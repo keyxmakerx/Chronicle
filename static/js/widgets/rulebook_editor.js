@@ -30,7 +30,8 @@
     flaps: { name: 'Flaps', hint: 'Headings that open to explain.' },
     example: { name: 'Worked example', hint: 'Stepped through one line at a time.' },
     creature: { name: 'Creature', hint: 'What heroes see; numbers for Directors.' },
-    note: { name: 'Director\'s note', hint: 'Only Directors ever see this.' }
+    note: { name: 'Director\'s note', hint: 'Only Directors ever see this.' },
+    links: { name: 'Chapter links', hint: 'Buttons that turn to other chapters.' }
   };
   var PALETTE = ['text', 'callout', 'roll', 'cards', 'flaps', 'example', 'creature', 'note'];
   var WIDGET_TYPE = { name: 'Widget', hint: 'Part of the book that comes from the game system.' };
@@ -87,13 +88,18 @@
       case 'widget':
         b.widget = str(b.widget);
         break;
+      case 'links':
+        b.items = arr(b.items).filter(isObj).map(function (it) {
+          return { title: str(it.title), summary: str(it.summary), chapter: str(it.chapter) };
+        });
+        break;
     }
     return b;
   }
 
   function pageModel(raw) {
     var p = isObj(raw) ? raw : {};
-    return { title: str(p.title), director: p.director === true, wide: p.wide === true, blocks: arr(p.blocks).map(blockModel) };
+    return { title: str(p.title), director: p.director === true, wide: p.wide === true, columns: p.columns === true, blocks: arr(p.blocks).map(blockModel) };
   }
 
   function put(o, k, v) { if (v !== '' && v != null) o[k] = v; }
@@ -141,6 +147,14 @@
         put(o, 'note', b.note);
         break;
       case 'widget': o.widget = b.widget; break;
+      case 'links':
+        put(o, 'title', b.title);
+        o.items = b.items.map(function (it) {
+          var r = {};
+          put(r, 'title', it.title); put(r, 'summary', it.summary); put(r, 'chapter', it.chapter);
+          return r;
+        });
+        break;
     }
     return o;
   }
@@ -149,6 +163,7 @@
     var o = { title: m.title };
     if (m.director) o.director = true;
     if (m.wide) o.wide = true;
+    if (m.columns) o.columns = true;
     o.blocks = m.blocks.map(authoredBlock);
     return o;
   }
@@ -178,12 +193,13 @@
         o.hiddenStats = o.stats.length > 0;
         break;
       case 'widget': o.widget = b.widget; break;
+      case 'links': o.title = b.title; o.items = b.items; break;
     }
     return o;
   }
 
   function wirePage(m) {
-    return { title: m.title, director: m.director, wide: m.wide, blocks: m.blocks.map(wireBlock) };
+    return { title: m.title, director: m.director, wide: m.wide, columns: m.columns, blocks: m.blocks.map(wireBlock) };
   }
 
   function newBlock(t) {
@@ -341,7 +357,7 @@
   Editor.prototype.addChapter = function (part, c) {
     var ch = {
       uid: 'c' + (++this.nid), id: str(c.id), title: str(c.title), intro: str(c.intro), director: c.director === true,
-      house: c.house === true, problem: str(c.problem), part: part, pages: [],
+      house: c.house === true, generated: c.generated === true, problem: str(c.problem), part: part, pages: [],
       timer: 0, dirty: false, inflight: null, again: false, error: '', save: Editor.prototype.saveChapter
     };
     var self = this;
@@ -573,6 +589,8 @@
           (ch.director && !part.director ? ' <span class="rbe-pill rbe-dir">Directors</span>' : '') + '</div>';
         if (ch.problem) {
           h += '<p class="rbe-note-line">This chapter could not be loaded: ' + esc(ch.problem) + '</p>';
+        } else if (ch.generated) {
+          h += '<p class="rbe-note-line">Made from ' + esc(s) + '\'s rules data, so it changes when ' + esc(s) + ' updates. It isn\'t edited here.</p>';
         } else {
           ch.pages.forEach(function (n) { h += self.pageButton(n); });
           h += '<button type="button" class="rbe-add" id="' + self.id('addpg-' + ch.uid) + '" data-act="addpage" data-ch="' + ch.uid + '">+ Add a page</button>';
@@ -770,6 +788,10 @@
         break;
       case 'widget':
         h += '<p class="rbe-widget">This part of the page is the <b>' + esc(b.widget || 'unnamed') + '</b> widget from ' + esc(this.sys()) + '. It can be moved or removed here, but not edited.</p>';
+        break;
+      case 'links':
+        h += '<p class="rbe-widget">Turns to: ' + b.items.map(function (it) { return '<b>' + esc(it.title) + '</b>'; }).join(', ') +
+          '. These buttons can be moved or removed here, but not edited.</p>';
         break;
     }
     return h + '</div></section>';

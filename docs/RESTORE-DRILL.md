@@ -4,11 +4,6 @@ A backup you've never restored is a hope, not a backup. This is the one
 command that turns "we have backups" into "we've proven the backups work" --
 without touching your live database.
 
-Cites: `cordinator/plans/2026-07-10-beta-transition-plan.md` §2 item 0.6
-(the beta plan's single largest data-loss risk); `cordinator/decisions/2026-05-21-core-tenets.md`
-§T-O1 (verify before claim) and §T-B1 (security -- the drill never widens
-the live DB's attack surface).
-
 ## The one command
 
 ```sh
@@ -25,8 +20,8 @@ lives), with the stack up. No flags needed. It:
    network or volume as your real deployment.
 3. Loads that backup's database dump into the throwaway container.
 4. Checks: the migrations table is present and at a plausible version,
-   the core tables (`users`, `campaigns`, `entities`, `calendar_events`)
-   have rows, and one foreign-key relationship
+   the core tables (`users`, `campaigns`, `entities`) have rows, the
+   `calendar_events` plugin table is checked the same way, and one foreign-key relationship
    (`entities.campaign_id -> campaigns.id`) is intact.
 5. Prints one line: green `RESTORE DRILL: PASS` or red `RESTORE DRILL:
    FAIL: <why>`.

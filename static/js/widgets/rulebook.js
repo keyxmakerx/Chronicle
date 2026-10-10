@@ -24,11 +24,14 @@
   var TURN_MS = { flip: 780, slide: 520, fade: 380 };
   var SWIPE_PX = 60;
 
-  var THEME_COLOURS = { 'paper': 1, 'paper-alt': 1, 'ink': 1, 'ink-soft': 1, 'muted': 1, 'edge': 1, 'accent': 1 };
+  var THEME_COLOURS = { 'paper': 1, 'paper-alt': 1, 'ink': 1, 'ink-soft': 1, 'muted': 1, 'edge': 1, 'accent': 1, 'cover': 1 };
   var THEME_FONTS = { 'heading-font': 1, 'body-font': 1 };
   var COLOUR_RE = /^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
   var FONT_RE = /^[A-Za-z0-9 ,'"._-]{1,200}$/;
   var SLUG_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
+  // House chapters a campaign writes have ids with this prefix; a package's
+  // chapter ids cannot contain _, so the two never clash.
+  var HOUSE_PREFIX = 'house_';
 
   var instances = new WeakMap();
   var uid = 0;
@@ -105,6 +108,8 @@
       para.split('\n').forEach(function (line) {
         var m = /^\s*-\s+(.*)$/.exec(line);
         if (m) { flushP(); list.push(m[1]); }
+        // An indented line straight after a list item carries that item on.
+        else if (list.length && /^\s+\S/.test(line)) list[list.length - 1] += ' ' + line.trim();
         else { flushL(); if (line.trim()) buf.push(line.trim()); }
       });
       flushP(); flushL();
@@ -132,6 +137,10 @@
       systemName: str(json.systemName),
       turn: TURN_MS[turn] ? turn : 'flip',
       theme: isObj(json.theme) ? json.theme : {},
+      look: json.look === 'paper' ? 'paper' : '',
+      tabs: arr(json.tabs).filter(function (id) { return typeof id === 'string' && SLUG_RE.test(id); }),
+      start: SLUG_RE.test(str(json.start)) ? str(json.start) : '',
+      first: SLUG_RE.test(str(json.first)) ? str(json.first) : '',
       isDirector: json.isDirector === true,
       canEdit: json.canEdit === true,
       terms: terms,
@@ -145,11 +154,13 @@
               title: str(ch.title),
               intro: str(ch.intro),
               director: ch.director === true,
+              generated: ch.generated === true,
               pages: arr(ch.pages).filter(isObj).map(function (pg) {
                 return {
                   title: str(pg.title),
                   director: pg.director === true,
                   wide: pg.wide === true,
+                  columns: pg.columns === true,
                   blocks: arr(pg.blocks).filter(isObj)
                 };
               })
@@ -185,14 +196,19 @@
     this.dead = false;
     this.loadSeq = 0;
     this.timers = [];
-    this.card = null;
-    this.pinned = false;
     this.leafTimer = 0;
     this.touch = null;
     this.handlers = [];
     this.finishNow = null;
     this.refocus = false;
+    this.ixCache = {};
+    this.pendingEntry = '';
+    this.searchSeq = 0;
+    this.searchTimer = 0;
+    this.inst = ++uid;
   }
+
+  Rulebook.prototype.domId = function (name) { return 'rb' + this.inst + '-' + name; };
 
   Rulebook.prototype.on = function (target, type, fn, opts) {
     target.addEventListener(type, fn, opts);
@@ -204,10 +220,11 @@
     this.el.classList.add('rb');
     this.on(document, 'click', function (e) { self.onClick(e); });
     this.on(document, 'keydown', function (e) { self.onKey(e); });
-    this.on(this.el, 'mouseover', function (e) { self.onOver(e); });
-    this.on(this.el, 'focusin', function (e) { self.onFocus(e, true); });
-    this.on(this.el, 'focusout', function (e) { self.onFocus(e, false); });
-    this.on(this.el, 'scroll', function () { if (self.card) self.hideCard(true); }, true);
+    // Rule words open Chronicle's shared hover card, in the campaign's look.
+    if (window.Chronicle && Chronicle.hovercard) {
+      this.unbindCard = Chronicle.hovercard.bind(this.el, '.rb-term', function (t) { return self.termCard(t); }, { pinOnClick: true });
+    }
+    this.on(this.el, 'input', function (e) { self.onInput(e); });
     this.on(this.el, 'touchstart', function (e) { self.onTouch(e, true); }, { passive: true });
     this.on(this.el, 'touchend', function (e) { self.onTouch(e, false); }, { passive: true });
     try {
@@ -226,9 +243,11 @@
       else h[0].removeEventListener(h[1], h[2], h[3]);
     });
     this.handlers = [];
+    if (this.unbindCard) { this.unbindCard(); this.unbindCard = null; }
     this.timers.forEach(function (t) { clearInterval(t); clearTimeout(t); });
     this.timers = [];
     clearTimeout(this.leafTimer);
+    clearTimeout(this.searchTimer);
     this.destroyNested(this.el);
     this.el.innerHTML = '';
     this.el.classList.remove('rb');
@@ -277,6 +296,8 @@
       }
     });
     this.el.setAttribute('data-turn', this.data.turn);
+    if (this.data.look) this.el.setAttribute('data-look', this.data.look);
+    else this.el.removeAttribute('data-look');
   };
 
   Rulebook.prototype.open = function (data) {
@@ -294,14 +315,90 @@
     this.bookEl = q('.rb-book');
     this.drawerEl = q('.rb-drawer');
     this.scrimEl = q('.rb-scrim');
-    this.cardEl = q('.rb-hc');
     this.whereEl = q('.rb-where');
     this.srEl = q('.rb-sr');
     this.tocBtn = q('[data-act="toc"]');
     this.curlPrev = q('.rb-curl.l');
     this.curlNext = q('.rb-curl.r');
+    this.searchEl = q('[data-search]');
+    this.resultsEl = q('.rb-results');
 
-    this.rebuild(place && typeof place.key === 'string' ? place.key : '');
+    this.tabsEl = q('.rb-tabs');
+    this.rebuild(this.openingKey(place));
+  };
+
+  // Where the book opens: a chapter named in the address (#making-a-hero),
+  // else the book's first-visit chapter for a reader with no saved place,
+  // else its start chapter, else the reader's saved place.
+  Rulebook.prototype.openingKey = function (place) {
+    var d = this.data, hash = '';
+    try { hash = decodeURIComponent(String(window.location.hash || '').slice(1)); } catch (e) { hash = ''; }
+    var key = SLUG_RE.test(hash) ? this.chapterKey(hash) : '';
+    if (key) return key;
+    var saved = place && typeof place.key === 'string' ? place.key : '';
+    if (!saved && d.first) key = this.chapterKey(d.first);
+    if (!key && d.start) key = this.chapterKey(d.start);
+    return key || saved;
+  };
+
+  // chapterKey is the item key prefix ("part.chapter") of a chapter id, which
+  // rebuild resolves to the chapter's opener or its first shown page.
+  Rulebook.prototype.chapterKey = function (id) {
+    var parts = this.data.parts;
+    for (var pi = 0; pi < parts.length; pi++) {
+      for (var ci = 0; ci < parts[pi].chapters.length; ci++) {
+        if (parts[pi].chapters[ci].id === id) return pi + '.' + ci;
+      }
+    }
+    return '';
+  };
+
+  // firstItemOf is the first shown item of a chapter, or -1 when the current
+  // view does not show it.
+  Rulebook.prototype.firstItemOf = function (id) {
+    for (var i = 0; i < this.items.length; i++) if (this.items[i].ch.id === id) return i;
+    return -1;
+  };
+
+  Rulebook.prototype.goChapter = function (id) {
+    var n = this.firstItemOf(id);
+    if (n >= 0) this.goItem(n);
+  };
+
+  // The tab strip: the book's chosen chapters, then a House rules tab when
+  // the campaign has written its own chapters.
+  Rulebook.prototype.tabsHTML = function () {
+    var d = this.data;
+    if (!d.tabs.length) return '';
+    var tabs = [], seen = {};
+    d.parts.forEach(function (part) {
+      part.chapters.forEach(function (ch) { seen[ch.id] = ch; });
+    });
+    d.tabs.forEach(function (id) { if (seen[id]) tabs.push({ id: id, label: seen[id].title }); });
+    var house = '';
+    d.parts.forEach(function (part) {
+      part.chapters.forEach(function (ch) { if (!house && ch.id.indexOf(HOUSE_PREFIX) === 0) house = ch.id; });
+    });
+    if (house) tabs.push({ id: house, label: 'House rules', house: true });
+    if (!tabs.length) return '';
+    return '<nav class="rb-tabs" aria-label="Sections">' + tabs.map(function (t) {
+      return '<button type="button" class="rb-tab' + (t.house ? ' house' : '') + '" data-tab="' + esc(t.id) + '"' +
+        (t.house ? ' data-house="1"' : '') + '>' + esc(t.label) + '</button>';
+    }).join('') + '</nav>';
+  };
+
+  // syncTabs hides tabs the current view does not show and marks the tab of
+  // the chapter on the page.
+  Rulebook.prototype.syncTabs = function () {
+    if (!this.tabsEl) return;
+    var self = this, sp = this.spreads[this.at], ch = sp ? sp.items[0].ch : null;
+    var house = ch && ch.id.indexOf(HOUSE_PREFIX) === 0;
+    [].forEach.call(this.tabsEl.querySelectorAll('[data-tab]'), function (b) {
+      var id = b.getAttribute('data-tab');
+      b.hidden = self.firstItemOf(id) < 0;
+      var on = !!ch && (ch.id === id || (house && b.hasAttribute('data-house')));
+      if (on) b.setAttribute('aria-current', 'true'); else b.removeAttribute('aria-current');
+    });
   };
 
   Rulebook.prototype.frameHTML = function () {
@@ -319,13 +416,18 @@
       '<div class="rb-name"><span class="rb-title">' + esc(d.title) + '</span>' +
       (d.systemName ? '<small>' + esc(d.systemName) + '</small>' : '') + '</div></div>' +
       '<button type="button" class="rb-btn" data-act="toc" aria-expanded="false" aria-label="Open the contents"><span aria-hidden="true">☰</span> Contents</button>' +
-      '<span class="rb-where"></span><span class="rb-sp"></span>' + edit + seg + '</div>' +
+      '<span class="rb-where"></span><span class="rb-sp"></span>' +
+      '<div class="rb-search" role="search"><span class="rb-search-ic" aria-hidden="true">⌕</span>' +
+      '<input type="search" class="rb-search-in" data-search placeholder="Search the book" aria-label="Search the book" autocomplete="off" spellcheck="false"' +
+      ' aria-controls="' + this.domId('results') + '" aria-expanded="false"><kbd aria-hidden="true">/</kbd>' +
+      '<div class="rb-results" id="' + this.domId('results') + '" role="region" aria-label="Search results" hidden></div></div>' +
+      edit + seg + '</div>' + this.tabsHTML() +
       '<div class="rb-book">' +
       '<article class="rb-page l"></article><div class="rb-spine" aria-hidden="true"></div><article class="rb-page r"></article>' +
       '<button type="button" class="rb-curl l" data-act="prev" aria-label="Previous page"></button>' +
       '<button type="button" class="rb-curl r" data-act="next" aria-label="Next page"></button>' +
       '<div class="rb-scrim"></div><aside class="rb-drawer" aria-label="Contents"></aside></div>' +
-      '<div class="rb-hc" role="tooltip" hidden></div><div class="rb-sr" aria-live="polite"></div>';
+      '<div class="rb-sr" aria-live="polite"></div>';
   };
 
   // --- Page list -------------------------------------------------------------
@@ -371,7 +473,11 @@
     if (this.narrow) {
       this.items.forEach(function (it) { sp.push({ items: [it], wide: false }); });
     } else {
+      // A handbook starts every chapter on a fresh spread, so a tab or link
+      // always lands on a spread that opens with that chapter.
+      var fresh = this.data.look === 'paper';
       this.items.forEach(function (it) {
+        if (fresh && it.kind === 'open' && cur.length) { sp.push({ items: cur, wide: false }); cur = []; }
         if (it.wide) {
           if (cur.length) { sp.push({ items: cur, wide: false }); cur = []; }
           sp.push({ items: [it], wide: true });
@@ -441,7 +547,8 @@
   // Widget elements are created only here, on the live page, so a copy of a
   // page used for the turning leaf never carries one.
   Rulebook.prototype.mountNested = function (page) {
-    var cid = this.campaignId;
+    var self = this, cid = this.campaignId;
+    [].forEach.call(page.querySelectorAll('[data-ix]'), function (box) { self.fillIndex(box); });
     [].forEach.call(page.querySelectorAll('.rb-wslot'), function (slot) {
       var slug = slot.getAttribute('data-slug');
       if (!SLUG_RE.test(slug || '') || !window.Chronicle || !Chronicle.mountWidgets) return;
@@ -492,6 +599,7 @@
       label = '<b>' + esc(first.ch.title) + '</b>' + (first.kind === 'page' && first.p.title ? ' · ' + esc(first.p.title) : '');
     }
     this.whereEl.innerHTML = label;
+    this.syncTabs();
     if (first) {
       this.srEl.textContent = 'Page ' + (first.n + 1) + (it !== first ? ' and ' + (it.n + 1) : '') + ' of ' + this.items.length + ': ' +
         first.ch.title + (first.kind === 'page' ? ', ' + first.p.title : '');
@@ -531,7 +639,7 @@
     var self = this;
     return '<p class="rb-kicker">' + esc(chapterTitle) + (p.director ? ' ' + this.dirTag() : '') + '</p>' +
       (p.title ? '<h2>' + esc(p.title) + '</h2>' : '') +
-      '<div class="rb-blocks">' + arr(p.blocks).filter(isObj).map(function (b) { return self.blockHTML(b); }).join('') + '</div>';
+      '<div class="rb-blocks' + (p.columns === true ? ' rb-cols' : '') + '">' + arr(p.blocks).filter(isObj).map(function (b) { return self.blockHTML(b); }).join('') + '</div>';
   };
 
   // --- Blocks ----------------------------------------------------------------
@@ -553,8 +661,10 @@
       case 'roll': html = this.rollHTML(b); break;
       case 'cards': html = this.cardsHTML(b); break;
       case 'flaps': html = this.flapsHTML(b); break;
+      case 'links': html = this.linksHTML(b); break;
       case 'example': html = this.exampleHTML(b); break;
       case 'creature': html = this.creatureHTML(b); break;
+      case 'index': html = this.indexHTML(b); break;
       case 'widget':
         html = SLUG_RE.test(str(b.widget))
           ? '<div class="rb-wslot" data-slug="' + esc(b.widget) + '"></div>'
@@ -609,6 +719,22 @@
     }).join('') + '</div>';
   };
 
+  // A links block is a row of "turn to" buttons, each opening a chapter.
+  Rulebook.prototype.linksHTML = function (b) {
+    // Once the page list is built, a link to a chapter this view does not
+    // show (a Director previewing Player view) is left out, not left dead.
+    var self = this, t = this.data.terms, items = arr(b.items).filter(function (it) {
+      return isObj(it) && SLUG_RE.test(str(it.chapter)) && (!self.items.length || self.firstItemOf(it.chapter) >= 0);
+    });
+    if (!items.length) return '';
+    return '<nav class="rb-links" aria-label="' + esc(str(b.title) || 'Turn to') + '">' +
+      (str(b.title) ? '<b class="rb-links-hd">' + esc(b.title) + '</b>' : '') +
+      '<div class="rb-links-row">' + items.map(function (it) {
+        return '<button type="button" class="rb-link" data-chapter="' + esc(it.chapter) + '"><b>' + esc(it.title) + '</b>' +
+          (str(it.summary) ? '<span>' + inline(it.summary, t) + '</span>' : '') + '<i aria-hidden="true">Turn to it \u2192</i></button>';
+      }).join('') + '</div></nav>';
+  };
+
   Rulebook.prototype.flapsHTML = function (b) {
     var t = this.data.terms, items = arr(b.items).filter(isObj);
     if (!items.length) return '';
@@ -648,6 +774,249 @@
     }
     if (dir && str(b.note)) h += '<div class="rb-stat-note">' + this.dirTag() + '<div class="rb-prose">' + rich(b.note, t) + '</div></div>';
     return h + '</div>';
+  };
+
+
+  // --- Rules index -----------------------------------------------------------
+  // A generated page lists one slice of a data category. The entries load
+  // when the page is shown (once per slice) and fold down like flaps.
+
+  Rulebook.prototype.indexHTML = function (b) {
+    var count = intOr(b.count, 0, 100000, 0);
+    var noun = count === 1 ? 'entry' : 'entries';
+    return '<div class="rb-ix" data-ix data-cat="' + esc(str(b.category)) + '" data-key="' + esc(str(b.key)) +
+      '" data-value="' + esc(str(b.value)) + '" data-from="' + intOr(b.from, 0, 100000, 0) + '" data-to="' + intOr(b.to, 0, 100000, 0) + '">' +
+      '<div class="rb-ix-hd"><input type="search" class="rb-ix-filter" data-ix-filter placeholder="Filter ' + count + ' ' + noun + '"' +
+      ' aria-label="Filter this page" autocomplete="off" spellcheck="false"><span class="rb-ix-n" aria-live="polite"></span></div>' +
+      '<ul class="rb-flaps rb-ix-list" data-ix-list><li class="rb-ix-wait">Opening the entries…</li></ul></div>';
+  };
+
+  // A Director previewing the player view asks the server for exactly what a
+  // player would get (no gm_only fields, no Director-only chapters).
+  Rulebook.prototype.viewParam = function (sep) {
+    return this.data && this.data.isDirector && this.view === 'player' ? sep + 'view=player' : '';
+  };
+
+  Rulebook.prototype.indexURL = function (box) {
+    var base = this.url.replace(/[?#].*$/, '').replace(/\/+$/, '');
+    var q = 'key=' + encodeURIComponent(box.getAttribute('data-key') || '') +
+      '&value=' + encodeURIComponent(box.getAttribute('data-value') || '') +
+      '&from=' + (+box.getAttribute('data-from') || 0) + '&to=' + (+box.getAttribute('data-to') || 0);
+    return base + '/index/' + encodeURIComponent(box.getAttribute('data-cat') || '') + '?' + q + this.viewParam('&');
+  };
+
+  Rulebook.prototype.fillIndex = function (box) {
+    var self = this, url = this.indexURL(box), hit = this.ixCache[url];
+    if (hit && hit.items) { this.renderIndex(box, hit.items); return; }
+    if (!hit) {
+      hit = this.ixCache[url] = { wait: [] };
+      Chronicle.apiFetch(url).then(function (res) {
+        if (!res.ok) throw new Error('http');
+        return res.json();
+      }).then(function (json) {
+        hit.items = arr(json && json.items).filter(isObj);
+      }).catch(function () {
+        delete self.ixCache[url];
+        hit.failed = true;
+      }).then(function () {
+        if (self.dead) return;
+        hit.wait.forEach(function (b) { if (b.isConnected) self.renderIndex(b, hit.items || null); });
+        hit.wait = [];
+      });
+    }
+    hit.wait.push(box);
+  };
+
+  Rulebook.prototype.renderIndex = function (box, items) {
+    var list = box.querySelector('[data-ix-list]'), t = this.data.terms;
+    if (!items) {
+      list.innerHTML = '<li class="rb-ix-wait">The entries could not be loaded. Turn away and back to try again.</li>';
+      return;
+    }
+    list.innerHTML = items.map(function (it) {
+      var fields = arr(it.fields).filter(isObj);
+      var body = (fields.length ? '<dl class="rb-ix-dl">' + fields.map(function (f) {
+        return '<div><dt>' + esc(f.label) + '</dt><dd>' + inline(f.value, t) + '</dd></div>';
+      }).join('') + '</dl>' : '') + (str(it.text) ? '<div class="rb-prose">' + rich(it.text, t) + '</div>' : '') +
+        (!fields.length && !str(it.text) && str(it.summary) ? '<div class="rb-prose"><p>' + esc(it.summary) + '</p></div>' : '');
+      return '<li class="rb-flap rb-ix-row" data-id="' + esc(str(it.id)) + '" data-find="' + esc((str(it.name) + ' ' + str(it.summary)).toLowerCase()) + '">' +
+        '<button type="button" aria-expanded="false"><span class="rb-ix-t"><b>' + esc(it.name) + '</b>' +
+        (str(it.summary) ? '<span>' + esc(it.summary) + '</span>' : '') + '</span></button>' +
+        '<div class="rb-body" hidden>' + body + '</div></li>';
+    }).join('');
+    box.setAttribute('data-ready', '');
+    var f = box.querySelector('[data-ix-filter]');
+    if (f && f.value) this.filterIndex(f);
+    this.openPending(box);
+  };
+
+  Rulebook.prototype.filterIndex = function (input) {
+    var box = input.closest('[data-ix]'), q = input.value.trim().toLowerCase(), shown = 0, rows = box.querySelectorAll('.rb-ix-row');
+    [].forEach.call(rows, function (li) {
+      var on = !q || li.getAttribute('data-find').indexOf(q) >= 0;
+      li.hidden = !on;
+      if (on) shown++;
+    });
+    box.querySelector('.rb-ix-n').textContent = q ? shown + ' of ' + rows.length : '';
+  };
+
+  // Opens the entry a search result asked for once its page is on screen.
+  Rulebook.prototype.openPending = function (box) {
+    var p = this.pendingEntry;
+    if (!p || p.url !== this.indexURL(box)) return;
+    this.pendingEntry = '';
+    var row = null;
+    [].forEach.call(box.querySelectorAll('.rb-ix-row'), function (li) { if (li.getAttribute('data-id') === p.id) row = li; });
+    if (!row) return;
+    var btn = row.querySelector('button');
+    if (!row.classList.contains('open')) this.toggleFlap(btn);
+    var scroller = row.closest('.rb-scroll');
+    if (scroller) scroller.scrollTop += row.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 24;
+    btn.focus({ preventScroll: true });
+  };
+
+  // --- Search ----------------------------------------------------------------
+  // Pages are searched here, in the book already loaded; rules-index entries
+  // are searched by the server, which knows every entry's page.
+
+  Rulebook.prototype.onInput = function (e) {
+    var t = e.target;
+    if (!t || !t.matches) return;
+    if (t.matches('[data-ix-filter]')) { this.filterIndex(t); return; }
+    if (t.matches('[data-search]')) {
+      var self = this;
+      clearTimeout(this.searchTimer);
+      this.searchTimer = setTimeout(function () { self.runSearch(t.value); }, 180);
+    }
+  };
+
+  function blockWords(b) {
+    var out = [str(b.title), str(b.text), str(b.label), str(b.name), str(b.tagline), str(b.look)];
+    arr(b.items).filter(isObj).forEach(function (it) { out.push(str(it.title), str(it.summary), str(it.text)); });
+    arr(b.steps).forEach(function (x) { out.push(str(x)); });
+    arr(b.notice).forEach(function (x) { out.push(str(x)); });
+    return out.join('\n');
+  }
+
+  function plain(s) { return s.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, function (_, a, b) { return b || a; }).replace(/\*+/g, ''); }
+
+  Rulebook.prototype.findPages = function (q) {
+    var dir = this.showDirector(), hits = [];
+    this.items.forEach(function (it) {
+      if (it.kind !== 'page' || it.ch.generated || hits.length >= 8) return;
+      var title = str(it.p.title), words = plain(arr(it.p.blocks).filter(function (b) {
+        return isObj(b) && (dir || (b.director !== true && b.type !== 'note'));
+      }).map(blockWords).join('\n'));
+      var inTitle = title.toLowerCase().indexOf(q) >= 0, at = words.toLowerCase().indexOf(q);
+      if (!inTitle && at < 0) return;
+      var snip = '';
+      if (at >= 0) {
+        var from = Math.max(0, at - 40);
+        snip = (from > 0 ? '…' : '') + words.slice(from, at + q.length + 60).replace(/\s+/g, ' ').trim() + '…';
+      }
+      hits.push({ n: it.n, title: title || it.ch.title, where: it.ch.title, snip: snip, rank: inTitle ? 0 : 1 });
+    });
+    return hits.sort(function (a, b) { return a.rank - b.rank; });
+  };
+
+  Rulebook.prototype.runSearch = function (raw) {
+    var self = this, q = str(raw).trim().toLowerCase(), seq = ++this.searchSeq;
+    if (q.length < 2) { this.closeResults(); return; }
+    var pages = this.findPages(q);
+    this.showResults(q, pages, null);
+    if (!this.items.some(function (it) { return it.ch.generated; })) { this.showResults(q, pages, []); return; }
+    var base = this.url.replace(/[?#].*$/, '').replace(/\/+$/, '');
+    Chronicle.apiFetch(base + '/find?q=' + encodeURIComponent(q) + this.viewParam('&')).then(function (res) {
+      if (!res.ok) throw new Error('http');
+      return res.json();
+    }).then(function (json) {
+      if (self.dead || seq !== self.searchSeq) return;
+      self.showResults(q, pages, arr(json && json.results).filter(isObj));
+    }).catch(function () {
+      if (self.dead || seq !== self.searchSeq) return;
+      self.showResults(q, pages, []);
+    });
+  };
+
+  // Where a rules-index result lives: the item showing that chapter's page.
+  Rulebook.prototype.itemFor = function (chapterId, page) {
+    for (var i = 0; i < this.items.length; i++) {
+      var it = this.items[i];
+      if (it.kind === 'page' && it.ch.id === chapterId && it.ch.pages[page] === it.p) return it;
+    }
+    return null;
+  };
+
+  Rulebook.prototype.showResults = function (q, pages, entries) {
+    var self = this, h = '';
+    if (pages.length) {
+      h += '<h3>In the book</h3><ul>' + pages.map(function (r) {
+        return '<li><button type="button" data-hit="' + r.n + '"><b>' + esc(r.title) + '</b><small>' + esc(r.where) + '</small>' +
+          (r.snip ? '<span>' + esc(r.snip) + '</span>' : '') + '</button></li>';
+      }).join('') + '</ul>';
+    }
+    var found = (entries || []).map(function (r) { return { r: r, it: self.itemFor(str(r.chapter), intOr(r.page, 0, 100000, -1)) }; })
+      .filter(function (x) { return x.it; });
+    if (found.length) {
+      h += '<h3>Rules index</h3><ul>' + found.map(function (x) {
+        return '<li><button type="button" data-hit="' + x.it.n + '" data-entry="' + esc(str(x.r.id)) + '"><b>' + esc(x.r.name) + '</b>' +
+          '<small>' + esc(x.r.where) + '</small>' + (str(x.r.summary) ? '<span>' + esc(x.r.summary) + '</span>' : '') + '</button></li>';
+      }).join('') + '</ul>';
+    }
+    if (!h) h = entries === null ? '<p class="rb-results-note">Searching…</p>' : '<p class="rb-results-note">Nothing in this book matches “' + esc(q) + '”.</p>';
+    this.resultsEl.innerHTML = h;
+    this.resultsEl.hidden = false;
+    this.searchEl.setAttribute('aria-expanded', 'true');
+  };
+
+  Rulebook.prototype.closeResults = function () {
+    if (!this.resultsEl || this.resultsEl.hidden) return;
+    this.resultsEl.hidden = true;
+    this.resultsEl.innerHTML = '';
+    this.searchEl.setAttribute('aria-expanded', 'false');
+  };
+
+  // Keys inside the search box and its results: Enter takes the first
+  // result, the arrows move through them, Escape closes them.
+  Rulebook.prototype.searchKey = function (e, t) {
+    if (!this.resultsEl || !t.closest('.rb-search')) return false;
+    var hits = [].slice.call(this.resultsEl.querySelectorAll('[data-hit]')), i = hits.indexOf(t);
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      if (!this.resultsEl.hidden) { this.closeResults(); this.searchEl.focus(); }
+      else { this.searchEl.value = ''; this.searchEl.blur(); }
+      return true;
+    }
+    if (this.resultsEl.hidden || !hits.length) return false;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      var next = e.key === 'ArrowDown' ? i + 1 : i - 1;
+      if (next < 0) this.searchEl.focus(); else hits[Math.min(next, hits.length - 1)].focus();
+      return true;
+    }
+    if (e.key === 'Enter' && t === this.searchEl) { e.preventDefault(); this.pickResult(hits[0]); return true; }
+    return false;
+  };
+
+  Rulebook.prototype.pickResult = function (btn) {
+    var n = +btn.getAttribute('data-hit'), id = btn.getAttribute('data-entry') || '';
+    this.closeResults();
+    this.pendingEntry = '';
+    var it = this.items[n], blk = it && it.kind === 'page' && it.p.blocks[0];
+    if (id && isObj(blk) && blk.type === 'index') {
+      // The entry opens only on the page that lists it, once its rows load.
+      var probe = document.createElement('div');
+      probe.innerHTML = this.indexHTML(blk);
+      this.pendingEntry = { id: id, url: this.indexURL(probe.firstChild) };
+    }
+    var sp = this.spreadOf(n);
+    if (sp === this.at) {
+      var self = this;
+      [].forEach.call(this.el.querySelectorAll('.rb-page [data-ix][data-ready]'), function (box) { self.openPending(box); });
+      if (!id) this.goItem(n);
+    } else {
+      this.goItem(n);
+    }
   };
 
   // --- Turning pages ---------------------------------------------------------
@@ -799,50 +1168,19 @@
 
   // --- Hover terms -----------------------------------------------------------
 
-  Rulebook.prototype.showCard = function (t) {
-    var key = t.getAttribute('data-term'), def = has(this.data.terms, key) ? this.data.terms[key] : null;
-    if (!def) return;
-    var hc = this.cardEl;
-    if (this.card && this.card !== t) this.card.removeAttribute('aria-describedby');
-    hc.innerHTML = '<b>' + esc(def.name) + '</b>' + esc(def.text);
-    hc.id = hc.id || 'rb-hc-' + (++uid);
-    t.setAttribute('aria-describedby', hc.id);
-    hc.hidden = false;
-    hc.style.left = '0px';
-    hc.style.top = '0px';
-    var r = t.getBoundingClientRect(), w = hc.offsetWidth, h = hc.offsetHeight;
-    var x = clamp(r.left, 8, Math.max(8, window.innerWidth - w - 8)), y = r.bottom + 6;
-    if (y + h > window.innerHeight - 8 && r.top - h - 6 > 8) y = r.top - h - 6;
-    hc.style.left = Math.round(x) + 'px';
-    hc.style.top = Math.round(y) + 'px';
-    this.card = t;
+  // What a rule word's hover card says. Inside the book there is no
+  // "open in the rulebook" link: the reader is already in it.
+  Rulebook.prototype.termCard = function (t) {
+    var key = t.getAttribute('data-term');
+    var def = this.data && has(this.data.terms, key) ? this.data.terms[key] : null;
+    return def ? { kind: 'Rule', title: def.name, text: def.text } : null;
   };
 
+  // Closes the hover card when it belongs to this book.
   Rulebook.prototype.hideCard = function () {
-    if (this.card) this.card.removeAttribute('aria-describedby');
-    if (this.cardEl) this.cardEl.hidden = true;
-    this.card = null;
-    this.pinned = false;
-  };
-
-  Rulebook.prototype.togglePin = function (t) {
-    if (this.card === t && this.pinned) { this.hideCard(); return; }
-    this.showCard(t);
-    this.pinned = this.card === t;
-  };
-
-  Rulebook.prototype.onOver = function (e) {
-    if (!this.data || this.pinned) return;
-    var t = e.target.closest && e.target.closest('.rb-term');
-    if (t) { if (t !== this.card) this.showCard(t); }
-    else if (this.card) this.hideCard();
-  };
-
-  Rulebook.prototype.onFocus = function (e, inn) {
-    if (!this.data || this.pinned) return;
-    var t = e.target.classList && e.target.classList.contains('rb-term') ? e.target : null;
-    if (inn && t) this.showCard(t);
-    else if (!inn && t) this.hideCard();
+    var hc = window.Chronicle && Chronicle.hovercard;
+    var cur = hc && hc.current();
+    if (cur && this.el.contains(cur)) hc.close();
   };
 
   // --- Block behaviour -------------------------------------------------------
@@ -933,21 +1271,24 @@
     if (this.finishNow) this.finishNow();
     var key = this.currentKey();
     this.view = v;
+    this.closeResults();
     this.rebuild(key);
   };
 
   Rulebook.prototype.onClick = function (e) {
     var t = e.target;
     if (!t || !t.closest) return;
-    if (!this.el.contains(t)) { if (this.card) this.hideCard(); return; }
+    if (!this.el.contains(t)) { this.closeResults(); return; }
     var x;
-    if ((x = t.closest('.rb-term'))) { this.togglePin(x); return; }
-    if (this.card) this.hideCard();
     if (!this.data) {
       if (t.closest('[data-act="retry"]')) this.load();
       return;
     }
+    if ((x = t.closest('.rb-results [data-hit]'))) { this.pickResult(x); return; }
+    if (!t.closest('.rb-search')) this.closeResults();
     if ((x = t.closest('[data-go]'))) { this.goItem(+x.getAttribute('data-go')); return; }
+    if ((x = t.closest('[data-tab]'))) { this.goChapter(x.getAttribute('data-tab')); return; }
+    if ((x = t.closest('[data-chapter]'))) { this.goChapter(x.getAttribute('data-chapter')); return; }
     if ((x = t.closest('[data-act]'))) {
       switch (x.getAttribute('data-act')) {
         case 'prev': this.turnTo(this.at - 1); break;
@@ -970,11 +1311,12 @@
     if (!this.data || !this.el.isConnected) return;
     var t = e.target;
     if (t && t.closest) {
-      if (t.classList.contains('rb-term') && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); this.togglePin(t); return; }
+      if (this.searchKey(e, t)) return;
       if (t.closest('input,select,textarea,[contenteditable="true"]')) return;
       if (t.closest('.rb-wslot') && e.key !== 'Escape') return;
     }
-    if (e.key === 'Escape') { this.closeDrawer(true); this.hideCard(); return; }
+    if (e.key === 'Escape') { this.closeDrawer(true); this.hideCard(); this.closeResults(); return; }
+    if (e.key === '/' && !e.altKey && !e.ctrlKey && !e.metaKey && this.searchEl) { e.preventDefault(); this.searchEl.focus(); this.searchEl.select(); return; }
     if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
     if (e.key === 'ArrowRight') { this.turnTo(this.at + 1); e.preventDefault(); }
     else if (e.key === 'ArrowLeft') { this.turnTo(this.at - 1); e.preventDefault(); }

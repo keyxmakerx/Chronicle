@@ -42,6 +42,13 @@ const (
 	MsgLayerDeleted MessageType = "layer.deleted"
 )
 
+// MsgHexChanged tells map viewers that a map's hex layer changed. The payload
+// is {map_id, version, party_path?} and never cell contents: clients refetch
+// the role-filtered read, so who may see what is decided in one place.
+// party_path rides along only when every hex on it is explored. Not a
+// change-feed type: the filtered read is the source of truth.
+const MsgHexChanged MessageType = "hex.changed"
+
 // Calendar sync messages.
 const (
 	MsgCalendarEventCreated     MessageType = "calendar.event.created"
@@ -121,6 +128,16 @@ const (
 	// and deliberately not a change-feed type: the state is read through
 	// its own route, not replayed from the feed.
 	MsgSystemStateUpdated MessageType = "system_state.updated"
+)
+
+// Quest messages. They carry ids only (and a quest's version), so a page
+// reading them fetches again through its own route; not change-feed types.
+const (
+	// MsgQuestUpdated says a quest sheet was saved. ResourceID is the page id.
+	MsgQuestUpdated MessageType = "quest.updated"
+	// MsgNoticeBoardsUpdated says a home's notice boards changed. ResourceID
+	// is the page id, or the category id for a category's boards.
+	MsgNoticeBoardsUpdated MessageType = "notice_boards.updated"
 )
 
 // Sync control messages.

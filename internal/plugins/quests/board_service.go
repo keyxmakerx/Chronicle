@@ -3,7 +3,10 @@ package quests
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"math"
+	"sort"
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -24,29 +27,35 @@ const (
 // BoardService owns the notice-board rules: who may change which board, what
 // each viewer may see, and the caps.
 type BoardService interface {
-	// View returns the page's boards as v may see them.
-	View(ctx context.Context, campaignID, entityID string, v Viewer) (*BoardsView, error)
+	// View returns the home's boards as v may see them.
+	View(ctx context.Context, campaignID string, h Home, v Viewer) (*BoardsView, error)
+	// Homes lists the places with boards that v may open: categories first,
+	// then pages by name.
+	Homes(ctx context.Context, campaignID string, v Viewer) ([]HomeView, error)
 
-	CreateBoard(ctx context.Context, campaignID, entityID string, v Viewer, name, who string) (*BoardView, error)
-	PatchBoard(ctx context.Context, campaignID, entityID, boardID string, v Viewer, p BoardPatch) (*BoardSummary, error)
-	DeleteBoard(ctx context.Context, campaignID, entityID, boardID string, v Viewer) error
-	SetOrder(ctx context.Context, campaignID, entityID string, v Viewer, ids []string) error
-	SetLooks(ctx context.Context, campaignID, entityID string, v Viewer, p LooksPatch) (Looks, error)
+	CreateBoard(ctx context.Context, campaignID string, h Home, v Viewer, name, who string) (*BoardView, error)
+	PatchBoard(ctx context.Context, campaignID string, h Home, boardID string, v Viewer, p BoardPatch) (*BoardSummary, error)
+	DeleteBoard(ctx context.Context, campaignID string, h Home, boardID string, v Viewer) error
+	SetOrder(ctx context.Context, campaignID string, h Home, v Viewer, ids []string) error
+	SetLooks(ctx context.Context, campaignID string, h Home, v Viewer, p LooksPatch) (Looks, error)
 	// ClearPlayerItems removes everything players pinned (not the DM's own
 	// pieces, and never notices) and returns how many items went.
-	ClearPlayerItems(ctx context.Context, campaignID, entityID, boardID string, v Viewer) (int, error)
+	ClearPlayerItems(ctx context.Context, campaignID string, h Home, boardID string, v Viewer) (int, error)
 
-	CreateItem(ctx context.Context, campaignID, entityID, boardID string, v Viewer, in ItemInput) (*ItemView, error)
-	PatchItem(ctx context.Context, campaignID, entityID, boardID, itemID string, v Viewer, p ItemPatch) (*ItemView, error)
-	DeleteItem(ctx context.Context, campaignID, entityID, boardID, itemID string, v Viewer) error
+	CreateItem(ctx context.Context, campaignID string, h Home, boardID string, v Viewer, in ItemInput) (*ItemView, error)
+	PatchItem(ctx context.Context, campaignID string, h Home, boardID, itemID string, v Viewer, p ItemPatch) (*ItemView, error)
+	DeleteItem(ctx context.Context, campaignID string, h Home, boardID, itemID string, v Viewer) error
 }
 
 type boardService struct {
 	repo   BoardRepository
 	quests questDocs
 	gate
+	types   TypeDirectory
 	maps    MapDirectory
 	members MemberNames
+	// cal may be nil: without a calendar a notice carries no days left.
+	cal CalendarDirectory
 }
 
 // questDocs is the slice of QuestRepository the boards need, to show a
@@ -56,8 +65,30 @@ type questDocs interface {
 }
 
 // NewBoardService builds the service.
-func NewBoardService(repo BoardRepository, quests QuestRepository, entities EntityDirectory, maps MapDirectory, members MemberNames) BoardService {
-	return &boardService{repo: repo, quests: quests, gate: gate{entities: entities}, maps: maps, members: members}
+func NewBoardService(repo BoardRepository, quests QuestRepository, entities EntityDirectory, types TypeDirectory, maps MapDirectory, members MemberNames, cal CalendarDirectory) BoardService {
+	return &boardService{repo: repo, quests: quests, gate: gate{entities: entities}, types: types, maps: maps, members: members, cal: cal}
+}
+
+// requireHome is the one check that a board home exists in the campaign. A
+// page must also be viewable to v. A category has no visibility of its own, so
+// campaign view access (enforced by the route) is enough; a type of another
+// campaign reads as missing, never as forbidden.
+func (s *boardService) requireHome(ctx context.Context, campaignID string, h Home, v Viewer) error {
+	if h.IsType() {
+		if h.EntityID != "" {
+			return errNotFound("category")
+		}
+		ok, err := s.types.TypeInCampaign(ctx, campaignID, h.TypeID)
+		if err != nil {
+			return apperrorInternal(err)
+		}
+		if !ok {
+			return errNotFound("category")
+		}
+		return nil
+	}
+	_, err := s.requireViewable(ctx, campaignID, h.EntityID, v)
+	return err
 }
 
 // canChange says who may pin to / edit a board.
@@ -98,15 +129,57 @@ func (s *boardService) summary(b *Board, v Viewer) BoardSummary {
 	return BoardSummary{ID: b.ID, Name: b.Name, Who: b.Who, CanChange: canChange(b, v)}
 }
 
-func (s *boardService) View(ctx context.Context, campaignID, entityID string, v Viewer) (*BoardsView, error) {
-	if _, err := s.requireViewable(ctx, campaignID, entityID, v); err != nil {
-		return nil, err
-	}
-	looks, err := s.repo.GetLooks(ctx, campaignID, entityID)
+func (s *boardService) Homes(ctx context.Context, campaignID string, v Viewer) ([]HomeView, error) {
+	homes, err := s.repo.ListHomes(ctx, campaignID)
 	if err != nil {
 		return nil, apperrorInternal(err)
 	}
-	boards, err := s.repo.ListBoards(ctx, campaignID, entityID)
+	var typeIDs []int
+	var pageIDs []string
+	for _, h := range homes {
+		switch {
+		case h.IsType() && h.EntityID == "":
+			typeIDs = append(typeIDs, h.TypeID)
+		case !h.IsType() && h.EntityID != "":
+			pageIDs = append(pageIDs, h.EntityID)
+		}
+	}
+	sort.Ints(typeIDs)
+	out := make([]HomeView, 0, len(homes))
+	for _, id := range typeIDs {
+		out = append(out, HomeView{Kind: "category", ID: strconv.Itoa(id)})
+	}
+	if len(pageIDs) == 0 {
+		return out, nil
+	}
+	infos, ok, err := s.viewable(ctx, campaignID, v, pageIDs)
+	if err != nil {
+		return nil, err
+	}
+	var pages []HomeView
+	for _, id := range pageIDs {
+		if ok[id] {
+			pages = append(pages, HomeView{Kind: "page", ID: id, Name: infos[id].Name})
+		}
+	}
+	sort.Slice(pages, func(i, j int) bool {
+		if pages[i].Name != pages[j].Name {
+			return strings.ToLower(pages[i].Name) < strings.ToLower(pages[j].Name)
+		}
+		return pages[i].ID < pages[j].ID
+	})
+	return append(out, pages...), nil
+}
+
+func (s *boardService) View(ctx context.Context, campaignID string, h Home, v Viewer) (*BoardsView, error) {
+	if err := s.requireHome(ctx, campaignID, h, v); err != nil {
+		return nil, err
+	}
+	looks, err := s.repo.GetLooks(ctx, campaignID, h)
+	if err != nil {
+		return nil, apperrorInternal(err)
+	}
+	boards, err := s.repo.ListBoards(ctx, campaignID, h)
 	if err != nil {
 		return nil, apperrorInternal(err)
 	}
@@ -122,7 +195,12 @@ func (s *boardService) View(ctx context.Context, campaignID, entityID string, v 
 	if err != nil {
 		return nil, err
 	}
+	mapsOn, err := s.maps.Enabled(ctx, campaignID)
+	if err != nil {
+		return nil, apperrorInternal(err)
+	}
 	out := &BoardsView{
+		MapsOn:    mapsOn,
 		CanManage: v.IsDM,
 		Me:        Me{UserID: v.UserID, IsDM: v.IsDM, Role: v.MemberRole},
 		Looks:     looks,
@@ -183,6 +261,26 @@ func (s *boardService) buildViews(ctx context.Context, campaignID string, v View
 		if names, err = s.members.DisplayNames(ctx, campaignID, ownerIDs); err != nil {
 			return nil, nil, apperrorInternal(err)
 		}
+	}
+
+	// The calendar is read at most once, and only for a notice that has a
+	// due date; a calendar that cannot be read just leaves the days off.
+	var cal QuestCalendar
+	calRead := false
+	daysLeft := func(d DueDay) *int {
+		if !calRead {
+			calRead = true
+			c, err := calendarOf(ctx, s.cal, campaignID)
+			if err != nil {
+				slog.Warn("quests: reading the campaign calendar failed", slog.String("campaign_id", campaignID), slog.Any("error", err))
+			}
+			cal = c
+		}
+		if cal == nil {
+			return nil
+		}
+		n := cal.DaysFromToday(d)
+		return &n
 	}
 
 	out := map[string][]ItemView{}
@@ -254,6 +352,9 @@ func (s *boardService) buildViews(ctx context.Context, campaignID string, v View
 			iv = base(it)
 			iv.QuestID, iv.Title, iv.Kicker = e.ID, q.Notice.Title, q.Notice.Kicker
 			iv.Blurb, iv.Status, iv.HasSheet = q.Notice.Blurb, q.Status, true
+			if q.DueDate != nil {
+				iv.DaysLeft = daysLeft(*q.DueDate)
+			}
 			// The reward travels with its tag: hidden on the quest page, hidden here.
 			if v.IsDM || !q.Layout.Tag.Hidden {
 				iv.Reward = q.Notice.Reward
@@ -288,11 +389,11 @@ func initial(name string) string {
 	return ""
 }
 
-func (s *boardService) CreateBoard(ctx context.Context, campaignID, entityID string, v Viewer, name, who string) (*BoardView, error) {
+func (s *boardService) CreateBoard(ctx context.Context, campaignID string, h Home, v Viewer, name, who string) (*BoardView, error) {
 	if err := requireDM(v); err != nil {
 		return nil, err
 	}
-	if _, err := s.requireViewable(ctx, campaignID, entityID, v); err != nil {
+	if err := s.requireHome(ctx, campaignID, h, v); err != nil {
 		return nil, err
 	}
 	name, err := cleanBoardName(name)
@@ -305,12 +406,12 @@ func (s *boardService) CreateBoard(ctx context.Context, campaignID, entityID str
 	if !validWho(who) {
 		return nil, errInvalid("who must be dm, scribe or all")
 	}
-	boards, err := s.repo.ListBoards(ctx, campaignID, entityID)
+	boards, err := s.repo.ListBoards(ctx, campaignID, h)
 	if err != nil {
 		return nil, apperrorInternal(err)
 	}
 	if len(boards) >= MaxBoardsPerPage {
-		return nil, errInvalid("a page can hold at most 12 boards")
+		return nil, errInvalid("a page or category can hold at most 12 boards")
 	}
 	order := 0
 	for _, b := range boards {
@@ -318,21 +419,21 @@ func (s *boardService) CreateBoard(ctx context.Context, campaignID, entityID str
 			order = b.SortOrder + 1
 		}
 	}
-	b := Board{ID: uuid.NewString(), CampaignID: campaignID, EntityID: entityID, Name: name, Who: who, SortOrder: order}
+	b := Board{ID: uuid.NewString(), CampaignID: campaignID, Home: h, Name: name, Who: who, SortOrder: order}
 	if err := s.repo.InsertBoard(ctx, b); err != nil {
 		return nil, apperrorInternal(err)
 	}
 	return &BoardView{BoardSummary: s.summary(&b, v), Items: []ItemView{}}, nil
 }
 
-func (s *boardService) PatchBoard(ctx context.Context, campaignID, entityID, boardID string, v Viewer, p BoardPatch) (*BoardSummary, error) {
+func (s *boardService) PatchBoard(ctx context.Context, campaignID string, h Home, boardID string, v Viewer, p BoardPatch) (*BoardSummary, error) {
 	if err := requireDM(v); err != nil {
 		return nil, err
 	}
-	if _, err := s.requireViewable(ctx, campaignID, entityID, v); err != nil {
+	if err := s.requireHome(ctx, campaignID, h, v); err != nil {
 		return nil, err
 	}
-	b, err := s.repo.GetBoard(ctx, campaignID, entityID, boardID)
+	b, err := s.repo.GetBoard(ctx, campaignID, h, boardID)
 	if err != nil {
 		return nil, passThrough(err)
 	}
@@ -354,30 +455,30 @@ func (s *boardService) PatchBoard(ctx context.Context, campaignID, entityID, boa
 	return &sum, nil
 }
 
-func (s *boardService) DeleteBoard(ctx context.Context, campaignID, entityID, boardID string, v Viewer) error {
+func (s *boardService) DeleteBoard(ctx context.Context, campaignID string, h Home, boardID string, v Viewer) error {
 	if err := requireDM(v); err != nil {
 		return err
 	}
-	if _, err := s.requireViewable(ctx, campaignID, entityID, v); err != nil {
+	if err := s.requireHome(ctx, campaignID, h, v); err != nil {
 		return err
 	}
-	if _, err := s.repo.GetBoard(ctx, campaignID, entityID, boardID); err != nil {
+	if _, err := s.repo.GetBoard(ctx, campaignID, h, boardID); err != nil {
 		return passThrough(err)
 	}
-	if err := s.repo.DeleteBoard(ctx, campaignID, entityID, boardID); err != nil {
+	if err := s.repo.DeleteBoard(ctx, campaignID, h, boardID); err != nil {
 		return apperrorInternal(err)
 	}
 	return nil
 }
 
-func (s *boardService) SetOrder(ctx context.Context, campaignID, entityID string, v Viewer, ids []string) error {
+func (s *boardService) SetOrder(ctx context.Context, campaignID string, h Home, v Viewer, ids []string) error {
 	if err := requireDM(v); err != nil {
 		return err
 	}
-	if _, err := s.requireViewable(ctx, campaignID, entityID, v); err != nil {
+	if err := s.requireHome(ctx, campaignID, h, v); err != nil {
 		return err
 	}
-	boards, err := s.repo.ListBoards(ctx, campaignID, entityID)
+	boards, err := s.repo.ListBoards(ctx, campaignID, h)
 	if err != nil {
 		return apperrorInternal(err)
 	}
@@ -388,29 +489,29 @@ func (s *boardService) SetOrder(ctx context.Context, campaignID, entityID string
 		have[b.ID] = true
 	}
 	if len(ids) != len(boards) {
-		return errInvalid("order must list every board on the page exactly once")
+		return errInvalid("order must list every board here exactly once")
 	}
 	seen := map[string]bool{}
 	for _, id := range ids {
 		if !have[id] || seen[id] {
-			return errInvalid("order must list every board on the page exactly once")
+			return errInvalid("order must list every board here exactly once")
 		}
 		seen[id] = true
 	}
-	if err := s.repo.SetOrder(ctx, campaignID, entityID, ids); err != nil {
+	if err := s.repo.SetOrder(ctx, campaignID, h, ids); err != nil {
 		return apperrorInternal(err)
 	}
 	return nil
 }
 
-func (s *boardService) SetLooks(ctx context.Context, campaignID, entityID string, v Viewer, p LooksPatch) (Looks, error) {
+func (s *boardService) SetLooks(ctx context.Context, campaignID string, h Home, v Viewer, p LooksPatch) (Looks, error) {
 	if err := requireDM(v); err != nil {
 		return Looks{}, err
 	}
-	if _, err := s.requireViewable(ctx, campaignID, entityID, v); err != nil {
+	if err := s.requireHome(ctx, campaignID, h, v); err != nil {
 		return Looks{}, err
 	}
-	l, err := s.repo.GetLooks(ctx, campaignID, entityID)
+	l, err := s.repo.GetLooks(ctx, campaignID, h)
 	if err != nil {
 		return Looks{}, apperrorInternal(err)
 	}
@@ -426,20 +527,20 @@ func (s *boardService) SetLooks(ctx context.Context, campaignID, entityID string
 		}
 		l.Ledger = x
 	}
-	if err := s.repo.SetLooks(ctx, campaignID, entityID, l); err != nil {
+	if err := s.repo.SetLooks(ctx, campaignID, h, l); err != nil {
 		return Looks{}, apperrorInternal(err)
 	}
 	return l, nil
 }
 
-func (s *boardService) ClearPlayerItems(ctx context.Context, campaignID, entityID, boardID string, v Viewer) (int, error) {
+func (s *boardService) ClearPlayerItems(ctx context.Context, campaignID string, h Home, boardID string, v Viewer) (int, error) {
 	if err := requireDM(v); err != nil {
 		return 0, err
 	}
-	if _, err := s.requireViewable(ctx, campaignID, entityID, v); err != nil {
+	if err := s.requireHome(ctx, campaignID, h, v); err != nil {
 		return 0, err
 	}
-	if _, err := s.repo.GetBoard(ctx, campaignID, entityID, boardID); err != nil {
+	if _, err := s.repo.GetBoard(ctx, campaignID, h, boardID); err != nil {
 		return 0, passThrough(err)
 	}
 	items, err := s.repo.ListItems(ctx, campaignID, []string{boardID})
@@ -467,11 +568,11 @@ func (s *boardService) ClearPlayerItems(ctx context.Context, campaignID, entityI
 	return n, nil
 }
 
-func (s *boardService) CreateItem(ctx context.Context, campaignID, entityID, boardID string, v Viewer, in ItemInput) (*ItemView, error) {
-	if _, err := s.requireViewable(ctx, campaignID, entityID, v); err != nil {
+func (s *boardService) CreateItem(ctx context.Context, campaignID string, h Home, boardID string, v Viewer, in ItemInput) (*ItemView, error) {
+	if err := s.requireHome(ctx, campaignID, h, v); err != nil {
 		return nil, err
 	}
-	b, err := s.repo.GetBoard(ctx, campaignID, entityID, boardID)
+	b, err := s.repo.GetBoard(ctx, campaignID, h, boardID)
 	if err != nil {
 		return nil, passThrough(err)
 	}
@@ -596,11 +697,11 @@ func authorize(b *Board, it *Item, v Viewer) error {
 	return errForbidden("you can only change your own pins")
 }
 
-func (s *boardService) PatchItem(ctx context.Context, campaignID, entityID, boardID, itemID string, v Viewer, p ItemPatch) (*ItemView, error) {
-	if _, err := s.requireViewable(ctx, campaignID, entityID, v); err != nil {
+func (s *boardService) PatchItem(ctx context.Context, campaignID string, h Home, boardID, itemID string, v Viewer, p ItemPatch) (*ItemView, error) {
+	if err := s.requireHome(ctx, campaignID, h, v); err != nil {
 		return nil, err
 	}
-	b, err := s.repo.GetBoard(ctx, campaignID, entityID, boardID)
+	b, err := s.repo.GetBoard(ctx, campaignID, h, boardID)
 	if err != nil {
 		return nil, passThrough(err)
 	}
@@ -638,11 +739,11 @@ func (s *boardService) PatchItem(ctx context.Context, campaignID, entityID, boar
 	return s.singleView(ctx, campaignID, v, *it)
 }
 
-func (s *boardService) DeleteItem(ctx context.Context, campaignID, entityID, boardID, itemID string, v Viewer) error {
-	if _, err := s.requireViewable(ctx, campaignID, entityID, v); err != nil {
+func (s *boardService) DeleteItem(ctx context.Context, campaignID string, h Home, boardID, itemID string, v Viewer) error {
+	if err := s.requireHome(ctx, campaignID, h, v); err != nil {
 		return err
 	}
-	b, err := s.repo.GetBoard(ctx, campaignID, entityID, boardID)
+	b, err := s.repo.GetBoard(ctx, campaignID, h, boardID)
 	if err != nil {
 		return passThrough(err)
 	}

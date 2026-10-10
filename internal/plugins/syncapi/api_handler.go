@@ -58,6 +58,7 @@ type APIHandler struct {
 	dmScreen             DMScreenProvider
 	systemState          SystemStateReader
 	history              *SyncHistoryHandler
+	quests               *QuestAPIHandler
 	signer               *media.URLSigner
 }
 

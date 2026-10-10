@@ -998,6 +998,13 @@ func (a *wsNotesGrantAdapter) AuthenticateNotesGrantForWS(ctx context.Context, t
 // relations.RelationEventPublisher interface.
 type relationEventPublisherAdapter struct {
 	bus ws.EventBus
+	// shares, when set, re-checks the row's source character's item shares
+	// after a relation is deleted or its metadata changes, so a share never
+	// outlives the holding. Runs detached: the armory's own moves call this
+	// while holding the campaign lock the check takes.
+	shares interface {
+		ReleaseLetGoShares(ctx context.Context, campaignID, characterID string)
+	}
 }
 
 // PublishRelationEvent translates a relation row write into a WebSocket
@@ -1023,6 +1030,15 @@ func (a *relationEventPublisherAdapter) PublishRelationEvent(eventType string, r
 	msg := ws.NewMessage(msgType, rel.CampaignID, rel.SourceEntityID, rel)
 	msg.RequiresDM = true
 	a.bus.Publish(msg)
+
+	if a.shares != nil && eventType != relations.RelationEventCreated {
+		campaignID, characterID := rel.CampaignID, rel.SourceEntityID
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			a.shares.ReleaseLetGoShares(ctx, campaignID, characterID)
+		}()
+	}
 }
 
 // entityEventPublisherAdapter bridges the websocket.EventBus to the
@@ -1151,6 +1167,7 @@ type navAppDef struct {
 	path    string   // campaign-relative page
 	caption string   // a few muted words beside the label
 	addons  []string // the app is on when any of these addons is enabled
+	needs   []string // and only while every one of these is enabled too
 	access  campaigns.NavAccess
 	pinned  bool // starts in Pinned for a campaign that never arranged its sidebar
 	system  bool // the enabled game system's reference; label, icon and path come from it
@@ -1159,13 +1176,13 @@ type navAppDef struct {
 // navAppCatalog lists every app the sidebar can show, in the order a campaign
 // that never arranged its sidebar lists them. Each access level mirrors the
 // app route's own gate, so the sidebar never offers a page that would turn
-// the viewer away; Game nights is gated on the calendar addon because its
-// routes are. Its slug stays "sessions" so sidebars already arranged keep it. Characters is the campaign's cast, party and NPCs together, which is
+// the viewer away; Game nights has its own switch (addon slug "sessions")
+// and also needs the calendar addon, because its routes need both. Its slug stays "sessions" so sidebars already arranged keep it. Characters is the campaign's cast, party and NPCs together, which is
 // why the NPC gallery addon also turns it on.
 var navAppCatalog = []navAppDef{
 	{slug: "notes", label: "Journal", icon: "fa-book-open", path: "/journal", addons: []string{"notes"}, access: campaigns.NavAccessMember, pinned: true},
 	{slug: "calendar", label: "Calendar", icon: "fa-calendar-days", path: "/apps/calendar", addons: []string{calendar.PluginSlug}, access: campaigns.NavAccessMemberOrAdmin, pinned: true},
-	{slug: "sessions", label: "Game nights", icon: "fa-dice-d20", path: "/game-nights", addons: []string{calendar.PluginSlug}, access: campaigns.NavAccessAnyone},
+	{slug: "sessions", label: "Game nights", icon: "fa-dice-d20", path: "/game-nights", addons: []string{"sessions"}, needs: []string{calendar.PluginSlug}, access: campaigns.NavAccessAnyone},
 	{slug: "maps", label: "Maps", icon: "fa-map", path: "/maps", addons: []string{"maps"}, access: campaigns.NavAccessAnyone},
 	{slug: "characters", label: "Characters", icon: "fa-masks-theater", path: "/characters", caption: "Party & NPCs", addons: []string{entities.AddonPlayerCharacterClaiming, "npcs"}, access: campaigns.NavAccessAnyone},
 	{slug: "armory", label: "Armory", icon: "fa-shield-halved", path: "/armory", addons: []string{"armory"}, access: campaigns.NavAccessAnyone},
@@ -1335,6 +1352,38 @@ type mapEventPublisherAdapter struct {
 	// published to DM-equivalent clients only. Nil fails closed: with no way to
 	// tell, every pin and drawing event is restricted.
 	shadows maps.ShadowLookup
+	// fog resolves a map's unexplored hexes so a pin or drawing wholly inside
+	// them is published to DM-equivalent clients only. Nil fails closed, like
+	// shadows.
+	fog maps.HexFogLookup
+}
+
+// wireHexFog gives pins, drawings, tokens, the event publisher, the map picture
+// and the media guard their fog source (the hex service, and the drawing
+// service for which picture files it withholds), and the hex service the lookups it needs
+// to build the fog and to announce changes. A named helper so a test can prove
+// the production wiring sets all of it; without it players would see every pin
+// and the whole picture under unexplored hexes.
+func wireHexFog(mapsService maps.MapService, drawingService maps.DrawingService, events *mapEventPublisherAdapter, hexService maps.HexService) {
+	mapsService.SetHexFogLookup(hexService)
+	mapsService.SetFogMediaLookup(drawingService)
+	drawingService.SetHexFogLookup(hexService)
+	events.fog = hexService
+	hexService.SetEventPublisher(events)
+	hexService.SetMapLoader(mapsService.GetMap)
+	// The terrain art lives in the map's display settings; the map service
+	// exposes the narrow write by assertion, as the picture drop below does.
+	if aw, ok := mapsService.(interface {
+		SetHexArt(ctx context.Context, mapID, art string) error
+	}); ok {
+		hexService.SetArtWriter(aw.SetHexArt)
+	}
+	// Fog on a whole-map layer changes who may fetch the original picture, so a
+	// toggle drops the cached answers; the map service exposes the drop by
+	// assertion, as other optional wiring here does.
+	if inv, ok := mapsService.(interface{ InvalidateMapPictures(campaignID string) }); ok {
+		hexService.SetPictureInvalidator(inv.InvalidateMapPictures)
+	}
 }
 
 // wireMapShadows gives the map service its shadow source. A named helper so a
@@ -1410,6 +1459,42 @@ func (a *mapEventPublisherAdapter) underShadow(mapID string, check func([]maps.S
 	return check(areas)
 }
 
+// underFog is underShadow for hex fog: it reports whether an event about a pin
+// or drawing on mapID must be restricted to DM-equivalent clients because the
+// item lies in unexplored hexes. Same fail-closed rule: an unwired or failing
+// lookup restricts.
+func (a *mapEventPublisherAdapter) underFog(mapID string, check func(*maps.FogMask) bool) bool {
+	if a.fog == nil {
+		slog.Error("maps: hex fog lookup not wired; restricting map events to DMs", slog.String("map_id", mapID))
+		return true
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	mask, err := a.fog.FogMask(ctx, mapID)
+	if err != nil {
+		slog.Error("maps: hex fog lookup failed while publishing; restricting event to DMs",
+			slog.String("map_id", mapID), slog.Any("error", err))
+		return true
+	}
+	return mask != nil && check(mask)
+}
+
+// PublishHexChanged announces a hex write. The message carries the map id, the
+// layer version and, only when the service judged it safe, the party's path:
+// never a cell, a name or a note. Clients refetch the role-filtered read, so
+// the audience rules live in one place. It goes to every client of the
+// campaign: the version tells a viewer who cannot see the layer nothing.
+func (a *mapEventPublisherAdapter) PublishHexChanged(campaignID, mapID string, version uint64, partyPath []maps.HexKey) {
+	if campaignID == "" || a.bus == nil {
+		return
+	}
+	payload := map[string]any{"map_id": mapID, "version": version}
+	if len(partyPath) > 0 {
+		payload["party_path"] = partyPath
+	}
+	a.bus.Publish(ws.NewMessage(ws.MsgHexChanged, campaignID, mapID, payload))
+}
+
 // publishWithAudience wraps ws.NewMessage with the audience derived from
 // the source row: the binary RequiresDM (dm_only) flag, plus — for
 // markers and drawings, which carry per-user visibility_rules — the
@@ -1447,15 +1532,19 @@ func (a *mapEventPublisherAdapter) PublishDrawingEvent(eventType string, campaig
 	default:
 		return
 	}
+	// The picture a fogged hex layer is pinned to is DM-only on the wire too:
+	// its event carries the file id, which is the secret under the fog.
 	dmOnly := drawing.Visibility == "dm_only" ||
 		(drawing.DrawingType != maps.DrawingTypeShadow &&
-			a.underShadow(drawing.MapID, func(areas []maps.ShadowArea) bool { return maps.DrawingUnderShadow(areas, drawing) }))
+			(a.underShadow(drawing.MapID, func(areas []maps.ShadowArea) bool { return maps.DrawingUnderShadow(areas, drawing) }) ||
+				a.underFog(drawing.MapID, func(f *maps.FogMask) bool { return f.HidesDrawing(drawing) || f.WithholdsImageOf(drawing) })))
 	a.publishWithAudience(msgType, campaignID, drawing.ID, drawing, dmOnly, maps.ParseVisibilityRules(drawing.VisibilityRules))
 }
 
 // PublishTokenEvent translates map token domain events into WebSocket messages.
 // Tokens flagged is_hidden are GM-only — same gate as the SQL filter in
-// drawing_repository.ListTokens.
+// drawing_repository.ListTokens — and so are tokens in unexplored hexes, the
+// gate DrawingService.ListTokens adds.
 func (a *mapEventPublisherAdapter) PublishTokenEvent(eventType string, campaignID string, token *maps.Token) {
 	if campaignID == "" {
 		return
@@ -1471,20 +1560,23 @@ func (a *mapEventPublisherAdapter) PublishTokenEvent(eventType string, campaignI
 	default:
 		return
 	}
-	a.publishWithAudience(msgType, campaignID, token.ID, token, token.IsHidden, nil)
+	dmOnly := token.IsHidden || a.underFog(token.MapID, func(f *maps.FogMask) bool { return f.HidesToken(token) })
+	a.publishWithAudience(msgType, campaignID, token.ID, token, dmOnly, nil)
 }
 
 // PublishTokenPositionEvent broadcasts a token position update via WebSocket.
-// Gated on isHidden exactly like PublishTokenEvent, so a GM-only token's live
-// drag position never reaches a non-GM client.
-func (a *mapEventPublisherAdapter) PublishTokenPositionEvent(campaignID, tokenID string, x, y float64, isHidden bool) {
+// Gated on isHidden and the fog exactly like PublishTokenEvent, so neither a
+// GM-only token's live drag position nor a token walking in unexplored land
+// reaches a non-GM client.
+func (a *mapEventPublisherAdapter) PublishTokenPositionEvent(campaignID, mapID, tokenID string, x, y float64, isHidden bool) {
 	if campaignID == "" {
 		return
 	}
+	dmOnly := isHidden || a.underFog(mapID, func(f *maps.FogMask) bool { return f.HidesPoint(x, y) })
 	a.publishWithAudience(ws.MsgTokenMoved, campaignID, tokenID, map[string]float64{
 		"x": x,
 		"y": y,
-	}, isHidden, nil)
+	}, dmOnly, nil)
 }
 
 // PublishLayerEvent broadcasts a map layer event via WebSocket. Layers
@@ -1559,7 +1651,8 @@ func (a *mapEventPublisherAdapter) PublishMarkerEvent(eventType string, campaign
 		return
 	}
 	dmOnly := marker.IsDMOnly() ||
-		a.underShadow(marker.MapID, func(areas []maps.ShadowArea) bool { return maps.MarkerUnderShadow(areas, marker) })
+		a.underShadow(marker.MapID, func(areas []maps.ShadowArea) bool { return maps.MarkerUnderShadow(areas, marker) }) ||
+		a.underFog(marker.MapID, func(f *maps.FogMask) bool { return f.HidesMarker(marker) })
 	a.publishWithAudience(msgType, campaignID, marker.ID, marker, dmOnly, maps.ParseVisibilityRules(marker.VisibilityRules))
 }
 
@@ -2368,6 +2461,20 @@ func (a *App) RegisterRoutes() {
 	entityPermRepo := entities.NewEntityPermissionRepository(a.DB)
 	entityService := entities.NewEntityService(entityRepo, entityTypeRepo, entityPermRepo)
 
+	// Pages saved before search_text stopped indexing GM-only content still
+	// carry it until edited; recompute those rows. Idempotent, so it is a
+	// no-op on later boots; detached so a large campaign can't stall startup.
+	go func() {
+		n, err := entities.ReindexSecretSearchText(a.ShutdownCtx, entityRepo)
+		if err != nil {
+			slog.Warn("entities: search_text reindex stopped", slog.Any("error", err), slog.Int("rewritten", n))
+			return
+		}
+		if n > 0 {
+			slog.Info("entities: search_text reindexed", slog.Int("rewritten", n))
+		}
+	}()
+
 	// One-shot heal of legacy auto-pluralize defaults that produced
 	// "Mapss"-style values (name="Maps", plural="Mapss"). Idempotent;
 	// failures are logged but never block boot. Runs in a goroutine
@@ -2401,6 +2508,10 @@ func (a *App) RegisterRoutes() {
 		// fields become owner-private on types created before the manifest
 		// carried owner_only.
 		reconcileFieldOwnerOnlyFlags(ctx, entityService)
+
+		// Same for play blocks, so an installed system's play declarations
+		// reach types created before it declared them.
+		reconcileFieldPlay(ctx, entityService)
 	}()
 
 	// Campaigns plugin: CRUD, membership, ownership transfer.
@@ -2859,6 +2970,7 @@ func (a *App) RegisterRoutes() {
 		// without a restart — mirrors the boot-time reconcile.
 		reconcileFieldGMFlags(context.Background(), entityService)
 		reconcileFieldOwnerOnlyFlags(context.Background(), entityService)
+		reconcileFieldPlay(context.Background(), entityService)
 
 		// Add the sheet fields this install introduced to campaigns already
 		// using the system; background since it walks every such campaign.
@@ -3441,6 +3553,15 @@ func (a *App) RegisterRoutes() {
 	}); ok {
 		wired.SetGameNightsAffectedByAnchorMove(&gameNightsAnchorMoveAdapter{svc: sessionsService})
 	}
+	// Keeps Game nights on for campaigns that already use them; a recorded
+	// owner choice is left alone. Best-effort: logs and never blocks startup.
+	if n, err := sessions.ReconcileAddonEnablement(context.Background(), sessionsService, addonService); err != nil {
+		slog.Error("game nights addon enablement backfill failed; campaigns that already use game nights "+
+			"may not see them until an owner turns on Game nights (Manage → Game & features)",
+			slog.String("error", err.Error()))
+	} else if n > 0 {
+		slog.Info("game nights addon enablement backfill complete", slog.Int("campaigns", n))
+	}
 	sessionsHandler := sessions.NewHandler(sessionsService)
 	sessionsHandler.SetMemberLister(campaignService)
 	sessionsHandler.SetMailSender(smtpService, a.Config.BaseURL)
@@ -3614,6 +3735,9 @@ func (a *App) RegisterRoutes() {
 		&syncStashAPIAdapter{api: stashAPI},
 		"armory",
 	)
+	// Quests for the Foundry module; the quest services attach below, once
+	// the quests plugin is built.
+	questAPI := &syncQuestAPIAdapter{stash: stashSvc, actors: stashAPI, signer: urlSigner}
 
 	// REST API v1: versioned endpoints for external clients (Foundry VTT, etc.).
 	// Authenticates via API keys, not browser sessions.
@@ -3673,7 +3797,7 @@ func (a *App) RegisterRoutes() {
 	syncHistoryHandler.SetFoundryPlayers(foundryPlayerRepo)
 
 	if a.PluginHealth.IsHealthy("syncapi") {
-		syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, noteAPIHandler, tagAPIHandler, syncMappingHandler, syncChangesHandler, stashAPIHandler, syncService, addonService, authService, campaignService, syncapi.WithSyncHistory(syncHistoryHandler))
+		syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, noteAPIHandler, tagAPIHandler, syncMappingHandler, syncChangesHandler, stashAPIHandler, syncService, addonService, authService, campaignService, syncapi.WithSyncHistory(syncHistoryHandler), syncapi.WithQuests(syncapi.NewQuestAPIHandler(questAPI, campaignService, "armory")))
 		syncapi.RegisterSyncHistoryPageRoutes(e, syncHistoryHandler, campaignService, authService)
 		syncapi.RegisterFoundryPageRoutes(e, syncHistoryHandler, campaignService, authService)
 		syncapi.RegisterAdminSyncFlowRoute(adminGroup, syncHistoryHandler)
@@ -3763,12 +3887,19 @@ func (a *App) RegisterRoutes() {
 			slog.Error("revoking notes app grants failed", slog.String("user_id", userID), slog.Any("error", err))
 		}
 	})
+	// Removing a player from a campaign ends their grants there, so a later
+	// re-invite starts with none.
+	campaigns.OnMemberRemoved(campaignService, func(ctx context.Context, campaignID, userID string) {
+		if err := noteGrants.RevokeAllInCampaign(ctx, campaignID, userID); err != nil {
+			slog.Error("revoking notes app grants on removal failed", slog.String("campaign_id", campaignID), slog.String("user_id", userID), slog.Any("error", err))
+		}
+	})
 	// The campaign's Sync API switch governs outside apps, the notebook too.
 	notesAppGate := func(ctx context.Context, campaignID string) (bool, error) {
 		return addonService.IsEnabledForCampaign(ctx, campaignID, syncapi.SyncAPIAddonSlug)
 	}
 	noteHandler.SetJotsGate(func(ctx context.Context, campaignID string) (bool, error) {
-		return addonService.IsEnabledForCampaign(ctx, campaignID, "notes")
+		return addonService.IsEnabledForCampaign(ctx, campaignID, addons.JotNotesAddonSlug)
 	})
 	notesApp := notes.RegisterAppGrantRoutes(e, noteHandler, noteGrantHandler, noteGrants, notesAppGate, campaignService, authService)
 	// The editor's @ page picker, as the player sees pages.
@@ -4027,12 +4158,17 @@ func (a *App) RegisterRoutes() {
 	blockRegistry.Register(entities.BlockMeta{
 		Type: "notice_boards", Label: "Notice boards", Icon: "fa-thumbtack",
 		Description: "Boards players can cycle through, with quest notices, notes, pinned pages and maps",
-		Contexts:    []string{"template"}, Singleton: true,
+		Contexts:    []string{"template", "category"}, Singleton: true,
 	}, func(rc entities.BlockRenderContext) templ.Component {
 		if rc.CC == nil || rc.Entity == nil {
 			return templ.NopComponent
 		}
 		return quests.NoticeBoardsMount(rc.CC.Campaign.ID, rc.Entity.ID, rc.CSRFToken, rc.CC.CanControlWorldState(), int(rc.CC.MemberRole))
+	})
+	// The same block on a category dashboard: its boards belong to the
+	// category, not to a page.
+	entities.RegisterCategoryBlock("notice_boards", func(cc *campaigns.CampaignContext, et *entities.EntityType) templ.Component {
+		return quests.CategoryBoardsMount(cc.Campaign.ID, et.ID, cc.CanControlWorldState(), int(cc.MemberRole))
 	})
 
 	// Timeline plugin blocks (requires "timeline" addon).
@@ -4156,6 +4292,14 @@ func (a *App) RegisterRoutes() {
 		slog.Info("placed page extras into layouts", slog.Int("layouts", n))
 	}
 
+	// One-time: Notes became Journal plus Jot notes, so campaigns that had
+	// Notes on keep both (see jot_notes_split.go). Retried on the next boot.
+	if n, err := splitJotNotesOnce(context.Background(), settingsRepo, addonService); err != nil {
+		slog.Error("splitting jot notes failed", slog.String("error", err.Error()))
+	} else if n > 0 {
+		slog.Info("turned jot notes on where the journal was on", slog.Int("campaigns", n))
+	}
+
 	campaignHandler.SetAuditLogger(&campaignAuditAdapter{svc: auditService})
 	campaignHandler.SetAddonLister(&addonListerAdapter{svc: addonService})
 	campaignHandler.SetSystemAddonEnabler(addonService)
@@ -4231,6 +4375,7 @@ func (a *App) RegisterRoutes() {
 	exportSvc.SetGroupImporter(&groupImportAdapter{svc: groupService})
 	exportSvc.SetPostExporter(&postExportAdapter{postSvc: postService, entitySvc: entityService})
 	exportSvc.SetPostImporter(&postImportAdapter{svc: postService})
+	exportSvc.SetMediaImporter(&mediaImportAdapter{svc: mediaService})
 	exportHandler := campaigns.NewExportHandler(exportSvc)
 	campaigns.RegisterExportRoutes(e, exportHandler, campaignService, authService)
 
@@ -4595,6 +4740,7 @@ func (a *App) RegisterRoutes() {
 					SidebarColour: ap.SidebarColour, SidebarOwn: ap.SidebarOwn,
 					SidebarCorner: ap.SidebarCorner, SidebarSubtitle: ap.SidebarSubtitle, SidebarBanner: ap.SidebarBanner,
 					PeekGlow: ap.PeekGlow, PeekGlowColour: ap.PeekGlowColour,
+					HoverCard: ap.HoverCard,
 				}
 				ctx = layouts.SetAppearance(ctx, ad)
 			}
@@ -4882,8 +5028,11 @@ func (a *App) RegisterRoutes() {
 	wsEventBus := ws.EventBus(syncapi.NewRecordingEventBus(ws.NewEventBus(wsHub), syncChangeRepo))
 	go syncapi.StartChangePruner(a.ShutdownCtx, syncChangeRepo)
 
-	entityService.SetEventPublisher(&entityEventPublisherAdapter{bus: wsEventBus})
-	relService.SetEventPublisher(&relationEventPublisherAdapter{bus: wsEventBus})
+	// The quests due-date events follow a page's visibility, so the entity
+	// events also reach them once the quests service exists (attached below).
+	questEntityEvts := newQuestEntityEvents(&entityEventPublisherAdapter{bus: wsEventBus})
+	entityService.SetEventPublisher(questEntityEvts)
+	relService.SetEventPublisher(&relationEventPublisherAdapter{bus: wsEventBus, shares: stashSvc})
 	stashEvents.bus = wsEventBus
 	entityService.SetSidebarAutoAdder(&sidebarAutoAdderAdapter{campaignService: campaignService})
 	noteSvc.SetEventPublisher(&noteEventPublisherAdapter{bus: wsEventBus})
@@ -4923,17 +5072,21 @@ func (a *App) RegisterRoutes() {
 	// Quest sheets and notice boards. Cross-plugin lookups go through the
 	// adapters in quests_adapters.go.
 	if a.PluginHealth.IsHealthy(quests.PluginSlug) {
-		questEntities := &questEntityAdapter{svc: entityService}
-		questMaps := &questMapAdapter{svc: mapsService}
+		questEntities := &questEntityAdapter{svc: entityService, cards: entities.NewPageCards(a.DB)}
+		questMaps := &questMapAdapter{svc: mapsService, addons: addonService}
 		questRepo := quests.NewQuestRepository(a.DB)
-		quests.RegisterRoutes(e, quests.NewHandler(
-			quests.NewQuestService(questRepo, questEntities, questMaps),
-			quests.NewBoardService(quests.NewBoardRepository(a.DB), questRepo, questEntities, questMaps, &questMemberNamesAdapter{svc: campaignService}),
-			quests.NewPickerService(questEntities, questMaps, &questCharacterAdapter{
-				dir:   stashDirectory,
-				names: &questMemberNamesAdapter{svc: campaignService},
-			}),
-		), campaignService, authService)
+		questCal := &questCalendarAdapter{svc: calendarService, addons: addonService}
+		questSvc, boardSvc := quests.WithAnnouncer(
+			quests.NewQuestService(questRepo, questEntities, questMaps, questCal),
+			quests.NewBoardService(quests.NewBoardRepository(a.DB), questRepo, questEntities, &questTypeAdapter{svc: entityService}, questMaps, &questMemberNamesAdapter{svc: campaignService}, questCal),
+			questEntities, &questAnnouncerAdapter{bus: wsEventBus})
+		questEntityEvts.attach(questSvc)
+		questPicker := quests.NewPickerService(questEntities, questMaps, &questCharacterAdapter{
+			dir:   stashDirectory,
+			names: &questMemberNamesAdapter{svc: campaignService},
+		})
+		questAPI.attach(questSvc, boardSvc, questPicker)
+		quests.RegisterRoutes(e, quests.NewHandler(questSvc, boardSvc, questPicker), campaignService, authService)
 	} else {
 		slog.Warn("quests plugin degraded — routes not registered")
 	}
@@ -4946,6 +5099,13 @@ func (a *App) RegisterRoutes() {
 		records.WeatherKind{Svc: calendarService},
 	}
 	aiTables := records.TableKind{Svc: aiRollTablesAdapter{rollTablesSvc}}
+	aiHouseRules := records.HouseRuleKind{Book: systemHandler, SystemOf: func(ctx context.Context, campaignID string) string {
+		c, err := campaignService.GetByID(ctx, campaignID)
+		if err != nil {
+			return ""
+		}
+		return c.ParseSettings().SystemID
+	}}
 	if a.PluginHealth.IsHealthy(rolltables.PluginSlug) {
 		aiKinds = append(aiKinds, aiTables)
 	}
@@ -4954,17 +5114,23 @@ func (a *App) RegisterRoutes() {
 		records.CarriedItemKind(entityService, relService),
 		records.PinKind{Svc: aiMapsAdapter{mapsService}, Entities: entityService},
 		records.NoteKind{Svc: noteSvc, Entities: entityService},
-		records.HouseRuleKind{Book: systemHandler, SystemOf: func(ctx context.Context, campaignID string) string {
-			c, err := campaignService.GetByID(ctx, campaignID)
-			if err != nil {
-				return ""
-			}
-			return c.ParseSettings().SystemID
-		}},
+		aiHouseRules,
 		records.SystemEntryKind{Svc: systemEntrySvc},
 		records.GeneratorKind{Cal: calendarService, Tables: aiTables},
 	)
 	aiWorkspaceHandler.SetRecords(records.NewRegistry(aiKinds...))
+
+	// The read-only lookups an AI may ask for. Game-system entries wait on
+	// the character pick-list service (TODO(#1170)).
+	aiLookups := &records.Lookups{
+		Cal: calendarService, Maps: aiMapsAdapter{mapsService}, Pages: entityService,
+		Rels: relService, Notes: noteSvc, Rules: &aiHouseRules,
+		Party: &aiPartyAdapter{screen: dmScreenSvc, nights: sessionsService, members: campaignService},
+	}
+	if a.PluginHealth.IsHealthy(rolltables.PluginSlug) {
+		aiLookups.Tables = aiTables.Svc
+	}
+	aiWorkspaceHandler.SetLookups(aiLookups)
 
 	// Late-bind the entity_notes notifier now that wsEventBus exists.
 	// The service was constructed earlier with a holder.Notify reference;
@@ -4992,6 +5158,7 @@ func (a *App) RegisterRoutes() {
 	})
 	drawingService.SetMediaVerifier(&mapMediaVerifierAdapter{svc: mediaService})
 	mapsService.SetEventPublisher(mapEvents)
+	wireHexFog(mapsService, drawingService, mapEvents, hexService)
 	hexService.SetPictures(maps.NewHexPictures(drawingService))
 	hexService.SetMapLookup(func(ctx context.Context, mapID string) (string, error) {
 		m, err := mapsService.GetMap(ctx, mapID)

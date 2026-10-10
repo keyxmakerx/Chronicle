@@ -18,7 +18,8 @@ import (
 )
 
 // CategoryBlockSwitch dispatches a dashboard block to the appropriate render
-// component based on its type. Unknown types are silently skipped.
+// component based on its type. Types other plugins registered through
+// RegisterCategoryBlock come last; anything else is silently skipped.
 templ CategoryBlockSwitch(cc *campaigns.CampaignContext, et *EntityType, block campaigns.DashboardBlock, entities []Entity, total int) {
 	switch block.Type {
 		case "category_header":
@@ -37,6 +38,8 @@ templ CategoryBlockSwitch(cc *campaigns.CampaignContext, et *EntityType, block c
 			@catCalendarPreview(cc, block.Config)
 		case "timeline_preview":
 			@catTimelinePreview(cc, block.Config)
+		default:
+			@renderExtraCategoryBlock(cc, et, block.Type)
 		// map_preview was removed in favor of the per-entity map_editor
 		// block (see internal/plugins/maps/entity_map_block.templ). The
 		// old type silently drops at render — existing category layouts

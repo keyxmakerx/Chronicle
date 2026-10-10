@@ -61,7 +61,7 @@ var contractGoverned = map[string]string{
 	"armory.UpdateStashInput":      "PUT /campaigns/:id/armory/stashes/:sid — a rename must not clear the stash location; only an explicit null does",
 	"tags.UpdateTagRequest":        "PUT /campaigns/:id/tags/:tagId — the wire-bound twin of UpdateTagInput above; same incident, same fix",
 	"maps.UpdateHexCellInput":      "PATCH .../maps/:mid/hexes/cells — a paint stroke sends only terrain, so it must not touch a hex's name or notes; a rename must not clear its terrain",
-	"maps.UpdateHexLayerInput":     "PUT .../maps/:mid/hexes/layer — a push naming nothing about the anchor must not move the hexes off their picture; only an explicit null puts them back on the whole map",
+	"maps.UpdateHexLayerInput":     "PUT .../maps/:mid/hexes/layer — a push naming nothing about the anchor must not move the hexes off their picture; only an explicit null puts them back on the whole map; a fog-only or anchor-only push must not reset the travel figures to their defaults",
 	"auth.UpdateViewPrefsInput":    "PUT /account/view-prefs — each My view choice saves on its own as it is tapped, so a body naming one must not reset the other three (born governed, no incident)",
 }
 
@@ -70,7 +70,6 @@ var contractGoverned = map[string]string{
 var governedFieldExceptions = map[string]string{
 	"maps.UpdateHexCellInput.Col":          "value-typed by choice: Col and Row are the hex's identity, not data to merge. The handler refuses an entry that omits either, and the service bounds them to 0..MaxHexCoord.",
 	"maps.UpdateHexCellInput.Row":          "value-typed by choice: same as maps.UpdateHexCellInput.Col.",
-	"entities.UpdateEntityInput.ImagePath": "INERT — entityService.Update never reads it. That is its own defect (campaign import believes it is applying image paths through this input and is not); tracked as #613 rather than fixed under a ruling that was about a different bug. It cannot clobber anything precisely because nothing reads it.",
 
 	// Update only assigns Name when non-empty, so it already preserves an
 	// absent/blank name without needing presence-awareness.

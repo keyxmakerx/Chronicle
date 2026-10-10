@@ -38,6 +38,8 @@ type EntityShowRenderContext struct {
 	// UserID is the viewing user's id, used to gate owner-only field
 	// visibility. Empty for an anonymous viewer.
 	UserID string
+	// OwnerName is the claimant's display name, empty when unclaimed or unresolved.
+	OwnerName string
 }
 
 // EntityShowRenderer renders the inner contents of an entity show page
@@ -155,28 +157,32 @@ func GetGlobalEntityShowRendererRegistry() *EntityShowRendererRegistry {
 // under the entry's slug.
 func MakeWidgetMountRenderer(widget string) EntityShowRenderer {
 	return func(ctx EntityShowRenderContext) templ.Component {
-		entityID := ""
-		visibility := ""
-		isOwner := false
+		m := widgetMount{widget: widget}
 		if ctx.Entity != nil {
-			entityID = ctx.Entity.ID
-			visibility = string(ctx.Entity.Visibility)
+			m.entityID = ctx.Entity.ID
+			m.visibility = string(ctx.Entity.Visibility)
 			// Gates owner-only widget UI (e.g. the Draw Steel sheet's Background
 			// box) safely server-side — mirrors the isGM gate below, but for
 			// "this viewer is the entity's claimed owner" instead of GM-tier.
-			isOwner = ctx.Entity.IsOwnedBy(ctx.UserID)
+			m.isOwner = ctx.Entity.IsOwnedBy(ctx.UserID)
+			m.claimed = ctx.Entity.OwnerUserID != nil
+			m.claimedName = ctx.OwnerName
 		}
-		campaignID := ""
-		isGM := false
 		if ctx.CC != nil {
 			if ctx.CC.Campaign != nil {
-				campaignID = ctx.CC.Campaign.ID
+				m.campaignID = ctx.CC.Campaign.ID
 			}
 			// GM == can see dm_only content (Owner or a DM-grantee). Gates GM-only
 			// widget UI (e.g. the Draw Steel sheet's GM Lore box) safely server-side.
-			isGM = ctx.CC.VisibilityRole() >= int(campaigns.RoleOwner)
+			m.isGM = ctx.CC.VisibilityRole() >= int(campaigns.RoleOwner)
+			// The same rule the server applies to the identity writes, so a
+			// widget never offers an edit the server would refuse.
+			m.canEditIdentity = ctx.Entity != nil && CanEditIdentity(ctx.CC.MemberRole, ctx.Entity, ctx.UserID)
+			// The image route is Scribe-only; a claimed owner can rename and set
+			// identity fields but not replace the picture.
+			m.canChangeImage = ctx.CC.MemberRole >= campaigns.RoleScribe
 		}
-		return widgetMount{widget: widget, entityID: entityID, campaignID: campaignID, isGM: isGM, isOwner: isOwner, visibility: visibility}
+		return m
 	}
 }
 
@@ -184,32 +190,43 @@ func MakeWidgetMountRenderer(widget string) EntityShowRenderer {
 // point, implemented directly rather than via a generated templ file
 // since it's a handful of attributes on a single div.
 type widgetMount struct {
-	widget     string
-	entityID   string
-	campaignID string
-	isGM       bool   // viewer can see dm_only content (gates GM-only widget UI)
-	isOwner    bool   // viewer is this entity's claimed owner (gates owner-only widget UI)
-	visibility string // entity visibility mode (drives a header pill)
+	widget          string
+	entityID        string
+	campaignID      string
+	isGM            bool   // viewer can see dm_only content (gates GM-only widget UI)
+	isOwner         bool   // viewer is this entity's claimed owner (gates owner-only widget UI)
+	visibility      string // entity visibility mode (drives a header pill)
+	claimed         bool   // someone has claimed this entity
+	claimedName     string // the claimant's display name, when known
+	canEditIdentity bool   // viewer may edit identity fields and rename (Scribe+ or the claimed owner)
+	canChangeImage  bool   // viewer may replace the picture (Scribe+)
 }
 
-func (w widgetMount) Render(_ context.Context, out io.Writer) error {
-	isGM := "false"
-	if w.isGM {
-		isGM = "true"
-	}
-	isOwner := "false"
-	if w.isOwner {
-		isOwner = "true"
+// Render writes the mount div. data-armory-items is true when the
+// items-and-money panel draws on this same page, so the widget can leave its
+// own item list out instead of showing two inventories.
+func (w widgetMount) Render(ctx context.Context, out io.Writer) error {
+	claimedName := w.claimedName
+	if w.claimed && claimedName == "" {
+		claimedName = "a player"
 	}
 	_, err := fmt.Fprintf(
 		out,
-		`<div data-widget="%s" data-entity-id="%s" data-campaign-id="%s" data-is-gm="%s" data-is-owner="%s" data-visibility="%s"></div>`,
+		`<div data-widget="%s" data-entity-id="%s" data-campaign-id="%s" data-is-gm="%t" data-is-owner="%t" data-visibility="%s"`+
+			` data-can-edit-identity="%t" data-can-change-image="%t" data-armory-items="%t"`+
+			` data-claimed="%t" data-claimed-by-me="%t" data-claimed-name="%s"></div>`,
 		templ.EscapeString(w.widget),
 		templ.EscapeString(w.entityID),
 		templ.EscapeString(w.campaignID),
-		isGM,
-		isOwner,
+		w.isGM,
+		w.isOwner,
 		templ.EscapeString(w.visibility),
+		w.canEditIdentity,
+		w.canChangeImage,
+		autoPagePanel(ctx),
+		w.claimed,
+		w.claimed && w.isOwner,
+		templ.EscapeString(claimedName),
 	)
 	return err
 }

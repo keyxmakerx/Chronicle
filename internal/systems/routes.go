@@ -47,6 +47,9 @@ func RegisterRoutes(e *echo.Echo, h *SystemHandler, addonSvc addons.AddonService
 // sit ahead of the /:cat param routes without colliding.
 func registerBookEditorRoutes(mg *echo.Group, h *SystemHandler) {
 	mg.GET("/book/edit", h.BookEditPage)
+	// Rules-index pages and search; any reader, sliced to their own book.
+	mg.GET("/book/index/:cat", h.BookIndexAPI)
+	mg.GET("/book/find", h.BookFindAPI)
 	mg.GET("/book/source", h.BookSourceAPI)
 	mg.GET("/book/export", h.BookExport)
 	mg.POST("/book/chapters", h.BookChapterCreate)

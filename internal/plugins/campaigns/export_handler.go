@@ -134,18 +134,18 @@ func (h *ExportHandler) ExportCampaign(c echo.Context) error {
 		return nil
 	}
 
-	// 2. media/<filename> for each file. UUID-based filenames mean no
-	// collisions and no path-traversal risk. Sanitize defensively
-	// anyway: any filename that contains a separator gets dropped with
-	// a warning rather than the whole bundle aborting.
+	// 2. media/<basename> for each file. Stored names carry date folders
+	// ("2026/03/<id>.png"); the entry is the UUID-based basename, which the
+	// manifest's Filename names, so no collisions and no path traversal.
 	for _, f := range files {
-		if strings.ContainsAny(f.Filename, `/\`) || strings.Contains(f.Filename, "..") {
+		name := MediaZipName(f.Filename)
+		if name == "" || name == "." || name == "/" || strings.Contains(name, "..") {
 			slog.Warn("export: skipping media file with unsafe basename",
 				slog.String("filename", f.Filename),
 			)
 			continue
 		}
-		entry, err := zw.Create("media/" + f.Filename)
+		entry, err := zw.Create("media/" + name)
 		if err != nil {
 			slog.Warn("export: failed to create zip entry; skipping",
 				slog.String("filename", f.Filename),
@@ -186,13 +186,8 @@ func (h *ExportHandler) ImportCampaignForm(c echo.Context) error {
 
 // ImportCampaign imports a campaign from an uploaded JSON file or zip
 // bundle (POST /campaigns/import). Creates a new campaign owned by the
-// current user.
-//
-// The zip path accepts files produced by ?include_media=1 exports, but
-// embedded media bytes are not restored (TODO(keyxmakerx/Chronicle#612):
-// remap old media IDs across entity/map/token image paths and entry_html).
-// The count of unrestored files goes into the ImportReport so the operator
-// is told in the response what the zip did not give back.
+// current user. A zip from ?include_media=1 also restores its picture
+// files; a JSON upload carries none, and the report says which are missing.
 func (h *ExportHandler) ImportCampaign(c echo.Context) error {
 	userID := auth.GetUserID(c)
 	if userID == "" {
@@ -226,14 +221,14 @@ func (h *ExportHandler) ImportCampaign(c echo.Context) error {
 	}
 
 	jsonData := data
-	mediaCount := 0
+	var media *ImportMediaBundle
 	if isZip(data) {
-		extracted, count, extractErr := extractCampaignJSONFromZip(data)
+		extracted, bundle, extractErr := extractCampaignJSONFromZip(data)
 		if extractErr != nil {
 			return apperror.NewBadRequest(extractErr.Error())
 		}
 		jsonData = extracted
-		mediaCount = count
+		media = bundle
 	} else {
 		// JSON-only upload — enforce the tighter cap.
 		if int64(len(data)) > maxImportSize {
@@ -250,22 +245,9 @@ func (h *ExportHandler) ImportCampaign(c echo.Context) error {
 		return err
 	}
 
-	campaign, report, err := h.exportSvc.Import(c.Request().Context(), userID, export)
+	campaign, report, err := h.exportSvc.Import(c.Request().Context(), userID, export, media)
 	if err != nil {
 		return err
-	}
-
-	// Media bytes in a zip are not restored (TODO(keyxmakerx/Chronicle#612)).
-	// Every unrestored file goes into the report so the operator is told in
-	// the response, not just a log line.
-	if mediaCount > 0 {
-		slog.Info("campaign import: media bytes in zip not restored",
-			slog.String("campaign", campaign.ID),
-			slog.Int("skipped_media_files", mediaCount),
-		)
-		report.FailN("media", "media file", "",
-			"archived in the zip but not re-attached on import; restore them by hand",
-			mediaCount)
 	}
 
 	// A partial import must say so. Redirecting to the shiny new campaign
@@ -291,40 +273,36 @@ func isZip(data []byte) bool {
 }
 
 // extractCampaignJSONFromZip pulls campaign.json from a zip blob and
-// returns its bytes plus the count of media/* entries we observed but
-// did not restore. Refuses zips that don't have campaign.json at the
-// root (those aren't ours).
-func extractCampaignJSONFromZip(data []byte) ([]byte, int, error) {
+// returns its bytes plus the zip's media/ entries. Refuses zips that don't
+// have campaign.json at the root (those aren't ours).
+func extractCampaignJSONFromZip(data []byte) ([]byte, *ImportMediaBundle, error) {
 	r, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
-		return nil, 0, fmt.Errorf("invalid zip: %w", err)
+		return nil, nil, fmt.Errorf("invalid zip: %w", err)
 	}
 	var jsonBytes []byte
-	mediaCount := 0
 	for _, entry := range r.File {
-		switch {
-		case entry.Name == "campaign.json":
-			rc, err := entry.Open()
-			if err != nil {
-				return nil, 0, fmt.Errorf("open campaign.json in zip: %w", err)
-			}
-			b, err := io.ReadAll(io.LimitReader(rc, maxImportSize+1))
-			_ = rc.Close()
-			if err != nil {
-				return nil, 0, fmt.Errorf("read campaign.json in zip: %w", err)
-			}
-			if int64(len(b)) > maxImportSize {
-				return nil, 0, fmt.Errorf("campaign.json inside zip exceeds %d MB", maxImportSize/(1024*1024))
-			}
-			jsonBytes = b
-		case strings.HasPrefix(entry.Name, "media/"):
-			mediaCount++
+		if entry.Name != "campaign.json" {
+			continue
 		}
+		rc, err := entry.Open()
+		if err != nil {
+			return nil, nil, fmt.Errorf("open campaign.json in zip: %w", err)
+		}
+		b, err := io.ReadAll(io.LimitReader(rc, maxImportSize+1))
+		_ = rc.Close()
+		if err != nil {
+			return nil, nil, fmt.Errorf("read campaign.json in zip: %w", err)
+		}
+		if int64(len(b)) > maxImportSize {
+			return nil, nil, fmt.Errorf("campaign.json inside zip exceeds %d MB", maxImportSize/(1024*1024))
+		}
+		jsonBytes = b
 	}
 	if jsonBytes == nil {
-		return nil, 0, fmt.Errorf("zip is missing campaign.json at the root; upload a chronicle export")
+		return nil, nil, fmt.Errorf("zip is missing campaign.json at the root; upload a chronicle export")
 	}
-	return jsonBytes, mediaCount, nil
+	return jsonBytes, NewImportMediaBundle(r), nil
 }
 
 // sanitizeFilename converts a campaign name to a safe filename component.

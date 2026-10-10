@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/labstack/echo/v4"
@@ -378,19 +379,12 @@ func (h *SystemHandler) WidgetScriptAPI(c echo.Context) error {
 		return apperror.NewNotFound("widget not found")
 	}
 
-	// Resolve the system's directory on disk.
+	// Only installed packages serve scripts. A campaign's own custom system
+	// is data-only (errCustomSystemScripts), including one uploaded before
+	// that rule, whose scripts may still sit on disk.
 	sysDir := Dir(manifest.ID)
 	if sysDir == "" {
-		// Check campaign custom systems.
-		if h.campaignSystems != nil {
-			cc := campaigns.GetCampaignContext(c)
-			if cc != nil {
-				sysDir = h.campaignSystems.Dir(cc.Campaign.ID)
-			}
-		}
-	}
-	if sysDir == "" {
-		return apperror.NewNotFound("system directory not found")
+		return apperror.NewNotFound("widget not found")
 	}
 
 	// Resolve and validate the script file path.
@@ -560,6 +554,78 @@ func (h *SystemHandler) BookAPI(c echo.Context) error {
 	return c.JSON(http.StatusOK, out)
 }
 
+// viewerBook loads the package book filtered for the viewer (or for a player,
+// when a Director previews the player view), for the
+// rules-index endpoints. Campaign edits are not merged: generated chapters
+// can't be edited, so the package's are the ones readers see.
+func (h *SystemHandler) viewerBook(c echo.Context) (*Book, string, *SystemManifest, bool, error) {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return nil, "", nil, false, apperror.NewMissingContext()
+	}
+	mod := h.resolveSystem(c)
+	if mod == nil {
+		return nil, "", nil, false, apperror.NewNotFound("system not found")
+	}
+	sysDir := h.systemDir(c, mod)
+	if !HasBook(sysDir) {
+		return nil, "", nil, false, apperror.NewNotFound("this system has no book")
+	}
+	manifest := mod.Info()
+	b, err := LoadBook(sysDir, manifest)
+	if err != nil {
+		return nil, "", nil, false, apperror.NewNotFound("the rulebook could not be opened")
+	}
+	// A Director previewing the player view asks for exactly what players get.
+	director := bookViewerIsDirector(cc) && c.QueryParam("view") != "player"
+	return FilterBook(b, director), sysDir, manifest, director, nil
+}
+
+// BookIndexAPI returns the entries one rules-index page shows. The query must
+// name a slice a page of the viewer's own book shows, so a player can only
+// list what their book lists (Director-only chapters are already gone).
+// GET /campaigns/:id/systems/:mod/book/index/:cat?key=&value=&from=&to=
+func (h *SystemHandler) BookIndexAPI(c echo.Context) error {
+	b, sysDir, manifest, director, err := h.viewerBook(c)
+	if err != nil {
+		return err
+	}
+	cat := c.Param("cat")
+	want := bookIndexSlice{Key: c.QueryParam("key"), Value: c.QueryParam("value")}
+	want.From, _ = strconv.Atoi(c.QueryParam("from"))
+	want.To, _ = strconv.Atoi(c.QueryParam("to"))
+	if !bookShowsSlice(b, cat, want) {
+		return apperror.NewNotFound("this book has no such index page")
+	}
+	ie, err := loadIndexEntries(sysDir, manifest, cat)
+	if err != nil {
+		return apperror.NewNotFound("this index could not be read")
+	}
+	// Chapters are built so no page lists more than maxBookIndexItems.
+	items := ie.slice(want)
+	out := make([]BookIndexEntry, 0, len(items))
+	for _, it := range items {
+		out = append(out, ie.indexEntry(it, director, want.Key))
+	}
+	c.Response().Header().Set("Cache-Control", "private, no-store")
+	return c.JSON(http.StatusOK, map[string]any{"items": out})
+}
+
+// BookFindAPI searches the rules-index chapters the viewer's book shows.
+// GET /campaigns/:id/systems/:mod/book/find?q=
+func (h *SystemHandler) BookFindAPI(c echo.Context) error {
+	b, sysDir, manifest, _, err := h.viewerBook(c)
+	if err != nil {
+		return err
+	}
+	q := c.QueryParam("q")
+	if len(q) > 100 {
+		q = q[:100]
+	}
+	c.Response().Header().Set("Cache-Control", "private, no-store")
+	return c.JSON(http.StatusOK, map[string]any{"results": findInIndex(sysDir, manifest, b, q)})
+}
+
 // bookViewerIsDirector: the campaign owner, or a member the owner granted
 // Director (dm_only) visibility. The same rule as every other dm_only surface.
 func bookViewerIsDirector(cc *campaigns.CampaignContext) bool {
@@ -665,7 +731,8 @@ func (h *SystemHandler) GetSystemWidgetScriptURLs(ctx context.Context, campaignI
 
 	manifest := sys.Info()
 	total := len(manifest.TextRenderers) + len(manifest.Widgets)
-	if total == 0 {
+	// A campaign's custom system serves no scripts (see WidgetScriptAPI).
+	if total == 0 || Dir(manifest.ID) == "" {
 		return nil
 	}
 

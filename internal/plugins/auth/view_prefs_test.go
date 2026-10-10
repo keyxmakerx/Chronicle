@@ -40,6 +40,7 @@ func TestUpdateViewPrefsInput_ApplyTo(t *testing.T) {
 		{"explicit null resets just that choice", `{"textSize":null}`, stored, ViewPrefs{"dark", "calm", "standard", "high"}, false},
 		{"empty string means the default", `{"motion":""}`, stored, ViewPrefs{"dark", "owner", "larger", "high"}, false},
 		{"unknown theme refused", `{"theme":"sepia"}`, stored, stored, true},
+		{"off is a motion choice", `{"motion":"off"}`, stored, ViewPrefs{"dark", "off", "larger", "high"}, false},
 		{"unknown motion refused", `{"motion":"none"}`, stored, stored, true},
 		{"unknown size refused", `{"textSize":"huge"}`, stored, stored, true},
 		{"unknown contrast refused", `{"contrast":"max"}`, stored, stored, true},

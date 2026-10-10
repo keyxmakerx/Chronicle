@@ -89,14 +89,13 @@ var adminNav = AdminNavTree{
 			{Label: "People", Href: "/admin/users", Icon: "fa-users"},
 			{Label: "Campaigns", Href: "/admin/campaigns", Icon: "fa-book-open"},
 		}},
-		{ID: "packages", Label: "Packages", Items: []AdminNavItem{
+		// Everything an admin adds to the site, in one group.
+		{ID: "packages", Label: "Add-ons", Items: []AdminNavItem{
 			{Label: "Game systems & modules", Href: "/admin/packages", Icon: "fa-box",
 				Excludes: []string{"/admin/packages/settings"}},
-			{Label: "Package rules", Href: "/admin/packages/settings", Icon: "fa-scale-balanced"},
-		}},
-		{ID: "apps", Label: "Apps & extensions", Items: []AdminNavItem{
 			{Label: "Features", Href: "/admin/addons", Icon: "fa-plug"},
 			{Label: "Extensions", Href: "/admin/extensions", Icon: "fa-puzzle-piece"},
+			{Label: "Package rules", Href: "/admin/packages/settings", Icon: "fa-scale-balanced"},
 		}},
 		{ID: "security", Label: "Security", Items: []AdminNavItem{
 			{Label: "Sign-ins & sessions", Href: "/admin/security", Icon: "fa-shield-halved"},

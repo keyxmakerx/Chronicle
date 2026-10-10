@@ -226,6 +226,11 @@ func TestLoadBook_CoverErrors(t *testing.T) {
 		{"part without title", "parts:\n  - chapters: []\n", "no title"},
 		{"glossary path escape", "glossary: ../secret.json\n" + ok, "glossary"},
 		{"empty file", "", "empty"},
+		{"unknown look", "look: parchment\n" + ok, "look"},
+		{"tab not a chapter", "tabs: [nowhere]\n" + ok, "nowhere"},
+		{"start not a chapter", "start: nowhere\n" + ok, "start"},
+		{"first not a chapter", "first: nowhere\n" + ok, "first"},
+		{"tab twice", "tabs: [a, a]\nparts:\n  - title: P\n    chapters: [a]\n", "twice"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -324,5 +329,90 @@ func TestSystemIndexContent_BookMount(t *testing.T) {
 	}
 	if strings.Contains(html, `data-widget="rulebook-frontpage"`) || strings.Contains(html, `aria-label="Breadcrumb"`) {
 		t.Errorf("book page should mount only the book:\n%s", html)
+	}
+}
+
+// TestBookNavigation checks the handbook keys load, and that a player's copy
+// drops every tab, start page and link that points into the Director's book.
+func TestBookNavigation(t *testing.T) {
+	files := testBookFiles()
+	files["book/book.yaml"] = strings.Replace(testBookIndex, "parts:", `look: paper
+tabs: [basics, monsters]
+start: monsters
+first: basics
+parts:`, 1)
+	files["book/chapters/basics.yaml"] = testBasics + `  - title: Where next
+    columns: true
+    blocks:
+      - type: links
+        title: Turn to
+        items:
+          - {title: The basics, summary: Start here., chapter: basics}
+          - {title: Monsters, chapter: monsters}
+      - type: links
+        items:
+          - {title: Monsters only, chapter: monsters}
+`
+	dir := writeBook(t, files)
+	b, err := LoadBook(dir, &SystemManifest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.Look != "paper" || b.Start != "monsters" || b.First != "basics" || len(b.Tabs) != 2 {
+		t.Fatalf("navigation = %q %v %q %q", b.Look, b.Tabs, b.Start, b.First)
+	}
+	pages := b.Parts[0].Chapters[0].Pages
+	last := pages[len(pages)-1]
+	if !last.Columns || last.Blocks[0].Items[0].Chapter != "basics" {
+		t.Errorf("links page = %+v", last)
+	}
+
+	p := FilterBook(b, false)
+	if len(p.Tabs) != 1 || p.Tabs[0] != "basics" || p.Start != "" || p.First != "basics" {
+		t.Errorf("player navigation = %v %q %q", p.Tabs, p.Start, p.First)
+	}
+	pages = p.Parts[0].Chapters[0].Pages
+	last = pages[len(pages)-1]
+	if len(last.Blocks) != 1 || len(last.Blocks[0].Items) != 1 {
+		t.Errorf("player links = %+v", last.Blocks)
+	}
+	raw, _ := json.Marshal(p)
+	if strings.Contains(string(raw), "monsters") {
+		t.Error("player copy names a Director-only chapter")
+	}
+	if len(FilterBook(b, true).Tabs) != 2 || len(b.Parts[0].Chapters[0].Pages[2].Blocks[0].Items) != 2 {
+		t.Error("filtering for a player must not change the loaded book")
+	}
+}
+
+func TestBuildBookBlock_Links(t *testing.T) {
+	tests := []struct {
+		name    string
+		yaml    string
+		wantErr string
+	}{
+		{"ok", "type: links\nitems:\n  - {title: Combat, chapter: combat}\n", ""},
+		{"no items", "type: links\n", "needs items"},
+		{"no chapter", "type: links\nitems:\n  - {title: Combat}\n", "needs chapter"},
+		{"bad chapter", "type: links\nitems:\n  - {title: Combat, chapter: ../x}\n", "needs chapter"},
+		{"no title", "type: links\nitems:\n  - {chapter: combat}\n", "needs a title"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var y bookBlockYAML
+			if err := decodeBookBytes([]byte(tt.yaml), &y); err != nil {
+				t.Fatal(err)
+			}
+			_, err := buildBookBlock(y, nil)
+			if tt.wantErr == "" {
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Errorf("err = %v, want it to mention %q", err, tt.wantErr)
+			}
+		})
 	}
 }

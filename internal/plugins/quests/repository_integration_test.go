@@ -33,6 +33,8 @@ type questsFixture struct {
 	page, page2     string // page2 and otherPage belong to a different page/campaign
 	otherPage       string
 	user            string
+	typ, typ2       int // two categories of the first campaign
+	otherTyp        int // a category of the other campaign
 }
 
 func newQuestsFixture(t *testing.T) *questsFixture {
@@ -97,12 +99,29 @@ func newQuestsFixture(t *testing.T) *questsFixture {
 	for _, c := range []string{fx.campaign, fx.other} {
 		fx.exec(t, `INSERT INTO entity_types (campaign_id, slug, name, name_plural) VALUES (?,?,?,?)`, c, "place", "Place", "Places")
 	}
+	fx.typ = lookupType(t, db, fx.campaign)
+	fx.otherTyp = lookupType(t, db, fx.other)
+	fx.exec(t, `INSERT INTO entity_types (campaign_id, slug, name, name_plural) VALUES (?,?,?,?)`, fx.campaign, "faction", "Faction", "Factions")
+	fx.typ2 = lookupType(t, db, fx.campaign, "faction")
 	for _, p := range []struct{ id, campaign string }{{fx.page, fx.campaign}, {fx.page2, fx.campaign}, {fx.otherPage, fx.other}} {
 		fx.exec(t, `INSERT INTO entities (id, campaign_id, entity_type_id, name, slug, is_private, visibility, created_by, created_at, updated_at)
-			VALUES (?, ?, (SELECT id FROM entity_types WHERE campaign_id = ?), ?, ?, false, 'default', ?, NOW(), NOW())`,
+			VALUES (?, ?, (SELECT id FROM entity_types WHERE campaign_id = ? AND slug = 'place'), ?, ?, false, 'default', ?, NOW(), NOW())`,
 			p.id, p.campaign, p.campaign, "Page "+p.id[len(p.id)-1:], "p"+p.id[len(p.id)-1:], fx.user)
 	}
 	return fx
+}
+
+func lookupType(t *testing.T, db *sql.DB, campaign string, slug ...string) int {
+	t.Helper()
+	s := "place"
+	if len(slug) > 0 {
+		s = slug[0]
+	}
+	var id int
+	if err := db.QueryRow(`SELECT id FROM entity_types WHERE campaign_id = ? AND slug = ?`, campaign, s).Scan(&id); err != nil {
+		t.Fatalf("entity type %s: %v", s, err)
+	}
+	return id
 }
 
 func (fx *questsFixture) exec(t *testing.T, q string, args ...any) {
@@ -272,23 +291,23 @@ func TestBoardRepositoryIntegration_LooksAndBoards(t *testing.T) {
 	ctx := context.Background()
 	repo := NewBoardRepository(fx.db)
 
-	if l, err := repo.GetLooks(ctx, fx.campaign, fx.page); err != nil || l != (Looks{Board: LookLit, Ledger: LookLit}) {
+	if l, err := repo.GetLooks(ctx, fx.campaign, PageHome(fx.page)); err != nil || l != (Looks{Board: LookLit, Ledger: LookLit}) {
 		t.Fatalf("default looks: %+v %v", l, err)
 	}
 	for _, want := range []Looks{{LookPlain, LookParchment}, {LookMidnight, LookLit}} {
-		if err := repo.SetLooks(ctx, fx.campaign, fx.page, want); err != nil {
+		if err := repo.SetLooks(ctx, fx.campaign, PageHome(fx.page), want); err != nil {
 			t.Fatalf("set looks: %v", err)
 		}
-		if got, err := repo.GetLooks(ctx, fx.campaign, fx.page); err != nil || got != want {
+		if got, err := repo.GetLooks(ctx, fx.campaign, PageHome(fx.page)); err != nil || got != want {
 			t.Fatalf("looks = %+v %v, want %+v (upsert)", got, err, want)
 		}
 	}
-	if l, _ := repo.GetLooks(ctx, fx.campaign, fx.page2); l.Board != LookLit {
+	if l, _ := repo.GetLooks(ctx, fx.campaign, PageHome(fx.page2)); l.Board != LookLit {
 		t.Fatalf("looks leaked to another page: %+v", l)
 	}
 
 	mk := func(id, name, who string, order int) Board {
-		return Board{ID: id, CampaignID: fx.campaign, EntityID: fx.page, Name: name, Who: who, SortOrder: order}
+		return Board{ID: id, CampaignID: fx.campaign, Home: PageHome(fx.page), Name: name, Who: who, SortOrder: order}
 	}
 	boards := []Board{mk("b-1", "Bounties", WhoDM, 0), mk("b-2", "Notes", WhoAll, 1), mk("b-3", "Scribes", WhoScribe, 2)}
 	for _, b := range boards {
@@ -302,10 +321,10 @@ func TestBoardRepositoryIntegration_LooksAndBoards(t *testing.T) {
 	if err := repo.InsertBoard(ctx, mk("b-1", "dup", WhoDM, 0)); err == nil {
 		t.Fatal("duplicate board id must fail")
 	}
-	if err := repo.InsertBoard(ctx, Board{ID: "b-x", CampaignID: fx.campaign, EntityID: fx.page, Name: "ok", Who: WhoDM}); err != nil {
+	if err := repo.InsertBoard(ctx, Board{ID: "b-x", CampaignID: fx.campaign, Home: PageHome(fx.page), Name: "ok", Who: WhoDM}); err != nil {
 		t.Fatalf("zero sort order board: %v", err)
 	}
-	if err := repo.DeleteBoard(ctx, fx.campaign, fx.page, "b-x"); err != nil {
+	if err := repo.DeleteBoard(ctx, fx.campaign, PageHome(fx.page), "b-x"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -318,7 +337,7 @@ func TestBoardRepositoryIntegration_LooksAndBoards(t *testing.T) {
 	}
 	assertOrder := func(want ...string) {
 		t.Helper()
-		got, err := repo.ListBoards(ctx, fx.campaign, fx.page)
+		got, err := repo.ListBoards(ctx, fx.campaign, PageHome(fx.page))
 		if err != nil || !reflect.DeepEqual(ids(got), want) {
 			t.Fatalf("order = %v err=%v, want %v", ids(got), err, want)
 		}
@@ -326,20 +345,24 @@ func TestBoardRepositoryIntegration_LooksAndBoards(t *testing.T) {
 	assertOrder("b-1", "b-2", "b-3")
 
 	t.Run("get is scoped to page and campaign", func(t *testing.T) {
-		got, err := repo.GetBoard(ctx, fx.campaign, fx.page, "b-2")
+		got, err := repo.GetBoard(ctx, fx.campaign, PageHome(fx.page), "b-2")
 		if err != nil || !reflect.DeepEqual(*got, boards[1]) {
 			t.Fatalf("got %+v err=%v", got, err)
 		}
-		for name, args := range map[string][3]string{
-			"other page":     {fx.campaign, fx.page2, "b-2"},
-			"other campaign": {fx.other, fx.page, "b-2"},
-			"unknown id":     {fx.campaign, fx.page, "b-zzz"},
+		for name, args := range map[string]struct {
+			campaign string
+			home     Home
+			id       string
+		}{
+			"other page":     {fx.campaign, PageHome(fx.page2), "b-2"},
+			"other campaign": {fx.other, PageHome(fx.page), "b-2"},
+			"unknown id":     {fx.campaign, PageHome(fx.page), "b-zzz"},
 		} {
-			if _, err := repo.GetBoard(ctx, args[0], args[1], args[2]); !isNotFound(err) {
+			if _, err := repo.GetBoard(ctx, args.campaign, args.home, args.id); !isNotFound(err) {
 				t.Errorf("%s: want NotFound, got %v", name, err)
 			}
 		}
-		if bs, _ := repo.ListBoards(ctx, fx.campaign, fx.page2); len(bs) != 0 {
+		if bs, _ := repo.ListBoards(ctx, fx.campaign, PageHome(fx.page2)); len(bs) != 0 {
 			t.Error("boards listed for the wrong page")
 		}
 	})
@@ -350,29 +373,29 @@ func TestBoardRepositoryIntegration_LooksAndBoards(t *testing.T) {
 		if err := repo.UpdateBoard(ctx, b); err != nil {
 			t.Fatal(err)
 		}
-		got, _ := repo.GetBoard(ctx, fx.campaign, fx.page, "b-1")
+		got, _ := repo.GetBoard(ctx, fx.campaign, PageHome(fx.page), "b-1")
 		if got.Name != "Renamed" || got.Who != WhoScribe || got.SortOrder != 0 {
 			t.Fatalf("got %+v", got)
 		}
 		// A wrong campaign must not touch the row.
 		b.CampaignID, b.Name = fx.other, "Hijack"
 		_ = repo.UpdateBoard(ctx, b)
-		if got, _ := repo.GetBoard(ctx, fx.campaign, fx.page, "b-1"); got.Name != "Renamed" {
+		if got, _ := repo.GetBoard(ctx, fx.campaign, PageHome(fx.page), "b-1"); got.Name != "Renamed" {
 			t.Fatalf("update crossed campaigns: %+v", got)
 		}
 	})
 
 	t.Run("reorder", func(t *testing.T) {
-		if err := repo.SetOrder(ctx, fx.campaign, fx.page, []string{"b-3", "b-1", "b-2"}); err != nil {
+		if err := repo.SetOrder(ctx, fx.campaign, PageHome(fx.page), []string{"b-3", "b-1", "b-2"}); err != nil {
 			t.Fatal(err)
 		}
 		assertOrder("b-3", "b-1", "b-2")
 		// Ids from another page are ignored rather than reordered.
-		if err := repo.SetOrder(ctx, fx.campaign, fx.page2, []string{"b-2"}); err != nil {
+		if err := repo.SetOrder(ctx, fx.campaign, PageHome(fx.page2), []string{"b-2"}); err != nil {
 			t.Fatal(err)
 		}
 		assertOrder("b-3", "b-1", "b-2")
-		got, _ := repo.GetBoard(ctx, fx.campaign, fx.page, "b-2")
+		got, _ := repo.GetBoard(ctx, fx.campaign, PageHome(fx.page), "b-2")
 		if got.SortOrder != 2 {
 			t.Fatalf("sort_order = %d, want 2", got.SortOrder)
 		}
@@ -382,15 +405,15 @@ func TestBoardRepositoryIntegration_LooksAndBoards(t *testing.T) {
 		if err := repo.InsertItem(ctx, Item{ID: "i-1", BoardID: "b-1", CampaignID: fx.campaign, Kind: KindNote, Text: "hi"}); err != nil {
 			t.Fatal(err)
 		}
-		_ = repo.DeleteBoard(ctx, fx.other, fx.page, "b-1")
-		_ = repo.DeleteBoard(ctx, fx.campaign, fx.page2, "b-1")
-		if _, err := repo.GetBoard(ctx, fx.campaign, fx.page, "b-1"); err != nil {
+		_ = repo.DeleteBoard(ctx, fx.other, PageHome(fx.page), "b-1")
+		_ = repo.DeleteBoard(ctx, fx.campaign, PageHome(fx.page2), "b-1")
+		if _, err := repo.GetBoard(ctx, fx.campaign, PageHome(fx.page), "b-1"); err != nil {
 			t.Fatalf("board deleted through the wrong scope: %v", err)
 		}
-		if err := repo.DeleteBoard(ctx, fx.campaign, fx.page, "b-1"); err != nil {
+		if err := repo.DeleteBoard(ctx, fx.campaign, PageHome(fx.page), "b-1"); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := repo.GetBoard(ctx, fx.campaign, fx.page, "b-1"); !isNotFound(err) {
+		if _, err := repo.GetBoard(ctx, fx.campaign, PageHome(fx.page), "b-1"); !isNotFound(err) {
 			t.Fatalf("want NotFound after delete, got %v", err)
 		}
 		if n, _ := repo.CountItems(ctx, fx.campaign, "b-1"); n != 0 {
@@ -405,8 +428,8 @@ func TestBoardRepositoryIntegration_Items(t *testing.T) {
 	ctx := context.Background()
 	repo := NewBoardRepository(fx.db)
 	for _, b := range []Board{
-		{ID: "b-1", CampaignID: fx.campaign, EntityID: fx.page, Name: "One", Who: WhoAll},
-		{ID: "b-2", CampaignID: fx.campaign, EntityID: fx.page, Name: "Two", Who: WhoAll},
+		{ID: "b-1", CampaignID: fx.campaign, Home: PageHome(fx.page), Name: "One", Who: WhoAll},
+		{ID: "b-2", CampaignID: fx.campaign, Home: PageHome(fx.page), Name: "Two", Who: WhoAll},
 	} {
 		if err := repo.InsertBoard(ctx, b); err != nil {
 			t.Fatal(err)
@@ -556,6 +579,149 @@ func TestBoardRepositoryIntegration_Items(t *testing.T) {
 	t.Run("an item needs an existing board", func(t *testing.T) {
 		if err := repo.InsertItem(ctx, Item{ID: "i-orphan", BoardID: "b-none", CampaignID: fx.campaign, Kind: KindNote}); err == nil {
 			t.Fatal("orphan item inserted")
+		}
+	})
+}
+
+func TestBoardRepositoryIntegration_TypeHomes(t *testing.T) {
+	fx := newQuestsFixture(t)
+	ctx := context.Background()
+	repo := NewBoardRepository(fx.db)
+	cat, cat2 := TypeHome(fx.typ), TypeHome(fx.typ2)
+
+	t.Run("a home is exactly one of page or category", func(t *testing.T) {
+		for name, h := range map[string]Home{"none": {}, "both": {EntityID: fx.page, TypeID: fx.typ}, "negative": {TypeID: -1}} {
+			if _, err := repo.ListBoards(ctx, fx.campaign, h); err == nil {
+				t.Errorf("%s: list accepted an invalid home", name)
+			}
+			if _, err := repo.GetLooks(ctx, fx.campaign, h); err == nil {
+				t.Errorf("%s: looks accepted an invalid home", name)
+			}
+			if err := repo.InsertBoard(ctx, Board{ID: "b-bad", CampaignID: fx.campaign, Home: h, Name: "x", Who: WhoDM}); err == nil {
+				t.Errorf("%s: insert accepted an invalid home", name)
+			}
+		}
+	})
+
+	t.Run("looks upsert per category and stay apart from pages", func(t *testing.T) {
+		if l, err := repo.GetLooks(ctx, fx.campaign, cat); err != nil || l != (Looks{Board: LookLit, Ledger: LookLit}) {
+			t.Fatalf("default looks: %+v %v", l, err)
+		}
+		for _, want := range []Looks{{LookPlain, LookParchment}, {LookMidnight, LookLit}} {
+			if err := repo.SetLooks(ctx, fx.campaign, cat, want); err != nil {
+				t.Fatal(err)
+			}
+			if got, err := repo.GetLooks(ctx, fx.campaign, cat); err != nil || got != want {
+				t.Fatalf("looks = %+v %v, want %+v", got, err, want)
+			}
+		}
+		if l, _ := repo.GetLooks(ctx, fx.campaign, cat2); l.Board != LookLit {
+			t.Errorf("looks leaked to another category: %+v", l)
+		}
+		if l, _ := repo.GetLooks(ctx, fx.campaign, PageHome(fx.page)); l.Board != LookLit {
+			t.Errorf("looks leaked to a page: %+v", l)
+		}
+		// The row belongs to the campaign it was written for.
+		if l, _ := repo.GetLooks(ctx, fx.other, cat); l.Board != LookLit {
+			t.Errorf("looks read across campaigns: %+v", l)
+		}
+	})
+
+	mk := func(id string, h Home, order int) Board {
+		return Board{ID: id, CampaignID: fx.campaign, Home: h, Name: id, Who: WhoAll, SortOrder: order}
+	}
+	for _, b := range []Board{mk("t-1", cat, 0), mk("t-2", cat, 1), mk("t-3", cat2, 0), mk("p-1", PageHome(fx.page), 0)} {
+		if err := repo.InsertBoard(ctx, b); err != nil {
+			t.Fatalf("insert %s: %v", b.ID, err)
+		}
+	}
+
+	t.Run("homes list each place with boards once, in this campaign only", func(t *testing.T) {
+		got, err := repo.ListHomes(ctx, fx.campaign)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := map[Home]bool{cat: true, cat2: true, PageHome(fx.page): true}
+		if len(got) != len(want) {
+			t.Fatalf("homes %+v, want %d", got, len(want))
+		}
+		for _, h := range got {
+			if !want[h] {
+				t.Errorf("unexpected home %+v", h)
+			}
+		}
+		if other, err := repo.ListHomes(ctx, fx.other); err != nil || len(other) != 0 {
+			t.Errorf("other campaign homes %+v err=%v", other, err)
+		}
+	})
+
+	t.Run("round trip and listing are scoped to the home", func(t *testing.T) {
+		got, err := repo.GetBoard(ctx, fx.campaign, cat, "t-2")
+		if err != nil || !reflect.DeepEqual(*got, mk("t-2", cat, 1)) {
+			t.Fatalf("got %+v err=%v", got, err)
+		}
+		if bs, _ := repo.ListBoards(ctx, fx.campaign, cat); len(bs) != 2 {
+			t.Errorf("category lists %d boards, want 2", len(bs))
+		}
+		if bs, _ := repo.ListBoards(ctx, fx.campaign, PageHome(fx.page)); len(bs) != 1 || bs[0].ID != "p-1" {
+			t.Errorf("page lists %+v, want only p-1", bs)
+		}
+		for name, c := range map[string]struct {
+			campaign string
+			home     Home
+			id       string
+		}{
+			"other category":       {fx.campaign, cat2, "t-1"},
+			"page asking for it":   {fx.campaign, PageHome(fx.page), "t-1"},
+			"category asking page": {fx.campaign, cat, "p-1"},
+			"other campaign":       {fx.other, cat, "t-1"},
+		} {
+			if _, err := repo.GetBoard(ctx, c.campaign, c.home, c.id); !isNotFound(err) {
+				t.Errorf("%s: want NotFound, got %v", name, err)
+			}
+		}
+	})
+
+	t.Run("update, reorder and delete cannot cross homes", func(t *testing.T) {
+		hijack := mk("t-1", cat2, 0)
+		hijack.Name = "Hijack"
+		_ = repo.UpdateBoard(ctx, hijack)
+		_ = repo.DeleteBoard(ctx, fx.campaign, cat2, "t-1")
+		if got, err := repo.GetBoard(ctx, fx.campaign, cat, "t-1"); err != nil || got.Name != "t-1" {
+			t.Fatalf("board changed through the wrong home: %+v %v", got, err)
+		}
+		if err := repo.SetOrder(ctx, fx.campaign, cat, []string{"t-2", "t-1"}); err != nil {
+			t.Fatal(err)
+		}
+		if err := repo.SetOrder(ctx, fx.campaign, cat2, []string{"t-1"}); err != nil {
+			t.Fatal(err)
+		}
+		bs, _ := repo.ListBoards(ctx, fx.campaign, cat)
+		if len(bs) != 2 || bs[0].ID != "t-2" || bs[1].ID != "t-1" {
+			t.Fatalf("order = %+v", bs)
+		}
+	})
+
+	t.Run("deleting the category removes its boards, items and looks", func(t *testing.T) {
+		if err := repo.InsertItem(ctx, Item{ID: "ti-1", BoardID: "t-3", CampaignID: fx.campaign, Kind: KindNote, Text: "hi"}); err != nil {
+			t.Fatal(err)
+		}
+		if err := repo.SetLooks(ctx, fx.campaign, cat2, Looks{LookPlain, LookPlain}); err != nil {
+			t.Fatal(err)
+		}
+		fx.exec(t, `DELETE FROM entity_types WHERE id = ?`, fx.typ2)
+		if bs, _ := repo.ListBoards(ctx, fx.campaign, cat2); len(bs) != 0 {
+			t.Errorf("%d boards outlived their category", len(bs))
+		}
+		if n, _ := repo.CountItems(ctx, fx.campaign, "t-3"); n != 0 {
+			t.Errorf("%d items outlived their category", n)
+		}
+		var n int
+		if err := fx.db.QueryRow(`SELECT COUNT(*) FROM quest_board_type_looks WHERE entity_type_id = ?`, fx.typ2).Scan(&n); err != nil || n != 0 {
+			t.Errorf("category looks outlived the category: %d %v", n, err)
+		}
+		if bs, _ := repo.ListBoards(ctx, fx.campaign, PageHome(fx.page)); len(bs) != 1 {
+			t.Error("deleting a category touched a page's boards")
 		}
 	})
 }

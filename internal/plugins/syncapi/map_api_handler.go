@@ -97,6 +97,25 @@ func (h *MapAPIHandler) canAuthorDmOnly(c echo.Context) bool {
 	return err == nil && granted
 }
 
+// ownerVisibilityRules keeps per-player visibility rules on a new marker only
+// for an Owner, as the web route does; anyone else's are dropped.
+func (h *MapAPIHandler) ownerVisibilityRules(c echo.Context, rules *string) *string {
+	if campaigns.Role(h.resolveRole(c)) < campaigns.RoleOwner {
+		return nil
+	}
+	return rules
+}
+
+// ownerVisibilityRulesPatch is ownerVisibilityRules for an update: a non-Owner's
+// rules become absent, never null, so refusing the write can't erase the
+// Owner's existing rules.
+func (h *MapAPIHandler) ownerVisibilityRulesPatch(c echo.Context, rules patch.Field[string]) patch.Field[string] {
+	if campaigns.Role(h.resolveRole(c)) < campaigns.RoleOwner {
+		return patch.Absent[string]()
+	}
+	return rules
+}
+
 // requireMapInCampaign validates that the map belongs to the campaign in the URL.
 func (h *MapAPIHandler) requireMapInCampaign(c echo.Context) (*maps.Map, error) {
 	campaignID := c.Param("id")
@@ -276,6 +295,11 @@ func (h *MapAPIHandler) ListDrawings(c echo.Context) error {
 	}
 
 	drawings, err := h.drawingSvc.ListDrawings(c.Request().Context(), m.ID, role, userID)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("failed to list drawings"))
+	}
+	// A fogged hex layer's picture goes out without its file, as on the web.
+	drawings, err = h.drawingSvc.WithholdImages(c.Request().Context(), m.ID, role, drawings)
 	if err != nil {
 		return apperror.NewInternal(fmt.Errorf("failed to list drawings"))
 	}
@@ -539,7 +563,7 @@ func (h *MapAPIHandler) UpdateToken(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request body")
 	}
 
-	err := h.drawingSvc.UpdateToken(c.Request().Context(), tokenID, c.Param("mapID"), maps.UpdateTokenInput{
+	err := h.drawingSvc.UpdateToken(c.Request().Context(), tokenID, c.Param("mapID"), h.canAuthorDmOnly(c), maps.UpdateTokenInput{
 		Name:              req.Name,
 		ImagePath:         req.ImagePath,
 		X:                 req.X,
@@ -592,7 +616,7 @@ func (h *MapAPIHandler) UpdateTokenPosition(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request body")
 	}
 
-	err := h.drawingSvc.UpdateTokenPosition(c.Request().Context(), tokenID, c.Param("mapID"), maps.UpdateTokenPositionInput{
+	err := h.drawingSvc.UpdateTokenPosition(c.Request().Context(), tokenID, c.Param("mapID"), h.canAuthorDmOnly(c), maps.UpdateTokenPositionInput{
 		X:                 req.X,
 		Y:                 req.Y,
 		ExpectedUpdatedAt: req.ExpectedUpdatedAt,
@@ -888,9 +912,13 @@ func (h *MapAPIHandler) GetMarker(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	// Same rule as update and delete: a dm_only marker answers NotFound to a
-	// key that can't author dm_only content.
-	if marker.Visibility == "dm_only" && !h.canAuthorDmOnly(c) {
+	// Same rule as the list: a dm_only marker, or one whose visibility rules
+	// leave this user out, answers NotFound as a missing marker would.
+	var userID string
+	if key := GetAPIKey(c); key != nil {
+		userID = key.UserID
+	}
+	if !maps.MarkerVisibleTo(marker, h.viewRole(c), userID) {
 		return apperror.NewNotFound("marker not found")
 	}
 	// A pin under a shadow area answers NotFound to the roles the list hides
@@ -933,7 +961,7 @@ func (h *MapAPIHandler) CreateMarker(c echo.Context) error {
 		PinCategory:     req.PinCategory,
 		EntityID:        req.EntityID,
 		Visibility:      req.Visibility,
-		VisibilityRules: req.VisibilityRules,
+		VisibilityRules: h.ownerVisibilityRules(c, req.VisibilityRules),
 		CreatedBy:       key.UserID,
 		FoundryID:       req.FoundryID,
 	})
@@ -970,7 +998,7 @@ func (h *MapAPIHandler) UpdateMarker(c echo.Context) error {
 		PinCategory:       req.PinCategory,
 		EntityID:          req.EntityID,
 		Visibility:        req.Visibility,
-		VisibilityRules:   req.VisibilityRules,
+		VisibilityRules:   h.ownerVisibilityRulesPatch(c, req.VisibilityRules),
 		FoundryID:         req.FoundryID,
 		ExpectedUpdatedAt: req.ExpectedUpdatedAt,
 	}, h.canAuthorDmOnly(c))

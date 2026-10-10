@@ -23,9 +23,10 @@ templ Base(title string) {
 
 		<!-- Theme: apply dark class + inline background-color before first paint to prevent flash.
 		     A signed-in person's account choice (data-view-theme) wins over this browser's saved theme;
-		     "device" follows the OS. Either reduce switch (the campaign's or the person's own) sets nav-rm. -->
+		     "device" follows the OS. Either reduce switch (the campaign's or the person's own) sets nav-rm;
+		     a device asking for reduced motion lowers data-motion to off. -->
 		<script>
-			(function(){try{var h=document.documentElement;var v=h.getAttribute('data-view-theme');var t=(v==='light'||v==='dark')?v:(v==='device'?null:localStorage.getItem('chronicle-theme'));var d=t==='dark'||(t!=='light'&&window.matchMedia('(prefers-color-scheme:dark)').matches);if(d){h.classList.add('dark');h.style.backgroundColor='#111827'}else{h.style.backgroundColor='#f9fafb'}if(h.hasAttribute('data-cz-reduce')||h.getAttribute('data-view-motion')==='calm')h.classList.add('nav-rm')}catch(e){}})();
+			(function(){try{var h=document.documentElement;var v=h.getAttribute('data-view-theme');var t=(v==='light'||v==='dark')?v:(v==='device'?null:localStorage.getItem('chronicle-theme'));var d=t==='dark'||(t!=='light'&&window.matchMedia('(prefers-color-scheme:dark)').matches);if(d){h.classList.add('dark');h.style.backgroundColor='#111827'}else{h.style.backgroundColor='#f9fafb'}if(window.matchMedia('(prefers-reduced-motion:reduce)').matches)h.setAttribute('data-motion','off');if(h.hasAttribute('data-cz-reduce')||h.getAttribute('data-view-motion')==='calm')h.classList.add('nav-rm')}catch(e){}})();
 		</script>
 
 		<!-- Hide Alpine.js elements until initialized; hide body until all CSS loads (FOUC prevention). -->
@@ -33,11 +34,13 @@ templ Base(title string) {
 
 		<!-- Tailwind CSS (generated) -->
 		<link rel="stylesheet" href={ AssetURL("/static/css/app.css") }/>
+		<!-- Shared paper look and the hover card (hovercard.js) -->
+		<link rel="stylesheet" href={ AssetURL("/static/css/paper.css") }/>
 
 		<!-- Fonts -->
 		<link rel="preconnect" href="https://fonts.googleapis.com"/>
 		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-		<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+		<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Spectral:wght@500;700&display=swap" rel="stylesheet"/>
 
 		<!-- Font Awesome (icons for entity types, UI) -->
 		<link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin/>
@@ -157,7 +160,8 @@ templ Base(title string) {
 		<!-- Tag picker widget (entity tag management) -->
 		<script src={ AssetURL("/static/js/widgets/tag_picker.js") } defer></script>
 
-		<!-- Entity tooltip widget (hover preview popover for entity links) -->
+		<!-- The one hover card, then the linked-page previews that use it -->
+		<script src={ AssetURL("/static/js/hovercard.js") } defer></script>
 		<script src={ AssetURL("/static/js/widgets/entity_tooltip.js") } defer></script>
 		<!-- Bulk entity selection and actions -->
 		<script src={ AssetURL("/static/js/widgets/bulk_actions.js") } defer></script>
@@ -195,6 +199,12 @@ templ Base(title string) {
 
 		<!-- Change-picture box in the user menu (Chronicle.PictureBox). -->
 		<script src={ AssetURL("/static/js/widgets/picture_box.js") } defer></script>
+
+		<!-- Edit name fold on entity pages (Chronicle.PageHeader). -->
+		<script src={ AssetURL("/static/js/widgets/page_name_fold.js") } defer></script>
+
+		<!-- Header of a game-system-rendered page: more menu, Delete confirm, Claim. -->
+		<script src={ AssetURL("/static/js/widgets/page_header.js") } defer></script>
 
 		<!-- Transaction log widget (shop purchase/sale/gift/restock history).
 		     Mount is the `transaction_log` entity block; reads the armory

@@ -3,6 +3,7 @@ package maps
 import (
 	"context"
 	"crypto/rand"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"regexp"
@@ -103,8 +104,9 @@ type MapService interface {
 	// map has no picture or no shadow (players then see the original).
 	PlayerImageVersion(ctx context.Context, m *Map) (string, error)
 	// IsShadowedMapImage tells the media plugin whether a file is the picture of
-	// a map that has a shadow (media.MapImageGuard); IsMapPicture whether it is
-	// the picture of any map at all.
+	// a map that has a shadow or whole-map fog, or a picture drawing whose file
+	// the hex fog withholds (media.MapImageGuard); IsMapPicture whether it is
+	// the picture of any map at all, or such a withheld picture.
 	IsShadowedMapImage(ctx context.Context, campaignID, mediaID string) (bool, error)
 	IsMapPicture(ctx context.Context, campaignID, mediaID string) (bool, error)
 
@@ -116,6 +118,20 @@ type MapService interface {
 	SetShadowLookup(l ShadowLookup)
 	// SetPlayerImageSource is on the interface for the same reason.
 	SetPlayerImageSource(src MediaImageSource, cacheDir string)
+	// SetHexFogLookup is on the interface for the same reason: without it every
+	// player would see every pin and the whole picture under unexplored hexes.
+	SetHexFogLookup(l HexFogLookup)
+	// SetFogMediaLookup wires the check that a file is a picture drawing the
+	// fog withholds. With a fog lookup wired and this one not, the media guard
+	// refuses every campaign file rather than serve one under the fog.
+	SetFogMediaLookup(l FogMediaLookup)
+}
+
+// FogMediaLookup reports whether a file is a picture on a map whose image the
+// hex fog withholds from viewers below CanSeeDmOnly. Implemented by the
+// drawing service.
+type FogMediaLookup interface {
+	FogWithholdsMedia(ctx context.Context, mapID, mediaID string) (bool, error)
 }
 
 // EntityVisibilityGate resolves which of a set of entity IDs a viewer (role +
@@ -142,6 +158,8 @@ type mapService struct {
 	bindingCleaner BindingCleaner
 	entityGate     EntityVisibilityGate
 	shadows        ShadowLookup
+	hexFog         HexFogLookup
+	fogMedia       FogMediaLookup
 	images         MediaImageSource
 	imageCacheDir  string
 	pictureCache   *pictureStatusCache
@@ -187,6 +205,39 @@ func (s *mapService) SetShadowLookup(l ShadowLookup) {
 	}
 }
 
+// SetHexFogLookup injects the fog source (the hex service, built separately).
+// Unwired means no fog is known, which is correct only for tests and installs
+// without hexes; the production wiring is pinned by a test in app. Cached
+// picture answers are dropped because fog changes who may fetch the original.
+func (s *mapService) SetHexFogLookup(l HexFogLookup) {
+	s.hexFog = l
+	s.pictureCache.invalidate("")
+}
+
+// SetFogMediaLookup implements MapService.
+func (s *mapService) SetFogMediaLookup(l FogMediaLookup) {
+	s.fogMedia = l
+	s.pictureCache.invalidate("")
+}
+
+// notFoundIfMarkerHidden answers NotFound, the same as a missing id, when a
+// caller who cannot see DM-only content writes to a pin hidden from them (under
+// a shadow or in an unexplored hex). Otherwise the write's answer would confirm
+// the pin exists, and the write would change something they were never shown.
+func (s *mapService) notFoundIfMarkerHidden(ctx context.Context, mk *Marker, canAuthorDmOnly bool) error {
+	if canAuthorDmOnly {
+		return nil
+	}
+	hidden, err := s.IsMarkerShadowed(ctx, mk, permissions.RolePlayer)
+	if err != nil {
+		return err
+	}
+	if hidden {
+		return apperror.NewNotFound("marker not found")
+	}
+	return nil
+}
+
 // shadowAreasFor returns the map's shadows for a viewer subject to hiding, or
 // nil when the viewer is exempt or nothing is wired.
 func (s *mapService) shadowAreasFor(ctx context.Context, mapID string, role int) ([]ShadowArea, error) {
@@ -206,7 +257,14 @@ func (s *mapService) IsMarkerShadowed(ctx context.Context, mk *Marker, role int)
 	if err != nil {
 		return true, err
 	}
-	return MarkerUnderShadow(areas, mk), nil
+	if MarkerUnderShadow(areas, mk) {
+		return true, nil
+	}
+	fog, err := fogFor(ctx, s.hexFog, mk.MapID, role)
+	if err != nil {
+		return true, err
+	}
+	return fog.HidesMarker(mk), nil
 }
 
 // SetEventPublisher sets the event publisher for real-time marker sync.
@@ -320,6 +378,37 @@ func (s *mapService) UpdateMap(ctx context.Context, id string, input UpdateMapIn
 		return fmt.Errorf("update map: %w", err)
 	}
 	s.InvalidateMapPictures(m.CampaignID)
+	return nil
+}
+
+// SetHexArt stores the map's terrain art (display_settings hexes.art). The hex
+// layer calls it so a DM grant, who may not save the rest of the map's
+// settings, can change the art from the Paint mode. Only the art field of the
+// hexes group is written, through the same merge as a settings save, so the
+// party rule and every other group are kept.
+func (s *mapService) SetHexArt(ctx context.Context, mapID, art string) error {
+	if !IsValidHexArt(art) {
+		return apperror.NewValidation("terrain art must be one of: real, detailed, simple")
+	}
+	m, err := s.repo.GetMap(ctx, mapID)
+	if err != nil {
+		return fmt.Errorf("get map for terrain art: %w", err)
+	}
+	if m == nil {
+		return apperror.NewNotFound("map not found")
+	}
+	raw, err := json.Marshal(map[string]map[string]string{"hexes": {"art": art}})
+	if err != nil {
+		return apperror.NewInternal(err)
+	}
+	next, err := MergeDisplaySettings(m.Display, raw)
+	if err != nil {
+		return err
+	}
+	m.Display = next
+	if err := s.repo.UpdateMap(ctx, m); err != nil {
+		return fmt.Errorf("update map terrain art: %w", err)
+	}
 	return nil
 }
 
@@ -483,6 +572,9 @@ func (s *mapService) UpdateMarker(ctx context.Context, id string, input UpdateMa
 	if mk.Visibility == "dm_only" && !canAuthorDmOnly {
 		return apperror.NewNotFound("marker not found")
 	}
+	if err := s.notFoundIfMarkerHidden(ctx, mk, canAuthorDmOnly); err != nil {
+		return err
+	}
 
 	if err := concurrency.Check(mk.UpdatedAt, input.ExpectedUpdatedAt, "marker"); err != nil {
 		return err
@@ -568,6 +660,9 @@ func (s *mapService) DeleteMarker(ctx context.Context, id string, expectedUpdate
 	if mk.Visibility == "dm_only" && !canAuthorDmOnly {
 		return apperror.NewNotFound("marker not found")
 	}
+	if err := s.notFoundIfMarkerHidden(ctx, mk, canAuthorDmOnly); err != nil {
+		return err
+	}
 	if !canDeleteOwn(role, actorID, mk.CreatedBy) {
 		return apperror.NewForbidden("you can only delete markers you created")
 	}
@@ -606,6 +701,19 @@ func (s *mapService) ListMarkers(ctx context.Context, campaignID, mapID string, 
 		return nil, fmt.Errorf("list shadow areas: %w", err)
 	}
 	markers = filterMarkersByShadow(areas, markers)
+	fog, err := fogFor(ctx, s.hexFog, mapID, role)
+	if err != nil {
+		return nil, fmt.Errorf("read hex fog: %w", err)
+	}
+	if fog != nil {
+		kept := make([]Marker, 0, len(markers))
+		for _, mk := range markers {
+			if !fog.HidesMarker(&mk) {
+				kept = append(kept, mk)
+			}
+		}
+		markers = kept
+	}
 
 	entityIDs := make([]string, 0, len(markers))
 	seen := make(map[string]bool, len(markers))

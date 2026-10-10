@@ -101,6 +101,24 @@
         "foundry_writable": {
           "type": "boolean",
           "description": "Whether Chronicle can write this field back to Foundry. Defaults to true when foundry_path is set."
+        },
+        "play": {
+          "type": "object",
+          "description": "Declares the field can be changed during play. Dropped at load if invalid; see docs/system-plugin-marketplace.md.",
+          "required": ["edit", "kind"],
+          "properties": {
+            "edit": { "enum": ["owner", "gm", "none"] },
+            "kind": { "enum": ["counter", "resource", "conditions", "choice", "text"] },
+            "min": { "type": "number" },
+            "max": { "type": "number" },
+            "max_field": { "type": "string" },
+            "step": { "type": "number", "minimum": 0 },
+            "options": { "type": "array", "maxItems": 50, "items": { "type": "string", "minLength": 1, "maxLength": 64 } },
+            "max_length": { "type": "integer", "minimum": 0 },
+            "to_foundry": { "type": "boolean" },
+            "combat_authority": { "enum": ["foundry", "chronicle"] }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false

@@ -159,6 +159,7 @@ func buildWeekOverlay(
 				// Empty Lanes is ambiguous on its own — "never free" and "never
 				// asked" both render as nothing. This is what tells them apart.
 				HasAnswered: m.HasAnswered,
+				OffDays:     offDays(m.UserID, weekStart, availByUser, excByUser),
 			})
 		}
 	}
@@ -253,4 +254,43 @@ func splitToViewerDays(start, end time.Time, loc *time.Location) []viewerSeg {
 		cur = segEnd
 	}
 	return out
+}
+
+// offDays lists the week's columns where the member's exceptions leave them
+// no free time although their recurring hours would have given some: a day
+// they marked off. Dates are the member's own, taken as the column's date.
+func offDays(userID string, weekStart timeutil.CivilDate,
+	availByUser map[string][]AvailabilityBlock,
+	excByUser map[string][]AvailabilityException) []int {
+
+	var out []int
+	for col := 0; col < 7; col++ {
+		d := weekStart.AddDays(col)
+		eff := effectiveBlocks(userID, d, availByUser, excByUser)
+		if !hasExceptionOn(userID, d.String(), excByUser) || anyFree(eff) {
+			continue
+		}
+		if anyFree(effectiveBlocks(userID, d, availByUser, nil)) {
+			out = append(out, col)
+		}
+	}
+	return out
+}
+
+func hasExceptionOn(userID, date string, excByUser map[string][]AvailabilityException) bool {
+	for _, e := range excByUser[userID] {
+		if e.OnDate == date {
+			return true
+		}
+	}
+	return false
+}
+
+func anyFree(blocks []effBlock) bool {
+	for _, b := range blocks {
+		if b.state != AvailUnavailable && b.endMin > b.startMin {
+			return true
+		}
+	}
+	return false
 }

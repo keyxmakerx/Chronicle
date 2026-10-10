@@ -23,13 +23,14 @@ System or Widget (see root `CLAUDE.md` for what each tier is).
 │  └──────────────────────────────────────────────────────┘    │
 │                                                               │
 │  ┌──────────────────────────────────────────────────────┐    │
-│  │  PLUGINS -- Feature Applications (26)                  │    │
+│  │  PLUGINS -- Feature Applications (28)                  │    │
 │  │  auth/  campaigns/  entities/  calendar/  maps/        │    │
 │  │  admin/  addons/  syncapi/  media/  audit/             │    │
 │  │  settings/  timeline/  sessions/  packages/            │    │
 │  │  smtp/  armory/  bestiary/  designlab/  npcs/          │    │
 │  │  ai_workspace/  backup/  foundry_vtt/  restore/        │    │
 │  │  widgetbindings/  dmscreen/  systemstate/              │    │
+│  │  quests/  rolltables/                                  │    │
 │  └──────────────────────────────────────────────────────┘    │
 │                                                               │
 │  ┌──────────────────────────────────────────────────────┐    │
@@ -40,7 +41,7 @@ System or Widget (see root `CLAUDE.md` for what each tier is).
 │  ┌──────────────────────────────────────────────────────┐    │
 │  │  WIDGETS -- Reusable UI Building Blocks                │    │
 │  │  editor/  title/  tags/  attributes/  mentions/        │    │
-│  │  notes/  relations/  posts/  entity_notes/              │    │
+│  │  notes/  relations/  posts/  entity_notes/  sky/        │    │
 │  └──────────────────────────────────────────────────────┘    │
 │                                                               │
 │  ┌──────────────────────────────────────────────────────┐    │
@@ -61,9 +62,12 @@ System or Widget (see root `CLAUDE.md` for what each tier is).
 `calendar` was rebuilt from the ground up (V5, #741): domain layer,
 migrations, service and JSON API; the calendars list, preview and
 new-calendar wizard; each calendar's own page with owner editing;
-real-world calendars with game-night RSVPs; and the sky pane widget. What
-is still to be rebuilt is tagged `CALV5-PLACEHOLDER:` with a `TODO(#778)`:
-the entity-page calendar blocks show a rebuilding notice. `syncapi`'s
+real-world calendars with game-night RSVPs; and the sky pane widget. The
+entity-page and dashboard calendar blocks render from the widget-binding
+framework. What is still to be rewired is tagged `CALV5-PLACEHOLDER:` with a
+`TODO(#778)`: the WASM `calendar_read`/`calendar_write` host functions answer
+with an error, the `calendar.event_*` plugin hooks never fire, and nothing
+publishes calendar events to the websocket bus. `syncapi`'s
 Foundry calendar routes serve the V5 calendar (see
 `internal/plugins/syncapi/.ai.md`). See `internal/plugins/calendar/.ai.md` for exactly which
 routes and UI exist.
@@ -124,9 +128,14 @@ chronicle/
 │   │   │   └── templates/
 │   │   ├── campaigns/                #   Campaign/world management
 │   │   ├── entities/                 #   Entity CRUD & configurable types
-│   │   ├── calendar/                 #   Domain layer + migrations only (mid-rebuild, see below)
-│   │   │   ├── model.go             #   Calendar, Month, Weekday, Moon, Season, Event
+│   │   ├── calendar/                 #   Calendars, events, eras, weather, wizard, structure editor
+│   │   │   ├── model.go             #   Calendar, Month, Weekday, Moon, Season, Era, Event
 │   │   │   ├── calendar.go          #   Calendar math (dates, recurrence)
+│   │   │   ├── service.go           #   Business logic (visibility, validation)
+│   │   │   ├── repository.go        #   Persistence (plus event, event-kind, weather, structure repos)
+│   │   │   ├── handler.go           #   JSON API and page handlers (plus list, wizard, structure)
+│   │   │   ├── routes.go
+│   │   │   ├── view.templ           #   Calendar page (plus list, wizard, structure templates)
 │   │   │   ├── import.go / export.go
 │   │   │   ├── presets/             #   Built-in calendar presets (JSON)
 │   │   │   └── migrations/
@@ -177,8 +186,7 @@ chronicle/
 │           └── error.templ
 │
 ├── db/
-│   ├── migrations/                   # Core schema baseline (fatal on failure)
-│   └── queries/                      # Raw SQL query files (reference)
+│   └── migrations/                   # Core schema baseline (fatal on failure)
 │
 ├── static/
 │   ├── css/

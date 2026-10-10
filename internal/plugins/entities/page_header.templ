@@ -1,0 +1,173 @@
+// page_header.templ renders the header of a page a game-system renderer owns,
+// which has no layout and so lost its title block: name, favorite star, claim
+// marker and actions, plus the page blocks that sit under the system's widget.
+//
+// Every control is an inline handler into Chronicle.PageHeader
+// (static/js/widgets/page_header.js); nothing relies on a script inside a
+// swapped fragment.
+
+package entities
+
+import (
+	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+)
+
+// systemPageHeader is the header of a page a game-system renderer owns: name,
+// star, claim marker and actions. Edit name and History stay in view; Clone and
+// Delete sit under the more menu, and on a phone every action does.
+templ systemPageHeader(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, claimingEnabled bool, ownerName, csrfToken, userID string) {
+	{{
+		isScribe := cc.MemberRole >= campaigns.RoleScribe
+		canRename := CanEditIdentity(cc.MemberRole, entity, userID)
+		claim := headerClaimState(entity, userID, isScribe, claimingEnabled, entityType != nil && isClaimableType(entityType))
+		hasMenu := canRename || isScribe
+	}}
+	<div class="ph-title" data-page-header>
+		<div class="ph-title-l">
+			<h1 class="text-2xl md:text-3xl font-bold text-fg" data-page-h1>{ entity.Name }</h1>
+			@entityFavoriteButton(entity)
+			@claimMarker(cc, entity, claim, ownerName)
+		</div>
+		if hasMenu {
+			<div class="ph-acts">
+				if canRename {
+					<button type="button" class="btn-ghost btn-sm ph-wide" data-edit-name aria-expanded="false" aria-controls="page-name-fold" onclick={ headerCall("nameFold") }>
+						<i class="fa-solid fa-pencil mr-1"></i> Edit name
+					</button>
+				}
+				if isScribe {
+					@entityHistoryButton(cc, entity, "btn-ghost btn-sm ph-wide")
+				}
+				<button
+					type="button"
+					class={ "btn-ghost btn-sm", templ.KV("ph-phone-only", !isScribe) }
+					aria-haspopup="menu"
+					aria-expanded="false"
+					aria-label="More actions"
+					title="More actions"
+					data-more
+					onclick={ headerCall("toggleMore") }
+				><i class="fa-solid fa-ellipsis"></i></button>
+				<div class="ph-more-menu" role="menu" data-more-menu hidden>
+					if canRename {
+						<button type="button" role="menuitem" class="ph-item ph-only-phone" data-edit-name onclick={ headerCall("nameFoldFromMenu") }>
+							<i class="fa-solid fa-pencil"></i> Edit name
+						</button>
+					}
+					if isScribe {
+						@entityHistoryButton(cc, entity, "ph-item ph-only-phone")
+						<form
+							method="POST"
+							action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s/clone", cc.Campaign.ID, entity.ID)) }
+							hx-post={ fmt.Sprintf("/campaigns/%s/entities/%s/clone", cc.Campaign.ID, entity.ID) }
+						>
+							<input type="hidden" name="csrf_token" value={ csrfToken }/>
+							<button type="submit" role="menuitem" class="ph-item" title="Create a copy of this page">
+								<i class="fa-regular fa-clone"></i> Clone
+							</button>
+						</form>
+					}
+					if cc.MemberRole >= campaigns.RoleOwner {
+						<hr/>
+						<form
+							method="POST"
+							action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID)) }
+							hx-delete={ fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID) }
+						>
+							<input type="hidden" name="_method" value="DELETE"/>
+							<input type="hidden" name="csrf_token" value={ csrfToken }/>
+							<button type="button" role="menuitem" class="ph-item danger" data-del onclick={ headerCall("askDelete") }>
+								<i class="fa-solid fa-trash"></i> Delete
+							</button>
+							<div class="ph-confirm" data-del-ask hidden>
+								<p>Delete { entity.Name }?</p>
+								<small>{ entity.Name } and its sub-pages move to the Trash. You can put them back from Manage &gt; Trash.</small>
+								<div class="ph-row">
+									<button type="button" class="btn-secondary btn-sm" onclick={ headerCall("keepDelete") }>Keep</button>
+									<button type="submit" class="ph-danger-btn">Delete</button>
+								</div>
+							</div>
+						</form>
+					}
+				</div>
+			</div>
+		}
+	</div>
+	if claim == claimAvailable {
+		<div class="ag-warn" role="alert" data-claim-warn style="margin:-6px 0 12px">
+			<i class="fa-solid fa-triangle-exclamation"></i>
+			<span>Couldn’t claim { entity.Name }. Someone may have claimed it a moment ago. Nothing changed.</span>
+			<button type="button" onclick={ headerCall("claim") }>Try again</button>
+		</div>
+	}
+	if canRename {
+		@pageNameFold(cc, entity, isScribe)
+	}
+	if isScribe {
+		<div id="page-history-slot"></div>
+	}
+}
+
+// claimMarker is the pill (or Claim button) next to the name.
+templ claimMarker(cc *campaigns.CampaignContext, entity *Entity, state claimPillState, ownerName string) {
+	switch state {
+		case claimMine:
+			<span class="ph-pill is-yours" data-claim-pill><i class="fa-solid fa-circle-check"></i> Yours</span>
+		case claimOther:
+			<span class="ph-pill is-claim" data-claim-pill>
+				<i class="fa-solid fa-user-check"></i>
+				if ownerName != "" {
+					Claimed by { ownerName }
+				} else {
+					Claimed by a player
+				}
+			</span>
+		case claimNotYet:
+			<span class="ph-pill" data-claim-pill><i class="fa-regular fa-user"></i> Not claimed yet</span>
+		case claimAvailable:
+			<span class="ph-claim">
+				<button
+					type="button"
+					class="btn-primary btn-sm"
+					data-claim
+					data-url={ fmt.Sprintf("/campaigns/%s/entities/%s/claim", cc.Campaign.ID, entity.ID) }
+					data-name={ entity.Name }
+					onclick={ headerCall("claim") }
+				><i class="fa-solid fa-user-shield"></i> <span data-claim-label>Claim character</span></button>
+			</span>
+		}
+}
+
+// systemPageBelow draws, under a system widget, the page pieces its layout
+// would have placed: player notes, relations, tags and sub-pages. Each goes
+// through the block registry, so addon gating and who may edit are exactly
+// what a layout page applies.
+templ systemPageBelow(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, csrfToken string) {
+	<div class="ph-below" data-page-below>
+		@RenderBlock(ctx, TemplateBlock{ID: "shell-notes", Type: "entity_notes"}, cc, entity, entityType, csrfToken)
+		@RenderBlock(ctx, TemplateBlock{ID: "shell-relations", Type: "relations"}, cc, entity, entityType, csrfToken)
+		@RenderBlock(ctx, TemplateBlock{ID: "shell-tags", Type: "tags"}, cc, entity, entityType, csrfToken)
+		@RenderBlock(ctx, TemplateBlock{ID: "shell-subpages", Type: BlockSubPages}, cc, entity, entityType, csrfToken)
+	</div>
+}
+
+// systemImageMount is the image-upload mount a system widget's Change
+// picture button reaches through the chronicle:change-image event. It takes
+// no space but is not display:none, so the upload's progress strip and error
+// bar still show, pinned to the bottom of the screen. Only Scribes and up get
+// one: the image route is Scribe-only.
+templ systemImageMount(cc *campaigns.CampaignContext, entity *Entity, csrfToken string) {
+	if cc.MemberRole >= campaigns.RoleScribe {
+		<div
+			class="ph-image-mount"
+			data-widget="image-upload"
+			data-image-upload-for={ entity.ID }
+			data-endpoint={ fmt.Sprintf("/campaigns/%s/entities/%s/image", cc.Campaign.ID, entity.ID) }
+			data-upload-url="/media/upload"
+			data-csrf-token={ csrfToken }
+		></div>
+	}
+}
+

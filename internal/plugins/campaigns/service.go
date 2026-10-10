@@ -231,6 +231,16 @@ type campaignService struct {
 	navSections      NavSectionsSource      // Draws a member's sidebar for pin checks. Pins are refused while nil.
 	siteLook         SiteLookSource         // Site-wide look new campaigns start with. May be nil.
 	baseURL          string
+	// memberRemoved runs after a member is removed, so other plugins can end
+	// credentials they issued for that campaign without campaigns importing them.
+	memberRemoved []func(ctx context.Context, campaignID, userID string)
+}
+
+// OnMemberRemoved registers fn to run after a user is removed from a campaign.
+func OnMemberRemoved(svc CampaignService, fn func(ctx context.Context, campaignID, userID string)) {
+	if s, ok := svc.(*campaignService); ok && fn != nil {
+		s.memberRemoved = append(s.memberRemoved, fn)
+	}
 }
 
 // NewCampaignService creates a new campaign service with the given dependencies.
@@ -444,7 +454,7 @@ func (s *campaignService) Create(ctx context.Context, userID string, input Creat
 	}
 
 	// Seed entity types for the new campaign (genre-specific or defaults).
-	if s.seeder != nil {
+	if s.seeder != nil && !input.SkipEntityTypeSeed {
 		var seedErr error
 		if input.Genre != "" {
 			seedErr = s.seeder.SeedGenre(ctx, campaign.ID, input.Genre)
@@ -724,6 +734,9 @@ func (s *campaignService) RemoveMember(ctx context.Context, campaignID, userID s
 	// hub's gates too, so even a plain member keeps receiving otherwise.
 	if s.connRevoker != nil {
 		s.connRevoker.RevokeUser(campaignID, userID)
+	}
+	for _, fn := range s.memberRemoved {
+		fn(ctx, campaignID, userID)
 	}
 
 	slog.Info("member removed from campaign",
@@ -1173,24 +1186,33 @@ func (s *campaignService) UpdateDmGrants(ctx context.Context, campaignID string,
 		return apperror.NewNotFound("campaign not found")
 	}
 
+	settings := campaign.ParseSettings()
+	alreadyGranted := make(map[string]bool, len(settings.DmGrantIDs))
+	for _, id := range settings.DmGrantIDs {
+		alreadyGranted[id] = true
+	}
+
 	// Validate and dedup before storing. Membership gates whether a grant is
 	// HONOURED (middleware.go), but an unvalidated write is still the way to
 	// get an id into the list that should never have been there — a grant
-	// held by a non-member.
+	// held by a non-member. An id already on the list that is no longer a
+	// member (a deleted account) is dropped rather than refused, or one stale
+	// id would block every later change, removals included.
 	seen := make(map[string]bool, len(userIDs))
 	clean := make([]string, 0, len(userIDs))
 	for _, id := range userIDs {
 		if id == "" || seen[id] {
 			continue
 		}
+		seen[id] = true
 		if _, err := s.repo.FindMember(ctx, campaignID, id); err != nil {
+			if alreadyGranted[id] {
+				continue
+			}
 			return apperror.NewBadRequest("cannot grant dm_only visibility to a non-member")
 		}
-		seen[id] = true
 		clean = append(clean, id)
 	}
-
-	settings := campaign.ParseSettings()
 
 	// Diffed against the old list before it's overwritten, so anyone
 	// losing the grant can have their live socket dropped below.

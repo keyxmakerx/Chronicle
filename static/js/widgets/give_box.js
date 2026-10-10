@@ -1,10 +1,11 @@
 /**
- * give_box.js -- the Give box and the Share box (Chronicle.GiveBox).
+ * give_box.js -- the Give, Share and Move boxes (Chronicle.GiveBox).
  *
  * The server renders the boxes (internal/plugins/armory/give_box.templ,
- * share_box.templ); this file opens and shuts them and sends what was picked.
+ * share_box.templ, move_dialog.templ); this file opens and shuts them and sends what was picked.
  * On a character page a box opens in place: it grows out of a .ag-fold in the
- * "Items and money" panel, as the roll-table editor does. On an Armory card
+ * "Items and money" panel (a line's Share and Move boxes under the line, on
+ * the Stashes page too), as the roll-table editor does. On an Armory card
  * the ... button opens a .ag-pop popover whose "Give to..." turns into the
  * same box. One box is open at a time.
  *
@@ -30,7 +31,9 @@
     });
   }
   function reduced() {
-    return matchMedia('(prefers-reduced-motion: reduce)').matches || !!document.querySelector('.nav-rm, html.rm');
+    var h = document.documentElement;
+    return matchMedia('(prefers-reduced-motion: reduce)').matches || !!document.querySelector('.nav-rm, html.rm') ||
+      h.hasAttribute('data-cz-reduce') || h.getAttribute('data-view-motion') === 'calm';
   }
   function notify(msg, kind) { if (window.Chronicle && Chronicle.notify) Chronicle.notify(msg, kind || 'error'); }
 
@@ -147,6 +150,7 @@
     var give = box.querySelector('[data-give]');
     var h = box.querySelector('[data-hint]');
     if (give) give.disabled = !r;
+    if (box.hasAttribute('data-move-box')) moveReady(box);
     if (!h) return;
     var text = r && r.getAttribute('data-say');
     if (!text) { h.innerHTML = ''; return; }
@@ -175,6 +179,19 @@
     var box = boxOf(input); if (!box) return;
     var st = mine(box); if (st) st.dirty = true;
     warnOff(box);
+    clearErr(box);
+    hint(box);
+  }
+
+  // The Move box's amber error bar describes the last attempt, so any change
+  // to the choice or the amount clears it. Typing an amount is not an unsent
+  // choice by itself: only a picked destination makes the box dirty.
+  function clearErr(box) {
+    var e = box.querySelector('.ag-warn[data-err]'); if (e) e.classList.remove('is-on');
+  }
+  function edited(input) {
+    var box = boxOf(input); if (!box) return;
+    clearErr(box);
     hint(box);
   }
 
@@ -215,7 +232,9 @@
   function step(btn) {
     var box = boxOf(btn); if (!box) return;
     var i = box.querySelector('#ag-q'); if (!i) return;
-    i.value = clampQty(clampQty(i.value) + (+btn.getAttribute('data-q') || 0));
+    var max = +i.getAttribute('max') || 1000000;
+    i.value = Math.min(max, clampQty(clampQty(i.value) + (+btn.getAttribute('data-q') || 0)));
+    edited(i);
   }
 
   function cancel() { close(true); }
@@ -247,7 +266,7 @@
         if (!resp.ok) return errorOf(resp).then(function (m) { btn.disabled = false; notify(m); });
         var g = trigger(resp, 'armory-given') || {};
         var st = mine(box); if (st) st.dirty = false;
-        var panel = box.closest('section[id^="armory-panel-"]');
+        var panel = panelOf(box);
         // The panels reload once the box has folded away, then the line lands.
         close(true, function () { reload(panel ? panel.id : '', g.itemId); });
         if (g.message) toast(g.message);
@@ -258,7 +277,7 @@
   // reload tells every armory panel on the page to reload (armory-moved), and
   // when the one the give was made from comes back, flashes the line the
   // item went to. The listener lasts only until then.
-  function reload(panelId, itemId) {
+  function reload(panelId, itemId, holders) {
     if (!window.htmx) return;
     var old = panelId && document.getElementById(panelId);
     if (old && itemId) {
@@ -267,7 +286,12 @@
         var now = document.getElementById(panelId);
         if (!now || now === old) return;
         stop();
-        flash(now, itemId);
+        var row = flash(now, itemId, holders);
+        // The reload replaced the control that had focus; hand it to the line
+        // that changed, or the panel's first Move button.
+        var target = (row && (row.querySelector('[data-move]') || row)) || now.querySelector('[data-move]') || now;
+        if (target.tabIndex < 0 && !target.hasAttribute('tabindex')) target.setAttribute('tabindex', '-1');
+        target.focus({ preventScroll: true });
       };
       document.body.addEventListener('htmx:afterSettle', on);
       setTimeout(stop, 5000);
@@ -275,25 +299,44 @@
     htmx.trigger(document.body, 'armory-moved');
   }
 
-  function flash(section, itemId) {
-    var rows = section.querySelectorAll('[data-item-id]');
+  // flash marks the line that changed. A give names its line; a move names
+  // the item (or 'money') and the holders it left and reached, so another
+  // stash holding the same item is left alone.
+  function flash(section, key, holders) {
+    var rows = section.querySelectorAll(key === 'money' ? '[data-money-row]' : '[data-item-id]');
+    var first = null;
     for (var i = 0; i < rows.length; i++) {
-      if (rows[i].getAttribute('data-item-id') === itemId) { rows[i].classList.add('ag-landed'); return; }
+      var row = rows[i];
+      if (key !== 'money' && row.getAttribute('data-item-id') !== key) continue;
+      if (holders && holders.indexOf(row.getAttribute('data-holder')) < 0) continue;
+      row.classList.add('ag-landed');
+      if (!holders) return row;
+      if (!first) first = row;
     }
+    return first;
   }
 
   // open toggles a box that folds out of the character panel: the Give box
   // (the header's "Give an item") or a line's Share box ("Share...").
   function open(btn, url) {
-    var f = btn.hasAttribute('data-share')
-      ? (btn.closest('li') && btn.closest('li').querySelector('[data-share-fold]'))
-      : (btn.closest('section') && btn.closest('section').querySelector('[data-give-fold]'));
+    var f, host;
+    if (btn.hasAttribute('data-move')) {
+      host = btn.closest('[data-move-host]');
+      f = host && host.querySelector('[data-move-fold]');
+    } else if (btn.hasAttribute('data-share')) {
+      f = btn.closest('li') && btn.closest('li').querySelector('[data-share-fold]');
+    } else {
+      f = btn.closest('section') && btn.closest('section').querySelector('[data-give-fold]');
+    }
     if (!f || busy) return;
     if (S && S.btn === btn) { close(false); return; }
     if (S && !close(false)) return;
     f.style.height = '0px';
+    btn.setAttribute('aria-busy', 'true');
     load(url, f).then(function (box) {
-      if (!box || S) return;
+      btn.removeAttribute('aria-busy');
+      if (!box) { notify('Could not open that. Try again.'); return; }
+      if (S) return;
       S = { host: f, box: box, kind: 'fold', btn: btn, dirty: false };
       btn.setAttribute('aria-expanded', 'true');
       listen(true);
@@ -301,7 +344,7 @@
         // The Give box starts in its search, as the mockup does; the Share box
         // takes focus itself so Tab reaches the first player without a ring
         // showing on a mouse open.
-        var s = box.querySelector('#ag-search') || box;
+        var s = box.querySelector('#ag-search') || box.querySelector('input[name=ag-pick]') || box;
         s.focus({ preventScroll: true });
       });
     });
@@ -325,11 +368,78 @@
         if (!resp.ok) return errorOf(resp).then(function (m) { btn.disabled = false; notify(m); });
         var g = trigger(resp, 'armory-shared') || {};
         var st = mine(box); if (st) st.dirty = false;
-        var panel = box.closest('section[id^="armory-panel-"]');
+        var panel = panelOf(box);
         close(true, function () { reload(panel ? panel.id : '', g.itemId); });
         if (g.message) toast(g.message);
       })
       .catch(function () { btn.disabled = false; notify('Network error. Try again.'); });
+  }
+
+  // ---- the Move box ----
+
+  // The panel a box lives in: the character's, or the Stashes page body.
+  function panelOf(box) { return box.closest('section[id^="armory-panel-"], #armory-stashes'); }
+
+  // Move stays disabled until a destination is chosen and the amount is
+  // something the box can send.
+  function moveReady(box) {
+    var go = box.querySelector('[data-move-go]'); if (!go) return;
+    var ok = !!picked(box);
+    var q = box.querySelector('#ag-q');
+    if (q) { var n = +q.value, max = +q.getAttribute('max') || 1000000; ok = ok && n >= 1 && n <= max && Math.floor(n) === n; }
+    var a = box.querySelector('#ag-amount');
+    if (a) ok = ok && a.value.trim() !== '';
+    go.disabled = !ok || !!box._mvBusy;
+  }
+
+  function showErr(box, msg) {
+    var bar = box.querySelector('.ag-warn[data-err]');
+    if (!bar) { notify(msg); return; }
+    bar.querySelector('span').textContent = msg;
+    bar.classList.remove('is-on'); void bar.offsetWidth; bar.classList.add('is-on');
+  }
+
+  // move posts the choice to the moves route. While it waits the button shows
+  // a spinner; on success it says so as the box folds away and the line it
+  // landed on flashes; on failure the amber bar carries the server's words.
+  function move(el) {
+    var box = boxOf(el); if (!box) return;
+    var go = box.querySelector('[data-move-go]');
+    if (!go || go.disabled || box._mvBusy) return;
+    var r = picked(box); if (!r) return;
+    var kind = box.getAttribute('data-kind');
+    var fd = new FormData();
+    fd.append('kind', kind);
+    fd.append('item_id', box.getAttribute('data-item-id') || '');
+    fd.append('from_kind', box.getAttribute('data-from-kind') || '');
+    fd.append('from_id', box.getAttribute('data-from-id') || '');
+    fd.append('to', r.value);
+    if (kind === 'money') {
+      fd.append('amount', (box.querySelector('#ag-amount') || {}).value || '');
+    } else {
+      var q = box.querySelector('#ag-q');
+      fd.append('quantity', q ? String(clampQty(q.value)) : '1');
+    }
+    var errBar = box.querySelector('.ag-warn[data-err]'); if (errBar) errBar.classList.remove('is-on');
+    var label = go.getAttribute('data-label') || 'Move';
+    box._mvBusy = true;
+    go.disabled = true;
+    go.innerHTML = '<span class="fx-spin" aria-hidden="true"></span><span></span>';
+    go.lastChild.textContent = go.getAttribute('data-busy-label') || 'Moving…';
+    function restore() { box._mvBusy = false; go.textContent = label; moveReady(box); }
+    Chronicle.apiFetch(box.getAttribute('data-post'), { method: 'POST', body: fd, headers: { 'HX-Request': 'true' } })
+      .then(function (resp) {
+        if (!resp.ok) return errorOf(resp).then(function (m) { restore(); showErr(box, m); });
+        var note = trigger(resp, 'chronicle:notify') || {};
+        var st = mine(box); if (st) st.dirty = false;
+        go.innerHTML = '<i class="fa-solid fa-check" aria-hidden="true"></i><span></span>';
+        go.lastChild.textContent = label === 'Move' ? 'Moved' : 'Asked';
+        var panel = panelOf(box);
+        var holders = [box.getAttribute('data-from-kind') + ':' + box.getAttribute('data-from-id'), r.value];
+        close(true, function () { reload(panel ? panel.id : '', kind === 'money' ? 'money' : box.getAttribute('data-item-id'), holders); });
+        if (note.message) toast(note.message);
+      })
+      .catch(function () { restore(); showErr(box, 'Network error. Try again.'); });
   }
 
   // ---- the Armory card's menu ----
@@ -432,7 +542,7 @@
 
   window.Chronicle = window.Chronicle || {};
   window.Chronicle.GiveBox = {
-    open: open, card: card, tab: tab, pick: pick, step: step,
+    open: open, move: move, edited: edited, card: card, tab: tab, pick: pick, step: step,
     search: search, cancel: cancel, discard: discard, give: give, tick: tick, save: save,
     _internal: { clampQty: clampQty, esc: esc, close: close, toast: toast }
   };

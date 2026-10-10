@@ -13,6 +13,7 @@ which code comments still cite; Cordinator is otherwise a frozen archive.
 | File | What it covers |
 |------|----------------|
 | `architecture.md` | System design, the three-tier extension model, request flow, dependency graph |
+| `ui-standard.md` | How Chronicle looks and behaves: what is on a page, opening and closing, motion, look, sign-off. Read before any UI change |
 | `conventions.md` | Code patterns with Go/Templ/SQL examples, CI guards, security rules, cross-plugin import discipline |
 | `decisions.md` | Architecture Decision Records. Append-only; code cites ADR numbers, so never renumber |
 | `tech-stack.md` | Technology versions, configs, and why each was chosen |
@@ -21,7 +22,7 @@ which code comments still cite; Cordinator is otherwise a frozen archive.
 | `glossary.md` | TTRPG and Chronicle terminology |
 | `troubleshooting.md` | Non-obvious problems and their fixes, including the test-environment ones |
 | `plugin-development.md` | Building WASM extensions |
-| `designs/` | Designs. `2026-09-12-build-order.md` and `2026-09-12-header-and-nav.md` are approved and mostly unbuilt; their Apps drawer is superseded by the sidebar signed on #739 (Pinned + folding sections). `2026-09-13-media-renovation.md` is the media plan, waiting on four decisions (#730, #733). |
+| `designs/` | Designs. `2026-09-12-build-order.md` and `2026-09-12-header-and-nav.md` are approved and mostly unbuilt; their Apps drawer is superseded by the sidebar signed on #739 (Pinned + folding sections). `2026-09-13-media-renovation.md` is the media plan; its open decisions are tracked in #733. |
 
 `status.md` and `todo.md` are pointers to the issues now. Finished plans,
 audits and old designs were deleted; git history keeps them.
@@ -33,20 +34,24 @@ business rules and footguns.
 
 - **Plugins** (`internal/plugins/<name>/`): addons, admin, ai_workspace (and
   ai_workspace/aiexport), armory, audit, auth, backup, bestiary, calendar,
-  campaigns, designlab, entities, foundry_vtt, maps, media, npcs, packages,
-  restore, sessions, settings, smtp, syncapi, systemstate, timeline,
-  widgetbindings.
+  campaigns, designlab, dmscreen, entities, foundry_vtt, maps, media, npcs,
+  packages, quests, restore, rolltables, sessions, settings, smtp, syncapi,
+  systemstate, timeline, widgetbindings.
   calendar's V5 rebuild (#741) is landing in parts — its `.ai.md` says
   which parts have shipped and which are still open.
 - **Widgets** (`internal/widgets/<name>/`): attributes, editor, entity_notes,
-  mentions, notes, posts, relations, tags, title.
+  mentions, notes, posts, relations, sky, tags, title.
 - **Infrastructure:** `internal/database/`, `internal/extensions/`,
   `internal/systems/` (game systems are external packages installed through
   Admin → Packages, so there is one systems-infrastructure doc, not one per
   system), `internal/websocket/`.
-- **Front-end scripts** (`static/js/`): `boot`, `sidebar_tag_filter`,
-  `sidebar_tree`, and under `widgets/`: `dynamic_surface`, `entity_tooltip`,
-  `image_upload`, `layout_editor`, `template_editor`, `timeline_viz`.
+- **Front-end scripts** (`static/js/`): `boot`, `hovercard`, `motion_rest`,
+  `notifications`, `shortcuts_help`, `sidebar_tag_filter`, `sidebar_tree`, and
+  under `widgets/`: `dynamic_surface`, `entity_posts`, `entity_tooltip`,
+  `entity_type_config`, `entity_type_editor`, `groups`, `header_motion`,
+  `image_upload`, `layout_editor`, `map_widget`, `permissions`, `quest_board`,
+  `relation_graph`, `shop_inventory`, `template_editor`, `timeline_viz`,
+  `timeline_widget`.
 - **Examples:** `extensions/example-wasm-go/`, `extensions/example-wasm-rust/`.
 
 ## Templates

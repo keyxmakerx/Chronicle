@@ -273,6 +273,7 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 		data-draw-src={ layouts.AssetURL("/static/js/map_drawing_tools.js") }
 		data-shadow-src={ layouts.AssetURL("/static/js/map_shadow.js") }
 		data-pictures-src={ layouts.AssetURL("/static/js/map_pictures.js") }
+		data-hex-art-src={ layouts.AssetURL("/static/js/map_hex_art.js") }
 		data-hexes-src={ layouts.AssetURL("/static/js/map_hexes.js") }
 		data-map-id={ data.Map.ID }
 		data-image-id={ derefStr(data.Map.ImageID) }
@@ -284,6 +285,8 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 		data-can-dm-only={ fmt.Sprintf("%t", cc.CanAuthorDmOnly() || cc.IsSiteAdmin) }
 		data-can-draw={ fmt.Sprintf("%t", data.CanDraw()) }
 		data-can-paint-hexes={ fmt.Sprintf("%t", data.CanPaintHexes()) }
+		data-can-move-party={ fmt.Sprintf("%t", data.CanMoveParty()) }
+		data-can-fog={ fmt.Sprintf("%t", data.IsDM) }
 		data-can-shadow={ fmt.Sprintf("%t", data.CanShadow()) }
 		data-user-id={ data.UserID }
 		data-display={ mustMarshalDisplay(data.DisplayOrDefault()) }
@@ -337,11 +340,29 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 		.mp-hexpanel .mp-hx-pal button[aria-pressed="true"] { border-color: var(--mp-accent); box-shadow: 0 0 0 2px var(--mp-accent-soft); }
 		.mp-hexpanel .mp-hx-pal svg { display: block; overflow: visible; }
 		.mp-hexpanel .mp-hx-pal i { width: 22px; height: 13px; border-radius: 3px; display: block; background: repeating-linear-gradient(45deg, #ccc 0 3px, #fff 3px 6px); }
+		/* The Art chips and the piece picker in Paint. Folders are dashed so they
+		   read as something to open rather than a piece to paint with. */
+		.mp-hexpanel .mp-hx-art { gap: 4px; align-items: center; }
+		.mp-hexpanel .mp-hx-art > span { font-size: 11.5px; margin-right: 2px; color: var(--color-text-secondary); }
+		.mp-hexpanel .mp-hx-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+		.mp-hexpanel .mp-hx-pcs-h { display: flex; flex-direction: column; gap: 1px; font-size: 12px; }
+		.mp-hexpanel .mp-hx-pcs-h span { font-size: 11px; color: var(--color-text-secondary); }
+		.mp-hexpanel .mp-hx-pcs button { font-size: 10.5px; line-height: 1.15; text-align: center; padding: 4px 2px; }
+		.mp-hexpanel .mp-hx-pcs .mp-hx-pf { border-style: dashed; }
+		.mp-hexpanel .mp-hx-cnt { font-size: 9.5px; color: var(--color-text-secondary); }
+		.mp-hexpanel .mp-hx-pfback { align-self: flex-start; font-size: 11.5px; padding: 3px 8px; }
+		.mp-hexpanel .mp-hx-pfname { font-weight: 600; font-size: 12px; }
 		.mp-hexpanel .mp-hx-card { border: 1px solid var(--color-border); border-radius: 10px; padding: 9px; display: flex; flex-direction: column; gap: 6px; }
 		.mp-hexpanel .mp-hx-card b { font-size: 14px; }
 		.mp-hexpanel .mp-hx-card .mp-input { width: 100%; }
 		.mp-hexpanel .mp-hx-card span { white-space: pre-wrap; overflow-wrap: anywhere; }
+		.mp-hexpanel .mp-hx-trip { background: var(--mp-accent-soft); border-radius: 8px; padding: 8px 10px; color: var(--color-text-primary); }
+		.mp-hexpanel .mp-hx-trip b { display: block; font-size: 15px; }
+		.mp-hexpanel .mp-hx-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+		.mp-hexpanel .mp-hx-row input[type="number"] { width: 64px; }
 		@keyframes mp-hx-panel { from { opacity: 0; transform: translateY(-6px); } }
+		.mp-hx-fade { animation: mp-hx-fade 0.5s ease both; }
+		@keyframes mp-hx-fade { from { opacity: 0; } }
 		.mp-hx-in { animation: mp-hx-in 0.48s cubic-bezier(0.2, 0.9, 0.3, 1.18) both; transform-box: fill-box; transform-origin: 50% 62%; }
 		.mp-hx-out { animation: mp-hx-out 0.36s ease-in both; transform-box: fill-box; transform-origin: 50% 62%; }
 		@keyframes mp-hx-in { from { opacity: 0; transform: scale(0.5); } to { opacity: 1; transform: none; } }
@@ -350,7 +371,7 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 			.mp-hexpanel { left: 12px; right: 12px; width: auto; top: auto; bottom: 64px; max-height: 46%; }
 		}
 		@media (prefers-reduced-motion: reduce) {
-			.mp-hexpanel, .mp-hx-in, .mp-hx-out { animation: none !important; }
+			.mp-hexpanel, .mp-hx-in, .mp-hx-out, .mp-hx-fade { animation: none !important; }
 		}
 
 		#map-wrap {
@@ -489,6 +510,8 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 		.mp-kind { display: flex; align-items: center; gap: 8px; }
 		.mp-kind input[type=color] { width: 28px; height: 26px; padding: 0; border: 0; background: none; flex: none; }
 		.mp-kind .mp-input { flex: 1; min-width: 0; }
+		.mp-hx-travel { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+		.mp-hx-travel .mp-input { width: 64px; }
 		.mp-preview { width: 100%; max-height: 140px; object-fit: contain; border-radius: 6px; background: var(--color-bg-tertiary); }
 		.mp-file { font-size: 11.5px; padding: 3px; }
 		.mp-danger { align-self: flex-start; border: 0; background: none; padding: 4px 6px; border-radius: 6px; font-size: 12px; color: #dc2626; }

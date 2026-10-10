@@ -119,14 +119,31 @@ type DrawingService interface {
 	// IsDrawingShadowed answers the same question for one drawing fetched by
 	// id, so a by-id read cannot reveal what the list withholds.
 	IsDrawingShadowed(ctx context.Context, d *Drawing, role int) (bool, error)
+	// WithholdImages returns the drawings with the picture file removed, for a
+	// viewer subject to fog, from the picture a fogged hex layer is pinned to
+	// and from every picture reaching into unexplored hexes. Those files show
+	// land under the fog, so they never reach them; the drawing itself stays so
+	// the viewer can still place the hexes by its box.
+	WithholdImages(ctx context.Context, mapID string, role int, ds []Drawing) ([]Drawing, error)
+	// FogWithholdsMedia reports whether mediaID is the file of a picture on
+	// mapID that WithholdImages withholds, so the media server can refuse the
+	// file itself to the same viewers (MapService.IsShadowedMapImage).
+	FogWithholdsMedia(ctx context.Context, mapID, mediaID string) (bool, error)
 
-	// Token CRUD.
+	// Token CRUD. isDM on the writes is CampaignContext.CanAuthorDmOnly: anyone
+	// else is answered NotFound for a token they may not see (hidden, or under
+	// unexplored hexes), the same as for a token that does not exist.
 	CreateToken(ctx context.Context, input CreateTokenInput) (*Token, error)
 	GetToken(ctx context.Context, id string) (*Token, error)
-	UpdateToken(ctx context.Context, id, mapID string, input UpdateTokenInput) error
-	UpdateTokenPosition(ctx context.Context, id, mapID string, input UpdateTokenPositionInput) error
+	UpdateToken(ctx context.Context, id, mapID string, isDM bool, input UpdateTokenInput) error
+	UpdateTokenPosition(ctx context.Context, id, mapID string, isDM bool, input UpdateTokenPositionInput) error
 	DeleteToken(ctx context.Context, id, mapID string, expectedUpdatedAt *time.Time) error
+	// ListTokens also withholds, from viewers subject to fog, tokens standing
+	// in unexplored hexes.
 	ListTokens(ctx context.Context, mapID string, role int) ([]Token, error)
+	// IsTokenHidden answers, for one token fetched by id, whether role may not
+	// see it, so a by-id read cannot reveal what the list withholds.
+	IsTokenHidden(ctx context.Context, t *Token, role int) (bool, error)
 
 	// Layer CRUD.
 	CreateLayer(ctx context.Context, input CreateLayerInput) (*Layer, error)
@@ -156,6 +173,9 @@ type DrawingService interface {
 	// SetMediaVerifier wires the check that a picture's media file belongs to
 	// the map's campaign. Unwired, picture writes are refused.
 	SetMediaVerifier(v MediaVerifier)
+	// SetHexFogLookup wires the hex fog, so drawings under unexplored hexes are
+	// withheld like those under a shadow. Unwired, no fog is known.
+	SetHexFogLookup(l HexFogLookup)
 }
 
 // MapEventPublisher emits domain events when map resources change.
@@ -166,7 +186,8 @@ type MapEventPublisher interface {
 	// PublishTokenPositionEvent carries isHidden so the fast-drag path gates
 	// hidden tokens the same way PublishTokenEvent does — a GM-only token's
 	// live position must not reach non-GM clients while it's being dragged.
-	PublishTokenPositionEvent(campaignID, tokenID string, x, y float64, isHidden bool)
+	// mapID lets the publisher apply the hex fog to the new position.
+	PublishTokenPositionEvent(campaignID, mapID, tokenID string, x, y float64, isHidden bool)
 	PublishLayerEvent(eventType string, campaignID string, layer *Layer)
 	PublishFogEvent(eventType string, campaignID, mapID string, region *FogRegion)
 	PublishMarkerEvent(eventType string, campaignID string, marker *Marker)
@@ -175,12 +196,13 @@ type MapEventPublisher interface {
 // NoopMapEventPublisher is a no-op implementation for tests.
 type NoopMapEventPublisher struct{}
 
-func (NoopMapEventPublisher) PublishDrawingEvent(string, string, *Drawing)                     {}
-func (NoopMapEventPublisher) PublishTokenEvent(string, string, *Token)                         {}
-func (NoopMapEventPublisher) PublishTokenPositionEvent(string, string, float64, float64, bool) {}
-func (NoopMapEventPublisher) PublishLayerEvent(string, string, *Layer)                         {}
-func (NoopMapEventPublisher) PublishFogEvent(string, string, string, *FogRegion)               {}
-func (NoopMapEventPublisher) PublishMarkerEvent(string, string, *Marker)                       {}
+func (NoopMapEventPublisher) PublishDrawingEvent(string, string, *Drawing) {}
+func (NoopMapEventPublisher) PublishTokenEvent(string, string, *Token)     {}
+func (NoopMapEventPublisher) PublishTokenPositionEvent(string, string, string, float64, float64, bool) {
+}
+func (NoopMapEventPublisher) PublishLayerEvent(string, string, *Layer)           {}
+func (NoopMapEventPublisher) PublishFogEvent(string, string, string, *FogRegion) {}
+func (NoopMapEventPublisher) PublishMarkerEvent(string, string, *Marker)         {}
 
 var _ ShadowLookup = DrawingService(nil)
 
@@ -196,7 +218,11 @@ type drawingService struct {
 	onShadowChange func(campaignID string)
 	// media confirms a picture's file is an image of the map's campaign.
 	media MediaVerifier
+	// hexFog supplies the fog mask for drawings under unexplored hexes.
+	hexFog HexFogLookup
 }
+
+func (s *drawingService) SetHexFogLookup(l HexFogLookup) { s.hexFog = l }
 
 // errImageWiring is the cause logged when picture writes arrive before the
 // media verifier is wired.
@@ -227,11 +253,13 @@ func (s *drawingService) SetShadowChangeHook(fn func(campaignID string)) {
 	s.onShadowChange = fn
 }
 
-// shadowChanged runs the hook for a shadow write. An unresolved campaign is
-// passed as "", which the receiver treats as "everything", so a failed lookup
-// can never leave a stale "not shadowed" answer behind.
+// shadowChanged runs the hook for a shadow or picture write: a picture can be
+// the one a hex layer is pinned to, or move into the fog, and either changes
+// which files the media server must refuse. An unresolved campaign is passed
+// as "", which the receiver treats as "everything", so a failed lookup can
+// never leave a stale "not shadowed" answer behind.
 func (s *drawingService) shadowChanged(ctx context.Context, d *Drawing) {
-	if s.onShadowChange == nil || d == nil || d.DrawingType != DrawingTypeShadow {
+	if s.onShadowChange == nil || d == nil || (d.DrawingType != DrawingTypeShadow && d.DrawingType != DrawingTypeImage) {
 		return
 	}
 	s.onShadowChange(s.campaignForMap(ctx, d.MapID))
@@ -383,6 +411,9 @@ func (s *drawingService) UpdateDrawing(ctx context.Context, id, mapID string, ro
 	if d.MapID != mapID {
 		return apperror.NewNotFound("drawing not found")
 	}
+	if err := s.notFoundIfHiddenFrom(ctx, d, isDM); err != nil {
+		return err
+	}
 	if d.DrawingType == DrawingTypeShadow {
 		if err := requireShadowAuthor(isDM); err != nil {
 			return err
@@ -477,6 +508,9 @@ func (s *drawingService) DeleteDrawing(ctx context.Context, id, mapID string, ex
 	if d.MapID != mapID { // IDOR guard (audit-R2 Finding 2)
 		return apperror.NewNotFound("drawing not found")
 	}
+	if err := s.notFoundIfHiddenFrom(ctx, d, isDM); err != nil {
+		return err
+	}
 	// A co-DM grant counts as DM here, whatever the member role.
 	if !isDM && !canDeleteOwn(role, actorID, d.CreatedBy) {
 		if d.Visibility == "dm_only" {
@@ -512,7 +546,84 @@ func (s *drawingService) ListDrawings(ctx context.Context, mapID string, role in
 		// Fail closed: a drawing that might be under a shadow is not sent.
 		return nil, err
 	}
-	return filterDrawingsByShadow(areas, drawings), nil
+	drawings = filterDrawingsByShadow(areas, drawings)
+	fog, err := fogFor(ctx, s.hexFog, mapID, role)
+	if err != nil {
+		// Fail closed, as for shadows.
+		return nil, err
+	}
+	if fog == nil {
+		return drawings, nil
+	}
+	kept := make([]Drawing, 0, len(drawings))
+	for i := range drawings {
+		if !fog.HidesDrawing(&drawings[i]) {
+			kept = append(kept, drawings[i])
+		}
+	}
+	return kept, nil
+}
+
+// WithholdImages implements DrawingService.
+func (s *drawingService) WithholdImages(ctx context.Context, mapID string, role int, ds []Drawing) ([]Drawing, error) {
+	fog, err := fogFor(ctx, s.hexFog, mapID, role)
+	if err != nil {
+		return nil, err
+	}
+	if fog == nil {
+		return ds, nil
+	}
+	out := make([]Drawing, len(ds))
+	copy(out, ds)
+	for i := range out {
+		if fog.WithholdsImageOf(&out[i]) {
+			out[i].ImageID = nil
+		}
+	}
+	return out, nil
+}
+
+// FogWithholdsMedia implements DrawingService. It reads every drawing of the
+// map, as the owner would, because the question is about the file and not
+// about one viewer's list. No fog lookup wired means no fog is known.
+func (s *drawingService) FogWithholdsMedia(ctx context.Context, mapID, mediaID string) (bool, error) {
+	if s.hexFog == nil || mediaID == "" {
+		return false, nil
+	}
+	fog, err := s.hexFog.FogMask(ctx, mapID)
+	if err != nil || fog == nil {
+		return err != nil, err
+	}
+	drawings, err := s.repo.ListDrawings(ctx, mapID, permissions.RoleOwner, "")
+	if err != nil {
+		return true, err
+	}
+	for i := range drawings {
+		d := &drawings[i]
+		if d.ImageID != nil && *d.ImageID == mediaID && fog.WithholdsImageOf(d) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// notFoundIfHiddenFrom answers NotFound, the same as a missing id, when a
+// caller who is not a DM writes to a drawing they may not see (under a shadow
+// or wholly in unexplored hexes). Otherwise the write's answer (success,
+// Forbidden, Conflict) would confirm the drawing exists, and the write would
+// change something they were never shown.
+func (s *drawingService) notFoundIfHiddenFrom(ctx context.Context, d *Drawing, isDM bool) error {
+	if isDM {
+		return nil
+	}
+	hidden, err := s.IsDrawingShadowed(ctx, d, permissions.RolePlayer)
+	if err != nil {
+		return err
+	}
+	if hidden {
+		return apperror.NewNotFound("drawing not found")
+	}
+	return nil
 }
 
 // ShadowAreas returns the boxes of every shadow on a map. It is on the
@@ -533,6 +644,52 @@ func (s *drawingService) ShadowAreas(ctx context.Context, mapID string) ([]Shado
 	return areas, nil
 }
 
+// DrawingVisibleTo reports whether a viewer may read d by the rule ListDrawings
+// applies in SQL: DM-equivalents see everything; anyone else never a dm_only
+// drawing, nor one whose visibility_rules leave them out. Shadows are a
+// separate check (IsDrawingShadowed).
+func DrawingVisibleTo(d *Drawing, role int, userID string) bool {
+	if d == nil {
+		return false
+	}
+	if permissions.CanSeeDmOnly(role) {
+		return true
+	}
+	return d.Visibility != "dm_only" && visibilityRulesAdmit(d.VisibilityRules, userID)
+}
+
+// MarkerVisibleTo is DrawingVisibleTo for a marker: ListMarkers applies the
+// same dm_only and visibility_rules predicate.
+func MarkerVisibleTo(m *Marker, role int, userID string) bool {
+	if m == nil {
+		return false
+	}
+	if permissions.CanSeeDmOnly(role) {
+		return true
+	}
+	return m.Visibility != "dm_only" && visibilityRulesAdmit(m.VisibilityRules, userID)
+}
+
+// TokenVisibleTo reports whether a viewer may read t by ListTokens' rule: a
+// hidden token is for DM-equivalents only.
+func TokenVisibleTo(t *Token, role int) bool {
+	return t != nil && (!t.IsHidden || permissions.CanSeeDmOnly(role))
+}
+
+// visibilityRulesAdmit applies stored visibility_rules for a non-owner viewer.
+// Rules that do not parse admit no one, so a damaged row hides rather than
+// shows.
+func visibilityRulesAdmit(raw *string, userID string) bool {
+	if raw == nil {
+		return true
+	}
+	var rules VisibilityRules
+	if err := json.Unmarshal([]byte(*raw), &rules); err != nil {
+		return false
+	}
+	return rules.Allows(userID)
+}
+
 // IsDrawingShadowed reports whether a viewer of this role must not receive d.
 func (s *drawingService) IsDrawingShadowed(ctx context.Context, d *Drawing, role int) (bool, error) {
 	if d == nil || !shadowHidingApplies(role) {
@@ -542,7 +699,14 @@ func (s *drawingService) IsDrawingShadowed(ctx context.Context, d *Drawing, role
 	if err != nil {
 		return true, err
 	}
-	return DrawingUnderShadow(areas, d), nil
+	if DrawingUnderShadow(areas, d) {
+		return true, nil
+	}
+	fog, err := fogFor(ctx, s.hexFog, d.MapID, role)
+	if err != nil {
+		return true, err
+	}
+	return fog.HidesDrawing(d), nil
 }
 
 // validateShadowPoints requires exactly two finite corners; a shadow is a box,
@@ -627,13 +791,16 @@ func (s *drawingService) GetToken(ctx context.Context, id string) (*Token, error
 }
 
 // UpdateToken validates input and updates a token.
-func (s *drawingService) UpdateToken(ctx context.Context, id, mapID string, input UpdateTokenInput) error {
+func (s *drawingService) UpdateToken(ctx context.Context, id, mapID string, isDM bool, input UpdateTokenInput) error {
 	t, err := s.repo.GetToken(ctx, id)
 	if err != nil {
 		return err
 	}
 	if t.MapID != mapID { // IDOR guard (audit-R2 Finding 2)
 		return apperror.NewNotFound("token not found")
+	}
+	if err := s.notFoundIfTokenHiddenFrom(ctx, t, isDM); err != nil {
+		return err
 	}
 
 	if err := concurrency.Check(t.UpdatedAt, input.ExpectedUpdatedAt, "token"); err != nil {
@@ -695,7 +862,7 @@ func (s *drawingService) UpdateToken(ctx context.Context, id, mapID string, inpu
 // wins; deliberate "drop here" actions can include it to detect
 // cross-user collisions. The pre-fetch is skipped on the no-token path
 // to keep the drag fast path on the same code shape as before.
-func (s *drawingService) UpdateTokenPosition(ctx context.Context, id, mapID string, input UpdateTokenPositionInput) error {
+func (s *drawingService) UpdateTokenPosition(ctx context.Context, id, mapID string, isDM bool, input UpdateTokenPositionInput) error {
 	if input.X < 0 || input.X > 100 || input.Y < 0 || input.Y > 100 {
 		return apperror.NewBadRequest("token coordinates must be between 0 and 100")
 	}
@@ -709,6 +876,9 @@ func (s *drawingService) UpdateTokenPosition(ctx context.Context, id, mapID stri
 	if t.MapID != mapID {
 		return apperror.NewNotFound("token not found")
 	}
+	if err := s.notFoundIfTokenHiddenFrom(ctx, t, isDM); err != nil {
+		return err
+	}
 	if input.ExpectedUpdatedAt != nil {
 		if err := concurrency.Check(t.UpdatedAt, input.ExpectedUpdatedAt, "token"); err != nil {
 			return err
@@ -719,7 +889,7 @@ func (s *drawingService) UpdateTokenPosition(ctx context.Context, id, mapID stri
 	}
 	// Reuse the token loaded above (position update doesn't change its map) to
 	// resolve the campaign for the event.
-	s.events.PublishTokenPositionEvent(s.campaignForMap(ctx, t.MapID), id, input.X, input.Y, t.IsHidden)
+	s.events.PublishTokenPositionEvent(s.campaignForMap(ctx, t.MapID), t.MapID, id, input.X, input.Y, t.IsHidden)
 	return nil
 }
 
@@ -742,9 +912,56 @@ func (s *drawingService) DeleteToken(ctx context.Context, id, mapID string, expe
 	return nil
 }
 
-// ListTokens returns all tokens for a map, filtered by role.
+// ListTokens returns all tokens for a map, filtered by role and, for viewers
+// subject to fog, by the hex fog. A failed fog lookup fails the list.
 func (s *drawingService) ListTokens(ctx context.Context, mapID string, role int) ([]Token, error) {
-	return s.repo.ListTokens(ctx, mapID, role)
+	tokens, err := s.repo.ListTokens(ctx, mapID, role)
+	if err != nil {
+		return nil, err
+	}
+	fog, err := fogFor(ctx, s.hexFog, mapID, role)
+	if err != nil {
+		return nil, err
+	}
+	if fog == nil {
+		return tokens, nil
+	}
+	kept := make([]Token, 0, len(tokens))
+	for i := range tokens {
+		if !fog.HidesToken(&tokens[i]) {
+			kept = append(kept, tokens[i])
+		}
+	}
+	return kept, nil
+}
+
+// IsTokenHidden implements DrawingService: a GM-only token, or one in
+// unexplored hexes, is hidden from anyone below CanSeeDmOnly. A failed fog
+// lookup answers hidden.
+func (s *drawingService) IsTokenHidden(ctx context.Context, t *Token, role int) (bool, error) {
+	if !TokenVisibleTo(t, role) {
+		return true, nil
+	}
+	fog, err := fogFor(ctx, s.hexFog, t.MapID, role)
+	if err != nil {
+		return true, err
+	}
+	return fog.HidesToken(t), nil
+}
+
+// notFoundIfTokenHiddenFrom is notFoundIfHiddenFrom for tokens.
+func (s *drawingService) notFoundIfTokenHiddenFrom(ctx context.Context, t *Token, isDM bool) error {
+	if isDM {
+		return nil
+	}
+	hidden, err := s.IsTokenHidden(ctx, t, permissions.RolePlayer)
+	if err != nil {
+		return err
+	}
+	if hidden {
+		return apperror.NewNotFound("token not found")
+	}
+	return nil
 }
 
 // --- Layer ---

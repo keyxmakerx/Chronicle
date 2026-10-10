@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"html"
+	"log/slog"
 	"os"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 )
 
 // SystemManifest describes a module's metadata, capabilities, and content
@@ -14,6 +16,11 @@ import (
 // in its directory root. The manifest is the single source of truth for
 // what a module provides.
 type SystemManifest struct {
+	// PlayWarnings lists play blocks dropped at load. Never serialized: it is
+	// kept across repeat validations (a dropped block is gone, so a second pass
+	// finds nothing new) so the diagnostics report can show it.
+	PlayWarnings []string `json:"-"`
+
 	// ID is the unique machine-readable identifier (e.g., "dnd5e").
 	ID string `json:"id"`
 
@@ -271,6 +278,70 @@ type FieldDef struct {
 	// embedded items rather than a system.* path). Ignored unless
 	// FoundryCollection is set.
 	FoundryItemSingle bool `json:"foundry_item_single,omitempty"`
+
+	// Play declares that this field may be changed during play and how, so
+	// core never needs to know a system's field names. Optional; a block that
+	// fails validation is dropped at load (see sanitizePlayBlocks) and the
+	// rest of the field survives.
+	Play *PlayDef `json:"play,omitempty"`
+}
+
+// Play edit modes: who may change a field during play.
+const (
+	PlayEditOwner = "owner" // the claimed owner, or Scribe and above
+	PlayEditGM    = "gm"    // Scribe and above only
+	PlayEditNone  = "none"  // nobody through the play door
+)
+
+// Play kinds: the control shape and the value check a field gets.
+const (
+	PlayKindCounter    = "counter"
+	PlayKindResource   = "resource"
+	PlayKindConditions = "conditions"
+	PlayKindChoice     = "choice"
+	PlayKindText       = "text"
+)
+
+// Combat authority values: which side wins when Chronicle and Foundry disagree
+// about a field during combat.
+const (
+	PlayAuthorityFoundry   = "foundry"
+	PlayAuthorityChronicle = "chronicle"
+)
+
+// PlayDef is the manifest's per-field play-controls declaration. It only
+// DECLARES; the write guard and sheet controls that act on it live elsewhere.
+type PlayDef struct {
+	// Edit is who may change the field during play: owner, gm or none.
+	Edit string `json:"edit"`
+
+	// Kind is counter, resource, conditions, choice or text.
+	Kind string `json:"kind"`
+
+	// Min and Max bound counter and resource values. Pointers so an explicit
+	// 0 is distinguishable from absent.
+	Min *float64 `json:"min,omitempty"`
+	Max *float64 `json:"max,omitempty"`
+
+	// MaxField names another number field in the same preset whose current
+	// value is the upper bound; it wins over Max.
+	MaxField string `json:"max_field,omitempty"`
+
+	// Step is the size of one +/- nudge in the sheet.
+	Step float64 `json:"step,omitempty"`
+
+	// Options lists the allowed values for conditions and choice.
+	Options []string `json:"options,omitempty"`
+
+	// MaxLength bounds text and choice values.
+	MaxLength int `json:"max_length,omitempty"`
+
+	// ToFoundry overrides whether a play edit is written to Foundry. Nil
+	// means follow the field's foundry_writable.
+	ToFoundry *bool `json:"to_foundry,omitempty"`
+
+	// CombatAuthority is foundry or chronicle; empty leaves it undecided.
+	CombatAuthority string `json:"combat_authority,omitempty"`
 }
 
 // IsFoundryWritable returns whether this field should be written back to
@@ -560,6 +631,9 @@ func (m *SystemManifest) BuildValidationReport() *ValidationReport {
 		r.ItemFieldCount = len(itemPreset.Fields)
 	}
 
+	// Play blocks dropped at load.
+	r.Warnings = append(r.Warnings, m.PlayWarnings...)
+
 	// Generate warnings.
 	if r.CategoryCount == 0 {
 		r.Warnings = append(r.Warnings, "No reference data categories defined")
@@ -638,6 +712,10 @@ const (
 	maxTextRenderers   = 5
 	maxRenderers       = 10
 	maxEntityPanels    = 10
+	// A play block's options become controls on a character page, so a
+	// package cannot flood one with an unbounded list or long labels.
+	maxPlayOptions      = 50
+	maxPlayOptionLength = 64
 )
 
 // slugPattern matches valid manifest IDs and preset slugs.
@@ -727,6 +805,8 @@ func ValidateManifest(m *SystemManifest) error {
 			}
 		}
 	}
+
+	m.sanitizePlayBlocks()
 
 	// Validate widgets.
 	if len(m.Widgets) > maxWidgets {
@@ -909,6 +989,11 @@ func sanitizeManifestStrings(m *SystemManifest) {
 		m.EntityPresets[i].NamePlural = html.EscapeString(m.EntityPresets[i].NamePlural)
 		for j := range m.EntityPresets[i].Fields {
 			m.EntityPresets[i].Fields[j].Label = html.EscapeString(m.EntityPresets[i].Fields[j].Label)
+			if play := m.EntityPresets[i].Fields[j].Play; play != nil {
+				for k := range play.Options {
+					play.Options[k] = html.EscapeString(play.Options[k])
+				}
+			}
 		}
 	}
 
@@ -926,4 +1011,99 @@ func sanitizeManifestStrings(m *SystemManifest) {
 		m.TextRenderers[i].Name = html.EscapeString(m.TextRenderers[i].Name)
 		m.TextRenderers[i].Description = html.EscapeString(m.TextRenderers[i].Description)
 	}
+}
+
+// sanitizePlayBlocks validates every preset field's play block and drops the
+// ones that fail, recording a warning for each. A bad block must not refuse
+// the whole system: the field still works as an ordinary field, it just has no
+// play controls. Only presets are checked because only they become entity
+// fields; category fields describe reference data.
+func (m *SystemManifest) sanitizePlayBlocks() {
+	for i := range m.EntityPresets {
+		preset := &m.EntityPresets[i]
+		for j := range preset.Fields {
+			f := &preset.Fields[j]
+			if f.Play == nil {
+				continue
+			}
+			reason := validatePlayDef(*f, preset.Fields)
+			if reason == "" {
+				continue
+			}
+			f.Play = nil
+			msg := fmt.Sprintf("Preset %q field %q: play block ignored: %s", preset.Slug, f.Key, reason)
+			m.PlayWarnings = append(m.PlayWarnings, msg)
+			slog.Warn("system manifest: play block dropped",
+				slog.String("system", m.ID),
+				slog.String("preset", preset.Slug),
+				slog.String("field", f.Key),
+				slog.String("reason", reason))
+		}
+	}
+}
+
+// validatePlayDef returns why f's play block is unusable, or "" when it is
+// fine. siblings is the whole field list of the same preset, which max_field
+// is resolved against.
+func validatePlayDef(f FieldDef, siblings []FieldDef) string {
+	p := f.Play
+	switch p.Edit {
+	case PlayEditOwner, PlayEditGM, PlayEditNone:
+	default:
+		return fmt.Sprintf("unknown edit %q (valid: owner, gm, none)", p.Edit)
+	}
+	switch p.Kind {
+	case PlayKindCounter, PlayKindResource, PlayKindConditions, PlayKindChoice, PlayKindText:
+	default:
+		return fmt.Sprintf("unknown kind %q (valid: counter, resource, conditions, choice, text)", p.Kind)
+	}
+	switch p.CombatAuthority {
+	case "", PlayAuthorityFoundry, PlayAuthorityChronicle:
+	default:
+		return fmt.Sprintf("unknown combat_authority %q (valid: foundry, chronicle)", p.CombatAuthority)
+	}
+	// A GM-only value is hidden from players, so letting a player write it
+	// would be a blind write to a secret.
+	if f.GMOnly && p.Edit == PlayEditOwner {
+		return "a gm_only field cannot be owner-editable"
+	}
+	if (p.Kind == PlayKindConditions || p.Kind == PlayKindChoice) && len(p.Options) == 0 {
+		return fmt.Sprintf("kind %q needs a non-empty options list", p.Kind)
+	}
+	if len(p.Options) > maxPlayOptions {
+		return fmt.Sprintf("options has %d entries (max %d)", len(p.Options), maxPlayOptions)
+	}
+	for _, o := range p.Options {
+		if o == "" || utf8.RuneCountInString(o) > maxPlayOptionLength {
+			return fmt.Sprintf("each option must be 1 to %d characters", maxPlayOptionLength)
+		}
+	}
+	if p.Min != nil && p.Max != nil && *p.Min > *p.Max {
+		return fmt.Sprintf("min %v is greater than max %v", *p.Min, *p.Max)
+	}
+	if p.Step < 0 {
+		return "step must not be negative"
+	}
+	if p.MaxLength < 0 {
+		return "max_length must not be negative"
+	}
+	if p.MaxField != "" {
+		if p.MaxField == f.Key {
+			return "max_field names the field itself"
+		}
+		var target *FieldDef
+		for k := range siblings {
+			if siblings[k].Key == p.MaxField {
+				target = &siblings[k]
+				break
+			}
+		}
+		if target == nil {
+			return fmt.Sprintf("max_field %q is not a field of this preset", p.MaxField)
+		}
+		if target.Type != "number" {
+			return fmt.Sprintf("max_field %q is a %s field, not a number", p.MaxField, target.Type)
+		}
+	}
+	return ""
 }

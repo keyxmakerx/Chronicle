@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"reflect"
 	"regexp"
 	"strings"
 	"time"
@@ -219,6 +220,11 @@ type EntityService interface {
 	// FieldDefinition.OwnerOnly — same map shape, same idempotent per-type
 	// walk, different flag.
 	SyncFieldOwnerOnlyFlags(ctx context.Context, ownerOnlyByCategory map[string]map[string]bool) (int, error)
+
+	// SyncFieldPlay re-stamps FieldDefinition.Play on stored entity types
+	// from a (preset-category → field-key → play block) map; a nil block
+	// clears. Same idempotent, fields-column-only contract as the flag syncs.
+	SyncFieldPlay(ctx context.Context, playByCategory map[string]map[string]*FieldPlay) (int, error)
 
 	// BulkUpdateType changes the entity type for multiple entities at once.
 	// Returns the count of successfully updated entities. Validates that the
@@ -2467,7 +2473,7 @@ func (s *entityService) UpdateCategoryDashboardLayout(ctx context.Context, id in
 			}
 			blockCount += len(col.Blocks)
 			for _, block := range col.Blocks {
-				if !campaigns.ValidBlockTypes[block.Type] {
+				if !campaigns.ValidBlockTypes[block.Type] && !IsExtraCategoryBlock(block.Type) {
 					return apperror.NewBadRequest(fmt.Sprintf("invalid block type: %s", block.Type))
 				}
 			}
@@ -2962,6 +2968,55 @@ func (s *entityService) SyncFieldOwnerOnlyFlags(ctx context.Context, ownerOnlyBy
 		func(f *FieldDefinition) bool { return f.OwnerOnly },
 		func(f *FieldDefinition, v bool) { f.OwnerOnly = v },
 	)
+}
+
+// SyncFieldPlay converges FieldDefinition.Play on stored entity types the same
+// way SyncFieldGMFlags converges gm_only, so a system update that adds or
+// changes play blocks reaches types created before it. A nil block in the map
+// clears the field's stored play; a key absent from the map is left alone.
+func (s *entityService) SyncFieldPlay(ctx context.Context, playByCategory map[string]map[string]*FieldPlay) (int, error) {
+	if s.types == nil || len(playByCategory) == 0 {
+		return 0, nil
+	}
+	types, err := s.types.ListAll(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("listing entity types for play sync: %w", err)
+	}
+	updated := 0
+	for i := range types {
+		et := &types[i]
+		if et.PresetCategory == nil || *et.PresetCategory == "" {
+			continue
+		}
+		want, ok := playByCategory[*et.PresetCategory]
+		if !ok {
+			continue
+		}
+		changed := false
+		for j := range et.Fields {
+			wantPlay, has := want[et.Fields[j].Key]
+			if has && !reflect.DeepEqual(et.Fields[j].Play, wantPlay) {
+				et.Fields[j].Play = wantPlay
+				changed = true
+			}
+		}
+		if !changed {
+			continue
+		}
+		fieldsJSON, mErr := json.Marshal(et.Fields)
+		if mErr != nil {
+			slog.Warn("play sync: failed to marshal fields",
+				slog.Int("entity_type_id", et.ID), slog.Any("error", mErr))
+			continue
+		}
+		if uErr := s.types.UpdateFieldsSchema(ctx, et.ID, string(fieldsJSON)); uErr != nil {
+			slog.Warn("play sync: failed to update fields",
+				slog.Int("entity_type_id", et.ID), slog.Any("error", uErr))
+			continue
+		}
+		updated++
+	}
+	return updated, nil
 }
 
 // syncFieldFlag is the shared walk behind SyncFieldGMFlags and

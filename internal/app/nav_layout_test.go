@@ -31,7 +31,7 @@ func navTestTypes() []layouts.SidebarEntityType {
 }
 
 func navTestEnabled() map[string]bool {
-	return map[string]bool{"notes": true, calendar.PluginSlug: true, "maps": true, "npcs": true}
+	return map[string]bool{"notes": true, calendar.PluginSlug: true, "sessions": true, "maps": true, "npcs": true}
 }
 
 var navTestSystem = layouts.EnabledSystem{Slug: "drawsteel", Name: "Draw Steel", Icon: "fa-dragon"}
@@ -100,6 +100,28 @@ func TestNavAppsFor(t *testing.T) {
 		if a.Slug == "rulebook" && a.Icon != "fa-book" {
 			t.Errorf("a system icon that is not a Font Awesome name must fall back, got %q", a.Icon)
 		}
+	}
+}
+
+// Game nights follow their own switch, and need the calendar as well.
+func TestNavAppsFor_GameNightsNeedTheirSwitchAndTheCalendar(t *testing.T) {
+	tests := []struct {
+		name    string
+		enabled map[string]bool
+		want    bool
+	}{
+		{"both on", map[string]bool{"sessions": true, calendar.PluginSlug: true}, true},
+		{"switch off", map[string]bool{calendar.PluginSlug: true}, false},
+		{"calendar off", map[string]bool{"sessions": true}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for _, a := range navAppsFor("camp-1", tt.enabled, layouts.EnabledSystem{}) {
+				if a.Slug == "sessions" && a.Enabled != tt.want {
+					t.Errorf("Game nights enabled = %v, want %v", a.Enabled, tt.want)
+				}
+			}
+		})
 	}
 }
 

@@ -86,7 +86,7 @@ Field reference:
 |------------------|---------|
 | `id` / `name`    | The loaded system's id and display name. |
 | `loaded_version` | The version the loader resolved — what is *actually being served*, which may differ from the installed version in Admin▸Packages. |
-| `source`         | `bundled` (shipped in the binary's `internal/systems`) or `package` (installed via the package manager). |
+| `source`         | `package` (installed via Admin > Packages) or `bundled` (found in the server's own systems directory at startup rather than installed as a package; usually absent, since systems are external packages). |
 | `dir`            | The on-disk directory the loader serves this system's files from. |
 | `files[]`        | One entry per served file (manifest + every declared widget script + text-renderer file). |
 | `files[].exists` | `false` means the served dir is missing that file — itself diagnostic. |
@@ -208,6 +208,7 @@ of everything here.
 | `entity.field-coverage` | `<campaignId>:<typeIdOrName>` | For one entity type, how many of its declared fields are non-empty across its entities (emptiest first, with %). Surfaces "declared but never populated" — the backfill/sync smell. |
 | `campaign.surfaces` | `<campaignId>` | Which calendar route a URL actually renders, read from the LIVE Echo table, flagged CURRENT / LEGACY / REDIRECT, plus sidebar link targets. THE check for "which calendar am I looking at?" and "the deploy landed but I still see the old thing." |
 | `campaign.config` | `<campaignId>` | Enabled addons and the block types placed in `dashboard_layout` / `owner_dashboard_layout` and on each entity template — establishes hand-placed vs. seeded by a default layout or migration. |
+| `calendar.stats`  | `<campaignId>` | The calendar plugin's state for one campaign, counts only (never event text or member names): whether the `calendar` addon is enabled, how many calendars, events, moons, eras and event kinds exist, the plugin's own schema health with the applied and latest migration, and the Foundry sync state. THE check for "is the calendar plugin actually live here, and current." Requires the calendar provider (wired at startup). |
 | `sync.inbound`    | `<campaignId>:<entityIdOrSlug>` | The most recent **inbound** sync payloads an external client (e.g. the Foundry module) sent for this entity. Compare against `entity.fields`: arriving-but-not-stored → a storage bug; not arriving → a Foundry mapping gap. In-memory ring (no DB; rolls over on restart). |
 | `sync.recent`     | —             | The last several inbound payloads across **all** entities — a quick "is anything syncing at all?" check. |
 | `probes`          | —             | The run-and-paste-back probe library (below). |

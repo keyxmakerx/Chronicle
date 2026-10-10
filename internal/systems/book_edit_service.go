@@ -214,6 +214,12 @@ func mergePackageChapter(pkg *BookPackage, ch BookChapter, copies map[int]*Store
 		built: BookChapter{ID: ch.ID, Title: ch.Title, Intro: ch.Intro, Director: ch.Director},
 	}
 	authored := pkg.Source.chapters[ch.ID]
+	if ch.Generated {
+		// Made from the system's data: shown as is, never edited.
+		ec.built = ch
+		ec.entry.Generated = true
+		return ec
+	}
 	if authored == nil {
 		// Failed to load: kept as the package's problem chapter, not editable.
 		ec.built = ch
@@ -313,7 +319,7 @@ func problemPage(detail string) BookPage {
 // nothing, while every other block must pass the book checks. Block numbers
 // in errors still count the empty blocks, so they match what the editor shows.
 func buildStoredPage(p bookPageYAML, widgets map[string]bool) (BookPage, *bookPageError) {
-	page := BookPage{Title: strings.TrimSpace(p.Title), Director: p.Director, Wide: p.Wide, Blocks: []BookBlock{}}
+	page := BookPage{Title: strings.TrimSpace(p.Title), Director: p.Director, Wide: p.Wide, Columns: p.Columns, Blocks: []BookBlock{}}
 	if len(p.Blocks) == 0 {
 		return page, &bookPageError{Msg: "the page has no blocks"}
 	}
@@ -412,6 +418,9 @@ func (ed *edition) editableChapter(chapterID string) (*editionChapter, error) {
 	c := ed.byID[chapterID]
 	if c == nil {
 		return nil, apperror.NewNotFound("chapter not found")
+	}
+	if c.entry.Generated {
+		return nil, apperror.NewValidation("This chapter is made from the system's rules data, so it changes with the package and can't be edited here.")
 	}
 	if !c.editable {
 		return nil, apperror.NewValidation("This chapter couldn't be loaded, so it can't be edited here.")
@@ -808,6 +817,13 @@ func (s *bookEditService) Export(ctx context.Context, campaignID string, pkg *Bo
 	for _, p := range ed.parts {
 		for _, c := range p.chapters {
 			if !c.editable {
+				if g := pkg.Source.generated[c.entry.ID]; g != nil && c.entry.Generated {
+					data, err := marshalYAML(g)
+					if err != nil {
+						return nil, apperror.NewInternal(err)
+					}
+					files["book/"+bookChaptersDir+"/"+c.entry.ID+".yaml"] = data
+				}
 				continue // a broken package chapter has no authored form to write out
 			}
 			pages := make([]authoredPage, 0, len(c.entry.Pages))

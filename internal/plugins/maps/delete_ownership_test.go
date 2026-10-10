@@ -79,6 +79,9 @@ type drawingOwnershipRepo struct {
 }
 
 func (r *drawingOwnershipRepo) GetDrawing(context.Context, string) (*Drawing, error) { return r.d, nil }
+func (r *drawingOwnershipRepo) ListShadows(context.Context, string) ([]Drawing, error) {
+	return nil, nil
+}
 func (r *drawingOwnershipRepo) DeleteDrawing(context.Context, string) error {
 	r.deleted = true
 	return nil

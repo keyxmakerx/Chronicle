@@ -101,12 +101,17 @@ func (r *syncAPIRepository) FindKeyByID(ctx context.Context, id int) (*APIKey, e
 		 FROM api_keys WHERE id = ?`, id))
 }
 
-// FindKeyByPrefix retrieves an API key by its prefix (for auth lookup).
+// FindKeyByPrefix retrieves an API key by its prefix (for auth lookup). A key
+// whose creator's account is disabled is not found: disabling an account ends
+// its sessions, and a key is the same person's credential, so it stops too
+// (and works again if the account is re-enabled).
 func (r *syncAPIRepository) FindKeyByPrefix(ctx context.Context, prefix string) (*APIKey, error) {
 	return r.scanKey(r.db.QueryRowContext(ctx,
 		`SELECT id, key_hash, key_prefix, name, vtt_tag, user_id, campaign_id, permissions, ip_allowlist,
 		        rate_limit, is_active, last_used_at, last_used_ip, expires_at, device_fingerprint, device_bound_at, module_version, created_at, updated_at
-		 FROM api_keys WHERE key_prefix = ?`, prefix))
+		 FROM api_keys
+		 WHERE key_prefix = ?
+		   AND EXISTS (SELECT 1 FROM users u WHERE u.id = api_keys.user_id AND u.is_disabled = FALSE)`, prefix))
 }
 
 // ListKeysByUser returns all API keys owned by a user.
