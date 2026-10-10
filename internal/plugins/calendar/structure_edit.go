@@ -681,6 +681,7 @@ func (s *calendarService) ApplyStructureEdit(ctx context.Context, calendarID, ca
 		}
 		return nil, fmt.Errorf("apply structure: %w", err)
 	}
+	s.publish(PubStructureUpdated, campaignID, calendarID, nil)
 	return preview, nil
 }
 

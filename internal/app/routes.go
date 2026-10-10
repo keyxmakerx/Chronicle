@@ -966,34 +966,6 @@ func (a *wsNotesGrantAdapter) AuthenticateNotesGrantForWS(ctx context.Context, t
 	return g.CampaignID, g.UserID, nil
 }
 
-// CALV5-PLACEHOLDER: V5 must rebuild calendarEventPublisherAdapter — the
-// bridge from the calendar's PublishCalendarEvent to the websocket bus.
-// Nothing publishes calendar events now.
-//
-// A switch ending in `default: return` fails silently: an emitter whose event
-// type has no case here publishes into nothing, unreported. Rebuild it with a
-// test that walks every emitter's event type and asserts a case exists.
-// TODO(#778)
-//
-// The mapping it carried, so V5 has the checklist rather than rediscovering it:
-//   "event.created"                            -> ws.MsgCalendarEventCreated
-//   "event.updated"                            -> ws.MsgCalendarEventUpdated
-//   "event.deleted"                            -> ws.MsgCalendarEventDeleted
-//   "date.advanced"                            -> ws.MsgCalendarDateAdvanced
-//   "calendar.weather.changed"                 -> ws.MsgCalendarWeatherChanged
-//   "calendar.structure.updated"               -> ws.MsgCalendarStructureUpdated
-//   "calendar.season.changed"                  -> ws.MsgCalendarSeasonChanged
-//   "calendar.era.changed"                     -> ws.MsgCalendarEraChanged
-//   "calendar.moon.phase_changed"              -> ws.MsgCalendarMoonPhaseChanged
-//   "calendar.cycle.changed"                   -> ws.MsgCalendarCycleChanged
-//   "calendar.festival.changed"                -> ws.MsgCalendarFestivalChanged
-//   calendar.EventWorldStateChanged            -> ws.MsgCalendarWorldstateChanged
-//   calendar.EventWorldStateChangedDM          -> ws.MsgCalendarWorldstateChanged
-//   "calendar.weather.zones.changed"           -> ws.MsgCalendarWeatherZonesChanged
-//   (calendar.worldstate.changed also had a DM-gated twin that set
-//   RequiresDM = true — the dm_only worldstate payload must never reach a
-//   player's socket.)
-
 // relationEventPublisherAdapter bridges the websocket.EventBus to the
 // relations.RelationEventPublisher interface.
 type relationEventPublisherAdapter struct {
@@ -5029,6 +5001,14 @@ func (a *App) RegisterRoutes() {
 	questEntityEvts := newQuestEntityEvents(&entityEventPublisherAdapter{bus: wsEventBus})
 	entityService.SetEventPublisher(questEntityEvts)
 	relService.SetEventPublisher(&relationEventPublisherAdapter{bus: wsEventBus, shares: stashSvc})
+	// Calendar writes reach the Foundry module live; without this it only
+	// sees them on reconnect or a manual Pull. Reached by type assertion like
+	// the visibility gate, so the CalendarService interface stays unchanged.
+	if pub, ok := calendarService.(interface {
+		SetEventPublisher(calendar.CalendarEventPublisher)
+	}); ok {
+		pub.SetEventPublisher(&calendarEventPublisherAdapter{bus: wsEventBus})
+	}
 	stashEvents.bus = wsEventBus
 	entityService.SetSidebarAutoAdder(&sidebarAutoAdderAdapter{campaignService: campaignService})
 	noteSvc.SetEventPublisher(&noteEventPublisherAdapter{bus: wsEventBus})

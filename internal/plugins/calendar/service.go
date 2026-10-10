@@ -412,6 +412,7 @@ type calendarService struct {
 	weatherRepo WeatherRepository
 	entityGate  EntityVisibilityGate
 	gameNights  GameNightsAffectedByAnchorMove
+	publisher   CalendarEventPublisher
 }
 
 // NewCalendarService constructs a CalendarService over the four
@@ -1034,6 +1035,13 @@ func (s *calendarService) UpdateCalendar(ctx context.Context, calendarID, campai
 			return err
 		}
 	}
+	if input.CurrentYear.Present() || input.CurrentMonth.Present() || input.CurrentDay.Present() ||
+		input.CurrentHour.Present() || input.CurrentMinute.Present() {
+		s.publish(PubDateAdvanced, campaignID, calendarID, DatePayload{
+			Year: cal.CurrentYear, Month: cal.CurrentMonth, Day: cal.CurrentDay,
+			Hour: cal.CurrentHour, Minute: cal.CurrentMinute,
+		})
+	}
 	return nil
 }
 
@@ -1493,6 +1501,7 @@ func (s *calendarService) CreateEvent(ctx context.Context, calendarID, campaignI
 	if err := s.eventRepo.CreateEvent(ctx, evt); err != nil {
 		return nil, fmt.Errorf("create event: %w", err)
 	}
+	s.publish(PubEventCreated, campaignID, calendarID, evt)
 	return evt, nil
 }
 
@@ -2127,6 +2136,7 @@ func (s *calendarService) UpdateEvent(ctx context.Context, eventID, calendarID, 
 	if err := s.eventRepo.UpdateEvent(ctx, evt); err != nil {
 		return fmt.Errorf("update event: %w", err)
 	}
+	s.publish(PubEventUpdated, campaignID, calendarID, evt)
 	return nil
 }
 
@@ -2143,6 +2153,7 @@ func (s *calendarService) DeleteEvent(ctx context.Context, eventID, calendarID, 
 	if err := s.eventRepo.DeleteEvent(ctx, eventID); err != nil {
 		return fmt.Errorf("delete event: %w", err)
 	}
+	s.publish(PubEventDeleted, campaignID, calendarID, map[string]string{"id": eventID})
 	return nil
 }
 
@@ -2171,6 +2182,10 @@ func (s *calendarService) SetEventVisibility(ctx context.Context, eventID, calen
 	if err := s.eventRepo.UpdateEventVisibility(ctx, eventID, input.Visibility, visRules); err != nil {
 		return fmt.Errorf("set event visibility: %w", err)
 	}
+	updated := *evt
+	updated.Visibility = input.Visibility
+	updated.VisibilityRules = visRules
+	s.publish(PubEventUpdated, campaignID, calendarID, &updated)
 	return nil
 }
 
@@ -2333,6 +2348,7 @@ func (s *calendarService) CreateEra(ctx context.Context, calendarID, campaignID 
 	if err != nil {
 		return nil, fmt.Errorf("create era: %w", err)
 	}
+	s.publish(PubStructureUpdated, campaignID, calendarID, nil)
 	return era, nil
 }
 
@@ -2414,6 +2430,7 @@ func (s *calendarService) UpdateEra(ctx context.Context, eraID int, calendarID, 
 	if err := s.calRepo.UpdateEra(ctx, calendarID, eraID, merged); err != nil {
 		return err
 	}
+	s.publish(PubStructureUpdated, campaignID, calendarID, nil)
 	return nil
 }
 
@@ -2424,6 +2441,7 @@ func (s *calendarService) DeleteEra(ctx context.Context, eraID int, calendarID, 
 	if err := s.calRepo.DeleteEra(ctx, calendarID, eraID); err != nil {
 		return err
 	}
+	s.publish(PubStructureUpdated, campaignID, calendarID, nil)
 	return nil
 }
 
@@ -2498,7 +2516,7 @@ func (s *calendarService) SaveEraLook(ctx context.Context, calendarID, campaignI
 		}
 		writes = append(writes, w)
 	}
-	return s.calRepo.SaveEraLook(ctx, calendarID, look, writes)
+	return s.publishAfter(s.calRepo.SaveEraLook(ctx, calendarID, look, writes), PubStructureUpdated, campaignID, calendarID)
 }
 
 // validateEraLook checks the calendar-wide era look: a known feel and
@@ -2566,6 +2584,7 @@ func (s *calendarService) SetMoonHidden(ctx context.Context, moonID int, calenda
 	if err := s.calRepo.SetMoonHidden(ctx, calendarID, moonID, hidden); err != nil {
 		return err
 	}
+	s.publish(PubStructureUpdated, campaignID, calendarID, nil)
 	return nil
 }
 
@@ -2690,7 +2709,7 @@ func (s *calendarService) SetMonths(ctx context.Context, calendarID, campaignID 
 	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
 		return err
 	}
-	return s.calRepo.SetMonths(ctx, calendarID, months)
+	return s.publishAfter(s.calRepo.SetMonths(ctx, calendarID, months), PubStructureUpdated, campaignID, calendarID)
 }
 
 // SetWeekdays replaces calendarID's weekday list.
@@ -2706,7 +2725,7 @@ func (s *calendarService) SetWeekdays(ctx context.Context, calendarID, campaignI
 	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
 		return err
 	}
-	return s.calRepo.SetWeekdays(ctx, calendarID, weekdays)
+	return s.publishAfter(s.calRepo.SetWeekdays(ctx, calendarID, weekdays), PubStructureUpdated, campaignID, calendarID)
 }
 
 // SetMoons replaces (upserts by ID, see MoonInput's doc comment)
@@ -2724,7 +2743,7 @@ func (s *calendarService) SetMoons(ctx context.Context, calendarID, campaignID s
 	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
 		return err
 	}
-	return s.calRepo.SetMoons(ctx, calendarID, moons)
+	return s.publishAfter(s.calRepo.SetMoons(ctx, calendarID, moons), PubStructureUpdated, campaignID, calendarID)
 }
 
 // SetSeasons replaces calendarID's season list.
@@ -2748,7 +2767,7 @@ func (s *calendarService) SetSeasons(ctx context.Context, calendarID, campaignID
 	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
 		return err
 	}
-	return s.calRepo.SetSeasons(ctx, calendarID, seasons)
+	return s.publishAfter(s.calRepo.SetSeasons(ctx, calendarID, seasons), PubStructureUpdated, campaignID, calendarID)
 }
 
 // SetCycles replaces calendarID's cycle list, each with its own entries.
@@ -2773,7 +2792,7 @@ func (s *calendarService) SetCycles(ctx context.Context, calendarID, campaignID 
 	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
 		return err
 	}
-	return s.calRepo.SetCycles(ctx, calendarID, cycles)
+	return s.publishAfter(s.publishAfter(s.calRepo.SetCycles(ctx, calendarID, cycles), PubCycleChanged, campaignID, calendarID), PubStructureUpdated, campaignID, calendarID)
 }
 
 // SetFestivals replaces calendarID's festival list.
@@ -2794,7 +2813,7 @@ func (s *calendarService) SetFestivals(ctx context.Context, calendarID, campaign
 	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
 		return err
 	}
-	return s.calRepo.SetFestivals(ctx, calendarID, festivals)
+	return s.publishAfter(s.publishAfter(s.calRepo.SetFestivals(ctx, calendarID, festivals), PubFestivalChanged, campaignID, calendarID), PubStructureUpdated, campaignID, calendarID)
 }
 
 // SetWeather replaces calendarID's current weather reading. Reading it goes
@@ -2805,7 +2824,7 @@ func (s *calendarService) SetWeather(ctx context.Context, calendarID, campaignID
 	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
 		return err
 	}
-	return s.weatherRepo.Set(ctx, calendarID, input)
+	return s.publishAfter(s.weatherRepo.Set(ctx, calendarID, input), PubWeatherChanged, campaignID, calendarID)
 }
 
 // --- Day weather ---
@@ -3056,7 +3075,7 @@ func (s *calendarService) SetDayWeather(ctx context.Context, calendarID, campaig
 			return err
 		}
 	}
-	return s.weatherRepo.SetDays(ctx, calendarID, days)
+	return s.publishAfter(s.weatherRepo.SetDays(ctx, calendarID, days), PubWeatherChanged, campaignID, calendarID)
 }
 
 // ClearDayWeather removes the readings on the given days.
@@ -3076,7 +3095,7 @@ func (s *calendarService) ClearDayWeather(ctx context.Context, calendarID, campa
 			return err
 		}
 	}
-	return s.weatherRepo.ClearDays(ctx, calendarID, dates)
+	return s.publishAfter(s.weatherRepo.ClearDays(ctx, calendarID, dates), PubWeatherChanged, campaignID, calendarID)
 }
 
 // maxDayWeatherYear bounds a day reading's year well inside the INT column,
