@@ -13,6 +13,9 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
 
+// testAddonSlug is any add-on slug; the gate treats every slug alike.
+const testAddonSlug = "example-addon"
+
 type stubAddonChecker struct {
 	enabled bool
 	err     error
@@ -45,7 +48,7 @@ func TestRequireAddonAPI(t *testing.T) {
 			c.SetParamValues("camp-1")
 
 			calledNext := false
-			h := RequireAddonAPI(tc.checker, "calendar")(func(echo.Context) error {
+			h := RequireAddonAPI(tc.checker, testAddonSlug)(func(echo.Context) error {
 				calledNext = true
 				return nil
 			})
@@ -67,7 +70,7 @@ func TestRequireAddonAPI(t *testing.T) {
 			if appErr.Code != tc.wantCode || appErr.Type != tc.wantType {
 				t.Errorf("got %d/%q, want %d/%q", appErr.Code, appErr.Type, tc.wantCode, tc.wantType)
 			}
-			if tc.wantType == "addon_disabled" && !strings.Contains(appErr.Message, "calendar") {
+			if tc.wantType == "addon_disabled" && !strings.Contains(appErr.Message, testAddonSlug) {
 				t.Errorf("message %q does not name the add-on", appErr.Message)
 			}
 		})
