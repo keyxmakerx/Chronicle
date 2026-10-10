@@ -430,7 +430,7 @@ type WeatherChoice struct{ ID, Label string }
 func WeatherPresets() []WeatherChoice {
 	out := make([]WeatherChoice, len(weatherPresets))
 	for i, p := range weatherPresets {
-		out[i] = WeatherChoice{ID: p.ID, Label: p.Label}
+		out[i] = WeatherChoice(p)
 	}
 	return out
 }
@@ -439,7 +439,7 @@ func WeatherPresets() []WeatherChoice {
 func WeatherEffects() []WeatherChoice {
 	out := make([]WeatherChoice, len(weatherEffects))
 	for i, e := range weatherEffects {
-		out[i] = WeatherChoice{ID: e.ID, Label: e.Label}
+		out[i] = WeatherChoice(e)
 	}
 	return out
 }
