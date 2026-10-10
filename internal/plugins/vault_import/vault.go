@@ -602,8 +602,7 @@ func (v *Vault) buildTree() {
 	notePage := map[int]int{}
 	v.notePage = notePage
 	var pageOfDir func(d string) int
-	var pageOfNote func(i int) int
-	pageOfNote = func(i int) int {
+	pageOfNote := func(i int) int {
 		if p, ok := notePage[i]; ok {
 			return p
 		}
