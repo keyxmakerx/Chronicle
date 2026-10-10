@@ -322,3 +322,83 @@ func TestDB_LinkQueries(t *testing.T) {
 		t.Errorf("NotesWithAttachments = %v, %v", withAudio, err)
 	}
 }
+
+// TestDB_ViewerReadsMediaMatchesCanView: whether a viewer reads a picture is
+// whether they can read some note holding it, for every audience, and a note
+// that only looks like it holds the picture (another id, another campaign, a
+// wildcard) opens nothing.
+func TestDB_ViewerReadsMediaMatchesCanView(t *testing.T) {
+	db := newNotesScratchDB(t)
+	ctx := context.Background()
+	repo := NewNoteRepository(db)
+	camp, u := seedNotesCampaign(t, db, "gm", "ana", "bo", "cy")
+	otherCamp, _ := seedNotesCampaign(t, db, "dee")
+
+	pic := newUUID(t)
+	body := func(id string) *string {
+		s := `<figure class="ce-img ce-img--w50 ce-img--center"><img src="/media/` + id + `" alt=""></figure>`
+		return &s
+	}
+	mk := func(campaign, owner string, html *string, mutate func(n *Note)) {
+		n := &Note{ID: newUUID(t), CampaignID: campaign, UserID: owner, Title: "n", Content: []Block{}, Color: "#374151", EntryHTML: html}
+		mutate(n)
+		if err := repo.Create(ctx, n); err != nil {
+			t.Fatalf("create: %v", err)
+		}
+	}
+
+	tests := []struct {
+		name  string
+		setup func()
+		want  map[string]bool // viewer -> reads the picture
+	}{
+		{"private note: owner only, not even the GM", func() { mk(camp, u["ana"], body(pic), func(n *Note) {}) },
+			map[string]bool{"ana": true, "gm": false, "bo": false, "cy": false}},
+		{"party note", func() { mk(camp, u["ana"], body(pic), func(n *Note) { n.IsShared = true }) },
+			map[string]bool{"ana": true, "gm": true, "bo": true, "cy": true}},
+		{"note named to one person", func() { mk(camp, u["ana"], body(pic), func(n *Note) { n.SharedWith = []string{u["bo"]} }) },
+			map[string]bool{"ana": true, "gm": false, "bo": true, "cy": false}},
+		{"note shared with the GM", func() { mk(camp, u["ana"], body(pic), func(n *Note) { n.SharedWithGM = true }) },
+			map[string]bool{"ana": true, "gm": true, "bo": false, "cy": false}},
+		{"a private note holding some other picture", func() { mk(camp, u["ana"], body(newUUID(t)), func(n *Note) { n.IsShared = true }) },
+			map[string]bool{"ana": false, "gm": false, "bo": false, "cy": false}},
+		{"a party note in another campaign", func() { mk(otherCamp, u["ana"], body(pic), func(n *Note) { n.IsShared = true }) },
+			map[string]bool{"ana": false, "gm": false, "bo": false, "cy": false}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := db.Exec(`DELETE FROM notes`); err != nil {
+				t.Fatal(err)
+			}
+			tc.setup()
+			for who, want := range tc.want {
+				role := permissions.RolePlayer
+				if who == "gm" {
+					role = permissions.RoleOwner
+				}
+				got, err := repo.ViewerReadsMedia(ctx, camp, pic, permissions.RequestViewer(role, u[who]))
+				if err != nil {
+					t.Fatalf("%s: %v", who, err)
+				}
+				if got != want {
+					t.Errorf("%s reads the picture = %v, want %v", who, got, want)
+				}
+			}
+		})
+	}
+
+	t.Run("anonymous and malformed ids read nothing", func(t *testing.T) {
+		if _, err := db.Exec(`DELETE FROM notes`); err != nil {
+			t.Fatal(err)
+		}
+		mk(camp, u["ana"], body(pic), func(n *Note) { n.IsShared = true })
+		if ok, _ := repo.ViewerReadsMedia(ctx, camp, pic, permissions.RequestViewer(permissions.RolePlayer, "")); ok {
+			t.Error("an anonymous viewer read a party note's picture")
+		}
+		for _, bad := range []string{"%", "%%%%%%%%", `a" OR 1=1 -- `, ""} {
+			if ok, _ := repo.ViewerReadsMedia(ctx, camp, bad, permissions.RequestViewer(permissions.RoleOwner, u["gm"])); ok {
+				t.Errorf("id %q matched a note", bad)
+			}
+		}
+	})
+}

@@ -40,6 +40,11 @@ type NoteRepository interface {
 	// note (kind LinkNote) or page (LinkPage) targetID, newest first.
 	ListVisibleLinking(ctx context.Context, campaignID string, v permissions.Viewer, kind, targetID string) ([]Note, error)
 
+	// ViewerReadsMedia reports whether v can read at least one note in
+	// campaignID whose body holds the media file mediaID (the SQL twin of
+	// Note.CanView, applied to the notes that mention the file).
+	ViewerReadsMedia(ctx context.Context, campaignID, mediaID string, v permissions.Viewer) (bool, error)
+
 	// ListSharedByCampaign returns every campaign-wide-shared note in the
 	// campaign regardless of which user owns it.
 	//
@@ -274,6 +279,28 @@ func (r *noteRepository) ListVisibleLinking(ctx context.Context, campaignID stri
 		WHERE campaign_id = ? AND ` + vis + ` AND entry_html LIKE ?
 		ORDER BY updated_at DESC LIMIT 500`
 	return r.scanNotes(ctx, query, args...)
+}
+
+// ViewerReadsMedia answers "may v open this picture" for the media plugin:
+// true when a note v can read carries /media/<mediaID> in its body. The id is
+// checked against idPattern, so it can hold no LIKE wildcard.
+func (r *noteRepository) ViewerReadsMedia(ctx context.Context, campaignID, mediaID string, v permissions.Viewer) (bool, error) {
+	if !idPattern.MatchString(mediaID) || v.UserID() == "" {
+		return false, nil
+	}
+	vis, visArgs := visibleFilter(v)
+	args := append([]any{campaignID}, visArgs...)
+	args = append(args, "%/media/"+mediaID+"%")
+	var one int
+	err := r.db.QueryRowContext(ctx,
+		`SELECT 1 FROM notes WHERE campaign_id = ? AND `+vis+` AND entry_html LIKE ? LIMIT 1`, args...).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("checking note readers of a picture: %w", err)
+	}
+	return true, nil
 }
 
 // ListTree returns every note's structural row in the campaign, unfiltered.

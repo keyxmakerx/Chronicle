@@ -164,7 +164,9 @@ func (r *mediaRepository) FindByID(ctx context.Context, id string) (*MediaFile, 
 //
 // Scoped to a single campaign on purpose — cross-campaign dedup is
 // off, so each campaign's media space stays isolated for clean
-// export / cascade-delete behavior.
+// export / cascade-delete behavior. Note pictures never match: a picture one
+// player put in a private note must not be handed to another uploader of the
+// same bytes, nor adopted by a page whose readers the note rule does not know.
 func (r *mediaRepository) FindByContentHash(ctx context.Context, campaignID, hash string) (*MediaFile, error) {
 	if campaignID == "" || hash == "" {
 		return nil, nil
@@ -174,13 +176,13 @@ func (r *mediaRepository) FindByContentHash(ctx context.Context, campaignID, has
 	                 c.is_public
 	          FROM media_files m
 	          LEFT JOIN campaigns c ON m.campaign_id = c.id
-	          WHERE m.campaign_id = ? AND m.content_hash = ?
+	          WHERE m.campaign_id = ? AND m.content_hash = ? AND m.usage_type <> ?
 	          LIMIT 1`
 
 	file := &MediaFile{}
 	var thumbJSON string
 	var contentHash sql.NullString
-	err := r.db.QueryRowContext(ctx, query, campaignID, hash).Scan(
+	err := r.db.QueryRowContext(ctx, query, campaignID, hash, UsageNoteImage).Scan(
 		&file.ID, &file.CampaignID, &file.UploadedBy,
 		&file.Filename, &file.OriginalName, &file.MimeType,
 		&file.FileSize, &contentHash, &file.UsageType, &thumbJSON,
@@ -273,11 +275,13 @@ func (r *mediaRepository) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-// ListByCampaign returns media files for a campaign with pagination.
+// ListByCampaign returns media files for a campaign with pagination. Note
+// pictures are left out: this feeds the media browser, the picker and the sync
+// API, none of which may name a file that only its note's readers can open.
 func (r *mediaRepository) ListByCampaign(ctx context.Context, campaignID string, limit, offset int) ([]MediaFile, int, error) {
 	var total int
 	err := r.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM media_files WHERE campaign_id = ?`, campaignID,
+		`SELECT COUNT(*) FROM media_files WHERE campaign_id = ? AND usage_type <> ?`, campaignID, UsageNoteImage,
 	).Scan(&total)
 	if err != nil {
 		return nil, 0, fmt.Errorf("counting media files: %w", err)
@@ -285,10 +289,10 @@ func (r *mediaRepository) ListByCampaign(ctx context.Context, campaignID string,
 
 	query := `SELECT id, campaign_id, uploaded_by, filename, original_name,
 	                 mime_type, file_size, content_hash, usage_type, thumbnail_paths, created_at
-	          FROM media_files WHERE campaign_id = ?
+	          FROM media_files WHERE campaign_id = ? AND usage_type <> ?
 	          ORDER BY created_at DESC LIMIT ? OFFSET ?`
 
-	rows, err := r.db.QueryContext(ctx, query, campaignID, limit, offset)
+	rows, err := r.db.QueryContext(ctx, query, campaignID, UsageNoteImage, limit, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("listing media files: %w", err)
 	}

@@ -48,6 +48,11 @@ type NoteService interface {
 	// to the jot's page, and records it on the jot (jots.go).
 	SendToJournal(ctx context.Context, campaignID string, v permissions.Viewer, jotID, pageName string) (*SendResult, error)
 
+	// ViewerReadsMedia reports whether v can read a note in campaignID whose
+	// body holds the media file mediaID. The media plugin asks this to decide
+	// who may open a picture that lives in notes.
+	ViewerReadsMedia(ctx context.Context, campaignID, mediaID string, v permissions.Viewer) (bool, error)
+
 	// ListSharedByCampaign returns every shared note in the campaign across
 	// all owners. Unlike the three list methods above it applies no per-user
 	// visibility filter, so it is owner-gated data: campaign export is the
@@ -148,6 +153,12 @@ func NewNoteService(repo NoteRepository) NoteService {
 // NewNoteServiceWithAttachments creates a note service with attachment support.
 func NewNoteServiceWithAttachments(repo NoteRepository, attRepo AttachmentRepository) *noteService {
 	return &noteService{repo: repo, attRepo: attRepo, events: NoopNoteEventPublisher{}}
+}
+
+// ViewerReadsMedia delegates to the repository, which holds the one SQL form
+// of the note visibility rule.
+func (s *noteService) ViewerReadsMedia(ctx context.Context, campaignID, mediaID string, v permissions.Viewer) (bool, error) {
+	return s.repo.ViewerReadsMedia(ctx, campaignID, mediaID, v)
 }
 
 // SetEventPublisher sets the event publisher for real-time sync.

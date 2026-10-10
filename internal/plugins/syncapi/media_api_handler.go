@@ -225,8 +225,10 @@ func (h *MediaAPIHandler) GetMedia(c echo.Context) error {
 		return apperror.NewNotFound("media file not found")
 	}
 
-	// IDOR protection: verify file belongs to this campaign.
-	if file.CampaignID == nil || *file.CampaignID != c.Param("id") {
+	// IDOR protection: verify file belongs to this campaign. A note picture is
+	// answered like a missing file: this route mints a link for any caller
+	// with a key, but only readers of the note may open the picture.
+	if file.CampaignID == nil || *file.CampaignID != c.Param("id") || file.IsNotePicture() {
 		return apperror.NewNotFound("media file not found")
 	}
 
@@ -293,6 +295,9 @@ func (h *MediaAPIHandler) UploadMedia(c echo.Context) error {
 	if usageType == "" {
 		usageType = media.UsageAttachment
 	}
+	if usageType == media.UsageNoteImage {
+		return apperror.NewBadRequest("unsupported usage type")
+	}
 
 	input := media.UploadInput{
 		CampaignID:   campaignID,
@@ -332,7 +337,7 @@ func (h *MediaAPIHandler) DeleteMedia(c echo.Context) error {
 	if err != nil {
 		return apperror.NewNotFound("media file not found")
 	}
-	if file.CampaignID == nil || *file.CampaignID != campaignID {
+	if file.CampaignID == nil || *file.CampaignID != campaignID || file.IsNotePicture() {
 		return apperror.NewNotFound("media file not found")
 	}
 

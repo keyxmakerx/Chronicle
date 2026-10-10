@@ -196,6 +196,12 @@ func (s *mediaService) Upload(ctx context.Context, input UploadInput) (*MediaFil
 		return nil, apperror.NewBadRequest("unsupported file type: " + input.MimeType)
 	}
 
+	// A note picture is served only to readers of a note that holds it, so it
+	// needs a campaign to scope that to, and must be a picture.
+	if input.UsageType == UsageNoteImage && (input.CampaignID == "" || !strings.HasPrefix(input.MimeType, "image/")) {
+		return nil, apperror.NewBadRequest("a note picture must be an image in a campaign")
+	}
+
 	// Per-campaign dedup: hash the original bytes (before sanitization
 	// re-encodes them, which is non-deterministic). A hash already used in
 	// this campaign returns that record instead of writing a duplicate.
@@ -206,7 +212,9 @@ func (s *mediaService) Upload(ctx context.Context, input UploadInput) (*MediaFil
 	if len(input.FileBytes) > 0 {
 		sum := sha256.Sum256(input.FileBytes)
 		contentHash = hex.EncodeToString(sum[:])
-		if input.CampaignID != "" {
+		// Note pictures are never merged: each upload is its own file, so who
+		// may open it never depends on who else uploaded the same bytes.
+		if input.CampaignID != "" && input.UsageType != UsageNoteImage {
 			if existing, err := s.repo.FindByContentHash(ctx, input.CampaignID, contentHash); err != nil {
 				// Non-fatal — continue with a fresh upload rather than
 				// blocking the user on a transient DB hiccup.
@@ -666,8 +674,9 @@ func (s *mediaService) DeleteCampaignMedia(ctx context.Context, campaignID, medi
 		return err
 	}
 
-	// Verify the file belongs to this campaign.
-	if file.CampaignID == nil || *file.CampaignID != campaignID {
+	// Verify the file belongs to this campaign. A note picture is not the
+	// campaign owner's to remove: it belongs to the note that holds it.
+	if file.CampaignID == nil || *file.CampaignID != campaignID || file.IsNotePicture() {
 		return apperror.NewNotFound("media file not found")
 	}
 

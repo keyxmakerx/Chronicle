@@ -64,6 +64,9 @@ func registerNoteJSONRoutes(cg *echo.Group, h *Handler, player echo.MiddlewareFu
 	cg.GET("/notes/:noteId/versions/:vid", h.GetVersion, player)
 	cg.POST("/notes/:noteId/versions/:vid/restore", h.RestoreVersion, player)
 
+	// Pictures written into a note's text.
+	cg.POST("/notes/pictures", h.UploadPicture, player)
+
 	// Attachments (audio files, transcripts).
 	cg.GET("/notes/:nid/attachments", h.ListAttachments, player)
 	cg.POST("/notes/:nid/attachments", h.UploadAttachment, player)

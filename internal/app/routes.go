@@ -3866,6 +3866,10 @@ func (a *App) RegisterRoutes() {
 	noteHandler := notes.NewHandler(noteSvc)
 	noteHandler.SetAttachmentService(noteSvc)
 	noteHandler.SetMediaUploader(&mediaUploadAdapter{svc: mediaService})
+	noteHandler.SetPictureUploader(&mediaUploadAdapter{svc: mediaService})
+	// Who may open a picture in a note is decided by who can read the notes
+	// holding it, asked of the notes service rather than its tables.
+	mediaHandler.SetNoteMediaAccess(&noteMediaAccessAdapter{svc: noteSvc})
 	noteHandler.SetMemberLister(campaignService)
 	noteHandler.SetCharacterLister(&journalCharacterAdapter{svc: entityService})
 	notePages := &notesPagesAdapter{svc: entityService}
@@ -5312,6 +5316,33 @@ func (a *mediaUploadAdapter) UploadRaw(ctx context.Context, campaignID, userID s
 		return "", err
 	}
 	return file.Filename, nil
+}
+
+// UploadPicture stores a picture written into a note and returns its media id.
+func (a *mediaUploadAdapter) UploadPicture(ctx context.Context, campaignID, userID string, fileBytes []byte, originalName, mimeType string) (string, error) {
+	file, err := a.svc.Upload(ctx, media.UploadInput{
+		CampaignID:   campaignID,
+		UploadedBy:   userID,
+		OriginalName: originalName,
+		MimeType:     mimeType,
+		FileSize:     int64(len(fileBytes)),
+		UsageType:    media.UsageNoteImage,
+		FileBytes:    fileBytes,
+	})
+	if err != nil {
+		return "", err
+	}
+	return file.ID, nil
+}
+
+// noteMediaAccessAdapter answers the media plugin's note-picture question
+// over the notes service, so media never touches note tables.
+type noteMediaAccessAdapter struct {
+	svc notes.NoteService
+}
+
+func (a *noteMediaAccessAdapter) CanReadNoteMedia(ctx context.Context, campaignID, mediaID string, role int, userID string) (bool, error) {
+	return a.svc.ViewerReadsMedia(ctx, campaignID, mediaID, permissions.RequestViewer(role, userID))
 }
 
 // aiMapsAdapter is the maps service in AI Import's pin types, so the
