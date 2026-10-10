@@ -49,10 +49,10 @@ business rules and footguns.
   `notifications`, `sheet_motion`, `shortcuts_help`, `sidebar_tag_filter`, `sidebar_tree`, and
   under `widgets/`: `dynamic_surface`, `entity_posts`, `entity_tooltip`,
   `entity_type_config`, `entity_type_editor`, `groups`, `header_motion`,
-  `image_upload`, `layout_editor`, `map_widget`, `permissions`, `quest_board`,
+  `image_upload`, `layout_editor`, `map_widget`, `permissions`,
   `relation_graph`, `shop_inventory`, `template_editor`. A plugin's own
   widget scripts sit in `internal/plugins/<slug>/static/js/` with their
-  `.ai.md` (timeline: `timeline_viz`, `timeline_widget`).
+  `.ai.md` (timeline: `timeline_viz`, `timeline_widget`; quests: `quest_board`).
 - **Examples:** `extensions/example-wasm-go/`, `extensions/example-wasm-rust/`.
 
 ## Templates

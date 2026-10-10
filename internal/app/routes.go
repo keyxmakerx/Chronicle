@@ -5180,7 +5180,16 @@ func (a *App) RegisterRoutes() {
 	}
 
 	// Quest sheets and notice boards. Cross-plugin lookups go through the
-	// adapters in quests_adapters.go.
+	// adapters in quests_adapters.go. Both boards share quest_board_kit.js,
+	// so it loads first in each list (ADR-063).
+	a.registerPlugin(PluginRegistration{
+		Slug:     quests.PluginSlug,
+		StaticFS: echo.MustSubFS(quests.StaticAssetsFS, "static"),
+		Widgets: []PluginWidget{
+			{Name: "quest_board", Scripts: []string{"js/quest_board_kit.js", "js/quest_board.js"}},
+			{Name: "notice_boards", Scripts: []string{"js/quest_board_kit.js", "js/notice_boards.js"}},
+		},
+	})
 	if a.PluginHealth.IsHealthy(quests.PluginSlug) {
 		questEntities := &questEntityAdapter{svc: entityService, cards: entities.NewPageCards(a.DB)}
 		questMaps := &questMapAdapter{svc: mapsService, addons: addonService}
