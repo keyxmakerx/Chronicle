@@ -319,7 +319,7 @@ func (h *Handler) ParseImport(c echo.Context) error {
 		case importer.StatusNewCategory:
 			summary.Selectable++
 			summary.NewCategories++
-		case importer.StatusParseError:
+		case importer.StatusParseError, importer.StatusParentProblem:
 			summary.ParseErrors++
 		}
 	}

@@ -356,7 +356,7 @@ templ reviewRow(campaignID string, idx int, page importer.ParsedPage, cls import
 		aria-label={ fmt.Sprintf("Page %d: %s", idx+1, statusLabel(cls.Status)) }
 		class={
 			"card card-elev p-3 transition-colors",
-			templ.KV("border-rose-300 dark:border-rose-700", cls.Status == importer.StatusParseError || cls.Status == importer.StatusActionMismatch),
+			templ.KV("border-rose-300 dark:border-rose-700", cls.Status == importer.StatusParseError || cls.Status == importer.StatusActionMismatch || cls.Status == importer.StatusParentProblem),
 			templ.KV("border-amber-300 dark:border-amber-700", cls.Status == importer.StatusConflict),
 			templ.KV("border-sky-300 dark:border-sky-700", cls.Status == importer.StatusNewCategory),
 		}
@@ -365,7 +365,7 @@ templ reviewRow(campaignID string, idx int, page importer.ParsedPage, cls import
 			<input
 				type="checkbox"
 				name={ fmt.Sprintf("page_%d_include", idx) }
-				checked?={ page.Status != importer.StatusParseError }
+				checked?={ page.Status != importer.StatusParseError && cls.Status != importer.StatusParentProblem }
 				disabled?={ page.Status == importer.StatusParseError }
 				class="mt-1 rounded border-edge text-accent"
 				aria-label={ fmt.Sprintf("Include page %d (%s) in this import", idx+1, page.Name) }
@@ -377,7 +377,7 @@ templ reviewRow(campaignID string, idx int, page importer.ParsedPage, cls import
 						<i class="fa-solid fa-triangle-exclamation mr-1" aria-hidden="true"></i>
 						{ page.ParseError }
 					</div>
-				} else if cls.Status == importer.StatusActionMismatch {
+				} else if cls.Status == importer.StatusActionMismatch || cls.Status == importer.StatusParentProblem {
 					<div class="text-xs text-rose-700 dark:text-rose-300 mt-1" role="alert">
 						<i class="fa-solid fa-triangle-exclamation mr-1" aria-hidden="true"></i>
 						{ cls.Reason }
@@ -471,6 +471,8 @@ func statusLabel(s importer.ParseStatus) string {
 		return "Parse error"
 	case importer.StatusActionMismatch:
 		return "Action target missing"
+	case importer.StatusParentProblem:
+		return "Parent problem"
 	default:
 		return "Page"
 	}
@@ -550,6 +552,10 @@ templ statusChip(s importer.ParseStatus) {
 		case importer.StatusActionMismatch:
 			<span class="text-xs px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300">
 				<i class="fa-solid fa-circle-xmark mr-1"></i> Target missing
+			</span>
+		case importer.StatusParentProblem:
+			<span class="text-xs px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300">
+				<i class="fa-solid fa-circle-xmark mr-1"></i> Parent problem
 			</span>
 	}
 }

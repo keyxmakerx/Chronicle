@@ -290,6 +290,27 @@ func (run *lookupRun) findPage(name string) (*entities.Entity, error) {
 	return nil, badRequestf("no page called %s", quote(name))
 }
 
+// parentNames maps every visible page id to its name, so a parent is only
+// ever named when the Actor can see it.
+func (run *lookupRun) parentNames() map[string]string {
+	pages, _ := run.visiblePages()
+	names := make(map[string]string, len(pages))
+	for _, p := range pages {
+		names[p.ID] = p.Name
+	}
+	return names
+}
+
+// withParent labels a page "Name (in Parent)" when its parent is visible.
+func withParent(p entities.Entity, names map[string]string) string {
+	if p.ParentID != nil {
+		if parent := names[*p.ParentID]; parent != "" {
+			return p.Name + " (in " + parent + ")"
+		}
+	}
+	return p.Name
+}
+
 // visibleIDs is the set of page ids the Actor can see.
 func (run *lookupRun) visibleIDs() map[string]bool {
 	pages, _ := run.visiblePages()
@@ -332,6 +353,7 @@ func (run *lookupRun) pagesIndex(typeName string) (LookupAnswer, error) {
 		return LookupAnswer{Chip: "Pages"}, err
 	}
 	groups, order := map[string][]string{}, []string{}
+	parents := run.parentNames()
 	for _, p := range pages {
 		label := firstNonEmpty(p.TypeNamePlural, p.TypeName, "Pages")
 		if typeName != "" && !sameName(p.TypeName, typeName) && !sameName(p.TypeNamePlural, typeName) && !sameName(p.TypeSlug, typeName) {
@@ -340,7 +362,7 @@ func (run *lookupRun) pagesIndex(typeName string) (LookupAnswer, error) {
 		if _, ok := groups[label]; !ok {
 			order = append(order, label)
 		}
-		groups[label] = append(groups[label], p.Name)
+		groups[label] = append(groups[label], withParent(p, parents))
 	}
 	n := 0
 	for _, g := range groups {
@@ -374,7 +396,9 @@ func (run *lookupRun) pagesIndex(typeName string) (LookupAnswer, error) {
 }
 
 // PageIndex is the prompt's compact list of page names per type, capped,
-// so the AI knows what it can ask about without the whole world.
+// so the AI knows what it can ask about without the whole world. A
+// sub-page reads "Name (in Parent)" so the AI can place new pages with
+// `parent:`; a parent the reader cannot see is not named.
 func (l *Lookups) PageIndex(ctx context.Context, campaignID string, a Actor) string {
 	if l == nil || l.Pages == nil {
 		return ""
@@ -386,12 +410,13 @@ func (l *Lookups) PageIndex(ctx context.Context, campaignID string, a Actor) str
 	}
 	const perType = 40
 	groups, order := map[string][]string{}, []string{}
+	parents := run.parentNames()
 	for _, p := range pages {
 		label := firstNonEmpty(p.TypeNamePlural, p.TypeName, "Pages")
 		if _, ok := groups[label]; !ok {
 			order = append(order, label)
 		}
-		groups[label] = append(groups[label], p.Name)
+		groups[label] = append(groups[label], withParent(p, parents))
 	}
 	var b strings.Builder
 	for _, label := range order {
@@ -427,6 +452,7 @@ func (run *lookupRun) page(name string) (LookupAnswer, error) {
 	if run.director() {
 		opts.Privacy = aiexport.PrivacyModePermitted
 	}
+	opts.ParentNames = run.parentNames()
 	md, err := aiexport.RenderEntities(run.ctx, []entities.Entity{*e}, types, nil, map[string][]relations.Relation{e.ID: rels}, opts)
 	if err != nil {
 		return ans, err

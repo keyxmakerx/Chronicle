@@ -151,6 +151,8 @@ func TestBuild_FrontMatterExample(t *testing.T) {
 		"tags: [trade-hub, coastal]",
 		"# Example Page Name",
 		"`private`, `dm_only`, or `public`",
+		"`parent: Name of the parent page`",
+		"`parent: none`",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("expected substring %q in output. Full:\n%s", want, got)

@@ -168,6 +168,12 @@ The body of the page in markdown.
 Valid ` + "`" + `type` + "`" + ` values are the slugs listed above. ` + "`" + `visibility` + "`" + ` must be one of
 ` + "`" + `private` + "`" + `, ` + "`" + `dm_only` + "`" + `, or ` + "`" + `public` + "`" + `. ` + "`" + `tags` + "`" + ` is optional; use the campaign's
 existing tag vocabulary where possible.
+
+To put a page under another page, add ` + "`" + `parent: Name of the parent page` + "`" + `. The parent
+is an existing page (an index line like "Name (in Parent)" means that page already sits
+under Parent) or a page earlier in this same paste, so list parents first. With
+` + "`" + `action: update` + "`" + `, ` + "`" + `parent:` + "`" + ` moves the page, ` + "`" + `parent: none` + "`" + ` lifts it to the top
+level, and leaving the line out keeps it where it is. A page cannot be its own parent.
 {{ end }}
 
 {{ if .RecordDocs }}

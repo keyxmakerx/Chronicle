@@ -254,3 +254,45 @@ func TestEventKind_FindsEventToChange(t *testing.T) {
 		t.Fatal("a player found a hidden event to remove")
 	}
 }
+
+func TestLookups_PageIndexShowsVisibleParentOnly(t *testing.T) {
+	ghost, anchor, rope := "ghost", "anchor", "rope"
+	mk := func(id, name, typ string, private bool, parent *string) entities.Entity {
+		e := page(id, name, typ, private)
+		e.ParentID = parent
+		return e
+	}
+	l := &Lookups{Pages: &fakePages{all: []entities.Entity{
+		mk("anchor", "The Rusty Anchor", "Location", false, nil),
+		mk("ghost", "The Ghost", "Location", true, nil),
+		mk("cellar", "Cellar", "Location", false, &anchor),
+		mk("crypt", "Crypt", "Location", false, &ghost),
+		mk("rope", "Rope", "Item", false, nil),
+		mk("knot", "Knot", "Item", false, &rope),
+	}}}
+	tests := []struct {
+		name    string
+		a       Actor
+		want    []string
+		notWant []string
+	}{
+		{"player sees visible parent", player, []string{"Cellar (in The Rusty Anchor)", "Knot (in Rope)"}, []string{"Ghost"}},
+		{"hidden parent is not named", player, []string{"Crypt"}, []string{"Crypt (in", "Ghost"}},
+		{"owner sees the hidden parent", owner, []string{"Crypt (in The Ghost)"}, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			idx := l.PageIndex(context.Background(), camp, tt.a)
+			for _, w := range tt.want {
+				if !strings.Contains(idx, w) {
+					t.Errorf("missing %q in:\n%s", w, idx)
+				}
+			}
+			for _, w := range tt.notWant {
+				if strings.Contains(idx, w) {
+					t.Errorf("unexpected %q in:\n%s", w, idx)
+				}
+			}
+		})
+	}
+}
