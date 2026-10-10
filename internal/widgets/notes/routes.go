@@ -64,6 +64,10 @@ func registerNoteJSONRoutes(cg *echo.Group, h *Handler, player echo.MiddlewareFu
 	cg.GET("/notes/:noteId/versions/:vid", h.GetVersion, player)
 	cg.POST("/notes/:noteId/versions/:vid/restore", h.RestoreVersion, player)
 
+	// Pictures written into a note's text. Rate limited like the media upload
+	// route: a Player may call it, and each call can write 5 MB.
+	cg.POST("/notes/pictures", h.UploadPicture, player, middleware.RateLimit(30, time.Minute))
+
 	// Attachments (audio files, transcripts).
 	cg.GET("/notes/:nid/attachments", h.ListAttachments, player)
 	cg.POST("/notes/:nid/attachments", h.UploadAttachment, player)
