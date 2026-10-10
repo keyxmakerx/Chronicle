@@ -85,28 +85,125 @@ templ BlockEntityMapEmbed(cc *campaigns.CampaignContext, entityID string, data M
 	</div>
 }
 
-// BlockEntityMapChoose is the Scribe+ "no map bound yet" state: a friendly
-// prompt plus the shared create-or-pick binding affordance. Clicking
-// "Change map" opens the generic picker, which writes a `map` widget
-// binding. source is the resolved layer for the badge (default when nothing
-// is bound).
-templ BlockEntityMapChoose(cc *campaigns.CampaignContext, entityID, source string) {
-	<div class="card p-0 overflow-hidden" data-entity-map-choose data-entity-id={ entityID }>
-		@widgetbindings.BindingAffordance(cc.Campaign.ID, WidgetTypeMap, entityID, "map", source)
-		<div class="flex flex-col items-center justify-center py-10 px-4 text-center">
-			<i class="fa-solid fa-map-location-dot text-3xl text-fg-muted mb-3" aria-hidden="true"></i>
-			<p class="text-sm font-medium text-fg mb-1">No map for this page yet</p>
-			<p class="text-xs text-fg-secondary">Use “Change map” above to pick an existing map or create a new one.</p>
-		</div>
-	</div>
+// BlockEntityMapChoose is the Scribe+ "no map picked yet" state: the map
+// picker. A search with a live count over a grid of the campaign's maps (their
+// pictures as the viewer may see them, names escaped by templ); Pick stays
+// disabled until a card is chosen, and a double-click picks at once. Picking
+// binds the map through the existing widget-binding path (POST /bindings,
+// Scribe+, the same right as editing the page), whose answer is this block
+// re-rendered as the framed preview, swapped in place. An empty campaign gets
+// "This campaign has no maps yet". Create a map opens a name field that posts
+// the existing create-and-bind path (POST /bindings/create, Scribe+), the one
+// the generic binding picker uses, so a scribe can still make a map here.
+//
+// Every handler is an inline IIFE calling static/js/map_block_picker.js, so the
+// picker works after an HTMX swap brings it in (an unbind re-renders it).
+templ BlockEntityMapChoose(cc *campaigns.CampaignContext, entityID string, maps []Map) {
+	@mapFrameStyles()
+	<section
+		class="card mp-pick"
+		aria-label="Map block"
+		data-widget="map-picker"
+		data-map-picker
+		data-campaign-id={ cc.Campaign.ID }
+		data-host-id={ entityID }
+		data-host-block={ widgetbindings.BlockHostID(WidgetTypeMap, entityID) }
+		data-total={ fmt.Sprintf("%d", len(maps)) }
+	>
+		if len(maps) == 0 {
+			<div class="mp-pick-empty">
+				<span class="mp-pick-ico"><i class="fa-solid fa-map" aria-hidden="true"></i></span>
+				<b>This campaign has no maps yet</b>
+				<p>Make one here and it goes straight into this block.</p>
+				<button type="button" class="mp-pick-btn mp-pick-primary" data-pick-new-open onclick={ pickerCall("create") }>
+					<i class="fa-solid fa-plus" aria-hidden="true"></i>Create a map
+				</button>
+			</div>
+			@mapPickerCreate(cc.Campaign.ID, entityID)
+		} else {
+			<div class="mp-pick-head">
+				<h2><i class="fa-solid fa-map-location-dot" aria-hidden="true"></i><span>Pick a map</span></h2>
+			</div>
+			<label class="mp-pick-search">
+				<i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+				<input type="search" placeholder="Search maps" aria-label="Search maps" autocomplete="off" oninput={ pickerCall("filter") }/>
+			</label>
+			<div class="mp-pick-count" aria-live="polite" data-pick-count>{ mapCountLabel(len(maps)) }</div>
+			<div class="mp-pick-grid" role="group" aria-label="Maps">
+				for _, m := range maps {
+					<button
+						type="button"
+						class="mp-pick-card"
+						aria-pressed="false"
+						data-map-id={ m.ID }
+						data-map-name={ m.Name }
+						onclick={ pickerCall("select") }
+						ondblclick={ pickerCall("pick") }
+					>
+						<span class="mp-pick-th">
+							if m.HasImage() {
+								<img src={ mapImageSrc(ctx, &m) } alt="" loading="lazy"/>
+							} else {
+								<i class="fa-solid fa-map" aria-hidden="true"></i>
+							}
+							<span class="mp-pick-ck"><i class="fa-solid fa-check" aria-hidden="true"></i></span>
+						</span>
+						<b>{ m.Name }</b>
+						if m.Display != nil && m.Display.Grid != nil && m.Display.Grid.Type == GridHex {
+							<small>Hexes</small>
+						}
+					</button>
+				}
+				<p class="mp-pick-none" data-pick-none hidden></p>
+			</div>
+			@mapPickerCreate(cc.Campaign.ID, entityID)
+			<div class="mp-pick-foot">
+				<button type="button" class="mp-pick-link" data-pick-new-open onclick={ pickerCall("create") }><i class="fa-solid fa-plus" aria-hidden="true"></i>Create a map</button>
+				<button type="button" class="mp-pick-btn mp-pick-primary" data-pick disabled onclick={ pickerCall("pick") }>Pick</button>
+			</div>
+		}
+	</section>
 }
 
-// BlockEntityMapEmpty renders the player-facing empty state when no map
-// has been assigned. Players don't get the picker — only Scribe+ can
-// assign — so we just say so plainly.
+// mapPickerCreate is the picker's "Create a map" field, hidden until asked
+// for. It posts the generic binding picker's own create-and-bind route, so the
+// right to make a map here is exactly what it was (Scribe+), and the answer is
+// the block re-rendered with the new map's preview. CSRF rides on the header
+// boot.js adds to every htmx request.
+templ mapPickerCreate(campaignID, entityID string) {
+	<form
+		class="mp-pick-new"
+		data-pick-new
+		hidden
+		hx-post={ bindingsCreateURL(campaignID) }
+		hx-target={ "#" + widgetbindings.BlockHostID(WidgetTypeMap, entityID) }
+		hx-swap="outerHTML"
+	>
+		<input type="hidden" name="host_type" value="entity"/>
+		<input type="hidden" name="host_id" value={ entityID }/>
+		<input type="hidden" name="widget_type" value={ WidgetTypeMap }/>
+		<label class="mp-pick-new-lab">
+			<span>Name the new map</span>
+			<input type="text" name="name" maxlength="200" required autocomplete="off" placeholder="e.g. The Shattered Coast"/>
+		</label>
+		<div class="mp-pick-new-row">
+			<button type="button" class="mp-pick-btn" onclick={ pickerCall("cancelCreate") }>Cancel</button>
+			<button type="submit" class="mp-pick-btn mp-pick-primary">Create and use</button>
+		</div>
+		<p>Add its picture on the map’s own page.</p>
+	</form>
+}
+
+// BlockEntityMapEmpty renders the player-facing empty state when no map has
+// been picked. Players never get the picker (only Scribe+ can bind), so it
+// just says so plainly.
 templ BlockEntityMapEmpty() {
-	<div class="card p-8 text-center">
-		<i class="fa-solid fa-map text-3xl text-fg-muted mb-3"></i>
-		<p class="text-sm text-fg-muted">No map assigned to this entity yet.</p>
-	</div>
+	@mapFrameStyles()
+	<section class="card mp-pick" aria-label="Map block">
+		<div class="mp-pick-empty">
+			<span class="mp-pick-ico"><i class="fa-solid fa-map" aria-hidden="true"></i></span>
+			<b>No map here yet</b>
+			<p>The owner hasn’t picked a map for this block.</p>
+		</div>
+	</section>
 }

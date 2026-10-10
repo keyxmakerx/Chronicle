@@ -179,3 +179,55 @@
   .mf-panel { margin: 6px; }
   .mf-btn span { display: none; }
 }
+
+/*
+ * The Map block picker (an entity page's Map block before a map is picked):
+ * search, live count, a grid of map cards, Pick. Lives here because the block
+ * already loads this file for its framed preview, and pages carry no maps-page
+ * stylesheet.
+ */
+.mp-pick { --mp-pick-accent: rgb(var(--color-accent-rgb, 99 102 241)); --mp-pick-soft: rgb(var(--color-accent-rgb, 99 102 241) / 0.18); padding: 14px; }
+.mp-pick-head h2 { display: flex; align-items: center; gap: 7px; margin: 0 0 10px; font-size: 0.875rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-text-secondary); }
+.mp-pick-search { display: flex; align-items: center; gap: 7px; height: 34px; padding: 0 9px; border: 1px solid var(--color-input-border); border-radius: 8px; background: var(--color-input-bg); color: var(--color-text-secondary); }
+.mp-pick-search:focus-within { outline: 2px solid var(--mp-pick-accent); outline-offset: 1px; }
+.mp-pick-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; font: inherit; font-size: 13px; color: var(--color-text-primary); padding: 0; box-shadow: none; }
+.mp-pick-count { margin: 8px 0 6px; font-size: 11px; color: var(--color-text-secondary); }
+.mp-pick-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; max-height: 332px; overflow: auto; padding: 2px; }
+.mp-pick-card { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 6px; border: 1px solid var(--color-border); border-radius: 9px; background: var(--color-card-bg); text-align: left; cursor: pointer;
+  transition: box-shadow var(--dur-micro) var(--ease-out), border-color var(--dur-micro), transform var(--dur-micro) var(--ease-out); }
+.mp-pick-card[hidden] { display: none; }
+.mp-pick-card:hover { box-shadow: var(--elev-hover); transform: translateY(-1px); }
+.mp-pick-card:focus-visible { outline: 2px solid var(--mp-pick-accent); outline-offset: 2px; }
+.mp-pick-card[aria-pressed="true"] { border-color: var(--mp-pick-accent); box-shadow: 0 0 0 2px var(--mp-pick-soft); }
+.mp-pick-th { position: relative; display: grid; place-items: center; aspect-ratio: 16 / 10; overflow: hidden; border-radius: 5px; background: var(--color-bg-tertiary); color: var(--color-text-secondary); }
+.mp-pick-th img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.mp-pick-ck { position: absolute; top: 5px; right: 5px; width: 20px; height: 20px; display: grid; place-items: center; border-radius: 50%; background: var(--mp-pick-accent); color: #fff; font-size: 10px; opacity: 0; transform: scale(0.6);
+  transition: opacity var(--dur-micro), transform var(--dur-standard) var(--ease-out); }
+.mp-pick-card[aria-pressed="true"] .mp-pick-ck { opacity: 1; transform: none; }
+.mp-pick-card b { padding: 0 2px; font-size: 12.5px; font-weight: 600; color: var(--color-text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mp-pick-card small { padding: 0 2px; margin-top: -4px; font-size: 11px; color: var(--color-text-secondary); }
+.mp-pick-none { grid-column: 1 / -1; margin: 0; padding: 16px 8px; text-align: center; font-size: 12.5px; color: var(--color-text-secondary); }
+.mp-pick-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; }
+.mp-pick-btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--color-border); font-size: 13px; font-weight: 500; text-decoration: none; cursor: pointer;
+  transition: background-color var(--dur-micro), opacity var(--dur-micro); }
+.mp-pick-primary { background: var(--mp-pick-accent); border-color: var(--mp-pick-accent); color: #fff; }
+.mp-pick-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.mp-pick-empty { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 26px 10px 20px; text-align: center; }
+.mp-pick-ico { display: grid; place-items: center; width: 44px; height: 44px; margin-bottom: 4px; border-radius: 12px; background: var(--color-bg-tertiary); color: var(--color-text-secondary); font-size: 18px; }
+.mp-pick-empty b { font-size: 14px; font-weight: 600; color: var(--color-text-primary); }
+.mp-pick-empty p { max-width: 30ch; margin: 0 0 6px; font-size: 12.5px; line-height: 1.45; color: var(--color-text-secondary); }
+
+.mp-pick-link { display: inline-flex; align-items: center; gap: 5px; padding: 0; border: 0; background: none; font-size: 12px; color: var(--color-accent); cursor: pointer; }
+.mp-pick-link:hover { text-decoration: underline; }
+.mp-pick-link[hidden], .mp-pick-btn[hidden] { display: none; }
+.mp-pick-btn:not(.mp-pick-primary) { background: var(--color-card-bg); color: var(--color-text-primary); }
+/* The name field settles in where Create a map was (ui-standard "Settle"). */
+.mp-pick-new { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; padding: 10px; border: 1px solid var(--color-border); border-radius: 9px; background: var(--color-bg-tertiary);
+  animation: mp-pick-in var(--dur-standard) var(--ease-out) both; }
+.mp-pick-new[hidden] { display: none; }
+.mp-pick-new-lab { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 500; color: var(--color-text-secondary); }
+.mp-pick-new-lab input { height: 32px; padding: 0 9px; border: 1px solid var(--color-input-border); border-radius: 8px; background: var(--color-input-bg); font: inherit; font-size: 13px; color: var(--color-text-primary); }
+.mp-pick-new-lab input:focus { outline: 2px solid var(--mp-pick-accent); outline-offset: 1px; }
+.mp-pick-new-row { display: flex; justify-content: flex-end; gap: 8px; }
+.mp-pick-new p { margin: 0; font-size: 11.5px; color: var(--color-text-secondary); }
+@keyframes mp-pick-in { from { opacity: 0; transform: translateY(4px); } }

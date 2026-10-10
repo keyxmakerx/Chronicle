@@ -18,6 +18,20 @@ func mapPageURL(campaignID, mapID string) string {
 	return fmt.Sprintf("/campaigns/%s/maps/%s", campaignID, mapID)
 }
 
+// bindingsCreateURL is the widget-binding create-and-bind route the map
+// picker's "Create a map" field posts to.
+func bindingsCreateURL(campaignID string) string {
+	return fmt.Sprintf("/campaigns/%s/bindings/create", campaignID)
+}
+
+// mapCountLabel is the picker's count before anything is typed.
+func mapCountLabel(n int) string {
+	if n == 1 {
+		return "1 map"
+	}
+	return fmt.Sprintf("%d maps", n)
+}
+
 // mapViewerURL is the bare framed-viewer fragment the focus view fetches.
 func mapViewerURL(campaignID, mapID string) string {
 	return mapPageURL(campaignID, mapID) + "/viewer"
@@ -39,6 +53,20 @@ func unfoldOnClick() templ.ComponentScript {
 		Call: `(function(el,e){` +
 			`if(e&&e.type==='keydown'){if(e.key!=='Enter'&&e.key!==' ')return;e.preventDefault();}` +
 			`if(window.ChronicleMapFocus)window.ChronicleMapFocus.open(el);` +
+			`})(this,event)`,
+	}
+}
+
+// pickerCall is one of the map picker's handlers in
+// static/js/map_block_picker.js (filter, select, pick, create, cancelCreate),
+// as an inline IIFE for the same swap-safety reason as unfoldOnClick. fn is
+// always one of those fixed names, never input.
+func pickerCall(fn string) templ.ComponentScript {
+	return templ.ComponentScript{
+		Name:     "maps_picker_" + fn,
+		Function: "",
+		Call: `(function(el,e){` +
+			`if(window.ChronicleMapPicker)window.ChronicleMapPicker.` + fn + `(el,e);` +
 			`})(this,event)`,
 	}
 }
