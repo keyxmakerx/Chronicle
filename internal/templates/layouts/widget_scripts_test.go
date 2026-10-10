@@ -29,10 +29,10 @@ func TestBaseEmitsWidgetScripts(t *testing.T) {
 		{
 			name: "manifest set",
 			ctx: SetWidgetScripts(context.Background(), map[string][]string{
-				"timeline-viz": {"/static/plugins/timeline/js/timeline_viz.js?v=1", "/x</script>.js"},
+				"timeline-viz": {"/static/plugins/chart/js/timeline_viz.js?v=1", "/x</script>.js"},
 			}),
 			want: map[string][]string{
-				"timeline-viz": {"/static/plugins/timeline/js/timeline_viz.js?v=1", "/x</script>.js"},
+				"timeline-viz": {"/static/plugins/chart/js/timeline_viz.js?v=1", "/x</script>.js"},
 			},
 		},
 	}

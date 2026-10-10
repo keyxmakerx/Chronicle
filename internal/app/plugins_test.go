@@ -121,12 +121,12 @@ func TestBuildWidgetManifest(t *testing.T) {
 		},
 		{
 			name: "plugin-relative and site paths, in order",
-			regs: []PluginRegistration{{Slug: "timeline", Widgets: []PluginWidget{
+			regs: []PluginRegistration{{Slug: "chart", Widgets: []PluginWidget{
 				{Name: "timeline-viz", Scripts: []string{"/static/js/widgets/groups.js", "js/timeline_viz.js"}},
 			}}},
 			want: map[string][]string{"timeline-viz": {
 				"/static/js/widgets/groups.js?v=h",
-				"/static/plugins/timeline/js/timeline_viz.js?v=h",
+				"/static/plugins/chart/js/timeline_viz.js?v=h",
 			}},
 		},
 		{

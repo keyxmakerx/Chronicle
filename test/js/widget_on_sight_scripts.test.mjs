@@ -79,7 +79,7 @@ function boot(mountNames, manifest) {
   };
 }
 
-const LIST = { 'timeline-viz': ['/static/js/widgets/groups.js?v=1', '/static/plugins/timeline/js/timeline_viz.js?v=1'] };
+const LIST = { 'timeline-viz': ['/static/js/widgets/groups.js?v=1', '/static/plugins/chart/js/timeline_viz.js?v=1'] };
 
 test('a listed widget fetches its scripts in order, with async off', () => {
   const b = boot(['timeline-viz'], LIST);
