@@ -51,6 +51,9 @@
   // than swapped in, which is why htmx's allowScriptTags=false leaves them be.
   var widgetScripts = null;
   var requestedScripts = {};
+  // Only Chronicle's own static files may be loaded this way, whatever the
+  // list says: a same-origin /static/ path with an optional ?v= hash.
+  var WIDGET_SCRIPT_URL = /^\/static\/[A-Za-z0-9_.\-\/]+\.js(\?v=[A-Za-z0-9._\-]+)?$/;
   var requestedWidgets = {};
 
   function widgetScriptList(name) {
@@ -72,6 +75,11 @@
   }
 
   function appendWidgetScript(name, url, isLast) {
+    if (!WIDGET_SCRIPT_URL.test(url) || url.indexOf('..') !== -1) {
+      console.warn('[Chronicle] Refused widget script ' + url + ' for data-widget="' +
+        name + '" — not a Chronicle static path.');
+      return;
+    }
     var s = document.createElement('script');
     s.src = url;
     // Inserted scripts run in arrival order unless async is off; off keeps

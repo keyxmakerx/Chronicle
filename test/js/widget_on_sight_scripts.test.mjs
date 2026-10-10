@@ -117,9 +117,9 @@ test('a widget arriving by boosted navigation fetches its scripts', () => {
 });
 
 test('a script shared by two widgets is fetched once', () => {
-  const b = boot(['a', 'b'], { a: ['/s/shared.js', '/s/a.js'], b: ['/s/shared.js', '/s/b.js'] });
+  const b = boot(['a', 'b'], { a: ['/static/s/shared.js', '/static/s/a.js'], b: ['/static/s/shared.js', '/static/s/b.js'] });
   b.fireDOMContentLoaded();
-  assert.deepEqual(b.appended.map((s) => s.src), ['/s/shared.js', '/s/a.js', '/s/b.js']);
+  assert.deepEqual(b.appended.map((s) => s.src), ['/static/s/shared.js', '/static/s/a.js', '/static/s/b.js']);
 });
 
 test('a listed widget is not reported as dead while its scripts load', () => {
@@ -158,4 +158,13 @@ test('a list entry named like an Object property is not mistaken for a widget', 
   const b = boot(['constructor', 'toString'], {});
   b.fireDOMContentLoaded();
   assert.equal(b.appended.length, 0);
+});
+
+test('only same-origin /static/ scripts are loaded, whatever the list says', () => {
+  const bad = ['https://evil.example/x.js', '//evil.example/x.js', 'javascript:alert(1)',
+    '/static/../api/x.js', '/uploads/x.js', '/static/js/x.js?v=1"><b'];
+  const b = boot(['w'], { w: bad.concat(['/static/plugins/a/js/w.js?v=Ab_1-2']) });
+  b.fireDOMContentLoaded();
+  assert.deepEqual(b.appended.map((s) => s.src), ['/static/plugins/a/js/w.js?v=Ab_1-2']);
+  assert.equal(b.warnings.filter((w) => /Refused widget script/.test(w)).length, bad.length);
 });

@@ -1019,7 +1019,7 @@ Also under this ADR: the partial-update contract test only recognised structs na
 **Decision:**
 1. A plugin declares its widget scripts in `PluginRegistration.Widgets`: each entry is a `data-widget` name and its scripts in load order, the registering script last. Paths without a leading `/` are under the plugin's own `StaticFS` mount.
 2. The layout emits the resulting map once, as inert JSON (`#chronicle-widget-scripts`) outside `#main-content`. It is the same for every page and campaign, so boosted navigation can't leave a stale copy.
-3. When `boot.js` meets a mount whose widget isn't registered, it appends that widget's scripts to `<head>` (`async=false`, each URL once per page). `register()` then mounts it as before. Scripts created this way are not swapped content, so `allowScriptTags` stays off.
+3. When `boot.js` meets a mount whose widget isn't registered, it appends that widget's scripts to `<head>` (`async=false`, each URL once per page). `register()` then mounts it as before. Scripts created this way are not swapped content, so `allowScriptTags` stays off. `boot.js` loads only same-origin `/static/…*.js` paths from the list, whatever it contains.
 4. Add-on gating needs nothing extra: a switched-off add-on's pages and blocks don't render its mount, so its scripts are never fetched.
 5. `base.templ` keeps only the shell (htmx, Alpine, boot, theme, sidebar, search, notifications) and scripts that Alpine `x-data` needs before Alpine starts.
 
