@@ -14,6 +14,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
+	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
@@ -35,10 +36,6 @@ func (r *gateRepo) GetDrawing(_ context.Context, id string) (*Drawing, error) {
 	return &Drawing{ID: id, MapID: "map-1", CreatedBy: &author}, nil
 }
 
-// gateSession stands in for the auth session getUserID reads.
-type gateSession string
-
-func (s gateSession) GetUserID() string                           { return string(s) }
 func (r *gateRepo) CreateDrawing(context.Context, *Drawing) error { r.created = true; return nil }
 func (r *gateRepo) UpdateDrawing(context.Context, *Drawing) error { r.updated = true; return nil }
 
@@ -179,7 +176,7 @@ func TestDrawingHandlers_EnforceWhoCanDraw(t *testing.T) {
 				c.SetParamNames("id", "mid", "did")
 				c.SetParamValues("camp-1", "map-1", "d-1")
 				c.Set("campaign_context", dmWriteCampaignCtx(tc.role, false))
-				c.Set("session", gateSession(gateAuthor))
+				auth.SetSession(c, &auth.Session{UserID: gateAuthor})
 
 				var err error
 				if verb == "create" {
