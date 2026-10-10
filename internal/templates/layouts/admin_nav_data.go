@@ -193,34 +193,12 @@ func adminNavBadgeCount(ctx context.Context, it AdminNavItem) int {
 	return 0
 }
 
-// adminNavSectionCount sums the item badges so a folded section still shows
-// that something inside needs attention.
-func adminNavSectionCount(ctx context.Context, s AdminNavSection) int {
-	n := 0
-	for _, it := range s.Items {
-		n += adminNavBadgeCount(ctx, it)
-	}
-	return n
-}
-
-// adminNavXData is the Alpine state for the admin block. It is a constant so
-// no server value is ever spliced into script; the current section arrives in
-// a data-cur attribute that templ escapes. The section holding the open page
-// is forced open without being saved, so browsing does not overwrite the
-// viewer's own choices; only an explicit toggle is remembered. Stored values
-// are parsed defensively since they are client-written.
+// adminNavXData is the Alpine state for the admin menu. It is a constant so
+// no server value is ever spliced into script. init points "Back to
+// Chronicle" at the page the admin came from (static/js/site_admin.js).
 const adminNavXData = `{
-		open: localStorage.getItem('chronicle-admin-nav') !== 'collapsed',
-		saved: {},
-		secs: {},
 		init() {
-			try {
-				var s = JSON.parse(localStorage.getItem('chronicle-admin-nav-sections') || '{}');
-				if (s && typeof s === 'object' && !Array.isArray(s)) { this.saved = s; }
-			} catch (e) {}
-			this.secs = Object.assign({}, this.saved);
-			var cur = this.$el.dataset.cur;
-			if (cur) { this.secs[cur] = true; }
+			if (window.Chronicle && Chronicle.siteAdminArrive) Chronicle.siteAdminArrive(this.$el);
 		},
 		// pinToggle saves the admin's pins and swaps in the re-rendered nav.
 		// The list is read from the page at click time (every pinned item
@@ -252,14 +230,16 @@ const adminNavXData = `{
 					b.disabled = false;
 					Chronicle.notify((e && e.m) || 'That page could not be pinned. Check your connection and try again.', 'error');
 				});
-		},
-		toggle(id) {
-			this.secs[id] = !this.secs[id];
-			this.saved[id] = this.secs[id];
-			try { localStorage.setItem('chronicle-admin-nav-sections', JSON.stringify(this.saved)); } catch (e) {}
 		}
 	}`
 
-// adminNavSectionXData scopes one section: it reads its own ID from data-sec
-// so the expressions on the fold head stay constant strings.
-const adminNavSectionXData = `{ id: '', init() { this.id = this.$el.dataset.sec; } }`
+// SiteAdminIcon is the Font Awesome icon that stands for Site admin wherever
+// the way in appears.
+const SiteAdminIcon = "fa-screwdriver-wrench"
+
+// InSiteAdmin reports whether this page is in Site admin: a site admin on an
+// /admin page. Only the menu depends on it; the admin routes keep their own
+// server-side gate.
+func InSiteAdmin(ctx context.Context) bool {
+	return GetIsAdmin(ctx) && adminPathUnder(GetActivePath(ctx), "/admin")
+}

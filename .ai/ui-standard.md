@@ -20,8 +20,11 @@ pieces to reuse, not copy.
 - **Two sidebars exist**: inside a campaign (`campaignNavTop`,
   `campaignNavCategories` in `internal/templates/layouts/nav.templ`) and
   outside one (`app.templ`). A navigation fix covers both.
-- **Admin stays on admin pages.** Inside a campaign, a site admin gets one
-  "Site admin" link, not the admin menu.
+- **Site admin is its own place.** On an admin page a site admin's sidebar is
+  the admin menu (`AdminSidebarNav`): a shade darker, under a "Site admin"
+  band, with "Back to Chronicle" returning to the page they came from.
+  Everywhere else the only trace is the footer's Site admin button
+  (`SiteAdminEntry`, the tools icon `SiteAdminIcon`), in both sidebars.
 - **Who sees what follows one check.** DM-only content is visible to everyone
   who can write it: the owner and members with DM access
   (`CampaignContext.VisibilityRole()` to see it, `CanAuthorDmOnly()` to write
@@ -78,6 +81,12 @@ place, and Off shows the end state.
 | Page turn | the Handbook only | a turn with a soft crease, `--dur-turn`, `--ease-turn` | the new spread fades in |
 | Settle | moving to a new page or tab | fade and a 6px rise, `--dur-large`, `--ease-out` | fade only |
 
+- **Entering Site admin is a heavy Settle.** Only after the footer button,
+  the admin menu rises 28px over `--dur-arrive` on `--ease-arrive` (slow to
+  start, a firm stop, no bounce), then the band's accent rule draws across;
+  the button presses deeper and lets go slower than other footer buttons
+  (`static/js/site_admin.js`, `.admin-arrive`). Moving between admin pages
+  plays nothing. Calm and Off show the menu in place.
 - **How much motion is one attribute**: `html[data-motion]` is `calm` or `off`
   (absent means full), from `MotionLevel` in
   `internal/templates/layouts/appearance.go`. A device asking for reduced
