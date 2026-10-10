@@ -16,7 +16,7 @@ func TestHexCoverControls_Source(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	hexesSrc, err := os.ReadFile("../../../static/js/map_hexes.js")
+	hexesSrc, err := os.ReadFile("static/js/map_hexes.js")
 	if err != nil {
 		t.Fatal(err)
 	}
