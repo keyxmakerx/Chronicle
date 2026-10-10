@@ -38,7 +38,10 @@ func publishFixture(t *testing.T, writeErr error) (CalendarService, *recordingPu
 		HoursPerDay: 24, MinutesPerHour: 60, SecondsPerMinute: 60,
 	}
 	calRepo := &fakeCalendarRepo{
-		getByIDFn:     func(context.Context, string) (*Calendar, error) { c := cal; return &c, nil },
+		getByIDFn: func(context.Context, string) (*Calendar, error) { c := cal; return &c, nil },
+		listByCampaignFn: func(context.Context, string) ([]Calendar, error) {
+			return []Calendar{cal}, nil
+		},
 		getMonthsFn:   func(context.Context, string) ([]Month, error) { return []Month{{Name: "M", Days: 30}}, nil },
 		getWeekdaysFn: func(context.Context, string) ([]Weekday, error) { return nil, nil },
 		updateFn:      func(context.Context, *Calendar) error { return writeErr },
@@ -151,5 +154,33 @@ func TestPublishedEventTypesAreDistinct(t *testing.T) {
 			t.Errorf("empty or duplicate event type %q", ty)
 		}
 		seen[ty] = true
+	}
+}
+
+// TestSecondaryCalendarDateIsNotAnnounced: the date payload names no
+// calendar and the module applies it to the primary one, so a date move on
+// any other calendar of the campaign must stay off the wire.
+func TestSecondaryCalendarDateIsNotAnnounced(t *testing.T) {
+	cases := []struct {
+		name    string
+		primary *Calendar
+		want    int
+	}{
+		{"cal-1 is the default", &Calendar{ID: "cal-1"}, 1},
+		{"another calendar is the default", &Calendar{ID: "cal-2"}, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			svc, pub := publishFixture(t, nil)
+			svc.(*calendarService).calRepo.(*fakeCalendarRepo).getDefaultFn = func(context.Context, string) (*Calendar, error) {
+				return tc.primary, nil
+			}
+			if err := svc.SetCurrentDate(context.Background(), "cal-1", testCampaignA, 1000, 1, 5, 7, 9); err != nil {
+				t.Fatal(err)
+			}
+			if len(pub.got) != tc.want {
+				t.Errorf("published %v, want %d message(s)", pub.types(), tc.want)
+			}
+		})
 	}
 }

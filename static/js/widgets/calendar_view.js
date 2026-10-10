@@ -4350,7 +4350,7 @@
         all.push(e);
       });
       var events = all.filter(function (e) {
-        if (e.id === exceptId) return false;
+        if (e.id === exceptId || e.anchorable === false) return false;
         var r = e.recurrence_type === 'rule' && e.recurrence_rule;
         return !(r && (r.match || []).some(function (c) { return c.kind === 'relative_to_event' || c.kind === 'after_event'; }));
       }).map(function (e) { return { id: e.id, name: e.name }; });

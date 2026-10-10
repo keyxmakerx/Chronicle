@@ -93,3 +93,30 @@ func TestListEventIndexForViewer_Cap(t *testing.T) {
 		t.Errorf("got %d entries truncated=%v, want %d and true", len(got), truncated, maxEventIndex)
 	}
 }
+
+// An event that repeats relative to another is refused as an anchor by the
+// rule check, so the index marks it for the picker to leave out.
+func TestListEventIndexForViewer_Anchorable(t *testing.T) {
+	cal, eras, _ := eraFixture()
+	byRule := RecurrenceByRule
+	events := []Event{
+		{ID: "ev-plain", CalendarID: eraCalendarID, Name: "Plain", Year: 1001, Month: 1, Day: 1, Visibility: "everyone"},
+		{ID: "ev-after", CalendarID: eraCalendarID, Name: "After", Year: 1001, Month: 1, Day: 2, Visibility: "everyone",
+			IsRecurring: true, RecurrenceType: &byRule,
+			RecurrenceRule: &RecurrenceRule{Match: []RuleCondition{{Kind: RuleAfterEvent, EventID: "ev-plain"}}}},
+	}
+	got, _, err := newIndexService(cal, eras, events).ListEventIndexForViewer(context.Background(), eraCalendarID, eraCampaignID, "",
+		permissions.RequestViewer(permissions.RoleOwner, "u-1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]bool{"ev-plain": true, "ev-after": false}
+	for _, e := range got {
+		if e.Anchorable != want[e.ID] {
+			t.Errorf("%s anchorable = %v, want %v", e.ID, e.Anchorable, want[e.ID])
+		}
+	}
+	if len(got) != 2 {
+		t.Errorf("got %d entries, want 2", len(got))
+	}
+}

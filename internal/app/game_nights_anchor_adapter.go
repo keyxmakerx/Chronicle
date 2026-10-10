@@ -2,7 +2,10 @@ package app
 
 import (
 	"context"
+	"errors"
+	"net/http"
 
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
@@ -85,7 +88,10 @@ func (a *sessionMonthRemapAdapter) RemapMonthPositions(ctx context.Context, camp
 
 // sessionsDefaultCalendarAdapter satisfies sessions.DefaultCalendarResolver:
 // the calendar a session's in-world date is recorded against is the
-// campaign's default calendar (the session form has no calendar picker).
+// campaign's primary calendar, the default or else the first (the session
+// form has no calendar picker). Most campaigns never mark a default, so
+// requiring one would leave their game nights unstamped and outside every
+// calendar-scoped query.
 type sessionsDefaultCalendarAdapter struct {
 	svc calendar.CalendarService
 }
@@ -93,16 +99,15 @@ type sessionsDefaultCalendarAdapter struct {
 // DefaultCalendarID reads at Owner level (which skips per-user rules): the
 // answer is stored on a session row, not shown to anyone, so it must not
 // depend on who happens to be saving. It returns "" for a campaign with no
-// default calendar.
+// calendar.
 func (a *sessionsDefaultCalendarAdapter) DefaultCalendarID(ctx context.Context, campaignID string) (string, error) {
-	cals, err := a.svc.ListCalendars(ctx, campaignID, permissions.RequestViewer(permissions.RoleOwner, ""))
+	cal, err := a.svc.GetPrimaryCalendarForViewer(ctx, campaignID, permissions.RequestViewer(permissions.RoleOwner, ""))
 	if err != nil {
+		var appErr *apperror.AppError
+		if errors.As(err, &appErr) && appErr.Code == http.StatusNotFound {
+			return "", nil
+		}
 		return "", err
 	}
-	for i := range cals {
-		if cals[i].IsDefault {
-			return cals[i].ID, nil
-		}
-	}
-	return "", nil
+	return cal.ID, nil
 }

@@ -1082,10 +1082,15 @@ func (s *calendarService) UpdateCalendar(ctx context.Context, calendarID, campai
 	}
 	if input.CurrentYear.Present() || input.CurrentMonth.Present() || input.CurrentDay.Present() ||
 		input.CurrentHour.Present() || input.CurrentMinute.Present() {
-		s.publish(PubDateAdvanced, campaignID, calendarID, DatePayload{
-			Year: cal.CurrentYear, Month: cal.CurrentMonth, Day: cal.CurrentDay,
-			Hour: cal.CurrentHour, Minute: cal.CurrentMinute,
-		})
+		// The payload names no calendar and the Foundry module applies it to
+		// the campaign's primary calendar, so only that calendar's date moves
+		// may be announced.
+		if primary, err := s.primaryCalendarID(ctx, campaignID); err == nil && primary == calendarID {
+			s.publish(PubDateAdvanced, campaignID, calendarID, DatePayload{
+				Year: cal.CurrentYear, Month: cal.CurrentMonth, Day: cal.CurrentDay,
+				Hour: cal.CurrentHour, Minute: cal.CurrentMinute,
+			})
+		}
 	}
 	return nil
 }
@@ -1348,6 +1353,23 @@ func (s *calendarService) CreateCalendarFromImport(ctx context.Context, campaign
 		return nil, err
 	}
 	return cal, nil
+}
+
+// primaryCalendarID is the campaign's primary calendar (the default, else
+// the first), unfiltered: "" when the campaign has none.
+func (s *calendarService) primaryCalendarID(ctx context.Context, campaignID string) (string, error) {
+	cal, err := s.calRepo.GetDefaultByCampaignID(ctx, campaignID)
+	if err != nil {
+		return "", err
+	}
+	if cal != nil {
+		return cal.ID, nil
+	}
+	all, err := s.calRepo.ListByCampaignID(ctx, campaignID)
+	if err != nil || len(all) == 0 {
+		return "", err
+	}
+	return all[0].ID, nil
 }
 
 // GetPrimaryCalendarForViewer implements CalendarService (see the interface
@@ -1815,6 +1837,10 @@ type EventIndexEntry struct {
 	Year  int    `json:"year"`
 	Month int    `json:"month"`
 	Day   int    `json:"day"`
+	// Anchorable is false for an event that itself repeats relative to
+	// another event: the rule check refuses it as an anchor, so a picker
+	// must not offer it.
+	Anchorable bool `json:"anchorable"`
 }
 
 // ListEventIndexForViewer: see the interface doc comment. The visibility
@@ -1846,7 +1872,10 @@ func (s *calendarService) ListEventIndexForViewer(ctx context.Context, calendarI
 			truncated = true
 			break
 		}
-		entries = append(entries, EventIndexEntry{ID: e.ID, Name: e.Name, Year: e.Year, Month: e.Month, Day: e.Day})
+		entries = append(entries, EventIndexEntry{
+			ID: e.ID, Name: e.Name, Year: e.Year, Month: e.Month, Day: e.Day,
+			Anchorable: !(e.RecurrenceType != nil && *e.RecurrenceType == RecurrenceByRule && e.RecurrenceRule != nil && e.RecurrenceRule.hasAfterEvent()),
+		})
 	}
 	return entries, truncated, nil
 }
