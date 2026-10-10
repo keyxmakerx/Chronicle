@@ -101,7 +101,7 @@ func (CalendarKind) Doc() string {
 		"- `moons`: a list of `name`, `cycle` (days from new moon to new moon), `phase_offset` (days), `color`.\n" +
 		"- `eras`: a list of `name`, `start_year` (optional `start_month`, `start_day`), optional `end_year`/`end_month`/`end_day`, `color`, `description`.\n" +
 		"- `leap_year_every`: years between leap years (0 for none).\n" +
-		"The body is the calendar's description. On update, a `months`, `weekdays`, `seasons` or `moons` list replaces the whole list (events follow a month that keeps its name), and a key left out keeps what is there. Eras are matched by name: listed ones are added or changed, others are kept.\n\n" +
+		"The body is the calendar's description. On update, a `months`, `weekdays`, `seasons` or `moons` list replaces the whole list (events follow a month that keeps its name), and a key left out keeps what is there. Moons and eras are matched by name, and a key left out keeps what is there; a moon hidden from players is never removed here. Eras not listed are kept. An end with only `end_year` runs to the end of that year.\n\n" +
 		"```\n---\nkind: calendar\nname: Calendar of Harptos\nyear_label: DR\ncurrent_year: 1492\ncurrent_month: Hammer\ncurrent_day: 1\nmonths:\n  - {name: Hammer, days: 30, season: Winter}\n  - {name: Midwinter, days: 1, intercalary: true, season: Winter}\n  - {name: Alturiak, days: 30, season: Winter}\nweekdays: [First-day, Second-day, Third-day]\nmoons:\n  - {name: Selune, cycle: 30.4375, phase_offset: 0, color: \"#e8e8f0\"}\neras:\n  - {name: Dalereckoning, start_year: 1}\n---\n```"
 }
 
@@ -224,8 +224,8 @@ func readCalSpec(r Record, base *calendar.Calendar) (*calSpec, error) {
 			if err != nil {
 				return nil, err
 			}
-			if !ok || days < 1 {
-				return nil, badRequestf("month %q needs days (1 or more)", it.Name)
+			if !ok || days < 1 || days > calendar.MaxMonthDays {
+				return nil, badRequestf("month %q needs days, 1 to %d", it.Name, calendar.MaxMonthDays)
 			}
 			leap, _, err := it.Int("leap_days")
 			if err != nil {
@@ -309,14 +309,27 @@ func readCalSpec(r Record, base *calendar.Calendar) (*calSpec, error) {
 			if err != nil {
 				return nil, err
 			}
-			if !ok || cycle <= 0 {
+			old := baseMoon(base, it.Name)
+			if !ok && old != nil {
+				cycle = old.CycleDays
+			} else if !ok || cycle <= 0 {
 				return nil, badRequestf("moon %q needs a cycle in days", it.Name)
 			}
-			offset, _, err := firstNum(it, "phase_offset", "offset")
+			offset, ok, err := firstNum(it, "phase_offset", "offset")
 			if err != nil {
 				return nil, err
 			}
-			s.moons[i] = calendar.MoonInput{Name: it.Name, CycleDays: cycle, PhaseOffset: offset, Color: it.Str("color")}
+			color := it.Str("color")
+			// A key left out keeps what the moon already has.
+			if old != nil {
+				if !ok {
+					offset = old.PhaseOffset
+				}
+				if color == "" {
+					color = old.Color
+				}
+			}
+			s.moons[i] = calendar.MoonInput{Name: it.Name, CycleDays: cycle, PhaseOffset: offset, Color: color}
 		}
 	}
 
@@ -358,6 +371,18 @@ func readCalSpec(r Record, base *calendar.Calendar) (*calSpec, error) {
 		s.today = &calDate{y, m, d}
 	}
 	return s, nil
+}
+
+func baseMoon(base *calendar.Calendar, name string) *calendar.Moon {
+	if base == nil {
+		return nil
+	}
+	for i := range base.Moons {
+		if sameName(base.Moons[i].Name, name) {
+			return &base.Moons[i]
+		}
+	}
+	return nil
 }
 
 func hasAny(ss []string) bool {
@@ -428,7 +453,14 @@ func readEra(cal *calendar.Calendar, it Record) (eraSpec, error) {
 		return e, err
 	}
 	if ended {
-		e.in.EndYear, e.in.EndMonth, e.in.EndDay = &ey, &em, &ed
+		e.in.EndYear = &ey
+		// An end with only a year runs to that year's last day, as the
+		// calendar reads an era with no end month.
+		if it.Has("end_month") {
+			e.in.EndMonth, e.in.EndDay = &em, &ed
+		} else {
+			em, ed = len(cal.Months)+1, 0
+		}
 		if ok && (calDate{ey, em, ed}).Before(calDate{sy, sm, sd}) {
 			return e, badRequestf("era %q ends before it starts", it.Name)
 		}
@@ -535,7 +567,13 @@ func (k CalendarKind) planCreate(ctx context.Context, campaignID string, a Actor
 		return Plan{Error: planError(err)}, nil
 	}
 	p := Plan{Summary: createSummary(s, ir), Warnings: append(s.warnings, ir.Warnings...)}
-	if cals, err := k.Svc.ListCalendars(ctx, campaignID, a.Viewer()); err == nil && len(cals) > 0 {
+	cals, err := k.Svc.ListCalendars(ctx, campaignID, a.Viewer())
+	for _, c := range cals {
+		if sameName(c.Name, r.Name) {
+			return Plan{Error: fmt.Sprintf("a calendar called %s already exists but is not the main one; make it the main one on the Calendars page", quote(r.Name))}, nil
+		}
+	}
+	if err == nil && len(cals) > 0 {
 		p.Warnings = append(p.Warnings, "The campaign has other calendars, but none is the main one; this one becomes the main calendar")
 	}
 	next := s.next
@@ -580,9 +618,9 @@ func plural(n int, one, many string) string {
 // the block changes no months, weekdays, seasons, moons or leap rule.
 // Moons and seasons keep their ids where a name matches, so a moon's
 // hidden flag and look survive.
-func structureEdit(s *calSpec, cal *calendar.Calendar) *calendar.StructureEdit {
+func structureEdit(s *calSpec, cal *calendar.Calendar) (*calendar.StructureEdit, error) {
 	if s.months == nil && s.weekdays == nil && s.seasons == nil && s.moons == nil && s.leapEvery == nil {
-		return nil
+		return nil, nil
 	}
 	edit := &calendar.StructureEdit{Months: s.months, Weekdays: s.weekdays, LeapYearEvery: cal.LeapYearEvery}
 	if edit.Months == nil {
@@ -607,6 +645,15 @@ func structureEdit(s *calSpec, cal *calendar.Calendar) *calendar.StructureEdit {
 			}
 			edit.Moons = append(edit.Moons, m)
 		}
+		// A moon hidden from players is never in a player-safe export, so a
+		// list written from one would remove it; hidden moons stay unless
+		// removed on the calendar's own settings.
+		for _, old := range cal.Moons {
+			if old.HiddenFromPlayers && baseMoonIn(edit.Moons, old.Name) == nil {
+				id := old.ID
+				edit.Moons = append(edit.Moons, calendar.MoonInput{ID: &id, Name: old.Name, CycleDays: old.CycleDays, PhaseOffset: old.PhaseOffset, Color: old.Color})
+			}
+		}
 	} else {
 		for _, m := range cal.Moons {
 			id := m.ID
@@ -626,13 +673,49 @@ func structureEdit(s *calSpec, cal *calendar.Calendar) *calendar.StructureEdit {
 			}
 			edit.Seasons = append(edit.Seasons, sn)
 		}
+	} else if s.months != nil {
+		// Seasons are stored by month number, so when the months change each
+		// kept season follows its months by name.
+		for _, sn := range cal.Seasons {
+			sm, em := movedMonth(cal, s.months, sn.StartMonth), movedMonth(cal, s.months, sn.EndMonth)
+			if sm == 0 || em == 0 {
+				return nil, badRequestf("season %q starts or ends in a month this block removes; give seasons too", sn.Name)
+			}
+			sn.StartMonth, sn.EndMonth = sm, em
+			edit.Seasons = append(edit.Seasons, sn)
+		}
 	} else {
 		edit.Seasons = append(edit.Seasons, cal.Seasons...)
 	}
-	return edit
+	return edit, nil
+}
+
+// movedMonth is the new number of old month n, matched by name, or 0.
+func movedMonth(cal *calendar.Calendar, months []calendar.MonthInput, n int) int {
+	if n < 1 || n > len(cal.Months) {
+		return 0
+	}
+	for i, m := range months {
+		if sameName(m.Name, cal.Months[n-1].Name) {
+			return i + 1
+		}
+	}
+	return 0
+}
+
+func baseMoonIn(ms []calendar.MoonInput, name string) *calendar.MoonInput {
+	for i := range ms {
+		if sameName(ms[i].Name, name) {
+			return &ms[i]
+		}
+	}
+	return nil
 }
 
 func (k CalendarKind) planUpdate(ctx context.Context, campaignID string, r Record, cal *calendar.Calendar) Plan {
+	if r.Name != "" && !sameName(r.Name, cal.Name) {
+		return Plan{Error: fmt.Sprintf("the main calendar is %s, not %s; to rename it, use rename_to", quote(cal.Name), quote(r.Name))}
+	}
 	s, err := readCalSpec(r, cal)
 	if err != nil {
 		return Plan{Error: planError(err)}
@@ -648,7 +731,11 @@ func (k CalendarKind) planUpdate(ctx context.Context, campaignID string, r Recor
 	if strings.TrimSpace(r.Body) != "" {
 		did = append(did, "replaces its description")
 	}
-	if edit := structureEdit(s, cal); edit != nil {
+	edit, err := structureEdit(s, cal)
+	if err != nil {
+		return Plan{Error: planError(err)}
+	}
+	if edit != nil {
 		if cal.UsesRealTime() {
 			return Plan{Error: "this calendar follows the real-world date, so its months, weekdays, seasons and moons can't be changed"}
 		}
@@ -768,7 +855,11 @@ func (k CalendarKind) applyUpdate(ctx context.Context, campaignID string, r Reco
 	if err != nil {
 		return err
 	}
-	if edit := structureEdit(s, cal); edit != nil {
+	edit, err := structureEdit(s, cal)
+	if err != nil {
+		return err
+	}
+	if edit != nil {
 		pv, err := k.Svc.PreviewStructureEdit(ctx, cal.ID, campaignID, *edit)
 		if err != nil {
 			return err
@@ -820,7 +911,12 @@ func eraUpdate(e eraSpec) calendar.UpdateEraInput {
 		in.StartYear, in.StartMonth, in.StartDay = patch.Of(e.in.StartYear), patch.Of(e.in.StartMonth), patch.Of(e.in.StartDay)
 	}
 	if e.in.EndYear != nil {
-		in.EndYear, in.EndMonth, in.EndDay = patch.Of(*e.in.EndYear), patch.Of(*e.in.EndMonth), patch.Of(*e.in.EndDay)
+		in.EndYear = patch.Of(*e.in.EndYear)
+		if e.in.EndMonth != nil {
+			in.EndMonth, in.EndDay = patch.Of(*e.in.EndMonth), patch.Of(*e.in.EndDay)
+		} else {
+			in.EndMonth, in.EndDay = patch.Null[int](), patch.Null[int]()
+		}
 	}
 	if e.in.Color != "" {
 		in.Color = patch.Of(e.in.Color)

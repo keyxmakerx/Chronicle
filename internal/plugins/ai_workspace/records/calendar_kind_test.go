@@ -300,3 +300,69 @@ func TestPlanAll_EventsAfterNewCalendar(t *testing.T) {
 		t.Errorf("event after the calendar: %+v", plans[2])
 	}
 }
+
+// Review findings on the update path: what a block leaves out is kept.
+func TestCalendarKind_UpdateKeeps(t *testing.T) {
+	base := func() *calendar.Calendar {
+		return &calendar.Calendar{
+			ID: "cal", Name: "Harptos",
+			Months:   []calendar.Month{{Name: "Hammer", Days: 30}, {Name: "Alturiak", Days: 30}},
+			Weekdays: []calendar.Weekday{{Name: "First"}},
+			Moons: []calendar.Moon{
+				{ID: 7, Name: "Selune", CycleDays: 30, PhaseOffset: 3, Color: "#eeeeee"},
+				{ID: 8, Name: "Shadow", CycleDays: 9, HiddenFromPlayers: true},
+			},
+			Seasons: []calendar.Season{{ID: 4, Name: "Winter", StartMonth: 2, StartDay: 1, EndMonth: 2, EndDay: 30}},
+			Eras:    []calendar.Era{{ID: 2, Name: "Dalereckoning", StartYear: 1}},
+		}
+	}
+	t.Run("moon keys left out and hidden moons", func(t *testing.T) {
+		f := &fakeStructure{cal: base()}
+		r := rec(KindCalendar, ActionUpdate, "", map[string]any{"moons": []any{map[string]any{"name": "Selune"}}}, "")
+		if err := (CalendarKind{Svc: f}).Apply(context.Background(), camp, owner, r); err != nil {
+			t.Fatal(err)
+		}
+		ms := f.edits[0].Moons
+		if len(ms) != 2 || ms[0].CycleDays != 30 || ms[0].PhaseOffset != 3 || ms[0].Color != "#eeeeee" {
+			t.Fatalf("moons %+v", ms)
+		}
+		if ms[1].ID == nil || *ms[1].ID != 8 {
+			t.Fatalf("hidden moon dropped: %+v", ms)
+		}
+	})
+	t.Run("seasons follow their months", func(t *testing.T) {
+		f := &fakeStructure{cal: base()}
+		months := []any{map[string]any{"name": "New", "days": 10}, map[string]any{"name": "Hammer", "days": 30}, map[string]any{"name": "Alturiak", "days": 30}}
+		r := rec(KindCalendar, ActionUpdate, "", map[string]any{"months": months}, "")
+		if err := (CalendarKind{Svc: f}).Apply(context.Background(), camp, owner, r); err != nil {
+			t.Fatal(err)
+		}
+		if s := f.edits[0].Seasons[0]; s.StartMonth != 3 || s.EndMonth != 3 {
+			t.Fatalf("season %+v", s)
+		}
+		gone := rec(KindCalendar, ActionUpdate, "", map[string]any{"months": months[:2]}, "")
+		if p := (CalendarKind{Svc: f}).Plan(context.Background(), camp, owner, gone); !strings.Contains(p.Error, "give seasons too") {
+			t.Fatalf("plan %+v", p)
+		}
+	})
+	t.Run("era end with only a year", func(t *testing.T) {
+		f := &fakeStructure{cal: base()}
+		r := rec(KindCalendar, ActionUpdate, "", map[string]any{"eras": []any{
+			map[string]any{"name": "Dalereckoning", "end_year": 1500},
+			map[string]any{"name": "Short", "start_year": 1500, "end_year": 1500},
+		}}, "")
+		if err := (CalendarKind{Svc: f}).Apply(context.Background(), camp, owner, r); err != nil {
+			t.Fatal(err)
+		}
+		if !f.eraUps[0].EndMonth.IsNull() || f.eras[0].EndMonth != nil {
+			t.Fatalf("an end year alone must run to the year's end: %+v %+v", f.eraUps[0], f.eras[0])
+		}
+	})
+	t.Run("another calendar's name", func(t *testing.T) {
+		f := &fakeStructure{cal: base()}
+		p := (CalendarKind{Svc: f}).Plan(context.Background(), camp, owner, rec(KindCalendar, ActionUpdate, "Greyhawk", map[string]any{"year_label": "CY"}, ""))
+		if !strings.Contains(p.Error, "rename_to") {
+			t.Fatalf("plan %+v", p)
+		}
+	})
+}

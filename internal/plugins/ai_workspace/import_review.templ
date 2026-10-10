@@ -109,7 +109,7 @@ templ ImportReview(d ImportReviewData) {
 			{ fmt.Sprintf("%d new %s", d.SummaryCounts.NewCategories, pluralize("category", "categories", d.SummaryCounts.NewCategories)) } ·
 			{ fmt.Sprintf("%d parse %s", d.SummaryCounts.ParseErrors, pluralize("error", "errors", d.SummaryCounts.ParseErrors)) }
 			if d.SummaryCounts.Blocked > 0 {
-				· { fmt.Sprintf("%d can't be imported yet", d.SummaryCounts.Blocked) }
+				· { fmt.Sprintf("%d can't be imported", d.SummaryCounts.Blocked) }
 			}
 		</div>
 
@@ -217,20 +217,20 @@ templ ImportReview(d ImportReviewData) {
 	</script>
 }
 
-// pluralize returns singular when n==1, plural otherwise.
 // skippedNote says which rows the import leaves out and why, so a block
-// waiting on a calendar is not reported as markdown that failed to parse.
+// refused at review (one waiting on a calendar, say) is not reported as markdown that failed to parse.
 func skippedNote(s ReviewSummary) string {
 	var parts []string
 	if s.ParseErrors > 0 {
 		parts = append(parts, fmt.Sprintf("%d parse-error %s", s.ParseErrors, pluralize("row", "rows", s.ParseErrors)))
 	}
 	if s.Blocked > 0 {
-		parts = append(parts, fmt.Sprintf("%d %s that can't be imported yet", s.Blocked, pluralize("row", "rows", s.Blocked)))
+		parts = append(parts, fmt.Sprintf("%d %s that can't be imported", s.Blocked, pluralize("row", "rows", s.Blocked)))
 	}
 	return "(" + strings.Join(parts, " and ") + " will be skipped)"
 }
 
+// pluralize returns singular when n==1, plural otherwise.
 func pluralize(singular, plural string, n int) string {
 	if n == 1 {
 		return singular

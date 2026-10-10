@@ -1978,6 +1978,9 @@ func clampCalendarStructure(result *ImportResult) error {
 	return nil
 }
 
+// MaxMonthDays is the longest month a calendar can hold.
+const MaxMonthDays = maxCalendarMonthDays
+
 // PrepareImport holds an ImportResult built in process (AI Import's
 // calendar block) to the same limits and clamps as an uploaded file, so a
 // calendar made that way can store nothing an upload could not.
