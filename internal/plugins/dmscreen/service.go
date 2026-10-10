@@ -103,7 +103,8 @@ func (s *service) Build(ctx context.Context, campaignID string, v Viewer) (*View
 		view.Foundry = FoundryView{Connected: connected, NeverSeen: last == nil && !connected, LastSeen: last}
 	}
 
-	if s.src.Notes != nil {
+	// The DM note is for the owner and co-DMs only; a scribe never gets the tab.
+	if s.src.Notes != nil && v.IsOwner() {
 		nv, err := s.notesView(ctx, campaignID, v, view.Night)
 		if err != nil {
 			warn("notes", err)
@@ -262,8 +263,10 @@ func nightKey(n *NightView) string {
 
 // Note reads the screen's note for the GM side.
 func (s *service) Note(ctx context.Context, campaignID string, v Viewer) (*NotesView, error) {
-	if v.Role < 2 {
-		return nil, apperror.NewForbidden("the DM Screen is for the people running this campaign")
+	// Scribes may open the screen but the note holds GM-only text, so the
+	// gate is the same one the notes widget uses for GM-shared notes.
+	if !v.IsOwner() {
+		return nil, apperror.NewForbidden("the DM notes are for the campaign owner and co-DMs")
 	}
 	if s.src.Notes == nil {
 		return nil, apperror.NewNotFound("notes are not available")
@@ -276,8 +279,10 @@ func (s *service) Note(ctx context.Context, campaignID string, v Viewer) (*Notes
 // the night's title. It refuses a note holding formatting and a note that
 // changed since version was read.
 func (s *service) SaveNote(ctx context.Context, campaignID string, v Viewer, text, version string) (*NotesView, error) {
-	if v.Role < 2 {
-		return nil, apperror.NewForbidden("the DM Screen is for the people running this campaign")
+	// Scribes may open the screen but the note holds GM-only text, so the
+	// gate is the same one the notes widget uses for GM-shared notes.
+	if !v.IsOwner() {
+		return nil, apperror.NewForbidden("the DM notes are for the campaign owner and co-DMs")
 	}
 	if s.src.Notes == nil {
 		return nil, apperror.NewNotFound("notes are not available")

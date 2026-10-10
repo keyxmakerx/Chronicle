@@ -59,8 +59,9 @@ func TestSaveNote(t *testing.T) {
 		wantKey   string
 	}{
 		{"with a night", 3, night, "plan\nmore", false, "Session 12: DM notes", "Kept with Session 12", "sess-1:2026-10-16"},
-		{"no night is the standing note", 2, nil, "plan", false, "DM Screen notes", "DM Screen notes", ""},
+		{"no night is the standing note", 3, nil, "plan", false, "DM Screen notes", "DM Screen notes", ""},
 		{"player refused", 1, nil, "plan", true, "", "", ""},
+		{"scribe refused", 2, nil, "plan", true, "", "", ""},
 		{"too long", 3, nil, strings.Repeat("x", maxNoteChars+1), true, "", "", ""},
 	}
 	for _, tt := range tests {
@@ -194,5 +195,25 @@ func TestIsPlainProse(t *testing.T) {
 				t.Errorf("isPlainProse = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+// Scribes may open the screen but never see or write the DM note.
+func TestScribeHasNoNotes(t *testing.T) {
+	fn := &fakeNotes{notes: map[string]*ScreenNote{"": {ID: "n"}}}
+	svc := NewService(Sources{Notes: fn})
+	scribe := Viewer{UserID: "s", Role: 2}
+	if _, err := svc.Note(context.Background(), "c1", scribe); appErrCode(err) != http.StatusForbidden {
+		t.Errorf("Note: %v, want 403", err)
+	}
+	if _, err := svc.SaveNote(context.Background(), "c1", scribe, "x", ""); appErrCode(err) != http.StatusForbidden {
+		t.Errorf("SaveNote: %v, want 403", err)
+	}
+	if fn.savedKey != "" || fn.savedVer != "" {
+		t.Error("a scribe's save reached the source")
+	}
+	v, err := svc.Build(context.Background(), "c1", scribe)
+	if err != nil || v.Notes != nil {
+		t.Errorf("Build: notes = %+v err %v, want no notes section", v.Notes, err)
 	}
 }

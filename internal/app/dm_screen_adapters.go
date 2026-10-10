@@ -117,18 +117,61 @@ func dmNoteID(campaignID, nightKey string) string {
 	return uuid.NewSHA1(dmNotesNamespace, []byte(name)).String()
 }
 
+// dmMemberLister is the one campaigns call the notes adapter needs, kept
+// narrow so tests need no full campaign service.
+type dmMemberLister interface {
+	ListMembers(ctx context.Context, campaignID string) ([]campaigns.CampaignMember, error)
+}
+
 // dmNotesAdapter keeps the DM Screen's notes as ordinary notes shared with
 // the GM side (owner and co-DMs), so they also show in the Journal.
+//
+// The note's id is derivable, so anyone who can write a note could squat on
+// it before the screen does. The screen therefore only trusts a note owned by
+// the campaign owner, and always creates it in the owner's name, however
+// first-saving DM is.
 type dmNotesAdapter struct {
-	notes notes.NoteService
+	notes   notes.NoteService
+	members dmMemberLister
+}
+
+// errDMNoteSquatted is the refusal when something other than the campaign
+// owner's note sits at the screen's id.
+var errDMNoteSquatted = apperror.NewValidation("another note already uses the DM Screen's place for this night; ask the campaign owner to remove it in Notes")
+
+func (a *dmNotesAdapter) ownerID(ctx context.Context, campaignID string) (string, error) {
+	members, err := a.members.ListMembers(ctx, campaignID)
+	if err != nil {
+		return "", err
+	}
+	for _, m := range members {
+		if m.Role == campaigns.RoleOwner {
+			return m.UserID, nil
+		}
+	}
+	return "", apperror.NewNotFound("campaign owner not found")
+}
+
+// lookup returns the note at the derived id and whether it is the owner's.
+// A note that is not is reported as present-but-foreign so Save can refuse to
+// write over it while Find shows it as absent.
+func (a *dmNotesAdapter) lookup(ctx context.Context, campaignID, nightKey string) (n *notes.Note, ownerID string, foreign bool, err error) {
+	n, err = a.notes.GetByID(ctx, dmNoteID(campaignID, nightKey))
+	if err != nil {
+		if isNotFound(err) {
+			return nil, "", false, nil
+		}
+		return nil, "", false, err
+	}
+	if ownerID, err = a.ownerID(ctx, campaignID); err != nil {
+		return nil, "", false, err
+	}
+	return n, ownerID, n.CampaignID != campaignID || n.UserID != ownerID, nil
 }
 
 func (a *dmNotesAdapter) Find(ctx context.Context, campaignID, nightKey string, v dmscreen.Viewer) (*dmscreen.ScreenNote, error) {
-	n, err := a.notes.GetByID(ctx, dmNoteID(campaignID, nightKey))
-	if err != nil {
-		if isNotFound(err) {
-			return nil, nil
-		}
+	n, _, foreign, err := a.lookup(ctx, campaignID, nightKey)
+	if err != nil || n == nil || foreign {
 		return nil, err
 	}
 	// Same predicate the notes routes apply before showing a note.
@@ -141,6 +184,13 @@ func (a *dmNotesAdapter) Find(ctx context.Context, campaignID, nightKey string, 
 func (a *dmNotesAdapter) Save(ctx context.Context, campaignID, nightKey string, v dmscreen.Viewer, title, entry, entryHTML, version string) (*dmscreen.ScreenNote, error) {
 	viewer := permissions.RequestViewer(v.Role, v.UserID)
 	id := dmNoteID(campaignID, nightKey)
+	_, ownerID, foreign, err := a.lookup(ctx, campaignID, nightKey)
+	if err != nil {
+		return nil, err
+	}
+	if foreign {
+		return nil, errDMNoteSquatted
+	}
 	existing, err := a.Find(ctx, campaignID, nightKey, v)
 	if err != nil {
 		return nil, err
@@ -152,8 +202,13 @@ func (a *dmNotesAdapter) Save(ctx context.Context, campaignID, nightKey string, 
 		return nil, dmscreen.ErrNoteChanged
 	}
 	if existing == nil {
-		// The title is set here and never changed by later saves.
-		_, cerr := a.notes.Create(ctx, campaignID, viewer, notes.CreateNoteRequest{
+		if ownerID, err = a.ownerID(ctx, campaignID); err != nil {
+			return nil, err
+		}
+		// Created in the owner's name even when a co-DM saves first, so the
+		// note is never owned by whoever happened to type first. The title is
+		// set here and never changed by later saves.
+		_, cerr := a.notes.Create(ctx, campaignID, permissions.RequestViewer(permissions.RoleOwner, ownerID), notes.CreateNoteRequest{
 			ID: id, Title: title, Visibility: notes.VisibilityGM,
 		})
 		if cerr != nil {
@@ -162,6 +217,9 @@ func (a *dmNotesAdapter) Save(ctx context.Context, campaignID, nightKey string, 
 			if existing, err = a.Find(ctx, campaignID, nightKey, v); err != nil || existing == nil {
 				return nil, cerr
 			}
+			// The other DM's body is not what this tab loaded (nothing), so
+			// the version check applies and reports the conflict.
+			verify = true
 		}
 	}
 	cur, err := a.notes.GetByID(ctx, id)
@@ -178,10 +236,10 @@ func (a *dmNotesAdapter) Save(ctx context.Context, campaignID, nightKey string, 
 	if verify && version != dmscreen.BodyVersion(loaded) {
 		return nil, dmscreen.ErrNoteChanged
 	}
+	// Owner-only fields are always stripped: a co-DM is not the note's owner,
+	// and the owner's own save never changes sharing either.
 	req := notes.UpdateNoteRequest{Entry: &entry, EntryHTML: &entryHTML}
-	if !cur.IsOwnedBy(v.UserID, campaignID) {
-		req.StripOwnerOnly()
-	}
+	req.StripOwnerOnly()
 	n, err := a.notes.Update(ctx, cur.ID, viewer, req)
 	if err != nil {
 		return nil, err
