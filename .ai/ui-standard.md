@@ -42,11 +42,18 @@ Six rules every screen is judged against.
 - **Two sidebars exist**: inside a campaign (`campaignNavTop`,
   `campaignNavCategories` in `internal/templates/layouts/nav.templ`) and
   outside one (`app.templ`). A navigation fix covers both.
-- **Site admin is its own place.** On an admin page a site admin's sidebar is
-  the admin menu (`AdminSidebarNav`): a shade darker, under a "Site admin"
-  band, with "Back to Chronicle" returning to the page they came from.
-  Everywhere else the only trace is the footer's Site admin button
-  (`SiteAdminEntry`, the tools icon `SiteAdminIcon`), in both sidebars.
+- **Site admin is its own place, the control room.** On an admin page a site
+  admin's sidebar is the admin menu (`AdminSidebarNav`), under a "Site admin"
+  band, with "Back to Chronicle" returning to the page they came from and
+  "Leave Site admin" doing the same from the top bar. Admin pages are always
+  dark, on a deeper blue-black with red as the accent (`html[data-site-admin]`
+  in `input.css`), so they never pass for the everyday site; labels and
+  figures are set in mono. A status strip runs along the foot of every admin
+  page (`AdminStatusStrip`): the site is live, sessions signed in, the last
+  backup's age, and that every change is on the record in Admin activity.
+  Everywhere else the only trace is the Site admin row at the very bottom of
+  both sidebars (`SiteAdminEntry`, the tools icon `SiteAdminIcon`): an
+  ordinary menu row, its icon alone when the menu is folded.
 - **Who sees what follows one check.** DM-only content is visible to everyone
   who can write it: the owner and members with DM access
   (`CampaignContext.VisibilityRole()` to see it, `CanAuthorDmOnly()` to write
@@ -104,7 +111,7 @@ place, and Off shows the end state.
 | Settle | moving to a new page or tab | fade and a 6px rise, `--dur-large`, `--ease-out` | fade only |
 
 - **Site admin rises in and falls away**, the one bounce in Chronicle.
-  After the footer button, the whole admin page comes up from the bottom of
+  After the Site admin row, the whole admin page comes up from the bottom of
   the screen over the page you were on, gathering a little speed, and
   bounces off the top three times, each smaller, over `--dur-arrive`; the
   band's accent rule draws across as it lands. "Back to Chronicle" lets the
@@ -113,8 +120,8 @@ place, and Off shows the end state.
   for only by those two clicks (`static/js/site_admin.js`) and by the next
   page before it paints (`static/js/site_admin_reveal.js`,
   `html[data-admin-vt]`); a browser without them shows the admin page rising
-  by itself on the way in, and nothing on the way out. The button presses
-  deeper and lets go slower than other footer buttons. Moving between admin
+  by itself on the way in, and nothing on the way out. The row presses
+  deeper and lets go slower than other menu rows. Moving between admin
   pages plays nothing; Calm fades, and Off plays nothing.
 - **How much motion is one attribute**: `html[data-motion]` is `calm` or `off`
   (absent means full), from `MotionLevel` in
@@ -194,7 +201,8 @@ column's version; Off shows the end state.
   `--color-text-secondary`. The accent (`--color-accent`, the campaign's
   colour) marks what you can act on and where you are, never decoration.
   Green, amber and red (`--color-ok-rgb`, `--color-warn-rgb`,
-  `--color-bad-rgb`) only ever mean state.
+  `--color-bad-rgb`) only ever mean state. Site admin is the one place red
+  is the accent, to say that changes there reach the whole site.
 - **Depth has four levels**: 0 flat (pages, lists, `--elev-static`), 1
   resting (cards, buttons, `--elev-resting`), 2 lifted (hover, menus, hover
   cards, `--elev-hover`), 3 above (dialogs, dragging, `--elev-dragged`). A

@@ -73,6 +73,12 @@ func AppearanceAttrs(ctx context.Context) templ.Attributes {
 	if m := MotionLevel(ctx); m != "full" {
 		attrs["data-motion"] = m
 	}
+	// Site admin is the control room: always dark, red as its accent
+	// (input.css, "Site admin: the control room"; base.templ paints it dark
+	// before first paint).
+	if InSiteAdmin(ctx) {
+		attrs["data-site-admin"] = "1"
+	}
 	if a == nil {
 		return attrs
 	}

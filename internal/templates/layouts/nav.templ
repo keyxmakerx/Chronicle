@@ -412,11 +412,6 @@ templ campaignNavFooter() {
 		<span aria-hidden="true">·</span>
 		<a href="/" hx-boost="false">Discover</a>
 		<span class="nav-foot-gap"></span>
-		// A site admin's way into Site admin: in the footer, so it stays in
-		// reach while a category's page list covers the sections above.
-		if GetIsAdmin(ctx) {
-			@SiteAdminEntry(false)
-		}
 		if NavCanEdit(ctx) {
 			<button
 				type="button"

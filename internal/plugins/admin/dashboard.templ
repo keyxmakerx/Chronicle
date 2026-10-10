@@ -16,7 +16,7 @@ templ AdminDashboardPage(groups []HomeGroup, needs []NeedsItem, recent []Activit
 
 			for _, g := range groups {
 				<div>
-					<h2 class="text-xs font-semibold uppercase tracking-wider text-fg-muted mb-3">{ g.Label }</h2>
+					<h2 class="font-mono text-[11px] font-semibold uppercase tracking-wider text-fg-muted mb-3">{ g.Label }</h2>
 					<div class="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
 						for _, t := range g.Tiles {
 							@homeTile(t)
@@ -41,7 +41,9 @@ templ needsYouCard(items []NeedsItem) {
 			<ul class="divide-y divide-edge">
 				for _, it := range items {
 					<li class="flex items-center gap-3 py-2.5">
-						<span class="shrink-0 min-w-[1.75rem] text-center text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">{ needsCountLabel(it.Count) }</span>
+						<span class={ "shrink-0 min-w-[1.75rem] text-center font-mono tabular-nums text-xs font-semibold px-2 py-0.5 rounded-full",
+							templ.KV("bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300", it.Urgent()),
+							templ.KV("bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300", !it.Urgent()) }>{ needsCountLabel(it.Count) }</span>
 						<p class="text-sm text-fg flex-1">{ it.Text }</p>
 						<a href={ templ.SafeURL(it.Href) } class="btn-secondary text-xs shrink-0">{ it.Button }</a>
 					</li>
@@ -99,7 +101,7 @@ templ homeTile(t HomeTile) {
 			<span class="absolute top-3 right-3 w-2.5 h-2.5 rounded-full bg-amber-500" aria-hidden="true"></span>
 			<span class="sr-only">Needs a look</span>
 		}
-		<p class="text-2xl font-bold text-fg break-words">{ t.Big }</p>
+		<p class="font-mono tabular-nums text-2xl font-bold text-fg break-words">{ t.Big }</p>
 		<p class="text-sm font-medium text-fg-secondary mt-1 break-words">{ t.Label }</p>
 		<p class="text-xs text-fg-muted mt-0.5 break-words group-hover:text-accent transition-colors">{ t.Line }</p>
 	</a>

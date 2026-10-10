@@ -116,3 +116,15 @@ test('a tampered stored path falls back to the campaigns list', () => {
   C.siteAdminArrive(m.el);
   assert.equal(m.back.href, '/campaigns');
 });
+
+test('every way out on the page, the top bar\'s too, points at the remembered page', () => {
+  mem.clear();
+  mem.set('chronicle-admin-return', '/campaigns/abc');
+  const m = fakeMenu();
+  const leave = { href: '/campaigns', setAttribute(n, v) { this[n] = v; } };
+  globalThis.document.querySelectorAll = (q) => (q === '[data-admin-back]' ? [m.back, leave] : []);
+  C.siteAdminArrive(m.el);
+  delete globalThis.document.querySelectorAll;
+  assert.equal(m.back.href, '/campaigns/abc');
+  assert.equal(leave.href, '/campaigns/abc');
+});

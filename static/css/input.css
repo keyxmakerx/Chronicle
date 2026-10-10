@@ -1218,14 +1218,16 @@
   :is(html[data-motion], html[data-cz-reduce])[data-admin-vt] .admin-band::after { animation: none; }
   @keyframes admin-rule { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 
-  /* The way in presses deeper than other footer buttons and lets go slowly,
-     so the press itself feels like it carries weight. */
-  .site-admin-entry { transition: transform 260ms var(--ease-slide), box-shadow 260ms var(--ease-slide), color 120ms; }
-  .site-admin-entry:active {
-    transform: scale(0.82) translateY(1px); transition-duration: 70ms;
-    box-shadow: inset 0 2px 4px rgb(0 0 0 / 0.5);
+  /* The way in: an ordinary menu row on its own line at the very bottom of
+     either sidebar. It presses deeper than other rows and lets go slowly, so
+     the press itself feels like it carries weight. */
+  .site-admin-row { flex: none; padding: 4px 0; border-top: 1px solid var(--nav-line); }
+  .nav-row.site-admin-entry { transition: transform 260ms var(--ease-slide), box-shadow 260ms var(--ease-slide), color 120ms; }
+  .nav-row.site-admin-entry:active {
+    transform: scale(0.97) translateY(1px); transition-duration: 70ms;
+    box-shadow: inset 0 2px 5px rgb(0 0 0 / 0.5);
   }
-  .site-admin-entry[aria-current="page"] { color: rgb(var(--nav-accent, 99 102 241)); }
+  html[data-motion] .nav-row.site-admin-entry:active { transform: none; }
 
   /* ---- Admin Sidebar Pin Toggle ---- */
 
@@ -4095,6 +4097,50 @@
   }
   .btn-primary:hover { background-color: var(--color-accent-fill-hover, rgb(var(--color-accent-action-hover-rgb, var(--color-accent-hover-rgb, 79 70 229)))); }
 }
+
+/* Site admin: the control room. Admin pages are always dark
+   (layouts.AppearanceAttrs writes data-site-admin; base.templ and theme.js
+   keep .dark on), on a deeper blue-black, with red as the accent, so the
+   place reads as live and consequential. Before the high-contrast block,
+   so a viewer's contrast choice still wins. */
+html.dark[data-site-admin] {
+  --color-bg-primary: #0b0e14;
+  --color-bg-secondary: #121722;
+  --color-bg-tertiary: #182030;
+  --color-border: #232c3c;
+  --color-border-light: #2c3649;
+  --color-card-bg: #121722;
+  --color-input-bg: #0b0e14;
+  --color-input-border: #2c3649;
+  --color-sidebar-bg: #07090d;
+  --color-accent: #f87171;
+  --color-accent-hover: #ef4444;
+  --color-accent-light: #fca5a5;
+  --color-accent-rgb: 248 113 113;
+  --color-accent-hover-rgb: 239 68 68;
+  --color-accent-light-rgb: 252 165 165;
+  --color-accent-link: #fca5a5;
+  --color-accent-fill: #dc2626;
+  --color-accent-fill-hover: #b91c1c;
+  --color-accent-on-fill: #fff;
+  --color-accent-action-rgb: 220 38 38;
+  --color-accent-action-hover-rgb: 185 28 28;
+}
+/* The status strip along the foot of every admin page. */
+.admin-strip {
+  flex: none; display: flex; align-items: center; gap: 14px; height: 30px; padding: 0 12px;
+  border-top: 1px solid var(--color-border); background: var(--color-sidebar-bg, #07090d);
+  font-family: theme('fontFamily.mono'); font-size: 11px; color: var(--color-text-secondary);
+  white-space: nowrap; overflow: hidden;
+}
+.admin-strip b { color: var(--color-text-primary); font-weight: 600; }
+.admin-strip-live { display: inline-flex; align-items: center; gap: 6px; color: #fca5a5; font-weight: 600; }
+.admin-strip-dot { width: 7px; height: 7px; border-radius: 50%; background: #ef4444; box-shadow: 0 0 0 3px rgb(239 68 68 / 0.2); }
+.admin-strip-figures { display: inline-flex; gap: 14px; min-width: 0; overflow: hidden; }
+.admin-strip-warn { color: #fbbf24; }
+.admin-strip-log { color: var(--color-text-secondary); }
+.admin-strip-log:hover { color: var(--color-accent-link); }
+@media (max-width: 639px) { .admin-strip-figures > :nth-child(n+2) { display: none; } }
 
 /* Text size: rem-based sizes scale with the root. */
 html[data-cz-scale="compact"] { font-size: 93.75%; }

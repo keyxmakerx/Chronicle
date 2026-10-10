@@ -80,16 +80,18 @@
     } catch (err) { /* storage full or blocked: the menu still works */ }
   });
 
-  // siteAdminArrive points "Back to Chronicle" at the remembered page. Called
-  // by the admin menu's init.
+  // siteAdminArrive points every way out ("Back to Chronicle" in the menu,
+  // "Leave Site admin" in the top bar) at the remembered page. Called by the
+  // admin menu's init, which also runs when a pin swaps the menu in again.
   window.Chronicle.siteAdminArrive = function (menu) {
     if (!menu) return;
-    var s = store(), back = menu.querySelector('[data-admin-back]');
-    var path = FALLBACK;
+    var s = store(), path = FALLBACK;
     if (s) {
       try { path = safeReturn(s.getItem(RETURN_KEY)); } catch (err) { /* fall back */ }
     }
-    if (back) back.setAttribute('href', path);
+    var backs = [menu.querySelector('[data-admin-back]')];
+    if (document.querySelectorAll) backs = backs.concat([].slice.call(document.querySelectorAll('[data-admin-back]')));
+    backs.forEach(function (b) { if (b) b.setAttribute('href', path); });
   };
 
   // Exposed for the unit test only.

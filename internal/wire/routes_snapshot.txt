@@ -467,6 +467,7 @@ GET	/stashes/history	internal/plugins/syncapi/routes.go
 GET	/stashes/requests	internal/plugins/syncapi/routes.go
 GET	/stashes/view	internal/plugins/syncapi/routes.go
 GET	/stats	internal/plugins/bestiary/routes.go
+GET	/status	internal/plugins/admin/routes.go
 GET	/status	internal/systems/routes.go
 GET	/storage	internal/plugins/admin/routes.go
 GET	/storage/settings	internal/plugins/settings/routes.go
