@@ -236,6 +236,7 @@ GET	/campaigns/new	internal/plugins/campaigns/routes.go
 GET	/campaigns/picker	internal/plugins/campaigns/routes.go
 GET	/category-boards/:tid	internal/plugins/quests/routes.go
 GET	/characters	internal/plugins/entities/routes.go
+GET	/characters/entries	internal/plugins/entities/routes.go
 GET	/characters/new	internal/plugins/entities/routes.go
 GET	/characters/new/plan	internal/plugins/entities/routes.go
 GET	/content-templates	internal/plugins/entities/content_template_routes.go

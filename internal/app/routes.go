@@ -3434,6 +3434,7 @@ func (a *App) RegisterRoutes() {
 	pluginBodyScripts := []string{
 		"/static/plugins/" + entities.PluginSlug + "/js/characters.js",
 		"/static/plugins/" + entities.PluginSlug + "/js/hero_creator.js",
+		"/static/plugins/" + entities.PluginSlug + "/js/own_entries.js",
 		"/static/js/widgets/calendar_era_blend.js",
 		"/static/js/widgets/calendar_era_look.js",
 		"/static/js/widgets/calendar_view.js",
