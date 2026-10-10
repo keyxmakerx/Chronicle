@@ -314,3 +314,14 @@ func hydrate(n *Note, sharedWith, title, body, bodyHTML sql.NullString) {
 		n.BodyHTML = bodyHTML.String
 	}
 }
+
+// DeletePrivateByAuthor removes a deleted account's private notes. Notes
+// shared with anyone else stay, signed by the emptied account.
+func (r *repository) DeletePrivateByAuthor(ctx context.Context, userID string) (int64, error) {
+	res, err := r.db.ExecContext(ctx,
+		`DELETE FROM entity_notes WHERE author_user_id = ? AND audience = ?`, userID, string(AudiencePrivate))
+	if err != nil {
+		return 0, fmt.Errorf("deleting private notes: %w", err)
+	}
+	return res.RowsAffected()
+}

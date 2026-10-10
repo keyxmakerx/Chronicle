@@ -35,6 +35,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler) {
 	e.PUT("/account/timezone", h.UpdateTimezoneAPI, RequireAuth(h.service))
 	e.PUT("/account/view-prefs", h.UpdateViewPrefsAPI, RequireAuth(h.service))
 	e.PUT("/account/notifications", h.UpdateNotifyPrefsAPI, RequireAuth(h.service))
+	// Deleting your account checks your password, so it is rate-limited like
+	// the other password checks.
+	e.POST("/account/delete", h.DeleteAccountAPI, RequireAuth(h.service), middleware.RateLimit(5, time.Minute))
 	// Checking a password is a deliberately expensive hash, so every route
 	// that checks one is throttled like login.
 	e.PUT("/account/password", h.ChangePasswordAPI, RequireAuth(h.service), middleware.RateLimit(10, time.Minute))
