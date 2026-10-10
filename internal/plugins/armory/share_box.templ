@@ -26,6 +26,9 @@ templ ShareBox(v *ShareBoxView) {
 					}
 				</div>
 				<div class="ag-hint"><i class="fa-solid fa-circle-info"></i><span>{ shareHint(v) }</span></div>
+				if v.PartyTruncated {
+					<div class="ag-hint"><i class="fa-solid fa-triangle-exclamation"></i><span>This campaign has so many characters that some players may be missing from this list.</span></div>
+				}
 			}
 			<div class="ag-foot">
 				<span class="ag-sp"></span>
