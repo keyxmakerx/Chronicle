@@ -103,9 +103,19 @@ func (s *shopBuyService) Buyers(ctx context.Context, campaignID, shopEntityID st
 	if err != nil {
 		return nil, err
 	}
+	// Every candidate of a non-Owner is already claimed by the caller; the
+	// Owner's list is every character, so ask which of them are theirs.
+	var claimed map[string]bool
+	if a.IsOwner() {
+		if claimed, err = s.stash.Directory.OwnedCharacterIDs(ctx, campaignID, a.UserID); err != nil {
+			return nil, err
+		}
+	}
 	view := &BuyersView{DowntimeOpen: open, CanBuyNow: open || a.IsOwner(), Buyers: []Buyer{}}
 	for i := range refs {
-		view.Buyers = append(view.Buyers, s.describeBuyer(ctx, &refs[i]))
+		b := s.describeBuyer(ctx, &refs[i])
+		b.Own = !a.IsOwner() || claimed[refs[i].ID]
+		view.Buyers = append(view.Buyers, b)
 	}
 	return view, nil
 }
