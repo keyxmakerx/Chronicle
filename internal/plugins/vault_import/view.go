@@ -27,12 +27,18 @@ func folderLine(s Stats) string {
 	case s.FolderPages == 0 && s.FolderNotes == 0:
 		return "The notes sit at the top level of the Imported folder."
 	case s.FolderNotes == 0:
-		return fmt.Sprintf("%d %s become pages that hold the notes inside them.", s.FolderPages, plural(s.FolderPages, "folder", "folders"))
+		return folderPagesClause(s.FolderPages) + "."
 	case s.FolderPages == 0:
-		return fmt.Sprintf("%d %s use the note of the same name as the folder's page.", s.FolderNotes, plural(s.FolderNotes, "folder", "folders"))
+		return fmt.Sprintf("%d %s the note of the same name as the folder's page.", s.FolderNotes, plural(s.FolderNotes, "folder uses", "folders use"))
 	}
-	return fmt.Sprintf("%d %s become pages that hold the notes inside them, and %d use the note of the same name.",
-		s.FolderPages, plural(s.FolderPages, "folder", "folders"), s.FolderNotes)
+	return fmt.Sprintf("%s, and %d use the note of the same name.", folderPagesClause(s.FolderPages), s.FolderNotes)
+}
+
+func folderPagesClause(n int) string {
+	if n == 1 {
+		return "1 folder becomes a page that holds the notes inside it"
+	}
+	return fmt.Sprintf("%d folders become pages that hold the notes inside them", n)
 }
 
 // notesLine gathers the small things the import does not carry over.
