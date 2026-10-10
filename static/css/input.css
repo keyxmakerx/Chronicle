@@ -3115,6 +3115,49 @@
     .nav-rw.can-pin > .nav-row .nav-tr { opacity: 1; }
   }
 
+  /* The row menu's dots button (sidebar_row_menu.js). It takes the
+     right-most slot and shows on hover or focus, always on touch screens;
+     the twisty and the member's pin step one slot left to make room. */
+  .nav-more {
+    position: absolute; top: 4px; right: 8px; z-index: 4; width: 24px; height: 24px; border-radius: 6px;
+    display: grid; place-items: center; font-size: 12px; color: var(--nav-text-3); opacity: 0;
+    transition: opacity 120ms ease, transform 120ms var(--nav-ease);
+  }
+  .nav-more:hover, .nav-more[aria-expanded="true"] { color: var(--nav-hi); background: var(--nav-hover); }
+  .nav-more:active { transform: scale(0.88); }
+  .nav-rw:hover > .nav-more, .nav-rw:focus-within > .nav-more, .nav-more[aria-expanded="true"] { opacity: 1; }
+  .nav-rw.has-more:hover > .nav-row .nav-tr, .nav-rw.has-more:focus-within > .nav-row .nav-tr { opacity: 0; }
+  .nav-rw.has-more.has-subs > .nav-tw, .nav-rw.has-more.can-pin > .nav-mypin { right: 34px; }
+  .nav-rw.has-more.can-pin.has-subs > .nav-mypin { right: 60px; }
+  .nav-rw.has-more.has-subs > .nav-row, .nav-rw.has-more.is-mine > .nav-row { padding-right: 66px; }
+  .nav-rw.has-more.is-mine.has-subs > .nav-row { padding-right: 92px; }
+  @media (hover: none) {
+    .nav-rw.has-more > .nav-more { opacity: 1; }
+    .nav-rw.has-more.can-pin > .nav-row { padding-right: 66px; }
+    .nav-rw.has-more.can-pin.has-subs > .nav-row { padding-right: 92px; }
+    .nav-rw.has-more > .nav-row .nav-tr { opacity: 1; }
+  }
+
+  /* The row menu itself: fixed to the window, drawn on the menu's own dark
+     surface whatever the page's theme, scrolling inside if it runs long. */
+  .rowmenu {
+    position: fixed; z-index: 1000; min-width: 190px; max-width: min(260px, calc(100vw - 16px));
+    max-height: calc(100vh - 32px); overflow-y: auto; overscroll-behavior: contain;
+    padding: 5px; border-radius: 10px; background: #22242c; color: #e7e9ef; font-size: 13px;
+    box-shadow: 0 20px 44px -14px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(255 255 255 / 0.07);
+  }
+  .rowmenu-item {
+    display: flex; align-items: center; gap: 10px; width: 100%; height: 31px; padding: 0 10px; border-radius: 6px;
+    color: #e7e9ef; text-align: left;
+  }
+  .rowmenu-item i { width: 14px; flex: none; font-size: 12px; color: #9aa1b1; text-align: center; }
+  .rowmenu-item span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rowmenu-item:hover, .rowmenu-item:focus-visible { background: rgb(255 255 255 / 0.09); outline: none; }
+  .rowmenu-item:active { background: rgb(255 255 255 / 0.14); }
+  .rowmenu-item:disabled { color: #6b7280; cursor: not-allowed; background: none; }
+  .rowmenu-item:disabled i { color: #4b5563; }
+  .rowmenu-sep { height: 1px; margin: 4px 6px; background: rgb(255 255 255 / 0.09); }
+
   /* Section headings: the whole heading is the fold button. */
   .nav-gh-wrap { position: relative; margin-top: 8px; }
   .nav-gh {
@@ -3343,7 +3386,7 @@
   .sidebar-collapsed .nav-brand-name, .sidebar-collapsed .nav-edit-btn, .sidebar-collapsed .nav-lb,
   .sidebar-collapsed .nav-tr, .sidebar-collapsed .nav-hid, .sidebar-collapsed .nav-ext, .sidebar-collapsed .nav-gh-wrap,
   .sidebar-collapsed .nav-gh, .sidebar-collapsed .nav-tw, .sidebar-collapsed .nav-subs,
-  .sidebar-collapsed .nav-mypin,
+  .sidebar-collapsed .nav-mypin, .sidebar-collapsed .nav-more,
   .sidebar-collapsed .nav-foot { display: none; }
   .sidebar-collapsed .nav-sb .nav-row, .nav-sb.sidebar-collapsed .nav-row { padding: 0; justify-content: center; }
 
@@ -3493,7 +3536,7 @@
   .nav-ring-j { display: block; }
   .nav-row:active, .nav-row:hover .nav-ic, .nav-row:active .nav-ic, .nav-ibtn:active, .nav-tw:active,
   .nav-gh-add:active, button.nav-gh:active .nav-gh-l, .nav-hd:active, .nav-eb:active, .nav-addg:active,
-  .nav-btn:active, .nav-mypin:active, .nav-foot-edit:active { transform: none; }
+  .nav-btn:active, .nav-mypin:active, .nav-more:active, .nav-foot-edit:active { transform: none; }
   /* The drill panel crossfades instead of sliding. */
   .nav-drill { transition: opacity 160ms linear !important; transform: none !important; }
   .nav-drill:not(.is-open) { opacity: 0; pointer-events: none; }
