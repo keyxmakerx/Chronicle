@@ -94,7 +94,7 @@
     // front matter's start, or two that were nested).
     do {
       prev = t;
-      t = t.replace(/^(\s*\n)*---[ \t]*\n[\s\S]*?\n---[ \t]*(\n|$)/, '');
+      t = t.replace(/^(?:[ \t]*\n)*---[ \t]*\n[\s\S]*?\n---[ \t]*(\n|$)/, '');
       t = t.replace(/%%\{[\s\S]*?\}%%/g, '');
     } while (t !== prev);
     return t;
