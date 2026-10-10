@@ -4,7 +4,14 @@ import (
 	"fmt"
 
 	"github.com/a-h/templ"
+
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
+
+// scriptURL is the content-hashed URL of one of this plugin's scripts.
+func scriptURL(name string) string {
+	return layouts.AssetURL("/static/plugins/" + PluginSlug + "/js/" + name)
+}
 
 // mapPageURL is the map's own page.
 func mapPageURL(campaignID, mapID string) string {

@@ -12,11 +12,11 @@ import (
 // hexes are never re-laid without asking).
 func TestHexCoverControls_Source(t *testing.T) {
 	viewer := viewerScript(t)
-	pictures, err := os.ReadFile("../../../static/js/map_pictures.js")
+	pictures, err := os.ReadFile("static/js/map_pictures.js")
 	if err != nil {
 		t.Fatal(err)
 	}
-	hexesSrc, err := os.ReadFile("../../../static/js/map_hexes.js")
+	hexesSrc, err := os.ReadFile("static/js/map_hexes.js")
 	if err != nil {
 		t.Fatal(err)
 	}

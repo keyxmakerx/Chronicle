@@ -11,7 +11,7 @@ import (
 // the templ, so they read it from here.
 func viewerScript(t *testing.T) string {
 	t.Helper()
-	src, err := os.ReadFile("../../../static/js/widgets/map_viewer.js")
+	src, err := os.ReadFile("static/js/map_viewer.js")
 	if err != nil {
 		t.Fatalf("read map_viewer.js: %v", err)
 	}

@@ -231,7 +231,7 @@ templ mapShowContent(cc *campaigns.CampaignContext, data MapViewData) {
 
 // MapEditorBody renders the map viewer's markup: the map wrapper with its
 // floating controls (mapControls), modals, the server-rendered #map-config div
-// and the viewer's CSS. The behaviour is static/js/widgets/map_viewer.js,
+// and the viewer's CSS. The behaviour is static/js/map_viewer.js,
 // started by the data-widget on #map-config. The class and style parameters
 // size the wrapper. It is used by the dedicated map page (mapShowContent,
 // mapContainerClass="absolute inset-0" so the wrapper fills the frame's
@@ -270,13 +270,13 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 		data-campaign-id={ data.CampaignID }
 		data-leaflet-src={ layouts.AssetURL("/static/vendor/leaflet.js") }
 		data-cluster-src={ layouts.AssetURL("/static/vendor/leaflet.markercluster.js") }
-		data-draw-src={ layouts.AssetURL("/static/js/map_drawing_tools.js") }
-		data-shadow-src={ layouts.AssetURL("/static/js/map_shadow.js") }
-		data-pictures-src={ layouts.AssetURL("/static/js/map_pictures.js") }
-		data-annotations-src={ layouts.AssetURL("/static/js/map_annotations.js") }
-		data-hex-art-src={ layouts.AssetURL("/static/js/map_hex_art.js") }
-		data-hexes-src={ layouts.AssetURL("/static/js/map_hexes.js") }
-		data-live-src={ layouts.AssetURL("/static/js/map_live.js") }
+		data-draw-src={ scriptURL("map_drawing_tools.js") }
+		data-shadow-src={ scriptURL("map_shadow.js") }
+		data-pictures-src={ scriptURL("map_pictures.js") }
+		data-annotations-src={ scriptURL("map_annotations.js") }
+		data-hex-art-src={ scriptURL("map_hex_art.js") }
+		data-hexes-src={ scriptURL("map_hexes.js") }
+		data-live-src={ scriptURL("map_live.js") }
 		data-map-id={ data.Map.ID }
 		data-image-id={ derefStr(data.Map.ImageID) }
 		data-image-url={ mapImageSrc(ctx, data.Map) }
@@ -295,7 +295,7 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 		data-markers={ mustMarshalMarkers(data.Markers) }
 	></div>
 
-	// The viewer itself is static/js/widgets/map_viewer.js, mounted by boot.js from
+	// The viewer itself is static/js/map_viewer.js, mounted by boot.js from
 	// the data-widget on #map-config. Leaflet, MarkerCluster and the drawing
 	// module are loaded by it on demand (urls on the config div), so no page
 	// script tag is needed and the same markup works when fetched as a fragment.

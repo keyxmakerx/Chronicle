@@ -5,8 +5,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-const read = (p) => readFileSync(new URL('../../static/js/' + p, import.meta.url), 'utf8');
-const viewer = read('widgets/map_viewer.js');
+const read = (p) => readFileSync(new URL('../../internal/plugins/maps/static/js/' + p, import.meta.url), 'utf8');
+const viewer = read('map_viewer.js');
 
 function paneZ(src, name) {
   const re = new RegExp("(?:createPane|getPane)\\('" + name + "'\\)[^\\n]*?zIndex\\s*=\\s*(\\d+)|var pane = map\\.getPane\\('" + name + "'\\)[\\s\\S]*?pane\\.style\\.zIndex = (\\d+)");

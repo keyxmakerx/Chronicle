@@ -9,8 +9,10 @@ fetches its own data; nothing is shared between instances.
 
 ## Mount
 
-`data-widget="map-widget"` (registered as `map-widget`), loaded by a
-`<script defer>` tag in `layouts/base.templ`. Mounted from
+`data-widget="map-widget"` (registered as `map-widget`). Source:
+`internal/plugins/maps/static/js/map_widget.js`, loaded on sight after
+`map_annotations.js` by the maps plugin's `Widgets` registration (ADR-063).
+Mounted from
 `plugins/maps/blocks.templ`, `plugins/campaigns/dashboard_blocks.templ`
 (two places) and `plugins/entities/category_blocks.templ`.
 
