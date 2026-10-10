@@ -421,8 +421,8 @@ func (s *ExportImportService) Export(ctx context.Context, campaignID string) (*C
 // created campaign and a report of everything that could not be restored.
 // Processes data in dependency order: campaign metadata, addons, media,
 // entity types + entities + tags + relations, sidebar, groups, calendar,
-// timelines, sessions, maps, notes, posts. Addons come first because they gate what
-// may be created: the Player Character category is refused while its addon
+// timelines, sessions, maps, notes, posts. Addons come first because they
+// gate what may be created: the Player Character category is refused while its addon
 // is off, so restoring it first keeps the player characters. Media comes
 // before everything that points at a picture, so those references can be
 // rewritten to the restored files. media is the ZIP's files, or nil

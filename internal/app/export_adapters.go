@@ -1158,7 +1158,6 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 				}
 			}
 		}
-
 	}
 
 	// 2. Create entities (first pass: without parent references).
