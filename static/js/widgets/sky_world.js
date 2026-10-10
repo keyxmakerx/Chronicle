@@ -36,13 +36,23 @@
     (cal.months || []).forEach(function (m) { total += m.days || 0; });
     return total || 360;
   }
+  // A real-world calendar that tracks real time follows the Gregorian leap
+  // rule, which leap_year_every cannot express (every=4 would make 2100 a
+  // leap year). Mirrors Calendar.UsesRealTime: mode alone is not enough.
+  function usesRealTime(cal) { return cal.mode === 'reallife' && !!cal.tracks_real_time; }
+  function isGregorianLeap(year) { return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0; }
   function isLeapYear(cal, year) {
+    if (usesRealTime(cal)) return isGregorianLeap(year);
     if (!cal.leap_year_every) return false;
     return mod(year - (cal.leap_year_offset || 0), cal.leap_year_every) === 0;
   }
+  var GREGORIAN_DAYS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
   function monthDays(cal, idx, year) {
     var m = (cal.months || [])[idx];
     if (!m) return 0;
+    // Same source as Calendar.MonthDays for real-time calendars: the
+    // Gregorian table, not the stored month geometry.
+    if (usesRealTime(cal) && idx < 12) return GREGORIAN_DAYS[idx] + (idx === 1 && isGregorianLeap(year) ? 1 : 0);
     var d = m.days || 0;
     if (isLeapYear(cal, year)) d += m.leap_year_days || 0;
     return d;

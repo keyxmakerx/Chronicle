@@ -22,8 +22,11 @@ type mockSessionRepo struct {
 	findByIDFn                 func(ctx context.Context, id string) (*Session, error)
 	findByIDIncludingDeletedFn func(ctx context.Context, id string) (*Session, error)
 	listByCampaignFn           func(ctx context.Context, campaignID string) ([]Session, error)
-	listPlannedByWorldDateFn   func(ctx context.Context, campaignID string, from, to WorldDate, limit int) ([]Session, error)
+	listPlannedByWorldDateFn   func(ctx context.Context, campaignID, calendarID string, from, to WorldDate, limit int) ([]Session, error)
 	listByDateRangeFn          func(ctx context.Context, campaignID, startDate, endDate string) ([]Session, error)
+	listUnstampedCampaignsFn   func(ctx context.Context) ([]string, error)
+	stampWorldDateCalendarFn   func(ctx context.Context, campaignID, calendarID string) (int64, error)
+	remapMonthPositionsFn      func(ctx context.Context, campaignID, calendarID string, remap map[int]int) (int64, error)
 	searchByCampaignFn         func(ctx context.Context, campaignID, query string) ([]Session, error)
 	updateFn                   func(ctx context.Context, s *Session) error
 	updateRecapFn              func(ctx context.Context, id string, recap, recapHTML *string) error
@@ -257,11 +260,32 @@ func (m *mockSessionRepo) ListByCampaign(ctx context.Context, campaignID string)
 	return nil, nil
 }
 
-func (m *mockSessionRepo) ListPlannedByWorldDateRange(ctx context.Context, campaignID string, from, to WorldDate, limit int) ([]Session, error) {
+func (m *mockSessionRepo) ListPlannedByWorldDateRange(ctx context.Context, campaignID, calendarID string, from, to WorldDate, limit int) ([]Session, error) {
 	if m.listPlannedByWorldDateFn != nil {
-		return m.listPlannedByWorldDateFn(ctx, campaignID, from, to, limit)
+		return m.listPlannedByWorldDateFn(ctx, campaignID, calendarID, from, to, limit)
 	}
 	return nil, nil
+}
+
+func (m *mockSessionRepo) ListCampaignIDsWithUnstampedWorldDates(ctx context.Context) ([]string, error) {
+	if m.listUnstampedCampaignsFn != nil {
+		return m.listUnstampedCampaignsFn(ctx)
+	}
+	return nil, nil
+}
+
+func (m *mockSessionRepo) StampWorldDateCalendar(ctx context.Context, campaignID, calendarID string) (int64, error) {
+	if m.stampWorldDateCalendarFn != nil {
+		return m.stampWorldDateCalendarFn(ctx, campaignID, calendarID)
+	}
+	return 0, nil
+}
+
+func (m *mockSessionRepo) RemapMonthPositions(ctx context.Context, campaignID, calendarID string, remap map[int]int) (int64, error) {
+	if m.remapMonthPositionsFn != nil {
+		return m.remapMonthPositionsFn(ctx, campaignID, calendarID, remap)
+	}
+	return 0, nil
 }
 
 func (m *mockSessionRepo) ListByDateRange(ctx context.Context, campaignID, startDate, endDate string) ([]Session, error) {
@@ -2061,11 +2085,12 @@ func TestListPlannedSessionsInWorldDateRange(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			var gotCamp string
+			var gotCamp, gotCal string
 			var gotFrom, gotTo WorldDate
 			var gotLimit int
 			svc := NewSessionService(&mockSessionRepo{
-				listPlannedByWorldDateFn: func(_ context.Context, camp string, from, to WorldDate, limit int) ([]Session, error) {
+				listPlannedByWorldDateFn: func(_ context.Context, camp, cal string, from, to WorldDate, limit int) ([]Session, error) {
+					gotCal = cal
 					gotCamp, gotFrom, gotTo, gotLimit = camp, from, to, limit
 					if tc.repoErr != nil {
 						return nil, tc.repoErr
@@ -2074,7 +2099,7 @@ func TestListPlannedSessionsInWorldDateRange(t *testing.T) {
 				},
 			}, nil, nil)
 
-			got, err := svc.ListPlannedSessionsInWorldDateRange(context.Background(), "camp-1",
+			got, err := svc.ListPlannedSessionsInWorldDateRange(context.Background(), "camp-1", "cal-1",
 				WorldDate{1000, 1, 1}, WorldDate{1002, 12, 30}, 3)
 			if tc.wantErr {
 				if err == nil {
@@ -2089,7 +2114,7 @@ func TestListPlannedSessionsInWorldDateRange(t *testing.T) {
 			if err != nil || len(got) != 1 || got[0].Name != "Night" {
 				t.Fatalf("got %+v, %v", got, err)
 			}
-			if gotCamp != "camp-1" || gotFrom != (WorldDate{1000, 1, 1}) || gotTo != (WorldDate{1002, 12, 30}) || gotLimit != 3 {
+			if gotCamp != "camp-1" || gotCal != "cal-1" || gotFrom != (WorldDate{1000, 1, 1}) || gotTo != (WorldDate{1002, 12, 30}) || gotLimit != 3 {
 				t.Errorf("repo called with %q %+v %+v limit %d", gotCamp, gotFrom, gotTo, gotLimit)
 			}
 		})

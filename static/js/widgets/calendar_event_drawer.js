@@ -154,6 +154,12 @@
     var title = $('#cal5-edT', this.el);
     setTimeout(function () { title.focus({ preventScroll: true }); }, reducedMotion() ? 20 : 260);
     if (this.state.rep.type === 'rule' && !this.state.rep.locked) { this._renderSummary(); this._lookupEventNames(); this._schedulePreview(); }
+    // The picker may name events from any month, not only the loaded ones;
+    // the list arrives after the drawer is up and the rows are redrawn once.
+    var S = this.state, self = this;
+    view.loadEventIndex().then(function (got) {
+      if (got && self.state === S && S.rule && !S.rep.locked && $('#cal5-rrows', self.el)) self._redrawRows();
+    });
   };
 
   Drawer.prototype.close = function (quiet) {
@@ -487,19 +493,23 @@
       }).then(function (e) {
         if (!e || !e.name || self.state !== S) return;
         names[id] = e.name;
-        // Redrawing the rows must not drop the keyboard: put focus back on
-        // the same control of the same row.
-        var a = document.activeElement, row = a && a.closest && a.closest('.rrow'), at = null;
-        if (row && self.el.contains(row)) at = { i: row.dataset.i, f: a.dataset.f, r: a.dataset.r, wd: a.dataset.wd };
-        $('#cal5-rrows', self.el).innerHTML = self._rowsHTML();
-        if (at) {
-          var base = '.rrow[data-i="' + at.i + '"] ';
-          var back = $(at.f ? base + '[data-f="' + at.f + '"]' : at.wd != null ? base + '[data-wd="' + at.wd + '"]' : at.r ? base + '[data-r="' + at.r + '"]' : base + 'select', self.el);
-          if (back) back.focus();
-        }
-        self._renderSummary();
+        self._redrawRows();
       }, function () { /* the sentence keeps saying "another event" */ });
     });
+  };
+
+  // Redrawing the rows must not drop the keyboard: focus goes back to the
+  // same control of the same row.
+  Drawer.prototype._redrawRows = function () {
+    var a = document.activeElement, row = a && a.closest && a.closest('.rrow'), at = null;
+    if (row && this.el.contains(row)) at = { i: row.dataset.i, f: a.dataset.f, r: a.dataset.r, wd: a.dataset.wd };
+    $('#cal5-rrows', this.el).innerHTML = this._rowsHTML();
+    if (at) {
+      var base = '.rrow[data-i="' + at.i + '"] ';
+      var back = $(at.f ? base + '[data-f="' + at.f + '"]' : at.wd != null ? base + '[data-wd="' + at.wd + '"]' : at.r ? base + '[data-r="' + at.r + '"]' : base + 'select', this.el);
+      if (back) back.focus();
+    }
+    this._renderSummary();
   };
 
   // ---- the "Next five" dates ----

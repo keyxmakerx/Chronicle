@@ -966,34 +966,6 @@ func (a *wsNotesGrantAdapter) AuthenticateNotesGrantForWS(ctx context.Context, t
 	return g.CampaignID, g.UserID, nil
 }
 
-// CALV5-PLACEHOLDER: V5 must rebuild calendarEventPublisherAdapter — the
-// bridge from the calendar's PublishCalendarEvent to the websocket bus.
-// Nothing publishes calendar events now.
-//
-// A switch ending in `default: return` fails silently: an emitter whose event
-// type has no case here publishes into nothing, unreported. Rebuild it with a
-// test that walks every emitter's event type and asserts a case exists.
-// TODO(#778)
-//
-// The mapping it carried, so V5 has the checklist rather than rediscovering it:
-//   "event.created"                            -> ws.MsgCalendarEventCreated
-//   "event.updated"                            -> ws.MsgCalendarEventUpdated
-//   "event.deleted"                            -> ws.MsgCalendarEventDeleted
-//   "date.advanced"                            -> ws.MsgCalendarDateAdvanced
-//   "calendar.weather.changed"                 -> ws.MsgCalendarWeatherChanged
-//   "calendar.structure.updated"               -> ws.MsgCalendarStructureUpdated
-//   "calendar.season.changed"                  -> ws.MsgCalendarSeasonChanged
-//   "calendar.era.changed"                     -> ws.MsgCalendarEraChanged
-//   "calendar.moon.phase_changed"              -> ws.MsgCalendarMoonPhaseChanged
-//   "calendar.cycle.changed"                   -> ws.MsgCalendarCycleChanged
-//   "calendar.festival.changed"                -> ws.MsgCalendarFestivalChanged
-//   calendar.EventWorldStateChanged            -> ws.MsgCalendarWorldstateChanged
-//   calendar.EventWorldStateChangedDM          -> ws.MsgCalendarWorldstateChanged
-//   "calendar.weather.zones.changed"           -> ws.MsgCalendarWeatherZonesChanged
-//   (calendar.worldstate.changed also had a DM-gated twin that set
-//   RequiresDM = true — the dm_only worldstate payload must never reach a
-//   player's socket.)
-
 // relationEventPublisherAdapter bridges the websocket.EventBus to the
 // relations.RelationEventPublisher interface.
 type relationEventPublisherAdapter struct {
@@ -3554,6 +3526,26 @@ func (a *App) RegisterRoutes() {
 	}); ok {
 		wired.SetGameNightsAffectedByAnchorMove(&gameNightsAnchorMoveAdapter{svc: sessionsService})
 	}
+	// A structure edit that reorders months moves game nights with them.
+	if wired, ok := calendarService.(interface {
+		SetSessionMonthRemapper(calendar.SessionMonthRemapper)
+	}); ok {
+		wired.SetSessionMonthRemapper(&sessionMonthRemapAdapter{svc: sessionsService})
+	}
+	// Records which calendar a session's in-world date belongs to, and
+	// stamps the dates saved before it was recorded. Best-effort: logs and
+	// never blocks startup; a campaign with no calendar is retried next boot.
+	defaultCalendarResolver := &sessionsDefaultCalendarAdapter{svc: calendarService}
+	if wired, ok := sessionsService.(interface {
+		SetDefaultCalendarResolver(sessions.DefaultCalendarResolver)
+	}); ok {
+		wired.SetDefaultCalendarResolver(defaultCalendarResolver)
+	}
+	if n, err := sessions.ReconcileWorldDateCalendars(context.Background(), sessionsService, defaultCalendarResolver); err != nil {
+		slog.Error("sessions: world date calendar backfill failed", slog.Any("error", err), slog.Int("stamped", n))
+	} else if n > 0 {
+		slog.Info("sessions: world date calendar backfill complete", slog.Int("sessions", n))
+	}
 	// Keeps Game nights on for campaigns that already use them; a recorded
 	// owner choice is left alone. Best-effort: logs and never blocks startup.
 	if n, err := sessions.ReconcileAddonEnablement(context.Background(), sessionsService, addonService); err != nil {
@@ -5029,6 +5021,14 @@ func (a *App) RegisterRoutes() {
 	questEntityEvts := newQuestEntityEvents(&entityEventPublisherAdapter{bus: wsEventBus})
 	entityService.SetEventPublisher(questEntityEvts)
 	relService.SetEventPublisher(&relationEventPublisherAdapter{bus: wsEventBus, shares: stashSvc})
+	// Calendar writes reach the Foundry module live; without this it only
+	// sees them on reconnect or a manual Pull. Reached by type assertion like
+	// the visibility gate, so the CalendarService interface stays unchanged.
+	if pub, ok := calendarService.(interface {
+		SetEventPublisher(calendar.CalendarEventPublisher)
+	}); ok {
+		pub.SetEventPublisher(&calendarEventPublisherAdapter{bus: wsEventBus})
+	}
 	stashEvents.bus = wsEventBus
 	entityService.SetSidebarAutoAdder(&sidebarAutoAdderAdapter{campaignService: campaignService})
 	noteSvc.SetEventPublisher(&noteEventPublisherAdapter{bus: wsEventBus})

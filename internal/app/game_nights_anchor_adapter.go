@@ -2,7 +2,10 @@ package app
 
 import (
 	"context"
+	"errors"
+	"net/http"
 
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
@@ -18,8 +21,8 @@ type gameNightsAnchorMoveAdapter struct {
 // SessionsInWorldDateRange lists planned sessions whose stored in-world date
 // falls in the range. A session whose date is incomplete is never returned
 // by the sessions query, so every result has all three parts set.
-func (a *gameNightsAnchorMoveAdapter) SessionsInWorldDateRange(ctx context.Context, campaignID string, fromYear, fromMonth, fromDay, toYear, toMonth, toDay, limit int) ([]calendar.AffectedSession, error) {
-	list, err := a.svc.ListPlannedSessionsInWorldDateRange(ctx, campaignID,
+func (a *gameNightsAnchorMoveAdapter) SessionsInWorldDateRange(ctx context.Context, campaignID, calendarID string, fromYear, fromMonth, fromDay, toYear, toMonth, toDay, limit int) ([]calendar.AffectedSession, error) {
+	list, err := a.svc.ListPlannedSessionsInWorldDateRange(ctx, campaignID, calendarID,
 		sessions.WorldDate{Year: fromYear, Month: fromMonth, Day: fromDay},
 		sessions.WorldDate{Year: toYear, Month: toMonth, Day: toDay}, limit)
 	if err != nil {
@@ -69,4 +72,42 @@ func pickRealWorldCalendar(cals []calendar.Calendar) string {
 		}
 	}
 	return first
+}
+
+// sessionMonthRemapAdapter satisfies calendar.SessionMonthRemapper from the
+// sessions service, so a structure edit that reorders months moves game nights
+// with them without the calendar importing the sessions plugin.
+type sessionMonthRemapAdapter struct {
+	svc sessions.SessionService
+}
+
+func (a *sessionMonthRemapAdapter) RemapMonthPositions(ctx context.Context, campaignID, calendarID string, remap map[int]int) error {
+	_, err := a.svc.RemapMonthPositions(ctx, campaignID, calendarID, remap)
+	return err
+}
+
+// sessionsDefaultCalendarAdapter satisfies sessions.DefaultCalendarResolver:
+// the calendar a session's in-world date is recorded against is the
+// campaign's primary calendar, the default or else the first (the session
+// form has no calendar picker). Most campaigns never mark a default, so
+// requiring one would leave their game nights unstamped and outside every
+// calendar-scoped query.
+type sessionsDefaultCalendarAdapter struct {
+	svc calendar.CalendarService
+}
+
+// DefaultCalendarID reads at Owner level (which skips per-user rules): the
+// answer is stored on a session row, not shown to anyone, so it must not
+// depend on who happens to be saving. It returns "" for a campaign with no
+// calendar.
+func (a *sessionsDefaultCalendarAdapter) DefaultCalendarID(ctx context.Context, campaignID string) (string, error) {
+	cal, err := a.svc.GetPrimaryCalendarForViewer(ctx, campaignID, permissions.RequestViewer(permissions.RoleOwner, ""))
+	if err != nil {
+		var appErr *apperror.AppError
+		if errors.As(err, &appErr) && appErr.Code == http.StatusNotFound {
+			return "", nil
+		}
+		return "", err
+	}
+	return cal.ID, nil
 }

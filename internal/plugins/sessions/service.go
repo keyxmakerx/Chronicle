@@ -46,10 +46,20 @@ type SessionService interface {
 	ListPlannedSessions(ctx context.Context, campaignID string) ([]Session, error)
 	ListSessionsForDateRange(ctx context.Context, campaignID, startDate, endDate string) ([]Session, error)
 	// ListPlannedSessionsInWorldDateRange returns planned sessions whose
-	// in-world date falls in [from, to] inclusive, soonest first, capped at
-	// limit (<=0: no cap). Lets the calendar name the sessions an anchor
+	// in-world date on calendarID ( = any calendar) falls in [from, to]
+	// inclusive, soonest first, capped at limit (<=0: no cap). Lets the calendar name the sessions an anchor
 	// move would re-date. Only identity, name and in-world date are filled.
-	ListPlannedSessionsInWorldDateRange(ctx context.Context, campaignID string, from, to WorldDate, limit int) ([]Session, error)
+	ListPlannedSessionsInWorldDateRange(ctx context.Context, campaignID, calendarID string, from, to WorldDate, limit int) ([]Session, error)
+	// ListCampaignIDsWithUnstampedWorldDates and StampWorldDateCalendar back
+	// ReconcileWorldDateCalendars: campaigns holding a session with an
+	// in-world date but no calendar, and the stamp for one campaign.
+	ListCampaignIDsWithUnstampedWorldDates(ctx context.Context) ([]string, error)
+	StampWorldDateCalendar(ctx context.Context, campaignID, calendarID string) (int64, error)
+	// RemapMonthPositions moves the in-world month of the sessions dated on
+	// calendarID (old 1-based position -> new) when a calendar structure
+	// edit reorders its months, so game nights follow their month. Returns
+	// how many sessions changed.
+	RemapMonthPositions(ctx context.Context, campaignID, calendarID string, remap map[int]int) (int, error)
 	// UpdateSession validates and updates a session. If a recurring session is
 	// completed, auto-generates the next occurrence and returns it. Returns nil
 	// if no new session was created.
@@ -225,6 +235,9 @@ type sessionService struct {
 	repo             SessionRepository
 	entityChecker    EntityCampaignChecker
 	entityVisibility EntityVisibilityFilter
+	// calendarResolver stamps a session's in-world date with its calendar;
+	// optional (see SetDefaultCalendarResolver).
+	calendarResolver DefaultCalendarResolver
 }
 
 // NewSessionService creates a new session service. The EntityCampaignChecker
@@ -282,6 +295,8 @@ func (s *sessionService) CreateSession(ctx context.Context, campaignID string, i
 		CreatedAt:           time.Now().UTC(),
 		UpdatedAt:           time.Now().UTC(),
 	}
+
+	s.stampWorldDateCalendar(ctx, session)
 
 	if err := s.repo.Create(ctx, campaignID, session); err != nil {
 		return nil, apperror.NewInternal(fmt.Errorf("creating session: %w", err))
@@ -431,6 +446,7 @@ func (s *sessionService) UpdateSession(ctx context.Context, id string, input Upd
 	session.RecurrenceDayOfWeek = input.RecurrenceDayOfWeek.Ptr(session.RecurrenceDayOfWeek)
 	session.RecurrenceEndDate = input.RecurrenceEndDate.Ptr(session.RecurrenceEndDate)
 	session.ScheduledTZ = input.ScheduledTZ.Ptr(session.ScheduledTZ)
+	s.stampWorldDateCalendar(ctx, session)
 
 	if err := s.repo.Update(ctx, session); err != nil {
 		return nil, err
@@ -610,8 +626,8 @@ func (s *sessionService) ListSessionsForDateRange(ctx context.Context, campaignI
 
 // ListPlannedSessionsInWorldDateRange implements the sessions side of the
 // calendar's anchor-move preview.
-func (s *sessionService) ListPlannedSessionsInWorldDateRange(ctx context.Context, campaignID string, from, to WorldDate, limit int) ([]Session, error) {
-	sessions, err := s.repo.ListPlannedByWorldDateRange(ctx, campaignID, from, to, limit)
+func (s *sessionService) ListPlannedSessionsInWorldDateRange(ctx context.Context, campaignID, calendarID string, from, to WorldDate, limit int) ([]Session, error) {
+	sessions, err := s.repo.ListPlannedByWorldDateRange(ctx, campaignID, calendarID, from, to, limit)
 	if err != nil {
 		return nil, apperror.NewInternal(fmt.Errorf("listing sessions for world date range: %w", err))
 	}

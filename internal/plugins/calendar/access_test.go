@@ -261,6 +261,10 @@ func (f *fakeCalendarSvc) ListEventsForCalendar(context.Context, string, string,
 	return nil, nil
 }
 
+func (f *fakeCalendarSvc) ListEventIndexForViewer(context.Context, string, string, string, permissions.Viewer) ([]EventIndexEntry, bool, error) {
+	return nil, false, nil
+}
+
 func (f *fakeCalendarSvc) ListErasForCalendar(context.Context, string, string, int) ([]Era, error) {
 	return nil, nil
 }
