@@ -885,6 +885,33 @@ func (s *calendarService) dropSecretEraEvents(ctx context.Context, cal *Calendar
 	return kept, nil
 }
 
+// errDateUnusable is the only thing a refused write says. It must not mention
+// eras or hiding: the refusal would otherwise confirm to a Scribe that a
+// hidden era covers the date.
+const errDateUnusable = "That date can't be used."
+
+// refuseSecretEraDate refuses a save dated inside an era still hidden from
+// players when the writer is subject to per-user rules (a Scribe). Such a
+// writer could never read the event back (dropSecretEraEvents), so accepting
+// it would both strand their own event and hint at the hidden era. Authors
+// (SkipsPerUserRules) are unaffected. The zero Viewer is subject to the rule,
+// so callers must pass the real writer.
+func (s *calendarService) refuseSecretEraDate(ctx context.Context, cal *Calendar, evt *Event, v permissions.Viewer) error {
+	if v.SkipsPerUserRules() {
+		return nil
+	}
+	eras, err := s.calRepo.GetEras(ctx, cal.ID)
+	if err != nil {
+		return fmt.Errorf("load eras: %w", err)
+	}
+	probe := *cal
+	probe.Eras = eras
+	if probe.InSecretEra(evt.Year, evt.Month, evt.Day) {
+		return apperror.NewValidation(errDateUnusable)
+	}
+	return nil
+}
+
 // hideFromPlayer is every "not yet knowable" filter a non-author's event
 // read applies: unannounced future events, then events in a secret era.
 func (s *calendarService) hideFromPlayer(ctx context.Context, cal *Calendar, campaignID string, events []Event) ([]Event, error) {
@@ -1506,11 +1533,15 @@ func (s *calendarService) applyImportedEvent(ctx context.Context, calendarID str
 // such gate — see canChangeVisibility's doc comment on why that field is
 // scoped by the ordinary Scribe route gate instead.
 func (s *calendarService) CreateEvent(ctx context.Context, calendarID, campaignID string, input CreateEventInput) (*Event, error) {
-	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
+	cal, err := s.calendarInCampaign(ctx, calendarID, campaignID)
+	if err != nil {
 		return nil, err
 	}
 	evt, err := buildValidatedEvent(calendarID, input)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.refuseSecretEraDate(ctx, cal, evt, input.Author); err != nil {
 		return nil, err
 	}
 	if err := s.validateEventRule(ctx, calendarID, campaignID, "", evt, true, input.Author); err != nil {
@@ -2033,7 +2064,8 @@ func (s *calendarService) eventInCalendarForViewer(ctx context.Context, eventID,
 // (v.SkipsPerUserRules()); anyone else re-sending the stored value is a
 // no-op, and any other attempted value is a 403 — never a silent rewrite.
 func (s *calendarService) UpdateEvent(ctx context.Context, eventID, calendarID, campaignID string, input UpdateEventInput, v permissions.Viewer) error {
-	if _, err := s.calendarInCampaignForViewer(ctx, calendarID, campaignID, v); err != nil {
+	cal, err := s.calendarInCampaignForViewer(ctx, calendarID, campaignID, v)
+	if err != nil {
 		return err
 	}
 	evt, err := s.eventInCalendarForViewer(ctx, eventID, calendarID, v)
@@ -2138,6 +2170,9 @@ func (s *calendarService) UpdateEvent(ctx context.Context, eventID, calendarID, 
 	evt.RecurrenceEndDay = input.RecurrenceEndDay.Ptr(evt.RecurrenceEndDay)
 	evt.RecurrenceMaxOccurrences = input.RecurrenceMaxOccurrences.Ptr(evt.RecurrenceMaxOccurrences)
 	evt.RecurrenceRule = rule
+	if err := s.refuseSecretEraDate(ctx, cal, evt, v); err != nil {
+		return err
+	}
 	if err := s.validateEventRule(ctx, calendarID, campaignID, evt.ID, evt, recheckRule, v); err != nil {
 		return err
 	}
