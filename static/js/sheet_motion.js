@@ -201,6 +201,12 @@
     return out;
   }
   function fxDone(el) { if (el._fxEnd) el._fxEnd(); }
+  // An author's panel id goes inside a quoted attribute selector; escape it so a quote or backslash can't break the query.
+  function cssStr(v) {
+    v = String(v);
+    return (typeof CSS !== 'undefined' && CSS.escape) ? CSS.escape(v) : v.replace(/[\\"]/g, '\\$&');
+  }
+
   function node(cls, text) {
     var n = document.createElement('span');
     n.className = cls;
@@ -630,7 +636,7 @@
     }
 
     function panelBody(id) {
-      var tpl = $('template[data-sheet-panel="' + id.replace(/"/g, '\\"') + '"]', root);
+      var tpl = $('template[data-sheet-panel="' + cssStr(id) + '"]', root);
       if (!tpl) return null;
       return { tpl: tpl, fragment: tpl.content.cloneNode(true) };
     }
@@ -719,7 +725,7 @@
 
     var sheet = {
       root: root,
-      open: function (id) { var t = $('[data-sheet-open="' + id.replace(/"/g, '\\"') + '"]', root); return t ? openPanel(id, t, t.closest('[data-sheet-section]')) : false; },
+      open: function (id) { var t = $('[data-sheet-open="' + cssStr(id) + '"]', root); return t ? openPanel(id, t, t.closest('[data-sheet-section]')) : false; },
       close: function (force) { return closePanel(true, force); },
       setDirty: function (on) { if (S.panel) S.panel.dirty = !!on; },
       state: S,
