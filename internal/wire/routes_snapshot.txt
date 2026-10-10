@@ -555,6 +555,7 @@ POST	/armory/moves/:mid/decline	internal/plugins/armory/routes.go
 POST	/armory/pay	internal/plugins/armory/routes.go
 POST	/armory/purchase-requests/:rid/approve	internal/plugins/armory/routes.go
 POST	/armory/purchase-requests/:rid/decline	internal/plugins/armory/routes.go
+POST	/armory/purchase-requests/:rid/withdraw	internal/plugins/armory/routes.go
 POST	/armory/shops/:eid/buy	internal/plugins/armory/routes.go
 POST	/armory/shops/:eid/buy	internal/plugins/syncapi/routes.go
 POST	/armory/stashes	internal/plugins/armory/routes.go

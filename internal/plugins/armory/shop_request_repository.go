@@ -23,6 +23,10 @@ type PurchaseRequestRepository interface {
 	// Settle moves a request from one status to another and reports false when
 	// it was not in `from`, so two answers can't both win.
 	Settle(ctx context.Context, campaignID string, id int64, from, to, reason, decidedBy string) (bool, error)
+	// DeletePending removes a request only while it is still pending and
+	// reports whether it did, so a withdrawal cannot race an approval or the
+	// downtime sweep: whichever statement runs second matches no row.
+	DeletePending(ctx context.Context, campaignID string, id int64) (bool, error)
 	// ListPending returns the campaign's pending requests, oldest first.
 	ListPending(ctx context.Context, campaignID string) ([]PurchaseRequest, error)
 	// CountPendingBy counts one player's pending requests.
@@ -104,6 +108,20 @@ func (r *purchaseRequestRepository) Settle(ctx context.Context, campaignID strin
 		to, nullStr(reason), nullStr(decidedBy), campaignID, id, from)
 	if err != nil {
 		return false, fmt.Errorf("settling purchase request: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("checking rows affected: %w", err)
+	}
+	return n == 1, nil
+}
+
+func (r *purchaseRequestRepository) DeletePending(ctx context.Context, campaignID string, id int64) (bool, error) {
+	res, err := r.db.ExecContext(ctx,
+		`DELETE FROM shop_purchase_requests WHERE id = ? AND campaign_id = ? AND status = 'pending'`,
+		id, campaignID)
+	if err != nil {
+		return false, fmt.Errorf("withdrawing purchase request: %w", err)
 	}
 	n, err := res.RowsAffected()
 	if err != nil {

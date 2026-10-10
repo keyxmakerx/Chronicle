@@ -73,6 +73,18 @@ func (r *fakePurchaseRepo) Settle(_ context.Context, campaignID string, id int64
 	return true, nil
 }
 
+func (r *fakePurchaseRepo) DeletePending(_ context.Context, campaignID string, id int64) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i, p := range r.rows {
+		if p.ID == id && p.CampaignID == campaignID && p.Status == PurchasePending {
+			r.rows = append(r.rows[:i], r.rows[i+1:]...)
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func (r *fakePurchaseRepo) ListPending(_ context.Context, campaignID string) ([]PurchaseRequest, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -661,6 +673,8 @@ func TestShopRequestHandler(t *testing.T) {
 		{"approve that failed", (*ShopBuyHandler).ApproveRequest, "7", true, PurchaseFailed, nil, 204, `"type":"error"`, 7},
 		{"decline", (*ShopBuyHandler).DeclineRequest, "8", true, "", nil, 204, `"type":"success"`, 8},
 		{"approve without htmx redirects", (*ShopBuyHandler).ApproveRequest, "7", false, PurchaseApplied, nil, 303, "", 7},
+		{"withdraw", (*ShopBuyHandler).WithdrawRequest, "9", true, "", nil, 204, `"type":"success"`, 9},
+		{"withdraw conflict passes through", (*ShopBuyHandler).WithdrawRequest, "9", true, "", apperror.NewConflict("done"), 409, "", 9},
 		{"bad id", (*ShopBuyHandler).ApproveRequest, "abc", true, "", nil, 404, "", 0},
 		{"zero id", (*ShopBuyHandler).DeclineRequest, "0", true, "", nil, 404, "", 0},
 		{"service refusal passes through", (*ShopBuyHandler).ApproveRequest, "7", true, "", apperror.NewForbidden("no"), 403, "", 7},
@@ -701,4 +715,88 @@ func TestShopRequestHandler(t *testing.T) {
 			t.Errorf("role = %d", svc.actor.Role)
 		}
 	})
+}
+
+func TestShopRequest_Withdraw(t *testing.T) {
+	scribe := Actor{UserID: "s", Role: rScribe}
+	cases := []struct {
+		name     string
+		actor    Actor
+		campaign string
+		prep     func(*buyFx, int64)
+		wantCode int
+		wantGone bool
+	}{
+		{"requester withdraws", pU1, "camp", nil, 0, true},
+		{"owner withdraws", owner, "camp", nil, 0, true},
+		{"other player is forbidden", pU2, "camp", nil, 403, false},
+		{"scribe is forbidden", scribe, "camp", nil, 403, false},
+		{"already approved", pU1, "camp", func(f *buyFx, id int64) {
+			if _, err := f.svc.ApproveRequest(context.Background(), "camp", owner, id); err != nil {
+				panic(err)
+			}
+		}, 409, false},
+		{"already declined", pU1, "camp", func(f *buyFx, id int64) {
+			if _, err := f.svc.DeclineRequest(context.Background(), "camp", owner, id); err != nil {
+				panic(err)
+			}
+		}, 409, false},
+		{"wrong campaign", pU1, "other-camp", nil, 404, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newBuyFx()
+			id := f.ask(t, pU1, basket("c1", [2]int{1, 1}))
+			if tc.prep != nil {
+				tc.prep(f, id)
+			}
+			err := f.svc.WithdrawRequest(context.Background(), tc.campaign, tc.actor, id)
+			if code(err) != tc.wantCode {
+				t.Fatalf("err = %v, want code %d", err, tc.wantCode)
+			}
+			if gone := f.reqs.find("camp", id) == nil; gone != tc.wantGone {
+				t.Errorf("row gone = %v, want %v", gone, tc.wantGone)
+			}
+		})
+	}
+
+	t.Run("withdrawn request frees the player's slot and leaves history", func(t *testing.T) {
+		f := newBuyFx()
+		id := f.ask(t, pU1, basket("c1", [2]int{1, 1}))
+		if err := f.svc.WithdrawRequest(context.Background(), "camp", pU1, id); err != nil {
+			t.Fatal(err)
+		}
+		if n, _ := f.reqs.CountPendingBy(context.Background(), "camp", "u1"); n != 0 {
+			t.Errorf("pending = %d", n)
+		}
+		if err := f.svc.WithdrawRequest(context.Background(), "camp", pU1, id); code(err) != 404 {
+			t.Errorf("second withdraw: %v", err)
+		}
+	})
+}
+
+func TestShopRequest_HistoryWithdrawFlag(t *testing.T) {
+	cases := []struct {
+		name  string
+		actor Actor
+		want  bool
+	}{
+		{"requester", pU1, true},
+		{"owner", owner, true},
+		{"other player sees no waiting line", pU2, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newBuyFx()
+			f.ask(t, pU1, basket("c1", [2]int{1, 1}))
+			lines, err := f.svc.(*shopBuyService).buyerHistory(context.Background(), "camp", tc.actor, "c1", 10)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := len(lines) == 1 && lines[0].CanWithdraw && lines[0].Purchase
+			if got != tc.want {
+				t.Errorf("lines = %+v, want withdrawable %v", lines, tc.want)
+			}
+		})
+	}
 }

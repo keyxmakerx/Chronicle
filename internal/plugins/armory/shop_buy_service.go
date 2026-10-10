@@ -52,6 +52,9 @@ type ShopRequestService interface {
 	ApproveRequest(ctx context.Context, campaignID string, a Actor, requestID int64) (*PurchaseRequest, error)
 	// DeclineRequest turns a waiting purchase request down. Owner visibility only.
 	DeclineRequest(ctx context.Context, campaignID string, a Actor, requestID int64) (*PurchaseRequest, error)
+	// WithdrawRequest deletes a waiting request on the requester's or the
+	// Owner's say. A request that has been answered is a Conflict.
+	WithdrawRequest(ctx context.Context, campaignID string, a Actor, requestID int64) error
 }
 
 type shopBuyService struct {
