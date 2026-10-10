@@ -121,15 +121,16 @@ type DrawingService interface {
 	// id, so a by-id read cannot reveal what the list withholds.
 	IsDrawingShadowed(ctx context.Context, d *Drawing, role int) (bool, error)
 	// WithholdImages returns the drawings with the picture file removed, for a
-	// viewer subject to fog, from the picture a fogged hex layer is pinned to
-	// and from every picture reaching into unexplored hexes. Those files show
-	// land under the fog, so they never reach them; the drawing itself stays so
-	// the viewer can still place the hexes by its box.
+	// viewer subject to fog or shadows, from the picture a fogged hex layer is
+	// pinned to, from every picture reaching into unexplored hexes and from
+	// every picture overlapping a shadow. Those files show land the viewer may
+	// not see, so they never reach them; the drawing itself stays so the
+	// viewer can still place the hexes by its box.
 	WithholdImages(ctx context.Context, mapID string, role int, ds []Drawing) ([]Drawing, error)
-	// FogWithholdsMedia reports whether mediaID is the file of a picture on
+	// WithholdsPictureFile reports whether mediaID is the file of a picture on
 	// mapID that WithholdImages withholds, so the media server can refuse the
 	// file itself to the same viewers (MapService.IsShadowedMapImage).
-	FogWithholdsMedia(ctx context.Context, mapID, mediaID string) (bool, error)
+	WithholdsPictureFile(ctx context.Context, mapID, mediaID string) (bool, error)
 
 	// Token CRUD. isDM on the writes is CampaignContext.CanAuthorDmOnly: anyone
 	// else is answered NotFound for a token they may not see (hidden, or under
@@ -567,33 +568,50 @@ func (s *drawingService) ListDrawings(ctx context.Context, mapID string, role in
 
 // WithholdImages implements DrawingService.
 func (s *drawingService) WithholdImages(ctx context.Context, mapID string, role int, ds []Drawing) ([]Drawing, error) {
+	var areas []ShadowArea
+	if shadowHidingApplies(role) {
+		var err error
+		if areas, err = s.ShadowAreas(ctx, mapID); err != nil {
+			return nil, err
+		}
+	}
 	fog, err := fogFor(ctx, s.hexFog, mapID, role)
 	if err != nil {
 		return nil, err
 	}
-	if fog == nil {
+	if fog == nil && len(areas) == 0 {
 		return ds, nil
 	}
 	out := make([]Drawing, len(ds))
 	copy(out, ds)
 	for i := range out {
-		if fog.WithholdsImageOf(&out[i]) {
+		if fog.WithholdsImageOf(&out[i]) || shadowWithholdsImageOf(areas, &out[i]) {
 			out[i].ImageID = nil
 		}
 	}
 	return out, nil
 }
 
-// FogWithholdsMedia implements DrawingService. It reads every drawing of the
-// map, as the owner would, because the question is about the file and not
-// about one viewer's list. No fog lookup wired means no fog is known.
-func (s *drawingService) FogWithholdsMedia(ctx context.Context, mapID, mediaID string) (bool, error) {
-	if s.hexFog == nil || mediaID == "" {
+// WithholdsPictureFile implements DrawingService. It reads every drawing of
+// the map, as the owner would, because the question is about the file and not
+// about one viewer's list. With no fog lookup wired only shadows are known.
+func (s *drawingService) WithholdsPictureFile(ctx context.Context, mapID, mediaID string) (bool, error) {
+	if mediaID == "" {
 		return false, nil
 	}
-	fog, err := s.hexFog.FogMask(ctx, mapID)
-	if err != nil || fog == nil {
-		return err != nil, err
+	var fog *FogMask
+	if s.hexFog != nil {
+		var err error
+		if fog, err = s.hexFog.FogMask(ctx, mapID); err != nil {
+			return true, err
+		}
+	}
+	areas, err := s.ShadowAreas(ctx, mapID)
+	if err != nil {
+		return true, err
+	}
+	if fog == nil && len(areas) == 0 {
+		return false, nil
 	}
 	drawings, err := s.repo.ListDrawings(ctx, mapID, permissions.RoleOwner, "")
 	if err != nil {
@@ -601,7 +619,7 @@ func (s *drawingService) FogWithholdsMedia(ctx context.Context, mapID, mediaID s
 	}
 	for i := range drawings {
 		d := &drawings[i]
-		if d.ImageID != nil && *d.ImageID == mediaID && fog.WithholdsImageOf(d) {
+		if d.ImageID != nil && *d.ImageID == mediaID && (fog.WithholdsImageOf(d) || shadowWithholdsImageOf(areas, d)) {
 			return true, nil
 		}
 	}

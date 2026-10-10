@@ -431,3 +431,84 @@ func (r *shadowGetRepo) GetDrawing(context.Context, string) (*Drawing, error) {
 	d := r.drawing
 	return &d, nil
 }
+
+func TestShadowWithholdsImageOf(t *testing.T) {
+	areas := []ShadowArea{{MinX: 10, MinY: 10, MaxX: 30, MaxY: 30}}
+	img := func(points string, rot float64) *Drawing {
+		return &Drawing{DrawingType: DrawingTypeImage, Points: pts(points), Rotation: rot}
+	}
+	for _, tc := range []struct {
+		name string
+		d    *Drawing
+		want bool
+	}{
+		{"partly under the shadow", img(`[{"x":20,"y":20},{"x":50,"y":50}]`, 0), true},
+		{"wholly under the shadow", img(`[{"x":12,"y":12},{"x":28,"y":28}]`, 0), true},
+		{"covering the shadow", img(`[{"x":0,"y":0},{"x":90,"y":90}]`, 0), true},
+		{"clear of the shadow", img(`[{"x":40,"y":40},{"x":60,"y":60}]`, 0), false},
+		{"edge to edge with the shadow", img(`[{"x":30,"y":10},{"x":50,"y":30}]`, 0), false},
+		{"half turn is the same box", img(`[{"x":20,"y":20},{"x":50,"y":50}]`, 180), true},
+		{"half turn clear", img(`[{"x":40,"y":40},{"x":60,"y":60}]`, -180), false},
+		{"any other turn fails closed", img(`[{"x":40,"y":40},{"x":60,"y":60}]`, 45), true},
+		{"unreadable box fails closed", img(`{`, 0), true},
+		{"one corner fails closed", img(`[{"x":40,"y":40}]`, 0), true},
+		{"not a picture", &Drawing{DrawingType: "freehand", Points: pts(`[{"x":20,"y":20},{"x":50,"y":50}]`)}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := shadowWithholdsImageOf(areas, tc.d); got != tc.want {
+				t.Errorf("got %v, want %v", got, tc.want)
+			}
+		})
+	}
+	if shadowWithholdsImageOf(nil, img(`{`, 45)) {
+		t.Error("with no shadows no picture is withheld")
+	}
+}
+
+// A picture reaching under a shadow keeps its drawing (the list rule) but
+// loses its file for everyone the shadow hides things from, on the list, the
+// by-id read and the media guard alike.
+func TestDrawingService_ShadowWithholdsPictureFiles(t *testing.T) {
+	file := "media-under"
+	partly := Drawing{ID: "pic", MapID: "map-1", DrawingType: DrawingTypeImage, ImageID: &file, Points: pts(`[{"x":20,"y":20},{"x":50,"y":50}]`)}
+	repo := &shadowRepo{drawings: []Drawing{testShadow, partly}, shadows: []Drawing{testShadow}}
+	svc := NewDrawingService(repo)
+	ctx := context.Background()
+
+	listed, err := svc.ListDrawings(ctx, "map-1", permissions.RolePlayer, "u1")
+	if err != nil || len(listed) != 2 {
+		t.Fatalf("player list = %d drawings, %v; want the shadow and the picture", len(listed), err)
+	}
+	for _, role := range []int{permissions.RolePlayer, permissions.RoleScribe} {
+		out, err := svc.WithholdImages(ctx, "map-1", role, listed)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if out[1].ImageID != nil {
+			t.Errorf("role %d: the picture's file was sent", role)
+		}
+	}
+	if partly.ImageID == nil || repo.drawings[1].ImageID == nil {
+		t.Error("withholding must not change the caller's drawings")
+	}
+	dm, err := svc.WithholdImages(ctx, "map-1", permissions.RoleOwner, []Drawing{partly})
+	if err != nil || dm[0].ImageID == nil {
+		t.Errorf("owner/co-DM lost the picture's file: %v", err)
+	}
+
+	withheld, err := svc.WithholdsPictureFile(ctx, "map-1", file)
+	if err != nil || !withheld {
+		t.Errorf("media guard: got %v, %v; want the file withheld", withheld, err)
+	}
+	if other, _ := svc.WithholdsPictureFile(ctx, "map-1", "media-other"); other {
+		t.Error("media guard withheld a file no picture under a shadow uses")
+	}
+
+	repo.listErr = errors.New("db down")
+	if _, err := svc.WithholdImages(ctx, "map-1", permissions.RolePlayer, listed); err == nil {
+		t.Error("a failed shadow lookup must fail the player's read, not send the file")
+	}
+	if withheld, err := svc.WithholdsPictureFile(ctx, "map-1", file); err == nil || !withheld {
+		t.Error("a failed shadow lookup must withhold the file")
+	}
+}

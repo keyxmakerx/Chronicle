@@ -1366,7 +1366,7 @@ type mapEventPublisherAdapter struct {
 // and the whole picture under unexplored hexes.
 func wireHexFog(mapsService maps.MapService, drawingService maps.DrawingService, events *mapEventPublisherAdapter, hexService maps.HexService) {
 	mapsService.SetHexFogLookup(hexService)
-	mapsService.SetFogMediaLookup(drawingService)
+	mapsService.SetPictureFileLookup(drawingService)
 	drawingService.SetHexFogLookup(hexService)
 	events.fog = hexService
 	hexService.SetEventPublisher(events)
@@ -1532,11 +1532,13 @@ func (a *mapEventPublisherAdapter) PublishDrawingEvent(eventType string, campaig
 	default:
 		return
 	}
-	// The picture a fogged hex layer is pinned to is DM-only on the wire too:
-	// its event carries the file id, which is the secret under the fog.
+	// A picture whose file the fog or a shadow withholds is DM-only on the
+	// wire too: its event carries the file id, which is the secret.
 	dmOnly := drawing.Visibility == "dm_only" ||
 		(drawing.DrawingType != maps.DrawingTypeShadow &&
-			(a.underShadow(drawing.MapID, func(areas []maps.ShadowArea) bool { return maps.DrawingUnderShadow(areas, drawing) }) ||
+			(a.underShadow(drawing.MapID, func(areas []maps.ShadowArea) bool {
+				return maps.DrawingUnderShadow(areas, drawing) || maps.ShadowWithholdsImageOf(areas, drawing)
+			}) ||
 				a.underFog(drawing.MapID, func(f *maps.FogMask) bool { return f.HidesDrawing(drawing) || f.WithholdsImageOf(drawing) })))
 	a.publishWithAudience(msgType, campaignID, drawing.ID, drawing, dmOnly, maps.ParseVisibilityRules(drawing.VisibilityRules))
 }

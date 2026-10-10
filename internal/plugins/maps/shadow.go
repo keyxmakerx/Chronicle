@@ -118,6 +118,37 @@ func drawingUnderShadow(areas []ShadowArea, d Drawing) bool {
 	return true
 }
 
+// shadowWithholdsImageOf reports whether the picture file of drawing d must
+// not be sent to a viewer subject to shadow hiding: its box overlaps a shadow.
+// A picture shows the land under the shadow as pixels, so unlike a line it
+// cannot "merely touch" one; the drawing still goes out as a placeholder
+// wherever drawingUnderShadow lets it. Shadows are boxes in map percentages
+// and the map's aspect is not known here, so a turned picture's box cannot be
+// placed exactly: any turn other than a half turn is withheld while the map
+// has a shadow at all, and an unreadable box is withheld, failing closed.
+func shadowWithholdsImageOf(areas []ShadowArea, d *Drawing) bool {
+	if len(areas) == 0 || d == nil || d.DrawingType != DrawingTypeImage {
+		return false
+	}
+	pts, ok := parsePoints(d.Points)
+	if !ok || len(pts) != 2 || math.IsNaN(d.Rotation) || math.IsInf(d.Rotation, 0) {
+		return true
+	}
+	if math.Mod(d.Rotation, 180) != 0 {
+		return true
+	}
+	x0, x1 := math.Min(pts[0].X, pts[1].X), math.Max(pts[0].X, pts[1].X)
+	y0, y1 := math.Min(pts[0].Y, pts[1].Y), math.Max(pts[0].Y, pts[1].Y)
+	for _, a := range areas {
+		// Positive-area overlap: a picture lying edge to edge with a shadow
+		// shows none of the land under it.
+		if x0 < a.MaxX && x1 > a.MinX && y0 < a.MaxY && y1 > a.MinY {
+			return true
+		}
+	}
+	return false
+}
+
 // shadowHidingApplies reports whether a viewer is subject to shadow hiding.
 // Only owners and DM-equivalents (a co-DM grant is promoted to the owner role
 // by the visibility role) see under a shadow; a scribe is a diligent player
@@ -175,4 +206,10 @@ func MarkerUnderShadow(areas []ShadowArea, mk *Marker) bool {
 // DrawingUnderShadow: see MarkerUnderShadow.
 func DrawingUnderShadow(areas []ShadowArea, d *Drawing) bool {
 	return d != nil && drawingUnderShadow(areas, *d)
+}
+
+// ShadowWithholdsImageOf reports whether a shadow withholds the picture file of
+// d, for the event publisher, whose payload carries the file id.
+func ShadowWithholdsImageOf(areas []ShadowArea, d *Drawing) bool {
+	return shadowWithholdsImageOf(areas, d)
 }
