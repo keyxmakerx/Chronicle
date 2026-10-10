@@ -6,8 +6,10 @@
  * admin came from, so "Back to Chronicle" returns there. That click and the
  * click on "Back to Chronicle" each mark the way in or out for the next page
  * (site_admin_reveal.js plays it) and, where the browser has cross-document
- * view transitions, opt this page in so the next one can move over it. Only
- * those two clicks play anything; moving between admin pages does not.
+ * view transitions, opt this page in so the next one can move over it. A
+ * browser without them can't move this page from the next one, so on the way
+ * out this page falls away by itself first and then leaves. Only those two
+ * clicks play anything; moving between admin pages does not.
  *
  * The remembered page lives in sessionStorage, which any script on the site
  * could write, so it is checked before use: a same-site path only, never one
@@ -58,6 +60,55 @@
     setTimeout(function () { if (st.parentNode) st.parentNode.removeChild(st); }, 8000);
   }
 
+  // everydayColour is the page colour the site shows outside Site admin, the
+  // same choice base.templ's first script makes, so the way out uncovers it.
+  function everydayColour() {
+    var dark = false;
+    try {
+      var v = document.documentElement.getAttribute('data-view-theme');
+      var t = (v === 'light' || v === 'dark') ? v : (v === 'device' ? null : window.localStorage.getItem('chronicle-theme'));
+      dark = t === 'dark' || (t !== 'light' && window.matchMedia('(prefers-color-scheme:dark)').matches);
+    } catch (err) { /* light, as the first script falls back to */ }
+    return dark ? '#111827' : '#f9fafb';
+  }
+
+  // fallAway plays the way out on this page and then follows the link: the
+  // admin page falls down the screen over --dur-leave, or fades under Calm,
+  // as input.css plays it on browsers with view transitions. Returns false
+  // when it can't play, so the click goes ahead as an ordinary one.
+  var leaving = false;
+  function fallAway(href) {
+    var h = document.documentElement, b = document.body;
+    if (!b || typeof b.animate !== 'function') return false;
+    if (leaving) return true;
+    leaving = true;
+    var calm = h.getAttribute('data-motion') === 'calm' || h.hasAttribute('data-cz-reduce') ||
+      h.getAttribute('data-view-motion') === 'calm';
+    var dur = parseFloat(window.getComputedStyle(h).getPropertyValue('--dur-leave')) || 460;
+    var was = { bg: h.style.backgroundColor, overflow: h.style.overflow, shadow: b.style.boxShadow };
+    h.style.backgroundColor = everydayColour();
+    h.style.overflow = 'hidden';
+    var anim = calm
+      ? b.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 200, easing: 'linear', fill: 'forwards' })
+      : b.animate([{ transform: 'none' }, { transform: 'translateY(' + window.innerHeight + 'px)' }],
+        { duration: dur, easing: 'cubic-bezier(0.5, 0, 0.75, 0)', fill: 'forwards' });
+    if (!calm) b.style.boxShadow = '0 -14px 32px -12px rgb(0 0 0 / 0.35)';
+    var gone = false;
+    function go() { if (gone) return; gone = true; window.location.assign(href); }
+    anim.onfinish = go;
+    setTimeout(go, dur + 300);
+    // Back from the next page may restore this one from the browser's cache,
+    // still fallen: put it back as it was.
+    window.addEventListener('pageshow', function back(ev) {
+      if (!ev.persisted) return;
+      window.removeEventListener('pageshow', back);
+      anim.cancel();
+      h.style.backgroundColor = was.bg; h.style.overflow = was.overflow; b.style.boxShadow = was.shadow;
+      leaving = false;
+    });
+    return true;
+  }
+
   document.addEventListener('click', function (e) {
     var t = e.target && e.target.closest ? e.target : null;
     var entry = t && t.closest('[data-site-admin-entry]');
@@ -74,6 +125,10 @@
         s.setItem(VT_KEY, 'in');
         optIn();
       } else if (back && underAdmin(here)) {
+        if (!window.CSSViewTransitionRule && document.documentElement.getAttribute('data-motion') !== 'off') {
+          if (fallAway(back.href || back.getAttribute('href'))) e.preventDefault();
+          return;
+        }
         s.setItem(VT_KEY, 'out');
         optIn();
       }

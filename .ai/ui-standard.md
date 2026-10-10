@@ -52,8 +52,9 @@ Six rules every screen is judged against.
   page (`AdminStatusStrip`): the site is live, sessions signed in, the last
   backup's age, and that every change is on the record in Admin activity.
   Everywhere else the only trace is the Site admin row at the very bottom of
-  both sidebars (`SiteAdminEntry`, the tools icon `SiteAdminIcon`): an
-  ordinary menu row, its icon alone when the menu is folded.
+  both sidebars (`SiteAdminEntry`, the tools icon `SiteAdminIcon`): a dark
+  plate edged in admin red with a red icon, whose hover brightens the edge
+  rather than the everyday glow; its icon alone when the menu is folded.
 - **Who sees what follows one check.** DM-only content is visible to everyone
   who can write it: the owner and members with DM access
   (`CampaignContext.VisibilityRole()` to see it, `CanAuthorDmOnly()` to write
@@ -128,7 +129,8 @@ place, and Off shows the end state.
   for only by those two clicks (`static/js/site_admin.js`) and by the next
   page before it paints (`static/js/site_admin_reveal.js`,
   `html[data-admin-vt]`); a browser without them shows the admin page rising
-  by itself on the way in, and nothing on the way out. The row presses
+  by itself on the way in, and on the way out the admin page falls by itself
+  over the everyday page colour before the next page loads. The row presses
   deeper and lets go slower than other menu rows. Moving between admin
   pages plays nothing; Calm fades, and Off plays nothing.
 - **How much motion is one attribute**: `html[data-motion]` is `calm` or `off`
