@@ -3629,7 +3629,19 @@ func (a *App) RegisterRoutes() {
 	// UpdateImage/UpdateCoverImage — mediaService already exists by this
 	// point (constructed earlier in this function).
 	entityService.SetMediaVerifier(&entityMediaVerifierAdapter{svc: mediaService})
-	if a.PluginHealth.IsHealthy("maps") {
+	// Map scripts load on sight (ADR-063). A page block's framed preview
+	// unfolds into the live viewer, so the entity map lists the viewer and the
+	// focus view ahead of its own script; the dashboard map draws annotations.
+	a.registerPlugin(PluginRegistration{
+		Slug:     maps.PluginSlug,
+		StaticFS: echo.MustSubFS(maps.StaticAssetsFS, "static"),
+		Widgets: []PluginWidget{
+			{Name: "map-viewer", Scripts: []string{"js/map_viewer.js"}},
+			{Name: "entity-map", Scripts: []string{"js/map_viewer.js", "js/map_focus.js", "js/entity_map.js"}},
+			{Name: "map-widget", Scripts: []string{"js/map_annotations.js", "js/map_widget.js"}},
+		},
+	})
+	if a.PluginHealth.IsHealthy(maps.PluginSlug) {
 		maps.RegisterRoutes(e, mapsHandler, campaignService, authService, addonService)
 		// The campaign-wide map frame is a "Maps" tab on the Customize page;
 		// the campaigns plugin only hosts the tab, maps owns what is in it.

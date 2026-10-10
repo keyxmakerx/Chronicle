@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 
-const live = createRequire(import.meta.url)('../../static/js/map_live.js');
+const live = createRequire(import.meta.url)('../../internal/plugins/maps/static/js/map_live.js');
 
 // A manual clock stands in for setTimeout so the debounce is exact.
 function clock() {

@@ -12,7 +12,7 @@
  *   data-page-url    the map's own page ("Open map page")
  *   data-map-name    the title for the bar
  * The fragment is fetched when the panel opens and handed to
- * ChronicleMapViewer (widgets/map_viewer.js), the same viewer the map page
+ * ChronicleMapViewer (map_viewer.js), the same viewer the map page
  * runs, so role handling (players never receive dm_only content; Scribe+ get
  * the tools) is whatever the server rendered into the fragment. This file
  * makes no permission decisions.
