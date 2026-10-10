@@ -389,7 +389,7 @@ func (k GeneratorKind) Apply(ctx context.Context, campaignID string, a Actor, r 
 			}
 			var desc *string
 			if e.Description != nil {
-				if desc, err = bodyHTML(*e.Description); err != nil {
+				if desc, err = bodyHTML(*e.Description, nil); err != nil {
 					failed++
 					continue
 				}

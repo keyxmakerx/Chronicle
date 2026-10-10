@@ -277,3 +277,7 @@ func truncate(s string, n int) string {
 	}
 	return s[:n] + "...[truncated]"
 }
+
+func (s *stubLookup) CheckEntityAccess(context.Context, string, int, string) (*entities.EffectivePermission, error) {
+	return &entities.EffectivePermission{CanView: true}, nil
+}

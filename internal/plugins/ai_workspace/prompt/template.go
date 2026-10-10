@@ -174,6 +174,13 @@ is an existing page (an index line like "Name (in Parent)" means that page alrea
 under Parent) or a page earlier in this same paste, so list parents first. With
 ` + "`" + `action: update` + "`" + `, ` + "`" + `parent:` + "`" + ` moves the page, ` + "`" + `parent: none` + "`" + ` lifts it to the top
 level, and leaving the line out keeps it where it is. A page cannot be its own parent.
+
+To link to another page inside a body, write ` + "`" + `@[Page Name]` + "`" + ` (shown as "@Page Name", with
+a hover card and click-to-preview, like an @mention typed in the editor) or
+` + "`" + `@[Page Name|words to show]` + "`" + `. The name is an existing page or a page anywhere in this
+same paste. A name that matches no page I can see is saved as plain text, so use
+the exact page name. Do not link inside code, and do not use a markdown link for a
+page.
 {{ end }}
 
 {{ if .RecordDocs }}

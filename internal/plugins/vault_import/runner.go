@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/pagelink"
 )
 
 // rootBaseName is the folder every import lands in, so nothing mixes into the
@@ -309,7 +310,7 @@ func (r *runner) rewriteRef(ctx context.Context, noteIdx int, pageID string, ref
 			text = escapeMD(r.v.Notes[t.Index].Title)
 		}
 		r.sum.LinksMade++
-		return "[" + text + "](" + pageLinkHref(r.campaignID, id) + ")", true
+		return "[" + text + "](" + pagelink.Href(r.campaignID, id) + ")", true
 
 	case TargetFile:
 		f := r.v.Files[t.Index]

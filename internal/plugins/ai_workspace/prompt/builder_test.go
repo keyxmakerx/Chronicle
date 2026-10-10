@@ -153,6 +153,8 @@ func TestBuild_FrontMatterExample(t *testing.T) {
 		"`private`, `dm_only`, or `public`",
 		"`parent: Name of the parent page`",
 		"`parent: none`",
+		"`@[Page Name]`",
+		"`@[Page Name|words to show]`",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("expected substring %q in output. Full:\n%s", want, got)

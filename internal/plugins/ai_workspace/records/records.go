@@ -20,6 +20,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
+	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/importer"
 )
 
 // Actions a record may carry; the same verbs as page rows.
@@ -40,6 +41,9 @@ type Record struct {
 	// Generated is the browser's generator output (JSON), set at commit
 	// for generator rows only. Untrusted: kinds validate it like any input.
 	Generated string
+	// Links resolves @[Page] in Body to page links. Nil leaves the text as
+	// written (e.g. when planning).
+	Links *importer.PageLinks
 }
 
 // Actor is the operator running the import.

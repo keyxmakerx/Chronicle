@@ -44,6 +44,8 @@ type EntityCreator interface {
 	GetBySlug(ctx context.Context, campaignID, slug string) (*entities.Entity, error)
 	GetEntityTypeBySlug(ctx context.Context, campaignID, slug string) (*entities.EntityType, error)
 	GetEntityTypes(ctx context.Context, campaignID string) ([]entities.EntityType, error)
+	// CheckEntityAccess lets @[Name] links skip pages the viewer cannot see.
+	CheckEntityAccess(ctx context.Context, entityID string, role int, userID string) (*entities.EffectivePermission, error)
 }
 
 // Committer is the orchestrator. Constructed per request in the
@@ -129,6 +131,10 @@ type CommitInput struct {
 	// (CampaignSettings.ResolveNewEntityPrivacy) instead of the
 	// importer's own hardcoded choice (#729).
 	CampaignDefaultPrivate bool
+
+	// Viewer is who the page links are resolved for: a name never becomes
+	// a link to a page this viewer cannot see.
+	Viewer Viewer
 }
 
 // RowOutcome is the per-row commit outcome. The result summary
@@ -205,18 +211,26 @@ func (c *Committer) Commit(ctx context.Context, campaignID string, in CommitInpu
 	// finds a page from the same paste even when it was saved under a
 	// renamed slug.
 	made := map[string]string{}
+	links := NewPageLinks(ctx, c.creator, campaignID, in.Viewer)
+	pasteSlugs := pasteSlugsOf(in)
+	var relink []relinkRow
 	for i, page := range in.Pages {
 		dec := RowDecision{}
 		if i < len(in.Decisions) {
 			dec = in.Decisions[i]
 		}
 		result.Rows[i] = c.commitRow(ctx, campaignID, in.OwnerID,
-			i, page, dec, typesBySlug, newTypeIDs, failedTypes, in.CampaignDefaultPrivate, made)
+			i, page, dec, typesBySlug, newTypeIDs, failedTypes, in.CampaignDefaultPrivate, made, links)
 		if id := result.Rows[i].EntityID; id != "" && (result.Rows[i].Status == StatusCreated ||
 			result.Rows[i].Status == StatusRenamed || result.Rows[i].Status == StatusUpdated) {
 			made[entities.Slugify(page.Name)] = id
 			made[entities.Slugify(result.Rows[i].Name)] = id
+			links.Add(id, result.Rows[i].Name, page.Name)
+			if hasPendingLink(links, pasteSlugs) {
+				relink = append(relink, relinkRow{idx: i, id: id, body: page.Body})
+			}
 		}
+		links.missed = map[string]string{}
 		switch result.Rows[i].Status {
 		case StatusCreated:
 			result.Created++
@@ -233,7 +247,60 @@ func (c *Committer) Commit(ctx context.Context, campaignID string, in CommitInpu
 		}
 	}
 
+	c.relinkPending(ctx, relink, links, &result)
 	return result, nil
+}
+
+// pasteSlugsOf is the set of pages this commit will save, by name slug.
+func pasteSlugsOf(in CommitInput) map[string]bool {
+	out := map[string]bool{}
+	for i, p := range in.Pages {
+		if i >= len(in.Decisions) || !in.Decisions[i].Include || in.Decisions[i].Action == ActionDelete {
+			continue
+		}
+		out[entities.Slugify(p.Name)] = true
+		out[entities.Slugify(in.Decisions[i].Name)] = true
+	}
+	delete(out, "")
+	return out
+}
+
+// hasPendingLink reports whether the row just saved named a page that is
+// still to come in this paste, so its first write left that name as text.
+func hasPendingLink(links *PageLinks, pasteSlugs map[string]bool) bool {
+	for slug := range links.missed {
+		if pasteSlugs[slug] {
+			return true
+		}
+	}
+	return false
+}
+
+// relinkRow is a saved page whose body named a page not yet saved.
+type relinkRow struct {
+	idx  int
+	id   string
+	body string
+}
+
+// relinkPending writes the bodies again once every page of the paste exists,
+// so two new pages that link each other both get working links. The first
+// write already left those names as plain text, so a failure here costs only
+// the links. It goes through the same body write as any import, so backlinks
+// and version history follow.
+func (c *Committer) relinkPending(ctx context.Context, rows []relinkRow, links *PageLinks, result *CommitResult) {
+	for _, r := range rows {
+		bodyHTML, err := MarkdownToHTML(r.body, WithPageLinks(links))
+		if err == nil {
+			var bodyJSON string
+			if bodyJSON, err = htmlconv.Convert(bodyHTML); err == nil {
+				err = c.creator.UpdateEntry(ctx, r.id, bodyJSON, bodyHTML)
+			}
+		}
+		if err != nil {
+			result.Rows[r.idx].Reason = "Saved, but the links to other pages in this paste could not be added."
+		}
+	}
 }
 
 // createNewCategories scans the decisions for "new:<slug>" specs and
@@ -310,6 +377,7 @@ func (c *Committer) commitRow(
 	failedNewTypes []string,
 	campaignDefaultPrivate bool,
 	made map[string]string,
+	links *PageLinks,
 ) RowOutcome {
 	out := RowOutcome{Index: idx, Name: dec.Name}
 	if out.Name == "" {
@@ -333,7 +401,7 @@ func (c *Committer) commitRow(
 	case ActionDelete:
 		return c.commitDelete(ctx, campaignID, page, dec, idx)
 	case ActionUpdate:
-		return c.commitUpdateExplicit(ctx, campaignID, page, dec, typesBySlug, newTypeIDs, failedNewTypes, idx, made)
+		return c.commitUpdateExplicit(ctx, campaignID, page, dec, typesBySlug, newTypeIDs, failedNewTypes, idx, made, links)
 	}
 	// Fall-through: ActionCreate (or empty).
 
@@ -359,7 +427,7 @@ func (c *Committer) commitRow(
 	// SEC-6 mirror — every entity-creation path funnels through
 	// MarkdownToHTML first. Per-row errors are operator-friendly;
 	// the underlying library error stays in slog (handler-side).
-	bodyHTML, err := MarkdownToHTML(page.Body)
+	bodyHTML, err := MarkdownToHTML(page.Body, WithPageLinks(links))
 	if err != nil {
 		out.Status = StatusFailed
 		out.Reason = "Could not parse the page's markdown body — check the heading structure."
@@ -538,6 +606,7 @@ func (c *Committer) commitUpdateExplicit(
 	failedNewTypes []string,
 	idx int,
 	made map[string]string,
+	links *PageLinks,
 ) RowOutcome {
 	out := RowOutcome{Index: idx, Name: dec.Name}
 	if out.Name == "" {
@@ -575,7 +644,7 @@ func (c *Committer) commitUpdateExplicit(
 	// SEC-6 funnel — sanitize body markdown BEFORE handing to
 	// commitUpdate. The pin verifies this funnel exists in every
 	// non-exempt function calling creator.Update / UpdateEntry.
-	bodyHTML, err := MarkdownToHTML(page.Body)
+	bodyHTML, err := MarkdownToHTML(page.Body, WithPageLinks(links))
 	if err != nil {
 		out.Status = StatusFailed
 		out.Reason = "Could not parse the page's markdown body — check the heading structure."

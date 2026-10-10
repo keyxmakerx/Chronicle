@@ -11,6 +11,7 @@ import (
 	"github.com/yuin/goldmark/extension"
 	"github.com/yuin/goldmark/renderer/html"
 
+	"github.com/keyxmakerx/chronicle/internal/pagelink"
 	"github.com/keyxmakerx/chronicle/internal/sanitize"
 )
 
@@ -33,14 +34,8 @@ func markdownToHTML(src string) (string, error) {
 	return sanitize.HTML(buf.String()), nil
 }
 
-// pageLinkHref is the address of a page inside its campaign: the href the
-// editor writes for a [[page link]].
-func pageLinkHref(campaignID, pageID string) string {
-	return "/campaigns/" + campaignID + "/entities/" + pageID
-}
-
-// uuidRe is the shape of every page and media id.
-const uuidPat = `[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`
+// uuidPat is the shape of every page and media id.
+const uuidPat = pagelink.UUIDPattern
 
 var (
 	imgTagRe   = regexp.MustCompile(`<img\b[^>]*?\bsrc="/media/(` + uuidPat + `)"[^>]*?>`)
@@ -60,8 +55,7 @@ var (
 // Both are built only from ids this import created or got back from the media
 // service, and the result is sanitised again before it is stored.
 func finishHTML(htmlIn, campaignID string) string {
-	linkRe := regexp.MustCompile(`<a\b[^>]*?\bhref="(/campaigns/` + regexp.QuoteMeta(campaignID) + `/entities/(` + uuidPat + `))"[^>]*?>`)
-	out := linkRe.ReplaceAllString(htmlIn, `<a data-mention-id="$2" href="$1" data-entity-preview="$1/preview">`)
+	out := pagelink.RewriteLinks(htmlIn, campaignID)
 	out = paraRe.ReplaceAllStringFunc(out, splitPictures)
 	return sanitize.HTML(out)
 }

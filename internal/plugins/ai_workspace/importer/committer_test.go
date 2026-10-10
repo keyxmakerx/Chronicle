@@ -27,6 +27,11 @@ type fakeCreator struct {
 	updateFn      func(id string, input entities.UpdateEntityInput) (*entities.Entity, error)
 	updateEntryFn func(id, entryJSON, entryHTML string) error
 	deleteFn      func(id string) error
+	hidden        map[string]bool // entity ID → the viewer may not open it
+}
+
+func (f *fakeCreator) CheckEntityAccess(_ context.Context, id string, _ int, _ string) (*entities.EffectivePermission, error) {
+	return &entities.EffectivePermission{CanView: !f.hidden[id]}, nil
 }
 
 type updateEntryCall struct {

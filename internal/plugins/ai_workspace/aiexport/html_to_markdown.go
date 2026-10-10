@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	md "github.com/JohannesKaufmann/html-to-markdown"
+	"github.com/PuerkitoBio/goquery"
 
 	"github.com/keyxmakerx/chronicle/internal/sanitize"
 )
@@ -25,6 +26,7 @@ var (
 func getConverter() *md.Converter {
 	converterOnce.Do(func() {
 		converter = md.NewConverter("", true, nil)
+		converter.AddRules(mentionRule())
 	})
 	return converter
 }
@@ -77,4 +79,29 @@ func bodyOrSkip(kind, item, got string, err error) string {
 		return convertSkipMarker
 	}
 	return got
+}
+
+// mentionRule writes a page mention as `@[Name]`, the form AI Import reads
+// back as a page link, instead of a markdown link whose address means nothing
+// outside Chronicle. The name is the anchor's own text, so a page renamed
+// since the mention was typed still shows its old name; import then warns
+// that it matches nothing rather than linking the wrong page. Any other link
+// falls through to the default rule.
+func mentionRule() md.Rule {
+	return md.Rule{
+		Filter: []string{"a"},
+		Replacement: func(_ string, sel *goquery.Selection, _ *md.Options) *string {
+			if _, ok := sel.Attr("data-mention-id"); !ok {
+				return nil
+			}
+			text := strings.TrimSpace(sel.Text())
+			name := strings.TrimSpace(strings.TrimPrefix(text, "@"))
+			name = strings.NewReplacer("[", "", "]", "", "|", "").Replace(name)
+			if name == "" {
+				return md.String(text)
+			}
+			out := "@[" + name + "]"
+			return &out
+		},
+	}
 }
