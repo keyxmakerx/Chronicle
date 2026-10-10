@@ -105,6 +105,13 @@ test-cover: ## Run tests with coverage report
 test-js: ## Run JS runtime tests (sidebar, availability, widgets — node --test)
 	node --test test/js/*.test.mjs
 
+# playwright is resolved from NODE_PATH (a global install), not a devDependency,
+# so the repo carries no browser-sized dependency tree; CI and local setups
+# both put it in the global root. Override NODE_PATH to point elsewhere.
+.PHONY: test-e2e
+test-e2e: ## Run Playwright browser tests (needs global playwright + chromium)
+	NODE_PATH="$${NODE_PATH:-$$(npm root -g)}" node --test test/e2e/*.spec.mjs
+
 # --- Linting & Security ---
 # --- Local CI ---
 # `make verify` runs the same sequence, in the same order, as the CI "Build &

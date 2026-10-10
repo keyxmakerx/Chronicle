@@ -315,6 +315,28 @@ jobs:
             }
           done
 
+  # --- Browser tests ---
+  e2e:
+    name: Browser tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: '20'
+
+      - name: Install Playwright and Chromium
+        # Global install matches the NODE_PATH lookup in `make test-e2e`; the
+        # version is pinned to the one the spec was written against.
+        run: |
+          npm install -g playwright@1.56.1
+          npx playwright install --with-deps chromium
+
+      - name: Browser tests
+        run: make test-e2e
+
   # --- Lint ---
   lint:
     name: Lint
