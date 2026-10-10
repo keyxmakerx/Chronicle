@@ -1367,6 +1367,11 @@ func (s *entityService) EnsurePlayerCharacterType(ctx context.Context, campaignI
 		case t.ParentTypeID == nil && t.Slug == DefaultCharacterTypeSlug:
 			id := t.ID
 			charParentID = &id
+			// Characters carrying the system's preset is the system's character
+			// type itself, so no separate Player Character type is premade.
+			if preset == "character" {
+				systemCharType = t
+			}
 		case isPlayerCharacterType(preset, t.Slug):
 			pcType = t
 		case isClaimableType(t):
@@ -1469,6 +1474,10 @@ func (s *entityService) PlayerCharacterSetupSnapshot(ctx context.Context, campai
 		case t.ParentTypeID == nil && t.Slug == DefaultCharacterTypeSlug:
 			id := t.ID
 			snap.DefaultCharsParentID = &id
+			if preset == "character" {
+				snap.SystemCharTypes = append(snap.SystemCharTypes, *t)
+				snap.SystemCharCount += counts[t.ID]
+			}
 		case isPlayerCharacterType(preset, t.Slug):
 			snap.GenericPCTypes = append(snap.GenericPCTypes, *t)
 			snap.GenericPCCount += counts[t.ID]

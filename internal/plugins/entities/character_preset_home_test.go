@@ -201,3 +201,38 @@ func TestReconcileCharacterPresetHome(t *testing.T) {
 		})
 	}
 }
+
+// Once Characters carries the system's preset it is the system's character
+// type, so the claiming add-on must not premake a Player Character type beside it.
+func TestEnsurePlayerCharacterType_CharactersIsTheSystemType(t *testing.T) {
+	charPreset := "character"
+	tests := []struct {
+		name       string
+		preset     *string
+		wantCreate bool
+	}{
+		{"Characters bound to the system preset", &charPreset, false},
+		{"plain Characters still gets the premade type", nil, true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			created := false
+			chars := EntityType{ID: 1, CampaignID: "camp-1", Name: "Character", Slug: DefaultCharacterTypeSlug, PresetCategory: tc.preset, Enabled: true}
+			typeRepo := &mockEntityTypeRepo{
+				listByCampaignFn: func(_ context.Context, _ string) ([]EntityType, error) {
+					return []EntityType{chars}, nil
+				},
+				findByIDFn: func(_ context.Context, _ int) (*EntityType, error) { c := chars; return &c, nil },
+				createFn: func(_ context.Context, et *EntityType) error { created = true; et.ID = 9; return nil },
+			}
+			svc := newTestService(&mockEntityRepo{}, typeRepo)
+			svc.SetAddonChecker(&mockAddonChecker{enabled: map[string]bool{AddonPlayerCharacterClaiming: true}})
+			if err := svc.EnsurePlayerCharacterType(context.Background(), "camp-1"); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if created != tc.wantCreate {
+				t.Errorf("created = %v, want %v", created, tc.wantCreate)
+			}
+		})
+	}
+}
