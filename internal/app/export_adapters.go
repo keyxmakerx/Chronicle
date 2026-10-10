@@ -2221,7 +2221,8 @@ func (a *timelineImportAdapter) ImportTimelines(ctx context.Context, campaignID,
 				}
 				if l.VisibilityOverride != nil || l.VisibilityRules != nil {
 					if err := a.svc.UpdateEventLinkVisibility(ctx, newTimeline.ID, eventID, timeline.UpdateEventVisibilityInput{
-						VisibilityOverride: l.VisibilityOverride, VisibilityRules: l.VisibilityRules,
+						// A restore states the whole link, so a nil pointer means "none", not "absent".
+						VisibilityOverride: patch.FromPtr(l.VisibilityOverride), VisibilityRules: patch.FromPtr(l.VisibilityRules),
 					}); err != nil {
 						slog.Warn("import: timeline link visibility failed", slog.String("name", tl.Name), slog.Any("error", err))
 						report.Fail("timelines", "timeline event link", tl.Name, apperror.SafeMessage(err))

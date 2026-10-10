@@ -243,15 +243,21 @@ type CreateEntityGroupInput struct {
 }
 
 // UpdateEntityGroupInput is the validated input for updating an entity group.
+// It is a PARTIAL update: an absent key keeps the stored value, and a group
+// keeps its sort order, which this input does not carry at all. Both columns
+// are NOT NULL, so an explicit null also preserves.
 type UpdateEntityGroupInput struct {
-	Name  string
-	Color string
+	Name  patch.Field[string] `json:"name"`
+	Color patch.Field[string] `json:"color"`
 }
 
-// UpdateEventVisibilityInput is the validated input for updating event link visibility.
+// UpdateEventVisibilityInput is the validated input for updating event link
+// visibility. Both columns are nullable and independent: a body naming only
+// the override must not wipe the per-user rules, and an explicit null on
+// either clears it (null override means "inherit the event's own").
 type UpdateEventVisibilityInput struct {
-	VisibilityOverride *string
-	VisibilityRules    *string
+	VisibilityOverride patch.Field[string] `json:"visibility_override"`
+	VisibilityRules    patch.Field[string] `json:"visibility_rules"`
 }
 
 // --- Standalone Events ---

@@ -50,19 +50,21 @@ var contractGoverned = map[string]string{
 	"systems.UpdateBookChapterInput": "PUT .../systems/:mod/book/chapters/:chapter — a rename-only push must not blank the house-rules chapter's introduction or flip its Directors-only flag, which would publish a hidden chapter to every player",
 
 	// Each is pinned by a *_partial_update_test.go next to it.
-	"maps.UpdateTokenInput":           "PUT .../tokens/:tid (web + syncapi) — a drag PUT carrying only {x, y} zeroed IsHidden, IsLocked, both HP bars and every aura/light/vision field; a hidden ambush monster went visible on the next nudge",
-	"maps.UpdateDrawingInput":         "PUT .../drawings/:did (web + syncapi) — shares UpdateTokenInput's shape; a reshape-only push wiped fill, text content, font size and rotation. No shipped caller trips it today, fixed anyway under the partial-update contract",
-	"maps.UpdateLayerInput":           "PUT .../layers/:lid (web + syncapi) — a SortOrder-only reorder push turned visibility and lock off for every layer. No shipped caller trips it today, fixed anyway under the partial-update contract",
-	"maps.UpdateMapInput":             "PUT /campaigns/:id/maps/:mid — a rename-only push unlinked the map's image and wiped its description; ImageID/Description were already *string and STILL blindly overwritten, because a plain pointer bound from JSON can't tell absent from null either",
-	"timeline.UpdateTimelineInput":    "PUT /campaigns/:id/timelines/:tid — fired on EVERY settings save, not just a narrow push: the request struct has no visibility_rules/description_html member at all, so both were unconditionally blanked and canUserView() treats an absent VisibilityRules as visible to everyone",
-	"tags.UpdateTagInput":             "tagService.Update — the worst finding of the 2026-09-12 toggle-truth sweep (ADR-056): Color/DmOnly were plain value types, so ANY rename necessarily also sent DmOnly's zero value and turned a DM-only tag public",
-	"armory.UpdateStashInput":         "PUT /campaigns/:id/armory/stashes/:sid — a rename must not clear the stash location; only an explicit null does",
-	"tags.UpdateTagRequest":           "PUT /campaigns/:id/tags/:tagId — the wire-bound twin of UpdateTagInput above; same incident, same fix",
-	"maps.UpdateHexCellInput":         "PATCH .../maps/:mid/hexes/cells — a paint stroke sends only terrain, so it must not touch a hex's name or notes; a rename must not clear its terrain",
-	"maps.UpdateHexLayerInput":        "PUT .../maps/:mid/hexes/layer — a push naming nothing about the anchor must not move the hexes off their picture; only an explicit null puts them back on the whole map; a fog-only or anchor-only push must not reset the travel figures to their defaults",
-	"bestiary.UpdatePublicationInput": "PUT /bestiary/:id — a plain *string could not tell an absent description from an explicit null, so a client could never clear one; name/description/flavor_text are now patch.Field, and a literal null in the raw-JSON tags or statblock is treated as absent rather than stored as the text \"null\"",
-	"armory.UpdateInstanceInput":      "PUT /campaigns/:id/armory/instances/:iid — Rename echoed back the description, icon and colour it loaded, so a concurrent change to them was reverted; a name-only push must keep the rest",
-	"auth.UpdateViewPrefsInput":       "PUT /account/view-prefs — each My view choice saves on its own as it is tapped, so a body naming one must not reset the other three (born governed, no incident)",
+	"maps.UpdateTokenInput":               "PUT .../tokens/:tid (web + syncapi) — a drag PUT carrying only {x, y} zeroed IsHidden, IsLocked, both HP bars and every aura/light/vision field; a hidden ambush monster went visible on the next nudge",
+	"maps.UpdateDrawingInput":             "PUT .../drawings/:did (web + syncapi) — shares UpdateTokenInput's shape; a reshape-only push wiped fill, text content, font size and rotation. No shipped caller trips it today, fixed anyway under the partial-update contract",
+	"maps.UpdateLayerInput":               "PUT .../layers/:lid (web + syncapi) — a SortOrder-only reorder push turned visibility and lock off for every layer. No shipped caller trips it today, fixed anyway under the partial-update contract",
+	"maps.UpdateMapInput":                 "PUT /campaigns/:id/maps/:mid — a rename-only push unlinked the map's image and wiped its description; ImageID/Description were already *string and STILL blindly overwritten, because a plain pointer bound from JSON can't tell absent from null either",
+	"timeline.UpdateTimelineInput":        "PUT /campaigns/:id/timelines/:tid — fired on EVERY settings save, not just a narrow push: the request struct has no visibility_rules/description_html member at all, so both were unconditionally blanked and canUserView() treats an absent VisibilityRules as visible to everyone",
+	"tags.UpdateTagInput":                 "tagService.Update — the worst finding of the 2026-09-12 toggle-truth sweep (ADR-056): Color/DmOnly were plain value types, so ANY rename necessarily also sent DmOnly's zero value and turned a DM-only tag public",
+	"armory.UpdateStashInput":             "PUT /campaigns/:id/armory/stashes/:sid — a rename must not clear the stash location; only an explicit null does",
+	"tags.UpdateTagRequest":               "PUT /campaigns/:id/tags/:tagId — the wire-bound twin of UpdateTagInput above; same incident, same fix",
+	"maps.UpdateHexCellInput":             "PATCH .../maps/:mid/hexes/cells — a paint stroke sends only terrain, so it must not touch a hex's name or notes; a rename must not clear its terrain",
+	"maps.UpdateHexLayerInput":            "PUT .../maps/:mid/hexes/layer — a push naming nothing about the anchor must not move the hexes off their picture; only an explicit null puts them back on the whole map; a fog-only or anchor-only push must not reset the travel figures to their defaults",
+	"bestiary.UpdatePublicationInput":     "PUT /bestiary/:id — a plain *string could not tell an absent description from an explicit null, so a client could never clear one; name/description/flavor_text are now patch.Field, and a literal null in the raw-JSON tags or statblock is treated as absent rather than stored as the text \"null\"",
+	"timeline.UpdateEntityGroupInput":     "PUT .../timelines/:tid/groups/:gid — the service rebuilt the whole row from the body, so every edit reset the group's sort order to 0 and a name-only push blanked the color",
+	"timeline.UpdateEventVisibilityInput": "PUT .../timelines/:tid/events/:eid/visibility — a body naming only the override wrote NULL over the event link's per-user visibility rules (and vice versa)",
+	"armory.UpdateInstanceInput":          "PUT /campaigns/:id/armory/instances/:iid — Rename echoed back the description, icon and colour it loaded, so a concurrent change to them was reverted; a name-only push must keep the rest",
+	"auth.UpdateViewPrefsInput":           "PUT /account/view-prefs — each My view choice saves on its own as it is tapped, so a body naming one must not reset the other three (born governed, no incident)",
 }
 
 // governedFieldExceptions are value-typed fields deliberately left on a
@@ -109,8 +111,6 @@ var fullReplaceByDesign = map[string]string{
 // means the struct became contract-governed; adding one means a new update
 // input shipped and its author decided it is not a partial update.
 var notYetSwept = map[string]bool{
-	"timeline.UpdateEntityGroupInput":     true,
-	"timeline.UpdateEventVisibilityInput": true,
 	"addons.UpdateAddonInput":             true,
 	"entities.UpdateLayoutPresetInput":    true,
 	"entities.UpdateContentTemplateInput": true,

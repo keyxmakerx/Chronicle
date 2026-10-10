@@ -34,6 +34,7 @@ import (
 	"github.com/go-sql-driver/mysql"
 
 	"github.com/keyxmakerx/chronicle/internal/database"
+	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 )
 
@@ -196,8 +197,7 @@ func TestTimelineEventCount_Integration(t *testing.T) {
 	if err := repo.LinkEvent(ctx, &EventLink{TimelineID: timelineID, EventID: overriddenEventID}); err != nil {
 		t.Fatalf("link overridden event: %v", err)
 	}
-	dmOnly := "dm_only"
-	if err := repo.UpdateEventLinkVisibility(ctx, timelineID, overriddenEventID, &dmOnly, nil); err != nil {
+	if err := repo.UpdateEventLinkVisibility(ctx, timelineID, overriddenEventID, patch.Of("dm_only"), patch.Absent[string]()); err != nil {
 		t.Fatalf("override link visibility: %v", err)
 	}
 	if err := repo.CreateEvent(ctx, &TimelineEvent{

@@ -674,22 +674,17 @@ func (h *Handler) UpdateEntityGroupAPI(c echo.Context) error {
 		return err
 	}
 
-	var req struct {
-		Name  string `json:"name"`
-		Color string `json:"color"`
-	}
+	var req UpdateEntityGroupInput
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request")
 	}
 
-	if err := h.svc.UpdateEntityGroup(c.Request().Context(), timelineID, groupID, UpdateEntityGroupInput{
-		Name:  req.Name,
-		Color: req.Color,
-	}); err != nil {
+	if err := h.svc.UpdateEntityGroup(c.Request().Context(), timelineID, groupID, req); err != nil {
 		return err
 	}
+	name, _ := req.Name.Get()
 	h.logTimelineAudit(c, cc.Campaign.ID, audit.ActionTimelineEntityGroupUpdated, "timeline_entity_group",
-		fmt.Sprintf("%d", groupID), req.Name, map[string]any{"timeline_id": timelineID})
+		fmt.Sprintf("%d", groupID), name, map[string]any{"timeline_id": timelineID})
 	return nil
 }
 
@@ -843,24 +838,15 @@ func (h *Handler) UpdateEventVisibilityAPI(c echo.Context) error {
 		return err
 	}
 
-	var req struct {
-		VisibilityOverride *string `json:"visibility_override"`
-		VisibilityRules    *string `json:"visibility_rules"`
-	}
+	var req UpdateEventVisibilityInput
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request")
 	}
 
-	if err := h.svc.UpdateEventLinkVisibility(ctx, timelineID, eventID, UpdateEventVisibilityInput{
-		VisibilityOverride: req.VisibilityOverride,
-		VisibilityRules:    req.VisibilityRules,
-	}); err != nil {
+	if err := h.svc.UpdateEventLinkVisibility(ctx, timelineID, eventID, req); err != nil {
 		return err
 	}
-	override := ""
-	if req.VisibilityOverride != nil {
-		override = *req.VisibilityOverride
-	}
+	override, _ := req.VisibilityOverride.Get()
 	h.logTimelineAudit(c, cc.Campaign.ID, audit.ActionTimelineEventLinkVisibilityChanged, "timeline_event_link", eventID, "",
 		map[string]any{"timeline_id": timelineID, "new_override": override})
 	return c.NoContent(http.StatusOK)

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 )
 
@@ -30,7 +31,7 @@ type TimelineRepository interface {
 	CountEvents(ctx context.Context, timelineID string) (int, error)
 
 	// Event link visibility.
-	UpdateEventLinkVisibility(ctx context.Context, timelineID, eventID string, visOverride *string, visRules *string) error
+	UpdateEventLinkVisibility(ctx context.Context, timelineID, eventID string, visOverride, visRules patch.Field[string]) error
 
 	// Standalone events.
 	CreateEvent(ctx context.Context, e *TimelineEvent) error
@@ -371,12 +372,29 @@ func (r *timelineRepo) CountEvents(ctx context.Context, timelineID string) (int,
 
 // --- Event Link Visibility ---
 
-// UpdateEventLinkVisibility sets the visibility override and rules on an event link.
-func (r *timelineRepo) UpdateEventLinkVisibility(ctx context.Context, timelineID, eventID string, visOverride *string, visRules *string) error {
+// UpdateEventLinkVisibility writes only the visibility columns the caller
+// named: an absent field is left out of the SET clause, an explicit null
+// writes NULL, a value replaces. Writing both unconditionally is how a
+// visibility-only flip used to erase the per-user rules.
+func (r *timelineRepo) UpdateEventLinkVisibility(ctx context.Context, timelineID, eventID string, visOverride, visRules patch.Field[string]) error {
+	var sets []string
+	var args []any
+	if visOverride.Present() {
+		sets = append(sets, "visibility_override = ?")
+		args = append(args, visOverride.Ptr(nil))
+	}
+	if visRules.Present() {
+		sets = append(sets, "visibility_rules = ?")
+		args = append(args, visRules.Ptr(nil))
+	}
+	if len(sets) == 0 {
+		return nil
+	}
+	args = append(args, timelineID, eventID)
 	_, err := r.db.ExecContext(ctx,
-		`UPDATE timeline_event_links SET visibility_override = ?, visibility_rules = ?
+		`UPDATE timeline_event_links SET `+strings.Join(sets, ", ")+`
 		 WHERE timeline_id = ? AND event_id = ?`,
-		visOverride, visRules, timelineID, eventID,
+		args...,
 	)
 	return err
 }
