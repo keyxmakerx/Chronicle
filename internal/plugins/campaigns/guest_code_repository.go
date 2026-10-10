@@ -98,11 +98,12 @@ func (r *guestCodeRepository) DeleteUnused(ctx context.Context, campaignID, id s
 }
 
 // Claim marks the code used in one statement, so of two people racing for
-// it exactly one gets it.
+// it exactly one gets it. A campaign in the Trash takes no new guests.
 func (r *guestCodeRepository) Claim(ctx context.Context, codeHash string, now time.Time) (string, string, error) {
 	res, err := r.db.ExecContext(ctx,
 		`UPDATE campaign_guest_codes SET used_at = ?
-		  WHERE code_hash = ? AND used_at IS NULL AND expires_at > ?`, now, codeHash, now)
+		  WHERE code_hash = ? AND used_at IS NULL AND expires_at > ?
+		    AND campaign_id IN (SELECT id FROM campaigns WHERE deleted_at IS NULL)`, now, codeHash, now)
 	if err != nil {
 		return "", "", fmt.Errorf("claiming guest code: %w", err)
 	}
