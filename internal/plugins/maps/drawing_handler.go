@@ -220,7 +220,7 @@ func (h *DrawingHandler) UpdateDrawing(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request body")
 	}
 
-	if err := h.drawingSvc.UpdateDrawing(c.Request().Context(), c.Param("did"), c.Param("mid"), int(cc.MemberRole), cc.CanAuthorDmOnly(), UpdateDrawingInput{
+	if err := h.drawingSvc.UpdateDrawing(c.Request().Context(), c.Param("did"), c.Param("mid"), getUserID(c), int(cc.MemberRole), cc.CanAuthorDmOnly(), UpdateDrawingInput{
 		Points:            req.Points,
 		StrokeColor:       req.StrokeColor,
 		StrokeWidth:       req.StrokeWidth,

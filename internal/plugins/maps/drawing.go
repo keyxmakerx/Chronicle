@@ -70,6 +70,10 @@ type CreateDrawingInput struct {
 	// CallerIsDM is true for an owner or co-DM. Only they may create a shadow;
 	// it is not a data field.
 	CallerIsDM bool
+	// Imported marks a drawing restored from a campaign export: a label's
+	// text is cleaned to the current bounds instead of refused. Not a data
+	// field.
+	Imported bool
 }
 
 // UpdateDrawingInput is the validated input for updating a drawing.

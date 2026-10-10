@@ -172,7 +172,7 @@
       // Leaflet lifts every svg in the map pane to z-index 200; the outline
       // must stay under its text.
       '.mp-ann-bubble > svg.mp-ann-outline { position: absolute; z-index: 0; overflow: visible; pointer-events: none; filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.3)); }',
-      '.mp-ann-bubble-text { position: absolute; z-index: 1; left: 0; top: 0; width: max-content; max-width: ' + BUBBLE_TEXT_MAX + 'px; color: #111827; font: 13px/1.35 system-ui, sans-serif; white-space: pre-wrap; overflow-wrap: anywhere; cursor: pointer; }',
+      '.mp-ann-bubble-text { position: absolute; z-index: 1; left: 0; top: 0; width: max-content; max-width: ' + BUBBLE_TEXT_MAX + 'px; color: var(--color-text-primary, #111827); font: 13px/1.35 system-ui, sans-serif; white-space: pre-wrap; overflow-wrap: anywhere; cursor: pointer; }',
       '.mp-ann-measuring { visibility: hidden; }',
       // New shapes arrive quickly: discs and bubbles grow from their point,
       // lines fade in. Calm and Off are applied site-wide on html[data-motion].
@@ -306,7 +306,9 @@
     var wrap = document.createElement('div');
     wrap.className = 'mp-ann-bubble mp-ann-measuring';
     var svg = svgEl('svg', { 'class': 'mp-ann-outline' });
-    var outline = svgEl('path', { fill: '#ffffff', stroke: color, 'stroke-width': '2', 'stroke-linejoin': 'round' });
+    var outline = svgEl('path', { stroke: color, 'stroke-width': '2', 'stroke-linejoin': 'round' });
+    // The bubble takes the theme's surface, so it follows light and dark.
+    outline.style.fill = 'var(--color-card-bg, #ffffff)';
     svg.appendChild(outline);
     var body = document.createElement('div');
     body.className = 'mp-ann-bubble-text';
@@ -400,9 +402,12 @@
     h.textContent = title;
     pop.appendChild(h);
     // Clicks, wheel and keys inside belong to the popover, not the map or the
-    // viewer's shortcuts.
-    ['mousedown', 'pointerdown', 'click', 'dblclick', 'contextmenu', 'wheel', 'touchstart'].forEach(function (ev) {
+    // viewer's shortcuts, wherever the focus is in it (field or button).
+    ['mousedown', 'pointerdown', 'click', 'dblclick', 'contextmenu', 'wheel', 'touchstart', 'keydown'].forEach(function (ev) {
       pop.addEventListener(ev, function (e) { e.stopPropagation(); });
+    });
+    pop.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && pop._close) { e.preventDefault(); pop._close(); }
     });
     return pop;
   }
@@ -418,7 +423,11 @@
         if (!pop.parentNode) return;
         document.removeEventListener('pointerdown', away, true);
         map.off('move zoom resize', moved);
+        // Focus goes back to the map, unless the person already moved it
+        // somewhere else (a click off the popover into a field).
+        var hadFocus = pop.contains(document.activeElement);
         pop.parentNode.removeChild(pop);
+        if (hadFocus) { try { map.getContainer().focus({ preventScroll: true }); } catch (e) { /* not focusable */ } }
         if (openPop === handle) openPop = null;
         if (onClose) onClose();
       }
@@ -426,6 +435,7 @@
     // A click off the popover closes it, as every map popover does.
     setTimeout(function () { document.addEventListener('pointerdown', away, true); }, 0);
     map.on('move zoom resize', moved);
+    pop._close = handle.close;
     openPop = handle;
     return handle;
   }
@@ -479,8 +489,6 @@
     ok.addEventListener('click', submit);
     cancel.addEventListener('click', function () { handle.close(); });
     field.addEventListener('keydown', function (e) {
-      e.stopPropagation();
-      if (e.key === 'Escape') { e.preventDefault(); handle.close(); return; }
       // Enter saves; Shift+Enter starts a new line in a bubble.
       if (e.key === 'Enter' && !(opts.multiline && e.shiftKey) && !e.isComposing) { e.preventDefault(); submit(); }
     });
@@ -507,10 +515,6 @@
     var handle = openShell(pop, map, opts.latlng, null);
     cancel.addEventListener('click', function () { handle.close(); });
     ok.addEventListener('click', function () { handle.close(); opts.onConfirm(); });
-    pop.addEventListener('keydown', function (e) {
-      e.stopPropagation();
-      if (e.key === 'Escape') { e.preventDefault(); handle.close(); }
-    });
     cancel.focus();
     return handle;
   }

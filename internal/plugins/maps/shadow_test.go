@@ -349,7 +349,7 @@ func TestDrawingService_ShadowWritesAreDMOnly(t *testing.T) {
 		})
 		t.Run("update/"+tc.name, func(t *testing.T) {
 			sr := &shadowGetRepo{drawing: Drawing{ID: "sh", MapID: "map-1", DrawingType: "shadow", Points: shadowPts}}
-			err := NewDrawingService(sr).UpdateDrawing(context.Background(), "sh", "map-1", permissions.RoleScribe, tc.isDM,
+			err := NewDrawingService(sr).UpdateDrawing(context.Background(), "sh", "map-1", "", permissions.RoleScribe, tc.isDM,
 				UpdateDrawingInput{FillAlpha: patch.Of(0.85)})
 			if (err != nil) != tc.wantErr {
 				t.Errorf("err=%v, wantErr=%v", err, tc.wantErr)

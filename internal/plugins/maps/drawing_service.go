@@ -117,7 +117,10 @@ type DrawingService interface {
 	// isDM (owner or co-DM, CampaignContext.CanAuthorDmOnly) is separate from
 	// role: only a DM may create, change or delete a shadow, while role keeps
 	// driving the "who can draw" gate unchanged.
-	UpdateDrawing(ctx context.Context, id, mapID string, role int, isDM bool, input UpdateDrawingInput) error
+	//
+	// UpdateDrawing follows DeleteDrawing's ownership rule: owners and DM
+	// access change any drawing, a scribe only the ones actorID created.
+	UpdateDrawing(ctx context.Context, id, mapID, actorID string, role int, isDM bool, input UpdateDrawingInput) error
 	DeleteDrawing(ctx context.Context, id, mapID string, expectedUpdatedAt *time.Time, actorID string, role int, isDM bool) error
 	// ListDrawings also withholds, from viewers subject to shadow hiding,
 	// non-shadow drawings lying wholly under a shadow area.
@@ -327,8 +330,8 @@ func (s *drawingService) CreateDrawing(ctx context.Context, input CreateDrawingI
 	if len(input.Points) == 0 {
 		return nil, apperror.NewBadRequest("points are required")
 	}
-	if len(input.Points) > 10000 {
-		return nil, apperror.NewBadRequest("too many points (maximum 10,000)")
+	if err := checkPointsSize(input.Points); err != nil {
+		return nil, err
 	}
 	if dt == DrawingTypeShadow {
 		if err := validateShadowPoints(input.Points); err != nil {
@@ -389,7 +392,11 @@ func (s *drawingService) CreateDrawing(ctx context.Context, input CreateDrawingI
 	if d.StrokeWidth <= 0 {
 		d.StrokeWidth = 2.0
 	}
-	if err := validateDrawingContent(d, true); err != nil {
+	if input.Imported && d.DrawingType == "text" {
+		// An export from before the text bound may hold any label; import keeps
+		// it, cleaned, rather than failing the whole drawing.
+		d.TextContent = cleanImportedLabel(d.TextContent)
+	} else if err := validateDrawingContent(d, true); err != nil {
 		return nil, err
 	}
 
@@ -407,7 +414,7 @@ func (s *drawingService) GetDrawing(ctx context.Context, id string) (*Drawing, e
 }
 
 // UpdateDrawing validates input and updates a drawing.
-func (s *drawingService) UpdateDrawing(ctx context.Context, id, mapID string, role int, isDM bool, input UpdateDrawingInput) error {
+func (s *drawingService) UpdateDrawing(ctx context.Context, id, mapID, actorID string, role int, isDM bool, input UpdateDrawingInput) error {
 	if err := s.requireDrawAccess(ctx, mapID, role); err != nil {
 		return err
 	}
@@ -422,6 +429,13 @@ func (s *drawingService) UpdateDrawing(ctx context.Context, id, mapID string, ro
 	}
 	if err := s.notFoundIfHiddenFrom(ctx, d, isDM); err != nil {
 		return err
+	}
+	// Scribes may edit only their own drawings, matching delete.
+	if !isDM && !canDeleteOwn(role, actorID, d.CreatedBy) {
+		if d.Visibility == "dm_only" {
+			return apperror.NewNotFound("drawing not found")
+		}
+		return apperror.NewForbidden("you can only change drawings you created")
 	}
 	if d.DrawingType == DrawingTypeShadow {
 		if err := requireShadowAuthor(isDM); err != nil {
@@ -463,6 +477,9 @@ func (s *drawingService) UpdateDrawing(ctx context.Context, id, mapID string, ro
 		}
 		d.FillAlpha = normalizeShadowAlpha(d.FillAlpha)
 	}
+	if err := checkPointsSize(d.Points); err != nil {
+		return err
+	}
 	if err := validateDrawingContent(d, input.TextContent.Present()); err != nil {
 		return err
 	}
@@ -472,6 +489,17 @@ func (s *drawingService) UpdateDrawing(ctx context.Context, id, mapID string, ro
 	}
 	s.shadowChanged(ctx, d)
 	s.events.PublishDrawingEvent("updated", s.campaignForMap(ctx, d.MapID), d)
+	return nil
+}
+
+// maxPointsBytes bounds the stored points JSON of any drawing, on create and
+// on the merged row of every update.
+const maxPointsBytes = 10000
+
+func checkPointsSize(points json.RawMessage) error {
+	if len(points) > maxPointsBytes {
+		return apperror.NewBadRequest("too many points (maximum 10,000)")
+	}
 	return nil
 }
 

@@ -73,7 +73,7 @@ func validateDrawingText(s *string) (*string, error) {
 	if s == nil {
 		return nil, apperror.NewBadRequest("text is required")
 	}
-	t := strings.TrimSpace(*s)
+	t := strings.TrimSpace(normalizeNewlines(*s))
 	if t == "" {
 		return nil, apperror.NewBadRequest("text is required")
 	}
@@ -89,6 +89,33 @@ func validateDrawingText(s *string) (*string, error) {
 		}
 	}
 	return &t, nil
+}
+
+// normalizeNewlines turns Windows and old Mac line endings into \n, so text
+// pasted from anywhere is stored one way.
+func normalizeNewlines(s string) string {
+	return strings.ReplaceAll(strings.ReplaceAll(s, "\r\n", "\n"), "\r", "\n")
+}
+
+// cleanImportedLabel fits an imported label's text to the current rules
+// without refusing it: line endings normalised, other control characters
+// dropped, trimmed and cut to MaxDrawingTextRunes. Empty text stays as it was
+// stored, since an old label may have none.
+func cleanImportedLabel(s *string) *string {
+	if s == nil {
+		return nil
+	}
+	t := strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) && r != '\n' && r != '\t' {
+			return -1
+		}
+		return r
+	}, strings.ToValidUTF8(normalizeNewlines(*s), ""))
+	t = strings.TrimSpace(t)
+	if utf8.RuneCountInString(t) > MaxDrawingTextRunes {
+		t = strings.TrimSpace(string([]rune(t)[:MaxDrawingTextRunes]))
+	}
+	return &t
 }
 
 // parseStepNumber reads a step's number from text_content: decimal digits
@@ -159,7 +186,8 @@ func validateAnnotation(d *Drawing) error {
 		}
 	case DrawingTypeHighlight:
 		// The size of a stroke is bounded by the points ceiling every drawing
-		// shares (CreateDrawing), so only the floor is checked here.
+		// shares (checkPointsSize, on create and update), so only the floor is
+		// checked here.
 		if len(pts) < 2 {
 			return apperror.NewBadRequest("a highlighter stroke needs at least two points")
 		}

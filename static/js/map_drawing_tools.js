@@ -80,6 +80,11 @@
       if (kind === 'geo') picLive[id] = points; else delete picLive[id];
       picNotify(kind, id);
     }
+    // mayChange mirrors the server: owners and DM access change or delete any
+    // drawing, a scribe only the ones they made.
+    function mayChange(d) {
+      return !!(ctx.isOwner || ctx.canDmOnly || (ctx.userID && d && d.created_by === ctx.userID));
+    }
     var pictures = window.ChronicleMapPictures ? window.ChronicleMapPictures.attach(map, {
       mapW: w,
       mapH: h,
@@ -93,12 +98,10 @@
           .then(function (res) { return res.ok ? res.json() : null; })
           .then(function (fresh) { return fresh && fresh.image_url ? fresh.image_url : ''; });
       },
-      canEdit: !!isScribe,
-      // The server's delete rule: owners and DM access any picture, a scribe
-      // the ones they added.
-      canDelete: function (d) {
-        return !!(ctx.isOwner || ctx.canDmOnly || (ctx.userID && d.created_by === ctx.userID));
-      },
+      // The server's rule for changing and deleting alike: owners and DM
+      // access any picture, a scribe the ones they added.
+      canEdit: function (d) { return !!isScribe && mayChange(d); },
+      canDelete: mayChange,
       onPatch: patchDrawing,
       onDelete: confirmDelete,
       onChange: pictureChanged,
@@ -213,6 +216,11 @@
           });
         }
         return res.json();
+      }).catch(function () {
+        // A dropped connection resolves to null like a refusal, so every tool
+        // clears its preview and a step gives back its number.
+        Chronicle.notify('Failed to save drawing', 'error');
+        return null;
       });
     }
 
@@ -382,8 +390,9 @@
             if (e.originalEvent) e.originalEvent.preventDefault();
             confirmDelete(d.id, e.latlng);
           });
-          // Double-click a label or bubble to change its words.
-          if (d.drawing_type === 'text' || d.drawing_type === 'callout') {
+          // Double-click a label or bubble to change its words, where the
+          // server would let this person change it.
+          if ((d.drawing_type === 'text' || d.drawing_type === 'callout') && mayChange(d)) {
             layer.on('dblclick', function (e) {
               L.DomEvent.stopPropagation(e);
               if (e.originalEvent) L.DomEvent.preventDefault(e.originalEvent);

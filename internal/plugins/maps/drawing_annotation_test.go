@@ -210,7 +210,7 @@ func TestUpdateDrawing_AnnotationsRecheckTheMergedRow(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := &annotationRepo{stored: stored(tc.typ)}
-			err := NewDrawingService(repo).UpdateDrawing(context.Background(), "d-1", "map-1", permissions.RoleOwner, true, tc.input)
+			err := NewDrawingService(repo).UpdateDrawing(context.Background(), "d-1", "map-1", "", permissions.RoleOwner, true, tc.input)
 			if tc.ok && err != nil {
 				t.Fatalf("want accepted, got %v", err)
 			}
@@ -230,11 +230,11 @@ func TestUpdateDrawing_LongStoredLabelKeepsWorking(t *testing.T) {
 	long := strings.Repeat("a", MaxDrawingTextRunes+50)
 	repo := &annotationRepo{stored: Drawing{ID: "d-1", MapID: "map-1", DrawingType: "text", Points: pts(`[{"x":1,"y":1}]`), TextContent: &long}}
 	svc := NewDrawingService(repo)
-	if err := svc.UpdateDrawing(context.Background(), "d-1", "map-1", permissions.RoleOwner, true, UpdateDrawingInput{StrokeColor: patch.Of("#c0392b")}); err != nil {
+	if err := svc.UpdateDrawing(context.Background(), "d-1", "map-1", "", permissions.RoleOwner, true, UpdateDrawingInput{StrokeColor: patch.Of("#c0392b")}); err != nil {
 		t.Errorf("a colour change must not trip the text bound: %v", err)
 	}
 	repo.written = nil
-	if err := svc.UpdateDrawing(context.Background(), "d-1", "map-1", permissions.RoleOwner, true, UpdateDrawingInput{TextContent: patch.Of(long)}); err == nil {
+	if err := svc.UpdateDrawing(context.Background(), "d-1", "map-1", "", permissions.RoleOwner, true, UpdateDrawingInput{TextContent: patch.Of(long)}); err == nil {
 		t.Error("writing over-long text must be refused")
 	}
 }
@@ -412,5 +412,127 @@ func TestAnnotations_RoundTripAndDMOnly_Integration(t *testing.T) {
 	owner, _ := svc.ListDrawings(ctx, mapID, permissions.RoleOwner, userID)
 	if len(owner) != 5 {
 		t.Errorf("owner sees %d drawings, want all 5", len(owner))
+	}
+}
+
+// Line endings from any platform are stored as \n, never refused.
+func TestValidateDrawingText_NormalisesLineEndings(t *testing.T) {
+	for _, tc := range []struct{ in, want string }{
+		{"one\r\ntwo", "one\ntwo"},
+		{"one\rtwo", "one\ntwo"},
+		{"one\r\n\rtwo\n", "one\n\ntwo"},
+		{"plain", "plain"},
+	} {
+		got, err := validateDrawingText(&tc.in)
+		if err != nil || *got != tc.want {
+			t.Errorf("%q: got %v, %v; want %q", tc.in, got, err, tc.want)
+		}
+	}
+}
+
+// An import restores a label from any older export: cleaned, never refused.
+func TestCreateDrawing_ImportedLabelIsCleanedNotRefused(t *testing.T) {
+	long := strings.Repeat("é", MaxDrawingTextRunes+40)
+	for _, tc := range []struct {
+		name string
+		text *string
+		want *string
+	}{
+		{"over the limit is cut", &long, strp(strings.Repeat("é", MaxDrawingTextRunes))},
+		{"CRLF becomes LF", strp("a\r\nb\rc"), strp("a\nb\nc")},
+		{"empty stays empty", strp(""), strp("")},
+		{"no text stays none", nil, nil},
+		{"control characters dropped", strp("a\x00b\x07c"), strp("abc")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := &shadowRepo{}
+			_, err := NewDrawingService(repo).CreateDrawing(context.Background(), CreateDrawingInput{
+				MapID: "map-1", DrawingType: "text", Points: pts(`[{"x":1,"y":1}]`), TextContent: tc.text,
+				CallerRole: permissions.RoleOwner, CallerIsDM: true, Imported: true,
+			})
+			if err != nil {
+				t.Fatalf("import refused: %v", err)
+			}
+			got := repo.created.TextContent
+			if (got == nil) != (tc.want == nil) || (got != nil && *got != *tc.want) {
+				t.Errorf("stored %v, want %v", got, tc.want)
+			}
+		})
+	}
+	// Outside an import the same over-long label is still refused.
+	repo := &shadowRepo{}
+	if _, err := NewDrawingService(repo).CreateDrawing(context.Background(), CreateDrawingInput{
+		MapID: "map-1", DrawingType: "text", Points: pts(`[{"x":1,"y":1}]`), TextContent: &long, CallerRole: permissions.RoleOwner,
+	}); err == nil {
+		t.Error("a non-import create must keep the bound")
+	}
+}
+
+// The points ceiling applies to the merged row of an update, for every type.
+func TestUpdateDrawing_PointsCeiling(t *testing.T) {
+	big := func(n int) json.RawMessage {
+		parts := make([]string, n)
+		for i := range parts {
+			parts[i] = `{"x":1,"y":1}`
+		}
+		return json.RawMessage("[" + strings.Join(parts, ",") + "]")
+	}
+	for _, typ := range []string{"freehand", "polygon", DrawingTypeHighlight} {
+		for _, tc := range []struct {
+			n  int
+			ok bool
+		}{{600, true}, {1000, false}} {
+			repo := &annotationRepo{stored: Drawing{ID: "d-1", MapID: "map-1", DrawingType: typ, Points: pts(`[{"x":1,"y":1},{"x":2,"y":2}]`),
+				StrokeColor: "#2563eb", StrokeWidth: 18, FillAlpha: 0.35, Visibility: "everyone"}}
+			err := NewDrawingService(repo).UpdateDrawing(context.Background(), "d-1", "map-1", "", permissions.RoleOwner, true,
+				UpdateDrawingInput{Points: patch.Of(big(tc.n))})
+			if tc.ok != (err == nil) || (!tc.ok && repo.written != nil) {
+				t.Errorf("%s with %d points: err=%v, want ok=%v", typ, tc.n, err, tc.ok)
+			}
+		}
+	}
+}
+
+// Update follows delete's ownership rule: owners and DM access change any
+// drawing, a scribe only their own; another's hidden drawing reads as missing.
+func TestUpdateDrawing_OwnDrawingsOnlyForScribes(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		role       int
+		isDM       bool
+		actor      string
+		createdBy  *string
+		visibility string
+		wantCode   int // 0 means allowed
+	}{
+		{"owner, anyone's", permissions.RoleOwner, true, "u-owner", strp("u-other"), "everyone", 0},
+		{"owner, no recorded creator", permissions.RoleOwner, true, "u-owner", nil, "everyone", 0},
+		{"DM-granted scribe, anyone's", permissions.RoleScribe, true, "u-dm", strp("u-other"), "everyone", 0},
+		{"scribe, own", permissions.RoleScribe, false, "u-me", strp("u-me"), "everyone", 0},
+		{"scribe, another's", permissions.RoleScribe, false, "u-me", strp("u-other"), "everyone", 403},
+		{"scribe, no recorded creator", permissions.RoleScribe, false, "u-me", nil, "everyone", 403},
+		{"scribe, unknown caller", permissions.RoleScribe, false, "", strp(""), "everyone", 403},
+		{"scribe, another's hidden", permissions.RoleScribe, false, "u-me", strp("u-other"), "dm_only", 404},
+		{"player, own", permissions.RolePlayer, false, "u-me", strp("u-me"), "everyone", 403},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := &annotationRepo{stored: Drawing{ID: "d-1", MapID: "map-1", DrawingType: DrawingTypeCallout, Points: pts(`[{"x":5,"y":5}]`),
+				StrokeColor: "#2563eb", StrokeWidth: 2, TextContent: strp("hi"), Visibility: tc.visibility, CreatedBy: tc.createdBy}}
+			err := NewDrawingService(repo).UpdateDrawing(context.Background(), "d-1", "map-1", tc.actor, tc.role, tc.isDM,
+				UpdateDrawingInput{TextContent: patch.Of("changed")})
+			if tc.wantCode == 0 {
+				if err != nil || repo.written == nil {
+					t.Fatalf("want allowed, got %v", err)
+				}
+				return
+			}
+			var ae *apperror.AppError
+			if !errors.As(err, &ae) || ae.Code != tc.wantCode {
+				t.Fatalf("want %d, got %v", tc.wantCode, err)
+			}
+			if repo.written != nil {
+				t.Error("a refused edit reached persistence")
+			}
+		})
 	}
 }

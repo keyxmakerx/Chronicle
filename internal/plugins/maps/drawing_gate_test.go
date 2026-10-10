@@ -26,9 +26,19 @@ type gateRepo struct {
 	updated bool
 }
 
+// gateAuthor made every drawing gateRepo serves, so the ownership rule passes
+// and the draw gate alone decides.
+const gateAuthor = "u-gate"
+
 func (r *gateRepo) GetDrawing(_ context.Context, id string) (*Drawing, error) {
-	return &Drawing{ID: id, MapID: "map-1"}, nil
+	author := gateAuthor
+	return &Drawing{ID: id, MapID: "map-1", CreatedBy: &author}, nil
 }
+
+// gateSession stands in for the auth session getUserID reads.
+type gateSession string
+
+func (s gateSession) GetUserID() string                           { return string(s) }
 func (r *gateRepo) CreateDrawing(context.Context, *Drawing) error { r.created = true; return nil }
 func (r *gateRepo) UpdateDrawing(context.Context, *Drawing) error { r.updated = true; return nil }
 
@@ -81,7 +91,7 @@ func TestDrawingWrites_EnforceWhoCanDraw(t *testing.T) {
 		})
 		t.Run("update/"+tc.name, func(t *testing.T) {
 			repo := &gateRepo{}
-			err := gateService(repo, tc.policy).UpdateDrawing(context.Background(), "d-1", "map-1", tc.role, tc.role >= permissions.RoleOwner,
+			err := gateService(repo, tc.policy).UpdateDrawing(context.Background(), "d-1", "map-1", gateAuthor, tc.role, tc.role >= permissions.RoleOwner,
 				UpdateDrawingInput{StrokeColor: patch.Of("#ff0000")})
 			assertGate(t, err, tc.allow, repo.updated)
 		})
@@ -169,6 +179,7 @@ func TestDrawingHandlers_EnforceWhoCanDraw(t *testing.T) {
 				c.SetParamNames("id", "mid", "did")
 				c.SetParamValues("camp-1", "map-1", "d-1")
 				c.Set("campaign_context", dmWriteCampaignCtx(tc.role, false))
+				c.Set("session", gateSession(gateAuthor))
 
 				var err error
 				if verb == "create" {
