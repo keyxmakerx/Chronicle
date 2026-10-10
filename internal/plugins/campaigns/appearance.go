@@ -281,6 +281,9 @@ func applyAppearance(s *CampaignSettings, in AppearanceInput) (*string, error) {
 		default:
 			return fail(apperror.NewBadRequest("invalid gradient direction"))
 		}
+	case "sky":
+		// The sky draws itself from the campaign's calendar; nothing to set.
+		style.Mode = "sky"
 	case "image":
 		style.Mode = "image"
 		if style.ImagePath, err = pictureName("header", h.Image); err != nil {

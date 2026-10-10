@@ -305,6 +305,11 @@ func TestApplyAppearance_Header(t *testing.T) {
 		{"image leading dot", AppearanceHeaderInput{Bg: "image", Image: ".hidden.png"}, true, nil},
 		{"image 255 ok", AppearanceHeaderInput{Bg: "image", Image: long[1:]}, false, nil},
 		{"image 256 refused", AppearanceHeaderInput{Bg: "image", Image: long}, true, nil},
+		{"sky ok, nothing else kept", AppearanceHeaderInput{Bg: "sky", Color: "#1e293b", From: "#000000", To: "#ffffff", Image: "abc.png"}, false, func(t *testing.T, s *TopbarStyle) {
+			if *s != (TopbarStyle{Mode: "sky"}) {
+				t.Errorf("got %+v", s)
+			}
+		}},
 		{"unknown bg", AppearanceHeaderInput{Bg: "plaid"}, true, nil},
 	}
 	for _, tc := range cases {
@@ -699,7 +704,6 @@ func TestApplyAppearance_MovingHeader(t *testing.T) {
 		{"needs both colours", AppearanceHeaderInput{Bg: "moving", From: "#0f172a"}, true},
 		{"colours must be hex", AppearanceHeaderInput{Bg: "moving", From: "red", To: "blue"}, true},
 		{"bad direction", AppearanceHeaderInput{Bg: "moving", From: "#0f172a", To: "#3b1d5e", Dir: "diagonal"}, true},
-		{"sky is not built yet", AppearanceHeaderInput{Bg: "sky"}, true},
 		{"animated is the editor's old name, not a stored mode", AppearanceHeaderInput{Bg: "animated", From: "#0f172a", To: "#3b1d5e"}, true},
 	}
 	for _, tc := range cases {

@@ -194,6 +194,7 @@ func TestTopbarWantsLightWords(t *testing.T) {
 		{"default header", nil, false},
 		{"empty mode", &TopbarStyleData{}, false},
 		{"image", &TopbarStyleData{Mode: "image", ImagePath: "a.png"}, true},
+		{"sky", &TopbarStyleData{Mode: "sky"}, true},
 		{"dark solid", &TopbarStyleData{Mode: "solid", Color: "#0f172a"}, true},
 		{"light solid", &TopbarStyleData{Mode: "solid", Color: "#f4eddd"}, false},
 		{"dark gradient", &TopbarStyleData{Mode: "gradient", GradientFrom: "#0f172a", GradientTo: "#1e1b4b"}, true},

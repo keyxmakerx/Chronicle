@@ -2422,6 +2422,7 @@ func (a *mapImportAdapter) ImportMaps(ctx context.Context, campaignID, userID st
 				// just created, so the draw gate (which defaults to scribes) is met.
 				CallerRole: permissions.RoleOwner,
 				CallerIsDM: true,
+				Imported:   true,
 			})
 			if err != nil {
 				slog.Warn("import: create drawing failed", slog.Any("error", err))

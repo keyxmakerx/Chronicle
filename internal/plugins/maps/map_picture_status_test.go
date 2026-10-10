@@ -118,7 +118,7 @@ func TestPictureStatus_ShadowWritesInvalidate(t *testing.T) {
 		{"update shadow keeps it shadowed", func(t *testing.T, h *pictureHarness) {
 			d := h.addShadow(t)
 			h.shadowed(t)
-			if err := h.drawings.UpdateDrawing(context.Background(), d.ID, "map-1", permissions.RoleOwner, true, UpdateDrawingInput{}); err != nil {
+			if err := h.drawings.UpdateDrawing(context.Background(), d.ID, "map-1", "", permissions.RoleOwner, true, UpdateDrawingInput{}); err != nil {
 				t.Fatal(err)
 			}
 		}, true},
