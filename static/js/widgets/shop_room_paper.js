@@ -1,10 +1,11 @@
 /**
  * shop_room_paper.js — the shop room's paper look: the same room the shop
  * room engine lays out (static/js/widgets/shop_room.js), drawn as a pop-up
- * book. Every furniture piece, good and decoration is a cut-card piece that
- * folds up off an open book, with paper grain, a card edge, soft shadows on
- * the page that fall away from the room's warm lights, and small living
- * details (flames, swaying lanterns, a breathing shopkeeper).
+ * book seen from the front. Every furniture piece, good and decoration is a
+ * cut-card piece that folds up off an open book, with paper grain, a pale cut
+ * edge, soft shadows on the page that fall away from the room's warm lights,
+ * a faint haze and drifting dust, and small living details (flames, swaying
+ * lanterns, a breathing shopkeeper).
  *
  * The shop room widget calls ShopRoomPaper.render(host, model, opts) after
  * each draw when the shop's look is "paper". Positions are the engine's floor
@@ -15,7 +16,7 @@
  *
  * Coordinates: floor x runs left to right along the book, floor y from the
  * back wall toward the viewer. The engine's Y wall (along x at y=0) is the
- * book's back wall; its X wall (along y at x=0) is a side wall on the left.
+ * book's back wall; walls that run toward the viewer are not drawn.
  */
 (function () {
   'use strict';
@@ -208,9 +209,10 @@
     return 'background:repeating-linear-gradient(0deg,' + a + ' 0 ' + (T / 4 - 1) + 'px,' + j + ' ' + (T / 4 - 1) + 'px ' + (T / 4) + 'px),' + a;
   }
 
-  // ---- Layout. The floor is turned a quarter round so both back walls face
-  // the viewer, as in the lit room; every card stands on a base point. ----
-  var DIAG = Math.SQRT1_2;
+  // ---- Layout. The book is seen from the front, like a pop-up book on a
+  // table: every card faces the viewer, so the room reads as flat cut paper
+  // rather than a model seen from a corner. Pieces along the side wall would
+  // be edge-on from the front, so they stand as front-facing cut-outs too. ----
   // Where a furniture card stands: base point in floor units, its turn on the
   // floor, its size in px, how high it hangs, and how far along its base the
   // point is (0 = its left end, .5 = its middle).
@@ -220,21 +222,25 @@
       var o = p.off + (p.depth ? p.depth * .5 : .04), z = 0;
       if (k === 'herbs') { z = (WH - 1.6) * Z; h = 1.5 * Z; }
       if (k === 'window') h = 2.6 * Z;
-      return p.wall === 'Y' ? { x: p.x, y: o, rot: 0, w: p.len * T, h: h, z: z, ax: 0 } : { x: o, y: p.y + p.len, rot: -90, w: p.len * T, h: h, z: z, ax: 0 };
+      if (p.wall === 'Y') return { x: p.x, y: o, rot: 0, w: p.len * T, h: h, z: z, ax: 0 };
+      var bw = Math.min(p.len, 1.7);
+      return { x: o + bw / 2, y: p.y + p.len / 2, rot: 0, w: bw * T, h: h, z: z, ax: .5, bw: bw };
     }
-    if (k === 'lamp') return { x: p.x + .2, y: p.y + .2, rot: -45, w: 36, h: 1.3 * Z, z: (WH - 1.3) * Z, ax: .5 };
+    if (k === 'lamp') return { x: p.x + .2, y: p.y + .2, rot: 0, w: 36, h: 1.3 * Z, z: (WH - 1.3) * Z, ax: .5 };
     var r = p.r;
-    return { x: r[0] + r[2] / 2, y: r[1] + r[3] / 2, rot: -45, w: Math.max(30, (r[2] + r[3]) * DIAG * T), h: h, z: 0, ax: .5 };
+    return { x: r[0] + r[2] / 2, y: r[1] + r[3] / 2, rot: 0, w: Math.max(30, r[2] * T), h: h, z: 0, ax: .5 };
   }
   // Where a good or decoration stands for its spot: in front of a wall
   // piece's card, just behind a floor piece's card so it sits on top, and on
   // a glass case's shelf rather than inside its base.
   function spotPos(a, p) {
     var x = a[0], y = a[1], z = a[2];
-    if (p.wall) { var f = p.off + (p.depth ? p.depth * .5 : .04) + .22; if (p.wall === 'Y') y = f; else x = f; }
-    else if (p.kind !== 'rug') {
-      var s0 = p.r[0] + p.r[2] / 2 + p.r[1] + p.r[3] / 2 - .16, sd = x + y;
-      if (sd > s0) { x -= (sd - s0) / 2; y -= (sd - s0) / 2; }
+    if (p.wall) {
+      var f = p.off + (p.depth ? p.depth * .5 : .04) + .22;
+      if (p.wall === 'Y') y = f;
+      else { var bw = Math.min(p.len, 1.7); x = f - .22 + bw / 2 + ((a[1] - p.y) / p.len - .5) * bw * .9; y = p.y + p.len / 2 + .12; }
+    } else if (p.kind !== 'rug') {
+      y = Math.min(y, p.r[1] + p.r[3] / 2 - .08);
       if (p.kind === 'glass') z = Math.max(z, .66);
     }
     return [x, y, z];
@@ -274,11 +280,22 @@
     Rm.pieces.forEach(function (p) {
       if (p.kind === 'rug' || p.kind === 'lamp' || p.kind === 'window' || p.kind === 'herbs') return;
       var st = stand(p, WH);
-      if (p.wall) { s += at(st.x, st.y, .2, st.rot, '', '<div class="srp-foot wall" style="width:' + n1(st.w) + 'px;height:' + (T * .5) + 'px"></div>'); return; }
+      if (p.wall) { if (p.wall !== 'Y') return; s += at(st.x, st.y, .2, st.rot, '', '<div class="srp-foot wall" style="width:' + n1(st.w) + 'px;height:' + (T * .5) + 'px"></div>'); return; }
       var r = p.r, cx = r[0] + r[2] / 2, cy = r[1] + r[3] / 2, off = cast(M.warm, cx, cy, p.h), L = Math.hypot(off[0], off[1]), ang = Math.atan2(off[1], off[0]) * 180 / Math.PI, sz = Math.max(r[2], r[3]);
       s += at(cx + off[0] / 2, cy + off[1] / 2, .25, n1(ang), '', '<div class="srp-cast" style="width:' + n1((L + sz) * T) + 'px;height:' + n1(Math.min(r[2], r[3]) * T * .9) + 'px"></div>');
-      s += at(cx, cy, .3, -45, '', '<div class="srp-foot" style="width:' + n1(st.w * 1.05) + 'px"></div>');
+      s += at(cx, cy, .3, 0, '', '<div class="srp-foot" style="width:' + n1(st.w * 1.05) + 'px"></div><div class="srp-foot core" style="width:' + n1(st.w * .86) + 'px"></div>');
     });
+    // Atmosphere, kept faint so paper stays soft: shade where the back wall
+    // meets the floor, window light lying on the floor, and the page
+    // darkening toward its edges.
+    if (M.full) {
+      Rm.back.forEach(function (e) { if (Math.abs(e.d[0]) < Math.abs(e.d[1])) return; s += at(Math.min(e.a[0], e.b[0]), Math.min(e.a[1], e.b[1]) + .02, .35, 0, '', '<div class="srp-seam" style="width:' + n1(Math.abs(e.b[0] - e.a[0]) * T) + 'px"></div>'); });
+      Rm.pieces.forEach(function (p) {
+        if (p.kind !== 'window' || p.wall !== 'Y') return;
+        s += at(p.x - .2, p.off + .1, .45, 0, '', '<div class="srp-beam" style="width:' + n1((p.len + .4) * T) + 'px;height:' + n1(3.4 * T) + 'px"></div>');
+      });
+      s += '<div class="srp-edge"></div>';
+    }
     // Rugs lie flat on the floor.
     Rm.pieces.forEach(function (p) {
       if (p.kind !== 'rug') return;
@@ -287,20 +304,28 @@
     // Back walls, then the sign on the one facing most to the right.
     var signE = null, sb = -9;
     Rm.back.forEach(function (e) {
+      if (Math.abs(e.d[0]) < Math.abs(e.d[1])) return; // runs toward the viewer: edge-on from the front
       var m = [-e.d[1], e.d[0]], mid = [(e.a[0] + e.b[0]) / 2, (e.a[1] + e.b[1]) / 2];
       if (m[0] - Math.abs(m[1]) > sb && e.len > 1.2) { sb = m[0] - Math.abs(m[1]); signE = e; }
       s += at(e.a[0], e.a[1], 0, n1(Math.atan2(e.d[1], e.d[0]) * 180 / Math.PI), 'srp-wall', up(e.len * T + .5, e.h * Z, 0, 0, wallArt(e.len * T + .5, e.h * Z, C, Rm.wall), lf(mid[0] + m[0], mid[1] + m[1], M)));
     });
     if (signE) {
-      var sm = [-signE.d[1], signE.d[0]], sx = (signE.a[0] + signE.b[0]) / 2 + sm[0] * .08, sy = (signE.a[1] + signE.b[1]) / 2 + sm[1] * .08;
+      // The sign hangs in the widest stretch of wall between tall pieces, so a chimney never covers it.
+      var lo = Math.min(signE.a[0], signE.b[0]), hi = Math.max(signE.a[0], signE.b[0]), cuts = [[lo, lo]];
+      Rm.pieces.forEach(function (p) { if (p.wall === 'Y' && p.h > WH - 1.4 && p.kind !== 'window') cuts.push([p.x, p.x + p.len]); });
+      cuts.push([hi, hi]); cuts.sort(function (a, b) { return a[0] - b[0]; });
+      var gx = (lo + hi) / 2, gw = 0, e0 = lo;
+      cuts.forEach(function (c) { if (c[0] - e0 > gw) { gw = c[0] - e0; gx = (c[0] + e0) / 2; } e0 = Math.max(e0, c[1]); });
+      var sm = [-signE.d[1], signE.d[0]], sx = Math.max(lo + 1.4, Math.min(hi - 1.4, gx)), sy = (signE.a[1] + signE.b[1]) / 2 + sm[1] * .08;
       s += at(sx, sy, (WH - .15) * Z - 60, n1(Math.atan2(signE.d[1], signE.d[0]) * 180 / Math.PI), 'srp-sign', up(150, 56, .5, 1, signArt(o.name || 'Shop', C.acc), lf(sx, sy, M)));
     }
     // Furniture, goods and decorations, back to front so they pop up in that order.
     var bases = [];
     Rm.pieces.forEach(function (p) {
       if (p.kind === 'rug') return;
+      if (p.wall && p.wall !== 'Y' && p.kind === 'window') return; // a side window keeps its light but has no card
       var st = stand(p, WH), draw = KIND[p.kind] || fallback;
-      bases.push({ d: st.x + st.y, h: at(st.x, st.y, st.z, st.rot, 'srp-pc' + (p.pinned ? ' pinned' : ''), up(st.w, st.h, st.ax, 0, draw(st.w, st.h, C), lf(st.x, st.y, M)), ' data-p="' + p.id + '"') });
+      bases.push({ d: st.y + st.x * .01, h: at(st.x, st.y, st.z, st.rot, 'srp-pc' + (p.pinned ? ' pinned' : ''), up(st.w, st.h, st.ax, 0, draw(st.w, st.h, C), lf(st.x, st.y, M)), ' data-p="' + p.id + '"') });
     });
     (V.placed || []).forEach(function (q) {
       var p = byId[q.piece]; if (!p) return;
@@ -310,28 +335,36 @@
         g = ICONS[it.ic] || ICONS.box; if (!g) return;
         h = 34; w = Math.max(16, h * g[0] / 512);
         body = '<svg class="srp-ic" viewBox="-40 -40 ' + (g[0] + 80) + ' 592" aria-hidden="true">' + iconArt(g, it.c) + '</svg>';
-        var tag = '<div class="srp-tag" style="transform:translateZ(' + (h + 8) + 'px) translateX(-50%) rotateX(-56deg)"><b>' + esc(it.n) + '</b> · ' + esc(it.price) + (it.out ? ' · sold out' : '') + '</div>';
-        bases.push({ d: pos[0] + pos[1] + .01, h: at(pos[0], pos[1], pos[2] * Z, -45, 'srp-good it' + (it.out ? ' out' : ''), '<div class="srp-up" style="left:' + n1(-w / 2) + 'px;width:' + n1(w) + 'px;height:' + h + 'px;--i:0' + lf(pos[0], pos[1], M) + '"><div class="srp-cd">' + body + '</div></div>' + tag,
+        var tag = '<div class="srp-tag" style="transform:translateZ(' + (h + 8) + 'px) translateX(-50%) rotateX(-60deg)"><b>' + esc(it.n) + '</b> · ' + esc(it.price) + (it.out ? ' · sold out' : '') + '</div>';
+        bases.push({ d: pos[1] + pos[0] * .01 + .01, h: at(pos[0], pos[1], pos[2] * Z, 0, 'srp-good it' + (it.out ? ' out' : ''), '<div class="srp-up" style="left:' + n1(-w / 2) + 'px;width:' + n1(w) + 'px;height:' + h + 'px;--i:0' + lf(pos[0], pos[1], M) + '"><div class="srp-cd">' + body + '</div></div>' + tag,
           ' data-i="' + q.good + '" tabindex="0" role="button" aria-label="' + esc(it.n + ', ' + it.price + (it.out ? ', sold out' : '')) + '"') });
       } else {
         g = ICONS[q.icon]; if (!g) return;
         h = 26; w = Math.max(13, h * g[0] / 512);
         body = (q.hang ? '<div class="srp-str"></div>' : '') + '<svg class="srp-ic" viewBox="-40 -40 ' + (g[0] + 80) + ' 592" aria-hidden="true">' + iconArt(g, Rm.decoCol[q.icon] || '#a3a3a3') + '</svg>';
-        bases.push({ d: pos[0] + pos[1] + .01, h: at(pos[0], pos[1], pos[2] * Z - (q.hang ? h : 0), -45, 'srp-deco' + (q.hang ? ' hang' : ''), '<div class="srp-up" style="left:' + n1(-w / 2) + 'px;width:' + n1(w) + 'px;height:' + h + 'px;--i:0' + lf(pos[0], pos[1], M) + '"><div class="srp-cd">' + body + '</div></div>',
+        bases.push({ d: pos[1] + pos[0] * .01 + .01, h: at(pos[0], pos[1], pos[2] * Z - (q.hang ? h : 0), 0, 'srp-deco' + (q.hang ? ' hang' : ''), '<div class="srp-up" style="left:' + n1(-w / 2) + 'px;width:' + n1(w) + 'px;height:' + h + 'px;--i:0' + lf(pos[0], pos[1], M) + '"><div class="srp-cd">' + body + '</div></div>',
           ' data-up="' + q.piece + '" data-ua="' + q.spot + '"') });
       }
     });
+    // Air: two faint haze planes across the room for depth, and dust turning in each warm light.
+    if (M.full) {
+      [[1.4, .09], [N * .55, .05]].forEach(function (hz) { bases.push({ d: hz[0] - .001, h: at(0, hz[0], 0, 0, 'srp-haze', '<div class="srp-up" style="left:0;width:' + (N * T) + 'px;height:' + n1(WH * Z) + 'px;--i:0;--hz:' + hz[1] + '"></div>') }); });
+      M.warm.forEach(function (q) {
+        var d = ''; for (var k = 0; k < 9; k++) d += '<i style="left:' + (8 + k * 37 % 84) + '%;bottom:' + (6 + k * 23 % 40) + '%;animation-delay:-' + (k * 1.3).toFixed(1) + 's;animation-duration:' + (7 + k % 4) + 's"></i>';
+        bases.push({ d: q[1] + .6, h: at(q[0], q[1] + .6, 0, 0, 'srp-dust', '<div class="srp-up" style="left:' + (-1.6 * T) + 'px;width:' + (3.2 * T) + 'px;height:' + n1(2.4 * Z) + 'px;--i:0">' + d + '</div>') });
+      });
+    }
     // The keeper stands behind the counter, or toward the back with no counter.
-    var ctr = Rm.pieces.filter(function (p) { return p.kind === 'counter'; })[0], kx = ctr ? ctr.r[0] + ctr.r[2] / 2 - .42 : N * .3, ky = ctr ? ctr.r[1] + ctr.r[3] / 2 - .42 : N * .3;
+    var ctr = Rm.pieces.filter(function (p) { return p.kind === 'counter'; })[0], kx = ctr ? ctr.r[0] + ctr.r[2] / 2 : N * .5, ky = ctr ? ctr.r[1] + ctr.r[3] / 2 - .7 : N * .3;
     var kp = o.image ? '<img src="' + esc(o.image) + '" alt="">' : '';
-    bases.push({ d: kx + ky, h: at(kx, ky, 0, -45, 'srp-keeper', '<div class="srp-up" style="left:-38px;width:76px;height:90px;--i:0' + lf(kx, ky, M) + '"><div class="srp-cd">' + '<svg viewBox="0 0 104 122" aria-hidden="true">' + keeperArt(C.acc, !!o.image) + '</svg>' + kp + '</div></div>', ' tabindex="0" role="button" aria-label="Talk to the shopkeeper"') });
+    bases.push({ d: ky + kx * .01, h: at(kx, ky, 0, 0, 'srp-keeper', '<div class="srp-up" style="left:-46px;width:92px;height:110px;--i:0' + lf(kx, ky, M) + '"><div class="srp-cd">' + '<svg viewBox="0 0 104 122" aria-hidden="true">' + keeperArt(C.acc, !!o.image) + '</svg>' + kp + '</div></div>', ' tabindex="0" role="button" aria-label="Talk to the shopkeeper"') });
     bases.sort(function (a, b) { return a.d - b.d; }).forEach(function (b) { s += b.h.replace('--i:0', '--i:' + (i++)); });
     // Markers for turning a pointer into a floor point or a spot.
     [[0, 0], [N, 0], [N, N], [0, N]].forEach(function (q, k) { s += '<i class="srp-mk" data-c="' + k + '" style="transform:translate3d(' + (q[0] * T) + 'px,' + (q[1] * T) + 'px,0)"></i>'; });
     // The tops of the walls' far corners, so fitting knows how tall the room stands.
     [[0, 0], [N, 0], [0, N]].forEach(function (q) { s += '<i class="srp-mk srp-top" style="transform:translate3d(' + (q[0] * T) + 'px,' + (q[1] * T) + 'px,' + (WH * Z) + 'px)"></i>'; });
     (V.anchors || []).forEach(function (a) { var p = byId[a.piece]; if (!p) return; var q = spotPos(a.at, p); s += '<i class="srp-mk" data-s="' + a.piece + ':' + a.spot + '" style="transform:translate3d(' + n1(q[0] * T) + 'px,' + n1(q[1] * T) + 'px,' + n1(q[2] * Z) + 'px)"></i>'; });
-    var W0 = N * T * Math.SQRT2;
+    var W0 = N * T * 1.15;
     return { html: '<div class="srp-floor" style="width:' + (N * T) + 'px;height:' + (N * T) + 'px;left:' + n1(-N * T / 2) + 'px;top:' + n1(-N * T / 2) + 'px">' + s + '</div>', w: W0 + 120, h: W0 * .56 + WH * Z * .83 + 130, fy: W0 * .28 + 60, N: N };
   }
 
@@ -412,10 +445,10 @@
   var CSS = [
     '.srp{position:absolute;inset:0;overflow:hidden}',
     '.srp-fit{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) scale(var(--s,1)) translate(var(--dx,0px),var(--dy,0px))}',
-    '.srp-cam{position:absolute;inset:0;perspective:1500px;perspective-origin:50% 20%}',
+    '.srp-cam{position:absolute;inset:0;perspective:1400px;perspective-origin:50% 30%}',
     '.srp-tilt{position:absolute;left:50%;width:0;height:0;transform-style:preserve-3d;transition:transform .5s cubic-bezier(.2,.7,.2,1)}',
-    '.srp-floor{position:absolute;transform-style:preserve-3d;transform:rotateX(56deg) rotateZ(45deg)}',
-    '.srp-page{position:absolute;background:#efe4cc;background-image:radial-gradient(circle at 30% 20%,rgb(255 255 255/.35),transparent 60%),repeating-linear-gradient(0deg,rgb(80 60 30/.04) 0 2px,transparent 2px 5px);border-radius:6px;box-shadow:0 0 0 2px #2a1f17,0 30px 60px -20px rgb(0 0 0/.7)}',
+    '.srp-floor{position:absolute;transform-style:preserve-3d;transform:rotateX(60deg) scaleY(.8)}',
+    '.srp-page{position:absolute;background:#efe4cc;background-image:linear-gradient(90deg,transparent 47%,rgb(60 40 20/.18) 49.6%,rgb(255 255 255/.25) 50.2%,transparent 53%),radial-gradient(circle at 30% 20%,rgb(255 255 255/.35),transparent 60%),repeating-linear-gradient(0deg,rgb(80 60 30/.04) 0 2px,transparent 2px 5px);border-radius:6px;box-shadow:0 0 0 2px #2a1f17,0 30px 60px -20px rgb(0 0 0/.7)}',
     '.srp-ground{position:absolute;inset:0;transform:translateZ(.1px)}',
     '.srp-glow{position:absolute;border-radius:50%;pointer-events:none;transform:translateZ(.5px);background:radial-gradient(closest-side,rgb(255 176 92/.34),rgb(255 150 60/.12) 55%,transparent)}',
     '.srp-glow.cool{background:radial-gradient(closest-side,rgb(214 232 255/.28),transparent)}',
@@ -423,11 +456,20 @@
     '.srp-at{position:absolute;left:0;top:0;width:0;height:0;transform-style:preserve-3d}',
     '.srp-cast{position:absolute;left:0;top:0;transform:translate(-50%,-50%);border-radius:50%;background:radial-gradient(closest-side,rgb(30 16 4/.42),rgb(30 16 4/.16) 60%,transparent)}',
     '.srp-foot{position:absolute;left:0;top:0;height:16px;transform:translate(-50%,-50%);border-radius:50%;background:radial-gradient(closest-side,rgb(30 16 4/.5),transparent)}',
+    '.srp-foot.core{height:7px;background:radial-gradient(closest-side,rgb(24 12 2/.62),transparent)}',
+    '.srp-cast{filter:blur(2.5px)}',
+    '.srp-seam{position:absolute;left:0;top:0;height:46px;background:linear-gradient(rgb(24 12 2/.5),rgb(24 12 2/.18) 40%,transparent)}',
+    '.srp-beam{position:absolute;left:0;top:0;transform-origin:50% 0;transform:perspective(400px) rotateX(-18deg);clip-path:polygon(18% 0,82% 0,100% 100%,0 100%);background:linear-gradient(rgb(255 240 205/.26),rgb(255 236 200/.08) 70%,transparent)}',
+    '.srp-edge{position:absolute;inset:0;pointer-events:none;transform:translateZ(.4px);background:radial-gradient(ellipse 70% 62% at 50% 38%,transparent 55%,rgb(20 10 4/.34) 100%)}',
+    '.srp-haze,.srp-dust{pointer-events:none}.srp-haze .srp-up{background:linear-gradient(0deg,rgb(255 214 160/var(--hz)),rgb(255 214 160/0) 70%)}',
+    '.srp-dust i{position:absolute;width:2px;height:2px;border-radius:50%;background:#ffe6b8;box-shadow:0 0 3px #ffb35c;opacity:0;animation:srp-mote linear infinite}',
+    '@keyframes srp-mote{0%{transform:translate(0,0);opacity:0}20%{opacity:.75}80%{opacity:.5}100%{transform:translate(14px,-46px);opacity:0}}',
+    '.srp.fxl .srp-dust,html[data-motion] .srp-dust{display:none}',
     '.srp-foot.wall{transform:none;border-radius:0;background:linear-gradient(rgb(30 16 4/.42),transparent)}',
     '.srp-up{position:absolute;bottom:0;transform-origin:50% 100%;transform-style:preserve-3d;transform:rotateX(-90deg);transition:transform .7s cubic-bezier(.3,1.5,.5,1);transition-delay:calc(min(var(--i,0),40) * 28ms)}',
     '.srp.shut .srp-up{transform:rotateX(0deg);transition:none}',
     '.srp-cd{position:absolute;inset:0;transition:transform .25s cubic-bezier(.3,1.6,.5,1)}',
-    '.srp-cd>svg{display:block;width:100%;height:100%;overflow:visible;filter:var(--lf,brightness(1)) drop-shadow(0 1px 0 rgb(40 25 10/.4))}',
+    '.srp-cd>svg{display:block;width:100%;height:100%;overflow:visible;filter:var(--lf,brightness(1)) drop-shadow(1.6px 0 0 #fbf6ea) drop-shadow(-1.6px 0 0 #fbf6ea) drop-shadow(0 -1.6px 0 #fbf6ea) drop-shadow(0 2px 2px rgb(40 25 10/.45))}',
     '.srp-rug{position:absolute;transform:translateZ(.6px)}.srp-rug .srp-cd>svg{filter:var(--lf,brightness(1))}',
     '.srp-good{cursor:pointer;outline:none}.srp-good:hover .srp-cd,.srp-good:focus-visible .srp-cd{transform:translateY(-7px)}',
     '.srp-good:focus-visible .srp-cd>svg{filter:var(--lf,brightness(1)) drop-shadow(0 0 2px var(--color-accent,#6366f1)) drop-shadow(0 0 2px var(--color-accent,#6366f1))}',
@@ -446,7 +488,7 @@
     '.srp.arr .srp-pc .srp-cd>svg,.srp.arr .srp-deco .srp-cd>svg{filter:var(--lf,brightness(1)) drop-shadow(0 0 1.5px var(--srp-acc)) drop-shadow(0 0 1.5px var(--srp-acc))}',
     '.srp-mk{position:absolute;left:0;top:0;width:1px;height:1px;pointer-events:none}',
     '.srp-amb{position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at 50% 42%,transparent 40%,rgb(12 9 20/.35) 100%)}',
-    '.srp.full .srp-amb{background:radial-gradient(ellipse at 50% 42%,transparent 34%,rgb(12 9 20/.55) 100%)}',
+    '.srp.full .srp-amb{background:radial-gradient(ellipse at 50% 30%,rgb(255 190 120/.06),transparent 45%),radial-gradient(ellipse at 50% 42%,transparent 36%,rgb(12 9 20/.6) 100%)}',
     // Living details: flames, embers, sparks, swaying lanterns, a breathing keeper.
     '.srp-flame{transform-box:fill-box;transform-origin:50% 100%;animation:srp-flame .7s ease-in-out infinite alternate}.srp-flame.b{animation-duration:.9s;animation-delay:-.3s}',
     '@keyframes srp-flame{0%{transform:none}50%{transform:scale(.9,1.12) skewX(-5deg)}100%{transform:scale(1.06,.92) skewX(4deg)}}',
