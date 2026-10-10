@@ -8,18 +8,21 @@
  *                   (notes list, posts), for places that show HTML without TipTap
  *   .createView(host, opts)  a drawing surface: set(source), destroy()
  *
- * Saved HTML is <pre class="ce-diagram [ce-diagram--gm]"><code>MERMAID
- * TEXT</code></pre>. Only the text is stored, never the drawing, and it is
- * escaped like any code block, so the shared sanitizer keeps it as text and
- * a non-JS reader sees readable source. ce-diagram--gm marks a GM-only
- * diagram; the server drops it for players in sanitize.StripSecretsHTML and
- * StripSecretsJSON.
+ * Saved HTML is <pre class="ce-diagram"><code>MERMAID TEXT</code></pre>.
+ * Only the text is stored, never the drawing, and it is escaped like any
+ * code block, so the shared sanitizer keeps it as text and a non-JS reader
+ * sees readable source. A diagram has no visibility of its own: it follows
+ * its page's or note's. The class ce-diagram--gm is never produced or read
+ * here (the server still drops it from stored content as a safety net);
+ * hydrate() skips such a block entirely.
  *
  * Security: Mermaid is a vendored, version-pinned file served by Chronicle
  * (static/vendor/mermaid.min.js), loaded only when a diagram is first drawn,
- * run with securityLevel 'strict' and HTML labels off. Click and link
- * directives are removed from the text before it is drawn, and the SVG it
- * returns is cleaned again before it is put in the page.
+ * run with securityLevel 'strict' and HTML labels off. Before drawing, the
+ * text loses every %%{...}%% directive and any front matter (so the page, not
+ * the writer, picks theme and font), and click/link lines. The SVG it
+ * returns is rebuilt from an allow-list of drawing elements and attributes
+ * before it is put in the page.
  */
 (function () {
   'use strict';
@@ -81,11 +84,33 @@
   // ignores them; they are dropped here so nothing depends on that alone.
   var ACTION_LINE = /^\s*(click|link|links|callback|callbacks)\s+["\w]/i;
 
+  /* Remove leading front matter and every %%{ ... }%% directive (also across
+     lines). Both can carry configuration (theme, font, CSS) the writer must
+     not control; the page sets those itself in mermaid.initialize. */
+  function stripConfig(text) {
+    var t = String(text);
+    var prev;
+    // Repeat: removing one can leave another (a directive that was hiding
+    // front matter's start, or two that were nested).
+    do {
+      prev = t;
+      t = t.replace(/^(\s*\n)*---[ \t]*\n[\s\S]*?\n---[ \t]*(\n|$)/, '');
+      t = t.replace(/%%\{[\s\S]*?\}%%/g, '');
+    } while (t !== prev);
+    return t;
+  }
+
   function prepareSource(source) {
-    var text = String(source == null ? '' : source).replace(/\r\n?/g, '\n');
+    var raw = String(source == null ? '' : source).replace(/\r\n?/g, '\n');
+    if (!raw.trim()) return { ok: false, empty: true, error: MSG_EMPTY };
+    if (raw.length > MAX_SOURCE) return { ok: false, error: MSG_LONG };
+    // Defence in depth: the config is stripped below, but a text that tries
+    // to name custom CSS, or hides it behind a \u escape, is refused outright.
+    if (/themeCSS|@import/i.test(raw) || /%%[^\n]*\\u/i.test(raw) || /^\s*---[\s\S]*?\\u[\s\S]*?\n---/.test(raw)) {
+      return { ok: false, error: MSG_CSS };
+    }
+    var text = stripConfig(raw);
     if (!text.trim()) return { ok: false, empty: true, error: MSG_EMPTY };
-    if (text.length > MAX_SOURCE) return { ok: false, error: MSG_LONG };
-    if (/themeCSS/i.test(text) || /@import/i.test(text)) return { ok: false, error: MSG_CSS };
     if (TYPES.indexOf(diagramType(text)) < 0) return { ok: false, error: MSG_TYPE };
     var kept = text.split('\n').filter(function (l) { return !ACTION_LINE.test(l); });
     return { ok: true, source: kept.join('\n') };
@@ -104,37 +129,61 @@
 
   // --- Cleaning the drawing -------------------------------------------------
 
-  var DROP_TAGS = /^(script|iframe|object|embed|foreignobject|audio|video|canvas|link|meta|base|form|input|button|textarea|image)$/i;
+  var SVG_NS = 'http://www.w3.org/2000/svg';
+  // What Mermaid's supported kinds draw. Anything else is dropped with its
+  // children; a link is unwrapped so its drawing stays.
+  var ALLOWED_TAGS = ('svg g path rect circle ellipse line polyline polygon text tspan defs marker style title desc ' +
+    'lineargradient radialgradient stop clippath use filter fedropshadow fegaussianblur feoffset femerge femergenode ' +
+    'feflood fecomposite feblend fecolormatrix symbol').split(' ');
+  var ALLOWED_ATTRS = ('id class d x y x1 y1 x2 y2 cx cy r rx ry width height points transform viewbox xmlns xmlns:xlink ' +
+    'version preserveaspectratio fill stroke stroke-width stroke-dasharray stroke-dashoffset stroke-linecap stroke-linejoin ' +
+    'stroke-miterlimit opacity fill-opacity stroke-opacity fill-rule clip-rule font-family font-size font-weight font-style ' +
+    'text-anchor dominant-baseline alignment-baseline text-decoration letter-spacing dx dy rotate textlength lengthadjust ' +
+    'marker-start marker-mid marker-end markerwidth markerheight markerunits refx refy orient clip-path clippath clippathunits ' +
+    'mask filter href xlink:href offset stop-color stop-opacity gradientunits gradienttransform x1 y1 visibility display ' +
+    'style role xml:space std-deviation stddeviation flood-color flood-opacity in in2 result operator mode values type ' +
+    'k1 k2 k3 k4 order vector-effect pointer-events shape-rendering text-rendering overflow').split(' ');
 
-  /* Parse Mermaid's SVG text and return an <svg> element with only drawing
-     parts left: no scripts, no foreign content, no event handlers, no links
-     out (a link is unwrapped, leaving its drawing), no remote references. */
+  /* A value that could pull something in from outside or run: url() to
+     anything but a #fragment, image-set, @import, expression(), a backslash
+     escape (which can spell any of those), or a script/data scheme. */
+  var UNSAFE_VALUE = /url\(\s*["']?\s*(?!#)|image-set|@import|expression\s*\(|\\|javascript:|vbscript:|data:/i;
+  function unsafeValue(v) { return UNSAFE_VALUE.test(String(v)); }
+
+  function cleanAttrs(el, tag) {
+    Array.prototype.slice.call(el.attributes).forEach(function (a) {
+      var n = a.name.toLowerCase();
+      var v = String(a.value || '');
+      var known = ALLOWED_ATTRS.indexOf(n) >= 0 || /^(data|aria)-[a-z0-9_-]+$/.test(n);
+      if (!known) { el.removeAttribute(a.name); return; }
+      if ((n === 'href' || n === 'xlink:href') && (tag !== 'use' || v.charAt(0) !== '#')) { el.removeAttribute(a.name); return; }
+      if (unsafeValue(v)) el.removeAttribute(a.name);
+    });
+  }
+
+  /* Parse Mermaid's SVG text and return an <svg> element built only from the
+     allow-lists above: no scripts, foreign content, event handlers, links out
+     or remote references. null when it is not a clean SVG document. */
   function cleanSvg(svgText, doc) {
     doc = doc || document;
     var parsed = new DOMParser().parseFromString(String(svgText || ''), 'image/svg+xml');
     var root = parsed.documentElement;
     if (!root || root.nodeName.toLowerCase() !== 'svg' || parsed.getElementsByTagName('parsererror').length) return null;
-    var all = Array.prototype.slice.call(root.getElementsByTagName('*'));
+    // The root is checked like any other element, attributes included.
+    if (root.namespaceURI !== SVG_NS && root.namespaceURI !== undefined) return null;
+    var all = [root].concat(Array.prototype.slice.call(root.getElementsByTagName('*')));
     all.forEach(function (el) {
+      if (el === root) { cleanAttrs(el, 'svg'); return; }
       if (!el.parentNode) return;
       var tag = (el.localName || el.nodeName).toLowerCase();
-      if (DROP_TAGS.test(tag)) { el.parentNode.removeChild(el); return; }
-      if (tag === 'a') {
+      if (tag === 'a' && el.namespaceURI === SVG_NS) {
         while (el.firstChild) el.parentNode.insertBefore(el.firstChild, el);
         el.parentNode.removeChild(el);
         return;
       }
-      if (tag === 'style' && /@import|expression\s*\(|url\(\s*["']?\s*(?!#)/i.test(el.textContent || '')) {
-        el.parentNode.removeChild(el);
-        return;
-      }
-      Array.prototype.slice.call(el.attributes).forEach(function (a) {
-        var n = a.name.toLowerCase();
-        var v = String(a.value || '');
-        if (n.indexOf('on') === 0) { el.removeAttribute(a.name); return; }
-        if ((n === 'href' || n === 'xlink:href' || n === 'src') && v.charAt(0) !== '#') { el.removeAttribute(a.name); return; }
-        if (/javascript:|data:text\/html|expression\s*\(/i.test(v)) el.removeAttribute(a.name);
-      });
+      if (el.namespaceURI !== SVG_NS || ALLOWED_TAGS.indexOf(tag) < 0) { el.parentNode.removeChild(el); return; }
+      if (tag === 'style' && unsafeValue(el.textContent || '')) { el.parentNode.removeChild(el); return; }
+      cleanAttrs(el, tag);
     });
     root.setAttribute('role', 'img');
     root.setAttribute('aria-label', 'Diagram');
@@ -178,6 +227,8 @@
           startOnLoad: false,
           securityLevel: 'strict',
           theme: isDark() ? 'dark' : 'default',
+          fontFamily: '"trebuchet ms", verdana, arial, sans-serif',
+          themeCSS: '',
           htmlLabels: false,
           flowchart: { htmlLabels: false, useMaxWidth: true },
           class: { htmlLabels: false },
@@ -213,10 +264,21 @@
 
   var live = [];
   var watching = false;
+
+  /* Let go of hydrated views whose element has left the page (an HTMX swap,
+     a list drawn again). Editor views end with their node view's destroy(). */
+  function pruneDetached() {
+    live = live.filter(function (v) { return !(v.hydrated && v.host && v.host.isConnected === false); });
+  }
+  if (document.addEventListener) {
+    document.addEventListener('htmx:afterSwap', pruneDetached);
+    document.addEventListener('htmx:historyRestore', pruneDetached);
+  }
   function watchTheme() {
     if (watching || typeof MutationObserver === 'undefined') return;
     watching = true;
     new MutationObserver(function () {
+      pruneDetached();
       live.slice().forEach(function (v) { v.redraw(); });
     }).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
   }
@@ -258,6 +320,7 @@
         if (i >= 0) live.splice(i, 1);
       }
     };
+    pruneDetached();
     live.push(view);
     watchTheme();
     return view;
@@ -273,6 +336,8 @@
     var pres = root.querySelectorAll('pre.ce-diagram');
     var n = 0;
     Array.prototype.forEach.call(pres, function (pre) {
+      // A block marked GM-only (old or hand-written content) is never drawn.
+      if (pre.classList && pre.classList.contains('ce-diagram--gm')) return;
       if (pre.getAttribute('data-ce-done')) return;
       pre.setAttribute('data-ce-done', '1');
       var src = pre.textContent || '';
@@ -287,32 +352,34 @@
       wrap.appendChild(err);
       pre.parentNode.replaceChild(wrap, pre);
       n++;
-      createView(view, {
+      var v = createView(view, {
         onState: function (e, empty) {
           if (empty) { wrap.hidden = true; return; }
           err.hidden = !e;
           err.textContent = e ? MSG_READER : '';
         }
-      }).set(src);
+      });
+      // Nothing calls destroy() on these; pruneDetached() lets go of them
+      // once an HTMX swap or a re-render has removed their element.
+      v.host = view;
+      v.hydrated = true;
+      v.set(src);
     });
     return n;
   }
 
   // --- The editor node -------------------------------------------------------
 
-  function classFor(attrs) {
-    return 'ce-diagram' + (attrs && attrs.gmOnly ? ' ce-diagram--gm' : '');
-  }
-  function attrsFromPre(el) {
-    var cls = ' ' + (el.getAttribute('class') || '') + ' ';
-    return { gmOnly: cls.indexOf(' ce-diagram--gm ') >= 0 };
-  }
+  // A diagram carries no attributes. Old content that still holds the
+  // ce-diagram--gm class loads as an ordinary diagram and re-saves without it.
+  function classFor() { return 'ce-diagram'; }
+  function attrsFromPre() { return {}; }
 
   function createNodeView(props) {
     var node = props.node, editor = props.editor, getPos = props.getPos;
 
     var dom = document.createElement('div');
-    dom.className = classFor(node.attrs);
+    dom.className = classFor();
 
     var bar = document.createElement('div');
     bar.className = 'ce-diagram__bar';
@@ -321,12 +388,6 @@
     label.className = 'ce-diagram__label';
     label.innerHTML = '<i class="fa-solid fa-diagram-project" aria-hidden="true"></i> Diagram';
     bar.appendChild(label);
-    var gmBtn = document.createElement('button');
-    gmBtn.type = 'button';
-    gmBtn.className = 'ce-diagram__btn';
-    gmBtn.innerHTML = '<i class="fa-solid fa-eye-slash" aria-hidden="true"></i> GM only';
-    gmBtn.title = 'Hide this diagram from players';
-    bar.appendChild(gmBtn);
     var delBtn = document.createElement('button');
     delBtn.type = 'button';
     delBtn.className = 'ce-diagram__btn';
@@ -370,24 +431,9 @@
       }
     });
 
-    function setAttrs(patch) {
-      if (typeof getPos !== 'function') return;
-      var pos = getPos();
-      if (typeof pos !== 'number') return;
-      var next = {};
-      for (var k in node.attrs) next[k] = node.attrs[k];
-      for (var p in patch) next[p] = patch[p];
-      editor.view.dispatch(editor.view.state.tr.setNodeMarkup(pos, undefined, next));
-    }
     function paint() {
-      dom.className = classFor(node.attrs) + (dom.classList.contains('is-broken') ? ' is-broken' : '') + (dom.classList.contains('is-empty') ? ' is-empty' : '');
-      gmBtn.classList.toggle('is-on', !!node.attrs.gmOnly);
-      gmBtn.setAttribute('aria-pressed', node.attrs.gmOnly ? 'true' : 'false');
-      // Notes editors flag themselves after they are built; players have no GM-only.
-      gmBtn.style.display = editor.chronicleNotePictures ? 'none' : '';
+      dom.className = classFor() + (dom.classList.contains('is-broken') ? ' is-broken' : '') + (dom.classList.contains('is-empty') ? ' is-empty' : '');
     }
-    gmBtn.addEventListener('mousedown', function (e) { e.preventDefault(); });
-    gmBtn.addEventListener('click', function () { setAttrs({ gmOnly: !node.attrs.gmOnly }); });
     delBtn.addEventListener('mousedown', function (e) { e.preventDefault(); });
     delBtn.addEventListener('click', function () {
       var pos = getPos();
@@ -441,14 +487,14 @@
       defining: true,
       isolating: true,
       addAttributes: function () {
-        return { gmOnly: { default: false, rendered: false } };
+        return {};
       },
       // Ahead of the plain code block, which also claims <pre>.
       parseHTML: function () {
         return [{ tag: 'pre.ce-diagram', priority: 1000, preserveWhitespace: 'full', getAttrs: attrsFromPre }];
       },
-      renderHTML: function (p) {
-        return ['pre', { class: classFor(p.node.attrs) }, ['code', 0]];
+      renderHTML: function () {
+        return ['pre', { class: classFor() }, ['code', 0]];
       },
       addNodeView: function () { return createNodeView; },
       addKeyboardShortcuts: function () {
@@ -491,7 +537,6 @@
     if (!ed) return false;
     return ed.chain().focus().insertContent({
       type: 'diagram',
-      attrs: { gmOnly: false },
       content: [{ type: 'text', text: STARTER }]
     }).run();
   }
@@ -507,6 +552,8 @@
   api._cleanSvg = cleanSvg;
   api._attrsFromPre = attrsFromPre;
   api._classFor = classFor;
+  api._stripConfig = stripConfig;
+  api._live = function () { return live.length; };
   api._loadMermaid = loadMermaid;
   api._draw = draw;
   api._src = MERMAID_SRC;

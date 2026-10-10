@@ -4692,7 +4692,6 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
   border: 0; border-radius: 0.375rem; background: none; color: inherit; font: inherit; cursor: pointer;
 }
 .ce-diagram__btn:hover { background: var(--color-bg-secondary); color: var(--color-text-primary); }
-.ce-diagram__btn.is-on { background: rgb(217 119 6 / 0.15); color: rgb(180 83 9); }
 .ce-diagram__btn:focus-visible { outline: 2px solid var(--color-accent, #6366f1); outline-offset: 1px; }
 .ce-diagram__grid { display: grid; grid-template-columns: minmax(0, 1fr); }
 .ce-diagram__text { min-width: 0; border-bottom: 1px solid var(--color-border); }
@@ -4718,13 +4717,9 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
   .ce-diagram__grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .ce-diagram__text { border-bottom: 0; border-right: 1px solid var(--color-border); }
 }
-/* A GM-only diagram is marked for the people who can see it. */
-.ce-diagram--gm { border-color: rgb(217 119 6 / 0.6); border-style: dashed; }
-.ce-diagram--gm .ce-diagram__label::after { content: " (GM only)"; color: rgb(180 83 9); }
 /* Reading: only the drawing, bare; a broken or empty one says one line. */
 .ProseMirror[contenteditable="false"] .ce-diagram,
 .ce-diagram--static { border-color: transparent; background: none; }
-.ProseMirror[contenteditable="false"] .ce-diagram--gm { border-color: rgb(217 119 6 / 0.6); }
 .ProseMirror[contenteditable="false"] .ce-diagram__bar,
 .ProseMirror[contenteditable="false"] .ce-diagram__text { display: none; }
 .ProseMirror[contenteditable="false"] .ce-diagram__grid { grid-template-columns: minmax(0, 1fr); }

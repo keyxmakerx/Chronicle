@@ -30,6 +30,9 @@ function load(opts = {}) {
   };
   const svgRoot = {
     nodeName: 'svg',
+    localName: 'svg',
+    namespaceURI: 'http://www.w3.org/2000/svg',
+    attributes: [],
     getElementsByTagName: () => [],
     setAttribute() {},
   };
@@ -58,29 +61,24 @@ function load(opts = {}) {
   return { D: window.Chronicle.EditorDiagram, window, loaded, calls, added };
 }
 
-test('the node saves only text and a class, and reads its flag back', () => {
+test('the node saves only text and a class, and never a GM flag', () => {
   const { D } = load();
   const spec = D.extension.spec;
   assert.equal(spec.name, 'diagram');
   assert.equal(spec.code, true);
   assert.equal(spec.marks, '');
   assert.equal(spec.content, 'text*');
+  same(spec.addAttributes(), {});
 
   const rule = spec.parseHTML()[0];
   assert.equal(rule.tag, 'pre.ce-diagram');
   assert.ok(rule.priority > 50, 'must outrank the plain code block');
   const pre = (cls) => ({ getAttribute: (a) => (a === 'class' ? cls : null) });
-  same(rule.getAttrs(pre('ce-diagram')), { gmOnly: false });
-  same(rule.getAttrs(pre('ce-diagram ce-diagram--gm')), { gmOnly: true });
-  same(rule.getAttrs(pre('ce-diagram ce-diagram--gmx')), { gmOnly: false });
-
-  const out = spec.renderHTML({ node: { attrs: { gmOnly: true } } });
-  same(out, ['pre', { class: 'ce-diagram ce-diagram--gm' }, ['code', 0]]);
-  const plain = spec.renderHTML({ node: { attrs: { gmOnly: false } } });
-  same(plain, ['pre', { class: 'ce-diagram' }, ['code', 0]]);
-  // Round trip: what was rendered parses to the same flag.
-  same(rule.getAttrs(pre(out[1].class)), { gmOnly: true });
-  same(rule.getAttrs(pre(plain[1].class)), { gmOnly: false });
+  // Old content that carries the GM class loads as a plain diagram, so a
+  // re-save cannot bring the class back.
+  for (const cls of ['ce-diagram', 'ce-diagram ce-diagram--gm']) same(rule.getAttrs(pre(cls)), {});
+  same(spec.renderHTML({ node: { attrs: { gmOnly: true } } }), ['pre', { class: 'ce-diagram' }, ['code', 0]]);
+  same(spec.renderHTML({ node: { attrs: {} } }), ['pre', { class: 'ce-diagram' }, ['code', 0]]);
 });
 
 test('the slash menu gets /diagram', () => {
@@ -190,4 +188,47 @@ test('only the vendored file can be named as the library', () => {
   for (const evil of ['https://cdn.example.com/mermaid.min.js', '/static/vendor/other.js', '//evil/x.js', '/static/vendor/mermaid.min.js?v=a b']) {
     assert.equal(load({ src: evil }).D._src, '/static/vendor/mermaid.min.js', evil);
   }
+});
+
+test('directives and front matter are stripped before drawing', () => {
+  const { D } = load();
+  const cases = [
+    ['%%{init: {"theme":"forest","fontFamily":"x"}}%%\nflowchart LR\nA-->B', 'flowchart LR\nA-->B'],
+    ['%%{\n init: {\n "fontFamily": "url(https://evil.example/f)"\n }\n}%%\nsequenceDiagram\nA->>B: hi', '\nsequenceDiagram\nA->>B: hi'],
+    ['---\ntitle: T\nconfig:\n  fontFamily: "image-set(https://evil.example/i 1x)"\n---\nflowchart LR\nA-->B', 'flowchart LR\nA-->B'],
+    ['\n\n%%{init: {"a":1}}%%\n%%{init: {"b":2}}%%\nerDiagram\nA ||--o{ B : has', '\n\n\n\nerDiagram\nA ||--o{ B : has'],
+  ];
+  for (const [src, want] of cases) {
+    const r = D._prepareSource(src);
+    assert.equal(r.ok, true, src);
+    assert.equal(r.source.replace(/^\s+/, ''), want.replace(/^\s+/, ''));
+    assert.doesNotMatch(r.source, /evil|%%\{|fontFamily/);
+  }
+  assert.equal(D._prepareSource('%%{init: {}}%%').empty, true);
+});
+
+test('custom CSS is refused even when written as a JSON escape', () => {
+  const { D } = load();
+  for (const bad of [
+    '%%{init: {"\\u0074hemeCSS": "body{}"}}%%\nflowchart LR\nA-->B',
+    '%%{init: {"themeCSS": "body{}"}}%%\nflowchart LR\nA-->B',
+    '%%{init: {"fontFamily": "a\\u0075rl(x)"}}%%\nflowchart LR\nA-->B',
+    '---\nconfig:\n  themeCSS: "x"\n---\nflowchart LR\nA-->B',
+    'flowchart LR\nA-->B\n%% @import url(x)',
+  ]) {
+    const r = D._prepareSource(bad);
+    assert.equal(r.ok, false, bad);
+    assert.match(r.error, /styles/, bad);
+  }
+});
+
+test('the page, not the text, sets theme and font', async () => {
+  const { D, calls } = load();
+  await D._draw('%%{init: {"theme":"forest","fontFamily":"url(https://evil.example/f)"}}%%\nflowchart LR\nA-->B');
+  const c = calls.initialize[0];
+  assert.equal(c.theme, 'default');
+  assert.equal(typeof c.fontFamily, 'string');
+  assert.doesNotMatch(c.fontFamily, /url|evil/);
+  assert.equal(c.themeCSS, '');
+  assert.doesNotMatch(calls.render[0], /%%|evil/);
 });
