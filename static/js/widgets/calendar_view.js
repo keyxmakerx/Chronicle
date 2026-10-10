@@ -833,6 +833,21 @@
     return full > cap + 24 ? { L2: L2, cap: cap, full: full } : null;
   }
   function holdLeaf(h, px) { h.L2.style.maxHeight = px + 'px'; h.L2.style.overflow = 'hidden'; }
+  // Holding the leaf shortens the card from its foot, so a card that
+  // hangs up from its day (its foot level with the day's) would fold out
+  // well above the day and only reach it as the rest lets down. Holds
+  // the leaf and returns how far the held card must sit lower to keep
+  // its foot by the day; the card rises back as the leaf lets down.
+  function heldLift(P, h) {
+    var el = P.el, g = P.g, h0 = el.offsetHeight;
+    holdLeaf(h, h.cap);
+    var h1 = el.offsetHeight;
+    return clampN(g.cell.y + g.cell.h - (g.final.y + h1), 0, h0 - h1);
+  }
+  function liftCard(P, from, to, dur) {
+    P.el.style.top = (P.g.final.y + to) + 'px';
+    return anim(P.el, [{ top: (P.g.final.y + from) + 'px' }, { top: (P.g.final.y + to) + 'px' }], { duration: dur, easing: EASE, fill: 'none' }).finished;
+  }
   function freeLeaf(h) { h.L2.style.maxHeight = ''; h.L2.style.overflow = ''; }
   function slideLeaf(h, from, to, dur) {
     return anim(h.L2, [{ maxHeight: from + 'px' }, { maxHeight: to + 'px' }], { duration: dur, easing: EASE, fill: 'none' }).finished;
@@ -1008,8 +1023,8 @@
     } else {
       // The marks are aimed at the card as it will lie, before its leaves
       // turn; each lands after its leaf lies flat.
-      var held = foldShort(P);
-      if (held) holdLeaf(held, held.cap);
+      var held = foldShort(P), lift = held ? heldLift(P, held) : 0;
+      if (lift) el.style.top = (P.g.final.y + lift) + 'px';
       var F = foldGeo(P, calEl), marks = fly(P, false, { delay: 110, dur: 390, stagger: 30 }, calEl);
       pressIn(P.press);
       run = settleAll(foldRun(F, false, 1).concat(marks));
@@ -1018,7 +1033,11 @@
       if (tok !== P.seq) throw new Error('superseded');
       stopAnims(el, true);
       land(P, false);
-      if (held) { freeLeaf(held); slideLeaf(held, held.cap, held.full, leafTime(held, FOLD.letDown)); }
+      if (held) {
+        freeLeaf(held);
+        slideLeaf(held, held.cap, held.full, leafTime(held, FOLD.letDown));
+        if (lift) liftCard(P, lift, 0, leafTime(held, FOLD.letDown));
+      }
       P.state = 'open';
       el.classList.add('open');
       return true;
@@ -1053,8 +1072,9 @@
       pressIn(P.press, { delay: 300 / sp, dur: 280 / sp, soft: true });
     } else {
       var marks = fly(P, true, { delay: 0, dur: 340 / sp, stagger: 24 / sp }, calEl), held = foldShort(P);
-      var up = held ? leafTime(held, FOLD.takeUp) / sp : 0;
-      var folded = (held ? slideLeaf(held, held.full, held.cap, up).then(function () { holdLeaf(held, held.cap); }) : Promise.resolve())
+      var up = held ? leafTime(held, FOLD.takeUp) / sp : 0, lift = 0;
+      if (held) { lift = heldLift(P, held); freeLeaf(held); }
+      var folded = (held ? Promise.all([slideLeaf(held, held.full, held.cap, up), lift ? liftCard(P, 0, lift, up) : null]).then(function () { holdLeaf(held, held.cap); }) : Promise.resolve())
         .then(function () { return settleAll(foldRun(foldGeo(P, calEl), true, sp)); });
       run = Promise.all([folded, settleAll(marks)]);
       // The card tucks back into what it came from, which gives a little.
