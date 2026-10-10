@@ -7,6 +7,8 @@ import (
 
 	"github.com/a-h/templ"
 	"github.com/labstack/echo/v4"
+
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
 // LayoutInjector is a function that copies layout-relevant data from the Echo
@@ -15,6 +17,30 @@ import (
 //
 // This callback pattern avoids the middleware package importing any plugin types.
 var LayoutInjector func(echo.Context, context.Context) context.Context
+
+// MediaSigner builds the signed media-URL generators bound to whoever is making
+// the request. Registered once at startup in app/routes.go, where the signing
+// secret lives; nil means signing is off and links fall back to unsigned
+// /media/ paths.
+var MediaSigner func(echo.Context) (layouts.MediaURLFunc, layouts.MediaThumbFunc)
+
+// MediaContext returns the request context with the signed media-URL
+// generators attached. JSON handlers use it so layouts.AvatarURL and
+// layouts.MediaURL sign links for the caller the way a rendered page does;
+// Render does not run for JSON, so without this they would always fall back to
+// unsigned links.
+func MediaContext(c echo.Context) context.Context {
+	ctx := c.Request().Context()
+	if MediaSigner == nil {
+		return ctx
+	}
+	urlFn, thumbFn := MediaSigner(c)
+	if urlFn == nil || thumbFn == nil {
+		return ctx
+	}
+	ctx = layouts.SetMediaURLFunc(ctx, urlFn)
+	return layouts.SetMediaThumbFunc(ctx, thumbFn)
+}
 
 // IsHTMX returns true if the current request was initiated by HTMX and is NOT
 // a boosted navigation or a history restore. Boosted requests

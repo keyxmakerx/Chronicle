@@ -498,6 +498,22 @@ func MediaThumbURL(ctx context.Context, fileID, size string) string {
 	return "/media/" + fileID + "/thumb/" + size
 }
 
+// AvatarThumbSize is the thumbnail edge, in pixels, JSON responses link an
+// avatar at: large enough for any roster chip, small enough to stay cheap.
+const AvatarThumbSize = "300"
+
+// AvatarURL turns a stored users.avatar_path into a link a client can load.
+// The column holds a media id, so it goes through the same signed-or-fallback
+// path as MediaThumbURL. A value that is already a path or URL (a legacy row)
+// is returned as-is rather than wrapped into a broken /media/ link, and an
+// empty value stays empty so omitempty still drops the field.
+func AvatarURL(ctx context.Context, stored string) string {
+	if stored == "" || strings.HasPrefix(stored, "/") || strings.HasPrefix(stored, "http") {
+		return stored
+	}
+	return MediaThumbURL(ctx, stored, AvatarThumbSize)
+}
+
 // normalizeMediaID extracts the UUID from a media file identifier.
 // Handles both UUID-only ("b7c17bb1-...") and path-format ("2026/03/b7c17bb1-....jpg")
 // inputs, returning just the UUID portion without extension.

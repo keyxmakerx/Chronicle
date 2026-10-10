@@ -4633,6 +4633,9 @@ func (a *App) RegisterRoutes() {
 	// Registers the callback that copies auth/campaign data from Echo's
 	// context into Go's context.Context so Templ templates can read it.
 	// This runs inside middleware.Render() before every template render.
+	middleware.MediaSigner = func(c echo.Context) (layouts.MediaURLFunc, layouts.MediaThumbFunc) {
+		return mediaSignerFor(urlSigner, c)
+	}
 	middleware.LayoutInjector = func(c echo.Context, ctx context.Context) context.Context {
 		// Inject plugin-contributed body scripts (constant for process lifetime),
 		// so plugins can register widget scripts without hardcoding paths in the
@@ -4929,17 +4932,9 @@ func (a *App) RegisterRoutes() {
 		// the same viewer. A session cookie present means the viewer is that
 		// user; none means anonymous — media.URLSigner.Verify derives the
 		// same identity from the same session lookup when links are fetched.
-		if urlSigner != nil {
-			viewer := media.ViewerAnonymous
-			if userID := auth.GetUserID(c); userID != "" {
-				viewer = media.ViewerSession(userID)
-			}
-			ctx = layouts.SetMediaURLFunc(ctx, func(fileID string) string {
-				return urlSigner.Sign(fileID, viewer, media.SignedURLTTL)
-			})
-			ctx = layouts.SetMediaThumbFunc(ctx, func(fileID, size string) string {
-				return urlSigner.SignThumb(fileID, size, viewer, media.SignedURLTTL)
-			})
+		if urlFn, thumbFn := mediaSignerFor(urlSigner, c); urlFn != nil {
+			ctx = layouts.SetMediaURLFunc(ctx, urlFn)
+			ctx = layouts.SetMediaThumbFunc(ctx, thumbFn)
 		}
 
 		// Last, so the campaign values above are already in place: a page

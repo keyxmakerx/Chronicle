@@ -2478,7 +2478,9 @@ func (h *Handler) GetPermissionsAPI(c echo.Context) error {
 		grants = []EntityPermission{}
 	}
 
-	// Fetch campaign members for the picker UI.
+	// Fetch campaign members for the picker UI. avatar_path holds a media id,
+	// so it is resolved to a link here rather than sent raw.
+	mediaCtx := middleware.MediaContext(c)
 	var members []permissionsMember
 	if h.memberLister != nil {
 		campaignMembers, err := h.memberLister.ListMembers(ctx, cc.Campaign.ID)
@@ -2493,7 +2495,7 @@ func (h *Handler) GetPermissionsAPI(c echo.Context) error {
 					Role:        int(m.Role),
 				}
 				if m.AvatarPath != nil {
-					pm.AvatarPath = *m.AvatarPath
+					pm.AvatarPath = layouts.AvatarURL(mediaCtx, *m.AvatarPath)
 				}
 				members = append(members, pm)
 			}
