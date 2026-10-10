@@ -654,8 +654,14 @@ func (h *Handler) Campaigns(c echo.Context) error {
 		return err
 	}
 
+	handover, err := h.campaignService.HandoverStatuses(ctx, list)
+	if err != nil {
+		return err
+	}
 	data := CampaignListData{
 		Campaigns: list,
+		Handover:  handover,
+		Now:       time.Now().UTC(),
 		View:      view,
 		CSRFToken: middleware.GetCSRFToken(c),
 	}
@@ -728,6 +734,63 @@ func (h *Handler) LeaveCampaign(c echo.Context) error {
 		slog.String("user_id", userID),
 	)
 
+	return middleware.HTMXRedirect(c, "/admin/campaigns")
+}
+
+// HandoverPage shows who could take over a campaign whose owner has been
+// away (GET /admin/campaigns/:id/hand-over). The list's row action asks for
+// it over htmx, so that request is turned into a full page load.
+func (h *Handler) HandoverPage(c echo.Context) error {
+	campaignID := c.Param("id")
+	if middleware.IsHTMX(c) {
+		return middleware.HTMXRedirect(c, fmt.Sprintf("/admin/campaigns/%s/hand-over", campaignID))
+	}
+	ctx := c.Request().Context()
+	cm, err := h.campaignService.GetByID(ctx, campaignID)
+	if err != nil {
+		return err
+	}
+	statuses, err := h.campaignService.HandoverStatuses(ctx, []campaigns.Campaign{*cm})
+	if err != nil {
+		return err
+	}
+	st, ok := statuses[campaignID]
+	if !ok {
+		return apperror.NewNotFound("campaign owner not found")
+	}
+	if st.AfterMonths == 0 {
+		return apperror.NewForbidden("the owner hasn't allowed a hand-over")
+	}
+	members, err := h.campaignService.ListMembers(ctx, campaignID)
+	if err != nil {
+		return err
+	}
+	return middleware.Render(c, http.StatusOK, AdminHandoverPage(HandoverPageData{
+		Campaign:   *cm,
+		Status:     st,
+		Candidates: handoverCandidates(members, st.OwnerID),
+		Now:        time.Now().UTC(),
+		CSRFToken:  middleware.GetCSRFToken(c),
+	}))
+}
+
+// HandOver gives the campaign to the chosen member
+// (POST /admin/campaigns/:id/hand-over). The service re-checks every rule.
+func (h *Handler) HandOver(c echo.Context) error {
+	campaignID := c.Param("id")
+	toUserID := c.FormValue("user_id")
+	if toUserID == "" {
+		return apperror.NewBadRequest("choose the new owner")
+	}
+	if _, err := h.campaignService.AdminHandOver(c.Request().Context(), campaignID, toUserID); err != nil {
+		return err
+	}
+	h.record(c, "campaign.handed_over", "campaign", campaignID, h.campaignLabel(c.Request().Context(), campaignID))
+	slog.Info("admin handed over campaign",
+		slog.String("campaign_id", campaignID),
+		slog.String("to", toUserID),
+		slog.String("by", auth.GetUserID(c)),
+	)
 	return middleware.HTMXRedirect(c, "/admin/campaigns")
 }
 

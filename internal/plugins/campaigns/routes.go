@@ -136,6 +136,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 	cg.GET("/transfer", h.TransferForm, RequireRole(RoleOwner))
 	cg.POST("/transfer", h.Transfer, RequireRole(RoleOwner))
 	cg.POST("/cancel-transfer", h.CancelTransfer, RequireRole(RoleOwner))
+	cg.PUT("/handover-setting", h.UpdateHandoverSettingAPI, RequireRole(RoleOwner))
 
 	// Archive (Owner only). Archiving only makes sense on an active campaign,
 	// so it keeps the default gate; unarchiving is the only way out of

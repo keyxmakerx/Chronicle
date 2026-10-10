@@ -196,6 +196,9 @@ func (m *mockCampaignRepoForInvites) UpdateOwnerDashboardLayout(context.Context,
 func (m *mockCampaignRepoForInvites) TransferOwnership(context.Context, string, string, string) error {
 	return nil
 }
+func (m *mockCampaignRepoForInvites) OwnerPresence(context.Context, []string) (map[string]OwnerPresence, error) {
+	return nil, nil
+}
 func (m *mockCampaignRepoForInvites) ForceTransferOwnership(context.Context, string, string) error {
 	return nil
 }

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -88,6 +89,10 @@ type CampaignRepository interface {
 	// TransferOwnership atomically transfers campaign ownership from one user
 	// to another within a database transaction.
 	TransferOwnership(ctx context.Context, campaignID, fromUserID, toUserID string) error
+
+	// OwnerPresence returns each listed campaign's owner and when they last
+	// used the site.
+	OwnerPresence(ctx context.Context, campaignIDs []string) (map[string]OwnerPresence, error)
 
 	// ForceTransferOwnership is used by admins to take ownership. Atomically
 	// demotes current owner to Scribe and sets the new owner.
@@ -1084,6 +1089,38 @@ func (r *campaignRepository) ListMemberCampaignIDs(ctx context.Context, userID s
 			return nil, fmt.Errorf("scanning membership: %w", err)
 		}
 		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
+// OwnerPresence reads each campaign owner's last-seen time. Someone not seen
+// since last-seen tracking began falls back to their last sign-in, then to
+// when their account was made, so an old absence still counts.
+func (r *campaignRepository) OwnerPresence(ctx context.Context, campaignIDs []string) (map[string]OwnerPresence, error) {
+	out := make(map[string]OwnerPresence, len(campaignIDs))
+	if len(campaignIDs) == 0 {
+		return out, nil
+	}
+	args := make([]any, len(campaignIDs))
+	for i, id := range campaignIDs {
+		args[i] = id
+	}
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT c.id, u.id, u.display_name, COALESCE(u.last_seen_at, u.last_login_at, u.created_at)
+		   FROM campaigns c
+		   INNER JOIN users u ON u.id = c.created_by
+		  WHERE c.id IN (?`+strings.Repeat(",?", len(campaignIDs)-1)+`)`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("reading campaign owners: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var id string
+		var p OwnerPresence
+		if err := rows.Scan(&id, &p.OwnerID, &p.OwnerName, &p.LastSeen); err != nil {
+			return nil, fmt.Errorf("scanning campaign owner: %w", err)
+		}
+		out[id] = p
 	}
 	return out, rows.Err()
 }

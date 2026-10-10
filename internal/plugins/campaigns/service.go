@@ -64,6 +64,12 @@ type CampaignService interface {
 
 	// Ownership transfer
 	InitiateTransfer(ctx context.Context, campaignID, ownerID, targetEmail string) (*OwnershipTransfer, error)
+
+	// Hand-over after the owner is away: the owner's setting, the admin
+	// list's status and the admin's hand-over.
+	SetHandoverAfter(ctx context.Context, campaignID string, months int) error
+	HandoverStatuses(ctx context.Context, list []Campaign) (map[string]HandoverStatus, error)
+	AdminHandOver(ctx context.Context, campaignID, toUserID string) (*HandoverStatus, error)
 	AcceptTransfer(ctx context.Context, token string, acceptingUserID string) error
 	CancelTransfer(ctx context.Context, campaignID string) error
 	GetPendingTransfer(ctx context.Context, campaignID string) (*OwnershipTransfer, error)

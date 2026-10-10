@@ -44,6 +44,7 @@ var activityPhrases = map[string]string{
 	"hygiene.files_trashed":           "moved the unused uploads to the trash (%s)",
 	"campaign.joined":                 "joined the campaign %s",
 	"campaign.left":                   "left the campaign %s",
+	"campaign.handed_over":            "handed over the campaign %s",
 	"media.deleted":                   "deleted the file %s",
 	"registration.mode_changed":       "changed who can sign up to %s",
 	"hygiene.purged":                  "cleaned up %s",

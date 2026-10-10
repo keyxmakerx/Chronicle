@@ -35,6 +35,7 @@ type mockUserRepo struct {
 	markResetTokenUsedFn func(ctx context.Context, tokenHash string) error
 	keepGuestFn          func(ctx context.Context, userID, email, passwordHash string) error
 	campaignGuests       map[string][]string
+	seen                 []string
 	listUsersFn          func(ctx context.Context, offset, limit int) ([]User, int, error)
 	updateIsAdminFn      func(ctx context.Context, id string, isAdmin bool) error
 	countUsersFn         func(ctx context.Context) (int, error)
@@ -237,6 +238,11 @@ func (m *mockUserRepo) KeepGuestAccount(ctx context.Context, userID, email, pass
 
 func (m *mockUserRepo) ListCampaignGuests(ctx context.Context, campaignID string) ([]string, error) {
 	return m.campaignGuests[campaignID], nil
+}
+
+func (m *mockUserRepo) TouchLastSeen(ctx context.Context, userID string) error {
+	m.seen = append(m.seen, userID)
+	return nil
 }
 
 func (m *mockUserRepo) UpdateDisplayName(ctx context.Context, userID, displayName string) error {

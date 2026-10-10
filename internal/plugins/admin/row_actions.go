@@ -20,7 +20,7 @@ type rowAction struct {
 	// Label is the desktop text; MenuLabel the phone-menu text (risky items
 	// end in "…" because they ask first).
 	Label, MenuLabel string
-	// Method is the htmx verb: put, post or delete.
+	// Method is the htmx verb: get, put, post or delete.
 	Method, URL string
 	// Confirm is the hx-confirm text; empty means the action runs at once.
 	Confirm string
@@ -139,8 +139,9 @@ func campaignRowActions(c campaigns.Campaign) []rowAction {
 
 // campaignCardActions is the phone menu: join choices first, then the rest,
 // with the destructive tail set apart.
-func campaignCardActions(c campaigns.Campaign, csrf string) []rowAction {
-	acts := append(campaignJoinActions(c, csrf), campaignRowActions(c)...)
+func campaignCardActions(c campaigns.Campaign, st campaigns.HandoverStatus, csrf string) []rowAction {
+	acts := append(campaignJoinActions(c, csrf), handoverAction(c, st)...)
+	acts = append(acts, campaignRowActions(c)...)
 	acts[len(acts)-1].DividerBefore = true
 	return acts
 }

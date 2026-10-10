@@ -236,6 +236,7 @@ GET	/calendars/wizard/reallife	internal/plugins/calendar/routes.go
 GET	/campaigns	internal/plugins/admin/routes.go
 GET	/campaigns	internal/plugins/campaigns/routes.go
 GET	/campaigns/:id/accept-transfer	internal/plugins/campaigns/routes.go
+GET	/campaigns/:id/hand-over	internal/plugins/admin/routes.go
 GET	/campaigns/import	internal/plugins/campaigns/routes.go
 GET	/campaigns/new	internal/plugins/campaigns/routes.go
 GET	/campaigns/picker	internal/plugins/campaigns/routes.go
@@ -624,6 +625,7 @@ POST	/calendars/wizard/create	internal/plugins/calendar/routes.go
 POST	/calendars/wizard/generate/preview	internal/plugins/calendar/routes.go
 POST	/calendars/wizard/import/preview	internal/plugins/calendar/routes.go
 POST	/campaigns	internal/plugins/campaigns/routes.go
+POST	/campaigns/:id/hand-over	internal/plugins/admin/routes.go
 POST	/campaigns/:id/join	internal/plugins/admin/routes.go
 POST	/campaigns/:id/media	internal/plugins/syncapi/routes.go
 POST	/campaigns/import	internal/plugins/campaigns/routes.go
@@ -885,6 +887,7 @@ PUT	/entity-types/:typeID	internal/plugins/syncapi/routes.go
 PUT	/event-tier-definitions	internal/plugins/campaigns/routes.go
 PUT	/files/:fid/visibility	internal/plugins/media/routes.go
 PUT	/groups/:gid	internal/plugins/campaigns/routes.go
+PUT	/handover-setting	internal/plugins/campaigns/routes.go
 PUT	/layout-presets/:pid	internal/plugins/entities/layout_preset_routes.go
 PUT	/maps/:mapID/drawings/:drawingID	internal/plugins/syncapi/routes.go
 PUT	/maps/:mapID/layers/:layerID	internal/plugins/syncapi/routes.go
