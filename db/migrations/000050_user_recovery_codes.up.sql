@@ -1,6 +1,6 @@
 -- Two-factor recovery codes: each lets its owner past the code step once
--- after losing their authenticator. Only a SHA-256 of each code is kept, so
--- a database copy can't be used to sign in.
+-- after losing their authenticator. Only a SHA-256 of each twelve-character
+-- code is kept, and the password is still needed alongside it.
 -- Core table, core migration: no plugin tables referenced.
 
 CREATE TABLE IF NOT EXISTS user_recovery_codes (

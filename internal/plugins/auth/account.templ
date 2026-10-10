@@ -219,7 +219,8 @@ templ AccountPage(user *User, csrfToken string, timezones []timeutil.Zone, prefs
 
 // twoFactorCard is the Two-factor sign-in section. Turning it on is three
 // steps in place (password, scan and confirm, save the recovery codes);
-// replacing the codes and turning it off each ask for the password first.
+// replacing the codes and turning it off each ask for the password and a
+// code first.
 templ twoFactorCard(st TwoFactorStatus) {
 	<div class="card p-6 mb-6" x-data={ twoFactorData(st) } id="two-factor">
 		<div class="flex items-center gap-2 mb-1">
@@ -243,12 +244,13 @@ templ twoFactorCard(st TwoFactorStatus) {
 		</div>
 		<!-- Password first -->
 		<div x-show="step === 'password'" x-cloak class="step-settle space-y-3 mt-2">
-			<p class="text-sm text-fg-secondary" x-text="intent === 'setup' ? 'Type your password to start.' : intent === 'codes' ? 'Type your password to make new recovery codes. The old ones stop working.' : 'Type your password to turn two-factor off.'"></p>
-			<input type="password" x-model="password" x-ref="pw" class="input w-full" autocomplete="current-password" aria-label="Your password" @keydown.enter.prevent="confirmPassword()"/>
+			<p class="text-sm text-fg-secondary" x-text="intent === 'setup' ? 'Type your password to start.' : intent === 'codes' ? 'Type your password and a code to make new recovery codes. The old ones stop working.' : 'Type your password and a code to turn two-factor off.'"></p>
+			<input type="password" x-model="password" x-ref="pw" class="input w-full" autocomplete="current-password" aria-label="Your password" placeholder="Your password" @keydown.enter.prevent="confirmPassword()"/>
+			<input x-show="intent !== 'setup'" type="text" x-model="code" class="input w-full font-mono" inputmode="numeric" autocomplete="one-time-code" aria-label="Two-factor code" placeholder="Code from your authenticator app, or a recovery code" spellcheck="false" @keydown.enter.prevent="confirmPassword()"/>
 			<div class="flex flex-wrap items-center justify-end gap-2">
 				<span class="text-xs mr-auto text-red-500" x-text="error" aria-live="polite"></span>
 				<button type="button" class="btn-secondary text-sm" @click="reset()">Cancel</button>
-				<button type="button" class="text-sm" x-bind:class="intent === 'off' ? 'btn-danger' : 'btn-primary'" x-bind:disabled="!password || busy" @click="confirmPassword()" x-text="intent === 'off' ? 'Turn off' : 'Continue'"></button>
+				<button type="button" class="text-sm" x-bind:class="intent === 'off' ? 'btn-danger' : 'btn-primary'" x-bind:disabled="!password || (intent !== 'setup' && !code.trim()) || busy" @click="confirmPassword()" x-text="intent === 'off' ? 'Turn off' : 'Continue'"></button>
 			</div>
 		</div>
 		<!-- Scan and confirm -->
@@ -297,18 +299,18 @@ func twoFactorData(st TwoFactorStatus) string {
 		},
 		confirmPassword() {
 			if (!this.password || this.busy) return;
-			const pw = this.password;
+			const pw = this.password, code = this.code;
 			if (this.intent === 'setup') {
 				this.call('/account/two-factor/setup', { password: pw }).then(d => {
 					this.password = ''; this.qr = d.qr; this.secret = d.secret; this.step = 'scan';
 					this.$nextTick(() => this.$refs.code.focus());
 				}).catch(e => { this.error = e.message; });
 			} else if (this.intent === 'codes') {
-				this.call('/account/two-factor/recovery-codes', { password: pw }).then(d => {
-					this.password = ''; this.codes = d.recoveryCodes; this.codesLeft = this.codes.length; this.step = 'codes';
+				this.call('/account/two-factor/recovery-codes', { password: pw, code: code }).then(d => {
+					this.password = ''; this.code = ''; this.codes = d.recoveryCodes; this.codesLeft = this.codes.length; this.step = 'codes';
 				}).catch(e => { this.error = e.message; });
 			} else {
-				this.call('/account/two-factor/disable', { password: pw }).then(() => {
+				this.call('/account/two-factor/disable', { password: pw, code: code }).then(() => {
 					this.reset(); this.on = false; this.codesLeft = 0;
 				}).catch(e => { this.error = e.message; });
 			}

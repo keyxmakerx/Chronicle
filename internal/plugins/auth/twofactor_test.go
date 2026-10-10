@@ -19,6 +19,9 @@ type twoFactorRig struct {
 	svc  *authService
 	repo *mockUserRepo
 	mail *mockMailSender
+	// hash is every account's stored password hash; a test swaps it to
+	// stand for a password change.
+	hash string
 }
 
 func newTwoFactorRig(t *testing.T) *twoFactorRig {
@@ -28,8 +31,9 @@ func newTwoFactorRig(t *testing.T) *twoFactorRig {
 		t.Fatal(err)
 	}
 	repo := &mockUserRepo{}
+	r := &twoFactorRig{repo: repo, hash: hash}
 	repo.findByIDFn = func(_ context.Context, id string) (*User, error) {
-		return &User{ID: id, Email: id + "@example.com", DisplayName: id, PasswordHash: hash,
+		return &User{ID: id, Email: id + "@example.com", DisplayName: id, PasswordHash: r.hash,
 			TOTPSecret: repo.totpSecret[id], TOTPEnabled: repo.totpEnabled[id]}, nil
 	}
 	repo.findByEmailFn = func(ctx context.Context, email string) (*User, error) {
@@ -39,7 +43,8 @@ func newTwoFactorRig(t *testing.T) *twoFactorRig {
 	ConfigureTwoFactor(svc, "test-site-secret-of-at-least-thirty-two")
 	mail := &mockMailSender{}
 	ConfigureMailSender(svc, mail, "https://example.com")
-	return &twoFactorRig{svc: svc, repo: repo, mail: mail}
+	r.svc, r.mail = svc, mail
+	return r
 }
 
 // turnOn enables two-factor for id and returns the raw secret and codes.
@@ -169,11 +174,20 @@ func TestTwoFactorLogin(t *testing.T) {
 	r.turnOn(t, "sam")
 	r.passwordStep(t, "sam", res.TrustedDevice)
 
-	// Changing the password forgets remembered devices.
+	// Changing the password forgets remembered devices and ends a
+	// half-finished sign-in.
+	pending := r.passwordStep(t, "mara", "")
 	if err := r.svc.ChangePassword(ctx, "mara", "correct horse", "correct horse"); err != nil {
 		t.Fatal(err)
 	}
 	r.passwordStep(t, "mara", res.TrustedDevice)
+	newHash, _ := hashPassword("correct horse")
+	r.hash = newHash
+	_, err = r.svc.CompleteTwoFactorLogin(ctx, TwoFactorLoginInput{Challenge: pending, Code: earlierCode(secret)})
+	assertAppError(t, err, http.StatusUnauthorized)
+	if !strings.Contains(err.Error(), "start again") {
+		t.Fatalf("challenge from before the password change: %v", err)
+	}
 }
 
 func TestTwoFactorRecoveryCodes(t *testing.T) {
@@ -181,7 +195,7 @@ func TestTwoFactorRecoveryCodes(t *testing.T) {
 	ctx := context.Background()
 	_, codes := r.turnOn(t, "mara")
 
-	shape := regexp.MustCompile(`^[a-z2-9]{4}-[a-z2-9]{4}$`)
+	shape := regexp.MustCompile(`^[a-z2-9]{4}-[a-z2-9]{4}-[a-z2-9]{4}$`)
 	seen := map[string]bool{}
 	for _, c := range codes {
 		if !shape.MatchString(c) || seen[c] {
@@ -205,8 +219,10 @@ func TestTwoFactorRecoveryCodes(t *testing.T) {
 		t.Fatalf("codes left = %d", st.CodesLeft)
 	}
 
-	// New codes replace the old ones.
-	fresh, err := r.svc.RegenerateRecoveryCodes(ctx, "mara", "correct horse")
+	// New codes need a code as well as the password, and replace the old ones.
+	_, err = r.svc.RegenerateRecoveryCodes(ctx, "mara", "correct horse", "")
+	assertAppError(t, err, http.StatusBadRequest)
+	fresh, err := r.svc.RegenerateRecoveryCodes(ctx, "mara", "correct horse", codes[3])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -239,10 +255,12 @@ func TestTwoFactorLockAfterFiveWrongCodes(t *testing.T) {
 func TestTwoFactorTurnOff(t *testing.T) {
 	r := newTwoFactorRig(t)
 	ctx := context.Background()
-	r.turnOn(t, "mara")
+	secret, _ := r.turnOn(t, "mara")
 
-	assertAppError(t, r.svc.DisableTwoFactor(ctx, "mara", "wrong"), http.StatusBadRequest)
-	if err := r.svc.DisableTwoFactor(ctx, "mara", "correct horse"); err != nil {
+	assertAppError(t, r.svc.DisableTwoFactor(ctx, "mara", "wrong", earlierCode(secret)), http.StatusBadRequest)
+	assertAppError(t, r.svc.DisableTwoFactor(ctx, "mara", "correct horse", ""), http.StatusBadRequest)
+	assertAppError(t, r.svc.DisableTwoFactor(ctx, "mara", "correct horse", "000000"), http.StatusUnauthorized)
+	if err := r.svc.DisableTwoFactor(ctx, "mara", "correct horse", earlierCode(secret)); err != nil {
 		t.Fatal(err)
 	}
 	if r.repo.totpEnabled["mara"] || r.repo.totpSecret["mara"] != nil {
@@ -291,7 +309,7 @@ func TestDeleteAccountAsksForCodeWhenTwoFactorIsOn(t *testing.T) {
 
 func TestRecoveryCodeNormalizing(t *testing.T) {
 	tests := []struct{ in, want string }{
-		{"k7qe-2m9x", "k7qe2m9x"},
+		{"k7qe-2m9x-b4fz", "k7qe2m9xb4fz"},
 		{"K7QE 2M9X", "k7qe2m9x"},
 		{" k7qe-2m9x ", "k7qe2m9x"},
 	}

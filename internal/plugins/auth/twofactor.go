@@ -232,15 +232,19 @@ func (s *authService) EnableTwoFactor(ctx context.Context, userID, code string) 
 	return codes, nil
 }
 
-// DisableTwoFactor turns two-factor off after checking the password, and
+// DisableTwoFactor turns two-factor off after checking the password and a
+// code, so a stolen session plus a known password can't strip it; it
 // forgets the recovery codes and trusted devices with it.
-func (s *authService) DisableTwoFactor(ctx context.Context, userID, password string) error {
+func (s *authService) DisableTwoFactor(ctx context.Context, userID, password, code string) error {
 	user, err := s.repo.FindByID(ctx, userID)
 	if err != nil {
 		return err
 	}
 	if !verifyPassword(password, user.PasswordHash) {
 		return apperror.NewBadRequest("that password isn't right")
+	}
+	if err := s.verifySecondFactorIfOn(ctx, user, code); err != nil {
+		return err
 	}
 	return s.clearTwoFactor(ctx, userID)
 }
@@ -284,8 +288,8 @@ func (s *authService) clearTwoFactor(ctx context.Context, userID string) error {
 }
 
 // RegenerateRecoveryCodes replaces every recovery code with a new set after
-// checking the password. The old ones stop working at once.
-func (s *authService) RegenerateRecoveryCodes(ctx context.Context, userID, password string) ([]string, error) {
+// checking the password and a code. The old ones stop working at once.
+func (s *authService) RegenerateRecoveryCodes(ctx context.Context, userID, password, code string) ([]string, error) {
 	user, err := s.repo.FindByID(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -295,6 +299,9 @@ func (s *authService) RegenerateRecoveryCodes(ctx context.Context, userID, passw
 	}
 	if !verifyPassword(password, user.PasswordHash) {
 		return nil, apperror.NewBadRequest("that password isn't right")
+	}
+	if err := s.verifySecondFactorIfOn(ctx, user, code); err != nil {
+		return nil, err
 	}
 	codes, hashes, err := newRecoveryCodes()
 	if err != nil {
@@ -314,15 +321,17 @@ func (s *authService) CompleteTwoFactorLogin(ctx context.Context, in TwoFactorLo
 		return nil, apperror.NewInternal(errors.New("two-factor needs Redis"))
 	}
 	chKey := loginChallengeKeyPrefix + hashToken(in.Challenge)
-	userID, err := s.redis.Get(ctx, chKey).Result()
+	stored, err := s.redis.Get(ctx, chKey).Result()
 	if errors.Is(err, redis.Nil) || in.Challenge == "" {
 		return nil, apperror.NewUnauthorized("that sign-in took too long; start again")
 	}
 	if err != nil {
 		return nil, apperror.NewInternal(fmt.Errorf("reading sign-in: %w", err))
 	}
+	userID, passwordMark, _ := strings.Cut(stored, "|")
 	user, err := s.repo.FindByID(ctx, userID)
-	if err != nil {
+	// A password changed since the first step ends the half-finished sign-in.
+	if err != nil || passwordMark != challengePasswordMark(user) {
 		return nil, apperror.NewUnauthorized("that sign-in took too long; start again")
 	}
 	if user.IsDisabled {
@@ -372,12 +381,24 @@ func (s *authService) verifySecondFactorIfOn(ctx context.Context, user *User, co
 // checkSecondFactor accepts a current authenticator code or an unused
 // recovery code. Five wrong codes pause the account's code checks for 15
 // minutes; a right one clears the count.
+//
+// Every attempt takes its number before the code is checked, in one
+// round trip with the expiry, so parallel guesses can't slip past the
+// limit and the counter can never be left without a TTL.
 func (s *authService) checkSecondFactor(ctx context.Context, user *User, code string) error {
 	if s.redis == nil || s.totpKey == nil {
 		return apperror.NewInternal(errors.New("two-factor is not configured"))
 	}
 	failKey := totpFailuresKeyPrefix + user.ID
-	if n, _ := s.redis.Get(ctx, failKey).Int(); n >= twoFactorMaxFailures {
+	var attempt *redis.IntCmd
+	if _, err := s.redis.TxPipelined(ctx, func(p redis.Pipeliner) error {
+		attempt = p.Incr(ctx, failKey)
+		p.Expire(ctx, failKey, twoFactorLockWindow)
+		return nil
+	}); err != nil {
+		return apperror.NewInternal(fmt.Errorf("counting code attempts: %w", err))
+	}
+	if attempt.Val() > twoFactorMaxFailures {
 		return apperror.NewTooManyRequests("too many wrong codes; try again in 15 minutes")
 	}
 	ok, err := s.matchSecondFactor(ctx, user, code)
@@ -385,11 +406,7 @@ func (s *authService) checkSecondFactor(ctx context.Context, user *User, code st
 		return err
 	}
 	if !ok {
-		n, _ := s.redis.Incr(ctx, failKey).Result()
-		if n == 1 {
-			s.redis.Expire(ctx, failKey, twoFactorLockWindow)
-		}
-		if n >= twoFactorMaxFailures {
+		if attempt.Val() >= twoFactorMaxFailures {
 			return apperror.NewTooManyRequests("too many wrong codes; try again in 15 minutes")
 		}
 		return apperror.NewUnauthorized("that code isn't right")
@@ -438,15 +455,22 @@ func (s *authService) matchSecondFactor(ctx context.Context, user *User, code st
 
 // startTwoFactorChallenge records a sign-in whose password was right and
 // returns the token the code step carries. Only its hash is stored.
-func (s *authService) startTwoFactorChallenge(ctx context.Context, userID string) (string, error) {
+func (s *authService) startTwoFactorChallenge(ctx context.Context, user *User) (string, error) {
 	token, err := generateSessionToken()
 	if err != nil {
 		return "", err
 	}
-	if err := s.redis.Set(ctx, loginChallengeKeyPrefix+hashToken(token), userID, twoFactorChallengeTTL).Err(); err != nil {
+	val := user.ID + "|" + challengePasswordMark(user)
+	if err := s.redis.Set(ctx, loginChallengeKeyPrefix+hashToken(token), val, twoFactorChallengeTTL).Err(); err != nil {
 		return "", err
 	}
 	return token, nil
+}
+
+// challengePasswordMark is a short fingerprint of the stored password hash,
+// so a challenge stops working once the password changes.
+func challengePasswordMark(user *User) string {
+	return hashToken(user.PasswordHash)[:16]
 }
 
 func (s *authService) trustDevice(ctx context.Context, userID string) (string, error) {
@@ -497,22 +521,33 @@ func (s *authService) forgetTrustedDevices(ctx context.Context, userID string) {
 // copied onto paper reads back unambiguously.
 const recoveryAlphabet = "abcdefghjkmnpqrstuvwxyz23456789"
 
-// newRecoveryCodes returns the codes to show (xxxx-xxxx) and the hashes to
-// store, which are taken over the code without its dash.
+// recoveryCodeLen is twelve characters (about 59 bits), so the stored
+// hashes can't practically be reversed from a database copy.
+const recoveryCodeLen = 12
+
+// newRecoveryCodes returns the codes to show (xxxx-xxxx-xxxx) and the hashes
+// to store, which are taken over the code without its dashes.
 func newRecoveryCodes() ([]string, []string, error) {
 	codes := make([]string, 0, recoveryCodeCount)
 	hashes := make([]string, 0, recoveryCodeCount)
-	buf := make([]byte, 8)
+	// Bytes at or above the largest multiple of the alphabet size are
+	// skipped, so every character is equally likely.
+	limit := byte(256 - 256%len(recoveryAlphabet))
+	one := make([]byte, 1)
 	for len(codes) < recoveryCodeCount {
-		if _, err := rand.Read(buf); err != nil {
-			return nil, nil, fmt.Errorf("generating recovery codes: %w", err)
-		}
 		var b strings.Builder
-		for i, x := range buf {
-			if i == 4 {
+		for n := 0; n < recoveryCodeLen; {
+			if _, err := rand.Read(one); err != nil {
+				return nil, nil, fmt.Errorf("generating recovery codes: %w", err)
+			}
+			if one[0] >= limit {
+				continue
+			}
+			if n > 0 && n%4 == 0 {
 				b.WriteByte('-')
 			}
-			b.WriteByte(recoveryAlphabet[int(x)%len(recoveryAlphabet)])
+			b.WriteByte(recoveryAlphabet[int(one[0])%len(recoveryAlphabet)])
+			n++
 		}
 		code := b.String()
 		codes = append(codes, code)

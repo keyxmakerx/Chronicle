@@ -721,7 +721,7 @@ func (h *Handler) TwoFactorDisableAPI(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := h.service.DisableTwoFactor(c.Request().Context(), userID, req.Password); err != nil {
+	if err := h.service.DisableTwoFactor(c.Request().Context(), userID, req.Password, req.Code); err != nil {
 		return err
 	}
 	h.logSecurityEvent(c.Request().Context(), "two_factor.disabled", userID, userID, c.RealIP(), c.Request().UserAgent(), nil)
@@ -735,7 +735,7 @@ func (h *Handler) TwoFactorRecoveryCodesAPI(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	codes, err := h.service.RegenerateRecoveryCodes(c.Request().Context(), userID, req.Password)
+	codes, err := h.service.RegenerateRecoveryCodes(c.Request().Context(), userID, req.Password, req.Code)
 	if err != nil {
 		return err
 	}

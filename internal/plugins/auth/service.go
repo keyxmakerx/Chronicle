@@ -148,8 +148,8 @@ type AuthService interface {
 	TwoFactorStatus(ctx context.Context, userID string) (TwoFactorStatus, error)
 	BeginTwoFactor(ctx context.Context, userID, password string) (*TwoFactorSetup, error)
 	EnableTwoFactor(ctx context.Context, userID, code string) ([]string, error)
-	DisableTwoFactor(ctx context.Context, userID, password string) error
-	RegenerateRecoveryCodes(ctx context.Context, userID, password string) ([]string, error)
+	DisableTwoFactor(ctx context.Context, userID, password, code string) error
+	RegenerateRecoveryCodes(ctx context.Context, userID, password, code string) ([]string, error)
 	AdminDisableTwoFactor(ctx context.Context, userID string) error
 	CompleteTwoFactorLogin(ctx context.Context, in TwoFactorLoginInput) (*TwoFactorLoginResult, error)
 
@@ -459,7 +459,7 @@ func (s *authService) Login(ctx context.Context, input LoginInput) (string, *Use
 	// Two-factor accounts stop here for a code unless this device was
 	// remembered; the session is only made once the code checks out.
 	if user.TOTPEnabled && !s.isTrustedDevice(ctx, user.ID, input.TrustedDevice) {
-		challenge, err := s.startTwoFactorChallenge(ctx, user.ID)
+		challenge, err := s.startTwoFactorChallenge(ctx, user)
 		if err != nil {
 			return "", nil, apperror.NewInternal(fmt.Errorf("starting two-factor step: %w", err))
 		}
