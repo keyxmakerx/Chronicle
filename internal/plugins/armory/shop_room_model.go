@@ -18,13 +18,36 @@ type ShopRoomLayout struct {
 	Palette     string `json:"palette"`
 	// Look is how the room is drawn: "lit" (the isometric room) or "paper" (a
 	// pop-up book). Empty, from layouts saved before there was a choice, is lit.
-	Look     string                      `json:"look"`
+	Look string `json:"look"`
+	// Mood themes the room's furniture and atmosphere. Empty, from layouts
+	// saved before moods existed, is no mood.
+	Mood string `json:"mood"`
+	// Effects tunes the atmosphere. Nil, from older layouts, means the widget's
+	// defaults; a pointer keeps "never set" distinct from "all zero".
+	Effects  *ShopRoomEffects            `json:"effects"`
 	Seeds    ShopRoomSeeds               `json:"seeds"`
 	Pieces   []ShopRoomPiece             `json:"pieces"`
 	Decor    []ShopRoomDecor             `json:"decor"`
 	Items    map[string]ShopRoomItemLook `json:"items"`
 	Portrait *ShopRoomPortrait           `json:"portrait"`
 	Lines    []string                    `json:"lines"`
+}
+
+// ShopRoomEffects is the room's atmosphere. The int fields are percentages of
+// the default look (100 = unchanged), so a GM can dim or boost each one.
+type ShopRoomEffects struct {
+	Shadows  int  `json:"shadows"`
+	Warmth   int  `json:"warmth"`
+	Window   int  `json:"window"`
+	Haze     int  `json:"haze"`
+	Vignette int  `json:"vignette"`
+	Dust     bool `json:"dust"`
+	Flicker  bool `json:"flicker"`
+	Embers   bool `json:"embers"`
+	Smoke    bool `json:"smoke"`
+	// Weather and Time are "" for none/default.
+	Weather string `json:"weather"`
+	Time    string `json:"time"`
 }
 
 // ShopRoomSeeds drive the widget's deterministic procedural layout, so a
