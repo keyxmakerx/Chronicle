@@ -173,6 +173,9 @@ const_registry_files=(
   # AI Import's calendar block: the front-matter value `kind: calendar`, a
   # word of the import format, not a use of the calendar plugin's slug.
   "internal/plugins/ai_workspace/records/calendar_kind.go"
+  # AI Import's `what: calendar` lookup: a word of the import format, not a
+  # use of the calendar plugin's slug.
+  "internal/plugins/ai_workspace/records/lookup_calendar_info.go"
 )
 
 # ---------------------------------------------------------------------------

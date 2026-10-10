@@ -80,6 +80,7 @@ type PartyNight struct {
 // may be nil; its lookups then say so.
 type Lookups struct {
 	Cal     CalendarAPI
+	Weather WeatherSettingsAPI
 	Tables  RollTablesAPI
 	Maps    MapsAPI
 	Pages   PagesAPI
@@ -103,6 +104,8 @@ type LookupAnswer struct {
 var lookupWhats = []struct{ what, keys, brief string }{
 	{"pages", "optional `type` (e.g. Character)", "page names, by type"},
 	{"page", "`name`", "one page: its text, tags and links"},
+	{lookupWhatCalendar, "none", "the calendar itself: months, weekdays, seasons, moons with today's phase and the next new and full moon, eras, festivals, today's date, and its climate"},
+	{"weather-kinds", "none", "every climate, built-in weather label and sky effect the calendar can animate, and the owner's own kinds of weather"},
 	{"events", "`from` and `to` (e.g. `Deepwinter 1 1492`), or `year` and optional `month`", "calendar events in a date range"},
 	{"weather", "`from` and `to`, or `year` and `month`", "each day's weather in a date range"},
 	{"table", "optional `name`", "rolling tables, or one table's entries"},
@@ -190,6 +193,10 @@ func (run *lookupRun) one(what string, r Record) LookupAnswer {
 		ans, err = run.pagesIndex(r.Str("type"))
 	case "page":
 		ans, err = run.page(firstNonEmpty(r.Name, r.Str("page")))
+	case lookupWhatCalendar:
+		ans, err = run.calendarInfo()
+	case "weather-kinds", "weather-kind":
+		ans, err = run.weatherKinds()
 	case "events":
 		ans, err = run.events(r)
 	case "weather":

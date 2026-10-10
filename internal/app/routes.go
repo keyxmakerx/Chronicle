@@ -5280,7 +5280,7 @@ func (a *App) RegisterRoutes() {
 	// The read-only lookups an AI may ask for. Game-system entries wait on
 	// the character pick-list service (TODO(#1170)).
 	aiLookups := &records.Lookups{
-		Cal: calendarService, Maps: aiMapsAdapter{mapsService}, Pages: entityService,
+		Cal: calendarService, Weather: calendarService, Maps: aiMapsAdapter{mapsService}, Pages: entityService,
 		Rels: relService, Notes: noteSvc, Rules: &aiHouseRules,
 		Party: &aiPartyAdapter{screen: dmScreenSvc, nights: sessionsService, members: campaignService},
 	}

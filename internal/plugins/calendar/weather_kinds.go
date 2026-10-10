@@ -420,3 +420,26 @@ func weatherKindNotes(cur, next []WeatherKind) []string {
 func jsLength(s string) int {
 	return len(utf16.Encode([]rune(s)))
 }
+
+// WeatherChoice is one built-in weather or sky effect, as AI Import lists
+// them. Read from the generator's own tables, so a new entry shows up there
+// without a change elsewhere.
+type WeatherChoice struct{ ID, Label string }
+
+// WeatherPresets lists the generator's built-in weathers in its order.
+func WeatherPresets() []WeatherChoice {
+	out := make([]WeatherChoice, len(weatherPresets))
+	for i, p := range weatherPresets {
+		out[i] = WeatherChoice{ID: p.ID, Label: p.Label}
+	}
+	return out
+}
+
+// WeatherEffects lists the sky effects the renderer can draw, in its order.
+func WeatherEffects() []WeatherChoice {
+	out := make([]WeatherChoice, len(weatherEffects))
+	for i, e := range weatherEffects {
+		out[i] = WeatherChoice{ID: e.ID, Label: e.Label}
+	}
+	return out
+}
