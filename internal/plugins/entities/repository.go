@@ -391,11 +391,19 @@ func (r *entityTypeRepository) AdoptPresetCategory(ctx context.Context, toID int
 			return fmt.Errorf("retiring entity type %d: %w", *retireID, err)
 		}
 	}
-	if _, err := tx.ExecContext(ctx,
+	res, err := tx.ExecContext(ctx,
 		`UPDATE entity_types SET preset_category = ? WHERE id = ? AND (preset_category IS NULL OR preset_category = '')`,
 		category, toID,
-	); err != nil {
+	)
+	if err != nil {
 		return fmt.Errorf("setting preset category on entity type %d: %w", toID, err)
+	}
+	// If toID gained a category in between, keep the retired type as it was
+	// rather than leave the sheet with no home.
+	if n, err := res.RowsAffected(); err != nil {
+		return fmt.Errorf("checking preset category update on entity type %d: %w", toID, err)
+	} else if n == 0 && retireID != nil {
+		return fmt.Errorf("entity type %d already has a preset category", toID)
 	}
 	return tx.Commit()
 }
