@@ -244,7 +244,8 @@ func menuVars(m czMenu) string {
 }
 
 // czElevation is each elevation's resting and hover shadow, light then
-// dark. ACC is replaced by the accent's channels for Flat's outline.
+// dark. ACC is replaced by the accent's channels: Flat's outline and
+// Ambient's accent-tinted shadows.
 var czElevation = map[string]struct {
 	lift        int
 	rest, hover [2]string
@@ -253,6 +254,9 @@ var czElevation = map[string]struct {
 	"dramatic": {4,
 		[2]string{"0 2px 6px -1px rgb(0 0 0 / .10), 0 10px 22px -12px rgb(0 0 0 / .28)", "0 2px 6px -1px rgb(0 0 0 / .4), 0 12px 26px -12px rgb(0 0 0 / .7)"},
 		[2]string{"0 22px 44px -14px rgb(0 0 0 / .38), 0 6px 14px -6px rgb(0 0 0 / .18)", "0 24px 48px -14px rgb(0 0 0 / .85), 0 6px 14px -6px rgb(0 0 0 / .5)"}},
+	"ambient": {3,
+		[2]string{"0 1px 2px rgb(16 24 40 / .05), 0 6px 18px -8px rgb(ACC / .28)", "0 1px 2px rgb(0 0 0 / .4), 0 8px 20px -8px rgb(ACC / .32)"},
+		[2]string{"0 2px 4px rgb(16 24 40 / .06), 0 18px 36px -12px rgb(ACC / .42), 0 0 0 1px rgb(ACC / .12)", "0 2px 4px rgb(0 0 0 / .45), 0 20px 40px -12px rgb(ACC / .5), 0 0 0 1px rgb(ACC / .2)"}},
 }
 
 // czSpeeds retime Chronicle's chrome durations (micro, standard, large) and
@@ -374,8 +378,8 @@ func AppearanceCSS(ctx context.Context) string {
 		if accent != "" && colour.ValidHex(accent) {
 			acc = colour.RGBChannels(accent)
 		}
-		fmt.Fprintf(&root, "--elev-resting:%s;--elev-hover:%s;--cz-lift:%dpx;", e.rest[0], strings.ReplaceAll(e.hover[0], "ACC", acc), e.lift)
-		fmt.Fprintf(&dark, "--elev-resting:%s;--elev-hover:%s;", e.rest[1], strings.ReplaceAll(e.hover[1], "ACC", acc))
+		fmt.Fprintf(&root, "--elev-resting:%s;--elev-hover:%s;--cz-lift:%dpx;", strings.ReplaceAll(e.rest[0], "ACC", acc), strings.ReplaceAll(e.hover[0], "ACC", acc), e.lift)
+		fmt.Fprintf(&dark, "--elev-resting:%s;--elev-hover:%s;", strings.ReplaceAll(e.rest[1], "ACC", acc), strings.ReplaceAll(e.hover[1], "ACC", acc))
 	}
 
 	if s, ok := czSpeeds[a.MotionSpeed]; ok {

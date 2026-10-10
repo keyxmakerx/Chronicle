@@ -215,6 +215,25 @@ column's version; Off shows the end state.
   message confirms it ("Published"); an error says what went wrong and how to
   fix it, without apologising.
 
+## Customize goes further
+
+The standard above is the base every campaign starts from. A campaign owner's
+Customize choices (`AppearanceData`, emitted as `data-cz-*` on the page) can
+make it richer, never break it: Calm and Off still win, and the tools keep
+their tokens.
+
+- **Buttons** (`data-cz-btn`): Lift is the base; Press, Glow and Ink restyle
+  it; Keystone is soft, raised and rounded (12px), and gives every button the
+  heavy press.
+- **Depth** (`data-cz-elev`, shadows from `czElevation`): Standard is the
+  base; Flat, Dramatic, and Ambient, whose shadows are tinted with the accent
+  under a faint light from the page's top corner.
+- **Motion speed** retimes the duration tokens; **menu highlight** and
+  **hover card** looks are their own choices.
+- The editor's example site (`static/js/widgets/customize_look.js`,
+  `static/css/customize.css`) shows each choice and keeps its numbers in step
+  with the server's.
+
 ## Every control has every state
 
 A control isn't finished until it has rest, hover, pressed, keyboard focus,

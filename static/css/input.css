@@ -4189,6 +4189,28 @@ html.dark[data-view-contrast="high"] { /* the second out-ranks a campaign's :roo
   transition: transform 500ms cubic-bezier(.2, .7, .3, 1), opacity 500ms ease;
 }
 [data-cz-btn="ink"] .btn:active::after { opacity: 0.22; transform: translate(-50%, -50%) scale(1); transition-duration: 0ms; }
+/* Keystone: soft, raised and rounded; every button gets the heavy press,
+   sinking deep with an inner shadow and letting go slowly. Under Calm the
+   press is the colour change alone. */
+[data-cz-btn="keystone"] .btn {
+  border-radius: 12px;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.5), 0 2px 3px rgb(16 24 40 / 0.1), 0 8px 16px -8px rgb(16 24 40 / 0.25);
+  transition: transform var(--dur-large) var(--ease-slide), box-shadow var(--dur-large) var(--ease-slide), background-color var(--dur-micro), color var(--dur-micro);
+}
+[data-cz-btn="keystone"] :is(.btn-primary, .btn-danger, .btn-warning, .btn-success) {
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.25), 0 3px 6px -2px rgb(var(--color-accent-rgb, 99 102 241) / 0.5), 0 10px 20px -10px rgb(var(--color-accent-rgb, 99 102 241) / 0.6);
+}
+[data-cz-btn="keystone"] .btn:active {
+  transform: scale(0.92) translateY(1px); box-shadow: inset 0 2px 5px rgb(16 24 40 / 0.35); transition-duration: 70ms;
+}
+.dark [data-cz-btn="keystone"] .btn:not(:active) { box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 2px 4px rgb(0 0 0 / 0.4), 0 8px 18px -8px rgb(0 0 0 / 0.6); }
+html[data-motion] [data-cz-btn="keystone"] .btn:active { transform: none; }
+
+/* Ambient: shadows tinted with the accent (czElevation) and a faint light
+   from the page's top corner, as if the page were lamplit. */
+[data-cz-elev="ambient"] #main-content {
+  background-image: radial-gradient(90% 60% at 80% -10%, rgb(var(--color-accent-rgb, 99 102 241) / 0.08), transparent 60%);
+}
 
 /* Menu highlight on the page you are on. The living ring (the default)
    is drawn by .nav-ring itself; each other style shows some of its layers
