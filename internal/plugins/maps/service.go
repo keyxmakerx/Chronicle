@@ -71,6 +71,11 @@ type MapService interface {
 	GetCampaignFrame(ctx context.Context, campaignID string) (string, error)
 	SetCampaignFrame(ctx context.Context, campaignID, frame string) error
 	ResolveDisplay(ctx context.Context, m *Map) (ResolvedDisplay, error)
+	// SetMeasureScale stores (or, with a nil scale, removes) the map's scale
+	// for the Measure tool. canSet is the owner-or-DM-grant capability
+	// (CampaignContext.CanAuthorDmOnly): the rest of the display settings are
+	// owner-only, but a DM sets the scale too, so this is its own gate.
+	SetMeasureScale(ctx context.Context, campaignID, mapID string, canSet bool, scale json.RawMessage) (*MeasureDisplay, error)
 
 	// Marker CRUD. UpdateMarker and DeleteMarker take canAuthorDmOnly (Owner
 	// or a co-DM grant, campaigns.CampaignContext.CanAuthorDmOnly) so a
@@ -410,6 +415,43 @@ func (s *mapService) SetHexArt(ctx context.Context, mapID, art string) error {
 		return fmt.Errorf("update map terrain art: %w", err)
 	}
 	return nil
+}
+
+// SetMeasureScale writes only the measure group, through the same merge and
+// validation as a settings save, so every other group is kept. The gate is
+// here rather than on the route: the route admits any member, because a
+// member with DM access is not an owner by role. A map in another campaign
+// answers NotFound, as a missing one does.
+func (s *mapService) SetMeasureScale(ctx context.Context, campaignID, mapID string, canSet bool, scale json.RawMessage) (*MeasureDisplay, error) {
+	if !canSet {
+		return nil, apperror.NewForbidden("only the owner or a member with DM access can set the map's scale")
+	}
+	m, err := s.repo.GetMap(ctx, mapID)
+	if err != nil {
+		return nil, fmt.Errorf("get map for scale: %w", err)
+	}
+	if m == nil || m.CampaignID != campaignID {
+		return nil, apperror.NewNotFound("map not found")
+	}
+	if len(scale) == 0 {
+		scale = json.RawMessage("null")
+	}
+	raw, err := json.Marshal(map[string]json.RawMessage{"measure": scale})
+	if err != nil {
+		return nil, apperror.NewValidation("the scale is not valid")
+	}
+	next, err := MergeDisplaySettings(m.Display, raw)
+	if err != nil {
+		return nil, err
+	}
+	m.Display = next
+	if err := s.repo.UpdateMap(ctx, m); err != nil {
+		return nil, fmt.Errorf("update map scale: %w", err)
+	}
+	if next == nil {
+		return nil, nil
+	}
+	return next.Measure, nil
 }
 
 // GetCampaignFrame returns the campaign-wide frame style, or the default when

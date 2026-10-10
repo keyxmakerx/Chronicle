@@ -133,13 +133,51 @@ func TestMapWidgetType_RenderBlock(t *testing.T) {
 		t.Errorf("bound map should render the embed + affordance; got %q", embed)
 	}
 
-	// No map + Scribe → the choose state with the affordance.
-	choose := render(t, wt.RenderBlock(ctx, widgetbindings.BlockRenderContext{
-		CC: cc, HostID: "ent-1", Role: int(campaigns.RoleScribe),
-		Resolution: widgetbindings.Resolution{Source: widgetbindings.SourceNone},
-	}))
-	if !strings.Contains(choose, "data-entity-map-choose") || !strings.Contains(choose, `data-binding-affordance="map"`) {
-		t.Errorf("no-map Scribe should render the choose state; got %q", choose)
+	// No map + Scribe → the map picker, which binds through the existing
+	// binding routes into this block's host and offers the Scribe+ create path.
+	pickerCases := []struct {
+		name  string
+		maps  []Map
+		want  []string
+		avoid []string
+	}{
+		{
+			name: "campaign with maps lists them as cards",
+			maps: []Map{{ID: "m-1", CampaignID: "camp-1", Name: "Overworld"}, {ID: "m-2", CampaignID: "camp-1", Name: `<b>Under</b>`}},
+			want: []string{
+				"data-map-picker", `data-host-block="` + widgetbindings.BlockHostID(WidgetTypeMap, "ent-1") + `"`,
+				`data-map-id="m-1"`, `data-map-id="m-2"`, "2 maps", "data-pick disabled",
+				`hx-post="/campaigns/camp-1/bindings/create"`, "Create a map",
+				"&lt;b&gt;Under&lt;/b&gt;",
+			},
+			avoid: []string{"<b>Under</b>", "This campaign has no maps yet"},
+		},
+		{
+			name:  "empty campaign says so and still offers Create a map",
+			maps:  nil,
+			want:  []string{"data-map-picker", "This campaign has no maps yet", "Create a map", `hx-post="/campaigns/camp-1/bindings/create"`},
+			avoid: []string{"mp-pick-card"},
+		},
+	}
+	for _, tc := range pickerCases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := *repo
+			r.listMapsFn = func(_ context.Context, _ string) ([]Map, error) { return tc.maps, nil }
+			choose := render(t, NewMapWidgetType(newTestMapService(&r)).RenderBlock(ctx, widgetbindings.BlockRenderContext{
+				CC: cc, HostID: "ent-1", Role: int(campaigns.RoleScribe),
+				Resolution: widgetbindings.Resolution{Source: widgetbindings.SourceNone},
+			}))
+			for _, w := range tc.want {
+				if !strings.Contains(choose, w) {
+					t.Errorf("picker should contain %q; got %q", w, choose)
+				}
+			}
+			for _, a := range tc.avoid {
+				if strings.Contains(choose, a) {
+					t.Errorf("picker must not contain %q; got %q", a, choose)
+				}
+			}
+		})
 	}
 
 	// No map + player → the friendly empty state, NO affordance.
@@ -148,8 +186,11 @@ func TestMapWidgetType_RenderBlock(t *testing.T) {
 		CC: ccP, HostID: "ent-1", Role: int(campaigns.RolePlayer),
 		Resolution: widgetbindings.Resolution{Source: widgetbindings.SourceNone},
 	}))
-	if strings.Contains(empty, "data-binding-affordance") {
-		t.Errorf("players must not see the binding affordance; got %q", empty)
+	if strings.Contains(empty, "data-binding-affordance") || strings.Contains(empty, "data-map-picker") {
+		t.Errorf("players must not see the picker or the binding affordance; got %q", empty)
+	}
+	if !strings.Contains(empty, "No map here yet") {
+		t.Errorf("players should be told the block is empty; got %q", empty)
 	}
 }
 

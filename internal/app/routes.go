@@ -3645,6 +3645,7 @@ func (a *App) RegisterRoutes() {
 			{Name: "map-viewer", Scripts: []string{"js/map_viewer.js"}},
 			{Name: "entity-map", Scripts: []string{"js/map_viewer.js", "js/map_focus.js", "js/entity_map.js"}},
 			{Name: "map-widget", Scripts: []string{"js/map_annotations.js", "js/map_widget.js"}},
+			{Name: "map-block-picker", Scripts: []string{"js/map_block_picker.js"}},
 		},
 	})
 	if a.PluginHealth.IsHealthy(maps.PluginSlug) {

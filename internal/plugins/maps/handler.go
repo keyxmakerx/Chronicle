@@ -592,3 +592,34 @@ func (h *Handler) SetCampaignFrameAPI(c echo.Context) error {
 	}
 	return c.NoContent(http.StatusNoContent)
 }
+
+// PutMeasureScaleAPI sets or removes the map's scale for the Measure tool.
+// The body is {"scale": {a, b, length, unit}} to set it or {"scale": null} to
+// remove it; a body without "scale" changes nothing and is refused, so a
+// stray request can never clear a scale. Who may write is decided in the
+// service (owner or DM grant).
+// PUT /campaigns/:id/maps/:mid/measure
+func (h *Handler) PutMeasureScaleAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	var req struct {
+		Scale patch.Field[json.RawMessage] `json:"scale"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request body")
+	}
+	if !req.Scale.Present() {
+		return apperror.NewBadRequest("scale is required (null removes it)")
+	}
+	var raw json.RawMessage
+	if !req.Scale.IsNull() {
+		raw, _ = req.Scale.Get()
+	}
+	ms, err := h.svc.SetMeasureScale(c.Request().Context(), cc.Campaign.ID, c.Param("mid"), cc.CanAuthorDmOnly(), raw)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]any{"scale": ms})
+}

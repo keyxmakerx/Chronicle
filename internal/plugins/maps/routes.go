@@ -25,6 +25,11 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.PUT("/maps/:mid", h.UpdateMapAPI, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.DELETE("/maps/:mid", h.DeleteMapAPI, campaigns.RequireRole(campaigns.RoleOwner))
 
+	// The Measure tool's scale: membership only at the route, because a member
+	// with DM access is not an owner by role; MapService.SetMeasureScale
+	// refuses everyone but the owner and DM grants.
+	cg.PUT("/maps/:mid/measure", h.PutMeasureScaleAPI, campaigns.RequireRole(campaigns.RolePlayer))
+
 	// Campaign-wide map frame, set from the Customize page's Maps tab.
 	cg.PUT("/maps/frame-style", h.SetCampaignFrameAPI, campaigns.RequireRole(campaigns.RoleOwner))
 

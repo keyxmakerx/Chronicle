@@ -113,6 +113,9 @@
 	// Shadows decide what players may know, so the tool is for the owner and
 	// co-DMs only; the server refuses everyone else regardless.
 	var canShadow = cfg.dataset.canShadow === 'true';
+	// The Measure tool's scale may be set by the owner and members with DM
+	// access; the server refuses everyone else (MapService.SetMeasureScale).
+	var canSetScale = cfg.dataset.canSetScale === 'true';
 	var userID = cfg.dataset.userId || '';
 	// The map's display settings, resolved server-side with every
 	// default filled in, so the defaults live in one place (Go).
@@ -371,8 +374,12 @@
 		// The name on the map (escaped to prevent HTML injection).
 		bindLabel(lm, mk);
 
-		// A click opens the read card; scribes reach editing from there.
-		lm.on('click', function() { openCard(mk, 'read'); });
+		// A click opens the read card; scribes reach editing from there. While
+		// measuring, a pin is a turn of the path instead.
+		lm.on('click', function() {
+			if (tool === 'measure' && measureTool()) { measureTool().addPoint(lm.getLatLng()); return; }
+			openCard(mk, 'read');
+		});
 
 		if (isScribe) {
 			lm.on('dragstart', function() { draggingMarkerID = mk.id; });
@@ -892,19 +899,26 @@
 		else if (tool === 'move') map.getContainer().style.cursor = '';
 	}
 
+	// measureTool is the Measure module once it has loaded.
+	function measureTool() { return viewerCtx && viewerCtx.measure; }
 	function setTool(t) {
-		if (!isScribe && t !== 'hex') t = 'move';
+		// Move, Hexes and Measure are everyone's; the rest are scribes'.
+		if (!isScribe && t !== 'hex' && t !== 'measure') t = 'move';
 		if (t === 'hex' && !hexesOn()) t = 'move';
+		if (t === 'measure' && !measureTool()) t = 'move';
 		closePopovers();
 		if (t !== 'draw' && t !== 'shadow' && draw()) draw().cancel();
 		tool = t;
 		if (t === 'pin') setHint('Click the map to drop a pin');
 		else if (t === 'draw') setHint(shapeHint(drawShape));
 		else if (t === 'shadow') setHint(SHADOW_HINT);
-		else if (t !== 'hex') setHint('');
+		else if (t !== 'hex' && t !== 'measure') setHint('');
 		syncRail();
-		// The hex module sets its own hint, so it runs after the one above.
+		// The hex and measure modules set their own hints, so they run after
+		// the one above; the one being put down goes first.
+		if (t !== 'measure' && measureTool()) measureTool().setActive(false);
 		if (viewerCtx && viewerCtx.hexes) viewerCtx.hexes.setActive(t === 'hex');
+		if (t === 'measure') measureTool().setActive(true);
 	}
 	function startShape(shape) {
 		if (!draw()) { Chronicle.notify('Drawing tools are still loading', 'error'); return; }
@@ -912,6 +926,7 @@
 		drawShape = shape;
 		tool = 'draw';
 		if (viewerCtx && viewerCtx.hexes) viewerCtx.hexes.setActive(false);
+		if (measureTool()) measureTool().setActive(false);
 		draw().setStyle({ color: drawColor, width: drawWidth, picked: colorPicked });
 		draw().start(shape);
 		setHint(shapeHint(shape));
@@ -926,11 +941,13 @@
 		draw().setShadowStrength(strength);
 		tool = 'shadow';
 		if (viewerCtx && viewerCtx.hexes) viewerCtx.hexes.setActive(false);
+		if (measureTool()) measureTool().setActive(false);
 		draw().start('shadow');
 		setHint(SHADOW_HINT);
 		syncRail();
 	}
-	// Everyone's rail holds Move and the Hexes tool; the rest exist only for scribes.
+	// Everyone's rail holds Move, Measure and (on a hex map) Hexes; the rest
+	// exist only for scribes.
 	document.querySelectorAll('[data-tool]').forEach(function(b) {
 		b.addEventListener('click', function() {
 			var t = b.dataset.tool;
@@ -1784,12 +1801,12 @@
 	// while a drawing tool is active: the polygon tool finishes on
 	// double-click and must not also leave a pin behind.
 	map.on('dblclick', function(e) {
-		if (!isScribe || tool === 'draw' || tool === 'shadow' || tool === 'hex') return;
+		if (!isScribe || tool === 'draw' || tool === 'shadow' || tool === 'hex' || tool === 'measure') return;
 		var p = latLngToPercent(e.latlng);
 		startDraft(p.x, p.y);
 	});
 
-	// ---- Keys: V move, P pin, D draw, B hide under shadow, I add a picture, Delete removes the selected picture, Esc steps back ----
+	// ---- Keys: V move, M measure, P pin, D draw, B hide under shadow, I add a picture, Delete removes the selected picture, Backspace drops a measured point, Esc steps back ----
 	function typing(t) {
 		if (!t || !t.tagName) return false;
 		var n = t.tagName;
@@ -1819,6 +1836,8 @@
 			if (draw() && draw().escape && draw().escape()) return;
 			// An open hex card steps back before the Hexes tool does.
 			if (viewerCtx && viewerCtx.hexes && viewerCtx.hexes.escape()) return;
+			// Measuring: Esc finishes the path, a second Esc clears it.
+			if (tool === 'measure' && measureTool() && measureTool().escape()) return;
 			if (tool !== 'move') { setTool('move'); return; }
 			e.mpConsumed = false;
 			return;
@@ -1829,16 +1848,22 @@
 			e.preventDefault();
 			return;
 		}
-		// Letters inside the settings sheet belong to its controls.
-		if (!isScribe || typing(e.target) || (e.target.closest && e.target.closest('#mp-sheet'))) return;
+		// Letters inside the settings sheet and the scale box belong to their controls.
+		if (typing(e.target) || (e.target.closest && e.target.closest('#mp-sheet, .mp-ms-pop'))) return;
+		// Backspace drops the last point of the path being measured.
+		if (tool === 'measure' && measureTool() && measureTool().key(e)) return;
+		// M (Measure) and V (Move) are everyone's.
+		var lk = e.key.toLowerCase();
+		if (lk === 'm' && measureTool()) { setTool(tool === 'measure' ? 'move' : 'measure'); e.preventDefault(); return; }
+		if (lk === 'v') { setTool('move'); e.preventDefault(); return; }
+		if (!isScribe) return;
 		// Delete removes the selected picture, after the usual confirm.
 		if (e.key === 'Delete' && canDraw && draw() && draw().deleteSelected) {
 			if (draw().deleteSelected()) e.preventDefault();
 			return;
 		}
-		var k = e.key.toLowerCase();
-		if (k === 'v') { setTool('move'); e.preventDefault(); }
-		else if (k === 'p') { setTool('pin'); e.preventDefault(); }
+		var k = lk;
+		if (k === 'p') { setTool('pin'); e.preventDefault(); }
 		else if (k === 'd' && canDraw) { openPopover(flyDraw, document.querySelector('[data-tool="draw"]')); e.preventDefault(); }
 		else if (k === 'b' && canShadow) { openPopover(flyShadow, document.querySelector('[data-tool="shadow"]')); e.preventDefault(); }
 		else if (k === 'i' && canDraw) { var pb = $id('mp-add-picture'); if (pb) pb.click(); e.preventDefault(); }
@@ -2034,6 +2059,8 @@
 		canFog: canFog,
 		canMoveParty: canMoveParty,
 		canShadow: canShadow,
+		canSetScale: canSetScale,
+		mapName: cfg.dataset.mapName || '',
 		isOwner: isOwner,
 		canDmOnly: canDmOnly,
 		userID: userID,
@@ -2058,15 +2085,34 @@
 			if (fromPanel) delete D.hex_art;
 			if (window.__mpSyncFog) window.__mpSyncFog();
 		},
-		onHexTravel: function(perHex, perDay) { hexMiles = perHex; hexSpeed = perDay; if (window.__mpSyncFog) window.__mpSyncFog(); },
+		onHexTravel: function(perHex, perDay) { hexMiles = perHex; hexSpeed = perDay; if (window.__mpSyncFog) window.__mpSyncFog(); if (measureTool()) measureTool().refresh(); },
 		getMapImage: function() { return mapImageURL; },
 		setMapImage: setMapImage,
-		onHexLines: function(on) { hexLinesOwned = !!on; drawGrid(); },
+		onHexLines: function(on) { hexLinesOwned = !!on; drawGrid(); if (measureTool()) measureTool().refresh(); },
+		// onMeasureScale hears a newly saved scale. It goes into the saved copy
+		// too, so closing the settings sheet without saving cannot drop it.
+		onMeasureScale: function(sc) {
+			D.measure = sc;
+			savedD.measure = sc ? JSON.parse(JSON.stringify(sc)) : null;
+		},
 		setTool: function(t) { setTool(t); },
 		setHint: function(msg) { setHint(msg); }
 	};
 	viewerCtx = window.chronicleMap;
 	syncHexes();
+
+	// The Measure tool is everyone's. It is small and loads beside the viewer;
+	// it needs the hex module's maths only on a hex map, read when used.
+	if (cfg.dataset.measureSrc) {
+		loadScript(cfg.dataset.measureSrc).then(function() {
+			if (destroyed || !window.ChronicleMapMeasure || !viewerCtx) return;
+			try { window.ChronicleMapMeasure.init(viewerCtx); } catch (err) { console.error('[map-viewer] measure failed:', err); }
+		}).catch(function() {
+			// Without the module the button would do nothing; take it away.
+			var mb = document.querySelector('[data-tool="measure"]');
+			if (mb) mb.hidden = true;
+		});
+	}
 
 	// ---- Live changes ----
 	// The server announces every hex write as "hex.changed" with a version (and,
@@ -2144,6 +2190,7 @@
 			destroyed = true;
 			clearTimeout(viewTimer);
 			if (ctx.hexes) { try { ctx.hexes.destroy(); } catch (e) { /* hex module already gone */ } }
+			if (ctx.measure) { try { ctx.measure.destroy(); } catch (e) { /* measure module already gone */ } }
 			if (typeof ctx.onDestroy === 'function') { try { ctx.onDestroy(); } catch (e) { /* drawing add-on already gone */ } }
 			cleanups.forEach(function(fn) { fn(); });
 			leaveFullscreen();
