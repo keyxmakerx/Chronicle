@@ -34,7 +34,12 @@
    */
   function itemsFor(info) {
     var out = [];
-    if (info.href) out.push({ id: 'open-tab', label: 'Open in new tab', icon: 'fa-arrow-up-right-from-square' });
+    // Right-click replaces the browser's own menu, so its two link actions
+    // come along.
+    if (info.href) {
+      out.push({ id: 'open-tab', label: 'Open in new tab', icon: 'fa-arrow-up-right-from-square' });
+      out.push({ id: 'copy-link', label: 'Copy link', icon: 'fa-link' });
+    }
     var ed = info.editor;
     var loc = info.model && ed ? ed.findRow(info.model, info.key) : null;
     if (loc) {
@@ -56,9 +61,9 @@
     return out;
   }
 
-  /** Moves the row one place within its own section, as the signed menu
-   *  does; the editor's arrow keys also cross into the next section, but
-   *  here that would only repeat Pin. Returns false when it cannot move. */
+  /** Moves the row one place within its own section. The editor's arrow
+   *  keys also cross into the next section, but here that would only repeat
+   *  Pin. Returns false when it cannot move. */
   function stepWithin(ed, draft, key, dir) {
     var loc = ed.findRow(draft, key);
     if (!loc) return false;
@@ -189,6 +194,15 @@
       case 'open-tab':
         window.open(info.href, '_blank', 'noopener');
         break;
+      case 'copy-link':
+        if (navigator.clipboard) {
+          navigator.clipboard.writeText(new URL(info.href, window.location.href).href).then(function () {
+            if (Chronicle.notify) Chronicle.notify('Link copied.', 'success');
+          }, function () {
+            if (Chronicle.notify) Chronicle.notify('The link could not be copied.', 'error');
+          });
+        }
+        break;
       case 'pin-all':
         ed.quickChange(info.key, function (d) { return !!ed.togglePin(d, info.key); },
           ed.findRow(info.model, info.key).sec.id === 'pinned' ? nm + ' is unpinned.' : nm + ' is pinned to the top for everyone.');
@@ -282,6 +296,9 @@
   });
 
   document.addEventListener('keydown', function (e) {
+    // A long press whose lift brought no click must not swallow the next
+    // click a key makes.
+    justLongPressed = false;
     if (M) {
       var list = enabled(), at = list.indexOf(document.activeElement);
       if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(true); }

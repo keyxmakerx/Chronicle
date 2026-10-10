@@ -58,7 +58,7 @@ test('the owner gets pin, hide, move and Edit sidebar on their rows', () => {
   const { editor, menu } = load();
   const cases = [
     { name: 'an app with a page', info: { key: 'app:armory', href: '/campaigns/c/armory' },
-      want: ['open-tab', 'pin-all', 'show', '|', 'up', 'down(off)', '|', 'edit'] },
+      want: ['open-tab', 'copy-link', 'pin-all', 'show', '|', 'up', 'down(off)', '|', 'edit'] },
     { name: 'a category: no new tab, and the first one cannot move up out of its section', info: { key: 'cat:1', href: '' },
       want: ['pin-all', 'hide', '|', 'up(off)', 'down', '|', 'edit'] },
     { name: 'the first app cannot move up into Pinned', info: { key: 'app:maps', href: '' },
@@ -66,9 +66,9 @@ test('the owner gets pin, hide, move and Edit sidebar on their rows', () => {
     { name: 'the last category cannot move down', info: { key: 'cat:2', href: '' },
       want: ['pin-all', 'hide', '|', 'up', 'down(off)', '|', 'edit'] },
     { name: 'a shown row offers to hide it', info: { key: 'app:maps', href: '/x' },
-      want: ['open-tab', 'pin-all', 'hide', '|', 'up(off)', 'down', '|', 'edit'] },
+      want: ['open-tab', 'copy-link', 'pin-all', 'hide', '|', 'up(off)', 'down', '|', 'edit'] },
     { name: 'a fixed row (Dashboard) has only a new tab and Edit sidebar', info: { key: 'dashboard', href: '/campaigns/c' },
-      want: ['open-tab', '|', 'edit'] },
+      want: ['open-tab', 'copy-link', '|', 'edit'] },
   ];
   for (const c of cases) {
     const got = menu.itemsFor({ ...c.info, model: model(), pin: null, editor });
@@ -78,13 +78,13 @@ test('the owner gets pin, hide, move and Edit sidebar on their rows', () => {
 
 test('a pinned row reads Unpin; an unpinned one pins for everyone', () => {
   const { editor, menu } = load();
-  assert.equal(labels(menu.itemsFor({ key: 'app:notes', href: '/n', model: model(), pin: null, editor }))[1], 'Unpin');
-  assert.equal(labels(menu.itemsFor({ key: 'app:maps', href: '/m', model: model(), pin: null, editor }))[1], 'Pin to top for everyone');
+  assert.equal(labels(menu.itemsFor({ key: 'app:notes', href: '/n', model: model(), pin: null, editor }))[2], 'Unpin');
+  assert.equal(labels(menu.itemsFor({ key: 'app:maps', href: '/m', model: model(), pin: null, editor }))[2], 'Pin to top for everyone');
 });
 
 test('a member gets their own pin and never the owner\'s actions', () => {
   const { editor, menu } = load();
-  assert.deepEqual(ids(menu.itemsFor({ key: 'app:maps', href: '/m', model: null, pin: false, editor })), ['open-tab', 'pin-me']);
+  assert.deepEqual(ids(menu.itemsFor({ key: 'app:maps', href: '/m', model: null, pin: false, editor })), ['open-tab', 'copy-link', 'pin-me']);
   assert.deepEqual(labels(menu.itemsFor({ key: 'cat:1', href: '', model: null, pin: true, editor })), ['Unpin']);
 });
 

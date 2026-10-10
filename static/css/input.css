@@ -3129,12 +3129,10 @@
   .nav-rw.has-more:hover > .nav-row .nav-tr, .nav-rw.has-more:focus-within > .nav-row .nav-tr { opacity: 0; }
   .nav-rw.has-more.has-subs > .nav-tw, .nav-rw.has-more.can-pin > .nav-mypin { right: 34px; }
   .nav-rw.has-more.can-pin.has-subs > .nav-mypin { right: 60px; }
-  .nav-rw.has-more.has-subs > .nav-row, .nav-rw.has-more.is-mine > .nav-row { padding-right: 66px; }
-  .nav-rw.has-more.is-mine.has-subs > .nav-row { padding-right: 92px; }
+  .nav-rw.has-more.has-subs > .nav-row, .nav-rw.has-more.can-pin > .nav-row { padding-right: 66px; }
+  .nav-rw.has-more.can-pin.has-subs > .nav-row { padding-right: 92px; }
   @media (hover: none) {
     .nav-rw.has-more > .nav-more { opacity: 1; }
-    .nav-rw.has-more.can-pin > .nav-row { padding-right: 66px; }
-    .nav-rw.has-more.can-pin.has-subs > .nav-row { padding-right: 92px; }
     .nav-rw.has-more > .nav-row .nav-tr { opacity: 1; }
   }
 
