@@ -334,6 +334,7 @@ func DefaultDashboardLayout() *DashboardLayout {
 	return &DashboardLayout{
 		Rows: []DashboardRow{
 			full("welcome", BlockWelcomeBanner),
+			full("coming-up", BlockComingUp),
 			full("quick", BlockQuickActions),
 			full("categories", BlockCategoryGrid),
 			full("recent", BlockRecentPages),
@@ -728,6 +729,7 @@ const (
 	BlockSessionTracker  = "session_tracker"  // Upcoming sessions with RSVP status.
 	BlockActivityFeed    = "activity_feed"    // Recent campaign activity log.
 	BlockSyncStatus      = "sync_status"      // Foundry VTT sync health/status.
+	BlockComingUp        = "coming_up"        // Next game nights, what the viewer owes the table, next events.
 
 	// Category dashboard blocks.
 	BlockCategoryHeader = "category_header" // Category name, icon, count, description.
@@ -755,6 +757,7 @@ var ValidBlockTypes = map[string]bool{
 	BlockSessionTracker:  true,
 	BlockActivityFeed:    true,
 	BlockSyncStatus:      true,
+	BlockComingUp:        true,
 	BlockCategoryHeader:  true,
 	BlockEntityGrid:     true,
 	BlockSearchBar:      true,

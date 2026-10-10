@@ -3707,6 +3707,16 @@ func (a *App) RegisterRoutes() {
 		slog.Warn("sessions plugin degraded — routes not registered")
 	}
 
+	// The dashboard's "Coming up" block joins the calendar and game nights, so
+	// it is wired here rather than in either plugin. Each source is gated on
+	// its addon and on its plugin being healthy inside the handler.
+	registerComingUpRoutes(e, &comingUpHandler{
+		src:     comingUpSources{Calendar: calendarService, Nights: sessionsService, Members: campaignService},
+		addons:  addonService,
+		healthy: func(slug string) bool { return a.PluginHealth == nil || a.PluginHealth.IsHealthy(slug) },
+		now:     time.Now,
+	}, campaignService, authService)
+
 	// Timeline plugin: interactive visual timelines with zoom levels and entity grouping.
 	timelineRepo := timeline.NewTimelineRepository(a.DB)
 	// Wires the calendar selector dropdown, event picker and era

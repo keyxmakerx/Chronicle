@@ -378,6 +378,12 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 	}, nil)
 
 	r.Register(BlockMeta{
+		Type: "coming_up", Label: "Coming up", Icon: "fa-hourglass-half",
+		Description: "Next game nights, what you owe the table, next events",
+		Contexts: []string{"dashboard"},
+	}, nil)
+
+	r.Register(BlockMeta{
 		Type: "activity_feed", Label: "Activity Feed", Icon: "fa-clock-rotate-left",
 		Description: "Recent campaign activity log",
 		Contexts: []string{"dashboard"},

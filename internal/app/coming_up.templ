@@ -1,0 +1,70 @@
+// coming_up.templ draws the "Coming up" dashboard block's fragment: the
+// calendar page's raised-sheet look (static/css/coming_up.css) around the
+// rows buildComingUp composed. The dashboard shell that lazy-loads it lives
+// in campaigns.dashComingUp.
+package app
+
+import (
+	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// comingUpFragment is the whole card. It replaces the shell's placeholder
+// (hx-swap outerHTML), so it carries the same root class.
+templ comingUpFragment(campaignID string, v comingUpView) {
+	<div class="cu-wrap" data-block="coming-up">
+		<link rel="stylesheet" href={ layouts.AssetURL("/static/css/coming_up.css") }/>
+		<div class="cu-sheet">
+			<div class="cu-top">
+				<h2 class="cu-title">Coming up <span>{ v.Month }</span></h2>
+				if v.CalendarHref != "" {
+					<a class="cu-lnk" href={ templ.SafeURL(v.CalendarHref) }>Open the calendar</a>
+				}
+			</div>
+			if v.Empty() {
+				<p class="cu-empty">Nothing is coming up yet. A planned game night or a nearby event will show here.</p>
+			}
+			@comingUpSection("Game nights", v.Nights)
+			@comingUpSection("Waiting on you", v.Waiting)
+			@comingUpSection("In the world", v.World)
+		</div>
+	</div>
+}
+
+// comingUpSection draws one labelled group, or nothing when it has no rows.
+templ comingUpSection(label string, rows []comingUpRow) {
+	if len(rows) > 0 {
+		<section class="cu-sec" aria-label={ label }>
+			<h3 class="cu-lab">{ label }</h3>
+			for _, r := range rows {
+				@comingUpRowView(r)
+			}
+		</section>
+	}
+}
+
+templ comingUpRowView(r comingUpRow) {
+	<div class="cu-row">
+		<span class="cu-tile" aria-hidden="true">
+			<span class="cu-tile-top">{ r.TileTop }</span>
+			if r.TileIcon != "" {
+				<span class="cu-tile-big"><i class={ r.TileIcon }></i></span>
+			} else {
+				<span class="cu-tile-big">{ r.TileBig }</span>
+			}
+		</span>
+		<span class="cu-main">
+			<span class="cu-t">{ r.Title }</span>
+			<span class="cu-s">
+				<span class={ "cu-dot", templ.KV("cu-dot-wait", r.Waiting) }></span>
+				{ r.Sub }
+			</span>
+		</span>
+		if r.Action != "" && r.Href != "" {
+			<a class={ "cu-btn", templ.KV("cu-btn-pri", r.Primary) } href={ templ.SafeURL(r.Href) } aria-label={ fmt.Sprintf("%s: %s", r.Action, r.Title) }>{ r.Action }</a>
+		} else if r.Chip != "" {
+			<span class="cu-chip">{ r.Chip }</span>
+		}
+	</div>
+}
