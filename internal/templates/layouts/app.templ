@@ -972,10 +972,14 @@ templ Topbar() {
 						x-transition:leave-end="opacity-0 scale-95"
 						class="absolute right-0 top-full mt-1 w-72 max-w-[calc(100vw-1rem)] bg-surface rounded-lg shadow-lg border border-edge z-50 py-1"
 					>
-						@UserPictureBox()
-						<a href="/account" class="dropdown-item" @click="open = false">
-							<i class="fa-solid fa-gear text-xs w-4"></i> Account Settings
-						</a>
+						// A guest has no account page or picture of their own until
+						// they keep the account; the banner offers that instead.
+						if !IsGuest(ctx) {
+							@UserPictureBox()
+							<a href="/account" class="dropdown-item" @click="open = false">
+								<i class="fa-solid fa-gear text-xs w-4"></i> Account Settings
+							</a>
+						}
 						<form method="POST" action="/logout">
 							<input type="hidden" name="csrf_token" value={ GetCSRFToken(ctx) }/>
 							<button type="submit" class="dropdown-item dropdown-item-danger w-full text-left">

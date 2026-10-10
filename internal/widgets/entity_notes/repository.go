@@ -315,14 +315,22 @@ func hydrate(n *Note, sharedWith, title, body, bodyHTML sql.NullString) {
 	}
 }
 
-// ReassignAuthor moves a guest's page notes in one campaign to the account
-// they merged into.
+// ReassignAuthor moves a guest's page notes in one campaign, and notes
+// shared with them, to the account they merged into.
 func (r *repository) ReassignAuthor(ctx context.Context, campaignID, fromUserID, toUserID string) (int64, error) {
 	res, err := r.db.ExecContext(ctx,
 		`UPDATE entity_notes SET author_user_id = ? WHERE campaign_id = ? AND author_user_id = ?`,
 		toUserID, campaignID, fromUserID)
 	if err != nil {
 		return 0, fmt.Errorf("reassigning page notes: %w", err)
+	}
+	// Notes others shared with the guest by name follow them too. Ids are
+	// UUIDs, so swapping the quoted id in the JSON text is exact.
+	if _, err := r.db.ExecContext(ctx,
+		`UPDATE entity_notes SET shared_with = REPLACE(shared_with, ?, ?)
+		  WHERE campaign_id = ? AND shared_with LIKE ?`,
+		`"`+fromUserID+`"`, `"`+toUserID+`"`, campaignID, `%"`+fromUserID+`"%`); err != nil {
+		return 0, fmt.Errorf("reassigning shared page notes: %w", err)
 	}
 	return res.RowsAffected()
 }

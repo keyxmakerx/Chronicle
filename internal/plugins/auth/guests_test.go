@@ -236,6 +236,19 @@ func TestKeepGuestAccount(t *testing.T) {
 	assertAppError(t, err, http.StatusBadRequest)
 }
 
+func TestKeepGuestAccountRefusedOnInviteOnlySites(t *testing.T) {
+	for _, mode := range []string{"invite", "closed"} {
+		r := newGuestRig(t)
+		res := r.join(t, "ABCD2345", "Rook")
+		r.svc.regPolicy = fakeRegPolicy{mode: mode}
+		_, err := r.svc.KeepGuestAccount(context.Background(), res.User.ID, KeepGuestInput{Email: "rook@else.org", Password: "long enough"}, "", "")
+		assertAppError(t, err, http.StatusForbidden)
+		if r.users[res.User.ID].GuestCampaignID == nil {
+			t.Fatalf("%s: the guest became an account", mode)
+		}
+	}
+}
+
 func TestMergeGuest(t *testing.T) {
 	r := newGuestRig(t)
 	ctx := context.Background()
@@ -283,14 +296,16 @@ func TestMergeGuestStopsWhenAMoveFails(t *testing.T) {
 	}
 }
 
-func TestEndGuestLeavesFullAccounts(t *testing.T) {
+func TestEndGuestOnlyForTheirOwnCampaign(t *testing.T) {
 	r := newGuestRig(t)
 	res := r.join(t, "ABCD2345", "Rook")
-	r.svc.EndGuest(context.Background(), "mara")
+	ctx := context.Background()
+	r.svc.EndGuest(ctx, "mara", "camp-1")
+	r.svc.EndGuest(ctx, res.User.ID, "someone-elses-campaign")
 	if len(r.repo.anonymized) != 0 {
-		t.Fatal("EndGuest emptied a full account")
+		t.Fatalf("EndGuest emptied the wrong account: %v", r.repo.anonymized)
 	}
-	r.svc.EndGuest(context.Background(), res.User.ID)
+	r.svc.EndGuest(ctx, res.User.ID, "camp-1")
 	if len(r.repo.anonymized) != 1 {
 		t.Fatal("EndGuest left the guest")
 	}

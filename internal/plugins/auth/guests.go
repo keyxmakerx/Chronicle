@@ -163,6 +163,13 @@ func (s *authService) joinSignedIn(ctx context.Context, code, userID string) (*J
 	return &JoinResult{CampaignID: campaignID, User: user}, nil
 }
 
+// GuestCanKeep reports whether a guest may turn their account into a full
+// one here (only on an open site); otherwise merging is their way in.
+func (s *authService) GuestCanKeep(ctx context.Context) bool {
+	mode, err := s.registrationMode(ctx)
+	return err == nil && mode == registrationOpen
+}
+
 // guestUser loads the signed-in person and checks they are a guest.
 func (s *authService) guestUser(ctx context.Context, userID string) (*User, error) {
 	user, err := s.repo.FindByID(ctx, userID)
@@ -190,8 +197,15 @@ func (s *authService) KeepGuestAccount(ctx context.Context, userID string, in Ke
 	if n := len(in.Password); n < 8 || n > 128 {
 		return "", apperror.NewBadRequest("use a password of 8 to 128 characters")
 	}
-	if mode, err := s.registrationMode(ctx); err != nil || mode == registrationClosed {
+	// An invite-only site proves each new account's email with the invite;
+	// a guest typing one in proves nothing, and provider sign-in on such a
+	// site trusts account emails. So only an open site lets a guest keep.
+	mode, err := s.registrationMode(ctx)
+	if err != nil || mode == registrationClosed {
 		return "", apperror.NewForbidden("this site isn't taking new accounts right now; you can keep playing as a guest")
+	}
+	if mode == registrationInvite {
+		return "", apperror.NewForbidden("this site is invite-only, so a guest can't become an account here. Ask your game master for an email invite, or merge into an account you already have")
 	}
 	hash, err := hashPassword(in.Password)
 	if err != nil {
@@ -259,11 +273,12 @@ func (s *authService) MergeGuest(ctx context.Context, guestID string, in MergeGu
 	return token, target, nil
 }
 
-// EndGuest removes a guest's account once they have no campaign: removed by
-// the owner, merged, or their campaign deleted. Full accounts are untouched.
-func (s *authService) EndGuest(ctx context.Context, userID string) {
+// EndGuest removes a guest's account once they leave their own campaign:
+// removed by the owner, or the campaign deleted. Leaving any other campaign
+// ends nothing, and full accounts are untouched.
+func (s *authService) EndGuest(ctx context.Context, userID, campaignID string) {
 	user, err := s.repo.FindByID(ctx, userID)
-	if err != nil || user.GuestCampaignID == nil {
+	if err != nil || user.GuestCampaignID == nil || *user.GuestCampaignID != campaignID {
 		return
 	}
 	s.endGuest(ctx, user)
@@ -277,7 +292,7 @@ func (s *authService) EndCampaignGuests(ctx context.Context, campaignID string) 
 		return
 	}
 	for _, id := range ids {
-		s.EndGuest(ctx, id)
+		s.EndGuest(ctx, id, campaignID)
 	}
 }
 

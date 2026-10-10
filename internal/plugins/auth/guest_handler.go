@@ -57,15 +57,20 @@ func (h *Handler) GuestPanelFragment(c echo.Context) error {
 	if sess == nil || sess.GuestCampaignID == "" {
 		return c.NoContent(http.StatusNoContent)
 	}
+	canKeep := h.service.GuestCanKeep(c.Request().Context())
 	tab := c.QueryParam("tab")
 	switch tab {
 	case "close":
 		return c.HTML(http.StatusOK, "")
 	case guestTabMerge:
+	case guestTabKeep:
 	default:
 		tab = guestTabKeep
+		if !canKeep {
+			tab = guestTabMerge
+		}
 	}
-	return middleware.Render(c, http.StatusOK, GuestPanel(middleware.GetCSRFToken(c), tab, "", ""))
+	return middleware.Render(c, http.StatusOK, GuestPanel(middleware.GetCSRFToken(c), tab, "", "", canKeep))
 }
 
 // KeepGuestAccount adds an email and password to a guest's account (POST
@@ -80,7 +85,7 @@ func (h *Handler) KeepGuestAccount(c echo.Context) error {
 	email := c.FormValue("email")
 	token, err := h.service.KeepGuestAccount(ctx, sess.UserID, KeepGuestInput{Email: email, Password: c.FormValue("password")}, ip, ua)
 	if err != nil {
-		return middleware.Render(c, http.StatusOK, GuestPanel(middleware.GetCSRFToken(c), guestTabKeep, email, apperror.UserMessage(err, "your account couldn't be kept")))
+		return middleware.Render(c, http.StatusOK, GuestPanel(middleware.GetCSRFToken(c), guestTabKeep, email, apperror.UserMessage(err, "your account couldn't be kept"), h.service.GuestCanKeep(ctx)))
 	}
 	setSessionCookie(c, token, h.sessionTTL)
 	h.logSecurityEvent(ctx, "guest.kept", sess.UserID, sess.UserID, ip, ua, nil)
@@ -101,7 +106,7 @@ func (h *Handler) MergeGuest(c echo.Context) error {
 		Email: email, Password: c.FormValue("password"), Code: c.FormValue("code"),
 	}, ip, ua)
 	if err != nil {
-		return middleware.Render(c, http.StatusOK, GuestPanel(middleware.GetCSRFToken(c), guestTabMerge, email, apperror.UserMessage(err, "the accounts couldn't be merged")))
+		return middleware.Render(c, http.StatusOK, GuestPanel(middleware.GetCSRFToken(c), guestTabMerge, email, apperror.UserMessage(err, "the accounts couldn't be merged"), h.service.GuestCanKeep(ctx)))
 	}
 	setSessionCookie(c, token, h.sessionTTL)
 	h.logSecurityEvent(ctx, "guest.merged", user.ID, user.ID, ip, ua, map[string]any{"guest_id": sess.UserID})

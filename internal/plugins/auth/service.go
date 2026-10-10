@@ -166,7 +166,8 @@ type AuthService interface {
 	JoinWithGuestCode(ctx context.Context, in JoinInput) (*JoinResult, error)
 	KeepGuestAccount(ctx context.Context, userID string, in KeepGuestInput, ip, userAgent string) (string, error)
 	MergeGuest(ctx context.Context, guestID string, in MergeGuestInput, ip, userAgent string) (string, *User, error)
-	EndGuest(ctx context.Context, userID string)
+	EndGuest(ctx context.Context, userID, campaignID string)
+	GuestCanKeep(ctx context.Context) bool
 	EndCampaignGuests(ctx context.Context, campaignID string)
 
 	// Re-authentication for sensitive operations.

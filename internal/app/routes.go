@@ -2634,15 +2634,13 @@ func (a *App) RegisterRoutes() {
 	campaigns.RegisterInviteRoutes(e, inviteHandler, campaignService, authService)
 
 	// Guest codes: the owner's card, and auth's join page redeeming them.
-	// A guest exists only for their campaign, so removing them or deleting
-	// the campaign ends their account.
+	// A guest exists only for their campaign, so removing them from it or
+	// deleting it ends their account.
 	guestCodeService := campaigns.NewGuestCodeService(campaigns.NewGuestCodeRepository(a.DB), campaignRepo)
 	campaigns.RegisterGuestCodeRoutes(e, campaigns.NewGuestCodeHandler(guestCodeService, a.Config.BaseURL), campaignService, authService)
 	auth.ConfigureGuests(authService, guestCodeService)
 	auth.OnGuestMerged(authService, guestCodeService.MoveGuestMembership)
-	campaigns.OnMemberRemoved(campaignService, func(ctx context.Context, _, userID string) {
-		authService.EndGuest(ctx, userID)
-	})
+	campaigns.OnMemberRemoved(campaignService, authService.EndGuest)
 	campaigns.OnCampaignDeleted(campaignService, authService.EndCampaignGuests)
 
 	// Discover page (/) -- browse public campaigns. Uses OptionalAuth so
