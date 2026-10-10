@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"regexp"
 
@@ -298,7 +299,11 @@ func (h *SystemHandler) CampaignBookPackage(campaignID, systemID string) (*BookP
 	}
 	mod := FindSystem(systemID)
 	if mod == nil && h.campaignSystems != nil {
-		mod = h.campaignSystems.GetSystem(campaignID)
+		// Only the campaign's own system when it is the one asked for, as
+		// the editor route's resolveSystem does.
+		if own := h.campaignSystems.GetSystem(campaignID); own != nil && own.Info().ID == systemID {
+			mod = own
+		}
 	}
 	if mod == nil || len(mod.Info().ID) > maxBookSystemID {
 		return nil, nil, apperror.NewNotFound("this campaign has no editable rulebook")
@@ -312,7 +317,9 @@ func (h *SystemHandler) CampaignBookPackage(campaignID, systemID string) (*BookP
 	}
 	pkg, err := LoadBookPackage(sysDir, mod.Info())
 	if err != nil {
-		return nil, nil, apperror.NewBadRequest("The rulebook could not be opened. " + err.Error())
+		// The loader's text names files and paths; keep it in the log.
+		slog.Error("book package load failed", "campaign", campaignID, "system", mod.Info().ID, "error", err)
+		return nil, nil, apperror.NewBadRequest("The rulebook could not be opened. Try again, or ask the server's operator to check the game system's files.")
 	}
 	return pkg, h.bookEdits, nil
 }

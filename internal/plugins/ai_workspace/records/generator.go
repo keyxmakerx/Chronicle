@@ -66,6 +66,30 @@ func (d ymd) before(o ymd) bool {
 	return d.Day < o.Day
 }
 
+// countDays counts the days from..to inclusive on the calendar, stopping
+// once it passes limit so a far-off end year costs nothing. The plan's
+// range limit is this count because Apply refuses more output than the cap.
+func countDays(cal *calendar.Calendar, from, to ymd, limit int) int {
+	n := 0
+	for y, m := from.Year, from.Month; !to.before(ymd{y, m, 1}); {
+		first, last := 1, cal.MonthDays(m-1, y)
+		if y == from.Year && m == from.Month {
+			first = from.Day
+		}
+		if y == to.Year && m == to.Month {
+			last = to.Day
+		}
+		n += last - first + 1
+		if n > limit {
+			return n
+		}
+		if m++; m > len(cal.Months) {
+			m, y = 1, y+1
+		}
+	}
+	return n
+}
+
 func (k GeneratorKind) plan(ctx context.Context, campaignID string, a Actor, r Record) (genPlan, *calendar.Calendar, string, error) {
 	g := strings.ToLower(r.Str("generator"))
 	p := genPlan{Generator: g, Seed: r.Str("seed")}
@@ -140,8 +164,8 @@ func (k GeneratorKind) plan(ctx context.Context, campaignID string, a Actor, r R
 		if to.before(from) {
 			return p, nil, "", apperror.NewBadRequest("the end date is before the start date")
 		}
-		if to.Year-from.Year > 1 {
-			return p, nil, "", apperror.NewBadRequest("generate at most a year of weather at a time")
+		if n := countDays(cal, from, to, maxGenWeatherDays); n > maxGenWeatherDays {
+			return p, nil, "", badRequestf("generate at most %d days of weather at a time", maxGenWeatherDays)
 		}
 		if c := r.Str("climate"); c != "" {
 			p.Recipe["details"] = map[string]any{"climate": c}
@@ -258,10 +282,24 @@ func (k GeneratorKind) Apply(ctx context.Context, campaignID string, a Actor, r 
 			return badRequestf("the generator returned %d events", len(evs))
 		}
 		year := p.Scope["year"].(int)
-		var failed int
+		// A rerun after a partial failure must not add the events that
+		// already went in, so same-name same-day events are skipped.
+		existing, err := k.Cal.ListEventsForCalendar(ctx, campaignID, cal.ID, a.Role)
+		if err != nil {
+			return apperror.NewBadRequest("could not read the calendar's events")
+		}
+		have := make(map[string]bool, len(existing))
+		for _, ex := range existing {
+			have[eventKey(ex.Name, ex.Year, ex.Month, ex.Day)] = true
+		}
+		var failed, added, skipped int
 		for _, e := range evs {
 			if e.Year != year || strings.TrimSpace(e.Name) == "" {
 				failed++
+				continue
+			}
+			if have[eventKey(e.Name, e.Year, e.Month, e.Day)] {
+				skipped++
 				continue
 			}
 			if e.Visibility != "dm_only" {
@@ -283,13 +321,19 @@ func (k GeneratorKind) Apply(ctx context.Context, campaignID string, a Actor, r 
 			})
 			if err != nil {
 				failed++
+				continue
 			}
+			added++
 		}
 		if failed > 0 {
-			return badRequestf("%d of %d generated events could not be added", failed, len(evs))
+			return badRequestf("%d of %d generated events could not be added (%d were added, %d were already there). Running it again only adds the missing ones", failed, len(evs), added, skipped)
 		}
 		return nil
 	}
 }
 
 func (GeneratorKind) Export(context.Context, string, Actor) (string, error) { return "", nil }
+
+func eventKey(name string, y, m, d int) string {
+	return fmt.Sprintf("%s|%d-%d-%d", strings.ToLower(strings.TrimSpace(name)), y, m, d)
+}
