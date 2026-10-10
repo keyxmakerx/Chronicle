@@ -133,12 +133,7 @@ func (h *Handler) mapViewData(c echo.Context, cc *campaigns.CampaignContext) (Ma
 	}
 
 	role := cc.VisibilityRole()
-	userID := ""
-	if session := c.Get("session"); session != nil {
-		if s, ok := session.(interface{ GetUserID() string }); ok {
-			userID = s.GetUserID()
-		}
-	}
+	userID := getUserID(c)
 	markers, err := h.svc.ListMarkers(c.Request().Context(), cc.Campaign.ID, mapID, role, userID)
 	if err != nil {
 		return MapViewData{}, err
@@ -351,12 +346,7 @@ func (h *Handler) CreateMarkerAPI(c echo.Context) error {
 	}
 
 	// Get user ID from session context.
-	userID := ""
-	if session := c.Get("session"); session != nil {
-		if s, ok := session.(interface{ GetUserID() string }); ok {
-			userID = s.GetUserID()
-		}
-	}
+	userID := getUserID(c)
 
 	// Only a caller who can author dm_only content (Owner or a co-DM grant)
 	// may create a dm_only marker; anyone else defaults to 'everyone'.
@@ -495,12 +485,7 @@ func (h *Handler) GetMapMetaAPI(c echo.Context) error {
 	}
 
 	role := cc.VisibilityRole()
-	userID := ""
-	if session := c.Get("session"); session != nil {
-		if s, ok := session.(interface{ GetUserID() string }); ok {
-			userID = s.GetUserID()
-		}
-	}
+	userID := getUserID(c)
 	markers, err := h.svc.ListMarkers(ctx, cc.Campaign.ID, mapID, role, userID)
 	if err != nil {
 		return err
@@ -559,12 +544,7 @@ func (h *Handler) ListMarkersAPI(c echo.Context) error {
 	}
 
 	role := cc.VisibilityRole()
-	userID := ""
-	if session := c.Get("session"); session != nil {
-		if s, ok := session.(interface{ GetUserID() string }); ok {
-			userID = s.GetUserID()
-		}
-	}
+	userID := getUserID(c)
 
 	markers, err := h.svc.ListMarkers(ctx, cc.Campaign.ID, mapID, role, userID)
 	if err != nil {

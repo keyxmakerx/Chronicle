@@ -10,6 +10,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/patch"
+	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
@@ -39,14 +40,11 @@ func (h *DrawingHandler) requireMapOwnership(c echo.Context, mapID, campaignID s
 	return nil
 }
 
-// getUserID extracts the user ID from the session context.
+// getUserID returns the signed-in user's id, or "" for an anonymous visitor.
+// It must read through the auth plugin's accessor: pin rules, own-item
+// deletes and creator stamps all key off this id.
 func getUserID(c echo.Context) string {
-	if session := c.Get("session"); session != nil {
-		if s, ok := session.(interface{ GetUserID() string }); ok {
-			return s.GetUserID()
-		}
-	}
-	return ""
+	return auth.GetUserID(c)
 }
 
 // --- Drawing Endpoints ---
