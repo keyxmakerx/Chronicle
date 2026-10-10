@@ -81,6 +81,10 @@ templ Base(title string) {
 		     data-widget elements. Must load before Alpine so Chronicle utilities
 		     are available when Alpine processes x-data expressions. -->
 		<script src={ AssetURL("/static/js/boot.js") } defer></script>
+		<!-- On-sight widget scripts: boot.js fetches these when a widget's
+		     mount first appears (ADR-063). Inert JSON outside #main-content,
+		     so boosted navigation keeps it. -->
+		@templ.JSONScript("chronicle-widget-scripts", GetWidgetScripts(ctx))
 
 		<!-- Dynamic-surface motion engine: the frame's transition-preset library
 		     (Chronicle.surface.play / .transitions). Loads after boot.js so the

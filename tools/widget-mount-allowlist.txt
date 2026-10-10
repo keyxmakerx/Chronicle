@@ -2,9 +2,9 @@
 #
 # Read tools/check-widget-mounts.sh first; it explains the rule this file is the
 # state for. In one line: boot.js binds a `data-widget="name"` mount to whatever
-# Chronicle.register('name', …) put in its registry, and bails SILENTLY when the
-# name is absent — so a widget whose JS is in no <script src> anywhere is a
-# permanently empty div with an empty console. New ones are forbidden; the lines
+# Chronicle.register('name', …) put in its registry, or fetches the scripts a
+# plugin lists for it — so a widget whose JS is named nowhere is a permanently
+# empty div. New ones are forbidden; the lines
 # below are the survivors, each with the reason a script tag alone cannot fix it.
 #
 # FORMAT: one data-widget name per line. Blank lines and #-comments ignored.

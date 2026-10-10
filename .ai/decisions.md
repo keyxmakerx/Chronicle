@@ -1009,3 +1009,21 @@ Also under this ADR: the partial-update contract test only recognised structs na
 **Consequences:**
 - A campaign whose owner had switched the old dashboard-only "sessions" addon off now has game nights off too, until the owner turns Game nights on.
 - A new game-night route belongs in one of the two gated groups, or it answers while the switch is off.
+
+## ADR-063: Feature scripts load on sight
+
+**Status:** Accepted; operator sign-off 2026-10-10 (#1232).
+
+**Context:** `base.templ` and the plugin body-script list put every feature's scripts on every page, about 3.6 MB (1.1 MB compressed) across 116 files, including signed-out pages and add-ons a campaign has switched off. Scripts can't move into page templates: boosted navigation swaps only `#main-content`, and `allowScriptTags=false` strips a swapped `<script>` (`tools/check-page-scripts.sh`).
+
+**Decision:**
+1. A plugin declares its widget scripts in `PluginRegistration.Widgets`: each entry is a `data-widget` name and its scripts in load order, the registering script last. Paths without a leading `/` are under the plugin's own `StaticFS` mount.
+2. The layout emits the resulting map once, as inert JSON (`#chronicle-widget-scripts`) outside `#main-content`. It is the same for every page and campaign, so boosted navigation can't leave a stale copy.
+3. When `boot.js` meets a mount whose widget isn't registered, it appends that widget's scripts to `<head>` (`async=false`, each URL once per page). `register()` then mounts it as before. Scripts created this way are not swapped content, so `allowScriptTags` stays off.
+4. Add-on gating needs nothing extra: a switched-off add-on's pages and blocks don't render its mount, so its scripts are never fetched.
+5. `base.templ` keeps only the shell (htmx, Alpine, boot, theme, sidebar, search, notifications) and scripts that Alpine `x-data` needs before Alpine starts.
+
+**Consequences:**
+- The first time a feature appears after a boosted click, its scripts arrive after the page. They're cached immutably from then on.
+- A script that starts itself on `DOMContentLoaded` or an htmx event instead of registering a widget can't load on sight. It becomes a widget when its plugin moves.
+- Features move one plugin at a time (#1232), and the registry grows as they do. `tools/check-widget-mounts.sh` still requires every literal mount's script to be named in `base.templ` or `internal/app/routes.go`.
