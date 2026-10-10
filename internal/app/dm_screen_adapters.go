@@ -184,7 +184,7 @@ func (a *dmNotesAdapter) Find(ctx context.Context, campaignID, nightKey string, 
 func (a *dmNotesAdapter) Save(ctx context.Context, campaignID, nightKey string, v dmscreen.Viewer, title, entry, entryHTML, version string) (*dmscreen.ScreenNote, error) {
 	viewer := permissions.RequestViewer(v.Role, v.UserID)
 	id := dmNoteID(campaignID, nightKey)
-	_, ownerID, foreign, err := a.lookup(ctx, campaignID, nightKey)
+	_, _, foreign, err := a.lookup(ctx, campaignID, nightKey)
 	if err != nil {
 		return nil, err
 	}
@@ -202,7 +202,8 @@ func (a *dmNotesAdapter) Save(ctx context.Context, campaignID, nightKey string, 
 		return nil, dmscreen.ErrNoteChanged
 	}
 	if existing == nil {
-		if ownerID, err = a.ownerID(ctx, campaignID); err != nil {
+		ownerID, err := a.ownerID(ctx, campaignID)
+		if err != nil {
 			return nil, err
 		}
 		// Created in the owner's name even when a co-DM saves first, so the

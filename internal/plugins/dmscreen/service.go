@@ -503,7 +503,7 @@ func trimRequests(reqs []Request) *RequestsView {
 			rv.More = len(sorted) - requestsShown
 			break
 		}
-		rv.Items = append(rv.Items, RequestView{Kind: r.Kind, ID: r.ID, Text: r.Text, CreatedAt: r.CreatedAt})
+		rv.Items = append(rv.Items, RequestView(r))
 	}
 	return rv
 }

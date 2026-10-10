@@ -99,10 +99,10 @@ func plainFromProse(entry string) string {
 		cur.Reset()
 	}
 	walk = func(n proseNode) {
-		switch {
-		case n.Type == "text":
+		switch n.Type {
+		case "text":
 			cur.WriteString(n.Text)
-		case n.Type == "hardBreak":
+		case "hardBreak":
 			cur.WriteString("\n")
 		}
 		for _, c := range n.Content {
