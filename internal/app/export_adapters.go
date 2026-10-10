@@ -585,13 +585,24 @@ func (a *timelineExportAdapter) ExportTimelines(ctx context.Context, campaignID 
 				}
 				idx := len(et.Events)
 				eventIDToIndex[evt.EventID] = idx
-				et.Events = append(et.Events, campaigns.ExportTimelineEvent{
+				out := campaigns.ExportTimelineEvent{
 					Name: evt.EventName, EntitySlug: entitySlug,
 					Year: evt.EventYear, Month: evt.EventMonth, Day: evt.EventDay,
 					EndYear: evt.EventEndYear, EndMonth: evt.EventEndMonth, EndDay: evt.EventEndDay,
 					Category: evt.EventCategory, Visibility: evt.EventVisibility,
 					DisplayOrder: evt.DisplayOrder, Label: evt.Label, Color: evt.ColorOverride,
-				})
+				}
+				// The timeline's event list carries no text, times of day or
+				// repeat; the event itself does.
+				if full, err := a.svc.GetStandaloneEvent(ctx, evt.EventID); err == nil {
+					out.Description, out.DescriptionHTML = full.Description, full.DescriptionHTML
+					out.StartHour, out.StartMinute = full.StartHour, full.StartMinute
+					out.EndHour, out.EndMinute = full.EndHour, full.EndMinute
+					out.IsRecurring, out.RecurrenceType = full.IsRecurring, full.RecurrenceType
+				} else {
+					slog.Warn("export: timeline event details skipped", slog.String("event", evt.EventName), slog.Any("error", err))
+				}
+				et.Events = append(et.Events, out)
 			}
 		}
 
@@ -1148,10 +1159,6 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 			}
 		}
 
-		// Apply description and dashboard layout.
-		if et.Description != nil || et.DashboardLayout != nil {
-			_ = a.entitySvc.UpdateEntityTypeDashboard(ctx, newType.ID, et.Description, et.PinnedEntityIDs)
-		}
 	}
 
 	// 2. Create entities (first pass: without parent references).
@@ -1268,6 +1275,26 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 
 	report.FailN("entities", "page picture", "",
 		"its picture file was not in the upload; import the ZIP export to keep pictures", missingPictures)
+
+	// 2c. Category descriptions and pinned pages. Pins name pages by id, so
+	// they wait until every page has its new one; a pin whose page did not
+	// come back is dropped.
+	for _, et := range data.Types {
+		typeID, ok := idMap.EntityTypeIDs[et.OriginalID]
+		if !ok || (et.Description == nil && len(et.PinnedEntityIDs) == 0) {
+			continue
+		}
+		pinned := make([]string, 0, len(et.PinnedEntityIDs))
+		for _, old := range et.PinnedEntityIDs {
+			if id, ok := idMap.EntityIDs[old]; ok {
+				pinned = append(pinned, id)
+			}
+		}
+		if err := a.entitySvc.UpdateEntityTypeDashboard(ctx, typeID, et.Description, pinned); err != nil {
+			slog.Warn("import: apply category dashboard failed", slog.String("type", et.Slug), slog.Any("error", err))
+			report.Fail("entities", "category description", et.Name, apperror.SafeMessage(err))
+		}
+	}
 
 	// 3. Create tags.
 	tagSlugToNewID := make(map[string]int)
@@ -2153,26 +2180,27 @@ func (a *timelineImportAdapter) ImportTimelines(ctx context.Context, campaignID,
 				}
 			}
 			newEvt, err := a.svc.CreateStandaloneEvent(ctx, newTimeline.ID, timeline.CreateTimelineEventInput{
-				Name:           evt.Name,
-				Description:    evt.Description,
-				EntityID:       entityID,
-				Year:           evt.Year,
-				Month:          evt.Month,
-				Day:            evt.Day,
-				StartHour:      evt.StartHour,
-				StartMinute:    evt.StartMinute,
-				EndYear:        evt.EndYear,
-				EndMonth:       evt.EndMonth,
-				EndDay:         evt.EndDay,
-				EndHour:        evt.EndHour,
-				EndMinute:      evt.EndMinute,
-				IsRecurring:    evt.IsRecurring,
-				RecurrenceType: evt.RecurrenceType,
-				Category:       evt.Category,
-				Visibility:     evt.Visibility,
-				Label:          evt.Label,
-				Color:          evt.Color,
-				CreatedBy:      userID,
+				Name:            evt.Name,
+				Description:     evt.Description,
+				DescriptionHTML: evt.DescriptionHTML,
+				EntityID:        entityID,
+				Year:            evt.Year,
+				Month:           evt.Month,
+				Day:             evt.Day,
+				StartHour:       evt.StartHour,
+				StartMinute:     evt.StartMinute,
+				EndYear:         evt.EndYear,
+				EndMonth:        evt.EndMonth,
+				EndDay:          evt.EndDay,
+				EndHour:         evt.EndHour,
+				EndMinute:       evt.EndMinute,
+				IsRecurring:     evt.IsRecurring,
+				RecurrenceType:  evt.RecurrenceType,
+				Category:        evt.Category,
+				Visibility:      evt.Visibility,
+				Label:           evt.Label,
+				Color:           evt.Color,
+				CreatedBy:       userID,
 			})
 			if err != nil {
 				slog.Warn("import: create timeline event failed", slog.String("name", evt.Name), slog.Any("error", err))

@@ -420,8 +420,8 @@ func (s *ExportImportService) Export(ctx context.Context, campaignID string) (*C
 // Import creates a new campaign from a CampaignExport. Returns the newly
 // created campaign and a report of everything that could not be restored.
 // Processes data in dependency order: campaign metadata, addons, media,
-// entity types + entities + tags + relations, groups, calendar, timelines,
-// sessions, maps, notes, posts. Addons come first because they gate what
+// entity types + entities + tags + relations, sidebar, groups, calendar,
+// timelines, sessions, maps, notes, posts. Addons come first because they gate what
 // may be created: the Player Character category is refused while its addon
 // is off, so restoring it first keeps the player characters. Media comes
 // before everything that points at a picture, so those references can be
@@ -448,30 +448,6 @@ func (s *ExportImportService) Import(ctx context.Context, userID string, data *C
 
 	normalizeImportIcons(data, report)
 
-	// Apply campaign settings if present.
-	if len(data.Campaign.SidebarConfig) > 0 {
-		// A legacy export carries the old sidebar fields; convert it to the
-		// unified items model on the way in. A modern export is already on
-		// items and unmarshals directly. Either way we write only the
-		// unified fields (Items + hidden sets).
-		cfg, converted := convertLegacySidebarConfig(string(data.Campaign.SidebarConfig))
-		if !converted {
-			var parsed SidebarConfig
-			if err := json.Unmarshal(data.Campaign.SidebarConfig, &parsed); err == nil {
-				cfg = parsed
-			}
-		}
-		normalizeSidebarIcons(cfg.Items, data.Campaign.Name, report)
-		sidebarReq := UpdateSidebarConfigRequest{
-			Items:           &cfg.Items,
-			HiddenEntityIDs: &cfg.HiddenEntityIDs,
-			HiddenNodeIDs:   &cfg.HiddenNodeIDs,
-		}
-		if err := s.campaigns.UpdateSidebarConfig(ctx, campaignID, sidebarReq); err != nil {
-			slog.Warn("import sidebar config failed", slog.Any("error", err))
-			report.Fail("campaign", "sidebar layout", data.Campaign.Name, apperror.SafeMessage(err))
-		}
-	}
 	if len(data.Campaign.DashboardLayout) > 0 {
 		var dashLayout DashboardLayout
 		if err := json.Unmarshal(data.Campaign.DashboardLayout, &dashLayout); err == nil {
@@ -515,6 +491,33 @@ func (s *ExportImportService) Import(ctx context.Context, userID string, data *C
 		}
 		if err := s.entityImp.ImportEntities(ctx, campaignID, userID, entityData, idMap, report); err != nil {
 			return nil, report, fmt.Errorf("import entities: %w", err)
+		}
+	}
+
+	// The sidebar names categories and pages by id, so it is written once
+	// the import has given them their new ids.
+	if len(data.Campaign.SidebarConfig) > 0 {
+		// A legacy export carries the old sidebar fields; convert it to the
+		// unified items model on the way in. A modern export is already on
+		// items and unmarshals directly. Either way we write only the
+		// unified fields (Items + hidden sets).
+		cfg, converted := convertLegacySidebarConfig(string(data.Campaign.SidebarConfig))
+		if !converted {
+			var parsed SidebarConfig
+			if err := json.Unmarshal(data.Campaign.SidebarConfig, &parsed); err == nil {
+				cfg = parsed
+			}
+		}
+		normalizeSidebarIcons(cfg.Items, data.Campaign.Name, report)
+		remapSidebarIDs(&cfg, idMap)
+		sidebarReq := UpdateSidebarConfigRequest{
+			Items:           &cfg.Items,
+			HiddenEntityIDs: &cfg.HiddenEntityIDs,
+			HiddenNodeIDs:   &cfg.HiddenNodeIDs,
+		}
+		if err := s.campaigns.UpdateSidebarConfig(ctx, campaignID, sidebarReq); err != nil {
+			slog.Warn("import sidebar config failed", slog.Any("error", err))
+			report.Fail("campaign", "sidebar layout", data.Campaign.Name, apperror.SafeMessage(err))
 		}
 	}
 
