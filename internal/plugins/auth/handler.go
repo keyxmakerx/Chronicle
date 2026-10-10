@@ -98,6 +98,9 @@ func (h *Handler) LoginForm(c echo.Context) error {
 	if c.QueryParam("reset") == "success" {
 		successMsg = "Your password has been reset. You can now sign in."
 	}
+	if c.QueryParam("deleted") == "1" {
+		successMsg = "Your account has been deleted."
+	}
 
 	// Auto-recovery banner: the CSRF middleware bounces a stale/missing-token
 	// login POST here with ?expired=1. This GET already re-issued a fresh token
@@ -585,7 +588,32 @@ func (h *Handler) AccountPage(c echo.Context) error {
 		slog.Warn("reading notification choices", slog.String("user_id", userID), slog.Any("error", err))
 	}
 
-	return middleware.Render(c, http.StatusOK, AccountPage(user, csrfToken, timezones, prefs, notify))
+	owned, err := h.service.OwnedCampaigns(c.Request().Context(), userID)
+	if err != nil {
+		slog.Warn("listing owned campaigns", slog.String("user_id", userID), slog.Any("error", err))
+	}
+
+	return middleware.Render(c, http.StatusOK, AccountPage(user, csrfToken, timezones, prefs, notify, owned))
+}
+
+// DeleteAccountAPI deletes the signed-in person's own account
+// (POST /account/delete) after checking their password and the typed
+// confirmation, then signs this browser out.
+func (h *Handler) DeleteAccountAPI(c echo.Context) error {
+	userID := GetUserID(c)
+	if userID == "" {
+		return apperror.NewUnauthorized("not authenticated")
+	}
+	var req DeleteAccountInput
+	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
+		return apperror.NewBadRequest("invalid request body")
+	}
+	if err := h.service.DeleteOwnAccount(c.Request().Context(), userID, req); err != nil {
+		return err
+	}
+	h.logSecurityEvent(c.Request().Context(), "account.deleted", userID, "", c.RealIP(), c.Request().UserAgent(), nil)
+	clearSessionCookie(c)
+	return c.JSON(http.StatusOK, map[string]string{"redirect": "/login?deleted=1"})
 }
 
 // UpdateNotifyPrefsAPI saves the signed-in person's notification choices

@@ -1,0 +1,463 @@
+/*
+ * sheet_styles.css -- the twelve looks a system's character sheet can wear.
+ *
+ * Everything here is scoped to a sheet root, an element with data-sheet. The
+ * engine (static/js/sheet_motion.js) sets data-sheet-style on it from
+ * the campaign's html[data-cz-sheet], else "modern". Nothing outside a sheet
+ * root is restyled, so the site's own .paper uses (hover card, creator) keep
+ * their look.
+ *
+ * A style is only a set of --s-* tokens plus a few scoped rules. The --paper-*
+ * tokens the shared pieces in paper.css read are derived from the --s-* ones
+ * here, so one style changes the sheet, its panels, slips and pins together.
+ * Parchment is the base set on [data-sheet]; Modern is what an unstyled root
+ * shows. Motion presets per style are in sheet_motion.css.
+ */
+
+[data-sheet] {
+  position: relative;
+  /* Container queries (phone rules) measure the sheet, not the window, so a narrow column on a wide screen gets them too. */
+  container: sheet / inline-size;
+
+  --s-paper: #efe6d2; --s-cut: #f8f2e4; --s-slip: #f8f2e4; --s-under: #e2d5b8; --s-edge: #c4b89a;
+  --s-ink: #2b2433; --s-soft: #4a4152; --s-mute: #6e6458; --s-accent: #5b3d8a; --s-on: #f8f2e4; --s-pole: #000000;
+  --s-neg: #9b3b2e; --s-bar: #6f8a4a; --s-temp: #3f6283; --s-warn: #8a5a1c;
+  --s-burn: 110 80 40; --s-hl: 255 255 255; --s-hlk: 1; --s-rim: rgb(255 255 255 / .7); --s-sh: 0 0 0; --s-shk: 1;
+  --s-tack: #5b3d8a; --s-pinhi: #e6dcf3; --s-radius: 3px; --s-vig: .22; --s-glow: .16;
+  --s-font: "Spectral", Georgia, "Times New Roman", serif; --s-head: var(--s-font); --s-num: var(--s-font);
+  --sh-ui: var(--font-sans, "Inter", system-ui, -apple-system, "Segoe UI", sans-serif);
+  --s-ui: var(--sh-ui); --s-tss: 1;
+  --s-base: linear-gradient(var(--paper-cut), var(--paper) 38%);
+  --s-tex: var(--paper-fibre), var(--paper-grain);
+  --s-slip-tex: var(--paper-grain);
+  --s-peek: var(--paper-under);
+  --s-colorscheme: light;
+
+  /* Colours Modern needs that the site's own tokens do not carry; dark values below. */
+  --sh-accent-text: #4338ca; --sh-on-accent: #ffffff; --sh-neg: #b42318; --sh-temp: #1d4ed8; --sh-bar: #15803d; --sh-pole: #000000; --sh-warn: #92400e;
+  --shk-theme: 1;
+
+  /* Derived paper tokens: what the pieces and a system's own markup read. */
+  --paper: var(--s-paper); --paper-cut: var(--s-cut); --paper-slip: var(--s-slip); --paper-under: var(--s-under);
+  --paper-ink: var(--s-ink); --paper-ink-soft: var(--s-soft); --paper-mute: var(--s-mute); --paper-edge: var(--s-edge);
+  --acc0: var(--s-accent); --paper-accent: var(--acc0); --paper-on-accent: var(--s-on);
+  --paper-neg: var(--s-neg); --paper-bar: var(--s-bar); --paper-temp: var(--s-temp); --paper-warn: var(--s-warn);
+  --paper-burn: var(--s-burn); --paper-hl: var(--s-hl); --hlk: var(--s-hlk); --paper-rim: var(--s-rim);
+  --paper-radius: var(--s-radius); --paper-vig: var(--s-vig); --paper-glow: var(--s-glow);
+  --paper-tack: var(--s-tack); --paper-pinhi: var(--s-pinhi); --paper-peek: var(--s-peek);
+  --paper-base: var(--s-base); --paper-tex: var(--s-tex); --paper-slip-tex: var(--s-slip-tex);
+  --paper-font: var(--s-font); --paper-head-font: var(--s-head); --paper-num-font: var(--s-num); --paper-ui-font: var(--s-ui);
+  /* --ts-owner is the hook for the owner's type scale; --shk deepens shadows on a dark site. */
+  --ts-owner: 1; --ts: calc(var(--s-tss) * var(--ts-owner));
+  --shk: calc(var(--s-shk) * var(--shk-theme));
+  --paper-lift: 0 1px 1px rgb(var(--s-sh) / calc(.2 * var(--shk))), 0 6px 10px -4px rgb(var(--s-sh) / calc(.22 * var(--shk))), 0 22px 34px -14px rgb(var(--s-sh) / calc(.42 * var(--shk)));
+  --paper-slip-lift: 0 12px 20px -10px rgb(var(--s-sh) / calc(.35 * var(--shk))), 0 2px 5px -2px rgb(var(--s-sh) / calc(.2 * var(--shk)));
+  --paper-blot: color-mix(in srgb, var(--paper-accent) 32%, transparent);
+
+  /* 1 in Full; 0 under Calm and Off, so the one-shot flourishes (sheen, scan, outline draw) take no time. */
+  --fx: 1;
+  /* Which standard move each role uses is the style's choice (sheet_motion.css). */
+  --sheet-panel-move: slide-out; --sheet-slip-move: slide-out; --sheet-page-move: pull;
+  /* Two curves the sheet adds to the site's; neither overshoots. */
+  --sh-ease-crisp: cubic-bezier(.2, .9, .3, 1); --sh-ease-turn: cubic-bezier(.3, .7, .2, 1);
+}
+.dark [data-sheet] {
+  --sh-accent-text: #a5b4fc; --sh-on-accent: #111827; --sh-neg: #fca5a5; --sh-temp: #93c5fd; --sh-bar: #4ade80; --sh-pole: #ffffff; --sh-warn: #fcd34d;
+  --shk-theme: 2.2;
+}
+html:is([data-motion="calm"], [data-motion="off"], [data-view-motion="calm"], [data-cz-reduce]) [data-sheet] { --fx: 0; }
+
+/* The sheet and what shares its stock. The pieces themselves are paper.css's. */
+[data-sheet] .paper {
+  position: relative;
+  color: var(--paper-ink-soft);
+  font-family: var(--paper-font);
+  border-radius: var(--paper-radius);
+  color-scheme: var(--s-colorscheme);
+  background:
+    radial-gradient(130% 120% at 50% 0%, transparent 55%, rgb(var(--paper-burn) / var(--paper-vig)) 100%),
+    var(--paper-tex),
+    var(--paper-base);
+  box-shadow:
+    inset 0 0 0 1px rgb(var(--paper-burn) / 0.28),
+    inset 0 1px 0 var(--paper-rim),
+    inset 0 0 18px rgb(var(--paper-burn) / var(--paper-glow)),
+    var(--paper-lift);
+}
+[data-sheet] .paper-slip,
+[data-sheet] .paper-pin { color-scheme: var(--s-colorscheme); }
+[data-sheet] .paper-kind { font: 600 calc(10.5px * var(--ts)) / 1.3 var(--paper-ui-font); }
+[data-sheet] .paper-title { font: 700 calc(18px * var(--ts)) / 1.15 var(--paper-font); }
+[data-sheet] .paper :focus-visible,
+[data-sheet] .paper-slip :focus-visible,
+[data-sheet] .paper-pin :focus-visible { outline-color: var(--paper-accent); }
+
+/* Faces by role: headings can differ from the body face. */
+[data-sheet] .paper-title,
+[data-sheet] .paper-dhead h2{font-family:var(--paper-head-font)}
+/* --- Ledger: a clerk's account book. Cream stock, faint blue rules, double red margin, typewriter figures. --- */
+[data-sheet][data-sheet-style="ledger"]{
+  --s-paper:#f1ead3; --s-cut:#f8f3e1; --s-slip:#fdfaf0; --s-under:#d9d5bd; --s-edge:#8fa3c0;
+  --s-ink:#1b2a41; --s-soft:#34455f; --s-mute:#53647e; --s-accent:#1d4e89; --s-on:#fbf8ec;
+  --s-neg:#a3262a; --s-bar:#4f7a3a; --s-temp:#2d5f8a; --s-warn:#8a5a1c;
+  --s-burn:60 80 120; --s-sh:20 30 55; --s-tack:#b3261e; --s-pinhi:#f6cfca; --s-radius:1px; --s-vig:.1; --s-glow:.06;
+  --s-font:"Source Serif 4","Source Serif Pro",Charter,"Bitstream Charter",Georgia,serif;
+  --s-head:"Courier Prime","Courier New","Liberation Mono",monospace; --s-num:var(--s-head);
+  --s-base:linear-gradient(var(--paper-cut),var(--paper) 30%);
+  --s-tex:linear-gradient(90deg,transparent 25px,rgb(190 55 55 / .5) 25px 26px,transparent 26px 28px,rgb(190 55 55 / .5) 28px 29px,transparent 29px),
+          repeating-linear-gradient(180deg,transparent 0 25px,rgb(70 110 170 / .15) 25px 26px),var(--paper-grain);
+  --s-slip-tex:repeating-linear-gradient(180deg,transparent 0 21px,rgb(70 110 170 / .18) 21px 22px);
+  --s-peek:repeating-linear-gradient(90deg,#efead2 0 2px,#a9b7cd 2px 3px);
+}
+[data-sheet][data-sheet-style="ledger"] .paper-drawer{--paper-tex:linear-gradient(90deg,transparent 11px,rgb(190 55 55 / .5) 11px 12px,transparent 12px 14px,rgb(190 55 55 / .5) 14px 15px,transparent 15px),
+  repeating-linear-gradient(180deg,transparent 0 25px,rgb(70 110 170 / .15) 25px 26px),var(--paper-grain)}
+[data-sheet][data-sheet-style="ledger"] .paper-title{border-bottom:4px double var(--paper-accent)}
+[data-sheet][data-sheet-style="ledger"] .paper-kind{font-family:var(--paper-num-font);letter-spacing:.06em}
+/* --- Field journal: a leather-bound notebook of kraft pages, stitched frame, stamped heads. --- */
+[data-sheet][data-sheet-style="journal"]{
+  --s-paper:#d5b988; --s-cut:#e2cb9f; --s-slip:#ead9b6; --s-under:#a8854f; --s-edge:#8a6a3c;
+  --s-ink:#26170a; --s-soft:#43301b; --s-mute:#58401f; --s-accent:#24503a; --s-on:#f3e6c6;
+  --s-neg:#862818; --s-bar:#56752b; --s-temp:#25506f; --s-warn:#6a3e0a;
+  --s-burn:55 30 10; --s-hl:255 235 190; --s-rim:rgb(255 240 200 / .35); --s-sh:40 22 8; --s-shk:1.15;
+  --s-tack:#b88a2e; --s-pinhi:#f3e2a8; --s-radius:7px; --s-vig:.3; --s-glow:.22; --s-tss:1.04;
+  --s-font:"Alegreya","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif;
+  --s-head:"Alegreya SC","Alegreya","Palatino Linotype",Palatino,Georgia,serif; --s-num:var(--s-font);
+  --s-base:linear-gradient(var(--paper-cut),var(--paper) 36%);
+  --s-tex:linear-gradient(90deg,#3d2412 0,#5e3b1f 5px,#43290f 9px,transparent 10px),
+          radial-gradient(ellipse at 22% 28%,rgb(255 245 210 / .16),transparent 60%),radial-gradient(ellipse at 82% 76%,rgb(80 45 15 / .12),transparent 55%),
+          repeating-linear-gradient(97deg,rgb(90 55 20 / .06) 0 1px,transparent 1px 5px),repeating-linear-gradient(7deg,rgb(255 240 200 / .07) 0 1px,transparent 1px 7px);
+  --s-slip-tex:repeating-linear-gradient(97deg,rgb(90 55 20 / .05) 0 1px,transparent 1px 5px);
+  --s-peek:repeating-linear-gradient(90deg,#c0a06a 0 2px,#8a6836 2px 3px);
+}
+[data-sheet][data-sheet-style="journal"] .paper::before{content:"";position:absolute;inset:8px 8px 8px 16px;border:1.5px dashed rgb(var(--paper-burn) / .55);border-radius:4px;pointer-events:none}
+[data-sheet][data-sheet-style="journal"] .paper-title{border-bottom:2px dashed var(--paper-accent)}
+[data-sheet][data-sheet-style="journal"] .paper-kind{display:inline-block;border:1.5px solid currentColor;border-radius:2px;padding:1px 7px 0;letter-spacing:.14em;transform:rotate(-1deg);box-shadow:inset 0 0 0 1px color-mix(in srgb,currentColor 22%,transparent)}
+[data-sheet][data-sheet-style="journal"] .paper-drawer:not(.pg-card) .paper-dhead{padding-left:26px}
+[data-sheet][data-sheet-style="journal"] .paper-drawer:not(.pg-card) .paper-dbody{padding-left:26px}
+[data-sheet][data-sheet-style="journal"] .paper *,
+[data-sheet][data-sheet-style="journal"] .paper-slip *,
+[data-sheet][data-sheet-style="journal"] .paper-pin *{font-variant-numeric:lining-nums tabular-nums}
+/* --- Vellum: an illuminated manuscript. Warm skin, iron-gall ink, rubricated headings, gilt rules, a gilded initial. --- */
+[data-sheet][data-sheet-style="vellum"]{
+  --s-paper:#ecdcaa; --s-cut:#f6ebc6; --s-slip:#f8efd0; --s-under:#cdb577; --s-edge:#ad9150;
+  --s-ink:#2a1b0e; --s-soft:#4a3520; --s-mute:#5f4b2c; --s-accent:#8a1d14; --s-on:#f6ebc6;
+  --s-neg:#a2331c; --s-bar:#5d7b3a; --s-temp:#2b5883; --s-warn:#7a4c0e;
+  --s-burn:130 95 30; --s-hl:255 250 225; --s-rim:rgb(255 250 225 / .7); --s-sh:70 45 10;
+  --s-tack:#b8862b; --s-pinhi:#f6e3a1; --s-radius:2px; --s-vig:.2; --s-glow:.14; --s-tss:1.09;
+  --s-font:"EB Garamond",Garamond,"Palatino Linotype",Palatino,Georgia,serif;
+  --s-head:"Cinzel","Trajan Pro","Palatino Linotype",Palatino,Georgia,serif; --s-num:var(--s-font);
+  --s-base:linear-gradient(var(--paper-cut),var(--paper) 40%);
+  --s-tex:radial-gradient(ellipse at 14% 18%,rgb(255 250 220 / .5),transparent 50%),radial-gradient(ellipse at 88% 82%,rgb(150 100 30 / .16),transparent 55%),
+          radial-gradient(circle at 60% 40%,rgb(150 110 40 / .08),transparent 30%),radial-gradient(circle at 30% 85%,rgb(150 110 40 / .07),transparent 22%),var(--paper-grain);
+  --s-slip-tex:radial-gradient(ellipse at 20% 20%,rgb(255 250 220 / .45),transparent 55%);
+  --s-peek:linear-gradient(90deg,#ecc96c,#b8862b 55%,#8a6418);
+  --gilt:#b8862b;
+}
+[data-sheet][data-sheet-style="vellum"] .paper::before{content:"";position:absolute;inset:6px;border:1px solid var(--gilt);box-shadow:inset 0 0 0 3px transparent,inset 0 0 0 4px color-mix(in srgb,var(--gilt) 55%,transparent);pointer-events:none}
+[data-sheet][data-sheet-style="vellum"] .paper-title{border-bottom:4px double var(--gilt)}
+[data-sheet][data-sheet-style="vellum"] .paper-kind{color:var(--paper-accent);letter-spacing:.12em}
+[data-sheet][data-sheet-style="vellum"] .paper-drawer:not(.pg-card) .paper-dhead{padding-left:26px}
+[data-sheet][data-sheet-style="vellum"] .paper-drawer:not(.pg-card) .paper-dbody{padding-left:26px}
+[data-sheet][data-sheet-style="vellum"] .paper *,
+[data-sheet][data-sheet-style="vellum"] .paper-slip *,
+[data-sheet][data-sheet-style="vellum"] .paper-pin *{font-variant-numeric:lining-nums tabular-nums}
+/* --- Night: a dark paper. Blueprint slate with a faint drafting grid and chalk ink, for dark-site users. --- */
+[data-sheet][data-sheet-style="night"]{
+  --s-paper:#1a2636; --s-cut:#25364b; --s-slip:#2a3d55; --s-under:#2c4259; --s-edge:#5b7790;
+  --s-ink:#eaf0f6; --s-soft:#c5d2e0; --s-mute:#97abbf; --s-accent:#86d3ee; --s-on:#0c1520; --s-pole:#ffffff;
+  --s-neg:#ff9d8c; --s-bar:#8fd18a; --s-temp:#8fc4f4; --s-warn:#f0b35c;
+  --s-burn:0 0 0; --s-hl:150 190 255; --s-hlk:.3; --s-rim:rgb(150 190 255 / .2); --s-sh:0 0 0; --s-shk:1.8;
+  --s-tack:#86d3ee; --s-pinhi:#d8f3fc; --s-radius:3px; --s-vig:.5; --s-glow:.4; --s-colorscheme:dark;
+  --s-font:"Atkinson Hyperlegible","Segoe UI",Verdana,"DejaVu Sans",sans-serif;
+  --s-head:"Oswald","Arial Narrow","Liberation Sans Narrow","DejaVu Sans Condensed",sans-serif;
+  --s-num:"Share Tech Mono","DejaVu Sans Mono","Liberation Mono",monospace;
+  --s-base:linear-gradient(var(--paper-cut),var(--paper) 40%);
+  --s-tex:linear-gradient(rgb(160 200 255 / .1) 1px,transparent 1px) 0 0/120px 120px,linear-gradient(90deg,rgb(160 200 255 / .1) 1px,transparent 1px) 0 0/120px 120px,
+          linear-gradient(rgb(160 200 255 / .055) 1px,transparent 1px) 0 0/24px 24px,linear-gradient(90deg,rgb(160 200 255 / .055) 1px,transparent 1px) 0 0/24px 24px;
+  --s-slip-tex:linear-gradient(rgb(160 200 255 / .06) 1px,transparent 1px) 0 0/20px 20px,linear-gradient(90deg,rgb(160 200 255 / .06) 1px,transparent 1px) 0 0/20px 20px;
+  --s-peek:repeating-linear-gradient(90deg,#4a6b8a 0 2px,#23384d 2px 3px);
+}
+[data-sheet][data-sheet-style="night"] .paper::before{content:"";position:absolute;inset:7px;border:1px dashed rgb(160 200 255 / .28);border-radius:2px;pointer-events:none}
+[data-sheet][data-sheet-style="night"] .paper-dhead h2{text-transform:uppercase;letter-spacing:.05em}
+[data-sheet][data-sheet-style="night"] .paper-kind{letter-spacing:.14em}
+[data-sheet][data-sheet-style="night"] .paper-title{border-bottom-style:solid}
+[data-sheet][data-sheet-style="night"] .paper-drawer:not(.pg-card) .paper-dhead{padding-left:26px}
+[data-sheet][data-sheet-style="night"] .paper-drawer:not(.pg-card) .paper-dbody{padding-left:26px}
+[data-sheet][data-sheet-style="night"] .paper-pin,
+[data-sheet][data-sheet-style="night"] .paper-slip{box-shadow:inset 0 0 0 1px rgb(160 200 255 / .3),0 10px 18px -8px rgb(0 0 0 / .7)}
+/* --- Card deck: a hero as a printed card. Bright card stock, a heavy inked frame, a vermilion ribbon, a hard offset shadow like a stacked deck. --- */
+[data-sheet][data-sheet-style="deck"]{
+  --s-paper:#fbf6e9; --s-cut:#fffdf6; --s-slip:#fffdf6; --s-under:#e7dcc0; --s-edge:#bfae82;
+  --s-ink:#1b2236; --s-soft:#36405a; --s-mute:#566079; --s-accent:#b02e0c; --s-on:#fffdf6;
+  --s-neg:#a3262a; --s-bar:#3d7a48; --s-temp:#2a5d8c; --s-warn:#85530f;
+  --s-burn:70 50 30; --s-hl:255 255 255; --s-rim:rgb(255 255 255 / .9); --s-sh:30 24 40; --s-shk:1.1;
+  --s-tack:#b02e0c; --s-pinhi:#f7d2c6; --s-radius:16px; --s-vig:.05; --s-glow:.04; --s-tss:1.02;
+  --s-font:"Bitter","Roboto Slab",Rockwell,"Rockwell Nova",Georgia,serif; --s-head:var(--s-font); --s-num:var(--s-font);
+  --s-base:linear-gradient(var(--paper-cut),var(--paper) 45%);
+  --s-tex:radial-gradient(rgb(27 34 54 / .06) 1px,transparent 1.3px) 0 0/9px 9px;
+  --s-slip-tex:radial-gradient(rgb(27 34 54 / .05) 1px,transparent 1.3px) 0 0/9px 9px;
+  --s-peek:linear-gradient(90deg,#fbf6e9,#d9cba4);
+  --sheet-page-move:slide-out;
+}
+[data-sheet][data-sheet-style="deck"] .paper{box-shadow:inset 0 1px 0 var(--paper-rim),3px 4px 0 rgb(var(--paper-burn) / .24),var(--paper-lift)}
+[data-sheet][data-sheet-style="deck"] .paper::before{content:"";position:absolute;inset:7px;border:2px solid var(--paper-ink);border-radius:11px;opacity:.85;pointer-events:none}
+[data-sheet][data-sheet-style="deck"] .paper::after{content:"\25C6";position:absolute;top:13px;left:17px;font-size:11px;line-height:1;color:var(--paper-accent);pointer-events:none}
+[data-sheet][data-sheet-style="deck"] .paper-stack::before{transform:rotate(-2.1deg);inset:5px -5px -6px 5px;border-radius:16px}
+[data-sheet][data-sheet-style="deck"] .paper-stack::after{content:"";position:absolute;z-index:-2;inset:7px 3px -10px -3px;border-radius:16px;transform:rotate(2.3deg);background:color-mix(in srgb,var(--paper-under) 80%,rgb(var(--paper-burn)));box-shadow:inset 0 0 0 1px rgb(var(--paper-burn) / .25),0 12px 22px -10px rgb(0 0 0 / .35);pointer-events:none}
+[data-sheet][data-sheet-style="deck"] .paper-title{border-bottom:3px solid var(--paper-ink)}
+[data-sheet][data-sheet-style="deck"] .paper-kind{display:inline-block;background:var(--paper-accent);color:var(--paper-on-accent);border-radius:999px;padding:2px 10px 1px;letter-spacing:.1em}
+[data-sheet][data-sheet-style="deck"] .paper-drawer:not(.pg-card) .paper-dhead{padding-left:30px}
+[data-sheet][data-sheet-style="deck"] .paper-drawer:not(.pg-card) .paper-dbody{padding-left:26px}
+[data-sheet][data-sheet-style="deck"] .paper-slip,
+[data-sheet][data-sheet-style="deck"] .paper-pin{border-radius:12px;box-shadow:inset 0 0 0 1.5px var(--paper-ink),3px 4px 0 rgb(var(--paper-burn) / .22),0 10px 18px -8px rgb(var(--s-sh) / calc(.4 * var(--shk)))}
+[data-sheet][data-sheet-style="deck"] .paper-pin>.pin{display:none}
+[data-sheet][data-sheet-style="deck"] .pg-head{padding-left:10px}
+[data-sheet][data-sheet-style="deck"] .pg-card::after{display:none}
+[data-sheet][data-sheet-style="deck"] .pg-card .paper-dbody{padding-inline:22px}
+/* --- Pencil: a printed tabletop character sheet. White stock, crisp printed rules and boxed fields; everything the player fills in is written in graphite pencil. --- */
+[data-sheet][data-sheet-style="pencil"]{
+  --s-paper:#fbfbf8; --s-cut:#ffffff; --s-slip:#ffffff; --s-under:#e6e6e0; --s-edge:#8c9096;
+  --s-ink:#1d2126; --s-soft:#363a40; --s-mute:#555a61; --s-accent:#8c1c1c; --s-on:#ffffff;
+  --s-neg:#a02020; --s-bar:#4d6b49; --s-temp:#2c5a8a; --s-warn:#7a4a0c;
+  --s-burn:70 74 80; --s-hl:110 116 126; --s-hlk:.14; --s-rim:transparent; --s-sh:28 30 36; --s-shk:.85;
+  --s-tack:#8c1c1c; --s-pinhi:#f4dede; --s-radius:2px; --s-vig:.03; --s-glow:0; --s-tss:1.08;
+  --s-font:"Source Serif 4","Source Serif Pro",Charter,Georgia,serif;
+  --s-head:"Barlow Condensed","Arial Narrow","Liberation Sans Narrow","DejaVu Sans Condensed",sans-serif; --s-num:var(--pc-hand);
+  --s-ui:"Barlow Condensed","Arial Narrow","Liberation Sans Narrow","DejaVu Sans Condensed",sans-serif;
+  --s-base:linear-gradient(var(--paper-cut),var(--paper) 45%); --s-tex:none; --s-slip-tex:none;
+  --s-peek:linear-gradient(90deg,#f1f1ec,#d6d6cf);
+  --pc-hand:"Caveat","Kalam","Patrick Hand","Bradley Hand","Segoe Print","Comic Sans MS",cursive;
+  --pc-lead:#454950; /* graphite: 8.7:1 on the stock */
+  --pc-rule:#2b2e34; /* printed form lines */
+  --sheet-panel-move:slide-out; --sheet-slip-move:grow; --sheet-page-move:slide-out; --sheet-trace:pencil; --change-move:rewrite;
+}
+[data-sheet][data-sheet-style="pencil"] .paper{box-shadow:0 1px 1px rgb(var(--s-sh) / calc(.16 * var(--shk))),0 10px 22px -12px rgb(var(--s-sh) / calc(.4 * var(--shk)))}
+[data-sheet][data-sheet-style="pencil"] .paper::before{content:"";position:absolute;inset:6px;border:1.5px solid var(--pc-rule);border-radius:1px;pointer-events:none}
+[data-sheet][data-sheet-style="pencil"] .paper-stack::before{transform:rotate(.9deg);background:linear-gradient(#ededE8,#e2e2dc)}
+[data-sheet][data-sheet-style="pencil"] .paper-pull::after{display:none}
+[data-sheet][data-sheet-style="pencil"] .paper-peek{background:var(--paper-peek);box-shadow:inset 0 0 0 1px rgb(var(--paper-burn) / .3),2px 3px 6px -3px rgb(0 0 0 / .3)}
+[data-sheet][data-sheet-style="pencil"] .paper-title{border-bottom:2px solid var(--pc-rule)}
+/* Printed side: headings and labels are set type, in print black. */
+[data-sheet][data-sheet-style="pencil"] .paper-kind{font-family:var(--paper-ui-font);font-weight:700;letter-spacing:.12em;color:var(--pc-rule)}
+[data-sheet][data-sheet-style="pencil"] .paper-kind{font-size:calc(12.5px * var(--ts))}
+[data-sheet][data-sheet-style="pencil"] .paper-dhead h2{font-size:calc(22px * var(--ts));font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+[data-sheet][data-sheet-style="pencil"] .paper-drawer:not(.pg-card) .paper-dhead,
+[data-sheet][data-sheet-style="pencil"] .paper-drawer:not(.pg-card) .paper-dbody{padding-left:26px}
+[data-sheet][data-sheet-style="pencil"] .pg-card .paper-dbody{padding-inline:22px}
+[data-sheet][data-sheet-style="pencil"] .pg-head{padding-left:14px}
+[data-sheet][data-sheet-style="pencil"] .paper-slip,
+[data-sheet][data-sheet-style="pencil"] .paper-pin{border-radius:2px;box-shadow:inset 0 0 0 1.5px var(--pc-rule),0 10px 18px -8px rgb(var(--s-sh) / calc(.4 * var(--shk)))}
+[data-sheet][data-sheet-style="pencil"] .paper-pin>.pin{display:none}
+/* The erase-and-rewrite helper (Chronicle's JS) builds a ghost of the old value and a smear; the look of both is the style's. */
+[data-sheet][data-sheet-style="pencil"] .fx-ghost{color:var(--pc-lead);filter:blur(0)}
+[data-sheet][data-sheet-style="pencil"] .fx-smear{background:radial-gradient(ellipse closest-side,rgb(110 116 126 / .5),rgb(110 116 126 / .18) 70%,transparent);border-radius:45%}
+/* --- Starship: a ship's console, a screen rather than paper. Deep navy glass, thin cyan and amber HUD lines, corner brackets, scanlines. --- */
+[data-sheet][data-sheet-style="starship"]{
+  --s-paper:#08111e; --s-cut:#0d1b2f; --s-slip:#0f2036; --s-under:#0c1829; --s-edge:#2f6078;
+  --s-ink:#e8f7fc; --s-soft:#bfdae8; --s-mute:#8fb4c9; --s-accent:#5fe0f7; --s-on:#04131d; --s-pole:#ffffff;
+  --s-neg:#ff9585; --s-bar:#5be3a8; --s-temp:#8ccbff; --s-warn:#ffb85c;
+  --s-burn:0 0 0; --s-hl:95 215 245; --s-hlk:.12; --s-rim:rgb(95 215 245 / .16); --s-sh:0 0 0; --s-shk:1.6;
+  --s-tack:#5fe0f7; --s-pinhi:#d4f7fd; --s-radius:2px; --s-vig:.4; --s-glow:.0; --s-colorscheme:dark; --s-tss:1.02;
+  --s-font:"Exo 2","Segoe UI",Verdana,"DejaVu Sans",sans-serif;
+  --s-head:"Rajdhani","Arial Narrow","Liberation Sans Narrow","DejaVu Sans Condensed",sans-serif;
+  --s-num:"Share Tech Mono","DejaVu Sans Mono","Liberation Mono",monospace;
+  --s-ui:"Exo 2","Segoe UI",Verdana,"DejaVu Sans",sans-serif;
+  --s-base:linear-gradient(180deg,var(--paper-cut),var(--paper) 55%);
+  --s-tex:repeating-linear-gradient(180deg,rgb(95 215 245 / .045) 0 1px,transparent 1px 3px),linear-gradient(rgb(95 215 245 / .05) 1px,transparent 1px) 0 0/48px 48px,linear-gradient(90deg,rgb(95 215 245 / .05) 1px,transparent 1px) 0 0/48px 48px;
+  --s-slip-tex:repeating-linear-gradient(180deg,rgb(95 215 245 / .05) 0 1px,transparent 1px 3px);
+  --s-peek:var(--s-under);
+  --hud:#5fe0f7; --hud-a:#ffb454; --hud-dim:rgb(95 215 245 / .38);
+  --sheet-panel-move:slide-out; --sheet-slip-move:grow; --sheet-page-move:slide-out; --change-move:roll;
+}
+[data-sheet][data-sheet-style="starship"] .paper{border-radius:2px;box-shadow:inset 0 0 0 1px var(--hud-dim),0 0 22px -8px rgb(95 215 245 / .35),0 14px 30px -14px rgb(0 0 0 / .8)}
+/* Corner brackets: cyan at the top, amber at the foot. */
+[data-sheet][data-sheet-style="starship"] .paper::before{content:"";position:absolute;inset:5px;pointer-events:none;
+  background:linear-gradient(var(--hud),var(--hud)) 0 0/16px 2px no-repeat,linear-gradient(var(--hud),var(--hud)) 0 0/2px 16px no-repeat,
+    linear-gradient(var(--hud),var(--hud)) 100% 0/16px 2px no-repeat,linear-gradient(var(--hud),var(--hud)) 100% 0/2px 16px no-repeat,
+    linear-gradient(var(--hud-a),var(--hud-a)) 0 100%/16px 2px no-repeat,linear-gradient(var(--hud-a),var(--hud-a)) 0 100%/2px 16px no-repeat,
+    linear-gradient(var(--hud-a),var(--hud-a)) 100% 100%/16px 2px no-repeat,linear-gradient(var(--hud-a),var(--hud-a)) 100% 100%/2px 16px no-repeat}
+[data-sheet][data-sheet-style="starship"] .paper-stack::before,
+[data-sheet][data-sheet-style="starship"] .paper-peek,
+[data-sheet][data-sheet-style="starship"] .paper-pin>.pin{display:none}
+[data-sheet][data-sheet-style="starship"] .paper-pull::after{width:12px;height:12px;top:-1px;right:-1px;background:none;box-shadow:none;border-radius:0;border-top:2px solid var(--hud);border-right:2px solid var(--hud)}
+[data-sheet][data-sheet-style="starship"] .paper-pull.is-pulled::after{transform:none;border-color:var(--hud-a)}
+[data-sheet][data-sheet-style="starship"] .paper-title{border-bottom:1px solid var(--hud-dim)}
+[data-sheet][data-sheet-style="starship"] .paper-slip,
+[data-sheet][data-sheet-style="starship"] .paper-pin{border-radius:0;box-shadow:inset 0 0 0 1px var(--hud-dim),0 10px 22px -8px rgb(0 0 0 / .85)}
+[data-sheet][data-sheet-style="starship"] .paper-pin,
+[data-sheet][data-sheet-style="starship"] .paper-pin.alt{--pin-rot:0deg}
+[data-sheet][data-sheet-style="starship"] .paper-dhead h2{font-family:"Orbitron","Rajdhani",sans-serif;font-weight:700;text-transform:uppercase;letter-spacing:.07em}
+[data-sheet][data-sheet-style="starship"] .paper-dhead h2{font-size:calc(16px * var(--ts))}
+[data-sheet][data-sheet-style="starship"] .paper-kind{font-family:var(--paper-head-font);font-weight:700;letter-spacing:.16em}
+[data-sheet][data-sheet-style="starship"] .paper-kind{color:var(--hud);font-size:calc(12px * var(--ts))}
+[data-sheet][data-sheet-style="starship"] .paper-drawer:not(.pg-card) .paper-dhead,
+[data-sheet][data-sheet-style="starship"] .paper-drawer:not(.pg-card) .paper-dbody{padding-left:26px}
+[data-sheet][data-sheet-style="starship"] .pg-card .paper-dbody{padding-inline:22px}
+[data-sheet][data-sheet-style="starship"] .pg-head{padding-left:14px}
+[data-sheet][data-sheet-style="starship"] .paper-back{border-radius:0}
+/* --- Neon terminal: a cyberpunk console. Near-black glass, hot magenta and electric cyan, a monospace face, faint scanlines and a light phosphor glow. --- */
+[data-sheet][data-sheet-style="neon"]{
+  --s-paper:#09050f; --s-cut:#110a1b; --s-slip:#150c22; --s-under:#0b0612; --s-edge:#8a3a9e;
+  --s-ink:#f7f1ff; --s-soft:#dacbf0; --s-mute:#b09ccb; --s-accent:#38f3ff; --s-on:#04131a; --s-pole:#ffffff;
+  --s-neg:#ff8fb0; --s-bar:#b8ff3d; --s-temp:#7fd4ff; --s-warn:#ffc552;
+  --s-burn:0 0 0; --s-hl:255 70 190; --s-hlk:.12; --s-rim:rgb(255 63 180 / .16); --s-sh:0 0 0; --s-shk:1.8;
+  --s-tack:#ff3fb4; --s-pinhi:#ffd0ee; --s-radius:0px; --s-vig:.45; --s-glow:0; --s-colorscheme:dark; --s-tss:.95;
+  --s-font:"JetBrains Mono","IBM Plex Mono","DejaVu Sans Mono","Liberation Mono",monospace;
+  --s-head:"Big Shoulders Display","Barlow Condensed","Arial Narrow","Liberation Sans Narrow","DejaVu Sans Condensed",sans-serif;
+  --s-num:var(--s-font); --s-ui:var(--s-font);
+  --s-base:linear-gradient(180deg,var(--paper-cut),var(--paper) 50%);
+  --s-tex:repeating-linear-gradient(180deg,rgb(255 255 255 / .028) 0 1px,transparent 1px 3px),radial-gradient(120% 70% at 0% 0%,rgb(255 63 180 / .09),transparent 60%),radial-gradient(110% 60% at 100% 100%,rgb(56 243 255 / .08),transparent 60%);
+  --s-slip-tex:repeating-linear-gradient(180deg,rgb(255 255 255 / .03) 0 1px,transparent 1px 3px);
+  --s-peek:var(--s-under);
+  --nx-mag:#ff3fb4; --nx-cy:#38f3ff; --nx-dim:rgb(255 63 180 / .45);
+  --sheet-panel-move:slide-out; --sheet-slip-move:grow; --sheet-page-move:slide-out; --change-move:glitch;
+}
+[data-sheet][data-sheet-style="neon"] .paper{border-radius:0;box-shadow:inset 0 0 0 1px var(--nx-dim),0 0 26px -8px rgb(255 63 180 / .5),0 0 3px rgb(56 243 255 / .3),0 14px 30px -14px rgb(0 0 0 / .85)}
+[data-sheet][data-sheet-style="neon"] .paper::before{content:"";position:absolute;left:0;right:0;top:0;height:2px;pointer-events:none;background:linear-gradient(90deg,var(--nx-mag),var(--nx-cy));box-shadow:0 0 10px rgb(255 63 180 / .7)}
+[data-sheet][data-sheet-style="neon"] .paper-stack::before,
+[data-sheet][data-sheet-style="neon"] :is(.paper-peek,.paper-pin>.pin){display:none}
+[data-sheet][data-sheet-style="neon"] .paper-pull::after{width:12px;height:12px;top:-1px;right:-1px;background:none;box-shadow:none;border-radius:0;border-top:2px solid var(--nx-mag);border-right:2px solid var(--nx-mag)}
+[data-sheet][data-sheet-style="neon"] .paper-pull.is-pulled::after{transform:none;border-color:var(--nx-cy)}
+[data-sheet][data-sheet-style="neon"] .paper-title{border-bottom:1px solid var(--nx-dim)}
+[data-sheet][data-sheet-style="neon"] .paper-back{border-radius:0}
+[data-sheet][data-sheet-style="neon"] :is(.paper-slip,.paper-pin){border-radius:0;box-shadow:inset 0 0 0 1px var(--nx-dim),0 10px 22px -8px rgb(0 0 0 / .85),0 0 18px -8px rgb(255 63 180 / .5)}
+[data-sheet][data-sheet-style="neon"] :is(.paper-pin,.paper-pin.alt){--pin-rot:0deg}
+[data-sheet][data-sheet-style="neon"] .paper-dhead h2{font-weight:800;text-transform:uppercase;letter-spacing:.03em}
+[data-sheet][data-sheet-style="neon"] .paper-dhead h2{font-size:calc(25px * var(--ts));text-shadow:0 0 8px rgb(56 243 255 / .45)}
+[data-sheet][data-sheet-style="neon"] .paper-kind{font-family:var(--paper-ui-font);font-weight:700;letter-spacing:.1em}
+[data-sheet][data-sheet-style="neon"] .paper-kind{color:var(--nx-cy);font-size:calc(11.5px * var(--ts))}
+[data-sheet][data-sheet-style="neon"] .paper-kind::before{content:"> ";color:var(--nx-mag)}
+[data-sheet][data-sheet-style="neon"] :is(.paper-drawer:not(.pg-card) .paper-dhead,.paper-drawer:not(.pg-card) .paper-dbody){padding-left:26px}
+[data-sheet][data-sheet-style="neon"] .pg-card .paper-dbody{padding-inline:22px}
+[data-sheet][data-sheet-style="neon"] .pg-head{padding-left:14px}
+/* --- Rune slate: a heavy carved stone slab. The sheet is one slab with chiselled edges; headings are engraved,
+   and the runes sit in the grooves with a faint glow. Stone is drawn once into a bitmap (--rn-stone, see bake()), never re-run per tile. --- */
+[data-sheet][data-sheet-style="runes"]{
+  --s-paper:#25262e; --s-cut:#30313a; --s-slip:#2b2c35; --s-under:#17181e; --s-edge:#6d7389;
+  --s-ink:#f6f7fc; --s-soft:#e1e5f1; --s-mute:#ced6e8; --s-accent:#6fe9d6; --s-on:#06161a; --s-pole:#ffffff;
+  --s-neg:#ffa7a1; --s-bar:#79e3b3; --s-temp:#9ccaff; --s-warn:#f2bb6a;
+  --s-burn:0 0 0; --s-hl:165 145 255; --s-hlk:.12; --s-rim:rgb(220 226 255 / .1); --s-sh:0 0 0; --s-shk:1.9;
+  --s-tack:#9d7dff; --s-pinhi:#e5dcff; --s-radius:0px; --s-vig:.5; --s-glow:0; --s-colorscheme:dark; --s-tss:1.02;
+  --s-font:"Source Serif 4","Source Serif Pro",Charter,Georgia,serif;
+  --s-head:"Cormorant SC","Cinzel","Palatino Linotype",Palatino,Georgia,serif;
+  --s-num:"Cinzel","Cormorant SC","Palatino Linotype",Georgia,serif; --s-ui:var(--s-font);
+  --rn-stone:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='320' height='320'><filter id='s' x='0' y='0' width='100%' height='100%' color-interpolation-filters='sRGB'><feTurbulence type='fractalNoise' baseFrequency='.007 .01' numOctaves='5' seed='11' stitchTiles='stitch' result='a'/><feColorMatrix in='a' values='0 0 0 0 .02  0 0 0 0 .02  0 0 0 0 .05  1.3 0 0 0 -.6' result='dk'/><feTurbulence type='fractalNoise' baseFrequency='.03 .022' numOctaves='5' seed='5' stitchTiles='stitch' result='b'/><feColorMatrix in='b' values='0 0 0 0 .75  0 0 0 0 .78  0 0 0 0 .88  .7 0 0 0 -.43' result='lt'/><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' seed='2' stitchTiles='stitch' result='c'/><feColorMatrix in='c' values='0 0 0 0 .85  0 0 0 0 .85  0 0 0 0 .95  0 .75 0 0 -.43' result='gr'/><feTurbulence type='fractalNoise' baseFrequency='.6' numOctaves='1' seed='8' stitchTiles='stitch' result='d'/><feColorMatrix in='d' values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 .02  0 0 1.6 0 -.82' result='pit'/><feTurbulence type='turbulence' baseFrequency='.011 .018' numOctaves='3' seed='9' stitchTiles='stitch' result='v'/><feColorMatrix in='v' values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 .02  -11 0 0 0 .5' result='cr'/><feMerge><feMergeNode in='dk'/><feMergeNode in='lt'/><feMergeNode in='gr'/><feMergeNode in='pit'/><feMergeNode in='cr'/></feMerge></filter><rect width='100%' height='100%' filter='url(%23s)'/></svg>");
+  /* A panel is the inside of a niche: darker stone than the slab, so the door halves read against it. */
+  --s-base:linear-gradient(172deg,#23242b,#191a20);
+  --s-tex:var(--rn-stone) 0 0/320px 320px;
+  --s-slip-tex:var(--rn-stone) 110px 60px/320px 320px;
+  --s-peek:var(--s-under);
+  --rn-t:#6fe9d6; --rn-v:#b5a0ff; --rn-glow:rgb(111 233 214 / .5); --rn-glowv:rgb(165 139 255 / .5);
+  --rn-rune:"Noto Sans Runic","Segoe UI Historic","Segoe UI Symbol","DejaVu Sans","Junicode",serif;
+  --rn-title:"Cinzel Decorative","Cinzel","Palatino Linotype",Palatino,Georgia,serif;
+  /* Chiselled outlines: the slab, a slip or pin (s) and a panel (d); d0 is the panel's outline collapsed to its seam. */
+  --rn-ch-slab:polygon(0 16px,7px 7px,18px 0,29% 3px,52% 0,78% 4px,calc(100% - 20px) 0,calc(100% - 5px) 8px,100% 20px,calc(100% - 3px) 44%,100% 69%,calc(100% - 2px) calc(100% - 22px),calc(100% - 12px) calc(100% - 5px),calc(100% - 28px) 100%,64% calc(100% - 3px),37% 100%,15% calc(100% - 4px),9px calc(100% - 1px),2px calc(100% - 11px),0 calc(100% - 26px),3px 58%,0 31%);
+  --rn-ch-s:polygon(0 5px,4px 1px,8px 0,48% 1px,calc(100% - 6px) 0,100% 4px,calc(100% - 1px) 60%,100% calc(100% - 5px),calc(100% - 4px) 100%,40% calc(100% - 1px),5px 100%,0 calc(100% - 4px));
+  --rn-ch-d:polygon(0 12px,8px 4px,20px 0,34% 3px,61% 0,calc(100% - 22px) 2px,calc(100% - 6px) 7px,100% 18px,calc(100% - 2px) 45%,100% 72%,calc(100% - 3px) calc(100% - 16px),calc(100% - 14px) calc(100% - 3px),calc(100% - 30px) 100%,63% calc(100% - 2px),31% 100%,14px calc(100% - 3px),3px calc(100% - 10px),0 calc(100% - 20px),2px 55%,0 28%);
+  --rn-ch-d0:polygon(50% 12px,50% 4px,50% 0,50% 3px,50% 0,50% 2px,50% 7px,50% 18px,50% 45%,50% 72%,50% calc(100% - 16px),50% calc(100% - 3px),50% 100%,50% calc(100% - 2px),50% 100%,50% calc(100% - 3px),50% calc(100% - 10px),50% calc(100% - 20px),50% 55%,50% 28%);
+  --rn-engrave:-1px -1px 0 rgb(0 0 0 / .8),1px 1px 0 rgb(255 255 255 / .13);
+  --sheet-panel-move:slide-out; --sheet-slip-move:grow; --sheet-page-move:slide-out; --change-move:carve;
+}
+/* The slab: one stone behind the sheet (the sheet itself is clear, so nothing on it is clipped by the chiselled edge). */
+[data-sheet][data-sheet-style="runes"] .paper-stack{isolation:isolate}
+[data-sheet][data-sheet-style="runes"] .paper-stack::before{inset:0;z-index:-1;border-radius:0;transform:none;clip-path:var(--rn-ch-slab);
+  background:radial-gradient(120% 100% at 50% 0%,transparent 52%,rgb(0 0 0 / .5) 100%),var(--rn-stone) 0 0/320px 320px,linear-gradient(172deg,#454650,#383943 50%,#2f3039);
+  box-shadow:inset 4px 4px 0 rgb(255 255 255 / .07),inset -5px -6px 0 rgb(0 0 0 / .42),inset 0 0 0 2px rgb(0 0 0 / .35)}
+/* The cast shadow follows the chiselled outline (a box-shadow would leave the page showing under the chipped edge). */
+[data-sheet][data-sheet-style="runes"] .paper-stack::after{content:"";position:absolute;inset:0;z-index:-2;pointer-events:none;clip-path:var(--rn-ch-slab);background:rgb(0 0 0 / .5);transform:translate(3px,7px)}
+[data-sheet][data-sheet-style="runes"] .paper-stack>.paper{background:none;box-shadow:none}
+[data-sheet][data-sheet-style="runes"] .paper-drawer{box-shadow:inset 3px 3px 0 rgb(255 255 255 / .05),inset -4px -5px 8px -2px rgb(0 0 0 / .65),inset 0 0 0 2px rgb(0 0 0 / .4)}
+[data-sheet][data-sheet-style="runes"] .paper-slip{background:var(--paper-slip-tex),linear-gradient(172deg,#383943,#2a2b34);box-shadow:inset 3px 3px 0 rgb(255 255 255 / .06),inset -4px -5px 0 rgb(0 0 0 / .4),inset 0 0 0 2px rgb(0 0 0 / .4)}
+[data-sheet][data-sheet-style="runes"] .paper-pin{background:var(--paper-slip-tex),linear-gradient(172deg,#383943,#2a2b34);clip-path:var(--rn-ch-s);box-shadow:inset 3px 3px 0 rgb(255 255 255 / .06),inset -4px -5px 0 rgb(0 0 0 / .4)}
+[data-sheet][data-sheet-style="runes"] .paper-stack>.paper::before{content:"";position:absolute;inset:8px;border:0;border-radius:0;box-shadow:inset 0 0 0 1px rgb(0 0 0 / .55),0 0 0 1px rgb(255 255 255 / .06);pointer-events:none}
+[data-sheet][data-sheet-style="runes"] .paper-stack>.paper::after{content:"\16A0\16A2\16A6\16A8\16B1\16B2\16B7\16B9\16BA\16BE\16C1\16C3\16C7\16C8\16C9\16CA\16CF\16D2\16D6\16D7\16DA\16DC\16DE\16DF";position:absolute;top:12px;left:46px;right:46px;text-align:center;white-space:nowrap;overflow:hidden;letter-spacing:.9em;font:11px/1 var(--rn-rune);color:rgb(165 139 255 / .5);text-shadow:0 0 6px var(--rn-glowv);pointer-events:none}
+[data-sheet][data-sheet-style="runes"] .paper-pull::after,
+[data-sheet][data-sheet-style="runes"] :is(.paper-peek,.paper-pin>.pin){display:none}
+[data-sheet][data-sheet-style="runes"] .paper-title{border-bottom:3px groove rgb(120 126 150 / .4)}
+[data-sheet][data-sheet-style="runes"] :is(.paper-pin,.paper-pin.alt){--pin-rot:0deg}
+[data-sheet][data-sheet-style="runes"] .paper-dhead h2{font-family:var(--rn-title);font-weight:700;letter-spacing:.04em}
+[data-sheet][data-sheet-style="runes"] .paper-dhead h2{font-size:calc(20px * var(--ts))}
+[data-sheet][data-sheet-style="runes"] .paper-kind{letter-spacing:.14em}
+/* Engraved: a dark cut above and a pale lip below the stroke. */
+[data-sheet][data-sheet-style="runes"] .paper-dhead h2,
+[data-sheet][data-sheet-style="runes"] .paper-kind{text-shadow:var(--rn-engrave)}
+[data-sheet][data-sheet-style="runes"] .paper-kind{font-family:var(--paper-head-font);font-weight:700;color:var(--rn-t);font-size:calc(15px * var(--ts));letter-spacing:.14em}
+/* The rune sits in its own groove and glows. */
+[data-sheet][data-sheet-style="runes"] .paper-kind::before{content:"\16DF";margin-right:.55em;font:400 .9em var(--rn-rune);color:var(--rn-v);text-shadow:0 0 8px var(--rn-glowv),-1px -1px 0 rgb(0 0 0 / .7)}
+[data-sheet][data-sheet-style="runes"] :is(.paper-drawer:not(.pg-card) .paper-dhead,.paper-drawer:not(.pg-card) .paper-dbody){padding-left:26px}
+[data-sheet][data-sheet-style="runes"] .pg-card .paper-dbody{padding-inline:22px}
+[data-sheet][data-sheet-style="runes"] .pg-head{padding-left:14px}
+[data-sheet][data-sheet-style="runes"] .paper-dhead{border-bottom:3px groove rgb(120 126 150 / .38)}
+[data-sheet][data-sheet-style="runes"] .fx-ghost{text-shadow:0 0 8px var(--rn-glow)}
+/* --- Brass gauges: a steam-age instrument panel. Blued, smoked iron plate with a brushed grain, plate seams riveted in brass, brass trim, cream enamel label plates, engraved heads, typewriter figures. --- */
+[data-sheet][data-sheet-style="brass"]{
+  --s-paper:#1d232b; --s-cut:#272e38; --s-slip:#2a2f37; --s-under:#13171c; --s-edge:#9a7430;
+  --s-ink:#f8ecd0; --s-soft:#e6d6b2; --s-mute:#c8b286; --s-accent:#e8be62; --s-on:#22140a; --s-pole:#ffffff;
+  --s-neg:#ff9c88; --s-bar:#a3d77e; --s-temp:#92c6f0; --s-warn:#f2b65c;
+  --s-burn:0 0 0; --s-hl:255 225 160; --s-hlk:.1; --s-rim:rgb(255 220 150 / .14); --s-sh:0 0 0; --s-shk:1.8;
+  --s-tack:#d9ad4f; --s-pinhi:#fbe9b4; --s-radius:0px; --s-vig:.42; --s-glow:0; --s-colorscheme:dark; --s-tss:1;
+  --s-font:"Lora",Georgia,"Times New Roman",serif;
+  --s-head:"IM Fell English SC","Playfair Display SC",Georgia,"Times New Roman",serif;
+  --s-num:"Special Elite","Courier Prime","Courier New","Liberation Mono",monospace; --s-ui:var(--s-font);
+  --s-base:linear-gradient(180deg,var(--paper-cut),var(--paper) 55%);
+  --bs-iron:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='256' height='256'><filter id='b' x='0' y='0' width='100%' height='100%' color-interpolation-filters='sRGB'><feTurbulence type='fractalNoise' baseFrequency='.004 .3' numOctaves='3' seed='3' stitchTiles='stitch' result='a'/><feColorMatrix in='a' values='0 0 0 0 .8  0 0 0 0 .85  0 0 0 0 .92  .6 0 0 0 -.27' result='lt'/><feTurbulence type='fractalNoise' baseFrequency='.003 .7' numOctaves='3' seed='6' stitchTiles='stitch' result='b'/><feColorMatrix in='b' values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 .03  0.85 0 0 0 -.33' result='dk'/><feTurbulence type='fractalNoise' baseFrequency='.011 .006' numOctaves='3' seed='2' stitchTiles='stitch' result='c'/><feColorMatrix in='c' values='0 0 0 0 .55  0 0 0 0 .38  0 0 0 0 .16  .9 0 0 0 -.5' result='pt'/><feMerge><feMergeNode in='dk'/><feMergeNode in='lt'/><feMergeNode in='pt'/></feMerge></filter><rect width='100%' height='100%' filter='url(%23b)'/></svg>");
+  /* Plate seams with brass rivets along them, a warm patina toward the trim, and the brushed grain (baked once, see bake()). Panels and slips take the grain and patina only. */
+  --bs-grain:var(--bs-iron) 0 0/256px 256px;
+  --bs-patina:radial-gradient(130% 100% at 50% 50%,transparent 58%,rgb(150 100 36 / .2) 100%);
+  --s-tex:radial-gradient(circle at 34% 50%,#ecd48c 0 .8px,#b88a35 1.8px,#4a320f 2.8px,transparent 3.5px) 0 0/100% 46px repeat-y,radial-gradient(circle at 67% 50%,#ecd48c 0 .8px,#b88a35 1.8px,#4a320f 2.8px,transparent 3.5px) 0 0/100% 46px repeat-y,radial-gradient(circle at 50% 168px,#ecd48c 0 .8px,#b88a35 1.8px,#4a320f 2.8px,transparent 3.5px) 0 0/46px 100% repeat-x,linear-gradient(90deg,transparent calc(34% - 1px),rgb(0 0 0 / .6) calc(34% - 1px) 34%,rgb(255 255 255 / .09) 34% calc(34% + 1px),transparent calc(34% + 1px)),linear-gradient(90deg,transparent calc(67% - 1px),rgb(0 0 0 / .6) calc(67% - 1px) 67%,rgb(255 255 255 / .09) 67% calc(67% + 1px),transparent calc(67% + 1px)),linear-gradient(180deg,transparent 167px,rgb(0 0 0 / .6) 167px 168px,rgb(255 255 255 / .09) 168px 169px,transparent 169px),var(--bs-patina),var(--bs-grain);
+  --s-slip-tex:var(--bs-patina),var(--bs-grain);
+  --s-peek:var(--s-under);
+  --bs-b2:#b88a35; --bs-b3:#7a5718;
+  --bs-brass:linear-gradient(135deg,#f6dc8d,#b88a35 38%,#f1cf79 55%,#7a5718);
+  --bs-rivet:radial-gradient(circle,#fbe7a8 0 1px,#c39339 2.4px,#5e4012 3.6px,transparent 4.2px);
+  --bs-plate:#f0e4c6; --bs-plate-ink:#2a1a0f;
+  --sheet-panel-move:slide-out; --sheet-slip-move:grow; --sheet-page-move:slide-out; --change-move:odometer;
+}
+[data-sheet][data-sheet-style="brass"] .paper-drawer{--paper-tex:var(--bs-patina),var(--bs-grain)}
+[data-sheet][data-sheet-style="brass"] .paper{border:3px solid transparent;border-image:var(--bs-brass) 1;border-radius:0;box-shadow:0 0 0 1px #120a05,inset 0 0 0 1px rgb(0 0 0 / .55),inset 0 2px 12px rgb(0 0 0 / .5),0 16px 30px -14px rgb(0 0 0 / .9)}
+[data-sheet][data-sheet-style="brass"] .paper::before{content:"";position:absolute;inset:5px;pointer-events:none;background:var(--bs-rivet) 0 0/10px 10px no-repeat,var(--bs-rivet) 100% 0/10px 10px no-repeat,var(--bs-rivet) 0 100%/10px 10px no-repeat,var(--bs-rivet) 100% 100%/10px 10px no-repeat}
+[data-sheet][data-sheet-style="brass"] .paper-stack>.paper::before{background:var(--bs-rivet) 0 0/10px 10px no-repeat,var(--bs-rivet) 100% 0/10px 10px no-repeat,var(--bs-rivet) 0 100%/10px 10px no-repeat,var(--bs-rivet) 100% 100%/10px 10px no-repeat,var(--bs-rivet) 50% 0/10px 10px no-repeat,var(--bs-rivet) 50% 100%/10px 10px no-repeat}
+[data-sheet][data-sheet-style="brass"] .paper-stack::before,
+[data-sheet][data-sheet-style="brass"] .paper-pull::after,
+[data-sheet][data-sheet-style="brass"] .paper-peek{display:none}
+[data-sheet][data-sheet-style="brass"] .paper-title{border-bottom:2px solid var(--bs-b2);box-shadow:0 1px 0 rgb(0 0 0 / .6)}
+[data-sheet][data-sheet-style="brass"] .paper-kind{display:inline-block;font-family:var(--paper-head-font);font-weight:400;font-size:calc(13px * var(--ts));letter-spacing:.1em;color:var(--bs-plate-ink);padding:2px 15px 1px;border:1px solid var(--bs-b3);border-radius:3px;
+  background:radial-gradient(circle at 6px 50%,var(--bs-b3) 0 1.2px,transparent 1.7px),radial-gradient(circle at calc(100% - 6px) 50%,var(--bs-b3) 0 1.2px,transparent 1.7px),linear-gradient(#f8efd6,var(--bs-plate));box-shadow:inset 0 0 0 1px rgb(255 255 255 / .5),0 1px 2px rgb(0 0 0 / .6)}
+[data-sheet][data-sheet-style="brass"] :is(.paper-slip,.paper-pin){border-radius:0;box-shadow:inset 0 0 0 2px var(--bs-b2),inset 0 0 0 3px #120a05,0 12px 22px -8px rgb(0 0 0 / .9)}
+[data-sheet][data-sheet-style="brass"] :is(.paper-pin,.paper-pin.alt){--pin-rot:0deg}
+[data-sheet][data-sheet-style="brass"] .paper-dhead h2{font-weight:400;letter-spacing:.03em;text-shadow:0 -1px 0 rgb(0 0 0 / .85),0 1px 0 rgb(255 225 160 / .24)}
+[data-sheet][data-sheet-style="brass"] .paper-dhead h2{font-size:calc(24px * var(--ts))}
+[data-sheet][data-sheet-style="brass"] .paper-title{font-weight:400}
+[data-sheet][data-sheet-style="brass"] :is(.paper-drawer:not(.pg-card) .paper-dhead,.paper-drawer:not(.pg-card) .paper-dbody){padding-left:26px}
+[data-sheet][data-sheet-style="brass"] .pg-card .paper-dbody{padding-inline:22px}
+[data-sheet][data-sheet-style="brass"] .pg-head{padding-left:14px}
+/* --- Modern: how the rest of Chronicle looks. Theme tokens, light or dark with the site, cards with soft depth. Default. --- */
+[data-sheet]:is([data-sheet-style="modern"],:not([data-sheet-style])){
+  --s-paper:var(--color-card-bg); --s-cut:var(--color-card-bg); --s-slip:var(--color-card-bg); --s-under:var(--color-bg-tertiary); --s-edge:var(--color-border);
+  --s-ink:var(--color-text-primary); --s-soft:var(--color-text-body); --s-mute:var(--color-text-secondary); --s-accent:var(--sh-accent-text); --s-on:var(--sh-on-accent); --s-pole:var(--sh-pole);
+  --s-neg:var(--sh-neg); --s-bar:var(--sh-bar); --s-temp:var(--sh-temp); --s-warn:var(--sh-warn);
+  --s-burn:107 114 128; --s-hl:128 128 128; --s-hlk:.3; --s-rim:transparent; --s-sh:17 24 39; --s-shk:.6;
+  --s-tack:var(--color-accent); --s-pinhi:var(--color-card-bg); --s-radius:14px; --s-vig:0; --s-glow:0;
+  --s-font:var(--sh-ui); --s-head:var(--sh-ui); --s-num:var(--sh-ui);
+  --s-base:linear-gradient(var(--color-card-bg),var(--color-card-bg)); --s-tex:none; --s-slip-tex:none; --s-peek:var(--color-border);
+  --sheet-panel-move:grow; --sheet-slip-move:grow; --sheet-page-move:grow;
+}
+.dark [data-sheet]:is([data-sheet-style="modern"],:not([data-sheet-style])){--s-colorscheme:dark}
+[data-sheet]:is([data-sheet-style="modern"],:not([data-sheet-style])) .paper{border:1px solid var(--color-border);box-shadow:0 1px 2px rgb(var(--s-sh) / calc(.08 * var(--shk))),0 14px 34px -18px rgb(var(--s-sh) / calc(.4 * var(--shk)))}
+[data-sheet]:is([data-sheet-style="modern"],:not([data-sheet-style])) .paper-stack::before,
+[data-sheet]:is([data-sheet-style="modern"],:not([data-sheet-style])) .paper-pull::after,
+[data-sheet]:is([data-sheet-style="modern"],:not([data-sheet-style])) .paper-peek{display:none}
+[data-sheet]:is([data-sheet-style="modern"],:not([data-sheet-style])) .paper-title{border-bottom:1px solid var(--color-border);padding-bottom:14px}
+[data-sheet]:is([data-sheet-style="modern"],:not([data-sheet-style])) .paper-kind{letter-spacing:.08em}
+[data-sheet]:is([data-sheet-style="modern"],:not([data-sheet-style])) .paper-pull{border-radius:12px}
+[data-sheet]:is([data-sheet-style="modern"],:not([data-sheet-style])) .paper-pull{transition:box-shadow var(--dur-micro) var(--ease-out),border-color var(--dur-micro) var(--ease-out),background-color var(--dur-micro) var(--ease-out),transform var(--dur-micro) var(--ease-out)}
+@media (hover:hover){
+  [data-sheet]:is([data-sheet-style="modern"],:not([data-sheet-style])) .paper-pull[data-sheet-section]:hover{border-color:color-mix(in srgb,var(--paper-accent) 45%,var(--color-border));background:var(--color-card-bg);transform:translateY(-1px);box-shadow:0 8px 20px -10px rgb(var(--s-sh) / calc(.45 * var(--shk)))}
+}
+[data-sheet]:is([data-sheet-style="modern"],:not([data-sheet-style])) .paper-pull.is-pulled{border-color:var(--paper-accent)}
+[data-sheet]:is([data-sheet-style="modern"],:not([data-sheet-style])) .paper-slip,
+[data-sheet]:is([data-sheet-style="modern"],:not([data-sheet-style])) .paper-pin{border:1px solid var(--color-border);border-radius:12px;box-shadow:0 10px 28px -12px rgb(var(--s-sh) / calc(.5 * var(--shk))),0 1px 2px rgb(var(--s-sh) / .1)}
+[data-sheet]:is([data-sheet-style="modern"],:not([data-sheet-style])) .paper-pin>.pin{display:none}
+[data-sheet]:is([data-sheet-style="modern"],:not([data-sheet-style])) .paper-pin{transform:scale(.94);transform-origin:var(--ox,50%) var(--oy,0%)}
+[data-sheet]:is([data-sheet-style="modern"],:not([data-sheet-style])) .paper-pin.is-pinned{transform:none}
+[data-sheet]:is([data-sheet-style="modern"],:not([data-sheet-style])) .paper-dhead{border-bottom:1px solid var(--color-border)}

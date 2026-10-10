@@ -541,6 +541,7 @@ POST	/:id/moderate	internal/plugins/bestiary/routes.go
 POST	/:id/rate	internal/plugins/bestiary/routes.go
 POST	/:id/review	internal/plugins/packages/routes.go
 POST	/account/avatar	internal/plugins/auth/routes.go
+POST	/account/delete	internal/plugins/auth/routes.go
 POST	/account/reauth	internal/plugins/auth/routes.go
 POST	/addons	internal/plugins/addons/routes.go
 POST	/ai-workspace/import/commit	internal/plugins/ai_workspace/routes.go

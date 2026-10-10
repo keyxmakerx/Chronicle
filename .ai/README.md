@@ -46,12 +46,13 @@ business rules and footguns.
   Admin → Packages, so there is one systems-infrastructure doc, not one per
   system), `internal/websocket/`.
 - **Front-end scripts** (`static/js/`): `boot`, `hovercard`, `motion_rest`,
-  `notifications`, `shortcuts_help`, `sidebar_tag_filter`, `sidebar_tree`, and
+  `notifications`, `sheet_motion`, `shortcuts_help`, `sidebar_tag_filter`, `sidebar_tree`, and
   under `widgets/`: `dynamic_surface`, `entity_posts`, `entity_tooltip`,
   `entity_type_config`, `entity_type_editor`, `groups`, `header_motion`,
   `header_sky`, `image_upload`, `layout_editor`, `map_widget`, `permissions`,
-  `quest_board`, `relation_graph`, `shop_inventory`, `template_editor`,
-  `timeline_viz`, `timeline_widget`.
+  `quest_board`, `relation_graph`, `shop_inventory`, `template_editor`. A
+  plugin's own widget scripts sit in `internal/plugins/<slug>/static/js/` with
+  their `.ai.md` (timeline: `timeline_viz`, `timeline_widget`).
 - **Examples:** `extensions/example-wasm-go/`, `extensions/example-wasm-rust/`.
 
 ## Templates
