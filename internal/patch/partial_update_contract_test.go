@@ -102,6 +102,7 @@ var governedFieldExceptions = map[string]string{
 // The reason has to be a fact about the callers, and it has to stay true — a
 // new caller that sends a subset moves the struct to contractGoverned.
 var fullReplaceByDesign = map[string]string{
+	"addons.UpdateAddonInput":     "addonService.Update has no caller outside tests (the admin UI only flips status through UpdateStatus), and it requires a name and a valid status, so it is a whole-record edit by construction. A route that reaches it with a subset must make the fields presence-aware first",
 	"packages.UpdatePolicyInput":  "PUT /admin/packages/:id/auto-update — a one-field body: the policy radio is the whole request, so there is nothing else to preserve",
 	"packages.UpdateRepoURLInput": "PUT /admin/packages/:id/repo — a one-field body: the repository URL is the whole request, and an empty URL is refused by UpdateRepoURL's validation rather than stored",
 }
@@ -111,7 +112,6 @@ var fullReplaceByDesign = map[string]string{
 // means the struct became contract-governed; adding one means a new update
 // input shipped and its author decided it is not a partial update.
 var notYetSwept = map[string]bool{
-	"addons.UpdateAddonInput":             true,
 	"entities.UpdateLayoutPresetInput":    true,
 	"entities.UpdateContentTemplateInput": true,
 	"entities.UpdateEntityTypeInput":      true,
