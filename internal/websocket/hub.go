@@ -47,6 +47,15 @@ type Hub struct {
 	foundryMu       sync.RWMutex
 	foundryLastSeen map[string]time.Time
 
+	// browserSeen records, per campaign and user, the last signed-in page
+	// request, so "has Chronicle open" also covers pages that never open a
+	// socket. In-memory like foundryLastSeen: presence is transient.
+	browserMu        sync.Mutex
+	browserSeen      map[string]map[string]time.Time
+	browserLastSweep time.Time
+	// now is time.Now; tests replace it.
+	now func() time.Time
+
 	// pingEvery is fixed before any client connects; tests shorten it per hub.
 	pingEvery time.Duration
 }
@@ -59,6 +68,8 @@ func NewHub() *Hub {
 		register:        make(chan *Client),
 		unregister:      make(chan *Client),
 		foundryLastSeen: make(map[string]time.Time),
+		browserSeen:     make(map[string]map[string]time.Time),
+		now:             time.Now,
 		pingEvery:       pingPeriod,
 	}
 }
@@ -73,6 +84,58 @@ func (h *Hub) MarkFoundrySeen(campaignID string) {
 	h.foundryMu.Lock()
 	h.foundryLastSeen[campaignID] = time.Now()
 	h.foundryMu.Unlock()
+}
+
+// browserSeenRetention bounds how long a page request is remembered; readers
+// ask for a shorter window, so this only keeps the map from growing.
+const browserSeenRetention = 15 * time.Minute
+
+// MarkBrowserSeen records that userID just loaded a page of the campaign. It
+// is one map write under a mutex; once a minute it also drops entries older
+// than the retention window.
+func (h *Hub) MarkBrowserSeen(campaignID, userID string) {
+	if campaignID == "" || userID == "" {
+		return
+	}
+	now := h.now()
+	h.browserMu.Lock()
+	defer h.browserMu.Unlock()
+	users := h.browserSeen[campaignID]
+	if users == nil {
+		users = make(map[string]time.Time)
+		h.browserSeen[campaignID] = users
+	}
+	users[userID] = now
+	if now.Sub(h.browserLastSweep) < time.Minute {
+		return
+	}
+	h.browserLastSweep = now
+	for cid, us := range h.browserSeen {
+		for uid, t := range us {
+			if now.Sub(t) > browserSeenRetention {
+				delete(us, uid)
+			}
+		}
+		if len(us) == 0 {
+			delete(h.browserSeen, cid)
+		}
+	}
+}
+
+// RecentBrowserUsers lists the users who loaded a page of the campaign within
+// the window, sorted.
+func (h *Hub) RecentBrowserUsers(campaignID string, within time.Duration) []string {
+	now := h.now()
+	h.browserMu.Lock()
+	defer h.browserMu.Unlock()
+	var out []string
+	for uid, t := range h.browserSeen[campaignID] {
+		if now.Sub(t) <= within {
+			out = append(out, uid)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // FoundryPresence returns the last-seen timestamp and whether the

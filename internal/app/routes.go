@@ -4972,6 +4972,10 @@ func (a *App) RegisterRoutes() {
 	// affects instead of being a no-op.
 	wsRevoker.hub = wsHub
 
+	// Remember who has loaded a campaign page lately, for the DM Screen's
+	// "players here" count on pages that open no socket.
+	e.Use(campaignPageSeen(wsHub))
+
 	// Wire the WS hub's presence lookup into foundry_vtt. fvttHandler owns
 	// both GET /campaigns/:id/foundry-presence (live diagnostic JSON) and
 	// /foundry-vtt/presence-pill-fragment (lazy-loaded pill on the map detail
