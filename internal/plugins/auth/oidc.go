@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"crypto/hkdf"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -136,8 +137,11 @@ func ConfigureOIDC(svc AuthService, store OIDCStore, siteSecret, baseURL string)
 	if !ok || store == nil || siteSecret == "" {
 		return
 	}
-	k := sha256.Sum256([]byte("chronicle-oidc:" + siteSecret))
-	s.oidc = &oidcRuntime{store: store, key: k[:], baseURL: strings.TrimRight(baseURL, "/"),
+	k, err := hkdf.Key(sha256.New, []byte(siteSecret), nil, "chronicle-oidc", 32)
+	if err != nil {
+		return
+	}
+	s.oidc = &oidcRuntime{store: store, key: k, baseURL: strings.TrimRight(baseURL, "/"),
 		providers: map[string]*oidc.Provider{}}
 }
 
