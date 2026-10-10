@@ -14,6 +14,11 @@
  *   .paper-title    a title with the accent rule under it.
  *
  * Paper stays paper in dark mode; only its shadow deepens.
+ *
+ * The "Sheet pieces" section at the end holds the parts a system's character
+ * sheet is built from (parts that pull out a panel, wells, drawers, slips,
+ * pins). Their look comes from the sheet's style (sheet_styles.css) and their
+ * motion from sheet_motion.css and static/js/widgets/sheet_motion.js.
  */
 
 :root {
@@ -175,3 +180,176 @@
 @media (max-width: 640px) {
   .chc { width: calc(100vw - 16px); }
 }
+
+/* ------------------------------------------------------------------ */
+/* Sheet pieces. Inside a [data-sheet] root the --paper-* tokens below   */
+/* are derived from the sheet's style (sheet_styles.css); the fallbacks  */
+/* only keep a piece readable if it is used outside one.                 */
+/* ------------------------------------------------------------------ */
+
+/* A part with paper behind it: a turned corner and, on wide screens, an edge peeking past the sheet. */
+.paper-pull { position: relative; border-radius: 2px; }
+.paper-pull::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 16px;
+  height: 16px;
+  pointer-events: none;
+  background: linear-gradient(225deg, transparent 50%, var(--paper-under) 50%, color-mix(in srgb, var(--paper-under) 82%, rgb(var(--paper-burn))) 100%);
+  box-shadow: -1px 1px 2px rgb(var(--paper-burn) / 0.25);
+  border-bottom-left-radius: 2px;
+  transform-origin: 100% 0;
+  transition: transform var(--dur-micro) var(--ease-out);
+}
+.paper-pull:focus-within::after { transform: scale(1.35); }
+/* :hover sticks after a tap on a touch screen and would repaint the part for nothing. */
+@media (hover: hover) {
+  .paper-pull:hover::after { transform: scale(1.35); }
+  .paper-pull:hover { background: rgb(var(--paper-hl, 255 255 255) / calc(0.22 * var(--hlk, 1))); }
+}
+.paper-pull.is-pulled::after { transform: scale(0); }
+.paper-pull[data-sheet-section] { cursor: pointer; }
+.paper-peek {
+  position: absolute;
+  z-index: 1;
+  width: 18px;
+  border-radius: 0 5px 5px 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, rgb(var(--paper-burn) / 0.28), transparent 6px), var(--paper-peek, var(--paper-under));
+  box-shadow: inset 0 0 0 1px rgb(var(--paper-burn) / 0.22), 2px 3px 6px -3px rgb(0 0 0 / 0.35);
+  transform: translateX(-10px);
+  transition: transform var(--dur-micro) var(--ease-out), opacity var(--dur-micro) var(--ease-out);
+}
+.paper-peek.is-hover { transform: translateX(-5px); }
+.paper-peek.is-pulled { opacity: 0; }
+
+/* A well clips a panel or slip while it arrives; the arriving thing's motion is sheet_motion.css's. */
+.paper-well { position: absolute; z-index: 5; overflow: hidden; pointer-events: none; }
+.paper-well > * { pointer-events: auto; }
+.paper-well[data-from="right"] { padding: 14px 22px 28px 0; }
+.paper-well[data-from="up"] { padding: 18px 12px 0; }
+.paper-well[data-from="down"] { padding: 0 12px 24px; }
+/* The direction the arriving thing comes from, as a unit vector the slide-out presets scale by the element's own size. */
+.paper-well[data-from="right"] > * { --dir-x: -1; --dir-y: 0; }
+.paper-well[data-from="up"] > * { --dir-x: 0; --dir-y: 1; }
+.paper-well[data-from="down"] > * { --dir-x: 0; --dir-y: -1; }
+/* With too little room beside the sheet the paper arrives from behind its edge, then the clip opens and it lies over the sheet's right column. */
+.paper-well[data-from="right"].has-over { padding-left: 14px; clip-path: inset(0 0 0 var(--clip)); transition: clip-path var(--dur-slide) var(--ease-slide); }
+.paper-well.has-over.is-over { clip-path: inset(0 0 0 0); }
+.paper-well[data-from="right"].pad-over { padding-left: 14px; }
+
+/* The pulled paper. */
+.paper-drawer { display: flex; flex-direction: column; width: 100%; overflow: hidden; contain: layout paint; }
+.paper-dhead { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; padding: 14px 16px 9px 20px; border-bottom: 1px dashed var(--paper-edge); }
+.paper-dhead h2 { margin: 2px 0 0; font: 700 calc(18px * var(--ts, 1))/1.15 var(--paper-head-font, var(--paper-font)); color: var(--paper-ink); outline: none; }
+.paper-x { border: 0; background: none; color: var(--paper-ink-soft); font-size: calc(18px * var(--ts, 1)); line-height: 1; padding: 2px 6px; border-radius: 4px; cursor: pointer; }
+.paper-dbody { position: relative; flex: 1; overflow: auto; padding: 10px 16px 18px 20px; overscroll-behavior: contain; }
+
+/* A slip drawn out from under a value or row. */
+.paper-slip {
+  position: relative;
+  color: var(--paper-ink-soft);
+  font: 500 calc(13px * var(--ts, 1))/1.45 var(--paper-font);
+  border-radius: 0 0 4px 4px;
+  background: linear-gradient(rgb(var(--paper-burn) / 0.14), transparent 7px), var(--paper-slip-tex, none), var(--paper-slip, var(--paper-cut));
+  box-shadow: inset 0 0 0 1px rgb(var(--paper-burn) / 0.25), var(--paper-slip-lift);
+}
+
+/* A slip pinned onto the paper that is out. */
+.paper-pin {
+  position: absolute;
+  z-index: 6;
+  left: 14px;
+  right: 14px;
+  --pin-rot: -1.2deg;
+  border-radius: 2px;
+  background: var(--paper-slip-tex, none), var(--paper-slip, var(--paper-cut));
+  box-shadow: inset 0 0 0 1px rgb(var(--paper-burn) / 0.3), 0 10px 18px -8px rgb(var(--s-sh, 0 0 0) / calc(0.45 * var(--shk, 1))), 0 2px 4px -1px rgb(var(--s-sh, 0 0 0) / calc(0.2 * var(--shk, 1)));
+  color: var(--paper-ink-soft);
+  font: 500 calc(13px * var(--ts, 1))/1.5 var(--paper-font);
+  opacity: 0;
+  transform: translateY(-14px) rotate(calc(var(--pin-rot) - 3deg));
+  transition: transform var(--dur-slide) var(--ease-slide), opacity var(--dur-micro) var(--ease-out);
+}
+.paper-pin.is-pinned { opacity: 1; transform: rotate(var(--pin-rot)); }
+.paper-pin.alt { --pin-rot: 0.9deg; }
+/* The tack that holds a pin to the page, purple from --paper-accent like the rest of the paper. */
+.paper-pin > .pin {
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  width: 15px;
+  height: 15px;
+  margin-left: -7px;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(circle at 35% 30%, var(--paper-pinhi, #e6dcf3) 0 2px, var(--paper-tack, var(--paper-accent)) 3.5px, color-mix(in srgb, var(--paper-tack, var(--paper-accent)) 65%, #000) 100%);
+  box-shadow: 2px 3px 3px -1px rgb(0 0 0 / 0.45);
+}
+
+/* The ink blot that lands on a changed value when its style has no effect of its own. */
+.paper-landed { position: relative; }
+.paper-landed::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  left: -10px;
+  right: -10px;
+  top: -6px;
+  bottom: -6px;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(closest-side, var(--paper-blot, color-mix(in srgb, var(--paper-accent) 32%, transparent)), color-mix(in srgb, var(--paper-accent) 12%, transparent) 60%, transparent);
+  opacity: 0;
+  animation: paper-blot var(--dur-slide) var(--ease-out) both, paper-blot-dry calc(var(--dur-slide) * 2) linear var(--dur-slide) both;
+}
+@keyframes paper-blot { from { opacity: 0; transform: scale(0.4); } to { opacity: 1; transform: none; } }
+@keyframes paper-blot-dry { from { opacity: 1; } to { opacity: 0; } }
+
+/* Page open: the Settle move. The sheet's style supplies the look through the --mv-* tokens. */
+.paper-settle { animation: sheet-settle var(--mv-t, var(--dur-large)) var(--mv-e, var(--ease-out)) both; }
+@keyframes sheet-settle { from { opacity: var(--mv-fade, 0); transform: var(--mv-from, translateY(6px)); } to { opacity: 1; transform: var(--mv-to, none); } }
+
+/* On a narrow desk a pulled paper is a full page; its layer lives inside the sheet root so the style's tokens reach it. */
+.pg-layer { position: fixed; inset: 0; z-index: 60; pointer-events: auto; background: rgb(0 0 0 / 0); transition: background var(--dur-slide) var(--ease-slide); }
+.pg-layer.is-on { background: rgb(0 0 0 / 0.32); }
+.pg-card {
+  position: absolute;
+  margin: 0;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px rgb(var(--paper-burn) / 0.28), inset 0 1px 0 var(--paper-rim, transparent), 0 3px 8px -2px rgb(0 0 0 / 0.4), 0 12px 20px -12px rgb(0 0 0 / 0.4);
+  transition: transform var(--dur-slide) var(--ease-slide), clip-path var(--dur-slide) var(--ease-slide), opacity var(--dur-micro) var(--ease-out);
+}
+.pg-card .paper-dbody { flex: 1; min-height: 0; }
+.pg-head { align-items: center; justify-content: flex-start; gap: 12px; padding: 10px 16px 8px 8px; }
+.pg-title { min-width: 0; }
+.paper-back {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--paper-edge);
+  background: rgb(var(--paper-hl, 255 255 255) / calc(0.4 * var(--hlk, 1)));
+  color: var(--paper-accent);
+  border-radius: 999px;
+  padding: 5px 12px 5px 9px;
+  font: 600 calc(12.5px * var(--ts, 1)) var(--paper-ui-font);
+  cursor: pointer;
+}
+.paper-back:hover { background: rgb(var(--paper-hl, 255 255 255) / calc(0.7 * var(--hlk, 1))); }
+
+/* Calm and Off. Calm is the owner's reduce switch, a person's own Calm pick, or html[data-motion="calm"]; Off is html[data-motion="off"]. */
+html:is([data-motion="calm"], [data-view-motion="calm"], [data-cz-reduce]) .paper-well.has-over { clip-path: none; transition: none; }
+html:is([data-motion="calm"], [data-view-motion="calm"], [data-cz-reduce]) .paper-pin { transform: rotate(var(--pin-rot)) !important; }
+html:is([data-motion="calm"], [data-view-motion="calm"], [data-cz-reduce]) .paper-landed::before { animation-name: paper-blot-dry, paper-blot-dry; animation-duration: var(--dur-micro), calc(var(--dur-slide) * 2); }
+html:is([data-motion="calm"], [data-view-motion="calm"], [data-cz-reduce]) .pg-card { transition: opacity var(--dur-micro) var(--ease-out); }
+html:is([data-motion="calm"], [data-view-motion="calm"], [data-cz-reduce]) .pg-layer { transition: background var(--dur-micro) var(--ease-out); }
+html[data-motion="off"] .paper-pin,
+html[data-motion="off"] .pg-card,
+html[data-motion="off"] .pg-layer { transition: none; }
+html[data-motion="off"] .paper-landed::before { animation: none; }
