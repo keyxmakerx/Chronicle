@@ -516,13 +516,64 @@ Chronicle.register('attributes', {
         resetBtn.title = 'Reset to category template';
         resetBtn.innerHTML = '<i class="fa-solid fa-rotate-left" style="font-size:11px"></i> Reset';
         resetBtn.addEventListener('click', function () {
-          if (!confirm('Reset to category template? Custom fields and visibility changes will be lost.')) return;
-          resetOverrides();
+          askReset(btnRow);
         });
         btnRow.appendChild(resetBtn);
       }
 
       container.appendChild(btnRow);
+    }
+
+    // askReset puts the question in the button row's place, so it sits right
+    // where the person clicked. The row is only hidden, not rebuilt, because
+    // rebuilding would throw away customizations not saved yet.
+    function askReset(btnRow) {
+      if (btnRow.querySelector('[data-reset-ask]')) return;
+      var ask = document.createElement('div');
+      ask.className = 'ag-confirm flex-1';
+      ask.setAttribute('data-reset-ask', '1');
+      ask.setAttribute('role', 'alertdialog');
+      ask.setAttribute('aria-label', 'Reset to the category template');
+      var p = document.createElement('p');
+      p.textContent = 'Reset to the category template?';
+      var small = document.createElement('small');
+      small.textContent = 'Custom fields and visibility changes on this page will be lost.';
+      var row = document.createElement('div');
+      row.className = 'flex items-center gap-2 mt-2';
+      var yes = document.createElement('button');
+      yes.type = 'button';
+      yes.className = 'chronicle-editor__edit-btn';
+      yes.style.color = 'var(--color-danger-strong, #dc2626)';
+      yes.textContent = 'Reset';
+      var keep = document.createElement('button');
+      keep.type = 'button';
+      keep.className = 'chronicle-editor__edit-btn';
+      keep.textContent = 'Keep my changes';
+      row.appendChild(yes);
+      row.appendChild(keep);
+      ask.appendChild(p);
+      ask.appendChild(small);
+      ask.appendChild(row);
+
+      var shown = Array.prototype.slice.call(btnRow.children);
+      shown.forEach(function (c) { c.hidden = true; });
+      btnRow.appendChild(ask);
+      yes.focus();
+
+      function close() {
+        ask.remove();
+        shown.forEach(function (c) { c.hidden = false; });
+      }
+      keep.addEventListener('click', close);
+      ask.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') { e.stopPropagation(); close(); }
+      });
+      yes.addEventListener('click', function () {
+        yes.disabled = true;
+        keep.disabled = true;
+        yes.textContent = 'Resetting\u2026';
+        resetOverrides();
+      });
     }
 
     function resetOverrides() {

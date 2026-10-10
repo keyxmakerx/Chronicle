@@ -88,6 +88,37 @@ Character presets can include `foundry_path` for automatic VTT sync:
 - `foundry_path`: Dot-notation path in Foundry Actor system data
 - `foundry_writable`: Whether Chronicle can write this field back (default: true)
 
+### Play Controls (`play`)
+
+An entity preset field may carry an optional `play` object declaring that it can be changed during play, so Chronicle core never needs to know a system's field names. It applies to preset fields only (category fields are reference data) and is copied onto the entity type's stored field definition, the same way `gm_only` is.
+
+```json
+{
+  "key": "stamina_current",
+  "label": "Stamina",
+  "type": "number",
+  "play": { "edit": "owner", "kind": "counter", "min": 0, "max_field": "stamina_max", "step": 1 }
+}
+```
+
+| Key | Meaning |
+|-----|---------|
+| `edit` (required) | Who may change it: `owner` (the claimed owner, or Scribe and above), `gm` (Scribe and above), `none` (nobody through play) |
+| `kind` (required) | `counter`, `resource`, `conditions`, `choice` or `text` |
+| `min`, `max` | Bounds for `counter` and `resource` |
+| `max_field` | Key of another `number` field in the same preset whose value is the upper bound; wins over `max` |
+| `step` | Size of one +/- nudge |
+| `options` | Allowed values, at most 50, each 1 to 64 characters; required and non-empty for `conditions` and `choice` |
+| `max_length` | Length bound for `text` and `choice` |
+| `to_foundry` | Whether a play edit is written to Foundry; absent means follow the field's `foundry_writable` |
+| `combat_authority` | `foundry` or `chronicle`: which side wins during combat; absent leaves it undecided |
+
+A `play` block is dropped at load, and the field stays an ordinary field, when: `edit`, `kind` or `combat_authority` has an unknown value; `max_field` names a missing field, the field itself or a non-number field; `options` is empty for `conditions` or `choice`, has more than 50 entries, or holds an empty or over-64-character value; `min` is greater than `max`; `step` or `max_length` is negative; or the field is `gm_only` and `edit` is `owner`. The rest of the system still loads. Each drop is logged and listed under the system's validation warnings (the diagnostics page and the install preview).
+
+Entity types do not record which system created them, so when two installed systems declare the same category and field key with different `play` blocks, neither block is copied onto existing types.
+
+Declaring `play` changes no behaviour by itself; it is the declaration the play-edit guard and sheet controls read.
+
 ### Data Files
 
 Each category has a corresponding `data/<slug>.json` file. Each item is keyed by `id` or `slug` (the loader fills `id` from `slug` when `id` is empty):

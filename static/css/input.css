@@ -90,6 +90,17 @@
     --color-bad-rgb:  220 38 38;   /* red-600 */
     --color-sidebar-bg:    #1a1c23;  /* always dark */
 
+    /* State colours for older widgets that style themselves in JS. */
+    --color-danger:        #ef4444;
+    --color-danger-strong: #dc2626;
+    --color-danger-bg:     #fef2f2;
+    --color-warn:          #d97706;
+    --color-warn-bg:       #fef3c7;
+    --color-ok-fg:         #065f46;
+    --color-ok-bg:         #d1fae5;
+    --color-info:          #3b82f6;
+    --color-info-hover:    #2563eb;
+
     /* ──────────────────────────────────────────────────────────────────
      * V2 motion vocabulary. Only `transform` + `opacity` are ever
      * animated, never `transition: all` (lint-guarded via
@@ -221,6 +232,9 @@
     --color-warn-rgb: 251 191 36;  /* amber-400 */
     --color-bad-rgb:  248 113 113; /* red-400 */
     --color-sidebar-bg:    #1a1c23;  /* always dark */
+    --color-danger-bg:     #451a1a;
+    --color-warn:          #fbbf24;
+    --color-warn-bg:       #451a03;
   }
 
   /* Default body styling -- uses semantic vars so no dark: overrides needed */
@@ -4861,6 +4875,8 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
 .ag-warn.is-on { display: flex; animation: ag-in .28s ease-out both, ag-glow .9s ease-out .1s; }
 .dark .ag-warn { background: oklch(.32 .06 70); color: oklch(.92 .07 85); box-shadow: inset 0 0 0 1px oklch(.5 .1 75); }
 .ag-landed { animation: ag-land 1.1s ease-out; }
+/* A system sheet's picture upload has no box of its own: its progress strip and error bar sit at the bottom of the screen. */
+.ph-image-mount { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); width: min(22rem, calc(100vw - 32px)); height: 0; z-index: 60; }
 .ag-shared { display: flex; align-items: center; gap: 6px; margin: -2px 0 6px; font-size: 12px; color: var(--color-text-muted); }
 .ag-checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 2px 10px; }
 .ag-checks label { display: flex; align-items: center; gap: 8px; padding: 5px 4px; font-size: 13.5px; color: var(--color-text-primary); cursor: pointer; border-radius: 7px; }
@@ -4937,6 +4953,35 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
 }
 .nav-rm .ag-ring, html[data-cz-reduce] .ag-ring, html[data-view-motion="calm"] .ag-ring { animation: none !important; }
 .nav-rm .ag-prog > span, html[data-cz-reduce] .ag-prog > span, html[data-view-motion="calm"] .ag-prog > span { transition: none !important; }
+/* Working and answered states shared by the character page's older parts:
+   the spinner inside a busy button, the Move box's headings and button, the
+   "Yours" pill after a claim, an inline "Remove? Yes . Keep" ask, and the
+   picture's Change chip. */
+.fx-spin { width: 13px; height: 13px; flex: none; border-radius: 999px; border: 2px solid rgba(255, 255, 255, .45); border-top-color: #fff; animation: fx-spin .7s linear infinite; }
+@keyframes fx-spin { to { transform: rotate(360deg); } }
+.ag-box [data-move-go], [data-claim-wrap] .btn-primary { display: inline-flex; align-items: center; gap: 7px; }
+.fx-dest-h { padding: 6px 10px 3px; font-size: 10.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--color-text-muted); border-top: 1px solid var(--color-border); }
+.ag-list .fx-dest-h:first-child { border-top: 0; }
+.fx-pill { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; background: var(--color-bg-tertiary); color: var(--color-text-secondary); }
+.fx-pill.is-yours { background: rgba(16, 185, 129, .14); color: #047857; }
+.dark .fx-pill.is-yours { color: #34d399; }
+.fx-ask { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: var(--color-text-primary); animation: ag-in var(--dur-standard, 200ms) var(--ease-out, ease-out) both; }
+.fx-ask button { border: 0; background: none; padding: 3px 4px; font: inherit; cursor: pointer; color: var(--color-accent); }
+.fx-ask button.danger { color: #dc2626; }
+.dark .fx-ask button.danger { color: #f87171; }
+.fx-chip { position: absolute; left: 50%; bottom: -10px; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--color-border); background: var(--color-card-bg); color: var(--color-text-primary); font: inherit; font-size: 11.5px; font-weight: 600; white-space: nowrap; cursor: pointer; box-shadow: 0 4px 10px -6px rgba(0, 0, 0, .35); transition: border-color var(--dur-micro, 120ms), color var(--dur-micro, 120ms); }
+.fx-chip:hover, .fx-chip[aria-expanded="true"] { border-color: var(--color-accent); color: var(--color-accent); }
+.fx-chip:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.fx-chip:disabled { opacity: .6; cursor: default; }
+/* On a wide header picture the chip sits in the corner, always in view. */
+.fx-chip.is-corner { left: auto; right: 12px; bottom: 12px; transform: none; }
+@media (pointer: coarse) { .fx-chip { height: 32px; padding: 0 14px; font-size: 12.5px; } }
+@media (prefers-reduced-motion: reduce) {
+  .fx-spin, .fx-ask { animation: none !important; }
+  .fx-chip { transition: none !important; }
+}
+.nav-rm .fx-spin, html[data-cz-reduce] .fx-spin, html[data-view-motion="calm"] .fx-spin,
+.nav-rm .fx-ask, html[data-cz-reduce] .fx-ask, html[data-view-motion="calm"] .fx-ask { animation: none !important; }
 /* Game-system picker (static/js/widgets/choice_picker.js): the value button on
    a character field and the fold that lists the system's names. The box reuses
    the Give-box classes above, restated here on the real colour tokens. */
@@ -4961,3 +5006,58 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
 .ag-pickbox .ag-row .ag-name small { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 12px; line-height: 1.35; color: var(--color-text-muted); margin-top: 1px; }
 .ag-pick:focus-visible, .ag-link:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { .ag-pick .chev { transition: none !important; } }
+
+/* Edit name fold: the save button's loading and done states, and the error
+   line. The fold itself reuses ag-fold/ag-box/ag-warn;
+   static/js/widgets/page_name_fold.js drives it. */
+.ag-err { margin: 10px 0 0; font-size: 12.5px; color: #dc2626; }
+.dark .ag-err { color: #f87171; }
+.ag-err[hidden] { display: none; }
+.ph-save { display: inline-flex; align-items: center; gap: 7px; }
+.ph-save .ph-spin, .ph-save .ph-ok { display: none; }
+.ph-save.is-loading .ph-spin { display: inline-block; width: 13px; height: 13px; border-radius: 999px; border: 2px solid rgba(255,255,255,.45); border-top-color: #fff; animation: ph-spin .7s linear infinite; }
+.ph-save.is-ok .ph-ok { display: inline-block; }
+@keyframes ph-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .ph-save.is-loading .ph-spin { animation-duration: 2.4s; } }
+
+/* Header of a page a game-system renderer owns: name, star, claim marker and
+   actions (Edit name and History in view, the rest under the more menu; on a
+   phone every action goes under it). static/js/widgets/page_header.js drives it. */
+.ph-title { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; margin-bottom: 14px; }
+.ph-title-l { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; min-width: 0; }
+.ph-title h1 { margin: 0; line-height: 1.15; }
+.ph-pill { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; background: var(--color-bg-tertiary); color: var(--color-text-secondary); }
+.ph-pill.is-claim { background: rgb(var(--color-accent-rgb) / .12); color: var(--color-accent); }
+.ph-pill.is-yours { background: rgba(16, 185, 129, .14); color: #047857; }
+.dark .ph-pill.is-yours { color: #34d399; }
+.ph-claim { display: inline-flex; align-items: center; gap: 8px; }
+.ph-claim .btn-primary { display: inline-flex; align-items: center; gap: 7px; }
+.ph-claim .btn-primary.is-loading i { animation: ph-spin .7s linear infinite; }
+.ph-acts { display: flex; align-items: center; gap: 4px; position: relative; }
+.ph-more-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 45; width: 250px; padding: 6px; border-radius: 12px; border: 1px solid var(--color-border); background: var(--color-card-bg); box-shadow: 0 18px 40px -16px rgba(0, 0, 0, .35); animation: ag-pop var(--dur-standard, 200ms) var(--ease-out, ease-out) both; transform-origin: 90% 0; }
+.ph-more-menu[hidden] { display: none; }
+.ph-more-menu form { margin: 0; }
+.ph-more-menu .ph-item { display: flex; width: 100%; align-items: center; gap: 9px; padding: 8px 9px; border: 0; border-radius: 8px; background: transparent; color: var(--color-text-primary); font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+.ph-more-menu .ph-item:hover { background: var(--color-bg-tertiary); }
+.ph-more-menu .ph-item i { width: 14px; margin: 0; color: var(--color-text-muted); }
+.ph-more-menu .ph-item.danger, .ph-more-menu .ph-item.danger i { color: #dc2626; }
+.dark .ph-more-menu .ph-item.danger, .dark .ph-more-menu .ph-item.danger i { color: #f87171; }
+.ph-more-menu .ph-only-phone { display: none; }
+.ph-more-menu hr { border: 0; border-top: 1px solid var(--color-border); margin: 4px 2px; }
+.ph-confirm { padding: 8px 9px 6px; }
+.ph-confirm[hidden] { display: none; }
+.ph-confirm p { margin: 0 0 2px; font-size: 13px; font-weight: 600; color: var(--color-text-primary); }
+.ph-confirm small { display: block; font-size: 12px; color: var(--color-text-muted); margin-bottom: 8px; }
+.ph-confirm .ph-row { display: flex; gap: 6px; justify-content: flex-end; }
+.ph-danger-btn { border: 0; border-radius: 8px; padding: 6px 12px; background: #dc2626; color: #fff; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.ph-danger-btn:hover { background: #b91c1c; }
+.ph-below { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 16px; }
+.ph-below:empty { display: none; }
+@media (max-width: 1023.98px) { .ph-below { grid-template-columns: minmax(0, 1fr); } }
+@media (min-width: 640px) { .ph-phone-only { display: none; } }
+@media (max-width: 639.98px) {
+  .ph-acts .ph-wide { display: none; }
+  .ph-more-menu .ph-only-phone { display: flex; }
+}
+@media (prefers-reduced-motion: reduce) { .ph-more-menu, .ph-claim .btn-primary.is-loading i { animation: none !important; } }
+.nav-rm .ph-more-menu { animation: none !important; }

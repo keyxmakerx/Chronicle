@@ -81,8 +81,6 @@ templ StashesContent(cc *campaigns.CampaignContext, v *StashesPageView, csrfToke
 				}
 			</div>
 		}
-
-		<div id="armory-move-modal"></div>
 	</div>
 }
 
@@ -198,7 +196,7 @@ templ stashCard(v *StashesPageView, st StashView, csrfToken string) {
 		} else {
 			<ul class="divide-y divide-border mt-3">
 				for _, it := range st.Items {
-					<li class="flex items-center justify-between gap-2 py-1.5 text-sm">
+					<li class="flex flex-wrap items-center justify-between gap-2 py-1.5 text-sm" data-item-id={ it.ItemID } data-holder={ destValue(self) } data-move-host>
 						<span class="text-fg truncate">
 							{ it.Name }
 							if it.Quantity > 1 {
@@ -208,26 +206,30 @@ templ stashCard(v *StashesPageView, st StashView, csrfToken string) {
 						<button
 							type="button"
 							class="text-xs text-accent hover:underline shrink-0"
-							hx-get={ moveDialogURL(v.CampaignID, "item", self, it.ItemID) }
-							hx-target="#armory-move-modal"
-							hx-swap="innerHTML"
+							data-move
+							aria-expanded="false"
+							onclick={ moveOpenOnClick(moveDialogURL(v.CampaignID, "item", self, it.ItemID)) }
 						>Move&hellip;</button>
+						<div class="ag-fold basis-full" data-move-fold></div>
 					</li>
 				}
 			</ul>
 		}
 
+		<div data-money-row data-holder={ destValue(self) } data-move-host>
 		<div class="flex items-center justify-between gap-2 py-1.5 text-sm border-t border-border mt-2">
 			<span class="text-fg">Money <span class="text-fg-body font-medium ml-1">{ st.Money.String() }</span></span>
 			if st.Money > 0 {
 				<button
 					type="button"
 					class="text-xs text-accent hover:underline shrink-0"
-					hx-get={ moveDialogURL(v.CampaignID, "money", self, "") }
-					hx-target="#armory-move-modal"
-					hx-swap="innerHTML"
+					data-move
+					aria-expanded="false"
+					onclick={ moveOpenOnClick(moveDialogURL(v.CampaignID, "money", self, "")) }
 				>Move&hellip;</button>
 			}
+		</div>
+		<div class="ag-fold" data-move-fold></div>
 		</div>
 
 		if v.CanManage {

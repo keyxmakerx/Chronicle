@@ -107,6 +107,17 @@ func TestClaimBanner_ClaimedShowsOwner(t *testing.T) {
 	}
 }
 
+// The claim button must never be silent: it carries a working state, and the
+// amber bar with "Try again" is there for a refusal.
+func TestClaimBanner_UnclaimedHasWorkingAndFailureStates(t *testing.T) {
+	html := renderClaimBanner(t, &Entity{ID: "e1", Name: "Tyne"}, &EntityType{Slug: "character"}, true, "")
+	for _, want := range []string{"onsubmit=", "Claiming", "data-claim-warn", "Try again", "fx-pill is-yours"} {
+		if !strings.Contains(html, want) {
+			t.Errorf("unclaimed banner missing %q\n%s", want, html)
+		}
+	}
+}
+
 func TestClaimBanner_ClaimedUnknownOwnerFallback(t *testing.T) {
 	owned := &Entity{ID: "e1", Name: "Tyne", OwnerUserID: strPtr("u1")}
 	html := renderClaimBanner(t, owned, &EntityType{Slug: "character"}, true, "")

@@ -52,3 +52,64 @@ func TestMapPresetFields(t *testing.T) {
 		t.Errorf("abilities type = %q, want text", got[2].Type)
 	}
 }
+
+// TestMapPresetFields_CarriesPlay pins that a manifest play block survives
+// preset application onto the stored field definition, deep-copied, and that a
+// field without one stays nil.
+func TestMapPresetFields_CarriesPlay(t *testing.T) {
+	zero, tru := 0.0, true
+	play := &systems.PlayDef{
+		Edit: "owner", Kind: "conditions", Min: &zero, MaxField: "hp_max", Step: 1,
+		Options: []string{"dazed", "bleeding"}, MaxLength: 12, ToFoundry: &tru, CombatAuthority: "foundry",
+	}
+	got := mapPresetFields([]systems.FieldDef{
+		{Key: "conditions", Label: "Conditions", Type: "string", Play: play},
+		{Key: "notes", Label: "Notes", Type: "markdown"},
+	})
+	if got[1].Play != nil {
+		t.Errorf("field without play got %+v", got[1].Play)
+	}
+	p := got[0].Play
+	if p == nil {
+		t.Fatal("play block lost in preset application")
+	}
+	if p.Edit != "owner" || p.Kind != "conditions" || p.MaxField != "hp_max" || p.Step != 1 ||
+		p.MaxLength != 12 || p.CombatAuthority != "foundry" || p.Min == nil || *p.Min != 0 ||
+		p.ToFoundry == nil || !*p.ToFoundry || len(p.Options) != 2 {
+		t.Errorf("play not carried faithfully: %+v", p)
+	}
+	play.Options[0] = "mutated"
+	if p.Options[0] != "dazed" {
+		t.Error("stored options alias the manifest's slice")
+	}
+}
+
+func TestPlayByCategory_SharedKeysAcrossSystems(t *testing.T) {
+	owner := &systems.PlayDef{Edit: "owner", Kind: "counter"}
+	gm := &systems.PlayDef{Edit: "gm", Kind: "counter"}
+	sys := func(id string, fields ...systems.FieldDef) *systems.SystemManifest {
+		return &systems.SystemManifest{ID: id, EntityPresets: []systems.EntityPresetDef{{Category: "character", Fields: fields}}}
+	}
+	cases := []struct {
+		name      string
+		manifests []*systems.SystemManifest
+		key       string
+		wantSet   bool // key present in the map
+		wantPlay  bool // and carrying a block
+	}{
+		{"one system", []*systems.SystemManifest{sys("a", systems.FieldDef{Key: "level", Play: owner})}, "level", true, true},
+		{"one system clears", []*systems.SystemManifest{sys("a", systems.FieldDef{Key: "level"})}, "level", true, false},
+		{"same block twice", []*systems.SystemManifest{sys("a", systems.FieldDef{Key: "level", Play: owner}), sys("b", systems.FieldDef{Key: "level", Play: owner})}, "level", true, true},
+		{"block and none", []*systems.SystemManifest{sys("a", systems.FieldDef{Key: "level"}), sys("b", systems.FieldDef{Key: "level", Play: owner})}, "level", false, false},
+		{"different blocks", []*systems.SystemManifest{sys("a", systems.FieldDef{Key: "level", Play: owner}), sys("b", systems.FieldDef{Key: "level", Play: gm})}, "level", false, false},
+		{"conflict stays out", []*systems.SystemManifest{sys("a", systems.FieldDef{Key: "level", Play: owner}), sys("b", systems.FieldDef{Key: "level", Play: gm}), sys("c", systems.FieldDef{Key: "level", Play: owner})}, "level", false, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := playByCategory(tc.manifests)["character"][tc.key]
+			if ok != tc.wantSet || (got != nil) != tc.wantPlay {
+				t.Errorf("present=%v play=%+v, want present=%v play=%v", ok, got, tc.wantSet, tc.wantPlay)
+			}
+		})
+	}
+}

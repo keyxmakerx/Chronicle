@@ -309,3 +309,49 @@ func TestSyncFieldOwnerOnlyFlags_ConvergesAndIsIdempotent(t *testing.T) {
 		t.Errorf("un-marking backstory should update 1 type, got %d", n3)
 	}
 }
+
+// TestSyncFieldPlay_ConvergesAndIsIdempotent covers the play reconciler: it
+// stamps a block onto an existing type, rewrites nothing when already equal,
+// and clears it when the manifest drops it.
+func TestSyncFieldPlay_ConvergesAndIsIdempotent(t *testing.T) {
+	t1 := EntityType{ID: 1, PresetCategory: strptr("character"), Fields: []FieldDefinition{
+		{Key: "hp", Label: "HP"},
+		{Key: "notes", Label: "Notes"},
+	}}
+	saved := map[int]string{}
+	typeRepo := &mockEntityTypeRepo{
+		listAllFn: func(_ context.Context) ([]EntityType, error) { return []EntityType{t1}, nil },
+		updateFieldsSchemaFn: func(_ context.Context, id int, fieldsJSON string) error {
+			saved[id] = fieldsJSON
+			return nil
+		},
+	}
+	svc := newTestService(&mockEntityRepo{}, typeRepo).(*entityService)
+	want := map[string]map[string]*FieldPlay{
+		"character": {"hp": {Edit: "owner", Kind: "counter"}, "notes": nil},
+	}
+
+	n, err := svc.SyncFieldPlay(context.Background(), want)
+	if err != nil || n != 1 {
+		t.Fatalf("first sync = %d, %v; want 1 type updated", n, err)
+	}
+	var stored []FieldDefinition
+	if err := json.Unmarshal([]byte(saved[1]), &stored); err != nil {
+		t.Fatal(err)
+	}
+	if stored[0].Play == nil || stored[0].Play.Kind != "counter" || stored[1].Play != nil {
+		t.Errorf("stored fields wrong: %+v", stored)
+	}
+
+	// Feed the converged state back: nothing to write.
+	t1.Fields = stored
+	if n2, _ := svc.SyncFieldPlay(context.Background(), want); n2 != 0 {
+		t.Errorf("second sync updated %d types, want 0", n2)
+	}
+
+	// Manifest drops the block: it is cleared.
+	n3, _ := svc.SyncFieldPlay(context.Background(), map[string]map[string]*FieldPlay{"character": {"hp": nil}})
+	if n3 != 1 {
+		t.Errorf("clearing sync updated %d types, want 1", n3)
+	}
+}

@@ -288,6 +288,26 @@ type FieldDefinition struct {
 	// the picker falls back to the plural of the field key. The stored value
 	// is still the picked entry's name as plain text.
 	Choices string `json:"choices,omitempty"`
+	// Play carries the system manifest's play-controls declaration for this
+	// field, so whatever acts on play edits reads one stored source and core
+	// never hard-codes a system's field names. Nil = not a play field.
+	Play *FieldPlay `json:"play,omitempty"`
+}
+
+// FieldPlay mirrors the manifest's play block. It is a separate type from the
+// systems package's because plugins do not import each other; the app layer
+// copies between them.
+type FieldPlay struct {
+	Edit            string   `json:"edit"`                       // owner | gm | none.
+	Kind            string   `json:"kind"`                       // counter | resource | conditions | choice | text.
+	Min             *float64 `json:"min,omitempty"`              // Lower bound for counter/resource.
+	Max             *float64 `json:"max,omitempty"`              // Literal upper bound.
+	MaxField        string   `json:"max_field,omitempty"`        // Another number field whose value is the upper bound; wins over Max.
+	Step            float64  `json:"step,omitempty"`             // UI nudge size.
+	Options         []string `json:"options,omitempty"`          // Allowed values for conditions/choice.
+	MaxLength       int      `json:"max_length,omitempty"`       // Bound for text/choice.
+	ToFoundry       *bool    `json:"to_foundry,omitempty"`       // nil = follow the field's foundry_writable.
+	CombatAuthority string   `json:"combat_authority,omitempty"` // foundry | chronicle | empty.
 }
 
 // Entity represents a single worldbuilding object — a character, location,

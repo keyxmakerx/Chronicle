@@ -52,7 +52,7 @@ templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 						<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, ancestors[i].ID)) } class="hover:text-fg-body">{ ancestors[i].Name }</a>
 					}
 					<span class="mx-1">/</span>
-					<span class="text-fg">{ entity.Name }</span>
+					<span class="text-fg" data-page-crumb>{ entity.Name }</span>
 				</nav>
 				@effectiveVisibilityBadge(cc, entity, GetEffectiveVisibility(ctx))
 			</div>
@@ -60,7 +60,13 @@ templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 			     "Claimed by <player>" when owned, the actionable claim banner
 			     when unclaimed + claimable + the addon is enabled, nothing
 			     otherwise. ClaimEntity enforces the same rules server-side. -->
-			@claimBanner(cc, entity, entityType, claimingEnabled, ownerName, csrfToken)
+			if hasEntityShowRenderer(entityType) {
+				// A system-rendered page has no title block, so the header
+				// (name, claim marker, actions) is drawn here instead.
+				@systemPageHeader(cc, entity, entityType, claimingEnabled, ownerName, csrfToken, userID)
+			} else {
+				@claimBanner(cc, entity, entityType, claimingEnabled, ownerName, csrfToken)
+			}
 			<!-- Slug-keyed system-package renderer (CH4). When a system
 			     package has registered a renderer for this entity_type
 			     slug, that renderer owns the page contents in place of
@@ -77,14 +83,16 @@ templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 				ShowCalendar:   showCalendar,
 				CSRFToken:      csrfToken,
 				UserID:         userID,
+				OwnerName:      ownerName,
 			}); comp != nil {
 				// A page renderer replaces the layout, and with it the title
 				// block that normally carries the panels, so mount them here.
 				@entitySystemPanels(cc, entity)
+				@systemImageMount(cc, entity, csrfToken)
 				@comp
 				// It has no layout to place the page pieces in, so they are
 				// drawn here as before they became blocks.
-				@blockSubPages(cc, entity)
+				@systemPageBelow(cc, entity, entityType, csrfToken)
 				@blockPosts(cc, entity, csrfToken)
 				@blockWritingPrompts(cc, entityType)
 				@blockBacklinksMount(cc, entity)
@@ -220,28 +228,19 @@ templ entityBlockInner(block TemplateBlock, cc *campaigns.CampaignContext, entit
 	@RenderBlock(ctx, block, cc, entity, entityType, csrfToken)
 }
 
-// blockTitle renders the entity name heading with inline metadata edit panel.
+// blockTitle renders the entity name heading. Edit name opens the same fold the
+// system-page header uses; Scribes and up also get History, Clone and Delete.
 templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string) {
-	<div
-		if cc.MemberRole >= campaigns.RoleScribe {
-			x-data={ fmt.Sprintf("{ editing: false, saving: false, saved: false, error: '', name: '%s', typeLabel: '%s', parentId: '%s' }",
-				jsEsc(entity.Name),
-				jsEsc(derefStr(entity.TypeLabel)),
-				jsEsc(derefStr(entity.ParentID))) }
-		}
-	>
+	{{
+		isScribe := cc.MemberRole >= campaigns.RoleScribe
+		canRename := CanEditIdentity(cc.MemberRole, entity, layouts.GetUserID(ctx))
+	}}
+	<div>
 		<div class="flex items-start justify-between gap-3">
 			<div class="min-w-0">
 				<div class="flex items-center gap-2">
-					<h1 class="text-xl md:text-3xl font-bold text-fg">{ entity.Name }</h1>
-					<button
-						class="text-fg-muted hover:text-amber-400 transition-colors"
-						data-favorite-toggle={ entity.ID }
-						data-entity-name={ entity.Name }
-						title="Toggle favorite"
-					>
-						<i class="fa-regular fa-star text-lg"></i>
-					</button>
+					<h1 class="text-xl md:text-3xl font-bold text-fg" data-page-h1>{ entity.Name }</h1>
+					@entityFavoriteButton(entity)
 					// "Show in Foundry" for NPC pages. foundry_vtt owns it and
 					// answers empty for anything else, so this stays VTT-agnostic.
 					if cc.CanAuthorDmOnly() {
@@ -257,144 +256,97 @@ templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 					data-widget="aliases"
 					data-entity-id={ entity.ID }
 					data-campaign-id={ cc.Campaign.ID }
-					data-editable={ fmt.Sprintf("%t", cc.MemberRole >= campaigns.RoleScribe) }
+					data-editable={ fmt.Sprintf("%t", isScribe) }
 				></div>
 			</div>
-			if cc.MemberRole >= campaigns.RoleScribe {
+			if canRename {
 				<div class="flex items-center gap-2">
-					<button
-						@click="editing = !editing"
-						class="btn-ghost btn-sm"
-						:class="editing ? 'text-accent' : ''"
-						title="Edit page details"
-					>
-						<i class="fa-solid fa-pencil mr-1"></i>
-						<span x-text="editing ? 'Close' : 'Edit'">Edit</span>
-					</button>
-					<form
-						method="POST"
-						action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s/clone", cc.Campaign.ID, entity.ID)) }
-						hx-post={ fmt.Sprintf("/campaigns/%s/entities/%s/clone", cc.Campaign.ID, entity.ID) }
-						class="inline"
-					>
-						<input type="hidden" name="csrf_token" value={ csrfToken }/>
-						<button type="submit" class="btn-ghost btn-sm" title="Create a copy of this page">
-							<i class="fa-regular fa-clone mr-1"></i> Clone
-						</button>
-					</form>
 					<button
 						type="button"
 						class="btn-ghost btn-sm"
-						hx-get={ fmt.Sprintf("/campaigns/%s/entities/%s/history", cc.Campaign.ID, entity.ID) }
-						hx-target="#page-history-slot"
-						title="See earlier versions of this page and put one back"
+						data-edit-name
+						aria-expanded="false"
+						aria-controls="page-name-fold"
+						title="Edit page details"
+						onclick={ headerCall("nameFold") }
 					>
-						<i class="fa-solid fa-clock-rotate-left mr-1"></i> History
+						<i class="fa-solid fa-pencil mr-1"></i> Edit name
 					</button>
-					if cc.MemberRole >= campaigns.RoleOwner {
+					if isScribe {
 						<form
 							method="POST"
-							action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID)) }
-							hx-delete={ fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID) }
-							hx-confirm="Move this page and its sub-pages to the Trash? You can restore them from Manage > Trash."
+							action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s/clone", cc.Campaign.ID, entity.ID)) }
+							hx-post={ fmt.Sprintf("/campaigns/%s/entities/%s/clone", cc.Campaign.ID, entity.ID) }
 							class="inline"
 						>
-							<input type="hidden" name="_method" value="DELETE"/>
 							<input type="hidden" name="csrf_token" value={ csrfToken }/>
-							<button type="submit" class="btn-ghost btn-sm text-red-500 hover:text-red-700 dark:text-red-400">
-								<i class="fa-solid fa-trash mr-1"></i> Delete
+							<button type="submit" class="btn-ghost btn-sm" title="Create a copy of this page">
+								<i class="fa-regular fa-clone mr-1"></i> Clone
 							</button>
 						</form>
+						@entityHistoryButton(cc, entity, "btn-ghost btn-sm")
+						if cc.MemberRole >= campaigns.RoleOwner {
+							<form
+								method="POST"
+								action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID)) }
+								hx-delete={ fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID) }
+								hx-confirm="Move this page and its sub-pages to the Trash? You can restore them from Manage > Trash."
+								class="inline"
+							>
+								<input type="hidden" name="_method" value="DELETE"/>
+								<input type="hidden" name="csrf_token" value={ csrfToken }/>
+								<button type="submit" class="btn-ghost btn-sm text-red-500 hover:text-red-700 dark:text-red-400">
+									<i class="fa-solid fa-trash mr-1"></i> Delete
+								</button>
+							</form>
+						}
 					}
 				</div>
 			}
 		</div>
 		// The History panel loads here when History is clicked.
-		if cc.MemberRole >= campaigns.RoleScribe {
+		if isScribe {
 			<div id="page-history-slot"></div>
 		}
-		// Inline metadata edit panel (Scribe+).
-		if cc.MemberRole >= campaigns.RoleScribe {
-			<div x-show="editing" x-cloak x-transition class="mt-4 card p-4 space-y-3">
-				<div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-					<div>
-						<label class="block text-xs font-medium text-fg-body mb-1">Name</label>
-						<input type="text" x-model="name" class="input w-full text-sm" maxlength="200"/>
-					</div>
-					<div>
-						<label class="block text-xs font-medium text-fg-body mb-1">Descriptor</label>
-						<input type="text" x-model="typeLabel" class="input w-full text-sm" placeholder="e.g., City, NPC, Artifact" maxlength="100"/>
-					</div>
-				</div>
-				<div>
-					<label class="block text-xs font-medium text-fg-body mb-1">Parent Page</label>
-					<input type="text" x-model="parentId" class="input w-full text-sm" placeholder="Parent entity ID (or leave empty)"/>
-				</div>
-				// Visibility editing lives only in edit mode, via form.templ's
-				// inline permissions widget (ADR-057). The metadata PUT below
-				// carries no is_private; UpdateMetadataAPI's nil-preserving
-				// service call keeps the entity's current value.
-				<div class="flex items-center justify-end gap-3 pt-1">
-					<span x-show="saved" x-transition class="text-xs text-green-600">Saved!</span>
-					<span x-show="error" x-transition class="text-xs text-red-500" x-text="error"></span>
-					<button
-						type="button"
-						class="btn-secondary btn-sm"
-						@click="editing = false; saved = false; error = ''"
-					>Cancel</button>
-					<button
-						type="button"
-						class="btn-primary btn-sm"
-						:disabled="saving || !name.trim()"
-						@click={ fmt.Sprintf(`
-							saving = true; saved = false; error = '';
-							Chronicle.apiFetch('/campaigns/%s/entities/%s/metadata', {
-								method: 'PUT',
-								body: { name: name.trim(), type_label: typeLabel.trim(), parent_id: parentId.trim() }
-							}).then(r => {
-								if (!r.ok) return r.json().then(d => { throw new Error(d.error || 'Failed to save'); });
-								return r.json();
-							}).then(d => {
-								saved = true;
-								setTimeout(() => { window.location.reload(); }, 600);
-							}).catch(e => { error = e.message; }).finally(() => { saving = false; })
-						`, cc.Campaign.ID, entity.ID) }
-					>
-						<span x-show="!saving">Save Changes</span>
-						<span x-show="saving">Saving...</span>
-					</button>
-				</div>
-			</div>
+		if canRename {
+			@pageNameFold(cc, entity, isScribe)
 		}
 	</div>
 }
 
-// blockImage renders the entity header image with optional upload widget.
+// blockImage renders the entity header image. A Scribe or above sees a
+// "Change" chip on the picture itself, in view on touch screens too, which
+// opens the file picker; image_upload.js adds the progress bar and the amber
+// error bar. Everyone else sees the picture alone.
 templ blockImage(cc *campaigns.CampaignContext, entity *Entity, csrfToken string) {
 	<div class="card overflow-hidden p-0">
 		if entity.ImagePath != nil && *entity.ImagePath != "" {
-			<div class="relative group">
+			if cc.MemberRole >= campaigns.RoleScribe {
+				<div
+					class="relative"
+					data-widget="image-upload"
+					data-endpoint={ fmt.Sprintf("/campaigns/%s/entities/%s/image", cc.Campaign.ID, entity.ID) }
+					data-upload-url="/media/upload"
+					data-csrf-token={ csrfToken }
+				>
+					<img
+						src={ layouts.MediaURL(ctx, *entity.ImagePath) }
+						alt={ entity.Name }
+						class="w-full h-56 object-cover"
+					/>
+					<button type="button" class="fx-chip is-corner" data-pick aria-label="Change image"><i class="fa-solid fa-camera"></i> Change</button>
+				</div>
+			} else {
 				<img
 					src={ layouts.MediaURL(ctx, *entity.ImagePath) }
 					alt={ entity.Name }
 					class="w-full h-56 object-cover"
 				/>
-				if cc.MemberRole >= campaigns.RoleScribe {
-					<div
-						class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer"
-						data-widget="image-upload"
-						data-endpoint={ fmt.Sprintf("/campaigns/%s/entities/%s/image", cc.Campaign.ID, entity.ID) }
-						data-upload-url="/media/upload"
-						data-csrf-token={ csrfToken }
-					>
-						<span class="text-white text-sm font-medium">Change Image</span>
-					</div>
-				}
-			</div>
+			}
 		} else {
 			if cc.MemberRole >= campaigns.RoleScribe {
 				<div
-					class="w-full h-40 bg-surface-alt flex flex-col items-center justify-center cursor-pointer hover:bg-surface transition-colors"
+					class="relative w-full h-40 bg-surface-alt flex flex-col items-center justify-center cursor-pointer hover:bg-surface transition-colors"
 					data-widget="image-upload"
 					data-endpoint={ fmt.Sprintf("/campaigns/%s/entities/%s/image", cc.Campaign.ID, entity.ID) }
 					data-upload-url="/media/upload"
@@ -866,7 +818,7 @@ func coverImageOverlayClass(config map[string]any) string {
 templ blockCoverImage(cc *campaigns.CampaignContext, entity *Entity, csrfToken string, config map[string]any) {
 	<div class="w-full overflow-hidden rounded-lg">
 		if entity.CoverImagePath != nil && *entity.CoverImagePath != "" {
-			<div class="relative group">
+			<div class="relative">
 				<img
 					src={ layouts.MediaURL(ctx, *entity.CoverImagePath) }
 					alt={ entity.Name + " cover" }
@@ -877,20 +829,20 @@ templ blockCoverImage(cc *campaigns.CampaignContext, entity *Entity, csrfToken s
 				}
 				if cc.MemberRole >= campaigns.RoleScribe {
 					<div
-						class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer"
+						class="absolute inset-0"
 						data-widget="image-upload"
 						data-endpoint={ fmt.Sprintf("/campaigns/%s/entities/%s/cover-image", cc.Campaign.ID, entity.ID) }
 						data-upload-url="/media/upload"
 						data-csrf-token={ csrfToken }
 					>
-						<span class="text-white text-sm font-medium">Change Cover Image</span>
+						<button type="button" class="fx-chip is-corner" data-pick aria-label="Change cover image"><i class="fa-solid fa-camera"></i> Change</button>
 					</div>
 				}
 			</div>
 		} else {
 			if cc.MemberRole >= campaigns.RoleScribe {
 				<div
-					class={ "w-full bg-surface-alt flex flex-col items-center justify-center cursor-pointer hover:bg-surface transition-colors rounded-lg " + coverImageHeight(config) }
+					class={ "relative w-full bg-surface-alt flex flex-col items-center justify-center cursor-pointer hover:bg-surface transition-colors rounded-lg " + coverImageHeight(config) }
 					data-widget="image-upload"
 					data-endpoint={ fmt.Sprintf("/campaigns/%s/entities/%s/cover-image", cc.Campaign.ID, entity.ID) }
 					data-upload-url="/media/upload"

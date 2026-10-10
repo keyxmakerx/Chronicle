@@ -214,6 +214,33 @@ rest of the page from there. The `data-*` attributes round-trip
 into `config.entityId` and `config.campaignId` (see
 `static/js/boot.js` for the kebab-to-camel conversion rules).
 
+The mount also carries what the widget needs to draw its own controls, all
+`"true"`/`"false"` except the name and visibility:
+
+| Attribute | Meaning |
+|---|---|
+| `data-is-gm` | Viewer can see GM-only content. |
+| `data-is-owner` | Viewer is this page's claimed owner. |
+| `data-visibility` | The page's visibility mode. |
+| `data-can-edit-identity` | Viewer may rename the page and set the identity fields (ancestry, culture, career, kit, race, species, heritage, background): Scribe and up, or the claimed owner. The server enforces the same rule. |
+| `data-can-change-image` | Viewer may replace the picture (Scribe and up; the claimed owner may not). |
+| `data-armory-items` | The Items and money panel draws on this same page, so the widget leaves its own item list out. |
+| `data-claimed` | Someone has claimed the page. |
+| `data-claimed-by-me` | The viewer is that someone. |
+| `data-claimed-name` | The claimant's display name ("a player" when it can't be resolved), empty when unclaimed. |
+
+To change the picture, a widget dispatches a bubbling DOM event,
+`chronicle:change-image` with `detail: { entityId }`; the page opens its
+existing upload for that page, and does nothing for a viewer who may not
+change it. After a rename saved from the header, the page dispatches
+`chronicle:page-renamed` with `detail: { entityId, name }` for a widget that
+draws the name itself.
+
+The host draws the page header (name, favorite, claim marker, Edit name,
+History, and Clone and Delete under a more menu) above the widget, and Player
+notes, Relations, Tags and Sub-pages below it, so a widget does not draw
+those.
+
 ### Validation rules (enforced at install time)
 
 A manifest with an invalid `renderers` block is rejected during

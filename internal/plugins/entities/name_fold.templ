@@ -1,0 +1,128 @@
+// name_fold.templ renders the Edit name fold and the title pieces layout pages
+// and system-rendered pages share (the star, the history button), so there is
+// one copy of each.
+//
+// Every control is an inline handler into Chronicle.PageHeader
+// (static/js/widgets/page_name_fold.js); nothing relies on a script inside a
+// swapped fragment.
+
+package entities
+
+import (
+	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+)
+
+// entityFavoriteButton is the star next to the page name. favorites.js binds
+// any [data-favorite-toggle] and paints its state.
+templ entityFavoriteButton(entity *Entity) {
+	<button
+		type="button"
+		class="text-fg-muted hover:text-amber-400 transition-colors"
+		data-favorite-toggle={ entity.ID }
+		data-entity-name={ entity.Name }
+		title="Toggle favorite"
+	>
+		<i class="fa-regular fa-star text-lg"></i>
+	</button>
+}
+
+// entityHistoryButton loads the page's earlier versions into #page-history-slot.
+templ entityHistoryButton(cc *campaigns.CampaignContext, entity *Entity, class string) {
+	<button
+		type="button"
+		class={ class }
+		hx-get={ fmt.Sprintf("/campaigns/%s/entities/%s/history", cc.Campaign.ID, entity.ID) }
+		hx-target="#page-history-slot"
+		title="See earlier versions of this page and put one back"
+	>
+		<i class="fa-solid fa-clock-rotate-left mr-1"></i> History
+	</button>
+}
+
+// pageNameFold is the Edit name fold: it grows out of the header in place.
+// Everyone who may rename sees Name; only Scribes and up also get the
+// descriptor and the parent page, matching what the server accepts from a
+// claimed owner (identity_edit.go).
+templ pageNameFold(cc *campaigns.CampaignContext, entity *Entity, structure bool) {
+	{{ parent := pageParentOf(ctx) }}
+	<div id="page-name-fold" class="ag-fold" data-name-fold aria-hidden="true" inert>
+		<div
+			class="ag-box"
+			data-box
+			style="max-width:620px"
+			data-endpoint={ fmt.Sprintf("/campaigns/%s/entities/%s/metadata", cc.Campaign.ID, entity.ID) }
+			data-search-endpoint={ fmt.Sprintf("/campaigns/%s/entities/search", cc.Campaign.ID) }
+			data-self-id={ entity.ID }
+			data-name={ entity.Name }
+			data-label={ derefStr(entity.TypeLabel) }
+			data-parent-id={ parent.ID }
+			data-parent-name={ parent.Name }
+			data-structure={ boolAttr(structure) }
+		>
+			<div class="ag-head">
+				<h4>Page details</h4>
+				<button type="button" class="ag-x" aria-label="Close" onclick={ headerCall("nameClose") }><i class="fa-solid fa-xmark"></i></button>
+			</div>
+			<div class="ag-body">
+				<div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+					<div>
+						<label class="block text-xs font-medium text-fg-body mb-1" for="page-name-input">Name</label>
+						<input id="page-name-input" type="text" class="input w-full text-sm" maxlength="200" value={ entity.Name } data-f="name" oninput={ headerCall("nameInput") }/>
+					</div>
+					if structure {
+						<div>
+							<label class="block text-xs font-medium text-fg-body mb-1" for="page-label-input">Descriptor</label>
+							<input id="page-label-input" type="text" class="input w-full text-sm" placeholder="e.g., City, NPC, Artifact" maxlength="100" value={ derefStr(entity.TypeLabel) } data-f="label" oninput={ headerCall("nameInput") }/>
+						</div>
+					}
+				</div>
+				if structure {
+					<div style="margin-top:12px">
+						<label class="block text-xs font-medium text-fg-body mb-1" for="page-parent-search">Parent page</label>
+						<div class="ag-search">
+							<i class="fa-solid fa-magnifying-glass"></i>
+							<input id="page-parent-search" type="search" class="input w-full text-sm" placeholder="Search pages" aria-label="Search pages" autocomplete="off" data-parent-q oninput={ headerCall("parentSearch") }/>
+						</div>
+						<div class="ag-list" role="radiogroup" aria-label="Parent page" style="max-height:170px" data-parent-list>
+							<label class="ag-row">
+								<input type="radio" name="page-parent" value="" checked?={ parent.ID == "" } onchange={ headerCall("nameInput") }/>
+								<span class="ag-name"><b>No parent</b></span>
+							</label>
+							if parent.ID != "" {
+								<label class="ag-row">
+									<input type="radio" name="page-parent" value={ parent.ID } checked onchange={ headerCall("nameInput") }/>
+									<span class="ag-name"><b>{ parentLabel(parent) }</b></span>
+								</label>
+							}
+						</div>
+					</div>
+				}
+				<p class="ag-err" role="alert" data-err hidden></p>
+				<div class="ag-foot">
+					<span class="ag-sp"></span>
+					<button type="button" class="btn-secondary btn-sm" onclick={ headerCall("nameClose") }>Cancel</button>
+					<button type="button" class="btn-primary btn-sm ph-save" data-save disabled onclick={ headerCall("nameSave") }>
+						<span class="ph-spin" aria-hidden="true"></span>
+						<i class="fa-solid fa-check ph-ok" aria-hidden="true"></i>
+						<span data-save-label>Save</span>
+					</button>
+				</div>
+			</div>
+			<div class="ag-warn" role="alert">
+				<i class="fa-solid fa-triangle-exclamation"></i>
+				<span>Not saved yet. Save the details, or throw the change away.</span>
+				<button type="button" onclick={ headerCall("nameDiscard") }>Discard</button>
+			</div>
+		</div>
+	</div>
+}
+
+// parentLabel names the saved parent, or says there is one the viewer cannot see.
+func parentLabel(p pageParent) string {
+	if p.Name != "" {
+		return p.Name
+	}
+	return "A page you can't see"
+}

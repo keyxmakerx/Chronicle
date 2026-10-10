@@ -37,37 +37,29 @@ Chronicle.register('inventory', {
     style.textContent = [
       '.inv { font-size: 0.875rem; }',
       '.inv-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; }',
-      '.inv-header h3 { font-size: 0.875rem; font-weight: 600; margin: 0; color: var(--text-primary, #1f2937); }',
-      '.dark .inv-header h3 { color: #e5e7eb; }',
-      '.inv-add-btn { font-size: 0.75rem; padding: 0.25rem 0.5rem; border-radius: 0.25rem; background: #3b82f6; color: #fff; border: none; cursor: pointer; }',
-      '.inv-add-btn:hover { background: #2563eb; }',
-      '.inv-empty { color: #9ca3af; font-style: italic; padding: 1rem; text-align: center; }',
+      '.inv-header h3 { font-size: 0.875rem; font-weight: 600; margin: 0; color: var(--color-text-primary, #1f2937); }',
+      '.inv-add-btn { font-size: 0.75rem; padding: 0.25rem 0.5rem; border-radius: 0.25rem; background: var(--color-info, #3b82f6); color: #fff; border: none; cursor: pointer; }',
+      '.inv-add-btn:hover { background: var(--color-info-hover, #2563eb); }',
+      '.inv-empty { color: var(--color-text-muted, #9ca3af); font-style: italic; padding: 1rem; text-align: center; }',
       '.inv-list { display: flex; flex-direction: column; gap: 0.375rem; }',
-      '.inv-item { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem; border-radius: 0.375rem; background: var(--bg-secondary, #f9fafb); border: 1px solid var(--border, #e5e7eb); }',
-      '.dark .inv-item { background: #1f2937; border-color: #374151; }',
+      '.inv-item { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem; border-radius: 0.375rem; background: var(--color-card-bg, #f9fafb); border: 1px solid var(--color-border, #e5e7eb); }',
       '.inv-item-icon { width: 1.75rem; height: 1.75rem; display: flex; align-items: center; justify-content: center; border-radius: 0.25rem; flex-shrink: 0; font-size: 0.75rem; }',
       '.inv-item-info { flex: 1; min-width: 0; }',
-      '.inv-item-name { font-weight: 500; color: var(--text-primary, #1f2937); text-decoration: none; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.8125rem; }',
+      '.inv-item-name { font-weight: 500; color: var(--color-text-primary, #1f2937); text-decoration: none; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.8125rem; }',
       '.inv-item-name:hover { text-decoration: underline; }',
-      '.dark .inv-item-name { color: #e5e7eb; }',
-      '.inv-item-meta { font-size: 0.6875rem; color: #6b7280; margin-top: 1px; }',
+      '.inv-item-meta { font-size: 0.6875rem; color: var(--color-text-secondary, #6b7280); margin-top: 1px; }',
       '.inv-item-controls { display: flex; align-items: center; gap: 0.375rem; flex-shrink: 0; }',
-      '.inv-qty { width: 2.5rem; text-align: center; font-size: 0.75rem; padding: 0.125rem; border: 1px solid #d1d5db; border-radius: 0.25rem; }',
-      '.dark .inv-qty { background: #374151; border-color: #4b5563; color: #e5e7eb; }',
+      '.inv-qty { width: 2.5rem; text-align: center; font-size: 0.75rem; padding: 0.125rem; border: 1px solid var(--color-input-border, #d1d5db); border-radius: 0.25rem; background: var(--color-input-bg, #fff); color: var(--color-text-primary, #1f2937); }',
       '.inv-toggle { font-size: 0.5625rem; padding: 0.125rem 0.375rem; border-radius: 9999px; border: none; cursor: pointer; white-space: nowrap; }',
-      '.inv-toggle-on { background: #d1fae5; color: #065f46; }',
-      '.inv-toggle-off { background: #f3f4f6; color: #9ca3af; }',
-      '.dark .inv-toggle-off { background: #374151; color: #6b7280; }',
-      '.inv-remove { color: #ef4444; cursor: pointer; border: none; background: none; font-size: 0.75rem; padding: 0.125rem; }',
-      '.inv-remove:hover { color: #dc2626; }',
-      '.inv-search { width: 100%; padding: 0.375rem 0.5rem; border: 1px solid #d1d5db; border-radius: 0.25rem; font-size: 0.8125rem; margin-bottom: 0.5rem; }',
-      '.dark .inv-search { background: #374151; border-color: #4b5563; color: #e5e7eb; }',
+      '.inv-toggle-on { background: var(--color-ok-bg, #d1fae5); color: var(--color-ok-fg, #065f46); }',
+      '.inv-toggle-off { background: var(--color-bg-tertiary, #f3f4f6); color: var(--color-text-muted, #9ca3af); }',
+      '.inv-remove { color: var(--color-danger, #ef4444); cursor: pointer; border: none; background: none; font-size: 0.75rem; padding: 0.125rem; }',
+      '.inv-remove:hover { color: var(--color-danger-strong, #dc2626); }',
+      '.inv-search { width: 100%; padding: 0.375rem 0.5rem; border: 1px solid var(--color-input-border, #d1d5db); border-radius: 0.25rem; font-size: 0.8125rem; margin-bottom: 0.5rem; background: var(--color-input-bg, #fff); color: var(--color-text-primary, #1f2937); }',
       '.inv-search-results { max-height: 10rem; overflow-y: auto; }',
       '.inv-search-item { display: flex; align-items: center; gap: 0.5rem; padding: 0.375rem 0.5rem; cursor: pointer; border-radius: 0.25rem; font-size: 0.8125rem; }',
-      '.inv-search-item:hover { background: #f3f4f6; }',
-      '.dark .inv-search-item:hover { background: #374151; }',
-      '.inv-add-panel { border: 1px solid #e5e7eb; border-radius: 0.375rem; padding: 0.75rem; margin-bottom: 0.75rem; }',
-      '.dark .inv-add-panel { border-color: #374151; }',
+      '.inv-search-item:hover { background: var(--color-bg-tertiary, #f3f4f6); }',
+      '.inv-add-panel { border: 1px solid var(--color-border, #e5e7eb); border-radius: 0.375rem; padding: 0.75rem; margin-bottom: 0.75rem; }',
     ].join('\n');
     el.appendChild(style);
 
@@ -138,8 +130,11 @@ Chronicle.register('inventory', {
       // Icon.
       var icon = document.createElement('div');
       icon.className = 'inv-item-icon';
-      icon.style.background = (item.targetEntityColor || '#6b7280') + '22';
-      icon.style.color = item.targetEntityColor || '#6b7280';
+      // The tint is the colour at about 13% so a page type's colour still reads;
+      // colour-mix works with a token fallback where a hex+alpha suffix would not.
+      var tint = item.targetEntityColor || 'var(--color-text-secondary, #6b7280)';
+      icon.style.background = 'color-mix(in srgb, ' + tint + ' 13%, transparent)';
+      icon.style.color = tint;
       icon.innerHTML = '<i class="fa-solid ' + Chronicle.escapeHtml(item.targetEntityIcon || 'fa-gem') + '"></i>';
       row.appendChild(icon);
 
@@ -179,7 +174,7 @@ Chronicle.register('inventory', {
       } else {
         var qtySpan = document.createElement('span');
         qtySpan.style.fontSize = '0.75rem';
-        qtySpan.style.color = '#6b7280';
+        qtySpan.style.color = 'var(--color-text-secondary, #6b7280)';
         qtySpan.textContent = 'x' + (meta.quantity || 1);
         controls.appendChild(qtySpan);
       }
@@ -256,7 +251,7 @@ Chronicle.register('inventory', {
       state.searchResults.forEach(function (entity) {
         var item = document.createElement('div');
         item.className = 'inv-search-item';
-        item.innerHTML = '<i class="fa-solid ' + Chronicle.escapeHtml(entity.type_icon || 'fa-gem') + '" style="color:' + Chronicle.escapeAttr(entity.type_color || '#6b7280') + ';font-size:0.75rem"></i> ' +
+        item.innerHTML = '<i class="fa-solid ' + Chronicle.escapeHtml(entity.type_icon || 'fa-gem') + '" style="color:' + Chronicle.escapeAttr(entity.type_color || 'var(--color-text-secondary, #6b7280)') + ';font-size:0.75rem"></i> ' +
           '<span>' + Chronicle.escapeHtml(entity.name) + '</span>';
         item.addEventListener('click', function () {
           addItem(entity.id);
