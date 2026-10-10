@@ -224,6 +224,9 @@ type CampaignMember struct {
 	DisplayName   string  `json:"display_name,omitempty"`
 	Email         string  `json:"email,omitempty"`
 	AvatarPath    *string `json:"avatar_path,omitempty"`
+	// IsGuest marks someone who joined with a guest code and has no email
+	// yet; Email is then empty.
+	IsGuest bool `json:"is_guest,omitempty"`
 	// Joined from entities table for character display.
 	CharacterName *string `json:"character_name,omitempty"`
 }

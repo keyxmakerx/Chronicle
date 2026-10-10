@@ -31,6 +31,14 @@ func RegisterRoutes(e *echo.Echo, h *Handler) {
 	e.GET("/reset-password", h.ResetPasswordForm)
 	e.POST("/reset-password", h.ResetPassword, middleware.RateLimit(3, time.Minute))
 
+	// Guest codes: anyone may join with one; a signed-in person joins with
+	// their own account. Each try checks a code, so it is throttled.
+	e.GET("/join", h.JoinPage, OptionalAuth(h.service))
+	e.POST("/join", h.Join, OptionalAuth(h.service), middleware.RateLimit(10, time.Minute))
+	e.GET("/account/guest", h.GuestPanelFragment, RequireAuth(h.service))
+	e.POST("/account/guest/keep", h.KeepGuestAccount, RequireAuth(h.service), middleware.RateLimit(10, time.Minute))
+	e.POST("/account/guest/merge", h.MergeGuest, RequireAuth(h.service), middleware.RateLimit(10, time.Minute))
+
 	// Logout requires an active session.
 	e.POST("/logout", h.Logout)
 

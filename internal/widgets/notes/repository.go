@@ -871,6 +871,18 @@ func (r *noteRepository) UpdateTranscript(ctx context.Context, id string, transc
 	return nil
 }
 
+// ReassignUser moves a guest's notes in one campaign to the account they
+// merged into.
+func (r *noteRepository) ReassignUser(ctx context.Context, campaignID, fromUserID, toUserID string) (int64, error) {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE notes SET user_id = ? WHERE campaign_id = ? AND user_id = ?`,
+		toUserID, campaignID, fromUserID)
+	if err != nil {
+		return 0, fmt.Errorf("reassigning notes: %w", err)
+	}
+	return res.RowsAffected()
+}
+
 // DeletePrivateByUser removes a deleted account's unshared notes. Folders
 // stay: deleting one cascades to the notes inside, which may be shared.
 func (r *noteRepository) DeletePrivateByUser(ctx context.Context, userID string) (int64, error) {

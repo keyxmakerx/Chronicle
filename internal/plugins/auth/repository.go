@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-sql-driver/mysql"
+
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
 
@@ -77,6 +79,11 @@ type UserRepository interface {
 	ReplaceRecoveryCodes(ctx context.Context, userID string, hashes []string) error
 	UseRecoveryCode(ctx context.Context, userID, hash string) (bool, error)
 	CountRecoveryCodes(ctx context.Context, userID string) (int, error)
+
+	// Guests. KeepGuestAccount gives a guest an email and password and lifts
+	// the fence; an email someone else uses is a Conflict.
+	KeepGuestAccount(ctx context.Context, userID, email, passwordHash string) error
+	ListCampaignGuests(ctx context.Context, campaignID string) ([]string, error)
 }
 
 // userRepository implements UserRepository with hand-written MariaDB queries.
@@ -91,8 +98,8 @@ func NewUserRepository(db *sql.DB) UserRepository {
 
 // Create inserts a new user row into the users table.
 func (r *userRepository) Create(ctx context.Context, user *User) error {
-	query := `INSERT INTO users (id, email, display_name, password_hash, is_admin, created_at)
-	          VALUES (?, ?, ?, ?, ?, ?)`
+	query := `INSERT INTO users (id, email, display_name, password_hash, is_admin, created_at, guest_campaign_id)
+	          VALUES (?, ?, ?, ?, ?, ?, ?)`
 
 	_, err := r.db.ExecContext(ctx, query,
 		user.ID,
@@ -101,6 +108,7 @@ func (r *userRepository) Create(ctx context.Context, user *User) error {
 		user.PasswordHash,
 		user.IsAdmin,
 		user.CreatedAt,
+		user.GuestCampaignID,
 	)
 	if err != nil {
 		return fmt.Errorf("inserting user: %w", err)
@@ -114,7 +122,7 @@ func (r *userRepository) Create(ctx context.Context, user *User) error {
 func (r *userRepository) FindByID(ctx context.Context, id string) (*User, error) {
 	query := `SELECT id, email, display_name, password_hash, avatar_path,
 	                 is_admin, is_disabled, totp_secret, totp_enabled, timezone,
-	                 created_at, last_login_at
+	                 created_at, last_login_at, guest_campaign_id
 	          FROM users WHERE id = ?`
 
 	user := &User{}
@@ -131,6 +139,7 @@ func (r *userRepository) FindByID(ctx context.Context, id string) (*User, error)
 		&user.Timezone,
 		&user.CreatedAt,
 		&user.LastLoginAt,
+		&user.GuestCampaignID,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, apperror.NewNotFound("user not found")
@@ -147,7 +156,7 @@ func (r *userRepository) FindByID(ctx context.Context, id string) (*User, error)
 func (r *userRepository) FindByEmail(ctx context.Context, email string) (*User, error) {
 	query := `SELECT id, email, display_name, password_hash, avatar_path,
 	                 is_admin, is_disabled, totp_secret, totp_enabled, timezone,
-	                 created_at, last_login_at
+	                 created_at, last_login_at, guest_campaign_id
 	          FROM users WHERE email = ?`
 
 	user := &User{}
@@ -164,6 +173,7 @@ func (r *userRepository) FindByEmail(ctx context.Context, email string) (*User, 
 		&user.Timezone,
 		&user.CreatedAt,
 		&user.LastLoginAt,
+		&user.GuestCampaignID,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, apperror.NewNotFound("user not found")
@@ -659,4 +669,46 @@ func (r *userRepository) ConfirmEmailChange(ctx context.Context, userID, newEmai
 		return apperror.NewNotFound("user not found")
 	}
 	return nil
+}
+
+// --- Guests ---
+
+// KeepGuestAccount turns a guest into an ordinary account. The guest
+// condition in the WHERE keeps it from ever rewriting a full account.
+func (r *userRepository) KeepGuestAccount(ctx context.Context, userID, email, passwordHash string) error {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE users SET email = ?, password_hash = ?, guest_campaign_id = NULL
+		  WHERE id = ? AND guest_campaign_id IS NOT NULL AND deleted_at IS NULL`,
+		email, passwordHash, userID)
+	var myErr *mysql.MySQLError
+	if errors.As(err, &myErr) && myErr.Number == 1062 {
+		return apperror.NewConflict("that email already has an account; use \"I already have an account\" instead")
+	}
+	if err != nil {
+		return fmt.Errorf("keeping guest account: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return apperror.NewNotFound("guest account not found")
+	}
+	return nil
+}
+
+// ListCampaignGuests returns the guests fenced to a campaign that are still
+// live accounts.
+func (r *userRepository) ListCampaignGuests(ctx context.Context, campaignID string) ([]string, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id FROM users WHERE guest_campaign_id = ? AND deleted_at IS NULL`, campaignID)
+	if err != nil {
+		return nil, fmt.Errorf("listing guests: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scanning guest: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }

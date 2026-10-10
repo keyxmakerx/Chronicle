@@ -3,6 +3,7 @@ package auth
 import (
 	"net/http"
 	"net/url"
+	"path"
 	"strings"
 
 	"github.com/labstack/echo/v4"
@@ -33,6 +34,10 @@ func RequireAuth(service AuthService) echo.MiddlewareFunc {
 				// Invalid or expired session -- clear the stale cookie.
 				clearSessionCookie(c)
 				return handleUnauthenticated(c)
+			}
+
+			if session.GuestCampaignID != "" && !guestMayReach(c.Request().URL.Path, session.GuestCampaignID) {
+				return guestFenced(c, session.GuestCampaignID)
 			}
 
 			// Store session data in context for downstream handlers.
@@ -109,6 +114,12 @@ func OptionalAuth(service AuthService) echo.MiddlewareFunc {
 			token := getSessionToken(c)
 			if token != "" {
 				session, err := service.ValidateSession(c.Request().Context(), token)
+				// Outside their campaign a guest is just a visitor, so a
+				// public page shows them only what anyone may see.
+				if err == nil && session.GuestCampaignID != "" &&
+					!guestMayReach(c.Request().URL.Path, session.GuestCampaignID) {
+					return next(c)
+				}
 				if err == nil {
 					c.Set(contextKeySession, session)
 					c.Set(contextKeyUserID, session.UserID)
@@ -120,6 +131,62 @@ func OptionalAuth(service AuthService) echo.MiddlewareFunc {
 			return next(c)
 		}
 	}
+}
+
+// guestMayReach reports whether a guest may use a path: their own campaign
+// and what its pages need, nothing else on the site. It is an allow list,
+// so a route added later stays closed to guests until it is added here.
+func guestMayReach(p, campaignID string) bool {
+	// Echo routes the raw path, so a dot segment could carry a guest into a
+	// prefix it doesn't name; such paths are never allowed.
+	if clean := path.Clean(p); p == "" || (clean != p && clean+"/" != p) {
+		return false
+	}
+	own := []string{
+		"/campaigns/" + campaignID,
+		"/embed/campaigns/" + campaignID,
+		"/api/notes-app/campaigns/" + campaignID,
+		"/media",
+		"/notifications",
+		"/logout",
+		"/account/guest",
+		"/ws",
+		"/extensions",
+		"/static",
+	}
+	// Only the join page itself: /join/:code would add a guest to another
+	// campaign.
+	if p == "/join" {
+		return true
+	}
+	for _, prefix := range own {
+		if p == prefix || strings.HasPrefix(p, prefix+"/") {
+			return true
+		}
+	}
+	return false
+}
+
+// guestFenced sends a guest who wandered outside back to their campaign.
+func guestFenced(c echo.Context, campaignID string) error {
+	home := "/campaigns/" + campaignID
+	if isAPIRequest(c) {
+		return c.JSON(http.StatusForbidden, map[string]string{
+			"error":   "guest",
+			"message": "Guests can only use their own campaign. Keep your account to use the rest of the site.",
+		})
+	}
+	if isHTMXRequest(c) {
+		c.Response().Header().Set("HX-Redirect", home)
+		return c.NoContent(http.StatusNoContent)
+	}
+	if m := c.Request().Method; m == http.MethodGet || m == http.MethodHead {
+		return c.Redirect(http.StatusSeeOther, home)
+	}
+	return c.JSON(http.StatusForbidden, map[string]string{
+		"error":   "guest",
+		"message": "Guests can only use their own campaign.",
+	})
 }
 
 // --- Exported helpers for other plugins ---

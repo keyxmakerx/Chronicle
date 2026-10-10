@@ -1,0 +1,106 @@
+// guest_panel.templ renders the panel under a guest's banner: keep this
+// account by adding an email and password, or merge it into one they have.
+
+package auth
+
+// Guest panel tabs.
+const (
+	guestTabKeep  = "keep"
+	guestTabMerge = "merge"
+)
+
+// GuestPanel is loaded into #guest-panel and re-rendered in place when a
+// form is refused, keeping what the person typed except passwords.
+templ GuestPanel(csrfToken, tab, email, errMsg string, canKeep bool) {
+	<div class="step-settle border-b border-edge bg-surface-alt px-4 py-4">
+		<div class="max-w-md mx-auto space-y-4">
+			<div class="flex items-center justify-between gap-3">
+				<div class="inline-flex border border-edge rounded-lg overflow-hidden bg-surface" role="tablist" aria-label="Keep your account">
+					@guestTab(tab, guestTabKeep, "I'm new here")
+					@guestTab(tab, guestTabMerge, "I already have an account")
+				</div>
+				<button
+					type="button"
+					class="text-fg-muted hover:text-fg-body px-2 py-1 rounded"
+					aria-label="Close"
+					hx-get="/account/guest?tab=close"
+					hx-target="#guest-panel"
+					hx-swap="innerHTML"
+				>
+					<i class="fa-solid fa-xmark" aria-hidden="true"></i>
+				</button>
+			</div>
+			if tab == guestTabKeep && !canKeep {
+				<div class="space-y-2 text-sm" role="tabpanel">
+					<p class="text-fg-body">This site is invite-only, so a guest account can't become a full account here.</p>
+					<p class="text-fg-secondary">Ask your game master to invite your email to this campaign, then use the invite and merge this guest into it from "I already have an account". Until then you can keep playing as a guest in this browser.</p>
+				</div>
+			} else {
+				<form
+					class="space-y-3"
+					role="tabpanel"
+					hx-post={ "/account/guest/" + tab }
+					hx-target="#guest-panel"
+					hx-swap="innerHTML"
+				>
+					<input type="hidden" name="csrf_token" value={ csrfToken }/>
+					if tab == guestTabMerge {
+						<p class="text-sm text-fg-secondary">Your place in this campaign, your characters and your notes move to that account, and this guest account ends.</p>
+					} else {
+						<p class="text-sm text-fg-secondary">Add an email and password to sign in from anywhere. Everything you've made stays yours.</p>
+					}
+					if errMsg != "" {
+						<div class="alert-error" role="alert">{ errMsg }</div>
+					}
+					<div>
+						<label for="guest-email" class="block text-sm font-medium text-fg-body mb-1">Email</label>
+						<input type="email" id="guest-email" name="email" value={ email } required maxlength="255" class="input w-full" autocomplete="email"/>
+					</div>
+					<div>
+						<label for="guest-password" class="block text-sm font-medium text-fg-body mb-1">Password</label>
+						if tab == guestTabMerge {
+							<input type="password" id="guest-password" name="password" required class="input w-full" autocomplete="current-password"/>
+						} else {
+							<input type="password" id="guest-password" name="password" required minlength="8" maxlength="128" class="input w-full" autocomplete="new-password"/>
+							<p class="text-xs text-fg-muted mt-1">At least 8 characters.</p>
+						}
+					</div>
+					if tab == guestTabMerge {
+						<div>
+							<label for="guest-code" class="block text-sm font-medium text-fg-body mb-1">Two-factor code <span class="text-fg-muted font-normal">(only if that account uses one)</span></label>
+							<input type="text" id="guest-code" name="code" class="input w-full font-mono" autocomplete="one-time-code" inputmode="text" maxlength="20"/>
+						</div>
+					}
+					<button type="submit" class="btn-primary w-full py-2">
+						if tab == guestTabMerge {
+							Move everything to that account
+						} else {
+							Keep my account
+						}
+					</button>
+				</form>
+			}
+		</div>
+	</div>
+}
+
+// guestTab is one of the panel's two tabs.
+templ guestTab(current, tab, label string) {
+	<button
+		type="button"
+		role="tab"
+		aria-selected={ guestTabSelected(current, tab) }
+		class={ "px-3 py-1.5 text-sm font-medium", templ.KV("bg-accent text-white", current == tab), templ.KV("text-fg-body hover:bg-surface-alt", current != tab) }
+		hx-get={ "/account/guest?tab=" + tab }
+		hx-target="#guest-panel"
+		hx-swap="innerHTML"
+	>{ label }</button>
+}
+
+// guestTabSelected is the tab's aria-selected value.
+func guestTabSelected(current, tab string) string {
+	if current == tab {
+		return "true"
+	}
+	return "false"
+}

@@ -2633,6 +2633,16 @@ func (a *App) RegisterRoutes() {
 	inviteHandler := campaigns.NewInviteHandler(inviteService, campaignService, a.Config.BaseURL)
 	campaigns.RegisterInviteRoutes(e, inviteHandler, campaignService, authService)
 
+	// Guest codes: the owner's card, and auth's join page redeeming them.
+	// A guest exists only for their campaign, so removing them from it or
+	// deleting it ends their account.
+	guestCodeService := campaigns.NewGuestCodeService(campaigns.NewGuestCodeRepository(a.DB), campaignRepo)
+	campaigns.RegisterGuestCodeRoutes(e, campaigns.NewGuestCodeHandler(guestCodeService, a.Config.BaseURL), campaignService, authService)
+	auth.ConfigureGuests(authService, guestCodeService)
+	auth.OnGuestMerged(authService, guestCodeService.MoveGuestMembership)
+	campaigns.OnMemberRemoved(campaignService, authService.EndGuest)
+	campaigns.OnCampaignDeleted(campaignService, authService.EndCampaignGuests)
+
 	// Discover page (/) -- browse public campaigns. Uses OptionalAuth so
 	// authenticated users get the App layout with sidebar, while guests
 	// see a standalone page with signup CTA.
@@ -4043,6 +4053,11 @@ func (a *App) RegisterRoutes() {
 	auth.OnAccountDeleted(authService, func(ctx context.Context, userID string) {
 		forgetDeletedAccount(ctx, userID, entityRepo, entityNotesRepo, noteRepo, syncService)
 	})
+	// Merging a guest: their characters and notes in the campaign go to the
+	// account they merged into, before the guest account is emptied.
+	auth.OnGuestMerged(authService, func(ctx context.Context, campaignID, guestID, targetID string) error {
+		return moveGuestThings(ctx, campaignID, guestID, targetID, entityRepo, entityNotesRepo, noteRepo)
+	})
 	// Removing a player from a campaign ends their grants there, so a later
 	// re-invite starts with none.
 	campaigns.OnMemberRemoved(campaignService, func(ctx context.Context, campaignID, userID string) {
@@ -4861,6 +4876,7 @@ func (a *App) RegisterRoutes() {
 			ctx = layouts.SetUserEmail(ctx, session.Email)
 			ctx = layouts.SetUserAvatarPath(ctx, session.AvatarPath)
 			ctx = layouts.SetIsAdmin(ctx, session.IsAdmin)
+			ctx = layouts.SetIsGuest(ctx, session.GuestCampaignID != "")
 
 			// The person's own look. HTMX swaps never replace <html>, so only
 			// full-page renders need it. A failed read leaves the default look
@@ -5779,6 +5795,39 @@ func (a *accountDeletionAdapter) OwnedCampaigns(ctx context.Context, userID stri
 
 func (a *accountDeletionAdapter) LeaveAllCampaigns(ctx context.Context, userID string) error {
 	return a.campaigns.LeaveAllForDeletedAccount(ctx, userID)
+}
+
+// moveGuestThings hands a merged guest's characters, notes and page notes
+// in their campaign to the account they merged into. A store that can't
+// move is an error, never a skip: the guest's private notes are deleted
+// once the merge finishes, so anything left behind would be lost.
+func moveGuestThings(ctx context.Context, campaignID, guestID, targetID string, entityRepo, entityNotesRepo, noteRepo any) error {
+	type mover func(context.Context, string, string, string) (int64, error)
+	var steps []mover
+	if r, ok := entityRepo.(interface {
+		ReassignOwner(context.Context, string, string, string) (int64, error)
+	}); ok {
+		steps = append(steps, r.ReassignOwner)
+	}
+	if r, ok := noteRepo.(interface {
+		ReassignUser(context.Context, string, string, string) (int64, error)
+	}); ok {
+		steps = append(steps, r.ReassignUser)
+	}
+	if r, ok := entityNotesRepo.(interface {
+		ReassignAuthor(context.Context, string, string, string) (int64, error)
+	}); ok {
+		steps = append(steps, r.ReassignAuthor)
+	}
+	if len(steps) != 3 {
+		return fmt.Errorf("a store can't move a guest's things")
+	}
+	for _, fn := range steps {
+		if _, err := fn(ctx, campaignID, guestID, targetID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // forgetDeletedAccount clears what other plugins hold about a deleted

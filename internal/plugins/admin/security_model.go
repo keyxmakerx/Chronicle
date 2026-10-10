@@ -31,6 +31,9 @@ const (
 	EventProviderSaved          = "admin.sign_in_provider_saved"
 	EventSignInLinked           = "sign_in.linked"
 	EventSignInUnlinked         = "sign_in.unlinked"
+	EventGuestJoined            = "guest.joined"
+	EventGuestKept              = "guest.kept"
+	EventGuestMerged            = "guest.merged"
 )
 
 // SecurityEvent represents a single site-wide security event. Unlike campaign
@@ -87,6 +90,9 @@ func EventTypeLabel(eventType string) string {
 		EventProviderSaved:          "Sign-in Provider Changed",
 		EventSignInLinked:           "Sign-in Linked",
 		EventSignInUnlinked:         "Sign-in Unlinked",
+		EventGuestJoined:            "Guest Joined",
+		EventGuestKept:              "Guest Kept Their Account",
+		EventGuestMerged:            "Guest Merged Into an Account",
 	}
 	if label, ok := labels[eventType]; ok {
 		return label
@@ -120,6 +126,9 @@ func EventTypeIcon(eventType string) string {
 		EventProviderSaved:          "fa-solid fa-right-to-bracket text-purple-500",
 		EventSignInLinked:           "fa-solid fa-link text-emerald-500",
 		EventSignInUnlinked:         "fa-solid fa-link-slash text-amber-500",
+		EventGuestJoined:            "fa-solid fa-ticket text-blue-500",
+		EventGuestKept:              "fa-solid fa-user-check text-emerald-500",
+		EventGuestMerged:            "fa-solid fa-code-merge text-emerald-500",
 	}
 	if icon, ok := icons[eventType]; ok {
 		return icon

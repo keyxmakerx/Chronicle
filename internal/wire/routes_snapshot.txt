@@ -53,6 +53,7 @@ DELETE	/entity-types/:etid/dashboard-layout	internal/plugins/entities/routes.go
 DELETE	/files/:fid	internal/plugins/media/routes.go
 DELETE	/groups/:gid	internal/plugins/campaigns/routes.go
 DELETE	/groups/:gid/members/:uid	internal/plugins/campaigns/routes.go
+DELETE	/guest-codes/:gcid	internal/plugins/campaigns/guest_code_handler.go
 DELETE	/invites/:inviteId	internal/plugins/campaigns/routes.go
 DELETE	/join-code	internal/plugins/campaigns/routes.go
 DELETE	/layout-presets/:pid	internal/plugins/entities/layout_preset_routes.go
@@ -130,6 +131,7 @@ GET	/:typeSlug	internal/plugins/entities/routes.go
 GET	/about	internal/app/routes.go
 GET	/account	internal/plugins/auth/routes.go
 GET	/account/email/verify	internal/plugins/auth/routes.go
+GET	/account/guest	internal/plugins/auth/routes.go
 GET	/activity	internal/plugins/admin/routes.go
 GET	/activity	internal/plugins/audit/routes.go
 GET	/activity/embed	internal/plugins/audit/routes.go
@@ -341,6 +343,7 @@ GET	/game-nights	internal/plugins/sessions/routes.go
 GET	/groups	internal/plugins/campaigns/routes.go
 GET	/groups/:gid	internal/plugins/campaigns/routes.go
 GET	/groups/manage	internal/plugins/campaigns/routes.go
+GET	/guest-codes	internal/plugins/campaigns/guest_code_handler.go
 GET	/health	internal/app/routes.go
 GET	/healthz	internal/app/routes.go
 GET	/import	internal/plugins/vault_import/routes.go
@@ -350,6 +353,7 @@ GET	/integrations/keys	internal/plugins/syncapi/routes.go
 GET	/invites	internal/plugins/campaigns/routes.go
 GET	/invites/accept	internal/plugins/campaigns/routes.go
 GET	/invites/page	internal/plugins/campaigns/routes.go
+GET	/join	internal/plugins/auth/routes.go
 GET	/join/:code	internal/plugins/campaigns/routes.go
 GET	/journal	internal/widgets/notes/routes.go
 GET	/journal/:noteId	internal/widgets/notes/routes.go
@@ -551,6 +555,8 @@ POST	/:id/rate	internal/plugins/bestiary/routes.go
 POST	/:id/review	internal/plugins/packages/routes.go
 POST	/account/avatar	internal/plugins/auth/routes.go
 POST	/account/delete	internal/plugins/auth/routes.go
+POST	/account/guest/keep	internal/plugins/auth/routes.go
+POST	/account/guest/merge	internal/plugins/auth/routes.go
 POST	/account/reauth	internal/plugins/auth/routes.go
 POST	/account/sign-in/link	internal/plugins/auth/routes.go
 POST	/account/sign-in/unlink	internal/plugins/auth/routes.go
@@ -667,10 +673,12 @@ POST	/foundry-vtt/update/mode	internal/plugins/foundry_vtt/routes.go
 POST	/foundry-vtt/update/switch	internal/plugins/foundry_vtt/routes.go
 POST	/groups	internal/plugins/campaigns/routes.go
 POST	/groups/:gid/members	internal/plugins/campaigns/routes.go
+POST	/guest-codes	internal/plugins/campaigns/guest_code_handler.go
 POST	/import/markdown/preview	internal/plugins/vault_import/routes.go
 POST	/import/markdown/start	internal/plugins/vault_import/routes.go
 POST	/install	internal/extensions/routes.go
 POST	/invites	internal/plugins/campaigns/routes.go
+POST	/join	internal/plugins/auth/routes.go
 POST	/join-code	internal/plugins/campaigns/routes.go
 POST	/layout-presets	internal/plugins/entities/layout_preset_routes.go
 POST	/login	internal/plugins/auth/routes.go

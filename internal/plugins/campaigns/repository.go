@@ -559,7 +559,7 @@ func (r *campaignRepository) FindMember(ctx context.Context, campaignID, userID 
 // ListMembers returns all members of a campaign with their display info.
 func (r *campaignRepository) ListMembers(ctx context.Context, campaignID string) ([]CampaignMember, error) {
 	query := `SELECT cm.campaign_id, cm.user_id, cm.role, cm.character_entity_id, cm.joined_at,
-	                 u.display_name, u.email, u.avatar_path,
+	                 u.display_name, u.email, u.avatar_path, u.guest_campaign_id IS NOT NULL,
 	                 e.name
 	          FROM campaign_members cm
 	          INNER JOIN users u ON u.id = cm.user_id
@@ -580,10 +580,13 @@ func (r *campaignRepository) ListMembers(ctx context.Context, campaignID string)
 		var roleStr string
 		if err := rows.Scan(
 			&m.CampaignID, &m.UserID, &roleStr, &m.CharacterEntityID, &m.JoinedAt,
-			&m.DisplayName, &m.Email, &m.AvatarPath,
+			&m.DisplayName, &m.Email, &m.AvatarPath, &m.IsGuest,
 			&m.CharacterName,
 		); err != nil {
 			return nil, fmt.Errorf("scanning member row: %w", err)
+		}
+		if m.IsGuest {
+			m.Email = ""
 		}
 		m.Role = RoleFromString(roleStr)
 		members = append(members, m)
