@@ -5273,7 +5273,7 @@ func (a *App) RegisterRoutes() {
 		records.NoteKind{Svc: noteSvc, Entities: entityService},
 		aiHouseRules,
 		records.SystemEntryKind{Svc: systemEntrySvc},
-		records.GeneratorKind{Cal: calendarService, Tables: aiTables},
+		records.GeneratorKind{Cal: calendarService, Tables: aiTables, Weather: calendarService},
 	)
 	aiWorkspaceHandler.SetRecords(records.NewRegistry(aiKinds...))
 

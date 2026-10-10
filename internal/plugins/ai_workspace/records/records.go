@@ -158,7 +158,7 @@ func (r *Registry) PlanAll(ctx context.Context, campaignID string, a Actor, recs
 // can do" list, which every prompt carries; Docs has the full formats.
 var briefs = map[string]string{
 	KindCalendar:   "make the campaign calendar, or change its months, weekdays, seasons, moons, year label, eras and current date",
-	"event":        "calendar events on the campaign calendar",
+	"event":        "calendar events on the campaign calendar, one-off or repeating",
 	"weather":      "one day's weather on the calendar",
 	"table":        "rolling tables and their entries",
 	"shop-stock":   "what a shop sells, its price and how many",

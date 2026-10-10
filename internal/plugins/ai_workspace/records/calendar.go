@@ -91,7 +91,9 @@ type EventKind struct{ Svc CalendarAPI }
 func (EventKind) Name() string  { return "event" }
 func (EventKind) Label() string { return "Calendar event" }
 func (EventKind) Doc() string {
-	return "A calendar event, matched by `name`. Keys: `year`, `month` (number or month name), `day`; optional `end_year`/`end_month`/`end_day`, `hour`, `minute` (whole numbers), `all_day` (true/false), `visibility` (`everyone` or `dm_only`), `color` (#hex), `icon` (Font Awesome name), `rename_to`. The body is the description. When two events share a name, give the date too. On `action: update`, `year`/`month`/`day` say which event to change; to move it to another date add `move_to_year`/`move_to_month`/`move_to_day` (all three).\n\n```\n---\nkind: event\nname: Midwinter Feast\nyear: 1492\nmonth: Hammer\nday: 21\nvisibility: everyone\n---\nThe lords of the city open their halls.\n```"
+	return "A calendar event, matched by `name`. Keys: `year`, `month` (number or month name), `day`; optional `end_year`/`end_month`/`end_day`, `hour`, `minute` (whole numbers), `all_day` (true/false), `visibility` (`everyone` or `dm_only`), `color` (#hex), `icon` (Font Awesome name), `rename_to`. The body is the description. When two events share a name, give the date too. On `action: update`, `year`/`month`/`day` say which event to change; to move it to another date add `move_to_year`/`move_to_month`/`move_to_day` (all three).\n\n" +
+		"To repeat, add `repeat:` (" + repeatTypes() + "; `none` on update stops it). The date is the first time. `yearly` repeats on the same month and day; `repeat_every` is the step (years for yearly, months for monthly, weeks for custom, where it is required, every Nth matching day for rule; not for weekly or biweekly). Optional end: `repeat_until_year`/`repeat_until_month`/`repeat_until_day` or `repeat_times`. `repeat: rule` takes `repeat_on`, a list of conditions a day must all meet, each one of: `moon` + `phase` (new, first_quarter, full, last_quarter); `weekday`, optionally with `nth` (1 to 5 or last) in its month; `weekdays` (a list); `day` (of the month, or last); `month`; `months` (a list); `season` (any day in it); `season_start` (a season's first day, or any); `event` (an event already on the calendar), optionally with `days` after it (negative for before). `repeat_offset_days` moves every match. Names are the calendar's own. Naming a repeat on update replaces the event's whole repeat.\n\n" +
+		"```\n---\nkind: event\nname: Midwinter Feast\nyear: 1492\nmonth: Hammer\nday: 21\nvisibility: everyone\nrepeat: yearly\n---\nThe lords of the city open their halls.\n```\n\n```\n---\nkind: event\nname: Night of Wolves\nyear: 1492\nmonth: 1\nday: 1\nrepeat: rule\nrepeat_on:\n  - moon: Selune\n    phase: full\n  - season: Winter\n---\n```"
 }
 
 // find returns the event this record names; a date narrows same-named events.
@@ -163,12 +165,22 @@ func (k EventKind) Plan(ctx context.Context, campaignID string, a Actor, r Recor
 	if moving && r.Action != ActionUpdate {
 		return Plan{Error: "move_to_year, move_to_month and move_to_day only apply to action: update"}
 	}
+	rep, err := k.repeat(ctx, campaignID, a, cal, r)
+	if err != nil {
+		return Plan{Error: planError(err)}
+	}
+	if rep.set && r.Action == ActionDelete {
+		return Plan{Error: "repeat keys don't go with action: delete"}
+	}
+	if rep.set && rep.typ == "" && r.Action == ActionCreate {
+		return Plan{Error: "repeat: none only applies to action: update; leave repeat out instead"}
+	}
 	switch r.Action {
 	case ActionCreate:
 		if !dated {
 			return Plan{Error: "a new event needs year, month and day"}
 		}
-		p := Plan{Summary: dateLabel(cal, y, m, d) + " on " + cal.Name}
+		p := Plan{Summary: withRepeat(dateLabel(cal, y, m, d)+" on "+cal.Name, rep)}
 		if existing != nil {
 			p.Warnings = append(p.Warnings, "An event with this name already exists; this adds another")
 		}
@@ -178,15 +190,35 @@ func (k EventKind) Plan(ctx context.Context, campaignID string, a Actor, r Recor
 			return Plan{Error: "no event called " + quote(r.Name) + " to change"}
 		}
 		if moving {
-			return Plan{Summary: "moves the event on " + dateLabel(cal, existing.Year, existing.Month, existing.Day) + " to " + dateLabel(cal, my, mm, md)}
+			return Plan{Summary: withRepeat("moves the event on "+dateLabel(cal, existing.Year, existing.Month, existing.Day)+" to "+dateLabel(cal, my, mm, md), rep)}
 		}
-		return Plan{Summary: "changes the event on " + dateLabel(cal, existing.Year, existing.Month, existing.Day)}
+		return Plan{Summary: withRepeat("changes the event on "+dateLabel(cal, existing.Year, existing.Month, existing.Day), rep)}
 	default:
 		if existing == nil {
 			return Plan{Error: "no event called " + quote(r.Name) + " to remove"}
 		}
 		return Plan{Summary: "removes the event on " + dateLabel(cal, existing.Year, existing.Month, existing.Day)}
 	}
+}
+
+// repeat reads the row's repeat keys; the events are fetched only when a
+// rule may name one.
+func (k EventKind) repeat(ctx context.Context, campaignID string, a Actor, cal *calendar.Calendar, r Record) (repeatSpec, error) {
+	var evs []calendar.Event
+	if r.Has("repeat_on") {
+		var err error
+		if evs, err = k.Svc.ListEventsForCalendar(ctx, campaignID, cal.ID, a.Role); err != nil {
+			return repeatSpec{}, apperror.NewBadRequest("could not read the calendar's events")
+		}
+	}
+	return readRepeat(cal, r, evs)
+}
+
+func withRepeat(summary string, rep repeatSpec) string {
+	if s := rep.summary(); s != "" {
+		return summary + ", " + s
+	}
+	return summary
 }
 
 func (k EventKind) Apply(ctx context.Context, campaignID string, a Actor, r Record) error {
@@ -203,6 +235,10 @@ func (k EventKind) Apply(ctx context.Context, campaignID string, a Actor, r Reco
 	}
 	y, m, d, _, _ := readDate(cal, r, "")
 	ey, em, ed, ended, _ := readDate(cal, r, "end_")
+	rep, err := k.repeat(ctx, campaignID, a, cal, r)
+	if err != nil {
+		return err
+	}
 	if r.Action == ActionCreate {
 		in := calendar.CreateEventInput{
 			Name: r.Name, Year: y, Month: m, Day: d,
@@ -226,6 +262,7 @@ func (k EventKind) Apply(ctx context.Context, campaignID string, a Actor, r Reco
 		if s := r.Str("icon"); s != "" {
 			in.Icon = &s
 		}
+		rep.toCreate(&in)
 		_, err := k.Svc.CreateEvent(ctx, cal.ID, campaignID, in)
 		return err
 	}
@@ -272,6 +309,7 @@ func (k EventKind) Apply(ctx context.Context, campaignID string, a Actor, r Reco
 	if v, ok := r.Bool("all_day"); ok {
 		in.AllDay = patch.Of(v)
 	}
+	rep.toUpdate(&in)
 	return k.Svc.UpdateEvent(ctx, ev.ID, cal.ID, campaignID, in, a.Viewer())
 }
 

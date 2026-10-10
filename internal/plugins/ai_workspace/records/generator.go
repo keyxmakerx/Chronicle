@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 )
 
@@ -27,17 +28,54 @@ const (
 	maxGenNames       = 30 // the names engine's own per-kind maximum
 )
 
-// GeneratorKind runs one of Chronicle's generators.
+// weatherSettingsReader reads a calendar's climate, how long its weather
+// lasts, and the owner's own kinds of weather (calendar.CalendarService).
+type weatherSettingsReader interface {
+	GetWeatherSettings(ctx context.Context, calendarID, campaignID string, v permissions.Viewer) (*calendar.WeatherSettings, error)
+}
+
+// GeneratorKind runs one of Chronicle's generators. Weather, when set, gives
+// a weather run the calendar's own settings, as the calendar's weather sheet
+// does; without it a run uses the generator's defaults.
 type GeneratorKind struct {
-	Cal    CalendarAPI
-	Tables TableKind
+	Cal     CalendarAPI
+	Tables  TableKind
+	Weather weatherSettingsReader
+}
+
+// Weather tuning a row may set, with the generator's own bounds.
+var genWeatherNudges = []struct {
+	key      string
+	min, max float64
+}{
+	{"continuity", 0, 1},
+	{"warmer", -15, 15},
+	{"wetter", -1, 1},
+	{"windier", -1, 1},
+}
+
+func climateIDs() string {
+	ids := make([]string, len(calendar.WeatherClimates))
+	for i, c := range calendar.WeatherClimates {
+		ids[i] = c.ID
+	}
+	return strings.Join(ids, ", ")
+}
+
+func knownClimate(id string) bool {
+	for _, c := range calendar.WeatherClimates {
+		if c.ID == id {
+			return true
+		}
+	}
+	return false
 }
 
 func (GeneratorKind) Name() string  { return "generator" }
 func (GeneratorKind) Label() string { return "Generator" }
 func (GeneratorKind) Doc() string {
 	return "Asks Chronicle's own generators to make something, instead of writing it yourself. Use `action: create`. Keys by `generator`:\n" +
-		"- `weather`: weather for days of the default calendar, from `year`/`month`/`day` to `end_year`/`end_month`/`end_day`; optional `climate` (temperate, cold-coast, desert, tropical, highland, mediterranean, tundra, fey-wilds, ashlands, gloomfen). Days set by hand or locked are kept.\n" +
+		"- `weather`: weather for days of the default calendar, from `year`/`month`/`day` to `end_year`/`end_month`/`end_day`. It follows the calendar's own seasons, climate, how long its weather lasts, and the owner's own kinds of weather. Optional, for this run only: `climate` (" + climateIDs() + "), `continuity` (0 changes every day, 1 long spells), `warmer` (-15 to 15 degrees C), `wetter` and `windier` (-1 to 1). Days set by hand or locked are kept.\n" +
 		"- `events`: festivals and other calendar events for one `year`.\n" +
 		"- `sky`: sky events (eclipses, meteor showers, comets) for one `year`.\n" +
 		"- `names`: `count` names (up to 30) of `names` kind `people` or `places`, in a `theme` (pastoral, nautical, dwarven, elven, desert, imperial, fey, grim), added to the rolling table `table`.\n\n" +
@@ -52,6 +90,8 @@ type genPlan struct {
 	Scope     map[string]any  `json:"scope,omitempty"`
 	Seed      string          `json:"seed"`
 	NamesKind string          `json:"namesKind,omitempty"`
+	// Kinds is the owner's own kinds of weather, which the run may make.
+	Kinds []calendar.WeatherKind `json:"kinds,omitempty"`
 }
 
 type ymd struct{ Year, Month, Day int }
@@ -167,14 +207,16 @@ func (k GeneratorKind) plan(ctx context.Context, campaignID string, a Actor, r R
 		if n := countDays(cal, from, to, maxGenWeatherDays); n > maxGenWeatherDays {
 			return p, nil, "", badRequestf("generate at most %d days of weather at a time", maxGenWeatherDays)
 		}
-		if c := r.Str("climate"); c != "" {
-			p.Recipe["details"] = map[string]any{"climate": c}
+		details, climate, err := k.weatherDetails(ctx, campaignID, a, cal, r, &p)
+		if err != nil {
+			return p, nil, "", err
 		}
+		p.Recipe["details"] = details
 		p.Scope = map[string]any{"range": map[string]any{
 			"from": map[string]int{"year": y, "month": m, "day": d},
 			"to":   map[string]int{"year": ey, "month": em, "day": ed},
 		}}
-		return p, cal, "weather from " + dateLabel(cal, y, m, d) + " to " + dateLabel(cal, ey, em, ed) + ", kept off days set by hand or locked", nil
+		return p, cal, "weather from " + dateLabel(cal, y, m, d) + " to " + dateLabel(cal, ey, em, ed) + climate + ", kept off days set by hand or locked", nil
 	}
 	y, ok, err := r.Int("year")
 	if err != nil || !ok {
@@ -186,6 +228,62 @@ func (k GeneratorKind) plan(ctx context.Context, campaignID string, a Actor, r R
 		what = "sky events"
 	}
 	return p, cal, fmt.Sprintf("%s for the year %d on %s", what, y, cal.Name), nil
+}
+
+// weatherDetails is a weather run's recipe details: the row's own values,
+// else the calendar's settings. climate is the summary's wording for them.
+func (k GeneratorKind) weatherDetails(ctx context.Context, campaignID string, a Actor, cal *calendar.Calendar, r Record, p *genPlan) (map[string]any, string, error) {
+	details := map[string]any{}
+	var ws *calendar.WeatherSettings
+	if k.Weather != nil {
+		// Unreadable settings leave the generator's defaults, as on the
+		// calendar's weather sheet.
+		ws, _ = k.Weather.GetWeatherSettings(ctx, cal.ID, campaignID, a.Viewer())
+	}
+	from := " (the calendar's own)"
+	if ws != nil {
+		if knownClimate(ws.Climate) {
+			details["climate"] = ws.Climate
+		}
+		if ws.Continuity >= 0 && ws.Continuity <= 1 {
+			details["continuity"] = ws.Continuity
+		}
+		p.Kinds = ws.Kinds
+	}
+	if c := strings.ToLower(r.Str("climate")); c != "" {
+		if !knownClimate(c) {
+			return nil, "", badRequestf("climate: %q is not one of %s", c, climateIDs())
+		}
+		details["climate"] = c
+		from = ""
+	}
+	for _, n := range genWeatherNudges {
+		v, ok, err := r.Float(n.key)
+		if err != nil {
+			return nil, "", err
+		}
+		if !ok {
+			continue
+		}
+		if v < n.min || v > n.max {
+			return nil, "", badRequestf("%s must be from %v to %v", n.key, n.min, n.max)
+		}
+		details[n.key] = v
+	}
+	c, ok := details["climate"].(string)
+	if !ok {
+		return details, "", nil
+	}
+	return details, " in the " + weatherClimateName(c) + " climate" + from, nil
+}
+
+func weatherClimateName(id string) string {
+	for _, c := range calendar.WeatherClimates {
+		if c.ID == id {
+			return c.Name
+		}
+	}
+	return id
 }
 
 func (k GeneratorKind) Plan(ctx context.Context, campaignID string, a Actor, r Record) Plan {
