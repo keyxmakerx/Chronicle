@@ -47,8 +47,9 @@ func (r *placeRepository) Insert(ctx context.Context, p *Place) error {
 	if p.CreatedBy != "" {
 		by = p.CreatedBy
 	}
-	// INSERT IGNORE only swallows the duplicate key; the foreign keys still
-	// refuse a row whose page or parent is gone.
+	// INSERT IGNORE makes a repeated listing a no-op. It also turns a foreign
+	// key failure into a warning, so the service checks both pages are live
+	// first; a page purged in between just leaves no row.
 	_, err := r.db.ExecContext(ctx,
 		`INSERT IGNORE INTO entity_places (entity_id, parent_entity_id, campaign_id, sort_order, created_by)
 		 VALUES (?, ?, ?, ?, ?)`,
