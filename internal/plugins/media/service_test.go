@@ -22,6 +22,7 @@ type mockMediaRepo struct {
 	listByCampaignFn           func(ctx context.Context, campaignID string, limit, offset int) ([]MediaFile, int, error)
 	getStorageStatsFn          func(ctx context.Context) (*StorageStats, error)
 	listAllFn                  func(ctx context.Context, limit, offset int) ([]AdminMediaFile, int, error)
+	getUserNoteImageUsageFn    func(ctx context.Context, campaignID, userID string) (int64, int, error)
 	getCampaignUsageFn         func(ctx context.Context, campaignID string) (int64, int, error)
 	getUserCampaignlessUsageFn func(ctx context.Context, userID string) (int64, int, error)
 	findReferencesFn           func(ctx context.Context, campaignID, mediaID string) ([]MediaRef, error)
@@ -96,6 +97,13 @@ func (m *mockMediaRepo) ListAll(ctx context.Context, limit, offset int) ([]Admin
 func (m *mockMediaRepo) GetCampaignUsage(ctx context.Context, campaignID string) (int64, int, error) {
 	if m.getCampaignUsageFn != nil {
 		return m.getCampaignUsageFn(ctx, campaignID)
+	}
+	return 0, 0, nil
+}
+
+func (m *mockMediaRepo) GetUserNoteImageUsage(ctx context.Context, campaignID, userID string) (int64, int, error) {
+	if m.getUserNoteImageUsageFn != nil {
+		return m.getUserNoteImageUsageFn(ctx, campaignID, userID)
 	}
 	return 0, 0, nil
 }

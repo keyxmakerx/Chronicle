@@ -58,6 +58,12 @@ type MediaRepository interface {
 	// Used for storage quota enforcement at upload time.
 	GetCampaignUsage(ctx context.Context, campaignID string) (totalBytes int64, fileCount int, err error)
 
+	// GetUserNoteImageUsage returns the bytes and file count of the note
+	// pictures a user uploaded into a campaign, bound to a note or not. Bound
+	// ones are never swept and the owner cannot list them, so this is the only
+	// place their total is bounded.
+	GetUserNoteImageUsage(ctx context.Context, campaignID, userID string) (totalBytes int64, fileCount int, err error)
+
 	// GetUserCampaignlessUsage returns the total bytes and file count for a
 	// user's uploads that carry no campaign_id (avatars, and any
 	// /media/upload posted with a blank campaign_id). Used for storage
@@ -430,6 +436,23 @@ func (r *mediaRepository) GetCampaignUsage(ctx context.Context, campaignID strin
 	).Scan(&fileCount, &totalBytes)
 	if err != nil {
 		return 0, 0, fmt.Errorf("querying campaign storage usage: %w", err)
+	}
+	return totalBytes, fileCount, nil
+}
+
+// GetUserNoteImageUsage counts one uploader's note pictures in one campaign.
+// Every row counts, bound or not, so a member cannot dodge the cap by saving
+// each picture into a note.
+func (r *mediaRepository) GetUserNoteImageUsage(ctx context.Context, campaignID, userID string) (int64, int, error) {
+	var totalBytes int64
+	var fileCount int
+	err := r.db.QueryRowContext(ctx,
+		`SELECT COUNT(*), COALESCE(SUM(file_size), 0) FROM media_files
+		 WHERE campaign_id = ? AND uploaded_by = ? AND usage_type = ?`,
+		campaignID, userID, UsageNoteImage,
+	).Scan(&fileCount, &totalBytes)
+	if err != nil {
+		return 0, 0, fmt.Errorf("querying note picture usage: %w", err)
 	}
 	return totalBytes, fileCount, nil
 }

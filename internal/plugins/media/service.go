@@ -290,6 +290,14 @@ func (s *mediaService) Upload(ctx context.Context, input UploadInput) (*MediaFil
 		}
 	}
 
+	// Runs with or without a limiter: the cap is what keeps one member from
+	// holding the campaign's space in pictures nobody else can remove.
+	if input.UsageType == UsageNoteImage {
+		if err := s.checkNotePictureCap(ctx, input); err != nil {
+			return nil, err
+		}
+	}
+
 	// Validate magic bytes match declared MIME type.
 	if !validateMagicBytes(input.FileBytes, input.MimeType) {
 		return nil, apperror.NewBadRequest("file content does not match declared type")
@@ -515,6 +523,52 @@ func (s *mediaService) checkQuotas(ctx context.Context, input UploadInput) error
 		return apperror.NewBadRequest("campaign file count limit reached")
 	}
 
+	return nil
+}
+
+// Per-uploader share of a campaign for note pictures. Players can add these
+// without a Scribe role and only the notes that hold them can remove them, so
+// one member's total is bounded to leave room for everyone else.
+const (
+	// maxNotePictureBytesPerUser is the ceiling; a smaller campaign quota
+	// lowers it to a quarter of that quota.
+	maxNotePictureBytesPerUser int64 = 100 * 1024 * 1024
+	maxNotePicturesPerUser           = 200
+)
+
+// notePictureByteCap is the byte cap for one uploader: the smaller of the
+// ceiling and a quarter of the campaign's storage quota (0 = unlimited quota,
+// so the ceiling alone).
+func notePictureByteCap(campaignMaxStorage int64) int64 {
+	limit := maxNotePictureBytesPerUser
+	if campaignMaxStorage > 0 && campaignMaxStorage/4 < limit {
+		limit = campaignMaxStorage / 4
+	}
+	return limit
+}
+
+// errNotePictureSpace is what the editor shows; it says what to do, not which
+// number was hit.
+const errNotePictureSpace = "You've used your space for note pictures in this campaign. Remove some pictures from your notes to add more."
+
+// checkNotePictureCap refuses a note picture once the uploader holds their
+// share of the campaign. Unlike checkQuotas it fails closed when usage cannot
+// be read: this is the only bound on the pictures the owner cannot remove.
+func (s *mediaService) checkNotePictureCap(ctx context.Context, input UploadInput) error {
+	var campaignMax int64
+	if s.limiter != nil {
+		// A failed lookup leaves the fixed ceiling in force.
+		if _, maxStorage, _, err := s.limiter.GetEffectiveLimits(ctx, input.UploadedBy, input.CampaignID); err == nil {
+			campaignMax = maxStorage
+		}
+	}
+	usedBytes, count, err := s.repo.GetUserNoteImageUsage(ctx, input.CampaignID, input.UploadedBy)
+	if err != nil {
+		return apperror.NewInternal(err)
+	}
+	if usedBytes+input.FileSize > notePictureByteCap(campaignMax) || count+1 > maxNotePicturesPerUser {
+		return apperror.NewBadRequest(errNotePictureSpace)
+	}
 	return nil
 }
 
