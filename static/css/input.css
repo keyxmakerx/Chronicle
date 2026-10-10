@@ -126,8 +126,8 @@
 
     --ease-slide:      cubic-bezier(0.22, 0.8, 0.24, 1);  /* slows to a stop, no overshoot */
     --ease-turn:       cubic-bezier(0.45, 0.05, 0.25, 1); /* lifts slowly, lands softly */
-    --dur-arrive:      560ms;    /* entering Site admin: a heavy thing set down */
-    --ease-arrive:     cubic-bezier(0.55, 0, 0.1, 1);     /* slow to start, firm stop, no bounce */
+    --dur-arrive:      820ms;    /* entering Site admin: rise from the bottom, three bounces */
+    --dur-leave:       460ms;    /* leaving Site admin: it falls away down the screen */
 
     /* ──────────────────────────────────────────────────────────────────
      * V2 widget-animation durations — the `--motion-*` family, consumed
@@ -1174,29 +1174,60 @@
     background: rgb(var(--nav-accent, 99 102 241)); transform-origin: left center;
   }
 
-  /* Arrive: after the footer button is pressed the admin menu rises into
-     place like something heavy being set down: a slow start, a firm stop,
-     no bounce. Then the band's rule draws across. Calm and Off settle it at
-     once (the motion-level rules at the end of this file). */
-  .admin-arrive .admin-menu { animation: admin-rise var(--dur-arrive, 560ms) var(--ease-arrive, cubic-bezier(0.55, 0, 0.1, 1)) both; }
-  .admin-arrive .admin-band::after { animation: admin-rule 300ms var(--ease-slide) 420ms both; }
-  @keyframes admin-rise {
-    0%   { transform: translateY(28px); opacity: 0; }
-    35%  { opacity: 1; }
-    100% { transform: none; opacity: 1; }
+  /* The way in and out of Site admin (static/js/site_admin_reveal.js names
+     the direction on html[data-admin-vt]). Going in, the whole admin page
+     comes up from the bottom of the screen over the page you were on,
+     gathering a little speed, and bounces off the top three times, each
+     smaller: the one bounce in Chronicle, signed as an exception
+     (.ai/ui-standard.md "Motion"). Coming out, the admin page falls away
+     down the screen and the page you came from is underneath. Both are
+     cross-document view transitions (.admin-vt); without them the new admin
+     page itself rises over the page colour, and the way out plays nothing.
+     Calm fades instead; Off plays nothing (the script never names it). */
+  html.admin-vt::view-transition-old(root),
+  html.admin-vt::view-transition-new(root) { mix-blend-mode: normal; animation: none; }
+  html.admin-vt[data-admin-vt="in"]::view-transition-new(root) {
+    animation: admin-rise var(--dur-arrive, 820ms) linear both;
+    box-shadow: 0 -14px 32px -12px rgb(0 0 0 / 0.35);
   }
-  /* Under Calm or Off the rule is simply there; its delay would read as a flicker. */
-  html[data-motion] .admin-arrive .admin-band::after, html[data-cz-reduce] .admin-arrive .admin-band::after { animation: none; }
+  html.admin-vt[data-admin-vt="out"]::view-transition-old(root) {
+    z-index: 1;
+    animation: admin-fall var(--dur-leave, 460ms) cubic-bezier(0.5, 0, 0.75, 0) both;
+    box-shadow: 0 -14px 32px -12px rgb(0 0 0 / 0.35);
+  }
+  :is(html[data-cz-reduce], html[data-view-motion="calm"]).admin-vt[data-admin-vt="in"]::view-transition-new(root) { animation: admin-fade var(--dur-standard) linear both; box-shadow: none; }
+  :is(html[data-cz-reduce], html[data-view-motion="calm"]).admin-vt[data-admin-vt="out"]::view-transition-old(root) { animation: admin-fade var(--dur-standard) linear reverse both; box-shadow: none; }
+  html[data-admin-vt="in"]:not(.admin-vt) { overflow: hidden; }
+  html[data-admin-vt="in"]:not(.admin-vt) body { animation: admin-rise var(--dur-arrive, 820ms) linear both; }
+  html[data-admin-vt="in"] .admin-band::after { animation: admin-rule 300ms var(--ease-slide) calc(var(--dur-arrive, 820ms) - 320ms) both; }
+  /* Each keyframe sets the easing of the stretch after it: easing in on the
+     way up and into each fall, easing out off each bounce. */
+  @keyframes admin-rise {
+    0%   { transform: translateY(100%); animation-timing-function: cubic-bezier(0.45, 0, 0.85, 0.55); }
+    50%  { transform: translateY(0);    animation-timing-function: cubic-bezier(0.2, 0.6, 0.35, 1); }
+    62%  { transform: translateY(18px); animation-timing-function: cubic-bezier(0.6, 0, 0.8, 0.4); }
+    73%  { transform: translateY(0);    animation-timing-function: cubic-bezier(0.2, 0.6, 0.35, 1); }
+    81%  { transform: translateY(6px);  animation-timing-function: cubic-bezier(0.6, 0, 0.8, 0.4); }
+    89%  { transform: translateY(0);    animation-timing-function: cubic-bezier(0.2, 0.6, 0.35, 1); }
+    95%  { transform: translateY(2px);  animation-timing-function: cubic-bezier(0.6, 0, 0.8, 0.4); }
+    100% { transform: none; }
+  }
+  @keyframes admin-fall { from { transform: none; } to { transform: translateY(100%); } }
+  @keyframes admin-fade { from { opacity: 0; } to { opacity: 1; } }
+  /* Under Calm the rule is simply there; its delay would read as a flicker. */
+  :is(html[data-motion], html[data-cz-reduce])[data-admin-vt] .admin-band::after { animation: none; }
   @keyframes admin-rule { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 
-  /* The way in presses deeper than other footer buttons and lets go slowly,
-     so the press itself feels like it carries weight. */
-  .site-admin-entry { transition: transform 260ms var(--ease-slide), box-shadow 260ms var(--ease-slide), color 120ms; }
-  .site-admin-entry:active {
-    transform: scale(0.82) translateY(1px); transition-duration: 70ms;
-    box-shadow: inset 0 2px 4px rgb(0 0 0 / 0.5);
+  /* The way in: an ordinary menu row on its own line at the very bottom of
+     either sidebar. It presses deeper than other rows and lets go slowly, so
+     the press itself feels like it carries weight. */
+  .site-admin-row { flex: none; padding: 4px 0; border-top: 1px solid var(--nav-line); }
+  .nav-row.site-admin-entry { transition: transform 260ms var(--ease-slide), box-shadow 260ms var(--ease-slide), color 120ms; }
+  .nav-row.site-admin-entry:active {
+    transform: scale(0.97) translateY(1px); transition-duration: 70ms;
+    box-shadow: inset 0 2px 5px rgb(0 0 0 / 0.5);
   }
-  .site-admin-entry[aria-current="page"] { color: rgb(var(--nav-accent, 99 102 241)); }
+  html[data-motion] .nav-row.site-admin-entry:active { transform: none; }
 
   /* ---- Admin Sidebar Pin Toggle ---- */
 
@@ -4067,6 +4098,50 @@
   .btn-primary:hover { background-color: var(--color-accent-fill-hover, rgb(var(--color-accent-action-hover-rgb, var(--color-accent-hover-rgb, 79 70 229)))); }
 }
 
+/* Site admin: the control room. Admin pages are always dark
+   (layouts.AppearanceAttrs writes data-site-admin; base.templ and theme.js
+   keep .dark on), on a deeper blue-black, with red as the accent, so the
+   place reads as live and consequential. Before the high-contrast block,
+   so a viewer's contrast choice still wins. */
+html.dark[data-site-admin] {
+  --color-bg-primary: #0b0e14;
+  --color-bg-secondary: #121722;
+  --color-bg-tertiary: #182030;
+  --color-border: #232c3c;
+  --color-border-light: #2c3649;
+  --color-card-bg: #121722;
+  --color-input-bg: #0b0e14;
+  --color-input-border: #2c3649;
+  --color-sidebar-bg: #07090d;
+  --color-accent: #f87171;
+  --color-accent-hover: #ef4444;
+  --color-accent-light: #fca5a5;
+  --color-accent-rgb: 248 113 113;
+  --color-accent-hover-rgb: 239 68 68;
+  --color-accent-light-rgb: 252 165 165;
+  --color-accent-link: #fca5a5;
+  --color-accent-fill: #dc2626;
+  --color-accent-fill-hover: #b91c1c;
+  --color-accent-on-fill: #fff;
+  --color-accent-action-rgb: 220 38 38;
+  --color-accent-action-hover-rgb: 185 28 28;
+}
+/* The status strip along the foot of every admin page. */
+.admin-strip {
+  flex: none; display: flex; align-items: center; gap: 14px; height: 30px; padding: 0 12px;
+  border-top: 1px solid var(--color-border); background: var(--color-sidebar-bg, #07090d);
+  font-family: theme('fontFamily.mono'); font-size: 11px; color: var(--color-text-secondary);
+  white-space: nowrap; overflow: hidden;
+}
+.admin-strip b { color: var(--color-text-primary); font-weight: 600; }
+.admin-strip-live { display: inline-flex; align-items: center; gap: 6px; color: #fca5a5; font-weight: 600; }
+.admin-strip-dot { width: 7px; height: 7px; border-radius: 50%; background: #ef4444; box-shadow: 0 0 0 3px rgb(239 68 68 / 0.2); }
+.admin-strip-figures { display: inline-flex; gap: 14px; min-width: 0; overflow: hidden; }
+.admin-strip-warn { color: #fbbf24; }
+.admin-strip-log { color: var(--color-text-secondary); }
+.admin-strip-log:hover { color: var(--color-accent-link); }
+@media (max-width: 639px) { .admin-strip-figures > :nth-child(n+2) { display: none; } }
+
 /* Text size: rem-based sizes scale with the root. */
 html[data-cz-scale="compact"] { font-size: 93.75%; }
 html[data-cz-scale="roomy"] { font-size: 110%; }
@@ -4177,6 +4252,28 @@ html.dark[data-view-contrast="high"] { /* the second out-ranks a campaign's :roo
   transition: transform 500ms cubic-bezier(.2, .7, .3, 1), opacity 500ms ease;
 }
 [data-cz-btn="ink"] .btn:active::after { opacity: 0.22; transform: translate(-50%, -50%) scale(1); transition-duration: 0ms; }
+/* Keystone: soft, raised and rounded; every button gets the heavy press,
+   sinking deep with an inner shadow and letting go slowly. Under Calm the
+   press is the colour change alone. */
+[data-cz-btn="keystone"] .btn {
+  border-radius: 12px;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.5), 0 2px 3px rgb(16 24 40 / 0.1), 0 8px 16px -8px rgb(16 24 40 / 0.25);
+  transition: transform var(--dur-large) var(--ease-slide), box-shadow var(--dur-large) var(--ease-slide), background-color var(--dur-micro), color var(--dur-micro);
+}
+[data-cz-btn="keystone"] :is(.btn-primary, .btn-danger, .btn-warning, .btn-success) {
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.25), 0 3px 6px -2px rgb(var(--color-accent-rgb, 99 102 241) / 0.5), 0 10px 20px -10px rgb(var(--color-accent-rgb, 99 102 241) / 0.6);
+}
+[data-cz-btn="keystone"] .btn:active {
+  transform: scale(0.92) translateY(1px); box-shadow: inset 0 2px 5px rgb(16 24 40 / 0.35); transition-duration: 70ms;
+}
+.dark [data-cz-btn="keystone"] .btn:not(:active, .btn-primary, .btn-danger, .btn-warning, .btn-success) { box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 2px 4px rgb(0 0 0 / 0.4), 0 8px 18px -8px rgb(0 0 0 / 0.6); }
+html[data-motion] [data-cz-btn="keystone"] .btn:active { transform: none; }
+
+/* Ambient: shadows tinted with the accent (czElevation) and a faint light
+   from the page's top corner, as if the page were lamplit. */
+[data-cz-elev="ambient"] #main-content {
+  background-image: radial-gradient(90% 60% at 80% -10%, rgb(var(--color-accent-rgb, 99 102 241) / 0.08), transparent 60%);
+}
 
 /* Menu highlight on the page you are on. The living ring (the default)
    is drawn by .nav-ring itself; each other style shows some of its layers

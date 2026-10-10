@@ -435,6 +435,47 @@ func (h *Handler) Dashboard(c echo.Context) error {
 	return middleware.Render(c, http.StatusOK, AdminDashboardPage(buildHomeGroups(in), needs, recent))
 }
 
+// StatusFigures are the live figures on the Site admin status strip.
+// Sessions is -1 when it could not be read.
+type StatusFigures struct {
+	Sessions                   int
+	BackupKnown, BackupEnabled bool
+	BackupAge                  string // "" when there is no backup yet
+}
+
+// Status renders the status strip's figures (GET /admin/status), loaded by
+// every admin page after it is shown.
+func (h *Handler) Status(c echo.Context) error {
+	ctx := c.Request().Context()
+	f := StatusFigures{Sessions: -1}
+	if h.securityService != nil {
+		if sessions, err := h.securityService.GetActiveSessions(ctx); err != nil {
+			slog.Warn("admin status: listing sessions failed", slog.Any("error", err))
+		} else {
+			f.Sessions = len(sessions)
+		}
+	}
+	if h.backupLister != nil {
+		if bi, err := h.backupLister.BackupInfo(ctx); err != nil {
+			slog.Warn("admin status: backup info failed", slog.Any("error", err))
+		} else {
+			f.BackupKnown, f.BackupEnabled = true, bi.Enabled
+			if last := latestBackupTime(bi); !last.IsZero() {
+				f.BackupAge = strings.ToLower(backupAge(time.Since(last)))
+			}
+		}
+	}
+	return middleware.Render(c, http.StatusOK, AdminStatusFigures(f))
+}
+
+// sessionsWord is "session" or "sessions" for n.
+func sessionsWord(n int) string {
+	if n == 1 {
+		return "session"
+	}
+	return "sessions"
+}
+
 // latestBackupTime is the newest backup file's time, ignoring manifests, which
 // describe a backup rather than being one. Zero when there is none.
 func latestBackupTime(bi BackupInfo) time.Time {

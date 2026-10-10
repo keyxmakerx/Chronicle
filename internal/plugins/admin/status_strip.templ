@@ -1,0 +1,23 @@
+package admin
+
+import "strconv"
+
+// AdminStatusFigures fills the Site admin status strip: sessions signed in
+// and the last backup's age. A figure that could not be read is left out
+// rather than shown as a false zero.
+templ AdminStatusFigures(f StatusFigures) {
+	<span class="admin-strip-figures">
+		if f.Sessions >= 0 {
+			<span><b>{ strconv.Itoa(f.Sessions) }</b> { sessionsWord(f.Sessions) } signed in</span>
+		}
+		if f.BackupKnown {
+			if !f.BackupEnabled {
+				<span class="admin-strip-warn">Backups are off</span>
+			} else if f.BackupAge == "" {
+				<span class="admin-strip-warn">No backup yet</span>
+			} else {
+				<span>Last backup <b>{ f.BackupAge }</b> ago</span>
+			}
+		}
+	</span>
+}

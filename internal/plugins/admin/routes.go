@@ -20,6 +20,8 @@ func RegisterRoutes(e *echo.Echo, h *Handler, authService auth.AuthService, smtp
 
 	// Dashboard.
 	admin.GET("", h.Dashboard)
+	// The status strip's live figures, loaded by every admin page.
+	admin.GET("/status", h.Status)
 
 	// Reauth middleware for sensitive operations: requires a password
 	// re-confirmation within the last 5 minutes, so a hijacked admin session

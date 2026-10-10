@@ -433,6 +433,32 @@ func TestAppearanceCSSPeekGlow(t *testing.T) {
 	}
 }
 
+// Elevations whose shadows use the accent get the campaign's own channels in
+// both themes, resting and hover alike, and never the ACC placeholder.
+func TestAppearanceCSSElevationAccent(t *testing.T) {
+	cases := []struct {
+		name, elevation, want string
+	}{
+		{"ambient tints resting shadows", "ambient", "--elev-resting:0 1px 2px rgb(16 24 40 / .05), 0 6px 18px -8px rgb(16 185 129 / .28);"},
+		{"ambient tints hover shadows", "ambient", "0 0 0 1px rgb(16 185 129 / .12);--cz-lift:3px;"},
+		{"ambient tints dark shadows", "ambient", "0 8px 20px -8px rgb(16 185 129 / .32);"},
+		{"flat outlines in the accent", "flat", "--elev-hover:0 0 0 1.5px rgb(16 185 129 / .35);"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := SetAccentColor(context.Background(), "#10b981")
+			ctx = SetAppearance(ctx, &AppearanceData{Elevation: tc.elevation})
+			css := AppearanceCSS(ctx)
+			if !strings.Contains(css, tc.want) {
+				t.Errorf("css %q missing %q", css, tc.want)
+			}
+			if strings.Contains(css, "ACC") {
+				t.Errorf("placeholder left in %q", css)
+			}
+		})
+	}
+}
+
 func TestNavCorner(t *testing.T) {
 	cases := []struct {
 		name                   string
