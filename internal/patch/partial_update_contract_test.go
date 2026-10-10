@@ -98,15 +98,16 @@ var governedFieldExceptions = map[string]string{
 // field, or a body with one field), so there is no absent state to preserve.
 // The reason has to be a fact about the callers, and it has to stay true — a
 // new caller that sends a subset moves the struct to contractGoverned.
-var fullReplaceByDesign = map[string]string{}
+var fullReplaceByDesign = map[string]string{
+	"packages.UpdatePolicyInput":  "PUT /admin/packages/:id/auto-update — a one-field body: the policy radio is the whole request, so there is nothing else to preserve",
+	"packages.UpdateRepoURLInput": "PUT /admin/packages/:id/repo — a one-field body: the repository URL is the whole request, and an empty URL is refused by UpdateRepoURL's validation rather than stored",
+}
 
 // notYetSwept freezes the rest of the inventory. Being on this list is a
 // statement about what was looked at, not a claim of safety. Removing a name
 // means the struct became contract-governed; adding one means a new update
 // input shipped and its author decided it is not a partial update.
 var notYetSwept = map[string]bool{
-	"packages.UpdatePolicyInput":          true,
-	"packages.UpdateRepoURLInput":         true,
 	"bestiary.UpdatePublicationInput":     true,
 	"timeline.UpdateEntityGroupInput":     true,
 	"timeline.UpdateEventVisibilityInput": true,
