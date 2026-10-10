@@ -97,6 +97,13 @@ jobs:
         # Diff-scoped; needs full git history (fetch-depth: 0 above).
         run: ./tools/check-migration-immutability.sh
 
+      - name: Migration number guard
+        # Fails when two migrations in one directory share a version number,
+        # in this tree or against the base branch's current tip: golang-migrate
+        # refuses the directory and boot fails. Two PRs can each take the next
+        # number and pass alone; re-run CI on the second after the first merges.
+        run: ./tools/check-migration-numbers.sh
+
       - name: V2 motion-discipline guard (§B2)
         # Diff-scoped FAIL: no NEW `transition: all` / `transition-all` in
         # calendar / timeline / ai_workspace / campaigns sources — only
