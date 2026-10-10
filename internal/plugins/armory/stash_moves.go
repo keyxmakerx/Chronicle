@@ -116,7 +116,7 @@ func (s *stashService) carried(ctx context.Context, campaignID string, a Actor, 
 	}
 	ids := make([]string, 0, len(rels))
 	for _, r := range rels {
-		if r.DmOnly && !a.IsGM() {
+		if r.DmOnly && !a.SeesDmOnly() {
 			continue
 		}
 		ids = append(ids, r.ItemEntityID)
@@ -129,7 +129,7 @@ func (s *stashService) carried(ctx context.Context, campaignID string, a Actor, 
 	}
 	var out []HeldItem
 	for _, r := range rels {
-		if r.DmOnly && !a.IsGM() {
+		if r.DmOnly && !a.SeesDmOnly() {
 			continue
 		}
 		if viewable != nil && !viewable[r.ItemEntityID] {
@@ -167,7 +167,7 @@ func (s *stashService) dropEmptyCarried(ctx context.Context, campaignID, charact
 // keepZero leaves a line that reaches 0 in place (quantity 0) instead of
 // deleting it, so the original metadata (notes, attuned, equipped, dm_only)
 // survives until the move is certain; dropEmptyCarried removes it afterwards.
-// allowDM lets the call see DM-only lines (GM only).
+// allowDM lets the call see DM-only lines (Actor.SeesDmOnly).
 // The write is a compare-and-set on the relation's metadata so the inventory
 // widget editing the same line at the same moment cannot be overwritten.
 func (s *stashService) adjustCarried(ctx context.Context, campaignID, characterID, itemID, createdBy string, delta int, allowDM, keepZero bool) (bool, error) {
@@ -358,7 +358,7 @@ func (s *stashService) adjustPurse(ctx context.Context, ref *EntityRef, deltas m
 func (s *stashService) holds(ctx context.Context, m *Move, refs moveRefs) (bool, error) {
 	switch {
 	case m.Kind == MoveKindItem && m.From.Kind == EndpointCharacter:
-		rel, err := s.hasItem(ctx, m.CampaignID, m.From.ID, m.ItemEntityID, m.byGM)
+		rel, err := s.hasItem(ctx, m.CampaignID, m.From.ID, m.ItemEntityID, m.seesDmOnly)
 		if err != nil || rel == nil {
 			return false, err
 		}
@@ -393,7 +393,7 @@ func (s *stashService) holds(ctx context.Context, m *Move, refs moveRefs) (bool,
 func (s *stashService) debit(ctx context.Context, m *Move, end Endpoint, ref *EntityRef) (bool, error) {
 	switch {
 	case m.Kind == MoveKindItem && end.Kind == EndpointCharacter:
-		return s.adjustCarried(ctx, m.CampaignID, end.ID, m.ItemEntityID, m.RequestedBy, -m.Quantity, m.byGM, true)
+		return s.adjustCarried(ctx, m.CampaignID, end.ID, m.ItemEntityID, m.RequestedBy, -m.Quantity, m.seesDmOnly, true)
 	case m.Kind == MoveKindItem:
 		sid, _ := end.StashID()
 		return s.Repo.DebitItem(ctx, m.CampaignID, sid, m.ItemEntityID, m.Quantity)
@@ -409,7 +409,7 @@ func (s *stashService) debit(ctx context.Context, m *Move, end Endpoint, ref *En
 func (s *stashService) credit(ctx context.Context, m *Move, end Endpoint, ref *EntityRef) error {
 	switch {
 	case m.Kind == MoveKindItem && end.Kind == EndpointCharacter:
-		ok, err := s.adjustCarried(ctx, m.CampaignID, end.ID, m.ItemEntityID, m.RequestedBy, m.Quantity, m.byGM, false)
+		ok, err := s.adjustCarried(ctx, m.CampaignID, end.ID, m.ItemEntityID, m.RequestedBy, m.Quantity, m.seesDmOnly, false)
 		if err == nil && !ok {
 			err = errors.New("credit refused")
 		}
@@ -476,7 +476,7 @@ func insufficientMessage(m *Move) string {
 // Nothing here changes any data.
 func (s *stashService) validate(ctx context.Context, campaignID string, a Actor, in MoveInput) (*Move, moveRefs, error) {
 	var refs moveRefs
-	m := &Move{CampaignID: campaignID, Kind: in.Kind, From: in.From, To: in.To, RequestedBy: a.UserID, byGM: a.IsGM()}
+	m := &Move{CampaignID: campaignID, Kind: in.Kind, From: in.From, To: in.To, RequestedBy: a.UserID, seesDmOnly: a.SeesDmOnly()}
 
 	if !in.From.Valid() || !in.To.Valid() {
 		return nil, refs, apperror.NewBadRequest("Choose where it is going.")
@@ -831,7 +831,7 @@ func (s *stashService) MoveDialog(ctx context.Context, campaignID string, a Acto
 		}
 		view.ItemID, view.ItemName = ref.ID, ref.Name
 		m.ItemEntityID, m.Quantity = ref.ID, 1
-		max, err := s.heldItemQuantity(ctx, campaignID, from, ref.ID, a.IsGM())
+		max, err := s.heldItemQuantity(ctx, campaignID, from, ref.ID, a.SeesDmOnly())
 		if err != nil {
 			return nil, err
 		}

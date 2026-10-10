@@ -169,10 +169,11 @@ type Move struct {
 	CreatedAt    time.Time
 	DecidedAt    *time.Time
 
-	// byGM is set when the requester was Owner or Scribe. It is not stored: a
-	// request that waits for approval is always a player's, so an unset value
-	// is the safe reading (never touch a DM-only line).
-	byGM bool
+	// seesDmOnly is set when the requester may see DM-only lines
+	// (Actor.SeesDmOnly). It is not stored: a request that waits for approval
+	// is never from such a requester, so an unset value is the safe reading
+	// (never touch a DM-only line).
+	seesDmOnly bool
 }
 
 // IsMoneyEdit reports whether the row records a character's money being
