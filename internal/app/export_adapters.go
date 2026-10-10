@@ -14,6 +14,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -370,12 +371,12 @@ func (a *calendarExportAdapter) exportOne(ctx context.Context, cal *calendar.Cal
 		SecondsPerMinute: cal.SecondsPerMinute,
 		LeapYearEvery:    cal.LeapYearEvery,
 		LeapYearOffset:   cal.LeapYearOffset,
-		// Hemisphere/ForecastsEnabled/MonthStartsNewWeek are additive settings
-		// on ExportCalendarData — see its doc comment. TracksRealTime/
-		// RealTimeZone are deliberately not carried; see that same comment.
+		// Additive settings on ExportCalendarData; see its doc comment.
 		Hemisphere:         cal.Hemisphere,
 		ForecastsEnabled:   cal.ForecastsEnabled,
 		MonthStartsNewWeek: cal.MonthStartsNewWeek,
+		TracksRealTime:     cal.TracksRealTime,
+		RealTimeZone:       cal.RealTimeZone,
 	}
 
 	for _, m := range cal.Months {
@@ -1724,9 +1725,18 @@ func (a *calendarImportAdapter) importOne(ctx context.Context, campaignID string
 	// exported row, so every field is sent PRESENT — the same reasoning the
 	// entity/session importers already use elsewhere in this file (an
 	// absent value in the source really does mean "unset"). Real-time
-	// tracking is deliberately left alone (SetRealTime nil, preserving the
-	// fresh calendar's off-by-default state): ExportCalendarData carries no
-	// RealTimeZone to restore it with — see that struct's doc comment.
+	// tracking is switched on only when the backup carries a zone this
+	// server knows; otherwise the fresh calendar's off-by-default state
+	// stands, so a bad zone can't also lose the date and settings above.
+	var setRealTime *bool
+	if data.TracksRealTime && data.RealTimeZone != nil && *data.RealTimeZone != "" {
+		if _, err := time.LoadLocation(*data.RealTimeZone); err == nil {
+			on := true
+			setRealTime = &on
+		} else {
+			report.Fail(campaigns.SectionCalendar, "real-time setting", data.Name, "its time zone is not one this server knows")
+		}
+	}
 	if err := a.svc.UpdateCalendar(ctx, cal.ID, campaignID, calendar.UpdateCalendarInput{
 		Name:               data.Name,
 		CurrentMonth:       patch.Of(data.CurrentMonth),
@@ -1736,6 +1746,8 @@ func (a *calendarImportAdapter) importOne(ctx context.Context, campaignID string
 		Hemisphere:         patch.FromPtr(data.Hemisphere),
 		ForecastsEnabled:   patch.Of(data.ForecastsEnabled),
 		MonthStartsNewWeek: patch.Of(data.MonthStartsNewWeek),
+		SetRealTime:        setRealTime,
+		RealTimeZone:       data.RealTimeZone,
 	}); err != nil {
 		slog.Warn("import: set current date failed", slog.Any("error", err))
 		report.Fail(campaigns.SectionCalendar, campaigns.KindCalendar, data.Name, apperror.SafeMessage(err))
