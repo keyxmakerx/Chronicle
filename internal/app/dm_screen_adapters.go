@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/addons"
@@ -19,6 +21,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/syncapi"
+	"github.com/keyxmakerx/chronicle/internal/widgets/notes"
 )
 
 // The DM Screen owns no data; these adapters let it read the plugins it
@@ -96,6 +99,78 @@ func (a *dmRequestsAdapter) WaitingRequests(ctx context.Context, campaignID stri
 		})
 	}
 	return out, true, nil
+}
+
+// dmNotesNamespace seeds the screen note's id; any fixed UUID would do.
+var dmNotesNamespace = uuid.MustParse("6f0c2d1e-5a43-4c7b-9d28-3b1e7a90c4d5")
+
+// dmNoteID is the screen note's id for a campaign. Deriving it (instead of a
+// column or a title lookup) lets the screen find its note again without a
+// table of its own, and two DMs saving at once collide on the primary key
+// rather than making two notes.
+func dmNoteID(campaignID string) string {
+	return uuid.NewSHA1(dmNotesNamespace, []byte(campaignID)).String()
+}
+
+// dmNotesAdapter keeps the DM Screen's note as an ordinary note shared with
+// the GM side (owner and co-DMs), so it also shows in the Journal.
+type dmNotesAdapter struct {
+	notes notes.NoteService
+}
+
+func (a *dmNotesAdapter) Find(ctx context.Context, campaignID string, v dmscreen.Viewer) (*dmscreen.ScreenNote, error) {
+	n, err := a.notes.GetByID(ctx, dmNoteID(campaignID))
+	if err != nil {
+		if isNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	// Same predicate the notes routes apply before showing a note.
+	if !n.CanView(permissions.RequestViewer(v.Role, v.UserID), campaignID) {
+		return nil, apperror.NewForbidden("the DM Screen note is not shared with you")
+	}
+	return toScreenNote(n), nil
+}
+
+func (a *dmNotesAdapter) Save(ctx context.Context, campaignID string, v dmscreen.Viewer, title, entry, entryHTML string) (*dmscreen.ScreenNote, error) {
+	viewer := permissions.RequestViewer(v.Role, v.UserID)
+	existing, err := a.Find(ctx, campaignID, v)
+	if err != nil {
+		return nil, err
+	}
+	if existing == nil {
+		_, err := a.notes.Create(ctx, campaignID, viewer, notes.CreateNoteRequest{
+			ID: dmNoteID(campaignID), Title: title, Visibility: notes.VisibilityGM,
+		})
+		if err != nil {
+			// A second DM created it a moment ago: write into theirs.
+			if _, ferr := a.Find(ctx, campaignID, v); ferr != nil {
+				return nil, err
+			}
+		}
+	}
+	req := notes.UpdateNoteRequest{Title: &title, Entry: &entry, EntryHTML: &entryHTML}
+	cur, err := a.notes.GetByID(ctx, dmNoteID(campaignID))
+	if err != nil {
+		return nil, err
+	}
+	if !cur.IsOwnedBy(v.UserID, campaignID) {
+		req.StripOwnerOnly()
+	}
+	n, err := a.notes.Update(ctx, cur.ID, viewer, req)
+	if err != nil {
+		return nil, err
+	}
+	return toScreenNote(n), nil
+}
+
+func toScreenNote(n *notes.Note) *dmscreen.ScreenNote {
+	out := &dmscreen.ScreenNote{ID: n.ID, Title: n.Title}
+	if n.Entry != nil {
+		out.Entry = *n.Entry
+	}
+	return out
 }
 
 // dmWorldAdapter reads the default calendar's date and today's weather.

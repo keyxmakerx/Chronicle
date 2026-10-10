@@ -4404,6 +4404,7 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
   .dms-row { display: flex; justify-content: space-between; align-items: center; gap: .5rem; font-size: .88rem; border-top: 1px dashed var(--dms-leaf-edge); padding-top: .4rem; }
   .dms-row button { font-size: .78rem; border: 1px solid var(--dms-leaf-edge); border-radius: .35rem; padding: .1rem .45rem; color: var(--dms-ink); }
   .dms-req { align-items: flex-start; }
+  .dms-notes { min-height: 10rem; resize: vertical; font: inherit; }
   .dms-req-btns { display: flex; gap: .3rem; flex-shrink: 0; }
   .dms-row .dms-req-yes { background: var(--dms-ok-soft); font-weight: 700; }
   .dms-done { font-size: .78rem; color: var(--dms-ok); }

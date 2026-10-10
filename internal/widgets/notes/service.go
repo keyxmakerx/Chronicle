@@ -187,8 +187,12 @@ func (s *noteService) Create(ctx context.Context, campaignID string, creator per
 		content = []Block{}
 	}
 
+	id := generateID()
+	if req.ID != "" {
+		id = req.ID
+	}
 	note := &Note{
-		ID:           generateID(),
+		ID:           id,
 		CampaignID:   campaignID,
 		UserID:       userID,
 		EntityID:     req.EntityID,

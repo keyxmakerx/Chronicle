@@ -32,6 +32,23 @@ type RequestSource interface {
 	WaitingRequests(ctx context.Context, campaignID string, v Viewer) (reqs []Request, ok bool, err error)
 }
 
+// ScreenNote is the stored note behind the Notes tab.
+type ScreenNote struct {
+	ID    string
+	Title string
+	// Entry is the note's ProseMirror JSON as stored.
+	Entry string
+}
+
+// NotesSource keeps the screen's note in the notes widget. The note is found
+// again by a fixed id derived from the campaign, so nothing here owns a table.
+// Find returns nil, nil before the first save. Save creates the note (shared
+// with the GM side) or updates its title and body, as the viewer.
+type NotesSource interface {
+	Find(ctx context.Context, campaignID string, v Viewer) (*ScreenNote, error)
+	Save(ctx context.Context, campaignID string, v Viewer, title, entry, entryHTML string) (*ScreenNote, error)
+}
+
 // WorldSource reads the default calendar's current date and today's weather.
 // It returns nil, nil when there is no calendar the viewer can see.
 type WorldSource interface {
@@ -103,6 +120,7 @@ type SystemSource interface {
 type Sources struct {
 	Downtime DowntimeSource
 	Requests RequestSource
+	Notes    NotesSource
 	World    WorldSource
 	Nights   NightSource
 	Foundry  FoundrySource

@@ -4984,6 +4984,7 @@ func (a *App) RegisterRoutes() {
 	// registered here because Foundry presence comes from wsHub.
 	dmScreenSvc := dmscreen.NewService(dmscreen.Sources{
 		Downtime: &dmDowntimeAdapter{stash: stashSvc, addons: addonService},
+		Notes:    &dmNotesAdapter{notes: noteSvc},
 		Requests: &dmRequestsAdapter{stash: stashSvc, addons: addonService},
 		World:    &dmWorldAdapter{svc: calendarService},
 		Nights:   &dmNightAdapter{svc: sessionsService, members: campaignService},

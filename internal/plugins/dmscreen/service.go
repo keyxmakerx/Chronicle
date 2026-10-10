@@ -26,6 +26,10 @@ type Service interface {
 	Build(ctx context.Context, campaignID string, v Viewer) (*View, error)
 	Reveal(ctx context.Context, entityID, campaignID string, v Viewer) (string, error)
 	SetDowntime(ctx context.Context, campaignID string, v Viewer, open bool) (DowntimeResult, error)
+
+	// Note reads the screen's note; SaveNote replaces its text.
+	Note(ctx context.Context, campaignID string, v Viewer) (*NotesView, error)
+	SaveNote(ctx context.Context, campaignID string, v Viewer, text string) (*NotesView, error)
 }
 
 // DowntimeResult reports a downtime switch: the new state and how many
@@ -89,6 +93,15 @@ func (s *service) Build(ctx context.Context, campaignID string, v Viewer) (*View
 	if s.src.Foundry != nil {
 		last, connected := s.src.Foundry.FoundryPresence(campaignID)
 		view.Foundry = FoundryView{Connected: connected, NeverSeen: last == nil && !connected, LastSeen: last}
+	}
+
+	if s.src.Notes != nil {
+		nv, err := s.notesView(ctx, campaignID, v, view.Night)
+		if err != nil {
+			warn("notes", err)
+		} else {
+			view.Notes = nv
+		}
 	}
 
 	var presence map[string]bool
@@ -192,6 +205,70 @@ func (s *service) SetDowntime(ctx context.Context, campaignID string, v Viewer, 
 		return DowntimeResult{}, err
 	}
 	return DowntimeResult{Open: open, Applied: applied, Failed: failed}, nil
+}
+
+// nightForNote finds the night the note is kept with. A failing night source
+// only costs the label its night name.
+func (s *service) nightForNote(ctx context.Context, campaignID string, v Viewer) *NightView {
+	if s.src.Nights == nil {
+		return nil
+	}
+	n, err := s.src.Nights.NextNight(ctx, campaignID, v)
+	if err != nil {
+		return nil
+	}
+	return n
+}
+
+func (s *service) notesView(ctx context.Context, campaignID string, v Viewer, night *NightView) (*NotesView, error) {
+	label, _ := noteNames(night)
+	nv := &NotesView{Label: label}
+	n, err := s.src.Notes.Find(ctx, campaignID, v)
+	if err != nil {
+		return nil, err
+	}
+	if n != nil {
+		nv.NoteID = n.ID
+		nv.Text = plainFromProse(n.Entry)
+		nv.Link = fmt.Sprintf("/campaigns/%s/journal/%s", campaignID, n.ID)
+	}
+	return nv, nil
+}
+
+// Note reads the screen's note for the GM side.
+func (s *service) Note(ctx context.Context, campaignID string, v Viewer) (*NotesView, error) {
+	if v.Role < 2 {
+		return nil, apperror.NewForbidden("the DM Screen is for the people running this campaign")
+	}
+	if s.src.Notes == nil {
+		return nil, apperror.NewNotFound("notes are not available")
+	}
+	return s.notesView(ctx, campaignID, v, s.nightForNote(ctx, campaignID, v))
+}
+
+// SaveNote stores text as plain paragraphs in the screen's note, creating it on
+// first save and retitling it to the current next night.
+func (s *service) SaveNote(ctx context.Context, campaignID string, v Viewer, text string) (*NotesView, error) {
+	if v.Role < 2 {
+		return nil, apperror.NewForbidden("the DM Screen is for the people running this campaign")
+	}
+	if s.src.Notes == nil {
+		return nil, apperror.NewNotFound("notes are not available")
+	}
+	if utf8.RuneCountInString(text) > maxNoteChars {
+		return nil, apperror.NewBadRequest("the note is too long for the DM Screen; open it in Notes")
+	}
+	night := s.nightForNote(ctx, campaignID, v)
+	label, title := noteNames(night)
+	entry, entryHTML := proseFromPlain(text)
+	n, err := s.src.Notes.Save(ctx, campaignID, v, title, entry, entryHTML)
+	if err != nil {
+		return nil, err
+	}
+	return &NotesView{
+		Label: label, Text: plainFromProse(n.Entry), NoteID: n.ID,
+		Link: fmt.Sprintf("/campaigns/%s/journal/%s", campaignID, n.ID),
+	}, nil
 }
 
 // buildMeters reads each declared meter from a hero's sheet fields. A meter

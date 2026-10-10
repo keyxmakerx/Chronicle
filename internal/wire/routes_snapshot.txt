@@ -258,6 +258,7 @@ GET	/diagnostics/workspace	internal/plugins/admin/routes.go
 GET	/dm-grants	internal/plugins/campaigns/routes.go
 GET	/dm-screen	internal/plugins/dmscreen/routes.go
 GET	/dm-screen	internal/plugins/syncapi/routes.go
+GET	/dm-screen/notes	internal/plugins/dmscreen/routes.go
 GET	/edit	internal/plugins/campaigns/routes.go
 GET	/embed/campaigns/:id/notes/:mode	internal/widgets/notes/routes.go
 GET	/entities	internal/plugins/entities/routes.go
@@ -807,6 +808,7 @@ PUT	/content-templates/:tid	internal/plugins/entities/content_template_routes.go
 PUT	/dashboard-layout	internal/plugins/campaigns/routes.go
 PUT	/default-visibility	internal/plugins/campaigns/routes.go
 PUT	/dm-grants	internal/plugins/campaigns/routes.go
+PUT	/dm-screen/notes	internal/plugins/dmscreen/routes.go
 PUT	/entities/:eid	internal/plugins/entities/routes.go
 PUT	/entities/:eid/aliases	internal/plugins/entities/routes.go
 PUT	/entities/:eid/cover-image	internal/plugins/entities/routes.go

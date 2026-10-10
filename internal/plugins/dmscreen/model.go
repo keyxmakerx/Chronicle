@@ -38,6 +38,9 @@ type View struct {
 
 	Foundry FoundryView `json:"foundry"`
 
+	// Notes is nil when notes are unavailable; the Notes tab is then hidden.
+	Notes *NotesView `json:"notes,omitempty"`
+
 	// Requests is nil when the campaign has no armory or nothing waits.
 	Requests *RequestsView `json:"requests,omitempty"`
 
@@ -237,4 +240,17 @@ type RequestsView struct {
 	// CanAnswer is true for the owner and DM-granted co-DMs, the only people
 	// the armory lets approve or refuse; others would see rows without buttons.
 	CanAnswer bool `json:"can_answer"`
+}
+
+// NotesView is the screen's note: one per campaign, shared with the GM side,
+// kept with the next game night.
+type NotesView struct {
+	// Label reads "Kept with <game night>" or "DM Screen notes".
+	Label string `json:"label"`
+	// Text is the note as plain lines; empty before anything is saved.
+	Text string `json:"text"`
+	// NoteID is empty until the first save creates the note.
+	NoteID string `json:"note_id,omitempty"`
+	// Link opens the note in the Journal; empty until it exists.
+	Link string `json:"link,omitempty"`
 }

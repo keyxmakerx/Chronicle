@@ -67,9 +67,22 @@
           if (e.target.hasAttribute && e.target.hasAttribute('data-dms-party')) partyEdges(e.target);
         }, true);
         // A refresh after an Armory change swaps the panel in place.
-        o.addEventListener('htmx:afterSettle', refreshParty);
+        o.addEventListener('htmx:afterSettle', function () { refreshParty(); restoreKept(); });
         o.addEventListener('input', function (e) {
           if (e.target.hasAttribute('data-dms-filter')) filterConditions(e.target);
+          if (e.target.hasAttribute('data-dms-note')) noteEdited(e.target);
+        });
+        // blur doesn't bubble; focusout does, and leaving the box saves now.
+        o.addEventListener('focusout', function (e) {
+          if (e.target.hasAttribute && e.target.hasAttribute('data-dms-note')) saveNote();
+        });
+        // A panel refetch (an Allow, a downtime switch) replaces the markup;
+        // keep the open tab and any unsaved note text across it.
+        o.addEventListener('htmx:beforeSwap', function (e) {
+          if (!e.target.hasAttribute || !e.target.hasAttribute('data-dms-root')) return;
+          var tab = e.target.querySelector('[data-dms-tab][aria-selected="true"]');
+          var ta = e.target.querySelector('[data-dms-note]');
+          st.keep = { tab: tab && tab.getAttribute('data-dms-tab'), draft: st.noteDirty && ta ? ta.value : null };
         });
         st.overlay = o;
         return o;
@@ -149,6 +162,62 @@
         r.querySelectorAll('[data-dms-pane]').forEach(function (p) {
           p.hidden = p.getAttribute('data-dms-pane') !== name;
         });
+      }
+
+      var NOTE_OK = 'Saved \u00b7 only you and co-DMs can see this';
+
+      function noteBox() { var r = root(); return r && r.querySelector('[data-dms-note]'); }
+
+      function noteStatus(text) {
+        var r = root(), el = r && r.querySelector('[data-dms-note-status]');
+        if (el) el.textContent = text;
+      }
+
+      // Autosave: ~800ms after typing stops, and on blur or close.
+      function noteEdited() {
+        st.noteDirty = true;
+        noteStatus('Unsaved changes');
+        clearTimeout(st.noteTimer);
+        st.noteTimer = setTimeout(saveNote, 800);
+      }
+
+      function saveNote() {
+        clearTimeout(st.noteTimer);
+        var ta = noteBox();
+        if (!st.noteDirty || !ta) return;
+        if (st.noteSaving) { st.noteAgain = true; return; }
+        var url = ta.getAttribute('data-dms-note-url'), text = ta.value;
+        st.noteSaving = true;
+        noteStatus('Saving\u2026');
+        Chronicle.apiFetch(url, { method: 'PUT', body: { text: text } })
+          .then(function (r) {
+            if (!r.ok) throw new Error('save failed: ' + r.status);
+            return r.json();
+          })
+          .then(function (j) {
+            // Typing during the save keeps the box dirty for the next round.
+            var cur = noteBox();
+            if (!cur || cur.value === text) { st.noteDirty = false; noteStatus(NOTE_OK); }
+            var r = root(), a = r && r.querySelector('[data-dms-note-link]');
+            if (a && j && j.link) { a.setAttribute('href', j.link); a.hidden = false; }
+          })
+          .catch(function () { noteStatus('Could not save. Your text is still here; it will retry.'); })
+          .then(function () {
+            st.noteSaving = false;
+            if (st.noteAgain) { st.noteAgain = false; saveNote(); }
+          });
+      }
+
+      function restoreKept() {
+        var k = st.keep; if (!k) return;
+        st.keep = null;
+        var r = root(); if (!r) return;
+        if (k.tab) {
+          var t = r.querySelector('[data-dms-tab="' + k.tab + '"]');
+          if (t) selectTab(t);
+        }
+        var ta = noteBox();
+        if (ta && k.draft !== null) { ta.value = k.draft; noteStatus('Unsaved changes'); st.noteTimer = setTimeout(saveNote, 800); }
       }
 
       function filterConditions(input) {
@@ -355,6 +424,7 @@
 
       function close() {
         if (!st.overlay || st.overlay.hidden) return;
+        saveNote();
         stopAll();
         document.removeEventListener('keydown', onKey);
         var r = root(), o = st.overlay;

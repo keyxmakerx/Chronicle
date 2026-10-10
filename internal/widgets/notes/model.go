@@ -215,6 +215,10 @@ type CreateNoteRequest struct {
 	// Absent means private: a new note is private to its writer until they
 	// choose to share it.
 	Visibility Visibility `json:"visibility,omitempty"`
+	// ID lets an in-process caller that must find its note again (the DM
+	// Screen's notes) fix the id instead of drawing one. Never decoded from a
+	// request body, so API clients cannot choose ids.
+	ID string `json:"-"`
 }
 
 // UpdateNoteRequest holds the data submitted when updating a note.

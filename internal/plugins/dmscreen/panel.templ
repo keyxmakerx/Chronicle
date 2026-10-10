@@ -147,6 +147,9 @@ templ Panel(v *View, csrf string) {
 						<button type="button" role="tab" aria-selected="true" data-dms-tab="rules">Rules</button>
 					}
 					<button type="button" role="tab" aria-selected={ fmt.Sprint(len(v.Conditions) == 0) } data-dms-tab="reveal">Reveal</button>
+					if v.Notes != nil {
+						<button type="button" role="tab" aria-selected="false" data-dms-tab="notes">Notes</button>
+					}
 				</div>
 				if len(v.Conditions) > 0 {
 					<div class="dms-blk" data-dms-pane="rules">
@@ -171,6 +174,22 @@ templ Panel(v *View, csrf string) {
 						<a class="dms-link" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/characters", v.CampaignID)) }>More are hidden. See all on the Characters page</a>
 					}
 				</div>
+				if v.Notes != nil {
+					<div class="dms-blk" data-dms-pane="notes" hidden>
+						<span class="dms-lbl">{ v.Notes.Label }</span>
+						<textarea
+							class="dms-search dms-notes"
+							rows="12"
+							maxlength="20000"
+							aria-label={ v.Notes.Label }
+							placeholder="Jot things down for the table."
+							data-dms-note
+							data-dms-note-url={ fmt.Sprintf("/campaigns/%s/dm-screen/notes", v.CampaignID) }
+						>{ v.Notes.Text }</textarea>
+						<span class="dms-small" role="status" aria-live="polite" data-dms-note-status>Only you and co-DMs can see this</span>
+						<a class="dms-link" data-dms-note-link href={ templ.SafeURL(v.Notes.Link) } hidden?={ v.Notes.Link == "" }>Open in Notes</a>
+					</div>
+				}
 			</section>
 		</div>
 	</div>
