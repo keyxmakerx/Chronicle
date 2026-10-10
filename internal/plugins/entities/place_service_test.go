@@ -32,7 +32,7 @@ func (f *fakePlaces) Insert(_ context.Context, p *Place) error {
 func (f *fakePlaces) Delete(_ context.Context, entityID, parentID string) error {
 	out := f.links[:0]
 	for _, l := range f.links {
-		if !(l.EntityID == entityID && l.ParentEntityID == parentID) {
+		if l.EntityID != entityID || l.ParentEntityID != parentID {
 			out = append(out, l)
 		}
 	}
