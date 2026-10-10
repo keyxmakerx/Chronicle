@@ -33,7 +33,13 @@ files=$(
     find db/migrations internal/plugins/*/migrations -maxdepth 1 -type f \
       -name '*.sql' 2>/dev/null | grep -E '\.(up|down)\.sql$' || true
     if git rev-parse --verify --quiet "${base}" >/dev/null; then
-      list_tree "${base}"
+      # A base file this branch deletes is gone once it merges, so it can't
+      # collide; without this a PR fixing a duplicate on the base can't pass.
+      list_tree "${base}" | grep -vxFf <(
+        git diff --name-only --no-renames --diff-filter=D "${base}"...HEAD -- \
+          db/migrations internal/plugins 2>/dev/null
+        echo "/nonexistent"
+      ) || true
     else
       echo "check-migration-numbers: base ${base} not found; checking this tree only" >&2
     fi
