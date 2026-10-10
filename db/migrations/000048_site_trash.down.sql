@@ -1,4 +1,4 @@
--- Reverse 000046. Anything still in the Trash comes back with it: campaigns
+-- Reverse 000048. Anything still in the Trash comes back with it: campaigns
 -- become reachable again and clean-up files return to the unused-uploads
 -- list, so rolling back never deletes data. Empty the Trash first if that is
 -- not wanted.
