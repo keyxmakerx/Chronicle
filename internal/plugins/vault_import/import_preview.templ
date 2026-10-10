@@ -1,0 +1,122 @@
+// import_preview.templ renders the preview: what an import would do, shown
+// before anything is written.
+
+package vault_import
+
+import "fmt"
+
+// PreviewPanel lists what the zip holds and what will become of it, then offers
+// the Import button. Nothing has been written when this is on screen.
+templ PreviewPanel(campaignID string, p *Preview) {
+	<div class="vi-settle space-y-5">
+		<div class="min-w-0">
+			<h3 class="text-base font-semibold text-fg">Here's what will be imported</h3>
+			<p class="text-sm text-fg-muted truncate">
+				<i class="fa-solid fa-file-zipper mr-1" aria-hidden="true"></i>{ p.FileName }
+			</p>
+		</div>
+		<dl class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+			@statTile("fa-file-lines", p.Stats.Pages, "Pages", "one for each note")
+			@statTile("fa-link", p.Stats.LinksToPages, "Page links", "[[links]] between notes")
+			@statTile("fa-image", p.Stats.Pictures, "Pictures", "shown inside the text")
+			@statTile("fa-paperclip", p.Stats.Files, "Files", "attached to their pages")
+		</dl>
+		<ul class="space-y-2 text-sm text-fg-secondary">
+			<li class="flex gap-2">
+				<i class="fa-solid fa-folder-tree text-fg-muted mt-0.5 w-4 text-center" aria-hidden="true"></i>
+				<span>{ folderLine(p.Stats) }</span>
+			</li>
+			<li class="flex gap-2">
+				<i class="fa-solid fa-box-archive text-fg-muted mt-0.5 w-4 text-center" aria-hidden="true"></i>
+				<span>Pages land in a new <strong class="text-fg">Imported</strong> folder, so nothing mixes into your existing pages. Importing the same zip again makes a second folder.</span>
+			</li>
+		</ul>
+		if len(p.Outline) > 0 {
+			<details class="vi-fold rounded-lg border border-edge">
+				<summary class="px-3 py-2 text-sm font-medium text-fg cursor-pointer">The page tree</summary>
+				<ul class="px-3 pb-3 text-sm space-y-0.5 max-h-64 overflow-y-auto">
+					for _, l := range p.Outline {
+						<li class="flex items-baseline gap-2" style={ fmt.Sprintf("padding-left:%drem", l.Depth) }>
+							<i class="fa-regular fa-folder text-fg-muted text-xs" aria-hidden="true"></i>
+							<span class="text-fg truncate">{ l.Name }</span>
+							<span class="text-xs text-fg-muted">{ fmt.Sprint(l.Pages) } { plural(l.Pages, "page", "pages") }</span>
+						</li>
+					}
+					if p.OutlineMore > 0 {
+						<li class="text-xs text-fg-muted pt-1">and { fmt.Sprint(p.OutlineMore) } more</li>
+					}
+				</ul>
+			</details>
+		}
+		if p.Stats.LinksPlain > 0 {
+			<details class="vi-fold rounded-lg border border-edge">
+				<summary class="px-3 py-2 text-sm font-medium text-fg cursor-pointer">
+					{ fmt.Sprint(p.Stats.LinksPlain) } { plural(p.Stats.LinksPlain, "link", "links") } to notes that aren't in the zip
+				</summary>
+				<div class="px-3 pb-3 text-sm text-fg-secondary">
+					<p>These stay as plain text.</p>
+					if len(p.Stats.UnresolvedNames) > 0 {
+						<p class="mt-1 text-fg-muted">For example: { joinNames(p.Stats.UnresolvedNames) }</p>
+					}
+				</div>
+			</details>
+		}
+		if len(p.Skipped) > 0 || p.Stats.MissingPictures > 0 {
+			<details class="vi-fold rounded-lg border border-edge">
+				<summary class="px-3 py-2 text-sm font-medium text-fg cursor-pointer">Left out</summary>
+				<div class="px-3 pb-3 text-sm text-fg-secondary space-y-1">
+					if p.Stats.MissingPictures > 0 {
+						<p>{ fmt.Sprint(p.Stats.MissingPictures) } { plural(p.Stats.MissingPictures, "picture is", "pictures are") } shown in notes but not in the zip.</p>
+					}
+					<ul class="max-h-48 overflow-y-auto space-y-0.5">
+						for _, s := range p.Skipped {
+							<li><span class="text-fg">{ s.Path }</span> <span class="text-fg-muted">&middot; { s.Reason }</span></li>
+						}
+					</ul>
+					if p.SkippedMore > 0 {
+						<p class="text-xs text-fg-muted">and { fmt.Sprint(p.SkippedMore) } more</p>
+					}
+				</div>
+			</details>
+		}
+		if note := notesLine(p.Stats); note != "" {
+			<p class="text-xs text-fg-muted">{ note }</p>
+		}
+		<div class="flex items-start gap-3 rounded-lg bg-accent/5 border border-accent/20 px-4 py-3 text-sm text-fg">
+			<i class="fa-solid fa-lock text-accent mt-0.5" aria-hidden="true"></i>
+			<span>Every imported page starts GM only. Share them when you're ready.</span>
+		</div>
+		<div class="flex flex-wrap items-center gap-3 pt-1">
+			<form
+				hx-post={ fmt.Sprintf("/campaigns/%s/import/markdown/start", campaignID) }
+				hx-target="#vi-stage"
+				hx-swap="innerHTML"
+				hx-disabled-elt="find button"
+			>
+				<input type="hidden" name="upload" value={ p.UploadID }/>
+				<button type="submit" class="btn-primary">
+					<i class="fa-solid fa-file-import text-xs mr-1.5" aria-hidden="true"></i>
+					Import { fmt.Sprint(p.Total) } { plural(p.Total, "page", "pages") }
+				</button>
+			</form>
+			<button
+				type="button"
+				class="btn-secondary"
+				hx-get={ fmt.Sprintf("/campaigns/%s/import/markdown/dropzone", campaignID) }
+				hx-target="#vi-stage"
+				hx-swap="innerHTML"
+			>Choose a different file</button>
+		</div>
+	</div>
+}
+
+// statTile is one big number in the preview.
+templ statTile(icon string, n int, label, hint string) {
+	<div class="rounded-xl border border-edge bg-surface-alt/40 px-4 py-3">
+		<dt class="text-xs font-medium text-fg-muted flex items-center gap-1.5">
+			<i class={ "fa-solid " + icon + " text-accent" } aria-hidden="true"></i>{ label }
+		</dt>
+		<dd class="mt-1 text-2xl font-semibold text-fg tabular-nums">{ fmt.Sprint(n) }</dd>
+		<dd class="text-xs text-fg-muted">{ hint }</dd>
+	</div>
+}

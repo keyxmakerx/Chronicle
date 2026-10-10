@@ -159,6 +159,9 @@ templ Base(title string) {
 		     generator engine only when someone first rolls. -->
 		<script src={ AssetURL("/static/js/widgets/roll_tables.js") } data-engine-src={ AssetURL("/static/js/widgets/chronicle_gen.js") } data-library-src={ AssetURL("/static/roll-tables/library.json") } defer></script>
 		<script src={ AssetURL("/static/js/widgets/editor_rolltable.js") } defer></script>
+		<!-- Diagrams (Mermaid text drawn client-side). The vendored library is requested
+		     only when a diagram is first drawn. -->
+		<script src={ AssetURL("/static/js/widgets/editor_diagram.js") } data-mermaid-src={ AssetURL("/static/vendor/mermaid.min.js") } defer></script>
 		<script src={ AssetURL("/static/js/widgets/editor.js") } defer></script>
 
 		<!-- Image upload widget -->
@@ -262,6 +265,7 @@ templ Base(title string) {
 		     one thing a player must ACT on. Server-rendered and polled; this
 		     widget owns only the browser timezone and the dismissal. -->
 		<script src={ AssetURL("/static/js/widgets/callout.js") } defer></script>
+		<script src={ AssetURL("/static/js/widgets/vault_import.js") } defer></script>
 
 		<!-- Journal: the list's filter/group/sort rules, then the workspace widget -->
 		<script src={ AssetURL("/static/js/widgets/journal_list.js") } defer></script>

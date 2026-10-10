@@ -148,6 +148,12 @@
         extensions.push(Chronicle.EditorRollTable.extension);
       }
 
+      // Mermaid diagrams. In the schema for everyone so a page holding one
+      // loads; the drawing library is fetched only when one is drawn.
+      if (Chronicle.EditorDiagram && Chronicle.EditorDiagram.extension) {
+        extensions.push(Chronicle.EditorDiagram.extension);
+      }
+
       // [[links]] to notes. Always in the schema, so a body holding one
       // loads anywhere; reading, a click opens the Journal at the note,
       // unless this reader can't see it. While editing a click selects it.

@@ -270,7 +270,7 @@ jobs:
         run: |
           go test ./internal/plugins/sessions/... ./internal/plugins/entities/... ./internal/plugins/timeline/... ./internal/plugins/calendar/... \
             -v -count=1 2>&1 | tee dbtests.log
-          go test ./internal/app/ -v -count=1 -run 'CustomVisibilityLeak|PrivateEntityVisibilityLeak|CalendarCampaignExportImport|CampaignExportImport_PlacesInTree|SiteTrash' 2>&1 | tee -a dbtests.log
+          go test ./internal/app/ -v -count=1 -run 'CustomVisibilityLeak|PrivateEntityVisibilityLeak|CalendarCampaignExportImport|CampaignExportImport_PlacesInTree|SiteTrash|VaultImport_DB' 2>&1 | tee -a dbtests.log
           go test ./internal/plugins/campaigns/ -v -count=1 -run TestNavPins_Integration 2>&1 | tee -a dbtests.log
           go test ./internal/plugins/auth/ -v -count=1 -run 'TestUserRepository_.*_Integration' 2>&1 | tee -a dbtests.log
           go test ./internal/plugins/quests/ -v -count=1 -run 'Integration' 2>&1 | tee -a dbtests.log
@@ -286,6 +286,7 @@ jobs:
                       TestTimelineEvents_PrivateEntityVisibilityLeak \
                       TestTimelineEntityGroups_PrivateEntityVisibilityLeak \
                       TestNavPins_Integration \
+                      TestVaultImport_DBImportsATreeGMOnly_Integration \
                       TestUserRepository_UpdateAvatarPath_Integration \
                       TestUserRepository_ClearAvatarPathIfMatches_Integration \
                       TestCalendarRepository_Integration \

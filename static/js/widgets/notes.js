@@ -910,6 +910,8 @@ Chronicle.register('notes', {
       noteLinksOff = Chronicle.hydrateNoteLinks ? Chronicle.hydrateNoteLinks(notesList, campaignId) : null;
       bindCardEvents();
       initMiniEditors();
+      // Saved diagrams in the cards that show HTML are drawn here.
+      if (Chronicle.EditorDiagram && Chronicle.EditorDiagram.hydrate) Chronicle.EditorDiagram.hydrate(notesList);
     }
 
     /**
@@ -1038,7 +1040,8 @@ Chronicle.register('notes', {
           html += '</div>';
         });
         html += '<div class="note-add-block"><button class="note-add-tasks" type="button" title="Checklist" aria-label="Checklist"><i class="fa-solid fa-list-check"></i></button>' +
-          (Chronicle.EditorImage ? '<button class="note-add-picture" type="button" title="Picture" aria-label="Picture"><i class="fa-solid fa-image"></i></button>' : '') + '</div>';
+          (Chronicle.EditorImage ? '<button class="note-add-picture" type="button" title="Picture" aria-label="Picture"><i class="fa-solid fa-image"></i></button>' : '') +
+          (Chronicle.EditorDiagram && Chronicle.EditorDiagram.insert ? '<button class="note-add-diagram" type="button" title="Diagram" aria-label="Diagram"><i class="fa-solid fa-diagram-project"></i></button>' : '') + '</div>';
       } else {
         // Display mode: the rich text, then any checklist blocks.
         if (note.entryHtml) {
@@ -1319,6 +1322,16 @@ Chronicle.register('notes', {
         });
       });
 
+      // A diagram in the rich text (Mermaid text, drawn beside it).
+      notesList.querySelectorAll('.note-add-diagram').forEach(function (btn) {
+        btn.addEventListener('mousedown', function (e) { e.preventDefault(); });
+        btn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          var ed = miniEditors[state.editingId];
+          if (ed && Chronicle.EditorDiagram) Chronicle.EditorDiagram.insert(ed);
+        });
+      });
+
       // Journal references open in the Journal.
       notesList.querySelectorAll('a.note-link').forEach(function (a) {
         a.addEventListener('click', function () { flushAutosave(); });
@@ -1530,6 +1543,7 @@ Chronicle.register('notes', {
       if (TipTap.TaskList && TipTap.TaskItem) extensions.push(TipTap.TaskList, TipTap.TaskItem.configure({ nested: true }));
       // Pictures are in the schema for everyone, so a note holding one loads.
       if (Chronicle.EditorImage) extensions.push(Chronicle.EditorImage.extension);
+      if (Chronicle.EditorDiagram && Chronicle.EditorDiagram.extension) extensions.push(Chronicle.EditorDiagram.extension);
       var pictureProps = Chronicle.EditorImage ? Chronicle.EditorImage.pasteDropProps(function () { return editor; }, campaignId) : {};
 
       wikiExt = Chronicle.WikiLinkExtension ? Chronicle.WikiLinkExtension({ campaignId: campaignId, notes: linkCandidates }) : null;

@@ -539,6 +539,9 @@ templ SettingsDataSection(cc *CampaignContext) {
 			<a href="/campaigns/import" class="btn-secondary text-sm inline-flex items-center gap-1.5">
 				<i class="fa-solid fa-upload text-xs"></i> Import Campaign
 			</a>
+			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/import", cc.Campaign.ID)) } class="btn-secondary text-sm inline-flex items-center gap-1.5">
+				<i class="fa-solid fa-file-import text-xs"></i> Import from Obsidian or Markdown
+			</a>
 		</div>
 		<p class="text-[11px] text-fg-muted mt-2">
 			The ZIP contains <code>campaign.json</code> plus a <code>media/</code> folder holding your image

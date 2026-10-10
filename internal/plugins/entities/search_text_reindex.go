@@ -64,13 +64,13 @@ func ReindexSecretSearchText(ctx context.Context, repo EntityRepository) (int, e
 }
 
 // ListSecretSearchCandidates implements SearchTextReindexStore. The markers
-// are the three kinds of GM-only content sanitize.StripSecretsHTML removes.
+// are the kinds of GM-only content sanitize.StripSecretsHTML removes.
 func (r *entityRepository) ListSecretSearchCandidates(ctx context.Context, afterID string, limit int) ([]SearchTextCandidate, error) {
 	rows, err := r.db.QueryContext(ctx,
 		`SELECT id, entry_html, fields_data, search_text
 		 FROM entities
 		 WHERE id > ?
-		   AND (entry_html LIKE '%data-secret%' OR entry_html LIKE '%ce-img--gm%' OR entry_html LIKE '%ce-roll%')
+		   AND (entry_html LIKE '%data-secret%' OR entry_html LIKE '%ce-img--gm%' OR entry_html LIKE '%ce-diagram--gm%' OR entry_html LIKE '%ce-roll%')
 		 ORDER BY id
 		 LIMIT ?`, afterID, limit)
 	if err != nil {
