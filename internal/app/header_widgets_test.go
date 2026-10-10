@@ -238,3 +238,26 @@ func TestHeaderWeatherLabel(t *testing.T) {
 		})
 	}
 }
+
+func TestHeaderSkyCalendarID(t *testing.T) {
+	cases := []struct {
+		name string
+		cal  *fakeHeaderCalendar
+		want string
+	}{
+		{"the default calendar", &fakeHeaderCalendar{cal: testCalendar()}, "cal1"},
+		{"none, or not this viewer's", &fakeHeaderCalendar{calErr: apperror.NewNotFound("calendar not found")}, ""},
+		{"a failed read", &fakeHeaderCalendar{calErr: errors.New("db down")}, ""},
+		{"no calendar and no error", &fakeHeaderCalendar{}, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := headerSkyCalendarID(context.Background(), tc.cal, "camp1", permissions.Viewer{}); got != tc.want {
+				t.Errorf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+	if got := headerSkyCalendarID(context.Background(), nil, "camp1", permissions.Viewer{}); got != "" {
+		t.Errorf("no calendar service: got %q", got)
+	}
+}

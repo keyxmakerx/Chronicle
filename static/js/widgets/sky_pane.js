@@ -776,6 +776,12 @@
     (this.o.followers ? this.o.followers() : []).forEach(function (el) { el.style.transform = ''; });
   };
   window.SkyPane = { Dock: Dock, paneHeight: paneHeight, spring: spring, FOLD_KEY: FOLD_KEY };
+  // The pieces another sky (the header's Sky background) draws with, so it
+  // shows the same sky as the pane: the same state, painters, pace and words.
+  window.SkyPane.Scene = {
+    state: buildState, paint: paintSky, pace: paceOf, reduced: reducedMotion,
+    getJSON: getJSON, dayWeather: fetchDayWeather, seed: hashSeed, describe: describe, IDLE_S: IDLE_S
+  };
 
   Chronicle.register('sky-pane', {
     init: function (el) { injectStyles(); var inst = new Instance(el); el._skyPane = inst; inst.init(); },

@@ -4997,6 +4997,22 @@ func (a *App) RegisterRoutes() {
 				cancel()
 			}
 
+			// The campaign's sky is drawn from its default calendar, so the
+			// Sky header background needs that calendar's id, and so does
+			// the Customize page's example header. Without one the header
+			// keeps its still night colours. A fragment swap never redraws
+			// the bar, so only a full page reads it for the header.
+			skyHeader := !middleware.IsHTMX(c)
+			if ts := layouts.GetTopbarStyle(ctx); ts == nil || ts.Mode != "sky" {
+				skyHeader = false
+			}
+			if (skyHeader || c.Path() == "/campaigns/:id/customize") && enabledSlugs[calendar.PluginSlug] && calendarHealthy {
+				skyCtx, cancel := context.WithTimeout(reqCtx, headerLiveTimeout)
+				ctx = layouts.SetSkyCalendarID(ctx, headerSkyCalendarID(skyCtx, calendarService, cc.Campaign.ID,
+					permissions.RequestViewer(cc.VisibilityRole(), layoutUserID)))
+				cancel()
+			}
+
 			// Extension widget scripts for campaign pages.
 			if widgetURLs := extHandler.GetWidgetScriptURLs(reqCtx, cc.Campaign.ID); len(widgetURLs) > 0 {
 				ctx = layouts.SetExtWidgetScripts(ctx, widgetURLs)

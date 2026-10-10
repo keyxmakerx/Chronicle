@@ -49,9 +49,9 @@ business rules and footguns.
   `notifications`, `shortcuts_help`, `sidebar_tag_filter`, `sidebar_tree`, and
   under `widgets/`: `dynamic_surface`, `entity_posts`, `entity_tooltip`,
   `entity_type_config`, `entity_type_editor`, `groups`, `header_motion`,
-  `image_upload`, `layout_editor`, `map_widget`, `permissions`, `quest_board`,
-  `relation_graph`, `shop_inventory`, `template_editor`, `timeline_viz`,
-  `timeline_widget`.
+  `header_sky`, `image_upload`, `layout_editor`, `map_widget`, `permissions`,
+  `quest_board`, `relation_graph`, `shop_inventory`, `template_editor`,
+  `timeline_viz`, `timeline_widget`.
 - **Examples:** `extensions/example-wasm-go/`, `extensions/example-wasm-rust/`.
 
 ## Templates

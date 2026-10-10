@@ -106,6 +106,25 @@ func buildTopbarLive(ctx context.Context, cal headerCalendarService, nights head
 	return live
 }
 
+// headerSkyCalendarID is the calendar the header's Sky background draws:
+// the campaign's default calendar as this viewer may see it, or "" when there
+// is none, the viewer may not see it, or the read fails. An empty id leaves
+// the header on its still night fallback.
+func headerSkyCalendarID(ctx context.Context, cal headerCalendarService, campaignID string, v permissions.Viewer) string {
+	if cal == nil {
+		return ""
+	}
+	c, err := cal.GetDefaultCalendarForViewer(ctx, campaignID, v)
+	if err != nil {
+		logHeaderErr("sky", campaignID, err)
+		return ""
+	}
+	if c == nil {
+		return ""
+	}
+	return c.ID
+}
+
 // logHeaderErr logs a failed header read. NotFound is the normal "no
 // calendar yet / not visible to you" answer, not a fault.
 func logHeaderErr(what, campaignID string, err error) {

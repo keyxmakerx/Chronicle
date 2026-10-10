@@ -644,7 +644,7 @@ type TierDefinition struct {
 
 // TopbarStyle configures the visual appearance of the campaign's top navigation bar.
 type TopbarStyle struct {
-	Mode         string `json:"mode"`                       // "solid", "gradient", or "image".
+	Mode         string `json:"mode"`                       // "solid", "gradient", "moving", "sky" or "image".
 	Color        string `json:"color,omitempty"`             // Hex color for solid mode.
 	GradientFrom string `json:"gradient_from,omitempty"`     // Start color for gradient mode.
 	GradientTo   string `json:"gradient_to,omitempty"`       // End color for gradient mode.

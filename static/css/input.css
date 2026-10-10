@@ -4232,6 +4232,19 @@ html.dark[data-view-contrast="high"] { /* the second out-ranks a campaign's :roo
   border-bottom-color: rgb(255 255 255 / 0.13);
 }
 
+/* The Sky header: the campaign's sky fills the bar and fades in over the
+   still night colours once it is drawn (header_sky.js). */
+.header-sky { position: absolute; inset: 0; opacity: 0; transition: opacity 0.6s var(--ease-out, ease-out); }
+.header-sky.is-ready { opacity: 1; }
+.header-sky canvas { display: block; width: 100%; height: 100%; }
+@media (prefers-reduced-motion: reduce) { .header-sky { transition: none; } }
+:is([data-cz-reduce], [data-view-motion="calm"]) .header-sky { transition: none; }
+/* Over the sky the words and icons carry a soft shadow, so they read over a
+   bright noon as well as a night; menus that open from the bar stay plain. */
+#app-topbar:has(.header-sky) { text-shadow: 0 1px 3px rgb(0 0 0 / 0.45); }
+#app-topbar:has(.header-sky) svg:not(:is(.bg-surface, #topbar-tray) svg) { filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.4)); }
+#app-topbar:has(.header-sky) :is(.bg-surface, #topbar-tray) { text-shadow: none; }
+
 /* The header's "+N" tray opens over the page, so it keeps the page's own ink
    rather than the light ink above. The snapshot is taken on <html>, where the
    page tones and dark mode set these, so it follows both. */
