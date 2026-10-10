@@ -45,6 +45,10 @@ func (p *presetApplier) ReconcileSystemPresets(ctx context.Context, campaignID, 
 	return p.applyPresets(ctx, campaignID, systemSlug, false, known)
 }
 
+// presetCategoryCharacter is the system preset category that binds the
+// character sheet.
+const presetCategoryCharacter = "character"
+
 // presetFieldKeys maps preset slug → set of field keys a package version declares.
 type presetFieldKeys map[string]map[string]bool
 
@@ -81,7 +85,12 @@ func (p *presetApplier) applyPresets(ctx context.Context, campaignID, systemSlug
 		// bundled manifest. Not an error, just nothing to apply.
 		return 0, nil
 	}
+	return p.applyManifestPresets(ctx, campaignID, systemSlug, manifest, create, known)
+}
 
+// applyManifestPresets is applyPresets past the registry lookup, split out so
+// the walk can be tested against an in-memory manifest.
+func (p *presetApplier) applyManifestPresets(ctx context.Context, campaignID, systemSlug string, manifest *systems.SystemManifest, create bool, known presetFieldKeys) (int, error) {
 	if len(manifest.EntityPresets) == 0 {
 		return 0, nil
 	}
@@ -159,6 +168,32 @@ func (p *presetApplier) applyPresets(ctx context.Context, campaignID, systemSlug
 
 		if !create {
 			continue
+		}
+
+		// A character sheet belongs on the seeded "Characters" type: real
+		// characters (and the Foundry module's picks) live there, so a second
+		// type would sit empty and the sheet would never render. Only when that
+		// type is absent or already bound to another preset do we create one.
+		if preset.Category == presetCategoryCharacter {
+			adopted, err := p.entityService.AdoptDefaultCharacterType(ctx, campaignID, preset.Category, declared)
+			if err != nil {
+				slog.Warn("failed to adopt the default Characters type for a system preset",
+					slog.String("campaign_id", campaignID),
+					slog.String("preset", preset.Slug),
+					slog.Any("error", err),
+				)
+				continue // Don't fall through to creating a duplicate on a transient error.
+			}
+			if adopted != nil {
+				slog.Info("default Characters type adopted as the system character type",
+					slog.String("campaign_id", campaignID),
+					slog.Int("entity_type_id", adopted.ID),
+					slog.String("preset", preset.Slug),
+					slog.String("system", systemSlug),
+				)
+				created++
+				continue
+			}
 		}
 
 		// Create path: no matching type yet — make a new one with its fields.
