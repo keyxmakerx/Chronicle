@@ -104,6 +104,13 @@ run_case "unrelated added line passes" \
 run_case "whole-line comment naming a slug passes" \
   0 "${ordinary}" "	// the ${slug} plugin owns this"
 
+# 8. The addons catalogue names every plugin slug by design, so its file is
+#    allowed; the same line in a sibling file of that plugin is not.
+run_case "addon catalogue naming a slug passes" \
+  0 "internal/plugins/addons/service.go" "	{Slug: \"${slug}\", Name: \"x\"},"
+run_case "other file of the addons plugin naming a slug still fails" \
+  1 "internal/plugins/addons/handler.go" "	report.Fail(\"${slug}\", \"x\", n, e)"
+
 echo
 echo "test-plugin-isolation: ${pass} passed, ${fail} failed"
 [[ "${fail}" -eq 0 ]] || exit 1
