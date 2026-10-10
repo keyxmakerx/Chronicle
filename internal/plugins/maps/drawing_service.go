@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"regexp"
 	"strings"
 	"time"
@@ -178,6 +179,12 @@ type DrawingService interface {
 	// SetHexFogLookup wires the hex fog, so drawings under unexplored hexes are
 	// withheld like those under a shadow. Unwired, no fog is known.
 	SetHexFogLookup(l HexFogLookup)
+	// SetMapFrameLookup wires a map's recorded image size, so a turned picture
+	// is judged against shadows exactly. Unwired, every turned picture on a
+	// map with a shadow is withheld.
+	SetMapFrameLookup(fn func(ctx context.Context, mapID string) (w, h int, err error))
+	// MapFrame returns the frame the viewer draws mapID in; zero when unknown.
+	MapFrame(ctx context.Context, mapID string) MapFrame
 }
 
 // MapEventPublisher emits domain events when map resources change.
@@ -222,9 +229,16 @@ type drawingService struct {
 	media MediaVerifier
 	// hexFog supplies the fog mask for drawings under unexplored hexes.
 	hexFog HexFogLookup
+	// mapFrame returns a map's recorded image size, to place turned pictures.
+	mapFrame func(ctx context.Context, mapID string) (w, h int, err error)
 }
 
 func (s *drawingService) SetHexFogLookup(l HexFogLookup) { s.hexFog = l }
+
+// SetMapFrameLookup sets the function used to read a map's image size.
+func (s *drawingService) SetMapFrameLookup(fn func(ctx context.Context, mapID string) (w, h int, err error)) {
+	s.mapFrame = fn
+}
 
 // errImageWiring is the cause logged when picture writes arrive before the
 // media verifier is wired.
@@ -582,11 +596,13 @@ func (s *drawingService) WithholdImages(ctx context.Context, mapID string, role 
 	if fog == nil && len(areas) == 0 {
 		return ds, nil
 	}
+	frame := s.lazyMapFrame(ctx, mapID)
 	out := make([]Drawing, len(ds))
 	copy(out, ds)
 	for i := range out {
-		if fog.WithholdsImageOf(&out[i]) || shadowWithholdsImageOf(areas, &out[i]) {
-			out[i].ImageID = nil
+		d := &out[i]
+		if fog.WithholdsImageOf(d) || (len(areas) > 0 && shadowWithholdsImageOf(areas, d, frame(d))) {
+			d.ImageID = nil
 		}
 	}
 	return out, nil
@@ -617,13 +633,43 @@ func (s *drawingService) WithholdsPictureFile(ctx context.Context, mapID, mediaI
 	if err != nil {
 		return true, err
 	}
+	frame := s.lazyMapFrame(ctx, mapID)
 	for i := range drawings {
 		d := &drawings[i]
-		if d.ImageID != nil && *d.ImageID == mediaID && (fog.WithholdsImageOf(d) || shadowWithholdsImageOf(areas, d)) {
+		if d.ImageID != nil && *d.ImageID == mediaID &&
+			(fog.WithholdsImageOf(d) || (len(areas) > 0 && shadowWithholdsImageOf(areas, d, frame(d)))) {
 			return true, nil
 		}
 	}
 	return false, nil
+}
+
+// MapFrame implements DrawingService. An unwired or failing lookup answers an
+// unknown frame, which withholds every turned picture under a shadow.
+func (s *drawingService) MapFrame(ctx context.Context, mapID string) MapFrame {
+	if s.mapFrame == nil {
+		return MapFrame{}
+	}
+	w, h, err := s.mapFrame(ctx, mapID)
+	if err != nil {
+		slog.Warn("maps: map size lookup failed; withholding turned pictures under shadows",
+			slog.String("map_id", mapID), slog.Any("error", err))
+		return MapFrame{}
+	}
+	return mapFrameOf(w, h)
+}
+
+// lazyMapFrame returns a function giving the frame a drawing on mapID needs:
+// the map is read once, and only for a turned picture.
+func (s *drawingService) lazyMapFrame(ctx context.Context, mapID string) func(*Drawing) MapFrame {
+	var frame MapFrame
+	read := false
+	return func(d *Drawing) MapFrame {
+		if !read && pictureIsTurned(d) {
+			frame, read = s.MapFrame(ctx, mapID), true
+		}
+		return frame
+	}
 }
 
 // notFoundIfHiddenFrom answers NotFound, the same as a missing id, when a

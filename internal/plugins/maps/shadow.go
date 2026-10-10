@@ -118,15 +118,51 @@ func drawingUnderShadow(areas []ShadowArea, d Drawing) bool {
 	return true
 }
 
+// MapFrame is a map's size in map units (the pixels of its image), the space
+// the viewer draws in. A picture turns in this space, not in percentages, so a
+// turned picture can only be placed on a map whose frame is known.
+type MapFrame struct {
+	W, H float64
+}
+
+func (f MapFrame) known() bool {
+	return f.W > 0 && f.H > 0 && !math.IsInf(f.W, 0) && !math.IsInf(f.H, 0)
+}
+
+// viewerDefaultMapUnits is the side the map viewer gives a map whose image
+// size was never recorded; the frame must match what the viewer draws.
+const viewerDefaultMapUnits = 1000
+
+// mapFrameOf is the frame the viewer draws a map of this image size in.
+func mapFrameOf(imageW, imageH int) MapFrame {
+	f := MapFrame{W: float64(imageW), H: float64(imageH)}
+	if imageW <= 0 {
+		f.W = viewerDefaultMapUnits
+	}
+	if imageH <= 0 {
+		f.H = viewerDefaultMapUnits
+	}
+	return f
+}
+
+// pictureIsTurned reports whether d is a picture whose box is not axis-aligned
+// on screen, so judging it against a shadow needs the map's frame.
+func pictureIsTurned(d *Drawing) bool {
+	return d != nil && d.DrawingType == DrawingTypeImage && math.Mod(d.Rotation, 180) != 0
+}
+
+// PictureIsTurned: see pictureIsTurned. The event publisher reads the map's
+// frame only for these.
+func PictureIsTurned(d *Drawing) bool { return pictureIsTurned(d) }
+
 // shadowWithholdsImageOf reports whether the picture file of drawing d must
-// not be sent to a viewer subject to shadow hiding: its box overlaps a shadow.
-// A picture shows the land under the shadow as pixels, so unlike a line it
-// cannot "merely touch" one; the drawing still goes out as a placeholder
-// wherever drawingUnderShadow lets it. Shadows are boxes in map percentages
-// and the map's aspect is not known here, so a turned picture's box cannot be
-// placed exactly: any turn other than a half turn is withheld while the map
-// has a shadow at all, and an unreadable box is withheld, failing closed.
-func shadowWithholdsImageOf(areas []ShadowArea, d *Drawing) bool {
+// not be sent to a viewer subject to shadow hiding: the picture, as drawn,
+// covers part of a shadow. A picture shows the land under the shadow as
+// pixels, so unlike a line it cannot "merely touch" one; the drawing still
+// goes out as a placeholder wherever drawingUnderShadow lets it. A turned
+// picture is placed exactly in the map's frame; with no frame, or an
+// unreadable box, it is withheld, failing closed.
+func shadowWithholdsImageOf(areas []ShadowArea, d *Drawing, frame MapFrame) bool {
 	if len(areas) == 0 || d == nil || d.DrawingType != DrawingTypeImage {
 		return false
 	}
@@ -134,19 +170,76 @@ func shadowWithholdsImageOf(areas []ShadowArea, d *Drawing) bool {
 	if !ok || len(pts) != 2 || math.IsNaN(d.Rotation) || math.IsInf(d.Rotation, 0) {
 		return true
 	}
-	if math.Mod(d.Rotation, 180) != 0 {
-		return true
-	}
 	x0, x1 := math.Min(pts[0].X, pts[1].X), math.Max(pts[0].X, pts[1].X)
 	y0, y1 := math.Min(pts[0].Y, pts[1].Y), math.Max(pts[0].Y, pts[1].Y)
+	if !pictureIsTurned(d) {
+		for _, a := range areas {
+			// Positive-area overlap: a picture lying edge to edge with a
+			// shadow shows none of the land under it.
+			if x0 < a.MaxX && x1 > a.MinX && y0 < a.MaxY && y1 > a.MinY {
+				return true
+			}
+		}
+		return false
+	}
+	if !frame.known() {
+		return true
+	}
+	quad := turnedBox(x0/100*frame.W, y0/100*frame.H, x1/100*frame.W, y1/100*frame.H, d.Rotation)
 	for _, a := range areas {
-		// Positive-area overlap: a picture lying edge to edge with a shadow
-		// shows none of the land under it.
-		if x0 < a.MaxX && x1 > a.MinX && y0 < a.MaxY && y1 > a.MinY {
+		box := [4]pointXY{
+			{a.MinX / 100 * frame.W, a.MinY / 100 * frame.H}, {a.MaxX / 100 * frame.W, a.MinY / 100 * frame.H},
+			{a.MaxX / 100 * frame.W, a.MaxY / 100 * frame.H}, {a.MinX / 100 * frame.W, a.MaxY / 100 * frame.H},
+		}
+		if convexOverlap(quad, box) {
 			return true
 		}
 	}
 	return false
+}
+
+// turnedBox returns the corners of the box (x0,y0)-(x1,y1) turned deg
+// clockwise on screen (y grows downwards) about its centre, as the viewer's
+// CSS rotate() draws it.
+func turnedBox(x0, y0, x1, y1, deg float64) [4]pointXY {
+	cx, cy, hw, hh := (x0+x1)/2, (y0+y1)/2, (x1-x0)/2, (y1-y0)/2
+	rad := deg * math.Pi / 180
+	cos, sin := math.Cos(rad), math.Sin(rad)
+	var out [4]pointXY
+	for i, c := range [4][2]float64{{-hw, -hh}, {hw, -hh}, {hw, hh}, {-hw, hh}} {
+		out[i] = pointXY{X: cx + c[0]*cos - c[1]*sin, Y: cy + c[0]*sin + c[1]*cos}
+	}
+	return out
+}
+
+// convexOverlap reports whether two convex quadrilaterals share a region of
+// positive area, by the separating axis test: they do unless, along the
+// normal of some edge, their shadows on that axis at most touch.
+func convexOverlap(p, q [4]pointXY) bool {
+	for _, poly := range [2][4]pointXY{p, q} {
+		for i := range poly {
+			e := poly[(i+1)%4]
+			nx, ny := -(e.Y - poly[i].Y), e.X-poly[i].X
+			if nx == 0 && ny == 0 {
+				continue
+			}
+			pMin, pMax := project(p, nx, ny)
+			qMin, qMax := project(q, nx, ny)
+			if pMax <= qMin || qMax <= pMin {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func project(poly [4]pointXY, nx, ny float64) (lo, hi float64) {
+	lo, hi = math.Inf(1), math.Inf(-1)
+	for _, v := range poly {
+		d := v.X*nx + v.Y*ny
+		lo, hi = math.Min(lo, d), math.Max(hi, d)
+	}
+	return lo, hi
 }
 
 // shadowHidingApplies reports whether a viewer is subject to shadow hiding.
@@ -210,6 +303,6 @@ func DrawingUnderShadow(areas []ShadowArea, d *Drawing) bool {
 
 // ShadowWithholdsImageOf reports whether a shadow withholds the picture file of
 // d, for the event publisher, whose payload carries the file id.
-func ShadowWithholdsImageOf(areas []ShadowArea, d *Drawing) bool {
-	return shadowWithholdsImageOf(areas, d)
+func ShadowWithholdsImageOf(areas []ShadowArea, d *Drawing, frame MapFrame) bool {
+	return shadowWithholdsImageOf(areas, d, frame)
 }
