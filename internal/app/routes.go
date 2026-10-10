@@ -1505,6 +1505,42 @@ func (a *mapEventPublisherAdapter) PublishHexChanged(campaignID, mapID string, v
 	a.bus.Publish(ws.NewMessage(ws.MsgHexChanged, campaignID, mapID, payload))
 }
 
+// Kinds carried by PublishItemsChanged; the viewer maps each to a refetch.
+const (
+	mapItemsMarkers  = "markers"
+	mapItemsDrawings = "drawings"
+	mapItemsShadows  = "shadows"
+)
+
+// publishItemsChanged announces that something of one kind changed on a map.
+// It carries ids only: the viewer refetches through the role-filtered reads,
+// so DM-only, shadow and hex-fog rules stay decided in one place and nothing
+// secret rides this message. By default it goes to every client of the
+// campaign; creating or deleting a DM-only or rule-restricted pin or drawing
+// passes that item's audience (dmOnly, rules) so players are not told that a
+// hidden thing appeared or vanished. Updates and shadows stay open: a shadow
+// changes what players see, and an update may move an item into view. No
+// token notice exists: tokens have no layer on the web viewer, and a notice
+// per hidden drag would leak movement. It is
+// sent just before the per-item event (which stays audience-gated) because the
+// per-item event is not enough for a page to stay right: it cannot say what a
+// shadow or the fog now covers or uncovers.
+func (a *mapEventPublisherAdapter) publishItemsChanged(campaignID, mapID, kind string, dmOnly bool, rules *maps.VisibilityRules) {
+	if campaignID == "" || mapID == "" || a.bus == nil {
+		return
+	}
+	msg := ws.NewMessage(ws.MsgMapItemsChanged, campaignID, mapID, map[string]any{
+		"map_id": mapID,
+		"kind":   kind,
+	})
+	msg.RequiresDM = dmOnly
+	if rules != nil {
+		msg.AllowedUsers = rules.AllowedUsers
+		msg.DeniedUsers = rules.DeniedUsers
+	}
+	a.bus.Publish(msg)
+}
+
 // publishWithAudience wraps ws.NewMessage with the audience derived from
 // the source row: the binary RequiresDM (dm_only) flag, plus — for
 // markers and drawings, which carry per-user visibility_rules — the
@@ -1556,7 +1592,19 @@ func (a *mapEventPublisherAdapter) PublishDrawingEvent(eventType string, campaig
 				return maps.DrawingUnderShadow(areas, drawing) || maps.ShadowWithholdsImageOf(areas, drawing, frame)
 			}) ||
 				a.underFog(drawing.MapID, func(f *maps.FogMask) bool { return f.HidesDrawing(drawing) || f.WithholdsImageOf(drawing) })))
-	a.publishWithAudience(msgType, campaignID, drawing.ID, drawing, dmOnly, maps.ParseVisibilityRules(drawing.VisibilityRules))
+	// Shadows have their own kind so a viewer can tell that pins under or
+	// uncovered by them need a refetch too; pictures count as drawings.
+	kind := mapItemsDrawings
+	if drawing.DrawingType == maps.DrawingTypeShadow {
+		kind = mapItemsShadows
+	}
+	rules := maps.ParseVisibilityRules(drawing.VisibilityRules)
+	if kind == mapItemsShadows || eventType == "updated" {
+		a.publishItemsChanged(campaignID, drawing.MapID, kind, false, nil)
+	} else {
+		a.publishItemsChanged(campaignID, drawing.MapID, kind, dmOnly, rules)
+	}
+	a.publishWithAudience(msgType, campaignID, drawing.ID, drawing, dmOnly, rules)
 }
 
 // PublishTokenEvent translates map token domain events into WebSocket messages.
@@ -1671,7 +1719,13 @@ func (a *mapEventPublisherAdapter) PublishMarkerEvent(eventType string, campaign
 	dmOnly := marker.IsDMOnly() ||
 		a.underShadow(marker.MapID, func(areas []maps.ShadowArea) bool { return maps.MarkerUnderShadow(areas, marker) }) ||
 		a.underFog(marker.MapID, func(f *maps.FogMask) bool { return f.HidesMarker(marker) })
-	a.publishWithAudience(msgType, campaignID, marker.ID, marker, dmOnly, maps.ParseVisibilityRules(marker.VisibilityRules))
+	rules := maps.ParseVisibilityRules(marker.VisibilityRules)
+	if eventType == "updated" {
+		a.publishItemsChanged(campaignID, marker.MapID, mapItemsMarkers, false, nil)
+	} else {
+		a.publishItemsChanged(campaignID, marker.MapID, mapItemsMarkers, dmOnly, rules)
+	}
+	a.publishWithAudience(msgType, campaignID, marker.ID, marker, dmOnly, rules)
 }
 
 // (The campaigns show page lazy-loads the Foundry banner via
