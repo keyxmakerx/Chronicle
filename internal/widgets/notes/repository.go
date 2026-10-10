@@ -870,3 +870,14 @@ func (r *noteRepository) UpdateTranscript(ctx context.Context, id string, transc
 	}
 	return nil
 }
+
+// DeletePrivateByUser removes a deleted account's unshared notes. Folders
+// stay: deleting one cascades to the notes inside, which may be shared.
+func (r *noteRepository) DeletePrivateByUser(ctx context.Context, userID string) (int64, error) {
+	res, err := r.db.ExecContext(ctx,
+		`DELETE FROM notes WHERE user_id = ? AND is_shared = FALSE AND is_folder = FALSE`, userID)
+	if err != nil {
+		return 0, fmt.Errorf("deleting private notes: %w", err)
+	}
+	return res.RowsAffected()
+}

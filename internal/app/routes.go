@@ -3996,6 +3996,13 @@ func (a *App) RegisterRoutes() {
 			slog.Error("revoking notes app grants failed", slog.String("user_id", userID), slog.Any("error", err))
 		}
 	})
+	// Deleting your own account: the campaign side runs first and refuses
+	// while the person still owns a campaign; once the account is emptied,
+	// the rest of what other plugins hold about the person goes.
+	auth.ConfigureAccountDeletion(authService, &accountDeletionAdapter{campaigns: campaignService})
+	auth.OnAccountDeleted(authService, func(ctx context.Context, userID string) {
+		forgetDeletedAccount(ctx, userID, entityRepo, entityNotesRepo, noteRepo, syncService)
+	})
 	// Removing a player from a campaign ends their grants there, so a later
 	// re-invite starts with none.
 	campaigns.OnMemberRemoved(campaignService, func(ctx context.Context, campaignID, userID string) {
@@ -5646,4 +5653,68 @@ func (a *notesOriginAllower) OriginAllowed(ctx context.Context, origin string) b
 		}
 	}
 	return false
+}
+
+// accountDeletionAdapter gives auth's account deletion the campaign-side
+// steps without auth importing the campaigns plugin.
+type accountDeletionAdapter struct {
+	campaigns campaigns.CampaignService
+}
+
+func (a *accountDeletionAdapter) OwnedCampaigns(ctx context.Context, userID string) ([]auth.OwnedCampaignRef, error) {
+	owned, err := a.campaigns.OwnedCampaigns(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]auth.OwnedCampaignRef, len(owned))
+	for i, o := range owned {
+		out[i] = auth.OwnedCampaignRef{ID: o.ID, Name: o.Name, MemberCount: o.MemberCount}
+	}
+	return out, nil
+}
+
+func (a *accountDeletionAdapter) LeaveAllCampaigns(ctx context.Context, userID string) error {
+	return a.campaigns.LeaveAllForDeletedAccount(ctx, userID)
+}
+
+// forgetDeletedAccount clears what other plugins hold about a deleted
+// account: its characters' link to it, its private notes and its sync API
+// keys. Each repository is type-asserted so a test double without the
+// method just skips that step; a failure is logged and the rest still run.
+func forgetDeletedAccount(ctx context.Context, userID string, entityRepo, entityNotesRepo, noteRepo any, syncSvc syncapi.SyncAPIService) {
+	type cleaner func(context.Context, string) (int64, error)
+	steps := map[string]cleaner{}
+	if r, ok := entityRepo.(interface {
+		ClearOwnerForUser(context.Context, string) (int64, error)
+	}); ok {
+		steps["character links"] = r.ClearOwnerForUser
+	}
+	if r, ok := entityNotesRepo.(interface {
+		DeletePrivateByAuthor(context.Context, string) (int64, error)
+	}); ok {
+		steps["private page notes"] = r.DeletePrivateByAuthor
+	}
+	if r, ok := noteRepo.(interface {
+		DeletePrivateByUser(context.Context, string) (int64, error)
+	}); ok {
+		steps["private notes"] = r.DeletePrivateByUser
+	}
+	for name, fn := range steps {
+		if _, err := fn(ctx, userID); err != nil {
+			slog.Error("clearing deleted account data failed", slog.String("step", name), slog.String("user_id", userID), slog.Any("error", err))
+		}
+	}
+	if syncSvc == nil {
+		return
+	}
+	keys, err := syncSvc.ListKeysByUser(ctx, userID)
+	if err != nil {
+		slog.Error("listing deleted account's API keys failed", slog.String("user_id", userID), slog.Any("error", err))
+		return
+	}
+	for _, k := range keys {
+		if err := syncSvc.DeactivateKey(ctx, k.ID); err != nil {
+			slog.Error("deactivating deleted account's API key failed", slog.Int("key_id", k.ID), slog.Any("error", err))
+		}
+	}
 }
