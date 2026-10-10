@@ -85,6 +85,9 @@ folding, counts in a pill sized to its number.
   Paper, Plain, Night, Compact; Paper by default). Paper stays paper in dark
   mode, and its tokens and classes (`static/css/paper.css`) are the shared
   paper look for every paper-styled page.
+- **The character sheet style is the owner's choice** (Customize › Character
+  sheets; Modern by default). The choice reaches the page as `data-cz-sheet`
+  on `<html>`, which `static/css/sheet_styles.css` and `sheet_motion.js` read.
 - **The page peek** (`static/js/peek_panel.js`) opens a linked page read-only
   in one side panel (a bottom sheet on a phone) on Shift-click, Shift+Enter or
   the peek icon beside a link. It stays open beside the page so two pages can
