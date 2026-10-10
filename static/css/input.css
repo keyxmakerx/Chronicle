@@ -4336,6 +4336,17 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
   .dms-close { background: rgba(0,0,0,.35); border: 1px solid rgba(255,255,255,.3); color: #fff; border-radius: .5rem; padding: .15rem .7rem; }
   .dms-close:focus-visible, .dms button:focus-visible, .dms a:focus-visible, .dms summary:focus-visible { outline: 2px solid var(--color-accent, #6366f1); outline-offset: 2px; }
   .dms-strip { display: flex; flex-wrap: wrap; gap: .3rem 1rem; align-items: center; background: rgba(0,0,0,.5); color: #fff; border-radius: .5rem; padding: .35rem .75rem; margin: 0 .25rem .4rem; font-size: .85rem; }
+  /* The window state: nothing in the overlay catches clicks except the screen
+     itself, so the page behind stays usable. Close and Escape still close it. */
+  .dms-windowed { pointer-events: none; }
+  .dms-windowed .dms-dim, .dms-windowed .dms-stage { pointer-events: none; }
+  .dms-windowed .dms-stage { overflow: visible; }
+  .dms-windowed .dms { pointer-events: auto; max-height: calc(100vh - 2rem); overflow-y: auto; }
+  .dms-dimmed-off .dms-dim { display: none; }
+  .dms-windowed .dms-head { cursor: move; touch-action: none; user-select: none; }
+  .dms-windowed .dms-head button { cursor: pointer; }
+  .dms-dragging, .dms-dragging .dms-head { cursor: grabbing; }
+  .dms-settle { transition: translate .3s cubic-bezier(.2,.8,.2,1); }
   .dms-dot { display: inline-block; width: .5rem; height: .5rem; border-radius: 50%; border: 1px solid #fff; margin-right: .35rem; }
   .dms-dot-on { background: #4ade80; border-color: #4ade80; }
   .dms-dot-after { margin: 0 0 0 .3rem; vertical-align: middle; background: var(--dms-ok); border-color: var(--dms-ok); }

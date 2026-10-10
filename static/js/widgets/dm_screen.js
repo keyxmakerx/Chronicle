@@ -31,6 +31,20 @@
   var BREAK = 1560;   // ms: the screen pushes out and the die comes apart
   var FADE = BREAK + 1900;
 
+  var POS_KEY = 'chronicle.dmscreen.pos';
+
+  function readPos() {
+    try {
+      var p = JSON.parse(localStorage.getItem(POS_KEY) || 'null');
+      if (p && isFinite(p.x) && isFinite(p.y)) return { x: +p.x, y: +p.y };
+    } catch (e) { /* storage blocked or corrupt: open at the default spot */ }
+    return { x: 0, y: 0 };
+  }
+
+  function writePos(p) {
+    try { localStorage.setItem(POS_KEY, JSON.stringify(p)); } catch (e) { /* not remembered */ }
+  }
+
   var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   function narrow() { return window.matchMedia('(max-width: 700px)').matches; }
@@ -63,11 +77,17 @@
           var hrow = e.target.closest('[data-dms-hrow]');
           if (hrow) toggleHero(hrow);
         });
+        // Once the opening is over the screen is a window: drag it by its head.
+        o.addEventListener('pointerdown', function (e) {
+          if (!st.windowed || e.button > 0 || e.target.closest('button, a, input, textarea')) return;
+          var head = e.target.closest('.dms-head');
+          if (head) startDrag(e, head);
+        });
         o.addEventListener('scroll', function (e) {
           if (e.target.hasAttribute && e.target.hasAttribute('data-dms-party')) partyEdges(e.target);
         }, true);
         // A refresh after an Armory change swaps the panel in place.
-        o.addEventListener('htmx:afterSettle', function () { refreshParty(); restoreKept(); });
+        o.addEventListener('htmx:afterSettle', function () { refreshParty(); restoreKept(); if (st.windowed) placeWindow(false); });
         o.addEventListener('input', function (e) {
           if (e.target.hasAttribute('data-dms-filter')) filterConditions(e.target);
           if (e.target.hasAttribute('data-dms-note')) noteEdited(e.target);
@@ -264,7 +284,86 @@
       function setPlaying(on) {
         st.playing = on;
         if (st.overlay) st.overlay.querySelector('.dms-skip').hidden = !on;
-        if (!on) refreshParty();
+        if (!on) {
+          refreshParty();
+          if (st.willWindow && root()) enterWindow();
+        }
+      }
+
+      // The window: after the opening the dim fades away and stops catching
+      // clicks (the page behind is usable), the head bar drags the screen, and
+      // the spot is remembered per browser. Narrow screens stay as they are.
+      // The offset is the CSS `translate` property, which composes with the
+      // opening's `transform` animations instead of fighting them.
+      function enterWindow() {
+        var o = st.overlay, r = root();
+        if (st.windowed || !o || !r || narrow()) return;
+        st.windowed = true;
+        o.classList.add('dms-windowed');
+        var dim = o.querySelector('[data-dms-dim]');
+        var fade = anim(dim, [{ opacity: 1 }, { opacity: 0 }], { duration: 300 });
+        fade.onfinish = function () { o.classList.add('dms-dimmed-off'); };
+        st.off = clampOffset(r, readPos());
+        placeWindow(true);
+        window.addEventListener('resize', onResize);
+      }
+
+      function exitWindow() {
+        var o = st.overlay;
+        window.removeEventListener('resize', onResize);
+        st.windowed = false;
+        st.willWindow = false;
+        if (!o) return;
+        o.classList.remove('dms-windowed', 'dms-dimmed-off', 'dms-dragging');
+        var r = root();
+        if (r) r.style.translate = '';
+      }
+
+      // Puts the root at the stored offset; settle eases it there once.
+      function placeWindow(settle) {
+        var r = root(); if (!r || !st.off) return;
+        r.classList.toggle('dms-settle', !!settle && !reduce);
+        r.style.translate = st.off.x + 'px ' + st.off.y + 'px';
+      }
+
+      // Keeps the head bar whole inside the viewport. offsetLeft/Top ignore
+      // translate and transform, so the base spot is stable mid-move.
+      function clampOffset(r, p) {
+        var head = r.querySelector('.dms-head');
+        var hh = head ? head.offsetHeight : 32;
+        var minX = -r.offsetLeft, maxX = Math.max(minX, window.innerWidth - r.offsetWidth - r.offsetLeft);
+        var minY = -r.offsetTop, maxY = Math.max(minY, window.innerHeight - hh - r.offsetTop);
+        return { x: Math.min(maxX, Math.max(minX, p.x)), y: Math.min(maxY, Math.max(minY, p.y)) };
+      }
+
+      function onResize() {
+        var r = root(); if (!r || !st.windowed) return;
+        if (narrow()) { exitWindow(); st.willWindow = false; return; }
+        st.off = clampOffset(r, st.off || { x: 0, y: 0 });
+        placeWindow(false);
+      }
+
+      function startDrag(e, head) {
+        var r = root(); if (!r) return;
+        var startX = e.clientX, startY = e.clientY, from = st.off || { x: 0, y: 0 };
+        st.overlay.classList.add('dms-dragging');
+        r.classList.remove('dms-settle');
+        try { head.setPointerCapture(e.pointerId); } catch (err) { /* older browsers: window listeners below still work */ }
+        function move(ev) {
+          st.off = clampOffset(r, { x: from.x + ev.clientX - startX, y: from.y + ev.clientY - startY });
+          placeWindow(false);
+        }
+        function up() {
+          head.removeEventListener('pointermove', move);
+          head.removeEventListener('pointerup', up);
+          head.removeEventListener('pointercancel', up);
+          if (st.overlay) st.overlay.classList.remove('dms-dragging');
+          writePos(st.off);
+        }
+        head.addEventListener('pointermove', move);
+        head.addEventListener('pointerup', up);
+        head.addEventListener('pointercancel', up);
+        e.preventDefault();
       }
 
       function load() {
@@ -366,7 +465,9 @@
 
       function open() {
         var o = overlay();
+        exitWindow();
         stopAll();
+        st.willWindow = !narrow();
         o.hidden = false;
         document.addEventListener('keydown', onKey);
         var dim = o.querySelector('[data-dms-dim]');
@@ -376,7 +477,7 @@
         if (reduce) {
           loaded.then(function (html) {
             var r = mount(html);
-            if (r) { anim(r, [{ opacity: 0 }, { opacity: 1 }], { duration: 200 }); focusClose(); }
+            if (r) { anim(r, [{ opacity: 0 }, { opacity: 1 }], { duration: 200 }); focusClose(); if (st.willWindow) enterWindow(); }
           }).catch(failed);
           return;
         }
@@ -405,7 +506,7 @@
           var r = mount(html);
           if (!r) return;
           var wait = Math.max(0, BREAK - (performance.now() - start));
-          if (!st.playing) { focusClose(); return; } // skipped while loading
+          if (!st.playing) { focusClose(); if (st.willWindow) enterWindow(); return; } // skipped while loading
           unfold(r, cx, cy, wait);
           focusClose();
         }).catch(failed);
@@ -425,10 +526,11 @@
       function close() {
         if (!st.overlay || st.overlay.hidden) return;
         saveNote();
+        st.willWindow = false;
         stopAll();
         document.removeEventListener('keydown', onKey);
         var r = root(), o = st.overlay;
-        var done = function () { o.hidden = true; o.querySelector('[data-dms-stage]').innerHTML = ''; openBtn.focus({ preventScroll: true }); };
+        var done = function () { exitWindow(); o.hidden = true; o.querySelector('[data-dms-stage]').innerHTML = ''; openBtn.focus({ preventScroll: true }); };
         if (!r || reduce) { done(); return; }
         var b = openBtn.getBoundingClientRect(), rect = r.getBoundingClientRect();
         var dx = (b.left + b.width / 2) - (rect.left + rect.width / 2), dy = (b.top + b.height / 2) - (rect.top + rect.height / 2);
