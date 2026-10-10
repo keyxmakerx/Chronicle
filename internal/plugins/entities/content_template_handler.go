@@ -142,23 +142,9 @@ func (h *ContentTemplateHandler) UpdateAPI(c echo.Context) error {
 		return apperror.NewForbidden("cannot edit global templates")
 	}
 
-	var body struct {
-		Name        string `json:"name"`
-		Description string `json:"description"`
-		ContentJSON string `json:"content_json"`
-		ContentHTML string `json:"content_html"`
-		Icon        string `json:"icon"`
-	}
-	if err := json.NewDecoder(c.Request().Body).Decode(&body); err != nil {
+	var input UpdateContentTemplateInput
+	if err := json.NewDecoder(c.Request().Body).Decode(&input); err != nil {
 		return apperror.NewBadRequest("invalid JSON body")
-	}
-
-	input := UpdateContentTemplateInput{
-		Name:        body.Name,
-		Description: body.Description,
-		ContentJSON: body.ContentJSON,
-		ContentHTML: body.ContentHTML,
-		Icon:        body.Icon,
 	}
 
 	t, err := h.service.Update(c.Request().Context(), tid, input)

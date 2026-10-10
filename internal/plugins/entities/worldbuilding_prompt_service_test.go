@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"testing"
+
+	"github.com/keyxmakerx/chronicle/internal/patch"
 )
 
 // --- Mock Worldbuilding Prompt Repository ---
@@ -204,7 +206,7 @@ func TestUpdatePrompt(t *testing.T) {
 	})
 
 	err := svc.Update(context.Background(), p.ID, UpdatePromptInput{
-		Name: "Updated", PromptText: "updated text",
+		Name: patch.Of("Updated"), PromptText: patch.Of("updated text"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

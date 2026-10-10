@@ -1388,10 +1388,6 @@ func (s *entityService) EnsurePlayerCharacterType(ctx context.Context, campaignI
 			return nil
 		}
 		if _, err := s.UpdateEntityType(ctx, t.ID, UpdateEntityTypeInput{
-			Name:         t.Name,
-			NamePlural:   t.NamePlural,
-			Icon:         t.Icon,
-			Color:        t.Color,
 			ParentTypeID: charParentID,
 		}); err != nil {
 			return err
@@ -2057,7 +2053,9 @@ func (s *entityService) UpdateEntityType(ctx context.Context, id int, input Upda
 		return nil, err
 	}
 
-	name := strings.TrimSpace(input.Name)
+	// Load-merge-write: `et` is the stored row, so an absent key keeps its
+	// value and only what the caller sent can change.
+	name := strings.TrimSpace(input.Name.Val(et.Name))
 	if name == "" {
 		return nil, apperror.NewBadRequest("entity type name is required")
 	}
@@ -2065,25 +2063,31 @@ func (s *entityService) UpdateEntityType(ctx context.Context, id int, input Upda
 		return nil, apperror.NewBadRequest("entity type name must be at most 100 characters")
 	}
 
-	namePlural := strings.TrimSpace(input.NamePlural)
-	if namePlural == "" {
-		// Same s-ending guard as Create — see autoPluralize for the
-		// rationale.
-		namePlural = autoPluralize(name)
+	namePlural := et.NamePlural
+	if input.NamePlural.Present() {
+		namePlural = strings.TrimSpace(input.NamePlural.Val(et.NamePlural))
+		if namePlural == "" {
+			// Same s-ending guard as Create — see autoPluralize for the
+			// rationale. Reached only when the caller sent an empty plural.
+			namePlural = autoPluralize(name)
+		}
 	}
 	if len(namePlural) > 100 {
 		return nil, apperror.NewBadRequest("entity type plural name must be at most 100 characters")
 	}
 
-	icon, err := sanitize.ValidateIcon(input.Icon)
-	if err != nil {
-		return nil, err
-	}
-	if icon == "" {
-		icon = "fa-circle"
+	icon := et.Icon
+	if input.Icon.Present() {
+		icon, err = sanitize.ValidateIcon(input.Icon.Val(et.Icon))
+		if err != nil {
+			return nil, err
+		}
+		if icon == "" {
+			icon = "fa-circle"
+		}
 	}
 
-	color := strings.TrimSpace(input.Color)
+	color := strings.TrimSpace(input.Color.Val(et.Color))
 	if color == "" {
 		color = et.Color // Keep existing color if not provided.
 	}
@@ -2177,15 +2181,11 @@ func (s *entityService) ReconcileEntityTypeFields(ctx context.Context, typeID in
 	}
 
 	// Reuse UpdateEntityType so validation, slug stability, and the "updated"
-	// event all stay in one place. Passing the type's current name/icon/etc.
-	// leaves everything but Fields unchanged (name unchanged → slug unchanged).
+	// event all stay in one place. Naming only Fields leaves the rest of the
+	// type untouched.
 	if _, err := s.UpdateEntityType(ctx, typeID, UpdateEntityTypeInput{
-		Name:       et.Name,
-		NamePlural: et.NamePlural,
-		Icon:       et.Icon,
-		Color:      et.Color,
-		Fields:     merged,
-		Claimable:  et.Claimable, // nil preserves stored value; non-nil re-sets the same.
+		Fields:    merged,
+		Claimable: et.Claimable, // nil preserves stored value; non-nil re-sets the same.
 	}); err != nil {
 		return 0, err
 	}

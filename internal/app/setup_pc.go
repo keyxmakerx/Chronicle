@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/plugins/addons"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 )
@@ -195,10 +196,8 @@ func (p *pcSetupProvider) renamePCCategory(ctx context.Context, campaignID, cust
 		return custom, nil // already named; idempotent
 	}
 	if _, err := p.entityService.UpdateEntityType(ctx, target.ID, entities.UpdateEntityTypeInput{
-		Name:         custom,
-		NamePlural:   custom,
-		Icon:         target.Icon,
-		Color:        target.Color,
+		Name:         patch.Of(custom),
+		NamePlural:   patch.Of(custom),
 		ParentTypeID: target.ParentTypeID, // nil = no change (preserve nesting)
 	}); err != nil {
 		return "", err

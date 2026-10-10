@@ -1106,7 +1106,7 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 		if match := matchExistingType(existing, claimed, et); match != nil {
 			claimed[match.ID] = true
 			in := entities.UpdateEntityTypeInput{
-				Name: et.Name, NamePlural: et.NamePlural, Icon: et.Icon, Color: et.Color,
+				Name: patch.Of(et.Name), NamePlural: patch.Of(et.NamePlural), Icon: patch.Of(et.Icon), Color: patch.Of(et.Color),
 				ParentTypeID: parentID, ClearParent: parentID == nil, Claimable: et.Claimable,
 			}
 			if fieldsOK {

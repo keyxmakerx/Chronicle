@@ -126,21 +126,9 @@ func (h *LayoutPresetHandler) UpdateAPI(c echo.Context) error {
 		return apperror.NewForbidden("cannot edit built-in presets")
 	}
 
-	var body struct {
-		Name        string `json:"name"`
-		Description string `json:"description"`
-		LayoutJSON  string `json:"layout_json"`
-		Icon        string `json:"icon"`
-	}
-	if err := json.NewDecoder(c.Request().Body).Decode(&body); err != nil {
+	var input UpdateLayoutPresetInput
+	if err := json.NewDecoder(c.Request().Body).Decode(&input); err != nil {
 		return apperror.NewBadRequest("invalid JSON body")
-	}
-
-	input := UpdateLayoutPresetInput{
-		Name:        body.Name,
-		Description: body.Description,
-		LayoutJSON:  body.LayoutJSON,
-		Icon:        body.Icon,
 	}
 
 	p, err := h.service.Update(c.Request().Context(), pid, input)

@@ -65,6 +65,11 @@ var contractGoverned = map[string]string{
 	"timeline.UpdateEventVisibilityInput": "PUT .../timelines/:tid/events/:eid/visibility — a body naming only the override wrote NULL over the event link's per-user visibility rules (and vice versa)",
 	"armory.UpdateInstanceInput":          "PUT /campaigns/:id/armory/instances/:iid — Rename echoed back the description, icon and colour it loaded, so a concurrent change to them was reverted; a name-only push must keep the rest",
 	"maps.UpdateTokenPositionInput":       "PATCH .../tokens/:tid/position (web + syncapi) — x and y were value-typed, so a body naming one axis snapped the other to 0; each now moves only the axis it names",
+	"entities.UpdateEntityTypeInput":      "PUT .../entity-types/:etid (web) and PUT /api/v1/.../entity-types/:typeID (syncapi) — an empty plural or icon was written as the auto-plural / default icon, so a rename-only push reset both",
+	"entities.UpdateEntityTypeRequest":    "the wire-bound twin of entities.UpdateEntityTypeInput; same incident, same fix",
+	"entities.UpdateLayoutPresetInput":    "PUT .../layout-presets/:pid — validated and wrote all four columns, so a body naming only the name was refused or blanked the description",
+	"entities.UpdateContentTemplateInput": "PUT .../content-templates/:tid — a body naming only the name blanked the description and the preview HTML",
+	"entities.UpdatePromptInput":          "PUT .../worldbuilding-prompts/:pid — shares the other definitions' shape; absent name or text was refused rather than preserved",
 	"auth.UpdateViewPrefsInput":           "PUT /account/view-prefs — each My view choice saves on its own as it is tapped, so a body naming one must not reset the other three (born governed, no incident)",
 }
 
@@ -73,6 +78,12 @@ var contractGoverned = map[string]string{
 var governedFieldExceptions = map[string]string{
 	"maps.UpdateHexCellInput.Col": "value-typed by choice: Col and Row are the hex's identity, not data to merge. The handler refuses an entry that omits either, and the service bounds them to 0..MaxHexCoord.",
 	"maps.UpdateHexCellInput.Row": "value-typed by choice: same as maps.UpdateHexCellInput.Col.",
+
+	// ClearParent is a one-way trigger, not a stored value: false (or absent)
+	// does nothing and only true acts, so a body that omits it cannot clear a
+	// parent. The set case is carried by ParentTypeID, a pointer.
+	"entities.UpdateEntityTypeInput.ClearParent":   "value-typed by choice: a one-way trigger where false does nothing and only true clears the parent, so omitting it can never un-nest a type.",
+	"entities.UpdateEntityTypeRequest.ClearParent": "value-typed by choice: the wire-bound twin of entities.UpdateEntityTypeInput.ClearParent.",
 
 	// Update only assigns Name when non-empty, so it already preserves an
 	// absent/blank name without needing presence-awareness.
@@ -103,9 +114,10 @@ var governedFieldExceptions = map[string]string{
 // The reason has to be a fact about the callers, and it has to stay true — a
 // new caller that sends a subset moves the struct to contractGoverned.
 var fullReplaceByDesign = map[string]string{
-	"addons.UpdateAddonInput":     "addonService.Update has no caller outside tests (the admin UI only flips status through UpdateStatus), and it requires a name and a valid status, so it is a whole-record edit by construction. A route that reaches it with a subset must make the fields presence-aware first",
-	"packages.UpdatePolicyInput":  "PUT /admin/packages/:id/auto-update — a one-field body: the policy radio is the whole request, so there is nothing else to preserve",
-	"packages.UpdateRepoURLInput": "PUT /admin/packages/:id/repo — a one-field body: the repository URL is the whole request, and an empty URL is refused by UpdateRepoURL's validation rather than stored",
+	"entities.UpdateEntityRequest": "PUT /campaigns/:id/entities/:eid is the edit page's hx-put form, which posts name, descriptor, parent and entry on every save and is bound as a form (patch.Field has no form binding); no script or API client calls it. The JSON and sync routes use entities.UpdateEntityInput, which is governed",
+	"addons.UpdateAddonInput":      "addonService.Update has no caller outside tests (the admin UI only flips status through UpdateStatus), and it requires a name and a valid status, so it is a whole-record edit by construction. A route that reaches it with a subset must make the fields presence-aware first",
+	"packages.UpdatePolicyInput":   "PUT /admin/packages/:id/auto-update — a one-field body: the policy radio is the whole request, so there is nothing else to preserve",
+	"packages.UpdateRepoURLInput":  "PUT /admin/packages/:id/repo — a one-field body: the repository URL is the whole request, and an empty URL is refused by UpdateRepoURL's validation rather than stored",
 }
 
 // notYetSwept freezes the rest of the inventory. Being on this list is a
@@ -113,11 +125,7 @@ var fullReplaceByDesign = map[string]string{
 // means the struct became contract-governed; adding one means a new update
 // input shipped and its author decided it is not a partial update.
 var notYetSwept = map[string]bool{
-	"entities.UpdateLayoutPresetInput":    true,
-	"entities.UpdateContentTemplateInput": true,
-	"entities.UpdateEntityTypeInput":      true,
-	"entities.UpdatePromptInput":          true,
-	"campaigns.UpdateCampaignInput":       true,
+	"campaigns.UpdateCampaignInput": true,
 
 	// The scanner covers Update*Input and Update*Request (ADR-056). These are
 	// unaudited, not verified safe — several (UpdateEntityRequest,
@@ -126,8 +134,6 @@ var notYetSwept = map[string]bool{
 	"campaigns.UpdateCampaignRequest":         true,
 	"campaigns.UpdateRoleRequest":             true,
 	"campaigns.UpdateSidebarConfigRequest":    true,
-	"entities.UpdateEntityRequest":            true,
-	"entities.UpdateEntityTypeRequest":        true,
 	"entity_notes.UpdateNoteRequest":          true,
 	"notes.UpdateNoteRequest":                 true,
 	"posts.UpdatePostRequest":                 true,

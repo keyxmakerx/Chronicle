@@ -75,7 +75,11 @@ func (s *layoutPresetService) Update(ctx context.Context, id int, input UpdateLa
 		return nil, err
 	}
 
-	name, desc, icon, layoutJSON, err := s.validateInput(input.Name, input.Description, input.Icon, input.LayoutJSON)
+	// Load-merge-write: validate the merged record so a body naming only the
+	// name cannot blank the layout or description.
+	name, desc, icon, layoutJSON, err := s.validateInput(
+		input.Name.Val(p.Name), input.Description.Val(p.Description),
+		input.Icon.Val(p.Icon), input.LayoutJSON.Val(p.LayoutJSON))
 	if err != nil {
 		return nil, err
 	}

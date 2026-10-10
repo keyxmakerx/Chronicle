@@ -1,6 +1,10 @@
 package entities
 
-import "time"
+import (
+	"time"
+
+	"github.com/keyxmakerx/chronicle/internal/patch"
+)
 
 // ContentTemplate is a reusable content blueprint that pre-fills the editor
 // when creating or editing an entity. Templates can be global (available to
@@ -12,8 +16,8 @@ type ContentTemplate struct {
 	EntityTypeID *int      `json:"entity_type_id,omitempty"`
 	Name         string    `json:"name"`
 	Description  string    `json:"description"`
-	ContentJSON  string    `json:"content_json"`  // TipTap/ProseMirror document JSON.
-	ContentHTML  string    `json:"content_html"`  // Pre-rendered HTML for preview.
+	ContentJSON  string    `json:"content_json"` // TipTap/ProseMirror document JSON.
+	ContentHTML  string    `json:"content_html"` // Pre-rendered HTML for preview.
 	Icon         string    `json:"icon"`
 	SortOrder    int       `json:"sort_order"`
 	IsGlobal     bool      `json:"is_global"`
@@ -27,7 +31,7 @@ type ContentTemplate struct {
 // CreateContentTemplateInput holds validated input for creating a content template.
 type CreateContentTemplateInput struct {
 	CampaignID   string
-	EntityTypeID int    // 0 = applies to all entity types.
+	EntityTypeID int // 0 = applies to all entity types.
 	Name         string
 	Description  string
 	ContentJSON  string
@@ -36,10 +40,13 @@ type CreateContentTemplateInput struct {
 }
 
 // UpdateContentTemplateInput holds validated input for updating a content template.
+//
+// It is a PARTIAL update: an absent key keeps the stored value. Every column
+// is NOT NULL, so an explicit null also preserves.
 type UpdateContentTemplateInput struct {
-	Name        string
-	Description string
-	ContentJSON string
-	ContentHTML string
-	Icon        string
+	Name        patch.Field[string] `json:"name"`
+	Description patch.Field[string] `json:"description"`
+	ContentJSON patch.Field[string] `json:"content_json"`
+	ContentHTML patch.Field[string] `json:"content_html"`
+	Icon        patch.Field[string] `json:"icon"`
 }

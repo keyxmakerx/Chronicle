@@ -28,8 +28,8 @@ type EntityTypeLister interface {
 }
 
 type worldbuildingPromptService struct {
-	repo      WorldbuildingPromptRepository
-	typeRepo  EntityTypeLister
+	repo     WorldbuildingPromptRepository
+	typeRepo EntityTypeLister
 }
 
 // NewWorldbuildingPromptService creates a new worldbuilding prompt service.
@@ -99,7 +99,7 @@ func (s *worldbuildingPromptService) Update(ctx context.Context, id int, input U
 		return err
 	}
 
-	name := strings.TrimSpace(input.Name)
+	name := strings.TrimSpace(input.Name.Val(existing.Name))
 	if name == "" {
 		return apperror.NewValidation("name is required")
 	}
@@ -107,7 +107,7 @@ func (s *worldbuildingPromptService) Update(ctx context.Context, id int, input U
 		return apperror.NewValidation("name must be 200 characters or fewer")
 	}
 
-	text := strings.TrimSpace(input.PromptText)
+	text := strings.TrimSpace(input.PromptText.Val(existing.PromptText))
 	if text == "" {
 		return apperror.NewValidation("prompt text is required")
 	}
@@ -115,7 +115,7 @@ func (s *worldbuildingPromptService) Update(ctx context.Context, id int, input U
 		return apperror.NewValidation("prompt text must be 5000 characters or fewer")
 	}
 
-	icon, err := sanitize.ValidateIcon(input.Icon)
+	icon, err := sanitize.ValidateIcon(input.Icon.Val(""))
 	if err != nil {
 		return err
 	}

@@ -1,6 +1,10 @@
 package entities
 
-import "time"
+import (
+	"time"
+
+	"github.com/keyxmakerx/chronicle/internal/patch"
+)
 
 // LayoutPreset is a reusable page layout configuration that can be applied to
 // any entity type. Presets are campaign-scoped and optionally built-in (seeded
@@ -28,9 +32,12 @@ type CreateLayoutPresetInput struct {
 }
 
 // UpdateLayoutPresetInput holds validated input for updating a layout preset.
+// It is a PARTIAL update: an absent key keeps the stored value. Every column
+// is NOT NULL, so an explicit null also preserves; an empty icon is a value
+// and resets to the default.
 type UpdateLayoutPresetInput struct {
-	Name        string
-	Description string
-	LayoutJSON  string
-	Icon        string
+	Name        patch.Field[string] `json:"name"`
+	Description patch.Field[string] `json:"description"`
+	LayoutJSON  patch.Field[string] `json:"layout_json"`
+	Icon        patch.Field[string] `json:"icon"`
 }

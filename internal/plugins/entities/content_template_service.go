@@ -123,7 +123,9 @@ func (s *contentTemplateService) Update(ctx context.Context, id int, input Updat
 		return nil, err
 	}
 
-	name := strings.TrimSpace(input.Name)
+	// Load-merge-write: only a key the caller sent changes anything, so a
+	// rename cannot blank the description or the preview HTML.
+	name := strings.TrimSpace(input.Name.Val(t.Name))
 	if name == "" {
 		return nil, apperror.NewBadRequest("template name is required")
 	}
@@ -131,7 +133,7 @@ func (s *contentTemplateService) Update(ctx context.Context, id int, input Updat
 		return nil, apperror.NewBadRequest("template name must be at most 200 characters")
 	}
 
-	contentJSON := strings.TrimSpace(input.ContentJSON)
+	contentJSON := strings.TrimSpace(input.ContentJSON.Val(t.ContentJSON))
 	if contentJSON == "" {
 		return nil, apperror.NewBadRequest("template content is required")
 	}
@@ -141,15 +143,17 @@ func (s *contentTemplateService) Update(ctx context.Context, id int, input Updat
 	if len(contentJSON) > maxContentTemplateSize {
 		return nil, apperror.NewBadRequest("content_json exceeds maximum size")
 	}
-	if len(input.ContentHTML) > maxContentTemplateSize {
+	contentHTML := input.ContentHTML.Val(t.ContentHTML)
+	if len(contentHTML) > maxContentTemplateSize {
 		return nil, apperror.NewBadRequest("content_html exceeds maximum size")
 	}
 
 	t.Name = name
-	t.Description = strings.TrimSpace(input.Description)
+	t.Description = strings.TrimSpace(input.Description.Val(t.Description))
 	t.ContentJSON = contentJSON
-	t.ContentHTML = strings.TrimSpace(input.ContentHTML)
-	icon, err := sanitize.ValidateIcon(input.Icon)
+	t.ContentHTML = strings.TrimSpace(contentHTML)
+	// An absent or empty icon keeps the stored one.
+	icon, err := sanitize.ValidateIcon(input.Icon.Val(""))
 	if err != nil {
 		return nil, err
 	}
