@@ -80,7 +80,7 @@ numbered core migrations after it, tracked once each via `golang-migrate`'s
 
 | Table | Purpose | Notable columns |
 |---|---|---|
-| `users` | Accounts | `email` UNIQUE; `password_hash` (argon2id); `totp_secret`/`totp_enabled`; `is_admin`, `is_disabled`; `pending_email`/`email_verify_token` (email-change flow); `admin_nav_pins`, `view_prefs` JSON (the person's own pins and My view choices); `notify_prefs` JSON (which messages reach them on the bell and by email, `internal/notifyprefs`) |
+| `users` | Accounts | `email` UNIQUE; `password_hash` (argon2id); `totp_secret`/`totp_enabled`; `is_admin`, `is_disabled`; `pending_email`/`email_verify_token` (email-change flow); `admin_nav_pins`, `view_prefs` JSON (the person's own pins and My view choices); `notify_prefs` JSON (which messages reach them on the bell and by email, `internal/notifyprefs`); `deleted_at` (set when the person deleted their own account: the row stays, emptied, disabled and named "Former member", because content references it) |
 | `password_reset_tokens` | Forgot-password flow | `token_hash` UNIQUE; FK→`users` CASCADE; 1h expiry |
 | `security_events` | Site-wide security audit log | `event_type`, `user_id`/`actor_id` nullable; `details` JSON; indexed by type/user/ip/actor + `created_at` |
 | `site_settings` | Global key/value settings | `setting_key` PK |

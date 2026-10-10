@@ -39,6 +39,9 @@ templ Base(title string) {
 		<link rel="stylesheet" href={ AssetURL("/static/css/app.css") }/>
 		<!-- Shared paper look and the hover card (hovercard.js) -->
 		<link rel="stylesheet" href={ AssetURL("/static/css/paper.css") }/>
+		<!-- A game system's character sheet: its twelve styles and their motion. Scoped to [data-sheet], inert elsewhere. -->
+		<link rel="stylesheet" href={ AssetURL("/static/css/sheet_styles.css") }/>
+		<link rel="stylesheet" href={ AssetURL("/static/css/sheet_motion.css") }/>
 
 		<!-- Fonts -->
 		<link rel="preconnect" href="https://fonts.googleapis.com"/>
@@ -273,6 +276,9 @@ templ Base(title string) {
 		     together when they come back. Loaded before anything that loops. -->
 		<script src={ AssetURL("/static/js/motion_rest.js") } defer></script>
 
+		<!-- The character sheet's motion engine (sheet_motion.js): styles a [data-sheet] root and moves its panels, folds and changed values. Does nothing on a page without one. -->
+		<script src={ AssetURL("/static/js/sheet_motion.js") } defer></script>
+
 		<!-- Sky pane widget (issue #763): the "skybox" dashboard/template
 		     block's ambient sky — moons, stars, weather, celestial events.
 		     Eight files, loaded in the dependency order each one's own header
@@ -301,9 +307,6 @@ templ Base(title string) {
 		<!-- Dashboard layouts use the unified layout-editor widget (loaded
 		     further down). -->
 
-		<!-- Timeline D3 visualization widget (interactive SVG chart) -->
-		<script src={ AssetURL("/static/js/widgets/timeline_viz.js") } defer></script>
-
 		<!-- Plugin-contributed body scripts (injected at startup; calendar widget
 		     is the canonical first entry — avoids hardcoding plugin paths here).
 		     Emitted IN SLICE ORDER and deferred, so a contributor that depends on
@@ -315,9 +318,6 @@ templ Base(title string) {
 		for _, scriptURL := range GetPluginBodyScripts(ctx) {
 			<script src={ AssetURL(scriptURL) } defer></script>
 		}
-
-		<!-- Timeline widget (interactive timeline preview for dashboard embeds) -->
-		<script src={ AssetURL("/static/js/widgets/timeline_widget.js") } defer></script>
 
 		<!-- Map annotations (arrows, highlighter, steps, bubbles), shared by the
 		     map widget below and the map viewer -->

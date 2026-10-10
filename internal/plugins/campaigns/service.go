@@ -38,6 +38,10 @@ type CampaignService interface {
 	Delete(ctx context.Context, campaignID string) error
 	CountAll(ctx context.Context) (int, error)
 
+	// Account deletion
+	OwnedCampaigns(ctx context.Context, userID string) ([]OwnedCampaign, error)
+	LeaveAllForDeletedAccount(ctx context.Context, userID string) error
+
 	// Membership
 	GetMember(ctx context.Context, campaignID, userID string) (*CampaignMember, error)
 	AddMember(ctx context.Context, campaignID, email string, role Role) error
