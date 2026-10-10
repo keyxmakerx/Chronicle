@@ -103,13 +103,19 @@ place, and Off shows the end state.
 | Page turn | the Handbook only | a turn with a soft crease, `--dur-turn`, `--ease-turn` | the new spread fades in |
 | Settle | moving to a new page or tab | fade and a 6px rise, `--dur-large`, `--ease-out` | fade only |
 
-- **Entering Site admin rises and bounces**, the one bounce in Chronicle.
-  Only after the footer button, the admin menu comes up from the bottom of
-  the screen, gathering a little speed, and bounces off the top three times,
-  each smaller, over `--dur-arrive`; then the band's accent rule draws
-  across. The button presses deeper and lets go slower than other footer
-  buttons (`static/js/site_admin.js`, `.admin-arrive`). Moving between admin
-  pages plays nothing. Calm and Off show the menu in place.
+- **Site admin rises in and falls away**, the one bounce in Chronicle.
+  After the footer button, the whole admin page comes up from the bottom of
+  the screen over the page you were on, gathering a little speed, and
+  bounces off the top three times, each smaller, over `--dur-arrive`; the
+  band's accent rule draws across as it lands. "Back to Chronicle" lets the
+  admin page fall away down the screen over `--dur-leave`, and the page you
+  came from is underneath. Both are cross-document view transitions, asked
+  for only by those two clicks (`static/js/site_admin.js`) and by the next
+  page before it paints (`static/js/site_admin_reveal.js`,
+  `html[data-admin-vt]`); a browser without them shows the admin page rising
+  by itself on the way in, and nothing on the way out. The button presses
+  deeper and lets go slower than other footer buttons. Moving between admin
+  pages plays nothing; Calm fades, and Off plays nothing.
 - **How much motion is one attribute**: `html[data-motion]` is `calm` or `off`
   (absent means full), from `MotionLevel` in
   `internal/templates/layouts/appearance.go`. A device asking for reduced

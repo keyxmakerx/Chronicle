@@ -29,6 +29,9 @@ templ Base(title string) {
 			(function(){try{var h=document.documentElement;var v=h.getAttribute('data-view-theme');var t=(v==='light'||v==='dark')?v:(v==='device'?null:localStorage.getItem('chronicle-theme'));var d=t==='dark'||(t!=='light'&&window.matchMedia('(prefers-color-scheme:dark)').matches);if(d){h.classList.add('dark');h.style.backgroundColor='#111827'}else{h.style.backgroundColor='#f9fafb'}if(window.matchMedia('(prefers-reduced-motion:reduce)').matches)h.setAttribute('data-motion','off');if(h.hasAttribute('data-cz-reduce')||h.getAttribute('data-view-motion')==='calm')h.classList.add('nav-rm')}catch(e){}})();
 		</script>
 
+		<!-- Site admin's way in and out: the new page asks for its transition before the first paint. -->
+		<script src={ AssetURL("/static/js/site_admin_reveal.js") }></script>
+
 		<!-- Hide Alpine.js elements until initialized; hide body until all CSS loads (FOUC prevention). -->
 		<style>[x-cloak]{display:none!important}body{opacity:0}</style>
 
