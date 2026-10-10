@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/addons"
@@ -18,6 +20,8 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/dmscreen"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
+	"github.com/keyxmakerx/chronicle/internal/plugins/syncapi"
+	"github.com/keyxmakerx/chronicle/internal/widgets/notes"
 )
 
 // The DM Screen owns no data; these adapters let it read the plugins it
@@ -64,6 +68,214 @@ func (a *dmDowntimeAdapter) SetDowntime(ctx context.Context, campaignID string, 
 	return res.Applied, res.Failed, nil
 }
 
+// dmRequestsAdapter lists the stash moves and ask-to-buy requests waiting on
+// the owner. The armory only builds that list for Owner visibility, so anyone
+// else gets an empty one.
+type dmRequestsAdapter struct {
+	stash  armory.StashService
+	addons addons.AddonService
+}
+
+func (a *dmRequestsAdapter) WaitingRequests(ctx context.Context, campaignID string, v dmscreen.Viewer) ([]dmscreen.Request, bool, error) {
+	on, err := a.addons.IsEnabledForCampaign(ctx, campaignID, armory.AddonSlug)
+	if err != nil || !on {
+		return nil, false, err
+	}
+	page, err := a.stash.StashesPage(ctx, campaignID, armory.Actor{UserID: v.UserID, Role: v.Role})
+	if err != nil {
+		return nil, false, err
+	}
+	out := make([]dmscreen.Request, 0, page.WaitingCount())
+	for _, l := range page.Pending {
+		out = append(out, dmscreen.Request{
+			Kind: dmscreen.RequestMove, ID: l.ID, CreatedAt: l.CreatedAt,
+			Text: l.RequesterName + ": " + armory.MoveRequestText(l),
+		})
+	}
+	for _, p := range page.PendingPurchases {
+		out = append(out, dmscreen.Request{
+			Kind: dmscreen.RequestPurchase, ID: p.ID, CreatedAt: p.CreatedAt,
+			Text: p.RequesterName + ": " + armory.PurchaseRequestSentence(p),
+		})
+	}
+	return out, true, nil
+}
+
+// dmNotesNamespace seeds the screen notes' ids; any fixed UUID would do.
+var dmNotesNamespace = uuid.MustParse("6f0c2d1e-5a43-4c7b-9d28-3b1e7a90c4d5")
+
+// dmNoteID is a screen note's id. Deriving it from the campaign (and the game
+// night, when there is one) lets the screen find its note again without a
+// table of its own, and two DMs saving at once collide on the primary key
+// rather than making two notes. An empty nightKey is the campaign's standing
+// note.
+func dmNoteID(campaignID, nightKey string) string {
+	name := campaignID
+	if nightKey != "" {
+		name += "\x00" + nightKey
+	}
+	return uuid.NewSHA1(dmNotesNamespace, []byte(name)).String()
+}
+
+// dmMemberLister is the one campaigns call the notes adapter needs, kept
+// narrow so tests need no full campaign service.
+type dmMemberLister interface {
+	ListMembers(ctx context.Context, campaignID string) ([]campaigns.CampaignMember, error)
+}
+
+// dmNotesAdapter keeps the DM Screen's notes as ordinary notes shared with
+// the GM side (owner and co-DMs), so they also show in the Journal.
+//
+// The note's id is derivable, so anyone who can write a note could squat on
+// it before the screen does. The screen therefore only trusts a note owned by
+// the campaign owner, and always creates it in the owner's name, however
+// first-saving DM is.
+type dmNotesAdapter struct {
+	notes   notes.NoteService
+	members dmMemberLister
+}
+
+// errDMNoteSquatted is the refusal when something other than the campaign
+// owner's note sits at the screen's id.
+var errDMNoteSquatted = apperror.NewValidation("another note already uses the DM Screen's place for this night; ask the campaign owner to remove it in Notes")
+
+func (a *dmNotesAdapter) ownerID(ctx context.Context, campaignID string) (string, error) {
+	members, err := a.members.ListMembers(ctx, campaignID)
+	if err != nil {
+		return "", err
+	}
+	for _, m := range members {
+		if m.Role == campaigns.RoleOwner {
+			return m.UserID, nil
+		}
+	}
+	return "", apperror.NewNotFound("campaign owner not found")
+}
+
+// lookup returns the note at the derived id and whether it is the owner's.
+// A note that is not is reported as present-but-foreign so Save can refuse to
+// write over it while Find shows it as absent.
+func (a *dmNotesAdapter) lookup(ctx context.Context, campaignID, nightKey string) (n *notes.Note, ownerID string, foreign bool, err error) {
+	n, err = a.notes.GetByID(ctx, dmNoteID(campaignID, nightKey))
+	if err != nil {
+		if isNotFound(err) {
+			return nil, "", false, nil
+		}
+		return nil, "", false, err
+	}
+	if ownerID, err = a.ownerID(ctx, campaignID); err != nil {
+		return nil, "", false, err
+	}
+	return n, ownerID, n.CampaignID != campaignID || n.UserID != ownerID, nil
+}
+
+func (a *dmNotesAdapter) Find(ctx context.Context, campaignID, nightKey string, v dmscreen.Viewer) (*dmscreen.ScreenNote, error) {
+	n, _, foreign, err := a.lookup(ctx, campaignID, nightKey)
+	if err != nil || n == nil || foreign {
+		return nil, err
+	}
+	// Same predicate the notes routes apply before showing a note.
+	if !n.CanView(permissions.RequestViewer(v.Role, v.UserID), campaignID) {
+		return nil, apperror.NewForbidden("the DM Screen note is not shared with you")
+	}
+	return toScreenNote(n), nil
+}
+
+func (a *dmNotesAdapter) Save(ctx context.Context, campaignID, nightKey string, v dmscreen.Viewer, title, entry, entryHTML, version string) (*dmscreen.ScreenNote, error) {
+	viewer := permissions.RequestViewer(v.Role, v.UserID)
+	id := dmNoteID(campaignID, nightKey)
+	_, _, foreign, err := a.lookup(ctx, campaignID, nightKey)
+	if err != nil {
+		return nil, err
+	}
+	if foreign {
+		return nil, errDMNoteSquatted
+	}
+	existing, err := a.Find(ctx, campaignID, nightKey, v)
+	if err != nil {
+		return nil, err
+	}
+	// A tab that saw no note (version "") may only create it; one that saw a
+	// note may only replace that same body.
+	verify := existing != nil
+	if existing == nil && version != "" {
+		return nil, dmscreen.ErrNoteChanged
+	}
+	if existing == nil {
+		ownerID, err := a.ownerID(ctx, campaignID)
+		if err != nil {
+			return nil, err
+		}
+		// Created in the owner's name even when a co-DM saves first, so the
+		// note is never owned by whoever happened to type first. The title is
+		// set here and never changed by later saves.
+		_, cerr := a.notes.Create(ctx, campaignID, permissions.RequestViewer(permissions.RoleOwner, ownerID), notes.CreateNoteRequest{
+			ID: id, Title: title, Visibility: notes.VisibilityGM,
+		})
+		if cerr != nil {
+			// A second DM created it a moment ago (duplicate key): write into
+			// theirs. Anything else is a real failure.
+			if existing, err = a.Find(ctx, campaignID, nightKey, v); err != nil || existing == nil {
+				return nil, cerr
+			}
+			// The other DM's body is not what this tab loaded (nothing), so
+			// the version check applies and reports the conflict.
+			verify = true
+		}
+	}
+	cur, err := a.notes.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	// Checked against the freshest read, right before the write. A version of
+	// "" is the tab having seen no note: it matches only a note that does not
+	// exist yet, or one this call just created.
+	loaded := ""
+	if cur.Entry != nil {
+		loaded = *cur.Entry
+	}
+	if verify && version != dmscreen.BodyVersion(loaded) {
+		return nil, dmscreen.ErrNoteChanged
+	}
+	// Owner-only fields are always stripped: a co-DM is not the note's owner,
+	// and the owner's own save never changes sharing either.
+	req := notes.UpdateNoteRequest{Entry: &entry, EntryHTML: &entryHTML}
+	req.StripOwnerOnly()
+	n, err := a.notes.Update(ctx, cur.ID, viewer, req)
+	if err != nil {
+		return nil, err
+	}
+	return toScreenNote(n), nil
+}
+
+func toScreenNote(n *notes.Note) *dmscreen.ScreenNote {
+	out := &dmscreen.ScreenNote{ID: n.ID, Title: n.Title}
+	if n.Entry != nil {
+		out.Entry = *n.Entry
+	}
+	if out.Entry == "" && len(n.Content) > 0 {
+		out.Legacy = legacyNoteText(n.Content)
+		if out.Legacy == "" {
+			out.Legacy = "(no text)"
+		}
+	}
+	return out
+}
+
+// legacyNoteText flattens an old block-style note to lines of text.
+func legacyNoteText(blocks []notes.Block) string {
+	var lines []string
+	for _, b := range blocks {
+		if b.Value != "" {
+			lines = append(lines, b.Value)
+		}
+		for _, it := range b.Items {
+			lines = append(lines, it.Text)
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
 // dmWorldAdapter reads the default calendar's date and today's weather.
 type dmWorldAdapter struct {
 	svc calendar.CalendarService
@@ -78,7 +290,7 @@ func (a *dmWorldAdapter) World(ctx context.Context, campaignID string, v dmscree
 		}
 		return nil, err
 	}
-	w := &dmscreen.WorldView{CalendarID: cal.ID, DateLabel: cal.FullDateLabel(), TimeLabel: cal.FormatCurrentTime()}
+	w := &dmscreen.WorldView{CalendarID: cal.ID, DateLabel: cal.FullDateLabel(), TimeLabel: cal.FormatCurrentTime(), CanStep: !cal.UsesRealTime()}
 	days, err := a.svc.ListDayWeather(ctx, cal.ID, campaignID, cal.CurrentYear, cal.CurrentMonth, pv)
 	if err != nil {
 		return w, err
@@ -90,6 +302,16 @@ func (a *dmWorldAdapter) World(ctx context.Context, campaignID string, v dmscree
 		}
 	}
 	return w, nil
+}
+
+// Advance steps the default calendar forward; the calendar service refuses a
+// real-time calendar and checks the new date against the calendar's months.
+func (a *dmWorldAdapter) Advance(ctx context.Context, campaignID string, v dmscreen.Viewer, hours, days int) error {
+	cal, err := a.svc.GetDefaultCalendarForViewer(ctx, campaignID, permissions.RequestViewer(v.Role, v.UserID))
+	if err != nil {
+		return err
+	}
+	return a.svc.AdvanceCurrent(ctx, cal.ID, campaignID, hours, days)
 }
 
 // weatherLine renders a day's weather as "Light rain, 11°C, wind W".
@@ -139,11 +361,22 @@ func (a *dmNightAdapter) NextNight(ctx context.Context, campaignID string, _ dms
 			continue
 		}
 		return &dmscreen.NightView{
+			Key:  nightNoteKey(n),
 			Name: n.Name, When: nightWhen(n.Date, n.Time),
 			Going: n.Tally.Going, Maybe: n.Tally.Maybe, Cant: n.Tally.Cant, NoAnswer: n.Tally.NoAnswer,
 		}, nil
 	}
 	return nil, nil
+}
+
+// nightNoteKey names a night for keeping a note with it: its session id, plus
+// the date when the session repeats, because each occurrence of a repeating
+// session is its own night. A one-off night keeps its note if it is moved.
+func nightNoteKey(n sessions.GameNight) string {
+	if n.Recurring {
+		return n.SessionID + ":" + n.Date
+	}
+	return n.SessionID
 }
 
 // nightWhen renders "Fri 9 Oct, 19:30" from the stored date and time.
@@ -180,6 +413,7 @@ func (a *dmPartyAdapter) Heroes(ctx context.Context, campaignID string, v dmscre
 		h := dmscreen.Hero{ID: e.ID, Name: e.Name, Fields: e.FieldsData}
 		if e.OwnerUserID != nil {
 			h.PlayerName = names[*e.OwnerUserID]
+			h.PlayerUserID = *e.OwnerUserID
 		}
 		out = append(out, h)
 	}
@@ -254,6 +488,92 @@ func (a *dmHiddenAdapter) Reveal(ctx context.Context, entityID, campaignID strin
 		return "", err
 	}
 	return e.Name, nil
+}
+
+// foundryReportMaxAge is how old the GM's Foundry players report may be and
+// still count: the GM's client re-sends the list as people come and go, so a
+// stale list says nothing about who is online now.
+const foundryReportMaxAge = 5 * time.Minute
+
+// pageSeenWindow is how long a loaded campaign page counts as "has Chronicle
+// open" when no socket is up.
+const pageSeenWindow = 5 * time.Minute
+
+// dmBrowserHub is the slice of the websocket hub the presence adapter reads.
+type dmBrowserHub interface {
+	BrowserUserIDs(campaignID string) []string
+	RecentBrowserUsers(campaignID string, within time.Duration) []string
+	FoundryPresence(campaignID string) (*time.Time, bool)
+}
+
+// dmPresenceAdapter says which of a campaign's players are here. A player is
+// here when their browser has a live socket to Chronicle, or loaded a campaign
+// page in the last few minutes (sockets alone miss ordinary pages, which open
+// none), or when the GM's Foundry client reports them online (and is itself
+// connected and fresh).
+type dmPresenceAdapter struct {
+	members campaigns.CampaignService
+	hub     dmBrowserHub
+	foundry syncapi.FoundryPlayerRepository
+	now     func() time.Time
+}
+
+func (a *dmPresenceAdapter) Players(ctx context.Context, campaignID string) ([]dmscreen.PlayerPresence, error) {
+	members, err := a.members.ListMembers(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	var reports []syncapi.FoundryPlayer
+	_, foundryUp := a.hub.FoundryPresence(campaignID)
+	if a.foundry != nil && foundryUp {
+		// A failed read only loses the Foundry signal; browser presence stands.
+		if reports, err = a.foundry.List(ctx, campaignID); err != nil {
+			slog.Warn("dm screen: reading foundry players", slog.String("campaign_id", campaignID), slog.Any("error", err))
+			reports = nil
+		}
+	}
+	browser := append(a.hub.BrowserUserIDs(campaignID), a.hub.RecentBrowserUsers(campaignID, pageSeenWindow)...)
+	here := hereUsers(browser, reports, foundryUp, a.clock())
+
+	var out []dmscreen.PlayerPresence
+	for _, m := range members {
+		if m.Role != campaigns.RolePlayer {
+			continue
+		}
+		// A DM grant makes a Player-role member a co-DM, who runs the game.
+		if granted, err := a.members.IsUserDmGranted(ctx, campaignID, m.UserID); err == nil && granted {
+			continue
+		}
+		out = append(out, dmscreen.PlayerPresence{UserID: m.UserID, Name: m.DisplayName, Here: here[m.UserID]})
+	}
+	return out, nil
+}
+
+func (a *dmPresenceAdapter) clock() time.Time {
+	if a.now != nil {
+		return a.now()
+	}
+	return time.Now()
+}
+
+// hereUsers merges the two signals. A Foundry row counts only when the GM's
+// client is connected now, the row is linked to a member, it says online, and
+// the report is recent enough to trust.
+func hereUsers(browser []string, reports []syncapi.FoundryPlayer, foundryUp bool, now time.Time) map[string]bool {
+	here := map[string]bool{}
+	for _, id := range browser {
+		here[id] = true
+	}
+	if !foundryUp {
+		return here
+	}
+	for _, p := range reports {
+		if p.MemberUserID == "" || !p.Online || now.Sub(p.ReportedAt) > foundryReportMaxAge {
+			continue
+		}
+		here[p.MemberUserID] = true
+	}
+	return here
 }
 
 // dmScreenSyncAPIAdapter hands the DM Screen to the sync API for the Foundry

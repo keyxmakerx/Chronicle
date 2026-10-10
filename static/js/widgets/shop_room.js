@@ -865,6 +865,13 @@
     return rate ? Math.ceil(Math.round(total * 100) * rate / 100) : null;
   }
 
+  // The picker starts on the viewer's own claimed character; the Owner's
+  // list is every character by name, so "first" alone would pick a stranger.
+  function defaultPayer(list) {
+    for (var i = 0; i < list.length; i++) if (list[i].own) return list[i].id;
+    return list.length ? list[0].id : '';
+  }
+
   // What the basket adds up to for one payer. Prices here are for display
   // only; the server prices the sale again from the inventory. A buyer's kind
   // says how they pay: "wealth" needs Wealth at least the dearest unit price,
@@ -896,7 +903,7 @@
     };
   }
 
-  window.ShopRoom = { createRoom: createRoom, toLayout: toLayout, fromLayout: fromLayout, shopItems: shopItems, basketSummary: basketSummary, formatPurse: formatPurse, keyOf: keyOf, ROOM_TYPES: ROOM_TYPES };
+  window.ShopRoom = { createRoom: createRoom, toLayout: toLayout, fromLayout: fromLayout, shopItems: shopItems, basketSummary: basketSummary, defaultPayer: defaultPayer, formatPurse: formatPurse, keyOf: keyOf, ROOM_TYPES: ROOM_TYPES };
   if (!window.Chronicle || !window.document) return;
 
   var FX_KEY = 'chronicle.shopRoom.fx';
@@ -1217,7 +1224,7 @@
       function loadBuyers() {
         return Chronicle.apiFetch(buyersEndpoint).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }).then(function (j) {
           buy = j && Array.isArray(j.buyers) ? { canBuyNow: !!j.canBuyNow, buyers: j.buyers } : null;
-          if (buy && !buyer()) payer = buy.buyers.length ? buy.buyers[0].id : '';
+          if (buy && !buyer()) payer = defaultPayer(buy.buyers);
         });
       }
       function loadGoods() {

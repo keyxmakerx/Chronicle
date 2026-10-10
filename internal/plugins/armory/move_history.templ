@@ -2,6 +2,8 @@
 // and the full-history fragments.
 package armory
 
+import "fmt"
+
 // MoveHistoryList renders every given line, newest first.
 templ MoveHistoryList(lines []MoveLine) {
 	if len(lines) == 0 {
@@ -21,5 +23,40 @@ templ moveHistoryLine(l MoveLine) {
 		<span class={ moveStatusClass(l.Status) }>{ moveStatusLabel(l.Status) }</span>
 		<span class="text-fg-body">{ MoveSummary(l) }</span>
 		<time class="text-fg-muted" datetime={ l.CreatedAt.Format("2006-01-02T15:04:05Z07:00") } title={ l.CreatedAt.Format("2 Jan 2006 15:04") }>{ moveAgo(l.CreatedAt) }</time>
+		if l.Purchase && l.CanWithdraw {
+			@withdrawControl(l)
+		}
 	</li>
+}
+
+// withdrawControl lets the requester (or the Owner) take back a waiting
+// "Ask to buy" request. Pressing Withdraw swaps in an inline confirm instead of
+// a browser dialog; the confirming button posts through HTMX and the
+// armory-moved event it triggers reloads the panel. The toggles are inline
+// handlers because this fragment is swapped in by HTMX.
+templ withdrawControl(l MoveLine) {
+	<span class="inline-flex flex-wrap items-center gap-2" data-withdraw>
+		<button
+			type="button"
+			class="text-accent hover:underline"
+			data-withdraw-open
+			aria-expanded="false"
+			onclick={ withdrawToggleOnClick(true) }
+		>Withdraw</button>
+		<span class="space-x-2" data-withdraw-confirm role="group" aria-label="Withdraw this request?" hidden>
+			<span class="text-fg-body">Withdraw this request?</span>
+			<button
+				type="button"
+				class="btn-danger text-xs"
+				hx-post={ fmt.Sprintf("%s/%d/withdraw", purchaseRequestsURL(l.CampaignID), l.ID) }
+				hx-swap="none"
+				hx-disabled-elt="this"
+			>Withdraw</button>
+			<button
+				type="button"
+				class="btn-secondary text-xs"
+				onclick={ withdrawToggleOnClick(false) }
+			>Keep it</button>
+		</span>
+	</span>
 }

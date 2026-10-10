@@ -7,6 +7,7 @@ package dmscreen
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -36,6 +37,16 @@ type View struct {
 	Night *NightView `json:"night,omitempty"`
 
 	Foundry FoundryView `json:"foundry"`
+
+	// Notes is nil when notes are unavailable; the Notes tab is then hidden.
+	Notes *NotesView `json:"notes,omitempty"`
+
+	// Requests is nil when the campaign has no armory or nothing waits.
+	Requests *RequestsView `json:"requests,omitempty"`
+
+	// Presence is nil when the campaign has no players or the source is not
+	// wired; the strip then says nothing about who is here.
+	Presence *PresenceView `json:"presence,omitempty"`
 
 	// SystemName is the enabled game system, empty when none.
 	SystemName string `json:"system_name"`
@@ -85,10 +96,44 @@ type WorldView struct {
 	TimeLabel  string `json:"time_label"`
 	// Weather is a one-line description, empty when none is set for today.
 	Weather string `json:"weather"`
+	// CanStep is true when the viewer may move the date forward by hand and
+	// the calendar lets them: not a real-time calendar, and not a scribe.
+	CanStep bool `json:"can_step"`
+}
+
+// TimeStep is one of the three chips under the date: how far to move it.
+type TimeStep struct {
+	// Key is the wire value the chip posts.
+	Key   string
+	Label string
+	// Hours and Days are in the calendar's own units; a day is the calendar's
+	// hours per day, not 24.
+	Hours, Days int
+}
+
+// TimeSteps are the chips, in the order they are drawn.
+var TimeSteps = []TimeStep{
+	{Key: "1h", Label: "+1 hour", Hours: 1},
+	{Key: "8h", Label: "+8 hours", Hours: 8},
+	{Key: "1d", Label: "Next day", Days: 1},
+}
+
+// stepByKey finds a chip by its wire value.
+func stepByKey(key string) (TimeStep, bool) {
+	for _, s := range TimeSteps {
+		if s.Key == key {
+			return s, true
+		}
+	}
+	return TimeStep{}, false
 }
 
 // NightView is the next game night and its answers so far.
 type NightView struct {
+	// Key identifies this night for keeping things with it: the session id,
+	// plus the date when the session repeats so each occurrence is its own.
+	// Not on the wire.
+	Key      string `json:"-"`
 	Name     string `json:"name"`
 	When     string `json:"when"`
 	Going    int    `json:"going"`
@@ -109,6 +154,10 @@ type HeroView struct {
 	ID         string `json:"id"`
 	Name       string `json:"name"`
 	PlayerName string `json:"player_name"`
+	// PlayerUserID and PlayerHere are additive: the dot after "Played by"
+	// needs to know whether that player is here right now.
+	PlayerUserID string `json:"player_user_id,omitempty"`
+	PlayerHere   bool   `json:"player_here,omitempty"`
 	// Subtitle and Conditions come from the sheet fields the system's
 	// manifest names; either may be empty.
 	Subtitle   string      `json:"subtitle"`
@@ -157,4 +206,89 @@ type HiddenView struct {
 type ConditionView struct {
 	Name string `json:"name"`
 	Text string `json:"text"`
+}
+
+// PresenceView counts the campaign's players who are here right now. A player
+// is a member with the Player role; the owner, co-DMs and scribes run the game
+// and are not counted.
+type PresenceView struct {
+	Here  int `json:"here"`
+	Total int `json:"total"`
+	// HereNames and AwayNames are display names, sorted, for the strip's tooltip.
+	HereNames []string `json:"here_names,omitempty"`
+	AwayNames []string `json:"away_names,omitempty"`
+}
+
+// Label is the strip text: "3 of 4 players here".
+func (p PresenceView) Label() string {
+	noun := "players"
+	if p.Total == 1 {
+		noun = "player"
+	}
+	return fmt.Sprintf("%d of %d %s here", p.Here, p.Total, noun)
+}
+
+// Title is the strip's tooltip: "Here: a, b. Not here: c."
+func (p PresenceView) Title() string {
+	list := func(names []string) string {
+		if len(names) == 0 {
+			return "nobody"
+		}
+		return strings.Join(names, ", ")
+	}
+	return "Here: " + list(p.HereNames) + ". Not here: " + list(p.AwayNames) + "."
+}
+
+// Request kinds, which pick the armory route a button posts to.
+const (
+	RequestMove     = "move"
+	RequestPurchase = "purchase"
+)
+
+// RequestView is one stash move or ask-to-buy request waiting on the owner.
+type RequestView struct {
+	Kind string `json:"kind"`
+	ID   int64  `json:"id"`
+	// Text is one plain line: "Bren: move 2 × Healing potion from A to B".
+	Text      string    `json:"text"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// ApprovePath and DeclinePath are the armory routes the buttons post to.
+func (r RequestView) ApprovePath(campaignID string) string { return r.path(campaignID, "approve") }
+func (r RequestView) DeclinePath(campaignID string) string { return r.path(campaignID, "decline") }
+
+func (r RequestView) path(campaignID, verb string) string {
+	dir := "moves"
+	if r.Kind == RequestPurchase {
+		dir = "purchase-requests"
+	}
+	return fmt.Sprintf("/campaigns/%s/armory/%s/%d/%s", campaignID, dir, r.ID, verb)
+}
+
+// RequestsView is the "Waiting on you" block: the oldest few requests, and
+// how many more sit on the Stashes page.
+type RequestsView struct {
+	Items []RequestView `json:"items"`
+	More  int           `json:"more,omitempty"`
+}
+
+// NotesView is the screen's note: one per campaign, shared with the GM side,
+// kept with the next game night.
+type NotesView struct {
+	// Label reads "Kept with <game night>" or "DM Screen notes".
+	Label string `json:"label"`
+	// Text is the note as plain lines; empty before anything is saved.
+	Text string `json:"text"`
+	// NoteID is empty until the first save creates the note.
+	NoteID string `json:"note_id,omitempty"`
+	// Link opens the note in the Journal; empty until it exists.
+	Link string `json:"link,omitempty"`
+	// ReadOnly is true when the note holds more than plain paragraphs
+	// (headings, lists, marks, images, mentions); the tab shows its text and
+	// never saves, so formatting made in the full editor cannot be flattened.
+	ReadOnly bool `json:"read_only,omitempty"`
+	// Version names the stored body. A save sends it back and is refused (409)
+	// if the note changed since, so a stale tab cannot overwrite newer text.
+	Version string `json:"version"`
 }

@@ -178,6 +178,10 @@ type CalendarService interface {
 	// date or time outside the calendar's own months, days, hours or minutes
 	// is a bad request (400), so a caller can tell the two apart.
 	SetCurrentDate(ctx context.Context, calendarID, campaignID string, year, month, day, hour, minute int) error
+	// AdvanceCurrent steps the current date and time forward by hours and
+	// whole days of the calendar's own length (advance.go). Same refusals as
+	// SetCurrentDate; the caller decides who may.
+	AdvanceCurrent(ctx context.Context, calendarID, campaignID string, hours, days int) error
 	DeleteCalendar(ctx context.Context, calendarID, campaignID string) error
 	SetDefaultCalendar(ctx context.Context, campaignID, calendarID string) error
 

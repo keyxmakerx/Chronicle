@@ -4972,6 +4972,10 @@ func (a *App) RegisterRoutes() {
 	// affects instead of being a no-op.
 	wsRevoker.hub = wsHub
 
+	// Remember who has loaded a campaign page lately, for the DM Screen's
+	// "players here" count on pages that open no socket.
+	e.Use(campaignPageSeen(wsHub))
+
 	// Wire the WS hub's presence lookup into foundry_vtt. fvttHandler owns
 	// both GET /campaigns/:id/foundry-presence (live diagnostic JSON) and
 	// /foundry-vtt/presence-pill-fragment (lazy-loaded pill on the map detail
@@ -4984,9 +4988,12 @@ func (a *App) RegisterRoutes() {
 	// registered here because Foundry presence comes from wsHub.
 	dmScreenSvc := dmscreen.NewService(dmscreen.Sources{
 		Downtime: &dmDowntimeAdapter{stash: stashSvc, addons: addonService},
+		Notes:    &dmNotesAdapter{notes: noteSvc, members: campaignService},
+		Requests: &dmRequestsAdapter{stash: stashSvc, addons: addonService},
 		World:    &dmWorldAdapter{svc: calendarService},
 		Nights:   &dmNightAdapter{svc: sessionsService, members: campaignService},
 		Foundry:  wsHub,
+		Presence: &dmPresenceAdapter{members: campaignService, hub: wsHub, foundry: foundryPlayerRepo},
 		Party:    &dmPartyAdapter{entities: entityService, campaigns: campaignService},
 		Hidden:   &dmHiddenAdapter{entities: entityService, lists: characterListService},
 		System:   systemHandler,

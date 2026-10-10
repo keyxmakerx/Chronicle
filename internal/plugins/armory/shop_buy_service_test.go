@@ -471,6 +471,30 @@ func TestShopBuy_Buyers(t *testing.T) {
 		})
 	}
 
+	t.Run("own marks the viewer's claimed characters", func(t *testing.T) {
+		f := newBuyFx()
+		f.dir.ents["c2"].OwnerUserID = "gm"
+		cases := []struct {
+			name  string
+			actor Actor
+			want  map[string]bool
+		}{
+			{"owner: only the claimed one", owner, map[string]bool{"c2": true}},
+			{"player: every listed buyer is theirs", pU1, map[string]bool{"c1": true}},
+		}
+		for _, tc := range cases {
+			v, err := f.svc.Buyers(context.Background(), "camp", "shop-1", tc.actor)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, b := range v.Buyers {
+				if b.Own != tc.want[b.ID] {
+					t.Errorf("%s: %s own = %v", tc.name, b.ID, b.Own)
+				}
+			}
+		}
+	})
+
 	t.Run("money fields", func(t *testing.T) {
 		f := newBuyFx()
 		v, err := f.svc.Buyers(context.Background(), "camp", "shop-1", owner)

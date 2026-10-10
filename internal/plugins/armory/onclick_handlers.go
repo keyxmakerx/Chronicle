@@ -73,3 +73,19 @@ func renameInstanceOnClick(campaignID string, instanceID int, name string) templ
 		jsStr(campaignID), instanceID, jsStr(name))
 	return inlineOnClick("armory_renameInstance", body)
 }
+
+// withdrawToggleOnClick opens (or closes) the inline "Withdraw this request?"
+// confirm on a waiting purchase line. Opening hides the Withdraw link and
+// moves focus to the confirm; closing restores both. Escape inside the confirm
+// closes it too.
+func withdrawToggleOnClick(open bool) templ.ComponentScript {
+	body := fmt.Sprintf(
+		`(function(el){`+
+			`var w=el.closest('[data-withdraw]');if(!w)return;`+
+			`var o=w.querySelector('[data-withdraw-open]'),c=w.querySelector('[data-withdraw-confirm]');if(!o||!c)return;`+
+			`var open=%t;o.hidden=open;o.setAttribute('aria-expanded',open?'true':'false');c.hidden=!open;`+
+			`if(open){c.onkeydown=function(e){if(e.key==='Escape'){e.stopPropagation();o.hidden=false;o.setAttribute('aria-expanded','false');c.hidden=true;o.focus();}};`+
+			`var b=c.querySelector('button');if(b)b.focus();}else{o.focus();}`+
+			`})(this)`, open)
+	return inlineOnClick("armory_withdrawToggle", body)
+}

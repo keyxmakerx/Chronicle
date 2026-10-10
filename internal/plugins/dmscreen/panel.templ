@@ -17,7 +17,7 @@ templ Panel(v *View, csrf string) {
 		aria-modal="true"
 		aria-labelledby="dms-title"
 		hx-get={ fmt.Sprintf("/campaigns/%s/dm-screen", v.CampaignID) }
-		hx-trigger="armory-moved from:body"
+		hx-trigger="armory-moved from:body, dms-refresh from:body"
 		hx-swap="outerHTML"
 	>
 		<div class="dms-head">
@@ -30,6 +30,9 @@ templ Panel(v *View, csrf string) {
 				<span>{ fmt.Sprintf("%d coming · %d maybe · %d no answer", v.Night.Going, v.Night.Maybe, v.Night.NoAnswer) }</span>
 			} else {
 				<span>No game night planned</span>
+			}
+			if v.Presence != nil {
+				<span title={ v.Presence.Title() }><span class="dms-dot dms-dot-on" aria-hidden="true"></span>{ v.Presence.Label() }</span>
 			}
 			if v.Foundry.Connected {
 				<span><span class="dms-dot dms-dot-on" aria-hidden="true"></span>Foundry connected</span>
@@ -80,12 +83,15 @@ templ Panel(v *View, csrf string) {
 								{ " " }Only the campaign owner can switch this.
 							}
 						</span>
-						if v.Downtime.Pending > 0 {
+						if v.Requests == nil && v.Downtime.Pending > 0 {
 							<a class="dms-link" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/armory/stashes", v.CampaignID)) }>
 								{ plural(v.Downtime.Pending, "request", "requests") } waiting on you
 							</a>
 						}
 					</div>
+				}
+				if v.Requests != nil {
+					@waitingBlock(v.CampaignID, v.Requests, csrf)
 				}
 				if v.World != nil {
 					<div class="dms-blk">
@@ -95,6 +101,22 @@ templ Panel(v *View, csrf string) {
 								{ " · " + v.World.TimeLabel }
 							}
 						</span>
+						if v.World.CanStep {
+							<div class="dms-chipsrow" role="group" aria-label="Move the date forward">
+								for _, st := range TimeSteps {
+									<button
+										type="button"
+										class="dms-stepchip"
+										data-step={ st.Key }
+										hx-post={ fmt.Sprintf("/campaigns/%s/dm-screen/time", v.CampaignID) }
+										hx-vals={ fmt.Sprintf(`{"step":"%s"}`, st.Key) }
+										hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrf) }
+										hx-swap="none"
+										hx-disabled-elt="this"
+									>{ st.Label }</button>
+								}
+							</div>
+						}
 						<a class="dms-link" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s", v.CampaignID, v.World.CalendarID)) }>Open the calendar</a>
 					</div>
 					<div class="dms-blk">
@@ -141,6 +163,9 @@ templ Panel(v *View, csrf string) {
 						<button type="button" role="tab" aria-selected="true" data-dms-tab="rules">Rules</button>
 					}
 					<button type="button" role="tab" aria-selected={ fmt.Sprint(len(v.Conditions) == 0) } data-dms-tab="reveal">Reveal</button>
+					if v.Notes != nil {
+						<button type="button" role="tab" aria-selected="false" data-dms-tab="notes">Notes</button>
+					}
 				</div>
 				if len(v.Conditions) > 0 {
 					<div class="dms-blk" data-dms-pane="rules">
@@ -165,8 +190,59 @@ templ Panel(v *View, csrf string) {
 						<a class="dms-link" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/characters", v.CampaignID)) }>More are hidden. See all on the Characters page</a>
 					}
 				</div>
+				if v.Notes != nil {
+					<div class="dms-blk" data-dms-pane="notes" hidden>
+						<span class="dms-lbl">{ v.Notes.Label }</span>
+						<textarea
+							class="dms-search dms-notes"
+							rows="12"
+							maxlength="20000"
+							aria-label={ v.Notes.Label }
+							placeholder="Jot things down for the table."
+							readonly?={ v.Notes.ReadOnly }
+							data-dms-note
+							data-dms-note-version={ v.Notes.Version }
+							data-dms-note-url={ fmt.Sprintf("/campaigns/%s/dm-screen/notes", v.CampaignID) }
+						>{ v.Notes.Text }</textarea>
+						<span class="dms-small" role="status" aria-live="polite" data-dms-note-status>
+							if v.Notes.ReadOnly {
+								This note has formatting, so edit it in Notes
+							} else {
+								Only you and co-DMs can see this
+							}
+						</span>
+						<a class="dms-link" data-dms-note-link href={ templ.SafeURL(v.Notes.Link) } hidden?={ v.Notes.Link == "" }>Open in Notes</a>
+					</div>
+				}
 			</section>
 		</div>
+	</div>
+}
+
+// waitingBlock lists the oldest waiting requests with Allow and Refuse. The
+// armory's own routes answer with an armory-moved trigger, which makes the
+// panel refetch itself, so a decided row simply disappears.
+templ waitingBlock(campaignID string, r *RequestsView, csrf string) {
+	<div class="dms-blk" data-dms-waiting>
+		<span class="dms-lbl">Waiting on you</span>
+		for _, req := range r.Items {
+			<div class="dms-row dms-req">
+				<span>{ req.Text }</span>
+				<span class="dms-req-btns">
+					<form hx-post={ req.ApprovePath(campaignID) } hx-swap="none" hx-disabled-elt="find button">
+						<input type="hidden" name="_csrf" value={ csrf }/>
+						<button type="submit" class="dms-req-yes">Allow</button>
+					</form>
+					<form hx-post={ req.DeclinePath(campaignID) } hx-swap="none" hx-disabled-elt="find button">
+						<input type="hidden" name="_csrf" value={ csrf }/>
+						<button type="submit">Refuse</button>
+					</form>
+				</span>
+			</div>
+		}
+		if r.More > 0 {
+			<a class="dms-link" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/armory/stashes", campaignID)) }>{ fmt.Sprint(r.More) } more on the Stashes page</a>
+		}
 	</div>
 }
 
@@ -209,7 +285,12 @@ templ heroRow(hero HeroView) {
 					<div class="dms-who">
 						<span>{ hero.Subtitle }</span>
 						if hero.PlayerName != "" {
-							<span>Played by { hero.PlayerName }</span>
+							<span>
+								Played by { hero.PlayerName }
+								if hero.PlayerHere {
+									<span class="dms-dot dms-dot-on dms-dot-after" title="Here now"><span class="sr-only">Here now</span></span>
+								}
+							</span>
 						}
 					</div>
 				}

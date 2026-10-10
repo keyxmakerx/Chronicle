@@ -272,6 +272,11 @@ type MoveLine struct {
 	// Summary, when set, is the whole sentence for the row. Purchase requests
 	// share the history list and carry their own wording here.
 	Summary string
+	// Purchase marks a row that is a shop purchase request, whose ID is a
+	// request id rather than a move id. CanWithdraw is set only for a waiting
+	// one the viewer may take back (its requester, or the Owner).
+	Purchase    bool
+	CanWithdraw bool
 }
 
 // HeldItem is one line of what a character carries.
