@@ -1203,6 +1203,7 @@
 		} catch (err) { return true; }
 	}
 	var HIDDEN_PICTURE_CONFIRM = 'Hexes painted on this hidden picture will become visible to players. Continue?';
+	var TAKE_OFF_CONFIRM = 'Take the hexes off this map? Painted hexes are kept, so making it a hex map again brings them back.';
 	// Moving the hexes off a dm_only picture onto something players can see
 	// would publish whatever was painted while it was hidden.
 	function hexCoverReveals(newId) {
@@ -1276,7 +1277,7 @@
 	// The painted hexes stay stored, so turning hexes back on finds them.
 	async function takeHexesOff() {
 		if (!isOwner) return false;
-		if (hexCoverReveals(null) && !confirm(HIDDEN_PICTURE_CONFIRM)) return false;
+		if (!confirm(hexCoverReveals(null) ? HIDDEN_PICTURE_CONFIRM : TAKE_OFF_CONFIRM)) return false;
 		if (hexAnchor !== null && !await apiPut(hexBase + '/layer', { anchor_drawing_id: null })) return false;
 		if (!await putGrid('none', savedD.grid_size)) return false;
 		hexAnchor = null;
@@ -1306,19 +1307,36 @@
 		label.className = 'mp-fly-label';
 		label.textContent = 'Make a hex map';
 		flyHex.appendChild(label);
-		function item(text, id, mode) {
+		var HEX_PATH = 'M12 3l8 4.5v9L12 21l-8-4.5v-9z';
+		function item(title, sub, id, mode) {
 			var b = document.createElement('button');
 			b.type = 'button';
-			b.className = 'mp-wd';
-			b.textContent = text;
+			b.className = 'mp-mrow';
+			var ico = document.createElement('span');
+			ico.className = 'mp-mrow-ico';
+			ico.innerHTML = '<svg class="mp-hexico" viewBox="0 0 24 24" aria-hidden="true"><path d="' + HEX_PATH + '"/></svg>';
+			var txt = document.createElement('span');
+			txt.className = 'mp-mrow-txt';
+			var t = document.createElement('b');
+			t.textContent = title;
+			t.title = title;
+			var s = document.createElement('small');
+			s.textContent = sub;
+			txt.appendChild(t);
+			txt.appendChild(s);
+			b.appendChild(ico);
+			b.appendChild(txt);
 			b.addEventListener('click', function() { closePopovers(); setHexCover(id, mode); });
 			flyHex.appendChild(b);
 		}
-		item('Hexes over the whole map', null, 'look');
-		hexPictureList().forEach(function(p, i) { item('Hexes over “' + pictureName(i) + '”', p.id, 'paint'); });
+		var pics = hexPictureList();
+		item('Whole map', 'Hexes cover everything', null, 'look');
+		pics.forEach(function(p, i) { item(pictureName(i), 'Hexes cover just this picture', p.id, 'paint'); });
 		var help = document.createElement('div');
 		help.className = 'mp-fly-help';
-		help.textContent = 'Add a picture first to turn just that picture into a hex map. Or click any picture and choose Turn into a hex map.';
+		help.textContent = pics.length
+			? 'You can also click any picture and choose Turn into a hex map.'
+			: 'Add a picture first to turn just that picture into a hex map.';
 		flyHex.appendChild(help);
 	}
 	if (makeHexBtn && flyHex) {
