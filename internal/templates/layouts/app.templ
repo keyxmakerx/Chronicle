@@ -631,7 +631,19 @@ templ Topbar() {
 				// escape to the nearest ancestor context and paint before the header
 				// surface, making the brand invisible (the original "saved but invisible" bug).
 				// pointer-events:none lets clicks fall through to the nav controls.
-				if topbarStyleIsMoving(ctx) {
+				if topbarStyleIsSky(ctx) {
+					// Sky: the campaign's own sky over still night colours,
+					// which show until it is drawn and stay if it cannot be.
+					// The soft edge shade keeps the words at either end clear.
+					<div style={ "position:absolute; inset:0; z-index:-1; pointer-events:none; overflow:hidden; " + topbarInlineStyle(ctx) } aria-hidden="true">
+						if id := topbarSkyCalendarID(ctx); id != "" {
+							<div data-widget="header-sky" data-campaign-id={ GetCampaignID(ctx) } data-calendar-id={ id } class="header-sky">
+								<canvas></canvas>
+							</div>
+						}
+						<div style={ topbarSkyScrim }></div>
+					</div>
+				} else if topbarStyleIsMoving(ctx) {
 					// Moving: an over-wide strip of the two colours that the
 					// header-motion widget slides, easing to a stop whenever
 					// the person steps away. The clip keeps the strip inside
@@ -1259,6 +1271,10 @@ func topbarInlineStyle(ctx context.Context) string {
 		if style.GradientFrom != "" && style.GradientTo != "" {
 			return fmt.Sprintf("background: linear-gradient(%s, %s, %s);", topbarGradientDir(style.GradientDir), style.GradientFrom, style.GradientTo)
 		}
+	case "sky":
+		// The still night the sky is drawn over: the look before it loads,
+		// with no calendar, and if it cannot be read.
+		return "background: " + topbarSkyNight + ";"
 	case "image":
 		if style.ImagePath != "" {
 			return fmt.Sprintf("background-image: url('%s'); background-size: cover; background-position: center;", MediaURL(ctx, style.ImagePath))
@@ -1277,7 +1293,7 @@ func topbarWantsLightWords(ctx context.Context) bool {
 	}
 	var cols []string
 	switch style.Mode {
-	case "image":
+	case "image", "sky":
 		return true
 	case "solid":
 		cols = []string{style.Color}
@@ -1327,6 +1343,29 @@ func topbarGradientDir(dir string) string {
 // topbar background — used to decide whether to emit the background layer.
 func topbarHasCustomStyle(ctx context.Context) bool {
 	return topbarInlineStyle(ctx) != ""
+}
+
+// topbarSkyNight is the Sky background's still fallback, a clear night.
+const topbarSkyNight = "linear-gradient(to bottom, #04061a, #141d45 65%, #2a3768)"
+
+// topbarSkyScrim shades the Sky header's two ends so the words there read
+// over any sky, bright noon included.
+const topbarSkyScrim = "position:absolute; inset:0; background:linear-gradient(90deg,rgba(0,0,0,.18),rgba(0,0,0,0) 40%,rgba(0,0,0,0) 70%,rgba(0,0,0,.18));"
+
+// topbarStyleIsSky reports whether the header shows the campaign's sky.
+func topbarStyleIsSky(ctx context.Context) bool {
+	style := GetTopbarStyle(ctx)
+	return style != nil && style.Mode == "sky"
+}
+
+// topbarSkyCalendarID is the calendar the Sky header draws, or "" to keep
+// the still night: no calendar, one this viewer may not see, or the
+// calendar addon off.
+func topbarSkyCalendarID(ctx context.Context) string {
+	if topbarStyleIsSky(ctx) && GetCampaignID(ctx) != "" {
+		return GetSkyCalendarID(ctx)
+	}
+	return ""
 }
 
 // topbarStyleIsMoving reports whether the header background drifts.

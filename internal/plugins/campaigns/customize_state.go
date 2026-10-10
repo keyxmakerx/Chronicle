@@ -20,7 +20,7 @@ type customizeDraft struct {
 		Backdrop string `json:"backdrop"`
 	} `json:"brand"`
 	Header struct {
-		Bg      string       `json:"bg"`     // "solid", "gradient", "moving" or "image".
+		Bg      string       `json:"bg"`     // "solid", "gradient", "moving", "sky" or "image".
 		Height  string       `json:"height"` // "slim" or "tall".
 		Solid   string       `json:"solid"`  // A colour, or "page" for the header that matches the page.
 		From    string       `json:"from"`
@@ -159,6 +159,8 @@ func buildCustomizeState(ctx context.Context, cc *CampaignContext) customizeStat
 					h.Dir = "r"
 				}
 			}
+		case "sky":
+			h.Bg = "sky"
 		case "image":
 			if ts.ImagePath != "" {
 				h.Bg = "image"

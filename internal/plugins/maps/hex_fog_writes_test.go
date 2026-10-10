@@ -68,7 +68,7 @@ func TestFogHiddenWrites_DrawingsAndTokens(t *testing.T) {
 		write func(DrawingService) error
 	}{
 		{"update drawing", false, func(s DrawingService) error {
-			return s.UpdateDrawing(context.Background(), "d", "map-1", permissions.RoleScribe, false, UpdateDrawingInput{})
+			return s.UpdateDrawing(context.Background(), "d", "map-1", "", permissions.RoleScribe, false, UpdateDrawingInput{})
 		}},
 		{"delete drawing", false, func(s DrawingService) error {
 			return s.DeleteDrawing(context.Background(), "d", "map-1", nil, "u", permissions.RoleScribe, false)
@@ -80,7 +80,7 @@ func TestFogHiddenWrites_DrawingsAndTokens(t *testing.T) {
 			return s.UpdateTokenPosition(context.Background(), "t", "map-1", false, UpdateTokenPositionInput{X: patch.Of(float64(1)), Y: patch.Of(float64(1))})
 		}},
 		{"DM updates drawing", true, func(s DrawingService) error {
-			return s.UpdateDrawing(context.Background(), "d", "map-1", permissions.RoleOwner, true, UpdateDrawingInput{})
+			return s.UpdateDrawing(context.Background(), "d", "map-1", "", permissions.RoleOwner, true, UpdateDrawingInput{})
 		}},
 		{"DM moves token", true, func(s DrawingService) error {
 			return s.UpdateTokenPosition(context.Background(), "t", "map-1", true, UpdateTokenPositionInput{X: patch.Of(float64(1)), Y: patch.Of(float64(1))})

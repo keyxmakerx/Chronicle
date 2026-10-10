@@ -111,6 +111,8 @@ type AuthService interface {
 	GetNotifyPrefs(ctx context.Context, userID string) (notifyprefs.Prefs, error)
 	UpdateNotifyPrefs(ctx context.Context, userID string, in notifyprefs.Update) (notifyprefs.Prefs, error)
 	AllowedRecipients(ctx context.Context, ids []string, category string, ch notifyprefs.Channel) []string
+	OwnedCampaigns(ctx context.Context, userID string) ([]OwnedCampaignRef, error)
+	DeleteOwnAccount(ctx context.Context, userID string, input DeleteAccountInput) error
 	UpdateDisplayName(ctx context.Context, userID, displayName string) error
 	UpdateAvatarPath(ctx context.Context, userID string, avatarPath *string) error
 	ChangePassword(ctx context.Context, userID, currentPassword, newPassword string) error
@@ -169,6 +171,11 @@ type authService struct {
 	// (password reset or change, force sign-out), so credentials kept outside
 	// sessions, like a player's notes grants, end with them.
 	onSessionsRevoked []func(ctx context.Context, userID string)
+
+	// Account deletion steps, wired from routes.go so auth imports no
+	// other plugin (ConfigureAccountDeletion, OnAccountDeleted).
+	accountDeletion  AccountDeletionHooks
+	onAccountDeleted []func(ctx context.Context, userID string)
 }
 
 // Registration modes. These mirror the settings plugin's canonical constants;

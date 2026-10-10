@@ -15,7 +15,7 @@ type Drawing struct {
 	ID          string          `json:"id"`
 	MapID       string          `json:"map_id"`
 	LayerID     *string         `json:"layer_id,omitempty"`
-	DrawingType string          `json:"drawing_type"` // freehand, rectangle, ellipse, polygon, text, shadow, image (two corners; fill_alpha is its strength, see shadow.go)
+	DrawingType string          `json:"drawing_type"` // freehand, rectangle, ellipse, polygon, text, shadow (see shadow.go), image (drawing_image.go), arrow, highlight, step, callout (drawing_annotation.go)
 	Points      json.RawMessage `json:"points"`       // Array of {x, y} coordinate pairs.
 	StrokeColor string          `json:"stroke_color"`
 	StrokeWidth float64         `json:"stroke_width"`
@@ -70,6 +70,10 @@ type CreateDrawingInput struct {
 	// CallerIsDM is true for an owner or co-DM. Only they may create a shadow;
 	// it is not a data field.
 	CallerIsDM bool
+	// Imported marks a drawing restored from a campaign export: a label's
+	// text is cleaned to the current bounds instead of refused. Not a data
+	// field.
+	Imported bool
 }
 
 // UpdateDrawingInput is the validated input for updating a drawing.

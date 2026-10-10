@@ -46,6 +46,7 @@ const (
 	keyBrandLogo           ctxKey = "layout_brand_logo"
 	keyTopbarStyle         ctxKey = "layout_topbar_style"
 	keyTopbarContent       ctxKey = "layout_topbar_content"
+	keySkyCalendarID       ctxKey = "layout_sky_calendar_id"
 	keyDegradedPluginCount ctxKey = "layout_degraded_plugin_count"
 	keyAdminNavPins        ctxKey = "layout_admin_nav_pins"
 	keyFontFamily          ctxKey = "layout_font_family"
@@ -822,6 +823,20 @@ func SetTopbarStyle(ctx context.Context, style *TopbarStyleData) context.Context
 func GetTopbarStyle(ctx context.Context) *TopbarStyleData {
 	style, _ := ctx.Value(keyTopbarStyle).(*TopbarStyleData)
 	return style
+}
+
+// SetSkyCalendarID stores the calendar the campaign's sky is drawn from for
+// this viewer: the Sky header background and the Customize page's example
+// of it read it.
+func SetSkyCalendarID(ctx context.Context, id string) context.Context {
+	return context.WithValue(ctx, keySkyCalendarID, id)
+}
+
+// GetSkyCalendarID returns the calendar the sky is drawn from, or "" when
+// there is none this viewer may see.
+func GetSkyCalendarID(ctx context.Context) string {
+	id, _ := ctx.Value(keySkyCalendarID).(string)
+	return id
 }
 
 // TopbarContentData holds the topbar center area content for templates.

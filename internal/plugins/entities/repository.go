@@ -2324,3 +2324,13 @@ func (r *entityRepository) FindAllMentionLinks(ctx context.Context, campaignID s
 	}
 	return links, rows.Err()
 }
+
+// ClearOwnerForUser unlinks every page assigned to a deleted account, so
+// their characters stay in the campaign with no player attached.
+func (r *entityRepository) ClearOwnerForUser(ctx context.Context, userID string) (int64, error) {
+	res, err := r.db.ExecContext(ctx, `UPDATE entities SET owner_user_id = NULL WHERE owner_user_id = ?`, userID)
+	if err != nil {
+		return 0, fmt.Errorf("clearing entity owners: %w", err)
+	}
+	return res.RowsAffected()
+}

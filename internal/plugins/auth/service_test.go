@@ -20,6 +20,7 @@ import (
 type mockUserRepo struct {
 	viewPrefs            []byte
 	notifyPrefs          map[string][]byte
+	anonymized           []string
 	createFn             func(ctx context.Context, user *User) error
 	findByIDFn           func(ctx context.Context, id string) (*User, error)
 	findByEmailFn        func(ctx context.Context, email string) (*User, error)
@@ -176,6 +177,11 @@ func (m *mockUserRepo) ListNotifyPrefs(ctx context.Context, userIDs []string) (m
 		}
 	}
 	return out, nil
+}
+
+func (m *mockUserRepo) AnonymizeUser(ctx context.Context, userID, email, displayName, passwordHash string) error {
+	m.anonymized = append(m.anonymized, userID+"|"+email+"|"+displayName)
+	return nil
 }
 
 func (m *mockUserRepo) UpdateDisplayName(ctx context.Context, userID, displayName string) error {
