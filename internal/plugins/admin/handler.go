@@ -73,6 +73,8 @@ type Handler struct {
 	navPins  AdminNavPinService
 	// siteLook backs the Site look page; nil until wired.
 	siteLook SiteLookService
+	// trash is the site Trash; nil until wired.
+	trash TrashService
 }
 
 // StoragePageData holds all data needed for the combined storage management page.
@@ -251,18 +253,23 @@ func (h *Handler) DataHygiene(c echo.Context) error {
 	return middleware.Render(c, http.StatusOK, DataHygienePage(data))
 }
 
-// PurgeOrphanedMediaAPI handles DELETE /admin/data-hygiene/orphaned-media.
+// PurgeOrphanedMediaAPI handles DELETE /admin/data-hygiene/orphaned-media. The
+// unused uploads move to the Trash as one clean-up that can be undone; the
+// files are only removed when the Trash is emptied.
 func (h *Handler) PurgeOrphanedMediaAPI(c echo.Context) error {
-	if h.hygieneScanner == nil {
-		return apperror.NewInternal(fmt.Errorf("hygiene scanner not configured"))
+	if h.trash == nil {
+		return apperror.NewInternal(fmt.Errorf("trash not configured"))
 	}
-	purged, err := h.hygieneScanner.PurgeOrphanedMedia(c.Request().Context())
+	batch, err := h.trash.TrashUnusedUploads(c.Request().Context(), h.actor(c))
 	if err != nil {
-		return apperror.NewInternal(fmt.Errorf("purging orphaned media: %w", err))
+		return apperror.NewInternal(fmt.Errorf("moving orphaned media to trash: %w", err))
 	}
-	slog.Info("admin purged orphaned media", slog.Int("purged", purged))
-	h.record(c, "hygiene.purged", "hygiene", "", fmt.Sprintf("%d orphaned files", purged))
-	return middleware.HTMXRedirect(c, "/admin/data-hygiene")
+	if batch == nil {
+		return middleware.HTMXRedirect(c, "/admin/data-hygiene")
+	}
+	slog.Info("admin moved orphaned media to trash", slog.String("batch_id", batch.ID), slog.Int("files", batch.Items))
+	h.record(c, "hygiene.files_trashed", "trash", batch.ID, batchSummary(*batch))
+	return middleware.HTMXRedirect(c, "/admin/trash")
 }
 
 // PurgeOrphanedAPIKeysAPI handles DELETE /admin/data-hygiene/orphaned-api-keys.
@@ -658,18 +665,20 @@ func (h *Handler) Campaigns(c echo.Context) error {
 	return middleware.Render(c, http.StatusOK, AdminCampaignsPage(data))
 }
 
-// DeleteCampaign force-deletes a campaign (DELETE /admin/campaigns/:id).
+// DeleteCampaign moves a campaign to the Trash (DELETE /admin/campaigns/:id).
+// Nothing is removed: the campaign vanishes for everyone and can be brought
+// back from the Trash page until the retention is up.
 func (h *Handler) DeleteCampaign(c echo.Context) error {
 	campaignID := c.Param("id")
 
-	// Read the name first: the row is gone after the delete.
+	// Read the name first: the log keeps it, and the Trash shows it.
 	label := h.campaignLabel(c.Request().Context(), campaignID)
-	if err := h.campaignService.Delete(c.Request().Context(), campaignID); err != nil {
+	if err := h.campaignService.MoveToTrash(c.Request().Context(), campaignID, auth.GetUserID(c)); err != nil {
 		return err
 	}
-	h.record(c, "campaign.deleted", "campaign", campaignID, label)
+	h.record(c, "campaign.trashed", "campaign", campaignID, label)
 
-	slog.Info("admin deleted campaign",
+	slog.Info("admin moved campaign to trash",
 		slog.String("campaign_id", campaignID),
 		slog.String("by", auth.GetUserID(c)),
 	)

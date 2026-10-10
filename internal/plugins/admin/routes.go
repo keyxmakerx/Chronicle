@@ -41,6 +41,14 @@ func RegisterRoutes(e *echo.Echo, h *Handler, authService auth.AuthService, smtp
 	admin.POST("/campaigns/:id/join", h.JoinCampaign, reauth)
 	admin.DELETE("/campaigns/:id/leave", h.LeaveCampaign)
 
+	// Trash: deleted campaigns and file clean-ups wait here, with Undo.
+	// Emptying it early is permanent, so it asks for the password again.
+	admin.GET("/trash", h.Trash)
+	admin.POST("/trash/campaigns/:id/undo", h.UndoTrashedCampaign)
+	admin.POST("/trash/batches/:id/undo", h.UndoTrashedBatch)
+	admin.POST("/trash/retention", h.SaveTrashRetention)
+	admin.DELETE("/trash", h.EmptyTrash, reauth)
+
 	// Site look: name, logo, look and sign-in background for pages outside a
 	// campaign. The POST carries picture uploads, so it has its own body cap
 	// (the global 2M limit skips this path in app.go).

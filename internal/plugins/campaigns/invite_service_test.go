@@ -129,7 +129,20 @@ func (m *mockCampaignRepoForInvites) ListPublic(context.Context, int) ([]Campaig
 	return nil, nil
 }
 func (m *mockCampaignRepoForInvites) Update(context.Context, *Campaign) error { return nil }
-func (m *mockCampaignRepoForInvites) Delete(context.Context, string) error    { return nil }
+func (m *mockCampaignRepoForInvites) MoveToTrash(context.Context, string, string, string, time.Time) error {
+	return nil
+}
+func (m *mockCampaignRepoForInvites) RestoreFromTrash(context.Context, string) error { return nil }
+func (m *mockCampaignRepoForInvites) ListTrashed(context.Context) ([]TrashedCampaign, error) {
+	return nil, nil
+}
+func (m *mockCampaignRepoForInvites) ListPurgeDue(context.Context, time.Time, bool) ([]string, error) {
+	return nil, nil
+}
+func (m *mockCampaignRepoForInvites) ClaimForPurge(context.Context, string, time.Time) (bool, error) {
+	return true, nil
+}
+func (m *mockCampaignRepoForInvites) PurgeTrashed(context.Context, string) error { return nil }
 func (m *mockCampaignRepoForInvites) SlugExists(context.Context, string) (bool, error) {
 	return false, nil
 }

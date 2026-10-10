@@ -22,6 +22,12 @@ type SettingsService interface {
 	// UpdateTrashRetentionDays saves it; only TrashRetentionChoices pass.
 	UpdateTrashRetentionDays(ctx context.Context, days int) error
 
+	// SiteTrashRetentionDays is how long a deleted campaign or a file clean-up
+	// waits in the site Trash.
+	SiteTrashRetentionDays(ctx context.Context) int
+	// UpdateSiteTrashRetentionDays saves it; only SiteTrashRetentionChoices pass.
+	UpdateSiteTrashRetentionDays(ctx context.Context, days int) error
+
 	// GetStorageLimits returns the parsed global storage limits.
 	GetStorageLimits(ctx context.Context) (*GlobalStorageLimits, error)
 
@@ -504,6 +510,39 @@ func (s *settingsService) UpdateTrashRetentionDays(ctx context.Context, days int
 		return apperror.NewBadRequest("trash retention must be 30, 60, 90, 180 or 365 days")
 	}
 	return s.repo.Set(ctx, KeyTrashRetentionDays, strconv.Itoa(days))
+}
+
+// SiteTrashRetentionDays returns how long the site Trash keeps things. Like
+// TrashRetentionDays, an unset or unexpected value gives the default and never
+// a shorter period, so a bad row can't empty the Trash early.
+func (s *settingsService) SiteTrashRetentionDays(ctx context.Context) int {
+	raw, err := s.repo.Get(ctx, KeySiteTrashRetentionDays)
+	if err != nil {
+		return DefaultSiteTrashRetentionDays
+	}
+	days, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil || !IsValidSiteTrashRetention(days) {
+		return DefaultSiteTrashRetentionDays
+	}
+	return days
+}
+
+// UpdateSiteTrashRetentionDays validates and saves the site Trash retention.
+func (s *settingsService) UpdateSiteTrashRetentionDays(ctx context.Context, days int) error {
+	if !IsValidSiteTrashRetention(days) {
+		return apperror.NewBadRequest("trash retention must be 7, 14, 30 or 90 days")
+	}
+	return s.repo.Set(ctx, KeySiteTrashRetentionDays, strconv.Itoa(days))
+}
+
+// IsValidSiteTrashRetention reports whether days is one of the offered choices.
+func IsValidSiteTrashRetention(days int) bool {
+	for _, d := range SiteTrashRetentionChoices {
+		if d == days {
+			return true
+		}
+	}
+	return false
 }
 
 // IsValidTrashRetention reports whether days is one of the offered choices.

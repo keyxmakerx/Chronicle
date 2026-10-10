@@ -1,0 +1,133 @@
+package admin
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/plugins/settings"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// TrashPageData is what the Trash page and its swappable region draw.
+type TrashPageData struct {
+	Overview  *TrashOverview
+	CSRFToken string
+	// Notice is the one-line result of the last action ("Brought back ..."),
+	// drawn at the top of the region. Error styles it as a problem.
+	Notice string
+	Error  bool
+	// LoadFailed is set when the Trash could not be read, so an empty list is
+	// not mistaken for an empty Trash.
+	LoadFailed bool
+}
+
+// AdminTrashPage renders the Trash: what is waiting, Undo for each, the
+// retention setting and Empty now.
+templ AdminTrashPage(data TrashPageData) {
+	@layouts.App("Trash - Admin") {
+		<div class="max-w-4xl mx-auto space-y-6">
+			<div>
+				<h1 class="text-2xl font-bold text-fg">Trash</h1>
+				<p class="text-sm text-fg-secondary mt-1">
+					Deleted campaigns and file clean-ups wait here before they are removed for good.
+					Undo brings one back exactly as it was.
+				</p>
+			</div>
+			@TrashRegion(data)
+		</div>
+	}
+}
+
+// TrashRegion is the part of the page every action swaps: the notice, the
+// list and the settings card. Undo, Save and Empty now answer with this, so
+// the page updates in place and keeps its scroll.
+templ TrashRegion(data TrashPageData) {
+	<div id="trash-region" class="space-y-6" hx-headers={ trashHeaders(data.CSRFToken) } hx-target="this" hx-swap="outerHTML">
+		if data.Notice != "" {
+			if data.Error {
+				<div class="trash-settle card border border-red-500/50 bg-red-50 dark:bg-red-900/20" role="alert">
+					<p class="text-sm text-fg"><i class="fa-solid fa-triangle-exclamation text-red-500 mr-2" aria-hidden="true"></i>{ data.Notice }</p>
+				</div>
+			} else {
+				<div class="trash-settle card border border-edge" role="status">
+					<p class="text-sm text-fg"><i class="fa-solid fa-circle-check text-emerald-500 mr-2" aria-hidden="true"></i>{ data.Notice }</p>
+				</div>
+			}
+		}
+		if data.LoadFailed {
+			<div class="card border border-amber-500/50 bg-amber-50 dark:bg-amber-900/20" role="alert">
+				<p class="text-sm font-medium text-fg"><i class="fa-solid fa-triangle-exclamation text-amber-500 mr-2" aria-hidden="true"></i>The trash could not be read</p>
+				<p class="text-sm text-fg-secondary mt-1">Nothing was changed. Reload to try again; the server log has the details.</p>
+			</div>
+		} else if data.Overview != nil && len(data.Overview.Entries) > 0 {
+			<ul class="card p-0 divide-y divide-edge overflow-hidden" aria-label="Waiting in the trash">
+				for _, e := range data.Overview.Entries {
+					@trashRow(e)
+				}
+			</ul>
+		} else {
+			<div class="trash-settle card text-center py-10">
+				<span class="mx-auto w-12 h-12 rounded-full bg-surface-alt flex items-center justify-center mb-3">
+					<i class="fa-solid fa-trash-can text-fg-muted text-lg" aria-hidden="true"></i>
+				</span>
+				<p class="text-sm font-medium text-fg">The trash is empty</p>
+				<p class="text-sm text-fg-muted mt-1">
+					Deleted campaigns and cleaned-up files will wait here for
+					{ fmt.Sprint(trashRetention(data)) } days.
+				</p>
+			</div>
+		}
+		<div class="card space-y-5">
+			<form hx-post="/admin/trash/retention" class="space-y-2">
+				<label for="trash-retention" class="block text-sm font-medium text-fg">Keep deleted things for</label>
+				<div class="flex flex-wrap items-center gap-3">
+					<select id="trash-retention" name="trash_retention_days" class="input text-sm w-auto pr-8">
+						for _, d := range settings.SiteTrashRetentionChoices {
+							<option value={ fmt.Sprint(d) } selected?={ d == trashRetention(data) }>{ fmt.Sprint(d) } days</option>
+						}
+					</select>
+					<button type="submit" class="btn btn-primary btn-sm">Save</button>
+				</div>
+				<p class="text-xs text-fg-muted">
+					After this long an item is removed for good, at the next hourly check.
+					Choosing a shorter time also removes things that have already waited longer.
+				</p>
+			</form>
+			<div class="border-t border-edge pt-4 flex flex-wrap items-center justify-between gap-3">
+				<p class="text-sm text-fg-secondary">Remove everything in the trash now instead of waiting.</p>
+				<button
+					type="button"
+					hx-delete="/admin/trash"
+					hx-confirm="Empty the trash now? Everything in it is deleted for good and cannot be brought back."
+					class="btn btn-danger btn-sm"
+					disabled?={ data.Overview == nil || len(data.Overview.Entries) == 0 }
+				>
+					<i class="fa-solid fa-trash mr-1" aria-hidden="true"></i> Empty trash now…
+				</button>
+			</div>
+		</div>
+	</div>
+}
+
+// trashRow is one waiting item with its Undo button.
+templ trashRow(e TrashEntry) {
+	<li class="trash-settle flex flex-wrap items-center gap-3 p-4">
+		<span class="w-10 h-10 rounded-lg bg-surface-alt flex items-center justify-center text-fg-secondary shrink-0" aria-hidden="true">
+			<i class={ "fa-solid " + trashIcon(e) }></i>
+		</span>
+		<div class="min-w-[12rem] flex-1">
+			<p class="text-sm font-semibold text-fg break-words">{ e.Title }</p>
+			<p class="text-xs text-fg-muted mt-0.5">{ trashMeta(e) }</p>
+		</div>
+		if e.Emptying {
+			<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">Emptying…</span>
+		} else {
+			<button
+				type="button"
+				hx-post={ trashUndoURL(e) }
+				class="btn btn-secondary btn-sm"
+				aria-label={ "Undo: bring back " + e.Title }
+			>
+				<i class="fa-solid fa-rotate-left mr-1" aria-hidden="true"></i> Undo
+			</button>
+		}
+	</li>
+}

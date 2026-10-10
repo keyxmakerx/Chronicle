@@ -396,6 +396,12 @@ func (h *Handler) checkMediaAccess(c echo.Context, file *MediaFile, isThumb bool
 	if file.IsPageFile() {
 		return apperror.NewNotFound("media file not found")
 	}
+	// A file whose campaign is in the site Trash, or that is itself in a
+	// clean-up batch, is out of use for everyone. This runs ahead of the
+	// signature check: a link signed before the delete must stop working too.
+	if file.InTrash() {
+		return apperror.NewNotFound("media file not found")
+	}
 	if err := h.checkBaseMediaAccess(c, file, isThumb, thumbSize); err != nil {
 		return err
 	}
@@ -896,7 +902,7 @@ func (h *Handler) Info(c echo.Context) error {
 	// Ownership check: only uploader or admin can see file info. A page file
 	// has its page's rule and nothing here, so it answers like a missing file.
 	session := auth.GetSession(c)
-	if file.IsPageFile() || (file.UploadedBy != userID && (session == nil || !session.IsAdmin)) {
+	if file.IsPageFile() || file.InTrash() || (file.UploadedBy != userID && (session == nil || !session.IsAdmin)) {
 		return apperror.NewNotFound("media file not found")
 	}
 
@@ -936,7 +942,7 @@ func (h *Handler) Delete(c echo.Context) error {
 	// Ownership check. A page file is removed from its page by someone who can
 	// still edit that page, never by its uploader alone.
 	session := auth.GetSession(c)
-	if file.IsPageFile() || (file.UploadedBy != userID && (session == nil || !session.IsAdmin)) {
+	if file.IsPageFile() || file.InTrash() || (file.UploadedBy != userID && (session == nil || !session.IsAdmin)) {
 		return apperror.NewNotFound("media file not found")
 	}
 

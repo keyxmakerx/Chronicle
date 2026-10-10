@@ -34,6 +34,12 @@ type MediaFile struct {
 	// serve handler to enforce access control on private campaign media.
 	CampaignIsPublic *bool `json:"-"`
 
+	// CampaignTrashed is set by FindByID's join: the file's campaign is in
+	// the site Trash. TrashBatchID is set when the file itself is in a file
+	// clean-up batch. Either makes InTrash true.
+	CampaignTrashed bool    `json:"-"`
+	TrashBatchID    *string `json:"-"`
+
 	// MatchedExisting and UsedBy are transient (ADR-058) — never persisted.
 	// Set ONLY by mediaService.Upload's dedup path, and ONLY when the
 	// content-hash match was safe to merge (canMergeWithExisting said
@@ -47,6 +53,13 @@ type MediaFile struct {
 	// hidden page's artwork with candidate images. See UploadResponse.
 	MatchedExisting bool       `json:"-"`
 	UsedBy          []MediaRef `json:"-"`
+}
+
+// InTrash reports whether the file is out of use because its campaign, or the
+// file itself, is waiting in the site Trash. Every route that opens a file for
+// a person treats that as "not found", signed link or not.
+func (f *MediaFile) InTrash() bool {
+	return f.CampaignTrashed || f.TrashBatchID != nil
 }
 
 // UploadInput holds the validated input for creating a media file.

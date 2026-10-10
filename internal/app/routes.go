@@ -3237,6 +3237,15 @@ func (a *App) RegisterRoutes() {
 	hygieneScanner := admin.NewHygieneService(a.DB, mediaRepo, mediaService, a.Config.Upload.MediaPath, securityRepo)
 	adminHandler.SetHygieneScanner(hygieneScanner)
 
+	// Site Trash: a deleted campaign and a file clean-up wait here with Undo
+	// before anything is removed. The purger is the periodic job that empties
+	// items older than the retention setting (an hourly ticker, started the
+	// same way as the page Trash purger below).
+	trashService := admin.NewTrashService(campaignService, mediaService, hygieneScanner,
+		admin.NewTrashBatchRepository(a.DB), settingsService)
+	adminHandler.SetTrashService(trashService)
+	go trashService.StartPurger(a.ShutdownCtx)
+
 	// Database explorer: schema visualization and migration management.
 	dbExplorer := admin.NewDatabaseExplorer(a.DB, a.PluginHealth, a.PluginSchemas)
 	adminHandler.SetDatabaseExplorer(dbExplorer)

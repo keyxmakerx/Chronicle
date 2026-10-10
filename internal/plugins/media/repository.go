@@ -96,6 +96,14 @@ type MediaRepository interface {
 	// when their page was purged (the binding row goes with the page, the file
 	// does not).
 	ListUnboundPageFiles(ctx context.Context, olderThan time.Time) ([]string, error)
+
+	// TrashFiles puts unused, campaignless uploads in a site-Trash clean-up
+	// batch without touching the files on disk (trash_repository.go).
+	TrashFiles(ctx context.Context, batchID string, ids []string) (count int, bytes int64, err error)
+	// RestoreTrashedFiles takes every file out of a batch (Undo).
+	RestoreTrashedFiles(ctx context.Context, batchID string) (int, error)
+	// ListTrashedFileIDs returns the ids of the files in a batch.
+	ListTrashedFileIDs(ctx context.Context, batchID string) ([]string, error)
 }
 
 // mediaRepository implements MediaRepository with MariaDB queries.
@@ -145,7 +153,7 @@ func (r *mediaRepository) Create(ctx context.Context, file *MediaFile) error {
 func (r *mediaRepository) FindByID(ctx context.Context, id string) (*MediaFile, error) {
 	query := `SELECT m.id, m.campaign_id, m.uploaded_by, m.filename, m.original_name,
 	                 m.mime_type, m.file_size, m.content_hash, m.usage_type, m.thumbnail_paths, m.created_at,
-	                 c.is_public
+	                 c.is_public, c.deleted_at IS NOT NULL, m.trash_batch_id
 	          FROM media_files m
 	          LEFT JOIN campaigns c ON m.campaign_id = c.id
 	          WHERE m.id = ?`
@@ -157,7 +165,7 @@ func (r *mediaRepository) FindByID(ctx context.Context, id string) (*MediaFile, 
 		&file.ID, &file.CampaignID, &file.UploadedBy,
 		&file.Filename, &file.OriginalName, &file.MimeType,
 		&file.FileSize, &contentHash, &file.UsageType, &thumbJSON,
-		&file.CreatedAt, &file.CampaignIsPublic,
+		&file.CreatedAt, &file.CampaignIsPublic, &file.CampaignTrashed, &file.TrashBatchID,
 	)
 	if contentHash.Valid {
 		file.ContentHash = contentHash.String

@@ -21,7 +21,12 @@ type mockCampaignRepo struct {
 	listAllFn               func(ctx context.Context, opts ListOptions) ([]Campaign, int, error)
 	listPublicFn            func(ctx context.Context, limit int) ([]Campaign, error)
 	updateFn                func(ctx context.Context, campaign *Campaign) error
-	deleteFn                func(ctx context.Context, id string) error
+	moveToTrashFn           func(ctx context.Context, id, byUserID, byName string, at time.Time) error
+	restoreFn               func(ctx context.Context, id string) error
+	listTrashedFn           func(ctx context.Context) ([]TrashedCampaign, error)
+	listPurgeDueFn          func(ctx context.Context, cutoff time.Time, all bool) ([]string, error)
+	claimFn                 func(ctx context.Context, id string, at time.Time) (bool, error)
+	purgeFn                 func(ctx context.Context, id string) error
 	slugExistsFn            func(ctx context.Context, slug string) (bool, error)
 	countAllFn              func(ctx context.Context) (int, error)
 	addMemberFn             func(ctx context.Context, member *CampaignMember) error
@@ -104,9 +109,45 @@ func (m *mockCampaignRepo) Update(ctx context.Context, campaign *Campaign) error
 	return nil
 }
 
-func (m *mockCampaignRepo) Delete(ctx context.Context, id string) error {
-	if m.deleteFn != nil {
-		return m.deleteFn(ctx, id)
+func (m *mockCampaignRepo) MoveToTrash(ctx context.Context, id, byUserID, byName string, at time.Time) error {
+	if m.moveToTrashFn != nil {
+		return m.moveToTrashFn(ctx, id, byUserID, byName, at)
+	}
+	return nil
+}
+
+func (m *mockCampaignRepo) RestoreFromTrash(ctx context.Context, id string) error {
+	if m.restoreFn != nil {
+		return m.restoreFn(ctx, id)
+	}
+	return nil
+}
+
+func (m *mockCampaignRepo) ListTrashed(ctx context.Context) ([]TrashedCampaign, error) {
+	if m.listTrashedFn != nil {
+		return m.listTrashedFn(ctx)
+	}
+	return nil, nil
+}
+
+func (m *mockCampaignRepo) ListPurgeDue(ctx context.Context, cutoff time.Time, all bool) ([]string, error) {
+	if m.listPurgeDueFn != nil {
+		return m.listPurgeDueFn(ctx, cutoff, all)
+	}
+	return nil, nil
+}
+
+// ClaimForPurge defaults to a successful claim, the common case in tests.
+func (m *mockCampaignRepo) ClaimForPurge(ctx context.Context, id string, at time.Time) (bool, error) {
+	if m.claimFn != nil {
+		return m.claimFn(ctx, id, at)
+	}
+	return true, nil
+}
+
+func (m *mockCampaignRepo) PurgeTrashed(ctx context.Context, id string) error {
+	if m.purgeFn != nil {
+		return m.purgeFn(ctx, id)
 	}
 	return nil
 }
@@ -1508,39 +1549,6 @@ func TestAdminAddMember_NewMemberAsOwnerTriggersForceTransfer(t *testing.T) {
 	}
 }
 
-// ============================================================
-// Delete Tests
-// ============================================================
-
-func TestDelete_Success(t *testing.T) {
-	deleteCalled := false
-	repo := &mockCampaignRepo{
-		deleteFn: func(_ context.Context, _ string) error {
-			deleteCalled = true
-			return nil
-		},
-	}
-	svc := newTestCampaignService(repo, &mockUserFinder{})
-	err := svc.Delete(context.Background(), "camp-1")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !deleteCalled {
-		t.Error("Delete was not called on repo")
-	}
-}
-
-func TestDelete_RepoError(t *testing.T) {
-	repo := &mockCampaignRepo{
-		deleteFn: func(_ context.Context, _ string) error {
-			return apperror.NewNotFound("campaign not found")
-		},
-	}
-	svc := newTestCampaignService(repo, &mockUserFinder{})
-	err := svc.Delete(context.Background(), "nonexistent")
-	assertAppError(t, err, 404)
-}
-
 // --- Mock MediaCleaner ---
 
 type mockMediaCleaner struct {
@@ -1566,92 +1574,6 @@ type mockHookDispatcher struct {
 func (m *mockHookDispatcher) DispatchCampaignDeleted(_ context.Context, campaignID string) {
 	m.called = true
 	m.campaignID = campaignID
-}
-
-func TestDelete_CleanupMediaBeforeSQLDelete(t *testing.T) {
-	var callOrder []string
-	cleaner := &mockMediaCleaner{
-		deleteFn: func(_ context.Context, _ string) (int, error) {
-			callOrder = append(callOrder, "media")
-			return 3, nil
-		},
-	}
-	repo := &mockCampaignRepo{
-		deleteFn: func(_ context.Context, _ string) error {
-			callOrder = append(callOrder, "sql")
-			return nil
-		},
-	}
-	svc := NewCampaignService(repo, &mockUserFinder{}, nil, nil, "http://localhost:8080")
-	svc.SetMediaCleaner(cleaner)
-
-	err := svc.Delete(context.Background(), "camp-1")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !cleaner.called {
-		t.Error("media cleaner was not called")
-	}
-	if len(callOrder) != 2 || callOrder[0] != "media" || callOrder[1] != "sql" {
-		t.Errorf("expected [media, sql], got %v", callOrder)
-	}
-}
-
-func TestDelete_SucceedsEvenIfMediaCleanupFails(t *testing.T) {
-	cleaner := &mockMediaCleaner{
-		deleteFn: func(_ context.Context, _ string) (int, error) {
-			return 0, errors.New("disk failure")
-		},
-	}
-	repo := &mockCampaignRepo{
-		deleteFn: func(_ context.Context, _ string) error {
-			return nil
-		},
-	}
-	svc := NewCampaignService(repo, &mockUserFinder{}, nil, nil, "http://localhost:8080")
-	svc.SetMediaCleaner(cleaner)
-
-	err := svc.Delete(context.Background(), "camp-1")
-	if err != nil {
-		t.Fatalf("delete should succeed even if media cleanup fails: %v", err)
-	}
-}
-
-func TestDelete_DispatchesHook(t *testing.T) {
-	dispatcher := &mockHookDispatcher{}
-	repo := &mockCampaignRepo{
-		deleteFn: func(_ context.Context, _ string) error {
-			return nil
-		},
-	}
-	svc := NewCampaignService(repo, &mockUserFinder{}, nil, nil, "http://localhost:8080")
-	svc.SetHookDispatcher(dispatcher)
-
-	err := svc.Delete(context.Background(), "camp-42")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !dispatcher.called {
-		t.Error("hook dispatcher was not called")
-	}
-	if dispatcher.campaignID != "camp-42" {
-		t.Errorf("expected campaign ID camp-42, got %s", dispatcher.campaignID)
-	}
-}
-
-func TestDelete_NilCleanerAndDispatcher(t *testing.T) {
-	// Ensure Delete works fine when no cleaner or dispatcher is set (backward compat).
-	repo := &mockCampaignRepo{
-		deleteFn: func(_ context.Context, _ string) error {
-			return nil
-		},
-	}
-	svc := NewCampaignService(repo, &mockUserFinder{}, nil, nil, "http://localhost:8080")
-
-	err := svc.Delete(context.Background(), "camp-1")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
 }
 
 // ============================================================

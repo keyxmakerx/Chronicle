@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -23,7 +24,16 @@ type CampaignRepository interface {
 	CountBySystem(ctx context.Context, query string) ([]SystemCount, error)
 	ListPublic(ctx context.Context, limit int) ([]Campaign, error)
 	Update(ctx context.Context, campaign *Campaign) error
-	Delete(ctx context.Context, id string) error
+	// MoveToTrash marks a campaign deleted without removing anything; Undo is
+	// RestoreFromTrash. See trash_repository.go.
+	MoveToTrash(ctx context.Context, id, byUserID, byName string, at time.Time) error
+	RestoreFromTrash(ctx context.Context, id string) error
+	ListTrashed(ctx context.Context) ([]TrashedCampaign, error)
+	ListPurgeDue(ctx context.Context, cutoff time.Time, all bool) ([]string, error)
+	ClaimForPurge(ctx context.Context, id string, at time.Time) (bool, error)
+	// PurgeTrashed is the only hard delete of a campaign: it removes a row
+	// that was trashed and claimed, and nothing else.
+	PurgeTrashed(ctx context.Context, id string) error
 	SlugExists(ctx context.Context, slug string) (bool, error)
 	CountAll(ctx context.Context) (int, error)
 
@@ -121,7 +131,7 @@ func (r *campaignRepository) Create(ctx context.Context, campaign *Campaign) err
 // FindByID retrieves a campaign by its UUID.
 func (r *campaignRepository) FindByID(ctx context.Context, id string) (*Campaign, error) {
 	query := `SELECT id, name, slug, description, is_public, settings, backdrop_path, sidebar_config, dashboard_layout, owner_dashboard_layout, created_by, created_at, updated_at, archived_at, join_code
-	          FROM campaigns WHERE id = ?`
+	          FROM campaigns WHERE id = ? AND deleted_at IS NULL`
 
 	c := &Campaign{}
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
@@ -141,7 +151,7 @@ func (r *campaignRepository) FindByID(ctx context.Context, id string) (*Campaign
 // FindBySlug retrieves a campaign by its URL slug.
 func (r *campaignRepository) FindBySlug(ctx context.Context, slug string) (*Campaign, error) {
 	query := `SELECT id, name, slug, description, is_public, settings, backdrop_path, sidebar_config, dashboard_layout, owner_dashboard_layout, created_by, created_at, updated_at, archived_at, join_code
-	          FROM campaigns WHERE slug = ?`
+	          FROM campaigns WHERE slug = ? AND deleted_at IS NULL`
 
 	c := &Campaign{}
 	err := r.db.QueryRowContext(ctx, query, slug).Scan(
@@ -164,7 +174,7 @@ func (r *campaignRepository) ListByUser(ctx context.Context, userID string, opts
 	// Count total for pagination.
 	countQuery := `SELECT COUNT(*) FROM campaigns c
 	               INNER JOIN campaign_members cm ON cm.campaign_id = c.id
-	               WHERE cm.user_id = ? AND c.archived_at IS NULL`
+	               WHERE cm.user_id = ? AND c.archived_at IS NULL AND c.deleted_at IS NULL`
 	var total int
 	if err := r.db.QueryRowContext(ctx, countQuery, userID).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("counting user campaigns: %w", err)
@@ -176,7 +186,7 @@ func (r *campaignRepository) ListByUser(ctx context.Context, userID string, opts
 	                 c.archived_at, c.join_code
 	          FROM campaigns c
 	          INNER JOIN campaign_members cm ON cm.campaign_id = c.id
-	          WHERE cm.user_id = ? AND c.archived_at IS NULL
+	          WHERE cm.user_id = ? AND c.archived_at IS NULL AND c.deleted_at IS NULL
 	          ORDER BY c.updated_at DESC
 	          LIMIT ? OFFSET ?`
 
@@ -203,14 +213,14 @@ func (r *campaignRepository) ListByUser(ctx context.Context, userID string, opts
 
 // ListAll returns all campaigns ordered by most recently updated. Admin only.
 func (r *campaignRepository) ListAll(ctx context.Context, opts ListOptions) ([]Campaign, int, error) {
-	countQuery := `SELECT COUNT(*) FROM campaigns`
+	countQuery := `SELECT COUNT(*) FROM campaigns WHERE deleted_at IS NULL`
 	var total int
 	if err := r.db.QueryRowContext(ctx, countQuery).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("counting all campaigns: %w", err)
 	}
 
 	query := `SELECT id, name, slug, description, is_public, settings, backdrop_path, sidebar_config, dashboard_layout, owner_dashboard_layout, created_by, created_at, updated_at, archived_at, join_code
-	          FROM campaigns ORDER BY updated_at DESC LIMIT ? OFFSET ?`
+	          FROM campaigns WHERE deleted_at IS NULL ORDER BY updated_at DESC LIMIT ? OFFSET ?`
 
 	rows, err := r.db.QueryContext(ctx, query, opts.PerPage, opts.Offset())
 	if err != nil {
@@ -237,7 +247,7 @@ func (r *campaignRepository) ListAll(ctx context.Context, opts ListOptions) ([]C
 // Used for the public landing page to showcase discoverable campaigns.
 func (r *campaignRepository) ListPublic(ctx context.Context, limit int) ([]Campaign, error) {
 	query := `SELECT id, name, slug, description, is_public, settings, backdrop_path, sidebar_config, dashboard_layout, owner_dashboard_layout, created_by, created_at, updated_at, archived_at, join_code
-	          FROM campaigns WHERE is_public = 1 AND archived_at IS NULL
+	          FROM campaigns WHERE is_public = 1 AND archived_at IS NULL AND deleted_at IS NULL
 	          ORDER BY updated_at DESC LIMIT ?`
 
 	rows, err := r.db.QueryContext(ctx, query, limit)
@@ -282,20 +292,6 @@ func (r *campaignRepository) Update(ctx context.Context, campaign *Campaign) err
 	return nil
 }
 
-// Delete removes a campaign. FK CASCADE handles member and transfer cleanup.
-func (r *campaignRepository) Delete(ctx context.Context, id string) error {
-	result, err := r.db.ExecContext(ctx, `DELETE FROM campaigns WHERE id = ?`, id)
-	if err != nil {
-		return fmt.Errorf("deleting campaign: %w", err)
-	}
-
-	rows, _ := result.RowsAffected()
-	if rows == 0 {
-		return apperror.NewNotFound("campaign not found")
-	}
-	return nil
-}
-
 // SlugExists returns true if a campaign with the given slug already exists.
 func (r *campaignRepository) SlugExists(ctx context.Context, slug string) (bool, error) {
 	var exists bool
@@ -311,7 +307,7 @@ func (r *campaignRepository) SlugExists(ctx context.Context, slug string) (bool,
 // CountAll returns the total number of campaigns. Used for admin dashboard.
 func (r *campaignRepository) CountAll(ctx context.Context) (int, error) {
 	var count int
-	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM campaigns`).Scan(&count)
+	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM campaigns WHERE deleted_at IS NULL`).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("counting campaigns: %w", err)
 	}
@@ -476,7 +472,7 @@ func (r *campaignRepository) ClearJoinCode(ctx context.Context, campaignID strin
 // FindByJoinCode looks up a campaign by its shareable invite code.
 func (r *campaignRepository) FindByJoinCode(ctx context.Context, code string) (*Campaign, error) {
 	query := `SELECT id, name, slug, description, is_public, settings, backdrop_path, sidebar_config, dashboard_layout, owner_dashboard_layout, created_by, created_at, updated_at, archived_at, join_code
-	          FROM campaigns WHERE join_code = ?`
+	          FROM campaigns WHERE join_code = ? AND deleted_at IS NULL`
 
 	c := &Campaign{}
 	err := r.db.QueryRowContext(ctx, query, code).Scan(
@@ -532,6 +528,7 @@ func (r *campaignRepository) FindMember(ctx context.Context, campaignID, userID 
 	                 u.display_name, u.email, u.avatar_path
 	          FROM campaign_members cm
 	          INNER JOIN users u ON u.id = cm.user_id
+	          INNER JOIN campaigns c ON c.id = cm.campaign_id AND c.deleted_at IS NULL
 	          WHERE cm.campaign_id = ? AND cm.user_id = ?`
 
 	m := &CampaignMember{}

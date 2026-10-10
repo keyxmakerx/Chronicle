@@ -18,6 +18,7 @@ import (
 type OrphanedMediaItem struct {
 	ID        string
 	Filename  string
+	MimeType  string
 	FileSize  int64
 	CreatedAt time.Time
 	// Referenced indicates whether any entity still references this file
@@ -70,7 +71,6 @@ type DataHygieneScanner interface {
 	ScanOrphanedAPIKeys(ctx context.Context) ([]OrphanedAPIKey, error)
 	ScanStaleFiles(ctx context.Context) ([]StaleFile, error)
 	GetDiskUsageStats(ctx context.Context) (*DiskUsageStats, error)
-	PurgeOrphanedMedia(ctx context.Context) (int, error)
 	PurgeOrphanedAPIKeys(ctx context.Context) (int, error)
 	PurgeStaleFiles(ctx context.Context) (int, error)
 }
@@ -100,10 +100,11 @@ func NewHygieneService(db *sql.DB, mediaRepo media.MediaRepository, mediaService
 // avatars or backdrops. Cross-checks each against entity references to
 // determine if it's safe to delete.
 func (s *hygieneService) ScanOrphanedMedia(ctx context.Context) ([]OrphanedMediaItem, error) {
-	query := `SELECT id, filename, file_size, created_at
+	query := `SELECT id, filename, mime_type, file_size, created_at
 	          FROM media_files
 	          WHERE campaign_id IS NULL
 	            AND usage_type NOT IN ('avatar', 'backdrop')
+	            AND trash_batch_id IS NULL
 	          ORDER BY created_at DESC`
 
 	rows, err := s.db.QueryContext(ctx, query)
@@ -115,7 +116,7 @@ func (s *hygieneService) ScanOrphanedMedia(ctx context.Context) ([]OrphanedMedia
 	var items []OrphanedMediaItem
 	for rows.Next() {
 		var item OrphanedMediaItem
-		if err := rows.Scan(&item.ID, &item.Filename, &item.FileSize, &item.CreatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.Filename, &item.MimeType, &item.FileSize, &item.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scanning orphaned media row: %w", err)
 		}
 
@@ -247,7 +248,8 @@ func (s *hygieneService) GetDiskUsageStats(ctx context.Context) (*DiskUsageStats
 	// Orphaned media count and size.
 	err = s.db.QueryRowContext(ctx,
 		`SELECT COUNT(*), COALESCE(SUM(file_size), 0) FROM media_files
-		 WHERE campaign_id IS NULL AND usage_type NOT IN ('avatar', 'backdrop')`,
+		 WHERE campaign_id IS NULL AND usage_type NOT IN ('avatar', 'backdrop')
+		   AND trash_batch_id IS NULL`,
 	).Scan(&stats.OrphanMediaCount, &stats.OrphanMediaBytes)
 	if err != nil {
 		return nil, fmt.Errorf("querying orphan media stats: %w", err)
@@ -275,37 +277,6 @@ func (s *hygieneService) GetDiskUsageStats(ctx context.Context) (*DiskUsageStats
 	}
 
 	return stats, nil
-}
-
-// PurgeOrphanedMedia deletes orphaned media files that are not referenced by
-// any entity. Logs each deletion to security_events.
-func (s *hygieneService) PurgeOrphanedMedia(ctx context.Context) (int, error) {
-	orphans, err := s.ScanOrphanedMedia(ctx)
-	if err != nil {
-		return 0, err
-	}
-
-	purged := 0
-	for _, item := range orphans {
-		if item.Referenced {
-			continue // Safety: don't delete files still referenced by entities.
-		}
-
-		if err := s.mediaService.Delete(ctx, item.ID); err != nil {
-			slog.Warn("failed to purge orphaned media",
-				slog.String("file_id", item.ID),
-				slog.Any("error", err),
-			)
-			continue
-		}
-		purged++
-
-		s.logSecurityEvent(ctx, "orphan_media_purged",
-			fmt.Sprintf("Purged orphaned media file: %s (%s)", item.Filename, item.ID))
-	}
-
-	slog.Info("orphaned media purge completed", slog.Int("purged", purged))
-	return purged, nil
 }
 
 // PurgeOrphanedAPIKeys deletes API keys for campaigns that no longer exist.
