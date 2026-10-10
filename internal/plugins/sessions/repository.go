@@ -35,6 +35,10 @@ type SessionRepository interface {
 	// have a complete in-world date and no calendar id, returning how many.
 	// Rows already stamped are never touched, so it is safe to repeat.
 	StampWorldDateCalendar(ctx context.Context, campaignID, calendarID string) (int64, error)
+	// RemapMonthPositions rewrites calendar_month on the campaign's sessions
+	// dated on calendarID, old position -> new, in one statement so a swap
+	// reads every old value before any is replaced. Returns rows changed.
+	RemapMonthPositions(ctx context.Context, campaignID, calendarID string, remap map[int]int) (int64, error)
 	SearchByCampaign(ctx context.Context, campaignID, query string) ([]Session, error)
 	Update(ctx context.Context, s *Session) error
 	UpdateRecap(ctx context.Context, id string, recap, recapHTML *string) error

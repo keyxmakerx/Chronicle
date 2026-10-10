@@ -3526,6 +3526,12 @@ func (a *App) RegisterRoutes() {
 	}); ok {
 		wired.SetGameNightsAffectedByAnchorMove(&gameNightsAnchorMoveAdapter{svc: sessionsService})
 	}
+	// A structure edit that reorders months moves game nights with them.
+	if wired, ok := calendarService.(interface {
+		SetSessionMonthRemapper(calendar.SessionMonthRemapper)
+	}); ok {
+		wired.SetSessionMonthRemapper(&sessionMonthRemapAdapter{svc: sessionsService})
+	}
 	// Records which calendar a session's in-world date belongs to, and
 	// stamps the dates saved before it was recorded. Best-effort: logs and
 	// never blocks startup; a campaign with no calendar is retried next boot.

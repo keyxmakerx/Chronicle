@@ -71,6 +71,18 @@ func pickRealWorldCalendar(cals []calendar.Calendar) string {
 	return first
 }
 
+// sessionMonthRemapAdapter satisfies calendar.SessionMonthRemapper from the
+// sessions service, so a structure edit that reorders months moves game nights
+// with them without the calendar importing the sessions plugin.
+type sessionMonthRemapAdapter struct {
+	svc sessions.SessionService
+}
+
+func (a *sessionMonthRemapAdapter) RemapMonthPositions(ctx context.Context, campaignID, calendarID string, remap map[int]int) error {
+	_, err := a.svc.RemapMonthPositions(ctx, campaignID, calendarID, remap)
+	return err
+}
+
 // sessionsDefaultCalendarAdapter satisfies sessions.DefaultCalendarResolver:
 // the calendar a session's in-world date is recorded against is the
 // campaign's default calendar (the session form has no calendar picker).

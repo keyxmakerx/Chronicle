@@ -26,6 +26,7 @@ type mockSessionRepo struct {
 	listByDateRangeFn          func(ctx context.Context, campaignID, startDate, endDate string) ([]Session, error)
 	listUnstampedCampaignsFn   func(ctx context.Context) ([]string, error)
 	stampWorldDateCalendarFn   func(ctx context.Context, campaignID, calendarID string) (int64, error)
+	remapMonthPositionsFn      func(ctx context.Context, campaignID, calendarID string, remap map[int]int) (int64, error)
 	searchByCampaignFn         func(ctx context.Context, campaignID, query string) ([]Session, error)
 	updateFn                   func(ctx context.Context, s *Session) error
 	updateRecapFn              func(ctx context.Context, id string, recap, recapHTML *string) error
@@ -276,6 +277,13 @@ func (m *mockSessionRepo) ListCampaignIDsWithUnstampedWorldDates(ctx context.Con
 func (m *mockSessionRepo) StampWorldDateCalendar(ctx context.Context, campaignID, calendarID string) (int64, error) {
 	if m.stampWorldDateCalendarFn != nil {
 		return m.stampWorldDateCalendarFn(ctx, campaignID, calendarID)
+	}
+	return 0, nil
+}
+
+func (m *mockSessionRepo) RemapMonthPositions(ctx context.Context, campaignID, calendarID string, remap map[int]int) (int64, error) {
+	if m.remapMonthPositionsFn != nil {
+		return m.remapMonthPositionsFn(ctx, campaignID, calendarID, remap)
 	}
 	return 0, nil
 }

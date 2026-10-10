@@ -111,6 +111,17 @@ type GameNightsAffectedByAnchorMove interface {
 	SessionsInWorldDateRange(ctx context.Context, campaignID, calendarID string, fromYear, fromMonth, fromDay, toYear, toMonth, toDay, limit int) ([]AffectedSession, error)
 }
 
+// SessionMonthRemapper is satisfied by the sessions plugin and injected from
+// internal/app/routes.go, the same seam as GameNightsAffectedByAnchorMove.
+// After a structure edit reorders months it moves the game nights dated on
+// that calendar with their month. Optional and nil-safe: unwired, a save
+// still succeeds and game nights keep their stored month positions.
+type SessionMonthRemapper interface {
+	// RemapMonthPositions maps each old 1-based month position to its new
+	// one; only months that moved are present.
+	RemapMonthPositions(ctx context.Context, campaignID, calendarID string, remap map[int]int) error
+}
+
 // AffectedSession is one session/game-night SessionsInWorldDateRange returns:
 // its display name and its in-world date under the OLD anchor mapping.
 type AffectedSession struct {
@@ -415,6 +426,7 @@ type calendarService struct {
 	entityGate  EntityVisibilityGate
 	gameNights  GameNightsAffectedByAnchorMove
 	publisher   CalendarEventPublisher
+	monthRemap  SessionMonthRemapper
 }
 
 // NewCalendarService constructs a CalendarService over the four
@@ -440,6 +452,10 @@ func (s *calendarService) SetEntityVisibilityGate(g EntityVisibilityGate) { s.en
 func (s *calendarService) SetGameNightsAffectedByAnchorMove(g GameNightsAffectedByAnchorMove) {
 	s.gameNights = g
 }
+
+// SetSessionMonthRemapper injects the sessions-plugin call ApplyStructureEdit
+// makes after a successful save. Optional wiring like the setters above.
+func (s *calendarService) SetSessionMonthRemapper(r SessionMonthRemapper) { s.monthRemap = r }
 
 // --- Cross-campaign / cross-calendar scoping (no cross-tenant reach) ---
 

@@ -55,6 +55,11 @@ type SessionService interface {
 	// in-world date but no calendar, and the stamp for one campaign.
 	ListCampaignIDsWithUnstampedWorldDates(ctx context.Context) ([]string, error)
 	StampWorldDateCalendar(ctx context.Context, campaignID, calendarID string) (int64, error)
+	// RemapMonthPositions moves the in-world month of the sessions dated on
+	// calendarID (old 1-based position -> new) when a calendar structure
+	// edit reorders its months, so game nights follow their month. Returns
+	// how many sessions changed.
+	RemapMonthPositions(ctx context.Context, campaignID, calendarID string, remap map[int]int) (int, error)
 	// UpdateSession validates and updates a session. If a recurring session is
 	// completed, auto-generates the next occurrence and returns it. Returns nil
 	// if no new session was created.
