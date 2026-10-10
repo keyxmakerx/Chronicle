@@ -43,6 +43,11 @@ type SecurityService interface {
 	// DisableTwoFactor switches two-factor off for someone locked out of it.
 	DisableTwoFactor(ctx context.Context, userID string) error
 
+	// Sign-in provider: read, save, and start a test sign-in as the admin.
+	SignInProvider(ctx context.Context) (auth.OIDCSettings, error)
+	SaveSignInProvider(ctx context.Context, in auth.OIDCSettingsInput) error
+	BeginProviderTest(ctx context.Context, adminID string) (authURL, state string, err error)
+
 	// SetConnectionRevoker injects the hub's revocation surface, used by
 	// DisableUser. Late-bound and nil-safe: a disabled account is already
 	// logged out and refused on its next login regardless.
@@ -239,4 +244,20 @@ func (s *securityService) DisableTwoFactor(ctx context.Context, userID string) e
 		return apperror.NewBadRequest("user ID is required")
 	}
 	return s.authService.AdminDisableTwoFactor(ctx, userID)
+}
+
+// SignInProvider returns the provider setting for the Security page.
+func (s *securityService) SignInProvider(ctx context.Context) (auth.OIDCSettings, error) {
+	return s.authService.OIDCSettings(ctx)
+}
+
+// SaveSignInProvider stores the provider setting.
+func (s *securityService) SaveSignInProvider(ctx context.Context, in auth.OIDCSettingsInput) error {
+	return s.authService.SaveOIDCSettings(ctx, in)
+}
+
+// BeginProviderTest starts a sign-in that only reports back, so an admin
+// can check the setting without being signed in as someone else.
+func (s *securityService) BeginProviderTest(ctx context.Context, adminID string) (string, string, error) {
+	return s.authService.BeginOIDC(ctx, auth.OIDCModeTest, adminID, "")
 }

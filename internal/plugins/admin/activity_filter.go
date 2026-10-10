@@ -52,6 +52,7 @@ var activityResourceArea = map[string]string{
 	"cors":         AreaSecurity,
 	"ipblock":      AreaSecurity,
 	"registration": AreaSecurity,
+	"signin":       AreaSecurity,
 	"media":        AreaSite,
 	"hygiene":      AreaSite,
 	"trash":        AreaSite,

@@ -19,6 +19,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler) {
 	e.GET("/login", h.LoginForm)
 	e.POST("/login", h.Login, middleware.RateLimit(10, time.Minute))
 	e.POST("/login/two-factor", h.LoginTwoFactor, middleware.RateLimit(10, time.Minute))
+	// Provider sign-in: the start and the provider's return.
+	e.GET("/login/oidc", h.LoginOIDC, middleware.RateLimit(10, time.Minute))
+	e.GET("/login/oidc/callback", h.OIDCCallback, middleware.RateLimit(10, time.Minute))
 	e.GET("/register", h.RegisterForm)
 	e.POST("/register", h.Register, middleware.RateLimit(5, time.Minute))
 
@@ -39,6 +42,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler) {
 	// Deleting your account checks your password, so it is rate-limited like
 	// the other password checks.
 	e.POST("/account/delete", h.DeleteAccountAPI, RequireAuth(h.service), middleware.RateLimit(5, time.Minute))
+	// Linking a provider account to your own.
+	e.POST("/account/sign-in/link", h.LinkOIDC, RequireAuth(h.service), middleware.RateLimit(10, time.Minute))
+	e.POST("/account/sign-in/unlink", h.UnlinkOIDCAPI, RequireAuth(h.service), middleware.RateLimit(10, time.Minute))
 	// Two-factor: each call checks a password or a code, so each is throttled.
 	e.POST("/account/two-factor/setup", h.TwoFactorSetupAPI, RequireAuth(h.service), middleware.RateLimit(10, time.Minute))
 	e.POST("/account/two-factor/enable", h.TwoFactorEnableAPI, RequireAuth(h.service), middleware.RateLimit(10, time.Minute))

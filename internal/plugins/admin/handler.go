@@ -887,6 +887,17 @@ func (h *Handler) Security(c echo.Context) error {
 		}
 	}
 
+	var (
+		provider    auth.OIDCSettings
+		providerErr error
+	)
+	if tab == SecurityTabProvider {
+		provider, providerErr = h.securityService.SignInProvider(ctx)
+		if providerErr != nil {
+			slog.Warn("security page: load sign-in provider failed", slog.Any("error", providerErr))
+		}
+	}
+
 	csrfToken := middleware.GetCSRFToken(c)
 
 	// Current site registration mode (defaults to "open" when the settings
@@ -910,6 +921,8 @@ func (h *Handler) Security(c echo.Context) error {
 		Sessions:         sessions,
 		CSRFToken:        csrfToken,
 		RegistrationMode: registrationMode,
+		Provider:         provider,
+		ProviderFailed:   providerErr != nil,
 		StatsFailed:      statsErr != nil,
 		EventsFailed:     eventsErr != nil,
 		SessionsFailed:   sessionsErr != nil,
@@ -931,6 +944,46 @@ func (h *Handler) UpdateRegistrationMode(c echo.Context) error {
 	h.record(c, "registration.mode_changed", "setting", "registration_mode", registrationModeLabel(mode))
 	slog.Info("registration mode updated", slog.String("mode", mode))
 	c.Response().Header().Set("HX-Redirect", securityTabHref(SecurityTabSignup))
+	return c.NoContent(http.StatusOK)
+}
+
+// SaveSignInProvider stores the provider setting
+// (POST /admin/security/sign-in-provider). Reauth-gated.
+func (h *Handler) SaveSignInProvider(c echo.Context) error {
+	if h.securityService == nil {
+		return apperror.NewMissingContext()
+	}
+	in := auth.OIDCSettingsInput{
+		Enabled:      c.FormValue("enabled") != "",
+		ButtonName:   c.FormValue("button_name"),
+		Issuer:       c.FormValue("issuer"),
+		ClientID:     c.FormValue("client_id"),
+		ClientSecret: c.FormValue("client_secret"),
+		AllowSignup:  c.FormValue("allow_signup") != "",
+		HidePassword: c.FormValue("hide_password") != "",
+	}
+	if err := h.securityService.SaveSignInProvider(c.Request().Context(), in); err != nil {
+		return err
+	}
+	_ = h.securityService.LogEvent(c.Request().Context(), EventProviderSaved, "", auth.GetUserID(c),
+		c.RealIP(), c.Request().UserAgent(), map[string]any{"enabled": in.Enabled, "hidePassword": in.HidePassword})
+	h.record(c, "signin.provider_saved", "setting", "sign_in_provider", in.ButtonName)
+	c.Response().Header().Set("HX-Redirect", securityTabHref(SecurityTabProvider))
+	return c.NoContent(http.StatusOK)
+}
+
+// TestSignInProvider sends the admin through a sign-in that only reports
+// back (POST /admin/security/sign-in-provider/test). Reauth-gated.
+func (h *Handler) TestSignInProvider(c echo.Context) error {
+	if h.securityService == nil {
+		return apperror.NewMissingContext()
+	}
+	authURL, state, err := h.securityService.BeginProviderTest(c.Request().Context(), auth.GetUserID(c))
+	if err != nil {
+		return err
+	}
+	auth.SetOIDCStateCookie(c, state)
+	c.Response().Header().Set("HX-Redirect", authURL)
 	return c.NoContent(http.StatusOK)
 }
 
@@ -1383,6 +1436,9 @@ type SecurityPageData struct {
 	// RegistrationMode is the current site registration gate ("open", "invite",
 	// "closed"). Rendered as a select on the security page (B-R4).
 	RegistrationMode string
+	// Provider is the sign-in provider setting, read only on its tab.
+	Provider       auth.OIDCSettings
+	ProviderFailed bool
 	// StatsFailed, EventsFailed and SessionsFailed mark sections whose read
 	// errored, so the page says so instead of rendering an empty state.
 	StatsFailed    bool

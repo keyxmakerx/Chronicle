@@ -100,8 +100,14 @@ func ConfigureTwoFactor(svc AuthService, siteSecret string) {
 	}
 }
 
-func (s *authService) sealSecret(secret string) (string, error) {
-	block, err := aes.NewCipher(s.totpKey)
+func (s *authService) sealSecret(secret string) (string, error) { return sealWith(s.totpKey, secret) }
+
+func (s *authService) openSecret(sealed string) (string, error) { return openWith(s.totpKey, sealed) }
+
+// sealWith encrypts with AES-256-GCM under key and returns base64 of
+// nonce+ciphertext.
+func sealWith(key []byte, secret string) (string, error) {
+	block, err := aes.NewCipher(key)
 	if err != nil {
 		return "", err
 	}
@@ -116,12 +122,13 @@ func (s *authService) sealSecret(secret string) (string, error) {
 	return base64.StdEncoding.EncodeToString(gcm.Seal(nonce, nonce, []byte(secret), nil)), nil
 }
 
-func (s *authService) openSecret(sealed string) (string, error) {
+// openWith reverses sealWith.
+func openWith(key []byte, sealed string) (string, error) {
 	raw, err := base64.StdEncoding.DecodeString(sealed)
 	if err != nil {
 		return "", err
 	}
-	block, err := aes.NewCipher(s.totpKey)
+	block, err := aes.NewCipher(key)
 	if err != nil {
 		return "", err
 	}
@@ -473,10 +480,16 @@ func (s *authService) startTwoFactorChallenge(ctx context.Context, user *User) (
 	return token, nil
 }
 
-// challengePasswordMark is a short fingerprint of the stored password hash,
-// so a challenge stops working once the password changes.
+// challengePasswordMark is the tail of the stored password hash, so a
+// challenge stops working once the password changes. The stored value is
+// already a salted Argon2id digest (or a random placeholder), so its tail
+// changes with every new password without hashing it again.
 func challengePasswordMark(user *User) string {
-	return hashToken(user.PasswordHash)[:16]
+	h := user.PasswordHash
+	if len(h) > 16 {
+		h = h[len(h)-16:]
+	}
+	return h
 }
 
 func (s *authService) trustDevice(ctx context.Context, userID string) (string, error) {

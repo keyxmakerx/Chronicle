@@ -13,7 +13,7 @@ import (
 )
 
 // AccountPage renders the full account settings page.
-templ AccountPage(user *User, csrfToken string, timezones []timeutil.Zone, prefs ViewPrefs, notify notifyprefs.Prefs, owned []OwnedCampaignRef, twoFactor TwoFactorStatus) {
+templ AccountPage(user *User, csrfToken string, timezones []timeutil.Zone, prefs ViewPrefs, notify notifyprefs.Prefs, owned []OwnedCampaignRef, twoFactor TwoFactorStatus, methods SignInMethods, signInMsg string) {
 	@layouts.App("Account Settings") {
 		<div class="max-w-2xl mx-auto">
 			<div class="mb-6">
@@ -211,6 +211,9 @@ templ AccountPage(user *User, csrfToken string, timezones []timeutil.Zone, prefs
 				</div>
 			</div>
 			@twoFactorCard(twoFactor)
+			if methods.ProviderName != "" {
+				@signInMethodsCard(user, methods, signInMsg, csrfToken)
+			}
 			@notifyPrefsCard(notify)
 			@deleteAccountCard(owned, twoFactor.Enabled)
 		</div>
@@ -283,6 +286,76 @@ templ twoFactorCard(st TwoFactorStatus) {
 			</div>
 		</div>
 	</div>
+}
+
+// signInMethodsCard lists the ways this person can sign in: their password,
+// and the site's provider with a Link or Unlink button. It only appears when
+// an admin has switched a provider on.
+templ signInMethodsCard(user *User, m SignInMethods, msg, csrfToken string) {
+	<div class="card p-6 mb-6" id="sign-in" x-data="{ busy: false, error: '' }">
+		<h2 class="text-lg font-semibold text-fg mb-1">Sign-in methods</h2>
+		<p class="text-sm text-fg-secondary mb-4">The ways you can get into this account.</p>
+		if msg != "" {
+			<p class="text-sm text-fg-body mb-3 step-settle" role="status">{ msg }</p>
+		}
+		<ul class="divide-y divide-edge rounded-lg border border-edge">
+			<li class="flex flex-wrap items-center gap-3 px-4 py-3">
+				<i class="fa-solid fa-key text-fg-muted w-5 text-center" aria-hidden="true"></i>
+				<span class="flex-1 min-w-0">
+					<span class="block text-sm font-medium text-fg">Password</span>
+					<span class="block text-xs text-fg-muted truncate">{ user.Email }</span>
+				</span>
+				if m.HasPassword {
+					<span class="text-xs text-fg-muted">In use</span>
+				} else {
+					<span class="text-xs text-fg-muted">Not set. Use Forgot password on the sign-in page to make one.</span>
+				}
+			</li>
+			<li class="flex flex-wrap items-center gap-3 px-4 py-3">
+				<i class="fa-solid fa-right-to-bracket text-fg-muted w-5 text-center" aria-hidden="true"></i>
+				<span class="flex-1 min-w-0">
+					<span class="block text-sm font-medium text-fg">{ m.ProviderName }</span>
+					if len(m.Linked) > 0 {
+						<span class="block text-xs text-fg-muted truncate">Linked{ linkedEmail(m.Linked) }</span>
+					} else {
+						<span class="block text-xs text-fg-muted">Not linked</span>
+					}
+				</span>
+				if len(m.Linked) > 0 {
+					if m.HasPassword {
+						<button
+							type="button"
+							class="btn-secondary text-sm"
+							x-bind:disabled="busy"
+							@click={ "busy = true; error = ''; Chronicle.apiFetch('/account/sign-in/unlink', { method: 'POST' }).then(r => r.json().catch(() => ({})).then(d => { if (!r.ok) throw new Error(d.message || 'Could not unlink'); window.location.href = '/account#sign-in'; })).catch(e => { error = e.message; busy = false; })" }
+						>Unlink</button>
+					}
+				} else {
+					<button
+						type="button"
+						class="btn-primary text-sm"
+						hx-post="/account/sign-in/link"
+						hx-headers={ csrfHeader(csrfToken) }
+						hx-swap="none"
+					>Link</button>
+				}
+			</li>
+		</ul>
+		<p class="text-xs text-red-500 mt-2" x-show="error" x-text="error" aria-live="polite"></p>
+	</div>
+}
+
+func linkedEmail(ids []Identity) string {
+	if ids[0].Email == "" {
+		return ""
+	}
+	return " as " + ids[0].Email
+}
+
+// csrfHeader is the hx-headers value carrying the CSRF token.
+func csrfHeader(token string) string {
+	b, _ := json.Marshal(map[string]string{"X-CSRF-Token": token})
+	return string(b)
 }
 
 // twoFactorData is the Alpine state for the Two-factor section.
