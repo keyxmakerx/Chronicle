@@ -2,7 +2,7 @@
  * sheet_styles.css -- the twelve looks a system's character sheet can wear.
  *
  * Everything here is scoped to a sheet root, an element with data-sheet. The
- * engine (static/js/widgets/sheet_motion.js) sets data-sheet-style on it from
+ * engine (static/js/sheet_motion.js) sets data-sheet-style on it from
  * the campaign's html[data-cz-sheet], else "modern". Nothing outside a sheet
  * root is restyled, so the site's own .paper uses (hover card, creator) keep
  * their look.

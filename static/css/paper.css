@@ -18,7 +18,7 @@
  * The "Sheet pieces" section at the end holds the parts a system's character
  * sheet is built from (parts that pull out a panel, wells, drawers, slips,
  * pins). Their look comes from the sheet's style (sheet_styles.css) and their
- * motion from sheet_motion.css and static/js/widgets/sheet_motion.js.
+ * motion from sheet_motion.css and static/js/sheet_motion.js.
  */
 
 :root {

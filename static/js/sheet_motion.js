@@ -693,7 +693,7 @@
     });
     root.addEventListener('keydown', function (e) {
       if (e.key === 'Tab' && S.panel && S.panel.page) {
-        var fs = $$('button,input,select,textarea,summary,[tabindex]:not([tabindex="-1"])', S.panel.card).filter(function (x) { return !x.disabled && x.offsetParent !== null; });
+        var fs = $$('a[href],[contenteditable="true"],button,input,select,textarea,summary,[tabindex]:not([tabindex="-1"])', S.panel.card).filter(function (x) { return !x.disabled && x.offsetParent !== null; });
         if (fs.length) {
           var first = fs[0], last = fs[fs.length - 1];
           if (!S.panel.card.contains(document.activeElement)) { e.preventDefault(); first.focus(); }

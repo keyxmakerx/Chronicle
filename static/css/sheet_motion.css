@@ -248,14 +248,14 @@ html[data-motion="off"] [data-sheet][data-sheet-style="starship"] .paper-drawer[
 [data-sheet][data-sheet-style="starship"] .paper-landed::before{inset:-4px -6px;border-radius:0;background:linear-gradient(transparent calc(50% - 1px),var(--hud) calc(50% - 1px) calc(50% + 1px),transparent calc(50% + 1px)) 0 100%/100% 300% no-repeat;opacity:.9;animation:sheet-scan calc(var(--dur-slide) * 1.1 * var(--fx,1)) ease-out both}
 [data-sheet][data-sheet-style="starship"] .fx-ghost{color:var(--hud);text-shadow:0 0 6px rgb(95 215 245 / .6)}
 /* Row index for styles that stagger a panel's rows. */
-.paper-dbody>:nth-child(1){--i:0}
-.paper-dbody>:nth-child(2){--i:1}
-.paper-dbody>:nth-child(3){--i:2}
-.paper-dbody>:nth-child(4){--i:3}
-.paper-dbody>:nth-child(5){--i:4}
-.paper-dbody>:nth-child(6){--i:5}
-.paper-dbody>:nth-child(7){--i:6}
-.paper-dbody>:nth-child(n+8){--i:7}
+[data-sheet] .paper-dbody>:nth-child(1){--i:0}
+[data-sheet] .paper-dbody>:nth-child(2){--i:1}
+[data-sheet] .paper-dbody>:nth-child(3){--i:2}
+[data-sheet] .paper-dbody>:nth-child(4){--i:3}
+[data-sheet] .paper-dbody>:nth-child(5){--i:4}
+[data-sheet] .paper-dbody>:nth-child(6){--i:5}
+[data-sheet] .paper-dbody>:nth-child(7){--i:6}
+[data-sheet] .paper-dbody>:nth-child(n+8){--i:7}
 /* Neon terminal: panels boot like a CRT. A bright line runs out from the centre, the screen opens vertically from it, a block cursor types the heading
    and the body prints top-down in steps. Closing is the same in reverse: it collapses to a line and the line goes out. A fold prints open top-down.
    Changed values glitch (Chronicle's JS, --change-move: glitch). */
