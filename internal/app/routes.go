@@ -2803,7 +2803,11 @@ func (a *App) RegisterRoutes() {
 	backupHandler := backup.NewHandler(backupSvc)
 	backupHandler.SetActivityRecorder(adminActivity)
 	backupHandler.SetDownloadAuth(signingSecret, auth.GetUserID)
+	backupHandler.SetScheduleStore(settingsRepo)
 	backup.RegisterRoutes(adminGroup, backupHandler, auth.RequireReauth(authService))
+
+	// Daily backup, when the owner turns it on under Admin > Backup.
+	go backup.NewScheduler(backupSvc, settingsRepo, backupFailureMailer{users: authRepo, mail: smtpService}).Run(a.ShutdownCtx)
 
 	// Admin Restore plugin: lists backup manifests in BACKUP_DIR and
 	// shells out to scripts/restore.sh under a typed-RESTORE
