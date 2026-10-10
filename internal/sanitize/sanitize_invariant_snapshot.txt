@@ -1,30 +1,16 @@
-internal/plugins/addons/service.go	sanitize_calls=0	html_params=-	html_struct_fields=-
-internal/plugins/ai_workspace/aiexport/service.go	sanitize_calls=0	html_params=-	html_struct_fields=-
-internal/plugins/armory/service.go	sanitize_calls=0	html_params=-	html_struct_fields=-
-internal/plugins/audit/service.go	sanitize_calls=0	html_params=-	html_struct_fields=-
-internal/plugins/auth/service.go	sanitize_calls=0	html_params=-	html_struct_fields=-
-internal/plugins/backup/service.go	sanitize_calls=0	html_params=-	html_struct_fields=-
-internal/plugins/bestiary/service.go	sanitize_calls=0	html_params=-	html_struct_fields=-
-internal/plugins/calendar/service.go	sanitize_calls=2	html_params=-	html_struct_fields=DescriptionHTML
-internal/plugins/campaigns/service.go	sanitize_calls=1	html_params=-	html_struct_fields=-
-internal/plugins/dmscreen/service.go	sanitize_calls=0	html_params=-	html_struct_fields=-
-internal/plugins/entities/service.go	sanitize_calls=4	html_params=entryHTML,notesHTML	html_struct_fields=EntryHTML,PlayerNotesHTML
-internal/plugins/foundry_vtt/service.go	sanitize_calls=0	html_params=-	html_struct_fields=-
-internal/plugins/maps/service.go	sanitize_calls=0	html_params=-	html_struct_fields=-
-internal/plugins/media/service.go	sanitize_calls=0	html_params=-	html_struct_fields=-
-internal/plugins/npcs/service.go	sanitize_calls=0	html_params=-	html_struct_fields=-
-internal/plugins/packages/service.go	sanitize_calls=0	html_params=-	html_struct_fields=-
-internal/plugins/restore/service.go	sanitize_calls=0	html_params=-	html_struct_fields=-
-internal/plugins/rolltables/service.go	sanitize_calls=0	html_params=-	html_struct_fields=-
-internal/plugins/sessions/service.go	sanitize_calls=1	html_params=recapHTML	html_struct_fields=NotesHTML,RecapHTML
-internal/plugins/settings/service.go	sanitize_calls=0	html_params=-	html_struct_fields=-
-internal/plugins/smtp/service.go	sanitize_calls=0	html_params=-	html_struct_fields=-
-internal/plugins/syncapi/service.go	sanitize_calls=0	html_params=-	html_struct_fields=-
-internal/plugins/systemstate/service.go	sanitize_calls=0	html_params=-	html_struct_fields=-
-internal/plugins/timeline/service.go	sanitize_calls=2	html_params=-	html_struct_fields=DescriptionHTML
-internal/plugins/widgetbindings/service.go	sanitize_calls=0	html_params=-	html_struct_fields=-
-internal/widgets/entity_notes/service.go	sanitize_calls=1	html_params=-	html_struct_fields=BodyHTML
-internal/widgets/notes/service.go	sanitize_calls=2	html_params=-	html_struct_fields=EntryHTML
-internal/widgets/posts/service.go	sanitize_calls=1	html_params=-	html_struct_fields=EntryHTML
-internal/widgets/relations/service.go	sanitize_calls=0	html_params=-	html_struct_fields=-
-internal/widgets/tags/service.go	sanitize_calls=0	html_params=-	html_struct_fields=-
+internal/plugins/calendar/service.go:calendarService.applyImportedEvent	helper_depth=2	inputs=ee(ExportEvent.DescriptionHTML)
+internal/plugins/calendar/service.go:calendarService.CreateEvent	helper_depth=2	inputs=input(CreateEventInput.DescriptionHTML)
+internal/plugins/calendar/service.go:buildValidatedEvent	helper_depth=1	inputs=input(CreateEventInput.DescriptionHTML)
+internal/plugins/calendar/service.go:calendarService.UpdateEvent	helper_depth=1	inputs=input(UpdateEventInput.DescriptionHTML)
+internal/plugins/entities/service.go:entityService.UpdateEntry	direct	inputs=entryHTML
+internal/plugins/entities/service.go:entityService.UpdatePlayerNotes	direct	inputs=notesHTML
+internal/plugins/entities/service.go:buildSearchText	allowlisted	inputs=entryHTML
+internal/plugins/sessions/service.go:sessionService.UpdateSessionRecap	direct	inputs=recapHTML
+internal/plugins/timeline/service.go:timelineService.UpdateTimeline	direct	inputs=input(UpdateTimelineInput.DescriptionHTML)
+internal/plugins/timeline/service.go:timelineService.CreateStandaloneEvent	direct	inputs=input(CreateTimelineEventInput.DescriptionHTML)
+internal/plugins/timeline/service.go:timelineService.UpdateStandaloneEvent	direct	inputs=input(UpdateTimelineEventInput.DescriptionHTML)
+internal/widgets/entity_notes/service.go:service.Create	helper_depth=1	inputs=req(CreateNoteRequest.BodyHTML)
+internal/widgets/entity_notes/service.go:service.Update	helper_depth=1	inputs=req(UpdateNoteRequest.BodyHTML)
+internal/widgets/notes/service.go:noteService.Update	direct	inputs=req(UpdateNoteRequest.EntryHTML)
+internal/widgets/posts/service.go:postService.Create	helper_depth=1	inputs=req(CreatePostRequest.EntryHTML)
+internal/widgets/posts/service.go:postService.Update	helper_depth=1	inputs=req(UpdatePostRequest.EntryHTML)

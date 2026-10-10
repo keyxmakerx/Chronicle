@@ -22,11 +22,21 @@ type Handler struct {
 	// the plain usage list and the per-campaign actions are not available.
 	updates  CampaignUpdateService
 	reminder OwnerReminder
+	typeUI   typeUIHooks
 }
 
 // NewHandler creates a new package manager handler.
 func NewHandler(service PackageService) *Handler {
 	return &Handler{service: service}
+}
+
+// SetTypeUI registers a package type's UI hook. Optional: a type with none
+// renders only the generic row actions.
+func (h *Handler) SetTypeUI(t PackageType, ui TypeUI) {
+	if h.typeUI == nil {
+		h.typeUI = typeUIHooks{}
+	}
+	h.typeUI[t] = ui
 }
 
 // ListPackages renders the package management page (GET /admin/packages).
@@ -38,7 +48,7 @@ func (h *Handler) ListPackages(c echo.Context) error {
 		c.QueryParam("pkg"), c.QueryParam("ptab"),
 	)
 
-	data, err := buildPackagesPage(c.Request().Context(), h.service, h.updates, q, middleware.GetCSRFToken(c), time.Now())
+	data, err := buildPackagesPage(c.Request().Context(), h.service, h.updates, h.typeUI, q, middleware.GetCSRFToken(c), time.Now())
 	if err != nil {
 		return err
 	}

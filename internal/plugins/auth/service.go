@@ -104,6 +104,7 @@ type AuthService interface {
 
 	// User profile.
 	GetUser(ctx context.Context, userID string) (*User, error)
+	GetTimezonesByIDs(ctx context.Context, userIDs []string) (map[string]string, error)
 	UpdateTimezone(ctx context.Context, userID, timezone string) error
 	GetViewPrefs(ctx context.Context, userID string) (ViewPrefs, error)
 	UpdateViewPrefs(ctx context.Context, userID string, input UpdateViewPrefsInput) (ViewPrefs, error)
@@ -940,6 +941,12 @@ func (s *authService) GetUser(ctx context.Context, userID string) (*User, error)
 		return nil, err
 	}
 	return user, nil
+}
+
+// GetTimezonesByIDs returns each given user's stored timezone in one read.
+// Users without one are absent from the map.
+func (s *authService) GetTimezonesByIDs(ctx context.Context, userIDs []string) (map[string]string, error) {
+	return s.repo.GetTimezonesByIDs(ctx, userIDs)
 }
 
 // UpdateTimezone sets the user's IANA timezone. Validates the timezone string

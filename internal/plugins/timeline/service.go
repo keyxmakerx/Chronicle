@@ -229,7 +229,7 @@ type timelineService struct {
 
 // BindingCleaner sweeps a deleted instance's widget bindings. Implemented by
 // widgetbindings.Service; injected via SetBindingCleaner. Optional — nil
-// means no binding framework wired (the render-time guard + Sweep backstop it).
+// means no binding framework wired (Resolve's render-time guard skips and deletes orphaned bindings).
 type BindingCleaner interface {
 	OnInstanceDeleted(ctx context.Context, campaignID, widgetType, instanceID string) (int, error)
 }
@@ -545,7 +545,14 @@ func (s *timelineService) UpdateTimeline(ctx context.Context, timelineID string,
 
 	t.Name = name
 	t.Description = input.Description.Ptr(t.Description)
-	t.DescriptionHTML = input.DescriptionHTML.Ptr(t.DescriptionHTML)
+	if input.DescriptionHTML.Present() {
+		if v, ok := input.DescriptionHTML.Get(); ok && v != "" {
+			sanitized := sanitize.HTML(v)
+			t.DescriptionHTML = &sanitized
+		} else {
+			t.DescriptionHTML = nil
+		}
+	}
 	t.Color = color
 	t.Icon = icon
 	t.Visibility = visibility
@@ -571,7 +578,8 @@ func (s *timelineService) DeleteTimeline(ctx context.Context, timelineID string)
 		return fmt.Errorf("delete timeline: %w", err)
 	}
 	// Widget-binding delete hook: sweep this timeline's bindings. Best-effort
-	// — the render-time orphan guard + Sweep backstop it.
+	// — Resolve's render-time orphan guard
+	// skips and deletes any binding this misses.
 	if s.bindingCleaner != nil {
 		_, _ = s.bindingCleaner.OnInstanceDeleted(ctx, t.CampaignID, WidgetTypeTimeline, timelineID)
 	}
