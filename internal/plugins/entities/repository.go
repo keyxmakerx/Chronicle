@@ -693,7 +693,7 @@ type EntityRepository interface {
 	CountByType(ctx context.Context, campaignID string, role int, userID string) (map[int]int, error)
 
 	// ListByOwner returns entities in a campaign owned by a specific user.
-	// Used by the player landing page ("My Characters"). Visibility filtering
+	// Used by the Characters page's Yours band. Visibility filtering
 	// is intentionally NOT applied: a player owning the entity implies they
 	// can see it, even if a GM marked it private to hide it from other
 	// players. Cross-campaign isolation is enforced by the campaign_id
@@ -1420,7 +1420,7 @@ func (r *entityRepository) ListClaimed(ctx context.Context, campaignID string, r
 
 // UpdateOwner sets entities.owner_user_id. Pass nil to clear (unassign).
 // updated_at is bumped so the entity appears at the top of the new owner's
-// "My Characters" listing right after the claim.
+// Yours band right after the claim.
 func (r *entityRepository) UpdateOwner(ctx context.Context, entityID string, ownerUserID *string) error {
 	_, err := r.db.ExecContext(ctx,
 		`UPDATE entities SET owner_user_id = ?, updated_at = NOW() WHERE id = ?`,

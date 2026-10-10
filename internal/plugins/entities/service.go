@@ -153,8 +153,8 @@ type EntityService interface {
 	SetPrivateInCampaign(ctx context.Context, entityID, campaignID string, private bool) error
 
 	// ListByOwner returns entities in a campaign owned by the given user,
-	// ordered most-recently-updated first. Powers the player landing page
-	// ("My Characters") at GET /campaigns/:id/me. No visibility filter:
+	// ordered most-recently-updated first. Powers the Yours band
+	// on the Characters page. No visibility filter:
 	// owning the entity implies the player can see it.
 	ListByOwner(ctx context.Context, campaignID, ownerUserID string) ([]Entity, error)
 
@@ -1639,7 +1639,7 @@ func (s *entityService) AssignOwner(ctx context.Context, entityID string, ownerU
 	// Type guardrail: an owner may only be *assigned* to a character-shaped
 	// type — the same gate ClaimEntity enforces — so a Scribe cannot stamp
 	// ownership onto a Location (which would then surface in the target
-	// player's "My Characters", since ListByOwner is not visibility- or
+	// player's Yours band, since ListByOwner is not visibility- or
 	// type-filtered). Clearing ownership (nil) is always allowed so a stale
 	// claim can be scrubbed regardless of the type's current claimable flag.
 	if ownerUserID != nil {

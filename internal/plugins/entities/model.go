@@ -337,7 +337,7 @@ type Entity struct {
 	CreatedBy       string          `json:"created_by"`
 	// OwnerUserID claims an entity for a player. Nullable: most entities
 	// (locations, factions, lore) are not owned. Character-shaped entities
-	// surface on the owner's "My Characters" landing page. Set by Foundry
+	// surface in the owner's Yours band on the Characters page. Set by Foundry
 	// sync (when the actor's owner maps to a chronicle user) or by the
 	// player claim flow on entity show.
 	OwnerUserID *string `json:"owner_user_id,omitempty"`
