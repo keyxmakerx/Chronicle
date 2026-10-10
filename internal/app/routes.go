@@ -4987,6 +4987,7 @@ func (a *App) RegisterRoutes() {
 		World:    &dmWorldAdapter{svc: calendarService},
 		Nights:   &dmNightAdapter{svc: sessionsService, members: campaignService},
 		Foundry:  wsHub,
+		Presence: &dmPresenceAdapter{members: campaignService, hub: wsHub, foundry: foundryPlayerRepo},
 		Party:    &dmPartyAdapter{entities: entityService, campaigns: campaignService},
 		Hidden:   &dmHiddenAdapter{entities: entityService, lists: characterListService},
 		System:   systemHandler,

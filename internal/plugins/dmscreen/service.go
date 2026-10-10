@@ -83,6 +83,19 @@ func (s *service) Build(ctx context.Context, campaignID string, v Viewer) (*View
 		view.Foundry = FoundryView{Connected: connected, NeverSeen: last == nil && !connected, LastSeen: last}
 	}
 
+	var presence map[string]bool
+	if s.src.Presence != nil {
+		players, err := s.src.Presence.Players(ctx, campaignID)
+		if err != nil {
+			warn("presence", err)
+		}
+		view.Presence = buildPresence(players)
+		presence = map[string]bool{}
+		for _, p := range players {
+			presence[p.UserID] = p.Here
+		}
+	}
+
 	var def *systems.DMScreenDef
 	var sys systems.System
 	if s.src.System != nil {
@@ -107,6 +120,7 @@ func (s *service) Build(ctx context.Context, campaignID string, v Viewer) (*View
 		for _, h := range heroes {
 			hv := HeroView{
 				ID: h.ID, Name: h.Name, PlayerName: h.PlayerName,
+				PlayerUserID: h.PlayerUserID, PlayerHere: h.PlayerUserID != "" && presence[h.PlayerUserID],
 				Meters: buildMeters(meters, h.Fields),
 			}
 			if def != nil {
@@ -329,4 +343,28 @@ func pickConditions(items []systems.ReferenceItem, c *systems.DMScreenConditions
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
+}
+
+// buildPresence counts players who are here. It returns nil for no players so
+// the strip omits the count instead of reading "0 of 0".
+func buildPresence(players []PlayerPresence) *PresenceView {
+	if len(players) == 0 {
+		return nil
+	}
+	pv := &PresenceView{Total: len(players)}
+	for _, p := range players {
+		name := p.Name
+		if name == "" {
+			name = "A player"
+		}
+		if p.Here {
+			pv.Here++
+			pv.HereNames = append(pv.HereNames, name)
+		} else {
+			pv.AwayNames = append(pv.AwayNames, name)
+		}
+	}
+	sort.Strings(pv.HereNames)
+	sort.Strings(pv.AwayNames)
+	return pv
 }

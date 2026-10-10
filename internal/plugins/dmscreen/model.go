@@ -7,6 +7,7 @@ package dmscreen
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -36,6 +37,10 @@ type View struct {
 	Night *NightView `json:"night,omitempty"`
 
 	Foundry FoundryView `json:"foundry"`
+
+	// Presence is nil when the campaign has no players or the source is not
+	// wired; the strip then says nothing about who is here.
+	Presence *PresenceView `json:"presence,omitempty"`
 
 	// SystemName is the enabled game system, empty when none.
 	SystemName string `json:"system_name"`
@@ -109,6 +114,10 @@ type HeroView struct {
 	ID         string `json:"id"`
 	Name       string `json:"name"`
 	PlayerName string `json:"player_name"`
+	// PlayerUserID and PlayerHere are additive: the dot after "Played by"
+	// needs to know whether that player is here right now.
+	PlayerUserID string `json:"player_user_id,omitempty"`
+	PlayerHere   bool   `json:"player_here,omitempty"`
 	// Subtitle and Conditions come from the sheet fields the system's
 	// manifest names; either may be empty.
 	Subtitle   string      `json:"subtitle"`
@@ -157,4 +166,35 @@ type HiddenView struct {
 type ConditionView struct {
 	Name string `json:"name"`
 	Text string `json:"text"`
+}
+
+// PresenceView counts the campaign's players who are here right now. A player
+// is a member with the Player role; the owner, co-DMs and scribes run the game
+// and are not counted.
+type PresenceView struct {
+	Here  int `json:"here"`
+	Total int `json:"total"`
+	// HereNames and AwayNames are display names, sorted, for the strip's tooltip.
+	HereNames []string `json:"here_names,omitempty"`
+	AwayNames []string `json:"away_names,omitempty"`
+}
+
+// Label is the strip text: "3 of 4 players here".
+func (p PresenceView) Label() string {
+	noun := "players"
+	if p.Total == 1 {
+		noun = "player"
+	}
+	return fmt.Sprintf("%d of %d %s here", p.Here, p.Total, noun)
+}
+
+// Title is the strip's tooltip: "Here: a, b. Not here: c."
+func (p PresenceView) Title() string {
+	list := func(names []string) string {
+		if len(names) == 0 {
+			return "nobody"
+		}
+		return strings.Join(names, ", ")
+	}
+	return "Here: " + list(p.HereNames) + ". Not here: " + list(p.AwayNames) + "."
 }

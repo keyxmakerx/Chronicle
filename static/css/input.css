@@ -4338,6 +4338,7 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
   .dms-strip { display: flex; flex-wrap: wrap; gap: .3rem 1rem; align-items: center; background: rgba(0,0,0,.5); color: #fff; border-radius: .5rem; padding: .35rem .75rem; margin: 0 .25rem .4rem; font-size: .85rem; }
   .dms-dot { display: inline-block; width: .5rem; height: .5rem; border-radius: 50%; border: 1px solid #fff; margin-right: .35rem; }
   .dms-dot-on { background: #4ade80; border-color: #4ade80; }
+  .dms-dot-after { margin: 0 0 0 .3rem; vertical-align: middle; background: var(--dms-ok); border-color: var(--dms-ok); }
   .dms-leaves { display: flex; perspective: 1400px; transform-style: preserve-3d; }
   .dms-leaf {
     flex: 1 1 0; min-width: 0; display: grid; gap: .65rem; align-content: start; padding: .9rem;

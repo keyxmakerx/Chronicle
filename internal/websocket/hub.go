@@ -2,6 +2,7 @@ package websocket
 
 import (
 	"log/slog"
+	"sort"
 	"sync"
 	"time"
 
@@ -280,6 +281,25 @@ func (h *Hub) CampaignClientCount(campaignID string) int {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	return len(h.clients[campaignID])
+}
+
+// BrowserUserIDs lists the users with a signed-in browser socket open in the
+// campaign, each once. Foundry, notes-grant and sync-key sockets are left out:
+// they say a tool is connected, not that this person is looking at Chronicle.
+func (h *Hub) BrowserUserIDs(campaignID string) []string {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	seen := map[string]bool{}
+	var out []string
+	for _, c := range h.clients[campaignID] {
+		if c.Source != "browser" || c.UserID == "" || seen[c.UserID] {
+			continue
+		}
+		seen[c.UserID] = true
+		out = append(out, c.UserID)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // TotalClientCount returns the total number of connected clients.

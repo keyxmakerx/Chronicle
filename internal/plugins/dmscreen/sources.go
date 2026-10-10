@@ -33,11 +33,26 @@ type FoundrySource interface {
 	FoundryPresence(campaignID string) (lastSeen *time.Time, connected bool)
 }
 
+// PlayerPresence is one player of the campaign and whether they are here now.
+type PlayerPresence struct {
+	UserID string
+	Name   string
+	Here   bool
+}
+
+// PresenceSource lists the campaign's players (members with the Player role,
+// not the owner, co-DMs or scribes) with whether each is here. A campaign with
+// no players returns an empty list.
+type PresenceSource interface {
+	Players(ctx context.Context, campaignID string) ([]PlayerPresence, error)
+}
+
 // Hero is a claimed player character with its raw sheet fields.
 type Hero struct {
-	ID         string
-	Name       string
-	PlayerName string
+	ID           string
+	Name         string
+	PlayerName   string
+	PlayerUserID string
 	Fields     map[string]any
 }
 
@@ -75,6 +90,7 @@ type Sources struct {
 	World    WorldSource
 	Nights   NightSource
 	Foundry  FoundrySource
+	Presence PresenceSource
 	Party    PartySource
 	Hidden   HiddenSource
 	System   SystemSource

@@ -31,6 +31,9 @@ templ Panel(v *View, csrf string) {
 			} else {
 				<span>No game night planned</span>
 			}
+			if v.Presence != nil {
+				<span title={ v.Presence.Title() }><span class="dms-dot dms-dot-on" aria-hidden="true"></span>{ v.Presence.Label() }</span>
+			}
 			if v.Foundry.Connected {
 				<span><span class="dms-dot dms-dot-on" aria-hidden="true"></span>Foundry connected</span>
 			} else if !v.Foundry.NeverSeen {
@@ -209,7 +212,12 @@ templ heroRow(hero HeroView) {
 					<div class="dms-who">
 						<span>{ hero.Subtitle }</span>
 						if hero.PlayerName != "" {
-							<span>Played by { hero.PlayerName }</span>
+							<span>
+								Played by { hero.PlayerName }
+								if hero.PlayerHere {
+									<span class="dms-dot dms-dot-on dms-dot-after" title="Here now"><span class="sr-only">Here now</span></span>
+								}
+							</span>
 						}
 					</div>
 				}

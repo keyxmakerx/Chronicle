@@ -18,6 +18,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/dmscreen"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
+	"github.com/keyxmakerx/chronicle/internal/plugins/syncapi"
 )
 
 // The DM Screen owns no data; these adapters let it read the plugins it
@@ -180,6 +181,7 @@ func (a *dmPartyAdapter) Heroes(ctx context.Context, campaignID string, v dmscre
 		h := dmscreen.Hero{ID: e.ID, Name: e.Name, Fields: e.FieldsData}
 		if e.OwnerUserID != nil {
 			h.PlayerName = names[*e.OwnerUserID]
+			h.PlayerUserID = *e.OwnerUserID
 		}
 		out = append(out, h)
 	}
@@ -254,6 +256,89 @@ func (a *dmHiddenAdapter) Reveal(ctx context.Context, entityID, campaignID strin
 		return "", err
 	}
 	return e.Name, nil
+}
+
+// foundryReportMaxAge is how old the GM's Foundry players report may be and
+// still count: the GM's client re-sends the list as people come and go, so a
+// stale list says nothing about who is online now.
+const foundryReportMaxAge = 5 * time.Minute
+
+// dmBrowserHub is the slice of the websocket hub the presence adapter reads.
+type dmBrowserHub interface {
+	BrowserUserIDs(campaignID string) []string
+	FoundryPresence(campaignID string) (*time.Time, bool)
+}
+
+// dmPresenceAdapter says which of a campaign's players are here. A player is
+// here when their browser has a live socket to Chronicle, or when the GM's
+// Foundry client reports them online (and is itself connected and fresh).
+//
+// Browser sockets are opened only by pages with live widgets (notes, journal,
+// maps, quest boards), not by every campaign page, so a player reading a plain
+// page is invisible to the first signal; the Foundry report covers players at
+// the table.
+type dmPresenceAdapter struct {
+	members campaigns.CampaignService
+	hub     dmBrowserHub
+	foundry syncapi.FoundryPlayerRepository
+	now     func() time.Time
+}
+
+func (a *dmPresenceAdapter) Players(ctx context.Context, campaignID string) ([]dmscreen.PlayerPresence, error) {
+	members, err := a.members.ListMembers(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	var reports []syncapi.FoundryPlayer
+	_, foundryUp := a.hub.FoundryPresence(campaignID)
+	if a.foundry != nil && foundryUp {
+		// A failed read only loses the Foundry signal; browser presence stands.
+		if reports, err = a.foundry.List(ctx, campaignID); err != nil {
+			slog.Warn("dm screen: reading foundry players", slog.String("campaign_id", campaignID), slog.Any("error", err))
+			reports = nil
+		}
+	}
+	here := hereUsers(a.hub.BrowserUserIDs(campaignID), reports, foundryUp, a.clock())
+
+	var out []dmscreen.PlayerPresence
+	for _, m := range members {
+		if m.Role != campaigns.RolePlayer {
+			continue
+		}
+		// A DM grant makes a Player-role member a co-DM, who runs the game.
+		if granted, err := a.members.IsUserDmGranted(ctx, campaignID, m.UserID); err == nil && granted {
+			continue
+		}
+		out = append(out, dmscreen.PlayerPresence{UserID: m.UserID, Name: m.DisplayName, Here: here[m.UserID]})
+	}
+	return out, nil
+}
+
+func (a *dmPresenceAdapter) clock() time.Time {
+	if a.now != nil {
+		return a.now()
+	}
+	return time.Now()
+}
+
+// hereUsers merges the two signals. A Foundry row counts only when the GM's
+// client is connected now, the row is linked to a member, it says online, and
+// the report is recent enough to trust.
+func hereUsers(browser []string, reports []syncapi.FoundryPlayer, foundryUp bool, now time.Time) map[string]bool {
+	here := map[string]bool{}
+	for _, id := range browser {
+		here[id] = true
+	}
+	if !foundryUp {
+		return here
+	}
+	for _, p := range reports {
+		if p.MemberUserID == "" || !p.Online || now.Sub(p.ReportedAt) > foundryReportMaxAge {
+			continue
+		}
+		here[p.MemberUserID] = true
+	}
+	return here
 }
 
 // dmScreenSyncAPIAdapter hands the DM Screen to the sync API for the Foundry
