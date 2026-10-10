@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/hkdf"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -87,10 +88,15 @@ type TwoFactorLoginResult struct {
 // ConfigureTwoFactor gives the service the key that encrypts stored
 // authenticator secrets. It is derived from the site secret, so a database
 // copy alone can't produce codes. Without it two-factor can't be turned on.
+// HKDF gives this purpose its own key, separate from anything else the
+// site secret signs.
 func ConfigureTwoFactor(svc AuthService, siteSecret string) {
 	if s, ok := svc.(*authService); ok && siteSecret != "" {
-		k := sha256.Sum256([]byte("chronicle-totp:" + siteSecret))
-		s.totpKey = k[:]
+		k, err := hkdf.Key(sha256.New, []byte(siteSecret), nil, "chronicle-totp", 32)
+		if err != nil {
+			return
+		}
+		s.totpKey = k
 	}
 }
 
