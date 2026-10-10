@@ -178,17 +178,16 @@ func TestBuildComingUp(t *testing.T) {
 			},
 		},
 		{
-			name: "own unanswered night lands in waiting on you and offers Answer",
+			name: "own unanswered night is listed once, under waiting on you",
 			cal:  &fakeComingUpCalendar{cal: testCal()},
 			nights: &fakeComingUpNights{nights: []sessions.GameNight{
 				night("A", "2026-10-17", "", sessions.NightNoAnswer, sessions.NightYes),
 			}},
-			wantNights: []string{"Session A"},
 			wantWait:   []string{"Session A"},
 			wantAnswer: 4,
 			check: func(t *testing.T, v comingUpView) {
-				if v.Nights[0].Action != "Answer" || !v.Nights[0].Waiting {
-					t.Errorf("unanswered night row = %+v", v.Nights[0])
+				if !strings.Contains(v.Waiting[0].Sub, "not answered") {
+					t.Errorf("waiting sub = %q", v.Waiting[0].Sub)
 				}
 				if !v.Waiting[0].Primary || !strings.Contains(v.Waiting[0].Href, "session=A") {
 					t.Errorf("waiting row = %+v", v.Waiting[0])
@@ -203,7 +202,6 @@ func TestBuildComingUp(t *testing.T) {
 				n.Roster[0].Recheck = true
 				return n
 			}()}},
-			wantNights: []string{"Session A"},
 			wantWait:   []string{"Session A"},
 			wantAnswer: 4,
 		},
@@ -379,7 +377,6 @@ func TestBuildComingUp(t *testing.T) {
 					{Proposal: sessions.SlotProposal{ID: "p2", Title: "P2", Status: sessions.ProposalOpen}},
 				},
 			},
-			wantNights: []string{"Session A", "Session B", "Session C"},
 			wantWait:   []string{"Session A", "Session B", "Session C", "P1"},
 			wantAnswer: 4,
 		},

@@ -1,5 +1,5 @@
 /* The dashboard's "Coming up" card, drawn in the calendar page's own look: a
- * paper sheet, serif headings, spaced caps labels, day tiles, and the Who's
+ * raised sheet, serif headings, spaced caps labels, day tiles, and the Who's
  * free planner's green and gold. The tokens are scoped to .cu-wrap instead of
  * :root because calendar-view.css owns the global ones and is not loaded on
  * the dashboard; every class carries the cu- prefix so nothing here can

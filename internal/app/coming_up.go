@@ -240,8 +240,8 @@ func comingUpNightList(ctx context.Context, src comingUpSources, req comingUpReq
 
 // comingUpNightRows turns nights into the "Game nights" rows and the
 // "Waiting on you" rows for this viewer. A night the viewer has not answered,
-// or that moved after they answered, is waiting on them. Past nights, and
-// nights the viewer is not on the roster of, are skipped.
+// or that moved after they answered, is waiting on them and goes only there.
+// Past nights are skipped.
 func comingUpNightRows(nights []sessions.GameNight, base, userID string) (shown, waiting []comingUpRow) {
 	live := make([]sessions.GameNight, 0, len(nights))
 	for _, n := range nights {
@@ -268,25 +268,24 @@ func comingUpNightRows(nights []sessions.GameNight, base, userID string) (shown,
 		mine := n.Mine
 		owes := mine != nil && (mine.Answer == sessions.NightNoAnswer || mine.Recheck)
 
-		if len(shown) < comingUpNightsShown {
-			row := comingUpRow{
-				TileTop: tileTop, TileBig: tileBig, Title: title,
-				Sub:     nightTallyLabel(n.Tally) + nightMineLabel(mine),
-				Waiting: owes, Href: href, Action: "Change",
-			}
-			if owes {
-				row.Action = "Answer"
-			}
-			shown = append(shown, row)
-		}
+		// A night the viewer owes an answer on is listed once, under
+		// "Waiting on you", so the card never shows the same night twice.
 		if owes {
-			sub := "Game night · not answered"
+			sub := nightTallyLabel(n.Tally) + " · not answered"
 			if mine.Answer != sessions.NightNoAnswer {
-				sub = "Game night · moved since you answered"
+				sub = nightTallyLabel(n.Tally) + " · moved since you answered"
 			}
 			waiting = append(waiting, comingUpRow{
 				TileTop: tileTop, TileBig: tileBig, Title: title, Sub: sub,
 				Waiting: true, Href: href, Action: "Answer", Primary: true,
+			})
+			continue
+		}
+		if len(shown) < comingUpNightsShown {
+			shown = append(shown, comingUpRow{
+				TileTop: tileTop, TileBig: tileBig, Title: title,
+				Sub:  nightTallyLabel(n.Tally) + nightMineLabel(mine),
+				Href: href, Action: "Change",
 			})
 		}
 	}
