@@ -33,7 +33,7 @@ type recordingNoteSvc struct {
 	viewer permissions.Viewer
 }
 
-func (r *recordingNoteSvc) ViewerReadsMedia(_ context.Context, _, _ string, v permissions.Viewer) (bool, error) {
+func (r *recordingNoteSvc) ViewerReadsMedia(_ context.Context, _, _ string, v, _ permissions.Viewer) (bool, error) {
 	r.viewer = v
 	return true, nil
 }
@@ -42,7 +42,7 @@ func (r *recordingNoteSvc) ViewerReadsMedia(_ context.Context, _, _ string, v pe
 // a GM-shared note counts for the GM and a private one never does.
 func TestNoteMediaAccessAdapter_PassesTheViewerThrough(t *testing.T) {
 	svc := &recordingNoteSvc{}
-	ok, err := (&noteMediaAccessAdapter{svc: svc}).CanReadNoteMedia(context.Background(), "c", "m", permissions.RoleOwner, "u1")
+	ok, err := (&noteMediaAccessAdapter{svc: svc}).CanReadNoteMedia(context.Background(), "c", "m", permissions.RoleOwner, "u1", permissions.RolePlayer, "u2")
 	if err != nil || !ok {
 		t.Fatalf("got %v, %v", ok, err)
 	}

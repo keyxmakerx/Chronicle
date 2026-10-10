@@ -41,9 +41,11 @@ type NoteRepository interface {
 	ListVisibleLinking(ctx context.Context, campaignID string, v permissions.Viewer, kind, targetID string) ([]Note, error)
 
 	// ViewerReadsMedia reports whether v can read at least one note in
-	// campaignID whose body holds the media file mediaID (the SQL twin of
-	// Note.CanView, applied to the notes that mention the file).
-	ViewerReadsMedia(ctx context.Context, campaignID, mediaID string, v permissions.Viewer) (bool, error)
+	// campaignID whose body holds the media file mediaID AND that the file's
+	// uploader can read too (the SQL twin of Note.CanView, twice). A note the
+	// uploader cannot see grants nothing, so pasting a picture's id into
+	// one's own note does not open the picture.
+	ViewerReadsMedia(ctx context.Context, campaignID, mediaID string, v, uploader permissions.Viewer) (bool, error)
 
 	// ListSharedByCampaign returns every campaign-wide-shared note in the
 	// campaign regardless of which user owns it.
@@ -284,16 +286,18 @@ func (r *noteRepository) ListVisibleLinking(ctx context.Context, campaignID stri
 // ViewerReadsMedia answers "may v open this picture" for the media plugin:
 // true when a note v can read carries /media/<mediaID> in its body. The id is
 // checked against idPattern, so it can hold no LIKE wildcard.
-func (r *noteRepository) ViewerReadsMedia(ctx context.Context, campaignID, mediaID string, v permissions.Viewer) (bool, error) {
-	if !idPattern.MatchString(mediaID) || v.UserID() == "" {
+func (r *noteRepository) ViewerReadsMedia(ctx context.Context, campaignID, mediaID string, v, uploader permissions.Viewer) (bool, error) {
+	if !idPattern.MatchString(mediaID) || v.UserID() == "" || uploader.UserID() == "" {
 		return false, nil
 	}
 	vis, visArgs := visibleFilter(v)
+	upVis, upArgs := visibleFilter(uploader)
 	args := append([]any{campaignID}, visArgs...)
+	args = append(args, upArgs...)
 	args = append(args, "%/media/"+mediaID+"%")
 	var one int
 	err := r.db.QueryRowContext(ctx,
-		`SELECT 1 FROM notes WHERE campaign_id = ? AND `+vis+` AND entry_html LIKE ? LIMIT 1`, args...).Scan(&one)
+		`SELECT 1 FROM notes WHERE campaign_id = ? AND `+vis+` AND `+upVis+` AND entry_html LIKE ? LIMIT 1`, args...).Scan(&one)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
 	}

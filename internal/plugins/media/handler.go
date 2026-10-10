@@ -62,7 +62,9 @@ type EntityVisibilityFilter interface {
 // reads note tables or repeats the notes visibility rule. Nil is a valid
 // (unwired) value -- checkNoteImageAccess then admits only the uploader.
 type NoteMediaAccess interface {
-	CanReadNoteMedia(ctx context.Context, campaignID, mediaID string, role int, userID string) (bool, error)
+	// A note counts only if the uploader can read it too, so the uploader's
+	// role and id are passed along with the viewer's.
+	CanReadNoteMedia(ctx context.Context, campaignID, mediaID string, role int, userID string, uploaderRole int, uploaderID string) (bool, error)
 }
 
 // MapImageGuard says whether a media file is the background of a map that has a
@@ -607,7 +609,9 @@ func (h *Handler) checkBaseMediaAccess(c echo.Context, file *MediaFile, isThumb 
 
 // checkNoteImageAccess is the rule for a picture that lives in notes: only a
 // current campaign member who can read at least one note holding it, or the
-// person who uploaded it (so it shows before the note is first saved). It
+// person who uploaded it (so it shows before the note is first saved). A note
+// counts only when the uploader can read it too and is still a member, so an
+// id pasted into a note the uploader cannot see opens nothing. It
 // never consults the pages that reference the file and never falls back to
 // plain membership, so a picture used only in someone's private note is
 // closed to the rest of the table. Fails closed: an unwired rule admits only
@@ -626,7 +630,14 @@ func (h *Handler) checkNoteImageAccess(ctx context.Context, file *MediaFile, use
 	if h.noteMedia == nil {
 		return false, nil
 	}
-	return h.noteMedia.CanReadNoteMedia(ctx, campaignID, file.ID, h.viewerVisibilityRole(campaignID, userID), userID)
+	// The uploader must still be a member: a picture whose uploader has left
+	// stops loading for everyone else, since the note rule is anchored on them.
+	if !h.memberChecker.IsCampaignMember(campaignID, file.UploadedBy) {
+		return false, nil
+	}
+	return h.noteMedia.CanReadNoteMedia(ctx, campaignID, file.ID,
+		h.viewerVisibilityRole(campaignID, userID), userID,
+		h.viewerVisibilityRole(campaignID, file.UploadedBy), file.UploadedBy)
 }
 
 // mediaAccessCacheTTL bounds how long an ADR-058 entity-scoped access

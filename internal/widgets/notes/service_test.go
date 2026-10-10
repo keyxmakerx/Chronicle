@@ -90,7 +90,7 @@ func (m *mockNoteRepo) ListVisibleLinking(ctx context.Context, campaignID string
 	return nil, nil
 }
 
-func (m *mockNoteRepo) ViewerReadsMedia(ctx context.Context, campaignID, mediaID string, v permissions.Viewer) (bool, error) {
+func (m *mockNoteRepo) ViewerReadsMedia(ctx context.Context, campaignID, mediaID string, v, uploader permissions.Viewer) (bool, error) {
 	return false, nil
 }
 

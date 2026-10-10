@@ -16,14 +16,16 @@ import (
 // fakeNoteMedia answers CanReadNoteMedia from a fixed set of readers and
 // records what it was asked.
 type fakeNoteMedia struct {
-	readers map[string]bool
-	err     error
-	calls   int
-	role    int
+	readers  map[string]bool
+	err      error
+	calls    int
+	role     int
+	uploader string
 }
 
-func (f *fakeNoteMedia) CanReadNoteMedia(_ context.Context, _, _ string, role int, userID string) (bool, error) {
+func (f *fakeNoteMedia) CanReadNoteMedia(_ context.Context, _, _ string, role int, userID string, _ int, uploaderID string) (bool, error) {
 	f.calls++
+	f.uploader = uploaderID
 	f.role = role
 	if f.err != nil {
 		return false, f.err
@@ -53,12 +55,13 @@ func noteImageHandler(nm NoteMediaAccess, vis *fakeEntityVisibilityFilter, refs 
 
 func TestNoteImageAccess(t *testing.T) {
 	tests := []struct {
-		name     string
-		viewer   string // "" is anonymous
-		nm       NoteMediaAccess
-		allowed  bool
-		wantAsk  bool // whether the notes rule had to be consulted
-		nonMembr bool
+		name         string
+		viewer       string // "" is anonymous
+		nm           NoteMediaAccess
+		allowed      bool
+		wantAsk      bool // whether the notes rule had to be consulted
+		nonMembr     bool
+		uploaderGone bool
 	}{
 		{name: "uploader before any note holds it", viewer: noteAuthorID, nm: &fakeNoteMedia{}, allowed: true},
 		{name: "reader of a note holding it", viewer: noteReaderID, nm: &fakeNoteMedia{readers: map[string]bool{noteReaderID: true}}, allowed: true, wantAsk: true},
@@ -66,6 +69,7 @@ func TestNoteImageAccess(t *testing.T) {
 		{name: "anonymous", viewer: "", nm: &fakeNoteMedia{readers: map[string]bool{"": true}}},
 		{name: "reader who left the campaign", viewer: noteReaderID, nm: &fakeNoteMedia{readers: map[string]bool{noteReaderID: true}}, nonMembr: true},
 		{name: "notes rule errors: fail closed", viewer: noteReaderID, nm: &fakeNoteMedia{err: errors.New("db down")}, wantAsk: true},
+		{name: "uploader has left the campaign: others lose it", viewer: noteReaderID, nm: &fakeNoteMedia{readers: map[string]bool{noteReaderID: true}}, uploaderGone: true},
 		{name: "notes rule unwired: only the uploader", viewer: noteReaderID, nm: nil},
 	}
 	for _, tc := range tests {
@@ -73,6 +77,9 @@ func TestNoteImageAccess(t *testing.T) {
 			h, _ := noteImageHandler(tc.nm, &fakeEntityVisibilityFilter{}, nil)
 			if tc.nonMembr {
 				h.memberChecker = &stubMemberChecker{members: map[string]map[string]bool{testCampaignID: {}}}
+			}
+			if tc.uploaderGone {
+				h.memberChecker = &stubMemberChecker{members: map[string]map[string]bool{testCampaignID: {noteReaderID: true}}}
 			}
 			var c echo.Context
 			if tc.viewer == "" {
@@ -134,7 +141,7 @@ func TestNoteImageAccess_CoDMReachesTheNotesRuleAsGM(t *testing.T) {
 	nm := &fakeNoteMedia{readers: map[string]bool{noteReaderID: true}}
 	h, _ := noteImageHandler(nm, &fakeEntityVisibilityFilter{}, nil)
 	h.memberChecker = &stubMemberChecker{
-		members:   map[string]map[string]bool{testCampaignID: {noteReaderID: true}},
+		members:   map[string]map[string]bool{testCampaignID: {noteReaderID: true, noteAuthorID: true}},
 		dmGranted: map[string]map[string]bool{testCampaignID: {noteReaderID: true}},
 	}
 	mustAllow(t, h.checkMediaAccess(newADR058TestContext(noteReaderID), noteImageFile(), false, ""), "co-DM")

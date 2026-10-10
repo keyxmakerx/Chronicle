@@ -127,12 +127,13 @@ func TestSignedLinksForMember_NotePictures(t *testing.T) {
 	h := newLinkHandler()
 	svc := h.service.(*linkFilesService)
 	for _, id := range []string{readable, hidden, mine} {
-		uploader := "someone"
+		uploader := "someone" // a member, so their pictures still count
 		if id == mine {
 			uploader = "player"
 		}
 		svc.files[id] = &MediaFile{ID: id, CampaignID: &camp, CampaignIsPublic: boolPtr(false), UsageType: UsageNoteImage, UploadedBy: uploader}
 	}
+	h.memberChecker.(*stubMemberChecker).members["camp-l"]["someone"] = true
 	h.noteMedia = noteMediaByFile{readable: {"player": true}}
 
 	paths := []string{"/media/" + readable, "/media/" + hidden, "/media/" + mine + "/thumb/300"}
@@ -145,6 +146,6 @@ func TestSignedLinksForMember_NotePictures(t *testing.T) {
 // noteMediaByFile answers per file, for tests that need several pictures.
 type noteMediaByFile map[string]map[string]bool
 
-func (n noteMediaByFile) CanReadNoteMedia(_ context.Context, _, mediaID string, _ int, userID string) (bool, error) {
+func (n noteMediaByFile) CanReadNoteMedia(_ context.Context, _, mediaID string, _ int, userID string, _ int, _ string) (bool, error) {
 	return n[mediaID][userID], nil
 }

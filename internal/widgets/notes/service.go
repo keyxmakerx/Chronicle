@@ -49,9 +49,10 @@ type NoteService interface {
 	SendToJournal(ctx context.Context, campaignID string, v permissions.Viewer, jotID, pageName string) (*SendResult, error)
 
 	// ViewerReadsMedia reports whether v can read a note in campaignID whose
-	// body holds the media file mediaID. The media plugin asks this to decide
-	// who may open a picture that lives in notes.
-	ViewerReadsMedia(ctx context.Context, campaignID, mediaID string, v permissions.Viewer) (bool, error)
+	// body holds the media file mediaID and that the file's uploader can read
+	// as well. The media plugin asks this to decide who may open a picture
+	// that lives in notes.
+	ViewerReadsMedia(ctx context.Context, campaignID, mediaID string, v, uploader permissions.Viewer) (bool, error)
 
 	// ListSharedByCampaign returns every shared note in the campaign across
 	// all owners. Unlike the three list methods above it applies no per-user
@@ -157,8 +158,8 @@ func NewNoteServiceWithAttachments(repo NoteRepository, attRepo AttachmentReposi
 
 // ViewerReadsMedia delegates to the repository, which holds the one SQL form
 // of the note visibility rule.
-func (s *noteService) ViewerReadsMedia(ctx context.Context, campaignID, mediaID string, v permissions.Viewer) (bool, error) {
-	return s.repo.ViewerReadsMedia(ctx, campaignID, mediaID, v)
+func (s *noteService) ViewerReadsMedia(ctx context.Context, campaignID, mediaID string, v, uploader permissions.Viewer) (bool, error) {
+	return s.repo.ViewerReadsMedia(ctx, campaignID, mediaID, v, uploader)
 }
 
 // SetEventPublisher sets the event publisher for real-time sync.

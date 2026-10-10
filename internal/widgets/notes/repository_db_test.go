@@ -335,6 +335,7 @@ func TestDB_ViewerReadsMediaMatchesCanView(t *testing.T) {
 	otherCamp, _ := seedNotesCampaign(t, db, "dee")
 
 	pic := newUUID(t)
+	ana := permissions.RequestViewer(permissions.RolePlayer, u["ana"]) // uploaded the picture
 	body := func(id string) *string {
 		s := `<figure class="ce-img ce-img--w50 ce-img--center"><img src="/media/` + id + `" alt=""></figure>`
 		return &s
@@ -360,6 +361,12 @@ func TestDB_ViewerReadsMediaMatchesCanView(t *testing.T) {
 			map[string]bool{"ana": true, "gm": false, "bo": true, "cy": false}},
 		{"note shared with the GM", func() { mk(camp, u["ana"], body(pic), func(n *Note) { n.SharedWithGM = true }) },
 			map[string]bool{"ana": true, "gm": true, "bo": false, "cy": false}},
+		{"bo pastes ana's picture into bo's own private note", func() { mk(camp, u["bo"], body(pic), func(n *Note) {}) },
+			map[string]bool{"ana": false, "gm": false, "bo": false, "cy": false}},
+		{"bo pastes it into a party note ana can read", func() { mk(camp, u["bo"], body(pic), func(n *Note) { n.IsShared = true }) },
+			map[string]bool{"ana": true, "gm": true, "bo": true, "cy": true}},
+		{"bo pastes it into a note shared only with cy", func() { mk(camp, u["bo"], body(pic), func(n *Note) { n.SharedWith = []string{u["cy"]} }) },
+			map[string]bool{"ana": false, "gm": false, "bo": false, "cy": false}},
 		{"a private note holding some other picture", func() { mk(camp, u["ana"], body(newUUID(t)), func(n *Note) { n.IsShared = true }) },
 			map[string]bool{"ana": false, "gm": false, "bo": false, "cy": false}},
 		{"a party note in another campaign", func() { mk(otherCamp, u["ana"], body(pic), func(n *Note) { n.IsShared = true }) },
@@ -376,7 +383,7 @@ func TestDB_ViewerReadsMediaMatchesCanView(t *testing.T) {
 				if who == "gm" {
 					role = permissions.RoleOwner
 				}
-				got, err := repo.ViewerReadsMedia(ctx, camp, pic, permissions.RequestViewer(role, u[who]))
+				got, err := repo.ViewerReadsMedia(ctx, camp, pic, permissions.RequestViewer(role, u[who]), ana)
 				if err != nil {
 					t.Fatalf("%s: %v", who, err)
 				}
@@ -392,11 +399,11 @@ func TestDB_ViewerReadsMediaMatchesCanView(t *testing.T) {
 			t.Fatal(err)
 		}
 		mk(camp, u["ana"], body(pic), func(n *Note) { n.IsShared = true })
-		if ok, _ := repo.ViewerReadsMedia(ctx, camp, pic, permissions.RequestViewer(permissions.RolePlayer, "")); ok {
+		if ok, _ := repo.ViewerReadsMedia(ctx, camp, pic, permissions.RequestViewer(permissions.RolePlayer, ""), ana); ok {
 			t.Error("an anonymous viewer read a party note's picture")
 		}
 		for _, bad := range []string{"%", "%%%%%%%%", `a" OR 1=1 -- `, ""} {
-			if ok, _ := repo.ViewerReadsMedia(ctx, camp, bad, permissions.RequestViewer(permissions.RoleOwner, u["gm"])); ok {
+			if ok, _ := repo.ViewerReadsMedia(ctx, camp, bad, permissions.RequestViewer(permissions.RoleOwner, u["gm"]), ana); ok {
 				t.Errorf("id %q matched a note", bad)
 			}
 		}

@@ -27,8 +27,9 @@ func seedNotePicture(t *testing.T, db *sql.DB, campaignID, uploadedBy string) st
 
 type dbNoteMedia struct{ svc notes.NoteService }
 
-func (a dbNoteMedia) CanReadNoteMedia(ctx context.Context, campaignID, mediaID string, role int, userID string) (bool, error) {
-	return a.svc.ViewerReadsMedia(ctx, campaignID, mediaID, permissions.RequestViewer(role, userID))
+func (a dbNoteMedia) CanReadNoteMedia(ctx context.Context, campaignID, mediaID string, role int, userID string, uploaderRole int, uploaderID string) (bool, error) {
+	return a.svc.ViewerReadsMedia(ctx, campaignID, mediaID,
+		permissions.RequestViewer(role, userID), permissions.RequestViewer(uploaderRole, uploaderID))
 }
 
 func TestDB_NotePictureAccess(t *testing.T) {
@@ -104,6 +105,53 @@ func TestDB_NotePictureAccess(t *testing.T) {
 			}
 		})
 	}
+
+	addNote := func(owner, sharing string) string {
+		id := adr058DBID(t)
+		mustADR058Exec(t, db, `INSERT INTO notes (id, campaign_id, user_id, title, content, entry_html) VALUES (?,?,?,?,?,?)`,
+			id, camp, owner, "pasted", "[]", html)
+		if sharing != "" {
+			mustADR058Exec(t, db, `UPDATE notes SET `+sharing+` WHERE id = ?`, id)
+		}
+		return id
+	}
+
+	t.Run("a picture id pasted into someone else's private note grants nothing", func(t *testing.T) {
+		setSharing("") // Ana's own note stays private
+		mine := addNote(bo, "")
+		defer mustADR058Exec(t, db, `DELETE FROM notes WHERE id = ?`, mine)
+		mustDeny(t, check(bo), "Bo, who pasted Ana's private picture id into Bo's private note")
+		mustDeny(t, check(cy), "another player")
+		mustAllow(t, check(ana), "the uploader")
+	})
+
+	t.Run("a note the uploader cannot read grants nothing even when shared", func(t *testing.T) {
+		setSharing("")
+		onlyCy := addNote(bo, "shared_with = JSON_ARRAY('"+cy+"')")
+		defer mustADR058Exec(t, db, `DELETE FROM notes WHERE id = ?`, onlyCy)
+		mustDeny(t, check(cy), "Cy, named on a note the uploader is not named on")
+	})
+
+	t.Run("a picture Ana adds to a party note is visible to the party", func(t *testing.T) {
+		setSharing("")
+		// Bo owns the shared note; Ana, a collaborator, adds the picture.
+		shared := addNote(bo, "is_shared = TRUE")
+		defer mustADR058Exec(t, db, `DELETE FROM notes WHERE id = ?`, shared)
+		for _, who := range []string{bo, cy, gm, ana} {
+			mustAllow(t, check(who), "party note picture")
+		}
+		mustDeny(t, check(outsider), "someone outside the campaign")
+	})
+
+	t.Run("uploader removed from the campaign: the picture stops loading for others", func(t *testing.T) {
+		setSharing("is_shared = TRUE")
+		mustAllow(t, check(bo), "before the uploader leaves")
+		mustADR058Exec(t, db, `DELETE FROM campaign_members WHERE campaign_id = ? AND user_id = ?`, camp, ana)
+		defer seedADR058Member(t, db, camp, ana, "player")
+		mustDeny(t, check(bo), "party member, uploader gone")
+		mustDeny(t, check(gm), "the GM, uploader gone")
+		mustDeny(t, check(ana), "the removed uploader")
+	})
 
 	t.Run("note deleted: only the uploader still has it", func(t *testing.T) {
 		mustADR058Exec(t, db, `DELETE FROM notes WHERE id = ?`, noteID)

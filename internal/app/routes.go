@@ -5341,8 +5341,9 @@ type noteMediaAccessAdapter struct {
 	svc notes.NoteService
 }
 
-func (a *noteMediaAccessAdapter) CanReadNoteMedia(ctx context.Context, campaignID, mediaID string, role int, userID string) (bool, error) {
-	return a.svc.ViewerReadsMedia(ctx, campaignID, mediaID, permissions.RequestViewer(role, userID))
+func (a *noteMediaAccessAdapter) CanReadNoteMedia(ctx context.Context, campaignID, mediaID string, role int, userID string, uploaderRole int, uploaderID string) (bool, error) {
+	return a.svc.ViewerReadsMedia(ctx, campaignID, mediaID,
+		permissions.RequestViewer(role, userID), permissions.RequestViewer(uploaderRole, uploaderID))
 }
 
 // aiMapsAdapter is the maps service in AI Import's pin types, so the
