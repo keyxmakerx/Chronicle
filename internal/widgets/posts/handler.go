@@ -88,6 +88,9 @@ func (h *Handler) ListPosts(c echo.Context) error {
 	if posts == nil {
 		posts = []Post{}
 	}
+	if cc.MemberRole < campaigns.RoleScribe {
+		stripPostSecrets(posts)
+	}
 
 	return c.JSON(http.StatusOK, posts)
 }
