@@ -74,8 +74,13 @@
     if (c.text) h += '<p class="chc__text">' + esc(c.text) + '</p>';
     if (c.loading) h += '<p class="chc__loading">Loading…</p>';
     var href = c.link && safeHref(c.link.href);
-    if (c.foot || href) {
-      h += '<div class="chc__foot">' + (c.foot ? '<span>' + esc(c.foot) + '</span>' : '') +
+    // c.peek: a same-site peek address. Phones have no hover or Shift, so the
+    // card (opened by a long press there) is where they reach the side panel.
+    // The address rides in a data attribute so the inline handler needs no escaping.
+    var peek = c.peek && /^\/(?!\/)/.test(c.peek) ? c.peek : '';
+    var peekBtn = peek ? '<button type="button" class="chc__peek" data-peek="' + esc(peek) + '" onclick="(function(b){if(window.Chronicle&amp;&amp;Chronicle.peek){Chronicle.peek.open(b.getAttribute(\'data-peek\'));Chronicle.hovercard.close();}})(this)">Peek</button>' : '';
+    if (c.foot || href || peekBtn) {
+      h += '<div class="chc__foot">' + (c.foot ? '<span>' + esc(c.foot) + '</span>' : '') + peekBtn +
         (href ? '<a class="chc__link" href="' + esc(href) + '">' + esc(c.link.label || 'Open') + ' &rarr;</a>' : '') + '</div>';
     }
     return h;

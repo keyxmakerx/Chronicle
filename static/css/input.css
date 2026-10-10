@@ -5094,6 +5094,7 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
 @media (prefers-reduced-motion: reduce) { .ph-more-menu, .ph-claim .btn-primary.is-loading i { animation: none !important; } }
 .nav-rm .ph-more-menu { animation: none !important; }
 
+@layer components {
 /* ============================================================ */
 /* Page peek (static/js/peek_panel.js, internal/plugins/entities/peek.templ).
    A read-only side panel for a linked page: Grow from its right edge on a
@@ -5151,4 +5152,5 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
     border-radius: 1rem 1rem 0 0; box-shadow: 0 -12px 32px rgb(0 0 0 / 0.18);
     transform: translateY(100%); transform-origin: bottom center;
   }
+}
 }
