@@ -129,17 +129,10 @@ var fullReplaceByDesign = map[string]string{
 	"packages.UpdateRepoURLInput":             "PUT /admin/packages/:id/repo — a one-field body: the repository URL is the whole request, and an empty URL is refused by UpdateRepoURL's validation rather than stored",
 }
 
-// notYetSwept freezes the rest of the inventory. Being on this list is a
-// statement about what was looked at, not a claim of safety. Removing a name
-// means the struct became contract-governed; adding one means a new update
-// input shipped and its author decided it is not a partial update.
-var notYetSwept = map[string]bool{
-
-	// The scanner covers Update*Input and Update*Request (ADR-056). These are
-	// unaudited, not verified safe — several (UpdateEntityRequest,
-	// UpdateEntityTypeRequest, UpdateSMTPRequest) look like good candidates
-	// for the next sweep.
-}
+// notYetSwept holds update inputs nobody has audited. Being on this list is a
+// statement about what was looked at, not a claim of safety, so it is empty
+// today and an entry needs a reason to skip the audit.
+var notYetSwept = map[string]bool{}
 
 type inputStruct struct {
 	qualified string // "sessions.UpdateSessionInput"

@@ -93,7 +93,7 @@ stored.Status  = input.Status.Val(stored.Status)   // NOT NULL column
 - A refused write drops to ABSENT, not null: denying a field is not authority to erase it.
 - For a broad surface (many optional fields), load-merge-write beats a wall of nil-guards.
 - Every governed endpoint is pinned in all three directions, documented where it's described (`API-CONTRACT.md` for the Foundry wire; the plugin's `.ai.md` for web routes).
-- `internal/patch/partial_update_contract_test.go` pins the precondition: every field of a contract-governed `Update*Input` must be `patch.Field[T]`, a pointer, a map, or a slice; the whole-tree inventory is frozen, so a new one must be classified out loud (named exceptions carry a reason).
+- `internal/patch/partial_update_contract_test.go` pins the precondition: every field of a contract-governed `Update*Input` must be `patch.Field[T]`, a pointer, a map, or a slice; the whole-tree inventory is frozen, so a new one must be classified out loud (named exceptions carry a reason). Three classes: `contractGoverned` (partial, presence-aware), `fullReplaceByDesign` (audited: a form that posts every field, or a one-field body — the reason must be a fact about the callers), and `notYetSwept` (not audited; empty today, so a new input should not land there).
 
 ## Create Endpoints — visibility comes from the campaign, not from a zero value
 
