@@ -14,6 +14,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
+	"github.com/keyxmakerx/chronicle/internal/notifyprefs"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
@@ -195,16 +196,18 @@ func (h *Handler) sendConfirmEmails(ctx context.Context, campaignID, campaignNam
 		asked[id] = true
 	}
 	link := fmt.Sprintf("%s/campaigns/%s/game-nights", h.baseURL, campaignID)
+	footPlain, footHTML := h.prefsFooter()
 	subject := fmt.Sprintf("Are your times still right? — %s", campaignName)
-	plain := fmt.Sprintf("%s asked everyone in %s to check the times they can play.\n\nOpen the calendar and press Who's free, then either confirm your times or change them:\n%s\n", asker, campaignName, link)
+	plain := fmt.Sprintf("%s asked everyone in %s to check the times they can play.\n\nOpen the calendar and press Who's free, then either confirm your times or change them:\n%s\n", asker, campaignName, link) + footPlain
 	htmlBody := fmt.Sprintf(`<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:system-ui,-apple-system,sans-serif;max-width:480px;margin:0 auto;padding:20px;color:#333">
 <h1 style="font-size:18px;margin:0 0 12px">Are your times still right?</h1>
 <p style="font-size:14px;line-height:1.5;margin:0 0 16px">%s asked everyone in <strong>%s</strong> to check the times they can play.</p>
 <p style="margin:0 0 20px"><a href="%s" style="display:inline-block;padding:10px 20px;background:#1f2937;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">Check my times</a></p>
 <p style="font-size:12px;color:#777;margin:0">In the calendar, press Who&rsquo;s free, then confirm your times or change them.</p>
-</body></html>`, html.EscapeString(asker), html.EscapeString(campaignName), link)
+%s
+</body></html>`, html.EscapeString(asker), html.EscapeString(campaignName), link, footHTML)
 	for _, m := range members {
-		if !asked[m.UserID] || m.Email == "" {
+		if !asked[m.UserID] || m.Email == "" || !h.emailWanted(ctx, m.UserID, notifyprefs.AvailabilityAsks) {
 			continue
 		}
 		if err := h.mailer.SendHTMLMail(ctx, []string{m.Email}, subject, plain, htmlBody); err != nil {

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/notifyprefs"
 	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/sanitize"
@@ -225,6 +226,34 @@ type sessionService struct {
 	repo             SessionRepository
 	entityChecker    EntityCampaignChecker
 	entityVisibility EntityVisibilityFilter
+	// recipients drops people who switched a kind of message off. Nil
+	// delivers to everyone, as in tests.
+	recipients RecipientFilter
+}
+
+// RecipientFilter narrows recipients to those whose notification choices
+// allow this category on this channel, keeping their order. Implemented by
+// the auth service.
+type RecipientFilter interface {
+	AllowedRecipients(ctx context.Context, ids []string, category string, ch notifyprefs.Channel) []string
+}
+
+// ConfigureRecipientFilter wires people's notification choices into the
+// bell writes after construction, as the app builds auth first.
+func ConfigureRecipientFilter(svc SessionService, f RecipientFilter) {
+	if s, ok := svc.(*sessionService); ok {
+		s.recipients = f
+	}
+}
+
+// bellRecipients returns the ids that want a bell entry of this type. A type
+// with no category on the account page always goes to everyone.
+func (s *sessionService) bellRecipients(ctx context.Context, ids []string, ntype string) []string {
+	cat := notifyprefs.CategoryForBellType(ntype)
+	if s.recipients == nil || cat == "" || len(ids) == 0 {
+		return ids
+	}
+	return s.recipients.AllowedRecipients(ctx, ids, cat, notifyprefs.Bell)
 }
 
 // NewSessionService creates a new session service. The EntityCampaignChecker

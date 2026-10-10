@@ -7,12 +7,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/notifyprefs"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"github.com/keyxmakerx/chronicle/internal/timeutil"
 )
 
 // AccountPage renders the full account settings page.
-templ AccountPage(user *User, csrfToken string, timezones []timeutil.Zone, prefs ViewPrefs) {
+templ AccountPage(user *User, csrfToken string, timezones []timeutil.Zone, prefs ViewPrefs, notify notifyprefs.Prefs) {
 	@layouts.App("Account Settings") {
 		<div class="max-w-2xl mx-auto">
 			<div class="mb-6">
@@ -172,7 +173,7 @@ templ AccountPage(user *User, csrfToken string, timezones []timeutil.Zone, prefs
 				</p>
 			</div>
 			<!-- Timezone Setting -->
-			<div class="card p-6" x-data={ timezoneData(user) }>
+			<div class="card p-6 mb-6" x-data={ timezoneData(user) }>
 				<h2 class="text-lg font-semibold text-fg mb-1">Timezone</h2>
 				<p class="text-sm text-fg-secondary mb-4">
 					Used by real-life calendars to display dates and times in your local timezone.
@@ -209,8 +210,132 @@ templ AccountPage(user *User, csrfToken string, timezones []timeutil.Zone, prefs
 					</button>
 				</div>
 			</div>
+			@notifyPrefsCard(notify)
 		</div>
 	}
+}
+
+// notifyPrefsCard is the Notifications section: one row per kind of message,
+// a switch per way it can arrive, and a dash where Chronicle never sends it
+// that way. Each switch saves on its own.
+templ notifyPrefsCard(notify notifyprefs.Prefs) {
+	<div class="card p-6" x-data={ notifyPrefsData(notify) } id="notifications">
+		<h2 class="text-lg font-semibold text-fg mb-1">Notifications</h2>
+		<p class="text-sm text-fg-secondary mb-4">Choose what reaches you and how. The bell is the list at the top of every page. A dash means Chronicle doesn't send that one that way.</p>
+		<div class="overflow-x-auto">
+			<table class="w-full text-sm">
+				<thead>
+					<tr class="text-xs uppercase tracking-wide text-fg-muted">
+						<th class="text-left font-semibold py-1.5">When</th>
+						<th class="font-semibold py-1.5 w-16">Bell</th>
+						<th class="font-semibold py-1.5 w-16">Email</th>
+					</tr>
+				</thead>
+				<tbody>
+					for i, c := range notifyprefs.Catalog {
+						if i == 0 || notifyprefs.Catalog[i-1].Group != c.Group {
+							<tr><td colspan="3" class="pt-4 pb-1 font-semibold text-fg">{ c.Group }</td></tr>
+						}
+						<tr class="border-t border-edge">
+							<td class="py-2 pr-2 align-top">
+								<span class="text-fg-body">{ c.Label }</span>
+								if c.Detail != "" {
+									<span class="block text-xs text-fg-muted">{ c.Detail }</span>
+								}
+							</td>
+							@notifySwitchCell(c, notifyprefs.Bell)
+							@notifySwitchCell(c, notifyprefs.Email)
+						</tr>
+					}
+					<tr><td colspan="3" class="pt-4 pb-1 font-semibold text-fg">Always sent</td></tr>
+					<tr class="border-t border-edge">
+						<td class="py-2 pr-2 align-top">
+							<span class="text-fg-body">Password resets, email changes, campaign invitations and hand-overs</span>
+							<span class="block text-xs text-fg-muted">These keep your account safe, so they can't be switched off</span>
+						</td>
+						<td class="py-2 text-center"><i class="fa-solid fa-lock text-fg-muted" aria-label="Always on"></i></td>
+						<td class="py-2 text-center"><i class="fa-solid fa-lock text-fg-muted" aria-label="Always on"></i></td>
+					</tr>
+				</tbody>
+			</table>
+		</div>
+		<div class="flex items-start gap-3 mt-4 pt-4 border-t border-edge">
+			<button
+				type="button"
+				class="toggle shrink-0 mt-0.5"
+				role="switch"
+				aria-labelledby="notify-pause-label"
+				x-bind:aria-checked="p.pauseEmail.toString()"
+				@click="pause(!p.pauseEmail)"
+			><span class="toggle-knob"></span></button>
+			<div>
+				<p class="text-sm font-medium text-fg" id="notify-pause-label">Pause all email</p>
+				<p class="text-xs text-fg-muted">Bell entries still arrive, and your choices above come back when you switch this off.</p>
+			</div>
+		</div>
+		<p class="text-xs mt-4 min-h-4" aria-live="polite">
+			<span x-show="status === 'saved'" class="text-fg-muted">Saved to your account</span>
+			<span x-show="status === 'saving'" class="text-fg-muted">Saving...</span>
+			<span x-show="status === 'error'" class="text-red-500" x-text="error"></span>
+		</p>
+	</div>
+}
+
+// notifySwitchCell draws one switch, or a dash when the category never
+// sends on that channel. Email switches dim while email is paused.
+templ notifySwitchCell(c notifyprefs.Category, ch notifyprefs.Channel) {
+	<td class="py-2 text-center align-top">
+		if c.Has(ch) {
+			<button
+				type="button"
+				class="toggle"
+				role="switch"
+				aria-label={ fmt.Sprintf("%s: %s", notifyChannelName(ch), c.Label) }
+				x-bind:aria-checked={ fmt.Sprintf("p.choices[%q][%q].toString()", c.Key, ch) }
+				if ch == notifyprefs.Email {
+					x-bind:class="p.pauseEmail ? 'opacity-50' : ''"
+				}
+				@click={ fmt.Sprintf("set(%q, %q)", c.Key, ch) }
+			><span class="toggle-knob"></span></button>
+		} else {
+			<span class="text-fg-muted" title={ fmt.Sprintf("Chronicle doesn't send this one by %s", notifyChannelName(ch)) }>—</span>
+		}
+	</td>
+}
+
+func notifyChannelName(ch notifyprefs.Channel) string {
+	if ch == notifyprefs.Email {
+		return "email"
+	}
+	return "bell"
+}
+
+// notifyPrefsData returns the Alpine state for the Notifications section.
+// A failed save puts the switch back, so the page never shows a choice the
+// account doesn't hold.
+func notifyPrefsData(p notifyprefs.Prefs) string {
+	cur, _ := json.Marshal(p)
+	return fmt.Sprintf(`{
+		p: %s,
+		status: '',
+		error: '',
+		send(body, undo) {
+			this.status = 'saving'; this.error = '';
+			Chronicle.apiFetch('/account/notifications', { method: 'PUT', body: body })
+			.then(r => { if (!r.ok) throw new Error('Could not save that choice'); this.status = 'saved'; })
+			.catch(e => { undo(); this.status = 'error'; this.error = e.message; });
+		},
+		set(key, ch) {
+			var next = !this.p.choices[key][ch];
+			this.p.choices[key][ch] = next;
+			var body = { choices: {} }; body.choices[key] = {}; body.choices[key][ch] = next;
+			this.send(body, () => { this.p.choices[key][ch] = !next; });
+		},
+		pause(v) {
+			this.p.pauseEmail = v;
+			this.send({ pauseEmail: v }, () => { this.p.pauseEmail = !v; });
+		}
+	}`, cur)
 }
 
 // avatarData returns the Alpine.js x-data JSON for the avatar uploader.

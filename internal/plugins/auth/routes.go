@@ -34,6 +34,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler) {
 	e.GET("/account", h.AccountPage, RequireAuth(h.service))
 	e.PUT("/account/timezone", h.UpdateTimezoneAPI, RequireAuth(h.service))
 	e.PUT("/account/view-prefs", h.UpdateViewPrefsAPI, RequireAuth(h.service))
+	e.PUT("/account/notifications", h.UpdateNotifyPrefsAPI, RequireAuth(h.service))
 	// Checking a password is a deliberately expensive hash, so every route
 	// that checks one is throttled like login.
 	e.PUT("/account/password", h.ChangePasswordAPI, RequireAuth(h.service), middleware.RateLimit(10, time.Minute))

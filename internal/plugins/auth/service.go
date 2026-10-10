@@ -17,6 +17,7 @@ import (
 	"golang.org/x/crypto/argon2"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/notifyprefs"
 )
 
 // sessionKeyPrefix is the Redis key prefix for session data.
@@ -107,6 +108,9 @@ type AuthService interface {
 	UpdateTimezone(ctx context.Context, userID, timezone string) error
 	GetViewPrefs(ctx context.Context, userID string) (ViewPrefs, error)
 	UpdateViewPrefs(ctx context.Context, userID string, input UpdateViewPrefsInput) (ViewPrefs, error)
+	GetNotifyPrefs(ctx context.Context, userID string) (notifyprefs.Prefs, error)
+	UpdateNotifyPrefs(ctx context.Context, userID string, in notifyprefs.Update) (notifyprefs.Prefs, error)
+	AllowedRecipients(ctx context.Context, ids []string, category string, ch notifyprefs.Channel) []string
 	UpdateDisplayName(ctx context.Context, userID, displayName string) error
 	UpdateAvatarPath(ctx context.Context, userID string, avatarPath *string) error
 	ChangePassword(ctx context.Context, userID, currentPassword, newPassword string) error

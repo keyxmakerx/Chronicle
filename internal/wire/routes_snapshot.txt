@@ -760,6 +760,7 @@ PUT	/:id/retention	internal/plugins/packages/routes.go
 PUT	/:id/version	internal/plugins/packages/routes.go
 PUT	/account/display-name	internal/plugins/auth/routes.go
 PUT	/account/email	internal/plugins/auth/routes.go
+PUT	/account/notifications	internal/plugins/auth/routes.go
 PUT	/account/password	internal/plugins/auth/routes.go
 PUT	/account/timezone	internal/plugins/auth/routes.go
 PUT	/account/view-prefs	internal/plugins/auth/routes.go
