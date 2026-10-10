@@ -23,7 +23,7 @@ type Limits struct {
 	MaxTotalBytes  int64 // all files, uncompressed
 	MaxFileBytes   int64 // one picture or file, uncompressed
 	MaxNoteBytes   int64 // one Markdown note, uncompressed
-	MaxRatio       int64 // uncompressed / compressed, for entries over ratioFloor
+	MaxRatio       int64 // uncompressed / compressed, for each entry over entryRatioFloor and for the archive as a whole
 	MaxDepth       int   // folders deep
 	MaxPathBytes   int
 }
@@ -42,9 +42,13 @@ var DefaultLimits = Limits{
 	MaxPathBytes:   1024,
 }
 
-// ratioFloor is the size under which a high compression ratio proves nothing:
+// ratioFloor is the archive size under which the whole-archive ratio proves nothing:
 // a few kilobytes of repeated text legitimately shrinks 1000:1.
 const ratioFloor = 1 << 20
+
+// entryRatioFloor is the size under which one entry's ratio is not checked: a
+// few kilobytes of a repeated table row really do shrink a hundredfold.
+const entryRatioFloor = 16 << 10
 
 // ArchiveError is a refusal whose text is safe and useful to show the owner.
 // Anything else the archive code returns is an internal problem.
@@ -207,7 +211,7 @@ func admit(rc *zip.ReadCloser, fallbackName string, lim Limits) (*Archive, error
 
 	seenExact := make(map[string]bool, len(rc.File))
 	seenFold := make(map[string]string, len(rc.File))
-	var total uint64
+	var total, totalComp uint64
 	var files []Entry
 
 	for _, f := range rc.File {
@@ -238,7 +242,8 @@ func admit(rc *zip.ReadCloser, fallbackName string, lim Limits) (*Archive, error
 		if total > uint64(lim.MaxTotalBytes) {
 			return nil, refuse("This zip unpacks to more than %d MB, which is over the limit. Import a smaller part of the vault.", lim.MaxTotalBytes>>20)
 		}
-		if f.UncompressedSize64 > ratioFloor {
+		totalComp += f.CompressedSize64
+		if f.UncompressedSize64 > entryRatioFloor {
 			if f.CompressedSize64 == 0 || int64(f.UncompressedSize64/f.CompressedSize64) > lim.MaxRatio {
 				return nil, refuse("This zip is compressed far more than real notes and pictures are, so it was refused for safety.")
 			}
@@ -254,6 +259,12 @@ func admit(rc *zip.ReadCloser, fallbackName string, lim Limits) (*Archive, error
 		}
 		files = append(files, Entry{Path: name, raw: name, Size: int64(f.UncompressedSize64)})
 		a.byRaw[name] = f
+	}
+
+	// The whole archive is held to the same ratio, so many mid-sized entries
+	// cannot add up to a bomb that no single entry shows.
+	if total > ratioFloor && (totalComp == 0 || int64(total/totalComp) > lim.MaxRatio) {
+		return nil, refuse("This zip is compressed far more than real notes and pictures are, so it was refused for safety.")
 	}
 
 	root := commonRoot(files)

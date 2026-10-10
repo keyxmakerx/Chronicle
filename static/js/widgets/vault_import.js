@@ -140,6 +140,10 @@
         },
         reset: function () {
           drop.classList.remove('is-busy');
+          // Hide the bar and forget the file, so the same zip can be chosen
+          // again (a change event does not fire for an unchanged selection).
+          if (upload) upload.hidden = true;
+          try { input.value = ''; } catch (e) { /* older browsers */ }
           if (title) title.textContent = originalTitle;
           if (sub) sub.innerHTML = originalSub;
         },

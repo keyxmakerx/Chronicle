@@ -24,6 +24,13 @@ const uploadTTL = 30 * time.Minute
 // each holds a zip open and writes many rows.
 const maxConcurrentImports = 2
 
+// maxConcurrentPreviews bounds how many zips are being read for a preview at
+// once across the server; reading is CPU work done inside the request.
+const maxConcurrentPreviews = 2
+
+// previewBudget is how long one preview may spend reading a vault.
+const previewBudget = 60 * time.Second
+
 // jobKeep is how long a finished import's result stays readable.
 const jobKeep = 24 * time.Hour
 
@@ -52,6 +59,8 @@ type Service struct {
 	jobs    map[string]*Job
 	active  map[string]string // campaign -> running job id
 	running int
+	// previewing counts previews in progress, for the server-wide cap.
+	previewing int
 }
 
 type upload struct {
@@ -117,13 +126,29 @@ func (s *Service) SaveUpload(r io.Reader) (string, error) {
 
 // Preview checks and reads the zip at zipPath and reports what an import would
 // do. Nothing is written to the campaign. On any error the file is removed.
-func (s *Service) Preview(campaignID, userID, zipPath, fileName string) (*Preview, error) {
+func (s *Service) Preview(ctx context.Context, campaignID, userID, zipPath, fileName string) (*Preview, error) {
 	keep := false
 	defer func() {
 		if !keep {
 			_ = os.Remove(zipPath)
 		}
 	}()
+	s.mu.Lock()
+	if s.previewing >= maxConcurrentPreviews {
+		s.mu.Unlock()
+		return nil, apperror.NewConflict("The server is busy reading other imports. Try again in a minute.")
+	}
+	s.previewing++
+	s.mu.Unlock()
+	defer func() {
+		s.mu.Lock()
+		s.previewing--
+		s.mu.Unlock()
+	}()
+	// The budget also ends when the browser goes away, so an abandoned upload
+	// stops costing CPU.
+	ctx, cancel := context.WithTimeout(ctx, previewBudget)
+	defer cancel()
 	arc, err := OpenArchive(zipPath, fileName, s.d.Limits)
 	if err != nil {
 		return nil, s.asBadRequest(err)
@@ -133,7 +158,10 @@ func (s *Service) Preview(campaignID, userID, zipPath, fileName string) (*Previe
 	if s.d.Files != nil {
 		attachable = s.d.Files.CanAttach
 	}
-	v, err := Analyze(arc, attachable)
+	v, err := Analyze(ctx, arc, attachable)
+	if err != nil && IsArchiveError(err) {
+		return nil, s.asBadRequest(err)
+	}
 	if err != nil {
 		slog.Warn("vault import: analysing the zip failed", slog.String("campaign_id", campaignID), slog.Any("error", err))
 		return nil, apperror.NewBadRequest("Some notes in that zip could not be read. Check the zip and try again.")

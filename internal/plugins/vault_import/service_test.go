@@ -154,7 +154,7 @@ func newRig(t *testing.T, ctx context.Context) *rig {
 // importZip previews and runs an import to the end and returns the final view.
 func (r *rig) importZip(t *testing.T, zipPath string) JobView {
 	t.Helper()
-	p, err := r.svc.Preview("camp", "owner", zipPath, "Vault.zip")
+	p, err := r.svc.Preview(context.Background(), "camp", "owner", zipPath, "Vault.zip")
 	if err != nil {
 		t.Fatalf("preview: %v", err)
 	}
@@ -336,7 +336,7 @@ func TestImport_FailuresSayWhatWasWritten(t *testing.T) {
 
 func TestStart_Guards(t *testing.T) {
 	r := newRig(t, context.Background())
-	p, err := r.svc.Preview("camp", "owner", writeZip(t, zent{name: "a.md", data: "x"}), "v.zip")
+	p, err := r.svc.Preview(context.Background(), "camp", "owner", writeZip(t, zent{name: "a.md", data: "x"}), "v.zip")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -356,10 +356,10 @@ func TestStart_Guards(t *testing.T) {
 
 func TestPreview_RefusesWhatIsNotAVault(t *testing.T) {
 	r := newRig(t, context.Background())
-	if _, err := r.svc.Preview("camp", "owner", writeZip(t, zent{name: "pic.png", data: "x"}), "v.zip"); err == nil || !strings.Contains(err.Error(), "no Markdown notes") {
+	if _, err := r.svc.Preview(context.Background(), "camp", "owner", writeZip(t, zent{name: "pic.png", data: "x"}), "v.zip"); err == nil || !strings.Contains(err.Error(), "no Markdown notes") {
 		t.Errorf("err = %v, want the no-notes message", err)
 	}
-	if _, err := r.svc.Preview("camp", "owner", writeZip(t, zent{name: "../x.md", data: "x"}), "v.zip"); err == nil {
+	if _, err := r.svc.Preview(context.Background(), "camp", "owner", writeZip(t, zent{name: "../x.md", data: "x"}), "v.zip"); err == nil {
 		t.Error("a traversal zip was previewed")
 	}
 	if len(r.pages.pages) != 0 {
@@ -369,7 +369,7 @@ func TestPreview_RefusesWhatIsNotAVault(t *testing.T) {
 
 func TestPreview_ReportsWhatWillHappen(t *testing.T) {
 	r := newRig(t, context.Background())
-	p, err := r.svc.Preview("camp", "owner", fixtureZip(t), "Vault.zip")
+	p, err := r.svc.Preview(context.Background(), "camp", "owner", fixtureZip(t), "Vault.zip")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -385,5 +385,29 @@ func TestPreview_ReportsWhatWillHappen(t *testing.T) {
 	}
 	if len(r.pages.pages) != 0 || len(r.pictures.stored) != 0 {
 		t.Error("the preview wrote something")
+	}
+}
+
+func TestPreview_StopsWhenTheRequestIsGone(t *testing.T) {
+	r := newRig(t, context.Background())
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := r.svc.Preview(ctx, "camp", "owner", fixtureZip(t), "Vault.zip")
+	if err == nil || !strings.Contains(err.Error(), "too long") {
+		t.Fatalf("err = %v, want the plain-language time-out message", err)
+	}
+}
+
+func TestPreview_CapsConcurrentReads(t *testing.T) {
+	r := newRig(t, context.Background())
+	r.svc.mu.Lock()
+	r.svc.previewing = maxConcurrentPreviews
+	r.svc.mu.Unlock()
+	_, err := r.svc.Preview(context.Background(), "camp", "owner", fixtureZip(t), "Vault.zip")
+	if err == nil || !strings.Contains(err.Error(), "busy") {
+		t.Fatalf("err = %v, want a busy message", err)
+	}
+	if apperror.SafeCode(err) != 409 {
+		t.Errorf("status = %d, want 409", apperror.SafeCode(err))
 	}
 }

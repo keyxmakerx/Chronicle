@@ -27,6 +27,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/observability"
 	"github.com/keyxmakerx/chronicle/internal/plugins/packages"
 	"github.com/keyxmakerx/chronicle/internal/plugins/settings"
+	"github.com/keyxmakerx/chronicle/internal/plugins/vault_import"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"github.com/keyxmakerx/chronicle/internal/templates/pages"
 )
@@ -172,6 +173,15 @@ func (a *App) setupMiddleware() {
 		Skipper: func(c echo.Context) bool { return c.Request().URL.Path != siteLookPath },
 	}))
 
+	// Manage > Import's zip upload is exempt from the 2 MB limit above but gets
+	// its own cap here, for the same reason as the Site look form: the CSRF
+	// check below parses the multipart body before authentication, so an
+	// unauthenticated client could otherwise make the server spool any size.
+	a.Echo.Use(echomw.BodyLimitWithConfig(echomw.BodyLimitConfig{
+		Limit:   vaultImportBodyLimit(),
+		Skipper: func(c echo.Context) bool { return !isVaultImportUploadPath(c.Request().URL.Path) },
+	}))
+
 	// Request logging -- log every request with method, path, status, latency.
 	a.Echo.Use(middleware.RequestLogger())
 
@@ -219,6 +229,12 @@ var calendarImportPathPattern = regexp.MustCompile(
 // caps the body itself (a vault is far larger than the global 2MB limit), so
 // the global limit must not apply here.
 var vaultImportUploadPattern = regexp.MustCompile(`^/campaigns/[^/]+/import/markdown/preview$`)
+
+// vaultImportBodyLimit is the upload route's size cap in Echo's unit syntax,
+// rounded up to a whole KiB.
+func vaultImportBodyLimit() string {
+	return fmt.Sprintf("%dK", (vault_import.RequestLimit(vault_import.DefaultLimits)+1023)/1024)
+}
 
 // isVaultImportUploadPath reports whether path is that upload route.
 func isVaultImportUploadPath(path string) bool {

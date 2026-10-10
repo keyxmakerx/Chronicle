@@ -74,7 +74,7 @@ func TestVaultImport_DBImportsATreeGMOnly_Integration(t *testing.T) {
 	})
 
 	run := func() vault_import.JobView {
-		p, err := svc.Preview(camp.ID, owner, vaultFixtureZip(t, roundTripPNG(t, 33)), "Vault.zip")
+		p, err := svc.Preview(ctx, camp.ID, owner, vaultFixtureZip(t, roundTripPNG(t, 33)), "Vault.zip")
 		if err != nil {
 			t.Fatalf("preview: %v", err)
 		}

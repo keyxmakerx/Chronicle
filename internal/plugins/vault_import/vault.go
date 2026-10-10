@@ -1,6 +1,7 @@
 package vault_import
 
 import (
+	"context"
 	"path"
 	"regexp"
 	"sort"
@@ -94,12 +95,41 @@ type Vault struct {
 	Pages []Page
 	Stats Stats
 
-	noteByPath  map[string]int   // folded path (with and without Notion ids) -> note
-	noteByStem  map[string][]int // folded stem -> notes
-	fileByPath  map[string]int
-	fileByName  map[string][]int
-	folderNoteD map[int]string // note index -> folder it stands for
-	notePage    map[int]int    // note index -> index in Pages
+	noteByPath map[string]int   // folded path (with and without Notion ids) -> note
+	noteByStem map[string][]int // folded stem -> notes
+	fileByPath map[string]int
+	fileByName map[string][]int
+	// noteBySuffix / fileBySuffix list the items whose folded path ends, at a
+	// folder boundary, with the key ("b/c" for "a/b/c"). A link written with
+	// folders finds its candidates here in one lookup instead of walking every
+	// path in the vault.
+	noteBySuffix map[string][]int
+	fileBySuffix map[string][]int
+	folderNoteD  map[int]string // note index -> folder it stands for
+	notePage     map[int]int    // note index -> index in Pages
+	// resolved memoises Resolve: the answer depends only on the linking
+	// note's folder, the reference kind and the written target.
+	resolved map[resolveKey]Target
+}
+
+type resolveKey struct {
+	dir, target string
+	wiki        bool
+}
+
+// addSuffixes records idx under key and under every shorter tail of it that
+// starts after a "/".
+func addSuffixes(m map[string][]int, key string, idx int) {
+	for k := key; ; {
+		if l := m[k]; len(l) == 0 || l[len(l)-1] != idx {
+			m[k] = append(l, idx)
+		}
+		i := strings.IndexByte(k, '/')
+		if i < 0 {
+			return
+		}
+		k = k[i+1:]
+	}
 }
 
 // Stats is everything the preview reports.
@@ -129,6 +159,10 @@ type Stats struct {
 	Ignored        int
 }
 
+// maxRefsTotal bounds the links and pictures read across a whole vault; real
+// vaults hold a few per note.
+const maxRefsTotal = 1_000_000
+
 // AttachCheck reports whether a file of this name can be attached to a page.
 // The pages service decides; this package only asks.
 type AttachCheck func(name string) bool
@@ -136,7 +170,7 @@ type AttachCheck func(name string) bool
 // Analyze reads every note once and works out the page tree, the links and the
 // attachments, without writing anything. attachable is asked about each file
 // that a note refers to but that cannot sit inside text.
-func Analyze(a *Archive, attachable AttachCheck) (*Vault, error) {
+func Analyze(ctx context.Context, a *Archive, attachable AttachCheck) (*Vault, error) {
 	v := &Vault{
 		Name:        a.Name,
 		noteByPath:  map[string]int{},
@@ -144,6 +178,10 @@ func Analyze(a *Archive, attachable AttachCheck) (*Vault, error) {
 		fileByPath:  map[string]int{},
 		fileByName:  map[string][]int{},
 		folderNoteD: map[int]string{},
+
+		noteBySuffix: map[string][]int{},
+		fileBySuffix: map[string][]int{},
+		resolved:     map[resolveKey]Target{},
 	}
 	v.Stats.Ignored = a.Ignored
 	v.Stats.CaseClashes = len(a.CaseClashes)
@@ -160,10 +198,11 @@ func Analyze(a *Archive, attachable AttachCheck) (*Vault, error) {
 			for _, k := range pathKeys(e.Path) {
 				if _, taken := v.noteByPath[k]; !taken {
 					v.noteByPath[k] = idx
+					addSuffixes(v.noteBySuffix, k, idx)
 				}
 			}
 			for _, k := range stemKeys(e.Path) {
-				if !containsInt(v.noteByStem[k], idx) {
+				if l := v.noteByStem[k]; len(l) == 0 || l[len(l)-1] != idx {
 					v.noteByStem[k] = append(v.noteByStem[k], idx)
 				}
 			}
@@ -171,7 +210,9 @@ func Analyze(a *Archive, attachable AttachCheck) (*Vault, error) {
 		}
 		idx := len(v.Files)
 		v.Files = append(v.Files, e)
-		v.fileByPath[foldKey(e.Path)] = idx
+		fk := foldKey(e.Path)
+		v.fileByPath[fk] = idx
+		addSuffixes(v.fileBySuffix, fk, idx)
 		k := foldKey(path.Base(e.Path))
 		v.fileByName[k] = append(v.fileByName[k], idx)
 	}
@@ -186,7 +227,13 @@ func Analyze(a *Archive, attachable AttachCheck) (*Vault, error) {
 	attachPairs := map[[2]int]bool{}
 	seenUnresolved := map[string]bool{}
 
+	refsSeen := 0
 	for i, n := range v.Notes {
+		// The zip is attacker input: stop when the caller is gone or the
+		// time budget set by the service runs out.
+		if err := ctx.Err(); err != nil {
+			return nil, refuse("Reading this vault is taking too long, so it was stopped. Import a smaller part of it.")
+		}
 		raw, err := a.Read(n.Entry, a.limits.MaxNoteBytes)
 		if err != nil {
 			return nil, err
@@ -212,7 +259,14 @@ func Analyze(a *Archive, attachable AttachCheck) (*Vault, error) {
 		}
 
 		body = Prepare(body)
-		for _, r := range ScanRefs(body) {
+		found := ScanRefs(body)
+		if refsSeen += len(found); refsSeen > maxRefsTotal {
+			return nil, refuse("This vault holds more than %d links and pictures in its notes, which is over the limit. Import a smaller part of it.", maxRefsTotal)
+		}
+		for ri, r := range found {
+			if ri%1024 == 1023 && ctx.Err() != nil {
+				return nil, refuse("Reading this vault is taking too long, so it was stopped. Import a smaller part of it.")
+			}
 			if r.Remote {
 				continue
 			}
@@ -286,15 +340,6 @@ func Analyze(a *Archive, attachable AttachCheck) (*Vault, error) {
 	return v, nil
 }
 
-func containsInt(xs []int, x int) bool {
-	for _, y := range xs {
-		if y == x {
-			return true
-		}
-	}
-	return false
-}
-
 func isImageRef(r Ref) bool {
 	return (r.Kind == RefEmbed || r.Kind == RefImage) && IsPictureName(r.Target)
 }
@@ -365,6 +410,19 @@ func stemKeys(p string) []string {
 // name with folders matches the end of a path, and when several notes share a
 // name the one in the same folder, then the shallowest, wins.
 func (v *Vault) Resolve(src int, r Ref) Target {
+	if r.Remote || r.Target == "" {
+		return v.resolve(src, r)
+	}
+	key := resolveKey{dir: v.Notes[src].Dir, target: r.Target, wiki: r.Kind == RefWiki || r.Kind == RefEmbed}
+	if t, ok := v.resolved[key]; ok {
+		return t
+	}
+	t := v.resolve(src, r)
+	v.resolved[key] = t
+	return t
+}
+
+func (v *Vault) resolve(src int, r Ref) Target {
 	if r.Remote {
 		return Target{Kind: TargetNone}
 	}
@@ -433,12 +491,7 @@ func (v *Vault) lookupByName(src *Note, name string) (int, bool) {
 	key := foldKey(name)
 	var cands []int
 	if strings.Contains(name, "/") {
-		for k, i := range v.noteByPath {
-			if k == key || strings.HasSuffix(k, "/"+key) {
-				cands = append(cands, i)
-			}
-		}
-		cands = uniqueInts(cands)
+		cands = v.noteBySuffix[key]
 	} else {
 		cands = v.noteByStem[key]
 	}
@@ -453,12 +506,7 @@ func (v *Vault) lookupFile(src *Note, name string) (int, bool) {
 	key := foldKey(name)
 	var cands []int
 	if strings.Contains(name, "/") {
-		for k, j := range v.fileByPath {
-			if k == key || strings.HasSuffix(k, "/"+key) {
-				cands = append(cands, j)
-			}
-		}
-		cands = uniqueInts(cands)
+		cands = v.fileBySuffix[key]
 	} else {
 		cands = v.fileByName[key]
 	}
@@ -472,17 +520,6 @@ func (v *Vault) lookupFile(src *Note, name string) (int, bool) {
 		}
 	}
 	return best, true
-}
-
-func uniqueInts(xs []int) []int {
-	sort.Ints(xs)
-	out := xs[:0]
-	for i, x := range xs {
-		if i == 0 || x != xs[i-1] {
-			out = append(out, x)
-		}
-	}
-	return out
 }
 
 func (v *Vault) pick(src *Note, cands []int) (int, bool) {
@@ -524,6 +561,14 @@ func (v *Vault) buildTree() {
 			dirs[d] = true
 		}
 	}
+	// Notes by folder and their folded stems, so each folder's candidates are
+	// found without walking every note in the vault.
+	inDir := map[string][]int{}
+	stemFold := make([]string, len(v.Notes))
+	for i, n := range v.Notes {
+		inDir[n.Dir] = append(inDir[n.Dir], i)
+		stemFold[i] = foldKey(n.Stem)
+	}
 	folderNote := map[string]int{}
 	claimed := map[int]bool{}
 	dirList := make([]string, 0, len(dirs))
@@ -537,11 +582,9 @@ func (v *Vault) buildTree() {
 			{dirOf(d), base}, {d, base}, {d, "index"},
 		} {
 			found := -1
-			for i, n := range v.Notes {
-				if claimed[i] || n.Dir != cand.dir {
-					continue
-				}
-				if foldKey(n.Stem) == foldKey(cand.stem) {
+			want := foldKey(cand.stem)
+			for _, i := range inDir[cand.dir] {
+				if !claimed[i] && stemFold[i] == want {
 					found = i
 					break
 				}

@@ -1,6 +1,7 @@
 package vault_import
 
 import (
+	"context"
 	"strings"
 	"testing"
 )
@@ -18,7 +19,7 @@ func analyze(t *testing.T, files map[string]string) *Vault {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = a.Close() })
-	v, err := Analyze(a, func(name string) bool { return strings.HasSuffix(name, ".pdf") })
+	v, err := Analyze(context.Background(), a, func(name string) bool { return strings.HasSuffix(name, ".pdf") })
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -26,6 +26,12 @@ func NewHandler(svc *Service) *Handler { return &Handler{svc: svc} }
 // the zip itself.
 const maxFormOverhead = 1 << 20
 
+// RequestLimit is the largest request body the upload route accepts: the zip
+// plus the multipart framing. The app applies it as a global middleware, ahead
+// of the CSRF check, because that check parses the form (and so spools the
+// body to disk) before the route's own limit could run.
+func RequestLimit(l Limits) int64 { return l.MaxUploadBytes + maxFormOverhead }
+
 // Page renders Manage > Import, resuming the progress bar if an import for this
 // campaign is still running.
 func (h *Handler) Page(c echo.Context) error {
@@ -81,7 +87,7 @@ func (h *Handler) Preview(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	p, err := h.svc.Preview(cc.Campaign.ID, userID, zipPath, cleanUploadName(fh.Filename))
+	p, err := h.svc.Preview(c.Request().Context(), cc.Campaign.ID, userID, zipPath, cleanUploadName(fh.Filename))
 	if err != nil {
 		return err
 	}

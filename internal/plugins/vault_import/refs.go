@@ -87,6 +87,9 @@ func codeFreeSpans(body string, s, e int) []proseSpan {
 	var out []proseSpan
 	start := s
 	i := s
+	// A run length with no partner later on the line has none further on
+	// either; remembering that keeps a line of ever-longer runs linear.
+	var unmatched map[int]bool
 	for i < e {
 		if body[i] != '`' {
 			i++
@@ -96,8 +99,15 @@ func codeFreeSpans(body string, s, e int) []proseSpan {
 		for j < e && body[j] == '`' {
 			j++
 		}
-		closeAt := matchingRun(body, j, e, j-i)
+		closeAt := -1
+		if !unmatched[j-i] {
+			closeAt = matchingRun(body, j, e, j-i)
+		}
 		if closeAt < 0 {
+			if unmatched == nil {
+				unmatched = map[int]bool{}
+			}
+			unmatched[j-i] = true
 			i = j
 			continue
 		}
@@ -134,15 +144,78 @@ func matchingRun(body string, from, e, n int) int {
 }
 
 // ScanRefs returns every reference in body outside code, in order.
+//
+// Every step is linear in the length of body: a hostile note made of brackets
+// must cost no more than a real one. Bracket partners and the next "]]" are
+// found once per line in a single pass and looked up in O(1) afterwards.
 func ScanRefs(body string) []Ref {
 	var refs []Ref
+	var sc scratch
 	for _, sp := range proseSpans(body) {
-		scanSpan(body, sp.s, sp.e, &refs)
+		scanSpan(body, sp.s, sp.e, &refs, &sc)
 	}
 	return refs
 }
 
-func scanSpan(body string, s, e int, refs *[]Ref) {
+// maxDestLook bounds how far past a link's "]" the destination and title are
+// read, so a stream of "[a](<" cannot make every bracket rescan the line.
+const maxDestLook = 1024
+
+// maxLinkText is the longest link label read as a link.
+const maxLinkText = 4096
+
+// scratch holds the per-line lookup tables, reused across lines.
+type scratch struct {
+	match   []int32 // for a "[" at offset i: offset of its "]", or -1
+	nextEnd []int32 // offset of the first "]" at or after i, or -1
+	nextBeg []int32 // offset of the first "[" at or after i, or -1
+	stack   []int32
+}
+
+func grow(b []int32, n int) []int32 {
+	if cap(b) < n {
+		return make([]int32, n)
+	}
+	return b[:n]
+}
+
+// index fills the tables for body[s:e].
+func (sc *scratch) index(body string, s, e int) {
+	n := e - s
+	sc.match = grow(sc.match, n+1)
+	sc.nextEnd = grow(sc.nextEnd, n+1)
+	sc.nextBeg = grow(sc.nextBeg, n+1)
+	sc.stack = sc.stack[:0]
+	for i := range sc.match {
+		sc.match[i] = -1
+	}
+	for i := 0; i < n; i++ {
+		switch body[s+i] {
+		case '\\':
+			i++
+		case '[':
+			sc.stack = append(sc.stack, int32(i))
+		case ']':
+			if k := len(sc.stack); k > 0 {
+				sc.match[sc.stack[k-1]] = int32(i)
+				sc.stack = sc.stack[:k-1]
+			}
+		}
+	}
+	sc.nextEnd[n], sc.nextBeg[n] = -1, -1
+	for i := n - 1; i >= 0; i-- {
+		sc.nextEnd[i], sc.nextBeg[i] = sc.nextEnd[i+1], sc.nextBeg[i+1]
+		switch body[s+i] {
+		case ']':
+			sc.nextEnd[i] = int32(i)
+		case '[':
+			sc.nextBeg[i] = int32(i)
+		}
+	}
+}
+
+func scanSpan(body string, s, e int, refs *[]Ref, sc *scratch) {
+	sc.index(body, s, e)
 	i := s
 	for i < e {
 		c := body[i]
@@ -160,11 +233,14 @@ func scanSpan(body string, s, e int, refs *[]Ref) {
 			if embed {
 				open = i + 3
 			}
-			if rel := strings.Index(body[open:e], "]]"); rel >= 0 {
-				inner := body[open : open+rel]
-				if !strings.ContainsAny(inner, "[]") {
-					r := parseWiki(inner, embed)
-					r.Start, r.End = i, open+rel+2
+			// The inner text must hold no bracket: the first "]" after the
+			// opening must start the closing "]]", with no "[" before it.
+			if open <= e {
+				end := int(sc.nextEnd[open-s])
+				beg := int(sc.nextBeg[open-s])
+				if end >= 0 && end+1 < e-s && body[s+end+1] == ']' && (beg < 0 || beg > end) {
+					r := parseWiki(body[open:s+end], embed)
+					r.Start, r.End = i, s+end+2
 					// [[]] names nothing; leave it as the text it is.
 					if r.Target != "" || r.Fragment != "" {
 						*refs = append(*refs, r)
@@ -185,10 +261,12 @@ func scanSpan(body string, s, e int, refs *[]Ref) {
 			}
 			br = i + 1
 		}
-		if r, ok := parseMDRef(body, i, br, e, image); ok {
-			*refs = append(*refs, r)
-			i = r.End
-			continue
+		if cl := int(sc.match[br-s]); cl >= 0 {
+			if r, ok := parseMDRef(body, i, br, s+cl, e, image); ok {
+				*refs = append(*refs, r)
+				i = r.End
+				continue
+			}
 		}
 		i++
 	}
@@ -225,26 +303,11 @@ var schemeRe = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9+.-]*:`)
 
 // parseMDRef reads [text](dest "title") or ![alt](dest). open is the index of
 // the "[" and start the index of the whole reference (the "!" for a picture).
-func parseMDRef(body string, start, open, e int, image bool) (Ref, bool) {
-	depth := 0
-	closeIdx := -1
-	for j := open; j < e; j++ {
-		switch body[j] {
-		case '\\':
-			j++
-		case '[':
-			depth++
-		case ']':
-			depth--
-			if depth == 0 {
-				closeIdx = j
-			}
-		}
-		if closeIdx >= 0 {
-			break
-		}
-	}
-	if closeIdx < 0 || closeIdx+1 >= e || body[closeIdx+1] != '(' {
+func parseMDRef(body string, start, open, closeIdx, e int, image bool) (Ref, bool) {
+	// closeIdx is the "]" matching open, found once per line by scratch.index.
+	// Text longer than maxLinkText is not a link label; the cap keeps nested
+	// brackets from rescanning the same text for each level.
+	if closeIdx+1 >= e || body[closeIdx+1] != '(' || closeIdx-open > maxLinkText {
 		return Ref{}, false
 	}
 	text := body[open+1 : closeIdx]
@@ -253,7 +316,11 @@ func parseMDRef(body string, start, open, e int, image bool) (Ref, bool) {
 	if !image && strings.Contains(text, "![") {
 		return Ref{}, false
 	}
-	dest, title, end, ok := parseDest(body, closeIdx+1, e)
+	lookEnd := e
+	if closeIdx+1+maxDestLook < lookEnd {
+		lookEnd = closeIdx + 1 + maxDestLook
+	}
+	dest, title, end, ok := parseDest(body, closeIdx+1, lookEnd)
 	if !ok {
 		return Ref{}, false
 	}

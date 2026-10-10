@@ -88,7 +88,7 @@ func convertChildren(sel *goquery.Selection) []Node {
 
 	flushInline := func() {
 		if len(inlineBuffer) > 0 {
-			out = append(out, Node{Type: "paragraph", Content: inlineBuffer})
+			out = append(out, hoistPictures(Node{Type: "paragraph", Content: inlineBuffer})...)
 			inlineBuffer = nil
 		}
 	}
@@ -135,14 +135,14 @@ func convertElement(s *goquery.Selection) ([]Node, bool) {
 	tag := goquery.NodeName(s)
 	switch tag {
 	case "p":
-		return []Node{{Type: "paragraph", Content: convertInline(s)}}, false
+		return hoistPictures(Node{Type: "paragraph", Content: convertInline(s)}), false
 	case "h1", "h2", "h3", "h4", "h5", "h6":
 		level, _ := strconv.Atoi(tag[1:])
-		return []Node{{
+		return hoistPictures(Node{
 			Type:    "heading",
 			Attrs:   map[string]any{"level": level},
 			Content: convertInline(s),
-		}}, false
+		}), false
 	case "ul":
 		return []Node{{Type: "bulletList", Content: convertListItems(s)}}, false
 	case "ol":
@@ -158,7 +158,13 @@ func convertElement(s *goquery.Selection) ([]Node, bool) {
 		}
 		return []Node{node}, false
 	case "li":
-		return []Node{{Type: "listItem", Content: wrapAsListItemChildren(s)}}, false
+		kids := wrapAsListItemChildren(s)
+		// A list item must open with a paragraph; a picture alone in an item
+		// ("- ![a](/media/id)") gets an empty one in front.
+		if len(kids) > 0 && kids[0].Type != "paragraph" {
+			kids = append([]Node{{Type: "paragraph"}}, kids...)
+		}
+		return []Node{{Type: "listItem", Content: kids}}, false
 	case "pre":
 		// Goldmark emits <pre><code class="language-x">…</code></pre>
 		// for fenced code; the inner <code> carries the body. Strip
@@ -236,6 +242,29 @@ func pictureNode(s *goquery.Selection) (Node, bool) {
 		attrs["caption"] = strings.TrimSpace(s.Find("figcaption").First().Text())
 	}
 	return Node{Type: "chronicleImage", Attrs: attrs}, true
+}
+
+// hoistPictures keeps a picture out of a paragraph or heading: the editor's
+// picture is a block, and a block inside inline content is an invalid document.
+// The pictures follow the block they were written in; a block left empty by
+// the move is dropped rather than kept as a blank line.
+func hoistPictures(n Node) []Node {
+	var kept, pics []Node
+	for _, c := range n.Content {
+		if c.Type == "chronicleImage" {
+			pics = append(pics, c)
+		} else {
+			kept = append(kept, c)
+		}
+	}
+	if len(pics) == 0 {
+		return []Node{n}
+	}
+	if len(kept) == 0 {
+		return pics
+	}
+	n.Content = kept
+	return append([]Node{n}, pics...)
 }
 
 // convertInline walks an element's children expecting inline-only

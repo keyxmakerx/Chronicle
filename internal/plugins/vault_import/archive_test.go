@@ -3,6 +3,7 @@ package vault_import
 import (
 	"archive/zip"
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -73,6 +74,8 @@ func TestOpenArchive_RefusesHostileArchives(t *testing.T) {
 		{"too many entries", []zent{{name: "a.md"}, {name: "b.md"}, {name: "c.md"}, {name: "d.md"}}, small},
 		{"declared total over cap", []zent{{name: "a.md", data: strings.Repeat("x", 80)}, {name: "b.md", data: strings.Repeat("y", 80)}}, small},
 		{"compression bomb", []zent{{name: "a.md", data: strings.Repeat("\x00", 3<<20)}}, DefaultLimits},
+		{"small entry with a bomb-like ratio", []zent{{name: "a.md", data: strings.Repeat("\x00", 200<<10)}}, DefaultLimits},
+		{"many mid-sized entries add up to a bomb", manyZeroEntries(100, 15<<10), DefaultLimits},
 		{"too deep", []zent{{name: strings.Repeat("d/", 30) + "a.md", data: "x"}}, DefaultLimits},
 	}
 	for _, tc := range tests {
@@ -200,4 +203,23 @@ func TestCleanEntryName(t *testing.T) {
 			t.Errorf("CleanEntryName(%q) = %q, want %q", tc.in, got, tc.want)
 		}
 	}
+}
+
+// manyZeroEntries builds n entries that each stay under the per-entry ratio
+// floor's reach only in aggregate: the whole-archive check has to catch them.
+func manyZeroEntries(n, size int) []zent {
+	var out []zent
+	for i := 0; i < n; i++ {
+		out = append(out, zent{name: fmt.Sprintf("n%d.md", i), data: strings.Repeat("\x00", size)})
+	}
+	return out
+}
+
+func TestOpenArchive_OrdinaryTextIsNotARatioBomb(t *testing.T) {
+	row := "| a | b | c |\n|---|---|---|\n"
+	a, err := OpenArchive(writeZip(t, zent{name: "t.md", data: strings.Repeat(row, 400)}, zent{name: "tiny.md", data: strings.Repeat("a", 4000)}), "v.zip", DefaultLimits)
+	if err != nil {
+		t.Fatalf("a repetitive but ordinary note was refused: %v", err)
+	}
+	_ = a.Close()
 }
