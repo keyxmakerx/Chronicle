@@ -20,3 +20,9 @@ const PluginSlug = "quests"
 //
 //go:embed migrations/*.sql
 var MigrationsFS embed.FS
+
+// StaticAssetsFS holds the quest board and notice board scripts, served at
+// /static/plugins/quests/ and loaded only on pages that show a board.
+//
+//go:embed static
+var StaticAssetsFS embed.FS
