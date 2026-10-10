@@ -1618,7 +1618,7 @@ func looksLikeLocalizationKey(s string) bool {
 		return false
 	}
 	for _, r := range ns {
-		if !(r >= 'A' && r <= 'Z') && !(r >= '0' && r <= '9') && r != '_' {
+		if (r < 'A' || r > 'Z') && (r < '0' || r > '9') && r != '_' {
 			return false
 		}
 	}

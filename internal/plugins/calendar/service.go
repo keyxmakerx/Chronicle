@@ -1874,7 +1874,7 @@ func (s *calendarService) ListEventIndexForViewer(ctx context.Context, calendarI
 		}
 		entries = append(entries, EventIndexEntry{
 			ID: e.ID, Name: e.Name, Year: e.Year, Month: e.Month, Day: e.Day,
-			Anchorable: !(e.RecurrenceType != nil && *e.RecurrenceType == RecurrenceByRule && e.RecurrenceRule != nil && e.RecurrenceRule.hasAfterEvent()),
+			Anchorable: e.RecurrenceType == nil || *e.RecurrenceType != RecurrenceByRule || e.RecurrenceRule == nil || !e.RecurrenceRule.hasAfterEvent(),
 		})
 	}
 	return entries, truncated, nil
