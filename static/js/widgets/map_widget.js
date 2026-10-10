@@ -369,7 +369,25 @@
         try {
           points = typeof d.points === 'string' ? JSON.parse(d.points) : d.points;
         } catch (e) { return; }
-        if (!Array.isArray(points) || points.length < 2) return;
+        if (!Array.isArray(points)) return;
+
+        // Arrows, highlighter strokes, steps and bubbles come from the shared
+        // annotation module (loaded on every page beside this widget); without
+        // it they are left out rather than drawn as plain lines.
+        var A = window.ChronicleMapAnnotations;
+        if (A && A.TYPES.indexOf(d.drawing_type) !== -1) {
+          var layer = A.render(Object.assign({}, d, { points: points }), {
+            map: map,
+            toLatLng: function (p) { return L.latLng(imageH - (p.y / 100) * imageH, (p.x / 100) * imageW); }
+          });
+          if (layer) layer.addTo(map);
+          return;
+        }
+        if (points.length < 2) return;
+        // Shadows and pictures are drawn only by the full map page; as lines
+        // here they would be misleading.
+        if (d.drawing_type === 'shadow' || d.drawing_type === 'image' || d.drawing_type === 'arrow' ||
+            d.drawing_type === 'highlight' || d.drawing_type === 'step' || d.drawing_type === 'callout') return;
 
         // Convert percentage coords to pixel coords for Leaflet CRS.Simple.
         var latlngs = points.map(function (p) {
