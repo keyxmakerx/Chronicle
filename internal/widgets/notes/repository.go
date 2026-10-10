@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -39,6 +40,23 @@ type NoteRepository interface {
 	// ListVisibleLinking returns the notes v can see whose body links to the
 	// note (kind LinkNote) or page (LinkPage) targetID, newest first.
 	ListVisibleLinking(ctx context.Context, campaignID string, v permissions.Viewer, kind, targetID string) ([]Note, error)
+
+	// ViewerReadsMedia reports whether v can read at least one note bound to
+	// the note picture mediaID in campaignID (the SQL twin of Note.CanView over
+	// the bound notes). Indexed on the binding, not a scan of note bodies.
+	ViewerReadsMedia(ctx context.Context, campaignID, mediaID string, v permissions.Viewer) (bool, error)
+
+	// SyncPictureBindings binds the pictures of a newly created note, which has
+	// no stored body: every note picture in it that editorID uploaded.
+	SyncPictureBindings(ctx context.Context, noteID, campaignID, editorID string, html *string) error
+
+	// UpdateWithPictures saves note and settles its picture bindings in one
+	// transaction. A picture no longer in the text loses its binding whoever
+	// saved. A binding is added only when bindNew is set, the id was not in the
+	// stored body before this save, and editorID uploaded the picture; so an id
+	// someone else pasted never binds, even when the uploader saves the note
+	// later. bindNew is false for a restore.
+	UpdateWithPictures(ctx context.Context, note *Note, editorID string, bindNew bool) error
 
 	// ListSharedByCampaign returns every campaign-wide-shared note in the
 	// campaign regardless of which user owns it.
@@ -166,6 +184,11 @@ func (r *noteRepository) FindByID(ctx context.Context, id string) (*Note, error)
 
 // Update saves changes to an existing note.
 func (r *noteRepository) Update(ctx context.Context, note *Note) error {
+	return execNoteUpdate(ctx, r.db, note)
+}
+
+// execNoteUpdate writes the note row on db or inside a transaction.
+func execNoteUpdate(ctx context.Context, db execer, note *Note) error {
 	contentJSON, err := json.Marshal(note.Content)
 	if err != nil {
 		return fmt.Errorf("marshaling note content: %w", err)
@@ -179,7 +202,7 @@ func (r *noteRepository) Update(ctx context.Context, note *Note) error {
 		    linked_note_id = ?, last_edited_by = ?, parent_id = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE id = ?`
 
-	result, err := r.db.ExecContext(ctx, query,
+	result, err := db.ExecContext(ctx, query,
 		note.Title, contentJSON, note.Entry, note.EntryHTML,
 		note.Color, note.Pinned, note.ArchivedAt, note.IsShared, sharedWithJSON, note.SharedWithGM,
 		note.LinkedNoteID, note.LastEditedBy, note.ParentID, note.ID,
@@ -274,6 +297,206 @@ func (r *noteRepository) ListVisibleLinking(ctx context.Context, campaignID stri
 		WHERE campaign_id = ? AND ` + vis + ` AND entry_html LIKE ?
 		ORDER BY updated_at DESC LIMIT 500`
 	return r.scanNotes(ctx, query, args...)
+}
+
+// ViewerReadsMedia answers "may v open this picture" for the media plugin:
+// true when a note v can read is bound to it (see SyncPictureBindings). The id
+// is checked against idPattern, so it can hold no LIKE wildcard.
+func (r *noteRepository) ViewerReadsMedia(ctx context.Context, campaignID, mediaID string, v permissions.Viewer) (bool, error) {
+	if !idPattern.MatchString(mediaID) || v.UserID() == "" {
+		return false, nil
+	}
+	vis, visArgs := visibleFilter(v)
+	args := append([]any{mediaID, campaignID}, visArgs...)
+	var one int
+	err := r.db.QueryRowContext(ctx,
+		`SELECT 1 FROM note_pictures p JOIN notes n ON n.id = p.note_id
+		 WHERE p.media_id = ? AND n.campaign_id = ? AND `+vis+` LIMIT 1`, args...).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("checking note readers of a picture: %w", err)
+	}
+	return true, nil
+}
+
+// pictureRef finds the media ids a note body names by their plain address.
+var pictureRef = regexp.MustCompile(`/media/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})`)
+
+// maxPictureBindings bounds the ids one save may newly bind. It limits inserts
+// only: dropping stale bindings must see every id in the body, or a body with
+// more pictures than the cap would keep a binding for a picture it lost.
+const maxPictureBindings = 200
+
+// pictureSet returns every distinct media id html names, lower-cased and in
+// body order, with no cap.
+func pictureSet(html *string) []string {
+	if html == nil {
+		return nil
+	}
+	var out []string
+	seen := map[string]bool{}
+	for _, m := range pictureRef.FindAllStringSubmatch(*html, -1) {
+		id := strings.ToLower(m[1])
+		if !seen[id] {
+			seen[id] = true
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+// newPictureIDs returns the ids in newHTML that oldHTML did not already name,
+// capped at maxPictureBindings. "New to this note" is what lets a save bind a
+// picture: an id that was already in the stored body was put there by whoever
+// saved it, which may not be the uploader, so the uploader saving the note later
+// must not claim it.
+func newPictureIDs(oldHTML, newHTML *string) []string {
+	had := map[string]bool{}
+	for _, id := range pictureSet(oldHTML) {
+		had[id] = true
+	}
+	var out []string
+	for _, id := range pictureSet(newHTML) {
+		if !had[id] && len(out) < maxPictureBindings {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+// SyncPictureBindings binds the pictures of a freshly created note; see the
+// interface. A new note has no stored body, so every id in it is new.
+func (r *noteRepository) SyncPictureBindings(ctx context.Context, noteID, campaignID, editorID string, html *string) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("syncing note pictures: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := syncPictureBindingsTx(ctx, tx, noteID, campaignID, editorID, nil, html, true); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// UpdateWithPictures saves note and settles its picture bindings in one
+// transaction. The stored body is read under a row lock so "new to the note"
+// is judged against the body this save replaces, not a copy a concurrent save
+// has since changed. bindNew is false for a restore, which may only drop
+// bindings: the text it brings back was written by someone else at another time.
+func (r *noteRepository) UpdateWithPictures(ctx context.Context, note *Note, editorID string, bindNew bool) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("saving note: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var stored sql.NullString
+	err = tx.QueryRowContext(ctx, `SELECT entry_html FROM notes WHERE id = ? FOR UPDATE`, note.ID).Scan(&stored)
+	if errors.Is(err, sql.ErrNoRows) {
+		return apperror.NewNotFound("note not found")
+	}
+	if err != nil {
+		return fmt.Errorf("reading stored note body: %w", err)
+	}
+	var old *string
+	if stored.Valid {
+		old = &stored.String
+	}
+
+	if err := execNoteUpdate(ctx, tx, note); err != nil {
+		return err
+	}
+	if err := syncPictureBindingsTx(ctx, tx, note.ID, note.CampaignID, editorID, old, note.EntryHTML, bindNew); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// execer is the part of *sql.DB and *sql.Tx the update statement needs.
+type execer interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+}
+
+// syncPictureBindingsTx makes the note's bindings match newHTML. Bindings for
+// pictures the body no longer names go, whoever saved. A binding is added only
+// when bindNew is set, the id is new relative to oldHTML, and the picture is a
+// note picture of this campaign that editorID uploaded; an id pasted by anyone
+// else binds nothing, and neither does one the uploader merely re-saved.
+func syncPictureBindingsTx(ctx context.Context, tx *sql.Tx, noteID, campaignID, editorID string, oldHTML, newHTML *string, bindNew bool) error {
+	inBody := map[string]bool{}
+	for _, id := range pictureSet(newHTML) {
+		inBody[id] = true
+	}
+
+	rows, err := tx.QueryContext(ctx, `SELECT media_id FROM note_pictures WHERE note_id = ?`, noteID)
+	if err != nil {
+		return fmt.Errorf("listing note pictures: %w", err)
+	}
+	var stale []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			_ = rows.Close()
+			return fmt.Errorf("scanning note picture: %w", err)
+		}
+		if !inBody[strings.ToLower(id)] {
+			stale = append(stale, id)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return fmt.Errorf("listing note pictures: %w", err)
+	}
+	_ = rows.Close()
+
+	// Deleted in chunks so a note with many stale bindings stays within the
+	// placeholder limits.
+	for len(stale) > 0 {
+		n := len(stale)
+		if n > 500 {
+			n = 500
+		}
+		chunk := stale[:n]
+		stale = stale[n:]
+		args := []any{noteID}
+		for _, id := range chunk {
+			args = append(args, id)
+		}
+		if _, err := tx.ExecContext(ctx,
+			`DELETE FROM note_pictures WHERE note_id = ? AND media_id IN (`+placeholders(len(chunk))+`)`,
+			args...); err != nil {
+			return fmt.Errorf("dropping stale note pictures: %w", err)
+		}
+	}
+
+	if !bindNew || editorID == "" {
+		return nil
+	}
+	fresh := newPictureIDs(oldHTML, newHTML)
+	if len(fresh) == 0 {
+		return nil
+	}
+	args := []any{noteID, campaignID, editorID}
+	for _, id := range fresh {
+		args = append(args, id)
+	}
+	// One statement reads the uploader and writes the binding, so the check and
+	// the binding cannot drift apart.
+	if _, err := tx.ExecContext(ctx,
+		`INSERT IGNORE INTO note_pictures (media_id, note_id)
+		 SELECT id, ? FROM media_files
+		 WHERE campaign_id = ? AND uploaded_by = ? AND usage_type = 'note_image' AND id IN (`+placeholders(len(fresh))+`)`,
+		args...); err != nil {
+		return fmt.Errorf("binding note pictures: %w", err)
+	}
+	return nil
+}
+
+// placeholders returns n comma-separated question marks.
+func placeholders(n int) string {
+	return strings.TrimSuffix(strings.Repeat("?,", n), ",")
 }
 
 // ListTree returns every note's structural row in the campaign, unfiltered.

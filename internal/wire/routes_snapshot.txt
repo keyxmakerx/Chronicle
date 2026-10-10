@@ -678,6 +678,7 @@ POST	/notes/:noteId/versions/:vid/restore	internal/widgets/notes/routes.go
 POST	/notes/allow-app	internal/widgets/notes/routes.go
 POST	/notes/bulk	internal/widgets/notes/routes.go
 POST	/notes/media-links	internal/widgets/notes/routes.go
+POST	/notes/pictures	internal/widgets/notes/routes.go
 POST	/notice-boards/:eid/boards	internal/plugins/quests/routes.go
 POST	/notice-boards/:eid/boards/:bid/items	internal/plugins/quests/routes.go
 POST	/notifications/:nid/read	internal/plugins/sessions/routes.go

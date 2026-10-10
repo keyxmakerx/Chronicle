@@ -111,6 +111,11 @@ var MimeToExtension = map[string]string{
 	"audio/webm": ".webm",
 }
 
+// IsNotePicture reports whether the file is a picture that lives in notes.
+func (f *MediaFile) IsNotePicture() bool {
+	return f.UsageType == UsageNoteImage
+}
+
 // IsImage returns true if the file is an image based on MIME type.
 func (f *MediaFile) IsImage() bool {
 	return strings.HasPrefix(f.MimeType, "image/")
@@ -130,6 +135,12 @@ const (
 	UsageEntityImage = "entity_image"
 	UsageAvatar      = "avatar"
 	UsageBackdrop    = "backdrop"
+
+	// UsageNoteImage is a picture written into a note. Its readers are
+	// decided by who can read a note holding it, never by the entity-page
+	// rule, so it is kept out of every campaign-wide listing, lookup and
+	// dedup that the page rule relies on.
+	UsageNoteImage = "note_image"
 )
 
 // MediaRef is a lightweight reference from an entity to a media file.

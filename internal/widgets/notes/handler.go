@@ -3,6 +3,7 @@ package notes
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -34,12 +35,31 @@ type MediaUploader interface {
 	UploadRaw(ctx context.Context, campaignID, userID string, fileBytes []byte, originalName, mimeType string) (filePath string, err error)
 }
 
+// PictureUploader stores a picture written into a note and returns its media
+// id. Separate from MediaUploader because the file is not an attachment: only
+// readers of a note holding it may open it (media.UsageNoteImage).
+type PictureUploader interface {
+	UploadPicture(ctx context.Context, campaignID, userID string, fileBytes []byte, originalName, mimeType string) (mediaID string, err error)
+}
+
+// maxNotePictureBytes caps one picture in a note. Notes are written by every
+// player, so the cap is well under the Scribe upload limit; a bigger picture
+// belongs on a page.
+const maxNotePictureBytes = 5 * 1024 * 1024
+
+// notePictureTypes are the formats a note accepts, sniffed from the bytes
+// rather than taken from the browser's claim.
+var notePictureTypes = map[string]bool{
+	"image/png": true, "image/jpeg": true, "image/gif": true, "image/webp": true,
+}
+
 // Handler handles HTTP requests for note operations. Handlers are thin:
 // bind request, call service, render response. No business logic lives here.
 type Handler struct {
 	service         NoteService
 	attService      AttachmentService
 	mediaUploader   MediaUploader
+	pictureUploader PictureUploader
 	memberLister    MemberLister
 	characterLister CharacterLister
 	pageNamer       PageNamer
@@ -709,6 +729,60 @@ func (h *Handler) ListAttachments(c echo.Context) error {
 		attachments = []NoteAttachment{}
 	}
 	return c.JSON(http.StatusOK, attachments)
+}
+
+// SetPictureUploader wires the store for pictures written into notes.
+func (h *Handler) SetPictureUploader(u PictureUploader) {
+	h.pictureUploader = u
+}
+
+// UploadPicture stores a picture a player is writing into a note and returns
+// its media id (POST /campaigns/:id/notes/pictures). Open to every member who
+// can use notes: unlike /media/upload it needs no Scribe role, because the
+// file is private to the readers of the note that ends up holding it.
+func (h *Handler) UploadPicture(c echo.Context) error {
+	if h.pictureUploader == nil {
+		return apperror.NewBadRequest("pictures not configured")
+	}
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	userID := auth.GetUserID(c)
+
+	// A little headroom over the file for the multipart framing.
+	c.Request().Body = http.MaxBytesReader(c.Response(), c.Request().Body, maxNotePictureBytes+64*1024)
+	file, err := c.FormFile("file")
+	if err != nil {
+		var tooBig *http.MaxBytesError
+		if errors.As(err, &tooBig) {
+			return apperror.NewBadRequest("picture too large; maximum size is 5 MB")
+		}
+		return apperror.NewBadRequest("no file provided")
+	}
+	src, err := file.Open()
+	if err != nil {
+		return apperror.NewBadRequest("could not read uploaded file")
+	}
+	defer func() { _ = src.Close() }()
+
+	fileBytes, err := io.ReadAll(io.LimitReader(src, maxNotePictureBytes+1))
+	if err != nil {
+		return apperror.NewBadRequest("could not read uploaded file")
+	}
+	if len(fileBytes) > maxNotePictureBytes {
+		return apperror.NewBadRequest("picture too large; maximum size is 5 MB")
+	}
+	mimeType := http.DetectContentType(fileBytes)
+	if !notePictureTypes[mimeType] {
+		return apperror.NewBadRequest("unsupported file type; use a PNG, JPEG, GIF or WebP picture")
+	}
+
+	id, err := h.pictureUploader.UploadPicture(c.Request().Context(), cc.Campaign.ID, userID, fileBytes, file.Filename, mimeType)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusCreated, map[string]string{"id": id, "url": "/media/" + id})
 }
 
 // UploadAttachment uploads an audio file and attaches it to a note.

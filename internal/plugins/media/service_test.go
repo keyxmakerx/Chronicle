@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -21,11 +22,13 @@ type mockMediaRepo struct {
 	listByCampaignFn           func(ctx context.Context, campaignID string, limit, offset int) ([]MediaFile, int, error)
 	getStorageStatsFn          func(ctx context.Context) (*StorageStats, error)
 	listAllFn                  func(ctx context.Context, limit, offset int) ([]AdminMediaFile, int, error)
+	getUserNoteImageUsageFn    func(ctx context.Context, campaignID, userID string) (int64, int, error)
 	getCampaignUsageFn         func(ctx context.Context, campaignID string) (int64, int, error)
 	getUserCampaignlessUsageFn func(ctx context.Context, userID string) (int64, int, error)
 	findReferencesFn           func(ctx context.Context, campaignID, mediaID string) ([]MediaRef, error)
 	listAllFilenamesFn         func(ctx context.Context) (map[string]bool, error)
 	listFilesByCampaignFn      func(ctx context.Context, campaignID string) ([]MediaFile, error)
+	listUnboundFn              func(ctx context.Context, olderThan time.Time) ([]string, error)
 }
 
 func (m *mockMediaRepo) Create(ctx context.Context, file *MediaFile) error {
@@ -98,6 +101,13 @@ func (m *mockMediaRepo) GetCampaignUsage(ctx context.Context, campaignID string)
 	return 0, 0, nil
 }
 
+func (m *mockMediaRepo) GetUserNoteImageUsage(ctx context.Context, campaignID, userID string) (int64, int, error) {
+	if m.getUserNoteImageUsageFn != nil {
+		return m.getUserNoteImageUsageFn(ctx, campaignID, userID)
+	}
+	return 0, 0, nil
+}
+
 func (m *mockMediaRepo) GetUserCampaignlessUsage(ctx context.Context, userID string) (int64, int, error) {
 	if m.getUserCampaignlessUsageFn != nil {
 		return m.getUserCampaignlessUsageFn(ctx, userID)
@@ -117,6 +127,13 @@ func (m *mockMediaRepo) ListAllFilenames(ctx context.Context) (map[string]bool, 
 		return m.listAllFilenamesFn(ctx)
 	}
 	return make(map[string]bool), nil
+}
+
+func (m *mockMediaRepo) ListUnboundNotePictures(ctx context.Context, olderThan time.Time) ([]string, error) {
+	if m.listUnboundFn != nil {
+		return m.listUnboundFn(ctx, olderThan)
+	}
+	return nil, nil
 }
 
 func (m *mockMediaRepo) ListFilesByCampaign(ctx context.Context, campaignID string) ([]MediaFile, error) {

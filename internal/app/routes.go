@@ -541,6 +541,11 @@ func (a *backdropUploaderAdapter) OwnsFile(ctx context.Context, campaignID, file
 		}
 		return false, err
 	}
+	// A note picture is readable only through the notes that hold it; a campaign
+	// backdrop must not adopt one by its stored name.
+	if mf.IsNotePicture() {
+		return false, nil
+	}
 	return mf.Filename == filename && mf.CampaignID != nil && *mf.CampaignID == campaignID, nil
 }
 
@@ -1420,7 +1425,7 @@ func (a *mapImageSourceAdapter) ReadImage(ctx context.Context, campaignID, media
 	if err != nil {
 		return nil, err
 	}
-	if file.CampaignID == nil || *file.CampaignID != campaignID || !file.IsImage() {
+	if file.CampaignID == nil || *file.CampaignID != campaignID || !file.IsImage() || file.IsNotePicture() {
 		return nil, apperror.NewNotFound("media file not found")
 	}
 	data, err := os.ReadFile(a.svc.FilePath(file))
@@ -2215,7 +2220,7 @@ func (a *entityMediaVerifierAdapter) MediaExistsInCampaign(ctx context.Context, 
 		}
 		return false, err
 	}
-	if f == nil {
+	if f == nil || f.IsNotePicture() {
 		return false, nil
 	}
 	return f.CampaignID != nil && *f.CampaignID == campaignID, nil
@@ -2241,7 +2246,7 @@ func (a *mapMediaVerifierAdapter) ImageInCampaign(ctx context.Context, mediaID, 
 		}
 		return false, err
 	}
-	if f == nil || f.CampaignID == nil || *f.CampaignID != campaignID {
+	if f == nil || f.IsNotePicture() || f.CampaignID == nil || *f.CampaignID != campaignID {
 		return false, nil
 	}
 	return strings.HasPrefix(f.MimeType, "image/"), nil
@@ -3866,6 +3871,10 @@ func (a *App) RegisterRoutes() {
 	noteHandler := notes.NewHandler(noteSvc)
 	noteHandler.SetAttachmentService(noteSvc)
 	noteHandler.SetMediaUploader(&mediaUploadAdapter{svc: mediaService})
+	noteHandler.SetPictureUploader(&mediaUploadAdapter{svc: mediaService})
+	// Who may open a picture in a note is decided by who can read the notes
+	// holding it, asked of the notes service rather than its tables.
+	mediaHandler.SetNoteMediaAccess(&noteMediaAccessAdapter{svc: noteSvc})
 	noteHandler.SetMemberLister(campaignService)
 	noteHandler.SetCharacterLister(&journalCharacterAdapter{svc: entityService})
 	notePages := &notesPagesAdapter{svc: entityService}
@@ -5312,6 +5321,33 @@ func (a *mediaUploadAdapter) UploadRaw(ctx context.Context, campaignID, userID s
 		return "", err
 	}
 	return file.Filename, nil
+}
+
+// UploadPicture stores a picture written into a note and returns its media id.
+func (a *mediaUploadAdapter) UploadPicture(ctx context.Context, campaignID, userID string, fileBytes []byte, originalName, mimeType string) (string, error) {
+	file, err := a.svc.Upload(ctx, media.UploadInput{
+		CampaignID:   campaignID,
+		UploadedBy:   userID,
+		OriginalName: originalName,
+		MimeType:     mimeType,
+		FileSize:     int64(len(fileBytes)),
+		UsageType:    media.UsageNoteImage,
+		FileBytes:    fileBytes,
+	})
+	if err != nil {
+		return "", err
+	}
+	return file.ID, nil
+}
+
+// noteMediaAccessAdapter answers the media plugin's note-picture question
+// over the notes service, so media never touches note tables.
+type noteMediaAccessAdapter struct {
+	svc notes.NoteService
+}
+
+func (a *noteMediaAccessAdapter) CanReadNoteMedia(ctx context.Context, campaignID, mediaID string, role int, userID string) (bool, error) {
+	return a.svc.ViewerReadsMedia(ctx, campaignID, mediaID, permissions.RequestViewer(role, userID))
 }
 
 // aiMapsAdapter is the maps service in AI Import's pin types, so the

@@ -17,6 +17,7 @@ type mockNoteRepo struct {
 	createFn               func(ctx context.Context, note *Note) error
 	findByIDFn             func(ctx context.Context, id string) (*Note, error)
 	updateFn               func(ctx context.Context, note *Note) error
+	lastBindNew            *bool
 	deleteFn               func(ctx context.Context, id string) error
 	listVisibleFn          func(ctx context.Context, campaignID string, v permissions.Viewer, scope ListScope) ([]Note, error)
 	listTreeFn             func(ctx context.Context, campaignID string) ([]TreeRow, error)
@@ -88,6 +89,21 @@ func (m *mockNoteRepo) ListVisibleLinking(ctx context.Context, campaignID string
 		return m.listVisibleLinkingFn(ctx, campaignID, v, kind, targetID)
 	}
 	return nil, nil
+}
+
+func (m *mockNoteRepo) ViewerReadsMedia(ctx context.Context, campaignID, mediaID string, v permissions.Viewer) (bool, error) {
+	return false, nil
+}
+
+func (m *mockNoteRepo) SyncPictureBindings(ctx context.Context, noteID, campaignID, editorID string, html *string) error {
+	return nil
+}
+
+// UpdateWithPictures behaves like Update for these tests and records whether
+// the caller allowed new bindings.
+func (m *mockNoteRepo) UpdateWithPictures(ctx context.Context, note *Note, editorID string, bindNew bool) error {
+	m.lastBindNew = &bindNew
+	return m.Update(ctx, note)
 }
 
 func (m *mockNoteRepo) ReparentToTop(ctx context.Context, ids []string) error {
