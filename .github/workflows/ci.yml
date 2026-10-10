@@ -263,6 +263,9 @@ jobs:
           go test ./internal/plugins/campaigns/ -v -count=1 -run TestNavPins_Integration 2>&1 | tee -a dbtests.log
           go test ./internal/plugins/auth/ -v -count=1 -run 'TestUserRepository_.*_Integration' 2>&1 | tee -a dbtests.log
           go test ./internal/plugins/quests/ -v -count=1 -run 'Integration' 2>&1 | tee -a dbtests.log
+          go test ./internal/plugins/maps/... -v -count=1 -run 'Integration' 2>&1 | tee -a dbtests.log
+          go test ./internal/plugins/media/ -v -count=1 -run 'TestADR058Integration_' 2>&1 | tee -a dbtests.log
+          go test ./internal/plugins/syncapi/ -v -count=1 -run 'Integration' 2>&1 | tee -a dbtests.log
           for want in TestDB_SessionRSVPTokenCannotBeSpentTwiceConcurrently \
                       TestEntityTypeRepository_Integration \
                       TestConsolidatePlayerCharacterDuplicate_Integration \
@@ -288,7 +291,24 @@ jobs:
                       TestBoardRepositoryIntegration_LooksAndBoards \
                       TestBoardRepositoryIntegration_Items \
                       TestBoardRepositoryIntegration_TypeHomes \
-                      TestPageCards_Integration; do
+                      TestPageCards_Integration \
+                      TestListMarkers_DeniedUsersExcludesAnonymous_Integration \
+                      TestListDrawings_DeniedUsersExcludesAnonymous_Integration \
+                      TestPictureDrawings_RoundTripAndHiddenFromPlayers_Integration \
+                      TestHexFogRepository_Integration \
+                      TestHexMigration_Reapply_Integration \
+                      TestHexRepository_Integration \
+                      TestADR058Integration_HiddenEntityImage_PlayerDenied \
+                      TestADR058Integration_VisibleEntityImage_PlayerAllowed \
+                      TestADR058Integration_SharedHiddenAndVisible_ReadableAtAll \
+                      TestADR058Integration_CoverImageOnly_PlayerDenied \
+                      TestADR058Integration_PathFormCoverImage_PlayerDenied \
+                      TestADR058Integration_CoDM_SeesWhatDMSees \
+                      TestADR058Integration_Unreferenced_MembershipStillApplies \
+                      TestADR058Integration_ReferenceLookupError_Denies \
+                      TestFindKeyByPrefixIntegration_DisabledOwner \
+                      TestSyncHistoryIntegration_ListFiltersAndSteps \
+                      TestCampaignSyncStatsIntegration_CountsKeysMappingsAndErrors; do
             grep -q -- "--- PASS: $want" dbtests.log || {
               echo "::error::$want did not PASS — it was skipped or never ran."
               exit 1
