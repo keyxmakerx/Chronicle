@@ -206,6 +206,7 @@ GET	/calendars/:calid/events	internal/plugins/calendar/routes.go
 GET	/calendars/:calid/events	internal/plugins/calendar/routes.go
 GET	/calendars/:calid/events/:eid	internal/plugins/calendar/routes.go
 GET	/calendars/:calid/events/:eid	internal/plugins/calendar/routes.go
+GET	/calendars/:calid/events/index	internal/plugins/calendar/routes.go
 GET	/calendars/:calid/structure	internal/plugins/calendar/routes.go
 GET	/calendars/:calid/view	internal/plugins/calendar/routes.go
 GET	/calendars/:calid/view	internal/plugins/calendar/routes.go
