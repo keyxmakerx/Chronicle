@@ -62,6 +62,9 @@ type LoginInput struct {
 	Password  string
 	IP        string // Client IP for session tracking.
 	UserAgent string // Client User-Agent for session tracking.
+	// TrustedDevice is the remembered-device cookie, which skips the code
+	// step for the person it was issued to.
+	TrustedDevice string
 }
 
 // --- Session ---

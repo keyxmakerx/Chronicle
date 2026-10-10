@@ -40,6 +40,9 @@ type SecurityService interface {
 	// EnableUser re-enables a previously disabled user account.
 	EnableUser(ctx context.Context, userID string) error
 
+	// DisableTwoFactor switches two-factor off for someone locked out of it.
+	DisableTwoFactor(ctx context.Context, userID string) error
+
 	// SetConnectionRevoker injects the hub's revocation surface, used by
 	// DisableUser. Late-bound and nil-safe: a disabled account is already
 	// logged out and refused on its next login regardless.
@@ -227,4 +230,13 @@ func (s *securityService) EnableUser(ctx context.Context, userID string) error {
 	}
 
 	return nil
+}
+
+// DisableTwoFactor switches two-factor off for someone who lost their phone
+// and their recovery codes. The auth service emails them about it.
+func (s *securityService) DisableTwoFactor(ctx context.Context, userID string) error {
+	if userID == "" {
+		return apperror.NewBadRequest("user ID is required")
+	}
+	return s.authService.AdminDisableTwoFactor(ctx, userID)
 }

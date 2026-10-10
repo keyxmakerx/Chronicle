@@ -99,6 +99,7 @@ type AuthService interface {
 	DestroySession(ctx context.Context, token string) error
 
 	// Password reset flow.
+	CanEmailResetLinks(ctx context.Context) bool
 	InitiatePasswordReset(ctx context.Context, email string) error
 	ValidateResetToken(ctx context.Context, token string) (email string, err error)
 	ResetPassword(ctx context.Context, token, newPassword string) error
@@ -143,6 +144,15 @@ type AuthService interface {
 	// and destroys it. Used by the admin dashboard to avoid exposing raw tokens.
 	DestroySessionByHash(ctx context.Context, tokenHash string) error
 
+	// Two-factor sign-in.
+	TwoFactorStatus(ctx context.Context, userID string) (TwoFactorStatus, error)
+	BeginTwoFactor(ctx context.Context, userID, password string) (*TwoFactorSetup, error)
+	EnableTwoFactor(ctx context.Context, userID, code string) ([]string, error)
+	DisableTwoFactor(ctx context.Context, userID, password, code string) error
+	RegenerateRecoveryCodes(ctx context.Context, userID, password, code string) ([]string, error)
+	AdminDisableTwoFactor(ctx context.Context, userID string) error
+	CompleteTwoFactorLogin(ctx context.Context, in TwoFactorLoginInput) (*TwoFactorLoginResult, error)
+
 	// Re-authentication for sensitive operations.
 	ConfirmReauth(ctx context.Context, userID, password string) error
 	IsReauthValid(ctx context.Context, userID string) (bool, error)
@@ -176,6 +186,10 @@ type authService struct {
 	// other plugin (ConfigureAccountDeletion, OnAccountDeleted).
 	accountDeletion  AccountDeletionHooks
 	onAccountDeleted []func(ctx context.Context, userID string)
+
+	// totpKey encrypts stored authenticator secrets (ConfigureTwoFactor);
+	// nil means two-factor can't be turned on.
+	totpKey []byte
 }
 
 // Registration modes. These mirror the settings plugin's canonical constants;
@@ -441,6 +455,16 @@ func (s *authService) Login(ctx context.Context, input LoginInput) (string, *Use
 
 	// Successful login — clear any failure counter.
 	s.clearLoginFailures(ctx, email)
+
+	// Two-factor accounts stop here for a code unless this device was
+	// remembered; the session is only made once the code checks out.
+	if user.TOTPEnabled && !s.isTrustedDevice(ctx, user.ID, input.TrustedDevice) {
+		challenge, err := s.startTwoFactorChallenge(ctx, user)
+		if err != nil {
+			return "", nil, apperror.NewInternal(fmt.Errorf("starting two-factor step: %w", err))
+		}
+		return "", user, &TwoFactorRequired{Challenge: challenge}
+	}
 
 	// Create a new session in Redis with client metadata.
 	token, err := s.createSession(ctx, user, input.IP, input.UserAgent)
@@ -771,6 +795,12 @@ func (s *authService) DestroyAllUserSessions(ctx context.Context, userID string)
 
 // --- Password Reset ---
 
+// CanEmailResetLinks reports whether a reset link can be emailed at all, so
+// the Forgot password page never promises an email that can't be sent.
+func (s *authService) CanEmailResetLinks(ctx context.Context) bool {
+	return s.mail != nil && s.mail.IsConfigured(ctx)
+}
+
 // InitiatePasswordReset generates a reset token, stores its hash in the DB,
 // and sends a reset link via email. Always returns nil to avoid leaking whether
 // the email exists (timing-safe: we always do the same work).
@@ -918,6 +948,7 @@ func (s *authService) destroyUserSessions(ctx context.Context, userID string) {
 	if s.redis == nil {
 		return
 	}
+	s.forgetTrustedDevices(ctx, userID)
 
 	userSetKey := userSessionsKeyPrefix + userID
 	tokens, err := s.redis.SMembers(ctx, userSetKey).Result()

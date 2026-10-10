@@ -101,6 +101,11 @@ func userRowActions(u auth.User) []rowAction {
 				URL: fmt.Sprintf("/admin/security/users/%s/disable", u.ID), Confirm: "Disable this user account? They will be immediately logged out.", Tone: "warn"})
 		}
 	}
+	if u.TOTPEnabled {
+		acts = append(acts, rowAction{Label: "Switch off two-factor", MenuLabel: "Switch off two-factor…", Method: "put",
+			URL: fmt.Sprintf("/admin/security/users/%s/two-factor/off", u.ID), Tone: "warn",
+			Confirm: "Switch off two-factor for " + u.DisplayName + "? Only do this for someone who lost their phone and their recovery codes. They get an email, and it's written to the activity log."})
+	}
 	acts = append(acts, rowAction{Label: "Force logout all sessions", MenuLabel: "Force logout…", Method: "post",
 		URL: fmt.Sprintf("/admin/security/users/%s/force-logout", u.ID), Confirm: "Force logout all sessions for this user?",
 		Icon: true, Aria: "Force logout all sessions for " + u.DisplayName})
@@ -156,4 +161,13 @@ func avatarInitial(name string) string {
 		return string(unicode.ToUpper(r))
 	}
 	return "?"
+}
+
+// twoFactorNote is the phone card's mention of two-factor, which the
+// desktop table shows as a chip.
+func twoFactorNote(u auth.User) string {
+	if u.TOTPEnabled {
+		return " · two-factor on"
+	}
+	return ""
 }

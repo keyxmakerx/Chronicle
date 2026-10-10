@@ -70,6 +70,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, authService auth.AuthService, smtp
 	admin.POST("/security/users/:id/force-logout", h.ForceLogoutUser, reauth)
 	admin.PUT("/security/users/:id/disable", h.DisableUser, reauth)
 	admin.PUT("/security/users/:id/enable", h.EnableUser, reauth)
+	admin.PUT("/security/users/:id/two-factor/off", h.DisableTwoFactor, reauth)
 
 	// Data hygiene dashboard.
 	admin.GET("/data-hygiene", h.DataHygiene)

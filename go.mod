@@ -14,6 +14,7 @@ require (
 	github.com/gorilla/websocket v1.5.3
 	github.com/labstack/echo/v4 v4.15.4
 	github.com/microcosm-cc/bluemonday v1.0.27
+	github.com/pquerna/otp v1.4.0
 	github.com/redis/go-redis/v9 v9.18.0
 	github.com/tetratelabs/wazero v1.9.0
 	github.com/yuin/goldmark v1.8.2
@@ -27,6 +28,7 @@ require (
 	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/andybalholm/cascadia v1.3.2 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
+	github.com/boombuler/barcode v1.0.1-0.20190219062509-6c824513bacc // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/dylibso/observe-sdk/go v0.0.0-20240819160327-2d926c5d788a // indirect

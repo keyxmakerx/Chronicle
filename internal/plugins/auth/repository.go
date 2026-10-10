@@ -71,6 +71,12 @@ type UserRepository interface {
 	UpdateIsDisabled(ctx context.Context, id string, isDisabled bool) error
 	CountUsers(ctx context.Context) (int, error)
 	CountAdmins(ctx context.Context) (int, error)
+
+	// Two-factor sign-in. The secret arrives already encrypted; nil clears it.
+	SetTOTP(ctx context.Context, userID string, encryptedSecret *string, enabled bool) error
+	ReplaceRecoveryCodes(ctx context.Context, userID string, hashes []string) error
+	UseRecoveryCode(ctx context.Context, userID, hash string) (bool, error)
+	CountRecoveryCodes(ctx context.Context, userID string) (int, error)
 }
 
 // userRepository implements UserRepository with hand-written MariaDB queries.
@@ -403,7 +409,72 @@ func (r *userRepository) AnonymizeUser(ctx context.Context, userID, email, displ
 	if _, err := r.db.ExecContext(ctx, `DELETE FROM password_reset_tokens WHERE user_id = ?`, userID); err != nil {
 		return fmt.Errorf("removing reset tokens: %w", err)
 	}
+	if _, err := r.db.ExecContext(ctx, `DELETE FROM user_recovery_codes WHERE user_id = ?`, userID); err != nil {
+		return fmt.Errorf("removing recovery codes: %w", err)
+	}
 	return nil
+}
+
+// --- Two-factor ---
+
+// SetTOTP stores the encrypted authenticator secret and whether two-factor
+// is on. Turning it off passes nil, which clears the secret.
+func (r *userRepository) SetTOTP(ctx context.Context, userID string, encryptedSecret *string, enabled bool) error {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE users SET totp_secret = ?, totp_enabled = ? WHERE id = ?`,
+		encryptedSecret, enabled, userID)
+	if err != nil {
+		return fmt.Errorf("updating two-factor: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return apperror.NewNotFound("user not found")
+	}
+	return nil
+}
+
+// ReplaceRecoveryCodes swaps a person's recovery codes for a new set in one
+// transaction, so a failure never leaves them with half a set. An empty
+// list just removes them.
+func (r *userRepository) ReplaceRecoveryCodes(ctx context.Context, userID string, hashes []string) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("starting transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM user_recovery_codes WHERE user_id = ?`, userID); err != nil {
+		return fmt.Errorf("removing recovery codes: %w", err)
+	}
+	for _, h := range hashes {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO user_recovery_codes (user_id, code_hash) VALUES (?, ?)`, userID, h); err != nil {
+			return fmt.Errorf("storing recovery code: %w", err)
+		}
+	}
+	return tx.Commit()
+}
+
+// UseRecoveryCode marks an unused code as used and reports whether it
+// matched. The used_at guard in the UPDATE makes each code single-use even
+// when two sign-ins race.
+func (r *userRepository) UseRecoveryCode(ctx context.Context, userID, hash string) (bool, error) {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE user_recovery_codes SET used_at = NOW()
+		  WHERE user_id = ? AND code_hash = ? AND used_at IS NULL`, userID, hash)
+	if err != nil {
+		return false, fmt.Errorf("using recovery code: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n == 1, nil
+}
+
+// CountRecoveryCodes returns how many unused recovery codes a person has.
+func (r *userRepository) CountRecoveryCodes(ctx context.Context, userID string) (int, error) {
+	var n int
+	if err := r.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM user_recovery_codes WHERE user_id = ? AND used_at IS NULL`, userID).Scan(&n); err != nil {
+		return 0, fmt.Errorf("counting recovery codes: %w", err)
+	}
+	return n, nil
 }
 
 // UpdateDisplayName sets the display name for a user.

@@ -22,6 +22,12 @@ const (
 	EventMediaUploaded          = "media.uploaded"
 	EventMediaDeleted           = "media.deleted"
 	EventMediaQuotaExceeded     = "media.quota_exceeded"
+	EventAccountDeleted         = "account.deleted"
+	EventTwoFactorEnabled       = "two_factor.enabled"
+	EventTwoFactorDisabled      = "two_factor.disabled"
+	EventTwoFactorCodesReplaced = "two_factor.codes_replaced"
+	EventTwoFactorFailed        = "login.two_factor_failed"
+	EventTwoFactorAdminOff      = "admin.two_factor_disabled"
 )
 
 // SecurityEvent represents a single site-wide security event. Unlike campaign
@@ -69,6 +75,12 @@ func EventTypeLabel(eventType string) string {
 		EventMediaUploaded:          "Media Uploaded",
 		EventMediaDeleted:           "Media Deleted",
 		EventMediaQuotaExceeded:     "Media Quota Exceeded",
+		EventAccountDeleted:         "Account Deleted",
+		EventTwoFactorEnabled:       "Two-factor Turned On",
+		EventTwoFactorDisabled:      "Two-factor Turned Off",
+		EventTwoFactorCodesReplaced: "Recovery Codes Replaced",
+		EventTwoFactorFailed:        "Wrong Two-factor Code",
+		EventTwoFactorAdminOff:      "Two-factor Switched Off by Admin",
 	}
 	if label, ok := labels[eventType]; ok {
 		return label
@@ -93,6 +105,12 @@ func EventTypeIcon(eventType string) string {
 		EventMediaUploaded:          "fa-solid fa-cloud-arrow-up text-blue-500",
 		EventMediaDeleted:           "fa-solid fa-trash text-red-400",
 		EventMediaQuotaExceeded:     "fa-solid fa-hard-drive text-amber-500",
+		EventAccountDeleted:         "fa-solid fa-user-xmark text-red-500",
+		EventTwoFactorEnabled:       "fa-solid fa-mobile-screen text-emerald-500",
+		EventTwoFactorDisabled:      "fa-solid fa-mobile-screen text-amber-500",
+		EventTwoFactorCodesReplaced: "fa-solid fa-key text-blue-500",
+		EventTwoFactorFailed:        "fa-solid fa-triangle-exclamation text-red-500",
+		EventTwoFactorAdminOff:      "fa-solid fa-mobile-screen text-red-500",
 	}
 	if icon, ok := icons[eventType]; ok {
 		return icon

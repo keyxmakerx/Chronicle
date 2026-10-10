@@ -32,6 +32,7 @@ var activityPhrases = map[string]string{
 	"user.disabled":                   "disabled the account of %s",
 	"user.enabled":                    "re-enabled the account of %s",
 	"user.force_logout":               "signed %s out everywhere",
+	"user.two_factor_off":             "switched off two-factor sign-in for %s",
 	"session.terminated":              "ended a signed-in session",
 	"campaign.deleted":                "deleted the campaign %s",
 	"campaign.trashed":                "moved the campaign %s to the trash",

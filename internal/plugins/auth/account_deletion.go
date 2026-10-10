@@ -59,6 +59,8 @@ func OnAccountDeleted(svc AuthService, fn func(ctx context.Context, userID strin
 type DeleteAccountInput struct {
 	Password string `json:"password"`
 	Confirm  string `json:"confirm"`
+	// Code is asked for only when two-factor is on.
+	Code string `json:"code"`
 }
 
 // OwnedCampaigns lists what blocks this person from deleting their account.
@@ -89,6 +91,9 @@ func (s *authService) DeleteOwnAccount(ctx context.Context, userID string, in De
 	}
 	if !verifyPassword(in.Password, user.PasswordHash) {
 		return apperror.NewBadRequest("that password isn't right")
+	}
+	if err := s.verifySecondFactorIfOn(ctx, user, in.Code); err != nil {
+		return err
 	}
 	if user.IsAdmin {
 		n, err := s.repo.CountAdmins(ctx)

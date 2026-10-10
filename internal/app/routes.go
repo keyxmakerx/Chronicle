@@ -2531,6 +2531,8 @@ func (a *App) RegisterRoutes() {
 
 	// Wire SMTP into auth service for password reset emails.
 	auth.ConfigureMailSender(authService, smtpService, a.Config.BaseURL)
+	// Two-factor keys are stored encrypted under a key derived from the site secret.
+	auth.ConfigureTwoFactor(authService, a.Config.Auth.SecretKey)
 
 	// Entities plugin: entity types + entity CRUD (must be created before
 	// campaigns so we can pass EntityService as the EntityTypeSeeder).
