@@ -3377,6 +3377,13 @@
   .tree-row.tree-match .tree-lb mark { background: rgb(var(--nav-accent) / 0.55); color: #fff; border-radius: 2px; padding: 0 1px; }
   .tree-n { flex: none; font-size: 10.5px; color: var(--nav-text-3); font-variant-numeric: tabular-nums; }
   .tree-hid { flex: none; font-size: 10px; color: #fbbf24; opacity: 0.85; }
+  /* An extra listing: the same page shown under a second parent. A small link
+     icon and a muted "also here" label say so without a second weight of text. */
+  .tree-row.is-place > .tree-lb { color: var(--nav-text-2); }
+  .tree-also { flex: none; display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; color: var(--nav-text-3); }
+  .tree-also i { font-size: 8.5px; }
+  /* Alt held over a drop target: this drop lists the page here, it does not move it. */
+  .sidebar-drop-place { outline: 1.5px dashed rgb(var(--nav-accent) / 0.85); outline-offset: -2px; background: rgb(var(--nav-accent) / 0.12); }
   .tree-rename {
     flex: 1; min-width: 0; height: 22px; padding: 0 6px; border-radius: 5px; border: 1px solid rgb(var(--nav-accent) / 0.6);
     background: rgb(255 255 255 / 0.06); color: #fff; font-size: 12.5px;
@@ -5105,6 +5112,50 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
    script is there to remove it. */
 .ag-toast-timed { animation: ag-in .28s ease-out both, ag-out .3s ease-in 3.2s forwards; }
 @keyframes ag-out { to { opacity: 0; visibility: hidden; pointer-events: none; } }
+/* "Also listed under": the extra places a page shows in the page tree, as chips
+   under the title with a page picker that grows out of the Add button (Grow).
+   static/js/widgets/page_places.js drives it. Calm and Off swap movement for a
+   short fade. */
+.pl-line { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 6px 0 10px; font-size: 12.5px; color: var(--color-text-muted); }
+.pl-lead { display: inline-flex; align-items: center; gap: 6px; }
+.pl-lead i { font-size: 10px; }
+.pl-chips { display: contents; list-style: none; margin: 0; padding: 0; }
+.pl-chip { display: inline-flex; align-items: center; gap: 2px; height: 24px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--color-border); background: var(--color-card-bg); color: var(--color-text-primary); max-width: 100%; animation: pl-peek var(--dur-micro) var(--ease-out) both; transition: opacity var(--dur-micro) var(--ease-out); }
+.pl-chip:has(.pl-x) { padding-right: 3px; }
+.pl-chip.is-leaving { opacity: 0; }
+.pl-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; color: inherit; text-decoration: none; }
+.pl-name:hover { color: var(--color-accent); }
+.pl-x { width: 18px; height: 18px; border: 0; border-radius: 999px; background: transparent; color: var(--color-text-muted); cursor: pointer; display: grid; place-items: center; font-size: 10px; flex: none; }
+.pl-x:hover, .pl-x:focus-visible { background: var(--color-bg-tertiary, rgba(0,0,0,.06)); color: var(--color-text-primary); }
+.pl-add-wrap { position: relative; display: inline-flex; }
+.pl-add { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 10px; border-radius: 999px; border: 1px dashed var(--color-border); background: transparent; color: var(--color-text-muted); font: inherit; cursor: pointer; transition: color var(--dur-micro), border-color var(--dur-micro); }
+.pl-add:hover, .pl-add[aria-expanded="true"] { color: var(--color-accent); border-color: var(--color-accent); }
+.pl-add i { font-size: 10px; }
+.pl-pop { position: absolute; z-index: 30; top: calc(100% + 6px); left: 0; width: min(320px, calc(100vw - 32px)); padding: 10px; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-card-bg); box-shadow: 0 18px 40px -16px rgba(0, 0, 0, .35); transform-origin: 0 0; animation: pl-grow var(--dur-standard) var(--ease-out) both; }
+.pl-pop[hidden] { display: none; }
+.pl-list { margin-top: 8px; max-height: 220px; overflow-y: auto; border: 1px solid var(--color-border); border-radius: 9px; background: var(--color-card-bg); }
+.pl-row { display: flex; width: 100%; align-items: center; gap: 10px; padding: 8px 10px; border: 0; border-top: 1px solid var(--color-border); background: transparent; color: var(--color-text-primary); font: inherit; font-size: 13.5px; text-align: left; cursor: pointer; transition: background var(--dur-micro); }
+.pl-row:first-child { border-top: 0; }
+.pl-row:hover, .pl-row:focus-visible { background: var(--color-surface-alt, rgba(0,0,0,.04)); }
+.pl-row-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pl-row-type { flex: none; font-size: 11px; color: var(--color-text-muted); }
+.pl-more { padding: 8px 10px; font-size: 12px; color: var(--color-text-muted); }
+.pl-err { margin: 8px 2px 0; font-size: 12.5px; color: #b91c1c; }
+.dark .pl-err { color: #fca5a5; }
+.pl-also { flex: none; display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--color-text-muted); }
+.pl-also i { font-size: 9px; }
+@keyframes pl-peek { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes pl-grow { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: none; } }
+@keyframes pl-fade { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .pl-pop { animation: pl-fade var(--dur-micro) linear both; }
+  .pl-chip { animation: pl-fade var(--dur-micro) linear both; }
+}
+html[data-view-motion="calm"] .pl-pop, .nav-rm .pl-pop, html.rm .pl-pop, html[data-cz-reduce] .pl-pop { animation: pl-fade var(--dur-micro) linear both; }
+html[data-view-motion="calm"] .pl-chip, .nav-rm .pl-chip, html.rm .pl-chip, html[data-cz-reduce] .pl-chip { animation: pl-fade var(--dur-micro) linear both; }
+@media (max-width: 480px) {
+  .pl-pop { position: fixed; left: 16px; right: 16px; top: auto; bottom: 16px; width: auto; transform-origin: 50% 100%; }
+}
 /* Band heads on the Characters page: the heading, the chosen types as chips,
    and the Add button. */
 .ag-bandhead { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-bottom: 12px; }

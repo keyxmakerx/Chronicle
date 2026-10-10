@@ -66,6 +66,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.GET("/entities/types", h.EntityTypesAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/entities/:eid/edit", h.EditForm, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.POST("/entities/:eid/clone", h.Clone, campaigns.RequireRole(campaigns.RoleScribe))
+	// Extra places a page is listed in the page tree (Scribe, and the page's own edit check).
+	cg.POST("/entities/:eid/places", h.AddPlaceAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.DELETE("/entities/:eid/places/:pid", h.RemovePlaceAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.PUT("/entities/:eid", h.Update, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.PUT("/entities/:eid/reorder", h.ReorderAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.POST("/entities/bulk-move", h.BulkMoveAPI, campaigns.RequireRole(campaigns.RoleScribe))

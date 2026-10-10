@@ -4122,6 +4122,15 @@ func (a *App) RegisterRoutes() {
 	entities.RegisterPageSafetyRoutes(e, entities.NewPageSafetyHandler(pageSafetyService, entityService, campaignService), campaignService, authService)
 	go pageSafetyService.StartPurger(a.ShutdownCtx)
 
+	// --- Extra places in the page tree ---
+	// One page listed under more than one parent. The service is also the
+	// guard page moves ask, so a move can't loop through a listing.
+	placeService := entities.NewPlaceService(entityRepo, entities.NewPlaceRepository(a.DB))
+	entityHandler.SetPlaceService(placeService)
+	if g, ok := entityService.(interface{ SetPlaceGuard(entities.PlaceGuard) }); ok {
+		g.SetPlaceGuard(placeService)
+	}
+
 	// --- Entity Block Registry ---
 	// Create the block registry and let each plugin register its block types.
 	// This drives validation, rendering, and the template editor palette.
@@ -4483,7 +4492,7 @@ func (a *App) RegisterRoutes() {
 
 	// --- Campaign Export/Import ---
 	exportSvc := campaigns.NewExportImportService(campaignService)
-	exportSvc.SetEntityExporter(&entityExportAdapter{entitySvc: entityService, tagSvc: tagService, relationSvc: relService})
+	exportSvc.SetEntityExporter(&entityExportAdapter{entitySvc: entityService, tagSvc: tagService, relationSvc: relService, placeSvc: placeService})
 	exportSvc.SetCalendarExporter(&calendarExportAdapter{svc: calendarService})
 	exportSvc.SetTimelineExporter(&timelineExportAdapter{svc: timelineSvc})
 	exportSvc.SetSessionExporter(&sessionExportAdapter{svc: sessionsService})
@@ -4492,7 +4501,7 @@ func (a *App) RegisterRoutes() {
 	exportSvc.SetAddonExporter(&addonExportAdapter{svc: addonService})
 	exportSvc.SetMediaExporter(&mediaExportAdapter{svc: mediaService})
 	exportSvc.SetMediaBundler(&mediaBundleAdapter{svc: mediaService})
-	exportSvc.SetEntityImporter(&entityImportAdapter{entitySvc: entityService, tagSvc: tagService, relationSvc: relService})
+	exportSvc.SetEntityImporter(&entityImportAdapter{entitySvc: entityService, tagSvc: tagService, relationSvc: relService, placeSvc: placeService})
 	exportSvc.SetCalendarImporter(&calendarImportAdapter{svc: calendarService})
 	exportSvc.SetTimelineImporter(&timelineImportAdapter{svc: timelineSvc})
 	exportSvc.SetSessionImporter(&sessionImportAdapter{svc: sessionsService})

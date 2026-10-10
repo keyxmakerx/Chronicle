@@ -44,6 +44,7 @@ DELETE	/data-hygiene/stale-files	internal/plugins/admin/routes.go
 DELETE	/entities/:eid	internal/plugins/entities/routes.go
 DELETE	/entities/:eid/field-overrides	internal/plugins/entities/routes.go
 DELETE	/entities/:eid/notes/:nid	internal/widgets/entity_notes/routes.go
+DELETE	/entities/:eid/places/:pid	internal/plugins/entities/routes.go
 DELETE	/entities/:eid/posts/:pid	internal/widgets/posts/routes.go
 DELETE	/entities/:eid/relations/:rid	internal/widgets/relations/routes.go
 DELETE	/entities/:entityID	internal/plugins/syncapi/routes.go
@@ -625,6 +626,7 @@ POST	/entities/:eid/clone	internal/plugins/entities/routes.go
 POST	/entities/:eid/favorite	internal/plugins/entities/routes.go
 POST	/entities/:eid/history/:vid/restore	internal/plugins/entities/page_safety_handler.go
 POST	/entities/:eid/notes	internal/widgets/entity_notes/routes.go
+POST	/entities/:eid/places	internal/plugins/entities/routes.go
 POST	/entities/:eid/posts	internal/widgets/posts/routes.go
 POST	/entities/:eid/relations	internal/widgets/relations/routes.go
 POST	/entities/:entityID/relations	internal/plugins/syncapi/routes.go

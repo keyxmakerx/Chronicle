@@ -88,23 +88,26 @@ type ExportEntityType struct {
 
 // ExportEntity captures a single entity with all its data.
 type ExportEntity struct {
-	OriginalID     string                   `json:"original_id"`
-	EntityTypeSlug string                   `json:"entity_type_slug"`
-	Name           string                   `json:"name"`
-	Slug           string                   `json:"slug"`
-	Entry          *string                  `json:"entry,omitempty"`
-	EntryHTML      *string                  `json:"entry_html,omitempty"`
-	ImagePath      *string                  `json:"image_path,omitempty"`
-	CoverImagePath *string                  `json:"cover_image_path,omitempty"`
-	ParentSlug     *string                  `json:"parent_slug,omitempty"`
-	TypeLabel      *string                  `json:"type_label,omitempty"`
-	IsPrivate      bool                     `json:"is_private"`
-	IsTemplate     bool                     `json:"is_template"`
-	Visibility     string                   `json:"visibility,omitempty"`
-	Permissions    []ExportEntityPermission `json:"permissions,omitempty"`
-	FieldsData     json.RawMessage          `json:"fields_data,omitempty"`
-	FieldOverrides json.RawMessage          `json:"field_overrides,omitempty"`
-	PopupConfig    json.RawMessage          `json:"popup_config,omitempty"`
+	OriginalID     string  `json:"original_id"`
+	EntityTypeSlug string  `json:"entity_type_slug"`
+	Name           string  `json:"name"`
+	Slug           string  `json:"slug"`
+	Entry          *string `json:"entry,omitempty"`
+	EntryHTML      *string `json:"entry_html,omitempty"`
+	ImagePath      *string `json:"image_path,omitempty"`
+	CoverImagePath *string `json:"cover_image_path,omitempty"`
+	ParentSlug     *string `json:"parent_slug,omitempty"`
+	// AlsoListedUnder holds the slugs of the other pages this page is listed
+	// under in the page tree (additive; older files simply lack it).
+	AlsoListedUnder []string                 `json:"also_listed_under,omitempty"`
+	TypeLabel       *string                  `json:"type_label,omitempty"`
+	IsPrivate       bool                     `json:"is_private"`
+	IsTemplate      bool                     `json:"is_template"`
+	Visibility      string                   `json:"visibility,omitempty"`
+	Permissions     []ExportEntityPermission `json:"permissions,omitempty"`
+	FieldsData      json.RawMessage          `json:"fields_data,omitempty"`
+	FieldOverrides  json.RawMessage          `json:"field_overrides,omitempty"`
+	PopupConfig     json.RawMessage          `json:"popup_config,omitempty"`
 }
 
 // --- Tags ---
