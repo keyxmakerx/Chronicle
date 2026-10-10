@@ -141,3 +141,40 @@ func TestUpdate_KeepsAPictureInTheBody(t *testing.T) {
 		t.Errorf("body kept a script handler: %s", got)
 	}
 }
+
+// An edit may bind new pictures; a restore may not, because the text it brings
+// back was written by someone else at another time.
+func TestSaves_SayWhetherTheyMayBindPictures(t *testing.T) {
+	html := "<p>old</p>"
+	tests := []struct {
+		name     string
+		run      func(svc NoteService) error
+		wantBind bool
+	}{
+		{"edit", func(svc NoteService) error {
+			body := "<p>new</p>"
+			_, err := svc.Update(context.Background(), "note-123", player("user-1"), UpdateNoteRequest{EntryHTML: &body})
+			return err
+		}, true},
+		{"restore", func(svc NoteService) error {
+			_, err := svc.RestoreVersion(context.Background(), "note-123", "v1", "user-1")
+			return err
+		}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &mockNoteRepo{
+				findByIDFn: func(context.Context, string) (*Note, error) { return sampleNote(), nil },
+				findVersionByIDFn: func(context.Context, string) (*NoteVersion, error) {
+					return &NoteVersion{ID: "v1", NoteID: "note-123", EntryHTML: &html}, nil
+				},
+			}
+			if err := tt.run(NewNoteService(repo)); err != nil {
+				t.Fatal(err)
+			}
+			if repo.lastBindNew == nil || *repo.lastBindNew != tt.wantBind {
+				t.Errorf("bindNew = %v, want %v", repo.lastBindNew, tt.wantBind)
+			}
+		})
+	}
+}

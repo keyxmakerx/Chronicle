@@ -10,6 +10,7 @@ package media
 import (
 	"context"
 	"database/sql"
+	"strings"
 	"testing"
 	"time"
 
@@ -153,6 +154,57 @@ func TestDB_NotePictureAccess(t *testing.T) {
 		expect("not bound", map[string]bool{bo: false, cy: false})
 	})
 
+	t.Run("Bo inserts Ana's picture, then Ana saves the note: still closed to the party", func(t *testing.T) {
+		clearNotes()
+		n, err := svc.Create(ctx, camp, player(bo), notes.CreateNoteRequest{Title: "Bo's"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := svc.Update(ctx, n.ID, player(bo), notes.UpdateNoteRequest{EntryHTML: &html}); err != nil {
+			t.Fatal(err)
+		}
+		reshare(n.ID, bo, notes.VisibilityParty)
+		// Ana, a collaborator, saves the note for her own reasons: a title change,
+		// then a body edit that still carries the pasted id.
+		retitled := "Party notes"
+		if _, err := svc.Update(ctx, n.ID, player(ana), notes.UpdateNoteRequest{Title: &retitled}); err != nil {
+			t.Fatal(err)
+		}
+		edited := html + "<p>more</p>"
+		if _, err := svc.Update(ctx, n.ID, player(ana), notes.UpdateNoteRequest{EntryHTML: &edited}); err != nil {
+			t.Fatal(err)
+		}
+		expect("Ana saved Bo's pasted id", map[string]bool{bo: false, cy: false, gm: false, ana: true})
+	})
+
+	t.Run("a restore never binds a picture", func(t *testing.T) {
+		clearNotes()
+		id := write(ana, ana, notes.VisibilityParty)
+		empty := "<p>gone</p>"
+		if _, err := svc.Update(ctx, id, player(ana), notes.UpdateNoteRequest{EntryHTML: &empty}); err != nil {
+			t.Fatal(err)
+		}
+		expect("dropped", map[string]bool{bo: false})
+		versions, err := svc.ListVersions(ctx, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		restored := false
+		for _, v := range versions {
+			if v.EntryHTML != nil && strings.Contains(*v.EntryHTML, pic) {
+				if _, err := svc.RestoreVersion(ctx, id, v.ID, ana); err != nil {
+					t.Fatal(err)
+				}
+				restored = true
+				break
+			}
+		}
+		if !restored {
+			t.Fatal("no saved version names the picture to restore")
+		}
+		expect("after restore", map[string]bool{bo: false, cy: false, gm: false, ana: true})
+	})
+
 	t.Run("a page that mentions the file does not open it", func(t *testing.T) {
 		clearNotes()
 		write(ana, ana, notes.VisibilityPrivate)
@@ -179,6 +231,35 @@ func TestDB_NotePictureAccess(t *testing.T) {
 		loose := seedNotePicture(t, db, camp, ana)
 		f, _ := NewMediaRepository(db).FindByID(ctx, loose)
 		mustDeny(t, h.checkMediaAccess(newADR058TestContext(bo), f, false, ""), "membership fallback")
+	})
+
+	t.Run("orphan cleanup keeps a picture a saved version still names", func(t *testing.T) {
+		clearNotes()
+		id := write(ana, ana, notes.VisibilityParty)
+		gone := "<p>gone</p>"
+		if _, err := svc.Update(ctx, id, player(ana), notes.UpdateNoteRequest{EntryHTML: &gone}); err != nil {
+			t.Fatal(err)
+		}
+		mustADR058Exec(t, db, `UPDATE media_files SET created_at = NOW() - INTERVAL 3 DAY WHERE id = ?`, pic)
+		cutoff := time.Now().UTC().Add(-notePictureGrace)
+		got, err := NewMediaRepository(db).ListUnboundNotePictures(ctx, cutoff)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, g := range got {
+			if g == pic {
+				t.Fatal("collected a picture a note version still names")
+			}
+		}
+		mustADR058Exec(t, db, `DELETE FROM note_versions WHERE note_id = ?`, id)
+		got, _ = NewMediaRepository(db).ListUnboundNotePictures(ctx, cutoff)
+		found := false
+		for _, g := range got {
+			found = found || g == pic
+		}
+		if !found {
+			t.Error("a picture no note or version holds was not collected")
+		}
 	})
 
 	t.Run("orphan cleanup collects pictures no note holds, after the grace period", func(t *testing.T) {

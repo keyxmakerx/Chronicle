@@ -361,36 +361,42 @@ func TestDB_ViewerReadsMediaMatchesCanView(t *testing.T) {
 	otherCamp, ou := seedNotesCampaign(t, db, "dee")
 	pic := seedNotePicture(t, db, camp, u["ana"])
 
-	// mk writes a note and has saver save the picture into it.
-	mk := func(campaign, owner, saver string, uploaderCampaign string, mutate func(n *Note)) {
-		n := &Note{ID: newUUID(t), CampaignID: campaign, UserID: owner, Title: "n", Content: []Block{}, Color: "#374151", EntryHTML: pictureBody(pic)}
+	// mk writes a note whose stored body is stored, then has saver save the
+	// picture into it. The title changes so the save always changes a row.
+	mk := func(campaign, owner, saver string, stored *string, mutate func(n *Note)) {
+		n := &Note{ID: newUUID(t), CampaignID: campaign, UserID: owner, Title: "n", Content: []Block{}, Color: "#374151", EntryHTML: stored}
 		mutate(n)
 		if err := repo.Create(ctx, n); err != nil {
 			t.Fatalf("create: %v", err)
 		}
-		if err := repo.SyncPictureBindings(ctx, n.ID, uploaderCampaign, saver, n.EntryHTML); err != nil {
-			t.Fatalf("sync: %v", err)
+		n.Title = "n2"
+		n.EntryHTML = pictureBody(pic)
+		if err := repo.UpdateWithPictures(ctx, n, saver, true); err != nil {
+			t.Fatalf("save: %v", err)
 		}
 	}
+	holding := pictureBody(pic)
 
 	tests := []struct {
 		name  string
 		setup func()
 		want  map[string]bool
 	}{
-		{"private note: owner only, not even the GM", func() { mk(camp, u["ana"], u["ana"], camp, func(n *Note) {}) },
+		{"private note: owner only, not even the GM", func() { mk(camp, u["ana"], u["ana"], nil, func(n *Note) {}) },
 			map[string]bool{"ana": true, "gm": false, "bo": false, "cy": false}},
-		{"party note", func() { mk(camp, u["ana"], u["ana"], camp, func(n *Note) { n.IsShared = true }) },
+		{"party note", func() { mk(camp, u["ana"], u["ana"], nil, func(n *Note) { n.IsShared = true }) },
 			map[string]bool{"ana": true, "gm": true, "bo": true, "cy": true}},
-		{"note named to one person", func() { mk(camp, u["ana"], u["ana"], camp, func(n *Note) { n.SharedWith = []string{u["bo"]} }) },
+		{"note named to one person", func() { mk(camp, u["ana"], u["ana"], nil, func(n *Note) { n.SharedWith = []string{u["bo"]} }) },
 			map[string]bool{"ana": true, "gm": false, "bo": true, "cy": false}},
-		{"note shared with the GM", func() { mk(camp, u["ana"], u["ana"], camp, func(n *Note) { n.SharedWithGM = true }) },
+		{"note shared with the GM", func() { mk(camp, u["ana"], u["ana"], nil, func(n *Note) { n.SharedWithGM = true }) },
 			map[string]bool{"ana": true, "gm": true, "bo": false, "cy": false}},
-		{"Bo's party note saved by Ana (a collaborator) binds", func() { mk(camp, u["bo"], u["ana"], camp, func(n *Note) { n.IsShared = true }) },
+		{"Ana adds her picture to Bo's party note: binds", func() { mk(camp, u["bo"], u["ana"], nil, func(n *Note) { n.IsShared = true }) },
 			map[string]bool{"ana": true, "gm": true, "bo": true, "cy": true}},
-		{"Bo pastes the id into his own party note: nothing binds", func() { mk(camp, u["bo"], u["bo"], camp, func(n *Note) { n.IsShared = true }) },
+		{"Bo's party note already holds Ana's picture and Ana saves it: nothing binds", func() { mk(camp, u["bo"], u["ana"], holding, func(n *Note) { n.IsShared = true }) },
 			map[string]bool{"ana": false, "gm": false, "bo": false, "cy": false}},
-		{"a note in another campaign", func() { mk(otherCamp, ou["dee"], u["ana"], otherCamp, func(n *Note) { n.IsShared = true }) },
+		{"Bo pastes the id into his own party note: nothing binds", func() { mk(camp, u["bo"], u["bo"], nil, func(n *Note) { n.IsShared = true }) },
+			map[string]bool{"ana": false, "gm": false, "bo": false, "cy": false}},
+		{"a note in another campaign", func() { mk(otherCamp, ou["dee"], u["ana"], nil, func(n *Note) { n.IsShared = true }) },
 			map[string]bool{"ana": false, "gm": false, "bo": false, "cy": false}},
 	}
 	for _, tc := range tests {
@@ -419,7 +425,7 @@ func TestDB_ViewerReadsMediaMatchesCanView(t *testing.T) {
 		if _, err := db.Exec(`DELETE FROM notes`); err != nil {
 			t.Fatal(err)
 		}
-		mk(camp, u["ana"], u["ana"], camp, func(n *Note) { n.IsShared = true })
+		mk(camp, u["ana"], u["ana"], nil, func(n *Note) { n.IsShared = true })
 		if ok, _ := repo.ViewerReadsMedia(ctx, camp, pic, permissions.RequestViewer(permissions.RolePlayer, "")); ok {
 			t.Error("an anonymous viewer read a party note's picture")
 		}
@@ -431,9 +437,9 @@ func TestDB_ViewerReadsMediaMatchesCanView(t *testing.T) {
 	})
 }
 
-// TestDB_SyncPictureBindings: a binding is made only by the uploader's save,
-// is dropped by any save that no longer holds the picture, and goes with its
-// note or its file.
+// TestDB_SyncPictureBindings: a save binds only pictures new to the note that
+// the saver uploaded, drops any binding whose picture left the text (however
+// many pictures the body holds), and a restore binds nothing.
 func TestDB_SyncPictureBindings(t *testing.T) {
 	db := newNotesScratchDB(t)
 	ctx := context.Background()
@@ -451,47 +457,124 @@ func TestDB_SyncPictureBindings(t *testing.T) {
 	if err := repo.Create(ctx, n); err != nil {
 		t.Fatal(err)
 	}
-	both := func(a, b string) *string { s := `<img src="/media/` + a + `"><img src="/media/` + b + `">`; return &s }
+	n.IsShared = true
+	n.SharedWith = []string{}
+	version := 0
+	// save has editor save body; bindNew is true as for an edit.
+	saveAs := func(editor string, body *string, bindNew bool) {
+		t.Helper()
+		version++
+		n.Title = fmt.Sprintf("n%d", version)
+		n.EntryHTML = body
+		if err := repo.UpdateWithPictures(ctx, n, editor, bindNew); err != nil {
+			t.Fatal(err)
+		}
+	}
+	html := func(ids ...string) *string {
+		s := ""
+		for _, id := range ids {
+			s += `<img src="/media/` + id + `">`
+		}
+		return &s
+	}
+	bound := func(id string) bool { return boundNotes(t, db, id) == 1 }
+	partyReads := func(id string) bool {
+		ok, err := repo.ViewerReadsMedia(ctx, camp, id, permissions.RequestViewer(permissions.RolePlayer, u["bo"]))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return ok
+	}
 
 	// Ana saves: only her own note picture binds, not Bo's, not an attachment.
-	if err := repo.SyncPictureBindings(ctx, n.ID, camp, u["ana"], both(mine, theirs)); err != nil {
-		t.Fatal(err)
+	saveAs(u["ana"], html(mine, theirs, attachment), true)
+	if !bound(mine) || bound(theirs) || bound(attachment) {
+		t.Errorf("after Ana's save: mine=%v theirs=%v attachment=%v, want true false false", bound(mine), bound(theirs), bound(attachment))
 	}
-	if boundNotes(t, db, mine) != 1 || boundNotes(t, db, theirs) != 0 {
-		t.Errorf("after Ana's save: mine=%d theirs=%d, want 1 and 0", boundNotes(t, db, mine), boundNotes(t, db, theirs))
-	}
-	if err := repo.SyncPictureBindings(ctx, n.ID, camp, u["ana"], both(attachment, attachment)); err != nil {
-		t.Fatal(err)
-	}
-	if boundNotes(t, db, attachment) != 0 || boundNotes(t, db, mine) != 0 {
-		t.Error("a page attachment bound, or a removed picture kept its binding")
+	// Removing the pictures drops the binding; the attachment never bound.
+	saveAs(u["ana"], html(attachment), true)
+	if bound(mine) {
+		t.Error("a removed picture kept its binding")
 	}
 
-	// Bo saves a body naming Ana's picture: nothing binds. Saving it again
-	// after Ana bound it keeps her binding.
-	if err := repo.SyncPictureBindings(ctx, n.ID, camp, u["bo"], pictureBody(mine)); err != nil {
-		t.Fatal(err)
-	}
-	if boundNotes(t, db, mine) != 0 {
+	// Bo saves a body naming Ana's picture: nothing binds. Ana saving it later
+	// for any reason is not a second chance, because the id is already stored.
+	saveAs(u["bo"], html(mine), true)
+	if bound(mine) {
 		t.Error("Bo's save bound Ana's picture")
 	}
-	_ = repo.SyncPictureBindings(ctx, n.ID, camp, u["ana"], pictureBody(mine))
-	_ = repo.SyncPictureBindings(ctx, n.ID, camp, u["bo"], pictureBody(mine))
-	if boundNotes(t, db, mine) != 1 {
-		t.Error("a later save by Bo dropped a binding whose picture is still in the text")
+	saveAs(u["ana"], html(mine), true)
+	if bound(mine) || partyReads(mine) {
+		t.Error("Ana re-saving a note Bo put her picture into bound it")
 	}
-	// An empty body clears everything; deleting the note cascades.
-	if err := repo.SyncPictureBindings(ctx, n.ID, camp, u["bo"], nil); err != nil {
-		t.Fatal(err)
+
+	// Ana takes the picture out and adds it herself: now it is new and binds.
+	saveAs(u["ana"], html(), true)
+	saveAs(u["ana"], html(mine), true)
+	if !bound(mine) || !partyReads(mine) {
+		t.Error("Ana adding her own picture did not bind it")
 	}
-	if boundNotes(t, db, mine) != 0 {
-		t.Error("an empty body kept a binding")
+	// A later save by Bo, and a restore by Ana, keep a binding whose picture is
+	// still in the text.
+	saveAs(u["bo"], html(mine), true)
+	saveAs(u["ana"], html(mine), false)
+	if !bound(mine) {
+		t.Error("a later save dropped a binding whose picture is still in the text")
 	}
-	_ = repo.SyncPictureBindings(ctx, n.ID, camp, u["ana"], pictureBody(mine))
+	// A restore binds nothing new, even for the uploader's own picture.
+	saveAs(u["ana"], html(), true)
+	saveAs(u["ana"], html(mine), false)
+	if bound(mine) {
+		t.Error("a restore bound a picture")
+	}
+
+	// More pictures than the insert cap: bound over two saves, then the stale
+	// delete must still see every id in the body, including those past the cap.
+	saveAs(u["ana"], html(), true)
+	var own []string
+	for i := 0; i < maxPictureBindings+5; i++ {
+		own = append(own, seedNotePicture(t, db, camp, u["ana"]))
+	}
+	saveAs(u["ana"], html(own[:150]...), true)
+	saveAs(u["ana"], html(own...), true)
+	count := func() int {
+		var c int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM note_pictures WHERE note_id = ?`, n.ID).Scan(&c); err != nil {
+			t.Fatal(err)
+		}
+		return c
+	}
+	if got := count(); got != len(own) {
+		t.Fatalf("setup: %d bindings, want %d", got, len(own))
+	}
+	saveAs(u["ana"], html(own[:len(own)-1]...), true)
+	if bound(own[len(own)-1]) || count() != len(own)-1 {
+		t.Error("a picture past the cap kept its binding after leaving the text")
+	}
+	saveAs(u["ana"], html(attachment), true)
+	if got := count(); got != 0 {
+		t.Errorf("%d bindings survived a body that names none of them", got)
+	}
+
+	// Deleting the note cascades.
+	saveAs(u["ana"], html(), true)
+	saveAs(u["ana"], html(mine), true)
 	if err := repo.Delete(ctx, n.ID); err != nil {
 		t.Fatal(err)
 	}
 	if boundNotes(t, db, mine) != 0 {
 		t.Error("deleting the note left its binding")
+	}
+
+	// A new note binds its creator's own pictures through SyncPictureBindings.
+	c := &Note{ID: newUUID(t), CampaignID: camp, UserID: u["ana"], Title: "c", Content: []Block{}, Color: "#374151", EntryHTML: html(mine, theirs)}
+	if err := repo.Create(ctx, c); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.SyncPictureBindings(ctx, c.ID, camp, u["ana"], c.EntryHTML); err != nil {
+		t.Fatal(err)
+	}
+	if !bound(mine) || bound(theirs) {
+		t.Errorf("a new note bound mine=%v theirs=%v, want true false", bound(mine), bound(theirs))
 	}
 }

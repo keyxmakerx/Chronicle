@@ -541,6 +541,11 @@ func (a *backdropUploaderAdapter) OwnsFile(ctx context.Context, campaignID, file
 		}
 		return false, err
 	}
+	// A note picture is readable only through the notes that hold it; a campaign
+	// backdrop must not adopt one by its stored name.
+	if mf.IsNotePicture() {
+		return false, nil
+	}
 	return mf.Filename == filename && mf.CampaignID != nil && *mf.CampaignID == campaignID, nil
 }
 

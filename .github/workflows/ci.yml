@@ -256,6 +256,10 @@ jobs:
         # PASS-line check fails the job if one is skipped.
         env:
           CHRONICLE_TEST_DB_DSN: root:chronicle@tcp(127.0.0.1:3306)/
+        # Explicit bash runs with -e and pipefail, so a failing go test piped
+        # through tee fails the step on go test's own exit code rather than on
+        # tee's.
+        shell: bash
         run: |
           go test ./internal/plugins/sessions/... ./internal/plugins/entities/... ./internal/plugins/timeline/... ./internal/plugins/calendar/... \
             -v -count=1 2>&1 | tee dbtests.log
@@ -299,7 +303,13 @@ jobs:
                       TestDB_ViewerReadsMediaMatchesCanView \
                       TestDB_SyncPictureBindings \
                       TestADR058Integration_HiddenEntityImage_PlayerDenied \
+                      TestADR058Integration_VisibleEntityImage_PlayerAllowed \
+                      TestADR058Integration_SharedHiddenAndVisible_ReadableAtAll \
+                      TestADR058Integration_CoverImageOnly_PlayerDenied \
+                      TestADR058Integration_PathFormCoverImage_PlayerDenied \
                       TestADR058Integration_CoDM_SeesWhatDMSees \
+                      TestADR058Integration_Unreferenced_MembershipStillApplies \
+                      TestADR058Integration_ReferenceLookupError_Denies \
                       TestDB_NotePictureAccess \
                       TestDB_NotePicturesStayOutOfListingsAndDedup \
                       TestDB_AdminListHidesNotePictureDetails; do

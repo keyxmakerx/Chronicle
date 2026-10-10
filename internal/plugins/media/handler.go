@@ -883,7 +883,7 @@ func (h *Handler) Info(c echo.Context) error {
 		return apperror.NewNotFound("media file not found")
 	}
 
-	return c.JSON(http.StatusOK, map[string]any{
+	info := map[string]any{
 		"id":            file.ID,
 		"original_name": file.OriginalName,
 		"mime_type":     file.MimeType,
@@ -891,7 +891,15 @@ func (h *Handler) Info(c echo.Context) error {
 		"usage_type":    file.UsageType,
 		"created_at":    file.CreatedAt.Format(time.RFC3339),
 		"thumbnails":    file.ThumbnailPaths,
-	})
+	}
+	// A note picture's name and stored paths belong to the person who pasted it;
+	// an admin reading someone's picture gets no more than the admin storage
+	// page shows.
+	if file.IsNotePicture() && file.UploadedBy != userID {
+		delete(info, "original_name")
+		delete(info, "thumbnails")
+	}
+	return c.JSON(http.StatusOK, info)
 }
 
 // Delete removes a media file (DELETE /media/:fileID).

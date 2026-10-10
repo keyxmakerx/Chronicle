@@ -333,13 +333,8 @@ func (s *noteService) Update(ctx context.Context, id string, editor permissions.
 
 	note.LastEditedBy = &userID
 
-	if err := s.repo.Update(ctx, note); err != nil {
+	if err := s.repo.UpdateWithPictures(ctx, note, userID, true); err != nil {
 		return nil, err
-	}
-	if req.EntryHTML != nil {
-		if err := s.repo.SyncPictureBindings(ctx, note.ID, note.CampaignID, userID, note.EntryHTML); err != nil {
-			return nil, err
-		}
 	}
 	updated, err := s.repo.FindByID(ctx, note.ID)
 	if err != nil {
@@ -610,10 +605,9 @@ func (s *noteService) RestoreVersion(ctx context.Context, noteID, versionID, use
 	}
 	note.LastEditedBy = &userID
 
-	if err := s.repo.Update(ctx, note); err != nil {
-		return nil, err
-	}
-	if err := s.repo.SyncPictureBindings(ctx, note.ID, note.CampaignID, userID, note.EntryHTML); err != nil {
+	// A restore brings back text written at another time, so it binds nothing
+	// new; it can only drop bindings for pictures the restored text lacks.
+	if err := s.repo.UpdateWithPictures(ctx, note, userID, false); err != nil {
 		return nil, err
 	}
 	restored, err := s.repo.FindByID(ctx, note.ID)

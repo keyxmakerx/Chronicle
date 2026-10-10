@@ -96,3 +96,27 @@ func TestMediaVerifiers_RefuseNotePictures(t *testing.T) {
 		})
 	}
 }
+
+// A campaign backdrop may be set to a file of the campaign, but never to a
+// note picture, whose readers are the note's readers.
+func TestBackdropOwnsFile_RefusesNotePictures(t *testing.T) {
+	camp := "c1"
+	tests := []struct {
+		name  string
+		usage string
+		want  bool
+	}{
+		{"backdrop", media.UsageBackdrop, true},
+		{"page picture", media.UsageEntityImage, true},
+		{"note picture", media.UsageNoteImage, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			file := &media.MediaFile{ID: "m", CampaignID: &camp, Filename: "2026/01/m.png", UsageType: tc.usage}
+			got, err := (&backdropUploaderAdapter{svc: pictureMediaSvc{file: file}}).OwnsFile(context.Background(), camp, "2026/01/m.png")
+			if err != nil || got != tc.want {
+				t.Errorf("OwnsFile = %v, %v; want %v", got, err, tc.want)
+			}
+		})
+	}
+}

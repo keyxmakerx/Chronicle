@@ -6,6 +6,7 @@ package media
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"image"
 	"image/png"
 	"mime/multipart"
@@ -203,5 +204,50 @@ func TestCleanupOrphans_CollectsUnboundNotePictures(t *testing.T) {
 	}
 	if age := time.Since(cutoff); age < 23*time.Hour || age > 25*time.Hour {
 		t.Errorf("cutoff is %v old, want about 24h so a note still being written keeps its picture", age)
+	}
+}
+
+// /media/:id/info lets the uploader or a site admin read a file's details, but a
+// note picture's name and stored paths go to its uploader only.
+func TestInfo_NotePictureDetailsGoToTheUploaderOnly(t *testing.T) {
+	camp := "camp-1"
+	files := map[string]*MediaFile{
+		"pic":   {ID: "pic", CampaignID: &camp, UploadedBy: "ana", OriginalName: "secret-name.png", MimeType: "image/png", UsageType: UsageNoteImage, ThumbnailPaths: map[string]string{"small": "t.png"}, CreatedAt: time.Now()},
+		"plain": {ID: "plain", CampaignID: &camp, UploadedBy: "ana", OriginalName: "map.png", MimeType: "image/png", UsageType: "attachment", ThumbnailPaths: map[string]string{"small": "t.png"}, CreatedAt: time.Now()},
+	}
+	tests := []struct {
+		name      string
+		file      string
+		who       string
+		admin     bool
+		wantName  bool
+		wantThumb bool
+	}{
+		{"uploader of a note picture", "pic", "ana", false, true, true},
+		{"admin reading a note picture", "pic", "root", true, false, false},
+		{"admin reading an ordinary file", "plain", "root", true, true, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/media/"+tt.file+"/info", nil), rec)
+			c.SetParamNames("fileID")
+			c.SetParamValues(tt.file)
+			auth.SetSession(c, &auth.Session{UserID: tt.who, IsAdmin: tt.admin})
+			h := &Handler{service: &linkFilesService{files: files}}
+			if err := h.Info(c); err != nil {
+				t.Fatal(err)
+			}
+			var got map[string]any
+			if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+				t.Fatal(err)
+			}
+			if _, ok := got["original_name"]; ok != tt.wantName {
+				t.Errorf("original_name present = %v, want %v", ok, tt.wantName)
+			}
+			if _, ok := got["thumbnails"]; ok != tt.wantThumb {
+				t.Errorf("thumbnails present = %v, want %v", ok, tt.wantThumb)
+			}
+		})
 	}
 }

@@ -79,8 +79,10 @@ type MediaRepository interface {
 	ListFilesByCampaign(ctx context.Context, campaignID string) ([]MediaFile, error)
 
 	// ListUnboundNotePictures returns the ids of note pictures created before
-	// olderThan that no note is bound to: uploaded and never saved into a
-	// note, or left behind when their note was deleted or edited.
+	// olderThan that no note is bound to and no saved note version still names:
+	// uploaded and never saved into a note, or left behind when their note was
+	// deleted or edited. A version still naming one is kept so a restore after
+	// an accidental delete finds its picture.
 	ListUnboundNotePictures(ctx context.Context, olderThan time.Time) ([]string, error)
 }
 
@@ -573,12 +575,15 @@ func (r *mediaRepository) ListFilesByCampaign(ctx context.Context, campaignID st
 }
 
 // ListUnboundNotePictures finds note pictures nothing holds any more; see the
-// interface. It reads note_pictures, a core table the notes widget fills.
+// interface. It reads note_pictures and note_versions, core tables the notes
+// widget fills; the version check is a substring match on a fixed-shape id, so
+// it needs no wildcard escaping.
 func (r *mediaRepository) ListUnboundNotePictures(ctx context.Context, olderThan time.Time) ([]string, error) {
 	rows, err := r.db.QueryContext(ctx,
 		`SELECT m.id FROM media_files m
 		 WHERE m.usage_type = ? AND m.created_at < ?
 		   AND NOT EXISTS (SELECT 1 FROM note_pictures p WHERE p.media_id = m.id)
+		   AND NOT EXISTS (SELECT 1 FROM note_versions v WHERE LOCATE(m.id, v.entry_html) > 0)
 		 LIMIT 500`, UsageNoteImage, olderThan)
 	if err != nil {
 		return nil, fmt.Errorf("listing unbound note pictures: %w", err)
