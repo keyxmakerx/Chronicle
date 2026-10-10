@@ -342,6 +342,9 @@ GET	/groups/:gid	internal/plugins/campaigns/routes.go
 GET	/groups/manage	internal/plugins/campaigns/routes.go
 GET	/health	internal/app/routes.go
 GET	/healthz	internal/app/routes.go
+GET	/import	internal/plugins/vault_import/routes.go
+GET	/import/markdown/dropzone	internal/plugins/vault_import/routes.go
+GET	/import/markdown/jobs/:job	internal/plugins/vault_import/routes.go
 GET	/integrations/keys	internal/plugins/syncapi/routes.go
 GET	/invites	internal/plugins/campaigns/routes.go
 GET	/invites/accept	internal/plugins/campaigns/routes.go
@@ -655,6 +658,8 @@ POST	/foundry-vtt/update/mode	internal/plugins/foundry_vtt/routes.go
 POST	/foundry-vtt/update/switch	internal/plugins/foundry_vtt/routes.go
 POST	/groups	internal/plugins/campaigns/routes.go
 POST	/groups/:gid/members	internal/plugins/campaigns/routes.go
+POST	/import/markdown/preview	internal/plugins/vault_import/routes.go
+POST	/import/markdown/start	internal/plugins/vault_import/routes.go
 POST	/install	internal/extensions/routes.go
 POST	/invites	internal/plugins/campaigns/routes.go
 POST	/join-code	internal/plugins/campaigns/routes.go

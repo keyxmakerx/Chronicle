@@ -56,6 +56,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/syncapi"
 	"github.com/keyxmakerx/chronicle/internal/plugins/systemstate"
 	"github.com/keyxmakerx/chronicle/internal/plugins/timeline"
+	"github.com/keyxmakerx/chronicle/internal/plugins/vault_import"
 	"github.com/keyxmakerx/chronicle/internal/plugins/widgetbindings"
 	"github.com/keyxmakerx/chronicle/internal/systems"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
@@ -4489,6 +4490,20 @@ func (a *App) RegisterRoutes() {
 	)
 	ai_workspace.RegisterOwnerRoutes(aiWorkspaceCampaignAuthed, aiWorkspaceHandler,
 		campaigns.RequireRole(campaigns.RoleOwner))
+
+	// --- Import from Obsidian or Markdown (Manage > Import) ---
+	// Pages, pictures and page files are reached through the narrow adapters in
+	// vault_import_adapters.go, so the import follows the same rules as a page
+	// typed in the editor and never sees another plugin's repository.
+	vaultImportService := vault_import.NewService(vault_import.Deps{
+		Pages:     vaultPagesAdapter{svc: entityService},
+		Pictures:  vaultPicturesAdapter{svc: mediaService},
+		Files:     vaultFilesAdapter{svc: pageFileService},
+		ToJSON:    vaultEditorJSON,
+		Audit:     &aiWorkspaceAuditAdapter{svc: auditService},
+		Lifecycle: a.ShutdownCtx,
+	})
+	vault_import.RegisterRoutes(e, vault_import.NewHandler(vaultImportService), authService, campaignService)
 
 	// --- Campaign Export/Import ---
 	exportSvc := campaigns.NewExportImportService(campaignService)

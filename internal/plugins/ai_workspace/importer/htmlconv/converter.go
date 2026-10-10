@@ -8,7 +8,8 @@
 // nodes/marks: doc, paragraph, text, heading (level 1-6), bulletList,
 // orderedList, listItem, codeBlock (no language attribute), blockquote,
 // horizontalRule, hardBreak, table/tableRow/tableHeader/tableCell,
-// marks bold/italic/strike/code/link/underline.
+// marks bold/italic/strike/code/link/underline, and the editor's own
+// picture (chronicleImage, from a figure.ce-img or an img with a /media/<id> src).
 //
 // Unrecognised tags fall back to a paragraph containing the
 // concatenated text content of the element's descendants — better to
@@ -18,6 +19,7 @@ package htmlconv
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -169,6 +171,17 @@ func convertElement(s *goquery.Selection) ([]Node, bool) {
 		return []Node{{Type: "blockquote", Content: convertChildren(s)}}, false
 	case "hr":
 		return []Node{{Type: "horizontalRule"}}, false
+	case "figure":
+		// The editor's own picture: <figure class="ce-img ..."><img src="/media/id">.
+		if n, ok := pictureNode(s); ok {
+			return []Node{n}, false
+		}
+		return convertChildren(s), false
+	case "img":
+		if n, ok := pictureNode(s); ok {
+			return []Node{n}, false
+		}
+		return nil, true
 	case "br":
 		return []Node{{Type: "hardBreak"}}, true
 	case "table":
@@ -182,6 +195,47 @@ func convertElement(s *goquery.Selection) ([]Node, bool) {
 		return []Node{{Type: "text", Text: t}}, true
 	}
 	return nil, true
+}
+
+// mediaSrcRe matches only this site's own media path; a picture from another
+// website is never stored as a hotlink.
+var mediaSrcRe = regexp.MustCompile(`^/media/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$`)
+
+// ceWidthRe reads the width step from the editor's figure classes.
+var ceWidthRe = regexp.MustCompile(`(?:^|\s)ce-img--w(\d{1,3})(?:\s|$)`)
+
+// pictureNode builds the editor's chronicleImage node from a <figure> or a
+// bare <img> whose source is a /media/<id> path. ok is false for anything else.
+func pictureNode(s *goquery.Selection) (Node, bool) {
+	img := s
+	isFigure := goquery.NodeName(s) == "figure"
+	if isFigure {
+		img = s.Find("img").First()
+	}
+	src, _ := img.Attr("src")
+	m := mediaSrcRe.FindStringSubmatch(src)
+	if m == nil {
+		return Node{}, false
+	}
+	alt, _ := img.Attr("alt")
+	attrs := map[string]any{"mediaId": m[1], "alt": alt, "caption": "", "width": 100, "align": "center", "gmOnly": false}
+	if isFigure {
+		class, _ := s.Attr("class")
+		padded := " " + class + " "
+		if w := ceWidthRe.FindStringSubmatch(class); w != nil {
+			if n, err := strconv.Atoi(w[1]); err == nil {
+				attrs["width"] = n
+			}
+		}
+		for _, a := range []string{"left", "right", "center"} {
+			if strings.Contains(padded, " ce-img--"+a+" ") {
+				attrs["align"] = a
+			}
+		}
+		attrs["gmOnly"] = strings.Contains(padded, " ce-img--gm ")
+		attrs["caption"] = strings.TrimSpace(s.Find("figcaption").First().Text())
+	}
+	return Node{Type: "chronicleImage", Attrs: attrs}, true
 }
 
 // convertInline walks an element's children expecting inline-only
@@ -241,6 +295,10 @@ func tagToMark(tag string, s *goquery.Selection) Mark {
 		// MentionLink extension reads.
 		if mid, ok := s.Attr("data-mention-id"); ok {
 			attrs["data-mention-id"] = mid
+		}
+		// The hover-card address the editor writes beside a mention.
+		if prev, ok := s.Attr("data-entity-preview"); ok {
+			attrs["data-entity-preview"] = prev
 		}
 		return Mark{Type: "link", Attrs: attrs}
 	}

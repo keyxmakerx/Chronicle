@@ -159,7 +159,7 @@ func (a *App) setupMiddleware() {
 			if strings.HasPrefix(path, "/media/upload") || path == "/ws" || path == siteLookPath {
 				return true
 			}
-			return isCalendarImportPath(path)
+			return isCalendarImportPath(path) || isVaultImportUploadPath(path)
 		},
 	}))
 	// The Site look form carries a logo and a sign-in picture, so it gets a
@@ -214,6 +214,16 @@ func (a *App) setupMiddleware() {
 // that position.
 var calendarImportPathPattern = regexp.MustCompile(
 	`^/campaigns/[^/]+/calendars/(wizard/import/preview|wizard/build/preview|wizard/create|import/preview|import)$`)
+
+// vaultImportUploadPattern matches Manage > Import's zip upload. The handler
+// caps the body itself (a vault is far larger than the global 2MB limit), so
+// the global limit must not apply here.
+var vaultImportUploadPattern = regexp.MustCompile(`^/campaigns/[^/]+/import/markdown/preview$`)
+
+// isVaultImportUploadPath reports whether path is that upload route.
+func isVaultImportUploadPath(path string) bool {
+	return vaultImportUploadPattern.MatchString(path)
+}
 
 // siteLookPath is the Site look form's URL, and siteLookBodyLimit its request
 // size cap: room for a 1 MB logo and a 3 MB picture plus the other fields.
