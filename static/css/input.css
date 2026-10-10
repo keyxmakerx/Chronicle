@@ -4203,7 +4203,7 @@ html.dark[data-view-contrast="high"] { /* the second out-ranks a campaign's :roo
 [data-cz-btn="keystone"] .btn:active {
   transform: scale(0.92) translateY(1px); box-shadow: inset 0 2px 5px rgb(16 24 40 / 0.35); transition-duration: 70ms;
 }
-.dark [data-cz-btn="keystone"] .btn:not(:active) { box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 2px 4px rgb(0 0 0 / 0.4), 0 8px 18px -8px rgb(0 0 0 / 0.6); }
+.dark [data-cz-btn="keystone"] .btn:not(:active, .btn-primary, .btn-danger, .btn-warning, .btn-success) { box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 2px 4px rgb(0 0 0 / 0.4), 0 8px 18px -8px rgb(0 0 0 / 0.6); }
 html[data-motion] [data-cz-btn="keystone"] .btn:active { transform: none; }
 
 /* Ambient: shadows tinted with the accent (czElevation) and a faint light

@@ -16,7 +16,8 @@ Six rules every screen is judged against.
   like the phone menu, slide in from that edge.
 - **Weight matches what's at stake.** Browsing is light and quick. Powerful
   actions (entering Site admin, Publish, Delete, Send invites) press deeper
-  and let go slower; nothing else gets the heavy press.
+  and let go slower; nothing else gets the heavy press unless the owner picks
+  Keystone buttons in Customize.
 - **Nothing bounces or waits on show.** Motion slows to a stop, with no wobble
   or overshoot, and nothing runs past half a second unless it marks a big
   moment. Entering Site admin is the one signed exception (under Motion).
@@ -134,8 +135,7 @@ place, and Off shows the end state.
   the owner's Motion speed retimes all of them, the paper moves included.
 - **Effects have depth and stay light**: no flat pastel fills, no bounces or
   overshoot outside Site admin's entrance, and nothing that loads a weak
-  device. Heavy effects check what
-  the device can do first.
+  device. Heavy effects check what the device can do first.
 - **Zoom is gentle**: one wheel tick is a small step, never a jump from far to
   close.
 
