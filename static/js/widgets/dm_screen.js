@@ -31,6 +31,10 @@
   var BREAK = 1560;   // ms: the screen pushes out and the die comes apart
   var FADE = BREAK + 1900;
 
+  // Note state per campaign and note label, kept for the page's life so a draft
+  // that failed to save is still there when the screen is reopened.
+  var NOTES = {};
+
   var POS_KEY = 'chronicle.dmscreen.pos';
 
   function readPos() {
@@ -101,8 +105,7 @@
         o.addEventListener('htmx:beforeSwap', function (e) {
           if (!e.target.hasAttribute || !e.target.hasAttribute('data-dms-root')) return;
           var tab = e.target.querySelector('[data-dms-tab][aria-selected="true"]');
-          var ta = e.target.querySelector('[data-dms-note]');
-          st.keep = { tab: tab && tab.getAttribute('data-dms-tab'), draft: st.noteDirty && ta ? ta.value : null };
+          st.keep = { tab: tab && tab.getAttribute('data-dms-tab') };
         });
         st.overlay = o;
         return o;
@@ -193,71 +196,195 @@
         if (el) el.textContent = text;
       }
 
+      // The note's state lives outside the markup: a panel refetch, a close
+      // during a save, or a failed save must never lose typed text. noteFor
+      // adopts the box the first time it is seen and, on later mounts, pushes
+      // an unsaved draft back into the fresh markup (with the version it was
+      // typed against, so a save still notices that the note moved on).
+      function noteKey(ta) { return ta.getAttribute('data-dms-note-url') + '|' + (ta.getAttribute('aria-label') || ''); }
+      function onScreen(n, ta) { return !!ta && noteKey(ta) === n.key; }
+
+      function noteFor(ta, restore) {
+        var key = noteKey(ta);
+        var n = NOTES[key];
+        if (!n) n = NOTES[key] = { key: key, dirty: false, saving: false, again: false, conflict: false, failures: 0 };
+        n.url = ta.getAttribute('data-dms-note-url');
+        if (restore && n.dirty && !ta.readOnly) {
+          ta.value = n.text;
+          ta.setAttribute('data-dms-note-version', n.version);
+        } else if (!n.dirty) {
+          n.text = ta.value;
+          n.version = ta.getAttribute('data-dms-note-version') || '';
+        }
+        return n;
+      }
+
+      // The state of the box on screen, or the last one used when the markup is
+      // already gone (closing). The box is the truth for the text while it exists: anything in it that
+      // the state does not hold yet is an unsaved edit.
+      function curNote(restore) {
+        var ta = noteBox();
+        if (ta) {
+          st.note = noteFor(ta, restore);
+          if (!restore && !ta.readOnly && st.note.text !== ta.value) { st.note.text = ta.value; st.note.dirty = true; }
+        }
+        return st.note || null;
+      }
+
+      function conflictBox() {
+        var r = root(), s = r && r.querySelector('[data-dms-note-status]');
+        if (!s) return null;
+        var box = r.querySelector('[data-dms-note-conflict]');
+        if (!box) {
+          box = document.createElement('span');
+          box.setAttribute('data-dms-note-conflict', '');
+          box.hidden = true;
+          [['Use theirs', useTheirs], ['Keep mine', keepMine]].forEach(function (b) {
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'dms-link';
+            btn.textContent = b[0];
+            btn.addEventListener('click', b[1]);
+            box.appendChild(btn);
+          });
+          s.parentNode.insertBefore(box, s.nextSibling);
+        }
+        return box;
+      }
+
+      function showConflict(on) {
+        var box = conflictBox();
+        if (box) box.hidden = !on;
+        if (on) noteStatus('Changed elsewhere. Your text is kept here.');
+      }
+
       // Autosave: ~800ms after typing stops, and on blur or close.
       function noteEdited() {
-        st.noteDirty = true;
+        var n = curNote();
+        if (!n) return;
+        n.dirty = true;
+        if (n.conflict) return; // the choice comes first; the text is kept
         noteStatus('Unsaved changes');
         clearTimeout(st.noteTimer);
         st.noteTimer = setTimeout(saveNote, 800);
       }
 
+      // Sends the note's state, not the box: close() has already torn the box
+      // down by the time a queued or retried save runs.
       function saveNote() {
         clearTimeout(st.noteTimer);
-        var ta = noteBox();
-        if (!st.noteDirty || !ta || ta.readOnly) return;
-        if (st.noteSaving) { st.noteAgain = true; return; }
-        var url = ta.getAttribute('data-dms-note-url'), text = ta.value;
-        st.noteSaving = true;
+        clearTimeout(st.noteRetry);
+        var ta = noteBox(), n = curNote();
+        if (!n || !n.dirty || n.conflict || (ta && ta.readOnly)) return;
+        if (n.saving) { n.again = true; return; }
+        var text = n.text;
+        n.saving = true;
         noteStatus('Saving\u2026');
-        Chronicle.apiFetch(url, { method: 'PUT', body: { text: text, version: ta.getAttribute('data-dms-note-version') || '' } })
+        Chronicle.apiFetch(n.url, { method: 'PUT', body: { text: text, version: n.version } })
           .then(function (r) {
             if (r.status === 409) { var e = new Error('changed'); e.changed = true; throw e; }
-            if (!r.ok) throw new Error('save failed: ' + r.status);
+            if (!r.ok) { var f = new Error('save failed: ' + r.status); f.status = r.status; throw f; }
             return r.json();
           })
           .then(function (j) {
-            // Typing during the save keeps the box dirty for the next round.
-            var cur = noteBox();
-            if (cur && j) cur.setAttribute('data-dms-note-version', j.version || '');
-            if (!cur || cur.value === text) { st.noteDirty = false; noteStatus(NOTE_OK); }
-            var r = root(), a = r && r.querySelector('[data-dms-note-link]');
-            if (a && j && j.link) { a.setAttribute('href', j.link); a.hidden = false; }
+            n.failures = 0;
+            if (j) n.version = j.version || '';
+            // Typing during the save keeps the note dirty for the next round.
+            if (n.text === text) n.dirty = false;
+            var box = noteBox();
+            if (box && onScreen(n, box)) {
+              box.setAttribute('data-dms-note-version', n.version);
+              noteStatus(n.dirty ? 'Unsaved changes' : NOTE_OK);
+              var r = root(), a = r && r.querySelector('[data-dms-note-link]');
+              if (a && j && j.link) { a.setAttribute('href', j.link); a.hidden = false; }
+            }
           })
           .catch(function (err) {
-            if (err && err.changed) { reloadNote(url); return; }
-            noteStatus('Could not save. Your text is still here; it will retry.');
+            if (err && err.changed) {
+              n.conflict = true;
+              var box = noteBox();
+              if (box && onScreen(n, box)) showConflict(true);
+              return;
+            }
+            // A 4xx other than a conflict (too long, formatted note) will not
+            // pass by trying again; anything else gets one more go in 5 s and
+            // then waits for the next edit.
+            var retry = !(err && err.status >= 400 && err.status < 500);
+            n.failures++;
+            if (retry && n.failures < 2) {
+              noteStatus('Couldn\u2019t save. Your text is kept; retrying in a few seconds.');
+              st.noteRetry = setTimeout(saveNote, 5000);
+            } else if (retry) {
+              noteStatus('Couldn\u2019t save. Your text is kept; it saves on your next edit.');
+            } else {
+              noteStatus('Couldn\u2019t save this note. Your text is kept here.');
+            }
           })
           .then(function () {
-            st.noteSaving = false;
-            if (st.noteAgain) { st.noteAgain = false; saveNote(); }
+            n.saving = false;
+            if (n.again) { n.again = false; saveNote(); }
           });
       }
 
-      // Another save or an edit in Notes got there first: take its text.
-      function reloadNote(url) {
-        return Chronicle.apiFetch(url)
+      // The note moved on (another save, an edit in Notes, a new game night, or
+      // it was deleted). Typed text is never replaced without a choice.
+      function useTheirs() {
+        var n = st.note; if (!n) return;
+        Chronicle.apiFetch(n.url)
           .then(function (r) { if (!r.ok) throw new Error('reload failed'); return r.json(); })
           .then(function (j) {
-            var ta = noteBox(); if (!ta) return;
-            ta.value = j.text || '';
-            ta.readOnly = !!j.read_only;
-            ta.setAttribute('data-dms-note-version', j.version || '');
-            st.noteDirty = false;
-            noteStatus('Changed elsewhere; reloaded.');
+            n.text = j.text || '';
+            n.version = j.version || '';
+            n.dirty = false;
+            n.conflict = false;
+            n.failures = 0;
+            var ta = noteBox();
+            if (ta && onScreen(n, ta)) {
+              ta.value = n.text;
+              ta.readOnly = !!j.read_only;
+              ta.setAttribute('data-dms-note-version', n.version);
+              showConflict(false);
+              noteStatus('Loaded the newer text.');
+            }
           })
-          .catch(function () { noteStatus('Changed elsewhere. Close and reopen the screen to reload.'); });
+          .catch(function () { noteStatus('Couldn\u2019t load the newer text. Your text is kept here.'); });
+      }
+
+      // Re-saves the draft over the note as it is now: fetch its version, then
+      // save with that.
+      function keepMine() {
+        var n = st.note; if (!n) return;
+        Chronicle.apiFetch(n.url)
+          .then(function (r) { if (!r.ok) throw new Error('reload failed'); return r.json(); })
+          .then(function (j) {
+            n.version = j.version || '';
+            n.conflict = false;
+            n.dirty = true;
+            var ta = noteBox();
+            if (ta && onScreen(n, ta)) {
+              ta.setAttribute('data-dms-note-version', n.version);
+              ta.readOnly = !!j.read_only;
+              showConflict(false);
+            }
+            saveNote();
+          })
+          .catch(function () { noteStatus('Couldn\u2019t reach the note. Your text is kept here.'); });
       }
 
       function restoreKept() {
-        var k = st.keep; if (!k) return;
-        st.keep = null;
+        var k = st.keep; st.keep = null;
         var r = root(); if (!r) return;
-        if (k.tab) {
+        if (k && k.tab) {
           var t = r.querySelector('[data-dms-tab="' + k.tab + '"]');
           if (t) selectTab(t);
         }
-        var ta = noteBox();
-        if (ta && k.draft !== null) { ta.value = k.draft; noteStatus('Unsaved changes'); st.noteTimer = setTimeout(saveNote, 800); }
+        // A draft left by a failed save (or a refetch) comes back with the
+        // fresh markup.
+        var n = curNote(true);
+        if (n && n.dirty) {
+          if (n.conflict) showConflict(true);
+          else { noteStatus('Unsaved changes'); st.noteTimer = setTimeout(saveNote, 800); }
+        }
       }
 
       function filterConditions(input) {
@@ -270,7 +397,15 @@
 
       function onKey(e) {
         if (e.key !== 'Escape' || !st.overlay || st.overlay.hidden) return;
-        if (st.playing) finish(); else close();
+        if (st.playing) { finish(); return; }
+        // A window sits beside a usable page: Escape closes it only when focus
+        // is in it (or nowhere), so it never swallows Escape meant for a page
+        // dropdown or dialog.
+        if (st.windowed) {
+          var f = document.activeElement;
+          if (e.defaultPrevented || (f && f !== document.body && !st.overlay.contains(f))) return;
+        }
+        close();
       }
 
       function anim(target, frames, opts) {
@@ -320,6 +455,8 @@
         if (st.windowed || !o || !r || narrow()) return;
         st.windowed = true;
         o.classList.add('dms-windowed');
+        // The page behind is live now, so the dialog is no longer modal.
+        r.setAttribute('aria-modal', 'false');
         var dim = o.querySelector('[data-dms-dim]');
         var fade = anim(dim, [{ opacity: 1 }, { opacity: 0 }], { duration: 300 });
         fade.onfinish = function () { o.classList.add('dms-dimmed-off'); };
@@ -342,6 +479,7 @@
       // Puts the root at the stored offset; settle eases it there once.
       function placeWindow(settle) {
         var r = root(); if (!r || !st.off) return;
+        if (st.windowed) r.setAttribute('aria-modal', 'false'); // a refetch restores the template's value
         r.classList.toggle('dms-settle', !!settle && !reduce);
         r.style.translate = st.off.x + 'px ' + st.off.y + 'px';
       }
@@ -398,6 +536,7 @@
         var stage = st.overlay.querySelector('[data-dms-stage]');
         stage.innerHTML = html;
         if (window.htmx) window.htmx.process(stage);
+        restoreKept();
         return root();
       }
 
@@ -545,6 +684,8 @@
 
       function close() {
         if (!st.overlay || st.overlay.hidden) return;
+        // saveNote captures the box's text into the note state before the box
+        // is torn down below; a save already in flight queues this one behind it.
         saveNote();
         st.willWindow = false;
         stopAll();
