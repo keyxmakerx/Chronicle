@@ -219,3 +219,18 @@ test('a manual real-world calendar places a weekday by AbsoluteDay, not the Juli
   assert.equal(CalDate.dayIndex(manualRealWorld, 2026, 9, 27), 739760);
   assert.equal(CalDate.dayIndex(trackedRealWorld, 2026, 9, 27), 2461311);
 });
+
+// A real-world calendar's grid starts on Sunday (Calendar.GridFirstWeekday),
+// while weekdayCol keeps Monday first. 1 October 2026 is a Thursday, so it sits
+// after Sun Mon Tue Wed, the same 4 blanks buildMonthGrid gives.
+test('a real-world calendar grid starts on Sunday', () => {
+  const { CalDate } = loadCalendarMath();
+  assert.equal(CalDate.gridFirst(trackedRealWorld), 6);
+  assert.equal(CalDate.gridWeekdays(trackedRealWorld)[0].name, 'Sunday');
+  assert.equal(CalDate.gridWeekdays(trackedRealWorld)[6].name, 'Saturday');
+  assert.equal(CalDate.gridLead(trackedRealWorld, 2026, 10, 1), 4);
+  assert.equal(CalDate.weekdayCol(trackedRealWorld, 2026, 10, 1), 3, 'weekday math unchanged');
+  const fantasy = { mode: 'fantasy', months: realWorldMonths, weekdays: realWorldWeekdays };
+  assert.equal(CalDate.gridFirst(fantasy), 0);
+  assert.equal(CalDate.gridWeekdays(fantasy)[0].name, 'Monday');
+});

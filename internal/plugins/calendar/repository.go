@@ -9,6 +9,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -146,7 +147,11 @@ func scanCalendar(scanner interface{ Scan(...any) error }) (*Calendar, error) {
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
-	return cal, err
+	if err != nil {
+		return nil, err
+	}
+	cal.followRealClock(time.Now())
+	return cal, nil
 }
 
 // Create inserts a new calendar.

@@ -177,6 +177,28 @@
       return CalDate.mod(CalDate.dayIndex(cal, year, month1, day), wl);
     },
 
+    // gridFirst mirrors Calendar.GridFirstWeekday: the weekday a month grid
+    // starts each row on. A real-world calendar starts on Sunday like a wall
+    // calendar while its weekdays stay Monday to Sunday underneath.
+    gridFirst: function (cal) {
+      if (CalDate.weekLen(cal) !== 7 || cal.mode !== 'reallife') return 0;
+      var w = cal.weekdays || [];
+      return (CalDate.usesRealTime(cal) || (w.length === 7 && w[6].name === 'Sunday')) ? 6 : 0;
+    },
+
+    // gridWeekdays is the weekday list in grid column order.
+    gridWeekdays: function (cal) {
+      var w = cal.weekdays || [], f = CalDate.gridFirst(cal);
+      return f ? w.slice(f).concat(w.slice(0, f)) : w;
+    },
+
+    // gridLead is how many blank cells come before day 1 of a month on the grid.
+    gridLead: function (cal, year, month1) {
+      var col = CalDate.weekdayCol(cal, year, month1, 1);
+      if (col < 0) return 0;
+      return CalDate.mod(col - CalDate.gridFirst(cal), CalDate.weekLen(cal));
+    },
+
     monthCount: function (cal) { return (cal.months || []).length || 12; },
 
     // addDays walks {y,m,d} (month 1-based) forward/backward by delta real
@@ -3334,7 +3356,7 @@
       var season = this.seasonForDate(this.view.m, 15);
       $('#cal5-season', this.el).innerHTML = season ? ('<b>' + esc(season.name) + '</b>') : '';
 
-      var dow = this.dowEl, weekdays = cal.weekdays || [];
+      var dow = this.dowEl, weekdays = CalDate.gridWeekdays(cal);
       dow.innerHTML = weekdays.map(function (w) {
         return '<span><span class="f">' + esc(w.name) + '</span><span class="s">' + esc(w.name.slice(0, 1)) + '</span></span>';
       }).join('');
@@ -3481,15 +3503,7 @@
         for (var bd = 1; bd <= interDays; bd++) html += this._dayBandHTML(y, m, bd, monthDef, interDays);
       } else {
         var days = CalDate.monthDays(cal, m0, y);
-        var firstCol = CalDate.weekdayCol(cal, y, m, 1);
-        // -1 (MonthStartsNewWeek + an intercalary month) can't actually
-        // reach here — the branch above already routes every intercalary
-        // month to the band renderer — but weekdayCol's contract allows it,
-        // and clamping keeps this file's handling the same as the server's
-        // own preview grid (view_helpers.go's buildMonthGrid: "its days run
-        // from the first column") rather than leaning on a guard elsewhere
-        // that could change.
-        if (firstCol < 0) firstCol = 0;
+        var firstCol = CalDate.gridLead(cal, y, m);
         this._gridOff = firstCol;
         var cells = [];
         for (var i = 0; i < firstCol; i++) cells.push(null);
