@@ -412,6 +412,9 @@ func (r *userRepository) AnonymizeUser(ctx context.Context, userID, email, displ
 	if _, err := r.db.ExecContext(ctx, `DELETE FROM user_recovery_codes WHERE user_id = ?`, userID); err != nil {
 		return fmt.Errorf("removing recovery codes: %w", err)
 	}
+	if _, err := r.db.ExecContext(ctx, `DELETE FROM user_identities WHERE user_id = ?`, userID); err != nil {
+		return fmt.Errorf("removing linked sign-ins: %w", err)
+	}
 	return nil
 }
 

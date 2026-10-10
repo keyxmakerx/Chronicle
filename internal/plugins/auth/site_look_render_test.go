@@ -29,7 +29,7 @@ func TestAuthPagesCarryTheSiteBrand(t *testing.T) {
 		name string
 		page templ.Component
 	}{
-		{"login", LoginPage("tok", "", "", "", "")},
+		{"login", LoginPage("tok", "", "", "", "", LoginOptions{})},
 		{"register", RegisterPage("tok", &RegisterRequest{}, "", "", false, "open")},
 		{"forgot password", ForgotPasswordPage("tok", "", "", true)},
 		{"reset password", ResetPasswordPage("tok", "t", "", "")},
@@ -86,7 +86,7 @@ func TestLoginPageSiteLook(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			out := renderAuthPage(t, tc.look, LoginPage("tok", "", "", "", ""))
+			out := renderAuthPage(t, tc.look, LoginPage("tok", "", "", "", "", LoginOptions{}))
 			for _, w := range tc.want {
 				if !strings.Contains(out, w) {
 					t.Errorf("missing %q", w)
@@ -104,7 +104,7 @@ func TestLoginPageSiteLook(t *testing.T) {
 // TestSiteLookAccentOnAuthPages checks the look's accent reaches the sign-in
 // pages (they are outside a campaign) through the layout's accent CSS.
 func TestSiteLookAccentOnAuthPages(t *testing.T) {
-	out := renderAuthPage(t, sitelook.Settings{Configured: true, Look: "forest"}, LoginPage("tok", "", "", "", ""))
+	out := renderAuthPage(t, sitelook.Settings{Configured: true, Look: "forest"}, LoginPage("tok", "", "", "", "", LoginOptions{}))
 	if !strings.Contains(out, "--color-accent:#2f7d4f") {
 		t.Errorf("accent of the forest look missing from the page head")
 	}

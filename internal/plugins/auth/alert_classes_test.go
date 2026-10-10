@@ -17,7 +17,7 @@ import (
 // alongside the shared class, since alert-success itself carries none) and
 // no longer with hand-written green Tailwind utilities.
 func TestLoginPage_SuccessBannerUsesSharedAlertClass(t *testing.T) {
-	component := LoginPage("csrf", "", "", "Password updated", "")
+	component := LoginPage("csrf", "", "", "Password updated", "", LoginOptions{})
 
 	var buf bytes.Buffer
 	if err := component.Render(context.Background(), &buf); err != nil {

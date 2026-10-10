@@ -352,6 +352,8 @@ GET	/journal/:noteId	internal/widgets/notes/routes.go
 GET	/layout-presets	internal/plugins/entities/layout_preset_routes.go
 GET	/layout-presets/:pid	internal/plugins/entities/layout_preset_routes.go
 GET	/login	internal/plugins/auth/routes.go
+GET	/login/oidc	internal/plugins/auth/routes.go
+GET	/login/oidc/callback	internal/plugins/auth/routes.go
 GET	/maps	internal/plugins/maps/routes.go
 GET	/maps	internal/plugins/syncapi/routes.go
 GET	/maps/:mapID	internal/plugins/syncapi/routes.go
@@ -546,6 +548,8 @@ POST	/:id/review	internal/plugins/packages/routes.go
 POST	/account/avatar	internal/plugins/auth/routes.go
 POST	/account/delete	internal/plugins/auth/routes.go
 POST	/account/reauth	internal/plugins/auth/routes.go
+POST	/account/sign-in/link	internal/plugins/auth/routes.go
+POST	/account/sign-in/unlink	internal/plugins/auth/routes.go
 POST	/account/two-factor/disable	internal/plugins/auth/routes.go
 POST	/account/two-factor/enable	internal/plugins/auth/routes.go
 POST	/account/two-factor/recovery-codes	internal/plugins/auth/routes.go
@@ -720,6 +724,8 @@ POST	/run	internal/plugins/restore/routes.go
 POST	/saved-filters	internal/plugins/entities/routes.go
 POST	/schedule	internal/plugins/backup/routes.go
 POST	/security/registration	internal/plugins/admin/routes.go
+POST	/security/sign-in-provider	internal/plugins/admin/routes.go
+POST	/security/sign-in-provider/test	internal/plugins/admin/routes.go
 POST	/security/users/:id/force-logout	internal/plugins/admin/routes.go
 POST	/sessions	internal/plugins/sessions/routes.go
 POST	/sessions/:sid/entities	internal/plugins/sessions/routes.go

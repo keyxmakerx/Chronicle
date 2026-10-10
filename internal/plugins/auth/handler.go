@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -114,7 +115,7 @@ func (h *Handler) LoginForm(c echo.Context) error {
 	// the query param does not survive the HTMX form POST.
 	redirect := sanitizeRedirect(c.QueryParam("redirect"))
 
-	return middleware.Render(c, http.StatusOK, LoginPage(csrfToken, "", errMsg, successMsg, redirect))
+	return middleware.Render(c, http.StatusOK, LoginPage(csrfToken, "", errMsg, successMsg, redirect, h.service.LoginOptions(c.Request().Context())))
 }
 
 // Login processes the login form submission (POST /login).
@@ -164,7 +165,7 @@ func (h *Handler) Login(c echo.Context) error {
 		if middleware.IsHTMX(c) {
 			return middleware.Render(c, http.StatusOK, LoginForm_(csrfToken, req.Email, errMsg, redirect))
 		}
-		return middleware.Render(c, http.StatusOK, LoginPage(csrfToken, req.Email, errMsg, "", redirect))
+		return middleware.Render(c, http.StatusOK, LoginPage(csrfToken, req.Email, errMsg, "", redirect, h.service.LoginOptions(c.Request().Context())))
 	}
 
 	// Log successful login as a security event.
@@ -221,6 +222,146 @@ func (h *Handler) LoginTwoFactor(c echo.Context) error {
 		redirectTo = redirect
 	}
 	return middleware.HTMXRedirect(c, redirectTo)
+}
+
+// oidcStateCookie names the cookie that ties a provider round trip to the
+// browser that started it, so a callback link can't be replayed into
+// someone else's browser.
+const (
+	oidcStateCookieName       = "chronicle_oidc_state"
+	oidcStateCookieSecureName = "__Host-chronicle_oidc_state"
+)
+
+// SetOIDCStateCookie remembers the round trip's state in this browser. It
+// is Lax so it comes back on the provider's top-level redirect.
+func SetOIDCStateCookie(c echo.Context, state string) {
+	secure := middleware.SchemeIsSecure(c.Request())
+	name := oidcStateCookieName
+	if secure {
+		name = oidcStateCookieSecureName
+	}
+	c.SetCookie(&http.Cookie{Name: name, Value: state, Path: "/", HttpOnly: true, Secure: secure,
+		SameSite: http.SameSiteLaxMode, MaxAge: int(oidcStateTTL.Seconds())})
+}
+
+func readOIDCStateCookie(c echo.Context) string {
+	names := []string{oidcStateCookieName}
+	if middleware.SchemeIsSecure(c.Request()) {
+		names = []string{oidcStateCookieSecureName, oidcStateCookieName}
+	}
+	for _, n := range names {
+		if ck, err := c.Cookie(n); err == nil && ck.Value != "" {
+			return ck.Value
+		}
+	}
+	return ""
+}
+
+func clearOIDCStateCookie(c echo.Context) {
+	for _, n := range []string{oidcStateCookieName, oidcStateCookieSecureName} {
+		c.SetCookie(&http.Cookie{Name: n, Value: "", Path: "/", HttpOnly: true,
+			Secure: n == oidcStateCookieSecureName, MaxAge: -1})
+	}
+}
+
+// loginError shows the sign-in page with a message, for provider failures.
+func (h *Handler) loginError(c echo.Context, msg string) error {
+	csrfToken := middleware.GetCSRFToken(c)
+	return middleware.Render(c, http.StatusOK, LoginPage(csrfToken, "", msg, "", "", h.service.LoginOptions(c.Request().Context())))
+}
+
+// LoginOIDC sends the browser to the provider (GET /login/oidc).
+func (h *Handler) LoginOIDC(c echo.Context) error {
+	redirect := sanitizeRedirect(c.QueryParam("redirect"))
+	authURL, state, err := h.service.BeginOIDC(c.Request().Context(), OIDCModeLogin, "", redirect)
+	if err != nil {
+		return h.loginError(c, apperror.UserMessage(err, "sign-in with your provider isn't working right now"))
+	}
+	SetOIDCStateCookie(c, state)
+	return c.Redirect(http.StatusSeeOther, authURL)
+}
+
+// LinkOIDC starts linking the signed-in person's provider account
+// (POST /account/sign-in/link). It's a POST so another site can't start it.
+func (h *Handler) LinkOIDC(c echo.Context) error {
+	userID := GetUserID(c)
+	if userID == "" {
+		return apperror.NewUnauthorized("not authenticated")
+	}
+	authURL, state, err := h.service.BeginOIDC(c.Request().Context(), OIDCModeLink, userID, "")
+	if err != nil {
+		return err
+	}
+	SetOIDCStateCookie(c, state)
+	return middleware.HTMXRedirect(c, authURL)
+}
+
+// UnlinkOIDCAPI removes the link (POST /account/sign-in/unlink).
+func (h *Handler) UnlinkOIDCAPI(c echo.Context) error {
+	userID := GetUserID(c)
+	if userID == "" {
+		return apperror.NewUnauthorized("not authenticated")
+	}
+	if err := h.service.UnlinkOIDC(c.Request().Context(), userID); err != nil {
+		return err
+	}
+	h.logSecurityEvent(c.Request().Context(), "sign_in.unlinked", userID, userID, c.RealIP(), c.Request().UserAgent(), nil)
+	return c.NoContent(http.StatusNoContent)
+}
+
+// OIDCCallback is where the provider sends the browser back
+// (GET /login/oidc/callback). The state must match this browser's cookie
+// before anything else is looked at.
+func (h *Handler) OIDCCallback(c echo.Context) error {
+	ctx := c.Request().Context()
+	ip, ua := c.RealIP(), c.Request().UserAgent()
+	state := c.QueryParam("state")
+	cookie := readOIDCStateCookie(c)
+	clearOIDCStateCookie(c)
+	if state == "" || cookie == "" || subtle.ConstantTimeCompare([]byte(state), []byte(cookie)) != 1 {
+		return h.loginError(c, "That sign-in didn't start in this browser, or took too long. Start again.")
+	}
+	sessionUserID := ""
+	if token := getSessionToken(c); token != "" {
+		if sess, err := h.service.ValidateSession(ctx, token); err == nil {
+			sessionUserID = sess.UserID
+		}
+	}
+	res, err := h.service.FinishOIDC(ctx, OIDCCallbackInput{
+		State: state, Code: c.QueryParam("code"), ProviderError: c.QueryParam("error"),
+		SessionUserID: sessionUserID, IP: ip, UserAgent: ua,
+	})
+	mode := OIDCModeLogin
+	if res != nil {
+		mode = res.Mode
+	}
+	switch mode {
+	case OIDCModeTest:
+		return c.Redirect(http.StatusSeeOther, "/admin/security?tab=provider")
+	case OIDCModeLink:
+		outcome := "linked"
+		if err != nil {
+			outcome = "failed"
+			var appErr *apperror.AppError
+			if errors.As(err, &appErr) && appErr.Code == http.StatusConflict {
+				outcome = "taken"
+			}
+		} else {
+			h.logSecurityEvent(ctx, "sign_in.linked", sessionUserID, sessionUserID, ip, ua, nil)
+		}
+		return c.Redirect(http.StatusSeeOther, "/account?signin="+outcome+"#sign-in")
+	}
+	if err != nil {
+		h.logSecurityEvent(ctx, "login.failed", "", "", ip, ua, map[string]any{"provider": true})
+		return h.loginError(c, apperror.UserMessage(err, "sign-in with your provider didn't work"))
+	}
+	h.logSecurityEvent(ctx, "login.success", res.User.ID, "", ip, ua, map[string]any{"provider": true})
+	setSessionCookie(c, res.SessionToken, h.sessionTTL)
+	redirectTo := "/dashboard"
+	if r := sanitizeRedirect(res.Redirect); r != "" {
+		redirectTo = r
+	}
+	return c.Redirect(http.StatusSeeOther, redirectTo)
 }
 
 // RegisterForm renders the registration page (GET /register).
@@ -645,7 +786,13 @@ func (h *Handler) AccountPage(c echo.Context) error {
 		slog.Warn("reading two-factor status", slog.String("user_id", userID), slog.Any("error", err))
 	}
 
-	return middleware.Render(c, http.StatusOK, AccountPage(user, csrfToken, timezones, prefs, notify, owned, twoFactor))
+	methods, err := h.service.SignInMethods(c.Request().Context(), userID)
+	if err != nil {
+		slog.Warn("reading sign-in methods", slog.String("user_id", userID), slog.Any("error", err))
+	}
+
+	return middleware.Render(c, http.StatusOK, AccountPage(user, csrfToken, timezones, prefs, notify, owned, twoFactor,
+		methods, signInOutcome(c.QueryParam("signin"))))
 }
 
 // DeleteAccountAPI deletes the signed-in person's own account
@@ -1010,4 +1157,19 @@ func (h *Handler) ReauthConfirm(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{
 		"status": "confirmed",
 	})
+}
+
+// signInOutcome turns the fixed ?signin= codes from a link round trip into
+// the account page's message. Only these words are ever shown, so the
+// address bar can't put text of its own on the page.
+func signInOutcome(code string) string {
+	switch code {
+	case "linked":
+		return "Linked. You can now sign in with either."
+	case "taken":
+		return "That account is already linked to someone else's Chronicle account."
+	case "failed":
+		return "Linking didn't work. Try again, or ask your site admin to check the provider setting."
+	}
+	return ""
 }

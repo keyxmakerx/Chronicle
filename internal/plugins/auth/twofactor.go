@@ -100,8 +100,14 @@ func ConfigureTwoFactor(svc AuthService, siteSecret string) {
 	}
 }
 
-func (s *authService) sealSecret(secret string) (string, error) {
-	block, err := aes.NewCipher(s.totpKey)
+func (s *authService) sealSecret(secret string) (string, error) { return sealWith(s.totpKey, secret) }
+
+func (s *authService) openSecret(sealed string) (string, error) { return openWith(s.totpKey, sealed) }
+
+// sealWith encrypts with AES-256-GCM under key and returns base64 of
+// nonce+ciphertext.
+func sealWith(key []byte, secret string) (string, error) {
+	block, err := aes.NewCipher(key)
 	if err != nil {
 		return "", err
 	}
@@ -116,12 +122,13 @@ func (s *authService) sealSecret(secret string) (string, error) {
 	return base64.StdEncoding.EncodeToString(gcm.Seal(nonce, nonce, []byte(secret), nil)), nil
 }
 
-func (s *authService) openSecret(sealed string) (string, error) {
+// openWith reverses sealWith.
+func openWith(key []byte, sealed string) (string, error) {
 	raw, err := base64.StdEncoding.DecodeString(sealed)
 	if err != nil {
 		return "", err
 	}
-	block, err := aes.NewCipher(s.totpKey)
+	block, err := aes.NewCipher(key)
 	if err != nil {
 		return "", err
 	}

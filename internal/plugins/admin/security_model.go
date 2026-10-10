@@ -28,6 +28,9 @@ const (
 	EventTwoFactorCodesReplaced = "two_factor.codes_replaced"
 	EventTwoFactorFailed        = "login.two_factor_failed"
 	EventTwoFactorAdminOff      = "admin.two_factor_disabled"
+	EventProviderSaved          = "admin.sign_in_provider_saved"
+	EventSignInLinked           = "sign_in.linked"
+	EventSignInUnlinked         = "sign_in.unlinked"
 )
 
 // SecurityEvent represents a single site-wide security event. Unlike campaign
@@ -81,6 +84,9 @@ func EventTypeLabel(eventType string) string {
 		EventTwoFactorCodesReplaced: "Recovery Codes Replaced",
 		EventTwoFactorFailed:        "Wrong Two-factor Code",
 		EventTwoFactorAdminOff:      "Two-factor Switched Off by Admin",
+		EventProviderSaved:          "Sign-in Provider Changed",
+		EventSignInLinked:           "Sign-in Linked",
+		EventSignInUnlinked:         "Sign-in Unlinked",
 	}
 	if label, ok := labels[eventType]; ok {
 		return label
@@ -111,6 +117,9 @@ func EventTypeIcon(eventType string) string {
 		EventTwoFactorCodesReplaced: "fa-solid fa-key text-blue-500",
 		EventTwoFactorFailed:        "fa-solid fa-triangle-exclamation text-red-500",
 		EventTwoFactorAdminOff:      "fa-solid fa-mobile-screen text-red-500",
+		EventProviderSaved:          "fa-solid fa-right-to-bracket text-purple-500",
+		EventSignInLinked:           "fa-solid fa-link text-emerald-500",
+		EventSignInUnlinked:         "fa-solid fa-link-slash text-amber-500",
 	}
 	if icon, ok := icons[eventType]; ok {
 		return icon
@@ -125,13 +134,14 @@ const (
 	SecurityTabSessions = "sessions"
 	SecurityTabLog      = "log"
 	SecurityTabSignup   = "signup"
+	SecurityTabProvider = "provider"
 )
 
 // normalizeSecurityTab whitelists the ?tab= value; anything unknown falls back
 // to the overview so a hand-edited URL never renders a blank page.
 func normalizeSecurityTab(raw string) string {
 	switch raw {
-	case SecurityTabSessions, SecurityTabLog, SecurityTabSignup:
+	case SecurityTabSessions, SecurityTabLog, SecurityTabSignup, SecurityTabProvider:
 		return raw
 	default:
 		return SecurityTabOverview

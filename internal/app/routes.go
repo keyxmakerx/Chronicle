@@ -2533,6 +2533,8 @@ func (a *App) RegisterRoutes() {
 	auth.ConfigureMailSender(authService, smtpService, a.Config.BaseURL)
 	// Two-factor keys are stored encrypted under a key derived from the site secret.
 	auth.ConfigureTwoFactor(authService, a.Config.Auth.SecretKey)
+	// Provider sign-in keeps its client secret sealed under the site secret too.
+	auth.ConfigureOIDC(authService, auth.NewOIDCStore(a.DB), a.Config.Auth.SecretKey, a.Config.BaseURL)
 
 	// Entities plugin: entity types + entity CRUD (must be created before
 	// campaigns so we can pass EntityService as the EntityTypeSeeder).

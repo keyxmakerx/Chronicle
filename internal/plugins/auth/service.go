@@ -153,6 +153,15 @@ type AuthService interface {
 	AdminDisableTwoFactor(ctx context.Context, userID string) error
 	CompleteTwoFactorLogin(ctx context.Context, in TwoFactorLoginInput) (*TwoFactorLoginResult, error)
 
+	// Sign-in with an outside provider (OpenID Connect).
+	OIDCSettings(ctx context.Context) (OIDCSettings, error)
+	SaveOIDCSettings(ctx context.Context, in OIDCSettingsInput) error
+	LoginOptions(ctx context.Context) LoginOptions
+	SignInMethods(ctx context.Context, userID string) (SignInMethods, error)
+	BeginOIDC(ctx context.Context, mode, userID, redirect string) (authURL, state string, err error)
+	FinishOIDC(ctx context.Context, in OIDCCallbackInput) (*OIDCResult, error)
+	UnlinkOIDC(ctx context.Context, userID string) error
+
 	// Re-authentication for sensitive operations.
 	ConfirmReauth(ctx context.Context, userID, password string) error
 	IsReauthValid(ctx context.Context, userID string) (bool, error)
@@ -190,6 +199,9 @@ type authService struct {
 	// totpKey encrypts stored authenticator secrets (ConfigureTwoFactor);
 	// nil means two-factor can't be turned on.
 	totpKey []byte
+
+	// oidc is provider sign-in (ConfigureOIDC); nil means it's unavailable.
+	oidc *oidcRuntime
 }
 
 // Registration modes. These mirror the settings plugin's canonical constants;
@@ -455,6 +467,12 @@ func (s *authService) Login(ctx context.Context, input LoginInput) (string, *Use
 
 	// Successful login — clear any failure counter.
 	s.clearLoginFailures(ctx, email)
+
+	// With password sign-in hidden, only admins may still use it, so a
+	// broken provider never locks the site out.
+	if opts := s.LoginOptions(ctx); opts.HidePassword && !user.IsAdmin {
+		return "", nil, apperror.NewForbidden("use the " + opts.ProviderName + " button to sign in")
+	}
 
 	// Two-factor accounts stop here for a code unless this device was
 	// remembered; the session is only made once the code checks out.
