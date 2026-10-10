@@ -50,27 +50,28 @@ var contractGoverned = map[string]string{
 	"systems.UpdateBookChapterInput": "PUT .../systems/:mod/book/chapters/:chapter — a rename-only push must not blank the house-rules chapter's introduction or flip its Directors-only flag, which would publish a hidden chapter to every player",
 
 	// Each is pinned by a *_partial_update_test.go next to it.
-	"maps.UpdateTokenInput":               "PUT .../tokens/:tid (web + syncapi) — a drag PUT carrying only {x, y} zeroed IsHidden, IsLocked, both HP bars and every aura/light/vision field; a hidden ambush monster went visible on the next nudge",
-	"maps.UpdateDrawingInput":             "PUT .../drawings/:did (web + syncapi) — shares UpdateTokenInput's shape; a reshape-only push wiped fill, text content, font size and rotation. No shipped caller trips it today, fixed anyway under the partial-update contract",
-	"maps.UpdateLayerInput":               "PUT .../layers/:lid (web + syncapi) — a SortOrder-only reorder push turned visibility and lock off for every layer. No shipped caller trips it today, fixed anyway under the partial-update contract",
-	"maps.UpdateMapInput":                 "PUT /campaigns/:id/maps/:mid — a rename-only push unlinked the map's image and wiped its description; ImageID/Description were already *string and STILL blindly overwritten, because a plain pointer bound from JSON can't tell absent from null either",
-	"timeline.UpdateTimelineInput":        "PUT /campaigns/:id/timelines/:tid — fired on EVERY settings save, not just a narrow push: the request struct has no visibility_rules/description_html member at all, so both were unconditionally blanked and canUserView() treats an absent VisibilityRules as visible to everyone",
-	"tags.UpdateTagInput":                 "tagService.Update — the worst finding of the 2026-09-12 toggle-truth sweep (ADR-056): Color/DmOnly were plain value types, so ANY rename necessarily also sent DmOnly's zero value and turned a DM-only tag public",
-	"armory.UpdateStashInput":             "PUT /campaigns/:id/armory/stashes/:sid — a rename must not clear the stash location; only an explicit null does",
-	"tags.UpdateTagRequest":               "PUT /campaigns/:id/tags/:tagId — the wire-bound twin of UpdateTagInput above; same incident, same fix",
-	"maps.UpdateHexCellInput":             "PATCH .../maps/:mid/hexes/cells — a paint stroke sends only terrain, so it must not touch a hex's name or notes; a rename must not clear its terrain",
-	"maps.UpdateHexLayerInput":            "PUT .../maps/:mid/hexes/layer — a push naming nothing about the anchor must not move the hexes off their picture; only an explicit null puts them back on the whole map; a fog-only or anchor-only push must not reset the travel figures to their defaults",
-	"bestiary.UpdatePublicationInput":     "PUT /bestiary/:id — a plain *string could not tell an absent description from an explicit null, so a client could never clear one; name/description/flavor_text are now patch.Field, and a literal null in the raw-JSON tags or statblock is treated as absent rather than stored as the text \"null\"",
-	"timeline.UpdateEntityGroupInput":     "PUT .../timelines/:tid/groups/:gid — the service rebuilt the whole row from the body, so every edit reset the group's sort order to 0 and a name-only push blanked the color",
-	"timeline.UpdateEventVisibilityInput": "PUT .../timelines/:tid/events/:eid/visibility — a body naming only the override wrote NULL over the event link's per-user visibility rules (and vice versa)",
-	"armory.UpdateInstanceInput":          "PUT /campaigns/:id/armory/instances/:iid — Rename echoed back the description, icon and colour it loaded, so a concurrent change to them was reverted; a name-only push must keep the rest",
-	"maps.UpdateTokenPositionInput":       "PATCH .../tokens/:tid/position (web + syncapi) — x and y were value-typed, so a body naming one axis snapped the other to 0; each now moves only the axis it names",
-	"entities.UpdateEntityTypeInput":      "PUT .../entity-types/:etid (web) and PUT /api/v1/.../entity-types/:typeID (syncapi) — an empty plural or icon was written as the auto-plural / default icon, so a rename-only push reset both",
-	"entities.UpdateEntityTypeRequest":    "the wire-bound twin of entities.UpdateEntityTypeInput; same incident, same fix",
-	"entities.UpdateLayoutPresetInput":    "PUT .../layout-presets/:pid — validated and wrote all four columns, so a body naming only the name was refused or blanked the description",
-	"entities.UpdateContentTemplateInput": "PUT .../content-templates/:tid — a body naming only the name blanked the description and the preview HTML",
-	"entities.UpdatePromptInput":          "PUT .../worldbuilding-prompts/:pid — shares the other definitions' shape; absent name or text was refused rather than preserved",
-	"auth.UpdateViewPrefsInput":           "PUT /account/view-prefs — each My view choice saves on its own as it is tapped, so a body naming one must not reset the other three (born governed, no incident)",
+	"maps.UpdateTokenInput":                "PUT .../tokens/:tid (web + syncapi) — a drag PUT carrying only {x, y} zeroed IsHidden, IsLocked, both HP bars and every aura/light/vision field; a hidden ambush monster went visible on the next nudge",
+	"maps.UpdateDrawingInput":              "PUT .../drawings/:did (web + syncapi) — shares UpdateTokenInput's shape; a reshape-only push wiped fill, text content, font size and rotation. No shipped caller trips it today, fixed anyway under the partial-update contract",
+	"maps.UpdateLayerInput":                "PUT .../layers/:lid (web + syncapi) — a SortOrder-only reorder push turned visibility and lock off for every layer. No shipped caller trips it today, fixed anyway under the partial-update contract",
+	"maps.UpdateMapInput":                  "PUT /campaigns/:id/maps/:mid — a rename-only push unlinked the map's image and wiped its description; ImageID/Description were already *string and STILL blindly overwritten, because a plain pointer bound from JSON can't tell absent from null either",
+	"timeline.UpdateTimelineInput":         "PUT /campaigns/:id/timelines/:tid — fired on EVERY settings save, not just a narrow push: the request struct has no visibility_rules/description_html member at all, so both were unconditionally blanked and canUserView() treats an absent VisibilityRules as visible to everyone",
+	"tags.UpdateTagInput":                  "tagService.Update — the worst finding of the 2026-09-12 toggle-truth sweep (ADR-056): Color/DmOnly were plain value types, so ANY rename necessarily also sent DmOnly's zero value and turned a DM-only tag public",
+	"armory.UpdateStashInput":              "PUT /campaigns/:id/armory/stashes/:sid — a rename must not clear the stash location; only an explicit null does",
+	"tags.UpdateTagRequest":                "PUT /campaigns/:id/tags/:tagId — the wire-bound twin of UpdateTagInput above; same incident, same fix",
+	"maps.UpdateHexCellInput":              "PATCH .../maps/:mid/hexes/cells — a paint stroke sends only terrain, so it must not touch a hex's name or notes; a rename must not clear its terrain",
+	"maps.UpdateHexLayerInput":             "PUT .../maps/:mid/hexes/layer — a push naming nothing about the anchor must not move the hexes off their picture; only an explicit null puts them back on the whole map; a fog-only or anchor-only push must not reset the travel figures to their defaults",
+	"bestiary.UpdatePublicationInput":      "PUT /bestiary/:id — a plain *string could not tell an absent description from an explicit null, so a client could never clear one; name/description/flavor_text are now patch.Field, and a literal null in the raw-JSON tags or statblock is treated as absent rather than stored as the text \"null\"",
+	"timeline.UpdateEntityGroupInput":      "PUT .../timelines/:tid/groups/:gid — the service rebuilt the whole row from the body, so every edit reset the group's sort order to 0 and a name-only push blanked the color",
+	"timeline.UpdateEventVisibilityInput":  "PUT .../timelines/:tid/events/:eid/visibility — a body naming only the override wrote NULL over the event link's per-user visibility rules (and vice versa)",
+	"maps.UpdateTokenPositionInput":        "PATCH .../tokens/:tid/position (web + syncapi) — x and y were value-typed, so a body naming one axis snapped the other to 0; each now moves only the axis it names",
+	"entities.UpdateEntityTypeInput":       "PUT .../entity-types/:etid (web) and PUT /api/v1/.../entity-types/:typeID (syncapi) — an empty plural or icon was written as the auto-plural / default icon, so a rename-only push reset both",
+	"entities.UpdateEntityTypeRequest":     "the wire-bound twin of entities.UpdateEntityTypeInput; same incident, same fix",
+	"entities.UpdateLayoutPresetInput":     "PUT .../layout-presets/:pid — validated and wrote all four columns, so a body naming only the name was refused or blanked the description",
+	"entities.UpdateContentTemplateInput":  "PUT .../content-templates/:tid — a body naming only the name blanked the description and the preview HTML",
+	"entities.UpdatePromptInput":           "PUT .../worldbuilding-prompts/:pid — shares the other definitions' shape; absent name or text was refused rather than preserved",
+	"campaigns.UpdateSidebarConfigRequest": "PUT /campaigns/:id/sidebar-config — the nav editor, the entity manager and the import each name a different subset (items, or the hidden sets), so a push for one must not clear the others; the lists are pointers to slices, an empty list clears and a null preserves",
+	"armory.UpdateInstanceInput":           "PUT /campaigns/:id/armory/instances/:iid — Rename echoed back the description, icon and colour it loaded, so a concurrent change to them was reverted; a name-only push must keep the rest",
+	"auth.UpdateViewPrefsInput":            "PUT /account/view-prefs — each My view choice saves on its own as it is tapped, so a body naming one must not reset the other three (born governed, no incident)",
 }
 
 // governedFieldExceptions are value-typed fields deliberately left on a
@@ -114,10 +115,13 @@ var governedFieldExceptions = map[string]string{
 // The reason has to be a fact about the callers, and it has to stay true — a
 // new caller that sends a subset moves the struct to contractGoverned.
 var fullReplaceByDesign = map[string]string{
-	"entities.UpdateEntityRequest": "PUT /campaigns/:id/entities/:eid is the edit page's hx-put form, which posts name, descriptor, parent and entry on every save and is bound as a form (patch.Field has no form binding); no script or API client calls it. The JSON and sync routes use entities.UpdateEntityInput, which is governed",
-	"addons.UpdateAddonInput":      "addonService.Update has no caller outside tests (the admin UI only flips status through UpdateStatus), and it requires a name and a valid status, so it is a whole-record edit by construction. A route that reaches it with a subset must make the fields presence-aware first",
-	"packages.UpdatePolicyInput":   "PUT /admin/packages/:id/auto-update — a one-field body: the policy radio is the whole request, so there is nothing else to preserve",
-	"packages.UpdateRepoURLInput":  "PUT /admin/packages/:id/repo — a one-field body: the repository URL is the whole request, and an empty URL is refused by UpdateRepoURL's validation rather than stored",
+	"campaigns.UpdateCampaignRequest": "PUT /campaigns/:id is the settings page's hx-put form, which posts name, description and the is_public checkbox together; a checkbox is absent when unticked by HTML's own design, so is_public cannot be presence-aware on a form bind. No script or API client calls it",
+	"campaigns.UpdateCampaignInput":   "the service-side twin of campaigns.UpdateCampaignRequest: Update requires a name and states the whole record, and its only caller is the settings form handler",
+	"campaigns.UpdateRoleRequest":     "PUT /campaigns/:id/members/:uid/role — a one-field body: the role select is the whole request",
+	"entities.UpdateEntityRequest":    "PUT /campaigns/:id/entities/:eid is the edit page's hx-put form, which posts name, descriptor, parent and entry on every save and is bound as a form (patch.Field has no form binding); no script or API client calls it. The JSON and sync routes use entities.UpdateEntityInput, which is governed",
+	"addons.UpdateAddonInput":         "addonService.Update has no caller outside tests (the admin UI only flips status through UpdateStatus), and it requires a name and a valid status, so it is a whole-record edit by construction. A route that reaches it with a subset must make the fields presence-aware first",
+	"packages.UpdatePolicyInput":      "PUT /admin/packages/:id/auto-update — a one-field body: the policy radio is the whole request, so there is nothing else to preserve",
+	"packages.UpdateRepoURLInput":     "PUT /admin/packages/:id/repo — a one-field body: the repository URL is the whole request, and an empty URL is refused by UpdateRepoURL's validation rather than stored",
 }
 
 // notYetSwept freezes the rest of the inventory. Being on this list is a
@@ -125,15 +129,11 @@ var fullReplaceByDesign = map[string]string{
 // means the struct became contract-governed; adding one means a new update
 // input shipped and its author decided it is not a partial update.
 var notYetSwept = map[string]bool{
-	"campaigns.UpdateCampaignInput": true,
 
 	// The scanner covers Update*Input and Update*Request (ADR-056). These are
 	// unaudited, not verified safe — several (UpdateEntityRequest,
 	// UpdateEntityTypeRequest, UpdateSMTPRequest) look like good candidates
 	// for the next sweep.
-	"campaigns.UpdateCampaignRequest":         true,
-	"campaigns.UpdateRoleRequest":             true,
-	"campaigns.UpdateSidebarConfigRequest":    true,
 	"entity_notes.UpdateNoteRequest":          true,
 	"notes.UpdateNoteRequest":                 true,
 	"posts.UpdatePostRequest":                 true,
