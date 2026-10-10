@@ -687,6 +687,9 @@ func TestTopbarWidgetShown_LiveWidgets(t *testing.T) {
 		{"weather empty (no reading today)", &TopbarLiveData{Date: "x"}, "weather", false},
 		{"moon empty (no moons)", &TopbarLiveData{Date: "x"}, "moon", false},
 		{"session empty (no upcoming night)", &TopbarLiveData{Date: "x"}, "session", false},
+		{"era with data", &TopbarLiveData{Era: "Age of Ash"}, "era", true},
+		{"era empty (today in no era)", &TopbarLiveData{Date: "x"}, "era", false},
+		{"no live data, era", nil, "era", false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -729,6 +732,8 @@ func TestTopbarRendersLiveWidgets(t *testing.T) {
 			nil, []string{"DATE-MARKER", "topbar-tray", "fa-calendar-days", "fa-moon"}, ""},
 		{"empty widgets do not count toward +N", []string{"date", "weather", "session"}, &TopbarLiveData{Date: "DATE-MARKER"},
 			[]string{"DATE-MARKER"}, []string{"WEATHER-MARKER", "NIGHT-MARKER"}, ""},
+		{"the era draws its name", []string{"era"}, &TopbarLiveData{Era: "ERA-MARKER"},
+			[]string{"ERA-MARKER", "fa-hourglass-half"}, []string{"DATE-MARKER"}, ""},
 		{"a partial set counts only what drew", []string{"date", "weather", "moon"}, &TopbarLiveData{Date: "DATE-MARKER", Weather: "WEATHER-MARKER"},
 			[]string{"DATE-MARKER", "WEATHER-MARKER"}, []string{"fa-moon"}, "+1"},
 	}

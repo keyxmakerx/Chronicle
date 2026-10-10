@@ -1113,6 +1113,8 @@ func topbarWidgetShown(ctx context.Context, tc *TopbarContentData, w string) boo
 		return tc.Live != nil && tc.Live.Weather != ""
 	case "moon":
 		return tc.Live != nil && len(tc.Live.Moons) > 0
+	case "era":
+		return tc.Live != nil && tc.Live.Era != ""
 	case "session":
 		return tc.Live != nil && tc.Live.NextNight.Label != ""
 	}
@@ -1212,6 +1214,11 @@ templ topbarWidget(ctx context.Context, tc *TopbarContentData, w string) {
 		<span class={ topbarChipClass } title="Today's moon">
 			<i class="fa-solid fa-moon text-[10px] shrink-0" aria-hidden="true"></i>
 			<span class="truncate">{ topbarMoonText(tc.Live.Moons) }</span>
+		</span>
+	} else if w == "era" && topbarWidgetShown(ctx, tc, "era") {
+		<span class={ topbarChipClass } title="The current era">
+			<i class="fa-solid fa-hourglass-half text-[10px] shrink-0" aria-hidden="true"></i>
+			<span class="truncate">{ tc.Live.Era }</span>
 		</span>
 	} else if w == "session" && topbarWidgetShown(ctx, tc, "session") {
 		<span class={ topbarChipClass } title={ tc.Live.NextNight.Title }>
