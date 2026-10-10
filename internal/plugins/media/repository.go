@@ -90,6 +90,12 @@ type MediaRepository interface {
 	// deleted or edited. A version still naming one is kept so a restore after
 	// an accidental delete finds its picture.
 	ListUnboundNotePictures(ctx context.Context, olderThan time.Time) ([]string, error)
+
+	// ListUnboundPageFiles returns the ids of page files created before
+	// olderThan that no page holds: uploaded and never bound, or left behind
+	// when their page was purged (the binding row goes with the page, the file
+	// does not).
+	ListUnboundPageFiles(ctx context.Context, olderThan time.Time) ([]string, error)
 }
 
 // mediaRepository implements MediaRepository with MariaDB queries.
@@ -180,7 +186,9 @@ func (r *mediaRepository) FindByID(ctx context.Context, id string) (*MediaFile, 
 // off, so each campaign's media space stays isolated for clean
 // export / cascade-delete behavior. Note pictures never match: a picture one
 // player put in a private note must not be handed to another uploader of the
-// same bytes, nor adopted by a page whose readers the note rule does not know.
+// same bytes, nor adopted by a page whose readers the note rule does not know. Page
+// files never match either: a file attached to a GM-only handout must not be
+// handed to someone who uploads the same bytes elsewhere.
 func (r *mediaRepository) FindByContentHash(ctx context.Context, campaignID, hash string) (*MediaFile, error) {
 	if campaignID == "" || hash == "" {
 		return nil, nil
@@ -190,13 +198,13 @@ func (r *mediaRepository) FindByContentHash(ctx context.Context, campaignID, has
 	                 c.is_public
 	          FROM media_files m
 	          LEFT JOIN campaigns c ON m.campaign_id = c.id
-	          WHERE m.campaign_id = ? AND m.content_hash = ? AND m.usage_type <> ?
+	          WHERE m.campaign_id = ? AND m.content_hash = ? AND m.usage_type NOT IN (?, ?)
 	          LIMIT 1`
 
 	file := &MediaFile{}
 	var thumbJSON string
 	var contentHash sql.NullString
-	err := r.db.QueryRowContext(ctx, query, campaignID, hash, UsageNoteImage).Scan(
+	err := r.db.QueryRowContext(ctx, query, campaignID, hash, UsageNoteImage, UsagePageFile).Scan(
 		&file.ID, &file.CampaignID, &file.UploadedBy,
 		&file.Filename, &file.OriginalName, &file.MimeType,
 		&file.FileSize, &contentHash, &file.UsageType, &thumbJSON,
@@ -290,12 +298,13 @@ func (r *mediaRepository) Delete(ctx context.Context, id string) error {
 }
 
 // ListByCampaign returns media files for a campaign with pagination. Note
-// pictures are left out: this feeds the media browser, the picker and the sync
-// API, none of which may name a file that only its note's readers can open.
+// pictures and page files are left out: this feeds the media browser, the
+// picker, the sync API and the campaign export, none of which may name a file
+// that only its note's or page's readers can open.
 func (r *mediaRepository) ListByCampaign(ctx context.Context, campaignID string, limit, offset int) ([]MediaFile, int, error) {
 	var total int
 	err := r.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM media_files WHERE campaign_id = ? AND usage_type <> ?`, campaignID, UsageNoteImage,
+		`SELECT COUNT(*) FROM media_files WHERE campaign_id = ? AND usage_type NOT IN (?, ?)`, campaignID, UsageNoteImage, UsagePageFile,
 	).Scan(&total)
 	if err != nil {
 		return nil, 0, fmt.Errorf("counting media files: %w", err)
@@ -303,10 +312,10 @@ func (r *mediaRepository) ListByCampaign(ctx context.Context, campaignID string,
 
 	query := `SELECT id, campaign_id, uploaded_by, filename, original_name,
 	                 mime_type, file_size, content_hash, usage_type, thumbnail_paths, created_at
-	          FROM media_files WHERE campaign_id = ? AND usage_type <> ?
+	          FROM media_files WHERE campaign_id = ? AND usage_type NOT IN (?, ?)
 	          ORDER BY created_at DESC LIMIT ? OFFSET ?`
 
-	rows, err := r.db.QueryContext(ctx, query, campaignID, UsageNoteImage, limit, offset)
+	rows, err := r.db.QueryContext(ctx, query, campaignID, UsageNoteImage, UsagePageFile, limit, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("listing media files: %w", err)
 	}
@@ -617,6 +626,29 @@ func (r *mediaRepository) ListUnboundNotePictures(ctx context.Context, olderThan
 		var id string
 		if err := rows.Scan(&id); err != nil {
 			return nil, fmt.Errorf("scanning unbound note picture: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// ListUnboundPageFiles finds page files no page holds any more; see the
+// interface.
+func (r *mediaRepository) ListUnboundPageFiles(ctx context.Context, olderThan time.Time) ([]string, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT m.id FROM media_files m
+		 WHERE m.usage_type = ? AND m.created_at < ?
+		   AND NOT EXISTS (SELECT 1 FROM page_files p WHERE p.media_id = m.id)
+		 LIMIT 500`, UsagePageFile, olderThan)
+	if err != nil {
+		return nil, fmt.Errorf("listing unbound page files: %w", err)
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scanning unbound page file: %w", err)
 		}
 		ids = append(ids, id)
 	}

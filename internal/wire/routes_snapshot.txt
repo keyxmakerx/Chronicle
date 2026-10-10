@@ -49,6 +49,7 @@ DELETE	/entities/:eid/relations/:rid	internal/widgets/relations/routes.go
 DELETE	/entities/:entityID	internal/plugins/syncapi/routes.go
 DELETE	/entity-types/:etid	internal/plugins/entities/routes.go
 DELETE	/entity-types/:etid/dashboard-layout	internal/plugins/entities/routes.go
+DELETE	/files/:fid	internal/plugins/media/routes.go
 DELETE	/groups/:gid	internal/plugins/campaigns/routes.go
 DELETE	/groups/:gid/members/:uid	internal/plugins/campaigns/routes.go
 DELETE	/invites/:inviteId	internal/plugins/campaigns/routes.go
@@ -315,6 +316,8 @@ GET	/extensions/health	internal/app/routes.go
 GET	/favorite-ids	internal/plugins/entities/routes.go
 GET	/favorites	internal/plugins/bestiary/routes.go
 GET	/favorites	internal/plugins/entities/routes.go
+GET	/files	internal/plugins/media/routes.go
+GET	/files/:fid/download	internal/plugins/media/routes.go
 GET	/files/:name	internal/plugins/backup/routes.go
 GET	/flagged	internal/plugins/bestiary/routes.go
 GET	/forgot-password	internal/plugins/auth/routes.go
@@ -634,6 +637,7 @@ POST	/entity-types	internal/plugins/syncapi/routes.go
 POST	/extensions/:slug/settings/apply	internal/plugins/addons/routes.go
 POST	/extensions/:slug/settings/dismiss	internal/plugins/addons/routes.go
 POST	/extensions/foundry/connect-line	internal/plugins/campaigns/routes.go
+POST	/files	internal/plugins/media/routes.go
 POST	/files/:name/link	internal/plugins/backup/routes.go
 POST	/forgot-password	internal/plugins/auth/routes.go
 POST	/foundry-vtt/npc-spotlight/:eid	internal/plugins/foundry_vtt/routes.go
@@ -840,6 +844,7 @@ PUT	/entity-types/:etid/layout	internal/plugins/entities/routes.go
 PUT	/entity-types/:etid/reorder	internal/plugins/entities/routes.go
 PUT	/entity-types/:typeID	internal/plugins/syncapi/routes.go
 PUT	/event-tier-definitions	internal/plugins/campaigns/routes.go
+PUT	/files/:fid/visibility	internal/plugins/media/routes.go
 PUT	/groups/:gid	internal/plugins/campaigns/routes.go
 PUT	/layout-presets/:pid	internal/plugins/entities/layout_preset_routes.go
 PUT	/maps/:mapID/drawings/:drawingID	internal/plugins/syncapi/routes.go

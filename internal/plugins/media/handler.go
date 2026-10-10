@@ -246,9 +246,10 @@ func (h *Handler) Upload(c echo.Context) error {
 		input.UsageType = UsageAttachment
 	}
 	// Note pictures come only from the notes upload route, which lets players
-	// in and records nothing a Scribe could browse. Taking the type from a
-	// form field here would let anyone mint files outside the page rule.
-	if input.UsageType == UsageNoteImage {
+	// in and records nothing a Scribe could browse; page files only from the
+	// page's Files route, which binds them to the page. Taking either type
+	// from a form field here would let anyone mint files outside those rules.
+	if input.UsageType == UsageNoteImage || input.UsageType == UsagePageFile {
 		return apperror.NewBadRequest("unsupported usage type")
 	}
 
@@ -323,6 +324,12 @@ func (h *Handler) Serve(c echo.Context) error {
 		return err
 	}
 
+	// A page file is opened only by its page's download route, as an
+	// attachment; no signature, session or role makes this route serve one.
+	if file.IsPageFile() {
+		return apperror.NewNotFound("media file not found")
+	}
+
 	// Enforce access control.
 	if err := h.checkMediaAccess(c, file, false, ""); err != nil {
 		return err
@@ -353,6 +360,10 @@ func (h *Handler) ServeThumbnail(c echo.Context) error {
 		return err
 	}
 
+	if file.IsPageFile() {
+		return apperror.NewNotFound("media file not found")
+	}
+
 	// Enforce access control (includes size in signature check).
 	if err := h.checkMediaAccess(c, file, true, size); err != nil {
 		return err
@@ -380,6 +391,11 @@ func currentViewerIdentity(c echo.Context) string {
 // campaign access control, then the shadowed-map-picture rule. Returns nil if
 // access is allowed, or an error to return to the client.
 func (h *Handler) checkMediaAccess(c echo.Context, file *MediaFile, isThumb bool, thumbSize string) error {
+	// Backstop for the serve handlers' own refusal: whatever else is true, a
+	// page file is never decided by the rules below.
+	if file.IsPageFile() {
+		return apperror.NewNotFound("media file not found")
+	}
 	if err := h.checkBaseMediaAccess(c, file, isThumb, thumbSize); err != nil {
 		return err
 	}
@@ -877,9 +893,10 @@ func (h *Handler) Info(c echo.Context) error {
 		return err
 	}
 
-	// Ownership check: only uploader or admin can see file info.
+	// Ownership check: only uploader or admin can see file info. A page file
+	// has its page's rule and nothing here, so it answers like a missing file.
 	session := auth.GetSession(c)
-	if file.UploadedBy != userID && (session == nil || !session.IsAdmin) {
+	if file.IsPageFile() || (file.UploadedBy != userID && (session == nil || !session.IsAdmin)) {
 		return apperror.NewNotFound("media file not found")
 	}
 
@@ -916,9 +933,10 @@ func (h *Handler) Delete(c echo.Context) error {
 		return err
 	}
 
-	// Ownership check.
+	// Ownership check. A page file is removed from its page by someone who can
+	// still edit that page, never by its uploader alone.
 	session := auth.GetSession(c)
-	if file.UploadedBy != userID && (session == nil || !session.IsAdmin) {
+	if file.IsPageFile() || (file.UploadedBy != userID && (session == nil || !session.IsAdmin)) {
 		return apperror.NewNotFound("media file not found")
 	}
 

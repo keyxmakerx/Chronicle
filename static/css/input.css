@@ -5154,3 +5154,14 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
   }
 }
 }
+/* Page files: the Files section at the bottom of a page. The section settles
+   in once on the page's own load (pf-first); a row asks before it goes by
+   growing out of the button's edge, and fades as it leaves. Calm and Off are
+   handled by the global rules above. */
+.pf-first { animation: pf-settle var(--dur-large) var(--ease-out) both; }
+@keyframes pf-settle { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.pf-row { transition: opacity var(--dur-standard) var(--ease-out), background-color var(--dur-micro) var(--ease-out); }
+.pf-row.is-leaving { opacity: 0; }
+.pf-ask[hidden], [data-pf-acts][hidden] { display: none !important; }
+.pf-ask:not([hidden]) { transform-origin: right center; animation: pf-grow var(--dur-standard) var(--ease-out) both; }
+@keyframes pf-grow { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: none; } }
