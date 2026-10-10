@@ -44,6 +44,7 @@ DELETE	/data-hygiene/stale-files	internal/plugins/admin/routes.go
 DELETE	/entities/:eid	internal/plugins/entities/routes.go
 DELETE	/entities/:eid/field-overrides	internal/plugins/entities/routes.go
 DELETE	/entities/:eid/notes/:nid	internal/widgets/entity_notes/routes.go
+DELETE	/entities/:eid/places/:pid	internal/plugins/entities/routes.go
 DELETE	/entities/:eid/posts/:pid	internal/widgets/posts/routes.go
 DELETE	/entities/:eid/relations/:rid	internal/widgets/relations/routes.go
 DELETE	/entities/:entityID	internal/plugins/syncapi/routes.go
@@ -97,6 +98,7 @@ DELETE	/timelines/:tid/events/:eid	internal/plugins/timeline/routes.go
 DELETE	/timelines/:tid/groups/:gid	internal/plugins/timeline/routes.go
 DELETE	/timelines/:tid/groups/:gid/members/:eid	internal/plugins/timeline/routes.go
 DELETE	/timelines/:tid/standalone-events/:eid	internal/plugins/timeline/routes.go
+DELETE	/trash	internal/plugins/admin/routes.go
 DELETE	/users/:id/storage	internal/plugins/settings/routes.go
 DELETE	/users/:id/storage/bypass	internal/plugins/settings/routes.go
 DELETE	/worldbuilding-prompts/:pid	internal/plugins/entities/worldbuilding_prompt_routes.go
@@ -506,6 +508,7 @@ GET	/timelines/members	internal/plugins/timeline/routes.go
 GET	/timelines/preview	internal/plugins/timeline/routes.go
 GET	/top-rated	internal/plugins/bestiary/routes.go
 GET	/transfer	internal/plugins/campaigns/routes.go
+GET	/trash	internal/plugins/admin/routes.go
 GET	/trash	internal/plugins/entities/page_safety_handler.go
 GET	/trending	internal/plugins/bestiary/routes.go
 GET	/users	internal/plugins/admin/routes.go
@@ -627,6 +630,7 @@ POST	/entities/:eid/clone	internal/plugins/entities/routes.go
 POST	/entities/:eid/favorite	internal/plugins/entities/routes.go
 POST	/entities/:eid/history/:vid/restore	internal/plugins/entities/page_safety_handler.go
 POST	/entities/:eid/notes	internal/widgets/entity_notes/routes.go
+POST	/entities/:eid/places	internal/plugins/entities/routes.go
 POST	/entities/:eid/posts	internal/widgets/posts/routes.go
 POST	/entities/:eid/relations	internal/widgets/relations/routes.go
 POST	/entities/:entityID/relations	internal/plugins/syncapi/routes.go
@@ -751,6 +755,9 @@ POST	/timelines/:tid/standalone-events	internal/plugins/timeline/routes.go
 POST	/toggle-view-mode	internal/plugins/campaigns/routes.go
 POST	/transfer	internal/plugins/campaigns/routes.go
 POST	/trash/:eid/restore	internal/plugins/entities/page_safety_handler.go
+POST	/trash/batches/:id/undo	internal/plugins/admin/routes.go
+POST	/trash/campaigns/:id/undo	internal/plugins/admin/routes.go
+POST	/trash/retention	internal/plugins/admin/routes.go
 POST	/unarchive	internal/plugins/campaigns/routes.go
 POST	/upload	internal/systems/routes.go
 POST	/version/:version/force-pin-older	internal/plugins/foundry_vtt/routes.go

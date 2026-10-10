@@ -54,6 +54,7 @@ var activityResourceArea = map[string]string{
 	"registration": AreaSecurity,
 	"media":        AreaSite,
 	"hygiene":      AreaSite,
+	"trash":        AreaSite,
 	"migrations":   AreaSite,
 	"backup":       AreaSite,
 	"restore":      AreaSite,

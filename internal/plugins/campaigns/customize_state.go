@@ -20,7 +20,7 @@ type customizeDraft struct {
 		Backdrop string `json:"backdrop"`
 	} `json:"brand"`
 	Header struct {
-		Bg      string       `json:"bg"`     // "solid", "gradient", "moving" or "image".
+		Bg      string       `json:"bg"`     // "solid", "gradient", "moving", "sky" or "image".
 		Height  string       `json:"height"` // "slim" or "tall".
 		Solid   string       `json:"solid"`  // A colour, or "page" for the header that matches the page.
 		From    string       `json:"from"`
@@ -69,6 +69,9 @@ type customizeDraft struct {
 	Hover struct {
 		Look string `json:"look"`
 	} `json:"hover"`
+	Sheet struct {
+		Style string `json:"style"`
+	} `json:"sheet"`
 }
 
 // customizeState is everything the Customize page starts from.
@@ -159,6 +162,8 @@ func buildCustomizeState(ctx context.Context, cc *CampaignContext) customizeStat
 					h.Dir = "r"
 				}
 			}
+		case "sky":
+			h.Bg = "sky"
 		case "image":
 			if ts.ImagePath != "" {
 				h.Bg = "image"
@@ -220,6 +225,7 @@ func buildCustomizeState(ctx context.Context, cc *CampaignContext) customizeStat
 	d.Motion.Speed = orDefault(a.MotionSpeed, AppearanceSpeeds)
 	d.Motion.ReduceAll = a.ReduceMotion
 	d.Hover.Look = orDefault(a.HoverCard, AppearanceHoverCards)
+	d.Sheet.Style = orDefault(a.SheetStyle, AppearanceSheetStyles)
 	return st
 }
 

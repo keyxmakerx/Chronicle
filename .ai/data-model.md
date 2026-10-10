@@ -93,12 +93,13 @@ numbered core migrations after it, tracked once each via `golang-migrate`'s
 
 | Table | Purpose | Notable columns |
 |---|---|---|
-| `campaigns` | A worldbuilding project | `slug` UNIQUE; `settings`/`sidebar_config`/`dashboard_layout`/`owner_dashboard_layout` JSON; `is_public`; `archived_at` (soft-archive); `join_code` UNIQUE (shareable invite link) |
+| `campaigns` | A worldbuilding project | `slug` UNIQUE; `settings`/`sidebar_config`/`dashboard_layout`/`owner_dashboard_layout` JSON; `is_public`; `archived_at` (soft-archive); `join_code` UNIQUE (shareable invite link); `deleted_at`/`deleted_by`/`deleted_by_name` (site Trash, migration 48: every read filters `deleted_at IS NULL`, so a trashed campaign is 404 everywhere; the slug stays reserved); `purge_started_at` (set when the final delete begins, after which Undo is refused) |
 | `campaign_members` | Campaign ↔ user, with role | composite PK `(campaign_id, user_id)`; `role` CHECK IN (`owner`,`scribe`,`player`); `character_entity_id` FK→`entities` SET NULL; `nav_pins` JSON (the member's own pinned sidebar row keys, NULL for none) |
 | `campaign_invites` | Email invitations | `token` UNIQUE; `role` CHECK IN (`player`,`scribe`); `expires_at`/`accepted_at` |
 | `ownership_transfers` | Pending campaign-owner handoff | one pending per campaign (`campaign_id` UNIQUE); `token` UNIQUE; 72h expiry |
 | `campaign_storage_limits` | Per-campaign upload/storage overrides | PK `campaign_id`; `bypass_*` columns |
 | `campaign_groups` / `campaign_group_members` | Named member groups (a permission `subject_type`) | `UNIQUE(campaign_id, name)`; members table is a plain junction |
+| `trash_batches` | One row per admin file clean-up waiting in the site Trash (migration 48; lives in core because the media and campaign columns ship with it) | `kind`; `label`; `item_count`/`byte_count`; `state` (`trashed`/`restoring`/`purging`, moved by single conditional UPDATEs so Undo and purge exclude each other); `deleted_by_name` copied |
 | `audit_log` | Per-campaign action log (create/update/delete) | `action`, `entity_type`, `entity_id`, `entity_name`, `details` JSON |
 
 ### Entity types & entities
@@ -180,8 +181,9 @@ numbered core migrations after it, tracked once each via `golang-migrate`'s
 
 | Table | Purpose | Notable columns |
 |---|---|---|
-| `media_files` | Uploaded file metadata | `content_hash` (sha256, per-campaign dedup — `INDEX(campaign_id, content_hash)`); `thumbnail_paths` JSON; `usage_type` |
+| `media_files` | Uploaded file metadata | `content_hash` (sha256, per-campaign dedup — `INDEX(campaign_id, content_hash)`); `thumbnail_paths` JSON; `usage_type`; `trash_batch_id` (migration 48: set while the file sits in a Trash file clean-up batch; the file stays on disk until the batch is purged) |
 | `page_files` | Which page a `page_file` media file is attached to (migration 46) | `media_id` PK FK→`media_files` CASCADE; `entity_id` FK→`entities` CASCADE; `campaign_id`; `gm_only` |
+| `entity_places` | Extra places a page is listed in the page tree (migration 49); `entities.parent_id` stays the page's one real home | PK `(entity_id, parent_entity_id)`, both FK→`entities` CASCADE; `campaign_id`; `sort_order`; `created_by` (no FK) |
 | `addons` | Registry of installable features (systems/widgets/integrations/plugins) | `slug` UNIQUE; `category` enum; `status` enum(`active`,`planned`,`deprecated`); seeded by the baseline migration so the registry exists even if a plugin's own schema migration fails |
 | `campaign_addons` | Per-campaign addon enablement | `UNIQUE(campaign_id, addon_id)`; `config_json` (the `"setup"` key holds extension-settings wizard state, ADR-043) |
 | `extensions` | Installed WASM extension manifests | `ext_id` UNIQUE; `manifest` JSON |
@@ -242,7 +244,7 @@ plugin does with them: `internal/plugins/calendar/.ai.md`.
 | `map_campaign_settings` | Campaign-wide default map frame | `campaign_id` PK, FK→`campaigns` CASCADE; `frame_style` (no row = `atlas`) |
 | `map_markers` | Pins on a map | `x`/`y` percentage 0–100; `entity_id` FK→`entities` SET NULL; `pin_category`; `visibility`/`visibility_rules`; `foundry_id` |
 | `map_layers` | Ordered drawing/token/fog layers | `layer_type`; `is_visible`/`is_locked`/`opacity` |
-| `map_drawings` | Freehand/shape/text/shadow annotations and pictures on a layer | `points` JSON; `visibility`/`visibility_rules`; `foundry_id`; `image_id` (picture's media file, no FK), `crop` JSON, `sort_order` (migration 008, pictures only) |
+| `map_drawings` | Freehand/shape/text/shadow drawings, arrows, highlighter strokes, numbered steps, speech bubbles and pictures on a layer | `points` JSON; `visibility`/`visibility_rules`; `foundry_id`; `image_id` (picture's media file, no FK), `crop` JSON, `sort_order` (migration 008, pictures only) |
 | `map_tokens` | Positioned tokens (often an entity's avatar) | `entity_id` FK SET NULL; `bar1/2_value/max`, `aura_*`, `light_*`, `vision_enabled/range` (Foundry-parity fields); `status_effects`/`flags` JSON; `foundry_id` |
 | `map_fog` | Explored/unexplored fog-of-war polygons | `points` JSON; `is_explored` |
 | `map_hex_layers` | A map's hex layer (at most one per map, on when `display_settings` grid type is hex) | PK `map_id` FK→`maps` CASCADE; `anchor_drawing_id` (a picture on the map, no FK); `fog_enabled`; `party_col`/`party_row`; `miles_per_hex`, `miles_per_day`; `version` |

@@ -5,12 +5,14 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"image"
 	"image/gif"
 	"image/jpeg"
 	"image/png"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -72,6 +74,15 @@ type MediaService interface {
 	// CleanupOrphans finds files on disk without a corresponding DB record and
 	// deletes them. Returns the number of files removed.
 	CleanupOrphans(ctx context.Context) (int, error)
+
+	// TrashFiles, RestoreTrashedFiles and PurgeTrashedFile are the media side
+	// of the site Trash's file clean-ups. Trashing marks rows only (nothing
+	// moves on disk), so Undo restores exactly; the purge is the one step that
+	// deletes, and it refuses a file that is no longer in the named batch.
+	TrashFiles(ctx context.Context, batchID string, ids []string) (count int, bytes int64, err error)
+	RestoreTrashedFiles(ctx context.Context, batchID string) (int, error)
+	ListTrashedFileIDs(ctx context.Context, batchID string) ([]string, error)
+	PurgeTrashedFile(ctx context.Context, batchID, fileID string) error
 
 	// BackfillContentHashes hashes the on-disk bytes of any media row
 	// whose content_hash is NULL (legacy rows from before migration 26)
@@ -644,6 +655,47 @@ func (s *mediaService) Delete(ctx context.Context, id string) error {
 	}
 
 	slog.Info("media file deleted", slog.String("id", id))
+	return nil
+}
+
+// TrashFiles puts files in a clean-up batch; see MediaRepository.TrashFiles.
+func (s *mediaService) TrashFiles(ctx context.Context, batchID string, ids []string) (int, int64, error) {
+	return s.repo.TrashFiles(ctx, batchID, ids)
+}
+
+// RestoreTrashedFiles is Undo for a clean-up batch.
+func (s *mediaService) RestoreTrashedFiles(ctx context.Context, batchID string) (int, error) {
+	return s.repo.RestoreTrashedFiles(ctx, batchID)
+}
+
+// ListTrashedFileIDs lists the files in a clean-up batch.
+func (s *mediaService) ListTrashedFileIDs(ctx context.Context, batchID string) ([]string, error) {
+	return s.repo.ListTrashedFileIDs(ctx, batchID)
+}
+
+// PurgeTrashedFile deletes one file of a clean-up batch from the database and
+// from disk. A file that is already gone, or that is no longer in this batch
+// (it was restored), is left alone and is not an error, so a purge that
+// stopped partway can simply run again.
+func (s *mediaService) PurgeTrashedFile(ctx context.Context, batchID, fileID string) error {
+	file, err := s.repo.FindByID(ctx, fileID)
+	if err != nil {
+		var appErr *apperror.AppError
+		if errors.As(err, &appErr) && appErr.Code == http.StatusNotFound {
+			return nil
+		}
+		return err
+	}
+	if file.TrashBatchID == nil || *file.TrashBatchID != batchID {
+		return nil
+	}
+	if err := s.Delete(ctx, fileID); err != nil {
+		var appErr *apperror.AppError
+		if errors.As(err, &appErr) && appErr.Code == http.StatusNotFound {
+			return nil
+		}
+		return err
+	}
 	return nil
 }
 

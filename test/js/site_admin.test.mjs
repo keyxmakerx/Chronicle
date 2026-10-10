@@ -128,3 +128,70 @@ test('every way out on the page, the top bar\'s too, points at the remembered pa
   assert.equal(m.back.href, '/campaigns/abc');
   assert.equal(leave.href, '/campaigns/abc');
 });
+
+// leaveWithoutVT clicks "Back to Chronicle" from an admin page in a browser
+// without cross-document view transitions, with the given motion setting.
+function leaveWithoutVT(motion) {
+  const played = [];
+  const assigned = [];
+  let prevented = false;
+  const rule = globalThis.CSSViewTransitionRule;
+  delete globalThis.CSSViewTransitionRule;
+  const h = globalThis.document.documentElement;
+  h.style = {};
+  h.hasAttribute = () => false;
+  h.getAttribute = (n) => (n === 'data-motion' ? motion : null);
+  globalThis.document.body = {
+    style: {},
+    animate(frames, opts) { const a = { frames, opts, cancel() {} }; played.push(a); return a; },
+  };
+  globalThis.getComputedStyle = () => ({ getPropertyValue: () => '460ms' });
+  globalThis.matchMedia = () => ({ matches: false });
+  globalThis.localStorage = { getItem: () => null };
+  globalThis.innerHeight = 800;
+  globalThis.addEventListener = () => {};
+  globalThis.removeEventListener = () => {};
+  const savedLoc = globalThis.location;
+  globalThis.location = { pathname: '/admin/users', search: '', assign: (u) => assigned.push(u) };
+  const link = { href: '/campaigns/abc', getAttribute: () => '/campaigns/abc' };
+  mem.clear();
+  const timers = [];
+  const realTimeout = globalThis.setTimeout;
+  globalThis.setTimeout = (fn, ms) => { timers.push({ fn, ms }); return 0; };
+  try {
+    clickHandler({ target: { closest: (q) => (q === '[data-admin-back]' ? link : null) }, button: 0, preventDefault() { prevented = true; } });
+  } finally { globalThis.setTimeout = realTimeout; }
+  const finish = () => { if (played[0] && played[0].onfinish) played[0].onfinish(); };
+  const restore = () => {
+    globalThis.CSSViewTransitionRule = rule;
+    globalThis.location = savedLoc;
+    h.getAttribute = () => null;
+    delete globalThis.document.body;
+  };
+  return { played, assigned, timers, prevented: () => prevented, finish, restore, h };
+}
+
+test('no view transitions: the admin page falls away itself, then leaves', () => {
+  const r = leaveWithoutVT(null);
+  try {
+    assert.equal(r.prevented(), true, 'the link waits for the fall');
+    assert.equal(r.played.length, 1);
+    assert.deepEqual(r.played[0].frames[1], { transform: 'translateY(800px)' });
+    assert.equal(r.played[0].opts.duration, 460);
+    assert.equal(r.h.style.backgroundColor, '#f9fafb', 'the everyday page colour is underneath');
+    assert.equal(mem.size, 0, 'no mark: the next page has nothing to play');
+    assert.deepEqual(r.assigned, []);
+    r.finish();
+    assert.deepEqual(r.assigned, ['/campaigns/abc'], 'it leaves once the fall ends');
+    r.timers.forEach((t) => t.fn());
+    assert.equal(r.assigned.length, 1, 'the backstop timer never leaves twice');
+  } finally { r.restore(); }
+});
+
+test('no view transitions and motion off: the link simply goes', () => {
+  const r = leaveWithoutVT('off');
+  try {
+    assert.equal(r.prevented(), false);
+    assert.equal(r.played.length, 0);
+  } finally { r.restore(); }
+});

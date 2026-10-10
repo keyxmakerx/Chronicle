@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 	"sync"
@@ -21,6 +22,12 @@ type SettingsService interface {
 	TrashRetentionDays(ctx context.Context) int
 	// UpdateTrashRetentionDays saves it; only TrashRetentionChoices pass.
 	UpdateTrashRetentionDays(ctx context.Context, days int) error
+
+	// SiteTrashRetentionDays is how long a deleted campaign or a file clean-up
+	// waits in the site Trash.
+	SiteTrashRetentionDays(ctx context.Context) (int, error)
+	// UpdateSiteTrashRetentionDays saves it; only SiteTrashRetentionChoices pass.
+	UpdateSiteTrashRetentionDays(ctx context.Context, days int) error
 
 	// GetStorageLimits returns the parsed global storage limits.
 	GetStorageLimits(ctx context.Context) (*GlobalStorageLimits, error)
@@ -504,6 +511,44 @@ func (s *settingsService) UpdateTrashRetentionDays(ctx context.Context, days int
 		return apperror.NewBadRequest("trash retention must be 30, 60, 90, 180 or 365 days")
 	}
 	return s.repo.Set(ctx, KeyTrashRetentionDays, strconv.Itoa(days))
+}
+
+// SiteTrashRetentionDays returns how long the site Trash keeps things. Only an
+// unset setting means the default. A read failure or an unusable stored value
+// is an error, never a guess: the purger deletes for good, and a guess shorter
+// than what the admin configured would remove things early.
+func (s *settingsService) SiteTrashRetentionDays(ctx context.Context) (int, error) {
+	raw, err := s.repo.Get(ctx, KeySiteTrashRetentionDays)
+	if err != nil {
+		var appErr *apperror.AppError
+		if errors.As(err, &appErr) && appErr.Code == http.StatusNotFound {
+			return DefaultSiteTrashRetentionDays, nil
+		}
+		return 0, fmt.Errorf("reading the trash retention setting: %w", err)
+	}
+	days, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil || !IsValidSiteTrashRetention(days) {
+		return 0, fmt.Errorf("the trash retention setting holds an unusable value %q", raw)
+	}
+	return days, nil
+}
+
+// UpdateSiteTrashRetentionDays validates and saves the site Trash retention.
+func (s *settingsService) UpdateSiteTrashRetentionDays(ctx context.Context, days int) error {
+	if !IsValidSiteTrashRetention(days) {
+		return apperror.NewBadRequest("trash retention must be 7, 14, 30 or 90 days")
+	}
+	return s.repo.Set(ctx, KeySiteTrashRetentionDays, strconv.Itoa(days))
+}
+
+// IsValidSiteTrashRetention reports whether days is one of the offered choices.
+func IsValidSiteTrashRetention(days int) bool {
+	for _, d := range SiteTrashRetentionChoices {
+		if d == days {
+			return true
+		}
+	}
+	return false
 }
 
 // IsValidTrashRetention reports whether days is one of the offered choices.

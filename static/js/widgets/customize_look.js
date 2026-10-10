@@ -341,7 +341,10 @@
       era:     ['Era', 'Age of Ash'],
       session: ['Next', 'Fri 7 pm']
     };
-    var LATER = [];
+    // The sky header's calendar, and the still night it is drawn over (the
+    // same colours as the real header's, topbarSkyNight).
+    var SKY = { calendarId:ROOT.getAttribute('data-sky-calendar') || '' };
+    var SKY_NIGHT = 'linear-gradient(to bottom, #04061a, #141d45 65%, #2a3768)';
     var WIDGET_SLOTS = 4;
 
     var SECTIONS = [
@@ -353,8 +356,12 @@
       { id:'type', name:'Type', icon:'i-type', desc:'The fonts for text and headings, and how large everything reads.' },
       { id:'buttons', name:'Buttons', icon:'i-cursor', desc:'The shape of buttons and how they move when you point at them and press.' },
       { id:'motion', name:'Motion and depth', icon:'i-depth', desc:'How far cards lift, how quickly things move, and a calmer option for everyone.' },
-      { id:'hover', name:'Hover cards', icon:'i-note', desc:'The card that opens when someone points at a linked page or a rule word. One look for the whole campaign.' }
+      { id:'hover', name:'Hover cards', icon:'i-note', desc:'The card that opens when someone points at a linked page or a rule word. One look for the whole campaign.' },
+      { id:'sheet', name:'Character sheets', icon:'i-journal', desc:'How character sheets look for everyone in this campaign.' }
     ];
+    // Same ids as the server's AppearanceSheetStyles, in that order.
+    var SHEET_STYLES = [['modern', 'Modern'], ['parchment', 'Parchment'], ['ledger', 'Ledger'], ['journal', 'Field journal'], ['vellum', 'Vellum'], ['night', 'Night'],
+      ['deck', 'Card deck'], ['pencil', 'Pencil'], ['starship', 'Starship'], ['neon', 'Neon terminal'], ['runes', 'Rune slate'], ['brass', 'Brass gauges']];
     var SEC_KEYS = {
       brand:['brand.name', 'brand.logo', 'brand.welcome', 'brand.backdrop'],
       header:['header.bg', 'header.height', 'header.solid', 'header.from', 'header.to', 'header.dir', 'header.image', 'header.scrim', 'header.widgets', 'header.links', 'header.text'],
@@ -364,7 +371,8 @@
       type:['type.body', 'type.heading', 'type.scale'],
       buttons:['buttons.style'],
       motion:['motion.elevation', 'motion.speed', 'motion.reduceAll'],
-      hover:['hover.look']
+      hover:['hover.look'],
+      sheet:['sheet.style']
     };
 
     /* ---------- Sample pictures, painted once so the page needs no files ---------- */
@@ -422,6 +430,7 @@
       if (!d.header.image) d.header.image = 'none';
       if (!d.sidebar.banner) d.sidebar.banner = 'none';
       if (!d.hover) d.hover = { look:'paper' };
+      if (!d.sheet) d.sheet = { style:'modern' };
       d.header.links = (d.header.links || []).map(function(l){ return { label:l.label || '', url:l.url || '', icon:l.icon || '' }; });
       while (d.header.links.length < LINK_ROWS) d.header.links.push({ label:'', url:'', icon:'' });
       return d;
@@ -474,7 +483,7 @@
     }
     // The header picks light or dark words from its own background.
     function headerLook(d, T){
-      var h = d.header, mode = h.bg === 'sky' ? 'solid' : h.bg;
+      var h = d.header, mode = h.bg;
       function col(c){ return c === 'page' ? T.card : c; }
       function words(cols){
         var w = Math.min.apply(null, cols.map(function(c){ return contrast(c, '#ffffff'); }));
@@ -484,6 +493,7 @@
       var bg, light, rep = 'none';
       if (mode === 'solid'){ bg = col(h.solid); light = words([bg]); }
       else if (mode === 'image'){ bg = '#0b0f1a'; light = true; }
+      else if (mode === 'sky'){ bg = SKY_NIGHT; light = true; }
       else {
         var a = col(h.from), b = col(h.to);
         bg = 'linear-gradient(' + HDR_DIRS[h.dir][0] + ', ' + a + ', ' + b + ')';
@@ -665,20 +675,21 @@
         fld('brand-backdrop', 'Backdrop', 'Behind the welcome', imgSlot('brand.backdrop', '', 'Upload', 'A soft shade keeps the welcome message readable over any picture. Up to 4 MB.')));
       if (id === 'header') return (
         fld('h-bg', 'Background', null,
-          opts('h-bg', 'header.bg', 'h-bg-l', HDR_MODES.map(function(m){ return m[0] === 'sky' ? [m[0], m[1], null, true, 'hint:sky', 'Coming soon'] : [m[0], m[1]]; })) +
+          opts('h-bg', 'header.bg', 'h-bg-l', HDR_MODES.map(function(m){ return [m[0], m[1]]; })) +
           '<div class="ctl" id="h-solid"><span class="hint" id="h-solid-l">Colour</span>' + swatches('hsolid', 'h-solid-l') + '</div>' +
           '<div class="ctl" id="h-grad"><span class="hint" id="h-from-l">From</span>' + swatches('hfrom', 'h-from-l') + '<span class="hint" id="h-to-l">To</span>' + swatches('hto', 'h-to-l') +
             '<span class="hint" id="h-dir-l">Direction</span>' + opts('h-dir', 'header.dir', 'h-dir-l', Object.keys(HDR_DIRS).map(function(k){ return [k, HDR_DIRS[k][1]]; })) +
             '<p class="hint" id="h-anim-h">The two colours drift slowly from side to side. They slow to a stop when nobody is using the page, and hold still for anyone who asks for less motion.</p></div>' +
           '<div class="ctl" id="h-img">' + imgSlot('header.image', '', 'Replace', 'Still or animated, 1.5 MB at most. The shade keeps the header’s words readable.') +
             '<span class="hint" id="h-scrim-l">Shade</span>' + opts('h-scrim', 'header.scrim', 'h-scrim-l', Object.keys(SCRIMS).map(function(k){ return [k, SCRIMS[k][1]]; })) + '</div>' +
+          '<div class="ctl" id="h-sky"><p class="hint">The animated sky from your calendar, the same one that sits over the month. It follows the world’s date, time of day and weather by itself, so there is nothing to set. Slow devices get the basic sky.</p>' +
+            (SKY.calendarId ? '' : '<p class="note"><svg class="i" aria-hidden="true"><use href="#cz-i-info"/></svg><span>Your campaign has no calendar yet, so the header shows a still night sky until it has one.</span></p>') + '</div>' +
           '<p class="hint">Words and buttons switch to white on dark backgrounds and pictures by themselves.</p>') +
         fld('h-height', 'Height', 'How tall the bar is', opts('h-height', 'header.height', 'h-height-l', HDR_HEIGHTS) +
           '<p class="hint">Slim is today’s bar. Tall gives pictures and moving colour more room.</p>') +
         fld('h-w', 'Widgets', 'Up to ' + WIDGET_SLOTS, '<p class="hint" id="w-full" aria-live="polite"></p><div class="wl" id="wl" aria-labelledby="h-w-l"></div>' +
           '<p class="hint">On a phone the bar shows the first widget and a +N button that opens the rest.</p>' +
-          '<div class="tape-note"><span class="tape" aria-hidden="true"></span><p><b>Under construction.</b> These are on their way. The date, weather and moon widgets above only ever show today in your world, never days ahead, and stay out of the bar when your calendar has nothing for today.</p>' +
-          '<div class="later-row"><span class="w-later">Sky background</span>' + LATER.map(function(n){ return '<span class="w-later">' + esc(n) + '</span>'; }).join('') + '</div></div>'));
+          '<p class="hint">The date, weather and moon widgets only ever show today in your world, never days ahead, and stay out of the bar when your calendar has nothing for today.</p>'));
       if (id === 'sidebar') return (
         fld('sb-col', 'Colour', 'The menu stays dark', menuColourOpts() +
           '<div class="ctl" id="sb-own"><span class="hint" id="sb-own-l">Your colour</span>' + swatches('sbown', 'sb-own-l') + '<p class="note" id="sb-own-note" hidden><svg class="i" aria-hidden="true"><use href="#cz-i-info"/></svg><span></span></p></div>' +
@@ -730,6 +741,9 @@
       if (id === 'hover') return (
         fld('h-look', 'Look', 'Every hover card in the campaign', '<div class="tiles two" role="radiogroup" aria-labelledby="h-look-l">' + tilesHover() + '</div>' +
           '<p class="hint">Point at a linked page or a rule word anywhere in the campaign to see it. What a card shows comes from each page’s own settings.</p>'));
+      if (id === 'sheet') return (
+        fld('sh-style', 'Style', 'Every character sheet in the campaign', opts('sh-style', 'sheet.style', 'sh-style-l', SHEET_STYLES) +
+          '<p class="hint">How character sheets look for everyone in this campaign. Modern matches the rest of Chronicle; the others are optional paper and screen styles.</p>'));
       return '';
     }
     function buildUI(){
@@ -777,7 +791,8 @@
         '<div class="s-subs">' + ssub('regions', 'Regions', 6) + ssub('cities', 'Cities', 14, true) + ssub('dungeons', 'Dungeons', 11) + '</div>' +
         srow('factions', 'i-banner', 'Factions', 18, '#fbbf24') + srow('items', 'i-gem', 'Items', 53, '#a78bfa') + srow('lore', 'i-scroll', 'Lore', 29, '#34d399') +
         '</div></div>';
-      var hdr = '<div class="s-hdr"><div class="s-hdr-bg"><div class="s-hdr-drift" id="d-drift"></div><div class="s-hdr-img" id="d-himg"></div><div class="s-hdr-scrim"></div></div>' +
+      var hdr = '<div class="s-hdr"><div class="s-hdr-bg"><div class="s-hdr-drift" id="d-drift"></div><div class="s-hdr-img" id="d-himg"></div><div class="s-hdr-scrim"></div>' +
+        '<div class="s-hdr-sky" id="d-sky"><canvas></canvas></div><div class="s-hdr-skyscrim"></div></div>' +
         '<div class="s-path" id="d-path"></div><div class="s-rail" id="d-rail"></div><div class="s-tools" id="d-tools"></div></div>';
       var dash = '<div class="s-page" data-page="dash"><div class="d-banner" id="d-banner"><div class="d-img" id="d-img"></div><div class="d-scrim"></div><p class="d-welcome" id="d-welcome"></p></div>' +
         '<div class="d-title"><div class="h1" id="d-title"></div><div class="d-act">' + pbtn('pri', 'New page') + pbtn('sec', 'Invite players') + '</div></div>' +
@@ -860,7 +875,7 @@
       pv.dataset.navChosen = d.nav.style;
       pv.dataset.strength = d.nav.strength;
       pv.dataset.btn = d.buttons.style;
-      pv.dataset.hdr = d.header.bg === 'sky' ? 'solid' : d.header.bg;
+      pv.dataset.hdr = d.header.bg;
       pv.dataset.hdrh = d.header.height;
       pv.dataset.corner = d.sidebar.corner;
       pv.dataset.reduce = reduce ? '1' : '0';
@@ -927,6 +942,7 @@
       $('#h-grad').hidden = bg !== 'gradient' && bg !== 'moving';
       $('#h-anim-h').hidden = bg !== 'moving';
       $('#h-img').hidden = bg !== 'image';
+      $('#h-sky').hidden = bg !== 'sky';
       var lg = logoHTML(d), lt = $('#brand-logo-t');
       if (!imgURL(d.brand.logo)){ lt.className = 'thumb sq'; setHTML(lt, IC('i-image')); lt.style.backgroundImage = ''; lt._bg = ''; }
       else { lt.className = 'thumb sq'; setHTML(lt, '<span class="' + lg[0] + '" style="width:44px;height:44px;border-radius:9px">' + lg[1] + '</span>'); }
@@ -1078,12 +1094,27 @@
       $$('#preview .hl').forEach(function(hl){ hlMotion(hl, !reduce && !hl.closest('.zp.off') && hl.offsetParent !== null); });
       $$('.nt-s .hl').forEach(function(hl){ var vis = hl.offsetParent !== null; hlMotion(hl, vis && !reducedDevice() && !!hl.closest('.nav-tile.play'), vis && !reducedDevice()); });
       driftSync();
+      skySync();
     }
 
     /* ---------- The moving header, in the example ----------
        The same slide the real header makes (header_motion.js), on the shared
        MotionRest clock, so it rests when nobody is using the page. */
     var drift = null;
+    /* ---------- The sky header, in the example ----------
+       The campaign's own sky (header_sky.js) when it has a calendar; the
+       still night colours behind it otherwise. Held still under either
+       reduce choice, as the real header is. */
+    var sky = null;
+    function skyStop(){ if (sky){ if (sky.run) sky.run.destroy(); sky = null; } $('#d-sky').classList.remove('is-ready'); }
+    function skySync(){
+      var want = draft.header.bg === 'sky' && !!SKY.calendarId && !!(window.Chronicle && Chronicle.headerSky);
+      if (!want){ skyStop(); return; }
+      var still = reduceAll();
+      if (sky && sky.still === still) return;
+      skyStop();
+      sky = { run:Chronicle.headerSky.mount($('#d-sky'), { campaignId:CID, calendarId:SKY.calendarId, still:still }), still:still };
+    }
     function driftStop(){ if (drift){ if (drift.run) drift.run.destroy(); drift = null; } }
     function driftSync(){
       var el = $('#d-drift'), vertical = draft.header.dir === 'b';
@@ -1302,7 +1333,6 @@
       }
       if (t === 'btn'){ var b = BTN_STYLES.filter(function(x){ return x[0] === p[1]; })[0]; return '<b>' + esc(b[1]) + '</b><span>' + esc(b[2]) + '</span>'; }
       if (t === 'menu'){ var mc = MENU_COLOURS.filter(function(x){ return x[0] === p[1]; })[0]; return '<b>' + esc(mc[1]) + '</b><span>' + esc(mc[2]) + '</span>'; }
-      if (t === 'hint') return '<b>Sky</b><span>Coming soon: the living sky over your world as it is in the story right now.</span>';
       return '';
     }
     function hcCtl(el){ return el.matches('input, button') ? el : ($('input, button', el) || el); }
@@ -1413,7 +1443,7 @@
           dir:drift ? 'to-' + h.dir : '', image:bg === 'image' ? pic(h.image) : '', scrim:h.scrim,
           widgets:h.widgets.slice(), links:h.links.filter(function(l){ return l.label.trim() || l.url.trim(); }), text:h.text },
         colours:{ accent:d.colours.accent, s1:d.colours.s1 || '', s2:d.colours.s2 || '', page:d.colours.page, contrast:d.colours.contrast },
-        nav:clone(d.nav), type:clone(d.type), buttons:clone(d.buttons), motion:clone(d.motion), hover:clone(d.hover),
+        nav:clone(d.nav), type:clone(d.type), buttons:clone(d.buttons), motion:clone(d.motion), hover:clone(d.hover), sheet:clone(d.sheet),
         // The companion of each choice is sent only while that choice is
         // selected, so nothing stale is stored.
         sidebar:{ colour:d.colours.sidebar, own:d.colours.sidebar === 'own' ? sb.own : '', corner:sb.corner,
@@ -1814,6 +1844,7 @@
       if (mo) mo.disconnect();
       ringAnims.forEach(function (a) { a.forEach(function (x) { x.cancel(); }); });
       driftStop();
+      skyStop();
       clearTimeout(toastT); clearTimeout(hcTimer);
       cancelAnimationFrame(fzRaf); clearTimeout(discardT);
       playTimers.forEach(clearTimeout);

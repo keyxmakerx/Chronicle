@@ -101,3 +101,14 @@ nodes get `.sidebar-selected` class. A floating action bar appears with
 - `PUT /campaigns/:id/sidebar-nodes/:nid/reorder` — reorder/reparent folder
 - `POST /campaigns/:id/entities/bulk-move` — multi-select bulk reparent
 - `GET /campaigns/:id/entities/search?sidebar=1&type=N&page=P` — entity list
+
+## Extra listings (data-place-key rows)
+
+`SidebarEntityList` also draws a page listed under a second parent as a leaf
+row keyed `page~parent` (`data-place-key`, `data-place-entity`) with a link
+icon and an "also here" label. It has no `data-entity-id`, is never
+draggable, and takes no index among the siblings `calculateTargetIndex`
+counts (the server re-sequences real siblings only). In reorg mode, holding
+Alt while dropping a page onto another page (`placeRequest`, `addPlace`)
+POSTs `.../places` instead of moving it; a plain drop still moves. Touch has
+no Alt: the page's own "Add a place" picker is the way there.

@@ -132,8 +132,8 @@ func campaignRowActions(c campaigns.Campaign) []rowAction {
 	return []rowAction{
 		{Label: "Leave", MenuLabel: "Leave campaign…", Method: "delete", URL: fmt.Sprintf("/admin/campaigns/%s/leave", c.ID),
 			Confirm: "Leave this campaign? You will lose the access you gave yourself."},
-		{Label: "Delete", MenuLabel: "Delete campaign…", Method: "delete", URL: fmt.Sprintf("/admin/campaigns/%s", c.ID),
-			Confirm: "Permanently delete this campaign and all its data?", Tone: "danger"},
+		{Label: "Move to trash", MenuLabel: "Move to trash…", Method: "delete", URL: fmt.Sprintf("/admin/campaigns/%s", c.ID),
+			Confirm: "Move this campaign to the trash? It disappears for everyone right away. You can bring it back from Trash until it empties.", Tone: "danger"},
 	}
 }
 

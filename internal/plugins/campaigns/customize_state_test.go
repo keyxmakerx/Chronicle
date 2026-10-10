@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
 // TestBuildCustomizeState pins how saved settings become the Customize
@@ -106,6 +108,11 @@ func TestBuildCustomizeState(t *testing.T) {
 				t.Error("the banner needs a URL the editor can show")
 			}
 		}},
+		{"a sky header reads back", `{"topbar_style":{"mode":"sky"}}`, nil, func(t *testing.T, st customizeState) {
+			if st.Draft.Header.Bg != "sky" {
+				t.Errorf("want the sky header, got %q", st.Draft.Header.Bg)
+			}
+		}},
 		{"a broken own colour falls back to the starting colour", `{"appearance":{"sidebar_colour":"own","sidebar_own":"red","peek_glow":"own","peek_glow_colour":"nope"}}`, nil, func(t *testing.T, st customizeState) {
 			if st.Draft.Sidebar.Own != startMenuOwn || st.Draft.Sidebar.GlowColour != startGlowOwn {
 				t.Errorf("invalid stored colours must not reach the editor: %+v", st.Draft.Sidebar)
@@ -148,5 +155,15 @@ func TestLookTab_MountsWithState(t *testing.T) {
 	}
 	if st.Campaign != `Ash "fall" <b>` || st.Draft.Look != "classic" {
 		t.Errorf("data-state round trip lost data: %+v", st)
+	}
+	if !strings.Contains(out, `data-sky-calendar=""`) {
+		t.Error("without a calendar the example sky has no calendar to draw")
+	}
+	sb.Reset()
+	if err := lookTab(cc, "tok").Render(layouts.SetSkyCalendarID(context.Background(), "cal-9"), &sb); err != nil {
+		t.Fatalf("render lookTab: %v", err)
+	}
+	if !strings.Contains(sb.String(), `data-sky-calendar="cal-9"`) {
+		t.Error("the example sky must be given the campaign's calendar")
 	}
 }

@@ -83,6 +83,28 @@ templ SidebarEntityList(results []Entity, nodes []SidebarNode, total int, typeID
 					}
 				</a>
 			}
+			// Extra listings: the same page shown under a second parent. They
+			// carry no data-entity-id, so a drag, a reorder or a count never
+			// mistakes them for the page's real row (sidebar_tree.js keys them
+			// by data-place-key and never makes them draggable).
+			for _, pl := range treePlacesOf(ctx) {
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, pl.EntityID)) }
+					class={
+						"sidebar-tree-item tree-row is-page is-place",
+						templ.KV("opacity-40", hiddenIDs[pl.EntityID]),
+					}
+					data-place-key={ placeSidebarKey(pl) }
+					data-place-entity={ pl.EntityID }
+					data-parent-id={ pl.ParentID }
+					data-sort-order={ strconv.Itoa(pl.SortOrder) }
+					data-entity-name={ pl.EntityName }
+					title="Also listed here. It is the same page, edited once."
+				>
+					<span class="tree-lb">{ pl.EntityName }</span>
+					<span class="tree-also"><i class="fa-solid fa-link" aria-hidden="true"></i> also here</span>
+				</a>
+			}
 		</div>
 		if total > len(results) {
 			<!-- Load more sentinel for infinite scroll -->

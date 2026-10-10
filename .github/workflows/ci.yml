@@ -270,7 +270,7 @@ jobs:
         run: |
           go test ./internal/plugins/sessions/... ./internal/plugins/entities/... ./internal/plugins/timeline/... ./internal/plugins/calendar/... \
             -v -count=1 2>&1 | tee dbtests.log
-          go test ./internal/app/ -v -count=1 -run 'CustomVisibilityLeak|PrivateEntityVisibilityLeak|CalendarCampaignExportImport' 2>&1 | tee -a dbtests.log
+          go test ./internal/app/ -v -count=1 -run 'CustomVisibilityLeak|PrivateEntityVisibilityLeak|CalendarCampaignExportImport|CampaignExportImport_PlacesInTree|SiteTrash' 2>&1 | tee -a dbtests.log
           go test ./internal/plugins/campaigns/ -v -count=1 -run TestNavPins_Integration 2>&1 | tee -a dbtests.log
           go test ./internal/plugins/auth/ -v -count=1 -run 'TestUserRepository_.*_Integration' 2>&1 | tee -a dbtests.log
           go test ./internal/plugins/quests/ -v -count=1 -run 'Integration' 2>&1 | tee -a dbtests.log
@@ -323,7 +323,22 @@ jobs:
                       TestDB_PageFileMigrationIsIdempotent \
                       TestDB_PageFileAccess \
                       TestDB_PageFilesStayOutOfListingsAndDedup \
-                      TestDB_PageFileLifecycle; do
+                      TestDB_PageFileLifecycle \
+                      TestSiteTrash_CampaignIsGoneForMembersAndBackAfterUndo \
+                      TestSiteTrash_PurgeWaitsForRetentionAndNeverTouchesUndone \
+                      TestSiteTrash_UndoRefusedOnceTheFinalDeleteBegan \
+                      TestSiteTrash_FileCleanupCanBeUndoneAndPurgeSparesIt \
+                      TestSiteTrash_EmptyNowNeedsThePasswordRecheck \
+                      TestSiteTrash_ClaimRechecksAgeInSQL \
+                      TestSiteTrash_SessionsTokenRoutesStopForATrashedCampaign \
+                      TestSiteTrash_NoWritesIntoATrashedCampaign \
+                      TestSiteTrash_RetentionChangeNeedsThePasswordRecheck \
+                      TestPlaces_Integration_TreeVisibility \
+                      TestPlaces_Integration_TrashHidesAndRestoreBringsBack \
+                      TestPlaces_Integration_CyclesAndCampaigns \
+                      TestPlaces_Integration_RealMoveAndPurge \
+                      TestPlaces_Integration_ExportAndOwnRealParent \
+                      TestCampaignExportImport_PlacesInTree_DBRoundTrip; do
             grep -q -- "--- PASS: $want" dbtests.log || {
               echo "::error::$want did not PASS — it was skipped or never ran."
               exit 1

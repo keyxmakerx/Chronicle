@@ -15,6 +15,7 @@ templ lookTab(cc *CampaignContext, csrfToken string) {
 		data-campaign-id={ cc.Campaign.ID }
 		data-csrf={ csrfToken }
 		data-state={ customizeStateJSON(ctx, cc) }
+		data-sky-calendar={ layouts.GetSkyCalendarID(ctx) }
 	>
 		<div class="cz" id="cz">
 			<section class="looks" aria-labelledby="looks-h">

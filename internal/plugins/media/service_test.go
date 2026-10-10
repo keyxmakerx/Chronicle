@@ -133,6 +133,18 @@ func (m *mockMediaRepo) ListUnboundPageFiles(ctx context.Context, olderThan time
 	return nil, nil
 }
 
+func (m *mockMediaRepo) TrashFiles(ctx context.Context, batchID string, ids []string) (int, int64, error) {
+	return 0, 0, nil
+}
+
+func (m *mockMediaRepo) RestoreTrashedFiles(ctx context.Context, batchID string) (int, error) {
+	return 0, nil
+}
+
+func (m *mockMediaRepo) ListTrashedFileIDs(ctx context.Context, batchID string) ([]string, error) {
+	return nil, nil
+}
+
 func (m *mockMediaRepo) ListUnboundNotePictures(ctx context.Context, olderThan time.Time) ([]string, error) {
 	if m.listUnboundFn != nil {
 		return m.listUnboundFn(ctx, olderThan)

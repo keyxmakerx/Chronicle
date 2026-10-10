@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"reflect"
 	"regexp"
 	"strings"
@@ -103,6 +104,16 @@ type EntityService interface {
 	// the type was first created (WS-5): existing heroes' type picks up the new
 	// fields without recreating it. Additive and idempotent — see the impl.
 	ReconcileEntityTypeFields(ctx context.Context, typeID int, declared []FieldDefinition) (int, error)
+	// AdoptDefaultCharacterType makes the campaign's seeded top-level
+	// "Characters" type the home of a system's character sheet: it takes the
+	// preset category and gains the declared fields (additively). Returns nil,
+	// nil when there is nothing to adopt (no such type, or it already carries a
+	// preset category), so the caller can fall back to creating a type.
+	AdoptDefaultCharacterType(ctx context.Context, campaignID, category string, declared []FieldDefinition) (*EntityType, error)
+	// ReconcileCharacterPresetHome moves the system character sheet off an
+	// empty duplicate type onto "Characters" in every campaign, disabling (never
+	// deleting) the duplicate. Idempotent; returns the number of campaigns changed.
+	ReconcileCharacterPresetHome(ctx context.Context) (int, error)
 	DeleteEntityType(ctx context.Context, id int) error
 	UpdateEntityTypeLayout(ctx context.Context, id int, layout EntityTypeLayout) error
 	UpdateEntityTypeColor(ctx context.Context, id int, color string) error
@@ -337,6 +348,7 @@ type entityService struct {
 	mediaVerifier MediaCampaignVerifier
 	addonChecker  AddonChecker
 	safety        PageSafetyRepository // nil: no history, no Trash (tests)
+	placeGuard    PlaceGuard           // nil: no extra listings (tests)
 	fieldObserver FieldChangeObserver
 }
 
@@ -702,6 +714,11 @@ func (s *entityService) Update(ctx context.Context, entityID string, input Updat
 					return nil, apperror.NewBadRequest("circular reference: the selected parent is a descendant of this entity")
 				}
 			}
+			// The walk above follows real parents only; a page listed
+			// elsewhere can still lead back down to this one.
+			if err := s.refuseListingCycle(ctx, entity.CampaignID, entityID, pid); err != nil {
+				return nil, err
+			}
 			entity.ParentID = &pid
 		} else {
 			entity.ParentID = nil
@@ -752,6 +769,9 @@ func (s *entityService) Update(ctx context.Context, entityID string, input Updat
 
 	if err := s.entities.Update(ctx, entity); err != nil {
 		return nil, apperror.NewInternal(fmt.Errorf("updating entity: %w", err))
+	}
+	if input.ParentID.Present() && entity.ParentID != nil {
+		s.dropListingUnderRealParent(ctx, entityID, *entity.ParentID)
 	}
 
 	if entity.Name != before.Name || derefStr(entity.EntryHTML) != derefStr(before.EntryHTML) {
@@ -820,6 +840,12 @@ func (s *entityService) ReorderEntity(ctx context.Context, campaignID, entityID 
 		}
 	}
 
+	if parentID != nil {
+		if err := s.refuseListingCycle(ctx, campaignID, entityID, *parentID); err != nil {
+			return err
+		}
+	}
+
 	// An entity can be parented under an entity (parent_id) or a folder
 	// node (parent_node_id), but not both. When one is set, clear the other.
 	if parentNodeID != nil {
@@ -837,6 +863,9 @@ func (s *entityService) ReorderEntity(ctx context.Context, campaignID, entityID 
 		}
 		if err := s.entities.UpdateParent(ctx, entityID, campaignID, parentID); err != nil {
 			return err
+		}
+		if parentID != nil {
+			s.dropListingUnderRealParent(ctx, entityID, *parentID)
 		}
 	}
 
@@ -1356,6 +1385,11 @@ func (s *entityService) EnsurePlayerCharacterType(ctx context.Context, campaignI
 		case t.ParentTypeID == nil && t.Slug == DefaultCharacterTypeSlug:
 			id := t.ID
 			charParentID = &id
+			// Characters carrying the system's preset is the system's character
+			// type itself, so no separate Player Character type is premade.
+			if preset == "character" {
+				systemCharType = t
+			}
 		case isPlayerCharacterType(preset, t.Slug):
 			pcType = t
 		case isClaimableType(t):
@@ -1458,6 +1492,10 @@ func (s *entityService) PlayerCharacterSetupSnapshot(ctx context.Context, campai
 		case t.ParentTypeID == nil && t.Slug == DefaultCharacterTypeSlug:
 			id := t.ID
 			snap.DefaultCharsParentID = &id
+			if preset == "character" {
+				snap.SystemCharTypes = append(snap.SystemCharTypes, *t)
+				snap.SystemCharCount += counts[t.ID]
+			}
 		case isPlayerCharacterType(preset, t.Slug):
 			snap.GenericPCTypes = append(snap.GenericPCTypes, *t)
 			snap.GenericPCCount += counts[t.ID]
@@ -2195,6 +2233,133 @@ func (s *entityService) ReconcileEntityTypeFields(ctx context.Context, typeID in
 		slog.Int("fields_added", len(added)),
 	)
 	return len(added), nil
+}
+
+// presetCategoryCharacter is the system preset category whose sheet renders on
+// character pages.
+const presetCategoryCharacter = "character"
+
+// AdoptDefaultCharacterType exists because real characters live in the seeded
+// "Characters" type, so a system's sheet (bound by preset category) must land
+// there rather than on a second, empty type. It refuses a Characters type that
+// already has a preset category: that is someone's earlier choice.
+func (s *entityService) AdoptDefaultCharacterType(ctx context.Context, campaignID, category string, declared []FieldDefinition) (*EntityType, error) {
+	chars, err := s.types.FindBySlug(ctx, campaignID, DefaultCharacterTypeSlug)
+	if err != nil {
+		if apperror.SafeCode(err) == http.StatusNotFound {
+			return nil, nil // the campaign deleted its Characters type
+		}
+		return nil, err
+	}
+	if chars.ParentTypeID != nil || (chars.PresetCategory != nil && *chars.PresetCategory != "") {
+		return nil, nil
+	}
+	if err := s.types.AdoptPresetCategory(ctx, chars.ID, category, nil); err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("adopting preset category: %w", err))
+	}
+	if _, err := s.ReconcileEntityTypeFields(ctx, chars.ID, declared); err != nil {
+		return nil, err
+	}
+	// Reload so the caller and the "updated" event see the stored row.
+	updated, err := s.types.FindByID(ctx, chars.ID)
+	if err != nil {
+		return nil, err
+	}
+	s.events.PublishEntityTypeEvent("updated", updated.CampaignID, updated)
+	return updated, nil
+}
+
+// ReconcileCharacterPresetHome heals campaigns where a system's character type
+// was created beside "Characters" before AdoptDefaultCharacterType existed. It
+// only acts when the duplicate holds no pages at all (any visibility, plus the
+// Trash) and "Characters" has no preset category; anything else is logged and
+// left for the owner, because moving pages between types is not this
+// reconciler's call. It never deletes: the duplicate is disabled so it can be
+// re-enabled.
+func (s *entityService) ReconcileCharacterPresetHome(ctx context.Context) (int, error) {
+	all, err := s.types.ListAll(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("listing entity types for character preset home: %w", err)
+	}
+	byCampaign := make(map[string][]EntityType)
+	for _, t := range all {
+		byCampaign[t.CampaignID] = append(byCampaign[t.CampaignID], t)
+	}
+
+	changed := 0
+	for campaignID, types := range byCampaign {
+		var chars *EntityType
+		for i := range types {
+			if types[i].ParentTypeID == nil && types[i].Slug == DefaultCharacterTypeSlug {
+				chars = &types[i]
+			}
+		}
+		if chars == nil {
+			continue
+		}
+		var dupes []EntityType
+		for _, t := range types {
+			if t.ID != chars.ID && t.PresetCategory != nil && *t.PresetCategory == presetCategoryCharacter &&
+				(t.ParentTypeID == nil || *t.ParentTypeID == chars.ID) {
+				dupes = append(dupes, t)
+			}
+		}
+		if len(dupes) == 0 {
+			continue
+		}
+		if chars.PresetCategory != nil && *chars.PresetCategory != "" {
+			slog.Info("character preset home: Characters already has a preset category; leaving both types alone",
+				slog.String("campaign_id", campaignID), slog.Int("characters_type_id", chars.ID),
+				slog.Int("system_type_id", dupes[0].ID))
+			continue
+		}
+		if len(dupes) > 1 {
+			slog.Info("character preset home: more than one system character type; leaving them alone",
+				slog.String("campaign_id", campaignID), slog.Int("characters_type_id", chars.ID))
+			continue
+		}
+		dupe := dupes[0]
+
+		counts, err := s.entities.CountByType(ctx, campaignID, 3, "")
+		if err != nil {
+			slog.Warn("character preset home: counting pages failed",
+				slog.String("campaign_id", campaignID), slog.Any("error", err))
+			continue
+		}
+		trashed := 0
+		if s.safety != nil {
+			if trashed, err = s.safety.CountTrashedByType(ctx, dupe.ID); err != nil {
+				slog.Warn("character preset home: counting trashed pages failed",
+					slog.String("campaign_id", campaignID), slog.Any("error", err))
+				continue
+			}
+		}
+		if counts[dupe.ID] > 0 || trashed > 0 {
+			slog.Info("character preset home: system character type holds pages; leaving both types alone",
+				slog.String("campaign_id", campaignID), slog.Int("characters_type_id", chars.ID),
+				slog.Int("system_type_id", dupe.ID), slog.Int("pages", counts[dupe.ID]+trashed))
+			continue
+		}
+
+		if _, err := s.ReconcileEntityTypeFields(ctx, chars.ID, dupe.Fields); err != nil {
+			slog.Warn("character preset home: merging fields failed",
+				slog.String("campaign_id", campaignID), slog.Any("error", err))
+			continue
+		}
+		if err := s.types.AdoptPresetCategory(ctx, chars.ID, presetCategoryCharacter, &dupe.ID); err != nil {
+			slog.Warn("character preset home: moving the preset category failed",
+				slog.String("campaign_id", campaignID), slog.Any("error", err))
+			continue
+		}
+		slog.Info("character preset home: sheet moved onto Characters; empty system type disabled",
+			slog.String("campaign_id", campaignID), slog.Int("characters_type_id", chars.ID),
+			slog.Int("disabled_type_id", dupe.ID))
+		if updated, err := s.types.FindByID(ctx, chars.ID); err == nil {
+			s.events.PublishEntityTypeEvent("updated", campaignID, updated)
+		}
+		changed++
+	}
+	return changed, nil
 }
 
 // DeleteEntityType removes an entity type if no entities reference it.

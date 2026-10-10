@@ -2967,6 +2967,9 @@ func (a *App) RegisterRoutes() {
 	} else if n > 0 {
 		slog.Info("player-character-type backfill complete", slog.Int("campaigns", n))
 	}
+	// Move a system's character sheet off an empty duplicate type onto the
+	// default Characters type; idempotent and never deletes.
+	reconcileCharacterPresetHome(context.Background(), entityService)
 	addonService.SetSystemFinder(&systemManifestFinderAdapter{})
 	addonHandler := addons.NewHandler(addonService)
 	addonHandler.SetActivityRecorder(adminActivity)
@@ -3238,6 +3241,15 @@ func (a *App) RegisterRoutes() {
 	// Data hygiene scanner: orphan detection and cleanup for media, API keys, stale files.
 	hygieneScanner := admin.NewHygieneService(a.DB, mediaRepo, mediaService, a.Config.Upload.MediaPath, securityRepo)
 	adminHandler.SetHygieneScanner(hygieneScanner)
+
+	// Site Trash: a deleted campaign and a file clean-up wait here with Undo
+	// before anything is removed. The purger is the periodic job that empties
+	// items older than the retention setting (an hourly ticker, started the
+	// same way as the page Trash purger below).
+	trashService := admin.NewTrashService(campaignService, mediaService, hygieneScanner,
+		admin.NewTrashBatchRepository(a.DB), settingsService)
+	adminHandler.SetTrashService(trashService)
+	go trashService.StartPurger(a.ShutdownCtx)
 
 	// Database explorer: schema visualization and migration management.
 	dbExplorer := admin.NewDatabaseExplorer(a.DB, a.PluginHealth, a.PluginSchemas)
@@ -4112,6 +4124,15 @@ func (a *App) RegisterRoutes() {
 	entities.RegisterPageSafetyRoutes(e, entities.NewPageSafetyHandler(pageSafetyService, entityService, campaignService), campaignService, authService)
 	go pageSafetyService.StartPurger(a.ShutdownCtx)
 
+	// --- Extra places in the page tree ---
+	// One page listed under more than one parent. The service is also the
+	// guard page moves ask, so a move can't loop through a listing.
+	placeService := entities.NewPlaceService(entityRepo, entities.NewPlaceRepository(a.DB))
+	entityHandler.SetPlaceService(placeService)
+	if g, ok := entityService.(interface{ SetPlaceGuard(entities.PlaceGuard) }); ok {
+		g.SetPlaceGuard(placeService)
+	}
+
 	// --- Entity Block Registry ---
 	// Create the block registry and let each plugin register its block types.
 	// This drives validation, rendering, and the template editor palette.
@@ -4473,7 +4494,7 @@ func (a *App) RegisterRoutes() {
 
 	// --- Campaign Export/Import ---
 	exportSvc := campaigns.NewExportImportService(campaignService)
-	exportSvc.SetEntityExporter(&entityExportAdapter{entitySvc: entityService, tagSvc: tagService, relationSvc: relService})
+	exportSvc.SetEntityExporter(&entityExportAdapter{entitySvc: entityService, tagSvc: tagService, relationSvc: relService, placeSvc: placeService})
 	exportSvc.SetCalendarExporter(&calendarExportAdapter{svc: calendarService})
 	exportSvc.SetTimelineExporter(&timelineExportAdapter{svc: timelineSvc})
 	exportSvc.SetSessionExporter(&sessionExportAdapter{svc: sessionsService})
@@ -4482,7 +4503,7 @@ func (a *App) RegisterRoutes() {
 	exportSvc.SetAddonExporter(&addonExportAdapter{svc: addonService})
 	exportSvc.SetMediaExporter(&mediaExportAdapter{svc: mediaService})
 	exportSvc.SetMediaBundler(&mediaBundleAdapter{svc: mediaService})
-	exportSvc.SetEntityImporter(&entityImportAdapter{entitySvc: entityService, tagSvc: tagService, relationSvc: relService})
+	exportSvc.SetEntityImporter(&entityImportAdapter{entitySvc: entityService, tagSvc: tagService, relationSvc: relService, placeSvc: placeService})
 	exportSvc.SetCalendarImporter(&calendarImportAdapter{svc: calendarService})
 	exportSvc.SetTimelineImporter(&timelineImportAdapter{svc: timelineSvc})
 	exportSvc.SetSessionImporter(&sessionImportAdapter{svc: sessionsService})
@@ -4868,6 +4889,8 @@ func (a *App) RegisterRoutes() {
 					SidebarCorner: ap.SidebarCorner, SidebarSubtitle: ap.SidebarSubtitle, SidebarBanner: ap.SidebarBanner,
 					PeekGlow: ap.PeekGlow, PeekGlowColour: ap.PeekGlowColour,
 					HoverCard: ap.HoverCard,
+
+					SheetStyle: ap.SheetStyle,
 				}
 				ctx = layouts.SetAppearance(ctx, ad)
 			}
@@ -5013,6 +5036,22 @@ func (a *App) RegisterRoutes() {
 					Nights: cc.IsMember && enabledSlugs[calendar.PluginSlug],
 					Now:    time.Now(),
 				})
+				cancel()
+			}
+
+			// The campaign's sky is drawn from its default calendar, so the
+			// Sky header background needs that calendar's id, and so does
+			// the Customize page's example header. Without one the header
+			// keeps its still night colours. A fragment swap never redraws
+			// the bar, so only a full page reads it for the header.
+			skyHeader := !middleware.IsHTMX(c)
+			if ts := layouts.GetTopbarStyle(ctx); ts == nil || ts.Mode != "sky" {
+				skyHeader = false
+			}
+			if (skyHeader || c.Path() == "/campaigns/:id/customize") && enabledSlugs[calendar.PluginSlug] && calendarHealthy {
+				skyCtx, cancel := context.WithTimeout(reqCtx, headerLiveTimeout)
+				ctx = layouts.SetSkyCalendarID(ctx, headerSkyCalendarID(skyCtx, calendarService, cc.Campaign.ID,
+					permissions.RequestViewer(cc.VisibilityRole(), layoutUserID)))
 				cancel()
 			}
 
@@ -5189,7 +5228,16 @@ func (a *App) RegisterRoutes() {
 	}
 
 	// Quest sheets and notice boards. Cross-plugin lookups go through the
-	// adapters in quests_adapters.go.
+	// adapters in quests_adapters.go. Both boards share quest_board_kit.js,
+	// so it loads first in each list (ADR-063).
+	a.registerPlugin(PluginRegistration{
+		Slug:     quests.PluginSlug,
+		StaticFS: echo.MustSubFS(quests.StaticAssetsFS, "static"),
+		Widgets: []PluginWidget{
+			{Name: "quest_board", Scripts: []string{"js/quest_board_kit.js", "js/quest_board.js"}},
+			{Name: "notice_boards", Scripts: []string{"js/quest_board_kit.js", "js/notice_boards.js"}},
+		},
+	})
 	if a.PluginHealth.IsHealthy(quests.PluginSlug) {
 		questEntities := &questEntityAdapter{svc: entityService, cards: entities.NewPageCards(a.DB)}
 		questMaps := &questMapAdapter{svc: mapsService, addons: addonService}

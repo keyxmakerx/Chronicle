@@ -54,6 +54,9 @@ func TestAppearanceAttrs(t *testing.T) {
 		want map[string]string
 	}{
 		{"heading same", AppearanceData{HeadingFont: "same"}, map[string]string{}},
+		{"sheet empty", AppearanceData{SheetStyle: ""}, map[string]string{}},
+		{"sheet modern", AppearanceData{SheetStyle: "modern"}, map[string]string{}},
+		{"sheet brass", AppearanceData{SheetStyle: "brass"}, map[string]string{"data-cz-sheet": "brass"}},
 		{"heading cinzel", AppearanceData{HeadingFont: "cinzel"}, map[string]string{"data-cz-heading": "cinzel"}},
 		{"all", AppearanceData{NavStyle: "comet", NavStrength: "lively", NavPageName: "hidden", ButtonStyle: "glow",
 			Elevation: "flat", TypeScale: "roomy", ReduceMotion: true, HoverCard: "night"},
@@ -191,6 +194,7 @@ func TestTopbarWantsLightWords(t *testing.T) {
 		{"default header", nil, false},
 		{"empty mode", &TopbarStyleData{}, false},
 		{"image", &TopbarStyleData{Mode: "image", ImagePath: "a.png"}, true},
+		{"sky", &TopbarStyleData{Mode: "sky"}, true},
 		{"dark solid", &TopbarStyleData{Mode: "solid", Color: "#0f172a"}, true},
 		{"light solid", &TopbarStyleData{Mode: "solid", Color: "#f4eddd"}, false},
 		{"dark gradient", &TopbarStyleData{Mode: "gradient", GradientFrom: "#0f172a", GradientTo: "#1e1b4b"}, true},

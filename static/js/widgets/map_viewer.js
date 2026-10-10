@@ -56,6 +56,13 @@
     if (window.ChronicleMapPictures) return Promise.resolve();
     return loadScript(cfg.picturesSrc).catch(function () { /* pictures simply do not render */ });
   }
+  // Arrows, the highlighter, numbered steps and speech bubbles, plus the
+  // in-map text editor and delete confirm. Optional: without it those four are
+  // not drawn.
+  function ensureAnnotations(cfg) {
+    if (window.ChronicleMapAnnotations || !cfg.annotationsSrc) return Promise.resolve();
+    return loadScript(cfg.annotationsSrc).catch(function () { /* annotations simply do not render */ });
+  }
   // The live-refresh core is optional too: without it the page simply keeps
   // showing what it loaded until it is reloaded.
   function ensureLive(cfg) {
@@ -756,15 +763,29 @@
 	var drawShape = 'freehand';
 	var drawColor = '#2563eb';
 	var drawWidth = 4;
-	var SHAPE_ICON = { freehand: 'fa-pen', rectangle: 'fa-vector-square', ellipse: 'fa-circle', polygon: 'fa-draw-polygon', text: 'fa-font' };
+	// Until a colour is picked the highlighter stays yellow (the drawing module
+	// reads this through setStyle).
+	var colorPicked = false;
 	var SHADOW_HINT = 'Drag a box over what players should not make out';
 	var SHAPE_HINT = {
 		freehand: 'Drag to draw a line',
+		arrow: 'Drag from the tail to the tip',
 		rectangle: 'Click one corner, then the opposite corner',
 		ellipse: 'Click the centre, then click the edge',
 		polygon: 'Click each corner, double-click to finish',
+		highlight: 'Drag over what matters',
+		callout: 'Click where the speech bubble goes',
 		text: 'Click where the label goes'
 	};
+	// The step hint names the number the next click places.
+	function shapeHint(shape) {
+		if (shape === 'step') {
+			var A = window.ChronicleMapAnnotations;
+			var n = draw() && draw().nextStep ? draw().nextStep() : 1;
+			return A ? A.stepHint(n) : 'Click to place a numbered step';
+		}
+		return SHAPE_HINT[shape];
+	}
 	function draw() { return window.chronicleMap && window.chronicleMap.draw; }
 
 	// Zoom: 100% is the whole map fitted to the view, so the number means
@@ -851,8 +872,16 @@
 		document.querySelectorAll('[data-tool]').forEach(function(b) {
 			b.setAttribute('aria-pressed', b.dataset.tool === tool ? 'true' : 'false');
 		});
-		var db = document.querySelector('[data-tool="draw"] i');
-		if (db) db.className = 'fa-solid ' + SHAPE_ICON[drawShape];
+		// The Draw button wears the chosen shape's icon, copied from the picker.
+		var db = document.querySelector('[data-tool="draw"]');
+		var src = document.querySelector('[data-shape="' + drawShape + '"]');
+		var srcIcon = src && src.querySelector('i, svg');
+		var dbIcon = db && db.querySelector('i, svg');
+		if (srcIcon && dbIcon && dbIcon.getAttribute('data-shape-icon') !== drawShape) {
+			var copy = srcIcon.cloneNode(true);
+			copy.setAttribute('data-shape-icon', drawShape);
+			db.replaceChild(copy, dbIcon);
+		}
 		document.querySelectorAll('[data-shape]').forEach(function(b) {
 			b.setAttribute('aria-pressed', (tool === 'draw' && b.dataset.shape === drawShape) ? 'true' : 'false');
 		});
@@ -870,7 +899,7 @@
 		if (t !== 'draw' && t !== 'shadow' && draw()) draw().cancel();
 		tool = t;
 		if (t === 'pin') setHint('Click the map to drop a pin');
-		else if (t === 'draw') setHint(SHAPE_HINT[drawShape]);
+		else if (t === 'draw') setHint(shapeHint(drawShape));
 		else if (t === 'shadow') setHint(SHADOW_HINT);
 		else if (t !== 'hex') setHint('');
 		syncRail();
@@ -883,9 +912,9 @@
 		drawShape = shape;
 		tool = 'draw';
 		if (viewerCtx && viewerCtx.hexes) viewerCtx.hexes.setActive(false);
-		draw().setStyle({ color: drawColor, width: drawWidth });
+		draw().setStyle({ color: drawColor, width: drawWidth, picked: colorPicked });
 		draw().start(shape);
-		setHint(SHAPE_HINT[shape]);
+		setHint(shapeHint(shape));
 		syncRail();
 	}
 
@@ -948,7 +977,8 @@
 		flyStyle.querySelectorAll('[data-color]').forEach(function(b) {
 			b.addEventListener('click', function() {
 				drawColor = b.dataset.color;
-				if (draw()) draw().setStyle({ color: drawColor });
+				colorPicked = true;
+				if (draw()) draw().setStyle({ color: drawColor, picked: true });
 				syncStyle();
 			});
 		});
@@ -1173,6 +1203,7 @@
 		} catch (err) { return true; }
 	}
 	var HIDDEN_PICTURE_CONFIRM = 'Hexes painted on this hidden picture will become visible to players. Continue?';
+	var TAKE_OFF_CONFIRM = 'Take the hexes off this map? Painted hexes are kept, so making it a hex map again brings them back.';
 	// Moving the hexes off a dm_only picture onto something players can see
 	// would publish whatever was painted while it was hidden.
 	function hexCoverReveals(newId) {
@@ -1246,7 +1277,7 @@
 	// The painted hexes stay stored, so turning hexes back on finds them.
 	async function takeHexesOff() {
 		if (!isOwner) return false;
-		if (hexCoverReveals(null) && !confirm(HIDDEN_PICTURE_CONFIRM)) return false;
+		if (!confirm(hexCoverReveals(null) ? HIDDEN_PICTURE_CONFIRM : TAKE_OFF_CONFIRM)) return false;
 		if (hexAnchor !== null && !await apiPut(hexBase + '/layer', { anchor_drawing_id: null })) return false;
 		if (!await putGrid('none', savedD.grid_size)) return false;
 		hexAnchor = null;
@@ -1276,19 +1307,36 @@
 		label.className = 'mp-fly-label';
 		label.textContent = 'Make a hex map';
 		flyHex.appendChild(label);
-		function item(text, id, mode) {
+		var HEX_PATH = 'M12 3l8 4.5v9L12 21l-8-4.5v-9z';
+		function item(title, sub, id, mode) {
 			var b = document.createElement('button');
 			b.type = 'button';
-			b.className = 'mp-wd';
-			b.textContent = text;
+			b.className = 'mp-mrow';
+			var ico = document.createElement('span');
+			ico.className = 'mp-mrow-ico';
+			ico.innerHTML = '<svg class="mp-hexico" viewBox="0 0 24 24" aria-hidden="true"><path d="' + HEX_PATH + '"/></svg>';
+			var txt = document.createElement('span');
+			txt.className = 'mp-mrow-txt';
+			var t = document.createElement('b');
+			t.textContent = title;
+			t.title = title;
+			var s = document.createElement('small');
+			s.textContent = sub;
+			txt.appendChild(t);
+			txt.appendChild(s);
+			b.appendChild(ico);
+			b.appendChild(txt);
 			b.addEventListener('click', function() { closePopovers(); setHexCover(id, mode); });
 			flyHex.appendChild(b);
 		}
-		item('Hexes over the whole map', null, 'look');
-		hexPictureList().forEach(function(p, i) { item('Hexes over “' + pictureName(i) + '”', p.id, 'paint'); });
+		var pics = hexPictureList();
+		item('Whole map', 'Hexes cover everything', null, 'look');
+		pics.forEach(function(p, i) { item(pictureName(i), 'Hexes cover just this picture', p.id, 'paint'); });
 		var help = document.createElement('div');
 		help.className = 'mp-fly-help';
-		help.textContent = 'Add a picture first to turn just that picture into a hex map. Or click any picture and choose Turn into a hex map.';
+		help.textContent = pics.length
+			? 'You can also click any picture and choose Turn into a hex map.'
+			: 'Add a picture first to turn just that picture into a hex map.';
 		flyHex.appendChild(help);
 	}
 	if (makeHexBtn && flyHex) {
@@ -2121,6 +2169,8 @@
           // The hex layer may have started first; its fog smoke needs this module.
           if (handle.ctx && handle.ctx.hexes && handle.ctx.hexes.shadowReady) handle.ctx.hexes.shadowReady();
           return ensurePictures({ picturesSrc: d.picturesSrc });
+        }).then(function () {
+          return ensureAnnotations({ annotationsSrc: d.annotationsSrc });
         }).then(function () {
           return ensureDrawing({ drawSrc: d.drawSrc });
         }).then(function () {

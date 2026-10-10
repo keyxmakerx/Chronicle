@@ -116,6 +116,27 @@ type Campaign struct {
 	JoinCode        *string    `json:"join_code,omitempty"`                  // Shareable invite code; nil = no active link.
 }
 
+// TrashedCampaign is a campaign waiting in the site Trash, as the admin Trash
+// page needs it. It is a separate type from Campaign on purpose: a trashed
+// campaign must never come back from the reads that open one, so nothing that
+// takes a *Campaign can be handed a trashed row by mistake.
+type TrashedCampaign struct {
+	ID   string
+	Name string
+	Slug string
+	// DeletedAt starts the retention clock.
+	DeletedAt time.Time
+	// DeletedBy is the account that deleted it; DeletedByName is a copy of
+	// the name taken then, so the Trash still reads right if the account goes.
+	DeletedBy     *string
+	DeletedByName string
+	// Emptying is true once the final delete has begun and Undo is refused.
+	Emptying bool
+	// StorageBytes is the size of the media it holds, which still counts
+	// against the site's storage while it waits.
+	StorageBytes int64
+}
+
 // IsArchived returns true if the campaign has been soft-archived.
 func (c *Campaign) IsArchived() bool {
 	return c.ArchivedAt != nil
@@ -644,7 +665,7 @@ type TierDefinition struct {
 
 // TopbarStyle configures the visual appearance of the campaign's top navigation bar.
 type TopbarStyle struct {
-	Mode         string `json:"mode"`                       // "solid", "gradient", or "image".
+	Mode         string `json:"mode"`                       // "solid", "gradient", "moving", "sky" or "image".
 	Color        string `json:"color,omitempty"`             // Hex color for solid mode.
 	GradientFrom string `json:"gradient_from,omitempty"`     // Start color for gradient mode.
 	GradientTo   string `json:"gradient_to,omitempty"`       // End color for gradient mode.

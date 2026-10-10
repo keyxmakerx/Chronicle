@@ -165,8 +165,12 @@ func storedPicture() *Drawing {
 		ID: "pic", MapID: "map-1", DrawingType: "image", Points: json.RawMessage(twoCorners),
 		StrokeColor: "#000000", StrokeWidth: 2, FillAlpha: 0.8, Rotation: 10, Visibility: "everyone",
 		ImageID: strp("mine"), Crop: json.RawMessage(`{"t":5,"r":5,"b":5,"l":5}`), SortOrder: 3,
+		CreatedBy: strp(picAuthor),
 	}
 }
+
+// picAuthor placed storedPicture; the scribe edits in these tests are theirs.
+const picAuthor = "u-pic"
 
 func TestUpdateDrawing_Image(t *testing.T) {
 	cases := []struct {
@@ -249,7 +253,7 @@ func TestUpdateDrawing_Image(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := &imageRepo{stored: storedPicture()}
 			media := &fakeMedia{files: map[string]string{"mine": "camp-1", "other-mine": "camp-1", "theirs": "camp-2"}}
-			err := newImageService(repo, media).UpdateDrawing(context.Background(), "pic", "map-1", permissions.RoleScribe, false, tc.in)
+			err := newImageService(repo, media).UpdateDrawing(context.Background(), "pic", "map-1", picAuthor, permissions.RoleScribe, false, tc.in)
 			if tc.wantErr {
 				if err == nil {
 					t.Fatal("want an error")
@@ -272,7 +276,7 @@ func TestUpdateDrawing_Image(t *testing.T) {
 func TestUpdateDrawing_ImageSameIDSkipsLookup(t *testing.T) {
 	repo := &imageRepo{stored: storedPicture()}
 	media := &fakeMedia{files: map[string]string{}}
-	err := newImageService(repo, media).UpdateDrawing(context.Background(), "pic", "map-1", permissions.RoleScribe, false,
+	err := newImageService(repo, media).UpdateDrawing(context.Background(), "pic", "map-1", picAuthor, permissions.RoleScribe, false,
 		UpdateDrawingInput{ImageID: patch.Of("mine"), Rotation: patch.Of(5.0)})
 	if err != nil || media.calls != 0 {
 		t.Fatalf("err=%v lookups=%d, want none", err, media.calls)
@@ -291,7 +295,7 @@ func TestUpdateDrawing_NonImageRejectsImageFields(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := &imageRepo{stored: &Drawing{ID: "r", MapID: "map-1", DrawingType: "rectangle", Points: json.RawMessage(twoCorners), Visibility: "everyone"}}
 			media := &fakeMedia{files: map[string]string{"mine": "camp-1"}}
-			err := newImageService(repo, media).UpdateDrawing(context.Background(), "r", "map-1", permissions.RoleScribe, false, tc.in)
+			err := newImageService(repo, media).UpdateDrawing(context.Background(), "r", "map-1", "", permissions.RoleScribe, false, tc.in)
 			if err == nil || repo.updated != nil {
 				t.Fatalf("err=%v updated=%v, want a refusal", err, repo.updated)
 			}
@@ -371,7 +375,7 @@ func TestCrop_ReserialisedWithoutUnknownKeys(t *testing.T) {
 	}
 
 	up := &imageRepo{stored: storedPicture()}
-	err = newImageService(up, media).UpdateDrawing(context.Background(), "pic", "map-1", permissions.RoleScribe, false,
+	err = newImageService(up, media).UpdateDrawing(context.Background(), "pic", "map-1", picAuthor, permissions.RoleScribe, false,
 		UpdateDrawingInput{Crop: patch.Of(json.RawMessage(`{"t":1,"junk":true}`))})
 	if err != nil {
 		t.Fatal(err)

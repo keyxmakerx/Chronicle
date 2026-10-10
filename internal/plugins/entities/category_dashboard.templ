@@ -257,7 +257,7 @@ templ defaultCategoryDashboard(cc *campaigns.CampaignContext, et *EntityType, en
 				<!-- Tree view -->
 				<div x-show="view === 'tree'" x-cloak>
 					<div class="card p-4">
-						@entityTreeLevel(cc, buildEntityTree(entities), 0)
+						@entityTreeLevel(cc, buildEntityTreeWithPlaces(entities, treePlacesOf(ctx)), 0)
 					</div>
 				</div>
 
@@ -399,31 +399,89 @@ func isPinned(entityID string, pinnedIDs []string) bool {
 type EntityTreeNode struct {
 	Entity   Entity
 	Children []EntityTreeNode
+	// AlsoHere marks a page shown here because it is listed under this
+	// branch's parent as well as in its real home. It is a leaf, and its
+	// sub-pages stay under the real home.
+	AlsoHere bool
+}
+
+// realChildCount counts a node's sub-pages, not the "also here" listings under
+// it: those are not its children, only extra rows in the branch.
+func (n EntityTreeNode) realChildCount() int {
+	c := 0
+	for _, ch := range n.Children {
+		if !ch.AlsoHere {
+			c++
+		}
+	}
+	return c
+}
+
+// buildEntityTreeWithPlaces is buildEntityTree plus the extra listings whose
+// parent is in this page of the list. A listing whose parent is not on the
+// page is dropped, not promoted to a root: it would read as a second copy of
+// the page at the top level.
+func buildEntityTreeWithPlaces(entities []Entity, places []PlaceLink) []EntityTreeNode {
+	roots := buildEntityTree(entities)
+	if len(places) == 0 {
+		return roots
+	}
+	byParent := make(map[string][]EntityTreeNode, len(places))
+	for _, l := range places {
+		byParent[l.ParentID] = append(byParent[l.ParentID], EntityTreeNode{
+			Entity: Entity{
+				ID: l.EntityID, Name: l.EntityName, TypeIcon: l.EntityTypeIcon, TypeColor: l.EntityTypeColor,
+				IsPrivate: l.EntityIsPrivate, Visibility: l.EntityVisibility,
+			},
+			AlsoHere: true,
+		})
+	}
+	var attach func(nodes []EntityTreeNode)
+	attach = func(nodes []EntityTreeNode) {
+		for i := range nodes {
+			attach(nodes[i].Children)
+			nodes[i].Children = append(nodes[i].Children, byParent[nodes[i].Entity.ID]...)
+		}
+	}
+	attach(roots)
+	return roots
 }
 
 // buildEntityTree builds a tree structure from a flat entity list using parent_id.
 // Root entities (parent_id IS NULL) are top-level. Children are nested under their parents.
 func buildEntityTree(entities []Entity) []EntityTreeNode {
-	// Index entities by ID.
-	byID := make(map[string]*EntityTreeNode, len(entities))
+	// Collect each page's children first and copy nodes out only at the end:
+	// a node copied into its parent before its own children were attached
+	// would lose them, so a parent listed before its child showed no nesting.
+	present := make(map[string]bool, len(entities))
 	for i := range entities {
-		byID[entities[i].ID] = &EntityTreeNode{Entity: entities[i]}
+		present[entities[i].ID] = true
 	}
-
-	// Build tree: attach children to parents.
-	var roots []EntityTreeNode
+	kids := make(map[string][]int, len(entities))
+	var rootIdx []int
 	for i := range entities {
-		node := byID[entities[i].ID]
-		if entities[i].ParentID != nil {
-			if parent, ok := byID[*entities[i].ParentID]; ok {
-				parent.Children = append(parent.Children, *node)
+		if pid := entities[i].ParentID; pid != nil && present[*pid] && *pid != entities[i].ID {
+			kids[*pid] = append(kids[*pid], i)
+			continue
+		}
+		// No parent or parent not in this page -> treat as root.
+		rootIdx = append(rootIdx, i)
+	}
+	// seen guards a parent loop in bad data: a page is placed once.
+	seen := make(map[string]bool, len(entities))
+	var build func(idx []int) []EntityTreeNode
+	build = func(idx []int) []EntityTreeNode {
+		var out []EntityTreeNode
+		for _, i := range idx {
+			if seen[entities[i].ID] {
 				continue
 			}
+			seen[entities[i].ID] = true
+			out = append(out, EntityTreeNode{Entity: entities[i], Children: build(kids[entities[i].ID])})
 		}
-		// No parent or parent not in this page → treat as root.
-		roots = append(roots, *node)
+		return out
 	}
-	return roots
+	return build(rootIdx)
 }
 
 // entityTreeLevel renders one level of the entity tree with indentation.
@@ -471,14 +529,17 @@ templ entityTreeLevel(cc *campaigns.CampaignContext, nodes []EntityTreeNode, dep
 							{ node.Entity.Name }
 						</a>
 
+						if node.AlsoHere {
+							<span class="pl-also"><i class="fa-solid fa-link" aria-hidden="true"></i> also here</span>
+						}
 						if node.Entity.TypeLabel != nil && *node.Entity.TypeLabel != "" {
 							<span class="text-xs text-fg-muted hidden sm:inline">{ *node.Entity.TypeLabel }</span>
 						}
 
 						@visibilityGlance(cc, &node.Entity, nil)
 
-						if len(node.Children) > 0 {
-							<span class="text-[10px] text-fg-muted ml-auto">{ fmt.Sprintf("%d", len(node.Children)) }</span>
+						if n := node.realChildCount(); n > 0 {
+							<span class="text-[10px] text-fg-muted ml-auto">{ fmt.Sprintf("%d", n) }</span>
 						}
 					</div>
 

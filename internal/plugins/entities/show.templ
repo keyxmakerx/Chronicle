@@ -312,6 +312,7 @@ templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 				</div>
 			}
 		</div>
+		@entityPlacesLine(cc, entity)
 		// The History panel loads here when History is clicked.
 		if isScribe {
 			<div id="page-history-slot"></div>

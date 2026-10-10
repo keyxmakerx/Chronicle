@@ -202,10 +202,6 @@ templ Base(title string) {
 		<script src={ AssetURL("/static/js/widgets/shop_room_paper.js") } defer></script>
 		<script src={ AssetURL("/static/js/widgets/shop_room.js") } defer></script>
 
-		<!-- Quest board and Notice boards widgets (cork boards on quest and place pages). -->
-		<script src={ AssetURL("/static/js/widgets/quest_board_kit.js") } defer></script>
-		<script src={ AssetURL("/static/js/widgets/quest_board.js") } defer></script>
-		<script src={ AssetURL("/static/js/widgets/notice_boards.js") } defer></script>
 
 		<!-- Character inventory widget ("Has Item" relations with qty/equipped/attuned).
 		     Sibling of shop_inventory above; its mount is the `inventory` entity
@@ -221,6 +217,9 @@ templ Base(title string) {
 
 		<!-- Edit name fold on entity pages (Chronicle.PageHeader). -->
 		<script src={ AssetURL("/static/js/widgets/page_name_fold.js") } defer></script>
+
+		<!-- The "Also listed under" line on entity pages (Chronicle.PagePlaces). -->
+		<script src={ AssetURL("/static/js/widgets/page_places.js") } defer></script>
 
 		<!-- Header of a game-system-rendered page: more menu, Delete confirm, Claim. -->
 		<script src={ AssetURL("/static/js/widgets/page_header.js") } defer></script>
@@ -319,6 +318,9 @@ templ Base(title string) {
 			<script src={ AssetURL(scriptURL) } defer></script>
 		}
 
+		<!-- Map annotations (arrows, highlighter, steps, bubbles), shared by the
+		     map widget below and the map viewer -->
+		<script src={ AssetURL("/static/js/map_annotations.js") } defer></script>
 		<!-- Map widget (embedded Leaflet map viewer for dashboard embeds) -->
 		<script src={ AssetURL("/static/js/widgets/map_widget.js") } defer></script>
 
@@ -345,6 +347,9 @@ templ Base(title string) {
 
 		<!-- The header's moving background, on the shared rest clock -->
 		<script src={ AssetURL("/static/js/widgets/header_motion.js") } defer></script>
+
+		<!-- The header's Sky background; draws with the sky scripts above -->
+		<script src={ AssetURL("/static/js/widgets/header_sky.js") } defer></script>
 
 		<!-- Live map viewer (the map page's viewer; also what the focus view mounts) -->
 		<script src={ AssetURL("/static/js/widgets/map_viewer.js") } defer></script>

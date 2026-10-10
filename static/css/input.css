@@ -1182,7 +1182,8 @@
      (.ai/ui-standard.md "Motion"). Coming out, the admin page falls away
      down the screen and the page you came from is underneath. Both are
      cross-document view transitions (.admin-vt); without them the new admin
-     page itself rises over the page colour, and the way out plays nothing.
+     page itself rises over the page colour, and on the way out site_admin.js
+     lets the admin page fall before it leaves.
      Calm fades instead; Off plays nothing (the script never names it). */
   html.admin-vt::view-transition-old(root),
   html.admin-vt::view-transition-new(root) { mix-blend-mode: normal; animation: none; }
@@ -1218,11 +1219,24 @@
   :is(html[data-motion], html[data-cz-reduce])[data-admin-vt] .admin-band::after { animation: none; }
   @keyframes admin-rule { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 
-  /* The way in: an ordinary menu row on its own line at the very bottom of
-     either sidebar. It presses deeper than other rows and lets go slowly, so
-     the press itself feels like it carries weight. */
+  /* The way in: a row on its own line at the very bottom of either sidebar,
+     dressed as a door into the control room: a dark plate edged in Site
+     admin's red, with a red icon. Its hover brightens the edge instead of the
+     everyday accent glow, so it never reads as just another page. It presses
+     deeper than other rows and lets go slowly, so the press itself feels like
+     it carries weight. */
   .site-admin-row { flex: none; padding: 4px 0; border-top: 1px solid var(--nav-line); }
-  .nav-row.site-admin-entry { transition: transform 260ms var(--ease-slide), box-shadow 260ms var(--ease-slide), color 120ms; }
+  .nav-row.site-admin-entry {
+    width: auto; height: 34px; margin: 2px 8px; padding: 0 10px; border-radius: 8px;
+    border: 1px solid rgb(248 113 113 / 0.35); background: #07090d; color: #f3f4f6; font-weight: 600;
+    transition: transform 260ms var(--ease-slide), box-shadow 260ms var(--ease-slide), border-color 120ms, background-color 120ms;
+  }
+  .nav-row.site-admin-entry::before { display: none; }
+  .nav-row.site-admin-entry .nav-ic { color: #f87171; }
+  .nav-row.site-admin-entry .nav-tr { color: #8b95a7; }
+  .nav-row.site-admin-entry:hover { color: #fff; background: #121722; border-color: rgb(248 113 113 / 0.6); }
+  .nav-row.site-admin-entry:focus-visible { outline: 2px solid #f87171; outline-offset: 2px; }
+  .sidebar-collapsed .nav-sb .nav-row.site-admin-entry, .nav-sb.sidebar-collapsed .nav-row.site-admin-entry { margin: 2px 6px; padding: 0; }
   .nav-row.site-admin-entry:active {
     transform: scale(0.97) translateY(1px); transition-duration: 70ms;
     box-shadow: inset 0 2px 5px rgb(0 0 0 / 0.5);
@@ -3377,6 +3391,13 @@
   .tree-row.tree-match .tree-lb mark { background: rgb(var(--nav-accent) / 0.55); color: #fff; border-radius: 2px; padding: 0 1px; }
   .tree-n { flex: none; font-size: 10.5px; color: var(--nav-text-3); font-variant-numeric: tabular-nums; }
   .tree-hid { flex: none; font-size: 10px; color: #fbbf24; opacity: 0.85; }
+  /* An extra listing: the same page shown under a second parent. A small link
+     icon and a muted "also here" label say so without a second weight of text. */
+  .tree-row.is-place > .tree-lb { color: var(--nav-text-2); }
+  .tree-also { flex: none; display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; color: var(--nav-text-3); }
+  .tree-also i { font-size: 8.5px; }
+  /* Alt held over a drop target: this drop lists the page here, it does not move it. */
+  .sidebar-drop-place { outline: 1.5px dashed rgb(var(--nav-accent) / 0.85); outline-offset: -2px; background: rgb(var(--nav-accent) / 0.12); }
   .tree-rename {
     flex: 1; min-width: 0; height: 22px; padding: 0 6px; border-radius: 5px; border: 1px solid rgb(var(--nav-accent) / 0.6);
     background: rgb(255 255 255 / 0.06); color: #fff; font-size: 12.5px;
@@ -4246,6 +4267,19 @@ html.dark[data-view-contrast="high"] { /* the second out-ranks a campaign's :roo
   border-bottom-color: rgb(255 255 255 / 0.13);
 }
 
+/* The Sky header: the campaign's sky fills the bar and fades in over the
+   still night colours once it is drawn (header_sky.js). */
+.header-sky { position: absolute; inset: 0; opacity: 0; transition: opacity 0.6s var(--ease-out, ease-out); }
+.header-sky.is-ready { opacity: 1; }
+.header-sky canvas { display: block; width: 100%; height: 100%; }
+@media (prefers-reduced-motion: reduce) { .header-sky { transition: none; } }
+:is([data-cz-reduce], [data-view-motion="calm"]) .header-sky { transition: none; }
+/* Over the sky the words and icons carry a soft shadow, so they read over a
+   bright noon as well as a night; menus that open from the bar stay plain. */
+#app-topbar:has(.header-sky) { text-shadow: 0 1px 3px rgb(0 0 0 / 0.45); }
+#app-topbar:has(.header-sky) svg:not(:is(.bg-surface, #topbar-tray) svg) { filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.4)); }
+#app-topbar:has(.header-sky) :is(.bg-surface, #topbar-tray) { text-shadow: none; }
+
 /* The header's "+N" tray opens over the page, so it keeps the page's own ink
    rather than the light ink above. The snapshot is taken on <html>, where the
    page tones and dark mode set these, so it follows both. */
@@ -4446,6 +4480,18 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
   animation-iteration-count: 1 !important;
   transition-duration: 0.01ms !important;
   scroll-behavior: auto !important;
+}
+
+/* ============================================================ */
+/* Admin Trash (internal/plugins/admin/trash.templ): rows and the notice
+   settle in when the list is drawn or swapped. It is the Settle move
+   (opacity plus a 6px rise), so the Calm and Off guards above reduce it. */
+.trash-settle {
+  animation: trash-settle var(--dur-large) var(--ease-out) both;
+}
+@keyframes trash-settle {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
 }
 
 /* ============================================================ */
@@ -5080,6 +5126,50 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
    script is there to remove it. */
 .ag-toast-timed { animation: ag-in .28s ease-out both, ag-out .3s ease-in 3.2s forwards; }
 @keyframes ag-out { to { opacity: 0; visibility: hidden; pointer-events: none; } }
+/* "Also listed under": the extra places a page shows in the page tree, as chips
+   under the title with a page picker that grows out of the Add button (Grow).
+   static/js/widgets/page_places.js drives it. Calm and Off swap movement for a
+   short fade. */
+.pl-line { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 6px 0 10px; font-size: 12.5px; color: var(--color-text-muted); }
+.pl-lead { display: inline-flex; align-items: center; gap: 6px; }
+.pl-lead i { font-size: 10px; }
+.pl-chips { display: contents; list-style: none; margin: 0; padding: 0; }
+.pl-chip { display: inline-flex; align-items: center; gap: 2px; height: 24px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--color-border); background: var(--color-card-bg); color: var(--color-text-primary); max-width: 100%; animation: pl-peek var(--dur-micro) var(--ease-out) both; transition: opacity var(--dur-micro) var(--ease-out); }
+.pl-chip:has(.pl-x) { padding-right: 3px; }
+.pl-chip.is-leaving { opacity: 0; }
+.pl-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; color: inherit; text-decoration: none; }
+.pl-name:hover { color: var(--color-accent); }
+.pl-x { width: 18px; height: 18px; border: 0; border-radius: 999px; background: transparent; color: var(--color-text-muted); cursor: pointer; display: grid; place-items: center; font-size: 10px; flex: none; }
+.pl-x:hover, .pl-x:focus-visible { background: var(--color-bg-tertiary, rgba(0,0,0,.06)); color: var(--color-text-primary); }
+.pl-add-wrap { position: relative; display: inline-flex; }
+.pl-add { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 10px; border-radius: 999px; border: 1px dashed var(--color-border); background: transparent; color: var(--color-text-muted); font: inherit; cursor: pointer; transition: color var(--dur-micro), border-color var(--dur-micro); }
+.pl-add:hover, .pl-add[aria-expanded="true"] { color: var(--color-accent); border-color: var(--color-accent); }
+.pl-add i { font-size: 10px; }
+.pl-pop { position: absolute; z-index: 30; top: calc(100% + 6px); left: 0; width: min(320px, calc(100vw - 32px)); padding: 10px; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-card-bg); box-shadow: 0 18px 40px -16px rgba(0, 0, 0, .35); transform-origin: 0 0; animation: pl-grow var(--dur-standard) var(--ease-out) both; }
+.pl-pop[hidden] { display: none; }
+.pl-list { margin-top: 8px; max-height: 220px; overflow-y: auto; border: 1px solid var(--color-border); border-radius: 9px; background: var(--color-card-bg); }
+.pl-row { display: flex; width: 100%; align-items: center; gap: 10px; padding: 8px 10px; border: 0; border-top: 1px solid var(--color-border); background: transparent; color: var(--color-text-primary); font: inherit; font-size: 13.5px; text-align: left; cursor: pointer; transition: background var(--dur-micro); }
+.pl-row:first-child { border-top: 0; }
+.pl-row:hover, .pl-row:focus-visible { background: var(--color-surface-alt, rgba(0,0,0,.04)); }
+.pl-row-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pl-row-type { flex: none; font-size: 11px; color: var(--color-text-muted); }
+.pl-more { padding: 8px 10px; font-size: 12px; color: var(--color-text-muted); }
+.pl-err { margin: 8px 2px 0; font-size: 12.5px; color: #b91c1c; }
+.dark .pl-err { color: #fca5a5; }
+.pl-also { flex: none; display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--color-text-muted); }
+.pl-also i { font-size: 9px; }
+@keyframes pl-peek { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes pl-grow { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: none; } }
+@keyframes pl-fade { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .pl-pop { animation: pl-fade var(--dur-micro) linear both; }
+  .pl-chip { animation: pl-fade var(--dur-micro) linear both; }
+}
+html[data-view-motion="calm"] .pl-pop, .nav-rm .pl-pop, html.rm .pl-pop, html[data-cz-reduce] .pl-pop { animation: pl-fade var(--dur-micro) linear both; }
+html[data-view-motion="calm"] .pl-chip, .nav-rm .pl-chip, html.rm .pl-chip, html[data-cz-reduce] .pl-chip { animation: pl-fade var(--dur-micro) linear both; }
+@media (max-width: 480px) {
+  .pl-pop { position: fixed; left: 16px; right: 16px; top: auto; bottom: 16px; width: auto; transform-origin: 50% 100%; }
+}
 /* Band heads on the Characters page: the heading, the chosen types as chips,
    and the Add button. */
 .ag-bandhead { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-bottom: 12px; }

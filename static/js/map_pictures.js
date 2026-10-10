@@ -231,7 +231,9 @@
    *                         server sent for this viewer,
    *   refreshURL(d)         resolves a fresh signed URL (or '') once an image
    *                         fails to load, since signed URLs expire,
-   *   canEdit               whether this viewer may select and edit,
+   *   canEdit(d)            whether this viewer may select and edit picture d
+   *                         (the server's rule, as for delete; a boolean is
+   *                         taken to mean every picture),
    *   canDelete(d)          whether this viewer may delete picture d (the
    *                         server's rule: owners and DM access any, a
    *                         scribe the ones they added),
@@ -249,7 +251,7 @@
   function attach(map, opts) {
     addStyle();
     var mapW = opts.mapW, mapH = opts.mapH;
-    var canEdit = !!opts.canEdit;
+    var canEdit = typeof opts.canEdit === 'function' ? opts.canEdit : function () { return !!opts.canEdit; };
     var canDelete = typeof opts.canDelete === 'function' ? opts.canDelete : function () { return !!opts.canDelete; };
     var pane = map.getPane('mpPictures') || map.createPane('mpPictures');
     // Below the staff shadows (390) and the vector pane (400), so drawings and
@@ -567,7 +569,7 @@
         outer.appendChild(frame);
         this._outer = outer; this._inner = inner; this._frame = frame; this._box = box;
 
-        if (canEdit) {
+        if (canEdit(this._d)) {
           // An unselected picture lets the map pan under a drag and only a
           // clean click picks it; a selected one is dragged instead.
           var downAt = null;
@@ -635,8 +637,8 @@
         this._place();
         this._style();
         var o = this._outer.classList;
-        o.toggle('mp-pic-hidden', canEdit && this._d.visibility === 'dm_only');
-        o.toggle('mp-pic-live', canEdit && live);
+        o.toggle('mp-pic-hidden', canEdit(this._d) && this._d.visibility === 'dm_only');
+        o.toggle('mp-pic-live', canEdit(this._d) && live);
         this._handles();
       },
 
@@ -652,7 +654,7 @@
       _handles: function () {
         if (!this._box) return;
         while (this._box.firstChild) this._box.removeChild(this._box.firstChild);
-        if (!this._sel || !canEdit) return;
+        if (!this._sel || !canEdit(this._d)) return;
         var self = this;
         if (cropping) {
           ['t', 'r', 'b', 'l'].forEach(function (side) {
@@ -747,7 +749,7 @@
         live = !!on;
         if (!live) deselect();
         layers.forEach(function (l) {
-          if (l._outer) l._outer.classList.toggle('mp-pic-live', canEdit && live);
+          if (l._outer) l._outer.classList.toggle('mp-pic-live', canEdit(l._d) && live);
         });
       },
       // escape backs out of cropping first, then drops the selection.

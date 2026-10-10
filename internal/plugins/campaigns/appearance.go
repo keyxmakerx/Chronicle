@@ -39,6 +39,7 @@ type Appearance struct {
 	PeekGlowColour  string `json:"peek_glow_colour,omitempty"` // The glow's own colour, used when PeekGlow is "own".
 	HeaderHeight    string `json:"header_height,omitempty"`    // "slim" (default) or "tall".
 	HoverCard       string `json:"hover_card,omitempty"`       // Hover card look: "paper" (default), "plain", "night" or "compact".
+	SheetStyle      string `json:"sheet_style,omitempty"`      // Character sheet style (AppearanceSheetStyles); "modern" is the default.
 }
 
 // The allowed values of each Appearance choice. The first entry is the
@@ -63,6 +64,9 @@ var (
 	AppearanceGlows        = []string{"accent", "own"}
 	AppearanceHeights      = []string{"slim", "tall"}
 	AppearanceHoverCards   = []string{"paper", "plain", "night", "compact"}
+	// AppearanceSheetStyles are the character sheet styles sheet_styles.css
+	// knows, keyed by the data-cz-sheet value; "modern" is the unstyled default.
+	AppearanceSheetStyles = []string{"modern", "parchment", "ledger", "journal", "vellum", "night", "deck", "pencil", "starship", "neon", "runes", "brass"}
 )
 
 // Text limits the Customize page shows. Brand name and welcome keep their
@@ -107,6 +111,9 @@ type AppearanceInput struct {
 	Hover   struct {
 		Look string `json:"look"`
 	} `json:"hover"`
+	Sheet struct {
+		Style string `json:"style"`
+	} `json:"sheet"`
 }
 
 // AppearanceSidebarInput is the Sidebar section. Colour is the menu colour
@@ -274,6 +281,9 @@ func applyAppearance(s *CampaignSettings, in AppearanceInput) (*string, error) {
 		default:
 			return fail(apperror.NewBadRequest("invalid gradient direction"))
 		}
+	case "sky":
+		// The sky draws itself from the campaign's calendar; nothing to set.
+		style.Mode = "sky"
 	case "image":
 		style.Mode = "image"
 		if style.ImagePath, err = pictureName("header", h.Image); err != nil {
@@ -375,6 +385,7 @@ func applyAppearance(s *CampaignSettings, in AppearanceInput) (*string, error) {
 		{&a.SidebarCorner, "menu corner", in.Sidebar.Corner, AppearanceCorners},
 		{&a.PeekGlow, "peek glow", in.Sidebar.Glow, AppearanceGlows},
 		{&a.HoverCard, "hover card look", in.Hover.Look, AppearanceHoverCards},
+		{&a.SheetStyle, "character sheet style", in.Sheet.Style, AppearanceSheetStyles},
 	}
 	for _, c := range checks {
 		if *c.dst, err = oneOf(c.name, c.v, c.allowed); err != nil {
