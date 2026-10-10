@@ -1,8 +1,11 @@
 package app
 
 import (
+	"context"
+	"errors"
 	"testing"
 
+	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/systems"
 )
 
@@ -111,5 +114,104 @@ func TestPlayByCategory_SharedKeysAcrossSystems(t *testing.T) {
 				t.Errorf("present=%v play=%+v, want present=%v play=%v", ok, got, tc.wantSet, tc.wantPlay)
 			}
 		})
+	}
+}
+
+// fakePresetEntities is the slice of the entity service the preset walk
+// touches. Embedding the interface makes any other call panic, which keeps
+// the test honest about what the applier is allowed to use.
+type fakePresetEntities struct {
+	entities.EntityService
+	types      []entities.EntityType
+	adoptable  bool // the default Characters type is free to adopt
+	adoptErr   error
+	adopted    int
+	created    []entities.CreateEntityTypeInput
+	reconciled []int
+}
+
+func (f *fakePresetEntities) GetEntityTypes(context.Context, string) ([]entities.EntityType, error) {
+	return f.types, nil
+}
+
+func (f *fakePresetEntities) AdoptDefaultCharacterType(_ context.Context, _, _ string, _ []entities.FieldDefinition) (*entities.EntityType, error) {
+	if f.adoptErr != nil {
+		return nil, f.adoptErr
+	}
+	if !f.adoptable {
+		return nil, nil
+	}
+	f.adopted++
+	return &entities.EntityType{ID: 1}, nil
+}
+
+func (f *fakePresetEntities) CreateEntityType(_ context.Context, _ string, in entities.CreateEntityTypeInput) (*entities.EntityType, error) {
+	f.created = append(f.created, in)
+	return &entities.EntityType{ID: 99}, nil
+}
+
+func (f *fakePresetEntities) ReconcileEntityTypeFields(_ context.Context, id int, _ []entities.FieldDefinition) (int, error) {
+	f.reconciled = append(f.reconciled, id)
+	return 0, nil
+}
+
+// TestApplyPresets_CharacterSheetHome pins where a system's character preset
+// lands: on the default Characters type when it is free, on an already-bound
+// type when one exists, and on a new type only when neither applies.
+func TestApplyPresets_CharacterSheetHome(t *testing.T) {
+	manifest := &systems.SystemManifest{ID: "sys", EntityPresets: []systems.EntityPresetDef{
+		{Slug: "hero", Name: "Hero", NamePlural: "Heroes", Category: "character",
+			Fields: []systems.FieldDef{{Key: "might", Label: "Might", Type: "number"}}},
+	}}
+	bound := "character"
+	tests := []struct {
+		name        string
+		fake        *fakePresetEntities
+		wantAdopted int
+		wantCreated int
+		wantReused  bool // the preset merged into an existing type instead
+		wantCount   int
+	}{
+		{"default Characters is upgraded in place, no second type",
+			&fakePresetEntities{adoptable: true}, 1, 0, false, 1},
+		{"no free Characters type creates the system type",
+			&fakePresetEntities{adoptable: false}, 0, 1, false, 1},
+		{"a failed adoption does not create a duplicate",
+			&fakePresetEntities{adoptErr: errors.New("db down")}, 0, 0, false, 0},
+		{"a type already bound to the category is reused, never adopted over",
+			&fakePresetEntities{adoptable: true, types: []entities.EntityType{{ID: 5, Name: "Anything", PresetCategory: &bound}}}, 0, 0, true, 0},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := newPresetApplier(tc.fake)
+			n, err := p.applyManifestPresets(context.Background(), "c1", "sys", manifest, true, nil)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if tc.fake.adopted != tc.wantAdopted || len(tc.fake.created) != tc.wantCreated {
+				t.Errorf("adopted=%d created=%d, want adopted=%d created=%d",
+					tc.fake.adopted, len(tc.fake.created), tc.wantAdopted, tc.wantCreated)
+			}
+			if (len(tc.fake.reconciled) > 0) != tc.wantReused {
+				t.Errorf("reconciled=%v, want reuse=%v", tc.fake.reconciled, tc.wantReused)
+			}
+			if n != tc.wantCount {
+				t.Errorf("count = %d, want %d", n, tc.wantCount)
+			}
+		})
+	}
+}
+
+// TestApplyPresets_ReconcileNeverAdopts keeps the upgrade path additive-only:
+// a GM may have removed the system type on purpose, so ReconcileSystemPresets
+// must not bind the Characters type behind their back.
+func TestApplyPresets_ReconcileNeverAdopts(t *testing.T) {
+	fake := &fakePresetEntities{adoptable: true}
+	manifest := &systems.SystemManifest{ID: "sys", EntityPresets: []systems.EntityPresetDef{{Slug: "hero", Name: "Hero", Category: "character"}}}
+	if _, err := newPresetApplier(fake).applyManifestPresets(context.Background(), "c1", "sys", manifest, false, nil); err != nil {
+		t.Fatal(err)
+	}
+	if fake.adopted != 0 || len(fake.created) != 0 {
+		t.Errorf("reconcile adopted=%d created=%d, want none", fake.adopted, len(fake.created))
 	}
 }

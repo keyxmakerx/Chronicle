@@ -31,6 +31,8 @@ type mockEntityTypeRepo struct {
 	listChildTypesFn       func(ctx context.Context, parentID int) ([]EntityType, error)
 	resequenceChildTypesFn func(ctx context.Context, campaignID string, orderedIDs []int) error
 
+	adoptPresetCategoryFn func(ctx context.Context, toID int, category string, retireID *int) error
+
 	moveEntitiesAndDeleteTypeFn func(ctx context.Context, campaignID string, fromTypeID, toTypeID int) (int64, error)
 }
 
@@ -102,6 +104,13 @@ func (m *mockEntityTypeRepo) UpdateFieldsSchema(ctx context.Context, id int, fie
 }
 
 func (m *mockEntityTypeRepo) UpdateColor(ctx context.Context, id int, color string) error {
+	return nil
+}
+
+func (m *mockEntityTypeRepo) AdoptPresetCategory(ctx context.Context, toID int, category string, retireID *int) error {
+	if m.adoptPresetCategoryFn != nil {
+		return m.adoptPresetCategoryFn(ctx, toID, category, retireID)
+	}
 	return nil
 }
 

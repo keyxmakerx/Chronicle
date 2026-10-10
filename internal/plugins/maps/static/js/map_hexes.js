@@ -2067,6 +2067,10 @@
         if (selected) h += '<div class="mp-hx-card" id="mp-hx-card"></div>';
         else h += '<p>Click a hex to see ' + (canWrite ? 'or write what’s there.' : 'what the party knows about it.') + '</p>';
       }
+      // Taking the hexes off is the owner's, like turning them on; the
+      // map settings sheet's Grid row does the same thing less visibly.
+      var cover = ctx.hexCover;
+      if (cover && cover.canTakeOff()) h += '<div class="mp-hx-foot"><button type="button" class="mp-hx-off" id="mp-hx-off"><svg class="mp-hexico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9zM4 4l16 16"/></svg>Take the hexes off</button></div>';
       panel.innerHTML = h;
       panel.hidden = false;
       panel.querySelector('.mp-hx-x').onclick = function () { if (ctx.setTool) ctx.setTool('move'); };
@@ -2108,6 +2112,8 @@
       });
       var reset = document.getElementById('mp-hx-reset');
       if (reset) reset.onclick = resetFog;
+      var off = document.getElementById('mp-hx-off');
+      if (off) off.onclick = function () { flush(); cover.takeOff(); };
       if (mode === 'look' && selected) fillCard();
       if (mode === 'trip') { fillTrip(); bindTravel('mp-hx-mi', 'miles_per_hex'); bindTravel('mp-hx-sp', 'miles_per_day'); }
     }

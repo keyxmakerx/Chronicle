@@ -18,6 +18,11 @@ sidebar active link highlighting, and shared utilities.
    for new widgets. Before `htmx:beforeSwap`, destroys outgoing widgets.
 4. **Config parsing:** Collects `data-*` attributes from mount elements,
    converts kebab-case to camelCase, auto-parses booleans and numbers.
+5. **Loading on sight:** a `[data-widget]` mount whose widget isn't registered
+   yet gets its scripts from the page's `#chronicle-widget-scripts` map (built
+   by `buildWidgetManifest` in `internal/app/plugins.go` from each plugin's
+   `Widgets`; ADR-063), appended to `<head>` once per URL per page, then
+   mounts when they register.
 
 ## Cross-Cutting Features
 
@@ -57,6 +62,8 @@ sidebar active link highlighting, and shared utilities.
 ## Widget Lifecycle
 
 ```
+Load:     unregistered mount → its scripts from #chronicle-widget-scripts
+     ↓
 Register: Chronicle.register('my-widget', { init, destroy })
      ↓
 Mount:    boot.js finds <div data-widget="my-widget"> → calls init(el, config)

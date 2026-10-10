@@ -824,18 +824,24 @@
   // leaf swinging through a turn reads as a stretched sheet rather than
   // paper. So a long card folds with its second leaf held to about the
   // head's proportions, then lets the rest down once it lies flat, and
-  // takes it back up before folding away. Returns the leaf and its
-  // heights, or null when the card is short enough to fold whole.
+  // takes it back up before folding away. A card raised to fit above a
+  // low day would fold out of empty space above it, so the held card is
+  // moved down beside its day (shift), and the move undoes itself as the
+  // rest lets down. Returns the leaf, its heights and the shift, or null
+  // when the card is short enough to fold whole.
   function foldShort(P) {
     var g = P.g, L1 = P.el.querySelector('.lf1'), L2 = P.el.querySelector('.lf2');
     if (!g || (g.side !== 'right' && g.side !== 'left') || !L1 || !L2) return null;
     var cap = Math.round(Math.max(FOLD.leafMin, L1.offsetHeight * FOLD.leafRatio)), full = L2.offsetHeight;
-    return full > cap + 24 ? { L2: L2, cap: cap, full: full } : null;
+    return full > cap + 24 ? { el: P.el, L2: L2, cap: cap, full: full, shift: Math.round(clampN(g.cell.y - g.final.y, 0, full - cap)) } : null;
   }
-  function holdLeaf(h, px) { h.L2.style.maxHeight = px + 'px'; h.L2.style.overflow = 'hidden'; }
-  function freeLeaf(h) { h.L2.style.maxHeight = ''; h.L2.style.overflow = ''; }
+  function holdLeaf(h, px) { h.L2.style.maxHeight = px + 'px'; h.L2.style.overflow = 'hidden'; h.el.style.transform = h.shift ? 'translateY(' + h.shift + 'px)' : ''; }
+  function freeLeaf(h) { h.L2.style.maxHeight = ''; h.L2.style.overflow = ''; h.el.style.transform = ''; }
+  // The leaf and the shift move on one curve, so the held edge stays put.
   function slideLeaf(h, from, to, dur) {
-    return anim(h.L2, [{ maxHeight: from + 'px' }, { maxHeight: to + 'px' }], { duration: dur, easing: EASE, fill: 'none' }).finished;
+    var o = { duration: dur, easing: EASE, fill: 'none' }, s = function (px) { return 'translateY(' + Math.round(h.shift * (h.full - px) / (h.full - h.cap)) + 'px)'; };
+    if (h.shift) anim(h.el, [{ transform: s(from) }, { transform: s(to) }], o);
+    return anim(h.L2, [{ maxHeight: from + 'px' }, { maxHeight: to + 'px' }], o).finished;
   }
   function foldEase(u) { u = clampN(u, 0, 1); return 1 - Math.pow(1 - u, 3); }
   function foldRot(ax, a, v) {

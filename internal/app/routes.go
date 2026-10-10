@@ -2965,6 +2965,9 @@ func (a *App) RegisterRoutes() {
 	} else if n > 0 {
 		slog.Info("player-character-type backfill complete", slog.Int("campaigns", n))
 	}
+	// Move a system's character sheet off an empty duplicate type onto the
+	// default Characters type; idempotent and never deletes.
+	reconcileCharacterPresetHome(context.Background(), entityService)
 	addonService.SetSystemFinder(&systemManifestFinderAdapter{})
 	addonHandler := addons.NewHandler(addonService)
 	addonHandler.SetActivityRecorder(adminActivity)
@@ -4887,6 +4890,8 @@ func (a *App) RegisterRoutes() {
 					SidebarCorner: ap.SidebarCorner, SidebarSubtitle: ap.SidebarSubtitle, SidebarBanner: ap.SidebarBanner,
 					PeekGlow: ap.PeekGlow, PeekGlowColour: ap.PeekGlowColour,
 					HoverCard: ap.HoverCard,
+
+					SheetStyle: ap.SheetStyle,
 				}
 				ctx = layouts.SetAppearance(ctx, ad)
 			}

@@ -363,6 +363,11 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 		.mp-hexpanel .mp-hx-trip b { display: block; font-size: 15px; }
 		.mp-hexpanel .mp-hx-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 		.mp-hexpanel .mp-hx-row input[type="number"] { width: 64px; }
+		.mp-hexpanel .mp-hx-foot { border-top: 1px solid var(--color-border); padding-top: 8px; margin-top: 2px; }
+		.mp-hexpanel .mp-hx-off { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--color-border); background: var(--color-card-bg); border-radius: 7px; padding: 5px 10px 5px 8px; font-size: 12.5px; color: var(--color-text-body); transition: background-color 0.12s, color 0.12s, transform 0.08s; }
+		.mp-hexpanel .mp-hx-off:hover { background: var(--color-bg-tertiary); color: var(--color-text-primary); }
+		.mp-hexpanel .mp-hx-off:active { transform: scale(0.98); }
+		.mp-hx-off .mp-hexico { width: 15px; height: 15px; }
 		@keyframes mp-hx-panel { from { opacity: 0; transform: translateY(-6px); } }
 		.mp-hx-fade { animation: mp-hx-fade 0.5s ease both; }
 		@keyframes mp-hx-fade { from { opacity: 0; } }
@@ -394,7 +399,9 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 			box-shadow: var(--mp-shadow); color: var(--color-text-body);
 		}
 		#map-wrap [hidden] { display: none !important; }
-		#map-wrap button { font: inherit; color: inherit; cursor: pointer; }
+		/* Zero specificity, so any class below that sets a button's size or
+		   colour wins over this reset. */
+		:where(#map-wrap) button { font: inherit; color: inherit; cursor: pointer; }
 		#map-wrap :focus-visible { outline: 2px solid var(--mp-accent); outline-offset: 2px; }
 
 		.mp-search { top: 12px; left: 12px; display: flex; align-items: center; gap: 8px; padding: 0 10px; height: 36px; width: 230px; color: var(--color-text-secondary); }
@@ -410,7 +417,7 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 
 		.mp-rail { top: 58px; left: 12px; display: flex; flex-direction: column; padding: 4px; gap: 2px; }
 		.mp-item { position: relative; }
-		.mp-btn { position: relative; width: 36px; height: 36px; border: 0; border-radius: 7px; background: none; color: var(--color-text-body); display: flex; align-items: center; justify-content: center; font-size: 14px; }
+		.mp-btn { position: relative; width: 36px; height: 36px; border: 0; border-radius: 7px; background: none; color: var(--color-text-body); display: flex; align-items: center; justify-content: center; font-size: 16px; }
 		.mp-btn:hover:not(:disabled) { background: var(--color-bg-tertiary); color: var(--color-text-primary); }
 		.mp-btn[aria-pressed="true"] { background: var(--mp-accent-soft); color: var(--mp-accent); }
 		.mp-btn:disabled { opacity: 0.4; cursor: default; }
@@ -424,7 +431,16 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 		.mp-fly-gap { margin-top: 6px; }
 		#mp-fly-style { max-width: 260px; }
 		.mp-fly-col { flex-direction: column; flex-wrap: nowrap; align-items: stretch; max-width: 250px; }
-		.mp-fly-col .mp-wd { text-align: left; padding: 6px 10px; }
+		/* Menu rows (the Make a hex map flyout). */
+		.mp-mrow { display: flex; align-items: center; gap: 10px; width: 100%; border: 0; background: none; border-radius: 7px; padding: 7px 10px 7px 8px; text-align: left; font-size: 13px; line-height: 1.3; color: var(--color-text-primary); transition: background-color 0.12s, transform 0.08s; }
+		.mp-mrow:hover { background: var(--color-bg-tertiary); }
+		.mp-mrow:active { transform: scale(0.98); }
+		.mp-mrow:focus-visible { outline: 2px solid var(--mp-accent); outline-offset: -2px; }
+		.mp-mrow-ico { flex: none; width: 28px; height: 28px; border-radius: 7px; background: var(--mp-accent-soft); color: var(--mp-accent); display: flex; align-items: center; justify-content: center; }
+		.mp-mrow-txt { display: flex; flex-direction: column; min-width: 0; }
+		.mp-mrow-txt b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+		.mp-mrow-txt small { font-size: 11.5px; color: var(--color-text-secondary); }
+		#mp-fly-hex { width: 250px; padding: 6px; }
 		.mp-fly-help { font-size: 11.5px; color: var(--color-text-secondary); padding: 4px 4px 2px; }
 		.mp-sw { width: 24px; height: 24px; border-radius: 50%; border: 2px solid transparent; box-shadow: inset 0 0 0 1px var(--color-border); padding: 0; margin: 2px; }
 		.mp-sw[aria-pressed="true"] { border-color: var(--color-text-primary); }
