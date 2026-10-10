@@ -126,6 +126,8 @@
 
     --ease-slide:      cubic-bezier(0.22, 0.8, 0.24, 1);  /* slows to a stop, no overshoot */
     --ease-turn:       cubic-bezier(0.45, 0.05, 0.25, 1); /* lifts slowly, lands softly */
+    --dur-arrive:      560ms;    /* entering Site admin: a heavy thing set down */
+    --ease-arrive:     cubic-bezier(0.55, 0, 0.1, 1);     /* slow to start, firm stop, no bounce */
 
     /* ──────────────────────────────────────────────────────────────────
      * V2 widget-animation durations — the `--motion-*` family, consumed
@@ -1156,22 +1158,45 @@
   .stat-icon-slate { @apply stat-icon bg-slate-50 text-slate-500 dark:bg-slate-900/30; }
 }
 @layer components {
-  /* ---- Admin Sidebar Collapse (slide, not fade) ---- */
+  /* ---- Site admin ---- */
 
-  /* Uses the CSS grid-rows trick to animate height to/from zero. The outer
-     div toggles between 0fr (collapsed) and 1fr (expanded). The inner div
-     has overflow:hidden so content doesn't leak during the transition. */
-  .admin-slide {
-    display: grid;
-    grid-template-rows: 0fr;
-    transition: grid-template-rows 200ms ease-out;
+  /* Site admin is its own place: on admin pages the menu is a shade darker
+     and opens with a "Site admin" band, so it never reads as the everyday
+     menu. The band's rule is the accent, drawn in as the menu lands. */
+  .nav-admin-mode { background-color: color-mix(in srgb, var(--color-sidebar-bg, #1a1c23) 78%, #000); }
+  .admin-band {
+    position: relative; color: var(--nav-strong, #f3f4f6);
+    background: rgb(0 0 0 / 0.22); border-bottom: 1px solid var(--nav-line, rgb(255 255 255 / 0.07));
   }
-  .admin-slide.expanded {
-    grid-template-rows: 1fr;
+  .admin-band i { color: rgb(var(--nav-accent, 99 102 241)); }
+  .admin-band::after {
+    content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px;
+    background: rgb(var(--nav-accent, 99 102 241)); transform-origin: left center;
   }
-  .admin-slide > div {
-    overflow: hidden;
+
+  /* Arrive: after the footer button is pressed the admin menu rises into
+     place like something heavy being set down: a slow start, a firm stop,
+     no bounce. Then the band's rule draws across. Calm and Off settle it at
+     once (the motion-level rules at the end of this file). */
+  .admin-arrive .admin-menu { animation: admin-rise var(--dur-arrive, 560ms) var(--ease-arrive, cubic-bezier(0.55, 0, 0.1, 1)) both; }
+  .admin-arrive .admin-band::after { animation: admin-rule 300ms var(--ease-slide) 420ms both; }
+  @keyframes admin-rise {
+    0%   { transform: translateY(28px); opacity: 0; }
+    35%  { opacity: 1; }
+    100% { transform: none; opacity: 1; }
   }
+  /* Under Calm or Off the rule is simply there; its delay would read as a flicker. */
+  html[data-motion] .admin-arrive .admin-band::after, html[data-cz-reduce] .admin-arrive .admin-band::after { animation: none; }
+  @keyframes admin-rule { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+  /* The way in presses deeper than other footer buttons and lets go slowly,
+     so the press itself feels like it carries weight. */
+  .site-admin-entry { transition: transform 260ms var(--ease-slide), box-shadow 260ms var(--ease-slide), color 120ms; }
+  .site-admin-entry:active {
+    transform: scale(0.82) translateY(1px); transition-duration: 70ms;
+    box-shadow: inset 0 2px 4px rgb(0 0 0 / 0.5);
+  }
+  .site-admin-entry[aria-current="page"] { color: rgb(var(--nav-accent, 99 102 241)); }
 
   /* ---- Admin Sidebar Pin Toggle ---- */
 

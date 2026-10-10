@@ -100,6 +100,10 @@ templ Base(title string) {
 		     before Alpine for the same reason as the uploader above. -->
 		<script src={ AssetURL("/static/js/timeline_create_form.js") } defer></script>
 
+		<!-- Site admin's way in and back out; before Alpine so the admin menu's
+		     init finds it. -->
+		<script src={ AssetURL("/static/js/site_admin.js") } defer></script>
+
 		<!-- Alpine.js: loaded AFTER boot.js so Chronicle.apiFetch/notify exist
 		     when Alpine initializes and evaluates x-data attributes. -->
 		<script src={ AssetURL("/static/vendor/alpine-collapse.min.js") } defer></script>
