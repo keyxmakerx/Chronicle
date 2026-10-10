@@ -412,14 +412,10 @@ templ campaignNavFooter() {
 		<span aria-hidden="true">·</span>
 		<a href="/" hx-boost="false">Discover</a>
 		<span class="nav-foot-gap"></span>
-		// A site admin's way to the admin pages: in the footer, so it stays
-		// in reach while a category's page list covers the sections above,
-		// and the full admin menu stays on the admin pages. A full load, so
-		// the sidebar switches too.
+		// A site admin's way into Site admin: in the footer, so it stays in
+		// reach while a category's page list covers the sections above.
 		if GetIsAdmin(ctx) {
-			<a href="/admin" class="nav-ibtn nav-ibtn-sm" hx-boost="false" title="Site admin" aria-label="Site admin">
-				<i class="fa-solid fa-gauge" aria-hidden="true"></i>
-			</a>
+			@SiteAdminEntry(false)
 		}
 		if NavCanEdit(ctx) {
 			<button

@@ -160,9 +160,8 @@ templ Sidebar() {
 		@mouseenter="hovered = true"
 		@mouseleave="hovered = false"
 		@chronicle:nav-editing.window="editing = $event.detail"
-		class="nav-sb fixed inset-y-0 left-0 z-40 w-64 bg-sidebar-bg text-sidebar-text flex flex-col
-		       -translate-x-full md:translate-x-0 transition-[width,transform] duration-300 ease-in-out
-		       md:static md:z-auto md:shrink-0"
+		class={ "nav-sb fixed inset-y-0 left-0 z-40 w-64 bg-sidebar-bg text-sidebar-text flex flex-col -translate-x-full md:translate-x-0 transition-[width,transform] duration-300 ease-in-out md:static md:z-auto md:shrink-0",
+			templ.KV("nav-admin-mode", InSiteAdmin(ctx)) }
 		:class="[
 			sidebarOpen ? 'sidebar-mobile-open shadow-2xl' : '',
 			(!pinned && !hovered && !editing && !sidebarHidden) ? 'sidebar-collapsed' : '',
@@ -188,17 +187,22 @@ templ Sidebar() {
 					</span>
 				</a>
 			</div>
-			<!-- Non-campaign sidebar: simple navigation -->
-			<nav class="flex-1 py-4 overflow-y-auto" hx-boost="true" hx-target="#main-content" hx-select="#main-content" hx-swap="innerHTML show:window:top">
-				@DefaultSidebarNav()
-			</nav>
-			<!-- Admin section (site admins only, static, collapsible) -->
-			if GetIsAdmin(ctx) {
+			<!-- Site admin is its own place: on an admin page a site admin's menu
+			     is the admin menu; everywhere else it is the everyday menu, and
+			     the admin icon in the footer is the way in. -->
+			if InSiteAdmin(ctx) {
 				@AdminSidebarNav()
+			} else {
+				<nav class="flex-1 py-4 overflow-y-auto" hx-boost="true" hx-target="#main-content" hx-select="#main-content" hx-swap="innerHTML show:window:top">
+					@DefaultSidebarNav()
+				</nav>
 			}
 			<!-- Sidebar footer: pin and hide sit here, as in the campaign sidebar,
 			     so the hide arrow and the restore arrow share the bottom-left. -->
-			<div class="h-10 flex items-center gap-0.5 pl-4 pr-1.5 border-t border-gray-700 shrink-0">
+			<div class="h-10 flex items-center gap-0.5 pl-1.5 pr-1.5 border-t border-gray-700 shrink-0">
+				if GetIsAdmin(ctx) {
+					@SiteAdminEntry(InSiteAdmin(ctx))
+				}
 				<div class="flex-1"></div>
 				<!-- Pin/unpin button (visible only when expanded) -->
 				<button
@@ -222,91 +226,77 @@ templ Sidebar() {
 	</aside>
 }
 
-// AdminSidebarNav renders the collapsible admin navigation block from the
-// adminNav data: a Home link and foldable sections.
+// AdminSidebarNav is the Site admin menu, shown in place of the everyday menu
+// on admin pages: a "Site admin" band, the way back, Home, the admin's pinned
+// pages, then every section listed open. It is also the fragment the pin
+// toggle swaps in, so it carries its own Alpine state and no <script>.
 templ AdminSidebarNav() {
-	{{ curSection, _ := adminNav.Current(GetActivePath(ctx)) }}
 	{{ pins := GetAdminNavPins(ctx) }}
 	{{ pinned := adminNavPinnedItems(pins) }}
-	<div
+	<nav
 		id="admin-nav"
 		x-data={ adminNavXData }
-		data-cur={ curSection }
-		class="border-t border-gray-700 shrink-0"
+		aria-label="Site admin"
+		class="admin-menu flex-1 min-h-0 overflow-y-auto pb-2"
 	>
-		<button
-			type="button"
-			@click="open = !open; localStorage.setItem('chronicle-admin-nav', open ? 'open' : 'collapsed')"
-			:aria-expanded="open"
-			aria-controls="admin-nav-body"
-			class="w-full flex items-center justify-between px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500 hover:text-gray-300 transition-colors"
-		>
-			<span>Admin</span>
-			<svg
-				class="w-3 h-3 transition-transform duration-200"
-				:class="open ? 'rotate-0' : '-rotate-90'"
-				width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"
-			>
-				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-			</svg>
-		</button>
-		<div id="admin-nav-body" class="admin-slide" :class="open && 'expanded'" x-cloak>
-			<div hx-boost="true" hx-target="#main-content" hx-select="#main-content" hx-swap="innerHTML show:window:top">
-				@adminNavLink(adminNav.Home)
-				if len(pinned) > 0 {
-					<div role="group" aria-label="Pinned admin pages">
-						<div class="px-4 pt-3 pb-1 text-xs font-semibold uppercase tracking-wider text-gray-500">Pinned</div>
-						for _, it := range pinned {
-							@adminNavLink(it)
-						}
-					</div>
-				}
-				for _, sec := range adminNav.Sections {
-					@adminNavSection(sec, curSection == sec.ID, pins)
-				}
-				<div class="pb-2"></div>
-			</div>
+		<div class="admin-band flex items-center gap-2 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider">
+			<i class={ "fa-solid " + SiteAdminIcon + " text-xs" } aria-hidden="true"></i>
+			<span>Site admin</span>
 		</div>
+		<a href="/campaigns" data-admin-back hx-boost="false" class={ sidebarNavLink, sidebarNavInactive, "mt-2" }>
+			<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+				<i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>
+			</span>
+			Back to Chronicle
+		</a>
+		<div hx-boost="true" hx-target="#main-content" hx-select="#main-content" hx-swap="innerHTML show:window:top">
+			@adminNavLink(adminNav.Home)
+			if len(pinned) > 0 {
+				<div role="group" aria-label="Pinned admin pages">
+					<div class="px-4 pt-3 pb-1 text-xs font-semibold uppercase tracking-wider text-gray-500">Pinned</div>
+					for _, it := range pinned {
+						@adminNavLink(it)
+					}
+				</div>
+			}
+			for _, sec := range adminNav.Sections {
+				@adminNavSection(sec, pins)
+			}
+		</div>
+	</nav>
+}
+
+// adminNavSection is one group of admin pages under its label. Groups are
+// always open: the admin menu has the sidebar to itself.
+templ adminNavSection(sec AdminNavSection, pins []string) {
+	<div id={ "admin-nav-sec-" + sec.ID } role="group" aria-labelledby={ "admin-nav-sec-" + sec.ID + "-label" }>
+		<div id={ "admin-nav-sec-" + sec.ID + "-label" } class="px-4 pt-3 pb-1 text-xs font-semibold uppercase tracking-wider text-gray-500">
+			{ sec.Label }
+		</div>
+		for _, it := range sec.Items {
+			@adminNavPinnableLink(it, adminNavIsPinned(pins, it.Href))
+		}
 	</div>
 }
 
-// adminNavSection is one foldable group. Its fold head is a real button that
-// carries the group's attention count, so a folded group still signals
-// trouble inside it.
-templ adminNavSection(sec AdminNavSection, isCurrent bool, pins []string) {
-	<div x-data={ adminNavSectionXData } data-sec={ sec.ID }>
-		<button
-			type="button"
-			@click="toggle(id)"
-			aria-expanded={ strconv.FormatBool(isCurrent) }
-			:aria-expanded="!!secs[id]"
-			aria-controls={ "admin-nav-sec-" + sec.ID }
-			class="w-full flex items-center gap-2 px-4 pt-3 pb-1 text-xs font-semibold uppercase tracking-wider text-gray-500 hover:text-gray-300 transition-colors text-left"
-		>
-			<span>{ sec.Label }</span>
-			if n := adminNavSectionCount(ctx, sec); n > 0 {
-				<span
-					class="inline-flex items-center justify-center min-w-4 h-4 px-1 text-[10px] font-bold text-white bg-red-500 rounded-full"
-					x-show="!secs[id]"
-					aria-label={ fmt.Sprintf("%d need attention", n) }
-				>
-					{ fmt.Sprintf("%d", n) }
-				</span>
-			}
-			<svg
-				class="w-3 h-3 ml-auto transition-transform duration-200"
-				:class="secs[id] ? 'rotate-0' : '-rotate-90'"
-				width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"
-			>
-				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-			</svg>
-		</button>
-		<div id={ "admin-nav-sec-" + sec.ID } x-show="secs[id]" x-cloak>
-			for _, it := range sec.Items {
-				@adminNavPinnableLink(it, adminNavIsPinned(pins, it.Href))
-			}
-		</div>
-	</div>
+// SiteAdminEntry is a site admin's way into Site admin from a menu footer,
+// in or out of a campaign. It is a full load so the menu switches too. A
+// click remembers the page to come back to and asks the admin menu to arrive
+// with its entrance (static/js/site_admin.js).
+templ SiteAdminEntry(here bool) {
+	<a
+		href="/admin"
+		class="nav-ibtn nav-ibtn-sm site-admin-entry"
+		hx-boost="false"
+		data-site-admin-entry
+		title="Site admin"
+		aria-label="Site admin"
+		if here {
+			aria-current="page"
+		}
+	>
+		<i class={ "fa-solid " + SiteAdminIcon } aria-hidden="true"></i>
+	</a>
 }
 
 // adminNavPinnableLink is a section row: the page link plus its pin toggle.
