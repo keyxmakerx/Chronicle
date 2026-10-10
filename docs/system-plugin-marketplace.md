@@ -347,6 +347,25 @@ Each capability unlocks a group of host functions:
 | GET | `/campaigns/:id/systems/:mod/:cat/:item` | Item detail |
 | GET | `/campaigns/:id/systems/:mod/:cat/:item/tooltip` | Tooltip HTML |
 | GET | `/campaigns/:id/systems/:mod/widgets/:slug` | Widget JS file |
+| GET | `/campaigns/:id/systems/:mod/rules-glossary` | Raw rules glossary, for client-side reference renderers |
+| GET | `/campaigns/:id/systems/:mod/data/:file` | A bundled `data/<file>.json`, served verbatim for widgets |
+
+### Rulebook book
+Every route sits under `/campaigns/:id/systems/:mod`, behind the same campaign
+access and system addon checks as the reference routes. Reads are sliced to the
+viewer's own book; every editing route checks the editor rule itself (campaign
+owner or co-Director). Format: `docs/system-rulebook-book.md`.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/book` | The book, filtered for this viewer |
+| GET | `/book/index/:cat`, `/book/find` | Rules-index pages and book search |
+| GET | `/book/edit` | The book editor page (editors only) |
+| GET | `/book/source` | The editor's starting state: the campaign's edition with each page's state (editors only) |
+| GET | `/book/export` | Download the campaign's edition in the package's own book format (editors only) |
+| POST, PUT, DELETE | `/book/chapters[/:chapter]` | Add, change or remove a chapter (editors only) |
+| POST, PUT, DELETE | `/book/chapters/:chapter/pages[/:key]` | Add, save or remove a page (editors only) |
+| POST | `/book/chapters/:chapter/pages/:key/keep` | Keep the campaign's copy of a page the package changed after it was edited (editors only) |
 
 ### System Management (Campaign Owner)
 | Method | Path | Description |

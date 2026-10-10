@@ -3523,6 +3523,7 @@ func (a *App) RegisterRoutes() {
 	pluginBodyScripts := []string{
 		"/static/plugins/" + entities.PluginSlug + "/js/characters.js",
 		"/static/plugins/" + entities.PluginSlug + "/js/hero_creator.js",
+		"/static/plugins/" + entities.PluginSlug + "/js/own_entries.js",
 		"/static/js/widgets/calendar_era_blend.js",
 		"/static/js/widgets/calendar_era_look.js",
 		"/static/js/widgets/calendar_view.js",
@@ -4743,6 +4744,11 @@ func (a *App) RegisterRoutes() {
 	// static renders instead, not a maintained route (#741). TODO(#778):
 	// not a re-wiring target, listed for completeness.
 
+	// widgetScripts is the on-sight widget manifest. It is filled after every
+	// plugin has registered and its static files are mounted (the content
+	// hashes need them), which is before the server takes a request.
+	var widgetScripts map[string][]string
+
 	// --- Layout Data Injector ---
 	// Registers the callback that copies auth/campaign data from Echo's
 	// context into Go's context.Context so Templ templates can read it.
@@ -4755,6 +4761,7 @@ func (a *App) RegisterRoutes() {
 		// so plugins can register widget scripts without hardcoding paths in the
 		// core base.templ layout.
 		ctx = layouts.SetPluginBodyScripts(ctx, pluginBodyScripts)
+		ctx = layouts.SetWidgetScripts(ctx, widgetScripts)
 
 		// Site look (name, logo, tab icon, and for pages outside a campaign the
 		// borrowed look). A failed read leaves the shipped look rather than
@@ -5289,6 +5296,14 @@ func (a *App) RegisterRoutes() {
 	// Mount each registered plugin's static assets at /static/plugins/<slug>/.
 	// Must run AFTER all plugins have called a.registerPlugin() above.
 	a.mountPluginStatic()
+
+	// A wiring mistake leaves only the widgets it names unloaded, so it is
+	// logged rather than stopping the site.
+	m, err := buildWidgetManifest(a.registeredPlugins, layouts.AssetURL)
+	if err != nil {
+		slog.Error("on-sight widget manifest", slog.Any("error", err))
+	}
+	widgetScripts = m
 }
 
 // journalCharacterAdapter adapts EntityService to notes.CharacterLister: the

@@ -44,7 +44,7 @@
   function svg(w, h, body, cls) { return '<svg class="' + (cls || '') + '" viewBox="-3 -3 ' + n1(w + 6) + ' ' + n1(h + 6) + '" aria-hidden="true">' + body + '</svg>'; }
 
   // ---- Paper drawings, one per furniture kind; w and h are the card's px size ----
-  var KIND = {};
+  var KIND = {}, WIN = 0;
   function frameShelves(w, h, C, rows) {
     var s = card(R(0, 0, w, h), C.wood) + '<path d="' + R(6, 6, w - 12, h - 12) + '" fill="' + dk(C.wood, .45) + '" stroke="' + INK + '" stroke-width="1"/>';
     for (var i = 1; i <= rows; i++) s += card(R(3, i * (h - 8) / rows, w - 6, 5), lt(C.wood, .1), 1.2);
@@ -79,6 +79,7 @@
     s += '<g class="srp-fire"><path class="srp-flame" d="M' + n1(mx - 10) + ' ' + n1(my) + 'c-6-8-2-16 3-22 2 6 6 8 6 13 2-4 1-8 1-10 6 6 7 15-10 19z" fill="#ff8a2a"/>' +
       '<path class="srp-flame b" d="M' + n1(mx + 2) + ' ' + n1(my) + 'c-5-6-3-13 2-18 4 6 7 12-2 18z" fill="#ffd36a"/>' +
       '<path class="srp-flame" style="animation-delay:-.2s" d="M' + n1(mx + 10) + ' ' + n1(my) + 'c-4-5-2-10 1-13 3 4 5 8-1 13z" fill="#ff7a1a"/></g>';
+    for (var j = 0; j < 4; j++) s += '<circle class="srp-smoke" cx="' + n1(w * .5) + '" cy="' + n1(h * .02) + '" r="7" fill="#6b6460" style="animation-delay:-' + (j * .9) + 's"/>';
     for (var i = 0; i < 6; i++) s += '<circle class="srp-ember" style="--dx:' + ((i * 7) % 13 - 6) + 'px;animation-delay:-' + (i * .43).toFixed(2) + 's" cx="' + n1(mx - 8 + i * 3) + '" cy="' + n1(my - 14) + '" r="1.1" fill="#ffcf6a"/>';
     return s;
   };
@@ -89,7 +90,11 @@
     s += card('M0 ' + n1(y0 - 4) + 'h' + n1(w * .22) + 'c-2 ' + n1(wh * .4) + ' 4 ' + n1(wh * .7) + '-3 ' + n1(wh + 6) + 'h' + n1(-w * .19) + 'z', '#b8494a', 1.3);
     s += card('M' + n1(w) + ' ' + n1(y0 - 4) + 'h' + n1(-w * .22) + 'c2 ' + n1(wh * .4) + '-4 ' + n1(wh * .7) + ' 3 ' + n1(wh + 6) + 'h' + n1(w * .19) + 'z', '#b8494a', 1.3);
     s += card(R(-2, y0 + wh, w + 4, 5), dk('#a37a4e', .1), 1.2);
-    return s;
+    var id = 'srp-wc' + (++WIN), wx = '<g clip-path="url(#' + id + ')"><rect class="srp-sky" x="4" y="' + n1(y0) + '" width="' + n1(w - 8) + '" height="' + n1(wh) + '"/>', i;
+    s = s.replace('<path d="M8', '<clipPath id="' + id + '"><rect x="5" y="' + n1(y0 + 1) + '" width="' + n1(w - 10) + '" height="' + n1(wh - 2) + '"/></clipPath><path d="M8');
+    for (i = 0; i < 14; i++) wx += '<line class="srp-rain" x1="' + n1(6 + (i * 37 % 100) / 100 * (w - 12)) + '" y1="' + n1(y0 - 10) + '" x2="' + n1(4 + (i * 37 % 100) / 100 * (w - 12)) + '" y2="' + n1(y0) + '" stroke="#eef5ff" stroke-width="1.5" stroke-linecap="round" style="animation-delay:-' + (i * .13).toFixed(2) + 's;--fall:' + n1(wh + 12) + 'px"/>';
+    for (i = 0; i < 12; i++) wx += '<circle class="srp-snow" cx="' + n1(6 + (i * 41 % 100) / 100 * (w - 12)) + '" cy="' + n1(y0 - 4) + '" r="1.8" fill="#fff" style="animation-delay:-' + (i * .5).toFixed(1) + 's;--fall:' + n1(wh + 8) + 'px"/>';
+    return s + wx + '</g>';
   };
   KIND.herbs = function (w, h) {
     var s = '<path d="M2 4c' + n1(w * .3) + ' 10 ' + n1(w * .7) + ' 10 ' + n1(w - 4) + ' 0" fill="none" stroke="' + INK + '" stroke-width="1.2"/>';
@@ -146,6 +151,121 @@
     var cx = w / 2;
     return '<g class="srp-sway">' + line(cx, 0, cx, h * .45, INK, 1.2) + card(R(cx - 7, h * .45, 14, 4), '#3b3b3b', 1.2) + card(R(cx - 8, h * .45 + 4, 16, 18), '#f3d27a', 1.3) +
       '<path class="srp-flame" d="M' + n1(cx) + ' ' + n1(h * .45 + 18) + 'c-4-3-2-8 0-11 2 3 4 8 0 11z" fill="#f08a2a"/>' + card(R(cx - 9, h * .45 + 22, 18, 4), '#3b3b3b', 1.2) + '</g>';
+  };
+  // ---- Mood pieces: furniture that comes with a mood, drawn as cut card like the rest. ----
+  KIND.tentacle = function (w, h) {
+    var d = 'M' + n1(w * .28) + ' ' + n1(h) + 'C' + n1(w * .05) + ' ' + n1(h * .62) + ' ' + n1(w * .72) + ' ' + n1(h * .52) + ' ' + n1(w * .44) + ' ' + n1(h * .28) +
+      'C' + n1(w * .26) + ' ' + n1(h * .12) + ' ' + n1(w * .62) + ' -2 ' + n1(w * .8) + ' ' + n1(h * .12) + 'C' + n1(w * .62) + ' ' + n1(h * .1) + ' ' + n1(w * .52) + ' ' + n1(h * .2) + ' ' + n1(w * .64) + ' ' + n1(h * .32) +
+      'C' + n1(w * .9) + ' ' + n1(h * .56) + ' ' + n1(w * .6) + ' ' + n1(h * .78) + ' ' + n1(w * .76) + ' ' + n1(h) + 'Z';
+    var s = '<g>' + card(d, '#5c4a7e', 1.6);
+    [[.36, .86], [.42, .66], [.55, .5], [.5, .36], [.62, .2]].forEach(function (q, k) { s += '<ellipse class="srp-pulse" style="animation-delay:-' + (k * .5) + 's" cx="' + n1(w * q[0]) + '" cy="' + n1(h * q[1]) + '" rx="' + (3.4 - k * .4) + '" ry="' + (2.6 - k * .3) + '" fill="#c9a6e8" stroke="' + INK + '" stroke-width=".8"/>'; });
+    return s + '</g>';
+  };
+  KIND.monolith = function (w, h) {
+    var s = card('M' + n1(w * .18) + ' ' + n1(h) + 'L' + n1(w * .3) + ' 6L' + n1(w * .5) + ' 0L' + n1(w * .7) + ' 6L' + n1(w * .82) + ' ' + n1(h) + 'Z', '#2f2b3a', 1.8);
+    for (var y = h * .55; y < h - 6; y += 14) s += line(w * .3, y, w * .7, y + 4, '#4f8f6f', 1);
+    return s + '<g class="srp-eye"><ellipse cx="' + n1(w * .5) + '" cy="' + n1(h * .3) + '" rx="' + n1(w * .16) + '" ry="7" fill="#d9ffe6" stroke="' + INK + '" stroke-width="1.4"/><circle class="srp-pulse" cx="' + n1(w * .5) + '" cy="' + n1(h * .3) + '" r="4" fill="#0f3a24"/></g>';
+  };
+  KIND.circle = function (w, h) {
+    var cx = w / 2, cy = h / 2, r = Math.min(w, h) / 2 - 3, s = '<g class="srp-rune">';
+    s += '<circle cx="' + n1(cx) + '" cy="' + n1(cy) + '" r="' + n1(r) + '" fill="rgb(20 40 30/.55)" stroke="#7cf0a0" stroke-width="2.4"/><circle cx="' + n1(cx) + '" cy="' + n1(cy) + '" r="' + n1(r * .72) + '" fill="none" stroke="#7cf0a0" stroke-width="1.4"/>';
+    var p = []; for (var k = 0; k < 5; k++) { var a = -Math.PI / 2 + k * 4 * Math.PI / 5; p.push(n1(cx + Math.cos(a) * r * .72) + ' ' + n1(cy + Math.sin(a) * r * .72)); }
+    s += '<path d="M' + p.join('L') + 'Z" fill="none" stroke="#7cf0a0" stroke-width="1.4"/>';
+    for (k = 0; k < 12; k++) { var b = k * Math.PI / 6; s += line(cx + Math.cos(b) * r * .8, cy + Math.sin(b) * r * .8, cx + Math.cos(b + .12) * r * .92, cy + Math.sin(b + .12) * r * .92, '#7cf0a0', 1.6); }
+    return s + '</g>';
+  };
+  KIND.cane = function (w, h) {
+    var d = 'M' + n1(w * .35) + ' ' + n1(h) + 'V' + n1(h * .28) + 'A' + n1(w * .25) + ' ' + n1(w * .25) + ' 0 0 1 ' + n1(w * .85) + ' ' + n1(h * .28) + 'V' + n1(h * .4);
+    return '<path d="' + d + '" fill="none" stroke="' + INK + '" stroke-width="13" stroke-linecap="round"/><path d="' + d + '" fill="none" stroke="#fff6f0" stroke-width="10" stroke-linecap="round"/>' +
+      '<path d="' + d + '" fill="none" stroke="#e8364f" stroke-width="10" stroke-dasharray="7 7"/>';
+  };
+  KIND.gumdrop = function (w, h) {
+    var c = ['#ff6fae', '#7fd6ff', '#9be37a'][Math.round(w) % 3], s = card('M2 ' + n1(h) + 'C2 ' + n1(h * .2) + ' ' + n1(w - 2) + ' ' + n1(h * .2) + ' ' + n1(w - 2) + ' ' + n1(h) + 'Z', c, 1.6);
+    for (var k = 0; k < 9; k++) s += '<circle cx="' + n1(w * (.18 + (k * 37 % 64) / 100)) + '" cy="' + n1(h * (.45 + (k * 23 % 45) / 100)) + '" r="1.4" fill="#fff"/>';
+    return s;
+  };
+  KIND.lolly = function (w, h) {
+    var cx = w / 2, r = Math.min(w / 2 - 3, h * .3), cy = r + 3, s = card(R(cx - 3, cy, 6, h - cy), '#fff4e6', 1.3) + card('M' + n1(cx - r) + ' ' + n1(cy) + 'a' + n1(r) + ' ' + n1(r) + ' 0 1 0 ' + n1(2 * r) + ' 0a' + n1(r) + ' ' + n1(r) + ' 0 1 0 ' + n1(-2 * r) + ' 0z', '#ffd1e8', 1.6);
+    var sp = 'M' + n1(cx) + ' ' + n1(cy); for (var t = 0; t < 14; t += .5) sp += 'L' + n1(cx + Math.cos(t) * t * r / 14) + ' ' + n1(cy + Math.sin(t) * t * r / 14);
+    return s + '<path d="' + sp + '" fill="none" stroke="#ff4f9a" stroke-width="3.4" stroke-linecap="round"/>';
+  };
+  KIND.ghost = function (w, h) {
+    var d = 'M' + n1(w * .1) + ' ' + n1(h * .9) + 'C' + n1(w * .1) + ' ' + n1(h * .1) + ' ' + n1(w * .9) + ' ' + n1(h * .1) + ' ' + n1(w * .9) + ' ' + n1(h * .9) + 'l-' + n1(w * .13) + '-8-' + n1(w * .13) + ' 8-' + n1(w * .14) + '-8-' + n1(w * .13) + ' 8-' + n1(w * .13) + '-8z';
+    return '<g class="srp-haunt">' + card(d, '#eef3ff', 1.6) + '<ellipse cx="' + n1(w * .38) + '" cy="' + n1(h * .38) + '" rx="3" ry="5" fill="' + INK + '"/><ellipse cx="' + n1(w * .62) + '" cy="' + n1(h * .38) + '" rx="3" ry="5" fill="' + INK + '"/><ellipse cx="' + n1(w * .5) + '" cy="' + n1(h * .55) + '" rx="4" ry="6" fill="' + INK + '"/></g>';
+  };
+
+  KIND.gift = function (w, h) {
+    var s = card(R(2, h * .3, w - 4, h * .7), '#c8102e', 1.6) + card(R(0, h * .18, w, h * .16), '#d8233f', 1.4);
+    s += card(R(w * .44, h * .18, w * .12, h * .82), '#e9c46a', 1) + card('M' + n1(w * .5) + ' ' + n1(h * .18) + 'c-10-10-22-8-18 0 3 5 12 2 18 0zm0 0c10-10 22-8 18 0-3 5-12 2-18 0z', '#f2d27a', 1.2);
+    return s;
+  };
+  KIND.pine = function (w, h) {
+    var cx = w / 2, s = card(R(cx - 5, h - 12, 10, 12), '#6b4a2e', 1.2);
+    [[.62, 1, h - 10], [.46, .78, h * .62], [.3, .55, h * .36]].forEach(function (t, i) {
+      s += card('M' + n1(cx - w * t[1] / 2) + ' ' + n1(t[2]) + 'L' + n1(cx) + ' ' + n1(t[2] - h * .36) + 'L' + n1(cx + w * t[1] / 2) + ' ' + n1(t[2]) + 'Z', ['#2f6b3d', '#3a7a48', '#468a52'][i], 1.6);
+      for (var k = 0; k < 4; k++) s += '<circle class="srp-twinkle" style="animation-delay:-' + (k * .8 + i * .3).toFixed(1) + 's" cx="' + n1(cx - w * t[1] * .32 + k * w * t[1] * .21) + '" cy="' + n1(t[2] - 5 - (k % 2) * 6) + '" r="2.4" fill="' + ['#e8364f', '#ffd84a', '#7fd6ff'][(i + k) % 3] + '" stroke="' + INK + '" stroke-width=".6"/>';
+    });
+    return s + card('M' + n1(cx) + ' ' + n1(h * .0 - 2) + 'l3 6 6 .5-4.6 4 1.5 6-5.9-3.3-5.9 3.3 1.5-6-4.6-4 6-.5z', '#ffd84a', 1);
+  };
+  KIND.coral = function (w, h) {
+    var s = card('M' + n1(w * .1) + ' ' + n1(h) + 'q' + n1(w * .4) + ' -12 ' + n1(w * .8) + ' 0z', '#7a7f84', 1.2);
+    [[.2, .1, '#ff7f6e'], [.4, .0, '#ffb36e'], [.6, .05, '#ff6f61'], [.8, .15, '#ff9a7a']].forEach(function (b) {
+      var x = w * b[0], top = h * (b[1] + .05);
+      s += '<path d="M' + n1(w * .5) + ' ' + n1(h - 4) + 'Q' + n1(x) + ' ' + n1(h * .6) + ' ' + n1(x) + ' ' + n1(top) + '" stroke="' + INK + '" stroke-width="8" fill="none" stroke-linecap="round"/><path d="M' + n1(w * .5) + ' ' + n1(h - 4) + 'Q' + n1(x) + ' ' + n1(h * .6) + ' ' + n1(x) + ' ' + n1(top) + '" stroke="' + b[2] + '" stroke-width="5.4" fill="none" stroke-linecap="round"/>';
+    });
+    return s;
+  };
+  KIND.kelp = function (w, h) {
+    var s = '';
+    [[.3, '#3f8a4e', 1], [.6, '#5aa85e', .82], [.8, '#4a7a3a', .66]].forEach(function (k) {
+      var x = w * k[0], t = h * (1 - k[2]), d = 'M' + n1(x) + ' ' + n1(h) + 'C' + n1(x + 12) + ' ' + n1(h - (h - t) * .35) + ' ' + n1(x - 12) + ' ' + n1(h - (h - t) * .7) + ' ' + n1(x + 4) + ' ' + n1(t);
+      s += '<path d="' + d + '" stroke="' + INK + '" stroke-width="8.4" fill="none" stroke-linecap="round"/><path d="' + d + '" stroke="' + k[1] + '" stroke-width="5.6" fill="none" stroke-linecap="round"/>';
+    });
+    return s;
+  };
+  KIND.mushroom = function (w, h) {
+    var cx = w / 2, glow = Math.round(w) % 2, s = card('M' + n1(cx - 6) + ' ' + n1(h) + 'q-2-' + n1(h * .4) + ' 2-' + n1(h * .62) + 'h8q4 ' + n1(h * .22) + ' 2 ' + n1(h * .62) + 'z', '#f2e6cf', 1.4);
+    s += card('M2 ' + n1(h * .42) + 'C2 0 ' + n1(w - 2) + ' 0 ' + n1(w - 2) + ' ' + n1(h * .42) + 'Q' + n1(cx) + ' ' + n1(h * .52) + ' 2 ' + n1(h * .42) + 'z', glow ? '#b06ad8' : '#d8434b', 1.6);
+    [[-.25, .25, 3], [.05, .14, 3.6], [.28, .27, 2.6]].forEach(function (q) { s += '<circle' + (glow ? ' class="srp-pulse"' : '') + ' cx="' + n1(cx + q[0] * w) + '" cy="' + n1(h * q[1]) + '" r="' + q[2] + '" fill="#fff6ea"/>'; });
+    return s;
+  };
+  KIND.bloom = function (w, h) {
+    var cx = w / 2, cy = h * .25, s = line(cx, h, cx, cy, INK, 4.4) + line(cx, h, cx, cy, '#4f8a3a', 2.6);
+    s += card('M' + n1(cx) + ' ' + n1(h * .62) + 'q-14-2-18-12q12-2 18 12z', '#5aa85e', 1.1);
+    for (var k = 0; k < 6; k++) { var a = k * Math.PI / 3; s += '<ellipse cx="' + n1(cx + Math.cos(a) * 8) + '" cy="' + n1(cy + Math.sin(a) * 8) + '" rx="7" ry="5" transform="rotate(' + (k * 60) + ' ' + n1(cx + Math.cos(a) * 8) + ' ' + n1(cy + Math.sin(a) * 8) + ')" fill="' + (Math.round(w) % 2 ? '#f6a6d8' : '#c9a6ff') + '" stroke="' + INK + '" stroke-width="1.1"/>'; }
+    return s + '<circle cx="' + n1(cx) + '" cy="' + n1(cy) + '" r="4.4" fill="#ffd84a" stroke="' + INK + '" stroke-width="1"/>';
+  };
+  KIND.urn = function (w, h) {
+    var cx = w / 2, d = 'M' + n1(cx - w * .14) + ' ' + n1(h) + 'C' + n1(cx - w * .5) + ' ' + n1(h * .7) + ' ' + n1(cx - w * .5) + ' ' + n1(h * .36) + ' ' + n1(cx - w * .16) + ' ' + n1(h * .18) + 'V' + n1(h * .06) + 'L' + n1(cx - w * .22) + ' 0H' + n1(cx + w * .22) + 'L' + n1(cx + w * .16) + ' ' + n1(h * .06) + 'V' + n1(h * .18) + 'C' + n1(cx + w * .5) + ' ' + n1(h * .36) + ' ' + n1(cx + w * .5) + ' ' + n1(h * .7) + ' ' + n1(cx + w * .14) + ' ' + n1(h) + 'Z';
+    var s = card(d, Math.round(w) % 2 ? '#c46a3a' : '#2f7d8a', 1.6), y = h * .48;
+    s += '<path d="M' + n1(cx - w * .36) + ' ' + n1(y) + 'l5-5 5 5 5-5 5 5 5-5 5 5 5-5 5 5" stroke="#f3e2c0" stroke-width="1.6" fill="none"/>';
+    return s;
+  };
+  KIND.palm = function (w, h) {
+    var cx = w / 2, s = card(R(cx - 10, h - 16, 20, 16), '#b8643a', 1.3), t = h * .2;
+    s += line(cx, h - 16, cx + 4, t, INK, 7.4) + line(cx, h - 16, cx + 4, t, '#8a6a44', 5);
+    [[-1, .1], [-.8, -.3], [-.3, -.5], [.3, -.5], [.8, -.3], [1, .1]].forEach(function (f, k) {
+      s += card('M' + n1(cx + 4) + ' ' + n1(t) + 'Q' + n1(cx + 4 + f[0] * w * .25) + ' ' + n1(t + f[1] * h * .2 - 10) + ' ' + n1(cx + 4 + f[0] * w * .5) + ' ' + n1(t + 12 + f[1] * h * .1) + 'Q' + n1(cx + 4 + f[0] * w * .22) + ' ' + n1(t + f[1] * h * .1) + ' ' + n1(cx + 4) + ' ' + n1(t) + 'z', k % 2 ? '#3f8a50' : '#4f9f5a', 1.1);
+    });
+    return s;
+  };
+  KIND.pillar = function (w, h, C) {
+    var st = '#8a857e', s = card(R(0, h - 12, w, 12), dk(st, .15), 1.4) + card(R(w * .12, 10, w * .76, h - 22), st, 1.6) + card(R(0, 0, w, 12), dk(st, .15), 1.4);
+    s += card(R(w * .1, h * .45, w * .8, 9), '#b08a3e', 1.2);
+    for (var y = 26; y < h - 20; y += 16) if (Math.abs(y - h * .47) > 10) s += line(w * .14, y, w * .86, y, dk(st, .3), .8);
+    return s;
+  };
+  KIND.brazier = function (w, h) {
+    var cx = w / 2, my = h * .42, s = line(cx - w * .3, h, cx - w * .1, my, INK, 3.4) + line(cx + w * .3, h, cx + w * .1, my, INK, 3.4) + line(cx, h, cx, my, INK, 3.4);
+    s += card('M' + n1(cx - w * .42) + ' ' + n1(my) + 'Q' + n1(cx) + ' ' + n1(my + h * .36) + ' ' + n1(cx + w * .42) + ' ' + n1(my) + 'Z', '#4a4440', 1.6);
+    s += '<g class="srp-fire"><path class="srp-flame" d="M' + n1(cx - 10) + ' ' + n1(my) + 'c-6-8-2-16 3-22 2 6 6 8 6 13 2-4 1-8 1-10 6 6 7 15-10 19z" fill="#ff8a2a"/><path class="srp-flame b" d="M' + n1(cx + 2) + ' ' + n1(my) + 'c-5-6-3-13 2-18 4 6 7 12-2 18z" fill="#ffd36a"/></g>';
+    for (var j = 0; j < 4; j++) s += '<circle class="srp-smoke" cx="' + n1(cx) + '" cy="' + n1(my - 26) + '" r="6" fill="#6b6460" style="animation-delay:-' + (j * .9) + 's"/>';
+    for (var i = 0; i < 6; i++) s += '<circle class="srp-ember" style="--dx:' + ((i * 7) % 13 - 6) + 'px;animation-delay:-' + (i * .43).toFixed(2) + 's" cx="' + n1(cx - 6 + i * 2.4) + '" cy="' + n1(my - 12) + '" r="1.1" fill="#ffcf6a"/>';
+    return s;
+  };
+  KIND.coffin = function (w, h) {
+    var s = card('M' + n1(w * .3) + ' 0H' + n1(w * .7) + 'L' + n1(w * .92) + ' ' + n1(h * .25) + 'L' + n1(w * .72) + ' ' + n1(h) + 'H' + n1(w * .28) + 'L' + n1(w * .08) + ' ' + n1(h * .25) + 'Z', '#4a3528', 1.8);
+    return s + card(R(w * .46, h * .2, w * .08, h * .42), '#c9b48a', 1) + card(R(w * .36, h * .3, w * .28, h * .07), '#c9b48a', 1);
   };
   // Anything the drawings do not know yet still shows, as a plain card.
   function fallback(w, h, C) { return card(R(0, 0, w, h), lt(C.wood, .1)); }
@@ -299,7 +419,7 @@
     // Rugs lie flat on the floor.
     Rm.pieces.forEach(function (p) {
       if (p.kind !== 'rug') return;
-      s += '<div class="srp-rug srp-pc" data-p="' + p.id + '" style="left:' + n1(p.x * T) + 'px;top:' + n1(p.y * T) + 'px;width:' + n1(p.w * T) + 'px;height:' + n1(p.d * T) + 'px' + lf(p.x + p.w / 2, p.y + p.d / 2, M) + '"><div class="srp-cd">' + svg(p.w * T, p.d * T, KIND.rug(p.w * T, p.d * T, C)) + '</div></div>';
+      s += '<div class="srp-rug srp-pc" data-p="' + p.id + '" style="left:' + n1(p.x * T) + 'px;top:' + n1(p.y * T) + 'px;width:' + n1(p.w * T) + 'px;height:' + n1(p.d * T) + 'px' + lf(p.x + p.w / 2, p.y + p.d / 2, M) + '"><div class="srp-cd">' + svg(p.w * T, p.d * T, (KIND[p.art] || KIND.rug)(p.w * T, p.d * T, C)) + '</div></div>';
     });
     // Back walls, then the sign on the one facing most to the right.
     var signE = null, sb = -9;
@@ -419,6 +539,8 @@
     var root = host.firstChild, page = root && root.querySelector('.srp-page'); if (!page) return;
     root.style.setProperty('--s', 1); root.style.setProperty('--dx', '0px'); root.style.setProperty('--dy', '0px');
     var H = host.getBoundingClientRect(), u = page.getBoundingClientRect(), l = u.left, t = u.top, r = u.right, b = u.bottom;
+    var pn = root.classList.contains('arr') && host.parentNode && host.parentNode.querySelector('.shr-panel');
+    if (pn && pn.offsetWidth < H.width * .7) H = { left: H.left, top: H.top, width: H.width - pn.offsetWidth, height: H.height };
     root.querySelectorAll('.srp-top').forEach(function (m) { var q = mid(m); l = Math.min(l, q[0]); r = Math.max(r, q[0]); t = Math.min(t, q[1]); b = Math.max(b, q[1]); });
     if (!H.width || r <= l) return;
     var s = Math.min(H.width / (r - l), H.height / (b - t)) * .94;
@@ -430,9 +552,18 @@
     injectStyle();
     var r = html(o), cls = 'srp' + (o.fx === 'full' ? ' full' : ' fxl') + (o.arr ? ' arr' : '') + (o.shut ? ' shut' : '');
     host.innerHTML = DEFS + '<div class="' + cls + '" data-n="' + r.N + '" data-w="' + n1(r.w) + '" data-h="' + n1(r.h) + '" style="--srp-acc:' + o.view.room.colours.acc + '">' +
-      '<div class="srp-fit" style="width:' + n1(r.w) + 'px;height:' + n1(r.h) + 'px"><div class="srp-cam"><div class="srp-tilt" style="top:' + n1(r.h - r.fy) + 'px">' + r.html + '</div></div></div><div class="srp-amb"></div></div>';
+      '<div class="srp-fit" style="width:' + n1(r.w) + 'px;height:' + n1(r.h) + 'px"><div class="srp-cam"><div class="srp-tilt" style="top:' + n1(r.h - r.fy) + 'px">' + r.html + '</div></div></div><div class="srp-tod"></div><div class="srp-amb"></div></div>';
     // The defs svg comes first; the room itself is the element fit() scales.
     host.insertBefore(host.lastChild, host.firstChild);
+    var e = o.efx, el = host.querySelector('.srp');
+    if (o.mood && o.mood !== 'cozy') el.classList.add('mood-' + o.mood);
+    if (e) {
+      el.style.setProperty('--fx-sh', e.shadows / 100); el.style.setProperty('--fx-warm', e.warmth / 100); el.style.setProperty('--fx-win', e.window / 100);
+      el.style.setProperty('--fx-haze', e.haze / 100); el.style.setProperty('--fx-vig', e.vignette / 100);
+      el.classList.toggle('no-dust', !e.dust); el.classList.toggle('no-flicker', !e.flicker); el.classList.toggle('no-embers', !e.embers); el.classList.toggle('smoke', !!e.smoke);
+      el.classList.toggle('w-rain', e.weather === 'rain'); el.classList.toggle('w-snow', e.weather === 'snow');
+      if (e.time) el.setAttribute('data-tod', e.time);
+    }
     fit(host);
   }
 
@@ -452,7 +583,7 @@
     '.srp-ground{position:absolute;inset:0;transform:translateZ(.1px)}',
     '.srp-glow{position:absolute;border-radius:50%;pointer-events:none;transform:translateZ(.5px);background:radial-gradient(closest-side,rgb(255 176 92/.34),rgb(255 150 60/.12) 55%,transparent)}',
     '.srp-glow.cool{background:radial-gradient(closest-side,rgb(214 232 255/.28),transparent)}',
-    '.srp.full .srp-glow.warm{animation:srp-fl 2.2s ease-in-out infinite alternate}@keyframes srp-fl{0%{opacity:.82}35%{opacity:1}60%{opacity:.76}100%{opacity:.92}}',
+    '.srp-glow.warm{opacity:var(--fx-warm,1)}.srp.full .srp-glow.warm{animation:srp-fl 2.2s ease-in-out infinite alternate}@keyframes srp-fl{0%{opacity:calc(var(--fx-warm,1) * .82)}35%{opacity:var(--fx-warm,1)}60%{opacity:calc(var(--fx-warm,1) * .76)}100%{opacity:calc(var(--fx-warm,1) * .92)}}',
     '.srp-at{position:absolute;left:0;top:0;width:0;height:0;transform-style:preserve-3d}',
     '.srp-cast{position:absolute;left:0;top:0;transform:translate(-50%,-50%);border-radius:50%;background:radial-gradient(closest-side,rgb(30 16 4/.42),rgb(30 16 4/.16) 60%,transparent)}',
     '.srp-foot{position:absolute;left:0;top:0;height:16px;transform:translate(-50%,-50%);border-radius:50%;background:radial-gradient(closest-side,rgb(30 16 4/.5),transparent)}',
@@ -461,10 +592,47 @@
     '.srp-seam{position:absolute;left:0;top:0;height:46px;background:linear-gradient(rgb(24 12 2/.5),rgb(24 12 2/.18) 40%,transparent)}',
     '.srp-beam{position:absolute;left:0;top:0;transform-origin:50% 0;transform:perspective(400px) rotateX(-18deg);clip-path:polygon(18% 0,82% 0,100% 100%,0 100%);background:linear-gradient(rgb(255 240 205/.26),rgb(255 236 200/.08) 70%,transparent)}',
     '.srp-edge{position:absolute;inset:0;pointer-events:none;transform:translateZ(.4px);background:radial-gradient(ellipse 70% 62% at 50% 38%,transparent 55%,rgb(20 10 4/.34) 100%)}',
-    '.srp-haze,.srp-dust{pointer-events:none}.srp-haze .srp-up{background:linear-gradient(0deg,rgb(255 214 160/var(--hz)),rgb(255 214 160/0) 70%)}',
+    '.srp-haze,.srp-dust{pointer-events:none}.srp-haze .srp-up{background:linear-gradient(0deg,rgb(255 214 160/calc(var(--hz) * var(--fx-haze,1))),rgb(255 214 160/0) 70%)}',
     '.srp-dust i{position:absolute;width:2px;height:2px;border-radius:50%;background:#ffe6b8;box-shadow:0 0 3px #ffb35c;opacity:0;animation:srp-mote linear infinite}',
     '@keyframes srp-mote{0%{transform:translate(0,0);opacity:0}20%{opacity:.75}80%{opacity:.5}100%{transform:translate(14px,-46px);opacity:0}}',
     '.srp.fxl .srp-dust,html[data-motion] .srp-dust{display:none}',
+    // Each effect the owner tunes is one variable or class on the room.
+    '.srp-cast,.srp-foot,.srp-seam{opacity:var(--fx-sh,1)}.srp-beam{opacity:var(--fx-win,1)}.srp-edge,.srp-amb{opacity:var(--fx-vig,1)}',
+    '.srp.no-dust .srp-dust,.srp.no-embers .srp-ember,.srp.no-embers .srp-spark{display:none}.srp.no-flicker .srp-flame,.srp.no-flicker .srp-glow.warm{animation:none}',
+    '.srp-rune{animation:srp-rune 3s ease-in-out infinite alternate}@keyframes srp-rune{from{opacity:.65}to{opacity:1;filter:drop-shadow(0 0 4px #7cf0a0)}}',
+    '.srp-haunt{animation:srp-haunt 3.4s ease-in-out infinite alternate}@keyframes srp-haunt{from{opacity:.9}to{opacity:.45}}',
+    '.srp-pulse{animation:srp-pulse 3s ease-in-out infinite alternate}@keyframes srp-pulse{from{opacity:.55}to{opacity:1}}',
+    '.srp-twinkle{animation:srp-tw 2.4s ease-in-out infinite alternate}@keyframes srp-tw{from{opacity:.35}to{opacity:1}}',
+    '.srp.mood-eldritch .srp-glow.warm{background:radial-gradient(closest-side,rgb(90 255 160/.32),rgb(60 200 120/.1) 55%,transparent)}.srp.mood-eldritch .srp-dust i{background:#8dffb8}',
+    '.srp.mood-eldritch .srp-haze .srp-up{background:linear-gradient(0deg,rgb(80 220 140/calc(var(--hz) * var(--fx-haze,1) * 1.6)),rgb(80 220 140/0) 70%)}',
+    '.srp.mood-haunted .srp-glow.warm{background:radial-gradient(closest-side,rgb(170 200 255/.3),rgb(120 150 255/.08) 55%,transparent)}',
+    '.srp.mood-haunted .srp-haze .srp-up{background:linear-gradient(0deg,rgb(200 215 240/calc(var(--hz) * var(--fx-haze,1) * 2.4)),rgb(200 215 240/0) 55%)}',
+    '.srp.mood-candy .srp-glow.warm{background:radial-gradient(closest-side,rgb(255 170 220/.34),rgb(255 140 200/.1) 55%,transparent)}.srp.mood-candy .srp-dust i{background:#fff;box-shadow:0 0 4px #ff9ad0}',
+    '.srp.mood-candy .srp-haze .srp-up{background:linear-gradient(0deg,rgb(255 190 230/calc(var(--hz) * var(--fx-haze,1))),rgb(255 190 230/0) 70%)}',
+    '.srp.no-flicker .srp-haunt,.srp.no-flicker .srp-rune,.srp.no-flicker .srp-pulse,.srp.no-flicker .srp-twinkle{animation:none}',
+    '.srp.mood-festive .srp-glow.warm{background:radial-gradient(closest-side,rgb(255 190 110/.38),rgb(255 150 60/.1) 55%,transparent)}.srp.mood-festive .srp-dust i{background:#fff4d6}',
+    '.srp.mood-underwater .srp-glow.warm{background:radial-gradient(closest-side,rgb(140 245 255/.3),rgb(60 200 220/.1) 55%,transparent)}.srp.mood-underwater .srp-dust i{background:transparent;border:1px solid #e6fbff;width:4px;height:4px;box-shadow:none}',
+    '.srp.mood-underwater .srp-haze .srp-up{background:linear-gradient(0deg,rgb(90 200 230/calc(var(--hz) * var(--fx-haze,1) * 1.8)),rgb(90 200 230/0) 75%)}.srp.mood-underwater .srp-tod{opacity:1;background:linear-gradient(rgb(20 90 130/.22),rgb(10 60 90/.3))}',
+    '.srp.mood-fey .srp-glow.warm{background:radial-gradient(closest-side,rgb(240 255 160/.34),rgb(180 240 120/.1) 55%,transparent)}.srp.mood-fey .srp-dust i{background:#f0ff8a;box-shadow:0 0 5px #d8ff5a}',
+    '.srp.mood-fey .srp-haze .srp-up{background:linear-gradient(0deg,rgb(216 240 176/calc(var(--hz) * var(--fx-haze,1) * 1.4)),rgb(216 240 176/0) 70%)}',
+    '.srp.mood-desert .srp-glow.warm{background:radial-gradient(closest-side,rgb(255 210 120/.36),rgb(255 166 64/.1) 55%,transparent)}',
+    '.srp.mood-dwarven .srp-glow.warm{background:radial-gradient(closest-side,rgb(255 170 80/.4),rgb(255 120 40/.12) 55%,transparent)}.srp.mood-dwarven .srp-dust i{background:#ffd49a}',
+    // Calm and Off: loops stop where they are and travelling bits are hidden; fades and colour still change.
+    'html[data-motion=calm] .srp *,html[data-motion=off] .srp *{animation:none!important}',
+    'html[data-motion=calm] .srp .srp-ember,html[data-motion=calm] .srp .srp-spark,html[data-motion=calm] .srp .srp-smoke,html[data-motion=calm] .srp .srp-rain,html[data-motion=calm] .srp .srp-snow,html[data-motion=calm] .srp-dust,html[data-motion=off] .srp .srp-ember,html[data-motion=off] .srp .srp-spark,html[data-motion=off] .srp .srp-smoke,html[data-motion=off] .srp .srp-rain,html[data-motion=off] .srp .srp-snow,html[data-motion=off] .srp-dust{display:none!important}',
+    'html[data-motion=off] .srp *{transition:none!important}',
+    '.srp-rain,.srp-snow,.srp-smoke{display:none}.srp-cd>svg{overflow:visible}',
+    '.srp-sky{fill:#1d2540;opacity:0;transition:opacity .6s,fill .6s}.srp.w-rain .srp-sky,.srp.w-snow .srp-sky{fill:#55657a;opacity:.45}',
+    '.srp[data-tod=dusk] .srp-sky{fill:#c46a4a;opacity:.5}.srp[data-tod=dawn] .srp-sky{fill:#f2b7a0;opacity:.4}.srp[data-tod=night] .srp-sky{fill:#121a36;opacity:.85}',
+    '.srp[data-tod=night] .srp-beam{opacity:calc(var(--fx-win,1) * .15)}.srp[data-tod=dusk] .srp-beam{filter:sepia(.8) saturate(2) hue-rotate(-15deg)}',
+    '.srp.w-rain .srp-rain{display:inline;animation:srp-fall .55s linear infinite}.srp.w-snow .srp-snow{display:inline;animation:srp-fall 4s linear infinite}',
+    '@keyframes srp-fall{0%{transform:translate(0,0);opacity:0}10%{opacity:.85}100%{transform:translate(-3px,var(--fall));opacity:.6}}',
+    '.srp.smoke .srp-smoke{display:inline;opacity:0;transform-box:fill-box;transform-origin:50% 50%;filter:blur(1.2px);animation:srp-smoke 3.6s ease-out infinite}',
+    '@keyframes srp-smoke{0%{transform:translate(0,0) scale(.5);opacity:0}20%{opacity:.7}100%{transform:translate(8px,-36px) scale(2.4);opacity:0}}',
+    '.srp-tod{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .6s}',
+    '.srp[data-tod=dusk] .srp-tod{opacity:1;background:linear-gradient(rgb(110 50 90/.2),rgb(255 130 60/.14))}',
+    '.srp[data-tod=night] .srp-tod{opacity:1;background:radial-gradient(ellipse at 50% 55%,rgb(14 18 48/.38),rgb(8 10 30/.66))}',
+    '.srp[data-tod=dawn] .srp-tod{opacity:1;background:linear-gradient(rgb(255 210 190/.16),rgb(190 210 255/.1))}',
     '.srp-foot.wall{transform:none;border-radius:0;background:linear-gradient(rgb(30 16 4/.42),transparent)}',
     '.srp-up{position:absolute;bottom:0;transform-origin:50% 100%;transform-style:preserve-3d;transform:rotateX(-90deg);transition:transform .7s cubic-bezier(.3,1.5,.5,1);transition-delay:calc(min(var(--i,0),40) * 28ms)}',
     '.srp.shut .srp-up{transform:rotateX(0deg);transition:none}',
@@ -494,8 +662,6 @@
     '@keyframes srp-flame{0%{transform:none}50%{transform:scale(.9,1.12) skewX(-5deg)}100%{transform:scale(1.06,.92) skewX(4deg)}}',
     '.srp-ember{opacity:0;animation:srp-ember 2.6s ease-out infinite}@keyframes srp-ember{0%{transform:none;opacity:0}10%{opacity:1}100%{transform:translate(var(--dx,0),-46px);opacity:0}}',
     '.srp-spark{opacity:0;animation:srp-spark 4.2s ease-out infinite}@keyframes srp-spark{0%,86%{transform:none;opacity:0}88%{opacity:1}100%{transform:translate(var(--dx),var(--dy));opacity:0}}',
-    '.srp-sway{transform-box:fill-box;transform-origin:50% 0;animation:srp-sway 3.2s ease-in-out infinite alternate}@keyframes srp-sway{0%{transform:rotate(-3deg)}100%{transform:rotate(3deg)}}',
-    '.srp-bob{animation:srp-bob 3s ease-in-out infinite alternate}@keyframes srp-bob{to{transform:translateY(-1.6px)}}',
     '.srp-blink{transform-box:fill-box;transform-origin:50% 50%;animation:srp-blink 4.6s infinite}@keyframes srp-blink{0%,94%,100%{transform:none}96%{transform:scaleY(.1)}}',
     '.srp.fxl .srp-ember,.srp.fxl .srp-spark{display:none}.srp.fxl *{animation:none!important}',
     '@media (prefers-reduced-motion:reduce){.srp *{animation:none!important;transition:none!important}.srp-ember,.srp-spark{display:none}}'

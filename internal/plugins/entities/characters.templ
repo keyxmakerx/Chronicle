@@ -47,11 +47,21 @@ templ CharactersContent(cc *campaigns.CampaignContext, view CastView) {
 				<h1 class="text-2xl font-bold text-fg">Characters</h1>
 				<p class="mt-1 text-sm text-fg-secondary">The cast of { cc.Campaign.Name }.</p>
 			</div>
-			if view.CanCreateHero {
-				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/characters/new", cc.Campaign.ID)) } class="btn-primary" data-create-hero="true">
-					<i class="fa-solid fa-feather-pointed" aria-hidden="true"></i>
-					Create hero
-				</a>
+			if view.CanCreateHero || view.CanManageEntries {
+				<div class="flex flex-wrap items-center gap-2">
+					if view.CanManageEntries {
+						<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/characters/entries", cc.Campaign.ID)) } class="btn-secondary" data-own-entries-link="true">
+							<i class="fa-solid fa-book-open" aria-hidden="true"></i>
+							Your own entries
+						</a>
+					}
+					if view.CanCreateHero {
+						<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/characters/new", cc.Campaign.ID)) } class="btn-primary" data-create-hero="true">
+							<i class="fa-solid fa-feather-pointed" aria-hidden="true"></i>
+							Create hero
+						</a>
+					}
+				</div>
 			}
 		</div>
 		if len(view.Yours) > 0 {

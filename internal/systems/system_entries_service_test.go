@@ -122,6 +122,17 @@ func TestSystemEntryService_Create(t *testing.T) {
 		{"null property", dirActor, CreateSystemEntryInput{FieldKey: "ancestry", Name: "A", Properties: map[string]any{"a": nil}}, 422},
 		{"bad property key", dirActor, CreateSystemEntryInput{FieldKey: "ancestry", Name: "A", Properties: map[string]any{"1a": "x"}}, 422},
 		{"scalar properties ok", dirActor, CreateSystemEntryInput{FieldKey: "ancestry", Name: "A", Properties: map[string]any{"size": "Medium", "speed": 5.0, "fly": true}}, 0},
+		{"trait list ok", dirActor, CreateSystemEntryInput{FieldKey: "ancestry", Name: "A", Properties: map[string]any{"ancestry_points": 3.0,
+			"signature_traits": []any{map[string]any{"name": "Grounded", "description": "Hard to move."}},
+			"purchased_traits": []any{map[string]any{"name": "Durable", "cost": 1.0}, map[string]any{"name": "Wings", "cost": 2, "description": "Fly."}}}}, 0},
+		{"empty list", dirActor, CreateSystemEntryInput{FieldKey: "ancestry", Name: "A", Properties: map[string]any{"traits": []any{}}}, 422},
+		{"list of plain strings", dirActor, CreateSystemEntryInput{FieldKey: "ancestry", Name: "A", Properties: map[string]any{"traits": []any{"Durable"}}}, 422},
+		{"item without a name", dirActor, CreateSystemEntryInput{FieldKey: "ancestry", Name: "A", Properties: map[string]any{"traits": []any{map[string]any{"cost": 1.0}}}}, 422},
+		{"negative cost", dirActor, CreateSystemEntryInput{FieldKey: "ancestry", Name: "A", Properties: map[string]any{"traits": []any{map[string]any{"name": "X", "cost": -1.0}}}}, 422},
+		{"fractional cost", dirActor, CreateSystemEntryInput{FieldKey: "ancestry", Name: "A", Properties: map[string]any{"traits": []any{map[string]any{"name": "X", "cost": 1.5}}}}, 422},
+		{"unknown item key", dirActor, CreateSystemEntryInput{FieldKey: "ancestry", Name: "A", Properties: map[string]any{"traits": []any{map[string]any{"name": "X", "ability": map[string]any{"a": 1}}}}}, 422},
+		{"duplicate item", dirActor, CreateSystemEntryInput{FieldKey: "ancestry", Name: "A", Properties: map[string]any{"traits": []any{map[string]any{"name": "X"}, map[string]any{"name": "x"}}}}, 422},
+		{"item text too long", dirActor, CreateSystemEntryInput{FieldKey: "ancestry", Name: "A", Properties: map[string]any{"traits": []any{map[string]any{"name": "X", "description": strings.Repeat("y", maxEntryItemText+1)}}}}, 422},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

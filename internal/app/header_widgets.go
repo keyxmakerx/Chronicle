@@ -1,7 +1,7 @@
 package app
 
 // Header widgets that show live world data (in-world date, today's weather,
-// today's moons, the countdown to the next game night). This file is the one
+// today's moons, the current era, the countdown to the next game night). This file is the one
 // place the calendar and sessions services meet the header: the layouts
 // package only ever sees formatted strings, and neither plugin imports the
 // other. Everything here is read-only and fails quiet, because a bar widget
@@ -66,7 +66,7 @@ func buildTopbarLive(ctx context.Context, cal headerCalendarService, nights head
 	}
 	live := &layouts.TopbarLiveData{}
 
-	if req.Calendar && cal != nil && (want["date"] || want["weather"] || want["moon"]) {
+	if req.Calendar && cal != nil && (want["date"] || want["weather"] || want["moon"] || want["era"]) {
 		c, err := cal.GetDefaultCalendarForViewer(ctx, req.CampaignID, req.Viewer)
 		if err != nil {
 			logHeaderErr("world date", req.CampaignID, err)
@@ -76,6 +76,9 @@ func buildTopbarLive(ctx context.Context, cal headerCalendarService, nights head
 			}
 			if want["moon"] {
 				live.Moons = headerMoons(c)
+			}
+			if want["era"] {
+				live.Era = headerEraName(c)
 			}
 			if want["weather"] {
 				days, err := cal.ListDayWeather(ctx, c.ID, req.CampaignID, c.CurrentYear, c.CurrentMonth, req.Viewer)
@@ -97,7 +100,7 @@ func buildTopbarLive(ctx context.Context, cal headerCalendarService, nights head
 		}
 	}
 
-	if live.Date == "" && live.Weather == "" && len(live.Moons) == 0 && live.NextNight.Label == "" {
+	if live.Date == "" && live.Weather == "" && len(live.Moons) == 0 && live.Era == "" && live.NextNight.Label == "" {
 		return nil
 	}
 	return live
@@ -142,6 +145,18 @@ func headerMoons(c *calendar.Calendar) []layouts.TopbarMoon {
 		out = append(out, layouts.TopbarMoon{Name: m.Name, Phase: m.MoonPhaseName(day)})
 	}
 	return out
+}
+
+// headerEraName is the name of the era the calendar's current date falls in,
+// or "" when it falls in none. The viewer read has already taken out eras a
+// player may not see yet, and an era holding today has begun, so it is never
+// one of them.
+func headerEraName(c *calendar.Calendar) string {
+	e := c.CurrentEra()
+	if e == nil {
+		return ""
+	}
+	return strings.TrimSpace(e.Name)
 }
 
 // headerWeatherLabel finds today's reading in a month's days and words it as

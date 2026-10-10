@@ -250,13 +250,16 @@
       ['lift', 'Lift', 'Rises to meet the pointer and settles when pressed. Rounded corners.'],
       ['press', 'Press', 'A tactile key: it sinks onto its base when pressed.'],
       ['glow', 'Glow', 'A pill that gathers a soft light around itself on hover.'],
-      ['ink', 'Ink', 'Crisp square corners. Ink spreads from wherever you press.']
+      ['ink', 'Ink', 'Crisp square corners. Ink spreads from wherever you press.'],
+      ['keystone', 'Keystone', 'Soft, raised and rounded. Presses deep with an inner shadow and lets go slowly.']
     ];
-    var BTN_RADIUS = { lift:'8px', press:'6px', glow:'999px', ink:'3px' };
+    var BTN_RADIUS = { lift:'8px', press:'6px', glow:'999px', ink:'3px', keystone:'12px' };
     var ELEVATION = {
       flat:     { name:'Flat', lift:0, rest:{ light:'none', dark:'none' }, hover:{ light:'0 0 0 1.5px rgb(ACC / .35)', dark:'0 0 0 1.5px rgb(ACC / .45)' } },
       standard: { name:'Standard', lift:2, rest:{ light:'0 1px 2px 0 rgb(0 0 0 / .05)', dark:'0 1px 2px 0 rgb(0 0 0 / .3)' }, hover:{ light:'0 6px 16px -4px rgb(0 0 0 / .12), 0 2px 6px -2px rgb(0 0 0 / .08)', dark:'0 8px 20px -6px rgb(0 0 0 / .5), 0 2px 6px -2px rgb(0 0 0 / .35)' } },
-      dramatic: { name:'Dramatic', lift:4, rest:{ light:'0 2px 6px -1px rgb(0 0 0 / .10), 0 10px 22px -12px rgb(0 0 0 / .28)', dark:'0 2px 6px -1px rgb(0 0 0 / .4), 0 12px 26px -12px rgb(0 0 0 / .7)' }, hover:{ light:'0 22px 44px -14px rgb(0 0 0 / .38), 0 6px 14px -6px rgb(0 0 0 / .18)', dark:'0 24px 48px -14px rgb(0 0 0 / .85), 0 6px 14px -6px rgb(0 0 0 / .5)' } }
+      dramatic: { name:'Dramatic', lift:4, rest:{ light:'0 2px 6px -1px rgb(0 0 0 / .10), 0 10px 22px -12px rgb(0 0 0 / .28)', dark:'0 2px 6px -1px rgb(0 0 0 / .4), 0 12px 26px -12px rgb(0 0 0 / .7)' }, hover:{ light:'0 22px 44px -14px rgb(0 0 0 / .38), 0 6px 14px -6px rgb(0 0 0 / .18)', dark:'0 24px 48px -14px rgb(0 0 0 / .85), 0 6px 14px -6px rgb(0 0 0 / .5)' } },
+      // Ambient tints its shadows with the accent; keep in step with czElevation.
+      ambient:  { name:'Ambient', lift:3, rest:{ light:'0 1px 2px rgb(16 24 40 / .05), 0 6px 18px -8px rgb(ACC / .28)', dark:'0 1px 2px rgb(0 0 0 / .4), 0 8px 20px -8px rgb(ACC / .32)' }, hover:{ light:'0 2px 4px rgb(16 24 40 / .06), 0 18px 36px -12px rgb(ACC / .42), 0 0 0 1px rgb(ACC / .12)', dark:'0 2px 4px rgb(0 0 0 / .45), 0 20px 40px -12px rgb(ACC / .5), 0 0 0 1px rgb(ACC / .2)' } }
     };
     var SPEEDS = {
       snappy:    { name:'Snappy', d:110, d2:170, ease:'cubic-bezier(.3,.9,.3,1)' },
@@ -324,9 +327,10 @@
       date:    { name:'In-world date', desc:'Today in your world, from the calendar' },
       weather: { name:'Weather', desc:'Today’s weather from the calendar' },
       moon:    { name:'Moon', desc:'Tonight’s moon phase' },
+      era:     { name:'Era', desc:'The age your world is in, from the calendar' },
       session: { name:'Next game night', desc:'Counts down to the next session' }
     };
-    var WIDGET_ORDER = ['links', 'text', 'note', 'search', 'date', 'weather', 'moon', 'session'];
+    var WIDGET_ORDER = ['links', 'text', 'note', 'search', 'date', 'weather', 'moon', 'era', 'session'];
     // Sample text the preview shows for the data-backed widgets; the live
     // header reads the real calendar and sessions, and a widget with nothing
     // to show there simply does not appear.
@@ -334,9 +338,10 @@
       date:    ['Date', '14 Frostfall 1203'],
       weather: ['Weather', 'Clear, 4°'],
       moon:    ['Moon', 'Selûne waxing crescent'],
+      era:     ['Era', 'Age of Ash'],
       session: ['Next', 'Fri 7 pm']
     };
-    var LATER = ['Era'];
+    var LATER = [];
     var WIDGET_SLOTS = 4;
 
     var SECTIONS = [
@@ -511,7 +516,7 @@
         '--p-sb':sb.bg, '--p-sb-text':sb.text, '--p-sb-text-2':sb.text2, '--p-sb-text-3':sb.text3, '--p-sb-hi':'#ffffff', '--p-sb-line':'rgb(255 255 255 / .07)', '--p-sb-accent':sbAcc,
         '--p-font':B[2], '--p-font-h':same_ ? B[2] : H[2], '--p-hw':same_ ? '700' : String(H[4]), '--p-hw-b':same_ ? '700' : String(H[4]), '--p-hls':H[6],
         '--p-fs':fs + 'px', '--p-h1':(fs * 1.8 * hz).toFixed(2) + 'px', '--p-h2':(fs * 1.38 * hz).toFixed(2) + 'px', '--p-h3':(fs * 1.16 * hz).toFixed(2) + 'px',
-        '--p-elev-rest':E.rest[theme], '--p-elev-hover':E.hover[theme].replace(/ACC/g, rgbCh(acc)), '--p-lift':E.lift + 'px',
+        '--p-elev-rest':E.rest[theme].replace(/ACC/g, rgbCh(acc)), '--p-elev-hover':E.hover[theme].replace(/ACC/g, rgbCh(acc)), '--p-lift':E.lift + 'px',
         '--p-dur':S.d + 'ms', '--p-dur2':S.d2 + 'ms', '--p-ease':S.ease, '--p-shadow-rgb':theme === 'dark' ? '0 0 0' : '15 23 42',
         '--p-br':BTN_RADIUS[d.buttons.style],
         '--p-tint-a':lively ? '.26' : '.15', '--p-rail-w':lively ? '3px' : '2px', '--p-edge-w':lively ? '2px' : '1px', '--p-trace-a':lively ? '1' : '.85', '--p-band-a':lively ? '.28' : '.16',
@@ -629,7 +634,7 @@
     }
     function tilesElev(){
       return Object.keys(ELEVATION).map(function(id){
-        var E = ELEVATION[id], k = { flat:'Cards sit on the page, with an outline on hover.', standard:'A soft shadow; cards lift a little on hover.', dramatic:'Deep shadows; cards rise clearly off the page.' }[id];
+        var E = ELEVATION[id], k = { flat:'Cards sit on the page, with an outline on hover.', standard:'A soft shadow; cards lift a little on hover.', dramatic:'Deep shadows; cards rise clearly off the page.', ambient:'Shadows tinted with your accent and a faint light from the top corner.' }[id];
         return '<label class="tile el"><input type="radio" name="t-elev" value="' + id + '" data-k="motion.elevation"><span class="tb">' +
           '<span class="el-s pv" aria-hidden="true"><i data-elev-sample="' + id + '"></i></span><span class="tn">' + E.name + '<span class="tck">' + IC('i-check') + '</span></span><span class="tk">' + k + '</span></span></label>';
       }).join('');
@@ -835,7 +840,6 @@
     }
     function railHTML(d){
       var h = d.header.widgets.map(function(w){
-        if (w === 'era') return '<div class="rw"><span class="k">Era</span><span class="v">Age of Ash</span></div>';
         if (w === 'links') return '<div class="rw"><span class="k">Links</span><span class="v">' + esc(d.header.links.map(function(l){ return l.label.trim(); }).filter(Boolean).join(' · ') || 'No links yet') + '</span></div>';
         if (w === 'text') return '<div class="rw q"><span class="k">Note</span><span class="v">' + esc(d.header.text.trim() || 'Nothing written yet') + '</span></div>';
         if (w === 'search') return '<div class="rw srch">' + IC('i-search') + '<span>Search ' + esc(CAMPAIGN) + '…</span></div>';

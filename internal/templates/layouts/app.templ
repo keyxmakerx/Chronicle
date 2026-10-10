@@ -118,6 +118,9 @@ templ App(title string) {
 					}
 					{ children... }
 				</main>
+				if InSiteAdmin(ctx) {
+					@AdminStatusStrip()
+				}
 			</div>
 		</div>
 		<!-- Jot notes: the one entry point is the tab bottom-right, which
@@ -172,6 +175,9 @@ templ Sidebar() {
 			@campaignNavBrand()
 			@campaignNavTop()
 			@campaignNavCategories()
+			if GetIsAdmin(ctx) {
+				@SiteAdminEntry()
+			}
 			@campaignNavFooter()
 		} else {
 			<!-- Logo / Brand -->
@@ -189,20 +195,20 @@ templ Sidebar() {
 			</div>
 			<!-- Site admin is its own place: on an admin page a site admin's menu
 			     is the admin menu; everywhere else it is the everyday menu, and
-			     the admin icon in the footer is the way in. -->
+			     the Site admin row at the bottom is the way in. -->
 			if InSiteAdmin(ctx) {
 				@AdminSidebarNav()
 			} else {
 				<nav class="flex-1 py-4 overflow-y-auto" hx-boost="true" hx-target="#main-content" hx-select="#main-content" hx-swap="innerHTML show:window:top">
 					@DefaultSidebarNav()
 				</nav>
+				if GetIsAdmin(ctx) {
+					@SiteAdminEntry()
+				}
 			}
 			<!-- Sidebar footer: pin and hide sit here, as in the campaign sidebar,
 			     so the hide arrow and the restore arrow share the bottom-left. -->
 			<div class="h-10 flex items-center gap-0.5 pl-1.5 pr-1.5 border-t border-gray-700 shrink-0">
-				if GetIsAdmin(ctx) {
-					@SiteAdminEntry(InSiteAdmin(ctx))
-				}
 				<div class="flex-1"></div>
 				<!-- Pin/unpin button (visible only when expanded) -->
 				<button
@@ -239,7 +245,7 @@ templ AdminSidebarNav() {
 		aria-label="Site admin"
 		class="admin-menu flex-1 min-h-0 overflow-y-auto pb-2"
 	>
-		<div class="admin-band flex items-center gap-2 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider">
+		<div class="admin-band flex items-center gap-2 px-4 py-2.5 font-mono text-[11px] font-semibold uppercase tracking-wider">
 			<i class={ "fa-solid " + SiteAdminIcon + " text-xs" } aria-hidden="true"></i>
 			<span>Site admin</span>
 		</div>
@@ -253,7 +259,7 @@ templ AdminSidebarNav() {
 			@adminNavLink(adminNav.Home)
 			if len(pinned) > 0 {
 				<div role="group" aria-label="Pinned admin pages">
-					<div class="px-4 pt-3 pb-1 text-xs font-semibold uppercase tracking-wider text-gray-500">Pinned</div>
+					<div class="px-4 pt-3 pb-1 font-mono text-[11px] font-semibold uppercase tracking-wider text-gray-500">Pinned</div>
 					for _, it := range pinned {
 						@adminNavLink(it)
 					}
@@ -270,7 +276,7 @@ templ AdminSidebarNav() {
 // always open: the admin menu has the sidebar to itself.
 templ adminNavSection(sec AdminNavSection, pins []string) {
 	<div id={ "admin-nav-sec-" + sec.ID } role="group" aria-labelledby={ "admin-nav-sec-" + sec.ID + "-label" }>
-		<div id={ "admin-nav-sec-" + sec.ID + "-label" } class="px-4 pt-3 pb-1 text-xs font-semibold uppercase tracking-wider text-gray-500">
+		<div id={ "admin-nav-sec-" + sec.ID + "-label" } class="px-4 pt-3 pb-1 font-mono text-[11px] font-semibold uppercase tracking-wider text-gray-500">
 			{ sec.Label }
 		</div>
 		for _, it := range sec.Items {
@@ -279,24 +285,19 @@ templ adminNavSection(sec AdminNavSection, pins []string) {
 	</div>
 }
 
-// SiteAdminEntry is a site admin's way into Site admin from a menu footer,
-// in or out of a campaign. It is a full load so the menu switches too. A
-// click remembers the page to come back to and asks the admin menu to arrive
-// with its entrance (static/js/site_admin.js).
-templ SiteAdminEntry(here bool) {
-	<a
-		href="/admin"
-		class="nav-ibtn nav-ibtn-sm site-admin-entry"
-		hx-boost="false"
-		data-site-admin-entry
-		title="Site admin"
-		aria-label="Site admin"
-		if here {
-			aria-current="page"
-		}
-	>
-		<i class={ "fa-solid " + SiteAdminIcon } aria-hidden="true"></i>
-	</a>
+// SiteAdminEntry is a site admin's way into Site admin: a full menu row at
+// the very bottom of either sidebar, above the footer, so it stays in reach
+// whatever the menu above is showing. It is a full load so the menu switches
+// too; site_admin.js remembers the page to come back to and marks the way in,
+// so the admin screen rises over this one. Folded to icons, it is its icon.
+templ SiteAdminEntry() {
+	<div class="site-admin-row">
+		<a href="/admin" class="nav-row site-admin-entry" hx-boost="false" data-site-admin-entry title="Site admin">
+			<span class="nav-ic"><i class={ "fa-solid " + SiteAdminIcon } aria-hidden="true"></i></span>
+			<span class="nav-lb">Site admin</span>
+			<span class="nav-tr"><i class="fa-solid fa-arrow-up" aria-hidden="true"></i></span>
+		</a>
+	</div>
 }
 
 // adminNavPinnableLink is a section row: the page link plus its pin toggle.
@@ -816,6 +817,15 @@ templ Topbar() {
 
 		<!-- Right: Search + Notes + Dark mode + User menu -->
 		<div class="flex items-center gap-1 shrink-0 ml-auto">
+			if InSiteAdmin(ctx) {
+				<!-- The way out of Site admin, always in view; site_admin.js points
+				     it at the page the admin came from. -->
+				<a href="/campaigns" data-admin-back hx-boost="false" class="btn-secondary btn-sm admin-leave gap-1.5 mr-1">
+					<i class="fa-solid fa-arrow-down" aria-hidden="true"></i>
+					<span class="hidden sm:inline">Leave Site admin</span>
+					<span class="sm:hidden">Leave</span>
+				</a>
+			}
 			if InCampaign(ctx) {
 				<!-- Search trigger (magnifying glass) -->
 				<button
@@ -831,19 +841,21 @@ templ Topbar() {
 
 			}
 
-			<!-- Dark mode toggle -->
-			<button
-				data-theme-toggle
-				class="btn-ghost btn-icon"
-				title="Toggle dark mode"
-			>
-				<svg class="w-4 h-4 theme-icon-light hidden" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path>
-				</svg>
-				<svg class="w-4 h-4 theme-icon-dark" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
-				</svg>
-			</button>
+			<!-- Dark mode toggle. Site admin is always dark, so it has none. -->
+			if !InSiteAdmin(ctx) {
+				<button
+					data-theme-toggle
+					class="btn-ghost btn-icon"
+					title="Toggle dark mode"
+				>
+					<svg class="w-4 h-4 theme-icon-light hidden" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path>
+					</svg>
+					<svg class="w-4 h-4 theme-icon-dark" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
+					</svg>
+				</button>
+			}
 
 			<!-- View as player toggle (campaign owners only) -->
 			if InCampaign(ctx) && IsOwner(ctx) {
@@ -1101,6 +1113,8 @@ func topbarWidgetShown(ctx context.Context, tc *TopbarContentData, w string) boo
 		return tc.Live != nil && tc.Live.Weather != ""
 	case "moon":
 		return tc.Live != nil && len(tc.Live.Moons) > 0
+	case "era":
+		return tc.Live != nil && tc.Live.Era != ""
 	case "session":
 		return tc.Live != nil && tc.Live.NextNight.Label != ""
 	}
@@ -1200,6 +1214,11 @@ templ topbarWidget(ctx context.Context, tc *TopbarContentData, w string) {
 		<span class={ topbarChipClass } title="Today's moon">
 			<i class="fa-solid fa-moon text-[10px] shrink-0" aria-hidden="true"></i>
 			<span class="truncate">{ topbarMoonText(tc.Live.Moons) }</span>
+		</span>
+	} else if w == "era" && topbarWidgetShown(ctx, tc, "era") {
+		<span class={ topbarChipClass } title="The current era">
+			<i class="fa-solid fa-hourglass-half text-[10px] shrink-0" aria-hidden="true"></i>
+			<span class="truncate">{ tc.Live.Era }</span>
 		</span>
 	} else if w == "session" && topbarWidgetShown(ctx, tc, "session") {
 		<span class={ topbarChipClass } title={ tc.Live.NextNight.Title }>

@@ -26,8 +26,11 @@ templ Base(title string) {
 		     "device" follows the OS. Either reduce switch (the campaign's or the person's own) sets nav-rm;
 		     a device asking for reduced motion lowers data-motion to off. -->
 		<script>
-			(function(){try{var h=document.documentElement;var v=h.getAttribute('data-view-theme');var t=(v==='light'||v==='dark')?v:(v==='device'?null:localStorage.getItem('chronicle-theme'));var d=t==='dark'||(t!=='light'&&window.matchMedia('(prefers-color-scheme:dark)').matches);if(d){h.classList.add('dark');h.style.backgroundColor='#111827'}else{h.style.backgroundColor='#f9fafb'}if(window.matchMedia('(prefers-reduced-motion:reduce)').matches)h.setAttribute('data-motion','off');if(h.hasAttribute('data-cz-reduce')||h.getAttribute('data-view-motion')==='calm')h.classList.add('nav-rm')}catch(e){}})();
+			(function(){try{var h=document.documentElement;var v=h.getAttribute('data-view-theme');var t=(v==='light'||v==='dark')?v:(v==='device'?null:localStorage.getItem('chronicle-theme'));var a=h.hasAttribute('data-site-admin');var d=a||t==='dark'||(t!=='light'&&window.matchMedia('(prefers-color-scheme:dark)').matches);if(d){h.classList.add('dark');h.style.backgroundColor=a?'#0b0e14':'#111827'}else{h.style.backgroundColor='#f9fafb'}if(window.matchMedia('(prefers-reduced-motion:reduce)').matches)h.setAttribute('data-motion','off');if(h.hasAttribute('data-cz-reduce')||h.getAttribute('data-view-motion')==='calm')h.classList.add('nav-rm')}catch(e){}})();
 		</script>
+
+		<!-- Site admin's way in and out: the new page asks for its transition before the first paint. -->
+		<script src={ AssetURL("/static/js/site_admin_reveal.js") }></script>
 
 		<!-- Hide Alpine.js elements until initialized; hide body until all CSS loads (FOUC prevention). -->
 		<style>[x-cloak]{display:none!important}body{opacity:0}</style>
@@ -81,6 +84,10 @@ templ Base(title string) {
 		     data-widget elements. Must load before Alpine so Chronicle utilities
 		     are available when Alpine processes x-data expressions. -->
 		<script src={ AssetURL("/static/js/boot.js") } defer></script>
+		<!-- On-sight widget scripts: boot.js fetches these when a widget's
+		     mount first appears (ADR-063). Inert JSON outside #main-content,
+		     so boosted navigation keeps it. -->
+		@templ.JSONScript("chronicle-widget-scripts", GetWidgetScripts(ctx))
 
 		<!-- Dynamic-surface motion engine: the frame's transition-preset library
 		     (Chronicle.surface.play / .transitions). Loads after boot.js so the
@@ -113,6 +120,8 @@ templ Base(title string) {
 		<script src={ AssetURL("/static/js/sidebar_nav.js") } defer></script>
 		<!-- Unified sidebar edit mode: pencil-triggered inline editing -->
 		<script src={ AssetURL("/static/js/sidebar_editor.js") } defer></script>
+		<!-- A sidebar row's menu: right-click, long press, dots, Shift+F10 -->
+		<script src={ AssetURL("/static/js/sidebar_row_menu.js") } defer></script>
 		<!-- Hidden sidebar: peek open from the window's left edge -->
 		<script src={ AssetURL("/static/js/sidebar_peek.js") } defer></script>
 

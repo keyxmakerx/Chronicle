@@ -32,21 +32,20 @@ func TestInSiteAdmin(t *testing.T) {
 }
 
 // The admin menu replaces the everyday menu only for a site admin on an
-// admin page; the footer's way in shows for a site admin anywhere and for
-// nobody else.
+// admin page; the Site admin row, the way in, shows for a site admin
+// everywhere else and for nobody else.
 func TestSidebar_SiteAdminPlace(t *testing.T) {
 	cases := []struct {
-		name      string
-		admin     bool
-		path      string
-		menu      bool // the Site admin menu is drawn
-		entry     bool // the footer's way in is drawn
-		entryHere bool // and marked as the current place
+		name  string
+		admin bool
+		path  string
+		menu  bool // the Site admin menu is drawn
+		entry bool // the way in is drawn
 	}{
-		{"admin on an admin page", true, "/admin/users", true, true, true},
-		{"admin outside admin", true, "/campaigns", false, true, false},
-		{"non-admin on an admin path", false, "/admin/users", false, false, false},
-		{"non-admin elsewhere", false, "/campaigns", false, false, false},
+		{"admin on an admin page", true, "/admin/users", true, false},
+		{"admin outside admin", true, "/campaigns", false, true},
+		{"non-admin on an admin path", false, "/admin/users", false, false},
+		{"non-admin elsewhere", false, "/campaigns", false, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -68,13 +67,74 @@ func TestSidebar_SiteAdminPlace(t *testing.T) {
 			if got := strings.Contains(out, "data-site-admin-entry"); got != tc.entry {
 				t.Errorf("way in drawn = %v, want %v", got, tc.entry)
 			}
-			if tc.entry {
-				here := strings.Contains(out, `site-admin-entry" hx-boost="false" data-site-admin-entry title="Site admin" aria-label="Site admin" aria-current="page"`)
-				if here != tc.entryHere {
-					t.Errorf("way in marked current = %v, want %v", here, tc.entryHere)
-				}
+		})
+	}
+}
+
+// The way in is a labelled menu row and a full load, so the menu switches
+// and site_admin.js can play the rise.
+func TestSiteAdminEntry_Row(t *testing.T) {
+	var buf bytes.Buffer
+	if err := SiteAdminEntry().Render(context.Background(), &buf); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	out := buf.String()
+	for _, want := range []string{
+		`href="/admin" class="nav-row site-admin-entry" hx-boost="false" data-site-admin-entry`,
+		`<span class="nav-lb">Site admin</span>`,
+		SiteAdminIcon,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("row missing %q", want)
+		}
+	}
+}
+
+// Site admin pages carry data-site-admin on <html> (the control room look);
+// no other page does, admin or not.
+func TestAppearanceAttrs_SiteAdmin(t *testing.T) {
+	cases := []struct {
+		name  string
+		admin bool
+		path  string
+		want  bool
+	}{
+		{"admin page", true, "/admin/users", true},
+		{"admin elsewhere", true, "/campaigns", false},
+		{"non-admin on an admin path", false, "/admin", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := SetActivePath(SetIsAdmin(context.Background(), tc.admin), tc.path)
+			_, got := AppearanceAttrs(ctx)["data-site-admin"]
+			if got != tc.want {
+				t.Errorf("data-site-admin = %v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+// The top bar's way out shows only in Site admin, as a full load.
+func TestTopbar_LeaveSiteAdmin(t *testing.T) {
+	for _, tc := range []struct {
+		path string
+		want bool
+	}{{"/admin/users", true}, {"/campaigns", false}} {
+		ctx := SetActivePath(SetIsAdmin(context.Background(), true), tc.path)
+		var buf bytes.Buffer
+		if err := Topbar().Render(ctx, &buf); err != nil {
+			t.Fatalf("render: %v", err)
+		}
+		out := buf.String()
+		if got := strings.Contains(out, "Leave Site admin"); got != tc.want {
+			t.Errorf("%s: leave button = %v, want %v", tc.path, got, tc.want)
+		}
+		if tc.want && !strings.Contains(out, `href="/campaigns" data-admin-back hx-boost="false"`) {
+			t.Errorf("%s: leave button must be a full load marked data-admin-back", tc.path)
+		}
+		if got := strings.Contains(out, "data-theme-toggle"); got == tc.want {
+			t.Errorf("%s: theme toggle = %v, want %v", tc.path, got, !tc.want)
+		}
 	}
 }
 

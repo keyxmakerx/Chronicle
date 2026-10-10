@@ -237,6 +237,7 @@ GET	/campaigns/new	internal/plugins/campaigns/routes.go
 GET	/campaigns/picker	internal/plugins/campaigns/routes.go
 GET	/category-boards/:tid	internal/plugins/quests/routes.go
 GET	/characters	internal/plugins/entities/routes.go
+GET	/characters/entries	internal/plugins/entities/routes.go
 GET	/characters/new	internal/plugins/entities/routes.go
 GET	/characters/new/plan	internal/plugins/entities/routes.go
 GET	/content-templates	internal/plugins/entities/content_template_routes.go
@@ -471,6 +472,7 @@ GET	/stashes/history	internal/plugins/syncapi/routes.go
 GET	/stashes/requests	internal/plugins/syncapi/routes.go
 GET	/stashes/view	internal/plugins/syncapi/routes.go
 GET	/stats	internal/plugins/bestiary/routes.go
+GET	/status	internal/plugins/admin/routes.go
 GET	/status	internal/systems/routes.go
 GET	/storage	internal/plugins/admin/routes.go
 GET	/storage/settings	internal/plugins/settings/routes.go
