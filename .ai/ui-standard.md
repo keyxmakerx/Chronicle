@@ -77,7 +77,7 @@ place, and Off shows the end state.
 | Peek | hover cards, the sidebar peek, availability bars | fade and a 4px rise, `--dur-micro`, `--ease-out` | fade only |
 | Grow | menus, panels, pop-out editors, out of the thing clicked | scale from the clicked edge, `--dur-standard`, `--ease-out` | fade only |
 | Fold | sections, calendar months, long lists | to the content's real height, `--dur-standard` | opens at once |
-| Slide-out | sheet tabs, creator steps, slips under a value | out from under the paper, `--dur-slide`, `--ease-slide` | appears in place with a fade |
+| Slide-out | sheet tabs, creator steps, slips under a value | out from under its surface, `--dur-slide`, `--ease-slide` | appears in place with a fade |
 | Page turn | the Handbook only | a turn with a soft crease, `--dur-turn`, `--ease-turn` | the new spread fades in |
 | Settle | moving to a new page or tab | fade and a 6px rise, `--dur-large`, `--ease-out` | fade only |
 
@@ -118,15 +118,20 @@ place, and Off shows the end state.
 
 ## Look
 
-- **Paper is for things that exist in the world**: hover cards, character
-  sheets and the creator, the Handbook and rule cards, stat blocks, handouts,
-  quest notes and the DM Screen's pinned cards. They build on the shared
-  paper tokens and classes in `static/css/paper.css`, never their own
-  colours. The owner's Customize › Depth sets how far paper lifts; Flat drops
-  the tucked sheet behind it.
-- **The tools stay plain**: both sidebars, the header, ordinary pages, lists,
-  the calendar grid, maps, game nights, settings, Customize, admin, dialogs
-  and forms use the theme tokens below.
+- **Modern is the look.** Every page, panel and widget is built in
+  Chronicle's modern look first: the theme tokens below, the six moves under
+  Motion, light and dark. Mockups show that look first, always.
+- **Paper is an optional extra, mostly for players**: a look that some
+  in-world things can wear (hover cards, a character sheet, the Handbook)
+  where a signed mockup gives it to them, never a default for a new feature
+  and never a reason to restyle a tool. Where it exists it builds on the
+  shared paper tokens and classes in `static/css/paper.css`, never its own
+  colours, and moves with the same six moves as the modern look. The owner's
+  Customize › Depth sets how far paper lifts; Flat drops the tucked sheet
+  behind it. Further looks may come later, the same way.
+- **The tools are never paper**: both sidebars, the header, ordinary pages,
+  lists, the calendar grid, maps, game nights, settings, Customize, admin,
+  dialogs and forms use the theme tokens below.
 - Chronicle's current look, on the real page as it is on `main`: theme
   tokens (`bg-surface`, `text-fg`, `text-fg-muted`, `border-edge`,
   `text-accent`), never hard-coded colours, and both light and dark.
