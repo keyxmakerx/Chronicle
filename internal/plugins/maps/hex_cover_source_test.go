@@ -16,6 +16,11 @@ func TestHexCoverControls_Source(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	hexesSrc, err := os.ReadFile("../../../static/js/map_hexes.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	hexes := string(hexesSrc)
 	sheet, err := os.ReadFile("map_settings_sheet.templ")
 	if err != nil {
 		t.Fatal(err)
@@ -23,9 +28,12 @@ func TestHexCoverControls_Source(t *testing.T) {
 	tests := []struct {
 		name, src, want string
 	}{
-		{"flyout, whole map", viewer, "Hexes over the whole map"},
-		{"flyout, one picture", viewer, "Hexes over “"},
-		{"flyout, helper text", viewer, "Add a picture first to turn just that picture into a hex map. Or click any picture and choose Turn into a hex map."},
+		{"flyout, whole map", viewer, "item('Whole map', 'Hexes cover everything'"},
+		{"flyout, one picture", viewer, "'Hexes cover just this picture'"},
+		{"flyout, helper text with pictures", viewer, "You can also click any picture and choose Turn into a hex map."},
+		{"flyout, helper text without", viewer, "Add a picture first to turn just that picture into a hex map."},
+		{"take-off confirm", viewer, "Take the hexes off this map? Painted hexes are kept, so making it a hex map again brings them back."},
+		{"hexes panel, take off", hexes, ">Take the hexes off</button>"},
 		{"re-lay confirm", viewer, "Painted hexes stay where they are in the grid, so they may land on different spots. Continue?"},
 		{"chips, one picture", viewer, "Just “"},
 		{"picture bar, way in", string(pictures), "Turn into a hex map"},
