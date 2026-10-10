@@ -242,7 +242,7 @@ func requireODT(data []byte) error {
 		if err != nil {
 			return errPageFileType
 		}
-		defer rc.Close()
+		defer func() { _ = rc.Close() }()
 		got, err := io.ReadAll(io.LimitReader(rc, 128))
 		if err != nil || string(got) != mimeOdt {
 			return errPageFileType
