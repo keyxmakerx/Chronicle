@@ -1879,9 +1879,23 @@ func (h *Handler) GetPlayerNotes(c echo.Context) error {
 		return apperror.NewNotFound("entity not found")
 	}
 
+	notes, notesHTML := entity.PlayerNotes, entity.PlayerNotesHTML
+	if cc.MemberRole < campaigns.RoleScribe {
+		// Player notes are meant for players, but the API accepts any editor
+		// content, so GM-only parts are removed the same way as for the entry.
+		if notes != nil {
+			stripped := sanitize.StripSecretsJSON(*notes)
+			notes = &stripped
+		}
+		if notesHTML != nil {
+			stripped := sanitize.StripSecretsHTML(*notesHTML)
+			notesHTML = &stripped
+		}
+	}
+
 	return c.JSON(http.StatusOK, map[string]any{
-		"player_notes":      entity.PlayerNotes,
-		"player_notes_html": entity.PlayerNotesHTML,
+		"player_notes":      notes,
+		"player_notes_html": notesHTML,
 	})
 }
 
