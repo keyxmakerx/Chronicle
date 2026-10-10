@@ -32,7 +32,7 @@ type Service interface {
 
 	// Note reads the screen's note; SaveNote replaces its text.
 	Note(ctx context.Context, campaignID string, v Viewer) (*NotesView, error)
-	SaveNote(ctx context.Context, campaignID string, v Viewer, text string) (*NotesView, error)
+	SaveNote(ctx context.Context, campaignID string, v Viewer, text, version string) (*NotesView, error)
 }
 
 // DowntimeResult reports a downtime switch: the new state and how many
@@ -76,7 +76,7 @@ func (s *service) Build(ctx context.Context, campaignID string, v Viewer) (*View
 		if err != nil {
 			warn("requests", err)
 		} else if ok {
-			view.Requests = trimRequests(reqs, v.IsOwner())
+			view.Requests = trimRequests(reqs)
 		}
 	}
 	if s.src.World != nil {
@@ -231,16 +231,33 @@ func (s *service) nightForNote(ctx context.Context, campaignID string, v Viewer)
 func (s *service) notesView(ctx context.Context, campaignID string, v Viewer, night *NightView) (*NotesView, error) {
 	label, _ := noteNames(night)
 	nv := &NotesView{Label: label}
-	n, err := s.src.Notes.Find(ctx, campaignID, v)
+	n, err := s.src.Notes.Find(ctx, campaignID, nightKey(night), v)
 	if err != nil {
 		return nil, err
 	}
 	if n != nil {
 		nv.NoteID = n.ID
-		nv.Text = plainFromProse(n.Entry)
 		nv.Link = fmt.Sprintf("/campaigns/%s/journal/%s", campaignID, n.ID)
+		nv.Version = BodyVersion(n.Entry)
+		switch {
+		case n.Legacy != "":
+			nv.Text, nv.ReadOnly = n.Legacy, true
+		case !isPlainProse(n.Entry):
+			nv.Text, nv.ReadOnly = plainFromProse(n.Entry), true
+		default:
+			nv.Text = plainFromProse(n.Entry)
+		}
 	}
 	return nv, nil
+}
+
+// nightKey is the key a night's note is kept under; no night means the
+// campaign's standing note.
+func nightKey(n *NightView) string {
+	if n == nil {
+		return ""
+	}
+	return n.Key
 }
 
 // Note reads the screen's note for the GM side.
@@ -254,9 +271,11 @@ func (s *service) Note(ctx context.Context, campaignID string, v Viewer) (*Notes
 	return s.notesView(ctx, campaignID, v, s.nightForNote(ctx, campaignID, v))
 }
 
-// SaveNote stores text as plain paragraphs in the screen's note, creating it on
-// first save and retitling it to the current next night.
-func (s *service) SaveNote(ctx context.Context, campaignID string, v Viewer, text string) (*NotesView, error) {
+// SaveNote stores text as plain paragraphs in the screen's note for the next
+// game night (the standing note with no night), creating it on first save with
+// the night's title. It refuses a note holding formatting and a note that
+// changed since version was read.
+func (s *service) SaveNote(ctx context.Context, campaignID string, v Viewer, text, version string) (*NotesView, error) {
 	if v.Role < 2 {
 		return nil, apperror.NewForbidden("the DM Screen is for the people running this campaign")
 	}
@@ -267,14 +286,21 @@ func (s *service) SaveNote(ctx context.Context, campaignID string, v Viewer, tex
 		return nil, apperror.NewBadRequest("the note is too long for the DM Screen; open it in Notes")
 	}
 	night := s.nightForNote(ctx, campaignID, v)
+	cur, err := s.src.Notes.Find(ctx, campaignID, nightKey(night), v)
+	if err != nil {
+		return nil, err
+	}
+	if cur != nil && (cur.Legacy != "" || !isPlainProse(cur.Entry)) {
+		return nil, apperror.NewValidation("this note has formatting, so edit it in Notes")
+	}
 	label, title := noteNames(night)
 	entry, entryHTML := proseFromPlain(text)
-	n, err := s.src.Notes.Save(ctx, campaignID, v, title, entry, entryHTML)
+	n, err := s.src.Notes.Save(ctx, campaignID, nightKey(night), v, title, entry, entryHTML, version)
 	if err != nil {
 		return nil, err
 	}
 	return &NotesView{
-		Label: label, Text: plainFromProse(n.Entry), NoteID: n.ID,
+		Label: label, Text: plainFromProse(n.Entry), NoteID: n.ID, Version: BodyVersion(n.Entry),
 		Link: fmt.Sprintf("/campaigns/%s/journal/%s", campaignID, n.ID),
 	}, nil
 }
@@ -460,13 +486,13 @@ const requestsShown = 5
 
 // trimRequests keeps the oldest requestsShown, oldest first, and counts the
 // rest. It returns nil when nothing waits so the block is left out.
-func trimRequests(reqs []Request, canAnswer bool) *RequestsView {
+func trimRequests(reqs []Request) *RequestsView {
 	if len(reqs) == 0 {
 		return nil
 	}
 	sorted := append([]Request(nil), reqs...)
 	sort.SliceStable(sorted, func(i, j int) bool { return sorted[i].CreatedAt.Before(sorted[j].CreatedAt) })
-	rv := &RequestsView{CanAnswer: canAnswer}
+	rv := &RequestsView{}
 	for i, r := range sorted {
 		if i == requestsShown {
 			rv.More = len(sorted) - requestsShown

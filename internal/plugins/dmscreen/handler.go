@@ -70,7 +70,8 @@ func (h *Handler) ShowNote(c echo.Context) error {
 
 // saveNoteRequest is the PUT body: the whole note text.
 type saveNoteRequest struct {
-	Text string `json:"text"`
+	Text    string `json:"text"`
+	Version string `json:"version"`
 }
 
 // SaveNote handles PUT /campaigns/:id/dm-screen/notes.
@@ -83,7 +84,7 @@ func (h *Handler) SaveNote(c echo.Context) error {
 	if err := json.NewDecoder(http.MaxBytesReader(c.Response(), c.Request().Body, 256<<10)).Decode(&req); err != nil {
 		return apperror.NewBadRequest("invalid JSON body")
 	}
-	nv, err := h.svc.SaveNote(c.Request().Context(), cc.Campaign.ID, viewerOf(c, cc), req.Text)
+	nv, err := h.svc.SaveNote(c.Request().Context(), cc.Campaign.ID, viewerOf(c, cc), req.Text, req.Version)
 	if err != nil {
 		return err
 	}

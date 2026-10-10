@@ -130,6 +130,10 @@ func stepByKey(key string) (TimeStep, bool) {
 
 // NightView is the next game night and its answers so far.
 type NightView struct {
+	// Key identifies this night for keeping things with it: the session id,
+	// plus the date when the session repeats so each occurrence is its own.
+	// Not on the wire.
+	Key      string `json:"-"`
 	Name     string `json:"name"`
 	When     string `json:"when"`
 	Going    int    `json:"going"`
@@ -267,9 +271,6 @@ func (r RequestView) path(campaignID, verb string) string {
 type RequestsView struct {
 	Items []RequestView `json:"items"`
 	More  int           `json:"more,omitempty"`
-	// CanAnswer is true for the owner and DM-granted co-DMs, the only people
-	// the armory lets approve or refuse; others would see rows without buttons.
-	CanAnswer bool `json:"can_answer"`
 }
 
 // NotesView is the screen's note: one per campaign, shared with the GM side,
@@ -283,4 +284,11 @@ type NotesView struct {
 	NoteID string `json:"note_id,omitempty"`
 	// Link opens the note in the Journal; empty until it exists.
 	Link string `json:"link,omitempty"`
+	// ReadOnly is true when the note holds more than plain paragraphs
+	// (headings, lists, marks, images, mentions); the tab shows its text and
+	// never saves, so formatting made in the full editor cannot be flattened.
+	ReadOnly bool `json:"read_only,omitempty"`
+	// Version names the stored body. A save sends it back and is refused (409)
+	// if the note changed since, so a stale tab cannot overwrite newer text.
+	Version string `json:"version"`
 }

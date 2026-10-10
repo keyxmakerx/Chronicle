@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/systems"
 )
 
@@ -38,15 +39,26 @@ type ScreenNote struct {
 	Title string
 	// Entry is the note's ProseMirror JSON as stored.
 	Entry string
+	// Legacy is the text of an old block-style note with no Entry; such a note
+	// is shown read-only.
+	Legacy string
 }
 
-// NotesSource keeps the screen's note in the notes widget. The note is found
-// again by a fixed id derived from the campaign, so nothing here owns a table.
-// Find returns nil, nil before the first save. Save creates the note (shared
-// with the GM side) or updates its title and body, as the viewer.
+// ErrNoteChanged is returned by NotesSource.Save when the note's body no longer
+// matches the version the caller loaded.
+var ErrNoteChanged = apperror.NewConflict("changed elsewhere")
+
+// NotesSource keeps the screen's note in the notes widget. nightKey names the
+// game night the note is kept with (NightView.Key); empty means the campaign's
+// standing note. The note's id is derived from the campaign and key, so
+// nothing here owns a table. Find returns nil, nil before the first save.
+// Save creates the note (shared with the GM side, titled title) or, when it
+// exists, replaces only its body; it never retitles. version is the body
+// version the caller loaded ("" for no note yet) and a mismatch returns
+// ErrNoteChanged.
 type NotesSource interface {
-	Find(ctx context.Context, campaignID string, v Viewer) (*ScreenNote, error)
-	Save(ctx context.Context, campaignID string, v Viewer, title, entry, entryHTML string) (*ScreenNote, error)
+	Find(ctx context.Context, campaignID, nightKey string, v Viewer) (*ScreenNote, error)
+	Save(ctx context.Context, campaignID, nightKey string, v Viewer, title, entry, entryHTML, version string) (*ScreenNote, error)
 }
 
 // WorldSource reads the default calendar's current date and today's weather.

@@ -101,25 +101,30 @@ func (a *dmRequestsAdapter) WaitingRequests(ctx context.Context, campaignID stri
 	return out, true, nil
 }
 
-// dmNotesNamespace seeds the screen note's id; any fixed UUID would do.
+// dmNotesNamespace seeds the screen notes' ids; any fixed UUID would do.
 var dmNotesNamespace = uuid.MustParse("6f0c2d1e-5a43-4c7b-9d28-3b1e7a90c4d5")
 
-// dmNoteID is the screen note's id for a campaign. Deriving it (instead of a
-// column or a title lookup) lets the screen find its note again without a
+// dmNoteID is a screen note's id. Deriving it from the campaign (and the game
+// night, when there is one) lets the screen find its note again without a
 // table of its own, and two DMs saving at once collide on the primary key
-// rather than making two notes.
-func dmNoteID(campaignID string) string {
-	return uuid.NewSHA1(dmNotesNamespace, []byte(campaignID)).String()
+// rather than making two notes. An empty nightKey is the campaign's standing
+// note.
+func dmNoteID(campaignID, nightKey string) string {
+	name := campaignID
+	if nightKey != "" {
+		name += "\x00" + nightKey
+	}
+	return uuid.NewSHA1(dmNotesNamespace, []byte(name)).String()
 }
 
-// dmNotesAdapter keeps the DM Screen's note as an ordinary note shared with
-// the GM side (owner and co-DMs), so it also shows in the Journal.
+// dmNotesAdapter keeps the DM Screen's notes as ordinary notes shared with
+// the GM side (owner and co-DMs), so they also show in the Journal.
 type dmNotesAdapter struct {
 	notes notes.NoteService
 }
 
-func (a *dmNotesAdapter) Find(ctx context.Context, campaignID string, v dmscreen.Viewer) (*dmscreen.ScreenNote, error) {
-	n, err := a.notes.GetByID(ctx, dmNoteID(campaignID))
+func (a *dmNotesAdapter) Find(ctx context.Context, campaignID, nightKey string, v dmscreen.Viewer) (*dmscreen.ScreenNote, error) {
+	n, err := a.notes.GetByID(ctx, dmNoteID(campaignID, nightKey))
 	if err != nil {
 		if isNotFound(err) {
 			return nil, nil
@@ -133,28 +138,47 @@ func (a *dmNotesAdapter) Find(ctx context.Context, campaignID string, v dmscreen
 	return toScreenNote(n), nil
 }
 
-func (a *dmNotesAdapter) Save(ctx context.Context, campaignID string, v dmscreen.Viewer, title, entry, entryHTML string) (*dmscreen.ScreenNote, error) {
+func (a *dmNotesAdapter) Save(ctx context.Context, campaignID, nightKey string, v dmscreen.Viewer, title, entry, entryHTML, version string) (*dmscreen.ScreenNote, error) {
 	viewer := permissions.RequestViewer(v.Role, v.UserID)
-	existing, err := a.Find(ctx, campaignID, v)
+	id := dmNoteID(campaignID, nightKey)
+	existing, err := a.Find(ctx, campaignID, nightKey, v)
 	if err != nil {
 		return nil, err
 	}
+	// A tab that saw no note (version "") may only create it; one that saw a
+	// note may only replace that same body.
+	verify := existing != nil
+	if existing == nil && version != "" {
+		return nil, dmscreen.ErrNoteChanged
+	}
 	if existing == nil {
-		_, err := a.notes.Create(ctx, campaignID, viewer, notes.CreateNoteRequest{
-			ID: dmNoteID(campaignID), Title: title, Visibility: notes.VisibilityGM,
+		// The title is set here and never changed by later saves.
+		_, cerr := a.notes.Create(ctx, campaignID, viewer, notes.CreateNoteRequest{
+			ID: id, Title: title, Visibility: notes.VisibilityGM,
 		})
-		if err != nil {
-			// A second DM created it a moment ago: write into theirs.
-			if _, ferr := a.Find(ctx, campaignID, v); ferr != nil {
-				return nil, err
+		if cerr != nil {
+			// A second DM created it a moment ago (duplicate key): write into
+			// theirs. Anything else is a real failure.
+			if existing, err = a.Find(ctx, campaignID, nightKey, v); err != nil || existing == nil {
+				return nil, cerr
 			}
 		}
 	}
-	req := notes.UpdateNoteRequest{Title: &title, Entry: &entry, EntryHTML: &entryHTML}
-	cur, err := a.notes.GetByID(ctx, dmNoteID(campaignID))
+	cur, err := a.notes.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
+	// Checked against the freshest read, right before the write. A version of
+	// "" is the tab having seen no note: it matches only a note that does not
+	// exist yet, or one this call just created.
+	loaded := ""
+	if cur.Entry != nil {
+		loaded = *cur.Entry
+	}
+	if verify && version != dmscreen.BodyVersion(loaded) {
+		return nil, dmscreen.ErrNoteChanged
+	}
+	req := notes.UpdateNoteRequest{Entry: &entry, EntryHTML: &entryHTML}
 	if !cur.IsOwnedBy(v.UserID, campaignID) {
 		req.StripOwnerOnly()
 	}
@@ -170,7 +194,27 @@ func toScreenNote(n *notes.Note) *dmscreen.ScreenNote {
 	if n.Entry != nil {
 		out.Entry = *n.Entry
 	}
+	if out.Entry == "" && len(n.Content) > 0 {
+		out.Legacy = legacyNoteText(n.Content)
+		if out.Legacy == "" {
+			out.Legacy = "(no text)"
+		}
+	}
 	return out
+}
+
+// legacyNoteText flattens an old block-style note to lines of text.
+func legacyNoteText(blocks []notes.Block) string {
+	var lines []string
+	for _, b := range blocks {
+		if b.Value != "" {
+			lines = append(lines, b.Value)
+		}
+		for _, it := range b.Items {
+			lines = append(lines, it.Text)
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 // dmWorldAdapter reads the default calendar's date and today's weather.
@@ -258,11 +302,22 @@ func (a *dmNightAdapter) NextNight(ctx context.Context, campaignID string, _ dms
 			continue
 		}
 		return &dmscreen.NightView{
+			Key:  nightNoteKey(n),
 			Name: n.Name, When: nightWhen(n.Date, n.Time),
 			Going: n.Tally.Going, Maybe: n.Tally.Maybe, Cant: n.Tally.Cant, NoAnswer: n.Tally.NoAnswer,
 		}, nil
 	}
 	return nil, nil
+}
+
+// nightNoteKey names a night for keeping a note with it: its session id, plus
+// the date when the session repeats, because each occurrence of a repeating
+// session is its own night. A one-off night keeps its note if it is moved.
+func nightNoteKey(n sessions.GameNight) string {
+	if n.Recurring {
+		return n.SessionID + ":" + n.Date
+	}
+	return n.SessionID
 }
 
 // nightWhen renders "Fri 9 Oct, 19:30" from the stored date and time.
@@ -381,20 +436,22 @@ func (a *dmHiddenAdapter) Reveal(ctx context.Context, entityID, campaignID strin
 // stale list says nothing about who is online now.
 const foundryReportMaxAge = 5 * time.Minute
 
+// pageSeenWindow is how long a loaded campaign page counts as "has Chronicle
+// open" when no socket is up.
+const pageSeenWindow = 5 * time.Minute
+
 // dmBrowserHub is the slice of the websocket hub the presence adapter reads.
 type dmBrowserHub interface {
 	BrowserUserIDs(campaignID string) []string
+	RecentBrowserUsers(campaignID string, within time.Duration) []string
 	FoundryPresence(campaignID string) (*time.Time, bool)
 }
 
 // dmPresenceAdapter says which of a campaign's players are here. A player is
-// here when their browser has a live socket to Chronicle, or when the GM's
-// Foundry client reports them online (and is itself connected and fresh).
-//
-// Browser sockets are opened only by pages with live widgets (notes, journal,
-// maps, quest boards), not by every campaign page, so a player reading a plain
-// page is invisible to the first signal; the Foundry report covers players at
-// the table.
+// here when their browser has a live socket to Chronicle, or loaded a campaign
+// page in the last few minutes (sockets alone miss ordinary pages, which open
+// none), or when the GM's Foundry client reports them online (and is itself
+// connected and fresh).
 type dmPresenceAdapter struct {
 	members campaigns.CampaignService
 	hub     dmBrowserHub
@@ -416,7 +473,8 @@ func (a *dmPresenceAdapter) Players(ctx context.Context, campaignID string) ([]d
 			reports = nil
 		}
 	}
-	here := hereUsers(a.hub.BrowserUserIDs(campaignID), reports, foundryUp, a.clock())
+	browser := append(a.hub.BrowserUserIDs(campaignID), a.hub.RecentBrowserUsers(campaignID, pageSeenWindow)...)
+	here := hereUsers(browser, reports, foundryUp, a.clock())
 
 	var out []dmscreen.PlayerPresence
 	for _, m := range members {

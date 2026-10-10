@@ -25,22 +25,20 @@ func TestTrimRequests(t *testing.T) {
 		reqAt(6, RequestPurchase, 6), reqAt(4, RequestMove, 4), reqAt(5, RequestMove, 5),
 	}
 	tests := []struct {
-		name      string
-		in        []Request
-		canAnswer bool
-		wantNil   bool
-		wantIDs   []int64
-		wantMore  int
+		name     string
+		in       []Request
+		wantNil  bool
+		wantIDs  []int64
+		wantMore int
 	}{
-		{"nothing waiting leaves the block out", nil, true, true, nil, 0},
-		{"fewer than five all shown", seven[:2], true, false, []int64{1, 7}, 0},
-		{"exactly five, no more line", []Request{reqAt(5, RequestMove, 5), reqAt(1, RequestMove, 1), reqAt(2, RequestMove, 2), reqAt(3, RequestMove, 3), reqAt(4, RequestMove, 4)}, true, false, []int64{1, 2, 3, 4, 5}, 0},
-		{"seven keeps the five oldest, mixed kinds", seven, true, false, []int64{1, 2, 3, 4, 5}, 2},
-		{"scribe sees rows without answering", seven[:2], false, false, []int64{1, 7}, 0},
+		{"nothing waiting leaves the block out", nil, true, nil, 0},
+		{"fewer than five all shown", seven[:2], false, []int64{1, 7}, 0},
+		{"exactly five, no more line", []Request{reqAt(5, RequestMove, 5), reqAt(1, RequestMove, 1), reqAt(2, RequestMove, 2), reqAt(3, RequestMove, 3), reqAt(4, RequestMove, 4)}, false, []int64{1, 2, 3, 4, 5}, 0},
+		{"seven keeps the five oldest, mixed kinds", seven, false, []int64{1, 2, 3, 4, 5}, 2},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := trimRequests(tt.in, tt.canAnswer)
+			got := trimRequests(tt.in)
 			if (got == nil) != tt.wantNil {
 				t.Fatalf("got %+v, wantNil %v", got, tt.wantNil)
 			}
@@ -59,8 +57,8 @@ func TestTrimRequests(t *testing.T) {
 					t.Fatalf("ids = %v, want %v", ids, tt.wantIDs)
 				}
 			}
-			if got.More != tt.wantMore || got.CanAnswer != tt.canAnswer {
-				t.Errorf("more %d canAnswer %v", got.More, got.CanAnswer)
+			if got.More != tt.wantMore {
+				t.Errorf("more %d", got.More)
 			}
 		})
 	}
@@ -91,12 +89,8 @@ func TestRequestPaths(t *testing.T) {
 func TestBuild_RequestsSource(t *testing.T) {
 	src := Sources{Requests: fakeRequests{ok: true, reqs: []Request{reqAt(1, RequestMove, 1)}}}
 	v, err := NewService(src).Build(context.Background(), "c1", Viewer{Role: 3})
-	if err != nil || v.Requests == nil || !v.Requests.CanAnswer {
+	if err != nil || v.Requests == nil || len(v.Requests.Items) != 1 {
 		t.Fatalf("owner: %v %+v", err, v.Requests)
-	}
-	v, _ = NewService(src).Build(context.Background(), "c1", Viewer{Role: 2})
-	if v.Requests == nil || v.Requests.CanAnswer {
-		t.Fatalf("scribe: %+v", v.Requests)
 	}
 	src.Requests = fakeRequests{ok: false}
 	if v, _ = NewService(src).Build(context.Background(), "c1", Viewer{Role: 3}); v.Requests != nil {

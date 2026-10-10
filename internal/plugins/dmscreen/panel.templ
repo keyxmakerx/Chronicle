@@ -199,10 +199,18 @@ templ Panel(v *View, csrf string) {
 							maxlength="20000"
 							aria-label={ v.Notes.Label }
 							placeholder="Jot things down for the table."
+							readonly?={ v.Notes.ReadOnly }
 							data-dms-note
+							data-dms-note-version={ v.Notes.Version }
 							data-dms-note-url={ fmt.Sprintf("/campaigns/%s/dm-screen/notes", v.CampaignID) }
 						>{ v.Notes.Text }</textarea>
-						<span class="dms-small" role="status" aria-live="polite" data-dms-note-status>Only you and co-DMs can see this</span>
+						<span class="dms-small" role="status" aria-live="polite" data-dms-note-status>
+							if v.Notes.ReadOnly {
+								This note has formatting, so edit it in Notes
+							} else {
+								Only you and co-DMs can see this
+							}
+						</span>
 						<a class="dms-link" data-dms-note-link href={ templ.SafeURL(v.Notes.Link) } hidden?={ v.Notes.Link == "" }>Open in Notes</a>
 					</div>
 				}
@@ -220,18 +228,16 @@ templ waitingBlock(campaignID string, r *RequestsView, csrf string) {
 		for _, req := range r.Items {
 			<div class="dms-row dms-req">
 				<span>{ req.Text }</span>
-				if r.CanAnswer {
-					<span class="dms-req-btns">
-						<form hx-post={ req.ApprovePath(campaignID) } hx-swap="none" hx-disabled-elt="find button">
-							<input type="hidden" name="_csrf" value={ csrf }/>
-							<button type="submit" class="dms-req-yes">Allow</button>
-						</form>
-						<form hx-post={ req.DeclinePath(campaignID) } hx-swap="none" hx-disabled-elt="find button">
-							<input type="hidden" name="_csrf" value={ csrf }/>
-							<button type="submit">Refuse</button>
-						</form>
-					</span>
-				}
+				<span class="dms-req-btns">
+					<form hx-post={ req.ApprovePath(campaignID) } hx-swap="none" hx-disabled-elt="find button">
+						<input type="hidden" name="_csrf" value={ csrf }/>
+						<button type="submit" class="dms-req-yes">Allow</button>
+					</form>
+					<form hx-post={ req.DeclinePath(campaignID) } hx-swap="none" hx-disabled-elt="find button">
+						<input type="hidden" name="_csrf" value={ csrf }/>
+						<button type="submit">Refuse</button>
+					</form>
+				</span>
 			</div>
 		}
 		if r.More > 0 {

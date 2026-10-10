@@ -204,28 +204,48 @@
       function saveNote() {
         clearTimeout(st.noteTimer);
         var ta = noteBox();
-        if (!st.noteDirty || !ta) return;
+        if (!st.noteDirty || !ta || ta.readOnly) return;
         if (st.noteSaving) { st.noteAgain = true; return; }
         var url = ta.getAttribute('data-dms-note-url'), text = ta.value;
         st.noteSaving = true;
         noteStatus('Saving\u2026');
-        Chronicle.apiFetch(url, { method: 'PUT', body: { text: text } })
+        Chronicle.apiFetch(url, { method: 'PUT', body: { text: text, version: ta.getAttribute('data-dms-note-version') || '' } })
           .then(function (r) {
+            if (r.status === 409) { var e = new Error('changed'); e.changed = true; throw e; }
             if (!r.ok) throw new Error('save failed: ' + r.status);
             return r.json();
           })
           .then(function (j) {
             // Typing during the save keeps the box dirty for the next round.
             var cur = noteBox();
+            if (cur && j) cur.setAttribute('data-dms-note-version', j.version || '');
             if (!cur || cur.value === text) { st.noteDirty = false; noteStatus(NOTE_OK); }
             var r = root(), a = r && r.querySelector('[data-dms-note-link]');
             if (a && j && j.link) { a.setAttribute('href', j.link); a.hidden = false; }
           })
-          .catch(function () { noteStatus('Could not save. Your text is still here; it will retry.'); })
+          .catch(function (err) {
+            if (err && err.changed) { reloadNote(url); return; }
+            noteStatus('Could not save. Your text is still here; it will retry.');
+          })
           .then(function () {
             st.noteSaving = false;
             if (st.noteAgain) { st.noteAgain = false; saveNote(); }
           });
+      }
+
+      // Another save or an edit in Notes got there first: take its text.
+      function reloadNote(url) {
+        return Chronicle.apiFetch(url)
+          .then(function (r) { if (!r.ok) throw new Error('reload failed'); return r.json(); })
+          .then(function (j) {
+            var ta = noteBox(); if (!ta) return;
+            ta.value = j.text || '';
+            ta.readOnly = !!j.read_only;
+            ta.setAttribute('data-dms-note-version', j.version || '');
+            st.noteDirty = false;
+            noteStatus('Changed elsewhere; reloaded.');
+          })
+          .catch(function () { noteStatus('Changed elsewhere. Close and reopen the screen to reload.'); });
       }
 
       function restoreKept() {

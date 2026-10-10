@@ -1,6 +1,8 @@
 package dmscreen
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"html"
 	"strings"
@@ -31,9 +33,43 @@ func noteNames(n *NightView) (label, title string) {
 
 // proseNode is the slice of a ProseMirror node this package reads.
 type proseNode struct {
-	Type    string      `json:"type"`
-	Text    string      `json:"text"`
-	Content []proseNode `json:"content"`
+	Type    string            `json:"type"`
+	Text    string            `json:"text"`
+	Attrs   map[string]any    `json:"attrs"`
+	Marks   []json.RawMessage `json:"marks"`
+	Content []proseNode       `json:"content"`
+}
+
+// isPlainProse reports whether entry is empty or a document of paragraphs
+// holding only unmarked text: exactly what proseFromPlain writes. Anything
+// else (headings, lists, marks, images, mentions, hard breaks, an unreadable
+// body) is rich, and the screen must not save over it.
+func isPlainProse(entry string) bool {
+	entry = strings.TrimSpace(entry)
+	if entry == "" {
+		return true
+	}
+	var doc proseNode
+	if err := json.Unmarshal([]byte(entry), &doc); err != nil || doc.Type != "doc" || len(doc.Marks) > 0 {
+		return false
+	}
+	for _, p := range doc.Content {
+		if p.Type != "paragraph" || len(p.Marks) > 0 || len(p.Attrs) > 0 {
+			return false
+		}
+		for _, t := range p.Content {
+			if t.Type != "text" || len(t.Marks) > 0 || len(t.Attrs) > 0 || len(t.Content) > 0 {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// BodyVersion names a stored body for the lost-update check.
+func BodyVersion(entry string) string {
+	sum := sha256.Sum256([]byte(entry))
+	return hex.EncodeToString(sum[:8])
 }
 
 // blockTypes are the nodes that end a line of plain text.
