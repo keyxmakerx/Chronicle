@@ -22,6 +22,7 @@ import (
 	"math"
 	"regexp"
 	"sort"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -244,6 +245,14 @@ type CalendarService interface {
 	// entirely, by erasForPlayer) and filtered like ListEventsForMonth.
 	// Oldest first, at most maxEraEvents; total counts every match.
 	ListEraEventsForViewer(ctx context.Context, eraID int, calendarID, campaignID string, v permissions.Viewer) (events []Event, total int, err error)
+	// ListEventIndexForViewer returns a compact calendar-wide event list
+	// (id, name, date) for pickers that need events outside the loaded
+	// months. It is filtered exactly like ListEraEventsForViewer: role and
+	// per-user rules, unannounced future events and secret-era events are
+	// dropped for a non-author. q narrows by case-insensitive name match;
+	// the list is date-ordered and capped at maxEventIndex, truncated says
+	// whether matches were left out.
+	ListEventIndexForViewer(ctx context.Context, calendarID, campaignID, q string, v permissions.Viewer) (entries []EventIndexEntry, truncated bool, err error)
 	// ListUpcomingEvents returns up to limit events on or after the
 	// calendar's current date, chronological, viewer-filtered exactly like
 	// ListEventsForMonth (SQL role filter + per-user visibility_rules +
@@ -1734,6 +1743,54 @@ func (s *calendarService) ListEventsForMonth(ctx context.Context, calendarID, ca
 		return nil, err
 	}
 	return events, nil
+}
+
+// maxEventIndex caps the calendar-wide event index so a very large calendar
+// cannot make a picker read heavy; the picker narrows with q instead.
+const maxEventIndex = 500
+
+// EventIndexEntry is one row of the event index: just enough to name and
+// place an event, never its description or links.
+type EventIndexEntry struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Year  int    `json:"year"`
+	Month int    `json:"month"`
+	Day   int    `json:"day"`
+}
+
+// ListEventIndexForViewer: see the interface doc comment. The visibility
+// steps mirror ListEraEventsForViewer so the index can never name an event a
+// month read would withhold.
+func (s *calendarService) ListEventIndexForViewer(ctx context.Context, calendarID, campaignID, q string, v permissions.Viewer) ([]EventIndexEntry, bool, error) {
+	cal, err := s.calendarInCampaignForViewer(ctx, calendarID, campaignID, v)
+	if err != nil {
+		return nil, false, err
+	}
+	events, err := s.eventRepo.ListAllEvents(ctx, calendarID)
+	if err != nil {
+		return nil, false, fmt.Errorf("list event index: %w", err)
+	}
+	events = filterEventsByUser(events, v)
+	if !v.SkipsPerUserRules() {
+		if events, err = s.hideFromPlayer(ctx, cal, campaignID, events); err != nil {
+			return nil, false, err
+		}
+	}
+	needle := strings.ToLower(strings.TrimSpace(q))
+	entries := make([]EventIndexEntry, 0, len(events))
+	truncated := false
+	for _, e := range events {
+		if needle != "" && !strings.Contains(strings.ToLower(e.Name), needle) {
+			continue
+		}
+		if len(entries) == maxEventIndex {
+			truncated = true
+			break
+		}
+		entries = append(entries, EventIndexEntry{ID: e.ID, Name: e.Name, Year: e.Year, Month: e.Month, Day: e.Day})
+	}
+	return entries, truncated, nil
 }
 
 // maxEraEvents caps one era's event list: the era panel shows a handful of

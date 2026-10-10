@@ -4312,11 +4312,27 @@
       return 'Repeats ' + ev.recurrence_type;
     },
 
+    // loadEventIndex fetches the calendar-wide event list (id, name, date;
+    // the server applies the viewer's visibility) once per drawer open, so a
+    // new event shows up the next time. Resolves true when the list was
+    // read; on failure ruleEnv keeps using the months loaded so far.
+    loadEventIndex: function () {
+      var self = this;
+      return Chronicle.apiFetch(this.apiBase + '/events/index')
+        .then(function (resp) { return resp.ok ? resp.json() : null; })
+        .then(function (body) {
+          if (!body || !Array.isArray(body.data)) return false;
+          self._eventIndex = body.data;
+          return true;
+        })
+        .catch(function () { return false; });
+    },
+
     // What the rule editor and sentences may name on this calendar: its
-    // moons, seasons, weekdays, months and the events seen so far (the
-    // months visited; the API lists events a month at a time). An event
-    // that repeats relative to another cannot be an anchor, so it is not
-    // offered, and neither is the event being edited.
+    // moons, seasons, weekdays, months and its events (the calendar-wide
+    // index when it loaded, plus the months already read, whose rows carry
+    // the rules). An event that repeats relative to another cannot be an
+    // anchor, so it is not offered, and neither is the event being edited.
     ruleEnv: function (exceptId) {
       var self = this, seen = {}, all = [], names = this._eventNames || (this._eventNames = {});
       Object.keys(this.eventsByMonth).forEach(function (k) {
@@ -4326,6 +4342,12 @@
           names[e.id] = e.name;
           all.push(e);
         });
+      });
+      (this._eventIndex || []).forEach(function (e) {
+        if (seen[e.id]) return;
+        seen[e.id] = true;
+        names[e.id] = e.name;
+        all.push(e);
       });
       var events = all.filter(function (e) {
         if (e.id === exceptId) return false;

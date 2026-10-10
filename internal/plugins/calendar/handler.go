@@ -241,6 +241,18 @@ func (h *Handler) ListEventsAPI(c echo.Context) error {
 	return c.JSON(http.StatusOK, events)
 }
 
+// ListEventIndexAPI returns a compact calendar-wide event list for pickers
+// (the repeat rule's "day of <event>"), optionally narrowed by name.
+// GET /campaigns/:id/calendars/:calid/events/index?q=
+func (h *Handler) ListEventIndexAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	entries, truncated, err := h.svc.ListEventIndexForViewer(c.Request().Context(), c.Param("calid"), cc.Campaign.ID, c.QueryParam("q"), viewerFrom(c, cc))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]any{"data": entries, "truncated": truncated})
+}
+
 // ListEraEventsAPI returns the events dated within one era, for the era
 // panel's key events.
 // GET /campaigns/:id/calendars/:calid/eras/:eraID/events
