@@ -275,6 +275,7 @@ GET	/entities/:eid/history	internal/plugins/audit/routes.go
 GET	/entities/:eid/history	internal/plugins/entities/page_safety_handler.go
 GET	/entities/:eid/notes	internal/widgets/entity_notes/routes.go
 GET	/entities/:eid/notes/:nid	internal/widgets/entity_notes/routes.go
+GET	/entities/:eid/peek	internal/plugins/entities/routes.go
 GET	/entities/:eid/permissions	internal/plugins/entities/routes.go
 GET	/entities/:eid/player-notes	internal/plugins/entities/routes.go
 GET	/entities/:eid/posts	internal/widgets/posts/routes.go
