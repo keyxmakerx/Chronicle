@@ -38,6 +38,9 @@ type View struct {
 
 	Foundry FoundryView `json:"foundry"`
 
+	// Requests is nil when the campaign has no armory or nothing waits.
+	Requests *RequestsView `json:"requests,omitempty"`
+
 	// Presence is nil when the campaign has no players or the source is not
 	// wired; the strip then says nothing about who is here.
 	Presence *PresenceView `json:"presence,omitempty"`
@@ -197,4 +200,41 @@ func (p PresenceView) Title() string {
 		return strings.Join(names, ", ")
 	}
 	return "Here: " + list(p.HereNames) + ". Not here: " + list(p.AwayNames) + "."
+}
+
+// Request kinds, which pick the armory route a button posts to.
+const (
+	RequestMove     = "move"
+	RequestPurchase = "purchase"
+)
+
+// RequestView is one stash move or ask-to-buy request waiting on the owner.
+type RequestView struct {
+	Kind string `json:"kind"`
+	ID   int64  `json:"id"`
+	// Text is one plain line: "Bren: move 2 × Healing potion from A to B".
+	Text      string    `json:"text"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// ApprovePath and DeclinePath are the armory routes the buttons post to.
+func (r RequestView) ApprovePath(campaignID string) string { return r.path(campaignID, "approve") }
+func (r RequestView) DeclinePath(campaignID string) string { return r.path(campaignID, "decline") }
+
+func (r RequestView) path(campaignID, verb string) string {
+	dir := "moves"
+	if r.Kind == RequestPurchase {
+		dir = "purchase-requests"
+	}
+	return fmt.Sprintf("/campaigns/%s/armory/%s/%d/%s", campaignID, dir, r.ID, verb)
+}
+
+// RequestsView is the "Waiting on you" block: the oldest few requests, and
+// how many more sit on the Stashes page.
+type RequestsView struct {
+	Items []RequestView `json:"items"`
+	More  int           `json:"more,omitempty"`
+	// CanAnswer is true for the owner and DM-granted co-DMs, the only people
+	// the armory lets approve or refuse; others would see rows without buttons.
+	CanAnswer bool `json:"can_answer"`
 }

@@ -64,6 +64,14 @@ func (s *service) Build(ctx context.Context, campaignID string, v Viewer) (*View
 			view.Downtime = &DowntimeView{Open: open, CanToggle: v.IsOwner(), Pending: pending}
 		}
 	}
+	if s.src.Requests != nil {
+		reqs, ok, err := s.src.Requests.WaitingRequests(ctx, campaignID, v)
+		if err != nil {
+			warn("requests", err)
+		} else if ok {
+			view.Requests = trimRequests(reqs, v.IsOwner())
+		}
+	}
 	if s.src.World != nil {
 		w, err := s.src.World.World(ctx, campaignID, v)
 		if err != nil {
@@ -343,6 +351,29 @@ func pickConditions(items []systems.ReferenceItem, c *systems.DMScreenConditions
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
+}
+
+// requestsShown is how many waiting requests the panel answers in place; the
+// rest are counted and left to the Stashes page.
+const requestsShown = 5
+
+// trimRequests keeps the oldest requestsShown, oldest first, and counts the
+// rest. It returns nil when nothing waits so the block is left out.
+func trimRequests(reqs []Request, canAnswer bool) *RequestsView {
+	if len(reqs) == 0 {
+		return nil
+	}
+	sorted := append([]Request(nil), reqs...)
+	sort.SliceStable(sorted, func(i, j int) bool { return sorted[i].CreatedAt.Before(sorted[j].CreatedAt) })
+	rv := &RequestsView{CanAnswer: canAnswer}
+	for i, r := range sorted {
+		if i == requestsShown {
+			rv.More = len(sorted) - requestsShown
+			break
+		}
+		rv.Items = append(rv.Items, RequestView{Kind: r.Kind, ID: r.ID, Text: r.Text, CreatedAt: r.CreatedAt})
+	}
+	return rv
 }
 
 // buildPresence counts players who are here. It returns nil for no players so

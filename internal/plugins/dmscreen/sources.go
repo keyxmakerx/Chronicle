@@ -17,6 +17,21 @@ type DowntimeSource interface {
 	SetDowntime(ctx context.Context, campaignID string, v Viewer, open bool) (applied, failed int, err error)
 }
 
+// Request is one request waiting on the owner, in the armory's wording.
+type Request struct {
+	Kind      string
+	ID        int64
+	Text      string
+	CreatedAt time.Time
+}
+
+// RequestSource lists every request waiting on the viewer, in any order; the
+// service sorts oldest first and trims. ok is false when the campaign has no
+// armory.
+type RequestSource interface {
+	WaitingRequests(ctx context.Context, campaignID string, v Viewer) (reqs []Request, ok bool, err error)
+}
+
 // WorldSource reads the default calendar's current date and today's weather.
 // It returns nil, nil when there is no calendar the viewer can see.
 type WorldSource interface {
@@ -53,7 +68,7 @@ type Hero struct {
 	Name         string
 	PlayerName   string
 	PlayerUserID string
-	Fields     map[string]any
+	Fields       map[string]any
 }
 
 // PartySource lists the campaign's player characters.
@@ -87,6 +102,7 @@ type SystemSource interface {
 // that section out.
 type Sources struct {
 	Downtime DowntimeSource
+	Requests RequestSource
 	World    WorldSource
 	Nights   NightSource
 	Foundry  FoundrySource

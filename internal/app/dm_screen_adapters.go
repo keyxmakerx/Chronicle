@@ -65,6 +65,39 @@ func (a *dmDowntimeAdapter) SetDowntime(ctx context.Context, campaignID string, 
 	return res.Applied, res.Failed, nil
 }
 
+// dmRequestsAdapter lists the stash moves and ask-to-buy requests waiting on
+// the owner. The armory only builds that list for Owner visibility, so anyone
+// else gets an empty one.
+type dmRequestsAdapter struct {
+	stash  armory.StashService
+	addons addons.AddonService
+}
+
+func (a *dmRequestsAdapter) WaitingRequests(ctx context.Context, campaignID string, v dmscreen.Viewer) ([]dmscreen.Request, bool, error) {
+	on, err := a.addons.IsEnabledForCampaign(ctx, campaignID, armory.AddonSlug)
+	if err != nil || !on {
+		return nil, false, err
+	}
+	page, err := a.stash.StashesPage(ctx, campaignID, armory.Actor{UserID: v.UserID, Role: v.Role})
+	if err != nil {
+		return nil, false, err
+	}
+	out := make([]dmscreen.Request, 0, page.WaitingCount())
+	for _, l := range page.Pending {
+		out = append(out, dmscreen.Request{
+			Kind: dmscreen.RequestMove, ID: l.ID, CreatedAt: l.CreatedAt,
+			Text: l.RequesterName + ": " + armory.MoveRequestText(l),
+		})
+	}
+	for _, p := range page.PendingPurchases {
+		out = append(out, dmscreen.Request{
+			Kind: dmscreen.RequestPurchase, ID: p.ID, CreatedAt: p.CreatedAt,
+			Text: p.RequesterName + ": " + armory.PurchaseRequestSentence(p),
+		})
+	}
+	return out, true, nil
+}
+
 // dmWorldAdapter reads the default calendar's date and today's weather.
 type dmWorldAdapter struct {
 	svc calendar.CalendarService

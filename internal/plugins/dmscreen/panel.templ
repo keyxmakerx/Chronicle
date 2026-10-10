@@ -83,12 +83,15 @@ templ Panel(v *View, csrf string) {
 								{ " " }Only the campaign owner can switch this.
 							}
 						</span>
-						if v.Downtime.Pending > 0 {
+						if v.Requests == nil && v.Downtime.Pending > 0 {
 							<a class="dms-link" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/armory/stashes", v.CampaignID)) }>
 								{ plural(v.Downtime.Pending, "request", "requests") } waiting on you
 							</a>
 						}
 					</div>
+				}
+				if v.Requests != nil {
+					@waitingBlock(v.CampaignID, v.Requests, csrf)
 				}
 				if v.World != nil {
 					<div class="dms-blk">
@@ -170,6 +173,35 @@ templ Panel(v *View, csrf string) {
 				</div>
 			</section>
 		</div>
+	</div>
+}
+
+// waitingBlock lists the oldest waiting requests with Allow and Refuse. The
+// armory's own routes answer with an armory-moved trigger, which makes the
+// panel refetch itself, so a decided row simply disappears.
+templ waitingBlock(campaignID string, r *RequestsView, csrf string) {
+	<div class="dms-blk" data-dms-waiting>
+		<span class="dms-lbl">Waiting on you</span>
+		for _, req := range r.Items {
+			<div class="dms-row dms-req">
+				<span>{ req.Text }</span>
+				if r.CanAnswer {
+					<span class="dms-req-btns">
+						<form hx-post={ req.ApprovePath(campaignID) } hx-swap="none" hx-disabled-elt="find button">
+							<input type="hidden" name="_csrf" value={ csrf }/>
+							<button type="submit" class="dms-req-yes">Allow</button>
+						</form>
+						<form hx-post={ req.DeclinePath(campaignID) } hx-swap="none" hx-disabled-elt="find button">
+							<input type="hidden" name="_csrf" value={ csrf }/>
+							<button type="submit">Refuse</button>
+						</form>
+					</span>
+				}
+			</div>
+		}
+		if r.More > 0 {
+			<a class="dms-link" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/armory/stashes", campaignID)) }>{ fmt.Sprint(r.More) } more on the Stashes page</a>
+		}
 	</div>
 }
 
