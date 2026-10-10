@@ -5272,6 +5272,7 @@ func (a *App) RegisterRoutes() {
 	// Wired here, after the rulebook and rolling tables exist; a degraded
 	// plugin's kind is left out, so its blocks are refused at review.
 	aiKinds := []records.Kind{
+		records.CalendarKind{Svc: calendarService},
 		records.EventKind{Svc: calendarService},
 		records.WeatherKind{Svc: calendarService},
 	}
@@ -5293,14 +5294,14 @@ func (a *App) RegisterRoutes() {
 		records.NoteKind{Svc: noteSvc, Entities: entityService},
 		aiHouseRules,
 		records.SystemEntryKind{Svc: systemEntrySvc},
-		records.GeneratorKind{Cal: calendarService, Tables: aiTables},
+		records.GeneratorKind{Cal: calendarService, Tables: aiTables, Weather: calendarService},
 	)
 	aiWorkspaceHandler.SetRecords(records.NewRegistry(aiKinds...))
 
 	// The read-only lookups an AI may ask for. Game-system entries wait on
 	// the character pick-list service (TODO(#1170)).
 	aiLookups := &records.Lookups{
-		Cal: calendarService, Maps: aiMapsAdapter{mapsService}, Pages: entityService,
+		Cal: calendarService, Weather: calendarService, Maps: aiMapsAdapter{mapsService}, Pages: entityService,
 		Rels: relService, Notes: noteSvc, Rules: &aiHouseRules,
 		Party: &aiPartyAdapter{screen: dmScreenSvc, nights: sessionsService, members: campaignService},
 	}

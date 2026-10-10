@@ -137,10 +137,28 @@ func (r *Registry) Plan(ctx context.Context, campaignID string, a Actor, rec Rec
 	return k, k.Plan(ctx, campaignID, a, rec)
 }
 
+// PlanAll plans records in order. A row that makes the calendar lets the
+// rows after it be checked against that calendar, since commit applies
+// them in the same order.
+func (r *Registry) PlanAll(ctx context.Context, campaignID string, a Actor, recs []Record) ([]Kind, []Plan) {
+	kinds := make([]Kind, len(recs))
+	plans := make([]Plan, len(recs))
+	for i, rec := range recs {
+		kinds[i], plans[i] = r.Plan(ctx, campaignID, a, rec)
+		if ck, ok := kinds[i].(CalendarKind); ok && rec.Action == ActionCreate && plans[i].Error == "" {
+			if _, cal := ck.plan(ctx, campaignID, a, rec); cal != nil {
+				ctx = withPendingCalendar(ctx, cal)
+			}
+		}
+	}
+	return kinds, plans
+}
+
 // briefs is one plain line per kind for the prompt's opening "what you
 // can do" list, which every prompt carries; Docs has the full formats.
 var briefs = map[string]string{
-	"event":        "calendar events on the campaign calendar",
+	KindCalendar:   "make the campaign calendar, or change its months, weekdays, seasons, moons, year label, eras and current date",
+	"event":        "calendar events on the campaign calendar, one-off or repeating",
 	"weather":      "one day's weather on the calendar",
 	"table":        "rolling tables and their entries",
 	"shop-stock":   "what a shop sells, its price and how many",

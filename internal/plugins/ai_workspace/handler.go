@@ -220,23 +220,26 @@ func toRecord(i int, p importer.ParsedPage) records.Record {
 // planRecords plans every record for the review screen.
 func (h *Handler) planRecords(c echo.Context, cc *campaigns.CampaignContext, recs []importer.ParsedPage) []RecordRow {
 	rows := make([]RecordRow, len(recs))
-	a := actorFor(c, cc)
+	all := make([]records.Record, len(recs))
 	for i, p := range recs {
-		rec := toRecord(i, p)
-		row := RecordRow{Index: i, Label: rec.Kind, Action: rec.Action, Name: rec.Name}
-		if h.records == nil {
-			row.Plan = records.Plan{Error: "this server cannot import " + rec.Kind}
-		} else {
-			k, plan := h.records.Plan(c.Request().Context(), cc.Campaign.ID, a, rec)
-			if k != nil {
-				row.Label = k.Label()
-				if t, ok := k.(records.Titled); ok && row.Name == "" {
-					row.Name = t.Title(rec)
-				}
-			}
-			row.Plan = plan
+		all[i] = toRecord(i, p)
+		rows[i] = RecordRow{Index: i, Label: all[i].Kind, Action: all[i].Action, Name: all[i].Name}
+	}
+	if h.records == nil {
+		for i := range rows {
+			rows[i].Plan = records.Plan{Error: "this server cannot import " + all[i].Kind}
 		}
-		rows[i] = row
+		return rows
+	}
+	kinds, plans := h.records.PlanAll(c.Request().Context(), cc.Campaign.ID, actorFor(c, cc), all)
+	for i, k := range kinds {
+		if k != nil {
+			rows[i].Label = k.Label()
+			if t, ok := k.(records.Titled); ok && rows[i].Name == "" {
+				rows[i].Name = t.Title(all[i])
+			}
+		}
+		rows[i].Plan = plans[i]
 	}
 	return rows
 }
@@ -303,7 +306,7 @@ func (h *Handler) ParseImport(c echo.Context) error {
 		if r.Plan.Error == "" {
 			summary.Selectable++
 		} else {
-			summary.ParseErrors++
+			summary.Blocked++
 		}
 	}
 	for _, c := range cls {
@@ -316,7 +319,7 @@ func (h *Handler) ParseImport(c echo.Context) error {
 		case importer.StatusNewCategory:
 			summary.Selectable++
 			summary.NewCategories++
-		case importer.StatusParseError:
+		case importer.StatusParseError, importer.StatusParentProblem:
 			summary.ParseErrors++
 		}
 	}
@@ -330,6 +333,7 @@ func (h *Handler) ParseImport(c echo.Context) error {
 				"conflicts":       summary.Conflicts,
 				"new_categories":  summary.NewCategories,
 				"parse_errors":    summary.ParseErrors,
+				"blocked_records": summary.Blocked,
 				"input_byte_size": len(body),
 				"records":         len(recRows),
 			})

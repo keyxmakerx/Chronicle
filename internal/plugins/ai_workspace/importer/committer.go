@@ -17,10 +17,12 @@ package importer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/importer/htmlconv"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
@@ -198,14 +200,23 @@ func (c *Committer) Commit(ctx context.Context, campaignID string, in CommitInpu
 		result.NewCategoriesCreated = append(result.NewCategoriesCreated, slug)
 	}
 
-	// Phase 2: per-row commits.
+	// Phase 2: per-row commits. made maps a page's name slug to the entity
+	// this commit created or updated for it, so a later row's `parent:`
+	// finds a page from the same paste even when it was saved under a
+	// renamed slug.
+	made := map[string]string{}
 	for i, page := range in.Pages {
 		dec := RowDecision{}
 		if i < len(in.Decisions) {
 			dec = in.Decisions[i]
 		}
 		result.Rows[i] = c.commitRow(ctx, campaignID, in.OwnerID,
-			i, page, dec, typesBySlug, newTypeIDs, failedTypes, in.CampaignDefaultPrivate)
+			i, page, dec, typesBySlug, newTypeIDs, failedTypes, in.CampaignDefaultPrivate, made)
+		if id := result.Rows[i].EntityID; id != "" && (result.Rows[i].Status == StatusCreated ||
+			result.Rows[i].Status == StatusRenamed || result.Rows[i].Status == StatusUpdated) {
+			made[entities.Slugify(page.Name)] = id
+			made[entities.Slugify(result.Rows[i].Name)] = id
+		}
 		switch result.Rows[i].Status {
 		case StatusCreated:
 			result.Created++
@@ -298,6 +309,7 @@ func (c *Committer) commitRow(
 	newTypeIDs map[string]int,
 	failedNewTypes []string,
 	campaignDefaultPrivate bool,
+	made map[string]string,
 ) RowOutcome {
 	out := RowOutcome{Index: idx, Name: dec.Name}
 	if out.Name == "" {
@@ -321,7 +333,7 @@ func (c *Committer) commitRow(
 	case ActionDelete:
 		return c.commitDelete(ctx, campaignID, page, dec, idx)
 	case ActionUpdate:
-		return c.commitUpdateExplicit(ctx, campaignID, page, dec, typesBySlug, newTypeIDs, failedNewTypes, idx)
+		return c.commitUpdateExplicit(ctx, campaignID, page, dec, typesBySlug, newTypeIDs, failedNewTypes, idx, made)
 	}
 	// Fall-through: ActionCreate (or empty).
 
@@ -388,10 +400,23 @@ func (c *Committer) commitRow(
 			out.Reason = "Skipped: name conflicts with " + strconv.Quote(existing.Name)
 			return out
 		case "update", "overwrite": // "overwrite" is a back-compat alias for "update"
-			return c.commitUpdate(ctx, existing, page, dec, typeID, bodyJSON, bodyHTML, isPrivate, idx)
+			parent, _, reason := c.resolveParent(ctx, campaignID, page, made)
+			if reason != "" {
+				out.Status = StatusFailed
+				out.Reason = reason
+				return out
+			}
+			return c.commitUpdate(ctx, existing, page, dec, typeID, bodyJSON, bodyHTML, isPrivate, parent, idx)
 		default: // "rename" (default mode)
 			finalName = c.suffixUntilFree(ctx, campaignID, finalName)
 		}
+	}
+
+	_, parentID, reason := c.resolveParent(ctx, campaignID, page, made)
+	if reason != "" {
+		out.Status = StatusFailed
+		out.Reason = reason
+		return out
 	}
 
 	// Create. Operator-facing errors stay friendly — the technical
@@ -402,11 +427,15 @@ func (c *Committer) commitRow(
 		EntityTypeID: typeID,
 		TypeLabel:    dec.Subcategory,
 		IsPrivate:    isPrivate,
+		ParentID:     parentID,
 		FieldsData:   map[string]any{},
 	})
 	if err != nil {
 		out.Status = StatusFailed
 		out.Reason = "Could not save this page. Try again in a moment."
+		if parentID != "" {
+			out.Reason = parentReason(err, out.Reason)
+		}
 		return out
 	}
 	if err := c.creator.UpdateEntry(ctx, ent.ID, bodyJSON, bodyHTML); err != nil {
@@ -441,6 +470,7 @@ func (c *Committer) commitUpdate(
 	typeID int,
 	bodyJSON, bodyHTML string,
 	isPrivate bool,
+	parent patch.Field[string],
 	idx int,
 ) RowOutcome {
 	out := RowOutcome{Index: idx, Name: existing.Name, Slug: existing.Slug, EntityID: existing.ID}
@@ -472,12 +502,15 @@ func (c *Committer) commitUpdate(
 		Name:      patch.Of(existing.Name), // update keeps the existing name
 		TypeLabel: typeLabel,
 		IsPrivate: isPrivateField,
+		// Absent keeps the page where it is; the service validates a
+		// present parent (same campaign, no cycle).
+		ParentID: parent,
 		// FieldsData is ABSENT (nil), never an empty map: the service
 		// replaces all fields on any non-nil map, and the importer has
 		// no source of structured field data to replace them with.
 	}); err != nil {
 		out.Status = StatusFailed
-		out.Reason = "Could not update the existing page's settings. The original page is unchanged."
+		out.Reason = parentReason(err, "Could not update the existing page's settings. The original page is unchanged.")
 		return out
 	}
 	if err := c.creator.UpdateEntry(ctx, existing.ID, bodyJSON, bodyHTML); err != nil {
@@ -504,6 +537,7 @@ func (c *Committer) commitUpdateExplicit(
 	newTypeIDs map[string]int,
 	failedNewTypes []string,
 	idx int,
+	made map[string]string,
 ) RowOutcome {
 	out := RowOutcome{Index: idx, Name: dec.Name}
 	if out.Name == "" {
@@ -554,8 +588,14 @@ func (c *Committer) commitUpdateExplicit(
 		return out
 	}
 
+	parent, _, reason := c.resolveParent(ctx, campaignID, page, made)
+	if reason != "" {
+		out.Status = StatusFailed
+		out.Reason = reason
+		return out
+	}
 	isPrivate := dec.Visibility == "private" || dec.Visibility == "dm_only"
-	return c.commitUpdate(ctx, existing, page, dec, typeID, bodyJSON, bodyHTML, isPrivate, idx)
+	return c.commitUpdate(ctx, existing, page, dec, typeID, bodyJSON, bodyHTML, isPrivate, parent, idx)
 }
 
 // commitDelete handles action=delete: load the existing entity by
@@ -599,6 +639,44 @@ func (c *Committer) commitDelete(
 	}
 	out.Status = StatusDeleted
 	return out
+}
+
+// resolveParent turns the row's `parent:` into a patch for updates and an
+// id for creates. Absent stays absent so an update never moves a page
+// unasked; "none" is the explicit lift to the top level. A name is looked
+// up among pages this commit already saved before the campaign, because
+// the same-paste page may sit under a renamed slug. The entities service
+// still owns the real checks (same campaign, no cycle) when the id is used.
+func (c *Committer) resolveParent(ctx context.Context, campaignID string, page ParsedPage, made map[string]string) (patch.Field[string], string, string) {
+	if page.FrontMatter.LiftsParent() {
+		return patch.Null[string](), "", ""
+	}
+	key, ok := page.FrontMatter.ParentKey()
+	if !ok {
+		return patch.Absent[string](), "", ""
+	}
+	if key == "" || key == entities.Slugify(page.Name) {
+		return patch.Absent[string](), "", "A page cannot be its own parent, and the parent needs a usable name."
+	}
+	if id, ok := made[key]; ok {
+		return patch.Of(id), id, ""
+	}
+	if e, _ := c.creator.GetBySlug(ctx, campaignID, key); e != nil {
+		return patch.Of(e.ID), e.ID, ""
+	}
+	return patch.Absent[string](), "", "The parent " + strconv.Quote(strings.TrimSpace(page.FrontMatter.Parent)) +
+		" was not found or not saved, so this page was left alone. Include the parent above it, or fix the name."
+}
+
+// parentReason shows the entities service's plain refusal (circular
+// parent, wrong campaign) instead of a generic failure; anything else
+// keeps the fallback so no raw error reaches the review screen.
+func parentReason(err error, fallback string) string {
+	var ae *apperror.AppError
+	if errors.As(err, &ae) && ae.Code == 400 && ae.Message != "" {
+		return "Could not set the parent: " + ae.Message + "."
+	}
+	return fallback
 }
 
 // suffixUntilFree appends "(Imported)" then "-2", "-3", ... to the

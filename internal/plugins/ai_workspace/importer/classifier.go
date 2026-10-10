@@ -103,7 +103,74 @@ func (c *Classifier) ClassifyAll(ctx context.Context, pages []ParsedPage) ([]Cla
 		}
 		out[i] = cls
 	}
+	c.checkParents(ctx, pages, out)
 	return out, nil
+}
+
+// checkParents turns an unusable `parent:` into a row problem. It runs
+// after every row is classified because "created earlier in this paste"
+// depends on the other rows, and it only ever downgrades a row, never
+// hides an existing problem.
+func (c *Classifier) checkParents(ctx context.Context, pages []ParsedPage, cls []Classification) {
+	for i, p := range pages {
+		if p.Status == StatusParseError || cls[i].Status == StatusParseError ||
+			cls[i].Status == StatusActionMismatch || p.FrontMatter.Action == ActionDelete {
+			continue
+		}
+		key, ok := p.FrontMatter.ParentKey()
+		if !ok {
+			continue
+		}
+		if problem := c.parentProblem(ctx, pages, i, key); problem != "" {
+			cls[i].Status = StatusParentProblem
+			cls[i].Reason = problem
+		}
+	}
+}
+
+// parentProblem explains, in plain words, why page i's parent cannot be
+// used; "" means it resolves. Names match by slug, so two pastes of the
+// same name are the only way to be ambiguous: the campaign itself keeps
+// slugs unique.
+func (c *Classifier) parentProblem(ctx context.Context, pages []ParsedPage, i int, key string) string {
+	named := strings.TrimSpace(pages[i].FrontMatter.Parent)
+	quoted := `"` + named + `"`
+	if key == "" {
+		return "The parent " + quoted + " is not a usable page name."
+	}
+	if key == entities.Slugify(pages[i].Name) {
+		return "A page cannot be its own parent. Name a different page, or remove the parent line."
+	}
+	earlier, deleted := 0, false
+	for j, q := range pages {
+		if q.Status == StatusParseError || entities.Slugify(q.Name) != key {
+			continue
+		}
+		if j < i {
+			if q.FrontMatter.Action == ActionDelete {
+				deleted = true
+				continue
+			}
+			earlier++
+		}
+	}
+	switch {
+	case earlier > 1:
+		return "The parent " + quoted + " matches more than one page in this paste. Give each page a distinct name."
+	case earlier == 1:
+		return ""
+	case deleted:
+		return "The parent " + quoted + " is being deleted in this paste."
+	}
+	if existing, _ := c.lookup.GetBySlug(ctx, c.campaignID, key); existing != nil {
+		return ""
+	}
+	for j := i + 1; j < len(pages); j++ {
+		if pages[j].Status != StatusParseError && entities.Slugify(pages[j].Name) == key {
+			return "The parent " + quoted + " comes later in this paste. Move it above this page."
+		}
+	}
+	return "No page called " + quoted + " exists in this campaign or earlier in this paste."
 }
 
 // ensureTypes lazy-loads the entity-type registry. Called by

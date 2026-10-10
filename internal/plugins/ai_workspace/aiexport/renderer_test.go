@@ -537,3 +537,39 @@ func TestRenderEntities_MarkdownJSONSafe(t *testing.T) {
 		t.Errorf("JSON round-trip drifted")
 	}
 }
+
+func TestRenderEntities_NamesOnlyVisibleParent(t *testing.T) {
+	parent := "p1"
+	hidden := "hidden"
+	extra := "x1"
+	types := []entities.EntityType{{ID: 1, Name: "Location", NamePlural: "Locations"}}
+	tests := []struct {
+		name    string
+		ents    []entities.Entity
+		opts    Options
+		want    string
+		notWant string
+	}{
+		{"parent in the set", []entities.Entity{
+			{ID: "p1", Name: "Harbor", EntityTypeID: 1},
+			{ID: "c1", Name: "Docks", EntityTypeID: 1, ParentID: &parent}}, Options{}, "**Parent:** [Harbor](#harbor)", ""},
+		{"parent not visible", []entities.Entity{
+			{ID: "c1", Name: "Vault", EntityTypeID: 1, ParentID: &hidden}}, Options{}, "", "**Parent:**"},
+		{"parent supplied by options", []entities.Entity{
+			{ID: "c1", Name: "Pier", EntityTypeID: 1, ParentID: &extra}}, Options{ParentNames: map[string]string{"x1": "Coast"}}, "**Parent:** [Coast](#coast)", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out, err := RenderEntities(context.Background(), tt.ents, types, nil, nil, tt.opts)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tt.want != "" && !strings.Contains(out, tt.want) {
+				t.Errorf("missing %q in:\n%s", tt.want, out)
+			}
+			if tt.notWant != "" && strings.Contains(out, tt.notWant) {
+				t.Errorf("unexpected %q in:\n%s", tt.notWant, out)
+			}
+		})
+	}
+}
