@@ -234,11 +234,11 @@ func (s *questService) Put(ctx context.Context, campaignID, entityID string, v V
 	if want != version {
 		return nil, apperror.NewConflict("this quest was changed by someone else; reload and try again")
 	}
-	prevTitle := q.Notice.Title
+	prevTitle, prevHidden := q.Notice.Title, q.Layout.Notice.Hidden
 	if err := s.merge(ctx, campaignID, &q, p); err != nil {
 		return nil, err
 	}
-	plan, err := s.planDue(ctx, campaignID, ent, v, &q, p, prevTitle)
+	plan, err := s.planDue(ctx, campaignID, ent, v, &q, p, prevTitle, prevHidden)
 	if err != nil {
 		return nil, err
 	}

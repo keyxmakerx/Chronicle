@@ -338,7 +338,7 @@ func (s *stashService) give(ctx context.Context, campaignID string, a Actor, cha
 	self := Endpoint{Kind: EndpointCharacter, ID: char.ID}
 	m := &Move{
 		CampaignID: campaignID, Kind: MoveKindItem, ItemEntityID: item.ID, Quantity: qty,
-		From: self, To: self, Status: MoveApplied, RequestedBy: a.UserID, byGM: true,
+		From: self, To: self, Status: MoveApplied, RequestedBy: a.UserID, seesDmOnly: true,
 	}
 	if err := s.Repo.InsertMove(ctx, m); err != nil {
 		// The item is already on the character and its relation events have

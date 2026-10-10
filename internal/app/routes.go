@@ -1357,6 +1357,11 @@ type mapEventPublisherAdapter struct {
 	// published to DM-equivalent clients only. Nil fails closed: with no way to
 	// tell, every pin and drawing event is restricted.
 	shadows maps.ShadowLookup
+	// frames reads a map's frame, to place a turned picture against shadows.
+	// Nil leaves the frame unknown, which withholds every turned picture.
+	frames interface {
+		MapFrame(ctx context.Context, mapID string) maps.MapFrame
+	}
 	// fog resolves a map's unexplored hexes so a pin or drawing wholly inside
 	// them is published to DM-equivalent clients only. Nil fails closed, like
 	// shadows.
@@ -1371,7 +1376,7 @@ type mapEventPublisherAdapter struct {
 // and the whole picture under unexplored hexes.
 func wireHexFog(mapsService maps.MapService, drawingService maps.DrawingService, events *mapEventPublisherAdapter, hexService maps.HexService) {
 	mapsService.SetHexFogLookup(hexService)
-	mapsService.SetFogMediaLookup(drawingService)
+	mapsService.SetPictureFileLookup(drawingService)
 	drawingService.SetHexFogLookup(hexService)
 	events.fog = hexService
 	hexService.SetEventPublisher(events)
@@ -1437,7 +1442,7 @@ func (a *mapImageSourceAdapter) ReadImage(ctx context.Context, campaignID, media
 
 // newMapEventPublisher builds the WebSocket publisher with its shadow lookup.
 func newMapEventPublisher(bus ws.EventBus, drawingService maps.DrawingService) *mapEventPublisherAdapter {
-	return &mapEventPublisherAdapter{bus: bus, shadows: drawingService}
+	return &mapEventPublisherAdapter{bus: bus, shadows: drawingService, frames: drawingService}
 }
 
 // underShadow reports whether an event about a pin or drawing on mapID must be
@@ -1537,11 +1542,19 @@ func (a *mapEventPublisherAdapter) PublishDrawingEvent(eventType string, campaig
 	default:
 		return
 	}
-	// The picture a fogged hex layer is pinned to is DM-only on the wire too:
-	// its event carries the file id, which is the secret under the fog.
+	// A picture whose file the fog or a shadow withholds is DM-only on the
+	// wire too: its event carries the file id, which is the secret.
+	var frame maps.MapFrame
+	if a.frames != nil && maps.PictureIsTurned(drawing) {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		frame = a.frames.MapFrame(ctx, drawing.MapID)
+		cancel()
+	}
 	dmOnly := drawing.Visibility == "dm_only" ||
 		(drawing.DrawingType != maps.DrawingTypeShadow &&
-			(a.underShadow(drawing.MapID, func(areas []maps.ShadowArea) bool { return maps.DrawingUnderShadow(areas, drawing) }) ||
+			(a.underShadow(drawing.MapID, func(areas []maps.ShadowArea) bool {
+				return maps.DrawingUnderShadow(areas, drawing) || maps.ShadowWithholdsImageOf(areas, drawing, frame)
+			}) ||
 				a.underFog(drawing.MapID, func(f *maps.FogMask) bool { return f.HidesDrawing(drawing) || f.WithholdsImageOf(drawing) })))
 	a.publishWithAudience(msgType, campaignID, drawing.ID, drawing, dmOnly, maps.ParseVisibilityRules(drawing.VisibilityRules))
 }
@@ -5160,6 +5173,13 @@ func (a *App) RegisterRoutes() {
 			return "", err
 		}
 		return m.DrawWho(), nil
+	})
+	drawingService.SetMapFrameLookup(func(ctx context.Context, mapID string) (int, int, error) {
+		m, err := mapsService.GetMap(ctx, mapID)
+		if err != nil {
+			return 0, 0, err
+		}
+		return m.ImageWidth, m.ImageHeight, nil
 	})
 	drawingService.SetMediaVerifier(&mapMediaVerifierAdapter{svc: mediaService})
 	mapsService.SetEventPublisher(mapEvents)

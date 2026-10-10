@@ -85,7 +85,7 @@ func (s *stashService) loadShareTarget(ctx context.Context, campaignID string, a
 	if err != nil {
 		return nil, err
 	}
-	rel, err := s.hasItem(ctx, campaignID, char.ID, item.ID, a.IsGM())
+	rel, err := s.hasItem(ctx, campaignID, char.ID, item.ID, a.SeesDmOnly())
 	if err != nil {
 		return nil, err
 	}
