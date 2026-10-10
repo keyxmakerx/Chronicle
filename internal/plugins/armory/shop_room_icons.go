@@ -14,4 +14,7 @@ var shopRoomIcons = []string{
 	"book-open", "star", "moon", "feather", "lightbulb", "bread-slice", "tent",
 	"cheese", "shirt", "fish", "bucket", "apple-whole", "broom",
 	"scale-balanced", "bell", "sword", "dagger", "axe", "bow",
+	// Mood decorations.
+	"candy", "lollipop", "cupcake", "ghost", "web", "tentacle", "gift",
+	"snowflake", "shell", "anchor", "butterfly", "sun", "beer-mug",
 }

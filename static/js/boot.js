@@ -43,6 +43,83 @@
   // mounts of one dead widget logs one line, not twenty.
   var warnedUnmatched = {};
 
+  // --- On-sight widget scripts (ADR-063) ---
+  // The layout lists, per widget name, the scripts that implement it
+  // (#chronicle-widget-scripts). A mount whose widget is not registered
+  // fetches them, and register() then mounts it, so a feature's code is only
+  // downloaded on pages that show it. The scripts are created here rather
+  // than swapped in, which is why htmx's allowScriptTags=false leaves them be.
+  var widgetScripts = null;
+  var requestedScripts = {};
+  // Only Chronicle's own static files may be loaded this way, whatever the
+  // list says: a same-origin /static/ path with an optional ?v= hash.
+  var WIDGET_SCRIPT_URL = /^\/static\/[A-Za-z0-9_.\-\/]+\.js(\?v=[A-Za-z0-9._\-]+)?$/;
+  var requestedWidgets = {};
+
+  function widgetScriptList(name) {
+    if (widgetScripts === null) {
+      widgetScripts = {};
+      var el = document.getElementById('chronicle-widget-scripts');
+      if (el) {
+        try {
+          widgetScripts = JSON.parse(el.textContent) || {};
+        } catch (err) {
+          console.error('[Chronicle] Unreadable widget script list:', err);
+        }
+      }
+    }
+    var list = Object.prototype.hasOwnProperty.call(widgetScripts, name)
+      ? widgetScripts[name]
+      : null;
+    return Array.isArray(list) && list.length ? list : null;
+  }
+
+  function appendWidgetScript(name, url, isLast) {
+    if (!WIDGET_SCRIPT_URL.test(url) || url.indexOf('..') !== -1) {
+      console.warn('[Chronicle] Refused widget script ' + url + ' for data-widget="' +
+        name + '" — not a Chronicle static path.');
+      return;
+    }
+    var s = document.createElement('script');
+    s.src = url;
+    // Inserted scripts run in arrival order unless async is off; off keeps
+    // helpers ahead of the script that registers the widget.
+    s.async = false;
+    s.onerror = function () {
+      console.warn('[Chronicle] Could not load ' + url + ' for data-widget="' +
+        name + '" — this mount will stay empty.');
+    };
+    if (isLast) {
+      s.onload = function () {
+        if (!widgets[name]) {
+          console.warn('[Chronicle] ' + url + ' loaded but did not register ' +
+            'data-widget="' + name + '" — check its Chronicle.register name.');
+        }
+      };
+    }
+    document.head.appendChild(s);
+  }
+
+  /**
+   * Fetch the scripts the layout lists for a widget, once per page.
+   *
+   * @param {string} name - Widget name (data-widget value).
+   * @returns {boolean} true when the widget is listed (its scripts are
+   *   loading or loaded), false when nothing is known about it.
+   */
+  function loadWidgetScripts(name) {
+    if (requestedWidgets[name]) return true;
+    var list = widgetScriptList(name);
+    if (!list) return false;
+    requestedWidgets[name] = true;
+    for (var i = 0; i < list.length; i++) {
+      if (requestedScripts[list[i]]) continue;
+      requestedScripts[list[i]] = true;
+      appendWidgetScript(name, list[i], i === list.length - 1);
+    }
+    return true;
+  }
+
   /**
    * Report `data-widget` names that are mounted in the DOM but have no
    * registered implementation, once per name per page.
@@ -60,13 +137,14 @@
     var elements = root.querySelectorAll('[data-widget]');
     for (var i = 0; i < elements.length; i++) {
       var name = elements[i].getAttribute('data-widget');
-      if (!name || widgets[name] || warnedUnmatched[name]) continue;
+      // A listed widget reports its own failure when its scripts load.
+      if (!name || widgets[name] || warnedUnmatched[name] || requestedWidgets[name]) continue;
       warnedUnmatched[name] = true;
       console.warn(
         '[Chronicle] No implementation registered for data-widget="' + name +
         '" — this mount will stay empty. Its script is probably not loaded on ' +
-        'this page (internal/templates/layouts/base.templ, or the plugin ' +
-        'body-script registry in internal/app/routes.go).'
+        'this page (internal/templates/layouts/base.templ, the plugin ' +
+        'body-script registry, or a plugin\'s Widgets in internal/app/routes.go).'
       );
     }
   }
@@ -117,7 +195,9 @@
     var name = el.getAttribute('data-widget');
     var impl = widgets[name];
     if (!impl) {
-      // Widget not yet registered -- will be mounted when register() is called.
+      // Widget not yet registered -- will be mounted when register() is
+      // called, which its on-sight scripts do once they arrive.
+      loadWidgetScripts(name);
       return;
     }
 

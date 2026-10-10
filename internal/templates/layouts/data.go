@@ -40,6 +40,7 @@ const (
 	keyMediaThumbFunc      ctxKey = "layout_media_thumb_func"
 	keyExtWidgetScripts    ctxKey = "layout_ext_widget_scripts"
 	keyPluginBodyScripts   ctxKey = "layout_plugin_body_scripts"
+	keyWidgetScripts       ctxKey = "layout_widget_scripts"
 	keyAccentColor         ctxKey = "layout_accent_color"
 	keyBrandName           ctxKey = "layout_brand_name"
 	keyBrandLogo           ctxKey = "layout_brand_logo"
@@ -565,6 +566,23 @@ func GetPluginBodyScripts(ctx context.Context) []string {
 	return urls
 }
 
+// SetWidgetScripts stores the on-sight widget manifest (widget name → script
+// URLs in load order). base.templ emits it as JSON for boot.js, which fetches
+// a widget's scripts when its mount first appears. Global and constant for
+// the process lifetime, like the plugin body scripts.
+func SetWidgetScripts(ctx context.Context, m map[string][]string) context.Context {
+	return context.WithValue(ctx, keyWidgetScripts, m)
+}
+
+// GetWidgetScripts returns the on-sight widget manifest, never nil, so the
+// emitted JSON is always an object.
+func GetWidgetScripts(ctx context.Context) map[string][]string {
+	if m, ok := ctx.Value(keyWidgetScripts).(map[string][]string); ok && m != nil {
+		return m
+	}
+	return map[string][]string{}
+}
+
 // SetAccentColor stores the campaign's custom accent color in the context.
 func SetAccentColor(ctx context.Context, color string) context.Context {
 	return context.WithValue(ctx, keyAccentColor, color)
@@ -831,6 +849,8 @@ type TopbarLiveData struct {
 	Weather string
 	// Moons holds today's phase for each visible moon.
 	Moons []TopbarMoon
+	// Era is the name of the era today falls in, e.g. "Age of Ash".
+	Era string
 	// NextNight is the countdown to the next game night, e.g. "Fri 7 pm".
 	NextNight TopbarNight
 }
