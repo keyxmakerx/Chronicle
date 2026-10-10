@@ -4403,6 +4403,10 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
   .dms-cond p { margin-top: .25rem; color: var(--dms-ink-muted); white-space: pre-line; }
   .dms-row { display: flex; justify-content: space-between; align-items: center; gap: .5rem; font-size: .88rem; border-top: 1px dashed var(--dms-leaf-edge); padding-top: .4rem; }
   .dms-row button { font-size: .78rem; border: 1px solid var(--dms-leaf-edge); border-radius: .35rem; padding: .1rem .45rem; color: var(--dms-ink); }
+  .dms-chipsrow { display: flex; flex-wrap: wrap; gap: .3rem; }
+  .dms-stepchip { font-size: .78rem; padding: .1rem .55rem; border-radius: 999px; border: 1px solid var(--dms-hinge); color: var(--dms-ink); }
+  .dms-stepchip:hover:not(:disabled) { background: var(--dms-ok-soft); }
+  .dms-stepchip:disabled { opacity: .6; cursor: default; }
   .dms-req { align-items: flex-start; }
   .dms-notes { min-height: 10rem; resize: vertical; font: inherit; }
   .dms-req-btns { display: flex; gap: .3rem; flex-shrink: 0; }

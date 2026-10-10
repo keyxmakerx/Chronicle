@@ -96,6 +96,36 @@ type WorldView struct {
 	TimeLabel  string `json:"time_label"`
 	// Weather is a one-line description, empty when none is set for today.
 	Weather string `json:"weather"`
+	// CanStep is true when the viewer may move the date forward by hand and
+	// the calendar lets them: not a real-time calendar, and not a scribe.
+	CanStep bool `json:"can_step"`
+}
+
+// TimeStep is one of the three chips under the date: how far to move it.
+type TimeStep struct {
+	// Key is the wire value the chip posts.
+	Key   string
+	Label string
+	// Hours and Days are in the calendar's own units; a day is the calendar's
+	// hours per day, not 24.
+	Hours, Days int
+}
+
+// TimeSteps are the chips, in the order they are drawn.
+var TimeSteps = []TimeStep{
+	{Key: "1h", Label: "+1 hour", Hours: 1},
+	{Key: "8h", Label: "+8 hours", Hours: 8},
+	{Key: "1d", Label: "Next day", Days: 1},
+}
+
+// stepByKey finds a chip by its wire value.
+func stepByKey(key string) (TimeStep, bool) {
+	for _, s := range TimeSteps {
+		if s.Key == key {
+			return s, true
+		}
+	}
+	return TimeStep{}, false
 }
 
 // NightView is the next game night and its answers so far.

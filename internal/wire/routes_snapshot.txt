@@ -611,6 +611,7 @@ POST	/diagnostics/workspace/run	internal/plugins/admin/routes.go
 POST	/dm-screen/downtime	internal/plugins/syncapi/routes.go
 POST	/dm-screen/reveal/:eid	internal/plugins/dmscreen/routes.go
 POST	/dm-screen/reveal/:entityID	internal/plugins/syncapi/routes.go
+POST	/dm-screen/time	internal/plugins/dmscreen/routes.go
 POST	/entities	internal/plugins/entities/routes.go
 POST	/entities	internal/plugins/syncapi/routes.go
 POST	/entities/:eid/claim	internal/plugins/entities/routes.go

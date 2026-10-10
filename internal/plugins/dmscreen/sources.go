@@ -50,9 +50,15 @@ type NotesSource interface {
 }
 
 // WorldSource reads the default calendar's current date and today's weather.
-// It returns nil, nil when there is no calendar the viewer can see.
+// It returns nil, nil when there is no calendar the viewer can see. It sets
+// WorldView.CanStep only for what the calendar allows (not a real-time
+// calendar); the service adds the role check.
 type WorldSource interface {
 	World(ctx context.Context, campaignID string, v Viewer) (*WorldView, error)
+
+	// Advance moves the default calendar forward by hours and whole days of
+	// its own length. The calendar refuses a real-time calendar.
+	Advance(ctx context.Context, campaignID string, v Viewer, hours, days int) error
 }
 
 // NightSource returns the next game night that hasn't happened, or nil.

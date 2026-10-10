@@ -40,6 +40,21 @@ func (h *Handler) Show(c echo.Context) error {
 	return middleware.Render(c, http.StatusOK, Panel(view, middleware.GetCSRFToken(c)))
 }
 
+// StepTime handles POST /campaigns/:id/dm-screen/time. The panel listens for
+// the dms-refresh trigger and redraws itself with the new date.
+func (h *Handler) StepTime(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	if err := h.svc.StepTime(c.Request().Context(), cc.Campaign.ID, viewerOf(c, cc), c.FormValue("step")); err != nil {
+		return err
+	}
+	c.Response().Header().Set("HX-Trigger", "dms-refresh")
+	c.Response().Header().Set("HX-Reswap", "none")
+	return c.NoContent(http.StatusNoContent)
+}
+
 // ShowNote handles GET /campaigns/:id/dm-screen/notes.
 func (h *Handler) ShowNote(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)

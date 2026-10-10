@@ -27,6 +27,9 @@ type Service interface {
 	Reveal(ctx context.Context, entityID, campaignID string, v Viewer) (string, error)
 	SetDowntime(ctx context.Context, campaignID string, v Viewer, open bool) (DowntimeResult, error)
 
+	// StepTime moves the world's date forward by one of the TimeSteps.
+	StepTime(ctx context.Context, campaignID string, v Viewer, stepKey string) error
+
 	// Note reads the screen's note; SaveNote replaces its text.
 	Note(ctx context.Context, campaignID string, v Viewer) (*NotesView, error)
 	SaveNote(ctx context.Context, campaignID string, v Viewer, text string) (*NotesView, error)
@@ -80,6 +83,11 @@ func (s *service) Build(ctx context.Context, campaignID string, v Viewer) (*View
 		w, err := s.src.World.World(ctx, campaignID, v)
 		if err != nil {
 			warn("world", err)
+		}
+		if w != nil {
+			// Same rule as Set today on the calendar page: the owner and
+			// DM-granted co-DMs only.
+			w.CanStep = w.CanStep && v.IsOwner()
 		}
 		view.World = w
 	}
@@ -269,6 +277,22 @@ func (s *service) SaveNote(ctx context.Context, campaignID string, v Viewer, tex
 		Label: label, Text: plainFromProse(n.Entry), NoteID: n.ID,
 		Link: fmt.Sprintf("/campaigns/%s/journal/%s", campaignID, n.ID),
 	}, nil
+}
+
+// StepTime moves the date forward by the chip's amount. Only the owner and
+// DM-granted co-DMs may, as for Set today; the step must be one of TimeSteps.
+func (s *service) StepTime(ctx context.Context, campaignID string, v Viewer, stepKey string) error {
+	if !v.IsOwner() {
+		return apperror.NewForbidden("only the campaign owner can move the date")
+	}
+	step, ok := stepByKey(stepKey)
+	if !ok {
+		return apperror.NewBadRequest("unknown time step")
+	}
+	if s.src.World == nil {
+		return apperror.NewNotFound("the calendar is not available")
+	}
+	return s.src.World.Advance(ctx, campaignID, v, step.Hours, step.Days)
 }
 
 // buildMeters reads each declared meter from a hero's sheet fields. A meter

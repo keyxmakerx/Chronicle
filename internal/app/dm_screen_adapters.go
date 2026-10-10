@@ -187,7 +187,7 @@ func (a *dmWorldAdapter) World(ctx context.Context, campaignID string, v dmscree
 		}
 		return nil, err
 	}
-	w := &dmscreen.WorldView{CalendarID: cal.ID, DateLabel: cal.FullDateLabel(), TimeLabel: cal.FormatCurrentTime()}
+	w := &dmscreen.WorldView{CalendarID: cal.ID, DateLabel: cal.FullDateLabel(), TimeLabel: cal.FormatCurrentTime(), CanStep: !cal.UsesRealTime()}
 	days, err := a.svc.ListDayWeather(ctx, cal.ID, campaignID, cal.CurrentYear, cal.CurrentMonth, pv)
 	if err != nil {
 		return w, err
@@ -199,6 +199,16 @@ func (a *dmWorldAdapter) World(ctx context.Context, campaignID string, v dmscree
 		}
 	}
 	return w, nil
+}
+
+// Advance steps the default calendar forward; the calendar service refuses a
+// real-time calendar and checks the new date against the calendar's months.
+func (a *dmWorldAdapter) Advance(ctx context.Context, campaignID string, v dmscreen.Viewer, hours, days int) error {
+	cal, err := a.svc.GetDefaultCalendarForViewer(ctx, campaignID, permissions.RequestViewer(v.Role, v.UserID))
+	if err != nil {
+		return err
+	}
+	return a.svc.AdvanceCurrent(ctx, cal.ID, campaignID, hours, days)
 }
 
 // weatherLine renders a day's weather as "Light rain, 11°C, wind W".

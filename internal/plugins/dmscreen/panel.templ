@@ -17,7 +17,7 @@ templ Panel(v *View, csrf string) {
 		aria-modal="true"
 		aria-labelledby="dms-title"
 		hx-get={ fmt.Sprintf("/campaigns/%s/dm-screen", v.CampaignID) }
-		hx-trigger="armory-moved from:body"
+		hx-trigger="armory-moved from:body, dms-refresh from:body"
 		hx-swap="outerHTML"
 	>
 		<div class="dms-head">
@@ -101,6 +101,22 @@ templ Panel(v *View, csrf string) {
 								{ " · " + v.World.TimeLabel }
 							}
 						</span>
+						if v.World.CanStep {
+							<div class="dms-chipsrow" role="group" aria-label="Move the date forward">
+								for _, st := range TimeSteps {
+									<button
+										type="button"
+										class="dms-stepchip"
+										data-step={ st.Key }
+										hx-post={ fmt.Sprintf("/campaigns/%s/dm-screen/time", v.CampaignID) }
+										hx-vals={ fmt.Sprintf(`{"step":"%s"}`, st.Key) }
+										hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrf) }
+										hx-swap="none"
+										hx-disabled-elt="this"
+									>{ st.Label }</button>
+								}
+							</div>
+						}
 						<a class="dms-link" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s", v.CampaignID, v.World.CalendarID)) }>Open the calendar</a>
 					</div>
 					<div class="dms-blk">
