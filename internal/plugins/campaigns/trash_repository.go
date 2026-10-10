@@ -117,10 +117,21 @@ func (r *campaignRepository) ListPurgeDue(ctx context.Context, cutoff time.Time,
 // undone, or already purged). Claiming twice is fine: the first time stamps
 // purge_started_at and later runs keep it, so a purge that stopped halfway is
 // resumed rather than refused.
-func (r *campaignRepository) ClaimForPurge(ctx context.Context, id string, at time.Time) (bool, error) {
-	if _, err := r.db.ExecContext(ctx,
-		`UPDATE campaigns SET purge_started_at = COALESCE(purge_started_at, ?), updated_at = updated_at
-		 WHERE id = ? AND deleted_at IS NOT NULL`, at, id); err != nil {
+//
+// olderThan is the run's cutoff: an unclaimed campaign is claimed only if it
+// was trashed before it, checked in the same statement. A campaign that was
+// listed as due, then undone and trashed again, is younger than the cutoff by
+// the time it is claimed and survives. The zero time (Empty now) skips the age
+// condition; deleted_at IS NOT NULL always applies.
+func (r *campaignRepository) ClaimForPurge(ctx context.Context, id string, at, olderThan time.Time) (bool, error) {
+	query := `UPDATE campaigns SET purge_started_at = COALESCE(purge_started_at, ?), updated_at = updated_at
+		 WHERE id = ? AND deleted_at IS NOT NULL`
+	args := []any{at, id}
+	if !olderThan.IsZero() {
+		query += ` AND (purge_started_at IS NOT NULL OR deleted_at < ?)`
+		args = append(args, olderThan)
+	}
+	if _, err := r.db.ExecContext(ctx, query, args...); err != nil {
 		return false, fmt.Errorf("claiming campaign for purge: %w", err)
 	}
 	var claimed bool

@@ -139,7 +139,7 @@ func (m *mockCampaignRepoForInvites) ListTrashed(context.Context) ([]TrashedCamp
 func (m *mockCampaignRepoForInvites) ListPurgeDue(context.Context, time.Time, bool) ([]string, error) {
 	return nil, nil
 }
-func (m *mockCampaignRepoForInvites) ClaimForPurge(context.Context, string, time.Time) (bool, error) {
+func (m *mockCampaignRepoForInvites) ClaimForPurge(context.Context, string, time.Time, time.Time) (bool, error) {
 	return true, nil
 }
 func (m *mockCampaignRepoForInvites) PurgeTrashed(context.Context, string) error { return nil }

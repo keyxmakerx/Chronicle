@@ -97,7 +97,8 @@ type TrashService interface {
 	// anything a previous run left half done.
 	PurgeDue(ctx context.Context) (EmptyResult, error)
 	// RetentionDays is the setting the purger obeys.
-	RetentionDays(ctx context.Context) int
+	// It fails when the setting cannot be read, so nothing is removed on a guess.
+	RetentionDays(ctx context.Context) (int, error)
 	// StartPurger runs PurgeDue now and then every hour until ctx ends.
 	StartPurger(ctx context.Context)
 }
@@ -107,7 +108,7 @@ type TrashedCampaigns interface {
 	ListTrashed(ctx context.Context) ([]campaigns.TrashedCampaign, error)
 	RestoreFromTrash(ctx context.Context, campaignID string) error
 	ListPurgeDue(ctx context.Context, cutoff time.Time, all bool) ([]string, error)
-	PurgeTrashed(ctx context.Context, campaignID string) (bool, error)
+	PurgeTrashed(ctx context.Context, campaignID string, olderThan time.Time) (bool, error)
 }
 
 // TrashedFiles is the part of the media service the Trash needs.
@@ -126,7 +127,7 @@ type UnusedUploadFinder interface {
 
 // TrashRetention reads the retention setting.
 type TrashRetention interface {
-	SiteTrashRetentionDays(ctx context.Context) int
+	SiteTrashRetentionDays(ctx context.Context) (int, error)
 }
 
 type trashService struct {
@@ -149,22 +150,28 @@ func NewTrashService(c TrashedCampaigns, f TrashedFiles, finder UnusedUploadFind
 	return &trashService{campaigns: c, files: f, finder: finder, batches: b, retention: r, now: func() time.Time { return time.Now().UTC() }}
 }
 
-func (s *trashService) RetentionDays(ctx context.Context) int {
+func (s *trashService) RetentionDays(ctx context.Context) (int, error) {
 	if s.retention == nil {
-		return settings.DefaultSiteTrashRetentionDays
+		return settings.DefaultSiteTrashRetentionDays, nil
 	}
-	days := s.retention.SiteTrashRetentionDays(ctx)
+	days, err := s.retention.SiteTrashRetentionDays(ctx)
+	if err != nil {
+		return 0, err
+	}
 	if !settings.IsValidSiteTrashRetention(days) {
-		return settings.DefaultSiteTrashRetentionDays
+		return 0, fmt.Errorf("trash retention of %d days is not one of the offered choices", days)
 	}
-	return days
+	return days, nil
 }
 
 // --- Reading ---
 
 func (s *trashService) Overview(ctx context.Context) (*TrashOverview, error) {
 	now := s.now()
-	days := s.RetentionDays(ctx)
+	days, err := s.RetentionDays(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	trashed, err := s.campaigns.ListTrashed(ctx)
 	if err != nil {
@@ -292,7 +299,7 @@ func (s *trashService) UndoBatch(ctx context.Context, batchID string) (*TrashBat
 	if b == nil {
 		return nil, apperror.NewNotFound("that clean-up is not in the trash any more")
 	}
-	claimed, err := s.batches.Claim(ctx, batchID, batchTrashed, batchRestoring)
+	claimed, err := s.batches.Claim(ctx, batchID, batchTrashed, batchRestoring, time.Time{})
 	if err != nil {
 		return nil, apperror.NewInternal(err)
 	}
@@ -332,15 +339,28 @@ func (s *trashService) purge(ctx context.Context, all bool) (EmptyResult, error)
 	defer s.purgeMu.Unlock()
 
 	now := s.now()
-	cutoff := now.AddDate(0, 0, -s.RetentionDays(ctx))
+	// A retention that cannot be read skips the whole run: the purge deletes
+	// for good, so it never proceeds on a default that may be shorter than the
+	// configured period.
+	// Empty now ignores age, so it does not need the setting at all.
+	var cutoff time.Time
 	var res EmptyResult
+	if !all {
+		days, err := s.RetentionDays(ctx)
+		if err != nil {
+			return EmptyResult{}, fmt.Errorf("reading trash retention: %w", err)
+		}
+		cutoff = now.AddDate(0, 0, -days)
+	}
 
 	ids, err := s.campaigns.ListPurgeDue(ctx, cutoff, all)
 	if err != nil {
 		return res, err
 	}
 	for _, id := range ids {
-		purged, err := s.campaigns.PurgeTrashed(ctx, id)
+		// The cutoff goes down to the claim, which re-checks age in the same
+		// statement, so an item undone and trashed again since the listing lives.
+		purged, err := s.campaigns.PurgeTrashed(ctx, id, cutoff)
 		switch {
 		case err != nil:
 			res.Failed++
@@ -364,8 +384,13 @@ func (s *trashService) purge(ctx context.Context, all bool) (EmptyResult, error)
 			}
 			continue
 		case batchTrashed:
-			if b.Items == 0 && now.Sub(b.CreatedAt) > emptyBatchGrace {
-				s.reconcileEmpty(ctx, b)
+			if b.Items == 0 {
+				// Totals not written yet: either a clean-up still filling or one
+				// that crashed. Inside the grace window it is left alone even
+				// by Empty now, which would otherwise delete a half-marked set.
+				if now.Sub(b.CreatedAt) > emptyBatchGrace {
+					s.reconcileEmpty(ctx, b)
+				}
 				continue
 			}
 			if !all && !b.CreatedAt.Before(cutoff) {
@@ -374,7 +399,7 @@ func (s *trashService) purge(ctx context.Context, all bool) (EmptyResult, error)
 		}
 		// batchPurging falls through: its final delete is under way and is
 		// resumed whatever its age.
-		purged, err := s.purgeBatch(ctx, b.ID)
+		purged, err := s.purgeBatch(ctx, b.ID, cutoff)
 		switch {
 		case err != nil:
 			res.Failed++
@@ -409,8 +434,8 @@ func (s *trashService) reconcileEmpty(ctx context.Context, b TrashBatch) {
 // first; after that Undo is refused, so a file can never be deleted out from
 // under a restore. It reports false, having done nothing, when the batch is
 // gone or was claimed by Undo.
-func (s *trashService) purgeBatch(ctx context.Context, batchID string) (bool, error) {
-	claimed, err := s.batches.Claim(ctx, batchID, batchTrashed, batchPurging)
+func (s *trashService) purgeBatch(ctx context.Context, batchID string, olderThan time.Time) (bool, error) {
+	claimed, err := s.batches.Claim(ctx, batchID, batchTrashed, batchPurging, olderThan)
 	if err != nil {
 		return false, err
 	}

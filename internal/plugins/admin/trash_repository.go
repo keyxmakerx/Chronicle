@@ -44,8 +44,10 @@ type TrashBatchRepository interface {
 	Get(ctx context.Context, id string) (*TrashBatch, error)
 	List(ctx context.Context) ([]TrashBatch, error)
 	// Claim moves a batch from one state to another and reports whether this
-	// call made the move.
-	Claim(ctx context.Context, id, from, to string) (bool, error)
+	// call made the move. A non-zero olderThan adds created_at < olderThan to
+	// the same statement, so a purge run's age check cannot go stale between
+	// listing and claiming.
+	Claim(ctx context.Context, id, from, to string, olderThan time.Time) (bool, error)
 	Delete(ctx context.Context, id string) error
 }
 
@@ -127,9 +129,14 @@ func (r *trashBatchRepository) List(ctx context.Context) ([]TrashBatch, error) {
 	return out, rows.Err()
 }
 
-func (r *trashBatchRepository) Claim(ctx context.Context, id, from, to string) (bool, error) {
-	res, err := r.db.ExecContext(ctx,
-		`UPDATE trash_batches SET state = ? WHERE id = ? AND state = ?`, to, id, from)
+func (r *trashBatchRepository) Claim(ctx context.Context, id, from, to string, olderThan time.Time) (bool, error) {
+	query := `UPDATE trash_batches SET state = ? WHERE id = ? AND state = ?`
+	args := []any{to, id, from}
+	if !olderThan.IsZero() {
+		query += ` AND created_at < ?`
+		args = append(args, olderThan)
+	}
+	res, err := r.db.ExecContext(ctx, query, args...)
 	if err != nil {
 		return false, fmt.Errorf("claiming trash batch: %w", err)
 	}

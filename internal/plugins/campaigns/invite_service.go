@@ -181,6 +181,11 @@ func (s *inviteService) AcceptInvite(ctx context.Context, token string, userID s
 		return nil, apperror.NewValidation("this invitation has expired")
 	}
 
+	// A campaign in the site Trash is not found: nobody may be added to it.
+	if _, err := s.campaigns.FindByID(ctx, invite.CampaignID); err != nil {
+		return nil, err
+	}
+
 	// Check if user is already a member.
 	_, err = s.campaigns.FindMember(ctx, invite.CampaignID, userID)
 	if err == nil {

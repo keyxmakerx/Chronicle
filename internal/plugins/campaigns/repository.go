@@ -30,7 +30,7 @@ type CampaignRepository interface {
 	RestoreFromTrash(ctx context.Context, id string) error
 	ListTrashed(ctx context.Context) ([]TrashedCampaign, error)
 	ListPurgeDue(ctx context.Context, cutoff time.Time, all bool) ([]string, error)
-	ClaimForPurge(ctx context.Context, id string, at time.Time) (bool, error)
+	ClaimForPurge(ctx context.Context, id string, at, olderThan time.Time) (bool, error)
 	// PurgeTrashed is the only hard delete of a campaign: it removes a row
 	// that was trashed and claimed, and nothing else.
 	PurgeTrashed(ctx context.Context, id string) error
@@ -554,6 +554,7 @@ func (r *campaignRepository) ListMembers(ctx context.Context, campaignID string)
 	                 e.name
 	          FROM campaign_members cm
 	          INNER JOIN users u ON u.id = cm.user_id
+	          INNER JOIN campaigns c ON c.id = cm.campaign_id AND c.deleted_at IS NULL
 	          LEFT JOIN entities e ON e.id = cm.character_entity_id AND e.deleted_at IS NULL
 	          WHERE cm.campaign_id = ?
 	          ORDER BY FIELD(cm.role, 'owner', 'scribe', 'player'), u.display_name`

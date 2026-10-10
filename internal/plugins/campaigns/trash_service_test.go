@@ -116,7 +116,7 @@ func TestPurgeTrashed(t *testing.T) {
 			svc.SetMediaCleaner(cleaner)
 			svc.SetHookDispatcher(hook)
 
-			purged, err := svc.PurgeTrashed(context.Background(), "camp-9")
+			purged, err := svc.PurgeTrashed(context.Background(), "camp-9", time.Time{})
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("err = %v, wantErr %v", err, tc.wantErr)
 			}
@@ -140,7 +140,7 @@ func TestPurgeTrashed(t *testing.T) {
 // service built without a media cleaner or hook dispatcher still purges.
 func TestPurgeTrashed_NilCleanerAndDispatcher(t *testing.T) {
 	svc := NewCampaignService(&mockCampaignRepo{}, &mockUserFinder{}, nil, nil, "http://localhost:8080")
-	purged, err := svc.PurgeTrashed(context.Background(), "camp-1")
+	purged, err := svc.PurgeTrashed(context.Background(), "camp-1", time.Time{})
 	if err != nil || !purged {
 		t.Fatalf("purged=%v err=%v, want true,nil", purged, err)
 	}

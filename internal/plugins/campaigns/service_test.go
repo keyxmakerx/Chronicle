@@ -138,7 +138,7 @@ func (m *mockCampaignRepo) ListPurgeDue(ctx context.Context, cutoff time.Time, a
 }
 
 // ClaimForPurge defaults to a successful claim, the common case in tests.
-func (m *mockCampaignRepo) ClaimForPurge(ctx context.Context, id string, at time.Time) (bool, error) {
+func (m *mockCampaignRepo) ClaimForPurge(ctx context.Context, id string, at, olderThan time.Time) (bool, error) {
 	if m.claimFn != nil {
 		return m.claimFn(ctx, id, at)
 	}

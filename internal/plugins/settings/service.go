@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 	"sync"
@@ -24,7 +25,7 @@ type SettingsService interface {
 
 	// SiteTrashRetentionDays is how long a deleted campaign or a file clean-up
 	// waits in the site Trash.
-	SiteTrashRetentionDays(ctx context.Context) int
+	SiteTrashRetentionDays(ctx context.Context) (int, error)
 	// UpdateSiteTrashRetentionDays saves it; only SiteTrashRetentionChoices pass.
 	UpdateSiteTrashRetentionDays(ctx context.Context, days int) error
 
@@ -512,19 +513,24 @@ func (s *settingsService) UpdateTrashRetentionDays(ctx context.Context, days int
 	return s.repo.Set(ctx, KeyTrashRetentionDays, strconv.Itoa(days))
 }
 
-// SiteTrashRetentionDays returns how long the site Trash keeps things. Like
-// TrashRetentionDays, an unset or unexpected value gives the default and never
-// a shorter period, so a bad row can't empty the Trash early.
-func (s *settingsService) SiteTrashRetentionDays(ctx context.Context) int {
+// SiteTrashRetentionDays returns how long the site Trash keeps things. Only an
+// unset setting means the default. A read failure or an unusable stored value
+// is an error, never a guess: the purger deletes for good, and a guess shorter
+// than what the admin configured would remove things early.
+func (s *settingsService) SiteTrashRetentionDays(ctx context.Context) (int, error) {
 	raw, err := s.repo.Get(ctx, KeySiteTrashRetentionDays)
 	if err != nil {
-		return DefaultSiteTrashRetentionDays
+		var appErr *apperror.AppError
+		if errors.As(err, &appErr) && appErr.Code == http.StatusNotFound {
+			return DefaultSiteTrashRetentionDays, nil
+		}
+		return 0, fmt.Errorf("reading the trash retention setting: %w", err)
 	}
 	days, err := strconv.Atoi(strings.TrimSpace(raw))
 	if err != nil || !IsValidSiteTrashRetention(days) {
-		return DefaultSiteTrashRetentionDays
+		return 0, fmt.Errorf("the trash retention setting holds an unusable value %q", raw)
 	}
-	return days
+	return days, nil
 }
 
 // UpdateSiteTrashRetentionDays validates and saves the site Trash retention.

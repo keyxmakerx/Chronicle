@@ -29,6 +29,10 @@ type fakeTrashCampaigns struct {
 	purgeErr    map[string]error
 	restoreErr  error
 	dueArgs     []bool // the `all` flag of each ListPurgeDue call
+	// retrashed gives a campaign a newer deleted_at at claim time, as if it
+	// were undone and trashed again after the list was read.
+	retrashed map[string]time.Time
+	cutoffs   []time.Time // the olderThan of each PurgeTrashed call
 }
 
 func (f *fakeTrashCampaigns) ListTrashed(context.Context) ([]campaigns.TrashedCampaign, error) {
@@ -54,9 +58,26 @@ func (f *fakeTrashCampaigns) ListPurgeDue(_ context.Context, cutoff time.Time, a
 	}
 	return ids, nil
 }
-func (f *fakeTrashCampaigns) PurgeTrashed(_ context.Context, id string) (bool, error) {
+func (f *fakeTrashCampaigns) PurgeTrashed(_ context.Context, id string, olderThan time.Time) (bool, error) {
+	f.cutoffs = append(f.cutoffs, olderThan)
 	if err := f.purgeErr[id]; err != nil {
 		return false, err
+	}
+	// The claim re-checks age itself, like the SQL: an unclaimed campaign
+	// younger than the cutoff is left alone.
+	if !olderThan.IsZero() {
+		for _, c := range f.trashed {
+			if c.ID != id || c.Emptying {
+				continue
+			}
+			at := c.DeletedAt
+			if v, ok := f.retrashed[id]; ok {
+				at = v
+			}
+			if !at.Before(olderThan) {
+				return false, nil
+			}
+		}
 	}
 	f.purged = append(f.purged, id)
 	if v, ok := f.purgeResult[id]; ok {
@@ -145,8 +166,8 @@ func (r *fakeBatchRepo) List(context.Context) ([]TrashBatch, error) {
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out, nil
 }
-func (r *fakeBatchRepo) Claim(_ context.Context, id, from, to string) (bool, error) {
-	if b, ok := r.rows[id]; ok && b.State == from {
+func (r *fakeBatchRepo) Claim(_ context.Context, id, from, to string, olderThan time.Time) (bool, error) {
+	if b, ok := r.rows[id]; ok && b.State == from && (olderThan.IsZero() || b.CreatedAt.Before(olderThan)) {
 		b.State = to
 		return true, nil
 	}
@@ -159,7 +180,14 @@ func (r *fakeBatchRepo) Delete(_ context.Context, id string) error {
 
 type fixedRetention int
 
-func (f fixedRetention) SiteTrashRetentionDays(context.Context) int { return int(f) }
+func (f fixedRetention) SiteTrashRetentionDays(context.Context) (int, error) { return int(f), nil }
+
+// failingRetention is a setting that cannot be read right now.
+type failingRetention struct{}
+
+func (failingRetention) SiteTrashRetentionDays(context.Context) (int, error) {
+	return 0, errors.New("settings read failed")
+}
 
 func newTestTrash(c *fakeTrashCampaigns, f *fakeTrashFiles, finder UnusedUploadFinder, b *fakeBatchRepo, days int) *trashService {
 	s := NewTrashService(c, f, finder, b, fixedRetention(days)).(*trashService)
@@ -287,22 +315,25 @@ func TestOverview(t *testing.T) {
 	}
 }
 
-func TestRetentionDays_FallsBackToDefault(t *testing.T) {
+func TestRetentionDays(t *testing.T) {
 	tests := []struct {
 		name      string
 		retention TrashRetention
 		want      int
+		wantErr   bool
 	}{
-		{"nil setting", nil, 30},
-		{"offered choice", fixedRetention(7), 7},
-		{"not an offered choice", fixedRetention(3), 30},
-		{"zero", fixedRetention(0), 30},
+		{"nil setting means the default", nil, 30, false},
+		{"offered choice", fixedRetention(7), 7, false},
+		{"not an offered choice is an error, not a guess", fixedRetention(3), 0, true},
+		{"zero is an error", fixedRetention(0), 0, true},
+		{"a read failure is an error", failingRetention{}, 0, true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			s := NewTrashService(&fakeTrashCampaigns{}, &fakeTrashFiles{}, fakeFinder{}, newFakeBatchRepo(), tc.retention)
-			if got := s.RetentionDays(context.Background()); got != tc.want {
-				t.Errorf("RetentionDays = %d, want %d", got, tc.want)
+			got, err := s.RetentionDays(context.Background())
+			if (err != nil) != tc.wantErr || got != tc.want {
+				t.Errorf("RetentionDays = %d, %v; want %d, err %v", got, err, tc.want, tc.wantErr)
 			}
 		})
 	}

@@ -317,14 +317,14 @@ func TestSiteTrash_PurgeWaitsForRetentionAndNeverTouchesUndone(t *testing.T) {
 	if err := fx.campaigns.MoveToTrash(ctx, otherID, fx.adminID); err != nil {
 		t.Fatal(err)
 	}
-	purged, err := fx.campaigns.PurgeTrashed(ctx, otherID)
+	purged, err := fx.campaigns.PurgeTrashed(ctx, otherID, time.Time{})
 	if err != nil || !purged {
 		t.Fatalf("PurgeTrashed = %v, %v", purged, err)
 	}
 	if fx.rowExists("campaigns", otherID) {
 		t.Error("PurgeTrashed left the row")
 	}
-	if purged, err := fx.campaigns.PurgeTrashed(ctx, otherID); err != nil || purged {
+	if purged, err := fx.campaigns.PurgeTrashed(ctx, otherID, time.Time{}); err != nil || purged {
 		t.Errorf("second PurgeTrashed = %v, %v; want false, nil", purged, err)
 	}
 }
@@ -333,7 +333,7 @@ func TestSiteTrash_PurgeWaitsForRetentionAndNeverTouchesUndone(t *testing.T) {
 // Undo is refused afterwards.
 func (fx *trashFixture) claim(id string) (bool, error) {
 	repo := campaigns.NewCampaignRepository(fx.db)
-	return repo.ClaimForPurge(context.Background(), id, time.Now().UTC())
+	return repo.ClaimForPurge(context.Background(), id, time.Now().UTC(), time.Time{})
 }
 
 func TestSiteTrash_UndoRefusedOnceTheFinalDeleteBegan(t *testing.T) {

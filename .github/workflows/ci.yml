@@ -328,7 +328,11 @@ jobs:
                       TestSiteTrash_PurgeWaitsForRetentionAndNeverTouchesUndone \
                       TestSiteTrash_UndoRefusedOnceTheFinalDeleteBegan \
                       TestSiteTrash_FileCleanupCanBeUndoneAndPurgeSparesIt \
-                      TestSiteTrash_EmptyNowNeedsThePasswordRecheck; do
+                      TestSiteTrash_EmptyNowNeedsThePasswordRecheck \
+                      TestSiteTrash_ClaimRechecksAgeInSQL \
+                      TestSiteTrash_SessionsTokenRoutesStopForATrashedCampaign \
+                      TestSiteTrash_NoWritesIntoATrashedCampaign \
+                      TestSiteTrash_RetentionChangeNeedsThePasswordRecheck; do
             grep -q -- "--- PASS: $want" dbtests.log || {
               echo "::error::$want did not PASS — it was skipped or never ran."
               exit 1

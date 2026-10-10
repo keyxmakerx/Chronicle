@@ -44,7 +44,7 @@ type CampaignService interface {
 	RestoreFromTrash(ctx context.Context, campaignID string) error
 	ListTrashed(ctx context.Context) ([]TrashedCampaign, error)
 	ListPurgeDue(ctx context.Context, cutoff time.Time, all bool) ([]string, error)
-	PurgeTrashed(ctx context.Context, campaignID string) (bool, error)
+	PurgeTrashed(ctx context.Context, campaignID string, olderThan time.Time) (bool, error)
 	CountAll(ctx context.Context) (int, error)
 
 	// Membership
@@ -671,8 +671,8 @@ func (s *campaignService) ListPurgeDue(ctx context.Context, cutoff time.Time, al
 // Trash: never trashed, undone, or already purged. A run that stops partway
 // is picked up by the next one, since the claim stays and every step repeats
 // harmlessly.
-func (s *campaignService) PurgeTrashed(ctx context.Context, campaignID string) (bool, error) {
-	claimed, err := s.repo.ClaimForPurge(ctx, campaignID, time.Now().UTC())
+func (s *campaignService) PurgeTrashed(ctx context.Context, campaignID string, olderThan time.Time) (bool, error) {
+	claimed, err := s.repo.ClaimForPurge(ctx, campaignID, time.Now().UTC(), olderThan)
 	if err != nil {
 		return false, err
 	}
@@ -1017,6 +1017,11 @@ func (s *campaignService) AcceptTransfer(ctx context.Context, token string, acce
 	// Verify the accepting user is the intended recipient.
 	if transfer.ToUserID != acceptingUserID {
 		return apperror.NewForbidden("this transfer is not for your account")
+	}
+
+	// A campaign in the site Trash is not found: its ownership cannot change.
+	if _, err := s.repo.FindByID(ctx, transfer.CampaignID); err != nil {
+		return err
 	}
 
 	// Perform the atomic transfer.
