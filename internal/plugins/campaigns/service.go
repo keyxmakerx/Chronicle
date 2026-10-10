@@ -47,6 +47,10 @@ type CampaignService interface {
 	PurgeTrashed(ctx context.Context, campaignID string, olderThan time.Time) (bool, error)
 	CountAll(ctx context.Context) (int, error)
 
+	// Account deletion
+	OwnedCampaigns(ctx context.Context, userID string) ([]OwnedCampaign, error)
+	LeaveAllForDeletedAccount(ctx context.Context, userID string) error
+
 	// Membership
 	GetMember(ctx context.Context, campaignID, userID string) (*CampaignMember, error)
 	AddMember(ctx context.Context, campaignID, email string, role Role) error

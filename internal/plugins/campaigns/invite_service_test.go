@@ -437,3 +437,13 @@ func TestCreateInvite_DefaultsToPlayer(t *testing.T) {
 		t.Errorf("expected role player (default), got %s", invite.Role)
 	}
 }
+
+func (m *mockCampaignRepoForInvites) DeleteTransfersInvolving(context.Context, string) error { return nil }
+
+func (m *mockCampaignRepoForInvites) ListOwnedByUser(context.Context, string) ([]OwnedCampaign, error) {
+	return nil, nil
+}
+
+func (m *mockCampaignRepoForInvites) ListMemberCampaignIDs(context.Context, string) ([]string, error) {
+	return nil, nil
+}

@@ -381,6 +381,61 @@ category / claimability) and never references any system by name — every syste
 specific (fields, widget, renderer, the type's name) lives in the package's
 manifest.
 
+### Sheet styles and motion (`data-sheet`)
+
+A system's character sheet gets its styles and its motion from Chronicle; the
+package ships markup only. Put `data-sheet` on the sheet's root element (a block
+element that is not transformed). Chronicle then sets `data-sheet-style` on it
+from the campaign's chosen sheet style (`html[data-cz-sheet]`), or `modern` when
+none is chosen, and loads that style's fonts. The twelve styles are `modern`,
+`parchment`, `ledger`, `journal`, `vellum`, `night`, `deck`, `pencil`,
+`starship`, `neon`, `runes` and `brass`. Do not set colours, fonts, shadows,
+durations or effects yourself: read the `--paper-*` tokens (`--paper-ink`,
+`--paper-ink-soft`, `--paper-mute`, `--paper-edge`, `--paper-accent`,
+`--paper-neg`, `--paper-font`, `--paper-head-font`, `--paper-num-font`,
+`--ts` for the type scale) and the shared classes in `static/css/paper.css`
+(`.paper`, `.paper-stack`, `.paper-kind`, `.paper-title`, `.paper-pull`,
+`.paper-slip`, `.paper-pin`), and a style change reaches your sheet for free.
+Nothing outside a `[data-sheet]` root is restyled.
+
+What your markup carries:
+
+| Attribute / class | Meaning |
+|---|---|
+| `data-sheet` | The root. Without one, none of this runs. |
+| `data-sheet-folio` | Optional wrapper around the sheet; it slides left when a panel opens beside it. |
+| `.paper-stack > .paper` | The sheet itself. |
+| `data-sheet-section="id"` on a `.paper-pull` | A part with paper behind it. Pressing anywhere on it presses its button. |
+| `data-sheet-open="panel-id"` | The button in a part that opens a panel. |
+| `<template data-sheet-panel="panel-id" data-title data-kind>` | The panel's body. Chronicle builds the panel around it. |
+| `<details data-sheet-fold>` with `.fold-body > .fold-in[data-move="fold"]` | A fold that opens to its real height. |
+| `data-v` / `data-pv` on a number | A value that can change; call `Chronicle.sheetMotion.land(el, oldText)` after changing it. |
+
+Moves. Every moving thing says which standard move it is with `data-move`:
+`slide-out` (a panel from behind the sheet), `grow` (a slip out of the thing
+pressed), `fold` (a fold's content) or `settle` (the sheet arriving on a new
+page; add `.paper-settle` to play it once). A style never changes timing; it
+gives each move its own look, and chooses which move each role uses
+(`--sheet-panel-move`, `--sheet-slip-move`, `--sheet-page-move`). `data-move`
+is honoured only under `[data-sheet]`; elsewhere on the site it means
+something else.
+
+Changed values. Each style has its own `--change-move` (`mark`, `rewrite`,
+`roll`, `glitch`, `carve` or `odometer`): the plain ink mark, a pencil erase
+and rewrite, scrambling digits, a glitch, a stone carving, or an odometer.
+`Chronicle.sheetMotion.land(el, oldText)` picks the right one; with no old
+text it shows something new arriving.
+
+Events on the root: `sheet:panel-ready` (`detail.body` is the panel's body, so
+the package can wire widgets inside it), `sheet:open`, `sheet:close`, and
+`sheet:close-blocked` (a panel marked unsaved was asked to close). Mark one
+with `Chronicle.sheetMotion.mount(root).setDirty(true)`.
+
+Full, Calm and Off. Full plays every move. Calm (the owner's reduce switch or a
+person's own Calm pick) fades in place and opens folds at once. Off (the
+device's reduced-motion setting or a person's Off pick) jumps to the end state.
+The engine and the styles enforce both; a package has nothing to do for them.
+
 ### Hero creator
 
 Chronicle's hero creator (Characters → Create hero) needs nothing beyond what

@@ -58,6 +58,15 @@ type CampaignRepository interface {
 	FindTransferByToken(ctx context.Context, token string) (*OwnershipTransfer, error)
 	FindTransferByCampaign(ctx context.Context, campaignID string) (*OwnershipTransfer, error)
 	DeleteTransfer(ctx context.Context, id string) error
+	// DeleteTransfersInvolving cancels every pending hand-over to or from the user.
+	DeleteTransfersInvolving(ctx context.Context, userID string) error
+
+	// ListOwnedByUser lists campaigns the user created or holds the owner
+	// role in, archived ones included.
+	ListOwnedByUser(ctx context.Context, userID string) ([]OwnedCampaign, error)
+	// ListMemberCampaignIDs lists every campaign the user is a member of,
+	// archived ones included.
+	ListMemberCampaignIDs(ctx context.Context, userID string) ([]string, error)
 
 	// UpdateBackdropPath updates only the backdrop_path column.
 	UpdateBackdropPath(ctx context.Context, campaignID string, path *string) error
@@ -1022,4 +1031,56 @@ func (r *groupRepository) ListGroupMembers(ctx context.Context, groupID int) ([]
 		members = append(members, m)
 	}
 	return members, rows.Err()
+}
+
+// DeleteTransfersInvolving cancels every pending hand-over to or from the user.
+func (r *campaignRepository) DeleteTransfersInvolving(ctx context.Context, userID string) error {
+	if _, err := r.db.ExecContext(ctx,
+		`DELETE FROM ownership_transfers WHERE from_user_id = ? OR to_user_id = ?`, userID, userID); err != nil {
+		return fmt.Errorf("deleting transfers: %w", err)
+	}
+	return nil
+}
+
+// ListOwnedByUser lists campaigns the user created or holds the owner role
+// in, archived ones included, with each one's member count.
+func (r *campaignRepository) ListOwnedByUser(ctx context.Context, userID string) ([]OwnedCampaign, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT c.id, c.name, (SELECT COUNT(*) FROM campaign_members m WHERE m.campaign_id = c.id)
+		   FROM campaigns c
+		  WHERE c.created_by = ?
+		     OR EXISTS (SELECT 1 FROM campaign_members cm
+		                 WHERE cm.campaign_id = c.id AND cm.user_id = ? AND cm.role = 'owner')
+		  ORDER BY c.name`, userID, userID)
+	if err != nil {
+		return nil, fmt.Errorf("listing owned campaigns: %w", err)
+	}
+	defer rows.Close()
+	var out []OwnedCampaign
+	for rows.Next() {
+		var o OwnedCampaign
+		if err := rows.Scan(&o.ID, &o.Name, &o.MemberCount); err != nil {
+			return nil, fmt.Errorf("scanning owned campaign: %w", err)
+		}
+		out = append(out, o)
+	}
+	return out, rows.Err()
+}
+
+// ListMemberCampaignIDs lists every campaign the user is a member of.
+func (r *campaignRepository) ListMemberCampaignIDs(ctx context.Context, userID string) ([]string, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT campaign_id FROM campaign_members WHERE user_id = ?`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("listing memberships: %w", err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scanning membership: %w", err)
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
 }

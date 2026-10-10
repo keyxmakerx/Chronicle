@@ -14,6 +14,9 @@ import (
 // --- Mock Repository ---
 
 type mockCampaignRepo struct {
+	ownedByUser             []OwnedCampaign
+	memberCampaignIDs       []string
+	transfersCancelledFor   []string
 	createFn                func(ctx context.Context, campaign *Campaign) error
 	findByIDFn              func(ctx context.Context, id string) (*Campaign, error)
 	findBySlugFn            func(ctx context.Context, slug string) (*Campaign, error)
@@ -1724,4 +1727,17 @@ func TestParseDashboardLayout_Valid(t *testing.T) {
 	if len(layout.Rows) != 1 {
 		t.Errorf("expected 1 row, got %d", len(layout.Rows))
 	}
+}
+
+func (m *mockCampaignRepo) DeleteTransfersInvolving(_ context.Context, userID string) error {
+	m.transfersCancelledFor = append(m.transfersCancelledFor, userID)
+	return nil
+}
+
+func (m *mockCampaignRepo) ListOwnedByUser(context.Context, string) ([]OwnedCampaign, error) {
+	return m.ownedByUser, nil
+}
+
+func (m *mockCampaignRepo) ListMemberCampaignIDs(context.Context, string) ([]string, error) {
+	return m.memberCampaignIDs, nil
 }
