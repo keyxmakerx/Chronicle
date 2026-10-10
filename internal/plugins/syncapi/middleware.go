@@ -299,21 +299,25 @@ func RequireAPIKey(service SyncAPIService) echo.MiddlewareFunc {
 				msg := err.Error()
 				errMsg = &msg
 			}
+			// Echo recycles the context once the handler returns, so every
+			// request/response field is copied here before the goroutine
+			// starts; reading c inside it would race with the next request.
+			entry := &APIRequestLog{
+				APIKeyID:     key.ID,
+				CampaignID:   key.CampaignID,
+				UserID:       key.UserID,
+				Method:       c.Request().Method,
+				Path:         c.Request().URL.Path,
+				StatusCode:   statusCode,
+				IPAddress:    ip,
+				UserAgent:    strPtr(c.Request().UserAgent()),
+				RequestSize:  int(c.Request().ContentLength),
+				ResponseSize: int(c.Response().Size),
+				DurationMs:   int(duration.Milliseconds()),
+				ErrorMessage: errMsg,
+			}
 			go func() {
-				_ = service.LogRequest(context.Background(), &APIRequestLog{
-					APIKeyID:     key.ID,
-					CampaignID:   key.CampaignID,
-					UserID:       key.UserID,
-					Method:       c.Request().Method,
-					Path:         c.Request().URL.Path,
-					StatusCode:   statusCode,
-					IPAddress:    ip,
-					UserAgent:    strPtr(c.Request().UserAgent()),
-					RequestSize:  int(c.Request().ContentLength),
-					ResponseSize: int(c.Response().Size),
-					DurationMs:   int(duration.Milliseconds()),
-					ErrorMessage: errMsg,
-				})
+				_ = service.LogRequest(context.Background(), entry)
 			}()
 
 			return err
