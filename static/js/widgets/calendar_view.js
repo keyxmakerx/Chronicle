@@ -2705,7 +2705,7 @@
       h += '</section><section class="fvsec fvwho"><h4>Players</h4>';
       if (roster) h += this._fvRosterHTML(roster);
       h += '</section><section class="fvsec fvfoot">' +
-        '<label class="fvsw"><input type="checkbox" data-fv-lines' + (this.showFree ? ' checked' : '') + '><span>Show who’s free on the days</span></label>' +
+        '<label class="fvsw"><input type="checkbox" role="switch" data-fv-lines' + (this.showFree ? ' checked' : '') + '><span class="fvtrk" aria-hidden="true"></span><span>Show who’s free on the days</span></label>' +
         '<span class="fvlinks"><button type="button" class="lnk" data-fv-planner="mine">Change my hours</button><button type="button" class="btn sm" data-fv-planner="team"><i class="fa-solid fa-up-right-and-down-left-from-center"></i> Open the full planner</button></span></section>';
       return h;
     },
@@ -3064,7 +3064,7 @@
       // Best times and the players, as in the quick view.
       var quick = this._fvDirectorHTML(y, m, monthName).replace(/<section class="fvsec fvfoot">[\s\S]*$/, '');
       h += '<div class="plquick">' + quick + '</div>';
-      h += '<section class="dsec plfoot"><label class="fvsw"><input type="checkbox" data-fv-lines' + (this.showFree ? ' checked' : '') + '><span>Show who’s free on the days</span></label>' +
+      h += '<section class="dsec plfoot"><label class="fvsw"><input type="checkbox" role="switch" data-fv-lines' + (this.showFree ? ' checked' : '') + '><span class="fvtrk" aria-hidden="true"></span><span>Show who’s free on the days</span></label>' +
         '<a class="lnk" href="' + esc(this._availURL('overlay')) + '">Date polls</a></section>';
       return h;
     },
