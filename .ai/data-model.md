@@ -169,6 +169,12 @@ numbered core migrations after it, tracked once each via `golang-migrate`'s
 | `campaign_book_chapters` | A campaign's own chapters in an installed system's Rulebook | PK `(campaign_id, system_id, chapter_id)`; `director` marks a Director-only chapter; ids start `house_` |
 | `campaign_book_pages` | The campaign's edited or added pages in those chapters | `page_json`; `package_index` (0-based position of the package page it replaces, NULL for a page the campaign added); `base_hash` (hash of the package page it was copied from, so a later package change is noticed) |
 
+### Campaign system entries
+
+| Table | Purpose | Notable columns |
+|---|---|---|
+| `campaign_system_entries` | A campaign's own pick-list entries (ancestry, kit, culture, class...) for its game system, kept apart from the package's data | `UNIQUE(campaign_id, system_id, field_key, slug)`; `visibility` enum(`everyone`,`directors`); `properties` JSON (flat scalars); `description` sanitized HTML; `created_by` carries no FK; FK to `campaigns` CASCADE |
+
 ### Media, addons & extensions
 
 | Table | Purpose | Notable columns |

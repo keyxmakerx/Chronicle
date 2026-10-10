@@ -148,6 +148,7 @@ var briefs = map[string]string{
 	"pin":          "pins on the campaign's maps",
 	"note":         "my own notes only: my Journal notes and my jots on pages, never notes anyone else wrote",
 	"house-rule":   "house-rules chapters in the campaign's rulebook",
+	"system-entry": "the campaign's own ancestries, kits, cultures, classes and other pick-list entries for its game system",
 	"generator":    "run Chronicle's own generators (weather for a range of days, festivals and other events, sky events, names into a rolling table) instead of inventing the result",
 }
 

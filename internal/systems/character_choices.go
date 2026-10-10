@@ -71,6 +71,22 @@ var (
 	choiceSources   []ChoiceSource
 )
 
+// choiceViewerKey marks a context whose viewer is one of the campaign's
+// Directors, so a ChoiceSource may include entries kept from players.
+type choiceViewerKey struct{}
+
+// WithChoiceViewer records whether the pick list is being read by a Director.
+func WithChoiceViewer(ctx context.Context, isDirector bool) context.Context {
+	return context.WithValue(ctx, choiceViewerKey{}, isDirector)
+}
+
+// ChoiceViewerIsDirector reports what WithChoiceViewer recorded; a context
+// without it is treated as a player's, so sources fail closed.
+func ChoiceViewerIsDirector(ctx context.Context) bool {
+	v, _ := ctx.Value(choiceViewerKey{}).(bool)
+	return v
+}
+
 // RegisterChoiceSource adds a source whose entries are appended after the
 // system package's own. Call at start-up; a failing source is logged and
 // skipped rather than blanking the package's list.
@@ -215,6 +231,8 @@ type CharacterChoiceService interface {
 	CharacterChoices(ctx context.Context, campaignID, fieldKey string) ([]Choice, error)
 	// CharacterChoiceList is CharacterChoices plus the system's name.
 	CharacterChoiceList(ctx context.Context, campaignID, fieldKey string) (*ChoiceList, error)
+	// CreatorPlan lists every character field with entries, for the hero creator.
+	CreatorPlan(ctx context.Context, campaignID string) (*CreatorPlan, error)
 }
 
 type characterChoiceService struct {
