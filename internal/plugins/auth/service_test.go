@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/notifyprefs"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -17,6 +19,7 @@ import (
 // mockUserRepo implements UserRepository for testing.
 type mockUserRepo struct {
 	viewPrefs            []byte
+	notifyPrefs          map[string][]byte
 	createFn             func(ctx context.Context, user *User) error
 	findByIDFn           func(ctx context.Context, id string) (*User, error)
 	findByEmailFn        func(ctx context.Context, email string) (*User, error)
@@ -151,6 +154,28 @@ func (m *mockUserRepo) GetViewPrefs(ctx context.Context, userID string) ([]byte,
 func (m *mockUserRepo) SetViewPrefs(ctx context.Context, userID string, prefs []byte) error {
 	m.viewPrefs = prefs
 	return nil
+}
+
+func (m *mockUserRepo) GetNotifyPrefs(ctx context.Context, userID string) ([]byte, error) {
+	return m.notifyPrefs[userID], nil
+}
+
+func (m *mockUserRepo) SetNotifyPrefs(ctx context.Context, userID string, prefs []byte) error {
+	if m.notifyPrefs == nil {
+		m.notifyPrefs = map[string][]byte{}
+	}
+	m.notifyPrefs[userID] = prefs
+	return nil
+}
+
+func (m *mockUserRepo) ListNotifyPrefs(ctx context.Context, userIDs []string) (map[string][]byte, error) {
+	out := map[string][]byte{}
+	for _, id := range userIDs {
+		if raw, ok := m.notifyPrefs[id]; ok {
+			out[id] = raw
+		}
+	}
+	return out, nil
 }
 
 func (m *mockUserRepo) UpdateDisplayName(ctx context.Context, userID, displayName string) error {
@@ -1112,5 +1137,46 @@ func TestRevalidateSession_KeyDeletedBeforeWrite_StaysGone(t *testing.T) {
 
 	if mr.Exists(key) {
 		t.Error("revalidateSession must not recreate a session key that was deleted concurrently")
+	}
+}
+
+func TestAllowedRecipients(t *testing.T) {
+	repo := &mockUserRepo{notifyPrefs: map[string][]byte{
+		"off":    []byte(`{"choices":{"gameNightInvites":{"email":false}}}`),
+		"paused": []byte(`{"pauseEmail":true}`),
+	}}
+	svc := newTestAuthService(repo)
+	tests := []struct {
+		name string
+		ch   notifyprefs.Channel
+		want []string
+	}{
+		{"email honours switches and pause", notifyprefs.Email, []string{"fresh"}},
+		{"bell untouched by email choices", notifyprefs.Bell, []string{"off", "fresh", "paused"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := svc.AllowedRecipients(context.Background(), []string{"off", "fresh", "paused"}, notifyprefs.GameNightInvites, tt.ch)
+			if strings.Join(got, ",") != strings.Join(tt.want, ",") {
+				t.Fatalf("got %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestUpdateNotifyPrefsKeepsOtherSwitches(t *testing.T) {
+	repo := &mockUserRepo{}
+	svc := newTestAuthService(repo)
+	ctx := context.Background()
+	f := false
+	if _, err := svc.UpdateNotifyPrefs(ctx, "u1", notifyprefs.Update{Choices: map[string]map[notifyprefs.Channel]bool{notifyprefs.ItemsGiven: {notifyprefs.Bell: f}}}); err != nil {
+		t.Fatal(err)
+	}
+	p, err := svc.UpdateNotifyPrefs(ctx, "u1", notifyprefs.Update{Choices: map[string]map[notifyprefs.Channel]bool{notifyprefs.GameNightInvites: {notifyprefs.Email: f}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Allows(notifyprefs.ItemsGiven, notifyprefs.Bell) || p.Allows(notifyprefs.GameNightInvites, notifyprefs.Email) {
+		t.Fatalf("expected both switches off, got %+v", p)
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -34,6 +35,11 @@ type UserRepository interface {
 	// they have chosen nothing).
 	GetViewPrefs(ctx context.Context, userID string) ([]byte, error)
 	SetViewPrefs(ctx context.Context, userID string, prefs []byte) error
+	GetNotifyPrefs(ctx context.Context, userID string) ([]byte, error)
+	SetNotifyPrefs(ctx context.Context, userID string, prefs []byte) error
+	// ListNotifyPrefs returns the stored notify_prefs JSON of each listed
+	// user that has any; users with none are absent from the map.
+	ListNotifyPrefs(ctx context.Context, userIDs []string) (map[string][]byte, error)
 
 	// ListLegacyAvatarPaths returns userID -> avatar_path for every user
 	// whose avatar_path still starts with prefix. Used only by the boot
@@ -320,6 +326,55 @@ func (r *userRepository) SetViewPrefs(ctx context.Context, userID string, prefs 
 		return fmt.Errorf("updating view prefs: %w", err)
 	}
 	return nil
+}
+
+// GetNotifyPrefs returns the raw notify_prefs JSON for a user, or nil when unset.
+func (r *userRepository) GetNotifyPrefs(ctx context.Context, userID string) ([]byte, error) {
+	var raw []byte
+	err := r.db.QueryRowContext(ctx, `SELECT notify_prefs FROM users WHERE id = ?`, userID).Scan(&raw)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, apperror.NewNotFound("user not found")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("reading notify prefs: %w", err)
+	}
+	return raw, nil
+}
+
+// SetNotifyPrefs stores the validated notify_prefs JSON for a user.
+func (r *userRepository) SetNotifyPrefs(ctx context.Context, userID string, prefs []byte) error {
+	if _, err := r.db.ExecContext(ctx, `UPDATE users SET notify_prefs = ? WHERE id = ?`, string(prefs), userID); err != nil {
+		return fmt.Errorf("updating notify prefs: %w", err)
+	}
+	return nil
+}
+
+// ListNotifyPrefs reads notify_prefs for many users in one query.
+func (r *userRepository) ListNotifyPrefs(ctx context.Context, userIDs []string) (map[string][]byte, error) {
+	out := map[string][]byte{}
+	if len(userIDs) == 0 {
+		return out, nil
+	}
+	ph := strings.TrimSuffix(strings.Repeat("?,", len(userIDs)), ",")
+	args := make([]any, len(userIDs))
+	for i, id := range userIDs {
+		args[i] = id
+	}
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id, notify_prefs FROM users WHERE notify_prefs IS NOT NULL AND id IN (`+ph+`)`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("listing notify prefs: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		var raw []byte
+		if err := rows.Scan(&id, &raw); err != nil {
+			return nil, fmt.Errorf("scanning notify prefs: %w", err)
+		}
+		out[id] = raw
+	}
+	return out, rows.Err()
 }
 
 // UpdateDisplayName sets the display name for a user.

@@ -22,6 +22,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/changesource"
 	"github.com/keyxmakerx/chronicle/internal/extensions"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
+	"github.com/keyxmakerx/chronicle/internal/notifyprefs"
 	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/addons"
@@ -1725,6 +1726,11 @@ func (a *foundryCampaignOwnerLookupAdapter) GetCampaignOwnerEmail(ctx context.Co
 	user, err := a.authSvc.GetUser(ctx, c.CreatedBy)
 	if err != nil || user == nil {
 		return "", "", err
+	}
+	// An owner who switched module-update emails off gets no address, which
+	// the notify path already reads as "skip the email, keep the banner".
+	if len(a.authSvc.AllowedRecipients(ctx, []string{user.ID}, notifyprefs.ModuleUpdates, notifyprefs.Email)) == 0 {
+		return "", "", nil
 	}
 	display := user.DisplayName
 	if display == "" {
@@ -3566,6 +3572,10 @@ func (a *App) RegisterRoutes() {
 	sessionsHandler := sessions.NewHandler(sessionsService)
 	sessionsHandler.SetMemberLister(campaignService)
 	sessionsHandler.SetMailSender(smtpService, a.Config.BaseURL)
+	// People's notification choices (Account settings) filter the bell and
+	// the game-night emails.
+	sessionsHandler.SetRecipientFilter(authService)
+	sessions.ConfigureRecipientFilter(sessionsService, authService)
 	// Game-night links open the real-world calendar; with the calendar plugin
 	// down they keep going to the Sessions page.
 	if a.PluginHealth.IsHealthy(calendar.PluginSlug) {
