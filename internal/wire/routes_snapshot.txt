@@ -236,6 +236,8 @@ GET	/campaigns/new	internal/plugins/campaigns/routes.go
 GET	/campaigns/picker	internal/plugins/campaigns/routes.go
 GET	/category-boards/:tid	internal/plugins/quests/routes.go
 GET	/characters	internal/plugins/entities/routes.go
+GET	/characters/new	internal/plugins/entities/routes.go
+GET	/characters/new/plan	internal/plugins/entities/routes.go
 GET	/content-templates	internal/plugins/entities/content_template_routes.go
 GET	/content-templates/:tid	internal/plugins/entities/content_template_routes.go
 GET	/creators/:userId	internal/plugins/bestiary/routes.go
@@ -599,6 +601,7 @@ POST	/cancel-transfer	internal/plugins/campaigns/routes.go
 POST	/category-boards/:tid/boards	internal/plugins/quests/routes.go
 POST	/category-boards/:tid/boards/:bid/items	internal/plugins/quests/routes.go
 POST	/characters/lists	internal/plugins/entities/routes.go
+POST	/characters/new	internal/plugins/entities/routes.go
 POST	/content-templates	internal/plugins/entities/content_template_routes.go
 POST	/database/migrations/apply	internal/plugins/admin/routes.go
 POST	/diagnostics/workspace/parse	internal/plugins/admin/routes.go

@@ -231,6 +231,8 @@ type CharacterChoiceService interface {
 	CharacterChoices(ctx context.Context, campaignID, fieldKey string) ([]Choice, error)
 	// CharacterChoiceList is CharacterChoices plus the system's name.
 	CharacterChoiceList(ctx context.Context, campaignID, fieldKey string) (*ChoiceList, error)
+	// CreatorPlan lists every character field with entries, for the hero creator.
+	CreatorPlan(ctx context.Context, campaignID string) (*CreatorPlan, error)
 }
 
 type characterChoiceService struct {

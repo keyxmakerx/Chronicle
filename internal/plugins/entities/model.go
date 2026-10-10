@@ -705,6 +705,9 @@ type CastView struct {
 	// Notice is a one-line confirmation shown as a toast after a change.
 	Notice    string
 	CSRFToken string
+	// CanCreateHero shows the Create hero button: staff always, a player when
+	// the owner lets players claim the hero's page type.
+	CanCreateHero bool
 }
 
 // --- Slug Generation ---

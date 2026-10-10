@@ -212,6 +212,10 @@ func (s *stubChoiceSvc) CharacterChoiceList(ctx context.Context, c, k string) (*
 	return &ChoiceList{FieldKey: k, Choices: []Choice{}}, nil
 }
 
+func (s *stubChoiceSvc) CreatorPlan(ctx context.Context, c string) (*CreatorPlan, error) {
+	return &CreatorPlan{}, nil
+}
+
 func TestValidChoiceFieldKey(t *testing.T) {
 	cases := []struct {
 		key  string

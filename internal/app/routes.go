@@ -3433,6 +3433,7 @@ func (a *App) RegisterRoutes() {
 	// as every entry here.
 	pluginBodyScripts := []string{
 		"/static/plugins/" + entities.PluginSlug + "/js/characters.js",
+		"/static/plugins/" + entities.PluginSlug + "/js/hero_creator.js",
 		"/static/js/widgets/calendar_era_blend.js",
 		"/static/js/widgets/calendar_era_look.js",
 		"/static/js/widgets/calendar_view.js",
@@ -4579,9 +4580,9 @@ func (a *App) RegisterRoutes() {
 	systems.RegisterSystemEntryChoices(systemEntrySvc)
 	systems.RegisterSystemEntryRoutes(e, systems.NewSystemEntryHandler(systemEntrySvc), authService, campaignService)
 	// Pick lists (Ancestry, Kit, Race, Class…) for the character attributes editor.
-	systems.RegisterCharacterChoiceRoutes(e,
-		systems.NewCharacterChoiceHandler(systems.NewCharacterChoiceService(addonService, campaignSystemMgr)),
-		authService, campaignService)
+	characterChoiceSvc := systems.NewCharacterChoiceService(addonService, campaignSystemMgr)
+	systems.RegisterCharacterChoiceRoutes(e, systems.NewCharacterChoiceHandler(characterChoiceSvc), authService, campaignService)
+	entityHandler.SetHeroPlanner(heroPlannerAdapter{choices: characterChoiceSvc})
 
 	// Admin-only deployment-health diagnostic: read-only fingerprints of the
 	// version + files each system loader is ACTUALLY serving, to catch the

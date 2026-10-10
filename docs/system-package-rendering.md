@@ -381,6 +381,35 @@ category / claimability) and never references any system by name — every syste
 specific (fields, widget, renderer, the type's name) lives in the package's
 manifest.
 
+### Hero creator
+
+Chronicle's hero creator (Characters → Create hero) needs nothing beyond what
+the sheet already uses. It asks one question per **text field** of your
+`category: "character"` preset that has entries to pick from (your data file
+for that field, plus any entries the campaign's Directors added), in the
+order the preset lists its fields. The field's `label` names the step, so
+call it "Lineage" and the creator says "Choose your lineage".
+
+Each entry opens into a leaf drawn only from what the entry carries, with no
+empty sections:
+
+- `summary` and `description` make the Overview; `{@category term}` markers
+  read as plain words.
+- Scalar `properties` (numbers, short strings) show as a row of facts.
+  Keys ending `_display` are skipped, since they repeat a structured value.
+- Each property that is a list of named items (`[{ "name": …, "description": … }]`)
+  becomes its own tab, labelled from the key (`signature_traits` → "Signature traits").
+- **Buying from a list.** When one of those lists gives every item a numeric
+  `cost` and the entry has a positive number under a key ending `_points`
+  (`ancestry_points: 3`), the tab becomes "Choose …": the hero buys items up
+  to that budget. A `quick_build` list of names offers a suggested set.
+
+The chosen entry's **name** is saved in the field, as the sheet's picker does.
+Bought items are saved beside it as a JSON array of names in
+`<field>_choices_json` (`ancestry_choices_json: "[\"Grounded\"]"`), so your
+sheet can read them; declare that key as a `string` field if the sheet should
+show or edit it.
+
 ### Server-side rendering
 
 A renderer that needs server-side work (loading sibling entities,

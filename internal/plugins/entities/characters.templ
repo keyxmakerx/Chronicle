@@ -42,9 +42,17 @@ templ CharactersPage(cc *campaigns.CampaignContext, view CastView) {
 // whole region (#cast-content) after each change.
 templ CharactersContent(cc *campaigns.CampaignContext, view CastView) {
 	<div id="cast-content">
-		<div class="mb-6">
-			<h1 class="text-2xl font-bold text-fg">Characters</h1>
-			<p class="mt-1 text-sm text-fg-secondary">The cast of { cc.Campaign.Name }.</p>
+		<div class="mb-6 flex flex-wrap items-end justify-between gap-3">
+			<div>
+				<h1 class="text-2xl font-bold text-fg">Characters</h1>
+				<p class="mt-1 text-sm text-fg-secondary">The cast of { cc.Campaign.Name }.</p>
+			</div>
+			if view.CanCreateHero {
+				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/characters/new", cc.Campaign.ID)) } class="btn-primary" data-create-hero="true">
+					<i class="fa-solid fa-feather-pointed" aria-hidden="true"></i>
+					Create hero
+				</a>
+			}
 		</div>
 		if len(view.Yours) > 0 {
 			<section class="mb-8" data-yours="true">

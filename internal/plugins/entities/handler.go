@@ -118,6 +118,7 @@ type Handler struct {
 	memberLister       MemberLister
 	npcSection         NPCSectionProvider
 	charLists          CharacterListManager
+	heroPlanner        HeroPlanner
 	groupLister        GroupLister
 	widgetBlockLister  WidgetBlockLister
 	contentTemplateSvc ContentTemplateService
@@ -3563,6 +3564,11 @@ func (h *Handler) buildCastView(c echo.Context, cc *campaigns.CampaignContext) (
 	view.IsMember = cc.MemberRole >= campaigns.RolePlayer
 	view.CSRFToken = middleware.GetCSRFToken(c)
 	isOwner := cc.MemberRole >= campaigns.RoleOwner
+	if h.heroPlanner != nil {
+		if _, access, err := h.heroTarget(c, cc); err == nil {
+			view.CanCreateHero = access.Allowed
+		}
+	}
 
 	var charTypes []int
 	if h.charLists != nil {

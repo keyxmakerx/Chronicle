@@ -1,0 +1,55 @@
+// hero_creator.templ — the hero creator page: one page per step, and each
+// entry's leaf slides out from under it. The page is a mount point; the
+// creator script (static/js/hero_creator.js, shipped from the plugin
+// body-script registry so boosted navigation keeps it) fetches the steps
+// and draws the paper.
+
+package entities
+
+import (
+	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// HeroCreatorView is what the creator page needs besides the campaign.
+type HeroCreatorView struct {
+	// TypeName is the page type the hero becomes, for the closing step.
+	TypeName string
+	// ForSelf is true when the hero becomes the viewer's own.
+	ForSelf   bool
+	CSRFToken string
+}
+
+// HeroCreatorPage renders the creator inside the App shell.
+templ HeroCreatorPage(cc *campaigns.CampaignContext, view HeroCreatorView) {
+	@layouts.App("Create hero - " + cc.Campaign.Name) {
+		<link rel="stylesheet" href={ layouts.AssetURL("/static/plugins/entities/css/hero_creator.css") }/>
+		<div class="max-w-7xl mx-auto px-4 py-6">
+			<nav class="mb-4 text-sm text-fg-muted" aria-label="Breadcrumb">
+				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/characters", cc.Campaign.ID)) } class="hover:text-fg">Characters</a>
+				<span aria-hidden="true">/</span>
+				<span class="text-fg">New hero</span>
+			</nav>
+			<div
+				class="hc"
+				data-hero-creator="true"
+				data-campaign-id={ cc.Campaign.ID }
+				data-plan-url={ fmt.Sprintf("/campaigns/%s/characters/new/plan", cc.Campaign.ID) }
+				data-create-url={ fmt.Sprintf("/campaigns/%s/characters/new", cc.Campaign.ID) }
+				data-csrf={ view.CSRFToken }
+				data-type-name={ view.TypeName }
+				data-for-self={ fmt.Sprint(view.ForSelf) }
+			>
+				<div class="hc-page paper paper-stack hc-loading" role="status">
+					<p class="paper-kind">New hero</p>
+					<p class="hc-loading__text">Opening the creator…</p>
+				</div>
+				<noscript>
+					<p class="text-sm text-fg-muted">The hero creator needs JavaScript. You can still add a character page from the Characters page.</p>
+				</noscript>
+			</div>
+		</div>
+	}
+}
