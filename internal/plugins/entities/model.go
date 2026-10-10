@@ -716,6 +716,8 @@ type CastView struct {
 	// CanCreateHero shows the Create hero button: staff always, a player when
 	// the owner lets players claim the hero's page type.
 	CanCreateHero bool
+	// CanManageEntries shows the Directors their "Your own entries" link.
+	CanManageEntries bool
 }
 
 // --- Slug Generation ---
