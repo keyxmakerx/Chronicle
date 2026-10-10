@@ -18,7 +18,7 @@
  *
  * The handlers are inline IIFEs (swap-safety: the block arrives by HTMX), so
  * this exposes window.ChronicleMapPicker and adds no delegated listener. It
- * loads on sight through the block's map-picker widget mount (ADR-063).
+ * loads on sight through the block's map-block-picker widget mount (ADR-063).
  */
 (function () {
   // ---- Pure helpers (unit-tested in test/js/map_block_picker.test.mjs) ----
@@ -181,10 +181,10 @@
 
   window.ChronicleMapPicker = { filter: filter, select: select, pick: pick, create: create, cancelCreate: cancelCreate };
 
-  // The block's data-widget="map-picker" mount is what makes boot.js load this
+  // The block's data-widget="map-block-picker" mount is what makes boot.js load this
   // file on sight; the inline handlers do the work, so the widget itself has
   // nothing to set up.
   if (window.Chronicle && Chronicle.register) {
-    Chronicle.register('map-picker', { init: function () {}, destroy: function () {} });
+    Chronicle.register('map-block-picker', { init: function () {}, destroy: function () {} });
   }
 })();
