@@ -28,6 +28,14 @@ import (
 // sidestep it.
 var schedulerTokens = []string{"avail", "proposal", "notification", "timezone"}
 
+// isAllowedExportZone is the one zone the campaign export may carry: the
+// time zone a GM picked for a calendar that follows real time. It is a
+// setting of their world rather than where any member is, and the owner
+// chose to keep it in backups. Any other zone field still fails.
+func isAllowedExportZone(typ reflect.Type, f reflect.StructField) bool {
+	return typ == reflect.TypeOf(campaigns.ExportCalendarData{}) && f.Name == "RealTimeZone"
+}
+
 // mentionsSchedulerData reports whether a struct field name or its json tag
 // hints at any scheduler-owned data that must not be exported.
 func mentionsSchedulerData(f reflect.StructField) string {
@@ -55,6 +63,9 @@ func assertNoSchedulerFields(t *testing.T, typ reflect.Type, path string, seen m
 	seen[typ] = true
 	for i := 0; i < typ.NumField(); i++ {
 		f := typ.Field(i)
+		if isAllowedExportZone(typ, f) {
+			continue
+		}
 		if tok := mentionsSchedulerData(f); tok != "" {
 			t.Errorf("egress leak: %s.%s references scheduler data (%q) — it must stay out of export payloads (RC-12.5)", path, f.Name, tok)
 		}
