@@ -849,6 +849,8 @@ type TopbarLiveData struct {
 	Weather string
 	// Moons holds today's phase for each visible moon.
 	Moons []TopbarMoon
+	// Era is the name of the era today falls in, e.g. "Age of Ash".
+	Era string
 	// NextNight is the countdown to the next game night, e.g. "Fri 7 pm".
 	NextNight TopbarNight
 }

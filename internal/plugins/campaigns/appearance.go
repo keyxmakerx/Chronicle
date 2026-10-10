@@ -57,7 +57,7 @@ var (
 	AppearanceElevations   = []string{"standard", "flat", "dramatic", "ambient"}
 	AppearanceSpeeds       = []string{"standard", "snappy", "leisurely"}
 	AppearanceScrims       = []string{"medium", "light", "strong"}
-	AppearanceWidgets      = []string{"links", "text", "note", "search", "date", "weather", "moon", "session"}
+	AppearanceWidgets      = []string{"links", "text", "note", "search", "date", "weather", "moon", "era", "session"}
 	AppearanceSidebars     = []string{"charcoal", "ink", "tinted", "own"}
 	AppearanceCorners      = []string{"plain", "subtitle", "banner"}
 	AppearanceGlows        = []string{"accent", "own"}

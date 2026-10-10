@@ -190,11 +190,15 @@ templ navFoldHead(id string, label string, count int, cur string) {
 }
 
 // navItem is a row, plus its sub-category rows under a twisty when it has
-// any, and the viewer's own pin when they can pin it.
+// any, the viewer's own pin when they can pin it, and the dots button that
+// opens the row menu (sidebar_row_menu.js) when it has actions for them.
 templ navItem(row NavRowView, pinnable bool) {
-	if len(row.Subs) > 0 || pinnable {
-		<div class={ "nav-rw", templ.KV("can-pin", pinnable), templ.KV("is-mine", row.Personal), templ.KV("has-subs", len(row.Subs) > 0) }>
+	if more := pinnable || NavCanEdit(ctx); len(row.Subs) > 0 || more {
+		<div class={ "nav-rw", templ.KV("can-pin", pinnable), templ.KV("is-mine", row.Personal), templ.KV("has-subs", len(row.Subs) > 0), templ.KV("has-more", more) }>
 			@navRow(row)
+			if more {
+				@navMore(row)
+			}
 			if pinnable {
 				@navMyPin(row)
 			}
@@ -205,6 +209,22 @@ templ navItem(row NavRowView, pinnable bool) {
 	} else {
 		@navRow(row)
 	}
+}
+
+// navMore opens the row menu, the same one a right-click, a long press or
+// Shift+F10 opens.
+templ navMore(row NavRowView) {
+	<button
+		type="button"
+		class="nav-more"
+		data-nav-more
+		aria-haspopup="menu"
+		aria-expanded="false"
+		aria-label={ "More actions for " + row.Label }
+		title="More actions"
+	>
+		<i class="fa-solid fa-ellipsis" aria-hidden="true"></i>
+	</button>
 }
 
 // navMyPin is a member's own pin on a row: it pins the row to the top of
