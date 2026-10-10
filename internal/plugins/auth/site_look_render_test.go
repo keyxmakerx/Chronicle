@@ -31,7 +31,7 @@ func TestAuthPagesCarryTheSiteBrand(t *testing.T) {
 	}{
 		{"login", LoginPage("tok", "", "", "", "")},
 		{"register", RegisterPage("tok", &RegisterRequest{}, "", "", false, "open")},
-		{"forgot password", ForgotPasswordPage("tok", "", "")},
+		{"forgot password", ForgotPasswordPage("tok", "", "", true)},
 		{"reset password", ResetPasswordPage("tok", "t", "", "")},
 	}
 	saved := sitelook.Settings{Configured: true, Name: "Dragon Hold", Look: "ember", Background: sitelook.BackgroundLook}

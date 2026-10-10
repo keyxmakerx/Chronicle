@@ -21,6 +21,9 @@ type mockUserRepo struct {
 	viewPrefs            []byte
 	notifyPrefs          map[string][]byte
 	anonymized           []string
+	totpSecret           map[string]*string
+	totpEnabled          map[string]bool
+	recoveryCodes        map[string]map[string]bool // user -> hash -> used
 	createFn             func(ctx context.Context, user *User) error
 	findByIDFn           func(ctx context.Context, id string) (*User, error)
 	findByEmailFn        func(ctx context.Context, email string) (*User, error)
@@ -182,6 +185,45 @@ func (m *mockUserRepo) ListNotifyPrefs(ctx context.Context, userIDs []string) (m
 func (m *mockUserRepo) AnonymizeUser(ctx context.Context, userID, email, displayName, passwordHash string) error {
 	m.anonymized = append(m.anonymized, userID+"|"+email+"|"+displayName)
 	return nil
+}
+
+func (m *mockUserRepo) SetTOTP(ctx context.Context, userID string, encryptedSecret *string, enabled bool) error {
+	if m.totpSecret == nil {
+		m.totpSecret, m.totpEnabled = map[string]*string{}, map[string]bool{}
+	}
+	m.totpSecret[userID], m.totpEnabled[userID] = encryptedSecret, enabled
+	return nil
+}
+
+func (m *mockUserRepo) ReplaceRecoveryCodes(ctx context.Context, userID string, hashes []string) error {
+	if m.recoveryCodes == nil {
+		m.recoveryCodes = map[string]map[string]bool{}
+	}
+	set := map[string]bool{}
+	for _, h := range hashes {
+		set[h] = false
+	}
+	m.recoveryCodes[userID] = set
+	return nil
+}
+
+func (m *mockUserRepo) UseRecoveryCode(ctx context.Context, userID, hash string) (bool, error) {
+	used, ok := m.recoveryCodes[userID][hash]
+	if !ok || used {
+		return false, nil
+	}
+	m.recoveryCodes[userID][hash] = true
+	return true, nil
+}
+
+func (m *mockUserRepo) CountRecoveryCodes(ctx context.Context, userID string) (int, error) {
+	n := 0
+	for _, used := range m.recoveryCodes[userID] {
+		if !used {
+			n++
+		}
+	}
+	return n, nil
 }
 
 func (m *mockUserRepo) UpdateDisplayName(ctx context.Context, userID, displayName string) error {

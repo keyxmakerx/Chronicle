@@ -137,13 +137,22 @@ func (h *Handler) Login(c echo.Context) error {
 	}
 
 	input := LoginInput{
-		Email:     req.Email,
-		Password:  req.Password,
-		IP:        ip,
-		UserAgent: ua,
+		Email:         req.Email,
+		Password:      req.Password,
+		IP:            ip,
+		UserAgent:     ua,
+		TrustedDevice: readTrustedDevice(c.Request()),
 	}
 
 	token, user, err := h.service.Login(c.Request().Context(), input)
+	var need *TwoFactorRequired
+	if errors.As(err, &need) {
+		csrfToken := middleware.GetCSRFToken(c)
+		if middleware.IsHTMX(c) {
+			return middleware.Render(c, http.StatusOK, TwoFactorForm_(csrfToken, need.Challenge, redirect, ""))
+		}
+		return middleware.Render(c, http.StatusOK, TwoFactorPage(csrfToken, need.Challenge, redirect, ""))
+	}
 	if err != nil {
 		// Log failed login attempt as a security event.
 		h.logSecurityEvent(c.Request().Context(), "login.failed", "", "", ip, ua, map[string]any{"email": req.Email})
@@ -173,6 +182,44 @@ func (h *Handler) Login(c echo.Context) error {
 	}
 
 	// HTMX requests get a redirect header; browser forms get a 303 redirect.
+	return middleware.HTMXRedirect(c, redirectTo)
+}
+
+// LoginTwoFactor is the code step of a sign-in (POST /login/two-factor).
+// The challenge from the password step stands in for the email and
+// password, so neither is sent twice.
+func (h *Handler) LoginTwoFactor(c echo.Context) error {
+	ip := c.RealIP()
+	ua := c.Request().UserAgent()
+	redirect := sanitizeRedirect(c.FormValue("redirect"))
+	challenge := c.FormValue("challenge")
+
+	res, err := h.service.CompleteTwoFactorLogin(c.Request().Context(), TwoFactorLoginInput{
+		Challenge: challenge,
+		Code:      c.FormValue("code"),
+		Remember:  c.FormValue("remember") != "",
+		IP:        ip,
+		UserAgent: ua,
+	})
+	if err != nil {
+		h.logSecurityEvent(c.Request().Context(), "login.two_factor_failed", "", "", ip, ua, nil)
+		csrfToken := middleware.GetCSRFToken(c)
+		errMsg := apperror.UserMessage(err, "that code isn't right")
+		if middleware.IsHTMX(c) {
+			return middleware.Render(c, http.StatusOK, TwoFactorForm_(csrfToken, challenge, redirect, errMsg))
+		}
+		return middleware.Render(c, http.StatusOK, TwoFactorPage(csrfToken, challenge, redirect, errMsg))
+	}
+
+	h.logSecurityEvent(c.Request().Context(), "login.success", res.User.ID, "", ip, ua, map[string]any{"two_factor": true})
+	setSessionCookie(c, res.SessionToken, h.sessionTTL)
+	if res.TrustedDevice != "" {
+		setTrustedDeviceCookie(c, res.TrustedDevice)
+	}
+	redirectTo := "/dashboard"
+	if redirect != "" {
+		redirectTo = redirect
+	}
 	return middleware.HTMXRedirect(c, redirectTo)
 }
 
@@ -301,7 +348,7 @@ func (h *Handler) Logout(c echo.Context) error {
 // ForgotPasswordForm renders the forgot password page (GET /forgot-password).
 func (h *Handler) ForgotPasswordForm(c echo.Context) error {
 	csrfToken := middleware.GetCSRFToken(c)
-	return middleware.Render(c, http.StatusOK, ForgotPasswordPage(csrfToken, "", ""))
+	return middleware.Render(c, http.StatusOK, ForgotPasswordPage(csrfToken, "", "", h.service.CanEmailResetLinks(c.Request().Context())))
 }
 
 // ForgotPassword processes the forgot password form (POST /forgot-password).
@@ -310,7 +357,7 @@ func (h *Handler) ForgotPassword(c echo.Context) error {
 	email := c.FormValue("email")
 	if email == "" {
 		csrfToken := middleware.GetCSRFToken(c)
-		return middleware.Render(c, http.StatusOK, ForgotPasswordPage(csrfToken, "", "email is required"))
+		return middleware.Render(c, http.StatusOK, ForgotPasswordPage(csrfToken, "", "email is required", true))
 	}
 
 	// Initiate reset (fire-and-forget — always returns nil to avoid leaking info).
@@ -593,7 +640,12 @@ func (h *Handler) AccountPage(c echo.Context) error {
 		slog.Warn("listing owned campaigns", slog.String("user_id", userID), slog.Any("error", err))
 	}
 
-	return middleware.Render(c, http.StatusOK, AccountPage(user, csrfToken, timezones, prefs, notify, owned))
+	twoFactor, err := h.service.TwoFactorStatus(c.Request().Context(), userID)
+	if err != nil {
+		slog.Warn("reading two-factor status", slog.String("user_id", userID), slog.Any("error", err))
+	}
+
+	return middleware.Render(c, http.StatusOK, AccountPage(user, csrfToken, timezones, prefs, notify, owned, twoFactor))
 }
 
 // DeleteAccountAPI deletes the signed-in person's own account
@@ -614,6 +666,81 @@ func (h *Handler) DeleteAccountAPI(c echo.Context) error {
 	h.logSecurityEvent(c.Request().Context(), "account.deleted", userID, "", c.RealIP(), c.Request().UserAgent(), nil)
 	clearSessionCookie(c)
 	return c.JSON(http.StatusOK, map[string]string{"redirect": "/login?deleted=1"})
+}
+
+// twoFactorRequest is the body of the account page's two-factor calls; each
+// call reads only the field it needs.
+type twoFactorRequest struct {
+	Password string `json:"password"`
+	Code     string `json:"code"`
+}
+
+func bindTwoFactorRequest(c echo.Context) (string, twoFactorRequest, error) {
+	userID := GetUserID(c)
+	if userID == "" {
+		return "", twoFactorRequest{}, apperror.NewUnauthorized("not authenticated")
+	}
+	var req twoFactorRequest
+	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
+		return "", twoFactorRequest{}, apperror.NewBadRequest("invalid request body")
+	}
+	return userID, req, nil
+}
+
+// TwoFactorSetupAPI starts turning two-factor on (POST /account/two-factor/setup).
+func (h *Handler) TwoFactorSetupAPI(c echo.Context) error {
+	userID, req, err := bindTwoFactorRequest(c)
+	if err != nil {
+		return err
+	}
+	setup, err := h.service.BeginTwoFactor(c.Request().Context(), userID, req.Password)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, setup)
+}
+
+// TwoFactorEnableAPI finishes turning two-factor on and returns the recovery
+// codes (POST /account/two-factor/enable).
+func (h *Handler) TwoFactorEnableAPI(c echo.Context) error {
+	userID, req, err := bindTwoFactorRequest(c)
+	if err != nil {
+		return err
+	}
+	codes, err := h.service.EnableTwoFactor(c.Request().Context(), userID, req.Code)
+	if err != nil {
+		return err
+	}
+	h.logSecurityEvent(c.Request().Context(), "two_factor.enabled", userID, userID, c.RealIP(), c.Request().UserAgent(), nil)
+	return c.JSON(http.StatusOK, map[string]any{"recoveryCodes": codes})
+}
+
+// TwoFactorDisableAPI turns two-factor off (POST /account/two-factor/disable).
+func (h *Handler) TwoFactorDisableAPI(c echo.Context) error {
+	userID, req, err := bindTwoFactorRequest(c)
+	if err != nil {
+		return err
+	}
+	if err := h.service.DisableTwoFactor(c.Request().Context(), userID, req.Password); err != nil {
+		return err
+	}
+	h.logSecurityEvent(c.Request().Context(), "two_factor.disabled", userID, userID, c.RealIP(), c.Request().UserAgent(), nil)
+	return c.NoContent(http.StatusNoContent)
+}
+
+// TwoFactorRecoveryCodesAPI replaces the recovery codes
+// (POST /account/two-factor/recovery-codes).
+func (h *Handler) TwoFactorRecoveryCodesAPI(c echo.Context) error {
+	userID, req, err := bindTwoFactorRequest(c)
+	if err != nil {
+		return err
+	}
+	codes, err := h.service.RegenerateRecoveryCodes(c.Request().Context(), userID, req.Password)
+	if err != nil {
+		return err
+	}
+	h.logSecurityEvent(c.Request().Context(), "two_factor.codes_replaced", userID, userID, c.RealIP(), c.Request().UserAgent(), nil)
+	return c.JSON(http.StatusOK, map[string]any{"recoveryCodes": codes})
 }
 
 // UpdateNotifyPrefsAPI saves the signed-in person's notification choices
@@ -742,6 +869,48 @@ func setSessionCookie(c echo.Context, token string, ttl time.Duration) {
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   int(ttl.Seconds()),
 	})
+}
+
+// trustedDeviceCookieName / trustedDeviceCookieSecureName name the
+// remembered-device cookie, __Host- prefixed over HTTPS like the session.
+const (
+	trustedDeviceCookieName       = "chronicle_trusted_device"
+	trustedDeviceCookieSecureName = "__Host-chronicle_trusted_device"
+)
+
+// setTrustedDeviceCookie remembers this device for the code step. It only
+// skips the code; the password is still asked every time.
+func setTrustedDeviceCookie(c echo.Context, token string) {
+	req := c.Request()
+	secure := middleware.SchemeIsSecure(req)
+	name := trustedDeviceCookieName
+	if secure {
+		name = trustedDeviceCookieSecureName
+	}
+	c.SetCookie(&http.Cookie{
+		Name:     name,
+		Value:    token,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   int(trustedDeviceTTL.Seconds()),
+	})
+}
+
+// readTrustedDevice reads the remembered-device cookie, preferring the
+// __Host- name over HTTPS as readSessionToken does.
+func readTrustedDevice(req *http.Request) string {
+	names := []string{trustedDeviceCookieName}
+	if middleware.SchemeIsSecure(req) {
+		names = []string{trustedDeviceCookieSecureName, trustedDeviceCookieName}
+	}
+	for _, name := range names {
+		if cookie, err := req.Cookie(name); err == nil && cookie.Value != "" {
+			return cookie.Value
+		}
+	}
+	return ""
 }
 
 // clearSessionCookie removes the session cookie by setting MaxAge to -1. It

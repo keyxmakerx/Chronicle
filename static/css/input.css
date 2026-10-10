@@ -2685,6 +2685,20 @@
 }
 /* ============================================================ */
 
+/* Settle: a new step of a form (the sign-in code step, the two-factor
+   setup panel) fades in with a 6px rise. Calm keeps the fade only. */
+@layer components {
+  .step-settle {
+    opacity: 1;
+    transform: none;
+    transition: opacity var(--dur-large) var(--ease-out), transform var(--dur-large) var(--ease-out);
+    @starting-style {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+  }
+}
+
 /* === V2 widget animations === *
  * Each pattern is a CSS class consumers add to elements; durations +
  * easings resolve from the --motion-* tokens published in :root. Every

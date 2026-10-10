@@ -1033,6 +1033,23 @@ func (h *Handler) DisableUser(c echo.Context) error {
 	return middleware.HTMXRedirect(c, peopleListReturnURL(c.Request().Header.Get("HX-Current-URL"), "/admin/security"))
 }
 
+// DisableTwoFactor switches two-factor off for a user who is locked out of it
+// (PUT /admin/security/users/:id/two-factor/off).
+func (h *Handler) DisableTwoFactor(c echo.Context) error {
+	if h.securityService == nil {
+		return apperror.NewMissingContext()
+	}
+	targetID := c.Param("id")
+	currentUserID := auth.GetUserID(c)
+	if err := h.securityService.DisableTwoFactor(c.Request().Context(), targetID); err != nil {
+		return err
+	}
+	_ = h.securityService.LogEvent(c.Request().Context(), EventTwoFactorAdminOff,
+		targetID, currentUserID, c.RealIP(), c.Request().UserAgent(), nil)
+	h.record(c, "user.two_factor_off", "user", targetID, h.userLabel(c.Request().Context(), targetID))
+	return middleware.HTMXRedirect(c, peopleListReturnURL(c.Request().Header.Get("HX-Current-URL"), "/admin/users"))
+}
+
 // EnableUser re-enables a disabled user account (PUT /admin/security/users/:id/enable).
 func (h *Handler) EnableUser(c echo.Context) error {
 	if h.securityService == nil {

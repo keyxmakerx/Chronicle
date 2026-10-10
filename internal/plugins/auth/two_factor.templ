@@ -1,0 +1,81 @@
+// two_factor.templ renders the code step of signing in, shown after a right
+// password when the account has two-factor on.
+
+package auth
+
+import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
+
+// TwoFactorPage is the full-page code step, for a sign-in posted without HTMX.
+templ TwoFactorPage(csrfToken, challenge, redirect, errMsg string) {
+	@layouts.Base("Login") {
+		@layouts.SiteAuthStage("") {
+			<div class="w-full max-w-md">
+				<div class="text-center mb-8">
+					@layouts.SiteAuthMark()
+					<h1 class="text-3xl font-bold text-fg">Welcome back</h1>
+					<p class="text-fg-secondary mt-2">Sign in to your { layouts.SiteName(ctx) } account</p>
+				</div>
+				@TwoFactorForm_(csrfToken, challenge, redirect, errMsg)
+			</div>
+		}
+	}
+}
+
+// TwoFactorForm_ is the code step. It replaces the password form in place
+// (same id), so the page doesn't reload between the two steps. One field
+// takes either an authenticator code or a recovery code; "Use a recovery
+// code" only changes the wording.
+templ TwoFactorForm_(csrfToken, challenge, redirect, errMsg string) {
+	<div id="login-form" class="step-settle">
+		<form
+			class="card p-8 space-y-5"
+			method="POST"
+			action="/login/two-factor"
+			hx-post="/login/two-factor"
+			hx-target="#login-form"
+			hx-swap="outerHTML"
+			x-data="{ recovery: false }"
+		>
+			<input type="hidden" name="csrf_token" value={ csrfToken }/>
+			<input type="hidden" name="challenge" value={ challenge }/>
+			<input type="hidden" name="redirect" value={ redirect }/>
+			<div>
+				<h2 class="text-lg font-semibold text-fg" x-text="recovery ? 'Use a recovery code' : 'Enter your code'">Enter your code</h2>
+				<p class="text-sm text-fg-secondary mt-1" x-show="!recovery">Open your authenticator app and type the 6-digit code for Chronicle.</p>
+				<p class="text-sm text-fg-secondary mt-1" x-show="recovery" x-cloak>Each of the eight codes you saved works once.</p>
+			</div>
+			if errMsg != "" {
+				<div class="alert-error" role="alert">{ errMsg }</div>
+			}
+			<div>
+				<label for="code" class="block text-sm font-medium text-fg-body mb-1.5" x-text="recovery ? 'Recovery code' : 'Code'">Code</label>
+				<input
+					type="text"
+					id="code"
+					name="code"
+					x-ref="code"
+					required
+					autofocus
+					class="input w-full font-mono tracking-widest text-center text-lg"
+					x-bind:inputmode="recovery ? 'text' : 'numeric'"
+					x-bind:autocomplete="recovery ? 'off' : 'one-time-code'"
+					x-bind:placeholder="recovery ? 'xxxx-xxxx' : '123456'"
+					inputmode="numeric"
+					autocomplete="one-time-code"
+					maxlength="20"
+					spellcheck="false"
+				/>
+			</div>
+			<label class="flex items-center gap-2 text-sm text-fg-body" x-show="!recovery">
+				<input type="checkbox" name="remember" value="1" class="h-4 w-4 text-accent border-edge rounded focus:ring-accent"/>
+				Don&apos;t ask again on this device for 30 days
+			</label>
+			<button type="submit" class="btn-primary w-full py-2.5" x-text="recovery ? 'Sign In' : 'Verify'">Verify</button>
+			<div class="text-center text-sm space-y-2">
+				<button type="button" class="text-accent hover:text-accent-hover" x-show="!recovery" @click="recovery = true; $nextTick(() => $refs.code?.focus())">Lost your phone? Use a recovery code</button>
+				<p class="text-fg-secondary" x-show="recovery" x-cloak>No codes either? Ask your site admin. They can switch two-factor off for your account.</p>
+				<p><a href="/login" class="text-fg-muted hover:text-fg">Back to sign in</a></p>
+			</div>
+		</form>
+	</div>
+}

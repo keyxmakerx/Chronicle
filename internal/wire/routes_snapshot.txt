@@ -543,6 +543,10 @@ POST	/:id/review	internal/plugins/packages/routes.go
 POST	/account/avatar	internal/plugins/auth/routes.go
 POST	/account/delete	internal/plugins/auth/routes.go
 POST	/account/reauth	internal/plugins/auth/routes.go
+POST	/account/two-factor/disable	internal/plugins/auth/routes.go
+POST	/account/two-factor/enable	internal/plugins/auth/routes.go
+POST	/account/two-factor/recovery-codes	internal/plugins/auth/routes.go
+POST	/account/two-factor/setup	internal/plugins/auth/routes.go
 POST	/addons	internal/plugins/addons/routes.go
 POST	/ai-workspace/import/commit	internal/plugins/ai_workspace/routes.go
 POST	/ai-workspace/import/parse	internal/plugins/ai_workspace/routes.go
@@ -656,6 +660,7 @@ POST	/invites	internal/plugins/campaigns/routes.go
 POST	/join-code	internal/plugins/campaigns/routes.go
 POST	/layout-presets	internal/plugins/entities/layout_preset_routes.go
 POST	/login	internal/plugins/auth/routes.go
+POST	/login/two-factor	internal/plugins/auth/routes.go
 POST	/logout	internal/plugins/auth/routes.go
 POST	/maps	internal/plugins/maps/routes.go
 POST	/maps/:mapID/drawings	internal/plugins/syncapi/routes.go
@@ -880,6 +885,7 @@ PUT	/relations/:relationId	internal/plugins/syncapi/routes.go
 PUT	/roll-tables	internal/plugins/rolltables/routes.go
 PUT	/security/users/:id/disable	internal/plugins/admin/routes.go
 PUT	/security/users/:id/enable	internal/plugins/admin/routes.go
+PUT	/security/users/:id/two-factor/off	internal/plugins/admin/routes.go
 PUT	/sessions/:sid	internal/plugins/sessions/routes.go
 PUT	/sessions/:sid/recap	internal/plugins/sessions/routes.go
 PUT	/sessions/:sid/rsvp-exclude	internal/plugins/sessions/routes.go

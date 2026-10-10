@@ -13,7 +13,7 @@ import (
 )
 
 // AccountPage renders the full account settings page.
-templ AccountPage(user *User, csrfToken string, timezones []timeutil.Zone, prefs ViewPrefs, notify notifyprefs.Prefs, owned []OwnedCampaignRef) {
+templ AccountPage(user *User, csrfToken string, timezones []timeutil.Zone, prefs ViewPrefs, notify notifyprefs.Prefs, owned []OwnedCampaignRef, twoFactor TwoFactorStatus) {
 	@layouts.App("Account Settings") {
 		<div class="max-w-2xl mx-auto">
 			<div class="mb-6">
@@ -210,10 +210,120 @@ templ AccountPage(user *User, csrfToken string, timezones []timeutil.Zone, prefs
 					</button>
 				</div>
 			</div>
+			@twoFactorCard(twoFactor)
 			@notifyPrefsCard(notify)
-			@deleteAccountCard(owned)
+			@deleteAccountCard(owned, twoFactor.Enabled)
 		</div>
 	}
+}
+
+// twoFactorCard is the Two-factor sign-in section. Turning it on is three
+// steps in place (password, scan and confirm, save the recovery codes);
+// replacing the codes and turning it off each ask for the password first.
+templ twoFactorCard(st TwoFactorStatus) {
+	<div class="card p-6 mb-6" x-data={ twoFactorData(st) } id="two-factor">
+		<div class="flex items-center gap-2 mb-1">
+			<h2 class="text-lg font-semibold text-fg">Two-factor sign-in</h2>
+			<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium" x-bind:class="on ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300' : 'bg-surface-alt text-fg-muted'" x-text="on ? 'On' : 'Off'"></span>
+		</div>
+		<!-- Off, resting -->
+		<div x-show="!on && step === ''">
+			<p class="text-sm text-fg-secondary">Ask for a code from your phone each time you sign in, so a stolen password isn't enough.</p>
+			<div class="flex justify-end pt-3 mt-3 border-t border-edge">
+				<button type="button" class="btn-primary text-sm" @click="ask('setup')">Turn on</button>
+			</div>
+		</div>
+		<!-- On, resting -->
+		<div x-show="on && step === ''" x-cloak>
+			<p class="text-sm text-fg-secondary">You'll be asked for a code when you sign in with your password. <span x-text="codesLeft + ' of 8 recovery codes left.'"></span></p>
+			<div class="flex flex-wrap justify-end gap-2 pt-3 mt-3 border-t border-edge">
+				<button type="button" class="btn-secondary text-sm" @click="ask('codes')">New recovery codes</button>
+				<button type="button" class="btn-secondary text-sm text-red-600 dark:text-red-400" @click="ask('off')">Turn off</button>
+			</div>
+		</div>
+		<!-- Password first -->
+		<div x-show="step === 'password'" x-cloak class="step-settle space-y-3 mt-2">
+			<p class="text-sm text-fg-secondary" x-text="intent === 'setup' ? 'Type your password to start.' : intent === 'codes' ? 'Type your password to make new recovery codes. The old ones stop working.' : 'Type your password to turn two-factor off.'"></p>
+			<input type="password" x-model="password" x-ref="pw" class="input w-full" autocomplete="current-password" aria-label="Your password" @keydown.enter.prevent="confirmPassword()"/>
+			<div class="flex flex-wrap items-center justify-end gap-2">
+				<span class="text-xs mr-auto text-red-500" x-text="error" aria-live="polite"></span>
+				<button type="button" class="btn-secondary text-sm" @click="reset()">Cancel</button>
+				<button type="button" class="text-sm" x-bind:class="intent === 'off' ? 'btn-danger' : 'btn-primary'" x-bind:disabled="!password || busy" @click="confirmPassword()" x-text="intent === 'off' ? 'Turn off' : 'Continue'"></button>
+			</div>
+		</div>
+		<!-- Scan and confirm -->
+		<div x-show="step === 'scan'" x-cloak class="step-settle mt-2">
+			<div class="flex flex-wrap gap-5 items-start">
+				<img x-bind:src="qr" alt="QR code for your authenticator app" class="w-40 h-40 rounded-lg border border-edge bg-white p-2 shrink-0"/>
+				<div class="flex-1 min-w-0 space-y-3 text-sm">
+					<p class="text-fg-body"><span class="font-semibold">1.</span> Scan this with an authenticator app (Google Authenticator, 1Password, Aegis, Authy).</p>
+					<p class="text-fg-muted">Can't scan? Type this key: <code class="font-mono text-fg break-all" x-text="secret"></code></p>
+					<p class="text-fg-body"><span class="font-semibold">2.</span> Type the 6-digit code it shows</p>
+					<input type="text" x-model="code" x-ref="code" class="input w-40 font-mono tracking-widest text-center" inputmode="numeric" autocomplete="one-time-code" maxlength="7" placeholder="123456" aria-label="6-digit code" @keydown.enter.prevent="enable()"/>
+				</div>
+			</div>
+			<div class="flex flex-wrap items-center justify-end gap-2 pt-3 mt-3 border-t border-edge">
+				<span class="text-xs mr-auto text-red-500" x-text="error" aria-live="polite"></span>
+				<button type="button" class="btn-secondary text-sm" @click="reset()">Cancel</button>
+				<button type="button" class="btn-primary text-sm" x-bind:disabled="code.replace(/\D/g, '').length !== 6 || busy" @click="enable()">Turn on</button>
+			</div>
+		</div>
+		<!-- Recovery codes, shown once -->
+		<div x-show="step === 'codes'" x-cloak class="step-settle mt-2 space-y-3">
+			<p class="text-sm text-fg-body">Save these recovery codes somewhere safe. Each one gets you in once if you lose your phone. This is the only time they're shown.</p>
+			<ul class="grid grid-cols-2 gap-x-6 gap-y-1 rounded-lg border border-edge bg-surface-alt p-4 font-mono text-sm text-fg">
+				<template x-for="c in codes" x-bind:key="c"><li x-text="c"></li></template>
+			</ul>
+			<div class="flex flex-wrap items-center justify-end gap-2">
+				<span class="text-xs mr-auto text-fg-muted" x-bind:class="error ? 'text-red-500' : ''" x-text="copied ? 'Copied' : error" aria-live="polite"></span>
+				<button type="button" class="btn-secondary text-sm" @click="copy()"><i class="fa-regular fa-copy mr-1"></i> Copy codes</button>
+				<button type="button" class="btn-primary text-sm" @click="reset()">I've saved them</button>
+			</div>
+		</div>
+	</div>
+}
+
+// twoFactorData is the Alpine state for the Two-factor section.
+func twoFactorData(st TwoFactorStatus) string {
+	return fmt.Sprintf(`{
+		on: %t, codesLeft: %d, step: '', intent: '', password: '', code: '', qr: '', secret: '', codes: [], error: '', busy: false, copied: false,
+		reset() { this.step = ''; this.intent = ''; this.password = ''; this.code = ''; this.qr = ''; this.secret = ''; this.codes = []; this.error = ''; this.busy = false; this.copied = false; },
+		ask(intent) { this.reset(); this.intent = intent; this.step = 'password'; this.$nextTick(() => this.$refs.pw.focus()); },
+		call(path, body) {
+			this.busy = true; this.error = '';
+			return Chronicle.apiFetch(path, { method: 'POST', body: body })
+			.then(r => r.json().catch(() => ({})).then(d => { if (!r.ok) throw new Error(d.message || 'Something went wrong'); return d; }))
+			.finally(() => { this.busy = false; });
+		},
+		confirmPassword() {
+			if (!this.password || this.busy) return;
+			const pw = this.password;
+			if (this.intent === 'setup') {
+				this.call('/account/two-factor/setup', { password: pw }).then(d => {
+					this.password = ''; this.qr = d.qr; this.secret = d.secret; this.step = 'scan';
+					this.$nextTick(() => this.$refs.code.focus());
+				}).catch(e => { this.error = e.message; });
+			} else if (this.intent === 'codes') {
+				this.call('/account/two-factor/recovery-codes', { password: pw }).then(d => {
+					this.password = ''; this.codes = d.recoveryCodes; this.codesLeft = this.codes.length; this.step = 'codes';
+				}).catch(e => { this.error = e.message; });
+			} else {
+				this.call('/account/two-factor/disable', { password: pw }).then(() => {
+					this.reset(); this.on = false; this.codesLeft = 0;
+				}).catch(e => { this.error = e.message; });
+			}
+		},
+		enable() {
+			if (this.busy) return;
+			this.call('/account/two-factor/enable', { code: this.code }).then(d => {
+				this.on = true; this.codes = d.recoveryCodes; this.codesLeft = this.codes.length; this.qr = ''; this.secret = ''; this.step = 'codes';
+			}).catch(e => { this.error = e.message; });
+		},
+		copy() {
+			const text = this.codes.join('\n');
+			navigator.clipboard.writeText(text).then(() => { this.copied = true; }).catch(() => { this.error = 'Copy failed; select the codes instead'; });
+		}
+	}`, st.Enabled, st.CodesLeft)
 }
 
 // notifyPrefsCard is the Notifications section: one row per kind of message,
@@ -286,8 +396,8 @@ templ notifyPrefsCard(notify notifyprefs.Prefs) {
 // the campaigns that must be handed over or deleted first, and only enables
 // the button once none are left and the password and DELETE are typed. The
 // server checks all of it again.
-templ deleteAccountCard(owned []OwnedCampaignRef) {
-	<div class="card p-6 border-red-500/40" x-data={ deleteAccountData(len(owned)) } id="delete-account">
+templ deleteAccountCard(owned []OwnedCampaignRef, needsCode bool) {
+	<div class="card p-6 border-red-500/40" x-data={ deleteAccountData(len(owned), needsCode) } id="delete-account">
 		<h2 class="text-lg font-semibold text-red-600 dark:text-red-400 mb-1">Delete account</h2>
 		<div x-show="!open">
 			<p class="text-sm text-fg-secondary">Removes your account, your private notes and your link to your characters. This can't be undone.</p>
@@ -328,13 +438,19 @@ templ deleteAccountCard(owned []OwnedCampaignRef) {
 				<label class="block text-sm font-medium text-fg-body mb-1" for="delete-password">Your password</label>
 				<input type="password" id="delete-password" x-model="password" class="input w-full" autocomplete="current-password"/>
 			</div>
+			if needsCode {
+				<div>
+					<label class="block text-sm font-medium text-fg-body mb-1" for="delete-code">Two-factor code</label>
+					<input type="text" id="delete-code" x-model="code" class="input w-full font-mono" inputmode="numeric" autocomplete="one-time-code" placeholder="From your authenticator app, or a recovery code" spellcheck="false"/>
+				</div>
+			}
 			<div>
 				<label class="block text-sm font-medium text-fg-body mb-1" for="delete-confirm">Type DELETE to confirm</label>
 				<input type="text" id="delete-confirm" x-model="confirm" class="input w-full" autocomplete="off" spellcheck="false"/>
 			</div>
 			<div class="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-edge">
 				<span class="text-xs mr-auto" x-bind:class="error ? 'text-red-500' : 'text-fg-muted'" x-text="error || hint()" aria-live="polite"></span>
-				<button type="button" class="btn-secondary text-sm" @click="open = false; password = ''; confirm = ''; error = ''">Keep my account</button>
+				<button type="button" class="btn-secondary text-sm" @click="open = false; password = ''; confirm = ''; code = ''; error = ''">Keep my account</button>
 				<button type="button" class="btn-danger text-sm" x-bind:disabled="!ready() || busy" @click="submit()">
 					<span x-show="!busy">Delete account</span>
 					<span x-show="busy">Deleting...</span>
@@ -352,24 +468,25 @@ func memberCountLabel(n int) string {
 }
 
 // deleteAccountData is the Alpine state for the Delete account section.
-func deleteAccountData(owned int) string {
+func deleteAccountData(owned int, needsCode bool) string {
 	return fmt.Sprintf(`{
-		open: false, password: '', confirm: '', busy: false, error: '', owned: %d,
-		ready() { return this.owned === 0 && this.password.length > 0 && this.confirm.trim() === 'DELETE'; },
+		open: false, password: '', confirm: '', code: '', busy: false, error: '', owned: %d, needsCode: %t,
+		ready() { return this.owned === 0 && this.password.length > 0 && this.confirm.trim() === 'DELETE' && (!this.needsCode || this.code.trim().length > 0); },
 		hint() {
 			if (this.owned > 0) return 'Hand over or delete your ' + this.owned + (this.owned === 1 ? ' campaign' : ' campaigns') + ' first.';
-			return this.ready() ? 'This signs you out everywhere.' : 'Type your password and DELETE to continue.';
+			if (this.ready()) return 'This signs you out everywhere.';
+			return this.needsCode ? 'Type your password, a code and DELETE to continue.' : 'Type your password and DELETE to continue.';
 		},
 		submit() {
 			this.busy = true; this.error = '';
-			Chronicle.apiFetch('/account/delete', { method: 'POST', body: { password: this.password, confirm: this.confirm } })
+			Chronicle.apiFetch('/account/delete', { method: 'POST', body: { password: this.password, confirm: this.confirm, code: this.code } })
 			.then(r => r.json().catch(() => ({})).then(d => {
 				if (!r.ok) throw new Error(d.message || 'Could not delete your account');
 				window.location.href = d.redirect || '/login?deleted=1';
 			}))
 			.catch(e => { this.error = e.message; this.busy = false; });
 		}
-	}`, owned)
+	}`, owned, needsCode)
 }
 
 // notifySwitchCell draws one switch, or a dash when the category never

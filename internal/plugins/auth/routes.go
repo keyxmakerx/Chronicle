@@ -18,6 +18,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler) {
 	// Public routes -- no auth required.
 	e.GET("/login", h.LoginForm)
 	e.POST("/login", h.Login, middleware.RateLimit(10, time.Minute))
+	e.POST("/login/two-factor", h.LoginTwoFactor, middleware.RateLimit(10, time.Minute))
 	e.GET("/register", h.RegisterForm)
 	e.POST("/register", h.Register, middleware.RateLimit(5, time.Minute))
 
@@ -38,6 +39,11 @@ func RegisterRoutes(e *echo.Echo, h *Handler) {
 	// Deleting your account checks your password, so it is rate-limited like
 	// the other password checks.
 	e.POST("/account/delete", h.DeleteAccountAPI, RequireAuth(h.service), middleware.RateLimit(5, time.Minute))
+	// Two-factor: each call checks a password or a code, so each is throttled.
+	e.POST("/account/two-factor/setup", h.TwoFactorSetupAPI, RequireAuth(h.service), middleware.RateLimit(10, time.Minute))
+	e.POST("/account/two-factor/enable", h.TwoFactorEnableAPI, RequireAuth(h.service), middleware.RateLimit(10, time.Minute))
+	e.POST("/account/two-factor/disable", h.TwoFactorDisableAPI, RequireAuth(h.service), middleware.RateLimit(10, time.Minute))
+	e.POST("/account/two-factor/recovery-codes", h.TwoFactorRecoveryCodesAPI, RequireAuth(h.service), middleware.RateLimit(10, time.Minute))
 	// Checking a password is a deliberately expensive hash, so every route
 	// that checks one is throttled like login.
 	e.PUT("/account/password", h.ChangePasswordAPI, RequireAuth(h.service), middleware.RateLimit(10, time.Minute))
