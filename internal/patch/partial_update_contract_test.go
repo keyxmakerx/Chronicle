@@ -93,6 +93,13 @@ var governedFieldExceptions = map[string]string{
 	"calendar.UpdateCalendarVisibilityInput.Visibility": "value-typed by choice: same reason as calendar.UpdateEventVisibilityInput.Visibility — a dedicated set-visibility action, not a general update.",
 }
 
+// fullReplaceByDesign lists update inputs that were audited and are NOT partial
+// updates: every caller states the whole record (a form that posts every
+// field, or a body with one field), so there is no absent state to preserve.
+// The reason has to be a fact about the callers, and it has to stay true — a
+// new caller that sends a subset moves the struct to contractGoverned.
+var fullReplaceByDesign = map[string]string{}
+
 // notYetSwept freezes the rest of the inventory. Being on this list is a
 // statement about what was looked at, not a claim of safety. Removing a name
 // means the struct became contract-governed; adding one means a new update
@@ -181,6 +188,9 @@ func TestPartialUpdateContract_InventoryIsFrozen(t *testing.T) {
 		if notYetSwept[name] {
 			continue
 		}
+		if _, ok := fullReplaceByDesign[name]; ok {
+			continue
+		}
 		valueTyped := 0
 		for _, f := range st.fields {
 			if !presenceAware(f.typeString) {
@@ -194,7 +204,8 @@ func TestPartialUpdateContract_InventoryIsFrozen(t *testing.T) {
 		t.Errorf(
 			"new update input %s is in neither list.\n"+
 				"  Decide out loud: if it is a PARTIAL update, make its fields presence-aware and add\n"+
-				"  it to contractGoverned; if it is a full replace, add it to notYetSwept. The count\n"+
+				"  it to contractGoverned; if every caller states the whole record, add it to\n"+
+				"  fullReplaceByDesign with the reason; if you have not audited it, notYetSwept. The count\n"+
 				"  above is what the guard measured, not a verdict — a value-typed field is only a\n"+
 				"  bug if some caller omits the key.", u,
 		)
@@ -205,9 +216,23 @@ func TestPartialUpdateContract_InventoryIsFrozen(t *testing.T) {
 			t.Errorf("notYetSwept lists %s, which no longer exists. Stale allowlist entries are how a ratchet stops ratcheting.", name)
 		}
 	}
+	for name, why := range fullReplaceByDesign {
+		if _, ok := found[name]; !ok {
+			t.Errorf("fullReplaceByDesign lists %s, which no longer exists.", name)
+		}
+		if strings.TrimSpace(why) == "" {
+			t.Errorf("fullReplaceByDesign entry %s has no reason", name)
+		}
+		if _, dup := contractGoverned[name]; dup {
+			t.Errorf("%s is in BOTH contractGoverned and fullReplaceByDesign", name)
+		}
+	}
 	for name := range notYetSwept {
 		if _, dup := contractGoverned[name]; dup {
 			t.Errorf("%s is in BOTH lists; one of them is wrong", name)
+		}
+		if _, dup := fullReplaceByDesign[name]; dup {
+			t.Errorf("%s is in BOTH notYetSwept and fullReplaceByDesign", name)
 		}
 	}
 }
