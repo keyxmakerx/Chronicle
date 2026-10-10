@@ -28,7 +28,7 @@ const pfPickJS = `(function(b){b.closest('[data-pf]').querySelector('[data-pf-in
 const pfUploadJS = `(function(inp){var s=inp.closest('[data-pf]'),f=inp.files&&inp.files[0];if(!f)return;` +
 	`var base=s.getAttribute('data-base'),btn=s.querySelector('[data-pf-attach]'),label=btn.innerHTML;` + pfReloadJS +
 	`var fd=new FormData();fd.append('file',f);` +
-	`var gm=s.querySelector('[data-pf-gm]');if(gm&&gm.checked)fd.append('gm_only','1');` +
+	`var gm=s.querySelector('[data-pf-gm]');if(gm&&gm.checked)fd.append('gmOnly','true');` +
 	`btn.disabled=true;btn.innerHTML='<span class=fx-spin aria-hidden=true></span><span>Attaching…</span>';` +
 	`function fail(m){btn.disabled=false;btn.innerHTML=label;inp.value='';Chronicle.notify(m||'Couldn’t attach that file. Nothing changed.','error');}` +
 	`Chronicle.apiFetch(base,{method:'POST',body:fd}).then(function(r){` +

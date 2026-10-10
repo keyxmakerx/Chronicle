@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"mime"
 	"net/http"
+	"path/filepath"
 	"strings"
 
 	"github.com/labstack/echo/v4"
@@ -95,14 +96,19 @@ func (h *PageFileHandler) Upload(c echo.Context) error {
 		return apperror.NewInternal(err)
 	}
 
-	gm := c.FormValue("gm_only")
+	gmOnly, ok := parseGMOnlyForm(c.FormValue("gmOnly"))
+	// The other spelling is refused rather than ignored, so a client that
+	// sends it is told instead of publishing a file it meant to hide.
+	if !ok || c.FormValue("gm_only") != "" {
+		return apperror.NewBadRequest("gmOnly must be true or false")
+	}
 	f, err := h.svc.Attach(c.Request().Context(), PageFileUpload{
 		CampaignID: cc.Campaign.ID,
 		EntityID:   c.Param("eid"),
 		Viewer:     pageFileViewer(c, cc),
 		Name:       fh.Filename,
 		Bytes:      data,
-		GMOnly:     gm == "1" || gm == "true",
+		GMOnly:     gmOnly,
 	})
 	if err != nil {
 		return err
@@ -165,6 +171,17 @@ func downloadName(f *PageFile) string {
 	if strings.TrimSpace(name) == "" {
 		return "file"
 	}
+	// Pictures are re-encoded on upload (it strips location and camera data),
+	// so a .webp may now be a PNG. The offered name must match what is sent, or
+	// the file will not open.
+	if strings.HasPrefix(f.MimeType, "image/") {
+		ext := strings.ToLower(filepath.Ext(name))
+		if pageFileExtensions[ext] != f.MimeType {
+			if want := MimeToExtension[f.MimeType]; want != "" {
+				name = strings.TrimSuffix(name, filepath.Ext(name)) + want
+			}
+		}
+	}
 	return name
 }
 
@@ -186,7 +203,24 @@ func (h *PageFileHandler) Remove(c echo.Context) error {
 
 // pageFileVisibilityBody is the one field the visibility route takes.
 type pageFileVisibilityBody struct {
-	GMOnly bool `json:"gmOnly"`
+	// A pointer so an absent field is told apart from false: a body that
+	// misspells the key must not quietly publish a GM-only file.
+	GMOnly *bool `json:"gmOnly"`
+}
+
+// parseGMOnlyForm reads the attach form's checkbox. "on" is what a browser
+// sends for a ticked box; anything else that is not plainly yes or no is
+// refused instead of being read as "not GM only".
+func parseGMOnlyForm(v string) (gmOnly, ok bool) {
+	switch v {
+	case "":
+		return false, true
+	case "1", "true", "on":
+		return true, true
+	case "0", "false":
+		return false, true
+	}
+	return false, false
 }
 
 // SetVisibility marks a file GM-only or lets the page's readers see it again
@@ -200,7 +234,10 @@ func (h *PageFileHandler) SetVisibility(c echo.Context) error {
 	if err := c.Bind(&body); err != nil {
 		return apperror.NewBadRequest("invalid request")
 	}
-	f, err := h.svc.SetGMOnly(c.Request().Context(), cc.Campaign.ID, c.Param("eid"), c.Param("fid"), pageFileViewer(c, cc), body.GMOnly)
+	if body.GMOnly == nil {
+		return apperror.NewBadRequest("gmOnly is required")
+	}
+	f, err := h.svc.SetGMOnly(c.Request().Context(), cc.Campaign.ID, c.Param("eid"), c.Param("fid"), pageFileViewer(c, cc), *body.GMOnly)
 	if err != nil {
 		return err
 	}
