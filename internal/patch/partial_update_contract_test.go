@@ -70,7 +70,10 @@ var contractGoverned = map[string]string{
 	"entities.UpdateContentTemplateInput":  "PUT .../content-templates/:tid — a body naming only the name blanked the description and the preview HTML",
 	"entities.UpdatePromptInput":           "PUT .../worldbuilding-prompts/:pid — shares the other definitions' shape; absent name or text was refused rather than preserved",
 	"campaigns.UpdateSidebarConfigRequest": "PUT /campaigns/:id/sidebar-config — the nav editor, the entity manager and the import each name a different subset (items, or the hidden sets), so a push for one must not clear the others; the lists are pointers to slices, an empty list clears and a null preserves",
+	"entity_notes.UpdateNoteRequest":       "PUT .../entities/:eid/notes/:nid — the pin toggle and a rename each send one key, so the audience, share list and body must survive; every field is a pointer or slice, nil means absent",
+	"notes.UpdateNoteRequest":              "PUT .../notes/:noteId (web + syncapi) — pin, colour, filing, sharing and archive each send one key, and the public notes API and the import send only the text, so the text, share list and folder must survive; every field is a pointer or slice, nil means absent and an empty parentId files at the top level",
 	"armory.UpdateInstanceInput":           "PUT /campaigns/:id/armory/instances/:iid — Rename echoed back the description, icon and colour it loaded, so a concurrent change to them was reverted; a name-only push must keep the rest",
+	"posts.UpdatePostRequest":              "PUT .../entities/:eid/posts/:pid — a rename and the privacy toggle each send one key, so the post's content must survive; every field is a pointer or raw JSON, nil means absent",
 	"auth.UpdateViewPrefsInput":            "PUT /account/view-prefs — each My view choice saves on its own as it is tapped, so a body naming one must not reset the other three (born governed, no incident)",
 }
 
@@ -115,13 +118,15 @@ var governedFieldExceptions = map[string]string{
 // The reason has to be a fact about the callers, and it has to stay true — a
 // new caller that sends a subset moves the struct to contractGoverned.
 var fullReplaceByDesign = map[string]string{
-	"campaigns.UpdateCampaignRequest": "PUT /campaigns/:id is the settings page's hx-put form, which posts name, description and the is_public checkbox together; a checkbox is absent when unticked by HTML's own design, so is_public cannot be presence-aware on a form bind. No script or API client calls it",
-	"campaigns.UpdateCampaignInput":   "the service-side twin of campaigns.UpdateCampaignRequest: Update requires a name and states the whole record, and its only caller is the settings form handler",
-	"campaigns.UpdateRoleRequest":     "PUT /campaigns/:id/members/:uid/role — a one-field body: the role select is the whole request",
-	"entities.UpdateEntityRequest":    "PUT /campaigns/:id/entities/:eid is the edit page's hx-put form, which posts name, descriptor, parent and entry on every save and is bound as a form (patch.Field has no form binding); no script or API client calls it. The JSON and sync routes use entities.UpdateEntityInput, which is governed",
-	"addons.UpdateAddonInput":         "addonService.Update has no caller outside tests (the admin UI only flips status through UpdateStatus), and it requires a name and a valid status, so it is a whole-record edit by construction. A route that reaches it with a subset must make the fields presence-aware first",
-	"packages.UpdatePolicyInput":      "PUT /admin/packages/:id/auto-update — a one-field body: the policy radio is the whole request, so there is nothing else to preserve",
-	"packages.UpdateRepoURLInput":     "PUT /admin/packages/:id/repo — a one-field body: the repository URL is the whole request, and an empty URL is refused by UpdateRepoURL's validation rather than stored",
+	"relations.UpdateRelationMetadataRequest": "PUT .../relations/:rid/metadata — the endpoint exists to replace the relation's one opaque metadata blob, and its callers (the inventory widget, the Foundry item sync) send the complete object; the blob is replaced wholesale by design, not merged key by key",
+	"smtp.UpdateSMTPRequest":                  "PUT /admin/smtp is the admin settings page's hx-put form, which posts every field on each save (the unticked Enable checkbox is absent by HTML's design, so it cannot be presence-aware on a form bind; an empty password already keeps the stored secret). Nothing else calls it",
+	"campaigns.UpdateCampaignRequest":         "PUT /campaigns/:id is the settings page's hx-put form, which posts name, description and the is_public checkbox together; a checkbox is absent when unticked by HTML's own design, so is_public cannot be presence-aware on a form bind. No script or API client calls it",
+	"campaigns.UpdateCampaignInput":           "the service-side twin of campaigns.UpdateCampaignRequest: Update requires a name and states the whole record, and its only caller is the settings form handler",
+	"campaigns.UpdateRoleRequest":             "PUT /campaigns/:id/members/:uid/role — a one-field body: the role select is the whole request",
+	"entities.UpdateEntityRequest":            "PUT /campaigns/:id/entities/:eid is the edit page's hx-put form, which posts name, descriptor, parent and entry on every save and is bound as a form (patch.Field has no form binding); no script or API client calls it. The JSON and sync routes use entities.UpdateEntityInput, which is governed",
+	"addons.UpdateAddonInput":                 "addonService.Update has no caller outside tests (the admin UI only flips status through UpdateStatus), and it requires a name and a valid status, so it is a whole-record edit by construction. A route that reaches it with a subset must make the fields presence-aware first",
+	"packages.UpdatePolicyInput":              "PUT /admin/packages/:id/auto-update — a one-field body: the policy radio is the whole request, so there is nothing else to preserve",
+	"packages.UpdateRepoURLInput":             "PUT /admin/packages/:id/repo — a one-field body: the repository URL is the whole request, and an empty URL is refused by UpdateRepoURL's validation rather than stored",
 }
 
 // notYetSwept freezes the rest of the inventory. Being on this list is a
@@ -134,11 +139,6 @@ var notYetSwept = map[string]bool{
 	// unaudited, not verified safe — several (UpdateEntityRequest,
 	// UpdateEntityTypeRequest, UpdateSMTPRequest) look like good candidates
 	// for the next sweep.
-	"entity_notes.UpdateNoteRequest":          true,
-	"notes.UpdateNoteRequest":                 true,
-	"posts.UpdatePostRequest":                 true,
-	"relations.UpdateRelationMetadataRequest": true,
-	"smtp.UpdateSMTPRequest":                  true,
 }
 
 type inputStruct struct {
