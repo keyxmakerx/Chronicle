@@ -3526,6 +3526,20 @@ func (a *App) RegisterRoutes() {
 	}); ok {
 		wired.SetGameNightsAffectedByAnchorMove(&gameNightsAnchorMoveAdapter{svc: sessionsService})
 	}
+	// Records which calendar a session's in-world date belongs to, and
+	// stamps the dates saved before it was recorded. Best-effort: logs and
+	// never blocks startup; a campaign with no calendar is retried next boot.
+	defaultCalendarResolver := &sessionsDefaultCalendarAdapter{svc: calendarService}
+	if wired, ok := sessionsService.(interface {
+		SetDefaultCalendarResolver(sessions.DefaultCalendarResolver)
+	}); ok {
+		wired.SetDefaultCalendarResolver(defaultCalendarResolver)
+	}
+	if n, err := sessions.ReconcileWorldDateCalendars(context.Background(), sessionsService, defaultCalendarResolver); err != nil {
+		slog.Error("sessions: world date calendar backfill failed", slog.Any("error", err), slog.Int("stamped", n))
+	} else if n > 0 {
+		slog.Info("sessions: world date calendar backfill complete", slog.Int("sessions", n))
+	}
 	// Keeps Game nights on for campaigns that already use them; a recorded
 	// owner choice is left alone. Best-effort: logs and never blocks startup.
 	if n, err := sessions.ReconcileAddonEnablement(context.Background(), sessionsService, addonService); err != nil {

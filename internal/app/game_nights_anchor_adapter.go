@@ -18,8 +18,8 @@ type gameNightsAnchorMoveAdapter struct {
 // SessionsInWorldDateRange lists planned sessions whose stored in-world date
 // falls in the range. A session whose date is incomplete is never returned
 // by the sessions query, so every result has all three parts set.
-func (a *gameNightsAnchorMoveAdapter) SessionsInWorldDateRange(ctx context.Context, campaignID string, fromYear, fromMonth, fromDay, toYear, toMonth, toDay, limit int) ([]calendar.AffectedSession, error) {
-	list, err := a.svc.ListPlannedSessionsInWorldDateRange(ctx, campaignID,
+func (a *gameNightsAnchorMoveAdapter) SessionsInWorldDateRange(ctx context.Context, campaignID, calendarID string, fromYear, fromMonth, fromDay, toYear, toMonth, toDay, limit int) ([]calendar.AffectedSession, error) {
+	list, err := a.svc.ListPlannedSessionsInWorldDateRange(ctx, campaignID, calendarID,
 		sessions.WorldDate{Year: fromYear, Month: fromMonth, Day: fromDay},
 		sessions.WorldDate{Year: toYear, Month: toMonth, Day: toDay}, limit)
 	if err != nil {
@@ -69,4 +69,28 @@ func pickRealWorldCalendar(cals []calendar.Calendar) string {
 		}
 	}
 	return first
+}
+
+// sessionsDefaultCalendarAdapter satisfies sessions.DefaultCalendarResolver:
+// the calendar a session's in-world date is recorded against is the
+// campaign's default calendar (the session form has no calendar picker).
+type sessionsDefaultCalendarAdapter struct {
+	svc calendar.CalendarService
+}
+
+// DefaultCalendarID reads at Owner level (which skips per-user rules): the
+// answer is stored on a session row, not shown to anyone, so it must not
+// depend on who happens to be saving. It returns "" for a campaign with no
+// default calendar.
+func (a *sessionsDefaultCalendarAdapter) DefaultCalendarID(ctx context.Context, campaignID string) (string, error) {
+	cals, err := a.svc.ListCalendars(ctx, campaignID, permissions.RequestViewer(permissions.RoleOwner, ""))
+	if err != nil {
+		return "", err
+	}
+	for i := range cals {
+		if cals[i].IsDefault {
+			return cals[i].ID, nil
+		}
+	}
+	return "", nil
 }

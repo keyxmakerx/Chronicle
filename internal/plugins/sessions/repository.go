@@ -24,7 +24,17 @@ type SessionRepository interface {
 	// date (calendar_year/month/day) lies in [from, to] inclusive, soonest
 	// first, up to limit rows (limit<=0: no cap). Only ID, CampaignID, Name
 	// and the Calendar* fields are populated.
-	ListPlannedByWorldDateRange(ctx context.Context, campaignID string, from, to WorldDate, limit int) ([]Session, error)
+	// A non-empty calendarID restricts the result to sessions whose date is on
+	// that calendar; "" means every calendar.
+	ListPlannedByWorldDateRange(ctx context.Context, campaignID, calendarID string, from, to WorldDate, limit int) ([]Session, error)
+	// ListCampaignIDsWithUnstampedWorldDates is every campaign holding a
+	// session with a complete in-world date but no calendar id. Backs the
+	// boot reconciler.
+	ListCampaignIDsWithUnstampedWorldDates(ctx context.Context) ([]string, error)
+	// StampWorldDateCalendar sets calendar_id on a campaign's sessions that
+	// have a complete in-world date and no calendar id, returning how many.
+	// Rows already stamped are never touched, so it is safe to repeat.
+	StampWorldDateCalendar(ctx context.Context, campaignID, calendarID string) (int64, error)
 	SearchByCampaign(ctx context.Context, campaignID, query string) ([]Session, error)
 	Update(ctx context.Context, s *Session) error
 	UpdateRecap(ctx context.Context, id string, recap, recapHTML *string) error
@@ -161,14 +171,14 @@ func NewSessionRepository(db *sql.DB) SessionRepository {
 // Create inserts a new session.
 func (r *sessionRepository) Create(ctx context.Context, campaignID string, s *Session) error {
 	query := `INSERT INTO sessions
-		(id, campaign_id, name, summary, scheduled_date, scheduled_time, scheduled_tz, calendar_year, calendar_month,
+		(id, campaign_id, name, summary, scheduled_date, scheduled_time, scheduled_tz, calendar_id, calendar_year, calendar_month,
 		 calendar_day, status, is_recurring, recurrence_type, recurrence_interval,
 		 recurrence_day_of_week, recurrence_end_date, sort_order, created_by, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	_, err := r.db.ExecContext(ctx, query,
 		s.ID, campaignID, s.Name, s.Summary, s.ScheduledDate, s.ScheduledTime, s.ScheduledTZ,
-		s.CalendarYear, s.CalendarMonth, s.CalendarDay,
+		s.CalendarID, s.CalendarYear, s.CalendarMonth, s.CalendarDay,
 		s.Status, s.IsRecurring, s.RecurrenceType, s.RecurrenceInterval,
 		s.RecurrenceDayOfWeek, s.RecurrenceEndDate,
 		s.SortOrder, s.CreatedBy, s.CreatedAt, s.UpdatedAt,
@@ -189,7 +199,7 @@ func (r *sessionRepository) FindByID(ctx context.Context, id string) (*Session, 
 	// is for; do not use this method for that check, it will always 404.
 	query := `SELECT s.id, s.campaign_id, s.name, s.summary, s.notes, s.notes_html,
 	                 s.recap, s.recap_html,
-	                 s.scheduled_date, s.scheduled_time, s.scheduled_tz, s.calendar_year, s.calendar_month, s.calendar_day,
+	                 s.scheduled_date, s.scheduled_time, s.scheduled_tz, s.calendar_id, s.calendar_year, s.calendar_month, s.calendar_day,
 	                 s.status, s.is_recurring, s.recurrence_type, s.recurrence_interval,
 	                 s.recurrence_day_of_week, s.recurrence_end_date,
 	                 s.sort_order, s.created_by, s.created_at, s.updated_at,
@@ -202,7 +212,7 @@ func (r *sessionRepository) FindByID(ctx context.Context, id string) (*Session, 
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&s.ID, &s.CampaignID, &s.Name, &s.Summary, &s.Notes, &s.NotesHTML,
 		&s.Recap, &s.RecapHTML,
-		&s.ScheduledDate, &s.ScheduledTime, &s.ScheduledTZ, &s.CalendarYear, &s.CalendarMonth, &s.CalendarDay,
+		&s.ScheduledDate, &s.ScheduledTime, &s.ScheduledTZ, &s.CalendarID, &s.CalendarYear, &s.CalendarMonth, &s.CalendarDay,
 		&s.Status, &s.IsRecurring, &s.RecurrenceType, &s.RecurrenceInterval,
 		&s.RecurrenceDayOfWeek, &s.RecurrenceEndDate,
 		&s.SortOrder, &s.CreatedBy, &s.CreatedAt, &s.UpdatedAt,
@@ -340,7 +350,7 @@ func (r *sessionRepository) Update(ctx context.Context, s *Session) error {
 	query := `UPDATE sessions SET
 		name = ?, summary = ?, notes = ?, notes_html = ?,
 		recap = ?, recap_html = ?,
-		scheduled_date = ?, scheduled_time = ?, scheduled_tz = ?, calendar_year = ?, calendar_month = ?, calendar_day = ?,
+		scheduled_date = ?, scheduled_time = ?, scheduled_tz = ?, calendar_id = ?, calendar_year = ?, calendar_month = ?, calendar_day = ?,
 		status = ?, is_recurring = ?, recurrence_type = ?, recurrence_interval = ?,
 		recurrence_day_of_week = ?, recurrence_end_date = ?, updated_at = ?
 		WHERE id = ? AND deleted_at IS NULL`
@@ -348,7 +358,7 @@ func (r *sessionRepository) Update(ctx context.Context, s *Session) error {
 	result, err := r.db.ExecContext(ctx, query,
 		s.Name, s.Summary, s.Notes, s.NotesHTML,
 		s.Recap, s.RecapHTML,
-		s.ScheduledDate, s.ScheduledTime, s.ScheduledTZ, s.CalendarYear, s.CalendarMonth, s.CalendarDay,
+		s.ScheduledDate, s.ScheduledTime, s.ScheduledTZ, s.CalendarID, s.CalendarYear, s.CalendarMonth, s.CalendarDay,
 		s.Status, s.IsRecurring, s.RecurrenceType, s.RecurrenceInterval,
 		s.RecurrenceDayOfWeek, s.RecurrenceEndDate, time.Now().UTC(), s.ID,
 	)
@@ -544,17 +554,22 @@ func (r *sessionRepository) ListSessionEntities(ctx context.Context, sessionID s
 // for any calendar since month and day are 1-based positions within a year.
 // Sessions missing any part of the in-world date are excluded: they have no
 // world date for an anchor move to re-map.
-func (r *sessionRepository) ListPlannedByWorldDateRange(ctx context.Context, campaignID string, from, to WorldDate, limit int) ([]Session, error) {
+func (r *sessionRepository) ListPlannedByWorldDateRange(ctx context.Context, campaignID, calendarID string, from, to WorldDate, limit int) ([]Session, error) {
+	// A month/day is a position inside one calendar, so a night at "month 3"
+	// of another calendar is not a night on this one. Rows with no calendar
+	// id are excluded when a calendar is named: the boot reconciler stamps
+	// them, and until then their calendar is unknown.
 	query := `SELECT s.id, s.campaign_id, s.name, s.calendar_year, s.calendar_month, s.calendar_day
 	          FROM sessions s
 	          WHERE s.campaign_id = ?
+	            AND (? = '' OR s.calendar_id = ?)
 	            AND s.deleted_at IS NULL
 	            AND s.status = 'planned'
 	            AND s.calendar_year IS NOT NULL AND s.calendar_month IS NOT NULL AND s.calendar_day IS NOT NULL
 	            AND (s.calendar_year, s.calendar_month, s.calendar_day) >= (?, ?, ?)
 	            AND (s.calendar_year, s.calendar_month, s.calendar_day) <= (?, ?, ?)
 	          ORDER BY s.calendar_year, s.calendar_month, s.calendar_day, s.sort_order, s.created_at`
-	args := []any{campaignID, from.Year, from.Month, from.Day, to.Year, to.Month, to.Day}
+	args := []any{campaignID, calendarID, calendarID, from.Year, from.Month, from.Day, to.Year, to.Month, to.Day}
 	if limit > 0 {
 		query += ` LIMIT ?`
 		args = append(args, limit)
@@ -706,4 +721,44 @@ func (r *sessionRepository) ListCampaignIDsUsingGameNights(ctx context.Context) 
 		ids = append(ids, id)
 	}
 	return ids, rows.Err()
+}
+
+// ListCampaignIDsWithUnstampedWorldDates is every campaign with a session
+// (deleted ones included, since a restore brings them back) whose in-world
+// date is complete but names no calendar.
+func (r *sessionRepository) ListCampaignIDsWithUnstampedWorldDates(ctx context.Context) ([]string, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT DISTINCT campaign_id FROM sessions
+		WHERE calendar_id IS NULL
+		  AND calendar_year IS NOT NULL AND calendar_month IS NOT NULL AND calendar_day IS NOT NULL`)
+	if err != nil {
+		return nil, fmt.Errorf("listing campaigns with unstamped world dates: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scanning campaign id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// StampWorldDateCalendar records calendarID on every still-unstamped,
+// fully world-dated session of the campaign. The calendar_id IS NULL guard is
+// what makes a repeat run (and a run racing a save that stamped the row
+// itself) a no-op.
+func (r *sessionRepository) StampWorldDateCalendar(ctx context.Context, campaignID, calendarID string) (int64, error) {
+	res, err := r.db.ExecContext(ctx, `
+		UPDATE sessions SET calendar_id = ?
+		WHERE campaign_id = ? AND calendar_id IS NULL
+		  AND calendar_year IS NOT NULL AND calendar_month IS NOT NULL AND calendar_day IS NOT NULL`,
+		calendarID, campaignID)
+	if err != nil {
+		return 0, fmt.Errorf("stamping world-dated sessions with calendar: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
 }

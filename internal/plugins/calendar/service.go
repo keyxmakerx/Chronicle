@@ -103,10 +103,12 @@ type EntityVisibilityGate interface {
 // affected sessions listed, rather than failing the whole preview.
 type GameNightsAffectedByAnchorMove interface {
 	// SessionsInWorldDateRange returns up to `limit` sessions/game-nights in
-	// campaignID whose in-world date falls within [fromYMD, toYMD]
+	// campaignID dated on calendarID (a month/day is a position in one
+	// calendar, so another calendar's nights do not count) whose in-world
+	// date falls within [fromYMD, toYMD]
 	// (inclusive, by the OLD anchor mapping), for previewing an anchor
 	// move's blast radius. Ordered soonest-first. limit<=0 means no cap.
-	SessionsInWorldDateRange(ctx context.Context, campaignID string, fromYear, fromMonth, fromDay, toYear, toMonth, toDay, limit int) ([]AffectedSession, error)
+	SessionsInWorldDateRange(ctx context.Context, campaignID, calendarID string, fromYear, fromMonth, fromDay, toYear, toMonth, toDay, limit int) ([]AffectedSession, error)
 }
 
 // AffectedSession is one session/game-night SessionsInWorldDateRange returns:
@@ -2671,7 +2673,7 @@ func (s *calendarService) PreviewAnchorMove(ctx context.Context, calendarID, cam
 
 	fromYear, fromMonth, fromDay := cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay
 	toYear, toMonth, toDay := anchorPreviewWindowEnd(cal)
-	sessions, err := s.gameNights.SessionsInWorldDateRange(ctx, campaignID,
+	sessions, err := s.gameNights.SessionsInWorldDateRange(ctx, campaignID, calendarID,
 		fromYear, fromMonth, fromDay, toYear, toMonth, toDay, maxAnchorMovePreviewAffected)
 	if err != nil {
 		return nil, fmt.Errorf("list sessions affected by anchor move: %w", err)
