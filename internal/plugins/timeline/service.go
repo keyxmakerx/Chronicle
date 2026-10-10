@@ -545,7 +545,14 @@ func (s *timelineService) UpdateTimeline(ctx context.Context, timelineID string,
 
 	t.Name = name
 	t.Description = input.Description.Ptr(t.Description)
-	t.DescriptionHTML = input.DescriptionHTML.Ptr(t.DescriptionHTML)
+	if input.DescriptionHTML.Present() {
+		if v, ok := input.DescriptionHTML.Get(); ok && v != "" {
+			sanitized := sanitize.HTML(v)
+			t.DescriptionHTML = &sanitized
+		} else {
+			t.DescriptionHTML = nil
+		}
+	}
 	t.Color = color
 	t.Icon = icon
 	t.Visibility = visibility
