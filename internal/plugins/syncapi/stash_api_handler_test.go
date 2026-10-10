@@ -243,8 +243,8 @@ func TestStashRoutes_Gates(t *testing.T) {
 		{"read key cannot move", readOnly, allAddons(), "POST", base + "/moves", `{}`, 403},
 		{"read key cannot approve", readOnly, allAddons(), "POST", base + "/requests/1/approve", `{}`, 403},
 		{"read key cannot flip downtime", readOnly, allAddons(), "PUT", base + "/downtime", `{"open":true}`, 403},
-		{"stash addon off hides the routes", allPerms, slugChecker{SyncAPIAddonSlug: true}, "GET", base + "/downtime", "", 404},
-		{"stash addon off hides writes too", allPerms, slugChecker{SyncAPIAddonSlug: true}, "POST", base + "/moves", `{}`, 404},
+		{"stash addon off is addon_disabled", allPerms, slugChecker{SyncAPIAddonSlug: true}, "GET", base + "/downtime", "", 403},
+		{"stash addon off refuses writes too", allPerms, slugChecker{SyncAPIAddonSlug: true}, "POST", base + "/moves", `{}`, 403},
 		{"sync api off is its own error", allPerms, slugChecker{"stash-addon": true}, "GET", base + "/downtime", "", 403},
 		{"other campaign is refused", allPerms, allAddons(), "GET", "/api/v1/campaigns/other/stashes/downtime", "", 403},
 	}

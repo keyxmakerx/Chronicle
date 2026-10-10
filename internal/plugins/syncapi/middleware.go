@@ -528,8 +528,10 @@ func isIPAllowed(ip string, allowlist []string) bool {
 }
 
 // RequireAddonAPI returns middleware that gates API endpoints behind addon
-// enabled checks. Returns 404 JSON response when the addon is disabled,
-// matching the behavior of the web RequireAddon middleware but for API context.
+// enabled checks. A disabled addon answers 403 "addon_disabled" (see
+// addonDisabledError), not 404: a 404 is ambiguous for API clients, which read
+// it as "this Chronicle is too old to have the route". Browser page routes use
+// the addons plugin's own middleware and are unaffected.
 func RequireAddonAPI(addonChecker AddonChecker, slug string) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
@@ -549,7 +551,7 @@ func RequireAddonAPI(addonChecker AddonChecker, slug string) echo.MiddlewareFunc
 				return &apperror.AppError{Code: http.StatusServiceUnavailable, Type: "service_unavailable", Message: "temporarily unable to verify addon status"}
 			}
 			if !enabled {
-				return apperror.NewNotFound(slug + " addon is not enabled for this campaign")
+				return addonDisabledError(slug)
 			}
 			return next(c)
 		}
@@ -693,6 +695,18 @@ func syncAPIDisabledError() *apperror.AppError {
 		Type: "sync_api_disabled",
 		Message: "the Sync API integration is switched off for this campaign; " +
 			"a campaign owner can re-enable it on the campaign's Extensions page (sidebar → Extensions)",
+	}
+}
+
+// addonDisabledError is the response for "this campaign has switched off the
+// add-on behind this API route". The slug is in the message because the error
+// body carries only the machine code and the prose.
+func addonDisabledError(slug string) *apperror.AppError {
+	return &apperror.AppError{
+		Code: http.StatusForbidden,
+		Type: "addon_disabled",
+		Message: slug + " add-on is switched off for this campaign; " +
+			"a campaign owner can enable it on the campaign's Extensions page (sidebar → Extensions)",
 	}
 }
 
