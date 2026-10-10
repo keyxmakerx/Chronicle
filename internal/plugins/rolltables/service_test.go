@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -53,6 +55,10 @@ func tableJSON(id, name string, entries int) string {
 	return fmt.Sprintf(`{"id":%q,"name":%q,"entries":[%s]}`, id, name, strings.Join(es, ","))
 }
 
+func creditBody(credit string) string {
+	return `{"tables":[{"id":"loot","name":"Loot","credit":` + credit + `,"entries":[{"name":"a"}]}]}`
+}
+
 func TestService_PutValidation(t *testing.T) {
 	manyTables := make([]string, MaxTables+1)
 	for i := range manyTables {
@@ -92,6 +98,14 @@ func TestService_PutValidation(t *testing.T) {
 		{"weight negative", `{"tables":[{"id":"loot","name":"Loot","entries":[{"name":"a","weight":-1}]}]}`, http.StatusUnprocessableEntity},
 		{"weight too big", `{"tables":[{"id":"loot","name":"Loot","entries":[{"name":"a","weight":100.5}]}]}`, http.StatusUnprocessableEntity},
 		{"weight a string", `{"tables":[{"id":"loot","name":"Loot","entries":[{"name":"a","weight":"2"}]}]}`, http.StatusUnprocessableEntity},
+		{"credit ok", creditBody(`{"source":"Ironsworn","author":"Shawn Tomkin","url":"https://www.ironswornrpg.com","licence":"CC BY 4.0","licenceUrl":"https://creativecommons.org/licenses/by/4.0/"}`), 0},
+		{"credit script link", creditBody(`{"source":"S","url":"javascript:alert(1)"}`), http.StatusUnprocessableEntity},
+		{"credit http link", creditBody(`{"source":"S","licenceUrl":"http://example.com/"}`), http.StatusUnprocessableEntity},
+		{"credit link with quote", creditBody(`{"source":"S","url":"https://example.com/\"onmouseover"}`), http.StatusUnprocessableEntity},
+		{"credit link too long", creditBody(`{"source":"S","url":"https://example.com/` + strings.Repeat("p", MaxCreditURL) + `"}`), http.StatusUnprocessableEntity},
+		{"credit source too long", creditBody(`{"source":"` + strings.Repeat("s", MaxCreditField+1) + `"}`), http.StatusUnprocessableEntity},
+		{"credit notice too long", creditBody(`{"source":"S","notice":"` + strings.Repeat("n", MaxCreditNotice+1) + `"}`), http.StatusUnprocessableEntity},
+		{"credit not an object", creditBody(`"Ironsworn"`), http.StatusUnprocessableEntity},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -168,5 +182,69 @@ func TestService_RepoFailureIsInternal(t *testing.T) {
 	}
 	if _, err := svc.Put(context.Background(), "c", []byte(`{"tables":[]}`), ""); errCode(err) != http.StatusInternalServerError {
 		t.Errorf("put code = %d", errCode(err))
+	}
+}
+
+// A credit is trimmed and kept with its table; one that names no source is
+// dropped rather than stored as an empty credit line.
+func TestService_PutCredit(t *testing.T) {
+	repo := newFakeRepo()
+	svc := NewService(repo)
+	body := `{"tables":[` +
+		`{"id":"a","name":"A","credit":{"source":" Ironsworn ","author":"Shawn Tomkin","page":"174","licence":"CC BY 4.0","licenceUrl":"https://creativecommons.org/licenses/by/4.0/","extra":1},"entries":[{"name":"x"}]},` +
+		`{"id":"b","name":"B","credit":{"source":"  ","author":"Nobody"},"entries":[{"name":"y"}]}]}`
+	if _, err := svc.Put(context.Background(), "camp-1", []byte(body), "u1"); err != nil {
+		t.Fatal(err)
+	}
+	want := `{"tables":[` +
+		`{"id":"a","name":"A","credit":{"source":"Ironsworn","author":"Shawn Tomkin","page":"174","licence":"CC BY 4.0","licenceUrl":"https://creativecommons.org/licenses/by/4.0/"},"entries":[{"name":"x","brief":"","weight":1}]},` +
+		`{"id":"b","name":"B","entries":[{"name":"y","brief":"","weight":1}]}]}`
+	if stored := string(repo.rows["camp-1"]); stored != want {
+		t.Errorf("stored = %s\nwant   = %s", stored, want)
+	}
+}
+
+// Every table in the built-in library can be copied into a campaign: its
+// lines, weights and credit fit the limits a campaign's own tables are held
+// to, so "Make a copy" never meets a save it can't make.
+func TestLibraryTablesFitCampaignLimits(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "static", "roll-tables", "library.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var lib struct {
+		Tables []struct {
+			ID      string          `json:"id"`
+			Name    string          `json:"name"`
+			Credit  json.RawMessage `json:"credit"`
+			Entries []struct {
+				Name   string  `json:"name"`
+				Brief  string  `json:"brief"`
+				Weight float64 `json:"weight"`
+			} `json:"entries"`
+		} `json:"tables"`
+	}
+	if err := json.Unmarshal(raw, &lib); err != nil {
+		t.Fatal(err)
+	}
+	if len(lib.Tables) == 0 {
+		t.Fatal("library has no tables")
+	}
+	for _, tb := range lib.Tables {
+		if len(tb.Credit) == 0 {
+			t.Errorf("%s: no credit", tb.ID)
+			continue
+		}
+		copied, _ := json.Marshal(map[string]any{"tables": []any{map[string]any{
+			"id": tb.ID + "-copy", "name": tb.Name + " (copy)", "credit": tb.Credit, "entries": tb.Entries,
+		}}})
+		doc, err := normalize(copied)
+		if err != nil {
+			t.Errorf("%s: a copy would not save: %v", tb.ID, err)
+			continue
+		}
+		if c := doc.Tables[0].Credit; c == nil || c.Source == "" || c.Licence == "" || c.LicenceURL == "" {
+			t.Errorf("%s: the copy lost its credit", tb.ID)
+		}
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"net/url"
 	"regexp"
 	"strings"
 	"unicode/utf8"
@@ -21,6 +22,9 @@ const (
 	MaxEntryNameLen  = 200
 	MaxEntryBriefLen = 1000
 	MaxWeight        = 100
+	MaxCreditField   = 200
+	MaxCreditNotice  = 600
+	MaxCreditURL     = 300
 	defaultWeight    = 1.0
 )
 
@@ -93,6 +97,7 @@ type inDocument struct {
 type inTable struct {
 	ID      string    `json:"id"`
 	Name    string    `json:"name"`
+	Credit  *Credit   `json:"credit"`
 	Entries []inEntry `json:"entries"`
 }
 
@@ -157,7 +162,59 @@ func normalize(body []byte) (Document, error) {
 			}
 			entries = append(entries, Entry{Name: ename, Brief: e.Brief, Weight: w})
 		}
-		out.Tables = append(out.Tables, Table{ID: t.ID, Name: name, Entries: entries})
+		credit, err := normalizeCredit(t.Credit, label)
+		if err != nil {
+			return Document{}, err
+		}
+		out.Tables = append(out.Tables, Table{ID: t.ID, Name: name, Credit: credit, Entries: entries})
 	}
 	return out, nil
+}
+
+// normalizeCredit trims a table's credit and checks its links. A credit with no
+// source is dropped, since a credit line can't name nothing. Links must be
+// https so a stored credit can never become a script link when shown.
+func normalizeCredit(c *Credit, label string) (*Credit, error) {
+	if c == nil {
+		return nil, nil
+	}
+	out := Credit{
+		Source:     strings.TrimSpace(c.Source),
+		Author:     strings.TrimSpace(c.Author),
+		Page:       strings.TrimSpace(c.Page),
+		URL:        strings.TrimSpace(c.URL),
+		Licence:    strings.TrimSpace(c.Licence),
+		LicenceURL: strings.TrimSpace(c.LicenceURL),
+		Notice:     strings.TrimSpace(c.Notice),
+	}
+	if out.Source == "" {
+		return nil, nil
+	}
+	for _, f := range []struct{ name, v string }{{"source", out.Source}, {"author", out.Author}, {"page", out.Page}, {"licence", out.Licence}} {
+		if utf8.RuneCountInString(f.v) > MaxCreditField {
+			return nil, errInvalid(fmt.Sprintf("%s: the credit's %s can be at most %d characters", label, f.name, MaxCreditField))
+		}
+	}
+	if utf8.RuneCountInString(out.Notice) > MaxCreditNotice {
+		return nil, errInvalid(fmt.Sprintf("%s: the credit's notice can be at most %d characters", label, MaxCreditNotice))
+	}
+	for _, f := range []struct{ name, v string }{{"url", out.URL}, {"licenceUrl", out.LicenceURL}} {
+		if f.v == "" {
+			continue
+		}
+		if len(f.v) > MaxCreditURL || !httpsURL(f.v) {
+			return nil, errInvalid(fmt.Sprintf("%s: the credit's %s must be an https link of at most %d characters", label, f.name, MaxCreditURL))
+		}
+	}
+	return &out, nil
+}
+
+// httpsURL reports whether s is an absolute https URL with a host and no
+// whitespace or quote characters.
+func httpsURL(s string) bool {
+	u, err := url.Parse(s)
+	if err != nil || u.Scheme != "https" || u.Host == "" {
+		return false
+	}
+	return !strings.ContainsAny(s, " \t\r\n\"'<>")
 }
