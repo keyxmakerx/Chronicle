@@ -177,6 +177,28 @@
       return CalDate.mod(CalDate.dayIndex(cal, year, month1, day), wl);
     },
 
+    // gridFirst mirrors Calendar.GridFirstWeekday: the weekday a month grid
+    // starts each row on. A real-world calendar starts on Sunday like a wall
+    // calendar while its weekdays stay Monday to Sunday underneath.
+    gridFirst: function (cal) {
+      if (CalDate.weekLen(cal) !== 7 || cal.mode !== 'reallife') return 0;
+      var w = cal.weekdays || [];
+      return (CalDate.usesRealTime(cal) || (w.length === 7 && w[6].name === 'Sunday')) ? 6 : 0;
+    },
+
+    // gridWeekdays is the weekday list in grid column order.
+    gridWeekdays: function (cal) {
+      var w = cal.weekdays || [], f = CalDate.gridFirst(cal);
+      return f ? w.slice(f).concat(w.slice(0, f)) : w;
+    },
+
+    // gridLead is how many blank cells come before day 1 of a month on the grid.
+    gridLead: function (cal, year, month1) {
+      var col = CalDate.weekdayCol(cal, year, month1, 1);
+      if (col < 0) return 0;
+      return CalDate.mod(col - CalDate.gridFirst(cal), CalDate.weekLen(cal));
+    },
+
     monthCount: function (cal) { return (cal.months || []).length || 12; },
 
     // addDays walks {y,m,d} (month 1-based) forward/backward by delta real
@@ -2705,7 +2727,7 @@
       h += '</section><section class="fvsec fvwho"><h4>Players</h4>';
       if (roster) h += this._fvRosterHTML(roster);
       h += '</section><section class="fvsec fvfoot">' +
-        '<label class="fvsw"><input type="checkbox" data-fv-lines' + (this.showFree ? ' checked' : '') + '><span>Show who’s free on the days</span></label>' +
+        '<label class="fvsw"><input type="checkbox" role="switch" data-fv-lines' + (this.showFree ? ' checked' : '') + '><span class="fvtrk" aria-hidden="true"></span><span>Show who’s free on the days</span></label>' +
         '<span class="fvlinks"><button type="button" class="lnk" data-fv-planner="mine">Change my hours</button><button type="button" class="btn sm" data-fv-planner="team"><i class="fa-solid fa-up-right-and-down-left-from-center"></i> Open the full planner</button></span></section>';
       return h;
     },
@@ -3064,7 +3086,7 @@
       // Best times and the players, as in the quick view.
       var quick = this._fvDirectorHTML(y, m, monthName).replace(/<section class="fvsec fvfoot">[\s\S]*$/, '');
       h += '<div class="plquick">' + quick + '</div>';
-      h += '<section class="dsec plfoot"><label class="fvsw"><input type="checkbox" data-fv-lines' + (this.showFree ? ' checked' : '') + '><span>Show who’s free on the days</span></label>' +
+      h += '<section class="dsec plfoot"><label class="fvsw"><input type="checkbox" role="switch" data-fv-lines' + (this.showFree ? ' checked' : '') + '><span class="fvtrk" aria-hidden="true"></span><span>Show who’s free on the days</span></label>' +
         '<a class="lnk" href="' + esc(this._availURL('overlay')) + '">Date polls</a></section>';
       return h;
     },
@@ -3334,7 +3356,7 @@
       var season = this.seasonForDate(this.view.m, 15);
       $('#cal5-season', this.el).innerHTML = season ? ('<b>' + esc(season.name) + '</b>') : '';
 
-      var dow = this.dowEl, weekdays = cal.weekdays || [];
+      var dow = this.dowEl, weekdays = CalDate.gridWeekdays(cal);
       dow.innerHTML = weekdays.map(function (w) {
         return '<span><span class="f">' + esc(w.name) + '</span><span class="s">' + esc(w.name.slice(0, 1)) + '</span></span>';
       }).join('');
@@ -3481,15 +3503,7 @@
         for (var bd = 1; bd <= interDays; bd++) html += this._dayBandHTML(y, m, bd, monthDef, interDays);
       } else {
         var days = CalDate.monthDays(cal, m0, y);
-        var firstCol = CalDate.weekdayCol(cal, y, m, 1);
-        // -1 (MonthStartsNewWeek + an intercalary month) can't actually
-        // reach here — the branch above already routes every intercalary
-        // month to the band renderer — but weekdayCol's contract allows it,
-        // and clamping keeps this file's handling the same as the server's
-        // own preview grid (view_helpers.go's buildMonthGrid: "its days run
-        // from the first column") rather than leaning on a guard elsewhere
-        // that could change.
-        if (firstCol < 0) firstCol = 0;
+        var firstCol = CalDate.gridLead(cal, y, m);
         this._gridOff = firstCol;
         var cells = [];
         for (var i = 0; i < firstCol; i++) cells.push(null);

@@ -338,3 +338,75 @@ func TestRealWorldCalendar_MoonMatchesTheSky(t *testing.T) {
 		}
 	}
 }
+
+// TestFollowRealClock pins that a real-time calendar's date and time come
+// from the clock in its own zone on every read, not from the stored row.
+func TestFollowRealClock(t *testing.T) {
+	zone := func(s string) *string { return &s }
+	// 2026-10-10 03:30 UTC is still 9 October in New York.
+	now := time.Date(2026, 10, 10, 3, 30, 0, 0, time.UTC)
+	tests := []struct {
+		name                  string
+		cal                   Calendar
+		y, m, d, hour, minute int
+	}{
+		{"real time follows its zone", Calendar{Mode: ModeRealLife, TracksRealTime: true, RealTimeZone: zone("America/New_York")}, 2026, 10, 9, 23, 30},
+		{"real time in UTC", Calendar{Mode: ModeRealLife, TracksRealTime: true, RealTimeZone: zone("UTC")}, 2026, 10, 10, 3, 30},
+		{"manual real-world date stays", Calendar{Mode: ModeRealLife, RealTimeZone: zone("UTC")}, 2026, 9, 20, 8, 0},
+		{"fantasy calendar stays", Calendar{Mode: ModeFantasy, TracksRealTime: true, RealTimeZone: zone("UTC")}, 2026, 9, 20, 8, 0},
+		{"no zone keeps the stored date", Calendar{Mode: ModeRealLife, TracksRealTime: true}, 2026, 9, 20, 8, 0},
+		{"unknown zone keeps the stored date", Calendar{Mode: ModeRealLife, TracksRealTime: true, RealTimeZone: zone("Mars/Olympus")}, 2026, 9, 20, 8, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cal := tt.cal
+			cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay, cal.CurrentHour, cal.CurrentMinute = 2026, 9, 20, 8, 0
+			cal.followRealClock(now)
+			got := [5]int{cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay, cal.CurrentHour, cal.CurrentMinute}
+			want := [5]int{tt.y, tt.m, tt.d, tt.hour, tt.minute}
+			if got != want {
+				t.Errorf("got %v, want %v", got, want)
+			}
+		})
+	}
+}
+
+// TestRealWorldGrid_StartsOnSunday pins that a real-world calendar's month
+// grid starts its rows on Sunday while WeekdayIndex keeps Monday first.
+func TestRealWorldGrid_StartsOnSunday(t *testing.T) {
+	weekdays := weekdayInputsToWeekdays(gregorianWeekdays())
+	months := monthInputsToMonths(gregorianMonths())
+	tests := []struct {
+		name      string
+		cal       *Calendar
+		wantFirst int
+		wantLead  int // blanks before 1 October 2026, a Thursday
+	}{
+		{"real time", &Calendar{Mode: ModeRealLife, TracksRealTime: true, Months: months, Weekdays: weekdays}, 6, 4},
+		{"fantasy keeps its first weekday", &Calendar{Mode: ModeFantasy, Months: months, Weekdays: weekdays}, 0, -1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.cal.GridFirstWeekday(7); got != tt.wantFirst {
+				t.Fatalf("GridFirstWeekday = %d, want %d", got, tt.wantFirst)
+			}
+			if tt.wantLead < 0 {
+				return
+			}
+			lead := 0
+			for _, c := range buildMonthGrid(tt.cal, 2026, 10, nil, nil)[0] {
+				if !c.Blank {
+					break
+				}
+				lead++
+			}
+			if lead != tt.wantLead {
+				t.Errorf("1 October 2026 sits after %d blanks, want %d (Sun Mon Tue Wed, then Thu)", lead, tt.wantLead)
+			}
+		})
+	}
+	cal := &Calendar{Mode: ModeRealLife, TracksRealTime: true, Weekdays: weekdays}
+	if idx := cal.WeekdayIndex(2026, 10, 1); weekdays[idx].Name != "Thursday" {
+		t.Errorf("WeekdayIndex(2026-10-01) = %s, want Thursday", weekdays[idx].Name)
+	}
+}
