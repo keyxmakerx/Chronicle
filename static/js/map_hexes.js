@@ -893,22 +893,30 @@
     // around the change is redrawn. Each tile is painted once per terrain,
     // piece (or Detailed seed), lower edges and zoom bucket and then stamped on
     // every hex that matches, so a large field costs one image copy per hex.
-    // Painting a tile happens in short slices between frames; until it is
-    // ready the hex shows its Simple colour or the same tile at another size.
+    // Painting a tile, and stamping tiles onto the canvas, happen in short
+    // slices between frames, cut by the clock rather than by a count, so one
+    // costly tile or a field of thousands of hexes never holds the page; until a
+    // tile is ready the hex shows its Simple colour or the same tile at another
+    // size.
 
     var HA = window.ChronicleHexArt || null;
     var artCv = null, artCx = null, artView = null, artSig = '';
     var artFull = true, artDirty = {}, artRaf = 0, artKick = 0;
+    var artPass = null, artPassTimer = 0, artAgain = false, artBack = null;   // the whole-canvas redraw under way, and its spare canvas
+    var passMs = 0;           // time the last whole-canvas redraw took to draw
     var tiles = HA ? new HA.TileCache(900, 16e6) : null;   // painted tiles, bounded by count and pixels
     var models = HA ? new HA.TileCache(12, 12) : null;     // Realistic models, the costly half of a tile
-    var jobs = [], jobKeys = {}, jobTimer = 0, decoding = 0;
+    var jobs = HA ? new HA.JobQueue(doJob) : null, jobTimer = 0, decoding = 0;
+    var building = {};        // Realistic models part-built, by model key
     var thumbs = {};          // tile key -> job, for panel swatches waiting on a tile
     var ART_PAD = 0.3;        // the canvas reaches this share of the view past each edge, so a short pan still shows art
     // Tile sizes, as a hex radius in device pixels. Realistic tiles are costly
     // to paint, so they stop at 64 and are scaled up past that.
     var REAL_MIN = 12, REAL_MAX = 64, DET_MIN = 12, DET_MAX = 192;
-    var SLICE_MS = 12;        // time given to painting tiles between frames
-    var KICK_MS = 120;        // how often finished tiles are shown while more are coming
+    var SLICE_MS = 20;        // longest a stretch of tile painting runs before the page gets a turn (each hand-over has a fixed cost, so shorter slices finish later)
+    var PASS_MS = 20;         // the same for drawing the painted tiles onto the canvas
+    var KICK_MS = 120;        // least wait before finished tiles are shown while more are coming
+    var KICK_LOAD = 5;        // ...and at least this many times what drawing them all costs, so redraws stay a small share of the time
     var DET_R = 26;           // the radius Detailed tiles are drawn at before scaling
 
     function artMode() {
@@ -931,6 +939,7 @@
     function dropArtCanvas() {
       if (artCv && artCv.parentNode) artCv.parentNode.removeChild(artCv);
       artCv = artCx = artView = null;
+      artBack = null;
       artSig = '';
     }
 
@@ -954,8 +963,9 @@
 
     // artBucket is the tile size for the current zoom. Tiles are painted a
     // little larger than shown so their edges stay smooth.
-    function artBucket(mode) {
-      var R = geo && artView ? geo.r * artView.s : 24;
+    function artBucket(mode, f) {
+      f = f || artView;
+      var R = geo && f ? geo.r * f.s : 24;
       return mode === 'real' ? HA.zoomBucket(R * 1.5, REAL_MIN, REAL_MAX) : HA.zoomBucket(R * 1.25, DET_MIN, DET_MAX);
     }
 
@@ -976,11 +986,31 @@
       scheduleArt(false);
     }
 
+    // sizeArtCanvas gives the visible canvas the frame f: its pixel size, its
+    // CSS box and its place in the map pane.
+    function sizeArtCanvas(f) {
+      var W = Math.round(f.cssW * f.dpr), H = Math.round(f.cssH * f.dpr);
+      if (artCv.width !== W || artCv.height !== H) { artCv.width = W; artCv.height = H; }
+      artCv.style.width = f.cssW + 'px';
+      artCv.style.height = f.cssH + 'px';
+      L.DomUtil.setPosition(artCv, f.tl);
+      artCx.setTransform(1, 0, 0, 1, 0, 0);
+      return [W, H];
+    }
+
+    // cancelPass drops a whole-canvas redraw that is still being painted.
+    function cancelPass() {
+      artPassTimer = 0;
+      artPass = null;
+      artAgain = false;
+    }
+
     function drawArt() {
       artRaf = 0;
       var mode = artMode();
       if (destroyed || !overlay || !geo || !layout || !loaded || hidden || mode === 'simple' || !HA) {
         if (artCv) dropArtCanvas();
+        cancelPass();
         artDirty = {};
         artFull = true;
         return;
@@ -988,23 +1018,52 @@
       ensureArtCanvas();
       var dirty = Object.keys(artDirty);
       artDirty = {};
+      // The pass under way would draw an edited hex from before the edit.
+      if (artPass && dirty.length) artFull = true;
       if (artFull || !artView) {
         artFull = false;
+        cancelPass();
         var f = artFrame();
         // A new view or style drops the tiles queued for the old one; what this
         // view needs is queued again as it is drawn.
         var sig = [mode, f.tl.x, f.tl.y, f.cssW, f.cssH, f.s].join('|');
-        if (sig !== artSig) { artSig = sig; jobs = []; jobKeys = {}; requeueThumbs(); }
-        artView = f;
-        var W = Math.round(f.cssW * f.dpr), H = Math.round(f.cssH * f.dpr);
-        if (artCv.width !== W || artCv.height !== H) { artCv.width = W; artCv.height = H; }
-        artCv.style.width = f.cssW + 'px';
-        artCv.style.height = f.cssH + 'px';
-        L.DomUtil.setPosition(artCv, f.tl);
-        artCx.setTransform(1, 0, 0, 1, 0, 0);
-        artCx.clearRect(0, 0, W, H);
-        paintRect(f, 0, 0, W, H, mode);
-        startJobs();
+        if (sig !== artSig) { artSig = sig; jobs.clear(); requeueThumbs(); }
+        // A whole-canvas redraw is painted in slices. Over a canvas that already
+        // shows art it goes to a spare canvas that replaces the visible one when
+        // it is whole, so the page never shows half a redraw; over an empty
+        // canvas it is painted in place and the art appears as it is drawn.
+        var direct = !artView, W = Math.round(f.cssW * f.dpr), H = Math.round(f.cssH * f.dpr), cx;
+        if (direct) {
+          sizeArtCanvas(f);
+          artCx.clearRect(0, 0, W, H);
+          artView = f;
+          cx = artCx;
+        } else {
+          if (!artBack) artBack = document.createElement('canvas');
+          if (artBack.width !== W || artBack.height !== H) { artBack.width = W; artBack.height = H; }
+          cx = artBack.getContext('2d');
+          cx.setTransform(1, 0, 0, 1, 0, 0);
+          cx.clearRect(0, 0, W, H);
+        }
+        artPass = startPaint(f, 0, 0, W, H, mode, cx);
+        artPass.done = function () {
+          if (direct) return;
+          // The spare takes the visible canvas's place and the old one becomes
+          // the spare, so showing the redraw copies no pixels.
+          var old = artCv, now = artBack;
+          now.className = old.className;
+          now.style.position = 'absolute';
+          now.style.pointerEvents = 'none';
+          now.style.width = f.cssW + 'px';
+          now.style.height = f.cssH + 'px';
+          L.DomUtil.setPosition(now, f.tl);
+          pane.replaceChild(now, old);
+          artCv = now;
+          artCx = now.getContext('2d');
+          artBack = old;
+          artView = f;
+        };
+        passLater();
         return;
       }
       if (!dirty.length) return;
@@ -1019,51 +1078,135 @@
       x0 = Math.max(0, Math.floor(x0)); y0 = Math.max(0, Math.floor(y0));
       x1 = Math.min(artCv.width, Math.ceil(x1)); y1 = Math.min(artCv.height, Math.ceil(y1));
       if (x1 <= x0 || y1 <= y0) return;
+      // The edited block is small, so it is painted at once.
       artCx.save();
       artCx.beginPath();
       artCx.rect(x0, y0, x1 - x0, y1 - y0);
       artCx.clip();
       artCx.clearRect(x0, y0, x1 - x0, y1 - y0);
-      paintRect(v, x0, y0, x1, y1, mode);
+      startPaint(v, x0, y0, x1, y1, mode, artCx).step(Infinity);
       artCx.restore();
       startJobs();
     }
 
-    // paintRect draws every hex whose art reaches the canvas rectangle, row by
-    // row from the top, so a peak can rise over the hex behind it.
-    function paintRect(f, x0, y0, x1, y1, mode) {
-      var rg = artRange(geo, (x0 - f.ox) / f.s, (y0 - f.oy) / f.s, (x1 - f.ox) / f.s, (y1 - f.oy) / f.s, ART_REACH[mode]);
-      if (!rg) return;
-      var R = geo.r * f.s, bucket = artBucket(mode), list = [], k, c;
-      var area = (rg.c1 - rg.c0 + 1) * (rg.r1 - rg.r0 + 1), keys = Object.keys(cells);
-      if (keys.length < area) {
+    // soon runs fn in a later task. A message, unlike repeated setTimeout(0),
+    // is not held back by the browser's 4 ms floor, so a chain of short slices
+    // keeps its pace while still letting input and drawing in between.
+    var soonQ = [], soonCh = null;
+    function soon(fn) {
+      if (!soonCh) {
+        soonCh = new MessageChannel();
+        soonCh.port1.onmessage = function () { var f = soonQ.shift(); if (f) f(); };
+      }
+      soonQ.push(fn);
+      soonCh.port2.postMessage(0);
+    }
+
+    // passLater comes back to the redraw under way; a redraw that was dropped
+    // or replaced in the meantime finds its token stale and does nothing.
+    var passTok = 0;
+    function passLater() {
+      var tok = artPassTimer = ++passTok;
+      soon(function () { if (artPassTimer === tok) stepPass(); });
+    }
+
+    // stepPass paints the whole-canvas redraw for a short slice and, if it is
+    // not whole, comes back after the page has had a turn.
+    function stepPass() {
+      artPassTimer = 0;
+      var p = artPass;
+      if (!p || destroyed) return;
+      var t0 = performance.now(), finished = p.step(t0 + PASS_MS);
+      p.busy = (p.busy || 0) + performance.now() - t0;
+      startJobs();
+      if (!finished) { passLater(); return; }
+      artPass = null;
+      passMs = p.busy;
+      p.done();
+      // Tiles that finished while this pass ran are drawn by the next one.
+      if (artAgain) { artAgain = false; scheduleArt(true); }
+    }
+
+    // startPaint prepares a redraw of every hex whose art reaches the canvas
+    // rectangle, row by row from the top, so a peak can rise over the hex
+    // behind it. step(until) draws until the clock reaches `until` and says
+    // whether the redraw is whole.
+    function startPaint(f, x0, y0, x1, y1, mode, cx) {
+      var pass = { rg: null, sparse: null, row: 0, line: null, at: 0, memo: {}, standIn: null, step: null, done: null };
+      var R = geo.r * f.s, bucket = artBucket(mode, f);
+      // begin finds the block of hexes to draw. A field with few painted hexes
+      // is walked through its painted cells (sorted into drawing order); a
+      // crowded one is walked row by row, which needs no sort.
+      function begin() {
+        pass.rg = artRange(geo, (x0 - f.ox) / f.s, (y0 - f.oy) / f.s, (x1 - f.ox) / f.s, (y1 - f.oy) / f.s, ART_REACH[mode]);
+        pass.standIn = new Path2D(hexD(0, 0, R));
+        if (!pass.rg) { pass.sparse = []; return; }
+        var rg = pass.rg, area = (rg.c1 - rg.c0 + 1) * (rg.r1 - rg.r0 + 1), keys = Object.keys(cells);
+        pass.row = rg.r0;
+        if (keys.length * 8 >= area) return;
+        var list = [], c;
         for (var i = 0; i < keys.length; i++) {
           c = cells[keys[i]];
           if (c.col >= rg.c0 && c.col <= rg.c1 && c.row >= rg.r0 && c.row <= rg.r1) list.push(c);
         }
         list.sort(function (a, b) { return a.row - b.row || a.col - b.col; });
-      } else {
-        for (var row = rg.r0; row <= rg.r1; row++) {
-          for (var col = rg.c0; col <= rg.c1; col++) { c = cells[key(col, row)]; if (c) list.push(c); }
-        }
+        pass.sparse = list;
       }
-      for (var j = 0; j < list.length; j++) {
-        c = list[j];
-        k = key(c.col, c.row);
-        if (!c.terrain || c.terrain === 'road' || fx[k]) continue;
-        var ct = center(geo, c.col, c.row), dx = f.ox + ct[0] * f.s, dy = f.oy + ct[1] * f.s;
-        var tile = mode === 'real'
-          ? realTile(c.terrain, HA.pieceOf(c.terrain, k, c.piece), lowerRaised(cells, c.col, c.row), bucket, true)
-          : detTile(c.terrain, HA.detailedVariant(k), bucket, true);
-        if (tile) {
-          artCx.drawImage(tile.canvas, dx + tile.x * R, dy + tile.y * R, tile.w * R, tile.h * R);
-        } else {
-          artCx.globalAlpha = 0.4;
-          artCx.fillStyle = COLOR[c.terrain];
-          artCx.fill(new Path2D(hexD(dx, dy, R)));
-          artCx.globalAlpha = 1;
-        }
+      // nextRow fills pass.line with the painted hexes of the next row.
+      function nextRow() {
+        var rg = pass.rg, line = [];
+        for (var col = rg.c0; col <= rg.c1; col++) { var c = cells[key(col, pass.row)]; if (c) line.push(c); }
+        pass.row++;
+        pass.line = line;
+        pass.at = 0;
       }
+      // tileFor looks a tile up once per distinct terrain, piece and edges in
+      // this redraw, not once per hex.
+      function tileFor(c, k) {
+        if (mode === 'real') {
+          var piece = HA.pieceOf(c.terrain, k, c.piece), nb = lowerRaised(cells, c.col, c.row);
+          var mk = c.terrain + '|' + piece + '|' + (nb.bl ? 1 : 0) + (nb.br ? 1 : 0);
+          if (pass.memo[mk] === undefined) pass.memo[mk] = realTile(c.terrain, piece, nb, bucket, true) || null;
+          return pass.memo[mk];
+        }
+        var vr = HA.detailedVariant(k), dk = c.terrain + '|' + vr;
+        if (pass.memo[dk] === undefined) pass.memo[dk] = detTile(c.terrain, vr, bucket, true) || null;
+        return pass.memo[dk];
+      }
+      pass.step = function (until) {
+        if (!pass.rg && !pass.sparse) begin();
+        var drawn = 0;   // a step always draws a hex, so a redraw cannot stall
+        while (true) {
+          if (!pass.line) {
+            if (pass.sparse) { pass.line = pass.sparse; pass.at = 0; }
+            else if (pass.row <= pass.rg.r1) nextRow();
+            else return true;
+          }
+          var list = pass.line;
+          while (pass.at < list.length) {
+            // A tile drawn large costs milliseconds, so the clock is read per hex.
+            if (drawn++ && performance.now() > until) return false;
+            var c = list[pass.at++], k = key(c.col, c.row);
+            if (!c.terrain || c.terrain === 'road' || fx[k]) continue;
+            var ct = center(geo, c.col, c.row), dx = f.ox + ct[0] * f.s, dy = f.oy + ct[1] * f.s;
+            var tile = tileFor(c, k);
+            if (tile) {
+              cx.drawImage(tile.canvas, dx + tile.x * R, dy + tile.y * R, tile.w * R, tile.h * R);
+            } else {
+              // Until its tile is painted a hex shows its flat colour.
+              cx.save();
+              cx.translate(dx, dy);
+              cx.globalAlpha = 0.4;
+              cx.fillStyle = COLOR[c.terrain];
+              cx.fill(pass.standIn);
+              cx.restore();
+            }
+          }
+          if (pass.sparse) return true;
+          pass.line = null;
+        }
+      };
+      return pass;
     }
 
     function realKey(t, v, nb, bucket) { return 'r|' + t + '|' + v + '|' + (nb.bl ? 1 : 0) + (nb.br ? 1 : 0) + '|' + bucket; }
@@ -1099,35 +1242,50 @@
     function tileURL(tile) { return tile.url || (tile.url = tile.canvas.toDataURL()); }
 
     function enqueue(job, first) {
-      if (jobKeys[job.key]) return;
-      jobKeys[job.key] = true;
-      if (first) jobs.unshift(job); else jobs.push(job);
+      jobs.add(job, first);
     }
 
     function startJobs() {
       if (jobTimer || !jobs.length || destroyed) return;
-      jobTimer = setTimeout(runJobs, 0);
+      jobTimer = 1;
+      soon(runJobs);
     }
 
     // runJobs paints queued tiles for a slice of time, then yields to the page.
     function runJobs() {
       jobTimer = 0;
       if (destroyed) return;
-      var t0 = performance.now();
-      while (jobs.length && performance.now() - t0 < SLICE_MS) {
-        var j = jobs[0];
-        if (j.kind === 'd' && decoding >= 6) break;
-        jobs.shift();
-        delete jobKeys[j.key];
-        if (tiles.has(j.key)) continue;
-        if (j.kind === 'd') { paintDetailed(j); continue; }
-        var mk = j.t + '|' + j.v + '|' + j.bucket, model = models.get(mk);
-        if (!model) { model = HA.iso3Model(j.t, j.v, j.bucket / HA.TILE_R); models.set(mk, model, 1); }
-        var out = model(j.nb);
-        tiles.set(j.key, out, out.canvas.width * out.canvas.height);
-        tileReady(j.key);
-      }
+      jobs.run(SLICE_MS, function () { return performance.now(); });
       if (jobs.length) startJobs();
+    }
+
+    // doJob does one queued tile, as much as fits before the clock reads
+    // `until`. A Realistic tile is two steps: the model (the costly one, built a
+    // few rows at a time and kept between slices) and the cut of it for this
+    // tile's edges. It reports true when the tile is done, false when it ran out
+    // of time and 'wait' when it must not start yet.
+    function doJob(j, until) {
+      if (tiles.has(j.key)) return true;
+      if (j.kind === 'd') {
+        if (decoding >= 6) return 'wait';
+        paintDetailed(j);
+        return true;
+      }
+      var mk = j.t + '|' + j.v + '|' + j.bucket, model = models.get(mk);
+      if (!model) {
+        var mb = building[mk] || (building[mk] = HA.iso3ModelJob(j.t, j.v, j.bucket / HA.TILE_R));
+        if (!mb.step(until)) return false;
+        delete building[mk];
+        model = mb.make;
+        models.set(mk, model, 1);
+        // Cutting the tile is the second step; leave it for the next slice if
+        // this one is spent.
+        if (performance.now() >= until) return false;
+      }
+      var out = model(j.nb);
+      tiles.set(j.key, out, out.canvas.width * out.canvas.height);
+      tileReady(j.key);
+      return true;
     }
 
     // paintDetailed rasterises a Detailed tile through the browser's own SVG
@@ -1156,7 +1314,7 @@
     // finished tiles share one), and in any panel swatch waiting on it.
     function tileReady(k) {
       if (thumbs[k]) { delete thumbs[k]; fillThumbs(k); }
-      if (!artKick) artKick = setTimeout(function () { artKick = 0; scheduleArt(true); }, KICK_MS);
+      if (!artKick) artKick = setTimeout(function () { artKick = 0; if (artPass) artAgain = true; else scheduleArt(true); }, Math.max(KICK_MS, KICK_LOAD * passMs));
     }
 
     // ---- Panel swatches in Realistic ----
@@ -1205,7 +1363,7 @@
     // artChanged follows a change of style: tiles queued for the old style are
     // dropped and the map, the panel and the cross-fades start over.
     function artChanged() {
-      jobs = []; jobKeys = {}; thumbs = {};
+      jobs.clear(); building = {}; thumbs = {};
       fx = {};
       scheduleArt(true);
       renderSoon();
@@ -2302,10 +2460,11 @@
         map.off('moveend resize viewreset', onArtView);
         map.off('zoomanim', onZoomAnim);
         clearTimeout(fxTimer);
-        clearTimeout(jobTimer);
+        jobTimer = 0;
         clearTimeout(artKick);
         if (artRaf) cancelAnimationFrame(artRaf);
-        jobs = []; jobKeys = {}; thumbs = {};
+        jobs.clear(); building = {}; thumbs = {};
+        cancelPass();
         tiles.clear(); models.clear();
         revealTimers.forEach(clearTimeout);
         stopWalk();
