@@ -223,7 +223,7 @@ func TestEnsurePlayerCharacterType_CharactersIsTheSystemType(t *testing.T) {
 					return []EntityType{chars}, nil
 				},
 				findByIDFn: func(_ context.Context, _ int) (*EntityType, error) { c := chars; return &c, nil },
-				createFn: func(_ context.Context, et *EntityType) error { created = true; et.ID = 9; return nil },
+				createFn:   func(_ context.Context, et *EntityType) error { created = true; et.ID = 9; return nil },
 			}
 			svc := newTestService(&mockEntityRepo{}, typeRepo)
 			svc.SetAddonChecker(&mockAddonChecker{enabled: map[string]bool{AddonPlayerCharacterClaiming: true}})
