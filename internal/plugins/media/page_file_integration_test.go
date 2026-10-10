@@ -127,13 +127,13 @@ func (p *pageFileDB) trash(t *testing.T, page string, on bool) {
 
 func TestDB_PageFileMigrationIsIdempotent(t *testing.T) {
 	db := newADR058ScratchDB(t)
-	up, err := os.ReadFile(filepath.Join("..", "..", "..", "db", "migrations", "000046_page_files.up.sql"))
+	up, err := os.ReadFile(filepath.Join("..", "..", "..", "db", "migrations", "000045_page_files.up.sql"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	// The scratch schema already ran it once; a partial re-run must not fail.
 	if _, err := db.Exec(string(up)); err != nil {
-		t.Fatalf("re-running 000046 up: %v", err)
+		t.Fatalf("re-running 000045 up: %v", err)
 	}
 }
 

@@ -180,7 +180,7 @@ numbered core migrations after it, tracked once each via `golang-migrate`'s
 | Table | Purpose | Notable columns |
 |---|---|---|
 | `media_files` | Uploaded file metadata | `content_hash` (sha256, per-campaign dedup — `INDEX(campaign_id, content_hash)`); `thumbnail_paths` JSON; `usage_type` |
-| `page_files` | Which page a `page_file` media file is attached to (migration 46) | `media_id` PK FK→`media_files` CASCADE; `entity_id` FK→`entities` CASCADE; `campaign_id`; `gm_only` |
+| `page_files` | Which page a `page_file` media file is attached to (migration 45) | `media_id` PK FK→`media_files` CASCADE; `entity_id` FK→`entities` CASCADE; `campaign_id`; `gm_only` |
 | `addons` | Registry of installable features (systems/widgets/integrations/plugins) | `slug` UNIQUE; `category` enum; `status` enum(`active`,`planned`,`deprecated`); seeded by the baseline migration so the registry exists even if a plugin's own schema migration fails |
 | `campaign_addons` | Per-campaign addon enablement | `UNIQUE(campaign_id, addon_id)`; `config_json` (the `"setup"` key holds extension-settings wizard state, ADR-043) |
 | `extensions` | Installed WASM extension manifests | `ext_id` UNIQUE; `manifest` JSON |
