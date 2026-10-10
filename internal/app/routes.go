@@ -542,9 +542,9 @@ func (a *backdropUploaderAdapter) OwnsFile(ctx context.Context, campaignID, file
 		}
 		return false, err
 	}
-	// A note picture is readable only through the notes that hold it; a campaign
-	// backdrop must not adopt one by its stored name.
-	if mf.IsNotePicture() {
+	// A note picture or page file is readable only through what holds it; a
+	// campaign backdrop must not adopt one by its stored name.
+	if mf.IsBound() {
 		return false, nil
 	}
 	return mf.Filename == filename && mf.CampaignID != nil && *mf.CampaignID == campaignID, nil
@@ -1431,7 +1431,7 @@ func (a *mapImageSourceAdapter) ReadImage(ctx context.Context, campaignID, media
 	if err != nil {
 		return nil, err
 	}
-	if file.CampaignID == nil || *file.CampaignID != campaignID || !file.IsImage() || file.IsNotePicture() {
+	if file.CampaignID == nil || *file.CampaignID != campaignID || !file.IsImage() || file.IsBound() {
 		return nil, apperror.NewNotFound("media file not found")
 	}
 	data, err := os.ReadFile(a.svc.FilePath(file))
@@ -2293,7 +2293,7 @@ func (a *entityMediaVerifierAdapter) MediaExistsInCampaign(ctx context.Context, 
 		}
 		return false, err
 	}
-	if f == nil || f.IsNotePicture() {
+	if f == nil || f.IsBound() {
 		return false, nil
 	}
 	return f.CampaignID != nil && *f.CampaignID == campaignID, nil
@@ -2319,7 +2319,7 @@ func (a *mapMediaVerifierAdapter) ImageInCampaign(ctx context.Context, mediaID, 
 		}
 		return false, err
 	}
-	if f == nil || f.IsNotePicture() || f.CampaignID == nil || *f.CampaignID != campaignID {
+	if f == nil || f.IsBound() || f.CampaignID == nil || *f.CampaignID != campaignID {
 		return false, nil
 	}
 	return strings.HasPrefix(f.MimeType, "image/"), nil
@@ -2974,6 +2974,12 @@ func (a *App) RegisterRoutes() {
 	// Campaign media browser routes (gated behind media-gallery addon).
 	media.RegisterCampaignRoutes(e, mediaHandler, campaignService, authService, addonService)
 
+	// Files attached to a page. Who may see, add or remove one is the page's
+	// own rule, asked of the entities service, never of text that mentions it.
+	pageFileService := media.NewPageFileService(media.NewPageFileRepository(a.DB), mediaService, &pageAccessAdapter{svc: entityService})
+	pageFileHandler := media.NewPageFileHandler(pageFileService, mediaService)
+	media.RegisterPageFileRoutes(e, pageFileHandler, campaignService, authService, resolveMaxUpload, a.Config.Upload.ServeRateLimit)
+
 	// Wire addon count into admin dashboard for the Extensions stat card.
 	adminHandler.SetAddonCounter(addonService)
 	adminHandler.SetAddonUsageCounter(addonService)
@@ -3247,6 +3253,7 @@ func (a *App) RegisterRoutes() {
 	// Wire security event logging into the media handler so uploads, deletes,
 	// and quota failures are recorded in the admin security dashboard.
 	mediaHandler.SetSecurityLogger(securityService)
+	pageFileHandler.SetSecurityLogger(securityService)
 
 	// foundry_vtt sub-plugin: the Foundry-VTT-specific extension to the
 	// generic packages plugin. Owns every Foundry-specific behavior:
@@ -5436,6 +5443,29 @@ type noteMediaAccessAdapter struct {
 
 func (a *noteMediaAccessAdapter) CanReadNoteMedia(ctx context.Context, campaignID, mediaID string, role int, userID string) (bool, error) {
 	return a.svc.ViewerReadsMedia(ctx, campaignID, mediaID, permissions.RequestViewer(role, userID))
+}
+
+// pageAccessAdapter answers the media plugin's page-file question over the
+// entities service, so media never reads entity tables or repeats the page
+// visibility rule.
+type pageAccessAdapter struct {
+	svc entities.EntityService
+}
+
+// PageAccess says whether the viewer can see the page (which is false for a
+// page that is missing, in another campaign, in the Trash, or hidden from
+// them) and whether they can edit it. Editing is only asked of a page already
+// found visible, because CheckEntityAccess alone does not scope to a campaign.
+func (a *pageAccessAdapter) PageAccess(ctx context.Context, campaignID, entityID string, role int, userID string) (media.PageAccess, error) {
+	viewable, err := a.svc.FilterViewableEntityIDs(ctx, campaignID, []string{entityID}, role, userID)
+	if err != nil || !viewable[entityID] {
+		return media.PageAccess{}, err
+	}
+	ep, err := a.svc.CheckEntityAccess(ctx, entityID, role, userID)
+	if err != nil {
+		return media.PageAccess{}, err
+	}
+	return media.PageAccess{CanView: true, CanEdit: ep.CanEdit}, nil
 }
 
 // aiMapsAdapter is the maps service in AI Import's pin types, so the

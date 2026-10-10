@@ -191,8 +191,17 @@ func (s *mediaService) Upload(ctx context.Context, input UploadInput) (*MediaFil
 	}
 	defer s.sem.release(input.UploadedBy)
 
-	// Validate MIME type.
-	if !AllowedMimeTypes[input.MimeType] {
+	// Validate MIME type. A page file has its own, wider list (documents), which
+	// is never consulted for any other usage type, so an upload route that does
+	// not know about page files cannot store a PDF or an archive.
+	if input.UsageType == UsagePageFile {
+		if input.CampaignID == "" {
+			return nil, apperror.NewBadRequest("a page file must belong to a campaign")
+		}
+		if !PageFileMimeTypes[input.MimeType] {
+			return nil, apperror.NewBadRequest("unsupported file type: " + input.MimeType)
+		}
+	} else if !AllowedMimeTypes[input.MimeType] {
 		return nil, apperror.NewBadRequest("unsupported file type: " + input.MimeType)
 	}
 
@@ -212,9 +221,10 @@ func (s *mediaService) Upload(ctx context.Context, input UploadInput) (*MediaFil
 	if len(input.FileBytes) > 0 {
 		sum := sha256.Sum256(input.FileBytes)
 		contentHash = hex.EncodeToString(sum[:])
-		// Note pictures are never merged: each upload is its own file, so who
-		// may open it never depends on who else uploaded the same bytes.
-		if input.CampaignID != "" && input.UsageType != UsageNoteImage {
+		// Note pictures and page files are never merged: each upload is its own
+		// file, so who may open it never depends on who else uploaded the same
+		// bytes.
+		if input.CampaignID != "" && input.UsageType != UsageNoteImage && input.UsageType != UsagePageFile {
 			if existing, err := s.repo.FindByContentHash(ctx, input.CampaignID, contentHash); err != nil {
 				// Non-fatal — continue with a fresh upload rather than
 				// blocking the user on a transient DB hiccup.
@@ -298,8 +308,13 @@ func (s *mediaService) Upload(ctx context.Context, input UploadInput) (*MediaFil
 		}
 	}
 
-	// Validate magic bytes match declared MIME type.
-	if !validateMagicBytes(input.FileBytes, input.MimeType) {
+	// Validate that the content is what the type says. A page file also
+	// refuses programs, with its own words.
+	if input.UsageType == UsagePageFile {
+		if err := validatePageFileContent(input.FileBytes, input.MimeType); err != nil {
+			return nil, apperror.NewBadRequest(err.Error())
+		}
+	} else if !validateMagicBytes(input.FileBytes, input.MimeType) {
 		return nil, apperror.NewBadRequest("file content does not match declared type")
 	}
 
@@ -376,7 +391,8 @@ func (s *mediaService) Upload(ctx context.Context, input UploadInput) (*MediaFil
 	}
 
 	// Generate thumbnails for images (using sanitized bytes).
-	if file.IsImage() && input.MimeType != "image/gif" {
+	// A page file is only downloaded, so it gets no thumbnails to store.
+	if file.IsImage() && input.MimeType != "image/gif" && !file.IsPageFile() {
 		thumbSizes := map[string]int{"300": 300, "800": 800}
 		for sizeLabel, maxDim := range thumbSizes {
 			thumbFilename, err := s.generateThumbnail(input.FileBytes, dir, id, ext, maxDim)
@@ -728,9 +744,10 @@ func (s *mediaService) DeleteCampaignMedia(ctx context.Context, campaignID, medi
 		return err
 	}
 
-	// Verify the file belongs to this campaign. A note picture is not the
-	// campaign owner's to remove: it belongs to the note that holds it.
-	if file.CampaignID == nil || *file.CampaignID != campaignID || file.IsNotePicture() {
+	// Verify the file belongs to this campaign. A note picture or a page
+	// file is not the campaign owner's to remove here: it belongs to the note or
+	// page that holds it.
+	if file.CampaignID == nil || *file.CampaignID != campaignID || file.IsBound() {
 		return apperror.NewNotFound("media file not found")
 	}
 
@@ -772,6 +789,10 @@ func (s *mediaService) DeleteCampaignFiles(ctx context.Context, campaignID strin
 // uploaded into a note still being written is not collected under its author.
 const notePictureGrace = 24 * time.Hour
 
+// pageFileGrace is how long an unbound page file is kept: an upload is bound a
+// moment after it is stored, so an hour is far more than enough.
+const pageFileGrace = time.Hour
+
 // CleanupOrphans walks the media directory, checks each file against the
 // database, and deletes any files not tracked. This handles the case where
 // an upload crashes between writing the file and saving the DB record.
@@ -790,6 +811,22 @@ func (s *mediaService) CleanupOrphans(ctx context.Context) (int, error) {
 				continue
 			}
 			removedPictures++
+		}
+	}
+
+	// Page files whose page is gone (purged from the Trash) or that were never
+	// bound would otherwise sit in the campaign's quota with nobody able to
+	// reach them. The short delay covers an upload being bound right now.
+	removedPageFiles := 0
+	if ids, err := s.repo.ListUnboundPageFiles(ctx, time.Now().UTC().Add(-pageFileGrace)); err != nil {
+		slog.Warn("orphan cleanup: could not list unbound page files", slog.Any("error", err))
+	} else {
+		for _, id := range ids {
+			if err := s.Delete(ctx, id); err != nil {
+				slog.Warn("orphan cleanup: could not delete unbound page file", slog.String("file_id", id), slog.Any("error", err))
+				continue
+			}
+			removedPageFiles++
 		}
 	}
 
@@ -855,8 +892,8 @@ func (s *mediaService) CleanupOrphans(ctx context.Context) (int, error) {
 		return removed, fmt.Errorf("walking media directory: %w", err)
 	}
 
-	slog.Info("orphan cleanup completed", slog.Int("removed", removed), slog.Int("note_pictures", removedPictures))
-	return removed + removedPictures, nil
+	slog.Info("orphan cleanup completed", slog.Int("removed", removed), slog.Int("note_pictures", removedPictures), slog.Int("page_files", removedPageFiles))
+	return removed + removedPictures + removedPageFiles, nil
 }
 
 // maxImageDimension is the maximum width or height in pixels for uploaded images.

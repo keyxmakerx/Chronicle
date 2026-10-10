@@ -33,6 +33,17 @@ templ blockBacklinksMount(cc *campaigns.CampaignContext, entity *Entity) {
 	></div>
 }
 
+// pageFilesMount loads the Files section the media plugin serves for this page.
+// The section arrives with a short settle on the page's own load; the media
+// plugin refreshes it in place afterwards.
+templ pageFilesMount(cc *campaigns.CampaignContext, entity *Entity) {
+	<div
+		hx-get={ fmt.Sprintf("/campaigns/%s/entities/%s/files?first=1", cc.Campaign.ID, entity.ID) }
+		hx-trigger="load"
+		hx-swap="outerHTML"
+	></div>
+}
+
 // blockCharacterItems loads the items-and-money panel another plugin serves;
 // it renders nothing when that plugin is off or the page is not a character.
 templ blockCharacterItems() {

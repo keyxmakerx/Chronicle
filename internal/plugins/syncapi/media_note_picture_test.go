@@ -14,8 +14,15 @@ import (
 // it must answer for a note picture exactly as for a file that isn't there,
 // and an Owner key must not be able to delete one.
 func TestMediaAPI_NotePicturesAreOutOfReach(t *testing.T) {
+	// A file attached to a page is bound the same way: its page decides.
+	for _, usage := range []string{media.UsageNoteImage, media.UsagePageFile} {
+		t.Run(usage, func(t *testing.T) { notePicturesAreOutOfReach(t, usage) })
+	}
+}
+
+func notePicturesAreOutOfReach(t *testing.T, usage string) {
 	campID := "camp-1"
-	file := &media.MediaFile{ID: "med-1", CampaignID: &campID, UsageType: media.UsageNoteImage}
+	file := &media.MediaFile{ID: "med-1", CampaignID: &campID, UsageType: usage}
 	key := &APIKey{ID: 7, CampaignID: campID, UserID: "foundry-key-owner"}
 	newHandler := func(svc *stubMediaSvcOwnerGate) *MediaAPIHandler {
 		h := NewMediaAPIHandler(&stubSyncSvcForRole{}, svc)

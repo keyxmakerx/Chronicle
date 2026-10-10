@@ -129,6 +129,10 @@ func (m *mockMediaRepo) ListAllFilenames(ctx context.Context) (map[string]bool, 
 	return make(map[string]bool), nil
 }
 
+func (m *mockMediaRepo) ListUnboundPageFiles(ctx context.Context, olderThan time.Time) ([]string, error) {
+	return nil, nil
+}
+
 func (m *mockMediaRepo) ListUnboundNotePictures(ctx context.Context, olderThan time.Time) ([]string, error) {
 	if m.listUnboundFn != nil {
 		return m.listUnboundFn(ctx, olderThan)

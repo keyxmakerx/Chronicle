@@ -63,8 +63,8 @@ func (p pictureMediaSvc) GetByID(context.Context, string) (*media.MediaFile, err
 
 func (pictureMediaSvc) FilePath(*media.MediaFile) string { return "/nonexistent/picture" }
 
-// A page, a map or a map's picture source may not adopt a note picture: their
-// readers are not the note's readers.
+// A page, a map or a map's picture source may not adopt a note picture or a
+// page file: their readers are not those of the note or page that holds it.
 func TestMediaVerifiers_RefuseNotePictures(t *testing.T) {
 	camp := "c1"
 	file := func(usage string) *media.MediaFile {
@@ -79,6 +79,7 @@ func TestMediaVerifiers_RefuseNotePictures(t *testing.T) {
 		{"page picture", media.UsageEntityImage, true},
 		{"attachment", media.UsageAttachment, true},
 		{"note picture", media.UsageNoteImage, false},
+		{"page file", media.UsagePageFile, false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -98,7 +99,7 @@ func TestMediaVerifiers_RefuseNotePictures(t *testing.T) {
 }
 
 // A campaign backdrop may be set to a file of the campaign, but never to a
-// note picture, whose readers are the note's readers.
+// note picture or page file, whose readers are those of the note or page.
 func TestBackdropOwnsFile_RefusesNotePictures(t *testing.T) {
 	camp := "c1"
 	tests := []struct {
@@ -109,6 +110,7 @@ func TestBackdropOwnsFile_RefusesNotePictures(t *testing.T) {
 		{"backdrop", media.UsageBackdrop, true},
 		{"page picture", media.UsageEntityImage, true},
 		{"note picture", media.UsageNoteImage, false},
+		{"page file", media.UsagePageFile, false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

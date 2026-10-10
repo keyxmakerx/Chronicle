@@ -319,7 +319,11 @@ jobs:
                       TestADR058Integration_ReferenceLookupError_Denies \
                       TestDB_NotePictureAccess \
                       TestDB_NotePicturesStayOutOfListingsAndDedup \
-                      TestDB_AdminListHidesNotePictureDetails; do
+                      TestDB_AdminListHidesNotePictureDetails \
+                      TestDB_PageFileMigrationIsIdempotent \
+                      TestDB_PageFileAccess \
+                      TestDB_PageFilesStayOutOfListingsAndDedup \
+                      TestDB_PageFileLifecycle; do
             grep -q -- "--- PASS: $want" dbtests.log || {
               echo "::error::$want did not PASS — it was skipped or never ran."
               exit 1
