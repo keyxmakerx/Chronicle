@@ -10,6 +10,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/concurrency"
+	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 )
 
@@ -863,8 +864,11 @@ func (s *drawingService) UpdateToken(ctx context.Context, id, mapID string, isDM
 // cross-user collisions. The pre-fetch is skipped on the no-token path
 // to keep the drag fast path on the same code shape as before.
 func (s *drawingService) UpdateTokenPosition(ctx context.Context, id, mapID string, isDM bool, input UpdateTokenPositionInput) error {
-	if input.X < 0 || input.X > 100 || input.Y < 0 || input.Y > 100 {
-		return apperror.NewBadRequest("token coordinates must be between 0 and 100")
+	// Range-check only what the caller sent; the stored axis is already valid.
+	for _, axis := range []patch.Field[float64]{input.X, input.Y} {
+		if v, ok := axis.Get(); ok && (v < 0 || v > 100) {
+			return apperror.NewBadRequest("token coordinates must be between 0 and 100")
+		}
 	}
 	// Load once: needed for the IDOR guard (audit-R2 Finding 2) AND the optional
 	// concurrency check (the drag path may omit ExpectedUpdatedAt, but the map
@@ -884,12 +888,13 @@ func (s *drawingService) UpdateTokenPosition(ctx context.Context, id, mapID stri
 			return err
 		}
 	}
-	if err := s.repo.UpdateTokenPosition(ctx, id, input.X, input.Y); err != nil {
+	x, y := input.X.Val(t.X), input.Y.Val(t.Y)
+	if err := s.repo.UpdateTokenPosition(ctx, id, x, y); err != nil {
 		return err
 	}
 	// Reuse the token loaded above (position update doesn't change its map) to
 	// resolve the campaign for the event.
-	s.events.PublishTokenPositionEvent(s.campaignForMap(ctx, t.MapID), t.MapID, id, input.X, input.Y, t.IsHidden)
+	s.events.PublishTokenPositionEvent(s.campaignForMap(ctx, t.MapID), t.MapID, id, x, y, t.IsHidden)
 	return nil
 }
 

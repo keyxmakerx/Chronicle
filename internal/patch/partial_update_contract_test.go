@@ -64,6 +64,7 @@ var contractGoverned = map[string]string{
 	"timeline.UpdateEntityGroupInput":     "PUT .../timelines/:tid/groups/:gid — the service rebuilt the whole row from the body, so every edit reset the group's sort order to 0 and a name-only push blanked the color",
 	"timeline.UpdateEventVisibilityInput": "PUT .../timelines/:tid/events/:eid/visibility — a body naming only the override wrote NULL over the event link's per-user visibility rules (and vice versa)",
 	"armory.UpdateInstanceInput":          "PUT /campaigns/:id/armory/instances/:iid — Rename echoed back the description, icon and colour it loaded, so a concurrent change to them was reverted; a name-only push must keep the rest",
+	"maps.UpdateTokenPositionInput":       "PATCH .../tokens/:tid/position (web + syncapi) — x and y were value-typed, so a body naming one axis snapped the other to 0; each now moves only the axis it names",
 	"auth.UpdateViewPrefsInput":           "PUT /account/view-prefs — each My view choice saves on its own as it is tapped, so a body naming one must not reset the other three (born governed, no incident)",
 }
 
@@ -116,7 +117,6 @@ var notYetSwept = map[string]bool{
 	"entities.UpdateContentTemplateInput": true,
 	"entities.UpdateEntityTypeInput":      true,
 	"entities.UpdatePromptInput":          true,
-	"maps.UpdateTokenPositionInput":       true,
 	"campaigns.UpdateCampaignInput":       true,
 
 	// The scanner covers Update*Input and Update*Request (ADR-056). These are

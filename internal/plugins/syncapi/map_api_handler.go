@@ -596,13 +596,6 @@ func (h *MapAPIHandler) UpdateToken(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
-// apiUpdateTokenPositionRequest is the JSON body for moving a token.
-type apiUpdateTokenPositionRequest struct {
-	X                 float64    `json:"x"`
-	Y                 float64    `json:"y"`
-	ExpectedUpdatedAt *time.Time `json:"expected_updated_at"`
-}
-
 // UpdateTokenPosition updates only the position (optimized for drag sync).
 // PATCH /api/v1/campaigns/:id/maps/:mapID/tokens/:tokenID/position
 func (h *MapAPIHandler) UpdateTokenPosition(c echo.Context) error {
@@ -611,16 +604,12 @@ func (h *MapAPIHandler) UpdateTokenPosition(c echo.Context) error {
 	}
 	tokenID := c.Param("tokenID")
 
-	var req apiUpdateTokenPositionRequest
+	var req maps.UpdateTokenPositionInput
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request body")
 	}
 
-	err := h.drawingSvc.UpdateTokenPosition(c.Request().Context(), tokenID, c.Param("mapID"), h.canAuthorDmOnly(c), maps.UpdateTokenPositionInput{
-		X:                 req.X,
-		Y:                 req.Y,
-		ExpectedUpdatedAt: req.ExpectedUpdatedAt,
-	})
+	err := h.drawingSvc.UpdateTokenPosition(c.Request().Context(), tokenID, c.Param("mapID"), h.canAuthorDmOnly(c), req)
 	if err != nil {
 		return err
 	}

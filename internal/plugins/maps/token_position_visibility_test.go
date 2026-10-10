@@ -8,6 +8,8 @@ package maps
 import (
 	"context"
 	"testing"
+
+	"github.com/keyxmakerx/chronicle/internal/patch"
 )
 
 // recordingEventPublisher records the isHidden flag PublishTokenPositionEvent
@@ -42,7 +44,7 @@ func TestUpdateTokenPosition_PublishesHiddenFlag(t *testing.T) {
 			svc := NewDrawingService(repo)
 			svc.SetEventPublisher(pub)
 
-			err := svc.UpdateTokenPosition(context.Background(), "tok-1", "map-1", true, UpdateTokenPositionInput{X: 10, Y: 20})
+			err := svc.UpdateTokenPosition(context.Background(), "tok-1", "map-1", true, UpdateTokenPositionInput{X: patch.Of(float64(10)), Y: patch.Of(float64(20))})
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}

@@ -215,10 +215,14 @@ type UpdateTokenInput struct {
 // pipelines that fire many position updates per second can simply omit it
 // and accept last-writer-wins; deliberate "drop here" actions can include
 // it to detect cross-user collisions.
+//
+// X and Y are presence-aware: a body naming one axis moves the token along
+// that axis only, instead of snapping the other to 0. Both columns are NOT
+// NULL, so an explicit null also preserves.
 type UpdateTokenPositionInput struct {
-	X                 float64
-	Y                 float64
-	ExpectedUpdatedAt *time.Time
+	X                 patch.Field[float64] `json:"x"`
+	Y                 patch.Field[float64] `json:"y"`
+	ExpectedUpdatedAt *time.Time           `json:"expected_updated_at"`
 }
 
 // Layer organizes map content into z-ordered groups (background, drawing, token, gm, fog).
