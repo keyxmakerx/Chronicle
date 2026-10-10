@@ -307,6 +307,9 @@ templ Base(title string) {
 		<!-- Timeline widget (interactive timeline preview for dashboard embeds) -->
 		<script src={ AssetURL("/static/js/widgets/timeline_widget.js") } defer></script>
 
+		<!-- Map annotations (arrows, highlighter, steps, bubbles), shared by the
+		     map widget below and the map viewer -->
+		<script src={ AssetURL("/static/js/map_annotations.js") } defer></script>
 		<!-- Map widget (embedded Leaflet map viewer for dashboard embeds) -->
 		<script src={ AssetURL("/static/js/widgets/map_widget.js") } defer></script>
 

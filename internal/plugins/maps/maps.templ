@@ -273,6 +273,7 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 		data-draw-src={ layouts.AssetURL("/static/js/map_drawing_tools.js") }
 		data-shadow-src={ layouts.AssetURL("/static/js/map_shadow.js") }
 		data-pictures-src={ layouts.AssetURL("/static/js/map_pictures.js") }
+		data-annotations-src={ layouts.AssetURL("/static/js/map_annotations.js") }
 		data-hex-art-src={ layouts.AssetURL("/static/js/map_hex_art.js") }
 		data-hexes-src={ layouts.AssetURL("/static/js/map_hexes.js") }
 		data-map-id={ data.Map.ID }
@@ -329,6 +330,7 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 		/* The Hexes tool's icon and panel. The panel sits beside the rail like
 		   the draw flyouts; the hexes themselves are an SVG in map_hexes.js. */
 		.mp-hexico { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; }
+		.mp-shapeico { width: 16px; height: 16px; stroke-width: 2; stroke-linecap: round; }
 		.mp-hexpanel { top: 58px; left: 58px; width: 260px; max-height: calc(100% - 80px); overflow: auto; padding: 0 12px 12px; display: flex; flex-direction: column; gap: 9px; font-size: 12.5px; color: var(--color-text-primary); animation: mp-hx-panel 0.22s cubic-bezier(0.2, 0.8, 0.2, 1); }
 		.mp-hexpanel > * { flex-shrink: 0; }
 		.mp-hexpanel .mp-hx-head { display: flex; align-items: center; justify-content: space-between; font-weight: 600; padding: 10px 0 2px; position: sticky; top: 0; background: var(--mp-float); }
@@ -419,6 +421,7 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 		.mp-fly { left: 48px; top: 0; padding: 6px; display: flex; gap: 2px; flex-wrap: wrap; width: max-content; max-width: 220px; }
 		.mp-fly-label { flex-basis: 100%; font-size: 11px; color: var(--color-text-secondary); padding: 2px 4px 4px; text-transform: uppercase; letter-spacing: 0.06em; }
 		.mp-fly-gap { margin-top: 6px; }
+		#mp-fly-style { max-width: 260px; }
 		.mp-fly-col { flex-direction: column; flex-wrap: nowrap; align-items: stretch; max-width: 250px; }
 		.mp-fly-col .mp-wd { text-align: left; padding: 6px 10px; }
 		.mp-fly-help { font-size: 11.5px; color: var(--color-text-secondary); padding: 4px 4px 2px; }
@@ -566,11 +569,17 @@ templ mapControls(data MapViewData) {
 				</button>
 				<div id="mp-fly-draw" class="mp-fl mp-fly" hidden>
 					<div class="mp-fly-label">Draw</div>
-					<button type="button" class="mp-btn" data-shape="freehand" aria-pressed="false" aria-label="Freehand"><i class="fa-solid fa-pen" aria-hidden="true"></i></button>
-					<button type="button" class="mp-btn" data-shape="rectangle" aria-pressed="false" aria-label="Rectangle"><i class="fa-solid fa-vector-square" aria-hidden="true"></i></button>
-					<button type="button" class="mp-btn" data-shape="ellipse" aria-pressed="false" aria-label="Circle"><i class="fa-solid fa-circle" aria-hidden="true"></i></button>
-					<button type="button" class="mp-btn" data-shape="polygon" aria-pressed="false" aria-label="Polygon"><i class="fa-solid fa-draw-polygon" aria-hidden="true"></i></button>
-					<button type="button" class="mp-btn" data-shape="text" aria-pressed="false" aria-label="Text"><i class="fa-solid fa-font" aria-hidden="true"></i></button>
+					<!-- The shapes in the signed design's order. The four annotation icons
+					     are the design's own line icons, drawn like the hex icon. -->
+					<button type="button" class="mp-btn" data-shape="freehand" aria-pressed="false" aria-label="Freehand"><i class="fa-solid fa-pen" aria-hidden="true"></i><span class="mp-tip">Freehand line</span></button>
+					<button type="button" class="mp-btn" data-shape="arrow" aria-pressed="false" aria-label="Arrow"><svg class="mp-hexico mp-shapeico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19L19 5M19 5h-8M19 5v8"/></svg><span class="mp-tip">Arrow</span></button>
+					<button type="button" class="mp-btn" data-shape="rectangle" aria-pressed="false" aria-label="Rectangle"><i class="fa-solid fa-vector-square" aria-hidden="true"></i><span class="mp-tip">Box</span></button>
+					<button type="button" class="mp-btn" data-shape="ellipse" aria-pressed="false" aria-label="Circle"><i class="fa-solid fa-circle" aria-hidden="true"></i><span class="mp-tip">Circle</span></button>
+					<button type="button" class="mp-btn" data-shape="polygon" aria-pressed="false" aria-label="Polygon"><i class="fa-solid fa-draw-polygon" aria-hidden="true"></i><span class="mp-tip">Shape</span></button>
+					<button type="button" class="mp-btn" data-shape="highlight" aria-pressed="false" aria-label="Highlighter"><svg class="mp-hexico mp-shapeico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h7M14 4l6 6-9 9H5v-6z"/></svg><span class="mp-tip">Highlighter</span></button>
+					<button type="button" class="mp-btn" data-shape="step" aria-pressed="false" aria-label="Numbered step"><svg class="mp-hexico mp-shapeico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M11 9l2-1v8"/></svg><span class="mp-tip">Numbered step</span></button>
+					<button type="button" class="mp-btn" data-shape="callout" aria-pressed="false" aria-label="Speech bubble"><svg class="mp-hexico mp-shapeico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg><span class="mp-tip">Speech bubble</span></button>
+					<button type="button" class="mp-btn" data-shape="text" aria-pressed="false" aria-label="Text"><i class="fa-solid fa-font" aria-hidden="true"></i><span class="mp-tip">Label</span></button>
 				</div>
 			</div>
 			if data.CanShadow() {
@@ -784,9 +793,9 @@ templ markerModal(data MapViewData) {
 }
 
 // derefStr safely dereferences a *string, returning "" for nil.
-// mapDrawColors are the seven swatches offered for drawings: a small, legible
+// mapDrawColors are the eight swatches (the signed design's palette) offered for drawings: a small, legible
 // set that reads on both light and dark map art, replacing a free colour input.
-var mapDrawColors = []string{"#c0392b", "#d97706", "#15803d", "#2563eb", "#7c3aed", "#111827", "#ffffff"}
+var mapDrawColors = []string{"#c0392b", "#d97706", "#facc15", "#15803d", "#2563eb", "#7c3aed", "#111827", "#ffffff"}
 
 func derefStr(s *string) string {
 	if s == nil {
