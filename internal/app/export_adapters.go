@@ -41,6 +41,8 @@ type entityExportAdapter struct {
 	entitySvc   entities.EntityService
 	tagSvc      tags.TagService
 	relationSvc relations.RelationService
+	// placeSvc carries a page's extra places in the tree; nil leaves them out.
+	placeSvc entities.PlaceService
 }
 
 // ExportEntities gathers all entity-related data for a campaign export.
@@ -176,6 +178,24 @@ func (a *entityExportAdapter) ExportEntities(ctx context.Context, campaignID str
 			if slug, ok := entityIDToSlug[*parentID]; ok {
 				data.Entities[i].ParentSlug = &slug
 			}
+		}
+	}
+
+	// Extra places a page is listed in the tree, by the parent's slug like the
+	// real parent. Read without a viewer filter: export is the owner's copy.
+	if a.placeSvc != nil {
+		places, err := a.placeSvc.ExportPlaces(ctx, campaignID)
+		if err != nil {
+			return nil, err
+		}
+		slugsByEntity := make(map[string][]string)
+		for _, p := range places {
+			if slug, ok := entityIDToSlug[p.ParentEntityID]; ok {
+				slugsByEntity[p.EntityID] = append(slugsByEntity[p.EntityID], slug)
+			}
+		}
+		for i, e := range data.Entities {
+			data.Entities[i].AlsoListedUnder = slugsByEntity[e.OriginalID]
 		}
 	}
 
@@ -1078,6 +1098,8 @@ type entityImportAdapter struct {
 	entitySvc   entities.EntityService
 	tagSvc      tags.TagService
 	relationSvc relations.RelationService
+	// placeSvc restores a page's extra places in the tree; nil skips them.
+	placeSvc entities.PlaceService
 }
 
 // ImportEntities creates entity types, entities, tags, and relations from
@@ -1270,6 +1292,29 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 		if err != nil {
 			slog.Warn("import: set parent failed", slog.String("entity", e.Name), slog.Any("error", err))
 			report.Fail("entities", "entity parent link", e.Name, apperror.SafeMessage(err))
+		}
+	}
+
+	// 2c. Extra places in the tree. They go in after every parent is set so the
+	// cycle rule sees the finished tree; one that is refused is reported, not
+	// fatal, and the page itself is already imported.
+	if a.placeSvc != nil {
+		for _, e := range data.Entities {
+			entityNewID, ok := entitySlugToNewID[e.Slug]
+			if !ok {
+				continue
+			}
+			for _, parentSlug := range e.AlsoListedUnder {
+				parentNewID, ok := entitySlugToNewID[parentSlug]
+				if !ok {
+					report.Fail("entities", "extra place in the page tree", e.Name, "parent \""+parentSlug+"\" is not in the file")
+					continue
+				}
+				if err := a.placeSvc.AddPlace(ctx, campaignID, entityNewID, parentNewID, ""); err != nil {
+					slog.Warn("import: add extra place failed", slog.String("entity", e.Name), slog.Any("error", err))
+					report.Fail("entities", "extra place in the page tree", e.Name, apperror.SafeMessage(err))
+				}
+			}
 		}
 	}
 

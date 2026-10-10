@@ -95,6 +95,7 @@ templ systemPageHeader(cc *campaigns.CampaignContext, entity *Entity, entityType
 			</div>
 		}
 	</div>
+	@entityPlacesLine(cc, entity)
 	if claim == claimAvailable {
 		<div class="ag-warn" role="alert" data-claim-warn style="margin:-6px 0 12px">
 			<i class="fa-solid fa-triangle-exclamation"></i>

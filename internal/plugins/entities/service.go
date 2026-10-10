@@ -337,6 +337,7 @@ type entityService struct {
 	mediaVerifier MediaCampaignVerifier
 	addonChecker  AddonChecker
 	safety        PageSafetyRepository // nil: no history, no Trash (tests)
+	placeGuard    PlaceGuard           // nil: no extra listings (tests)
 	fieldObserver FieldChangeObserver
 }
 
@@ -702,6 +703,11 @@ func (s *entityService) Update(ctx context.Context, entityID string, input Updat
 					return nil, apperror.NewBadRequest("circular reference: the selected parent is a descendant of this entity")
 				}
 			}
+			// The walk above follows real parents only; a page listed
+			// elsewhere can still lead back down to this one.
+			if err := s.refuseListingCycle(ctx, entity.CampaignID, entityID, pid); err != nil {
+				return nil, err
+			}
 			entity.ParentID = &pid
 		} else {
 			entity.ParentID = nil
@@ -752,6 +758,9 @@ func (s *entityService) Update(ctx context.Context, entityID string, input Updat
 
 	if err := s.entities.Update(ctx, entity); err != nil {
 		return nil, apperror.NewInternal(fmt.Errorf("updating entity: %w", err))
+	}
+	if input.ParentID.Present() && entity.ParentID != nil {
+		s.dropListingUnderRealParent(ctx, entityID, *entity.ParentID)
 	}
 
 	if entity.Name != before.Name || derefStr(entity.EntryHTML) != derefStr(before.EntryHTML) {
@@ -820,6 +829,12 @@ func (s *entityService) ReorderEntity(ctx context.Context, campaignID, entityID 
 		}
 	}
 
+	if parentID != nil {
+		if err := s.refuseListingCycle(ctx, campaignID, entityID, *parentID); err != nil {
+			return err
+		}
+	}
+
 	// An entity can be parented under an entity (parent_id) or a folder
 	// node (parent_node_id), but not both. When one is set, clear the other.
 	if parentNodeID != nil {
@@ -837,6 +852,9 @@ func (s *entityService) ReorderEntity(ctx context.Context, campaignID, entityID 
 		}
 		if err := s.entities.UpdateParent(ctx, entityID, campaignID, parentID); err != nil {
 			return err
+		}
+		if parentID != nil {
+			s.dropListingUnderRealParent(ctx, entityID, *parentID)
 		}
 	}
 

@@ -125,6 +125,7 @@ type Handler struct {
 	favoriteRepo       FavoriteRepository
 	savedFilterRepo    SavedFilterRepository
 	blockRegistry      *BlockRegistry
+	placeSvc           PlaceService // Optional: extra listings in the page tree; see place_service.go.
 	cache              *redis.Client
 }
 
@@ -389,6 +390,13 @@ func (h *Handler) Index(c echo.Context) error {
 
 	// When viewing a specific category (type), render the category dashboard.
 	if activeEntityType != nil {
+		parentIDs := make([]string, len(entities))
+		for i := range entities {
+			parentIDs[i] = entities[i].ID
+		}
+		if links := h.loadTreePlaces(c.Request().Context(), cc, parentIDs, userID, nil); len(links) > 0 {
+			c.SetRequest(c.Request().WithContext(withTreePlaces(c.Request().Context(), links)))
+		}
 		if middleware.IsHTMX(c) {
 			return middleware.Render(c, http.StatusOK,
 				CategoryDashboardContent(cc, activeEntityType, entities, counts, total, opts, csrfToken, roster))
@@ -690,6 +698,8 @@ func (h *Handler) Show(c echo.Context) error {
 	}
 
 	ctx = withPageChildren(ctx, children)
+	ctx = withPagePlaces(ctx, h.loadPagePlaces(c.Request().Context(), cc, entity,
+		cc.MemberRole >= campaigns.RoleScribe && access.CanEdit, userID))
 	ctx = withPageParent(ctx, parentOfEntity(entity, ancestors))
 
 	// The items-and-money panel another plugin serves: drawn where the layout
@@ -1040,6 +1050,17 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 		// data-entity-type-id. A new empty folder (sidebar_nodes row) is then
 		// scoped to this category and reloads via ListByType(typeID) above,
 		// instead of being scoped to a rolled-up sub-type row and vanishing.
+		// Extra listings sit under their parent's row; a search shows pages
+		// once, so they are left out of a filtered list.
+		if strings.TrimSpace(query) == "" {
+			parentIDs := make([]string, len(results))
+			for i := range results {
+				parentIDs[i] = results[i].ID
+			}
+			if links := h.loadTreePlaces(c.Request().Context(), cc, parentIDs, userID, hiddenIDs); len(links) > 0 {
+				c.SetRequest(c.Request().WithContext(withTreePlaces(c.Request().Context(), links)))
+			}
+		}
 		return middleware.Render(c, http.StatusOK, SidebarEntityList(results, nodes, total, typeID, cc, hiddenIDs))
 	}
 

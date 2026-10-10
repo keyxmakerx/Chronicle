@@ -12,6 +12,9 @@
  *   - Drag-and-drop reparenting (drop onto an entity to nest it)
  *   - Visual feedback distinguishing reorder vs reparent operations
  *   - Collapse state persisted in localStorage per campaign
+ *   - Extra listings (data-place-key rows): the same page under a second
+ *     parent, a leaf with an "also here" label. Alt-dropping a page onto
+ *     another page adds one; a plain drop still moves.
  *
  * Listens for HTMX afterSwap events on #sidebar-cat-results to re-initialize
  * whenever the entity list is refreshed.
@@ -70,7 +73,10 @@
     var rootIds = [];
 
     items.forEach(function (el) {
-      var id = el.getAttribute('data-entity-id') || el.getAttribute('data-node-id');
+      // An extra listing of a page is keyed by page~parent: the page id alone
+      // names its real row, and one page can be listed under many parents.
+      var placeKey = el.getAttribute('data-place-key');
+      var id = placeKey || el.getAttribute('data-entity-id') || el.getAttribute('data-node-id');
       if (!id) return;
       // Resolve parent: entities may have parent_id (entity) or parent_node_id (folder).
       var parentId = el.getAttribute('data-parent-node-id') || el.getAttribute('data-parent-id') || null;
@@ -83,7 +89,8 @@
         parentId: parentId,
         sortOrder: sortOrder,
         children: [],
-        isNode: isNode
+        isNode: isNode,
+        isPlace: !!placeKey
       };
     });
 
@@ -134,6 +141,11 @@
       // Use the correct ID attribute based on node type.
       if (node.isNode) {
         wrapper.setAttribute('data-node-id', node.id);
+      } else if (node.isPlace) {
+        // No data-entity-id: drag, reorder and sibling counts must not treat a
+        // listing as the page itself.
+        wrapper.setAttribute('data-place-key', node.id);
+        wrapper.setAttribute('data-place-entity', node.el.getAttribute('data-place-entity') || '');
       } else {
         wrapper.setAttribute('data-entity-id', node.id);
       }
@@ -333,7 +345,8 @@
     var nodes = container.querySelectorAll('.sidebar-tree-node');
     nodes.forEach(function (node) {
       var item = node.querySelector('.sidebar-tree-item');
-      if (item) {
+      // A listing follows its page: it is not moved, hidden or reordered on its own.
+      if (item && !node.hasAttribute('data-place-key')) {
         var entityId = node.getAttribute('data-entity-id');
         var nodeId = node.getAttribute('data-node-id');
         var itemId = entityId || nodeId;
@@ -440,8 +453,12 @@
       if (!isReorgActive(container)) return;
       var item = e.target.closest('.sidebar-tree-item');
       if (!item) return;
+      // A listing is a link, so the browser would start a native drag; dragging
+      // it must never move the real page.
+      if (item.hasAttribute('data-place-key')) { e.preventDefault(); return; }
       dragSrcId = item.getAttribute('data-entity-id');
-      e.dataTransfer.effectAllowed = 'move';
+      // 'all' so dragover can pick 'link' while Alt is held (adds a place).
+      e.dataTransfer.effectAllowed = 'all';
       e.dataTransfer.setData('text/plain', dragSrcId);
       // Fade the source item to indicate it's being dragged.
       setTimeout(function () { item.style.opacity = '0.35'; }, 0);
@@ -468,6 +485,19 @@
 
       clearDropTargets(container);
 
+      // Alt held: this drop lists the page here as well, it does not move it.
+      if (e.altKey) {
+        var placeTarget = placeTargetId(target);
+        if (placeTarget && placeTarget !== dragSrcId) {
+          e.dataTransfer.dropEffect = 'link';
+          target.classList.add('sidebar-drop-place');
+        } else {
+          e.dataTransfer.dropEffect = 'none';
+        }
+        return;
+      }
+      e.dataTransfer.dropEffect = 'move';
+
       // Determine drop position: top 40% = reorder, bottom 60% = reparent.
       var rect = target.getBoundingClientRect();
       var thirdY = rect.top + rect.height * 0.4;
@@ -486,6 +516,7 @@
       if (target) {
         target.classList.remove('sidebar-drop-target');
         target.classList.remove('sidebar-drop-reparent');
+        target.classList.remove('sidebar-drop-place');
       }
     });
 
@@ -500,6 +531,16 @@
 
       var target = e.target.closest('.sidebar-tree-node');
       if (!target) return;
+
+      // Alt-drop adds a place; it never moves the page.
+      var wantPlace = placeRequest(droppedId, placeTargetId(target), e.altKey);
+      if (wantPlace) {
+        addPlace(campaignId, wantPlace.entityId, wantPlace.parentId);
+        return;
+      }
+      if (e.altKey) return;
+      // A listing row is not a drop target for a plain drag: it is not a folder.
+      if (target.hasAttribute('data-place-key')) return;
 
       var targetEntityId = target.getAttribute('data-entity-id');
       var targetNodeId = target.getAttribute('data-node-id');
@@ -549,10 +590,11 @@
     }
 
     function clearDropTargets(el) {
-      var targets = el.querySelectorAll('.sidebar-drop-target, .sidebar-drop-reparent');
+      var targets = el.querySelectorAll('.sidebar-drop-target, .sidebar-drop-reparent, .sidebar-drop-place');
       for (var i = 0; i < targets.length; i++) {
         targets[i].classList.remove('sidebar-drop-target');
         targets[i].classList.remove('sidebar-drop-reparent');
+        targets[i].classList.remove('sidebar-drop-place');
       }
     }
 
@@ -563,7 +605,7 @@
     container.addEventListener('touchstart', function (e) {
       if (!isReorgActive(container)) return;
       var item = e.target.closest('.sidebar-tree-item');
-      if (!item) return;
+      if (!item || item.hasAttribute('data-place-key')) return;
       var touch = e.touches[0];
       touchState.src = item.closest('.sidebar-tree-node');
       touchState.srcId = item.getAttribute('data-entity-id');
@@ -622,7 +664,7 @@
       var el = document.elementFromPoint(lastTouch.clientX, lastTouch.clientY);
       var target = el ? el.closest('.sidebar-tree-node') : null;
 
-      if (target && target !== touchState.src) {
+      if (target && target !== touchState.src && !target.hasAttribute('data-place-key')) {
         var targetEntityId = target.getAttribute('data-entity-id');
         var targetNodeId = target.getAttribute('data-node-id');
         var rect = target.getBoundingClientRect();
@@ -675,7 +717,8 @@
    * before the target rather than one slot too late.
    */
   function calculateTargetIndex(targetNode, position, draggedId) {
-    var siblings = targetNode.parentNode.querySelectorAll(':scope > .sidebar-tree-node');
+    // Listings are not siblings the server orders, so they take no index.
+    var siblings = realSiblings(targetNode.parentNode.querySelectorAll(':scope > .sidebar-tree-node'));
     var targetIdx = -1;
     var draggedIdx = -1;
     for (var i = 0; i < siblings.length; i++) {
@@ -696,6 +739,15 @@
     return siblings.length;
   }
 
+  /** The tree nodes the server orders: everything but extra listings. */
+  function realSiblings(list) {
+    var out = [];
+    for (var i = 0; i < list.length; i++) {
+      if (!(list[i].hasAttribute && list[i].hasAttribute('data-place-key'))) out.push(list[i]);
+    }
+    return out;
+  }
+
   /**
    * Count the direct children currently rendered inside a folder node. Used as
    * the append index when an entity is dropped *into* a folder, so it lands at
@@ -705,7 +757,53 @@
   function folderChildCount(folderNode) {
     var container = folderNode.querySelector(':scope > .sidebar-tree-children');
     if (!container) return 0;
-    return container.querySelectorAll(':scope > .sidebar-tree-node').length;
+    return realSiblings(container.querySelectorAll(':scope > .sidebar-tree-node')).length;
+  }
+
+  /**
+   * The page a drop target stands for, whether it is the page's own row or an
+   * extra listing of it. Folder nodes (sidebar_nodes) stand for no page, so a
+   * place can't be added under one: the server lists pages under pages only.
+   */
+  function placeTargetId(target) {
+    return target.getAttribute('data-entity-id') || target.getAttribute('data-place-entity') || null;
+  }
+
+  /**
+   * What an Alt-drop asks for, or null when it is not an add-a-place drop.
+   * Pure so the contract is testable: only with Alt held, only onto a page,
+   * never a page onto itself.
+   */
+  function placeRequest(droppedId, targetEntityId, altKey) {
+    if (!altKey || !droppedId || !targetEntityId || droppedId === targetEntityId) return null;
+    return { entityId: droppedId, parentId: targetEntityId };
+  }
+
+  /**
+   * List a page under another page as well (POST .../places). The server owns
+   * every refusal (itself, its own parent, a cycle, another campaign) and
+   * says why; the tree is re-read either way so it shows the truth.
+   */
+  function addPlace(campaignId, entityId, parentId) {
+    Chronicle.apiFetch('/campaigns/' + campaignId + '/entities/' + entityId + '/places', {
+      method: 'POST',
+      body: { parent_id: parentId }
+    })
+    .then(function (resp) {
+      if (resp.ok) {
+        if (window.Chronicle && Chronicle.notify) Chronicle.notify('Listed here as well. It is the same page.', 'success');
+        refreshSidebarTree();
+        return null;
+      }
+      return resp.json().catch(function () { return {}; }).then(function (b) {
+        throw new Error((b && (b.message || b.error)) || 'Could not list the page there');
+      });
+    })
+    .catch(function (err) {
+      console.error('sidebar_tree: add place failed', err);
+      if (window.Chronicle && Chronicle.notify) Chronicle.notify(err && err.message ? err.message : 'Could not list the page there', 'error');
+      refreshSidebarTree();
+    });
   }
 
   /**
@@ -1441,7 +1539,10 @@
       updateDraggable: updateDraggable,
       createGroupFolder: createGroupFolder,
       sortChildren: sortChildren,
-      countPages: countPages
+      countPages: countPages,
+      placeRequest: placeRequest,
+      placeTargetId: placeTargetId,
+      addPlace: addPlace
     };
   }
 })();
