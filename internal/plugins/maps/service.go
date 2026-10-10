@@ -167,7 +167,7 @@ type mapService struct {
 
 // BindingCleaner sweeps a deleted instance's widget bindings. Implemented by
 // widgetbindings.Service; injected via SetBindingCleaner. Optional — nil means
-// "no binding framework wired" (the render-time guard + Sweep are the backstop).
+// "no binding framework wired" (Resolve's render-time guard skips and deletes orphaned bindings).
 type BindingCleaner interface {
 	OnInstanceDeleted(ctx context.Context, campaignID, widgetType, instanceID string) (int, error)
 }
@@ -469,7 +469,8 @@ func (s *mapService) DeleteMap(ctx context.Context, id string, expectedUpdatedAt
 	}
 	s.InvalidateMapPictures(m.CampaignID)
 	// Widget-binding delete hook: sweep this map's widget_bindings rows.
-	// Best-effort — the render-time orphan guard + Sweep backstop it. The
+	// Best-effort — Resolve's render-time orphan guard
+	// skips and deletes any binding this misses. The
 	// legacy entity.map_id is independently SET-NULLed by the
 	// fk_entities_map_id ON DELETE SET NULL constraint.
 	if s.bindingCleaner != nil {

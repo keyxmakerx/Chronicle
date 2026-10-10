@@ -2,11 +2,13 @@
 // kit.
 //
 // FK-free polymorphism (see package doc, ADR-038) means integrity is
-// enforced here, as an AND of three mechanisms:
+// enforced here by two mechanisms:
 //   - per-plugin DELETE HOOK     → OnInstanceDeleted (owning plugins call it)
 //   - always-on RENDER-TIME GUARD → Resolve validates each candidate via
-//     WidgetType.InstanceExists and skips dead ones
-//   - periodic INTEGRITY SWEEP   → Sweep removes orphaned bindings campaign-wide
+//     WidgetType.InstanceExists, skips dead ones and deletes them
+//
+// Sweep is a third, campaign-wide cleanup, but nothing calls it in production
+// (Chronicle has no job runner), so it is not part of the integrity story.
 package widgetbindings
 
 import (
@@ -42,8 +44,10 @@ type Service interface {
 	// when an instance is deleted so its bindings are removed promptly. Returns
 	// the number of bindings cleaned.
 	OnInstanceDeleted(ctx context.Context, campaignID, widgetType, instanceID string) (int, error)
-	// Sweep removes bindings whose instance no longer validates (the periodic
-	// integrity sweep). Returns the number swept.
+	// Sweep removes bindings whose instance no longer validates, campaign-wide.
+	// It has no production caller: Chronicle has no job runner to run it from,
+	// so integrity rests on OnInstanceDeleted and Resolve's render-time guard.
+	// Returns the number swept.
 	Sweep(ctx context.Context, campaignID string) (int, error)
 }
 

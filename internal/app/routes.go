@@ -4024,8 +4024,8 @@ func (a *App) RegisterRoutes() {
 	widgetRegistry.Register(maps.NewMapWidgetType(mapsService))
 	widgetBindingSvc := widgetbindings.NewService(widgetbindings.NewRepository(a.DB), widgetRegistry)
 	// The calendar/timeline services call OnInstanceDeleted on delete so a
-	// removed instance's bindings are swept promptly (render-time guard and
-	// Sweep are the backstop). Reached via a type assertion so the
+	// removed instance's bindings are swept promptly (Resolve's render-time
+	// guard skips and deletes any orphan this misses). Reached via a type assertion so the
 	// CalendarService/TimelineService interfaces stay unchanged.
 	if t, ok := timelineSvc.(interface {
 		SetBindingCleaner(timeline.BindingCleaner)
