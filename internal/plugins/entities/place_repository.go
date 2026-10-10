@@ -73,7 +73,7 @@ func (r *placeRepository) Delete(ctx context.Context, entityID, parentID string)
 // real parent is skipped: it would draw the page twice in one branch (the
 // service deletes such rows when a page is moved there, this covers a move
 // made by any other writer).
-const placeLinkSelect = `SELECT e.id, e.name, et.icon, et.name, p.id, p.name, ep.sort_order
+const placeLinkSelect = `SELECT e.id, e.name, et.icon, et.name, et.color, e.is_private, e.visibility, p.id, p.name, ep.sort_order
 	FROM entity_places ep
 	INNER JOIN entities e ON e.id = ep.entity_id AND e.deleted_at IS NULL AND e.campaign_id = ep.campaign_id
 		AND (e.parent_id IS NULL OR e.parent_id <> ep.parent_entity_id)
@@ -108,11 +108,14 @@ func (r *placeRepository) queryLinks(ctx context.Context, q string, args ...any)
 	var out []PlaceLink
 	for rows.Next() {
 		var l PlaceLink
-		var icon sql.NullString
-		if err := rows.Scan(&l.EntityID, &l.EntityName, &icon, &l.EntityTypeName, &l.ParentID, &l.ParentName, &l.SortOrder); err != nil {
+		var icon, color sql.NullString
+		var vis string
+		if err := rows.Scan(&l.EntityID, &l.EntityName, &icon, &l.EntityTypeName, &color, &l.EntityIsPrivate, &vis, &l.ParentID, &l.ParentName, &l.SortOrder); err != nil {
 			return nil, fmt.Errorf("scanning page listing: %w", err)
 		}
 		l.EntityTypeIcon = icon.String
+		l.EntityTypeColor = color.String
+		l.EntityVisibility = VisibilityMode(vis)
 		out = append(out, l)
 	}
 	return out, rows.Err()

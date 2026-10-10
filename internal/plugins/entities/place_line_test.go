@@ -132,3 +132,24 @@ func TestBuildEntityTreeWithPlaces(t *testing.T) {
 		}
 	}
 }
+
+// TestBuildEntityTreeWithPlaces_ListingKeepsPageLook: an "also here" node wears
+// the page's own colour and visibility, and is not counted as a sub-page.
+func TestBuildEntityTreeWithPlaces_ListingKeepsPageLook(t *testing.T) {
+	entities := []Entity{{ID: "guild", Name: "Guild"}}
+	places := []PlaceLink{{
+		EntityID: "cook", EntityName: "Cook", ParentID: "guild",
+		EntityTypeColor: "#aa3300", EntityIsPrivate: true, EntityVisibility: VisibilityCustom,
+	}}
+	roots := buildEntityTreeWithPlaces(entities, places)
+	if len(roots) != 1 || len(roots[0].Children) != 1 {
+		t.Fatalf("unexpected tree: %+v", roots)
+	}
+	n := roots[0].Children[0]
+	if n.Entity.TypeColor != "#aa3300" || !n.Entity.IsPrivate || n.Entity.Visibility != VisibilityCustom {
+		t.Errorf("listing lost the page's colour or visibility: %+v", n.Entity)
+	}
+	if got := roots[0].realChildCount(); got != 0 {
+		t.Errorf("realChildCount = %d, want 0 (listings are not sub-pages)", got)
+	}
+}

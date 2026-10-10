@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -353,6 +354,18 @@ func TestReorderEntity_PlaceGuard(t *testing.T) {
 	var ae *apperror.AppError
 	if !errors.As(err, &ae) || ae.Code != http.StatusBadRequest {
 		t.Fatalf("expected the loop to be refused, got %v", err)
+	}
+
+	// A plain real-parent loop (no listings involved) must not talk about
+	// listings: city under its own descendant npc.
+	repo.links = nil
+	npc := "npc"
+	err = es.ReorderEntity(context.Background(), "camp-1", "city", &npc, nil, 0)
+	if !errors.As(err, &ae) || ae.Code != http.StatusBadRequest {
+		t.Fatalf("expected the real loop to be refused, got %v", err)
+	}
+	if !strings.Contains(ae.Message, "is below this page") || strings.Contains(ae.Message, "listed") {
+		t.Errorf("real-loop message = %q, want it to say the parent is below this page", ae.Message)
 	}
 
 	// npc really moves under other, where it was already listed: the listing goes.

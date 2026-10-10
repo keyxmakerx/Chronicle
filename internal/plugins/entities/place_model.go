@@ -18,11 +18,14 @@ type Place struct {
 // so no caller has to fetch each page again. It is read-only data; whether a
 // viewer may see either page is decided by PlaceService, never by the reader.
 type PlaceLink struct {
-	EntityID       string
-	EntityName     string
-	EntityTypeIcon string
-	EntityTypeName string
-	ParentID       string
-	ParentName     string
-	SortOrder      int
+	EntityID         string
+	EntityName       string
+	EntityTypeIcon   string
+	EntityTypeName   string
+	EntityTypeColor  string
+	EntityIsPrivate  bool
+	EntityVisibility VisibilityMode
+	ParentID         string
+	ParentName       string
+	SortOrder        int
 }

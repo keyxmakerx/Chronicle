@@ -88,6 +88,8 @@ test('placeRequest: only Alt, only onto a page, never onto itself', () => {
     { name: 'alt onto itself', args: ['same', 'same', true], want: null },
     { name: 'alt onto a folder (no page id)', args: ['dragged', null, true], want: null },
     { name: 'alt with nothing dragged', args: ['', 'target', true], want: null },
+    { name: 'alt with the text null dragged (a folder row)', args: ['null', 'target', true], want: null },
+    { name: 'alt with undefined dragged', args: ['undefined', 'target', true], want: null },
   ];
   for (const c of cases) {
     assert.deepEqual(plain(mod.placeRequest(...c.args)), c.want, c.name);
@@ -141,4 +143,12 @@ test('addPlace posts the parent and refreshes; a refusal is shown, not swallowed
   await new Promise((r) => setTimeout(r, 0));
   assert.equal(notes[1].l, 'error');
   assert.match(notes[1].m, /listed under itself/);
+});
+
+test('countPages does not count listing rows', () => {
+  const { mod } = loadScript('sidebar_tree.js');
+  const page = { isNode: false, children: [] };
+  const listing = { isNode: false, isPlace: true, children: [] };
+  assert.equal(mod.countPages(listing), 0);
+  assert.equal(mod.countPages(page), 1);
 });

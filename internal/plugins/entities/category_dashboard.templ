@@ -405,6 +405,18 @@ type EntityTreeNode struct {
 	AlsoHere bool
 }
 
+// realChildCount counts a node's sub-pages, not the "also here" listings under
+// it: those are not its children, only extra rows in the branch.
+func (n EntityTreeNode) realChildCount() int {
+	c := 0
+	for _, ch := range n.Children {
+		if !ch.AlsoHere {
+			c++
+		}
+	}
+	return c
+}
+
 // buildEntityTreeWithPlaces is buildEntityTree plus the extra listings whose
 // parent is in this page of the list. A listing whose parent is not on the
 // page is dropped, not promoted to a root: it would read as a second copy of
@@ -417,7 +429,10 @@ func buildEntityTreeWithPlaces(entities []Entity, places []PlaceLink) []EntityTr
 	byParent := make(map[string][]EntityTreeNode, len(places))
 	for _, l := range places {
 		byParent[l.ParentID] = append(byParent[l.ParentID], EntityTreeNode{
-			Entity:   Entity{ID: l.EntityID, Name: l.EntityName, TypeIcon: l.EntityTypeIcon},
+			Entity: Entity{
+				ID: l.EntityID, Name: l.EntityName, TypeIcon: l.EntityTypeIcon, TypeColor: l.EntityTypeColor,
+				IsPrivate: l.EntityIsPrivate, Visibility: l.EntityVisibility,
+			},
 			AlsoHere: true,
 		})
 	}
@@ -521,12 +536,10 @@ templ entityTreeLevel(cc *campaigns.CampaignContext, nodes []EntityTreeNode, dep
 							<span class="text-xs text-fg-muted hidden sm:inline">{ *node.Entity.TypeLabel }</span>
 						}
 
-						if !node.AlsoHere {
-							@visibilityGlance(cc, &node.Entity, nil)
-						}
+						@visibilityGlance(cc, &node.Entity, nil)
 
-						if len(node.Children) > 0 {
-							<span class="text-[10px] text-fg-muted ml-auto">{ fmt.Sprintf("%d", len(node.Children)) }</span>
+						if n := node.realChildCount(); n > 0 {
+							<span class="text-[10px] text-fg-muted ml-auto">{ fmt.Sprintf("%d", n) }</span>
 						}
 					</div>
 

@@ -109,7 +109,7 @@
     var url = root.getAttribute('data-search-endpoint');
     if (!url || !C.apiFetch) return;
     var seq = ++searchSeq;
-    C.apiFetch(url + '?q=' + encodeURIComponent(q), { headers: { Accept: 'application/json' } })
+    C.apiFetch(url + '?pages=1&q=' + encodeURIComponent(q), { headers: { Accept: 'application/json' } })
       .then(function (res) { return res.ok ? res.json() : Promise.reject(new Error('search')); })
       .then(function (data) {
         if (seq !== searchSeq || !root.isConnected) return;

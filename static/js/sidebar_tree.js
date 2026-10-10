@@ -47,6 +47,7 @@
   // A folder's own count badge: every page (not a folder) in its subtree, at
   // any depth — a folder contributes nothing itself, only what it holds.
   function countPages(node) {
+    if (node.isPlace) return 0;
     var n = node.isNode ? 0 : 1;
     node.children.forEach(function (c) { n += countPages(c); });
     return n;
@@ -485,6 +486,13 @@
 
       clearDropTargets(container);
 
+      // A listing row takes only an Alt-drop (add a place); a plain drag shows
+      // no reparent or reorder cue on it.
+      if (target.hasAttribute('data-place-key') && !e.altKey) {
+        e.dataTransfer.dropEffect = 'none';
+        return;
+      }
+
       // Alt held: this drop lists the page here as well, it does not move it.
       if (e.altKey) {
         var placeTarget = placeTargetId(target);
@@ -775,7 +783,9 @@
    * never a page onto itself.
    */
   function placeRequest(droppedId, targetEntityId, altKey) {
-    if (!altKey || !droppedId || !targetEntityId || droppedId === targetEntityId) return null;
+    // A folder row has no entity id (the drag carries nothing, or the text
+    // 'null'), so it can never be Alt-dropped.
+    if (!altKey || !droppedId || droppedId === 'null' || droppedId === 'undefined' || !targetEntityId || droppedId === targetEntityId) return null;
     return { entityId: droppedId, parentId: targetEntityId };
   }
 

@@ -23,7 +23,7 @@ func (s *entityService) refuseListingCycle(ctx context.Context, campaignID, enti
 		return err
 	}
 	if cycle {
-		return apperror.NewBadRequest("circular reference: the selected parent is listed below this page")
+		return apperror.NewBadRequest("circular reference: the selected parent is below this page")
 	}
 	return nil
 }

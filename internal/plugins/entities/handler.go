@@ -976,6 +976,12 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 		// Each searcher is gated by its addon being enabled for the campaign,
 		// so disabled features don't leak results into search.
 		ctx := c.Request().Context()
+		// pages=1 asks for pages only (the place picker): the other searchers
+		// return maps, timelines, events, sessions and modules, which are not
+		// pages a listing can sit under.
+		if c.QueryParam("pages") == "1" {
+			return c.JSON(http.StatusOK, map[string]any{"results": items, "total": total})
+		}
 		if h.timelineSearcher != nil && query != "" && h.isAddonEnabled(ctx, cc.Campaign.ID, "timeline") {
 			if tlResults, err := h.timelineSearcher.SearchTimelines(
 				ctx, cc.Campaign.ID, query, role, userID,

@@ -105,13 +105,9 @@ func (h *Handler) AddPlaceAPI(c echo.Context) error {
 	userID := auth.GetUserID(c)
 	// The parent must be a page this viewer can see. A page they can't see,
 	// one in another campaign and one that does not exist all answer alike.
-	parent, perr := h.service.GetByID(ctx, req.ParentID)
-	if perr != nil || parent.CampaignID != cc.Campaign.ID {
-		return apperror.NewNotFound("page not found")
-	}
-	pa, perr := h.service.CheckEntityAccess(ctx, parent.ID, int(cc.VisibilityRole()), userID)
-	if perr != nil || !pa.CanView {
-		return apperror.NewNotFound("page not found")
+	parent, perr := h.visibleParent(c, cc, req.ParentID)
+	if perr != nil {
+		return perr
 	}
 
 	if err := h.placeSvc.AddPlace(ctx, cc.Campaign.ID, entity.ID, parent.ID, userID); err != nil {
@@ -135,6 +131,11 @@ func (h *Handler) RemovePlaceAPI(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	// Same answer as add: a parent the viewer can't see is "not found", so
+	// removal can't probe for hidden pages.
+	if _, err := h.visibleParent(c, cc, c.Param("pid")); err != nil {
+		return err
+	}
 	if err := h.placeSvc.RemovePlace(c.Request().Context(), cc.Campaign.ID, entity.ID, c.Param("pid")); err != nil {
 		return err
 	}
@@ -146,4 +147,20 @@ func (h *Handler) RemovePlaceAPI(c echo.Context) error {
 func (h *Handler) renderPlaces(c echo.Context, cc *campaigns.CampaignContext, entity *Entity) error {
 	p := h.loadPagePlaces(c.Request().Context(), cc, entity, true, auth.GetUserID(c))
 	return middleware.Render(c, http.StatusOK, entityPlaces(cc, entity, p))
+}
+
+// visibleParent loads a parent page in this campaign that the viewer can see.
+// A page they can't see, one in another campaign and one that does not exist
+// all answer alike.
+func (h *Handler) visibleParent(c echo.Context, cc *campaigns.CampaignContext, id string) (*Entity, error) {
+	ctx := c.Request().Context()
+	parent, err := h.service.GetByID(ctx, id)
+	if err != nil || parent.CampaignID != cc.Campaign.ID {
+		return nil, apperror.NewNotFound("page not found")
+	}
+	pa, err := h.service.CheckEntityAccess(ctx, parent.ID, int(cc.VisibilityRole()), auth.GetUserID(c))
+	if err != nil || !pa.CanView {
+		return nil, apperror.NewNotFound("page not found")
+	}
+	return parent, nil
 }
