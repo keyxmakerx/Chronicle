@@ -23,6 +23,11 @@ var validDrawingTypes = map[string]bool{
 	"text":      true,
 	"shadow":    true,
 	"image":     true,
+	// Annotations: see drawing_annotation.go.
+	DrawingTypeArrow:     true,
+	DrawingTypeHighlight: true,
+	DrawingTypeStep:      true,
+	DrawingTypeCallout:   true,
 }
 
 // validLayerTypes enumerates allowed layer types.
@@ -384,6 +389,9 @@ func (s *drawingService) CreateDrawing(ctx context.Context, input CreateDrawingI
 	if d.StrokeWidth <= 0 {
 		d.StrokeWidth = 2.0
 	}
+	if err := validateDrawingContent(d, true); err != nil {
+		return nil, err
+	}
 
 	if err := s.repo.CreateDrawing(ctx, d); err != nil {
 		return nil, err
@@ -455,12 +463,32 @@ func (s *drawingService) UpdateDrawing(ctx context.Context, id, mapID string, ro
 		}
 		d.FillAlpha = normalizeShadowAlpha(d.FillAlpha)
 	}
+	if err := validateDrawingContent(d, input.TextContent.Present()); err != nil {
+		return err
+	}
 
 	if err := s.repo.UpdateDrawing(ctx, d); err != nil {
 		return err
 	}
 	s.shadowChanged(ctx, d)
 	s.events.PublishDrawingEvent("updated", s.campaignForMap(ctx, d.MapID), d)
+	return nil
+}
+
+// validateDrawingContent applies the annotation rules to an annotation, and
+// the shared text bound to a label whose text is being written. A stored
+// label longer than the bound keeps working until its text is edited.
+func validateDrawingContent(d *Drawing, textWritten bool) error {
+	if isAnnotationType(d.DrawingType) {
+		return validateAnnotation(d)
+	}
+	if d.DrawingType == "text" && textWritten && d.TextContent != nil {
+		t, err := validateDrawingText(d.TextContent)
+		if err != nil {
+			return err
+		}
+		d.TextContent = t
+	}
 	return nil
 }
 

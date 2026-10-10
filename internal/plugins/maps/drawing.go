@@ -15,7 +15,7 @@ type Drawing struct {
 	ID          string          `json:"id"`
 	MapID       string          `json:"map_id"`
 	LayerID     *string         `json:"layer_id,omitempty"`
-	DrawingType string          `json:"drawing_type"` // freehand, rectangle, ellipse, polygon, text, shadow, image (two corners; fill_alpha is its strength, see shadow.go)
+	DrawingType string          `json:"drawing_type"` // freehand, rectangle, ellipse, polygon, text, shadow (see shadow.go), image (drawing_image.go), arrow, highlight, step, callout (drawing_annotation.go)
 	Points      json.RawMessage `json:"points"`       // Array of {x, y} coordinate pairs.
 	StrokeColor string          `json:"stroke_color"`
 	StrokeWidth float64         `json:"stroke_width"`
