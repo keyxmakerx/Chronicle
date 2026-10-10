@@ -2,6 +2,7 @@ package syncapi
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net"
 	"net/http"
@@ -646,6 +647,20 @@ func RequireKeyOwnerStillOwner(campaignSvc campaigns.CampaignService, syncSvc Sy
 			}
 			if key.ID == synthKeySessionID {
 				return next(c)
+			}
+
+			// A campaign in the site Trash is "not found" to every key, with
+			// the same answer a deleted campaign gives. Without this the
+			// membership check below would still refuse the key, but as
+			// "creator lost access", which is untrue and would raise a
+			// security signal for what is an ordinary delete. Only a definite
+			// not-found counts here; the membership lookup is itself closed to
+			// a trashed campaign, so any other failure still ends in a refusal.
+			if _, cerr := campaignSvc.GetByID(c.Request().Context(), key.CampaignID); cerr != nil {
+				var appErr *apperror.AppError
+				if errors.As(cerr, &appErr) && appErr.Code == http.StatusNotFound {
+					return cerr
+				}
 			}
 
 			member, err := campaignSvc.GetMember(c.Request().Context(), key.CampaignID, key.UserID)

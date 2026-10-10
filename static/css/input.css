@@ -4448,6 +4448,18 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
 }
 
 /* ============================================================ */
+/* Admin Trash (internal/plugins/admin/trash.templ): rows and the notice
+   settle in when the list is drawn or swapped. It is the Settle move
+   (opacity plus a 6px rise), so the Calm and Off guards above reduce it. */
+.trash-settle {
+  animation: trash-settle var(--dur-large) var(--ease-out) both;
+}
+@keyframes trash-settle {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ============================================================ */
 /* AI tool (internal/plugins/ai_workspace): the lookup answer grows open
    under the paste box. The reduced-motion guards above settle it at once. */
 .ai-grow {

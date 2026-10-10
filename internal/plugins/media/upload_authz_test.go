@@ -64,6 +64,14 @@ func (f *fakeUploadService) DeleteCampaignFiles(ctx context.Context, campaignID 
 	return 0, nil
 }
 func (f *fakeUploadService) CleanupOrphans(ctx context.Context) (int, error) { return 0, nil }
+func (f *fakeUploadService) TrashFiles(ctx context.Context, batchID string, ids []string) (int, int64, error) {
+	return 0, 0, nil
+}
+func (f *fakeUploadService) RestoreTrashedFiles(ctx context.Context, batchID string) (int, error) { return 0, nil }
+func (f *fakeUploadService) ListTrashedFileIDs(ctx context.Context, batchID string) ([]string, error) {
+	return nil, nil
+}
+func (f *fakeUploadService) PurgeTrashedFile(ctx context.Context, batchID, fileID string) error { return nil }
 func (f *fakeUploadService) BackfillContentHashes(ctx context.Context, batchSize int) (int, error) {
 	return 0, nil
 }
