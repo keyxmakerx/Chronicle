@@ -5106,7 +5106,8 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
 .pl-lead { display: inline-flex; align-items: center; gap: 6px; }
 .pl-lead i { font-size: 10px; }
 .pl-chips { display: contents; list-style: none; margin: 0; padding: 0; }
-.pl-chip { display: inline-flex; align-items: center; gap: 2px; height: 24px; padding: 0 3px 0 9px; border-radius: 999px; border: 1px solid var(--color-border); background: var(--color-card-bg); color: var(--color-text-primary); max-width: 100%; animation: pl-peek var(--dur-micro) var(--ease-out) both; transition: opacity var(--dur-micro) var(--ease-out); }
+.pl-chip { display: inline-flex; align-items: center; gap: 2px; height: 24px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--color-border); background: var(--color-card-bg); color: var(--color-text-primary); max-width: 100%; animation: pl-peek var(--dur-micro) var(--ease-out) both; transition: opacity var(--dur-micro) var(--ease-out); }
+.pl-chip:has(.pl-x) { padding-right: 3px; }
 .pl-chip.is-leaving { opacity: 0; }
 .pl-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; color: inherit; text-decoration: none; }
 .pl-name:hover { color: var(--color-accent); }
