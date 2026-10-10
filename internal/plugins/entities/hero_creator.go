@@ -64,21 +64,22 @@ type HeroRequest struct {
 
 // heroAccess says whether the viewer may use the creator and, if so, whether
 // the hero becomes theirs. Scribes and above make heroes for the table;
-// a player may make their own when the owner switched on character claiming
-// and the hero's page type is one players may claim.
+// a player may make their own when the owner switched on character claiming,
+// the hero's page type is one players may claim, and they do not already own
+// a character: one hero at a time, so a slip cannot fill the party list.
 type heroAccess struct {
 	Allowed bool
 	ForSelf bool
 }
 
-func heroAccessFor(role campaigns.Role, claimingOn bool, target *EntityType) heroAccess {
+func heroAccessFor(role campaigns.Role, claimingOn bool, target *EntityType, ownsCharacter bool) heroAccess {
 	if target == nil {
 		return heroAccess{}
 	}
 	if role >= campaigns.RoleScribe {
 		return heroAccess{Allowed: true}
 	}
-	if role >= campaigns.RolePlayer && claimingOn && isClaimableType(target) {
+	if role >= campaigns.RolePlayer && claimingOn && isClaimableType(target) && !ownsCharacter {
 		return heroAccess{Allowed: true, ForSelf: true}
 	}
 	return heroAccess{}

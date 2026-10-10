@@ -16,18 +16,20 @@ func TestHeroAccessFor(t *testing.T) {
 		role     campaigns.Role
 		claiming bool
 		target   *EntityType
+		owns     bool
 		want     heroAccess
 	}{
-		{"no type", campaigns.RoleOwner, true, nil, heroAccess{}},
-		{"scribe makes heroes for the table", campaigns.RoleScribe, false, locked, heroAccess{Allowed: true}},
-		{"owner", campaigns.RoleOwner, false, claimable, heroAccess{Allowed: true}},
-		{"player with claiming on", campaigns.RolePlayer, true, claimable, heroAccess{Allowed: true, ForSelf: true}},
-		{"player with claiming off", campaigns.RolePlayer, false, claimable, heroAccess{}},
-		{"player and an unclaimable type", campaigns.RolePlayer, true, locked, heroAccess{}},
+		{"no type", campaigns.RoleOwner, true, nil, false, heroAccess{}},
+		{"scribe makes heroes for the table", campaigns.RoleScribe, false, locked, true, heroAccess{Allowed: true}},
+		{"owner", campaigns.RoleOwner, false, claimable, false, heroAccess{Allowed: true}},
+		{"player with claiming on", campaigns.RolePlayer, true, claimable, false, heroAccess{Allowed: true, ForSelf: true}},
+		{"player who already has a hero", campaigns.RolePlayer, true, claimable, true, heroAccess{}},
+		{"player with claiming off", campaigns.RolePlayer, false, claimable, false, heroAccess{}},
+		{"player and an unclaimable type", campaigns.RolePlayer, true, locked, false, heroAccess{}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := heroAccessFor(tt.role, tt.claiming, tt.target); got != tt.want {
+			if got := heroAccessFor(tt.role, tt.claiming, tt.target, tt.owns); got != tt.want {
 				t.Errorf("got %+v, want %+v", got, tt.want)
 			}
 		})

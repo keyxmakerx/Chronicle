@@ -1,7 +1,9 @@
 package entities
 
 import (
+	"context"
 	"net/http"
+	"slices"
 
 	"github.com/labstack/echo/v4"
 
@@ -36,7 +38,28 @@ func (h *Handler) heroTarget(c echo.Context, cc *campaigns.CampaignContext) (*En
 	staff := cc.MemberRole >= campaigns.RoleScribe
 	target := pickHeroType(types, ids, !staff)
 	claimingOn := h.isAddonEnabled(ctx, campaignID, AddonPlayerCharacterClaiming)
-	return target, heroAccessFor(cc.MemberRole, claimingOn, target), nil
+	owns := false
+	if !staff && claimingOn && target != nil {
+		if owns, err = h.ownsCharacter(ctx, campaignID, auth.GetUserID(c), ids); err != nil {
+			return nil, heroAccess{}, err
+		}
+	}
+	return target, heroAccessFor(cc.MemberRole, claimingOn, target, owns), nil
+}
+
+// ownsCharacter reports whether the user already owns a page of one of the
+// campaign's character types.
+func (h *Handler) ownsCharacter(ctx context.Context, campaignID, userID string, charTypeIDs []int) (bool, error) {
+	owned, err := h.service.ListByOwner(ctx, campaignID, userID)
+	if err != nil {
+		return false, err
+	}
+	for _, e := range owned {
+		if slices.Contains(charTypeIDs, e.EntityTypeID) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (h *Handler) heroPlan(c echo.Context, cc *campaigns.CampaignContext) (*HeroPlan, error) {
