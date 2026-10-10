@@ -91,6 +91,13 @@ test('mood and effects survive the saved layout; bad values fall back', () => {
   assert.equal(U.efx.haze, 100, 'wrongly typed effect keeps the default');
   assert.equal(U.efx.time, 'night');
 
+  const W = state();
+  SR.fromLayout(W, Object.assign({}, L, { effects: { haze: 900, shadows: -5, time: 'constructor', weather: 'hail' } }));
+  assert.equal(W.efx.haze, 250, 'levels are clamped');
+  assert.equal(W.efx.shadows, 0);
+  assert.equal(W.efx.time, '', 'unknown time is dropped');
+  assert.equal(W.efx.weather, '', 'unknown weather is dropped');
+
   const V = state();
   SR.fromLayout(V, Object.assign({}, L, { effects: null }));
   assert.equal(V.efx, null, 'no effects means the mood defaults');

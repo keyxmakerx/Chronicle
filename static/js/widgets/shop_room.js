@@ -1092,7 +1092,18 @@
     S.look = L.look === 'paper' ? 'paper' : 'lit';
     S.mood = MOODS[L.mood] ? L.mood : '';
     S.efx = null;
-    if (L.effects) { S.efx = moodEfx(S.mood); for (var k in EFX0) if (typeof L.effects[k] === typeof EFX0[k]) S.efx[k] = L.effects[k]; }
+    // The server checks these too; clamping here keeps a stray value from ever reaching the drawing.
+    if (L.effects) {
+      S.efx = moodEfx(S.mood);
+      for (var k in EFX0) {
+        var v = L.effects[k];
+        if (typeof v !== typeof EFX0[k]) continue;
+        if (typeof v === 'number') S.efx[k] = Math.max(0, Math.min(250, Math.round(v)) || 0);
+        else if (k === 'weather') S.efx[k] = v === 'rain' || v === 'snow' ? v : '';
+        else if (k === 'time') S.efx[k] = v === 'dawn' || v === 'dusk' || v === 'night' ? v : '';
+        else S.efx[k] = v;
+      }
+    }
     if (L.seeds) S.seeds = { room: L.seeds.room || 1, goods: L.seeds.goods || 1, deco: L.seeds.deco || 1 };
     S.pieces = (L.pieces || []).map(function (p) { var o = { id: p.id, kind: p.kind, x: p.x, y: p.y, off: p.off || 0, pinned: !!p.pinned }; if (p.wall) { o.wall = p.wall; o.len = p.len; } else { o.w = p.w; o.d = p.d; } return o; });
     S.decor = []; (L.decor || []).forEach(function (d) { S.decor.push({ piece: d.piece, spot: d.spot, icon: d.icon }); });

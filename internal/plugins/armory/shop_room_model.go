@@ -1,5 +1,7 @@
 package armory
 
+import "encoding/json"
+
 // maxShopRoomBytes caps the request body. A full 80-piece, 500-item layout is
 // well under this; the cap only stops a client from parking arbitrary data in
 // the row.
@@ -48,6 +50,18 @@ type ShopRoomEffects struct {
 	// Weather and Time are "" for none/default.
 	Weather string `json:"weather"`
 	Time    string `json:"time"`
+}
+
+// UnmarshalJSON starts from the default look, so a field the body leaves out
+// keeps its default instead of becoming zero (no shadows, no dust).
+func (e *ShopRoomEffects) UnmarshalJSON(b []byte) error {
+	type plain ShopRoomEffects
+	v := plain{Shadows: 100, Warmth: 100, Window: 100, Haze: 100, Vignette: 100, Dust: true, Flicker: true, Embers: true}
+	if err := json.Unmarshal(b, &v); err != nil {
+		return err
+	}
+	*e = ShopRoomEffects(v)
+	return nil
 }
 
 // ShopRoomSeeds drive the widget's deterministic procedural layout, so a

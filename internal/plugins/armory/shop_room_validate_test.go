@@ -210,6 +210,12 @@ func TestNormalizeShopRoomLayout_Accepts(t *testing.T) {
 				t.Errorf("mood/effects: %q %+v", l.Mood, l.Effects)
 			}
 		}},
+		{"effects left out keep the default look", mutate(func(m map[string]any) { m["effects"] = map[string]any{"smoke": true} }), func(t *testing.T, l ShopRoomLayout) {
+			want := ShopRoomEffects{Shadows: 100, Warmth: 100, Window: 100, Haze: 100, Vignette: 100, Dust: true, Flicker: true, Embers: true, Smoke: true}
+			if l.Effects == nil || *l.Effects != want {
+				t.Errorf("effects = %+v, want %+v", l.Effects, want)
+			}
+		}},
 		{"mood furniture kinds accepted", mutate(func(m map[string]any) {
 			var ps []any
 			for i, k := range []string{"tentacle", "monolith", "circle", "cane", "gumdrop", "lolly", "ghost", "coffin", "gift", "pine", "coral", "kelp", "mushroom", "bloom", "urn", "palm", "pillar", "brazier"} {
