@@ -161,32 +161,34 @@ html[data-view-motion="calm"] .hc-leaf:not(.is-open), html[data-cz-reduce] .hc-l
 .hc-btn.oe-btn--danger { background: var(--hc-neg); border-color: var(--hc-neg); }
 .hc-link.oe-del { color: var(--hc-neg); }
 
-/* Customize › look: the creator and the entries page follow the campaign's
-   card look. Paper is the default above; Plain and Compact take the site
-   theme's own colours on a flat card (Compact also tightens the page), and
-   Night is the dark ink-and-gold card. Only the tokens change. */
-html[data-cz-hover="plain"] .hc, html[data-cz-hover="compact"] .hc {
+/* Customize › look: the creator follows the campaign's card look. Paper is
+   the default above; Plain and Compact take the site theme's own colours on
+   a flat card (Compact also tightens the page), and Night is the dark
+   ink-and-gold card. Only the tokens change. "Your own entries" is a
+   Directors' tool, and tools stay plain (ui-standard › Look), so .hc--tool
+   always takes the Plain tokens. */
+html[data-cz-hover="plain"] .hc, html[data-cz-hover="compact"] .hc, .hc.hc--tool {
   --paper: var(--color-card-bg); --paper-cut: var(--color-card-bg);
   --paper-under: color-mix(in srgb, var(--color-text-primary) 6%, var(--color-card-bg));
   --paper-edge: var(--color-border); --paper-ink: var(--color-text-primary); --paper-ink-soft: var(--color-text-body);
   --paper-accent: var(--color-accent); --hc-mute: var(--color-text-secondary); --paper-font: var(--paper-ui-font);
   --hc-lit: color-mix(in srgb, var(--color-accent) 6%, transparent); --hc-lit-on: color-mix(in srgb, var(--color-accent) 10%, transparent);
 }
-html[data-cz-hover="night"] .hc {
+html[data-cz-hover="night"] .hc:not(.hc--tool) {
   --paper: #131722; --paper-cut: #181d2b; --paper-under: #1d2333; --paper-edge: #2d3448;
   --paper-ink: #f2f4fa; --paper-ink-soft: #c9d0e0; --paper-accent: #e4b45a; --hc-mute: #8a93a8; --hc-neg: #e07a68; --paper-burn: 0 0 0;
   --hc-lit: rgb(255 255 255 / 0.04); --hc-lit-on: rgb(255 255 255 / 0.07);
 }
-html[data-cz-hover="plain"] .hc .paper, html[data-cz-hover="compact"] .hc .paper, html[data-cz-hover="night"] .hc .paper {
+html[data-cz-hover="plain"] .hc .paper, html[data-cz-hover="compact"] .hc .paper, html[data-cz-hover="night"] .hc .paper, .hc--tool .paper {
   background: var(--paper); border: 1px solid var(--paper-edge); border-radius: 12px; box-shadow: 0 10px 28px -8px rgb(0 0 0 / 0.18);
 }
-html[data-cz-hover="night"] .hc .paper { box-shadow: 0 18px 40px rgb(0 0 0 / 0.5); }
+html[data-cz-hover="night"] .hc:not(.hc--tool) .paper { box-shadow: 0 18px 40px rgb(0 0 0 / 0.5); }
 html[data-cz-hover="plain"] .hc .paper-stack::before, html[data-cz-hover="compact"] .hc .paper-stack::before,
-html[data-cz-hover="night"] .hc .paper-stack::before { display: none; }
+html[data-cz-hover="night"] .hc .paper-stack::before, .hc--tool .paper-stack::before { display: none; }
 html[data-cz-hover="plain"] .hc .hc-page, html[data-cz-hover="plain"] .hc .hc-leaf,
-html[data-cz-hover="compact"] .hc .hc-page, html[data-cz-hover="compact"] .hc .hc-leaf { color-scheme: normal; }
-html[data-cz-hover="night"] .hc .hc-page, html[data-cz-hover="night"] .hc .hc-leaf { color-scheme: dark; }
-html[data-cz-hover="plain"] .hc .hc-seal, html[data-cz-hover="compact"] .hc .hc-seal, html[data-cz-hover="night"] .hc .hc-seal {
+html[data-cz-hover="compact"] .hc .hc-page, html[data-cz-hover="compact"] .hc .hc-leaf, .hc--tool .hc-page, .hc--tool .hc-leaf { color-scheme: normal; }
+html[data-cz-hover="night"] .hc:not(.hc--tool) .hc-page, html[data-cz-hover="night"] .hc:not(.hc--tool) .hc-leaf { color-scheme: dark; }
+html[data-cz-hover="plain"] .hc .hc-seal, html[data-cz-hover="compact"] .hc .hc-seal, html[data-cz-hover="night"] .hc .hc-seal, .hc--tool .hc-seal {
   background: color-mix(in srgb, currentColor 8%, transparent); }
 html[data-cz-hover="compact"] .hc .hc-page { padding: 16px 20px 18px; gap: 12px; }
 html[data-cz-hover="compact"] .hc .hc-head h1 { font-size: 26px; }

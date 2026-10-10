@@ -24,7 +24,7 @@ templ OwnEntriesPage(cc *campaigns.CampaignContext, csrfToken string) {
 				<span class="text-fg">Your own entries</span>
 			</nav>
 			<div
-				class="hc"
+				class="hc hc--tool"
 				data-own-entries="true"
 				data-campaign-id={ cc.Campaign.ID }
 				data-plan-url={ fmt.Sprintf("/campaigns/%s/characters/new/plan", cc.Campaign.ID) }
