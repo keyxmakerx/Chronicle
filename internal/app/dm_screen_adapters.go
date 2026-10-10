@@ -193,32 +193,40 @@ type dmHiddenAdapter struct {
 	lists    entities.CharacterListReader
 }
 
-func (a *dmHiddenAdapter) HiddenCharacters(ctx context.Context, campaignID string, v dmscreen.Viewer, limit int) ([]dmscreen.Hidden, error) {
+// HiddenCharacters asks for hidden entities only, newest first, and takes one
+// more than limit per type: that spare row is how it knows the panel cannot
+// show them all, without counting every hidden entity in the campaign.
+func (a *dmHiddenAdapter) HiddenCharacters(ctx context.Context, campaignID string, v dmscreen.Viewer, limit int) ([]dmscreen.Hidden, bool, error) {
 	npcTypes, err := a.lists.NPCTypeIDs(ctx, campaignID)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
+	// A parent type's listing includes its sub-types, so the same entity can
+	// come back once per type in the family.
+	seen := map[string]bool{}
 	var hidden []entities.Entity
 	for _, typeID := range npcTypes {
-		list, _, err := a.entities.List(ctx, campaignID, typeID, v.Role, v.UserID, entities.ListOptions{Page: 1, PerPage: 50, Sort: "updated"})
+		list, _, err := a.entities.List(ctx, campaignID, typeID, v.Role, v.UserID, entities.ListOptions{Page: 1, PerPage: limit + 1, Sort: "updated", PrivateOnly: true})
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		for _, e := range list {
-			if e.IsPrivate {
+			if e.IsPrivate && !seen[e.ID] {
+				seen[e.ID] = true
 				hidden = append(hidden, e)
 			}
 		}
 	}
 	sort.Slice(hidden, func(i, j int) bool { return hidden[i].UpdatedAt.After(hidden[j].UpdatedAt) })
-	if len(hidden) > limit {
+	more := len(hidden) > limit
+	if more {
 		hidden = hidden[:limit]
 	}
 	out := make([]dmscreen.Hidden, 0, len(hidden))
 	for _, e := range hidden {
 		out = append(out, dmscreen.Hidden{ID: e.ID, Name: e.Name, TypeName: e.TypeName})
 	}
-	return out, nil
+	return out, more, nil
 }
 
 // Reveal only ever un-hides, and only the NPC and creature types the panel

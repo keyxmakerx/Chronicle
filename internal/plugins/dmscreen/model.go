@@ -48,6 +48,9 @@ type View struct {
 	// Hidden lists characters players can't see yet, newest first.
 	Hidden []HiddenView `json:"hidden,omitempty"`
 
+	// HiddenMore is true when more are hidden than Hidden lists.
+	HiddenMore bool `json:"hidden_more,omitempty"`
+
 	// Conditions is empty when the system declares none; the tab is hidden.
 	Conditions []ConditionView `json:"conditions,omitempty"`
 }

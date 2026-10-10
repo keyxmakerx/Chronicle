@@ -118,10 +118,11 @@ func (s *service) Build(ctx context.Context, campaignID string, v Viewer) (*View
 	}
 
 	if s.src.Hidden != nil {
-		hidden, err := s.src.Hidden.HiddenCharacters(ctx, campaignID, v, hiddenLimit)
+		hidden, more, err := s.src.Hidden.HiddenCharacters(ctx, campaignID, v, hiddenLimit)
 		if err != nil {
 			warn("hidden", err)
 		}
+		view.HiddenMore = more
 		for _, h := range hidden {
 			view.Hidden = append(view.Hidden, HiddenView{ID: h.ID, Name: h.Name, TypeName: h.TypeName})
 		}

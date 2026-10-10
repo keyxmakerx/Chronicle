@@ -1314,6 +1314,10 @@ func (r *entityRepository) ListByCampaign(ctx context.Context, campaignID string
 		args = append(args, tagArgs...)
 	}
 
+	if opts.PrivateOnly {
+		where += " AND e.is_private = true"
+	}
+
 	visFilter, visArgs := visibilityFilter(role, userID)
 	where += visFilter
 	args = append(args, visArgs...)

@@ -161,6 +161,9 @@ templ Panel(v *View, csrf string) {
 					for _, h := range v.Hidden {
 						@HiddenRow(v.CampaignID, h, csrf)
 					}
+					if v.HiddenMore {
+						<a class="dms-link" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/characters", v.CampaignID)) }>More are hidden. See all on the Characters page</a>
+					}
 				</div>
 			</section>
 		</div>

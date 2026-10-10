@@ -533,6 +533,11 @@ type ListOptions struct {
 	PerPage  int
 	Sort     string   // "name" (default), "updated", "created"
 	TagSlugs []string // Filter by tag slugs (AND logic — entity must have all listed tags).
+
+	// PrivateOnly keeps only entities flagged is_private, so a caller that
+	// wants the hidden ones (the DM Screen's reveal list) is not limited to
+	// whatever happens to sit in the newest page of a mixed listing.
+	PrivateOnly bool
 }
 
 // DefaultListOptions returns sensible defaults for pagination.

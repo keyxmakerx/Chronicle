@@ -54,10 +54,12 @@ type Hidden struct {
 }
 
 // HiddenSource lists hidden characters and reveals one, returning its name.
+// HiddenCharacters returns at most limit of the newest and reports whether
+// more exist beyond them, so the panel can point at the full list.
 // Reveal must only ever make an entity visible, never hide it, and must refuse an entity
 // outside campaignID.
 type HiddenSource interface {
-	HiddenCharacters(ctx context.Context, campaignID string, v Viewer, limit int) ([]Hidden, error)
+	HiddenCharacters(ctx context.Context, campaignID string, v Viewer, limit int) (hidden []Hidden, more bool, err error)
 	Reveal(ctx context.Context, entityID, campaignID string) (name string, err error)
 }
 
