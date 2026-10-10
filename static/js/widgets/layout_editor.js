@@ -63,6 +63,7 @@
     { type: 'relations_graph_full', label: 'Full Relations Graph', icon: 'fa-diagram-project', desc: 'Large entity relations graph', addon: 'relations' },
     { type: 'map_full',         label: 'Full Map',         icon: 'fa-map-location-dot',  desc: 'Full map with drawings & tokens', addon: 'maps' },
     { type: 'session_tracker',  label: 'Sessions',         icon: 'fa-dice-d20',          desc: 'Upcoming sessions with RSVP',    addon: 'sessions' },
+    { type: 'coming_up',        label: 'Coming up',        icon: 'fa-hourglass-half',    desc: 'Next game nights, what you owe the table, next events' },
     { type: 'activity_feed',    label: 'Activity Feed',    icon: 'fa-clock-rotate-left', desc: 'Recent campaign activity log' },
     { type: 'sync_status',      label: 'Foundry Sync',     icon: 'fa-plug',              desc: 'Foundry VTT sync status',        addon: 'foundry' },
   ];

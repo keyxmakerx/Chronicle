@@ -61,6 +61,8 @@ templ DashboardBlockSwitch(cc *CampaignContext, block DashboardBlock, recentEnti
 			@dashSessionTracker(cc, block.Config)
 		case "activity_feed":
 			@dashActivityFeed(cc, block.Config)
+		case "coming_up":
+			@dashComingUp(cc)
 		case "sync_status":
 			// Lazy-loaded from foundry_vtt (DashboardSyncBlock) to keep
 			// this plugin VTT-agnostic; shows a loading skeleton until
@@ -731,6 +733,25 @@ templ dashSessionTracker(cc *CampaignContext, config map[string]any) {
 			class="card divide-y divide-edge min-h-[60px]"
 		>
 			<div class="px-4 py-3 text-sm text-fg-muted">Loading sessions...</div>
+		</div>
+	</div>
+}
+
+// dashComingUp is the placeholder for the "Coming up" card. The card joins the
+// calendar and game nights, which this plugin may not import, so internal/app
+// serves it from GET /campaigns/:id/coming-up. The response replaces this
+// placeholder, and an empty response (addons off) removes it.
+templ dashComingUp(cc *CampaignContext) {
+	<div
+		class="cu-wrap"
+		hx-get={ fmt.Sprintf("/campaigns/%s/coming-up", cc.Campaign.ID) }
+		hx-trigger="load"
+		hx-swap="outerHTML"
+	>
+		<link rel="stylesheet" href={ layouts.AssetURL("/static/css/coming_up.css") }/>
+		<div class="cu-sheet" aria-busy="true">
+			<div class="cu-top"><h2 class="cu-title">Coming up</h2></div>
+			<p class="cu-empty">Loading...</p>
 		</div>
 	</div>
 }
