@@ -38,6 +38,13 @@ func (s *stubSvcForPeek) CheckEntityAccess(_ context.Context, _ string, _ int, _
 	return &EffectivePermission{CanView: s.canView}, nil
 }
 
+// stubAddons reports every addon as on except the ones named in off.
+type stubAddons struct{ off map[string]bool }
+
+func (s stubAddons) IsEnabledForCampaign(_ context.Context, _ string, slug string) (bool, error) {
+	return !s.off[slug], nil
+}
+
 // TestPeek_Access pins who gets what from the side-panel fragment: the same
 // gate as the full page, the same field and secret stripping, and one
 // indistinguishable answer for every page the viewer may not see.
@@ -64,12 +71,14 @@ func TestPeek_Access(t *testing.T) {
 		entityCamp   string
 		wantNotFound bool
 		wantSecret   bool
+		attrsOff     bool
 	}{
-		{"owner sees GM-only text and fields", campaigns.RoleOwner, true, "c1", false, true},
-		{"scribe sees GM-only text and fields", campaigns.RoleScribe, true, "c1", false, true},
-		{"player allowed sees page without GM-only content", campaigns.RolePlayer, true, "c1", false, false},
-		{"player denied on private page gets not found", campaigns.RolePlayer, false, "c1", true, false},
-		{"page from another campaign gets not found", campaigns.RoleOwner, true, "other", true, false},
+		{"owner sees GM-only text and fields", campaigns.RoleOwner, true, "c1", false, true, false},
+		{"scribe sees GM-only text and fields", campaigns.RoleScribe, true, "c1", false, true, false},
+		{"player allowed sees page without GM-only content", campaigns.RolePlayer, true, "c1", false, false, false},
+		{"player denied on private page gets not found", campaigns.RolePlayer, false, "c1", true, false, false},
+		{"page from another campaign gets not found", campaigns.RoleOwner, true, "other", true, false, false},
+		{"attributes addon off hides all field values", campaigns.RoleOwner, true, "c1", false, false, true},
 	}
 
 	var denied *apperror.AppError
@@ -88,6 +97,9 @@ func TestPeek_Access(t *testing.T) {
 			})
 			auth.SetSession(c, &auth.Session{UserID: "u1"})
 
+			if tc.attrsOff {
+				h.addonSvc = stubAddons{off: map[string]bool{"attributes": true}}
+			}
 			err := h.Peek(c)
 			if tc.wantNotFound {
 				var ae *apperror.AppError
@@ -110,8 +122,15 @@ func TestPeek_Access(t *testing.T) {
 				t.Fatalf("Peek: %v", err)
 			}
 			out := rec.Body.String()
-			if !strings.Contains(out, "Duke Varrin") || !strings.Contains(out, "Open text.") || !strings.Contains(out, "Elf") {
+			wantFields := !tc.attrsOff
+			if !strings.Contains(out, "Duke Varrin") || !strings.Contains(out, "Open text.") || strings.Contains(out, "Elf") != wantFields {
 				t.Errorf("allowed viewer is missing the page: %s", out)
+			}
+			if tc.attrsOff {
+				if strings.Contains(out, "Elf") || strings.Contains(out, gmField) {
+					t.Errorf("attributes addon is off but field values were drawn: %s", out)
+				}
+				return
 			}
 			if got := strings.Contains(out, secretText); got != tc.wantSecret {
 				t.Errorf("secret text present=%v, want %v", got, tc.wantSecret)

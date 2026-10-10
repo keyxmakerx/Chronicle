@@ -5,7 +5,7 @@ package entities
 // static/js/peek_panel.js, so this fragment holds no script: a plain link is
 // the only interactive element and works after any swap.
 templ EntityPeekPanel(v PeekView) {
-	<article class="peek-body" data-peek-ready="1">
+	<article class="peek-body" data-peek-root="1">
 		<header class="peek-head">
 			if v.Kind != "" {
 				<span class="peek-kind">

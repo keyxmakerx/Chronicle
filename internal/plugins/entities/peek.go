@@ -96,7 +96,12 @@ func (h *Handler) Peek(c echo.Context) error {
 
 	// Same field rules as the page: GM-only and owner-only values are dropped
 	// before anything is listed.
+	// A campaign that switched the attributes addon off shows no field values
+	// on the page, so the panel shows none either.
 	fieldsData := FilterRestrictedFields(entity.FieldsData, entityType.Fields, canSeeGM, entity.IsOwnedBy(userID))
+	if !h.isAddonEnabled(ctx, cc.Campaign.ID, "attributes") {
+		fieldsData = nil
+	}
 	for _, fd := range MergeFields(entityType.Fields, entity.FieldOverrides) {
 		val, ok := fieldsData[fd.Key]
 		if !ok || val == nil {
@@ -109,6 +114,9 @@ func (h *Handler) Peek(c echo.Context) error {
 		view.Facts = append(view.Facts, PeekFact{Label: fd.Label, Value: s})
 	}
 
+	// The rendered text is what the panel shows. The editor saves it together
+	// with the JSON document, and there is no server-side renderer for the
+	// JSON, so the HTML is stripped here the way GetEntry strips both forms.
 	if entity.EntryHTML != nil {
 		body := *entity.EntryHTML
 		if !canSeeGM {

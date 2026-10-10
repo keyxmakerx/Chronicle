@@ -38,7 +38,7 @@
 
   // The preview address with /peek in its place: the card's Peek action.
   function peekOf(url) {
-    return /\/entities\/[^/?#]+\/preview$/.test(url) ? url.replace(/\/preview$/, '/peek') : '';
+    return Chronicle.peekAddress ? Chronicle.peekAddress(url) : '';
   }
 
   // The preview API's answer, as hover card content.

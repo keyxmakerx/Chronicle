@@ -37,16 +37,11 @@
 
   // The peek address for a link: the preview address with /peek in its place,
   // else the page address itself. Only same-site paths are ever fetched.
+  // Every address goes through Chronicle.peekAddress (peek_address.js), which
+  // rebuilds it from a fully anchored pattern, so nothing else is fetched.
   function peekURL(a) {
-    var p = a.getAttribute('data-entity-preview') || '';
-    var u = '';
-    if (/\/entities\/[^/?#]+\/preview$/.test(p)) {
-      u = p.replace(/\/preview$/, '/peek');
-    } else {
-      var h = (a.getAttribute('href') || '').split(/[?#]/)[0];
-      if (/^\/campaigns\/[^/]+\/entities\/[^/]+$/.test(h)) u = h + '/peek';
-    }
-    return /^\/(?!\/)/.test(u) ? u : '';
+    return C.peekAddress(a.getAttribute('data-entity-preview') || '') ||
+      C.peekAddress((a.getAttribute('href') || '').split(/[?#]/)[0]);
   }
 
   function build() {
@@ -99,8 +94,8 @@
 
   function open(target) {
     var a = typeof target === 'string' ? null : target;
-    var url = typeof target === 'string' ? target : (a ? peekURL(a) : '');
-    if (!url || !/^\/(?!\/)/.test(url)) return false;
+    var url = typeof target === 'string' ? C.peekAddress(target) : (a ? peekURL(a) : '');
+    if (!url) return false;
     build();
     if (a) opener = a;
     var mine = ++token;
@@ -117,7 +112,13 @@
       })
       .then(function (html) {
         if (mine !== token) return;
-        bodyEl.innerHTML = html;
+        // Only the fragment's own root is taken, parsed inertly. Any other
+        // answer (an error page, a file served at the wrong address) is
+        // treated as unavailable and none of it is inserted.
+        var root = new DOMParser().parseFromString(html, 'text/html').body.querySelector('[data-peek-root]');
+        if (!root) throw new Error('not a peek fragment');
+        bodyEl.textContent = '';
+        bodyEl.appendChild(document.importNode(root, true));
         bodyEl.scrollTop = 0;
       })
       .catch(function () {
