@@ -46,7 +46,7 @@ templ InstanceManagePanel(cc *campaigns.CampaignContext, instances []InventoryIn
 								type="button"
 								class="text-xs text-fg-secondary hover:text-fg px-2 py-1"
 								title="Rename"
-								onclick={ renameInstanceOnClick(cc.Campaign.ID, inst.ID, inst.Name, instanceDescription(inst), inst.Icon, inst.Color) }
+								onclick={ renameInstanceOnClick(cc.Campaign.ID, inst.ID, inst.Name) }
 							>
 								<i class="fa-solid fa-pen mr-1"></i>Rename
 							</button>

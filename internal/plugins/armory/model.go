@@ -5,7 +5,11 @@
 // own any database tables beyond the preset_category column on entity_types.
 package armory
 
-import "time"
+import (
+	"time"
+
+	"github.com/keyxmakerx/chronicle/internal/patch"
+)
 
 // ItemListOptions controls filtering and pagination for the Armory gallery.
 type ItemListOptions struct {
@@ -123,4 +127,16 @@ type CreateInstanceInput struct {
 	Description string `json:"description"`
 	Icon        string `json:"icon"`
 	Color       string `json:"color"`
+}
+
+// UpdateInstanceInput is a PARTIAL update: an absent field keeps the stored
+// value, an explicit null clears a nullable one (description), a present
+// value replaces it. Renaming a collection must never revert a description,
+// icon or colour changed elsewhere in the meantime. A present blank icon or
+// colour resets to the default, as it does on create.
+type UpdateInstanceInput struct {
+	Name        patch.Field[string] `json:"name"`
+	Description patch.Field[string] `json:"description"`
+	Icon        patch.Field[string] `json:"icon"`
+	Color       patch.Field[string] `json:"color"`
 }

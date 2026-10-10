@@ -6,6 +6,7 @@ package armory
 
 import (
 	"context"
+	"github.com/keyxmakerx/chronicle/internal/patch"
 	"testing"
 )
 
@@ -116,9 +117,9 @@ func TestUpdateInstance_InvalidIcon(t *testing.T) {
 				},
 			}
 			svc := newTestInstanceService(repo)
-			err := svc.UpdateInstance(context.Background(), "camp-1", 1, CreateInstanceInput{
-				Name: "Updated",
-				Icon: icon,
+			err := svc.UpdateInstance(context.Background(), "camp-1", 1, UpdateInstanceInput{
+				Name: patch.Of("Updated"),
+				Icon: patch.Of(icon),
 			})
 			if !isAppError(err) {
 				t.Fatalf("expected an AppError, got %v", err)
@@ -143,8 +144,8 @@ func TestUpdateInstance_ValidIconAndDefault(t *testing.T) {
 	}
 	svc := newTestInstanceService(repo)
 
-	if err := svc.UpdateInstance(context.Background(), "camp-1", 1, CreateInstanceInput{
-		Name: "Updated", Icon: "fa-dragon",
+	if err := svc.UpdateInstance(context.Background(), "camp-1", 1, UpdateInstanceInput{
+		Name: patch.Of("Updated"), Icon: patch.Of("fa-dragon"),
 	}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -152,8 +153,8 @@ func TestUpdateInstance_ValidIconAndDefault(t *testing.T) {
 		t.Errorf("expected icon fa-dragon, got %q", capturedIcon)
 	}
 
-	if err := svc.UpdateInstance(context.Background(), "camp-1", 1, CreateInstanceInput{
-		Name: "Updated", Icon: "",
+	if err := svc.UpdateInstance(context.Background(), "camp-1", 1, UpdateInstanceInput{
+		Name: patch.Of("Updated"), Icon: patch.Of(""),
 	}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -176,9 +177,9 @@ func TestUpdateInstance_InvalidColor(t *testing.T) {
 				},
 			}
 			svc := newTestInstanceService(repo)
-			err := svc.UpdateInstance(context.Background(), "camp-1", 1, CreateInstanceInput{
-				Name:  "Updated",
-				Color: color,
+			err := svc.UpdateInstance(context.Background(), "camp-1", 1, UpdateInstanceInput{
+				Name:  patch.Of("Updated"),
+				Color: patch.Of(color),
 			})
 			if !isAppError(err) {
 				t.Fatalf("expected an AppError, got %v", err)

@@ -56,6 +56,7 @@ var contractGoverned = map[string]string{
 	"maps.UpdateMapInput":          "PUT /campaigns/:id/maps/:mid — a rename-only push unlinked the map's image and wiped its description; ImageID/Description were already *string and STILL blindly overwritten, because a plain pointer bound from JSON can't tell absent from null either",
 	"timeline.UpdateTimelineInput": "PUT /campaigns/:id/timelines/:tid — fired on EVERY settings save, not just a narrow push: the request struct has no visibility_rules/description_html member at all, so both were unconditionally blanked and canUserView() treats an absent VisibilityRules as visible to everyone",
 	"tags.UpdateTagInput":          "tagService.Update — the worst finding of the 2026-09-12 toggle-truth sweep (ADR-056): Color/DmOnly were plain value types, so ANY rename necessarily also sent DmOnly's zero value and turned a DM-only tag public",
+	"armory.UpdateInstanceInput":   "PUT /campaigns/:id/armory/instances/:iid — Rename echoed back the description, icon and colour it loaded, so a concurrent change to them was reverted; a name-only push must keep the rest",
 	"armory.UpdateStashInput":      "PUT /campaigns/:id/armory/stashes/:sid — a rename must not clear the stash location; only an explicit null does",
 	"tags.UpdateTagRequest":        "PUT /campaigns/:id/tags/:tagId — the wire-bound twin of UpdateTagInput above; same incident, same fix",
 	"maps.UpdateHexCellInput":      "PATCH .../maps/:mid/hexes/cells — a paint stroke sends only terrain, so it must not touch a hex's name or notes; a rename must not clear its terrain",
@@ -66,8 +67,8 @@ var contractGoverned = map[string]string{
 // governedFieldExceptions are value-typed fields deliberately left on a
 // governed struct. Each needs a reason, and the reason has to be a fact.
 var governedFieldExceptions = map[string]string{
-	"maps.UpdateHexCellInput.Col":          "value-typed by choice: Col and Row are the hex's identity, not data to merge. The handler refuses an entry that omits either, and the service bounds them to 0..MaxHexCoord.",
-	"maps.UpdateHexCellInput.Row":          "value-typed by choice: same as maps.UpdateHexCellInput.Col.",
+	"maps.UpdateHexCellInput.Col": "value-typed by choice: Col and Row are the hex's identity, not data to merge. The handler refuses an entry that omits either, and the service bounds them to 0..MaxHexCoord.",
+	"maps.UpdateHexCellInput.Row": "value-typed by choice: same as maps.UpdateHexCellInput.Col.",
 
 	// Update only assigns Name when non-empty, so it already preserves an
 	// absent/blank name without needing presence-awareness.

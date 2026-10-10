@@ -41,10 +41,10 @@ func collectionMenuOnClick(campaignID, entityID, popoverID, giveURL string, coll
 }
 
 // renameInstanceOnClick swaps a collection row's label for an inline name
-// input. The update route replaces every field, so the row's current
-// description, icon and colour ride along with the new name; a validation
+// input. It sends only the name: the update route is partial, so the row's
+// possibly stale description, icon and colour are left alone; a validation
 // failure is shown under the input instead of failing silently.
-func renameInstanceOnClick(campaignID string, instanceID int, name, description, icon, color string) templ.ComponentScript {
+func renameInstanceOnClick(campaignID string, instanceID int, name string) templ.ComponentScript {
 	body := fmt.Sprintf(
 		`(function(btn){`+
 			`var row=btn.closest('[data-inst-row]');if(!row||row.querySelector('[data-rename-form]'))return;`+
@@ -63,22 +63,13 @@ func renameInstanceOnClick(campaignID string, instanceID int, name, description,
 			`form.onsubmit=function(e){e.preventDefault();var n=input.value.trim();err.textContent='';`+
 			`if(!n){err.textContent='Name is required.';input.focus();return;}`+
 			`save.disabled=true;`+
-			`Chronicle.apiFetch(url,{method:'PUT',body:{name:n,description:%[4]s,icon:%[5]s,color:%[6]s}}).then(function(r){`+
+			`Chronicle.apiFetch(url,{method:'PUT',body:{name:n}}).then(function(r){`+
 			`if(r.ok){var t=label.querySelector('[data-inst-name]');if(t)t.textContent=n;`+
 			`var o=document.querySelector('select[name=instance] option[value=\''+%[2]d+'\']');if(o){var m=o.textContent.trim().match(/\(\d+\)$/);o.textContent=n+(m?' '+m[0]:'');}done();return;}`+
 			`return r.json().then(function(j){err.textContent=j.message||'Rename failed.';input.focus();},function(){err.textContent='Rename failed.';});})`+
 			`.catch(function(){err.textContent='Network error. Try again.';})`+
 			`.then(function(){save.disabled=false;});};`+
 			`})(this)`,
-		jsStr(campaignID), instanceID, jsStr(name), jsStr(description), jsStr(icon), jsStr(color))
+		jsStr(campaignID), instanceID, jsStr(name))
 	return inlineOnClick("armory_renameInstance", body)
-}
-
-// instanceDescription dereferences the optional description for the rename
-// payload, where an absent one must be sent as empty rather than dropped.
-func instanceDescription(inst InventoryInstance) string {
-	if inst.Description == nil {
-		return ""
-	}
-	return *inst.Description
 }
