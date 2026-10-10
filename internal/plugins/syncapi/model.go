@@ -18,7 +18,7 @@ const (
 type APIKey struct {
 	ID          int                `json:"id"`
 	KeyHash     string             `json:"-"`                       // Never exposed in JSON.
-	KeyPrefix   string             `json:"key_prefix"`              // First 8 chars for display.
+	KeyPrefix   string             `json:"key_prefix"`              // Start of the key, for display.
 	Name        string             `json:"name"`
 	VTTTag      *string            `json:"vtt_tag,omitempty"`       // Cosmetic label: "foundry", "custom".
 	UserID      string             `json:"user_id"`
