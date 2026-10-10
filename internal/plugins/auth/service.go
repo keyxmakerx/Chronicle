@@ -162,6 +162,13 @@ type AuthService interface {
 	FinishOIDC(ctx context.Context, in OIDCCallbackInput) (*OIDCResult, error)
 	UnlinkOIDC(ctx context.Context, userID string) error
 
+	// Guests: join with a code, then keep the account or merge it.
+	JoinWithGuestCode(ctx context.Context, in JoinInput) (*JoinResult, error)
+	KeepGuestAccount(ctx context.Context, userID string, in KeepGuestInput, ip, userAgent string) (string, error)
+	MergeGuest(ctx context.Context, guestID string, in MergeGuestInput, ip, userAgent string) (string, *User, error)
+	EndGuest(ctx context.Context, userID string)
+	EndCampaignGuests(ctx context.Context, campaignID string)
+
 	// Re-authentication for sensitive operations.
 	ConfirmReauth(ctx context.Context, userID, password string) error
 	IsReauthValid(ctx context.Context, userID string) (bool, error)
@@ -202,6 +209,11 @@ type authService struct {
 
 	// oidc is provider sign-in (ConfigureOIDC); nil means it's unavailable.
 	oidc *oidcRuntime
+
+	// Guest codes (ConfigureGuests, OnGuestMerged); nil codes means guests
+	// can't join.
+	guestCodes    GuestCodes
+	onGuestMerged []func(ctx context.Context, campaignID, guestID, targetID string) error
 }
 
 // Registration modes. These mirror the settings plugin's canonical constants;
@@ -638,6 +650,7 @@ func (s *authService) revalidateSession(ctx context.Context, key, token string, 
 	session.Email = user.Email
 	session.Name = user.DisplayName
 	session.AvatarPath = derefOrEmpty(user.AvatarPath)
+	session.GuestCampaignID = derefOrEmpty(user.GuestCampaignID)
 	session.LastValidated = time.Now().UTC()
 
 	data, err := json.Marshal(session)
@@ -695,15 +708,16 @@ func (s *authService) createSession(ctx context.Context, user *User, ip, userAge
 
 	now := time.Now().UTC()
 	session := Session{
-		UserID:        user.ID,
-		Email:         user.Email,
-		Name:          user.DisplayName,
-		IsAdmin:       user.IsAdmin,
-		AvatarPath:    derefOrEmpty(user.AvatarPath),
-		IP:            ip,
-		UserAgent:     userAgent,
-		CreatedAt:     now,
-		LastValidated: now,
+		UserID:          user.ID,
+		Email:           user.Email,
+		Name:            user.DisplayName,
+		IsAdmin:         user.IsAdmin,
+		AvatarPath:      derefOrEmpty(user.AvatarPath),
+		GuestCampaignID: derefOrEmpty(user.GuestCampaignID),
+		IP:              ip,
+		UserAgent:       userAgent,
+		CreatedAt:       now,
+		LastValidated:   now,
 	}
 
 	data, err := json.Marshal(session)

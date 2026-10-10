@@ -2365,6 +2365,18 @@ func (r *entityRepository) FindAllMentionLinks(ctx context.Context, campaignID s
 	return links, rows.Err()
 }
 
+// ReassignOwner moves a guest's characters in one campaign to the account
+// they merged into.
+func (r *entityRepository) ReassignOwner(ctx context.Context, campaignID, fromUserID, toUserID string) (int64, error) {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE entities SET owner_user_id = ? WHERE campaign_id = ? AND owner_user_id = ?`,
+		toUserID, campaignID, fromUserID)
+	if err != nil {
+		return 0, fmt.Errorf("reassigning entity owners: %w", err)
+	}
+	return res.RowsAffected()
+}
+
 // ClearOwnerForUser unlinks every page assigned to a deleted account, so
 // their characters stay in the campaign with no player attached.
 func (r *entityRepository) ClearOwnerForUser(ctx context.Context, userID string) (int64, error) {

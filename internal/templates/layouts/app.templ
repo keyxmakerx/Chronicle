@@ -80,6 +80,10 @@ templ App(title string) {
 				<!-- Flash messages -->
 				@FlashMessages()
 
+				if IsGuest(ctx) {
+					@GuestBanner()
+				}
+
 				<!-- Player call-to-action (C-RSVP-P10).
 				     One banner for the one thing a player is expected to ACT on:
 				     an unanswered RSVP, or the timezone we would otherwise guess

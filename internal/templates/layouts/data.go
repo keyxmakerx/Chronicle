@@ -22,6 +22,7 @@ const (
 	keyUserEmail           ctxKey = "layout_user_email"
 	keyUserAvatarPath      ctxKey = "layout_user_avatar_path"
 	keyIsAdmin             ctxKey = "layout_is_admin"
+	keyIsGuest             ctxKey = "layout_is_guest"
 	keyCampaignID          ctxKey = "layout_campaign_id"
 	keyCampaignName        ctxKey = "layout_campaign_name"
 	keyCampaignRole        ctxKey = "layout_campaign_role"
@@ -104,6 +105,17 @@ func SetUserAvatarPath(ctx context.Context, avatarPath string) context.Context {
 // SetIsAdmin stores whether the user is a site admin.
 func SetIsAdmin(ctx context.Context, isAdmin bool) context.Context {
 	return context.WithValue(ctx, keyIsAdmin, isAdmin)
+}
+
+// SetIsGuest marks the signed-in person as a guest fenced to one campaign.
+func SetIsGuest(ctx context.Context, isGuest bool) context.Context {
+	return context.WithValue(ctx, keyIsGuest, isGuest)
+}
+
+// IsGuest reports whether the signed-in person is a guest.
+func IsGuest(ctx context.Context) bool {
+	v, _ := ctx.Value(keyIsGuest).(bool)
+	return v
 }
 
 // SetCampaignID stores the current campaign's ID in context.

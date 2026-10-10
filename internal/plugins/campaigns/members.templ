@@ -145,6 +145,15 @@ templ memberAvatar(member *CampaignMember) {
 	</span>
 }
 
+// removeMemberConfirm is the question before Remove. A guest has nowhere
+// else to go, so removing one ends their account.
+func removeMemberConfirm(member *CampaignMember) string {
+	if member.IsGuest {
+		return "Remove this guest? Their guest account ends; anything they shared stays, signed Former member."
+	}
+	return "Remove this member from the campaign?"
+}
+
 // MemberRow renders a single member row in the table.
 templ MemberRow(cc *CampaignContext, member *CampaignMember, csrfToken string) {
 	<tr>
@@ -152,10 +161,19 @@ templ MemberRow(cc *CampaignContext, member *CampaignMember, csrfToken string) {
 			<div class="flex items-center gap-3">
 				@memberAvatar(member)
 				<div class="min-w-0">
-					<div class="text-sm font-medium text-fg">{ member.DisplayName }</div>
+					<div class="text-sm font-medium text-fg">
+						{ member.DisplayName }
+						if member.IsGuest {
+							<span class="ml-1 inline-block px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide rounded bg-surface-alt text-fg-secondary align-middle">Guest</span>
+						}
+					</div>
 					// Email addresses are private: only the owner, who manages people, and
 					// the member themselves see one. Fellow players see the name alone.
-					if cc.MemberRole >= RoleOwner || layouts.GetUserID(ctx) == member.UserID {
+					if member.IsGuest {
+						if cc.MemberRole >= RoleOwner {
+							<div class="text-xs text-fg-muted">Joined with a guest code, no email yet</div>
+						}
+					} else if cc.MemberRole >= RoleOwner || layouts.GetUserID(ctx) == member.UserID {
 						<div class="text-xs text-fg-secondary">{ member.Email }</div>
 					}
 					if layouts.GetUserID(ctx) == member.UserID {
@@ -234,7 +252,7 @@ templ MemberRow(cc *CampaignContext, member *CampaignMember, csrfToken string) {
 							hx-delete={ fmt.Sprintf("/campaigns/%s/members/%s", cc.Campaign.ID, member.UserID) }
 							hx-target="#member-list"
 							hx-swap="outerHTML"
-							hx-confirm="Remove this member from the campaign?"
+							hx-confirm={ removeMemberConfirm(member) }
 						>
 							<input type="hidden" name="_method" value="DELETE"/>
 							<input type="hidden" name="csrf_token" value={ csrfToken }/>

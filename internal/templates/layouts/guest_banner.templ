@@ -1,0 +1,23 @@
+package layouts
+
+// GuestBanner is the strip a guest sees on every page of their campaign. A
+// guest's only way back in is this browser's cookie, so it says so and
+// offers to keep the account; the forms load into #guest-panel below it.
+templ GuestBanner() {
+	<div class="cta-bar" data-cta="guest" role="status">
+		<i class="fa-solid fa-ticket cta-ico" aria-hidden="true"></i>
+		<span class="cta-msg">
+			You're playing as a guest. Only this browser can get back in.
+		</span>
+		<button
+			type="button"
+			class="cta-go"
+			hx-get="/account/guest"
+			hx-target="#guest-panel"
+			hx-swap="innerHTML"
+		>
+			Keep my account
+		</button>
+	</div>
+	<div id="guest-panel"></div>
+}

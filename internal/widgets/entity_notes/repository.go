@@ -315,6 +315,18 @@ func hydrate(n *Note, sharedWith, title, body, bodyHTML sql.NullString) {
 	}
 }
 
+// ReassignAuthor moves a guest's page notes in one campaign to the account
+// they merged into.
+func (r *repository) ReassignAuthor(ctx context.Context, campaignID, fromUserID, toUserID string) (int64, error) {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE entity_notes SET author_user_id = ? WHERE campaign_id = ? AND author_user_id = ?`,
+		toUserID, campaignID, fromUserID)
+	if err != nil {
+		return 0, fmt.Errorf("reassigning page notes: %w", err)
+	}
+	return res.RowsAffected()
+}
+
 // DeletePrivateByAuthor removes a deleted account's private notes. Notes
 // shared with anyone else stay, signed by the emptied account.
 func (r *repository) DeletePrivateByAuthor(ctx context.Context, userID string) (int64, error) {
