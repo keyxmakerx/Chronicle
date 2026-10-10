@@ -327,9 +327,10 @@
       date:    { name:'In-world date', desc:'Today in your world, from the calendar' },
       weather: { name:'Weather', desc:'Today’s weather from the calendar' },
       moon:    { name:'Moon', desc:'Tonight’s moon phase' },
+      era:     { name:'Era', desc:'The age your world is in, from the calendar' },
       session: { name:'Next game night', desc:'Counts down to the next session' }
     };
-    var WIDGET_ORDER = ['links', 'text', 'note', 'search', 'date', 'weather', 'moon', 'session'];
+    var WIDGET_ORDER = ['links', 'text', 'note', 'search', 'date', 'weather', 'moon', 'era', 'session'];
     // Sample text the preview shows for the data-backed widgets; the live
     // header reads the real calendar and sessions, and a widget with nothing
     // to show there simply does not appear.
@@ -337,9 +338,10 @@
       date:    ['Date', '14 Frostfall 1203'],
       weather: ['Weather', 'Clear, 4°'],
       moon:    ['Moon', 'Selûne waxing crescent'],
+      era:     ['Era', 'Age of Ash'],
       session: ['Next', 'Fri 7 pm']
     };
-    var LATER = ['Era'];
+    var LATER = [];
     var WIDGET_SLOTS = 4;
 
     var SECTIONS = [
@@ -838,7 +840,6 @@
     }
     function railHTML(d){
       var h = d.header.widgets.map(function(w){
-        if (w === 'era') return '<div class="rw"><span class="k">Era</span><span class="v">Age of Ash</span></div>';
         if (w === 'links') return '<div class="rw"><span class="k">Links</span><span class="v">' + esc(d.header.links.map(function(l){ return l.label.trim(); }).filter(Boolean).join(' · ') || 'No links yet') + '</span></div>';
         if (w === 'text') return '<div class="rw q"><span class="k">Note</span><span class="v">' + esc(d.header.text.trim() || 'Nothing written yet') + '</span></div>';
         if (w === 'search') return '<div class="rw srch">' + IC('i-search') + '<span>Search ' + esc(CAMPAIGN) + '…</span></div>';
