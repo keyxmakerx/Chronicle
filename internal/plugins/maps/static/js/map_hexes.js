@@ -2299,10 +2299,9 @@
 
     function showTool(on) {
       if (!wrap) return;
+      // Everyone has a rail (Move and Measure at least), so only the button
+      // comes and goes with the hexes.
       Array.prototype.forEach.call(wrap.querySelectorAll('[data-tool="hex"]'), function (b) { b.hidden = !on; });
-      // People who cannot use the other tools get a rail only while hexes exist.
-      var rail = wrap.querySelector('.mp-rail');
-      if (rail && !ctx.isScribe) rail.hidden = !on;
     }
 
     // wantedAnchor is the picture the field should cover right now: the owner's
@@ -2446,6 +2445,14 @@
       },
       setActive: setActive,
       isOn: function () { return layerOn; },
+      // measureInfo is what the Measure tool needs while the field is up and
+      // shown to this viewer: where it sits and the travel figures (the
+      // owner's unsaved sheet values while the sheet is open), else null.
+      measureInfo: function () {
+        if (!layerOn || hidden || !layout || !geo) return null;
+        var t = travel();
+        return { layout: layout, perHex: t.perHex, perDay: t.perDay };
+      },
       onChanged: onChanged,
       // resync reads the layer again, after the live connection was lost and
       // events may have been missed.
@@ -2492,5 +2499,13 @@
     return handle;
   }
 
-  window.ChronicleMapHexes = { init: attach };
+  // math is the pure hex maths, for the Measure tool (map_measure.js), so it
+  // measures with the same hexes and trip wording rather than a copy.
+  window.ChronicleMapHexes = {
+    init: attach,
+    math: {
+      hexAtMap: hexAtMap, center: center, distance: distance, hexLine: hexLine, hexD: hexD,
+      travelDays: travelDays, tripSummary: tripSummary
+    }
+  };
 })();

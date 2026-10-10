@@ -277,6 +277,7 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 		data-hex-art-src={ scriptURL("map_hex_art.js") }
 		data-hexes-src={ scriptURL("map_hexes.js") }
 		data-live-src={ scriptURL("map_live.js") }
+		data-measure-src={ scriptURL("map_measure.js") }
 		data-map-id={ data.Map.ID }
 		data-image-id={ derefStr(data.Map.ImageID) }
 		data-image-url={ mapImageSrc(ctx, data.Map) }
@@ -290,6 +291,8 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 		data-can-move-party={ fmt.Sprintf("%t", data.CanMoveParty()) }
 		data-can-fog={ fmt.Sprintf("%t", data.IsDM) }
 		data-can-shadow={ fmt.Sprintf("%t", data.CanShadow()) }
+		data-can-set-scale={ fmt.Sprintf("%t", data.IsDM) }
+		data-map-name={ data.Map.Name }
 		data-user-id={ data.UserID }
 		data-display={ mustMarshalDisplay(data.DisplayOrDefault()) }
 		data-markers={ mustMarshalMarkers(data.Markers) }
@@ -377,6 +380,60 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 		@keyframes mp-hx-out { to { opacity: 0; transform: scale(0.8); } }
 		@media (max-width: 760px) {
 			.mp-hexpanel { left: 12px; right: 12px; width: auto; top: auto; bottom: 64px; max-height: 46%; }
+		}
+
+		/* The Measure tool (static/js/map_measure.js): its panel beside the rail,
+		   the path drawn in its own Leaflet pane, the running-distance chips and
+		   the "How long is that line?" box. Colours are the theme's tokens. */
+		.mp-ms-panel { top: 58px; left: 58px; width: 262px; max-height: calc(100% - 140px); overflow: auto; padding: 0 12px 12px; display: flex; flex-direction: column; gap: 9px; font-size: 12.5px; color: var(--color-text-primary); transform-origin: 0 24px; }
+		.mp-ms-panel > * { flex-shrink: 0; }
+		.mp-ms-head { display: flex; align-items: center; justify-content: space-between; font-weight: 600; padding: 10px 0 2px; }
+		.mp-ms-x { border: 0; background: none; width: 26px; height: 26px; border-radius: 6px; display: grid; place-items: center; color: var(--color-text-secondary); }
+		.mp-ms-x:hover { background: var(--color-bg-tertiary); color: var(--color-text-primary); }
+		.mp-ms-panel p { margin: 0; color: var(--color-text-secondary); line-height: 1.45; }
+		.mp-ms-panel kbd, .mp-hint kbd { font: 11px ui-monospace, monospace; border: 1px solid var(--color-border); border-radius: 4px; padding: 0 4px; background: var(--color-bg-tertiary); }
+		.mp-ms-readout { background: var(--mp-accent-soft); border-radius: 8px; padding: 9px 11px; display: flex; flex-direction: column; gap: 2px; }
+		.mp-ms-readout b { font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--color-text-primary); }
+		.mp-ms-readout span { color: var(--color-text-body); }
+		.mp-ms-readout .mp-ms-lab { font-size: 11px; color: var(--color-text-secondary); }
+		.mp-ms-legs { display: flex; flex-wrap: wrap; gap: 4px; }
+		.mp-ms-legs .mp-badge { font-size: 11px; color: var(--color-text-secondary); font-variant-numeric: tabular-nums; }
+		.mp-ms-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+		.mp-ms-row .mp-cbtn { display: inline-flex; align-items: center; gap: 6px; }
+		.mp-ms-scalebox { border: 1px solid var(--color-border); border-radius: 8px; padding: 9px 10px; display: flex; flex-direction: column; gap: 7px; }
+		.mp-ms-scalebox b { font-size: 13px; }
+		.mp-ms-panel .mp-ms-note { font-size: 11.5px; }
+		.mp-ms-link { border: 0; background: none; padding: 0 2px; font-size: inherit; color: var(--mp-accent) !important; }
+		.mp-ms-link:hover { text-decoration: underline; }
+		.mp-ms-private { display: flex; gap: 6px; align-items: flex-start; font-size: 11.5px; color: var(--color-text-secondary); }
+		.mp-ms-private i { font-size: 11px; margin-top: 2px; }
+		.mp-ms-pop { position: absolute; z-index: 1120; width: 236px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; font-size: 12.5px; color: var(--color-text-primary); background: var(--color-card-bg); transform-origin: 0 0; }
+		.mp-ms-pop small { font-size: 11px; color: var(--color-text-secondary); }
+		.mp-ms-pop .mp-ms-len { width: 76px; }
+		.mp-ms-pop .mp-ms-unit { width: auto; flex: 1; }
+		.mp-ms-pop .mp-input[aria-invalid="true"] { border-color: #dc2626; }
+		.mp-ms-grow { animation: mp-ms-grow var(--dur-standard, 200ms) var(--ease-out, ease-out) both; }
+		@keyframes mp-ms-grow { from { opacity: 0; transform: scale(0.94); } }
+		.leaflet-pane .mp-ms-halo, .leaflet-pane .mp-ms-sl-halo { stroke: #fff; stroke-opacity: 0.85; fill: none; }
+		.leaflet-pane .mp-ms-line { stroke: var(--mp-accent); fill: none; }
+		.leaflet-pane .mp-ms-sl { stroke: #111827; fill: none; }
+		.leaflet-pane .mp-ms-pt { stroke: var(--mp-accent); fill: #fff; fill-opacity: 1; }
+		.leaflet-pane .mp-ms-hexes { stroke: var(--mp-accent); stroke-opacity: 0.75; fill: var(--mp-accent); fill-opacity: 0.22; }
+		.mp-ms-chipwrap { background: none; border: 0; }
+		.mp-ms-chip { position: absolute; left: 0; top: 0; transform: translate(-50%, calc(-100% - 12px)); white-space: nowrap; font: 600 11px/1 ui-sans-serif, system-ui, sans-serif; font-variant-numeric: tabular-nums; color: var(--color-text-primary); background: var(--color-card-bg); border: 1px solid var(--color-border); border-radius: 999px; padding: 4px 8px; box-shadow: var(--elev-hover, 0 6px 16px -4px rgb(0 0 0 / 0.12)); pointer-events: none; }
+		.mp-ms-chip.mp-ms-tot { background: var(--mp-accent); border-color: var(--mp-accent); color: #fff; }
+		@media (max-width: 760px) {
+			/* A sheet above the bottom rail, over the zoom buttons; its own text
+			   says what the hint would, so the hint steps aside. */
+			/* A sheet above the rail that stops short of the zoom column, so
+			   zoom stays in reach while a path is laid. */
+			.mp-fl.mp-ms-panel { top: auto; left: 12px; right: 56px; width: auto; bottom: 62px; max-height: 34%; transform-origin: 30% 100%; }
+			/* Each leg already has its chip on the map; the sheet keeps to the total. */
+			.mp-ms-panel .mp-ms-legs { display: none; }
+			#map-wrap:has(.mp-ms-panel:not([hidden])) .mp-hint { display: none; }
+		}
+		@media (prefers-reduced-motion: reduce) {
+			.mp-ms-grow { animation: none !important; }
 		}
 		@media (prefers-reduced-motion: reduce) {
 			.mp-hexpanel, .mp-hx-in, .mp-hx-out, .mp-hx-fade { animation: none !important; }
@@ -551,8 +608,9 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 // corner: search and tool rail (top-left), pins and layers (top-right), zoom
 // (bottom-right) and the active-tool hint (bottom-centre). They are siblings of
 // the Leaflet container, not Leaflet controls, so the map never sees their
-// clicks, wheel or double-clicks. All behaviour is wired by the IIFE in
-// MapEditorBody; this is markup only, and the tool rail is Scribe+ only.
+// clicks, wheel or double-clicks. All behaviour is wired by the viewer module
+// (static/js/map_viewer.js); this is markup only. Everyone gets the
+// rail: Move and Measure always, Hexes on a hex map, the rest Scribe+.
 templ mapControls(data MapViewData) {
 	<div class="mp-fl mp-search">
 		<i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
@@ -565,10 +623,11 @@ templ mapControls(data MapViewData) {
 		/>
 		<div id="mp-results" class="mp-results" hidden></div>
 	</div>
-	<!-- The rail is for scribes; everyone else gets it only while the map has
-	     hexes, holding Move and the Hexes tool, so a player can open a hex's
-	     card. The viewer shows or hides the Hexes button as the grid changes. -->
-	<div class="mp-fl mp-rail" role="toolbar" aria-label="Map tools" hidden?={ !data.IsScribe && data.DisplayOrDefault().GridType != "hex" }>
+	<!-- Everyone's rail holds Move and Measure, and Hexes while the map has
+	     hexes (so a player can open a hex's card and measure in hexes); the
+	     other tools are for scribes. The viewer shows or hides the Hexes
+	     button as the grid changes. -->
+	<div class="mp-fl mp-rail" role="toolbar" aria-label="Map tools">
 		<button type="button" class="mp-btn" data-tool="move" aria-pressed="true" aria-label="Move the map (V)">
 			<i class="fa-solid fa-hand" aria-hidden="true"></i>
 			<span class="mp-tip">Move the map <kbd>V</kbd></span>
@@ -628,6 +687,11 @@ templ mapControls(data MapViewData) {
 			</button>
 			}
 		}
+		<div class="mp-sep"></div>
+		<button type="button" class="mp-btn" data-tool="measure" aria-pressed="false" aria-label="Measure (M)">
+			<i class="fa-solid fa-ruler" aria-hidden="true"></i>
+			<span class="mp-tip">Measure <kbd>M</kbd></span>
+		</button>
 		<button type="button" class="mp-btn" data-tool="hex" aria-pressed="false" aria-label="Hexes (H)" hidden?={ data.DisplayOrDefault().GridType != "hex" }>
 			<svg class="mp-hexico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/></svg>
 			<span class="mp-tip">Hexes <kbd>H</kbd></span>
@@ -668,6 +732,8 @@ templ mapControls(data MapViewData) {
 		}
 	</div>
 	<div id="mp-hexpanel" class="mp-fl mp-hexpanel" role="region" aria-label="Hexes" hidden></div>
+	<!-- The Measure panel, filled by static/js/map_measure.js. -->
+	<div id="mp-measure" class="mp-fl mp-ms-panel" role="region" aria-label="Measure" hidden></div>
 	<div class="mp-topright">
 		if data.IsOwner {
 			<button type="button" id="mp-settings-btn" class="mp-fl mp-pill mp-pill-icon" aria-label="Map settings" title="Map settings" aria-expanded="false" aria-controls="mp-sheet">
