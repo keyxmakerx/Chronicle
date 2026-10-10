@@ -7,8 +7,8 @@
  * rest of Chronicle, and every rule carries :where(:not(.rb-wslot *)) so it
  * never reaches into a package widget mounted on a page (.rb-wslot): package
  * widgets use the same rb- class prefix and bring their own styles. Layout: slim bar on top, then two flat full-height pages
- * with a 1px hairline between them (no crease, no frame); one page at or
- * below 900px.
+ * with a 1px hairline between them; one page at or below 900px. A book with
+ * look: paper is drawn as a handbook instead (see "paper look" below).
  */
 
 .rb {
@@ -48,8 +48,10 @@
 }
 .rb *:where(:not(.rb-wslot *)), .rb *:where(:not(.rb-wslot *))::before, .rb *:where(:not(.rb-wslot *))::after { box-sizing: border-box; }
 .rb [hidden]:where(:not(.rb-wslot *)) { display: none !important; }
-.rb button:where(:not(.rb-wslot *)) { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
-.rb button:disabled:where(:not(.rb-wslot *)) { cursor: default; }
+/* The reset is written with :where so it weighs no more than a single class:
+   .rb-fc, .rb-go, .rb-btn and the other styled buttons come later and win. */
+.rb :where(button):where(:not(.rb-wslot *)) { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+.rb :where(button:disabled):where(:not(.rb-wslot *)) { cursor: default; }
 .rb h1:where(:not(.rb-wslot *)), .rb h2:where(:not(.rb-wslot *)), .rb h3:where(:not(.rb-wslot *)) { margin: 0; text-wrap: balance; line-height: 1.15; }
 .rb p:where(:not(.rb-wslot *)) { margin: 0; }
 .rb ul:where(:not(.rb-wslot *)), .rb ol:where(:not(.rb-wslot *)) { margin: 0; }
@@ -250,6 +252,84 @@
 @keyframes rb-slideB { to { transform: translateX(100%); opacity: 0; } }
 @keyframes rb-fade { to { opacity: 0; } }
 
+/* ---- search (bar) ---- */
+.rb-search:where(:not(.rb-wslot *)) { position: relative; display: flex; align-items: center; gap: 6px; min-width: 0; padding: 0 8px; border: 1px solid var(--rb-edge); border-radius: 8px; background: var(--rb-box); color: var(--rb-mut); }
+.rb-search:focus-within:where(:not(.rb-wslot *)) { border-color: var(--rb-acc3); }
+.rb-search-ic:where(:not(.rb-wslot *)) { font-size: 15px; line-height: 1; }
+.rb-search-in:where(:not(.rb-wslot *)) { width: 180px; min-width: 0; padding: 6px 0; border: 0; background: none; color: var(--rb-ink); font: 13px var(--rb-ui); outline: none; }
+.rb-search-in::-webkit-search-cancel-button:where(:not(.rb-wslot *)) { filter: grayscale(1); }
+.rb-search kbd:where(:not(.rb-wslot *)) { font: 700 10px ui-monospace, monospace; background: var(--rb-box2); border: 1px solid var(--rb-edge); border-radius: 4px; padding: 1px 5px; }
+.rb-results:where(:not(.rb-wslot *)) { position: absolute; top: calc(100% + 8px); right: -1px; z-index: 60; width: min(440px, calc(100vw - 24px)); max-height: min(70vh, 560px); overflow: auto; padding: 10px; border: 1px solid var(--rb-edge); border-radius: 12px; background: var(--rb-box); box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5); transform-origin: top right; animation: rb-pop 0.16s ease; }
+.rb-results h3:where(:not(.rb-wslot *)) { font: 700 11px var(--rb-ui); letter-spacing: 0.12em; text-transform: uppercase; color: var(--rb-mut); margin: 6px 6px 4px; }
+.rb-results ul:where(:not(.rb-wslot *)) { list-style: none; padding: 0; }
+.rb-results button:where(:not(.rb-wslot *)) { width: 100%; display: grid; gap: 1px; padding: 7px 8px; border-radius: 8px; text-align: left; color: var(--rb-ink2); }
+.rb-results button:hover:where(:not(.rb-wslot *)), .rb-results button:focus-visible:where(:not(.rb-wslot *)) { background: var(--rb-box2); color: var(--rb-ink); }
+.rb-results b:where(:not(.rb-wslot *)) { font: 600 14.5px var(--rb-body); color: var(--rb-ink); }
+.rb-results small:where(:not(.rb-wslot *)) { font: 11.5px var(--rb-ui); color: var(--rb-mut); }
+.rb-results span:where(:not(.rb-wslot *)) { font: 13px/1.45 var(--rb-body); color: var(--rb-mut); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.rb-results-note:where(:not(.rb-wslot *)) { padding: 10px 8px; color: var(--rb-mut); font: italic 14px var(--rb-body); }
+
+/* ---- rules index (generated pages) ---- */
+.rb-ix:where(:not(.rb-wslot *)) { display: flex; flex-direction: column; gap: 10px; max-width: 720px; }
+.rb-ix-hd:where(:not(.rb-wslot *)) { display: flex; align-items: center; gap: 10px; }
+.rb-ix-filter:where(:not(.rb-wslot *)) { flex: 1; min-width: 0; max-width: 340px; padding: 7px 10px; border: 1px solid var(--rb-edge); border-radius: 8px; background: var(--rb-box); color: var(--rb-ink); font: 13px var(--rb-ui); }
+.rb-ix-filter:focus:where(:not(.rb-wslot *)) { outline: none; border-color: var(--rb-acc3); }
+.rb-ix-n:where(:not(.rb-wslot *)) { font: 12px var(--rb-ui); color: var(--rb-mut); font-variant-numeric: tabular-nums; }
+.rb-ix-wait:where(:not(.rb-wslot *)) { padding: 12px 2px; color: var(--rb-mut); font: italic 14px var(--rb-body); }
+.rb-ix-t:where(:not(.rb-wslot *)) { display: grid; gap: 2px; min-width: 0; }
+.rb-ix-t span:where(:not(.rb-wslot *)) { font: 500 13.5px/1.45 var(--rb-body); color: var(--rb-mut); }
+.rb-ix-dl:where(:not(.rb-wslot *)) { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 0 0 10px; font-size: 13px; }
+.rb-ix-dl div:where(:not(.rb-wslot *)) { display: contents; }
+.rb-ix-dl dt:where(:not(.rb-wslot *)) { color: var(--rb-mut); font: 600 11px/1.9 var(--rb-ui); letter-spacing: 0.05em; text-transform: uppercase; }
+.rb-ix-dl dd:where(:not(.rb-wslot *)) { margin: 0; color: var(--rb-ink2); font: 500 14px/1.55 var(--rb-body); overflow-wrap: anywhere; }
+
+/* ---- section tabs (a book that names tabs) ---- */
+.rb-tabs:where(:not(.rb-wslot *)) { flex: 0 0 auto; display: flex; gap: 4px; padding: 8px 14px 0; overflow-x: auto; scrollbar-width: thin; }
+.rb-tab:where(:not(.rb-wslot *)) { flex: 0 0 auto; padding: 8px 14px 7px; border: 1px solid var(--rb-edge); border-bottom: 0; border-radius: 8px 8px 0 0; background: var(--rb-box); font: 600 13px/1.2 var(--rb-ui); letter-spacing: 0.01em; color: var(--rb-ink2); white-space: nowrap; }
+.rb-tab:hover:where(:not(.rb-wslot *)) { color: var(--rb-ink); background: var(--rb-box2); }
+.rb-tab[aria-current="true"]:where(:not(.rb-wslot *)) { background: var(--rb-paper); color: var(--rb-ink); box-shadow: inset 0 3px 0 var(--rb-acc); }
+.rb-tab.house:where(:not(.rb-wslot *)) { margin-left: auto; }
+.rb-tab:focus-visible:where(:not(.rb-wslot *)) { outline-offset: -3px; }
+
+/* ---- block: links ---- */
+.rb-links:where(:not(.rb-wslot *)) { display: flex; flex-direction: column; gap: 8px; }
+.rb-links-hd:where(:not(.rb-wslot *)) { font: 700 11px var(--rb-ui); letter-spacing: 0.12em; text-transform: uppercase; color: var(--rb-mut); }
+.rb-links-row:where(:not(.rb-wslot *)) { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
+.rb-link:where(:not(.rb-wslot *)) { display: flex; flex-direction: column; gap: 3px; padding: 12px 14px; border: 1px solid var(--rb-edge); border-radius: 12px; background: var(--rb-box2); text-align: left; transition: border-color 0.2s, transform 0.2s; overflow-wrap: anywhere; }
+.rb-link:hover:where(:not(.rb-wslot *)) { border-color: var(--rb-acc3); transform: translateY(-1px); }
+.rb-link b:where(:not(.rb-wslot *)) { font: 700 16px var(--rb-head); color: var(--rb-ink); }
+.rb-link span:where(:not(.rb-wslot *)) { font: 500 13px/1.45 var(--rb-body); color: var(--rb-ink2); }
+.rb-link i:where(:not(.rb-wslot *)) { margin-top: 4px; font: 600 12px var(--rb-ui); font-style: normal; color: var(--rb-acc); }
+
+/* ---- a page in two columns ---- */
+.rb-blocks.rb-cols:where(:not(.rb-wslot *)) { display: block; columns: 2 320px; column-gap: 32px; max-width: none; }
+.rb-blocks.rb-cols > *:where(:not(.rb-wslot *)) { break-inside: avoid; margin-bottom: 18px; }
+
+/* ---- paper look: a printed handbook in a leather cover ----
+   The pages take the book's paper colours; --book-cover is the leather
+   around them. The spine becomes a soft crease, boxes become die-cut paper. */
+.rb[data-look="paper"] {
+  --rb-cover: var(--book-cover, #2e2240);
+  --rb-bg: var(--rb-cover);
+  --rb-gold: #8a5a00;
+  --rb-bad: #a3271b;
+  color-scheme: light;
+  background: radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, var(--rb-cover) 82%, #fff), var(--rb-cover) 60%, color-mix(in srgb, var(--rb-cover) 80%, #000));
+}
+.rb[data-look="paper"] .rb-bar:where(:not(.rb-wslot *)) { background: var(--rb-box); border-bottom-color: var(--rb-edge); }
+.rb[data-look="paper"] .rb-tabs:where(:not(.rb-wslot *)) { padding: 12px 22px 0; }
+.rb[data-look="paper"] .rb-tab:where(:not(.rb-wslot *)) { border-color: color-mix(in srgb, var(--rb-cover) 60%, #000); background: color-mix(in srgb, var(--rb-box) 88%, var(--rb-cover)); color: var(--rb-ink); }
+.rb[data-look="paper"] .rb-tab:hover:where(:not(.rb-wslot *)) { background: var(--rb-box); }
+.rb[data-look="paper"] .rb-tab[aria-current="true"]:where(:not(.rb-wslot *)) { background: var(--rb-paper); border-color: var(--rb-paper); }
+.rb[data-look="paper"] .rb-book:where(:not(.rb-wslot *)) { margin: 0 14px 14px; border-radius: 4px 4px 10px 10px; box-shadow: 0 0 0 1px color-mix(in srgb, var(--rb-cover) 60%, #000), 0 18px 40px rgba(0, 0, 0, 0.45); }
+.rb[data-look="paper"] .rb-page:where(:not(.rb-wslot *)) { background-color: var(--rb-paper); background-image: radial-gradient(130% 100% at 50% 40%, transparent 55%, rgba(110, 80, 40, 0.10)); }
+.rb[data-look="paper"] .rb-spine:where(:not(.rb-wslot *)) { left: calc(50% - 36px); width: 72px; background: linear-gradient(90deg, transparent, rgba(80, 55, 25, 0.06) 30%, rgba(80, 55, 25, 0.16) 48%, rgba(255, 255, 255, 0.10) 51%, rgba(80, 55, 25, 0.06) 70%, transparent); }
+.rb[data-look="paper"] .rb-roll:where(:not(.rb-wslot *)), .rb[data-look="paper"] .rb-callout:where(:not(.rb-wslot *)), .rb[data-look="paper"] .rb-play:where(:not(.rb-wslot *)), .rb[data-look="paper"] .rb-stat:where(:not(.rb-wslot *)) { border-radius: 8px; box-shadow: 0 1px 0 rgba(60, 40, 20, 0.08), 0 4px 12px -6px rgba(60, 40, 20, 0.25); }
+.rb[data-look="paper"] .rb-fc:where(:not(.rb-wslot *)), .rb[data-look="paper"] .rb-tier:where(:not(.rb-wslot *)), .rb[data-look="paper"] .rb-link:where(:not(.rb-wslot *)) { border-radius: 6px; background: var(--rb-box); box-shadow: 0 1px 0 rgba(60, 40, 20, 0.10), 0 3px 8px -5px rgba(60, 40, 20, 0.30); }
+.rb[data-look="paper"] .rb-die:where(:not(.rb-wslot *)) { background: var(--rb-paper); }
+.rb[data-look="paper"] .rb-drawer:where(:not(.rb-wslot *)), .rb[data-look="paper"] .rb-results:where(:not(.rb-wslot *)) { box-shadow: 0 18px 50px rgba(30, 20, 40, 0.35); }
+.rb[data-look="paper"] .rb-shade:where(:not(.rb-wslot *)) { background: linear-gradient(90deg, rgba(60, 40, 20, 0.35), transparent 65%); }
+
 /* ---- one page at a time ---- */
 @media (max-width: 900px) {
   .rb-page.l:where(:not(.rb-wslot *)), .rb-spine:where(:not(.rb-wslot *)) { display: none; }
@@ -257,14 +337,23 @@
   .rb-leaf.flip:where(:not(.rb-wslot *)) { width: 100%; }
   .rb-leaf.flip.fwd:where(:not(.rb-wslot *)), .rb-leaf.flip.back:where(:not(.rb-wslot *)) { left: 0; transform-origin: left center; }
   .rb-where:where(:not(.rb-wslot *)) { display: none; }
+  .rb[data-look="paper"] .rb-book:where(:not(.rb-wslot *)) { margin: 0 6px 6px; }
+  .rb[data-look="paper"] .rb-tabs:where(:not(.rb-wslot *)) { padding: 8px 8px 0; }
 }
 @media (max-width: 600px) {
   .rb-brand .rb-name:where(:not(.rb-wslot *)) { display: none; }
   .rb-bar:where(:not(.rb-wslot *)) { gap: 8px; padding: 8px 10px; }
   .rb-seg button:where(:not(.rb-wslot *)) { padding: 6px 8px; }
   .rb-scroll:where(:not(.rb-wslot *)) { padding-top: 24px; }
+  .rb-search-in:where(:not(.rb-wslot *)) { width: 92px; }
+  .rb-search kbd:where(:not(.rb-wslot *)) { display: none; }
+  .rb-bar:where(:not(.rb-wslot *)) { position: relative; }
+  .rb-search:where(:not(.rb-wslot *)) { position: static; }
+  .rb-results:where(:not(.rb-wslot *)) { top: calc(100% + 4px); left: 8px; right: 8px; width: auto; }
+  .rb-ix-dl:where(:not(.rb-wslot *)) { grid-template-columns: 1fr; gap: 0; }
+  .rb-ix-dl dd:where(:not(.rb-wslot *)) { margin-bottom: 6px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .rb-leaf:where(:not(.rb-wslot *)), .rb-leaf.go:where(:not(.rb-wslot *)), .rb-fold:where(:not(.rb-wslot *)), .rb-body:where(:not(.rb-wslot *)), .rb-die.spin:where(:not(.rb-wslot *)), .rb-spinner:where(:not(.rb-wslot *)) { animation: none !important; }
+  .rb-leaf:where(:not(.rb-wslot *)), .rb-leaf.go:where(:not(.rb-wslot *)), .rb-fold:where(:not(.rb-wslot *)), .rb-body:where(:not(.rb-wslot *)), .rb-die.spin:where(:not(.rb-wslot *)), .rb-spinner:where(:not(.rb-wslot *)), .rb-results:where(:not(.rb-wslot *)) { animation: none !important; }
   .rb-drawer:where(:not(.rb-wslot *)), .rb-scrim:where(:not(.rb-wslot *)), .rb-tier:where(:not(.rb-wslot *)), .rb-curl:where(:not(.rb-wslot *))::before { transition: none; }
 }
