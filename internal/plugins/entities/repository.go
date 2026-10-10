@@ -38,6 +38,11 @@ type EntityTypeRepository interface {
 	// reconciler), never layout_json.
 	UpdateFieldsSchema(ctx context.Context, id int, fieldsJSON string) error
 	UpdateColor(ctx context.Context, id int, color string) error
+	// AdoptPresetCategory gives toID the system preset category and, when
+	// retireID is non-nil, takes the category off that type and disables it,
+	// in one transaction so a crash never leaves two types both claiming the
+	// system's sheet. Nothing is deleted.
+	AdoptPresetCategory(ctx context.Context, toID int, category string, retireID *int) error
 	UpdateDashboard(ctx context.Context, id int, description *string, pinnedIDs []string) error
 	UpdateDashboardLayout(ctx context.Context, id int, layoutJSON *string) error
 	SlugExists(ctx context.Context, campaignID, slug string) (bool, error)
@@ -366,6 +371,33 @@ func (r *entityTypeRepository) UpdateColor(ctx context.Context, id int, color st
 		return fmt.Errorf("updating entity type color: %w", err)
 	}
 	return r.changedOrExists(ctx, result, id)
+}
+
+// AdoptPresetCategory moves a system preset category onto toID and optionally
+// retires the type that held it. The WHERE guards make a replay a no-op rather
+// than overwriting a category someone set in between.
+func (r *entityTypeRepository) AdoptPresetCategory(ctx context.Context, toID int, category string, retireID *int) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("beginning adopt-preset tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	if retireID != nil {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE entity_types SET preset_category = NULL, enabled = 0 WHERE id = ? AND preset_category = ?`,
+			*retireID, category,
+		); err != nil {
+			return fmt.Errorf("retiring entity type %d: %w", *retireID, err)
+		}
+	}
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE entity_types SET preset_category = ? WHERE id = ? AND (preset_category IS NULL OR preset_category = '')`,
+		category, toID,
+	); err != nil {
+		return fmt.Errorf("setting preset category on entity type %d: %w", toID, err)
+	}
+	return tx.Commit()
 }
 
 // UpdateDashboard updates the category dashboard fields (description and pinned
