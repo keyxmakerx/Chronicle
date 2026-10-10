@@ -173,7 +173,8 @@ templ calendarCardFace(data CalendarsListData, cal Calendar) {
 								hx-put={ fmt.Sprintf("/campaigns/%s/calendars/%s/default", data.CampaignID, cal.ID) }
 								hx-headers={ csrfHeaderJSON(data.CSRFToken) }
 								hx-swap="none"
-								hx-on::after-request="if(event.detail.successful) window.location.reload()"
+								x-data
+								x-on:htmx:after-request="if ($event.detail.successful) window.location.reload()"
 							>
 								Set as the campaign's main calendar
 							</button>
@@ -195,7 +196,8 @@ templ calendarCardFace(data CalendarsListData, cal Calendar) {
 							hx-headers={ csrfHeaderJSON(data.CSRFToken) }
 							hx-confirm={ fmt.Sprintf("Delete %q? This cannot be undone.", cal.Name) }
 							hx-swap="none"
-							hx-on::after-request="if(event.detail.successful) window.location.reload()"
+							x-data
+							x-on:htmx:after-request="if ($event.detail.successful) window.location.reload()"
 						>
 							Delete
 						</button>

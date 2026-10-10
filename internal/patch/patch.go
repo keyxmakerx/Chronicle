@@ -123,3 +123,14 @@ func (f Field[T]) MarshalJSON() ([]byte, error) {
 	}
 	return json.Marshal(*f.value)
 }
+
+// HasRawValue reports whether a json.RawMessage field carries a value to
+// write. RawMessage is a byte slice, so the decoder stores a literal `null`
+// as the four bytes "null" instead of leaving it nil, and a plain `!= nil` or
+// `len > 0` check would write those four bytes into a JSON column. For a
+// column that cannot hold NULL, an explicit null therefore means "preserve",
+// the same as Field.Val.
+func HasRawValue(raw json.RawMessage) bool {
+	t := bytes.TrimSpace(raw)
+	return len(t) > 0 && !bytes.Equal(t, []byte("null"))
+}

@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/patch"
 )
 
 // maxStatblockSize is the maximum allowed size for statblock JSON (100KB).
@@ -205,12 +206,13 @@ func (s *bestiaryService) Update(ctx context.Context, userID, publicationID stri
 		return nil, err
 	}
 
-	// Apply partial updates.
-	if input.Name != nil {
-		if err := validateName(*input.Name); err != nil {
+	// Apply partial updates: only a key the caller sent changes anything.
+	if input.Name.Present() && !input.Name.IsNull() {
+		name, _ := input.Name.Get()
+		if err := validateName(name); err != nil {
 			return nil, err
 		}
-		pub.Name = sanitizeText(*input.Name)
+		pub.Name = sanitizeText(name)
 		// Regenerate slug when name changes.
 		slug, err := s.generateUniqueSlug(ctx, pub.Name)
 		if err != nil {
@@ -218,15 +220,18 @@ func (s *bestiaryService) Update(ctx context.Context, userID, publicationID stri
 		}
 		pub.Slug = slug
 	}
-	if input.Description != nil {
-		validateOptionalText(&input.Description, 5000)
-		pub.Description = sanitizeOptionalText(input.Description)
+	// Description and flavor text are nullable: explicit null clears them.
+	if input.Description.Present() {
+		desc := input.Description.Ptr(nil)
+		validateOptionalText(&desc, 5000)
+		pub.Description = sanitizeOptionalText(desc)
 	}
-	if input.FlavorText != nil {
-		validateOptionalText(&input.FlavorText, 5000)
-		pub.FlavorText = sanitizeOptionalText(input.FlavorText)
+	if input.FlavorText.Present() {
+		flavor := input.FlavorText.Ptr(nil)
+		validateOptionalText(&flavor, 5000)
+		pub.FlavorText = sanitizeOptionalText(flavor)
 	}
-	if len(input.StatblockJSON) > 0 {
+	if patch.HasRawValue(input.StatblockJSON) {
 		if err := validateStatblock(input.StatblockJSON); err != nil {
 			return nil, err
 		}
@@ -235,7 +240,7 @@ func (s *bestiaryService) Update(ctx context.Context, userID, publicationID stri
 		pub.StatblockJSON = input.StatblockJSON
 		pub.Organization, pub.Role, pub.Level = extractStatblockFields(input.StatblockJSON)
 	}
-	if len(input.Tags) > 0 {
+	if patch.HasRawValue(input.Tags) {
 		pub.Tags = input.Tags
 	}
 

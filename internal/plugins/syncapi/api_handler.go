@@ -1577,11 +1577,14 @@ func (h *APIHandler) CreateEntityType(c echo.Context) error {
 }
 
 // apiUpdateEntityTypeRequest is the JSON body for updating an entity type.
+//
+// It is a partial update: an absent key keeps the stored value, so a
+// rename-only push cannot reset the plural name, icon or color.
 type apiUpdateEntityTypeRequest struct {
-	Name       string `json:"name"`
-	NamePlural string `json:"name_plural"`
-	Icon       string `json:"icon"`
-	Color      string `json:"color"`
+	Name       patch.Field[string] `json:"name"`
+	NamePlural patch.Field[string] `json:"name_plural"`
+	Icon       patch.Field[string] `json:"icon"`
+	Color      patch.Field[string] `json:"color"`
 }
 
 // UpdateEntityType updates an existing entity type.

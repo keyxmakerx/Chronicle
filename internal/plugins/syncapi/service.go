@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"net/http"
 	"strings"
 	"time"
 
@@ -19,8 +20,15 @@ import (
 // keyBytes is the number of random bytes in a generated API key.
 const keyBytes = 32
 
-// keyPrefixLen is the length of the prefix stored for key identification.
-const keyPrefixLen = 8
+// keyPrefixLen is the length of the lookup prefix stored for new keys. Every
+// key starts with "chron_", so it covers that plus 8 random hex chars (2^32
+// values); the old 8-char prefix left only 2 random chars and made creation
+// collide on the unique index.
+const keyPrefixLen = 14
+
+// legacyKeyPrefixLen is the prefix length of keys minted before the longer
+// prefix existed. Authentication falls back to it so those keys keep working.
+const legacyKeyPrefixLen = 8
 
 // errAddonGateUnwired is the internal error behind a WebSocket refusal when
 // SetAddonGate was never called. A distinct value so the boot/wiring fault is
@@ -394,7 +402,7 @@ func (s *syncAPIService) RevokeKey(ctx context.Context, id int) error {
 // "invalid api key" to avoid leaking which keys exist.
 func (s *syncAPIService) AuthenticateKey(ctx context.Context, rawKey string) (*APIKey, error) {
 	rawKey = strings.TrimSpace(rawKey)
-	if len(rawKey) < keyPrefixLen {
+	if len(rawKey) < legacyKeyPrefixLen {
 		slog.Debug("api key auth failed",
 			slog.String("reason", "token too short"),
 			slog.Int("length", len(rawKey)),
@@ -402,8 +410,7 @@ func (s *syncAPIService) AuthenticateKey(ctx context.Context, rawKey string) (*A
 		return nil, apperror.NewBadRequest("invalid api key format")
 	}
 
-	prefix := rawKey[:keyPrefixLen]
-	key, err := s.repo.FindKeyByPrefix(ctx, prefix)
+	prefix, key, err := s.findKeyForToken(ctx, rawKey)
 	if err != nil {
 		slog.Debug("api key auth failed",
 			slog.String("reason", "prefix not found"),
@@ -442,6 +449,27 @@ func (s *syncAPIService) AuthenticateKey(ctx context.Context, rawKey string) (*A
 	}
 
 	return key, nil
+}
+
+// findKeyForToken looks a key up by its long prefix first and falls back to
+// the legacy 8-char prefix only when nothing matched, so keys minted before
+// the longer prefix keep authenticating. Any error other than not-found is
+// returned as is rather than retried under a different prefix.
+func (s *syncAPIService) findKeyForToken(ctx context.Context, rawKey string) (string, *APIKey, error) {
+	if len(rawKey) >= keyPrefixLen {
+		prefix := rawKey[:keyPrefixLen]
+		key, err := s.repo.FindKeyByPrefix(ctx, prefix)
+		if err == nil {
+			return prefix, key, nil
+		}
+		var appErr *apperror.AppError
+		if !errors.As(err, &appErr) || appErr.Code != http.StatusNotFound {
+			return prefix, nil, err
+		}
+	}
+	prefix := rawKey[:legacyKeyPrefixLen]
+	key, err := s.repo.FindKeyByPrefix(ctx, prefix)
+	return prefix, key, err
 }
 
 // UpdateKeyLastUsed records the last-used timestamp and IP for an API key, and

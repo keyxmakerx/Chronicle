@@ -16,6 +16,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"github.com/keyxmakerx/chronicle/internal/timeutil"
 )
 
@@ -112,6 +113,14 @@ func (h *Handler) GetOverlayAPI(c echo.Context) error {
 	overlay, err := h.CampaignWeekOverlay(c.Request().Context(), cc.Campaign.ID, week, viewerTZ, includeDetail)
 	if err != nil {
 		return c.JSON(apperror.SafeCode(err), map[string]string{"error": apperror.SafeMessage(err)})
+	}
+	// The roster carries users.avatar_path, a media id; send a link instead.
+	mediaCtx := middleware.MediaContext(c)
+	for i := range overlay.Members {
+		if a := overlay.Members[i].Avatar; a != nil {
+			link := layouts.AvatarURL(mediaCtx, *a)
+			overlay.Members[i].Avatar = &link
+		}
 	}
 	return c.JSON(http.StatusOK, overlay)
 }

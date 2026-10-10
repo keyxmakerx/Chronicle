@@ -324,7 +324,8 @@ func TestCreateKey_Success(t *testing.T) {
 		t.Error("expected bcrypt hash to match raw key")
 	}
 
-	// Prefix should be first 8 chars of raw key.
+	// Prefix should be the first keyPrefixLen chars of the raw key, with
+	// enough random chars to make collisions negligible.
 	if storedKey.KeyPrefix != result.RawKey[:keyPrefixLen] {
 		t.Errorf("expected prefix %s, got %s", result.RawKey[:keyPrefixLen], storedKey.KeyPrefix)
 	}
@@ -467,8 +468,8 @@ func TestAuthenticateKey_Success(t *testing.T) {
 
 	repo := &mockSyncAPIRepo{
 		findKeyByPrefixFn: func(ctx context.Context, prefix string) (*APIKey, error) {
-			if prefix != "chron_ab" {
-				t.Errorf("expected prefix chron_ab, got %s", prefix)
+			if prefix != "chron_abcdef12" {
+				t.Errorf("expected prefix chron_abcdef12, got %s", prefix)
 			}
 			return &APIKey{
 				ID:       1,
@@ -1136,4 +1137,53 @@ func TestAPIKey_HasPermission_Empty(t *testing.T) {
 // timePtr returns a pointer to a time value.
 func timePtr(t time.Time) *time.Time {
 	return &t
+}
+
+// TestAuthenticateKey_PrefixLengths pins that a new long-prefix key is found
+// by its long prefix, and a pre-existing 8-char-prefix key is still found by
+// the fallback, with the repository error for anything else passed through.
+func TestAuthenticateKey_PrefixLengths(t *testing.T) {
+	rawKey := "chron_0123456789abcdef0123456789abcdef"
+	hash, err := bcrypt.GenerateFromPassword([]byte(rawKey), bcrypt.MinCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []struct {
+		name       string
+		storedAs   string
+		repoErr    error
+		wantErr    bool
+		wantLookup []string
+	}{
+		{"long prefix", rawKey[:keyPrefixLen], nil, false, []string{rawKey[:keyPrefixLen]}},
+		{"legacy 8-char prefix", rawKey[:legacyKeyPrefixLen], nil, false,
+			[]string{rawKey[:keyPrefixLen], rawKey[:legacyKeyPrefixLen]}},
+		{"unknown", "", nil, true, []string{rawKey[:keyPrefixLen], rawKey[:legacyKeyPrefixLen]}},
+		{"repo failure is not retried", "", errors.New("db down"), true, []string{rawKey[:keyPrefixLen]}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var looked []string
+			repo := &mockSyncAPIRepo{
+				findKeyByPrefixFn: func(_ context.Context, prefix string) (*APIKey, error) {
+					looked = append(looked, prefix)
+					if tc.repoErr != nil {
+						return nil, tc.repoErr
+					}
+					if prefix != tc.storedAs {
+						return nil, apperror.NewNotFound("key not found")
+					}
+					return &APIKey{ID: 1, KeyHash: string(hash), KeyPrefix: prefix, IsActive: true}, nil
+				},
+			}
+			_, err := NewSyncAPIService(repo).AuthenticateKey(context.Background(), rawKey)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("err = %v, wantErr %v", err, tc.wantErr)
+			}
+			if strings.Join(looked, ",") != strings.Join(tc.wantLookup, ",") {
+				t.Errorf("lookups = %v, want %v", looked, tc.wantLookup)
+			}
+		})
+	}
 }

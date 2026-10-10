@@ -3,13 +3,16 @@
 package armory
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
+	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -101,17 +104,34 @@ func (h *InstanceHandler) UpdateInstance(c echo.Context) error {
 		return apperror.NewBadRequest("invalid instance ID")
 	}
 
-	var input CreateInstanceInput
-	ct := c.Request().Header.Get("Content-Type")
-	if ct == "application/json" || ct == "application/json; charset=utf-8" {
-		if err := c.Bind(&input); err != nil {
+	var input UpdateInstanceInput
+	if strings.HasPrefix(c.Request().Header.Get("Content-Type"), "application/json") {
+		// Field keeps an absent key apart from an explicit null.
+		if err := json.NewDecoder(c.Request().Body).Decode(&input); err != nil {
 			return apperror.NewBadRequest("invalid request body")
 		}
 	} else {
-		input.Name = c.FormValue("name")
-		input.Description = c.FormValue("description")
-		input.Icon = c.FormValue("icon")
-		input.Color = c.FormValue("color")
+		// A form sends only the fields it has; a blank description clears it.
+		form, err := c.FormParams()
+		if err != nil {
+			return apperror.NewBadRequest("invalid form")
+		}
+		if v, ok := form["name"]; ok && len(v) > 0 {
+			input.Name = patch.Of(v[0])
+		}
+		if v, ok := form["description"]; ok && len(v) > 0 {
+			if strings.TrimSpace(v[0]) == "" {
+				input.Description = patch.Null[string]()
+			} else {
+				input.Description = patch.Of(v[0])
+			}
+		}
+		if v, ok := form["icon"]; ok && len(v) > 0 {
+			input.Icon = patch.Of(v[0])
+		}
+		if v, ok := form["color"]; ok && len(v) > 0 {
+			input.Color = patch.Of(v[0])
+		}
 	}
 
 	if err := h.svc.UpdateInstance(c.Request().Context(), cc.Campaign.ID, instanceID, input); err != nil {

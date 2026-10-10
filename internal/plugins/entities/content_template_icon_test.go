@@ -7,6 +7,8 @@ package entities
 import (
 	"context"
 	"testing"
+
+	"github.com/keyxmakerx/chronicle/internal/patch"
 )
 
 // mockContentTemplateRepo implements ContentTemplateRepository for testing.
@@ -140,9 +142,9 @@ func TestUpdateContentTemplate_InvalidIcon(t *testing.T) {
 			}
 			svc := NewContentTemplateService(repo, &mockEntityTypeRepo{})
 			_, err := svc.Update(context.Background(), 1, UpdateContentTemplateInput{
-				Name:        "Recap",
-				ContentJSON: `{"type":"doc"}`,
-				Icon:        icon,
+				Name:        patch.Of("Recap"),
+				ContentJSON: patch.Of(`{"type":"doc"}`),
+				Icon:        patch.Of(icon),
 			})
 			assertAppError(t, err, 400)
 			if updated {
@@ -165,9 +167,9 @@ func TestUpdateContentTemplate_ValidIcon(t *testing.T) {
 	}
 	svc := NewContentTemplateService(repo, &mockEntityTypeRepo{})
 	_, err := svc.Update(context.Background(), 1, UpdateContentTemplateInput{
-		Name:        "Recap",
-		ContentJSON: `{"type":"doc"}`,
-		Icon:        "fa-dragon",
+		Name:        patch.Of("Recap"),
+		ContentJSON: patch.Of(`{"type":"doc"}`),
+		Icon:        patch.Of("fa-dragon"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -193,9 +195,9 @@ func TestUpdateContentTemplate_EmptyIconKeepsExisting(t *testing.T) {
 	}
 	svc := NewContentTemplateService(repo, &mockEntityTypeRepo{})
 	_, err := svc.Update(context.Background(), 1, UpdateContentTemplateInput{
-		Name:        "Recap",
-		ContentJSON: `{"type":"doc"}`,
-		Icon:        "",
+		Name:        patch.Of("Recap"),
+		ContentJSON: patch.Of(`{"type":"doc"}`),
+		Icon:        patch.Of(""),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

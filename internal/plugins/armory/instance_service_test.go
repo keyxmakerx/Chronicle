@@ -3,6 +3,7 @@ package armory
 import (
 	"context"
 	"errors"
+	"github.com/keyxmakerx/chronicle/internal/patch"
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -11,15 +12,15 @@ import (
 // --- Mock ---
 
 type mockInstanceRepo struct {
-	createFn          func(ctx context.Context, campaignID, name, slug, desc, icon, color string) (*InventoryInstance, error)
-	findByIDFn        func(ctx context.Context, id int) (*InventoryInstance, error)
-	listByCampaignFn  func(ctx context.Context, campaignID string) ([]InventoryInstance, error)
-	updateFn          func(ctx context.Context, id int, name, slug, desc, icon, color string) error
-	deleteFn          func(ctx context.Context, id int) error
-	addItemFn         func(ctx context.Context, instanceID int, entityID string, quantity int) error
-	removeItemFn      func(ctx context.Context, instanceID int, entityID string) error
-	countItemsFn      func(ctx context.Context, instanceID int) (int, error)
-	entityIDsFn       func(ctx context.Context, campaignID string) (map[int][]string, error)
+	createFn         func(ctx context.Context, campaignID, name, slug, desc, icon, color string) (*InventoryInstance, error)
+	findByIDFn       func(ctx context.Context, id int) (*InventoryInstance, error)
+	listByCampaignFn func(ctx context.Context, campaignID string) ([]InventoryInstance, error)
+	updateFn         func(ctx context.Context, id int, name, slug, desc, icon, color string) error
+	deleteFn         func(ctx context.Context, id int) error
+	addItemFn        func(ctx context.Context, instanceID int, entityID string, quantity int) error
+	removeItemFn     func(ctx context.Context, instanceID int, entityID string) error
+	countItemsFn     func(ctx context.Context, instanceID int) (int, error)
+	entityIDsFn      func(ctx context.Context, campaignID string) (map[int][]string, error)
 }
 
 func (m *mockInstanceRepo) ListItemEntityIDsByInstance(ctx context.Context, campaignID string) (map[int][]string, error) {
@@ -283,7 +284,7 @@ func TestUpdateInstance_Success(t *testing.T) {
 		},
 	}
 	svc := newTestInstanceService(repo)
-	err := svc.UpdateInstance(context.Background(), "camp-1", 1, CreateInstanceInput{Name: "Updated"})
+	err := svc.UpdateInstance(context.Background(), "camp-1", 1, UpdateInstanceInput{Name: patch.Of("Updated")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -296,7 +297,7 @@ func TestUpdateInstance_EmptyName(t *testing.T) {
 		},
 	}
 	svc := newTestInstanceService(repo)
-	err := svc.UpdateInstance(context.Background(), "camp-1", 1, CreateInstanceInput{Name: ""})
+	err := svc.UpdateInstance(context.Background(), "camp-1", 1, UpdateInstanceInput{Name: patch.Of("")})
 	if err == nil {
 		t.Error("expected validation error for empty name")
 	}

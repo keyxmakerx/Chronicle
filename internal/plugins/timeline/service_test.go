@@ -24,7 +24,7 @@ type mockTimelineRepo struct {
 	unlinkEventFn           func(ctx context.Context, timelineID, eventID string) error
 	listEventLinksFn        func(ctx context.Context, timelineID string, role int) ([]EventLink, error)
 	countEventsFn           func(ctx context.Context, timelineID string) (int, error)
-	updateEventLinkVisFn    func(ctx context.Context, timelineID, eventID string, visOverride *string, visRules *string) error
+	updateEventLinkVisFn    func(ctx context.Context, timelineID, eventID string, visOverride, visRules patch.Field[string]) error
 	createEventFn           func(ctx context.Context, e *TimelineEvent) error
 	getEventFn              func(ctx context.Context, eventID string) (*TimelineEvent, error)
 	updateEventFn           func(ctx context.Context, e *TimelineEvent) error
@@ -119,7 +119,7 @@ func (m *mockTimelineRepo) CountEvents(ctx context.Context, timelineID string) (
 	return 0, nil
 }
 
-func (m *mockTimelineRepo) UpdateEventLinkVisibility(ctx context.Context, timelineID, eventID string, visOverride *string, visRules *string) error {
+func (m *mockTimelineRepo) UpdateEventLinkVisibility(ctx context.Context, timelineID, eventID string, visOverride, visRules patch.Field[string]) error {
 	if m.updateEventLinkVisFn != nil {
 		return m.updateEventLinkVisFn(ctx, timelineID, eventID, visOverride, visRules)
 	}
@@ -1050,9 +1050,8 @@ func TestSearchTimelines_Empty(t *testing.T) {
 
 func TestUpdateEventLinkVisibility_InvalidOverride(t *testing.T) {
 	svc := newTestTimelineService(&mockTimelineRepo{})
-	invalid := "invalid"
 	err := svc.UpdateEventLinkVisibility(context.Background(), "tl-1", "evt-1", UpdateEventVisibilityInput{
-		VisibilityOverride: &invalid,
+		VisibilityOverride: patch.Of("invalid"),
 	})
 	assertAppError(t, err, 422)
 }
@@ -1061,9 +1060,8 @@ func TestUpdateEventLinkVisibility_Success(t *testing.T) {
 	repo := &mockTimelineRepo{}
 	svc := newTestTimelineService(repo)
 
-	dmOnly := "dm_only"
 	err := svc.UpdateEventLinkVisibility(context.Background(), "tl-1", "evt-1", UpdateEventVisibilityInput{
-		VisibilityOverride: &dmOnly,
+		VisibilityOverride: patch.Of("dm_only"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

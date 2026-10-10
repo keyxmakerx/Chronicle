@@ -533,6 +533,11 @@ type ListOptions struct {
 	PerPage  int
 	Sort     string   // "name" (default), "updated", "created"
 	TagSlugs []string // Filter by tag slugs (AND logic — entity must have all listed tags).
+
+	// PrivateOnly keeps only entities flagged is_private, so a caller that
+	// wants the hidden ones (the DM Screen's reveal list) is not limited to
+	// whatever happens to sit in the newest page of a mixed listing.
+	PrivateOnly bool
 }
 
 // DefaultListOptions returns sensible defaults for pagination.
@@ -580,16 +585,19 @@ type CreateEntityTypeRequest struct {
 	Claimable    *bool  `json:"claimable,omitempty" form:"claimable"`
 }
 
-// UpdateEntityTypeRequest holds the data submitted by the entity type edit form.
+// UpdateEntityTypeRequest is the JSON body of PUT .../entity-types/:etid. It is
+// a PARTIAL update: an absent key keeps the stored value, so a rename or a
+// color change cannot reset the plural name or icon. Every column here is NOT
+// NULL, so an explicit null also preserves.
 type UpdateEntityTypeRequest struct {
-	Name         string            `json:"name" form:"name"`
-	NamePlural   string            `json:"name_plural" form:"name_plural"`
-	Icon         string            `json:"icon" form:"icon"`
-	Color        string            `json:"color" form:"color"`
-	Fields       []FieldDefinition `json:"fields"`
-	ParentTypeID *int              `json:"parent_type_id"`                       // New parent (nil = no change).
-	ClearParent  bool              `json:"clear_parent"`                         // Explicitly remove parent (make top-level).
-	Claimable    *bool             `json:"claimable,omitempty" form:"claimable"` // nil = no change; true/false = set the player-claim flag.
+	Name         patch.Field[string] `json:"name"`
+	NamePlural   patch.Field[string] `json:"name_plural"`
+	Icon         patch.Field[string] `json:"icon"`
+	Color        patch.Field[string] `json:"color"`
+	Fields       []FieldDefinition   `json:"fields"`
+	ParentTypeID *int                `json:"parent_type_id"`      // New parent (nil = no change).
+	ClearParent  bool                `json:"clear_parent"`        // Explicitly remove parent (make top-level).
+	Claimable    *bool               `json:"claimable,omitempty"` // nil = no change; true/false = set the player-claim flag.
 }
 
 // --- Entity Type Service Input DTOs ---
@@ -608,10 +616,10 @@ type CreateEntityTypeInput struct {
 
 // UpdateEntityTypeInput is the validated input for updating an entity type.
 type UpdateEntityTypeInput struct {
-	Name         string
-	NamePlural   string
-	Icon         string
-	Color        string
+	Name         patch.Field[string]
+	NamePlural   patch.Field[string]
+	Icon         patch.Field[string]
+	Color        patch.Field[string]
 	Fields       []FieldDefinition
 	ParentTypeID *int  // New parent type (nil = no change).
 	ClearParent  bool  // Explicitly remove parent (make top-level).

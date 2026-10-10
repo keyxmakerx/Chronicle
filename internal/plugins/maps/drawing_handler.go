@@ -471,20 +471,12 @@ func (h *DrawingHandler) UpdateTokenPosition(c echo.Context) error {
 		return err
 	}
 
-	var req struct {
-		X                 float64    `json:"x"`
-		Y                 float64    `json:"y"`
-		ExpectedUpdatedAt *time.Time `json:"expected_updated_at"`
-	}
+	var req UpdateTokenPositionInput
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request body")
 	}
 
-	if err := h.drawingSvc.UpdateTokenPosition(c.Request().Context(), c.Param("tid"), c.Param("mid"), cc.CanAuthorDmOnly(), UpdateTokenPositionInput{
-		X:                 req.X,
-		Y:                 req.Y,
-		ExpectedUpdatedAt: req.ExpectedUpdatedAt,
-	}); err != nil {
+	if err := h.drawingSvc.UpdateTokenPosition(c.Request().Context(), c.Param("tid"), c.Param("mid"), cc.CanAuthorDmOnly(), req); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusOK)

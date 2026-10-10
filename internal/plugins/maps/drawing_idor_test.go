@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 )
 
@@ -77,7 +78,7 @@ func TestDrawingWrites_CrossMapRejected(t *testing.T) {
 			return s.UpdateToken(context.Background(), "t-1", wrongMap, true, UpdateTokenInput{})
 		}},
 		{"UpdateTokenPosition", func(s DrawingService) error {
-			return s.UpdateTokenPosition(context.Background(), "t-1", wrongMap, true, UpdateTokenPositionInput{X: 10, Y: 10})
+			return s.UpdateTokenPosition(context.Background(), "t-1", wrongMap, true, UpdateTokenPositionInput{X: patch.Of(float64(10)), Y: patch.Of(float64(10))})
 		}},
 		{"DeleteToken", func(s DrawingService) error {
 			return s.DeleteToken(context.Background(), "t-1", wrongMap, nil)
@@ -126,7 +127,7 @@ func TestDrawingWrites_SameMapAllowed(t *testing.T) {
 			return s.UpdateToken(context.Background(), "t-1", rightMap, true, UpdateTokenInput{})
 		}},
 		{"UpdateTokenPosition", func(s DrawingService) error {
-			return s.UpdateTokenPosition(context.Background(), "t-1", rightMap, true, UpdateTokenPositionInput{X: 10, Y: 10})
+			return s.UpdateTokenPosition(context.Background(), "t-1", rightMap, true, UpdateTokenPositionInput{X: patch.Of(float64(10)), Y: patch.Of(float64(10))})
 		}},
 		{"DeleteToken", func(s DrawingService) error {
 			return s.DeleteToken(context.Background(), "t-1", rightMap, nil)

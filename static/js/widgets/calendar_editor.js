@@ -809,6 +809,25 @@
     });
   };
 
+  // The per-day weather API takes at most WEATHER_BATCH days per call, and a
+  // save or an Undo can span many months, so every list goes out in batches
+  // of that size, in order, stopping at the first refusal.
+  var WEATHER_BATCH = 1000;
+  function weatherBatches(apiFetch, base, path, method, list, extra) {
+    var at = 0;
+    var next = function () {
+      if (at >= list.length) return Promise.resolve(null);
+      var body = { days: list.slice(at, at + WEATHER_BATCH) };
+      at += WEATHER_BATCH;
+      Object.keys(extra || {}).forEach(function (k) { body[k] = extra[k]; });
+      return apiFetch(base + path, { method: method, body: body }).then(function (resp) {
+        if (!resp.ok) throw new Error('weather batch failed');
+        return next();
+      });
+    };
+    return next();
+  }
+
   // _undoPaint clears the touched days, then writes back the readings they
   // held. Clearing first lets a generated reading return to a day just
   // painted by hand, which a generated write alone may not replace.
@@ -818,18 +837,16 @@
     this._paintBusy = true;
     var dates = snap.map(function (s) { return s.date; });
     var restore = snap.filter(function (s) { return s.prev; }).map(function (s) { return s.prev; });
-    Chronicle.apiFetch(view.apiBase + '/weather/days/clear', { method: 'POST', body: { days: dates } }).then(function (resp) {
-      if (!resp.ok) throw new Error('undo clear failed');
-      if (!restore.length) return resp;
-      return Chronicle.apiFetch(view.apiBase + '/weather/days', { method: 'PUT', body: { days: restore } });
-    }).then(function (resp) {
-      if (!resp.ok) throw new Error('undo restore failed');
+    var call = function (path, method, list, extra) {
+      return weatherBatches(function (u, o) { return Chronicle.apiFetch(u, o); }, view.apiBase, path, method, list, extra);
+    };
+    call('/weather/days/clear', 'POST', dates).then(function () {
+      return call('/weather/days', 'PUT', restore);
+    }).then(function () {
       // Painting over a locked day clears its lock; Undo puts that back too.
       var relock = snap.filter(function (s) { return s.prev && s.locked; }).map(function (s) { return s.date; });
-      if (!relock.length) return resp;
-      return Chronicle.apiFetch(view.apiBase + '/weather/days/lock', { method: 'POST', body: { days: relock, locked: true } });
-    }).then(function (resp) {
-      if (!resp.ok) throw new Error('undo relock failed');
+      return call('/weather/days/lock', 'POST', relock, { locked: true });
+    }).then(function () {
       self._paintUndo = null;
       view.say('Undone.');
     }).catch(function () {
@@ -877,21 +894,8 @@
       if (!seen[k]) { seen[k] = true; dates.push({ year: d.year, month: d.month, day: d.day }); }
     });
     if (!dates.length) return Promise.resolve(true);
-    // The per-day weather API takes at most 1000 days per call, and a draft
-    // can span many months, so each list goes in batches of that size.
     var call = function (path, method, list, extra) {
-      var at = 0;
-      var next = function () {
-        if (at >= list.length) return null;
-        var body = { days: list.slice(at, at + 1000) };
-        at += 1000;
-        Object.keys(extra || {}).forEach(function (k) { body[k] = extra[k]; });
-        return Chronicle.apiFetch(view.apiBase + path, { method: method, body: body }).then(function (resp) {
-          if (!resp.ok) throw new Error('weather save failed');
-          return next();
-        });
-      };
-      return next();
+      return weatherBatches(function (u, o) { return Chronicle.apiFetch(u, o); }, view.apiBase, path, method, list, extra);
     };
     this._paintBusy = true;
     var snap = null;
@@ -1619,7 +1623,7 @@
   // not a function" the instant a canEdit viewer loads the page.
   // Pure helpers, exposed for test/js/calendar_paint_weather.test.mjs.
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { dayInput: dayInput, lockState: lockState, lockButtonHTML: lockButtonHTML };
+    module.exports = { dayInput: dayInput, lockState: lockState, lockButtonHTML: lockButtonHTML, weatherBatches: weatherBatches, WEATHER_BATCH: WEATHER_BATCH };
   }
 
   var mount = document.querySelector('[data-widget="calendar_view"]');

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 )
 
@@ -76,13 +77,13 @@ func TestFogHiddenWrites_DrawingsAndTokens(t *testing.T) {
 			return s.UpdateToken(context.Background(), "t", "map-1", false, UpdateTokenInput{})
 		}},
 		{"move token", false, func(s DrawingService) error {
-			return s.UpdateTokenPosition(context.Background(), "t", "map-1", false, UpdateTokenPositionInput{X: 1, Y: 1})
+			return s.UpdateTokenPosition(context.Background(), "t", "map-1", false, UpdateTokenPositionInput{X: patch.Of(float64(1)), Y: patch.Of(float64(1))})
 		}},
 		{"DM updates drawing", true, func(s DrawingService) error {
 			return s.UpdateDrawing(context.Background(), "d", "map-1", permissions.RoleOwner, true, UpdateDrawingInput{})
 		}},
 		{"DM moves token", true, func(s DrawingService) error {
-			return s.UpdateTokenPosition(context.Background(), "t", "map-1", true, UpdateTokenPositionInput{X: 1, Y: 1})
+			return s.UpdateTokenPosition(context.Background(), "t", "map-1", true, UpdateTokenPositionInput{X: patch.Of(float64(1)), Y: patch.Of(float64(1))})
 		}},
 	}
 	for _, tc := range tests {
@@ -167,7 +168,7 @@ func TestUpdateTokenPosition_EventNamesTheMap(t *testing.T) {
 	repo.tok.X, repo.tok.Y = 0, 0
 	rec := &positionRecorder{}
 	svc.SetEventPublisher(rec)
-	if err := svc.UpdateTokenPosition(context.Background(), "t", "map-1", true, UpdateTokenPositionInput{X: 5, Y: 5}); err != nil {
+	if err := svc.UpdateTokenPosition(context.Background(), "t", "map-1", true, UpdateTokenPositionInput{X: patch.Of(float64(5)), Y: patch.Of(float64(5))}); err != nil {
 		t.Fatal(err)
 	}
 	if rec.mapID != "map-1" {

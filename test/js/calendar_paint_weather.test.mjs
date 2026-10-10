@@ -95,3 +95,35 @@ test('a palette button is a pressed toggle in the kind colour', () => {
   assert.match(html, /data-wx="rain" class="" aria-pressed="true" style="--wc:#/);
   assert.match(html, /fa-cloud-rain/);
 });
+
+test('weather writes go out in batches of at most 1000 days, in order', async () => {
+  const { weatherBatches, WEATHER_BATCH } = load();
+  assert.equal(WEATHER_BATCH, 1000);
+  const cases = [
+    { name: 'empty list sends nothing', n: 0, calls: [] },
+    { name: 'exactly one batch', n: 1000, calls: [1000] },
+    { name: 'one over splits', n: 1001, calls: [1000, 1] },
+    { name: 'a large undo splits in three', n: 2500, calls: [1000, 1000, 500] },
+  ];
+  for (const tc of cases) {
+    const sent = [];
+    const apiFetch = async (url, opts) => { sent.push({ url, opts }); return { ok: true }; };
+    const list = Array.from({ length: tc.n }, (_, i) => i);
+    await weatherBatches(apiFetch, '/api', '/weather/days/lock', 'POST', list, { locked: true });
+    assert.deepEqual(sent.map((s) => s.opts.body.days.length), tc.calls, tc.name);
+    assert.deepEqual(sent.flatMap((s) => s.opts.body.days), list, tc.name);
+    for (const s of sent) {
+      assert.equal(s.url, '/api/weather/days/lock');
+      assert.equal(s.opts.method, 'POST');
+      assert.equal(s.opts.body.locked, true);
+    }
+  }
+});
+
+test('a refused batch stops the rest and rejects', async () => {
+  const { weatherBatches } = load();
+  let n = 0;
+  const apiFetch = async () => ({ ok: ++n < 2 });
+  await assert.rejects(weatherBatches(apiFetch, '/api', '/weather/days', 'PUT', new Array(3000).fill(0)));
+  assert.equal(n, 2);
+});

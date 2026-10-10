@@ -310,7 +310,8 @@ templ timelineShowContent(cc *campaigns.CampaignContext, data TimelineViewData) 
 								hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, data.CSRFToken) }
 								hx-confirm="Link all available calendar events to this timeline?"
 								hx-swap="none"
-								hx-on::after-request="if(event.detail.successful) window.location.reload()"
+								x-data
+								x-on:htmx:after-request="if ($event.detail.successful) window.location.reload()"
 							>
 								<i class="fa-solid fa-link mr-1"></i> Link All
 							</button>
@@ -332,7 +333,8 @@ templ timelineShowContent(cc *campaigns.CampaignContext, data TimelineViewData) 
 							hx-confirm="Delete this timeline? This action cannot be undone."
 							hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, data.CSRFToken) }
 							hx-swap="none"
-							hx-on::after-request="if(event.detail.successful) window.location.href='/campaigns/'+window.location.pathname.split('/')[2]+'/timelines'"
+							x-data
+							x-on:htmx:after-request={ fmt.Sprintf("if ($event.detail.successful) window.location.href = '/campaigns/%s/timelines'", data.CampaignID) }
 						>
 							<i class="fa-solid fa-trash mr-1"></i> Delete
 						</button>

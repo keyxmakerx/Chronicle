@@ -8,6 +8,8 @@ package entities
 import (
 	"context"
 	"testing"
+
+	"github.com/keyxmakerx/chronicle/internal/patch"
 )
 
 // badPromptIconNames are inputs that must fail sanitize.ValidateIcon.
@@ -85,9 +87,9 @@ func TestUpdatePrompt_InvalidIcon(t *testing.T) {
 			}
 
 			err = svc.Update(context.Background(), p.ID, UpdatePromptInput{
-				Name:       "Original",
-				PromptText: "original text",
-				Icon:       icon,
+				Name:       patch.Of("Original"),
+				PromptText: patch.Of("original text"),
+				Icon:       patch.Of(icon),
 			})
 			if err == nil {
 				t.Fatal("expected an error for an invalid icon")
@@ -109,9 +111,9 @@ func TestUpdatePrompt_ValidIcon(t *testing.T) {
 	})
 
 	err := svc.Update(context.Background(), p.ID, UpdatePromptInput{
-		Name:       "Original",
-		PromptText: "original text",
-		Icon:       "fa-dragon",
+		Name:       patch.Of("Original"),
+		PromptText: patch.Of("original text"),
+		Icon:       patch.Of("fa-dragon"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -133,9 +135,9 @@ func TestUpdatePrompt_EmptyIconKeepsExisting(t *testing.T) {
 	})
 
 	err := svc.Update(context.Background(), p.ID, UpdatePromptInput{
-		Name:       "Original",
-		PromptText: "original text",
-		Icon:       "",
+		Name:       patch.Of("Original"),
+		PromptText: patch.Of("original text"),
+		Icon:       patch.Of(""),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

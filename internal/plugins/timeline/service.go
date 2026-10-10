@@ -1103,22 +1103,37 @@ func (s *timelineService) CreateEntityGroup(ctx context.Context, timelineID stri
 // UpdateEntityGroup modifies an existing entity group.
 // timelineID scoping prevents cross-timeline IDOR.
 func (s *timelineService) UpdateEntityGroup(ctx context.Context, timelineID string, groupID int, input UpdateEntityGroupInput) error {
-	if input.Name == "" {
-		return apperror.NewValidation("group name is required")
+	// Load-merge-write: the repo writes every column, so start from the stored
+	// row. Scoping the lookup to the timeline keeps the cross-timeline IDOR
+	// guard, and it preserves the sort order this input does not carry.
+	groups, err := s.repo.ListEntityGroups(ctx, timelineID)
+	if err != nil {
+		return fmt.Errorf("load entity group: %w", err)
 	}
-	if len(input.Name) > 200 {
-		return apperror.NewValidation("group name must be 200 characters or less")
+	var g *EntityGroup
+	for i := range groups {
+		if groups[i].ID == groupID {
+			g = &groups[i]
+			break
+		}
 	}
-	if input.Color != "" && !colorPattern.MatchString(input.Color) {
-		return apperror.NewValidation("color must be a valid hex color")
+	if g == nil {
+		return apperror.NewNotFound("entity group not found")
 	}
 
-	g := &EntityGroup{
-		ID:         groupID,
-		TimelineID: timelineID,
-		Name:       input.Name,
-		Color:      input.Color,
+	name := input.Name.Val(g.Name)
+	color := input.Color.Val(g.Color)
+	if name == "" {
+		return apperror.NewValidation("group name is required")
 	}
+	if len(name) > 200 {
+		return apperror.NewValidation("group name must be 200 characters or less")
+	}
+	if color != "" && !colorPattern.MatchString(color) {
+		return apperror.NewValidation("color must be a valid hex color")
+	}
+	g.Name = name
+	g.Color = color
 
 	if err := s.repo.UpdateEntityGroup(ctx, g); err != nil {
 		return fmt.Errorf("update entity group: %w", err)
@@ -1233,13 +1248,12 @@ func (s *timelineService) SearchTimelines(ctx context.Context, campaignID, query
 
 // UpdateEventLinkVisibility updates the visibility override and rules for an event link.
 func (s *timelineService) UpdateEventLinkVisibility(ctx context.Context, timelineID, eventID string, input UpdateEventVisibilityInput) error {
-	if input.VisibilityOverride != nil && *input.VisibilityOverride != "" {
-		v := *input.VisibilityOverride
+	if v, ok := input.VisibilityOverride.Get(); ok && v != "" {
 		if v != "everyone" && v != "dm_only" {
 			return apperror.NewValidation("visibility_override must be 'everyone', 'dm_only', or empty")
 		}
 	}
-	if err := validateVisibilityRules(input.VisibilityRules); err != nil {
+	if err := validateVisibilityRules(input.VisibilityRules.Ptr(nil)); err != nil {
 		return err
 	}
 	return s.repo.UpdateEventLinkVisibility(ctx, timelineID, eventID, input.VisibilityOverride, input.VisibilityRules)

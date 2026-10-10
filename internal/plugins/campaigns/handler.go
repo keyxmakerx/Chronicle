@@ -1119,6 +1119,11 @@ func (h *Handler) Members(c echo.Context) error {
 		if err != nil {
 			return err
 		}
+		// avatar_path holds a media id; hand clients a link instead.
+		mediaCtx := middleware.MediaContext(c)
+		for i := range members {
+			members[i].AvatarPath = resolveAvatarPath(mediaCtx, members[i].AvatarPath)
+		}
 		return c.JSON(http.StatusOK, members)
 	}
 
@@ -1443,6 +1448,7 @@ func (h *Handler) GetGroupAPI(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	resolveGroupMemberAvatars(middleware.MediaContext(c), members)
 	group.Members = members
 
 	return c.JSON(http.StatusOK, group)
@@ -1560,6 +1566,7 @@ func (h *Handler) AddGroupMemberAPI(c echo.Context) error {
 		return err
 	}
 
+	resolveGroupMemberAvatars(middleware.MediaContext(c), members)
 	return c.JSON(http.StatusOK, map[string]any{"members": members})
 }
 
@@ -1748,4 +1755,22 @@ func (h *Handler) GroupsPage(c echo.Context) error {
 	csrfToken := middleware.GetCSRFToken(c)
 
 	return middleware.Render(c, http.StatusOK, GroupsManagePage(cc, groups, members, csrfToken))
+}
+
+// resolveAvatarPath turns a stored avatar media id into a link for JSON
+// responses; nil and empty stay as they are so omitempty still drops the field.
+func resolveAvatarPath(ctx context.Context, stored *string) *string {
+	if stored == nil || *stored == "" {
+		return stored
+	}
+	link := layouts.AvatarURL(ctx, *stored)
+	return &link
+}
+
+// resolveGroupMemberAvatars rewrites each member's avatar in place. The slice
+// is built per request by the service, so mutating it cannot leak elsewhere.
+func resolveGroupMemberAvatars(ctx context.Context, members []GroupMemberInfo) {
+	for i := range members {
+		members[i].AvatarPath = resolveAvatarPath(ctx, members[i].AvatarPath)
+	}
 }

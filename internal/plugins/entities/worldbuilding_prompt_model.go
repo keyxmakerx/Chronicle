@@ -1,6 +1,10 @@
 package entities
 
-import "time"
+import (
+	"time"
+
+	"github.com/keyxmakerx/chronicle/internal/patch"
+)
 
 // WorldbuildingPrompt is a guided writing prompt that helps users flesh out
 // their campaign content. Prompts can be global (available to all campaigns)
@@ -29,9 +33,11 @@ type CreatePromptInput struct {
 	Icon         string `json:"icon,omitempty"`
 }
 
-// UpdatePromptInput holds input for updating a worldbuilding prompt.
+// UpdatePromptInput holds input for updating a worldbuilding prompt. It is a
+// PARTIAL update: an absent key keeps the stored value, and every column is
+// NOT NULL, so an explicit null also preserves.
 type UpdatePromptInput struct {
-	Name       string `json:"name"`
-	PromptText string `json:"prompt_text"`
-	Icon       string `json:"icon,omitempty"`
+	Name       patch.Field[string] `json:"name"`
+	PromptText patch.Field[string] `json:"prompt_text"`
+	Icon       patch.Field[string] `json:"icon"`
 }

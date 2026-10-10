@@ -7,6 +7,8 @@ package entities
 import (
 	"context"
 	"testing"
+
+	"github.com/keyxmakerx/chronicle/internal/patch"
 )
 
 // badIconNames are inputs that must fail sanitize.ValidateIcon.
@@ -97,8 +99,8 @@ func TestUpdateEntityType_InvalidIcon(t *testing.T) {
 			}
 			svc := newTestService(&mockEntityRepo{}, typeRepo)
 			_, err := svc.UpdateEntityType(context.Background(), 1, UpdateEntityTypeInput{
-				Name: "Location",
-				Icon: icon,
+				Name: patch.Of("Location"),
+				Icon: patch.Of(icon),
 			})
 			assertAppError(t, err, 400)
 			if updated {
@@ -121,8 +123,8 @@ func TestUpdateEntityType_ValidIcon(t *testing.T) {
 	}
 	svc := newTestService(&mockEntityRepo{}, typeRepo)
 	_, err := svc.UpdateEntityType(context.Background(), 1, UpdateEntityTypeInput{
-		Name: "Location",
-		Icon: "fa-dragon",
+		Name: patch.Of("Location"),
+		Icon: patch.Of("fa-dragon"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -145,8 +147,8 @@ func TestUpdateEntityType_EmptyIconDefaults(t *testing.T) {
 	}
 	svc := newTestService(&mockEntityRepo{}, typeRepo)
 	_, err := svc.UpdateEntityType(context.Background(), 1, UpdateEntityTypeInput{
-		Name: "Location",
-		Icon: "",
+		Name: patch.Of("Location"),
+		Icon: patch.Of(""),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

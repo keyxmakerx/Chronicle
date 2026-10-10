@@ -5,6 +5,7 @@ package armory
 
 import (
 	"context"
+	"github.com/keyxmakerx/chronicle/internal/patch"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -134,13 +135,13 @@ func TestListCollectionsForItem(t *testing.T) {
 func TestUpdateInstance_RenameValidation(t *testing.T) {
 	tests := []struct {
 		name    string
-		input   CreateInstanceInput
+		input   UpdateInstanceInput
 		wantErr bool
 	}{
-		{name: "valid rename keeping other fields", input: CreateInstanceInput{Name: "New name", Description: "d", Icon: "fa-box", Color: "#6b7280"}},
-		{name: "blank name", input: CreateInstanceInput{Name: "   "}, wantErr: true},
-		{name: "name too long", input: CreateInstanceInput{Name: strings.Repeat("x", 101)}, wantErr: true},
-		{name: "bad colour", input: CreateInstanceInput{Name: "ok", Color: "red"}, wantErr: true},
+		{name: "valid rename keeping other fields", input: UpdateInstanceInput{Name: patch.Of("New name"), Description: patch.Of("d"), Icon: patch.Of("fa-box"), Color: patch.Of("#6b7280")}},
+		{name: "blank name", input: UpdateInstanceInput{Name: patch.Of("   ")}, wantErr: true},
+		{name: "name too long", input: UpdateInstanceInput{Name: patch.Of(strings.Repeat("x", 101))}, wantErr: true},
+		{name: "bad colour", input: UpdateInstanceInput{Name: patch.Of("ok"), Color: patch.Of("red")}, wantErr: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -269,7 +270,7 @@ func TestInlineHandlers_AttributeSafe(t *testing.T) {
 		{"collection menu", collectionMenuOnClick("camp-1", "ent'1", "pop-1", "/campaigns/camp-1/armory/give?item=ent%271", true).Call},
 		{"give box", giveBoxCall("pick").Call},
 		{"give open", giveOpenOnClick("/campaigns/camp-1/armory/give?character=c%27\"1").Call},
-		{"rename", renameInstanceOnClick("camp-1", 7, hostile, hostile, "fa-box", "#6b7280").Call},
+		{"rename", renameInstanceOnClick("camp-1", 7, hostile).Call},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -284,6 +285,47 @@ func TestInlineHandlers_AttributeSafe(t *testing.T) {
 			}
 			if strings.Contains(tt.call, "</script>") {
 				t.Error("hostile value escaped its JS string literal")
+			}
+		})
+	}
+}
+
+// TestUpdateInstance_IsPartial pins the partial-update contract: a name-only
+// push keeps the stored description, icon and colour, an explicit null clears
+// the description, and a present value replaces.
+func TestUpdateInstance_IsPartial(t *testing.T) {
+	desc := "Old description"
+	stored := InventoryInstance{ID: 1, CampaignID: "camp-1", Name: "Cellar", Description: &desc, Icon: "fa-dragon", Color: "#112233"}
+	tests := []struct {
+		name                                 string
+		input                                UpdateInstanceInput
+		wantName, wantDesc, wantIcon, wantCl string
+	}{
+		{"name only keeps the rest", UpdateInstanceInput{Name: patch.Of("Vault")}, "Vault", "Old description", "fa-dragon", "#112233"},
+		{"empty body keeps everything", UpdateInstanceInput{}, "Cellar", "Old description", "fa-dragon", "#112233"},
+		{"null description clears it", UpdateInstanceInput{Description: patch.Null[string]()}, "Cellar", "", "fa-dragon", "#112233"},
+		{"null icon and colour keep (NOT NULL columns)", UpdateInstanceInput{Icon: patch.Null[string](), Color: patch.Null[string]()}, "Cellar", "Old description", "fa-dragon", "#112233"},
+		{"present values replace", UpdateInstanceInput{Description: patch.Of("New"), Icon: patch.Of("fa-box"), Color: patch.Of("#abcdef")}, "Cellar", "New", "fa-box", "#abcdef"},
+		{"blank icon and colour reset to defaults", UpdateInstanceInput{Icon: patch.Of(""), Color: patch.Of("")}, "Cellar", "Old description", "fa-box", "#6b7280"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var gotName, gotDesc, gotIcon, gotColor string
+			repo := &mockInstanceRepo{
+				findByIDFn: func(context.Context, int) (*InventoryInstance, error) {
+					cp := stored
+					return &cp, nil
+				},
+				updateFn: func(_ context.Context, _ int, name, _, desc, icon, color string) error {
+					gotName, gotDesc, gotIcon, gotColor = name, desc, icon, color
+					return nil
+				},
+			}
+			if err := newTestInstanceService(repo).UpdateInstance(context.Background(), "camp-1", 1, tt.input); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if gotName != tt.wantName || gotDesc != tt.wantDesc || gotIcon != tt.wantIcon || gotColor != tt.wantCl {
+				t.Errorf("stored (%q, %q, %q, %q), want (%q, %q, %q, %q)", gotName, gotDesc, gotIcon, gotColor, tt.wantName, tt.wantDesc, tt.wantIcon, tt.wantCl)
 			}
 		})
 	}

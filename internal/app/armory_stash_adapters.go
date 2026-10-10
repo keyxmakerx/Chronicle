@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"sync"
 	"time"
@@ -188,15 +189,24 @@ func (a *armoryStashDirectoryAdapter) GetEntity(ctx context.Context, campaignID,
 	return &r, nil
 }
 
-// listByTypes pages through every viewable entity of the given types.
-func (a *armoryStashDirectoryAdapter) listByTypes(ctx context.Context, ti *stashTypeInfo, campaignID string, typeIDs []int, role int, userID string, limit int) ([]armory.EntityRef, error) {
+// listPageBound is a safety bound on the page walk, not a feature limit: at
+// 100 per page it is far beyond any real campaign, and exists only so a
+// misbehaving listing cannot loop forever. Reaching it is reported, never
+// silently swallowed.
+const listPageBound = 1000
+
+// listByTypes pages through every viewable entity of the given types. The
+// bool is true when listPageBound cut the walk short, so a caller whose
+// output must be complete (the Share box's party) can say so.
+func (a *armoryStashDirectoryAdapter) listByTypes(ctx context.Context, ti *stashTypeInfo, campaignID string, typeIDs []int, role int, userID string, limit int) ([]armory.EntityRef, bool, error) {
+	truncated := false
 	seen := map[string]bool{}
 	var out []armory.EntityRef
 	for _, tid := range typeIDs {
-		for page := 1; page <= 20; page++ {
+		for page := 1; ; page++ {
 			list, total, err := a.svc.List(ctx, campaignID, tid, role, userID, entities.ListOptions{Page: page, PerPage: 100, Sort: "name"})
 			if err != nil {
-				return nil, err
+				return nil, false, err
 			}
 			for i := range list {
 				if seen[list[i].ID] {
@@ -205,25 +215,37 @@ func (a *armoryStashDirectoryAdapter) listByTypes(ctx context.Context, ti *stash
 				seen[list[i].ID] = true
 				out = append(out, a.ref(ti, &list[i]))
 				if limit > 0 && len(out) >= limit {
-					return out, nil
+					return out, truncated, nil
 				}
 			}
 			if page*100 >= total || len(list) == 0 {
 				break
 			}
+			if page >= listPageBound {
+				truncated = true
+				slog.Warn("armory entity listing stopped at the page bound; later entries are missing",
+					"campaign_id", campaignID, "entity_type_id", tid, "pages", page, "total", total)
+				break
+			}
 		}
 	}
-	return out, nil
+	return out, truncated, nil
 }
 
 func (a *armoryStashDirectoryAdapter) ListCharacters(ctx context.Context, campaignID string, role int, userID string) ([]armory.EntityRef, error) {
+	out, _, err := a.ListCharactersChecked(ctx, campaignID, role, userID)
+	return out, err
+}
+
+// ListCharactersChecked is ListCharacters plus whether the walk was cut short.
+func (a *armoryStashDirectoryAdapter) ListCharactersChecked(ctx context.Context, campaignID string, role int, userID string) ([]armory.EntityRef, bool, error) {
 	ti, err := a.types(ctx, campaignID)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	all, err := a.listByTypes(ctx, ti, campaignID, ti.charIDs, role, userID, 0)
+	all, truncated, err := a.listByTypes(ctx, ti, campaignID, ti.charIDs, role, userID, 0)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	// Listing a parent type also returns its sub-types, so keep only entities
 	// whose own type is in the family.
@@ -233,7 +255,7 @@ func (a *armoryStashDirectoryAdapter) ListCharacters(ctx context.Context, campai
 			out = append(out, r)
 		}
 	}
-	return out, nil
+	return out, truncated, nil
 }
 
 func (a *armoryStashDirectoryAdapter) ListItems(ctx context.Context, campaignID string, role int, userID string, limit int) ([]armory.EntityRef, error) {
@@ -241,7 +263,8 @@ func (a *armoryStashDirectoryAdapter) ListItems(ctx context.Context, campaignID 
 	if err != nil {
 		return nil, err
 	}
-	return a.listByTypes(ctx, ti, campaignID, ti.itemIDs, role, userID, limit)
+	out, _, err := a.listByTypes(ctx, ti, campaignID, ti.itemIDs, role, userID, limit)
+	return out, err
 }
 
 func (a *armoryStashDirectoryAdapter) OwnedCharacterIDs(ctx context.Context, campaignID, userID string) (map[string]bool, error) {

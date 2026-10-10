@@ -64,11 +64,12 @@ type fakeFoundry struct {
 func (f fakeFoundry) FoundryPresence(string) (*time.Time, bool) { return f.last, f.connected }
 
 type fakeHidden struct {
+	more     bool
 	revealed string
 }
 
-func (f *fakeHidden) HiddenCharacters(context.Context, string, Viewer, int) ([]Hidden, error) {
-	return []Hidden{{ID: "e1", Name: "Captain Vosk"}}, nil
+func (f *fakeHidden) HiddenCharacters(context.Context, string, Viewer, int) ([]Hidden, bool, error) {
+	return []Hidden{{ID: "e1", Name: "Captain Vosk"}}, f.more, nil
 }
 func (f *fakeHidden) Reveal(_ context.Context, id, _ string) (string, error) {
 	f.revealed = id
@@ -321,5 +322,17 @@ func TestSetDowntime(t *testing.T) {
 				t.Fatalf("got %+v, want %+v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestBuild_HiddenMore(t *testing.T) {
+	for _, more := range []bool{false, true} {
+		v, err := NewService(Sources{Hidden: &fakeHidden{more: more}}).Build(context.Background(), "c1", Viewer{Role: 2})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if v.HiddenMore != more {
+			t.Errorf("HiddenMore = %v, want %v", v.HiddenMore, more)
+		}
 	}
 }

@@ -40,8 +40,8 @@ func (f *fakePCEntitySvc) MergeDuplicatePlayerCharacterType(_ context.Context, _
 func (f *fakePCEntitySvc) UpdateEntityType(_ context.Context, id int, input entities.UpdateEntityTypeInput) (*entities.EntityType, error) {
 	f.order = append(f.order, "update")
 	f.updatedID = id
-	f.updatedName = input.Name
-	return &entities.EntityType{ID: id, Name: input.Name}, nil
+	f.updatedName, _ = input.Name.Get()
+	return &entities.EntityType{ID: id, Name: f.updatedName}, nil
 }
 
 func dupSnapshot() entities.PCSetupSnapshot {

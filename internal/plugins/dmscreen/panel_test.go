@@ -66,9 +66,15 @@ func TestPanel(t *testing.T) {
 			want: []string{"Aria", "Sam", "Draw Steel doesn't fill in hero numbers yet."},
 		},
 		{
-			name: "hidden rows post to the campaign's reveal route",
-			view: View{CampaignID: "c1", Hidden: []HiddenView{{ID: "e9", Name: "Vosk"}}},
-			want: []string{`/campaigns/c1/dm-screen/reveal/e9`, "Vosk"},
+			name:    "hidden rows post to the campaign's reveal route",
+			view:    View{CampaignID: "c1", Hidden: []HiddenView{{ID: "e9", Name: "Vosk"}}},
+			want:    []string{`/campaigns/c1/dm-screen/reveal/e9`, "Vosk"},
+			notWant: []string{"/campaigns/c1/characters"},
+		},
+		{
+			name: "more hidden than fit links to the Characters page",
+			view: View{CampaignID: "c1", Hidden: []HiddenView{{ID: "e9", Name: "Vosk"}}, HiddenMore: true},
+			want: []string{`href="/campaigns/c1/characters"`},
 		},
 	}
 	for _, tt := range tests {

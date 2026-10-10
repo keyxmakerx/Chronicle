@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/keyxmakerx/chronicle/internal/patch"
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -596,7 +597,7 @@ func TestUpdate_RejectsNonCreator(t *testing.T) {
 	}
 	svc := newTestBestiaryService(repo)
 	name := "New Name"
-	_, err := svc.Update(context.Background(), "someone-else", "p1", UpdatePublicationInput{Name: &name})
+	_, err := svc.Update(context.Background(), "someone-else", "p1", UpdatePublicationInput{Name: patch.Of(name)})
 	var appErr *apperror.AppError
 	if !errors.As(err, &appErr) || appErr.Type != "forbidden" {
 		t.Fatalf("expected forbidden error, got %v", err)
@@ -631,7 +632,7 @@ func TestUpdate_PartialUpdateContract(t *testing.T) {
 	svc := newTestBestiaryService(repo)
 
 	newName := "New Name"
-	pub, err := svc.Update(context.Background(), "user-1", "p1", UpdatePublicationInput{Name: &newName})
+	pub, err := svc.Update(context.Background(), "user-1", "p1", UpdatePublicationInput{Name: patch.Of(newName)})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -658,6 +659,76 @@ func TestUpdate_PartialUpdateContract(t *testing.T) {
 	}
 }
 
+// TestUpdate_PartialUpdateWireBodies decodes real JSON bodies, because the
+// absent/null distinction only exists at the bind layer: absent preserves,
+// explicit null clears a nullable column and preserves a required one, a value
+// replaces.
+func TestUpdate_PartialUpdateWireBodies(t *testing.T) {
+	tests := []struct {
+		name          string
+		body          string
+		wantName      string
+		wantDesc      string // "" with wantDescNil=false means "empty string"
+		wantDescNil   bool
+		wantFlavor    string
+		wantFlavorNil bool
+		wantTags      string
+		wantStat      string
+	}{
+		{"empty body preserves everything", `{}`, "Old", "d", false, "f", false, `["a"]`, `{"name":"Old","level":3}`},
+		{"explicit null clears description only", `{"description":null}`, "Old", "", true, "f", false, `["a"]`, `{"name":"Old","level":3}`},
+		{"explicit null clears flavor only", `{"flavor_text":null}`, "Old", "d", false, "", true, `["a"]`, `{"name":"Old","level":3}`},
+		{"null name, tags and statblock preserve", `{"name":null,"tags":null,"statblock_json":null}`, "Old", "d", false, "f", false, `["a"]`, `{"name":"Old","level":3}`},
+		{"value replaces description", `{"description":"new"}`, "Old", "new", false, "f", false, `["a"]`, `{"name":"Old","level":3}`},
+		{"tags replace", `{"tags":["x","y"]}`, "Old", "d", false, "f", false, `["x","y"]`, `{"name":"Old","level":3}`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			desc, flavor := "d", "f"
+			existing := &Publication{
+				ID: "p1", CreatorID: "u", Name: "Old", Slug: "old",
+				Description: &desc, FlavorText: &flavor,
+				Tags:          json.RawMessage(`["a"]`),
+				StatblockJSON: json.RawMessage(`{"name":"Old","level":3}`),
+			}
+			repo := &mockBestiaryRepo{
+				getByIDFn: func(_ context.Context, _ string) (*Publication, error) { return existing, nil },
+			}
+			var in UpdatePublicationInput
+			if err := json.Unmarshal([]byte(tt.body), &in); err != nil {
+				t.Fatalf("bad test body: %v", err)
+			}
+			pub, err := newTestBestiaryService(repo).Update(context.Background(), "u", "p1", in)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if pub.Name != tt.wantName {
+				t.Errorf("name = %q, want %q", pub.Name, tt.wantName)
+			}
+			if tt.wantDescNil {
+				if pub.Description != nil {
+					t.Errorf("description = %q, want cleared", *pub.Description)
+				}
+			} else if pub.Description == nil || *pub.Description != tt.wantDesc {
+				t.Errorf("description = %v, want %q", pub.Description, tt.wantDesc)
+			}
+			if tt.wantFlavorNil {
+				if pub.FlavorText != nil {
+					t.Errorf("flavor = %q, want cleared", *pub.FlavorText)
+				}
+			} else if pub.FlavorText == nil || *pub.FlavorText != tt.wantFlavor {
+				t.Errorf("flavor = %v, want %q", pub.FlavorText, tt.wantFlavor)
+			}
+			if string(pub.Tags) != tt.wantTags {
+				t.Errorf("tags = %s, want %s", pub.Tags, tt.wantTags)
+			}
+			if string(pub.StatblockJSON) != tt.wantStat {
+				t.Errorf("statblock = %s, want %s", pub.StatblockJSON, tt.wantStat)
+			}
+		})
+	}
+}
+
 // TestUpdate_NameChangeRegeneratesSlug proves a rename asks the repo for a
 // fresh unique slug rather than keeping a now-stale one.
 func TestUpdate_NameChangeRegeneratesSlug(t *testing.T) {
@@ -668,7 +739,7 @@ func TestUpdate_NameChangeRegeneratesSlug(t *testing.T) {
 	svc := newTestBestiaryService(repo)
 
 	newName := "Brand New"
-	pub, err := svc.Update(context.Background(), "user-1", "p1", UpdatePublicationInput{Name: &newName})
+	pub, err := svc.Update(context.Background(), "user-1", "p1", UpdatePublicationInput{Name: patch.Of(newName)})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

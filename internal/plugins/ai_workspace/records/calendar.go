@@ -99,7 +99,7 @@ type EventKind struct{ Svc CalendarAPI }
 func (EventKind) Name() string  { return "event" }
 func (EventKind) Label() string { return "Calendar event" }
 func (EventKind) Doc() string {
-	return "A calendar event, matched by `name`. Keys: `year`, `month` (number or month name), `day`; optional `end_year`/`end_month`/`end_day`, `hour`, `minute`, `all_day` (true/false), `visibility` (`everyone` or `dm_only`), `color` (#hex), `icon` (Font Awesome name), `rename_to`. The body is the description. When two events share a name, give the date too.\n\n```\n---\nkind: event\nname: Midwinter Feast\nyear: 1492\nmonth: Hammer\nday: 21\nvisibility: everyone\n---\nThe lords of the city open their halls.\n```"
+	return "A calendar event, matched by `name`. Keys: `year`, `month` (number or month name), `day`; optional `end_year`/`end_month`/`end_day`, `hour`, `minute` (whole numbers), `all_day` (true/false), `visibility` (`everyone` or `dm_only`), `color` (#hex), `icon` (Font Awesome name), `rename_to`. The body is the description. When two events share a name, give the date too. On `action: update`, `year`/`month`/`day` say which event to change; to move it to another date add `move_to_year`/`move_to_month`/`move_to_day` (all three).\n\n```\n---\nkind: event\nname: Midwinter Feast\nyear: 1492\nmonth: Hammer\nday: 21\nvisibility: everyone\n---\nThe lords of the city open their halls.\n```"
 }
 
 // find returns the event this record names; a date narrows same-named events.
@@ -155,6 +155,19 @@ func (k EventKind) Plan(ctx context.Context, campaignID string, a Actor, r Recor
 	if _, _, _, _, err := readDate(cal, r, "end_"); err != nil {
 		return Plan{Error: planError(err)}
 	}
+	// A non-numeric hour or minute would otherwise be read as 0 and saved.
+	for _, key := range []string{"hour", "minute"} {
+		if _, _, err := r.Int(key); err != nil {
+			return Plan{Error: planError(err)}
+		}
+	}
+	my, mm, md, moving, merr := readDate(cal, r, "move_to_")
+	if merr != nil {
+		return Plan{Error: planError(merr)}
+	}
+	if moving && r.Action != ActionUpdate {
+		return Plan{Error: "move_to_year, move_to_month and move_to_day only apply to action: update"}
+	}
 	switch r.Action {
 	case ActionCreate:
 		if !dated {
@@ -168,6 +181,9 @@ func (k EventKind) Plan(ctx context.Context, campaignID string, a Actor, r Recor
 	case ActionUpdate:
 		if existing == nil {
 			return Plan{Error: "no event called " + quote(r.Name) + " to change"}
+		}
+		if moving {
+			return Plan{Summary: "moves the event on " + dateLabel(cal, existing.Year, existing.Month, existing.Day) + " to " + dateLabel(cal, my, mm, md)}
 		}
 		return Plan{Summary: "changes the event on " + dateLabel(cal, existing.Year, existing.Month, existing.Day)}
 	default:
@@ -236,14 +252,18 @@ func (k EventKind) Apply(ctx context.Context, campaignID string, a Actor, r Reco
 	if desc != nil {
 		in.DescriptionHTML = patch.Of(*desc)
 	}
-	if r.Has("year") {
-		in.Year, in.Month, in.Day = patch.Of(y), patch.Of(m), patch.Of(d)
+	// year/month/day only pick the event; move_to_* is the new date.
+	if my, mm, md, moving, _ := readDate(cal, r, "move_to_"); moving {
+		in.Year, in.Month, in.Day = patch.Of(my), patch.Of(mm), patch.Of(md)
 	}
 	if ended {
 		in.EndYear, in.EndMonth, in.EndDay = patch.Of(ey), patch.Of(em), patch.Of(ed)
 	}
 	if h, ok, _ := r.Int("hour"); ok {
 		in.StartHour = patch.Of(h)
+	}
+	if mi, ok, _ := r.Int("minute"); ok {
+		in.StartMinute = patch.Of(mi)
 	}
 	if s := r.Str("visibility"); s != "" {
 		in.Visibility = patch.Of(s)
@@ -296,13 +316,41 @@ func (k WeatherKind) Plan(ctx context.Context, campaignID string, a Actor, r Rec
 			return Plan{Error: planError(err)}
 		}
 	}
+	warn := k.dayWarning(ctx, campaignID, a, cal, y, m, d, r.Action == ActionDelete)
 	if r.Action == ActionDelete {
-		return Plan{Summary: "clears the weather on " + dateLabel(cal, y, m, d)}
+		return Plan{Summary: "clears the weather on " + dateLabel(cal, y, m, d), Warnings: warn}
 	}
 	if r.Str("label") == "" && r.Str("description") == "" {
 		return Plan{Error: "weather needs a label or a description"}
 	}
-	return Plan{Summary: r.Str("label") + " on " + dateLabel(cal, y, m, d)}
+	return Plan{Summary: r.Str("label") + " on " + dateLabel(cal, y, m, d), Warnings: warn}
+}
+
+// dayWarning says when the record would overwrite a day the owner locked or
+// set by hand. A hand-written record saves as manual and so also unlocks the
+// day, which the owner may not expect from an import. A failed read just
+// means no warning; the write itself is unaffected.
+func (k WeatherKind) dayWarning(ctx context.Context, campaignID string, a Actor, cal *calendar.Calendar, y, m, d int, clearing bool) []string {
+	days, err := k.Svc.ListDayWeather(ctx, cal.ID, campaignID, y, m, a.Viewer())
+	if err != nil {
+		return nil
+	}
+	verb := "replaces it"
+	if clearing {
+		verb = "clears it"
+	}
+	for _, day := range days {
+		if day.Year != y || day.Month != m || day.Day != d {
+			continue
+		}
+		switch {
+		case day.Locked != nil && *day.Locked:
+			return []string{"This day is locked; this " + verb + " and unlocks it"}
+		case day.Source == calendar.WeatherSourceManual:
+			return []string{"This day's weather was set by hand; this " + verb}
+		}
+	}
+	return nil
 }
 
 func (k WeatherKind) Apply(ctx context.Context, campaignID string, a Actor, r Record) error {

@@ -188,7 +188,8 @@ func (r *fakeStashRepo) SetDowntime(_ context.Context, _ string, open bool, _ st
 }
 
 type fakeDir struct {
-	ents map[string]*EntityRef // id -> ref (all in campaign "camp")
+	ents      map[string]*EntityRef // id -> ref (all in campaign "camp")
+	truncated bool
 }
 
 func (d *fakeDir) GetEntity(_ context.Context, campaignID, id string) (*EntityRef, error) {
@@ -211,6 +212,10 @@ func (d *fakeDir) ListCharacters(context.Context, string, int, string) ([]Entity
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out, nil
+}
+func (d *fakeDir) ListCharactersChecked(ctx context.Context, c string, r int, u string) ([]EntityRef, bool, error) {
+	out, err := d.ListCharacters(ctx, c, r, u)
+	return out, d.truncated, err
 }
 func (d *fakeDir) ListItems(context.Context, string, int, string, int) ([]EntityRef, error) {
 	return nil, nil

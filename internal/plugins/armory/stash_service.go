@@ -30,6 +30,10 @@ type StashDirectory interface {
 	// ListCharacters returns the character-family entities in the campaign
 	// that the viewer may see.
 	ListCharacters(ctx context.Context, campaignID string, role int, userID string) ([]EntityRef, error)
+	// ListCharactersChecked is ListCharacters plus whether a safety bound cut
+	// the walk short, for callers (the Share box) that must not drop players
+	// silently.
+	ListCharactersChecked(ctx context.Context, campaignID string, role int, userID string) (chars []EntityRef, truncated bool, err error)
 	// ListItems returns up to limit item entities the viewer may see.
 	ListItems(ctx context.Context, campaignID string, role int, userID string, limit int) ([]EntityRef, error)
 	// OwnedCharacterIDs returns the entities the user has claimed.

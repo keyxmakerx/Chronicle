@@ -601,3 +601,27 @@ func TestReleaseLetGoShares(t *testing.T) {
 		})
 	}
 }
+
+// A truncated character listing must reach the Share box as a visible note,
+// and a complete one must leave the box unchanged.
+func TestShareBox_TruncationNote(t *testing.T) {
+	const note = "some players may be missing"
+	for _, truncated := range []bool{false, true} {
+		f := newShareFx()
+		f.dir.truncated = truncated
+		v, err := f.svc.ShareBox(context.Background(), "camp", robin, "c2", "z1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if v.PartyTruncated != truncated {
+			t.Fatalf("PartyTruncated = %v, want %v", v.PartyTruncated, truncated)
+		}
+		var sb strings.Builder
+		if err := ShareBox(v).Render(context.Background(), &sb); err != nil {
+			t.Fatal(err)
+		}
+		if got := strings.Contains(sb.String(), note); got != truncated {
+			t.Errorf("truncated=%v: note shown = %v", truncated, got)
+		}
+	}
+}

@@ -33,7 +33,7 @@ type InstanceService interface {
 	CreateInstance(ctx context.Context, campaignID string, input CreateInstanceInput) (*InventoryInstance, error)
 
 	// UpdateInstance modifies an instance after IDOR validation.
-	UpdateInstance(ctx context.Context, campaignID string, instanceID int, input CreateInstanceInput) error
+	UpdateInstance(ctx context.Context, campaignID string, instanceID int, input UpdateInstanceInput) error
 
 	// DeleteInstance removes an instance after IDOR validation.
 	DeleteInstance(ctx context.Context, campaignID string, instanceID int) error
@@ -220,14 +220,17 @@ func (s *instanceService) CreateInstance(ctx context.Context, campaignID string,
 	return s.repo.Create(ctx, campaignID, name, slug, desc, icon, color)
 }
 
-// UpdateInstance validates and updates an instance.
-func (s *instanceService) UpdateInstance(ctx context.Context, campaignID string, instanceID int, input CreateInstanceInput) error {
-	// IDOR check.
-	if _, err := s.GetInstance(ctx, campaignID, instanceID); err != nil {
+// UpdateInstance validates and updates an instance. Input merges onto the
+// stored row so a name-only push leaves description, icon and colour alone;
+// validation reads the merged values, not the raw input.
+func (s *instanceService) UpdateInstance(ctx context.Context, campaignID string, instanceID int, input UpdateInstanceInput) error {
+	// IDOR check; also supplies the stored values to merge onto.
+	cur, err := s.GetInstance(ctx, campaignID, instanceID)
+	if err != nil {
 		return err
 	}
 
-	name := strings.TrimSpace(input.Name)
+	name := strings.TrimSpace(input.Name.Val(cur.Name))
 	if name == "" {
 		return apperror.NewBadRequest("name is required")
 	}
@@ -240,7 +243,7 @@ func (s *instanceService) UpdateInstance(ctx context.Context, campaignID string,
 		slug = "inventory"
 	}
 
-	icon, err := sanitize.ValidateIcon(input.Icon)
+	icon, err := sanitize.ValidateIcon(input.Icon.Val(cur.Icon))
 	if err != nil {
 		return err
 	}
@@ -248,7 +251,7 @@ func (s *instanceService) UpdateInstance(ctx context.Context, campaignID string,
 		icon = "fa-box"
 	}
 
-	color := strings.TrimSpace(input.Color)
+	color := strings.TrimSpace(input.Color.Val(cur.Color))
 	if color == "" {
 		color = "#6b7280"
 	}
@@ -256,7 +259,10 @@ func (s *instanceService) UpdateInstance(ctx context.Context, campaignID string,
 		return apperror.NewBadRequest("color must be a hex value like #6b7280")
 	}
 
-	desc := strings.TrimSpace(input.Description)
+	desc := ""
+	if p := input.Description.Ptr(cur.Description); p != nil {
+		desc = strings.TrimSpace(*p)
+	}
 
 	return s.repo.Update(ctx, instanceID, name, slug, desc, icon, color)
 }

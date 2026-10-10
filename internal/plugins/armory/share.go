@@ -42,6 +42,9 @@ type ShareBoxView struct {
 	// IsMap marks a map handout, whose hint says the map opens too.
 	IsMap bool
 	Party []ShareMember
+	// PartyTruncated is true when the campaign has more characters than the
+	// listing could walk, so Party may be missing players.
+	PartyTruncated bool
 }
 
 // ShareOutcome reports who the item is shared with after a save, by
@@ -58,6 +61,8 @@ type shareTarget struct {
 	char  *EntityRef
 	item  *EntityRef
 	party []ShareMember
+	// partyTruncated is true when the character listing hit its safety bound.
+	partyTruncated bool
 }
 
 // loadShareTarget checks that a may share itemID held by characterID and
@@ -100,21 +105,21 @@ func (s *stashService) loadShareTarget(ctx context.Context, campaignID string, a
 	if !item.Restricted {
 		return nil, apperror.NewBadRequest("Everyone can already see " + item.Name + ".")
 	}
-	party, err := s.shareParty(ctx, campaignID, a, char)
+	party, truncated, err := s.shareParty(ctx, campaignID, a, char)
 	if err != nil {
 		return nil, err
 	}
-	return &shareTarget{char: char, item: item, party: party}, nil
+	return &shareTarget{char: char, item: item, party: party, partyTruncated: truncated}, nil
 }
 
 // shareParty lists the players of the campaign's other characters that the
 // actor can see, one row per player (their first character by name), never
 // the holder's own player or the actor. A user who is no longer a member
 // drops out because they have no name.
-func (s *stashService) shareParty(ctx context.Context, campaignID string, a Actor, char *EntityRef) ([]ShareMember, error) {
-	chars, err := s.Directory.ListCharacters(ctx, campaignID, a.Role, a.UserID)
+func (s *stashService) shareParty(ctx context.Context, campaignID string, a Actor, char *EntityRef) ([]ShareMember, bool, error) {
+	chars, truncated, err := s.Directory.ListCharactersChecked(ctx, campaignID, a.Role, a.UserID)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	sort.SliceStable(chars, func(i, j int) bool { return strings.ToLower(chars[i].Name) < strings.ToLower(chars[j].Name) })
 	var owners []string
@@ -131,7 +136,7 @@ func (s *stashService) shareParty(ctx context.Context, campaignID string, a Acto
 		seen[c.OwnerUserID] = true
 		out = append(out, ShareMember{UserID: c.OwnerUserID, Character: c.Name, Player: names[c.OwnerUserID]})
 	}
-	return out, nil
+	return out, truncated, nil
 }
 
 func (s *stashService) ShareBox(ctx context.Context, campaignID string, a Actor, characterID, itemID string) (*ShareBoxView, error) {
@@ -147,11 +152,12 @@ func (s *stashService) ShareBox(ctx context.Context, campaignID string, a Actor,
 		t.party[i].Checked = shared[t.party[i].UserID]
 	}
 	return &ShareBoxView{
-		CampaignID: campaignID,
-		Character:  NamedRef{ID: t.char.ID, Name: t.char.Name},
-		Item:       NamedRef{ID: t.item.ID, Name: t.item.Name},
-		IsMap:      t.item.HandoutMapID != "",
-		Party:      t.party,
+		CampaignID:     campaignID,
+		Character:      NamedRef{ID: t.char.ID, Name: t.char.Name},
+		Item:           NamedRef{ID: t.item.ID, Name: t.item.Name},
+		IsMap:          t.item.HandoutMapID != "",
+		Party:          t.party,
+		PartyTruncated: t.partyTruncated,
 	}, nil
 }
 
@@ -439,7 +445,7 @@ func (s *stashService) markShares(ctx context.Context, campaignID string, a Acto
 	}
 	var names map[string]string
 	if len(rows) > 0 {
-		party, err := s.shareParty(ctx, campaignID, Actor{UserID: char.OwnerUserID, Role: a.Role}, char)
+		party, _, err := s.shareParty(ctx, campaignID, Actor{UserID: char.OwnerUserID, Role: a.Role}, char)
 		if err != nil {
 			slog.Warn("panel: could not read the party", slog.Any("error", err))
 			return

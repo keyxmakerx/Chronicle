@@ -7,6 +7,8 @@ package entities
 import (
 	"context"
 	"testing"
+
+	"github.com/keyxmakerx/chronicle/internal/patch"
 )
 
 // mockLayoutPresetRepo implements LayoutPresetRepository for testing.
@@ -140,9 +142,9 @@ func TestUpdateLayoutPreset_InvalidIcon(t *testing.T) {
 			}
 			svc := NewLayoutPresetService(repo)
 			_, err := svc.Update(context.Background(), 1, UpdateLayoutPresetInput{
-				Name:       "Standard",
-				LayoutJSON: validLayoutJSON,
-				Icon:       icon,
+				Name:       patch.Of("Standard"),
+				LayoutJSON: patch.Of(validLayoutJSON),
+				Icon:       patch.Of(icon),
 			})
 			assertAppError(t, err, 400)
 			if updated {
@@ -165,9 +167,9 @@ func TestUpdateLayoutPreset_ValidIcon(t *testing.T) {
 	}
 	svc := NewLayoutPresetService(repo)
 	_, err := svc.Update(context.Background(), 1, UpdateLayoutPresetInput{
-		Name:       "Standard",
-		LayoutJSON: validLayoutJSON,
-		Icon:       "fa-dragon",
+		Name:       patch.Of("Standard"),
+		LayoutJSON: patch.Of(validLayoutJSON),
+		Icon:       patch.Of("fa-dragon"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -193,9 +195,9 @@ func TestUpdateLayoutPreset_EmptyIconDefaults(t *testing.T) {
 	}
 	svc := NewLayoutPresetService(repo)
 	_, err := svc.Update(context.Background(), 1, UpdateLayoutPresetInput{
-		Name:       "Standard",
-		LayoutJSON: validLayoutJSON,
-		Icon:       "",
+		Name:       patch.Of("Standard"),
+		LayoutJSON: patch.Of(validLayoutJSON),
+		Icon:       patch.Of(""),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

@@ -30,7 +30,7 @@ templ extensionDashboardSwitch(cc *CampaignContext, slug string, enabled bool, d
 				class="text-xs text-fg-muted hover:text-fg transition-colors duration-micro"
 				data-extension-dashboard-collapse
 				aria-label="Close dashboard"
-				hx-on:click="document.getElementById('extensions-hub-dashboard-panel').innerHTML = ''"
+				onclick="(function(){var p=document.getElementById('extensions-hub-dashboard-panel');if(p){p.innerHTML=''}})()"
 			>
 				<i class="fa-solid fa-xmark"></i>
 			</button>

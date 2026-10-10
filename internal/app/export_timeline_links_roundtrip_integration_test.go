@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -74,7 +75,7 @@ func TestTimelineCalendarLinks_DBRoundTrip(t *testing.T) {
 	if _, err := tlSvc.LinkEvent(ctx, linked.ID, evt.ID, timeline.LinkEventInput{Label: &label}); err != nil {
 		t.Fatalf("link event: %v", err)
 	}
-	if err := tlSvc.UpdateEventLinkVisibility(ctx, linked.ID, evt.ID, timeline.UpdateEventVisibilityInput{VisibilityOverride: &dmOnly}); err != nil {
+	if err := tlSvc.UpdateEventLinkVisibility(ctx, linked.ID, evt.ID, timeline.UpdateEventVisibilityInput{VisibilityOverride: patch.Of(dmOnly)}); err != nil {
 		t.Fatalf("link visibility: %v", err)
 	}
 	if _, err := tlSvc.CreateTimeline(ctx, srcCampaignID, timeline.CreateTimelineInput{
