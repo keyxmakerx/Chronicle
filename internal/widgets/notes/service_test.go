@@ -90,8 +90,12 @@ func (m *mockNoteRepo) ListVisibleLinking(ctx context.Context, campaignID string
 	return nil, nil
 }
 
-func (m *mockNoteRepo) ViewerReadsMedia(ctx context.Context, campaignID, mediaID string, v, uploader permissions.Viewer) (bool, error) {
+func (m *mockNoteRepo) ViewerReadsMedia(ctx context.Context, campaignID, mediaID string, v permissions.Viewer) (bool, error) {
 	return false, nil
+}
+
+func (m *mockNoteRepo) SyncPictureBindings(ctx context.Context, noteID, campaignID, editorID string, html *string) error {
+	return nil
 }
 
 func (m *mockNoteRepo) ReparentToTop(ctx context.Context, ids []string) error {

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -40,12 +41,17 @@ type NoteRepository interface {
 	// note (kind LinkNote) or page (LinkPage) targetID, newest first.
 	ListVisibleLinking(ctx context.Context, campaignID string, v permissions.Viewer, kind, targetID string) ([]Note, error)
 
-	// ViewerReadsMedia reports whether v can read at least one note in
-	// campaignID whose body holds the media file mediaID AND that the file's
-	// uploader can read too (the SQL twin of Note.CanView, twice). A note the
-	// uploader cannot see grants nothing, so pasting a picture's id into
-	// one's own note does not open the picture.
-	ViewerReadsMedia(ctx context.Context, campaignID, mediaID string, v, uploader permissions.Viewer) (bool, error)
+	// ViewerReadsMedia reports whether v can read at least one note bound to
+	// the note picture mediaID in campaignID (the SQL twin of Note.CanView over
+	// the bound notes). Indexed on the binding, not a scan of note bodies.
+	ViewerReadsMedia(ctx context.Context, campaignID, mediaID string, v permissions.Viewer) (bool, error)
+
+	// SyncPictureBindings makes note noteID's bindings match the pictures in
+	// html after a save by editorID. A picture no longer in the text loses its
+	// binding whoever saved; a binding is added only for a note picture in this
+	// campaign that editorID uploaded, so an id pasted by anyone else binds
+	// nothing.
+	SyncPictureBindings(ctx context.Context, noteID, campaignID, editorID string, html *string) error
 
 	// ListSharedByCampaign returns every campaign-wide-shared note in the
 	// campaign regardless of which user owns it.
@@ -284,20 +290,18 @@ func (r *noteRepository) ListVisibleLinking(ctx context.Context, campaignID stri
 }
 
 // ViewerReadsMedia answers "may v open this picture" for the media plugin:
-// true when a note v can read carries /media/<mediaID> in its body. The id is
-// checked against idPattern, so it can hold no LIKE wildcard.
-func (r *noteRepository) ViewerReadsMedia(ctx context.Context, campaignID, mediaID string, v, uploader permissions.Viewer) (bool, error) {
-	if !idPattern.MatchString(mediaID) || v.UserID() == "" || uploader.UserID() == "" {
+// true when a note v can read is bound to it (see SyncPictureBindings). The id
+// is checked against idPattern, so it can hold no LIKE wildcard.
+func (r *noteRepository) ViewerReadsMedia(ctx context.Context, campaignID, mediaID string, v permissions.Viewer) (bool, error) {
+	if !idPattern.MatchString(mediaID) || v.UserID() == "" {
 		return false, nil
 	}
 	vis, visArgs := visibleFilter(v)
-	upVis, upArgs := visibleFilter(uploader)
-	args := append([]any{campaignID}, visArgs...)
-	args = append(args, upArgs...)
-	args = append(args, "%/media/"+mediaID+"%")
+	args := append([]any{mediaID, campaignID}, visArgs...)
 	var one int
 	err := r.db.QueryRowContext(ctx,
-		`SELECT 1 FROM notes WHERE campaign_id = ? AND `+vis+` AND `+upVis+` AND entry_html LIKE ? LIMIT 1`, args...).Scan(&one)
+		`SELECT 1 FROM note_pictures p JOIN notes n ON n.id = p.note_id
+		 WHERE p.media_id = ? AND n.campaign_id = ? AND `+vis+` LIMIT 1`, args...).Scan(&one)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
 	}
@@ -305,6 +309,68 @@ func (r *noteRepository) ViewerReadsMedia(ctx context.Context, campaignID, media
 		return false, fmt.Errorf("checking note readers of a picture: %w", err)
 	}
 	return true, nil
+}
+
+// pictureRef finds the media ids a note body names by their plain address.
+var pictureRef = regexp.MustCompile(`/media/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})`)
+
+// maxPictureBindings bounds the ids one save looks at.
+const maxPictureBindings = 200
+
+// pictureIDs returns the distinct media ids in html, lower-cased.
+func pictureIDs(html *string) []string {
+	if html == nil {
+		return nil
+	}
+	var out []string
+	seen := map[string]bool{}
+	for _, m := range pictureRef.FindAllStringSubmatch(*html, -1) {
+		id := strings.ToLower(m[1])
+		if !seen[id] && len(out) < maxPictureBindings {
+			seen[id] = true
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+// SyncPictureBindings keeps note_pictures in step with a saved body; see the
+// interface. The cross-table read of media_files is one statement with the
+// insert so the uploader check and the binding cannot drift apart.
+func (r *noteRepository) SyncPictureBindings(ctx context.Context, noteID, campaignID, editorID string, html *string) error {
+	ids := pictureIDs(html)
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("syncing note pictures: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if len(ids) == 0 {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM note_pictures WHERE note_id = ?`, noteID); err != nil {
+			return fmt.Errorf("clearing note pictures: %w", err)
+		}
+		return tx.Commit()
+	}
+	in := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
+	idArgs := make([]any, len(ids))
+	for i, id := range ids {
+		idArgs[i] = id
+	}
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM note_pictures WHERE note_id = ? AND media_id NOT IN (`+in+`)`,
+		append([]any{noteID}, idArgs...)...); err != nil {
+		return fmt.Errorf("dropping stale note pictures: %w", err)
+	}
+	if editorID != "" {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT IGNORE INTO note_pictures (media_id, note_id)
+			 SELECT id, ? FROM media_files
+			 WHERE campaign_id = ? AND uploaded_by = ? AND usage_type = 'note_image' AND id IN (`+in+`)`,
+			append([]any{noteID, campaignID, editorID}, idArgs...)...); err != nil {
+			return fmt.Errorf("binding note pictures: %w", err)
+		}
+	}
+	return tx.Commit()
 }
 
 // ListTree returns every note's structural row in the campaign, unfiltered.

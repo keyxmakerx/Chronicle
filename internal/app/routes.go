@@ -1420,7 +1420,7 @@ func (a *mapImageSourceAdapter) ReadImage(ctx context.Context, campaignID, media
 	if err != nil {
 		return nil, err
 	}
-	if file.CampaignID == nil || *file.CampaignID != campaignID || !file.IsImage() {
+	if file.CampaignID == nil || *file.CampaignID != campaignID || !file.IsImage() || file.IsNotePicture() {
 		return nil, apperror.NewNotFound("media file not found")
 	}
 	data, err := os.ReadFile(a.svc.FilePath(file))
@@ -2215,7 +2215,7 @@ func (a *entityMediaVerifierAdapter) MediaExistsInCampaign(ctx context.Context, 
 		}
 		return false, err
 	}
-	if f == nil {
+	if f == nil || f.IsNotePicture() {
 		return false, nil
 	}
 	return f.CampaignID != nil && *f.CampaignID == campaignID, nil
@@ -2241,7 +2241,7 @@ func (a *mapMediaVerifierAdapter) ImageInCampaign(ctx context.Context, mediaID, 
 		}
 		return false, err
 	}
-	if f == nil || f.CampaignID == nil || *f.CampaignID != campaignID {
+	if f == nil || f.IsNotePicture() || f.CampaignID == nil || *f.CampaignID != campaignID {
 		return false, nil
 	}
 	return strings.HasPrefix(f.MimeType, "image/"), nil
@@ -5341,9 +5341,8 @@ type noteMediaAccessAdapter struct {
 	svc notes.NoteService
 }
 
-func (a *noteMediaAccessAdapter) CanReadNoteMedia(ctx context.Context, campaignID, mediaID string, role int, userID string, uploaderRole int, uploaderID string) (bool, error) {
-	return a.svc.ViewerReadsMedia(ctx, campaignID, mediaID,
-		permissions.RequestViewer(role, userID), permissions.RequestViewer(uploaderRole, uploaderID))
+func (a *noteMediaAccessAdapter) CanReadNoteMedia(ctx context.Context, campaignID, mediaID string, role int, userID string) (bool, error) {
+	return a.svc.ViewerReadsMedia(ctx, campaignID, mediaID, permissions.RequestViewer(role, userID))
 }
 
 // aiMapsAdapter is the maps service in AI Import's pin types, so the

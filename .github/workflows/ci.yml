@@ -263,6 +263,7 @@ jobs:
           go test ./internal/plugins/campaigns/ -v -count=1 -run TestNavPins_Integration 2>&1 | tee -a dbtests.log
           go test ./internal/plugins/auth/ -v -count=1 -run 'TestUserRepository_.*_Integration' 2>&1 | tee -a dbtests.log
           go test ./internal/plugins/quests/ -v -count=1 -run 'Integration' 2>&1 | tee -a dbtests.log
+          go test ./internal/plugins/media/ ./internal/widgets/notes/ -v -count=1 -run 'TestDB_|TestADR058Integration_' 2>&1 | tee -a dbtests.log
           for want in TestDB_SessionRSVPTokenCannotBeSpentTwiceConcurrently \
                       TestEntityTypeRepository_Integration \
                       TestConsolidatePlayerCharacterDuplicate_Integration \
@@ -288,7 +289,20 @@ jobs:
                       TestBoardRepositoryIntegration_LooksAndBoards \
                       TestBoardRepositoryIntegration_Items \
                       TestBoardRepositoryIntegration_TypeHomes \
-                      TestPageCards_Integration; do
+                      TestPageCards_Integration \
+                      TestDB_AppGrantRoundTrip \
+                      TestDB_AttachmentSaves \
+                      TestDB_ListVisibilityMatchesCanView \
+                      TestDB_NewColumnsRoundTrip \
+                      TestDB_ScopesAndTree \
+                      TestDB_LinkQueries \
+                      TestDB_ViewerReadsMediaMatchesCanView \
+                      TestDB_SyncPictureBindings \
+                      TestADR058Integration_HiddenEntityImage_PlayerDenied \
+                      TestADR058Integration_CoDM_SeesWhatDMSees \
+                      TestDB_NotePictureAccess \
+                      TestDB_NotePicturesStayOutOfListingsAndDedup \
+                      TestDB_AdminListHidesNotePictureDetails; do
             grep -q -- "--- PASS: $want" dbtests.log || {
               echo "::error::$want did not PASS — it was skipped or never ran."
               exit 1

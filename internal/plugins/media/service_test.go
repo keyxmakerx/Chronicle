@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -26,6 +27,7 @@ type mockMediaRepo struct {
 	findReferencesFn           func(ctx context.Context, campaignID, mediaID string) ([]MediaRef, error)
 	listAllFilenamesFn         func(ctx context.Context) (map[string]bool, error)
 	listFilesByCampaignFn      func(ctx context.Context, campaignID string) ([]MediaFile, error)
+	listUnboundFn              func(ctx context.Context, olderThan time.Time) ([]string, error)
 }
 
 func (m *mockMediaRepo) Create(ctx context.Context, file *MediaFile) error {
@@ -117,6 +119,13 @@ func (m *mockMediaRepo) ListAllFilenames(ctx context.Context) (map[string]bool, 
 		return m.listAllFilenamesFn(ctx)
 	}
 	return make(map[string]bool), nil
+}
+
+func (m *mockMediaRepo) ListUnboundNotePictures(ctx context.Context, olderThan time.Time) ([]string, error) {
+	if m.listUnboundFn != nil {
+		return m.listUnboundFn(ctx, olderThan)
+	}
+	return nil, nil
 }
 
 func (m *mockMediaRepo) ListFilesByCampaign(ctx context.Context, campaignID string) ([]MediaFile, error) {

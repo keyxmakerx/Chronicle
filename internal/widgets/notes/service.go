@@ -48,11 +48,10 @@ type NoteService interface {
 	// to the jot's page, and records it on the jot (jots.go).
 	SendToJournal(ctx context.Context, campaignID string, v permissions.Viewer, jotID, pageName string) (*SendResult, error)
 
-	// ViewerReadsMedia reports whether v can read a note in campaignID whose
-	// body holds the media file mediaID and that the file's uploader can read
-	// as well. The media plugin asks this to decide who may open a picture
-	// that lives in notes.
-	ViewerReadsMedia(ctx context.Context, campaignID, mediaID string, v, uploader permissions.Viewer) (bool, error)
+	// ViewerReadsMedia reports whether v can read a note bound to the note
+	// picture mediaID in campaignID (bound by the uploader's own save). The
+	// media plugin asks this to decide who may open a picture in notes.
+	ViewerReadsMedia(ctx context.Context, campaignID, mediaID string, v permissions.Viewer) (bool, error)
 
 	// ListSharedByCampaign returns every shared note in the campaign across
 	// all owners. Unlike the three list methods above it applies no per-user
@@ -158,8 +157,8 @@ func NewNoteServiceWithAttachments(repo NoteRepository, attRepo AttachmentReposi
 
 // ViewerReadsMedia delegates to the repository, which holds the one SQL form
 // of the note visibility rule.
-func (s *noteService) ViewerReadsMedia(ctx context.Context, campaignID, mediaID string, v, uploader permissions.Viewer) (bool, error) {
-	return s.repo.ViewerReadsMedia(ctx, campaignID, mediaID, v, uploader)
+func (s *noteService) ViewerReadsMedia(ctx context.Context, campaignID, mediaID string, v permissions.Viewer) (bool, error) {
+	return s.repo.ViewerReadsMedia(ctx, campaignID, mediaID, v)
 }
 
 // SetEventPublisher sets the event publisher for real-time sync.
@@ -336,6 +335,11 @@ func (s *noteService) Update(ctx context.Context, id string, editor permissions.
 
 	if err := s.repo.Update(ctx, note); err != nil {
 		return nil, err
+	}
+	if req.EntryHTML != nil {
+		if err := s.repo.SyncPictureBindings(ctx, note.ID, note.CampaignID, userID, note.EntryHTML); err != nil {
+			return nil, err
+		}
 	}
 	updated, err := s.repo.FindByID(ctx, note.ID)
 	if err != nil {
@@ -607,6 +611,9 @@ func (s *noteService) RestoreVersion(ctx context.Context, noteID, versionID, use
 	note.LastEditedBy = &userID
 
 	if err := s.repo.Update(ctx, note); err != nil {
+		return nil, err
+	}
+	if err := s.repo.SyncPictureBindings(ctx, note.ID, note.CampaignID, userID, note.EntryHTML); err != nil {
 		return nil, err
 	}
 	restored, err := s.repo.FindByID(ctx, note.ID)

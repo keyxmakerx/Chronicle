@@ -62,9 +62,7 @@ type EntityVisibilityFilter interface {
 // reads note tables or repeats the notes visibility rule. Nil is a valid
 // (unwired) value -- checkNoteImageAccess then admits only the uploader.
 type NoteMediaAccess interface {
-	// A note counts only if the uploader can read it too, so the uploader's
-	// role and id are passed along with the viewer's.
-	CanReadNoteMedia(ctx context.Context, campaignID, mediaID string, role int, userID string, uploaderRole int, uploaderID string) (bool, error)
+	CanReadNoteMedia(ctx context.Context, campaignID, mediaID string, role int, userID string) (bool, error)
 }
 
 // MapImageGuard says whether a media file is the background of a map that has a
@@ -608,12 +606,11 @@ func (h *Handler) checkBaseMediaAccess(c echo.Context, file *MediaFile, isThumb 
 }
 
 // checkNoteImageAccess is the rule for a picture that lives in notes: only a
-// current campaign member who can read at least one note holding it, or the
-// person who uploaded it (so it shows before the note is first saved). A note
-// counts only when the uploader can read it too and is still a member, so an
-// id pasted into a note the uploader cannot see opens nothing. It
-// never consults the pages that reference the file and never falls back to
-// plain membership, so a picture used only in someone's private note is
+// current campaign member who can read at least one note the uploader bound
+// the picture to by saving it there, or the uploader (so it shows before the
+// note is first saved). An id pasted into anyone else's note binds nothing.
+// The uploader must still be a member. It never consults the pages that
+// reference the file and never falls back to plain membership, so a picture used only in someone's private note is
 // closed to the rest of the table. Fails closed: an unwired rule admits only
 // the uploader.
 func (h *Handler) checkNoteImageAccess(ctx context.Context, file *MediaFile, userID string) (bool, error) {
@@ -635,9 +632,7 @@ func (h *Handler) checkNoteImageAccess(ctx context.Context, file *MediaFile, use
 	if !h.memberChecker.IsCampaignMember(campaignID, file.UploadedBy) {
 		return false, nil
 	}
-	return h.noteMedia.CanReadNoteMedia(ctx, campaignID, file.ID,
-		h.viewerVisibilityRole(campaignID, userID), userID,
-		h.viewerVisibilityRole(campaignID, file.UploadedBy), file.UploadedBy)
+	return h.noteMedia.CanReadNoteMedia(ctx, campaignID, file.ID, h.viewerVisibilityRole(campaignID, userID), userID)
 }
 
 // mediaAccessCacheTTL bounds how long an ADR-058 entity-scoped access
@@ -831,6 +826,10 @@ func (h *Handler) setSecurityHeaders(c echo.Context, file *MediaFile) {
 
 	// Cache control based on campaign privacy.
 	switch {
+	case file.IsNotePicture():
+		// Readers change as the note's sharing does, and a public campaign's
+		// notes are no more public than a private one's: never cacheable.
+		resp.Header().Set("Cache-Control", "private, no-store, max-age=0")
 	case file.CampaignIsPublic != nil && !*file.CampaignIsPublic:
 		// Private campaign media must not be cached by shared proxies.
 		resp.Header().Set("Cache-Control", "private, no-store, max-age=0")

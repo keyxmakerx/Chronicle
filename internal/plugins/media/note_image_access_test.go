@@ -18,14 +18,12 @@ import (
 type fakeNoteMedia struct {
 	readers  map[string]bool
 	err      error
-	calls    int
-	role     int
-	uploader string
+	calls int
+	role  int
 }
 
-func (f *fakeNoteMedia) CanReadNoteMedia(_ context.Context, _, _ string, role int, userID string, _ int, uploaderID string) (bool, error) {
+func (f *fakeNoteMedia) CanReadNoteMedia(_ context.Context, _, _ string, role int, userID string) (bool, error) {
 	f.calls++
-	f.uploader = uploaderID
 	f.role = role
 	if f.err != nil {
 		return false, f.err

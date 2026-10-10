@@ -323,53 +323,74 @@ func TestDB_LinkQueries(t *testing.T) {
 	}
 }
 
+// seedNotePicture inserts a note_image media row uploaded by uploader.
+func seedNotePicture(t *testing.T, db *sql.DB, campaignID, uploader string) string {
+	t.Helper()
+	id := newUUID(t)
+	if _, err := db.Exec(`INSERT INTO media_files
+		(id, campaign_id, uploaded_by, filename, original_name, mime_type, file_size, usage_type, thumbnail_paths)
+		VALUES (?,?,?,?,?,?,?,?,?)`,
+		id, campaignID, uploader, id+".png", "p.png", "image/png", 10, "note_image", "{}"); err != nil {
+		t.Fatalf("seed picture: %v", err)
+	}
+	return id
+}
+
+func pictureBody(id string) *string {
+	s := `<figure class="ce-img ce-img--w50 ce-img--center"><img src="/media/` + id + `" alt=""></figure>`
+	return &s
+}
+
+func boundNotes(t *testing.T, db *sql.DB, media string) int {
+	t.Helper()
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM note_pictures WHERE media_id = ?`, media).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
+
 // TestDB_ViewerReadsMediaMatchesCanView: whether a viewer reads a picture is
-// whether they can read some note holding it, for every audience, and a note
-// that only looks like it holds the picture (another id, another campaign, a
-// wildcard) opens nothing.
+// whether they can read some note the uploader bound it to, for every
+// audience, and a note in another campaign opens nothing.
 func TestDB_ViewerReadsMediaMatchesCanView(t *testing.T) {
 	db := newNotesScratchDB(t)
 	ctx := context.Background()
 	repo := NewNoteRepository(db)
 	camp, u := seedNotesCampaign(t, db, "gm", "ana", "bo", "cy")
-	otherCamp, _ := seedNotesCampaign(t, db, "dee")
+	otherCamp, ou := seedNotesCampaign(t, db, "dee")
+	pic := seedNotePicture(t, db, camp, u["ana"])
 
-	pic := newUUID(t)
-	ana := permissions.RequestViewer(permissions.RolePlayer, u["ana"]) // uploaded the picture
-	body := func(id string) *string {
-		s := `<figure class="ce-img ce-img--w50 ce-img--center"><img src="/media/` + id + `" alt=""></figure>`
-		return &s
-	}
-	mk := func(campaign, owner string, html *string, mutate func(n *Note)) {
-		n := &Note{ID: newUUID(t), CampaignID: campaign, UserID: owner, Title: "n", Content: []Block{}, Color: "#374151", EntryHTML: html}
+	// mk writes a note and has saver save the picture into it.
+	mk := func(campaign, owner, saver string, uploaderCampaign string, mutate func(n *Note)) {
+		n := &Note{ID: newUUID(t), CampaignID: campaign, UserID: owner, Title: "n", Content: []Block{}, Color: "#374151", EntryHTML: pictureBody(pic)}
 		mutate(n)
 		if err := repo.Create(ctx, n); err != nil {
 			t.Fatalf("create: %v", err)
+		}
+		if err := repo.SyncPictureBindings(ctx, n.ID, uploaderCampaign, saver, n.EntryHTML); err != nil {
+			t.Fatalf("sync: %v", err)
 		}
 	}
 
 	tests := []struct {
 		name  string
 		setup func()
-		want  map[string]bool // viewer -> reads the picture
+		want  map[string]bool
 	}{
-		{"private note: owner only, not even the GM", func() { mk(camp, u["ana"], body(pic), func(n *Note) {}) },
+		{"private note: owner only, not even the GM", func() { mk(camp, u["ana"], u["ana"], camp, func(n *Note) {}) },
 			map[string]bool{"ana": true, "gm": false, "bo": false, "cy": false}},
-		{"party note", func() { mk(camp, u["ana"], body(pic), func(n *Note) { n.IsShared = true }) },
+		{"party note", func() { mk(camp, u["ana"], u["ana"], camp, func(n *Note) { n.IsShared = true }) },
 			map[string]bool{"ana": true, "gm": true, "bo": true, "cy": true}},
-		{"note named to one person", func() { mk(camp, u["ana"], body(pic), func(n *Note) { n.SharedWith = []string{u["bo"]} }) },
+		{"note named to one person", func() { mk(camp, u["ana"], u["ana"], camp, func(n *Note) { n.SharedWith = []string{u["bo"]} }) },
 			map[string]bool{"ana": true, "gm": false, "bo": true, "cy": false}},
-		{"note shared with the GM", func() { mk(camp, u["ana"], body(pic), func(n *Note) { n.SharedWithGM = true }) },
+		{"note shared with the GM", func() { mk(camp, u["ana"], u["ana"], camp, func(n *Note) { n.SharedWithGM = true }) },
 			map[string]bool{"ana": true, "gm": true, "bo": false, "cy": false}},
-		{"bo pastes ana's picture into bo's own private note", func() { mk(camp, u["bo"], body(pic), func(n *Note) {}) },
-			map[string]bool{"ana": false, "gm": false, "bo": false, "cy": false}},
-		{"bo pastes it into a party note ana can read", func() { mk(camp, u["bo"], body(pic), func(n *Note) { n.IsShared = true }) },
+		{"Bo's party note saved by Ana (a collaborator) binds", func() { mk(camp, u["bo"], u["ana"], camp, func(n *Note) { n.IsShared = true }) },
 			map[string]bool{"ana": true, "gm": true, "bo": true, "cy": true}},
-		{"bo pastes it into a note shared only with cy", func() { mk(camp, u["bo"], body(pic), func(n *Note) { n.SharedWith = []string{u["cy"]} }) },
+		{"Bo pastes the id into his own party note: nothing binds", func() { mk(camp, u["bo"], u["bo"], camp, func(n *Note) { n.IsShared = true }) },
 			map[string]bool{"ana": false, "gm": false, "bo": false, "cy": false}},
-		{"a private note holding some other picture", func() { mk(camp, u["ana"], body(newUUID(t)), func(n *Note) { n.IsShared = true }) },
-			map[string]bool{"ana": false, "gm": false, "bo": false, "cy": false}},
-		{"a party note in another campaign", func() { mk(otherCamp, u["ana"], body(pic), func(n *Note) { n.IsShared = true }) },
+		{"a note in another campaign", func() { mk(otherCamp, ou["dee"], u["ana"], otherCamp, func(n *Note) { n.IsShared = true }) },
 			map[string]bool{"ana": false, "gm": false, "bo": false, "cy": false}},
 	}
 	for _, tc := range tests {
@@ -383,7 +404,7 @@ func TestDB_ViewerReadsMediaMatchesCanView(t *testing.T) {
 				if who == "gm" {
 					role = permissions.RoleOwner
 				}
-				got, err := repo.ViewerReadsMedia(ctx, camp, pic, permissions.RequestViewer(role, u[who]), ana)
+				got, err := repo.ViewerReadsMedia(ctx, camp, pic, permissions.RequestViewer(role, u[who]))
 				if err != nil {
 					t.Fatalf("%s: %v", who, err)
 				}
@@ -398,14 +419,79 @@ func TestDB_ViewerReadsMediaMatchesCanView(t *testing.T) {
 		if _, err := db.Exec(`DELETE FROM notes`); err != nil {
 			t.Fatal(err)
 		}
-		mk(camp, u["ana"], body(pic), func(n *Note) { n.IsShared = true })
-		if ok, _ := repo.ViewerReadsMedia(ctx, camp, pic, permissions.RequestViewer(permissions.RolePlayer, ""), ana); ok {
+		mk(camp, u["ana"], u["ana"], camp, func(n *Note) { n.IsShared = true })
+		if ok, _ := repo.ViewerReadsMedia(ctx, camp, pic, permissions.RequestViewer(permissions.RolePlayer, "")); ok {
 			t.Error("an anonymous viewer read a party note's picture")
 		}
 		for _, bad := range []string{"%", "%%%%%%%%", `a" OR 1=1 -- `, ""} {
-			if ok, _ := repo.ViewerReadsMedia(ctx, camp, bad, permissions.RequestViewer(permissions.RoleOwner, u["gm"]), ana); ok {
+			if ok, _ := repo.ViewerReadsMedia(ctx, camp, bad, permissions.RequestViewer(permissions.RoleOwner, u["gm"])); ok {
 				t.Errorf("id %q matched a note", bad)
 			}
 		}
 	})
+}
+
+// TestDB_SyncPictureBindings: a binding is made only by the uploader's save,
+// is dropped by any save that no longer holds the picture, and goes with its
+// note or its file.
+func TestDB_SyncPictureBindings(t *testing.T) {
+	db := newNotesScratchDB(t)
+	ctx := context.Background()
+	repo := NewNoteRepository(db)
+	camp, u := seedNotesCampaign(t, db, "ana", "bo")
+	mine := seedNotePicture(t, db, camp, u["ana"])
+	theirs := seedNotePicture(t, db, camp, u["bo"])
+	attachment := newUUID(t)
+	if _, err := db.Exec(`INSERT INTO media_files (id, campaign_id, uploaded_by, filename, original_name, mime_type, file_size, usage_type, thumbnail_paths)
+		VALUES (?,?,?,?,?,?,?,?,?)`, attachment, camp, u["ana"], "a.png", "a.png", "image/png", 1, "attachment", "{}"); err != nil {
+		t.Fatal(err)
+	}
+
+	n := &Note{ID: newUUID(t), CampaignID: camp, UserID: u["bo"], Title: "n", Content: []Block{}, Color: "#374151"}
+	if err := repo.Create(ctx, n); err != nil {
+		t.Fatal(err)
+	}
+	both := func(a, b string) *string { s := `<img src="/media/` + a + `"><img src="/media/` + b + `">`; return &s }
+
+	// Ana saves: only her own note picture binds, not Bo's, not an attachment.
+	if err := repo.SyncPictureBindings(ctx, n.ID, camp, u["ana"], both(mine, theirs)); err != nil {
+		t.Fatal(err)
+	}
+	if boundNotes(t, db, mine) != 1 || boundNotes(t, db, theirs) != 0 {
+		t.Errorf("after Ana's save: mine=%d theirs=%d, want 1 and 0", boundNotes(t, db, mine), boundNotes(t, db, theirs))
+	}
+	if err := repo.SyncPictureBindings(ctx, n.ID, camp, u["ana"], both(attachment, attachment)); err != nil {
+		t.Fatal(err)
+	}
+	if boundNotes(t, db, attachment) != 0 || boundNotes(t, db, mine) != 0 {
+		t.Error("a page attachment bound, or a removed picture kept its binding")
+	}
+
+	// Bo saves a body naming Ana's picture: nothing binds. Saving it again
+	// after Ana bound it keeps her binding.
+	if err := repo.SyncPictureBindings(ctx, n.ID, camp, u["bo"], pictureBody(mine)); err != nil {
+		t.Fatal(err)
+	}
+	if boundNotes(t, db, mine) != 0 {
+		t.Error("Bo's save bound Ana's picture")
+	}
+	_ = repo.SyncPictureBindings(ctx, n.ID, camp, u["ana"], pictureBody(mine))
+	_ = repo.SyncPictureBindings(ctx, n.ID, camp, u["bo"], pictureBody(mine))
+	if boundNotes(t, db, mine) != 1 {
+		t.Error("a later save by Bo dropped a binding whose picture is still in the text")
+	}
+	// An empty body clears everything; deleting the note cascades.
+	if err := repo.SyncPictureBindings(ctx, n.ID, camp, u["bo"], nil); err != nil {
+		t.Fatal(err)
+	}
+	if boundNotes(t, db, mine) != 0 {
+		t.Error("an empty body kept a binding")
+	}
+	_ = repo.SyncPictureBindings(ctx, n.ID, camp, u["ana"], pictureBody(mine))
+	if err := repo.Delete(ctx, n.ID); err != nil {
+		t.Fatal(err)
+	}
+	if boundNotes(t, db, mine) != 0 {
+		t.Error("deleting the note left its binding")
+	}
 }

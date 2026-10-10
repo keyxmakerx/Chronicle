@@ -714,10 +714,31 @@ func (s *mediaService) DeleteCampaignFiles(ctx context.Context, campaignID strin
 	return deleted, nil
 }
 
+// notePictureGrace is how long an unbound note picture is kept, so a picture
+// uploaded into a note still being written is not collected under its author.
+const notePictureGrace = 24 * time.Hour
+
 // CleanupOrphans walks the media directory, checks each file against the
 // database, and deletes any files not tracked. This handles the case where
 // an upload crashes between writing the file and saving the DB record.
 func (s *mediaService) CleanupOrphans(ctx context.Context) (int, error) {
+	// Note pictures no note is bound to were abandoned (never saved into a
+	// note, or their note is gone); keeping them would let players fill the
+	// campaign's quota with files nobody can reach. The delay covers a note
+	// not yet saved. A listing error only skips this step.
+	removedPictures := 0
+	if ids, err := s.repo.ListUnboundNotePictures(ctx, time.Now().UTC().Add(-notePictureGrace)); err != nil {
+		slog.Warn("orphan cleanup: could not list unbound note pictures", slog.Any("error", err))
+	} else {
+		for _, id := range ids {
+			if err := s.Delete(ctx, id); err != nil {
+				slog.Warn("orphan cleanup: could not delete unbound note picture", slog.String("file_id", id), slog.Any("error", err))
+				continue
+			}
+			removedPictures++
+		}
+	}
+
 	knownFiles, err := s.repo.ListAllFilenames(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("listing known files: %w", err)
@@ -780,8 +801,8 @@ func (s *mediaService) CleanupOrphans(ctx context.Context) (int, error) {
 		return removed, fmt.Errorf("walking media directory: %w", err)
 	}
 
-	slog.Info("orphan cleanup completed", slog.Int("removed", removed))
-	return removed, nil
+	slog.Info("orphan cleanup completed", slog.Int("removed", removed), slog.Int("note_pictures", removedPictures))
+	return removed + removedPictures, nil
 }
 
 // maxImageDimension is the maximum width or height in pixels for uploaded images.

@@ -11,6 +11,7 @@ import (
 	"context"
 	"database/sql"
 	"testing"
+	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
@@ -27,9 +28,8 @@ func seedNotePicture(t *testing.T, db *sql.DB, campaignID, uploadedBy string) st
 
 type dbNoteMedia struct{ svc notes.NoteService }
 
-func (a dbNoteMedia) CanReadNoteMedia(ctx context.Context, campaignID, mediaID string, role int, userID string, uploaderRole int, uploaderID string) (bool, error) {
-	return a.svc.ViewerReadsMedia(ctx, campaignID, mediaID,
-		permissions.RequestViewer(role, userID), permissions.RequestViewer(uploaderRole, uploaderID))
+func (a dbNoteMedia) CanReadNoteMedia(ctx context.Context, campaignID, mediaID string, role int, userID string) (bool, error) {
+	return a.svc.ViewerReadsMedia(ctx, campaignID, mediaID, permissions.RequestViewer(role, userID))
 }
 
 func TestDB_NotePictureAccess(t *testing.T) {
@@ -42,128 +42,159 @@ func TestDB_NotePictureAccess(t *testing.T) {
 		seedADR058Member(t, db, camp, id, "player")
 	}
 	outsider := seedADR058User(t, db, "Outsider")
+	player := func(id string) permissions.Viewer { return permissions.RequestViewer(permissions.RolePlayer, id) }
 
-	// A picture Ana put in her note, and a page that mentions the same file.
+	// A picture Ana uploaded; the notes below are written through the real
+	// notes service, so bindings come from real saves.
 	pic := seedNotePicture(t, db, camp, ana)
-	noteID := adr058DBID(t)
 	html := `<p><figure class="ce-img"><img src="/media/` + pic + `"></figure></p>`
-	mustADR058Exec(t, db, `INSERT INTO notes (id, campaign_id, user_id, title, content, entry_html) VALUES (?,?,?,?,?,?)`,
-		noteID, camp, ana, "Ana's note", "[]", html)
+	svc := notes.NewNoteService(notes.NewNoteRepository(db))
 
-	// A public page whose text also mentions the file must not open it.
-	et := seedADR058EntityType(t, db, camp)
-	mention := "/media/" + pic
-	seedADR058Entity(t, db, camp, et, gm, adr058Entity{Name: "Open page", EntryHTML: &mention})
+	reshare := func(noteID, owner string, vis notes.Visibility, with ...string) {
+		if _, err := svc.Update(ctx, noteID, player(owner), notes.UpdateNoteRequest{Visibility: &vis, SharedWith: with}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// write makes a note owned by owner, saved by saver with the picture in
+	// its text, then shared as vis (with named people for "custom").
+	write := func(owner, saver string, vis notes.Visibility, with ...string) string {
+		n, err := svc.Create(ctx, camp, player(owner), notes.CreateNoteRequest{Title: "n"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		req := notes.UpdateNoteRequest{EntryHTML: &html}
+		if _, err := svc.Update(ctx, n.ID, player(saver), req); err != nil {
+			t.Fatal(err)
+		}
+		if vis != notes.VisibilityPrivate { // a new note already is private
+			reshare(n.ID, owner, vis, with...)
+		}
+		return n.ID
+	}
+	clearNotes := func() { mustADR058Exec(t, db, `DELETE FROM notes WHERE campaign_id = ?`, camp) }
 
 	h := &Handler{
 		memberChecker:    &dbMemberChecker{db: db},
 		service:          &fakeAccessMediaService{},
 		entityVisibility: &dbEntityVisibility{repo: entities.NewEntityRepository(db)},
-		noteMedia:        dbNoteMedia{svc: notes.NewNoteService(notes.NewNoteRepository(db))},
+		noteMedia:        dbNoteMedia{svc: svc},
 	}
-	file := func() *MediaFile {
+	check := func(who string) error {
 		f, err := NewMediaRepository(db).FindByID(ctx, pic)
 		if err != nil {
 			t.Fatal(err)
 		}
-		return f
+		return h.checkMediaAccess(newADR058TestContext(who), f, false, "")
 	}
-	check := func(who string) error {
-		return h.checkMediaAccess(newADR058TestContext(who), file(), false, "")
-	}
-	setSharing := func(set string, args ...any) {
-		mustADR058Exec(t, db, `UPDATE notes SET is_shared = FALSE, shared_with_gm = FALSE, shared_with = NULL WHERE id = ?`, noteID)
-		if set != "" {
-			mustADR058Exec(t, db, `UPDATE notes SET `+set+` WHERE id = ?`, append(args, noteID)...)
-		}
-	}
-
-	tests := []struct {
-		name    string
-		sharing func()
-		allowed map[string]bool
-	}{
-		{"private note", func() { setSharing("") },
-			map[string]bool{ana: true, gm: false, bo: false, cy: false, outsider: false}},
-		{"note shared with the party", func() { setSharing("is_shared = TRUE") },
-			map[string]bool{ana: true, gm: true, bo: true, cy: true, outsider: false}},
-		{"note named to Bo", func() { setSharing("shared_with = JSON_ARRAY(?)", bo) },
-			map[string]bool{ana: true, gm: false, bo: true, cy: false, outsider: false}},
-		{"note shared with the GM", func() { setSharing("shared_with_gm = TRUE") },
-			map[string]bool{ana: true, gm: true, bo: false, cy: false, outsider: false}},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			tc.sharing()
-			for who, want := range tc.allowed {
-				err := check(who)
-				if want {
-					mustAllow(t, err, tc.name)
-				} else {
-					mustDeny(t, err, tc.name)
-				}
+	expect := func(label string, allowed map[string]bool) {
+		t.Helper()
+		for who, want := range allowed {
+			if want {
+				mustAllow(t, check(who), label)
+			} else {
+				mustDeny(t, check(who), label)
 			}
-		})
+		}
 	}
 
-	addNote := func(owner, sharing string) string {
-		id := adr058DBID(t)
-		mustADR058Exec(t, db, `INSERT INTO notes (id, campaign_id, user_id, title, content, entry_html) VALUES (?,?,?,?,?,?)`,
-			id, camp, owner, "pasted", "[]", html)
-		if sharing != "" {
-			mustADR058Exec(t, db, `UPDATE notes SET `+sharing+` WHERE id = ?`, id)
-		}
-		return id
-	}
-
-	t.Run("a picture id pasted into someone else's private note grants nothing", func(t *testing.T) {
-		setSharing("") // Ana's own note stays private
-		mine := addNote(bo, "")
-		defer mustADR058Exec(t, db, `DELETE FROM notes WHERE id = ?`, mine)
-		mustDeny(t, check(bo), "Bo, who pasted Ana's private picture id into Bo's private note")
-		mustDeny(t, check(cy), "another player")
-		mustAllow(t, check(ana), "the uploader")
+	t.Run("the uploader's own note follows its sharing", func(t *testing.T) {
+		clearNotes()
+		id := write(ana, ana, notes.VisibilityPrivate)
+		expect("private", map[string]bool{ana: true, gm: false, bo: false, cy: false, outsider: false})
+		reshare(id, ana, notes.VisibilityParty)
+		expect("party", map[string]bool{ana: true, gm: true, bo: true, cy: true, outsider: false})
+		reshare(id, ana, notes.VisibilityCustom, bo)
+		expect("named to Bo", map[string]bool{ana: true, gm: false, bo: true, cy: false, outsider: false})
+		reshare(id, ana, notes.VisibilityGM)
+		expect("shared with the GM", map[string]bool{ana: true, gm: true, bo: false, cy: false, outsider: false})
 	})
 
-	t.Run("a note the uploader cannot read grants nothing even when shared", func(t *testing.T) {
-		setSharing("")
-		onlyCy := addNote(bo, "shared_with = JSON_ARRAY('"+cy+"')")
-		defer mustADR058Exec(t, db, `DELETE FROM notes WHERE id = ?`, onlyCy)
-		mustDeny(t, check(cy), "Cy, named on a note the uploader is not named on")
+	t.Run("an id pasted into someone else's note grants nothing, however it is shared", func(t *testing.T) {
+		clearNotes()
+		ownerNote := write(ana, ana, notes.VisibilityPrivate) // Ana unshares / never shared
+		// Bo pastes the id into his own note and then shares that note.
+		bos := write(bo, bo, notes.VisibilityPrivate)
+		expect("Bo's private note", map[string]bool{bo: false, cy: false, gm: false, ana: true})
+		reshare(bos, bo, notes.VisibilityCustom, ana)
+		expect("Bo's note shared with Ana", map[string]bool{bo: false, cy: false, gm: false, ana: true})
+		reshare(bos, bo, notes.VisibilityParty)
+		expect("Bo's note shared with the party", map[string]bool{bo: false, cy: false, gm: false, ana: true})
+		_ = ownerNote
 	})
 
-	t.Run("a picture Ana adds to a party note is visible to the party", func(t *testing.T) {
-		setSharing("")
-		// Bo owns the shared note; Ana, a collaborator, adds the picture.
-		shared := addNote(bo, "is_shared = TRUE")
-		defer mustADR058Exec(t, db, `DELETE FROM notes WHERE id = ?`, shared)
-		for _, who := range []string{bo, cy, gm, ana} {
-			mustAllow(t, check(who), "party note picture")
+	t.Run("a picture Ana adds to Bo's party note is visible to the party", func(t *testing.T) {
+		clearNotes()
+		write(bo, ana, notes.VisibilityParty) // Bo's note; Ana, the collaborator, saves the picture in
+		expect("collaborator picture", map[string]bool{ana: true, bo: true, cy: true, gm: true, outsider: false})
+	})
+
+	t.Run("a save without the picture drops the binding", func(t *testing.T) {
+		clearNotes()
+		id := write(ana, ana, notes.VisibilityParty)
+		expect("before", map[string]bool{bo: true})
+		empty := "<p>gone</p>"
+		if _, err := svc.Update(ctx, id, player(ana), notes.UpdateNoteRequest{EntryHTML: &empty}); err != nil {
+			t.Fatal(err)
 		}
-		mustDeny(t, check(outsider), "someone outside the campaign")
+		expect("after", map[string]bool{bo: false, ana: true})
+	})
+
+	t.Run("a later save by someone else keeps the binding but cannot create one", func(t *testing.T) {
+		clearNotes()
+		id := write(ana, ana, notes.VisibilityParty)
+		if _, err := svc.Update(ctx, id, player(bo), notes.UpdateNoteRequest{EntryHTML: &html}); err != nil {
+			t.Fatal(err)
+		}
+		expect("kept", map[string]bool{bo: true, cy: true})
+		// Bo's save into a note Ana never saved binds nothing.
+		clearNotes()
+		other := write(bo, bo, notes.VisibilityParty)
+		_ = other
+		expect("not bound", map[string]bool{bo: false, cy: false})
+	})
+
+	t.Run("a page that mentions the file does not open it", func(t *testing.T) {
+		clearNotes()
+		write(ana, ana, notes.VisibilityPrivate)
+		et := seedADR058EntityType(t, db, camp)
+		mention := "/media/" + pic
+		seedADR058Entity(t, db, camp, et, gm, adr058Entity{Name: "Open page", EntryHTML: &mention})
+		expect("page mention", map[string]bool{bo: false, cy: false, gm: false, ana: true})
 	})
 
 	t.Run("uploader removed from the campaign: the picture stops loading for others", func(t *testing.T) {
-		setSharing("is_shared = TRUE")
-		mustAllow(t, check(bo), "before the uploader leaves")
+		clearNotes()
+		write(ana, ana, notes.VisibilityParty)
+		expect("before", map[string]bool{bo: true})
 		mustADR058Exec(t, db, `DELETE FROM campaign_members WHERE campaign_id = ? AND user_id = ?`, camp, ana)
 		defer seedADR058Member(t, db, camp, ana, "player")
-		mustDeny(t, check(bo), "party member, uploader gone")
-		mustDeny(t, check(gm), "the GM, uploader gone")
-		mustDeny(t, check(ana), "the removed uploader")
+		expect("uploader gone", map[string]bool{bo: false, gm: false, ana: false})
 	})
 
-	t.Run("note deleted: only the uploader still has it", func(t *testing.T) {
-		mustADR058Exec(t, db, `DELETE FROM notes WHERE id = ?`, noteID)
-		mustAllow(t, check(ana), "uploader")
-		mustDeny(t, check(bo), "another player")
-		mustDeny(t, check(gm), "the GM")
-	})
-
-	t.Run("picture in no note at all is not open to the campaign", func(t *testing.T) {
+	t.Run("note deleted: only the uploader still has it, and nobody by membership", func(t *testing.T) {
+		clearNotes()
+		write(ana, ana, notes.VisibilityParty)
+		clearNotes()
+		expect("deleted", map[string]bool{ana: true, bo: false, gm: false})
 		loose := seedNotePicture(t, db, camp, ana)
 		f, _ := NewMediaRepository(db).FindByID(ctx, loose)
 		mustDeny(t, h.checkMediaAccess(newADR058TestContext(bo), f, false, ""), "membership fallback")
+	})
+
+	t.Run("orphan cleanup collects pictures no note holds, after the grace period", func(t *testing.T) {
+		clearNotes()
+		bound := pic
+		write(ana, ana, notes.VisibilityPrivate)
+		stale := seedNotePicture(t, db, camp, ana)
+		fresh := seedNotePicture(t, db, camp, ana)
+		mustADR058Exec(t, db, `UPDATE media_files SET created_at = NOW() - INTERVAL 3 DAY WHERE id IN (?, ?)`, bound, stale)
+		got, err := NewMediaRepository(db).ListUnboundNotePictures(ctx, time.Now().UTC().Add(-notePictureGrace))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != 1 || got[0] != stale {
+			t.Errorf("collected %v, want only the old unbound picture %s (not the bound one %s nor the fresh one %s)", got, stale, bound, fresh)
+		}
 	})
 }
 
@@ -206,5 +237,33 @@ func TestDB_NotePicturesStayOutOfListingsAndDedup(t *testing.T) {
 	mustADR058Exec(t, db, `DELETE FROM media_files WHERE id = ?`, page)
 	if got, _ := repo.FindByContentHash(ctx, camp, hash); got != nil {
 		t.Errorf("dedup matched the note picture %s", got.ID)
+	}
+}
+
+// The admin storage list keeps a note picture's row for disk accounting but
+// never carries its file name or thumbnails.
+func TestDB_AdminListHidesNotePictureDetails(t *testing.T) {
+	db := newADR058ScratchDB(t)
+	camp, gm := seedADR058Campaign(t, db)
+	note := seedNotePicture(t, db, camp, gm)
+	mustADR058Exec(t, db, `UPDATE media_files SET original_name = 'secret-plan.png', thumbnail_paths = '{"300":"x_300.jpg"}' WHERE id = ?`, note)
+	page := seedADR058MediaFile(t, db, camp, gm)
+	mustADR058Exec(t, db, `UPDATE media_files SET thumbnail_paths = '{"300":"y_300.jpg"}' WHERE id = ?`, page)
+
+	files, total, err := NewMediaRepository(db).ListAll(context.Background(), 50, 0)
+	if err != nil || total != 2 || len(files) != 2 {
+		t.Fatalf("list = %d rows, total %d, err %v; the row must stay for disk accounting", len(files), total, err)
+	}
+	for _, f := range files {
+		switch f.ID {
+		case note:
+			if f.OriginalName == "secret-plan.png" || len(f.ThumbnailPaths) != 0 || f.FileSize == 0 {
+				t.Errorf("note picture row leaks or lost its size: %+v", f.MediaFile)
+			}
+		case page:
+			if f.OriginalName != "test.png" || f.ThumbnailPaths["300"] == "" {
+				t.Errorf("ordinary row changed: %+v", f.MediaFile)
+			}
+		}
 	}
 }

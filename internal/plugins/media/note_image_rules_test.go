@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/labstack/echo/v4"
 
@@ -146,6 +147,61 @@ func TestSignedLinksForMember_NotePictures(t *testing.T) {
 // noteMediaByFile answers per file, for tests that need several pictures.
 type noteMediaByFile map[string]map[string]bool
 
-func (n noteMediaByFile) CanReadNoteMedia(_ context.Context, _, mediaID string, _ int, userID string, _ int, _ string) (bool, error) {
+func (n noteMediaByFile) CanReadNoteMedia(_ context.Context, _, mediaID string, _ int, userID string) (bool, error) {
 	return n[mediaID][userID], nil
+}
+
+// A note picture is never cacheable by a shared cache, in a public campaign
+// too: who may read it changes as its note's sharing does.
+func TestSetSecurityHeaders_NotePictureIsNeverCached(t *testing.T) {
+	camp := "camp-1"
+	tests := []struct {
+		name string
+		file *MediaFile
+		want string
+	}{
+		{"note picture, public campaign", &MediaFile{CampaignID: &camp, CampaignIsPublic: boolPtr(true), UsageType: UsageNoteImage}, "private, no-store, max-age=0"},
+		{"note picture, private campaign", &MediaFile{CampaignID: &camp, CampaignIsPublic: boolPtr(false), UsageType: UsageNoteImage}, "private, no-store, max-age=0"},
+		{"page picture, public campaign keeps its cache", &MediaFile{CampaignID: &camp, CampaignIsPublic: boolPtr(true), UsageType: UsageEntityImage}, "public, max-age=31536000, immutable"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c := newAccessTestContext(nil, nil)
+			(&Handler{}).setSecurityHeaders(c, tc.file)
+			if got := c.Response().Header().Get("Cache-Control"); got != tc.want {
+				t.Errorf("Cache-Control = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// The orphan sweep also collects note pictures no note holds, but only ones
+// older than a day.
+func TestCleanupOrphans_CollectsUnboundNotePictures(t *testing.T) {
+	var cutoff time.Time
+	var deleted []string
+	camp := "camp-1"
+	repo := &mockMediaRepo{
+		listUnboundFn: func(_ context.Context, olderThan time.Time) ([]string, error) {
+			cutoff = olderThan
+			return []string{"stale-1", "stale-2"}, nil
+		},
+		findByIDFn: func(_ context.Context, id string) (*MediaFile, error) {
+			return &MediaFile{ID: id, CampaignID: &camp, Filename: id + ".png", UsageType: UsageNoteImage}, nil
+		},
+		deleteFn: func(_ context.Context, id string) error { deleted = append(deleted, id); return nil },
+	}
+	svc := newTestMediaService(repo)
+	svc.mediaPath = t.TempDir()
+
+	n, err := svc.CleanupOrphans(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 2 || len(deleted) != 2 {
+		t.Errorf("removed %d, deleted %v; want both unbound pictures", n, deleted)
+	}
+	if age := time.Since(cutoff); age < 23*time.Hour || age > 25*time.Hour {
+		t.Errorf("cutoff is %v old, want about 24h so a note still being written keeps its picture", age)
+	}
 }

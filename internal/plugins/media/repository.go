@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -76,6 +77,11 @@ type MediaRepository interface {
 	// ListFilesByCampaign returns all media files for a campaign without
 	// pagination. Used for bulk cleanup during campaign deletion.
 	ListFilesByCampaign(ctx context.Context, campaignID string) ([]MediaFile, error)
+
+	// ListUnboundNotePictures returns the ids of note pictures created before
+	// olderThan that no note is bound to: uploaded and never saved into a
+	// note, or left behind when their note was deleted or edited.
+	ListUnboundNotePictures(ctx context.Context, olderThan time.Time) ([]string, error)
 }
 
 // mediaRepository implements MediaRepository with MariaDB queries.
@@ -369,8 +375,14 @@ func (r *mediaRepository) ListAll(ctx context.Context, limit, offset int) ([]Adm
 		return nil, 0, fmt.Errorf("counting all media files: %w", err)
 	}
 
-	query := `SELECT m.id, m.campaign_id, m.uploaded_by, m.filename, m.original_name,
-	                 m.mime_type, m.file_size, m.usage_type, m.thumbnail_paths, m.created_at,
+	// A note picture keeps its row for disk accounting, but its file name and
+	// thumbnails are the note's business: the page shows neither, so a site
+	// admin sees a size and an owner, not a private picture's name or image.
+	query := `SELECT m.id, m.campaign_id, m.uploaded_by, m.filename,
+	                 CASE WHEN m.usage_type = 'note_image' THEN 'Note picture' ELSE m.original_name END,
+	                 m.mime_type, m.file_size, m.usage_type,
+	                 CASE WHEN m.usage_type = 'note_image' THEN '{}' ELSE m.thumbnail_paths END,
+	                 m.created_at,
 	                 COALESCE(u.display_name, 'Unknown')
 	          FROM media_files m
 	          LEFT JOIN users u ON m.uploaded_by = u.id
@@ -558,4 +570,27 @@ func (r *mediaRepository) ListFilesByCampaign(ctx context.Context, campaignID st
 		files = append(files, f)
 	}
 	return files, rows.Err()
+}
+
+// ListUnboundNotePictures finds note pictures nothing holds any more; see the
+// interface. It reads note_pictures, a core table the notes widget fills.
+func (r *mediaRepository) ListUnboundNotePictures(ctx context.Context, olderThan time.Time) ([]string, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT m.id FROM media_files m
+		 WHERE m.usage_type = ? AND m.created_at < ?
+		   AND NOT EXISTS (SELECT 1 FROM note_pictures p WHERE p.media_id = m.id)
+		 LIMIT 500`, UsageNoteImage, olderThan)
+	if err != nil {
+		return nil, fmt.Errorf("listing unbound note pictures: %w", err)
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scanning unbound note picture: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }
