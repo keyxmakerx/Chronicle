@@ -5,9 +5,10 @@
 //
 // The check is per function, not per file, so a new Update method cannot
 // hide behind a sibling that already sanitizes. It is name-based: a call
-// to foo() or x.foo() resolves to every function named foo in the package,
-// which over-approximates reachability slightly but never misses a real
-// call. Functions that legitimately skip sanitizing (they delegate to a
+// to foo() or to recv.foo() on the function's own receiver resolves to
+// every function named foo in the package. Calls through a field such as
+// s.repo.Update are not followed, so a repository write is never credited
+// to a sanitizing service method of the same name. Functions that legitimately skip sanitizing (they delegate to a
 // method that does, or never persist the value) are listed in
 // unsanitizedAllowlist with the reason.
 //
@@ -232,6 +233,10 @@ func parseFuncs(t *testing.T, path string, htmlTypes map[string]string) []*funcI
 				}
 			}
 		}
+		recv := ""
+		if fd.Recv != nil && len(fd.Recv.List) > 0 && len(fd.Recv.List[0].Names) > 0 {
+			recv = fd.Recv.List[0].Names[0].Name
+		}
 		if fd.Body != nil {
 			seen := map[string]bool{}
 			ast.Inspect(fd.Body, func(n ast.Node) bool {
@@ -244,7 +249,10 @@ func parseFuncs(t *testing.T, path string, htmlTypes map[string]string) []*funcI
 					if id, ok := fn.X.(*ast.Ident); ok && id.Name == "sanitize" && fn.Sel.Name == "HTML" {
 						f.Direct = true
 					}
-					if !seen[fn.Sel.Name] {
+					// Only calls on the function's own receiver can reach a
+					// same-package helper; s.repo.Update must not be credited
+					// because a service method is also named Update.
+					if id, ok := fn.X.(*ast.Ident); ok && recv != "" && id.Name == recv && !seen[fn.Sel.Name] {
 						seen[fn.Sel.Name] = true
 						f.Callees = append(f.Callees, fn.Sel.Name)
 					}
@@ -375,7 +383,6 @@ func endsHTML(name string) bool {
 	}
 	return strings.HasSuffix(name, "HTML")
 }
-
 
 // repoRootForSanitize finds the repository root by walking up from the
 // test file's directory.
