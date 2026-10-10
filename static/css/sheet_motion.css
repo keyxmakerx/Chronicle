@@ -1,0 +1,404 @@
+/*
+ * sheet_motion.css -- how a sheet's parts move, and what each style does with
+ * the four standard moves.
+ *
+ * Every moving thing on a sheet carries data-move="slide-out | grow | fold |
+ * settle" and sits under a [data-sheet] root, which keeps other data-move users
+ * on the site (the give box) untouched. The engine (static/js/widgets/
+ * sheet_motion.js) gives the thing a rest state and an open state and moves
+ * between them on the move's duration and easing token. A style never writes
+ * timing; it only supplies the look of each move through these tokens, set on
+ * [data-move="..."] under [data-sheet-style="..."]:
+ *   --mv-from  transform at rest      --mv-to   transform when open (default none)
+ *   --mv-fade  opacity at rest        --mv-clip clip-path at rest (a reveal)
+ *   --mv-ox / --mv-oy  hinge or origin
+ *   --mv-k     time multiplier on the move's token (a crisp style < 1)
+ *   --mv-e     easing, never an overshoot
+ *   --mv-ft    share of the move's time the fade takes (a card that should read at once < 1)
+ * A style also picks which move a role uses (--sheet-panel-move, --sheet-slip-move,
+ * --sheet-page-move) and how a changed value shows (--change-move).
+ *
+ * Calm is a fade in place (a fold opens at once); Off is the end state. Both
+ * are enforced here and in the engine, so no style can skip them. Durations
+ * are the site's --dur-* tokens, so Customize's motion speed moves every sheet.
+ */
+
+/* The look tokens must not inherit, or a Settle on the page would leak into every panel inside it.
+   --mv-t and --mv-e do inherit so a style's pseudo-elements share the move's clock. */
+@property --mv-from { syntax: "*"; inherits: false; }
+@property --mv-to { syntax: "*"; inherits: false; }
+@property --mv-fade { syntax: "*"; inherits: false; }
+@property --mv-clip { syntax: "*"; inherits: false; }
+@property --mv-ox { syntax: "*"; inherits: false; }
+@property --mv-oy { syntax: "*"; inherits: false; }
+@property --mv-k { syntax: "*"; inherits: false; }
+@property --mv-ft { syntax: "*"; inherits: false; }
+/* Optional staging for a move with two beats (a line, then the panel): --mv-tt / --mv-ct are the shares of the move's time the
+   transform and the clip take, --mv-td / --mv-cd the shares they wait first. The -o forms apply while opening, the plain forms while closing. */
+@property --mv-tt { syntax: "*"; inherits: false; }
+@property --mv-td { syntax: "*"; inherits: false; }
+@property --mv-ct { syntax: "*"; inherits: false; }
+@property --mv-cd { syntax: "*"; inherits: false; }
+@property --mv-tto { syntax: "*"; inherits: false; }
+@property --mv-tdo { syntax: "*"; inherits: false; }
+@property --mv-cto { syntax: "*"; inherits: false; }
+@property --mv-cdo { syntax: "*"; inherits: false; }
+
+[data-sheet] [data-move] { --mv-k: 1; }
+[data-sheet] [data-move="slide-out"] { --mv-t: calc(var(--dur-slide) * var(--mv-k)); --mv-e: var(--ease-slide); }
+[data-sheet] [data-move="grow"],
+[data-sheet] [data-move="fold"] { --mv-t: calc(var(--dur-standard) * var(--mv-k)); --mv-e: var(--ease-out); }
+[data-sheet] [data-move="settle"] { --mv-t: calc(var(--dur-large) * var(--mv-k)); --mv-e: var(--ease-out); transform-origin: var(--mv-ox, 50%) var(--mv-oy, 0%); }
+[data-sheet] [data-move]:not([data-move="settle"]) {
+  transform: var(--mv-from, none);
+  opacity: var(--mv-fade, 1);
+  clip-path: var(--mv-clip, inset(-90px));
+  transform-origin: var(--mv-ox, 50%) var(--mv-oy, 0%);
+  transition:
+    transform calc(var(--mv-t) * var(--mv-tt, 1)) var(--mv-e) calc(var(--mv-t) * var(--mv-td, 0)),
+    opacity calc(var(--mv-t) * var(--mv-ft, 1)) var(--mv-e),
+    clip-path calc(var(--mv-t) * var(--mv-ct, 1)) var(--mv-e) calc(var(--mv-t) * var(--mv-cd, 0));
+}
+[data-sheet] .paper-well.is-open > [data-move],
+[data-sheet] [data-move].is-open,
+[data-sheet] [data-sheet-fold].is-in > .fold-body > [data-move] {
+  transform: var(--mv-to, none);
+  opacity: 1;
+  clip-path: inset(-90px);
+  transition:
+    transform calc(var(--mv-t) * var(--mv-tto, var(--mv-tt, 1))) var(--mv-e) calc(var(--mv-t) * var(--mv-tdo, var(--mv-td, 0))),
+    opacity calc(var(--mv-t) * var(--mv-ft, 1)) var(--mv-e),
+    clip-path calc(var(--mv-t) * var(--mv-cto, var(--mv-ct, 1))) var(--mv-e) calc(var(--mv-t) * var(--mv-cdo, var(--mv-cd, 0)));
+}
+html:is([data-motion="calm"], [data-view-motion="calm"], [data-cz-reduce]) [data-sheet] [data-move] {
+  --mv-from: none !important; --mv-to: none !important; --mv-clip: inset(-90px) !important; --mv-fade: 0 !important; --mv-ft: 1 !important;
+  --mv-t: var(--dur-micro) !important; --mv-e: var(--ease-out) !important;
+  --mv-tt: 1 !important; --mv-td: 0 !important; --mv-ct: 1 !important; --mv-cd: 0 !important;
+  --mv-tto: 1 !important; --mv-tdo: 0 !important; --mv-cto: 1 !important; --mv-cdo: 0 !important;
+}
+html[data-motion="off"] [data-sheet] [data-move] { transition: none !important; animation: none !important; }
+
+/* Only the layer that is moving is promoted (the engine adds .is-moving), so the paper texture behind it is rasterized once and then only slid, clipped and faded. */
+[data-sheet] .is-moving { will-change: transform, clip-path, opacity; }
+
+/* While a paper is out beside the sheet, the folio shifts left by what the desk can spare (--shift, set when the paper opens);
+   a paper that still does not fit lies over the sheet's right column instead of widening the page. */
+[data-sheet-folio] { position: relative; isolation: isolate; transition: transform var(--dur-slide) var(--ease-slide); }
+[data-sheet-folio].is-shifted { transform: translateX(calc(var(--shift, 0px) * -1)); }
+html:is([data-motion="calm"], [data-motion="off"], [data-view-motion="calm"], [data-cz-reduce]) [data-sheet-folio] { transition: none; }
+@container sheet (max-width: 819px) {
+  [data-sheet-folio].is-shifted { transform: none; }
+  .paper-peek { display: none; }
+}
+
+/* The trace: when a style asks for one (--sheet-trace), the engine puts a four-line frame around the panel as it opens; the style draws it. */
+[data-sheet] .mv-trace { position: absolute; z-index: 6; pointer-events: none; display: none; }
+[data-sheet] .mv-trace b { position: absolute; transform: scale(0); }
+html:is([data-motion="calm"], [data-motion="off"], [data-view-motion="calm"], [data-cz-reduce]) [data-sheet] .mv-trace { display: none !important; }
+
+/* A changed value: the engine keeps the new text in place and lays a ghost of the old one over it (--change-move: rewrite | roll | glitch | carve | odometer). */
+[data-sheet] .fx-host { position: relative; display: inline-block; }
+[data-sheet] .fx-new { display: inline-block; }
+[data-sheet] .fx-ghost { position: absolute; left: 0; top: 0; white-space: pre; pointer-events: none; }
+[data-sheet] .fx-smear { position: absolute; left: -4px; right: -4px; top: 14%; bottom: 0; pointer-events: none; }
+[data-sheet] .fx-fr { position: absolute; left: 0; top: 0; white-space: pre; visibility: hidden; }
+
+/* One-shot keyframes the presets below point at. */
+@keyframes sheet-press { from { scale: 1.04; opacity: .4; } to { scale: 1; opacity: 1; } }
+@keyframes sheet-sheen { from { background-position: 130% 0; } to { background-position: -30% 0; } }
+@keyframes sheet-wipe { 0% { transform: scaleX(0); opacity: 1; } 65% { transform: scaleX(1); opacity: 1; } 100% { transform: scaleX(1); opacity: 0; } }
+@keyframes sheet-scan { from { background-position: 0 100%; } to { background-position: 0 0; } }
+@keyframes sheet-draw {
+  0% { background-size: 0 2px, 2px 0, 0 2px, 2px 0; opacity: 1; }
+  25% { background-size: 100% 2px, 2px 0, 0 2px, 2px 0; opacity: 1; }
+  50% { background-size: 100% 2px, 2px 100%, 0 2px, 2px 0; opacity: 1; }
+  75% { background-size: 100% 2px, 2px 100%, 100% 2px, 2px 0; opacity: 1; }
+  90% { background-size: 100% 2px, 2px 100%, 100% 2px, 2px 100%; opacity: 1; }
+  100% { background-size: 100% 2px, 2px 100%, 100% 2px, 2px 100%; opacity: .5; }
+}
+@keyframes sheet-ring { from { opacity: .9; transform: scale(1.14); } to { opacity: 0; transform: scale(1); } }
+@keyframes sheet-flash { from { opacity: .9; } to { opacity: 0; } }
+
+/* ---------- Per-style presets ----------
+   One block per style, keyed by move name; the same four moves everywhere, each style giving them its own material.
+   Timing, easing and Calm/Off are not here: they come from the contract above and the site's --dur-* tokens. */
+
+/* Parchment: paper slides out from under the sheet; a slip drops in slightly turned; a fold unfolds; the sheet lands with a small tilt. */
+[data-sheet][data-sheet-style="parchment"] [data-move="slide-out"]{--mv-from:translate(calc(var(--dir-x,0) * 100%),calc(var(--dir-y,0) * 100%))}
+[data-sheet][data-sheet-style="parchment"] [data-move="grow"]{--mv-from:translateY(-10px) rotate(-1.5deg);--mv-fade:0;--mv-ox:30%}
+[data-sheet][data-sheet-style="parchment"] [data-move="fold"]{--mv-from:translateY(-6px);--mv-fade:0}
+[data-sheet][data-sheet-style="parchment"] [data-move="settle"]{--mv-from:translateY(6px) rotate(-.4deg);--mv-fade:0}
+/* Ledger: a tabbed account book. A page drops from its top binding, short and crisp; changed figures get a ruled-line wipe. */
+[data-sheet][data-sheet-style="ledger"] [data-move="slide-out"]{--mv-from:perspective(1100px) rotateX(-84deg);--mv-to:perspective(1100px) rotateX(0deg);--mv-fade:1;--mv-ox:50%;--mv-oy:0%;--mv-k:.72;--mv-e:var(--sh-ease-crisp)}
+[data-sheet][data-sheet-style="ledger"] [data-move="grow"]{--mv-from:perspective(900px) rotateX(-38deg);--mv-to:perspective(900px) rotateX(0deg);--mv-fade:0;--mv-k:.8;--mv-e:var(--sh-ease-crisp)}
+[data-sheet][data-sheet-style="ledger"] [data-move="fold"]{--mv-from:perspective(900px) rotateX(-78deg);--mv-to:perspective(900px) rotateX(0deg);--mv-fade:1;--mv-k:.7;--mv-e:var(--sh-ease-crisp)}
+[data-sheet][data-sheet-style="ledger"] [data-move="settle"]{--mv-from:perspective(1200px) rotateX(-5deg) translateY(-4px);--mv-to:perspective(1200px) rotateX(0deg);--mv-fade:0;--mv-k:.8;--mv-e:var(--sh-ease-crisp)}
+[data-sheet][data-sheet-style="ledger"] .paper-drawer::before{content:"";position:absolute;left:0;right:0;top:0;height:7px;border-radius:inherit;background:repeating-linear-gradient(90deg,var(--paper-accent) 0 16px,transparent 16px 21px);opacity:.8;pointer-events:none}
+[data-sheet][data-sheet-style="ledger"] .paper-landed::before{left:0;right:0;top:auto;bottom:-3px;height:2px;border-radius:0;background:var(--paper-accent);transform-origin:left;opacity:0;animation:sheet-wipe calc(var(--dur-slide) * .9 * var(--fx,1)) var(--sh-ease-crisp) both}
+/* Field journal: pages turn from the leather spine with a soft shadow sweep; stamped headings land with a small press. */
+[data-sheet][data-sheet-style="journal"] [data-move="slide-out"]{--mv-from:perspective(1300px) rotateY(-86deg);--mv-to:perspective(1300px) rotateY(0deg);--mv-fade:1;--mv-ox:0%;--mv-oy:50%;--mv-k:1.1;--mv-e:var(--sh-ease-turn)}
+[data-sheet][data-sheet-style="journal"] [data-move="grow"]{--mv-from:scale(.97) translateY(6px);--mv-fade:0;--mv-ox:50%;--mv-oy:0%}
+[data-sheet][data-sheet-style="journal"] [data-move="fold"]{--mv-from:perspective(1000px) rotateY(-70deg);--mv-to:perspective(1000px) rotateY(0deg);--mv-fade:1;--mv-ox:0%;--mv-oy:50%;--mv-k:.9;--mv-e:var(--sh-ease-turn)}
+[data-sheet][data-sheet-style="journal"] [data-move="settle"]{--mv-from:perspective(1300px) rotateY(-6deg) translateY(4px);--mv-to:perspective(1300px) rotateY(0deg);--mv-fade:0;--mv-ox:0%;--mv-oy:50%;--mv-e:var(--sh-ease-turn)}
+[data-sheet][data-sheet-style="journal"] .paper-drawer[data-move]::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;background:linear-gradient(90deg,rgb(var(--paper-burn) / .6),rgb(var(--paper-burn) / .14) 55%,transparent);opacity:calc(.9 * var(--fx,1));transition:opacity var(--mv-t) var(--mv-e)}
+[data-sheet][data-sheet-style="journal"] :is(.paper-well.is-open>.paper-drawer,.paper-drawer.is-open)::after{opacity:0}
+[data-sheet][data-sheet-style="journal"] :is(.paper-well.is-open,.pg-card.is-open) :is(.paper-dhead h2,.paper-kind){transform-origin:left center;animation:sheet-press calc(var(--dur-standard) * var(--fx,1)) var(--ease-out) calc(var(--dur-slide) * .55 * var(--fx,1)) backwards}
+[data-sheet][data-sheet-style="journal"] .paper-landed::before{inset:-3px -7px;border:2px solid var(--paper-accent);border-radius:3px;background:none;opacity:0;animation:sheet-ring calc(var(--dur-slide) * 1.2 * var(--fx,1)) var(--ease-out) both}
+/* Vellum: a scroll unfurls top-down to its real height; a faint gilt sheen sweeps once across headings as it opens. */
+[data-sheet][data-sheet-style="vellum"] [data-move="slide-out"]{--mv-from:none;--mv-clip:inset(0 0 100% 0);--mv-fade:1;--mv-k:1.15}
+[data-sheet][data-sheet-style="vellum"] [data-move="grow"]{--mv-from:scale(.98);--mv-clip:inset(0 0 100% 0);--mv-fade:1}
+[data-sheet][data-sheet-style="vellum"] [data-move="fold"]{--mv-from:none;--mv-clip:inset(0 0 100% 0);--mv-fade:1;--mv-k:1.1}
+[data-sheet][data-sheet-style="vellum"] [data-move="settle"]{--mv-from:translateY(4px);--mv-fade:0}
+[data-sheet][data-sheet-style="vellum"] .paper-drawer[data-move]::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;background:linear-gradient(transparent calc(100% - 10px),rgb(120 80 20 / .55) calc(100% - 9px),rgb(214 170 70 / .95) calc(100% - 6px),rgb(120 80 20 / .55) calc(100% - 1px),transparent);
+  transform:translateY(calc(-100% * var(--fx,1)));opacity:var(--fx,1);transition:transform var(--mv-t) var(--mv-e),opacity calc(var(--mv-t) * .3) linear calc(var(--mv-t) * .7)}
+[data-sheet][data-sheet-style="vellum"] :is(.paper-well.is-open>.paper-drawer,.paper-drawer.is-open)::after{transform:none;opacity:0}
+[data-sheet][data-sheet-style="vellum"] :is(.paper-well.is-open,.pg-card.is-open) :is(.paper-dhead h2,[data-sheet-fold].is-in>summary){background:linear-gradient(100deg,transparent 38%,rgb(214 170 70 / .4) 50%,transparent 62%) 130% 0/260% 100% no-repeat;animation:sheet-sheen calc(var(--dur-slide) * 1.6 * var(--fx,1)) ease-out calc(var(--dur-slide) * .4 * var(--fx,1)) backwards}
+[data-sheet][data-sheet-style="vellum"] .paper-landed::before{inset:-2px -6px;border-radius:2px;background:linear-gradient(100deg,transparent 38%,rgb(214 170 70 / .55) 50%,transparent 62%) 130% 0/260% 100% no-repeat;opacity:1;animation:sheet-sheen calc(var(--dur-slide) * 1.6 * var(--fx,1)) ease-out both}
+/* Night: a blueprint. The panel's outline draws in, then its contents fade up, and a scan line passes once. */
+[data-sheet][data-sheet-style="night"] [data-move="slide-out"]{--mv-from:scale(.985);--mv-fade:0;--mv-ft:.3;--mv-ox:50%;--mv-oy:0%;--mv-k:.9}
+[data-sheet][data-sheet-style="night"] [data-move="grow"]{--mv-from:scale(.97);--mv-fade:0;--mv-ft:.4}
+[data-sheet][data-sheet-style="night"] [data-move="fold"]{--mv-from:translateY(6px);--mv-fade:0}
+[data-sheet][data-sheet-style="night"] [data-move="settle"]{--mv-from:scale(.994);--mv-fade:0}
+[data-sheet][data-sheet-style="night"] .paper-drawer::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  background:linear-gradient(var(--paper-accent),var(--paper-accent)) 0 0/100% 2px no-repeat,linear-gradient(var(--paper-accent),var(--paper-accent)) 100% 0/2px 100% no-repeat,linear-gradient(var(--paper-accent),var(--paper-accent)) 100% 100%/100% 2px no-repeat,linear-gradient(var(--paper-accent),var(--paper-accent)) 0 100%/2px 100% no-repeat;opacity:.5}
+[data-sheet][data-sheet-style="night"] :is(.paper-well.is-open>.paper-drawer,.pg-card.is-open)::after{animation:sheet-draw calc(var(--dur-slide) * 1.1 * var(--fx,1)) linear backwards}
+[data-sheet][data-sheet-style="night"] .paper-drawer[data-move] :is(.paper-dhead,.paper-dbody){opacity:0;transform:translateY(8px);transition:opacity var(--mv-t) var(--mv-e),transform var(--mv-t) var(--mv-e)}
+[data-sheet][data-sheet-style="night"] :is(.paper-well.is-open>.paper-drawer,.paper-drawer.is-open) :is(.paper-dhead,.paper-dbody){opacity:1;transform:none;transition-delay:calc(var(--dur-slide) * .45)}
+html:is([data-motion="calm"],[data-view-motion="calm"],[data-cz-reduce]) [data-sheet][data-sheet-style="night"] .paper-drawer[data-move] :is(.paper-dhead,.paper-dbody){opacity:1;transform:none}
+html[data-motion="off"] [data-sheet][data-sheet-style="night"] .paper-drawer[data-move] :is(.paper-dhead,.paper-dbody){opacity:1;transform:none;transition:none}
+[data-sheet][data-sheet-style="night"] .paper-drawer .paper-dbody::before{content:"";position:absolute;left:0;right:0;top:0;height:100%;pointer-events:none;background:linear-gradient(transparent calc(50% - 1px),var(--paper-accent) calc(50% - 1px) calc(50% + 1px),transparent calc(50% + 1px)) 0 100%/100% 300% no-repeat;opacity:0}
+[data-sheet][data-sheet-style="night"] :is(.paper-well.is-open,.pg-card.is-open) .paper-dbody::before{opacity:.8;animation:sheet-scan calc(var(--dur-slide) * 1.2 * var(--fx,1)) ease-out calc(var(--dur-slide) * .5 * var(--fx,1)) backwards}
+[data-sheet][data-sheet-style="night"] .fold-body{position:relative}
+[data-sheet][data-sheet-style="night"] .fold-body::before{content:"";position:absolute;left:0;right:0;top:0;height:1.5px;background:var(--paper-accent);transform:scaleX(0);transform-origin:left;transition:transform var(--dur-standard) var(--ease-out)}
+[data-sheet][data-sheet-style="night"] [data-sheet-fold].is-in>.fold-body::before{transform:scaleX(1);opacity:.55}
+[data-sheet][data-sheet-style="night"] .paper-landed::before{inset:-4px -6px;border-radius:0;background:linear-gradient(transparent calc(50% - 1px),var(--paper-accent) calc(50% - 1px) calc(50% + 1px),transparent calc(50% + 1px)) 0 100%/100% 300% no-repeat;opacity:.8;animation:sheet-scan calc(var(--dur-slide) * 1.1 * var(--fx,1)) ease-out both}
+/* Card deck: each thing is a card dealt from the stack, a small rotation settling flat. */
+[data-sheet][data-sheet-style="deck"] [data-move="slide-out"]{--mv-from:translate(calc(var(--dir-x,0) * 70%),calc(var(--dir-y,0) * 70%)) rotate(-7deg);--mv-fade:0;--mv-ft:.45;--mv-ox:0%;--mv-oy:100%}
+[data-sheet][data-sheet-style="deck"] [data-move="grow"]{--mv-from:translateY(-12px) rotate(-3deg) scale(.97);--mv-fade:0;--mv-ox:0%;--mv-oy:0%}
+[data-sheet][data-sheet-style="deck"] [data-move="fold"]{--mv-from:translateY(-14px) rotate(-1.6deg);--mv-fade:0;--mv-ox:0%;--mv-oy:0%}
+[data-sheet][data-sheet-style="deck"] [data-move="settle"]{--mv-from:translateY(14px) rotate(-1.4deg);--mv-fade:0;--mv-ox:0%;--mv-oy:100%}
+[data-sheet][data-sheet-style="deck"] .paper-landed::before{inset:-3px -6px;border-radius:7px;background:color-mix(in srgb,var(--paper-accent) 24%,transparent);opacity:0;animation:sheet-flash calc(var(--dur-slide) * 1.4 * var(--fx,1)) ease-out both}
+/* Modern: the site's own motion. Grow out of the thing clicked, Fold to real height, Settle on a new page. */
+[data-sheet]:is([data-sheet-style="modern"],:not([data-sheet-style])) [data-move="slide-out"]{--mv-from:translate(calc(var(--dir-x,0) * 40%),calc(var(--dir-y,0) * 40%));--mv-fade:0}
+[data-sheet]:is([data-sheet-style="modern"],:not([data-sheet-style])) [data-move="grow"]{--mv-from:scale(.94);--mv-fade:0;--mv-ox:var(--ox,50%);--mv-oy:var(--oy,0%)}
+[data-sheet]:is([data-sheet-style="modern"],:not([data-sheet-style])) [data-move="fold"]{--mv-from:translateY(-6px);--mv-fade:0}
+[data-sheet]:is([data-sheet-style="modern"],:not([data-sheet-style])) [data-move="settle"]{--mv-from:translateY(6px);--mv-fade:0}
+[data-sheet]:is([data-sheet-style="modern"],:not([data-sheet-style])) .paper-landed::before{inset:-3px -7px;border:2px solid var(--paper-accent);border-radius:7px;background:none;opacity:0;animation:sheet-ring calc(var(--dur-slide) * 1.1 * var(--fx,1)) var(--ease-out) both}
+html:is([data-motion="calm"],[data-view-motion="calm"],[data-cz-reduce]) [data-sheet]:is([data-sheet-style="modern"],:not([data-sheet-style])) .paper-pin{transform:none!important}
+/* Pencil: sketched in. A thin graphite outline draws around the panel's edge first (the trace), then the paper and everything on it is written in
+   top-down at its real height. A fold opens the same way under a ruled line. */
+[data-sheet][data-sheet-style="pencil"] [data-move="slide-out"]{--mv-from:none;--mv-clip:inset(0 0 100% 0);--mv-fade:1;--mv-k:1.25;--mv-e:cubic-bezier(.35,.1,.3,1);--mv-cto:.6;--mv-cdo:.4;--mv-ct:.7}
+[data-sheet][data-sheet-style="pencil"] [data-move="grow"]{--mv-from:none;--mv-clip:inset(0 0 100% 0);--mv-fade:1;--mv-k:.95;--mv-e:cubic-bezier(.35,.1,.3,1);--mv-cto:.7;--mv-cdo:.3;--mv-ct:.8}
+[data-sheet][data-sheet-style="pencil"] [data-move="fold"]{--mv-from:none;--mv-clip:inset(0 0 100% 0);--mv-fade:1;--mv-e:cubic-bezier(.35,.1,.3,1)}
+[data-sheet][data-sheet-style="pencil"] [data-move="settle"]{--mv-from:translateY(4px);--mv-fade:0}
+[data-sheet][data-sheet-style="pencil"] .mv-trace{display:block}
+[data-sheet][data-sheet-style="pencil"] .mv-trace b{background:rgb(66 72 82 / .85)}
+[data-sheet][data-sheet-style="pencil"] .mv-trace b:nth-child(1){left:-3px;right:-1px;top:0;height:1.25px;transform-origin:0 50%}
+[data-sheet][data-sheet-style="pencil"] .mv-trace b:nth-child(2){right:0;top:-2px;bottom:-1px;width:1.25px;transform-origin:50% 0}
+[data-sheet][data-sheet-style="pencil"] .mv-trace b:nth-child(3){left:-1px;right:-3px;bottom:0;height:1.25px;transform-origin:100% 50%}
+[data-sheet][data-sheet-style="pencil"] .mv-trace b:nth-child(4){left:0;top:-1px;bottom:-2px;width:1.25px;transform-origin:50% 100%}
+[data-sheet][data-sheet-style="pencil"] :is(.paper-well.is-open>.mv-trace,.mv-trace.is-open){animation:pc-life calc(var(--dur-slide) * 2 * var(--fx,1)) linear both}
+[data-sheet][data-sheet-style="pencil"] :is(.paper-well.is-open>.mv-trace,.mv-trace.is-open) b:nth-child(odd){animation:pc-sx calc(var(--dur-slide) * .16 * var(--fx,1)) linear both}
+[data-sheet][data-sheet-style="pencil"] :is(.paper-well.is-open>.mv-trace,.mv-trace.is-open) b:nth-child(even){animation:pc-sy calc(var(--dur-slide) * .16 * var(--fx,1)) linear both}
+[data-sheet][data-sheet-style="pencil"] :is(.paper-well.is-open>.mv-trace,.mv-trace.is-open) b:nth-child(2){animation-delay:calc(var(--dur-slide) * .16 * var(--fx,1))}
+[data-sheet][data-sheet-style="pencil"] :is(.paper-well.is-open>.mv-trace,.mv-trace.is-open) b:nth-child(3){animation-delay:calc(var(--dur-slide) * .32 * var(--fx,1))}
+[data-sheet][data-sheet-style="pencil"] :is(.paper-well.is-open>.mv-trace,.mv-trace.is-open) b:nth-child(4){animation-delay:calc(var(--dur-slide) * .48 * var(--fx,1))}
+[data-sheet][data-sheet-style="pencil"] .fold-body{position:relative}
+[data-sheet][data-sheet-style="pencil"] .fold-body::before{content:"";position:absolute;left:0;right:0;top:0;height:1.25px;background:var(--pc-rule);opacity:.55;transform:scaleX(0);transform-origin:left;transition:transform var(--dur-standard) var(--ease-out)}
+[data-sheet][data-sheet-style="pencil"] [data-sheet-fold].is-in>.fold-body::before{transform:scaleX(1)}
+[data-sheet][data-sheet-style="pencil"] .paper-landed::before{inset:auto -2px -3px -2px;height:2px;border-radius:0;background:var(--pc-lead);transform-origin:left;opacity:0;animation:sheet-wipe calc(var(--dur-slide) * .9 * var(--fx,1)) var(--sh-ease-crisp) both}
+@keyframes pc-sx{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@keyframes pc-sy{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+@keyframes pc-life{0%,62%{opacity:1}100%{opacity:0}}
+/* Starship: panels materialize. A line of light runs out from the point you pressed, then the panel opens vertically from that line like a holo display;
+   rows fade up a hair apart. A fold opens under a scan line. Changed values roll through a few frames of digits (Chronicle's JS, --change-move: roll). */
+[data-sheet][data-sheet-style="starship"] [data-move="slide-out"]{--hy:clamp(2px,var(--oy,50%),calc(100% - 2px));--mv-from:scaleX(.02);--mv-ox:var(--ox,50%);--mv-oy:50%;--mv-fade:1;
+  --mv-clip:inset(calc(var(--hy) - 1.5px) 0 calc(100% - var(--hy) - 1.5px) 0);--mv-k:1.2;--mv-e:var(--ease-out);
+  --mv-tto:.36;--mv-tdo:0;--mv-cto:.64;--mv-cdo:.36;--mv-tt:.4;--mv-td:.6;--mv-ct:.6;--mv-cd:0}
+[data-sheet][data-sheet-style="starship"] [data-move="grow"]{--hy:clamp(1px,var(--oy,0px),calc(100% - 2px));--mv-from:scaleX(.02);--mv-ox:var(--ox,50%);--mv-oy:0%;--mv-fade:1;
+  --mv-clip:inset(calc(var(--hy) - 1.5px) 0 calc(100% - var(--hy) - 1.5px) 0);--mv-k:.9;--mv-e:var(--ease-out);
+  --mv-tto:.36;--mv-tdo:0;--mv-cto:.64;--mv-cdo:.36;--mv-tt:.4;--mv-td:.6;--mv-ct:.6;--mv-cd:0}
+[data-sheet][data-sheet-style="starship"] [data-move="fold"]{--mv-from:translateY(-4px);--mv-fade:0}
+[data-sheet][data-sheet-style="starship"] [data-move="settle"]{--mv-from:scale(.995);--mv-fade:0}
+[data-sheet][data-sheet-style="starship"] :is(.paper-drawer,.paper-slip)[data-move]::after{content:"";position:absolute;inset:0;pointer-events:none;border-radius:inherit;
+  background:linear-gradient(transparent calc(var(--hy,50%) - 1.5px),var(--hud) calc(var(--hy,50%) - 1.5px) calc(var(--hy,50%) + 1.5px),transparent calc(var(--hy,50%) + 1.5px));
+  opacity:1;transition:opacity calc(var(--mv-t) * .3) linear}
+[data-sheet][data-sheet-style="starship"] :is(.paper-well.is-open>.paper-drawer,.paper-well.is-open>.paper-slip,.paper-drawer.is-open)::after{opacity:0;transition-delay:calc(var(--mv-t) * .42)}
+html:is([data-motion="calm"],[data-view-motion="calm"],[data-cz-reduce]) [data-sheet][data-sheet-style="starship"] :is(.paper-drawer,.paper-slip)[data-move]::after,
+html[data-motion="off"] [data-sheet][data-sheet-style="starship"] :is(.paper-drawer,.paper-slip)[data-move]::after{display:none}
+[data-sheet][data-sheet-style="starship"] .paper-drawer[data-move] .paper-dhead,
+[data-sheet][data-sheet-style="starship"] .paper-drawer[data-move] .paper-dbody>:not(.paper-pin){opacity:0;transform:translateY(6px);
+  transition:opacity calc(var(--mv-t) * .6) var(--mv-e),transform calc(var(--mv-t) * .6) var(--mv-e)}
+[data-sheet][data-sheet-style="starship"] :is(.paper-well.is-open>.paper-drawer,.paper-drawer.is-open) :is(.paper-dhead,.paper-dbody>:not(.paper-pin)){opacity:1;transform:none;
+  transition-delay:calc(var(--mv-t) * .5 + var(--i,0) * var(--dur-slide) * .035)}
+[data-sheet][data-sheet-style="starship"] .paper-dbody>:nth-child(1){--i:0}
+[data-sheet][data-sheet-style="starship"] .paper-dbody>:nth-child(2){--i:1}
+[data-sheet][data-sheet-style="starship"] .paper-dbody>:nth-child(3){--i:2}
+[data-sheet][data-sheet-style="starship"] .paper-dbody>:nth-child(4){--i:3}
+[data-sheet][data-sheet-style="starship"] .paper-dbody>:nth-child(5){--i:4}
+[data-sheet][data-sheet-style="starship"] .paper-dbody>:nth-child(6){--i:5}
+[data-sheet][data-sheet-style="starship"] .paper-dbody>:nth-child(7){--i:6}
+[data-sheet][data-sheet-style="starship"] .paper-dbody>:nth-child(n+8){--i:7}
+html:is([data-motion="calm"],[data-view-motion="calm"],[data-cz-reduce]) [data-sheet][data-sheet-style="starship"] .paper-drawer[data-move] :is(.paper-dhead,.paper-dbody>:not(.paper-pin)){opacity:1;transform:none;transition-delay:0s}
+html[data-motion="off"] [data-sheet][data-sheet-style="starship"] .paper-drawer[data-move] :is(.paper-dhead,.paper-dbody>:not(.paper-pin)){opacity:1;transform:none;transition:none}
+[data-sheet][data-sheet-style="starship"] .fold-body{position:relative}
+[data-sheet][data-sheet-style="starship"] .fold-body::after{content:"";position:absolute;left:0;right:0;top:0;height:100%;pointer-events:none;opacity:0;
+  background:linear-gradient(transparent calc(50% - 1px),var(--hud) calc(50% - 1px) calc(50% + 1px),transparent calc(50% + 1px)) 0 100%/100% 300% no-repeat}
+[data-sheet][data-sheet-style="starship"] [data-sheet-fold].is-in>.fold-body::after{opacity:.85;animation:sheet-scan calc(var(--dur-standard) * 1.5 * var(--fx,1)) ease-out backwards}
+[data-sheet][data-sheet-style="starship"] .paper-landed::before{inset:-4px -6px;border-radius:0;background:linear-gradient(transparent calc(50% - 1px),var(--hud) calc(50% - 1px) calc(50% + 1px),transparent calc(50% + 1px)) 0 100%/100% 300% no-repeat;opacity:.9;animation:sheet-scan calc(var(--dur-slide) * 1.1 * var(--fx,1)) ease-out both}
+[data-sheet][data-sheet-style="starship"] .fx-ghost{color:var(--hud);text-shadow:0 0 6px rgb(95 215 245 / .6)}
+/* Row index for styles that stagger a panel's rows. */
+[data-sheet] .paper-dbody>:nth-child(1){--i:0}
+[data-sheet] .paper-dbody>:nth-child(2){--i:1}
+[data-sheet] .paper-dbody>:nth-child(3){--i:2}
+[data-sheet] .paper-dbody>:nth-child(4){--i:3}
+[data-sheet] .paper-dbody>:nth-child(5){--i:4}
+[data-sheet] .paper-dbody>:nth-child(6){--i:5}
+[data-sheet] .paper-dbody>:nth-child(7){--i:6}
+[data-sheet] .paper-dbody>:nth-child(n+8){--i:7}
+/* Neon terminal: panels boot like a CRT. A bright line runs out from the centre, the screen opens vertically from it, a block cursor types the heading
+   and the body prints top-down in steps. Closing is the same in reverse: it collapses to a line and the line goes out. A fold prints open top-down.
+   Changed values glitch (Chronicle's JS, --change-move: glitch). */
+@property --nx-p{syntax:"<number>";inherits:true;initial-value:1}
+[data-sheet][data-sheet-style="neon"]{--nx-t:calc(var(--dur-slide) * 1.3)}
+[data-sheet][data-sheet-style="neon"] [data-move="slide-out"]{--mv-from:scaleY(.012);--mv-clip:inset(0 50% 0 50%);--mv-fade:1;--mv-ox:50%;--mv-oy:50%;--mv-k:1.3;--mv-e:var(--ease-out);
+  --mv-cto:.3;--mv-cdo:0;--mv-tto:.5;--mv-tdo:.3;--mv-tt:.42;--mv-td:0;--mv-ct:.3;--mv-cd:.42}
+[data-sheet][data-sheet-style="neon"] [data-move="grow"]{--mv-from:none;--mv-clip:inset(0 0 100% 0);--mv-fade:1;--mv-k:.9;--mv-e:steps(8,end)}
+[data-sheet][data-sheet-style="neon"] [data-move="fold"]{--mv-from:none;--mv-clip:inset(0 0 100% 0);--mv-fade:1;--mv-k:1;--mv-e:steps(8,end)}
+[data-sheet][data-sheet-style="neon"] [data-move="settle"]{--mv-from:none;--mv-fade:0;--mv-k:.9;--mv-e:steps(5,end)}
+/* The CRT line sits on the well (or the narrow-screen page layer), because the panel itself is squashed flat while it draws. */
+[data-sheet][data-sheet-style="neon"] :is(.paper-well:has(>[data-move="slide-out"]),.pg-layer)::after{content:"";position:absolute;left:0;right:0;top:calc(50% - 8px);height:2px;z-index:7;pointer-events:none;
+  background:linear-gradient(90deg,transparent,var(--nx-cy) 16%,#fff 50%,var(--nx-mag) 84%,transparent);box-shadow:0 0 12px 1px rgb(56 243 255 / .75);
+  transform:scaleX(0);opacity:1;transition:transform calc(var(--nx-t) * .3) var(--ease-out) calc(var(--nx-t) * .42),opacity calc(var(--nx-t) * .05) linear}
+[data-sheet][data-sheet-style="neon"] .pg-layer::after{top:50%}
+[data-sheet][data-sheet-style="neon"] :is(.paper-well.is-open:has(>[data-move="slide-out"]),.pg-layer.is-on)::after{transform:scaleX(1);opacity:0;
+  transition:transform calc(var(--nx-t) * .3) var(--ease-out),opacity calc(var(--nx-t) * .2) linear calc(var(--nx-t) * .36)}
+/* A block cursor types the heading in; the body then prints down in steps. Both are one-shots on open, so the closing collapse shows the panel as it was. */
+[data-sheet][data-sheet-style="neon"] .paper-dhead h2{position:relative;display:inline-block;clip-path:inset(-4px calc((1 - var(--nx-p)) * 100% - .62em) -4px -2px)}
+[data-sheet][data-sheet-style="neon"] .paper-dhead h2::after{content:"";position:absolute;left:calc(var(--nx-p) * 100%);top:.12em;bottom:.12em;width:.5em;background:var(--nx-cy);box-shadow:0 0 8px var(--nx-cy);opacity:0}
+[data-sheet][data-sheet-style="neon"] :is(.paper-well.is-open>.paper-drawer,.pg-card.is-open) .paper-dhead h2{animation:nx-type calc(var(--mv-t) * .34 * var(--fx,1)) steps(12,end) calc(var(--mv-t) * .6 * var(--fx,1)) backwards}
+[data-sheet][data-sheet-style="neon"] :is(.paper-well.is-open>.paper-drawer,.pg-card.is-open) .paper-dhead h2::after{animation:nx-cursor calc(var(--mv-t) * .9 * var(--fx,1)) steps(1,end) calc(var(--mv-t) * .6 * var(--fx,1)) both}
+[data-sheet][data-sheet-style="neon"] :is(.paper-well.is-open>.paper-drawer,.pg-card.is-open) .paper-dbody{animation:nx-print calc(var(--mv-t) * .6 * var(--fx,1)) steps(16,end) calc(var(--mv-t) * .62 * var(--fx,1)) backwards}
+@keyframes nx-type{from{--nx-p:0}to{--nx-p:1}}
+@keyframes nx-cursor{0%{opacity:1}38%{opacity:0}52%{opacity:1}66%{opacity:0}80%{opacity:1}94%{opacity:0}100%{opacity:0}}
+@keyframes nx-print{from{clip-path:inset(0 0 100% 0)}to{clip-path:inset(0 0 0 0)}}
+html:is([data-motion="calm"],[data-motion="off"],[data-view-motion="calm"],[data-cz-reduce]) [data-sheet][data-sheet-style="neon"] :is(.paper-dhead h2,.paper-dbody){animation:none}
+html:is([data-motion="calm"],[data-motion="off"],[data-view-motion="calm"],[data-cz-reduce]) [data-sheet][data-sheet-style="neon"] .paper-dhead h2::after,
+html:is([data-motion="calm"],[data-motion="off"],[data-view-motion="calm"],[data-cz-reduce]) [data-sheet][data-sheet-style="neon"] :is(.paper-well,.pg-layer)::after{display:none}
+/* Glitch: the old value in two offset colour channels (the effect's ghost nodes, built by the JS), then the new value. */
+[data-sheet][data-sheet-style="neon"] :is(.gl-a,.gl-b){position:absolute;left:0;top:0;white-space:pre;mix-blend-mode:screen}
+[data-sheet][data-sheet-style="neon"] .gl-a{color:var(--nx-mag)}
+[data-sheet][data-sheet-style="neon"] .gl-b{color:var(--nx-cy)}
+[data-sheet][data-sheet-style="neon"] .paper-landed::before{inset:-3px -6px;border-radius:0;background:rgb(255 63 180 / .22);box-shadow:0 0 12px rgb(255 63 180 / .5);opacity:0;animation:sheet-flash calc(var(--dur-slide) * 1.3 * var(--fx,1)) steps(5,end) both}
+/* Rune slate: stone only grinds. A panel is a stone door: light leaks through the seam, the two halves slide apart with a heavy ease and settle with a
+   small thud while dust falls, then the runes in the heading light one after another along the groove and cool to a dim glow. A slip splits open from
+   its centre seam. A fold is a slab sliding down under a carved lip. Closing draws the edges back to the seam. A changed value cracks and crumbles and
+   the new one is cut in with a glow that cools (--change-move: carve). Only transform, opacity and clip-path move. */
+[data-sheet][data-sheet-style="runes"] [data-move="slide-out"]{--mv-from:none;--mv-fade:1;--mv-k:1.6;--mv-e:cubic-bezier(.55,.02,.2,1);--mv-tt:1.05}
+[data-sheet][data-sheet-style="runes"] [data-move="grow"]{--mv-from:none;--mv-fade:1;--mv-k:1.15;--mv-e:cubic-bezier(.55,.02,.2,1);--mv-cto:1;--mv-cdo:0;--mv-ct:.8;--mv-cd:0}
+[data-sheet][data-sheet-style="runes"] [data-move="slide-out"]:is(.paper-drawer,.pg-card){--mv-cto:.001;--mv-cdo:0;--mv-ct:.8;--mv-cd:0}
+[data-sheet][data-sheet-style="runes"] :is(.paper-drawer,.paper-slip)[data-move]{--mv-clip:var(--rn-ch-d0);--mv-clip-o:var(--rn-ch-d)}
+[data-sheet][data-sheet-style="runes"] [data-move="fold"]{--mv-from:translateY(-100%);--mv-fade:1;--mv-clip:inset(-90px);--mv-k:1.5;--mv-e:cubic-bezier(.62,.04,.22,1)}
+[data-sheet][data-sheet-style="runes"] [data-move="settle"]{--mv-from:translateY(5px);--mv-fade:0;--mv-k:1.3}
+[data-sheet][data-sheet-style="runes"] :is(.paper-well.is-open>[data-move],[data-move].is-open){clip-path:var(--mv-clip-o,inset(-90px))}
+/* Calm keeps the chiselled edge and fades; its shut and open shapes match, so nothing is drawn between them. */
+html:is([data-motion="calm"],[data-view-motion="calm"],[data-cz-reduce]) [data-sheet][data-sheet-style="runes"] :is(.paper-drawer,.paper-slip)[data-move]{--mv-clip:var(--rn-ch-d)!important;--mv-clip-o:var(--rn-ch-d)}
+/* The door: two halves of the panel's own face lying over its contents. They exist only while the panel is open, so closing needs no second animation. */
+[data-sheet][data-sheet-style="runes"] .paper-drawer[data-move]::before,
+[data-sheet][data-sheet-style="runes"] .paper-drawer[data-move]::after{content:"";position:absolute;top:0;bottom:0;z-index:4;pointer-events:none;opacity:0;
+  background:linear-gradient(180deg,transparent 74px,rgb(0 0 0 / .55) 74px 76px,rgb(255 255 255 / .07) 76px 77px,transparent 77px) 0 0/100% 100% no-repeat,var(--rn-stone) 30px 20px/320px 320px,linear-gradient(172deg,#3b3c47,#2c2d36 55%,#25262d)}
+[data-sheet][data-sheet-style="runes"] .paper-drawer[data-move]::before{left:0;right:50%;box-shadow:inset 3px 3px 0 rgb(255 255 255 / .07),inset -3px 0 0 rgb(0 0 0 / .65),inset -9px 0 10px -6px rgb(0 0 0 / .55)}
+[data-sheet][data-sheet-style="runes"] .paper-drawer[data-move]::after{left:50%;right:0;box-shadow:inset 3px 0 0 rgb(0 0 0 / .65),inset 9px 0 10px -6px rgb(0 0 0 / .55),inset -3px -3px 0 rgb(0 0 0 / .25)}
+[data-sheet][data-sheet-style="runes"] :is(.paper-well.is-open>.paper-drawer,.pg-card.is-open)::before{animation:rn-door-l calc(var(--mv-t) * var(--fx,1)) linear both}
+[data-sheet][data-sheet-style="runes"] :is(.paper-well.is-open>.paper-drawer,.pg-card.is-open)::after{animation:rn-door-r calc(var(--mv-t) * var(--fx,1)) linear both}
+@keyframes rn-door-l{0%{opacity:1;transform:translate3d(0,0,0)}14%{opacity:1;transform:translate3d(0,0,0);animation-timing-function:cubic-bezier(.55,.02,.2,1)}100%{opacity:1;transform:translate3d(-101%,0,0)}}
+@keyframes rn-door-r{0%{opacity:1;transform:translate3d(0,0,0)}14%{opacity:1;transform:translate3d(0,0,0);animation-timing-function:cubic-bezier(.55,.02,.2,1)}100%{opacity:1;transform:translate3d(101%,0,0)}}
+/* The thud when the halves stop. The separate translate property composes with the move's own transform. */
+[data-sheet][data-sheet-style="runes"] :is(.paper-well.is-open>.paper-drawer,.pg-card.is-open){animation:rn-thud calc(var(--mv-t) * var(--fx,1)) linear both}
+@keyframes rn-thud{0%,84%{translate:0 0}90%{translate:0 2px}95%{translate:0 -1px}100%{translate:0 0}}
+/* Light through the seam, then falling dust. Both hang off the heading, which anchors to the panel, so they need no extra markup. */
+[data-sheet][data-sheet-style="runes"] .paper-drawer[data-move] .paper-dhead::before{content:"";position:absolute;z-index:6;top:0;bottom:0;left:calc(50% - 14px);width:28px;pointer-events:none;opacity:0;
+  background:linear-gradient(90deg,transparent,rgb(111 233 214 / .32) 40%,rgb(234 255 251 / .85) 50%,rgb(111 233 214 / .32) 60%,transparent)}
+[data-sheet][data-sheet-style="runes"] .paper-drawer[data-move] .paper-dhead::after{content:"";position:absolute;z-index:6;top:0;left:calc(50% - 80px);width:160px;height:110px;pointer-events:none;opacity:0;
+  background:radial-gradient(circle at 18px 12px,#d9dceb 0 1px,transparent 1.6px),radial-gradient(circle at 44px 40px,#b9bfd6 0 1.2px,transparent 1.8px),radial-gradient(circle at 70px 8px,#d9dceb 0 1px,transparent 1.6px),radial-gradient(circle at 92px 52px,#b9bfd6 0 1.4px,transparent 2px),radial-gradient(circle at 118px 22px,#d9dceb 0 1px,transparent 1.6px),radial-gradient(circle at 136px 60px,#b9bfd6 0 1.2px,transparent 1.8px),radial-gradient(circle at 58px 76px,#d9dceb 0 1px,transparent 1.6px)}
+[data-sheet][data-sheet-style="runes"] :is(.paper-well.is-open>.paper-drawer,.pg-card.is-open) .paper-dhead::before{animation:rn-seam calc(var(--mv-t) * var(--fx,1)) ease-out both}
+[data-sheet][data-sheet-style="runes"] :is(.paper-well.is-open>.paper-drawer,.pg-card.is-open) .paper-dhead::after{animation:rn-dust calc(var(--mv-t) * 1.3 * var(--fx,1)) ease-in calc(var(--mv-t) * .14 * var(--fx,1)) both}
+@keyframes rn-seam{0%{opacity:0;transform:scaleX(.08)}12%{opacity:1;transform:scaleX(.3)}45%{opacity:1;transform:scaleX(1.2)}100%{opacity:0;transform:scaleX(2.6)}}
+@keyframes rn-dust{0%{opacity:0;transform:translate3d(0,-6px,0)}18%{opacity:.9}100%{opacity:0;transform:translate3d(0,80px,0)}}
+/* The heading's runes: a dim row always cut into the groove, and a lit copy swept over it one rune at a time (clip-path in steps), which then cools away. */
+[data-sheet][data-sheet-style="runes"] .paper-dhead h2{position:relative;padding-bottom:20px}
+[data-sheet][data-sheet-style="runes"] .paper-dhead h2::before,
+[data-sheet][data-sheet-style="runes"] .paper-dhead h2::after{content:"\16A0  \16A2  \16A6  \16A8  \16B1  \16B2  \16B7";position:absolute;left:0;bottom:2px;font:400 12px/1 var(--rn-rune);letter-spacing:.5em;white-space:nowrap;pointer-events:none;text-shadow:none}
+[data-sheet][data-sheet-style="runes"] .paper-dhead h2::after{color:rgb(165 139 255 / .55);text-shadow:0 0 5px var(--rn-glowv)}
+[data-sheet][data-sheet-style="runes"] .paper-dhead h2::before{z-index:1;color:#eafffb;text-shadow:0 0 6px var(--rn-t),0 0 14px var(--rn-glow);opacity:0}
+[data-sheet][data-sheet-style="runes"] :is(.paper-well.is-open>.paper-drawer,.pg-card.is-open) .paper-dhead h2::before{animation:rn-runes calc(var(--mv-t) * 1.1 * var(--fx,1)) linear calc(var(--mv-t) * .8 * var(--fx,1)) backwards}
+@keyframes rn-runes{0%{clip-path:inset(0 100% 0 0);opacity:1;animation-timing-function:steps(7,end)}50%{clip-path:inset(0 0 0 0);opacity:1;animation-timing-function:ease-out}100%{clip-path:inset(0 0 0 0);opacity:0}}
+html:is([data-motion="calm"],[data-motion="off"],[data-view-motion="calm"],[data-cz-reduce]) [data-sheet][data-sheet-style="runes"] .paper-drawer[data-move]::before,
+html:is([data-motion="calm"],[data-motion="off"],[data-view-motion="calm"],[data-cz-reduce]) [data-sheet][data-sheet-style="runes"] .paper-drawer[data-move]::after,
+html:is([data-motion="calm"],[data-motion="off"],[data-view-motion="calm"],[data-cz-reduce]) [data-sheet][data-sheet-style="runes"] .paper-drawer[data-move] .paper-dhead::before,
+html:is([data-motion="calm"],[data-motion="off"],[data-view-motion="calm"],[data-cz-reduce]) [data-sheet][data-sheet-style="runes"] .paper-drawer[data-move] .paper-dhead::after,
+html:is([data-motion="calm"],[data-motion="off"],[data-view-motion="calm"],[data-cz-reduce]) [data-sheet][data-sheet-style="runes"] .paper-dhead h2::before{display:none}
+html:is([data-motion="calm"],[data-motion="off"],[data-view-motion="calm"],[data-cz-reduce]) [data-sheet][data-sheet-style="runes"] :is(.paper-drawer[data-move],[data-sheet-fold].is-in>.fold-body>.fold-in){animation:none}
+/* A fold: the slab slides down under a lip carved into the top of its opening. */
+[data-sheet][data-sheet-style="runes"] .fold-body{position:relative}
+[data-sheet][data-sheet-style="runes"] .fold-body::before{content:"";position:absolute;left:0;right:0;top:0;height:5px;z-index:2;pointer-events:none;background:linear-gradient(180deg,rgb(0 0 0 / .75),rgb(0 0 0 / .25) 60%,transparent)}
+[data-sheet][data-sheet-style="runes"] [data-sheet-fold].is-in>.fold-body>.fold-in{animation:rn-thud-s calc(var(--mv-t) * var(--fx,1)) linear both}
+@keyframes rn-thud-s{0%,82%{translate:0 0}92%{translate:0 2px}100%{translate:0 0}}
+/* Changed values (nodes built by the JS): the two halves of the old value, crumbs, and the glow that cools over the new one. */
+[data-sheet][data-sheet-style="runes"] .fx-sp{position:absolute;width:3px;height:3px;background:#a3a9bf;box-shadow:0 0 0 1px rgb(0 0 0 / .45);pointer-events:none}
+[data-sheet][data-sheet-style="runes"] .fx-half{text-shadow:var(--rn-engrave)}
+[data-sheet][data-sheet-style="runes"] .fx-glow{color:#eafffb;text-shadow:0 0 6px var(--rn-t),0 0 14px var(--rn-glow)}
+/* The plain mark: a patch of stone lit from within, cooling. */
+[data-sheet][data-sheet-style="runes"] .paper-landed::before{inset:-2px -6px;border:0;border-radius:0;background:rgb(111 233 214 / .24);box-shadow:none;opacity:0;animation:rn-cool calc(var(--dur-slide) * 1.3 * var(--fx,1)) var(--ease-out) both}
+@keyframes rn-cool{0%{opacity:1}100%{opacity:0}}
+/* Brass gauges: panels open like a brass hatch. A hinged door swings open on its left edge (short and weighty, no overshoot) while a glint crosses it and a small
+   cog in the heading turns a few degrees. A fold opens like a shutter: four stepped slats, then smoothly. Changed values roll like an odometer
+   (--change-move: odometer). */
+[data-sheet][data-sheet-style="brass"] [data-move="slide-out"]{--mv-from:perspective(1200px) rotateY(-84deg);--mv-to:perspective(1200px) rotateY(0deg);--mv-fade:1;--mv-ox:0%;--mv-oy:50%;--mv-k:1.1;--mv-e:cubic-bezier(.55,.05,.25,1)}
+[data-sheet][data-sheet-style="brass"] [data-move="grow"]{--mv-from:perspective(900px) rotateY(-72deg);--mv-to:perspective(900px) rotateY(0deg);--mv-fade:1;--mv-ox:0%;--mv-oy:0%;--mv-k:.9;--mv-e:cubic-bezier(.55,.05,.25,1)}
+[data-sheet][data-sheet-style="brass"] [data-move="fold"]{--mv-from:none;--mv-clip:inset(0 0 100% 0);--mv-fade:1;--mv-k:1.15;--mv-e:var(--ease-out)}
+[data-sheet][data-sheet-style="brass"] [data-move="settle"]{--mv-from:translateY(8px);--mv-fade:0;--mv-k:1.1}
+[data-sheet][data-sheet-style="brass"] .paper-drawer[data-move]::after{content:"";position:absolute;inset:0;z-index:3;pointer-events:none;
+  background:linear-gradient(100deg,transparent 36%,rgb(255 226 150 / .34) 50%,transparent 64%) 130% 0/260% 100% no-repeat}
+[data-sheet][data-sheet-style="brass"] :is(.paper-well.is-open>.paper-drawer,.pg-card.is-open)::after{animation:sheet-sheen calc(var(--mv-t) * 1.2 * var(--fx,1)) ease-out calc(var(--mv-t) * .25 * var(--fx,1)) backwards}
+/* The cog in the heading turns with the door and back with it. */
+[data-sheet][data-sheet-style="brass"] .paper-dhead{position:relative}
+[data-sheet][data-sheet-style="brass"] .paper-drawer .paper-dhead::after{content:"";position:absolute;right:54px;top:14px;width:24px;height:24px;pointer-events:none;
+  background:radial-gradient(circle,transparent 0 5px,var(--bs-b2) 5.5px 9px,transparent 9.5px),repeating-conic-gradient(var(--bs-b2) 0 14deg,transparent 14deg 30deg);
+  -webkit-mask:radial-gradient(circle,transparent 0 5px,#000 5.5px 12px,transparent 12.5px);mask:radial-gradient(circle,transparent 0 5px,#000 5.5px 12px,transparent 12.5px);
+  transform:rotate(-45deg);transition:transform calc(var(--mv-t) * 1.3) var(--mv-e)}
+[data-sheet][data-sheet-style="brass"] .pg-card .paper-dhead::after{right:16px}
+[data-sheet][data-sheet-style="brass"] :is(.paper-well.is-open>.paper-drawer,.paper-drawer.is-open) .paper-dhead::after{transform:rotate(0deg)}
+html:is([data-motion="calm"],[data-motion="off"],[data-view-motion="calm"],[data-cz-reduce]) [data-sheet][data-sheet-style="brass"] .paper-drawer .paper-dhead::after{transform:none;transition:none}
+html:is([data-motion="calm"],[data-motion="off"],[data-view-motion="calm"],[data-cz-reduce]) [data-sheet][data-sheet-style="brass"] .paper-drawer[data-move]::after{display:none}
+/* The body is shown once the door is mostly open. */
+[data-sheet][data-sheet-style="brass"] .paper-drawer[data-move] .paper-dbody{opacity:0;transition:opacity calc(var(--mv-t) * .5) var(--mv-e)}
+[data-sheet][data-sheet-style="brass"] :is(.paper-well.is-open>.paper-drawer,.paper-drawer.is-open) .paper-dbody{opacity:1;transition-delay:calc(var(--mv-t) * .4)}
+html:is([data-motion="calm"],[data-view-motion="calm"],[data-cz-reduce]) [data-sheet][data-sheet-style="brass"] .paper-drawer[data-move] .paper-dbody{opacity:1;transition-delay:0s}
+html[data-motion="off"] [data-sheet][data-sheet-style="brass"] .paper-drawer[data-move] .paper-dbody{opacity:1;transition:none}
+/* Shutter: four stepped slats, then a smooth finish; faint slat lines fade off the top. */
+[data-sheet][data-sheet-style="brass"] [data-sheet-fold].is-in>.fold-body>.fold-in{animation:bs-slats calc(var(--mv-t) * var(--fx,1)) linear both}
+[data-sheet][data-sheet-style="brass"] .fold-body{position:relative}
+[data-sheet][data-sheet-style="brass"] [data-sheet-fold].is-in>.fold-body::after{content:"";position:absolute;inset:0;z-index:2;pointer-events:none;opacity:0;
+  background:repeating-linear-gradient(180deg,rgb(0 0 0 / .55) 0 2px,rgb(184 138 53 / .5) 2px 3px,transparent 3px 14px);animation:bs-slatfade calc(var(--dur-standard) * 1.15 * var(--fx,1)) linear both}
+@keyframes bs-slats{0%{clip-path:inset(0 0 100% 0);animation-timing-function:steps(1,end)}15%{clip-path:inset(0 0 76% 0);animation-timing-function:steps(1,end)}
+  30%{clip-path:inset(0 0 52% 0);animation-timing-function:steps(1,end)}45%{clip-path:inset(0 0 28% 0);animation-timing-function:steps(1,end)}
+  60%{clip-path:inset(0 0 4% 0);animation-timing-function:cubic-bezier(.16,1,.3,1)}100%{clip-path:inset(0 0 0 0)}}
+@keyframes bs-slatfade{0%{opacity:.9}100%{opacity:0}}
+html:is([data-motion="calm"],[data-motion="off"],[data-view-motion="calm"],[data-cz-reduce]) [data-sheet][data-sheet-style="brass"] [data-sheet-fold].is-in>.fold-body>.fold-in{animation:none}
+html:is([data-motion="calm"],[data-motion="off"],[data-view-motion="calm"],[data-cz-reduce]) [data-sheet][data-sheet-style="brass"] [data-sheet-fold].is-in>.fold-body::after{display:none}
+/* Odometer: each changed digit sits in a clipped box and the old and new values slide past (nodes built by the JS). */
+[data-sheet][data-sheet-style="brass"] .od-c{display:inline-block;vertical-align:top;overflow:hidden}
+[data-sheet][data-sheet-style="brass"] .od-s{display:block}
+[data-sheet][data-sheet-style="brass"] .od-s>span{display:block;text-align:center}
+[data-sheet][data-sheet-style="brass"] .od-t{display:inline-block;vertical-align:top}
+[data-sheet][data-sheet-style="brass"] .paper-landed::before{inset:-3px -7px;border:2px solid var(--bs-b2);border-radius:3px;background:none;opacity:0;animation:sheet-ring calc(var(--dur-slide) * 1.1 * var(--fx,1)) var(--ease-out) both}
+/* On a narrow sheet the hatch is the costliest move of all the styles, so it becomes a short, weighty slide from the hinge side with no glint; the cog, shutter and odometer stay. */
+@container sheet (max-width:600px){
+  [data-sheet][data-sheet-style="brass"] :is([data-move="slide-out"],[data-move="grow"]){--mv-from:translateX(-14%);--mv-to:none;--mv-k:.85}
+  [data-sheet][data-sheet-style="brass"] :is(.paper-well.is-open>.paper-drawer,.pg-card.is-open)::after{animation:none}
+}
+[data-sheet][data-sheet-style="journal"] .pg-head{padding-left:22px}
+[data-sheet][data-sheet-style="journal"] .pg-card .paper-dbody{padding-left:30px;padding-right:20px}
+[data-sheet][data-sheet-style="vellum"] .pg-card .paper-dbody,
+[data-sheet][data-sheet-style="night"] .pg-card .paper-dbody{padding-inline:22px}

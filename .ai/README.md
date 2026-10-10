@@ -46,7 +46,7 @@ business rules and footguns.
   Admin → Packages, so there is one systems-infrastructure doc, not one per
   system), `internal/websocket/`.
 - **Front-end scripts** (`static/js/`): `boot`, `hovercard`, `motion_rest`,
-  `notifications`, `shortcuts_help`, `sidebar_tag_filter`, `sidebar_tree`, and
+  `notifications`, `sheet_motion`, `shortcuts_help`, `sidebar_tag_filter`, `sidebar_tree`, and
   under `widgets/`: `dynamic_surface`, `entity_posts`, `entity_tooltip`,
   `entity_type_config`, `entity_type_editor`, `groups`, `header_motion`,
   `image_upload`, `layout_editor`, `map_widget`, `permissions`, `quest_board`,
