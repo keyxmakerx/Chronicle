@@ -9,6 +9,10 @@ import (
 // system with dozens of listed text fields still gives a walkable creator.
 const maxCreatorSteps = 12
 
+// CreatorOptionsSuffix names the field beside a step's field that keeps what
+// a hero bought from the chosen entry's list (ancestry_choices_json).
+const CreatorOptionsSuffix = "_choices_json"
+
 // CreatorStep is one question the hero creator asks: a text field on the
 // system's character preset that has entries to pick from, whether the
 // package lists them or the campaign's Directors added their own.
@@ -44,7 +48,9 @@ func (s *characterChoiceService) CreatorPlan(ctx context.Context, campaignID str
 		return plan, nil
 	}
 	for _, f := range preset.Fields {
-		if f.Type != "string" || !ValidChoiceFieldKey(f.Key) {
+		// A key ending in the creator's options suffix would collide with the
+		// field that keeps another step's bought options.
+		if f.Type != "string" || !ValidChoiceFieldKey(f.Key) || strings.HasSuffix(f.Key, CreatorOptionsSuffix) {
 			continue
 		}
 		l, err := s.CharacterChoiceList(ctx, campaignID, f.Key)

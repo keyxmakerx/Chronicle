@@ -66,7 +66,7 @@
     if (!budget) return null;
     for (var j = 0; j < keys.length; j++) {
       var list = props[keys[j]];
-      if (namedList(list) && list.every(function (it) { return typeof it.cost === 'number'; })) {
+      if (namedList(list) && list.every(function (it) { return typeof it.cost === 'number' && it.cost >= 0; })) {
         return { key: keys[j], items: list, budget: budget, budgetKey: keys[i] };
       }
     }
@@ -119,7 +119,11 @@
       if (!d) return;
       var self = this;
       Object.keys(d.picks || {}).forEach(function (k) {
-        if (self.stepByKey(k) && self.choice(k, d.picks[k].name)) self.picks[k] = { name: d.picks[k].name, options: d.picks[k].options || [] };
+        var c = self.stepByKey(k) && self.choice(k, d.picks[k].name);
+        if (!c) return;
+        // Keep only options the entry still offers, in case the system changed.
+        var bl = buyList(c.properties), opts = Array.isArray(d.picks[k].options) ? d.picks[k].options : [];
+        self.picks[k] = { name: c.name, options: bl ? opts.filter(function (o) { return bl.items.some(function (it) { return it.name === o; }); }) : [] };
       });
       this.name = typeof d.name === 'string' ? d.name : '';
     } catch (e) { /* no storage: start fresh */ }

@@ -91,6 +91,10 @@ func TestHeroBuyList(t *testing.T) {
 	if _, _, ok := heroBuyList(map[string]any{"purchased_traits": ancestryProps()["purchased_traits"]}); ok {
 		t.Error("a list without a budget can't be bought from")
 	}
+	negative := map[string]any{"ancestry_points": float64(3), "traits": []any{map[string]any{"name": "Free lunch", "cost": float64(-5)}}}
+	if _, _, ok := heroBuyList(negative); ok {
+		t.Error("a negative cost must not make a buy list")
+	}
 	if _, _, ok := heroBuyList(map[string]any{"ancestry_points": float64(3), "notes": []any{"a", "b"}}); ok {
 		t.Error("a list of plain strings is not a buy list")
 	}

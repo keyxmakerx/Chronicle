@@ -146,7 +146,7 @@ func heroBuyList(props map[string]any) (costs map[string]float64, budget float64
 			m, isObj := it.(map[string]any)
 			name, _ := m["name"].(string)
 			cost, hasCost := m["cost"].(float64)
-			if !isObj || strings.TrimSpace(name) == "" || !hasCost {
+			if !isObj || strings.TrimSpace(name) == "" || !hasCost || cost < 0 {
 				found = nil
 				break
 			}
