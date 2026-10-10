@@ -278,7 +278,9 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 		data-hexes-src={ scriptURL("map_hexes.js") }
 		data-live-src={ scriptURL("map_live.js") }
 		data-measure-src={ scriptURL("map_measure.js") }
+		data-links-src={ scriptURL("map_links.js") }
 		data-map-id={ data.Map.ID }
+		data-map-name={ data.Map.Name }
 		data-image-id={ derefStr(data.Map.ImageID) }
 		data-image-url={ mapImageSrc(ctx, data.Map) }
 		data-image-width={ fmt.Sprintf("%d", data.Map.ImageWidth) }
@@ -294,8 +296,16 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 		data-can-set-scale={ fmt.Sprintf("%t", data.IsDM) }
 		data-map-name={ data.Map.Name }
 		data-user-id={ data.UserID }
+		data-link-tree={ fmt.Sprintf("%t", cc.MemberRole >= campaigns.RolePlayer || cc.IsSiteAdmin) }
 		data-display={ mustMarshalDisplay(data.DisplayOrDefault()) }
 		data-markers={ mustMarshalMarkers(data.Markers) }
+		data-trail={ marshalOr(data.Trail, "[]") }
+		if data.IsScribe {
+			data-link-maps={ marshalOr(data.LinkMaps, "[]") }
+		}
+		if len(data.MemberNames) > 0 {
+			data-members={ marshalOr(data.MemberNames, "{}") }
+		}
 	></div>
 
 	// The viewer itself is static/js/map_viewer.js, mounted by boot.js from
@@ -596,9 +606,94 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 		@media (max-width: 760px) {
 			.mp-sheet { left: 12px; width: auto; }
 		}
+
+		/* Pins that open another map: the badge on the pin says at a glance who
+		   can follow it (an eye when players can, inverted with a struck eye and
+		   "DM only" when they cannot). Its tooltip is a Peek, to the right so it
+		   never covers the pin's own name above or below. It stacks over the
+		   pin's own picture, which Leaflet lifts to z-index 200 as an svg. */
+		.mp-lglyph { width: 11px; height: 11px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+		.mp-lbadge { position: absolute; z-index: 201; left: 63%; top: -8px; height: 19px; display: flex; align-items: center; gap: 2px; padding: 0 5px; border: 0; border-radius: 999px; background: var(--color-card-bg); color: var(--mp-accent); box-shadow: 0 0 0 1.5px var(--mp-accent), 0 1px 3px rgb(0 0 0 / 0.35); white-space: nowrap; font-size: 9px; line-height: 1; transition: filter var(--dur-micro, 120ms); }
+		#map-wrap .mp-lbadge { color: var(--mp-accent); }
+		.mp-lbadge:hover { filter: brightness(1.08); }
+		.mp-lbadge i { position: static; font-size: 9px; }
+		.mp-pin .mp-lbadge svg, .mp-pin .mp-lbadge i { position: static; inset: auto; width: 11px; height: 11px; filter: none; overflow: visible; pointer-events: none; }
+		#map-wrap .mp-lbadge.dm { background: var(--color-text-primary); color: var(--color-bg-primary); box-shadow: 0 0 0 1.5px var(--color-bg-primary), 0 1px 3px rgb(0 0 0 / 0.4); }
+		.mp-lbadge-l { font-size: 9.5px; font-weight: 600; margin-left: 2px; }
+		.mp-btip { position: absolute; left: calc(100% + 6px); top: 50%; width: max-content; max-width: 210px; white-space: normal; text-align: left; background: var(--color-text-primary); color: var(--color-bg-primary); font-size: 11px; font-weight: 400; line-height: 1.35; padding: 4px 8px; border-radius: 5px; opacity: 0; pointer-events: none; transform: translateY(-50%) translateY(4px); transition: opacity var(--dur-micro, 120ms) var(--ease-out), transform var(--dur-micro, 120ms) var(--ease-out); }
+		.mp-lbadge:hover .mp-btip, .mp-lbadge:focus-visible .mp-btip { opacity: 1; transform: translateY(-50%); }
+		.leaflet-marker-icon:hover, .leaflet-marker-icon:focus-within { z-index: 100000 !important; }
+		.mp-badge-acc { background: var(--mp-accent-soft); color: var(--mp-accent); }
+		.mp-cbtn-ico { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+		.mp-cbtn-ico span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+		.mp-cbtn-ico .mp-lglyph { width: 13px; height: 13px; }
+		.mp-card-row { flex-wrap: wrap; }
+		.mp-vline { display: flex; gap: 6px; align-items: flex-start; font-size: 11.5px; line-height: 1.35; color: var(--mp-accent); margin-top: 2px; }
+		.mp-vline i { margin-top: 2px; font-size: 11px; }
+		.mp-vline span, .mp-vline-help { color: var(--color-text-body); }
+		.mp-vline.dm, .mp-vline.dm span { color: var(--color-text-secondary); }
+
+		/* The "Opens map" chooser: a button that grows a short list of maps. */
+		.mp-mapsel { position: relative; }
+		.mp-omb { display: flex; align-items: center; gap: 8px; text-align: left; height: 32px; }
+		.mp-omb > i { color: var(--color-text-secondary); font-size: 10px; }
+		.mp-om-th { width: 30px; height: 20px; border-radius: 3px; background: var(--color-bg-tertiary); overflow: hidden; flex: none; display: grid; place-items: center; color: var(--color-text-muted); font-size: 11px; }
+		.mp-om-th img { width: 100%; height: 100%; object-fit: cover; display: block; }
+		.mp-om-nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-text-primary); }
+		.mp-om-menu { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 3; background: var(--color-card-bg); border: 1px solid var(--color-border); border-radius: 9px; box-shadow: var(--mp-shadow); padding: 4px; max-height: 220px; overflow: auto; transform-origin: 50% 0; }
+		.mp-om-menu.mp-om-up { top: auto; bottom: calc(100% + 4px); transform-origin: 50% 100%; }
+		.mp-om-opt { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: none; text-align: left; border-radius: 6px; padding: 5px 6px; font-size: 12.5px; }
+		.mp-om-opt:hover, .mp-om-opt:focus-visible { background: var(--color-bg-tertiary); }
+		.mp-om-opt[aria-selected="true"] { background: var(--mp-accent-soft); }
+		.mp-om-opt .mp-om-th { width: 34px; height: 23px; }
+		.mp-om-opt > i { color: var(--mp-accent); font-size: 11px; }
+
+		/* The trail of maps and the tree of linked maps. */
+		.mp-trail { top: 12px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 2px; height: 36px; padding: 0 4px; max-width: calc(100% - 520px); font-size: 13px; white-space: nowrap; flex-wrap: nowrap; }
+		.mp-trail button { border: 0; background: none; border-radius: 7px; padding: 5px 7px; color: var(--color-text-secondary); display: flex; align-items: center; gap: 6px; min-width: 0; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 0 1 auto; transition: background-color var(--dur-micro, 120ms), color var(--dur-micro, 120ms); }
+		#map-wrap .mp-trail button { color: var(--color-text-secondary); }
+		#map-wrap .mp-trail button:hover { background: var(--color-bg-tertiary); color: var(--color-text-primary); }
+		#map-wrap .mp-trail .mp-tt { flex: none; gap: 3px; padding: 5px 6px; color: var(--color-text-body); }
+		#map-wrap .mp-trail .mp-tt[aria-expanded="true"], #map-wrap .mp-trail .mp-gap[aria-expanded="true"] { background: var(--mp-accent-soft); color: var(--mp-accent); }
+		.mp-trail .mp-tt-sm { font-size: 9px; }
+		.mp-trail .mp-gap { flex: none; font-weight: 600; letter-spacing: 0.05em; }
+		.mp-trail .mp-cur { padding: 5px 7px; color: var(--color-text-primary); font-weight: 600; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; }
+		.mp-trail .mp-chev { color: var(--color-text-muted); flex: none; display: flex; font-size: 9px; }
+		.mp-tree { width: 330px; max-height: min(360px, calc(100% - 70px)); overflow: auto; padding: 8px 6px 6px; z-index: 1160; transform-origin: 20px 0; font-size: 13px; }
+		.mp-tth2 { display: flex; align-items: center; gap: 8px; padding: 2px 8px 8px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--color-text-secondary); }
+		.mp-tth2 .mp-badge { text-transform: none; letter-spacing: 0; font-weight: 500; }
+		.mp-tree ul { list-style: none; margin: 0; padding: 0; }
+		.mp-tree li { outline: none; }
+		.mp-trow { display: flex; align-items: center; gap: 6px; height: 34px; padding-right: 8px; border-radius: 7px; color: var(--color-text-primary); cursor: pointer; transition: background-color var(--dur-micro, 120ms); }
+		.mp-trow:hover { background: var(--color-bg-tertiary); }
+		#map-wrap .mp-tree li:focus-visible { outline: none; }
+		.mp-tree li:focus-visible > .mp-trow { outline: 2px solid var(--mp-accent); outline-offset: -2px; }
+		.mp-trow.cur { background: var(--mp-accent-soft); color: var(--mp-accent); font-weight: 600; }
+		.mp-tw { width: 20px; height: 20px; display: grid; place-items: center; border-radius: 5px; color: var(--color-text-secondary); flex: none; font-size: 10px; }
+		.mp-tw[data-tw]:hover { background: var(--color-border); color: var(--color-text-primary); }
+		.mp-tw i { transition: transform var(--dur-standard, 200ms) var(--ease-out); }
+		.mp-tree li[aria-expanded="true"] > .mp-trow .mp-tw i { transform: rotate(90deg); }
+		.mp-tth { width: 28px; height: 19px; border-radius: 3px; overflow: hidden; flex: none; background: var(--color-bg-tertiary); }
+		.mp-tth img { width: 100%; height: 100%; object-fit: cover; display: block; }
+		.mp-tn { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+		.mp-tvis { display: inline-flex; align-items: center; gap: 3px; font-size: 10.5px; font-weight: 500; color: var(--color-text-secondary); flex: none; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+		.mp-tvis.dm { color: var(--color-text-primary); background: var(--color-bg-tertiary); border-radius: 999px; padding: 1px 6px; }
+		.mp-tvis i { font-size: 10px; }
+		.mp-here { font-size: 10.5px; font-weight: 600; color: var(--mp-accent); flex: none; }
+		.mp-tfoot { display: flex; gap: 6px; align-items: flex-start; margin: 6px 8px 2px; padding-top: 8px; border-top: 1px solid var(--color-border); font-size: 11.5px; line-height: 1.4; color: var(--color-text-secondary); }
+		.mp-tfoot i { margin-top: 2px; font-size: 11px; }
+		@media (max-width: 760px) {
+			.mp-trail { top: 56px; left: 12px; right: auto; transform: none; max-width: calc(100% - 24px); overflow: hidden; }
+			.mp-trail button { max-width: 110px; }
+		}
+		html[data-motion="calm"] .mp-btip { transform: translateY(-50%); }
 		@media (prefers-reduced-motion: reduce) {
 			.mp-tip { transition: none; }
 			.leaflet-fade-anim .leaflet-popup, .leaflet-zoom-anim .leaflet-zoom-animated { transition: none !important; }
+		}
+		@media (prefers-reduced-motion: reduce) {
+			.mp-btip { transition: none; transform: translateY(-50%); }
+			.mp-tw i { transition: none; }
 		}
 
 	</style>
@@ -623,6 +718,10 @@ templ mapControls(data MapViewData) {
 		/>
 		<div id="mp-results" class="mp-results" hidden></div>
 	</div>
+	<!-- The trail of maps the viewer came through, and the tree of linked maps
+	     its first button opens. Filled by static/js/map_links.js. -->
+	<nav id="mp-trail" class="mp-fl mp-trail" aria-label="Map levels" hidden></nav>
+	<div id="mp-tree" class="mp-fl mp-tree" hidden></div>
 	<!-- Everyone's rail holds Move and Measure, and Hexes while the map has
 	     hexes (so a player can open a hex's card and measure in hexes); the
 	     other tools are for scribes. The viewer shows or hides the Hexes

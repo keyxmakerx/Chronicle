@@ -2,6 +2,7 @@ package maps
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
@@ -43,4 +44,15 @@ func fillLinkThumbs(ctx context.Context, nodes []LinkNode) {
 		nodes[i].ThumbURL = thumbSrc(ctx, idp, player)
 		fillLinkThumbs(ctx, nodes[i].Children)
 	}
+}
+
+// marshalOr serialises v for a data attribute, or returns empty when v is nil,
+// an empty slice, or cannot be marshalled, so the script always parses a value
+// of the shape it expects.
+func marshalOr(v any, empty string) string {
+	b, err := json.Marshal(v)
+	if err != nil || string(b) == "null" {
+		return empty
+	}
+	return string(b)
 }

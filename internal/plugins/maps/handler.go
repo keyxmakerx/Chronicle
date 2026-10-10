@@ -206,12 +206,15 @@ func (h *Handler) linkMapOptions(c echo.Context, cc *campaigns.CampaignContext, 
 	if err != nil {
 		return nil, err
 	}
+	// The thumbnails go into a data attribute, built before the page renders,
+	// so they are signed here the way the page's own pictures are.
+	sctx := middleware.MediaContext(c)
 	out := make([]LinkMapOption, 0, len(ms))
 	for i := range ms {
 		if ms[i].ID == mapID {
 			continue
 		}
-		out = append(out, LinkMapOption{ID: ms[i].ID, Name: ms[i].Name, ThumbURL: mapThumbSrc(ctx, &ms[i])})
+		out = append(out, LinkMapOption{ID: ms[i].ID, Name: ms[i].Name, ThumbURL: mapThumbSrc(sctx, &ms[i])})
 	}
 	return out, nil
 }
@@ -227,7 +230,8 @@ func (h *Handler) LinkTreeAPI(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	fillLinkThumbs(ctx, tree.Roots)
+	// Signed for this viewer, as a rendered page would sign them.
+	fillLinkThumbs(middleware.MediaContext(c), tree.Roots)
 	return c.JSON(http.StatusOK, tree)
 }
 
