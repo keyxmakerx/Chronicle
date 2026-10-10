@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
-	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 )
 
@@ -28,19 +27,13 @@ const (
 	maxGenNames       = 30 // the names engine's own per-kind maximum
 )
 
-// weatherSettingsReader reads a calendar's climate, how long its weather
-// lasts, and the owner's own kinds of weather (calendar.CalendarService).
-type weatherSettingsReader interface {
-	GetWeatherSettings(ctx context.Context, calendarID, campaignID string, v permissions.Viewer) (*calendar.WeatherSettings, error)
-}
-
 // GeneratorKind runs one of Chronicle's generators. Weather, when set, gives
 // a weather run the calendar's own settings, as the calendar's weather sheet
 // does; without it a run uses the generator's defaults.
 type GeneratorKind struct {
 	Cal     CalendarAPI
 	Tables  TableKind
-	Weather weatherSettingsReader
+	Weather WeatherSettingsAPI
 }
 
 // Weather tuning a row may set, with the generator's own bounds.
@@ -274,16 +267,7 @@ func (k GeneratorKind) weatherDetails(ctx context.Context, campaignID string, a 
 	if !ok {
 		return details, "", nil
 	}
-	return details, " in the " + weatherClimateName(c) + " climate" + from, nil
-}
-
-func weatherClimateName(id string) string {
-	for _, c := range calendar.WeatherClimates {
-		if c.ID == id {
-			return c.Name
-		}
-	}
-	return id
+	return details, " in the " + climateLabel(c) + " climate" + from, nil
 }
 
 func (k GeneratorKind) Plan(ctx context.Context, campaignID string, a Actor, r Record) Plan {

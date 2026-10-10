@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 )
 
@@ -189,19 +188,13 @@ func TestEventKind_DocListsRepeatTypes(t *testing.T) {
 	}
 }
 
-type fakeWeatherSettings struct{ ws calendar.WeatherSettings }
-
-func (f fakeWeatherSettings) GetWeatherSettings(context.Context, string, string, permissions.Viewer) (*calendar.WeatherSettings, error) {
-	return &f.ws, nil
-}
-
 func TestGeneratorKind_WeatherUsesCalendarSettings(t *testing.T) {
 	base := map[string]any{"generator": "weather", "year": 1492, "month": 1, "day": 1}
 	kinds := []calendar.WeatherKind{{ID: "ashfall", Name: "Ashfall", Like: "snow"}}
 	settings := fakeWeatherSettings{calendar.WeatherSettings{Climate: "desert", Continuity: 0.8, Kinds: kinds}}
 	tests := []struct {
 		name     string
-		weather  weatherSettingsReader
+		weather  WeatherSettingsAPI
 		extra    map[string]any
 		climate  any
 		cont     any
