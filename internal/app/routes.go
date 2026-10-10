@@ -2965,6 +2965,9 @@ func (a *App) RegisterRoutes() {
 	} else if n > 0 {
 		slog.Info("player-character-type backfill complete", slog.Int("campaigns", n))
 	}
+	// Move a system's character sheet off an empty duplicate type onto the
+	// default Characters type; idempotent and never deletes.
+	reconcileCharacterPresetHome(context.Background(), entityService)
 	addonService.SetSystemFinder(&systemManifestFinderAdapter{})
 	addonHandler := addons.NewHandler(addonService)
 	addonHandler.SetActivityRecorder(adminActivity)
@@ -3236,6 +3239,15 @@ func (a *App) RegisterRoutes() {
 	// Data hygiene scanner: orphan detection and cleanup for media, API keys, stale files.
 	hygieneScanner := admin.NewHygieneService(a.DB, mediaRepo, mediaService, a.Config.Upload.MediaPath, securityRepo)
 	adminHandler.SetHygieneScanner(hygieneScanner)
+
+	// Site Trash: a deleted campaign and a file clean-up wait here with Undo
+	// before anything is removed. The purger is the periodic job that empties
+	// items older than the retention setting (an hourly ticker, started the
+	// same way as the page Trash purger below).
+	trashService := admin.NewTrashService(campaignService, mediaService, hygieneScanner,
+		admin.NewTrashBatchRepository(a.DB), settingsService)
+	adminHandler.SetTrashService(trashService)
+	go trashService.StartPurger(a.ShutdownCtx)
 
 	// Database explorer: schema visualization and migration management.
 	dbExplorer := admin.NewDatabaseExplorer(a.DB, a.PluginHealth, a.PluginSchemas)
@@ -4866,6 +4878,8 @@ func (a *App) RegisterRoutes() {
 					SidebarCorner: ap.SidebarCorner, SidebarSubtitle: ap.SidebarSubtitle, SidebarBanner: ap.SidebarBanner,
 					PeekGlow: ap.PeekGlow, PeekGlowColour: ap.PeekGlowColour,
 					HoverCard: ap.HoverCard,
+
+					SheetStyle: ap.SheetStyle,
 				}
 				ctx = layouts.SetAppearance(ctx, ad)
 			}
@@ -5203,7 +5217,16 @@ func (a *App) RegisterRoutes() {
 	}
 
 	// Quest sheets and notice boards. Cross-plugin lookups go through the
-	// adapters in quests_adapters.go.
+	// adapters in quests_adapters.go. Both boards share quest_board_kit.js,
+	// so it loads first in each list (ADR-063).
+	a.registerPlugin(PluginRegistration{
+		Slug:     quests.PluginSlug,
+		StaticFS: echo.MustSubFS(quests.StaticAssetsFS, "static"),
+		Widgets: []PluginWidget{
+			{Name: "quest_board", Scripts: []string{"js/quest_board_kit.js", "js/quest_board.js"}},
+			{Name: "notice_boards", Scripts: []string{"js/quest_board_kit.js", "js/notice_boards.js"}},
+		},
+	})
 	if a.PluginHealth.IsHealthy(quests.PluginSlug) {
 		questEntities := &questEntityAdapter{svc: entityService, cards: entities.NewPageCards(a.DB)}
 		questMaps := &questMapAdapter{svc: mapsService, addons: addonService}

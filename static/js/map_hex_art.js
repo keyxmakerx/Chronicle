@@ -276,7 +276,7 @@
   function wor2(x,y,s){var xi=Math.floor(x),yi=Math.floor(y),b1=9,b2=9,id=0;for(var j=-1;j<=1;j++)for(var i=-1;i<=1;i++){var cx=xi+i,cy=yi+j,px=cx+hsh(cx,cy,s),py=cy+hsh(cx,cy,s+1),d=(px-x)*(px-x)+(py-y)*(py-y);if(d<b1){b2=b1;b1=d;id=hsh(cx,cy,s+2)}else if(d<b2)b2=d}return [Math.sqrt(b1),Math.sqrt(b2),id]}
   function segD(px,py,ax,ay,bx,by){var dx=bx-ax,dy=by-ay,l=dx*dx+dy*dy,t=l?Math.max(0,Math.min(1,((px-ax)*dx+(py-ay)*dy)/l)):0;return [Math.hypot(px-ax-dx*t,py-ay-dy*t),t]}
   function lineD(px,py,L){var best=9,al=0;for(var i=1;i<L.length;i++){var s=segD(px,py,L[i-1][0],L[i-1][1],L[i][0],L[i][1]);if(s[0]<best){best=s[0];al=i-1+s[1]}}return [best,al]}
-  function iso3Model(t,v,RQ){var cx=0,cy=0,r=TILE_R;
+  function iso3ModelJob(t,v,RQ){var cx=0,cy=0,r=TILE_R;
     var R=rng(t+'|'+v),G=scene(t,v,R);
     /* Rendered at 1.4x the display resolution and scaled down, which smooths every silhouette. */
     var Q=RQ*1.4,up=r*G.up,T=G.bank?0:r*.2,m=r*.04,W=Math.sqrt(3)*r+2*m,ox=cx-W/2,oy=cy-r-up,H=2*r+up+T+m,
@@ -343,17 +343,17 @@
         if(ob.k==='py')th=Math.floor(th/.035)*.035;th+=g0;
         if(th>hh){hh=th;mt=om;var vv=vnoise(X*Q*.35+ob.x*30,Y*Q*.35,7)*.6+vnoise(X*Q*1.2,Y*Q*1.2,17)*.4;c=om===8?[oc[0]*(.94+vv*.12),oc[1]*(.94+vv*.12),oc[2]*(.94+vv*.12)]:[oc[0]*(.88+vv*.24),oc[1]*(.88+vv*.24),oc[2]*(.88+vv*.24)];wc=ob.wc||null;if(G.snowy&&(om===1||(om===8&&ob.rf)))mt=5}}
       o[0]=hh;o[1]=c;o[2]=mt;o[3]=wc}
-    var o=[0,null,0,null],maxH=0;
-    for(var j=0;j<gh;j++)for(var i=0;i<gw;i++){var X=gx0+i/Q,Y=gy0+j/Q,p=(X-cx)/r,q=(Y-cy)/r,ii=j*gw+i,ap=Math.abs(p);if(ap>.8661||Math.abs(q)+ap*.57735>1.001)continue;
-      IN[ii]=1;surf(p,q,X,Y,o);HP[ii]=o[0]*k;BC[ii*3]=o[1][0];BC[ii*3+1]=o[1][1];BC[ii*3+2]=o[1][2];MT[ii]=o[2];if(o[3]){WC[ii*3]=o[3][0];WC[ii*3+1]=o[3][1];WC[ii*3+2]=o[3][2]}else WC[ii*3]=-1;if(HP[ii]>maxH)maxH=HP[ii]}
+    var o=[0,null,0,null],maxH=0,j=0,i=0;
+    function sample(until){for(var n=0;j<gh;j++){if(n++&&performance.now()>until)return false;for(i=0;i<gw;i++){var X=gx0+i/Q,Y=gy0+j/Q,p=(X-cx)/r,q=(Y-cy)/r,ii=j*gw+i,ap=Math.abs(p);if(ap>.8661||Math.abs(q)+ap*.57735>1.001)continue;
+      IN[ii]=1;surf(p,q,X,Y,o);HP[ii]=o[0]*k;BC[ii*3]=o[1][0];BC[ii*3+1]=o[1][1];BC[ii*3+2]=o[1][2];MT[ii]=o[2];if(o[3]){WC[ii*3]=o[3][0];WC[ii*3+1]=o[3][1];WC[ii*3+2]=o[3][2]}else WC[ii*3]=-1;if(HP[ii]>maxH)maxH=HP[ii]}}return true}
     function hAt(i,j){i=Math.max(0,Math.min(gw-1,i));j=Math.max(0,Math.min(gh-1,j));var ii=j*gw+i;return IN[ii]?HP[ii]:-1}
     /* Ambient occlusion from a summed-area table: a point lower than its surroundings gets less sky. */
     var SA=new Float64Array((gw+1)*(gh+1)),SC=new Float64Array((gw+1)*(gh+1));
-    for(j=0;j<gh;j++)for(i=0;i<gw;i++){var a=(j+1)*(gw+1)+i+1,ii2=j*gw+i;SA[a]=(IN[ii2]?HP[ii2]:0)+SA[a-1]+SA[a-gw-1]-SA[a-gw-2];SC[a]=IN[ii2]+SC[a-1]+SC[a-gw-1]-SC[a-gw-2]}
+    function buildSat(){for(j=0;j<gh;j++)for(i=0;i<gw;i++){var a=(j+1)*(gw+1)+i+1,ii2=j*gw+i;SA[a]=(IN[ii2]?HP[ii2]:0)+SA[a-1]+SA[a-gw-1]-SA[a-gw-2];SC[a]=IN[ii2]+SC[a-1]+SC[a-gw-1]-SC[a-gw-2]}j=0}
     function boxAvg(i,j,rr){var x0=Math.max(0,i-rr),x1=Math.min(gw,i+rr+1),y0=Math.max(0,j-rr),y1=Math.min(gh,j+rr+1),A=function(T,x,y){return T[y*(gw+1)+x]},s=A(SA,x1,y1)-A(SA,x0,y1)-A(SA,x1,y0)+A(SA,x0,y0),n=A(SC,x1,y1)-A(SC,x0,y1)-A(SC,x1,y0)+A(SC,x0,y0);return n?s/n:0}
     var COL=new Uint8ClampedArray(N*3),LA=new Float32Array(N),AA=new Float32Array(N),WX=new Float32Array(N),sl=Math.hypot(SUN[0],SUN[1]),sdx=SUN[0]/sl,sdy=SUN[1]/sl,sdz=SUN[2]/sl,ar1=Math.round(Q*1.5),ar2=Math.round(Q*5);
     var wamp=G.calm?.3:G.rough?2.2:1,ROCK={grey:[[108,98,86],[164,152,136]],dark:[[56,50,48],[100,90,82]],red:[[160,86,52],[214,150,100]]}[G.rock];
-    for(j=0;j<gh;j++)for(i=0;i<gw;i++){var id=j*gw+i;if(!IN[id])continue;var hc=HP[id],hl=hAt(i-1,j),hr=hAt(i+1,j),hu=hAt(i,j-1),hd=hAt(i,j+1);if(hl<0)hl=hc;if(hr<0)hr=hc;if(hu<0)hu=hc;if(hd<0)hd=hc;
+    function light(until){for(var n=0;j<gh;j++){if(n++&&performance.now()>until)return false;for(i=0;i<gw;i++){var id=j*gw+i;if(!IN[id])continue;var hc=HP[id],hl=hAt(i-1,j),hr=hAt(i+1,j),hu=hAt(i,j-1),hd=hAt(i,j+1);if(hl<0)hl=hc;if(hr<0)hr=hc;if(hu<0)hu=hc;if(hd<0)hd=hc;
       var gx=(hr-hl)/2,gy=(hd-hu)/2,mt2=MT[id],X2=gx0+i/Q,Y2=gy0+j/Q,Xs2=X2*sc,Ys2=Y2*sc,c0=BC[id*3],c1=BC[id*3+1],c2=BC[id*3+2];
       if(mt2===3){var wv=Math.sin((Ys2+fbm(Xs2/9,Ys2/9,3,57)*14)/(G.rough?.9:1.3));
         if(G.whirl){var wpx=(X2-cx)/r,wpy=(Y2-cy)/r,wr=Math.hypot(wpx,wpy),wa=Math.atan2(wpy,wpx);wv=Math.sin(wa*3+wr*18);var dk2=sstep(.5,0,wr);c0*=1-.5*dk2;c1*=1-.45*dk2;c2*=1-.35*dk2}
@@ -380,9 +380,9 @@
       if(mt2===4||mt2===5)spec=Math.pow(dif,24)*lit*30;
       if(mt2===9)spec=Math.pow(dif,40)*lit*120;
       var gn=(hsh(i,j,7)-.5)*5;
-      COL[id*3]=c0*(amb*.92+sun*1.06)+spec+gn;COL[id*3+1]=c1*(amb*.98+sun*1.0)+spec+gn;COL[id*3+2]=c2*(amb*1.12+sun*.86)+spec+gn}
+      COL[id*3]=c0*(amb*.92+sun*1.06)+spec+gn;COL[id*3+1]=c1*(amb*.98+sun*1.0)+spec+gn;COL[id*3+2]=c2*(amb*1.12+sun*.86)+spec+gn}}return true}
     /* The model above is the costly part and does not depend on the neighbours; only the cut sides below do, so one model serves all four edge variants. */
-    return function(nb){nb=nb||{};
+    function make(nb){nb=nb||{};
     /* Draw front to back per column, each sample filling up to the last one drawn; the tile's cut sides are earth strata. */
     var cv=document.createElement('canvas');cv.width=w;cv.height=h;var x=cv.getContext('2d'),img=x.createImageData(w,h),D=img.data,offx=Math.round((gx0-ox)*Q),offy=(gy0-oy)*Q,Tp=T*Q;
     var SOIL={mountain:[108,100,90],redrock:[170,100,64],desert:[178,140,90],rockdesert:[170,130,92],salt:[200,190,176],snow:[186,198,212],tundra:[150,150,150],swamp:[78,66,44],peat:[70,56,40],swampwater:[78,66,44]}[gb]||[104,80,52];
@@ -408,7 +408,14 @@
     x.putImageData(img,0,0);
     if(G.steam){x.save();x.scale(Q/Q,1);var sg=x.createRadialGradient((cx-ox)*Q,(cy+.05*r-oy)*Q,0,(cx-ox)*Q,(cy+.05*r-oy)*Q,r*.5*Q);sg.addColorStop(0,'rgba(255,255,255,.45)');sg.addColorStop(1,'rgba(255,255,255,0)');x.fillStyle=sg;x.fillRect(0,0,w,h);x.restore()}
     var out=document.createElement('canvas');out.width=Math.ceil(W*RQ);out.height=Math.ceil(H*RQ);var ox2=out.getContext('2d');ox2.imageSmoothingQuality='high';ox2.drawImage(cv,0,0,out.width,out.height);
-    return {canvas:out,x:ox/r,y:oy/r,w:W/r,h:H/r}}}
+    return {canvas:out,x:ox/r,y:oy/r,w:W/r,h:H/r}}
+    /* The model is built in row-sized steps so a caller can stop at a time limit and carry on in the next slice; step(until) always does at least one row and is true once the model is whole. */
+    var stage=0;
+    return {make:make,step:function(until){
+      if(stage===0){if(!sample(until))return false;stage=1;buildSat()}
+      if(stage===1){if(!light(until))return false;stage=2}
+      return true}}}
+  function iso3Model(t,v,RQ){var job=iso3ModelJob(t,v,RQ);job.step(Infinity);return job.make}
   function iso3(t,v,nb,RQ){return iso3Model(t,v,RQ)(nb)}
   /* Folders keep a long piece list scannable; each shows its first piece as the cover. */
   var PFOLD={forest:[['Woods',[0,1,2,3,4,11]],['Clearings & water',[5,8]],['Old & strange',[6,9,10]],['Camps',[7]]],
@@ -456,11 +463,30 @@
   TileCache.prototype.clear=function(){this.map.clear();this.px=0};
   Object.defineProperty(TileCache.prototype,'size',{get:function(){return this.map.size}});
 
+  // JobQueue runs queued work in time-limited slices. Jobs are deduplicated by
+  // key. work(job, until) does as much of a job as fits before the deadline
+  // `until` (a clock reading) and returns true when it is finished, false when
+  // it stopped for time, or 'wait' when it cannot start yet; both of the latter
+  // end the slice with the job still at the front. A slice always gives the
+  // front job one go, so the queue cannot stall on a budget of zero.
+  function JobQueue(work){this.work=work;this.list=[];this.keys={}}
+  JobQueue.prototype.add=function(job,first){if(this.keys[job.key])return false;this.keys[job.key]=true;if(first)this.list.unshift(job);else this.list.push(job);return true};
+  JobQueue.prototype.clear=function(){this.list=[];this.keys={}};
+  Object.defineProperty(JobQueue.prototype,'length',{get:function(){return this.list.length}});
+  JobQueue.prototype.run=function(budgetMs,now){
+    var until=now()+budgetMs;
+    while(this.list.length){
+      var j=this.list[0];
+      if(this.work(j,until)!==true)break;
+      var at=this.list.indexOf(j);if(at>=0)this.list.splice(at,1);delete this.keys[j.key];
+      if(now()>=until)break}
+    return this.list.length};
+
   var api = {
     TER_COLOR: TER_COLOR, PIECES: PIECES, PFOLD: PFOLD, DETAILED_VARIANTS: DETAILED_VARIANTS, TILE_R: TILE_R, DESIGN_RQ: DESIGN_RQ,
     pieceOf: pieceOf, folderOf: folderOf, terrainHasPieces: terrainHasPieces, detailedVariant: detailedVariant, detailedSeed: detailedSeed,
-    zoomBucket: zoomBucket, TileCache: TileCache, hexPath: hexPath,
-    detailedDefs: detailedDefs, detailedArt: detailedArt, iso3: iso3, iso3Model: iso3Model
+    zoomBucket: zoomBucket, TileCache: TileCache, JobQueue: JobQueue, hexPath: hexPath,
+    detailedDefs: detailedDefs, detailedArt: detailedArt, iso3: iso3, iso3Model: iso3Model, iso3ModelJob: iso3ModelJob
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (typeof window !== 'undefined') window.ChronicleHexArt = api;

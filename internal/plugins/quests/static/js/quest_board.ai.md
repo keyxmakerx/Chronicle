@@ -16,7 +16,9 @@ load before the two widgets.
 
 ## Mount
 
-Loaded by `<script defer>` tags in `layouts/base.templ` (kit first). The
+Source: `internal/plugins/quests/static/js/`, loaded on sight by the quests
+plugin's `Widgets` registration (ADR-063): each widget's list puts the kit
+first, and a page with both boards fetches the kit once. The
 blocks `quest_board` and `notice_boards` are registered in
 `internal/app/routes.go`; their markup is `internal/plugins/quests/block.templ`,
 which also links `static/css/quest_board.css` and the period fonts.

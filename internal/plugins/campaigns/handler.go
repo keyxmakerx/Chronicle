@@ -437,7 +437,8 @@ func (h *Handler) Update(c echo.Context) error {
 	return middleware.HTMXRedirect(c, "/campaigns/"+cc.Campaign.ID+"/settings")
 }
 
-// Delete removes a campaign (DELETE /campaigns/:id). Requires the request to
+// Delete moves a campaign to the site Trash (DELETE /campaigns/:id). The owner
+// sees it vanish; only a site admin can bring it back. Requires the request to
 // include a confirm_name field that matches the campaign name exactly (S4).
 func (h *Handler) Delete(c echo.Context) error {
 	cc := GetCampaignContext(c)
@@ -456,11 +457,11 @@ func (h *Handler) Delete(c echo.Context) error {
 		return apperror.NewBadRequest("campaign name does not match; deletion cancelled")
 	}
 
-	if err := h.service.Delete(c.Request().Context(), cc.Campaign.ID); err != nil {
+	if err := h.service.MoveToTrash(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c)); err != nil {
 		return err
 	}
 
-	h.logAudit(c, cc.Campaign.ID, "campaign.deleted", nil)
+	h.logAudit(c, cc.Campaign.ID, "campaign.trashed", nil)
 	return middleware.HTMXRedirect(c, "/campaigns")
 }
 

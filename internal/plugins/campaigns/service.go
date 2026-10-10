@@ -5,8 +5,10 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"regexp"
 	"strings"
 	"time"
@@ -35,7 +37,14 @@ type CampaignService interface {
 	CountBySystem(ctx context.Context, query string) ([]SystemCount, error)
 	ListPublic(ctx context.Context, limit int) ([]Campaign, error)
 	Update(ctx context.Context, campaignID string, input UpdateCampaignInput) (*Campaign, error)
-	Delete(ctx context.Context, campaignID string) error
+	// MoveToTrash is what "delete campaign" means: the campaign disappears for
+	// everyone and waits in the site Trash (trash_repository.go). PurgeTrashed
+	// is the only real delete.
+	MoveToTrash(ctx context.Context, campaignID, byUserID string) error
+	RestoreFromTrash(ctx context.Context, campaignID string) error
+	ListTrashed(ctx context.Context) ([]TrashedCampaign, error)
+	ListPurgeDue(ctx context.Context, cutoff time.Time, all bool) ([]string, error)
+	PurgeTrashed(ctx context.Context, campaignID string, olderThan time.Time) (bool, error)
 	CountAll(ctx context.Context) (int, error)
 
 	// Account deletion
@@ -609,11 +618,72 @@ func (s *campaignService) Update(ctx context.Context, campaignID string, input U
 	return campaign, nil
 }
 
-// Delete removes a campaign and all its data. Performs multi-step cleanup:
-// 1. Delete media files from disk (before SQL CASCADE nullifies campaign_id)
-// 2. Dispatch campaign.deleted hook to WASM plugins for cache cleanup
-// 3. SQL DELETE with FK CASCADE handles remaining database rows
-func (s *campaignService) Delete(ctx context.Context, campaignID string) error {
+// MoveToTrash takes a campaign out of use without deleting anything: from this
+// moment every read that opens it answers "not found", so members, the sync
+// API and Foundry keys lose it at once, and live sockets are dropped. A site
+// admin can bring it back with RestoreFromTrash until the retention is up.
+// byUserID may be empty; the person's name is copied now so the Trash can still
+// say who deleted it later.
+func (s *campaignService) MoveToTrash(ctx context.Context, campaignID, byUserID string) error {
+	var byName string
+	if byUserID != "" && s.users != nil {
+		if u, err := s.users.FindUserByID(ctx, byUserID); err == nil && u != nil {
+			byName = u.DisplayName
+		}
+	}
+	if err := s.repo.MoveToTrash(ctx, campaignID, byUserID, byName, time.Now().UTC()); err != nil {
+		return err
+	}
+
+	// No member, grant or key can use the campaign now, so close what is open.
+	if s.connRevoker != nil {
+		s.connRevoker.RevokeCampaign(campaignID)
+	}
+	slog.Info("campaign moved to trash", slog.String("campaign_id", campaignID), slog.String("by", byUserID))
+	return nil
+}
+
+// RestoreFromTrash is Undo: the campaign, its members, pages and files come
+// back exactly as they were. It fails once the final delete has begun.
+func (s *campaignService) RestoreFromTrash(ctx context.Context, campaignID string) error {
+	if err := s.repo.RestoreFromTrash(ctx, campaignID); err != nil {
+		return err
+	}
+	slog.Info("campaign restored from trash", slog.String("campaign_id", campaignID))
+	return nil
+}
+
+// ListTrashed returns the campaigns waiting in the Trash, newest first.
+func (s *campaignService) ListTrashed(ctx context.Context) ([]TrashedCampaign, error) {
+	return s.repo.ListTrashed(ctx)
+}
+
+// ListPurgeDue returns the trashed campaigns that are past cutoff, plus any
+// whose final delete was started and not finished. all ignores the cutoff.
+func (s *campaignService) ListPurgeDue(ctx context.Context, cutoff time.Time, all bool) ([]string, error) {
+	return s.repo.ListPurgeDue(ctx, cutoff, all)
+}
+
+// PurgeTrashed is the final delete of a campaign that is in the Trash. It
+// first claims the campaign, which is the point of no return (Undo refuses
+// from then on), then performs the multi-step cleanup:
+//  1. Delete media files from disk (before SQL CASCADE nullifies campaign_id)
+//  2. Dispatch campaign.deleted hook to WASM plugins for cache cleanup
+//  3. SQL DELETE with FK CASCADE handles remaining database rows
+//
+// It reports false, having done nothing, when the campaign is not in the
+// Trash: never trashed, undone, or already purged. A run that stops partway
+// is picked up by the next one, since the claim stays and every step repeats
+// harmlessly.
+func (s *campaignService) PurgeTrashed(ctx context.Context, campaignID string, olderThan time.Time) (bool, error) {
+	claimed, err := s.repo.ClaimForPurge(ctx, campaignID, time.Now().UTC(), olderThan)
+	if err != nil {
+		return false, err
+	}
+	if !claimed {
+		return false, nil
+	}
+
 	// Step 1: Clean up media files from disk before the SQL DELETE.
 	// The media_files FK uses ON DELETE SET NULL, so we must delete files
 	// while we still know which campaign they belong to.
@@ -638,18 +708,19 @@ func (s *campaignService) Delete(ctx context.Context, campaignID string) error {
 		s.hookDispatcher.DispatchCampaignDeleted(ctx, campaignID)
 	}
 
-	// Step 3: SQL DELETE — FK CASCADE handles all remaining DB rows.
-	if err := s.repo.Delete(ctx, campaignID); err != nil {
-		return err
+	// Step 3: SQL DELETE, FK CASCADE handles all remaining DB rows. A second
+	// purger that got here first leaves nothing to delete, which is the
+	// outcome both wanted.
+	if err := s.repo.PurgeTrashed(ctx, campaignID); err != nil {
+		var appErr *apperror.AppError
+		if errors.As(err, &appErr) && appErr.Code == http.StatusNotFound {
+			return true, nil
+		}
+		return false, err
 	}
 
-	// No member, grant or key survives the delete to hold a socket open.
-	if s.connRevoker != nil {
-		s.connRevoker.RevokeCampaign(campaignID)
-	}
-
-	slog.Info("campaign deleted", slog.String("campaign_id", campaignID))
-	return nil
+	slog.Info("campaign purged", slog.String("campaign_id", campaignID))
+	return true, nil
 }
 
 // CountAll returns total number of campaigns. Used for admin dashboard.
@@ -950,6 +1021,11 @@ func (s *campaignService) AcceptTransfer(ctx context.Context, token string, acce
 	// Verify the accepting user is the intended recipient.
 	if transfer.ToUserID != acceptingUserID {
 		return apperror.NewForbidden("this transfer is not for your account")
+	}
+
+	// A campaign in the site Trash is not found: its ownership cannot change.
+	if _, err := s.repo.FindByID(ctx, transfer.CampaignID); err != nil {
+		return err
 	}
 
 	// Perform the atomic transfer.

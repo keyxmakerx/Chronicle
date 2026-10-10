@@ -218,40 +218,38 @@ func TestAdminAddMember_RoleUpgradeDoesNotRevoke(t *testing.T) {
 	}
 }
 
-// TestDelete_DropsEveryLiveConnectionInCampaign pins that deleting a
-// campaign closes every socket in it, regardless of user or source — once
-// the delete commits there is no member, grant or key left to hold one open.
-func TestDelete_DropsEveryLiveConnectionInCampaign(t *testing.T) {
-	repo := &mockCampaignRepo{
-		deleteFn: func(context.Context, string) error { return nil },
-	}
+// TestMoveToTrash_DropsEveryLiveConnectionInCampaign pins that deleting a
+// campaign closes every socket in it, regardless of user or source: once it is
+// in the Trash there is no member, grant or key that may hold one open.
+func TestMoveToTrash_DropsEveryLiveConnectionInCampaign(t *testing.T) {
+	repo := &mockCampaignRepo{}
 	revoker := &mockConnRevoker{}
 	svc := &campaignService{repo: repo, connRevoker: revoker}
 
-	if err := svc.Delete(context.Background(), "camp-1"); err != nil {
-		t.Fatalf("Delete: %v", err)
+	if err := svc.MoveToTrash(context.Background(), "camp-1", "u-1"); err != nil {
+		t.Fatalf("MoveToTrash: %v", err)
 	}
 	if len(revoker.revokedCampaigns) != 1 || revoker.revokedCampaigns[0] != "camp-1" {
 		t.Errorf("revokedCampaigns = %v, want [camp-1]", revoker.revokedCampaigns)
 	}
 }
 
-// TestDelete_UnwiredRevokerStillDeletes matches the fail-open convention
+// TestMoveToTrash_UnwiredRevokerStillTrashes matches the fail-open convention
 // used elsewhere: a nil revoker must not block the delete itself.
-func TestDelete_UnwiredRevokerStillDeletes(t *testing.T) {
-	deleted := false
+func TestMoveToTrash_UnwiredRevokerStillTrashes(t *testing.T) {
+	trashed := false
 	repo := &mockCampaignRepo{
-		deleteFn: func(context.Context, string) error {
-			deleted = true
+		moveToTrashFn: func(context.Context, string, string, string, time.Time) error {
+			trashed = true
 			return nil
 		},
 	}
 	svc := newTestCampaignService(repo, &mockUserFinder{})
 
-	if err := svc.Delete(context.Background(), "camp-1"); err != nil {
+	if err := svc.MoveToTrash(context.Background(), "camp-1", "u-1"); err != nil {
 		t.Fatalf("unexpected error with no connection revoker wired: %v", err)
 	}
-	if !deleted {
-		t.Error("campaign was not deleted even though the revoker was never wired")
+	if !trashed {
+		t.Error("campaign was not trashed even though the revoker was never wired")
 	}
 }

@@ -48,6 +48,10 @@ type AppearanceData struct {
 	// HoverCard is the hover card look ("plain", "night" or "compact");
 	// "" is Paper, which paper.css and hovercard.js use without an attribute.
 	HoverCard string
+
+	// SheetStyle is the character sheet style; "" and "modern" add no
+	// attribute, so sheets render as before.
+	SheetStyle string
 }
 
 const keyAppearance ctxKey = "layout_appearance"
@@ -94,6 +98,9 @@ func AppearanceAttrs(ctx context.Context) templ.Attributes {
 	set("data-cz-elev", a.Elevation)
 	set("data-cz-scale", a.TypeScale)
 	set("data-cz-hover", a.HoverCard)
+	if a.SheetStyle != "modern" {
+		set("data-cz-sheet", a.SheetStyle)
+	}
 	if a.HeadingFont != "" && a.HeadingFont != "same" {
 		attrs["data-cz-heading"] = a.HeadingFont
 	}

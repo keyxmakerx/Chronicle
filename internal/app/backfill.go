@@ -95,3 +95,26 @@ func reconcileSystemSheetFields(ctx context.Context, addonSvc pcBackfillAddons, 
 	}
 	return total
 }
+
+// characterHomeReconciler is the slice of the entity service the character
+// preset-home sweep needs.
+type characterHomeReconciler interface {
+	ReconcileCharacterPresetHome(ctx context.Context) (int, error)
+}
+
+// reconcileCharacterPresetHome moves a system's character sheet onto the
+// default "Characters" type in campaigns that got a separate, empty system
+// type (see entities.ReconcileCharacterPresetHome for the rules). It never
+// deletes and is idempotent, so it runs on every boot; failure is logged, not
+// fatal. Returns the number of campaigns changed.
+func reconcileCharacterPresetHome(ctx context.Context, svc characterHomeReconciler) int {
+	n, err := svc.ReconcileCharacterPresetHome(ctx)
+	if err != nil {
+		slog.Warn("character preset home sweep failed", slog.Any("error", err))
+		return 0
+	}
+	if n > 0 {
+		slog.Info("character preset home sweep complete", slog.Int("campaigns", n))
+	}
+	return n
+}
