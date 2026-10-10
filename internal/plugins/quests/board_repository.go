@@ -20,6 +20,8 @@ type BoardRepository interface {
 	SetLooks(ctx context.Context, campaignID string, h Home, l Looks) error
 
 	ListBoards(ctx context.Context, campaignID string, h Home) ([]Board, error)
+	// ListHomes returns every home in the campaign with at least one board.
+	ListHomes(ctx context.Context, campaignID string) ([]Home, error)
 	// GetBoard returns NotFound unless the board belongs to the home and campaign.
 	GetBoard(ctx context.Context, campaignID string, h Home, boardID string) (*Board, error)
 	InsertBoard(ctx context.Context, b Board) error
@@ -121,6 +123,25 @@ func (r *sqlBoardRepository) ListBoards(ctx context.Context, campaignID string, 
 			return nil, fmt.Errorf("scan board: %w", err)
 		}
 		out = append(out, b)
+	}
+	return out, rows.Err()
+}
+
+func (r *sqlBoardRepository) ListHomes(ctx context.Context, campaignID string) ([]Home, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT DISTINCT entity_id, entity_type_id FROM quest_boards WHERE campaign_id = ?`, campaignID)
+	if err != nil {
+		return nil, fmt.Errorf("list board homes: %w", err)
+	}
+	defer rows.Close()
+	var out []Home
+	for rows.Next() {
+		var ent sql.NullString
+		var typ sql.NullInt64
+		if err := rows.Scan(&ent, &typ); err != nil {
+			return nil, fmt.Errorf("scan board home: %w", err)
+		}
+		out = append(out, Home{EntityID: ent.String, TypeID: int(typ.Int64)})
 	}
 	return out, rows.Err()
 }

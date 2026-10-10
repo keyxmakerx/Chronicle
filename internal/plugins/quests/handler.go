@@ -82,15 +82,28 @@ func (h *Handler) PutQuest(c echo.Context) error {
 	if rerr != nil || len(raw) > MaxBodyBytes {
 		return apperror.NewBadRequest("request body is missing or too large")
 	}
-	var p QuestPatch
-	if err := jsonUnmarshal(raw, &p); err != nil {
-		return apperror.NewBadRequest("request body is not valid JSON")
+	p, err := DecodePatch(raw)
+	if err != nil {
+		return err
 	}
 	out, err := h.quests.Put(c.Request().Context(), cid, c.Param("eid"), v, p)
 	if err != nil {
 		return err
 	}
 	return c.JSON(http.StatusOK, out)
+}
+
+// DecodePatch reads a quest PUT body. The sync API decodes through here too,
+// so both routes accept exactly the same patch.
+func DecodePatch(raw []byte) (QuestPatch, error) {
+	if len(raw) > MaxBodyBytes {
+		return QuestPatch{}, apperror.NewBadRequest("request body is missing or too large")
+	}
+	var p QuestPatch
+	if err := jsonUnmarshal(raw, &p); err != nil {
+		return QuestPatch{}, apperror.NewBadRequest("request body is not valid JSON")
+	}
+	return p, nil
 }
 
 // Picker handles GET /campaigns/:id/quests/picker.

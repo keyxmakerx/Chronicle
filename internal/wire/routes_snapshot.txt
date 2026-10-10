@@ -425,6 +425,10 @@ GET	/proposals/:pid	internal/plugins/sessions/routes.go
 GET	/proposals/respond/:token	internal/plugins/sessions/routes.go
 GET	/prune	internal/plugins/packages/routes.go
 GET	/quests/:eid	internal/plugins/quests/routes.go
+GET	/quests/:entityID	internal/plugins/syncapi/routes.go
+GET	/quests/boards	internal/plugins/syncapi/routes.go
+GET	/quests/homes	internal/plugins/syncapi/routes.go
+GET	/quests/party	internal/plugins/syncapi/routes.go
 GET	/quests/picker	internal/plugins/quests/routes.go
 GET	/register	internal/plugins/auth/routes.go
 GET	/relation-types	internal/widgets/relations/routes.go
@@ -680,6 +684,8 @@ POST	/proposals	internal/plugins/sessions/routes.go
 POST	/proposals/:pid/confirm	internal/plugins/sessions/routes.go
 POST	/proposals/:pid/options/:oid/respond	internal/plugins/sessions/routes.go
 POST	/proposals/respond/:token	internal/plugins/sessions/routes.go
+POST	/quests/give	internal/plugins/syncapi/routes.go
+POST	/quests/pay	internal/plugins/syncapi/routes.go
 POST	/register	internal/plugins/auth/routes.go
 POST	/rescan	internal/extensions/routes.go
 POST	/reset-password	internal/plugins/auth/routes.go
@@ -850,6 +856,7 @@ PUT	/notice-boards/:eid/looks	internal/plugins/quests/routes.go
 PUT	/notice-boards/:eid/order	internal/plugins/quests/routes.go
 PUT	/owner-dashboard-layout	internal/plugins/campaigns/routes.go
 PUT	/quests/:eid	internal/plugins/quests/routes.go
+PUT	/quests/:entityID	internal/plugins/syncapi/routes.go
 PUT	/relations/:relationId	internal/plugins/syncapi/routes.go
 PUT	/roll-tables	internal/plugins/rolltables/routes.go
 PUT	/security/users/:id/disable	internal/plugins/admin/routes.go

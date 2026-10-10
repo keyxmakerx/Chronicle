@@ -636,6 +636,25 @@ func TestBoardRepositoryIntegration_TypeHomes(t *testing.T) {
 		}
 	}
 
+	t.Run("homes list each place with boards once, in this campaign only", func(t *testing.T) {
+		got, err := repo.ListHomes(ctx, fx.campaign)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := map[Home]bool{cat: true, cat2: true, PageHome(fx.page): true}
+		if len(got) != len(want) {
+			t.Fatalf("homes %+v, want %d", got, len(want))
+		}
+		for _, h := range got {
+			if !want[h] {
+				t.Errorf("unexpected home %+v", h)
+			}
+		}
+		if other, err := repo.ListHomes(ctx, fx.other); err != nil || len(other) != 0 {
+			t.Errorf("other campaign homes %+v err=%v", other, err)
+		}
+	})
+
 	t.Run("round trip and listing are scoped to the home", func(t *testing.T) {
 		got, err := repo.GetBoard(ctx, fx.campaign, cat, "t-2")
 		if err != nil || !reflect.DeepEqual(*got, mk("t-2", cat, 1)) {

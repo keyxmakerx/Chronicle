@@ -318,6 +318,20 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 		cg.POST("/sync/players", api.history.ReportPlayers, RequirePermission(PermSync))
 	}
 
+	// Quests: boards, sheets and rewards for the Foundry module. Owner or
+	// co-DM only (checked in the handler); the module passes the players view
+	// on to its players. Paying and giving need the rewards addon.
+	if q := api.quests; q != nil {
+		cg.GET("/quests/homes", q.Homes, RequirePermission(PermRead))
+		cg.GET("/quests/boards", q.Boards, RequirePermission(PermRead))
+		cg.GET("/quests/party", q.Party, RequirePermission(PermRead))
+		cg.GET("/quests/:entityID", q.GetQuest, RequirePermission(PermRead))
+		cg.PUT("/quests/:entityID", q.PutQuest, RequirePermission(PermWrite))
+		rewards := cg.Group("", RequireAddonAPI(addonChecker, q.rewardAddon))
+		rewards.POST("/quests/pay", q.Pay, RequirePermission(PermWrite))
+		rewards.POST("/quests/give", q.Give, RequirePermission(PermWrite))
+	}
+
 	// Stashes: move items and money as a named campaign member. The group is
 	// gated by the stash feature's addon (slug supplied by the wiring), and the
 	// acting member's own rules apply to each call — see StashAPIService.
