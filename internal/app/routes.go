@@ -5379,11 +5379,24 @@ func (a *App) RegisterRoutes() {
 
 	// A wiring mistake leaves only the widgets it names unloaded, so it is
 	// logged rather than stopping the site.
-	m, err := buildWidgetManifest(a.registeredPlugins, layouts.AssetURL)
+	m, err := buildWidgetManifest(coreWidgets, a.registeredPlugins, layouts.AssetURL)
 	if err != nil {
 		slog.Error("on-sight widget manifest", slog.Any("error", err))
 	}
 	widgetScripts = m
+}
+
+// coreWidgets are the on-sight widgets whose scripts live under
+// /static/js/widgets/ rather than in a plugin: each loads on the first page
+// that mounts it (ADR-063). Helpers come first, the registering script last.
+var coreWidgets = []PluginWidget{
+	{Name: "journal", Scripts: []string{"/static/js/widgets/journal_list.js", "/static/js/widgets/journal.js"}},
+	{Name: "permissions", Scripts: []string{"/static/js/widgets/permissions.js"}},
+	{Name: "groups", Scripts: []string{"/static/js/widgets/groups.js"}},
+	{Name: "relation-graph", Scripts: []string{"/static/js/widgets/relation_graph.js"}},
+	{Name: "db-explorer", Scripts: []string{"/static/js/widgets/db_explorer.js"}},
+	{Name: "entity-posts", Scripts: []string{"/static/js/widgets/entity_posts.js"}},
+	{Name: "entity-notes", Scripts: []string{"/static/js/widgets/entity_notes.js"}},
 }
 
 // journalCharacterAdapter adapts EntityService to notes.CharacterLister: the

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"slices"
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
@@ -88,17 +89,33 @@ func (a *App) mountPluginStatic() {
 	}
 }
 
-// buildWidgetManifest flattens the registry's on-sight widgets into the
-// widget-name → script-URLs map the layout hands to boot.js. assetURL turns
-// a site path into its served URL (layouts.AssetURL, which adds the content
-// hash). A widget with no name or scripts, or a name a second plugin also
-// claims, is a wiring mistake: it is left out and reported, and every other
-// widget still loads.
-func buildWidgetManifest(regs []PluginRegistration, assetURL func(string) string) (map[string][]string, error) {
+// coreWidgetOwner names core-owned widgets in buildWidgetManifest's
+// reports. It is not a plugin slug and has no static mount.
+const coreWidgetOwner = "core"
+
+// buildWidgetManifest flattens the on-sight widgets into the widget-name →
+// script-URLs map the layout hands to boot.js: core's own widgets first,
+// then each plugin's. Core widgets live under /static/, so their paths must
+// be site paths. assetURL turns a site path into its served URL
+// (layouts.AssetURL, which adds the content hash). A widget with no name or
+// scripts, a core script that isn't a site path, or a name a second owner
+// also claims, is a wiring mistake: it is left out and reported, and every
+// other widget still loads.
+func buildWidgetManifest(core []PluginWidget, regs []PluginRegistration, assetURL func(string) string) (map[string][]string, error) {
 	out := map[string][]string{}
 	owner := map[string]string{}
 	var errs []error
-	for _, p := range regs {
+	all := make([]PluginRegistration, 0, len(regs)+1)
+	coreReg := PluginRegistration{Slug: coreWidgetOwner}
+	for _, w := range core {
+		if i := slices.IndexFunc(w.Scripts, func(s string) bool { return !strings.HasPrefix(s, "/") }); i >= 0 {
+			errs = append(errs, fmt.Errorf("core widget %q: script %q must be a site path", w.Name, w.Scripts[i]))
+			continue
+		}
+		coreReg.Widgets = append(coreReg.Widgets, w)
+	}
+	all = append(append(all, coreReg), regs...)
+	for _, p := range all {
 		for _, w := range p.Widgets {
 			if w.Name == "" || len(w.Scripts) == 0 {
 				errs = append(errs, fmt.Errorf("plugin %q: widget %q needs a name and at least one script", p.Slug, w.Name))

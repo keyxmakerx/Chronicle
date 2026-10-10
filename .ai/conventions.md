@@ -385,7 +385,7 @@ Per `cordinator/decisions/2026-05-23-plugin-registration.md`, plugins self-descr
 
 Per `cordinator/decisions/2026-05-25-plugin-static-assets.md`, each plugin's static assets (JS/CSS under `static/`) embed via `embed.FS` and mount through the registry — no app-level static-route enumeration. Not every plugin has migrated; check a plugin's `registration.go` for a `StaticFS` entry.
 
-A plugin's widget scripts load on sight (ADR-063): list them in `PluginRegistration.Widgets` as `{Name: "<data-widget name>", Scripts: []string{"js/helper.js", "js/widget.js"}}`, registering script last. `boot.js` fetches them the first time that mount appears on a page, including after boosted navigation. Don't add a feature script to `base.templ`; that list is for the shell and for scripts Alpine needs before it starts.
+A plugin's widget scripts load on sight (ADR-063): list them in `PluginRegistration.Widgets` as `{Name: "<data-widget name>", Scripts: []string{"js/helper.js", "js/widget.js"}}`, registering script last. A widget whose scripts live under `static/js/widgets/` rather than in a plugin goes in `coreWidgets` (`internal/app/routes.go`) with site paths. `boot.js` fetches them the first time that mount appears on a page, including after boosted navigation. Don't add a feature script to `base.templ`; that list is for the shell and for scripts Alpine needs before it starts.
 
 ## Static asset URLs go through `layouts.AssetURL`
 
