@@ -849,6 +849,7 @@ type apiCreateMarkerRequest struct {
 	Color           string  `json:"color"`
 	PinCategory     *string `json:"pin_category"`
 	EntityID        *string `json:"entity_id"`
+	LinkedMapID     *string `json:"linked_map_id"`
 	Visibility      string  `json:"visibility"`
 	VisibilityRules *string `json:"visibility_rules"`
 	FoundryID       *string `json:"foundry_id"`
@@ -869,6 +870,7 @@ type apiUpdateMarkerRequest struct {
 	Color             patch.Field[string]  `json:"color"`
 	PinCategory       patch.Field[string]  `json:"pin_category"`
 	EntityID          patch.Field[string]  `json:"entity_id"`
+	LinkedMapID       patch.Field[string]  `json:"linked_map_id"`
 	Visibility        patch.Field[string]  `json:"visibility"`
 	VisibilityRules   patch.Field[string]  `json:"visibility_rules"`
 	FoundryID         patch.Field[string]  `json:"foundry_id"`
@@ -955,6 +957,7 @@ func (h *MapAPIHandler) CreateMarker(c echo.Context) error {
 		Color:           req.Color,
 		PinCategory:     req.PinCategory,
 		EntityID:        req.EntityID,
+		LinkedMapID:     req.LinkedMapID,
 		Visibility:      req.Visibility,
 		VisibilityRules: h.ownerVisibilityRules(c, req.VisibilityRules),
 		CreatedBy:       key.UserID,
@@ -992,6 +995,7 @@ func (h *MapAPIHandler) UpdateMarker(c echo.Context) error {
 		Color:             req.Color,
 		PinCategory:       req.PinCategory,
 		EntityID:          req.EntityID,
+		LinkedMapID:       req.LinkedMapID,
 		Visibility:        req.Visibility,
 		VisibilityRules:   h.ownerVisibilityRulesPatch(c, req.VisibilityRules),
 		FoundryID:         req.FoundryID,

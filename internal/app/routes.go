@@ -3620,6 +3620,8 @@ func (a *App) RegisterRoutes() {
 		g.SetEntityVisibilityGate(&entityVisibilityFilterAdapter{svc: entityService})
 	}
 	mapsHandler := maps.NewHandler(mapsService)
+	// Names the players a pin's rules allow on the badge DMs see.
+	mapsHandler.SetMemberLister(campaignService)
 	drawingRepo := maps.NewDrawingRepository(a.DB)
 	drawingService := maps.NewDrawingService(drawingRepo)
 	hexService := maps.NewHexService(maps.NewHexRepository(a.DB))

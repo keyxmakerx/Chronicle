@@ -568,7 +568,10 @@ type ExportAttendee struct {
 // --- Maps ---
 
 // ExportMap captures a map with markers, drawings, layers, tokens, and fog.
+// Ref is the map's id in the exporting campaign, so a marker that opens this
+// map (ExportMarker.LinkedMapRef) can be pointed at its copy on import.
 type ExportMap struct {
+	Ref         string            `json:"ref,omitempty"`
 	Name        string            `json:"name"`
 	Description *string           `json:"description,omitempty"`
 	ImageID     *string           `json:"image_id,omitempty"`
@@ -592,6 +595,8 @@ type ExportMarker struct {
 	Color       string  `json:"color"`
 	EntitySlug  *string `json:"entity_slug,omitempty"`
 	Visibility  string  `json:"visibility"`
+	// LinkedMapRef is the Ref of the exported map this marker opens.
+	LinkedMapRef *string `json:"linked_map_ref,omitempty"`
 }
 
 // ExportDrawing captures a map drawing.
