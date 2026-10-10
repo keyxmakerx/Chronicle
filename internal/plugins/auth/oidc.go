@@ -90,6 +90,7 @@ type OIDCCallbackInput struct {
 	SessionUserID string
 	IP            string
 	UserAgent     string
+	TrustedDevice string
 }
 
 // OIDCResult says what a finished round trip did.
@@ -429,7 +430,15 @@ func (s *authService) FinishOIDC(ctx context.Context, in OIDCCallbackInput) (*OI
 		if user.IsDisabled {
 			return res, apperror.NewForbidden("your account has been disabled")
 		}
-		// The provider does its own checks, so two-factor isn't asked here.
+		// A provider sign-in still asks for the code when two-factor is on,
+		// so the account's second factor holds whichever way someone signs in.
+		if user.TOTPEnabled && !s.isTrustedDevice(ctx, user.ID, in.TrustedDevice) {
+			challenge, err := s.startTwoFactorChallenge(ctx, user)
+			if err != nil {
+				return res, apperror.NewInternal(fmt.Errorf("starting two-factor step: %w", err))
+			}
+			return res, &TwoFactorRequired{Challenge: challenge}
+		}
 		token, err := s.createSession(ctx, user, in.IP, in.UserAgent)
 		if err != nil {
 			return res, apperror.NewInternal(fmt.Errorf("creating session: %w", err))
@@ -474,6 +483,10 @@ func (s *authService) exchangeOIDC(ctx context.Context, row oidcSettingsRow, pen
 		slog.Warn("provider ID token rejected", slog.Any("error", err))
 		return oidcClaims{}, apperror.NewUnauthorized("the provider's answer couldn't be checked")
 	}
+	// The links table holds subjects up to 255 characters; the spec caps them there too.
+	if idt.Subject == "" || len(idt.Subject) > 255 {
+		return oidcClaims{}, apperror.NewUnauthorized("the provider sent an account ID Chronicle can't store")
+	}
 	if idt.Nonce != pending.Nonce {
 		return oidcClaims{}, apperror.NewUnauthorized("the provider's answer doesn't belong to this sign-in")
 	}
@@ -488,6 +501,9 @@ func (s *authService) exchangeOIDC(ctx context.Context, row oidcSettingsRow, pen
 	}
 	// Some providers send email_verified as the string "true".
 	verified := strings.Trim(strings.ToLower(string(c.EmailVerified)), `"`) == "true"
+	if len(c.Email) > 255 {
+		c.Email, verified = "", false
+	}
 	return oidcClaims{Subject: idt.Subject, Email: strings.ToLower(strings.TrimSpace(c.Email)),
 		EmailVerified: verified, Name: c.Name, PreferredUsername: c.PreferredUsername}, nil
 }
@@ -507,6 +523,15 @@ func (s *authService) oidcAccount(ctx context.Context, row oidcSettingsRow, c oi
 		return nil, apperror.NewForbidden("your provider didn't confirm your email, so Chronicle can't match you to an account. Sign in with your password and link it under Account Settings.")
 	}
 	if user, err := s.repo.FindByEmail(ctx, c.Email); err == nil {
+		// With open sign-up anyone could have registered that email first,
+		// since Chronicle never checks it; matching would hand the provider
+		// account to them. The owner links it from inside their account.
+		if mode, err := s.registrationMode(ctx); err != nil || mode == registrationOpen {
+			if row.HidePassword {
+				return nil, apperror.NewForbidden("a Chronicle account already uses this email, but it isn't linked to this sign-in yet. Ask your site admin to let you sign in with your password once to link it.")
+			}
+			return nil, apperror.NewForbidden("a Chronicle account already uses this email. Sign in with your password, then link your provider under Account Settings, Sign-in methods.")
+		}
 		if err := s.oidc.store.LinkIdentity(ctx, user.ID, row.Issuer, c.Subject, c.Email); err != nil {
 			return nil, err
 		}

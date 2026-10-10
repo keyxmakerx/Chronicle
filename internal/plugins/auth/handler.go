@@ -330,6 +330,7 @@ func (h *Handler) OIDCCallback(c echo.Context) error {
 	res, err := h.service.FinishOIDC(ctx, OIDCCallbackInput{
 		State: state, Code: c.QueryParam("code"), ProviderError: c.QueryParam("error"),
 		SessionUserID: sessionUserID, IP: ip, UserAgent: ua,
+		TrustedDevice: readTrustedDevice(c.Request()),
 	})
 	mode := OIDCModeLogin
 	if res != nil {
@@ -350,6 +351,10 @@ func (h *Handler) OIDCCallback(c echo.Context) error {
 			h.logSecurityEvent(ctx, "sign_in.linked", sessionUserID, sessionUserID, ip, ua, nil)
 		}
 		return c.Redirect(http.StatusSeeOther, "/account?signin="+outcome+"#sign-in")
+	}
+	var need *TwoFactorRequired
+	if errors.As(err, &need) {
+		return middleware.Render(c, http.StatusOK, TwoFactorPage(middleware.GetCSRFToken(c), need.Challenge, sanitizeRedirect(res.Redirect), ""))
 	}
 	if err != nil {
 		h.logSecurityEvent(ctx, "login.failed", "", "", ip, ua, map[string]any{"provider": true})

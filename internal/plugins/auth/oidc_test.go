@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -234,20 +235,25 @@ func TestOIDCLogin(t *testing.T) {
 		claims    map[string]any
 		code      string
 		signup    bool
-		wantCode  int // 0 = signed in
+		regMode   string // "" = open
+		wantCode  int    // 0 = signed in
 		wantEmail string
 	}{
-		{"verified email matches an account", map[string]any{"sub": "s1", "email": "mara@example.com", "email_verified": true}, "good-code", false, 0, "mara@example.com"},
-		{"verified as a string", map[string]any{"sub": "s2", "email": "mara@example.com", "email_verified": "true"}, "good-code", false, 0, "mara@example.com"},
-		{"unverified email never matches", map[string]any{"sub": "s3", "email": "mara@example.com", "email_verified": false}, "good-code", false, http.StatusForbidden, ""},
-		{"unknown person, sign-up off", map[string]any{"sub": "s4", "email": "new@else.org", "email_verified": true}, "good-code", false, http.StatusForbidden, ""},
-		{"unknown person, sign-up on", map[string]any{"sub": "s5", "email": "new@else.org", "email_verified": true, "name": "Rook"}, "good-code", true, 0, "new@else.org"},
-		{"bad code", map[string]any{"sub": "s6"}, "stolen", false, http.StatusUnauthorized, ""},
+		{"verified email matches an account", map[string]any{"sub": "s1", "email": "mara@example.com", "email_verified": true}, "good-code", false, "invite", 0, "mara@example.com"},
+		{"verified as a string", map[string]any{"sub": "s2", "email": "mara@example.com", "email_verified": "true"}, "good-code", false, "closed", 0, "mara@example.com"},
+		{"open sign-up never matches by email", map[string]any{"sub": "s7", "email": "mara@example.com", "email_verified": true}, "good-code", true, "", http.StatusForbidden, ""},
+		{"unverified email never matches", map[string]any{"sub": "s3", "email": "mara@example.com", "email_verified": false}, "good-code", false, "invite", http.StatusForbidden, ""},
+		{"unknown person, sign-up off", map[string]any{"sub": "s4", "email": "new@else.org", "email_verified": true}, "good-code", false, "", http.StatusForbidden, ""},
+		{"unknown person, sign-up on", map[string]any{"sub": "s5", "email": "new@else.org", "email_verified": true, "name": "Rook"}, "good-code", true, "", 0, "new@else.org"},
+		{"bad code", map[string]any{"sub": "s6"}, "stolen", false, "", http.StatusUnauthorized, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := newOIDCRig(t)
 			r.store.row.AllowSignup = tt.signup
+			if tt.regMode != "" {
+				r.svc.regPolicy = fakeRegPolicy{mode: tt.regMode}
+			}
 			r.op.claims = tt.claims
 			res, err := r.roundTrip(t, OIDCModeLogin, "", "", tt.code)
 			if tt.wantCode != 0 {
@@ -274,20 +280,26 @@ func TestOIDCLogin(t *testing.T) {
 	}
 }
 
-func TestOIDCLoginSkipsTwoFactorAndStateIsSingleUse(t *testing.T) {
+func TestOIDCLoginAsksForTwoFactorAndStateIsSingleUse(t *testing.T) {
 	r := newOIDCRig(t)
 	ctx := context.Background()
-	r.turnOn(t, "mara")
+	r.svc.regPolicy = fakeRegPolicy{mode: "invite"}
+	secret, _ := r.turnOn(t, "mara")
 	r.op.claims = map[string]any{"sub": "s1", "email": "mara@example.com", "email_verified": true}
 
-	authURL, state, err := r.svc.BeginOIDC(ctx, OIDCModeLogin, "", "")
+	authURL, state, err := r.svc.BeginOIDC(ctx, OIDCModeLogin, "", "/campaigns/x")
 	if err != nil {
 		t.Fatal(err)
 	}
 	r.op.readAuthURL(t, authURL)
 	res, err := r.svc.FinishOIDC(ctx, OIDCCallbackInput{State: state, Code: "good-code"})
-	if err != nil || res.SessionToken == "" {
+	var need *TwoFactorRequired
+	if !errors.As(err, &need) || res.SessionToken != "" || res.Redirect != "/campaigns/x" {
 		t.Fatalf("provider sign-in with two-factor on: %+v, %v", res, err)
+	}
+	done, err := r.svc.CompleteTwoFactorLogin(ctx, TwoFactorLoginInput{Challenge: need.Challenge, Code: earlierCode(secret)})
+	if err != nil || done.SessionToken == "" {
+		t.Fatalf("code step after provider: %+v, %v", done, err)
 	}
 	_, err = r.svc.FinishOIDC(ctx, OIDCCallbackInput{State: state, Code: "good-code"})
 	assertAppError(t, err, http.StatusUnauthorized)
