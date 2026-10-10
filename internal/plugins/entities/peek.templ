@@ -1,0 +1,44 @@
+package entities
+
+// EntityPeekPanel is the body of the side panel opened by Shift-click or the
+// peek icon on a page link. The panel shell (close button, motion) lives in
+// static/js/peek_panel.js, so this fragment holds no script: a plain link is
+// the only interactive element and works after any swap.
+templ EntityPeekPanel(v PeekView) {
+	<article class="peek-body" data-peek-ready="1">
+		<header class="peek-head">
+			if v.Kind != "" {
+				<span class="peek-kind">
+					if v.KindIcon != "" {
+						<i class={ "fa-solid " + v.KindIcon } aria-hidden="true"></i>
+					}
+					{ v.Kind }
+				</span>
+			}
+			<h2 class="peek-title" id="peek-title">
+				{ v.Name }
+				if v.Private {
+					<i class="fa-solid fa-lock peek-lock" aria-label="Private"></i>
+				}
+			</h2>
+			<a class="btn-secondary peek-full" href={ templ.SafeURL(v.FullURL) }>
+				Open full page <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+			</a>
+		</header>
+		if len(v.Facts) > 0 {
+			<dl class="peek-facts">
+				for _, f := range v.Facts {
+					<dt>{ f.Label }</dt>
+					<dd>{ f.Value }</dd>
+				}
+			</dl>
+		}
+		if v.BodyHTML != "" {
+			<div class="prose peek-prose">
+				@templ.Raw(v.BodyHTML)
+			</div>
+		} else {
+			<p class="peek-empty">This page has no text yet.</p>
+		}
+	</article>
+}
