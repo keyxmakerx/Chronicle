@@ -95,6 +95,13 @@ func RegisterAdminRoutes(admin *echo.Group, h *Handler, reauth echo.MiddlewareFu
 	g.GET("/packages/:id/actions-fragment", h.AdminPackageActionsFragmentHandler)
 }
 
+// AdminPackageActionsFragmentURL is the path RegisterAdminRoutes serves the
+// per-row fragment on; internal/app hands it to the packages page so that
+// plugin never names this one. Keep it in step with the route above.
+func AdminPackageActionsFragmentURL(packageID string) string {
+	return "/admin/foundry-vtt/packages/" + packageID + "/actions-fragment"
+}
+
 // RegisterPublicRoutes mounts the unauthenticated manifest and
 // download endpoints. Foundry hits these on every update check.
 // The per-campaign signed token is the only access control.

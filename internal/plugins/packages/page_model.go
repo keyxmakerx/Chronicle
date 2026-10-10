@@ -216,6 +216,9 @@ type PackageRow struct {
 	// nothing about campaign counts rather than showing a wrong zero.
 	UsageKnown bool
 
+	// ActionsFragmentURL is the type-registered lazy-load slot URL, "" for none.
+	ActionsFragmentURL string
+
 	// Campaigns is each campaign's standing on the package, loaded for a type
 	// whose owners are asked before a campaign moves (the Foundry module).
 	// CampaignsKnown is false when that is not wired or the lookup failed, and

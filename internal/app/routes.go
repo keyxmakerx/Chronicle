@@ -3206,6 +3206,11 @@ func (a *App) RegisterRoutes() {
 	// Also read by the Foundry page's version check; nil without packages.
 	var fvttOwnerUpdates foundry_vtt.OwnerUpdates
 	fvttHandler.SetActivityRecorder(adminActivity)
+	pkgHandler.SetTypeUI(packages.PackageTypeFoundryModule, packages.TypeUI{
+		ActionsFragmentURL: func(p packages.Package) string {
+			return foundry_vtt.AdminPackageActionsFragmentURL(p.ID)
+		},
+	})
 	if pkgUpdateSvc != nil {
 		// Owners are asked before a new module version reaches their campaign.
 		fvttOwnerUpdates = foundry_vtt.NewOwnerUpdates(pkgUpdateSvc, pkgService)
