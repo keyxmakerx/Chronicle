@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -27,6 +28,7 @@ type UserRepository interface {
 
 	// User profile.
 	UpdateTimezone(ctx context.Context, userID, timezone string) error
+	GetTimezonesByIDs(ctx context.Context, userIDs []string) (map[string]string, error)
 	UpdateDisplayName(ctx context.Context, userID, displayName string) error
 	UpdateAvatarPath(ctx context.Context, userID string, avatarPath *string) error
 
@@ -280,6 +282,40 @@ func (r *userRepository) CountAdmins(ctx context.Context) (int, error) {
 }
 
 // --- User Profile ---
+
+// GetTimezonesByIDs returns the stored timezone of each given user in one
+// query, so a roster render does not look users up one by one. Users with no
+// timezone set (NULL or empty) and unknown IDs are absent from the map; the
+// values are NOT validated as IANA zones here (that is the caller's call).
+func (r *userRepository) GetTimezonesByIDs(ctx context.Context, userIDs []string) (map[string]string, error) {
+	out := make(map[string]string, len(userIDs))
+	if len(userIDs) == 0 {
+		return out, nil
+	}
+	// Placeholders only: the ids travel as args, never inside the SQL text.
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(userIDs)), ",")
+	args := make([]any, len(userIDs))
+	for i, id := range userIDs {
+		args[i] = id
+	}
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id, timezone FROM users WHERE timezone IS NOT NULL AND timezone <> '' AND id IN (`+placeholders+`)`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("reading timezones: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, tz string
+		if err := rows.Scan(&id, &tz); err != nil {
+			return nil, fmt.Errorf("scanning timezone: %w", err)
+		}
+		out[id] = tz
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("reading timezones: %w", err)
+	}
+	return out, nil
+}
 
 // UpdateTimezone sets the IANA timezone for a user. Empty string sets NULL.
 func (r *userRepository) UpdateTimezone(ctx context.Context, userID, timezone string) error {

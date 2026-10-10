@@ -144,6 +144,10 @@ func (m *mockUserRepo) UpdateTimezone(ctx context.Context, userID, timezone stri
 	return nil
 }
 
+func (m *mockUserRepo) GetTimezonesByIDs(ctx context.Context, userIDs []string) (map[string]string, error) {
+	return map[string]string{}, nil
+}
+
 func (m *mockUserRepo) GetViewPrefs(ctx context.Context, userID string) ([]byte, error) {
 	return m.viewPrefs, nil
 }

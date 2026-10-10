@@ -279,6 +279,7 @@ jobs:
                       TestNavPins_Integration \
                       TestUserRepository_UpdateAvatarPath_Integration \
                       TestUserRepository_ClearAvatarPathIfMatches_Integration \
+                      TestUserRepository_GetTimezonesByIDs_Integration \
                       TestCalendarRepository_Integration \
                       TestEventRepository_Integration \
                       TestEventKindRepository_Integration \
