@@ -169,3 +169,7 @@ func TestClassify_ActionCreate_ExistingSlug_StatusConflict(t *testing.T) {
 		t.Errorf("expected StatusConflict (existing slug + action=create); got %q", cls[0].Status)
 	}
 }
+
+func (s *stubLookup) CheckEntityAccess(context.Context, string, int, string) (*entities.EffectivePermission, error) {
+	return &entities.EffectivePermission{CanView: true}, nil
+}

@@ -45,10 +45,12 @@ var md = goldmark.New(
 // handlers per the bluemonday UGC policy, so the output is safe for
 // storage in EntryHTML and for direct render via templ.Raw().
 //
+// WithPageLinks additionally turns @[Page] / @[Page|text] into page links.
+//
 // Returns the empty string for empty input. Parse-failure errors are
 // friendly-worded for operator UIs; the goldmark error is preserved
 // via %w for log-side debugging.
-func MarkdownToHTML(input string) (string, error) {
+func MarkdownToHTML(input string, opts ...RenderOption) (string, error) {
 	if input == "" {
 		return "", nil
 	}
@@ -56,5 +58,14 @@ func MarkdownToHTML(input string) (string, error) {
 	if err := md.Convert([]byte(input), &buf); err != nil {
 		return "", fmt.Errorf("could not parse markdown body — check heading structure: %w", err)
 	}
-	return sanitize.HTML(buf.String()), nil
+	var o renderOpts
+	for _, opt := range opts {
+		opt(&o)
+	}
+	out := buf.String()
+	if o.links != nil {
+		// Before sanitize, so the anchors are vetted like any other markup.
+		out = linkMentions(out, o.links)
+	}
+	return sanitize.HTML(out), nil
 }

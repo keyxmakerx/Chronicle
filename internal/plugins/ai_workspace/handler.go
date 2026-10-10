@@ -127,6 +127,11 @@ func actorFor(c echo.Context, cc *campaigns.CampaignContext) records.Actor {
 	return records.Actor{UserID: auth.GetUserID(c), Role: cc.VisibilityRole()}
 }
 
+// viewerFor is the operator as page-link resolution checks access.
+func viewerFor(c echo.Context, cc *campaigns.CampaignContext) importer.Viewer {
+	return importer.Viewer{Role: cc.VisibilityRole(), UserID: auth.GetUserID(c)}
+}
+
 // exportActor is who the export lists records as. Safe mode, the default,
 // lists them as a player sees them, so hidden events and pins, rolling
 // tables and Director-only rules stay out, as for every other category.
@@ -171,7 +176,7 @@ func (h *Handler) answerLookups(c echo.Context, cc *campaigns.CampaignContext, s
 	privacy := parsePrivacy(c.FormValue("lookup_privacy"))
 	recs := make([]records.Record, len(blocks))
 	for i, p := range blocks {
-		recs[i] = toRecord(i, p)
+		recs[i] = toRecord(i, p, nil)
 	}
 	l := h.lookups
 	if l == nil {
@@ -206,23 +211,23 @@ func (h *Handler) answerLookups(c echo.Context, cc *campaigns.CampaignContext, s
 }
 
 // toRecord builds a records.Record from a parsed block.
-func toRecord(i int, p importer.ParsedPage) records.Record {
+func toRecord(i int, p importer.ParsedPage, links *importer.PageLinks) records.Record {
 	fields := make(map[string]any, len(p.Fields))
 	for k, v := range p.Fields {
 		fields[strings.ToLower(k)] = v
 	}
 	return records.Record{
 		Index: i, Kind: p.FrontMatter.Kind, Action: p.FrontMatter.Action,
-		Name: p.Name, Fields: fields, Body: p.Body,
+		Name: p.Name, Fields: fields, Body: p.Body, Links: links,
 	}
 }
 
 // planRecords plans every record for the review screen.
-func (h *Handler) planRecords(c echo.Context, cc *campaigns.CampaignContext, recs []importer.ParsedPage) []RecordRow {
+func (h *Handler) planRecords(c echo.Context, cc *campaigns.CampaignContext, recs []importer.ParsedPage, links *importer.PageLinks, pasteSlugs map[string]bool) []RecordRow {
 	rows := make([]RecordRow, len(recs))
 	all := make([]records.Record, len(recs))
 	for i, p := range recs {
-		all[i] = toRecord(i, p)
+		all[i] = toRecord(i, p, nil)
 		rows[i] = RecordRow{Index: i, Label: all[i].Kind, Action: all[i].Action, Name: all[i].Name}
 	}
 	if h.records == nil {
@@ -240,6 +245,9 @@ func (h *Handler) planRecords(c echo.Context, cc *campaigns.CampaignContext, rec
 			}
 		}
 		rows[i].Plan = plans[i]
+		if links != nil && rows[i].Plan.Error == "" {
+			rows[i].Plan.Warnings = append(rows[i].Plan.Warnings, importer.LinkWarnings(links, recs[i].Body, pasteSlugs)...)
+		}
 	}
 	return rows
 }
@@ -291,7 +299,9 @@ func (h *Handler) ParseImport(c echo.Context) error {
 		return h.answerLookups(c, cc, body, lookups, len(parsed))
 	}
 	pages, recs := splitImport(parsed)
-	recRows := h.planRecords(c, cc, recs)
+	links := importer.NewPageLinks(c.Request().Context(), h.importLookup, cc.Campaign.ID, viewerFor(c, cc))
+	pasteSlugs := importer.PasteSlugs(pages)
+	recRows := h.planRecords(c, cc, recs, links, pasteSlugs)
 	cls, err := importer.NewClassifier(h.importLookup, cc.Campaign.ID).
 		ClassifyAll(c.Request().Context(), pages)
 	if err != nil {
@@ -299,6 +309,13 @@ func (h *Handler) ParseImport(c echo.Context) error {
 			slog.String("campaign_id", cc.Campaign.ID),
 			slog.Any("error", err))
 		return apperror.NewInternal(err)
+	}
+
+	// An unknown @[Name] only warns; at commit it stays plain text.
+	for i := range pages {
+		if pages[i].Status != importer.StatusParseError && pages[i].FrontMatter.Action != importer.ActionDelete {
+			pages[i].Warnings = append(pages[i].Warnings, importer.LinkWarnings(links, pages[i].Body, pasteSlugs)...)
+		}
 	}
 
 	summary := ReviewSummary{Total: len(pages) + len(recRows)}
@@ -466,6 +483,7 @@ func (h *Handler) CommitImport(c echo.Context) error {
 			Pages:                  pages,
 			Decisions:              decisions,
 			CampaignDefaultPrivate: cc.Campaign.ParseSettings().DefaultsToPrivate(),
+			Viewer:                 viewerFor(c, cc),
 		})
 	}
 	if err != nil {
@@ -511,10 +529,16 @@ type recordCounts struct{ applied, failed int }
 func (h *Handler) commitRecords(c echo.Context, cc *campaigns.CampaignContext, recs []importer.ParsedPage, result *importer.CommitResult) recordCounts {
 	var n recordCounts
 	a := actorFor(c, cc)
+	// Pages are saved by now, so a record's @[Name] resolves against the
+	// campaign alone.
+	var links *importer.PageLinks
+	if h.importLookup != nil {
+		links = importer.NewPageLinks(c.Request().Context(), h.importLookup, cc.Campaign.ID, viewerFor(c, cc))
+	}
 	base := len(result.Rows)
 	for i, p := range recs {
 		prefix := "rec_" + strconv.Itoa(i) + "_"
-		rec := toRecord(i, p)
+		rec := toRecord(i, p, links)
 		out := importer.RowOutcome{Index: base + i, Name: rec.Name}
 		k, ok := h.records.Get(rec.Kind)
 		if ok {

@@ -21,6 +21,8 @@ type CampaignLookup interface {
 	GetBySlug(ctx context.Context, campaignID, slug string) (*entities.Entity, error)
 	GetEntityTypeBySlug(ctx context.Context, campaignID, slug string) (*entities.EntityType, error)
 	GetEntityTypes(ctx context.Context, campaignID string) ([]entities.EntityType, error)
+	// CheckEntityAccess lets @[Name] links skip pages the viewer cannot see.
+	CheckEntityAccess(ctx context.Context, entityID string, role int, userID string) (*entities.EffectivePermission, error)
 }
 
 // Classification is the per-page outcome of Classify. Stored on the
