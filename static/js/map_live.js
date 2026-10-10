@@ -16,7 +16,7 @@
  *   - a change that arrives while a refetch is in flight triggers one more
  *     afterwards, so the last write is never missed.
  *
- * Exposes window.ChronicleMapLive = { create, kindOf, DELAY_MS }.
+ * Exposes window.ChronicleMapLive = { create, kindOf, kindsFor, DELAY_MS }.
  */
 (function () {
   'use strict';
@@ -30,6 +30,13 @@
 
   function kindOf(kind) {
     return Object.prototype.hasOwnProperty.call(ALIAS, kind) ? ALIAS[kind] : kind;
+  }
+
+  // kindsFor lists every refetch a notice implies. A shadow hides and uncovers
+  // pins, so it refreshes the pins as well as the drawings.
+  function kindsFor(kind) {
+    var k = kindOf(kind);
+    return kind === 'shadows' ? [k, 'markers'] : [k];
   }
 
   /**
@@ -105,7 +112,7 @@
     };
   }
 
-  var api = { create: create, kindOf: kindOf, DELAY_MS: DELAY_MS };
+  var api = { create: create, kindOf: kindOf, kindsFor: kindsFor, DELAY_MS: DELAY_MS };
   if (typeof window !== 'undefined') window.ChronicleMapLive = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

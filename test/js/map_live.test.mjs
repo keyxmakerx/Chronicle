@@ -145,3 +145,9 @@ test('destroy stops pending work and applies nothing late', async () => {
   r.notify('markers');
   assert.equal(c.pending(), 0);
 });
+
+test('a shadow notice refreshes pins as well as drawings', () => {
+  assert.deepEqual(live.kindsFor('shadows'), ['drawings', 'markers']);
+  assert.deepEqual(live.kindsFor('drawings'), ['drawings']);
+  assert.deepEqual(live.kindsFor('markers'), ['markers']);
+});

@@ -1499,25 +1499,36 @@ func (a *mapEventPublisherAdapter) PublishHexChanged(campaignID, mapID string, v
 const (
 	mapItemsMarkers  = "markers"
 	mapItemsDrawings = "drawings"
-	mapItemsTokens   = "tokens"
 	mapItemsShadows  = "shadows"
 )
 
 // publishItemsChanged announces that something of one kind changed on a map.
-// It carries ids only and goes to every client of the campaign: the viewer
-// refetches through the role-filtered reads, so DM-only, shadow and hex-fog
-// rules stay decided in one place and nothing secret rides this message. It is
+// It carries ids only: the viewer refetches through the role-filtered reads,
+// so DM-only, shadow and hex-fog rules stay decided in one place and nothing
+// secret rides this message. By default it goes to every client of the
+// campaign; creating or deleting a DM-only or rule-restricted pin or drawing
+// passes that item's audience (dmOnly, rules) so players are not told that a
+// hidden thing appeared or vanished. Updates and shadows stay open: a shadow
+// changes what players see, and an update may move an item into view. No
+// token notice exists: tokens have no layer on the web viewer, and a notice
+// per hidden drag would leak movement. It is
 // sent just before the per-item event (which stays audience-gated) because the
 // per-item event is not enough for a page to stay right: it cannot say what a
 // shadow or the fog now covers or uncovers.
-func (a *mapEventPublisherAdapter) publishItemsChanged(campaignID, mapID, kind string) {
+func (a *mapEventPublisherAdapter) publishItemsChanged(campaignID, mapID, kind string, dmOnly bool, rules *maps.VisibilityRules) {
 	if campaignID == "" || mapID == "" || a.bus == nil {
 		return
 	}
-	a.bus.Publish(ws.NewMessage(ws.MsgMapItemsChanged, campaignID, mapID, map[string]any{
+	msg := ws.NewMessage(ws.MsgMapItemsChanged, campaignID, mapID, map[string]any{
 		"map_id": mapID,
 		"kind":   kind,
-	}))
+	})
+	msg.RequiresDM = dmOnly
+	if rules != nil {
+		msg.AllowedUsers = rules.AllowedUsers
+		msg.DeniedUsers = rules.DeniedUsers
+	}
+	a.bus.Publish(msg)
 }
 
 // publishWithAudience wraps ws.NewMessage with the audience derived from
@@ -1569,8 +1580,13 @@ func (a *mapEventPublisherAdapter) PublishDrawingEvent(eventType string, campaig
 	if drawing.DrawingType == maps.DrawingTypeShadow {
 		kind = mapItemsShadows
 	}
-	a.publishItemsChanged(campaignID, drawing.MapID, kind)
-	a.publishWithAudience(msgType, campaignID, drawing.ID, drawing, dmOnly, maps.ParseVisibilityRules(drawing.VisibilityRules))
+	rules := maps.ParseVisibilityRules(drawing.VisibilityRules)
+	if kind == mapItemsShadows || eventType == "updated" {
+		a.publishItemsChanged(campaignID, drawing.MapID, kind, false, nil)
+	} else {
+		a.publishItemsChanged(campaignID, drawing.MapID, kind, dmOnly, rules)
+	}
+	a.publishWithAudience(msgType, campaignID, drawing.ID, drawing, dmOnly, rules)
 }
 
 // PublishTokenEvent translates map token domain events into WebSocket messages.
@@ -1593,7 +1609,6 @@ func (a *mapEventPublisherAdapter) PublishTokenEvent(eventType string, campaignI
 		return
 	}
 	dmOnly := token.IsHidden || a.underFog(token.MapID, func(f *maps.FogMask) bool { return f.HidesToken(token) })
-	a.publishItemsChanged(campaignID, token.MapID, mapItemsTokens)
 	a.publishWithAudience(msgType, campaignID, token.ID, token, dmOnly, nil)
 }
 
@@ -1606,7 +1621,6 @@ func (a *mapEventPublisherAdapter) PublishTokenPositionEvent(campaignID, mapID, 
 		return
 	}
 	dmOnly := isHidden || a.underFog(mapID, func(f *maps.FogMask) bool { return f.HidesPoint(x, y) })
-	a.publishItemsChanged(campaignID, mapID, mapItemsTokens)
 	a.publishWithAudience(ws.MsgTokenMoved, campaignID, tokenID, map[string]float64{
 		"x": x,
 		"y": y,
@@ -1687,8 +1701,13 @@ func (a *mapEventPublisherAdapter) PublishMarkerEvent(eventType string, campaign
 	dmOnly := marker.IsDMOnly() ||
 		a.underShadow(marker.MapID, func(areas []maps.ShadowArea) bool { return maps.MarkerUnderShadow(areas, marker) }) ||
 		a.underFog(marker.MapID, func(f *maps.FogMask) bool { return f.HidesMarker(marker) })
-	a.publishItemsChanged(campaignID, marker.MapID, mapItemsMarkers)
-	a.publishWithAudience(msgType, campaignID, marker.ID, marker, dmOnly, maps.ParseVisibilityRules(marker.VisibilityRules))
+	rules := maps.ParseVisibilityRules(marker.VisibilityRules)
+	if eventType == "updated" {
+		a.publishItemsChanged(campaignID, marker.MapID, mapItemsMarkers, false, nil)
+	} else {
+		a.publishItemsChanged(campaignID, marker.MapID, mapItemsMarkers, dmOnly, rules)
+	}
+	a.publishWithAudience(msgType, campaignID, marker.ID, marker, dmOnly, rules)
 }
 
 // (The campaigns show page lazy-loads the Foundry banner via

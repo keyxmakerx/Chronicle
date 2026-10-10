@@ -370,8 +370,6 @@
 		if (isScribe) {
 			lm.on('dragstart', function() { draggingMarkerID = mk.id; });
 			lm.on('dragend', function(e) {
-				draggingMarkerID = null;
-				releaseMarkerGuard();
 				var pos = e.target.getLatLng();
 				var newX = (pos.lng / w) * 100;
 				var newY = ((h - pos.lat) / h) * 100;
@@ -380,7 +378,12 @@
 				newY = Math.max(0, Math.min(100, newY));
 				mk.x = newX;
 				mk.y = newY;
-				updateMarkerPosition(mk);
+				// Hold the guard until the save settles, so a refetch cannot
+				// snap the pin back to the old spot mid-save.
+				updateMarkerPosition(mk).then(function() {
+					draggingMarkerID = null;
+					releaseMarkerGuard();
+				});
 			});
 		}
 
@@ -445,7 +448,8 @@
 			if (markerGuarded(mk.id)) { markersStale = true; return; }
 			var lm = leafletMarkers[mk.id];
 			if (lm) { (clusterGroup || map).removeLayer(lm); delete leafletMarkers[mk.id]; }
-			markers.splice(markers.indexOf(mk), 1);
+			var at = markers.indexOf(mk);
+			if (at >= 0) markers.splice(at, 1);
 		});
 		renderPanel();
 	}
@@ -633,9 +637,16 @@
 				});
 				return resp.json().then(function(mk) {
 					removeDraft();
-					markers.push(mk);
+					// A live refetch can land before this response and already
+					// draw the pin; reuse it rather than drawing it twice.
+					var drawn = markers.filter(function(m) { return m.id === mk.id; })[0];
+					if (drawn) {
+						mk = drawn;
+					} else {
+						markers.push(mk);
+						addMarkerToMap(mk);
+					}
 					if (kind) kindOn[kind] = true;
-					addMarkerToMap(mk);
 					syncMarkerVisibility(mk);
 					renderPanel();
 					openCard(mk, 'read');
@@ -677,7 +688,8 @@
 				});
 				var lm = leafletMarkers[mk.id];
 				if (lm) { (clusterGroup || map).removeLayer(lm); delete leafletMarkers[mk.id]; }
-				markers.splice(markers.indexOf(mk), 1);
+				var at = markers.indexOf(mk);
+				if (at >= 0) markers.splice(at, 1);
 				map.closePopup();
 				renderPanel();
 			})
@@ -2048,7 +2060,9 @@
 					if (viewerCtx && viewerCtx.hexes && viewerCtx.hexes.onChanged) viewerCtx.hexes.onChanged(msg.payload);
 				} else if (msg.type === 'map.items.changed') {
 					// Only this map's notices count; the socket carries the whole campaign.
-					if (live && msg.payload && msg.payload.map_id === mapID) live.notify(msg.payload.kind);
+					if (live && msg.payload && msg.payload.map_id === mapID) {
+						window.ChronicleMapLive.kindsFor(msg.payload.kind).forEach(function(k) { live.notify(k); });
+					}
 				}
 			});
 			liveSocket.addEventListener('close', function() {
@@ -2057,7 +2071,7 @@
 				// A quiet, bounded retry: a proxy that never upgrades must not be hammered.
 				if (!destroyed && liveSocketTries < 8) {
 					liveSocketTries++;
-					liveSocketTimer = setTimeout(function() { liveSocketTimer = null; startLiveSocket(); }, Math.min(30000, 2000 * liveSocketTries));
+					liveSocketTimer = setTimeout(function() { liveSocketTimer = null; startLiveSocket(); }, Math.min(30000, 2000 * liveSocketTries) + Math.random() * 1000);
 				}
 			});
 			liveSocket.addEventListener('error', function(e) { if (e && e.preventDefault) e.preventDefault(); });
