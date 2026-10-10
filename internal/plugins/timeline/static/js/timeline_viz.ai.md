@@ -5,7 +5,7 @@
 D3.js-powered interactive SVG timeline: a zoomable spine ruler, event markers
 with clustering, range bars, era bands, a mini-map, entity swim-lanes,
 search/filter, connections between events, and double-click to create an event
-at a date. Source: `static/js/widgets/timeline_viz.js`.
+at a date. Source: `internal/plugins/timeline/static/js/timeline_viz.js`, loaded on sight by the timeline plugin's `Widgets` registration (ADR-063).
 
 ## Widget Registration
 
