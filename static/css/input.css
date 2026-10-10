@@ -4672,6 +4672,69 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
   .ce-img { float: none !important; width: 100% !important; margin: 1rem 0; }
 }
 
+/* ---- Diagrams inside editor text (editor_diagram.js) ----
+   Outside @layer so the script-built classes survive the unused-class purge.
+   Writers see the text and the drawing side by side (stacked on narrow
+   columns); readers see only the drawing. Motion is the Peek move: opacity
+   and a short rise, which the global reduced-motion guard turns off. */
+.ce-diagram {
+  container-type: inline-size; margin: 1rem 0; border: 1px solid var(--color-border);
+  border-radius: 0.75rem; background: var(--color-card-bg); overflow: hidden;
+}
+.ce-diagram__bar {
+  display: flex; align-items: center; gap: 0.25rem; padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid var(--color-border); background: var(--color-bg-tertiary);
+  font-size: 0.75rem; color: var(--color-text-secondary);
+}
+.ce-diagram__label { flex: 1 1 auto; font-weight: 600; letter-spacing: 0.02em; }
+.ce-diagram__btn {
+  display: inline-flex; align-items: center; gap: 0.3rem; height: 1.75rem; padding: 0 0.55rem;
+  border: 0; border-radius: 0.375rem; background: none; color: inherit; font: inherit; cursor: pointer;
+}
+.ce-diagram__btn:hover { background: var(--color-bg-secondary); color: var(--color-text-primary); }
+.ce-diagram__btn.is-on { background: rgb(217 119 6 / 0.15); color: rgb(180 83 9); }
+.ce-diagram__btn:focus-visible { outline: 2px solid var(--color-accent, #6366f1); outline-offset: 1px; }
+.ce-diagram__grid { display: grid; grid-template-columns: minmax(0, 1fr); }
+.ce-diagram__text { min-width: 0; border-bottom: 1px solid var(--color-border); }
+.ce-diagram pre.ce-diagram__src {
+  margin: 0; padding: 0.75rem 0.9rem; min-height: 5rem; max-height: 22rem; overflow: auto;
+  border-radius: 0; background: var(--color-bg-primary); white-space: pre; tab-size: 2;
+  font-size: 0.8rem; line-height: 1.5;
+}
+.ce-diagram__error {
+  margin: 0; padding: 0.45rem 0.9rem; font-size: 0.8rem; line-height: 1.35;
+  color: var(--color-danger, #ef4444); background: var(--color-danger-bg, #fef2f2);
+}
+.dark .ce-diagram__error { background: rgb(239 68 68 / 0.12); }
+.ce-diagram__view {
+  min-width: 0; min-height: 5rem; padding: 0.75rem; overflow: auto;
+  display: flex; align-items: center; justify-content: center;
+}
+.ce-diagram__view svg { max-width: 100%; height: auto; animation: ce-diagram-in var(--dur-standard, 200ms) var(--ease-out, ease-out); }
+.ce-diagram.is-broken .ce-diagram__view svg { opacity: 0.35; }
+.ce-diagram.is-empty .ce-diagram__view::before { content: "The drawing appears here"; font-size: 0.8rem; color: var(--color-text-muted); }
+@keyframes ce-diagram-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@container (min-width: 480px) {
+  .ce-diagram__grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .ce-diagram__text { border-bottom: 0; border-right: 1px solid var(--color-border); }
+}
+/* A GM-only diagram is marked for the people who can see it. */
+.ce-diagram--gm { border-color: rgb(217 119 6 / 0.6); border-style: dashed; }
+.ce-diagram--gm .ce-diagram__label::after { content: " (GM only)"; color: rgb(180 83 9); }
+/* Reading: only the drawing, bare; a broken or empty one says one line. */
+.ProseMirror[contenteditable="false"] .ce-diagram,
+.ce-diagram--static { border-color: transparent; background: none; }
+.ProseMirror[contenteditable="false"] .ce-diagram--gm { border-color: rgb(217 119 6 / 0.6); }
+.ProseMirror[contenteditable="false"] .ce-diagram__bar,
+.ProseMirror[contenteditable="false"] .ce-diagram__text { display: none; }
+.ProseMirror[contenteditable="false"] .ce-diagram__grid { grid-template-columns: minmax(0, 1fr); }
+.ProseMirror[contenteditable="false"] .ce-diagram.is-empty { display: none; }
+.ProseMirror[contenteditable="false"] .ce-diagram.is-broken .ce-diagram__view svg { display: none; }
+.ProseMirror[contenteditable="false"] .ce-diagram.is-broken .ce-diagram__view::before {
+  content: "This diagram could not be drawn."; font-size: 0.85rem; color: var(--color-text-muted);
+}
+.ce-diagram--static .ce-diagram__error { text-align: center; background: none; color: var(--color-text-muted); }
+
 /* Site look preview (Admin > Site look): a small window drawing the sign-in
    page, Discover and the browser tab from the form's values. --sa is the
    site accent, --hd1/--hd2 the look's top bar colours, --hf its heading font;

@@ -124,20 +124,27 @@ var gmPictureRe = regexp.MustCompile(`(?s)<figure\b[^>]*\bclass="[^"]*\bce-img--
 // get it; only what the DM puts into the text reaches them.
 var rollerRe = regexp.MustCompile(`(?s)<div\b[^>]*\bclass="[^"]*\bce-roll\b[^"]*"[^>]*>.*?</div>`)
 
+// gmDiagramRe matches a GM-only diagram from the editor: a <pre> whose class
+// list holds ce-diagram--gm. The diagram's Mermaid source is stored as the
+// <pre>'s escaped text, so a literal closing tag cannot occur inside it and
+// the lazy match ends at the diagram's own </pre>.
+var gmDiagramRe = regexp.MustCompile(`(?s)<pre\b[^>]*\bclass="[^"]*\bce-diagram--gm\b[^"]*"[^>]*>.*?</pre>`)
+
 // StripSecretsHTML removes all <span data-secret>...</span> elements,
-// GM-only pictures and rolling-table rollers from HTML, used to hide GM-only
-// content from players.
+// GM-only pictures, GM-only diagrams and rolling-table rollers from HTML, used
+// to hide GM-only content from players.
 func StripSecretsHTML(html string) string {
 	if html == "" {
 		return ""
 	}
 	html = gmPictureRe.ReplaceAllString(html, "")
+	html = gmDiagramRe.ReplaceAllString(html, "")
 	html = rollerRe.ReplaceAllString(html, "")
 	return secretSpanRe.ReplaceAllString(html, "")
 }
 
 // StripSecretsJSON removes nodes marked with the "secret" mark, GM-only
-// pictures and rolling-table rollers from ProseMirror JSON content. Returns the modified JSON string. If the input
+// pictures, GM-only diagrams and rolling-table rollers from ProseMirror JSON content. Returns the modified JSON string. If the input
 // is not valid ProseMirror JSON, it is returned unchanged.
 func StripSecretsJSON(jsonStr string) string {
 	if jsonStr == "" {
@@ -175,7 +182,7 @@ func stripSecretNodes(node map[string]interface{}) {
 			continue
 		}
 
-		if hasSecretMark(childMap) || isGMPicture(childMap) || childMap["type"] == "rollTable" {
+		if hasSecretMark(childMap) || isGMPicture(childMap) || isGMDiagram(childMap) || childMap["type"] == "rollTable" {
 			continue // strip this node
 		}
 
@@ -189,6 +196,16 @@ func stripSecretNodes(node map[string]interface{}) {
 // isGMPicture reports whether a node is an editor picture marked GM-only.
 func isGMPicture(node map[string]interface{}) bool {
 	if node["type"] != "chronicleImage" {
+		return false
+	}
+	attrs, _ := node["attrs"].(map[string]interface{})
+	gm, _ := attrs["gmOnly"].(bool)
+	return gm
+}
+
+// isGMDiagram reports whether a node is an editor diagram marked GM-only.
+func isGMDiagram(node map[string]interface{}) bool {
+	if node["type"] != "diagram" {
 		return false
 	}
 	attrs, _ := node["attrs"].(map[string]interface{})

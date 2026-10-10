@@ -1640,6 +1640,7 @@
     if (T.TaskList && T.TaskItem) ext.push(T.TaskList, T.TaskItem.configure({ nested: true }));
     // Pictures are in the schema for everyone, so a note holding one loads.
     if (Chronicle.EditorImage) ext.push(Chronicle.EditorImage.extension);
+    if (Chronicle.EditorDiagram && Chronicle.EditorDiagram.extension) ext.push(Chronicle.EditorDiagram.extension);
     var pictureProps = Chronicle.EditorImage ? Chronicle.EditorImage.pasteDropProps(function () { return self.editor; }, this.cid) : {};
 
     this.wiki = Chronicle.WikiLinkExtension({
@@ -1734,6 +1735,7 @@
     else if (cmd === 'tasks' && c.toggleTaskList) c.toggleTaskList().run();
     else if (cmd === 'link' && this.wiki) this.wiki.begin();
     else if (cmd === 'picture' && Chronicle.EditorImage) Chronicle.EditorImage.pickAndInsert(ed, this.cid);
+    else if (cmd === 'diagram' && Chronicle.EditorDiagram && Chronicle.EditorDiagram.insert) Chronicle.EditorDiagram.insert(ed);
     this.paintToolbar();
   };
 

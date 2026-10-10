@@ -169,6 +169,7 @@
         }
 
         el.innerHTML = html;
+        if (Chronicle.EditorDiagram && Chronicle.EditorDiagram.hydrate) Chronicle.EditorDiagram.hydrate(el);
         // [[links]] to notes in a post's HTML are labelled for this reader.
         if (el._postsNoteLinksOff) el._postsNoteLinksOff();
         el._postsNoteLinksOff = Chronicle.hydrateNoteLinks ? Chronicle.hydrateNoteLinks(el, campaignId) : null;
