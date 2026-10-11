@@ -5465,6 +5465,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "customize-look", Scripts: []string{"/static/js/widgets/customize_look.js"}},
 	{Name: "site-look", Scripts: []string{"/static/js/widgets/site_look.js"}},
 	{Name: "page-tabs", Scripts: []string{"/static/js/widgets/page_tabs.js"}},
+	{Name: "dm-screen", Scripts: []string{"/static/js/widgets/dm_screen.js"}},
 }
 
 // journalCharacterAdapter adapts EntityService to notes.CharacterLister: the
