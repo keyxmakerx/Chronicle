@@ -43,6 +43,10 @@ type EntityTypeRepository interface {
 	// in one transaction so a crash never leaves two types both claiming the
 	// system's sheet. Nothing is deleted.
 	AdoptPresetCategory(ctx context.Context, toID int, category string, retireID *int) error
+	// MovePagesAndAdoptPresetCategory moves every page of fromID (Trash
+	// included) onto toID, then does what AdoptPresetCategory does with fromID
+	// retired, all in one transaction. Returns the number of pages moved.
+	MovePagesAndAdoptPresetCategory(ctx context.Context, campaignID string, fromID, toID int, category string) (int64, error)
 	UpdateDashboard(ctx context.Context, id int, description *string, pinnedIDs []string) error
 	UpdateDashboardLayout(ctx context.Context, id int, layoutJSON *string) error
 	SlugExists(ctx context.Context, campaignID, slug string) (bool, error)
@@ -383,9 +387,58 @@ func (r *entityTypeRepository) AdoptPresetCategory(ctx context.Context, toID int
 	}
 	defer tx.Rollback()
 
+	if err := adoptPresetCategoryTx(ctx, tx, toID, category, retireID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// MovePagesAndAdoptPresetCategory moves fromID's pages onto toID and hands
+// toID the preset category, so the pages never sit on a type without the
+// system's sheet. Slugs stay unique per campaign and claims follow the page id.
+// fromID keeps its own layout, dashboard, prompts and any plugin rows (quest
+// boards), so re-enabling it brings them back.
+func (r *entityTypeRepository) MovePagesAndAdoptPresetCategory(ctx context.Context, campaignID string, fromID, toID int, category string) (int64, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("beginning move-pages tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	res, err := tx.ExecContext(ctx,
+		`UPDATE entities SET entity_type_id = ? WHERE entity_type_id = ? AND campaign_id = ?`,
+		toID, fromID, campaignID)
+	if err != nil {
+		return 0, fmt.Errorf("moving pages from entity type %d: %w", fromID, err)
+	}
+	moved, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("checking moved pages: %w", err)
+	}
+	// Sidebar folders and saved filters follow the pages: a page left under a
+	// folder of the disabled type would drop out of the Characters tree.
+	for _, table := range []string{"sidebar_nodes", "saved_filters"} {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE `+table+` SET entity_type_id = ? WHERE entity_type_id = ? AND campaign_id = ?`,
+			toID, fromID, campaignID); err != nil {
+			return 0, fmt.Errorf("moving %s from entity type %d: %w", table, fromID, err)
+		}
+	}
+	if err := adoptPresetCategoryTx(ctx, tx, toID, category, &fromID); err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("committing move-pages tx: %w", err)
+	}
+	return moved, nil
+}
+
+// adoptPresetCategoryTx also marks the retired type not claimable, so a slug
+// like "drawsteel-character" no longer makes it count as the players' category.
+func adoptPresetCategoryTx(ctx context.Context, tx *sql.Tx, toID int, category string, retireID *int) error {
 	if retireID != nil {
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE entity_types SET preset_category = NULL, enabled = 0 WHERE id = ? AND preset_category = ?`,
+			`UPDATE entity_types SET preset_category = NULL, enabled = 0, claimable = 0 WHERE id = ? AND preset_category = ?`,
 			*retireID, category,
 		); err != nil {
 			return fmt.Errorf("retiring entity type %d: %w", *retireID, err)
@@ -405,7 +458,7 @@ func (r *entityTypeRepository) AdoptPresetCategory(ctx context.Context, toID int
 	} else if n == 0 && retireID != nil {
 		return fmt.Errorf("entity type %d already has a preset category", toID)
 	}
-	return tx.Commit()
+	return nil
 }
 
 // UpdateDashboard updates the category dashboard fields (description and pinned

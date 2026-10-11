@@ -10,11 +10,12 @@ import (
 // rather than on call shapes.
 type presetHomeStore struct {
 	types   map[int]*EntityType
-	adopted int // AdoptPresetCategory calls that reached the store
+	adopted int         // AdoptPresetCategory calls that reached the store
+	pages   map[int]int // pages per type, moved by MovePagesAndAdoptPresetCategory
 }
 
 func newPresetHomeStore(ts ...EntityType) *presetHomeStore {
-	s := &presetHomeStore{types: map[int]*EntityType{}}
+	s := &presetHomeStore{types: map[int]*EntityType{}, pages: map[int]int{}}
 	for i := range ts {
 		t := ts[i]
 		s.types[t.ID] = &t
@@ -43,6 +44,24 @@ func (s *presetHomeStore) repo() *mockEntityTypeRepo {
 				out = append(out, *t)
 			}
 			return out, nil
+		},
+		listByCampaignFn: func(_ context.Context, campaignID string) ([]EntityType, error) {
+			var out []EntityType
+			for _, t := range s.types {
+				if t.CampaignID == campaignID {
+					out = append(out, *t)
+				}
+			}
+			return out, nil
+		},
+		movePagesAndAdoptFn: func(_ context.Context, _ string, fromID, toID int, category string) (int64, error) {
+			moved := s.pages[fromID]
+			s.pages[toID] += moved
+			s.pages[fromID] = 0
+			r := s.types[fromID]
+			r.PresetCategory, r.Enabled, r.Claimable = nil, false, boolp(false)
+			s.types[toID].PresetCategory = &category
+			return int64(moved), nil
 		},
 		updateFn: func(_ context.Context, et *EntityType) error {
 			cp := *et
@@ -232,6 +251,88 @@ func TestEnsurePlayerCharacterType_CharactersIsTheSystemType(t *testing.T) {
 			}
 			if created != tc.wantCreate {
 				t.Errorf("created = %v, want %v", created, tc.wantCreate)
+			}
+		})
+	}
+}
+
+func boolp(b bool) *bool { return &b }
+
+func TestMoveCharacterPresetHome(t *testing.T) {
+	tests := []struct {
+		name      string
+		types     []EntityType
+		pages     map[int]int
+		wantMoved int
+		wantNoOp  bool
+		wantErr   bool
+	}{
+		{"heroes with pages move into Characters",
+			[]EntityType{charsType(1, "c1", nil), heroType(2, "c1", intp(1))}, map[int]int{2: 4}, 4, false, false},
+		{"Characters marked not claimable becomes claimable with the heroes",
+			[]EntityType{func() EntityType { c := charsType(1, "c1", nil); c.Claimable = boolp(false); return c }(),
+				heroType(2, "c1", intp(1))}, map[int]int{2: 1}, 1, false, false},
+		{"nothing to move is a no-op",
+			[]EntityType{charsType(1, "c1", strp("character"))}, nil, 0, true, false},
+		{"two system character types is a conflict",
+			[]EntityType{charsType(1, "c1", nil), heroType(2, "c1", nil), heroType(3, "c1", nil)}, nil, 0, false, true},
+		{"heroes with sub-categories is a conflict",
+			[]EntityType{charsType(1, "c1", nil), heroType(2, "c1", intp(1)),
+				{ID: 5, CampaignID: "c1", Slug: "villain", ParentTypeID: intp(2)}}, nil, 0, false, true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			store := newPresetHomeStore(tc.types...)
+			for id, n := range tc.pages {
+				store.pages[id] = n
+			}
+			svc := newTestService(&mockEntityRepo{
+				countByTypeFn: func(context.Context, string, int, string) (map[int]int, error) { return store.pages, nil },
+			}, store.repo())
+
+			if !tc.wantNoOp && !tc.wantErr {
+				cand, err := svc.CharacterHomeCandidate(context.Background(), "c1")
+				if err != nil || cand == nil || cand.Pages != tc.wantMoved || cand.FromName != "Heroes" {
+					t.Fatalf("candidate = (%+v, %v), want Heroes with %d pages", cand, err, tc.wantMoved)
+				}
+			}
+
+			res, err := svc.MoveCharacterPresetHome(context.Background(), "c1")
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("err = %v, want error %v", err, tc.wantErr)
+			}
+			if tc.wantErr {
+				if store.types[1].PresetCategory != nil {
+					t.Error("a refused move must leave Characters as it was")
+				}
+				return
+			}
+			if res.NoOp != tc.wantNoOp || res.Pages != tc.wantMoved {
+				t.Errorf("result = %+v, want NoOp %v, %d pages", res, tc.wantNoOp, tc.wantMoved)
+			}
+			if tc.wantNoOp {
+				return
+			}
+			chars, hero := store.types[1], store.types[2]
+			if chars.PresetCategory == nil || *chars.PresetCategory != "character" {
+				t.Error("Characters should carry the character sheet")
+			}
+			if len(chars.Fields) != 2 {
+				t.Errorf("Characters fields = %+v, want bio and might", chars.Fields)
+			}
+			if !isClaimableType(chars) {
+				t.Error("Characters must be claimable after taking the heroes")
+			}
+			if hero.Enabled || isClaimableType(hero) {
+				t.Errorf("Heroes enabled = %v, claimable = %v; want both false", hero.Enabled, isClaimableType(hero))
+			}
+			if store.pages[1] != tc.wantMoved || store.pages[2] != 0 {
+				t.Errorf("pages = %v, want all %d on Characters", store.pages, tc.wantMoved)
+			}
+
+			again, err := svc.MoveCharacterPresetHome(context.Background(), "c1")
+			if err != nil || !again.NoOp {
+				t.Errorf("second run = (%+v, %v), want a no-op", again, err)
 			}
 		})
 	}
