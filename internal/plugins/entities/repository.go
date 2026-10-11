@@ -807,6 +807,18 @@ type EntityRepository interface {
 	// for verifying the new owner is a campaign member.
 	UpdateOwner(ctx context.Context, entityID string, ownerUserID *string) error
 
+	// SetPlayable marks or unmarks an entity as one a player may play.
+	SetPlayable(ctx context.Context, entityID string, playable bool) error
+
+	// ListOnRoster returns the entities of the given types that are on the
+	// "Who plays whom" list: marked playable or owned. Visibility-filtered for
+	// the viewer, by name, capped at 500.
+	ListOnRoster(ctx context.Context, campaignID string, typeIDs []int, role int, userID string) ([]Entity, error)
+
+	// SearchRosterCandidates returns entities of the given types that are not
+	// on the roster and whose name contains q, for the "add a character" picker.
+	SearchRosterCandidates(ctx context.Context, campaignID string, typeIDs []int, q string, role int, userID string, limit int) ([]Entity, error)
+
 	// UpdateMapID sets or clears entities.map_id. Pass nil to unassign.
 	// Service-level callers are responsible for verifying the map belongs
 	// to the same campaign as the entity.
@@ -949,7 +961,7 @@ const entitySelectColumns = `e.id, e.campaign_id, e.entity_type_id, e.name, e.sl
 	                 e.entry, e.entry_html, e.player_notes, e.player_notes_html,
 	                 e.image_path, e.cover_image_path, e.parent_id, e.parent_node_id, e.sort_order, e.type_label,
 	                 e.is_private, e.visibility, e.is_template, e.fields_data, e.field_overrides, e.popup_config,
-	                 e.created_by, e.owner_user_id, e.map_id, e.created_at, e.updated_at,
+	                 e.created_by, e.owner_user_id, e.playable, e.map_id, e.created_at, e.updated_at,
 	                 et.name, et.name_plural, et.icon, et.color, et.slug`
 
 // FindByID retrieves an entity with joined type info.
@@ -982,7 +994,7 @@ func (r *entityRepository) scanEntity(row *sql.Row) (*Entity, error) {
 		&e.Entry, &e.EntryHTML, &e.PlayerNotes, &e.PlayerNotesHTML,
 		&e.ImagePath, &e.CoverImagePath, &e.ParentID, &e.ParentNodeID, &e.SortOrder, &e.TypeLabel,
 		&e.IsPrivate, &e.Visibility, &e.IsTemplate, &fieldsRaw, &overridesRaw, &popupRaw,
-		&e.CreatedBy, &e.OwnerUserID, &e.MapID, &e.CreatedAt, &e.UpdatedAt,
+		&e.CreatedBy, &e.OwnerUserID, &e.Playable, &e.MapID, &e.CreatedAt, &e.UpdatedAt,
 		&e.TypeName, &e.TypeNamePlural, &e.TypeIcon, &e.TypeColor, &e.TypeSlug,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -1513,15 +1525,109 @@ func (r *entityRepository) ListClaimed(ctx context.Context, campaignID string, r
 
 // UpdateOwner sets entities.owner_user_id. Pass nil to clear (unassign).
 // updated_at is bumped so the entity appears at the top of the new owner's
-// "My Characters" listing right after the claim.
+// "My Characters" listing right after the claim. A non-nil owner also marks
+// the entity playable in the same statement so it stays on the roster if the
+// claim is later cleared; clearing leaves the mark as it was.
 func (r *entityRepository) UpdateOwner(ctx context.Context, entityID string, ownerUserID *string) error {
 	_, err := r.db.ExecContext(ctx,
-		`UPDATE entities SET owner_user_id = ?, updated_at = NOW() WHERE id = ?`,
-		ownerUserID, entityID)
+		`UPDATE entities SET owner_user_id = ?, playable = playable OR ? IS NOT NULL, updated_at = NOW() WHERE id = ?`,
+		ownerUserID, ownerUserID, entityID)
 	if err != nil {
 		return fmt.Errorf("updating entity owner: %w", err)
 	}
 	return nil
+}
+
+// SetPlayable sets entities.playable.
+func (r *entityRepository) SetPlayable(ctx context.Context, entityID string, playable bool) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE entities SET playable = ?, updated_at = NOW() WHERE id = ?`, playable, entityID)
+	if err != nil {
+		return fmt.Errorf("updating entity playable: %w", err)
+	}
+	return nil
+}
+
+// typeIDPlaceholders returns "?,?,?" and the matching args for an IN list.
+func typeIDPlaceholders(typeIDs []int) (string, []any) {
+	ph := make([]string, len(typeIDs))
+	args := make([]any, len(typeIDs))
+	for i, id := range typeIDs {
+		ph[i] = "?"
+		args[i] = id
+	}
+	return strings.Join(ph, ","), args
+}
+
+// ListOnRoster returns the entities of typeIDs that are marked playable or
+// have an owner. Templates are excluded; they are blueprints, not characters.
+func (r *entityRepository) ListOnRoster(ctx context.Context, campaignID string, typeIDs []int, role int, userID string) ([]Entity, error) {
+	if len(typeIDs) == 0 {
+		return nil, nil
+	}
+	ph, typeArgs := typeIDPlaceholders(typeIDs)
+	visFilter, visArgs := visibilityFilter(role, userID)
+	args := append([]any{campaignID}, typeArgs...)
+	args = append(args, visArgs...)
+
+	query := `SELECT ` + entitySelectColumns + `
+	          FROM entities e
+	          INNER JOIN entity_types et ON et.id = e.entity_type_id
+	          WHERE e.campaign_id = ? AND e.entity_type_id IN (` + ph + `)
+	            AND e.is_template = 0 AND (e.playable = 1 OR e.owner_user_id IS NOT NULL)` + visFilter + `
+	          ORDER BY e.name ASC LIMIT 500`
+	return r.queryEntities(ctx, "listing roster entities", query, args)
+}
+
+// SearchRosterCandidates returns off-roster entities of typeIDs whose name
+// contains q. LIKE wildcards in q match literally.
+func (r *entityRepository) SearchRosterCandidates(ctx context.Context, campaignID string, typeIDs []int, q string, role int, userID string, limit int) ([]Entity, error) {
+	if len(typeIDs) == 0 {
+		return nil, nil
+	}
+	if limit <= 0 {
+		limit = 20
+	}
+	ph, typeArgs := typeIDPlaceholders(typeIDs)
+	visFilter, visArgs := visibilityFilter(role, userID)
+	args := append([]any{campaignID}, typeArgs...)
+	args = append(args, "%"+escapeLike(q)+"%")
+	args = append(args, visArgs...)
+	args = append(args, limit)
+
+	query := `SELECT ` + entitySelectColumns + `
+	          FROM entities e
+	          INNER JOIN entity_types et ON et.id = e.entity_type_id
+	          WHERE e.campaign_id = ? AND e.entity_type_id IN (` + ph + `)
+	            AND e.is_template = 0 AND e.playable = 0 AND e.owner_user_id IS NULL
+	            AND e.name LIKE ?` + visFilter + `
+	          ORDER BY e.name ASC LIMIT ?`
+	return r.queryEntities(ctx, "searching roster candidates", query, args)
+}
+
+// escapeLike makes %, _ and the backslash match literally in a LIKE pattern
+// (backslash is MariaDB's default LIKE escape).
+func escapeLike(s string) string {
+	return strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(s)
+}
+
+// queryEntities runs a query built on entitySelectColumns and scans the rows.
+func (r *entityRepository) queryEntities(ctx context.Context, what, query string, args []any) ([]Entity, error) {
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", what, err)
+	}
+	defer rows.Close()
+
+	var entities []Entity
+	for rows.Next() {
+		e, err := r.scanEntityRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		entities = append(entities, *e)
+	}
+	return entities, rows.Err()
 }
 
 // UpdateMapID sets entities.map_id. Pass nil to clear the assignment.
@@ -1743,7 +1849,7 @@ func (r *entityRepository) FindAncestors(ctx context.Context, entityID string, r
 	           e.entry, e.entry_html, e.player_notes, e.player_notes_html,
 	           e.image_path, e.cover_image_path, e.parent_id, e.parent_node_id, e.sort_order, e.type_label,
 	           e.is_private, e.visibility, e.is_template, e.fields_data, e.field_overrides, e.popup_config,
-	           e.created_by, e.owner_user_id, e.map_id, e.created_at, e.updated_at, e.deleted_at,
+	           e.created_by, e.owner_user_id, e.playable, e.map_id, e.created_at, e.updated_at, e.deleted_at,
 	           1 AS depth
 	    FROM entities e
 	    WHERE e.id = (SELECT parent_id FROM entities WHERE id = ?)
@@ -1752,7 +1858,7 @@ func (r *entityRepository) FindAncestors(ctx context.Context, entityID string, r
 	           e.entry, e.entry_html, e.player_notes, e.player_notes_html,
 	           e.image_path, e.cover_image_path, e.parent_id, e.parent_node_id, e.sort_order, e.type_label,
 	           e.is_private, e.visibility, e.is_template, e.fields_data, e.field_overrides, e.popup_config,
-	           e.created_by, e.owner_user_id, e.map_id, e.created_at, e.updated_at, e.deleted_at,
+	           e.created_by, e.owner_user_id, e.playable, e.map_id, e.created_at, e.updated_at, e.deleted_at,
 	           a.depth + 1
 	    FROM entities e
 	    INNER JOIN ancestors a ON e.id = a.parent_id
@@ -1762,7 +1868,7 @@ func (r *entityRepository) FindAncestors(ctx context.Context, entityID string, r
 	       e.entry, e.entry_html, e.player_notes, e.player_notes_html,
 	       e.image_path, e.cover_image_path, e.parent_id, e.parent_node_id, e.sort_order, e.type_label,
 	       e.is_private, e.visibility, e.is_template, e.fields_data, e.field_overrides, e.popup_config,
-	       e.created_by, e.owner_user_id, e.map_id, e.created_at, e.updated_at,
+	       e.created_by, e.owner_user_id, e.playable, e.map_id, e.created_at, e.updated_at,
 	       et.name, et.name_plural, et.icon, et.color, et.slug
 	FROM ancestors e
 	INNER JOIN entity_types et ON et.id = e.entity_type_id
@@ -2063,7 +2169,7 @@ func (r *entityRepository) scanEntityRow(rows *sql.Rows) (*Entity, error) {
 		&e.Entry, &e.EntryHTML, &e.PlayerNotes, &e.PlayerNotesHTML,
 		&e.ImagePath, &e.CoverImagePath, &e.ParentID, &e.ParentNodeID, &e.SortOrder, &e.TypeLabel,
 		&e.IsPrivate, &e.Visibility, &e.IsTemplate, &fieldsRaw, &overridesRaw, &popupRaw,
-		&e.CreatedBy, &e.OwnerUserID, &e.MapID, &e.CreatedAt, &e.UpdatedAt,
+		&e.CreatedBy, &e.OwnerUserID, &e.Playable, &e.MapID, &e.CreatedAt, &e.UpdatedAt,
 		&e.TypeName, &e.TypeNamePlural, &e.TypeIcon, &e.TypeColor, &e.TypeSlug,
 	)
 	if err != nil {

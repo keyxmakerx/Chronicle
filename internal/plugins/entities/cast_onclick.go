@@ -19,15 +19,15 @@ func inlineHandler(name, body string) templ.ComponentScript {
 }
 
 // castFoldJS opens the named box in the band's fold, or closes the fold when
-// box is empty or already open. Boxes are "add" and "rm-<typeID>"; one shows
-// at a time. The fold grows to the box's height and returns to auto so a
-// search that shortens the list can still resize it.
+// box is empty or already open. Boxes are "add", "players" and "rm-<typeID>";
+// one shows at a time. The fold grows to the box's height and returns to auto
+// so a search that shortens the list can still resize it.
 const castFoldJS = `(function(el,want){` +
 	`var s=el.closest('[data-band]'),f=s.querySelector('.ag-fold');` +
 	`var cur=f.getAttribute('data-open')||'';if(want&&cur===want)want='';` +
 	`var boxes=f.querySelectorAll('[data-box]');` +
 	`for(var i=0;i<boxes.length;i++){boxes[i].hidden=boxes[i].getAttribute('data-box')!==want;}` +
-	`var add=s.querySelector('.ag-add');if(add)add.setAttribute('aria-expanded',want==='add'?'true':'false');` +
+	`var ops=s.querySelectorAll('[data-opens]');for(var j=0;j<ops.length;j++){ops[j].setAttribute('aria-expanded',ops[j].getAttribute('data-opens')===want?'true':'false');}` +
 	`f.setAttribute('data-open',want);` +
 	`var still=window.matchMedia('(prefers-reduced-motion: reduce)').matches;` +
 	`if(want){f.classList.add('is-open');f.style.height=still?'auto':f.scrollHeight+'px';` +
@@ -35,6 +35,23 @@ const castFoldJS = `(function(el,want){` +
 	`var q=f.querySelector('[data-box='+JSON.stringify(want)+'] input[type=search]');if(q)q.focus({preventScroll:true});}` +
 	`else{if(!still){f.style.height=f.scrollHeight+'px';f.getBoundingClientRect();}f.style.height='0px';f.classList.remove('is-open');}` +
 	`})(this,`
+
+// castFoldStyle keeps a fold the server renders open at its natural height;
+// a closed fold takes its zero height from the stylesheet.
+func castFoldStyle(open string) string {
+	if open == "" {
+		return ""
+	}
+	return "height:auto"
+}
+
+// castIcon is the page type's icon for a row, or a plain person.
+func castIcon(e Entity) string {
+	if e.TypeIcon != "" {
+		return e.TypeIcon
+	}
+	return "fa-user"
+}
 
 // castFoldCall returns the click handler that opens (or closes) a box.
 func castFoldCall(box string) templ.ComponentScript {

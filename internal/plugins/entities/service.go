@@ -193,6 +193,19 @@ type EntityService interface {
 	// responsibility — the service trusts upstream campaign auth.
 	AssignOwner(ctx context.Context, entityID string, ownerUserID *string) (*Entity, error)
 
+	// SetPlayable marks or unmarks a character as playable, which puts it on
+	// (or takes it off) the Characters page's "Who plays whom" list unless it
+	// is owned. The entity must belong to campaignID. Marking needs a claimable
+	// type; unmarking is always allowed.
+	SetPlayable(ctx context.Context, campaignID, entityID string, playable bool) (*Entity, error)
+
+	// ListRoster returns the entities of typeIDs on the "Who plays whom" list
+	// (playable or owned), visibility-filtered for the viewer.
+	ListRoster(ctx context.Context, campaignID string, typeIDs []int, role int, userID string) ([]Entity, error)
+
+	// SearchRosterCandidates returns off-roster entities of typeIDs matching q.
+	SearchRosterCandidates(ctx context.Context, campaignID string, typeIDs []int, q string, role int, userID string, limit int) ([]Entity, error)
+
 	// AssignMap sets or clears the entity's map_id (the per-entity Map
 	// Editor block reads from this). Pass mapID = nil to unassign.
 	// Verifies the map exists in the entity's own campaign before
@@ -1644,6 +1657,7 @@ func (s *entityService) ClaimEntity(ctx context.Context, entityID, userID string
 	}
 
 	entity.OwnerUserID = &userID
+	entity.Playable = true // UpdateOwner marks it in the same statement.
 	s.events.PublishEntityEvent("updated", entity.CampaignID, entityID, entity)
 	slog.Info("entity claimed",
 		slog.String("entity_id", entityID),
@@ -1701,6 +1715,9 @@ func (s *entityService) AssignOwner(ctx context.Context, entityID string, ownerU
 	}
 
 	entity.OwnerUserID = ownerUserID
+	if ownerUserID != nil {
+		entity.Playable = true // UpdateOwner marks it in the same statement.
+	}
 	s.events.PublishEntityEvent("updated", entity.CampaignID, entityID, entity)
 	slog.Info("entity owner reassigned",
 		slog.String("entity_id", entityID),
@@ -1708,6 +1725,51 @@ func (s *entityService) AssignOwner(ctx context.Context, entityID string, ownerU
 		slog.Any("new_owner", ownerUserID),
 	)
 	return entity, nil
+}
+
+// SetPlayable marks or unmarks a character as one a player may play.
+func (s *entityService) SetPlayable(ctx context.Context, campaignID, entityID string, playable bool) (*Entity, error) {
+	entity, err := s.entities.FindByID(ctx, entityID)
+	if err != nil {
+		return nil, err
+	}
+	// A page from another campaign must look absent, not forbidden.
+	if entity.CampaignID != campaignID {
+		return nil, apperror.NewNotFound("entity not found")
+	}
+	if !s.isAddonEnabled(ctx, entity.CampaignID, AddonPlayerCharacterClaiming) {
+		return nil, apperror.NewForbidden("player character claiming is not enabled for this campaign")
+	}
+	if entity.Playable == playable {
+		return entity, nil
+	}
+	// Only marking is gated on type: a stale mark must stay removable even
+	// after the type stops being claimable.
+	if playable {
+		et, err := s.types.FindByID(ctx, entity.EntityTypeID)
+		if err != nil {
+			return nil, apperror.NewInternal(fmt.Errorf("loading entity type for playable mark: %w", err))
+		}
+		if !isClaimableType(et) {
+			return nil, apperror.NewBadRequest("only character entities can be marked playable")
+		}
+	}
+	if err := s.entities.SetPlayable(ctx, entityID, playable); err != nil {
+		return nil, apperror.NewInternal(err)
+	}
+	entity.Playable = playable
+	s.events.PublishEntityEvent("updated", entity.CampaignID, entityID, entity)
+	return entity, nil
+}
+
+// ListRoster returns the entities of typeIDs on the "Who plays whom" list.
+func (s *entityService) ListRoster(ctx context.Context, campaignID string, typeIDs []int, role int, userID string) ([]Entity, error) {
+	return s.entities.ListOnRoster(ctx, campaignID, typeIDs, role, userID)
+}
+
+// SearchRosterCandidates returns off-roster entities matching q.
+func (s *entityService) SearchRosterCandidates(ctx context.Context, campaignID string, typeIDs []int, q string, role int, userID string, limit int) ([]Entity, error) {
+	return s.entities.SearchRosterCandidates(ctx, campaignID, typeIDs, q, role, userID, limit)
 }
 
 // AssignMap sets or clears entity.map_id. Pass mapID = nil to unassign.
