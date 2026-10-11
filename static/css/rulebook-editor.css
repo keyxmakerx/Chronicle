@@ -116,8 +116,8 @@
 .rbe-plus { width: 16px; height: 16px; flex: none; display: grid; place-items: center; border-radius: 5px; border: 1px solid currentColor; font: 600 12px/1 var(--rbe-ui); }
 .rbe-add { display: inline-flex; align-items: center; gap: 7px; margin: 3px 0 0 4px; padding: 4px 8px; border-radius: 7px; font-size: 12px; font-weight: 600; color: var(--rbe-mut); text-align: left; }
 .rbe-add:hover { color: var(--rbe-acc); background: color-mix(in srgb, var(--rbe-acc) 10%, transparent); }
-.rbe-add-ch { display: flex; width: 100%; margin: 4px 0 0; padding: 10px; justify-content: center; border: 1px dashed var(--rbe-edge); border-radius: 10px; }
-.rbe-add-ch:hover { border-color: var(--rbe-acc); }
+.rbe-add-ch { display: flex; width: 100%; margin: 0 0 12px; padding: 9px 10px; justify-content: center; font-size: 13px; color: var(--rbe-ink); border: 1px solid var(--rbe-acc); border-radius: 10px; background: color-mix(in srgb, var(--rbe-acc) 22%, transparent); }
+.rbe-add-ch:hover { color: var(--rbe-ink); background: color-mix(in srgb, var(--rbe-acc) 34%, transparent); }
 .rbe-note-line { margin: 0; padding: 4px 8px 6px; font-size: 12px; color: var(--rbe-mut); overflow-wrap: anywhere; }
 .rbe-legend { margin: 18px 4px 0; padding-top: 12px; border-top: 1px solid var(--rbe-edge2); display: grid; gap: 6px; font-size: 11.5px; color: var(--rbe-mut); }
 .rbe-legend > span { display: flex; align-items: center; gap: 7px; }

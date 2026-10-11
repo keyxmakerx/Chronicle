@@ -385,3 +385,37 @@ func TestBuild_Lookups(t *testing.T) {
 		}
 	}
 }
+
+// TestBuild_ContentMode_HouseRules pins the house-rules choice: its context
+// is only the house rules handed in, never the world export, and the
+// house-rule format comes along even without the front-matter example.
+func TestBuild_ContentMode_HouseRules(t *testing.T) {
+	tests := []struct {
+		name, rules, want string
+	}{
+		{"with rules", "## House rules\n\n### Table rules\n", "### Table rules"},
+		{"none yet", "", "There are no house rules yet."},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			exp := &stubExporter{markdown: "WORLD EXPORT"}
+			got, err := NewService(nil, nil, exp).Build(context.Background(), "Ashfall", "owner-1", "camp-1", Input{
+				ContentMode:         ContentHouseRules,
+				RecordDocs:          "### kind: house-rule (House rule)\n\npages and blocks",
+				RecordContext:       tc.rules,
+				OperatorInstruction: "Add a fumble rule.",
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if exp.calls != 0 || strings.Contains(got, "WORLD EXPORT") {
+				t.Errorf("the world export was used (%d calls)", exp.calls)
+			}
+			for _, want := range []string{"## Existing world context", tc.want, "kind: house-rule", "Add a fumble rule."} {
+				if !strings.Contains(got, want) {
+					t.Errorf("prompt lacks %q:\n%s", want, got)
+				}
+			}
+		})
+	}
+}

@@ -166,7 +166,8 @@ templ promptBuilderBody(cc *campaigns.CampaignContext) {
 				if (this.schemaTypes) chars += 400;
 				if (this.schemaCategories) chars += 600;
 				if (this.schemaFrontMatter) chars += 500;
-				if (this.contentMode !== 'none') chars += 30000; // content dominates
+				if (this.contentMode === 'house-rules') chars += 4000;
+				else if (this.contentMode !== 'none') chars += 30000; // content dominates
 				chars += this.instruction.length;
 				return Math.ceil(chars / 4);
 			}
@@ -220,6 +221,13 @@ templ promptBuilderBody(cc *campaigns.CampaignContext) {
 							<span class="block text-xs text-fg-muted">Everything the privacy filter below allows. AI can reference existing entities by name.</span>
 						</span>
 					</label>
+					<label class="flex items-start gap-2 cursor-pointer">
+						<input type="radio" name="content_mode" value="house-rules" x-model="contentMode" class="mt-0.5 border-edge text-accent"/>
+						<span>
+							<strong>House rules</strong>
+							<span class="block text-xs text-fg-muted">Your Handbook's house rules as they are now, and how to write pages with highlighted boxes, dice rolls, flaps and the rest. The AI can add, change or remove them.</span>
+						</span>
+					</label>
 				</div>
 			</div>
 
@@ -248,7 +256,7 @@ templ promptBuilderBody(cc *campaigns.CampaignContext) {
 						</span>
 					</label>
 				</div>
-				<label class="flex items-center gap-2 cursor-pointer text-sm mt-3">
+				<label x-show="contentMode !== 'house-rules'" class="flex items-center gap-2 cursor-pointer text-sm mt-3">
 					<input type="checkbox" name="gm_notes" value="on" x-model="gmNotes" class="rounded border-edge text-accent"/>
 					<span>
 						Include session GM notes
