@@ -68,6 +68,9 @@ parts:
   with `name` and `summary`. Each becomes a hover definition.
 - `look: paper` draws pages as paper inside a cover, with a soft crease
   between them. Set the paper colours in `theme` (light `paper`, dark `ink`).
+  A campaign owner can switch every book to Chronicle's standard look
+  (Customize › Rulebook); the book's colours and `look` are then ignored, and
+  only its fonts still apply.
 - `tabs` puts a row of tabs above the book, one per named chapter, in that
   order (at most 12). When the campaign has written house rules, a House
   rules tab is added at the end.

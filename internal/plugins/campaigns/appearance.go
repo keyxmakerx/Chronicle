@@ -40,6 +40,7 @@ type Appearance struct {
 	HeaderHeight    string `json:"header_height,omitempty"`    // "slim" (default) or "tall".
 	HoverCard       string `json:"hover_card,omitempty"`       // Hover card look: "paper" (default), "plain", "night" or "compact".
 	SheetStyle      string `json:"sheet_style,omitempty"`      // Character sheet style (AppearanceSheetStyles); "modern" is the default.
+	BookLook        string `json:"book_look,omitempty"`        // Rules page look: "book" (as the game system draws it, the default) or "standard".
 }
 
 // The allowed values of each Appearance choice. The first entry is the
@@ -67,6 +68,10 @@ var (
 	// AppearanceSheetStyles are the character sheet styles sheet_styles.css
 	// knows, keyed by the data-cz-sheet value; "modern" is the unstyled default.
 	AppearanceSheetStyles = []string{"modern", "parchment", "ledger", "journal", "vellum", "night", "deck", "pencil", "starship", "neon", "runes", "brass"}
+	// AppearanceBookLooks are the Rules page looks: "book" keeps the look the
+	// game system's book asks for (a paper handbook, say); "standard" draws
+	// every book in Chronicle's own plain look.
+	AppearanceBookLooks = []string{"book", "standard"}
 )
 
 // Text limits the Customize page shows. Brand name and welcome keep their
@@ -114,6 +119,9 @@ type AppearanceInput struct {
 	Sheet struct {
 		Style string `json:"style"`
 	} `json:"sheet"`
+	Book struct {
+		Look string `json:"look"`
+	} `json:"book"`
 }
 
 // AppearanceSidebarInput is the Sidebar section. Colour is the menu colour
@@ -386,6 +394,7 @@ func applyAppearance(s *CampaignSettings, in AppearanceInput) (*string, error) {
 		{&a.PeekGlow, "peek glow", in.Sidebar.Glow, AppearanceGlows},
 		{&a.HoverCard, "hover card look", in.Hover.Look, AppearanceHoverCards},
 		{&a.SheetStyle, "character sheet style", in.Sheet.Style, AppearanceSheetStyles},
+		{&a.BookLook, "rulebook look", in.Book.Look, AppearanceBookLooks},
 	}
 	for _, c := range checks {
 		if *c.dst, err = oneOf(c.name, c.v, c.allowed); err != nil {
