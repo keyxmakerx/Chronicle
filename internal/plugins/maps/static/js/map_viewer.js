@@ -69,6 +69,12 @@
     if (window.ChronicleMapLive) return Promise.resolve();
     return loadScript(cfg.liveSrc).catch(function () { /* live refresh simply stays off */ });
   }
+  // Pins that open other maps (badges, trail, tree). Optional: without it a
+  // linking pin is an ordinary pin.
+  function ensureLinks(cfg) {
+    if (window.ChronicleMapLinks) return Promise.resolve();
+    return loadScript(cfg.linksSrc).catch(function () { /* links simply do not render */ });
+  }
   function ensureDrawing(cfg) {
     if (window.ChronicleMapDrawing) return Promise.resolve();
     return loadScript(cfg.drawSrc).catch(function () { /* drawings simply do not render */ });
@@ -234,6 +240,30 @@
 	// exists; null when the module is missing.
 	var live = null;
 
+	// Pins that open another map. The server sent link data only on pins this
+	// viewer may see, the member names only to owners and co-DMs, and the maps a
+	// pin may open only to scribes.
+	function jsonAttr(v, fallback) {
+		try { var x = JSON.parse(v || ''); return x == null ? fallback : x; } catch (e) { return fallback; }
+	}
+	var links = null;
+	if (window.ChronicleMapLinks && window.ChronicleMapLinks.attach) {
+		links = window.ChronicleMapLinks.attach({
+			wrap: document.getElementById('map-wrap'),
+			container: map.getContainer(),
+			campaignID: campaignID,
+			mapID: mapID,
+			mapName: cfg.dataset.mapName || '',
+			canTree: cfg.dataset.linkTree === 'true',
+			staff: canDmOnly,
+			members: jsonAttr(cfg.dataset.members, {}),
+			trail: jsonAttr(cfg.dataset.trail, []),
+			linkMaps: jsonAttr(cfg.dataset.linkMaps, []),
+			pinPoint: function(mk) { return map.latLngToContainerPoint(pinLatLng(mk.x, mk.y)); }
+		});
+		cleanups.push(function() { links.destroy(); });
+	}
+
 	// Escape helpers to prevent XSS when building HTML strings from
 	// user-supplied marker data (name, description, icon, color).
 	function escapeHtml(s) {
@@ -325,14 +355,26 @@
 	function markerIcon(mk) {
 		var m = pinMetrics();
 		var hidden = mk.visibility === 'dm_only';
-		var badge = hidden
+		// A pin that opens a map wears the link badge, which also says when only
+		// DMs can follow it, so it takes the place of the hidden mark.
+		var linkBadge = links && mk.linked_map_id ? links.badge(mk) : null;
+		var badge = hidden && !linkBadge
 			? '<span class="mp-pin-badge" title="Hidden from players"><i class="fa-solid fa-eye-slash"></i></span>' : '';
 		var ico = '<i class="fa-solid ' + escapeAttr(mk.icon) + ' mp-pin-ico" style="left:' + (m.sh.cx * m.k) + 'px;top:' + (m.sh.cy * m.k) + 'px;font-size:' + (m.sh.fs * m.k) + 'px"></i>';
 		// A name shown always sits under the pin; otherwise it appears above.
 		var below = D.pin_labels === 'always';
+		var html = '<div class="mp-pin" style="width:' + m.w + 'px;height:' + m.h + 'px">' + pinShapeSvg(D.pin_style, mk.color, hidden) + ico + badge + '</div>';
+		// The badge carries a map name, so it is built as elements (textContent),
+		// never spliced into the markup string.
+		if (linkBadge) {
+			var holder = document.createElement('div');
+			holder.innerHTML = html;
+			html = holder.firstChild;
+			html.appendChild(linkBadge);
+		}
 		return L.divIcon({
 			className: 'chronicle-marker',
-			html: '<div class="mp-pin" style="width:' + m.w + 'px;height:' + m.h + 'px">' + pinShapeSvg(D.pin_style, mk.color, hidden) + ico + badge + '</div>',
+			html: html,
 			iconSize: [m.w, m.h],
 			iconAnchor: [m.ax, m.ay],
 			tooltipAnchor: [m.w / 2 - m.ax, below ? m.h - m.ay + 2 : -m.ay]
@@ -537,12 +579,14 @@
 		title.appendChild(el('strong', null, mk.name));
 		card.appendChild(title);
 		var meta = el('div', 'mp-card-meta', k.one);
+		var link = links ? links.cardBits(mk) : null;
 		if (mk.visibility === 'dm_only') {
 			var badge = el('span', 'mp-badge');
 			badge.appendChild(el('i', 'fa-solid fa-eye-slash'));
 			badge.appendChild(document.createTextNode(' Hidden from players'));
 			meta.appendChild(badge);
 		}
+		if (link) meta.appendChild(link.meta);
 		card.appendChild(meta);
 		if (mk.description) card.appendChild(el('div', 'mp-card-desc', mk.description));
 		if (mk.entity_name && mk.entity_id) {
@@ -550,14 +594,18 @@
 			a.href = '/campaigns/' + encodeURIComponent(campaignID) + '/entities/' + encodeURIComponent(mk.entity_id);
 			card.appendChild(a);
 		}
-		if (isScribe) {
+		if (isScribe || link) {
 			var row = el('div', 'mp-card-row');
-			var edit = el('button', 'mp-cbtn', 'Edit');
-			edit.type = 'button';
-			edit.addEventListener('click', function() { openCard(mk, 'edit'); });
-			row.appendChild(edit);
+			if (link) row.appendChild(link.open);
+			if (isScribe) {
+				var edit = el('button', 'mp-cbtn', 'Edit');
+				edit.type = 'button';
+				edit.addEventListener('click', function() { openCard(mk, 'edit'); });
+				row.appendChild(edit);
+			}
 			card.appendChild(row);
 		}
+		if (link && link.line) card.appendChild(link.line);
 		return card;
 	}
 
@@ -594,6 +642,16 @@
 			card.appendChild(field('Who can see it', vis));
 		}
 
+		// "Opens map": the pin's link, with who can follow it in words, which is
+		// whoever can see the pin.
+		var opens = links ? links.chooser(isNew ? null : mk, function() {
+			return ChronicleMapLinks.audience(curVis(), isNew ? null : mk.visibility_rules);
+		}) : null;
+		if (opens) {
+			card.appendChild(opens.el);
+			if (vis) vis.addEventListener('change', function() { opens.refresh(); });
+		}
+
 		var row = el('div', 'mp-card-row');
 		var save = el('button', 'mp-cbtn mp-cbtn-primary', 'Save');
 		save.type = 'button';
@@ -620,8 +678,8 @@
 		save.addEventListener('click', function() {
 			var nm = name.value.trim();
 			if (!nm) { name.focus(); Chronicle.notify('Give the pin a name', 'error'); return; }
-			if (isNew) createPin(draftState, nm, kind.value, curVis(), save);
-			else updatePin(mk, nm, kind.value, origKind, curVis(), save);
+			if (isNew) createPin(draftState, nm, kind.value, curVis(), opens ? opens.value() : '', save);
+			else updatePin(mk, nm, kind.value, origKind, curVis(), opens && opens.changed() ? { id: opens.value(), name: opens.nameOf(opens.value()) } : null, save);
 		});
 		name.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); save.click(); } });
 		more.addEventListener('click', function() {
@@ -639,8 +697,9 @@
 	}
 
 	// ---- Quick-card writes. Each sends only what the person changed. ----
-	function createPin(d, nm, kind, visibility, btn) {
+	function createPin(d, nm, kind, visibility, linkedMapID, btn) {
 		var body = { name: nm, x: d.x, y: d.y, visibility: visibility };
+		if (linkedMapID) body.linked_map_id = linkedMapID;
 		if (kind) { body.pin_category = kind; body.color = kindInfo(kind).color; }
 		btn.disabled = true;
 		Chronicle.apiFetch('/campaigns/' + campaignID + '/maps/' + mapID + '/markers', { method: 'POST', body: body })
@@ -669,11 +728,14 @@
 			.catch(function(err) { btn.disabled = false; Chronicle.notify('Network error: ' + err.message, 'error'); });
 	}
 
-	function updatePin(mk, nm, kind, origKind, visibility, btn) {
+	// link is null when the pin's link is untouched, else { id, name } with an
+	// empty id for "Nothing, just a pin" (sent as null, which clears it).
+	function updatePin(mk, nm, kind, origKind, visibility, link, btn) {
 		var body = {};
 		if (nm !== mk.name) body.name = nm;
 		if (kind !== origKind) body.pin_category = kind || null;
 		if (visibility !== (mk.visibility || 'everyone')) body.visibility = visibility;
+		if (link) body.linked_map_id = link.id || null;
 		if (!Object.keys(body).length) { openCard(mk, 'read'); return; }
 		btn.disabled = true;
 		Chronicle.apiFetch('/campaigns/' + campaignID + '/maps/' + mapID + '/markers/' + mk.id, { method: 'PUT', body: body })
@@ -685,6 +747,10 @@
 				if ('name' in body) mk.name = body.name;
 				if ('pin_category' in body) { if (body.pin_category) mk.pin_category = body.pin_category; else delete mk.pin_category; }
 				if ('visibility' in body) mk.visibility = body.visibility;
+				if ('linked_map_id' in body) {
+					if (link.id) { mk.linked_map_id = link.id; mk.linked_map_name = link.name; }
+					else { delete mk.linked_map_id; delete mk.linked_map_name; }
+				}
 				var lm = leafletMarkers[mk.id];
 				if (lm) { lm.setIcon(markerIcon(mk)); bindLabel(lm, mk); }
 				syncMarkerVisibility(mk);
@@ -1828,6 +1894,7 @@
 			// itself.
 			e.mpConsumed = true;
 			if (window.__mpCloseResults && window.__mpCloseResults()) return;
+			if (links && links.escape()) return;
 			if (closePopovers()) return;
 			if (window.__mpCloseSheet && window.__mpCloseSheet()) return;
 			if (closePanel()) return;
@@ -2208,6 +2275,10 @@
     var d = cfgEl.dataset;
     var p = ensureLeaflet({ leafletSrc: d.leafletSrc, clusterSrc: d.clusterSrc })
       .then(function () { return ensureLive({ liveSrc: d.liveSrc }); })
+      .then(function () {
+        // The pin badges are drawn as the pins are, so links come first.
+        return ensureLinks({ linksSrc: d.linksSrc });
+      })
       .then(function () {
         if (cfgEl.__mapViewerDestroyed) return null;
         var handle = mountViewer(cfgEl, opts);

@@ -753,6 +753,7 @@ func (a *mapExportAdapter) ExportMaps(ctx context.Context, campaignID string, en
 	var result []campaigns.ExportMap
 	for _, m := range allMaps {
 		em := campaigns.ExportMap{
+			Ref:         m.ID,
 			Name:        m.Name,
 			Description: m.Description,
 			ImageID:     m.ImageID,
@@ -776,6 +777,7 @@ func (a *mapExportAdapter) ExportMaps(ctx context.Context, campaignID string, en
 					Name: mk.Name, Description: mk.Description,
 					X: mk.X, Y: mk.Y, Icon: mk.Icon, Color: mk.Color,
 					EntitySlug: entitySlug, Visibility: mk.Visibility,
+					LinkedMapRef: mk.LinkedMapID,
 				})
 			}
 		}
@@ -2390,6 +2392,11 @@ func (a *mapImportAdapter) ImportMaps(ctx context.Context, campaignID, userID st
 		report.FailN("maps", "map picture", "",
 			"its picture file was not in the upload; import the ZIP export to keep pictures", missingPictures)
 	}()
+	// A marker may open a map that comes later in the file, so links are set
+	// once every map exists: refs maps each exported map to its copy.
+	refs := make(map[string]string, len(data))
+	type pendingLink struct{ markerID, mapRef, name string }
+	var links []pendingLink
 	for _, m := range data {
 		var imageID *string
 		if m.ImageID != nil && *m.ImageID != "" {
@@ -2411,6 +2418,9 @@ func (a *mapImportAdapter) ImportMaps(ctx context.Context, campaignID, userID st
 			slog.Warn("import: create map failed", slog.String("name", m.Name), slog.Any("error", err))
 			report.Fail("maps", "map", m.Name, apperror.SafeMessage(err))
 			continue
+		}
+		if m.Ref != "" {
+			refs[m.Ref] = newMap.ID
 		}
 
 		// Create layers first (needed for drawing/token references).
@@ -2437,7 +2447,7 @@ func (a *mapImportAdapter) ImportMaps(ctx context.Context, campaignID, userID st
 					entityID = &id
 				}
 			}
-			_, err := a.mapSvc.CreateMarker(ctx, maps.CreateMarkerInput{
+			created, err := a.mapSvc.CreateMarker(ctx, maps.CreateMarkerInput{
 				MapID: newMap.ID, Name: mk.Name, Description: mk.Description,
 				X: mk.X, Y: mk.Y, Icon: mk.Icon, Color: mk.Color,
 				EntityID: entityID, Visibility: mk.Visibility, CreatedBy: userID,
@@ -2445,6 +2455,10 @@ func (a *mapImportAdapter) ImportMaps(ctx context.Context, campaignID, userID st
 			if err != nil {
 				slog.Warn("import: create marker failed", slog.String("name", mk.Name), slog.Any("error", err))
 				report.Fail("maps", "map marker", mk.Name, apperror.SafeMessage(err))
+				continue
+			}
+			if mk.LinkedMapRef != nil && *mk.LinkedMapRef != "" {
+				links = append(links, pendingLink{markerID: created.ID, mapRef: *mk.LinkedMapRef, name: mk.Name})
 			}
 		}
 
@@ -2523,6 +2537,17 @@ func (a *mapImportAdapter) ImportMaps(ctx context.Context, campaignID, userID st
 				slog.Warn("import: create fog region failed", slog.Any("error", err))
 				report.Fail("maps", "map fog region", m.Name, apperror.SafeMessage(err))
 			}
+		}
+	}
+	for _, l := range links {
+		to, ok := refs[l.mapRef]
+		if !ok {
+			report.Fail("maps", "map marker link", l.name, "the map it opened was not imported")
+			continue
+		}
+		if err := a.mapSvc.UpdateMarker(ctx, l.markerID, maps.UpdateMarkerInput{LinkedMapID: patch.Of(to)}, true); err != nil {
+			slog.Warn("import: link marker failed", slog.String("name", l.name), slog.Any("error", err))
+			report.Fail("maps", "map marker link", l.name, apperror.SafeMessage(err))
 		}
 	}
 	return nil

@@ -95,6 +95,14 @@ type MapService interface {
 	// they cannot reveal what ListMarkers withholds.
 	IsMarkerShadowed(ctx context.Context, mk *Marker, role int) (bool, error)
 
+	// Linked maps (a pin that opens another map). ResolveTrail turns the ids
+	// a viewer followed (?from=) into the trail shown above mapID, keeping
+	// only maps of the campaign; it is display only and grants nothing.
+	// LinkTree is the campaign's linked maps as this viewer can follow them,
+	// built from ListMarkers for the viewer so hidden pins add nothing.
+	ResolveTrail(ctx context.Context, campaignID, mapID string, from []string) ([]TrailStep, error)
+	LinkTree(ctx context.Context, campaignID string, role int, userID string) (*LinkTree, error)
+
 	// ForViewer returns the map as a viewer of this (promoted visibility) role
 	// may receive it. For anyone who is not owner/DM-equivalent and a map with a
 	// shadow, the original image id is removed and the address of the player copy
@@ -563,6 +571,20 @@ func (s *mapService) CreateMarker(ctx context.Context, input CreateMarkerInput) 
 		return nil, apperror.NewValidation("color must be a valid hex color (e.g., #3b82f6)")
 	}
 
+	// A linked map must be another map of this pin's campaign. "" means none,
+	// so a form that sends an empty choice makes a plain pin.
+	var linkedMap *Map
+	if input.LinkedMapID != nil && *input.LinkedMapID == "" {
+		input.LinkedMapID = nil
+	}
+	if input.LinkedMapID != nil {
+		tgt, err := s.linkTarget(ctx, input.MapID, *input.LinkedMapID)
+		if err != nil {
+			return nil, err
+		}
+		linkedMap = tgt
+	}
+
 	mk := &Marker{
 		ID:              generateID(),
 		MapID:           input.MapID,
@@ -574,10 +596,14 @@ func (s *mapService) CreateMarker(ctx context.Context, input CreateMarkerInput) 
 		Color:           input.Color,
 		PinCategory:     input.PinCategory,
 		EntityID:        input.EntityID,
+		LinkedMapID:     input.LinkedMapID,
 		Visibility:      input.Visibility,
 		VisibilityRules: input.VisibilityRules,
 		CreatedBy:       &input.CreatedBy,
 		FoundryID:       input.FoundryID,
+	}
+	if linkedMap != nil {
+		mk.LinkedMapName = linkedMap.Name
 	}
 	if err := s.repo.CreateMarker(ctx, mk); err != nil {
 		return nil, fmt.Errorf("create marker: %w", err)
@@ -652,6 +678,19 @@ func (s *mapService) UpdateMarker(ctx context.Context, id string, input UpdateMa
 	if color != "" && !colorPattern.MatchString(color) {
 		return apperror.NewValidation("color must be a valid hex color")
 	}
+	// Only a link the caller sent is checked, and one equal to the stored
+	// link is taken as already checked: a client that echoes the marker back
+	// (the Foundry module's dialog) must not fail on a field it never changed.
+	linkedName := mk.LinkedMapName
+	if v, sent := input.LinkedMapID.Get(); sent && v != "" {
+		if mk.LinkedMapID == nil || *mk.LinkedMapID != v {
+			tgt, err := s.linkTarget(ctx, mk.MapID, v)
+			if err != nil {
+				return err
+			}
+			linkedName = tgt.Name
+		}
+	}
 
 	mk.Name = name
 	mk.Description = input.Description.Ptr(mk.Description)
@@ -661,6 +700,14 @@ func (s *mapService) UpdateMarker(ctx context.Context, id string, input UpdateMa
 	mk.Color = color
 	mk.PinCategory = input.PinCategory.Ptr(mk.PinCategory)
 	mk.EntityID = input.EntityID.Ptr(mk.EntityID)
+	mk.LinkedMapID = input.LinkedMapID.Ptr(mk.LinkedMapID)
+	if mk.LinkedMapID != nil && *mk.LinkedMapID == "" {
+		mk.LinkedMapID = nil
+	}
+	mk.LinkedMapName = ""
+	if mk.LinkedMapID != nil {
+		mk.LinkedMapName = linkedName
+	}
 	mk.Visibility = input.Visibility.Val(mk.Visibility)
 	mk.VisibilityRules = input.VisibilityRules.Ptr(mk.VisibilityRules)
 	mk.FoundryID = input.FoundryID.Ptr(mk.FoundryID)

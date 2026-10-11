@@ -119,16 +119,20 @@ func (m *Map) HasImage() bool {
 // Optionally links to an entity and supports per-player visibility via
 // visibility_rules (same pattern as timelines/calendar events).
 type Marker struct {
-	ID              string    `json:"id"`
-	MapID           string    `json:"map_id"`
-	Name            string    `json:"name"`
-	Description     *string   `json:"description,omitempty"`
-	X               float64   `json:"x"`
-	Y               float64   `json:"y"`
-	Icon            string    `json:"icon"`
-	Color           string    `json:"color"`
-	PinCategory     *string   `json:"pin_category,omitempty"` // location, danger, treasure, quest, note.
-	EntityID        *string   `json:"entity_id,omitempty"`
+	ID          string  `json:"id"`
+	MapID       string  `json:"map_id"`
+	Name        string  `json:"name"`
+	Description *string `json:"description,omitempty"`
+	X           float64 `json:"x"`
+	Y           float64 `json:"y"`
+	Icon        string  `json:"icon"`
+	Color       string  `json:"color"`
+	PinCategory *string `json:"pin_category,omitempty"` // location, danger, treasure, quest, note.
+	EntityID    *string `json:"entity_id,omitempty"`
+	// LinkedMapID is the map this pin opens: another map of the same
+	// campaign, never the pin's own. Who may follow it is the pin's own
+	// visibility; maps have no "who can see" setting of their own.
+	LinkedMapID     *string   `json:"linked_map_id,omitempty"`
 	Visibility      string    `json:"visibility"`
 	VisibilityRules *string   `json:"visibility_rules,omitempty"`
 	CreatedBy       *string   `json:"created_by,omitempty"`
@@ -139,6 +143,10 @@ type Marker struct {
 	// Joined fields for display (populated by some queries).
 	EntityName string `json:"entity_name,omitempty"`
 	EntityIcon string `json:"entity_icon,omitempty"`
+	// LinkedMapName is the name of the map LinkedMapID opens, for the badge
+	// and the "Open <map>" button. It rides on the marker, so it reaches
+	// exactly the viewers the marker itself reaches.
+	LinkedMapName string `json:"linked_map_name,omitempty"`
 }
 
 // IsDMOnly returns true if this marker is only visible to the DM.
@@ -192,15 +200,17 @@ type UpdateMapInput struct {
 
 // CreateMarkerInput is the validated input for placing a marker on a map.
 type CreateMarkerInput struct {
-	MapID           string
-	Name            string
-	Description     *string
-	X               float64
-	Y               float64
-	Icon            string
-	Color           string
-	PinCategory     *string
-	EntityID        *string
+	MapID       string
+	Name        string
+	Description *string
+	X           float64
+	Y           float64
+	Icon        string
+	Color       string
+	PinCategory *string
+	EntityID    *string
+	// LinkedMapID is the map the new pin opens; nil or "" makes a plain pin.
+	LinkedMapID     *string
 	Visibility      string
 	VisibilityRules *string
 	CreatedBy       string
@@ -228,6 +238,7 @@ type UpdateMarkerInput struct {
 	Color             patch.Field[string]
 	PinCategory       patch.Field[string]
 	EntityID          patch.Field[string]
+	LinkedMapID       patch.Field[string]
 	Visibility        patch.Field[string]
 	VisibilityRules   patch.Field[string]
 	FoundryID         patch.Field[string]
@@ -253,6 +264,17 @@ type MapViewData struct {
 	// defaults at render (see DisplayOrDefault), so a caller that builds
 	// MapViewData by hand never has to fill it.
 	Display ResolvedDisplay
+	// Trail is the path the viewer followed to reach this map (the validated
+	// ?from= ids), ending with this map. Display only: it never grants access.
+	// Empty when the viewer did not arrive by a link.
+	Trail []TrailStep
+	// LinkMaps are the maps a pin on this map may open, offered by the pin
+	// form's "Opens map" chooser. Filled only for viewers who can edit pins.
+	LinkMaps []LinkMapOption
+	// MemberNames maps user ids to display names so the badge can name the
+	// players a pin's rules allow. Filled only for viewers who can see
+	// DM-only content, the only ones shown those names.
+	MemberNames map[string]string
 }
 
 // DisplayOrDefault returns Display, or the all-defaults resolution when the

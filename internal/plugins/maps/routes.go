@@ -45,6 +45,11 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.PUT("/maps/:mid/markers/:mkid", h.UpdateMarkerAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.DELETE("/maps/:mid/markers/:mkid", h.DeleteMarkerAPI, campaigns.RequireRole(campaigns.RoleScribe))
 
+	// The tree of linked maps (pins that open other maps), filtered for the
+	// viewer exactly as their marker lists are. Session-only: the static
+	// segment wins over /maps/:mid in Echo's router.
+	cg.GET("/maps/link-tree", h.LinkTreeAPI, campaigns.RequireRole(campaigns.RolePlayer))
+
 	// Public-capable views: map list and map viewer.
 	pub := e.Group("/campaigns/:id",
 		auth.OptionalAuth(authSvc),
