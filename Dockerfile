@@ -29,7 +29,7 @@ FROM golang:1.27-alpine AS builder
 # the pinned runtime doesn't have. Keep generator and runtime in
 # lockstep; bumping templ is a deliberate change in three places
 # (go.mod, ci.yml, Dockerfile).
-RUN go install github.com/a-h/templ/cmd/templ@v0.3.1001
+RUN go install github.com/a-h/templ/cmd/templ@v0.3.1070
 
 # Install git so the Go toolchain can stamp the source revision into the
 # binary: with `git` on PATH and a checkout present, Go records vcs.revision /

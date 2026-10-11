@@ -46,6 +46,9 @@
   font: 14px/1.55 var(--rb-ui);
   -webkit-font-smoothing: antialiased;
 }
+/* A book shown inside another page (a draft under review) fills the box it
+   is given instead of the screen; its pages scroll inside it. */
+.rb.rb-inline { min-height: 0; }
 .rb *:where(:not(.rb-wslot *)), .rb *:where(:not(.rb-wslot *))::before, .rb *:where(:not(.rb-wslot *))::after { box-sizing: border-box; }
 .rb [hidden]:where(:not(.rb-wslot *)) { display: none !important; }
 /* The reset is written with :where so it weighs no more than a single class:

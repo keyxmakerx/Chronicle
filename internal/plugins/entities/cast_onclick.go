@@ -19,15 +19,15 @@ func inlineHandler(name, body string) templ.ComponentScript {
 }
 
 // castFoldJS opens the named box in the band's fold, or closes the fold when
-// box is empty or already open. Boxes are "add" and "rm-<typeID>"; one shows
-// at a time. The fold grows to the box's height and returns to auto so a
-// search that shortens the list can still resize it.
+// box is empty or already open. Boxes are "add", "players" and "rm-<typeID>";
+// one shows at a time. The fold grows to the box's height and returns to auto
+// so a search that shortens the list can still resize it.
 const castFoldJS = `(function(el,want){` +
 	`var s=el.closest('[data-band]'),f=s.querySelector('.ag-fold');` +
 	`var cur=f.getAttribute('data-open')||'';if(want&&cur===want)want='';` +
 	`var boxes=f.querySelectorAll('[data-box]');` +
 	`for(var i=0;i<boxes.length;i++){boxes[i].hidden=boxes[i].getAttribute('data-box')!==want;}` +
-	`var add=s.querySelector('.ag-add');if(add)add.setAttribute('aria-expanded',want==='add'?'true':'false');` +
+	`var ops=s.querySelectorAll('[data-opens]');for(var j=0;j<ops.length;j++){ops[j].setAttribute('aria-expanded',ops[j].getAttribute('data-opens')===want?'true':'false');}` +
 	`f.setAttribute('data-open',want);` +
 	`var still=window.matchMedia('(prefers-reduced-motion: reduce)').matches;` +
 	`if(want){f.classList.add('is-open');f.style.height=still?'auto':f.scrollHeight+'px';` +
@@ -35,6 +35,23 @@ const castFoldJS = `(function(el,want){` +
 	`var q=f.querySelector('[data-box='+JSON.stringify(want)+'] input[type=search]');if(q)q.focus({preventScroll:true});}` +
 	`else{if(!still){f.style.height=f.scrollHeight+'px';f.getBoundingClientRect();}f.style.height='0px';f.classList.remove('is-open');}` +
 	`})(this,`
+
+// castFoldStyle keeps a fold the server renders open at its natural height;
+// a closed fold takes its zero height from the stylesheet.
+func castFoldStyle(open string) string {
+	if open == "" {
+		return ""
+	}
+	return "height:auto"
+}
+
+// castIcon is the page type's icon for a row, or a plain person.
+func castIcon(e Entity) string {
+	if e.TypeIcon != "" {
+		return e.TypeIcon
+	}
+	return "fa-user"
+}
 
 // castFoldCall returns the click handler that opens (or closes) a box.
 func castFoldCall(box string) templ.ComponentScript {
@@ -79,3 +96,38 @@ func castPickSay(kind CharacterListKind, o CastTypeOption) string {
 	}
 	return what + " Players still only see the pages they’re allowed to."
 }
+
+// castFinderJS opens the Players box's single finder under the clicked button,
+// or closes it when that button's finder is already open. kind "give" puts it
+// after the player list, "free" after the Free to pick section. The target
+// (a user id, or "free") goes in the hidden "for" field the search sends, and
+// an immediate search shows the starting list.
+const castFinderJS = `(function(b,kind){` +
+	`var box=b.closest('[data-box]'),f=box.querySelector('.pw-find');` +
+	`var was=b.getAttribute('aria-expanded')==='true';` +
+	`var all=box.querySelectorAll('.pw-give');for(var i=0;i<all.length;i++)all[i].setAttribute('aria-expanded','false');` +
+	`if(was){f.hidden=true;return;}` +
+	`var host=kind==='give'?box.querySelector('.pw-list'):b.closest('.pw-sec');` +
+	`host.after(f);f.hidden=false;` +
+	`f.querySelector('input[name=for]').value=b.getAttribute('data-who')||'free';` +
+	`var q=f.querySelector('input[type=search]');q.value='';q.placeholder=b.getAttribute('data-ph')||'';` +
+	`b.setAttribute('aria-expanded','true');` +
+	`if(window.htmx)htmx.trigger(q,'search');` +
+	`q.focus({preventScroll:true});` +
+	`})(this,`
+
+// castFinderCall returns the click handler of a Give or Add button.
+func castFinderCall(kind string) templ.ComponentScript {
+	return inlineHandler("cast_finder_"+kind, castFinderJS+"'"+kind+"')")
+}
+
+// castAskClaimCall shows the confirm row that belongs to the clicked Pick
+// button and hides the others, so one question is open at a time.
+var castAskClaimCall = inlineHandler("cast_ask_claim",
+	`(function(b){var id=b.getAttribute('data-entity-id'),`+
+		`rows=b.closest('.ag-body').querySelectorAll('.ag-confirm-row');`+
+		`for(var i=0;i<rows.length;i++){rows[i].hidden=rows[i].getAttribute('data-for')!==id;}})(this)`)
+
+// castCancelClaimCall closes the confirm row it sits in.
+var castCancelClaimCall = inlineHandler("cast_cancel_claim",
+	`(function(b){b.closest('.ag-confirm-row').hidden=true;})(this)`)

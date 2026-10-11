@@ -5250,6 +5250,45 @@ html[data-view-motion="calm"] .pl-chip, .nav-rm .pl-chip, html.rm .pl-chip, html
 .ag-confirm p { margin: 0 0 4px; font-size: 13px; color: var(--color-fg); }
 .ag-confirm small { display: block; font-size: 12px; color: var(--color-fg-muted); }
 .ag-row.is-sub { padding-left: 32px; }
+/* The pick box a player with no character sees: the free characters, each with a Pick button. */
+.ag-owners { max-height: 320px; }
+.ag-row.ag-own { cursor: default; align-items: center; }
+.ag-own .ag-name { color: inherit; text-decoration: none; }
+.ag-own .ag-name:hover { color: var(--color-accent); }
+.ag-own .btn-sm { flex: none; }
+.ag-confirm-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; font-size: 13px; color: var(--color-text-primary); }
+.ag-confirm-row[hidden] { display: none; }
+/* The staff's Players box: a row per player with the characters they play,
+   then Free to pick. A single finder panel moves under whichever Give or Add
+   button opened it. */
+.pw-list { display: grid; gap: 0; border: 1px solid var(--color-border); border-radius: 9px; background: var(--color-card-bg); }
+.pw-row { display: grid; grid-template-columns: 28px minmax(5.5rem, 9rem) 1fr auto; align-items: center; gap: 10px; padding: 9px 10px; border-top: 1px solid var(--color-border); min-height: 48px; }
+.pw-row:first-child { border-top: 0; }
+.pw-av { width: 28px; height: 28px; border-radius: 999px; display: grid; place-items: center; background: rgba(99, 102, 241, .14); color: rgb(var(--color-accent-rgb, 99 102 241)); font-weight: 600; font-size: 12px; }
+.pw-name { font-weight: 600; font-size: 13.5px; color: var(--color-text-primary); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pw-chars { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.pw-chip { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 4px 0 9px; border-radius: 999px; border: 1px solid var(--color-border); background: var(--color-surface-alt, var(--color-bg-secondary)); font-size: 12.5px; color: var(--color-text-primary); max-width: 100%; }
+.pw-chip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pw-chip > i { font-size: 11px; color: #8b5cf6; }
+.pw-chipx { width: 20px; height: 20px; border: 0; border-radius: 999px; background: transparent; color: var(--color-text-muted); cursor: pointer; display: grid; place-items: center; font-size: 11px; flex: none; }
+.pw-chipx:hover { background: rgba(0, 0, 0, .08); color: var(--color-text-primary); }
+.pw-none { font-size: 12.5px; color: var(--color-text-muted); font-style: italic; }
+.pw-give { justify-self: end; white-space: nowrap; }
+.pw-sec { margin-top: 14px; }
+.pw-sechead { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.pw-sechead h5 { font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--color-text-secondary); margin: 0; }
+.pw-freelist { min-height: 30px; }
+.pw-find { margin: 8px 0 4px; padding: 10px; border: 1px dashed var(--color-border); border-radius: 9px; }
+.pw-find[hidden] { display: none; }
+.pw-results { max-height: 260px; }
+.pw-res { align-items: center; cursor: default; }
+.pw-res .btn-sm { flex: none; }
+.pw-findhint { font-size: 12px; color: var(--color-text-muted); margin: 8px 2px 0; }
+@media (max-width: 560px) {
+  .pw-row { grid-template-columns: 28px 1fr auto; row-gap: 8px; }
+  .pw-chars { grid-column: 2 / 4; }
+  .pw-give { grid-row: 1; grid-column: 3; }
+}
 .ag-row .ag-name b { font-weight: 500; }
 .ag-count { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 6px; border-radius: 999px; background: var(--color-bg-tertiary, rgba(0,0,0,.06)); color: var(--color-fg-muted); font-size: 11px; }
 @keyframes ag-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }

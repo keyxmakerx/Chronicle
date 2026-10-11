@@ -72,6 +72,10 @@ type Plan struct {
 	// Client is JSON handed to the browser (generator rows only): what
 	// to run, and over which calendar.
 	Client string
+	// Preview is a rulebook Book (the JSON GET /book returns) of what the
+	// row writes, drawn on the review screen by the rulebook reader so it
+	// shows in the campaign's look. House rules only; "" for none.
+	Preview string
 }
 
 // Kind is one feature AI Import can write.
@@ -169,7 +173,7 @@ var briefs = map[string]string{
 	"carried-item": "items a character carries",
 	"pin":          "pins on the campaign's maps",
 	"note":         "my own notes only: my Journal notes and my jots on pages, never notes anyone else wrote",
-	"house-rule":   "house-rules chapters in the campaign's rulebook",
+	"house-rule":   "house-rules chapters in the campaign's rulebook, written whole: pages with highlighted boxes, dice rolls, fold-out cards, flaps, worked examples, creatures and Director's notes",
 	"system-entry": "the campaign's own ancestries, kits, cultures, classes and other pick-list entries for its game system",
 	"generator":    "run Chronicle's own generators (weather for a range of days, festivals and other events, sky events, names into a rolling table) instead of inventing the result",
 }

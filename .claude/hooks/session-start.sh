@@ -8,7 +8,7 @@ fi
 cd "$CLAUDE_PROJECT_DIR"
 # templ generator pinned to the go.mod version (needed for `templ generate`).
 if ! command -v templ >/dev/null 2>&1; then
-  go install github.com/a-h/templ/cmd/templ@v0.3.1001
+  go install github.com/a-h/templ/cmd/templ@v0.3.1070
 fi
 echo "export PATH=\"\$PATH:$(go env GOPATH)/bin\"" >> "$CLAUDE_ENV_FILE"
 # Warm the module cache so the first go build/test doesn't stall.

@@ -1391,6 +1391,37 @@ func (h *APIHandler) GetItemFields(c echo.Context) error {
 	return c.JSON(http.StatusOK, resp)
 }
 
+// GetCreatureFields returns the creature preset field definitions for a
+// specific system, with the Foundry annotations creature sync reads to make
+// Foundry NPC actors. A system without a creature preset answers with an
+// empty field list, as item-fields does.
+// GET /api/v1/campaigns/:id/systems/:systemId/creature-fields
+func (h *APIHandler) GetCreatureFields(c echo.Context) error {
+	campaignID := c.Param("id")
+	systemID := c.Param("systemId")
+
+	manifest := systems.Find(systemID)
+	if manifest == nil && h.campaignSystemLister != nil {
+		if custom := h.campaignSystemLister.GetManifest(campaignID); custom != nil && custom.ID == systemID {
+			manifest = custom
+		}
+	}
+
+	if manifest == nil {
+		return apperror.NewNotFound("system not found: " + systemID)
+	}
+
+	resp := manifest.CreatureFieldsForAPI()
+	if resp == nil {
+		return c.JSON(http.StatusOK, map[string]any{
+			"system_id": systemID,
+			"fields":    []any{},
+		})
+	}
+
+	return c.JSON(http.StatusOK, resp)
+}
+
 // --- Addon Discovery ---
 
 // ListAddons returns all addons for the campaign with their enabled state.
