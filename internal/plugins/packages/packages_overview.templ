@@ -10,7 +10,10 @@ templ panelOverview(r PackageRow, data PackagesPageData) {
 			<div class="rounded-lg border border-red-500/40 bg-red-500/5 p-3 text-sm text-fg">
 				<p class="font-semibold">Last update failed.</p>
 				<p class="mt-1 text-fg-secondary break-words">{ r.LastError }</p>
-				<div class="mt-2">
+				<div class="mt-2 flex flex-wrap gap-2">
+					if r.Newer != nil {
+						@installButton(r.ID, r.Newer.Version, data.CSRFToken, "Install "+r.Newer.Version, "btn-primary btn-sm", installConfirmText(r.Type, r.Newer.Version))
+					}
 					<button
 						type="button"
 						hx-post={ "/admin/packages/" + r.ID + "/check" }

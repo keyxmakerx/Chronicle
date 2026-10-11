@@ -76,9 +76,7 @@ func buildPackagesPage(ctx context.Context, src pageSource, updates campaignStat
 		row.Versions = versions
 		row.Newer = newerVersion(p, versions)
 		row.Status = derivePackageStatus(p, row.Newer)
-		if row.Status != statusUpdateReady {
-			row.Newer = nil
-		}
+		row.Newer = offeredNewer(p, row.Status, row.Newer)
 
 		usage, err := src.GetUsage(ctx, p.ID)
 		if err != nil {
