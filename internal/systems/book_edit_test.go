@@ -192,7 +192,7 @@ func (f *fakeBookRepo) WriteHouseChapter(_ context.Context, ch HouseChapter, cre
 	}
 	var keep []StoredBookPage
 	for _, p := range f.pages {
-		if !(p.CampaignID == ch.CampaignID && p.SystemID == ch.SystemID && p.ChapterID == ch.ChapterID) {
+		if p.CampaignID != ch.CampaignID || p.SystemID != ch.SystemID || p.ChapterID != ch.ChapterID {
 			keep = append(keep, p)
 		}
 	}

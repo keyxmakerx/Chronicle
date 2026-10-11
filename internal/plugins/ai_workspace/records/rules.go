@@ -289,7 +289,7 @@ func (k HouseRuleKind) Export(ctx context.Context, campaignID string, a Actor) (
 		}
 	}
 	if hidden > 0 {
-		b.WriteString(fmt.Sprintf("(%s for Directors only %s left out here.)\n", plural(hidden, "chapter, page or block", "chapters, pages or blocks"), wereWas(hidden)))
+		fmt.Fprintf(&b, "(%s for Directors only %s left out here.)\n", plural(hidden, "chapter, page or block", "chapters, pages or blocks"), wereWas(hidden))
 	}
 	return b.String(), nil
 }
