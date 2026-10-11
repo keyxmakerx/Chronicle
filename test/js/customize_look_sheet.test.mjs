@@ -34,3 +34,47 @@ test('the sheet style is part of Save, Discard and Reset', () => {
   assert.match(src, /if \(!d\.sheet\) d\.sheet = \{ style:'modern' \}/, 'fromServer must default to modern');
   assert.match(src, /data-k="sheet\.style"|'sheet\.style', 'sh-style-l'/, 'a control must bind sheet.style');
 });
+
+test('the preview has a character sheet page drawn in the draft style', () => {
+  const templ = readFileSync(join(root, 'internal', 'plugins', 'campaigns', 'customize_look.templ'), 'utf8');
+  assert.match(templ, /name="dpage" value="sheet" id="dp-sheet"/, 'the page picker must offer the sheet');
+  assert.match(src, /data-page="sheet" hidden><div class="pv-sheet" id="d-sheet" data-sheet data-sheet-preview/, 'the sample must be a preview sheet root');
+  assert.match(src, /sh\.setAttribute\('data-sheet-style', d\.sheet\.style\)/, 'the sample must wear the draft style');
+  assert.match(src, /id === 'sheet' && ui\.page !== 'sheet'\) setPage\('sheet'\)/, 'opening Character sheets must show the sheet');
+});
+
+// The engine's applyStyle, run against a stub page: the saved pick on <html>
+// styles a campaign's sheets, but never the Customize preview's sample.
+const engine = readFileSync(join(root, 'static', 'js', 'sheet_motion.js'), 'utf8');
+function slice(start, end) {
+  const s = engine.indexOf(start);
+  const e = engine.indexOf(end, s);
+  assert.ok(s > 0 && e > s, `${start} not found`);
+  return engine.slice(s, e + end.length);
+}
+const applyCode = slice('var STYLES = [', ';') + slice('var DEFAULT_STYLE', ';') +
+  slice('function styleFor(', '\n  }') + slice('function applyStyle(root)', '\n  }');
+
+function el(attrs) {
+  return {
+    a: { ...attrs },
+    getAttribute(k) { return k in this.a ? this.a[k] : null; },
+    setAttribute(k, v) { this.a[k] = String(v); },
+    hasAttribute(k) { return k in this.a; },
+  };
+}
+function apply(htmlPick, rootAttrs) {
+  const root = el(rootAttrs);
+  vm.runInNewContext(applyCode + ';applyStyle(root);', {
+    R: el(htmlPick ? { 'data-cz-sheet': htmlPick } : {}), root,
+    ensureFonts() {}, bakeOnce() {}, BAKED: {},
+  });
+  return root.getAttribute('data-sheet-style');
+}
+
+test('a campaign sheet takes the saved style; the preview sample keeps the draft', () => {
+  assert.equal(apply('ledger', { 'data-sheet': '' }), 'ledger');
+  assert.equal(apply(null, { 'data-sheet': '' }), 'modern');
+  assert.equal(apply('ledger', { 'data-sheet': '', 'data-sheet-preview': '', 'data-sheet-style': 'neon' }), 'neon');
+  assert.equal(apply('ledger', { 'data-sheet': '', 'data-sheet-preview': '', 'data-sheet-style': 'bogus' }), 'modern');
+});

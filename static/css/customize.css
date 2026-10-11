@@ -685,6 +685,47 @@
 .czp .e-info dt{ color:var(--p-muted); }
 .czp .e-info dd{ margin:0; color:var(--p-text); font-weight:600; }
 
+/* Character sheet page. The sample is a real [data-sheet] root, so
+   sheet_styles.css gives it the draft's style; only layout lives here, and
+   colours and type come from the --paper-* tokens. Modern reads the site's
+   own tokens, which inside the preview are the draft's, in the preview's
+   light or dark rather than the page's. */
+.czp .pv-sheet{
+  flex:1; min-height:0; padding:2px 10px 6px 2px;
+  --color-card-bg:var(--p-card); --color-bg-tertiary:var(--p-alt); --color-border:var(--p-line); --color-accent:var(--p-accent);
+  --color-text-primary:var(--p-text); --color-text-body:var(--p-body); --color-text-secondary:var(--p-muted); --sh-ui:var(--p-font);
+}
+.czp .pv[data-theme="light"] .pv-sheet{ --sh-accent-text:#4338ca; --sh-on-accent:#ffffff; --sh-neg:#b42318; --sh-temp:#1d4ed8; --sh-bar:#15803d; --sh-pole:#000000; --sh-warn:#92400e; --shk-theme:1; }
+.czp .pv[data-theme="dark"] .pv-sheet{ --sh-accent-text:#a5b4fc; --sh-on-accent:#111827; --sh-neg:#fca5a5; --sh-temp:#93c5fd; --sh-bar:#4ade80; --sh-pole:#ffffff; --sh-warn:#fcd34d; --shk-theme:2.2; }
+.czp .pv[data-theme="light"] .pv-sheet[data-sheet-style="modern"]{ --s-colorscheme:light; }
+.czp .pv[data-theme="dark"] .pv-sheet[data-sheet-style="modern"]{ --s-colorscheme:dark; }
+.czp .pv-sheet .ps{ display:flex; flex-direction:column; gap:12px; padding:16px 22px 18px; font-size:calc(12.5px * var(--ts)); line-height:1.45; }
+.czp .ps-head{ display:flex; align-items:center; gap:12px; }
+.czp .ps-por{ width:44px; height:44px; flex:none; border-radius:50%; display:grid; place-items:center; background:var(--paper-accent); color:var(--paper-on-accent); font:700 calc(15px * var(--ts)) / 1 var(--paper-head-font); }
+.czp .ps-id{ flex:1; min-width:0; display:grid; gap:2px; }
+.czp .ps-id .paper-kind{ justify-self:start; max-width:100%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.czp .ps-id .paper-title{ display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.czp .ps-stats{ display:flex; gap:14px; flex:none; }
+.czp .ps-stat{ display:grid; justify-items:center; gap:1px; }
+.czp .ps-stat b{ font:700 calc(16px * var(--ts)) / 1.15 var(--paper-num-font); color:var(--paper-ink); font-variant-numeric:tabular-nums; }
+.czp .ps-body{ display:grid; grid-template-columns:minmax(0, 1fr) minmax(0, 1fr); gap:10px 22px; align-items:start; }
+.czp .ps-col{ display:flex; flex-direction:column; gap:8px; min-width:0; }
+.czp .ps-sec{ display:grid; gap:5px; padding:8px 12px 9px; }
+.czp .ps-hp{ display:flex; align-items:baseline; gap:5px; color:var(--paper-mute); font-family:var(--paper-num-font); }
+.czp .ps-hp b{ font:700 calc(24px * var(--ts)) / 1 var(--paper-num-font); color:var(--paper-ink); font-variant-numeric:tabular-nums; }
+.czp .ps-bar{ display:block; height:6px; border-radius:99px; overflow:hidden; background:color-mix(in srgb, var(--paper-edge) 60%, transparent); }
+.czp .ps-bar i{ display:block; width:73%; height:100%; border-radius:inherit; background:var(--paper-bar); }
+.czp .ps-abs{ display:grid; grid-template-columns:repeat(6, minmax(0, 1fr)); gap:6px; }
+.czp .ps-ab{ display:grid; justify-items:center; padding:5px 0 4px; border:1px solid var(--paper-edge); border-radius:calc(var(--paper-radius) + 2px); }
+.czp .ps-ab span{ font:600 calc(9.5px * var(--ts)) / 1.2 var(--paper-ui-font); letter-spacing:.08em; text-transform:uppercase; color:var(--paper-mute); }
+.czp .ps-ab b{ font:700 calc(15px * var(--ts)) / 1.2 var(--paper-num-font); color:var(--paper-ink); }
+.czp .ps-ab small{ font:500 calc(10px * var(--ts)) / 1.2 var(--paper-num-font); color:var(--paper-mute); }
+.czp .ps-list{ list-style:none; margin:0; padding:0; display:grid; gap:3px; }
+.czp .ps-list li{ display:flex; align-items:baseline; gap:8px; }
+.czp .ps-list b{ flex:1; min-width:0; font-weight:600; color:var(--paper-ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.czp .ps-list span{ flex:none; color:var(--paper-mute); font-size:calc(11.5px * var(--ts)); }
+.czp .ps-slip{ padding:8px 12px; transform:rotate(-.6deg); }
+
 /* Buttons in the campaign's chosen style. The fill sits on .f, the face;
    each style moves the face or fades a layer, never anything else. */
 .czp .pbtn{ position:relative; display:inline-flex; border-radius:var(--p-br); -webkit-tap-highlight-color:transparent; cursor:pointer; }

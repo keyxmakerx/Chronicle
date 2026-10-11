@@ -404,8 +404,10 @@
     document.head.appendChild(l);
   }
 
+  // A data-sheet-preview root (the Customize preview) shows the owner's unsaved pick, so the saved one never overrides it.
   function applyStyle(root) {
-    var style = styleFor(R.getAttribute('data-cz-sheet'), root.getAttribute('data-sheet-style'));
+    var cz = root.hasAttribute('data-sheet-preview') ? null : R.getAttribute('data-cz-sheet');
+    var style = styleFor(cz, root.getAttribute('data-sheet-style'));
     if (root.getAttribute('data-sheet-style') !== style) root.setAttribute('data-sheet-style', style);
     ensureFonts(style);
     bakeOnce(root, '--paper-grain');
@@ -752,7 +754,7 @@
 
   window.Chronicle = window.Chronicle || {};
   window.Chronicle.sheetMotion = {
-    mount: mount, land: land, landText: landText, snap: snap, changed: changed, fold: fold, mode: mode, rescan: scan
+    mount: mount, land: land, landText: landText, snap: snap, changed: changed, fold: fold, mode: mode, rescan: scan, style: applyStyle
   };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', scan);
