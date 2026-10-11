@@ -706,6 +706,9 @@
 
     // ----- events
     root.addEventListener('click', function (e) {
+      // Using any other control on the sheet puts the open paper away first, so a picker or fold never opens under it.
+      if (S.panel && !S.panel.page && e.target.closest && e.target.closest('a,button,input,select,textarea,summary,label') &&
+          !e.target.closest('[data-sheet-open],[data-sheet-close],.paper-well,.ag-fold')) closePanel(false);
       var sm = e.target.closest && e.target.closest('[data-sheet-fold] > summary');
       if (sm) { e.preventDefault(); fold(sm.parentNode); return; }
       if (e.target.classList && e.target.classList.contains('pg-layer')) { closePanel(true); return; }
