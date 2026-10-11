@@ -7,6 +7,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -160,11 +161,17 @@ func TestBuildComingUp(t *testing.T) {
 			wantWorld:  []string{"Festival of Lanterns", "The duke's wedding"},
 			wantAnswer: 4,
 			check: func(t *testing.T, v comingUpView) {
-				if got := v.Nights[0].Sub; got != "1 of 2 coming · you're going" {
+				if got := v.Nights[0].Sub; got != "1 of 2 coming" {
 					t.Errorf("night sub = %q", got)
 				}
-				if v.Nights[0].Action != "Change" || v.Nights[0].Waiting {
-					t.Errorf("an answered night offers Change and is not waiting: %+v", v.Nights[0])
+				if v.Nights[0].Answer != "Going" || v.Nights[0].AnswerTone != "go" || v.Nights[0].Action != "" || v.Nights[0].Waiting {
+					t.Errorf("an answered night shows the answer and is not waiting: %+v", v.Nights[0])
+				}
+				if v.Nights[0].SessionID != "A" || v.Nights[0].Date != "2026-10-17" {
+					t.Errorf("night does not name itself for the calendar: %+v", v.Nights[0])
+				}
+				if v.GameNightsHref != "/campaigns/c1/game-nights" {
+					t.Errorf("game nights link = %q", v.GameNightsHref)
 				}
 				if v.World[0].Sub != "In 3 days" || v.World[0].Chip != "Festival" || v.World[0].TileTop != "Fro" {
 					t.Errorf("world row = %+v", v.World[0])
@@ -186,7 +193,7 @@ func TestBuildComingUp(t *testing.T) {
 			wantWait:   []string{"Session A"},
 			wantAnswer: 4,
 			check: func(t *testing.T, v comingUpView) {
-				if !strings.Contains(v.Waiting[0].Sub, "not answered") {
+				if !strings.Contains(v.Waiting[0].Sub, "you haven't answered") {
 					t.Errorf("waiting sub = %q", v.Waiting[0].Sub)
 				}
 				if !v.Waiting[0].Primary || !strings.Contains(v.Waiting[0].Href, "session=A") {
@@ -401,9 +408,6 @@ func TestBuildComingUp(t *testing.T) {
 			if v.Answered != tt.wantAnswer {
 				t.Errorf("answered = %d, want %d", v.Answered, tt.wantAnswer)
 			}
-			if v.Month != "October" {
-				t.Errorf("month = %q", v.Month)
-			}
 			if tt.check != nil {
 				tt.check(t, v)
 			}
@@ -466,15 +470,15 @@ func TestComingUpWording(t *testing.T) {
 
 func TestComingUpFragment_Renders(t *testing.T) {
 	v := comingUpView{
-		Month: "October", CalendarHref: "/campaigns/c1/calendars/cal-1/view", Answered: 1,
-		Nights:  []comingUpRow{{TileTop: "Fri", TileBig: "17", Title: "Session 12 · 7 pm", Sub: "4 of 5 coming · you're going", Href: "/campaigns/c1/game-nights?session=s", Action: "Change"}},
+		CalendarHref: "/campaigns/c1/calendars/cal-1/view", Answered: 1,
+		Nights:  []comingUpRow{{TileTop: "Fri", TileBig: "17", Title: "Session 12 · 7 pm", Sub: "4 of 5 coming", Href: "/campaigns/c1/game-nights?session=s", Answer: "Going", AnswerTone: "go", SessionID: "s"}},
 		Waiting: []comingUpRow{{TileTop: "Poll", TileIcon: "fa-solid fa-chart-simple", Title: "Pick <b>a night</b>", Sub: "Date poll", Waiting: true, Href: "/campaigns/c1/proposals/p", Action: "Answer", Primary: true}},
 		World:   []comingUpRow{{TileTop: "Fro", TileBig: "14", Title: "Festival", Sub: "In 3 days", Chip: "Festival"}},
 	}
 	got := renderToString(t, comingUpFragment("c1", v))
 	for _, want := range []string{
-		`Coming up <span>October</span>`, `Open the calendar`, `>Game nights<`, `>Waiting on you<`, `>In the world<`,
-		`cu-btn cu-btn-pri`, `cu-dot cu-dot-wait`, `cu-chip">Festival`, `/static/css/coming_up.css`,
+		`Coming up`, `Open the calendar`, `Next game nights`, `Waiting on you`, `On the calendar`,
+		`bg-accent text-white">Answer`, `bg-ok/10 text-ok">Going`, `text-fg-secondary">Festival`,
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q in %s", want, got)
@@ -484,8 +488,16 @@ func TestComingUpFragment_Renders(t *testing.T) {
 		t.Errorf("poll title was not escaped: %s", got)
 	}
 
-	empty := renderToString(t, comingUpFragment("c1", comingUpView{Month: "October", Answered: 1}))
-	if !strings.Contains(empty, "Nothing is coming up yet") || strings.Contains(empty, "cu-sec") {
+	if n := strings.Count(got, "<a "); n != 3 {
+		t.Errorf("want one link per linked row plus the header link: %s", got)
+	}
+	gn := renderToString(t, comingUpFragment("c1", comingUpView{GameNightsHref: "/campaigns/c1/game-nights", CalendarHref: "/x", Answered: 1}))
+	if !strings.Contains(gn, "Open Game nights") || strings.Contains(gn, "Open the calendar") {
+		t.Errorf("with game nights on, the card links to Game nights: %s", gn)
+	}
+
+	empty := renderToString(t, comingUpFragment("c1", comingUpView{Answered: 1}))
+	if !strings.Contains(empty, "Nothing is planned yet") || strings.Contains(empty, "aria-label=\"Waiting on you\"") {
 		t.Errorf("empty state wrong: %s", empty)
 	}
 }
@@ -547,6 +559,56 @@ func TestComingUpHandler_AddonGating(t *testing.T) {
 			}
 			if got := strings.Contains(body, "Festival"); got != tt.wantWorld {
 				t.Errorf("world shown = %v, want %v", got, tt.wantWorld)
+			}
+		})
+	}
+}
+
+// The calendar's "waiting on you" list is the card's own Waiting rows, for
+// members of a campaign with game nights on, and an empty list otherwise.
+func TestComingUpHandler_Waiting(t *testing.T) {
+	now := time.Date(2026, time.October, 10, 12, 0, 0, 0, time.UTC)
+	both := fakeComingUpAddons{calendar.PluginSlug: true, sessions.SessionsAddonSlug: true}
+	tests := []struct {
+		name     string
+		addons   fakeComingUpAddons
+		member   bool
+		wantRows int
+	}{
+		{"member with game nights on", both, true, 1},
+		{"not a member", both, false, 0},
+		{"game nights off", fakeComingUpAddons{calendar.PluginSlug: true}, true, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			nights := &fakeComingUpNights{nights: []sessions.GameNight{
+				night("A", "2026-10-17", "19:00", sessions.NightNoAnswer, sessions.NightYes),
+				night("B", "2026-10-24", "19:00", sessions.NightYes, sessions.NightYes),
+			}}
+			h := &comingUpHandler{
+				src:    comingUpSources{Calendar: &fakeComingUpCalendar{cal: testCal()}, Nights: nights, Members: fakeComingUpMembers{}},
+				addons: tt.addons,
+				now:    func() time.Time { return now },
+			}
+			e := echo.New()
+			rec := httptest.NewRecorder()
+			c := e.NewContext(httptest.NewRequest(http.MethodGet, "/campaigns/c1/coming-up/waiting", nil), rec)
+			c.Set("campaign_context", &campaigns.CampaignContext{
+				Campaign: &campaigns.Campaign{ID: "c1"}, MemberRole: campaigns.RolePlayer, IsMember: tt.member,
+			})
+			c.Set("auth_user_id", "me")
+			if err := h.Waiting(c); err != nil {
+				t.Fatalf("Waiting: %v", err)
+			}
+			var got []comingUpWaitingItem
+			if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+				t.Fatalf("body %q: %v", rec.Body.String(), err)
+			}
+			if got == nil || len(got) != tt.wantRows {
+				t.Fatalf("rows = %+v, want %d (and never null)", got, tt.wantRows)
+			}
+			if tt.wantRows > 0 && (got[0].SessionID != "A" || got[0].Date != "2026-10-17" || got[0].Action != "Answer") {
+				t.Errorf("row = %+v", got[0])
 			}
 		})
 	}

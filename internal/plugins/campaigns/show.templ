@@ -131,13 +131,16 @@ func welcomeMessageQuoted(msg string) string {
 // customDashboard renders the campaign dashboard from a custom DashboardLayout
 // JSON. Iterates rows → columns → blocks, using a 12-column CSS grid.
 templ customDashboard(cc *CampaignContext, layout *DashboardLayout, recentEntities []RecentEntity) {
+	{{ repeats := layout.ComingUpRepeats() }}
 	<div class="space-y-6">
-		for _, row := range layout.Rows {
+		for ri, row := range layout.Rows {
 			<div class="grid grid-cols-1 md:grid-cols-12 gap-4">
-				for _, col := range row.Columns {
+				for ci, col := range row.Columns {
 					<div class={ dashColSpan(col.Width) }>
-						for _, block := range col.Blocks {
-							@DashboardBlockSwitch(cc, block, recentEntities)
+						for bi, block := range col.Blocks {
+							if !repeats[[3]int{ri, ci, bi}] {
+								@DashboardBlockSwitch(cc, block, recentEntities)
+							}
 						}
 					</div>
 				}

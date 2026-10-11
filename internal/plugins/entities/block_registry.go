@@ -36,6 +36,10 @@ type BlockMeta struct {
 	//   3. RenderBlock renders subsequent instances as a clear error
 	//      message (last-resort guard if both layers are bypassed).
 	Singleton bool `json:"singleton,omitempty"`
+	// Retired blocks still render where a saved layout already has them,
+	// but the editor no longer offers them, because another block took
+	// their place.
+	Retired bool `json:"retired,omitempty"`
 }
 
 // ConfigFieldMeta describes a single configurable field for a block type.

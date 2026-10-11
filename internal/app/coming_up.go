@@ -99,23 +99,34 @@ type comingUpRow struct {
 	TileIcon string
 	Title    string
 	Sub      string
-	// Waiting paints the sub-line's dot gold: this row needs the viewer.
+	// Waiting marks a row that needs the viewer.
 	Waiting bool
 	Href    string
-	Action  string
-	// Primary makes the action the ink button; otherwise it is the quiet one.
+	// Action is the button word on a row that needs the viewer.
+	Action string
+	// Primary makes the action the filled button; otherwise it is the quiet one.
 	Primary bool
-	// Chip is the event kind, shown as a small gold pill.
+	// Answer is the viewer's own answer to a night ("Going", "Maybe",
+	// "Can't go"), shown as a pill; AnswerTone picks its colour.
+	Answer     string
+	AnswerTone string
+	// Chip is the event kind, shown as a small pill.
 	Chip string
+	// SessionID and Date name a game night, so the calendar can open it in
+	// place instead of following Href.
+	SessionID string
+	Date      string
 }
 
 // comingUpView is the card's content. Sections with no rows are not drawn.
 type comingUpView struct {
-	Month        string
-	CalendarHref string
-	Nights       []comingUpRow
-	Waiting      []comingUpRow
-	World        []comingUpRow
+	// GameNightsHref is the Game nights page (the real-world calendar); it
+	// is the card's link when game nights are on, else CalendarHref is.
+	GameNightsHref string
+	CalendarHref   string
+	Nights         []comingUpRow
+	Waiting        []comingUpRow
+	World          []comingUpRow
 	// Answered counts the sources that read successfully. Zero means nothing
 	// could be said, so the block renders nothing instead of claiming the
 	// future is empty.
@@ -131,7 +142,7 @@ func (v comingUpView) Empty() bool {
 // card. It never returns an error: a failed source is logged and skipped.
 func buildComingUp(ctx context.Context, src comingUpSources, req comingUpRequest) comingUpView {
 	now := req.Now.UTC()
-	view := comingUpView{Month: now.Month().String()}
+	view := comingUpView{}
 	userID := req.Viewer.UserID()
 	base := "/campaigns/" + url.PathEscape(req.CampaignID)
 
@@ -150,6 +161,7 @@ func buildComingUp(ctx context.Context, src comingUpSources, req comingUpRequest
 	}
 
 	if req.Nights && req.Member && userID != "" && src.Nights != nil {
+		view.GameNightsHref = base + "/game-nights"
 		var waiting []comingUpRow
 		if src.Members != nil {
 			nights, ok := comingUpNightList(ctx, src, req, now)
@@ -271,21 +283,24 @@ func comingUpNightRows(nights []sessions.GameNight, base, userID string) (shown,
 		// A night the viewer owes an answer on is listed once, under
 		// "Waiting on you", so the card never shows the same night twice.
 		if owes {
-			sub := nightTallyLabel(n.Tally) + " · not answered"
+			sub := nightTallyLabel(n.Tally) + " · you haven't answered"
 			if mine.Answer != sessions.NightNoAnswer {
 				sub = nightTallyLabel(n.Tally) + " · moved since you answered"
 			}
 			waiting = append(waiting, comingUpRow{
 				TileTop: tileTop, TileBig: tileBig, Title: title, Sub: sub,
 				Waiting: true, Href: href, Action: "Answer", Primary: true,
+				SessionID: n.SessionID, Date: n.Date,
 			})
 			continue
 		}
 		if len(shown) < comingUpNightsShown {
+			answer, tone := nightAnswerPill(mine)
 			shown = append(shown, comingUpRow{
 				TileTop: tileTop, TileBig: tileBig, Title: title,
-				Sub:  nightTallyLabel(n.Tally) + nightMineLabel(mine),
-				Href: href, Action: "Change",
+				Sub: nightTallyLabel(n.Tally), Href: href,
+				Answer: answer, AnswerTone: tone,
+				SessionID: n.SessionID, Date: n.Date,
 			})
 		}
 	}
@@ -309,7 +324,7 @@ func comingUpPolls(ctx context.Context, svc comingUpNights, req comingUpRequest,
 			Title:   p.Proposal.Title,
 			Sub:     "Date poll · " + answeredCount(p.ResponderN),
 			Waiting: true, Href: base + "/proposals/" + url.PathEscape(p.Proposal.ID),
-			Action: "Answer", Primary: true,
+			Action: "Vote", Primary: true,
 		})
 	}
 	return rows, true
@@ -374,21 +389,18 @@ func nightTallyLabel(t sessions.NightTally) string {
 	return fmt.Sprintf("%d of %d coming", t.Going, t.Going+t.Maybe+t.Cant+t.NoAnswer)
 }
 
-// nightMineLabel appends the viewer's own answer to the tally line.
-func nightMineLabel(mine *sessions.NightAnswer) string {
+// nightAnswerPill words the viewer's own answer to a night they have
+// answered, with the pill's tone; nothing for a night with no answer.
+func nightAnswerPill(mine *sessions.NightAnswer) (label, tone string) {
 	switch {
-	case mine == nil:
-		return ""
-	case mine.Answer == sessions.NightNoAnswer:
-		return " · not answered"
-	case mine.Recheck:
-		return " · moved, check again"
+	case mine == nil || mine.Answer == sessions.NightNoAnswer:
+		return "", ""
 	case mine.Answer == sessions.NightYes:
-		return " · you're going"
+		return "Going", "go"
 	case mine.Answer == sessions.NightMaybe:
-		return " · you're maybe"
+		return "Maybe", "maybe"
 	default:
-		return " · you can't go"
+		return "Can't go", "cant"
 	}
 }
 
@@ -483,6 +495,55 @@ func (h *comingUpHandler) Show(c echo.Context) error {
 	return middleware.Render(c, http.StatusOK, comingUpFragment(cc.Campaign.ID, view))
 }
 
+// comingUpWaitingItem is one "waiting on you" row as the calendar's button
+// reads it. A night carries its session and date so the calendar opens it in
+// place; anything else is followed by its href.
+type comingUpWaitingItem struct {
+	Title     string `json:"title"`
+	Sub       string `json:"sub"`
+	Action    string `json:"action"`
+	Href      string `json:"href"`
+	TileTop   string `json:"tileTop"`
+	TileBig   string `json:"tileBig,omitempty"`
+	TileIcon  string `json:"tileIcon,omitempty"`
+	SessionID string `json:"sessionId,omitempty"`
+	Date      string `json:"date,omitempty"`
+}
+
+// Waiting lists what the viewer owes the table, for the "waiting on you"
+// button on the Game nights calendar. Members only; anyone else, or a
+// campaign without game nights, gets an empty list.
+// GET /campaigns/:id/coming-up/waiting
+func (h *comingUpHandler) Waiting(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx, cancel := context.WithTimeout(c.Request().Context(), comingUpTimeout)
+	defer cancel()
+	items := []comingUpWaitingItem{}
+	userID := auth.GetUserID(c)
+	on := func(slug string) bool {
+		ok, err := h.addons.IsEnabledForCampaign(ctx, cc.Campaign.ID, slug)
+		return err == nil && ok && (h.healthy == nil || h.healthy(slug))
+	}
+	if !cc.IsMember || userID == "" || !on(calendar.PluginSlug) || !on(sessions.SessionsAddonSlug) {
+		return c.JSON(http.StatusOK, items)
+	}
+	view := buildComingUp(ctx, comingUpSources{Nights: h.src.Nights, Members: h.src.Members}, comingUpRequest{
+		CampaignID: cc.Campaign.ID,
+		Viewer:     permissions.RequestViewer(cc.VisibilityRole(), userID),
+		Member:     true,
+		Nights:     true,
+		Now:        h.now(),
+	})
+	for _, r := range view.Waiting {
+		items = append(items, comingUpWaitingItem{
+			Title: r.Title, Sub: r.Sub, Action: r.Action, Href: r.Href,
+			TileTop: r.TileTop, TileBig: r.TileBig, TileIcon: r.TileIcon,
+			SessionID: r.SessionID, Date: r.Date,
+		})
+	}
+	return c.JSON(http.StatusOK, items)
+}
+
 // registerComingUpRoutes mounts the block's fragment. Public-capable like the
 // other dashboard fragments; what a visitor may see is decided per source.
 func registerComingUpRoutes(e *echo.Echo, h *comingUpHandler, campaignSvc campaigns.CampaignService, authSvc auth.AuthService) {
@@ -491,4 +552,5 @@ func registerComingUpRoutes(e *echo.Echo, h *comingUpHandler, campaignSvc campai
 		campaigns.AllowPublicCampaignAccess(campaignSvc),
 	)
 	g.GET("/coming-up", h.Show, campaigns.RequireViewAccess())
+	g.GET("/coming-up/waiting", h.Waiting, campaigns.RequireViewAccess())
 }
