@@ -5,7 +5,6 @@
 package syncapi
 
 import (
-	"fmt"
 	"time"
 )
 
@@ -136,7 +135,7 @@ templ FoundryProblemsFragment(campaignID string, events []SyncEvent, now time.Ti
 							<p class="text-xs text-fg-secondary">{ problemLine(problemEvent(ev)) }</p>
 						</div>
 						<span class="text-xs text-fg-muted whitespace-nowrap">{ relativeTime(ev.OccurredAt) }</span>
-						<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/sync-history/flow/%d", campaignID, ev.ID)) } class="btn-secondary text-xs">Show the steps</a>
+						<a href={ templ.SafeURL(flowHistoryURL(campaignID, ev.ID)) } class="btn-secondary text-xs">Show in sync history</a>
 					</li>
 				}
 			</ul>
