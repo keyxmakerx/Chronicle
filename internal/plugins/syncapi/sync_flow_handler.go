@@ -2,6 +2,7 @@ package syncapi
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -131,6 +132,11 @@ func (h *SyncHistoryHandler) Flow(c echo.Context) error {
 	if err != nil || id < 1 {
 		return apperror.NewBadRequest("invalid history entry")
 	}
+	// The flow is a fragment with no page around it, so a browser opening
+	// this address directly is sent to the history, starting at this row.
+	if !middleware.IsHTMX(c) {
+		return c.Redirect(http.StatusSeeOther, flowHistoryURL(cc.Campaign.ID, id))
+	}
 	ctx := c.Request().Context()
 	centre, err := h.repo.Get(ctx, cc.Campaign.ID, id)
 	if err != nil {
@@ -141,6 +147,12 @@ func (h *SyncHistoryHandler) Flow(c echo.Context) error {
 		return err
 	}
 	return middleware.Render(c, http.StatusOK, SyncFlow(f))
+}
+
+// flowHistoryURL is the Sync history page with the given row at the top:
+// failures only, since every link to a flow starts from a failure.
+func flowHistoryURL(campaignID string, eventID int64) string {
+	return fmt.Sprintf("/campaigns/%s/sync-history?failed=1&before=%d", campaignID, eventID+1)
 }
 
 // AdminFlow serves a campaign's call flow to site admins: around its latest
