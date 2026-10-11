@@ -77,10 +77,21 @@ func (r *foundryPlayerRepo) Replace(ctx context.Context, campaignID string, play
 		return apperror.NewInternal(fmt.Errorf("begin foundry players: %w", err))
 	}
 	defer func() { _ = tx.Rollback() }()
+	prev, err := listPlayers(ctx, tx, campaignID)
+	if err != nil {
+		return err
+	}
+	byID := make(map[string]FoundryPlayer, len(prev))
+	for _, old := range prev {
+		byID[old.FoundryUserID] = old
+	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM foundry_players WHERE campaign_id = ?`, campaignID); err != nil {
 		return apperror.NewInternal(fmt.Errorf("clear foundry players: %w", err))
 	}
 	for _, p := range players {
+		if old, ok := byID[p.FoundryUserID]; ok {
+			p = carryForward(p, old)
+		}
 		var member any
 		if p.MemberUserID != "" {
 			member = p.MemberUserID
@@ -107,8 +118,31 @@ func utcOrNil(t *time.Time) any {
 	return t.UTC()
 }
 
+// carryForward keeps what an earlier report knew and this one doesn't. The
+// module counts a user's changes only while the world is open, so each new
+// Foundry session reports none; without this a player who synced yesterday
+// would read "none yet" today. The newer of each time wins.
+func carryForward(p, old FoundryPlayer) FoundryPlayer {
+	if old.LastChangeAt != nil && (p.LastChangeAt == nil || old.LastChangeAt.After(*p.LastChangeAt)) {
+		p.LastChangeAt = old.LastChangeAt
+	}
+	if old.LastFailedAt != nil && (p.LastFailedAt == nil || old.LastFailedAt.After(*p.LastFailedAt)) {
+		p.LastFailedAt, p.LastFailure, p.FailedCount = old.LastFailedAt, old.LastFailure, old.FailedCount
+	}
+	return p
+}
+
 func (r *foundryPlayerRepo) List(ctx context.Context, campaignID string) ([]FoundryPlayer, error) {
-	rows, err := r.db.QueryContext(ctx, `SELECT foundry_user_id, foundry_name, member_user_id, is_online,
+	return listPlayers(ctx, r.db, campaignID)
+}
+
+// queryer is what listPlayers needs from a *sql.DB or *sql.Tx.
+type queryer interface {
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+}
+
+func listPlayers(ctx context.Context, db queryer, campaignID string) ([]FoundryPlayer, error) {
+	rows, err := db.QueryContext(ctx, `SELECT foundry_user_id, foundry_name, member_user_id, is_online,
 		last_change_at, last_failed_at, last_failure, failed_count, reported_at
 		FROM foundry_players WHERE campaign_id = ?
 		ORDER BY member_user_id IS NULL, foundry_name, foundry_user_id`, campaignID)
@@ -240,13 +274,15 @@ type PlayerStatus string
 
 const (
 	PlayerWorking   PlayerStatus = "working"
+	PlayerIdle      PlayerStatus = "idle"
 	PlayerRefused   PlayerStatus = "refused"
 	PlayerUnlinked  PlayerStatus = "unlinked"
 	PlayerNoFoundry PlayerStatus = "none"
 )
 
-// recentFailureWindow is how long a refused change keeps a player marked.
-const recentFailureWindow = 7 * 24 * time.Hour
+// recentWindow is how long a synced change keeps a player Working and a
+// failed one keeps them marked.
+const recentWindow = 7 * 24 * time.Hour
 
 // PlayerRow is one row of the Players in Foundry table: a Foundry user, a
 // member with no Foundry user, or both.
@@ -309,18 +345,24 @@ func buildPlayerRows(players []FoundryPlayer, members []MemberRef, now time.Time
 		}
 		linked[m.UserID] = true
 		r.MemberUserID, r.MemberName, r.MemberRole = m.UserID, m.Name, m.Role
-		r.Status = PlayerWorking
-		if p.LastFailedAt != nil && now.Sub(*p.LastFailedAt) < recentFailureWindow &&
-			(p.LastChangeAt == nil || !p.LastChangeAt.After(*p.LastFailedAt)) {
+		// Working is a claim that something synced lately, never just a link.
+		switch {
+		case p.LastFailedAt != nil && now.Sub(*p.LastFailedAt) < recentWindow &&
+			(p.LastChangeAt == nil || !p.LastChangeAt.After(*p.LastFailedAt)):
 			r.Status = PlayerRefused
-			r.Why = "The latest thing done in Foundry as " + m.Name + " (a shop buy, a stash move, or a synced change) didn't reach Chronicle."
+			r.Why = "The latest sync through Foundry as " + m.Name + " (a shop buy, a stash move, or a change going either way) failed."
 			if p.LastFailure != "" {
 				r.Why += " Foundry was told: " + p.LastFailure
 			}
 			r.Fix = []string{
-				"If " + m.Name + " should be able to do that, give them a role that allows it on the People page.",
-				"Otherwise nothing to do: nothing was changed in Chronicle, and Foundry catches up on the next sync.",
+				"If Chronicle refused something " + m.Name + " should be allowed to do, give them a role that allows it on the People page.",
+				"If it failed inside Foundry, the Chronicle Sync window's Debug tab has the details, and Foundry tries again on the next sync.",
 			}
+		case p.LastChangeAt != nil && now.Sub(*p.LastChangeAt) < recentWindow:
+			r.Status = PlayerWorking
+		default:
+			r.Status = PlayerIdle
+			r.Why = "Linked, but nothing done in Foundry as " + m.Name + " has synced in the last week, so there's nothing to show yet. Changes only count while your world is open."
 		}
 		rows = append(rows, r)
 	}
