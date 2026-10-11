@@ -655,6 +655,17 @@ type MergeResult struct {
 	NoOp          bool   // true when there was nothing to reconcile
 }
 
+// CharacterHomeMove describes moving a system character type's pages into
+// "Characters": pending (from CharacterHomeCandidate) or done.
+type CharacterHomeMove struct {
+	FromTypeID int
+	FromName   string // the system type's plural name, e.g. "Heroes"
+	ToTypeID   int
+	ToName     string // "Characters", or whatever the owner renamed it to
+	Pages      int    // pages to move, or moved (Trash included)
+	NoOp       bool   // nothing to move
+}
+
 // ClaimRoster carries the GM owner-overview data for a claimable category
 // dashboard. It is assembled by the Index handler only for a Scribe+ viewer
 // of a claimable entity type with the Player Character Claiming addon

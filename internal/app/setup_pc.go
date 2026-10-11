@@ -70,6 +70,21 @@ func (p *pcSetupProvider) RunChecks(ctx context.Context, campaignID string) ([]a
 		})
 	}
 
+	home, err := p.entityService.CharacterHomeCandidate(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	if home != nil {
+		checks = append(checks, addons.SetupCheck{
+			ID:       "pc.home",
+			Severity: addons.SeverityWarning,
+			Title:    fmt.Sprintf("Your characters are split between \"%s\" and \"%s\"", home.ToName, home.FromName),
+			Detail: fmt.Sprintf("Your game system's character sheet is on \"%s\" (%d page%s). Move them into \"%s\" so there is one place for characters.",
+				home.FromName, home.Pages, plural(home.Pages), home.ToName),
+			ActionLabel: fmt.Sprintf("Move them into \"%s\" below", home.ToName),
+		})
+	}
+
 	if name := pcTargetName(snap); name != "" {
 		checks = append(checks, addons.SetupCheck{
 			ID:       "pc.naming",
@@ -91,7 +106,8 @@ func (p *pcSetupProvider) RunChecks(ctx context.Context, campaignID string) ([]a
 	return checks, nil
 }
 
-// Questions describes the onboarding questions (naming + optional merge).
+// Questions describes the onboarding questions (naming, optional merge, optional
+// move into Characters).
 func (p *pcSetupProvider) Questions(ctx context.Context, campaignID string) ([]addons.SetupQuestion, error) {
 	snap, err := p.entityService.PlayerCharacterSetupSnapshot(ctx, campaignID)
 	if err != nil {
@@ -135,10 +151,27 @@ func (p *pcSetupProvider) Questions(ctx context.Context, campaignID string) ([]a
 		})
 	}
 
+	home, err := p.entityService.CharacterHomeCandidate(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	if home != nil {
+		qs = append(qs, addons.SetupQuestion{
+			ID:    "home",
+			Kind:  addons.QuestionBool,
+			Title: fmt.Sprintf("Move \"%s\" into \"%s\"", home.FromName, home.ToName),
+			Help: fmt.Sprintf("Moves %d page%s into \"%s\", which takes over the character sheet. \"%s\" is turned off, not deleted, and claims stay as they are.",
+				home.Pages, plural(home.Pages), home.ToName, home.FromName),
+			ShowIfCheckID: "pc.home",
+			Default:       "true",
+		})
+	}
+
 	return qs, nil
 }
 
-// Apply runs the safe ensure, then the optional merge, then the optional rename.
+// Apply runs the safe ensure, then the optional merge, the optional move into
+// Characters, and the optional rename.
 // Idempotent — re-applying the same answers is a no-op.
 func (p *pcSetupProvider) Apply(ctx context.Context, campaignID string, answers map[string]string) (addons.SetupResult, error) {
 	var messages []string
@@ -162,7 +195,19 @@ func (p *pcSetupProvider) Apply(ctx context.Context, campaignID string, answers 
 		}
 	}
 
-	// 3. Rename to a custom name, if chosen.
+	// 3. Move the system character type's pages into Characters, if requested.
+	if answers["home"] == "true" {
+		res, err := p.entityService.MoveCharacterPresetHome(ctx, campaignID)
+		if err != nil {
+			return addons.SetupResult{}, err
+		}
+		if !res.NoOp {
+			messages = append(messages, fmt.Sprintf("Moved %d page%s into \"%s\" and turned off \"%s\".",
+				res.Pages, plural(res.Pages), res.ToName, res.FromName))
+		}
+	}
+
+	// 4. Rename to a custom name, if chosen.
 	if answers["naming"] == "custom" {
 		if custom := strings.TrimSpace(answers["naming_custom"]); custom != "" {
 			renamed, err := p.renamePCCategory(ctx, campaignID, custom)
