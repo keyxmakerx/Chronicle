@@ -98,12 +98,21 @@
         return resp.json();
       }
 
+      // Live updates and the poll call this too. The widget redraws as a
+      // whole, so it holds the redraw while a note is being written or
+      // edited (the typing would lose its cursor) and skips it when nothing
+      // changed; closing the form draws whatever arrived meanwhile.
+      var lastLoaded = null;
       function loadNotes() {
         Chronicle.apiFetch(endpoint)
           .then(asJSON)
           .then(function (notes) {
             state.notes = Array.isArray(notes) ? notes : [];
+            var sig = JSON.stringify(state.notes);
+            var unchanged = !state.loading && sig === lastLoaded;
+            lastLoaded = sig;
             state.loading = false;
+            if (unchanged || state.composeOpen || state.editingId) return;
             render();
           })
           .catch(function (err) {
@@ -423,7 +432,7 @@
         var h = '';
         var titleText = note.title && note.title.trim()
           ? note.title
-          : (firstLineOf(stripHtml(note.bodyHtml || '')) || 'Untitled');
+          : (firstLineOf(htmlToEditText(note.bodyHtml || '')) || 'Untitled');
         h += '<div class="px-2.5 py-1.5 flex items-center gap-2 select-none text-sm ' +
              (isEditing ? '' : 'cursor-pointer hover:bg-accent/5 transition-colors') + '" ' +
              (isEditing ? '' : 'data-action="toggle-note" data-note-id="' + esc(note.id) + '"') + '>';
@@ -630,7 +639,7 @@
           state.editingId = id;
           state.expandedIds[id] = true; // editing implies expanded
           state.editingTitle = note.title || '';
-          state.editingBody = stripHtml(note.bodyHtml || '');
+          state.editingBody = htmlToEditText(note.bodyHtml || '');
           state.editingAudience = note.audience || 'private';
           // Hydrate shared list from the note so the edit picker shows
           // the existing recipients pre-checked. Server returns
@@ -775,7 +784,7 @@
           state.editingId = note.id;
           state.expandedIds[note.id] = true;
           state.editingTitle = note.title || '';
-          state.editingBody = stripHtml(note.bodyHtml || '');
+          state.editingBody = htmlToEditText(note.bodyHtml || '');
           state.editingAudience = note.audience || 'private';
           state.editingSharedWith = Array.isArray(note.sharedWith) ? note.sharedWith.slice() : [];
           render();
@@ -895,11 +904,34 @@
         }).join('');
       }
 
-      function stripHtml(html) {
+      // htmlToEditText turns a note back into the text the edit box shows,
+      // keeping paragraphs, line breaks and list items on their own lines
+      // so saving it again (bodyToHTML) doesn't run them together.
+      function htmlToEditText(html) {
         if (!html) return '';
         var div = document.createElement('div');
         div.innerHTML = html;
-        return div.textContent || div.innerText || '';
+        var blocks = [];
+        var line = '';
+        function flush() {
+          if (line.replace(/\s+/g, '') !== '') blocks.push(line.replace(/^\s+|\s+$/g, ''));
+          line = '';
+        }
+        (function walk(node) {
+          for (var c = node.firstChild; c; c = c.nextSibling) {
+            if (c.nodeType === 3) { line += c.nodeValue; continue; }
+            if (c.nodeType !== 1) continue;
+            var tag = c.nodeName;
+            if (tag === 'BR') { line += '\n'; continue; }
+            var block = /^(P|DIV|LI|H[1-6]|BLOCKQUOTE|PRE|UL|OL)$/.test(tag);
+            if (block) flush();
+            if (tag === 'LI') line += '- ';
+            walk(c);
+            if (block) flush();
+          }
+        })(div);
+        flush();
+        return blocks.join('\n\n');
       }
 
       function extractText(jsonBody) {
