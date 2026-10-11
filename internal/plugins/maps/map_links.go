@@ -324,13 +324,14 @@ func (s *mapService) LinkTree(ctx context.Context, campaignID string, role int, 
 		return nil, fmt.Errorf("list linking maps: %w", err)
 	}
 	var edges []linkEdge
-	read := 0
+	read, skipped := 0, false
 	for _, src := range sources {
 		if !inCampaign[src] {
 			continue
 		}
 		// One marker read per map that has links; capped like the tree.
 		if read >= MaxLinkTreeNodes {
+			skipped = true
 			break
 		}
 		read++
@@ -365,5 +366,9 @@ func (s *mapService) LinkTree(ctx context.Context, campaignID string, role int, 
 		return nil, err
 	}
 	tree := buildLinkTree(nodes, edges, permissions.CanSeeDmOnly(role))
+	// Maps past the read cap add no links, so the tree must say it is partial.
+	if skipped {
+		tree.Truncated = true
+	}
 	return &tree, nil
 }

@@ -353,3 +353,36 @@ func TestLinkTree_UsesTheViewersMarkerList(t *testing.T) {
 		t.Error("the owner is told who can follow each link")
 	}
 }
+
+// More linking maps than the read cap: the maps past it are not read, and the
+// tree says it is partial instead of dropping their links silently.
+func TestLinkTree_ReadCapMarksTruncated(t *testing.T) {
+	var ms []Map
+	var sources []string
+	for i := 0; i <= MaxLinkTreeNodes; i++ {
+		id := fmt.Sprintf("m%04d", i)
+		ms = append(ms, Map{ID: id, CampaignID: "camp-1", Name: id})
+		sources = append(sources, id)
+	}
+	ms = append(ms, Map{ID: "target", CampaignID: "camp-1", Name: "Target"})
+	target := "target"
+	repo := linkRepo()
+	repo.listMapsFn = func(context.Context, string) ([]Map, error) { return ms, nil }
+	repo.linkSources = sources
+	// Only the map past the cap has a link, so the tree's own size bound
+	// cannot be what marks it.
+	last := sources[len(sources)-1]
+	repo.listMarkersFn = func(_ context.Context, mapID string, _ int) ([]Marker, error) {
+		if mapID != last {
+			return nil, nil
+		}
+		return []Marker{{ID: "pin", MapID: mapID, LinkedMapID: &target, Visibility: "everyone"}}, nil
+	}
+	tree, err := NewMapService(repo).LinkTree(context.Background(), "camp-1", int(permissions.RoleOwner), "u-owner")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !tree.Truncated {
+		t.Error("a tree that skipped maps past the read cap must be marked truncated")
+	}
+}

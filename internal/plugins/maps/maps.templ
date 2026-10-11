@@ -280,7 +280,6 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 		data-measure-src={ scriptURL("map_measure.js") }
 		data-links-src={ scriptURL("map_links.js") }
 		data-map-id={ data.Map.ID }
-		data-map-name={ data.Map.Name }
 		data-image-id={ derefStr(data.Map.ImageID) }
 		data-image-url={ mapImageSrc(ctx, data.Map) }
 		data-image-width={ fmt.Sprintf("%d", data.Map.ImageWidth) }
