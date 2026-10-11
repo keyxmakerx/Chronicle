@@ -441,6 +441,76 @@ func TestSystemManifest_CharacterFieldsForAPI_NoPreset(t *testing.T) {
 	}
 }
 
+// Creature presets reach the Foundry module with the value conversions and
+// the fields Foundry may send back, so a creature can become an NPC actor.
+func TestSystemManifest_CreatureFieldsForAPI(t *testing.T) {
+	m := &SystemManifest{
+		ID:              "drawsteel",
+		FoundrySystemID: "draw-steel",
+		EntityPresets: []EntityPresetDef{
+			{Slug: "drawsteel-character", Category: "character", Name: "Hero"},
+			{
+				Slug: "drawsteel-creature", Category: "creature", Name: "Creature",
+				FoundryActorType:  "npc",
+				FoundryPullFields: []string{"stamina_current", "conditions_json"},
+				Fields: []FieldDef{
+					{Key: "role", Label: "Role", Type: "string", FoundryPath: "system.monster.role",
+						FoundryChoices: "DRAW_STEEL.monsters.roles"},
+					{Key: "keywords", Label: "Keywords", Type: "string", FoundryPath: "system.monster.keywords",
+						FoundryFormat: "set", FoundryChoices: "DRAW_STEEL.monsters.keywords"},
+					{Key: "faction", Label: "Faction", Type: "string"},
+				},
+			},
+		},
+	}
+
+	tests := []struct {
+		name    string
+		field   int
+		path    string
+		choices string
+		format  string
+	}{
+		{"choices carried", 0, "system.monster.role", "DRAW_STEEL.monsters.roles", ""},
+		{"format and choices carried", 1, "system.monster.keywords", "DRAW_STEEL.monsters.keywords", "set"},
+		{"unmapped field stays bare", 2, "", "", ""},
+	}
+
+	resp := m.CreatureFieldsForAPI()
+	if resp == nil {
+		t.Fatal("CreatureFieldsForAPI() returned nil")
+	}
+	if resp.PresetSlug != "drawsteel-creature" || resp.FoundryActorType != "npc" {
+		t.Errorf("preset = %q / %q, want drawsteel-creature / npc", resp.PresetSlug, resp.FoundryActorType)
+	}
+	if len(resp.FoundryPullFields) != 2 || resp.FoundryPullFields[0] != "stamina_current" || resp.FoundryPullFields[1] != "conditions_json" {
+		t.Errorf("FoundryPullFields = %v", resp.FoundryPullFields)
+	}
+	if len(resp.Fields) != 3 {
+		t.Fatalf("Fields len = %d, want 3", len(resp.Fields))
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := resp.Fields[tt.field]
+			if f.FoundryPath != tt.path || f.FoundryChoices != tt.choices || f.FoundryFormat != tt.format {
+				t.Errorf("field %q = path %q choices %q format %q", f.Key, f.FoundryPath, f.FoundryChoices, f.FoundryFormat)
+			}
+		})
+	}
+
+	// The hero preset keeps answering character-fields, with no pull limit.
+	if hero := m.CharacterFieldsForAPI(); hero == nil || hero.PresetSlug != "drawsteel-character" || hero.FoundryPullFields != nil {
+		t.Errorf("CharacterFieldsForAPI() = %+v", hero)
+	}
+}
+
+func TestSystemManifest_CreatureFieldsForAPI_NoPreset(t *testing.T) {
+	m := &SystemManifest{ID: "dnd5e", EntityPresets: []EntityPresetDef{{Slug: "dnd5e-character", Category: "character"}}}
+	if resp := m.CreatureFieldsForAPI(); resp != nil {
+		t.Errorf("CreatureFieldsForAPI() = %v, want nil", resp)
+	}
+}
+
 func TestLoadManifest_FoundryAnnotations(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "manifest.json")

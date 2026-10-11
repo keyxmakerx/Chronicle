@@ -380,6 +380,7 @@ owner or co-Director). Format: `docs/system-rulebook-book.md`.
 |--------|------|-------------|
 | GET | `/systems/:id/character-fields` | Character field definitions with foundry_path |
 | GET | `/systems/:id/item-fields` | Item field definitions |
+| GET | `/systems/:id/creature-fields` | Creature field definitions, with the fields Foundry may send back |
 
 ### Package Management (Admin)
 | Method | Path | Description |
