@@ -4931,6 +4931,7 @@ func (a *App) RegisterRoutes() {
 					HoverCard: ap.HoverCard,
 
 					SheetStyle: ap.SheetStyle,
+					BookLook:   ap.BookLook,
 				}
 				ctx = layouts.SetAppearance(ctx, ad)
 			}

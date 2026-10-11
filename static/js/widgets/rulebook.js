@@ -286,12 +286,19 @@
     });
   };
 
+  // The campaign owner can ask for every book in Chronicle's standard look
+  // (Customize > Rulebook): the book's colours and its paper look are then
+  // ignored, and only its fonts still apply.
+  function standardLook() {
+    return document.documentElement.getAttribute('data-cz-book') === 'standard';
+  }
+
   Rulebook.prototype.applyTheme = function (theme) {
-    var style = this.el.style;
+    var style = this.el.style, plain = standardLook();
     Object.keys(theme).forEach(function (k) {
       var v = theme[k];
       if (typeof v !== 'string') return;
-      if ((has(THEME_COLOURS, k) && COLOUR_RE.test(v)) || (has(THEME_FONTS, k) && FONT_RE.test(v))) {
+      if ((has(THEME_COLOURS, k) && COLOUR_RE.test(v) && !plain) || (has(THEME_FONTS, k) && FONT_RE.test(v))) {
         style.setProperty('--book-' + k, v);
       }
     });
@@ -301,6 +308,7 @@
   };
 
   Rulebook.prototype.open = function (data) {
+    if (standardLook()) data.look = '';
     this.data = data;
     this.applyTheme(data.theme);
     this.view = data.isDirector ? 'director' : 'player';

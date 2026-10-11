@@ -57,6 +57,8 @@ func TestAppearanceAttrs(t *testing.T) {
 		{"sheet empty", AppearanceData{SheetStyle: ""}, map[string]string{}},
 		{"sheet modern", AppearanceData{SheetStyle: "modern"}, map[string]string{}},
 		{"sheet brass", AppearanceData{SheetStyle: "brass"}, map[string]string{"data-cz-sheet": "brass"}},
+		{"book default", AppearanceData{BookLook: "book"}, map[string]string{}},
+		{"book standard", AppearanceData{BookLook: "standard"}, map[string]string{"data-cz-book": "standard"}},
 		{"heading cinzel", AppearanceData{HeadingFont: "cinzel"}, map[string]string{"data-cz-heading": "cinzel"}},
 		{"all", AppearanceData{NavStyle: "comet", NavStrength: "lively", NavPageName: "hidden", ButtonStyle: "glow",
 			Elevation: "flat", TypeScale: "roomy", ReduceMotion: true, HoverCard: "night"},

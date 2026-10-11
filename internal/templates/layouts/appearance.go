@@ -52,6 +52,11 @@ type AppearanceData struct {
 	// SheetStyle is the character sheet style; "" and "modern" add no
 	// attribute, so sheets render as before.
 	SheetStyle string
+
+	// BookLook is "standard" when the owner wants every rulebook in
+	// Chronicle's plain look instead of the look its game system asks for;
+	// anything else adds no attribute.
+	BookLook string
 }
 
 const keyAppearance ctxKey = "layout_appearance"
@@ -100,6 +105,9 @@ func AppearanceAttrs(ctx context.Context) templ.Attributes {
 	set("data-cz-hover", a.HoverCard)
 	if a.SheetStyle != "modern" {
 		set("data-cz-sheet", a.SheetStyle)
+	}
+	if a.BookLook == "standard" {
+		attrs["data-cz-book"] = "standard"
 	}
 	if a.HeadingFont != "" && a.HeadingFont != "same" {
 		attrs["data-cz-heading"] = a.HeadingFont
