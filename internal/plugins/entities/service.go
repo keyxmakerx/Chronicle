@@ -114,6 +114,12 @@ type EntityService interface {
 	// empty duplicate type onto "Characters" in every campaign, disabling (never
 	// deleting) the duplicate. Idempotent; returns the number of campaigns changed.
 	ReconcileCharacterPresetHome(ctx context.Context) (int, error)
+	// CharacterHomeCandidate reports the system character type whose pages
+	// could move into "Characters", or nil when there is none.
+	CharacterHomeCandidate(ctx context.Context, campaignID string) (*CharacterHomeMove, error)
+	// MoveCharacterPresetHome moves that type's pages into "Characters", gives
+	// Characters the system's sheet and disables the emptied type. Owner-run.
+	MoveCharacterPresetHome(ctx context.Context, campaignID string) (CharacterHomeMove, error)
 	DeleteEntityType(ctx context.Context, id int) error
 	UpdateEntityTypeLayout(ctx context.Context, id int, layout EntityTypeLayout) error
 	UpdateEntityTypeColor(ctx context.Context, id int, color string) error
@@ -2274,8 +2280,8 @@ func (s *entityService) AdoptDefaultCharacterType(ctx context.Context, campaignI
 // only acts when the duplicate holds no pages at all (any visibility, plus the
 // Trash) and "Characters" has no preset category; anything else is logged and
 // left for the owner, because moving pages between types is not this
-// reconciler's call. It never deletes: the duplicate is disabled so it can be
-// re-enabled.
+// reconciler's call (MoveCharacterPresetHome is the owner's step). It never
+// deletes: the duplicate is disabled so it can be re-enabled.
 func (s *entityService) ReconcileCharacterPresetHome(ctx context.Context) (int, error) {
 	all, err := s.types.ListAll(ctx)
 	if err != nil {
@@ -2288,56 +2294,25 @@ func (s *entityService) ReconcileCharacterPresetHome(ctx context.Context) (int, 
 
 	changed := 0
 	for campaignID, types := range byCampaign {
-		var chars *EntityType
-		for i := range types {
-			if types[i].ParentTypeID == nil && types[i].Slug == DefaultCharacterTypeSlug {
-				chars = &types[i]
+		chars, dupe, why := characterHomePair(types)
+		if chars == nil || dupe == nil {
+			if why != "" {
+				slog.Info("character preset home: "+why+"; leaving the types alone",
+					slog.String("campaign_id", campaignID))
 			}
-		}
-		if chars == nil {
 			continue
 		}
-		var dupes []EntityType
-		for _, t := range types {
-			if t.ID != chars.ID && t.PresetCategory != nil && *t.PresetCategory == presetCategoryCharacter &&
-				(t.ParentTypeID == nil || *t.ParentTypeID == chars.ID) {
-				dupes = append(dupes, t)
-			}
-		}
-		if len(dupes) == 0 {
-			continue
-		}
-		if chars.PresetCategory != nil && *chars.PresetCategory != "" {
-			slog.Info("character preset home: Characters already has a preset category; leaving both types alone",
-				slog.String("campaign_id", campaignID), slog.Int("characters_type_id", chars.ID),
-				slog.Int("system_type_id", dupes[0].ID))
-			continue
-		}
-		if len(dupes) > 1 {
-			slog.Info("character preset home: more than one system character type; leaving them alone",
-				slog.String("campaign_id", campaignID), slog.Int("characters_type_id", chars.ID))
-			continue
-		}
-		dupe := dupes[0]
 
-		counts, err := s.entities.CountByType(ctx, campaignID, 3, "")
+		pages, err := s.countAllPagesOfType(ctx, campaignID, dupe.ID)
 		if err != nil {
 			slog.Warn("character preset home: counting pages failed",
 				slog.String("campaign_id", campaignID), slog.Any("error", err))
 			continue
 		}
-		trashed := 0
-		if s.safety != nil {
-			if trashed, err = s.safety.CountTrashedByType(ctx, dupe.ID); err != nil {
-				slog.Warn("character preset home: counting trashed pages failed",
-					slog.String("campaign_id", campaignID), slog.Any("error", err))
-				continue
-			}
-		}
-		if counts[dupe.ID] > 0 || trashed > 0 {
-			slog.Info("character preset home: system character type holds pages; leaving both types alone",
+		if pages > 0 {
+			slog.Info("character preset home: system character type holds pages; the owner can move them from the player-character setup page",
 				slog.String("campaign_id", campaignID), slog.Int("characters_type_id", chars.ID),
-				slog.Int("system_type_id", dupe.ID), slog.Int("pages", counts[dupe.ID]+trashed))
+				slog.Int("system_type_id", dupe.ID), slog.Int("pages", pages))
 			continue
 		}
 
@@ -2360,6 +2335,123 @@ func (s *entityService) ReconcileCharacterPresetHome(ctx context.Context) (int, 
 		changed++
 	}
 	return changed, nil
+}
+
+// characterHomePair finds the campaign's top-level "Characters" type and the
+// one system character type whose sheet could move onto it: carrying the
+// "character" preset, top-level or directly under Characters, with no
+// sub-categories of its own. A nil pair with a reason means a candidate exists
+// but the shape is ambiguous, so it is left for the owner.
+func characterHomePair(types []EntityType) (chars, dupe *EntityType, why string) {
+	for i := range types {
+		if types[i].ParentTypeID == nil && types[i].Slug == DefaultCharacterTypeSlug {
+			chars = &types[i]
+		}
+	}
+	if chars == nil {
+		return nil, nil, ""
+	}
+	var dupes []*EntityType
+	for i := range types {
+		t := &types[i]
+		if t.ID != chars.ID && t.PresetCategory != nil && *t.PresetCategory == presetCategoryCharacter &&
+			(t.ParentTypeID == nil || *t.ParentTypeID == chars.ID) {
+			dupes = append(dupes, t)
+		}
+	}
+	switch {
+	case len(dupes) == 0:
+		return nil, nil, ""
+	case chars.PresetCategory != nil && *chars.PresetCategory != "":
+		return nil, nil, "Characters already has a preset category"
+	case len(dupes) > 1:
+		return nil, nil, "more than one system character type"
+	}
+	for i := range types {
+		if types[i].ParentTypeID != nil && *types[i].ParentTypeID == dupes[0].ID {
+			return nil, nil, "the system character type has sub-categories"
+		}
+	}
+	return chars, dupes[0], ""
+}
+
+// CharacterHomeCandidate reports the system character type whose pages the
+// owner can move into "Characters", with its page count (Trash included), or
+// nil when there is none.
+func (s *entityService) CharacterHomeCandidate(ctx context.Context, campaignID string) (*CharacterHomeMove, error) {
+	types, err := s.types.ListByCampaign(ctx, campaignID)
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("listing entity types: %w", err))
+	}
+	chars, dupe, _ := characterHomePair(types)
+	if chars == nil || dupe == nil {
+		return nil, nil
+	}
+	pages, err := s.countAllPagesOfType(ctx, campaignID, dupe.ID)
+	if err != nil {
+		return nil, err
+	}
+	return &CharacterHomeMove{FromTypeID: dupe.ID, FromName: dupe.NamePlural, ToTypeID: chars.ID,
+		ToName: chars.NamePlural, Pages: pages}, nil
+}
+
+// MoveCharacterPresetHome is the owner's step for what ReconcileCharacterPresetHome
+// will not do on its own: it moves every page of the system character type into
+// "Characters", gives Characters the type's fields and the system's sheet, and
+// disables the emptied type (never deletes it). A campaign with nothing to move
+// is a no-op, so a replay is harmless.
+func (s *entityService) MoveCharacterPresetHome(ctx context.Context, campaignID string) (CharacterHomeMove, error) {
+	types, err := s.types.ListByCampaign(ctx, campaignID)
+	if err != nil {
+		return CharacterHomeMove{}, apperror.NewInternal(fmt.Errorf("listing entity types: %w", err))
+	}
+	chars, dupe, why := characterHomePair(types)
+	if why != "" {
+		return CharacterHomeMove{}, apperror.NewConflict("Couldn't move the characters automatically: " + why + ".")
+	}
+	if chars == nil || dupe == nil {
+		return CharacterHomeMove{NoOp: true}, nil
+	}
+	if _, err := s.ReconcileEntityTypeFields(ctx, chars.ID, dupe.Fields); err != nil {
+		return CharacterHomeMove{}, err
+	}
+	// The pages were claimable where they were, so an explicit "not
+	// claimable" on Characters would strand their claims.
+	if chars.Claimable != nil && !*chars.Claimable && isClaimableType(dupe) {
+		on := true
+		if _, err := s.UpdateEntityType(ctx, chars.ID, UpdateEntityTypeInput{Claimable: &on}); err != nil {
+			return CharacterHomeMove{}, err
+		}
+	}
+	moved, err := s.types.MovePagesAndAdoptPresetCategory(ctx, campaignID, dupe.ID, chars.ID, presetCategoryCharacter)
+	if err != nil {
+		return CharacterHomeMove{}, apperror.NewInternal(err)
+	}
+	slog.Info("character preset home: owner moved the system character pages onto Characters",
+		slog.String("campaign_id", campaignID), slog.Int("characters_type_id", chars.ID),
+		slog.Int("disabled_type_id", dupe.ID), slog.Int64("pages", moved))
+	for _, id := range []int{chars.ID, dupe.ID} {
+		if updated, err := s.types.FindByID(ctx, id); err == nil {
+			s.events.PublishEntityTypeEvent("updated", campaignID, updated)
+		}
+	}
+	return CharacterHomeMove{FromTypeID: dupe.ID, FromName: dupe.NamePlural, ToTypeID: chars.ID,
+		ToName: chars.NamePlural, Pages: int(moved)}, nil
+}
+
+// countAllPagesOfType counts a type's pages at every visibility plus its Trash.
+func (s *entityService) countAllPagesOfType(ctx context.Context, campaignID string, typeID int) (int, error) {
+	counts, err := s.entities.CountByType(ctx, campaignID, 3, "")
+	if err != nil {
+		return 0, apperror.NewInternal(fmt.Errorf("counting entities by type: %w", err))
+	}
+	trashed := 0
+	if s.safety != nil {
+		if trashed, err = s.safety.CountTrashedByType(ctx, typeID); err != nil {
+			return 0, apperror.NewInternal(err)
+		}
+	}
+	return counts[typeID] + trashed, nil
 }
 
 // DeleteEntityType removes an entity type if no entities reference it.

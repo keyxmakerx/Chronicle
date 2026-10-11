@@ -32,6 +32,7 @@ type mockEntityTypeRepo struct {
 	resequenceChildTypesFn func(ctx context.Context, campaignID string, orderedIDs []int) error
 
 	adoptPresetCategoryFn func(ctx context.Context, toID int, category string, retireID *int) error
+	movePagesAndAdoptFn   func(ctx context.Context, campaignID string, fromID, toID int, category string) (int64, error)
 
 	moveEntitiesAndDeleteTypeFn func(ctx context.Context, campaignID string, fromTypeID, toTypeID int) (int64, error)
 }
@@ -112,6 +113,13 @@ func (m *mockEntityTypeRepo) AdoptPresetCategory(ctx context.Context, toID int, 
 		return m.adoptPresetCategoryFn(ctx, toID, category, retireID)
 	}
 	return nil
+}
+
+func (m *mockEntityTypeRepo) MovePagesAndAdoptPresetCategory(ctx context.Context, campaignID string, fromID, toID int, category string) (int64, error) {
+	if m.movePagesAndAdoptFn != nil {
+		return m.movePagesAndAdoptFn(ctx, campaignID, fromID, toID, category)
+	}
+	return 0, nil
 }
 
 func (m *mockEntityTypeRepo) UpdateDashboard(ctx context.Context, id int, description *string, pinnedIDs []string) error {
