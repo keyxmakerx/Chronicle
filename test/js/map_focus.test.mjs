@@ -11,7 +11,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const src = readFileSync(path.join(here, '..', '..', 'static', 'js', 'map_focus.js'), 'utf8');
+const src = readFileSync(path.join(here, '..', '..', 'internal', 'plugins', 'maps', 'static', 'js', 'map_focus.js'), 'utf8');
 
 function load() {
   const saved = { window: globalThis.window, module: globalThis.module };

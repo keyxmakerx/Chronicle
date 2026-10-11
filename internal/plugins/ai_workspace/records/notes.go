@@ -6,6 +6,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
+	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/importer"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/importer/htmlconv"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/widgets/notes"
@@ -32,7 +33,7 @@ type NoteKind struct {
 func (NoteKind) Name() string  { return "note" }
 func (NoteKind) Label() string { return "Note" }
 func (NoteKind) Doc() string {
-	return "One of my own notes, matched by `name` (its title). Without `page` it is a Journal note; with `page: <page name>` it is my jot on that page. Optional `share`: `private` (default), `gm` or `party`; `rename_to`. The body is the note.\n\n```\n---\nkind: note\nname: Who poisoned the duke?\npage: Duke Varrin\n---\nThe cook had the means. Check the cellar key.\n```"
+	return "One of my own notes, matched by `name` (its title). Without `page` it is a Journal note; with `page: <page name>` it is my jot on that page. Optional `share`: `private` (default), `gm` or `party`; `rename_to`. The body is the note; write `@[Page Name]` or `@[Page Name|words]` in it to link a page.\n\n```\n---\nkind: note\nname: Who poisoned the duke?\npage: Duke Varrin\n---\nThe cook had the means. Check the cellar key.\n```"
 }
 
 // ownNotes is the operator's own, non-folder notes. Shared-with-me notes
@@ -127,8 +128,8 @@ func (k NoteKind) Plan(ctx context.Context, campaignID string, a Actor, r Record
 
 // entry converts the body to the editor's stored pair (ProseMirror JSON +
 // sanitized HTML); the notes service sanitizes the HTML again on save.
-func entry(body string) (*string, *string, error) {
-	h, err := bodyHTML(body)
+func entry(body string, links *importer.PageLinks) (*string, *string, error) {
+	h, err := bodyHTML(body, links)
 	if err != nil || h == nil {
 		return nil, nil, err
 	}
@@ -147,7 +148,7 @@ func (k NoteKind) Apply(ctx context.Context, campaignID string, a Actor, r Recor
 	if err != nil {
 		return err
 	}
-	j, h, err := entry(r.Body)
+	j, h, err := entry(r.Body, r.Links)
 	if err != nil {
 		return err
 	}

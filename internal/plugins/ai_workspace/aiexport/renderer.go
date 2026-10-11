@@ -150,6 +150,11 @@ func RenderEntities(
 		return a.Name < b.Name
 	})
 
+	// Parent names come only from the rows being exported (already filtered
+	// to what the reader may see) plus opts.ParentNames, so a hidden parent
+	// is never named.
+	opts.ParentNames = visibleParentNames(ents, opts.ParentNames)
+
 	var b strings.Builder
 	b.WriteString("# Entities\n\n")
 	for _, tid := range typeIDs {
@@ -178,6 +183,17 @@ func RenderEntities(
 		}
 	}
 	return b.String(), nil
+}
+
+func visibleParentNames(ents []entities.Entity, extra map[string]string) map[string]string {
+	names := make(map[string]string, len(ents)+len(extra))
+	for id, n := range extra {
+		names[id] = n
+	}
+	for _, e := range ents {
+		names[e.ID] = e.Name
+	}
+	return names
 }
 
 func renderEntity(
@@ -249,6 +265,14 @@ func renderEntity(
 		}
 		if len(names) > 0 {
 			fmt.Fprintf(b, "**Tags:** %s\n\n", strings.Join(names, ", "))
+		}
+	}
+
+	// Parent — where the page sits in the tree, so the AI can add sub-pages
+	// with `parent:`. Named only when the reader can see the parent.
+	if e.ParentID != nil {
+		if name := opts.ParentNames[*e.ParentID]; name != "" {
+			fmt.Fprintf(b, "**Parent:** %s\n\n", wikilink(name))
 		}
 	}
 

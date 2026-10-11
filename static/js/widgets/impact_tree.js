@@ -147,12 +147,11 @@
 
   // Register with Chronicle widget system: `Chronicle.register(name, {init})`
   // is the registration API boot.js has, not `Chronicle.registerWidget`.
-  // Unguarded, like every sibling widget: base.templ loads boot.js first and
-  // `defer` preserves document order, so Chronicle.register is always
-  // defined. This mount matters because the preview fragment arrives by
-  // htmx swap (custom_system.templ → POST /campaigns/:id/systems/preview)
-  // long after DOMContentLoaded, and only boot.js's htmx:afterSettle
-  // re-mount reaches swapped-in content.
+  // Unguarded, like every sibling widget: boot.js loads this script on
+  // sight, so Chronicle.register is always defined. The preview fragment
+  // arrives by htmx swap (custom_system.templ → POST
+  // /campaigns/:id/systems/preview), and boot.js's htmx:afterSettle scan is
+  // what finds the mount and fetches this script.
   // init() receives (el, config); the tree is read off the element's own
   // data-tree attribute, so the config argument is unused.
   Chronicle.register('impact_tree', { init: mount });

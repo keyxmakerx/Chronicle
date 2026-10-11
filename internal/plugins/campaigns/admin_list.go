@@ -46,7 +46,8 @@ type SystemCount struct {
 // buildAdminCampaignWhere returns the WHERE clause (including the keyword,
 // or empty) and its placeholder args. User text only ever travels as an arg.
 func buildAdminCampaignWhere(query, system string) (string, []any) {
-	var conds []string
+	// A campaign in the Trash is listed on the Trash page, not here.
+	conds := []string{"deleted_at IS NULL"}
 	var args []any
 	if query != "" {
 		conds = append(conds, fmt.Sprintf("name LIKE ? ESCAPE '%s'", database.LikeEscapeChar))
@@ -61,9 +62,6 @@ func buildAdminCampaignWhere(query, system string) (string, []any) {
 	default:
 		conds = append(conds, campaignSystemExpr+" = ?")
 		args = append(args, system)
-	}
-	if len(conds) == 0 {
-		return "", nil
 	}
 	clause := " WHERE " + conds[0]
 	for _, c := range conds[1:] {

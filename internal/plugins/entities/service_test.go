@@ -31,6 +31,9 @@ type mockEntityTypeRepo struct {
 	listChildTypesFn       func(ctx context.Context, parentID int) ([]EntityType, error)
 	resequenceChildTypesFn func(ctx context.Context, campaignID string, orderedIDs []int) error
 
+	adoptPresetCategoryFn func(ctx context.Context, toID int, category string, retireID *int) error
+	movePagesAndAdoptFn   func(ctx context.Context, campaignID string, fromID, toID int, category string) (int64, error)
+
 	moveEntitiesAndDeleteTypeFn func(ctx context.Context, campaignID string, fromTypeID, toTypeID int) (int64, error)
 }
 
@@ -103,6 +106,20 @@ func (m *mockEntityTypeRepo) UpdateFieldsSchema(ctx context.Context, id int, fie
 
 func (m *mockEntityTypeRepo) UpdateColor(ctx context.Context, id int, color string) error {
 	return nil
+}
+
+func (m *mockEntityTypeRepo) AdoptPresetCategory(ctx context.Context, toID int, category string, retireID *int) error {
+	if m.adoptPresetCategoryFn != nil {
+		return m.adoptPresetCategoryFn(ctx, toID, category, retireID)
+	}
+	return nil
+}
+
+func (m *mockEntityTypeRepo) MovePagesAndAdoptPresetCategory(ctx context.Context, campaignID string, fromID, toID int, category string) (int64, error) {
+	if m.movePagesAndAdoptFn != nil {
+		return m.movePagesAndAdoptFn(ctx, campaignID, fromID, toID, category)
+	}
+	return 0, nil
 }
 
 func (m *mockEntityTypeRepo) UpdateDashboard(ctx context.Context, id int, description *string, pinnedIDs []string) error {
@@ -184,6 +201,9 @@ type mockEntityRepo struct {
 	listByOwnerFn      func(ctx context.Context, campaignID, ownerUserID string) ([]Entity, error)
 	listClaimedFn      func(ctx context.Context, campaignID string, role int, userID string) ([]Entity, error)
 	updateOwnerFn      func(ctx context.Context, entityID string, ownerUserID *string) error
+	setPlayableFn      func(ctx context.Context, entityID string, playable bool) error
+	listOnRosterFn     func(ctx context.Context, campaignID string, typeIDs []int, role int, userID string) ([]Entity, error)
+	searchRosterFn     func(ctx context.Context, campaignID string, typeIDs []int, f RosterSearch, role int, userID string) ([]Entity, error)
 	updateMapIDFn      func(ctx context.Context, entityID string, mapID *string) error
 	listSiblingIDsFn   func(ctx context.Context, campaignID string, entityTypeID int, parentID, parentNodeID *string) ([]string, error)
 	resequenceFn       func(ctx context.Context, campaignID string, orderedIDs []string) error
@@ -415,6 +435,27 @@ func (m *mockEntityRepo) UpdateOwner(ctx context.Context, entityID string, owner
 		return m.updateOwnerFn(ctx, entityID, ownerUserID)
 	}
 	return nil
+}
+
+func (m *mockEntityRepo) SetPlayable(ctx context.Context, entityID string, playable bool) error {
+	if m.setPlayableFn != nil {
+		return m.setPlayableFn(ctx, entityID, playable)
+	}
+	return nil
+}
+
+func (m *mockEntityRepo) ListOnRoster(ctx context.Context, campaignID string, typeIDs []int, role int, userID string) ([]Entity, error) {
+	if m.listOnRosterFn != nil {
+		return m.listOnRosterFn(ctx, campaignID, typeIDs, role, userID)
+	}
+	return nil, nil
+}
+
+func (m *mockEntityRepo) SearchRoster(ctx context.Context, campaignID string, typeIDs []int, f RosterSearch, role int, userID string) ([]Entity, error) {
+	if m.searchRosterFn != nil {
+		return m.searchRosterFn(ctx, campaignID, typeIDs, f, role, userID)
+	}
+	return nil, nil
 }
 
 func (m *mockEntityRepo) UpdateMapID(ctx context.Context, entityID string, mapID *string) error {

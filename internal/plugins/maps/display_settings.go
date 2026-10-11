@@ -2,6 +2,7 @@ package maps
 
 import (
 	"encoding/json"
+	"math"
 	"strings"
 	"unicode"
 
@@ -128,6 +129,10 @@ type DisplaySettings struct {
 	Open  *OpenDisplay           `json:"open,omitempty"`
 	Draw  *DrawDisplay           `json:"draw,omitempty"`
 	Hexes *HexesDisplay          `json:"hexes,omitempty"`
+	// Measure is the map's scale for the Measure tool. Unlike the rest of the
+	// document an owner or a member with DM access may write it
+	// (MapService.SetMeasureScale), so it is its own group.
+	Measure *MeasureDisplay `json:"measure,omitempty"`
 }
 
 // FrameDisplay overrides the campaign frame for one map. An empty Style means
@@ -190,9 +195,41 @@ type HexesDisplay struct {
 	Art      string `json:"art,omitempty"`
 }
 
+// MeasureDisplay is a picture map's scale: two points the owner dragged
+// between (percent of the picture, like pins, so a bigger upload of the same
+// map keeps its scale) and the real length of that line. Storing the line
+// rather than a units-per-pixel figure keeps it independent of the picture's
+// resolution. Hex maps do not use it: they measure in hexes.
+type MeasureDisplay struct {
+	A      MeasurePoint `json:"a"`
+	B      MeasurePoint `json:"b"`
+	Length float64      `json:"length"`
+	Unit   string       `json:"unit"`
+}
+
+// MeasurePoint is one end of the scale line, in percent of the picture.
+type MeasurePoint struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
+}
+
+// The units a scale may be given in, and the bounds on it. The length cap is
+// far beyond any world map in kilometres; it only keeps a typo from storing
+// something absurd. The two ends must be apart, or every distance would be a
+// division by zero.
+var MeasureUnits = []string{"miles", "km", "feet", "leagues"}
+
+const (
+	measureLengthMax  = 100000.0
+	measureMinApartPc = 0.1
+)
+
+// IsValidMeasureUnit reports whether u is one of the allowed units.
+func IsValidMeasureUnit(u string) bool { return oneOf(u, MeasureUnits...) }
+
 // displayGroups is the closed set of top-level keys; anything else in an
 // incoming document is dropped.
-var displayGroups = []string{"frame", "pins", "kinds", "grid", "open", "draw", "hexes"}
+var displayGroups = []string{"frame", "pins", "kinds", "grid", "open", "draw", "hexes", "measure"}
 
 func oneOf(v string, allowed ...string) bool {
 	for _, a := range allowed {
@@ -433,6 +470,42 @@ func normalizeHexes(raw json.RawMessage) (*HexesDisplay, error) {
 	return &h, nil
 }
 
+// normalizeMeasure validates a scale. Nothing is clamped: a clamped point or
+// length would silently store a different scale from the one the person
+// drew, so anything out of bounds is refused. Every field is required.
+func normalizeMeasure(raw json.RawMessage) (*MeasureDisplay, error) {
+	var in struct {
+		A      *MeasurePoint `json:"a"`
+		B      *MeasurePoint `json:"b"`
+		Length *float64      `json:"length"`
+		Unit   string        `json:"unit"`
+	}
+	if err := decodeGroup("measure", raw, &in); err != nil {
+		return nil, err
+	}
+	if in.A == nil || in.B == nil || in.Length == nil {
+		return nil, apperror.NewValidation("a scale needs both ends of the line and its length")
+	}
+	inPicture := func(p *MeasurePoint) bool {
+		return !math.IsNaN(p.X) && !math.IsNaN(p.Y) && p.X >= 0 && p.X <= 100 && p.Y >= 0 && p.Y <= 100
+	}
+	if !inPicture(in.A) || !inPicture(in.B) {
+		return nil, apperror.NewValidation("both ends of the scale line must be on the map")
+	}
+	if math.Hypot(in.B.X-in.A.X, in.B.Y-in.A.Y) < measureMinApartPc {
+		return nil, apperror.NewValidation("the scale line is too short; drag along something longer")
+	}
+	l := *in.Length
+	if math.IsNaN(l) || math.IsInf(l, 0) || l <= 0 || l > measureLengthMax {
+		return nil, apperror.NewValidation("the length must be a number above 0 and at most 100000")
+	}
+	in.Unit = strings.TrimSpace(in.Unit)
+	if !IsValidMeasureUnit(in.Unit) {
+		return nil, apperror.NewValidation("unit must be one of: miles, km, feet, leagues")
+	}
+	return &MeasureDisplay{A: *in.A, B: *in.B, Length: l, Unit: in.Unit}, nil
+}
+
 // applyGroup validates one incoming group and writes it into ds, or removes it
 // when the group normalises to nothing (every field default). raw is never the
 // literal null here: the caller handles an explicit null as "clear this group".
@@ -453,6 +526,8 @@ func applyGroup(ds *DisplaySettings, name string, raw json.RawMessage) error {
 		ds.Draw, err = normalizeDraw(raw)
 	case "hexes":
 		ds.Hexes, err = normalizeHexes(raw)
+	case "measure":
+		ds.Measure, err = normalizeMeasure(raw)
 	}
 	return err
 }
@@ -473,13 +548,15 @@ func clearGroup(ds *DisplaySettings, name string) {
 		ds.Draw = nil
 	case "hexes":
 		ds.Hexes = nil
+	case "measure":
+		ds.Measure = nil
 	}
 }
 
 // IsEmpty reports whether no group is set, i.e. the stored value should be NULL.
 func (d *DisplaySettings) IsEmpty() bool {
 	return d == nil || (d.Frame == nil && d.Pins == nil && d.Kinds == nil &&
-		d.Grid == nil && d.Open == nil && d.Draw == nil && d.Hexes == nil)
+		d.Grid == nil && d.Open == nil && d.Draw == nil && d.Hexes == nil && d.Measure == nil)
 }
 
 // MergeDisplaySettings applies an incoming display_settings document to the
@@ -628,6 +705,9 @@ type ResolvedDisplay struct {
 	OpenZoom      float64       `json:"open_zoom"`
 	DrawWho       string        `json:"draw_who"`
 	PartyWho      string        `json:"party_who"`
+	// Measure is the map's scale, or null while nobody has set one. It is not
+	// secret: everyone who can see the map measures with it.
+	Measure *MeasureDisplay `json:"measure"`
 }
 
 // ResolveDisplay fills every default for a map. campaignFrame is the
@@ -701,5 +781,9 @@ func ResolveDisplay(m *Map, campaignFrame string) ResolvedDisplay {
 	}
 	r.DrawWho = m.DrawWho()
 	r.PartyWho = m.PartyWho()
+	if d.Measure != nil {
+		ms := *d.Measure
+		r.Measure = &ms
+	}
 	return r
 }

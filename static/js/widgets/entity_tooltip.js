@@ -36,8 +36,13 @@
     cacheOrder.push(url);
   }
 
+  // The preview address with /peek in its place: the card's Peek action.
+  function peekOf(url) {
+    return Chronicle.peekAddress ? Chronicle.peekAddress(url) : '';
+  }
+
   // The preview API's answer, as hover card content.
-  function toContent(data, href) {
+  function toContent(data, href, peek) {
     var kind = data.type_name || '';
     if (data.type_label) kind += (kind ? ' · ' : '') + data.type_label;
     return {
@@ -48,7 +53,8 @@
       pic: data.image_path || '',
       facts: (data.attributes || []).map(function (a) { return [a.label, a.value]; }),
       text: data.entry_excerpt || '',
-      link: href && href !== '#' ? { href: href, label: 'Open page' } : null
+      link: href && href !== '#' ? { href: href, label: 'Open page' } : null,
+      peek: peek || ''
     };
   }
 
@@ -60,7 +66,7 @@
     if (!url) return null;
     var href = trigger.getAttribute('href') || '';
     var hit = cacheGet(url);
-    if (hit) return toContent(hit, href);
+    if (hit) return toContent(hit, href, peekOf(url));
     return Chronicle.apiFetch(url)
       .then(function (res) {
         if (!res.ok) throw new Error('Preview fetch failed: ' + res.status);
@@ -68,7 +74,7 @@
       })
       .then(function (data) {
         cacheSet(url, data);
-        return toContent(data, href);
+        return toContent(data, href, peekOf(url));
       })
       .catch(function (err) {
         console.warn('[Tooltip] Preview fetch failed:', err);

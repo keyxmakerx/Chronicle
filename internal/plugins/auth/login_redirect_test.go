@@ -27,7 +27,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
 
-// redirectStubService satisfies AuthService by embedding it: only the two
+// redirectStubService satisfies AuthService by embedding it: only the
 // methods the login round trip touches are implemented, and any other call
 // would nil-panic loudly rather than pass silently.
 type redirectStubService struct {
@@ -42,6 +42,8 @@ func (s redirectStubService) Login(_ context.Context, input LoginInput) (string,
 	}
 	return "session-token", &User{ID: "u1", Email: input.Email}, nil
 }
+
+func (s redirectStubService) LoginOptions(context.Context) LoginOptions { return LoginOptions{} }
 
 func (s redirectStubService) ValidateSession(context.Context, string) (*Session, error) {
 	if s.validSession {

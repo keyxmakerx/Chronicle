@@ -101,6 +101,11 @@ test-cover: ## Run tests with coverage report
 	go test ./... -coverprofile=coverage.out
 	go tool cover -html=coverage.out -o coverage.html
 
+.PHONY: mermaid-vendor
+mermaid-vendor: ## Copy the pinned Mermaid build (package.json) into static/vendor
+	npm ci --no-audit --no-fund
+	cp node_modules/mermaid/dist/mermaid.min.js static/vendor/mermaid.min.js
+
 .PHONY: test-js
 test-js: ## Run JS runtime tests (sidebar, availability, widgets — node --test)
 	node --test test/js/*.test.mjs
@@ -129,6 +134,7 @@ verify: ## Run the full local CI sequence (templ → build → vet → guards �
 	@echo "==> guard: comment-clutter (self-test)"; ./tools/test-comment-clutter.sh
 	@echo "==> guard: comment-clutter";        ./tools/check-comment-clutter.sh
 	@echo "==> guard: migration-immutability"; ./tools/check-migration-immutability.sh
+	@echo "==> guard: migration-numbers";     ./tools/check-migration-numbers.sh
 	@echo "==> guard: v2-motion-discipline";   ./tools/check-v2-motion-discipline.sh
 	@echo "==> guard: page-scripts";           ./tools/check-page-scripts.sh
 	@echo "==> guard: decision-citations";     ./tools/check-decision-citations.sh

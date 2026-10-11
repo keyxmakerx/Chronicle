@@ -262,6 +262,28 @@ type SessionListData struct {
 	Campaign interface{} // *campaigns.Campaign, avoid import cycle.
 }
 
+// normalizeDates cuts the DATE columns back to YYYY-MM-DD. The driver runs
+// with parseTime, so a DATE scanned into a string arrives as RFC 3339
+// ("2026-10-14T00:00:00Z"), and every caller compares and parses these as
+// plain dates.
+func (s *Session) normalizeDates() {
+	s.ScheduledDate = plainDate(s.ScheduledDate)
+	s.RecurrenceEndDate = plainDate(s.RecurrenceEndDate)
+}
+
+// plainDate keeps the YYYY-MM-DD head of a scanned DATE, leaving anything
+// that is not a date untouched.
+func plainDate(v *string) *string {
+	if v == nil || len(*v) <= 10 {
+		return v
+	}
+	if _, err := time.Parse("2006-01-02", (*v)[:10]); err != nil {
+		return v
+	}
+	d := (*v)[:10]
+	return &d
+}
+
 // FormatScheduledDate returns a human-readable date string like "Sat, Mar 8, 2028"
 // from the YYYY-MM-DD scheduled_date field, with the wall-clock time appended
 // ("Sat, Mar 8, 2028 · 7:00 PM") when scheduled_time is set. Returns empty

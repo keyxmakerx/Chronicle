@@ -1638,6 +1638,10 @@
       Chronicle.NoteLink.configure({ campaignId: this.cid, onOpen: function (id) { self.open(id); } })
     ];
     if (T.TaskList && T.TaskItem) ext.push(T.TaskList, T.TaskItem.configure({ nested: true }));
+    // Pictures are in the schema for everyone, so a note holding one loads.
+    if (Chronicle.EditorImage) ext.push(Chronicle.EditorImage.extension);
+    if (Chronicle.EditorDiagram && Chronicle.EditorDiagram.extension) ext.push(Chronicle.EditorDiagram.extension);
+    var pictureProps = Chronicle.EditorImage ? Chronicle.EditorImage.pasteDropProps(function () { return self.editor; }, this.cid) : {};
 
     this.wiki = Chronicle.WikiLinkExtension({
       campaignId: this.cid,
@@ -1656,7 +1660,9 @@
           if (self.wiki && self.wiki.onKeyDown(null, event)) return true;
           if (self.mention && self.mention.onKeyDown(null, event)) return true;
           return false;
-        }
+        },
+        handlePaste: pictureProps.handlePaste,
+        handleDrop: pictureProps.handleDrop
       },
       onUpdate: function (p) {
         // Only a real edit counts: toggling editability emits an update too.
@@ -1673,6 +1679,7 @@
       onBlur: function () { self.flushSave(); }
     });
     this.editor = ed;
+    if (Chronicle.EditorImage) Chronicle.EditorImage.useNotePictures(ed, this.cid);
     this.wiki.onCreate(ed);
     if (this.mention) this.mention.onCreate(ed);
     this.paintToolbar();
@@ -1727,6 +1734,8 @@
     else if (cmd === 'heading') c.toggleHeading({ level: 2 }).run();
     else if (cmd === 'tasks' && c.toggleTaskList) c.toggleTaskList().run();
     else if (cmd === 'link' && this.wiki) this.wiki.begin();
+    else if (cmd === 'picture' && Chronicle.EditorImage) Chronicle.EditorImage.pickAndInsert(ed, this.cid);
+    else if (cmd === 'diagram' && Chronicle.EditorDiagram && Chronicle.EditorDiagram.insert) Chronicle.EditorDiagram.insert(ed);
     this.paintToolbar();
   };
 
@@ -2826,6 +2835,9 @@
       document.addEventListener('keydown', j.onDocKey);
       document.addEventListener('pointerdown', j.onDocPointer);
       document.addEventListener('visibilitychange', j.onVisibility);
+      // This script loads on sight, so a note asked for before it arrived
+      // (the notebook frame) is opened by whoever was holding it.
+      window.dispatchEvent(new CustomEvent('chronicle:journal-ready'));
     },
     destroy: function (el) {
       var j = el._journal;

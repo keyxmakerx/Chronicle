@@ -3,6 +3,7 @@ package campaigns
 import (
 	"context"
 
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 )
 
@@ -18,11 +19,19 @@ func NewUserFinderAdapter(repo auth.UserRepository) UserFinder {
 	return &UserFinderAdapter{repo: repo}
 }
 
-// FindUserByEmail looks up a user by email and maps to MemberUser.
+// FindUserByEmail looks up a user by email and maps to MemberUser. A
+// guest's placeholder address finds nobody: a guest belongs to one campaign
+// and can't be added to, or handed, any other.
 func (a *UserFinderAdapter) FindUserByEmail(ctx context.Context, email string) (*MemberUser, error) {
+	if auth.IsGuestEmail(email) {
+		return nil, apperror.NewNotFound("user not found")
+	}
 	user, err := a.repo.FindByEmail(ctx, email)
 	if err != nil {
 		return nil, err
+	}
+	if user.GuestCampaignID != nil {
+		return nil, apperror.NewNotFound("user not found")
 	}
 	return &MemberUser{
 		ID:          user.ID,

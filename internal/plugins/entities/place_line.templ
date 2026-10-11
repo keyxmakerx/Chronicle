@@ -1,0 +1,77 @@
+// place_line.templ draws the "Also listed under" line under a page's title:
+// the extra spots the page shows in the page tree, with remove (x) on each and
+// a "+ Add a place" page picker for anyone who can edit the page. Behaviour is
+// static/js/widgets/page_places.js (Chronicle.PagePlaces).
+
+package entities
+
+import (
+	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+)
+
+// entityPlacesLine draws the line from what the show handler loaded.
+templ entityPlacesLine(cc *campaigns.CampaignContext, entity *Entity) {
+	@entityPlaces(cc, entity, pagePlacesOf(ctx))
+}
+
+// entityPlaces is the whole swappable unit: the add and remove endpoints
+// answer with it, and the script replaces #page-places with the reply. Every
+// control calls in through an inline handler so the swap needs no script.
+templ entityPlaces(cc *campaigns.CampaignContext, entity *Entity, p pagePlaces) {
+	if p.Enabled && (len(p.Links) > 0 || p.CanEdit) {
+		<div
+			id="page-places"
+			class="pl-line"
+			data-places
+			data-endpoint={ placesEndpoint(cc.Campaign.ID, entity.ID) }
+			data-search-endpoint={ fmt.Sprintf("/campaigns/%s/entities/search", cc.Campaign.ID) }
+			data-self-id={ entity.ID }
+			data-parent-id={ p.RealParentID }
+			data-listed={ placeIDList(p.Links) }
+		>
+			if len(p.Links) > 0 {
+				<span class="pl-lead"><i class="fa-solid fa-link" aria-hidden="true"></i> Also listed under:</span>
+				<ul class="pl-chips">
+					for _, l := range p.Links {
+						<li class="pl-chip">
+							<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, l.ParentID)) } class="pl-name">{ l.ParentName }</a>
+							if p.CanEdit {
+								<button
+									type="button"
+									class="pl-x"
+									data-parent-id={ l.ParentID }
+									data-parent-name={ l.ParentName }
+									aria-label={ "Stop listing this page under " + l.ParentName }
+									title="Remove this place. The page itself stays."
+									onclick={ placesCall("remove") }
+								><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+							}
+						</li>
+					}
+				</ul>
+			}
+			if p.CanEdit {
+				<span class="pl-add-wrap">
+					<button
+						type="button"
+						class="pl-add"
+						data-add
+						aria-expanded="false"
+						aria-haspopup="dialog"
+						onclick={ placesCall("toggle") }
+					><i class="fa-solid fa-plus" aria-hidden="true"></i> Add a place</button>
+					<div class="pl-pop" data-pop role="dialog" aria-label="List this page under another page" hidden>
+						<div class="ag-search">
+							<i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+							<input type="search" class="input w-full text-sm" placeholder="Search pages" aria-label="Search pages" autocomplete="off" data-q oninput={ placesCall("search") }/>
+						</div>
+						<div class="pl-list" role="listbox" aria-label="Pages" data-list></div>
+						<p class="pl-err" role="alert" data-err hidden></p>
+					</div>
+				</span>
+			}
+		</div>
+	}
+}

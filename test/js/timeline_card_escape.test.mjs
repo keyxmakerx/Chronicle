@@ -15,7 +15,7 @@ import vm from 'node:vm';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const bootSrc = readFileSync(join(root, 'static/js/boot.js'), 'utf8');
-const vizSrc = readFileSync(join(root, 'static/js/widgets/timeline_viz.js'), 'utf8');
+const vizSrc = readFileSync(join(root, 'internal/plugins/timeline/static/js/timeline_viz.js'), 'utf8');
 
 /** Pull the escape helpers out of boot.js and evaluate them on a bare object. */
 function loadEscapers() {

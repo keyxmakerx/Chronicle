@@ -125,6 +125,11 @@
     var opts = { recipe: plan.recipe, seed: plan.seed };
     if (plan.calendar) opts.calendar = plan.calendar;
     if (plan.scope) opts.scope = plan.scope;
+    // The owner's own kinds of weather; one the engine can't read is left
+    // out, as the calendar's weather sheet does, rather than failing the run.
+    if (Array.isArray(plan.kinds)) {
+      opts.kinds = plan.kinds.filter(function (k) { return G.weather.validateKind(k, plan.kinds).ok; });
+    }
     var res = G.run(plan.generator, opts);
     if (plan.generator === 'names') return (res.names && res.names[plan.namesKind]) || [];
     if (plan.generator === 'weather') {

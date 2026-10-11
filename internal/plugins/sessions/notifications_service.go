@@ -11,8 +11,8 @@ import (
 
 // Scheduler-scoped notification business logic: new proposals notify
 // members; received responses notify the proposer. The store itself is
-// generic (see NotifyUsers) but no other feature subscribes yet — no prefs,
-// no digests, no per-user websockets.
+// generic (see NotifyUsers), and people's notification choices filter every
+// write (bellRecipients). No digests, no per-user websockets.
 
 // notificationPayload is the small render context stored as JSON on each row.
 type notificationPayload struct {
@@ -63,7 +63,7 @@ func (s *sessionService) NotifyUsersWithDetail(ctx context.Context, userIDs []st
 	payload := marshalPayloadDetail(message, ntype, detail)
 	now := time.Now().UTC()
 	cid := campaignID
-	for _, uid := range userIDs {
+	for _, uid := range s.bellRecipients(ctx, userIDs, ntype) {
 		if uid == "" {
 			continue
 		}
@@ -94,7 +94,7 @@ func (s *sessionService) NotifyProposalCreated(ctx context.Context, campaignID, 
 	payload := marshalPayload(message, NotifProposalCreated)
 	now := time.Now().UTC()
 	cid := campaignID
-	for _, uid := range recipientIDs {
+	for _, uid := range s.bellRecipients(ctx, recipientIDs, NotifProposalCreated) {
 		if uid == "" {
 			continue
 		}
@@ -125,6 +125,9 @@ func (s *sessionService) NotifyProposalResponse(ctx context.Context, campaignID,
 		return err
 	}
 	if responderID == p.CreatedBy {
+		return nil
+	}
+	if len(s.bellRecipients(ctx, []string{p.CreatedBy}, NotifProposalResponse)) == 0 {
 		return nil
 	}
 	responses, err := s.repo.ListProposalResponses(ctx, proposalID)
@@ -190,14 +193,18 @@ func (s *sessionService) NotifyProposalConfirmed(ctx context.Context, campaignID
 	now := time.Now().UTC()
 	cid := campaignID
 	seen := make(map[string]bool)
+	var ids []string
 	for _, r := range responses {
 		if r.UserID == "" || seen[r.UserID] {
 			continue
 		}
 		seen[r.UserID] = true
+		ids = append(ids, r.UserID)
+	}
+	for _, uid := range s.bellRecipients(ctx, ids, NotifProposalConfirmed) {
 		n := &Notification{
 			ID:         generateUUID(),
-			UserID:     r.UserID,
+			UserID:     uid,
 			CampaignID: &cid,
 			Type:       NotifProposalConfirmed,
 			Payload:    payload,

@@ -179,6 +179,20 @@ func newerVersion(pkg Package, versions []PackageVersion) *PackageVersion {
 	return latest
 }
 
+// offeredNewer is the version the page offers to install for a status. A
+// failed update still offers a newer release, because the fix for a failed
+// install is usually the next release and Try again only re-checks. A pin
+// still holds, as it does for the auto-update worker.
+func offeredNewer(pkg Package, status rowStatus, newer *PackageVersion) *PackageVersion {
+	switch {
+	case status == statusUpdateReady:
+		return newer
+	case status == statusProblem && pkg.PinnedVersion == "":
+		return newer
+	}
+	return nil
+}
+
 // derivePackageStatus picks the pill. Order matters: a retired package's old
 // error is moot, and a failure outranks a pending update because the admin
 // must see it first. A pinned package never reports an update, matching the
@@ -209,7 +223,7 @@ func derivePackageStatus(pkg Package, newer *PackageVersion) rowStatus {
 type PackageRow struct {
 	Package
 	Status   rowStatus
-	Newer    *PackageVersion // non-nil only when Status == statusUpdateReady
+	Newer    *PackageVersion // non-nil only for statusUpdateReady or statusProblem
 	Versions []PackageVersion
 	Usage    []PackageUsage
 	// UsageKnown is false when the usage lookup failed: the page then says

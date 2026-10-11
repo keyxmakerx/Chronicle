@@ -254,6 +254,17 @@ type FieldDef struct {
 	// should set this to false. Defaults to true when FoundryPath is set.
 	FoundryWritable *bool `json:"foundry_writable,omitempty"`
 
+	// FoundryChoices names a list in the Foundry system's CONFIG (e.g.
+	// "DRAW_STEEL.monsters.roles") whose keys this field's values become in
+	// Foundry, so a label like "Leader" is stored as the key "leader". Core
+	// only passes it to the Foundry module.
+	FoundryChoices string `json:"foundry_choices,omitempty"`
+
+	// FoundryFormat names how the module converts the value between Chronicle
+	// and Foundry ("set", "integer", "size"). Core only passes it on; the
+	// module skips a field whose format it doesn't know.
+	FoundryFormat string `json:"foundry_format,omitempty"`
+
 	// --- Collection mapping (abilities/inventory/features that live in an
 	// embedded actor collection like actor.items[], which a dot-path cannot
 	// reach). When FoundryCollection is set the generic adapter extracts &
@@ -384,6 +395,11 @@ type EntityPresetDef struct {
 	// filter actors of the correct type. Defaults to "character" if omitted.
 	FoundryActorType string `json:"foundry_actor_type,omitempty"`
 
+	// FoundryPullFields, when set, are the only field keys Foundry may send
+	// back for this preset; Chronicle owns the rest. Absent means every
+	// mapped field syncs both ways, as for heroes.
+	FoundryPullFields []string `json:"foundry_pull_fields,omitempty"`
+
 	// Fields are the default field definitions for entities of this type.
 	Fields []FieldDef `json:"fields,omitempty"`
 }
@@ -461,9 +477,31 @@ func (m *SystemManifest) ItemPreset() *EntityPresetDef {
 }
 
 // ItemFieldsForAPI builds the API response for item preset fields.
-// Returns nil if no item preset exists. Mirrors CharacterFieldsForAPI.
+// Returns nil if no item preset exists.
 func (m *SystemManifest) ItemFieldsForAPI() *CharacterFieldsResponse {
-	preset := m.ItemPreset()
+	return m.presetFieldsForAPI(m.ItemPreset())
+}
+
+// CreaturePreset returns the first entity preset with category "creature",
+// or nil. Used by creature sync to Foundry NPC actors.
+func (m *SystemManifest) CreaturePreset() *EntityPresetDef {
+	for i := range m.EntityPresets {
+		if m.EntityPresets[i].Category == "creature" {
+			return &m.EntityPresets[i]
+		}
+	}
+	return nil
+}
+
+// CreatureFieldsForAPI builds the API response for creature preset fields.
+// Returns nil if no creature preset exists.
+func (m *SystemManifest) CreatureFieldsForAPI() *CharacterFieldsResponse {
+	return m.presetFieldsForAPI(m.CreaturePreset())
+}
+
+// presetFieldsForAPI exports one preset's fields with their Foundry
+// annotations for the Foundry module. Returns nil for a nil preset.
+func (m *SystemManifest) presetFieldsForAPI(preset *EntityPresetDef) *CharacterFieldsResponse {
 	if preset == nil {
 		return nil
 	}
@@ -476,6 +514,8 @@ func (m *SystemManifest) ItemFieldsForAPI() *CharacterFieldsResponse {
 			Type:              f.Type,
 			FoundryPath:       f.FoundryPath,
 			FoundryWritable:   f.FoundryPath != "" && f.IsFoundryWritable(),
+			FoundryChoices:    f.FoundryChoices,
+			FoundryFormat:     f.FoundryFormat,
 			FoundryCollection: f.FoundryCollection,
 			FoundryItemType:   f.FoundryItemType,
 			FoundryItemFields: f.FoundryItemFields,
@@ -484,24 +524,28 @@ func (m *SystemManifest) ItemFieldsForAPI() *CharacterFieldsResponse {
 	}
 
 	return &CharacterFieldsResponse{
-		SystemID:         m.ID,
-		PresetSlug:       preset.Slug,
-		PresetName:       preset.Name,
-		FoundrySystemID:  m.FoundrySystemID,
-		FoundryActorType: preset.FoundryActorType,
-		Fields:           fields,
+		SystemID:          m.ID,
+		PresetSlug:        preset.Slug,
+		PresetName:        preset.Name,
+		FoundrySystemID:   m.FoundrySystemID,
+		FoundryActorType:  preset.FoundryActorType,
+		FoundryPullFields: preset.FoundryPullFields,
+		Fields:            fields,
 	}
 }
 
 // CharacterFieldsResponse is the API response shape for the character
 // fields endpoint, containing field definitions with Foundry annotations.
 type CharacterFieldsResponse struct {
-	SystemID         string                 `json:"system_id"`
-	PresetSlug       string                 `json:"preset_slug"`
-	PresetName       string                 `json:"preset_name"`
-	FoundrySystemID  string                 `json:"foundry_system_id,omitempty"`
-	FoundryActorType string                 `json:"foundry_actor_type,omitempty"`
-	Fields           []CharacterFieldExport `json:"fields"`
+	SystemID         string `json:"system_id"`
+	PresetSlug       string `json:"preset_slug"`
+	PresetName       string `json:"preset_name"`
+	FoundrySystemID  string `json:"foundry_system_id,omitempty"`
+	FoundryActorType string `json:"foundry_actor_type,omitempty"`
+	// FoundryPullFields lists the only keys Foundry may send back; absent
+	// means all mapped fields sync both ways.
+	FoundryPullFields []string               `json:"foundry_pull_fields,omitempty"`
+	Fields            []CharacterFieldExport `json:"fields"`
 }
 
 // CharacterFieldExport is a single field definition exported for the
@@ -512,6 +556,8 @@ type CharacterFieldExport struct {
 	Type              string            `json:"type"`
 	FoundryPath       string            `json:"foundry_path,omitempty"`
 	FoundryWritable   bool              `json:"foundry_writable"`
+	FoundryChoices    string            `json:"foundry_choices,omitempty"`
+	FoundryFormat     string            `json:"foundry_format,omitempty"`
 	FoundryCollection string            `json:"foundry_collection,omitempty"`
 	FoundryItemType   []string          `json:"foundry_item_type,omitempty"`
 	FoundryItemFields map[string]string `json:"foundry_item_fields,omitempty"`
@@ -521,34 +567,7 @@ type CharacterFieldExport struct {
 // CharacterFieldsForAPI builds the API response for character preset fields.
 // Returns nil if no character preset exists.
 func (m *SystemManifest) CharacterFieldsForAPI() *CharacterFieldsResponse {
-	preset := m.CharacterPreset()
-	if preset == nil {
-		return nil
-	}
-
-	fields := make([]CharacterFieldExport, len(preset.Fields))
-	for i, f := range preset.Fields {
-		fields[i] = CharacterFieldExport{
-			Key:               f.Key,
-			Label:             f.Label,
-			Type:              f.Type,
-			FoundryPath:       f.FoundryPath,
-			FoundryWritable:   f.FoundryPath != "" && f.IsFoundryWritable(),
-			FoundryCollection: f.FoundryCollection,
-			FoundryItemType:   f.FoundryItemType,
-			FoundryItemFields: f.FoundryItemFields,
-			FoundryItemSingle: f.FoundryItemSingle,
-		}
-	}
-
-	return &CharacterFieldsResponse{
-		SystemID:         m.ID,
-		PresetSlug:       preset.Slug,
-		PresetName:       preset.Name,
-		FoundrySystemID:  m.FoundrySystemID,
-		FoundryActorType: preset.FoundryActorType,
-		Fields:           fields,
-	}
+	return m.presetFieldsForAPI(m.CharacterPreset())
 }
 
 // ValidationReport summarizes a system manifest's capabilities and readiness.

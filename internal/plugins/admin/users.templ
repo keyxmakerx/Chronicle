@@ -51,7 +51,12 @@ templ AdminUsersList(data UserListData) {
 						for _, user := range users {
 							<tr class="hover:bg-surface-alt transition-colors">
 								<td class="px-4 py-3 text-sm font-medium text-fg">{ user.DisplayName }</td>
-								<td class="px-4 py-3 text-sm text-fg-secondary">{ user.Email }</td>
+								<td class="px-4 py-3 text-sm text-fg-secondary">
+									{ user.Email }
+									if user.TOTPEnabled {
+										<span class="ml-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-surface-alt text-fg-muted" title="Signs in with a code from their phone"><i class="fa-solid fa-mobile-screen" aria-hidden="true"></i> Two-factor on</span>
+									}
+								</td>
 								<td class="px-4 py-3">
 									<span class={ "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium " + userRoleChipClass(user) }>{ userRoleLabel(user) }</span>
 								</td>
@@ -74,7 +79,7 @@ templ AdminUsersList(data UserListData) {
 		<div class="card p-0 divide-y divide-edge md:hidden" data-testid="users-cards">
 			if len(users) > 0 {
 				for _, user := range users {
-					@adminCardRow(avatarInitial(user.DisplayName), user.DisplayName, "", userRoleLabel(user), userRoleChipClass(user), user.Email+" · joined "+user.CreatedAt.Format("Jan 2, 2006"), csrfToken, userCardActions(user))
+					@adminCardRow(avatarInitial(user.DisplayName), user.DisplayName, "", userRoleLabel(user), userRoleChipClass(user), user.Email+twoFactorNote(user)+" · joined "+user.CreatedAt.Format("Jan 2, 2006"), csrfToken, userCardActions(user))
 				}
 			} else {
 				@adminListEmptyCard(data.View)

@@ -66,6 +66,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.GET("/entities/types", h.EntityTypesAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/entities/:eid/edit", h.EditForm, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.POST("/entities/:eid/clone", h.Clone, campaigns.RequireRole(campaigns.RoleScribe))
+	// Extra places a page is listed in the page tree (Scribe, and the page's own edit check).
+	cg.POST("/entities/:eid/places", h.AddPlaceAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.DELETE("/entities/:eid/places/:pid", h.RemovePlaceAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.PUT("/entities/:eid", h.Update, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.PUT("/entities/:eid/reorder", h.ReorderAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.POST("/entities/bulk-move", h.BulkMoveAPI, campaigns.RequireRole(campaigns.RoleScribe))
@@ -94,11 +97,17 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// Owner picks which page types the Characters page lists as the party and
 	// as NPCs.
 	cg.POST("/characters/lists", h.UpdateCharacterLists, campaigns.RequireRole(campaigns.RoleOwner))
+	// Staff keep the Players list: who plays which character, and
+	// which characters are on it.
+	cg.POST("/characters/owner", h.SetCharacterOwner, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.POST("/characters/playable", h.SetCharacterPlayable, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.GET("/characters/players/search", h.SearchRosterFinder, campaigns.RequireRole(campaigns.RoleScribe))
 	// Hero creator: staff make heroes for the table, players their own when
 	// the owner allows claiming (checked in the handler).
 	cg.GET("/characters/new", h.NewHero, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/characters/new/plan", h.HeroPlanAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.POST("/characters/new", h.CreateHero, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.GET("/characters/entries", h.OwnEntries, campaigns.RequireRole(campaigns.RolePlayer))
 	// Owner reassignment: Scribe+ only. Pass owner_user_id=null to clear.
 	cg.PUT("/entities/:eid/owner", h.AssignOwner, campaigns.RequireRole(campaigns.RoleScribe))
 	// Map assignment for the per-entity Map Editor block: Scribe+ only.
@@ -163,6 +172,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	pub.GET("/search", h.SearchPageHandler, campaigns.RequireViewAccess())
 	pub.GET("/entities/:eid", h.Show, campaigns.RequireViewAccess())
 	pub.GET("/entities/:eid/preview", h.PreviewAPI, campaigns.RequireViewAccess())
+	pub.GET("/entities/:eid/peek", h.Peek, campaigns.RequireViewAccess())
 	pub.GET("/entities/:eid/backlinks", h.BacklinksFragment, campaigns.RequireViewAccess())
 	// /characters — the campaign Cast (party + NPCs). Public so a public
 	// campaign's cast is browsable signed out, like the old NPC gallery; the

@@ -95,10 +95,14 @@ func (h *Handler) HeroPlanAPI(c echo.Context) error {
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
-	if _, access, err := h.heroTarget(c, cc); err != nil {
-		return err
-	} else if !access.Allowed {
-		return apperror.NewForbidden("you can't create a hero in this campaign")
+	// Directors also read the plan: the "Your own entries" page takes its
+	// pick lists from it, whether or not they could make a hero themselves.
+	if !cc.CanAuthorDmOnly() {
+		if _, access, err := h.heroTarget(c, cc); err != nil {
+			return err
+		} else if !access.Allowed {
+			return apperror.NewForbidden("you can't create a hero in this campaign")
+		}
 	}
 	plan, err := h.heroPlan(c, cc)
 	if err != nil {
@@ -159,4 +163,18 @@ func (h *Handler) CreateHero(c echo.Context) error {
 		"id":  entity.ID,
 		"url": "/campaigns/" + cc.Campaign.ID + "/entities/" + entity.ID,
 	})
+}
+
+// OwnEntries renders the Directors' page for their own pick-list entries
+// (GET /campaigns/:id/characters/entries). The entry API enforces the same
+// Director rule on every write; this only keeps others off the page.
+func (h *Handler) OwnEntries(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	if !cc.CanAuthorDmOnly() || h.heroPlanner == nil {
+		return apperror.NewForbidden("only the campaign's Directors manage its own entries")
+	}
+	return middleware.Render(c, http.StatusOK, OwnEntriesPage(cc, middleware.GetCSRFToken(c)))
 }

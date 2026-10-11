@@ -48,7 +48,7 @@ jobs:
         # runtime go in lockstep — `@latest` drifts ahead of go.mod and
         # emits symbols (e.g. templ.ResolveAttributeValue) the pinned
         # runtime doesn't have, breaking every PR until go.mod catches up.
-        run: go install github.com/a-h/templ/cmd/templ@v0.3.1001
+        run: go install github.com/a-h/templ/cmd/templ@v0.3.1070
 
       - name: Generate templ files
         run: templ generate
@@ -96,6 +96,13 @@ jobs:
         # recorded one or boot crash-loops. New migrations are fine.
         # Diff-scoped; needs full git history (fetch-depth: 0 above).
         run: ./tools/check-migration-immutability.sh
+
+      - name: Migration number guard
+        # Fails when two migrations in one directory share a version number,
+        # in this tree or against the base branch's current tip: golang-migrate
+        # refuses the directory and boot fails. Two PRs can each take the next
+        # number and pass alone; re-run CI on the second after the first merges.
+        run: ./tools/check-migration-numbers.sh
 
       - name: V2 motion-discipline guard (§B2)
         # Diff-scoped FAIL: no NEW `transition: all` / `transition-all` in
@@ -216,7 +223,7 @@ jobs:
           go-version: '1.27'
 
       - name: Install templ
-        run: go install github.com/a-h/templ/cmd/templ@v0.3.1001
+        run: go install github.com/a-h/templ/cmd/templ@v0.3.1070
 
       - name: Generate templ files
         run: templ generate
@@ -256,13 +263,18 @@ jobs:
         # PASS-line check fails the job if one is skipped.
         env:
           CHRONICLE_TEST_DB_DSN: root:chronicle@tcp(127.0.0.1:3306)/
+        # Explicit bash runs with -e and pipefail, so a failing go test piped
+        # through tee fails the step on go test's own exit code rather than on
+        # tee's.
+        shell: bash
         run: |
           go test ./internal/plugins/sessions/... ./internal/plugins/entities/... ./internal/plugins/timeline/... ./internal/plugins/calendar/... \
             -v -count=1 2>&1 | tee dbtests.log
-          go test ./internal/app/ -v -count=1 -run 'CustomVisibilityLeak|PrivateEntityVisibilityLeak|CalendarCampaignExportImport' 2>&1 | tee -a dbtests.log
+          go test ./internal/app/ -v -count=1 -run 'CustomVisibilityLeak|PrivateEntityVisibilityLeak|CalendarCampaignExportImport|CampaignExportImport_PlacesInTree|SiteTrash|VaultImport_DB' 2>&1 | tee -a dbtests.log
           go test ./internal/plugins/campaigns/ -v -count=1 -run TestNavPins_Integration 2>&1 | tee -a dbtests.log
           go test ./internal/plugins/auth/ -v -count=1 -run 'TestUserRepository_.*_Integration' 2>&1 | tee -a dbtests.log
           go test ./internal/plugins/quests/ -v -count=1 -run 'Integration' 2>&1 | tee -a dbtests.log
+          go test ./internal/plugins/media/ ./internal/widgets/notes/ -v -count=1 -run 'TestDB_|TestADR058Integration_' 2>&1 | tee -a dbtests.log
           for want in TestDB_SessionRSVPTokenCannotBeSpentTwiceConcurrently \
                       TestEntityTypeRepository_Integration \
                       TestConsolidatePlayerCharacterDuplicate_Integration \
@@ -274,6 +286,7 @@ jobs:
                       TestTimelineEvents_PrivateEntityVisibilityLeak \
                       TestTimelineEntityGroups_PrivateEntityVisibilityLeak \
                       TestNavPins_Integration \
+                      TestVaultImport_DBImportsATreeGMOnly_Integration \
                       TestUserRepository_UpdateAvatarPath_Integration \
                       TestUserRepository_ClearAvatarPathIfMatches_Integration \
                       TestCalendarRepository_Integration \
@@ -288,7 +301,45 @@ jobs:
                       TestBoardRepositoryIntegration_LooksAndBoards \
                       TestBoardRepositoryIntegration_Items \
                       TestBoardRepositoryIntegration_TypeHomes \
-                      TestPageCards_Integration; do
+                      TestPageCards_Integration \
+                      TestDB_AppGrantRoundTrip \
+                      TestDB_AttachmentSaves \
+                      TestDB_ListVisibilityMatchesCanView \
+                      TestDB_NewColumnsRoundTrip \
+                      TestDB_ScopesAndTree \
+                      TestDB_LinkQueries \
+                      TestDB_ViewerReadsMediaMatchesCanView \
+                      TestDB_SyncPictureBindings \
+                      TestADR058Integration_HiddenEntityImage_PlayerDenied \
+                      TestADR058Integration_VisibleEntityImage_PlayerAllowed \
+                      TestADR058Integration_SharedHiddenAndVisible_ReadableAtAll \
+                      TestADR058Integration_CoverImageOnly_PlayerDenied \
+                      TestADR058Integration_PathFormCoverImage_PlayerDenied \
+                      TestADR058Integration_CoDM_SeesWhatDMSees \
+                      TestADR058Integration_Unreferenced_MembershipStillApplies \
+                      TestADR058Integration_ReferenceLookupError_Denies \
+                      TestDB_NotePictureAccess \
+                      TestDB_NotePicturesStayOutOfListingsAndDedup \
+                      TestDB_AdminListHidesNotePictureDetails \
+                      TestDB_PageFileMigrationIsIdempotent \
+                      TestDB_PageFileAccess \
+                      TestDB_PageFilesStayOutOfListingsAndDedup \
+                      TestDB_PageFileLifecycle \
+                      TestSiteTrash_CampaignIsGoneForMembersAndBackAfterUndo \
+                      TestSiteTrash_PurgeWaitsForRetentionAndNeverTouchesUndone \
+                      TestSiteTrash_UndoRefusedOnceTheFinalDeleteBegan \
+                      TestSiteTrash_FileCleanupCanBeUndoneAndPurgeSparesIt \
+                      TestSiteTrash_EmptyNowNeedsThePasswordRecheck \
+                      TestSiteTrash_ClaimRechecksAgeInSQL \
+                      TestSiteTrash_SessionsTokenRoutesStopForATrashedCampaign \
+                      TestSiteTrash_NoWritesIntoATrashedCampaign \
+                      TestSiteTrash_RetentionChangeNeedsThePasswordRecheck \
+                      TestPlaces_Integration_TreeVisibility \
+                      TestPlaces_Integration_TrashHidesAndRestoreBringsBack \
+                      TestPlaces_Integration_CyclesAndCampaigns \
+                      TestPlaces_Integration_RealMoveAndPurge \
+                      TestPlaces_Integration_ExportAndOwnRealParent \
+                      TestCampaignExportImport_PlacesInTree_DBRoundTrip; do
             grep -q -- "--- PASS: $want" dbtests.log || {
               echo "::error::$want did not PASS — it was skipped or never ran."
               exit 1
@@ -315,7 +366,7 @@ jobs:
         # runtime go in lockstep — `@latest` drifts ahead of go.mod and
         # emits symbols (e.g. templ.ResolveAttributeValue) the pinned
         # runtime doesn't have, breaking every PR until go.mod catches up.
-        run: go install github.com/a-h/templ/cmd/templ@v0.3.1001
+        run: go install github.com/a-h/templ/cmd/templ@v0.3.1070
 
       - name: Generate templ files
         run: templ generate
@@ -342,7 +393,7 @@ jobs:
       - name: Install templ
         # govulncheck compiles every package, and Templ components exist only
         # once generated.
-        run: go install github.com/a-h/templ/cmd/templ@v0.3.1001
+        run: go install github.com/a-h/templ/cmd/templ@v0.3.1070
 
       - name: Generate templ files
         run: templ generate

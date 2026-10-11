@@ -35,6 +35,10 @@ type BookEditRepository interface {
 	UpdateChapter(ctx context.Context, ch HouseChapter) error
 	// DeleteChapter removes a house chapter and its pages; false when absent.
 	DeleteChapter(ctx context.Context, campaignID, systemID, chapterID string) (bool, error)
+	// WriteHouseChapter stores a house chapter's row (a new one when create)
+	// and, when pages is not nil, replaces all its pages with them, in order,
+	// in one transaction.
+	WriteHouseChapter(ctx context.Context, ch HouseChapter, create bool, pages []StoredBookPage) error
 }
 
 type bookEditRepository struct {
@@ -287,4 +291,53 @@ func (r *bookEditRepository) DeleteChapter(ctx context.Context, campaignID, syst
 		return false, internalErr(err)
 	}
 	return n > 0, nil
+}
+
+func (r *bookEditRepository) WriteHouseChapter(ctx context.Context, ch HouseChapter, create bool, pages []StoredBookPage) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return internalErr(err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if create {
+		var next int
+		if err := tx.QueryRowContext(ctx,
+			`SELECT COALESCE(MAX(sort_order), 0) + 1 FROM campaign_book_chapters WHERE campaign_id = ? AND system_id = ?`,
+			ch.CampaignID, ch.SystemID).Scan(&next); err != nil {
+			return internalErr(err)
+		}
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO campaign_book_chapters
+			   (campaign_id, system_id, chapter_id, title, intro, director, sort_order, created_by)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, NULLIF(?, ''))`,
+			ch.CampaignID, ch.SystemID, ch.ChapterID, ch.Title, ch.Intro, ch.Director, next, ch.CreatedBy); err != nil {
+			return internalErr(err)
+		}
+	} else if _, err := tx.ExecContext(ctx,
+		`UPDATE campaign_book_chapters SET title = ?, intro = ?, director = ?
+		  WHERE campaign_id = ? AND system_id = ? AND chapter_id = ?`,
+		ch.Title, ch.Intro, ch.Director, ch.CampaignID, ch.SystemID, ch.ChapterID); err != nil {
+		return internalErr(err)
+	}
+	if pages != nil {
+		if _, err := tx.ExecContext(ctx,
+			`DELETE FROM campaign_book_pages WHERE campaign_id = ? AND system_id = ? AND chapter_id = ?`,
+			ch.CampaignID, ch.SystemID, ch.ChapterID); err != nil {
+			return internalErr(err)
+		}
+		for i, p := range pages {
+			if _, err := tx.ExecContext(ctx,
+				`INSERT INTO campaign_book_pages
+				   (campaign_id, system_id, chapter_id, package_index, sort_order, page_json, updated_by)
+				 VALUES (?, ?, ?, NULL, ?, ?, NULLIF(?, ''))`,
+				ch.CampaignID, ch.SystemID, ch.ChapterID, i+1, p.PageJSON, p.UpdatedBy); err != nil {
+				return internalErr(err)
+			}
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return internalErr(err)
+	}
+	return nil
 }

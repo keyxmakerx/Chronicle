@@ -127,6 +127,11 @@ func actorFor(c echo.Context, cc *campaigns.CampaignContext) records.Actor {
 	return records.Actor{UserID: auth.GetUserID(c), Role: cc.VisibilityRole()}
 }
 
+// viewerFor is the operator as page-link resolution checks access.
+func viewerFor(c echo.Context, cc *campaigns.CampaignContext) importer.Viewer {
+	return importer.Viewer{Role: cc.VisibilityRole(), UserID: auth.GetUserID(c)}
+}
+
 // exportActor is who the export lists records as. Safe mode, the default,
 // lists them as a player sees them, so hidden events and pins, rolling
 // tables and Director-only rules stay out, as for every other category.
@@ -171,7 +176,7 @@ func (h *Handler) answerLookups(c echo.Context, cc *campaigns.CampaignContext, s
 	privacy := parsePrivacy(c.FormValue("lookup_privacy"))
 	recs := make([]records.Record, len(blocks))
 	for i, p := range blocks {
-		recs[i] = toRecord(i, p)
+		recs[i] = toRecord(i, p, nil)
 	}
 	l := h.lookups
 	if l == nil {
@@ -206,37 +211,43 @@ func (h *Handler) answerLookups(c echo.Context, cc *campaigns.CampaignContext, s
 }
 
 // toRecord builds a records.Record from a parsed block.
-func toRecord(i int, p importer.ParsedPage) records.Record {
+func toRecord(i int, p importer.ParsedPage, links *importer.PageLinks) records.Record {
 	fields := make(map[string]any, len(p.Fields))
 	for k, v := range p.Fields {
 		fields[strings.ToLower(k)] = v
 	}
 	return records.Record{
 		Index: i, Kind: p.FrontMatter.Kind, Action: p.FrontMatter.Action,
-		Name: p.Name, Fields: fields, Body: p.Body,
+		Name: p.Name, Fields: fields, Body: p.Body, Links: links,
 	}
 }
 
 // planRecords plans every record for the review screen.
-func (h *Handler) planRecords(c echo.Context, cc *campaigns.CampaignContext, recs []importer.ParsedPage) []RecordRow {
+func (h *Handler) planRecords(c echo.Context, cc *campaigns.CampaignContext, recs []importer.ParsedPage, links *importer.PageLinks, pasteSlugs map[string]bool) []RecordRow {
 	rows := make([]RecordRow, len(recs))
-	a := actorFor(c, cc)
+	all := make([]records.Record, len(recs))
 	for i, p := range recs {
-		rec := toRecord(i, p)
-		row := RecordRow{Index: i, Label: rec.Kind, Action: rec.Action, Name: rec.Name}
-		if h.records == nil {
-			row.Plan = records.Plan{Error: "this server cannot import " + rec.Kind}
-		} else {
-			k, plan := h.records.Plan(c.Request().Context(), cc.Campaign.ID, a, rec)
-			if k != nil {
-				row.Label = k.Label()
-				if t, ok := k.(records.Titled); ok && row.Name == "" {
-					row.Name = t.Title(rec)
-				}
-			}
-			row.Plan = plan
+		all[i] = toRecord(i, p, nil)
+		rows[i] = RecordRow{Index: i, Label: all[i].Kind, Action: all[i].Action, Name: all[i].Name}
+	}
+	if h.records == nil {
+		for i := range rows {
+			rows[i].Plan = records.Plan{Error: "this server cannot import " + all[i].Kind}
 		}
-		rows[i] = row
+		return rows
+	}
+	kinds, plans := h.records.PlanAll(c.Request().Context(), cc.Campaign.ID, actorFor(c, cc), all)
+	for i, k := range kinds {
+		if k != nil {
+			rows[i].Label = k.Label()
+			if t, ok := k.(records.Titled); ok && rows[i].Name == "" {
+				rows[i].Name = t.Title(all[i])
+			}
+		}
+		rows[i].Plan = plans[i]
+		if links != nil && rows[i].Plan.Error == "" {
+			rows[i].Plan.Warnings = append(rows[i].Plan.Warnings, importer.LinkWarnings(links, recs[i].Body, pasteSlugs)...)
+		}
 	}
 	return rows
 }
@@ -288,7 +299,9 @@ func (h *Handler) ParseImport(c echo.Context) error {
 		return h.answerLookups(c, cc, body, lookups, len(parsed))
 	}
 	pages, recs := splitImport(parsed)
-	recRows := h.planRecords(c, cc, recs)
+	links := importer.NewPageLinks(c.Request().Context(), h.importLookup, cc.Campaign.ID, viewerFor(c, cc))
+	pasteSlugs := importer.PasteSlugs(pages)
+	recRows := h.planRecords(c, cc, recs, links, pasteSlugs)
 	cls, err := importer.NewClassifier(h.importLookup, cc.Campaign.ID).
 		ClassifyAll(c.Request().Context(), pages)
 	if err != nil {
@@ -298,12 +311,19 @@ func (h *Handler) ParseImport(c echo.Context) error {
 		return apperror.NewInternal(err)
 	}
 
+	// An unknown @[Name] only warns; at commit it stays plain text.
+	for i := range pages {
+		if pages[i].Status != importer.StatusParseError && pages[i].FrontMatter.Action != importer.ActionDelete {
+			pages[i].Warnings = append(pages[i].Warnings, importer.LinkWarnings(links, pages[i].Body, pasteSlugs)...)
+		}
+	}
+
 	summary := ReviewSummary{Total: len(pages) + len(recRows)}
 	for _, r := range recRows {
 		if r.Plan.Error == "" {
 			summary.Selectable++
 		} else {
-			summary.ParseErrors++
+			summary.Blocked++
 		}
 	}
 	for _, c := range cls {
@@ -316,7 +336,7 @@ func (h *Handler) ParseImport(c echo.Context) error {
 		case importer.StatusNewCategory:
 			summary.Selectable++
 			summary.NewCategories++
-		case importer.StatusParseError:
+		case importer.StatusParseError, importer.StatusParentProblem:
 			summary.ParseErrors++
 		}
 	}
@@ -330,6 +350,7 @@ func (h *Handler) ParseImport(c echo.Context) error {
 				"conflicts":       summary.Conflicts,
 				"new_categories":  summary.NewCategories,
 				"parse_errors":    summary.ParseErrors,
+				"blocked_records": summary.Blocked,
 				"input_byte_size": len(body),
 				"records":         len(recRows),
 			})
@@ -462,6 +483,7 @@ func (h *Handler) CommitImport(c echo.Context) error {
 			Pages:                  pages,
 			Decisions:              decisions,
 			CampaignDefaultPrivate: cc.Campaign.ParseSettings().DefaultsToPrivate(),
+			Viewer:                 viewerFor(c, cc),
 		})
 	}
 	if err != nil {
@@ -507,10 +529,16 @@ type recordCounts struct{ applied, failed int }
 func (h *Handler) commitRecords(c echo.Context, cc *campaigns.CampaignContext, recs []importer.ParsedPage, result *importer.CommitResult) recordCounts {
 	var n recordCounts
 	a := actorFor(c, cc)
+	// Pages are saved by now, so a record's @[Name] resolves against the
+	// campaign alone.
+	var links *importer.PageLinks
+	if h.importLookup != nil {
+		links = importer.NewPageLinks(c.Request().Context(), h.importLookup, cc.Campaign.ID, viewerFor(c, cc))
+	}
 	base := len(result.Rows)
 	for i, p := range recs {
 		prefix := "rec_" + strconv.Itoa(i) + "_"
-		rec := toRecord(i, p)
+		rec := toRecord(i, p, links)
 		out := importer.RowOutcome{Index: base + i, Name: rec.Name}
 		k, ok := h.records.Get(rec.Kind)
 		if ok {
@@ -625,7 +653,7 @@ func readImportBody(c echo.Context) (string, error) {
 // GET /campaigns/:id/ai-workspace/prompt/generate
 //
 // Query params: schema_types/schema_categories/schema_front_matter ("on"),
-// content_mode ("none"|"all"|category slugs), privacy
+// content_mode ("none"|"all"|"house-rules"|category slugs), privacy
 // ("safe"|"permitted"|"everything"), gm_notes ("on"), instruction (free text).
 //
 // A builder error surfaces in the modal's error region, not a top-level
@@ -661,7 +689,9 @@ func (h *Handler) GeneratePrompt(c echo.Context) error {
 		if in.IncludeFrontMatterExample {
 			in.RecordDocs = h.records.Docs()
 		}
-		if in.ContentMode == "all" || hasCategory(in.ContentMode, recordsCategory) {
+		if in.ContentMode == prompt.ContentHouseRules {
+			in.RecordDocs, in.RecordContext = h.houseRulesContext(c, cc, in.Privacy)
+		} else if in.ContentMode == "all" || hasCategory(in.ContentMode, recordsCategory) {
 			in.RecordContext = h.records.ExportAll(c.Request().Context(), cc.Campaign.ID, exportActor(c, cc, in.Privacy))
 		}
 	}
@@ -692,6 +722,25 @@ func (h *Handler) GeneratePrompt(c echo.Context) error {
 	}
 
 	return middleware.Render(c, http.StatusOK, PromptModal(out, ""))
+}
+
+// houseRulesContext is the house-rules prompt's format and context: the
+// house-rule kind's doc (always, since the AI must write that format) and
+// today's house rules in the chosen privacy.
+func (h *Handler) houseRulesContext(c echo.Context, cc *campaigns.CampaignContext, privacy aiexport.PrivacyMode) (doc, rules string) {
+	k, ok := h.records.Get("house-rule")
+	if !ok {
+		return "", ""
+	}
+	doc = "### kind: " + k.Name() + " (" + k.Label() + ")\n\n" + strings.TrimSpace(k.Doc())
+	out, err := k.Export(c.Request().Context(), cc.Campaign.ID, exportActor(c, cc, privacy))
+	if err != nil {
+		return doc, "<!-- " + k.Label() + "s: could not be listed -->"
+	}
+	if strings.TrimSpace(out) == "" {
+		return doc, ""
+	}
+	return doc, "## " + k.Label() + "s\n\n" + out
 }
 
 // GenerateAIExport renders the AI-export markdown for the campaign

@@ -40,6 +40,9 @@ type BookEditService interface {
 	CreateChapter(ctx context.Context, campaignID, userID string, pkg *BookPackage, title string) (*BookChapterEntry, error)
 	UpdateChapter(ctx context.Context, campaignID string, pkg *BookPackage, chapterID string, in UpdateBookChapterInput) (*BookChapterEntry, error)
 	DeleteChapter(ctx context.Context, campaignID string, pkg *BookPackage, chapterID string) error
+	// WriteHouseChapter writes a whole house-rules chapter from a draft (see
+	// book_house_draft.go): a new one when chapterID is "".
+	WriteHouseChapter(ctx context.Context, campaignID, userID string, pkg *BookPackage, chapterID, title string, d *HouseChapterDraft) (*BookChapterEntry, error)
 
 	// Export returns the campaign's edition as a zip of package-format files.
 	Export(ctx context.Context, campaignID string, pkg *BookPackage) ([]byte, error)
@@ -671,19 +674,12 @@ func (s *bookEditService) CreateChapter(ctx context.Context, campaignID, userID 
 	if err := checkChapterTitle(title); err != nil {
 		return nil, err
 	}
-	edits, err := s.repo.Load(ctx, campaignID, pkg.SystemID)
+	ed, err := s.load(ctx, campaignID, pkg)
 	if err != nil {
 		return nil, err
 	}
-	if len(edits.Chapters) >= maxHouseChapters {
-		return nil, apperror.NewValidation(fmt.Sprintf("A book can hold at most %d house-rules chapters.", maxHouseChapters))
-	}
-	total := len(edits.Chapters)
-	for _, p := range pkg.Book.Parts {
-		total += len(p.Chapters)
-	}
-	if total >= maxBookChapters {
-		return nil, apperror.NewValidation(fmt.Sprintf("A book can hold at most %d chapters.", maxBookChapters))
+	if err := ed.checkNewChapter(pkg); err != nil {
+		return nil, err
 	}
 	starter, err := json.Marshal(authoredPage{Title: "New page", Blocks: []authoredBlock{{}}})
 	if err != nil {
@@ -697,6 +693,27 @@ func (s *bookEditService) CreateChapter(ctx context.Context, campaignID, userID 
 		return nil, err
 	}
 	return s.chapterEntry(ctx, campaignID, pkg, id)
+}
+
+// checkNewChapter refuses another house chapter once the book is full.
+func (ed *edition) checkNewChapter(pkg *BookPackage) error {
+	house := 0
+	for _, c := range ed.byID {
+		if c.house != nil {
+			house++
+		}
+	}
+	if house >= maxHouseChapters {
+		return apperror.NewValidation(fmt.Sprintf("A book can hold at most %d house-rules chapters.", maxHouseChapters))
+	}
+	total := house
+	for _, p := range pkg.Book.Parts {
+		total += len(p.Chapters)
+	}
+	if total >= maxBookChapters {
+		return apperror.NewValidation(fmt.Sprintf("A book can hold at most %d chapters.", maxBookChapters))
+	}
+	return nil
 }
 
 func checkChapterTitle(title string) error {

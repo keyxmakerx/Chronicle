@@ -1,0 +1,25 @@
+package layouts
+
+// AdminStatusStrip runs along the bottom of every Site admin page: the site
+// is live, how many are signed in and how old the last backup is, and that
+// every change here is recorded. It sits outside #main-content, so moving
+// between admin pages keeps it; the figures load once, after the page
+// (GET /admin/status), so a slow count never holds the page up.
+templ AdminStatusStrip() {
+	<footer class="admin-strip" aria-label="Site status">
+		<span class="admin-strip-live"><span class="admin-strip-dot" aria-hidden="true"></span>Live site</span>
+		<span class="admin-strip-figures" hx-get="/admin/status" hx-trigger="load" hx-swap="outerHTML"></span>
+		<span class="flex-1"></span>
+		<a
+			href="/admin/activity"
+			class="admin-strip-log"
+			hx-boost="true"
+			hx-target="#main-content"
+			hx-select="#main-content"
+			hx-swap="innerHTML show:window:top"
+		>
+			<span class="hidden md:inline">Every change is recorded ·</span>
+			Admin activity
+		</a>
+	</footer>
+}

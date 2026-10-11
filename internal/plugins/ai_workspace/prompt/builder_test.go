@@ -151,6 +151,10 @@ func TestBuild_FrontMatterExample(t *testing.T) {
 		"tags: [trade-hub, coastal]",
 		"# Example Page Name",
 		"`private`, `dm_only`, or `public`",
+		"`parent: Name of the parent page`",
+		"`parent: none`",
+		"`@[Page Name]`",
+		"`@[Page Name|words to show]`",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("expected substring %q in output. Full:\n%s", want, got)
@@ -379,5 +383,39 @@ func TestBuild_Lookups(t *testing.T) {
 		if !strings.Contains(got, s) {
 			t.Errorf("prompt lacks %q", s)
 		}
+	}
+}
+
+// TestBuild_ContentMode_HouseRules pins the house-rules choice: its context
+// is only the house rules handed in, never the world export, and the
+// house-rule format comes along even without the front-matter example.
+func TestBuild_ContentMode_HouseRules(t *testing.T) {
+	tests := []struct {
+		name, rules, want string
+	}{
+		{"with rules", "## House rules\n\n### Table rules\n", "### Table rules"},
+		{"none yet", "", "There are no house rules yet."},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			exp := &stubExporter{markdown: "WORLD EXPORT"}
+			got, err := NewService(nil, nil, exp).Build(context.Background(), "Ashfall", "owner-1", "camp-1", Input{
+				ContentMode:         ContentHouseRules,
+				RecordDocs:          "### kind: house-rule (House rule)\n\npages and blocks",
+				RecordContext:       tc.rules,
+				OperatorInstruction: "Add a fumble rule.",
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if exp.calls != 0 || strings.Contains(got, "WORLD EXPORT") {
+				t.Errorf("the world export was used (%d calls)", exp.calls)
+			}
+			for _, want := range []string{"## Existing world context", tc.want, "kind: house-rule", "Add a fumble rule."} {
+				if !strings.Contains(got, want) {
+					t.Errorf("prompt lacks %q:\n%s", want, got)
+				}
+			}
+		})
 	}
 }

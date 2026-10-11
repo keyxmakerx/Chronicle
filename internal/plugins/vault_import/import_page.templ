@@ -1,0 +1,73 @@
+// import_page.templ renders Manage > Import: the page that holds the Obsidian
+// and Markdown import, and the drop zone that starts it.
+
+package vault_import
+
+import (
+	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// ImportPage is Manage > Import. A running import is shown in place of the
+// drop zone, so reloading the page picks the progress bar back up.
+templ ImportPage(cc *campaigns.CampaignContext, active *JobView, lim Limits) {
+	@layouts.App(cc.Campaign.Name + " - Import") {
+		<div class="max-w-3xl mx-auto">
+			@layouts.ManageHeader("Import")
+			<section class="card p-6 vi-settle" aria-labelledby="vi-title">
+				<div class="flex items-start gap-4 mb-5">
+					<span class="w-11 h-11 rounded-xl bg-accent/10 flex items-center justify-center shrink-0">
+						<i class="fa-solid fa-file-import text-accent text-lg" aria-hidden="true"></i>
+					</span>
+					<div class="min-w-0">
+						<h2 id="vi-title" class="text-lg font-semibold text-fg">From Obsidian or Markdown</h2>
+						<p class="text-sm text-fg-secondary mt-0.5 leading-relaxed">
+							Upload a .zip of an Obsidian vault or of a folder of Markdown notes. Notion and Trilium Markdown exports work the same way.
+							You will see what is in it before anything is added.
+						</p>
+					</div>
+				</div>
+				<div id="vi-stage" aria-live="polite">
+					if active != nil {
+						@ProgressPanel(cc.Campaign.ID, *active, 0)
+					} else {
+						@DropZone(cc.Campaign.ID, lim)
+					}
+				</div>
+			</section>
+		</div>
+	}
+}
+
+// DropZone is the upload step. Choosing or dropping a .zip sends it for a
+// preview; nothing is written to the campaign yet.
+templ DropZone(campaignID string, lim Limits) {
+	<form
+		data-widget="vault-import"
+		data-max-bytes={ fmt.Sprint(lim.MaxUploadBytes) }
+		hx-post={ fmt.Sprintf("/campaigns/%s/import/markdown/preview", campaignID) }
+		hx-encoding="multipart/form-data"
+		hx-target="#vi-stage"
+		hx-swap="innerHTML"
+		class="vi-settle"
+	>
+		<label class="vi-drop block" data-vi-drop>
+			<input type="file" name="file" accept=".zip,application/zip" class="sr-only" data-vi-file required/>
+			<i class="fa-solid fa-file-zipper text-3xl text-accent mb-3 block" aria-hidden="true"></i>
+			<span class="block text-base font-medium text-fg" data-vi-title>Drop a .zip here</span>
+			<span class="block text-sm text-fg-secondary mt-1" data-vi-sub>or <span class="text-accent underline">choose a file</span></span>
+			<span class="block text-xs text-fg-muted mt-3">
+				Up to { fmt.Sprint(lim.MaxUploadBytes >> 20) } MB and { fmt.Sprint(lim.MaxEntries) } files. Hidden folders such as .obsidian are skipped.
+			</span>
+		</label>
+		<div class="mt-4" data-vi-upload hidden>
+			<div class="flex items-center justify-between text-sm mb-1.5">
+				<span class="text-fg" data-vi-upload-label>Uploading…</span>
+				<span class="text-fg-muted tabular-nums" data-vi-upload-pct></span>
+			</div>
+			<div class="vi-bar" role="progressbar" aria-label="Upload progress" aria-valuemin="0" aria-valuemax="100" data-vi-upload-bar><span style="--to:0"></span></div>
+		</div>
+	</form>
+}

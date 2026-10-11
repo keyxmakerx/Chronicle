@@ -147,6 +147,19 @@ func TestConvert_Link_PreservesHrefAndMentionID(t *testing.T) {
 	}
 }
 
+func TestConvert_Link_KeepsEntityPreview(t *testing.T) {
+	got, err := Convert(`<p><a href="/x" data-mention-id="ent-42" data-entity-preview="/x/preview">@Lyra</a></p>`)
+	if err != nil {
+		t.Fatalf("Convert: %v", err)
+	}
+	p := firstChildOfDoc(t, got)
+	text := p["content"].([]any)[0].(map[string]any)
+	attrs := text["marks"].([]any)[0].(map[string]any)["attrs"].(map[string]any)
+	if attrs["data-entity-preview"] != "/x/preview" {
+		t.Errorf("attrs.data-entity-preview = %v, want /x/preview", attrs["data-entity-preview"])
+	}
+}
+
 func TestConvert_BulletList(t *testing.T) {
 	got, err := Convert("<ul><li>One</li><li>Two</li></ul>")
 	if err != nil {

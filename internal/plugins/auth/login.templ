@@ -4,13 +4,27 @@
 
 package auth
 
-import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
+import (
+	"fmt"
+	"net/url"
+
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// providerLoginHref starts a provider sign-in, carrying the page to return to.
+func providerLoginHref(redirect string) string {
+	if redirect == "" {
+		return "/login/oidc"
+	}
+	return "/login/oidc?redirect=" + url.QueryEscape(redirect)
+}
 
 // LoginPage renders the full login page wrapped in the base layout.
 // successMsg is shown as a green banner (e.g., after password reset).
 // redirect is the already-sanitized post-login destination (see
-// sanitizeRedirect in handler.go); "" means the dashboard.
-templ LoginPage(csrfToken, email, errMsg, successMsg, redirect string) {
+// sanitizeRedirect in handler.go); "" means the dashboard. opts adds the
+// provider button, and folds the password form away when the admin hid it.
+templ LoginPage(csrfToken, email, errMsg, successMsg, redirect string, opts LoginOptions) {
 	@layouts.Base("Login") {
 		@layouts.SiteAuthStage("") {
 			<div class="w-full max-w-md">
@@ -26,7 +40,29 @@ templ LoginPage(csrfToken, email, errMsg, successMsg, redirect string) {
 						{ successMsg }
 					</div>
 				}
-				@LoginForm_(csrfToken, email, errMsg, redirect)
+				if opts.ProviderName != "" {
+					<a href={ templ.SafeURL(providerLoginHref(redirect)) } class="btn-primary w-full py-2.5 flex items-center justify-center gap-2" data-testid="provider-sign-in">
+						<i class="fa-solid fa-right-to-bracket" aria-hidden="true"></i>
+						Sign in with { opts.ProviderName }
+					</a>
+					if opts.HidePassword {
+						<div x-data={ fmt.Sprintf("{ show: %t }", errMsg != "") } class="mt-4">
+							<p class="text-center text-sm" x-show="!show">
+								<button type="button" class="text-fg-muted hover:text-fg" @click="show = true">Site admin? Use your password</button>
+							</p>
+							<div x-show="show" x-cloak class="step-settle">
+								@LoginForm_(csrfToken, email, errMsg, redirect)
+							</div>
+						</div>
+					} else {
+						<div class="flex items-center gap-3 my-4 text-xs text-fg-muted" aria-hidden="true">
+							<span class="flex-1 border-t border-edge"></span>or use your password<span class="flex-1 border-t border-edge"></span>
+						</div>
+						@LoginForm_(csrfToken, email, errMsg, redirect)
+					}
+				} else {
+					@LoginForm_(csrfToken, email, errMsg, redirect)
+				}
 			</div>
 		}
 	}

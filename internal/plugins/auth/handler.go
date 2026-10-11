@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
+	"github.com/keyxmakerx/chronicle/internal/notifyprefs"
 	"github.com/keyxmakerx/chronicle/internal/timeutil"
 )
 
@@ -97,6 +99,9 @@ func (h *Handler) LoginForm(c echo.Context) error {
 	if c.QueryParam("reset") == "success" {
 		successMsg = "Your password has been reset. You can now sign in."
 	}
+	if c.QueryParam("deleted") == "1" {
+		successMsg = "Your account has been deleted."
+	}
 
 	// Auto-recovery banner: the CSRF middleware bounces a stale/missing-token
 	// login POST here with ?expired=1. This GET already re-issued a fresh token
@@ -110,7 +115,7 @@ func (h *Handler) LoginForm(c echo.Context) error {
 	// the query param does not survive the HTMX form POST.
 	redirect := sanitizeRedirect(c.QueryParam("redirect"))
 
-	return middleware.Render(c, http.StatusOK, LoginPage(csrfToken, "", errMsg, successMsg, redirect))
+	return middleware.Render(c, http.StatusOK, LoginPage(csrfToken, "", errMsg, successMsg, redirect, h.service.LoginOptions(c.Request().Context())))
 }
 
 // Login processes the login form submission (POST /login).
@@ -133,13 +138,22 @@ func (h *Handler) Login(c echo.Context) error {
 	}
 
 	input := LoginInput{
-		Email:     req.Email,
-		Password:  req.Password,
-		IP:        ip,
-		UserAgent: ua,
+		Email:         req.Email,
+		Password:      req.Password,
+		IP:            ip,
+		UserAgent:     ua,
+		TrustedDevice: readTrustedDevice(c.Request()),
 	}
 
 	token, user, err := h.service.Login(c.Request().Context(), input)
+	var need *TwoFactorRequired
+	if errors.As(err, &need) {
+		csrfToken := middleware.GetCSRFToken(c)
+		if middleware.IsHTMX(c) {
+			return middleware.Render(c, http.StatusOK, TwoFactorForm_(csrfToken, need.Challenge, redirect, ""))
+		}
+		return middleware.Render(c, http.StatusOK, TwoFactorPage(csrfToken, need.Challenge, redirect, ""))
+	}
 	if err != nil {
 		// Log failed login attempt as a security event.
 		h.logSecurityEvent(c.Request().Context(), "login.failed", "", "", ip, ua, map[string]any{"email": req.Email})
@@ -151,7 +165,7 @@ func (h *Handler) Login(c echo.Context) error {
 		if middleware.IsHTMX(c) {
 			return middleware.Render(c, http.StatusOK, LoginForm_(csrfToken, req.Email, errMsg, redirect))
 		}
-		return middleware.Render(c, http.StatusOK, LoginPage(csrfToken, req.Email, errMsg, "", redirect))
+		return middleware.Render(c, http.StatusOK, LoginPage(csrfToken, req.Email, errMsg, "", redirect, h.service.LoginOptions(c.Request().Context())))
 	}
 
 	// Log successful login as a security event.
@@ -170,6 +184,189 @@ func (h *Handler) Login(c echo.Context) error {
 
 	// HTMX requests get a redirect header; browser forms get a 303 redirect.
 	return middleware.HTMXRedirect(c, redirectTo)
+}
+
+// LoginTwoFactor is the code step of a sign-in (POST /login/two-factor).
+// The challenge from the password step stands in for the email and
+// password, so neither is sent twice.
+func (h *Handler) LoginTwoFactor(c echo.Context) error {
+	ip := c.RealIP()
+	ua := c.Request().UserAgent()
+	redirect := sanitizeRedirect(c.FormValue("redirect"))
+	challenge := c.FormValue("challenge")
+
+	res, err := h.service.CompleteTwoFactorLogin(c.Request().Context(), TwoFactorLoginInput{
+		Challenge: challenge,
+		Code:      c.FormValue("code"),
+		Remember:  c.FormValue("remember") != "",
+		IP:        ip,
+		UserAgent: ua,
+	})
+	if err != nil {
+		h.logSecurityEvent(c.Request().Context(), "login.two_factor_failed", "", "", ip, ua, nil)
+		csrfToken := middleware.GetCSRFToken(c)
+		errMsg := apperror.UserMessage(err, "that code isn't right")
+		if middleware.IsHTMX(c) {
+			return middleware.Render(c, http.StatusOK, TwoFactorForm_(csrfToken, challenge, redirect, errMsg))
+		}
+		return middleware.Render(c, http.StatusOK, TwoFactorPage(csrfToken, challenge, redirect, errMsg))
+	}
+
+	h.logSecurityEvent(c.Request().Context(), "login.success", res.User.ID, "", ip, ua, map[string]any{"two_factor": true})
+	setSessionCookie(c, res.SessionToken, h.sessionTTL)
+	if res.TrustedDevice != "" {
+		setTrustedDeviceCookie(c, res.TrustedDevice)
+	}
+	redirectTo := "/dashboard"
+	if redirect != "" {
+		redirectTo = redirect
+	}
+	return middleware.HTMXRedirect(c, redirectTo)
+}
+
+// oidcStateCookie names the cookie that ties a provider round trip to the
+// browser that started it, so a callback link can't be replayed into
+// someone else's browser.
+const (
+	oidcStateCookieName       = "chronicle_oidc_state"
+	oidcStateCookieSecureName = "__Host-chronicle_oidc_state"
+)
+
+// SetOIDCStateCookie remembers the round trip's state in this browser. It
+// is Lax so it comes back on the provider's top-level redirect.
+func SetOIDCStateCookie(c echo.Context, state string) {
+	secure := middleware.SchemeIsSecure(c.Request())
+	name := oidcStateCookieName
+	if secure {
+		name = oidcStateCookieSecureName
+	}
+	c.SetCookie(&http.Cookie{Name: name, Value: state, Path: "/", HttpOnly: true, Secure: secure,
+		SameSite: http.SameSiteLaxMode, MaxAge: int(oidcStateTTL.Seconds())})
+}
+
+func readOIDCStateCookie(c echo.Context) string {
+	names := []string{oidcStateCookieName}
+	if middleware.SchemeIsSecure(c.Request()) {
+		names = []string{oidcStateCookieSecureName, oidcStateCookieName}
+	}
+	for _, n := range names {
+		if ck, err := c.Cookie(n); err == nil && ck.Value != "" {
+			return ck.Value
+		}
+	}
+	return ""
+}
+
+func clearOIDCStateCookie(c echo.Context) {
+	for _, n := range []string{oidcStateCookieName, oidcStateCookieSecureName} {
+		c.SetCookie(&http.Cookie{Name: n, Value: "", Path: "/", HttpOnly: true,
+			Secure: n == oidcStateCookieSecureName, MaxAge: -1})
+	}
+}
+
+// loginError shows the sign-in page with a message, for provider failures.
+func (h *Handler) loginError(c echo.Context, msg string) error {
+	csrfToken := middleware.GetCSRFToken(c)
+	return middleware.Render(c, http.StatusOK, LoginPage(csrfToken, "", msg, "", "", h.service.LoginOptions(c.Request().Context())))
+}
+
+// LoginOIDC sends the browser to the provider (GET /login/oidc).
+func (h *Handler) LoginOIDC(c echo.Context) error {
+	redirect := sanitizeRedirect(c.QueryParam("redirect"))
+	authURL, state, err := h.service.BeginOIDC(c.Request().Context(), OIDCModeLogin, "", redirect)
+	if err != nil {
+		return h.loginError(c, apperror.UserMessage(err, "sign-in with your provider isn't working right now"))
+	}
+	SetOIDCStateCookie(c, state)
+	return c.Redirect(http.StatusSeeOther, authURL)
+}
+
+// LinkOIDC starts linking the signed-in person's provider account
+// (POST /account/sign-in/link). It's a POST so another site can't start it.
+func (h *Handler) LinkOIDC(c echo.Context) error {
+	userID := GetUserID(c)
+	if userID == "" {
+		return apperror.NewUnauthorized("not authenticated")
+	}
+	authURL, state, err := h.service.BeginOIDC(c.Request().Context(), OIDCModeLink, userID, "")
+	if err != nil {
+		return err
+	}
+	SetOIDCStateCookie(c, state)
+	return middleware.HTMXRedirect(c, authURL)
+}
+
+// UnlinkOIDCAPI removes the link (POST /account/sign-in/unlink).
+func (h *Handler) UnlinkOIDCAPI(c echo.Context) error {
+	userID := GetUserID(c)
+	if userID == "" {
+		return apperror.NewUnauthorized("not authenticated")
+	}
+	if err := h.service.UnlinkOIDC(c.Request().Context(), userID); err != nil {
+		return err
+	}
+	h.logSecurityEvent(c.Request().Context(), "sign_in.unlinked", userID, userID, c.RealIP(), c.Request().UserAgent(), nil)
+	return c.NoContent(http.StatusNoContent)
+}
+
+// OIDCCallback is where the provider sends the browser back
+// (GET /login/oidc/callback). The state must match this browser's cookie
+// before anything else is looked at.
+func (h *Handler) OIDCCallback(c echo.Context) error {
+	ctx := c.Request().Context()
+	ip, ua := c.RealIP(), c.Request().UserAgent()
+	state := c.QueryParam("state")
+	cookie := readOIDCStateCookie(c)
+	clearOIDCStateCookie(c)
+	if state == "" || cookie == "" || subtle.ConstantTimeCompare([]byte(state), []byte(cookie)) != 1 {
+		return h.loginError(c, "That sign-in didn't start in this browser, or took too long. Start again.")
+	}
+	sessionUserID := ""
+	if token := getSessionToken(c); token != "" {
+		if sess, err := h.service.ValidateSession(ctx, token); err == nil {
+			sessionUserID = sess.UserID
+		}
+	}
+	res, err := h.service.FinishOIDC(ctx, OIDCCallbackInput{
+		State: state, Code: c.QueryParam("code"), ProviderError: c.QueryParam("error"),
+		SessionUserID: sessionUserID, IP: ip, UserAgent: ua,
+		TrustedDevice: readTrustedDevice(c.Request()),
+	})
+	mode := OIDCModeLogin
+	if res != nil {
+		mode = res.Mode
+	}
+	switch mode {
+	case OIDCModeTest:
+		return c.Redirect(http.StatusSeeOther, "/admin/security?tab=provider")
+	case OIDCModeLink:
+		outcome := "linked"
+		if err != nil {
+			outcome = "failed"
+			var appErr *apperror.AppError
+			if errors.As(err, &appErr) && appErr.Code == http.StatusConflict {
+				outcome = "taken"
+			}
+		} else {
+			h.logSecurityEvent(ctx, "sign_in.linked", sessionUserID, sessionUserID, ip, ua, nil)
+		}
+		return c.Redirect(http.StatusSeeOther, "/account?signin="+outcome+"#sign-in")
+	}
+	var need *TwoFactorRequired
+	if errors.As(err, &need) {
+		return middleware.Render(c, http.StatusOK, TwoFactorPage(middleware.GetCSRFToken(c), need.Challenge, sanitizeRedirect(res.Redirect), ""))
+	}
+	if err != nil {
+		h.logSecurityEvent(ctx, "login.failed", "", "", ip, ua, map[string]any{"provider": true})
+		return h.loginError(c, apperror.UserMessage(err, "sign-in with your provider didn't work"))
+	}
+	h.logSecurityEvent(ctx, "login.success", res.User.ID, "", ip, ua, map[string]any{"provider": true})
+	setSessionCookie(c, res.SessionToken, h.sessionTTL)
+	redirectTo := "/dashboard"
+	if r := sanitizeRedirect(res.Redirect); r != "" {
+		redirectTo = r
+	}
+	return c.Redirect(http.StatusSeeOther, redirectTo)
 }
 
 // RegisterForm renders the registration page (GET /register).
@@ -297,7 +494,7 @@ func (h *Handler) Logout(c echo.Context) error {
 // ForgotPasswordForm renders the forgot password page (GET /forgot-password).
 func (h *Handler) ForgotPasswordForm(c echo.Context) error {
 	csrfToken := middleware.GetCSRFToken(c)
-	return middleware.Render(c, http.StatusOK, ForgotPasswordPage(csrfToken, "", ""))
+	return middleware.Render(c, http.StatusOK, ForgotPasswordPage(csrfToken, "", "", h.service.CanEmailResetLinks(c.Request().Context())))
 }
 
 // ForgotPassword processes the forgot password form (POST /forgot-password).
@@ -306,7 +503,7 @@ func (h *Handler) ForgotPassword(c echo.Context) error {
 	email := c.FormValue("email")
 	if email == "" {
 		csrfToken := middleware.GetCSRFToken(c)
-		return middleware.Render(c, http.StatusOK, ForgotPasswordPage(csrfToken, "", "email is required"))
+		return middleware.Render(c, http.StatusOK, ForgotPasswordPage(csrfToken, "", "email is required", true))
 	}
 
 	// Initiate reset (fire-and-forget — always returns nil to avoid leaking info).
@@ -579,7 +776,143 @@ func (h *Handler) AccountPage(c echo.Context) error {
 		slog.Warn("reading view prefs", slog.String("user_id", userID), slog.Any("error", err))
 	}
 
-	return middleware.Render(c, http.StatusOK, AccountPage(user, csrfToken, timezones, prefs))
+	notify, err := h.service.GetNotifyPrefs(c.Request().Context(), userID)
+	if err != nil {
+		slog.Warn("reading notification choices", slog.String("user_id", userID), slog.Any("error", err))
+	}
+
+	owned, err := h.service.OwnedCampaigns(c.Request().Context(), userID)
+	if err != nil {
+		slog.Warn("listing owned campaigns", slog.String("user_id", userID), slog.Any("error", err))
+	}
+
+	twoFactor, err := h.service.TwoFactorStatus(c.Request().Context(), userID)
+	if err != nil {
+		slog.Warn("reading two-factor status", slog.String("user_id", userID), slog.Any("error", err))
+	}
+
+	methods, err := h.service.SignInMethods(c.Request().Context(), userID)
+	if err != nil {
+		slog.Warn("reading sign-in methods", slog.String("user_id", userID), slog.Any("error", err))
+	}
+
+	return middleware.Render(c, http.StatusOK, AccountPage(user, csrfToken, timezones, prefs, notify, owned, twoFactor,
+		methods, signInOutcome(c.QueryParam("signin"))))
+}
+
+// DeleteAccountAPI deletes the signed-in person's own account
+// (POST /account/delete) after checking their password and the typed
+// confirmation, then signs this browser out.
+func (h *Handler) DeleteAccountAPI(c echo.Context) error {
+	userID := GetUserID(c)
+	if userID == "" {
+		return apperror.NewUnauthorized("not authenticated")
+	}
+	var req DeleteAccountInput
+	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
+		return apperror.NewBadRequest("invalid request body")
+	}
+	if err := h.service.DeleteOwnAccount(c.Request().Context(), userID, req); err != nil {
+		return err
+	}
+	h.logSecurityEvent(c.Request().Context(), "account.deleted", userID, "", c.RealIP(), c.Request().UserAgent(), nil)
+	clearSessionCookie(c)
+	return c.JSON(http.StatusOK, map[string]string{"redirect": "/login?deleted=1"})
+}
+
+// twoFactorRequest is the body of the account page's two-factor calls; each
+// call reads only the field it needs.
+type twoFactorRequest struct {
+	Password string `json:"password"`
+	Code     string `json:"code"`
+}
+
+func bindTwoFactorRequest(c echo.Context) (string, twoFactorRequest, error) {
+	userID := GetUserID(c)
+	if userID == "" {
+		return "", twoFactorRequest{}, apperror.NewUnauthorized("not authenticated")
+	}
+	var req twoFactorRequest
+	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
+		return "", twoFactorRequest{}, apperror.NewBadRequest("invalid request body")
+	}
+	return userID, req, nil
+}
+
+// TwoFactorSetupAPI starts turning two-factor on (POST /account/two-factor/setup).
+func (h *Handler) TwoFactorSetupAPI(c echo.Context) error {
+	userID, req, err := bindTwoFactorRequest(c)
+	if err != nil {
+		return err
+	}
+	setup, err := h.service.BeginTwoFactor(c.Request().Context(), userID, req.Password)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, setup)
+}
+
+// TwoFactorEnableAPI finishes turning two-factor on and returns the recovery
+// codes (POST /account/two-factor/enable).
+func (h *Handler) TwoFactorEnableAPI(c echo.Context) error {
+	userID, req, err := bindTwoFactorRequest(c)
+	if err != nil {
+		return err
+	}
+	codes, err := h.service.EnableTwoFactor(c.Request().Context(), userID, req.Code)
+	if err != nil {
+		return err
+	}
+	h.logSecurityEvent(c.Request().Context(), "two_factor.enabled", userID, userID, c.RealIP(), c.Request().UserAgent(), nil)
+	return c.JSON(http.StatusOK, map[string]any{"recoveryCodes": codes})
+}
+
+// TwoFactorDisableAPI turns two-factor off (POST /account/two-factor/disable).
+func (h *Handler) TwoFactorDisableAPI(c echo.Context) error {
+	userID, req, err := bindTwoFactorRequest(c)
+	if err != nil {
+		return err
+	}
+	if err := h.service.DisableTwoFactor(c.Request().Context(), userID, req.Password, req.Code); err != nil {
+		return err
+	}
+	h.logSecurityEvent(c.Request().Context(), "two_factor.disabled", userID, userID, c.RealIP(), c.Request().UserAgent(), nil)
+	return c.NoContent(http.StatusNoContent)
+}
+
+// TwoFactorRecoveryCodesAPI replaces the recovery codes
+// (POST /account/two-factor/recovery-codes).
+func (h *Handler) TwoFactorRecoveryCodesAPI(c echo.Context) error {
+	userID, req, err := bindTwoFactorRequest(c)
+	if err != nil {
+		return err
+	}
+	codes, err := h.service.RegenerateRecoveryCodes(c.Request().Context(), userID, req.Password, req.Code)
+	if err != nil {
+		return err
+	}
+	h.logSecurityEvent(c.Request().Context(), "two_factor.codes_replaced", userID, userID, c.RealIP(), c.Request().UserAgent(), nil)
+	return c.JSON(http.StatusOK, map[string]any{"recoveryCodes": codes})
+}
+
+// UpdateNotifyPrefsAPI saves the signed-in person's notification choices
+// (PUT /account/notifications). The body is partial: only the switches sent change.
+func (h *Handler) UpdateNotifyPrefsAPI(c echo.Context) error {
+	userID := GetUserID(c)
+	if userID == "" {
+		return apperror.NewUnauthorized("not authenticated")
+	}
+
+	var req notifyprefs.Update
+	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
+		return apperror.NewBadRequest("invalid request body")
+	}
+
+	prefs, err := h.service.UpdateNotifyPrefs(c.Request().Context(), userID, req)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, prefs)
 }
 
 // UpdateViewPrefsAPI saves the signed-in person's own viewing choices
@@ -690,6 +1023,48 @@ func setSessionCookie(c echo.Context, token string, ttl time.Duration) {
 	})
 }
 
+// trustedDeviceCookieName / trustedDeviceCookieSecureName name the
+// remembered-device cookie, __Host- prefixed over HTTPS like the session.
+const (
+	trustedDeviceCookieName       = "chronicle_trusted_device"
+	trustedDeviceCookieSecureName = "__Host-chronicle_trusted_device"
+)
+
+// setTrustedDeviceCookie remembers this device for the code step. It only
+// skips the code; the password is still asked every time.
+func setTrustedDeviceCookie(c echo.Context, token string) {
+	req := c.Request()
+	secure := middleware.SchemeIsSecure(req)
+	name := trustedDeviceCookieName
+	if secure {
+		name = trustedDeviceCookieSecureName
+	}
+	c.SetCookie(&http.Cookie{
+		Name:     name,
+		Value:    token,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   int(trustedDeviceTTL.Seconds()),
+	})
+}
+
+// readTrustedDevice reads the remembered-device cookie, preferring the
+// __Host- name over HTTPS as readSessionToken does.
+func readTrustedDevice(req *http.Request) string {
+	names := []string{trustedDeviceCookieName}
+	if middleware.SchemeIsSecure(req) {
+		names = []string{trustedDeviceCookieSecureName, trustedDeviceCookieName}
+	}
+	for _, name := range names {
+		if cookie, err := req.Cookie(name); err == nil && cookie.Value != "" {
+			return cookie.Value
+		}
+	}
+	return ""
+}
+
 // clearSessionCookie removes the session cookie by setting MaxAge to -1. It
 // clears BOTH the scheme-appropriate name AND the bare legacy name, so a stale
 // pre-upgrade cookie can't linger in the browser after logout.
@@ -787,4 +1162,19 @@ func (h *Handler) ReauthConfirm(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{
 		"status": "confirmed",
 	})
+}
+
+// signInOutcome turns the fixed ?signin= codes from a link round trip into
+// the account page's message. Only these words are ever shown, so the
+// address bar can't put text of its own on the page.
+func signInOutcome(code string) string {
+	switch code {
+	case "linked":
+		return "Linked. You can now sign in with either."
+	case "taken":
+		return "That account is already linked to someone else's Chronicle account."
+	case "failed":
+		return "Linking didn't work. Try again, or ask your site admin to check the provider setting."
+	}
+	return ""
 }

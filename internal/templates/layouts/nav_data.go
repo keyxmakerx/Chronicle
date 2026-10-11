@@ -145,6 +145,7 @@ func NavManageRows(ctx context.Context) []NavRowView {
 		rows = append(rows, NavRowView{Key: "manage:foundry", Label: "Foundry", Icon: "fa-dice-d20", URL: base + "/foundry"})
 	}
 	return append(rows,
+		NavRowView{Key: "manage:import", Label: "Import", Icon: "fa-file-import", URL: base + "/import"},
 		NavRowView{Key: "manage:trash", Label: "Trash", Icon: "fa-trash-can", URL: base + "/trash"},
 		NavRowView{Key: "manage:settings", Label: "Settings", Icon: "fa-gear", URL: base + "/settings"},
 	)

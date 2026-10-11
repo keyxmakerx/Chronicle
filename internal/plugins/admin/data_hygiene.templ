@@ -59,12 +59,12 @@ templ DataHygienePage(data DataHygieneData) {
 					if len(data.OrphanedMedia) > 0 {
 						<button
 							hx-delete="/admin/data-hygiene/orphaned-media"
-							hx-confirm={ fmt.Sprintf("Delete %d uploads that no campaign page uses? This cannot be undone.", countUnreferenced(data.OrphanedMedia)) }
+							hx-confirm={ fmt.Sprintf("Move %d uploads that no campaign page uses to the trash? You can undo this from Trash until it empties.", countUnreferenced(data.OrphanedMedia)) }
 							hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, data.CSRFToken) }
 							hx-swap="none"
 							class="btn btn-sm btn-danger"
 						>
-							<i class="fa-solid fa-trash mr-1"></i> Delete unused uploads
+							<i class="fa-solid fa-trash mr-1"></i> Move unused uploads to trash
 						</button>
 					}
 				</div>

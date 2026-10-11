@@ -1,0 +1,98 @@
+// guest_codes.templ renders the owner's Guest codes card on the People page.
+
+package campaigns
+
+import (
+	"fmt"
+	"time"
+)
+
+// GuestCodesCard lists the campaign's recent guest codes and makes new
+// ones. fresh is a code just made: the only time it is ever shown.
+templ GuestCodesCard(campaignID string, codes []GuestCode, fresh *NewGuestCode, now time.Time, joinURL, csrfToken, errMsg string) {
+	<section id="guest-codes" class="card p-6" aria-labelledby="guest-codes-heading">
+		<h2 id="guest-codes-heading" class="text-lg font-semibold text-fg mb-1">Guest codes</h2>
+		<p class="text-sm text-fg-secondary mb-4">
+			For someone with no account. They type the code at
+			<span class="font-mono text-fg-body">{ joinURL }</span>
+			with just a name and join this campaign as a player. Each code works once, for 7 days.
+		</p>
+		if errMsg != "" {
+			<div class="alert-error mb-4" role="alert">{ errMsg }</div>
+		}
+		if fresh != nil {
+			<div
+				class="step-settle rounded-lg border border-accent/40 bg-accent/5 p-4 mb-4"
+				x-data={ fmt.Sprintf(`{ copy() { navigator.clipboard.writeText(%q).then(() => Chronicle.notify('Code copied', 'success')); } }`, fresh.Code) }
+			>
+				<div class="flex flex-wrap items-center gap-3">
+					<span class="font-mono text-2xl font-semibold tracking-widest text-fg" aria-label={ "Code " + fresh.Code }>{ fresh.Code }</span>
+					<button type="button" class="btn-secondary text-sm" @click="copy()">
+						<i class="fa-solid fa-copy mr-1" aria-hidden="true"></i>Copy
+					</button>
+				</div>
+				<p class="text-xs text-fg-secondary mt-2">
+					if fresh.Note != "" {
+						For { fresh.Note }.
+					}
+					Write it down or copy it now: Chronicle keeps only a fingerprint, so it can't show this code again.
+				</p>
+			</div>
+		}
+		<form
+			class="flex flex-wrap items-end gap-3"
+			hx-post={ fmt.Sprintf("/campaigns/%s/guest-codes", campaignID) }
+			hx-target="#guest-codes"
+			hx-swap="outerHTML"
+		>
+			<input type="hidden" name="csrf_token" value={ csrfToken }/>
+			<div class="flex-1 min-w-[12rem]">
+				<label for="guest-code-note" class="block text-xs font-medium text-fg-body mb-1">Who it's for <span class="text-fg-muted font-normal">(optional)</span></label>
+				<input type="text" id="guest-code-note" name="note" maxlength="100" class="input w-full" placeholder="Sam, Friday's one-shot"/>
+			</div>
+			<button type="submit" class="btn-primary text-sm">Make a code</button>
+		</form>
+		if len(codes) > 0 {
+			<ul class="mt-5 divide-y divide-edge border-t border-edge">
+				for _, gc := range codes {
+					<li class="flex items-center justify-between gap-3 py-2.5">
+						<div class="min-w-0">
+							<div class="text-sm text-fg truncate">
+								if gc.Note != "" {
+									{ gc.Note }
+								} else {
+									<span class="text-fg-muted italic">No note</span>
+								}
+							</div>
+							<div class="text-xs text-fg-muted">Made { gc.CreatedAt.Format("Jan 2") }</div>
+						</div>
+						<div class="flex items-center gap-3 shrink-0">
+							switch gc.Status(now) {
+								case "used":
+									<span class="text-xs px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300">
+										if gc.UsedByName != "" {
+											Used by { gc.UsedByName }
+										} else {
+											Used
+										}
+									</span>
+								case "expired":
+									<span class="text-xs px-2 py-0.5 rounded-full bg-surface-alt text-fg-muted">Expired</span>
+								default:
+									<span class="text-xs px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300">Open until { gc.ExpiresAt.Format("Jan 2") }</span>
+									<form
+										hx-delete={ fmt.Sprintf("/campaigns/%s/guest-codes/%s", campaignID, gc.ID) }
+										hx-target="#guest-codes"
+										hx-swap="outerHTML"
+									>
+										<input type="hidden" name="csrf_token" value={ csrfToken }/>
+										<button type="submit" class="text-xs text-red-600 hover:text-red-500 dark:text-red-400 dark:hover:text-red-300">Remove</button>
+									</form>
+							}
+						</div>
+					</li>
+				}
+			</ul>
+		}
+	</section>
+}
