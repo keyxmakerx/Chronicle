@@ -176,6 +176,7 @@ func recordKeyUsage(ctx context.Context, service SyncAPIService, key *APIKey, ip
 	if key == nil || key.ID == synthKeySessionID {
 		return nil
 	}
+	service.NoteKeyUser(ctx, key.UserID)
 	return service.UpdateKeyLastUsed(ctx, key.ID, ip, moduleVersion)
 }
 

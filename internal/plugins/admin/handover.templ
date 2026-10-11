@@ -1,0 +1,74 @@
+package admin
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+	"time"
+)
+
+// HandoverPageData is what the admin hand-over page shows: the campaign,
+// its owner's absence and the members who could take it on.
+type HandoverPageData struct {
+	Campaign   campaigns.Campaign
+	Status     campaigns.HandoverStatus
+	Candidates []campaigns.CampaignMember
+	Now        time.Time
+	CSRFToken  string
+}
+
+// AdminHandoverPage lets an admin give a campaign to one of its members once
+// the owner has been away longer than they allowed.
+templ AdminHandoverPage(d HandoverPageData) {
+	@layouts.App("Hand over - Admin") {
+		<div class="max-w-2xl mx-auto space-y-6 step-settle">
+			<a href="/admin/campaigns" class="text-sm text-fg-muted hover:text-fg transition-colors">
+				<i class="fa-solid fa-arrow-left mr-1 text-xs"></i>Campaigns
+			</a>
+			<h1 class="text-2xl font-bold text-fg text-balance">Hand over { d.Campaign.Name }</h1>
+			<div class="card p-6 space-y-3">
+				<p class="text-sm text-fg-body">
+					<strong>{ d.Status.OwnerName }</strong> owns this campaign and was last { lastSeenText(d.Status.LastSeen, d.Now) }
+					({ d.Status.LastSeen.Format("January 2, 2006") }).
+				</p>
+				<p class="text-sm text-fg-secondary">
+					They allowed a hand-over after { handoverMonthsText(d.Status.AfterMonths) } away, so you can now choose a new owner.
+				</p>
+			</div>
+			if !d.Status.Open {
+				<div class="alert-warning">The owner hasn't been away long enough for a hand-over.</div>
+			} else if len(d.Candidates) == 0 {
+				<div class="card p-6">
+					<p class="text-sm text-fg-secondary">Nobody else in this campaign can take it on. The new owner must already be a member with their own account; guests have to keep their account first.</p>
+				</div>
+			} else {
+				<form
+					class="card p-6 space-y-5"
+					hx-post={ fmt.Sprintf("/admin/campaigns/%s/hand-over", d.Campaign.ID) }
+					hx-confirm={ fmt.Sprintf("Make the chosen member owner of %s? %s will stay on as Co-DM.", d.Campaign.Name, d.Status.OwnerName) }
+				>
+					<input type="hidden" name="csrf_token" value={ d.CSRFToken }/>
+					<fieldset class="space-y-2">
+						<legend class="block text-sm font-medium text-fg-body mb-2">New owner</legend>
+						for i, m := range d.Candidates {
+							<label class="flex items-center gap-3 rounded-md border border-edge px-3 py-2 cursor-pointer hover:bg-surface-alt transition-colors">
+								<input type="radio" name="user_id" value={ m.UserID } required checked?={ i == 0 }/>
+								<span class="text-sm text-fg flex-1 min-w-0 truncate">{ m.DisplayName }</span>
+								<span class="text-xs text-fg-muted">{ m.Role.DisplayName() }</span>
+							</label>
+						}
+					</fieldset>
+					<ul class="text-sm text-fg-secondary space-y-1 list-disc pl-5">
+						<li>{ d.Status.OwnerName } stays in the campaign as Co-DM and keeps everything they made.</li>
+						<li>They get an email saying who the new owner is, if email is set up.</li>
+						<li>The hand-over is recorded in Admin › Activity.</li>
+					</ul>
+					<div class="flex justify-end gap-3">
+						<a href="/admin/campaigns" class="btn-secondary text-sm">Cancel</a>
+						<button type="submit" class="btn-primary text-sm">Hand over</button>
+					</div>
+				</form>
+			}
+		</div>
+	}
+}

@@ -84,6 +84,9 @@ type UserRepository interface {
 	// the fence; an email someone else uses is a Conflict.
 	KeepGuestAccount(ctx context.Context, userID, email, passwordHash string) error
 	ListCampaignGuests(ctx context.Context, campaignID string) ([]string, error)
+
+	// TouchLastSeen records that the person used the site just now.
+	TouchLastSeen(ctx context.Context, userID string) error
 }
 
 // userRepository implements UserRepository with hand-written MariaDB queries.
@@ -711,4 +714,12 @@ func (r *userRepository) ListCampaignGuests(ctx context.Context, campaignID stri
 		ids = append(ids, id)
 	}
 	return ids, rows.Err()
+}
+
+// TouchLastSeen stamps users.last_seen_at with the current time.
+func (r *userRepository) TouchLastSeen(ctx context.Context, userID string) error {
+	if _, err := r.db.ExecContext(ctx, `UPDATE users SET last_seen_at = NOW() WHERE id = ?`, userID); err != nil {
+		return fmt.Errorf("recording last seen: %w", err)
+	}
+	return nil
 }

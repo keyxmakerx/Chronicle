@@ -23,6 +23,9 @@ import (
 // sessionKeyPrefix is the Redis key prefix for session data.
 const sessionKeyPrefix = "session:"
 
+// lastSeenKeyPrefix marks a person whose last-seen time was written today.
+const lastSeenKeyPrefix = "last_seen:"
+
 // userSessionsKeyPrefix is the Redis key prefix for the set of session tokens
 // belonging to a user. Used to invalidate all sessions on password reset.
 const userSessionsKeyPrefix = "user_sessions:"
@@ -173,6 +176,10 @@ type AuthService interface {
 	// Re-authentication for sensitive operations.
 	ConfirmReauth(ctx context.Context, userID, password string) error
 	IsReauthValid(ctx context.Context, userID string) (bool, error)
+
+	// NoteSeen records that someone used Chronicle by another route than a
+	// browser session, such as a sync key.
+	NoteSeen(ctx context.Context, userID string)
 }
 
 // authService implements AuthService with argon2id hashing and Redis sessions.
@@ -612,8 +619,35 @@ func (s *authService) ValidateSession(ctx context.Context, token string) (*Sessi
 			return nil, err
 		}
 	}
+	s.noteSeen(ctx, session.UserID)
 
 	return &session, nil
+}
+
+// lastSeenEvery is how often a person's last-seen time is written: once a
+// day is plenty to tell months away from present, and keeps it off the hot
+// path.
+const lastSeenEvery = 24 * time.Hour
+
+// NoteSeen records presence from outside a browser session.
+func (s *authService) NoteSeen(ctx context.Context, userID string) {
+	s.noteSeen(ctx, userID)
+}
+
+// noteSeen records that someone used the site, at most once a day. A Redis
+// marker decides who writes; a failure only means the time is a day stale.
+func (s *authService) noteSeen(ctx context.Context, userID string) {
+	if s.redis == nil || userID == "" {
+		return
+	}
+	set, err := s.redis.SetArgs(ctx, lastSeenKeyPrefix+userID, "1", redis.SetArgs{Mode: "NX", TTL: lastSeenEvery}).Result()
+	if err != nil || set != "OK" {
+		return
+	}
+	if err := s.repo.TouchLastSeen(ctx, userID); err != nil {
+		slog.Warn("recording last seen", slog.String("user_id", userID), slog.Any("error", err))
+		s.redis.Del(ctx, lastSeenKeyPrefix+userID)
+	}
 }
 
 // revalidateSession checks the database to ensure the session's user still

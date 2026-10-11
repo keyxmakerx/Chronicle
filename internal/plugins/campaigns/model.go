@@ -597,6 +597,11 @@ type CampaignSettings struct {
 	DefaultVisibility string       `json:"default_visibility,omitempty"`  // Default visibility for new entities: "", "dm_only", "private".
 	SystemID          string       `json:"system_id,omitempty"`           // Game system ID (e.g. "dnd5e", "drawsteel") or "custom:<url>".
 
+	// HandoverAfterMonths is the owner's "If you're away" choice: how long
+	// they can be unseen before a site admin may hand the campaign to another
+	// member. 0 (the default) means never.
+	HandoverAfterMonths int `json:"handover_after_months,omitempty"`
+
 	// CharacterTypeIDs and NPCTypeIDs are the page types the owner chose to
 	// show as The Party and as NPCs. Pointers because "never chosen" (nil) and
 	// "chose none" (empty) differ: the one-time reconciler fills only nil.

@@ -645,6 +645,30 @@ func (h *Handler) UpdateDefaultVisibilityAPI(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
+// UpdateHandoverSettingAPI saves the owner's "If you're away" choice
+// (PUT /campaigns/:id/handover-setting). Only the owner themself may set
+// it: it decides when others can take their campaign, so a Co-DM can't.
+func (h *Handler) UpdateHandoverSettingAPI(c echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	if cc.MemberRole != RoleOwner {
+		return apperror.NewForbidden("only the campaign owner can change this")
+	}
+	var req struct {
+		Months int `json:"months"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request body")
+	}
+	if err := h.service.SetHandoverAfter(c.Request().Context(), cc.Campaign.ID, req.Months); err != nil {
+		return err
+	}
+	h.logAudit(c, cc.Campaign.ID, "campaign.handover_setting.updated", map[string]any{"months": req.Months})
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
 // --- Settings ---
 
 // Settings renders the campaign settings page (GET /campaigns/:id/settings).

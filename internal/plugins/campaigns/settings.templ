@@ -487,6 +487,10 @@ templ peopleSections(cc *CampaignContext, members []CampaignMember, transfer *Ow
 				</form>
 			}
 		</div>
+
+		if cc.MemberRole == RoleOwner {
+			@handoverCard(cc)
+		}
 	</div>
 }
 
@@ -711,4 +715,59 @@ func hasDisabled(addons []PluginHubAddon) bool {
 		}
 	}
 	return false
+}
+
+// handoverCard is the owner's "If you're away" choice: how long they can go
+// unseen before a site admin may give the campaign to another member.
+templ handoverCard(cc *CampaignContext) {
+	<div
+		class="card p-6"
+		x-data={ fmt.Sprintf(`{
+			months: %d,
+			saving: false,
+			saved: false,
+			error: '',
+			async save(m) {
+				var prev = this.months;
+				this.months = m; this.saving = true; this.saved = false; this.error = '';
+				const res = await Chronicle.apiFetch('/campaigns/%s/handover-setting', { method: 'PUT', body: { months: m } });
+				this.saving = false;
+				if (res.ok) { this.saved = true; setTimeout(() => { this.saved = false; }, 3000); }
+				else { this.months = prev; this.error = 'That choice could not be saved. Try again.'; }
+			}
+		}`, cc.Campaign.ParseSettings().HandoverAfterMonths, cc.Campaign.ID) }
+	>
+		<h2 class="text-lg font-semibold text-fg mb-1">If you're away</h2>
+		<p class="text-sm text-fg-secondary mb-4">
+			If you stop using Chronicle for this long (the site or Foundry sync), a site admin may make another member the owner, so the table can keep playing. You'd stay in the campaign as Co-DM and get an email.
+		</p>
+		<div class="inline-flex flex-wrap border border-edge rounded-lg overflow-hidden bg-surface" role="group" aria-label="If you're away">
+			for _, m := range HandoverChoices {
+				<button
+					type="button"
+					class="px-3 py-1.5 text-sm font-medium text-fg-body"
+					x-bind:class={ fmt.Sprintf("months === %d ? 'bg-accent text-white' : 'hover:bg-surface-alt'", m) }
+					x-bind:aria-pressed={ fmt.Sprintf("(months === %d).toString()", m) }
+					@click={ fmt.Sprintf("save(%d)", m) }
+				>{ handoverChoiceLabel(m) }</button>
+			}
+		</div>
+		<p class="text-xs mt-3 min-h-4" aria-live="polite">
+			<span x-show="saving" class="text-fg-muted">Saving...</span>
+			<span x-show="saved" x-transition class="text-green-600">Saved</span>
+			<span x-show="error" class="text-red-500" x-text="error"></span>
+		</p>
+	</div>
+}
+
+// handoverChoiceLabel names one "If you're away" choice.
+func handoverChoiceLabel(months int) string {
+	switch months {
+	case 0:
+		return "Never"
+	case 12:
+		return "1 year"
+	default:
+		return fmt.Sprintf("%d months", months)
+	}
 }

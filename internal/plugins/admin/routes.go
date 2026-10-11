@@ -40,6 +40,8 @@ func RegisterRoutes(e *echo.Echo, h *Handler, authService auth.AuthService, smtp
 	admin.DELETE("/campaigns/:id", h.DeleteCampaign, reauth)
 	admin.POST("/campaigns/:id/join", h.JoinCampaign, reauth)
 	admin.DELETE("/campaigns/:id/leave", h.LeaveCampaign)
+	admin.GET("/campaigns/:id/hand-over", h.HandoverPage)
+	admin.POST("/campaigns/:id/hand-over", h.HandOver, reauth)
 
 	// Trash: deleted campaigns and file clean-ups wait here, with Undo.
 	// Emptying it early is permanent, and a shorter retention makes the next

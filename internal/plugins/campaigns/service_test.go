@@ -14,6 +14,7 @@ import (
 // --- Mock Repository ---
 
 type mockCampaignRepo struct {
+	ownerPresence           map[string]OwnerPresence
 	ownedByUser             []OwnedCampaign
 	memberCampaignIDs       []string
 	transfersCancelledFor   []string
@@ -289,6 +290,16 @@ func (m *mockCampaignRepo) TransferOwnership(ctx context.Context, campaignID, fr
 		return m.transferOwnershipFn(ctx, campaignID, fromUserID, toUserID)
 	}
 	return nil
+}
+
+func (m *mockCampaignRepo) OwnerPresence(_ context.Context, ids []string) (map[string]OwnerPresence, error) {
+	out := map[string]OwnerPresence{}
+	for _, id := range ids {
+		if p, ok := m.ownerPresence[id]; ok {
+			out[id] = p
+		}
+	}
+	return out, nil
 }
 
 func (m *mockCampaignRepo) ForceTransferOwnership(ctx context.Context, campaignID, newOwnerID string) error {

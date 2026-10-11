@@ -3416,6 +3416,9 @@ func (a *App) RegisterRoutes() {
 	// authenticated with it can't keep receiving until it happens to
 	// reconnect on its own. See wsRevokerHolder.
 	syncService.SetConnectionRevoker(wsRevoker)
+	// Syncing with a key counts as using Chronicle, so an owner who plays
+	// through Foundry is never mistaken for away.
+	syncService.SetSeenRecorder(authService)
 	// One-time, idempotent startup backfill: enable sync-api for campaigns
 	// that already own API keys but have no recorded toggle state, so
 	// enforcing the toggle cannot cut off an integration that was working.
