@@ -5389,9 +5389,45 @@ html[data-view-motion="calm"] .pl-chip, .nav-rm .pl-chip, html.rm .pl-chip, html
 .ph-confirm .ph-row { display: flex; gap: 6px; justify-content: flex-end; }
 .ph-danger-btn { border: 0; border-radius: 8px; padding: 6px 12px; background: #dc2626; color: #fff; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
 .ph-danger-btn:hover { background: #b91c1c; }
-.ph-below { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 16px; }
-.ph-below:empty { display: none; }
-@media (max-width: 1023.98px) { .ph-below { grid-template-columns: minmax(0, 1fr); } }
+/* The tabbed panel under a system-rendered page (page_tabs.templ, widgets/page_tabs.js). Each piece keeps its own markup; inside a
+   pane its heading and add button give way to the tab and the bar's one action button, which presses that same add button. */
+.pt { margin-top: 16px; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-card-bg); box-shadow: 0 1px 2px rgb(0 0 0 / .06); min-width: 0; }
+.pt-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--color-border); }
+.pt-tabs { display: flex; flex-wrap: wrap; gap: 2px; flex: 1; min-width: 0; }
+.pt-tab { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border: 0; border-radius: 8px; background: none; color: var(--color-text-body); font: inherit; font-size: 14px; font-weight: 500; cursor: pointer; }
+.pt-tab:hover { background: var(--color-bg-tertiary); }
+.pt-tab:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
+.pt-tab[aria-selected="true"] { background: rgb(var(--color-accent-rgb) / .12); color: var(--color-accent); }
+.pt-tab.is-empty:not([aria-selected="true"]) { color: var(--color-text-muted); }
+.pt-tab[hidden] { display: none; }
+.pt-n { min-width: 18px; padding: 0 6px; border-radius: 999px; background: var(--color-bg-tertiary); color: var(--color-text-muted); font-size: 11px; font-weight: 600; text-align: center; font-variant-numeric: tabular-nums; }
+.pt-n:empty { display: none; }
+.pt-tab[aria-selected="true"] .pt-n { background: var(--color-accent); color: #fff; }
+.pt-act { white-space: nowrap; }
+.pt-act[hidden] { display: none; }
+.pt-pane { padding: 16px; min-width: 0; }
+.pt-pane[hidden], .pt-empty[hidden], .pt-none[hidden] { display: none; }
+.pt-empty, .pt-none { margin: 0; color: var(--color-text-muted); font-size: 13.5px; }
+.pt-pane [data-widget="entity-notes"] > .flex.items-center.justify-between.mb-3,
+.pt-pane [data-widget="entity-posts"] > .flex.items-center.justify-between.mb-3,
+.pt-pane [id^="armory-panel-"] > .flex.items-center.justify-between > h3,
+.pt-pane [data-open-give], .pt-pane #page-files-title, .pt-pane [data-pf-attach], .pt-pane .rel-add-btn,
+.pt-grp .mt-8 > .flex.items-center.gap-2.mb-3:first-child, .pt-grp .mt-8 > .flex.items-center.justify-between:first-child > h2,
+.pt-grp .mt-8 > p.text-sm { display: none; }
+.pt-pane [id^="armory-panel-"] { margin: 0; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; }
+.pt-pane [id^="armory-panel-"] > .flex.items-center.justify-between { justify-content: flex-end; }
+.pt-pane .pf-section, .pt-grp .mt-8 { margin-top: 0; }
+.pt-grp .mt-8 > .flex.items-center.justify-between:first-child { margin-bottom: 8px; }
+.pt-grp .mt-8 > .flex.items-center.justify-between:first-child > a { font-size: 12.5px; padding: 2px 8px; }
+.pt-prompts { margin-top: 12px; }
+.pt-prompts > details { margin: 0; border: 0; background: none; box-shadow: none; }
+.pt-prompts > details > summary { display: inline-flex; padding: 2px 0; font-size: 12.5px; }
+.pt-prompts > details > summary span { font-weight: 500; color: var(--color-accent); }
+.pt-prompts > details > summary:hover { background: none; }
+.pt-links { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.pt-grp { min-width: 0; padding: 10px 12px; border: 1px solid var(--color-border); border-radius: 8px; }
+.pt-grp-h { margin: 0 0 6px; font-size: 11px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--color-text-muted); }
+.pt-grp .grid { grid-template-columns: minmax(0, 1fr); }
 @media (min-width: 640px) { .ph-phone-only { display: none; } }
 @media (max-width: 639.98px) {
   .ph-acts .ph-wide { display: none; }

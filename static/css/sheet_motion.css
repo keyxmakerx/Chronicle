@@ -185,9 +185,9 @@ html[data-motion="off"] [data-sheet][data-sheet-style="night"] .paper-drawer[dat
 [data-sheet]:is([data-sheet-style="modern"],:not([data-sheet-style])) [data-move="settle"]{--mv-from:translateY(6px);--mv-fade:0}
 [data-sheet]:is([data-sheet-style="modern"],:not([data-sheet-style])) .paper-landed::before{inset:-3px -7px;border:2px solid var(--paper-accent);border-radius:7px;background:none;opacity:0;animation:sheet-ring calc(var(--dur-slide) * 1.1 * var(--fx,1)) var(--ease-out) both}
 html:is([data-motion="calm"],[data-view-motion="calm"],[data-cz-reduce]) [data-sheet]:is([data-sheet-style="modern"],:not([data-sheet-style])) .paper-pin{transform:none!important}
-/* Pencil: sketched in. A thin graphite outline draws around the panel's edge first (the trace), then the paper and everything on it is written in
-   top-down at its real height. A fold opens the same way under a ruled line. */
-[data-sheet][data-sheet-style="pencil"] [data-move="slide-out"]{--mv-from:none;--mv-clip:inset(0 0 100% 0);--mv-fade:1;--mv-k:1.25;--mv-e:cubic-bezier(.35,.1,.3,1);--mv-cto:.6;--mv-cdo:.4;--mv-ct:.7}
+/* Pencil: a panel is paper slid out from behind the sheet, with a thin graphite outline drawn around where it lands (the trace). A grown
+   panel and a fold are sketched in top-down at their real height, a fold under a ruled line. */
+[data-sheet][data-sheet-style="pencil"] [data-move="slide-out"]{--mv-from:translate(calc(var(--dir-x,0) * 100%),calc(var(--dir-y,0) * 100%));--mv-fade:1}
 [data-sheet][data-sheet-style="pencil"] [data-move="grow"]{--mv-from:none;--mv-clip:inset(0 0 100% 0);--mv-fade:1;--mv-k:.95;--mv-e:cubic-bezier(.35,.1,.3,1);--mv-cto:.7;--mv-cdo:.3;--mv-ct:.8}
 [data-sheet][data-sheet-style="pencil"] [data-move="fold"]{--mv-from:none;--mv-clip:inset(0 0 100% 0);--mv-fade:1;--mv-e:cubic-bezier(.35,.1,.3,1)}
 [data-sheet][data-sheet-style="pencil"] [data-move="settle"]{--mv-from:translateY(4px);--mv-fade:0}
@@ -315,7 +315,8 @@ html:is([data-motion="calm"],[data-view-motion="calm"],[data-cz-reduce]) [data-s
 @keyframes rn-door-r{0%{opacity:1;transform:translate3d(0,0,0)}14%{opacity:1;transform:translate3d(0,0,0);animation-timing-function:cubic-bezier(.55,.02,.2,1)}100%{opacity:1;transform:translate3d(101%,0,0)}}
 /* The thud when the halves stop. The separate translate property composes with the move's own transform. */
 [data-sheet][data-sheet-style="runes"] :is(.paper-well.is-open>.paper-drawer,.pg-card.is-open){animation:rn-thud calc(var(--mv-t) * var(--fx,1)) linear both}
-@keyframes rn-thud{0%,84%{translate:0 0}90%{translate:0 2px}95%{translate:0 -1px}100%{translate:0 0}}
+/* The bump is a transform: the translate property carries the engine's slide-out and pull over the sheet, and an animation on it would pin the panel in place. */
+@keyframes rn-thud{0%,84%{transform:translateY(0)}90%{transform:translateY(2px)}95%{transform:translateY(-1px)}100%{transform:none}}
 /* Light through the seam, then falling dust. Both hang off the heading, which anchors to the panel, so they need no extra markup. */
 [data-sheet][data-sheet-style="runes"] .paper-drawer[data-move] .paper-dhead::before{content:"";position:absolute;z-index:6;top:0;bottom:0;left:calc(50% - 14px);width:28px;pointer-events:none;opacity:0;
   background:linear-gradient(90deg,transparent,rgb(111 233 214 / .32) 40%,rgb(234 255 251 / .85) 50%,rgb(111 233 214 / .32) 60%,transparent)}
