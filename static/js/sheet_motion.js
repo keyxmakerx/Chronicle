@@ -457,24 +457,44 @@
     }
     // Settle the closed state without a transition (its look can depend on --ox/--oy set a moment ago), so the open transition starts from the right place.
     function rest(el) { el.style.transition = 'none'; reflow(el); el.style.transition = ''; }
+    // With no room beside the sheet a paper comes out in two beats: it slides out from behind the edge into the gap (the rest of it
+    // past the well's far side), then is pulled left over the sheet. The pull is the CSS translate property, so it composes with
+    // whatever transform the style's own move uses.
+    function pull(card, from, to, ms, e) {
+      if (!card.animate) { card.style.translate = to; return null; }
+      card.style.translate = to;
+      return card.animate([{ translate: from }, { translate: to }], { duration: ms, easing: e || ease(card) });
+    }
     function slideOut(w) {
-      rest(w.firstChild);
-      moving(w.firstChild, tms(w.firstChild));
-      addTrace(w, w.firstChild);
+      var card = w.firstChild, t = tms(card), full = mode() === 'full', off = (w._over || 0) + 'px 0';
+      if (w.classList.contains('has-over') && full) card.style.translate = off;
+      rest(card);
+      moving(card, t);
+      // The trace is placed from offsetLeft, which leaves out the translate, so it is given the same offset and pulled with the card.
+      var trace = addTrace(w, card);
+      if (trace && card.style.translate) trace.style.translate = off;
       w.classList.add('is-open');
       if (w.classList.contains('has-over')) {
-        var go = function () { w.classList.add('is-over'); };
-        if (mode() === 'full') w._t = setTimeout(go, dur(root) * 0.8); else go();
+        var go = function () {
+          w.classList.add('is-over');
+          if (full) { moving(card, dur(root)); pull(card, off, '0px 0', dur(root)); if (trace) pull(trace, off, '0px 0', dur(root), ease(card)); }
+        };
+        // The pull starts as the slide settles, so the two beats read as one quick motion rather than a stop and a start.
+        if (full) w._t = setTimeout(go, t * 0.6); else go();
       }
     }
     function slideBack(w, done) {
       clearTimeout(w._t);
+      var card = w.firstChild;
       var fin = function () {
         w.classList.remove('is-open');
-        moving(w.firstChild, tms(w.firstChild));
-        setTimeout(function () { w.remove(); if (done) done(); }, tms(w.firstChild) + 30);
+        moving(card, tms(card));
+        setTimeout(function () { w.remove(); if (done) done(); }, tms(card) + 30);
       };
-      if (w.classList.contains('is-over')) { w.classList.remove('is-over'); w._t = setTimeout(fin, dur(root) * 0.8); } else fin();
+      if (w.classList.contains('is-over')) {
+        w.classList.remove('is-over');
+        if (mode() === 'full') { moving(card, dur(root)); pull(card, '0px 0', (w._over || 0) + 'px 0', dur(root)); w._t = setTimeout(fin, dur(root)); } else fin();
+      } else fin();
     }
 
     // ----- peeks: the edge of the paper behind each part
@@ -561,9 +581,11 @@
       var move = role(root, 'panel');
       var p = drawer(id, title, kind, body, false), w = makeWell(folio, 'right', p, move);
       p.style.width = WD + 'px';
-      p.style.maxHeight = Math.min(sr.height - 28, Math.max(320, innerHeight - 120)) + 'px';
+      // A panel is as tall as what it holds, up to the window: past a short sheet it lies over the page below rather than cutting off.
+      p.style.maxHeight = Math.max(320, innerHeight - 120) + 'px';
       var ph = p.offsetHeight, rel = sr.right - fr.left, T = pr.top - fr.top - 18;
-      T = Math.min(T, sr.bottom - fr.top - 14 - ph);
+      // Beside the part that was clicked, lifted only as far as it takes to stay in the window, and never above the sheet.
+      T = Math.min(T, innerHeight - 24 - fr.top - 14 - ph);
       T = Math.max(T, sr.top - fr.top - 14);
       w.style.top = T + 'px';
       w.style.height = (ph + 42) + 'px';
@@ -572,6 +594,7 @@
       p.style.setProperty('--oy', Math.max(0, Math.min(ph, pr.top + pr.height / 2 - (fr.top + T + 14))) + 'px');
       if (over) {
         w.classList.add(move === 'grow' ? 'pad-over' : 'has-over');
+        w._over = over;
         w.style.setProperty('--clip', (14 + over) + 'px');
         w.style.left = (rel - over - 14) + 'px';
         w.style.width = (WD + 36) + 'px';
@@ -685,6 +708,9 @@
 
     // ----- events
     root.addEventListener('click', function (e) {
+      // Using any other control on the sheet puts the open paper away first, so a picker or fold never opens under it.
+      if (S.panel && !S.panel.page && e.target.closest && e.target.closest('a,button,input,select,textarea,summary,label') &&
+          !e.target.closest('[data-sheet-open],[data-sheet-close],.paper-well,.ag-fold')) closePanel(false);
       var sm = e.target.closest && e.target.closest('[data-sheet-fold] > summary');
       if (sm) { e.preventDefault(); fold(sm.parentNode); return; }
       if (e.target.classList && e.target.classList.contains('pg-layer')) { closePanel(true); return; }

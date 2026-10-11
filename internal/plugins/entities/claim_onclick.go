@@ -25,8 +25,8 @@ const claimSubmitJS = `(function(form,e){e.preventDefault();` +
 	`if(!r.ok)return r.json().then(function(j){fail(j&&j.message);},function(){fail();});` +
 	`box.className='mb-4 rounded-md border border-edge bg-surface-alt px-4 py-2.5 flex items-center gap-3 ag-landed';` +
 	`box.setAttribute('data-claim-state','claimed');` +
-	`box.innerHTML='<i class="fa-solid fa-user-check text-accent"></i><p class="flex-1 text-sm text-fg">This character is yours. It is on your My Characters page.</p><span class="fx-pill is-yours">Yours</span>';` +
-	`Chronicle.notify('Claimed. It is on your My Characters page.','success');` +
+	`box.innerHTML='<i class="fa-solid fa-user-check text-accent"></i><p class="flex-1 text-sm text-fg">This character is yours. It is under Yours on the Characters page.</p><span class="fx-pill is-yours">Yours</span>';` +
+	`Chronicle.notify('Claimed. It is under Yours on the Characters page.','success');` +
 	`setTimeout(function(){location.reload();},1300);` +
 	`}).catch(function(){fail('Network error. Try again.');});` +
 	`})(this,event)`

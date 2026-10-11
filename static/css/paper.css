@@ -235,7 +235,7 @@
 .paper-well[data-from="right"] > * { --dir-x: -1; --dir-y: 0; }
 .paper-well[data-from="up"] > * { --dir-x: 0; --dir-y: 1; }
 .paper-well[data-from="down"] > * { --dir-x: 0; --dir-y: -1; }
-/* With too little room beside the sheet the paper arrives from behind its edge, then the clip opens and it lies over the sheet's right column. */
+/* With too little room beside the sheet the paper slides out from behind its edge, then the engine pulls it left over the sheet as the clip opens. */
 .paper-well[data-from="right"].has-over { padding-left: 14px; clip-path: inset(0 0 0 var(--clip)); transition: clip-path var(--dur-slide) var(--ease-slide); }
 .paper-well.has-over.is-over { clip-path: inset(0 0 0 0); }
 .paper-well[data-from="right"].pad-over { padding-left: 14px; }
@@ -342,6 +342,30 @@
   cursor: pointer;
 }
 .paper-back:hover { background: rgb(var(--paper-hl, 255 255 255) / calc(0.7 * var(--hlk, 1))); }
+
+/* Chronicle's choice picker (choice_picker.js) opened inside a sheet takes the sheet's paper and type, not the site's panel colours. */
+[data-sheet] .ag-box { border: 1px solid var(--paper-edge); border-radius: 4px; background: var(--paper-cut); color: var(--paper-ink); font-family: var(--paper-ui-font); box-shadow: var(--paper-slip-lift, none); }
+[data-sheet] .ag-head h4 { font: 700 calc(14px * var(--ts, 1)) var(--paper-head-font, var(--paper-font)); color: var(--paper-ink); }
+[data-sheet] .ag-src { background: none; border: 1px solid var(--paper-edge); color: var(--paper-ink-soft); font-family: var(--paper-ui-font); }
+[data-sheet] .ag-x { color: var(--paper-ink-soft); }
+[data-sheet] .ag-x:hover { background: rgb(var(--paper-hl, 255 255 255) / calc(0.5 * var(--hlk, 1))); color: var(--paper-ink); }
+[data-sheet] .ag-search i, [data-sheet] .ag-more, [data-sheet] .ag-note, [data-sheet] .ag-hint { color: var(--paper-mute); }
+[data-sheet] .ag-box .input { border: 1px solid var(--paper-edge); border-radius: 4px; background: rgb(var(--paper-hl, 255 255 255) / calc(0.55 * var(--hlk, 1))); color: var(--paper-ink); font-family: var(--paper-ui-font); box-shadow: none; }
+[data-sheet] .ag-box .input::placeholder { color: var(--paper-mute); }
+[data-sheet] .ag-box .input:focus { border-color: var(--paper-accent); outline: 2px solid color-mix(in srgb, var(--paper-accent) 35%, transparent); outline-offset: 0; box-shadow: none; }
+[data-sheet] .ag-list { border-color: var(--paper-edge); border-radius: 4px; background: rgb(var(--paper-hl, 255 255 255) / calc(0.25 * var(--hlk, 1))); }
+[data-sheet] .ag-row { color: var(--paper-ink); border-top: 1px dashed var(--paper-edge); font-family: var(--paper-font); }
+[data-sheet] .ag-row:first-child { border-top: 0; }
+[data-sheet] .ag-row:hover { background: rgb(var(--paper-hl, 255 255 255) / calc(0.45 * var(--hlk, 1))); }
+[data-sheet] .ag-row:has(input:checked) { background: color-mix(in srgb, var(--paper-accent) 10%, transparent); }
+[data-sheet] .ag-row input { accent-color: var(--paper-accent); }
+[data-sheet] .ag-row .ag-name b { font-family: var(--paper-head-font, var(--paper-font)); }
+[data-sheet] .ag-row .ag-name small { color: var(--paper-ink-soft); }
+[data-sheet] .ag-more { border-top-color: var(--paper-edge); }
+[data-sheet] .ag-link { color: var(--paper-accent); font-family: var(--paper-ui-font); }
+[data-sheet] .ag-box .btn-secondary { border: 1px solid var(--paper-edge); background: transparent; color: var(--paper-ink); font-family: var(--paper-ui-font); }
+[data-sheet] .ag-box .btn-primary { border: 0; background: var(--paper-accent); color: var(--paper-on-accent, #fff); font-family: var(--paper-ui-font); }
+[data-sheet] .ag-box .btn-primary:disabled { opacity: 0.45; }
 
 /* Calm and Off. Calm is the owner's reduce switch, a person's own Calm pick, or html[data-motion="calm"]; Off is html[data-motion="off"]. */
 html:is([data-motion="calm"], [data-view-motion="calm"], [data-cz-reduce]) .paper-well.has-over { clip-path: none; transition: none; }

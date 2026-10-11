@@ -90,12 +90,9 @@ templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 				@entitySystemPanels(cc, entity)
 				@systemImageMount(cc, entity, csrfToken)
 				@comp
-				// It has no layout to place the page pieces in, so they are
-				// drawn here as before they became blocks.
-				@systemPageBelow(cc, entity, entityType, csrfToken)
-				@blockPosts(cc, entity, csrfToken)
-				@blockWritingPrompts(cc, entityType)
-				@blockBacklinksMount(cc, entity)
+				// It has no layout to place the page pieces in, so they share
+				// one tabbed panel under it.
+				@systemPageTabs(cc, entity, entityType, csrfToken)
 			} else {
 				<!-- Dynamic layout from entity type template -->
 				if entityType != nil && len(entityType.Layout.Rows) > 0 {
@@ -134,20 +131,18 @@ templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 					@blockWritingPrompts(cc, entityType)
 					@blockBacklinksMount(cc, entity)
 				}
-			}
-
-			// The items-and-money panel on player-character pages whose layout
-			// does not place it; every other page gets it only as a block.
-			if autoPagePanel(ctx) {
-				@blockCharacterItems()
-			}
-
-			// The Files section closes every page, served by the media plugin
-			// over this page's own visibility. Members only: the files routes
-			// need a signed-in member, and a failed lazy load must not be
-			// able to disturb a public visitor's page.
-			if cc.MemberRole >= campaigns.RolePlayer {
-				@pageFilesMount(cc, entity)
+				// The items-and-money panel on player-character pages whose layout
+				// does not place it; every other page gets it only as a block.
+				if autoPagePanel(ctx) {
+					@blockCharacterItems()
+				}
+				// The Files section closes every page, served by the media plugin
+				// over this page's own visibility. Members only: the files routes
+				// need a signed-in member, and a failed lazy load must not be
+				// able to disturb a public visitor's page.
+				if cc.MemberRole >= campaigns.RolePlayer {
+					@pageFilesMount(cc, entity)
+				}
 			}
 
 			// A per-entity calendar is opt-in via the `entity_calendar`
