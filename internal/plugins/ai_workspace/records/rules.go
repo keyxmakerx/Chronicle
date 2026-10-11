@@ -154,7 +154,7 @@ func (k HouseRuleKind) Plan(ctx context.Context, campaignID string, a Actor, r R
 		p.Summary = "changes the chapter"
 		if d.HasPages() {
 			p.Summary = fmt.Sprintf("replaces its %s with %s", plural(len(ch.Pages), "page", "pages"), describeDraft(d))
-			p.Warnings = replaceWarnings(*ch, d)
+			p.Warnings = replaceWarnings(*ch, d, ch.Director && (d.Director == nil || *d.Director))
 		}
 	}
 	if d.Director != nil && !*d.Director && director {
@@ -179,8 +179,10 @@ func describeDraft(d *systems.HouseChapterDraft) string {
 
 // replaceWarnings names what a whole-chapter replacement would lose: pages
 // whose titles are gone, and Director-only parts the new version lacks
-// (an AI working from the players' view never saw them).
-func replaceWarnings(ch systems.BookChapterEntry, d *systems.HouseChapterDraft) []string {
+// (an AI working from the players' view never saw them), and pages only
+// Directors could read that the new version shows to players. hiddenChapter
+// is whether the chapter stays Directors-only, which keeps every page hidden.
+func replaceWarnings(ch systems.BookChapterEntry, d *systems.HouseChapterDraft, hiddenChapter bool) []string {
 	var out []string
 	kept := map[string]bool{}
 	for _, t := range d.PageTitles() {
@@ -194,6 +196,23 @@ func replaceWarnings(ch systems.BookChapterEntry, d *systems.HouseChapterDraft) 
 	}
 	if len(gone) > 0 {
 		out = append(out, "These pages are not in the new version and will be removed: "+strings.Join(gone, ", ")+".")
+	}
+	if !hiddenChapter {
+		hiddenBefore := map[string]bool{}
+		for _, pe := range ch.Pages {
+			if pe.Page.Director {
+				hiddenBefore[strings.ToLower(strings.TrimSpace(pe.Page.Title))] = true
+			}
+		}
+		var opened []string
+		for i, dir := range d.DirectorPages() {
+			if t := d.PageTitles()[i]; !dir && t != "" && hiddenBefore[strings.ToLower(t)] {
+				opened = append(opened, quote(t))
+			}
+		}
+		if len(opened) > 0 {
+			out = append(out, "Players will be able to read these pages, which only Directors can today: "+strings.Join(opened, ", ")+".")
+		}
 	}
 	if had, has := systems.HiddenPartsOf(ch), d.HiddenParts(); had > has {
 		out = append(out, fmt.Sprintf("The chapter has %s for Directors only; the new version has %d. Check nothing you hid from players is lost.", plural(had, "page or block", "pages or blocks"), has))
@@ -269,6 +288,7 @@ func (k HouseRuleKind) Export(ctx context.Context, campaignID string, a Actor) (
 		return "", err
 	}
 	director := a.CanAuthorDmOnly()
+	visible := systems.PlayerChapters(src)
 	var b strings.Builder
 	hidden := 0
 	for _, part := range src.Parts {
@@ -280,7 +300,7 @@ func (k HouseRuleKind) Export(ctx context.Context, campaignID string, a Actor) (
 				hidden++
 				continue
 			}
-			out, h, err := systems.HouseChapterYAML(ch, director)
+			out, h, err := systems.HouseChapterYAML(ch, director, visible)
 			if err != nil {
 				return "", err
 			}

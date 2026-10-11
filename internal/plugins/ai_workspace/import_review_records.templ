@@ -41,7 +41,7 @@ func (r RecordRow) title() string {
 	return r.Label
 }
 
-templ reviewRecordRow(r RecordRow) {
+templ reviewRecordRow(campaignID string, r RecordRow) {
 	<div
 		role="listitem"
 		aria-label={ fmt.Sprintf("%s %s: %s", r.actionWord(), r.Label, r.title()) }
@@ -85,7 +85,7 @@ templ reviewRecordRow(r RecordRow) {
 					<div class="text-xs text-fg-muted">{ r.Plan.Summary }</div>
 				}
 				if r.Plan.Preview != "" && r.Plan.Error == "" {
-					@recordPreview(r)
+					@recordPreview(campaignID, r)
 				}
 				if r.Plan.Client != "" {
 					<input type="hidden" name={ fmt.Sprintf("rec_%d_generated", r.Index) } value=""/>
@@ -119,7 +119,7 @@ templ reviewRecordRow(r RecordRow) {
 // recordPreview draws what a house-rule row writes with the rulebook reader
 // itself, so the pages show in the campaign's Handbook look (its own style,
 // or Standard if the owner chose that) with their working rolls and flaps.
-templ recordPreview(r RecordRow) {
+templ recordPreview(campaignID string, r RecordRow) {
 	<details class="mt-2" open>
 		<summary class="text-xs font-medium text-accent cursor-pointer">Read it as the Handbook will show it</summary>
 		<link rel="stylesheet" href={ layouts.AssetURL("/static/css/rulebook.css") }/>
@@ -127,6 +127,7 @@ templ recordPreview(r RecordRow) {
 			<div
 				class="h-full"
 				data-widget="rulebook"
+				data-campaign-id={ campaignID }
 				data-book-json={ r.Plan.Preview }
 				aria-label={ fmt.Sprintf("Preview of %s", r.title()) }
 			></div>

@@ -256,7 +256,7 @@ templ promptBuilderBody(cc *campaigns.CampaignContext) {
 						</span>
 					</label>
 				</div>
-				<label class="flex items-center gap-2 cursor-pointer text-sm mt-3">
+				<label x-show="contentMode !== 'house-rules'" class="flex items-center gap-2 cursor-pointer text-sm mt-3">
 					<input type="checkbox" name="gm_notes" value="on" x-model="gmNotes" class="rounded border-edge text-accent"/>
 					<span>
 						Include session GM notes

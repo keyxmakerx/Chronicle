@@ -124,7 +124,7 @@ templ ImportReview(d ImportReviewData) {
 		if len(d.Records) > 0 {
 			<div class="space-y-3 mt-4" role="list" aria-label="Other changes to review">
 				for _, r := range d.Records {
-					@reviewRecordRow(r)
+					@reviewRecordRow(d.CampaignID, r)
 				}
 			</div>
 		}

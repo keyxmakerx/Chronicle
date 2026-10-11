@@ -227,6 +227,35 @@ func TestHouseRule_UpdateReplacesPagesAndWarns(t *testing.T) {
 	}
 }
 
+func TestHouseRule_WarnsWhenAHiddenPageOpens(t *testing.T) {
+	ctx := context.Background()
+	hiddenPage := "pages:\n  - title: Traps\n    director: true\n    blocks:\n      - text: The pit.\n"
+	openPage := "pages:\n  - title: traps\n    blocks:\n      - text: The pit.\n"
+	tests := []struct {
+		name, create string
+		want         bool
+	}{
+		{"page loses director", "name: Open rules\n" + hiddenPage, true},
+		{"chapter stays hidden", "name: Open rules\ndirector: true\n" + hiddenPage, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			k, _ := newHouseRules(t)
+			if err := k.Apply(ctx, "c1", owner, houseRecord(t, ActionCreate, tc.create, "")); err != nil {
+				t.Fatal(err)
+			}
+			p := k.Plan(ctx, "c1", owner, houseRecord(t, ActionUpdate, "name: Open rules\n"+openPage, ""))
+			if p.Error != "" {
+				t.Fatal(p.Error)
+			}
+			got := strings.Contains(strings.Join(p.Warnings, " | "), `Players will be able to read these pages, which only Directors can today: "traps"`)
+			if got != tc.want {
+				t.Errorf("warned = %v, want %v: %v", got, tc.want, p.Warnings)
+			}
+		})
+	}
+}
+
 func TestHouseRule_Refusals(t *testing.T) {
 	ctx := context.Background()
 	k, _ := newHouseRules(t)

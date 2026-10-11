@@ -137,6 +137,15 @@ func (d *HouseChapterDraft) Blocks() string {
 	return strings.Join(parts, ", ")
 }
 
+// DirectorPages reports, per page in order, whether it is Directors-only.
+func (d *HouseChapterDraft) DirectorPages() []bool {
+	out := make([]bool, 0, len(d.pages))
+	for _, p := range d.pages {
+		out = append(out, p.Director)
+	}
+	return out
+}
+
 // HiddenParts counts the Director-only pages and blocks in the draft.
 func (d *HouseChapterDraft) HiddenParts() int {
 	return countHidden(d.pages)
@@ -156,6 +165,22 @@ func countHidden(pages []bookPageYAML) int {
 		}
 	}
 	return n
+}
+
+// PlayerChapters is the set of chapter ids a player can open in the edition.
+func PlayerChapters(src *BookEditorSource) map[string]bool {
+	out := map[string]bool{}
+	for _, part := range src.Parts {
+		if part.Director {
+			continue
+		}
+		for _, ch := range part.Chapters {
+			if !ch.Director {
+				out[ch.ID] = true
+			}
+		}
+	}
+	return out
 }
 
 // HiddenPartsOf counts the Director-only pages and blocks of a chapter as
@@ -214,8 +239,9 @@ type houseChapterFile struct {
 // HouseChapterYAML writes a house chapter in the draft format, so an AI can
 // change it and send it back whole. With director false it is the player's
 // view: Director-only pages and blocks are left out (and counted in hidden),
-// and a creature keeps only what players see.
-func HouseChapterYAML(ch BookChapterEntry, director bool) (out []byte, hidden int, err error) {
+// a creature keeps only what players see, and a link keeps only chapters in
+// playerChapters (the ids players can open), as the reader trims them.
+func HouseChapterYAML(ch BookChapterEntry, director bool, playerChapters map[string]bool) (out []byte, hidden int, err error) {
 	f := houseChapterFile{Intro: ch.Intro, Director: ch.Director, Pages: []authoredPage{}}
 	for _, pe := range ch.Pages {
 		pg := pe.Page
@@ -232,6 +258,18 @@ func HouseChapterYAML(ch BookChapterEntry, director bool) (out []byte, hidden in
 				}
 				if b.Type == "creature" {
 					b.Stats, b.Note = nil, ""
+				}
+				if b.Type == "links" {
+					var items []authoredItem
+					for _, it := range b.Items {
+						if playerChapters[it.Chapter] {
+							items = append(items, it)
+						}
+					}
+					if len(items) == 0 {
+						continue
+					}
+					b.Items = items
 				}
 			}
 			blocks = append(blocks, b)

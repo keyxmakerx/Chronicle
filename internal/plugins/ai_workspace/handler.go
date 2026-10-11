@@ -653,7 +653,7 @@ func readImportBody(c echo.Context) (string, error) {
 // GET /campaigns/:id/ai-workspace/prompt/generate
 //
 // Query params: schema_types/schema_categories/schema_front_matter ("on"),
-// content_mode ("none"|"all"|category slugs), privacy
+// content_mode ("none"|"all"|"house-rules"|category slugs), privacy
 // ("safe"|"permitted"|"everything"), gm_notes ("on"), instruction (free text).
 //
 // A builder error surfaces in the modal's error region, not a top-level

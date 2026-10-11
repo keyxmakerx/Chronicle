@@ -181,7 +181,9 @@ func TestHouseChapterYAML(t *testing.T) {
 	ctx := context.Background()
 	pkg := testPackage(t, nil)
 	svc := newTestService(&fakeBookRepo{})
-	d, err := ParseHouseChapterDraft([]byte(draftTableRules+"  - title: Monsters\n    blocks:\n      - type: creature\n        name: Troll\n        stats:\n          - label: Stamina\n            value: \"40\"\n        note: Regenerates.\n"), pkg)
+	d, err := ParseHouseChapterDraft([]byte(draftTableRules+"  - title: Monsters\n    blocks:\n      - type: creature\n        name: Troll\n        stats:\n          - label: Stamina\n            value: \"40\"\n        note: Regenerates.\n"+
+		"  - title: See also\n    blocks:\n      - type: links\n        items:\n          - {title: The basics, chapter: basics}\n          - {title: Secret lair, chapter: lair}\n"+
+		"      - type: links\n        items:\n          - {title: Only the lair, chapter: lair}\n"), pkg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -190,7 +192,7 @@ func TestHouseChapterYAML(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	all, hidden, err := HouseChapterYAML(*ch, true)
+	all, hidden, err := HouseChapterYAML(*ch, true, nil)
 	if err != nil || hidden != 0 {
 		t.Fatalf("director: hidden %d, %v", hidden, err)
 	}
@@ -201,21 +203,28 @@ func TestHouseChapterYAML(t *testing.T) {
 	}
 	// It reads back as the same chapter.
 	back, err := ParseHouseChapterDraft(all, pkg)
-	if err != nil || len(back.PageTitles()) != 3 {
+	if err != nil || len(back.PageTitles()) != 4 {
 		t.Errorf("round trip: %v, %v", back, err)
 	}
 
-	players, hidden, err := HouseChapterYAML(*ch, false)
+	players, hidden, err := HouseChapterYAML(*ch, false, map[string]bool{"basics": true})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if hidden != 1 {
 		t.Errorf("player hidden = %d, want 1 (the Director-only page)", hidden)
 	}
-	for _, gone := range []string{"Camping", "Roll the night", "Stamina", "Regenerates."} {
+	// A link to a chapter players can't open goes, as the reader drops it.
+	for _, gone := range []string{"Camping", "Roll the night", "Stamina", "Regenerates.", "Secret lair", "Only the lair"} {
 		if strings.Contains(string(players), gone) {
 			t.Errorf("player export has %q:\n%s", gone, players)
 		}
+	}
+	if !strings.Contains(string(players), "The basics") {
+		t.Errorf("player export lost a link players can follow:\n%s", players)
+	}
+	if !strings.Contains(string(all), "Secret lair") {
+		t.Errorf("director export lost a link:\n%s", all)
 	}
 	if !strings.Contains(string(players), "name: Troll") {
 		t.Errorf("player export lost the creature itself:\n%s", players)
