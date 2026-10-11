@@ -87,6 +87,10 @@ Used in both category fields (for reference item display) and entity preset fiel
 | `type` | string | Yes | Data type: `"string"`, `"number"`, `"list"`, `"markdown"` |
 | `foundry_path` | string | No | Dot-notation path in Foundry Actor (e.g., `"system.abilities.str.value"`) |
 | `foundry_writable` | boolean | No | Whether Chronicle can write this field back to Foundry. Defaults to `true` when `foundry_path` is set. |
+| `foundry_choices` | string | No | A list in the Foundry system's `CONFIG` (e.g. `"DRAW_STEEL.monsters.roles"`); the value is stored in Foundry as that list's matching key. |
+| `foundry_format` | string | No | How the value converts: `"set"` (comma-separated list to a Foundry set), `"integer"` (the number in text like "5 damage"), `"size"` ("1S" to size value and letter). |
+
+A creature preset may also set `foundry_pull_fields`: the only field keys Foundry may send back. Chronicle owns the rest.
 
 **Field types:**
 - `"string"` — plain text value
@@ -223,6 +227,7 @@ When loaded into Chronicle, systems are accessible via these endpoints:
 | `GET /api/v1/campaigns/:id/systems` | List all systems (with `foundry_system_id`) |
 | `GET /api/v1/campaigns/:id/systems/:id/character-fields` | Character field definitions with Foundry annotations |
 | `GET /api/v1/campaigns/:id/systems/:id/item-fields` | Item field definitions with Foundry annotations |
+| `GET /api/v1/campaigns/:id/systems/:id/creature-fields` | Creature field definitions with Foundry annotations and `foundry_pull_fields` |
 
 ### Tooltip API Response
 

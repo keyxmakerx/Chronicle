@@ -505,6 +505,7 @@ GET	/sync/pull	internal/plugins/syncapi/routes.go
 GET	/systems	internal/plugins/admin/routes.go
 GET	/systems	internal/plugins/syncapi/routes.go
 GET	/systems/:systemId/character-fields	internal/plugins/syncapi/routes.go
+GET	/systems/:systemId/creature-fields	internal/plugins/syncapi/routes.go
 GET	/systems/:systemId/item-fields	internal/plugins/syncapi/routes.go
 GET	/tags	internal/plugins/syncapi/routes.go
 GET	/tags	internal/widgets/tags/routes.go
