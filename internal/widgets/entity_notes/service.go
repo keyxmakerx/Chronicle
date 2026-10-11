@@ -44,7 +44,7 @@ type Notifier func(event string, note *Note, audience Audience)
 
 // ErrAudienceForbidden is returned when the viewer's role doesn't
 // permit creating/updating a note with the requested audience
-// (e.g., a player attempting to create dm_only or dm_scribe).
+// (e.g., a player attempting to create dm_scribe).
 var ErrAudienceForbidden = errors.New("you do not have permission to use this audience")
 
 type service struct {
@@ -232,15 +232,13 @@ func checkAudienceWrite(audience Audience, viewer ViewerContext) error {
 	switch audience {
 	case AudiencePrivate, AudienceEveryone, AudienceCustom:
 		return nil
+	case AudienceDMOnly:
+		// Any member may write a note only the DMs read (a player asking
+		// the DM something privately). The author's name shows on every
+		// note, so a player's DM-only note can't pass as the DM's.
+		return nil
 	case AudienceDMScribe:
 		if viewer.IsOwner || viewer.IsScribe || viewer.IsDMGranted {
-			return nil
-		}
-	case AudienceDMOnly:
-		// IsDmGranted users can read dm_only but only Owners can author
-		// them, so a dm-granted player can't post notes that pretend to be
-		// GM-authored.
-		if viewer.IsOwner {
 			return nil
 		}
 	}

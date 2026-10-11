@@ -138,11 +138,11 @@ func TestCheckAudienceWrite(t *testing.T) {
 		{"owner dm_scribe ok", AudienceDMScribe, ownerViewer(), true},
 		{"dm_granted dm_scribe ok", AudienceDMScribe, dmGrantedPlayerViewer(), true},
 
-		// dm_only — Owner only for write. dm_granted users can READ
-		// but cannot AUTHOR; scribe is not enough either.
-		{"player dm_only forbidden", AudienceDMOnly, playerViewer(), false},
-		{"scribe dm_only forbidden", AudienceDMOnly, scribeViewer(), false},
-		{"dm_granted dm_only forbidden for write", AudienceDMOnly, dmGrantedPlayerViewer(), false},
+		// dm_only — any member may write one; only DMs (and the author)
+		// read it.
+		{"player dm_only ok", AudienceDMOnly, playerViewer(), true},
+		{"scribe dm_only ok", AudienceDMOnly, scribeViewer(), true},
+		{"dm_granted dm_only ok", AudienceDMOnly, dmGrantedPlayerViewer(), true},
 		{"owner dm_only ok", AudienceDMOnly, ownerViewer(), true},
 	}
 	for _, c := range cases {
@@ -197,29 +197,17 @@ func TestService_Create_DefaultsToPrivateWhenAudienceEmpty(t *testing.T) {
 	}
 }
 
-func TestService_Create_PlayerCannotAuthorDMOnly(t *testing.T) {
-	svc := NewService(&stubRepo{}, nil)
+func TestService_Create_PlayerCanAuthorDMOnly(t *testing.T) {
+	s := &stubRepo{}
+	svc := NewService(s, nil)
 	_, err := svc.Create(context.Background(), "e1", playerViewer(), CreateNoteRequest{
 		Audience: AudienceDMOnly,
 	})
-	if err == nil {
-		t.Fatal("expected forbidden, got nil")
+	if err != nil {
+		t.Fatalf("expected success, got %v", err)
 	}
-	if !isStatus(err, http.StatusForbidden) {
-		t.Errorf("expected Forbidden error, got %T: %v", err, err)
-	}
-}
-
-func TestService_Create_DMGrantedCannotAuthorDMOnly(t *testing.T) {
-	// Pinning the asymmetry: dm_granted users CAN read dm_only but cannot
-	// author dm_only. Without this, a player could be silently elevated
-	// to DM-author by getting the dm_granted flag.
-	svc := NewService(&stubRepo{}, nil)
-	_, err := svc.Create(context.Background(), "e1", dmGrantedPlayerViewer(), CreateNoteRequest{
-		Audience: AudienceDMOnly,
-	})
-	if err == nil {
-		t.Fatal("expected forbidden, got nil")
+	if len(s.created) != 1 || s.created[0].Audience != AudienceDMOnly || s.created[0].AuthorUserID != playerViewer().UserID {
+		t.Errorf("expected the player's dm_only note, got %#v", s.created)
 	}
 }
 
@@ -338,7 +326,7 @@ func TestService_Update_AuthorCanUpdateOwnPrivateNote(t *testing.T) {
 	}
 }
 
-func TestService_Update_PlayerCannotEscalateToDMOnly(t *testing.T) {
+func TestService_Update_PlayerCannotEscalateToDMScribe(t *testing.T) {
 	noteID := "n1"
 	repo := &stubRepo{
 		findForAuthor: map[string]*Note{
@@ -346,7 +334,7 @@ func TestService_Update_PlayerCannotEscalateToDMOnly(t *testing.T) {
 		},
 	}
 	svc := NewService(repo, nil)
-	bad := AudienceDMOnly
+	bad := AudienceDMScribe
 	_, err := svc.Update(context.Background(), noteID, playerViewer(), UpdateNoteRequest{
 		Audience: &bad,
 	})
