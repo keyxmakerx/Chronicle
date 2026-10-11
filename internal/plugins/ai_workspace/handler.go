@@ -689,7 +689,9 @@ func (h *Handler) GeneratePrompt(c echo.Context) error {
 		if in.IncludeFrontMatterExample {
 			in.RecordDocs = h.records.Docs()
 		}
-		if in.ContentMode == "all" || hasCategory(in.ContentMode, recordsCategory) {
+		if in.ContentMode == prompt.ContentHouseRules {
+			in.RecordDocs, in.RecordContext = h.houseRulesContext(c, cc, in.Privacy)
+		} else if in.ContentMode == "all" || hasCategory(in.ContentMode, recordsCategory) {
 			in.RecordContext = h.records.ExportAll(c.Request().Context(), cc.Campaign.ID, exportActor(c, cc, in.Privacy))
 		}
 	}
@@ -720,6 +722,25 @@ func (h *Handler) GeneratePrompt(c echo.Context) error {
 	}
 
 	return middleware.Render(c, http.StatusOK, PromptModal(out, ""))
+}
+
+// houseRulesContext is the house-rules prompt's format and context: the
+// house-rule kind's doc (always, since the AI must write that format) and
+// today's house rules in the chosen privacy.
+func (h *Handler) houseRulesContext(c echo.Context, cc *campaigns.CampaignContext, privacy aiexport.PrivacyMode) (doc, rules string) {
+	k, ok := h.records.Get("house-rule")
+	if !ok {
+		return "", ""
+	}
+	doc = "### kind: " + k.Name() + " (" + k.Label() + ")\n\n" + strings.TrimSpace(k.Doc())
+	out, err := k.Export(c.Request().Context(), cc.Campaign.ID, exportActor(c, cc, privacy))
+	if err != nil {
+		return doc, "<!-- " + k.Label() + "s: could not be listed -->"
+	}
+	if strings.TrimSpace(out) == "" {
+		return doc, ""
+	}
+	return doc, "## " + k.Label() + "s\n\n" + out
 }
 
 // GenerateAIExport renders the AI-export markdown for the campaign
