@@ -171,6 +171,32 @@ func TestDerivePackageStatusAndLabel(t *testing.T) {
 	}
 }
 
+// TestOfferedNewer pins that a failed update still offers the newer release,
+// so a package whose last install failed is not stuck until it succeeds.
+func TestOfferedNewer(t *testing.T) {
+	newer := &PackageVersion{Version: "2.0.5.1"}
+	tests := []struct {
+		name   string
+		pkg    Package
+		status rowStatus
+		want   *PackageVersion
+	}{
+		{"update ready", Package{}, statusUpdateReady, newer},
+		{"failed update offers the newer release", Package{LastError: "boom"}, statusProblem, newer},
+		{"failed update keeps a pin", Package{LastError: "boom", PinnedVersion: "2.0.4"}, statusProblem, nil},
+		{"pinned", Package{PinnedVersion: "2.0.4"}, statusPinned, nil},
+		{"up to date", Package{}, statusUpToDate, nil},
+		{"retired", Package{}, statusRetired, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := offeredNewer(tt.pkg, tt.status, newer); got != tt.want {
+				t.Errorf("offeredNewer = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestUpdatePolicyLabel(t *testing.T) {
 	tests := []struct {
 		in   UpdatePolicy

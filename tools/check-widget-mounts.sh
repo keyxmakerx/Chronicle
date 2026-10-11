@@ -3,13 +3,14 @@
 #
 # DEAD WIDGET MOUNT RATCHET: a widget is a `data-widget="name"` div plus a
 # JS module calling `Chronicle.register('name', …)`; boot.js binds them at
-# DOMContentLoaded and silently no-ops on an unregistered name. With no
-# lazy loader or bundler, a widget JS file absent from every `<script src>`
-# renders as a permanently empty div — no console error, no network error.
+# DOMContentLoaded and fetches an unregistered name's scripts only if a
+# plugin lists them (ADR-063). A widget JS file named nowhere renders as a
+# permanently empty div.
 #
-# Fix: add the script to base.templ's script list, or (plugin-owned) to
-# internal/app/routes.go's `pluginBodyScripts`. Never in a page templ — see
-# check-page-scripts.sh for why that breaks on hx-boosted nav.
+# Fix: list the script in its plugin's `Widgets` registration in
+# internal/app/routes.go (loads on sight), or, for shell code, in
+# base.templ's script list. Never in a page templ — see check-page-scripts.sh
+# for why that breaks on hx-boosted nav.
 #
 # Mount names translate kebab-case (DOM) to snake_case (disk):
 # `data-widget="tag-picker"` -> tag_picker.js. A `data-widget` set via a
@@ -48,7 +49,7 @@ mount_names() {
 
 # has_load_path <root> <mount-name>
 #   True when the widget's JS file is named by a `<script src=` line in some
-#   *.templ, or anywhere in the plugin body-script registry (routes.go).
+#   *.templ, or anywhere in routes.go (plugin Widgets or body scripts).
 has_load_path() {
   local root="$1" name="$2" file
   file="$(echo "${name}" | tr '-' '_')"
@@ -214,16 +215,14 @@ echo
 printf '%s' "${findings}"
 echo
 echo "WHY THIS IS BLOCKED. boot.js mounts a widget by looking its data-widget name"
-echo "up in the registry that Chronicle.register() fills, and RETURNS SILENTLY when"
-echo "the name is absent. Nothing lazy-loads the file: no script injection, no"
-echo "dynamic import, no bundler. A mount whose JS is in no <script src> anywhere"
-echo "is a permanently empty div — no console output, no failed request, and a page"
-echo "that looks finished."
+echo "up in the registry that Chronicle.register() fills. When the name is absent it"
+echo "fetches the scripts a plugin listed for it (ADR-063), and if none are listed"
+echo "the mount is a permanently empty div and a page that looks finished."
 echo
-echo "WHAT TO DO: add the file to the layout's script list —"
+echo "WHAT TO DO: list the file in its plugin's on-sight widgets —"
+echo "  internal/app/routes.go   PluginRegistration{ Widgets: []PluginWidget{ ... } }"
+echo "or, for shell code every page needs, in the layout's script list —"
 echo "  internal/templates/layouts/base.templ"
-echo "or, for a plugin-owned script, to the body-script registry —"
-echo "  internal/app/routes.go   pluginBodyScripts := []string{ ... }"
 echo "Do NOT add a <script src> to a page templ; tools/check-page-scripts.sh"
 echo "explains why that loads on a typed URL and not through the sidebar."
 echo

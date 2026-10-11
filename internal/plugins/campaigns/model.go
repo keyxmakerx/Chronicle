@@ -116,6 +116,27 @@ type Campaign struct {
 	JoinCode        *string    `json:"join_code,omitempty"`                  // Shareable invite code; nil = no active link.
 }
 
+// TrashedCampaign is a campaign waiting in the site Trash, as the admin Trash
+// page needs it. It is a separate type from Campaign on purpose: a trashed
+// campaign must never come back from the reads that open one, so nothing that
+// takes a *Campaign can be handed a trashed row by mistake.
+type TrashedCampaign struct {
+	ID   string
+	Name string
+	Slug string
+	// DeletedAt starts the retention clock.
+	DeletedAt time.Time
+	// DeletedBy is the account that deleted it; DeletedByName is a copy of
+	// the name taken then, so the Trash still reads right if the account goes.
+	DeletedBy     *string
+	DeletedByName string
+	// Emptying is true once the final delete has begun and Undo is refused.
+	Emptying bool
+	// StorageBytes is the size of the media it holds, which still counts
+	// against the site's storage while it waits.
+	StorageBytes int64
+}
+
 // IsArchived returns true if the campaign has been soft-archived.
 func (c *Campaign) IsArchived() bool {
 	return c.ArchivedAt != nil
@@ -203,6 +224,9 @@ type CampaignMember struct {
 	DisplayName   string  `json:"display_name,omitempty"`
 	Email         string  `json:"email,omitempty"`
 	AvatarPath    *string `json:"avatar_path,omitempty"`
+	// IsGuest marks someone who joined with a guest code and has no email
+	// yet; Email is then empty.
+	IsGuest bool `json:"is_guest,omitempty"`
 	// Joined from entities table for character display.
 	CharacterName *string `json:"character_name,omitempty"`
 }
@@ -318,6 +342,28 @@ func DefaultDashboardLayout() *DashboardLayout {
 			full("recent", BlockRecentPages),
 		},
 	}
+}
+
+// ComingUpRepeats marks, by row, column and block index, every Coming up
+// block after the first. The retired session tracker draws the same card, so
+// a layout holding both would otherwise show it twice.
+func (l *DashboardLayout) ComingUpRepeats() map[[3]int]bool {
+	repeats := map[[3]int]bool{}
+	seen := false
+	for ri, row := range l.Rows {
+		for ci, col := range row.Columns {
+			for bi, b := range col.Blocks {
+				if b.Type != BlockComingUp && b.Type != BlockSessionTracker {
+					continue
+				}
+				if seen {
+					repeats[[3]int{ri, ci, bi}] = true
+				}
+				seen = true
+			}
+		}
+	}
+	return repeats
 }
 
 // DashboardLayout defines a configurable dashboard using a row/column/block
@@ -551,6 +597,11 @@ type CampaignSettings struct {
 	DefaultVisibility string       `json:"default_visibility,omitempty"`  // Default visibility for new entities: "", "dm_only", "private".
 	SystemID          string       `json:"system_id,omitempty"`           // Game system ID (e.g. "dnd5e", "drawsteel") or "custom:<url>".
 
+	// HandoverAfterMonths is the owner's "If you're away" choice: how long
+	// they can be unseen before a site admin may hand the campaign to another
+	// member. 0 (the default) means never.
+	HandoverAfterMonths int `json:"handover_after_months,omitempty"`
+
 	// CharacterTypeIDs and NPCTypeIDs are the page types the owner chose to
 	// show as The Party and as NPCs. Pointers because "never chosen" (nil) and
 	// "chose none" (empty) differ: the one-time reconciler fills only nil.
@@ -644,7 +695,7 @@ type TierDefinition struct {
 
 // TopbarStyle configures the visual appearance of the campaign's top navigation bar.
 type TopbarStyle struct {
-	Mode         string `json:"mode"`                       // "solid", "gradient", or "image".
+	Mode         string `json:"mode"`                       // "solid", "gradient", "moving", "sky" or "image".
 	Color        string `json:"color,omitempty"`             // Hex color for solid mode.
 	GradientFrom string `json:"gradient_from,omitempty"`     // Start color for gradient mode.
 	GradientTo   string `json:"gradient_to,omitempty"`       // End color for gradient mode.
@@ -704,9 +755,10 @@ const (
 	BlockTimelineFull    = "timeline_full"    // Full timeline visualization with D3.
 	BlockRelationsGraphFull = "relations_graph_full" // Large relations graph view.
 	BlockMapFull         = "map_full"         // Full interactive map viewer with markers/drawings.
-	BlockSessionTracker  = "session_tracker"  // Upcoming sessions with RSVP status.
+	BlockSessionTracker  = "session_tracker"  // Retired: a saved one draws the Coming up card.
 	BlockActivityFeed    = "activity_feed"    // Recent campaign activity log.
 	BlockSyncStatus      = "sync_status"      // Foundry VTT sync health/status.
+	BlockComingUp        = "coming_up"        // Next game nights, what the viewer owes the table, next events.
 
 	// Category dashboard blocks.
 	BlockCategoryHeader = "category_header" // Category name, icon, count, description.
@@ -734,6 +786,7 @@ var ValidBlockTypes = map[string]bool{
 	BlockSessionTracker:  true,
 	BlockActivityFeed:    true,
 	BlockSyncStatus:      true,
+	BlockComingUp:        true,
 	BlockCategoryHeader:  true,
 	BlockEntityGrid:     true,
 	BlockSearchBar:      true,

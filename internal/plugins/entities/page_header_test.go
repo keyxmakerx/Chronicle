@@ -139,7 +139,9 @@ func TestSystemImageMount_ScribeOnly(t *testing.T) {
 	}
 }
 
-func TestSystemPageBelow_RendersTheFourBlocks(t *testing.T) {
+// The panel under a system widget carries a tab for each piece this viewer
+// can see, in order, with every piece's own block in its pane.
+func TestSystemPageTabs_TabsPerViewer(t *testing.T) {
 	prev := GetGlobalBlockRegistry()
 	reg := NewBlockRegistry()
 	RegisterCoreBlocks(reg)
@@ -147,16 +149,57 @@ func TestSystemPageBelow_RendersTheFourBlocks(t *testing.T) {
 	defer SetGlobalBlockRegistry(prev)
 
 	ent := &Entity{ID: "e1", CampaignID: "c1", Name: "Bren"}
-	ctx := layouts.SetUserID(withPageChildren(context.Background(), nil), "u1")
-	var buf bytes.Buffer
 	et := &EntityType{ID: 1, Slug: "character"}
-	if err := systemPageBelow(foldTestCC(campaigns.RolePlayer), ent, et, "tok").Render(ctx, &buf); err != nil {
-		t.Fatal(err)
+	withPanel := func(ctx context.Context) context.Context {
+		return withPagePanelURL(withAutoPagePanel(ctx), "/campaigns/c1/armory/characters/e1/panel")
 	}
-	html := buf.String()
-	for _, w := range []string{`data-widget="relations"`, `data-widget="tag-picker"`} {
-		if !strings.Contains(html, w) {
-			t.Errorf("missing %s", w)
-		}
+	cases := []struct {
+		name  string
+		role  campaigns.Role
+		user  string
+		panel bool
+		want  []string
+	}{
+		{"player with items", campaigns.RolePlayer, "u1", true, []string{"notes", "items", "files", "posts", "links"}},
+		{"player, no armory panel", campaigns.RolePlayer, "u1", false, []string{"notes", "files", "posts", "links"}},
+		{"public visitor", campaigns.RoleNone, "", false, []string{"posts", "links"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := layouts.SetUserID(withPageChildren(context.Background(), nil), tc.user)
+			if tc.panel {
+				ctx = withPanel(ctx)
+			}
+			var buf bytes.Buffer
+			if err := systemPageTabs(foldTestCC(tc.role), ent, et, "tok").Render(ctx, &buf); err != nil {
+				t.Fatal(err)
+			}
+			html := buf.String()
+			var got []string
+			for _, part := range strings.Split(html, `data-pt-tab="`)[1:] {
+				got = append(got, part[:strings.Index(part, `"`)])
+			}
+			if strings.Join(got, ",") != strings.Join(tc.want, ",") {
+				t.Fatalf("tabs = %v, want %v", got, tc.want)
+			}
+			if !strings.Contains(html, `data-widget="page-tabs"`) {
+				t.Error("panel is not the page-tabs widget")
+			}
+			// Only the first tab's pane is open on arrival.
+			if n := strings.Count(html, `aria-selected="true"`); n != 1 {
+				t.Errorf("%d tabs selected, want 1", n)
+			}
+			for _, w := range []string{`data-widget="relations"`, `data-widget="tag-picker"`, `data-widget="entity-posts"`, "/backlinks"} {
+				if !strings.Contains(html, w) {
+					t.Errorf("missing %s", w)
+				}
+			}
+			if got := strings.Contains(html, `data-widget="entity-notes"`); got != (tc.user != "") {
+				t.Errorf("notes mount = %v, want %v", got, tc.user != "")
+			}
+			if got := strings.Contains(html, "/armory/characters/e1/panel"); got != tc.panel {
+				t.Errorf("items mount = %v, want %v", got, tc.panel)
+			}
+		})
 	}
 }

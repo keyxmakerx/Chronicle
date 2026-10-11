@@ -20,6 +20,8 @@ type usageCall struct {
 	version string
 }
 
+func (f *fakeUsageService) NoteKeyUser(context.Context, string) {}
+
 func (f *fakeUsageService) UpdateKeyLastUsed(_ context.Context, id int, ip, moduleVersion string) error {
 	f.calls = append(f.calls, usageCall{id, ip, moduleVersion})
 	return nil
@@ -81,5 +83,22 @@ func TestRecordKeyUsage(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+type seenRecorder struct{ users []string }
+
+func (r *seenRecorder) NoteSeen(_ context.Context, userID string) { r.users = append(r.users, userID) }
+
+// A key's use counts as its owner using Chronicle.
+func TestKeyUseNotesItsOwnerAsSeen(t *testing.T) {
+	rec := &seenRecorder{}
+	svc := NewSyncAPIService(&mockSyncAPIRepo{})
+	svc.SetSeenRecorder(rec)
+	if err := recordKeyUsage(context.Background(), svc, &APIKey{ID: 7, UserID: "owner-1"}, "10.0.0.1", ""); err != nil {
+		t.Fatalf("recordKeyUsage: %v", err)
+	}
+	if len(rec.users) != 1 || rec.users[0] != "owner-1" {
+		t.Errorf("seen = %v, want [owner-1]", rec.users)
 	}
 }

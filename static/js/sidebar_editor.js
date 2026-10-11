@@ -1150,6 +1150,47 @@
       .then(function () { pinning = false; });
   }
 
+  /**
+   * One change the owner makes from a row's menu (sidebar_row_menu.js),
+   * saved at once rather than staged: the same arrangement, the same PUT and
+   * the same refresh as Save, with the touched row gliding to its new place.
+   * mutate edits a copy of the arrangement and returns false to do nothing.
+   */
+  function quickChange(key, mutate, done) {
+    if (pinning || S) return;
+    var model = readModel(nav());
+    if (!model) return;
+    var draft = clone(model);
+    if (mutate(draft) === false) return;
+    var base = nav().getAttribute('data-nav-base');
+    pinning = true;
+    Chronicle.apiFetch(base + '/sidebar-config', { method: 'PUT', body: { items: itemsFromDraft(draft) } })
+      .then(function (res) {
+        if (res.ok) return true;
+        return res.json().catch(function () { return {}; }).then(function (body) {
+          throw new Error(body.message || body.error || 'The sidebar could not be saved.');
+        });
+      }, function () {
+        throw new Error('The sidebar could not be saved. Check your connection and try again.');
+      })
+      .then(function () {
+        var prev = snapshot(sidebarEl());
+        return refreshSidebar().then(function () {
+          viewList().hidden = false;
+          if (topList()) topList().hidden = false;
+          playFlip(sidebarEl(), prev, { lift: 'n:' + key });
+          // The row was redrawn; focus follows it to its new place.
+          var again = sidebarEl().querySelector('.nav-row[data-nav-key="' + key.replace(/["\\]/g, '\\$&') + '"]');
+          if (again) again.focus({ preventScroll: true });
+          if (done) announce(done);
+        }, function () {
+          window.location.reload();
+        });
+      })
+      .catch(function (err) { notify(err.message, 'error'); })
+      .then(function () { pinning = false; });
+  }
+
   document.addEventListener('click', function (e) {
     var btn = e.target && e.target.closest && e.target.closest('#sidebar [data-nav-pin]');
     if (!btn) return;
@@ -1204,6 +1245,9 @@
   window.Chronicle = window.Chronicle || {};
   window.Chronicle.navEditor = {
     accepts: accepts,
+    findRow: findRow,
+    quickChange: quickChange,
+    togglePersonalPin: togglePersonalPin,
     homeFor: homeFor,
     moveRowTo: moveRowTo,
     stepRow: stepRow,

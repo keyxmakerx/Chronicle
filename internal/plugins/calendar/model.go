@@ -231,6 +231,23 @@ func (c *Calendar) UsesRealTime() bool {
 	return c.Mode == ModeRealLife && c.TracksRealTime
 }
 
+// followRealClock sets a real-time calendar's current date and time from now
+// in its zone. The stored date is only what the calendar held when it was
+// created or last saved, so every read takes the clock instead. A missing or
+// unknown zone keeps the stored date rather than failing the read.
+func (c *Calendar) followRealClock(now time.Time) {
+	if !c.UsesRealTime() || c.RealTimeZone == nil || *c.RealTimeZone == "" {
+		return
+	}
+	loc, err := time.LoadLocation(*c.RealTimeZone)
+	if err != nil {
+		return
+	}
+	t := now.In(loc)
+	c.CurrentYear, c.CurrentMonth, c.CurrentDay = t.Year(), int(t.Month()), t.Day()
+	c.CurrentHour, c.CurrentMinute = t.Hour(), t.Minute()
+}
+
 // IsLeapYear returns true if the given year is a leap year according to
 // the calendar's leap year configuration. LeapYearEvery=0 means no leap years.
 func (c *Calendar) IsLeapYear(year int) bool {
@@ -292,6 +309,22 @@ func (c *Calendar) MonthDays(monthIdx int, year int) int {
 // WeekLength returns the number of days in a week (number of weekdays).
 func (c *Calendar) WeekLength() int {
 	return len(c.Weekdays)
+}
+
+// GridFirstWeekday is the weekday index a month grid starts each row on. A
+// real-world calendar keeps its weekdays Monday to Sunday (WeekdayIndex's
+// real-time branch depends on that order), but its grid starts on Sunday like
+// a wall calendar. Every other calendar starts on its own first weekday. Only
+// the grid layout reads this; weekday rules and recurrences keep the stored
+// order.
+func (c *Calendar) GridFirstWeekday(weekLen int) int {
+	if weekLen != 7 || !c.IsRealLife() {
+		return 0
+	}
+	if c.UsesRealTime() || (len(c.Weekdays) == 7 && c.Weekdays[6].Name == "Sunday") {
+		return 6
+	}
+	return 0
 }
 
 // Recurrence type constants. The first five mirror the sessions plugin's

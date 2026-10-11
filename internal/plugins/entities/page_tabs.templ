@@ -1,0 +1,135 @@
+package entities
+
+import (
+	"context"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// pageTab is one tab of the panel under a system-rendered page.
+type pageTab struct {
+	Key   string
+	Label string
+	// Count names the rows that make up the tab's count; the page-tabs widget
+	// counts them as each piece loads, since every piece fetches its own.
+	Count string
+	// Act is the piece's own add button, which the panel's one action button
+	// presses and mirrors; the piece's copy is hidden.
+	Act string
+	// Empty is shown when a piece draws nothing at all (a fetch with no rows
+	// and no add button for this viewer); a tab with no Empty line is hidden
+	// instead, as when the armory has no panel for this page.
+	Empty string
+}
+
+// systemPageTabs gathers everything under a game-system widget into one panel
+// with tabs: notes, items and money, files, posts, and the page's links
+// (relations, tags, sub-pages and the pages that mention it). Each piece is
+// the same block or lazy load a layout page uses, so who sees and edits what
+// is unchanged; the panel only places them. Pages built from a layout keep
+// their blocks where the layout puts them.
+templ systemPageTabs(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, csrfToken string) {
+	{{ tabs := systemPageTabList(ctx, cc) }}
+	<section class="pt" data-widget="page-tabs" aria-label="On this page">
+		<div class="pt-bar">
+			<div class="pt-tabs" role="tablist" aria-label="On this page">
+				for i, t := range tabs {
+					<button
+						type="button"
+						class="pt-tab"
+						role="tab"
+						id={ "pt-tab-" + t.Key }
+						aria-controls={ "pt-pane-" + t.Key }
+						if i == 0 {
+							aria-selected="true"
+						} else {
+							aria-selected="false"
+							tabindex="-1"
+						}
+						data-pt-tab={ t.Key }
+						data-pt-count={ t.Count }
+						data-pt-act={ t.Act }
+					>{ t.Label } <span class="pt-n" data-pt-n aria-hidden="true"></span></button>
+				}
+			</div>
+			<button type="button" class="btn-primary btn-sm pt-act" data-pt-press hidden><i class="fa-solid fa-plus text-xs" aria-hidden="true"></i> <span data-pt-press-label></span></button>
+		</div>
+		for i, t := range tabs {
+			<div
+				class="pt-pane"
+				role="tabpanel"
+				tabindex="0"
+				id={ "pt-pane-" + t.Key }
+				aria-labelledby={ "pt-tab-" + t.Key }
+				data-pt-pane={ t.Key }
+				if i != 0 {
+					hidden
+				}
+			>
+				switch t.Key {
+					case "notes":
+						@RenderBlock(ctx, TemplateBlock{ID: "shell-notes", Type: "entity_notes"}, cc, entity, entityType, csrfToken)
+						if cc.MemberRole >= campaigns.RoleScribe && entityType != nil {
+							<div class="pt-prompts">
+								@WorldbuildingPromptsPanel(cc.Campaign.ID, entityType.ID)
+							</div>
+						}
+					case "items":
+						@blockCharacterItems()
+					case "files":
+						@pageFilesMount(cc, entity)
+					case "posts":
+						@blockPosts(cc, entity, csrfToken)
+					case "links":
+						<div class="pt-links">
+							<div class="pt-grp" data-pt-grp=".rel-item">
+								<h3 class="pt-grp-h">Relations</h3>
+								<p class="pt-none" data-pt-none hidden>None yet</p>
+								@RenderBlock(ctx, TemplateBlock{ID: "shell-relations", Type: "relations"}, cc, entity, entityType, csrfToken)
+							</div>
+							<div class="pt-grp" data-pt-grp=".tp-wrap > .tp-chip">
+								<h3 class="pt-grp-h">Tags</h3>
+								<p class="pt-none" data-pt-none hidden>None</p>
+								@RenderBlock(ctx, TemplateBlock{ID: "shell-tags", Type: "tags"}, cc, entity, entityType, csrfToken)
+							</div>
+							<div class="pt-grp" data-pt-grp=".grid > a.card">
+								<h3 class="pt-grp-h">Sub-pages</h3>
+								<p class="pt-none" data-pt-none hidden>None</p>
+								@RenderBlock(ctx, TemplateBlock{ID: "shell-subpages", Type: BlockSubPages}, cc, entity, entityType, csrfToken)
+							</div>
+							<div class="pt-grp" data-pt-grp=".space-y-2 > a">
+								<h3 class="pt-grp-h">Mentioned on</h3>
+								<p class="pt-none" data-pt-none hidden>No pages mention { entity.Name } yet</p>
+								@blockBacklinksMount(cc, entity)
+							</div>
+						</div>
+				}
+				if t.Empty != "" {
+					<p class="pt-empty" data-pt-empty hidden>{ t.Empty }</p>
+				}
+			</div>
+		}
+	</section>
+}
+
+// systemPageTabList is the panel's tabs in order, each only where its piece
+// can draw for this viewer: notes need a signed-in viewer, items the armory
+// panel the show handler set up, files a member.
+func systemPageTabList(ctx context.Context, cc *campaigns.CampaignContext) []pageTab {
+	var tabs []pageTab
+	if layouts.GetUserID(ctx) != "" {
+		tabs = append(tabs, pageTab{Key: "notes", Label: "Notes", Count: ".card.divide-y > [data-note-id]", Act: `[data-action="toggle-compose"]`})
+	}
+	if autoPagePanel(ctx) && pagePanelURL(ctx) != "" {
+		tabs = append(tabs, pageTab{Key: "items", Label: "Items", Count: "li[data-item-id]", Act: "[data-open-give]"})
+	}
+	if cc.MemberRole >= campaigns.RolePlayer {
+		tabs = append(tabs, pageTab{Key: "files", Label: "Files", Count: "[data-pf-row]", Act: "[data-pf-attach]",
+			Empty: "No files yet."})
+	}
+	tabs = append(tabs, pageTab{Key: "posts", Label: "Posts", Count: ".card[data-post-id]", Act: `[data-action="create-post"]`})
+	// Links counts its groups, each by its own rows (data-pt-grp).
+	tabs = append(tabs, pageTab{Key: "links", Label: "Links", Act: ".rel-add-btn"})
+	return tabs
+}

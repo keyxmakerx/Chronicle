@@ -2,12 +2,16 @@ package backup
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strconv"
+	"time"
 
 	"github.com/labstack/echo/v4"
 
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 )
 
@@ -19,7 +23,12 @@ type Handler struct {
 	svc      Service
 	signer   *downloadSigner
 	userID   func(echo.Context) string
+	settings SettingsStore
 }
+
+// SetScheduleStore wires the site settings that hold the daily backup
+// schedule. Without it the page leaves the schedule card out.
+func (h *Handler) SetScheduleStore(st SettingsStore) { h.settings = st }
 
 // NewHandler constructs a Handler against the given Service. Downloads fail
 // closed until SetDownloadAuth supplies the identity lookup.
@@ -42,27 +51,61 @@ func (h *Handler) SetDownloadAuth(secret string, userID func(echo.Context) strin
 
 // Page renders the backup dashboard (GET /admin/backup).
 func (h *Handler) Page(c echo.Context) error {
+	d := BackupPageData{
+		BackupDir:  h.svc.BackupDir(),
+		LastRun:    h.svc.LastRun(),
+		RunningNow: h.svc.IsRunning(),
+		CSRFToken:  middleware.GetCSRFToken(c),
+		ServerZone: time.Now().Format("MST"),
+	}
 	artifacts, err := h.svc.ListBackups()
 	if err != nil {
 		// Listing failure is not fatal — we still render the page so the
 		// operator can at least try to start a backup. Surface the error
 		// inline so they know why the table is empty.
-		return middleware.Render(c, http.StatusOK, BackupPage(BackupPageData{
-			BackupDir:  h.svc.BackupDir(),
-			Artifacts:  nil,
-			ListError:  err.Error(),
-			LastRun:    h.svc.LastRun(),
-			RunningNow: h.svc.IsRunning(),
-			CSRFToken:  middleware.GetCSRFToken(c),
-		}))
+		d.ListError = err.Error()
+	} else {
+		d.Artifacts = artifacts
 	}
-	return middleware.Render(c, http.StatusOK, BackupPage(BackupPageData{
-		BackupDir:  h.svc.BackupDir(),
-		Artifacts:  artifacts,
-		LastRun:    h.svc.LastRun(),
-		RunningNow: h.svc.IsRunning(),
-		CSRFToken:  middleware.GetCSRFToken(c),
-	}))
+	if h.settings != nil {
+		ctx := c.Request().Context()
+		sched, sErr := LoadSchedule(ctx, h.settings)
+		last, lErr := LoadLastScheduledRun(ctx, h.settings)
+		if sErr != nil || lErr != nil {
+			slog.Warn("backup page: could not read schedule", slog.Any("error", errors.Join(sErr, lErr)))
+		} else {
+			d.Schedule = &sched
+			d.LastScheduled = last
+		}
+	}
+	return middleware.Render(c, http.StatusOK, BackupPage(d))
+}
+
+// SaveSchedule stores the daily backup choice (POST /admin/backup/schedule).
+func (h *Handler) SaveSchedule(c echo.Context) error {
+	if h.settings == nil {
+		return echo.NewHTTPError(http.StatusNotFound)
+	}
+	hour, hErr := strconv.Atoi(c.FormValue("hour"))
+	keep, kErr := strconv.Atoi(c.FormValue("keep_days"))
+	if hErr != nil || kErr != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "Pick an hour and how many days to keep.")
+	}
+	sched := Schedule{Enabled: c.FormValue("enabled") == "on", Hour: hour, KeepDays: keep}
+	if err := SaveSchedule(c.Request().Context(), h.settings, sched); err != nil {
+		var ae *apperror.AppError
+		if errors.As(err, &ae) && ae.Code == http.StatusUnprocessableEntity {
+			return echo.NewHTTPError(http.StatusUnprocessableEntity, ae.Message)
+		}
+		slog.Error("backup schedule save failed", slog.Any("error", err))
+		return echo.NewHTTPError(http.StatusInternalServerError, "The schedule could not be saved. Try again.")
+	}
+	label := "off"
+	if sched.Enabled {
+		label = fmt.Sprintf("daily at %02d:00, keep %d days", sched.Hour, sched.KeepDays)
+	}
+	h.recordActivity(c, "backup.schedule", "backup", "", label)
+	return middleware.HTMXRedirect(c, "/admin/backup")
 }
 
 // Run triggers a backup (POST /admin/backup/run). The actual shell-out

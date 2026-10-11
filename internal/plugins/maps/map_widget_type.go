@@ -145,9 +145,22 @@ func (w *mapWidgetType) renderInner(ctx context.Context, rc widgetbindings.Block
 		}
 	}
 	// No (valid) map: players get the friendly empty state; Scribe+ get the
-	// generic create-or-pick affordance.
+	// map picker over the campaign's maps.
 	if !isScribe {
 		return BlockEntityMapEmpty()
 	}
-	return BlockEntityMapChoose(rc.CC, rc.HostID, rc.Resolution.Source)
+	ms, err := w.svc.ListMaps(ctx, rc.CC.Campaign.ID)
+	if err != nil {
+		slog.Error("map widget RenderBlock: cannot list maps for the picker",
+			slog.String("entity_id", rc.HostID), slog.Any("error", err))
+		return templ.NopComponent
+	}
+	// The thumbnails are the pictures this viewer may see, as on the map list.
+	ms, err = w.svc.ForViewerList(ctx, ms, rc.Role)
+	if err != nil {
+		slog.Error("map widget RenderBlock: cannot prepare the map pictures",
+			slog.String("entity_id", rc.HostID), slog.Any("error", err))
+		return templ.NopComponent
+	}
+	return BlockEntityMapChoose(rc.CC, rc.HostID, ms)
 }

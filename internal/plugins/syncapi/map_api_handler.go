@@ -376,7 +376,13 @@ func (h *MapAPIHandler) UpdateDrawing(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request body")
 	}
 
-	err := h.drawingSvc.UpdateDrawing(c.Request().Context(), drawingID, c.Param("mapID"), h.resolveRole(c), h.canAuthorDmOnly(c), maps.UpdateDrawingInput{
+	// A scribe key changes only drawings its user created, as for delete; the
+	// service enforces it from the key owner's id.
+	actorID := ""
+	if key := GetAPIKey(c); key != nil {
+		actorID = key.UserID
+	}
+	err := h.drawingSvc.UpdateDrawing(c.Request().Context(), drawingID, c.Param("mapID"), actorID, h.resolveRole(c), h.canAuthorDmOnly(c), maps.UpdateDrawingInput{
 		Points:            req.Points,
 		StrokeColor:       req.StrokeColor,
 		StrokeWidth:       req.StrokeWidth,
@@ -843,6 +849,7 @@ type apiCreateMarkerRequest struct {
 	Color           string  `json:"color"`
 	PinCategory     *string `json:"pin_category"`
 	EntityID        *string `json:"entity_id"`
+	LinkedMapID     *string `json:"linked_map_id"`
 	Visibility      string  `json:"visibility"`
 	VisibilityRules *string `json:"visibility_rules"`
 	FoundryID       *string `json:"foundry_id"`
@@ -863,6 +870,7 @@ type apiUpdateMarkerRequest struct {
 	Color             patch.Field[string]  `json:"color"`
 	PinCategory       patch.Field[string]  `json:"pin_category"`
 	EntityID          patch.Field[string]  `json:"entity_id"`
+	LinkedMapID       patch.Field[string]  `json:"linked_map_id"`
 	Visibility        patch.Field[string]  `json:"visibility"`
 	VisibilityRules   patch.Field[string]  `json:"visibility_rules"`
 	FoundryID         patch.Field[string]  `json:"foundry_id"`
@@ -949,6 +957,7 @@ func (h *MapAPIHandler) CreateMarker(c echo.Context) error {
 		Color:           req.Color,
 		PinCategory:     req.PinCategory,
 		EntityID:        req.EntityID,
+		LinkedMapID:     req.LinkedMapID,
 		Visibility:      req.Visibility,
 		VisibilityRules: h.ownerVisibilityRules(c, req.VisibilityRules),
 		CreatedBy:       key.UserID,
@@ -986,6 +995,7 @@ func (h *MapAPIHandler) UpdateMarker(c echo.Context) error {
 		Color:             req.Color,
 		PinCategory:       req.PinCategory,
 		EntityID:          req.EntityID,
+		LinkedMapID:       req.LinkedMapID,
 		Visibility:        req.Visibility,
 		VisibilityRules:   h.ownerVisibilityRulesPatch(c, req.VisibilityRules),
 		FoundryID:         req.FoundryID,

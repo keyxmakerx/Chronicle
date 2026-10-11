@@ -20,6 +20,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
+	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/importer"
 )
 
 // Actions a record may carry; the same verbs as page rows.
@@ -40,6 +41,9 @@ type Record struct {
 	// Generated is the browser's generator output (JSON), set at commit
 	// for generator rows only. Untrusted: kinds validate it like any input.
 	Generated string
+	// Links resolves @[Page] in Body to page links. Nil leaves the text as
+	// written (e.g. when planning).
+	Links *importer.PageLinks
 }
 
 // Actor is the operator running the import.
@@ -68,6 +72,10 @@ type Plan struct {
 	// Client is JSON handed to the browser (generator rows only): what
 	// to run, and over which calendar.
 	Client string
+	// Preview is a rulebook Book (the JSON GET /book returns) of what the
+	// row writes, drawn on the review screen by the rulebook reader so it
+	// shows in the campaign's look. House rules only; "" for none.
+	Preview string
 }
 
 // Kind is one feature AI Import can write.
@@ -137,17 +145,35 @@ func (r *Registry) Plan(ctx context.Context, campaignID string, a Actor, rec Rec
 	return k, k.Plan(ctx, campaignID, a, rec)
 }
 
+// PlanAll plans records in order. A row that makes the calendar lets the
+// rows after it be checked against that calendar, since commit applies
+// them in the same order.
+func (r *Registry) PlanAll(ctx context.Context, campaignID string, a Actor, recs []Record) ([]Kind, []Plan) {
+	kinds := make([]Kind, len(recs))
+	plans := make([]Plan, len(recs))
+	for i, rec := range recs {
+		kinds[i], plans[i] = r.Plan(ctx, campaignID, a, rec)
+		if ck, ok := kinds[i].(CalendarKind); ok && rec.Action == ActionCreate && plans[i].Error == "" {
+			if _, cal := ck.plan(ctx, campaignID, a, rec); cal != nil {
+				ctx = withPendingCalendar(ctx, cal)
+			}
+		}
+	}
+	return kinds, plans
+}
+
 // briefs is one plain line per kind for the prompt's opening "what you
 // can do" list, which every prompt carries; Docs has the full formats.
 var briefs = map[string]string{
-	"event":        "calendar events on the campaign calendar",
+	KindCalendar:   "make the campaign calendar, or change its months, weekdays, seasons, moons, year label, eras and current date",
+	"event":        "calendar events on the campaign calendar, one-off or repeating",
 	"weather":      "one day's weather on the calendar",
 	"table":        "rolling tables and their entries",
 	"shop-stock":   "what a shop sells, its price and how many",
 	"carried-item": "items a character carries",
 	"pin":          "pins on the campaign's maps",
 	"note":         "my own notes only: my Journal notes and my jots on pages, never notes anyone else wrote",
-	"house-rule":   "house-rules chapters in the campaign's rulebook",
+	"house-rule":   "house-rules chapters in the campaign's rulebook, written whole: pages with highlighted boxes, dice rolls, fold-out cards, flaps, worked examples, creatures and Director's notes",
 	"system-entry": "the campaign's own ancestries, kits, cultures, classes and other pick-list entries for its game system",
 	"generator":    "run Chronicle's own generators (weather for a range of days, festivals and other events, sky events, names into a rolling table) instead of inventing the result",
 }

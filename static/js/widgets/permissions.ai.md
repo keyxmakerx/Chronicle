@@ -9,8 +9,8 @@ sees when a tag has widened access.
 
 ## Mount
 
-`data-widget="permissions"`, loaded by a `<script defer>` tag in
-`layouts/base.templ`. The page's own mount is the top-right visibility
+`data-widget="permissions"`, loaded on sight from
+`coreWidgets` in `internal/app/routes.go` (ADR-063). The page's own mount is the top-right visibility
 control (`effectiveVisibilityBadge` in `plugins/entities/visibility_glance.templ`),
 rendered for the Owner only:
 

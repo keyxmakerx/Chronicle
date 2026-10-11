@@ -25,6 +25,7 @@ func RegisterRoutes(admin *echo.Group, h *Handler, reauth echo.MiddlewareFunc) {
 	g := admin.Group("/backup")
 	g.GET("", h.Page)
 	g.POST("/run", h.Run, middleware.RateLimit(2, 1*time.Hour))
+	g.POST("/schedule", h.SaveSchedule, middleware.RateLimit(30, 1*time.Hour))
 	g.POST("/files/:name/link", h.DownloadLink, reauth, middleware.RateLimit(20, 1*time.Hour))
 	g.GET("/files/:name", h.Download, middleware.RateLimit(20, 1*time.Hour))
 }

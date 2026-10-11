@@ -13,6 +13,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -28,6 +29,11 @@ type Service interface {
 	// silently coalescing — operators want to know their click did not
 	// start a fresh run.
 	RunBackup(ctx context.Context) (*RunResult, error)
+
+	// RunBackupKeeping is RunBackup with the script's retention set to
+	// keepDays, so the scheduled run prunes to the owner's chosen window.
+	// keepDays <= 0 leaves the script's own default.
+	RunBackupKeeping(ctx context.Context, keepDays int) (*RunResult, error)
 
 	// ListBackups returns the artifacts currently in the backup directory
 	// as Lister sees them. Read-only; never mutates disk.
@@ -121,6 +127,11 @@ func NewService(cfg Config) Service {
 // caller's context is honored: if the request is cancelled, the
 // child process is killed via exec.CommandContext.
 func (s *service) RunBackup(ctx context.Context) (*RunResult, error) {
+	return s.RunBackupKeeping(ctx, 0)
+}
+
+// RunBackupKeeping runs the script with --retention keepDays when positive.
+func (s *service) RunBackupKeeping(ctx context.Context, keepDays int) (*RunResult, error) {
 	s.mu.Lock()
 	if s.running {
 		s.mu.Unlock()
@@ -139,7 +150,11 @@ func (s *service) RunBackup(ctx context.Context) (*RunResult, error) {
 
 	result := &RunResult{StartedAt: time.Now()}
 
-	cmd := exec.CommandContext(runCtx, "sh", s.cfg.ScriptPath)
+	args := []string{s.cfg.ScriptPath}
+	if keepDays > 0 {
+		args = append(args, "--retention", strconv.Itoa(keepDays))
+	}
+	cmd := exec.CommandContext(runCtx, "sh", args...)
 	if s.cfg.BackupDir != "" {
 		cmd.Env = append(cmd.Environ(), "BACKUP_DIR="+s.cfg.BackupDir)
 	}

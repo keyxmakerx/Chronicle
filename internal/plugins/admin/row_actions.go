@@ -20,7 +20,7 @@ type rowAction struct {
 	// Label is the desktop text; MenuLabel the phone-menu text (risky items
 	// end in "…" because they ask first).
 	Label, MenuLabel string
-	// Method is the htmx verb: put, post or delete.
+	// Method is the htmx verb: get, put, post or delete.
 	Method, URL string
 	// Confirm is the hx-confirm text; empty means the action runs at once.
 	Confirm string
@@ -101,6 +101,11 @@ func userRowActions(u auth.User) []rowAction {
 				URL: fmt.Sprintf("/admin/security/users/%s/disable", u.ID), Confirm: "Disable this user account? They will be immediately logged out.", Tone: "warn"})
 		}
 	}
+	if u.TOTPEnabled {
+		acts = append(acts, rowAction{Label: "Switch off two-factor", MenuLabel: "Switch off two-factor…", Method: "put",
+			URL: fmt.Sprintf("/admin/security/users/%s/two-factor/off", u.ID), Tone: "warn",
+			Confirm: "Switch off two-factor for " + u.DisplayName + "? Only do this for someone who lost their phone and their recovery codes. They get an email, and it's written to the activity log."})
+	}
 	acts = append(acts, rowAction{Label: "Force logout all sessions", MenuLabel: "Force logout…", Method: "post",
 		URL: fmt.Sprintf("/admin/security/users/%s/force-logout", u.ID), Confirm: "Force logout all sessions for this user?",
 		Icon: true, Aria: "Force logout all sessions for " + u.DisplayName})
@@ -127,15 +132,16 @@ func campaignRowActions(c campaigns.Campaign) []rowAction {
 	return []rowAction{
 		{Label: "Leave", MenuLabel: "Leave campaign…", Method: "delete", URL: fmt.Sprintf("/admin/campaigns/%s/leave", c.ID),
 			Confirm: "Leave this campaign? You will lose the access you gave yourself."},
-		{Label: "Delete", MenuLabel: "Delete campaign…", Method: "delete", URL: fmt.Sprintf("/admin/campaigns/%s", c.ID),
-			Confirm: "Permanently delete this campaign and all its data?", Tone: "danger"},
+		{Label: "Move to trash", MenuLabel: "Move to trash…", Method: "delete", URL: fmt.Sprintf("/admin/campaigns/%s", c.ID),
+			Confirm: "Move this campaign to the trash? It disappears for everyone right away. You can bring it back from Trash until it empties.", Tone: "danger"},
 	}
 }
 
 // campaignCardActions is the phone menu: join choices first, then the rest,
 // with the destructive tail set apart.
-func campaignCardActions(c campaigns.Campaign, csrf string) []rowAction {
-	acts := append(campaignJoinActions(c, csrf), campaignRowActions(c)...)
+func campaignCardActions(c campaigns.Campaign, st campaigns.HandoverStatus, csrf string) []rowAction {
+	acts := append(campaignJoinActions(c, csrf), handoverAction(c, st)...)
+	acts = append(acts, campaignRowActions(c)...)
 	acts[len(acts)-1].DividerBefore = true
 	return acts
 }
@@ -156,4 +162,13 @@ func avatarInitial(name string) string {
 		return string(unicode.ToUpper(r))
 	}
 	return "?"
+}
+
+// twoFactorNote is the phone card's mention of two-factor, which the
+// desktop table shows as a chip.
+func twoFactorNote(u auth.User) string {
+	if u.TOTPEnabled {
+		return " · two-factor on"
+	}
+	return ""
 }

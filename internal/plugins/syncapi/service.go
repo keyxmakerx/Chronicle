@@ -73,6 +73,8 @@ type SyncAPIService interface {
 	// and nil-safe: the authoritative check is still AuthenticateKeyForWS
 	// on reconnect, so a nil revoker only skips the live-drop nicety.
 	SetConnectionRevoker(cr ConnectionRevoker)
+	SetSeenRecorder(sr SeenRecorder)
+	NoteKeyUser(ctx context.Context, userID string)
 
 	// Authentication.
 	AuthenticateKey(ctx context.Context, rawKey string) (*APIKey, error)
@@ -133,6 +135,13 @@ type MembershipChecker interface {
 	GetMember(ctx context.Context, campaignID, userID string) (*campaigns.CampaignMember, error)
 }
 
+// SeenRecorder notes that someone used Chronicle. A key's owner syncing
+// from Foundry is using it even if they never open the site, and an
+// owner's "if you're away" hand-over must not treat them as gone.
+type SeenRecorder interface {
+	NoteSeen(ctx context.Context, userID string)
+}
+
 // ConnectionRevoker is the narrow hub view this plugin needs:
 // force-disconnect a campaign's Foundry sockets on a key revoke.
 // Declared locally, not imported — same reason as SyncAPIAddonGate.
@@ -160,6 +169,9 @@ type syncAPIService struct {
 	// connRevoker drops already-open Foundry sockets on key revoke.
 	// Injected after construction; nil means not wired yet, a no-op.
 	connRevoker ConnectionRevoker
+
+	// seen records key use as the owner being present; nil skips it.
+	seen SeenRecorder
 }
 
 // NewSyncAPIService creates a new sync API service.
@@ -180,6 +192,18 @@ func (s *syncAPIService) SetMemberChecker(mc MembershipChecker) {
 // SetConnectionRevoker injects the WebSocket hub's revocation surface.
 func (s *syncAPIService) SetConnectionRevoker(cr ConnectionRevoker) {
 	s.connRevoker = cr
+}
+
+// SetSeenRecorder injects where key use is recorded as presence.
+func (s *syncAPIService) SetSeenRecorder(sr SeenRecorder) {
+	s.seen = sr
+}
+
+// NoteKeyUser records that a key's owner used Chronicle through it.
+func (s *syncAPIService) NoteKeyUser(ctx context.Context, userID string) {
+	if s.seen != nil {
+		s.seen.NoteSeen(ctx, userID)
+	}
 }
 
 // --- Key Management ---

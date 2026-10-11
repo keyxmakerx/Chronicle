@@ -8,8 +8,8 @@ private, delete and drag-reorder them; players see the visible ones.
 
 ## Mount
 
-`data-widget="entity-posts"`, loaded by a `<script defer>` tag in
-`layouts/base.templ`. Mounted by `blockPosts` in `plugins/entities/show.templ`.
+`data-widget="entity-posts"`, loaded on sight from
+`coreWidgets` in `internal/app/routes.go` (ADR-063). Mounted by `blockPosts` in `plugins/entities/show.templ`.
 
 | Attribute | Meaning |
 |---|---|

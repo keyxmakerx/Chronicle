@@ -131,7 +131,7 @@
     pill.setAttribute('data-claim-pill', '');
     pill.innerHTML = '<i class="fa-solid fa-circle-check"></i> Yours';
     if (holder) holder.replaceWith(pill);
-    toast('Claimed. ' + (btn.getAttribute('data-name') || 'This character') + ' is on your My Characters page.');
+    toast('Claimed. ' + (btn.getAttribute('data-name') || 'This character') + ' is under Yours on the Characters page.');
     // The page's own widget learns it is claimed from what the server draws,
     // so show the pill, then draw the page again.
     setTimeout(function () { window.location.reload(); }, reduced() ? 600 : 1300);

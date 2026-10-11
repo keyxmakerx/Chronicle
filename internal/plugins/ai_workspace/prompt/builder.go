@@ -47,6 +47,11 @@ type Exporter interface {
 	Generate(ctx context.Context, campaignName, ownerID, campaignID string, opts aiexport.Options) (string, error)
 }
 
+// ContentHouseRules is the content choice for writing house rules: the
+// context is only the campaign's house rules (RecordContext), so the
+// Exporter is not called.
+const ContentHouseRules = "house-rules"
+
 // Service is the prompt builder's entry point. Wired in app/routes.go
 // with the same plugin Services that back the aiexport renderer.
 type Service struct {
@@ -80,10 +85,10 @@ type Input struct {
 
 	// --- Content picker ---
 
-	// ContentMode is one of "none", "all", or a comma-separated list
-	// of category slugs (mapping to aiexport.Category values). "none"
-	// short-circuits the Exporter call; the "Existing world context"
-	// block is omitted from the rendered prompt.
+	// ContentMode is one of "none", "all", ContentHouseRules, or a
+	// comma-separated list of category slugs (mapping to aiexport.Category
+	// values). "none" short-circuits the Exporter call; the "Existing world
+	// context" block is omitted from the rendered prompt.
 	ContentMode string
 
 	Privacy               aiexport.PrivacyMode
@@ -156,7 +161,12 @@ func (s *Service) Build(
 		}
 	}
 
-	if in.ContentMode != "" && in.ContentMode != "none" {
+	if in.ContentMode == ContentHouseRules {
+		data.ExportedContent = strings.TrimSpace(in.RecordContext)
+		if data.ExportedContent == "" {
+			data.ExportedContent = "There are no house rules yet."
+		}
+	} else if in.ContentMode != "" && in.ContentMode != "none" {
 		if s.Exporter == nil {
 			return "", fmt.Errorf("prompt: exporter not wired")
 		}

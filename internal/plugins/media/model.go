@@ -34,6 +34,12 @@ type MediaFile struct {
 	// serve handler to enforce access control on private campaign media.
 	CampaignIsPublic *bool `json:"-"`
 
+	// CampaignTrashed is set by FindByID's join: the file's campaign is in
+	// the site Trash. TrashBatchID is set when the file itself is in a file
+	// clean-up batch. Either makes InTrash true.
+	CampaignTrashed bool    `json:"-"`
+	TrashBatchID    *string `json:"-"`
+
 	// MatchedExisting and UsedBy are transient (ADR-058) — never persisted.
 	// Set ONLY by mediaService.Upload's dedup path, and ONLY when the
 	// content-hash match was safe to merge (canMergeWithExisting said
@@ -47,6 +53,13 @@ type MediaFile struct {
 	// hidden page's artwork with candidate images. See UploadResponse.
 	MatchedExisting bool       `json:"-"`
 	UsedBy          []MediaRef `json:"-"`
+}
+
+// InTrash reports whether the file is out of use because its campaign, or the
+// file itself, is waiting in the site Trash. Every route that opens a file for
+// a person treats that as "not found", signed link or not.
+func (f *MediaFile) InTrash() bool {
+	return f.CampaignTrashed || f.TrashBatchID != nil
 }
 
 // UploadInput holds the validated input for creating a media file.
@@ -109,6 +122,32 @@ var MimeToExtension = map[string]string{
 	"audio/ogg":  ".ogg",
 	"audio/wav":  ".wav",
 	"audio/webm": ".webm",
+	// Page files only; AllowedMimeTypes does not list them, so no other
+	// upload route can store one.
+	mimePDF:  ".pdf",
+	mimeText: ".txt",
+	mimeMD:   ".md",
+	mimeDocx: ".docx",
+	mimeXlsx: ".xlsx",
+	mimeOdt:  ".odt",
+	mimeZip:  ".zip",
+}
+
+// IsNotePicture reports whether the file is a picture that lives in notes.
+func (f *MediaFile) IsNotePicture() bool {
+	return f.UsageType == UsageNoteImage
+}
+
+// IsPageFile reports whether the file is attached to a page.
+func (f *MediaFile) IsPageFile() bool {
+	return f.UsageType == UsagePageFile
+}
+
+// IsBound reports whether the file's readers come only from what it is bound to
+// (a note, or a page), so every route that treats media as campaign-wide
+// content must pass it by.
+func (f *MediaFile) IsBound() bool {
+	return f.IsNotePicture() || f.IsPageFile()
 }
 
 // IsImage returns true if the file is an image based on MIME type.
@@ -130,6 +169,18 @@ const (
 	UsageEntityImage = "entity_image"
 	UsageAvatar      = "avatar"
 	UsageBackdrop    = "backdrop"
+
+	// UsageNoteImage is a picture written into a note. Its readers are
+	// decided by who can read a note holding it, never by the entity-page
+	// rule, so it is kept out of every campaign-wide listing, lookup and
+	// dedup that the page rule relies on.
+	UsageNoteImage = "note_image"
+
+	// UsagePageFile is a file attached to a page (a handout, a PDF). It is
+	// opened only through the page it is bound to in page_files, and always as
+	// a download, so like a note picture it stays out of every campaign-wide
+	// listing, lookup and dedup.
+	UsagePageFile = "page_file"
 )
 
 // MediaRef is a lightweight reference from an entity to a media file.

@@ -88,23 +88,26 @@ type ExportEntityType struct {
 
 // ExportEntity captures a single entity with all its data.
 type ExportEntity struct {
-	OriginalID     string                   `json:"original_id"`
-	EntityTypeSlug string                   `json:"entity_type_slug"`
-	Name           string                   `json:"name"`
-	Slug           string                   `json:"slug"`
-	Entry          *string                  `json:"entry,omitempty"`
-	EntryHTML      *string                  `json:"entry_html,omitempty"`
-	ImagePath      *string                  `json:"image_path,omitempty"`
-	CoverImagePath *string                  `json:"cover_image_path,omitempty"`
-	ParentSlug     *string                  `json:"parent_slug,omitempty"`
-	TypeLabel      *string                  `json:"type_label,omitempty"`
-	IsPrivate      bool                     `json:"is_private"`
-	IsTemplate     bool                     `json:"is_template"`
-	Visibility     string                   `json:"visibility,omitempty"`
-	Permissions    []ExportEntityPermission `json:"permissions,omitempty"`
-	FieldsData     json.RawMessage          `json:"fields_data,omitempty"`
-	FieldOverrides json.RawMessage          `json:"field_overrides,omitempty"`
-	PopupConfig    json.RawMessage          `json:"popup_config,omitempty"`
+	OriginalID     string  `json:"original_id"`
+	EntityTypeSlug string  `json:"entity_type_slug"`
+	Name           string  `json:"name"`
+	Slug           string  `json:"slug"`
+	Entry          *string `json:"entry,omitempty"`
+	EntryHTML      *string `json:"entry_html,omitempty"`
+	ImagePath      *string `json:"image_path,omitempty"`
+	CoverImagePath *string `json:"cover_image_path,omitempty"`
+	ParentSlug     *string `json:"parent_slug,omitempty"`
+	// AlsoListedUnder holds the slugs of the other pages this page is listed
+	// under in the page tree (additive; older files simply lack it).
+	AlsoListedUnder []string                 `json:"also_listed_under,omitempty"`
+	TypeLabel       *string                  `json:"type_label,omitempty"`
+	IsPrivate       bool                     `json:"is_private"`
+	IsTemplate      bool                     `json:"is_template"`
+	Visibility      string                   `json:"visibility,omitempty"`
+	Permissions     []ExportEntityPermission `json:"permissions,omitempty"`
+	FieldsData      json.RawMessage          `json:"fields_data,omitempty"`
+	FieldOverrides  json.RawMessage          `json:"field_overrides,omitempty"`
+	PopupConfig     json.RawMessage          `json:"popup_config,omitempty"`
 }
 
 // --- Tags ---
@@ -172,20 +175,17 @@ type ExportCalendarData struct {
 	// must carry the GM's actual configuration rather than falling back to
 	// the un-set/off defaults.
 	//
-	// TracksRealTime/RealTimeZone are deliberately NOT carried here:
-	// RealTimeZone trips this repo's scheduler-data egress guard
-	// (sessions.TestScheduler_AbsentFromCampaignExport, RC-12.5), which
-	// fails on any exported field whose name contains "timezone" — a
-	// calendar's real-time anchor is GM-configured world data, not a
-	// specific member's own location the way the guard's usual target
-	// (session availability) is, but a GM who anchors a calendar to their
-	// own convenient zone still has that zone leave in the backup, and the
-	// guard's own doc comment says a new zone-carrying field must
-	// consciously EXTEND that pin, not be routed around it — a security
-	// sign-off call for a human reviewer.
+	// TracksRealTime/RealTimeZone keep a calendar that follows real time
+	// doing so after a restore. The zone is the one the GM picked for their
+	// world, not a member's own; it is the one named exception to the
+	// scheduler-data export guard (sessions.TestScheduler_AbsentFromCampaignExport).
+	// Absent in older backups, which restore the calendar not following
+	// real time.
 	Hemisphere         *string `json:"hemisphere,omitempty"`
 	ForecastsEnabled   bool    `json:"forecasts_enabled,omitempty"`
 	MonthStartsNewWeek bool    `json:"month_starts_new_week,omitempty"`
+	TracksRealTime     bool    `json:"tracks_real_time,omitempty"`
+	RealTimeZone       *string `json:"real_time_zone,omitempty"`
 	// EraLook is the calendar's era colours setting; nil in a backup from
 	// before it existed, which keeps the defaults on restore.
 	EraLook  *ExportCalendarEraLook  `json:"era_look,omitempty"`
@@ -568,7 +568,10 @@ type ExportAttendee struct {
 // --- Maps ---
 
 // ExportMap captures a map with markers, drawings, layers, tokens, and fog.
+// Ref is the map's id in the exporting campaign, so a marker that opens this
+// map (ExportMarker.LinkedMapRef) can be pointed at its copy on import.
 type ExportMap struct {
+	Ref         string            `json:"ref,omitempty"`
 	Name        string            `json:"name"`
 	Description *string           `json:"description,omitempty"`
 	ImageID     *string           `json:"image_id,omitempty"`
@@ -592,6 +595,8 @@ type ExportMarker struct {
 	Color       string  `json:"color"`
 	EntitySlug  *string `json:"entity_slug,omitempty"`
 	Visibility  string  `json:"visibility"`
+	// LinkedMapRef is the Ref of the exported map this marker opens.
+	LinkedMapRef *string `json:"linked_map_ref,omitempty"`
 }
 
 // ExportDrawing captures a map drawing.

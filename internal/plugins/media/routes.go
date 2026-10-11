@@ -97,6 +97,30 @@ func RegisterCampaignRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.Camp
 	picker.GET("/media/list", h.CampaignMediaList, campaigns.RequireRole(campaigns.RoleScribe))
 }
 
+// RegisterPageFileRoutes sets up the Files section of a page. Every route needs
+// a signed-in campaign member; what a member may do with a given page and file
+// is decided by PageFileService from the page itself, so the routes carry no
+// role gate beyond membership (an editor-player must get through, a Scribe
+// must not on a page they cannot see).
+//
+// Uploads go through the same per-request size cap the media upload route
+// uses, and downloads are rate limited like every other media serve.
+func RegisterPageFileRoutes(e *echo.Echo, h *PageFileHandler, campaignSvc campaigns.CampaignService, authSvc auth.AuthService, resolveMaxUpload MaxUploadResolver, serveRateLimit int) {
+	if serveRateLimit <= 0 {
+		serveRateLimit = 300
+	}
+	g := e.Group("/campaigns/:id/entities/:eid",
+		auth.RequireAuth(authSvc),
+		campaigns.RequireCampaignAccess(campaignSvc),
+		campaigns.RequireRole(campaigns.RolePlayer),
+	)
+	g.GET("/files", h.Section)
+	g.POST("/files", h.Upload, middleware.RateLimit(30, time.Minute), dynamicBodyLimitMiddleware(resolveMaxUpload))
+	g.GET("/files/:fid/download", h.Download, middleware.RateLimit(serveRateLimit, time.Minute))
+	g.PUT("/files/:fid/visibility", h.SetVisibility)
+	g.DELETE("/files/:fid", h.Remove)
+}
+
 // dynamicBodyLimitMiddleware rejects request bodies exceeding the cap
 // returned by the resolver. Adds a 10% margin above the resolver's value
 // to absorb multipart-encoding overhead — the application-layer quota

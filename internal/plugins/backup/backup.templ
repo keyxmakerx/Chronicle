@@ -6,6 +6,7 @@ package backup
 import (
 	"fmt"
 	"net/url"
+	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/templates/components"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
@@ -19,6 +20,11 @@ type BackupPageData struct {
 	LastRun    *RunResult
 	RunningNow bool
 	CSRFToken  string
+	// ServerZone names the server's time zone for the schedule's hour.
+	ServerZone string
+	// Schedule is nil when the settings store isn't wired; the card is left out.
+	Schedule      *Schedule
+	LastScheduled *ScheduledRun
 }
 
 templ BackupPage(d BackupPageData) {
@@ -26,10 +32,23 @@ templ BackupPage(d BackupPageData) {
 		<div class="max-w-5xl mx-auto space-y-6">
 			@components.AdminGroupHeading(components.AdminTabsBackup, "/admin/backup")
 			<p class="text-sm text-fg-secondary">
-				Make a copy of your site now, or download one you already have. A backup holds your database, your uploaded files and your logged-in sessions. To make backups on a schedule or from the server itself, ask whoever runs your server.
+				Make a copy of your site now, or download one you already have. A backup holds your database, your uploaded files and your logged-in sessions.
 			</p>
 
+			if d.LastScheduled != nil && !d.LastScheduled.OK && d.Schedule != nil && d.Schedule.Enabled {
+				<div class="card p-4 border-l-4 border-red-500" role="alert">
+					<p class="text-sm text-red-700 dark:text-red-300">
+						<i class="fa-solid fa-triangle-exclamation mr-1"></i>
+						The daily backup on { d.LastScheduled.At.Format("2 Jan at 15:04") } failed: { d.LastScheduled.Detail }. Run one now to check, and see the server log for details.
+					</p>
+				</div>
+			}
+
 			@runCard(d)
+
+			if d.Schedule != nil {
+				@scheduleCard(d)
+			}
 
 			if d.ListError != "" {
 				<div class="card p-4 border-l-4 border-red-500">
@@ -186,4 +205,76 @@ templ kindBadge(kind string) {
 	} else {
 		<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-500/10 text-gray-600">Other</span>
 	}
+}
+
+// scheduleCard is the daily backup setting: on or off, the hour, and how
+// many days of backups to keep, with the last scheduled run's outcome.
+templ scheduleCard(d BackupPageData) {
+	<div class="card p-5 space-y-4">
+		<div>
+			<h2 class="text-lg font-semibold text-fg">Daily backup</h2>
+			<p class="text-xs text-fg-muted mt-1">
+				Chronicle backs itself up once a day and deletes backups older than you choose to keep. If a backup fails, this page says so and site admins get an email when email is set up.
+			</p>
+		</div>
+		<form
+			method="POST"
+			action="/admin/backup/schedule"
+			hx-post="/admin/backup/schedule"
+			hx-disabled-elt="find button"
+			class="flex flex-wrap items-end gap-4"
+		>
+			<input type="hidden" name="csrf_token" value={ d.CSRFToken }/>
+			<label class="flex items-center gap-2 text-sm text-fg">
+				<input type="checkbox" name="enabled" checked?={ d.Schedule.Enabled }/>
+				Back up every day
+			</label>
+			<label class="text-sm text-fg-secondary">
+				<span class="block text-xs text-fg-muted mb-1">At ({ d.ServerZone }, server time)</span>
+				<select name="hour" class="input text-sm">
+					for h := 0; h < 24; h++ {
+						<option value={ fmt.Sprintf("%d", h) } selected?={ h == d.Schedule.Hour }>{ fmt.Sprintf("%02d:00", h) }</option>
+					}
+				</select>
+			</label>
+			<label class="text-sm text-fg-secondary">
+				<span class="block text-xs text-fg-muted mb-1">Keep backups for</span>
+				<span class="flex items-center gap-2">
+					<input
+						type="number"
+						name="keep_days"
+						min={ fmt.Sprintf("%d", MinKeepDays) }
+						max={ fmt.Sprintf("%d", MaxKeepDays) }
+						value={ fmt.Sprintf("%d", d.Schedule.KeepDays) }
+						class="input text-sm w-20"
+					/>
+					days
+				</span>
+			</label>
+			<button type="submit" class="btn-primary text-sm">Save</button>
+		</form>
+		if d.LastScheduled != nil {
+			<div class="border-t border-edge pt-3 text-sm">
+				if d.LastScheduled.OK {
+					<div class="text-green-700 dark:text-green-300">
+						<i class="fa-solid fa-circle-check mr-1"></i>
+						Last daily backup finished { d.LastScheduled.At.Format("2 Jan at 15:04") }
+					</div>
+				} else {
+					<div class="text-red-700 dark:text-red-300">
+						<i class="fa-solid fa-triangle-exclamation mr-1"></i>
+						Last daily backup failed { d.LastScheduled.At.Format("2 Jan at 15:04") }
+					</div>
+				}
+			</div>
+		} else if d.Schedule.Enabled {
+			<p class="border-t border-edge pt-3 text-sm text-fg-muted">
+				if time.Now().Hour() >= d.Schedule.Hour {
+					The first daily backup starts within a minute.
+				} else {
+					The first daily backup runs at { fmt.Sprintf("%02d:00", d.Schedule.Hour) }.
+				}
+			</p>
+		}
+	</div>
 }

@@ -22,6 +22,18 @@ const (
 	EventMediaUploaded          = "media.uploaded"
 	EventMediaDeleted           = "media.deleted"
 	EventMediaQuotaExceeded     = "media.quota_exceeded"
+	EventAccountDeleted         = "account.deleted"
+	EventTwoFactorEnabled       = "two_factor.enabled"
+	EventTwoFactorDisabled      = "two_factor.disabled"
+	EventTwoFactorCodesReplaced = "two_factor.codes_replaced"
+	EventTwoFactorFailed        = "login.two_factor_failed"
+	EventTwoFactorAdminOff      = "admin.two_factor_disabled"
+	EventProviderSaved          = "admin.sign_in_provider_saved"
+	EventSignInLinked           = "sign_in.linked"
+	EventSignInUnlinked         = "sign_in.unlinked"
+	EventGuestJoined            = "guest.joined"
+	EventGuestKept              = "guest.kept"
+	EventGuestMerged            = "guest.merged"
 )
 
 // SecurityEvent represents a single site-wide security event. Unlike campaign
@@ -69,6 +81,18 @@ func EventTypeLabel(eventType string) string {
 		EventMediaUploaded:          "Media Uploaded",
 		EventMediaDeleted:           "Media Deleted",
 		EventMediaQuotaExceeded:     "Media Quota Exceeded",
+		EventAccountDeleted:         "Account Deleted",
+		EventTwoFactorEnabled:       "Two-factor Turned On",
+		EventTwoFactorDisabled:      "Two-factor Turned Off",
+		EventTwoFactorCodesReplaced: "Recovery Codes Replaced",
+		EventTwoFactorFailed:        "Wrong Two-factor Code",
+		EventTwoFactorAdminOff:      "Two-factor Switched Off by Admin",
+		EventProviderSaved:          "Sign-in Provider Changed",
+		EventSignInLinked:           "Sign-in Linked",
+		EventSignInUnlinked:         "Sign-in Unlinked",
+		EventGuestJoined:            "Guest Joined",
+		EventGuestKept:              "Guest Kept Their Account",
+		EventGuestMerged:            "Guest Merged Into an Account",
 	}
 	if label, ok := labels[eventType]; ok {
 		return label
@@ -93,6 +117,18 @@ func EventTypeIcon(eventType string) string {
 		EventMediaUploaded:          "fa-solid fa-cloud-arrow-up text-blue-500",
 		EventMediaDeleted:           "fa-solid fa-trash text-red-400",
 		EventMediaQuotaExceeded:     "fa-solid fa-hard-drive text-amber-500",
+		EventAccountDeleted:         "fa-solid fa-user-xmark text-red-500",
+		EventTwoFactorEnabled:       "fa-solid fa-mobile-screen text-emerald-500",
+		EventTwoFactorDisabled:      "fa-solid fa-mobile-screen text-amber-500",
+		EventTwoFactorCodesReplaced: "fa-solid fa-key text-blue-500",
+		EventTwoFactorFailed:        "fa-solid fa-triangle-exclamation text-red-500",
+		EventTwoFactorAdminOff:      "fa-solid fa-mobile-screen text-red-500",
+		EventProviderSaved:          "fa-solid fa-right-to-bracket text-purple-500",
+		EventSignInLinked:           "fa-solid fa-link text-emerald-500",
+		EventSignInUnlinked:         "fa-solid fa-link-slash text-amber-500",
+		EventGuestJoined:            "fa-solid fa-ticket text-blue-500",
+		EventGuestKept:              "fa-solid fa-user-check text-emerald-500",
+		EventGuestMerged:            "fa-solid fa-code-merge text-emerald-500",
 	}
 	if icon, ok := icons[eventType]; ok {
 		return icon
@@ -107,13 +143,14 @@ const (
 	SecurityTabSessions = "sessions"
 	SecurityTabLog      = "log"
 	SecurityTabSignup   = "signup"
+	SecurityTabProvider = "provider"
 )
 
 // normalizeSecurityTab whitelists the ?tab= value; anything unknown falls back
 // to the overview so a hand-edited URL never renders a blank page.
 func normalizeSecurityTab(raw string) string {
 	switch raw {
-	case SecurityTabSessions, SecurityTabLog, SecurityTabSignup:
+	case SecurityTabSessions, SecurityTabLog, SecurityTabSignup, SecurityTabProvider:
 		return raw
 	default:
 		return SecurityTabOverview

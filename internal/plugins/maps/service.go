@@ -71,6 +71,11 @@ type MapService interface {
 	GetCampaignFrame(ctx context.Context, campaignID string) (string, error)
 	SetCampaignFrame(ctx context.Context, campaignID, frame string) error
 	ResolveDisplay(ctx context.Context, m *Map) (ResolvedDisplay, error)
+	// SetMeasureScale stores (or, with a nil scale, removes) the map's scale
+	// for the Measure tool. canSet is the owner-or-DM-grant capability
+	// (CampaignContext.CanAuthorDmOnly): the rest of the display settings are
+	// owner-only, but a DM sets the scale too, so this is its own gate.
+	SetMeasureScale(ctx context.Context, campaignID, mapID string, canSet bool, scale json.RawMessage) (*MeasureDisplay, error)
 
 	// Marker CRUD. UpdateMarker and DeleteMarker take canAuthorDmOnly (Owner
 	// or a co-DM grant, campaigns.CampaignContext.CanAuthorDmOnly) so a
@@ -89,6 +94,14 @@ type MapService interface {
 	// the marker because it lies under a shadow area. By-id reads use it so
 	// they cannot reveal what ListMarkers withholds.
 	IsMarkerShadowed(ctx context.Context, mk *Marker, role int) (bool, error)
+
+	// Linked maps (a pin that opens another map). ResolveTrail turns the ids
+	// a viewer followed (?from=) into the trail shown above mapID, keeping
+	// only maps of the campaign; it is display only and grants nothing.
+	// LinkTree is the campaign's linked maps as this viewer can follow them,
+	// built from ListMarkers for the viewer so hidden pins add nothing.
+	ResolveTrail(ctx context.Context, campaignID, mapID string, from []string) ([]TrailStep, error)
+	LinkTree(ctx context.Context, campaignID string, role int, userID string) (*LinkTree, error)
 
 	// ForViewer returns the map as a viewer of this (promoted visibility) role
 	// may receive it. For anyone who is not owner/DM-equivalent and a map with a
@@ -121,17 +134,17 @@ type MapService interface {
 	// SetHexFogLookup is on the interface for the same reason: without it every
 	// player would see every pin and the whole picture under unexplored hexes.
 	SetHexFogLookup(l HexFogLookup)
-	// SetFogMediaLookup wires the check that a file is a picture drawing the
-	// fog withholds. With a fog lookup wired and this one not, the media guard
-	// refuses every campaign file rather than serve one under the fog.
-	SetFogMediaLookup(l FogMediaLookup)
+	// SetPictureFileLookup wires the check that a file is a picture drawing the
+	// fog or a shadow withholds. With a fog lookup wired and this one not, the
+	// media guard refuses every campaign file rather than serve one under the fog.
+	SetPictureFileLookup(l PictureFileLookup)
 }
 
-// FogMediaLookup reports whether a file is a picture on a map whose image the
-// hex fog withholds from viewers below CanSeeDmOnly. Implemented by the
-// drawing service.
-type FogMediaLookup interface {
-	FogWithholdsMedia(ctx context.Context, mapID, mediaID string) (bool, error)
+// PictureFileLookup reports whether a file is a picture on a map whose image the
+// hex fog or a shadow withholds from viewers below CanSeeDmOnly. Implemented by
+// the drawing service.
+type PictureFileLookup interface {
+	WithholdsPictureFile(ctx context.Context, mapID, mediaID string) (bool, error)
 }
 
 // EntityVisibilityGate resolves which of a set of entity IDs a viewer (role +
@@ -159,7 +172,7 @@ type mapService struct {
 	entityGate     EntityVisibilityGate
 	shadows        ShadowLookup
 	hexFog         HexFogLookup
-	fogMedia       FogMediaLookup
+	pictureFiles   PictureFileLookup
 	images         MediaImageSource
 	imageCacheDir  string
 	pictureCache   *pictureStatusCache
@@ -214,9 +227,9 @@ func (s *mapService) SetHexFogLookup(l HexFogLookup) {
 	s.pictureCache.invalidate("")
 }
 
-// SetFogMediaLookup implements MapService.
-func (s *mapService) SetFogMediaLookup(l FogMediaLookup) {
-	s.fogMedia = l
+// SetPictureFileLookup implements MapService.
+func (s *mapService) SetPictureFileLookup(l PictureFileLookup) {
+	s.pictureFiles = l
 	s.pictureCache.invalidate("")
 }
 
@@ -412,6 +425,43 @@ func (s *mapService) SetHexArt(ctx context.Context, mapID, art string) error {
 	return nil
 }
 
+// SetMeasureScale writes only the measure group, through the same merge and
+// validation as a settings save, so every other group is kept. The gate is
+// here rather than on the route: the route admits any member, because a
+// member with DM access is not an owner by role. A map in another campaign
+// answers NotFound, as a missing one does.
+func (s *mapService) SetMeasureScale(ctx context.Context, campaignID, mapID string, canSet bool, scale json.RawMessage) (*MeasureDisplay, error) {
+	if !canSet {
+		return nil, apperror.NewForbidden("only the owner or a member with DM access can set the map's scale")
+	}
+	m, err := s.repo.GetMap(ctx, mapID)
+	if err != nil {
+		return nil, fmt.Errorf("get map for scale: %w", err)
+	}
+	if m == nil || m.CampaignID != campaignID {
+		return nil, apperror.NewNotFound("map not found")
+	}
+	if len(scale) == 0 {
+		scale = json.RawMessage("null")
+	}
+	raw, err := json.Marshal(map[string]json.RawMessage{"measure": scale})
+	if err != nil {
+		return nil, apperror.NewValidation("the scale is not valid")
+	}
+	next, err := MergeDisplaySettings(m.Display, raw)
+	if err != nil {
+		return nil, err
+	}
+	m.Display = next
+	if err := s.repo.UpdateMap(ctx, m); err != nil {
+		return nil, fmt.Errorf("update map scale: %w", err)
+	}
+	if next == nil {
+		return nil, nil
+	}
+	return next.Measure, nil
+}
+
 // GetCampaignFrame returns the campaign-wide frame style, or the default when
 // the campaign has not chosen or its stored value is no longer a known frame.
 func (s *mapService) GetCampaignFrame(ctx context.Context, campaignID string) (string, error) {
@@ -521,6 +571,20 @@ func (s *mapService) CreateMarker(ctx context.Context, input CreateMarkerInput) 
 		return nil, apperror.NewValidation("color must be a valid hex color (e.g., #3b82f6)")
 	}
 
+	// A linked map must be another map of this pin's campaign. "" means none,
+	// so a form that sends an empty choice makes a plain pin.
+	var linkedMap *Map
+	if input.LinkedMapID != nil && *input.LinkedMapID == "" {
+		input.LinkedMapID = nil
+	}
+	if input.LinkedMapID != nil {
+		tgt, err := s.linkTarget(ctx, input.MapID, *input.LinkedMapID)
+		if err != nil {
+			return nil, err
+		}
+		linkedMap = tgt
+	}
+
 	mk := &Marker{
 		ID:              generateID(),
 		MapID:           input.MapID,
@@ -532,10 +596,14 @@ func (s *mapService) CreateMarker(ctx context.Context, input CreateMarkerInput) 
 		Color:           input.Color,
 		PinCategory:     input.PinCategory,
 		EntityID:        input.EntityID,
+		LinkedMapID:     input.LinkedMapID,
 		Visibility:      input.Visibility,
 		VisibilityRules: input.VisibilityRules,
 		CreatedBy:       &input.CreatedBy,
 		FoundryID:       input.FoundryID,
+	}
+	if linkedMap != nil {
+		mk.LinkedMapName = linkedMap.Name
 	}
 	if err := s.repo.CreateMarker(ctx, mk); err != nil {
 		return nil, fmt.Errorf("create marker: %w", err)
@@ -610,6 +678,19 @@ func (s *mapService) UpdateMarker(ctx context.Context, id string, input UpdateMa
 	if color != "" && !colorPattern.MatchString(color) {
 		return apperror.NewValidation("color must be a valid hex color")
 	}
+	// Only a link the caller sent is checked, and one equal to the stored
+	// link is taken as already checked: a client that echoes the marker back
+	// (the Foundry module's dialog) must not fail on a field it never changed.
+	linkedName := mk.LinkedMapName
+	if v, sent := input.LinkedMapID.Get(); sent && v != "" {
+		if mk.LinkedMapID == nil || *mk.LinkedMapID != v {
+			tgt, err := s.linkTarget(ctx, mk.MapID, v)
+			if err != nil {
+				return err
+			}
+			linkedName = tgt.Name
+		}
+	}
 
 	mk.Name = name
 	mk.Description = input.Description.Ptr(mk.Description)
@@ -619,6 +700,14 @@ func (s *mapService) UpdateMarker(ctx context.Context, id string, input UpdateMa
 	mk.Color = color
 	mk.PinCategory = input.PinCategory.Ptr(mk.PinCategory)
 	mk.EntityID = input.EntityID.Ptr(mk.EntityID)
+	mk.LinkedMapID = input.LinkedMapID.Ptr(mk.LinkedMapID)
+	if mk.LinkedMapID != nil && *mk.LinkedMapID == "" {
+		mk.LinkedMapID = nil
+	}
+	mk.LinkedMapName = ""
+	if mk.LinkedMapID != nil {
+		mk.LinkedMapName = linkedName
+	}
 	mk.Visibility = input.Visibility.Val(mk.Visibility)
 	mk.VisibilityRules = input.VisibilityRules.Ptr(mk.VisibilityRules)
 	mk.FoundryID = input.FoundryID.Ptr(mk.FoundryID)

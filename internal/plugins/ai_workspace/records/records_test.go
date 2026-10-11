@@ -9,6 +9,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
+	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/importer"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/widgets/notes"
@@ -591,4 +592,31 @@ func TestGeneratorKind_EventsRerunDoesNotDuplicate(t *testing.T) {
 	if len(c.events) != 2 {
 		t.Fatalf("created %d events across both runs, want 2", len(c.events))
 	}
+}
+
+func TestBodyHTML_PageLinks(t *testing.T) {
+	links := importer.NewPageLinks(context.Background(), linkPages{}, "camp", importer.Viewer{})
+	got, err := bodyHTML("Ask @[Lyra] about @[Nobody].", links)
+	if err != nil || got == nil {
+		t.Fatalf("bodyHTML: %v", err)
+	}
+	if !strings.Contains(*got, `data-mention-id="p-1"`) || !strings.Contains(*got, "about Nobody.") {
+		t.Errorf("got %s", *got)
+	}
+	plain, _ := bodyHTML("Ask @[Lyra].", nil)
+	if !strings.Contains(*plain, "@[Lyra]") {
+		t.Errorf("without links the text stays as written: %s", *plain)
+	}
+}
+
+type linkPages struct{}
+
+func (linkPages) GetBySlug(_ context.Context, c, slug string) (*entities.Entity, error) {
+	if slug == "lyra" {
+		return &entities.Entity{ID: "p-1", CampaignID: c, Name: "Lyra", Slug: "lyra"}, nil
+	}
+	return nil, nil
+}
+func (linkPages) CheckEntityAccess(context.Context, string, int, string) (*entities.EffectivePermission, error) {
+	return &entities.EffectivePermission{CanView: true}, nil
 }

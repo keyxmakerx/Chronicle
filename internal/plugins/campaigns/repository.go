@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -23,7 +25,16 @@ type CampaignRepository interface {
 	CountBySystem(ctx context.Context, query string) ([]SystemCount, error)
 	ListPublic(ctx context.Context, limit int) ([]Campaign, error)
 	Update(ctx context.Context, campaign *Campaign) error
-	Delete(ctx context.Context, id string) error
+	// MoveToTrash marks a campaign deleted without removing anything; Undo is
+	// RestoreFromTrash. See trash_repository.go.
+	MoveToTrash(ctx context.Context, id, byUserID, byName string, at time.Time) error
+	RestoreFromTrash(ctx context.Context, id string) error
+	ListTrashed(ctx context.Context) ([]TrashedCampaign, error)
+	ListPurgeDue(ctx context.Context, cutoff time.Time, all bool) ([]string, error)
+	ClaimForPurge(ctx context.Context, id string, at, olderThan time.Time) (bool, error)
+	// PurgeTrashed is the only hard delete of a campaign: it removes a row
+	// that was trashed and claimed, and nothing else.
+	PurgeTrashed(ctx context.Context, id string) error
 	SlugExists(ctx context.Context, slug string) (bool, error)
 	CountAll(ctx context.Context) (int, error)
 
@@ -48,6 +59,15 @@ type CampaignRepository interface {
 	FindTransferByToken(ctx context.Context, token string) (*OwnershipTransfer, error)
 	FindTransferByCampaign(ctx context.Context, campaignID string) (*OwnershipTransfer, error)
 	DeleteTransfer(ctx context.Context, id string) error
+	// DeleteTransfersInvolving cancels every pending hand-over to or from the user.
+	DeleteTransfersInvolving(ctx context.Context, userID string) error
+
+	// ListOwnedByUser lists campaigns the user created or holds the owner
+	// role in, archived ones included.
+	ListOwnedByUser(ctx context.Context, userID string) ([]OwnedCampaign, error)
+	// ListMemberCampaignIDs lists every campaign the user is a member of,
+	// archived ones included.
+	ListMemberCampaignIDs(ctx context.Context, userID string) ([]string, error)
 
 	// UpdateBackdropPath updates only the backdrop_path column.
 	UpdateBackdropPath(ctx context.Context, campaignID string, path *string) error
@@ -69,6 +89,10 @@ type CampaignRepository interface {
 	// TransferOwnership atomically transfers campaign ownership from one user
 	// to another within a database transaction.
 	TransferOwnership(ctx context.Context, campaignID, fromUserID, toUserID string) error
+
+	// OwnerPresence returns each listed campaign's owner and when they last
+	// used the site.
+	OwnerPresence(ctx context.Context, campaignIDs []string) (map[string]OwnerPresence, error)
 
 	// ForceTransferOwnership is used by admins to take ownership. Atomically
 	// demotes current owner to Scribe and sets the new owner.
@@ -121,7 +145,7 @@ func (r *campaignRepository) Create(ctx context.Context, campaign *Campaign) err
 // FindByID retrieves a campaign by its UUID.
 func (r *campaignRepository) FindByID(ctx context.Context, id string) (*Campaign, error) {
 	query := `SELECT id, name, slug, description, is_public, settings, backdrop_path, sidebar_config, dashboard_layout, owner_dashboard_layout, created_by, created_at, updated_at, archived_at, join_code
-	          FROM campaigns WHERE id = ?`
+	          FROM campaigns WHERE id = ? AND deleted_at IS NULL`
 
 	c := &Campaign{}
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
@@ -141,7 +165,7 @@ func (r *campaignRepository) FindByID(ctx context.Context, id string) (*Campaign
 // FindBySlug retrieves a campaign by its URL slug.
 func (r *campaignRepository) FindBySlug(ctx context.Context, slug string) (*Campaign, error) {
 	query := `SELECT id, name, slug, description, is_public, settings, backdrop_path, sidebar_config, dashboard_layout, owner_dashboard_layout, created_by, created_at, updated_at, archived_at, join_code
-	          FROM campaigns WHERE slug = ?`
+	          FROM campaigns WHERE slug = ? AND deleted_at IS NULL`
 
 	c := &Campaign{}
 	err := r.db.QueryRowContext(ctx, query, slug).Scan(
@@ -164,7 +188,7 @@ func (r *campaignRepository) ListByUser(ctx context.Context, userID string, opts
 	// Count total for pagination.
 	countQuery := `SELECT COUNT(*) FROM campaigns c
 	               INNER JOIN campaign_members cm ON cm.campaign_id = c.id
-	               WHERE cm.user_id = ? AND c.archived_at IS NULL`
+	               WHERE cm.user_id = ? AND c.archived_at IS NULL AND c.deleted_at IS NULL`
 	var total int
 	if err := r.db.QueryRowContext(ctx, countQuery, userID).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("counting user campaigns: %w", err)
@@ -176,7 +200,7 @@ func (r *campaignRepository) ListByUser(ctx context.Context, userID string, opts
 	                 c.archived_at, c.join_code
 	          FROM campaigns c
 	          INNER JOIN campaign_members cm ON cm.campaign_id = c.id
-	          WHERE cm.user_id = ? AND c.archived_at IS NULL
+	          WHERE cm.user_id = ? AND c.archived_at IS NULL AND c.deleted_at IS NULL
 	          ORDER BY c.updated_at DESC
 	          LIMIT ? OFFSET ?`
 
@@ -203,14 +227,14 @@ func (r *campaignRepository) ListByUser(ctx context.Context, userID string, opts
 
 // ListAll returns all campaigns ordered by most recently updated. Admin only.
 func (r *campaignRepository) ListAll(ctx context.Context, opts ListOptions) ([]Campaign, int, error) {
-	countQuery := `SELECT COUNT(*) FROM campaigns`
+	countQuery := `SELECT COUNT(*) FROM campaigns WHERE deleted_at IS NULL`
 	var total int
 	if err := r.db.QueryRowContext(ctx, countQuery).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("counting all campaigns: %w", err)
 	}
 
 	query := `SELECT id, name, slug, description, is_public, settings, backdrop_path, sidebar_config, dashboard_layout, owner_dashboard_layout, created_by, created_at, updated_at, archived_at, join_code
-	          FROM campaigns ORDER BY updated_at DESC LIMIT ? OFFSET ?`
+	          FROM campaigns WHERE deleted_at IS NULL ORDER BY updated_at DESC LIMIT ? OFFSET ?`
 
 	rows, err := r.db.QueryContext(ctx, query, opts.PerPage, opts.Offset())
 	if err != nil {
@@ -237,7 +261,7 @@ func (r *campaignRepository) ListAll(ctx context.Context, opts ListOptions) ([]C
 // Used for the public landing page to showcase discoverable campaigns.
 func (r *campaignRepository) ListPublic(ctx context.Context, limit int) ([]Campaign, error) {
 	query := `SELECT id, name, slug, description, is_public, settings, backdrop_path, sidebar_config, dashboard_layout, owner_dashboard_layout, created_by, created_at, updated_at, archived_at, join_code
-	          FROM campaigns WHERE is_public = 1 AND archived_at IS NULL
+	          FROM campaigns WHERE is_public = 1 AND archived_at IS NULL AND deleted_at IS NULL
 	          ORDER BY updated_at DESC LIMIT ?`
 
 	rows, err := r.db.QueryContext(ctx, query, limit)
@@ -282,20 +306,6 @@ func (r *campaignRepository) Update(ctx context.Context, campaign *Campaign) err
 	return nil
 }
 
-// Delete removes a campaign. FK CASCADE handles member and transfer cleanup.
-func (r *campaignRepository) Delete(ctx context.Context, id string) error {
-	result, err := r.db.ExecContext(ctx, `DELETE FROM campaigns WHERE id = ?`, id)
-	if err != nil {
-		return fmt.Errorf("deleting campaign: %w", err)
-	}
-
-	rows, _ := result.RowsAffected()
-	if rows == 0 {
-		return apperror.NewNotFound("campaign not found")
-	}
-	return nil
-}
-
 // SlugExists returns true if a campaign with the given slug already exists.
 func (r *campaignRepository) SlugExists(ctx context.Context, slug string) (bool, error) {
 	var exists bool
@@ -311,7 +321,7 @@ func (r *campaignRepository) SlugExists(ctx context.Context, slug string) (bool,
 // CountAll returns the total number of campaigns. Used for admin dashboard.
 func (r *campaignRepository) CountAll(ctx context.Context) (int, error) {
 	var count int
-	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM campaigns`).Scan(&count)
+	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM campaigns WHERE deleted_at IS NULL`).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("counting campaigns: %w", err)
 	}
@@ -476,7 +486,7 @@ func (r *campaignRepository) ClearJoinCode(ctx context.Context, campaignID strin
 // FindByJoinCode looks up a campaign by its shareable invite code.
 func (r *campaignRepository) FindByJoinCode(ctx context.Context, code string) (*Campaign, error) {
 	query := `SELECT id, name, slug, description, is_public, settings, backdrop_path, sidebar_config, dashboard_layout, owner_dashboard_layout, created_by, created_at, updated_at, archived_at, join_code
-	          FROM campaigns WHERE join_code = ?`
+	          FROM campaigns WHERE join_code = ? AND deleted_at IS NULL`
 
 	c := &Campaign{}
 	err := r.db.QueryRowContext(ctx, query, code).Scan(
@@ -532,6 +542,7 @@ func (r *campaignRepository) FindMember(ctx context.Context, campaignID, userID 
 	                 u.display_name, u.email, u.avatar_path
 	          FROM campaign_members cm
 	          INNER JOIN users u ON u.id = cm.user_id
+	          INNER JOIN campaigns c ON c.id = cm.campaign_id AND c.deleted_at IS NULL
 	          WHERE cm.campaign_id = ? AND cm.user_id = ?`
 
 	m := &CampaignMember{}
@@ -553,10 +564,11 @@ func (r *campaignRepository) FindMember(ctx context.Context, campaignID, userID 
 // ListMembers returns all members of a campaign with their display info.
 func (r *campaignRepository) ListMembers(ctx context.Context, campaignID string) ([]CampaignMember, error) {
 	query := `SELECT cm.campaign_id, cm.user_id, cm.role, cm.character_entity_id, cm.joined_at,
-	                 u.display_name, u.email, u.avatar_path,
+	                 u.display_name, u.email, u.avatar_path, u.guest_campaign_id IS NOT NULL,
 	                 e.name
 	          FROM campaign_members cm
 	          INNER JOIN users u ON u.id = cm.user_id
+	          INNER JOIN campaigns c ON c.id = cm.campaign_id AND c.deleted_at IS NULL
 	          LEFT JOIN entities e ON e.id = cm.character_entity_id AND e.deleted_at IS NULL
 	          WHERE cm.campaign_id = ?
 	          ORDER BY FIELD(cm.role, 'owner', 'scribe', 'player'), u.display_name`
@@ -573,10 +585,13 @@ func (r *campaignRepository) ListMembers(ctx context.Context, campaignID string)
 		var roleStr string
 		if err := rows.Scan(
 			&m.CampaignID, &m.UserID, &roleStr, &m.CharacterEntityID, &m.JoinedAt,
-			&m.DisplayName, &m.Email, &m.AvatarPath,
+			&m.DisplayName, &m.Email, &m.AvatarPath, &m.IsGuest,
 			&m.CharacterName,
 		); err != nil {
 			return nil, fmt.Errorf("scanning member row: %w", err)
+		}
+		if m.IsGuest {
+			m.Email = ""
 		}
 		m.Role = RoleFromString(roleStr)
 		members = append(members, m)
@@ -1024,4 +1039,88 @@ func (r *groupRepository) ListGroupMembers(ctx context.Context, groupID int) ([]
 		members = append(members, m)
 	}
 	return members, rows.Err()
+}
+
+// DeleteTransfersInvolving cancels every pending hand-over to or from the user.
+func (r *campaignRepository) DeleteTransfersInvolving(ctx context.Context, userID string) error {
+	if _, err := r.db.ExecContext(ctx,
+		`DELETE FROM ownership_transfers WHERE from_user_id = ? OR to_user_id = ?`, userID, userID); err != nil {
+		return fmt.Errorf("deleting transfers: %w", err)
+	}
+	return nil
+}
+
+// ListOwnedByUser lists campaigns the user created or holds the owner role
+// in, archived ones included, with each one's member count.
+func (r *campaignRepository) ListOwnedByUser(ctx context.Context, userID string) ([]OwnedCampaign, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT c.id, c.name, (SELECT COUNT(*) FROM campaign_members m WHERE m.campaign_id = c.id)
+		   FROM campaigns c
+		  WHERE c.created_by = ?
+		     OR EXISTS (SELECT 1 FROM campaign_members cm
+		                 WHERE cm.campaign_id = c.id AND cm.user_id = ? AND cm.role = 'owner')
+		  ORDER BY c.name`, userID, userID)
+	if err != nil {
+		return nil, fmt.Errorf("listing owned campaigns: %w", err)
+	}
+	defer rows.Close()
+	var out []OwnedCampaign
+	for rows.Next() {
+		var o OwnedCampaign
+		if err := rows.Scan(&o.ID, &o.Name, &o.MemberCount); err != nil {
+			return nil, fmt.Errorf("scanning owned campaign: %w", err)
+		}
+		out = append(out, o)
+	}
+	return out, rows.Err()
+}
+
+// ListMemberCampaignIDs lists every campaign the user is a member of.
+func (r *campaignRepository) ListMemberCampaignIDs(ctx context.Context, userID string) ([]string, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT campaign_id FROM campaign_members WHERE user_id = ?`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("listing memberships: %w", err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scanning membership: %w", err)
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
+// OwnerPresence reads each campaign owner's last-seen time. Someone not seen
+// since last-seen tracking began falls back to their last sign-in, then to
+// when their account was made, so an old absence still counts.
+func (r *campaignRepository) OwnerPresence(ctx context.Context, campaignIDs []string) (map[string]OwnerPresence, error) {
+	out := make(map[string]OwnerPresence, len(campaignIDs))
+	if len(campaignIDs) == 0 {
+		return out, nil
+	}
+	args := make([]any, len(campaignIDs))
+	for i, id := range campaignIDs {
+		args[i] = id
+	}
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT c.id, u.id, u.display_name, COALESCE(u.last_seen_at, u.last_login_at, u.created_at)
+		   FROM campaigns c
+		   INNER JOIN users u ON u.id = c.created_by
+		  WHERE c.id IN (?`+strings.Repeat(",?", len(campaignIDs)-1)+`)`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("reading campaign owners: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var id string
+		var p OwnerPresence
+		if err := rows.Scan(&id, &p.OwnerID, &p.OwnerName, &p.LastSeen); err != nil {
+			return nil, fmt.Errorf("scanning campaign owner: %w", err)
+		}
+		out[id] = p
+	}
+	return out, rows.Err()
 }

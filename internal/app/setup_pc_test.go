@@ -20,6 +20,8 @@ type fakePCEntitySvc struct {
 	ensureErr   error
 	mergeResult entities.MergeResult
 	mergeErr    error
+	home        *entities.CharacterHomeMove
+	moveResult  entities.CharacterHomeMove
 
 	order       []string
 	updatedID   int
@@ -36,6 +38,13 @@ func (f *fakePCEntitySvc) EnsurePlayerCharacterType(_ context.Context, _ string)
 func (f *fakePCEntitySvc) MergeDuplicatePlayerCharacterType(_ context.Context, _ string) (entities.MergeResult, error) {
 	f.order = append(f.order, "merge")
 	return f.mergeResult, f.mergeErr
+}
+func (f *fakePCEntitySvc) CharacterHomeCandidate(_ context.Context, _ string) (*entities.CharacterHomeMove, error) {
+	return f.home, nil
+}
+func (f *fakePCEntitySvc) MoveCharacterPresetHome(_ context.Context, _ string) (entities.CharacterHomeMove, error) {
+	f.order = append(f.order, "home")
+	return f.moveResult, nil
 }
 func (f *fakePCEntitySvc) UpdateEntityType(_ context.Context, id int, input entities.UpdateEntityTypeInput) (*entities.EntityType, error) {
 	f.order = append(f.order, "update")
@@ -168,6 +177,74 @@ func TestPCProviderApply(t *testing.T) {
 		}
 		if appErr, ok := err.(*apperror.AppError); !ok || appErr.Code != http.StatusConflict {
 			t.Errorf("error = %v, want 409 conflict", err)
+		}
+	})
+}
+
+func heroesHome() *entities.CharacterHomeMove {
+	return &entities.CharacterHomeMove{FromTypeID: 3, FromName: "Heroes", ToTypeID: 1, ToName: "Characters", Pages: 4}
+}
+
+func TestPCProviderCharacterHome(t *testing.T) {
+	sysOnly := func() entities.PCSetupSnapshot {
+		parent := 1
+		return entities.PCSetupSnapshot{
+			DefaultCharsParentID: &parent,
+			SystemCharTypes:      []entities.EntityType{{ID: 3, Name: "Heroes", Slug: "hero"}},
+		}
+	}
+
+	tests := []struct {
+		name     string
+		home     *entities.CharacterHomeMove
+		wantStep bool
+	}{
+		{"heroes hold pages beside Characters → check and question", heroesHome(), true},
+		{"nothing to move → neither", nil, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := newPCSetupProvider(&fakePCEntitySvc{snapshot: sysOnly(), home: tc.home})
+			checks, err := p.RunChecks(context.Background(), "camp-1")
+			if err != nil {
+				t.Fatalf("RunChecks: %v", err)
+			}
+			qs, err := p.Questions(context.Background(), "camp-1")
+			if err != nil {
+				t.Fatalf("Questions: %v", err)
+			}
+			if hasCheck(checks, "pc.home") != tc.wantStep || hasQuestion(qs, "home") != tc.wantStep {
+				t.Errorf("pc.home check = %v, home question = %v, want both %v",
+					hasCheck(checks, "pc.home"), hasQuestion(qs, "home"), tc.wantStep)
+			}
+		})
+	}
+
+	t.Run("home=true moves after ensure and reports it", func(t *testing.T) {
+		fake := &fakePCEntitySvc{snapshot: sysOnly(), home: heroesHome(),
+			moveResult: entities.CharacterHomeMove{FromName: "Heroes", ToName: "Characters", Pages: 4}}
+		res, err := newPCSetupProvider(fake).Apply(context.Background(), "camp-1", map[string]string{"home": "true"})
+		if err != nil {
+			t.Fatalf("Apply: %v", err)
+		}
+		if len(fake.order) != 2 || fake.order[0] != "ensure" || fake.order[1] != "home" {
+			t.Errorf("call order = %v, want [ensure home]", fake.order)
+		}
+		want := `Moved 4 pages into "Characters" and turned off "Heroes".`
+		if len(res.Messages) != 1 || res.Messages[0] != want {
+			t.Errorf("messages = %q, want [%q]", res.Messages, want)
+		}
+	})
+
+	t.Run("home unanswered → nothing moves", func(t *testing.T) {
+		fake := &fakePCEntitySvc{snapshot: sysOnly(), home: heroesHome()}
+		if _, err := newPCSetupProvider(fake).Apply(context.Background(), "camp-1", map[string]string{}); err != nil {
+			t.Fatalf("Apply: %v", err)
+		}
+		for _, step := range fake.order {
+			if step == "home" {
+				t.Errorf("moved without the owner's answer: %v", fake.order)
+			}
 		}
 	})
 }

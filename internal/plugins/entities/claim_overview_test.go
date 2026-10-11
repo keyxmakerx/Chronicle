@@ -2,8 +2,7 @@
 //
 //	claimBanner: "Claimed by <player>" when owned; the actionable claim
 //	  banner only when unclaimed + claimable + addon enabled.
-//	claimRosterPanel: per-character owner + reassign/unclaim controls;
-//	  ownerDisplayNames / resolveOwnerName / roster label helpers.
+//	ownerDisplayNames / resolveOwnerName / roster label helpers.
 //	EntityTypeCard: the per-type "Players can claim" toggle appears and
 //	  rides the save PUT only when the addon is enabled.
 package entities
@@ -159,68 +158,6 @@ func TestClaimBanner_UnclaimedGating(t *testing.T) {
 				t.Errorf("unclaimed entity rendered a claimed indicator\n%s", html)
 			}
 		})
-	}
-}
-
-// --- claimRosterPanel (Part 2) ---------------------------------------------
-
-func renderClaimRoster(t *testing.T, et *EntityType, roster *ClaimRoster) string {
-	t.Helper()
-	cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1", Name: "C"}, MemberRole: campaigns.RoleScribe}
-	var buf bytes.Buffer
-	if err := claimRosterPanel(cc, et, roster).Render(context.Background(), &buf); err != nil {
-		t.Fatalf("render claimRosterPanel: %v", err)
-	}
-	return buf.String()
-}
-
-func TestClaimRosterPanel_RowsAndControls(t *testing.T) {
-	et := &EntityType{ID: 1, Name: "Character", NamePlural: "Characters", Slug: "character"}
-	roster := &ClaimRoster{
-		Characters: []Entity{
-			{ID: "e1", Name: "Tyne", OwnerUserID: strPtr("u1")},
-			{ID: "e2", Name: "Bram"}, // unclaimed
-		},
-		Members: []campaigns.CampaignMember{
-			{UserID: "u1", DisplayName: "Alice"},
-			{UserID: "u2", DisplayName: "Bob"},
-		},
-		OwnerNames: map[string]string{"u1": "Alice", "u2": "Bob"},
-	}
-	html := renderClaimRoster(t, et, roster)
-
-	for _, want := range []string{
-		"Player Character Roster",
-		"Tyne", "Bram", // both characters
-		"Alice", "Bob", // member options
-		"— Unclaimed —",                       // the unclaim option
-		"Unclaim",                             // explicit unclaim button (Tyne is owned)
-		"/campaigns/camp-1/entities/e1/owner", // reassign endpoint
-		`value="u1"`,                          // Alice's option value
-	} {
-		if !strings.Contains(html, want) {
-			t.Errorf("roster missing %q\n%s", want, html)
-		}
-	}
-
-	// Tyne (owned) shows the owner name; Bram (unclaimed) is labeled Unclaimed.
-	if !strings.Contains(html, "Unclaimed") {
-		t.Errorf("expected an Unclaimed label for Bram\n%s", html)
-	}
-}
-
-func TestClaimRosterPanel_Empty(t *testing.T) {
-	et := &EntityType{ID: 1, Name: "Character", NamePlural: "Characters", Slug: "character"}
-	roster := &ClaimRoster{
-		Members:    []campaigns.CampaignMember{{UserID: "u1", DisplayName: "Alice"}},
-		OwnerNames: map[string]string{"u1": "Alice"},
-	}
-	html := renderClaimRoster(t, et, roster)
-	if !strings.Contains(html, "No Characters to assign yet") {
-		t.Errorf("expected empty-state message\n%s", html)
-	}
-	if strings.Contains(html, "Unclaim") {
-		t.Errorf("empty roster should have no row controls\n%s", html)
 	}
 }
 

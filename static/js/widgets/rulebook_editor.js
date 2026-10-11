@@ -202,6 +202,10 @@
     return { title: m.title, director: m.director, wide: m.wide, columns: m.columns, blocks: m.blocks.map(wireBlock) };
   }
 
+  function isBlankText(b) {
+    return (!b.type || b.type === 'text') && !String(b.text || '').trim();
+  }
+
   function newBlock(t) {
     var b = { type: t, director: t === 'note', title: '', text: '' };
     if (t === 'roll') {
@@ -581,24 +585,32 @@
   Editor.prototype.drawToc = function () {
     var self = this, h = '', a = document.activeElement, fid = a && a.id && this.tocEl.contains(a) ? a.id : '';
     var s = this.sys();
+    // Each part is a section, each chapter a group with its pages on a guide
+    // line; "Add page" is a quiet action at the end of the group, never a row
+    // that reads like another page.
+    // House rules are what a Director adds most, so the way to start one sits
+    // above the package's chapters rather than under all of them.
+    h += '<button type="button" class="rbe-add rbe-add-ch" id="' + this.id('addch') + '" data-act="addchapter"><span class="rbe-plus" aria-hidden="true">+</span>New house rule</button>';
     this.parts.forEach(function (part) {
-      h += '<h3>' + esc(part.title) + (part.director ? ' <span class="rbe-pill rbe-dir">Directors</span>' : '') +
+      h += '<section class="rbe-part"><h3>' + esc(part.title) + (part.director ? ' <span class="rbe-pill rbe-dir">Directors</span>' : '') +
         (part.house ? ' <span class="rbe-pill rbe-mine">Yours</span>' : '') + '</h3>';
       part.chapters.forEach(function (ch) {
-        h += '<div class="rbe-ch"><div class="rbe-chn">' + esc(ch.title) +
-          (ch.director && !part.director ? ' <span class="rbe-pill rbe-dir">Directors</span>' : '') + '</div>';
+        var count = ch.problem || ch.generated ? '' : '<span class="rbe-cnt" aria-hidden="true">' + ch.pages.length + '</span>';
+        h += '<div class="rbe-ch"><div class="rbe-chn"><span class="rbe-cht">' + esc(ch.title) + '</span>' +
+          (ch.director && !part.director ? ' <span class="rbe-pill rbe-dir">Directors</span>' : '') + count + '</div><div class="rbe-pgs">';
         if (ch.problem) {
           h += '<p class="rbe-note-line">This chapter could not be loaded: ' + esc(ch.problem) + '</p>';
         } else if (ch.generated) {
           h += '<p class="rbe-note-line">Made from ' + esc(s) + '\'s rules data, so it changes when ' + esc(s) + ' updates. It isn\'t edited here.</p>';
         } else {
           ch.pages.forEach(function (n) { h += self.pageButton(n); });
-          h += '<button type="button" class="rbe-add" id="' + self.id('addpg-' + ch.uid) + '" data-act="addpage" data-ch="' + ch.uid + '">+ Add a page</button>';
+          h += '<button type="button" class="rbe-add" id="' + self.id('addpg-' + ch.uid) + '" data-act="addpage" data-ch="' + ch.uid + '">' +
+            '<span class="rbe-plus" aria-hidden="true">+</span>Add page<span class="rbe-sr"> to ' + esc(ch.title) + '</span></button>';
         }
-        h += '</div>';
+        h += '</div></div>';
       });
+      h += '</section>';
     });
-    h += '<button type="button" class="rbe-add rbe-add-ch" id="' + this.id('addch') + '" data-act="addchapter">+ Add a house-rules chapter</button>';
     h += '<div class="rbe-legend"><span><span class="rbe-dot" aria-hidden="true"></span>' + esc(s) + '\'s page, untouched</span>' +
       '<span><span class="rbe-dot ed" aria-hidden="true"></span>You changed it</span>' +
       '<span><span class="rbe-dot mine" aria-hidden="true"></span>Your own page</span>' +
@@ -740,13 +752,13 @@
 
   Editor.prototype.blockForm = function (b, i, count) {
     var self = this, t = TYPES[b.type] || WIDGET_TYPE, p = 'blocks.' + i + '.', f = this.field.bind(this);
-    var h = '<section class="rbe-blk' + (b.director ? ' isdir' : '') + '" aria-label="' + esc(t.name) + '" data-i="' + i + '"><div class="rbe-bh"><span class="rbe-ty">' + esc(t.name) + '</span><span class="rbe-hint">' + esc(t.hint) + '</span><span class="rbe-sp"></span>';
+    var h = '<section class="rbe-blk' + (b.director ? ' isdir' : '') + '" aria-label="' + esc(t.name) + '" data-i="' + i + '"><div class="rbe-bh"><span class="rbe-bname"><span class="rbe-ty">' + esc(t.name) + '</span><span class="rbe-hint">' + esc(t.hint) + '</span></span><span class="rbe-bctl">';
     if (b.type !== 'note' && b.type !== 'widget') {
       h += '<label class="rbe-tog"><input type="checkbox" data-bdir="' + i + '"' + (b.director ? ' checked' : '') + '> Directors only</label>';
     }
     h += '<button type="button" class="rbe-ib" id="' + this.id('mv-' + i + '-up') + '" data-act="mv" data-i="' + i + '" data-d="-1" aria-label="Move up"' + (i === 0 ? ' disabled' : '') + '>↑</button>' +
       '<button type="button" class="rbe-ib" id="' + this.id('mv-' + i + '-down') + '" data-act="mv" data-i="' + i + '" data-d="1" aria-label="Move down"' + (i === count - 1 ? ' disabled' : '') + '>↓</button>' +
-      '<button type="button" class="rbe-ib" data-act="rm" data-i="' + i + '" aria-label="Remove this block">✕</button></div><div class="rbe-bb">';
+      '<button type="button" class="rbe-ib" data-act="rm" data-i="' + i + '" aria-label="Remove this block">✕</button></span></div><div class="rbe-bb">';
     switch (b.type) {
       case 'text': h += this.area(p + 'text', 'Text', b.text, i); break;
       case 'note': h += this.area(p + 'text', 'Note', b.text, i); break;
@@ -800,7 +812,7 @@
   Editor.prototype.fieldsHTML = function () {
     var n = this.cur, h = '';
     if (!n) {
-      return '<p class="rbe-empty">This book has no pages yet. Use “+ Add a house-rules chapter” in the contents to start one.</p>';
+      return '<p class="rbe-empty">This book has no pages yet. Use “+ New house rule” in the contents to start one.</p>';
     }
     var ch = n.ch, m = n.page;
     if (n.problem) return '<p class="rbe-empty">Fix or reset this page to edit it.</p>';
@@ -815,18 +827,25 @@
       }
       h += '</div>';
     }
-    h += this.field('title', 'Page title', m.title);
-    h += '<div class="rbe-row"><label class="rbe-tog"><input type="checkbox" data-pdir> Only Directors see this page</label>' +
-      '<label class="rbe-tog"><input type="checkbox" data-pwide> Spread across both pages</label></div>';
-    var self = this;
-    m.blocks.forEach(function (b, i) { h += self.blockForm(b, i, m.blocks.length); });
-    h += '<button type="button" class="rbe-addblk" id="' + this.id('addblk') + '" data-act="addblk" aria-expanded="' + this.palOpen + '">+ Add a block</button>';
+    h += '<section class="rbe-sec" aria-labelledby="' + this.id('sec-page') + '"><h2 class="rbe-sech" id="' + this.id('sec-page') + '">Page</h2>' +
+      this.field('title', 'Title', m.title) +
+      '<div class="rbe-row rbe-row-tight"><label class="rbe-tog"><input type="checkbox" data-pdir> Only Directors see this page</label>' +
+      '<label class="rbe-tog"><input type="checkbox" data-pwide> Spread across both pages</label></div></section>';
+    var self = this, nb = m.blocks.length;
+    // While the picker is open on a page that holds only its untouched
+    // starter text box, the picker stands in for that box.
+    var starter = this.palOpen && nb === 1 && isBlankText(m.blocks[0]);
+    h += '<section class="rbe-sec rbe-sec-blocks" aria-labelledby="' + this.id('sec-blk') + '"><h2 class="rbe-sech" id="' + this.id('sec-blk') + '">Blocks' +
+      '<span class="rbe-cnt">' + (starter ? 0 : nb) + '</span><span class="rbe-sech-hint">' +
+      (starter ? 'Pick the first block' : 'Top to bottom, as they appear on the page') + '</span></h2>';
+    if (!starter) m.blocks.forEach(function (b, i) { h += self.blockForm(b, i, nb); });
+    h += '<button type="button" class="rbe-addblk" id="' + this.id('addblk') + '" data-act="addblk" aria-expanded="' + this.palOpen + '"><span class="rbe-plus" aria-hidden="true">+</span>Add a block</button>';
     if (this.palOpen) {
       h += '<div class="rbe-palette" role="group" aria-label="Block types">' + PALETTE.map(function (k) {
         return '<button type="button" data-act="new" data-type="' + k + '"><b>' + esc(TYPES[k].name) + '</b><span>' + esc(TYPES[k].hint) + '</span></button>';
       }).join('') + '</div>';
     }
-    return h;
+    return h + '</section>';
   };
 
   // Rebuilds the form. Only for structural changes (never while typing); the
@@ -1080,6 +1099,9 @@
     switch (act) {
       case 'addblk': this.palOpen = !this.palOpen; this.drawFields(this.id('addblk')); return;
       case 'new':
+        // A new page's starter is one empty text box; the first block picked
+        // takes its place instead of sitting under it.
+        if (n.page.blocks.length === 1 && isBlankText(n.page.blocks[0])) n.page.blocks = [];
         n.page.blocks.push(newBlock(b.getAttribute('data-type')));
         this.palOpen = false;
         this.edited();
@@ -1192,8 +1214,18 @@
         var n = self.addNode(ch, j.entry);
         ch.pages.push(n);
         self.select(n, true);
+        self.openPicker(self.id('title'));
       });
     });
+  };
+
+  // openPicker shows the block list on a page that holds only its starter
+  // text box, so a new page starts from "what kind of block?".
+  Editor.prototype.openPicker = function (focus) {
+    var n = this.cur;
+    if (!n || n.page.blocks.length !== 1 || !isBlankText(n.page.blocks[0])) return;
+    this.palOpen = true;
+    this.drawFields(focus);
   };
 
   Editor.prototype.addHouseChapter = function () {
@@ -1206,7 +1238,7 @@
         if (!part) { part = { title: 'House rules', director: false, house: true, chapters: [] }; self.parts.push(part); }
         var ch = self.addChapter(part, j.chapter);
         ch.house = true;
-        if (ch.pages.length) self.select(ch.pages[0]);
+        if (ch.pages.length) { self.select(ch.pages[0]); self.openPicker(); }
         else { self.drawToc(); }
         var t = document.getElementById(self.id('chtitle'));
         if (t) { t.focus(); t.select(); }

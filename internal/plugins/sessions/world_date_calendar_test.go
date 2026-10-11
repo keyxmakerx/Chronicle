@@ -161,10 +161,3 @@ func equalStrPtr(a, b *string) bool {
 	}
 	return *a == *b
 }
-
-func deref(p *string) string {
-	if p == nil {
-		return "<nil>"
-	}
-	return *p
-}

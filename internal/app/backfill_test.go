@@ -155,3 +155,31 @@ func TestReconcileSystemSheetFields(t *testing.T) {
 		t.Fatal("reconciler never received the known keys")
 	}
 }
+
+type fakeCharacterHome struct {
+	n   int
+	err error
+}
+
+func (f fakeCharacterHome) ReconcileCharacterPresetHome(context.Context) (int, error) {
+	return f.n, f.err
+}
+
+func TestReconcileCharacterPresetHome(t *testing.T) {
+	tests := []struct {
+		name string
+		svc  fakeCharacterHome
+		want int
+	}{
+		{"campaigns changed are reported", fakeCharacterHome{n: 2}, 2},
+		{"nothing to do is a clean no-op", fakeCharacterHome{}, 0},
+		{"a failure is logged, not fatal", fakeCharacterHome{n: 3, err: errors.New("boom")}, 0},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := reconcileCharacterPresetHome(context.Background(), tc.svc); got != tc.want {
+				t.Errorf("got %d, want %d", got, tc.want)
+			}
+		})
+	}
+}

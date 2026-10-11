@@ -478,7 +478,7 @@ test('the Director’s Who’s free view lists the players, a reminder and the f
   assert.match(html, /Jack<\/span><span class="ok">Hours given/);
   assert.match(html, /Dee<\/span><span class="wait">No hours yet/);
   assert.match(html, /data-best-nudge><i class="fa-solid fa-bell"><\/i> Remind the 1 without hours/);
-  assert.match(html, /<input type="checkbox" data-fv-lines checked>/, 'the lines switch, on');
+  assert.match(html, /<input type="checkbox" role="switch" data-fv-lines checked>/, 'the lines switch, on');
   assert.match(html, /data-fv-planner="team">.*Open the full planner/, 'the full planner, inside the calendar');
 });
 

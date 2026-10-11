@@ -61,6 +61,11 @@ func TestTopbarInlineStyle(t *testing.T) {
 			want:  "background-image: url('/media/bg.png');",
 		},
 		{
+			name:  "sky emits the still night it is drawn over",
+			style: &TopbarStyleData{Mode: "sky"},
+			want:  "background: " + topbarSkyNight + ";",
+		},
+		{
 			name:      "gradient missing a color falls back to default",
 			style:     &TopbarStyleData{Mode: "gradient", GradientFrom: "#111111"},
 			wantEmpty: true,
@@ -179,6 +184,45 @@ func TestTopbarSwapTargetsAlwaysRender(t *testing.T) {
 			bg = bg[:strings.Index(bg, "<!--")]
 			if hasLayer := strings.Contains(bg, "background-color: #1e2a5a"); hasLayer != (tc.style != nil) {
 				t.Errorf("background layer inside #topbar-bg = %v, want %v", hasLayer, tc.style != nil)
+			}
+		})
+	}
+}
+
+// TestTopbarSky pins the Sky header: the night colours and the edge shade
+// always, and the sky itself only when there is a campaign calendar to draw.
+func TestTopbarSky(t *testing.T) {
+	cases := []struct {
+		name       string
+		campaignID string
+		calendarID string
+		wantSky    bool
+	}{
+		{"with a calendar", "camp1", "cal1", true},
+		{"no calendar this viewer may see", "camp1", "", false},
+		{"outside a campaign", "", "cal1", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := ctxWithTopbarStyle(&TopbarStyleData{Mode: "sky"})
+			ctx = SetCampaignID(ctx, tc.campaignID)
+			ctx = SetSkyCalendarID(ctx, tc.calendarID)
+			var buf bytes.Buffer
+			if err := Topbar().Render(ctx, &buf); err != nil {
+				t.Fatalf("render Topbar: %v", err)
+			}
+			html := buf.String()
+			bg := html[strings.Index(html, `id="topbar-bg"`):]
+			bg = bg[:strings.Index(bg, "<!--")]
+			if !strings.Contains(bg, "#04061a") || !strings.Contains(bg, "rgba(0,0,0,.18)") {
+				t.Errorf("want the night colours and the edge shade, got %s", bg)
+			}
+			mount := `data-widget="header-sky" data-campaign-id="camp1" data-calendar-id="cal1"`
+			if got := strings.Contains(bg, mount); got != tc.wantSky {
+				t.Errorf("sky mounted = %v, want %v: %s", got, tc.wantSky, bg)
+			}
+			if !tc.wantSky && strings.Contains(bg, "header-sky") {
+				t.Errorf("no sky may mount here: %s", bg)
 			}
 		})
 	}

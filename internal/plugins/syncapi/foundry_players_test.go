@@ -224,11 +224,11 @@ func TestBuildPlayerRows(t *testing.T) {
 			},
 		},
 		{
-			name: "failure older than the window is working",
+			name: "failure older than the window with no change since is only linked",
 			players: []FoundryPlayer{{FoundryUserID: "f1", MemberUserID: "ann",
-				LastFailedAt: tptr(playersNow.Add(-recentFailureWindow - time.Hour))}},
+				LastFailedAt: tptr(playersNow.Add(-recentWindow - time.Hour))}},
 			check: func(t *testing.T, rows []PlayerRow) {
-				if rows[0].Status != PlayerWorking {
+				if rows[0].Status != PlayerIdle {
 					t.Fatalf("got %+v", rows[0])
 				}
 			},
@@ -259,8 +259,27 @@ func TestBuildPlayerRows(t *testing.T) {
 			},
 		},
 		{
+			name:    "linked with nothing synced is only linked, never working",
+			players: []FoundryPlayer{{FoundryUserID: "f1", MemberUserID: "ann"}},
+			check: func(t *testing.T, rows []PlayerRow) {
+				if rows[0].Status != PlayerIdle || !strings.Contains(rows[0].Why, "Ann") {
+					t.Fatalf("got %+v", rows[0])
+				}
+			},
+		},
+		{
+			name: "a change older than the window is only linked",
+			players: []FoundryPlayer{{FoundryUserID: "f1", MemberUserID: "ann",
+				LastChangeAt: tptr(playersNow.Add(-recentWindow - time.Hour))}},
+			check: func(t *testing.T, rows []PlayerRow) {
+				if rows[0].Status != PlayerIdle {
+					t.Fatalf("got %+v", rows[0])
+				}
+			},
+		},
+		{
 			name:    "owner linked to a foundry user is listed as that user",
-			players: []FoundryPlayer{{FoundryUserID: "f0", Name: "Gamemaster", MemberUserID: "gm", Online: true}},
+			players: []FoundryPlayer{{FoundryUserID: "f0", Name: "Gamemaster", MemberUserID: "gm", Online: true, LastChangeAt: tptr(playersNow.Add(-time.Minute))}},
 			check: func(t *testing.T, rows []PlayerRow) {
 				if rows[0].MemberUserID != "gm" || rows[0].Status != PlayerWorking || !rows[0].Online {
 					t.Fatalf("got %+v", rows[0])
@@ -278,7 +297,7 @@ func TestBuildPlayerRows(t *testing.T) {
 				for _, r := range rows {
 					got = append(got, r.Status)
 				}
-				want := []PlayerStatus{PlayerWorking, PlayerUnlinked, PlayerNoFoundry, PlayerNoFoundry}
+				want := []PlayerStatus{PlayerIdle, PlayerUnlinked, PlayerNoFoundry, PlayerNoFoundry}
 				if len(got) != len(want) {
 					t.Fatalf("got %v", got)
 				}
@@ -308,4 +327,47 @@ func TestLatestReport(t *testing.T) {
 	if got == nil || !got.Equal(playersNow) {
 		t.Fatalf("got %v", got)
 	}
+}
+
+func TestCarryForward(t *testing.T) {
+	older, newer := tptr(playersNow.Add(-2*time.Hour)), tptr(playersNow.Add(-time.Hour))
+	cases := []struct {
+		name      string
+		now, old  FoundryPlayer
+		change    *time.Time
+		failed    *time.Time
+		failure   string
+		failCount int
+	}{
+		{name: "a new session reporting nothing keeps the earlier times",
+			now:    FoundryPlayer{},
+			old:    FoundryPlayer{LastChangeAt: older, LastFailedAt: older, LastFailure: "HTTP 403 Forbidden", FailedCount: 2},
+			change: older, failed: older, failure: "HTTP 403 Forbidden", failCount: 2},
+		{name: "newer reported times win",
+			now:    FoundryPlayer{LastChangeAt: newer, LastFailedAt: newer, LastFailure: "HTTP 500", FailedCount: 1},
+			old:    FoundryPlayer{LastChangeAt: older, LastFailedAt: older, LastFailure: "HTTP 403 Forbidden", FailedCount: 2},
+			change: newer, failed: newer, failure: "HTTP 500", failCount: 1},
+		{name: "a newer stored failure keeps its text and count",
+			now:    FoundryPlayer{LastChangeAt: newer, LastFailedAt: older, LastFailure: "HTTP 500", FailedCount: 1},
+			old:    FoundryPlayer{LastFailedAt: newer, LastFailure: "HTTP 403 Forbidden", FailedCount: 4},
+			change: newer, failed: newer, failure: "HTTP 403 Forbidden", failCount: 4},
+		{name: "nothing known stays nothing",
+			now: FoundryPlayer{}, old: FoundryPlayer{}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := carryForward(tc.now, tc.old)
+			if !sameTime(got.LastChangeAt, tc.change) || !sameTime(got.LastFailedAt, tc.failed) ||
+				got.LastFailure != tc.failure || got.FailedCount != tc.failCount {
+				t.Fatalf("got %+v", got)
+			}
+		})
+	}
+}
+
+func sameTime(a, b *time.Time) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return a.Equal(*b)
 }

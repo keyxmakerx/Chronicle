@@ -129,7 +129,20 @@ func (m *mockCampaignRepoForInvites) ListPublic(context.Context, int) ([]Campaig
 	return nil, nil
 }
 func (m *mockCampaignRepoForInvites) Update(context.Context, *Campaign) error { return nil }
-func (m *mockCampaignRepoForInvites) Delete(context.Context, string) error    { return nil }
+func (m *mockCampaignRepoForInvites) MoveToTrash(context.Context, string, string, string, time.Time) error {
+	return nil
+}
+func (m *mockCampaignRepoForInvites) RestoreFromTrash(context.Context, string) error { return nil }
+func (m *mockCampaignRepoForInvites) ListTrashed(context.Context) ([]TrashedCampaign, error) {
+	return nil, nil
+}
+func (m *mockCampaignRepoForInvites) ListPurgeDue(context.Context, time.Time, bool) ([]string, error) {
+	return nil, nil
+}
+func (m *mockCampaignRepoForInvites) ClaimForPurge(context.Context, string, time.Time, time.Time) (bool, error) {
+	return true, nil
+}
+func (m *mockCampaignRepoForInvites) PurgeTrashed(context.Context, string) error { return nil }
 func (m *mockCampaignRepoForInvites) SlugExists(context.Context, string) (bool, error) {
 	return false, nil
 }
@@ -182,6 +195,9 @@ func (m *mockCampaignRepoForInvites) UpdateOwnerDashboardLayout(context.Context,
 }
 func (m *mockCampaignRepoForInvites) TransferOwnership(context.Context, string, string, string) error {
 	return nil
+}
+func (m *mockCampaignRepoForInvites) OwnerPresence(context.Context, []string) (map[string]OwnerPresence, error) {
+	return nil, nil
 }
 func (m *mockCampaignRepoForInvites) ForceTransferOwnership(context.Context, string, string) error {
 	return nil
@@ -423,4 +439,14 @@ func TestCreateInvite_DefaultsToPlayer(t *testing.T) {
 	if invite.Role != "player" {
 		t.Errorf("expected role player (default), got %s", invite.Role)
 	}
+}
+
+func (m *mockCampaignRepoForInvites) DeleteTransfersInvolving(context.Context, string) error { return nil }
+
+func (m *mockCampaignRepoForInvites) ListOwnedByUser(context.Context, string) ([]OwnedCampaign, error) {
+	return nil, nil
+}
+
+func (m *mockCampaignRepoForInvites) ListMemberCampaignIDs(context.Context, string) ([]string, error) {
+	return nil, nil
 }

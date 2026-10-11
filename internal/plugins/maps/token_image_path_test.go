@@ -1,7 +1,7 @@
 // token_image_path_test.go pins that map_tokens.image_path can't be used to
 // make every viewer's browser fetch an outside URL: the map widget passes
-// the stored value straight into an <img>/Leaflet iconUrl (static/js/
-// widgets/map_widget.js), so an absolute or protocol-relative value is a
+// the stored value straight into an <img>/Leaflet iconUrl
+// (static/js/map_widget.js), so an absolute or protocol-relative value is a
 // cross-origin request forced on every viewer, GM included. Relative
 // references ("wolf.png", "/media/<id>") are the only forms Chronicle's own
 // token create/update paths and the sync API ever write, and must keep

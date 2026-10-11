@@ -1,0 +1,163 @@
+// page_files.templ renders the Files section at the bottom of a page: the list
+// of attached files with a Download link each, and for people who can edit the
+// page, the controls to attach, remove and mark a file GM only.
+package media
+
+import "fmt"
+
+// pageFilesBase is the section's own address, which its handlers read to reach
+// the attach, remove and visibility routes.
+func pageFilesBase(campaignID, entityID string) string {
+	return fmt.Sprintf("/campaigns/%s/entities/%s/files", campaignID, entityID)
+}
+
+// pageFileIcon picks the Font Awesome icon for a stored type.
+func pageFileIcon(mime string) string {
+	switch {
+	case mime == mimePDF:
+		return "fa-file-pdf"
+	case mime == mimeDocx || mime == mimeOdt:
+		return "fa-file-word"
+	case mime == mimeXlsx:
+		return "fa-file-excel"
+	case mime == mimeZip:
+		return "fa-file-zipper"
+	case mime == mimeText || mime == mimeMD:
+		return "fa-file-lines"
+	case len(mime) > 6 && mime[:6] == "image/":
+		return "fa-file-image"
+	case len(mime) > 6 && mime[:6] == "audio/":
+		return "fa-file-audio"
+	default:
+		return "fa-file"
+	}
+}
+
+func pageFileGMAttr(f PageFile) string {
+	if f.GMOnly {
+		return "1"
+	}
+	return "0"
+}
+
+func pageFileCount(n int) string {
+	return fmt.Sprintf("%d", n)
+}
+
+// PageFilesSection is the whole section. first is true on the page's own load,
+// when it settles in; after an attach or a removal it is swapped in place
+// without replaying that.
+templ PageFilesSection(campaignID, entityID string, listing *PageFileListing, first bool) {
+	<section
+		id="page-files"
+		class={ "pf-section mt-8", templ.KV("pf-first", first) }
+		data-pf
+		data-base={ pageFilesBase(campaignID, entityID) }
+		aria-labelledby="page-files-title"
+	>
+		<div class="flex flex-wrap items-center gap-x-3 gap-y-2 mb-3">
+			<h2 id="page-files-title" class="text-lg font-semibold text-fg flex items-center gap-2">
+				<i class="fa-solid fa-paperclip text-sm text-fg-muted" aria-hidden="true"></i>
+				Files
+				if len(listing.Files) > 0 {
+					<span class="text-sm font-normal text-fg-muted">({ pageFileCount(len(listing.Files)) })</span>
+				}
+			</h2>
+			if listing.CanAttach {
+				<div class="ml-auto flex flex-wrap items-center gap-3">
+					if listing.CanMarkGMOnly {
+						<label class="inline-flex items-center gap-1.5 text-xs text-fg-secondary cursor-pointer select-none">
+							<input type="checkbox" data-pf-gm class="rounded border-edge text-accent focus:ring-accent"/>
+							<i class="fa-solid fa-lock text-[10px]" aria-hidden="true"></i>
+							GM only
+						</label>
+					}
+					<button type="button" class="btn-primary btn-sm" data-pf-attach onclick={ pfPickCall }>
+						<i class="fa-solid fa-plus mr-1.5" aria-hidden="true"></i>
+						Attach a file
+					</button>
+					<input type="file" hidden data-pf-input accept={ PageFileAcceptAttr } onchange={ pfUploadCall }/>
+				</div>
+			}
+		</div>
+		if len(listing.Files) == 0 {
+			<p class="text-sm text-fg-muted">No files yet. Handouts, PDFs and pictures you attach show here for everyone who can see this page.</p>
+		} else {
+			<ul class="card p-0 divide-y divide-edge overflow-hidden">
+				for _, f := range listing.Files {
+					@pageFileRow(campaignID, entityID, f, listing)
+				}
+			</ul>
+		}
+	</section>
+}
+
+// pageFileRow is one file: icon, name, size, a Download link, and the controls
+// for people who can edit the page.
+templ pageFileRow(campaignID, entityID string, f PageFile, listing *PageFileListing) {
+	<li class="pf-row hover:bg-surface-alt flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3" data-pf-row data-id={ f.ID } data-gm={ pageFileGMAttr(f) }>
+		<span class="w-9 h-9 rounded-lg bg-surface-alt text-fg-secondary flex items-center justify-center shrink-0" aria-hidden="true">
+			<i class={ "fa-solid", pageFileIcon(f.MimeType) }></i>
+		</span>
+		<div class="min-w-0 flex-1 basis-40">
+			<p class="text-sm font-medium text-fg truncate" title={ f.Name }>{ f.Name }</p>
+			<p class="text-xs text-fg-muted flex flex-wrap items-center gap-x-2">
+				<span>{ formatFileSize(f.Size) }</span>
+				if f.GMOnly {
+					<span class="inline-flex items-center gap-1 text-amber-700 dark:text-amber-400 font-medium">
+						<i class="fa-solid fa-lock text-[10px]" aria-hidden="true"></i>
+						GM only
+					</span>
+				}
+			</p>
+		</div>
+		<div class="ml-auto flex items-center gap-2" data-pf-acts>
+			<a
+				href={ templ.SafeURL(pageFilesBase(campaignID, entityID) + "/" + f.ID + "/download") }
+				class="btn-secondary btn-sm"
+			>
+				<i class="fa-solid fa-download mr-1.5" aria-hidden="true"></i>
+				Download
+			</a>
+			if listing.CanMarkGMOnly {
+				<button
+					type="button"
+					class="btn-ghost btn-sm btn-icon"
+					onclick={ pfGMToggleCall }
+					if f.GMOnly {
+						title="Show to everyone who can see this page"
+						aria-label="Show to everyone who can see this page"
+					} else {
+						title="Make GM only"
+						aria-label="Make GM only"
+					}
+				>
+					if f.GMOnly {
+						<i class="fa-solid fa-lock-open" aria-hidden="true"></i>
+					} else {
+						<i class="fa-solid fa-lock" aria-hidden="true"></i>
+					}
+				</button>
+			}
+			if listing.CanAttach {
+				<button
+					type="button"
+					class="btn-ghost btn-sm btn-icon hover:!text-red-600"
+					data-pf-remove
+					title="Remove file"
+					aria-label={ "Remove " + f.Name }
+					onclick={ pfAskCall }
+				>
+					<i class="fa-solid fa-trash-can" aria-hidden="true"></i>
+				</button>
+			}
+		</div>
+		if listing.CanAttach {
+			<div class="pf-ask ml-auto flex flex-wrap items-center gap-2" data-pf-ask hidden role="group" aria-label="Confirm removal">
+				<span class="text-sm text-fg-secondary">Remove this file? It can't be brought back.</span>
+				<button type="button" class="btn-danger btn-sm" onclick={ pfRemoveCall }>Remove</button>
+				<button type="button" class="btn-secondary btn-sm" data-pf-keep onclick={ pfKeepCall }>Keep</button>
+			</div>
+		}
+	</li>
+}

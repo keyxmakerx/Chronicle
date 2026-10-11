@@ -31,6 +31,10 @@ type MapRepository interface {
 	UpdateMarker(ctx context.Context, mk *Marker) error
 	DeleteMarker(ctx context.Context, id string) error
 	ListMarkers(ctx context.Context, mapID string, role int, userID string) ([]Marker, error)
+	// ListLinkSourceMaps returns the ids of the campaign's maps that carry at
+	// least one pin opening another map, unfiltered: the caller reads each
+	// map's pins through the viewer's own marker filtering.
+	ListLinkSourceMaps(ctx context.Context, campaignID string) ([]string, error)
 }
 
 // mapRepo is the MariaDB implementation of MapRepository.
@@ -166,22 +170,27 @@ func (r *mapRepo) ListMaps(ctx context.Context, campaignID string) ([]Map, error
 // markerCols is the column list for marker queries (with entity join fields).
 const markerCols = `m.id, m.map_id, m.name, m.description,
        m.x, m.y, m.icon, m.color, m.pin_category,
-       m.entity_id, m.visibility, m.visibility_rules,
+       m.entity_id, lm.id, m.visibility, m.visibility_rules,
        m.created_by, m.foundry_id, m.created_at, m.updated_at,
-       COALESCE(ent.name, ''), COALESCE(et.icon, '')`
+       COALESCE(ent.name, ''), COALESCE(et.icon, ''), COALESCE(lm.name, '')`
 
-// markerJoins is the LEFT JOIN clause for entity display data.
-const markerJoins = `LEFT JOIN entities ent ON ent.id = m.entity_id AND ent.deleted_at IS NULL
-     LEFT JOIN entity_types et ON et.id = ent.entity_type_id`
+// markerJoins is the JOIN clause for entity and linked-map display data. The
+// linked map is joined only within the pin's own campaign, and its id is read
+// from that join, so a link that somehow named another campaign's map reads
+// as no link at all rather than carrying that map's name out.
+const markerJoins = `JOIN maps src ON src.id = m.map_id
+     LEFT JOIN entities ent ON ent.id = m.entity_id AND ent.deleted_at IS NULL
+     LEFT JOIN entity_types et ON et.id = ent.entity_type_id
+     LEFT JOIN maps lm ON lm.id = m.linked_map_id AND lm.campaign_id = src.campaign_id`
 
 // scanMarker reads a row into a Marker struct.
 func scanMarker(scanner interface{ Scan(...any) error }) (*Marker, error) {
 	mk := &Marker{}
 	err := scanner.Scan(&mk.ID, &mk.MapID, &mk.Name, &mk.Description,
 		&mk.X, &mk.Y, &mk.Icon, &mk.Color, &mk.PinCategory,
-		&mk.EntityID, &mk.Visibility, &mk.VisibilityRules,
+		&mk.EntityID, &mk.LinkedMapID, &mk.Visibility, &mk.VisibilityRules,
 		&mk.CreatedBy, &mk.FoundryID, &mk.CreatedAt, &mk.UpdatedAt,
-		&mk.EntityName, &mk.EntityIcon)
+		&mk.EntityName, &mk.EntityIcon, &mk.LinkedMapName)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -192,10 +201,10 @@ func scanMarker(scanner interface{ Scan(...any) error }) (*Marker, error) {
 func (r *mapRepo) CreateMarker(ctx context.Context, mk *Marker) error {
 	_, err := r.db.ExecContext(ctx,
 		`INSERT INTO map_markers (id, map_id, name, description,
-		        x, y, icon, color, pin_category, entity_id, visibility, visibility_rules, created_by, foundry_id)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		        x, y, icon, color, pin_category, entity_id, linked_map_id, visibility, visibility_rules, created_by, foundry_id)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		mk.ID, mk.MapID, mk.Name, mk.Description,
-		mk.X, mk.Y, mk.Icon, mk.Color, mk.PinCategory, mk.EntityID, mk.Visibility,
+		mk.X, mk.Y, mk.Icon, mk.Color, mk.PinCategory, mk.EntityID, mk.LinkedMapID, mk.Visibility,
 		mk.VisibilityRules, mk.CreatedBy, mk.FoundryID,
 	)
 	return err
@@ -214,12 +223,12 @@ func (r *mapRepo) UpdateMarker(ctx context.Context, mk *Marker) error {
 	_, err := r.db.ExecContext(ctx,
 		`UPDATE map_markers SET name = ?, description = ?,
 		        x = ?, y = ?, icon = ?, color = ?, pin_category = ?,
-		        entity_id = ?, visibility = ?, visibility_rules = ?,
+		        entity_id = ?, linked_map_id = ?, visibility = ?, visibility_rules = ?,
 		        foundry_id = ?
 		 WHERE id = ?`,
 		mk.Name, mk.Description,
 		mk.X, mk.Y, mk.Icon, mk.Color, mk.PinCategory,
-		mk.EntityID, mk.Visibility, mk.VisibilityRules,
+		mk.EntityID, mk.LinkedMapID, mk.Visibility, mk.VisibilityRules,
 		mk.FoundryID, mk.ID,
 	)
 	return err
@@ -296,6 +305,28 @@ func (r *mapRepo) ListMarkers(ctx context.Context, mapID string, role int, userI
 		result = append(result, *mk)
 	}
 	return result, rows.Err()
+}
+
+// ListLinkSourceMaps implements MapRepository.
+func (r *mapRepo) ListLinkSourceMaps(ctx context.Context, campaignID string) ([]string, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT DISTINCT m.map_id
+		 FROM map_markers m
+		 JOIN maps src ON src.id = m.map_id
+		 WHERE src.campaign_id = ? AND m.linked_map_id IS NOT NULL`, campaignID)
+	if err != nil {
+		return nil, fmt.Errorf("list linking maps: %w", err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan linking map: %w", err)
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
 }
 
 // SearchMaps returns maps matching a name query for a campaign.

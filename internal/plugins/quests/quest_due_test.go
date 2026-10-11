@@ -387,6 +387,29 @@ func TestDueEventVisibilityAndTitle(t *testing.T) {
 		}
 	})
 
+	t.Run("hiding the notice hides the event, showing it shows the event", func(t *testing.T) {
+		e, cal := newDueEnv()
+		if _, err := putDM(t, e, qid, `{"version":0,"notice":{"title":"Find the Goat"},"dueDate":{"year":100,"month":1,"day":20}}`); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := putDM(t, e, qid, `{"version":1,"layout":{"notice":{"x":1,"y":2,"w":30,"r":0,"hidden":true}}}`); err != nil {
+			t.Fatal(err)
+		}
+		if ev := cal.events["ev-1"]; len(cal.events) != 1 || !ev.DMOnly || ev.Day.Day != 20 {
+			t.Fatalf("a hidden notice's due date must be DM-only: %+v", cal.events)
+		}
+		// Page visibility changing later keeps the notice's choice.
+		if err := e.svc.SyncDueEvent(context.Background(), camp, qid); err != nil || !cal.events["ev-1"].DMOnly {
+			t.Fatalf("sync showed a hidden notice's due date: err=%v ev=%+v", err, cal.events["ev-1"])
+		}
+		if _, err := putDM(t, e, qid, `{"version":2,"layout":{"notice":{"x":1,"y":2,"w":30,"r":0,"hidden":false}}}`); err != nil {
+			t.Fatal(err)
+		}
+		if cal.events["ev-1"].DMOnly {
+			t.Fatal("showing the notice must show its due date again")
+		}
+	})
+
 	t.Run("a title change with no due date touches no calendar", func(t *testing.T) {
 		e, cal := newDueEnv()
 		if _, err := putDM(t, e, qid, `{"version":0,"notice":{"title":"A"}}`); err != nil {
