@@ -97,11 +97,11 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// Owner picks which page types the Characters page lists as the party and
 	// as NPCs.
 	cg.POST("/characters/lists", h.UpdateCharacterLists, campaigns.RequireRole(campaigns.RoleOwner))
-	// Staff keep the "Who plays whom" list: who plays which character, and
+	// Staff keep the Players list: who plays which character, and
 	// which characters are on it.
 	cg.POST("/characters/owner", h.SetCharacterOwner, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.POST("/characters/playable", h.SetCharacterPlayable, campaigns.RequireRole(campaigns.RoleScribe))
-	cg.GET("/characters/playable/search", h.SearchRosterCandidates, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.GET("/characters/players/search", h.SearchRosterFinder, campaigns.RequireRole(campaigns.RoleScribe))
 	// Hero creator: staff make heroes for the table, players their own when
 	// the owner allows claiming (checked in the handler).
 	cg.GET("/characters/new", h.NewHero, campaigns.RequireRole(campaigns.RolePlayer))

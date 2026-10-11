@@ -3607,7 +3607,7 @@ func (h *Handler) buildCastView(c echo.Context, cc *campaigns.CampaignContext) (
 	return view, nil
 }
 
-// fillCastRoster adds the "Who plays whom" data: the full roster for staff who
+// fillCastRoster adds the Players box data: the full roster for staff who
 // may reassign, and for a member with no character yet, the playable ones they
 // could take. A failed lookup leaves the part out; it must not break the page.
 func (h *Handler) fillCastRoster(ctx context.Context, cc *campaigns.CampaignContext, userID string, charTypes []int, view *CastView) {
@@ -3731,7 +3731,7 @@ func (h *Handler) UpdateCharacterLists(c echo.Context) error {
 }
 
 // castRosterPage answers a roster change with the refreshed Characters page
-// body, the "Who plays whom" box left open. A non-HTMX post (no script) goes
+// body, the Players box left open. A non-HTMX post (no script) goes
 // back to the page instead.
 func (h *Handler) castRosterPage(c echo.Context, cc *campaigns.CampaignContext, notice string) error {
 	if !isHTMX(c) {
@@ -3742,6 +3742,20 @@ func (h *Handler) castRosterPage(c echo.Context, cc *campaigns.CampaignContext, 
 		return err
 	}
 	view.Open = "players"
+	view.Notice = notice
+	return middleware.Render(c, http.StatusOK, CharactersContent(cc, view))
+}
+
+// castClaimedPage answers a claim made from the pick box with the refreshed
+// Characters page body and a notice; without script it goes back to the page.
+func (h *Handler) castClaimedPage(c echo.Context, cc *campaigns.CampaignContext, notice string) error {
+	if !isHTMX(c) {
+		return c.Redirect(http.StatusSeeOther, fmt.Sprintf("/campaigns/%s/characters", cc.Campaign.ID))
+	}
+	view, err := h.buildCastView(c, cc)
+	if err != nil {
+		return err
+	}
 	view.Notice = notice
 	return middleware.Render(c, http.StatusOK, CharactersContent(cc, view))
 }
@@ -3768,7 +3782,7 @@ func (h *Handler) campaignEntity(c echo.Context, cc *campaigns.CampaignContext, 
 }
 
 // SetCharacterOwner hands a character to a member, or takes it back, from the
-// Characters page's "Who plays whom" list. Scribe+ (the route enforces it).
+// Characters page's Players list. Scribe+ (the route enforces it).
 //
 // Route: POST /campaigns/:id/characters/owner
 func (h *Handler) SetCharacterOwner(c echo.Context) error {
@@ -3800,7 +3814,7 @@ func (h *Handler) SetCharacterOwner(c echo.Context) error {
 	}
 
 	details := map[string]any{"cleared": true}
-	notice := entity.Name + " is unclaimed now."
+	notice := entity.Name + " is unclaimed now, and free to pick."
 	if owner != nil {
 		details = map[string]any{"new_owner_id": *owner, "new_owner_name": ownerName}
 		notice = entity.Name + " is now " + ownerName + "'s."
@@ -3840,24 +3854,25 @@ func (h *Handler) SetCharacterPlayable(c echo.Context) error {
 	if _, err := h.service.SetPlayable(c.Request().Context(), cc.Campaign.ID, entity.ID, playable); err != nil {
 		return err
 	}
-	notice := entity.Name + " is off the list."
+	notice := entity.Name + " is off Free to pick."
 	if playable {
-		notice = entity.Name + " is on the list now."
+		notice = entity.Name + " is free to pick now."
 	}
 	return h.castRosterPage(c, cc, notice)
 }
 
-// rosterCandidate is one search hit for the "add a character" picker.
-type rosterCandidate struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	TypeName string `json:"typeName"`
-}
+// finderLimit caps the Players finder's rows; the list is a shortlist to type
+// against, not a place to scroll.
+const finderLimit = 8
 
-// SearchRosterCandidates finds party-type characters not yet on the list.
+// SearchRosterFinder answers the Players box's finder with result rows. for is
+// "free" (adding to Free to pick) or the user id of the member who would
+// receive the character. With nothing typed, giving offers only the free
+// characters and adding offers none; typing searches every character of the
+// party's page types the viewer may see. Scribe+ (the route enforces it).
 //
-// Route: GET /campaigns/:id/characters/playable/search?q=
-func (h *Handler) SearchRosterCandidates(c echo.Context) error {
+// Route: GET /campaigns/:id/characters/players/search?q=&for=
+func (h *Handler) SearchRosterFinder(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
@@ -3869,20 +3884,46 @@ func (h *Handler) SearchRosterCandidates(c echo.Context) error {
 		return err
 	}
 	ctx := c.Request().Context()
-	typeIDs, err := h.charLists.CharacterTypeIDs(ctx, cc.Campaign.ID)
-	if err != nil {
-		return err
+	campaignID := cc.Campaign.ID
+	q := strings.TrimSpace(c.QueryParam("q"))
+
+	// The target is checked against the member list so a hand-typed id cannot
+	// aim a Give button at someone outside the campaign.
+	give := c.QueryParam("for")
+	var ownerNames map[string]string
+	if h.memberLister != nil {
+		members, err := h.memberLister.ListMembers(ctx, campaignID)
+		if err != nil {
+			return apperror.NewInternal(err)
+		}
+		ownerNames = ownerDisplayNames(members)
 	}
-	found, err := h.service.SearchRosterCandidates(ctx, cc.Campaign.ID, typeIDs,
-		strings.TrimSpace(c.QueryParam("q")), cc.VisibilityRole(), auth.GetUserID(c), 20)
-	if err != nil {
-		return err
+	if give == "free" {
+		give = ""
+	} else if _, ok := ownerNames[give]; !ok {
+		return apperror.NewBadRequest("for must be free or a member of this campaign")
 	}
-	out := make([]rosterCandidate, 0, len(found))
-	for _, e := range found {
-		out = append(out, rosterCandidate{ID: e.ID, Name: e.Name, TypeName: e.TypeName})
+
+	f := RosterSearch{Query: q, Limit: finderLimit}
+	if give == "" {
+		f.SkipListed = true
+	} else {
+		f.SkipOwnedBy = give
+		f.OnlyFree = q == ""
 	}
-	return c.JSON(http.StatusOK, out)
+	var hits []rosterHit
+	if q != "" || give != "" {
+		typeIDs, err := h.charLists.CharacterTypeIDs(ctx, campaignID)
+		if err != nil {
+			return err
+		}
+		found, err := h.service.SearchRoster(ctx, campaignID, typeIDs, f, cc.VisibilityRole(), auth.GetUserID(c))
+		if err != nil {
+			return err
+		}
+		hits = rosterHits(found, ownerNames)
+	}
+	return middleware.Render(c, http.StatusOK, rosterFinderResults(campaignID, give, hits, q != ""))
 }
 
 // buildCastParty fetches the party for the Players section: the campaign-wide
@@ -4023,6 +4064,11 @@ func (h *Handler) ClaimEntity(c echo.Context) error {
 	// action rather than buried under generic entity.updated.
 	h.logAudit(c, cc.Campaign.ID, audit.ActionEntityClaimed, entityID, entity.Name)
 
+	// The Characters page's pick box claims in place: it asks for the page
+	// body back so the new card shows without leaving the page.
+	if c.FormValue("from") == "characters" {
+		return h.castClaimedPage(c, cc, entity.Name+" is yours now.")
+	}
 	if middleware.IsHTMX(c) {
 		// Return the entity show page so the claim button disappears.
 		return middleware.HTMXRedirect(c, "/campaigns/"+cc.Campaign.ID+"/entities/"+entityID)

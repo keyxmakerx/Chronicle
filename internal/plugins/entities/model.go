@@ -342,7 +342,7 @@ type Entity struct {
 	// player claim flow on entity show.
 	OwnerUserID *string `json:"owner_user_id,omitempty"`
 	// Playable marks a character a player may play. With OwnerUserID it
-	// decides who is on the Characters page's "Who plays whom" list, so NPCs
+	// decides who is on the Characters page's Players list, so NPCs
 	// sharing a category stay off it. Setting an owner also sets it.
 	Playable bool `json:"playable"`
 	// MapID points the entity at one of the campaign's maps and powers

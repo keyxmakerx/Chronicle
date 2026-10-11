@@ -74,6 +74,9 @@ templ CharactersContent(cc *campaigns.CampaignContext, view CastView) {
 				</div>
 			</section>
 		}
+		if len(view.Pickable) > 0 {
+			@castPickBox(cc.Campaign.ID, view.CSRFToken, view.Pickable)
+		}
 		if view.ShowPlayers && (view.PartyListed || view.PartyEditor != nil || len(view.Party) > 0) {
 			<section class="mb-8" data-band="characters">
 				@castBandHead("The Party", view.PartyEditor, view.Landed, view.Roster != nil, view.Open)
@@ -121,7 +124,7 @@ templ CharactersContent(cc *campaigns.CampaignContext, view CastView) {
 
 // castBandHead is a band's heading. The owner's page adds the chosen types as
 // chips (each with an x that opens its in-place "stop showing" box) and the Add
-// button; staff who may reassign characters also get "Who plays whom".
+// button; staff who may reassign characters also get "Players".
 // Everyone else sees the heading alone.
 templ castBandHead(label string, ed *CastBandEditor, landed int, players bool, open string) {
 	<div class="ag-bandhead">
@@ -143,7 +146,7 @@ templ castBandHead(label string, ed *CastBandEditor, landed int, players bool, o
 		}
 		if players {
 			<button type="button" class="ag-add ag-players" data-opens="players" aria-expanded={ strconv.FormatBool(open == "players") } onclick={ castFoldCall("players") }>
-				<i class="fa-solid fa-user-shield" aria-hidden="true"></i> Who plays whom
+				<i class="fa-solid fa-user-shield" aria-hidden="true"></i> Players
 			</button>
 		}
 	</div>
@@ -159,8 +162,8 @@ templ castBandEmpty() {
 }
 
 // castBandFold holds the band's boxes, closed until a control opens one: the
-// owner's Add box and one "stop showing" box per chip, and the staff's "Who
-// plays whom" list. Each posts a form whose answer is the refreshed page body;
+// owner's Add box and one "stop showing" box per chip, and the staff's Players
+// box. Each posts a form whose answer is the refreshed page body;
 // open names the box that answer renders open.
 templ castBandFold(campaignID, csrf string, ed *CastBandEditor, roster *ClaimRoster, open string) {
 	<div class={ "ag-fold", templ.KV("is-open", open != "") } data-open={ open } style={ castFoldStyle(open) }>
@@ -251,56 +254,6 @@ templ castListBoxes(campaignID, csrf string, ed *CastBandEditor) {
 				</div>
 			</form>
 		}
-}
-
-// castPlayersBox lists every character of the party's page types with who
-// plays it. Picking a player saves at once: the row's form posts to the owner
-// endpoint, which answers with the page body and this box still open.
-templ castPlayersBox(campaignID, csrf string, roster *ClaimRoster, open bool) {
-	<div class="ag-box" data-box="players" hidden?={ !open }>
-		<div class="ag-head">
-			<h4>Who plays whom</h4>
-			<button type="button" class="ag-x" aria-label="Close" onclick={ castFoldCall("") }>
-				<i class="fa-solid fa-xmark" aria-hidden="true"></i>
-			</button>
-		</div>
-		<div class="ag-body">
-			if len(roster.Characters) == 0 {
-				<div class="ag-more">No characters on the party's page types yet.</div>
-			} else {
-				<div class="ag-list ag-owners">
-					for _, char := range roster.Characters {
-						<form
-							class="ag-row ag-own"
-							data-entity-id={ char.ID }
-							method="post"
-							action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/characters/owner", campaignID)) }
-							hx-post={ fmt.Sprintf("/campaigns/%s/characters/owner", campaignID) }
-							hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrf) }
-							hx-trigger="change"
-							hx-target="#cast-content"
-							hx-swap="outerHTML"
-						>
-							<input type="hidden" name="csrf_token" value={ csrf }/>
-							<input type="hidden" name="entity_id" value={ char.ID }/>
-							<span class="ag-ico"><i class={ "fa-solid", castIcon(char) } aria-hidden="true"></i></span>
-							<a class="ag-name" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", campaignID, char.ID)) }><b>{ char.Name }</b></a>
-							<select name="owner_user_id" class="input py-1 pr-8 text-xs w-auto max-w-[11rem]" aria-label={ "Who plays " + char.Name }>
-								<option value="" selected?={ char.OwnerUserID == nil }>Unclaimed</option>
-								for _, m := range roster.Members {
-									<option value={ m.UserID } selected?={ char.OwnerUserID != nil && *char.OwnerUserID == m.UserID }>{ rosterMemberLabel(m) }</option>
-								}
-								if char.OwnerUserID != nil && roster.OwnerNames[*char.OwnerUserID] == "" {
-									<option value={ *char.OwnerUserID } selected>Someone who left</option>
-								}
-							</select>
-						</form>
-					}
-				</div>
-			}
-			<div class="ag-hint"><i class="fa-solid fa-circle-info" aria-hidden="true"></i><span>A pick saves straight away. Players can still claim an unclaimed character from its page.</span></div>
-		</div>
-	</div>
 }
 
 // castCard is one mini profile card. The whole card links to the entity page

@@ -203,7 +203,7 @@ type mockEntityRepo struct {
 	updateOwnerFn      func(ctx context.Context, entityID string, ownerUserID *string) error
 	setPlayableFn      func(ctx context.Context, entityID string, playable bool) error
 	listOnRosterFn     func(ctx context.Context, campaignID string, typeIDs []int, role int, userID string) ([]Entity, error)
-	searchRosterFn     func(ctx context.Context, campaignID string, typeIDs []int, q string, role int, userID string, limit int) ([]Entity, error)
+	searchRosterFn     func(ctx context.Context, campaignID string, typeIDs []int, f RosterSearch, role int, userID string) ([]Entity, error)
 	updateMapIDFn      func(ctx context.Context, entityID string, mapID *string) error
 	listSiblingIDsFn   func(ctx context.Context, campaignID string, entityTypeID int, parentID, parentNodeID *string) ([]string, error)
 	resequenceFn       func(ctx context.Context, campaignID string, orderedIDs []string) error
@@ -451,9 +451,9 @@ func (m *mockEntityRepo) ListOnRoster(ctx context.Context, campaignID string, ty
 	return nil, nil
 }
 
-func (m *mockEntityRepo) SearchRosterCandidates(ctx context.Context, campaignID string, typeIDs []int, q string, role int, userID string, limit int) ([]Entity, error) {
+func (m *mockEntityRepo) SearchRoster(ctx context.Context, campaignID string, typeIDs []int, f RosterSearch, role int, userID string) ([]Entity, error) {
 	if m.searchRosterFn != nil {
-		return m.searchRosterFn(ctx, campaignID, typeIDs, q, role, userID, limit)
+		return m.searchRosterFn(ctx, campaignID, typeIDs, f, role, userID)
 	}
 	return nil, nil
 }

@@ -194,17 +194,18 @@ type EntityService interface {
 	AssignOwner(ctx context.Context, entityID string, ownerUserID *string) (*Entity, error)
 
 	// SetPlayable marks or unmarks a character as playable, which puts it on
-	// (or takes it off) the Characters page's "Who plays whom" list unless it
+	// (or takes it off) the Characters page's Players list unless it
 	// is owned. The entity must belong to campaignID. Marking needs a claimable
 	// type; unmarking is always allowed.
 	SetPlayable(ctx context.Context, campaignID, entityID string, playable bool) (*Entity, error)
 
-	// ListRoster returns the entities of typeIDs on the "Who plays whom" list
+	// ListRoster returns the entities of typeIDs on the Players list
 	// (playable or owned), visibility-filtered for the viewer.
 	ListRoster(ctx context.Context, campaignID string, typeIDs []int, role int, userID string) ([]Entity, error)
 
-	// SearchRosterCandidates returns off-roster entities of typeIDs matching q.
-	SearchRosterCandidates(ctx context.Context, campaignID string, typeIDs []int, q string, role int, userID string, limit int) ([]Entity, error)
+	// SearchRoster returns the characters of typeIDs the Players finder offers,
+	// free-to-pick first, then by name.
+	SearchRoster(ctx context.Context, campaignID string, typeIDs []int, f RosterSearch, role int, userID string) ([]Entity, error)
 
 	// AssignMap sets or clears the entity's map_id (the per-entity Map
 	// Editor block reads from this). Pass mapID = nil to unassign.
@@ -1762,14 +1763,15 @@ func (s *entityService) SetPlayable(ctx context.Context, campaignID, entityID st
 	return entity, nil
 }
 
-// ListRoster returns the entities of typeIDs on the "Who plays whom" list.
+// ListRoster returns the entities of typeIDs on the Players list.
 func (s *entityService) ListRoster(ctx context.Context, campaignID string, typeIDs []int, role int, userID string) ([]Entity, error) {
 	return s.entities.ListOnRoster(ctx, campaignID, typeIDs, role, userID)
 }
 
-// SearchRosterCandidates returns off-roster entities matching q.
-func (s *entityService) SearchRosterCandidates(ctx context.Context, campaignID string, typeIDs []int, q string, role int, userID string, limit int) ([]Entity, error) {
-	return s.entities.SearchRosterCandidates(ctx, campaignID, typeIDs, q, role, userID, limit)
+// SearchRoster returns the characters the Players finder offers.
+func (s *entityService) SearchRoster(ctx context.Context, campaignID string, typeIDs []int, f RosterSearch, role int, userID string) ([]Entity, error) {
+	f.Query = strings.TrimSpace(f.Query)
+	return s.entities.SearchRoster(ctx, campaignID, typeIDs, f, role, userID)
 }
 
 // AssignMap sets or clears entity.map_id. Pass mapID = nil to unassign.

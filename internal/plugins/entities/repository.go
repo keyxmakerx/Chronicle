@@ -811,13 +811,14 @@ type EntityRepository interface {
 	SetPlayable(ctx context.Context, entityID string, playable bool) error
 
 	// ListOnRoster returns the entities of the given types that are on the
-	// "Who plays whom" list: marked playable or owned. Visibility-filtered for
+	// Players list: marked playable or owned. Visibility-filtered for
 	// the viewer, by name, capped at 500.
 	ListOnRoster(ctx context.Context, campaignID string, typeIDs []int, role int, userID string) ([]Entity, error)
 
-	// SearchRosterCandidates returns entities of the given types that are not
-	// on the roster and whose name contains q, for the "add a character" picker.
-	SearchRosterCandidates(ctx context.Context, campaignID string, typeIDs []int, q string, role int, userID string, limit int) ([]Entity, error)
+	// SearchRoster returns the non-template entities of the given types for the
+	// Players finder, free-to-pick ones first and then by name. See
+	// RosterSearch for the filters.
+	SearchRoster(ctx context.Context, campaignID string, typeIDs []int, f RosterSearch, role int, userID string) ([]Entity, error)
 
 	// UpdateMapID sets or clears entities.map_id. Pass nil to unassign.
 	// Service-level callers are responsible for verifying the map belongs
@@ -1548,6 +1549,20 @@ func (r *entityRepository) SetPlayable(ctx context.Context, entityID string, pla
 	return nil
 }
 
+// RosterSearch narrows a Players-finder search. An empty Query matches every
+// name; the caller decides whether that is wanted.
+type RosterSearch struct {
+	Query string
+	// OnlyFree keeps characters that are free to pick (playable, unowned).
+	OnlyFree bool
+	// SkipListed drops characters already playable or owned, for adding to
+	// Free to pick.
+	SkipListed bool
+	// SkipOwnedBy drops characters this user already plays, for giving one.
+	SkipOwnedBy string
+	Limit       int
+}
+
 // typeIDPlaceholders returns "?,?,?" and the matching args for an IN list.
 func typeIDPlaceholders(typeIDs []int) (string, []any) {
 	ph := make([]string, len(typeIDs))
@@ -1579,19 +1594,36 @@ func (r *entityRepository) ListOnRoster(ctx context.Context, campaignID string, 
 	return r.queryEntities(ctx, "listing roster entities", query, args)
 }
 
-// SearchRosterCandidates returns off-roster entities of typeIDs whose name
-// contains q. LIKE wildcards in q match literally.
-func (r *entityRepository) SearchRosterCandidates(ctx context.Context, campaignID string, typeIDs []int, q string, role int, userID string, limit int) ([]Entity, error) {
+// SearchRoster implements the Players finder's query. The filters are in SQL,
+// not applied to a capped page afterwards, so a skipped character never uses
+// up a slot of Limit. LIKE wildcards in the query match literally.
+func (r *entityRepository) SearchRoster(ctx context.Context, campaignID string, typeIDs []int, f RosterSearch, role int, userID string) ([]Entity, error) {
 	if len(typeIDs) == 0 {
 		return nil, nil
 	}
+	limit := f.Limit
 	if limit <= 0 {
-		limit = 20
+		limit = 8
 	}
 	ph, typeArgs := typeIDPlaceholders(typeIDs)
 	visFilter, visArgs := visibilityFilter(role, userID)
 	args := append([]any{campaignID}, typeArgs...)
-	args = append(args, "%"+escapeLike(q)+"%")
+
+	where := ""
+	if f.Query != "" {
+		where += ` AND e.name LIKE ?`
+		args = append(args, "%"+escapeLike(f.Query)+"%")
+	}
+	if f.OnlyFree {
+		where += ` AND e.playable = 1 AND e.owner_user_id IS NULL`
+	}
+	if f.SkipListed {
+		where += ` AND e.playable = 0 AND e.owner_user_id IS NULL`
+	}
+	if f.SkipOwnedBy != "" {
+		where += ` AND (e.owner_user_id IS NULL OR e.owner_user_id <> ?)`
+		args = append(args, f.SkipOwnedBy)
+	}
 	args = append(args, visArgs...)
 	args = append(args, limit)
 
@@ -1599,10 +1631,9 @@ func (r *entityRepository) SearchRosterCandidates(ctx context.Context, campaignI
 	          FROM entities e
 	          INNER JOIN entity_types et ON et.id = e.entity_type_id
 	          WHERE e.campaign_id = ? AND e.entity_type_id IN (` + ph + `)
-	            AND e.is_template = 0 AND e.playable = 0 AND e.owner_user_id IS NULL
-	            AND e.name LIKE ?` + visFilter + `
-	          ORDER BY e.name ASC LIMIT ?`
-	return r.queryEntities(ctx, "searching roster candidates", query, args)
+	            AND e.is_template = 0` + where + visFilter + `
+	          ORDER BY (e.playable = 1 AND e.owner_user_id IS NULL) DESC, e.name ASC LIMIT ?`
+	return r.queryEntities(ctx, "searching roster", query, args)
 }
 
 // escapeLike makes %, _ and the backslash match literally in a LIKE pattern

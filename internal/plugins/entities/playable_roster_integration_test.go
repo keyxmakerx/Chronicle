@@ -10,7 +10,7 @@ import (
 
 // The roster queries run against a real MariaDB: the playable column must
 // round-trip through the shared SELECT, a claim must mark the page playable in
-// the same statement, and the roster/candidate lists must split exactly on
+// the same statement, and the roster list must split exactly on
 // playable-or-owned, honour visibility and the type filter, and treat LIKE
 // wildcards in the search literally.
 func TestEntityRepository_Roster_Integration(t *testing.T) {
@@ -132,30 +132,40 @@ func TestEntityRepository_Roster_Integration(t *testing.T) {
 		}
 	})
 
-	t.Run("SearchRosterCandidates excludes the roster and escapes wildcards", func(t *testing.T) {
-		got, err := repo.SearchRosterCandidates(ctx, campaignID, []int{party.ID}, "", permissions.RoleOwner, userID, 20)
-		if err != nil {
-			t.Fatalf("SearchRosterCandidates: %v", err)
+	t.Run("SearchRoster filters in SQL, lists free-to-pick first and escapes wildcards", func(t *testing.T) {
+		search := func(role int, f RosterSearch) string {
+			got, err := repo.SearchRoster(ctx, campaignID, []int{party.ID}, f, role, userID)
+			if err != nil {
+				t.Fatalf("SearchRoster(%+v): %v", f, err)
+			}
+			return names(got)
 		}
-		if want := "100% Pure_Gold|Npc Nora"; names(got) != want {
-			t.Errorf("candidates %q, want %q", names(got), want)
+		tests := []struct {
+			name string
+			role int
+			f    RosterSearch
+			want string
+		}{
+			{"free only, owner sees the private page", permissions.RoleOwner, RosterSearch{OnlyFree: true}, "Hidden Hana|Marked Mara"},
+			{"free only, player does not", permissions.RolePlayer, RosterSearch{OnlyFree: true}, "Marked Mara"},
+			{"a name search spans everything, free first", permissions.RoleOwner, RosterSearch{Query: "a"}, "Hidden Hana|Marked Mara|Claimed Cleo|Npc Nora"},
+			{"adding to Free skips listed characters", permissions.RoleOwner, RosterSearch{Query: "a", SkipListed: true}, "Npc Nora"},
+			{"giving skips what the target already plays", permissions.RoleOwner, RosterSearch{Query: "cleo", SkipOwnedBy: userID}, ""},
+			{"giving keeps what someone else plays", permissions.RoleOwner, RosterSearch{Query: "cleo", SkipOwnedBy: "someone-else"}, "Claimed Cleo"},
+			{"a bare % matches literally", permissions.RoleOwner, RosterSearch{Query: "%"}, "100% Pure_Gold"},
+			{"a bare _ matches literally", permissions.RoleOwner, RosterSearch{Query: "_"}, "100% Pure_Gold"},
+			{"other types stay out", permissions.RoleOwner, RosterSearch{Query: "opal"}, ""},
 		}
-		for q, want := range map[string]string{
-			"nora": "Npc Nora",
-			"%":    "100% Pure_Gold", // a bare % must not match everything
-			"_":    "100% Pure_Gold",
-			"mara": "", // already on the roster
-		} {
-			got, _ := repo.SearchRosterCandidates(ctx, campaignID, []int{party.ID}, q, permissions.RoleOwner, userID, 20)
-			if names(got) != want {
-				t.Errorf("q=%q -> %q, want %q", q, names(got), want)
+		for _, tc := range tests {
+			if got := search(tc.role, tc.f); got != tc.want {
+				t.Errorf("%s: got %q, want %q", tc.name, got, tc.want)
 			}
 		}
-		got, _ = repo.SearchRosterCandidates(ctx, campaignID, []int{party.ID}, "", permissions.RoleOwner, userID, 1)
+		got, _ := repo.SearchRoster(ctx, campaignID, []int{party.ID}, RosterSearch{Query: "a", Limit: 1}, permissions.RoleOwner, userID)
 		if len(got) != 1 {
 			t.Errorf("limit 1 returned %d", len(got))
 		}
-		if got, err := repo.SearchRosterCandidates(ctx, campaignID, nil, "x", permissions.RoleOwner, userID, 20); got != nil || err != nil {
+		if got, err := repo.SearchRoster(ctx, campaignID, nil, RosterSearch{Query: "x"}, permissions.RoleOwner, userID); got != nil || err != nil {
 			t.Errorf("no types: got %v, %v; want nil, nil", got, err)
 		}
 	})
