@@ -166,55 +166,6 @@ templ ImportReview(d ImportReviewData) {
 			}
 		</div>
 	</form>
-	// Alpine x-data factory, defined inline so the review screen
-	// doesn't require a separate JS bundle. Bulk action ops run via
-	// direct DOM mutation rather than a fully-reactive row model, to
-	// keep the templ-rendered server-side state authoritative and
-	// avoid a 3-way sync between FormData, the templ markup, and the
-	// Alpine store.
-	<script>
-		(function () {
-			if (window.aiImportReview) { return; }
-			window.aiImportReview = function () {
-				return {
-					applyDefaultsToAll: function () {
-						var form = this.$root;
-						var bulkCategory = form.querySelector('[name=bulk_default_category]')?.value || '';
-						var bulkVisibility = form.querySelector('[name=bulk_default_visibility]')?.value || '';
-						var bulkConflict = form.querySelector('[name=bulk_default_conflict]')?.value || '';
-						form.querySelectorAll('select[name$="_category"]').forEach(function (sel) {
-							if (sel.name === 'bulk_default_category') return;
-							if (bulkCategory && Array.from(sel.options).some(function (o) { return o.value === bulkCategory; })) {
-								sel.value = bulkCategory;
-								sel.dispatchEvent(new Event('change'));
-							}
-						});
-						form.querySelectorAll('select[name$="_visibility"]').forEach(function (sel) {
-							if (sel.name === 'bulk_default_visibility') return;
-							if (bulkVisibility) { sel.value = bulkVisibility; }
-						});
-						form.querySelectorAll('select[name$="_conflict"]').forEach(function (sel) {
-							if (sel.name === 'bulk_default_conflict') return;
-							if (bulkConflict) { sel.value = bulkConflict; }
-						});
-					},
-					skipAllConflicts: function () {
-						this.$root.querySelectorAll('select[name$="_conflict"]').forEach(function (sel) {
-							if (sel.name === 'bulk_default_conflict') return;
-							sel.value = 'skip';
-						});
-					},
-					toggleAll: function (event) {
-						var checked = event.target.checked;
-						this.$root.querySelectorAll('input[type=checkbox][name$="_include"]').forEach(function (cb) {
-							if (cb.disabled) return;
-							cb.checked = checked;
-						});
-					},
-				};
-			};
-		})();
-	</script>
 }
 
 // skippedNote says which rows the import leaves out and why, so a block
@@ -812,6 +763,58 @@ templ importBody(cc *campaigns.CampaignContext) {
 
 		<div id="ai-import-review-host"></div>
 	</div>
+	@importReviewScript()
+}
+
+// importReviewScript defines the review screen's Alpine x-data factory
+// with the page, not inside the swapped-in review: Alpine reads x-data the
+// moment htmx inserts the form, before htmx runs scripts that came with it,
+// so a factory shipped in the fragment is always too late. Bulk actions
+// mutate the DOM directly to keep the server-rendered state authoritative.
+templ importReviewScript() {
+	<script>
+		(function () {
+			if (window.aiImportReview) { return; }
+			window.aiImportReview = function () {
+				return {
+					applyDefaultsToAll: function () {
+						var form = this.$root;
+						var bulkCategory = form.querySelector('[name=bulk_default_category]')?.value || '';
+						var bulkVisibility = form.querySelector('[name=bulk_default_visibility]')?.value || '';
+						var bulkConflict = form.querySelector('[name=bulk_default_conflict]')?.value || '';
+						form.querySelectorAll('select[name$="_category"]').forEach(function (sel) {
+							if (sel.name === 'bulk_default_category') return;
+							if (bulkCategory && Array.from(sel.options).some(function (o) { return o.value === bulkCategory; })) {
+								sel.value = bulkCategory;
+								sel.dispatchEvent(new Event('change'));
+							}
+						});
+						form.querySelectorAll('select[name$="_visibility"]').forEach(function (sel) {
+							if (sel.name === 'bulk_default_visibility') return;
+							if (bulkVisibility) { sel.value = bulkVisibility; }
+						});
+						form.querySelectorAll('select[name$="_conflict"]').forEach(function (sel) {
+							if (sel.name === 'bulk_default_conflict') return;
+							if (bulkConflict) { sel.value = bulkConflict; }
+						});
+					},
+					skipAllConflicts: function () {
+						this.$root.querySelectorAll('select[name$="_conflict"]').forEach(function (sel) {
+							if (sel.name === 'bulk_default_conflict') return;
+							sel.value = 'skip';
+						});
+					},
+					toggleAll: function (event) {
+						var checked = event.target.checked;
+						this.$root.querySelectorAll('input[type=checkbox][name$="_include"]').forEach(function (cb) {
+							if (cb.disabled) return;
+							cb.checked = checked;
+						});
+					},
+				};
+			};
+		})();
+	</script>
 }
 
 // ensure entities import is referenced (silences unused-import).

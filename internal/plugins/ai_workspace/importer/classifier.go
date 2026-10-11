@@ -190,6 +190,15 @@ func (c *Classifier) ensureTypes(ctx context.Context) error {
 	for i, t := range types {
 		c.typesBySlug[strings.ToLower(t.Slug)] = &c.cachedTypes[i]
 	}
+	// An AI writes the category as either name ("race" or "races"), so the
+	// plural name finds the type too, unless another type's slug is that word.
+	for i, t := range types {
+		if alias := entities.Slugify(t.NamePlural); alias != "" {
+			if _, taken := c.typesBySlug[alias]; !taken {
+				c.typesBySlug[alias] = &c.cachedTypes[i]
+			}
+		}
+	}
 	c.typesFetched = true
 	return nil
 }
