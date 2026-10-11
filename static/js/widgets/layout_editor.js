@@ -62,8 +62,8 @@
     { type: 'timeline_full',    label: 'Full Timeline',    icon: 'fa-timeline',          desc: 'Full timeline D3 visualization', addon: 'timeline' },
     { type: 'relations_graph_full', label: 'Full Relations Graph', icon: 'fa-diagram-project', desc: 'Large entity relations graph', addon: 'relations' },
     { type: 'map_full',         label: 'Full Map',         icon: 'fa-map-location-dot',  desc: 'Full map with drawings & tokens', addon: 'maps' },
-    { type: 'session_tracker',  label: 'Sessions',         icon: 'fa-dice-d20',          desc: 'Upcoming sessions with RSVP',    addon: 'sessions' },
-    { type: 'coming_up',        label: 'Coming up',        icon: 'fa-hourglass-half',    desc: 'Next game nights, what you owe the table, next events' },
+    { type: 'session_tracker',  label: 'Coming up',        icon: 'fa-dice-d20',          desc: 'Replaced by Coming up',          addon: 'sessions', retired: true },
+    { type: 'coming_up',        label: 'Coming up',        icon: 'fa-dice-d20',          desc: 'Game nights, what you owe the table, next events' },
     { type: 'activity_feed',    label: 'Activity Feed',    icon: 'fa-clock-rotate-left', desc: 'Recent campaign activity log' },
     { type: 'sync_status',      label: 'Foundry Sync',     icon: 'fa-plug',              desc: 'Foundry VTT sync status',        addon: 'foundry' },
   ];
@@ -241,6 +241,7 @@
                 type: t.type, label: t.label, icon: t.icon, desc: t.description,
                 container: !!t.container,
                 singleton: !!t.singleton, // Carries BlockMeta.Singleton — drives the singleton drop guard.
+                retired: !!t.retired,
               };
               if (t.addon) bt.addon = t.addon;
               if (t.widget_slug) bt.widget_slug = t.widget_slug;
@@ -413,8 +414,11 @@
 
     _buildDashboardPalette: function (palette) {
       var self = this;
-      var coreBlocks = this.blockTypes.filter(function (bt) { return !bt.addon; });
-      var addonBlocks = this.blockTypes.filter(function (bt) { return !!bt.addon; });
+      // Retired blocks keep their label for layouts that hold one, but are
+      // never offered again.
+      var offered = this.blockTypes.filter(function (bt) { return !bt.retired; });
+      var coreBlocks = offered.filter(function (bt) { return !bt.addon; });
+      var addonBlocks = offered.filter(function (bt) { return !!bt.addon; });
 
       palette.appendChild(this._createPaletteSection('Core Blocks', 'fa-cube', coreBlocks, true));
       if (addonBlocks.length > 0) {

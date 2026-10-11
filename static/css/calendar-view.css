@@ -2026,3 +2026,28 @@
    planner's tab and paint buttons and swallow their presses. */
 .cal-v5 .rseg.fvtabs, .cal-v5 .rseg.pltools, .cal-v5 .rseg.plalt{height:auto}
 .cal-v5 .rseg.fvtabs::before, .cal-v5 .rseg.pltools::before, .cal-v5 .rseg.plalt::before{content:none}
+
+/* "Waiting on you": a gold count beside Who's free, shown only while the
+   member owes the table an answer, opening a short list under it. */
+.cal-v5 .h-acts{position:relative}
+.cal-v5 .waitbtn{color:var(--gold);background:var(--goldBg);box-shadow:inset 0 0 0 1px var(--goldRing)}
+.cal-v5 .waitbtn:hover, .cal-v5 .waitbtn[aria-expanded="true"]{color:var(--gold);background:var(--goldBg);box-shadow:inset 0 0 0 1.5px var(--gold)}
+.cal-v5 .waitbtn .wcount{font:650 12.5px/1 var(--sans);font-variant-numeric:tabular-nums}
+.cal-v5 .waitbtn:focus-visible{outline:1.5px solid var(--ink);outline-offset:2px}
+.cal-v5 .waitpop{position:absolute;right:0;top:calc(100% + 6px);z-index:40;width:min(360px, calc(100vw - 24px));background:var(--paper);border-radius:12px;
+  box-shadow:0 1px 2px oklch(.2 .02 265 / .08),0 12px 32px -12px oklch(.2 .02 265 / .3),inset 0 0 0 1px var(--hair);padding:6px;transform-origin:top right;animation:calWaitIn .16s var(--ease)}
+.cal-v5 .waitpop[hidden]{display:none}
+.cal-v5 .wlist{list-style:none;margin:0;padding:0}
+.cal-v5 .wrow{display:flex;align-items:center;gap:10px;width:100%;padding:7px 8px;border-radius:9px;text-align:left;color:var(--ink);text-decoration:none;background:none;border:0;font:inherit;cursor:pointer}
+.cal-v5 .wrow:hover{background:var(--lift)}
+.cal-v5 .wrow:focus-visible{outline:1.5px solid var(--ink);outline-offset:-1.5px}
+.cal-v5 .wtile{flex:none;width:38px;height:38px;border-radius:9px;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;background:var(--paper2);box-shadow:inset 0 0 0 1px var(--hair);color:var(--ink)}
+.cal-v5 .wtile small{font:650 8.5px/1 var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--mut)}
+.cal-v5 .wtile b{font:600 15px/1 var(--sans);margin-top:2px}
+.cal-v5 .wtile i{font-size:13px;margin-top:3px;color:var(--ink2)}
+.cal-v5 .wmain{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.cal-v5 .wt{font:600 13px/1.3 var(--sans);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cal-v5 .ws{font:500 11.5px/1.35 var(--sans);color:var(--mut)}
+.cal-v5 .wact{flex:none;height:26px;display:inline-flex;align-items:center;padding:0 10px;border-radius:8px;background:var(--ink);color:var(--paper);font:550 11.5px/1 var(--sans)}
+@keyframes calWaitIn{from{opacity:0;transform:scale(.97) translateY(-4px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.cal-v5 .waitpop{animation:none}}

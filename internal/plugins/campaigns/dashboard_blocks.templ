@@ -57,12 +57,12 @@ templ DashboardBlockSwitch(cc *CampaignContext, block DashboardBlock, recentEnti
 			@dashRelationsGraphFull(cc, block.Config)
 		case "map_full":
 			@dashMapFull(cc, block.Config)
-		case "session_tracker":
-			@dashSessionTracker(cc, block.Config)
+		case "session_tracker", "coming_up":
+			// Coming up replaced the session tracker; a layout saved with
+			// the old block shows the new card in its place.
+			@dashComingUp(cc)
 		case "activity_feed":
 			@dashActivityFeed(cc, block.Config)
-		case "coming_up":
-			@dashComingUp(cc)
 		case "sync_status":
 			// Lazy-loaded from foundry_vtt (DashboardSyncBlock) to keep
 			// this plugin VTT-agnostic; shows a loading skeleton until
@@ -315,8 +315,8 @@ templ calendarCardUnavailableState(minHeightPx int) {
 
 // dashCalendarPreview renders a card that lazy-loads upcoming calendar
 // events from the calendar plugin's own embed route (calendar-v5, #778) —
-// the same hx-get="/campaigns/:id/<plugin>/..." pattern dashTimelinePreview,
-// dashSessionTracker and dashActivityFeed already use for their own
+// the same hx-get="/campaigns/:id/<plugin>/..." pattern dashTimelinePreview
+// and dashActivityFeed already use for their own
 // dashboard cards, since campaigns cannot import the calendar plugin
 // directly (plugin isolation) and each plugin owns its own embed fragment.
 // Config: limit (int, default 5).
@@ -710,48 +710,24 @@ templ dashMapFull(cc *CampaignContext, config map[string]any) {
 	</div>
 }
 
-// dashSessionTracker renders upcoming game sessions with RSVP status.
-// Lazy-loads via HTMX from the sessions plugin sidebar endpoint.
-// Config: limit (int, default 5).
-templ dashSessionTracker(cc *CampaignContext, config map[string]any) {
-	<div>
-		<div class="flex items-center justify-between mb-3">
-			<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
-				<i class="fa-solid fa-dice-d20 mr-1.5"></i>Upcoming Sessions
-			</h2>
-			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/game-nights", cc.Campaign.ID)) }
-				class="text-xs text-accent hover:underline"
-			>
-				View all
-			</a>
-		</div>
-		<div
-			hx-get={ fmt.Sprintf("/campaigns/%s/sessions/embed?limit=%d", cc.Campaign.ID, dashCalendarLimit(config)) }
-			hx-trigger="intersect once"
-			hx-swap="innerHTML"
-			class="card divide-y divide-edge min-h-[60px]"
-		>
-			<div class="px-4 py-3 text-sm text-fg-muted">Loading sessions...</div>
-		</div>
-	</div>
-}
-
 // dashComingUp is the placeholder for the "Coming up" card. The card joins the
 // calendar and game nights, which this plugin may not import, so internal/app
 // serves it from GET /campaigns/:id/coming-up. The response replaces this
 // placeholder, and an empty response (addons off) removes it.
 templ dashComingUp(cc *CampaignContext) {
 	<div
-		class="cu-wrap"
+		data-block="coming-up"
 		hx-get={ fmt.Sprintf("/campaigns/%s/coming-up", cc.Campaign.ID) }
 		hx-trigger="load"
 		hx-swap="outerHTML"
 	>
-		<link rel="stylesheet" href={ layouts.AssetURL("/static/css/coming_up.css") }/>
-		<div class="cu-sheet" aria-busy="true">
-			<div class="cu-top"><h2 class="cu-title">Coming up</h2></div>
-			<p class="cu-empty">Loading...</p>
+		<div class="flex items-center justify-between mb-3">
+			<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
+				<i class="fa-solid fa-dice-d20 mr-1.5"></i>Coming up
+			</h2>
+		</div>
+		<div class="card min-h-[60px] px-4 py-3" aria-busy="true">
+			<span class="inline-block w-48 h-3 rounded bg-fg-secondary/10 animate-pulse" aria-hidden="true"></span>
 		</div>
 	</div>
 }

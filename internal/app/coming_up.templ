@@ -1,42 +1,46 @@
-// coming_up.templ draws the "Coming up" dashboard block's fragment: the
-// calendar page's raised-sheet look (static/css/coming_up.css) around the
-// rows buildComingUp composed. The dashboard shell that lazy-loads it lives
-// in campaigns.dashComingUp.
+// coming_up.templ draws the "Coming up" dashboard block's fragment in the
+// dashboard's own card style, around the rows buildComingUp composed. The
+// dashboard shell that lazy-loads it lives in campaigns.dashComingUp.
 package app
 
-import (
-	"fmt"
+import "fmt"
 
-	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
-)
-
-// comingUpFragment is the whole card. It replaces the shell's placeholder
-// (hx-swap outerHTML), so it carries the same root class.
+// comingUpFragment is the whole block. It replaces the shell's placeholder
+// (hx-swap outerHTML), so it carries the same data-block marker.
 templ comingUpFragment(campaignID string, v comingUpView) {
-	<div class="cu-wrap" data-block="coming-up">
-		<link rel="stylesheet" href={ layouts.AssetURL("/static/css/coming_up.css") }/>
-		<div class="cu-sheet">
-			<div class="cu-top">
-				<h2 class="cu-title">Coming up <span>{ v.Month }</span></h2>
-				if v.CalendarHref != "" {
-					<a class="cu-lnk" href={ templ.SafeURL(v.CalendarHref) }>Open the calendar</a>
-				}
-			</div>
-			if v.Empty() {
-				<p class="cu-empty">Nothing is coming up yet. A planned game night or a nearby event will show here.</p>
+	<div data-block="coming-up">
+		<div class="flex items-center justify-between mb-3">
+			<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
+				<i class="fa-solid fa-dice-d20 mr-1.5"></i>Coming up
+			</h2>
+			if v.GameNightsHref != "" {
+				<a href={ templ.SafeURL(v.GameNightsHref) } class="text-xs text-accent hover:underline">Open Game nights</a>
+			} else if v.CalendarHref != "" {
+				<a href={ templ.SafeURL(v.CalendarHref) } class="text-xs text-accent hover:underline">Open the calendar</a>
 			}
-			@comingUpSection("Game nights", v.Nights)
-			@comingUpSection("Waiting on you", v.Waiting)
-			@comingUpSection("In the world", v.World)
+		</div>
+		<div class="card divide-y divide-edge overflow-hidden">
+			if v.Empty() {
+				<p class="px-4 py-5 text-sm text-fg-muted">Nothing is planned yet. Game nights and nearby events will show here.</p>
+			}
+			@comingUpSection("Waiting on you", v.Waiting, true)
+			@comingUpSection("Next game nights", v.Nights, false)
+			@comingUpSection("On the calendar", v.World, false)
 		</div>
 	</div>
 }
 
 // comingUpSection draws one labelled group, or nothing when it has no rows.
-templ comingUpSection(label string, rows []comingUpRow) {
+// count shows the number of rows beside the label.
+templ comingUpSection(label string, rows []comingUpRow, count bool) {
 	if len(rows) > 0 {
-		<section class="cu-sec" aria-label={ label }>
-			<h3 class="cu-lab">{ label }</h3>
+		<section class="py-1" aria-label={ label }>
+			<h3 class="flex items-center gap-2 px-4 pt-2.5 pb-1 text-[11px] font-semibold text-fg-muted uppercase tracking-wider">
+				{ label }
+				if count {
+					<span class="px-1.5 rounded-full bg-warn/10 text-warn text-[10.5px] normal-case tracking-normal">{ fmt.Sprint(len(rows)) }</span>
+				}
+			</h3>
 			for _, r := range rows {
 				@comingUpRowView(r)
 			}
@@ -44,27 +48,63 @@ templ comingUpSection(label string, rows []comingUpRow) {
 	}
 }
 
+// comingUpRowView is one row. A row with a link is one link, its button word
+// part of the link's text, so there is never a link inside a link.
 templ comingUpRowView(r comingUpRow) {
-	<div class="cu-row">
-		<span class="cu-tile" aria-hidden="true">
-			<span class="cu-tile-top">{ r.TileTop }</span>
-			if r.TileIcon != "" {
-				<span class="cu-tile-big"><i class={ r.TileIcon }></i></span>
-			} else {
-				<span class="cu-tile-big">{ r.TileBig }</span>
-			}
-		</span>
-		<span class="cu-main">
-			<span class="cu-t">{ r.Title }</span>
-			<span class="cu-s">
-				<span class={ "cu-dot", templ.KV("cu-dot-wait", r.Waiting) }></span>
-				{ r.Sub }
-			</span>
-		</span>
-		if r.Action != "" && r.Href != "" {
-			<a class={ "cu-btn", templ.KV("cu-btn-pri", r.Primary) } href={ templ.SafeURL(r.Href) } aria-label={ fmt.Sprintf("%s: %s", r.Action, r.Title) }>{ r.Action }</a>
-		} else if r.Chip != "" {
-			<span class="cu-chip">{ r.Chip }</span>
+	if r.Href != "" {
+		<a href={ templ.SafeURL(r.Href) } class="flex items-center gap-3 px-4 py-2 hover:bg-surface-alt/50 transition-colors group">
+			@comingUpRowBody(r)
+		</a>
+	} else {
+		<div class="flex items-center gap-3 px-4 py-2">
+			@comingUpRowBody(r)
+		</div>
+	}
+}
+
+templ comingUpRowBody(r comingUpRow) {
+	<span
+		class={ "shrink-0 w-10 h-10 rounded-lg flex flex-col items-center justify-center leading-none", tileClass(r) }
+		aria-hidden="true"
+	>
+		<span class="text-[9px] font-semibold uppercase tracking-wider opacity-80">{ r.TileTop }</span>
+		if r.TileIcon != "" {
+			<i class={ r.TileIcon, "text-sm mt-0.5" }></i>
+		} else {
+			<span class="text-base font-semibold mt-0.5">{ r.TileBig }</span>
 		}
-	</div>
+	</span>
+	<span class="flex-1 min-w-0">
+		<span class="block text-sm font-medium text-fg truncate group-hover:text-accent transition-colors">{ r.Title }</span>
+		<span class="block text-xs text-fg-muted">{ r.Sub }</span>
+	</span>
+	if r.Action != "" {
+		<span class={ "shrink-0 text-xs font-medium px-3 py-1.5 rounded-lg", templ.KV("bg-accent text-white", r.Primary), templ.KV("border border-edge text-fg", !r.Primary) }>{ r.Action }</span>
+	} else if r.Answer != "" {
+		<span class={ "shrink-0 text-xs font-medium px-2.5 py-0.5 rounded-full", answerPillClass(r.AnswerTone) }>{ r.Answer }</span>
+	} else if r.Chip != "" {
+		<span class="shrink-0 text-xs px-2.5 py-0.5 rounded-full bg-surface-alt text-fg-secondary">{ r.Chip }</span>
+	}
+}
+
+// tileClass tints the tile of the table's own items (nights, polls, asks)
+// with the accent; calendar events stay neutral.
+func tileClass(r comingUpRow) string {
+	if r.SessionID != "" || r.TileIcon != "" {
+		return "bg-accent/10 text-accent"
+	}
+	return "bg-surface-alt text-fg-secondary border border-edge"
+}
+
+// answerPillClass colours the viewer's answer: green going, amber maybe,
+// red can't.
+func answerPillClass(tone string) string {
+	switch tone {
+	case "go":
+		return "bg-ok/10 text-ok"
+	case "maybe":
+		return "bg-warn/10 text-warn"
+	default:
+		return "bg-bad/10 text-bad"
+	}
 }

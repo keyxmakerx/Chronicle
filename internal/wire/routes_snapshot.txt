@@ -243,6 +243,7 @@ GET	/characters/entries	internal/plugins/entities/routes.go
 GET	/characters/new	internal/plugins/entities/routes.go
 GET	/characters/new/plan	internal/plugins/entities/routes.go
 GET	/coming-up	internal/app/coming_up.go
+GET	/coming-up/waiting	internal/app/coming_up.go
 GET	/content-templates	internal/plugins/entities/content_template_routes.go
 GET	/content-templates/:tid	internal/plugins/entities/content_template_routes.go
 GET	/creators/:userId	internal/plugins/bestiary/routes.go

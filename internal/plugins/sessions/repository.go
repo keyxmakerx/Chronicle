@@ -214,6 +214,7 @@ func (r *sessionRepository) FindByID(ctx context.Context, id string) (*Session, 
 	if err != nil {
 		return nil, fmt.Errorf("querying session by id: %w", err)
 	}
+	s.normalizeDates()
 	return s, nil
 }
 
@@ -249,6 +250,7 @@ func (r *sessionRepository) FindByIDIncludingDeleted(ctx context.Context, id str
 	if err != nil {
 		return nil, fmt.Errorf("querying session by id (including deleted): %w", err)
 	}
+	s.normalizeDates()
 	return s, nil
 }
 
@@ -291,6 +293,7 @@ func (r *sessionRepository) ListByCampaign(ctx context.Context, campaignID strin
 		); err != nil {
 			return nil, fmt.Errorf("scanning session row: %w", err)
 		}
+		s.normalizeDates()
 		sessions = append(sessions, s)
 	}
 	return sessions, rows.Err()
@@ -330,6 +333,7 @@ func (r *sessionRepository) SearchByCampaign(ctx context.Context, campaignID, qu
 		); err != nil {
 			return nil, fmt.Errorf("scanning session search row: %w", err)
 		}
+		s.normalizeDates()
 		sessions = append(sessions, s)
 	}
 	return sessions, rows.Err()
@@ -618,6 +622,7 @@ func (r *sessionRepository) ListByDateRange(ctx context.Context, campaignID, sta
 		); err != nil {
 			return nil, fmt.Errorf("scanning session date range row: %w", err)
 		}
+		s.normalizeDates()
 		sessions = append(sessions, s)
 	}
 	return sessions, rows.Err()

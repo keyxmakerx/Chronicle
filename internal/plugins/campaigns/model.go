@@ -334,12 +334,33 @@ func DefaultDashboardLayout() *DashboardLayout {
 	return &DashboardLayout{
 		Rows: []DashboardRow{
 			full("welcome", BlockWelcomeBanner),
-			full("coming-up", BlockComingUp),
 			full("quick", BlockQuickActions),
 			full("categories", BlockCategoryGrid),
 			full("recent", BlockRecentPages),
 		},
 	}
+}
+
+// ComingUpRepeats marks, by row, column and block index, every Coming up
+// block after the first. The retired session tracker draws the same card, so
+// a layout holding both would otherwise show it twice.
+func (l *DashboardLayout) ComingUpRepeats() map[[3]int]bool {
+	repeats := map[[3]int]bool{}
+	seen := false
+	for ri, row := range l.Rows {
+		for ci, col := range row.Columns {
+			for bi, b := range col.Blocks {
+				if b.Type != BlockComingUp && b.Type != BlockSessionTracker {
+					continue
+				}
+				if seen {
+					repeats[[3]int{ri, ci, bi}] = true
+				}
+				seen = true
+			}
+		}
+	}
+	return repeats
 }
 
 // DashboardLayout defines a configurable dashboard using a row/column/block
@@ -726,7 +747,7 @@ const (
 	BlockTimelineFull    = "timeline_full"    // Full timeline visualization with D3.
 	BlockRelationsGraphFull = "relations_graph_full" // Large relations graph view.
 	BlockMapFull         = "map_full"         // Full interactive map viewer with markers/drawings.
-	BlockSessionTracker  = "session_tracker"  // Upcoming sessions with RSVP status.
+	BlockSessionTracker  = "session_tracker"  // Retired: a saved one draws the Coming up card.
 	BlockActivityFeed    = "activity_feed"    // Recent campaign activity log.
 	BlockSyncStatus      = "sync_status"      // Foundry VTT sync health/status.
 	BlockComingUp        = "coming_up"        // Next game nights, what the viewer owes the table, next events.
