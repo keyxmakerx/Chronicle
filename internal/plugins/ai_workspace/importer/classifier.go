@@ -45,6 +45,11 @@ type Classification struct {
 	// to drive the Rename / Overwrite handling.
 	ConflictEntity *entities.Entity
 
+	// GMOnly counts the GM-only parts of ConflictEntity's current text. The
+	// review screen puts a "Replace the text anyway" tick on any row that
+	// could update such a page.
+	GMOnly GMOnlyParts
+
 	// ProposedTypeSlug is the FrontMatter.Type lowercased + trimmed.
 	// "" when no type was specified in FM (operator picks via bulk
 	// default at review time).
@@ -217,6 +222,7 @@ func (c *Classifier) classifyOne(ctx context.Context, p ParsedPage) (Classificat
 	existing, _ := c.lookup.GetBySlug(ctx, c.campaignID, cls.ResolvedSlug)
 	if existing != nil {
 		cls.ConflictEntity = existing
+		cls.GMOnly = GMOnlyPartsOf(existing)
 	}
 
 	switch p.FrontMatter.Action {

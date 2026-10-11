@@ -396,6 +396,12 @@ templ reviewRow(campaignID string, idx int, page importer.ParsedPage, cls import
 				if page.FrontMatter.Action == importer.ActionDelete {
 					@reviewRowDeleteConfirm(idx, page.Name)
 				}
+				// A page with GM-only parts: any row that ends up replacing its
+				// text needs the tick (the dropdowns can turn a row into an
+				// update after this renders, so every non-delete row shows it).
+				if cls.GMOnly.Any() && page.Status != importer.StatusParseError && page.FrontMatter.Action != importer.ActionDelete {
+					@reviewRowGMOnlyConfirm(idx, page.Name, cls.GMOnly)
+				}
 				if len(page.Warnings) > 0 {
 					<details class="text-xs text-fg-muted mt-1">
 						<summary class="cursor-pointer">{ fmt.Sprintf("%d %s", len(page.Warnings), pluralize("warning", "warnings", len(page.Warnings))) }</summary>
@@ -431,6 +437,30 @@ templ reviewRowDeleteConfirm(idx int, name string) {
 				This cannot be undone.
 			</span>
 		</label>
+	</div>
+}
+
+// reviewRowGMOnlyConfirm renders the "Replace the text anyway" callout for a
+// page whose current text has GM-only parts. Unticked by default and not
+// `required`: leaving it unticked is a valid choice (the row is skipped), and
+// the committer re-checks the tick against the live page either way.
+templ reviewRowGMOnlyConfirm(idx int, name string, gm importer.GMOnlyParts) {
+	<div class="mt-2 p-2 rounded border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20" role="group" aria-label={ fmt.Sprintf("GM-only parts of %s", name) }>
+		<p class="text-xs text-amber-900 dark:text-amber-100">
+			<i class="fa-solid fa-triangle-exclamation mr-1" aria-hidden="true"></i>
+			{ gm.Warning() }
+		</p>
+		<label class="flex items-start gap-2 text-xs text-amber-900 dark:text-amber-100 cursor-pointer mt-1">
+			<input
+				type="checkbox"
+				name={ fmt.Sprintf("page_%d_replace_gm_confirmed", idx) }
+				class="mt-0.5 rounded border-amber-400 text-amber-600"
+			/>
+			<span>Replace the text anyway</span>
+		</label>
+		<p class="text-xs text-amber-900 dark:text-amber-100 mt-1">
+			Any GM-only words the AI copied into its text will be visible to players.
+		</p>
 	</div>
 }
 
