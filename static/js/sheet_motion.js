@@ -458,10 +458,10 @@
     // With no room beside the sheet a paper comes out in two beats: it slides out from behind the edge into the gap (the rest of it
     // past the well's far side), then is pulled left over the sheet. The pull is the CSS translate property, so it composes with
     // whatever transform the style's own move uses.
-    function pull(card, from, to, ms) {
+    function pull(card, from, to, ms, e) {
       if (!card.animate) { card.style.translate = to; return null; }
       card.style.translate = to;
-      return card.animate([{ translate: from }, { translate: to }], { duration: ms, easing: ease(card) });
+      return card.animate([{ translate: from }, { translate: to }], { duration: ms, easing: e || ease(card) });
     }
     function slideOut(w) {
       var card = w.firstChild, t = tms(card), full = mode() === 'full', off = (w._over || 0) + 'px 0';
@@ -475,9 +475,10 @@
       if (w.classList.contains('has-over')) {
         var go = function () {
           w.classList.add('is-over');
-          if (full) { moving(card, dur(root)); pull(card, off, '0px 0', dur(root)); if (trace) pull(trace, off, '0px 0', dur(root)); }
+          if (full) { moving(card, dur(root)); pull(card, off, '0px 0', dur(root)); if (trace) pull(trace, off, '0px 0', dur(root), ease(card)); }
         };
-        if (full) w._t = setTimeout(go, Math.max(dur(root) * 0.8, t * 0.9)); else go();
+        // The pull starts as the slide settles, so the two beats read as one quick motion rather than a stop and a start.
+        if (full) w._t = setTimeout(go, t * 0.6); else go();
       }
     }
     function slideBack(w, done) {

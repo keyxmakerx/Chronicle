@@ -229,7 +229,7 @@ html:is([data-motion="calm"], [data-motion="off"], [data-view-motion="calm"], [d
   --pc-hand:"Caveat","Kalam","Patrick Hand","Bradley Hand","Segoe Print","Comic Sans MS",cursive;
   --pc-lead:#454950; /* graphite: 8.7:1 on the stock */
   --pc-rule:#2b2e34; /* printed form lines */
-  --sheet-panel-move:slide-out; --sheet-slip-move:grow; --sheet-page-move:slide-out; --sheet-trace:pencil; --change-move:rewrite;
+  --sheet-panel-move:slide-out; --sheet-slip-move:grow; --sheet-page-move:pull; --sheet-trace:pencil; --change-move:rewrite;
 }
 [data-sheet][data-sheet-style="pencil"] .paper{box-shadow:0 1px 1px rgb(var(--s-sh) / calc(.16 * var(--shk))),0 10px 22px -12px rgb(var(--s-sh) / calc(.4 * var(--shk)))}
 [data-sheet][data-sheet-style="pencil"] .paper::before{content:"";position:absolute;inset:6px;border:1.5px solid var(--pc-rule);border-radius:1px;pointer-events:none}

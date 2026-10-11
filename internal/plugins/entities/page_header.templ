@@ -1,6 +1,6 @@
 // page_header.templ renders the header of a page a game-system renderer owns,
 // which has no layout and so lost its title block: name, favorite star, claim
-// marker and actions, plus the page blocks that sit under the system's widget.
+// marker and actions. The pieces under the system's widget are page_tabs.templ.
 //
 // Every control is an inline handler into Chronicle.PageHeader
 // (static/js/widgets/page_header.js); nothing relies on a script inside a
@@ -139,19 +139,6 @@ templ claimMarker(cc *campaigns.CampaignContext, entity *Entity, state claimPill
 				><i class="fa-solid fa-user-shield"></i> <span data-claim-label>Claim character</span></button>
 			</span>
 		}
-}
-
-// systemPageBelow draws, under a system widget, the page pieces its layout
-// would have placed: player notes, relations, tags and sub-pages. Each goes
-// through the block registry, so addon gating and who may edit are exactly
-// what a layout page applies.
-templ systemPageBelow(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, csrfToken string) {
-	<div class="ph-below" data-page-below>
-		@RenderBlock(ctx, TemplateBlock{ID: "shell-notes", Type: "entity_notes"}, cc, entity, entityType, csrfToken)
-		@RenderBlock(ctx, TemplateBlock{ID: "shell-relations", Type: "relations"}, cc, entity, entityType, csrfToken)
-		@RenderBlock(ctx, TemplateBlock{ID: "shell-tags", Type: "tags"}, cc, entity, entityType, csrfToken)
-		@RenderBlock(ctx, TemplateBlock{ID: "shell-subpages", Type: BlockSubPages}, cc, entity, entityType, csrfToken)
-	</div>
 }
 
 // systemImageMount is the image-upload mount a system widget's Change

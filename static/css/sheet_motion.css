@@ -185,9 +185,9 @@ html[data-motion="off"] [data-sheet][data-sheet-style="night"] .paper-drawer[dat
 [data-sheet]:is([data-sheet-style="modern"],:not([data-sheet-style])) [data-move="settle"]{--mv-from:translateY(6px);--mv-fade:0}
 [data-sheet]:is([data-sheet-style="modern"],:not([data-sheet-style])) .paper-landed::before{inset:-3px -7px;border:2px solid var(--paper-accent);border-radius:7px;background:none;opacity:0;animation:sheet-ring calc(var(--dur-slide) * 1.1 * var(--fx,1)) var(--ease-out) both}
 html:is([data-motion="calm"],[data-view-motion="calm"],[data-cz-reduce]) [data-sheet]:is([data-sheet-style="modern"],:not([data-sheet-style])) .paper-pin{transform:none!important}
-/* Pencil: sketched in. A thin graphite outline draws around the panel's edge first (the trace), then the paper and everything on it is written in
-   top-down at its real height. A fold opens the same way under a ruled line. */
-[data-sheet][data-sheet-style="pencil"] [data-move="slide-out"]{--mv-from:none;--mv-clip:inset(0 0 100% 0);--mv-fade:1;--mv-k:1.25;--mv-e:cubic-bezier(.35,.1,.3,1);--mv-cto:.6;--mv-cdo:.4;--mv-ct:.7}
+/* Pencil: a panel is paper slid out from behind the sheet, with a thin graphite outline drawn around where it lands (the trace). A grown
+   panel and a fold are sketched in top-down at their real height, a fold under a ruled line. */
+[data-sheet][data-sheet-style="pencil"] [data-move="slide-out"]{--mv-from:translate(calc(var(--dir-x,0) * 100%),calc(var(--dir-y,0) * 100%));--mv-fade:1}
 [data-sheet][data-sheet-style="pencil"] [data-move="grow"]{--mv-from:none;--mv-clip:inset(0 0 100% 0);--mv-fade:1;--mv-k:.95;--mv-e:cubic-bezier(.35,.1,.3,1);--mv-cto:.7;--mv-cdo:.3;--mv-ct:.8}
 [data-sheet][data-sheet-style="pencil"] [data-move="fold"]{--mv-from:none;--mv-clip:inset(0 0 100% 0);--mv-fade:1;--mv-e:cubic-bezier(.35,.1,.3,1)}
 [data-sheet][data-sheet-style="pencil"] [data-move="settle"]{--mv-from:translateY(4px);--mv-fade:0}
