@@ -375,19 +375,6 @@ func (h *Handler) Index(c echo.Context) error {
 
 	csrfToken := middleware.GetCSRFToken(c)
 
-	// GM owner-overview roster: for a Scribe+ viewer of a
-	// claimable category with the claiming addon enabled, assemble the full
-	// character list + assignable members so the dashboard can show each
-	// character's owner with reassign/unclaim controls. nil for everyone else,
-	// which hides the panel.
-	var roster *ClaimRoster
-	if activeEntityType != nil &&
-		cc.MemberRole >= campaigns.RoleScribe &&
-		isClaimableType(activeEntityType) &&
-		h.isAddonEnabled(c.Request().Context(), campaignID, AddonPlayerCharacterClaiming) {
-		roster = h.buildClaimRoster(c.Request().Context(), campaignID, activeEntityType.ID, role, userID)
-	}
-
 	// When viewing a specific category (type), render the category dashboard.
 	if activeEntityType != nil {
 		parentIDs := make([]string, len(entities))
@@ -399,10 +386,10 @@ func (h *Handler) Index(c echo.Context) error {
 		}
 		if middleware.IsHTMX(c) {
 			return middleware.Render(c, http.StatusOK,
-				CategoryDashboardContent(cc, activeEntityType, entities, counts, total, opts, csrfToken, roster))
+				CategoryDashboardContent(cc, activeEntityType, entities, counts, total, opts, csrfToken))
 		}
 		return middleware.Render(c, http.StatusOK,
-			CategoryDashboardPage(cc, activeEntityType, entities, counts, total, opts, csrfToken, roster))
+			CategoryDashboardPage(cc, activeEntityType, entities, counts, total, opts, csrfToken))
 	}
 
 	// Otherwise render the "All Pages" grid.
@@ -412,37 +399,6 @@ func (h *Handler) Index(c echo.Context) error {
 	}
 	return middleware.Render(c, http.StatusOK,
 		EntityIndexPage(cc, entities, entityTypes, counts, total, opts, typeID, activeTypeSlug, csrfToken))
-}
-
-// buildClaimRoster assembles the GM owner-overview data for a claimable
-// category: the campaign's members (assignable owners) plus the full
-// character list for the type — not just the paginated dashboard page — so
-// the roster is a complete picture. role/userID scope the character
-// list to what the viewer may see, matching the dashboard. Returns nil (panel
-// hidden) on any lookup failure; the roster is a non-critical overlay and must
-// never break the dashboard. The PerPage cap (100) bounds very large rosters.
-func (h *Handler) buildClaimRoster(ctx context.Context, campaignID string, typeID, role int, userID string) *ClaimRoster {
-	if h.memberLister == nil {
-		return nil
-	}
-	members, err := h.memberLister.ListMembers(ctx, campaignID)
-	if err != nil {
-		slog.Warn("owner roster: member lookup failed",
-			slog.String("campaign_id", campaignID), slog.Any("error", err))
-		return nil
-	}
-	chars, _, err := h.service.List(ctx, campaignID, typeID, role, userID,
-		ListOptions{Page: 1, PerPage: 100, Sort: "name"})
-	if err != nil {
-		slog.Warn("owner roster: character list failed",
-			slog.String("campaign_id", campaignID), slog.Any("error", err))
-		return nil
-	}
-	return &ClaimRoster{
-		Characters: chars,
-		Members:    members,
-		OwnerNames: ownerDisplayNames(members),
-	}
 }
 
 // NewForm renders the entity creation form (GET /campaigns/:id/entities/new).
@@ -3605,6 +3561,7 @@ func (h *Handler) buildCastView(c echo.Context, cc *campaigns.CampaignContext) (
 	view.Yours = h.buildYours(ctx, campaignID, userID)
 	if pcOn {
 		view.Party = filterCastByType(h.buildCastParty(ctx, cc, userID), charTypes)
+		h.fillCastRoster(ctx, cc, userID, charTypes, &view)
 		// Only a member with no party yet needs a pointer to where claiming happens.
 		if view.IsMember && len(view.Party) == 0 {
 			if types, err := h.service.GetEntityTypes(ctx, campaignID); err == nil {
@@ -3638,6 +3595,42 @@ func (h *Handler) buildCastView(c echo.Context, cc *campaigns.CampaignContext) (
 		}
 	}
 	return view, nil
+}
+
+// fillCastRoster adds the Players box data: the full roster for staff who
+// may reassign, and for a member with no character yet, the playable ones they
+// could take. A failed lookup leaves the part out; it must not break the page.
+func (h *Handler) fillCastRoster(ctx context.Context, cc *campaigns.CampaignContext, userID string, charTypes []int, view *CastView) {
+	if len(charTypes) == 0 || userID == "" {
+		return
+	}
+	campaignID := cc.Campaign.ID
+	role := cc.VisibilityRole()
+	isStaff := cc.MemberRole >= campaigns.RoleScribe && h.memberLister != nil
+	// Staff hand characters out from the list instead, so only players get the pick box.
+	wantsPick := cc.MemberRole == campaigns.RolePlayer && len(view.Yours) == 0
+	if !isStaff && !wantsPick {
+		return
+	}
+	onRoster, err := h.service.ListRoster(ctx, campaignID, charTypes, role, userID)
+	if err != nil {
+		slog.Warn("cast page: roster failed", slog.String("campaign_id", campaignID), slog.Any("error", err))
+		return
+	}
+	if isStaff {
+		if members, err := h.memberLister.ListMembers(ctx, campaignID); err == nil {
+			view.Roster = &ClaimRoster{Characters: onRoster, Members: members, OwnerNames: ownerDisplayNames(members)}
+		} else {
+			slog.Warn("cast page: member lookup failed", slog.String("campaign_id", campaignID), slog.Any("error", err))
+		}
+	}
+	if wantsPick {
+		for _, e := range onRoster {
+			if e.Playable && e.OwnerUserID == nil {
+				view.Pickable = append(view.Pickable, e)
+			}
+		}
+	}
 }
 
 // filterCastByType keeps the cards whose page type is in typeIDs.
@@ -3725,6 +3718,202 @@ func (h *Handler) UpdateCharacterLists(c echo.Context) error {
 		view.Landed = req.TypeID
 	}
 	return middleware.Render(c, http.StatusOK, CharactersContent(cc, view))
+}
+
+// castRosterPage answers a roster change with the refreshed Characters page
+// body, the Players box left open. A non-HTMX post (no script) goes
+// back to the page instead.
+func (h *Handler) castRosterPage(c echo.Context, cc *campaigns.CampaignContext, notice string) error {
+	if !isHTMX(c) {
+		return c.Redirect(http.StatusSeeOther, fmt.Sprintf("/campaigns/%s/characters", cc.Campaign.ID))
+	}
+	view, err := h.buildCastView(c, cc)
+	if err != nil {
+		return err
+	}
+	view.Open = "players"
+	view.Notice = notice
+	return middleware.Render(c, http.StatusOK, CharactersContent(cc, view))
+}
+
+// castClaimedPage answers a claim made from the pick box with the refreshed
+// Characters page body and a notice; without script it goes back to the page.
+func (h *Handler) castClaimedPage(c echo.Context, cc *campaigns.CampaignContext, notice string) error {
+	if !isHTMX(c) {
+		return c.Redirect(http.StatusSeeOther, fmt.Sprintf("/campaigns/%s/characters", cc.Campaign.ID))
+	}
+	view, err := h.buildCastView(c, cc)
+	if err != nil {
+		return err
+	}
+	view.Notice = notice
+	return middleware.Render(c, http.StatusOK, CharactersContent(cc, view))
+}
+
+// requireRosterAddon hides the roster routes, as if absent, when Player
+// Character Claiming is off for the campaign.
+func (h *Handler) requireRosterAddon(c echo.Context, cc *campaigns.CampaignContext) error {
+	if !h.isAddonEnabled(c.Request().Context(), cc.Campaign.ID, AddonPlayerCharacterClaiming) {
+		return apperror.NewNotFound("player character claiming is not enabled")
+	}
+	return nil
+}
+
+// campaignEntity loads an entity and 404s when it belongs to another campaign.
+func (h *Handler) campaignEntity(c echo.Context, cc *campaigns.CampaignContext, entityID string) (*Entity, error) {
+	entity, err := h.service.GetByID(c.Request().Context(), entityID)
+	if err != nil {
+		return nil, err
+	}
+	if entity.CampaignID != cc.Campaign.ID {
+		return nil, apperror.NewNotFound("entity not found")
+	}
+	return entity, nil
+}
+
+// SetCharacterOwner hands a character to a member, or takes it back, from the
+// Characters page's Players list. Scribe+ (the route enforces it).
+//
+// Route: POST /campaigns/:id/characters/owner
+func (h *Handler) SetCharacterOwner(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	if err := h.requireRosterAddon(c, cc); err != nil {
+		return err
+	}
+	var req struct {
+		EntityID    string `form:"entity_id"`
+		OwnerUserID string `form:"owner_user_id"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request")
+	}
+	ctx := c.Request().Context()
+	entity, err := h.campaignEntity(c, cc, req.EntityID)
+	if err != nil {
+		return err
+	}
+	owner, ownerName, err := h.resolveOwnerMember(ctx, cc.Campaign.ID, &req.OwnerUserID)
+	if err != nil {
+		return err
+	}
+	if _, err := h.service.AssignOwner(ctx, entity.ID, owner); err != nil {
+		return err
+	}
+
+	details := map[string]any{"cleared": true}
+	notice := entity.Name + " is unclaimed now, and free to pick."
+	if owner != nil {
+		details = map[string]any{"new_owner_id": *owner, "new_owner_name": ownerName}
+		notice = entity.Name + " is now " + ownerName + "'s."
+	}
+	h.logAuditWithDetails(c, cc.Campaign.ID, audit.ActionEntityOwnerChanged, entity.ID, entity.Name, details)
+	return h.castRosterPage(c, cc, notice)
+}
+
+// SetCharacterPlayable puts a character on or takes it off the "Who plays
+// whom" list. Scribe+ (the route enforces it).
+//
+// Route: POST /campaigns/:id/characters/playable
+func (h *Handler) SetCharacterPlayable(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	if err := h.requireRosterAddon(c, cc); err != nil {
+		return err
+	}
+	var req struct {
+		EntityID string `form:"entity_id"`
+		Playable string `form:"playable"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request")
+	}
+	playable := req.Playable == "1"
+	if !playable && req.Playable != "0" {
+		return apperror.NewBadRequest("playable must be 1 or 0")
+	}
+	// The service re-checks the campaign; loading first gives the notice a name.
+	entity, err := h.campaignEntity(c, cc, req.EntityID)
+	if err != nil {
+		return err
+	}
+	if _, err := h.service.SetPlayable(c.Request().Context(), cc.Campaign.ID, entity.ID, playable); err != nil {
+		return err
+	}
+	notice := entity.Name + " is off Free to pick."
+	if playable {
+		notice = entity.Name + " is free to pick now."
+	}
+	return h.castRosterPage(c, cc, notice)
+}
+
+// finderLimit caps the Players finder's rows; the list is a shortlist to type
+// against, not a place to scroll.
+const finderLimit = 8
+
+// SearchRosterFinder answers the Players box's finder with result rows. for is
+// "free" (adding to Free to pick) or the user id of the member who would
+// receive the character. With nothing typed, giving offers only the free
+// characters and adding offers none; typing searches every character of the
+// party's page types the viewer may see. Scribe+ (the route enforces it).
+//
+// Route: GET /campaigns/:id/characters/players/search?q=&for=
+func (h *Handler) SearchRosterFinder(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	if h.charLists == nil {
+		return apperror.NewNotFound("page type lists are not available")
+	}
+	if err := h.requireRosterAddon(c, cc); err != nil {
+		return err
+	}
+	ctx := c.Request().Context()
+	campaignID := cc.Campaign.ID
+	q := strings.TrimSpace(c.QueryParam("q"))
+
+	// The target is checked against the member list so a hand-typed id cannot
+	// aim a Give button at someone outside the campaign.
+	give := c.QueryParam("for")
+	var ownerNames map[string]string
+	if h.memberLister != nil {
+		members, err := h.memberLister.ListMembers(ctx, campaignID)
+		if err != nil {
+			return apperror.NewInternal(err)
+		}
+		ownerNames = ownerDisplayNames(members)
+	}
+	if give == "free" {
+		give = ""
+	} else if _, ok := ownerNames[give]; !ok {
+		return apperror.NewBadRequest("for must be free or a member of this campaign")
+	}
+
+	f := RosterSearch{Query: q, Limit: finderLimit}
+	if give == "" {
+		f.SkipListed = true
+	} else {
+		f.SkipOwnedBy = give
+		f.OnlyFree = q == ""
+	}
+	var hits []rosterHit
+	if q != "" || give != "" {
+		typeIDs, err := h.charLists.CharacterTypeIDs(ctx, campaignID)
+		if err != nil {
+			return err
+		}
+		found, err := h.service.SearchRoster(ctx, campaignID, typeIDs, f, cc.VisibilityRole(), auth.GetUserID(c))
+		if err != nil {
+			return err
+		}
+		hits = rosterHits(found, ownerNames)
+	}
+	return middleware.Render(c, http.StatusOK, rosterFinderResults(campaignID, give, hits, q != ""))
 }
 
 // buildCastParty fetches the party for the Players section: the campaign-wide
@@ -3865,6 +4054,11 @@ func (h *Handler) ClaimEntity(c echo.Context) error {
 	// action rather than buried under generic entity.updated.
 	h.logAudit(c, cc.Campaign.ID, audit.ActionEntityClaimed, entityID, entity.Name)
 
+	// The Characters page's pick box claims in place: it asks for the page
+	// body back so the new card shows without leaving the page.
+	if c.FormValue("from") == "characters" {
+		return h.castClaimedPage(c, cc, entity.Name+" is yours now.")
+	}
 	if middleware.IsHTMX(c) {
 		// Return the entity show page so the claim button disappears.
 		return middleware.HTMXRedirect(c, "/campaigns/"+cc.Campaign.ID+"/entities/"+entityID)
@@ -3906,29 +4100,10 @@ func (h *Handler) AssignOwner(c echo.Context) error {
 
 	// Membership validation when assigning (not when clearing). Capture the
 	// new owner's display name for a legible audit entry.
-	newOwnerName := ""
-	if req.OwnerUserID != nil && *req.OwnerUserID != "" {
-		if h.memberLister == nil {
-			return apperror.NewInternal(fmt.Errorf("member lister not configured"))
-		}
-		members, err := h.memberLister.ListMembers(c.Request().Context(), cc.Campaign.ID)
-		if err != nil {
-			return apperror.NewInternal(err)
-		}
-		isMember := false
-		for _, m := range members {
-			if m.UserID == *req.OwnerUserID {
-				isMember = true
-				newOwnerName = m.DisplayName
-				break
-			}
-		}
-		if !isMember {
-			return apperror.NewBadRequest("owner_user_id is not a member of this campaign")
-		}
-	} else {
-		// Treat empty string as "unassign" for caller convenience.
-		req.OwnerUserID = nil
+	var newOwnerName string
+	req.OwnerUserID, newOwnerName, err = h.resolveOwnerMember(c.Request().Context(), cc.Campaign.ID, req.OwnerUserID)
+	if err != nil {
+		return err
 	}
 
 	updated, err := h.service.AssignOwner(c.Request().Context(), entityID, req.OwnerUserID)
@@ -3949,6 +4124,29 @@ func (h *Handler) AssignOwner(c echo.Context) error {
 	h.logAuditWithDetails(c, cc.Campaign.ID, audit.ActionEntityOwnerChanged, entityID, entity.Name, details)
 
 	return c.JSON(http.StatusOK, updated)
+}
+
+// resolveOwnerMember validates a requested owner against the campaign's
+// members. An empty or nil id means "unassign" and comes back nil; otherwise
+// the id must be a member, and the member's display name is returned for
+// audit and notice text.
+func (h *Handler) resolveOwnerMember(ctx context.Context, campaignID string, owner *string) (*string, string, error) {
+	if owner == nil || *owner == "" {
+		return nil, "", nil
+	}
+	if h.memberLister == nil {
+		return nil, "", apperror.NewInternal(fmt.Errorf("member lister not configured"))
+	}
+	members, err := h.memberLister.ListMembers(ctx, campaignID)
+	if err != nil {
+		return nil, "", apperror.NewInternal(err)
+	}
+	for _, m := range members {
+		if m.UserID == *owner {
+			return owner, m.DisplayName, nil
+		}
+	}
+	return nil, "", apperror.NewBadRequest("owner_user_id is not a member of this campaign")
 }
 
 // assignMapRequest is the JSON body for PUT .../map. map_id may be null

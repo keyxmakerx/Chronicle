@@ -341,6 +341,10 @@ type Entity struct {
 	// sync (when the actor's owner maps to a chronicle user) or by the
 	// player claim flow on entity show.
 	OwnerUserID *string `json:"owner_user_id,omitempty"`
+	// Playable marks a character a player may play. With OwnerUserID it
+	// decides who is on the Characters page's Players list, so NPCs
+	// sharing a category stay off it. Setting an owner also sets it.
+	Playable bool `json:"playable"`
 	// MapID points the entity at one of the campaign's maps and powers
 	// the per-entity Map Editor block. Nullable — most entities aren't
 	// "a map." FK enforces same-campaign integrity (added by the maps
@@ -729,6 +733,15 @@ type CastView struct {
 	CanCreateHero bool
 	// CanManageEntries shows the Directors their "Your own entries" link.
 	CanManageEntries bool
+	// Roster is who plays whom for the Party band's page types, for staff
+	// who may reassign; nil hides the control.
+	Roster *ClaimRoster
+	// Pickable is, for a member with no character of their own, the playable
+	// characters nobody has claimed yet that they may see.
+	Pickable []Entity
+	// Open names the band box rendered open, so a reassign answers with the
+	// list still in view.
+	Open string
 }
 
 // --- Slug Generation ---

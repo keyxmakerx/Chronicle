@@ -1,0 +1,173 @@
+package entities
+
+import "fmt"
+
+// castPlayersBox is the staff's Players box: each player with the characters
+// they play, and the Free to pick strip a character-less player chooses from.
+// Every control posts at once and the answer is the page body with this box
+// still open; hx-target, hx-swap and the CSRF header are set once here and
+// inherited by the buttons and by the finder's results, which arrive later.
+templ castPlayersBox(campaignID, csrf string, roster *ClaimRoster, open bool) {
+	<div
+		class="ag-box"
+		data-box="players"
+		hidden?={ !open }
+		hx-target="#cast-content"
+		hx-swap="outerHTML"
+		hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrf) }
+	>
+		<div class="ag-head">
+			<h4>Players</h4>
+			<button type="button" class="ag-x" aria-label="Close" onclick={ castFoldCall("") }>
+				<i class="fa-solid fa-xmark" aria-hidden="true"></i>
+			</button>
+		</div>
+		<div class="ag-body">
+			if rows := rosterPlayerRows(roster); len(rows) == 0 {
+				<div class="ag-more">No players have joined yet.</div>
+			} else {
+				<div class="pw-list">
+					for _, row := range rows {
+						<div class="pw-row" data-player={ row.User }>
+							<span class="pw-av" aria-hidden="true">{ memberInitial(row.Name) }</span>
+							<span class="pw-name">{ row.Name }</span>
+							<span class="pw-chars">
+								for _, ch := range row.Chars {
+									<span class="pw-chip" data-char={ ch.Name }>
+										<i class={ "fa-solid", castIcon(ch) } aria-hidden="true"></i>
+										<span>{ ch.Name }</span>
+										<button
+											type="button"
+											class="pw-chipx"
+											aria-label={ "Unassign " + ch.Name }
+											hx-post={ fmt.Sprintf("/campaigns/%s/characters/owner", campaignID) }
+											hx-vals={ htmxVals(map[string]string{"entity_id": ch.ID, "owner_user_id": ""}) }
+										>
+											<i class="fa-solid fa-xmark" aria-hidden="true"></i>
+										</button>
+									</span>
+								}
+								if len(row.Chars) == 0 {
+									<span class="pw-none">No character yet</span>
+								}
+							</span>
+							<button
+								type="button"
+								class="ag-add pw-give"
+								aria-expanded="false"
+								data-who={ row.User }
+								data-ph={ "Find a character for " + row.Name }
+								onclick={ castFinderCall("give") }
+							>
+								<i class="fa-solid fa-plus" aria-hidden="true"></i> Give a character
+							</button>
+						</div>
+					}
+				</div>
+			}
+			<div class="pw-sec">
+				<div class="pw-sechead">
+					<h5>Free to pick</h5>
+					<button
+						type="button"
+						class="ag-add pw-give"
+						aria-expanded="false"
+						data-ph="Find a character to set aside"
+						onclick={ castFinderCall("free") }
+					>
+						<i class="fa-solid fa-plus" aria-hidden="true"></i> Add a character
+					</button>
+				</div>
+				<div class="pw-chars pw-freelist">
+					for _, ch := range rosterFreeCharacters(roster) {
+						<span class="pw-chip pw-free" data-char={ ch.Name }>
+							<i class={ "fa-solid", castIcon(ch) } aria-hidden="true"></i>
+							<span>{ ch.Name }</span>
+							<button
+								type="button"
+								class="pw-chipx"
+								aria-label={ "Take " + ch.Name + " off Free to pick" }
+								hx-post={ fmt.Sprintf("/campaigns/%s/characters/playable", campaignID) }
+								hx-vals={ htmxVals(map[string]string{"entity_id": ch.ID, "playable": "0"}) }
+							>
+								<i class="fa-solid fa-xmark" aria-hidden="true"></i>
+							</button>
+						</span>
+					}
+					if len(rosterFreeCharacters(roster)) == 0 {
+						<span class="pw-none">Nobody is free to pick yet</span>
+					}
+				</div>
+				<div class="ag-hint"><i class="fa-solid fa-circle-info" aria-hidden="true"></i><span>A player with no character chooses from these. Everything saves straight away. Characters stay in your Characters category, with their pages and widgets.</span></div>
+			</div>
+			<div class="pw-find" hidden>
+				<div class="ag-search">
+					<i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+					<input
+						type="search"
+						name="q"
+						class="input w-full text-sm"
+						placeholder="Type a character’s name"
+						aria-label="Find a character"
+						autocomplete="off"
+						hx-get={ fmt.Sprintf("/campaigns/%s/characters/players/search", campaignID) }
+						hx-trigger="input changed delay:200ms, search"
+						hx-include="closest .pw-find"
+						hx-target="#pw-results"
+						hx-swap="innerHTML"
+						hx-sync="this:replace"
+					/>
+					<input type="hidden" name="for" value="free"/>
+				</div>
+				<div class="ag-list pw-results" id="pw-results"></div>
+				<p class="pw-findhint">Type to search. Characters marked free to pick show first.</p>
+			</div>
+		</div>
+	</div>
+}
+
+// castPickBox is what a player with no character yet sees above the Party: the
+// free characters they may take. Pick asks first (the GM is the only one who
+// can undo it); Yes posts the ordinary claim and the answer is the refreshed
+// page body, where the new card now shows. One confirm row per character keeps
+// the Yes button's target static, so nothing is rewired in the browser.
+templ castPickBox(campaignID, csrf string, pickable []Entity) {
+	<section class="mb-8" data-pickbox="true">
+		<div class="ag-box" hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrf) }>
+			<div class="ag-head"><h4>Pick your character</h4></div>
+			<div class="ag-body">
+				<p class="text-sm text-fg-secondary">These characters are free to play. Pick one to make it yours. Your GM can change it later.</p>
+				<div class="ag-list ag-owners">
+					for _, ch := range pickable {
+						<div class="ag-row ag-own">
+							<span class="ag-ico"><i class={ "fa-solid", castIcon(ch) } aria-hidden="true"></i></span>
+							<a class="ag-name" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", campaignID, ch.ID)) }><b>{ ch.Name }</b></a>
+							<button
+								type="button"
+								class="btn-primary btn-sm"
+								aria-label={ "Pick " + ch.Name }
+								data-entity-id={ ch.ID }
+								onclick={ castAskClaimCall }
+							>Pick</button>
+						</div>
+					}
+				</div>
+				for _, ch := range pickable {
+					<div class="ag-confirm-row" data-for={ ch.ID } hidden>
+						<span>Make { ch.Name } yours? Only your GM can undo this.</span>
+						<span class="ag-sp"></span>
+						<button type="button" class="btn-secondary btn-sm" onclick={ castCancelClaimCall }>Cancel</button>
+						<button
+							type="button"
+							class="btn-primary btn-sm"
+							hx-post={ fmt.Sprintf("/campaigns/%s/entities/%s/claim", campaignID, ch.ID) }
+							hx-vals={ htmxVals(map[string]string{"from": "characters"}) }
+							hx-target="#cast-content"
+							hx-swap="outerHTML"
+						>Yes, it’s mine</button>
+					</div>
+				}
+			</div>
+		</div>
+	</section>
+}

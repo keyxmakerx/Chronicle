@@ -1,0 +1,41 @@
+package entities
+
+import "fmt"
+
+// rosterFinderResults is the Players finder's answer: up to eight rows, each
+// with where the character stands now and the one button that acts on it.
+// give names the player receiving the character; empty means Add to Free to
+// pick. The posts target #cast-content from the Players box that holds this.
+templ rosterFinderResults(campaignID, give string, hits []rosterHit, searched bool) {
+	for _, h := range hits {
+		<div class="ag-row pw-res">
+			<span class="ag-ico"><i class={ "fa-solid", castIcon(h.Entity) } aria-hidden="true"></i></span>
+			<span class="ag-name"><b>{ h.Entity.Name }</b></span>
+			<span class="ag-tag">{ h.Tag }</span>
+			if give != "" {
+				<button
+					type="button"
+					class="btn-secondary btn-sm"
+					aria-label={ "Give " + h.Entity.Name }
+					hx-post={ fmt.Sprintf("/campaigns/%s/characters/owner", campaignID) }
+					hx-vals={ htmxVals(map[string]string{"entity_id": h.Entity.ID, "owner_user_id": give}) }
+				>Give</button>
+			} else {
+				<button
+					type="button"
+					class="btn-secondary btn-sm"
+					aria-label={ "Add " + h.Entity.Name }
+					hx-post={ fmt.Sprintf("/campaigns/%s/characters/playable", campaignID) }
+					hx-vals={ htmxVals(map[string]string{"entity_id": h.Entity.ID, "playable": "1"}) }
+				>Add</button>
+			}
+		</div>
+	}
+	if len(hits) == 0 {
+		if searched {
+			<div class="ag-more">No character matches.</div>
+		} else {
+			<div class="ag-more">Type a name to search all your characters.</div>
+		}
+	}
+}
