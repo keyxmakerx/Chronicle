@@ -90,8 +90,12 @@ func TestEveryPageScriptBudget(t *testing.T) {
 		}
 		var buf bytes.Buffer
 		zw, _ := gzip.NewWriterLevel(&buf, 6)
-		zw.Write(b)
-		zw.Close()
+		if _, err := zw.Write(b); err != nil {
+			t.Fatal(err)
+		}
+		if err := zw.Close(); err != nil {
+			t.Fatal(err)
+		}
 		rows = append(rows, row{u, len(b), buf.Len()})
 		raw += len(b)
 		gzd += buf.Len()
