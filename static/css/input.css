@@ -2876,6 +2876,12 @@
     border-block-end-color: color-mix(in srgb, var(--gold, #d69e0a) 45%, transparent);
   }
   .cta-bar[data-cta="rsvp"] .cta-ico { color: var(--gold, #d69e0a); }
+  /* A guest's strip is steady, not news: it stays until they keep the
+     account, so it takes the accent at a low tint rather than gold. */
+  .cta-bar[data-cta="guest"] {
+    background: color-mix(in srgb, var(--color-accent, #6366f1) 8%, var(--color-bg-secondary, #fff));
+  }
+  .cta-bar[data-cta="guest"] .cta-ico { color: var(--color-accent, #6366f1); }
 
   .cta-ico { font-size: 13px; color: var(--color-text-secondary, #6b7280); }
   .cta-msg { flex: 1 1 auto; min-width: 0; }

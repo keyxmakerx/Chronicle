@@ -408,6 +408,10 @@ templ peopleSections(cc *CampaignContext, members []CampaignMember, transfer *Ow
 
 		@MemberListComponent(cc, members, csrfToken, errMsg)
 
+		if cc.MemberRole >= RoleOwner {
+			<div id="guest-codes" hx-get={ fmt.Sprintf("/campaigns/%s/guest-codes", cc.Campaign.ID) } hx-trigger="load" hx-swap="outerHTML"></div>
+		}
+
 		// Shareable invite link.
 		<div class="card p-6" x-data={ fmt.Sprintf(`{
 			code: '%s',

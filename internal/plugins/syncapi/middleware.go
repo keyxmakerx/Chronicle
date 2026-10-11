@@ -114,6 +114,10 @@ func tryAuthFromSession(c echo.Context, authSvc auth.AuthService, campaignSvc ca
 	}
 
 	campaignID := c.Param("id")
+	// A guest's session reaches only their own campaign's routes.
+	if campaignID == "" && session.GuestCampaignID != "" {
+		return nil, false
+	}
 	if campaignID == "" {
 		// Routes that don't carry :id can still authenticate by session
 		// (e.g. a future /api/v1/me endpoint); synthesise a minimal key.

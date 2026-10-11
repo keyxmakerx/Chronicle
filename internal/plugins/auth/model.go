@@ -13,18 +13,21 @@ import (
 // throughout the application. Database scanning and JSON marshaling use this
 // struct directly.
 type User struct {
-	ID           string     `json:"id"`
-	Email        string     `json:"email"`
-	DisplayName  string     `json:"display_name"`
-	PasswordHash string     `json:"-"` // Never expose in JSON responses.
-	AvatarPath   *string    `json:"avatar_path,omitempty"`
-	IsAdmin      bool       `json:"is_admin"`
-	IsDisabled   bool       `json:"is_disabled"`
-	TOTPSecret   *string    `json:"-"` // Never expose.
-	TOTPEnabled  bool       `json:"totp_enabled"`
-	Timezone     *string    `json:"timezone,omitempty"` // IANA timezone (e.g. "America/New_York"). Nil = UTC.
-	CreatedAt    time.Time  `json:"created_at"`
-	LastLoginAt  *time.Time `json:"last_login_at,omitempty"`
+	ID           string  `json:"id"`
+	Email        string  `json:"email"`
+	DisplayName  string  `json:"display_name"`
+	PasswordHash string  `json:"-"` // Never expose in JSON responses.
+	AvatarPath   *string `json:"avatar_path,omitempty"`
+	IsAdmin      bool    `json:"is_admin"`
+	IsDisabled   bool    `json:"is_disabled"`
+	TOTPSecret   *string `json:"-"` // Never expose.
+	TOTPEnabled  bool    `json:"totp_enabled"`
+	Timezone     *string `json:"timezone,omitempty"` // IANA timezone (e.g. "America/New_York"). Nil = UTC.
+	// GuestCampaignID is set while the account is a guest: joined with a
+	// guest code, fenced to that one campaign, with no email or password.
+	GuestCampaignID *string    `json:"guest_campaign_id,omitempty"`
+	CreatedAt       time.Time  `json:"created_at"`
+	LastLoginAt     *time.Time `json:"last_login_at,omitempty"`
 }
 
 // --- Request DTOs (bound from HTTP requests) ---
@@ -84,11 +87,13 @@ type Session struct {
 	// like Name/Email so the top bar can render it without a DB hit on every
 	// page; it carries the same eventual-consistency lag as those fields —
 	// refreshed at login and by the periodic revalidation below.
-	AvatarPath    string    `json:"avatar_path,omitempty"`
-	IP            string    `json:"ip,omitempty"`
-	UserAgent     string    `json:"user_agent,omitempty"`
-	CreatedAt     time.Time `json:"created_at"`
-	LastValidated time.Time `json:"last_validated"`
+	AvatarPath string `json:"avatar_path,omitempty"`
+	// GuestCampaignID fences a guest's session to their one campaign.
+	GuestCampaignID string    `json:"guest_campaign_id,omitempty"`
+	IP              string    `json:"ip,omitempty"`
+	UserAgent       string    `json:"user_agent,omitempty"`
+	CreatedAt       time.Time `json:"created_at"`
+	LastValidated   time.Time `json:"last_validated"`
 }
 
 // SessionInfo extends Session with metadata for the admin active sessions view.

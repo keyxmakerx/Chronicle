@@ -89,8 +89,8 @@ func TestPurgeTrashed(t *testing.T) {
 	}{
 		{"unclaimed campaign is left alone", false, nil, nil, nil, false, false, []string{"claim"}, false, false},
 		{"claim error stops everything", false, errors.New("db down"), nil, nil, false, true, []string{"claim"}, false, false},
-		{"claimed: files, then the row (hook fires between)", true, nil, nil, nil, true, false, []string{"claim", "media", "sql"}, true, true},
-		{"media failure does not stop the delete", true, nil, nil, errors.New("disk"), true, false, []string{"claim", "media", "sql"}, true, true},
+		{"claimed: files, then the row (hook fires between), then guests end", true, nil, nil, nil, true, false, []string{"claim", "media", "sql", "guests"}, true, true},
+		{"media failure does not stop the delete", true, nil, nil, errors.New("disk"), true, false, []string{"claim", "media", "sql", "guests"}, true, true},
 		{"another purger finished first is success", true, nil, apperror.NewNotFound("campaign not found"), nil, true, false, []string{"claim", "media", "sql"}, true, true},
 		{"sql failure is reported and retried later", true, nil, errors.New("db down"), nil, false, true, []string{"claim", "media", "sql"}, true, true},
 	}
@@ -115,6 +115,7 @@ func TestPurgeTrashed(t *testing.T) {
 			svc := NewCampaignService(repo, &mockUserFinder{}, nil, nil, "http://localhost:8080")
 			svc.SetMediaCleaner(cleaner)
 			svc.SetHookDispatcher(hook)
+			OnCampaignDeleted(svc, func(context.Context, string) { order = append(order, "guests") })
 
 			purged, err := svc.PurgeTrashed(context.Background(), "camp-9", time.Time{})
 			if (err != nil) != tc.wantErr {

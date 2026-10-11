@@ -247,12 +247,23 @@ type campaignService struct {
 	// memberRemoved runs after a member is removed, so other plugins can end
 	// credentials they issued for that campaign without campaigns importing them.
 	memberRemoved []func(ctx context.Context, campaignID, userID string)
+	// campaignDeleted runs after a campaign is purged, for accounts that
+	// existed only for it (guests).
+	campaignDeleted []func(ctx context.Context, campaignID string)
 }
 
 // OnMemberRemoved registers fn to run after a user is removed from a campaign.
 func OnMemberRemoved(svc CampaignService, fn func(ctx context.Context, campaignID, userID string)) {
 	if s, ok := svc.(*campaignService); ok && fn != nil {
 		s.memberRemoved = append(s.memberRemoved, fn)
+	}
+}
+
+// OnCampaignDeleted registers fn to run after a campaign is purged from the
+// Trash, not when it is moved there, so an Undo finds it whole.
+func OnCampaignDeleted(svc CampaignService, fn func(ctx context.Context, campaignID string)) {
+	if s, ok := svc.(*campaignService); ok && fn != nil {
+		s.campaignDeleted = append(s.campaignDeleted, fn)
 	}
 }
 
@@ -717,6 +728,12 @@ func (s *campaignService) PurgeTrashed(ctx context.Context, campaignID string, o
 			return true, nil
 		}
 		return false, err
+	}
+
+	// The campaign is gone for good now, so accounts that only existed for
+	// it (guests) end here rather than when it went to the Trash.
+	for _, fn := range s.campaignDeleted {
+		fn(ctx, campaignID)
 	}
 
 	slog.Info("campaign purged", slog.String("campaign_id", campaignID))

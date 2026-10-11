@@ -1,0 +1,91 @@
+// join.templ renders the page where someone types a guest code from their
+// game master and joins that campaign with only a name.
+
+package auth
+
+import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
+
+// JoinPage is the full /join page. signedInAs is the name of someone
+// already signed in, who joins with their own account and needs no name.
+templ JoinPage(csrfToken, code, name, errMsg, signedInAs string) {
+	@layouts.Base("Join a campaign") {
+		@layouts.SiteAuthStage("") {
+			<div class="w-full max-w-md">
+				<div class="text-center mb-8">
+					@layouts.SiteAuthMark()
+					<h1 class="text-3xl font-bold text-fg">Join a campaign</h1>
+					<p class="text-fg-secondary mt-2">Type the code your game master gave you</p>
+				</div>
+				@JoinForm_(csrfToken, code, name, errMsg, signedInAs)
+			</div>
+		}
+	}
+}
+
+// JoinForm_ is the join form, swapped in place when the code is refused.
+templ JoinForm_(csrfToken, code, name, errMsg, signedInAs string) {
+	<div id="join-form" class="step-settle">
+		<form
+			class="card p-8 space-y-5"
+			method="POST"
+			action="/join"
+			hx-post="/join"
+			hx-target="#join-form"
+			hx-swap="outerHTML"
+		>
+			<input type="hidden" name="csrf_token" value={ csrfToken }/>
+			if errMsg != "" {
+				<div class="alert-error" role="alert">{ errMsg }</div>
+			}
+			<div>
+				<label for="join-code" class="block text-sm font-medium text-fg-body mb-1.5">Guest code</label>
+				<input
+					type="text"
+					id="join-code"
+					name="code"
+					value={ code }
+					required
+					autofocus?={ code == "" }
+					class="input w-full font-mono tracking-widest uppercase text-center text-lg"
+					placeholder="ABCD-2345"
+					autocomplete="off"
+					autocapitalize="characters"
+					spellcheck="false"
+					maxlength="20"
+				/>
+			</div>
+			if signedInAs == "" {
+				<div>
+					<label for="join-name" class="block text-sm font-medium text-fg-body mb-1.5">Your name</label>
+					<input
+						type="text"
+						id="join-name"
+						name="name"
+						value={ name }
+						required
+						autofocus?={ code != "" }
+						minlength="2"
+						maxlength="100"
+						class="input w-full"
+						placeholder="What the table calls you"
+						autocomplete="nickname"
+					/>
+					<p class="text-xs text-fg-muted mt-1.5">No email or password needed. You can keep your account later.</p>
+				</div>
+			} else {
+				<p class="text-sm text-fg-secondary">
+					You're signed in as <strong class="text-fg">{ signedInAs }</strong>, so you'll join with your own account.
+				</p>
+			}
+			<button type="submit" class="btn-primary w-full py-2.5">
+				Join
+			</button>
+			if signedInAs == "" {
+				<p class="text-center text-sm text-fg-secondary">
+					Already have an account?
+					<a href="/login?redirect=/join" class="text-accent hover:text-accent-hover font-medium">Sign in first</a>
+				</p>
+			}
+		</form>
+	</div>
+}
