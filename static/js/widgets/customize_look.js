@@ -776,8 +776,8 @@
 
     /* ---------- Building the preview ----------
        Real chrome at a small size: the navigation (pinned rows and folding
-       sections), the header, a dashboard and a
-       city page. Nothing here is a picture of the site. */
+       sections), the header, a dashboard, a city page and a character
+       sheet. Nothing here is a picture of the site. */
     function srow(id, icon, label, count, colour, withHL){
       return '<div class="s-row" data-row="' + id + '"' + (colour ? ' style="--c:' + colour + '"' : '') + '><span class="ic">' + IC(icon) + '</span><span class="lb">' + label + '</span>' +
         (count != null ? '<span class="ct">' + count + '</span>' : '') + (withHL ? '<span class="pn"></span>' + HL : '') + '</div>';
@@ -820,7 +820,30 @@
           '<div class="d-act">' + pbtn('pri', 'Edit page') + pbtn('sec', 'Share with players') + '</div></div>' +
           '<div class="pcard lifts e-info"><p class="c-h">At a glance</p><dl><dt>Population</dt><dd>18,400</dd><dt>Ruler</dt><dd>Ysolde Vane</dd><dt>Founded</dt><dd>212 AF</dd></dl>' +
           '<div class="tags"><span class="tag">#cinder-reach</span><span class="tag">#capital</span></div></div></div></div>';
-      return '<div class="site" aria-hidden="true">' + sb + '<div class="s-main">' + hdr + dash + city + '</div></div>';
+      return '<div class="site" aria-hidden="true">' + sb + '<div class="s-main">' + hdr + dash + city + sheetHTML() + '</div></div>';
+    }
+    // A sample hero on a real sheet root built from the pieces a system's sheet
+    // uses (paper.css), so sheet_styles.css draws it in the draft's style exactly
+    // as it draws the campaign's own sheets. data-sheet-preview keeps the saved
+    // style from overriding the draft.
+    function sheetHTML(){
+      function stat(k, v){ return '<span class="ps-stat"><span class="paper-kind">' + k + '</span><b>' + v + '</b></span>'; }
+      function ab(k, score, mod){ return '<span class="ps-ab"><span>' + k + '</span><b>' + mod + '</b><small>' + score + '</small></span>'; }
+      function line(name, note){ return '<li><b>' + name + '</b><span>' + note + '</span></li>'; }
+      return '<div class="s-page" data-page="sheet" hidden><div class="pv-sheet" id="d-sheet" data-sheet data-sheet-preview data-sheet-style="modern">' +
+        '<div class="paper-stack"><div class="paper ps">' +
+          '<div class="ps-head"><span class="ps-por">SW</span><span class="ps-id"><span class="paper-kind">Ranger · Level 6</span><span class="paper-title">Sera Windrose</span></span>' +
+            '<span class="ps-stats">' + stat('Armour', '15') + stat('Speed', '30 ft') + '</span></div>' +
+          '<div class="ps-body"><div class="ps-col">' +
+            '<div class="paper-pull ps-sec"><span class="paper-kind">Health</span><span class="ps-hp"><b>38</b>/ 52</span><span class="ps-bar"><i></i></span></div>' +
+            '<div class="paper-pull ps-sec"><span class="paper-kind">Abilities</span><span class="ps-abs">' +
+              ab('Str', 10, '+0') + ab('Dex', 18, '+4') + ab('Con', 14, '+2') + ab('Int', 12, '+1') + ab('Wis', 16, '+3') + ab('Cha', 8, '−1') + '</span></div>' +
+          '</div><div class="ps-col">' +
+            '<div class="paper-pull ps-sec"><span class="paper-kind">Features</span><ul class="ps-list">' + line('Hunter’s Mark', '1 hour') + line('Favoured Foe', '3 a day') + line('Natural Explorer', 'Forest') + '</ul></div>' +
+            '<div class="paper-pull ps-sec"><span class="paper-kind">Items</span><ul class="ps-list">' + line('Longbow', '1d8 + 4') + line('Cloak of Embers', 'Attuned') + '</ul></div>' +
+            '<div class="paper-slip ps-slip">Owes Old Brannoc three silver for the room at the Warm Ash.</div>' +
+          '</div></div>' +
+        '</div></div></div></div>';
     }
     function piecesHTML(){
       function pc(label, body){ return '<div class="pc"><div class="pc-l">' + label + '</div>' + body + '</div>'; }
@@ -905,11 +928,15 @@
       setBg($('#d-bnr'), d.sidebar.corner === 'banner' ? imgURL(d.sidebar.banner) : '');
       setText($('#d-bsub'), d.sidebar.corner === 'subtitle' ? d.sidebar.subtitle.trim() : '');
       setBg($('#d-himg'), imgURL(d.header.image));
-      setHTML($('#d-path'), ui.page === 'dash' ? '<b>Dashboard</b>' : '<span>Locations</span>' + IC('i-chev-r') + '<span>Cities</span>' + IC('i-chev-r') + '<b>Emberfall</b>');
+      setHTML($('#d-path'), {
+        dash:'<b>Dashboard</b>',
+        city:'<span>Locations</span>' + IC('i-chev-r') + '<span>Cities</span>' + IC('i-chev-r') + '<b>Emberfall</b>',
+        sheet:'<span>Characters</span>' + IC('i-chev-r') + '<b>Sera Windrose</b>'
+      }[ui.page]);
       setHTML($('#d-rail'), railHTML(d));
       setHTML($('#d-tools'), toolsHTML(d));
       $$('.s-page', pv).forEach(function(p){ p.hidden = p.dataset.page !== ui.page; });
-      var act = ui.page === 'dash' ? 'dash' : 'cities';
+      var act = { dash:'dash', city:'cities', sheet:'' }[ui.page];
       $$('.site .s-row[data-row]', pv).forEach(function(r){ r.classList.toggle('on', r.dataset.row === act); });
       // The page name sits in the active row when it names a page inside it.
       $$('.s-row .pn').forEach(function(pn){
@@ -918,6 +945,10 @@
         setText(pn, name);
         var ct = $('.ct', row); if (ct) ct.hidden = !!name;
       });
+      // The engine loads the style's fonts and textures; it may arrive after the first render.
+      var sh = $('#d-sheet'), SM = window.Chronicle && Chronicle.sheetMotion;
+      if (sh.getAttribute('data-sheet-style') !== d.sheet.style) sh.setAttribute('data-sheet-style', d.sheet.style);
+      if (SM && SM.style && sh._st !== d.sheet.style){ SM.style(sh); sh._st = d.sheet.style; }
       var H = headFont(d.type.heading), B = bodyFont(d.type.body), sc = SCALES[d.type.scale];
       setHTML($('#ts-meta'), '<span>Headings <b>' + esc(H[0] === 'same' ? B[1] : H[1]) + '</b></span><span>Text <b>' + esc(B[1]) + '</b></span><span><b>' + sc[1] + '</b> size, ' + sc[0] + ' px text</span>');
     }
@@ -1412,6 +1443,7 @@
         if (openW) closeWset(false);
         if (id === 'nav' && ui.page !== 'city') setPage('city');
         else if (id === 'brand' && ui.page !== 'dash') setPage('dash');
+        else if (id === 'sheet' && ui.page !== 'sheet') setPage('sheet');
         else update();
         var tl = $('#tl');
         if (tl.scrollWidth > tl.clientWidth + 1) tl.scrollLeft = tab.offsetLeft - tl.offsetLeft - (tl.clientWidth - tab.offsetWidth) / 2;
@@ -1661,13 +1693,14 @@
       colours:{ all:['.p-link', '.tag', '.chipe', '.czbadge', '.band', '.tev.now', '.av'], tip:'Links, tags, events and badges' },
       type:   { dash:['.d-title .h1', '.c-h'], city:['.e-head', '.e-body p'], tip:'Headings and text' },
       buttons:{ all:['.pbtn'], tip:'Every button' },
-      motion: { all:['.pcard'], tip:'Cards and how they lift' }
+      motion: { all:['.pcard'], tip:'Cards and how they lift' },
+      sheet:  { all:['#d-sheet'], tip:'Every character sheet' }
     };
     // Most specific first: a button inside a card is a button.
     var FZ_HIT = [['.pbtn', 'buttons'], ['.p-link, .tag, .chipe, .czbadge, .band, .tev.now, .av', 'colours'],
       ['.h1, .c-h, .e-head, .e-body p', 'type'], ['.s-bnr, .s-bsub', 'sidebar'], ['.s-brand, #d-banner', 'brand'], ['.s-hdr', 'header'], ['.s-list', 'nav'], ['.s-sb', 'sidebar'],
-      ['.pcard', 'motion'], ['.s-page', 'colours']];
-    var FZ_OF = { brand:'brand', header:'header', sidebar:'sidebar', nav:'nav', colours:'colours', type:'type', buttons:'buttons', motion:'motion' };
+      ['.pcard', 'motion'], ['[data-sheet]', 'sheet'], ['.s-page', 'colours']];
+    var FZ_OF = { brand:'brand', header:'header', sidebar:'sidebar', nav:'nav', colours:'colours', type:'type', buttons:'buttons', motion:'motion', sheet:'sheet' };
     var fzLock = false, fzLastFlash = {}, fzRaf = 0, fzHovSec = null;
     function fzSite(){ return $('#site-wrap .site'); }
     function fzRects(sec){
