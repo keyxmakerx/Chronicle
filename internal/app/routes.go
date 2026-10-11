@@ -4188,6 +4188,10 @@ func (a *App) RegisterRoutes() {
 	pageSafetyRepo := entities.NewPageSafetyRepository(a.DB)
 	entityService.SetPageSafety(pageSafetyRepo)
 	pageSafetyService := entities.NewPageSafetyService(pageSafetyRepo, entityRepo, entityService, settingsService)
+	// Player Notes are counted (never read) so a delete and the Trash can say
+	// how many notes go with a page; without the wiring they just stay quiet.
+	pageSafetyService.SetNoteCounter(entityNotesService)
+	entityHandler.SetTrashNoteCounter(pageSafetyService)
 	entities.RegisterPageSafetyRoutes(e, entities.NewPageSafetyHandler(pageSafetyService, entityService, campaignService), campaignService, authService)
 	go pageSafetyService.StartPurger(a.ShutdownCtx)
 

@@ -34,6 +34,12 @@ type Service interface {
 
 	// Delete removes a note. Only the author may delete.
 	Delete(ctx context.Context, id string, viewer ViewerContext) error
+
+	// CountByEntities counts the notes on each page, any audience. It is
+	// the seam the Trash uses to say how many notes go with a page; it
+	// returns numbers only, so it can't leak a note a viewer may not read.
+	// Callers must already be allowed to manage the pages (owner-gated).
+	CountByEntities(ctx context.Context, campaignID string, entityIDs []string) (map[string]int, error)
 }
 
 // Notifier is the optional callback the service invokes after each
@@ -220,6 +226,17 @@ func (s *service) Delete(ctx context.Context, id string, viewer ViewerContext) e
 	}
 	s.broadcast("entity_notes.deleted", existing)
 	return nil
+}
+
+func (s *service) CountByEntities(ctx context.Context, campaignID string, entityIDs []string) (map[string]int, error) {
+	if len(entityIDs) == 0 {
+		return map[string]int{}, nil
+	}
+	counts, err := s.repo.CountByEntities(ctx, campaignID, entityIDs)
+	if err != nil {
+		return nil, apperror.NewInternal(err)
+	}
+	return counts, nil
 }
 
 // --- ACL helpers (write-side) ---

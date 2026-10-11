@@ -7,6 +7,7 @@
  * 2. After a page is deleted the server redirects to the page list with
  *    ?trashed=<id>; this shows "Moved to Trash" with an Undo button that
  *    restores it, and drops the parameter so a reload doesn't repeat it.
+ *    ?notes=<n> (set when the page had Player Notes) adds "with its n notes".
  */
 (function () {
   'use strict';
@@ -46,13 +47,16 @@
     var m = window.location.pathname.match(/^\/campaigns\/([^/]+)\/entities\/?$/);
     if (!id || !m || !window.Chronicle || !Chronicle.notify) return;
 
+    var notes = parseInt(params.get('notes'), 10);
+    var withNotes = notes > 0 ? ' with its ' + notes + (notes === 1 ? ' note' : ' notes') : '';
     params.delete('trashed');
+    params.delete('notes');
     var rest = params.toString();
     history.replaceState(history.state, '', window.location.pathname + (rest ? '?' + rest : ''));
 
     var btnId = 'undo-trash-' + Date.now();
     Chronicle.notify(
-      'Moved to Trash. <button type="button" id="' + btnId + '" class="underline font-medium ml-1">Undo</button>',
+      'Moved to Trash' + withNotes + '. <button type="button" id="' + btnId + '" class="underline font-medium ml-1">Undo</button>',
       'success',
       { html: true, duration: 10000 }
     );

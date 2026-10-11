@@ -44,6 +44,11 @@ type stubRepo struct {
 	findForAuthor map[string]*Note
 	updated       []Note
 	deletedIDs    []string
+
+	counts        map[string]int
+	countErr      error
+	countCampaign string
+	countIDs      []string
 }
 
 func (s *stubRepo) Create(_ context.Context, n *Note) error {
@@ -76,6 +81,11 @@ func (s *stubRepo) Update(_ context.Context, n *Note) error {
 func (s *stubRepo) Delete(_ context.Context, id string) error {
 	s.deletedIDs = append(s.deletedIDs, id)
 	return nil
+}
+
+func (s *stubRepo) CountByEntities(_ context.Context, campaignID string, ids []string) (map[string]int, error) {
+	s.countCampaign, s.countIDs = campaignID, ids
+	return s.counts, s.countErr
 }
 
 // helpers
@@ -735,5 +745,42 @@ func TestService_Create_RejectsOversizeBodyHTML(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected BadRequest on oversize body HTML")
+	}
+}
+
+// --- CountByEntities ---
+
+func TestService_CountByEntities(t *testing.T) {
+	cases := []struct {
+		name      string
+		ids       []string
+		counts    map[string]int
+		repoErr   error
+		want      map[string]int
+		wantErr   bool
+		wantQuery bool
+	}{
+		{"notes present", []string{"e1", "e2"}, map[string]int{"e1": 3}, nil, map[string]int{"e1": 3}, false, true},
+		{"no notes", []string{"e1"}, map[string]int{}, nil, map[string]int{}, false, true},
+		{"no pages skips the query", nil, nil, nil, map[string]int{}, false, false},
+		{"repo error is an internal error", []string{"e1"}, nil, errors.New("db down"), nil, true, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			repo := &stubRepo{counts: c.counts, countErr: c.repoErr}
+			got, err := NewService(repo, nil).CountByEntities(context.Background(), "c1", c.ids)
+			if (err != nil) != c.wantErr {
+				t.Fatalf("err = %v, wantErr %v", err, c.wantErr)
+			}
+			if c.wantErr {
+				return
+			}
+			if len(got) != len(c.want) || got["e1"] != c.want["e1"] {
+				t.Errorf("got %v, want %v", got, c.want)
+			}
+			if queried := repo.countCampaign != ""; queried != c.wantQuery {
+				t.Errorf("queried = %v, want %v", queried, c.wantQuery)
+			}
+		})
 	}
 }
