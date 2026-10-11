@@ -31,6 +31,39 @@ changes=$(git diff --name-status --no-renames --diff-filter=DM "${base}"...HEAD 
   'db/migrations' 'internal/plugins' 2>/dev/null \
   | grep -E 'migrations/[0-9]+_.*\.(up|down)\.sql$' || true)
 
+# The one exception: a migration whose version number appears twice in its
+# directory on the base may be renumbered. golang-migrate refuses to load a
+# source with a duplicate version, so no database can have applied either file
+# from that base. Only a Delete qualifies, and only when HEAD adds the same
+# content under another name in the same directory.
+duplicate_renumbered() {
+  local status="$1" path="$2" dir name ver kind blob added
+  [[ "${status}" == "D" ]] || return 1
+  dir=$(dirname "${path}")
+  name=$(basename "${path}")
+  ver="${name%%_*}"
+  kind="${name##*.}"; kind="${name%."${kind}"}"; kind="${kind##*.}"
+  git ls-tree --name-only "${base}" -- "${dir}/" | xargs -n1 basename \
+    | grep -E "^${ver}_.*\.${kind}\.sql$" | grep -qvxF "${name}" || return 1
+  blob=$(git rev-parse "${base}:${path}")
+  while IFS= read -r added; do
+    [[ -n "${added}" ]] || continue
+    [[ "$(git rev-parse "HEAD:${added}")" == "${blob}" ]] && return 0
+  done < <(git diff --name-only --no-renames --diff-filter=A "${base}"...HEAD -- "${dir}/")
+  return 1
+}
+
+blocked=""
+while IFS=$'\t' read -r status path; do
+  [[ -n "${path:-}" ]] || continue
+  if duplicate_renumbered "${status}" "${path}"; then
+    echo "check-migration-immutability: allowed — ${path} had a duplicate version on ${base} and is renumbered unchanged."
+  else
+    blocked+="${status}"$'\t'"${path}"$'\n'
+  fi
+done <<< "${changes}"
+changes="${blocked%$'\n'}"
+
 if [[ -z "${changes}" ]]; then
   echo "check-migration-immutability: OK — no existing migration deleted or modified vs ${base}."
   exit 0

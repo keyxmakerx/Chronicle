@@ -25,7 +25,7 @@ func (s *recordingDrawingSvc) CreateDrawing(_ context.Context, in maps.CreateDra
 	return &maps.Drawing{}, nil
 }
 
-func (s *recordingDrawingSvc) UpdateDrawing(_ context.Context, _, _ string, role int, isDM bool, _ maps.UpdateDrawingInput) error {
+func (s *recordingDrawingSvc) UpdateDrawing(_ context.Context, _, _, _ string, role int, isDM bool, _ maps.UpdateDrawingInput) error {
 	s.updateRole = role
 	s.updateIsDM = isDM
 	return nil

@@ -1,0 +1,117 @@
+// import_progress.templ renders a running import (a bar that polls itself) and
+// its result.
+
+package vault_import
+
+import "fmt"
+
+// ProgressPanel shows a job. While it runs the panel asks for itself again
+// every second; once it ends the same panel shows the result and stops asking.
+// from is the percent drawn last time, so the bar glides on from there.
+templ ProgressPanel(campaignID string, j JobView, from int) {
+	switch j.State {
+		case StateRunning:
+			<div
+				class="vi-settle space-y-4"
+				hx-get={ fmt.Sprintf("/campaigns/%s/import/markdown/jobs/%s?from=%d", campaignID, j.ID, j.Percent) }
+				hx-trigger="every 1s"
+				hx-target="#vi-stage"
+				hx-swap="innerHTML"
+			>
+				<div class="flex items-center justify-between gap-3 text-sm">
+					<span class="font-medium text-fg" role="status">{ j.Label }</span>
+					<span class="text-fg-muted tabular-nums">{ fmt.Sprint(j.Percent) }%</span>
+				</div>
+				<div class="vi-bar" role="progressbar" aria-label="Import progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow={ fmt.Sprint(j.Percent) }>
+					<span style={ fmt.Sprintf("--from:%.2f;--to:%.2f", float64(from)/100, float64(j.Percent)/100) }></span>
+				</div>
+				<p class="text-xs text-fg-muted">
+					You can leave this page. The import keeps going, and the Imported folder shows how it ended.
+				</p>
+			</div>
+		case StateDone:
+			@importResult(campaignID, j)
+		default:
+			@importFailed(campaignID, j)
+	}
+}
+
+// importResult is the success panel: what was made, and where.
+templ importResult(campaignID string, j JobView) {
+	<div class="vi-settle space-y-4">
+		<div class="flex items-center gap-3">
+			<span class="w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center shrink-0">
+				<i class="fa-solid fa-check text-emerald-600 dark:text-emerald-400" aria-hidden="true"></i>
+			</span>
+			<div>
+				<h3 class="text-base font-semibold text-fg">Imported { fmt.Sprint(j.Summary.Pages) } { plural(j.Summary.Pages, "page", "pages") }</h3>
+				<p class="text-sm text-fg-secondary">They are in the folder <strong class="text-fg">{ j.RootName }</strong>, GM only until you share them.</p>
+			</div>
+		</div>
+		@summaryList(j.Summary)
+		<div class="flex flex-wrap items-center gap-3">
+			<a class="btn-primary" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", campaignID, j.RootID)) }>
+				Open the { j.RootName } folder
+			</a>
+			<button
+				type="button"
+				class="btn-secondary"
+				hx-get={ fmt.Sprintf("/campaigns/%s/import/markdown/dropzone", campaignID) }
+				hx-target="#vi-stage"
+				hx-swap="innerHTML"
+			>Import another</button>
+		</div>
+	</div>
+}
+
+// importFailed says plainly what was and was not written.
+templ importFailed(campaignID string, j JobView) {
+	<div class="vi-settle space-y-4">
+		<div class="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/5 px-4 py-3">
+			<i class="fa-solid fa-triangle-exclamation text-amber-500 mt-0.5" aria-hidden="true"></i>
+			<div class="text-sm">
+				<p class="font-medium text-fg">The import stopped</p>
+				<p class="text-fg-secondary mt-0.5">{ j.Error }</p>
+			</div>
+		</div>
+		if j.Summary != nil && j.Summary.Pages > 0 {
+			@summaryList(j.Summary)
+		}
+		<div class="flex flex-wrap items-center gap-3">
+			if j.Partial && j.RootID != "" {
+				<a class="btn-secondary" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", campaignID, j.RootID)) }>Open the folder</a>
+			}
+			<button
+				type="button"
+				class="btn-primary"
+				hx-get={ fmt.Sprintf("/campaigns/%s/import/markdown/dropzone", campaignID) }
+				hx-target="#vi-stage"
+				hx-swap="innerHTML"
+			>Try again</button>
+		</div>
+	</div>
+}
+
+// summaryList is the tally and the things that did not come across.
+templ summaryList(s *Summary) {
+	<ul class="text-sm text-fg-secondary space-y-0.5">
+		<li>{ fmt.Sprint(s.LinksMade) } { plural(s.LinksMade, "page link", "page links") }</li>
+		<li>{ fmt.Sprint(s.Pictures) } { plural(s.Pictures, "picture", "pictures") } inside the text</li>
+		<li>{ fmt.Sprint(s.FilesAttached) } { plural(s.FilesAttached, "file", "files") } attached</li>
+	</ul>
+	if len(s.Problems) > 0 {
+		<details class="vi-fold rounded-lg border border-edge">
+			<summary class="px-3 py-2 text-sm font-medium text-fg cursor-pointer">
+				{ fmt.Sprint(len(s.Problems) + s.MoreProblems) } { plural(len(s.Problems)+s.MoreProblems, "thing", "things") } did not come across
+			</summary>
+			<ul class="px-3 pb-3 text-sm space-y-0.5 max-h-56 overflow-y-auto">
+				for _, p := range s.Problems {
+					<li><span class="text-fg">{ p.Where }</span> <span class="text-fg-muted">&middot; { p.What }</span></li>
+				}
+				if s.MoreProblems > 0 {
+					<li class="text-xs text-fg-muted">and { fmt.Sprint(s.MoreProblems) } more</li>
+				}
+			</ul>
+		</details>
+	}
+}

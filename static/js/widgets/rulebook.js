@@ -14,7 +14,9 @@
  * rules (paragraphs, lists, bold, italic, [[terms]]) are applied to the escaped
  * result. Theme values only reach CSS through setProperty on an allow-list.
  *
- * Mount: <div data-widget="rulebook" data-campaign-id data-book-url>
+ * Mount: <div data-widget="rulebook" data-campaign-id data-book-url>, or
+ * data-book-json for a book shown inside another page (a draft under review),
+ * which keeps no place and only answers keys pressed inside it.
  */
 (function () {
   'use strict';
@@ -186,6 +188,9 @@
     this.el = el;
     this.campaignId = str(config.campaignId);
     this.url = str(config.bookUrl);
+    // data-book-json carries the book itself (a draft shown for review
+    // before it is saved); such a book has no address to search or edit.
+    this.inline = str(config.bookJson);
     this.data = null;
     this.view = 'director';
     this.items = [];
@@ -218,6 +223,7 @@
   Rulebook.prototype.start = function () {
     var self = this;
     this.el.classList.add('rb');
+    if (this.inline) this.el.classList.add('rb-inline');
     this.on(document, 'click', function (e) { self.onClick(e); });
     this.on(document, 'keydown', function (e) { self.onKey(e); });
     // Rule words open Chronicle's shared hover card, in the campaign's look.
@@ -250,7 +256,7 @@
     clearTimeout(this.searchTimer);
     this.destroyNested(this.el);
     this.el.innerHTML = '';
-    this.el.classList.remove('rb');
+    this.el.classList.remove('rb', 'rb-inline');
     this.el.removeAttribute('aria-busy');
   };
 
@@ -270,6 +276,13 @@
 
   Rulebook.prototype.load = function () {
     var self = this, seq = ++this.loadSeq;
+    if (this.inline) {
+      var parsed = null;
+      try { parsed = normalize(JSON.parse(this.inline)); } catch (e) { parsed = null; }
+      if (parsed) this.open(parsed);
+      else this.showState('error', errorMessage({ unreadable: true }));
+      return;
+    }
     if (!this.url) { this.showState('error', 'This page has no book address.'); return; }
     this.showState('loading');
     Chronicle.apiFetch(this.url).then(function (res) {
@@ -286,12 +299,19 @@
     });
   };
 
+  // The campaign owner can ask for every book in Chronicle's standard look
+  // (Customize > Rulebook): the book's colours and its paper look are then
+  // ignored, and only its fonts still apply.
+  function standardLook() {
+    return document.documentElement.getAttribute('data-cz-book') === 'standard';
+  }
+
   Rulebook.prototype.applyTheme = function (theme) {
-    var style = this.el.style;
+    var style = this.el.style, plain = standardLook();
     Object.keys(theme).forEach(function (k) {
       var v = theme[k];
       if (typeof v !== 'string') return;
-      if ((has(THEME_COLOURS, k) && COLOUR_RE.test(v)) || (has(THEME_FONTS, k) && FONT_RE.test(v))) {
+      if ((has(THEME_COLOURS, k) && COLOUR_RE.test(v) && !plain) || (has(THEME_FONTS, k) && FONT_RE.test(v))) {
         style.setProperty('--book-' + k, v);
       }
     });
@@ -301,10 +321,11 @@
   };
 
   Rulebook.prototype.open = function (data) {
+    if (standardLook()) data.look = '';
     this.data = data;
     this.applyTheme(data.theme);
     this.view = data.isDirector ? 'director' : 'player';
-    var place = loadPlace(this.campaignId);
+    var place = this.inline ? null : loadPlace(this.campaignId);
     if (data.isDirector && place && (place.view === 'player' || place.view === 'director')) this.view = place.view;
 
     this.el.innerHTML = this.frameHTML();
@@ -417,10 +438,10 @@
       (d.systemName ? '<small>' + esc(d.systemName) + '</small>' : '') + '</div></div>' +
       '<button type="button" class="rb-btn" data-act="toc" aria-expanded="false" aria-label="Open the contents"><span aria-hidden="true">☰</span> Contents</button>' +
       '<span class="rb-where"></span><span class="rb-sp"></span>' +
-      '<div class="rb-search" role="search"><span class="rb-search-ic" aria-hidden="true">⌕</span>' +
+      (this.inline ? '' : '<div class="rb-search" role="search"><span class="rb-search-ic" aria-hidden="true">⌕</span>' +
       '<input type="search" class="rb-search-in" data-search placeholder="Search the book" aria-label="Search the book" autocomplete="off" spellcheck="false"' +
       ' aria-controls="' + this.domId('results') + '" aria-expanded="false"><kbd aria-hidden="true">/</kbd>' +
-      '<div class="rb-results" id="' + this.domId('results') + '" role="region" aria-label="Search results" hidden></div></div>' +
+      '<div class="rb-results" id="' + this.domId('results') + '" role="region" aria-label="Search results" hidden></div></div>') +
       edit + seg + '</div>' + this.tabsHTML() +
       '<div class="rb-book">' +
       '<article class="rb-page l"></article><div class="rb-spine" aria-hidden="true"></div><article class="rb-page r"></article>' +
@@ -605,7 +626,7 @@
         first.ch.title + (first.kind === 'page' ? ', ' + first.p.title : '');
       var place = { key: first.key };
       if (this.data.isDirector) place.view = this.view;
-      savePlace(this.campaignId, place);
+      if (!this.inline) savePlace(this.campaignId, place);
     }
   };
 
@@ -1310,6 +1331,8 @@
   Rulebook.prototype.onKey = function (e) {
     if (!this.data || !this.el.isConnected) return;
     var t = e.target;
+    // A book shown inside another page only answers keys pressed in it.
+    if (this.inline && !(t && this.el.contains(t))) return;
     if (t && t.closest) {
       if (this.searchKey(e, t)) return;
       if (t.closest('input,select,textarea,[contenteditable="true"]')) return;

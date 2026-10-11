@@ -73,6 +73,8 @@ type Handler struct {
 	navPins  AdminNavPinService
 	// siteLook backs the Site look page; nil until wired.
 	siteLook SiteLookService
+	// trash is the site Trash; nil until wired.
+	trash TrashService
 }
 
 // StoragePageData holds all data needed for the combined storage management page.
@@ -251,18 +253,23 @@ func (h *Handler) DataHygiene(c echo.Context) error {
 	return middleware.Render(c, http.StatusOK, DataHygienePage(data))
 }
 
-// PurgeOrphanedMediaAPI handles DELETE /admin/data-hygiene/orphaned-media.
+// PurgeOrphanedMediaAPI handles DELETE /admin/data-hygiene/orphaned-media. The
+// unused uploads move to the Trash as one clean-up that can be undone; the
+// files are only removed when the Trash is emptied.
 func (h *Handler) PurgeOrphanedMediaAPI(c echo.Context) error {
-	if h.hygieneScanner == nil {
-		return apperror.NewInternal(fmt.Errorf("hygiene scanner not configured"))
+	if h.trash == nil {
+		return apperror.NewInternal(fmt.Errorf("trash not configured"))
 	}
-	purged, err := h.hygieneScanner.PurgeOrphanedMedia(c.Request().Context())
+	batch, err := h.trash.TrashUnusedUploads(c.Request().Context(), h.actor(c))
 	if err != nil {
-		return apperror.NewInternal(fmt.Errorf("purging orphaned media: %w", err))
+		return apperror.NewInternal(fmt.Errorf("moving orphaned media to trash: %w", err))
 	}
-	slog.Info("admin purged orphaned media", slog.Int("purged", purged))
-	h.record(c, "hygiene.purged", "hygiene", "", fmt.Sprintf("%d orphaned files", purged))
-	return middleware.HTMXRedirect(c, "/admin/data-hygiene")
+	if batch == nil {
+		return middleware.HTMXRedirect(c, "/admin/data-hygiene")
+	}
+	slog.Info("admin moved orphaned media to trash", slog.String("batch_id", batch.ID), slog.Int("files", batch.Items))
+	h.record(c, "hygiene.files_trashed", "trash", batch.ID, batchSummary(*batch))
+	return middleware.HTMXRedirect(c, "/admin/trash")
 }
 
 // PurgeOrphanedAPIKeysAPI handles DELETE /admin/data-hygiene/orphaned-api-keys.
@@ -433,6 +440,47 @@ func (h *Handler) Dashboard(c echo.Context) error {
 	}
 
 	return middleware.Render(c, http.StatusOK, AdminDashboardPage(buildHomeGroups(in), needs, recent))
+}
+
+// StatusFigures are the live figures on the Site admin status strip.
+// Sessions is -1 when it could not be read.
+type StatusFigures struct {
+	Sessions                   int
+	BackupKnown, BackupEnabled bool
+	BackupAge                  string // "" when there is no backup yet
+}
+
+// Status renders the status strip's figures (GET /admin/status), loaded by
+// every admin page after it is shown.
+func (h *Handler) Status(c echo.Context) error {
+	ctx := c.Request().Context()
+	f := StatusFigures{Sessions: -1}
+	if h.securityService != nil {
+		if sessions, err := h.securityService.GetActiveSessions(ctx); err != nil {
+			slog.Warn("admin status: listing sessions failed", slog.Any("error", err))
+		} else {
+			f.Sessions = len(sessions)
+		}
+	}
+	if h.backupLister != nil {
+		if bi, err := h.backupLister.BackupInfo(ctx); err != nil {
+			slog.Warn("admin status: backup info failed", slog.Any("error", err))
+		} else {
+			f.BackupKnown, f.BackupEnabled = true, bi.Enabled
+			if last := latestBackupTime(bi); !last.IsZero() {
+				f.BackupAge = strings.ToLower(backupAge(time.Since(last)))
+			}
+		}
+	}
+	return middleware.Render(c, http.StatusOK, AdminStatusFigures(f))
+}
+
+// sessionsWord is "session" or "sessions" for n.
+func sessionsWord(n int) string {
+	if n == 1 {
+		return "session"
+	}
+	return "sessions"
 }
 
 // latestBackupTime is the newest backup file's time, ignoring manifests, which
@@ -606,8 +654,14 @@ func (h *Handler) Campaigns(c echo.Context) error {
 		return err
 	}
 
+	handover, err := h.campaignService.HandoverStatuses(ctx, list)
+	if err != nil {
+		return err
+	}
 	data := CampaignListData{
 		Campaigns: list,
+		Handover:  handover,
+		Now:       time.Now().UTC(),
 		View:      view,
 		CSRFToken: middleware.GetCSRFToken(c),
 	}
@@ -617,18 +671,20 @@ func (h *Handler) Campaigns(c echo.Context) error {
 	return middleware.Render(c, http.StatusOK, AdminCampaignsPage(data))
 }
 
-// DeleteCampaign force-deletes a campaign (DELETE /admin/campaigns/:id).
+// DeleteCampaign moves a campaign to the Trash (DELETE /admin/campaigns/:id).
+// Nothing is removed: the campaign vanishes for everyone and can be brought
+// back from the Trash page until the retention is up.
 func (h *Handler) DeleteCampaign(c echo.Context) error {
 	campaignID := c.Param("id")
 
-	// Read the name first: the row is gone after the delete.
+	// Read the name first: the log keeps it, and the Trash shows it.
 	label := h.campaignLabel(c.Request().Context(), campaignID)
-	if err := h.campaignService.Delete(c.Request().Context(), campaignID); err != nil {
+	if err := h.campaignService.MoveToTrash(c.Request().Context(), campaignID, auth.GetUserID(c)); err != nil {
 		return err
 	}
-	h.record(c, "campaign.deleted", "campaign", campaignID, label)
+	h.record(c, "campaign.trashed", "campaign", campaignID, label)
 
-	slog.Info("admin deleted campaign",
+	slog.Info("admin moved campaign to trash",
 		slog.String("campaign_id", campaignID),
 		slog.String("by", auth.GetUserID(c)),
 	)
@@ -678,6 +734,63 @@ func (h *Handler) LeaveCampaign(c echo.Context) error {
 		slog.String("user_id", userID),
 	)
 
+	return middleware.HTMXRedirect(c, "/admin/campaigns")
+}
+
+// HandoverPage shows who could take over a campaign whose owner has been
+// away (GET /admin/campaigns/:id/hand-over). The list's row action asks for
+// it over htmx, so that request is turned into a full page load.
+func (h *Handler) HandoverPage(c echo.Context) error {
+	campaignID := c.Param("id")
+	if middleware.IsHTMX(c) {
+		return middleware.HTMXRedirect(c, fmt.Sprintf("/admin/campaigns/%s/hand-over", campaignID))
+	}
+	ctx := c.Request().Context()
+	cm, err := h.campaignService.GetByID(ctx, campaignID)
+	if err != nil {
+		return err
+	}
+	statuses, err := h.campaignService.HandoverStatuses(ctx, []campaigns.Campaign{*cm})
+	if err != nil {
+		return err
+	}
+	st, ok := statuses[campaignID]
+	if !ok {
+		return apperror.NewNotFound("campaign owner not found")
+	}
+	if st.AfterMonths == 0 {
+		return apperror.NewForbidden("the owner hasn't allowed a hand-over")
+	}
+	members, err := h.campaignService.ListMembers(ctx, campaignID)
+	if err != nil {
+		return err
+	}
+	return middleware.Render(c, http.StatusOK, AdminHandoverPage(HandoverPageData{
+		Campaign:   *cm,
+		Status:     st,
+		Candidates: handoverCandidates(members, st.OwnerID),
+		Now:        time.Now().UTC(),
+		CSRFToken:  middleware.GetCSRFToken(c),
+	}))
+}
+
+// HandOver gives the campaign to the chosen member
+// (POST /admin/campaigns/:id/hand-over). The service re-checks every rule.
+func (h *Handler) HandOver(c echo.Context) error {
+	campaignID := c.Param("id")
+	toUserID := c.FormValue("user_id")
+	if toUserID == "" {
+		return apperror.NewBadRequest("choose the new owner")
+	}
+	if _, err := h.campaignService.AdminHandOver(c.Request().Context(), campaignID, toUserID); err != nil {
+		return err
+	}
+	h.record(c, "campaign.handed_over", "campaign", campaignID, h.campaignLabel(c.Request().Context(), campaignID))
+	slog.Info("admin handed over campaign",
+		slog.String("campaign_id", campaignID),
+		slog.String("to", toUserID),
+		slog.String("by", auth.GetUserID(c)),
+	)
 	return middleware.HTMXRedirect(c, "/admin/campaigns")
 }
 
@@ -837,6 +950,17 @@ func (h *Handler) Security(c echo.Context) error {
 		}
 	}
 
+	var (
+		provider    auth.OIDCSettings
+		providerErr error
+	)
+	if tab == SecurityTabProvider {
+		provider, providerErr = h.securityService.SignInProvider(ctx)
+		if providerErr != nil {
+			slog.Warn("security page: load sign-in provider failed", slog.Any("error", providerErr))
+		}
+	}
+
 	csrfToken := middleware.GetCSRFToken(c)
 
 	// Current site registration mode (defaults to "open" when the settings
@@ -860,6 +984,8 @@ func (h *Handler) Security(c echo.Context) error {
 		Sessions:         sessions,
 		CSRFToken:        csrfToken,
 		RegistrationMode: registrationMode,
+		Provider:         provider,
+		ProviderFailed:   providerErr != nil,
 		StatsFailed:      statsErr != nil,
 		EventsFailed:     eventsErr != nil,
 		SessionsFailed:   sessionsErr != nil,
@@ -881,6 +1007,46 @@ func (h *Handler) UpdateRegistrationMode(c echo.Context) error {
 	h.record(c, "registration.mode_changed", "setting", "registration_mode", registrationModeLabel(mode))
 	slog.Info("registration mode updated", slog.String("mode", mode))
 	c.Response().Header().Set("HX-Redirect", securityTabHref(SecurityTabSignup))
+	return c.NoContent(http.StatusOK)
+}
+
+// SaveSignInProvider stores the provider setting
+// (POST /admin/security/sign-in-provider). Reauth-gated.
+func (h *Handler) SaveSignInProvider(c echo.Context) error {
+	if h.securityService == nil {
+		return apperror.NewMissingContext()
+	}
+	in := auth.OIDCSettingsInput{
+		Enabled:      c.FormValue("enabled") != "",
+		ButtonName:   c.FormValue("button_name"),
+		Issuer:       c.FormValue("issuer"),
+		ClientID:     c.FormValue("client_id"),
+		ClientSecret: c.FormValue("client_secret"),
+		AllowSignup:  c.FormValue("allow_signup") != "",
+		HidePassword: c.FormValue("hide_password") != "",
+	}
+	if err := h.securityService.SaveSignInProvider(c.Request().Context(), in); err != nil {
+		return err
+	}
+	_ = h.securityService.LogEvent(c.Request().Context(), EventProviderSaved, "", auth.GetUserID(c),
+		c.RealIP(), c.Request().UserAgent(), map[string]any{"enabled": in.Enabled, "hidePassword": in.HidePassword})
+	h.record(c, "signin.provider_saved", "setting", "sign_in_provider", in.ButtonName)
+	c.Response().Header().Set("HX-Redirect", securityTabHref(SecurityTabProvider))
+	return c.NoContent(http.StatusOK)
+}
+
+// TestSignInProvider sends the admin through a sign-in that only reports
+// back (POST /admin/security/sign-in-provider/test). Reauth-gated.
+func (h *Handler) TestSignInProvider(c echo.Context) error {
+	if h.securityService == nil {
+		return apperror.NewMissingContext()
+	}
+	authURL, state, err := h.securityService.BeginProviderTest(c.Request().Context(), auth.GetUserID(c))
+	if err != nil {
+		return err
+	}
+	auth.SetOIDCStateCookie(c, state)
+	c.Response().Header().Set("HX-Redirect", authURL)
 	return c.NoContent(http.StatusOK)
 }
 
@@ -990,6 +1156,23 @@ func (h *Handler) DisableUser(c echo.Context) error {
 	)
 
 	return middleware.HTMXRedirect(c, peopleListReturnURL(c.Request().Header.Get("HX-Current-URL"), "/admin/security"))
+}
+
+// DisableTwoFactor switches two-factor off for a user who is locked out of it
+// (PUT /admin/security/users/:id/two-factor/off).
+func (h *Handler) DisableTwoFactor(c echo.Context) error {
+	if h.securityService == nil {
+		return apperror.NewMissingContext()
+	}
+	targetID := c.Param("id")
+	currentUserID := auth.GetUserID(c)
+	if err := h.securityService.DisableTwoFactor(c.Request().Context(), targetID); err != nil {
+		return err
+	}
+	_ = h.securityService.LogEvent(c.Request().Context(), EventTwoFactorAdminOff,
+		targetID, currentUserID, c.RealIP(), c.Request().UserAgent(), nil)
+	h.record(c, "user.two_factor_off", "user", targetID, h.userLabel(c.Request().Context(), targetID))
+	return middleware.HTMXRedirect(c, peopleListReturnURL(c.Request().Header.Get("HX-Current-URL"), "/admin/users"))
 }
 
 // EnableUser re-enables a disabled user account (PUT /admin/security/users/:id/enable).
@@ -1316,6 +1499,9 @@ type SecurityPageData struct {
 	// RegistrationMode is the current site registration gate ("open", "invite",
 	// "closed"). Rendered as a select on the security page (B-R4).
 	RegistrationMode string
+	// Provider is the sign-in provider setting, read only on its tab.
+	Provider       auth.OIDCSettings
+	ProviderFailed bool
 	// StatsFailed, EventsFailed and SessionsFailed mark sections whose read
 	// errored, so the page says so instead of rendering an empty state.
 	StatsFailed    bool

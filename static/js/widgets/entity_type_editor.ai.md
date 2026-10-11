@@ -8,8 +8,8 @@ whole definition with one PUT.
 
 ## Mount
 
-`data-widget="entity-type-editor"`, loaded by a `<script defer>` tag in
-`layouts/base.templ`. Mounted twice in `plugins/entities/entity_type_config.templ`
+`data-widget="entity-type-editor"`, loaded on sight from
+`coreWidgets` in `internal/app/routes.go` (ADR-063). Mounted twice in `plugins/entities/entity_type_config.templ`
 (the field-management tabs), both with `data-fields-only="true"`.
 
 | Attribute | Meaning |

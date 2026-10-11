@@ -102,8 +102,16 @@ func TestMapEventPublisher_MarkerEventRestrictedWhenShadowed(t *testing.T) {
 	bus := &shadowCaptureBus{}
 	a := &mapEventPublisherAdapter{bus: bus}
 	a.PublishMarkerEvent("created", "c", &maps.Marker{ID: "k", MapID: "m"})
-	if len(bus.msgs) != 1 || !bus.msgs[0].RequiresDM {
-		t.Fatalf("expected one DM-only message, got %+v", bus.msgs)
+	// The id-only items notice rides alongside and is deliberately open to
+	// everyone; the pin event itself is the one that must stay DM-only.
+	var pin []ws.Message
+	for _, m := range bus.msgs {
+		if m.Type == ws.MsgMarkerCreated {
+			pin = append(pin, m)
+		}
+	}
+	if len(pin) != 1 || !pin[0].RequiresDM {
+		t.Fatalf("expected one DM-only pin message, got %+v", bus.msgs)
 	}
 }
 

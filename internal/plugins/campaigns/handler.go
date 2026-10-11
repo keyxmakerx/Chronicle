@@ -437,7 +437,8 @@ func (h *Handler) Update(c echo.Context) error {
 	return middleware.HTMXRedirect(c, "/campaigns/"+cc.Campaign.ID+"/settings")
 }
 
-// Delete removes a campaign (DELETE /campaigns/:id). Requires the request to
+// Delete moves a campaign to the site Trash (DELETE /campaigns/:id). The owner
+// sees it vanish; only a site admin can bring it back. Requires the request to
 // include a confirm_name field that matches the campaign name exactly (S4).
 func (h *Handler) Delete(c echo.Context) error {
 	cc := GetCampaignContext(c)
@@ -456,11 +457,11 @@ func (h *Handler) Delete(c echo.Context) error {
 		return apperror.NewBadRequest("campaign name does not match; deletion cancelled")
 	}
 
-	if err := h.service.Delete(c.Request().Context(), cc.Campaign.ID); err != nil {
+	if err := h.service.MoveToTrash(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c)); err != nil {
 		return err
 	}
 
-	h.logAudit(c, cc.Campaign.ID, "campaign.deleted", nil)
+	h.logAudit(c, cc.Campaign.ID, "campaign.trashed", nil)
 	return middleware.HTMXRedirect(c, "/campaigns")
 }
 
@@ -641,6 +642,30 @@ func (h *Handler) UpdateDefaultVisibilityAPI(c echo.Context) error {
 	}
 
 	h.logAudit(c, cc.Campaign.ID, "campaign.default_visibility.updated", map[string]any{"visibility": req.Visibility})
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// UpdateHandoverSettingAPI saves the owner's "If you're away" choice
+// (PUT /campaigns/:id/handover-setting). Only the owner themself may set
+// it: it decides when others can take their campaign, so a Co-DM can't.
+func (h *Handler) UpdateHandoverSettingAPI(c echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	if cc.MemberRole != RoleOwner {
+		return apperror.NewForbidden("only the campaign owner can change this")
+	}
+	var req struct {
+		Months int `json:"months"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request body")
+	}
+	if err := h.service.SetHandoverAfter(c.Request().Context(), cc.Campaign.ID, req.Months); err != nil {
+		return err
+	}
+	h.logAudit(c, cc.Campaign.ID, "campaign.handover_setting.updated", map[string]any{"months": req.Months})
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 

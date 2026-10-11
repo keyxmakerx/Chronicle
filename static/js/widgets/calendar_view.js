@@ -177,6 +177,28 @@
       return CalDate.mod(CalDate.dayIndex(cal, year, month1, day), wl);
     },
 
+    // gridFirst mirrors Calendar.GridFirstWeekday: the weekday a month grid
+    // starts each row on. A real-world calendar starts on Sunday like a wall
+    // calendar while its weekdays stay Monday to Sunday underneath.
+    gridFirst: function (cal) {
+      if (CalDate.weekLen(cal) !== 7 || cal.mode !== 'reallife') return 0;
+      var w = cal.weekdays || [];
+      return (CalDate.usesRealTime(cal) || (w.length === 7 && w[6].name === 'Sunday')) ? 6 : 0;
+    },
+
+    // gridWeekdays is the weekday list in grid column order.
+    gridWeekdays: function (cal) {
+      var w = cal.weekdays || [], f = CalDate.gridFirst(cal);
+      return f ? w.slice(f).concat(w.slice(0, f)) : w;
+    },
+
+    // gridLead is how many blank cells come before day 1 of a month on the grid.
+    gridLead: function (cal, year, month1) {
+      var col = CalDate.weekdayCol(cal, year, month1, 1);
+      if (col < 0) return 0;
+      return CalDate.mod(col - CalDate.gridFirst(cal), CalDate.weekLen(cal));
+    },
+
     monthCount: function (cal) { return (cal.months || []).length || 12; },
 
     // addDays walks {y,m,d} (month 1-based) forward/backward by delta real
@@ -824,18 +846,24 @@
   // leaf swinging through a turn reads as a stretched sheet rather than
   // paper. So a long card folds with its second leaf held to about the
   // head's proportions, then lets the rest down once it lies flat, and
-  // takes it back up before folding away. Returns the leaf and its
-  // heights, or null when the card is short enough to fold whole.
+  // takes it back up before folding away. A card raised to fit above a
+  // low day would fold out of empty space above it, so the held card is
+  // moved down beside its day (shift), and the move undoes itself as the
+  // rest lets down. Returns the leaf, its heights and the shift, or null
+  // when the card is short enough to fold whole.
   function foldShort(P) {
     var g = P.g, L1 = P.el.querySelector('.lf1'), L2 = P.el.querySelector('.lf2');
     if (!g || (g.side !== 'right' && g.side !== 'left') || !L1 || !L2) return null;
     var cap = Math.round(Math.max(FOLD.leafMin, L1.offsetHeight * FOLD.leafRatio)), full = L2.offsetHeight;
-    return full > cap + 24 ? { L2: L2, cap: cap, full: full } : null;
+    return full > cap + 24 ? { el: P.el, L2: L2, cap: cap, full: full, shift: Math.round(clampN(g.cell.y - g.final.y, 0, full - cap)) } : null;
   }
-  function holdLeaf(h, px) { h.L2.style.maxHeight = px + 'px'; h.L2.style.overflow = 'hidden'; }
-  function freeLeaf(h) { h.L2.style.maxHeight = ''; h.L2.style.overflow = ''; }
+  function holdLeaf(h, px) { h.L2.style.maxHeight = px + 'px'; h.L2.style.overflow = 'hidden'; h.el.style.transform = h.shift ? 'translateY(' + h.shift + 'px)' : ''; }
+  function freeLeaf(h) { h.L2.style.maxHeight = ''; h.L2.style.overflow = ''; h.el.style.transform = ''; }
+  // The leaf and the shift move on one curve, so the held edge stays put.
   function slideLeaf(h, from, to, dur) {
-    return anim(h.L2, [{ maxHeight: from + 'px' }, { maxHeight: to + 'px' }], { duration: dur, easing: EASE, fill: 'none' }).finished;
+    var o = { duration: dur, easing: EASE, fill: 'none' }, s = function (px) { return 'translateY(' + Math.round(h.shift * (h.full - px) / (h.full - h.cap)) + 'px)'; };
+    if (h.shift) anim(h.el, [{ transform: s(from) }, { transform: s(to) }], o);
+    return anim(h.L2, [{ maxHeight: from + 'px' }, { maxHeight: to + 'px' }], o).finished;
   }
   function foldEase(u) { u = clampN(u, 0, 1); return 1 - Math.pow(1 - u, 3); }
   function foldRot(ax, a, v) {
@@ -1265,6 +1293,7 @@
       this.renderToday();
       this.renderLegend();
       this._openFromLink();
+      this.loadWaiting();
 
       // Hand the instance to calendar_editor.js (loaded only for an
       // Owner/co-Director viewer) without assuming load order.
@@ -1309,6 +1338,8 @@
               '<div class="todaypill" id="cal5-todaypill"></div>' +
               '<div class="h-acts">' +
                 '<button type="button" class="skybtn" id="cal5-skybtn" aria-expanded="false" aria-controls="cal5-skywrap" title="Fold or open the sky" hidden><span class="sw" aria-hidden="true"></span><span>Sky</span></button>' +
+                (this.showNights ? '<button type="button" class="tbtn waitbtn" id="cal5-waitbtn" aria-haspopup="dialog" aria-expanded="false" aria-controls="cal5-waitpop" hidden><b class="wcount"></b><span>waiting on you</span></button>' +
+                  '<div class="waitpop" id="cal5-waitpop" role="dialog" aria-label="Waiting on you" hidden></div>' : '') +
                 (this.freeCan ? '<button type="button" class="tbtn" id="cal5-freebtn" aria-haspopup="dialog" aria-expanded="false" title="' + (this.freeDirector ? 'When players are free, and the best times to play' : 'Give your hours, and see who is free') + '"><i class="fa-solid fa-user-clock"></i><span>Who’s free</span></button>' : '') +
                 '<button type="button" class="tbtn" id="cal5-moonbtn" aria-haspopup="dialog" aria-expanded="false"><i class="fa-solid fa-moon"></i><span>Moons</span></button>' +
               '</div>' +
@@ -1626,6 +1657,9 @@
       var self = this, key = this.monthKey(y, m);
       if (!this.showNights) return Promise.resolve([]);
       if (this.nightsByMonth[key] && !(o && o.fresh)) return Promise.resolve(this.nightsByMonth[key]);
+      // A fresh read follows a saved answer, which may settle something
+      // the "waiting on you" button counts.
+      if (o && o.fresh) this.loadWaiting();
       var last = CalDate.monthDays(this.cal, m - 1, y), reads = [];
       for (var start = 1; start <= last; start += 60) {
         var from = this._realIso(y, m, start), to = this._realIso(y, m, Math.min(last, start + 59));
@@ -1683,14 +1717,76 @@
       var self = this, t = this._linkTarget();
       if (!t) return;
       (t.next ? this._nextNight() : Promise.resolve(t)).then(function (n) {
-        if (!n) return null;
-        var p = n.date.split('-'), y = +p[0], m = +p[1], d = +p[2];
-        if (self.view.y !== y || self.view.m !== m) { self.view = { y: y, m: m }; self.renderMonth(); }
-        return self.fetchNights(y, m).then(function () {
-          self._paintMonth();
-          self.openWing(dayKey(y, m, d), 'gn:' + n.sessionId + ':' + n.date);
-        });
+        return n ? self._openNight(n) : null;
       }).catch(function () { /* the calendar still shows; only the jump is lost */ });
+    },
+
+    // _openNight moves to a night's month and opens its day with the night
+    // picked out. n needs sessionId and date (YYYY-MM-DD). Returns a Promise.
+    _openNight: function (n) {
+      var self = this, p = n.date.split('-'), y = +p[0], m = +p[1], d = +p[2];
+      if (self.view.y !== y || self.view.m !== m) { self.view = { y: y, m: m }; self.renderMonth(); }
+      return self.fetchNights(y, m).then(function () {
+        self._paintMonth();
+        self.openWing(dayKey(y, m, d), 'gn:' + n.sessionId + ':' + n.date);
+      }).catch(function () { /* the calendar still shows; only the jump is lost */ });
+    },
+
+    // "Waiting on you": what this member owes the table (unanswered or moved
+    // nights, open date polls, the confirm-your-times ask), read from the
+    // same list the dashboard's Coming up card shows. The button appears
+    // only while something is waiting.
+    loadWaiting: function () {
+      var self = this;
+      if (!$('#cal5-waitbtn', this.el)) return;
+      Chronicle.apiFetch('/campaigns/' + encodeURIComponent(this.campaignId) + '/coming-up/waiting')
+        .then(function (resp) { return resp.ok ? resp.json() : []; })
+        .then(function (list) { self.waiting = Array.isArray(list) ? list : []; self.renderWaiting(); })
+        .catch(function () { /* the button simply stays as it was */ });
+    },
+
+    renderWaiting: function () {
+      var btn = $('#cal5-waitbtn', this.el), pop = $('#cal5-waitpop', this.el);
+      if (!btn || !pop) return;
+      var list = this.waiting || [], n = list.length;
+      btn.hidden = n === 0;
+      $('.wcount', btn).textContent = String(n);
+      btn.setAttribute('aria-label', n + ' waiting on you');
+      if (n === 0) { this.closeWaiting(); pop.innerHTML = ''; return; }
+      pop.innerHTML = '<ul class="wlist">' + list.map(function (w) {
+        var tile = '<span class="wtile" aria-hidden="true"><small>' + esc(w.tileTop || '') + '</small>' +
+          (w.tileIcon ? '<i class="' + esc(w.tileIcon) + '"></i>' : '<b>' + esc(w.tileBig || '') + '</b>') + '</span>';
+        var body = tile + '<span class="wmain"><span class="wt">' + esc(w.title) + '</span><span class="ws">' + esc(w.sub) + '</span></span>' +
+          '<span class="wact">' + esc(w.action || 'Open') + '</span>';
+        // A night opens here, on its day; anything else is its own page.
+        return '<li>' + (w.sessionId && /^\d{4}-\d{2}-\d{2}$/.test(w.date || '')
+          ? '<button type="button" class="wrow" data-wait-night="' + esc(w.sessionId) + '" data-wait-date="' + esc(w.date) + '">' + body + '</button>'
+          : '<a class="wrow" href="' + esc(w.href) + '">' + body + '</a>') + '</li>';
+      }).join('') + '</ul>';
+    },
+
+    waitOpen: function () {
+      var pop = $('#cal5-waitpop', this.el);
+      return !!pop && !pop.hidden;
+    },
+
+    openWaiting: function () {
+      var btn = $('#cal5-waitbtn', this.el), pop = $('#cal5-waitpop', this.el);
+      if (!btn || !pop || btn.hidden) return;
+      pop.hidden = false;
+      btn.setAttribute('aria-expanded', 'true');
+      var first = $('.wrow', pop);
+      if (first) first.focus();
+    },
+
+    closeWaiting: function (o) {
+      var btn = $('#cal5-waitbtn', this.el), pop = $('#cal5-waitpop', this.el);
+      if (!pop || pop.hidden) return;
+      pop.hidden = true;
+      if (btn) {
+        btn.setAttribute('aria-expanded', 'false');
+        if (o && o.refocus) btn.focus();
+      }
     },
 
     // A game night's id in the grid and the cards: "gn:" + session + date,
@@ -2699,7 +2795,7 @@
       h += '</section><section class="fvsec fvwho"><h4>Players</h4>';
       if (roster) h += this._fvRosterHTML(roster);
       h += '</section><section class="fvsec fvfoot">' +
-        '<label class="fvsw"><input type="checkbox" data-fv-lines' + (this.showFree ? ' checked' : '') + '><span>Show who’s free on the days</span></label>' +
+        '<label class="fvsw"><input type="checkbox" role="switch" data-fv-lines' + (this.showFree ? ' checked' : '') + '><span class="fvtrk" aria-hidden="true"></span><span>Show who’s free on the days</span></label>' +
         '<span class="fvlinks"><button type="button" class="lnk" data-fv-planner="mine">Change my hours</button><button type="button" class="btn sm" data-fv-planner="team"><i class="fa-solid fa-up-right-and-down-left-from-center"></i> Open the full planner</button></span></section>';
       return h;
     },
@@ -3058,7 +3154,7 @@
       // Best times and the players, as in the quick view.
       var quick = this._fvDirectorHTML(y, m, monthName).replace(/<section class="fvsec fvfoot">[\s\S]*$/, '');
       h += '<div class="plquick">' + quick + '</div>';
-      h += '<section class="dsec plfoot"><label class="fvsw"><input type="checkbox" data-fv-lines' + (this.showFree ? ' checked' : '') + '><span>Show who’s free on the days</span></label>' +
+      h += '<section class="dsec plfoot"><label class="fvsw"><input type="checkbox" role="switch" data-fv-lines' + (this.showFree ? ' checked' : '') + '><span class="fvtrk" aria-hidden="true"></span><span>Show who’s free on the days</span></label>' +
         '<a class="lnk" href="' + esc(this._availURL('overlay')) + '">Date polls</a></section>';
       return h;
     },
@@ -3328,7 +3424,7 @@
       var season = this.seasonForDate(this.view.m, 15);
       $('#cal5-season', this.el).innerHTML = season ? ('<b>' + esc(season.name) + '</b>') : '';
 
-      var dow = this.dowEl, weekdays = cal.weekdays || [];
+      var dow = this.dowEl, weekdays = CalDate.gridWeekdays(cal);
       dow.innerHTML = weekdays.map(function (w) {
         return '<span><span class="f">' + esc(w.name) + '</span><span class="s">' + esc(w.name.slice(0, 1)) + '</span></span>';
       }).join('');
@@ -3475,15 +3571,7 @@
         for (var bd = 1; bd <= interDays; bd++) html += this._dayBandHTML(y, m, bd, monthDef, interDays);
       } else {
         var days = CalDate.monthDays(cal, m0, y);
-        var firstCol = CalDate.weekdayCol(cal, y, m, 1);
-        // -1 (MonthStartsNewWeek + an intercalary month) can't actually
-        // reach here — the branch above already routes every intercalary
-        // month to the band renderer — but weekdayCol's contract allows it,
-        // and clamping keeps this file's handling the same as the server's
-        // own preview grid (view_helpers.go's buildMonthGrid: "its days run
-        // from the first column") rather than leaning on a guard elsewhere
-        // that could change.
-        if (firstCol < 0) firstCol = 0;
+        var firstCol = CalDate.gridLead(cal, y, m);
         this._gridOff = firstCol;
         var cells = [];
         for (var i = 0; i < firstCol; i++) cells.push(null);
@@ -3934,6 +4022,18 @@
       $('#cal5-hub', this.el).addEventListener('click', function () { self.toggleHub(); });
       this._bindEras();
       $('#cal5-moonbtn', this.el).addEventListener('click', function () { self.openMoonView(); });
+      var waitBtn = $('#cal5-waitbtn', this.el);
+      if (waitBtn) {
+        waitBtn.addEventListener('click', function () {
+          if (self.waitOpen()) self.closeWaiting(); else self.openWaiting();
+        });
+        $('#cal5-waitpop', this.el).addEventListener('click', function (e) {
+          var row = e.target.closest('[data-wait-night]');
+          if (!row) return;
+          self.closeWaiting();
+          self._openNight({ sessionId: row.getAttribute('data-wait-night'), date: row.getAttribute('data-wait-date') });
+        });
+      }
       var freeBtn = $('#cal5-freebtn', this.el);
       if (freeBtn) freeBtn.addEventListener('click', function () {
         if (self.fvEl.classList.contains('open')) self.closeFreeView(); else self.openFreeView();
@@ -4116,6 +4216,7 @@
       this._escHandler = function (e) {
         if (e.key !== 'Escape') return;
         if (self._hideEraTip) self._hideEraTip(true);
+        if (self.waitOpen()) { self.closeWaiting({ refocus: true }); return; }
         if (self.plannerOpen()) { self.closePlanner(); return; }
         if (self.evpEl.classList.contains('open')) { self.closeEventDetail(); return; }
         if (self.mvEl.classList.contains('open')) { self.closeMoonView(); return; }
@@ -4139,6 +4240,7 @@
         var t = e.target;
         if (!(t instanceof Element) || self.evpEl.contains(t)) return;
         var inside = self.el.contains(t);
+        if (self.waitOpen() && !t.closest('#cal5-waitpop, #cal5-waitbtn')) self.closeWaiting();
         if (inside && self.mvEl.classList.contains('open') && !self.mvEl.contains(t) && !t.closest('#cal5-moonbtn, .msil, .mrow')) self.closeMoonView();
         if (inside && self.fvEl.classList.contains('open') && !self.fvEl.contains(t) && !t.closest('#cal5-freebtn') && !self._awayHolds(function () { self.refreshFreeView(); })) self.closeFreeView();
         if (self.popEl.classList.contains('open') && !self.popEl.contains(t) && !t.closest('#cal5-hub, #cal5-todaypill')) self._popOff();

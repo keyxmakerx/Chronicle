@@ -639,7 +639,7 @@ these is describing work already done.
 
 ## 7. Slicing
 
-The governing rule from `.ai/designs/2026-09-12-build-order.md` is **one slice,
+The governing rule is **one slice,
 one PR**. Every slice must be safe to ship half-done and safe to review alone.
 
 | Slice | What lands | Depends on | Reviewable alone? |

@@ -46,7 +46,7 @@ func TestCategoryDashboard_CalendarBlockRenders(t *testing.T) {
 	// category_calendar_card_test.go covers on its own.
 	ctx := layouts.SetUpcomingEventsAvailable(context.Background(), true)
 	var buf bytes.Buffer
-	if err := CategoryDashboardContent(cc, et, nil, nil, 0, ListOptions{}, "", nil).Render(ctx, &buf); err != nil {
+	if err := CategoryDashboardContent(cc, et, nil, nil, 0, ListOptions{}, "").Render(ctx, &buf); err != nil {
 		t.Fatalf("render: %v", err)
 	}
 	html := buf.String()

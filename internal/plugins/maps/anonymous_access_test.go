@@ -57,6 +57,9 @@ func (guardMapSvc) ResolveDisplay(_ context.Context, m *Map) (ResolvedDisplay, e
 func (guardMapSvc) ListMarkers(_ context.Context, _, _ string, _ int, _ string) ([]Marker, error) {
 	return []Marker{}, nil
 }
+func (guardMapSvc) ResolveTrail(_ context.Context, _, _ string, _ []string) ([]TrailStep, error) {
+	return nil, nil
+}
 
 type guardDrawingSvc struct {
 	DrawingService
@@ -122,6 +125,10 @@ func TestMapsAnonymousAccess_PublicVsPrivate(t *testing.T) {
 		{"layers public (GM-only)", http.MethodGet, base + "/layers", true, true},
 		{"create marker public (write)", http.MethodPost, base + "/markers", true, true},
 		{"create map public (write)", http.MethodPost, "/campaigns/camp-1/maps", true, true},
+		// The tree of linked maps is session-only, and its static path must not
+		// fall through to the public /maps/:mid page.
+		{"link tree public (session only)", http.MethodGet, "/campaigns/camp-1/maps/link-tree", true, true},
+		{"link tree private", http.MethodGet, "/campaigns/camp-1/maps/link-tree", false, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

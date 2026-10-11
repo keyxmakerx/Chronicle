@@ -314,7 +314,9 @@ func TestSyncFlowHandlers(t *testing.T) {
 
 	serve := func(handler echo.HandlerFunc, names, values []string, cc *campaigns.CampaignContext) (string, error) {
 		rec := httptest.NewRecorder()
-		c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/", nil), rec)
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.Header.Set("HX-Request", "true")
+		c := echo.New().NewContext(req, rec)
 		c.SetParamNames(names...)
 		c.SetParamValues(values...)
 		if cc != nil {
@@ -332,6 +334,25 @@ func TestSyncFlowHandlers(t *testing.T) {
 		}
 		if !strings.Contains(html, "Chronicle refused") || strings.Contains(html, "Port Ashwick") || !strings.Contains(html, "player") {
 			t.Fatalf("unexpected flow:\n%s", html)
+		}
+	})
+	t.Run("opened as a page, the flow sends the browser to the history", func(t *testing.T) {
+		for _, hdr := range []map[string]string{{}, {"HX-Request": "true", "HX-Boosted": "true"}} {
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			for k, v := range hdr {
+				req.Header.Set(k, v)
+			}
+			c := echo.New().NewContext(req, rec)
+			c.SetParamNames("id", "eventID")
+			c.SetParamValues("c1", "2")
+			c.Set("campaign_context", cc)
+			if err := h.Flow(c); err != nil {
+				t.Fatal(err)
+			}
+			if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/campaigns/c1/sync-history?failed=1&before=3" {
+				t.Fatalf("headers %v: got %d to %q", hdr, rec.Code, rec.Header().Get("Location"))
+			}
 		}
 	})
 	t.Run("unknown row", func(t *testing.T) {

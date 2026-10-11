@@ -1,0 +1,44 @@
+// own_entries.templ — the Directors' "Your own entries" page: one paper page
+// with a tab per pick list, and the creator's pull-out leaf for writing an
+// entry. The page is a mount point; static/js/own_entries.js (from the plugin
+// body-script registry) reads the pick lists from the creator's plan and the
+// entries from the systems plugin's entry API.
+
+package entities
+
+import (
+	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// OwnEntriesPage renders the page inside the App shell.
+templ OwnEntriesPage(cc *campaigns.CampaignContext, csrfToken string) {
+	@layouts.App("Your own entries - " + cc.Campaign.Name) {
+		<link rel="stylesheet" href={ layouts.AssetURL("/static/plugins/entities/css/hero_creator.css") }/>
+		<div class="max-w-7xl mx-auto px-4 py-6">
+			<nav class="mb-4 text-sm text-fg-muted" aria-label="Breadcrumb">
+				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/characters", cc.Campaign.ID)) } class="hover:text-fg">Characters</a>
+				<span aria-hidden="true">/</span>
+				<span class="text-fg">Your own entries</span>
+			</nav>
+			<div
+				class="hc hc--tool"
+				data-own-entries="true"
+				data-campaign-id={ cc.Campaign.ID }
+				data-plan-url={ fmt.Sprintf("/campaigns/%s/characters/new/plan", cc.Campaign.ID) }
+				data-entries-url={ fmt.Sprintf("/campaigns/%s/system-entries", cc.Campaign.ID) }
+				data-csrf={ csrfToken }
+			>
+				<div class="hc-page paper paper-stack hc-loading" role="status">
+					<p class="paper-kind">Your own entries</p>
+					<p class="hc-loading__text">Opening your entries…</p>
+				</div>
+				<noscript>
+					<p class="text-sm text-fg-muted">This page needs JavaScript.</p>
+				</noscript>
+			</div>
+		</div>
+	}
+}

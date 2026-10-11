@@ -172,6 +172,39 @@ func (f *fakeBookRepo) DeleteChapter(_ context.Context, c, s, ch string) (bool, 
 	return found, nil
 }
 
+func (f *fakeBookRepo) WriteHouseChapter(_ context.Context, ch HouseChapter, create bool, pages []StoredBookPage) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.writes++
+	if create {
+		ch.SortOrder = len(f.chapters) + 1
+		f.chapters = append(f.chapters, ch)
+	} else {
+		for i, c := range f.chapters {
+			if c.CampaignID == ch.CampaignID && c.SystemID == ch.SystemID && c.ChapterID == ch.ChapterID {
+				ch.SortOrder = c.SortOrder
+				f.chapters[i] = ch
+			}
+		}
+	}
+	if pages == nil {
+		return nil
+	}
+	var keep []StoredBookPage
+	for _, p := range f.pages {
+		if p.CampaignID != ch.CampaignID || p.SystemID != ch.SystemID || p.ChapterID != ch.ChapterID {
+			keep = append(keep, p)
+		}
+	}
+	for i, p := range pages {
+		f.nextID++
+		p.ID, p.CampaignID, p.SystemID, p.ChapterID, p.PackageIndex, p.SortOrder = f.nextID, ch.CampaignID, ch.SystemID, ch.ChapterID, nil, i+1
+		keep = append(keep, p)
+	}
+	f.pages = keep
+	return nil
+}
+
 const testCampaign = "camp-1"
 
 // testPackage loads the shared fixture book as a package of system "ds".

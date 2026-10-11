@@ -87,7 +87,7 @@ layout_editor.js
 - **layout_studio.js**: Orchestrator that mounts layout-editor with appropriate
   context/features for each navigation selection
 - **template_editor.js**: Separate widget for page templates (`data-widget="template-editor"`,
-  loaded directly in `base.templ`); layout_editor.js mounts with
+  loaded on sight like this one); layout_editor.js mounts with
   `data-context="dashboard"` (customize and entity-type config pages) or
   `data-context="template"` (mounted by layout_studio.js for page templates)
 - **block_registry.go**: Server-side source of truth for block types + config fields

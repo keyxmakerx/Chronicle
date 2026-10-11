@@ -118,7 +118,7 @@ func TestAdminCampaignsList_TableAndCardsShareActions(t *testing.T) {
 	want := []string{
 		"Join as Owner? Ownership moves to you and the current owner loses it.",
 		"Leave this campaign? You will lose the access you gave yourself.",
-		"Permanently delete this campaign and all its data?",
+		"Move this campaign to the trash? It disappears for everyone right away. You can bring it back from Trash until it empties.",
 	}
 	if got := confirmsIn(table); strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Errorf("table confirms = %v, want %v", got, want)
@@ -126,12 +126,12 @@ func TestAdminCampaignsList_TableAndCardsShareActions(t *testing.T) {
 	if got := confirmsIn(cards); strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Errorf("card confirms = %v, want %v", got, want)
 	}
-	for _, w := range []string{`aria-label="Actions for Shattered Coast"`, "Join as player", "Join as scribe", "Join as owner (transfers)…", "Leave campaign…", "Delete campaign…", "text-red-600"} {
+	for _, w := range []string{`aria-label="Actions for Shattered Coast"`, "Join as player", "Join as scribe", "Join as owner (transfers)…", "Leave campaign…", "Move to trash…", "text-red-600"} {
 		if !strings.Contains(cards, w) {
 			t.Errorf("card missing %q", w)
 		}
 	}
-	for _, w := range []string{"Join as...", "Leave", "Delete", "aria-expanded"} {
+	for _, w := range []string{"Join as...", "Leave", "Move to trash", "aria-expanded"} {
 		if !strings.Contains(table, w) {
 			t.Errorf("table missing %q", w)
 		}

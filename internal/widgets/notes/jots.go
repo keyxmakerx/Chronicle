@@ -65,6 +65,9 @@ func (s *noteService) SendToJournal(ctx context.Context, campaignID string, v pe
 	if err := s.repo.Create(ctx, note); err != nil {
 		return nil, err
 	}
+	if err := s.repo.SyncPictureBindings(ctx, note.ID, campaignID, uid, note.EntryHTML); err != nil {
+		return nil, err
+	}
 	created, err := s.repo.FindByID(ctx, note.ID)
 	if err != nil {
 		return nil, err

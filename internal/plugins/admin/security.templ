@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"strings"
@@ -83,6 +84,12 @@ templ AdminSecurityPage(data SecurityPageData) {
 					@securityLogTab(data)
 				case SecurityTabSignup:
 					@registrationGateCard(data.RegistrationMode, data.CSRFToken)
+				case SecurityTabProvider:
+					if data.ProviderFailed {
+						@loadFailedNotice("sign-in provider setting")
+					} else {
+						@signInProviderCard(data.Provider, data.CSRFToken)
+					}
 				default:
 					@securityOverviewTab(data)
 			}
@@ -115,6 +122,7 @@ templ securityTabs(data SecurityPageData) {
 			}
 			@securityTab(data.Tab, SecurityTabLog, "Sign-in log")
 			@securityTab(data.Tab, SecurityTabSignup, "Who can sign up")
+			@securityTab(data.Tab, SecurityTabProvider, "Sign-in provider")
 		</ul>
 	</nav>
 }
@@ -264,6 +272,114 @@ templ registrationGateCard(mode, csrfToken string) {
 			<button type="submit" class="btn-primary py-2 px-4">Save</button>
 		</form>
 	</div>
+}
+
+// signInProviderCard is the sign-in provider setting: one OpenID Connect
+// provider (Authentik, Keycloak, Google, Microsoft…). Saving and testing are
+// reauth-gated; the secret is never sent back to the page.
+templ signInProviderCard(p auth.OIDCSettings, csrfToken string) {
+	<div class="card p-6 space-y-5 max-w-3xl">
+		<div class="flex flex-wrap items-center gap-2">
+			<i class="fa-solid fa-right-to-bracket text-accent" aria-hidden="true"></i>
+			<h2 class="text-lg font-semibold text-fg">Sign-in provider</h2>
+			@providerStatusChip(p)
+		</div>
+		<p class="text-sm text-fg-secondary">
+			Let people sign in with an account you already run, such as Authentik, Keycloak, Google or Microsoft. Another app can use the same provider, so one account works for both.
+		</p>
+		if p.LastTestAt != nil && p.LastTestNote != "" {
+			<p class={ "text-sm " + providerTestClass(p.LastTestOK) } role="status">
+				Last test: { p.LastTestNote }
+			</p>
+		}
+		<form hx-post="/admin/security/sign-in-provider" hx-swap="none" class="space-y-4">
+			<input type="hidden" name="csrf_token" value={ csrfToken }/>
+			<div class="grid gap-4 sm:grid-cols-2">
+				<div>
+					<label for="op-name" class="block text-sm font-medium text-fg-body mb-1.5">Button name</label>
+					<input id="op-name" name="button_name" value={ p.ButtonName } maxlength="40" class="input w-full" placeholder="Authentik"/>
+				</div>
+				<div>
+					<label for="op-issuer" class="block text-sm font-medium text-fg-body mb-1.5">Provider address</label>
+					<input id="op-issuer" name="issuer" type="url" value={ p.Issuer } class="input w-full" placeholder="https://auth.example.com/application/o/chronicle/" spellcheck="false"/>
+				</div>
+				<div>
+					<label for="op-client" class="block text-sm font-medium text-fg-body mb-1.5">Client ID</label>
+					<input id="op-client" name="client_id" value={ p.ClientID } class="input w-full" spellcheck="false" autocomplete="off"/>
+				</div>
+				<div>
+					<label for="op-secret" class="block text-sm font-medium text-fg-body mb-1.5">Client secret</label>
+					<input id="op-secret" name="client_secret" type="password" class="input w-full" autocomplete="new-password"
+						if p.HasSecret {
+							placeholder="Saved. Leave as is to keep it."
+						}
+					/>
+				</div>
+			</div>
+			<div x-data="{ copied: false }">
+				<p class="block text-sm font-medium text-fg-body mb-1.5">Give your provider this return address</p>
+				<div class="flex flex-wrap items-center gap-2">
+					<code class="flex-1 min-w-0 break-all rounded-lg border border-edge bg-surface-alt px-3 py-2 text-sm text-fg" x-ref="ret">{ p.RedirectURL }</code>
+					<button type="button" class="btn-secondary text-sm" @click="navigator.clipboard.writeText($refs.ret.textContent).then(() => { copied = true; setTimeout(() => copied = false, 2000); })">
+						<span x-show="!copied">Copy</span><span x-show="copied" x-cloak>Copied</span>
+					</button>
+				</div>
+			</div>
+			<div class="space-y-3 border-t border-edge pt-4">
+				@providerSwitch("enabled", "Show the sign-in button", "People see it on the sign-in page.", p.Enabled)
+				@providerSwitch("allow_signup", "Let new people sign up this way", "Follows your normal sign-up setting. Off means only existing accounts can use the button.", p.AllowSignup)
+				@providerSwitch("hide_password", "Hide password sign-in", "Admins can always use their password, so a broken provider never locks you out.", p.HidePassword)
+			</div>
+			<div class="flex flex-wrap items-center justify-end gap-2 border-t border-edge pt-4">
+				<span class="text-xs text-fg-muted mr-auto">Save first, then test. Testing signs you in at the provider and only reports back.</span>
+				<button
+					type="button"
+					class="btn-secondary text-sm"
+					hx-post="/admin/security/sign-in-provider/test"
+					hx-headers={ csrfHeaderJSON(csrfToken) }
+					hx-swap="none"
+				>Test sign-in</button>
+				<button type="submit" class="btn-primary text-sm">Save</button>
+			</div>
+		</form>
+	</div>
+}
+
+// providerSwitch is a labelled checkbox that posts "1" when on.
+templ providerSwitch(name, label, help string, on bool) {
+	<label class="flex items-start gap-3 text-sm">
+		<input type="checkbox" name={ name } value="1" checked?={ on } class="mt-0.5 h-4 w-4 text-accent border-edge rounded focus:ring-accent"/>
+		<span>
+			<span class="block font-medium text-fg">{ label }</span>
+			<span class="block text-xs text-fg-muted">{ help }</span>
+		</span>
+	</label>
+}
+
+templ providerStatusChip(p auth.OIDCSettings) {
+	switch {
+		case !p.Enabled:
+			<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-surface-alt text-fg-muted">Off</span>
+		case p.LastTestAt != nil && p.LastTestOK:
+			<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300">Working</span>
+		case p.LastTestAt != nil:
+			<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300">Test failed</span>
+		default:
+			<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">On, not tested</span>
+	}
+}
+
+func providerTestClass(ok bool) string {
+	if ok {
+		return "text-emerald-700 dark:text-emerald-300"
+	}
+	return "text-red-600 dark:text-red-400"
+}
+
+// csrfHeaderJSON is the hx-headers value carrying the CSRF token.
+func csrfHeaderJSON(token string) string {
+	b, _ := json.Marshal(map[string]string{"X-CSRF-Token": token})
+	return string(b)
 }
 
 // activeSessionsTable renders the list of active sessions with actions.

@@ -150,6 +150,47 @@ func TestBookEditRepository_Integration(t *testing.T) {
 		}
 	}
 
+	// A whole chapter written in one step: created with its pages in order,
+	// then rewritten with fewer pages, which replace the old ones.
+	whole := HouseChapter{CampaignID: campA, SystemID: "drawsteel", ChapterID: "house_whole", Title: "Whole", Intro: "Intro.", CreatedBy: userID}
+	three := []StoredBookPage{{PageJSON: `{"title":"one"}`, UpdatedBy: userID}, {PageJSON: `{"title":"two"}`, UpdatedBy: userID}, {PageJSON: `{"title":"three"}`, UpdatedBy: userID}}
+	if err := repo.WriteHouseChapter(ctx, whole, true, three); err != nil {
+		t.Fatalf("write new chapter: %v", err)
+	}
+	wholePages := func() []string {
+		t.Helper()
+		edits, err := repo.Load(ctx, campA, "drawsteel")
+		if err != nil {
+			t.Fatalf("load: %v", err)
+		}
+		var out []string
+		for _, p := range edits.Pages {
+			if p.ChapterID == "house_whole" {
+				out = append(out, fmt.Sprintf("%d:%s", p.SortOrder, p.PageJSON))
+			}
+		}
+		return out
+	}
+	if got := wholePages(); fmt.Sprint(got) != `[1:{"title":"one"} 2:{"title":"two"} 3:{"title":"three"}]` {
+		t.Fatalf("new chapter pages: %v", got)
+	}
+	whole.Title = "Whole, renamed"
+	if err := repo.WriteHouseChapter(ctx, whole, false, []StoredBookPage{{PageJSON: `{"title":"only"}`, UpdatedBy: userID}}); err != nil {
+		t.Fatalf("rewrite chapter: %v", err)
+	}
+	if got := wholePages(); fmt.Sprint(got) != `[1:{"title":"only"}]` {
+		t.Fatalf("rewritten pages: %v", got)
+	}
+	// Nil pages change only the chapter row.
+	whole.Intro = "New intro."
+	if err := repo.WriteHouseChapter(ctx, whole, false, nil); err != nil {
+		t.Fatalf("rewrite lines only: %v", err)
+	}
+	edits, _ = repo.Load(ctx, campA, "drawsteel")
+	if len(edits.Chapters) != 1 || edits.Chapters[0].Title != "Whole, renamed" || edits.Chapters[0].Intro != "New intro." || len(wholePages()) != 1 {
+		t.Fatalf("after lines-only rewrite: %+v / %v", edits.Chapters, wholePages())
+	}
+
 	// Deleting a campaign takes its book edits with it.
 	mustBookExec(t, db, `DELETE FROM campaigns WHERE id = ?`, campA)
 	var n int

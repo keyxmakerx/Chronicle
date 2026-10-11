@@ -265,15 +265,11 @@ func TestCalendarCampaignExportImport_DBRoundTrip(t *testing.T) {
 	if !dstCal.ForecastsEnabled || !dstCal.MonthStartsNewWeek {
 		t.Errorf("imported calendar lost forecasts_enabled/month_starts_new_week: %v/%v", dstCal.ForecastsEnabled, dstCal.MonthStartsNewWeek)
 	}
-	// The source calendar tracks real time (set above via UpdateCalendar,
-	// unrelated to the settings fields this test otherwise checks), but that
-	// must NOT reach the destination: ExportCalendarData deliberately carries no
-	// TracksRealTime/RealTimeZone (see its doc comment — RealTimeZone trips
-	// the scheduler-data egress guard), so a restored calendar must come
-	// back with real-time tracking off, not silently re-enabled.
-	if dstCal.TracksRealTime || dstCal.RealTimeZone != nil {
-		t.Errorf("imported calendar has real-time tracking on (tracks=%v zone=%v); ExportCalendarData carries no RealTimeZone, so this must stay off",
-			dstCal.TracksRealTime, dstCal.RealTimeZone)
+	// The source calendar follows real time in a zone the GM picked; the
+	// restored one keeps doing so in the same zone.
+	if !dstCal.TracksRealTime || dstCal.RealTimeZone == nil || *dstCal.RealTimeZone != realZone {
+		t.Errorf("imported calendar real-time = %v in zone %v, want on in %s",
+			dstCal.TracksRealTime, dstCal.RealTimeZone, realZone)
 	}
 	if len(dstCal.EventKinds) != 1 || dstCal.EventKinds[0].Slug != "festival" {
 		t.Errorf("imported calendar lost its event kind: %+v", dstCal.EventKinds)

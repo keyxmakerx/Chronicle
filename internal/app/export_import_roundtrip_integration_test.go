@@ -40,6 +40,7 @@ type roundTripHarness struct {
 	db        *sql.DB
 	campaigns campaigns.CampaignService
 	entities  entities.EntityService
+	places    entities.PlaceService
 	addons    addons.AddonService
 	media     media.MediaService
 	maps      maps.MapService
@@ -78,21 +79,22 @@ func newRoundTripHarness(t *testing.T) *roundTripHarness {
 	drawingSvc := maps.NewDrawingService(maps.NewDrawingRepository(db))
 	entitySvc.SetMapVerifier(&entityMapVerifierAdapter{svc: mapSvc})
 
+	placeSvc := entities.NewPlaceService(entities.NewEntityRepository(db), entities.NewPlaceRepository(db))
 	exportSvc := campaigns.NewExportImportService(campaignSvc)
 	tagSvc := tags.NewTagService(tags.NewTagRepository(db))
 	relSvc := relations.NewRelationService(relations.NewRelationRepository(db))
-	exportSvc.SetEntityExporter(&entityExportAdapter{entitySvc: entitySvc, tagSvc: tagSvc, relationSvc: relSvc})
+	exportSvc.SetEntityExporter(&entityExportAdapter{entitySvc: entitySvc, tagSvc: tagSvc, relationSvc: relSvc, placeSvc: placeSvc})
 	exportSvc.SetMapExporter(&mapExportAdapter{mapSvc: mapSvc, drawingSvc: drawingSvc})
 	exportSvc.SetAddonExporter(&addonExportAdapter{svc: addonSvc})
 	exportSvc.SetMediaExporter(&mediaExportAdapter{svc: mediaSvc})
 	exportSvc.SetMediaBundler(&mediaBundleAdapter{svc: mediaSvc})
-	exportSvc.SetEntityImporter(&entityImportAdapter{entitySvc: entitySvc, tagSvc: tagSvc, relationSvc: relSvc})
+	exportSvc.SetEntityImporter(&entityImportAdapter{entitySvc: entitySvc, tagSvc: tagSvc, relationSvc: relSvc, placeSvc: placeSvc})
 	exportSvc.SetMapImporter(&mapImportAdapter{mapSvc: mapSvc, drawingSvc: drawingSvc})
 	exportSvc.SetAddonImporter(&addonImportAdapter{svc: addonSvc})
 	exportSvc.SetMediaImporter(&mediaImportAdapter{svc: mediaSvc})
 
 	return &roundTripHarness{
-		t: t, db: db, campaigns: campaignSvc, entities: entitySvc, addons: addonSvc,
+		t: t, db: db, campaigns: campaignSvc, entities: entitySvc, places: placeSvc, addons: addonSvc,
 		media: mediaSvc, maps: mapSvc, drawings: drawingSvc,
 		handler: campaigns.NewExportHandler(exportSvc),
 	}
@@ -438,5 +440,53 @@ func TestCampaignExportImport_Pictures_DBRoundTrip(t *testing.T) {
 	}
 	if jsonMapImage.Valid || jsonTokenImage.Valid {
 		t.Errorf("JSON import kept the source campaign's map pictures: map %q, token %q", jsonMapImage.String, jsonTokenImage.String)
+	}
+}
+
+// TestCampaignExportImport_PlacesInTree_DBRoundTrip: the extra places a page is
+// listed in come back with the campaign, under the imported copies of the
+// same pages, while each page keeps its real parent.
+func TestCampaignExportImport_PlacesInTree_DBRoundTrip(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test requires a database; skipped under -short")
+	}
+	h := newRoundTripHarness(t)
+	ctx := context.Background()
+	owner := h.newUser("owner")
+	src, err := h.campaigns.Create(ctx, owner, campaigns.CreateCampaignInput{Name: "Places Source"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	typ := h.typeID(src.ID, "character")
+	mk := func(name, parent string) *entities.Entity {
+		e, err := h.entities.Create(ctx, src.ID, owner, entities.CreateEntityInput{Name: name, EntityTypeID: typ, ParentID: parent})
+		if err != nil {
+			t.Fatalf("create %s: %v", name, err)
+		}
+		return e
+	}
+	city, guild := mk("Port City", ""), mk("Thieves Guild", "")
+	cook := mk("Mira the Cook", city.ID)
+	if err := h.places.AddPlace(ctx, src.ID, cook.ID, guild.ID, owner); err != nil {
+		t.Fatal(err)
+	}
+
+	newID, body := h.importBlob(h.newUser("importer"), "campaign.zip", h.exportZip(src, owner))
+	var n int
+	if err := h.db.QueryRow(`
+		SELECT COUNT(*) FROM entity_places ep
+		  JOIN entities e ON e.id = ep.entity_id AND e.name = 'Mira the Cook' AND e.campaign_id = ?
+		  JOIN entities p ON p.id = ep.parent_entity_id AND p.name = 'Thieves Guild' AND p.campaign_id = ?
+		 WHERE ep.campaign_id = ?`, newID, newID, newID).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("imported campaign has %d extra places for Mira, want 1 (response: %s)", n, body)
+	}
+	var parentName string
+	if err := h.db.QueryRow(`
+		SELECT p.name FROM entities e JOIN entities p ON p.id = e.parent_id
+		 WHERE e.name = 'Mira the Cook' AND e.campaign_id = ?`, newID).Scan(&parentName); err != nil || parentName != "Port City" {
+		t.Fatalf("Mira's real parent after import = %q (%v), want Port City", parentName, err)
 	}
 }

@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-sql-driver/mysql"
+
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
 
@@ -36,6 +38,15 @@ type UserRepository interface {
 	// they have chosen nothing).
 	GetViewPrefs(ctx context.Context, userID string) ([]byte, error)
 	SetViewPrefs(ctx context.Context, userID string, prefs []byte) error
+	GetNotifyPrefs(ctx context.Context, userID string) ([]byte, error)
+	SetNotifyPrefs(ctx context.Context, userID string, prefs []byte) error
+	// ListNotifyPrefs returns the stored notify_prefs JSON of each listed
+	// user that has any; users with none are absent from the map.
+	ListNotifyPrefs(ctx context.Context, userIDs []string) (map[string][]byte, error)
+	// AnonymizeUser empties a deleted account's row: personal fields
+	// cleared, a placeholder email and name, an unusable password,
+	// disabled and stamped deleted_at. Its reset tokens are removed.
+	AnonymizeUser(ctx context.Context, userID, email, displayName, passwordHash string) error
 
 	// ListLegacyAvatarPaths returns userID -> avatar_path for every user
 	// whose avatar_path still starts with prefix. Used only by the boot
@@ -63,6 +74,20 @@ type UserRepository interface {
 	UpdateIsDisabled(ctx context.Context, id string, isDisabled bool) error
 	CountUsers(ctx context.Context) (int, error)
 	CountAdmins(ctx context.Context) (int, error)
+
+	// Two-factor sign-in. The secret arrives already encrypted; nil clears it.
+	SetTOTP(ctx context.Context, userID string, encryptedSecret *string, enabled bool) error
+	ReplaceRecoveryCodes(ctx context.Context, userID string, hashes []string) error
+	UseRecoveryCode(ctx context.Context, userID, hash string) (bool, error)
+	CountRecoveryCodes(ctx context.Context, userID string) (int, error)
+
+	// Guests. KeepGuestAccount gives a guest an email and password and lifts
+	// the fence; an email someone else uses is a Conflict.
+	KeepGuestAccount(ctx context.Context, userID, email, passwordHash string) error
+	ListCampaignGuests(ctx context.Context, campaignID string) ([]string, error)
+
+	// TouchLastSeen records that the person used the site just now.
+	TouchLastSeen(ctx context.Context, userID string) error
 }
 
 // userRepository implements UserRepository with hand-written MariaDB queries.
@@ -77,8 +102,8 @@ func NewUserRepository(db *sql.DB) UserRepository {
 
 // Create inserts a new user row into the users table.
 func (r *userRepository) Create(ctx context.Context, user *User) error {
-	query := `INSERT INTO users (id, email, display_name, password_hash, is_admin, created_at)
-	          VALUES (?, ?, ?, ?, ?, ?)`
+	query := `INSERT INTO users (id, email, display_name, password_hash, is_admin, created_at, guest_campaign_id)
+	          VALUES (?, ?, ?, ?, ?, ?, ?)`
 
 	_, err := r.db.ExecContext(ctx, query,
 		user.ID,
@@ -87,6 +112,7 @@ func (r *userRepository) Create(ctx context.Context, user *User) error {
 		user.PasswordHash,
 		user.IsAdmin,
 		user.CreatedAt,
+		user.GuestCampaignID,
 	)
 	if err != nil {
 		return fmt.Errorf("inserting user: %w", err)
@@ -100,7 +126,7 @@ func (r *userRepository) Create(ctx context.Context, user *User) error {
 func (r *userRepository) FindByID(ctx context.Context, id string) (*User, error) {
 	query := `SELECT id, email, display_name, password_hash, avatar_path,
 	                 is_admin, is_disabled, totp_secret, totp_enabled, timezone,
-	                 created_at, last_login_at
+	                 created_at, last_login_at, guest_campaign_id
 	          FROM users WHERE id = ?`
 
 	user := &User{}
@@ -117,6 +143,7 @@ func (r *userRepository) FindByID(ctx context.Context, id string) (*User, error)
 		&user.Timezone,
 		&user.CreatedAt,
 		&user.LastLoginAt,
+		&user.GuestCampaignID,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, apperror.NewNotFound("user not found")
@@ -133,7 +160,7 @@ func (r *userRepository) FindByID(ctx context.Context, id string) (*User, error)
 func (r *userRepository) FindByEmail(ctx context.Context, email string) (*User, error) {
 	query := `SELECT id, email, display_name, password_hash, avatar_path,
 	                 is_admin, is_disabled, totp_secret, totp_enabled, timezone,
-	                 created_at, last_login_at
+	                 created_at, last_login_at, guest_campaign_id
 	          FROM users WHERE email = ?`
 
 	user := &User{}
@@ -150,6 +177,7 @@ func (r *userRepository) FindByEmail(ctx context.Context, email string) (*User, 
 		&user.Timezone,
 		&user.CreatedAt,
 		&user.LastLoginAt,
+		&user.GuestCampaignID,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, apperror.NewNotFound("user not found")
@@ -246,17 +274,19 @@ func (r *userRepository) UpdateIsAdmin(ctx context.Context, id string, isAdmin b
 
 // UpdateIsDisabled sets or clears the is_disabled flag for a user. Disabled
 // users cannot log in and their active sessions are invalidated separately.
+// A deleted account stays disabled: enabling it would list an empty row as
+// an ordinary user.
 func (r *userRepository) UpdateIsDisabled(ctx context.Context, id string, isDisabled bool) error {
-	query := `UPDATE users SET is_disabled = ? WHERE id = ?`
+	query := `UPDATE users SET is_disabled = ? WHERE id = ? AND (? OR deleted_at IS NULL)`
 
-	result, err := r.db.ExecContext(ctx, query, isDisabled, id)
+	result, err := r.db.ExecContext(ctx, query, isDisabled, id, isDisabled)
 	if err != nil {
 		return fmt.Errorf("updating is_disabled: %w", err)
 	}
 
 	n, _ := result.RowsAffected()
 	if n == 0 {
-		return apperror.NewNotFound("user not found")
+		return apperror.NewNotFound("user not found or the account was deleted")
 	}
 
 	return nil
@@ -271,11 +301,11 @@ func (r *userRepository) CountUsers(ctx context.Context) (int, error) {
 	return count, nil
 }
 
-// CountAdmins returns the number of users with is_admin = true.
-// Used to prevent removing the last admin.
+// CountAdmins returns the number of admins who can still sign in. Used to
+// prevent removing the last admin; a disabled admin can't stand in for one.
 func (r *userRepository) CountAdmins(ctx context.Context) (int, error) {
 	var count int
-	if err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM users WHERE is_admin = true`).Scan(&count); err != nil {
+	if err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM users WHERE is_admin = true AND is_disabled = FALSE`).Scan(&count); err != nil {
 		return 0, fmt.Errorf("counting admins: %w", err)
 	}
 	return count, nil
@@ -356,6 +386,146 @@ func (r *userRepository) SetViewPrefs(ctx context.Context, userID string, prefs 
 		return fmt.Errorf("updating view prefs: %w", err)
 	}
 	return nil
+}
+
+// GetNotifyPrefs returns the raw notify_prefs JSON for a user, or nil when unset.
+func (r *userRepository) GetNotifyPrefs(ctx context.Context, userID string) ([]byte, error) {
+	var raw []byte
+	err := r.db.QueryRowContext(ctx, `SELECT notify_prefs FROM users WHERE id = ?`, userID).Scan(&raw)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, apperror.NewNotFound("user not found")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("reading notify prefs: %w", err)
+	}
+	return raw, nil
+}
+
+// SetNotifyPrefs stores the validated notify_prefs JSON for a user.
+func (r *userRepository) SetNotifyPrefs(ctx context.Context, userID string, prefs []byte) error {
+	if _, err := r.db.ExecContext(ctx, `UPDATE users SET notify_prefs = ? WHERE id = ?`, string(prefs), userID); err != nil {
+		return fmt.Errorf("updating notify prefs: %w", err)
+	}
+	return nil
+}
+
+// ListNotifyPrefs reads notify_prefs for many users in one query.
+func (r *userRepository) ListNotifyPrefs(ctx context.Context, userIDs []string) (map[string][]byte, error) {
+	out := map[string][]byte{}
+	if len(userIDs) == 0 {
+		return out, nil
+	}
+	ph := strings.TrimSuffix(strings.Repeat("?,", len(userIDs)), ",")
+	args := make([]any, len(userIDs))
+	for i, id := range userIDs {
+		args[i] = id
+	}
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id, notify_prefs FROM users WHERE notify_prefs IS NOT NULL AND id IN (`+ph+`)`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("listing notify prefs: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		var raw []byte
+		if err := rows.Scan(&id, &raw); err != nil {
+			return nil, fmt.Errorf("scanning notify prefs: %w", err)
+		}
+		out[id] = raw
+	}
+	return out, rows.Err()
+}
+
+// AnonymizeUser empties a deleted account's row in one statement, then
+// removes its password reset tokens.
+func (r *userRepository) AnonymizeUser(ctx context.Context, userID, email, displayName, passwordHash string) error {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE users SET email = ?, display_name = ?, password_hash = ?,
+		        avatar_path = NULL, is_admin = FALSE, totp_secret = NULL, totp_enabled = FALSE,
+		        timezone = NULL, pending_email = NULL, email_verify_token = NULL, email_verify_expires = NULL,
+		        admin_nav_pins = NULL, view_prefs = NULL, notify_prefs = NULL,
+		        is_disabled = TRUE, deleted_at = NOW()
+		  WHERE id = ? AND deleted_at IS NULL`,
+		email, displayName, passwordHash, userID)
+	if err != nil {
+		return fmt.Errorf("anonymizing user: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return apperror.NewNotFound("user not found")
+	}
+	if _, err := r.db.ExecContext(ctx, `DELETE FROM password_reset_tokens WHERE user_id = ?`, userID); err != nil {
+		return fmt.Errorf("removing reset tokens: %w", err)
+	}
+	if _, err := r.db.ExecContext(ctx, `DELETE FROM user_recovery_codes WHERE user_id = ?`, userID); err != nil {
+		return fmt.Errorf("removing recovery codes: %w", err)
+	}
+	if _, err := r.db.ExecContext(ctx, `DELETE FROM user_identities WHERE user_id = ?`, userID); err != nil {
+		return fmt.Errorf("removing linked sign-ins: %w", err)
+	}
+	return nil
+}
+
+// --- Two-factor ---
+
+// SetTOTP stores the encrypted authenticator secret and whether two-factor
+// is on. Turning it off passes nil, which clears the secret.
+func (r *userRepository) SetTOTP(ctx context.Context, userID string, encryptedSecret *string, enabled bool) error {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE users SET totp_secret = ?, totp_enabled = ? WHERE id = ?`,
+		encryptedSecret, enabled, userID)
+	if err != nil {
+		return fmt.Errorf("updating two-factor: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return apperror.NewNotFound("user not found")
+	}
+	return nil
+}
+
+// ReplaceRecoveryCodes swaps a person's recovery codes for a new set in one
+// transaction, so a failure never leaves them with half a set. An empty
+// list just removes them.
+func (r *userRepository) ReplaceRecoveryCodes(ctx context.Context, userID string, hashes []string) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("starting transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM user_recovery_codes WHERE user_id = ?`, userID); err != nil {
+		return fmt.Errorf("removing recovery codes: %w", err)
+	}
+	for _, h := range hashes {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO user_recovery_codes (user_id, code_hash) VALUES (?, ?)`, userID, h); err != nil {
+			return fmt.Errorf("storing recovery code: %w", err)
+		}
+	}
+	return tx.Commit()
+}
+
+// UseRecoveryCode marks an unused code as used and reports whether it
+// matched. The used_at guard in the UPDATE makes each code single-use even
+// when two sign-ins race.
+func (r *userRepository) UseRecoveryCode(ctx context.Context, userID, hash string) (bool, error) {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE user_recovery_codes SET used_at = NOW()
+		  WHERE user_id = ? AND code_hash = ? AND used_at IS NULL`, userID, hash)
+	if err != nil {
+		return false, fmt.Errorf("using recovery code: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n == 1, nil
+}
+
+// CountRecoveryCodes returns how many unused recovery codes a person has.
+func (r *userRepository) CountRecoveryCodes(ctx context.Context, userID string) (int, error) {
+	var n int
+	if err := r.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM user_recovery_codes WHERE user_id = ? AND used_at IS NULL`, userID).Scan(&n); err != nil {
+		return 0, fmt.Errorf("counting recovery codes: %w", err)
+	}
+	return n, nil
 }
 
 // UpdateDisplayName sets the display name for a user.
@@ -535,6 +705,56 @@ func (r *userRepository) ConfirmEmailChange(ctx context.Context, userID, newEmai
 	n, _ := result.RowsAffected()
 	if n == 0 {
 		return apperror.NewNotFound("user not found")
+	}
+	return nil
+}
+
+// --- Guests ---
+
+// KeepGuestAccount turns a guest into an ordinary account. The guest
+// condition in the WHERE keeps it from ever rewriting a full account.
+func (r *userRepository) KeepGuestAccount(ctx context.Context, userID, email, passwordHash string) error {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE users SET email = ?, password_hash = ?, guest_campaign_id = NULL
+		  WHERE id = ? AND guest_campaign_id IS NOT NULL AND deleted_at IS NULL`,
+		email, passwordHash, userID)
+	var myErr *mysql.MySQLError
+	if errors.As(err, &myErr) && myErr.Number == 1062 {
+		return apperror.NewConflict("that email already has an account; use \"I already have an account\" instead")
+	}
+	if err != nil {
+		return fmt.Errorf("keeping guest account: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return apperror.NewNotFound("guest account not found")
+	}
+	return nil
+}
+
+// ListCampaignGuests returns the guests fenced to a campaign that are still
+// live accounts.
+func (r *userRepository) ListCampaignGuests(ctx context.Context, campaignID string) ([]string, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id FROM users WHERE guest_campaign_id = ? AND deleted_at IS NULL`, campaignID)
+	if err != nil {
+		return nil, fmt.Errorf("listing guests: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scanning guest: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// TouchLastSeen stamps users.last_seen_at with the current time.
+func (r *userRepository) TouchLastSeen(ctx context.Context, userID string) error {
+	if _, err := r.db.ExecContext(ctx, `UPDATE users SET last_seen_at = NOW() WHERE id = ?`, userID); err != nil {
+		return fmt.Errorf("recording last seen: %w", err)
 	}
 	return nil
 }

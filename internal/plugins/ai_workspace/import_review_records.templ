@@ -9,6 +9,7 @@ import (
 	"fmt"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/records"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
 // RecordRow is one record as the review screen shows it.
@@ -40,7 +41,7 @@ func (r RecordRow) title() string {
 	return r.Label
 }
 
-templ reviewRecordRow(r RecordRow) {
+templ reviewRecordRow(campaignID string, r RecordRow) {
 	<div
 		role="listitem"
 		aria-label={ fmt.Sprintf("%s %s: %s", r.actionWord(), r.Label, r.title()) }
@@ -83,6 +84,9 @@ templ reviewRecordRow(r RecordRow) {
 				} else {
 					<div class="text-xs text-fg-muted">{ r.Plan.Summary }</div>
 				}
+				if r.Plan.Preview != "" && r.Plan.Error == "" {
+					@recordPreview(campaignID, r)
+				}
 				if r.Plan.Client != "" {
 					<input type="hidden" name={ fmt.Sprintf("rec_%d_generated", r.Index) } value=""/>
 				}
@@ -110,4 +114,23 @@ templ reviewRecordRow(r RecordRow) {
 			</div>
 		</div>
 	</div>
+}
+
+// recordPreview draws what a house-rule row writes with the rulebook reader
+// itself, so the pages show in the campaign's Handbook look (its own style,
+// or Standard if the owner chose that) with their working rolls and flaps.
+templ recordPreview(campaignID string, r RecordRow) {
+	<details class="mt-2" open>
+		<summary class="text-xs font-medium text-accent cursor-pointer">Read it as the Handbook will show it</summary>
+		<link rel="stylesheet" href={ layouts.AssetURL("/static/css/rulebook.css") }/>
+		<div class="mt-2 rounded-lg overflow-hidden border border-edge" style="height: 560px">
+			<div
+				class="h-full"
+				data-widget="rulebook"
+				data-campaign-id={ campaignID }
+				data-book-json={ r.Plan.Preview }
+				aria-label={ fmt.Sprintf("Preview of %s", r.title()) }
+			></div>
+		</div>
+	</details>
 }

@@ -24,6 +24,9 @@ const (
 	maxShopRoomRelID   = 2_147_483_647
 	shopRoomCoordMin   = -1.0
 	shopRoomCoordMax   = 20.0
+	// Effect levels are percentages of the default look; 250 leaves room to
+	// exaggerate without letting a client store an absurd value.
+	maxShopRoomEffect = 250
 )
 
 func setOf(vals ...string) map[string]bool {
@@ -42,10 +45,14 @@ var (
 	shopRoomDecorations = setOf("none", "some", "lots")
 	shopRoomPalettes    = setOf("oak", "ember", "moss", "gilt", "slate", "dusk")
 	shopRoomLooks       = setOf("lit", "paper", "")
-	shopRoomKinds       = setOf("shelf", "rack", "cabinet", "bookcase", "forge", "window", "herbs", "counter", "table", "barrel", "crate", "anvil", "glass", "stall", "rug", "pedestal", "lamp", "sack")
-	shopRoomWalls       = setOf("Y", "X", "")
-	shopRoomColors      = setOf("steel", "iron", "gold", "silver", "red", "green", "teal", "blue", "violet", "leather", "paper", "cloth", "wood", "dark", "bone", "honey", "")
-	shopRoomIconSet     = func() map[string]bool {
+	shopRoomMoods       = setOf("", "cozy", "eldritch", "candy", "haunted", "festive", "underwater", "fey", "desert", "dwarven")
+	shopRoomWeathers    = setOf("", "rain", "snow")
+	shopRoomTimes       = setOf("", "dawn", "dusk", "night")
+	shopRoomKinds       = setOf("shelf", "rack", "cabinet", "bookcase", "forge", "window", "herbs", "counter", "table", "barrel", "crate", "anvil", "glass", "stall", "rug", "pedestal", "lamp", "sack",
+		"tentacle", "monolith", "circle", "cane", "gumdrop", "lolly", "ghost", "coffin", "gift", "pine", "coral", "kelp", "mushroom", "bloom", "urn", "palm", "pillar", "brazier")
+	shopRoomWalls   = setOf("Y", "X", "")
+	shopRoomColors  = setOf("steel", "iron", "gold", "silver", "red", "green", "teal", "blue", "violet", "leather", "paper", "cloth", "wood", "dark", "bone", "honey", "")
+	shopRoomIconSet = func() map[string]bool {
 		m := setOf(shopRoomIcons...)
 		m[""] = true
 		return m
@@ -95,10 +102,28 @@ func (l *ShopRoomLayout) validate() error {
 		{"decorations", l.Decorations, shopRoomDecorations},
 		{"palette", l.Palette, shopRoomPalettes},
 		{"look", l.Look, shopRoomLooks},
+		{"mood", l.Mood, shopRoomMoods},
 	}
 	for _, e := range enums {
 		if !e.set[e.val] {
 			return fmt.Errorf("invalid %s", e.name)
+		}
+	}
+	if ef := l.Effects; ef != nil {
+		levels := []struct {
+			name string
+			v    int
+		}{{"shadows", ef.Shadows}, {"warmth", ef.Warmth}, {"window", ef.Window}, {"haze", ef.Haze}, {"vignette", ef.Vignette}}
+		for _, lv := range levels {
+			if lv.v < 0 || lv.v > maxShopRoomEffect {
+				return fmt.Errorf("invalid effects %s", lv.name)
+			}
+		}
+		if !shopRoomWeathers[ef.Weather] {
+			return fmt.Errorf("invalid effects weather")
+		}
+		if !shopRoomTimes[ef.Time] {
+			return fmt.Errorf("invalid effects time")
 		}
 	}
 	for name, v := range map[string]int{"room": l.Seeds.Room, "goods": l.Seeds.Goods, "deco": l.Seeds.Deco} {

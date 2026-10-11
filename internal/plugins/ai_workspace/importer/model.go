@@ -12,6 +12,8 @@ package importer
 import (
 	"strings"
 	"time"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 )
 
 // FrontMatter is the YAML preamble that AI tools emit between
@@ -38,6 +40,31 @@ type FrontMatter struct {
 	// Kind routes the block: "" or "page" is a page; anything else is a
 	// record for the records package (calendar event, rolling table…).
 	Kind string `yaml:"kind"`
+	// Parent names the page this one sits under: an existing page, or one
+	// created earlier in the same paste. "" (key absent) leaves the
+	// hierarchy alone; ParentNone lifts the page to the top level. Matched
+	// by slug like every other name in the importer.
+	Parent string `yaml:"parent"`
+}
+
+// ParentNone is the `parent:` value that lifts a page to the top level.
+// Absent and "none" must differ so an update that says nothing about
+// parents never flattens a page by accident.
+const ParentNone = "none"
+
+// ParentKey is the slug a `parent:` value refers to, and whether the key
+// carried a parent at all. ok is false for an absent key and for "none".
+func (f FrontMatter) ParentKey() (slug string, ok bool) {
+	v := strings.TrimSpace(f.Parent)
+	if v == "" || strings.EqualFold(v, ParentNone) {
+		return "", false
+	}
+	return entities.Slugify(v), true
+}
+
+// LiftsParent reports an explicit `parent: none`.
+func (f FrontMatter) LiftsParent() bool {
+	return strings.EqualFold(strings.TrimSpace(f.Parent), ParentNone)
 }
 
 // Front-matter action values. The corresponding committer dispatch
@@ -76,6 +103,10 @@ const (
 	// Default-EXCLUDE; operator can fix the source or override the
 	// action via per-row controls.
 	StatusActionMismatch ParseStatus = "action_mismatch"
+	// StatusParentProblem means the row's `parent:` names no usable page
+	// (missing, ambiguous, itself, later in the paste, or being deleted).
+	// Default-EXCLUDE; the Reason says what to fix.
+	StatusParentProblem ParseStatus = "parent_problem"
 )
 
 // ParsedPage is one page detected in the multi-page input. The

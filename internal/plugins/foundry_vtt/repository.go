@@ -131,7 +131,8 @@ func (r *repository) CampaignsOlderThan(ctx context.Context, version string, sem
 		       c.updated_at
 		  FROM campaigns c
 		  LEFT JOIN users u ON u.id = c.created_by
-		  WHERE JSON_UNQUOTE(JSON_EXTRACT(c.settings, '$.foundry_module_pin')) IS NOT NULL
+		  WHERE c.deleted_at IS NULL
+		    AND JSON_UNQUOTE(JSON_EXTRACT(c.settings, '$.foundry_module_pin')) IS NOT NULL
 		    AND JSON_UNQUOTE(JSON_EXTRACT(c.settings, '$.foundry_module_pin')) != ''
 		    AND JSON_UNQUOTE(JSON_EXTRACT(c.settings, '$.foundry_module_pin')) != ?
 		  ORDER BY c.name`, version)
@@ -147,7 +148,8 @@ func (r *repository) CampaignsOlderThan(ctx context.Context, version string, sem
 	return out, nil
 }
 
-// CampaignsWithEmptyPin lists every campaign whose pin is NULL,
+// CampaignsWithEmptyPin lists every live campaign (never one in the site
+// Trash, which the auto-pin must not write into) whose pin is NULL,
 // missing from the settings JSON, or empty string — the auto-tracking
 // campaigns the auto-pin logic targets. JSON_UNQUOTE on a NULL is a
 // literal "null" string in some MySQL configs, so both the NULL and
@@ -159,9 +161,10 @@ func (r *repository) CampaignsWithEmptyPin(ctx context.Context) ([]CampaignUsage
 		       c.updated_at
 		  FROM campaigns c
 		  LEFT JOIN users u ON u.id = c.created_by
-		  WHERE JSON_EXTRACT(c.settings, '$.foundry_module_pin') IS NULL
+		  WHERE c.deleted_at IS NULL
+		    AND (JSON_EXTRACT(c.settings, '$.foundry_module_pin') IS NULL
 		     OR JSON_UNQUOTE(JSON_EXTRACT(c.settings, '$.foundry_module_pin')) = ''
-		     OR JSON_UNQUOTE(JSON_EXTRACT(c.settings, '$.foundry_module_pin')) = 'null'
+		     OR JSON_UNQUOTE(JSON_EXTRACT(c.settings, '$.foundry_module_pin')) = 'null')
 		  ORDER BY c.name`)
 }
 

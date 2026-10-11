@@ -149,6 +149,7 @@
   function openPending() {
     if (pendingNote && Chronicle.openJournalNote && Chronicle.openJournalNote(pendingNote)) pendingNote = '';
   }
+  window.addEventListener('chronicle:journal-ready', openPending);
 
   function load() {
     var seq = ++loading;

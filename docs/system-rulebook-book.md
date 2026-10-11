@@ -68,6 +68,9 @@ parts:
   with `name` and `summary`. Each becomes a hover definition.
 - `look: paper` draws pages as paper inside a cover, with a soft crease
   between them. Set the paper colours in `theme` (light `paper`, dark `ink`).
+  A campaign owner can switch every book to Chronicle's standard look
+  (Customize › Rulebook); the book's colours and `look` are then ignored, and
+  only its fonts still apply.
 - `tabs` puts a row of tabs above the book, one per named chapter, in that
   order (at most 12). When the campaign has written house rules, a House
   rules tab is added at the end.
@@ -197,6 +200,12 @@ rewrite a page, add pages to a chapter and add a chapter of house rules. The
 package files are never touched, so updating the package does not overwrite
 anything a campaign wrote; a page a campaign edited that the package has since
 changed is flagged so the Director can choose which text to keep.
+
+The campaign owner can also have an AI write house rules: Settings, Data & AI,
+then the AI tool's prompt with **House rules** as its content. The AI answers
+with `kind: house-rule` blocks whose front matter is a chapter file like the
+one above (`intro`, `director`, `pages`), and the owner reads the pages, drawn
+in the Handbook's own look, before anything is saved.
 
 A campaign's copy can be downloaded from the editor as a zip of these same
 files (`book/book.yaml` and `book/chapters/*.yaml`), with house-rules chapters
