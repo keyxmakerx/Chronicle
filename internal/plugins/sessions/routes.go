@@ -112,6 +112,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler,
 	// proposal route is the emailed token below.
 	cg.GET("/proposals", h.ListProposals, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.POST("/proposals", h.CreateProposalAPI, scribeOrCoDirector())
+	cg.GET("/proposals/open", h.OpenPollsAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/proposals/:pid", h.ShowProposal, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.POST("/proposals/:pid/options/:oid/respond", h.RespondOptionAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	// Confirm-winner: Scribe+ or a co-Director picks the winning option,

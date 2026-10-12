@@ -7,6 +7,7 @@ import (
 	"html"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/labstack/echo/v4"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/notifyprefs"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
 )
 
 // Slot-proposal HTTP surface. Handlers stay thin: bind, call the service,
@@ -26,6 +28,11 @@ import (
 // GET /campaigns/:id/proposals
 func (h *Handler) ListProposals(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
+	// Date polls are answered on the Game nights calendar; this list stays
+	// only for a campaign without one.
+	if calID, _ := h.realWorldCalendar(c); calID != "" {
+		return middleware.HTMXRedirect(c, gameNightsTarget(cc.Campaign.ID, calID, "", ""))
+	}
 	userID := auth.GetUserID(c)
 	canManage := cc.MemberRole >= campaigns.RoleScribe
 	summaries, err := h.svc.ListProposalSummaries(c.Request().Context(), cc.Campaign.ID, userID)
@@ -51,6 +58,12 @@ func (h *Handler) ShowProposal(c echo.Context) error {
 	view, err := h.svc.GetProposalView(c.Request().Context(), cc.Campaign.ID, c.Param("pid"), userID, viewerTZ, includeDetail)
 	if err != nil {
 		return c.JSON(apperror.SafeCode(err), map[string]string{"error": apperror.SafeMessage(err)})
+	}
+	// A poll is answered on the Game nights calendar, so every link to one
+	// (the bell, emails, Coming up) opens it there; this page stays only for
+	// a campaign without that calendar.
+	if calID, _ := h.realWorldCalendar(c); calID != "" {
+		return middleware.HTMXRedirect(c, pollTarget(cc.Campaign.ID, calID, view.Proposal.ID, pollLandingDate(view, time.Now().In(timeutil.LoadLocation(viewerTZ)).Format("2006-01-02"))))
 	}
 	if includeDetail {
 		h.fillResponderNames(c.Request().Context(), cc.Campaign.ID, view)

@@ -46,9 +46,9 @@ templ SessionListFragment(cc *campaigns.CampaignContext, sessions []Session, csr
 				<a
 					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/proposals", cc.Campaign.ID)) }
 					class="btn-secondary text-sm"
-					title="Vote on candidate session times"
+					title="Answer date polls on the Game nights calendar"
 				>
-					<i class="fa-solid fa-calendar-day mr-1"></i> Proposals
+					<i class="fa-solid fa-calendar-day mr-1"></i> Date polls
 				</a>
 			}
 			if isScribe {

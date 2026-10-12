@@ -4,7 +4,9 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/labstack/echo/v4"
 
@@ -105,6 +107,53 @@ func TestGameNightsLink_NoRealWorldCalendar(t *testing.T) {
 			}
 			if got := rec.Header().Get("Location"); got != tt.want {
 				t.Fatalf("Location = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// A date poll's page and the polls list open on the Game nights calendar
+// when the campaign has one, and stay as pages when it doesn't.
+func TestDatePollPagesOpenOnTheCalendar(t *testing.T) {
+	start := time.Date(2099, 10, 17, 1, 30, 0, 0, time.UTC)
+	repo := &mockSessionRepo{
+		getProposalFn: func(_ context.Context, _, _ string) (*SlotProposal, []SlotProposalOption, error) {
+			return &SlotProposal{ID: "p1", CampaignID: "c1", Title: "Next arc", Status: ProposalOpen},
+				[]SlotProposalOption{{ID: "o1", ProposalID: "p1", StartsAtUTC: start, EndsAtUTC: start.Add(4 * time.Hour)}}, nil
+		},
+	}
+	tests := []struct {
+		name, calID, path string
+		want              string
+	}{
+		{"a poll opens on its next date", "k1", "/campaigns/c1/proposals/p1?tz=America/Chicago", "/campaigns/c1/calendars/k1/view?date=2099-10-16&poll=p1"},
+		{"the list opens the calendar", "k1", "/campaigns/c1/proposals", "/campaigns/c1/calendars/k1/view?night=next"},
+		{"without a calendar a poll keeps its page", "", "/campaigns/c1/proposals/p1", ""},
+		{"without a calendar the list keeps its page", "", "/campaigns/c1/proposals", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := NewHandler(NewSessionService(repo, nil, nil))
+			h.SetCalendarFinder(stubCalendarFinder{id: tt.calID})
+			rec := httptest.NewRecorder()
+			c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, tt.path, nil), rec)
+			c.Set("campaign_context", &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "c1"}, MemberRole: campaigns.RolePlayer, IsMember: true})
+			c.SetParamNames("pid")
+			c.SetParamValues("p1")
+			var err error
+			if strings.HasSuffix(c.Request().URL.Path, "/proposals") {
+				err = h.ListProposals(c)
+			} else {
+				err = h.ShowProposal(c)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := rec.Header().Get("Location"); got != tt.want {
+				t.Fatalf("Location = %q, want %q", got, tt.want)
+			}
+			if tt.want == "" && rec.Code != http.StatusOK {
+				t.Fatalf("status %d, want the page", rec.Code)
 			}
 		})
 	}

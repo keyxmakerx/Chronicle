@@ -1271,6 +1271,11 @@
       this._gnPages = {}; // session id -> its recap and linked pages
       this._gnReminded = {}; // night id + "|" + user id -> reminded this visit
       this._gnRemindedAll = {}; // night id -> "remind everyone" sent
+      this.polls = []; // open date polls, filled by fetchPolls
+      this._pollsRead = null; // the first read of them
+      this._pollDraft = null; // {dates} while a poll's days are being tapped
+      this._pollPicking = null; // the poll date whose "Pick this date" is being confirmed
+      this._gnChooseFor = null; // the day whose "Plan a game night" choices are open
       // Game nights are real-world dates, so only a real-world calendar
       // shows them; a world calendar keeps to the story. Only members see
       // who is coming.
@@ -1379,6 +1384,7 @@
           '</header>' +
           '<div class="eratip" id="cal5-eratip" role="tooltip" hidden></div>' +
           '<div class="erapanel" id="cal5-erapanel" role="region" aria-label="Era" hidden></div>' +
+          '<div class="pollbar" id="cal5-pollbar" role="region" aria-label="New date poll" hidden></div>' +
           '<div class="dow" id="cal5-dow" aria-hidden="true"></div>' +
           '<div class="stage" id="cal5-stage"></div>' +
           '<div class="hc" id="cal5-hc" aria-hidden="true"></div>' +
@@ -1709,7 +1715,8 @@
       if (!this.showNights || !CalDate.usesRealTime(this.cal)) return null;
       var q;
       try { q = new URLSearchParams(window.location.search); } catch (e) { return null; }
-      var night = q.get('night'), date = q.get('date') || '';
+      var night = q.get('night'), date = q.get('date') || '', poll = q.get('poll');
+      if (poll) return { poll: poll, date: /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : '' };
       if (!night) return null;
       if (night === 'next') return { next: true };
       return /^\d{4}-\d{2}-\d{2}$/.test(date) ? { sessionId: night, date: date } : { next: true };
@@ -1734,6 +1741,7 @@
     _openFromLink: function () {
       var self = this, t = this._linkTarget();
       if (!t) return;
+      if (t.poll) { this._openPollLink(t).catch(function () { /* the calendar still shows; only the jump is lost */ }); return; }
       (t.next ? this._nextNight() : Promise.resolve(t)).then(function (n) {
         return n ? self._openNight(n) : null;
       }).catch(function () { /* the calendar still shows; only the jump is lost */ });
@@ -1776,9 +1784,12 @@
           (w.tileIcon ? '<i class="' + esc(w.tileIcon) + '"></i>' : '<b>' + esc(w.tileBig || '') + '</b>') + '</span>';
         var body = tile + '<span class="wmain"><span class="wt">' + esc(w.title) + '</span><span class="ws">' + esc(w.sub) + '</span></span>' +
           '<span class="wact">' + esc(w.action || 'Open') + '</span>';
-        // A night opens here, on its day; anything else is its own page.
+        // A night or a date poll opens here, on its day; anything else is
+        // its own page.
+        var poll = /\/proposals\/([^/?#]+)$/.exec(w.href || '');
         return '<li>' + (w.sessionId && /^\d{4}-\d{2}-\d{2}$/.test(w.date || '')
           ? '<button type="button" class="wrow" data-wait-night="' + esc(w.sessionId) + '" data-wait-date="' + esc(w.date) + '">' + body + '</button>'
+          : poll ? '<a class="wrow" href="' + esc(w.href) + '" data-wait-poll="' + esc(decodeURIComponent(poll[1])) + '">' + body + '</a>'
           : '<a class="wrow" href="' + esc(w.href) + '">' + body + '</a>') + '</li>';
       }).join('') + '</ul>';
     },
@@ -2537,7 +2548,307 @@
       if (!this.showNights || this.role < 2) return '';
       var iso = this._realIso(d.y, d.m, d.d);
       if (!iso || iso < (this._todayIso() || localIso(new Date()))) return '';
-      return '<button type="button" class="addev" data-gn-new="' + esc(iso) + '"><i class="fa-solid fa-dice-d20"></i>Plan a game night</button>';
+      var open = this._gnChooseFor === iso;
+      return '<button type="button" class="addev" data-gn-choose="' + esc(iso) + '" aria-expanded="' + open + '"><i class="fa-solid fa-dice-d20"></i>Plan a game night</button>' +
+        (open ? '<div class="gnchoose" role="group" aria-label="Plan a game night">' +
+          '<button type="button" data-gn-new="' + esc(iso) + '"><b>One date</b><small>Set the night and ask who’s coming</small></button>' +
+          '<button type="button" data-poll-new="' + esc(iso) + '"><b>Ask about a few dates</b><small>Tap up to five days, then send the poll</small></button></div>' : '');
+    },
+
+    // --------------------------------------------------------------
+    // Date polls: whoever runs the game asks which of a few dates suit,
+    // and members answer here. Each date a poll suggests shows on its day;
+    // the day's card is where members answer and where whoever may pick
+    // the date plans it, which closes the poll and makes it a game night.
+    // --------------------------------------------------------------
+    fetchPolls: function () {
+      var self = this;
+      if (!this.showNights) return Promise.resolve([]);
+      var q = this.calZone ? '?tz=' + encodeURIComponent(this.calZone) : '';
+      return Chronicle.apiFetch('/campaigns/' + encodeURIComponent(this.campaignId) + '/proposals/open' + q)
+        .then(function (resp) { return resp.ok ? resp.json() : null; })
+        .then(function (list) { if (Array.isArray(list)) self.polls = list; return self.polls; })
+        .catch(function () { return self.polls; });
+    },
+
+    _pollsLoaded: function () {
+      if (!this._pollsRead) this._pollsRead = this.fetchPolls();
+      return this._pollsRead;
+    },
+
+    _pollId: function (p, o) { return 'poll:' + p.id + ':' + o.id; },
+
+    // Each {p, o} whose suggested date is this day.
+    pollsOnDay: function (y, m, d) {
+      var iso = this.showNights ? this._realIso(y, m, d) : '', out = [];
+      if (!iso) return out;
+      (this.polls || []).forEach(function (p) {
+        (p.options || []).forEach(function (o) { if (o.date === iso) out.push({ p: p, o: o }); });
+      });
+      return out;
+    },
+
+    _pollFind: function (id) {
+      var parts = String(id).split(':'), hit = null;
+      (this.polls || []).forEach(function (p) {
+        if (p.id !== parts[1]) return;
+        (p.options || []).forEach(function (o) { if (o.id === parts[2]) hit = { p: p, o: o }; });
+      });
+      return hit;
+    },
+
+    _pollTally: function (p, o) {
+      var none = Math.max(0, (p.members || 0) - o.yes - o.maybe - o.no);
+      return o.yes + ' can · ' + o.maybe + ' maybe · ' + o.no + ' can’t' + (none ? ' · ' + none + ' no answer yet' : '');
+    },
+
+    // The date most can make so far: most yeses, then fewest can'ts, then
+    // the soonest. null until someone has said yes.
+    _pollBest: function (p) {
+      var best = null;
+      (p.options || []).forEach(function (o) {
+        if (!o.yes) return;
+        if (!best || o.yes > best.yes || (o.yes === best.yes && o.no < best.no)) best = o;
+      });
+      return best;
+    },
+
+    _pollWhen: function (p, o) {
+      var z = zoneAbbr(p.tz, o.date);
+      return o.timeLabel + (z ? ' ' + z : '');
+    },
+
+    _pollBoxHTML: function (p, o, highlightId) {
+      var self = this, id = this._pollId(p, o), past = o.date < this._todayIso(), best = this._pollBest(p);
+      var h = '<div class="evd pollb' + (highlightId === id ? ' hl' : '') + '" data-ev="' + esc(id) + '">' +
+        '<div class="evh"><span class="ric"><i class="fa-solid fa-square-poll-vertical"></i></span><span class="qt0">' + esc(p.title) + '</span></div>' +
+        '<div class="evm"><span class="mi">' + esc(this._pollWhen(p, o)) + '</span><span class="mi">Asked by ' + esc(p.askedBy) + '</span></div>';
+      if (p.note) h += '<p class="brief">' + esc(p.note) + '</p>';
+      h += '<div class="rsvp">';
+      if (past) h += '<div class="rnote">This date has passed.</div>';
+      else {
+        h += '<div class="rq">Can you make this date?</div><div class="seg3" role="group" aria-label="' + esc('Your answer for ' + p.title + ', ' + realDateWords(o.date)) + '">' +
+          ['yes', 'maybe', 'no'].map(function (x) {
+            return '<button type="button" data-poll-ans="' + x + '" aria-pressed="' + (o.mine === x) + '">' + { yes: 'Can make it', maybe: 'Maybe', no: 'Can’t' }[x] + '</button>';
+          }).join('') + '</div>';
+      }
+      h += '<div class="rcount">' + esc(this._pollTally(p, o)) + (best === o ? ' · <b>most can make this one</b>' : '') + '</div>';
+      var others = (p.options || []).filter(function (x) { return x.id !== o.id; });
+      if (others.length) {
+        h += '<div class="plother"><span>Other dates:</span>' + others.map(function (x) {
+          return '<button type="button" class="plchip" data-poll-go="' + esc(self._pollId(p, x)) + '">' + esc(realDateWords(x.date)) +
+            (best === x ? ' <b>· most can</b>' : '') + '</button>';
+        }).join('') + '</div>';
+      }
+      if (p.canPick && !past) {
+        h += this._pollPicking === id
+          ? '<div class="plpick ask"><span>This closes the poll and plans a game night on ' + esc(realDateWords(o.date)) + '. Everyone is asked if they can come.</span>' +
+            '<span class="plpa"><button type="button" class="btn sm primary" data-poll-pick-yes>Plan it</button><button type="button" class="btn sm quiet" data-poll-pick-no>Not yet</button></span></div>'
+          : '<div class="plpick"><span>Only those running the game see this.</span><button type="button" class="btn sm primary" data-poll-pick>Pick this date</button></div>';
+      }
+      return h + '</div></div>';
+    },
+
+    // Clicks inside a poll's box in the day card. Returns true when the
+    // click was in one, so it never opens the event page.
+    _pollClick: function (e) {
+      var box = e.target.closest('.pollb');
+      if (!box) return false;
+      var hit = this._pollFind(box.dataset.ev);
+      if (!hit) return true;
+      var ans = e.target.closest('[data-poll-ans]');
+      if (ans) { this._pollVote(hit.p, hit.o, ans.dataset.pollAns); return true; }
+      var go = e.target.closest('[data-poll-go]');
+      if (go) {
+        var to = this._pollFind(go.dataset.pollGo);
+        if (to) this._openPollDate(to.o.date, go.dataset.pollGo);
+        return true;
+      }
+      if (e.target.closest('[data-poll-pick]')) { this._pollPicking = box.dataset.ev; this.refreshWing(); return true; }
+      if (e.target.closest('[data-poll-pick-no]')) { this._pollPicking = null; this.refreshWing(); return true; }
+      if (e.target.closest('[data-poll-pick-yes]')) { this._pollPick(hit.p, hit.o, e.target.closest('.plpick')); return true; }
+      return true;
+    },
+
+    _pollVote: function (p, o, ans) {
+      var self = this, prev = o.mine || '';
+      if (prev === ans) return;
+      var bump = function (a, by) { if (a === 'yes') o.yes += by; else if (a === 'maybe') o.maybe += by; else if (a === 'no') o.no += by; };
+      var redraw = function () { self.refreshWing(); self._paintMonth(); };
+      bump(prev, -1); bump(ans, 1); o.mine = ans;
+      redraw();
+      Chronicle.apiFetch('/campaigns/' + encodeURIComponent(this.campaignId) + '/proposals/' + encodeURIComponent(p.id) + '/options/' + encodeURIComponent(o.id) + '/respond',
+        { method: 'POST', body: { response: ans } })
+        .then(function (resp) {
+          if (!resp.ok) return resp.json().catch(function () { return {}; }).then(function (j) { return Promise.reject(j && j.error); });
+          self._announce('Answer saved.');
+          self.loadWaiting();
+        })
+        .catch(function (msg) {
+          bump(ans, -1); bump(prev, 1); o.mine = prev;
+          redraw();
+          self.say((typeof msg === 'string' && msg) || 'Your answer could not be saved. Try again.');
+        });
+    },
+
+    // Picking a date closes the poll and plans the night in the calendar's
+    // zone, so it lands on the day the poll showed.
+    _pollPick: function (p, o, row) {
+      var self = this, q = this.calZone ? '?tz=' + encodeURIComponent(this.calZone) : '';
+      if (row) $$('button', row).forEach(function (b) { b.disabled = true; });
+      Chronicle.apiFetch('/campaigns/' + encodeURIComponent(this.campaignId) + '/proposals/' + encodeURIComponent(p.id) + '/confirm' + q,
+        { method: 'POST', body: { optionId: o.id } })
+        .then(function (resp) {
+          if (!resp.ok) return resp.json().catch(function () { return {}; }).then(function (j) { return Promise.reject(j && j.error); });
+          self._pollPicking = null;
+          self.polls = (self.polls || []).filter(function (x) { return x.id !== p.id; });
+          self.say('Game night planned for ' + realDateWords(o.date) + '. Everyone has been asked if they can come.');
+          self.loadWaiting();
+          return self.reloadNights(o.date);
+        })
+        .catch(function (msg) {
+          if (row && row.isConnected) $$('button', row).forEach(function (b) { b.disabled = false; });
+          self.say((typeof msg === 'string' && msg) || 'That date could not be picked. Try again.');
+        });
+    },
+
+    // Opens a real date's day card with one poll date picked out.
+    _openPollDate: function (iso, id) {
+      var self = this, p = iso.split('-'), y = +p[0], m = +p[1], d = +p[2];
+      if (this.view.y !== y || this.view.m !== m) { this.view = { y: y, m: m }; this.renderMonth(); }
+      return Promise.all([this.fetchNights(y, m), this._pollsLoaded()]).then(function () {
+        self._paintMonth();
+        self.openWing(dayKey(y, m, d), id || null);
+      });
+    },
+
+    // A link to a poll (the bell, an email, Coming up) opens on the day the
+    // server named. A poll that has closed since opens that day plainly:
+    // its picked date is a game night there.
+    _openPollLink: function (t) {
+      var self = this;
+      return this._pollsLoaded().then(function () {
+        var hit = null;
+        (self.polls || []).forEach(function (p) {
+          if (p.id !== t.poll) return;
+          (p.options || []).forEach(function (o) { if (!hit && o.date === t.date) hit = { p: p, o: o }; });
+          if (!hit && p.options && p.options.length) hit = { p: p, o: p.options[0] };
+        });
+        if (!hit && !t.date) return null;
+        if (!hit) self.say('That date poll is closed.');
+        return self._openPollDate(hit ? hit.o.date : t.date, hit ? self._pollId(hit.p, hit.o) : null);
+      });
+    },
+
+    // The date a poll opens on from the waiting list: its next date, or its
+    // first once all have passed.
+    _pollLanding: function (p) {
+      var today = this._todayIso(), opts = p.options || [];
+      return opts.filter(function (o) { return o.date >= today; })[0] || opts[0] || null;
+    },
+
+    // Starting a poll: the days are tapped on the calendar itself, up to
+    // five, while a bar above the month holds the name and start time.
+    _pollStart: function (dates, startMin) {
+      var today = this._todayIso();
+      this._pollDraft = { dates: (dates || []).filter(function (d) { return d >= today; }).slice(0, 5).sort() };
+      var self = this;
+      this.closeAllPanels();
+      var bar = $('#cal5-pollbar', this.el);
+      bar.innerHTML = this._pollBarHTML(startMin == null ? 19 * 60 : startMin);
+      bar.hidden = false;
+      this.calEl.classList.add('picking');
+      this._pollPaintPicks();
+      var t = bar.querySelector('input[name="title"]');
+      if (t) { t.focus({ preventScroll: true }); t.select(); }
+      bar.scrollIntoView({ block: 'nearest' });
+      if (!this._pollDraft.dates.length) self._announce('Tap up to five days on the calendar.');
+    },
+
+    _pollBarHTML: function (startMin) {
+      var z = zoneAbbr(this.calZone, this._pollDraft.dates[0] || this._todayIso());
+      return '<form class="pbar" data-poll-form>' +
+        '<div class="gph"><b>Ask about a few dates</b><span>Tap up to five days on the calendar. Tap one again to take it off.</span></div>' +
+        '<div class="pbdates">' + this._pollDatesHTML() + '</div>' +
+        '<div class="gprow"><label class="fld"><span>Name</span><input type="text" name="title" value="Game night" maxlength="200" required></label>' +
+        '<label class="fld"><span>Starts' + (z ? ' (' + esc(z) + ')' : '') + '</span><input type="time" name="time" value="' + pad2(Math.floor(startMin / 60) % 24) + ':' + pad2(startMin % 60) + '" required></label></div>' +
+        '<p class="gpn">Everyone in the campaign is asked which dates they can make, here and by email.</p>' +
+        '<div class="gpa"><button type="submit" class="btn sm primary">Send the poll</button><button type="button" class="btn sm quiet" data-poll-cancel>Cancel</button></div>' +
+        '<p class="gperr" role="alert" hidden></p></form>';
+    },
+
+    _pollDatesHTML: function () {
+      var dates = this._pollDraft ? this._pollDraft.dates : [];
+      if (!dates.length) return '<span class="none">No days picked yet.</span>';
+      return dates.map(function (iso) {
+        return '<button type="button" class="plchip" data-poll-drop="' + esc(iso) + '">' + esc(realDateWords(iso)) + ' <i class="fa-solid fa-xmark" aria-hidden="true"></i><span class="sr">Take it off</span></button>';
+      }).join('');
+    },
+
+    _pollPaintPicks: function () {
+      var picked = {};
+      ((this._pollDraft && this._pollDraft.dates) || []).forEach(function (d) { picked[d] = true; });
+      var self = this;
+      $$('.day[data-key]', this.stageEl).forEach(function (btn) {
+        var k = parseDayKey(btn.dataset.key), on = !!picked[self._realIso(k.y, k.m, k.d)];
+        btn.classList.toggle('ppick', on);
+        if (self._pollDraft) btn.setAttribute('aria-pressed', String(on)); else btn.removeAttribute('aria-pressed');
+      });
+    },
+
+    _pollToggle: function (key) {
+      var k = parseDayKey(key), iso = this._realIso(k.y, k.m, k.d), dates = this._pollDraft.dates, at = dates.indexOf(iso);
+      if (!iso) return;
+      if (at >= 0) dates.splice(at, 1);
+      else if (iso < this._todayIso()) { this.say('That day has passed.'); return; }
+      else if (dates.length >= 5) { this.say('A poll can ask about five days at most.'); return; }
+      else { dates.push(iso); dates.sort(); }
+      $('#cal5-pollbar .pbdates', this.el).innerHTML = this._pollDatesHTML();
+      this._pollPaintPicks();
+      this._announce(at >= 0 ? realDateWords(iso) + ' taken off.' : realDateWords(iso) + ' added.');
+    },
+
+    _pollEnd: function () {
+      this._pollDraft = null;
+      var bar = $('#cal5-pollbar', this.el);
+      bar.hidden = true;
+      bar.innerHTML = '';
+      this.calEl.classList.remove('picking');
+      this._pollPaintPicks();
+    },
+
+    _pollSubmit: function (form) {
+      var self = this, err = form.querySelector('.gperr'), dates = this._pollDraft.dates.slice();
+      var title = form.elements.title.value.trim(), hm = (form.elements.time.value || '').split(':');
+      var fail = function (msg) { err.textContent = msg; err.hidden = false; };
+      if (!dates.length) return fail('Tap at least one day on the calendar.');
+      if (!title) return fail('Give the poll a name.');
+      if (hm.length < 2) return fail('Set a start time.');
+      var start = (+hm[0]) * 60 + (+hm[1]), end = Math.min(1440, start + 240);
+      var tz = this.calZone;
+      if (!tz) { try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch (e) { tz = 'UTC'; } }
+      $$('button, input', form).forEach(function (c) { c.disabled = true; });
+      Chronicle.apiFetch('/campaigns/' + encodeURIComponent(this.campaignId) + '/proposals', {
+        method: 'POST',
+        body: { title: title, note: '', tz: tz, options: dates.map(function (d) { return { date: d, startMinute: start, endMinute: end }; }) },
+      })
+        .then(function (resp) {
+          if (!resp.ok) return resp.json().catch(function () { return {}; }).then(function (j) { return Promise.reject(j && j.error); });
+          return resp.json();
+        })
+        .then(function (res) {
+          self._pollEnd();
+          self.say('Date poll sent. Everyone has been asked which days they can make.');
+          self._pollsRead = self.fetchPolls();
+          return self._pollsRead.then(function () {
+            var p = (self.polls || []).filter(function (x) { return x.id === (res && res.id); })[0];
+            return self._openPollDate(dates[0], p && p.options[0] ? self._pollId(p, p.options[0]) : null);
+          });
+        })
+        .catch(function (msg) {
+          $$('button, input', form).forEach(function (c) { c.disabled = false; });
+          fail((typeof msg === 'string' && msg) || 'The poll could not be sent. Try again.');
+        });
     },
 
     // reloadNights re-reads game nights after one is planned, changed or
@@ -2857,6 +3168,12 @@
             : '<button type="button" class="btn sm" data-best-open="' + esc(dayKey(s.y, s.m, s.d)) + '">Open</button>');
         return '<li><span><b>' + esc(realDateWords(s.iso)) + '</b>, ' + esc(self._windowWords(s.w, s.iso)) + '<small>' + esc(who) + '</small></span>' + act + '</li>';
       }).join('') + '</ul>';
+      // Two or more open best times can go to the players as a date poll.
+      var open = slots.filter(function (s) { return !self.nightsOnDay(s.y, s.m, s.d).length; });
+      if (open.length > 1 && this.role >= 2) {
+        h += '<button type="button" class="btn sm fvpoll" data-best-poll="' + esc(open.map(function (s) { return s.iso; }).join(',')) + '" data-plan-at="' + open[0].w.start + '">' +
+          '<i class="fa-solid fa-square-poll-vertical"></i> Ask the players about these days</button>';
+      }
       var wk = roster ? this.bestWeekday(y, m) : null;
       if (wk) {
         h += '<p class="fvwk"><b>' + esc(wk.weekday) + 's</b> are best overall, ' + esc(this._windowWords(wk.window, wk.iso)) + '.' +
@@ -3414,6 +3731,8 @@
       if (this._timeToolClick(e, redraw)) return;
       var pl = e.target.closest('[data-fv-planner]');
       if (pl) { this.openPlanner({ paint: pl.dataset.fvPlanner === 'mine' }); return; }
+      var bp = e.target.closest('[data-best-poll]');
+      if (bp) { this._pollStart(bp.dataset.bestPoll.split(','), (parseInt(bp.dataset.planAt, 10) || 19) * 60); return; }
       if (open) {
         var key = open.dataset.bestOpen, night = open.dataset.bestNight || null;
         this._planFor = open.dataset.bestPlan ? { iso: open.dataset.bestPlan, start: parseInt(open.dataset.planAt, 10) || 19 } : null;
@@ -3614,7 +3933,7 @@
       var self = this, cal = this.cal;
       this.renderHeader();
       Promise.all([this.fetchMonth(this.view.y, this.view.m), this.fetchWeatherYear(this.view.y), this.fetchForecast(), this.fetchNights(this.view.y, this.view.m),
-        this.showFree ? this.fetchFreeMonth(this.view.y, this.view.m) : null]).then(function () {
+        this._pollsLoaded(), this.showFree ? this.fetchFreeMonth(this.view.y, this.view.m) : null]).then(function () {
         self._paintMonth();
         self.refreshFreeView();
         // The open day's card shows what the fetch just brought.
@@ -3666,6 +3985,7 @@
       this._paintEraField(this._eraFade ? { crossfade: true } : null);
       this._eraFade = false;
       this._skyDay();
+      if (this._pollDraft) this._pollPaintPicks();
     },
 
     _dayBandHTML: function (y, m, d, monthDef, totalDays) {
@@ -3712,13 +4032,16 @@
     },
 
     _marksHTML: function (y, m, d) {
-      var evs = this.eventsOnDay(y, m, d), nights = this.nightsOnDay(y, m, d);
-      if (!evs.length && !nights.length) return '';
+      var evs = this.eventsOnDay(y, m, d), nights = this.nightsOnDay(y, m, d), polls = this.pollsOnDay(y, m, d);
+      if (!evs.length && !nights.length && !polls.length) return '';
       var self = this;
-      // Game nights come first: they are the marks a player acts on.
+      // Game nights come first, then the dates polls suggest: they are the
+      // marks a player acts on.
       var gn = nights.map(function (n) {
         return '<span class="mk gnm" data-ev="' + esc(self._gnId(n)) + '" title="' + esc(n.name) + '"><i class="fa-solid fa-dice-d20"></i></span>';
-      });
+      }).concat(polls.map(function (x) {
+        return '<span class="mk plm' + (x.o.mine ? ' mine' : '') + '" data-ev="' + esc(self._pollId(x.p, x.o)) + '" title="' + esc('Date poll: ' + x.p.title) + '"><i class="fa-solid fa-square-poll-vertical"></i></span>';
+      }));
       var cap = Math.max(0, 4 - gn.length), shown = evs.slice(0, cap), extra = evs.length - shown.length;
       var html = '<div class="marks">' + gn.join('') + shown.map(function (e) {
         var dirRing = self.canAuthorDmOnly && e.visibility === 'dm_only' ? ' dir' : '';
@@ -4096,6 +4419,15 @@
           if (self.waitOpen()) self.closeWaiting(); else self.openWaiting();
         });
         $('#cal5-waitpop', this.el).addEventListener('click', function (e) {
+          var pr = e.target.closest('[data-wait-poll]');
+          if (pr) {
+            var p = (self.polls || []).filter(function (x) { return x.id === pr.dataset.waitPoll; })[0], o = p && self._pollLanding(p);
+            if (!o) return; // not loaded here: its link opens it
+            e.preventDefault();
+            self.closeWaiting();
+            self._openPollDate(o.date, self._pollId(p, o));
+            return;
+          }
           var row = e.target.closest('[data-wait-night]');
           if (!row) return;
           self.closeWaiting();
@@ -4119,6 +4451,12 @@
       this.scrimEl.addEventListener('click', function () { self.closeAllPanels(); });
 
       this.stageEl.addEventListener('click', function (e) {
+        // While a poll's days are being picked, a day is picked, not opened.
+        if (self._pollDraft) {
+          var pick = e.target.closest('.day');
+          if (pick && pick.dataset.key) self._pollToggle(pick.dataset.key);
+          return;
+        }
         var es = e.target.closest('[data-era-start]');
         if (es && !self.calEl.classList.contains('editing')) {
           e.stopPropagation();
@@ -4152,6 +4490,22 @@
         self.hideGlance();
       }, true);
 
+      var pollBar = $('#cal5-pollbar', this.el);
+      pollBar.addEventListener('submit', function (e) {
+        e.preventDefault();
+        if (self._pollDraft) self._pollSubmit(e.target.closest('[data-poll-form]'));
+      });
+      pollBar.addEventListener('click', function (e) {
+        if (e.target.closest('[data-poll-cancel]')) { self._pollEnd(); return; }
+        var drop = e.target.closest('[data-poll-drop]');
+        if (drop && self._pollDraft) {
+          var p = drop.dataset.pollDrop.split('-');
+          self._pollToggle(dayKey(+p[0], +p[1], +p[2]));
+        }
+      });
+      pollBar.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); self._pollEnd(); }
+      });
       this.wingEl.addEventListener('submit', function (e) {
         var form = e.target.closest('[data-plan-form]');
         if (form) { e.preventDefault(); self._submitPlan(form); return; }
@@ -4167,7 +4521,12 @@
         if (e.target.closest('[data-pl-mine]')) { self.openPlanner({ paint: true }); return; }
         if (self._myDayClick(e)) return;
         var gnNew = e.target.closest('[data-gn-new]');
-        if (gnNew) { self._gnOpenEditor(null, gnNew.dataset.gnNew); return; }
+        if (gnNew) { self._gnChooseFor = null; self._gnOpenEditor(null, gnNew.dataset.gnNew); return; }
+        var choose = e.target.closest('[data-gn-choose]');
+        if (choose) { self._gnChooseFor = self._gnChooseFor === choose.dataset.gnChoose ? null : choose.dataset.gnChoose; self.refreshWing(); return; }
+        var pollNew = e.target.closest('[data-poll-new]');
+        if (pollNew) { self._gnChooseFor = null; self._pollStart([pollNew.dataset.pollNew]); return; }
+        if (self._pollClick(e)) return;
         var more = e.target.closest('[data-plan-more]');
         if (more) { self._planMore(more.closest('[data-plan-form]')); return; }
         if (self._gnHandleClick(e)) return;
@@ -4451,6 +4810,8 @@
       var self = this, P = this._pw;
       if (!this.wingFor) return Promise.resolve();
       this._planFor = null;
+      this._gnChooseFor = null;
+      this._pollPicking = null;
       if (P.state === 'opening' && !o.instant) return new Promise(function (res) { P.next = function () { self.closeWing(o).then(res); }; });
       if (P.state === 'closing' && !o.instant) return P.closing || Promise.resolve();
       if (this.evpEl.classList.contains('open')) this.closeEventDetail();
@@ -4623,7 +4984,10 @@
       var self = this, nights = this.nightsOnDay(d.y, d.m, d.d);
       var gnHTML = nights.length ? '<div class="sect">' + (nights.length > 1 ? nights.length + ' game nights' : 'Game night') + '</div>' +
         '<div class="evlist">' + nights.map(function (n) { return self._gnBoxHTML(n, highlightEventId); }).join('') + '</div>' : '';
-      if (nights.length && !evs.length) evHTML = '';
+      var polls = this.pollsOnDay(d.y, d.m, d.d);
+      gnHTML += polls.length ? '<div class="sect">' + (polls.length > 1 ? polls.length + ' date polls' : 'Date poll') + '</div>' +
+        '<div class="evlist">' + polls.map(function (x) { return self._pollBoxHTML(x.p, x.o, highlightEventId); }).join('') + '</div>' : '';
+      if ((nights.length || polls.length) && !evs.length) evHTML = '';
 
       // Two leaves: the head (the date and the weather), which stays in
       // view, and the rest, which scrolls on a desktop: the day's events
@@ -4658,6 +5022,11 @@
       } else if (mk.classList.contains('avl')) {
         html = this._freeGlanceHTML(mk.dataset.avl);
         if (!html) return;
+      } else if (String(mk.dataset.ev).indexOf('poll:') === 0) {
+        var pl = this._pollFind(mk.dataset.ev);
+        if (!pl) return;
+        html = '<div class="gh"><b>' + esc(pl.p.title) + '</b></div><div class="gw">Date poll · ' + esc(this._pollWhen(pl.p, pl.o)) + '</div>' +
+          '<div class="gb">' + esc((pl.o.mine ? 'You said ' + { yes: 'you can make it', maybe: 'maybe', no: 'you can’t' }[pl.o.mine] + '. ' : 'You haven’t answered yet. ') + this._pollTally(pl.p, pl.o)) + '</div>';
       } else if (String(mk.dataset.ev).indexOf('gn:') === 0) {
         var n = this._findNight(mk.dataset.ev);
         if (!n) return;

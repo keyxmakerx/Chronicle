@@ -64,13 +64,13 @@ test('reads the list for this campaign and shows the count', async () => {
   assert.equal(attrs['aria-label'], '2 waiting on you');
 });
 
-test('a night opens on the calendar; a poll is a link; text is escaped', () => {
+test('a night opens on the calendar; a poll opens its day here, its link the fallback; text is escaped', () => {
   const { def } = load([]);
   const { v, pop } = view(def);
   v.waiting = rows;
   v.renderWaiting();
   assert.match(pop.innerHTML, /<button type="button" class="wrow" data-wait-night="s1" data-wait-date="2026-10-14">/);
-  assert.match(pop.innerHTML, /<a class="wrow" href="\/campaigns\/c1\/proposals\/p1">/);
+  assert.match(pop.innerHTML, /<a class="wrow" href="\/campaigns\/c1\/proposals\/p1" data-wait-poll="p1">/);
   assert.match(pop.innerHTML, />Vote</);
   assert.doesNotMatch(pop.innerHTML, /<b>a night<\/b>/);
 });

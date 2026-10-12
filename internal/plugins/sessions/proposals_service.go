@@ -42,6 +42,7 @@ func renderLocalSlot(startUTC, endUTC time.Time, loc *time.Location, tzLabel str
 	return LocalSlot{
 		StartsAtUTC: startUTC.UTC().Format(time.RFC3339),
 		EndsAtUTC:   endUTC.UTC().Format(time.RFC3339),
+		Date:        ls.Format("2006-01-02"),
 		DateLabel:   ls.Format("Mon, Jan 2"),
 		TimeLabel:   timeLabel,
 		TZLabel:     tzLabel,
