@@ -103,7 +103,7 @@ func (s *smtpService) send(ctx context.Context, to []string, subject, plainBody,
 	from := mail.Address{Name: row.FromName, Address: row.FromAddress}
 	msg, err := buildMessage(from, to, subject, plainBody, htmlBody, time.Now())
 	if err != nil {
-		return apperror.NewInternal(err)
+		return apperror.NewInternalMessage("Chronicle couldn't build the email.", err)
 	}
 
 	client, err := dial(row)
@@ -117,6 +117,9 @@ func (s *smtpService) send(ctx context.Context, to []string, subject, plainBody,
 	return sendMessage(client, from.Address, to, msg)
 }
 
+// passwordUnreadableMsg is shown when the stored password can't be decrypted.
+const passwordUnreadableMsg = "The saved SMTP password can't be unlocked, usually because the server's SECRET_KEY changed after it was saved. Type the password again and press Save."
+
 // password decrypts the stored SMTP password; empty when none is set.
 func (s *smtpService) password(row *smtpRow) (string, error) {
 	if len(row.PasswordEncrypted) == 0 {
@@ -124,7 +127,9 @@ func (s *smtpService) password(row *smtpRow) (string, error) {
 	}
 	plaintext, err := decrypt(row.PasswordEncrypted, s.secret)
 	if err != nil {
-		return "", apperror.NewInternal(fmt.Errorf("decrypting smtp password: %w", err))
+		// The usual cause is a SECRET_KEY that changed after the password was
+		// saved; re-entering the password is the fix, so say so.
+		return "", apperror.NewInternalMessage(passwordUnreadableMsg, fmt.Errorf("decrypting smtp password: %w", err))
 	}
 	return string(plaintext), nil
 }

@@ -1,6 +1,8 @@
 package smtp
 
 import (
+	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -42,6 +44,7 @@ func (h *Handler) UpdateSettings(c echo.Context) error {
 	if err := h.service.UpdateSettings(c.Request().Context(), req); err != nil {
 		settings, _ := h.service.GetSettings(c.Request().Context())
 		csrfToken := middleware.GetCSRFToken(c)
+		logInternal(err)
 		errMsg := apperror.UserMessage(err, "failed to save settings")
 		// The form targets an inner container; a full page here would nest a
 		// whole layout inside it.
@@ -68,6 +71,7 @@ func (h *Handler) TestConnection(c echo.Context) error {
 	if err := h.service.TestConnection(c.Request().Context()); err != nil {
 		settings, _ := h.service.GetSettings(c.Request().Context())
 		csrfToken := middleware.GetCSRFToken(c)
+		logInternal(err)
 		errMsg := apperror.UserMessage(err, "connection failed")
 		if middleware.IsHTMX(c) {
 			return middleware.Render(c, http.StatusOK, SMTPFormComponent(settings, csrfToken, errMsg, ""))
@@ -94,6 +98,7 @@ func (h *Handler) SendTestEmail(c echo.Context) error {
 	if err := h.service.SendTestEmail(c.Request().Context(), to); err != nil {
 		settings, _ := h.service.GetSettings(c.Request().Context())
 		csrfToken := middleware.GetCSRFToken(c)
+		logInternal(err)
 		errMsg := apperror.UserMessage(err, "send failed")
 		if middleware.IsHTMX(c) {
 			return middleware.Render(c, http.StatusOK, SMTPFormComponent(settings, csrfToken, errMsg, ""))
@@ -109,4 +114,14 @@ func (h *Handler) SendTestEmail(c echo.Context) error {
 		return middleware.Render(c, http.StatusOK, SMTPFormComponent(settings, csrfToken, "", successMsg))
 	}
 	return middleware.Render(c, http.StatusOK, SMTPSettingsPage(settings, csrfToken, ""))
+}
+
+// logInternal records the cause of an internal error. These handlers render
+// the error into the form with a 200, so the app's error handler, which
+// would otherwise log it, never sees it.
+func logInternal(err error) {
+	var appErr *apperror.AppError
+	if errors.As(err, &appErr) && appErr.Internal != nil {
+		slog.Error("smtp admin action failed", slog.Any("error", appErr.Internal))
+	}
 }
