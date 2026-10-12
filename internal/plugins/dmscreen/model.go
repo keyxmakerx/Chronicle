@@ -64,6 +64,11 @@ type View struct {
 
 	// Conditions is empty when the system declares none; the tab is hidden.
 	Conditions []ConditionView `json:"conditions,omitempty"`
+
+	// Adventures is the Adventures tab, nil when the board is unavailable. It
+	// is not on the wire: the Foundry module has no use for it and the sync
+	// contract stays as it was.
+	Adventures *AdventuresView `json:"-"`
 }
 
 // DowntimeView is the downtime switch's state plus requests waiting on the GM.

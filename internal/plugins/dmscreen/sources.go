@@ -146,4 +146,9 @@ type Sources struct {
 	Party    PartySource
 	Hidden   HiddenSource
 	System   SystemSource
+
+	// Board and Adventures together feed the Adventures tab; with either
+	// missing (the table failed to migrate) the tab is left out.
+	Board      BoardRepository
+	Adventures AdventureSource
 }

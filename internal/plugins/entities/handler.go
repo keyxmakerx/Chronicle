@@ -562,22 +562,72 @@ func (h *Handler) Create(c echo.Context) error {
 	return middleware.HTMXRedirect(c, "/campaigns/"+cc.Campaign.ID+"/entities/"+entity.ID)
 }
 
+// showPage is everything the entity page and the DM Screen's sheet draw from,
+// gathered once so the two views cannot disagree about what a viewer may see.
+type showPage struct {
+	cc              *campaigns.CampaignContext
+	entity          *Entity
+	entityType      *EntityType
+	ancestors       []Entity
+	children        []Entity
+	showAttributes  bool
+	showCalendar    bool
+	claimingEnabled bool
+	ownerName       string
+	csrfToken       string
+	userID          string
+}
+
 // Show renders the entity profile page (GET /campaigns/:id/entities/:eid).
 func (h *Handler) Show(c echo.Context) error {
+	p, err := h.prepareShow(c)
+	if err != nil {
+		return err
+	}
+	return middleware.Render(c, http.StatusOK, EntityShowPage(p.cc, p.entity, p.entityType, p.ancestors, p.children, p.showAttributes, p.showCalendar, p.claimingEnabled, p.ownerName, p.csrfToken, p.userID))
+}
+
+// Sheet renders a DM-only page's body without the site chrome, for the DM
+// Screen to open over itself (GET /campaigns/:id/entities/:eid/sheet). It is
+// for the DM team and for Adventures pages only; anything else answers the
+// same not-found as a page that does not exist, so the route cannot be used to
+// probe for pages.
+func (h *Handler) Sheet(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(fmt.Errorf("campaign context is nil for entity show"))
+		return apperror.NewMissingContext()
+	}
+	if !(cc.MemberRole >= campaigns.RoleScribe || cc.IsDmGranted) {
+		return apperror.NewNotFound("entity not found")
+	}
+	p, err := h.prepareShow(c)
+	if err != nil {
+		return err
+	}
+	if !p.entityType.DMOnly() {
+		return apperror.NewNotFound("entity not found")
+	}
+	return middleware.Render(c, http.StatusOK, EntitySheet(p.cc, p.entity, p.entityType, p.ancestors, p.children, p.showAttributes, p.showCalendar, p.claimingEnabled, p.ownerName, p.csrfToken, p.userID))
+}
+
+// prepareShow loads the page for the viewer and puts the render context on the
+// request. Every denial is the same not-found, so a hidden page is
+// indistinguishable from a missing one.
+func (h *Handler) prepareShow(c echo.Context) (*showPage, error) {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return nil, apperror.NewInternal(fmt.Errorf("campaign context is nil for entity show"))
 	}
 
 	entityID := c.Param("eid")
 	entity, err := h.service.GetByID(c.Request().Context(), entityID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// IDOR protection: verify entity belongs to the campaign in the URL.
 	if entity.CampaignID != cc.Campaign.ID {
-		return apperror.NewNotFound("entity not found")
+		return nil, apperror.NewNotFound("entity not found")
 	}
 
 	// Visibility check: verify the user can view this entity.
@@ -587,12 +637,12 @@ func (h *Handler) Show(c echo.Context) error {
 	// entity (ADR-057 slice 1). Read (CanView) gate only.
 	access, err := h.service.CheckEntityAccess(c.Request().Context(), entity.ID, int(cc.VisibilityRole()), userID)
 	if err != nil || !access.CanView {
-		return apperror.NewNotFound("entity not found")
+		return nil, apperror.NewNotFound("entity not found")
 	}
 
 	entityType, err := h.service.GetEntityTypeByID(c.Request().Context(), entity.EntityTypeID)
 	if err != nil {
-		return apperror.NewInternal(fmt.Errorf("get entity type %d: %w", entity.EntityTypeID, err))
+		return nil, apperror.NewInternal(fmt.Errorf("get entity type %d: %w", entity.EntityTypeID, err))
 	}
 
 	// Fetch ancestor chain for breadcrumbs and children for sub-page listing.
@@ -706,7 +756,11 @@ func (h *Handler) Show(c echo.Context) error {
 
 	c.SetRequest(c.Request().WithContext(ctx))
 
-	return middleware.Render(c, http.StatusOK, EntityShowPage(cc, entity, entityType, ancestors, children, showAttributes, showCalendar, claimingEnabled, ownerName, csrfToken, userID))
+	return &showPage{
+		cc: cc, entity: entity, entityType: entityType, ancestors: ancestors, children: children,
+		showAttributes: showAttributes, showCalendar: showCalendar, claimingEnabled: claimingEnabled,
+		ownerName: ownerName, csrfToken: csrfToken, userID: userID,
+	}, nil
 }
 
 // Clone creates a copy of an entity (POST /campaigns/:id/entities/:eid/clone).

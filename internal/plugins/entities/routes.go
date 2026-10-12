@@ -20,6 +20,11 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 		withActorMiddleware,
 	)
 
+	// The page body without chrome, for the DM Screen to open over itself. The
+	// handler applies the DM team's rule and limits it to Adventures pages, and
+	// answers 404 (not 403) to everyone else so the route confirms nothing.
+	cg.GET("/entities/:eid/sheet", h.Sheet)
+
 	// Entry API (JSON endpoints for editor widget).
 	cg.GET("/entities/:eid/entry", h.GetEntry, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.PUT("/entities/:eid/entry", h.UpdateEntryAPI, campaigns.RequireRole(campaigns.RoleScribe))

@@ -490,6 +490,118 @@ func (a *dmHiddenAdapter) Reveal(ctx context.Context, entityID, campaignID strin
 	return e.Name, nil
 }
 
+// dmAdventuresAdapter reads Adventures pages for the DM Screen's tab. Every
+// page goes through the entities plugin's own viewer filter first, so the tab
+// can never name a page the viewer could not open; the category check on top
+// keeps a pin from becoming a way to surface other kinds of page.
+type dmAdventuresAdapter struct {
+	entities entities.EntityService
+}
+
+// adventureTypes returns the campaign's Adventures categories by id.
+func (a *dmAdventuresAdapter) adventureTypes(ctx context.Context, campaignID string) (map[int]entities.EntityType, error) {
+	found, err := a.entities.GetEntityTypesByPresetCategory(ctx, campaignID, entities.PresetCategoryAdventures)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[int]entities.EntityType, len(found))
+	for _, t := range found {
+		out[t.ID] = t
+	}
+	return out, nil
+}
+
+func (a *dmAdventuresAdapter) Pages(ctx context.Context, campaignID string, ids []string, v dmscreen.Viewer) (map[string]dmscreen.AdventurePage, error) {
+	out := map[string]dmscreen.AdventurePage{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	types, err := a.adventureTypes(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	if len(types) == 0 {
+		return out, nil
+	}
+	viewable, err := a.entities.FilterViewableEntityIDs(ctx, campaignID, ids, v.Role, v.UserID)
+	if err != nil {
+		return nil, err
+	}
+	for _, id := range ids {
+		if !viewable[id] {
+			continue
+		}
+		e, err := a.entities.GetByID(ctx, id)
+		if err != nil {
+			// Trashed or removed between the two reads: absent, not an error.
+			if apperror.SafeCode(err) == 404 {
+				continue
+			}
+			return nil, err
+		}
+		if e.CampaignID != campaignID {
+			continue
+		}
+		if _, ok := types[e.EntityTypeID]; !ok {
+			continue
+		}
+		out[id] = adventurePage(e)
+	}
+	return out, nil
+}
+
+func (a *dmAdventuresAdapter) Search(ctx context.Context, campaignID, query string, v dmscreen.Viewer, limit int) ([]dmscreen.AdventurePage, bool, error) {
+	types, err := a.adventureTypes(ctx, campaignID)
+	if err != nil {
+		return nil, false, err
+	}
+	if len(types) == 0 {
+		return nil, false, nil
+	}
+	seen := map[string]bool{}
+	var pages []dmscreen.AdventurePage
+	for typeID := range types {
+		var list []entities.Entity
+		opts := entities.ListOptions{Page: 1, PerPage: limit, Sort: "updated"}
+		// Search wants two characters; a shorter query lists everything
+		// instead of failing, since the picker searches as you type.
+		if len(strings.TrimSpace(query)) >= 2 {
+			list, _, err = a.entities.Search(ctx, campaignID, query, typeID, v.Role, v.UserID, opts)
+		} else {
+			list, _, err = a.entities.List(ctx, campaignID, typeID, v.Role, v.UserID, opts)
+		}
+		if err != nil {
+			return nil, true, err
+		}
+		for i := range list {
+			if seen[list[i].ID] || list[i].CampaignID != campaignID {
+				continue
+			}
+			if _, ok := types[list[i].EntityTypeID]; !ok {
+				continue
+			}
+			seen[list[i].ID] = true
+			pages = append(pages, adventurePage(&list[i]))
+		}
+	}
+	if len(pages) > limit {
+		pages = pages[:limit]
+	}
+	return pages, true, nil
+}
+
+// adventurePage shapes an Adventures entity for the tab: the sessions and
+// status fields make the subtitle, whichever of them the DM filled in.
+func adventurePage(e *entities.Entity) dmscreen.AdventurePage {
+	var bits []string
+	for _, key := range []string{"sessions", "status"} {
+		if v, ok := e.FieldsData[key].(string); ok && strings.TrimSpace(v) != "" {
+			bits = append(bits, strings.TrimSpace(v))
+		}
+	}
+	return dmscreen.AdventurePage{ID: e.ID, Name: e.Name, TypeName: e.TypeName, Subtitle: strings.Join(bits, " · ")}
+}
+
 // foundryReportMaxAge is how old the GM's Foundry players report may be and
 // still count: the GM's client re-sends the list as people come and go, so a
 // stale list says nothing about who is online now.

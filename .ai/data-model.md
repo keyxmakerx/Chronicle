@@ -343,6 +343,12 @@ Foundry module repo for the wire contract.
 | `quest_boards` | Boards on a place page or a category: exactly one of `entity_id` / `entity_type_id` is set; `who` = dm/scribe/all, `sort_order` |
 | `quest_board_items` | Pins: notice/note/page/map/string; `owner_user_id`, `by_dm`, `hidden`, `ref_id` (no FK) |
 
+### dmscreen (`internal/plugins/dmscreen/migrations/`)
+
+| Table | Purpose |
+|-------|---------|
+| `dm_screen_board_items` | The DM Screen's Adventures tab: `kind` = page/note; a pin has `entity_id` (unique per campaign; FK cascade to `entities` and `campaigns`), a note has `body` (500 characters); `created_by` carries no FK |
+
 ### pageblocks (`internal/plugins/pageblocks/migrations/`)
 
 | Table | Purpose |

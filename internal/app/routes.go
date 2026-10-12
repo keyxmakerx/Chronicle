@@ -5271,7 +5271,7 @@ func (a *App) RegisterRoutes() {
 	// DM Screen: the owner's and scribes' control panel. It owns no data and
 	// reads every section through the adapters in dm_screen_adapters.go;
 	// registered here because Foundry presence comes from wsHub.
-	dmScreenSvc := dmscreen.NewService(dmscreen.Sources{
+	dmSources := dmscreen.Sources{
 		Downtime: &dmDowntimeAdapter{stash: stashSvc, addons: addonService},
 		Notes:    &dmNotesAdapter{notes: noteSvc, members: campaignService},
 		Requests: &dmRequestsAdapter{stash: stashSvc, addons: addonService},
@@ -5282,7 +5282,14 @@ func (a *App) RegisterRoutes() {
 		Party:    &dmPartyAdapter{entities: entityService, campaigns: campaignService},
 		Hidden:   &dmHiddenAdapter{entities: entityService, lists: characterListService},
 		System:   systemHandler,
-	})
+	}
+	// The Adventures tab needs its table; with the plugin degraded the rest of
+	// the screen still works and the tab is simply left out.
+	if a.PluginHealth.IsHealthy(dmscreen.PluginSlug) {
+		dmSources.Board = dmscreen.NewBoardRepository(a.DB)
+		dmSources.Adventures = &dmAdventuresAdapter{entities: entityService}
+	}
+	dmScreenSvc := dmscreen.NewService(dmSources)
 	dmscreen.RegisterRoutes(e, dmscreen.NewHandler(dmScreenSvc), campaignService, authService)
 	// The sync API routes are already registered; they answer 404 until this
 	// is set, and it is set before the server starts serving.
@@ -5554,7 +5561,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "site-look", Scripts: []string{"/static/js/widgets/site_look.js"}},
 	{Name: "page-tabs", Scripts: []string{"/static/js/widgets/page_tabs.js"}},
 	{Name: "era-pages", Scripts: []string{"/static/js/widgets/era_pages.js"}},
-	{Name: "dm-screen", Scripts: []string{"/static/js/widgets/dm_screen.js"}},
+	{Name: "dm-screen", Scripts: []string{"/static/js/widgets/dm_sheet.js", "/static/js/widgets/dm_screen.js"}},
 	{Name: "tile", Scripts: []string{"/static/js/widgets/tile.js"}},
 }
 

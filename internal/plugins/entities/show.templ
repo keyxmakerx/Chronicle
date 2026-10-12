@@ -25,6 +25,13 @@ import (
 // this entity's own claimed owner apart from any other viewer (C-FIELDS-OWNER-FILTER).
 templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, ancestors []Entity, children []Entity, showAttributes bool, showCalendar bool, claimingEnabled bool, ownerName string, csrfToken string, userID string) {
 	@layouts.App(entity.Name + " - " + cc.Campaign.Name) {
+		@entityPageBody(cc, entity, entityType, ancestors, children, showAttributes, showCalendar, claimingEnabled, ownerName, csrfToken, userID)
+	}
+}
+
+// entityPageBody is the page without the site chrome. The DM Screen's sheet
+// draws the same body, so a page reads the same in both places.
+templ entityPageBody(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, ancestors []Entity, children []Entity, showAttributes bool, showCalendar bool, claimingEnabled bool, ownerName string, csrfToken string, userID string) {
 		<div class="max-w-7xl mx-auto" data-entity-type-slug={ entityType.Slug }>
 			<!-- Breadcrumb with ancestor chain, and the page's visibility
 			     control standing on its own at the top-right. -->
@@ -152,7 +159,6 @@ templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 			// A per-entity calendar is opt-in via the `entity_calendar`
 			// page-template block, not rendered automatically here.
 		</div>
-	}
 }
 
 // derefStr safely dereferences a *string, returning "" if nil.
