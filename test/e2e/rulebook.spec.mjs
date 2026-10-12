@@ -32,32 +32,51 @@ const longPage = (title) => ({
   blocks: [{ type: 'text', text: Array.from({ length: 40 }, (_, i) => `Paragraph ${i + 1} of ${title}.`).join('\n\n') }],
 });
 
+// A light paper with a crimson accent, the shape of a real bold book's theme.
+const BOLD_THEME = { paper: '#f1f2f4', 'paper-alt': '#ffffff', ink: '#15171d', 'ink-soft': '#4b5261', muted: '#6b7280', edge: '#cbd1da', accent: '#c22f39' };
+const COVER_URL = '/campaigns/camp-1/systems/demo/book/files/cover.svg';
+const FONT_URL = '/campaigns/camp-1/systems/demo/book/files/display.woff2';
+const COVER_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 516"><rect width="400" height="516" fill="#3d0a1c"/><circle cx="200" cy="250" r="90" fill="#ffd27a"/></svg>';
+
+const rollPage = {
+  title: 'The power roll',
+  blocks: [{ type: 'roll', dice: { count: 2, sides: 10 }, label: 'Power roll', modifier: true, bands: [
+    { max: 11, label: 'Tier 1', text: 'A weak result.' }, { max: 16, label: 'Tier 2', text: 'A solid result.' }, { max: null, label: 'Tier 3', text: 'A strong result.' }] },
+    { type: 'callout', title: 'Remember', text: 'Edges stack.' }],
+};
+
 function bookFixture(opts = {}) {
-  if (opts.screen) return screenFixture();
+  if (opts.screen) return screenFixture(opts);
   return {
-    title: 'Handbook', systemName: 'Demo', turn: 'flip', look: 'paper',
-    tabs: ['basics', 'screen', 'combat'], isDirector: true, start: 'basics',
+    title: 'Handbook', systemName: 'Demo', turn: 'flip', look: opts.bold ? 'bold' : 'paper',
+    theme: opts.bold ? BOLD_THEME : {},
+    cover: opts.cover ? COVER_URL : undefined,
+    fonts: opts.cover ? [{ family: 'Big Shoulders Display', url: FONT_URL, weight: 900, style: 'normal' }] : undefined,
+    tabs: opts.noTabs ? [] : ['basics', 'screen', 'combat'], isDirector: true, start: 'basics',
     terms: {},
     parts: [{
       title: "Player's book",
       chapters: [
-        { id: 'basics', title: 'Basics', pages: [longPage('Start here'), longPage('Rolling')] },
+        { id: 'basics', title: 'Basics', pages: [longPage('Start here'), rollPage, longPage('Rolling')] },
         { id: 'screen', title: 'Players Screen', pages: [{ title: 'At the table', wide: true, blocks: [{ type: 'text', text: 'Everything at once.' }] }] },
         { id: 'tests', title: 'Tests', pages: [longPage('Rolling a test'), longPage('Easy and hard')] },
         { id: 'combat', title: 'Combat', pages: [longPage('Turns'), longPage('Moving')] },
       ],
+    }, {
+      title: "Director's book", director: true,
+      chapters: [{ id: 'running', title: 'Running the game', director: true, pages: [longPage('Pacing'), longPage('Rewards')] }],
     }],
   };
 }
 
 // A book that names a screen chapter: three quick-reference pages that drop
 // over the book instead of being pages of it, a long card list among them.
-function screenFixture() {
+function screenFixture(opts = {}) {
   const conditions = Array.from({ length: 9 }, (_, i) => ({ title: `Condition ${i + 1}`, text: `What condition ${i + 1} does.` }));
   conditions[4].title = 'Grabbed';
   return {
     title: 'Handbook', systemName: 'Demo', turn: 'flip', look: 'paper',
-    tabs: ['screen', 'basics', 'combat'], isDirector: true, start: 'screen', screen: 'screen',
+    tabs: opts.noTabs ? [] : ['screen', 'basics', 'combat'], isDirector: true, start: 'screen', screen: 'screen',
     terms: {},
     parts: [{
       title: "Player's book",
@@ -108,7 +127,9 @@ function harnessHTML() {
 async function withBook(fn, opts = {}) {
   const browser = await chromium.launch({ headless: true });
   try {
-    const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+    const page = await browser.newPage({ viewport: opts.viewport || { width: 1280, height: 720 }, reducedMotion: opts.reducedMotion ? 'reduce' : 'no-preference' });
+    const fontRequests = [];
+    page.fontRequests = fontRequests;
     const errors = [];
     page.on('pageerror', (e) => errors.push(e.message));
     await page.route('**/*', (route) => {
@@ -117,12 +138,14 @@ async function withBook(fn, opts = {}) {
       if (p === '/static/css/rulebook.css') return route.fulfill({ status: 200, contentType: 'text/css', body: asset('static/css/rulebook.css') });
       if (p === '/static/js/widgets/rulebook.js') return route.fulfill({ status: 200, contentType: 'text/javascript', body: asset('static/js/widgets/rulebook.js') });
       if (p === BOOK_URL) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(bookFixture(opts)) });
+      if (p === COVER_URL) return route.fulfill({ status: 200, contentType: 'image/svg+xml', body: COVER_SVG });
+      if (p === FONT_URL) { fontRequests.push(p); return route.fulfill({ status: 200, contentType: 'font/woff2', body: 'wOF2' }); }
       return route.fulfill({ status: 404, body: '' });
     });
     // Customize > Rulebook "Chronicle's look" reaches the page as this attribute.
     if (opts.standard) await page.addInitScript(() => document.addEventListener('DOMContentLoaded', () => document.documentElement.setAttribute('data-cz-book', 'standard')));
     await page.goto('https://chronicle.test/rules' + (opts.hash || ''));
-    await page.waitForSelector('.rb-tabs');
+    await page.waitForSelector('.rb-book');
     await fn(page);
     assert.deepEqual(errors, []);
   } finally {
@@ -248,4 +271,243 @@ test('the ribbon, the P key and a link all drop the screen, and Escape returns t
     await page.mouse.click(book.x, book.y);
     await page.waitForFunction(() => document.querySelector('.rb-screen').hidden);
   }, { screen: true, hash: '#basics' });
+});
+
+// --- the cover, the bold look and the Sections bookmark -----------------------
+
+const frontState = (page) => page.evaluate(() => {
+  const rb = document.querySelector('.rb'), f = document.querySelector('.rb-front');
+  return {
+    closed: rb.classList.contains('rb-closed'), shown: !!f && !f.hidden, open: !!f && f.classList.contains('open'),
+    pageVisible: getComputedStyle(document.querySelector('.rb-book .rb-page.r')).visibility,
+    focusOnFace: document.activeElement === document.querySelector('.rb-front-face'),
+    seen: sessionStorage.getItem('chronicle.rulebook.cover.camp-1'),
+  };
+});
+
+test('a book with a cover shows it closed on the first visit, opens on Enter and shuts again', async () => {
+  await withBook(async (page) => {
+    let st = await frontState(page);
+    assert.deepEqual([st.closed, st.shown, st.open, st.pageVisible, st.focusOnFace, st.seen], [true, true, false, 'hidden', false, null]);
+    const face = await page.$eval('.rb-front-face', (b) => ({ label: b.getAttribute('aria-label'), alt: b.querySelector('img').alt, src: b.querySelector('img').getAttribute('src') }));
+    assert.deepEqual(face, { label: 'Open the Handbook', alt: 'Handbook: the cover', src: '/campaigns/camp-1/systems/demo/book/files/cover.svg' });
+    assert.equal(await page.evaluate(() => document.querySelector('.rb-front-face img').naturalWidth > 0), true);
+    // The book's fonts are asked for from the package route.
+    assert.deepEqual(page.fontRequests, [FONT_URL]);
+    // Nothing behind the cover answers the keyboard.
+    await page.keyboard.press('ArrowRight');
+    assert.equal(await page.evaluate(() => document.querySelector('.rb-where').textContent), 'Basics');
+    assert.equal(await page.evaluate(() => document.querySelector('.rb-front-face').getBoundingClientRect().width > 100), true);
+
+    // With the rest of the book hidden, Tab lands straight on the cover.
+    await page.keyboard.press('Tab');
+    assert.equal((await frontState(page)).focusOnFace, true);
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => document.querySelector('.rb-front').hidden);
+    st = await frontState(page);
+    assert.deepEqual([st.closed, st.shown, st.pageVisible, st.seen], [false, false, 'visible', '1']);
+    assert.equal(await page.evaluate(() => document.activeElement.closest('.rb-scroll') !== null), true);
+
+    await page.click('[data-act="shut"]');
+    await page.waitForFunction(() => document.querySelector('.rb').classList.contains('rb-closed'));
+    st = await frontState(page);
+    assert.deepEqual([st.shown, st.open, st.focusOnFace], [true, false, true]);
+    await page.click('.rb-front-face');
+    await page.waitForFunction(() => document.querySelector('.rb-front').hidden);
+    assert.equal((await frontState(page)).closed, false);
+
+    // The same visit does not show it again.
+    await page.reload();
+    await page.waitForSelector('.rb-book');
+    st = await frontState(page);
+    assert.deepEqual([st.closed, st.shown], [false, false]);
+    assert.equal(await page.evaluate(() => !!document.querySelector('[data-act="shut"]')), true);
+  }, { cover: true, bold: true });
+});
+
+test('a link naming a chapter skips the cover, and a book without one has none', async () => {
+  await withBook(async (page) => {
+    const st = await frontState(page);
+    assert.deepEqual([st.closed, st.shown], [false, false]);
+    assert.equal(await page.evaluate(() => document.querySelector('.rb-where b').textContent), 'Combat');
+  }, { cover: true, hash: '#combat' });
+  await withBook(async (page) => {
+    assert.equal(await page.evaluate(() => [!!document.querySelector('.rb-front'), !!document.querySelector('[data-act="shut"]')].join()), 'false,false');
+    assert.equal(await page.evaluate(() => document.querySelector('.rb').classList.contains('rb-closed')), false);
+  });
+});
+
+test('with reduced motion the cover is a still that a click dismisses at once', async () => {
+  await withBook(async (page) => {
+    const t = await page.$eval('.rb-front-board', (b) => getComputedStyle(b).transitionDuration);
+    assert.equal(t, '0s');
+    await page.click('.rb-front-face');
+    await page.waitForFunction(() => document.querySelector('.rb-front').hidden, null, { timeout: 500 });
+    assert.equal((await frontState(page)).closed, false);
+  }, { cover: true, reducedMotion: true });
+});
+
+test('look: bold draws dark banners, heavy headings and coloured tiers; Chronicle\'s look overrides it', async () => {
+  const probe = (page) => page.evaluate(() => {
+    const rb = document.querySelector('.rb');
+    const kick = document.querySelector('.rb-page.l .rb-scroll > .rb-kicker');
+    const h1 = document.querySelector('.rb-page.l h1, .rb-page.l h2');
+    const lum = (c) => { const m = c.match(/[\d.]+/g).map(Number), k = c.startsWith('color(') ? 1 : 255; return (0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]) / k; };
+    return {
+      look: rb.getAttribute('data-look'),
+      bannerBg: getComputedStyle(kick).backgroundColor,
+      bannerLum: lum(getComputedStyle(kick).backgroundColor),
+      weight: getComputedStyle(h1).fontWeight, transform: getComputedStyle(h1).textTransform,
+      tier: document.querySelector('.rb-tier') ? getComputedStyle(document.querySelector('.rb-tier')).backgroundImage.includes('linear-gradient') : null,
+    };
+  });
+  await withBook(async (page) => {
+    let p = await probe(page);
+    assert.equal(p.look, 'bold');
+    assert.ok(p.bannerLum < 0.15, `banner is dark (${p.bannerLum})`);
+    assert.deepEqual([p.weight, p.transform], ['900', 'uppercase']);
+    await page.click('[data-act="next"]');
+    await page.waitForFunction(() => !document.querySelector('.rb-leaf'));
+    const tiers = await page.$$eval('.rb-page.l .rb-tier', (ts) => ts.map((t) => getComputedStyle(t).backgroundImage.includes('linear-gradient')));
+    assert.deepEqual(tiers, [true, true, true]);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
+  }, { bold: true });
+  await withBook(async (page) => {
+    const p = await probe(page);
+    assert.equal(p.look, null);
+    assert.equal(p.bannerBg, 'rgba(0, 0, 0, 0)', "Chronicle's look draws no banner");
+    assert.notEqual(p.weight, '900');
+  }, { bold: true, standard: true });
+});
+
+// The words on the open page, in the tab row, and over the book's top edge.
+const wordsUnderRibbon = (page) => page.evaluate(() => {
+  const bm = document.querySelector('.rb-bm-roll').getBoundingClientRect();
+  const hits = [];
+  for (const root of document.querySelectorAll('.rb-book, .rb-tabs')) {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      if (!n.nodeValue.trim() || n.parentElement.closest('.rb-bm, [hidden]')) continue;
+      const r = document.createRange();
+      r.selectNodeContents(n);
+      for (const q of r.getClientRects()) {
+        if (q.width && q.height && q.left < bm.right && q.right > bm.left && q.top < bm.bottom && q.bottom > bm.top) hits.push(n.nodeValue.trim().slice(0, 30));
+      }
+    }
+  }
+  return { hits, rect: { left: Math.round(bm.left), top: Math.round(bm.top), width: Math.round(bm.width), height: Math.round(bm.height) } };
+});
+
+for (const [name, viewport] of [['desktop', { width: 1280, height: 720 }], ['phone', { width: 390, height: 844 }]]) {
+  for (const look of ['bold', 'paper']) {
+    test(`the closed Sections ribbon never covers a word (${name}, ${look})`, async () => {
+      await withBook(async (page) => {
+        // A long chapter title runs the whole width of the page header.
+        await page.evaluate(() => document.querySelector('.rb').scrollTop);
+        for (let i = 0; i < 4; i++) {
+          const w = await wordsUnderRibbon(page);
+          assert.deepEqual(w.hits, [], `spread ${i}: ${JSON.stringify(w.rect)}`);
+          if (name === 'desktop') assert.ok(Math.abs(w.rect.left + w.rect.width / 2 - 0.75 * 1280) < 20, `centred over the right page: ${JSON.stringify(w.rect)}`);
+          assert.equal(w.rect.height, 46);
+          const next = await page.$('[data-act="next"]:not([hidden])');
+          if (!next) break;
+          await next.click();
+          await page.waitForFunction(() => !document.querySelector('.rb-leaf'));
+        }
+      }, { viewport, bold: look === 'bold' });
+    });
+  }
+}
+
+test('on a phone the Sections ribbon sits right of the screen ribbon, never over it', async () => {
+  await withBook(async (page) => {
+    const r = await page.evaluate(() => {
+      const a = document.querySelector('.rb-ribbon').getBoundingClientRect(), b = document.querySelector('.rb-bm-roll').getBoundingClientRect();
+      return { a: [a.left, a.right, a.top, a.bottom], b: [b.left, b.right, b.top, b.bottom] };
+    });
+    const apart = r.a[1] <= r.b[0] || r.b[1] <= r.a[0] || r.a[3] <= r.b[2] || r.b[3] <= r.a[2];
+    assert.ok(apart, JSON.stringify(r));
+    assert.ok(r.b[1] <= 390 && r.b[0] >= 195, `right side: ${JSON.stringify(r)}`);
+  }, { screen: true, noTabs: true, viewport: { width: 390, height: 844 }, hash: '#basics' });
+});
+
+const bmState = (page) => page.evaluate(() => {
+  const tab = document.querySelector('.rb-bm-tab'), roll = document.querySelector('.rb-bm-roll');
+  return { expanded: tab.getAttribute('aria-expanded'), controls: tab.getAttribute('aria-controls'), height: Math.round(roll.getBoundingClientRect().height), tabFocused: document.activeElement === tab };
+});
+
+test('the Sections ribbon pulls down, lists chapters and pages, and rolls up before it turns', async () => {
+  await withBook(async (page) => {
+    assert.equal(await page.$eval('.rb-bm-tab span', (s) => s.textContent), 'Sections');
+    await page.click('.rb-bm-tab');
+    await page.waitForFunction(() => document.querySelector('.rb-bm-roll').getBoundingClientRect().height > 200);
+    let st = await bmState(page);
+    assert.equal(st.expanded, 'true');
+    assert.ok(await page.$(`#${st.controls}`));
+    // Chapters by part, with a chapter's pages under it when it has several.
+    const list = await page.$$eval('.rb-bm-list > li', (lis) => lis.map((li) => li.classList.contains('rb-bm-part') ? `# ${li.textContent}` : li.querySelector(':scope > button span').textContent + (li.querySelector('.rb-bm-sub') ? ` [${[...li.querySelectorAll('.rb-bm-sub button span')].map((s) => s.textContent).join(', ')}]` : '')));
+    assert.deepEqual(list, ["# Player's book", 'Basics [Start here, The power roll, Rolling]', 'Players Screen', 'Tests [Rolling a test, Easy and hard]', 'Combat [Turns, Moving]', "# Director's book", 'Running the game [Pacing, Rewards]']);
+    assert.equal(await page.$eval('.rb-bm-list [aria-current="true"] span', (s) => s.textContent), 'Basics');
+
+    // Picking a page: the ribbon rolls up, and only then does the leaf turn.
+    await page.evaluate(() => {
+      window.__atTurn = null;
+      new MutationObserver(() => {
+        if (window.__atTurn === null && document.querySelector('.rb-leaf')) window.__atTurn = document.querySelector('.rb-bm-roll').getBoundingClientRect().height;
+      }).observe(document.querySelector('.rb-book'), { childList: true, subtree: true });
+    });
+    await page.click('.rb-bm-sub button >> text=Moving');
+    await page.waitForFunction(() => window.__atTurn !== null);
+    assert.equal(await page.evaluate(() => Math.round(window.__atTurn)), 46, 'rolled up before the turn');
+    await page.waitForFunction(() => !document.querySelector('.rb-leaf'));
+    assert.equal(await page.evaluate(() => document.querySelector('.rb-where').textContent), 'Combat · Moving');
+    st = await bmState(page);
+    assert.equal(st.expanded, 'false');
+  }, { bold: true });
+});
+
+test('Escape or a click elsewhere rolls the Sections ribbon up; Escape returns focus to it', async () => {
+  await withBook(async (page) => {
+    await page.click('.rb-bm-tab');
+    await page.waitForFunction(() => document.querySelector('.rb-bm-list').contains(document.activeElement));
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => document.querySelector('.rb-bm-roll').getBoundingClientRect().height === 46);
+    let st = await bmState(page);
+    assert.deepEqual([st.expanded, st.tabFocused], ['false', true]);
+    await page.click('.rb-bm-tab');
+    await page.waitForFunction(() => document.querySelector('.rb-bm-roll').getBoundingClientRect().height > 200);
+    await page.mouse.click(200, 650);
+    await page.waitForFunction(() => document.querySelector('.rb-bm-roll').getBoundingClientRect().height === 46);
+    st = await bmState(page);
+    assert.equal(st.expanded, 'false');
+    // Opening the contents closes it, and it does not outlive a view switch.
+    await page.click('.rb-bm-tab');
+    await page.click('[data-act="toc"]');
+    assert.equal((await bmState(page)).expanded, 'false');
+  });
+});
+
+test('the Sections ribbon stops at 80% of the window and its list scrolls', async () => {
+  await withBook(async (page) => {
+    await page.click('.rb-bm-tab');
+    await page.waitForFunction(() => document.querySelector('.rb-bm-roll').getBoundingClientRect().height > 200);
+    await page.waitForTimeout(700);
+    const r = await page.evaluate(() => {
+      const roll = document.querySelector('.rb-bm-roll');
+      return { h: roll.getBoundingClientRect().height, win: window.innerHeight, scroll: roll.scrollHeight, overflow: getComputedStyle(roll).overflowY, bottom: roll.getBoundingClientRect().bottom, rb: document.querySelector('.rb').getBoundingClientRect().bottom };
+    });
+    assert.ok(r.h <= r.win * 0.8 + 1, JSON.stringify(r));
+    assert.ok(r.bottom <= r.rb, JSON.stringify(r));
+    assert.equal(r.overflow, 'auto');
+    assert.ok(r.scroll > r.h);
+  }, { viewport: { width: 1280, height: 520 } });
+});
+
+test('with reduced motion the Sections ribbon has no transition and turns at once', async () => {
+  await withBook(async (page) => {
+    assert.equal(await page.$eval('.rb-bm-roll', (r) => getComputedStyle(r).transitionDuration), '0s');
+    await page.click('.rb-bm-tab');
+    await page.click('.rb-bm-list > li >> text=Tests');
+    await page.waitForFunction(() => document.querySelector('.rb-where').textContent === 'Tests', null, { timeout: 1000 });
+  }, { reducedMotion: true });
 });
