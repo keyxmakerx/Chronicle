@@ -1269,6 +1269,8 @@
       this.weatherByYear = {}; // year -> {'m_d': reading}, filled by fetchWeatherYear
       this.nightsByMonth = {}; // 'y_m' -> game nights, filled by fetchNights
       this._gnPages = {}; // session id -> its recap and linked pages
+      this._gnReminded = {}; // night id + "|" + user id -> reminded this visit
+      this._gnRemindedAll = {}; // night id -> "remind everyone" sent
       // Game nights are real-world dates, so only a real-world calendar
       // shows them; a world calendar keeps to the story. Only members see
       // who is coming.
@@ -1891,14 +1893,60 @@
     },
 
     _gnRosterHTML: function (n) {
-      var self = this;
+      var self = this, remind = this._gnCanRemind(n), id = this._gnId(n);
       return '<ul class="roster">' + (n.roster || []).map(function (a) {
-        var me = n.mine && n.mine.userId === a.userId;
+        var me = n.mine && n.mine.userId === a.userId, bell = '';
+        if (remind && !me && a.userId !== self.userId && self._gnRemindable(a)) {
+          var sent = self._gnReminded[id + '|' + a.userId];
+          bell = '<button type="button" class="ib gnbell" data-gn-remind="' + esc(a.userId) + '"' + (sent ? ' disabled' : '') +
+            ' aria-label="' + esc((sent ? 'Reminded ' : 'Remind ') + (a.name || 'them')) + '" title="' + esc(sent ? 'Reminded' : 'Remind ' + (a.name || 'them') + ' to answer') + '">' +
+            '<i class="fa-solid ' + (sent ? 'fa-check' : 'fa-bell') + '"></i></button>';
+        }
         return '<li><span class="av" aria-hidden="true">' + esc((a.name || '?').charAt(0)) + '</span>' +
           '<span class="who">' + esc(a.name || 'A member') + (me ? ' (you)' : '') + (a.userId === n.organizerId ? ' · running it' : '') +
           (a.note ? '<span class="rn2">“' + esc(a.note) + '”</span>' : '') + '</span>' +
-          '<span class="st' + (a.answer === 'yes' && !a.excluded ? ' yes' : '') + '">' + esc(self._gnAnswerWord(a)) + (a.recheck ? ' · to check' : '') + '</span></li>';
+          '<span class="st' + (a.answer === 'yes' && !a.excluded ? ' yes' : '') + '">' + esc(self._gnAnswerWord(a)) + (a.recheck ? ' · to check' : '') + '</span>' + bell + '</li>';
       }).join('') + '</ul>';
+    },
+
+    // Whoever runs a night, the owner and a co-Director may remind players to
+    // answer it; the server holds the same rule.
+    _gnCanRemind: function (n) {
+      return !n.past && !!this.userId && (n.organizerId === this.userId || this.canAuthorDmOnly);
+    },
+
+    // A player can be reminded until they give a firm answer: a maybe may be
+    // asked to decide, someone left out of the count is not asked.
+    _gnRemindable: function (a) {
+      return !a.excluded && (a.carried || a.answer === '' || a.answer === 'maybe' || !a.answer);
+    },
+
+    // "Remind everyone" reaches only those with no answer at all.
+    _gnSilent: function (n) {
+      var self = this;
+      return (n.roster || []).filter(function (a) { return a.userId !== self.userId && !a.excluded && (a.carried || !a.answer); });
+    },
+
+    _gnRemindClick: function (e) {
+      var one = e.target.closest('[data-gn-remind]'), all = !one && e.target.closest('[data-gn-remind-all]');
+      if (!one && !all) return false;
+      var self = this, id = this.evpEl.dataset.ev, n = this._findNight(id);
+      if (!n) return true;
+      var btn = one || all, body = { date: n.date };
+      if (one) body.userId = one.dataset.gnRemind;
+      btn.disabled = true;
+      Chronicle.apiFetch('/campaigns/' + encodeURIComponent(this.campaignId) + '/sessions/' + encodeURIComponent(n.sessionId) + '/remind', { method: 'POST', body: body })
+        .then(function (resp) { return resp.ok ? resp.json() : resp.json().catch(function () { return {}; }).then(function (b) { return Promise.reject(b); }); })
+        .then(function (res) {
+          var names = (res && res.notified) || [];
+          (one ? [{ userId: body.userId }] : self._gnSilent(n)).forEach(function (a) { self._gnReminded[id + '|' + a.userId] = true; });
+          if (all) self._gnRemindedAll[id] = true;
+          self.say(names.length ? 'Reminded ' + (names.length === 1 ? names[0] : names.length + ' players') + ' to answer.' : 'Everyone has answered already.');
+          var box = self.evpEl.querySelector('.rsvp[data-gnr="' + id + '"]');
+          if (box) box.outerHTML = self._gnRsvpHTML(n, true);
+        })
+        .catch(function (b) { btn.disabled = false; self.say((b && b.error) || 'That reminder could not be sent. Try again.'); });
+      return true;
     },
 
     // Who answered what, as name chips: the day's card for whoever has no
@@ -1935,7 +1983,13 @@
       }
       h += '<div class="rcount">' + esc(this._gnTally(n)) + '</div>';
       if (!full) return h + '</div>';
-      h += this._gnRosterHTML(n) + '<div class="rnote">A missing answer is never counted as a no.</div>';
+      h += this._gnRosterHTML(n);
+      if (this._gnCanRemind(n) && this._gnSilent(n).length) {
+        h += this._gnRemindedAll[id]
+          ? '<div class="rnote"><i class="fa-solid fa-check"></i> Everyone without an answer was reminded.</div>'
+          : '<button type="button" class="lnk" data-gn-remind-all><i class="fa-solid fa-bell"></i> Remind everyone who hasn’t answered</button>';
+      }
+      h += '<div class="rnote">A missing answer is never counted as a no.</div>';
       if (n.canExclude) {
         h += '<div class="sw"><span>Count me in the answers<small>Off leaves you out of the numbers, as the one running it.</small></span>' +
           '<button type="button" class="tog" role="switch" aria-checked="' + !mine.excluded + '" aria-label="Count me in the answers" data-gn-count></button></div>';
@@ -4150,6 +4204,7 @@
         if (e.target.closest('[data-close]')) { self.closeEventDetail(); return; }
         if (e.target.closest('[data-gn-edit]')) { self._gnOpenEditor(self._findNight(self.evpEl.dataset.ev)); return; }
         if (self._gnExtraClick(e)) return;
+        if (self._gnRemindClick(e)) return;
         self._gnHandleClick(e);
       });
       this.evpEl.addEventListener('input', function (e) {
