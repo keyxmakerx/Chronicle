@@ -553,7 +553,11 @@ DELETE	/campaigns/:id/content-templates/:tid	session	plugins/entities.(*ContentT
 GET	/campaigns/:id/content-templates/:tid	session	plugins/entities.(*ContentTemplateHandler).GetAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/content-templates/:tid	session	plugins/entities.(*ContentTemplateHandler).UpdateAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/customize	session	plugins/campaigns.(*Handler).Customize	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+DELETE	/campaigns/:id/customize/draft	session	plugins/campaigns.(*Handler).DeleteCustomizeDraftAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/customize/draft	session	plugins/campaigns.(*Handler).GetCustomizeDraftAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+PUT	/campaigns/:id/customize/draft	session	plugins/campaigns.(*Handler).PutCustomizeDraftAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/customize/layout-editor/:etid	session	plugins/campaigns.(*Handler).LayoutEditorFragment	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/customize/publish	session	plugins/campaigns.(*Handler).PublishCustomizeAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/dashboard	session	plugins/campaigns.(*Handler).OwnerDashboard	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 DELETE	/campaigns/:id/dashboard-layout	session	plugins/campaigns.(*Handler).ResetDashboardLayout	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/dashboard-layout	session	plugins/campaigns.(*Handler).GetDashboardLayout	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole

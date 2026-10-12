@@ -70,6 +70,11 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 	// against this same campaign group.
 	cg.GET("/customize", h.Customize, RequireRole(RoleOwner))
 	cg.GET("/customize/layout-editor/:etid", h.LayoutEditorFragment, RequireRole(RoleOwner))
+	// The one Customize draft, kept until the owner presses Save or Discard.
+	cg.GET("/customize/draft", h.GetCustomizeDraftAPI, RequireRole(RoleOwner))
+	cg.PUT("/customize/draft", h.PutCustomizeDraftAPI, RequireRole(RoleOwner))
+	cg.DELETE("/customize/draft", h.DeleteCustomizeDraftAPI, RequireRole(RoleOwner))
+	cg.POST("/customize/publish", h.PublishCustomizeAPI, RequireRole(RoleOwner))
 
 	// Top-level Extensions hub; Content Packs renders as a card inside it
 	// via ContentPacksCardRenderer. /extensions/fragment is the HTMX swap
