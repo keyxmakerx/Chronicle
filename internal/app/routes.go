@@ -4532,7 +4532,14 @@ func (a *App) RegisterRoutes() {
 	// ingress sanitization is enforced by the AST pin in
 	// internal/plugins/ai_workspace/importer/committer_sanitize_test.go.
 	aiWorkspaceHandler.SetImportLookup(entityService)
-	aiWorkspaceHandler.SetImportCommitter(importer.NewCommitter(entityService))
+	aiWorkspaceCommitter := importer.NewCommitter(entityService)
+	// Pages by era go through the calendar plugin's version service, never
+	// its repository.
+	aiEraVersions := calendar.NewEraVersionService(calendar.NewEraVersionRepository(a.DB), calendarService)
+	aiWorkspaceCommitter.SetEraWriter(aiImportEraAdapter{versions: aiEraVersions})
+	aiWorkspaceHandler.SetImportEras(aiImportEraAdapter{versions: aiEraVersions})
+	aiWorkspaceRenderer.EraVersions = aiExportEraAdapter{versions: aiEraVersions}
+	aiWorkspaceHandler.SetImportCommitter(aiWorkspaceCommitter)
 
 	campaignHandler.RegisterSettingsTab(aiWorkspaceHandler.SettingsTabFactory())
 

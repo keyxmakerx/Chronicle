@@ -68,6 +68,7 @@ func TestRenderers_FunnelThroughHtmlToMarkdown(t *testing.T) {
 	// htmlToMarkdown. If a new Render* lands, add it here.
 	required := []string{
 		"renderEntity",
+		"renderEraVersion",
 		"renderNoteTree",
 		"renderCalendarEvent",
 		"renderSession",

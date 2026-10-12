@@ -57,6 +57,8 @@ func TestCommitter_EntityMutationsFunnelThroughMarkdownToHTML(t *testing.T) {
 		"Create":      true,
 		"Update":      true,
 		"UpdateEntry": true,
+		// Era versions store page text too (c.eras), so they take the same funnel.
+		"WriteVersion": true,
 	}
 
 	// Wrapper functions on the Committer that are exempt from the body
@@ -104,7 +106,7 @@ func TestCommitter_EntityMutationsFunnelThroughMarkdownToHTML(t *testing.T) {
 			if !ok {
 				return true
 			}
-			if recv.Sel.Name != "creator" {
+			if recv.Sel.Name != "creator" && recv.Sel.Name != "eras" {
 				return true
 			}
 			mutationCalls = append(mutationCalls, call)

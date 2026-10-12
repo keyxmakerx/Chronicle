@@ -65,6 +65,10 @@ type Handler struct {
 	// lookups answers an AI's read-only `kind: lookup` blocks. Optional —
 	// nil answers each one with "can't be looked up on this server".
 	lookups *records.Lookups
+
+	// importEras lets the review check an `era:` block's era and page before
+	// anything is written. Optional — nil marks such blocks unavailable.
+	importEras importer.EraLookup
 }
 
 // AuditLogger is the narrow contract the plugin needs for audit
@@ -110,6 +114,12 @@ func (h *Handler) SetImportLookup(l importer.CampaignLookup) {
 // crashing.
 func (h *Handler) SetImportCommitter(c *importer.Committer) {
 	h.importCommitter = c
+}
+
+// SetImportEras wires the era lookup the review uses for `era:` blocks. The
+// committer gets its writer separately (Committer.SetEraWriter).
+func (h *Handler) SetImportEras(l importer.EraLookup) {
+	h.importEras = l
 }
 
 // SetRecords wires the record kinds.
@@ -302,8 +312,11 @@ func (h *Handler) ParseImport(c echo.Context) error {
 	links := importer.NewPageLinks(c.Request().Context(), h.importLookup, cc.Campaign.ID, viewerFor(c, cc))
 	pasteSlugs := importer.PasteSlugs(pages)
 	recRows := h.planRecords(c, cc, recs, links, pasteSlugs)
-	cls, err := importer.NewClassifier(h.importLookup, cc.Campaign.ID).
-		ClassifyAll(c.Request().Context(), pages)
+	classifier := importer.NewClassifier(h.importLookup, cc.Campaign.ID)
+	if h.importEras != nil {
+		classifier.WithEras(h.importEras, viewerFor(c, cc))
+	}
+	cls, err := classifier.ClassifyAll(c.Request().Context(), pages)
 	if err != nil {
 		slog.Error("ai-workspace: classify failed",
 			slog.String("campaign_id", cc.Campaign.ID),
