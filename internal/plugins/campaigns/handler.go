@@ -178,7 +178,12 @@ type Handler struct {
 	extraSettingsTabs []func(*CampaignContext) SettingsTab
 	// extraCustomizeTabs is the same idea for the Customize page
 	// (RegisterCustomizeTab, customize_tabs.go).
-	extraCustomizeTabs   []func(*CampaignContext) CustomizeTab
+	extraCustomizeTabs []func(*CampaignContext) CustomizeTab
+	// customizeSections are the named parts of the Customize draft, in apply
+	// order (RegisterCustomizeSection, customize_sections.go).
+	customizeSections    []CustomizeSection
+	customizeDrafts      CustomizeDraftService
+	categoryLister       CustomizeCategoryLister
 	baseURL              string
 	contentPacksRenderer ContentPacksCardRenderer
 	// Per-extension inline dashboard registry + enable-state check.
@@ -190,7 +195,11 @@ type Handler struct {
 
 // NewHandler creates a new campaign handler.
 func NewHandler(service CampaignService) *Handler {
-	return &Handler{service: service}
+	h := &Handler{service: service}
+	// The look is the campaign's own data, so it registers here and always
+	// applies first; other plugins register their sections after it.
+	h.RegisterCustomizeSection(CustomizeSection{Key: customizeSectionLook, Apply: h.applyLookSection})
+	return h
 }
 
 // SetGroupService sets the group service for campaign group management.
@@ -268,11 +277,16 @@ func (h *Handler) SetSystemLister(lister SystemLister) {
 // logAudit fires a fire-and-forget audit entry. Errors are logged but
 // never block the primary operation.
 func (h *Handler) logAudit(c echo.Context, campaignID, action string, details map[string]any) {
+	h.logAuditCtx(c.Request().Context(), campaignID, auth.GetUserID(c), action, details)
+}
+
+// logAuditCtx is logAudit for callers with no echo.Context, such as a
+// Customize section applied from a stored draft.
+func (h *Handler) logAuditCtx(ctx context.Context, campaignID, userID, action string, details map[string]any) {
 	if h.auditLogger == nil {
 		return
 	}
-	userID := auth.GetUserID(c)
-	if err := h.auditLogger.LogEvent(c.Request().Context(), campaignID, userID, action, details); err != nil {
+	if err := h.auditLogger.LogEvent(ctx, campaignID, userID, action, details); err != nil {
 		slog.Warn("audit log failed", slog.String("action", action), slog.Any("error", err))
 	}
 }

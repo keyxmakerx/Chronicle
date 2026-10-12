@@ -120,6 +120,9 @@ type CampaignService interface {
 	// Sidebar configuration
 	UpdateSidebarConfig(ctx context.Context, campaignID string, req UpdateSidebarConfigRequest) error
 	GetSidebarConfig(ctx context.Context, campaignID string) (*SidebarConfig, error)
+	// SetCategoryMenuVisibility shows or hides one category in the players'
+	// sidebar menu, leaving the rest of the sidebar config as stored.
+	SetCategoryMenuVisibility(ctx context.Context, campaignID string, typeID int, visible bool) error
 	// EnsureSidebarItems is the one-time, idempotent boot reconciler that
 	// converts campaigns still on the legacy sidebar model onto the unified
 	// items model. Returns the number of campaigns converted.
@@ -1542,20 +1545,7 @@ func (s *campaignService) UpdateSidebarConfig(ctx context.Context, campaignID st
 	if err != nil {
 		return err
 	}
-	config := campaign.ParseSidebarConfig()
-
-	// If this campaign is still on the legacy model — the boot reconciler hasn't
-	// converged it yet, or EnsureSidebarItems failed for this row — converting
-	// here first closes a data-loss window: the canonical SidebarConfig struct no
-	// longer carries the legacy fields, so the Marshal below would drop them and
-	// permanently destroy the operator's saved customization on the very first
-	// write. Converting lazily on write self-heals the straggler onto items,
-	// exactly as the reconciler would, before the merge applies.
-	if len(config.Items) == 0 {
-		if converted, ok := convertLegacySidebarConfig(campaign.SidebarConfig); ok {
-			config = converted
-		}
-	}
+	config := sidebarConfigForWrite(campaign)
 
 	// Merge only the fields present in the request.
 	if req.Items != nil {
@@ -1579,6 +1569,57 @@ func (s *campaignService) UpdateSidebarConfig(ctx context.Context, campaignID st
 
 	slog.Info("sidebar config updated", slog.String("campaign_id", campaignID))
 	return nil
+}
+
+// sidebarConfigForWrite is the stored sidebar config to merge a change into.
+//
+// If the campaign is still on the legacy model — the boot reconciler hasn't
+// converged it yet, or EnsureSidebarItems failed for this row — converting
+// here first closes a data-loss window: the canonical SidebarConfig struct no
+// longer carries the legacy fields, so the Marshal on write would drop them and
+// permanently destroy the operator's saved customization on the very first
+// write. Converting lazily on write self-heals the straggler onto items,
+// exactly as the reconciler would, before the merge applies.
+func sidebarConfigForWrite(campaign *Campaign) SidebarConfig {
+	config := campaign.ParseSidebarConfig()
+	if len(config.Items) == 0 {
+		if converted, ok := convertLegacySidebarConfig(campaign.SidebarConfig); ok {
+			config = converted
+		}
+	}
+	return config
+}
+
+// SetCategoryMenuVisibility shows or hides one category in the sidebar menu
+// for players. A category with no menu item already shows, so showing it
+// writes nothing; hiding it adds an item. The write goes through
+// UpdateSidebarConfig so its validation and legacy conversion still apply.
+func (s *campaignService) SetCategoryMenuVisibility(ctx context.Context, campaignID string, typeID int, visible bool) error {
+	if typeID <= 0 {
+		return apperror.NewBadRequest("a category id is required")
+	}
+	campaign, err := s.repo.FindByID(ctx, campaignID)
+	if err != nil {
+		return err
+	}
+	items := append([]SidebarItem(nil), sidebarConfigForWrite(campaign).Items...)
+	found := false
+	for i := range items {
+		if items[i].Type == SidebarTypeCategory && items[i].TypeID == typeID {
+			found = true
+			if items[i].Visible == visible {
+				return nil
+			}
+			items[i].Visible = visible
+		}
+	}
+	if !found {
+		if visible {
+			return nil
+		}
+		items = append(items, SidebarItem{Type: SidebarTypeCategory, TypeID: typeID, Visible: false, Section: NavSectionCategories})
+	}
+	return s.UpdateSidebarConfig(ctx, campaignID, UpdateSidebarConfigRequest{Items: &items})
 }
 
 // GetSidebarConfig returns the parsed sidebar configuration for a campaign.
