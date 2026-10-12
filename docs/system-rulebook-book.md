@@ -51,6 +51,7 @@ look: paper              # optional: draw the book as a printed handbook
 tabs: [players-screen, how-to-play, combat]   # optional: chapters with a tab
 start: players-screen    # optional: the chapter the book opens on
 first: how-to-play       # optional: where a first-time reader opens instead
+screen: players-screen   # optional: a chapter that drops over any page
 terms:                   # optional: extra hover definitions
   edge: A bonus on a power roll.
 parts:
@@ -78,9 +79,17 @@ parts:
   `first`. A link to the Rules page ending in `#<chapter>` (for example
   `#making-a-hero`) opens that chapter instead. Without `start` the book
   reopens where the reader left it.
-- `tabs`, `start` and `first` must name chapters listed in `parts`. A player
-  never receives a tab, start page or link that leads to a Director-only
-  chapter.
+- `screen` names a chapter of quick-reference pages, such as a player
+  screen. It is left out of the page order and the tabs. Instead a ribbon
+  hangs from the top bar on every page (or the reader presses P), and its
+  pages drop down side by side over the book; Escape, the ribbon or a click
+  on the book folds them away. Contents entries, links and search results
+  for that chapter open it the same way. When `start` names the same
+  chapter, the book opens with the screen down. A list of eight or more
+  cards on a screen page gets a box to find a card by name.
+- `tabs`, `start`, `first` and `screen` must name chapters listed in
+  `parts`. A player never receives a tab, start page, screen or link that
+  leads to a Director-only chapter.
 
 ## A chapter file
 
