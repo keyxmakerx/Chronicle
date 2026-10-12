@@ -17,10 +17,14 @@ import (
 	"golang.org/x/crypto/argon2"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/notifyprefs"
 )
 
 // sessionKeyPrefix is the Redis key prefix for session data.
 const sessionKeyPrefix = "session:"
+
+// lastSeenKeyPrefix marks a person whose last-seen time was written today.
+const lastSeenKeyPrefix = "last_seen:"
 
 // userSessionsKeyPrefix is the Redis key prefix for the set of session tokens
 // belonging to a user. Used to invalidate all sessions on password reset.
@@ -98,15 +102,22 @@ type AuthService interface {
 	DestroySession(ctx context.Context, token string) error
 
 	// Password reset flow.
+	CanEmailResetLinks(ctx context.Context) bool
 	InitiatePasswordReset(ctx context.Context, email string) error
 	ValidateResetToken(ctx context.Context, token string) (email string, err error)
 	ResetPassword(ctx context.Context, token, newPassword string) error
 
 	// User profile.
 	GetUser(ctx context.Context, userID string) (*User, error)
+	GetTimezonesByIDs(ctx context.Context, userIDs []string) (map[string]string, error)
 	UpdateTimezone(ctx context.Context, userID, timezone string) error
 	GetViewPrefs(ctx context.Context, userID string) (ViewPrefs, error)
 	UpdateViewPrefs(ctx context.Context, userID string, input UpdateViewPrefsInput) (ViewPrefs, error)
+	GetNotifyPrefs(ctx context.Context, userID string) (notifyprefs.Prefs, error)
+	UpdateNotifyPrefs(ctx context.Context, userID string, in notifyprefs.Update) (notifyprefs.Prefs, error)
+	AllowedRecipients(ctx context.Context, ids []string, category string, ch notifyprefs.Channel) []string
+	OwnedCampaigns(ctx context.Context, userID string) ([]OwnedCampaignRef, error)
+	DeleteOwnAccount(ctx context.Context, userID string, input DeleteAccountInput) error
 	UpdateDisplayName(ctx context.Context, userID, displayName string) error
 	UpdateAvatarPath(ctx context.Context, userID string, avatarPath *string) error
 	ChangePassword(ctx context.Context, userID, currentPassword, newPassword string) error
@@ -137,9 +148,39 @@ type AuthService interface {
 	// and destroys it. Used by the admin dashboard to avoid exposing raw tokens.
 	DestroySessionByHash(ctx context.Context, tokenHash string) error
 
+	// Two-factor sign-in.
+	TwoFactorStatus(ctx context.Context, userID string) (TwoFactorStatus, error)
+	BeginTwoFactor(ctx context.Context, userID, password string) (*TwoFactorSetup, error)
+	EnableTwoFactor(ctx context.Context, userID, code string) ([]string, error)
+	DisableTwoFactor(ctx context.Context, userID, password, code string) error
+	RegenerateRecoveryCodes(ctx context.Context, userID, password, code string) ([]string, error)
+	AdminDisableTwoFactor(ctx context.Context, userID string) error
+	CompleteTwoFactorLogin(ctx context.Context, in TwoFactorLoginInput) (*TwoFactorLoginResult, error)
+
+	// Sign-in with an outside provider (OpenID Connect).
+	OIDCSettings(ctx context.Context) (OIDCSettings, error)
+	SaveOIDCSettings(ctx context.Context, in OIDCSettingsInput) error
+	LoginOptions(ctx context.Context) LoginOptions
+	SignInMethods(ctx context.Context, userID string) (SignInMethods, error)
+	BeginOIDC(ctx context.Context, mode, userID, redirect string) (authURL, state string, err error)
+	FinishOIDC(ctx context.Context, in OIDCCallbackInput) (*OIDCResult, error)
+	UnlinkOIDC(ctx context.Context, userID string) error
+
+	// Guests: join with a code, then keep the account or merge it.
+	JoinWithGuestCode(ctx context.Context, in JoinInput) (*JoinResult, error)
+	KeepGuestAccount(ctx context.Context, userID string, in KeepGuestInput, ip, userAgent string) (string, error)
+	MergeGuest(ctx context.Context, guestID string, in MergeGuestInput, ip, userAgent string) (string, *User, error)
+	EndGuest(ctx context.Context, userID, campaignID string)
+	GuestCanKeep(ctx context.Context) bool
+	EndCampaignGuests(ctx context.Context, campaignID string)
+
 	// Re-authentication for sensitive operations.
 	ConfirmReauth(ctx context.Context, userID, password string) error
 	IsReauthValid(ctx context.Context, userID string) (bool, error)
+
+	// NoteSeen records that someone used Chronicle by another route than a
+	// browser session, such as a sync key.
+	NoteSeen(ctx context.Context, userID string)
 }
 
 // authService implements AuthService with argon2id hashing and Redis sessions.
@@ -165,6 +206,23 @@ type authService struct {
 	// (password reset or change, force sign-out), so credentials kept outside
 	// sessions, like a player's notes grants, end with them.
 	onSessionsRevoked []func(ctx context.Context, userID string)
+
+	// Account deletion steps, wired from routes.go so auth imports no
+	// other plugin (ConfigureAccountDeletion, OnAccountDeleted).
+	accountDeletion  AccountDeletionHooks
+	onAccountDeleted []func(ctx context.Context, userID string)
+
+	// totpKey encrypts stored authenticator secrets (ConfigureTwoFactor);
+	// nil means two-factor can't be turned on.
+	totpKey []byte
+
+	// oidc is provider sign-in (ConfigureOIDC); nil means it's unavailable.
+	oidc *oidcRuntime
+
+	// Guest codes (ConfigureGuests, OnGuestMerged); nil codes means guests
+	// can't join.
+	guestCodes    GuestCodes
+	onGuestMerged []func(ctx context.Context, campaignID, guestID, targetID string) error
 }
 
 // Registration modes. These mirror the settings plugin's canonical constants;
@@ -431,6 +489,22 @@ func (s *authService) Login(ctx context.Context, input LoginInput) (string, *Use
 	// Successful login — clear any failure counter.
 	s.clearLoginFailures(ctx, email)
 
+	// With password sign-in hidden, only admins may still use it, so a
+	// broken provider never locks the site out.
+	if opts := s.LoginOptions(ctx); opts.HidePassword && !user.IsAdmin {
+		return "", nil, apperror.NewForbidden("use the " + opts.ProviderName + " button to sign in")
+	}
+
+	// Two-factor accounts stop here for a code unless this device was
+	// remembered; the session is only made once the code checks out.
+	if user.TOTPEnabled && !s.isTrustedDevice(ctx, user.ID, input.TrustedDevice) {
+		challenge, err := s.startTwoFactorChallenge(ctx, user)
+		if err != nil {
+			return "", nil, apperror.NewInternal(fmt.Errorf("starting two-factor step: %w", err))
+		}
+		return "", user, &TwoFactorRequired{Challenge: challenge}
+	}
+
 	// Create a new session in Redis with client metadata.
 	token, err := s.createSession(ctx, user, input.IP, input.UserAgent)
 	if err != nil {
@@ -546,8 +620,35 @@ func (s *authService) ValidateSession(ctx context.Context, token string) (*Sessi
 			return nil, err
 		}
 	}
+	s.noteSeen(ctx, session.UserID)
 
 	return &session, nil
+}
+
+// lastSeenEvery is how often a person's last-seen time is written: once a
+// day is plenty to tell months away from present, and keeps it off the hot
+// path.
+const lastSeenEvery = 24 * time.Hour
+
+// NoteSeen records presence from outside a browser session.
+func (s *authService) NoteSeen(ctx context.Context, userID string) {
+	s.noteSeen(ctx, userID)
+}
+
+// noteSeen records that someone used the site, at most once a day. A Redis
+// marker decides who writes; a failure only means the time is a day stale.
+func (s *authService) noteSeen(ctx context.Context, userID string) {
+	if s.redis == nil || userID == "" {
+		return
+	}
+	set, err := s.redis.SetArgs(ctx, lastSeenKeyPrefix+userID, "1", redis.SetArgs{Mode: "NX", TTL: lastSeenEvery}).Result()
+	if err != nil || set != "OK" {
+		return
+	}
+	if err := s.repo.TouchLastSeen(ctx, userID); err != nil {
+		slog.Warn("recording last seen", slog.String("user_id", userID), slog.Any("error", err))
+		s.redis.Del(ctx, lastSeenKeyPrefix+userID)
+	}
 }
 
 // revalidateSession checks the database to ensure the session's user still
@@ -585,6 +686,7 @@ func (s *authService) revalidateSession(ctx context.Context, key, token string, 
 	session.Email = user.Email
 	session.Name = user.DisplayName
 	session.AvatarPath = derefOrEmpty(user.AvatarPath)
+	session.GuestCampaignID = derefOrEmpty(user.GuestCampaignID)
 	session.LastValidated = time.Now().UTC()
 
 	data, err := json.Marshal(session)
@@ -642,15 +744,16 @@ func (s *authService) createSession(ctx context.Context, user *User, ip, userAge
 
 	now := time.Now().UTC()
 	session := Session{
-		UserID:        user.ID,
-		Email:         user.Email,
-		Name:          user.DisplayName,
-		IsAdmin:       user.IsAdmin,
-		AvatarPath:    derefOrEmpty(user.AvatarPath),
-		IP:            ip,
-		UserAgent:     userAgent,
-		CreatedAt:     now,
-		LastValidated: now,
+		UserID:          user.ID,
+		Email:           user.Email,
+		Name:            user.DisplayName,
+		IsAdmin:         user.IsAdmin,
+		AvatarPath:      derefOrEmpty(user.AvatarPath),
+		GuestCampaignID: derefOrEmpty(user.GuestCampaignID),
+		IP:              ip,
+		UserAgent:       userAgent,
+		CreatedAt:       now,
+		LastValidated:   now,
 	}
 
 	data, err := json.Marshal(session)
@@ -759,6 +862,12 @@ func (s *authService) DestroyAllUserSessions(ctx context.Context, userID string)
 }
 
 // --- Password Reset ---
+
+// CanEmailResetLinks reports whether a reset link can be emailed at all, so
+// the Forgot password page never promises an email that can't be sent.
+func (s *authService) CanEmailResetLinks(ctx context.Context) bool {
+	return s.mail != nil && s.mail.IsConfigured(ctx)
+}
 
 // InitiatePasswordReset generates a reset token, stores its hash in the DB,
 // and sends a reset link via email. Always returns nil to avoid leaking whether
@@ -907,6 +1016,7 @@ func (s *authService) destroyUserSessions(ctx context.Context, userID string) {
 	if s.redis == nil {
 		return
 	}
+	s.forgetTrustedDevices(ctx, userID)
 
 	userSetKey := userSessionsKeyPrefix + userID
 	tokens, err := s.redis.SMembers(ctx, userSetKey).Result()
@@ -940,6 +1050,12 @@ func (s *authService) GetUser(ctx context.Context, userID string) (*User, error)
 		return nil, err
 	}
 	return user, nil
+}
+
+// GetTimezonesByIDs returns each given user's stored timezone in one read.
+// Users without one are absent from the map.
+func (s *authService) GetTimezonesByIDs(ctx context.Context, userIDs []string) (map[string]string, error) {
+	return s.repo.GetTimezonesByIDs(ctx, userIDs)
 }
 
 // UpdateTimezone sets the user's IANA timezone. Validates the timezone string

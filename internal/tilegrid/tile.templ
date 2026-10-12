@@ -1,0 +1,23 @@
+package tilegrid
+
+import "strconv"
+
+// Section is the grid a tile section's tiles sit in. The layout (4 columns, 2
+// on narrow screens, 12px gap, dense packing, fixed minimum row height) lives
+// in static/css/input.css under .tile-grid, so every page type draws it alike.
+templ Section(rowID string) {
+	<div class="tile-grid mb-4 md:mb-6" data-tile-grid={ rowID }>
+		{ children... }
+	</div>
+}
+
+// Cell is one tile's wrapper. data-tile-w / data-tile-h carry the size the
+// tile is drawn at, which is what CSS spans on and what a widget reads to
+// decide how much to show; the tile widget (static/js/widgets/tile.js, mounted
+// by data-widget) announces changes to them as chronicle:tile-resize. A tile
+// grows to fit its content and never scrolls.
+templ Cell(id string, w, h int) {
+	<div class="tile" data-widget="tile" data-tile-id={ id } data-tile-w={ strconv.Itoa(w) } data-tile-h={ strconv.Itoa(h) }>
+		{ children... }
+	</div>
+}

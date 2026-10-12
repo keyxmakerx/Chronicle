@@ -31,6 +31,11 @@ type mockEntityTypeRepo struct {
 	listChildTypesFn       func(ctx context.Context, parentID int) ([]EntityType, error)
 	resequenceChildTypesFn func(ctx context.Context, campaignID string, orderedIDs []int) error
 
+	listByPresetCategoryFn func(ctx context.Context, campaignID, category string) ([]EntityType, error)
+
+	adoptPresetCategoryFn func(ctx context.Context, toID int, category string, retireID *int) error
+	movePagesAndAdoptFn   func(ctx context.Context, campaignID string, fromID, toID int, category string) (int64, error)
+
 	moveEntitiesAndDeleteTypeFn func(ctx context.Context, campaignID string, fromTypeID, toTypeID int) (int64, error)
 }
 
@@ -84,6 +89,9 @@ func (m *mockEntityTypeRepo) ListAll(ctx context.Context) ([]EntityType, error) 
 }
 
 func (m *mockEntityTypeRepo) ListByPresetCategory(ctx context.Context, campaignID, category string) ([]EntityType, error) {
+	if m.listByPresetCategoryFn != nil {
+		return m.listByPresetCategoryFn(ctx, campaignID, category)
+	}
 	return nil, nil
 }
 
@@ -103,6 +111,20 @@ func (m *mockEntityTypeRepo) UpdateFieldsSchema(ctx context.Context, id int, fie
 
 func (m *mockEntityTypeRepo) UpdateColor(ctx context.Context, id int, color string) error {
 	return nil
+}
+
+func (m *mockEntityTypeRepo) AdoptPresetCategory(ctx context.Context, toID int, category string, retireID *int) error {
+	if m.adoptPresetCategoryFn != nil {
+		return m.adoptPresetCategoryFn(ctx, toID, category, retireID)
+	}
+	return nil
+}
+
+func (m *mockEntityTypeRepo) MovePagesAndAdoptPresetCategory(ctx context.Context, campaignID string, fromID, toID int, category string) (int64, error) {
+	if m.movePagesAndAdoptFn != nil {
+		return m.movePagesAndAdoptFn(ctx, campaignID, fromID, toID, category)
+	}
+	return 0, nil
 }
 
 func (m *mockEntityTypeRepo) UpdateDashboard(ctx context.Context, id int, description *string, pinnedIDs []string) error {
@@ -184,6 +206,9 @@ type mockEntityRepo struct {
 	listByOwnerFn      func(ctx context.Context, campaignID, ownerUserID string) ([]Entity, error)
 	listClaimedFn      func(ctx context.Context, campaignID string, role int, userID string) ([]Entity, error)
 	updateOwnerFn      func(ctx context.Context, entityID string, ownerUserID *string) error
+	setPlayableFn      func(ctx context.Context, entityID string, playable bool) error
+	listOnRosterFn     func(ctx context.Context, campaignID string, typeIDs []int, role int, userID string) ([]Entity, error)
+	searchRosterFn     func(ctx context.Context, campaignID string, typeIDs []int, f RosterSearch, role int, userID string) ([]Entity, error)
 	updateMapIDFn      func(ctx context.Context, entityID string, mapID *string) error
 	listSiblingIDsFn   func(ctx context.Context, campaignID string, entityTypeID int, parentID, parentNodeID *string) ([]string, error)
 	resequenceFn       func(ctx context.Context, campaignID string, orderedIDs []string) error
@@ -415,6 +440,27 @@ func (m *mockEntityRepo) UpdateOwner(ctx context.Context, entityID string, owner
 		return m.updateOwnerFn(ctx, entityID, ownerUserID)
 	}
 	return nil
+}
+
+func (m *mockEntityRepo) SetPlayable(ctx context.Context, entityID string, playable bool) error {
+	if m.setPlayableFn != nil {
+		return m.setPlayableFn(ctx, entityID, playable)
+	}
+	return nil
+}
+
+func (m *mockEntityRepo) ListOnRoster(ctx context.Context, campaignID string, typeIDs []int, role int, userID string) ([]Entity, error) {
+	if m.listOnRosterFn != nil {
+		return m.listOnRosterFn(ctx, campaignID, typeIDs, role, userID)
+	}
+	return nil, nil
+}
+
+func (m *mockEntityRepo) SearchRoster(ctx context.Context, campaignID string, typeIDs []int, f RosterSearch, role int, userID string) ([]Entity, error) {
+	if m.searchRosterFn != nil {
+		return m.searchRosterFn(ctx, campaignID, typeIDs, f, role, userID)
+	}
+	return nil, nil
 }
 
 func (m *mockEntityRepo) UpdateMapID(ctx context.Context, entityID string, mapID *string) error {
@@ -1634,6 +1680,16 @@ func TestCheckEntityAccess_OwnerAlwaysFullAccess(t *testing.T) {
 	}
 }
 
+// plainTypeRepo answers every type lookup with an ordinary category, for tests
+// of access rules that need a page's type to be readable but not special.
+func plainTypeRepo() *mockEntityTypeRepo {
+	return &mockEntityTypeRepo{
+		findByIDFn: func(_ context.Context, id int) (*EntityType, error) {
+			return &EntityType{ID: id, CampaignID: "camp-1", Slug: "note"}, nil
+		},
+	}
+}
+
 func TestCheckEntityAccess_DefaultVisibility_PublicEntity(t *testing.T) {
 	entityRepo := &mockEntityRepo{
 		findByIDFn: func(_ context.Context, _ string) (*Entity, error) {
@@ -1645,7 +1701,7 @@ func TestCheckEntityAccess_DefaultVisibility_PublicEntity(t *testing.T) {
 		},
 	}
 
-	svc := newTestService(entityRepo, &mockEntityTypeRepo{})
+	svc := newTestService(entityRepo, plainTypeRepo())
 
 	// Player (role 1) can view but not edit public entities.
 	perm, err := svc.CheckEntityAccess(context.Background(), "ent-1", 1, "player-1")
@@ -1722,7 +1778,7 @@ func TestCheckEntityAccess_CustomVisibility_DelegatesToRepo(t *testing.T) {
 		},
 	}
 
-	svc := NewEntityService(entityRepo, &mockEntityTypeRepo{}, permRepo)
+	svc := NewEntityService(entityRepo, plainTypeRepo(), permRepo)
 	perm, err := svc.CheckEntityAccess(context.Background(), "ent-1", 1, "user-42")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -2231,6 +2287,8 @@ func TestIsClaimableType(t *testing.T) {
 		// An unset player_character preset is claimable via the flag default at
 		// create time, not via this heuristic — so heuristic-only resolves false.
 		{"unset player_character preset uses flag not heuristic", &EntityType{PresetCategory: strPtr(PresetCategoryPlayerCharacter)}, false},
+		// A DM-only category is never claimable, whatever its flag says.
+		{"adventures with flag true", &EntityType{Slug: "adventures", PresetCategory: strPtr(PresetCategoryAdventures), Claimable: boolPtr(true)}, false},
 	}
 	for _, tc := range cases {
 		if got := isClaimableType(tc.et); got != tc.want {

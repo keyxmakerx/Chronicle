@@ -214,6 +214,9 @@ func dashboardBlockTypes(l *campaigns.DashboardLayout) []string {
 				out = append(out, blk.Type)
 			}
 		}
+		for _, t := range row.Tiles {
+			out = append(out, t.Type)
+		}
 	}
 	return out
 }
@@ -229,6 +232,9 @@ func templateBlockTypes(rows []entities.TemplateRow) []string {
 				out = append(out, blk.Type)
 				out = append(out, nestedBlockTypes(blk.Config)...)
 			}
+		}
+		for _, t := range row.Tiles {
+			out = append(out, t.Type)
 		}
 	}
 	return out

@@ -64,7 +64,7 @@ Drives the rest of this doc. **Bold = must back up.**
 | Operator backups | `/app/data/backups/chronicle_db_*` etc. | n/a (the backups themselves) | n/a |
 | Redis AOF (sessions) | volume `chronicle-redisdata` | Optional (sessions only) | All users logged out; no data lost. |
 | Migration version pointer | `schema_migrations` row in MariaDB | Covered by DB dump | Auto-replayed by `golang-migrate` on next boot if matching DB content present. |
-| **Secrets** (`SECRET_KEY`, DB passwords) | `.env` on host | **Yes — out of band** | Sessions invalidated; DB auth breaks. |
+| **Secrets** (`SECRET_KEY`, DB passwords) | `.env` on host | **Yes — out of band** | Sessions invalidated; stored two-factor secrets and the sign-in provider secret become unreadable; DB auth breaks. |
 
 Everything operator-controlled lives in three named volumes
 (`chronicle-data`, `chronicle-dbdata`, `chronicle-redisdata`) and one host
@@ -114,7 +114,7 @@ Every env var Chronicle reads. **Bold = required in production.**
 |---|---|---|
 | `ENV` | `development` | Set to `production` in prod; raises security audit warnings to errors. |
 | `PORT` | `8080` | Container exposes 8080; change the port mapping in compose, not this. |
-| **`BASE_URL`** | `http://localhost:8080` | Production must be `https://...`; HTTP in production is flagged by the security audit. |
+| **`BASE_URL`** | `http://localhost:8080` | Production must be `https://...`; HTTP in production is flagged by the security audit. It is also the base of the sign-in provider redirect: register `BASE_URL` + `/login/oidc/callback` with the provider. |
 | `LOG_LEVEL` | `debug` | `info` / `warn` / `error` for production. |
 | `DB_HOST` | `localhost:3306` | `host:port` format; compose sets `chronicle-db:3306`. |
 | `DB_USER` | `chronicle` | |
@@ -126,7 +126,7 @@ Every env var Chronicle reads. **Bold = required in production.**
 | `DB_MAX_IDLE_CONNS` | `5` | |
 | `DB_CONN_MAX_LIFETIME` | `5m` | |
 | `REDIS_URL` | `redis://localhost:6379` | |
-| **`SECRET_KEY`** | (none — required) | 32+ bytes base64. Generate: `openssl rand -base64 32`. PASETO signing key for sessions; rotating it logs everyone out. |
+| **`SECRET_KEY`** | (none — required) | 32+ bytes base64. Generate: `openssl rand -base64 32`. PASETO signing key for sessions; rotating it logs everyone out. It also derives the keys that encrypt stored two-factor authenticator secrets and the outside sign-in provider's client secret; after a rotation people use a recovery code (or an admin switches their two-factor off) and the provider secret is re-entered under Admin > Sign-ins & sessions > Sign-in provider. |
 | `SESSION_TTL` | `720h` | |
 | `EXTENSIONS_PATH` | `./extensions` | User-installable content extensions. |
 | `MAX_UPLOAD_SIZE` | `10485760` | Bytes, as a plain integer. A value like `10MB` does not parse and silently falls back to the default. |
@@ -469,6 +469,15 @@ chronicle-data volume). Each run produces:
 managed by a separate Go-side rotator and are never touched by the
 script.
 
+### Daily backup from the admin page
+
+Site admin › Backups & restore › Daily backup runs `backup.sh` inside the
+server once a day at the chosen hour (server time) and keeps the chosen
+number of days. A failed run shows on that page and emails active site
+admins when email is set up. It writes into the same `$BACKUP_DIR`, so an
+offsite copy still needs one of the options below. Use it or the host
+cron job, not both.
+
 ### Cron example (daily at 03:00, host crontab)
 
 ```cron
@@ -649,7 +658,7 @@ Run through this before exposing Chronicle anywhere reachable.
 - [ ] `ENV=production` is set so the audit warnings don't get suppressed.
 - [ ] `DB_TLS_MODE=required` if the DB is on a different host. Optional
       if DB and chronicle are on the same Docker bridge.
-- [ ] Daily `make backup` cron job + offsite copy of `$BACKUP_DIR`
+- [ ] Daily backup (admin page or `make backup` cron job) + offsite copy of `$BACKUP_DIR`
       working and tested.
 - [ ] First registered user is the legitimate site admin, not a test
       account left over from setup.

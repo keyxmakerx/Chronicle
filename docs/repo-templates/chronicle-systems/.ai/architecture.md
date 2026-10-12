@@ -10,7 +10,7 @@ hover tooltips, entity type presets, and Foundry VTT character sync mappings.
 ## How Chronicle Loads Systems
 
 1. **Discovery:** Chronicle scans a directory for subdirectories containing `manifest.json`
-2. **Validation:** `ValidateManifest()` checks required fields (id, name, version, api_version)
+2. **Validation:** `ValidateManifest()` checks required fields (id, name, api_version); a missing `version` becomes `"0.0.0"` and the package manager sets it from the release tag
 3. **Data loading:** `JSONProvider` reads `data/*.json`, maps filename stem to category slug
 4. **Registration:** System is registered in the global registry by its `id`
 5. **Serving:** HTTP handlers serve reference pages, search API, and tooltip API
@@ -51,7 +51,7 @@ my-system.zip
 | `id` | string | Yes | Unique machine-readable identifier (e.g., `"dnd5e"`, `"drawsteel"`) |
 | `name` | string | Yes | Human-readable display name (e.g., `"D&D 5th Edition"`) |
 | `description` | string | No | Short summary of what the system provides |
-| `version` | string | Yes | Semantic version (e.g., `"1.0.0"`) |
+| `version` | string | No | Leave it out; set from the GitHub release tag on install |
 | `author` | string | No | Creator name or organization |
 | `license` | string | No | Content license identifier (e.g., `"OGL-1.0a"`, `"ORC"`, `"CC-BY-4.0"`) |
 | `icon` | string | No | Font Awesome icon class (e.g., `"fa-dragon"`, `"fa-dice-d20"`) |
@@ -84,9 +84,13 @@ Used in both category fields (for reference item display) and entity preset fiel
 |-------|------|----------|-------------|
 | `key` | string | Yes | Property map key (e.g., `"level"`, `"school"`, `"cr"`) |
 | `label` | string | Yes | Human-readable name (e.g., `"Spell Level"`, `"School"`) |
-| `type` | string | Yes | Data type: `"string"`, `"number"`, `"list"`, `"markdown"` |
+| `type` | string | Yes | Data type: `"string"`, `"number"`, `"boolean"`, `"list"`, `"markdown"`, `"enum"`, `"url"` |
 | `foundry_path` | string | No | Dot-notation path in Foundry Actor (e.g., `"system.abilities.str.value"`) |
 | `foundry_writable` | boolean | No | Whether Chronicle can write this field back to Foundry. Defaults to `true` when `foundry_path` is set. |
+| `foundry_choices` | string | No | A list in the Foundry system's `CONFIG` (e.g. `"DRAW_STEEL.monsters.roles"`); the value is stored in Foundry as that list's matching key. |
+| `foundry_format` | string | No | How the value converts: `"set"` (comma-separated list to a Foundry set), `"integer"` (the number in text like "5 damage"), `"size"` ("1S" to size value and letter). |
+
+A creature preset may also set `foundry_pull_fields`: the only field keys Foundry may send back. Chronicle owns the rest.
 
 **Field types:**
 - `"string"` — plain text value
@@ -223,6 +227,7 @@ When loaded into Chronicle, systems are accessible via these endpoints:
 | `GET /api/v1/campaigns/:id/systems` | List all systems (with `foundry_system_id`) |
 | `GET /api/v1/campaigns/:id/systems/:id/character-fields` | Character field definitions with Foundry annotations |
 | `GET /api/v1/campaigns/:id/systems/:id/item-fields` | Item field definitions with Foundry annotations |
+| `GET /api/v1/campaigns/:id/systems/:id/creature-fields` | Creature field definitions with Foundry annotations and `foundry_pull_fields` |
 
 ### Tooltip API Response
 

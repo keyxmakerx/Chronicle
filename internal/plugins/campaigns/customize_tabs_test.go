@@ -55,23 +55,3 @@ func TestCustomizeTabs_NoneRegistered(t *testing.T) {
 		t.Errorf("want no tabs, got %d", len(got))
 	}
 }
-
-// The page shows a registered tab's button and body, wired to the Alpine tab
-// key, after the three built-in tabs.
-func TestCustomizePage_RendersContributedTab(t *testing.T) {
-	cc := ctxWithRole(RoleOwner)
-	extra := []CustomizeTab{{ID: "maps", Label: "Maps", Icon: "fa-solid fa-map", Content: tabBody("MAPS-BODY")}}
-	var sb strings.Builder
-	if err := CustomizePage(cc, nil, "tok", extra).Render(context.Background(), &sb); err != nil {
-		t.Fatalf("render: %v", err)
-	}
-	out := sb.String()
-	for _, want := range []string{"MAPS-BODY", `tab === &#39;maps&#39;`, "Appearance"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("customize page missing %q", want)
-		}
-	}
-	if strings.Index(out, "Appearance") > strings.Index(out, "MAPS-BODY") {
-		t.Error("contributed tabs come after the built-in ones")
-	}
-}

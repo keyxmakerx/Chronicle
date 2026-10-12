@@ -219,7 +219,8 @@ func (r *calendarRepo) ApplyStructure(ctx context.Context, calendarID string, pl
 }
 
 // applyStructureMoons is upsertMoons narrowed to what the structure editor
-// shows: an existing moon's name and cycle, nothing else.
+// shows: an existing moon's name and cycle, and its lore page when the
+// editor sent one, nothing else.
 func applyStructureMoons(ctx context.Context, ex dbExecutor, calendarID string, moons []MoonInput) error {
 	existing, err := existingIDs(ctx, ex, "calendar_moons", calendarID)
 	if err != nil {
@@ -232,6 +233,9 @@ func applyStructureMoons(ctx context.Context, ex dbExecutor, calendarID string, 
 				`UPDATE calendar_moons SET name = ?, cycle_days = ? WHERE id = ? AND calendar_id = ?`,
 				m.Name, m.CycleDays, *m.ID, calendarID,
 			); err != nil {
+				return err
+			}
+			if err := setMoonLore(ctx, ex, calendarID, *m.ID, m); err != nil {
 				return err
 			}
 			keep[*m.ID] = true

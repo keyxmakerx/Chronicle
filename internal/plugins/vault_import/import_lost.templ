@@ -1,0 +1,31 @@
+// import_lost.templ renders the answer to a poll for an import the server no
+// longer remembers.
+
+package vault_import
+
+import "fmt"
+
+// ImportLost answers a poll for an import the server no longer remembers,
+// which only happens if it restarted. The Imported folder, if one was made,
+// says whether it finished.
+templ ImportLost(campaignID string) {
+	<div class="vi-settle space-y-4">
+		<div class="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/5 px-4 py-3">
+			<i class="fa-solid fa-triangle-exclamation text-amber-500 mt-0.5" aria-hidden="true"></i>
+			<div class="text-sm">
+				<p class="font-medium text-fg">We lost track of this import</p>
+				<p class="text-fg-secondary mt-0.5">
+					The server restarted while it ran. Look for an Imported folder in your pages: the note on it says whether the import finished.
+					If it did not, delete the folder and import again.
+				</p>
+			</div>
+		</div>
+		<button
+			type="button"
+			class="btn-primary"
+			hx-get={ fmt.Sprintf("/campaigns/%s/import/markdown/dropzone", campaignID) }
+			hx-target="#vi-stage"
+			hx-swap="innerHTML"
+		>Start over</button>
+	</div>
+}

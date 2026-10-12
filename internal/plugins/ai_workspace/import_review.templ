@@ -9,6 +9,7 @@ package ai_workspace
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/importer"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -42,7 +43,13 @@ type ReviewSummary struct {
 	Conflicts  int
 	NewCategories int
 	ParseErrors int
+	// Blocked counts records the review refused (a missing calendar, a
+	// bad key), kept apart from blocks whose markdown would not parse.
+	Blocked int
 }
+
+// skipped is every row the import leaves out whatever the operator ticks.
+func (s ReviewSummary) skipped() int { return s.ParseErrors + s.Blocked }
 
 // ImportReview renders the review fragment + the bulk-defaults bar
 // + the Submit button. HTMX swaps this into #ai-import-review-host.
@@ -101,6 +108,9 @@ templ ImportReview(d ImportReviewData) {
 			{ fmt.Sprintf("%d %s", d.SummaryCounts.Conflicts, pluralize("conflict", "conflicts", d.SummaryCounts.Conflicts)) } ·
 			{ fmt.Sprintf("%d new %s", d.SummaryCounts.NewCategories, pluralize("category", "categories", d.SummaryCounts.NewCategories)) } ·
 			{ fmt.Sprintf("%d parse %s", d.SummaryCounts.ParseErrors, pluralize("error", "errors", d.SummaryCounts.ParseErrors)) }
+			if d.SummaryCounts.Blocked > 0 {
+				· { fmt.Sprintf("%d can't be imported", d.SummaryCounts.Blocked) }
+			}
 		</div>
 
 		if len(d.Pages) > 0 {
@@ -114,7 +124,7 @@ templ ImportReview(d ImportReviewData) {
 		if len(d.Records) > 0 {
 			<div class="space-y-3 mt-4" role="list" aria-label="Other changes to review">
 				for _, r := range d.Records {
-					@reviewRecordRow(r)
+					@reviewRecordRow(d.CampaignID, r)
 				}
 			</div>
 		}
@@ -124,7 +134,7 @@ templ ImportReview(d ImportReviewData) {
 			// creates entities (per-row autonomy) and any confirmed
 			// new categories, then swaps in the import_result
 			// fragment.
-			if d.SummaryCounts.ParseErrors > 0 {
+			if d.SummaryCounts.skipped() > 0 {
 				<button
 					id="ai-import-submit"
 					type="submit"
@@ -149,62 +159,26 @@ templ ImportReview(d ImportReviewData) {
 			<span id="ai-import-committing" class="htmx-indicator text-xs text-fg-muted" role="status" aria-live="polite">
 				<i class="fa-solid fa-spinner fa-spin mr-1" aria-hidden="true"></i> Committing...
 			</span>
-			if d.SummaryCounts.ParseErrors > 0 {
+			if d.SummaryCounts.skipped() > 0 {
 				<span id="ai-import-parse-errors-note" class="text-xs text-fg-muted">
-					{ fmt.Sprintf("(%d parse-error %s will be skipped)", d.SummaryCounts.ParseErrors, pluralize("row", "rows", d.SummaryCounts.ParseErrors)) }
+					{ skippedNote(d.SummaryCounts) }
 				</span>
 			}
 		</div>
 	</form>
-	// Alpine x-data factory, defined inline so the review screen
-	// doesn't require a separate JS bundle. Bulk action ops run via
-	// direct DOM mutation rather than a fully-reactive row model, to
-	// keep the templ-rendered server-side state authoritative and
-	// avoid a 3-way sync between FormData, the templ markup, and the
-	// Alpine store.
-	<script>
-		(function () {
-			if (window.aiImportReview) { return; }
-			window.aiImportReview = function () {
-				return {
-					applyDefaultsToAll: function () {
-						var form = this.$root;
-						var bulkCategory = form.querySelector('[name=bulk_default_category]')?.value || '';
-						var bulkVisibility = form.querySelector('[name=bulk_default_visibility]')?.value || '';
-						var bulkConflict = form.querySelector('[name=bulk_default_conflict]')?.value || '';
-						form.querySelectorAll('select[name$="_category"]').forEach(function (sel) {
-							if (sel.name === 'bulk_default_category') return;
-							if (bulkCategory && Array.from(sel.options).some(function (o) { return o.value === bulkCategory; })) {
-								sel.value = bulkCategory;
-								sel.dispatchEvent(new Event('change'));
-							}
-						});
-						form.querySelectorAll('select[name$="_visibility"]').forEach(function (sel) {
-							if (sel.name === 'bulk_default_visibility') return;
-							if (bulkVisibility) { sel.value = bulkVisibility; }
-						});
-						form.querySelectorAll('select[name$="_conflict"]').forEach(function (sel) {
-							if (sel.name === 'bulk_default_conflict') return;
-							if (bulkConflict) { sel.value = bulkConflict; }
-						});
-					},
-					skipAllConflicts: function () {
-						this.$root.querySelectorAll('select[name$="_conflict"]').forEach(function (sel) {
-							if (sel.name === 'bulk_default_conflict') return;
-							sel.value = 'skip';
-						});
-					},
-					toggleAll: function (event) {
-						var checked = event.target.checked;
-						this.$root.querySelectorAll('input[type=checkbox][name$="_include"]').forEach(function (cb) {
-							if (cb.disabled) return;
-							cb.checked = checked;
-						});
-					},
-				};
-			};
-		})();
-	</script>
+}
+
+// skippedNote says which rows the import leaves out and why, so a block
+// refused at review (one waiting on a calendar, say) is not reported as markdown that failed to parse.
+func skippedNote(s ReviewSummary) string {
+	var parts []string
+	if s.ParseErrors > 0 {
+		parts = append(parts, fmt.Sprintf("%d parse-error %s", s.ParseErrors, pluralize("row", "rows", s.ParseErrors)))
+	}
+	if s.Blocked > 0 {
+		parts = append(parts, fmt.Sprintf("%d %s that can't be imported", s.Blocked, pluralize("row", "rows", s.Blocked)))
+	}
+	return "(" + strings.Join(parts, " and ") + " will be skipped)"
 }
 
 // pluralize returns singular when n==1, plural otherwise.
@@ -333,7 +307,7 @@ templ reviewRow(campaignID string, idx int, page importer.ParsedPage, cls import
 		aria-label={ fmt.Sprintf("Page %d: %s", idx+1, statusLabel(cls.Status)) }
 		class={
 			"card card-elev p-3 transition-colors",
-			templ.KV("border-rose-300 dark:border-rose-700", cls.Status == importer.StatusParseError || cls.Status == importer.StatusActionMismatch),
+			templ.KV("border-rose-300 dark:border-rose-700", cls.Status == importer.StatusParseError || cls.Status == importer.StatusActionMismatch || cls.Status == importer.StatusParentProblem),
 			templ.KV("border-amber-300 dark:border-amber-700", cls.Status == importer.StatusConflict),
 			templ.KV("border-sky-300 dark:border-sky-700", cls.Status == importer.StatusNewCategory),
 		}
@@ -342,7 +316,7 @@ templ reviewRow(campaignID string, idx int, page importer.ParsedPage, cls import
 			<input
 				type="checkbox"
 				name={ fmt.Sprintf("page_%d_include", idx) }
-				checked?={ page.Status != importer.StatusParseError }
+				checked?={ page.Status != importer.StatusParseError && cls.Status != importer.StatusParentProblem }
 				disabled?={ page.Status == importer.StatusParseError }
 				class="mt-1 rounded border-edge text-accent"
 				aria-label={ fmt.Sprintf("Include page %d (%s) in this import", idx+1, page.Name) }
@@ -354,7 +328,7 @@ templ reviewRow(campaignID string, idx int, page importer.ParsedPage, cls import
 						<i class="fa-solid fa-triangle-exclamation mr-1" aria-hidden="true"></i>
 						{ page.ParseError }
 					</div>
-				} else if cls.Status == importer.StatusActionMismatch {
+				} else if cls.Status == importer.StatusActionMismatch || cls.Status == importer.StatusParentProblem {
 					<div class="text-xs text-rose-700 dark:text-rose-300 mt-1" role="alert">
 						<i class="fa-solid fa-triangle-exclamation mr-1" aria-hidden="true"></i>
 						{ cls.Reason }
@@ -362,16 +336,20 @@ templ reviewRow(campaignID string, idx int, page importer.ParsedPage, cls import
 					// Still expose the action chip so the operator can
 					// override (e.g. delete → create)
 					// without re-pasting.
-					@reviewRowFields(idx, page, cls, data)
-					@reviewRowMeta(page)
+					@reviewRowBody(idx, page, cls, data)
 				} else {
-					@reviewRowFields(idx, page, cls, data)
-					@reviewRowMeta(page)
+					@reviewRowBody(idx, page, cls, data)
 				}
 				// Per-row delete confirmation; renders only when the
 				// AI-suggested action is "delete".
 				if page.FrontMatter.Action == importer.ActionDelete {
-					@reviewRowDeleteConfirm(idx, page.Name)
+					@reviewRowDeleteConfirm(idx, page.Name, page.FrontMatter.EraName())
+				}
+				// A page with GM-only parts: any row that ends up replacing its
+				// text needs the tick (the dropdowns can turn a row into an
+				// update after this renders, so every non-delete row shows it).
+				if cls.GMOnly.Any() && page.Status != importer.StatusParseError && page.FrontMatter.Action != importer.ActionDelete {
+					@reviewRowGMOnlyConfirm(idx, page.Name, cls.GMOnly)
 				}
 				if len(page.Warnings) > 0 {
 					<details class="text-xs text-fg-muted mt-1">
@@ -393,7 +371,7 @@ templ reviewRow(campaignID string, idx int, page importer.ParsedPage, cls import
 // attribute blocks Submit via the browser's form-validity gate until
 // every Delete row is confirmed; the committer re-checks
 // DeleteConfirmed independently against any client-side bypass.
-templ reviewRowDeleteConfirm(idx int, name string) {
+templ reviewRowDeleteConfirm(idx int, name, era string) {
 	<div class="mt-2 p-2 rounded border border-rose-300 dark:border-rose-700 bg-rose-50 dark:bg-rose-900/20">
 		<label class="flex items-start gap-2 text-xs text-rose-900 dark:text-rose-100 cursor-pointer">
 			<input
@@ -403,11 +381,69 @@ templ reviewRowDeleteConfirm(idx int, name string) {
 				class="mt-0.5 rounded border-rose-400 text-rose-600"
 				aria-label={ fmt.Sprintf("I confirm permanent deletion of %s", name) }
 			/>
-			<span>
-				I understand <strong>{ name }</strong> will be permanently deleted.
-				This cannot be undone.
-			</span>
+			if era != "" {
+				<span>
+					I understand the <strong>{ era }</strong> version of <strong>{ name }</strong> will be permanently deleted.
+					The usual page stays. This cannot be undone.
+				</span>
+			} else {
+				<span>
+					I understand <strong>{ name }</strong> will be permanently deleted.
+					This cannot be undone.
+				</span>
+			}
 		</label>
+	</div>
+}
+
+// reviewRowBody is what sits under a row's header: the page controls, or for
+// an era block just the pill saying which era's version it writes (the page's
+// category, visibility and conflict mode do not apply to a version).
+templ reviewRowBody(idx int, page importer.ParsedPage, cls importer.Classification, data ImportReviewData) {
+	if page.FrontMatter.IsEra() {
+		@reviewRowEraPill(page)
+	} else {
+		@reviewRowFields(idx, page, cls, data)
+		@reviewRowMeta(page)
+	}
+}
+
+// reviewRowEraPill marks a row that writes one era's version of a page.
+templ reviewRowEraPill(page importer.ParsedPage) {
+	<div class="flex flex-wrap items-center gap-1.5 mt-1">
+		<span class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-accent/10 text-accent">
+			<i class="fa-solid fa-hourglass-half text-[9px] mr-1" aria-hidden="true"></i>
+			{ page.FrontMatter.EraName() } version
+		</span>
+		if page.FrontMatter.KnownAs != "" {
+			<span class="text-[10px] text-fg-muted">
+				{ "known as " + page.FrontMatter.KnownAs }
+			</span>
+		}
+	</div>
+}
+
+// reviewRowGMOnlyConfirm renders the "Replace the text anyway" callout for a
+// page whose current text has GM-only parts. Unticked by default and not
+// `required`: leaving it unticked is a valid choice (the row is skipped), and
+// the committer re-checks the tick against the live page either way.
+templ reviewRowGMOnlyConfirm(idx int, name string, gm importer.GMOnlyParts) {
+	<div class="mt-2 p-2 rounded border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20" role="group" aria-label={ fmt.Sprintf("GM-only parts of %s", name) }>
+		<p class="text-xs text-amber-900 dark:text-amber-100">
+			<i class="fa-solid fa-triangle-exclamation mr-1" aria-hidden="true"></i>
+			{ gm.Warning() }
+		</p>
+		<label class="flex items-start gap-2 text-xs text-amber-900 dark:text-amber-100 cursor-pointer mt-1">
+			<input
+				type="checkbox"
+				name={ fmt.Sprintf("page_%d_replace_gm_confirmed", idx) }
+				class="mt-0.5 rounded border-amber-400 text-amber-600"
+			/>
+			<span>Replace the text anyway</span>
+		</label>
+		<p class="text-xs text-amber-900 dark:text-amber-100 mt-1">
+			Any GM-only words the AI copied into its text will be visible to players.
+		</p>
 	</div>
 }
 
@@ -448,6 +484,8 @@ func statusLabel(s importer.ParseStatus) string {
 		return "Parse error"
 	case importer.StatusActionMismatch:
 		return "Action target missing"
+	case importer.StatusParentProblem:
+		return "Parent problem"
 	default:
 		return "Page"
 	}
@@ -527,6 +565,10 @@ templ statusChip(s importer.ParseStatus) {
 		case importer.StatusActionMismatch:
 			<span class="text-xs px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300">
 				<i class="fa-solid fa-circle-xmark mr-1"></i> Target missing
+			</span>
+		case importer.StatusParentProblem:
+			<span class="text-xs px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300">
+				<i class="fa-solid fa-circle-xmark mr-1"></i> Parent problem
 			</span>
 	}
 }
@@ -783,6 +825,58 @@ templ importBody(cc *campaigns.CampaignContext) {
 
 		<div id="ai-import-review-host"></div>
 	</div>
+	@importReviewScript()
+}
+
+// importReviewScript defines the review screen's Alpine x-data factory
+// with the page, not inside the swapped-in review: Alpine reads x-data the
+// moment htmx inserts the form, before htmx runs scripts that came with it,
+// so a factory shipped in the fragment is always too late. Bulk actions
+// mutate the DOM directly to keep the server-rendered state authoritative.
+templ importReviewScript() {
+	<script>
+		(function () {
+			if (window.aiImportReview) { return; }
+			window.aiImportReview = function () {
+				return {
+					applyDefaultsToAll: function () {
+						var form = this.$root;
+						var bulkCategory = form.querySelector('[name=bulk_default_category]')?.value || '';
+						var bulkVisibility = form.querySelector('[name=bulk_default_visibility]')?.value || '';
+						var bulkConflict = form.querySelector('[name=bulk_default_conflict]')?.value || '';
+						form.querySelectorAll('select[name$="_category"]').forEach(function (sel) {
+							if (sel.name === 'bulk_default_category') return;
+							if (bulkCategory && Array.from(sel.options).some(function (o) { return o.value === bulkCategory; })) {
+								sel.value = bulkCategory;
+								sel.dispatchEvent(new Event('change'));
+							}
+						});
+						form.querySelectorAll('select[name$="_visibility"]').forEach(function (sel) {
+							if (sel.name === 'bulk_default_visibility') return;
+							if (bulkVisibility) { sel.value = bulkVisibility; }
+						});
+						form.querySelectorAll('select[name$="_conflict"]').forEach(function (sel) {
+							if (sel.name === 'bulk_default_conflict') return;
+							if (bulkConflict) { sel.value = bulkConflict; }
+						});
+					},
+					skipAllConflicts: function () {
+						this.$root.querySelectorAll('select[name$="_conflict"]').forEach(function (sel) {
+							if (sel.name === 'bulk_default_conflict') return;
+							sel.value = 'skip';
+						});
+					},
+					toggleAll: function (event) {
+						var checked = event.target.checked;
+						this.$root.querySelectorAll('input[type=checkbox][name$="_include"]').forEach(function (cb) {
+							if (cb.disabled) return;
+							cb.checked = checked;
+						});
+					},
+				};
+			};
+		})();
+	</script>
 }
 
 // ensure entities import is referenced (silences unused-import).

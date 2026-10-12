@@ -144,6 +144,7 @@ type RespondRequest struct {
 type LocalSlot struct {
 	StartsAtUTC string `json:"startsAtUtc"` // RFC-3339 UTC (stable key)
 	EndsAtUTC   string `json:"endsAtUtc"`
+	Date        string `json:"date"`      // YYYY-MM-DD the slot starts on, in the viewer zone
 	DateLabel   string `json:"dateLabel"` // e.g. "Sat, Jul 18"
 	TimeLabel   string `json:"timeLabel"` // e.g. "7:00 PM – 11:00 PM"
 	TZLabel     string `json:"tzLabel"`   // the viewer zone the labels are in

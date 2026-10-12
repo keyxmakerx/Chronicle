@@ -43,6 +43,34 @@ templ SyncOverviewCardTempl(summary *SyncSummary) {
 	</div>
 }
 
+// SyncOverviewInlineTempl is the sync summary as a section of the Foundry
+// page's Connection card: a label and a row of counts, no card of its own.
+// A nil summary means the counts are not available on this site.
+templ SyncOverviewInlineTempl(summary *SyncSummary) {
+	<div class="pt-3 border-t border-edge" data-sync-overview-inline>
+		<div class="flex flex-wrap items-baseline justify-between gap-2 mb-2">
+			<h3 class="text-[11px] font-semibold uppercase tracking-wider text-fg-muted">Linked so far</h3>
+			if summary != nil && summary.LastSyncActivity != nil {
+				<span class="text-xs text-fg-muted">Last sync { syncRelativeTime(*summary.LastSyncActivity) }</span>
+			}
+		</div>
+		if summary == nil {
+			<p class="text-sm text-fg-secondary">Sync counts aren't available on this Chronicle site.</p>
+		} else if summary.TotalMappings == 0 {
+			<p class="text-sm text-fg-secondary">Nothing is linked between Foundry and Chronicle yet. Pages, characters and maps show up here once your world syncs them.</p>
+		} else {
+			<ul class="flex flex-wrap gap-2">
+				<li class="rounded-md bg-surface-alt px-3 py-1.5 text-sm text-fg"><b class="tabular-nums">{ fmt.Sprintf("%d", summary.TotalMappings) }</b> <span class="text-fg-secondary">in all</span></li>
+				for _, typeName := range syncTypeOrder() {
+					if count, ok := summary.ByType[typeName]; ok && count > 0 {
+						<li class="rounded-md bg-surface-alt px-3 py-1.5 text-sm text-fg"><b class="tabular-nums">{ fmt.Sprintf("%d", count) }</b> <span class="text-fg-secondary">{ strings.ToLower(syncTypePlural(typeName)) }</span></li>
+					}
+				}
+			</ul>
+		}
+	</div>
+}
+
 // SyncOverviewEmptyTempl renders when sync mapping service is not available.
 templ SyncOverviewEmptyTempl() {
 	<div class="card p-6">

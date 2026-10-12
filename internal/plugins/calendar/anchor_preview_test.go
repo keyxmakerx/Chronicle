@@ -16,16 +16,16 @@ import (
 // GameNightsAffectedByAnchorMove: nil fn returns no sessions, and every call
 // records the limit it was invoked with so a test can pin the cap.
 type fakeGameNightsGate struct {
-	fn              func(ctx context.Context, campaignID string, fromYear, fromMonth, fromDay, toYear, toMonth, toDay, limit int) ([]AffectedSession, error)
+	fn              func(ctx context.Context, campaignID, calendarID string, fromYear, fromMonth, fromDay, toYear, toMonth, toDay, limit int) ([]AffectedSession, error)
 	called          bool
 	calledWithLimit int
 }
 
-func (g *fakeGameNightsGate) SessionsInWorldDateRange(ctx context.Context, campaignID string, fromYear, fromMonth, fromDay, toYear, toMonth, toDay, limit int) ([]AffectedSession, error) {
+func (g *fakeGameNightsGate) SessionsInWorldDateRange(ctx context.Context, campaignID, calendarID string, fromYear, fromMonth, fromDay, toYear, toMonth, toDay, limit int) ([]AffectedSession, error) {
 	g.called = true
 	g.calledWithLimit = limit
 	if g.fn != nil {
-		return g.fn(ctx, campaignID, fromYear, fromMonth, fromDay, toYear, toMonth, toDay, limit)
+		return g.fn(ctx, campaignID, calendarID, fromYear, fromMonth, fromDay, toYear, toMonth, toDay, limit)
 	}
 	return nil, nil
 }
@@ -88,7 +88,7 @@ func TestPreviewAnchorMove_PositiveShift(t *testing.T) {
 	svc := newTestCalendarService(repo, nil, nil, nil)
 	cs := svc.(*calendarService)
 	gate := &fakeGameNightsGate{
-		fn: func(_ context.Context, _ string, _, _, _, _, _, _, _ int) ([]AffectedSession, error) {
+		fn: func(_ context.Context, _, _ string, _, _, _, _, _, _, _ int) ([]AffectedSession, error) {
 			return []AffectedSession{{Name: "Session A", OldWorldYear: 1000, OldWorldMonth: 1, OldWorldDay: 5}}, nil
 		},
 	}
@@ -127,7 +127,7 @@ func TestPreviewAnchorMove_NegativeShift(t *testing.T) {
 	svc := newTestCalendarService(repo, nil, nil, nil)
 	cs := svc.(*calendarService)
 	gate := &fakeGameNightsGate{
-		fn: func(_ context.Context, _ string, _, _, _, _, _, _, _ int) ([]AffectedSession, error) {
+		fn: func(_ context.Context, _, _ string, _, _, _, _, _, _, _ int) ([]AffectedSession, error) {
 			return []AffectedSession{{Name: "Session B", OldWorldYear: 1000, OldWorldMonth: 1, OldWorldDay: 1}}, nil
 		},
 	}
@@ -182,7 +182,7 @@ func TestPreviewAnchorMove_CapsAtThreeAffected(t *testing.T) {
 	svc := newTestCalendarService(repo, nil, nil, nil)
 	cs := svc.(*calendarService)
 	gate := &fakeGameNightsGate{
-		fn: func(_ context.Context, _ string, _, _, _, _, _, _, limit int) ([]AffectedSession, error) {
+		fn: func(_ context.Context, _, _ string, _, _, _, _, _, _, limit int) ([]AffectedSession, error) {
 			all := []AffectedSession{
 				{Name: "S1", OldWorldYear: 1000, OldWorldMonth: 1, OldWorldDay: 1},
 				{Name: "S2", OldWorldYear: 1000, OldWorldMonth: 1, OldWorldDay: 2},

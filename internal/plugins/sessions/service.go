@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/notifyprefs"
 	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/sanitize"
@@ -46,10 +47,20 @@ type SessionService interface {
 	ListPlannedSessions(ctx context.Context, campaignID string) ([]Session, error)
 	ListSessionsForDateRange(ctx context.Context, campaignID, startDate, endDate string) ([]Session, error)
 	// ListPlannedSessionsInWorldDateRange returns planned sessions whose
-	// in-world date falls in [from, to] inclusive, soonest first, capped at
-	// limit (<=0: no cap). Lets the calendar name the sessions an anchor
+	// in-world date on calendarID ( = any calendar) falls in [from, to]
+	// inclusive, soonest first, capped at limit (<=0: no cap). Lets the calendar name the sessions an anchor
 	// move would re-date. Only identity, name and in-world date are filled.
-	ListPlannedSessionsInWorldDateRange(ctx context.Context, campaignID string, from, to WorldDate, limit int) ([]Session, error)
+	ListPlannedSessionsInWorldDateRange(ctx context.Context, campaignID, calendarID string, from, to WorldDate, limit int) ([]Session, error)
+	// ListCampaignIDsWithUnstampedWorldDates and StampWorldDateCalendar back
+	// ReconcileWorldDateCalendars: campaigns holding a session with an
+	// in-world date but no calendar, and the stamp for one campaign.
+	ListCampaignIDsWithUnstampedWorldDates(ctx context.Context) ([]string, error)
+	StampWorldDateCalendar(ctx context.Context, campaignID, calendarID string) (int64, error)
+	// RemapMonthPositions moves the in-world month of the sessions dated on
+	// calendarID (old 1-based position -> new) when a calendar structure
+	// edit reorders its months, so game nights follow their month. Returns
+	// how many sessions changed.
+	RemapMonthPositions(ctx context.Context, campaignID, calendarID string, remap map[int]int) (int, error)
 	// UpdateSession validates and updates a session. If a recurring session is
 	// completed, auto-generates the next occurrence and returns it. Returns nil
 	// if no new session was created.
@@ -172,6 +183,9 @@ type SessionService interface {
 	PingMemberAvailability(ctx context.Context, campaignID, askerID, askerName, targetID, link string, members []overlayMemberInput) (*NudgeResult, error)
 	AskAllToConfirm(ctx context.Context, campaignID, askerID, askerName, link string, members []overlayMemberInput) (*NudgeResult, []string, error)
 	LastConfirmAsk(ctx context.Context, campaignID string) (time.Time, error)
+	// RemindNight asks one player, or everyone who hasn't answered, to say
+	// whether they're coming to one night; see night_reminders.go.
+	RemindNight(ctx context.Context, campaignID, sessionID, date, askerID, askerName, targetID, today string, members []NightMember) (*NightReminder, error)
 	// ListCampaignIDsUsingGameNights is every campaign with game-night data,
 	// for the addon reconciler.
 	ListCampaignIDsUsingGameNights(ctx context.Context) ([]string, error)
@@ -183,6 +197,7 @@ type SessionService interface {
 	CreateProposal(ctx context.Context, campaignID, createdBy string, req CreateProposalRequest) (*SlotProposal, error)
 	GetProposalView(ctx context.Context, campaignID, proposalID, viewerID, viewerTZ string, includeDetail bool) (*ProposalView, error)
 	ListProposalSummaries(ctx context.Context, campaignID, viewerID string) ([]ProposalSummary, error)
+	ListOpenProposalViews(ctx context.Context, campaignID, viewerID, viewerTZ string) ([]ProposalView, error)
 	RespondToOption(ctx context.Context, campaignID, proposalID, optionID, userID, response string) error
 	CreateProposalTokens(ctx context.Context, optionID, userID string) (map[string]string, error)
 	// Emailed-token redeem is split into a read-only validate (used by the GET
@@ -225,6 +240,37 @@ type sessionService struct {
 	repo             SessionRepository
 	entityChecker    EntityCampaignChecker
 	entityVisibility EntityVisibilityFilter
+	// calendarResolver stamps a session's in-world date with its calendar;
+	// optional (see SetDefaultCalendarResolver).
+	calendarResolver DefaultCalendarResolver
+	// recipients drops people who switched a kind of message off. Nil
+	// delivers to everyone, as in tests.
+	recipients RecipientFilter
+}
+
+// RecipientFilter narrows recipients to those whose notification choices
+// allow this category on this channel, keeping their order. Implemented by
+// the auth service.
+type RecipientFilter interface {
+	AllowedRecipients(ctx context.Context, ids []string, category string, ch notifyprefs.Channel) []string
+}
+
+// ConfigureRecipientFilter wires people's notification choices into the
+// bell writes after construction, as the app builds auth first.
+func ConfigureRecipientFilter(svc SessionService, f RecipientFilter) {
+	if s, ok := svc.(*sessionService); ok {
+		s.recipients = f
+	}
+}
+
+// bellRecipients returns the ids that want a bell entry of this type. A type
+// with no category on the account page always goes to everyone.
+func (s *sessionService) bellRecipients(ctx context.Context, ids []string, ntype string) []string {
+	cat := notifyprefs.CategoryForBellType(ntype)
+	if s.recipients == nil || cat == "" || len(ids) == 0 {
+		return ids
+	}
+	return s.recipients.AllowedRecipients(ctx, ids, cat, notifyprefs.Bell)
 }
 
 // NewSessionService creates a new session service. The EntityCampaignChecker
@@ -282,6 +328,8 @@ func (s *sessionService) CreateSession(ctx context.Context, campaignID string, i
 		CreatedAt:           time.Now().UTC(),
 		UpdatedAt:           time.Now().UTC(),
 	}
+
+	s.stampWorldDateCalendar(ctx, session)
 
 	if err := s.repo.Create(ctx, campaignID, session); err != nil {
 		return nil, apperror.NewInternal(fmt.Errorf("creating session: %w", err))
@@ -431,6 +479,7 @@ func (s *sessionService) UpdateSession(ctx context.Context, id string, input Upd
 	session.RecurrenceDayOfWeek = input.RecurrenceDayOfWeek.Ptr(session.RecurrenceDayOfWeek)
 	session.RecurrenceEndDate = input.RecurrenceEndDate.Ptr(session.RecurrenceEndDate)
 	session.ScheduledTZ = input.ScheduledTZ.Ptr(session.ScheduledTZ)
+	s.stampWorldDateCalendar(ctx, session)
 
 	if err := s.repo.Update(ctx, session); err != nil {
 		return nil, err
@@ -610,8 +659,8 @@ func (s *sessionService) ListSessionsForDateRange(ctx context.Context, campaignI
 
 // ListPlannedSessionsInWorldDateRange implements the sessions side of the
 // calendar's anchor-move preview.
-func (s *sessionService) ListPlannedSessionsInWorldDateRange(ctx context.Context, campaignID string, from, to WorldDate, limit int) ([]Session, error) {
-	sessions, err := s.repo.ListPlannedByWorldDateRange(ctx, campaignID, from, to, limit)
+func (s *sessionService) ListPlannedSessionsInWorldDateRange(ctx context.Context, campaignID, calendarID string, from, to WorldDate, limit int) ([]Session, error) {
+	sessions, err := s.repo.ListPlannedByWorldDateRange(ctx, campaignID, calendarID, from, to, limit)
 	if err != nil {
 		return nil, apperror.NewInternal(fmt.Errorf("listing sessions for world date range: %w", err))
 	}

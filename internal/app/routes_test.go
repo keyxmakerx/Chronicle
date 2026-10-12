@@ -149,3 +149,31 @@ func TestPublishEntityEvent_DMOnly(t *testing.T) {
 		})
 	}
 }
+
+// TestPublishEntityTypeEvent_DMOnlyCategory pins that a DM-only category's
+// events never reach a player's socket, while an ordinary category's still do.
+func TestPublishEntityTypeEvent_DMOnlyCategory(t *testing.T) {
+	adv := entities.PresetCategoryAdventures
+	tests := []struct {
+		name   string
+		et     *entities.EntityType
+		wantDM bool
+	}{
+		{"Adventures", &entities.EntityType{ID: 9, PresetCategory: &adv}, true},
+		{"ordinary category", &entities.EntityType{ID: 1}, false},
+	}
+	for _, tt := range tests {
+		for _, event := range []string{"created", "updated", "deleted"} {
+			t.Run(tt.name+"/"+event, func(t *testing.T) {
+				bus := &captureBus{}
+				(&entityEventPublisherAdapter{bus: bus}).PublishEntityTypeEvent(event, "camp-1", tt.et)
+				if bus.last == nil {
+					t.Fatal("expected Publish to be called")
+				}
+				if bus.last.RequiresDM != tt.wantDM {
+					t.Errorf("RequiresDM = %v, want %v", bus.last.RequiresDM, tt.wantDM)
+				}
+			})
+		}
+	}
+}

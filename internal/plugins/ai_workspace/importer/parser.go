@@ -246,10 +246,19 @@ func parseOnePage(raw string) ParsedPage {
 		return p
 	}
 
+	// known_as renames the page inside one era, so it means nothing alone.
+	if strings.TrimSpace(p.FrontMatter.KnownAs) != "" && !p.FrontMatter.IsEra() {
+		p.Status = StatusParseError
+		p.ParseError = "known_as: only works together with era: (it is the page's name in that era). " +
+			"Add the era's name as `era:`, or remove known_as."
+		return p
+	}
+
 	// Validate visibility enum BEFORE checking name — a bad
 	// visibility value is the noisier failure mode and the operator
-	// notices it first.
-	if v := strings.TrimSpace(p.FrontMatter.Visibility); v != "" {
+	// notices it first. An era block never changes the usual page's
+	// settings, so its visibility is ignored (with a warning) unchecked.
+	if v := strings.TrimSpace(p.FrontMatter.Visibility); v != "" && !p.FrontMatter.IsEra() {
 		if !validVisibilities[v] {
 			p.Status = StatusParseError
 			p.ParseError = fmt.Sprintf(
@@ -279,8 +288,13 @@ func parseOnePage(raw string) ParsedPage {
 	// produce an empty entity body which is a degraded but valid
 	// state. The Delete warning surfaces an AI-prompt-quality issue
 	// (wasted tokens) without blocking the commit.
+	if p.FrontMatter.IsEra() {
+		p.Warnings = append(p.Warnings, eraIgnoredWarnings(p.FrontMatter)...)
+	}
+	// An empty body is meaningful on an era block: it leaves that era's
+	// text as it was.
 	if strings.TrimSpace(p.Body) == "" {
-		if p.FrontMatter.Action != ActionDelete {
+		if p.FrontMatter.Action != ActionDelete && !p.FrontMatter.IsEra() {
 			p.Warnings = append(p.Warnings, "Page body is empty")
 		}
 	} else if p.FrontMatter.Action == ActionDelete {
@@ -369,6 +383,33 @@ func humanizeYAMLError(err error) string {
 	}
 }
 
+// eraIgnoredWarnings names the front-matter keys an era block carries that
+// it does not act on: an era's version never changes the usual page's type,
+// visibility, parent or tags.
+func eraIgnoredWarnings(f FrontMatter) []string {
+	var ignored []string
+	if f.Type != "" {
+		ignored = append(ignored, "type")
+	}
+	if f.Subcategory != "" {
+		ignored = append(ignored, "subcategory")
+	}
+	if f.Visibility != "" {
+		ignored = append(ignored, "visibility")
+	}
+	if f.Parent != "" {
+		ignored = append(ignored, "parent")
+	}
+	if len(f.Tags) > 0 {
+		ignored = append(ignored, "tags")
+	}
+	if len(ignored) == 0 {
+		return nil
+	}
+	return []string{"An era block only writes that era's version of the page, so these keys are ignored: " +
+		strings.Join(ignored, ", ")}
+}
+
 // unknownYAMLKeys returns the top-level YAML keys that aren't in
 // the FrontMatter schema. Used to populate the row's Warnings slice.
 // Tolerant of comments + blank lines.
@@ -376,7 +417,8 @@ func unknownYAMLKeys(rawYAML string) []string {
 	known := map[string]bool{
 		"name": true, "type": true, "subcategory": true,
 		"visibility": true, "tags": true, "description": true,
-		"action": true, "kind": true,
+		"action": true, "kind": true, "parent": true,
+		"era": true, "known_as": true,
 	}
 	var unknown []string
 	for _, line := range strings.Split(rawYAML, "\n") {

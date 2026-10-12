@@ -22,6 +22,7 @@ import (
 	"math"
 	"regexp"
 	"sort"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -102,10 +103,23 @@ type EntityVisibilityGate interface {
 // affected sessions listed, rather than failing the whole preview.
 type GameNightsAffectedByAnchorMove interface {
 	// SessionsInWorldDateRange returns up to `limit` sessions/game-nights in
-	// campaignID whose in-world date falls within [fromYMD, toYMD]
+	// campaignID dated on calendarID (a month/day is a position in one
+	// calendar, so another calendar's nights do not count) whose in-world
+	// date falls within [fromYMD, toYMD]
 	// (inclusive, by the OLD anchor mapping), for previewing an anchor
 	// move's blast radius. Ordered soonest-first. limit<=0 means no cap.
-	SessionsInWorldDateRange(ctx context.Context, campaignID string, fromYear, fromMonth, fromDay, toYear, toMonth, toDay, limit int) ([]AffectedSession, error)
+	SessionsInWorldDateRange(ctx context.Context, campaignID, calendarID string, fromYear, fromMonth, fromDay, toYear, toMonth, toDay, limit int) ([]AffectedSession, error)
+}
+
+// SessionMonthRemapper is satisfied by the sessions plugin and injected from
+// internal/app/routes.go, the same seam as GameNightsAffectedByAnchorMove.
+// After a structure edit reorders months it moves the game nights dated on
+// that calendar with their month. Optional and nil-safe: unwired, a save
+// still succeeds and game nights keep their stored month positions.
+type SessionMonthRemapper interface {
+	// RemapMonthPositions maps each old 1-based month position to its new
+	// one; only months that moved are present.
+	RemapMonthPositions(ctx context.Context, campaignID, calendarID string, remap map[int]int) error
 }
 
 // AffectedSession is one session/game-night SessionsInWorldDateRange returns:
@@ -178,6 +192,10 @@ type CalendarService interface {
 	// date or time outside the calendar's own months, days, hours or minutes
 	// is a bad request (400), so a caller can tell the two apart.
 	SetCurrentDate(ctx context.Context, calendarID, campaignID string, year, month, day, hour, minute int) error
+	// AdvanceCurrent steps the current date and time forward by hours and
+	// whole days of the calendar's own length (advance.go). Same refusals as
+	// SetCurrentDate; the caller decides who may.
+	AdvanceCurrent(ctx context.Context, calendarID, campaignID string, hours, days int) error
 	DeleteCalendar(ctx context.Context, calendarID, campaignID string) error
 	SetDefaultCalendar(ctx context.Context, campaignID, calendarID string) error
 
@@ -244,6 +262,14 @@ type CalendarService interface {
 	// entirely, by erasForPlayer) and filtered like ListEventsForMonth.
 	// Oldest first, at most maxEraEvents; total counts every match.
 	ListEraEventsForViewer(ctx context.Context, eraID int, calendarID, campaignID string, v permissions.Viewer) (events []Event, total int, err error)
+	// ListEventIndexForViewer returns a compact calendar-wide event list
+	// (id, name, date) for pickers that need events outside the loaded
+	// months. It is filtered exactly like ListEraEventsForViewer: role and
+	// per-user rules, unannounced future events and secret-era events are
+	// dropped for a non-author. q narrows by case-insensitive name match;
+	// the list is date-ordered and capped at maxEventIndex, truncated says
+	// whether matches were left out.
+	ListEventIndexForViewer(ctx context.Context, calendarID, campaignID, q string, v permissions.Viewer) (entries []EventIndexEntry, truncated bool, err error)
 	// ListUpcomingEvents returns up to limit events on or after the
 	// calendar's current date, chronological, viewer-filtered exactly like
 	// ListEventsForMonth (SQL role filter + per-user visibility_rules +
@@ -298,6 +324,12 @@ type CalendarService interface {
 	// Moon. Calendar structure; the hidden flag is gated CanAuthorDmOnly
 	// (Owner or a granted co-Director) at the route (routes.go).
 	SetMoonHidden(ctx context.Context, moonID int, calendarID, campaignID string, hidden bool) error
+	// MoonsForEntity lists the moons whose lore page is entityID, in every
+	// calendar v may open and, for anyone who does not skip the per-user
+	// layer, without hidden moons, each with tonight's phase name on its
+	// calendar's current date. It does not judge whether v may see the
+	// entity itself; the entity page asking has already shown it to them.
+	MoonsForEntity(ctx context.Context, campaignID, entityID string, v permissions.Viewer) ([]EntityMoonRef, error)
 
 	// PreviewAnchorMove is a READ-ONLY preview of moving a real-anchored
 	// calendar's anchor: it computes the day shift and up to three affected
@@ -403,6 +435,8 @@ type calendarService struct {
 	weatherRepo WeatherRepository
 	entityGate  EntityVisibilityGate
 	gameNights  GameNightsAffectedByAnchorMove
+	publisher   CalendarEventPublisher
+	monthRemap  SessionMonthRemapper
 }
 
 // NewCalendarService constructs a CalendarService over the four
@@ -428,6 +462,10 @@ func (s *calendarService) SetEntityVisibilityGate(g EntityVisibilityGate) { s.en
 func (s *calendarService) SetGameNightsAffectedByAnchorMove(g GameNightsAffectedByAnchorMove) {
 	s.gameNights = g
 }
+
+// SetSessionMonthRemapper injects the sessions-plugin call ApplyStructureEdit
+// makes after a successful save. Optional wiring like the setters above.
+func (s *calendarService) SetSessionMonthRemapper(r SessionMonthRemapper) { s.monthRemap = r }
 
 // --- Cross-campaign / cross-calendar scoping (no cross-tenant reach) ---
 
@@ -750,6 +788,9 @@ func (s *calendarService) finishCalendarForViewer(ctx context.Context, cal *Cale
 	if err := s.redactEraLore(ctx, cal.CampaignID, cal.Eras, v); err != nil {
 		return nil, err
 	}
+	if err := s.redactMoonLore(ctx, cal.CampaignID, cal.Moons, v); err != nil {
+		return nil, err
+	}
 	return cal, nil
 }
 
@@ -801,27 +842,15 @@ func eraEndDay(cal *Calendar, e *Era) int {
 // may not see that page, the same treatment redactHiddenEntityLinks gives
 // an event's page, and fails closed the same way when no gate is wired.
 func (s *calendarService) redactEraLore(ctx context.Context, campaignID string, eras []Era, v permissions.Viewer) error {
-	if v.SkipsPerUserRules() {
-		return nil
-	}
 	var ids []string
 	for _, e := range eras {
 		if e.LoreEntityID != nil && *e.LoreEntityID != "" {
 			ids = append(ids, *e.LoreEntityID)
 		}
 	}
-	if len(ids) == 0 {
-		return nil
-	}
-	viewable := map[string]bool{}
-	if s.entityGate == nil {
-		slog.Error("calendar: entity visibility gate not configured; blanking all era lore pages",
-			slog.String("campaign_id", campaignID))
-	} else {
-		var err error
-		if viewable, err = s.entityGate.FilterViewableEntityIDs(ctx, campaignID, ids, v.Role(), v.UserID()); err != nil {
-			return fmt.Errorf("filter viewable era lore pages: %w", err)
-		}
+	viewable, err := s.viewableLorePages(ctx, campaignID, ids, v, "era")
+	if err != nil || viewable == nil {
+		return err
 	}
 	for i := range eras {
 		e := &eras[i]
@@ -831,6 +860,53 @@ func (s *calendarService) redactEraLore(ctx context.Context, campaignID string, 
 		}
 	}
 	return nil
+}
+
+// redactMoonLore is redactEraLore for a moon's lore page: a moon the viewer
+// may see can still point at a page they may not.
+func (s *calendarService) redactMoonLore(ctx context.Context, campaignID string, moons []Moon, v permissions.Viewer) error {
+	var ids []string
+	for _, m := range moons {
+		if m.LoreEntityID != nil && *m.LoreEntityID != "" {
+			ids = append(ids, *m.LoreEntityID)
+		}
+	}
+	viewable, err := s.viewableLorePages(ctx, campaignID, ids, v, "moon")
+	if err != nil || viewable == nil {
+		return err
+	}
+	for i := range moons {
+		m := &moons[i]
+		if m.LoreEntityID != nil && !viewable[*m.LoreEntityID] {
+			m.LoreEntityID = nil
+			m.LoreEntityName = ""
+		}
+	}
+	return nil
+}
+
+// viewableLorePages answers which of the lore page ids this viewer may see.
+// A nil map means nothing needs blanking (the viewer skips the per-user
+// layer, or there are no ids); a non-nil map is the allow-list, empty when
+// no entity gate is wired so the pages fail closed. kind only names the
+// owner of the pages in the log line.
+func (s *calendarService) viewableLorePages(ctx context.Context, campaignID string, ids []string, v permissions.Viewer, kind string) (map[string]bool, error) {
+	if v.SkipsPerUserRules() || len(ids) == 0 {
+		return nil, nil
+	}
+	if s.entityGate == nil {
+		slog.Error("calendar: entity visibility gate not configured; blanking all "+kind+" lore pages",
+			slog.String("campaign_id", campaignID))
+		return map[string]bool{}, nil
+	}
+	viewable, err := s.entityGate.FilterViewableEntityIDs(ctx, campaignID, ids, v.Role(), v.UserID())
+	if err != nil {
+		return nil, fmt.Errorf("filter viewable %s lore pages: %w", kind, err)
+	}
+	if viewable == nil {
+		viewable = map[string]bool{}
+	}
+	return viewable, nil
 }
 
 // dropSecretEraEvents removes events dated inside an era still hidden from
@@ -855,6 +931,33 @@ func (s *calendarService) dropSecretEraEvents(ctx context.Context, cal *Calendar
 		}
 	}
 	return kept, nil
+}
+
+// errDateUnusable is the only thing a refused write says. It must not mention
+// eras or hiding: the refusal would otherwise confirm to a Scribe that a
+// hidden era covers the date.
+const errDateUnusable = "That date can't be used."
+
+// refuseSecretEraDate refuses a save dated inside an era still hidden from
+// players when the writer is subject to per-user rules (a Scribe). Such a
+// writer could never read the event back (dropSecretEraEvents), so accepting
+// it would both strand their own event and hint at the hidden era. Authors
+// (SkipsPerUserRules) are unaffected. The zero Viewer is subject to the rule,
+// so callers must pass the real writer.
+func (s *calendarService) refuseSecretEraDate(ctx context.Context, cal *Calendar, evt *Event, v permissions.Viewer) error {
+	if v.SkipsPerUserRules() {
+		return nil
+	}
+	eras, err := s.calRepo.GetEras(ctx, cal.ID)
+	if err != nil {
+		return fmt.Errorf("load eras: %w", err)
+	}
+	probe := *cal
+	probe.Eras = eras
+	if probe.InSecretEra(evt.Year, evt.Month, evt.Day) {
+		return apperror.NewValidation(errDateUnusable)
+	}
+	return nil
 }
 
 // hideFromPlayer is every "not yet knowable" filter a non-author's event
@@ -1025,6 +1128,18 @@ func (s *calendarService) UpdateCalendar(ctx context.Context, calendarID, campai
 			return err
 		}
 	}
+	if input.CurrentYear.Present() || input.CurrentMonth.Present() || input.CurrentDay.Present() ||
+		input.CurrentHour.Present() || input.CurrentMinute.Present() {
+		// The payload names no calendar and the Foundry module applies it to
+		// the campaign's primary calendar, so only that calendar's date moves
+		// may be announced.
+		if primary, err := s.primaryCalendarID(ctx, campaignID); err == nil && primary == calendarID {
+			s.publish(PubDateAdvanced, campaignID, calendarID, DatePayload{
+				Year: cal.CurrentYear, Month: cal.CurrentMonth, Day: cal.CurrentDay,
+				Hour: cal.CurrentHour, Minute: cal.CurrentMinute,
+			})
+		}
+	}
 	return nil
 }
 
@@ -1176,6 +1291,20 @@ func (s *calendarService) CreateCalendarFromImport(ctx context.Context, campaign
 		return nil, apperror.NewValidation("import result is required")
 	}
 
+	// Uploads and the wizard carry no page ids; a caller that does (AI
+	// Import's calendar block) has them checked against this campaign before
+	// anything is created.
+	for i := range ir.Moons {
+		if err := s.checkLoreEntity(ctx, campaignID, ir.Moons[i].LoreEntityID); err != nil {
+			return nil, err
+		}
+	}
+	for i := range ir.Eras {
+		if err := s.checkLoreEntity(ctx, campaignID, ir.Eras[i].LoreEntityID); err != nil {
+			return nil, err
+		}
+	}
+
 	name := ir.CalendarName
 	if name == "" {
 		name = "Imported Calendar"
@@ -1286,6 +1415,23 @@ func (s *calendarService) CreateCalendarFromImport(ctx context.Context, campaign
 		return nil, err
 	}
 	return cal, nil
+}
+
+// primaryCalendarID is the campaign's primary calendar (the default, else
+// the first), unfiltered: "" when the campaign has none.
+func (s *calendarService) primaryCalendarID(ctx context.Context, campaignID string) (string, error) {
+	cal, err := s.calRepo.GetDefaultByCampaignID(ctx, campaignID)
+	if err != nil {
+		return "", err
+	}
+	if cal != nil {
+		return cal.ID, nil
+	}
+	all, err := s.calRepo.ListByCampaignID(ctx, campaignID)
+	if err != nil || len(all) == 0 {
+		return "", err
+	}
+	return all[0].ID, nil
 }
 
 // GetPrimaryCalendarForViewer implements CalendarService (see the interface
@@ -1471,11 +1617,15 @@ func (s *calendarService) applyImportedEvent(ctx context.Context, calendarID str
 // such gate — see canChangeVisibility's doc comment on why that field is
 // scoped by the ordinary Scribe route gate instead.
 func (s *calendarService) CreateEvent(ctx context.Context, calendarID, campaignID string, input CreateEventInput) (*Event, error) {
-	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
+	cal, err := s.calendarInCampaign(ctx, calendarID, campaignID)
+	if err != nil {
 		return nil, err
 	}
 	evt, err := buildValidatedEvent(calendarID, input)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.refuseSecretEraDate(ctx, cal, evt, input.Author); err != nil {
 		return nil, err
 	}
 	if err := s.validateEventRule(ctx, calendarID, campaignID, "", evt, true, input.Author); err != nil {
@@ -1484,6 +1634,7 @@ func (s *calendarService) CreateEvent(ctx context.Context, calendarID, campaignI
 	if err := s.eventRepo.CreateEvent(ctx, evt); err != nil {
 		return nil, fmt.Errorf("create event: %w", err)
 	}
+	s.publish(PubEventCreated, campaignID, calendarID, evt)
 	return evt, nil
 }
 
@@ -1736,6 +1887,61 @@ func (s *calendarService) ListEventsForMonth(ctx context.Context, calendarID, ca
 	return events, nil
 }
 
+// maxEventIndex caps the calendar-wide event index so a very large calendar
+// cannot make a picker read heavy; the picker narrows with q instead.
+const maxEventIndex = 500
+
+// EventIndexEntry is one row of the event index: just enough to name and
+// place an event, never its description or links.
+type EventIndexEntry struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Year  int    `json:"year"`
+	Month int    `json:"month"`
+	Day   int    `json:"day"`
+	// Anchorable is false for an event that itself repeats relative to
+	// another event: the rule check refuses it as an anchor, so a picker
+	// must not offer it.
+	Anchorable bool `json:"anchorable"`
+}
+
+// ListEventIndexForViewer: see the interface doc comment. The visibility
+// steps mirror ListEraEventsForViewer so the index can never name an event a
+// month read would withhold.
+func (s *calendarService) ListEventIndexForViewer(ctx context.Context, calendarID, campaignID, q string, v permissions.Viewer) ([]EventIndexEntry, bool, error) {
+	cal, err := s.calendarInCampaignForViewer(ctx, calendarID, campaignID, v)
+	if err != nil {
+		return nil, false, err
+	}
+	events, err := s.eventRepo.ListAllEvents(ctx, calendarID)
+	if err != nil {
+		return nil, false, fmt.Errorf("list event index: %w", err)
+	}
+	events = filterEventsByUser(events, v)
+	if !v.SkipsPerUserRules() {
+		if events, err = s.hideFromPlayer(ctx, cal, campaignID, events); err != nil {
+			return nil, false, err
+		}
+	}
+	needle := strings.ToLower(strings.TrimSpace(q))
+	entries := make([]EventIndexEntry, 0, len(events))
+	truncated := false
+	for _, e := range events {
+		if needle != "" && !strings.Contains(strings.ToLower(e.Name), needle) {
+			continue
+		}
+		if len(entries) == maxEventIndex {
+			truncated = true
+			break
+		}
+		entries = append(entries, EventIndexEntry{
+			ID: e.ID, Name: e.Name, Year: e.Year, Month: e.Month, Day: e.Day,
+			Anchorable: e.RecurrenceType == nil || *e.RecurrenceType != RecurrenceByRule || e.RecurrenceRule == nil || !e.RecurrenceRule.hasAfterEvent(),
+		})
+	}
+	return entries, truncated, nil
+}
+
 // maxEraEvents caps one era's event list: the era panel shows a handful of
 // key events and offers the rest, so a long era cannot make the read heavy.
 const maxEraEvents = 500
@@ -1949,7 +2155,8 @@ func (s *calendarService) eventInCalendarForViewer(ctx context.Context, eventID,
 // (v.SkipsPerUserRules()); anyone else re-sending the stored value is a
 // no-op, and any other attempted value is a 403 — never a silent rewrite.
 func (s *calendarService) UpdateEvent(ctx context.Context, eventID, calendarID, campaignID string, input UpdateEventInput, v permissions.Viewer) error {
-	if _, err := s.calendarInCampaignForViewer(ctx, calendarID, campaignID, v); err != nil {
+	cal, err := s.calendarInCampaignForViewer(ctx, calendarID, campaignID, v)
+	if err != nil {
 		return err
 	}
 	evt, err := s.eventInCalendarForViewer(ctx, eventID, calendarID, v)
@@ -2054,6 +2261,9 @@ func (s *calendarService) UpdateEvent(ctx context.Context, eventID, calendarID, 
 	evt.RecurrenceEndDay = input.RecurrenceEndDay.Ptr(evt.RecurrenceEndDay)
 	evt.RecurrenceMaxOccurrences = input.RecurrenceMaxOccurrences.Ptr(evt.RecurrenceMaxOccurrences)
 	evt.RecurrenceRule = rule
+	if err := s.refuseSecretEraDate(ctx, cal, evt, v); err != nil {
+		return err
+	}
 	if err := s.validateEventRule(ctx, calendarID, campaignID, evt.ID, evt, recheckRule, v); err != nil {
 		return err
 	}
@@ -2070,6 +2280,7 @@ func (s *calendarService) UpdateEvent(ctx context.Context, eventID, calendarID, 
 	if err := s.eventRepo.UpdateEvent(ctx, evt); err != nil {
 		return fmt.Errorf("update event: %w", err)
 	}
+	s.publish(PubEventUpdated, campaignID, calendarID, evt)
 	return nil
 }
 
@@ -2086,6 +2297,7 @@ func (s *calendarService) DeleteEvent(ctx context.Context, eventID, calendarID, 
 	if err := s.eventRepo.DeleteEvent(ctx, eventID); err != nil {
 		return fmt.Errorf("delete event: %w", err)
 	}
+	s.publish(PubEventDeleted, campaignID, calendarID, map[string]string{"id": eventID})
 	return nil
 }
 
@@ -2114,6 +2326,10 @@ func (s *calendarService) SetEventVisibility(ctx context.Context, eventID, calen
 	if err := s.eventRepo.UpdateEventVisibility(ctx, eventID, input.Visibility, visRules); err != nil {
 		return fmt.Errorf("set event visibility: %w", err)
 	}
+	updated := *evt
+	updated.Visibility = input.Visibility
+	updated.VisibilityRules = visRules
+	s.publish(PubEventUpdated, campaignID, calendarID, &updated)
 	return nil
 }
 
@@ -2276,6 +2492,7 @@ func (s *calendarService) CreateEra(ctx context.Context, calendarID, campaignID 
 	if err != nil {
 		return nil, fmt.Errorf("create era: %w", err)
 	}
+	s.publish(PubStructureUpdated, campaignID, calendarID, nil)
 	return era, nil
 }
 
@@ -2357,6 +2574,7 @@ func (s *calendarService) UpdateEra(ctx context.Context, eraID int, calendarID, 
 	if err := s.calRepo.UpdateEra(ctx, calendarID, eraID, merged); err != nil {
 		return err
 	}
+	s.publish(PubStructureUpdated, campaignID, calendarID, nil)
 	return nil
 }
 
@@ -2367,6 +2585,7 @@ func (s *calendarService) DeleteEra(ctx context.Context, eraID int, calendarID, 
 	if err := s.calRepo.DeleteEra(ctx, calendarID, eraID); err != nil {
 		return err
 	}
+	s.publish(PubStructureUpdated, campaignID, calendarID, nil)
 	return nil
 }
 
@@ -2441,7 +2660,7 @@ func (s *calendarService) SaveEraLook(ctx context.Context, calendarID, campaignI
 		}
 		writes = append(writes, w)
 	}
-	return s.calRepo.SaveEraLook(ctx, calendarID, look, writes)
+	return s.publishAfter(s.calRepo.SaveEraLook(ctx, calendarID, look, writes), PubStructureUpdated, campaignID, calendarID)
 }
 
 // validateEraLook checks the calendar-wide era look: a known feel and
@@ -2509,6 +2728,7 @@ func (s *calendarService) SetMoonHidden(ctx context.Context, moonID int, calenda
 	if err := s.calRepo.SetMoonHidden(ctx, calendarID, moonID, hidden); err != nil {
 		return err
 	}
+	s.publish(PubStructureUpdated, campaignID, calendarID, nil)
 	return nil
 }
 
@@ -2595,7 +2815,7 @@ func (s *calendarService) PreviewAnchorMove(ctx context.Context, calendarID, cam
 
 	fromYear, fromMonth, fromDay := cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay
 	toYear, toMonth, toDay := anchorPreviewWindowEnd(cal)
-	sessions, err := s.gameNights.SessionsInWorldDateRange(ctx, campaignID,
+	sessions, err := s.gameNights.SessionsInWorldDateRange(ctx, campaignID, calendarID,
 		fromYear, fromMonth, fromDay, toYear, toMonth, toDay, maxAnchorMovePreviewAffected)
 	if err != nil {
 		return nil, fmt.Errorf("list sessions affected by anchor move: %w", err)
@@ -2633,7 +2853,7 @@ func (s *calendarService) SetMonths(ctx context.Context, calendarID, campaignID 
 	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
 		return err
 	}
-	return s.calRepo.SetMonths(ctx, calendarID, months)
+	return s.publishAfter(s.calRepo.SetMonths(ctx, calendarID, months), PubStructureUpdated, campaignID, calendarID)
 }
 
 // SetWeekdays replaces calendarID's weekday list.
@@ -2649,7 +2869,7 @@ func (s *calendarService) SetWeekdays(ctx context.Context, calendarID, campaignI
 	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
 		return err
 	}
-	return s.calRepo.SetWeekdays(ctx, calendarID, weekdays)
+	return s.publishAfter(s.calRepo.SetWeekdays(ctx, calendarID, weekdays), PubStructureUpdated, campaignID, calendarID)
 }
 
 // SetMoons replaces (upserts by ID, see MoonInput's doc comment)
@@ -2663,11 +2883,14 @@ func (s *calendarService) SetMoons(ctx context.Context, calendarID, campaignID s
 			return err
 		}
 		moons[i].Color = normalizeColor(moons[i].Color)
+		if err := s.checkLoreEntity(ctx, campaignID, moons[i].LoreEntityID); err != nil {
+			return err
+		}
 	}
 	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
 		return err
 	}
-	return s.calRepo.SetMoons(ctx, calendarID, moons)
+	return s.publishAfter(s.calRepo.SetMoons(ctx, calendarID, moons), PubStructureUpdated, campaignID, calendarID)
 }
 
 // SetSeasons replaces calendarID's season list.
@@ -2691,7 +2914,7 @@ func (s *calendarService) SetSeasons(ctx context.Context, calendarID, campaignID
 	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
 		return err
 	}
-	return s.calRepo.SetSeasons(ctx, calendarID, seasons)
+	return s.publishAfter(s.calRepo.SetSeasons(ctx, calendarID, seasons), PubStructureUpdated, campaignID, calendarID)
 }
 
 // SetCycles replaces calendarID's cycle list, each with its own entries.
@@ -2716,7 +2939,7 @@ func (s *calendarService) SetCycles(ctx context.Context, calendarID, campaignID 
 	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
 		return err
 	}
-	return s.calRepo.SetCycles(ctx, calendarID, cycles)
+	return s.publishAfter(s.publishAfter(s.calRepo.SetCycles(ctx, calendarID, cycles), PubCycleChanged, campaignID, calendarID), PubStructureUpdated, campaignID, calendarID)
 }
 
 // SetFestivals replaces calendarID's festival list.
@@ -2737,7 +2960,7 @@ func (s *calendarService) SetFestivals(ctx context.Context, calendarID, campaign
 	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
 		return err
 	}
-	return s.calRepo.SetFestivals(ctx, calendarID, festivals)
+	return s.publishAfter(s.publishAfter(s.calRepo.SetFestivals(ctx, calendarID, festivals), PubFestivalChanged, campaignID, calendarID), PubStructureUpdated, campaignID, calendarID)
 }
 
 // SetWeather replaces calendarID's current weather reading. Reading it goes
@@ -2748,7 +2971,7 @@ func (s *calendarService) SetWeather(ctx context.Context, calendarID, campaignID
 	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
 		return err
 	}
-	return s.weatherRepo.Set(ctx, calendarID, input)
+	return s.publishAfter(s.weatherRepo.Set(ctx, calendarID, input), PubWeatherChanged, campaignID, calendarID)
 }
 
 // --- Day weather ---
@@ -2999,7 +3222,7 @@ func (s *calendarService) SetDayWeather(ctx context.Context, calendarID, campaig
 			return err
 		}
 	}
-	return s.weatherRepo.SetDays(ctx, calendarID, days)
+	return s.publishAfter(s.weatherRepo.SetDays(ctx, calendarID, days), PubWeatherChanged, campaignID, calendarID)
 }
 
 // ClearDayWeather removes the readings on the given days.
@@ -3019,7 +3242,7 @@ func (s *calendarService) ClearDayWeather(ctx context.Context, calendarID, campa
 			return err
 		}
 	}
-	return s.weatherRepo.ClearDays(ctx, calendarID, dates)
+	return s.publishAfter(s.weatherRepo.ClearDays(ctx, calendarID, dates), PubWeatherChanged, campaignID, calendarID)
 }
 
 // maxDayWeatherYear bounds a day reading's year well inside the INT column,

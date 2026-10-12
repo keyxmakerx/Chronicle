@@ -21,7 +21,14 @@ import (
 // Handler processes HTTP requests for the maps plugin.
 type Handler struct {
 	svc MapService
+	// members names the players a pin's rules allow, for DM viewers. Optional:
+	// unwired, the badge falls back to "Some players".
+	members campaigns.MemberLister
 }
+
+// SetMemberLister wires the campaign member list (post-construction, as the
+// other plugins that show member names do).
+func (h *Handler) SetMemberLister(ml campaigns.MemberLister) { h.members = ml }
 
 // NewHandler creates a new maps Handler.
 func NewHandler(svc MapService) *Handler {
@@ -133,12 +140,7 @@ func (h *Handler) mapViewData(c echo.Context, cc *campaigns.CampaignContext) (Ma
 	}
 
 	role := cc.VisibilityRole()
-	userID := ""
-	if session := c.Get("session"); session != nil {
-		if s, ok := session.(interface{ GetUserID() string }); ok {
-			userID = s.GetUserID()
-		}
-	}
+	userID := getUserID(c)
 	markers, err := h.svc.ListMarkers(c.Request().Context(), cc.Campaign.ID, mapID, role, userID)
 	if err != nil {
 		return MapViewData{}, err
@@ -155,7 +157,14 @@ func (h *Handler) mapViewData(c echo.Context, cc *campaigns.CampaignContext) (Ma
 		return MapViewData{}, err
 	}
 
-	return MapViewData{
+	// The trail is display only: ResolveTrail keeps ids that name maps of this
+	// campaign and nothing in it grants access to anything.
+	trail, err := h.svc.ResolveTrail(c.Request().Context(), cc.Campaign.ID, mapID, ParseTrailParam(c.QueryParam("from")))
+	if err != nil {
+		return MapViewData{}, err
+	}
+
+	data := MapViewData{
 		CampaignID: cc.Campaign.ID,
 		Map:        m,
 		Markers:    markers,
@@ -164,7 +173,66 @@ func (h *Handler) mapViewData(c echo.Context, cc *campaigns.CampaignContext) (Ma
 		IsDM:       cc.CanAuthorDmOnly(),
 		UserID:     userID,
 		Display:    display,
-	}, nil
+		Trail:      trail,
+	}
+	// Only someone who can edit pins gets the "Opens map" chooser's list.
+	if data.IsScribe {
+		if data.LinkMaps, err = h.linkMapOptions(c, cc, mapID); err != nil {
+			return MapViewData{}, err
+		}
+	}
+	// Names for "Mira and Kael can open this": only for those shown who can
+	// follow a link. A failed lookup only loses the names.
+	if cc.CanAuthorDmOnly() && h.members != nil {
+		if ms, err := h.members.ListMembers(c.Request().Context(), cc.Campaign.ID); err == nil {
+			data.MemberNames = make(map[string]string, len(ms))
+			for _, mb := range ms {
+				data.MemberNames[mb.UserID] = mb.DisplayName
+			}
+		}
+	}
+	return data, nil
+}
+
+// linkMapOptions lists the maps a pin on mapID may open, each with the
+// viewer's version of its picture as a thumbnail.
+func (h *Handler) linkMapOptions(c echo.Context, cc *campaigns.CampaignContext, mapID string) ([]LinkMapOption, error) {
+	ctx := c.Request().Context()
+	ms, err := h.svc.ListMaps(ctx, cc.Campaign.ID)
+	if err != nil {
+		return nil, err
+	}
+	ms, err = h.svc.ForViewerList(ctx, ms, cc.VisibilityRole())
+	if err != nil {
+		return nil, err
+	}
+	// The thumbnails go into a data attribute, built before the page renders,
+	// so they are signed here the way the page's own pictures are.
+	sctx := middleware.MediaContext(c)
+	out := make([]LinkMapOption, 0, len(ms))
+	for i := range ms {
+		if ms[i].ID == mapID {
+			continue
+		}
+		out = append(out, LinkMapOption{ID: ms[i].ID, Name: ms[i].Name, ThumbURL: mapThumbSrc(sctx, &ms[i])})
+	}
+	return out, nil
+}
+
+// LinkTreeAPI returns the campaign's linked maps as this viewer can follow
+// them. The service builds it from the viewer's own marker lists, so a link
+// on a pin hidden from them is never in it.
+// GET /campaigns/:id/maps/link-tree
+func (h *Handler) LinkTreeAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+	tree, err := h.svc.LinkTree(ctx, cc.Campaign.ID, cc.VisibilityRole(), getUserID(c))
+	if err != nil {
+		return err
+	}
+	// Signed for this viewer, as a rendered page would sign them.
+	fillLinkThumbs(middleware.MediaContext(c), tree.Roots)
+	return c.JSON(http.StatusOK, tree)
 }
 
 // CreateMapAPI creates a new map.
@@ -343,6 +411,7 @@ func (h *Handler) CreateMarkerAPI(c echo.Context) error {
 		Color           string  `json:"color"`
 		PinCategory     *string `json:"pin_category"`
 		EntityID        *string `json:"entity_id"`
+		LinkedMapID     *string `json:"linked_map_id"`
 		Visibility      string  `json:"visibility"`
 		VisibilityRules *string `json:"visibility_rules"`
 	}
@@ -351,12 +420,7 @@ func (h *Handler) CreateMarkerAPI(c echo.Context) error {
 	}
 
 	// Get user ID from session context.
-	userID := ""
-	if session := c.Get("session"); session != nil {
-		if s, ok := session.(interface{ GetUserID() string }); ok {
-			userID = s.GetUserID()
-		}
-	}
+	userID := getUserID(c)
 
 	// Only a caller who can author dm_only content (Owner or a co-DM grant)
 	// may create a dm_only marker; anyone else defaults to 'everyone'.
@@ -380,6 +444,7 @@ func (h *Handler) CreateMarkerAPI(c echo.Context) error {
 		Color:           req.Color,
 		PinCategory:     req.PinCategory,
 		EntityID:        req.EntityID,
+		LinkedMapID:     req.LinkedMapID,
 		Visibility:      visibility,
 		VisibilityRules: visRules,
 		CreatedBy:       userID,
@@ -420,6 +485,7 @@ func (h *Handler) UpdateMarkerAPI(c echo.Context) error {
 		Color             patch.Field[string]  `json:"color"`
 		PinCategory       patch.Field[string]  `json:"pin_category"`
 		EntityID          patch.Field[string]  `json:"entity_id"`
+		LinkedMapID       patch.Field[string]  `json:"linked_map_id"`
 		Visibility        patch.Field[string]  `json:"visibility"`
 		VisibilityRules   patch.Field[string]  `json:"visibility_rules"`
 		ExpectedUpdatedAt *time.Time           `json:"expected_updated_at"`
@@ -453,6 +519,7 @@ func (h *Handler) UpdateMarkerAPI(c echo.Context) error {
 		Color:             req.Color,
 		PinCategory:       req.PinCategory,
 		EntityID:          req.EntityID,
+		LinkedMapID:       req.LinkedMapID,
 		Visibility:        visibility,
 		VisibilityRules:   visRules,
 		ExpectedUpdatedAt: req.ExpectedUpdatedAt,
@@ -495,12 +562,7 @@ func (h *Handler) GetMapMetaAPI(c echo.Context) error {
 	}
 
 	role := cc.VisibilityRole()
-	userID := ""
-	if session := c.Get("session"); session != nil {
-		if s, ok := session.(interface{ GetUserID() string }); ok {
-			userID = s.GetUserID()
-		}
-	}
+	userID := getUserID(c)
 	markers, err := h.svc.ListMarkers(ctx, cc.Campaign.ID, mapID, role, userID)
 	if err != nil {
 		return err
@@ -559,12 +621,7 @@ func (h *Handler) ListMarkersAPI(c echo.Context) error {
 	}
 
 	role := cc.VisibilityRole()
-	userID := ""
-	if session := c.Get("session"); session != nil {
-		if s, ok := session.(interface{ GetUserID() string }); ok {
-			userID = s.GetUserID()
-		}
-	}
+	userID := getUserID(c)
 
 	markers, err := h.svc.ListMarkers(ctx, cc.Campaign.ID, mapID, role, userID)
 	if err != nil {
@@ -611,4 +668,35 @@ func (h *Handler) SetCampaignFrameAPI(c echo.Context) error {
 		return middleware.Render(c, http.StatusOK, mapFrameSection(cc.Campaign.ID, req.Frame, true))
 	}
 	return c.NoContent(http.StatusNoContent)
+}
+
+// PutMeasureScaleAPI sets or removes the map's scale for the Measure tool.
+// The body is {"scale": {a, b, length, unit}} to set it or {"scale": null} to
+// remove it; a body without "scale" changes nothing and is refused, so a
+// stray request can never clear a scale. Who may write is decided in the
+// service (owner or DM grant).
+// PUT /campaigns/:id/maps/:mid/measure
+func (h *Handler) PutMeasureScaleAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	var req struct {
+		Scale patch.Field[json.RawMessage] `json:"scale"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request body")
+	}
+	if !req.Scale.Present() {
+		return apperror.NewBadRequest("scale is required (null removes it)")
+	}
+	var raw json.RawMessage
+	if !req.Scale.IsNull() {
+		raw, _ = req.Scale.Get()
+	}
+	ms, err := h.svc.SetMeasureScale(c.Request().Context(), cc.Campaign.ID, c.Param("mid"), cc.CanAuthorDmOnly(), raw)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]any{"scale": ms})
 }

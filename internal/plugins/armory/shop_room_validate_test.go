@@ -65,6 +65,10 @@ func TestNormalizeShopRoomLayout_Rejects(t *testing.T) {
 	}
 	look := func(icon, color string) map[string]any { return map[string]any{"icon": icon, "color": color} }
 
+	effect := func(k string, v any) func(m map[string]any) {
+		return func(m map[string]any) { m["effects"] = map[string]any{k: v} }
+	}
+
 	cases := []struct {
 		name string
 		body []byte
@@ -92,6 +96,17 @@ func TestNormalizeShopRoomLayout_Rejects(t *testing.T) {
 		{"bad decorations", mutate(func(m map[string]any) { m["decorations"] = "many" })},
 		{"bad palette", mutate(func(m map[string]any) { m["palette"] = "pink" })},
 		{"bad look", mutate(func(m map[string]any) { m["look"] = "neon" })},
+		{"bad mood", mutate(func(m map[string]any) { m["mood"] = "grimdark" })},
+		{"effects shadows negative", mutate(effect("shadows", -1))},
+		{"effects shadows high", mutate(effect("shadows", 251))},
+		{"effects warmth high", mutate(effect("warmth", 251))},
+		{"effects window high", mutate(effect("window", 251))},
+		{"effects haze negative", mutate(effect("haze", -1))},
+		{"effects vignette high", mutate(effect("vignette", 251))},
+		{"effects fractional", mutate(effect("haze", 1.5))},
+		{"effects dust type", mutate(effect("dust", "yes"))},
+		{"effects weather", mutate(effect("weather", "hail"))},
+		{"effects time", mutate(effect("time", "noon"))},
 		{"seed zero", mutate(func(m map[string]any) { m["seeds"] = map[string]any{"room": 0, "goods": 2, "deco": 3} })},
 		{"seed too big", mutate(func(m map[string]any) { m["seeds"] = map[string]any{"room": 1, "goods": 1000000001, "deco": 3} })},
 		{"seed missing", mutate(func(m map[string]any) { m["seeds"] = map[string]any{"room": 1, "goods": 2} })},
@@ -178,6 +193,38 @@ func TestNormalizeShopRoomLayout_Accepts(t *testing.T) {
 		{"no look reads as the lit room", mutate(func(m map[string]any) { delete(m, "look") }), func(t *testing.T, l ShopRoomLayout) {
 			if l.Look != "" {
 				t.Errorf("look = %q, want empty", l.Look)
+			}
+		}},
+		{"mood and effects kept", mutate(func(m map[string]any) {
+			m["mood"] = "eldritch"
+			m["effects"] = map[string]any{"shadows": 0, "warmth": 250, "window": 100, "haze": 1, "vignette": 249,
+				"dust": true, "flicker": false, "embers": true, "smoke": false, "weather": "rain", "time": "dusk"}
+		}), func(t *testing.T, l ShopRoomLayout) {
+			want := ShopRoomEffects{Warmth: 250, Window: 100, Haze: 1, Vignette: 249, Dust: true, Embers: true, Weather: "rain", Time: "dusk"}
+			if l.Mood != "eldritch" || l.Effects == nil || *l.Effects != want {
+				t.Errorf("mood/effects: %q %+v", l.Mood, l.Effects)
+			}
+		}},
+		{"older layout has no mood or effects", mutate(func(m map[string]any) { delete(m, "mood"); delete(m, "effects") }), func(t *testing.T, l ShopRoomLayout) {
+			if l.Mood != "" || l.Effects != nil {
+				t.Errorf("mood/effects: %q %+v", l.Mood, l.Effects)
+			}
+		}},
+		{"effects left out keep the default look", mutate(func(m map[string]any) { m["effects"] = map[string]any{"smoke": true} }), func(t *testing.T, l ShopRoomLayout) {
+			want := ShopRoomEffects{Shadows: 100, Warmth: 100, Window: 100, Haze: 100, Vignette: 100, Dust: true, Flicker: true, Embers: true, Smoke: true}
+			if l.Effects == nil || *l.Effects != want {
+				t.Errorf("effects = %+v, want %+v", l.Effects, want)
+			}
+		}},
+		{"mood furniture kinds accepted", mutate(func(m map[string]any) {
+			var ps []any
+			for i, k := range []string{"tentacle", "monolith", "circle", "cane", "gumdrop", "lolly", "ghost", "coffin", "gift", "pine", "coral", "kelp", "mushroom", "bloom", "urn", "palm", "pillar", "brazier"} {
+				ps = append(ps, map[string]any{"id": i + 1, "kind": k, "wall": "", "x": 1, "y": 1, "off": 0, "len": 1, "w": 1, "d": 1, "pinned": false})
+			}
+			m["pieces"] = ps
+		}), func(t *testing.T, l ShopRoomLayout) {
+			if len(l.Pieces) != 18 {
+				t.Errorf("pieces: %d", len(l.Pieces))
 			}
 		}},
 		{"boundaries", mutate(boundary), func(t *testing.T, l ShopRoomLayout) {

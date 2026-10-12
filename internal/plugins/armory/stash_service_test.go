@@ -997,8 +997,12 @@ func TestMove_DmOnlyRelation(t *testing.T) {
 	if err == nil || err2 == nil || err.Error() != err2.Error() {
 		t.Fatalf("messages differ: %v / %v", err, err2)
 	}
-	// The GM can.
-	if _, err := f.svc.Move(context.Background(), "camp", Actor{"gm", rScribe}, in); err != nil {
+	// A Scribe cannot see DM-only lines either, so cannot move one.
+	if _, err := f.svc.Move(context.Background(), "camp", Actor{"scribe", rScribe}, in); code(err) != http.StatusBadRequest || f.carried("c1", "i1") != 3 {
+		t.Fatalf("scribe took from a DM-only line: %v", err)
+	}
+	// The Owner (or a co-DM, whose role is promoted) can.
+	if _, err := f.svc.Move(context.Background(), "camp", Actor{"gm", rOwner}, in); err != nil {
 		t.Fatal(err)
 	}
 	// A player's credit never merges into a DM-only line.
@@ -1072,5 +1076,34 @@ func TestMove_InsertFailureMovesNothing(t *testing.T) {
 	_, err := f.svc.Move(context.Background(), "camp", Actor{"u1", rPlayer}, MoveInput{Kind: MoveKindItem, ItemEntityID: "i1", Quantity: 1, From: charEP("c1"), To: StashEndpoint(sid)})
 	if err == nil || f.carried("c1", "i1") != 3 || f.repo.items[sid]["i1"] != 0 {
 		t.Fatalf("moved without a record: %v", err)
+	}
+}
+
+// DM-only inventory lines follow Chronicle's DM-only rule: the Owner (or a
+// co-DM, whose role is promoted) sees them, a Scribe does not.
+func TestCarried_DmOnlyLinesFollowTheDmOnlyRule(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		role int
+		want bool
+	}{{"player", rPlayer, false}, {"scribe", rScribe, false}, {"owner or co-DM", rOwner, true}} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFx()
+			f.rels.rels["c1"][0].DmOnly = true
+			dmItem := f.rels.rels["c1"][0].ItemEntityID
+			held, err := f.svc.(*stashService).carried(context.Background(), "camp", Actor{"u", tc.role}, "c1")
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := false
+			for _, h := range held {
+				if h.ItemID == dmItem {
+					got = true
+				}
+			}
+			if got != tc.want {
+				t.Errorf("sees the DM-only line = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }

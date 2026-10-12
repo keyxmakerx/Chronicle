@@ -26,8 +26,11 @@ templ Base(title string) {
 		     "device" follows the OS. Either reduce switch (the campaign's or the person's own) sets nav-rm;
 		     a device asking for reduced motion lowers data-motion to off. -->
 		<script>
-			(function(){try{var h=document.documentElement;var v=h.getAttribute('data-view-theme');var t=(v==='light'||v==='dark')?v:(v==='device'?null:localStorage.getItem('chronicle-theme'));var d=t==='dark'||(t!=='light'&&window.matchMedia('(prefers-color-scheme:dark)').matches);if(d){h.classList.add('dark');h.style.backgroundColor='#111827'}else{h.style.backgroundColor='#f9fafb'}if(window.matchMedia('(prefers-reduced-motion:reduce)').matches)h.setAttribute('data-motion','off');if(h.hasAttribute('data-cz-reduce')||h.getAttribute('data-view-motion')==='calm')h.classList.add('nav-rm')}catch(e){}})();
+			(function(){try{var h=document.documentElement;var v=h.getAttribute('data-view-theme');var t=(v==='light'||v==='dark')?v:(v==='device'?null:localStorage.getItem('chronicle-theme'));var a=h.hasAttribute('data-site-admin');var d=a||t==='dark'||(t!=='light'&&window.matchMedia('(prefers-color-scheme:dark)').matches);if(d){h.classList.add('dark');h.style.backgroundColor=a?'#0b0e14':'#111827'}else{h.style.backgroundColor='#f9fafb'}if(window.matchMedia('(prefers-reduced-motion:reduce)').matches)h.setAttribute('data-motion','off');if(h.hasAttribute('data-cz-reduce')||h.getAttribute('data-view-motion')==='calm')h.classList.add('nav-rm')}catch(e){}})();
 		</script>
+
+		<!-- Site admin's way in and out: the new page asks for its transition before the first paint. -->
+		<script src={ AssetURL("/static/js/site_admin_reveal.js") }></script>
 
 		<!-- Hide Alpine.js elements until initialized; hide body until all CSS loads (FOUC prevention). -->
 		<style>[x-cloak]{display:none!important}body{opacity:0}</style>
@@ -36,6 +39,9 @@ templ Base(title string) {
 		<link rel="stylesheet" href={ AssetURL("/static/css/app.css") }/>
 		<!-- Shared paper look and the hover card (hovercard.js) -->
 		<link rel="stylesheet" href={ AssetURL("/static/css/paper.css") }/>
+		<!-- A game system's character sheet: its twelve styles and their motion. Scoped to [data-sheet], inert elsewhere. -->
+		<link rel="stylesheet" href={ AssetURL("/static/css/sheet_styles.css") }/>
+		<link rel="stylesheet" href={ AssetURL("/static/css/sheet_motion.css") }/>
 
 		<!-- Fonts -->
 		<link rel="preconnect" href="https://fonts.googleapis.com"/>
@@ -81,6 +87,10 @@ templ Base(title string) {
 		     data-widget elements. Must load before Alpine so Chronicle utilities
 		     are available when Alpine processes x-data expressions. -->
 		<script src={ AssetURL("/static/js/boot.js") } defer></script>
+		<!-- On-sight widget scripts: boot.js fetches these when a widget's
+		     mount first appears (ADR-063). Inert JSON outside #main-content,
+		     so boosted navigation keeps it. -->
+		@templ.JSONScript("chronicle-widget-scripts", GetWidgetScripts(ctx))
 
 		<!-- Dynamic-surface motion engine: the frame's transition-preset library
 		     (Chronicle.surface.play / .transitions). Loads after boot.js so the
@@ -113,6 +123,8 @@ templ Base(title string) {
 		<script src={ AssetURL("/static/js/sidebar_nav.js") } defer></script>
 		<!-- Unified sidebar edit mode: pencil-triggered inline editing -->
 		<script src={ AssetURL("/static/js/sidebar_editor.js") } defer></script>
+		<!-- A sidebar row's menu: right-click, long press, dots, Shift+F10 -->
+		<script src={ AssetURL("/static/js/sidebar_row_menu.js") } defer></script>
 		<!-- Hidden sidebar: peek open from the window's left edge -->
 		<script src={ AssetURL("/static/js/sidebar_peek.js") } defer></script>
 
@@ -147,6 +159,9 @@ templ Base(title string) {
 		     generator engine only when someone first rolls. -->
 		<script src={ AssetURL("/static/js/widgets/roll_tables.js") } data-engine-src={ AssetURL("/static/js/widgets/chronicle_gen.js") } data-library-src={ AssetURL("/static/roll-tables/library.json") } defer></script>
 		<script src={ AssetURL("/static/js/widgets/editor_rolltable.js") } defer></script>
+		<!-- Diagrams (Mermaid text drawn client-side). The vendored library is requested
+		     only when a diagram is first drawn. -->
+		<script src={ AssetURL("/static/js/widgets/editor_diagram.js") } data-mermaid-src={ AssetURL("/static/vendor/mermaid.min.js") } defer></script>
 		<script src={ AssetURL("/static/js/widgets/editor.js") } defer></script>
 
 		<!-- Image upload widget -->
@@ -158,21 +173,15 @@ templ Base(title string) {
 		<!-- Entity type config widget (unified sidebar + layout + color) -->
 		<script src={ AssetURL("/static/js/widgets/entity_type_config.js") } defer></script>
 
-		<!-- Template editor widget (drag-and-drop page builder) -->
-		<script src={ AssetURL("/static/js/widgets/template_editor.js") } defer></script>
-
 		<!-- Tag picker widget (entity tag management) -->
 		<script src={ AssetURL("/static/js/widgets/tag_picker.js") } defer></script>
 
 		<!-- The one hover card, then the linked-page previews that use it -->
+		<script src={ AssetURL("/static/js/peek_address.js") } defer></script>
 		<script src={ AssetURL("/static/js/hovercard.js") } defer></script>
 		<script src={ AssetURL("/static/js/widgets/entity_tooltip.js") } defer></script>
-		<!-- Bulk entity selection and actions -->
-		<script src={ AssetURL("/static/js/widgets/bulk_actions.js") } defer></script>
-
-		<!-- AI-Export modal copy-to-clipboard (C-AI-EXPORT-V1 PR-B) -->
-		<script src={ AssetURL("/static/js/widgets/ai_export.js") } defer></script>
-
+		<!-- Page peek: Shift-click or the peek icon on a page link opens it in a side panel -->
+		<script src={ AssetURL("/static/js/peek_panel.js") } defer></script>
 		<!-- AI-Workspace Import — drag/drop multi-file markdown importer (V1-D) -->
 		<script src={ AssetURL("/static/js/widgets/markdown_importer.js") } defer></script>
 
@@ -187,10 +196,6 @@ templ Base(title string) {
 		<script src={ AssetURL("/static/js/widgets/shop_room_paper.js") } defer></script>
 		<script src={ AssetURL("/static/js/widgets/shop_room.js") } defer></script>
 
-		<!-- Quest board and Notice boards widgets (cork boards on quest and place pages). -->
-		<script src={ AssetURL("/static/js/widgets/quest_board_kit.js") } defer></script>
-		<script src={ AssetURL("/static/js/widgets/quest_board.js") } defer></script>
-		<script src={ AssetURL("/static/js/widgets/notice_boards.js") } defer></script>
 
 		<!-- Character inventory widget ("Has Item" relations with qty/equipped/attuned).
 		     Sibling of shop_inventory above; its mount is the `inventory` entity
@@ -207,6 +212,9 @@ templ Base(title string) {
 		<!-- Edit name fold on entity pages (Chronicle.PageHeader). -->
 		<script src={ AssetURL("/static/js/widgets/page_name_fold.js") } defer></script>
 
+		<!-- The "Also listed under" line on entity pages (Chronicle.PagePlaces). -->
+		<script src={ AssetURL("/static/js/widgets/page_places.js") } defer></script>
+
 		<!-- Header of a game-system-rendered page: more menu, Delete confirm, Claim. -->
 		<script src={ AssetURL("/static/js/widgets/page_header.js") } defer></script>
 
@@ -220,16 +228,6 @@ templ Base(title string) {
 		     every entity page. -->
 		<script src={ AssetURL("/static/js/widgets/aliases.js") } defer></script>
 
-		<!-- Impact tree widget ("Impact Overview" diagram on the custom-system
-		     upload preview). Mount is internal/systems/preview.templ, which is
-		     an HTMX fragment — so the tag belongs here and not in that templ:
-		     boot.js sets htmx.config.allowScriptTags = false, and a script in a
-		     swapped fragment is stripped (see tools/check-page-scripts.sh). -->
-		<script src={ AssetURL("/static/js/widgets/impact_tree.js") } defer></script>
-
-		<!-- Entity type editor widget (inline edit for entity type management) -->
-		<script src={ AssetURL("/static/js/widgets/entity_type_editor.js") } defer></script>
-
 		<!-- Choice picker: Chronicle.pickChoice, shared by the attributes widget
 		     and system widgets (loads first so both can call it) -->
 		<script src={ AssetURL("/static/js/widgets/choice_picker.js") } defer></script>
@@ -242,24 +240,20 @@ templ Base(title string) {
 
 		<!-- Notification bell (C-SCHED-P2): topbar dropdown; badge polled via HTMX. -->
 		<script src={ AssetURL("/static/js/widgets/notification_bell.js") } defer></script>
-		<script src={ AssetURL("/static/js/widgets/dm_screen.js") } defer></script>
 
 		<!-- Player call-to-action (C-RSVP-P10): the banner above the page for the
 		     one thing a player must ACT on. Server-rendered and polled; this
 		     widget owns only the browser timezone and the dismissal. -->
 		<script src={ AssetURL("/static/js/widgets/callout.js") } defer></script>
-
-		<!-- Journal: the list's filter/group/sort rules, then the workspace widget -->
-		<script src={ AssetURL("/static/js/widgets/journal_list.js") } defer></script>
-		<script src={ AssetURL("/static/js/widgets/journal.js") } defer></script>
-
-		<!-- Entity manager widget (sortable, filterable entity list block) -->
-		<script src={ AssetURL("/static/js/widgets/entity_manager.js") } defer></script>
+		<script src={ AssetURL("/static/js/widgets/vault_import.js") } defer></script>
 
 		<!-- The rest clock every looping animation reads its time from, so they
 		     all ease to a standstill when the viewer steps away and wake
 		     together when they come back. Loaded before anything that loops. -->
 		<script src={ AssetURL("/static/js/motion_rest.js") } defer></script>
+
+		<!-- The character sheet's motion engine (sheet_motion.js): styles a [data-sheet] root and moves its panels, folds and changed values. Does nothing on a page without one. -->
+		<script src={ AssetURL("/static/js/sheet_motion.js") } defer></script>
 
 		<!-- Sky pane widget (issue #763): the "skybox" dashboard/template
 		     block's ambient sky — moons, stars, weather, celestial events.
@@ -286,12 +280,6 @@ templ Base(title string) {
 		<script src={ AssetURL("/static/js/sidebar_tree.js") } defer></script>
 		<script src={ AssetURL("/static/js/sidebar_tag_filter.js") } defer></script>
 
-		<!-- Dashboard layouts use the unified layout-editor widget (loaded
-		     further down). -->
-
-		<!-- Timeline D3 visualization widget (interactive SVG chart) -->
-		<script src={ AssetURL("/static/js/widgets/timeline_viz.js") } defer></script>
-
 		<!-- Plugin-contributed body scripts (injected at startup; calendar widget
 		     is the canonical first entry — avoids hardcoding plugin paths here).
 		     Emitted IN SLICE ORDER and deferred, so a contributor that depends on
@@ -304,53 +292,11 @@ templ Base(title string) {
 			<script src={ AssetURL(scriptURL) } defer></script>
 		}
 
-		<!-- Timeline widget (interactive timeline preview for dashboard embeds) -->
-		<script src={ AssetURL("/static/js/widgets/timeline_widget.js") } defer></script>
-
-		<!-- Map widget (embedded Leaflet map viewer for dashboard embeds) -->
-		<script src={ AssetURL("/static/js/widgets/map_widget.js") } defer></script>
-
-		<!-- Permissions widget (per-entity visibility and access control) -->
-		<script src={ AssetURL("/static/js/widgets/permissions.js") } defer></script>
-
-		<!-- Groups management widget (campaign group CRUD) -->
-		<script src={ AssetURL("/static/js/widgets/groups.js") } defer></script>
-
-		<!-- Relations graph visualization (D3 force-directed) -->
-		<script src={ AssetURL("/static/js/widgets/relation_graph.js") } defer></script>
-
-		<!-- Database schema explorer (admin D3 visualization) -->
-		<script src={ AssetURL("/static/js/widgets/db_explorer.js") } defer></script>
-
-		<!-- Entity posts (sub-notes) -->
-		<script src={ AssetURL("/static/js/widgets/entity_posts.js") } defer></script>
-
-		<!-- Entity notes (per-user player notes with audience ACL — player-notes addon) -->
-		<script src={ AssetURL("/static/js/widgets/entity_notes.js") } defer></script>
-
-		<!-- Entity map block (per-entity map assignment) -->
-		<script src={ AssetURL("/static/js/widgets/entity_map.js") } defer></script>
-
 		<!-- The header's moving background, on the shared rest clock -->
 		<script src={ AssetURL("/static/js/widgets/header_motion.js") } defer></script>
 
-		<!-- Live map viewer (the map page's viewer; also what the focus view mounts) -->
-		<script src={ AssetURL("/static/js/widgets/map_viewer.js") } defer></script>
-
-		<!-- Map focus view: a framed map preview unfolds into the live viewer -->
-		<script src={ AssetURL("/static/js/map_focus.js") } defer></script>
-
-		<!-- Admin > Site look: the live preview layered on the plain form -->
-		<script src={ AssetURL("/static/js/widgets/site_look.js") } defer></script>
-
-		<!-- Customize look editor (campaign look, one Save for every setting) -->
-		<script src={ AssetURL("/static/js/widgets/customize_look.js") } defer></script>
-
-		<!-- Unified layout editor widget -->
-		<script src={ AssetURL("/static/js/widgets/layout_editor.js") } defer></script>
-
-		<!-- Layout Studio widget (orchestrates layout-editor contexts) -->
-		<script src={ AssetURL("/static/js/widgets/layout_studio.js") } defer></script>
+		<!-- The header's Sky background; draws with the sky scripts above -->
+		<script src={ AssetURL("/static/js/widgets/header_sky.js") } defer></script>
 
 		<!-- Content template picker (entity create form + editor insert) -->
 		<script src={ AssetURL("/static/js/template_picker.js") } defer></script>

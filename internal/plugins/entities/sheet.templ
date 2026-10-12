@@ -1,0 +1,12 @@
+package entities
+
+import "github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+
+// EntitySheet is a page's body with no site chrome, fetched by the DM Screen
+// and shown over itself. The sheet's frame (close button, previous/next,
+// focus handling) belongs to the screen's script; this is only the page.
+templ EntitySheet(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, ancestors []Entity, children []Entity, showAttributes bool, showCalendar bool, claimingEnabled bool, ownerName string, csrfToken string, userID string) {
+	<div data-dms-sheet-page data-entity-id={ entity.ID }>
+		@entityPageBody(cc, entity, entityType, ancestors, children, showAttributes, showCalendar, claimingEnabled, ownerName, csrfToken, userID)
+	</div>
+}

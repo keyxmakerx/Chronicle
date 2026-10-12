@@ -367,7 +367,7 @@ templ settingsGeneralTab(cc *CampaignContext, csrfToken string) {
 				// Delete campaign (type name to confirm).
 				<div class="pt-4 border-t border-red-200 dark:border-red-800" x-data="{ confirmName: '' }">
 					<h3 class="text-sm font-semibold text-red-600 dark:text-red-400 mb-1">Delete Campaign</h3>
-					<p class="text-sm text-fg-secondary mb-3">Permanently delete this campaign and all its data. This cannot be undone.</p>
+					<p class="text-sm text-fg-secondary mb-3">The campaign disappears for everyone right away. Your site admin can bring it back for a limited time; after that it is gone for good.</p>
 					<p class="text-sm text-fg-body mb-2">Type <strong class="text-fg">{ cc.Campaign.Name }</strong> to confirm:</p>
 					<input type="text" x-model="confirmName" class="input w-full mb-3" placeholder="Campaign name"/>
 					<form
@@ -397,7 +397,7 @@ templ settingsGeneralTab(cc *CampaignContext, csrfToken string) {
 // email invitations and ownership transfer. The People page is its
 // only home; Settings links to it instead of repeating it.
 templ peopleSections(cc *CampaignContext, members []CampaignMember, transfer *OwnershipTransfer, csrfToken, errMsg string, smtpConfigured bool) {
-	<div class="space-y-6">
+	<div class="manage-split">
 		// SMTP warning.
 		if !smtpConfigured {
 			<div class="alert-warning">
@@ -407,6 +407,10 @@ templ peopleSections(cc *CampaignContext, members []CampaignMember, transfer *Ow
 		}
 
 		@MemberListComponent(cc, members, csrfToken, errMsg)
+
+		if cc.MemberRole >= RoleOwner {
+			<div id="guest-codes" hx-get={ fmt.Sprintf("/campaigns/%s/guest-codes", cc.Campaign.ID) } hx-trigger="load" hx-swap="outerHTML"></div>
+		}
 
 		// Shareable invite link.
 		<div class="card p-6" x-data={ fmt.Sprintf(`{
@@ -483,6 +487,10 @@ templ peopleSections(cc *CampaignContext, members []CampaignMember, transfer *Ow
 				</form>
 			}
 		</div>
+
+		if cc.MemberRole == RoleOwner {
+			@handoverCard(cc)
+		}
 	</div>
 }
 
@@ -523,11 +531,12 @@ templ settingsAPIKeysTab(cc *CampaignContext, baseURL string) {
 	</div>
 }
 
-// SettingsDataSection is the campaign's export and import. It is the
-// built-in Data tab, and the AI plugin's Data & AI tab opens with it.
+// SettingsDataSection is the campaign's export. It is the built-in Data tab,
+// and the AI plugin's Data & AI tab opens with it. Importing lives on the
+// Import tab.
 templ SettingsDataSection(cc *CampaignContext) {
 	<div class="card p-4">
-		<h2 class="text-sm font-semibold text-fg mb-3">Data Export &amp; Import</h2>
+		<h2 class="text-sm font-semibold text-fg mb-3">Data Export</h2>
 		<p class="text-xs text-fg-secondary mb-3">Export your campaign as a JSON file, or as a ZIP that adds an archive of your media files, for backup or migration.</p>
 		<div class="flex flex-wrap items-center gap-3">
 			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/export", cc.Campaign.ID)) } class="btn-primary text-sm inline-flex items-center gap-1.5" download>
@@ -536,15 +545,12 @@ templ SettingsDataSection(cc *CampaignContext) {
 			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/export?include_media=1", cc.Campaign.ID)) } class="btn-primary text-sm inline-flex items-center gap-1.5" download>
 				<i class="fa-solid fa-file-zipper text-xs"></i> Export ZIP (+ media archive)
 			</a>
-			<a href="/campaigns/import" class="btn-secondary text-sm inline-flex items-center gap-1.5">
-				<i class="fa-solid fa-upload text-xs"></i> Import Campaign
-			</a>
 		</div>
 		<p class="text-[11px] text-fg-muted mt-2">
 			The ZIP contains <code>campaign.json</code> plus a <code>media/</code> folder holding your image
-			files. Importing the ZIP restores the campaign with its pictures in place. The JSON-only
-			export carries no pictures at all, so a campaign imported from it has none; use the ZIP for
-			a backup you can restore in full.
+			files. Importing the ZIP (Settings › Import) restores the campaign with its pictures in place.
+			The JSON-only export carries no pictures at all, so a campaign imported from it has none; use
+			the ZIP for a backup you can restore in full.
 		</p>
 	</div>
 
@@ -704,4 +710,59 @@ func hasDisabled(addons []PluginHubAddon) bool {
 		}
 	}
 	return false
+}
+
+// handoverCard is the owner's "If you're away" choice: how long they can go
+// unseen before a site admin may give the campaign to another member.
+templ handoverCard(cc *CampaignContext) {
+	<div
+		class="card p-6"
+		x-data={ fmt.Sprintf(`{
+			months: %d,
+			saving: false,
+			saved: false,
+			error: '',
+			async save(m) {
+				var prev = this.months;
+				this.months = m; this.saving = true; this.saved = false; this.error = '';
+				const res = await Chronicle.apiFetch('/campaigns/%s/handover-setting', { method: 'PUT', body: { months: m } });
+				this.saving = false;
+				if (res.ok) { this.saved = true; setTimeout(() => { this.saved = false; }, 3000); }
+				else { this.months = prev; this.error = 'That choice could not be saved. Try again.'; }
+			}
+		}`, cc.Campaign.ParseSettings().HandoverAfterMonths, cc.Campaign.ID) }
+	>
+		<h2 class="text-lg font-semibold text-fg mb-1">If you're away</h2>
+		<p class="text-sm text-fg-secondary mb-4">
+			If you stop using Chronicle for this long (the site or Foundry sync), a site admin may make another member the owner, so the table can keep playing. You'd stay in the campaign as Co-DM and get an email.
+		</p>
+		<div class="inline-flex flex-wrap border border-edge rounded-lg overflow-hidden bg-surface" role="group" aria-label="If you're away">
+			for _, m := range HandoverChoices {
+				<button
+					type="button"
+					class="px-3 py-1.5 text-sm font-medium text-fg-body"
+					x-bind:class={ fmt.Sprintf("months === %d ? 'bg-accent text-white' : 'hover:bg-surface-alt'", m) }
+					x-bind:aria-pressed={ fmt.Sprintf("(months === %d).toString()", m) }
+					@click={ fmt.Sprintf("save(%d)", m) }
+				>{ handoverChoiceLabel(m) }</button>
+			}
+		</div>
+		<p class="text-xs mt-3 min-h-4" aria-live="polite">
+			<span x-show="saving" class="text-fg-muted">Saving...</span>
+			<span x-show="saved" x-transition class="text-green-600">Saved</span>
+			<span x-show="error" class="text-red-500" x-text="error"></span>
+		</p>
+	</div>
+}
+
+// handoverChoiceLabel names one "If you're away" choice.
+func handoverChoiceLabel(months int) string {
+	switch months {
+	case 0:
+		return "Never"
+	case 12:
+		return "1 year"
+	default:
+		return fmt.Sprintf("%d months", months)
+	}
 }

@@ -22,5 +22,13 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 		campaigns.RequireCampaignAccess(campaignSvc),
 	)
 	cg.GET("/dm-screen", h.Show, campaigns.RequireCapability(CanOpen, "the DM Screen is for the people running this campaign"))
+	cg.POST("/dm-screen/time", h.StepTime, campaigns.RequireCapability(CanOpen, "the DM Screen is for the people running this campaign"))
+	cg.GET("/dm-screen/notes", h.ShowNote, campaigns.RequireCapability(CanOpen, "the DM Screen is for the people running this campaign"))
+	cg.PUT("/dm-screen/notes", h.SaveNote, campaigns.RequireCapability(CanOpen, "the DM Screen is for the people running this campaign"))
 	cg.POST("/dm-screen/reveal/:eid", h.Reveal, campaigns.RequireCapability(CanOpen, "the DM Screen is for the people running this campaign"))
+	// The Adventures tab: DM team only, like the screen itself.
+	cg.GET("/dm-screen/adventures/pages", h.PickPages, campaigns.RequireCapability(CanOpen, "the DM Screen is for the people running this campaign"))
+	cg.POST("/dm-screen/adventures/pins", h.PinPage, campaigns.RequireCapability(CanOpen, "the DM Screen is for the people running this campaign"))
+	cg.POST("/dm-screen/adventures/notes", h.AddBoardNote, campaigns.RequireCapability(CanOpen, "the DM Screen is for the people running this campaign"))
+	cg.DELETE("/dm-screen/adventures/items/:itemID", h.RemoveBoardItem, campaigns.RequireCapability(CanOpen, "the DM Screen is for the people running this campaign"))
 }

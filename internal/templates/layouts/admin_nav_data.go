@@ -110,6 +110,8 @@ var adminNav = AdminNavTree{
 			// tab strip on each page to flip between them.
 			{Label: "Backups & restore", Href: "/admin/backup", Icon: "fa-box-archive",
 				Prefixes: []string{"/admin/restore"}},
+			// Deleted campaigns and file clean-ups wait here with Undo.
+			{Label: "Trash", Href: "/admin/trash", Icon: "fa-trash-can-arrow-up"},
 			{Label: "Email", Href: "/admin/smtp", Icon: "fa-envelope"},
 			{Label: "Site look", Href: "/admin/site-look", Icon: "fa-palette"},
 		}},

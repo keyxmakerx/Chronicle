@@ -36,27 +36,6 @@ type SettingsEntityType struct {
 	ParentTypeID *int    `json:"parent_type_id,omitempty"`
 }
 
-// EntityTypeLayoutFetcher fetches a single entity type's full layout and field
-// data for the page layout editor. Avoids importing the entities package directly.
-type EntityTypeLayoutFetcher interface {
-	GetEntityTypeForLayoutEditor(ctx context.Context, entityTypeID int) (*LayoutEditorEntityType, error)
-}
-
-// LayoutEditorEntityType holds the entity type data needed to mount the
-// template-editor widget in the Customization Hub's Page Layouts tab.
-// LayoutJSON and FieldsJSON are pre-serialized so templates can emit them
-// directly as data attributes.
-type LayoutEditorEntityType struct {
-	ID         int
-	CampaignID string
-	Name       string
-	NamePlural string
-	Icon       string
-	Color      string
-	LayoutJSON string
-	FieldsJSON string
-}
-
 // RecentEntityLister returns recently updated entities for the campaign dashboard.
 // Avoids importing the entities package directly.
 type RecentEntityLister interface {
@@ -161,7 +140,6 @@ type Handler struct {
 	service            CampaignService
 	groupSvc           GroupService
 	entityLister       EntityTypeLister
-	layoutFetcher      EntityTypeLayoutFetcher
 	recentLister       RecentEntityLister
 	auditLogger        AuditLogger
 	addonLister        AddonLister
@@ -178,7 +156,12 @@ type Handler struct {
 	extraSettingsTabs []func(*CampaignContext) SettingsTab
 	// extraCustomizeTabs is the same idea for the Customize page
 	// (RegisterCustomizeTab, customize_tabs.go).
-	extraCustomizeTabs   []func(*CampaignContext) CustomizeTab
+	extraCustomizeTabs []func(*CampaignContext) CustomizeTab
+	// customizeSections are the named parts of the Customize draft, in apply
+	// order (RegisterCustomizeSection, customize_sections.go).
+	customizeSections    []CustomizeSection
+	customizeDrafts      CustomizeDraftService
+	categoryLister       CustomizeCategoryLister
 	baseURL              string
 	contentPacksRenderer ContentPacksCardRenderer
 	// Per-extension inline dashboard registry + enable-state check.
@@ -190,7 +173,11 @@ type Handler struct {
 
 // NewHandler creates a new campaign handler.
 func NewHandler(service CampaignService) *Handler {
-	return &Handler{service: service}
+	h := &Handler{service: service}
+	// The look is the campaign's own data, so it registers here and always
+	// applies first; other plugins register their sections after it.
+	h.RegisterCustomizeSection(CustomizeSection{Key: customizeSectionLook, Apply: h.applyLookSection})
+	return h
 }
 
 // SetGroupService sets the group service for campaign group management.
@@ -202,12 +189,6 @@ func (h *Handler) SetGroupService(svc GroupService) {
 // Called after both plugins are wired to avoid circular dependencies.
 func (h *Handler) SetEntityLister(lister EntityTypeLister) {
 	h.entityLister = lister
-}
-
-// SetLayoutFetcher sets the entity type layout fetcher for the Page Layouts tab.
-// Called after both plugins are wired to avoid circular dependencies.
-func (h *Handler) SetLayoutFetcher(fetcher EntityTypeLayoutFetcher) {
-	h.layoutFetcher = fetcher
 }
 
 // SetRecentEntityLister sets the recent entity lister for the dashboard.
@@ -268,11 +249,16 @@ func (h *Handler) SetSystemLister(lister SystemLister) {
 // logAudit fires a fire-and-forget audit entry. Errors are logged but
 // never block the primary operation.
 func (h *Handler) logAudit(c echo.Context, campaignID, action string, details map[string]any) {
+	h.logAuditCtx(c.Request().Context(), campaignID, auth.GetUserID(c), action, details)
+}
+
+// logAuditCtx is logAudit for callers with no echo.Context, such as a
+// Customize section applied from a stored draft.
+func (h *Handler) logAuditCtx(ctx context.Context, campaignID, userID, action string, details map[string]any) {
 	if h.auditLogger == nil {
 		return
 	}
-	userID := auth.GetUserID(c)
-	if err := h.auditLogger.LogEvent(c.Request().Context(), campaignID, userID, action, details); err != nil {
+	if err := h.auditLogger.LogEvent(ctx, campaignID, userID, action, details); err != nil {
 		slog.Warn("audit log failed", slog.String("action", action), slog.Any("error", err))
 	}
 }
@@ -437,7 +423,8 @@ func (h *Handler) Update(c echo.Context) error {
 	return middleware.HTMXRedirect(c, "/campaigns/"+cc.Campaign.ID+"/settings")
 }
 
-// Delete removes a campaign (DELETE /campaigns/:id). Requires the request to
+// Delete moves a campaign to the site Trash (DELETE /campaigns/:id). The owner
+// sees it vanish; only a site admin can bring it back. Requires the request to
 // include a confirm_name field that matches the campaign name exactly (S4).
 func (h *Handler) Delete(c echo.Context) error {
 	cc := GetCampaignContext(c)
@@ -456,11 +443,11 @@ func (h *Handler) Delete(c echo.Context) error {
 		return apperror.NewBadRequest("campaign name does not match; deletion cancelled")
 	}
 
-	if err := h.service.Delete(c.Request().Context(), cc.Campaign.ID); err != nil {
+	if err := h.service.MoveToTrash(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c)); err != nil {
 		return err
 	}
 
-	h.logAudit(c, cc.Campaign.ID, "campaign.deleted", nil)
+	h.logAudit(c, cc.Campaign.ID, "campaign.trashed", nil)
 	return middleware.HTMXRedirect(c, "/campaigns")
 }
 
@@ -644,6 +631,30 @@ func (h *Handler) UpdateDefaultVisibilityAPI(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
+// UpdateHandoverSettingAPI saves the owner's "If you're away" choice
+// (PUT /campaigns/:id/handover-setting). Only the owner themself may set
+// it: it decides when others can take their campaign, so a Co-DM can't.
+func (h *Handler) UpdateHandoverSettingAPI(c echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	if cc.MemberRole != RoleOwner {
+		return apperror.NewForbidden("only the campaign owner can change this")
+	}
+	var req struct {
+		Months int `json:"months"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request body")
+	}
+	if err := h.service.SetHandoverAfter(c.Request().Context(), cc.Campaign.ID, req.Months); err != nil {
+		return err
+	}
+	h.logAudit(c, cc.Campaign.ID, "campaign.handover_setting.updated", map[string]any{"months": req.Months})
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
 // --- Settings ---
 
 // Settings renders the campaign settings page (GET /campaigns/:id/settings).
@@ -727,58 +738,6 @@ func (h *Handler) PluginHubFragment(c echo.Context) error {
 }
 
 // --- Customization Hub ---
-
-// Customize renders the Campaign Customization Hub (GET /campaigns/:id/customize).
-// Owners use this page to control navigation, dashboards, and category layouts.
-func (h *Handler) Customize(c echo.Context) error {
-	cc := GetCampaignContext(c)
-	if cc == nil {
-		return apperror.NewMissingContext()
-	}
-
-	csrfToken := middleware.GetCSRFToken(c)
-
-	// Fetch entity types for the categories tabs and navigation editor.
-	var entityTypes []SettingsEntityType
-	if h.entityLister != nil {
-		entityTypes, _ = h.entityLister.GetEntityTypesForSettings(c.Request().Context(), cc.Campaign.ID)
-	}
-
-	return middleware.Render(c, http.StatusOK, CustomizePage(cc, entityTypes, csrfToken, h.customizeTabs(cc)))
-}
-
-// LayoutEditorFragment returns an HTMX fragment containing the template-editor
-// widget for a specific entity type. Used by the Page Layouts tab in the
-// Customization Hub to lazy-load editors one category at a time.
-// GET /campaigns/:id/customize/layout-editor/:etid
-func (h *Handler) LayoutEditorFragment(c echo.Context) error {
-	cc := GetCampaignContext(c)
-	if cc == nil {
-		return apperror.NewMissingContext()
-	}
-
-	etID, err := strconv.Atoi(c.Param("etid"))
-	if err != nil {
-		return apperror.NewBadRequest("invalid entity type ID")
-	}
-
-	if h.layoutFetcher == nil {
-		return apperror.NewMissingContext()
-	}
-
-	et, err := h.layoutFetcher.GetEntityTypeForLayoutEditor(c.Request().Context(), etID)
-	if err != nil {
-		return err
-	}
-
-	// IDOR protection: verify entity type belongs to this campaign.
-	if et.CampaignID != cc.Campaign.ID {
-		return apperror.NewNotFound("entity type not found")
-	}
-
-	csrfToken := middleware.GetCSRFToken(c)
-	return middleware.Render(c, http.StatusOK, LayoutEditorFragment(cc, et, csrfToken))
-}
 
 // --- Sidebar Config API ---
 
@@ -908,7 +867,7 @@ func (h *Handler) UpdateDashboardLayout(c echo.Context) error {
 		return apperror.NewBadRequest("invalid JSON body")
 	}
 
-	if err := validateDashboardLayout(&layout); err != nil {
+	if err := validateDashboardLayout(c.Request().Context(), cc.Campaign.ID, &layout); err != nil {
 		return err
 	}
 

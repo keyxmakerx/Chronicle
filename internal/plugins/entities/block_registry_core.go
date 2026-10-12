@@ -18,6 +18,7 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 
 	r.Register(BlockMeta{
 		Type: "title", Label: "Title", Icon: "fa-heading",
+		TileSizes: []string{"2x1", "4x1"},
 		Description: "Entity name and actions",
 		Contexts:    []string{"template"},
 	}, func(ctx BlockRenderContext) templ.Component {
@@ -26,6 +27,7 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 
 	r.Register(BlockMeta{
 		Type: "image", Label: "Image", Icon: "fa-image",
+		TileSizes: []string{"1x2", "2x2", "4x2"},
 		Description: "Header image with upload",
 		Contexts:    []string{"template"},
 	}, func(ctx BlockRenderContext) templ.Component {
@@ -34,6 +36,7 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 
 	r.Register(BlockMeta{
 		Type: "entry", Label: "Rich Text", Icon: "fa-align-left",
+		TileSizes: []string{"2x2", "4x2"},
 		Description: "Main content editor",
 		Contexts:    []string{"template"},
 	}, func(ctx BlockRenderContext) templ.Component {
@@ -42,6 +45,7 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 
 	r.Register(BlockMeta{
 		Type: "attributes", Label: "Attributes", Icon: "fa-list",
+		TileSizes: []string{"2x2", "2x1", "4x2"},
 		Description: "Custom field values",
 		Contexts:    []string{"template"},
 	}, func(ctx BlockRenderContext) templ.Component {
@@ -59,6 +63,7 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 
 	r.Register(BlockMeta{
 		Type: "details", Label: "Details", Icon: "fa-info-circle",
+		TileSizes: []string{"2x1", "2x2"},
 		Description: "Metadata and dates",
 		Contexts:    []string{"template"},
 	}, func(ctx BlockRenderContext) templ.Component {
@@ -67,6 +72,7 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 
 	r.Register(BlockMeta{
 		Type: "tags", Label: "Tags", Icon: "fa-tags",
+		TileSizes: []string{"1x1", "2x1"},
 		Description: "Tag picker widget",
 		Contexts:    []string{"template"},
 	}, func(ctx BlockRenderContext) templ.Component {
@@ -75,6 +81,7 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 
 	r.Register(BlockMeta{
 		Type: "relations", Label: "Relations", Icon: "fa-link",
+		TileSizes: []string{"2x2", "4x2"},
 		Description: "Entity relation links",
 		Contexts:    []string{"template"},
 	}, func(ctx BlockRenderContext) templ.Component {
@@ -187,6 +194,7 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 	// text_block is shared between dashboard and template contexts.
 	r.Register(BlockMeta{
 		Type: "text_block", Label: "Text Block", Icon: "fa-align-left",
+		TileSizes: []string{"1x1", "2x1", "2x2", "4x2"},
 		Description: "Custom static HTML content",
 		Contexts:    []string{"dashboard", "template"},
 		ConfigFields: []ConfigFieldMeta{
@@ -283,6 +291,7 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 
 	r.Register(BlockMeta{
 		Type: "recent_pages", Label: "Recent Pages", Icon: "fa-clock",
+		TileSizes: []string{"2x2", "4x2"},
 		Description: "Recently updated entities",
 		Contexts:    []string{"dashboard"},
 		ConfigFields: []ConfigFieldMeta{
@@ -369,12 +378,17 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 	}, nil)
 
 	r.Register(BlockMeta{
-		Type: "session_tracker", Label: "Game nights", Icon: "fa-dice-d20",
-		Description: "Upcoming game nights with RSVP",
-		Addon: "sessions", Contexts: []string{"dashboard"},
-		ConfigFields: []ConfigFieldMeta{
-			{Key: "limit", Label: "Sessions to show", Type: "number", Min: IntPtr(1), Max: IntPtr(20), Default: 5},
-		},
+		// Coming up replaced this block; a saved one draws Coming up.
+		Type: "session_tracker", Label: "Coming up", Icon: "fa-dice-d20",
+		Description: "Replaced by Coming up",
+		Addon: "sessions", Contexts: []string{"dashboard"}, Retired: true,
+	}, nil)
+
+	r.Register(BlockMeta{
+		Type: "coming_up", Label: "Coming up", Icon: "fa-dice-d20",
+		TileSizes: []string{"2x2", "2x1"},
+		Description: "Game nights, what you owe the table, next events",
+		Contexts: []string{"dashboard"},
 	}, nil)
 
 	r.Register(BlockMeta{

@@ -42,6 +42,10 @@ type PageSafetyRepository interface {
 	// TrashSubtree moves a live page and its live sub-pages to the Trash as
 	// one item, and returns the ids that moved, the page first.
 	TrashSubtree(ctx context.Context, campaignID, rootID, userID string, at time.Time) ([]string, error)
+	// TrashedPageIDs maps each Trash item's root id to the ids of every page
+	// in it, the root included. With rootIDs empty it covers the whole
+	// campaign Trash.
+	TrashedPageIDs(ctx context.Context, campaignID string, rootIDs ...string) (map[string][]string, error)
 	// ListTrash returns the campaign's Trash items, newest first.
 	ListTrash(ctx context.Context, campaignID string) ([]TrashItem, error)
 	// FindTrashItem returns one Trash item; NotFound when it isn't in the
@@ -304,6 +308,32 @@ func (r *pageSafetyRepository) ListTrash(ctx context.Context, campaignID string)
 			return nil, fmt.Errorf("scanning trash item: %w", err)
 		}
 		out = append(out, *t)
+	}
+	return out, rows.Err()
+}
+
+func (r *pageSafetyRepository) TrashedPageIDs(ctx context.Context, campaignID string, rootIDs ...string) (map[string][]string, error) {
+	query := `SELECT trash_root_id, id FROM entities
+		WHERE campaign_id = ? AND deleted_at IS NOT NULL AND trash_root_id IS NOT NULL`
+	args := []any{campaignID}
+	if len(rootIDs) > 0 {
+		query += ` AND trash_root_id IN (` + sqlPlaceholders(len(rootIDs)) + `)`
+		for _, id := range rootIDs {
+			args = append(args, id)
+		}
+	}
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("listing trashed pages: %w", err)
+	}
+	defer rows.Close()
+	out := map[string][]string{}
+	for rows.Next() {
+		var root, id string
+		if err := rows.Scan(&root, &id); err != nil {
+			return nil, fmt.Errorf("scanning trashed page: %w", err)
+		}
+		out[root] = append(out[root], id)
 	}
 	return out, rows.Err()
 }

@@ -31,6 +31,10 @@ const (
 	maxBookBlocks    = 60
 	maxBookListItems = 60
 	maxBookString    = 20000
+	// maxBookAssetBytes caps each cover or font file, which are served as-is
+	// and held in the browser for the whole visit.
+	maxBookAssetBytes = 1 << 20
+	maxBookFonts      = 8
 )
 
 // bookThemeKeys are the theme tokens a book may set. Values become CSS
@@ -55,6 +59,11 @@ var (
 	bookDicePattern    = regexp.MustCompile(`^([1-9]|10)d([2-9]|[1-9][0-9]|100)$`)
 	bookWidgetSlug     = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
 	glossaryRefPattern = regexp.MustCompile(`\{@[a-z]+ ([^}|]+)(?:\|([^}]+))?\}`)
+	// The cover and fonts live in fixed subfolders with plain names, so a
+	// declared path can never climb out of book/ or name a hidden file.
+	bookCoverPattern = regexp.MustCompile(`^art/([a-z0-9][a-z0-9-]*\.svg)$`)
+	bookFontFile     = regexp.MustCompile(`^fonts/([a-z0-9][a-z0-9-]*\.woff2)$`)
+	bookAssetName    = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*\.(svg|woff2)$`)
 )
 
 // Book is the wire shape of a system's rulebook book (camelCase JSON).
@@ -64,17 +73,35 @@ type Book struct {
 	SystemName string            `json:"systemName"`
 	Turn       string            `json:"turn"`
 	Theme      map[string]string `json:"theme,omitempty"`
-	// Look "paper" draws the book as a printed handbook; "" is the default.
+	// Look "paper" draws the book as a printed handbook and "bold" as a
+	// poster-styled one; "" is the default.
 	Look string `json:"look,omitempty"`
+	// Cover is the drawn cover art and Fonts the package's own faces. After
+	// loading they hold package-relative paths; WithAssetBase turns them into
+	// the URLs the browser fetches.
+	Cover string     `json:"cover,omitempty"`
+	Fonts []BookFont `json:"fonts,omitempty"`
 	// Tabs are the chapter ids given an edge tab. Start is the chapter the
 	// book opens on, and First the one it opens on for a first-time reader.
+	// Screen is the chapter the reader drops over any page as a quick
+	// reference instead of showing it as pages of the book.
 	Tabs       []string            `json:"tabs,omitempty"`
 	Start      string              `json:"start,omitempty"`
 	First      string              `json:"first,omitempty"`
+	Screen     string              `json:"screen,omitempty"`
 	IsDirector bool                `json:"isDirector"`
 	CanEdit    bool                `json:"canEdit"`
 	Terms      map[string]BookTerm `json:"terms"`
 	Parts      []BookPart          `json:"parts"`
+}
+
+// BookFont is one font face the package ships. URL is a package-relative
+// path until WithAssetBase resolves it.
+type BookFont struct {
+	Family string `json:"family"`
+	URL    string `json:"url"`
+	Weight int    `json:"weight,omitempty"`
+	Style  string `json:"style,omitempty"`
 }
 
 // BookTerm is one hover definition.
@@ -180,11 +207,21 @@ type bookIndexYAML struct {
 	Glossary string            `yaml:"glossary,omitempty"`
 	Theme    map[string]string `yaml:"theme,omitempty"`
 	Look     string            `yaml:"look,omitempty"`
+	Cover    string            `yaml:"cover,omitempty"`
+	Fonts    []bookFontYAML    `yaml:"fonts,omitempty"`
 	Tabs     []string          `yaml:"tabs,omitempty"`
 	Start    string            `yaml:"start,omitempty"`
 	First    string            `yaml:"first,omitempty"`
+	Screen   string            `yaml:"screen,omitempty"`
 	Terms    map[string]string `yaml:"terms,omitempty"`
 	Parts    []bookPartYAML    `yaml:"parts"`
+}
+
+type bookFontYAML struct {
+	Family string `yaml:"family"`
+	File   string `yaml:"file"`
+	Weight int    `yaml:"weight,omitempty"`
+	Style  string `yaml:"style,omitempty"`
 }
 
 type bookPartYAML struct {
@@ -370,21 +407,24 @@ func loadBookWithSource(sysDir string, manifest *SystemManifest) (*Book, *BookSo
 	if err := setBookNavigation(b, idx); err != nil {
 		return nil, nil, fmt.Errorf("%s: %w", bookIndexFile, err)
 	}
+	if err := setBookAssets(b, idx, sysDir); err != nil {
+		return nil, nil, fmt.Errorf("%s: %w", bookIndexFile, err)
+	}
 	return b, src, nil
 }
 
 // maxBookTabs keeps the tab strip to one readable row.
 const maxBookTabs = 12
 
-// setBookNavigation checks the cover file's look, tabs, start and first
+// setBookNavigation checks the cover file's look, tabs, start, first and screen
 // against the chapters the book lists, so a typo is reported here rather
 // than leaving a tab that goes nowhere.
 func setBookNavigation(b *Book, idx bookIndexYAML) error {
 	switch idx.Look {
-	case "", "paper":
+	case "", "paper", "bold":
 		b.Look = idx.Look
 	default:
-		return fmt.Errorf("look must be paper or left out, not %q", idx.Look)
+		return fmt.Errorf("look must be paper, bold or left out, not %q", idx.Look)
 	}
 	listed := map[string]bool{}
 	for _, p := range idx.Parts {
@@ -410,7 +450,7 @@ func setBookNavigation(b *Book, idx bookIndexYAML) error {
 		key string
 		id  string
 		dst *string
-	}{{"start", idx.Start, &b.Start}, {"first", idx.First, &b.First}} {
+	}{{"start", idx.Start, &b.Start}, {"first", idx.First, &b.First}, {"screen", idx.Screen, &b.Screen}} {
 		if f.id == "" {
 			continue
 		}
@@ -812,6 +852,9 @@ func trimBookNavigation(b *Book) {
 	}
 	if !has[b.First] {
 		b.First = ""
+	}
+	if !has[b.Screen] {
+		b.Screen = ""
 	}
 	for pi := range b.Parts {
 		for ci := range b.Parts[pi].Chapters {

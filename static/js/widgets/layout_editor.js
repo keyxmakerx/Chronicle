@@ -1,9 +1,10 @@
 /**
  * Unified Layout Editor Widget
  *
- * Drag-and-drop layout editor used by layout_studio.js to edit campaign
- * dashboards, owner dashboards, category dashboards, and page templates
- * through one UI.
+ * Drag-and-drop layout editor for campaign dashboards, owner dashboards,
+ * category dashboards, and page templates through one UI. Customize's Home
+ * pages and category workspace mount it until the new page editor replaces
+ * it (#1362).
  *
  * Mount: data-widget="layout-editor". Config: data-endpoint (GET/PUT/DELETE
  * layout JSON), data-campaign-id, data-csrf-token, data-context
@@ -62,7 +63,8 @@
     { type: 'timeline_full',    label: 'Full Timeline',    icon: 'fa-timeline',          desc: 'Full timeline D3 visualization', addon: 'timeline' },
     { type: 'relations_graph_full', label: 'Full Relations Graph', icon: 'fa-diagram-project', desc: 'Large entity relations graph', addon: 'relations' },
     { type: 'map_full',         label: 'Full Map',         icon: 'fa-map-location-dot',  desc: 'Full map with drawings & tokens', addon: 'maps' },
-    { type: 'session_tracker',  label: 'Sessions',         icon: 'fa-dice-d20',          desc: 'Upcoming sessions with RSVP',    addon: 'sessions' },
+    { type: 'session_tracker',  label: 'Coming up',        icon: 'fa-dice-d20',          desc: 'Replaced by Coming up',          addon: 'sessions', retired: true },
+    { type: 'coming_up',        label: 'Coming up',        icon: 'fa-dice-d20',          desc: 'Game nights, what you owe the table, next events' },
     { type: 'activity_feed',    label: 'Activity Feed',    icon: 'fa-clock-rotate-left', desc: 'Recent campaign activity log' },
     { type: 'sync_status',      label: 'Foundry Sync',     icon: 'fa-plug',              desc: 'Foundry VTT sync status',        addon: 'foundry' },
   ];
@@ -84,6 +86,15 @@
     { type: 'tabs',         label: 'Tabs',            icon: 'fa-folder',        desc: 'Tabbed content sections',   container: true },
     { type: 'section',      label: 'Section',         icon: 'fa-caret-down',    desc: 'Collapsible accordion',     container: true },
   ];
+
+  // A read-only stand-in for a tile section, which this editor can't arrange.
+  function tileSectionNote(row) {
+    var n = (row.tiles || []).length;
+    var note = document.createElement('div');
+    note.className = 'bg-surface border-2 border-dashed border-edge rounded-lg p-3 text-xs text-fg-muted';
+    note.textContent = 'Tile section with ' + n + (n === 1 ? ' tile' : ' tiles') + '. Tiles are arranged in the tile layout editor; this editor keeps them as they are.';
+    return note;
+  }
 
   function uid(prefix) {
     return (prefix || 'le') + '_' + Math.random().toString(36).substr(2, 8);
@@ -240,6 +251,7 @@
                 type: t.type, label: t.label, icon: t.icon, desc: t.description,
                 container: !!t.container,
                 singleton: !!t.singleton, // Carries BlockMeta.Singleton — drives the singleton drop guard.
+                retired: !!t.retired,
               };
               if (t.addon) bt.addon = t.addon;
               if (t.widget_slug) bt.widget_slug = t.widget_slug;
@@ -412,8 +424,11 @@
 
     _buildDashboardPalette: function (palette) {
       var self = this;
-      var coreBlocks = this.blockTypes.filter(function (bt) { return !bt.addon; });
-      var addonBlocks = this.blockTypes.filter(function (bt) { return !!bt.addon; });
+      // Retired blocks keep their label for layouts that hold one, but are
+      // never offered again.
+      var offered = this.blockTypes.filter(function (bt) { return !bt.retired; });
+      var coreBlocks = offered.filter(function (bt) { return !bt.addon; });
+      var addonBlocks = offered.filter(function (bt) { return !!bt.addon; });
 
       palette.appendChild(this._createPaletteSection('Core Blocks', 'fa-cube', coreBlocks, true));
       if (addonBlocks.length > 0) {
@@ -475,8 +490,9 @@
       toolbar.className = 'flex items-center gap-2 mb-1 opacity-0 group-hover/row:opacity-100 transition-opacity';
       toolbar.innerHTML = '<span class="text-[10px] text-fg-muted font-mono">Row ' + (rowIdx + 1) + '</span><div class="flex-1"></div>';
 
-      // Column layout picker buttons.
-      COL_PRESETS.forEach(function (preset) {
+      // Column layout picker buttons; a tile section has no columns to pick.
+      var isTiles = row.kind === 'tiles';
+      if (!isTiles) COL_PRESETS.forEach(function (preset) {
         var btn = document.createElement('button');
         btn.className = 'p-1 hover:bg-surface-alt rounded transition-colors';
         btn.title = preset.label;
@@ -518,6 +534,13 @@
       }
 
       rowEl.appendChild(toolbar);
+
+      // This editor can't arrange tiles, so a tile section is kept as it is
+      // and shown as a note; saving leaves its kind and tiles untouched.
+      if (isTiles) {
+        rowEl.appendChild(tileSectionNote(row));
+        return rowEl;
+      }
 
       // Columns grid.
       var grid = document.createElement('div');
@@ -1308,6 +1331,7 @@
 
     changeRowLayout: function (rowIdx, widths) {
       var row = this.layout.rows[rowIdx];
+      if (row.kind === 'tiles') return;
       var allBlocks = [];
       row.columns.forEach(function (c) { allBlocks = allBlocks.concat(c.blocks); });
       row.columns = widths.map(function (w, i) {

@@ -549,9 +549,32 @@ func (h *SystemHandler) BookAPI(c echo.Context) error {
 		}
 	}
 	c.Response().Header().Set("Cache-Control", "private, no-store")
-	out := FilterBook(book, bookViewerIsDirector(cc))
+	out := FilterBook(book, bookViewerIsDirector(cc)).
+		WithAssetBase("/campaigns/" + cc.Campaign.ID + "/systems/" + manifest.ID + "/book/files")
 	out.CanEdit = h.bookEdits != nil && bookEditorAllowed(cc)
 	return c.JSON(http.StatusOK, out)
+}
+
+// BookFileAPI serves one cover or font file the book declares, behind the
+// same access checks as the book itself. The SVG cover is drawn by an <img>,
+// where scripts never run; the sandbox policy keeps it inert if someone opens
+// the address directly, and nosniff stops a font being read as anything else.
+//
+// GET /campaigns/:id/systems/:mod/book/files/:name
+func (h *SystemHandler) BookFileAPI(c echo.Context) error {
+	sysDir, _, _, err := h.viewerBookTarget(c)
+	if err != nil {
+		return err
+	}
+	data, contentType, err := BookAsset(sysDir, c.Param("name"))
+	if err != nil {
+		return apperror.NewNotFound("this book has no such file")
+	}
+	hdr := c.Response().Header()
+	hdr.Set("Content-Security-Policy", "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:")
+	hdr.Set("X-Content-Type-Options", "nosniff")
+	hdr.Set("Cache-Control", "private, max-age=3600")
+	return c.Blob(http.StatusOK, contentType, data)
 }
 
 // viewerBook loads the package book filtered for the viewer (or for a player,
@@ -559,26 +582,35 @@ func (h *SystemHandler) BookAPI(c echo.Context) error {
 // rules-index endpoints. Campaign edits are not merged: generated chapters
 // can't be edited, so the package's are the ones readers see.
 func (h *SystemHandler) viewerBook(c echo.Context) (*Book, string, *SystemManifest, bool, error) {
-	cc := campaigns.GetCampaignContext(c)
-	if cc == nil {
-		return nil, "", nil, false, apperror.NewMissingContext()
+	sysDir, manifest, director, err := h.viewerBookTarget(c)
+	if err != nil {
+		return nil, "", nil, false, err
 	}
-	mod := h.resolveSystem(c)
-	if mod == nil {
-		return nil, "", nil, false, apperror.NewNotFound("system not found")
-	}
-	sysDir := h.systemDir(c, mod)
-	if !HasBook(sysDir) {
-		return nil, "", nil, false, apperror.NewNotFound("this system has no book")
-	}
-	manifest := mod.Info()
 	b, err := LoadBook(sysDir, manifest)
 	if err != nil {
 		return nil, "", nil, false, apperror.NewNotFound("the rulebook could not be opened")
 	}
+	return FilterBook(b, director), sysDir, manifest, director, nil
+}
+
+// viewerBookTarget resolves which book a request reads and as whom, without
+// loading it, so the search can answer from its cached index.
+func (h *SystemHandler) viewerBookTarget(c echo.Context) (string, *SystemManifest, bool, error) {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return "", nil, false, apperror.NewMissingContext()
+	}
+	mod := h.resolveSystem(c)
+	if mod == nil {
+		return "", nil, false, apperror.NewNotFound("system not found")
+	}
+	sysDir := h.systemDir(c, mod)
+	if !HasBook(sysDir) {
+		return "", nil, false, apperror.NewNotFound("this system has no book")
+	}
 	// A Director previewing the player view asks for exactly what players get.
 	director := bookViewerIsDirector(cc) && c.QueryParam("view") != "player"
-	return FilterBook(b, director), sysDir, manifest, director, nil
+	return sysDir, mod.Info(), director, nil
 }
 
 // BookIndexAPI returns the entries one rules-index page shows. The query must
@@ -614,16 +646,20 @@ func (h *SystemHandler) BookIndexAPI(c echo.Context) error {
 // BookFindAPI searches the rules-index chapters the viewer's book shows.
 // GET /campaigns/:id/systems/:mod/book/find?q=
 func (h *SystemHandler) BookFindAPI(c echo.Context) error {
-	b, sysDir, manifest, _, err := h.viewerBook(c)
+	sysDir, manifest, director, err := h.viewerBookTarget(c)
 	if err != nil {
 		return err
+	}
+	idx, err := cachedBookFindIndex(sysDir, manifest, director)
+	if err != nil {
+		return apperror.NewNotFound("the rulebook could not be opened")
 	}
 	q := c.QueryParam("q")
 	if len(q) > 100 {
 		q = q[:100]
 	}
 	c.Response().Header().Set("Cache-Control", "private, no-store")
-	return c.JSON(http.StatusOK, map[string]any{"results": findInIndex(sysDir, manifest, b, q)})
+	return c.JSON(http.StatusOK, map[string]any{"results": idx.search(q)})
 }
 
 // bookViewerIsDirector: the campaign owner, or a member the owner granted
@@ -714,6 +750,7 @@ func placeableWidgetMetas(manifest *SystemManifest) []entities.BlockMeta {
 			Icon:        icon,
 			Description: w.Description,
 			WidgetSlug:  w.Slug,
+			TileSizes:   w.TileSizes,
 		})
 	}
 	return metas

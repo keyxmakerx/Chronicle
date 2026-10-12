@@ -106,6 +106,22 @@ func purchaseRequestText(p PurchaseRequestLine) string {
 	return text
 }
 
+// MoveRequestText is a waiting move as one line for a list that already names
+// the requester: "move 2 × Healing potion from Bren to Party stash".
+func MoveRequestText(l MoveLine) string {
+	return fmt.Sprintf("move %s from %s to %s", thingText(l), l.FromName, l.ToName)
+}
+
+// PurchaseRequestSentence is a waiting purchase as one line that already names
+// the requester: "buy 3 items at The Gilded Cup (12 gp)".
+func PurchaseRequestSentence(p PurchaseRequestLine) string {
+	text := fmt.Sprintf("buy %s at %s", plural(p.ItemCount(), "item"), p.ShopName)
+	if p.Total != nil {
+		text += fmt.Sprintf(" (%s %s)", p.Total.String(), p.Currency)
+	}
+	return text
+}
+
 func downtimeURL(campaignID string) string { return "/campaigns/" + campaignID + "/armory/downtime" }
 
 func panelURL(campaignID, characterID string) string {

@@ -8,8 +8,8 @@ grants (see `permissions.js`).
 
 ## Mount
 
-`data-widget="groups"`, loaded by a `<script defer>` tag in
-`layouts/base.templ`. Mounted once, in `plugins/campaigns/groups.templ`
+`data-widget="groups"`, loaded on sight from
+`coreWidgets` in `internal/app/routes.go` (ADR-063). Mounted once, in `plugins/campaigns/groups.templ`
 (`GET /campaigns/:id/groups/manage`, Owner role).
 
 | Attribute | Meaning |

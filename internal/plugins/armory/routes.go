@@ -62,6 +62,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler, th *TransactionHandler, ih *Instan
 	// the service lets only Owner visibility through.
 	cg.POST("/armory/purchase-requests/:rid/approve", bh.ApproveRequest, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.POST("/armory/purchase-requests/:rid/decline", bh.DeclineRequest, campaigns.RequireRole(campaigns.RolePlayer))
+	// A player takes back their own waiting request; the service allows only
+	// the requester or Owner visibility.
+	cg.POST("/armory/purchase-requests/:rid/withdraw", bh.WithdrawRequest, campaigns.RequireRole(campaigns.RolePlayer))
 
 	// Transaction routes. Buying goes through the shop buy route above;
 	// CreateTransaction is the GM-mediated path (gift, transfer, restock).

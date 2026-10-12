@@ -26,56 +26,6 @@ Chronicle.register('relations', {
       error: null
     };
 
-    // Inject scoped styles once.
-    if (!document.getElementById('relations-widget-styles')) {
-      var style = document.createElement('style');
-      style.id = 'relations-widget-styles';
-      style.textContent = [
-        '.rel-card { border: 1px solid var(--color-border, #e5e7eb); border-radius: 8px; background: var(--color-card-bg, white); overflow: hidden; }',
-        '.rel-group-header { display: flex; align-items: center; gap: 6px; padding: 8px 12px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-text-secondary, #6b7280); border-bottom: 1px solid var(--color-bg-tertiary, #f3f4f6); }',
-        '.rel-item { display: flex; align-items: center; gap: 8px; padding: 8px 12px; transition: background 0.15s; }',
-        '.rel-item:hover { background: var(--color-bg-tertiary, #f3f4f6); }',
-        '.rel-item + .rel-item { border-top: 1px solid var(--color-bg-tertiary, #f3f4f6); }',
-        '.rel-icon { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }',
-        '.rel-icon i { font-size: 12px; color: white; }',
-        '.rel-name { flex: 1; min-width: 0; }',
-        '.rel-name a { font-size: 14px; font-weight: 500; color: var(--color-text-primary, #111827); text-decoration: none; }',
-        '.rel-name a:hover { color: var(--color-accent, #6366f1); }',
-        '.rel-type-badge { font-size: 11px; color: var(--color-text-muted, #9ca3af); }',
-        '.rel-delete { opacity: 0; padding: 4px; cursor: pointer; color: var(--color-text-muted, #9ca3af); border: none; background: none; border-radius: 4px; transition: opacity 0.15s, color 0.15s; }',
-        '.rel-item:hover .rel-delete, .rel-delete:focus-visible { opacity: 1; }',
-        '.rel-delete:hover { color: var(--color-danger, #ef4444); }',
-        '.rel-add-btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; font-size: 13px; font-weight: 500; color: var(--color-accent-hover, #4f46e5); background: none; border: 1px dashed rgb(var(--color-accent-rgb, 99 102 241) / 0.4); border-radius: 8px; cursor: pointer; transition: border-color 0.15s, background 0.15s; }',
-        '.rel-add-btn:hover { background: rgb(var(--color-accent-rgb, 99 102 241) / 0.08); border-color: var(--color-accent-light, #a5b4fc); }',
-        '.rel-modal { margin-top: 8px; border: 1px solid var(--color-border, #e5e7eb); border-radius: 8px; background: var(--color-card-bg, white); box-shadow: 0 4px 12px rgba(0,0,0,0.1); padding: 12px; }',
-        '.rel-search { width: 100%; padding: 8px 10px; font-size: 13px; border: 1px solid var(--color-border, #e5e7eb); border-radius: 6px; outline: none; background: transparent; color: inherit; }',
-        '.rel-search:focus { border-color: var(--color-accent, #6366f1); box-shadow: 0 0 0 2px rgb(var(--color-accent-rgb, 99 102 241) / 0.15); }',
-        '.rel-results { max-height: 160px; overflow-y: auto; margin-top: 6px; }',
-        '.rel-result { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; cursor: pointer; font-size: 13px; color: var(--color-text-body, #374151); }',
-        '.rel-result:hover { background: var(--color-bg-tertiary, #f3f4f6); }',
-        '.rel-result.selected { background: rgb(var(--color-accent-rgb, 99 102 241) / 0.1); border: 1px solid rgb(var(--color-accent-rgb, 99 102 241) / 0.4); }',
-        '.rel-result-icon { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }',
-        '.rel-result-icon i { font-size: 10px; color: white; }',
-        '.rel-type-select { width: 100%; padding: 8px 10px; font-size: 13px; border: 1px solid var(--color-border, #e5e7eb); border-radius: 6px; outline: none; background: var(--color-card-bg, transparent); color: inherit; margin-top: 8px; }',
-        '.rel-type-select:focus { border-color: var(--color-accent, #6366f1); box-shadow: 0 0 0 2px rgb(var(--color-accent-rgb, 99 102 241) / 0.15); }',
-        '.rel-custom-row { display: flex; gap: 6px; margin-top: 6px; }',
-        '.rel-custom-row input { flex: 1; padding: 6px 8px; font-size: 12px; border: 1px solid var(--color-border, #e5e7eb); border-radius: 6px; outline: none; background: transparent; color: inherit; }',
-        '.rel-actions { display: flex; gap: 6px; margin-top: 10px; justify-content: flex-end; }',
-        '.rel-submit { padding: 6px 16px; font-size: 13px; font-weight: 500; color: white; background: var(--color-accent-hover, #4f46e5); border: none; border-radius: 6px; cursor: pointer; }',
-        '.rel-submit:hover { filter: brightness(0.9); }',
-        '.rel-submit:disabled { opacity: 0.5; cursor: not-allowed; }',
-        '.rel-cancel { padding: 6px 16px; font-size: 13px; font-weight: 500; color: var(--color-text-secondary, #6b7280); background: none; border: 1px solid var(--color-border, #e5e7eb); border-radius: 6px; cursor: pointer; }',
-        '.rel-cancel:hover { background: var(--color-bg-tertiary, #f3f4f6); }',
-        '.rel-empty { padding: 16px; text-align: center; font-size: 13px; color: var(--color-text-muted, #9ca3af); }',
-        '.rel-error { padding: 12px; font-size: 13px; color: var(--color-danger, #ef4444); background: var(--color-danger-bg, #fef2f2); border-radius: 6px; margin-bottom: 8px; }',
-        '.rel-label { font-size: 12px; font-weight: 500; color: var(--color-text-secondary, #6b7280); margin-top: 8px; margin-bottom: 4px; }',
-        '.rel-dm-badge { display: inline-flex; align-items: center; gap: 3px; font-size: 10px; font-weight: 600; color: var(--color-warn, #d97706); background: var(--color-warn-bg, #fef3c7); padding: 1px 6px; border-radius: 4px; margin-left: 4px; }',
-        '.rel-dm-toggle { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 12px; color: var(--color-text-secondary, #6b7280); cursor: pointer; }',
-        '.rel-dm-toggle input { cursor: pointer; }'
-      ].join('\n');
-      document.head.appendChild(style);
-    }
-
     el._relationsState = state;
 
     // Load relations and common types in parallel.

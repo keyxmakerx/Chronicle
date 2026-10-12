@@ -231,6 +231,23 @@ func (c *Calendar) UsesRealTime() bool {
 	return c.Mode == ModeRealLife && c.TracksRealTime
 }
 
+// followRealClock sets a real-time calendar's current date and time from now
+// in its zone. The stored date is only what the calendar held when it was
+// created or last saved, so every read takes the clock instead. A missing or
+// unknown zone keeps the stored date rather than failing the read.
+func (c *Calendar) followRealClock(now time.Time) {
+	if !c.UsesRealTime() || c.RealTimeZone == nil || *c.RealTimeZone == "" {
+		return
+	}
+	loc, err := time.LoadLocation(*c.RealTimeZone)
+	if err != nil {
+		return
+	}
+	t := now.In(loc)
+	c.CurrentYear, c.CurrentMonth, c.CurrentDay = t.Year(), int(t.Month()), t.Day()
+	c.CurrentHour, c.CurrentMinute = t.Hour(), t.Minute()
+}
+
 // IsLeapYear returns true if the given year is a leap year according to
 // the calendar's leap year configuration. LeapYearEvery=0 means no leap years.
 func (c *Calendar) IsLeapYear(year int) bool {
@@ -292,6 +309,22 @@ func (c *Calendar) MonthDays(monthIdx int, year int) int {
 // WeekLength returns the number of days in a week (number of weekdays).
 func (c *Calendar) WeekLength() int {
 	return len(c.Weekdays)
+}
+
+// GridFirstWeekday is the weekday index a month grid starts each row on. A
+// real-world calendar keeps its weekdays Monday to Sunday (WeekdayIndex's
+// real-time branch depends on that order), but its grid starts on Sunday like
+// a wall calendar. Every other calendar starts on its own first weekday. Only
+// the grid layout reads this; weekday rules and recurrences keep the stored
+// order.
+func (c *Calendar) GridFirstWeekday(weekLen int) int {
+	if weekLen != 7 || !c.IsRealLife() {
+		return 0
+	}
+	if c.UsesRealTime() || (len(c.Weekdays) == 7 && c.Weekdays[6].Name == "Sunday") {
+		return 6
+	}
+	return 0
 }
 
 // Recurrence type constants. The first five mirror the sessions plugin's
@@ -823,6 +856,11 @@ type Moon struct {
 	// HiddenFromPlayers lets the Director hide a moon from players entirely
 	// (undiscovered, or secret world lore) while it still renders for the GM.
 	HiddenFromPlayers bool `json:"hidden_from_players"`
+	// LoreEntityID links a page about the moon. LoreEntityName is read with
+	// it, scoped to the calendar's campaign; both are blanked for a viewer
+	// who may not see that page, exactly as an era's are.
+	LoreEntityID   *string `json:"lore_entity_id,omitempty"`
+	LoreEntityName string  `json:"lore_entity_name,omitempty"`
 }
 
 // MoonPhase returns the phase (0.0–1.0) of this moon on a given absolute day
@@ -1517,6 +1555,14 @@ type MoonInput struct {
 	PhaseSource       string  `json:"phase_source,omitempty"`
 	Size              float64 `json:"size,omitempty"`
 	OrbitSpeed        float64 `json:"orbit_speed,omitempty"`
+	// LoreEntityID is the moon's lore page. A plain pointer cannot tell an
+	// absent key from an explicit null, so LoreSet says whether the writer
+	// means it: an update with LoreSet false keeps the stored page, with
+	// LoreSet true replaces it (nil clears). A fresh insert always stores
+	// it. A file or a wizard round trip never reaches the database with
+	// either (a page id names a page in some other campaign, if any).
+	LoreEntityID *string `json:"lore_entity_id,omitempty"`
+	LoreSet      bool    `json:"lore_set,omitempty"`
 }
 
 // EraInput is the input for creating/updating an era. Field order matches

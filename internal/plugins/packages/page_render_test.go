@@ -250,3 +250,23 @@ func TestVersionListShowsRuleText(t *testing.T) {
 		t.Error("versions tab must state the actual rule")
 	}
 }
+
+// TestProblemPanelOffersNewerRelease pins that a package whose last update
+// failed offers Install for the newer release beside Try again, which only
+// re-checks.
+func TestProblemPanelOffersNewerRelease(t *testing.T) {
+	data := pageDataForRender("pf", "")
+	data.Selected.Newer = &PackageVersion{Version: "0.7.0"}
+	out := renderToString(t, installedTab(data))
+	for _, want := range []string{"Last update failed.", "Install 0.7.0", `hx-put="/admin/packages/pf/version"`, "Try again"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q", want)
+		}
+	}
+
+	data.Selected.Newer = nil
+	out = renderToString(t, installedTab(data))
+	if strings.Contains(out, `hx-put="/admin/packages/pf/version"`) {
+		t.Error("with no newer release the failed panel offers only Try again")
+	}
+}

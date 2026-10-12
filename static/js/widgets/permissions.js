@@ -57,113 +57,6 @@ Chronicle.register('permissions', {
     // edge, so it opens inside the thing it belongs to.
     var corner = config.layout === 'corner';
 
-    // Inject scoped styles once. Card uses CSS variables that flow from
-    // the campaign theme (surface/edge/accent) so per-campaign retints
-    // work.
-    if (!document.getElementById('perm-widget-styles')) {
-      var style = document.createElement('style');
-      style.id = 'perm-widget-styles';
-      style.textContent = [
-        // Trigger button — small inline affordance rendered into the mount el.
-        '.perm-trigger { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--color-edge, #d1d5db); background: var(--color-surface, #fff); color: var(--color-fg-body, #374151); font-size: 13px; cursor: pointer; transition: background 0.15s, border-color 0.15s; }',
-        '.perm-trigger:hover { background: var(--color-surface-alt, #f3f4f6); border-color: var(--color-accent, #6366f1); }',
-        '.perm-trigger:focus-visible { outline: 2px solid var(--color-accent, #6366f1); outline-offset: 2px; }',
-        '.perm-trigger .perm-trigger-mode { color: var(--color-fg-muted, #9ca3af); font-size: 11px; padding-left: 4px; border-left: 1px solid var(--color-edge, #e5e7eb); margin-left: 4px; }',
-        // Backdrop — fades in/out under the card.
-        '.perm-backdrop { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.4); opacity: 0; pointer-events: none; transition: opacity 280ms ease-out; z-index: 90; }',
-        '.perm-backdrop.perm-open { opacity: 1; pointer-events: auto; }',
-        // Card — fixed to the right edge, off-screen by default.
-        '.perm-card { position: fixed; top: 0; right: 0; bottom: 0; width: min(100%, 420px); background: var(--color-surface, #fff); color: var(--color-fg-body, #374151); border-left: 1px solid var(--color-edge, #e5e7eb); box-shadow: -16px 0 32px -8px rgba(15, 23, 42, 0.18); display: flex; flex-direction: column; transform: translateX(100%); transition: transform 280ms ease-out; z-index: 100; }',
-        '.perm-card.perm-open { transform: translateX(0); }',
-        // Header / body / footer of the card.
-        '.perm-card-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--color-edge, #e5e7eb); }',
-        '.perm-card-title { font-size: 15px; font-weight: 600; color: var(--color-fg, #111827); display: flex; align-items: center; gap: 8px; }',
-        '.perm-card-close { width: 32px; height: 32px; border-radius: 8px; border: none; background: transparent; color: var(--color-fg-muted, #6b7280); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.15s; }',
-        '.perm-card-close:hover { background: var(--color-surface-alt, #f3f4f6); color: var(--color-fg-body, #374151); }',
-        '.perm-card-body { flex: 1 1 auto; overflow-y: auto; padding: 16px 20px; }',
-        '.perm-card-footer { padding: 10px 20px; border-top: 1px solid var(--color-edge, #e5e7eb); font-size: 12px; color: var(--color-fg-muted, #6b7280); min-height: 20px; }',
-        // Inline error region.
-        '.perm-error { border-radius: 8px; padding: 10px 12px; font-size: 13px; margin-bottom: 12px; display: flex; align-items: flex-start; gap: 8px; }',
-        '.perm-error .perm-error-dismiss { margin-left: auto; background: transparent; border: none; color: inherit; opacity: 0.7; cursor: pointer; font-size: 16px; line-height: 1; }',
-        '.perm-error-validation { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }',
-        '.perm-error-auth { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }',
-        '.perm-error-not_found { background: #e0e7ff; color: #3730a3; border: 1px solid #c7d2fe; }',
-        '.perm-error-internal { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }',
-        '.dark .perm-error-validation { background: #451a03; color: #fbbf24; border-color: #92400e; }',
-        '.dark .perm-error-auth, .dark .perm-error-internal { background: #450a0a; color: #fca5a5; border-color: #991b1b; }',
-        '.dark .perm-error-not_found { background: #1e1b4b; color: #c7d2fe; border-color: #3730a3; }',
-        // Mode picker — Material-ish card list.
-        '.perm-mode-list { display: flex; flex-direction: column; gap: 8px; }',
-        '.perm-mode-option { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border-radius: 10px; border: 1.5px solid var(--color-edge, #e5e7eb); background: var(--color-surface, #fff); cursor: pointer; transition: border-color 0.15s, background 0.15s, box-shadow 0.15s; }',
-        '.perm-mode-option:hover { background: var(--color-surface-alt, #f9fafb); }',
-        '.perm-mode-option.perm-mode-active { border-color: var(--color-accent, #6366f1); background: var(--color-accent-subtle, #eef2ff); box-shadow: 0 1px 3px rgba(99, 102, 241, 0.12); }',
-        '.perm-mode-option.perm-mode-disabled { opacity: 0.6; cursor: not-allowed; }',
-        '.perm-mode-option input[type=radio] { margin-top: 2px; accent-color: var(--color-accent, #6366f1); }',
-        '.perm-mode-icon { width: 28px; height: 28px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border-radius: 8px; background: var(--color-surface-alt, #f3f4f6); color: var(--color-fg-muted, #6b7280); margin-top: 1px; }',
-        '.perm-mode-option.perm-mode-active .perm-mode-icon { background: var(--color-accent, #6366f1); color: white; }',
-        '.perm-mode-label { font-size: 13px; font-weight: 600; color: var(--color-fg, #111827); }',
-        '.perm-mode-desc { font-size: 12px; color: var(--color-fg-muted, #6b7280); margin-top: 2px; line-height: 1.4; }',
-        // Custom grants block.
-        '.perm-section-header { font-size: 11px; font-weight: 600; color: var(--color-fg-muted, #6b7280); text-transform: uppercase; letter-spacing: 0.06em; margin: 16px 0 6px; }',
-        '.perm-section-hint { font-size: 11px; color: var(--color-fg-muted, #9ca3af); margin-bottom: 8px; }',
-        '.perm-grant-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--color-edge, #f3f4f6); }',
-        '.perm-grant-row:last-child { border-bottom: none; }',
-        '.perm-grant-name { flex: 1; font-size: 13px; color: var(--color-fg-body, #374151); display: flex; align-items: center; gap: 6px; min-width: 0; }',
-        '.perm-grant-name .perm-role-badge { font-size: 10px; padding: 1px 6px; border-radius: 9999px; background: var(--color-surface-alt, #f3f4f6); color: var(--color-fg-muted, #6b7280); }',
-        '.perm-grant-name .perm-grant-icon { width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; color: var(--color-fg-muted, #6b7280); flex-shrink: 0; }',
-        '.perm-toggle-group { display: inline-flex; }',
-        '.perm-toggle { padding: 3px 10px; font-size: 12px; border: 1px solid var(--color-edge, #d1d5db); background: var(--color-surface, #fff); color: var(--color-fg-muted, #6b7280); cursor: pointer; transition: background 0.15s, color 0.15s, border-color 0.15s; }',
-        '.perm-toggle:first-child { border-radius: 6px 0 0 6px; }',
-        '.perm-toggle:last-child { border-radius: 0 6px 6px 0; border-left-width: 0; }',
-        '.perm-toggle:not(:first-child):not(:last-child) { border-left-width: 0; }',
-        '.perm-toggle:hover:not(.perm-toggle-active) { background: var(--color-surface-alt, #f3f4f6); }',
-        '.perm-toggle-active { background: var(--color-accent, #6366f1); color: white; border-color: var(--color-accent, #6366f1); }',
-        '.perm-warning { font-size: 12px; color: #b45309; padding: 8px 12px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; margin-top: 8px; display: flex; align-items: flex-start; gap: 8px; }',
-        '.dark .perm-warning { background: #451a03; border-color: #92400e; color: #fbbf24; }',
-        '.perm-loading { padding: 24px; text-align: center; color: var(--color-fg-muted, #9ca3af); font-size: 13px; }',
-        '.perm-readonly-badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 6px; font-size: 13px; background: var(--color-surface-alt, #f3f4f6); color: var(--color-fg-body, #374151); }',
-        '.perm-draft-note { font-size: 11px; color: var(--color-fg-muted, #6b7280); margin-top: 10px; padding: 8px 10px; background: var(--color-surface-alt, #f9fafb); border-radius: 6px; border-left: 3px solid var(--color-accent, #6366f1); line-height: 1.4; }',
-        // Tag-derived grants note: amber to distinguish a widening exposed
-        // by a tag from the page-level permission controls.
-        '.perm-tag-note { font-size: 12px; color: var(--color-fg-body, #374151); margin-bottom: 12px; padding: 8px 10px; background: var(--color-surface-alt, #f9fafb); border-radius: 6px; border-left: 3px solid #f59e0b; line-height: 1.5; }',
-        '.perm-tag-note .perm-tag-note-title { font-weight: 600; display: block; margin-bottom: 2px; }',
-        '.perm-tag-note .perm-tag-chip { color: var(--color-fg-muted, #6b7280); }',
-        '.perm-trigger-widened { width: 6px; height: 6px; border-radius: 9999px; background: #f59e0b; margin-left: 4px; }',
-        '@media (max-width: 480px) { .perm-card { width: 100%; box-shadow: none; } }',
-        // Inline layout: a summary trigger above a collapsible panel in the
-        // form flow. The panel animates open/closed via the
-        // grid-template-rows 0fr↔1fr trick — pure CSS height animation, no JS
-        // measurement, reduced-motion safe.
-        '.perm-inline .perm-trigger { width: 100%; justify-content: flex-start; }',
-        '.perm-inline .perm-trigger .perm-trigger-chevron { margin-left: auto; transition: transform 200ms ease-out; }',
-        '.perm-inline.perm-inline-open .perm-trigger .perm-trigger-chevron { transform: rotate(180deg); }',
-        '.perm-inline-panel { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 280ms ease-out; border: 1px solid var(--color-edge, #e5e7eb); border-top: none; border-radius: 0 0 8px 8px; }',
-        '.perm-inline-panel.perm-open { grid-template-rows: 1fr; }',
-        '.perm-inline-inner { overflow: hidden; min-height: 0; }',
-        '.perm-inline .perm-card-body { padding: 16px; }',
-        '.perm-inline .perm-card-footer { border-top: 1px solid var(--color-edge, #e5e7eb); }',
-        '.perm-inline-open .perm-trigger { border-radius: 8px 8px 0 0; }',
-        '@media (prefers-reduced-motion: reduce) { .perm-inline-panel, .perm-inline .perm-trigger-chevron { transition: none; } }',
-        // Corner layout: a popover anchored under the page's top-right
-        // control, growing from that corner. Only transform and opacity
-        // animate; visibility flips after the close transition ends.
-        '.perm-corner-panel { position: absolute; top: calc(100% + 6px); right: 0; width: min(380px, calc(100vw - 32px)); max-height: min(70vh, 560px); display: flex; flex-direction: column; background: var(--color-card-bg, #fff); color: var(--color-fg-body, #374151); border: 1px solid var(--color-edge, #e5e7eb); border-radius: 12px; box-shadow: var(--elev-dragged, 0 16px 36px -8px rgba(0,0,0,0.22)); transform-origin: top right; transform: scale(0.92) translateY(-4px); opacity: 0; visibility: hidden; pointer-events: none; transition: transform var(--dur-standard, 200ms) var(--ease-out, ease-out), opacity var(--dur-standard, 200ms) var(--ease-out, ease-out), visibility 0s linear var(--dur-standard, 200ms); z-index: 50; text-align: left; }',
-        '.perm-corner-panel.perm-open { transform: none; opacity: 1; visibility: visible; pointer-events: auto; transition-delay: 0s; }',
-        '.perm-corner-panel .perm-card-header { padding: 12px 16px; }',
-        '.perm-corner-panel .perm-card-body { padding: 12px 16px; }',
-        '.perm-corner-open [data-perm-corner-tip] { display: none; }',
-        '.perm-corner-open [data-perm-corner-trigger] { border-color: var(--color-accent, #6366f1); }',
-        '.perm-unsaved { display: none; margin: 0 16px 12px; padding: 8px 10px; border-radius: 8px; font-size: 12px; background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }',
-        '.dark .perm-unsaved { background: #451a03; color: #fbbf24; border-color: #92400e; }',
-        '.perm-unsaved.perm-unsaved-show { display: block; animation: perm-unsaved-in var(--dur-standard, 200ms) var(--ease-out, ease-out); }',
-        '.perm-corner-panel.perm-nudge { animation: perm-nudge 360ms var(--ease-in-out, ease-in-out); }',
-        '@keyframes perm-unsaved-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }',
-        '@keyframes perm-nudge { 20%, 60% { transform: translateX(-5px); } 40%, 80% { transform: translateX(5px); } }',
-        '@media (prefers-reduced-motion: reduce) { .perm-corner-panel { transition: none; } .perm-corner-panel.perm-nudge, .perm-unsaved.perm-unsaved-show { animation: none; } }'
-      ].join('\n');
-      document.head.appendChild(style);
-    }
-
     var roleNames = { 1: 'Player', 2: 'Scribe', 3: 'Owner' };
 
     function modeLabel(mode) {
@@ -282,7 +175,7 @@ Chronicle.register('permissions', {
       trigger.appendChild(modeBadge);
       // Tag-widening dot: an amber pip when an otherwise hidden page is
       // exposed by a tag grant, mirroring the show-page badge.
-      if (mode !== 'everyone' && state.tagGrants && state.tagGrants.length > 0) {
+      if (mode !== 'everyone' && el.getAttribute('data-category-dm-only') !== 'true' && state.tagGrants && state.tagGrants.length > 0) {
         var widened = document.createElement('span');
         widened.className = 'perm-trigger-widened';
         widened.setAttribute('data-tag-widened', 'true');
@@ -303,6 +196,10 @@ Chronicle.register('permissions', {
     function renderCornerTrigger() {
       if (state.loading || state.loadFailed) return;
       var mode = getMode();
+      // A DM-only category hides the page from players whatever the page's
+      // own setting says, so "everyone" there still means the DM team.
+      var dmCategory = el.getAttribute('data-category-dm-only') === 'true';
+      if (dmCategory && mode === 'everyone') mode = 'dm_only';
       var icon = trigger.querySelector('[data-perm-corner-icon]');
       if (icon) {
         icon.className = 'fa-solid ' + (mode === 'everyone' ? 'fa-globe' : mode === 'dm_only' ? 'fa-lock' : 'fa-shield-halved') + ' text-[11px]';
@@ -313,7 +210,7 @@ Chronicle.register('permissions', {
       trigger.setAttribute('data-visibility-badge', mode);
       // Tags only widen a page that is otherwise hidden.
       var dot = trigger.querySelector('[data-perm-corner-dot]');
-      if (dot) dot.style.display = mode === 'everyone' ? 'none' : '';
+      if (dot) dot.style.display = mode === 'everyone' || dmCategory ? 'none' : '';
       var tip = el.querySelector('[data-perm-corner-tip]');
       if (tip && tip.getAttribute('data-perm-mode') !== mode && tip.hasAttribute('data-perm-mode')) {
         tip.textContent = cornerTip(mode);

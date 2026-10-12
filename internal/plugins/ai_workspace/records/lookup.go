@@ -80,6 +80,7 @@ type PartyNight struct {
 // may be nil; its lookups then say so.
 type Lookups struct {
 	Cal     CalendarAPI
+	Weather WeatherSettingsAPI
 	Tables  RollTablesAPI
 	Maps    MapsAPI
 	Pages   PagesAPI
@@ -88,6 +89,8 @@ type Lookups struct {
 	Rules   *HouseRuleKind
 	Entries SystemEntriesAPI
 	Party   PartyAPI
+	// Kinds answers `what: format` with a kind's own doc.
+	Kinds *Registry
 }
 
 // LookupAnswer is one lookup's result: the chip shown on screen and the
@@ -103,6 +106,8 @@ type LookupAnswer struct {
 var lookupWhats = []struct{ what, keys, brief string }{
 	{"pages", "optional `type` (e.g. Character)", "page names, by type"},
 	{"page", "`name`", "one page: its text, tags and links"},
+	{lookupWhatCalendar, "none", "the calendar itself: months, weekdays, seasons, moons with today's phase and the next new and full moon, eras, festivals, today's date, and its climate"},
+	{"weather-kinds", "none", "every climate, built-in weather label and sky effect the calendar can animate, and the owner's own kinds of weather"},
 	{"events", "`from` and `to` (e.g. `Deepwinter 1 1492`), or `year` and optional `month`", "calendar events in a date range"},
 	{"weather", "`from` and `to`, or `year` and `month`", "each day's weather in a date range"},
 	{"table", "optional `name`", "rolling tables, or one table's entries"},
@@ -113,6 +118,7 @@ var lookupWhats = []struct{ what, keys, brief string }{
 	{"house-rules", "none", "the house-rules chapters"},
 	{"system-entries", "`field` (e.g. ancestry, kit, race)", "the game system's entries for a character field"},
 	{"players", "none", "each player's character right now: level and class, meters, conditions, what they carry, and whether they are coming to the next game night"},
+	{lookupWhatFormat, "`block`, the kind to explain (e.g. `block: calendar`)", "how to write one kind of block: every key, the rules and an example"},
 }
 
 // LookupDoc is the prompt's description of lookup blocks.
@@ -173,7 +179,7 @@ func Markdown(ans []LookupAnswer) string {
 	var b strings.Builder
 	for _, a := range ans {
 		if a.Error != "" {
-			fmt.Fprintf(&b, "## %s\n\nNot answered: %s.\n\n", a.Chip, a.Error)
+			fmt.Fprintf(&b, "## %s\n\nNot answered: %s.\n\n", a.Chip, strings.TrimRight(a.Error, "."))
 			continue
 		}
 		b.WriteString(strings.TrimSpace(a.Text))
@@ -190,6 +196,10 @@ func (run *lookupRun) one(what string, r Record) LookupAnswer {
 		ans, err = run.pagesIndex(r.Str("type"))
 	case "page":
 		ans, err = run.page(firstNonEmpty(r.Name, r.Str("page")))
+	case lookupWhatCalendar:
+		ans, err = run.calendarInfo()
+	case "weather-kinds", "weather-kind":
+		ans, err = run.weatherKinds()
 	case "events":
 		ans, err = run.events(r)
 	case "weather":
@@ -210,10 +220,15 @@ func (run *lookupRun) one(what string, r Record) LookupAnswer {
 		ans, err = run.systemEntries(firstNonEmpty(r.Str("field"), r.Str("category")))
 	case "players", "party":
 		ans, err = run.players()
+	case lookupWhatFormat, "formats", "how-to":
+		ans, err = run.format(firstNonEmpty(r.Str("block"), r.Name))
 	case "":
 		return LookupAnswer{Chip: "Lookup", Error: "it needs `what:`"}
 	default:
 		return LookupAnswer{Chip: what, Error: fmt.Sprintf("`what: %s` is not something Chronicle can look up", what)}
+	}
+	if isNoCalendar(err) {
+		return run.noCalendar(strings.SplitN(ans.Chip, " · ", 2)[0])
 	}
 	if err != nil {
 		if ans.Chip == "" {
@@ -283,6 +298,27 @@ func (run *lookupRun) findPage(name string) (*entities.Entity, error) {
 	return nil, badRequestf("no page called %s", quote(name))
 }
 
+// parentNames maps every visible page id to its name, so a parent is only
+// ever named when the Actor can see it.
+func (run *lookupRun) parentNames() map[string]string {
+	pages, _ := run.visiblePages()
+	names := make(map[string]string, len(pages))
+	for _, p := range pages {
+		names[p.ID] = p.Name
+	}
+	return names
+}
+
+// withParent labels a page "Name (in Parent)" when its parent is visible.
+func withParent(p entities.Entity, names map[string]string) string {
+	if p.ParentID != nil {
+		if parent := names[*p.ParentID]; parent != "" {
+			return p.Name + " (in " + parent + ")"
+		}
+	}
+	return p.Name
+}
+
 // visibleIDs is the set of page ids the Actor can see.
 func (run *lookupRun) visibleIDs() map[string]bool {
 	pages, _ := run.visiblePages()
@@ -325,6 +361,7 @@ func (run *lookupRun) pagesIndex(typeName string) (LookupAnswer, error) {
 		return LookupAnswer{Chip: "Pages"}, err
 	}
 	groups, order := map[string][]string{}, []string{}
+	parents := run.parentNames()
 	for _, p := range pages {
 		label := firstNonEmpty(p.TypeNamePlural, p.TypeName, "Pages")
 		if typeName != "" && !sameName(p.TypeName, typeName) && !sameName(p.TypeNamePlural, typeName) && !sameName(p.TypeSlug, typeName) {
@@ -333,7 +370,7 @@ func (run *lookupRun) pagesIndex(typeName string) (LookupAnswer, error) {
 		if _, ok := groups[label]; !ok {
 			order = append(order, label)
 		}
-		groups[label] = append(groups[label], p.Name)
+		groups[label] = append(groups[label], withParent(p, parents))
 	}
 	n := 0
 	for _, g := range groups {
@@ -367,7 +404,9 @@ func (run *lookupRun) pagesIndex(typeName string) (LookupAnswer, error) {
 }
 
 // PageIndex is the prompt's compact list of page names per type, capped,
-// so the AI knows what it can ask about without the whole world.
+// so the AI knows what it can ask about without the whole world. A
+// sub-page reads "Name (in Parent)" so the AI can place new pages with
+// `parent:`; a parent the reader cannot see is not named.
 func (l *Lookups) PageIndex(ctx context.Context, campaignID string, a Actor) string {
 	if l == nil || l.Pages == nil {
 		return ""
@@ -379,12 +418,13 @@ func (l *Lookups) PageIndex(ctx context.Context, campaignID string, a Actor) str
 	}
 	const perType = 40
 	groups, order := map[string][]string{}, []string{}
+	parents := run.parentNames()
 	for _, p := range pages {
 		label := firstNonEmpty(p.TypeNamePlural, p.TypeName, "Pages")
 		if _, ok := groups[label]; !ok {
 			order = append(order, label)
 		}
-		groups[label] = append(groups[label], p.Name)
+		groups[label] = append(groups[label], withParent(p, parents))
 	}
 	var b strings.Builder
 	for _, label := range order {
@@ -420,6 +460,7 @@ func (run *lookupRun) page(name string) (LookupAnswer, error) {
 	if run.director() {
 		opts.Privacy = aiexport.PrivacyModePermitted
 	}
+	opts.ParentNames = run.parentNames()
 	md, err := aiexport.RenderEntities(run.ctx, []entities.Entity{*e}, types, nil, map[string][]relations.Relation{e.ID: rels}, opts)
 	if err != nil {
 		return ans, err

@@ -227,6 +227,33 @@ func TestValidateContributes(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name: "widget with tile sizes",
+			c: &ManifestContributes{
+				Widgets: []WidgetContribution{{Slug: "sky", Name: "Sky", File: "widgets/sky.js", TileSizes: []string{"1x1", "2x1"}}},
+			},
+		},
+		{
+			name: "widget tile size malformed",
+			c: &ManifestContributes{
+				Widgets: []WidgetContribution{{Slug: "sky", Name: "Sky", File: "widgets/sky.js", TileSizes: []string{"wide"}}},
+			},
+			wantErr: true,
+		},
+		{
+			name: "widget tile size wider than the grid",
+			c: &ManifestContributes{
+				Widgets: []WidgetContribution{{Slug: "sky", Name: "Sky", File: "widgets/sky.js", TileSizes: []string{"5x1"}}},
+			},
+			wantErr: true,
+		},
+		{
+			name: "widget tile size repeated",
+			c: &ManifestContributes{
+				Widgets: []WidgetContribution{{Slug: "sky", Name: "Sky", File: "widgets/sky.js", TileSizes: []string{"1x1", "1x1"}}},
+			},
+			wantErr: true,
+		},
+		{
 			name: "widget path traversal",
 			c: &ManifestContributes{
 				Widgets: []WidgetContribution{{Slug: "dice-roller", Name: "Dice Roller", File: "../evil.js"}},

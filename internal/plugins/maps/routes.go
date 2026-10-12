@@ -25,6 +25,11 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.PUT("/maps/:mid", h.UpdateMapAPI, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.DELETE("/maps/:mid", h.DeleteMapAPI, campaigns.RequireRole(campaigns.RoleOwner))
 
+	// The Measure tool's scale: membership only at the route, because a member
+	// with DM access is not an owner by role; MapService.SetMeasureScale
+	// refuses everyone but the owner and DM grants.
+	cg.PUT("/maps/:mid/measure", h.PutMeasureScaleAPI, campaigns.RequireRole(campaigns.RolePlayer))
+
 	// Campaign-wide map frame, set from the Customize page's Maps tab.
 	cg.PUT("/maps/frame-style", h.SetCampaignFrameAPI, campaigns.RequireRole(campaigns.RoleOwner))
 
@@ -39,6 +44,11 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.POST("/maps/:mid/markers", h.CreateMarkerAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.PUT("/maps/:mid/markers/:mkid", h.UpdateMarkerAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.DELETE("/maps/:mid/markers/:mkid", h.DeleteMarkerAPI, campaigns.RequireRole(campaigns.RoleScribe))
+
+	// The tree of linked maps (pins that open other maps), filtered for the
+	// viewer exactly as their marker lists are. Session-only: the static
+	// segment wins over /maps/:mid in Echo's router.
+	cg.GET("/maps/link-tree", h.LinkTreeAPI, campaigns.RequireRole(campaigns.RolePlayer))
 
 	// Public-capable views: map list and map viewer.
 	pub := e.Group("/campaigns/:id",

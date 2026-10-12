@@ -6,6 +6,10 @@
  *   .pickAndInsert(ed, campaignId)          file chooser -> upload -> insert
  *   .uploadAndInsert(ed, campaignId, files, pos)
  *   .imageFiles(dataTransfer)               the image files in a paste/drop
+ *   .useNotePictures(ed, campaignId)        send this editor's pictures to the
+ *                                           notes picture route (players may)
+ *   .pasteDropProps(ed, campaignId)         editorProps that upload pasted or
+ *                                           dropped picture files
  *
  * Saved HTML is <figure class="ce-img ce-img--w40 ce-img--right
  * [ce-img--gm]"><img src="/media/<id>" alt><figcaption>…</figcaption></figure>.
@@ -157,6 +161,8 @@
       cap.hidden = !a.caption;
       if (document.activeElement !== capInput) capInput.value = a.caption || '';
       ALIGNS.forEach(function (al) { alignBtns[al].classList.toggle('is-on', a.align === al); });
+      // Read per paint: the notes editors flag themselves after they are built.
+      gmBtn.style.display = editor.chronicleNotePictures ? 'none' : '';
       gmBtn.classList.toggle('is-on', !!a.gmOnly);
       gmBtn.setAttribute('aria-pressed', a.gmOnly ? 'true' : 'false');
       handle.setAttribute('aria-valuenow', String(clampWidth(a.width)));
@@ -242,7 +248,7 @@
         paint();
         return true;
       },
-      selectNode: function () { fig.classList.add('is-selected'); },
+      selectNode: function () { gmBtn.style.display = editor.chronicleNotePictures ? 'none' : ''; fig.classList.add('is-selected'); },
       deselectNode: function () { fig.classList.remove('is-selected'); commitCaption(); },
       // Clicks and typing in the tools stay out of ProseMirror.
       stopEvent: function (e) {
@@ -296,12 +302,11 @@
     return out;
   }
 
-  function upload(campaignId, file) {
+  function post(url, file, fields) {
     var body = new FormData();
     body.append('file', file);
-    body.append('campaign_id', campaignId);
-    body.append('usage_type', 'attachment');
-    return Chronicle.apiFetch('/media/upload', { method: 'POST', body: body })
+    for (var k in fields) body.append(k, fields[k]);
+    return Chronicle.apiFetch(url, { method: 'POST', body: body })
       .then(function (res) {
         if (!res.ok) {
           return res.json().catch(function () { return {}; }).then(function (j) {
@@ -312,13 +317,35 @@
       });
   }
 
+  // Pages: the campaign's media library (Scribe and up).
+  function upload(campaignId, file) {
+    return post('/media/upload', file, { campaign_id: campaignId, usage_type: 'attachment' });
+  }
+
+  // Notes: any member may add a picture to their own note. The server keeps
+  // the file private to the readers of the note that holds it, and the same
+  // address works in the Foundry notebook frame, which has no media-library
+  // access.
+  function uploadNotePicture(campaignId, file) {
+    return post('/campaigns/' + encodeURIComponent(campaignId) + '/notes/pictures', file, {});
+  }
+
+  // useNotePictures makes this editor's pictures go to the notes route and
+  // drops the "GM only" switch, which notes have no meaning for: a note's
+  // audience is its own share setting.
+  function useNotePictures(editor, campaignId) {
+    editor.chronicleImageUpload = function (file) { return uploadNotePicture(campaignId, file); };
+    editor.chronicleNotePictures = true;
+  }
+
   function uploadAndInsert(editor, campaignId, files, pos) {
     if (!campaignId || !files || !files.length) return Promise.resolve(0);
     var done = 0;
     var chain = Promise.resolve();
     files.forEach(function (file) {
       chain = chain.then(function () {
-        return upload(campaignId, file).then(function (data) {
+        var send = editor.chronicleImageUpload || function (f) { return upload(campaignId, f); };
+        return send(file).then(function (data) {
           if (!data || !MEDIA_ID_RE.test(String(data.id || ''))) throw new Error('Upload failed');
           var content = { type: 'chronicleImage', attrs: { mediaId: data.id, alt: (file.name || '').replace(/\.[^.]+$/, '').slice(0, 120) } };
           if (typeof pos === 'number') {
@@ -350,6 +377,31 @@
     input.click();
   }
 
+  // pasteDropProps are editorProps for an editor that takes picture files
+  // pasted or dropped into the text. editor is a getter because the props are
+  // needed to build the editor they act on.
+  function pasteDropProps(getEditor, campaignId) {
+    function take(view, files, pos) {
+      var ed = getEditor();
+      if (!ed || !files.length || !view.editable) return false;
+      uploadAndInsert(ed, campaignId, files, pos);
+      return true;
+    }
+    return {
+      handlePaste: function (view, event) {
+        return take(view, imageFiles(event.clipboardData));
+      },
+      handleDrop: function (view, event, slice, moved) {
+        if (moved) return false;
+        var files = imageFiles(event.dataTransfer);
+        if (!files.length) return false;
+        event.preventDefault();
+        var at = view.posAtCoords({ left: event.clientX, top: event.clientY });
+        return take(view, files, at ? at.pos : undefined);
+      }
+    };
+  }
+
   // "/picture" in the slash menu (loaded before this file).
   if (window.Chronicle && Chronicle.SlashCommands && Chronicle.SlashCommands.addCommand) {
     Chronicle.SlashCommands.addCommand({
@@ -366,6 +418,8 @@
     pickAndInsert: pickAndInsert,
     uploadAndInsert: uploadAndInsert,
     imageFiles: imageFiles,
+    useNotePictures: useNotePictures,
+    pasteDropProps: pasteDropProps,
     // Exposed for tests.
     _clampWidth: clampWidth,
     _mediaIdFromSrc: mediaIdFromSrc,

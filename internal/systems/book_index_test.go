@@ -208,7 +208,7 @@ func TestBookIndexReaderScope(t *testing.T) {
 		t.Error("the paged chapter's first page is shown")
 	}
 
-	for _, r := range findInIndex(dir, m, player, "a") {
+	for _, r := range buildBookFindIndex(dir, m, player).search("a") {
 		if r.Chapter == "secret-index" {
 			t.Errorf("a player's search found a Director-only chapter: %+v", r)
 		}
@@ -216,7 +216,7 @@ func TestBookIndexReaderScope(t *testing.T) {
 	if chapterByID(director, "secret-index") == nil || chapterByID(player, "secret-index") != nil {
 		t.Error("the Director's index is in a Director's book only")
 	}
-	got := findInIndex(dir, m, player, "dash")
+	got := buildBookFindIndex(dir, m, player).search("dash")
 	if len(got) == 0 || got[0].Name != "dash" || got[0].Where != "By class · Fury" {
 		t.Errorf("find dash: %+v", got)
 	}

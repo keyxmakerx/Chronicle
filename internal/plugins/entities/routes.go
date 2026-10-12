@@ -20,6 +20,11 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 		withActorMiddleware,
 	)
 
+	// The page body without chrome, for the DM Screen to open over itself. The
+	// handler applies the DM team's rule and limits it to Adventures pages, and
+	// answers 404 (not 403) to everyone else so the route confirms nothing.
+	cg.GET("/entities/:eid/sheet", h.Sheet)
+
 	// Entry API (JSON endpoints for editor widget).
 	cg.GET("/entities/:eid/entry", h.GetEntry, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.PUT("/entities/:eid/entry", h.UpdateEntryAPI, campaigns.RequireRole(campaigns.RoleScribe))
@@ -45,6 +50,15 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.PUT("/entities/:eid/image", h.UpdateImageAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.PUT("/entities/:eid/cover-image", h.UpdateCoverImageAPI, campaigns.RequireRole(campaigns.RoleScribe))
 
+	// A page's version for one era: making, removing and other eras are the
+	// GM's. Its reads sit with the public widget reads below.
+	cg.POST("/entities/:eid/eras/:eraID", h.CreateEraVersionAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.PATCH("/entities/:eid/eras/:eraID", h.UpdateEraIdentityAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.DELETE("/entities/:eid/eras/:eraID", h.DeleteEraVersionAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.PUT("/entities/:eid/eras/:eraID/image", h.UpdateEraImageAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.PUT("/entities/:eid/eras/:eraID/entry", h.UpdateEraEntryAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.PUT("/entities/:eid/eras/:eraID/fields", h.UpdateEraFieldsAPI, campaigns.RequireRole(campaigns.RoleScribe))
+
 	// Inline metadata API (Scribe+): name, descriptor, parent, privacy.
 	// Player-admitted like /fields: a claimed owner may send {name} only.
 	cg.PUT("/entities/:eid/metadata", h.UpdateMetadataAPI, campaigns.RequireRole(campaigns.RolePlayer))
@@ -66,6 +80,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.GET("/entities/types", h.EntityTypesAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/entities/:eid/edit", h.EditForm, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.POST("/entities/:eid/clone", h.Clone, campaigns.RequireRole(campaigns.RoleScribe))
+	// Extra places a page is listed in the page tree (Scribe, and the page's own edit check).
+	cg.POST("/entities/:eid/places", h.AddPlaceAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.DELETE("/entities/:eid/places/:pid", h.RemovePlaceAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.PUT("/entities/:eid", h.Update, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.PUT("/entities/:eid/reorder", h.ReorderAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.POST("/entities/bulk-move", h.BulkMoveAPI, campaigns.RequireRole(campaigns.RoleScribe))
@@ -94,11 +111,17 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// Owner picks which page types the Characters page lists as the party and
 	// as NPCs.
 	cg.POST("/characters/lists", h.UpdateCharacterLists, campaigns.RequireRole(campaigns.RoleOwner))
+	// Staff keep the Players list: who plays which character, and
+	// which characters are on it.
+	cg.POST("/characters/owner", h.SetCharacterOwner, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.POST("/characters/playable", h.SetCharacterPlayable, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.GET("/characters/players/search", h.SearchRosterFinder, campaigns.RequireRole(campaigns.RoleScribe))
 	// Hero creator: staff make heroes for the table, players their own when
 	// the owner allows claiming (checked in the handler).
 	cg.GET("/characters/new", h.NewHero, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/characters/new/plan", h.HeroPlanAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.POST("/characters/new", h.CreateHero, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.GET("/characters/entries", h.OwnEntries, campaigns.RequireRole(campaigns.RolePlayer))
 	// Owner reassignment: Scribe+ only. Pass owner_user_id=null to clear.
 	cg.PUT("/entities/:eid/owner", h.AssignOwner, campaigns.RequireRole(campaigns.RoleScribe))
 	// Map assignment for the per-entity Map Editor block: Scribe+ only.
@@ -123,6 +146,8 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// Entity type management (Owner only).
 	cg.GET("/entity-types", h.EntityTypesPage, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.POST("/entity-types", h.CreateEntityType, campaigns.RequireRole(campaigns.RoleOwner))
+	// Customize's one-click Adventures category for a campaign that has none.
+	cg.POST("/entity-types/adventures", h.EnsureAdventuresAPI, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.PUT("/entity-types/:etid", h.UpdateEntityTypeAPI, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.DELETE("/entity-types/:etid", h.DeleteEntityType, campaigns.RequireRole(campaigns.RoleOwner))
 
@@ -135,6 +160,8 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.GET("/entity-types/:etid/customize", h.EntityTypeCustomizeFragment, campaigns.RequireRole(campaigns.RoleOwner))
 	// Customize Hub fragment: attributes field editor (used in Extensions tab).
 	cg.GET("/entity-types/:etid/attributes-fragment", h.EntityTypeAttributesFragment, campaigns.RequireRole(campaigns.RoleOwner))
+	// Customize's category workspace: the tabs that still use today's editors.
+	cg.GET("/entity-types/:etid/customize-tab/:tab", h.EntityTypeCustomizeTab, campaigns.RequireRole(campaigns.RoleOwner))
 
 	// Block types API — returns available block types filtered by campaign addons.
 	cg.GET("/entity-types/block-types", h.BlockTypesAPI, campaigns.RequireRole(campaigns.RoleOwner))
@@ -163,6 +190,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	pub.GET("/search", h.SearchPageHandler, campaigns.RequireViewAccess())
 	pub.GET("/entities/:eid", h.Show, campaigns.RequireViewAccess())
 	pub.GET("/entities/:eid/preview", h.PreviewAPI, campaigns.RequireViewAccess())
+	pub.GET("/entities/:eid/peek", h.Peek, campaigns.RequireViewAccess())
 	pub.GET("/entities/:eid/backlinks", h.BacklinksFragment, campaigns.RequireViewAccess())
 	// /characters — the campaign Cast (party + NPCs). Public so a public
 	// campaign's cast is browsable signed out, like the old NPC gallery; the
@@ -174,6 +202,10 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// entity-level privacy checks (private entities require Scribe+).
 	pub.GET("/entities/:eid/entry", h.GetEntry, campaigns.RequireViewAccess())
 	pub.GET("/entities/:eid/fields", h.GetFieldsAPI, campaigns.RequireViewAccess())
+	// The same reads for the version of the era the page is shown in; anyone
+	// but the GM reaches only the current era's.
+	pub.GET("/entities/:eid/eras/:eraID/entry", h.GetEraEntryAPI, campaigns.RequireViewAccess())
+	pub.GET("/entities/:eid/eras/:eraID/fields", h.GetEraFieldsAPI, campaigns.RequireViewAccess())
 	// Aliases display data — the aliases widget mounts for every viewer, so
 	// its read must be public-capable like entry/fields. GetAliasesAPI
 	// enforces the same IDOR + entity-privacy gate.

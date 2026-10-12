@@ -32,7 +32,7 @@ type campaignStateSource interface {
 // usage are loaded for all rows; a failed lookup for one package degrades that
 // row (no update, no campaign count) instead of failing the page, because the
 // admin must still be able to reach the Remove and Settings controls.
-func buildPackagesPage(ctx context.Context, src pageSource, updates campaignStateSource, q packagesQuery, csrfToken string, now time.Time) (*PackagesPageData, error) {
+func buildPackagesPage(ctx context.Context, src pageSource, updates campaignStateSource, hooks typeUIHooks, q packagesQuery, csrfToken string, now time.Time) (*PackagesPageData, error) {
 	pkgs, err := src.ListPackages(ctx)
 	if err != nil {
 		return nil, err
@@ -66,7 +66,7 @@ func buildPackagesPage(ctx context.Context, src pageSource, updates campaignStat
 		if p.Status == StatusPending {
 			continue
 		}
-		row := PackageRow{Package: p}
+		row := PackageRow{Package: p, ActionsFragmentURL: hooks.actionsFragmentURLFor(p)}
 
 		versions, err := src.ListVersions(ctx, p.ID)
 		if err != nil {
@@ -76,9 +76,7 @@ func buildPackagesPage(ctx context.Context, src pageSource, updates campaignStat
 		row.Versions = versions
 		row.Newer = newerVersion(p, versions)
 		row.Status = derivePackageStatus(p, row.Newer)
-		if row.Status != statusUpdateReady {
-			row.Newer = nil
-		}
+		row.Newer = offeredNewer(p, row.Status, row.Newer)
 
 		usage, err := src.GetUsage(ctx, p.ID)
 		if err != nil {

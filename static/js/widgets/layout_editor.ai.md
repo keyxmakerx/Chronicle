@@ -2,12 +2,12 @@
 
 ## Purpose
 Drag-and-drop layout editor used for campaign dashboards, owner dashboards,
-and category dashboards (`data-context="dashboard"`). Mounted by the Layout
-Studio (`layout_studio.js`) and by `customize.templ` / `entity_type_config.templ`
-directly via `data-widget="layout-editor"`. Page templates still use the
-separate `template_editor.js` widget (`data-context="template"` features in
-this file describe that other widget's config surface, listed here for
-comparison, not for this one).
+and category dashboards (`data-context="dashboard"`), and for a category's
+page layout (`data-context="template"`). Mounted directly via
+`data-widget="layout-editor"` by Customize's Home pages
+(`customize.templ`), its category workspace
+(`entity_type_customize_tab.templ`) and `entity_type_config.templ`. The new
+Customize page editor replaces it (#1362).
 
 ## Mount
 ```html
@@ -84,11 +84,9 @@ layout_editor.js
 - Keyboard shortcut: Ctrl+S / Cmd+S to save
 
 ## Relationship to Other Files
-- **layout_studio.js**: Orchestrator that mounts layout-editor with appropriate
-  context/features for each navigation selection
 - **template_editor.js**: Separate widget for page templates (`data-widget="template-editor"`,
-  loaded directly in `base.templ`); layout_editor.js mounts with
+  loaded on sight like this one); layout_editor.js mounts with
   `data-context="dashboard"` (customize and entity-type config pages) or
-  `data-context="template"` (mounted by layout_studio.js for page templates)
+  `data-context="template"` (Customize's category workspace, for page layouts)
 - **block_registry.go**: Server-side source of truth for block types + config fields
 - **block_registry_core.go**: Registers core blocks with contexts + config fields

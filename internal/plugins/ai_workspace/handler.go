@@ -65,6 +65,10 @@ type Handler struct {
 	// lookups answers an AI's read-only `kind: lookup` blocks. Optional —
 	// nil answers each one with "can't be looked up on this server".
 	lookups *records.Lookups
+
+	// importEras lets the review check an `era:` block's era and page before
+	// anything is written. Optional — nil marks such blocks unavailable.
+	importEras importer.EraLookup
 }
 
 // AuditLogger is the narrow contract the plugin needs for audit
@@ -112,6 +116,12 @@ func (h *Handler) SetImportCommitter(c *importer.Committer) {
 	h.importCommitter = c
 }
 
+// SetImportEras wires the era lookup the review uses for `era:` blocks. The
+// committer gets its writer separately (Committer.SetEraWriter).
+func (h *Handler) SetImportEras(l importer.EraLookup) {
+	h.importEras = l
+}
+
 // SetRecords wires the record kinds.
 func (h *Handler) SetRecords(r *records.Registry) {
 	h.records = r
@@ -125,6 +135,11 @@ func (h *Handler) SetLookups(l *records.Lookups) {
 // actorFor is the operator as the record kinds see them.
 func actorFor(c echo.Context, cc *campaigns.CampaignContext) records.Actor {
 	return records.Actor{UserID: auth.GetUserID(c), Role: cc.VisibilityRole()}
+}
+
+// viewerFor is the operator as page-link resolution checks access.
+func viewerFor(c echo.Context, cc *campaigns.CampaignContext) importer.Viewer {
+	return importer.Viewer{Role: cc.VisibilityRole(), UserID: auth.GetUserID(c)}
 }
 
 // exportActor is who the export lists records as. Safe mode, the default,
@@ -171,7 +186,7 @@ func (h *Handler) answerLookups(c echo.Context, cc *campaigns.CampaignContext, s
 	privacy := parsePrivacy(c.FormValue("lookup_privacy"))
 	recs := make([]records.Record, len(blocks))
 	for i, p := range blocks {
-		recs[i] = toRecord(i, p)
+		recs[i] = toRecord(i, p, nil)
 	}
 	l := h.lookups
 	if l == nil {
@@ -206,37 +221,43 @@ func (h *Handler) answerLookups(c echo.Context, cc *campaigns.CampaignContext, s
 }
 
 // toRecord builds a records.Record from a parsed block.
-func toRecord(i int, p importer.ParsedPage) records.Record {
+func toRecord(i int, p importer.ParsedPage, links *importer.PageLinks) records.Record {
 	fields := make(map[string]any, len(p.Fields))
 	for k, v := range p.Fields {
 		fields[strings.ToLower(k)] = v
 	}
 	return records.Record{
 		Index: i, Kind: p.FrontMatter.Kind, Action: p.FrontMatter.Action,
-		Name: p.Name, Fields: fields, Body: p.Body,
+		Name: p.Name, Fields: fields, Body: p.Body, Links: links,
 	}
 }
 
 // planRecords plans every record for the review screen.
-func (h *Handler) planRecords(c echo.Context, cc *campaigns.CampaignContext, recs []importer.ParsedPage) []RecordRow {
+func (h *Handler) planRecords(c echo.Context, cc *campaigns.CampaignContext, recs []importer.ParsedPage, links *importer.PageLinks, pasteSlugs map[string]bool) []RecordRow {
 	rows := make([]RecordRow, len(recs))
-	a := actorFor(c, cc)
+	all := make([]records.Record, len(recs))
 	for i, p := range recs {
-		rec := toRecord(i, p)
-		row := RecordRow{Index: i, Label: rec.Kind, Action: rec.Action, Name: rec.Name}
-		if h.records == nil {
-			row.Plan = records.Plan{Error: "this server cannot import " + rec.Kind}
-		} else {
-			k, plan := h.records.Plan(c.Request().Context(), cc.Campaign.ID, a, rec)
-			if k != nil {
-				row.Label = k.Label()
-				if t, ok := k.(records.Titled); ok && row.Name == "" {
-					row.Name = t.Title(rec)
-				}
-			}
-			row.Plan = plan
+		all[i] = toRecord(i, p, nil)
+		rows[i] = RecordRow{Index: i, Label: all[i].Kind, Action: all[i].Action, Name: all[i].Name}
+	}
+	if h.records == nil {
+		for i := range rows {
+			rows[i].Plan = records.Plan{Error: "this server cannot import " + all[i].Kind}
 		}
-		rows[i] = row
+		return rows
+	}
+	kinds, plans := h.records.PlanAll(c.Request().Context(), cc.Campaign.ID, actorFor(c, cc), all)
+	for i, k := range kinds {
+		if k != nil {
+			rows[i].Label = k.Label()
+			if t, ok := k.(records.Titled); ok && rows[i].Name == "" {
+				rows[i].Name = t.Title(all[i])
+			}
+		}
+		rows[i].Plan = plans[i]
+		if links != nil && rows[i].Plan.Error == "" {
+			rows[i].Plan.Warnings = append(rows[i].Plan.Warnings, importer.LinkWarnings(links, recs[i].Body, pasteSlugs)...)
+		}
 	}
 	return rows
 }
@@ -288,9 +309,14 @@ func (h *Handler) ParseImport(c echo.Context) error {
 		return h.answerLookups(c, cc, body, lookups, len(parsed))
 	}
 	pages, recs := splitImport(parsed)
-	recRows := h.planRecords(c, cc, recs)
-	cls, err := importer.NewClassifier(h.importLookup, cc.Campaign.ID).
-		ClassifyAll(c.Request().Context(), pages)
+	links := importer.NewPageLinks(c.Request().Context(), h.importLookup, cc.Campaign.ID, viewerFor(c, cc))
+	pasteSlugs := importer.PasteSlugs(pages)
+	recRows := h.planRecords(c, cc, recs, links, pasteSlugs)
+	classifier := importer.NewClassifier(h.importLookup, cc.Campaign.ID)
+	if h.importEras != nil {
+		classifier.WithEras(h.importEras, viewerFor(c, cc))
+	}
+	cls, err := classifier.ClassifyAll(c.Request().Context(), pages)
 	if err != nil {
 		slog.Error("ai-workspace: classify failed",
 			slog.String("campaign_id", cc.Campaign.ID),
@@ -298,12 +324,19 @@ func (h *Handler) ParseImport(c echo.Context) error {
 		return apperror.NewInternal(err)
 	}
 
+	// An unknown @[Name] only warns; at commit it stays plain text.
+	for i := range pages {
+		if pages[i].Status != importer.StatusParseError && pages[i].FrontMatter.Action != importer.ActionDelete {
+			pages[i].Warnings = append(pages[i].Warnings, importer.LinkWarnings(links, pages[i].Body, pasteSlugs)...)
+		}
+	}
+
 	summary := ReviewSummary{Total: len(pages) + len(recRows)}
 	for _, r := range recRows {
 		if r.Plan.Error == "" {
 			summary.Selectable++
 		} else {
-			summary.ParseErrors++
+			summary.Blocked++
 		}
 	}
 	for _, c := range cls {
@@ -316,7 +349,7 @@ func (h *Handler) ParseImport(c echo.Context) error {
 		case importer.StatusNewCategory:
 			summary.Selectable++
 			summary.NewCategories++
-		case importer.StatusParseError:
+		case importer.StatusParseError, importer.StatusParentProblem:
 			summary.ParseErrors++
 		}
 	}
@@ -330,6 +363,7 @@ func (h *Handler) ParseImport(c echo.Context) error {
 				"conflicts":       summary.Conflicts,
 				"new_categories":  summary.NewCategories,
 				"parse_errors":    summary.ParseErrors,
+				"blocked_records": summary.Blocked,
 				"input_byte_size": len(body),
 				"records":         len(recRows),
 			})
@@ -450,6 +484,8 @@ func (h *Handler) CommitImport(c echo.Context) error {
 			ConflictMode:    conflict,
 			Action:          action,
 			DeleteConfirmed: deleteConfirmed,
+			// Re-checked by the committer against the live page.
+			ReplaceGMOnlyConfirmed: c.FormValue(prefix+"replace_gm_confirmed") == "on",
 		}
 	}
 
@@ -462,6 +498,7 @@ func (h *Handler) CommitImport(c echo.Context) error {
 			Pages:                  pages,
 			Decisions:              decisions,
 			CampaignDefaultPrivate: cc.Campaign.ParseSettings().DefaultsToPrivate(),
+			Viewer:                 viewerFor(c, cc),
 		})
 	}
 	if err != nil {
@@ -507,10 +544,16 @@ type recordCounts struct{ applied, failed int }
 func (h *Handler) commitRecords(c echo.Context, cc *campaigns.CampaignContext, recs []importer.ParsedPage, result *importer.CommitResult) recordCounts {
 	var n recordCounts
 	a := actorFor(c, cc)
+	// Pages are saved by now, so a record's @[Name] resolves against the
+	// campaign alone.
+	var links *importer.PageLinks
+	if h.importLookup != nil {
+		links = importer.NewPageLinks(c.Request().Context(), h.importLookup, cc.Campaign.ID, viewerFor(c, cc))
+	}
 	base := len(result.Rows)
 	for i, p := range recs {
 		prefix := "rec_" + strconv.Itoa(i) + "_"
-		rec := toRecord(i, p)
+		rec := toRecord(i, p, links)
 		out := importer.RowOutcome{Index: base + i, Name: rec.Name}
 		k, ok := h.records.Get(rec.Kind)
 		if ok {
@@ -625,7 +668,7 @@ func readImportBody(c echo.Context) (string, error) {
 // GET /campaigns/:id/ai-workspace/prompt/generate
 //
 // Query params: schema_types/schema_categories/schema_front_matter ("on"),
-// content_mode ("none"|"all"|category slugs), privacy
+// content_mode ("none"|"all"|"house-rules"|category slugs), privacy
 // ("safe"|"permitted"|"everything"), gm_notes ("on"), instruction (free text).
 //
 // A builder error surfaces in the modal's error region, not a top-level
@@ -649,6 +692,9 @@ func (h *Handler) GeneratePrompt(c echo.Context) error {
 		IncludeSessionGMNotes:     c.QueryParam("gm_notes") == "on",
 		OperatorInstruction:       c.QueryParam("instruction"),
 	}
+	if c.QueryParam("instructions_saved") == "on" {
+		in.Instructions = prompt.InstructionsSaved
+	}
 	if in.ContentMode == "" {
 		in.ContentMode = "none"
 	}
@@ -661,7 +707,11 @@ func (h *Handler) GeneratePrompt(c echo.Context) error {
 		if in.IncludeFrontMatterExample {
 			in.RecordDocs = h.records.Docs()
 		}
-		if in.ContentMode == "all" || hasCategory(in.ContentMode, recordsCategory) {
+		if in.ContentMode == prompt.ContentHouseRules {
+			in.RecordDocs, in.RecordContext = h.houseRulesContext(c, cc, in.Privacy)
+		} else if in.ContentMode == prompt.ContentCalendar {
+			in.RecordDocs, in.RecordContext = h.calendarContext(c, cc, in.Privacy)
+		} else if in.ContentMode == "all" || hasCategory(in.ContentMode, recordsCategory) {
 			in.RecordContext = h.records.ExportAll(c.Request().Context(), cc.Campaign.ID, exportActor(c, cc, in.Privacy))
 		}
 	}
@@ -692,6 +742,79 @@ func (h *Handler) GeneratePrompt(c echo.Context) error {
 	}
 
 	return middleware.Render(c, http.StatusOK, PromptModal(out, ""))
+}
+
+// PromptInstructions returns the standing half of the prompt as plain text,
+// for the "Copy AI instructions" button: every block format, the lookups and
+// the rules, plus the campaign's page types, but none of its content, so an
+// operator can save it in their AI once and paste only short requests.
+//
+// GET /campaigns/:id/ai-workspace/prompt/instructions (owner only)
+func (h *Handler) PromptInstructions(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	if h.promptBuilder == nil {
+		return apperror.NewBadRequest("AI prompt builder is not configured on this server")
+	}
+	in := prompt.Input{
+		IncludeEntityTypes:        true,
+		IncludeFrontMatterExample: true,
+		ContentMode:               "none",
+		Instructions:              prompt.InstructionsOnly,
+	}
+	if h.lookups != nil {
+		in.Lookups = records.LookupDoc()
+	}
+	if h.records != nil {
+		in.Capabilities = h.records.Capabilities()
+		in.RecordDocs = h.records.Docs()
+	}
+	out, err := h.promptBuilder.Build(c.Request().Context(), cc.Campaign.Name, auth.GetUserID(c), cc.Campaign.ID, in)
+	if err != nil {
+		slog.Error("ai-workspace: prompt instructions failed",
+			slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", err))
+		return apperror.NewInternal(err)
+	}
+	if h.audit != nil {
+		h.audit.LogCampaignEvent(c.Request().Context(), cc.Campaign.ID, "campaign.ai_prompt.instructions_copied",
+			map[string]any{"prompt_byte_count": len(out)})
+	}
+	c.Response().Header().Set("Cache-Control", "no-store")
+	return c.String(http.StatusOK, out)
+}
+
+// calendarContext is the Calendar prompt's format and context: the docs of
+// the calendar kinds (always, since the AI must write those formats) and the
+// calendar and weather-kinds lookups in the chosen privacy, which say how to
+// set up a main calendar when there is none.
+func (h *Handler) calendarContext(c echo.Context, cc *campaigns.CampaignContext, privacy aiexport.PrivacyMode) (doc, answers string) {
+	doc = h.records.DocsFor(records.CalendarKinds...)
+	if h.lookups == nil {
+		return doc, ""
+	}
+	ans := h.lookups.Answer(c.Request().Context(), cc.Campaign.ID, exportActor(c, cc, privacy), records.CalendarLookups())
+	return doc, records.Markdown(ans)
+}
+
+// houseRulesContext is the house-rules prompt's format and context: the
+// house-rule kind's doc (always, since the AI must write that format) and
+// today's house rules in the chosen privacy.
+func (h *Handler) houseRulesContext(c echo.Context, cc *campaigns.CampaignContext, privacy aiexport.PrivacyMode) (doc, rules string) {
+	k, ok := h.records.Get("house-rule")
+	if !ok {
+		return "", ""
+	}
+	doc = "### kind: " + k.Name() + " (" + k.Label() + ")\n\n" + strings.TrimSpace(k.Doc())
+	out, err := k.Export(c.Request().Context(), cc.Campaign.ID, exportActor(c, cc, privacy))
+	if err != nil {
+		return doc, "<!-- " + k.Label() + "s: could not be listed -->"
+	}
+	if strings.TrimSpace(out) == "" {
+		return doc, ""
+	}
+	return doc, "## " + k.Label() + "s\n\n" + out
 }
 
 // GenerateAIExport renders the AI-export markdown for the campaign

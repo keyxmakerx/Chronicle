@@ -149,6 +149,7 @@ func registerCalendarJSONRoutes(g *echo.Group, h *Handler) {
 
 	// Events: view Player, create/edit Scribe, delete + visibility Owner.
 	g.GET("/calendars/:calid/events", h.ListEventsAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	g.GET("/calendars/:calid/events/index", h.ListEventIndexAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	g.GET("/calendars/:calid/events/:eid", h.GetEventAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	g.GET("/calendars/:calid/eras/:eraID/events", h.ListEraEventsAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	g.POST("/calendars/:calid/events", h.CreateEventAPI, campaigns.RequireRole(campaigns.RoleScribe))

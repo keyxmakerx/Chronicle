@@ -23,14 +23,14 @@ System or Widget (see root `CLAUDE.md` for what each tier is).
 │  └──────────────────────────────────────────────────────┘    │
 │                                                               │
 │  ┌──────────────────────────────────────────────────────┐    │
-│  │  PLUGINS -- Feature Applications (28)                  │    │
+│  │  PLUGINS -- Feature Applications (30)                  │    │
 │  │  auth/  campaigns/  entities/  calendar/  maps/        │    │
 │  │  admin/  addons/  syncapi/  media/  audit/             │    │
 │  │  settings/  timeline/  sessions/  packages/            │    │
 │  │  smtp/  armory/  bestiary/  designlab/  npcs/          │    │
 │  │  ai_workspace/  backup/  foundry_vtt/  restore/        │    │
 │  │  widgetbindings/  dmscreen/  systemstate/              │    │
-│  │  quests/  rolltables/                                  │    │
+│  │  quests/  rolltables/  vault_import/  pageblocks/      │    │
 │  └──────────────────────────────────────────────────────┘    │
 │                                                               │
 │  ┌──────────────────────────────────────────────────────┐    │
@@ -66,9 +66,9 @@ real-world calendars with game-night RSVPs; and the sky pane widget. The
 entity-page and dashboard calendar blocks render from the widget-binding
 framework. What is still to be rewired is tagged `CALV5-PLACEHOLDER:` with a
 `TODO(#778)`: the WASM `calendar_read`/`calendar_write` host functions answer
-with an error, the `calendar.event_*` plugin hooks never fire, and nothing
-publishes calendar events to the websocket bus. `syncapi`'s
-Foundry calendar routes serve the V5 calendar (see
+with an error, the `calendar.event_*` plugin hooks never fire. Calendar
+changes do publish to the websocket bus (`internal/app/calendar_event_publisher.go`),
+and `syncapi`'s Foundry calendar routes serve the V5 calendar (see
 `internal/plugins/syncapi/.ai.md`). See `internal/plugins/calendar/.ai.md` for exactly which
 routes and UI exist.
 

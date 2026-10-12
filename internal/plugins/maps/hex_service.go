@@ -115,7 +115,7 @@ func (p *drawingHexPictures) ClearRotation(ctx context.Context, mapID, id string
 	if actor.IsDM {
 		role = permissions.RoleOwner
 	}
-	return p.svc.UpdateDrawing(ctx, id, mapID, role, actor.IsDM,
+	return p.svc.UpdateDrawing(ctx, id, mapID, actor.UserID, role, actor.IsDM,
 		UpdateDrawingInput{Rotation: patch.Of(0.0), ExpectedUpdatedAt: &expected})
 }
 

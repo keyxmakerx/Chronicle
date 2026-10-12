@@ -25,8 +25,8 @@ type Appearance struct {
 	BodyFont     string `json:"body_font,omitempty"`     // Text face id (AppearanceBodyFonts).
 	HeadingFont  string `json:"heading_font,omitempty"`  // Heading face id (AppearanceHeadingFonts); "same" follows the text.
 	TypeScale    string `json:"type_scale,omitempty"`    // "compact", "standard" or "roomy".
-	ButtonStyle  string `json:"button_style,omitempty"`  // "lift", "press", "glow" or "ink".
-	Elevation    string `json:"elevation,omitempty"`     // "flat", "standard" or "dramatic".
+	ButtonStyle  string `json:"button_style,omitempty"`  // "lift", "press", "glow", "ink" or "keystone".
+	Elevation    string `json:"elevation,omitempty"`     // "flat", "standard", "dramatic" or "ambient".
 	MotionSpeed  string `json:"motion_speed,omitempty"`  // "snappy", "standard" or "leisurely".
 	ReduceMotion bool   `json:"reduce_motion,omitempty"` // Calmer motion for every member of the campaign.
 
@@ -39,6 +39,7 @@ type Appearance struct {
 	PeekGlowColour  string `json:"peek_glow_colour,omitempty"` // The glow's own colour, used when PeekGlow is "own".
 	HeaderHeight    string `json:"header_height,omitempty"`    // "slim" (default) or "tall".
 	HoverCard       string `json:"hover_card,omitempty"`       // Hover card look: "paper" (default), "plain", "night" or "compact".
+	SheetStyle      string `json:"sheet_style,omitempty"`      // Character sheet style (AppearanceSheetStyles); "modern" is the default.
 }
 
 // The allowed values of each Appearance choice. The first entry is the
@@ -53,16 +54,19 @@ var (
 	AppearanceBodyFonts    = []string{"inter", "sourcesans", "atkinson", "literata", "sourceserif", "lora", "alegreya", "merriweather"}
 	AppearanceHeadingFonts = []string{"same", "cinzel", "marcellus", "imfell", "cormorant", "fraunces", "playfair", "josefin", "chakra"}
 	AppearanceTypeScales   = []string{"standard", "compact", "roomy"}
-	AppearanceButtonStyles = []string{"lift", "press", "glow", "ink"}
-	AppearanceElevations   = []string{"standard", "flat", "dramatic"}
+	AppearanceButtonStyles = []string{"lift", "press", "glow", "ink", "keystone"}
+	AppearanceElevations   = []string{"standard", "flat", "dramatic", "ambient"}
 	AppearanceSpeeds       = []string{"standard", "snappy", "leisurely"}
 	AppearanceScrims       = []string{"medium", "light", "strong"}
-	AppearanceWidgets      = []string{"links", "text", "note", "search", "date", "weather", "moon", "session"}
+	AppearanceWidgets      = []string{"links", "text", "note", "search", "date", "weather", "moon", "era", "session"}
 	AppearanceSidebars     = []string{"charcoal", "ink", "tinted", "own"}
 	AppearanceCorners      = []string{"plain", "subtitle", "banner"}
 	AppearanceGlows        = []string{"accent", "own"}
 	AppearanceHeights      = []string{"slim", "tall"}
 	AppearanceHoverCards   = []string{"paper", "plain", "night", "compact"}
+	// AppearanceSheetStyles are the character sheet styles sheet_styles.css
+	// knows, keyed by the data-cz-sheet value; "modern" is the unstyled default.
+	AppearanceSheetStyles = []string{"modern", "parchment", "ledger", "journal", "vellum", "night", "deck", "pencil", "starship", "neon", "runes", "brass"}
 )
 
 // Text limits the Customize page shows. Brand name and welcome keep their
@@ -107,6 +111,9 @@ type AppearanceInput struct {
 	Hover   struct {
 		Look string `json:"look"`
 	} `json:"hover"`
+	Sheet struct {
+		Style string `json:"style"`
+	} `json:"sheet"`
 }
 
 // AppearanceSidebarInput is the Sidebar section. Colour is the menu colour
@@ -274,6 +281,9 @@ func applyAppearance(s *CampaignSettings, in AppearanceInput) (*string, error) {
 		default:
 			return fail(apperror.NewBadRequest("invalid gradient direction"))
 		}
+	case "sky":
+		// The sky draws itself from the campaign's calendar; nothing to set.
+		style.Mode = "sky"
 	case "image":
 		style.Mode = "image"
 		if style.ImagePath, err = pictureName("header", h.Image); err != nil {
@@ -375,6 +385,7 @@ func applyAppearance(s *CampaignSettings, in AppearanceInput) (*string, error) {
 		{&a.SidebarCorner, "menu corner", in.Sidebar.Corner, AppearanceCorners},
 		{&a.PeekGlow, "peek glow", in.Sidebar.Glow, AppearanceGlows},
 		{&a.HoverCard, "hover card look", in.Hover.Look, AppearanceHoverCards},
+		{&a.SheetStyle, "character sheet style", in.Sheet.Style, AppearanceSheetStyles},
 	}
 	for _, c := range checks {
 		if *c.dst, err = oneOf(c.name, c.v, c.allowed); err != nil {

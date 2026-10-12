@@ -14,6 +14,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -40,6 +41,8 @@ type entityExportAdapter struct {
 	entitySvc   entities.EntityService
 	tagSvc      tags.TagService
 	relationSvc relations.RelationService
+	// placeSvc carries a page's extra places in the tree; nil leaves them out.
+	placeSvc entities.PlaceService
 }
 
 // ExportEntities gathers all entity-related data for a campaign export.
@@ -178,6 +181,24 @@ func (a *entityExportAdapter) ExportEntities(ctx context.Context, campaignID str
 		}
 	}
 
+	// Extra places a page is listed in the tree, by the parent's slug like the
+	// real parent. Read without a viewer filter: export is the owner's copy.
+	if a.placeSvc != nil {
+		places, err := a.placeSvc.ExportPlaces(ctx, campaignID)
+		if err != nil {
+			return nil, err
+		}
+		slugsByEntity := make(map[string][]string)
+		for _, p := range places {
+			if slug, ok := entityIDToSlug[p.ParentEntityID]; ok {
+				slugsByEntity[p.EntityID] = append(slugsByEntity[p.EntityID], slug)
+			}
+		}
+		for i, e := range data.Entities {
+			data.Entities[i].AlsoListedUnder = slugsByEntity[e.OriginalID]
+		}
+	}
+
 	// Export tags.
 	allTags, err := a.tagSvc.ListByCampaign(ctx, campaignID, true)
 	if err != nil {
@@ -261,6 +282,8 @@ func (a *entityExportAdapter) ExportEntities(ctx context.Context, campaignID str
 // calendarExportAdapter implements campaigns.CalendarExporter.
 type calendarExportAdapter struct {
 	svc calendar.CalendarService
+	// versions carries pages' era versions; nil leaves them out.
+	versions calendar.EraVersionService
 }
 
 // isNotFound reports whether err is an apperror.AppError carrying a 404 —
@@ -340,6 +363,30 @@ func (a *calendarExportAdapter) ExportCalendar(ctx context.Context, campaignID s
 // exportOne walks a single calendar. Event kinds are campaign-scoped, so only
 // the primary calendar (withKinds) carries them; repeating them on every
 // calendar would make the import create each kind once per calendar.
+// exportPageVersions lists the pages' versions for one era. A read failure
+// leaves them out of the backup rather than failing it, and is logged.
+func (a *calendarExportAdapter) exportPageVersions(ctx context.Context, eraID int, entitySlugLookup func(string) string) []campaigns.ExportEraPageVersion {
+	if a.versions == nil {
+		return nil
+	}
+	vs, err := a.versions.ForEra(ctx, eraID)
+	if err != nil {
+		slog.Warn("export: era page versions", slog.Int("era_id", eraID), slog.Any("error", err))
+		return nil
+	}
+	var out []campaigns.ExportEraPageVersion
+	for _, v := range vs {
+		slug := entitySlugLookup(v.EntityID)
+		if slug == "" {
+			continue
+		}
+		out = append(out, campaigns.ExportEraPageVersion{
+			EntitySlug: slug, Name: v.Name, Entry: v.Entry, EntryHTML: v.EntryHTML, FieldsData: v.FieldsData,
+		})
+	}
+	return out
+}
+
 func (a *calendarExportAdapter) exportOne(ctx context.Context, cal *calendar.Calendar, campaignID string, systemViewer permissions.Viewer, entitySlugLookup func(string) string, withKinds bool) (*campaigns.ExportCalendarData, error) {
 	events, err := a.svc.ListAllEventsForCalendar(ctx, cal.ID, campaignID, systemViewer)
 	if err != nil {
@@ -370,12 +417,12 @@ func (a *calendarExportAdapter) exportOne(ctx context.Context, cal *calendar.Cal
 		SecondsPerMinute: cal.SecondsPerMinute,
 		LeapYearEvery:    cal.LeapYearEvery,
 		LeapYearOffset:   cal.LeapYearOffset,
-		// Hemisphere/ForecastsEnabled/MonthStartsNewWeek are additive settings
-		// on ExportCalendarData — see its doc comment. TracksRealTime/
-		// RealTimeZone are deliberately not carried; see that same comment.
+		// Additive settings on ExportCalendarData; see its doc comment.
 		Hemisphere:         cal.Hemisphere,
 		ForecastsEnabled:   cal.ForecastsEnabled,
 		MonthStartsNewWeek: cal.MonthStartsNewWeek,
+		TracksRealTime:     cal.TracksRealTime,
+		RealTimeZone:       cal.RealTimeZone,
 	}
 
 	for _, m := range cal.Months {
@@ -394,11 +441,17 @@ func (a *calendarExportAdapter) exportOne(ctx context.Context, cal *calendar.Cal
 		// produce the "unknown, pre-V5 backup" shape ImportCalendar treats
 		// as hidden — see ExportCalendarMoon's doc comment.
 		hidden := m.HiddenFromPlayers
+		var moonLoreSlug *string
+		if m.LoreEntityID != nil {
+			if s := entitySlugLookup(*m.LoreEntityID); s != "" {
+				moonLoreSlug = &s
+			}
+		}
 		data.Moons = append(data.Moons, campaigns.ExportCalendarMoon{
 			Ref: m.ID, Name: m.Name, CycleDays: m.CycleDays, PhaseOffset: m.PhaseOffset,
 			Color: m.Color, HiddenFromPlayers: &hidden,
 			BaseDesign: m.BaseDesign, Tint: m.Tint, PhaseSource: m.PhaseSource,
-			Size: m.Size, OrbitSpeed: m.OrbitSpeed,
+			Size: m.Size, OrbitSpeed: m.OrbitSpeed, LoreEntitySlug: moonLoreSlug,
 		})
 	}
 	for _, s := range cal.Seasons {
@@ -425,6 +478,7 @@ func (a *calendarExportAdapter) exportOne(ctx context.Context, cal *calendar.Cal
 			Description: e.Description, Color: e.Color, SortOrder: e.SortOrder,
 			Color2: e.Color2, Style: e.Style, Feel: e.Feel, LoreEntitySlug: loreSlug,
 			DMNote: e.DMNote, HiddenUntilBegins: e.HiddenUntilBegins,
+			PageVersions: a.exportPageVersions(ctx, e.ID, entitySlugLookup),
 		})
 	}
 	for _, k := range cal.EventKinds {
@@ -585,13 +639,24 @@ func (a *timelineExportAdapter) ExportTimelines(ctx context.Context, campaignID 
 				}
 				idx := len(et.Events)
 				eventIDToIndex[evt.EventID] = idx
-				et.Events = append(et.Events, campaigns.ExportTimelineEvent{
+				out := campaigns.ExportTimelineEvent{
 					Name: evt.EventName, EntitySlug: entitySlug,
 					Year: evt.EventYear, Month: evt.EventMonth, Day: evt.EventDay,
 					EndYear: evt.EventEndYear, EndMonth: evt.EventEndMonth, EndDay: evt.EventEndDay,
 					Category: evt.EventCategory, Visibility: evt.EventVisibility,
 					DisplayOrder: evt.DisplayOrder, Label: evt.Label, Color: evt.ColorOverride,
-				})
+				}
+				// The timeline's event list carries no text, times of day or
+				// repeat; the event itself does.
+				if full, err := a.svc.GetStandaloneEvent(ctx, evt.EventID); err == nil {
+					out.Description, out.DescriptionHTML = full.Description, full.DescriptionHTML
+					out.StartHour, out.StartMinute = full.StartHour, full.StartMinute
+					out.EndHour, out.EndMinute = full.EndHour, full.EndMinute
+					out.IsRecurring, out.RecurrenceType = full.IsRecurring, full.RecurrenceType
+				} else {
+					slog.Warn("export: timeline event details skipped", slog.String("event", evt.EventName), slog.Any("error", err))
+				}
+				et.Events = append(et.Events, out)
 			}
 		}
 
@@ -721,6 +786,7 @@ func (a *mapExportAdapter) ExportMaps(ctx context.Context, campaignID string, en
 	var result []campaigns.ExportMap
 	for _, m := range allMaps {
 		em := campaigns.ExportMap{
+			Ref:         m.ID,
 			Name:        m.Name,
 			Description: m.Description,
 			ImageID:     m.ImageID,
@@ -744,6 +810,7 @@ func (a *mapExportAdapter) ExportMaps(ctx context.Context, campaignID string, en
 					Name: mk.Name, Description: mk.Description,
 					X: mk.X, Y: mk.Y, Icon: mk.Icon, Color: mk.Color,
 					EntitySlug: entitySlug, Visibility: mk.Visibility,
+					LinkedMapRef: mk.LinkedMapID,
 				})
 			}
 		}
@@ -1066,6 +1133,8 @@ type entityImportAdapter struct {
 	entitySvc   entities.EntityService
 	tagSvc      tags.TagService
 	relationSvc relations.RelationService
+	// placeSvc restores a page's extra places in the tree; nil skips them.
+	placeSvc entities.PlaceService
 }
 
 // ImportEntities creates entity types, entities, tags, and relations from
@@ -1103,7 +1172,17 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 		}
 
 		var newType *entities.EntityType
-		if match := matchExistingType(existing, claimed, et); match != nil {
+		match := matchExistingType(existing, claimed, et)
+		if match == nil && derefStr(et.PresetCategory) == entities.PresetCategoryAdventures {
+			// CreateEntityType refuses the reserved marker, so the category
+			// is made by the one function that may set it.
+			if made, _, ensureErr := a.entitySvc.EnsureAdventures(ctx, campaignID); ensureErr != nil {
+				slog.Warn("import: adding the Adventures category failed", slog.Any("error", ensureErr))
+			} else {
+				match = made
+			}
+		}
+		if match != nil {
 			claimed[match.ID] = true
 			in := entities.UpdateEntityTypeInput{
 				Name: patch.Of(et.Name), NamePlural: patch.Of(et.NamePlural), Icon: patch.Of(et.Icon), Color: patch.Of(et.Color),
@@ -1146,11 +1225,6 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 					report.Fail("entities", "entity type layout", et.Name, apperror.SafeMessage(err))
 				}
 			}
-		}
-
-		// Apply description and dashboard layout.
-		if et.Description != nil || et.DashboardLayout != nil {
-			_ = a.entitySvc.UpdateEntityTypeDashboard(ctx, newType.ID, et.Description, et.PinnedEntityIDs)
 		}
 	}
 
@@ -1266,8 +1340,51 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 		}
 	}
 
+	// 2c. Extra places in the tree. They go in after every parent is set so the
+	// cycle rule sees the finished tree; one that is refused is reported, not
+	// fatal, and the page itself is already imported.
+	if a.placeSvc != nil {
+		for _, e := range data.Entities {
+			entityNewID, ok := entitySlugToNewID[e.Slug]
+			if !ok {
+				continue
+			}
+			for _, parentSlug := range e.AlsoListedUnder {
+				parentNewID, ok := entitySlugToNewID[parentSlug]
+				if !ok {
+					report.Fail("entities", "extra place in the page tree", e.Name, "parent \""+parentSlug+"\" is not in the file")
+					continue
+				}
+				if err := a.placeSvc.AddPlace(ctx, campaignID, entityNewID, parentNewID, ""); err != nil {
+					slog.Warn("import: add extra place failed", slog.String("entity", e.Name), slog.Any("error", err))
+					report.Fail("entities", "extra place in the page tree", e.Name, apperror.SafeMessage(err))
+				}
+			}
+		}
+	}
+
 	report.FailN("entities", "page picture", "",
 		"its picture file was not in the upload; import the ZIP export to keep pictures", missingPictures)
+
+	// 2c. Category descriptions and pinned pages. Pins name pages by id, so
+	// they wait until every page has its new one; a pin whose page did not
+	// come back is dropped.
+	for _, et := range data.Types {
+		typeID, ok := idMap.EntityTypeIDs[et.OriginalID]
+		if !ok || (et.Description == nil && len(et.PinnedEntityIDs) == 0) {
+			continue
+		}
+		pinned := make([]string, 0, len(et.PinnedEntityIDs))
+		for _, old := range et.PinnedEntityIDs {
+			if id, ok := idMap.EntityIDs[old]; ok {
+				pinned = append(pinned, id)
+			}
+		}
+		if err := a.entitySvc.UpdateEntityTypeDashboard(ctx, typeID, et.Description, pinned); err != nil {
+			slog.Warn("import: apply category dashboard failed", slog.String("type", et.Slug), slog.Any("error", err))
+			report.Fail("entities", "category description", et.Name, apperror.SafeMessage(err))
+		}
+	}
 
 	// 3. Create tags.
 	tagSlugToNewID := make(map[string]int)
@@ -1428,6 +1545,7 @@ func importIsPlayerCharacterType(preset, slug string) bool {
 // campaign's copy had, since both were named by the same preset.
 func matchExistingType(existing []entities.EntityType, claimed map[int]bool, et campaigns.ExportEntityType) *entities.EntityType {
 	wantPC := importIsPlayerCharacterType(derefStr(et.PresetCategory), et.Slug)
+	wantDMOnly := derefStr(et.PresetCategory) == entities.PresetCategoryAdventures
 	for i := range existing {
 		t := &existing[i]
 		if claimed[t.ID] {
@@ -1439,8 +1557,18 @@ func matchExistingType(existing []entities.EntityType, claimed map[int]bool, et 
 	}
 	for i := range existing {
 		t := &existing[i]
-		if !claimed[t.ID] && t.Slug == et.Slug {
+		// The DM-only marker never moves between categories by a shared slug:
+		// that would either hide an ordinary category from players or show
+		// the Adventures pages to them.
+		if !claimed[t.ID] && t.Slug == et.Slug && t.DMOnly() == wantDMOnly {
 			return t
+		}
+	}
+	if wantDMOnly {
+		for i := range existing {
+			if t := &existing[i]; !claimed[t.ID] && t.DMOnly() {
+				return t
+			}
 		}
 	}
 	return nil
@@ -1450,6 +1578,41 @@ func matchExistingType(existing []entities.EntityType, claimed map[int]bool, et 
 // calendarExportAdapter.
 type calendarImportAdapter struct {
 	svc calendar.CalendarService
+	// versions restores pages' era versions; nil leaves them out.
+	versions calendar.EraVersionService
+}
+
+// importPageVersions restores the pages' versions for one restored era. A
+// version whose page was not restored is skipped; a failed write is
+// reported and the rest go on.
+func (a *calendarImportAdapter) importPageVersions(ctx context.Context, campaignID string, eraID int, e campaigns.ExportCalendarEra, idMap *campaigns.IDMap, report *campaigns.ImportReport) {
+	if a.versions == nil {
+		return
+	}
+	for _, v := range e.PageVersions {
+		entityID, ok := idMap.EntitySlugToID[v.EntitySlug]
+		if !ok {
+			continue
+		}
+		err := a.versions.Create(ctx, campaignID, entityID, eraID, "")
+		if err == nil && v.Name != nil {
+			err = a.versions.SetIdentity(ctx, campaignID, entityID, eraID, patch.Of(*v.Name), patch.Field[string]{}, "")
+		}
+		if err == nil && v.Entry != nil {
+			html := ""
+			if v.EntryHTML != nil {
+				html = *v.EntryHTML
+			}
+			_, _, err = a.versions.SaveEntry(ctx, campaignID, entityID, eraID, *v.Entry, html, nil, "")
+		}
+		if err == nil && len(v.FieldsData) > 0 {
+			err = a.versions.SaveFields(ctx, campaignID, entityID, eraID, v.FieldsData, "")
+		}
+		if err != nil {
+			slog.Warn("import: era page version failed", slog.String("era", e.Name), slog.String("page", v.EntitySlug), slog.Any("error", err))
+			report.Fail(campaigns.SectionCalendar, "era", e.Name+": "+v.EntitySlug, apperror.SafeMessage(err))
+		}
+	}
 }
 
 // ImportCalendar rebuilds one calendar (and its months/weekdays/moons/
@@ -1553,6 +1716,12 @@ func (a *calendarImportAdapter) importOne(ctx context.Context, campaignID string
 	if len(data.Moons) > 0 {
 		moons := make([]calendar.MoonInput, len(data.Moons))
 		for i, m := range data.Moons {
+			var moonLoreID *string
+			if m.LoreEntitySlug != nil {
+				if id, ok := idMap.EntitySlugToID[*m.LoreEntitySlug]; ok {
+					moonLoreID = &id
+				}
+			}
 			moons[i] = calendar.MoonInput{
 				Name: m.Name, CycleDays: m.CycleDays, PhaseOffset: m.PhaseOffset,
 				Color: m.Color, HiddenFromPlayers: importMoonHidden(m.HiddenFromPlayers),
@@ -1561,7 +1730,7 @@ func (a *calendarImportAdapter) importOne(ctx context.Context, campaignID string
 				// way it would a hand-created moon's zero value — never an
 				// empty/invalid look.
 				BaseDesign: m.BaseDesign, Tint: m.Tint, PhaseSource: m.PhaseSource,
-				Size: m.Size, OrbitSpeed: m.OrbitSpeed,
+				Size: m.Size, OrbitSpeed: m.OrbitSpeed, LoreEntityID: moonLoreID,
 			}
 		}
 		if err := a.svc.SetMoons(ctx, cal.ID, campaignID, moons); err != nil {
@@ -1652,16 +1821,19 @@ func (a *calendarImportAdapter) importOne(ctx context.Context, campaignID string
 				loreID = &id
 			}
 		}
-		if _, err := a.svc.CreateEra(ctx, cal.ID, campaignID, calendar.EraInput{
+		era, err := a.svc.CreateEra(ctx, cal.ID, campaignID, calendar.EraInput{
 			Name: e.Name, StartYear: e.StartYear, StartMonth: startMonth, StartDay: startDay,
 			EndYear: e.EndYear, EndMonth: endMonth, EndDay: endDay,
 			Description: e.Description, Color: e.Color, SortOrder: e.SortOrder,
 			Color2: e.Color2, Style: e.Style, Feel: e.Feel, LoreEntityID: loreID,
 			DMNote: e.DMNote, HiddenUntilBegins: e.HiddenUntilBegins,
-		}); err != nil {
+		})
+		if err != nil {
 			slog.Warn("import: create era failed", slog.String("name", e.Name), slog.Any("error", err))
 			report.Fail(campaigns.SectionCalendar, "era", e.Name, apperror.SafeMessage(err))
+			continue
 		}
+		a.importPageVersions(ctx, campaignID, era.ID, e, idMap, report)
 	}
 	if l := data.EraLook; l != nil {
 		if err := a.svc.SaveEraLook(ctx, cal.ID, campaignID, calendar.EraLook{
@@ -1698,9 +1870,18 @@ func (a *calendarImportAdapter) importOne(ctx context.Context, campaignID string
 	// exported row, so every field is sent PRESENT — the same reasoning the
 	// entity/session importers already use elsewhere in this file (an
 	// absent value in the source really does mean "unset"). Real-time
-	// tracking is deliberately left alone (SetRealTime nil, preserving the
-	// fresh calendar's off-by-default state): ExportCalendarData carries no
-	// RealTimeZone to restore it with — see that struct's doc comment.
+	// tracking is switched on only when the backup carries a zone this
+	// server knows; otherwise the fresh calendar's off-by-default state
+	// stands, so a bad zone can't also lose the date and settings above.
+	var setRealTime *bool
+	if data.TracksRealTime && data.RealTimeZone != nil && *data.RealTimeZone != "" {
+		if _, err := time.LoadLocation(*data.RealTimeZone); err == nil {
+			on := true
+			setRealTime = &on
+		} else {
+			report.Fail(campaigns.SectionCalendar, "real-time setting", data.Name, "its time zone is not one this server knows")
+		}
+	}
 	if err := a.svc.UpdateCalendar(ctx, cal.ID, campaignID, calendar.UpdateCalendarInput{
 		Name:               data.Name,
 		CurrentMonth:       patch.Of(data.CurrentMonth),
@@ -1710,6 +1891,8 @@ func (a *calendarImportAdapter) importOne(ctx context.Context, campaignID string
 		Hemisphere:         patch.FromPtr(data.Hemisphere),
 		ForecastsEnabled:   patch.Of(data.ForecastsEnabled),
 		MonthStartsNewWeek: patch.Of(data.MonthStartsNewWeek),
+		SetRealTime:        setRealTime,
+		RealTimeZone:       data.RealTimeZone,
 	}); err != nil {
 		slog.Warn("import: set current date failed", slog.Any("error", err))
 		report.Fail(campaigns.SectionCalendar, campaigns.KindCalendar, data.Name, apperror.SafeMessage(err))
@@ -2153,26 +2336,27 @@ func (a *timelineImportAdapter) ImportTimelines(ctx context.Context, campaignID,
 				}
 			}
 			newEvt, err := a.svc.CreateStandaloneEvent(ctx, newTimeline.ID, timeline.CreateTimelineEventInput{
-				Name:           evt.Name,
-				Description:    evt.Description,
-				EntityID:       entityID,
-				Year:           evt.Year,
-				Month:          evt.Month,
-				Day:            evt.Day,
-				StartHour:      evt.StartHour,
-				StartMinute:    evt.StartMinute,
-				EndYear:        evt.EndYear,
-				EndMonth:       evt.EndMonth,
-				EndDay:         evt.EndDay,
-				EndHour:        evt.EndHour,
-				EndMinute:      evt.EndMinute,
-				IsRecurring:    evt.IsRecurring,
-				RecurrenceType: evt.RecurrenceType,
-				Category:       evt.Category,
-				Visibility:     evt.Visibility,
-				Label:          evt.Label,
-				Color:          evt.Color,
-				CreatedBy:      userID,
+				Name:            evt.Name,
+				Description:     evt.Description,
+				DescriptionHTML: evt.DescriptionHTML,
+				EntityID:        entityID,
+				Year:            evt.Year,
+				Month:           evt.Month,
+				Day:             evt.Day,
+				StartHour:       evt.StartHour,
+				StartMinute:     evt.StartMinute,
+				EndYear:         evt.EndYear,
+				EndMonth:        evt.EndMonth,
+				EndDay:          evt.EndDay,
+				EndHour:         evt.EndHour,
+				EndMinute:       evt.EndMinute,
+				IsRecurring:     evt.IsRecurring,
+				RecurrenceType:  evt.RecurrenceType,
+				Category:        evt.Category,
+				Visibility:      evt.Visibility,
+				Label:           evt.Label,
+				Color:           evt.Color,
+				CreatedBy:       userID,
 			})
 			if err != nil {
 				slog.Warn("import: create timeline event failed", slog.String("name", evt.Name), slog.Any("error", err))
@@ -2306,6 +2490,11 @@ func (a *mapImportAdapter) ImportMaps(ctx context.Context, campaignID, userID st
 		report.FailN("maps", "map picture", "",
 			"its picture file was not in the upload; import the ZIP export to keep pictures", missingPictures)
 	}()
+	// A marker may open a map that comes later in the file, so links are set
+	// once every map exists: refs maps each exported map to its copy.
+	refs := make(map[string]string, len(data))
+	type pendingLink struct{ markerID, mapRef, name string }
+	var links []pendingLink
 	for _, m := range data {
 		var imageID *string
 		if m.ImageID != nil && *m.ImageID != "" {
@@ -2327,6 +2516,9 @@ func (a *mapImportAdapter) ImportMaps(ctx context.Context, campaignID, userID st
 			slog.Warn("import: create map failed", slog.String("name", m.Name), slog.Any("error", err))
 			report.Fail("maps", "map", m.Name, apperror.SafeMessage(err))
 			continue
+		}
+		if m.Ref != "" {
+			refs[m.Ref] = newMap.ID
 		}
 
 		// Create layers first (needed for drawing/token references).
@@ -2353,7 +2545,7 @@ func (a *mapImportAdapter) ImportMaps(ctx context.Context, campaignID, userID st
 					entityID = &id
 				}
 			}
-			_, err := a.mapSvc.CreateMarker(ctx, maps.CreateMarkerInput{
+			created, err := a.mapSvc.CreateMarker(ctx, maps.CreateMarkerInput{
 				MapID: newMap.ID, Name: mk.Name, Description: mk.Description,
 				X: mk.X, Y: mk.Y, Icon: mk.Icon, Color: mk.Color,
 				EntityID: entityID, Visibility: mk.Visibility, CreatedBy: userID,
@@ -2361,6 +2553,10 @@ func (a *mapImportAdapter) ImportMaps(ctx context.Context, campaignID, userID st
 			if err != nil {
 				slog.Warn("import: create marker failed", slog.String("name", mk.Name), slog.Any("error", err))
 				report.Fail("maps", "map marker", mk.Name, apperror.SafeMessage(err))
+				continue
+			}
+			if mk.LinkedMapRef != nil && *mk.LinkedMapRef != "" {
+				links = append(links, pendingLink{markerID: created.ID, mapRef: *mk.LinkedMapRef, name: mk.Name})
 			}
 		}
 
@@ -2383,6 +2579,7 @@ func (a *mapImportAdapter) ImportMaps(ctx context.Context, campaignID, userID st
 				// just created, so the draw gate (which defaults to scribes) is met.
 				CallerRole: permissions.RoleOwner,
 				CallerIsDM: true,
+				Imported:   true,
 			})
 			if err != nil {
 				slog.Warn("import: create drawing failed", slog.Any("error", err))
@@ -2438,6 +2635,17 @@ func (a *mapImportAdapter) ImportMaps(ctx context.Context, campaignID, userID st
 				slog.Warn("import: create fog region failed", slog.Any("error", err))
 				report.Fail("maps", "map fog region", m.Name, apperror.SafeMessage(err))
 			}
+		}
+	}
+	for _, l := range links {
+		to, ok := refs[l.mapRef]
+		if !ok {
+			report.Fail("maps", "map marker link", l.name, "the map it opened was not imported")
+			continue
+		}
+		if err := a.mapSvc.UpdateMarker(ctx, l.markerID, maps.UpdateMarkerInput{LinkedMapID: patch.Of(to)}, true); err != nil {
+			slog.Warn("import: link marker failed", slog.String("name", l.name), slog.Any("error", err))
+			report.Fail("maps", "map marker link", l.name, apperror.SafeMessage(err))
 		}
 	}
 	return nil

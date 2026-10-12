@@ -13,7 +13,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const jsDir = path.join(here, '..', '..', 'static', 'js');
+const jsDir = path.join(here, '..', '..', 'internal', 'plugins', 'maps', 'static', 'js');
 
 function load(file = 'map_hexes.js') {
   const src = readFileSync(path.join(jsDir, file), 'utf8');

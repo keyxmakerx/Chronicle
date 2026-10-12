@@ -19,11 +19,12 @@ type worldRangeSessionsService struct {
 	sessions.SessionService
 	gotFrom, gotTo sessions.WorldDate
 	gotLimit       int
+	gotCalendar    string
 	result         []sessions.Session
 }
 
-func (f *worldRangeSessionsService) ListPlannedSessionsInWorldDateRange(_ context.Context, _ string, from, to sessions.WorldDate, limit int) ([]sessions.Session, error) {
-	f.gotFrom, f.gotTo, f.gotLimit = from, to, limit
+func (f *worldRangeSessionsService) ListPlannedSessionsInWorldDateRange(_ context.Context, _, calendarID string, from, to sessions.WorldDate, limit int) ([]sessions.Session, error) {
+	f.gotFrom, f.gotTo, f.gotLimit, f.gotCalendar = from, to, limit, calendarID
 	return f.result, nil
 }
 
@@ -35,11 +36,11 @@ func TestGameNightsAnchorMoveAdapter_MapsSessionsAndForwardsRange(t *testing.T) 
 	}}
 	a := &gameNightsAnchorMoveAdapter{svc: svc}
 
-	got, err := a.SessionsInWorldDateRange(context.Background(), "camp", 1000, 1, 2, 1003, 12, 30, 3)
+	got, err := a.SessionsInWorldDateRange(context.Background(), "camp", "cal-1", 1000, 1, 2, 1003, 12, 30, 3)
 	if err != nil {
 		t.Fatalf("SessionsInWorldDateRange: %v", err)
 	}
-	if svc.gotFrom != (sessions.WorldDate{Year: 1000, Month: 1, Day: 2}) || svc.gotTo != (sessions.WorldDate{Year: 1003, Month: 12, Day: 30}) || svc.gotLimit != 3 {
+	if svc.gotFrom != (sessions.WorldDate{Year: 1000, Month: 1, Day: 2}) || svc.gotTo != (sessions.WorldDate{Year: 1003, Month: 12, Day: 30}) || svc.gotLimit != 3 || svc.gotCalendar != "cal-1" {
 		t.Errorf("forwarded range %+v..%+v limit %d", svc.gotFrom, svc.gotTo, svc.gotLimit)
 	}
 	want := calendar.AffectedSession{Name: "Dated", OldWorldYear: 1000, OldWorldMonth: 4, OldWorldDay: 9}
@@ -90,7 +91,15 @@ func TestPreviewAnchorMove_ListsRealSessionsOnceWired(t *testing.T) {
 		t.Fatalf("set anchor: %v", err)
 	}
 
+	// Sessions record the calendar their in-world date belongs to, and the
+	// preview only lists nights on the calendar being moved.
+	if err := calSvc.SetDefaultCalendar(ctx, campID, cal.ID); err != nil {
+		t.Fatalf("SetDefaultCalendar: %v", err)
+	}
 	sessSvc := sessions.NewSessionService(sessions.NewSessionRepository(db), nil, nil)
+	sessSvc.(interface {
+		SetDefaultCalendarResolver(sessions.DefaultCalendarResolver)
+	}).SetDefaultCalendarResolver(&sessionsDefaultCalendarAdapter{svc: calSvc})
 	ymd := func(y, m, d int) (*int, *int, *int) { return &y, &m, &d }
 	for _, s := range []struct {
 		name    string

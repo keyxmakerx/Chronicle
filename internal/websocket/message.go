@@ -49,6 +49,15 @@ const (
 // change-feed type: the filtered read is the source of truth.
 const MsgHexChanged MessageType = "hex.changed"
 
+// MsgMapItemsChanged tells map viewers that a map's pins, drawings, tokens or
+// shadows changed. The payload is {map_id, kind} with kind one of "markers",
+// "drawings", "tokens" or "shadows", and never any item content: a viewer
+// refetches the role-filtered read, so a player only ever learns what their
+// own refetch returns. It goes to every client of the campaign, like
+// hex.changed, because it tells a viewer who may not see the item nothing. Not
+// a change-feed type: the filtered read is the source of truth.
+const MsgMapItemsChanged MessageType = "map.items.changed"
+
 // Calendar sync messages.
 const (
 	MsgCalendarEventCreated     MessageType = "calendar.event.created"
@@ -191,6 +200,11 @@ type Message struct {
 	// GM sees everything" does not hold. Set only with a non-empty
 	// AllowedUsers: an empty allowlist still means everyone.
 	StrictAudience bool `json:"-"`
+
+	// AdmitScribes lets co-DMs (RoleScribe and up) past AllowedUsers the
+	// way DM-equivalent clients already pass, for content written for
+	// "the DM and co-DMs". Ignored under StrictAudience.
+	AdmitScribes bool `json:"-"`
 }
 
 // Encode serializes a Message to JSON bytes.

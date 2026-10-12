@@ -14,6 +14,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
+	"github.com/keyxmakerx/chronicle/internal/notifyprefs"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
@@ -25,6 +26,9 @@ import (
 // in the DM's own zone. Kept minimal to preserve plugin isolation.
 type UserDirectory interface {
 	GetUser(ctx context.Context, userID string) (*auth.User, error)
+	// GetTimezonesByIDs answers many members' account zones in one read so a
+	// roster render is not one lookup per member.
+	GetTimezonesByIDs(ctx context.Context, userIDs []string) (map[string]string, error)
 }
 
 // SetUserDirectory wires the auth service for viewer-zone resolution. Called
@@ -195,16 +199,18 @@ func (h *Handler) sendConfirmEmails(ctx context.Context, campaignID, campaignNam
 		asked[id] = true
 	}
 	link := fmt.Sprintf("%s/campaigns/%s/game-nights", h.baseURL, campaignID)
+	footPlain, footHTML := h.prefsFooter()
 	subject := fmt.Sprintf("Are your times still right? — %s", campaignName)
-	plain := fmt.Sprintf("%s asked everyone in %s to check the times they can play.\n\nOpen the calendar and press Who's free, then either confirm your times or change them:\n%s\n", asker, campaignName, link)
+	plain := fmt.Sprintf("%s asked everyone in %s to check the times they can play.\n\nOpen the calendar and press Who's free, then either confirm your times or change them:\n%s\n", asker, campaignName, link) + footPlain
 	htmlBody := fmt.Sprintf(`<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:system-ui,-apple-system,sans-serif;max-width:480px;margin:0 auto;padding:20px;color:#333">
 <h1 style="font-size:18px;margin:0 0 12px">Are your times still right?</h1>
 <p style="font-size:14px;line-height:1.5;margin:0 0 16px">%s asked everyone in <strong>%s</strong> to check the times they can play.</p>
 <p style="margin:0 0 20px"><a href="%s" style="display:inline-block;padding:10px 20px;background:#1f2937;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">Check my times</a></p>
 <p style="font-size:12px;color:#777;margin:0">In the calendar, press Who&rsquo;s free, then confirm your times or change them.</p>
-</body></html>`, html.EscapeString(asker), html.EscapeString(campaignName), link)
+%s
+</body></html>`, html.EscapeString(asker), html.EscapeString(campaignName), link, footHTML)
 	for _, m := range members {
-		if !asked[m.UserID] || m.Email == "" {
+		if !asked[m.UserID] || m.Email == "" || !h.emailWanted(ctx, m.UserID, notifyprefs.AvailabilityAsks) {
 			continue
 		}
 		if err := h.mailer.SendHTMLMail(ctx, []string{m.Email}, subject, plain, htmlBody); err != nil {
@@ -473,12 +479,40 @@ func (h *Handler) storedTZ(ctx context.Context, userID string) string {
 // ever set) first, then users.timezone. Empty means genuinely not set
 // anywhere and stays a first-class state — callers that print a per-member
 // clock show a "zone not set" repair rather than a UTC guess (see .ai.md
-// "Role and Zone Display Rules").
-func (h *Handler) memberZone(ctx context.Context, availabilityZones map[string]string, userID string) string {
+// "Role and Zone Display Rules"). accountZones is the batch read from
+// accountZonesFor, so this never touches the database itself.
+func memberZone(availabilityZones, accountZones map[string]string, userID string) string {
 	if tz := availabilityZones[userID]; tz != "" {
 		return tz
 	}
-	return h.storedTZ(ctx, userID)
+	if tz := accountZones[userID]; timeutil.IsValidLocation(tz) {
+		return tz
+	}
+	return ""
+}
+
+// accountZonesFor reads the account zones of every member who has no
+// availability-page zone, in ONE query. A failed or unwired read degrades to
+// "no account zone" (the same answer the per-member lookup gave on error):
+// a roster render must not fail on it.
+func (h *Handler) accountZonesFor(ctx context.Context, availabilityZones map[string]string, members []campaigns.CampaignMember) map[string]string {
+	if h.userDir == nil {
+		return nil
+	}
+	var ids []string
+	for _, m := range members {
+		if m.UserID != "" && availabilityZones[m.UserID] == "" {
+			ids = append(ids, m.UserID)
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	zones, err := h.userDir.GetTimezonesByIDs(ctx, ids)
+	if err != nil {
+		return nil
+	}
+	return zones
 }
 
 // dmGrantSet reads the campaign's co-DM grant list ONCE and returns it as a set.
@@ -520,12 +554,13 @@ func (h *Handler) overlayMembers(ctx context.Context, campaignID string) []overl
 		return nil
 	}
 	grants := h.dmGrantSet(ctx, campaignID)
-	// One read for every member's own zone; a per-member account-zone read
-	// happens only for members that read did not answer.
+	// One read for every member's own zone, and one more for the account
+	// zones of the members that read did not answer.
 	zones, err := h.svc.CampaignMemberZones(ctx, campaignID)
 	if err != nil {
 		zones = nil // degrade to the account zone; never fail a roster render on it
 	}
+	accountZones := h.accountZonesFor(ctx, zones, members)
 	out := make([]overlayMemberInput, 0, len(members))
 	for _, m := range members {
 		out = append(out, overlayMemberInput{
@@ -535,7 +570,7 @@ func (h *Handler) overlayMembers(ctx context.Context, campaignID string) []overl
 			IsOwner:   m.Role >= campaigns.RoleOwner,
 			RoleLabel: m.Role.DisplayName(),
 			IsCoDM:    grants[m.UserID],
-			TZ:        h.memberZone(ctx, zones, m.UserID),
+			TZ:        memberZone(zones, accountZones, m.UserID),
 		})
 	}
 	sort.SliceStable(out, func(i, j int) bool {

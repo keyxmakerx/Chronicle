@@ -96,10 +96,6 @@ type PackageService interface {
 	// SaveSecuritySettings persists updated security settings.
 	SaveSecuritySettings(ctx context.Context, s *PackageSecuritySettings) error
 
-	// ReconcileOrphanedInstalls detects package directories on disk that have
-	// no corresponding DB record (e.g. after a database wipe).
-	ReconcileOrphanedInstalls(ctx context.Context) ([]OrphanedInstall, error)
-
 	// PruneStaleVersions reclaims old on-disk version dirs of installed
 	// SYSTEM packages (never foundry-module — those are pin-served).
 	// Always keeps the top keepNewest versions, the DB-installed version,
@@ -1252,99 +1248,6 @@ func (s *packageService) SaveSecuritySettings(ctx context.Context, settings *Pac
 	}
 
 	return nil
-}
-
-// ReconcileOrphanedInstalls detects package directories on disk that have no
-// corresponding DB record. This happens when the database is wiped but
-// package files remain on disk.
-func (s *packageService) ReconcileOrphanedInstalls(ctx context.Context) ([]OrphanedInstall, error) {
-	pkgs, err := s.repo.ListPackages(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("listing packages: %w", err)
-	}
-
-	// Build set of known install paths.
-	knownPaths := make(map[string]bool, len(pkgs))
-	for _, pkg := range pkgs {
-		if pkg.InstallPath != "" {
-			knownPaths[pkg.InstallPath] = true
-		}
-	}
-
-	var orphans []OrphanedInstall
-
-	// Scan systems directory: packages/systems/{slug}/{version}/
-	systemsDir := filepath.Join(s.packagesDir(), "systems")
-	if slugDirs, err := os.ReadDir(systemsDir); err == nil {
-		for _, slugDir := range slugDirs {
-			if !slugDir.IsDir() {
-				continue
-			}
-			slugPath := filepath.Join(systemsDir, slugDir.Name())
-			versionDirs, err := os.ReadDir(slugPath)
-			if err != nil {
-				continue
-			}
-			for _, verDir := range versionDirs {
-				if !verDir.IsDir() {
-					continue
-				}
-				fullPath := filepath.Join(slugPath, verDir.Name())
-				if knownPaths[fullPath] {
-					continue
-				}
-				orphans = append(orphans, OrphanedInstall{
-					Path:    fullPath,
-					Slug:    slugDir.Name(),
-					Version: verDir.Name(),
-					Size:    dirSize(fullPath),
-				})
-			}
-		}
-	}
-
-	// Scan foundry-module directory: packages/foundry-module/{version}/
-	foundryDir := filepath.Join(s.packagesDir(), "foundry-module")
-	if versionDirs, err := os.ReadDir(foundryDir); err == nil {
-		for _, verDir := range versionDirs {
-			if !verDir.IsDir() {
-				continue
-			}
-			fullPath := filepath.Join(foundryDir, verDir.Name())
-			if knownPaths[fullPath] {
-				continue
-			}
-			orphans = append(orphans, OrphanedInstall{
-				Path:    fullPath,
-				Slug:    "chronicle-sync",
-				Version: verDir.Name(),
-				Size:    dirSize(fullPath),
-			})
-		}
-	}
-
-	// Scan downloads directory for orphaned ZIPs.
-	dlDir := s.downloadsDir()
-	if files, err := os.ReadDir(dlDir); err == nil {
-		for _, f := range files {
-			if f.IsDir() {
-				continue
-			}
-			fullPath := filepath.Join(dlDir, f.Name())
-			info, err := f.Info()
-			if err != nil {
-				continue
-			}
-			orphans = append(orphans, OrphanedInstall{
-				Path:    fullPath,
-				Slug:    "download-cache",
-				Version: f.Name(),
-				Size:    info.Size(),
-			})
-		}
-	}
-
-	return orphans, nil
 }
 
 // dirSize calculates the total size of all files in a directory tree.

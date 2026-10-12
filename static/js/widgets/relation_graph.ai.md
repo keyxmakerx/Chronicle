@@ -9,8 +9,8 @@ Used full-page (with filters) and as small embeds, including a local
 
 ## Mount
 
-`data-widget="relation-graph"`, loaded by a `<script defer>` tag in
-`layouts/base.templ`. Mounted from `widgets/relations/graph.templ` (full page,
+`data-widget="relation-graph"`, loaded on sight from
+`coreWidgets` in `internal/app/routes.go` (ADR-063). Mounted from `widgets/relations/graph.templ` (full page,
 filters on), `plugins/entities/show.templ` (`blockLocalGraph`, focus mode) and
 `plugins/campaigns/dashboard_blocks.templ` (two dashboard blocks).
 

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 // Repository defines the data access interface for entity notes.
@@ -35,6 +36,54 @@ type Repository interface {
 
 	// Delete removes a note by ID. Caller responsible for author check.
 	Delete(ctx context.Context, id string) error
+
+	// CountByEntities returns how many notes sit on each of the given
+	// pages, every audience included. It is deliberately not ACL-filtered:
+	// it returns counts only, for telling an owner what removing a page
+	// takes with it, and never any note content.
+	CountByEntities(ctx context.Context, campaignID string, entityIDs []string) (map[string]int, error)
+}
+
+// countChunk bounds the IN list so a page with a very large sub-tree stays
+// well under the driver's placeholder limit.
+const countChunk = 500
+
+func (r *repository) CountByEntities(ctx context.Context, campaignID string, entityIDs []string) (map[string]int, error) {
+	out := make(map[string]int)
+	for start := 0; start < len(entityIDs); start += countChunk {
+		end := start + countChunk
+		if end > len(entityIDs) {
+			end = len(entityIDs)
+		}
+		chunk := entityIDs[start:end]
+		args := make([]any, 0, len(chunk)+1)
+		args = append(args, campaignID)
+		for _, id := range chunk {
+			args = append(args, id)
+		}
+		rows, err := r.db.QueryContext(ctx,
+			`SELECT entity_id, COUNT(*) FROM entity_notes
+			WHERE campaign_id = ? AND entity_id IN (`+strings.TrimSuffix(strings.Repeat("?,", len(chunk)), ",")+`)
+			GROUP BY entity_id`, args...)
+		if err != nil {
+			return nil, err
+		}
+		for rows.Next() {
+			var id string
+			var n int
+			if err := rows.Scan(&id, &n); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			out[id] = n
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
 }
 
 // ViewerContext bundles the audience-relevant facts about the viewer
@@ -313,4 +362,35 @@ func hydrate(n *Note, sharedWith, title, body, bodyHTML sql.NullString) {
 	if bodyHTML.Valid {
 		n.BodyHTML = bodyHTML.String
 	}
+}
+
+// ReassignAuthor moves a guest's page notes in one campaign, and notes
+// shared with them, to the account they merged into.
+func (r *repository) ReassignAuthor(ctx context.Context, campaignID, fromUserID, toUserID string) (int64, error) {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE entity_notes SET author_user_id = ? WHERE campaign_id = ? AND author_user_id = ?`,
+		toUserID, campaignID, fromUserID)
+	if err != nil {
+		return 0, fmt.Errorf("reassigning page notes: %w", err)
+	}
+	// Notes others shared with the guest by name follow them too. Ids are
+	// UUIDs, so swapping the quoted id in the JSON text is exact.
+	if _, err := r.db.ExecContext(ctx,
+		`UPDATE entity_notes SET shared_with = REPLACE(shared_with, ?, ?)
+		  WHERE campaign_id = ? AND shared_with LIKE ?`,
+		`"`+fromUserID+`"`, `"`+toUserID+`"`, campaignID, `%"`+fromUserID+`"%`); err != nil {
+		return 0, fmt.Errorf("reassigning shared page notes: %w", err)
+	}
+	return res.RowsAffected()
+}
+
+// DeletePrivateByAuthor removes a deleted account's private notes. Notes
+// shared with anyone else stay, signed by the emptied account.
+func (r *repository) DeletePrivateByAuthor(ctx context.Context, userID string) (int64, error) {
+	res, err := r.db.ExecContext(ctx,
+		`DELETE FROM entity_notes WHERE author_user_id = ? AND audience = ?`, userID, string(AudiencePrivate))
+	if err != nil {
+		return 0, fmt.Errorf("deleting private notes: %w", err)
+	}
+	return res.RowsAffected()
 }

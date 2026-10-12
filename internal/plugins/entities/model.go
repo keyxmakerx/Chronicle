@@ -16,6 +16,7 @@ import (
 	"github.com/a-h/templ"
 	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/tilegrid"
 )
 
 // --- Domain Models ---
@@ -67,10 +68,14 @@ type EntityTypeLayout struct {
 	Rows []TemplateRow `json:"rows"`
 }
 
-// TemplateRow is a horizontal row in the page template grid.
+// TemplateRow is a horizontal row in the page template grid. An ordinary row
+// (Kind empty) holds columns of blocks. A tile section (Kind "tiles") holds
+// Tiles on a 4-column grid instead and has no columns; see internal/tilegrid.
 type TemplateRow struct {
 	ID      string           `json:"id"`
+	Kind    string           `json:"kind,omitempty"`
 	Columns []TemplateColumn `json:"columns"`
+	Tiles   []tilegrid.Tile  `json:"tiles,omitempty"`
 }
 
 // TemplateColumn is a column within a row. Width uses a 12-column grid (1-12).
@@ -337,10 +342,14 @@ type Entity struct {
 	CreatedBy       string          `json:"created_by"`
 	// OwnerUserID claims an entity for a player. Nullable: most entities
 	// (locations, factions, lore) are not owned. Character-shaped entities
-	// surface on the owner's "My Characters" landing page. Set by Foundry
+	// surface in the owner's Yours band on the Characters page. Set by Foundry
 	// sync (when the actor's owner maps to a chronicle user) or by the
 	// player claim flow on entity show.
 	OwnerUserID *string `json:"owner_user_id,omitempty"`
+	// Playable marks a character a player may play. With OwnerUserID it
+	// decides who is on the Characters page's Players list, so NPCs
+	// sharing a category stay off it. Setting an owner also sets it.
+	Playable bool `json:"playable"`
 	// MapID points the entity at one of the campaign's maps and powers
 	// the per-entity Map Editor block. Nullable — most entities aren't
 	// "a map." FK enforces same-campaign integrity (added by the maps
@@ -356,6 +365,9 @@ type Entity struct {
 	TypeIcon       string `json:"type_icon,omitempty"`
 	TypeColor      string `json:"type_color,omitempty"`
 	TypeSlug       string `json:"type_slug,omitempty"`
+	// TypeDMOnly is set when the page's category is for the DM team only, so
+	// the page is hidden from players whatever its own visibility says.
+	TypeDMOnly bool `json:"-"`
 
 	// Tags is populated at the handler level via batch fetch, not by the repository.
 	Tags []EntityTagInfo `json:"tags,omitempty"`
@@ -655,6 +667,17 @@ type MergeResult struct {
 	NoOp          bool   // true when there was nothing to reconcile
 }
 
+// CharacterHomeMove describes moving a system character type's pages into
+// "Characters": pending (from CharacterHomeCandidate) or done.
+type CharacterHomeMove struct {
+	FromTypeID int
+	FromName   string // the system type's plural name, e.g. "Heroes"
+	ToTypeID   int
+	ToName     string // "Characters", or whatever the owner renamed it to
+	Pages      int    // pages to move, or moved (Trash included)
+	NoOp       bool   // nothing to move
+}
+
 // ClaimRoster carries the GM owner-overview data for a claimable category
 // dashboard. It is assembled by the Index handler only for a Scribe+ viewer
 // of a claimable entity type with the Player Character Claiming addon
@@ -716,6 +739,15 @@ type CastView struct {
 	// CanCreateHero shows the Create hero button: staff always, a player when
 	// the owner lets players claim the hero's page type.
 	CanCreateHero bool
+	// Roster is who plays whom for the Party band's page types, for staff
+	// who may reassign; nil hides the control.
+	Roster *ClaimRoster
+	// Pickable is, for a member with no character of their own, the playable
+	// characters nobody has claimed yet that they may see.
+	Pickable []Entity
+	// Open names the band box rendered open, so a reassign answers with the
+	// list still in view.
+	Open string
 }
 
 // --- Slug Generation ---

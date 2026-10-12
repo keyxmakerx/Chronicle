@@ -596,7 +596,7 @@ On top of `RequireSiteAdmin` + CSRF: an in-process single-flight lock (concurren
 
 ## ADR-038: Widget bindings — polymorphic, FK-free association table
 
-**Status:** Accepted
+**Status:** Accepted; amended (integrity rests on two mechanisms, not three)
 
 **Context:** The widget-binding framework maps a host (entity / entity-type / dashboard) to a data instance (a calendar / map / timeline) per widget type. A hard FK is impossible: `instance_id` references a different, plugin-owned table depending on `widget_type`, and core migrations run before plugin migrations, so a binding table can't FK into them.
 
@@ -605,12 +605,14 @@ On top of `RequireSiteAdmin` + CSRF: an in-process single-flight lock (concurren
 Because there is no DB-enforced integrity, the application is the only backstop, enforced as an AND of three mechanisms:
 1. A per-plugin delete hook (`Service.OnInstanceDeleted`) that owning plugins call when an instance is deleted.
 2. An always-on render-time orphan guard (`Resolve` validates every candidate via `WidgetType.InstanceExists`, which also enforces campaign scope, and skips/sweeps dead bindings).
-3. A periodic campaign integrity sweep (`Service.Sweep`).
+3. A periodic campaign integrity sweep (`Service.Sweep`). *(Amended: see below.)*
 
 Campaign scope is pushed down to the repository signature (an unscoped read is unrepresentable) and checked on both `host_id` and the resolved `instance_id`.
 
 **Consequences:**
-- New widget types need no migration; integrity depends entirely on the three mechanisms above staying in place.
+- New widget types need no migration; integrity depends on the two mechanisms in place (the delete hook and the render-time guard) staying in place.
+
+**Amendment:** Mechanism 3 is not part of the design as built. `Service.Sweep` exists as a callable function but nothing in production calls it, and Chronicle has no job runner (scheduler, boot pass or admin action) to run it from. Integrity rests on mechanisms 1 and 2 alone: an orphaned binding is skipped, and deleted, when `Resolve` next reaches it, so it never renders. Bindings nobody resolves again, and rows whose `host_id` host is gone (the package cannot check host existence without inverting plugin isolation), stay in the table as inert rows. A real sweep is added only when there is a place to run it.
 
 ---
 
@@ -1009,3 +1011,108 @@ Also under this ADR: the partial-update contract test only recognised structs na
 **Consequences:**
 - A campaign whose owner had switched the old dashboard-only "sessions" addon off now has game nights off too, until the owner turns Game nights on.
 - A new game-night route belongs in one of the two gated groups, or it answers while the switch is off.
+
+## ADR-063: Feature scripts load on sight
+
+**Status:** Accepted; operator sign-off 2026-10-10 (#1232).
+
+**Context:** `base.templ` and the plugin body-script list put every feature's scripts on every page, about 3.6 MB (1.1 MB compressed) across 116 files, including signed-out pages and add-ons a campaign has switched off. Scripts can't move into page templates: boosted navigation swaps only `#main-content`, and `allowScriptTags=false` strips a swapped `<script>` (`tools/check-page-scripts.sh`).
+
+**Decision:**
+1. A plugin declares its widget scripts in `PluginRegistration.Widgets`: each entry is a `data-widget` name and its scripts in load order, the registering script last. Paths without a leading `/` are under the plugin's own `StaticFS` mount.
+2. The layout emits the resulting map once, as inert JSON (`#chronicle-widget-scripts`) outside `#main-content`. It is the same for every page and campaign, so boosted navigation can't leave a stale copy.
+3. When `boot.js` meets a mount whose widget isn't registered, it appends that widget's scripts to `<head>` (`async=false`, each URL once per page). `register()` then mounts it as before. Scripts created this way are not swapped content, so `allowScriptTags` stays off. `boot.js` loads only same-origin `/static/…*.js` paths from the list, whatever it contains.
+4. Add-on gating needs nothing extra: a switched-off add-on's pages and blocks don't render its mount, so its scripts are never fetched.
+5. `base.templ` keeps only the shell (htmx, Alpine, boot, theme, sidebar, search, notifications) and scripts that Alpine `x-data` needs before Alpine starts.
+
+**Consequences:**
+- The first time a feature appears after a boosted click, its scripts arrive after the page. They're cached immutably from then on.
+- A script that starts itself on `DOMContentLoaded` or an htmx event instead of registering a widget can't load on sight. It becomes a widget when its plugin moves.
+- Features move one plugin at a time (#1232), and the registry grows as they do. `tools/check-widget-mounts.sh` still requires every literal mount's script to be named in `base.templ` or `internal/app/routes.go`.
+
+## ADR-064: Text a DM types into a page block is stored per page and block, in its own table
+
+**Status:** Accepted (#1346, parent #1344).
+
+**Context:** The Read-aloud, Table and Steps blocks hold text a DM types on one page. The two existing places for block data do not fit: a block's `config` lives in the entity type's layout, so every page of that type would share it, and a widget binding allows one binding per host and widget type, so a page could not hold two tables.
+
+**Decision:**
+1. The `pageblocks` plugin keeps one table, `page_block_content`, keyed by `(entity_id, block_id)`; `block_id` is the layout block's id. Several tables on a page, and the same layout on many pages, each get their own row.
+2. The row holds one validated JSON document plus `kind` and `version`, as the quest sheet does, so a block's shape can grow without a schema change and concurrent edits get a 409.
+3. The service filters on read: a DM-only table column is removed for any viewer below Owner visibility. A viewer below it may not save a table that has such a column, rather than have the save merged with columns they cannot see.
+
+**Consequences:**
+- Deleting a page deletes its block content (cascade); removing a block from a layout leaves its rows orphaned but harmless until the page goes.
+- A new typed-in block kind adds a case to the plugin's validation, not a table.
+
+## ADR-065: Tile sections sit beside rows, with sizes the widget declares
+
+**Status:** Accepted. The layout editor that arranges tiles belongs to the Customize redesign.
+
+**Context:** Rows of 12-unit columns suit prose pages, but a page of small widgets (a progress ring, a sky clock, a stat block) wants them at set sizes that pack side by side and grow when given room. The same need reaches entity pages, category dashboards, the campaign dashboard and game-system packages' own widgets (#1352, Chronicle-Draw-Steel#108), so one design has to serve all of them.
+
+**Decision:**
+1. A layout row gets an optional `kind`. Absent or empty is an ordinary row, so no stored layout changes and nothing is migrated; `"tiles"` is a tile section with no columns. A row is one or the other, and the save refuses a row that holds both. Tile sections sit beside rows, not in place of them; a page can mix both.
+2. A tile is `{id, type, size:"WxH", config}`. `type` is a block-registry type and `config` is that block's own config, `visibility` included. Placement is order only (no x/y), so a neighbour changing size can never leave a stale position. One `tilegrid.Tile` type is stored by entity layouts and dashboards alike.
+3. A block type declares the sizes it can take as `BlockMeta.TileSizes` (`tile_sizes`); empty means it cannot be a tile. A game-system or extension widget declares `tile_sizes` on its manifest widget entry, and the `ext_widget` block resolves sizes from the widget its config names (`BlockRegistry.TileSizesFor`), so a package supplies tile content without Chronicle knowing it.
+4. Save rejects a tile whose type has no sizes, whose size is not in the type's list, or whose size is malformed (canonical `WxH`, 1 to 4 wide, 1 to 6 tall). Draw never fails: a stored size the type no longer allows falls back to the type's first size; a type that now allows none (or is gone) shows the "Block not available here" notice.
+5. The grid is 4 columns, 2 below 640px (a tile wider than 2 clamps to 2), 12px gap, `grid-auto-flow: dense`, rows at least 104px. A tile grows to fit its content and never scrolls inside. Each cell carries `data-tile-w` / `data-tile-h`, which a widget reads at mount; `chronicle:tile-resize` announces later changes (`static/js/widgets/tile.js`).
+6. Dashboards reach the registry through `campaigns.SetTileSizeResolver`, because the registry lives in the entities plugin, which imports campaigns.
+
+**Consequences:**
+- A widget that wants to be a tile must render sensibly at every size it lists, from the attributes alone.
+- Withdrawing a size from a widget's list is safe for saved pages; removing every size turns its tiles into notices until the owner edits them.
+- Extension widgets are resolved per campaign, so a widget the campaign has disabled shows the notice.
+
+## ADR-066: Customize keeps one draft, applied by the plugins that own each part
+
+**Status:** Accepted; operator sign-off on the Customize mockup, 2026-10-12 (#1361).
+
+**Context:** Customize grew as separate tabs, each with its own Save, its own unsaved state and no way back from a mistake. The rebuilt Customize is one frame over many areas, and the owner needs to see and save everything they changed in one place. The parts belong to different plugins: the look to campaigns, categories to entities, later the menu and the library.
+
+**Decision:**
+1. Each owner has one draft per campaign (`customize_drafts`), a JSON object of named sections with a version. The page stores it as the owner edits; a write with a stale version is refused with the current draft, so two tabs or devices never overwrite each other silently.
+2. A plugin owns its section: it registers how to apply it (`RegisterCustomizeSection`) and the page area that edits it writes only that key. Campaigns never imports the plugin; the apply runs through its service.
+3. Save applies the sections in registration order through the same validation as each part's own API. A section that fails stays in the draft and the reply names it; the rest are saved.
+4. Keys starting with `_` are the page's own (such as `_changes`, the save bar's list) and are never applied.
+5. Undo, redo and the save bar live in the page; the server keeps only the latest draft.
+
+**Consequences:**
+- A part moves into the draft by registering a section and writing its key; until then it keeps its own Save, and its area says so.
+- The draft is the owner's only. Co-DMs and AI editing are separate decisions.
+- Save is not one transaction across plugins: a partial save is reported, never hidden.
+
+## ADR-067: Diagram shapes are four new drawing types plus the arrow and the bubble
+
+**Status:** Accepted; operator sign-off on the round-three mockup (#1354).
+
+**Context:** The Shapes tool places rooms, areas, water, walls, arrows and speech bubbles on a map and lets them be selected, moved, resized and renamed. The AI map sketch (#1351) must later create the same records. Drawings already carry points, text, visibility and colours; there is no column for "what kind of box this is".
+
+**Decision:**
+1. A box kind is its own `drawing_type` (`room`, `area`, `water`, `wall`), not a `rectangle` plus a marker in another column. `drawing_type` is a VARCHAR(50) checked in Go, so this needs no migration, and the viewer, the server's validation and a sketch importer all read the kind from one field. Arrows and bubbles reuse `arrow` and `callout`.
+2. A box is two corners stored top-left first (the server normalises), with a minimum extent of 0.5 percent per side. A wall has no text; the others have an optional name.
+3. What a kind looks like belongs to the viewer and follows the theme, so the stored `stroke_color` and `fill_color` are valid hex but not used for these four kinds. A client that creates one sends type, points and name.
+4. Selecting is done by the Move tool, with partial `PUT`s of only the changed field. Nothing about permissions changes: the draw gate, edit-own, delete-own and DM-only hiding apply to the new types through the shared drawing rules.
+
+**Consequences:**
+- A reader that does not know the four types (the Foundry module's overlay) skips them, as it skips the annotations.
+- A kind that later needs its own colour or pattern adds a field to the contract and a rule here; until then a sketch cannot recolour a room.
+- Old rectangles stay rectangles: they keep their own tool and are not selectable by this one.
+
+## ADR-068: Adventures is a category only the DM team sees, closed in the one visibility predicate
+
+**Status:** Accepted; operator sign-off on the trial-page mockup, 2026-10-12 (#1344, #1348).
+
+**Context:** A DM's prep (an adventure, its trials, the read-aloud text) must live beside the world it uses, with the same links, search and relations, yet never reach a player. Page visibility is per page, so relying on each page being set to DM-only would leak the first time one was not. The rule has to be a property of the category that every read path obeys without remembering to.
+
+**Decision:**
+1. A category is DM-team-only when its `preset_category` is `adventures`. No new column and no migration: the marker already round-trips through campaign export and import. "DM team" is a visibility role of Scribe or above, which includes a member with DM access (`VisibilityRole()` promotes them to Owner).
+2. The rule sits in `visibilityFilter`, the one predicate every list, search, count, mention, relation, ancestor and backlink read shares (the calendar's mirror carries the same clause). No page-level setting can widen past it: a custom grant or tag grant on an Adventures page does nothing for a player. `CheckEntityAccess` applies it for the single-page gates (show, peek, preview, the editor's reads, the sync API, media), and fails closed when the category cannot be read.
+3. A category-level read hides the category itself the same way: the sidebar, the category list APIs, the search page's category filter, the relations graph's filter, a member's own menu pins, the quest boards' homes, the category home (a 404, like a category never made) and its websocket events (`RequiresDM`).
+4. The category cannot have kinds (sub-categories), and the marker is reserved: creating a category with it through the API or a package is refused. Only the idempotent `EnsureAdventures` sets it, from the seed lists for a new campaign and from the owner's Add Adventures button in Customize for an existing one. Existing campaigns are not changed by a migration, because the owner decides whether the category appears in their menu.
+5. The default page layout is a data constant (`AdventureLayout`): the story and facts as ordinary rows, then a tile section of Read-aloud, Steps and Table (ADR-065).
+
+**Consequences:**
+- A new read path over entities must use `visibilityFilter` or the service gates; one that writes its own SQL against `entities` must add the clause. `internal/plugins/entities/adventures_integration_test.go` proves each existing path against a real schema.
+- Moving a page out of Adventures, or deleting the category after moving its pages, makes those pages visible to players under their own visibility; that is the owner's explicit act.
+- Players' stored favourites of a page that becomes hidden are filtered out on read rather than deleted.

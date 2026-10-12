@@ -132,6 +132,8 @@ for _, tt := range tests {
 }
 ```
 
+DB-backed Go tests get a throwaway schema from `internal/database/dbtest`: `dbtest.Open` reads `CHRONICLE_TEST_DB_DSN`, creates a uniquely named migrated schema on that server and drops it afterwards (`make test-int-local` sets the DSN).
+
 ## Widget Registration (Frontend JS)
 
 Mounts to `data-widget="<slug>"` elements, fetches its own data, renders itself.
@@ -195,6 +197,7 @@ Avoid: restating the code (`// Set name to the request name`), unexplained comme
 9. **Append-only / immutability**: NEVER delete, edit, or renumber a migration any live database may have applied — golang-migrate needs a file for every version up to the DB's recorded one; removing one crash-loops boot (ADR-044/045). `tools/check-migration-immutability.sh` (CI) fails a PR that deletes or edits an existing migration file.
 10. **Schema-only**: a one-time DATA correction belongs in an IDEMPOTENT reconciler — an `EnsureX`/`MergeX` service method run from a boot backfill, an addon-enable hook, or an owner-triggered `SetupProvider` (see `app/setup_pc.go` + `entities.MergeDuplicatePlayerCharacterType`) — never a migration.
 11. **Boot runtime contract** (`database.MigrateWithBackup`, ADR-045): the pre-migration backup runs only when a migration is pending; a DB AHEAD of the build logs a warning and boots anyway; a DIRTY DB fails fast with restore guidance; `fatalBoot` backs off (`BOOT_FAIL_BACKOFF`, 45s). Keep `ExpectedCoreMigrationVersion` (`migrate_state.go`) equal to the highest migration — `TestExpectedCoreMigrationVersion_MatchesMax` enforces it.
+12. **Unique numbers**: one version number per directory. `tools/check-migration-numbers.sh` (CI) fails a PR whose migration shares a number with one in its tree or on the base branch's tip. When two open PRs take the same number, the second to merge renumbers its own (unapplied) files and `ExpectedCoreMigrationVersion`, and re-runs CI.
 
 ### Permission Model
 
@@ -241,9 +244,10 @@ This repo is **not plain-`gofmt`-clean** (many committed files predate or differ
 |---|---|---|---|
 | Plugin isolation grep | `tools/check-plugin-isolation.sh` | diff-scoped FAIL | T-B2: no new `foundry-vtt`/`foundry-module`/`foundry_vtt` literals outside `internal/plugins/foundry_vtt/*` |
 | Motion discipline | `tools/check-v2-motion-discipline.sh` | diff-scoped FAIL | No new `transition: all`/`transition-all` in calendar/timeline/ai_workspace/campaigns sources; opt out per line with `/* OK exempt: … */` |
-| Wire-contract conformance | `internal/wire/wire_contract_test.go` + `routes_snapshot.txt` | FAIL (snapshot) | T-O2: every Echo route registration is in the curated snapshot |
+| Wire-contract conformance | `internal/wire/wire_contract_test.go` + `routes_snapshot.txt` | FAIL (snapshot) | T-O2: every route the real `RegisterRoutes` registers is in the curated snapshot with its resolved path, auth class, handler and middleware chain |
 | Foundry public rate-limit pin | `internal/wire/foundry_public_ratelimit_test.go` | FAIL | T-B1: two AST assertions pin the Foundry public manifest rate-limit wiring (`g.Use(rateLimit)` in `foundry_vtt.RegisterPublicRoutes`) and call site (`middleware.RateLimit(...)` in `app.RegisterRoutes`) |
 | Sanitize-on-write invariant | `internal/sanitize/invariant_test.go` + snapshot | FAIL (snapshot + invariant) | T-B1: every `internal/plugins/*/service.go` (+ widgets) declaring HTML-typed inputs must call `sanitize.HTML` |
+| CSS emissions | `tools/check-css-emissions.sh` + `tools/css-emissions.txt` | FAIL (CI and `make verify`) | Every selector listed in `css-emissions.txt` survives into the built stylesheet; Tailwind's purge drops rules it thinks are unused (JS-built class names) with no build error |
 | Decision-citations | `tools/check-decision-citations.sh` | WARN (exit 0, `continue-on-error`) | T-O3: warns about a `cordinator/decisions/*.md` that nothing references; with no Cordinator checkout it has nothing to check |
 
 ### Pre-merge rules that no guard checks
@@ -252,7 +256,7 @@ Check these by hand: a PR adding an `hx-get` fragment endpoint lists every consu
 
 ### Extending the guards
 
-- **Wire-contract snapshot:** on an intentional route add/remove/change, run `UPDATE_ROUTES_SNAPSHOT=1 go test ./internal/wire/...` and commit the regenerated `internal/wire/routes_snapshot.txt`, explaining the change (especially for the auth surfaces below). Limitations: the snapshot captures `(method, path, file)` via static AST extraction — it doesn't resolve group prefixes (an `e.Group("/admin")` rename), classify the auth surface, capture programmatic registration (loops/builders), or catch per-route middleware removal in general (#697 is the open work), except where a focused AST assertion pins one invariant by hand, as `internal/wire/foundry_public_ratelimit_test.go` does for the Foundry rate limit — copy its shape for a new one: locate the function wiring the middleware and assert its `*.Use(...)` call, then the call site supplying the argument and assert it names the middleware.
+- **Wire-contract snapshot:** on an intentional route or middleware add/remove/change, run `UPDATE_ROUTES_SNAPSHOT=1 go test ./internal/wire/...` and commit the regenerated `internal/wire/routes_snapshot.txt`, explaining the change (especially for the auth surfaces below). The test builds the real `App` against an unreachable database and an in-memory Redis, runs the real `RegisterRoutes`, and records every route through Echo's `OnAddRouteHandler`, so each line is the resolved path (group prefixes included), method, auth class, handler and middleware chain in execution order, and routes added by loops or builders are included. The auth class comes from the chain's middleware names (`authClassRules` in the test), so a route that loses `RequireAuth` shows as class `none` plus the removed name; a new auth middleware needs a rule there. Limitations: middleware is identified by function name, not arguments (`RequireRole(RoleOwner)` becoming `RequireRole(RoleScribe)`, or one `RequirePermission` level becoming another, does not change the line); global `Echo.Use` middleware is not part of any route's chain; routes registered while `App` is constructed (the `/static` mount) are not recorded; inline closures are named after the function that built them. The test needs the Templ-generated code, so run `templ generate` first. `internal/wire/foundry_public_ratelimit_test.go` still pins the Foundry rate limit by hand with two AST assertions, which also covers what the snapshot cannot see about the argument at the call site.
 - **Plugin-isolation guard:** targets `foundry-vtt` strings only today; other plugin names aren't checked. Joins its tokens from fragments at runtime so it can scan its own tree without false-positiving on itself.
 - **Sanitize-invariant snapshot:** on a new plugin's `service.go`, or added/removed HTML-typed inputs, run `UPDATE_SANITIZE_SNAPSHOT=1 go test ./internal/sanitize/...` and commit the regenerated snapshot; cite the audit in the PR if it's a new sanitize surface.
 
@@ -305,7 +309,7 @@ Conflating these is the risk this table and the wire-contract test guard against
 | **Session-OR-Bearer (syncapi multipart)** | same file, `v1Multipart` group | `RequireAuthOrAPIKey` + `RateLimit` (skips `RequireJSONContentType`) | `POST /api/v1/campaigns/:id/media`, the only multipart endpoint under `/api/v1/*` (a sub-group that skips the JSON content-type check) |
 | **Admin-session (site admin UI)** | `internal/app/routes.go` (admin group) | `auth.RequireAuth` + `auth.RequireSiteAdmin` + optional `auth.RequireReauth` | Site admin browser users |
 
-**Regression-prevention:** the wire-contract conformance test pins every Echo route registration, but only `(method, path, file)` — not per-route middleware (see "Extending the guards" above).
+**Regression-prevention:** the wire-contract conformance test pins every registered route with its auth class and middleware chain, so a removed or added middleware fails with the route and the middleware named; it does not see middleware arguments such as a role or permission level (see "Extending the guards" above).
 
 ### CSRF
 
@@ -376,13 +380,15 @@ Plugin CSS sub-layers under `@layer plugins` use **hyphens** matching the public
 
 ## Tailwind JIT safelist for runtime-injected classes
 
-Tailwind's JIT only emits classes found in source files, so classes added at runtime by JS or HTMX (e.g. `.htmx-added`, applied during the settle phase) won't be in the compiled CSS unless referenced: define base styling directly in `static/css/input.css` under an inline `@layer` rule (see the `.htmx-added` + `@starting-style` block there), or add a runtime Tailwind-utility class to the safelist in `tailwind.config.js`. Prefer the inline `@layer` for HTMX/Alpine-injected classes, since the JIT can't see them.
+Tailwind's JIT only emits classes found in source files, so classes added at runtime by JS or HTMX (e.g. `.htmx-added`, applied during the settle phase) won't be in the compiled CSS unless referenced: define base styling directly in `static/css/input.css` under an inline `@layer` rule (see the `.htmx-added` + `@starting-style` block there), or add a runtime Tailwind-utility class to the safelist in `tailwind.config.js`. Prefer the inline `@layer` for HTMX/Alpine-injected classes, since the JIT can't see them. Add the selector of any hand-written rule that must survive to `tools/css-emissions.txt`; `tools/check-css-emissions.sh` fails when the built stylesheet lacks it.
 
 ## Plugin registration + per-plugin static assets
 
 Per `cordinator/decisions/2026-05-23-plugin-registration.md`, plugins self-describe via a `PluginRegistration` value (slug, optional `embed.FS` for migrations, optional `embed.FS` for static assets, optional smoke test); the registry is `internal/app/plugins.go`. Only `ai_workspace`, `foundry_vtt` and `smtp` have a `registration.go`; the other plugins register in `registeredPlugins()` in `cmd/server/main.go`.
 
 Per `cordinator/decisions/2026-05-25-plugin-static-assets.md`, each plugin's static assets (JS/CSS under `static/`) embed via `embed.FS` and mount through the registry — no app-level static-route enumeration. Not every plugin has migrated; check a plugin's `registration.go` for a `StaticFS` entry.
+
+A plugin's widget scripts load on sight (ADR-063): list them in `PluginRegistration.Widgets` as `{Name: "<data-widget name>", Scripts: []string{"js/helper.js", "js/widget.js"}}`, registering script last. A widget whose scripts live under `static/js/widgets/` rather than in a plugin goes in `coreWidgets` (`internal/app/routes.go`) with site paths. `boot.js` fetches them the first time that mount appears on a page, including after boosted navigation. Don't add a feature script to `base.templ`; that list is for the shell and for scripts Alpine needs before it starts. `TestEveryPageScriptBudget` (`internal/app/script_budget_test.go`) caps the count and gzip size of the scripts every page loads; a change past the cap raises it in the same PR and says why, and a move out of the list lowers it.
 
 ## Static asset URLs go through `layouts.AssetURL`
 

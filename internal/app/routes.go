@@ -22,6 +22,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/changesource"
 	"github.com/keyxmakerx/chronicle/internal/extensions"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
+	"github.com/keyxmakerx/chronicle/internal/notifyprefs"
 	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/addons"
@@ -46,6 +47,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/media"
 	"github.com/keyxmakerx/chronicle/internal/plugins/npcs"
 	"github.com/keyxmakerx/chronicle/internal/plugins/packages"
+	"github.com/keyxmakerx/chronicle/internal/plugins/pageblocks"
 	"github.com/keyxmakerx/chronicle/internal/plugins/quests"
 	"github.com/keyxmakerx/chronicle/internal/plugins/restore"
 	"github.com/keyxmakerx/chronicle/internal/plugins/rolltables"
@@ -55,6 +57,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/syncapi"
 	"github.com/keyxmakerx/chronicle/internal/plugins/systemstate"
 	"github.com/keyxmakerx/chronicle/internal/plugins/timeline"
+	"github.com/keyxmakerx/chronicle/internal/plugins/vault_import"
 	"github.com/keyxmakerx/chronicle/internal/plugins/widgetbindings"
 	"github.com/keyxmakerx/chronicle/internal/systems"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
@@ -239,40 +242,6 @@ func (a *recentEntityListerAdapter) ListRecentForDashboard(ctx context.Context, 
 		}
 	}
 	return result, nil
-}
-
-// entityTypeLayoutFetcherAdapter wraps entities.EntityService to implement the
-// campaigns.EntityTypeLayoutFetcher interface. Fetches a single entity type
-// with pre-serialized layout and fields JSON for the page layout editor.
-type entityTypeLayoutFetcherAdapter struct {
-	svc entities.EntityService
-}
-
-// GetEntityTypeForLayoutEditor returns entity type data formatted for the
-// template-editor widget mount. Layout and fields are pre-serialized to JSON.
-func (a *entityTypeLayoutFetcherAdapter) GetEntityTypeForLayoutEditor(ctx context.Context, entityTypeID int) (*campaigns.LayoutEditorEntityType, error) {
-	et, err := a.svc.GetEntityTypeByID(ctx, entityTypeID)
-	if err != nil {
-		return nil, err
-	}
-	layoutJSON, err := json.Marshal(et.Layout)
-	if err != nil {
-		return nil, fmt.Errorf("marshal entity type layout: %w", err)
-	}
-	fieldsJSON, err := json.Marshal(et.Fields)
-	if err != nil {
-		return nil, fmt.Errorf("marshal entity type fields: %w", err)
-	}
-	return &campaigns.LayoutEditorEntityType{
-		ID:         et.ID,
-		CampaignID: et.CampaignID,
-		Name:       et.Name,
-		NamePlural: et.NamePlural,
-		Icon:       et.Icon,
-		Color:      et.Color,
-		LayoutJSON: string(layoutJSON),
-		FieldsJSON: string(fieldsJSON),
-	}, nil
 }
 
 // campaignAuditAdapter wraps audit.AuditService to implement the
@@ -540,6 +509,11 @@ func (a *backdropUploaderAdapter) OwnsFile(ctx context.Context, campaignID, file
 			return false, nil
 		}
 		return false, err
+	}
+	// A note picture or page file is readable only through what holds it; a
+	// campaign backdrop must not adopt one by its stored name.
+	if mf.IsBound() {
+		return false, nil
 	}
 	return mf.Filename == filename && mf.CampaignID != nil && *mf.CampaignID == campaignID, nil
 }
@@ -966,34 +940,6 @@ func (a *wsNotesGrantAdapter) AuthenticateNotesGrantForWS(ctx context.Context, t
 	return g.CampaignID, g.UserID, nil
 }
 
-// CALV5-PLACEHOLDER: V5 must rebuild calendarEventPublisherAdapter — the
-// bridge from the calendar's PublishCalendarEvent to the websocket bus.
-// Nothing publishes calendar events now.
-//
-// A switch ending in `default: return` fails silently: an emitter whose event
-// type has no case here publishes into nothing, unreported. Rebuild it with a
-// test that walks every emitter's event type and asserts a case exists.
-// TODO(#778)
-//
-// The mapping it carried, so V5 has the checklist rather than rediscovering it:
-//   "event.created"                            -> ws.MsgCalendarEventCreated
-//   "event.updated"                            -> ws.MsgCalendarEventUpdated
-//   "event.deleted"                            -> ws.MsgCalendarEventDeleted
-//   "date.advanced"                            -> ws.MsgCalendarDateAdvanced
-//   "calendar.weather.changed"                 -> ws.MsgCalendarWeatherChanged
-//   "calendar.structure.updated"               -> ws.MsgCalendarStructureUpdated
-//   "calendar.season.changed"                  -> ws.MsgCalendarSeasonChanged
-//   "calendar.era.changed"                     -> ws.MsgCalendarEraChanged
-//   "calendar.moon.phase_changed"              -> ws.MsgCalendarMoonPhaseChanged
-//   "calendar.cycle.changed"                   -> ws.MsgCalendarCycleChanged
-//   "calendar.festival.changed"                -> ws.MsgCalendarFestivalChanged
-//   calendar.EventWorldStateChanged            -> ws.MsgCalendarWorldstateChanged
-//   calendar.EventWorldStateChangedDM          -> ws.MsgCalendarWorldstateChanged
-//   "calendar.weather.zones.changed"           -> ws.MsgCalendarWeatherZonesChanged
-//   (calendar.worldstate.changed also had a DM-gated twin that set
-//   RequiresDM = true — the dm_only worldstate payload must never reach a
-//   player's socket.)
-
 // relationEventPublisherAdapter bridges the websocket.EventBus to the
 // relations.RelationEventPublisher interface.
 type relationEventPublisherAdapter struct {
@@ -1088,7 +1034,11 @@ func (a *entityEventPublisherAdapter) PublishEntityTypeEvent(eventType, campaign
 	default:
 		return
 	}
-	a.bus.Publish(ws.NewMessage(msgType, campaignID, fmt.Sprintf("%d", entityType.ID), entityType))
+	msg := ws.NewMessage(msgType, campaignID, fmt.Sprintf("%d", entityType.ID), entityType)
+	// A DM-only category's existence is itself hidden from players, so its
+	// events never reach a socket below the DM team.
+	msg.RequiresDM = entityType.DMOnly()
+	a.bus.Publish(msg)
 }
 
 // sidebarConfigStore is the narrow slice of the campaign service the sidebar
@@ -1272,10 +1222,9 @@ type entityNotesNotifierHolder struct {
 }
 
 // Notify is the entity_notes.Notifier callback. Translates the
-// service's string event into a websocket message type and broadcasts
-// to the campaign that owns the note. Never to specific users — the
-// audience filter is server-side on the next list refresh; clients
-// just need a "something changed, refetch" nudge.
+// service's string event into a websocket message type and sends it only
+// to the note's readers (entityNoteAudience); clients refetch the list,
+// where the repository's ACL decides what they get.
 func (h *entityNotesNotifierHolder) Notify(event string, note *entity_notes.Note, _ entity_notes.Audience) {
 	if h.bus == nil || note == nil || note.CampaignID == "" {
 		return
@@ -1295,10 +1244,32 @@ func (h *entityNotesNotifierHolder) Notify(event string, note *entity_notes.Note
 	// for fresh ACL filtering. We deliberately do NOT broadcast the note
 	// body so a private note's contents never leave the server, even
 	// if a misconfigured client subscribes to the wrong campaign.
-	h.bus.Publish(ws.NewMessage(msgType, note.CampaignID, note.ID, map[string]string{
+	msg := ws.NewMessage(msgType, note.CampaignID, note.ID, map[string]string{
 		"entityId": note.EntityID,
 		"noteId":   note.ID,
-	}))
+	})
+	msg.AllowedUsers, msg.StrictAudience, msg.AdmitScribes = entityNoteAudience(note)
+	h.bus.Publish(msg)
+}
+
+// entityNoteAudience maps a note onto the hub's audience fields so the
+// nudge reaches exactly who entity_notes.NotePassesACL lets read it: a
+// player must not learn that a hidden note exists on a page. The author
+// is always named, since they read their own note whatever its audience.
+func entityNoteAudience(note *entity_notes.Note) (allowed []string, strict, admitScribes bool) {
+	switch note.Audience {
+	case entity_notes.AudienceEveryone:
+		return nil, false, false
+	case entity_notes.AudienceDMOnly:
+		return []string{note.AuthorUserID}, false, false
+	case entity_notes.AudienceDMScribe:
+		return []string{note.AuthorUserID}, false, true
+	case entity_notes.AudienceCustom:
+		return append([]string{note.AuthorUserID}, note.SharedWith...), true, false
+	default:
+		// Private, or anything unknown: the author alone.
+		return []string{note.AuthorUserID}, true, false
+	}
 }
 
 // wsRevokerHolder bridges each plugin's own ConnectionRevoker interface
@@ -1352,6 +1323,11 @@ type mapEventPublisherAdapter struct {
 	// published to DM-equivalent clients only. Nil fails closed: with no way to
 	// tell, every pin and drawing event is restricted.
 	shadows maps.ShadowLookup
+	// frames reads a map's frame, to place a turned picture against shadows.
+	// Nil leaves the frame unknown, which withholds every turned picture.
+	frames interface {
+		MapFrame(ctx context.Context, mapID string) maps.MapFrame
+	}
 	// fog resolves a map's unexplored hexes so a pin or drawing wholly inside
 	// them is published to DM-equivalent clients only. Nil fails closed, like
 	// shadows.
@@ -1366,7 +1342,7 @@ type mapEventPublisherAdapter struct {
 // and the whole picture under unexplored hexes.
 func wireHexFog(mapsService maps.MapService, drawingService maps.DrawingService, events *mapEventPublisherAdapter, hexService maps.HexService) {
 	mapsService.SetHexFogLookup(hexService)
-	mapsService.SetFogMediaLookup(drawingService)
+	mapsService.SetPictureFileLookup(drawingService)
 	drawingService.SetHexFogLookup(hexService)
 	events.fog = hexService
 	hexService.SetEventPublisher(events)
@@ -1420,7 +1396,7 @@ func (a *mapImageSourceAdapter) ReadImage(ctx context.Context, campaignID, media
 	if err != nil {
 		return nil, err
 	}
-	if file.CampaignID == nil || *file.CampaignID != campaignID || !file.IsImage() {
+	if file.CampaignID == nil || *file.CampaignID != campaignID || !file.IsImage() || file.IsBound() {
 		return nil, apperror.NewNotFound("media file not found")
 	}
 	data, err := os.ReadFile(a.svc.FilePath(file))
@@ -1432,7 +1408,7 @@ func (a *mapImageSourceAdapter) ReadImage(ctx context.Context, campaignID, media
 
 // newMapEventPublisher builds the WebSocket publisher with its shadow lookup.
 func newMapEventPublisher(bus ws.EventBus, drawingService maps.DrawingService) *mapEventPublisherAdapter {
-	return &mapEventPublisherAdapter{bus: bus, shadows: drawingService}
+	return &mapEventPublisherAdapter{bus: bus, shadows: drawingService, frames: drawingService}
 }
 
 // underShadow reports whether an event about a pin or drawing on mapID must be
@@ -1495,6 +1471,42 @@ func (a *mapEventPublisherAdapter) PublishHexChanged(campaignID, mapID string, v
 	a.bus.Publish(ws.NewMessage(ws.MsgHexChanged, campaignID, mapID, payload))
 }
 
+// Kinds carried by PublishItemsChanged; the viewer maps each to a refetch.
+const (
+	mapItemsMarkers  = "markers"
+	mapItemsDrawings = "drawings"
+	mapItemsShadows  = "shadows"
+)
+
+// publishItemsChanged announces that something of one kind changed on a map.
+// It carries ids only: the viewer refetches through the role-filtered reads,
+// so DM-only, shadow and hex-fog rules stay decided in one place and nothing
+// secret rides this message. By default it goes to every client of the
+// campaign; creating or deleting a DM-only or rule-restricted pin or drawing
+// passes that item's audience (dmOnly, rules) so players are not told that a
+// hidden thing appeared or vanished. Updates and shadows stay open: a shadow
+// changes what players see, and an update may move an item into view. No
+// token notice exists: tokens have no layer on the web viewer, and a notice
+// per hidden drag would leak movement. It is
+// sent just before the per-item event (which stays audience-gated) because the
+// per-item event is not enough for a page to stay right: it cannot say what a
+// shadow or the fog now covers or uncovers.
+func (a *mapEventPublisherAdapter) publishItemsChanged(campaignID, mapID, kind string, dmOnly bool, rules *maps.VisibilityRules) {
+	if campaignID == "" || mapID == "" || a.bus == nil {
+		return
+	}
+	msg := ws.NewMessage(ws.MsgMapItemsChanged, campaignID, mapID, map[string]any{
+		"map_id": mapID,
+		"kind":   kind,
+	})
+	msg.RequiresDM = dmOnly
+	if rules != nil {
+		msg.AllowedUsers = rules.AllowedUsers
+		msg.DeniedUsers = rules.DeniedUsers
+	}
+	a.bus.Publish(msg)
+}
+
 // publishWithAudience wraps ws.NewMessage with the audience derived from
 // the source row: the binary RequiresDM (dm_only) flag, plus — for
 // markers and drawings, which carry per-user visibility_rules — the
@@ -1532,13 +1544,33 @@ func (a *mapEventPublisherAdapter) PublishDrawingEvent(eventType string, campaig
 	default:
 		return
 	}
-	// The picture a fogged hex layer is pinned to is DM-only on the wire too:
-	// its event carries the file id, which is the secret under the fog.
+	// A picture whose file the fog or a shadow withholds is DM-only on the
+	// wire too: its event carries the file id, which is the secret.
+	var frame maps.MapFrame
+	if a.frames != nil && maps.PictureIsTurned(drawing) {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		frame = a.frames.MapFrame(ctx, drawing.MapID)
+		cancel()
+	}
 	dmOnly := drawing.Visibility == "dm_only" ||
 		(drawing.DrawingType != maps.DrawingTypeShadow &&
-			(a.underShadow(drawing.MapID, func(areas []maps.ShadowArea) bool { return maps.DrawingUnderShadow(areas, drawing) }) ||
+			(a.underShadow(drawing.MapID, func(areas []maps.ShadowArea) bool {
+				return maps.DrawingUnderShadow(areas, drawing) || maps.ShadowWithholdsImageOf(areas, drawing, frame)
+			}) ||
 				a.underFog(drawing.MapID, func(f *maps.FogMask) bool { return f.HidesDrawing(drawing) || f.WithholdsImageOf(drawing) })))
-	a.publishWithAudience(msgType, campaignID, drawing.ID, drawing, dmOnly, maps.ParseVisibilityRules(drawing.VisibilityRules))
+	// Shadows have their own kind so a viewer can tell that pins under or
+	// uncovered by them need a refetch too; pictures count as drawings.
+	kind := mapItemsDrawings
+	if drawing.DrawingType == maps.DrawingTypeShadow {
+		kind = mapItemsShadows
+	}
+	rules := maps.ParseVisibilityRules(drawing.VisibilityRules)
+	if kind == mapItemsShadows || eventType == "updated" {
+		a.publishItemsChanged(campaignID, drawing.MapID, kind, false, nil)
+	} else {
+		a.publishItemsChanged(campaignID, drawing.MapID, kind, dmOnly, rules)
+	}
+	a.publishWithAudience(msgType, campaignID, drawing.ID, drawing, dmOnly, rules)
 }
 
 // PublishTokenEvent translates map token domain events into WebSocket messages.
@@ -1653,7 +1685,13 @@ func (a *mapEventPublisherAdapter) PublishMarkerEvent(eventType string, campaign
 	dmOnly := marker.IsDMOnly() ||
 		a.underShadow(marker.MapID, func(areas []maps.ShadowArea) bool { return maps.MarkerUnderShadow(areas, marker) }) ||
 		a.underFog(marker.MapID, func(f *maps.FogMask) bool { return f.HidesMarker(marker) })
-	a.publishWithAudience(msgType, campaignID, marker.ID, marker, dmOnly, maps.ParseVisibilityRules(marker.VisibilityRules))
+	rules := maps.ParseVisibilityRules(marker.VisibilityRules)
+	if eventType == "updated" {
+		a.publishItemsChanged(campaignID, marker.MapID, mapItemsMarkers, false, nil)
+	} else {
+		a.publishItemsChanged(campaignID, marker.MapID, mapItemsMarkers, dmOnly, rules)
+	}
+	a.publishWithAudience(msgType, campaignID, marker.ID, marker, dmOnly, rules)
 }
 
 // (The campaigns show page lazy-loads the Foundry banner via
@@ -1725,6 +1763,11 @@ func (a *foundryCampaignOwnerLookupAdapter) GetCampaignOwnerEmail(ctx context.Co
 	user, err := a.authSvc.GetUser(ctx, c.CreatedBy)
 	if err != nil || user == nil {
 		return "", "", err
+	}
+	// An owner who switched module-update emails off gets no address, which
+	// the notify path already reads as "skip the email, keep the banner".
+	if len(a.authSvc.AllowedRecipients(ctx, []string{user.ID}, notifyprefs.ModuleUpdates, notifyprefs.Email)) == 0 {
+		return "", "", nil
 	}
 	display := user.DisplayName
 	if display == "" {
@@ -1913,6 +1956,7 @@ func (a *widgetBlockListerAdapter) GetWidgetBlockMetas(ctx context.Context, camp
 				Icon:        icon,
 				Description: info.Description,
 				WidgetSlug:  info.Slug,
+				TileSizes:   info.TileSizes,
 			})
 		}
 	}
@@ -1956,6 +2000,42 @@ func (a *mentionLinkAdapter) GetMentionLinksForGraph(ctx context.Context, campai
 	return result, nil
 }
 
+// registerPageTextBlocks registers Read-aloud, Table and Steps: text a DM types
+// in place, stored per page and block. They are always available (no addon) and
+// usable several times on a page; the widget fetches its own content, so these
+// only emit the mount point. A layout that places them (Adventures does) fails
+// to save without them, so every registry that validates layouts needs them.
+func registerPageTextBlocks(blockRegistry *entities.BlockRegistry) {
+	for _, b := range []entities.BlockMeta{
+		{
+			Type: pageblocks.KindReadAloud, Label: "Read-aloud", Icon: "fa-bullhorn",
+			Description: "Boxed text the DM reads to the table",
+			Contexts:    []string{"template"},
+			TileSizes:   []string{"2x1", "2x2", "4x1", "4x2"},
+		},
+		{
+			Type: pageblocks.KindTable, Label: "Table", Icon: "fa-table",
+			Description: "Rows and columns typed in place, with columns only the DM sees",
+			Contexts:    []string{"template"},
+			TileSizes:   []string{"2x2", "4x2"},
+		},
+		{
+			Type: pageblocks.KindSteps, Label: "Steps", Icon: "fa-list-ol",
+			Description: "Numbered beats with a tick for each, for use during play",
+			Contexts:    []string{"template"},
+			TileSizes:   []string{"1x2", "2x2", "4x2"},
+		},
+	} {
+		kind := b.Type
+		blockRegistry.Register(b, func(rc entities.BlockRenderContext) templ.Component {
+			if rc.CC == nil || rc.Entity == nil || rc.Block.ID == "" {
+				return templ.NopComponent
+			}
+			return pageblocks.BlockMount(rc.CC.Campaign.ID, rc.Entity.ID, rc.Block.ID, kind, rc.CSRFToken)
+		})
+	}
+}
+
 // entityTypeListerForGraphAdapter wraps entities.EntityService to implement the
 // relations.EntityTypeListerForGraph interface for the graph filter dropdown.
 type entityTypeListerForGraphAdapter struct {
@@ -1963,11 +2043,12 @@ type entityTypeListerForGraphAdapter struct {
 }
 
 // ListEntityTypesForGraph returns entity types as lightweight summaries.
-func (a *entityTypeListerForGraphAdapter) ListEntityTypesForGraph(ctx context.Context, campaignID string) ([]relations.EntityTypeSummary, error) {
+func (a *entityTypeListerForGraphAdapter) ListEntityTypesForGraph(ctx context.Context, campaignID string, role int) ([]relations.EntityTypeSummary, error) {
 	etypes, err := a.svc.GetEntityTypes(ctx, campaignID)
 	if err != nil {
 		return nil, err
 	}
+	etypes = entities.TypesForViewer(etypes, role)
 	result := make([]relations.EntityTypeSummary, 0, len(etypes))
 	for _, et := range etypes {
 		if !et.Enabled {
@@ -2215,7 +2296,7 @@ func (a *entityMediaVerifierAdapter) MediaExistsInCampaign(ctx context.Context, 
 		}
 		return false, err
 	}
-	if f == nil {
+	if f == nil || f.IsBound() {
 		return false, nil
 	}
 	return f.CampaignID != nil && *f.CampaignID == campaignID, nil
@@ -2241,7 +2322,7 @@ func (a *mapMediaVerifierAdapter) ImageInCampaign(ctx context.Context, mediaID, 
 		}
 		return false, err
 	}
-	if f == nil || f.CampaignID == nil || *f.CampaignID != campaignID {
+	if f == nil || f.IsBound() || f.CampaignID == nil || *f.CampaignID != campaignID {
 		return false, nil
 	}
 	return strings.HasPrefix(f.MimeType, "image/"), nil
@@ -2453,6 +2534,10 @@ func (a *App) RegisterRoutes() {
 
 	// Wire SMTP into auth service for password reset emails.
 	auth.ConfigureMailSender(authService, smtpService, a.Config.BaseURL)
+	// Two-factor keys are stored encrypted under a key derived from the site secret.
+	auth.ConfigureTwoFactor(authService, a.Config.Auth.SecretKey)
+	// Provider sign-in keeps its client secret sealed under the site secret too.
+	auth.ConfigureOIDC(authService, auth.NewOIDCStore(a.DB), a.Config.Auth.SecretKey, a.Config.BaseURL)
 
 	// Entities plugin: entity types + entity CRUD (must be created before
 	// campaigns so we can pass EntityService as the EntityTypeSeeder).
@@ -2537,8 +2622,12 @@ func (a *App) RegisterRoutes() {
 	campaignHandler := campaigns.NewHandler(campaignService)
 	campaignHandler.SetBaseURL(a.Config.BaseURL)
 	campaignHandler.SetEntityLister(&entityTypeListerAdapter{svc: entityService})
-	campaignHandler.SetLayoutFetcher(&entityTypeLayoutFetcherAdapter{svc: entityService})
 	campaignHandler.SetRecentEntityLister(&recentEntityListerAdapter{svc: entityService})
+	campaignHandler.SetCustomizeCategoryLister(&customizeCategoryAdapter{svc: entityService})
+	campaignHandler.SetCustomizeDrafts(campaigns.NewCustomizeDraftService(campaigns.NewCustomizeDraftRepository(a.DB)))
+	// After the look, which NewHandler registers first: a category's menu
+	// setting is applied on top of the saved sidebar.
+	campaignHandler.RegisterCustomizeSection(newCategoriesSection(entityService, campaignService))
 	groupRepo := campaigns.NewGroupRepository(a.DB)
 	groupService := campaigns.NewGroupService(groupRepo)
 	campaignHandler.SetGroupService(groupService)
@@ -2549,6 +2638,16 @@ func (a *App) RegisterRoutes() {
 	inviteService := campaigns.NewInviteService(inviteRepo, campaignRepo, smtpService, a.Config.BaseURL)
 	inviteHandler := campaigns.NewInviteHandler(inviteService, campaignService, a.Config.BaseURL)
 	campaigns.RegisterInviteRoutes(e, inviteHandler, campaignService, authService)
+
+	// Guest codes: the owner's card, and auth's join page redeeming them.
+	// A guest exists only for their campaign, so removing them from it or
+	// deleting it ends their account.
+	guestCodeService := campaigns.NewGuestCodeService(campaigns.NewGuestCodeRepository(a.DB), campaignRepo)
+	campaigns.RegisterGuestCodeRoutes(e, campaigns.NewGuestCodeHandler(guestCodeService, a.Config.BaseURL), campaignService, authService)
+	auth.ConfigureGuests(authService, guestCodeService)
+	auth.OnGuestMerged(authService, guestCodeService.MoveGuestMembership)
+	campaigns.OnMemberRemoved(campaignService, authService.EndGuest)
+	campaigns.OnCampaignDeleted(campaignService, authService.EndCampaignGuests)
 
 	// Discover page (/) -- browse public campaigns. Uses OptionalAuth so
 	// authenticated users get the App layout with sidebar, while guests
@@ -2803,7 +2902,11 @@ func (a *App) RegisterRoutes() {
 	backupHandler := backup.NewHandler(backupSvc)
 	backupHandler.SetActivityRecorder(adminActivity)
 	backupHandler.SetDownloadAuth(signingSecret, auth.GetUserID)
+	backupHandler.SetScheduleStore(settingsRepo)
 	backup.RegisterRoutes(adminGroup, backupHandler, auth.RequireReauth(authService))
+
+	// Daily backup, when the owner turns it on under Admin > Backup.
+	go backup.NewScheduler(backupSvc, settingsRepo, backupFailureMailer{users: authRepo, mail: smtpService}).Run(a.ShutdownCtx)
 
 	// Admin Restore plugin: lists backup manifests in BACKUP_DIR and
 	// shells out to scripts/restore.sh under a typed-RESTORE
@@ -2883,6 +2986,9 @@ func (a *App) RegisterRoutes() {
 	} else if n > 0 {
 		slog.Info("player-character-type backfill complete", slog.Int("campaigns", n))
 	}
+	// Move a system's character sheet off an empty duplicate type onto the
+	// default Characters type; idempotent and never deletes.
+	reconcileCharacterPresetHome(context.Background(), entityService)
 	addonService.SetSystemFinder(&systemManifestFinderAdapter{})
 	addonHandler := addons.NewHandler(addonService)
 	addonHandler.SetActivityRecorder(adminActivity)
@@ -2891,6 +2997,12 @@ func (a *App) RegisterRoutes() {
 
 	// Campaign media browser routes (gated behind media-gallery addon).
 	media.RegisterCampaignRoutes(e, mediaHandler, campaignService, authService, addonService)
+
+	// Files attached to a page. Who may see, add or remove one is the page's
+	// own rule, asked of the entities service, never of text that mentions it.
+	pageFileService := media.NewPageFileService(media.NewPageFileRepository(a.DB), mediaService, &pageAccessAdapter{svc: entityService})
+	pageFileHandler := media.NewPageFileHandler(pageFileService, mediaService)
+	media.RegisterPageFileRoutes(e, pageFileHandler, campaignService, authService, resolveMaxUpload, a.Config.Upload.ServeRateLimit)
 
 	// Wire addon count into admin dashboard for the Extensions stat card.
 	adminHandler.SetAddonCounter(addonService)
@@ -3149,6 +3261,15 @@ func (a *App) RegisterRoutes() {
 	hygieneScanner := admin.NewHygieneService(a.DB, mediaRepo, mediaService, a.Config.Upload.MediaPath, securityRepo)
 	adminHandler.SetHygieneScanner(hygieneScanner)
 
+	// Site Trash: a deleted campaign and a file clean-up wait here with Undo
+	// before anything is removed. The purger is the periodic job that empties
+	// items older than the retention setting (an hourly ticker, started the
+	// same way as the page Trash purger below).
+	trashService := admin.NewTrashService(campaignService, mediaService, hygieneScanner,
+		admin.NewTrashBatchRepository(a.DB), settingsService)
+	adminHandler.SetTrashService(trashService)
+	go trashService.StartPurger(a.ShutdownCtx)
+
 	// Database explorer: schema visualization and migration management.
 	dbExplorer := admin.NewDatabaseExplorer(a.DB, a.PluginHealth, a.PluginSchemas)
 	adminHandler.SetDatabaseExplorer(dbExplorer)
@@ -3165,6 +3286,7 @@ func (a *App) RegisterRoutes() {
 	// Wire security event logging into the media handler so uploads, deletes,
 	// and quota failures are recorded in the admin security dashboard.
 	mediaHandler.SetSecurityLogger(securityService)
+	pageFileHandler.SetSecurityLogger(securityService)
 
 	// foundry_vtt sub-plugin: the Foundry-VTT-specific extension to the
 	// generic packages plugin. Owns every Foundry-specific behavior:
@@ -3206,6 +3328,11 @@ func (a *App) RegisterRoutes() {
 	// Also read by the Foundry page's version check; nil without packages.
 	var fvttOwnerUpdates foundry_vtt.OwnerUpdates
 	fvttHandler.SetActivityRecorder(adminActivity)
+	pkgHandler.SetTypeUI(packages.PackageTypeFoundryModule, packages.TypeUI{
+		ActionsFragmentURL: func(p packages.Package) string {
+			return foundry_vtt.AdminPackageActionsFragmentURL(p.ID)
+		},
+	})
 	if pkgUpdateSvc != nil {
 		// Owners are asked before a new module version reaches their campaign.
 		fvttOwnerUpdates = foundry_vtt.NewOwnerUpdates(pkgUpdateSvc, pkgService)
@@ -3300,6 +3427,9 @@ func (a *App) RegisterRoutes() {
 	// authenticated with it can't keep receiving until it happens to
 	// reconnect on its own. See wsRevokerHolder.
 	syncService.SetConnectionRevoker(wsRevoker)
+	// Syncing with a key counts as using Chronicle, so an owner who plays
+	// through Foundry is never mistaken for away.
+	syncService.SetSeenRecorder(authService)
 	// One-time, idempotent startup backfill: enable sync-api for campaigns
 	// that already own API keys but have no recorded toggle state, so
 	// enforcing the toggle cannot cut off an integration that was working.
@@ -3372,6 +3502,11 @@ func (a *App) RegisterRoutes() {
 	calendarKindRepo := calendar.NewEventKindRepository(a.DB)
 	calendarWeatherRepo := calendar.NewWeatherRepository(a.DB)
 	calendarService := calendar.NewCalendarService(calendarRepo, calendarEventRepo, calendarKindRepo, calendarWeatherRepo)
+	// Pages by era and moon lore pages: the calendar owns eras, moons and
+	// each page's era versions; the entity page draws them.
+	eraVersionService := calendar.NewEraVersionService(calendar.NewEraVersionRepository(a.DB), calendarService)
+	entityHandler.SetEraPages(eraPagesAdapter{versions: eraVersionService})
+	entityHandler.SetPageMoons(pageMoonsAdapter{calendars: calendarService})
 	// An event's entity_id join reads straight from entities with no
 	// visibility filter of its own (calendar.EntityVisibilityGate's doc
 	// comment) — reuses the same entityVisibilityFilterAdapter sessions,
@@ -3434,6 +3569,7 @@ func (a *App) RegisterRoutes() {
 	pluginBodyScripts := []string{
 		"/static/plugins/" + entities.PluginSlug + "/js/characters.js",
 		"/static/plugins/" + entities.PluginSlug + "/js/hero_creator.js",
+		"/static/plugins/" + entities.PluginSlug + "/js/own_entries.js",
 		"/static/js/widgets/calendar_era_blend.js",
 		"/static/js/widgets/calendar_era_look.js",
 		"/static/js/widgets/calendar_view.js",
@@ -3515,6 +3651,8 @@ func (a *App) RegisterRoutes() {
 		g.SetEntityVisibilityGate(&entityVisibilityFilterAdapter{svc: entityService})
 	}
 	mapsHandler := maps.NewHandler(mapsService)
+	// Names the players a pin's rules allow on the badge DMs see.
+	mapsHandler.SetMemberLister(campaignService)
 	drawingRepo := maps.NewDrawingRepository(a.DB)
 	drawingService := maps.NewDrawingService(drawingRepo)
 	hexService := maps.NewHexService(maps.NewHexRepository(a.DB))
@@ -3530,7 +3668,20 @@ func (a *App) RegisterRoutes() {
 	// UpdateImage/UpdateCoverImage — mediaService already exists by this
 	// point (constructed earlier in this function).
 	entityService.SetMediaVerifier(&entityMediaVerifierAdapter{svc: mediaService})
-	if a.PluginHealth.IsHealthy("maps") {
+	// Map scripts load on sight (ADR-063). A page block's framed preview
+	// unfolds into the live viewer, so the entity map lists the viewer and the
+	// focus view ahead of its own script; the dashboard map draws annotations and shapes.
+	a.registerPlugin(PluginRegistration{
+		Slug:     maps.PluginSlug,
+		StaticFS: echo.MustSubFS(maps.StaticAssetsFS, "static"),
+		Widgets: []PluginWidget{
+			{Name: "map-viewer", Scripts: []string{"js/map_viewer.js"}},
+			{Name: "entity-map", Scripts: []string{"js/map_viewer.js", "js/map_focus.js", "js/entity_map.js"}},
+			{Name: "map-widget", Scripts: []string{"js/map_annotations.js", "js/map_shapes.js", "js/map_widget.js"}},
+			{Name: "map-block-picker", Scripts: []string{"js/map_block_picker.js"}},
+		},
+	})
+	if a.PluginHealth.IsHealthy(maps.PluginSlug) {
 		maps.RegisterRoutes(e, mapsHandler, campaignService, authService, addonService)
 		// The campaign-wide map frame is a "Maps" tab on the Customize page;
 		// the campaigns plugin only hosts the tab, maps owns what is in it.
@@ -3554,6 +3705,26 @@ func (a *App) RegisterRoutes() {
 	}); ok {
 		wired.SetGameNightsAffectedByAnchorMove(&gameNightsAnchorMoveAdapter{svc: sessionsService})
 	}
+	// A structure edit that reorders months moves game nights with them.
+	if wired, ok := calendarService.(interface {
+		SetSessionMonthRemapper(calendar.SessionMonthRemapper)
+	}); ok {
+		wired.SetSessionMonthRemapper(&sessionMonthRemapAdapter{svc: sessionsService})
+	}
+	// Records which calendar a session's in-world date belongs to, and
+	// stamps the dates saved before it was recorded. Best-effort: logs and
+	// never blocks startup; a campaign with no calendar is retried next boot.
+	defaultCalendarResolver := &sessionsDefaultCalendarAdapter{svc: calendarService}
+	if wired, ok := sessionsService.(interface {
+		SetDefaultCalendarResolver(sessions.DefaultCalendarResolver)
+	}); ok {
+		wired.SetDefaultCalendarResolver(defaultCalendarResolver)
+	}
+	if n, err := sessions.ReconcileWorldDateCalendars(context.Background(), sessionsService, defaultCalendarResolver); err != nil {
+		slog.Error("sessions: world date calendar backfill failed", slog.Any("error", err), slog.Int("stamped", n))
+	} else if n > 0 {
+		slog.Info("sessions: world date calendar backfill complete", slog.Int("sessions", n))
+	}
 	// Keeps Game nights on for campaigns that already use them; a recorded
 	// owner choice is left alone. Best-effort: logs and never blocks startup.
 	if n, err := sessions.ReconcileAddonEnablement(context.Background(), sessionsService, addonService); err != nil {
@@ -3566,6 +3737,10 @@ func (a *App) RegisterRoutes() {
 	sessionsHandler := sessions.NewHandler(sessionsService)
 	sessionsHandler.SetMemberLister(campaignService)
 	sessionsHandler.SetMailSender(smtpService, a.Config.BaseURL)
+	// People's notification choices (Account settings) filter the bell and
+	// the game-night emails.
+	sessionsHandler.SetRecipientFilter(authService)
+	sessions.ConfigureRecipientFilter(sessionsService, authService)
 	// Game-night links open the real-world calendar; with the calendar plugin
 	// down they keep going to the Sessions page.
 	if a.PluginHealth.IsHealthy(calendar.PluginSlug) {
@@ -3582,6 +3757,16 @@ func (a *App) RegisterRoutes() {
 	} else {
 		slog.Warn("sessions plugin degraded — routes not registered")
 	}
+
+	// The dashboard's "Coming up" block joins the calendar and game nights, so
+	// it is wired here rather than in either plugin. Each source is gated on
+	// its addon and on its plugin being healthy inside the handler.
+	registerComingUpRoutes(e, &comingUpHandler{
+		src:     comingUpSources{Calendar: calendarService, Nights: sessionsService, Members: campaignService},
+		addons:  addonService,
+		healthy: func(slug string) bool { return a.PluginHealth == nil || a.PluginHealth.IsHealthy(slug) },
+		now:     time.Now,
+	}, campaignService, authService)
 
 	// Timeline plugin: interactive visual timelines with zoom levels and entity grouping.
 	timelineRepo := timeline.NewTimelineRepository(a.DB)
@@ -3623,6 +3808,16 @@ func (a *App) RegisterRoutes() {
 	}
 	timelineHandler := timeline.NewHandler(timelineSvc)
 	timelineHandler.SetMemberLister(campaignService)
+	// The timeline page's chart and the dashboard/category preview cards load
+	// their scripts on sight, so pages without a timeline never fetch them.
+	a.registerPlugin(PluginRegistration{
+		Slug:     timeline.PluginSlug,
+		StaticFS: echo.MustSubFS(timeline.StaticAssetsFS, "static"),
+		Widgets: []PluginWidget{
+			{Name: "timeline-viz", Scripts: []string{"js/timeline_viz.js"}},
+			{Name: "timeline-widget", Scripts: []string{"js/timeline_widget.js"}},
+		},
+	})
 	if a.PluginHealth.IsHealthy("timeline") {
 		timeline.RegisterRoutes(e, timelineHandler, campaignService, authService, addonService)
 	} else {
@@ -3866,6 +4061,10 @@ func (a *App) RegisterRoutes() {
 	noteHandler := notes.NewHandler(noteSvc)
 	noteHandler.SetAttachmentService(noteSvc)
 	noteHandler.SetMediaUploader(&mediaUploadAdapter{svc: mediaService})
+	noteHandler.SetPictureUploader(&mediaUploadAdapter{svc: mediaService})
+	// Who may open a picture in a note is decided by who can read the notes
+	// holding it, asked of the notes service rather than its tables.
+	mediaHandler.SetNoteMediaAccess(&noteMediaAccessAdapter{svc: noteSvc})
 	noteHandler.SetMemberLister(campaignService)
 	noteHandler.SetCharacterLister(&journalCharacterAdapter{svc: entityService})
 	notePages := &notesPagesAdapter{svc: entityService}
@@ -3887,6 +4086,18 @@ func (a *App) RegisterRoutes() {
 		if err := noteGrants.RevokeAllForUser(ctx, userID); err != nil {
 			slog.Error("revoking notes app grants failed", slog.String("user_id", userID), slog.Any("error", err))
 		}
+	})
+	// Deleting your own account: the campaign side runs first and refuses
+	// while the person still owns a campaign; once the account is emptied,
+	// the rest of what other plugins hold about the person goes.
+	auth.ConfigureAccountDeletion(authService, &accountDeletionAdapter{campaigns: campaignService})
+	auth.OnAccountDeleted(authService, func(ctx context.Context, userID string) {
+		forgetDeletedAccount(ctx, userID, entityRepo, entityNotesRepo, noteRepo, syncService)
+	})
+	// Merging a guest: their characters and notes in the campaign go to the
+	// account they merged into, before the guest account is emptied.
+	auth.OnGuestMerged(authService, func(ctx context.Context, campaignID, guestID, targetID string) error {
+		return moveGuestThings(ctx, campaignID, guestID, targetID, entityRepo, entityNotesRepo, noteRepo)
 	})
 	// Removing a player from a campaign ends their grants there, so a later
 	// re-invite starts with none.
@@ -3992,8 +4203,21 @@ func (a *App) RegisterRoutes() {
 	pageSafetyRepo := entities.NewPageSafetyRepository(a.DB)
 	entityService.SetPageSafety(pageSafetyRepo)
 	pageSafetyService := entities.NewPageSafetyService(pageSafetyRepo, entityRepo, entityService, settingsService)
+	// Player Notes are counted (never read) so a delete and the Trash can say
+	// how many notes go with a page; without the wiring they just stay quiet.
+	pageSafetyService.SetNoteCounter(entityNotesService)
+	entityHandler.SetTrashNoteCounter(pageSafetyService)
 	entities.RegisterPageSafetyRoutes(e, entities.NewPageSafetyHandler(pageSafetyService, entityService, campaignService), campaignService, authService)
 	go pageSafetyService.StartPurger(a.ShutdownCtx)
+
+	// --- Extra places in the page tree ---
+	// One page listed under more than one parent. The service is also the
+	// guard page moves ask, so a move can't loop through a listing.
+	placeService := entities.NewPlaceService(entityRepo, entities.NewPlaceRepository(a.DB))
+	entityHandler.SetPlaceService(placeService)
+	if g, ok := entityService.(interface{ SetPlaceGuard(entities.PlaceGuard) }); ok {
+		g.SetPlaceGuard(placeService)
+	}
 
 	// --- Entity Block Registry ---
 	// Create the block registry and let each plugin register its block types.
@@ -4024,8 +4248,8 @@ func (a *App) RegisterRoutes() {
 	widgetRegistry.Register(maps.NewMapWidgetType(mapsService))
 	widgetBindingSvc := widgetbindings.NewService(widgetbindings.NewRepository(a.DB), widgetRegistry)
 	// The calendar/timeline services call OnInstanceDeleted on delete so a
-	// removed instance's bindings are swept promptly (render-time guard and
-	// Sweep are the backstop). Reached via a type assertion so the
+	// removed instance's bindings are swept promptly (Resolve's render-time
+	// guard skips and deletes any orphan this misses). Reached via a type assertion so the
 	// CalendarService/TimelineService interfaces stay unchanged.
 	if t, ok := timelineSvc.(interface {
 		SetBindingCleaner(timeline.BindingCleaner)
@@ -4172,6 +4396,8 @@ func (a *App) RegisterRoutes() {
 		return quests.CategoryBoardsMount(cc.Campaign.ID, et.ID, cc.CanControlWorldState(), int(cc.MemberRole))
 	})
 
+	registerPageTextBlocks(blockRegistry)
+
 	// Timeline plugin blocks (requires "timeline" addon).
 	blockRegistry.Register(entities.BlockMeta{
 		Type: "timeline", Label: "Timeline", Icon: "fa-timeline",
@@ -4260,6 +4486,8 @@ func (a *App) RegisterRoutes() {
 	blockRegistry.SetAddonChecker(addonService)
 	entityService.SetBlockRegistry(blockRegistry)
 	entities.SetGlobalBlockRegistry(blockRegistry)
+	// Dashboards check and draw tile sizes through the same registry.
+	campaigns.SetTileSizeResolver(blockRegistry)
 	entityHandler.SetBlockRegistry(blockRegistry)
 	entityHandler.SetWidgetBlockLister(&widgetBlockListerAdapter{extHandler: extHandler})
 
@@ -4343,7 +4571,14 @@ func (a *App) RegisterRoutes() {
 	// ingress sanitization is enforced by the AST pin in
 	// internal/plugins/ai_workspace/importer/committer_sanitize_test.go.
 	aiWorkspaceHandler.SetImportLookup(entityService)
-	aiWorkspaceHandler.SetImportCommitter(importer.NewCommitter(entityService))
+	aiWorkspaceCommitter := importer.NewCommitter(entityService)
+	// Pages by era go through the calendar plugin's version service, never
+	// its repository.
+	aiEraVersions := calendar.NewEraVersionService(calendar.NewEraVersionRepository(a.DB), calendarService)
+	aiWorkspaceCommitter.SetEraWriter(aiImportEraAdapter{versions: aiEraVersions})
+	aiWorkspaceHandler.SetImportEras(aiImportEraAdapter{versions: aiEraVersions})
+	aiWorkspaceRenderer.EraVersions = aiExportEraAdapter{versions: aiEraVersions}
+	aiWorkspaceHandler.SetImportCommitter(aiWorkspaceCommitter)
 
 	campaignHandler.RegisterSettingsTab(aiWorkspaceHandler.SettingsTabFactory())
 
@@ -4354,10 +4589,26 @@ func (a *App) RegisterRoutes() {
 	ai_workspace.RegisterOwnerRoutes(aiWorkspaceCampaignAuthed, aiWorkspaceHandler,
 		campaigns.RequireRole(campaigns.RoleOwner))
 
+	// --- Import from Obsidian or Markdown (Settings > Import) ---
+	// Pages, pictures and page files are reached through the narrow adapters in
+	// vault_import_adapters.go, so the import follows the same rules as a page
+	// typed in the editor and never sees another plugin's repository.
+	vaultImportService := vault_import.NewService(vault_import.Deps{
+		Pages:     vaultPagesAdapter{svc: entityService},
+		Pictures:  vaultPicturesAdapter{svc: mediaService},
+		Files:     vaultFilesAdapter{svc: pageFileService},
+		ToJSON:    vaultEditorJSON,
+		Audit:     &aiWorkspaceAuditAdapter{svc: auditService},
+		Lifecycle: a.ShutdownCtx,
+	})
+	vaultImportHandler := vault_import.NewHandler(vaultImportService)
+	vault_import.RegisterRoutes(e, vaultImportHandler, authService, campaignService)
+	campaignHandler.RegisterSettingsTab(vaultImportHandler.SettingsTabFactory())
+
 	// --- Campaign Export/Import ---
 	exportSvc := campaigns.NewExportImportService(campaignService)
-	exportSvc.SetEntityExporter(&entityExportAdapter{entitySvc: entityService, tagSvc: tagService, relationSvc: relService})
-	exportSvc.SetCalendarExporter(&calendarExportAdapter{svc: calendarService})
+	exportSvc.SetEntityExporter(&entityExportAdapter{entitySvc: entityService, tagSvc: tagService, relationSvc: relService, placeSvc: placeService})
+	exportSvc.SetCalendarExporter(&calendarExportAdapter{svc: calendarService, versions: eraVersionService})
 	exportSvc.SetTimelineExporter(&timelineExportAdapter{svc: timelineSvc})
 	exportSvc.SetSessionExporter(&sessionExportAdapter{svc: sessionsService})
 	exportSvc.SetMapExporter(&mapExportAdapter{mapSvc: mapsService, drawingSvc: drawingService})
@@ -4365,8 +4616,8 @@ func (a *App) RegisterRoutes() {
 	exportSvc.SetAddonExporter(&addonExportAdapter{svc: addonService})
 	exportSvc.SetMediaExporter(&mediaExportAdapter{svc: mediaService})
 	exportSvc.SetMediaBundler(&mediaBundleAdapter{svc: mediaService})
-	exportSvc.SetEntityImporter(&entityImportAdapter{entitySvc: entityService, tagSvc: tagService, relationSvc: relService})
-	exportSvc.SetCalendarImporter(&calendarImportAdapter{svc: calendarService})
+	exportSvc.SetEntityImporter(&entityImportAdapter{entitySvc: entityService, tagSvc: tagService, relationSvc: relService, placeSvc: placeService})
+	exportSvc.SetCalendarImporter(&calendarImportAdapter{svc: calendarService, versions: eraVersionService})
 	exportSvc.SetTimelineImporter(&timelineImportAdapter{svc: timelineSvc})
 	exportSvc.SetSessionImporter(&sessionImportAdapter{svc: sessionsService})
 	exportSvc.SetMapImporter(&mapImportAdapter{mapSvc: mapsService, drawingSvc: drawingService})
@@ -4646,6 +4897,11 @@ func (a *App) RegisterRoutes() {
 	// static renders instead, not a maintained route (#741). TODO(#778):
 	// not a re-wiring target, listed for completeness.
 
+	// widgetScripts is the on-sight widget manifest. It is filled after every
+	// plugin has registered and its static files are mounted (the content
+	// hashes need them), which is before the server takes a request.
+	var widgetScripts map[string][]string
+
 	// --- Layout Data Injector ---
 	// Registers the callback that copies auth/campaign data from Echo's
 	// context into Go's context.Context so Templ templates can read it.
@@ -4658,6 +4914,7 @@ func (a *App) RegisterRoutes() {
 		// so plugins can register widget scripts without hardcoding paths in the
 		// core base.templ layout.
 		ctx = layouts.SetPluginBodyScripts(ctx, pluginBodyScripts)
+		ctx = layouts.SetWidgetScripts(ctx, widgetScripts)
 
 		// Site look (name, logo, tab icon, and for pages outside a campaign the
 		// borrowed look). A failed read leaves the shipped look rather than
@@ -4677,6 +4934,7 @@ func (a *App) RegisterRoutes() {
 			ctx = layouts.SetUserEmail(ctx, session.Email)
 			ctx = layouts.SetUserAvatarPath(ctx, session.AvatarPath)
 			ctx = layouts.SetIsAdmin(ctx, session.IsAdmin)
+			ctx = layouts.SetIsGuest(ctx, session.GuestCampaignID != "")
 
 			// The person's own look. HTMX swaps never replace <html>, so only
 			// full-page renders need it. A failed read leaves the default look
@@ -4745,6 +5003,8 @@ func (a *App) RegisterRoutes() {
 					SidebarCorner: ap.SidebarCorner, SidebarSubtitle: ap.SidebarSubtitle, SidebarBanner: ap.SidebarBanner,
 					PeekGlow: ap.PeekGlow, PeekGlowColour: ap.PeekGlowColour,
 					HoverCard: ap.HoverCard,
+
+					SheetStyle: ap.SheetStyle,
 				}
 				ctx = layouts.SetAppearance(ctx, ad)
 			}
@@ -4798,7 +5058,15 @@ func (a *App) RegisterRoutes() {
 			reqCtx := c.Request().Context()
 			var sidebarTypes []layouts.SidebarEntityType
 			etypes, typesErr := entityService.GetEntityTypes(reqCtx, cc.Campaign.ID)
+			// A member the owner gave DM access is on the DM team whatever
+			// their membership role, so the DM-only Adventures category is
+			// theirs to see; an owner viewing as a player is not.
+			sidebarRole := effectiveRole
+			if cc.IsDmGranted && sidebarRole < int(campaigns.RoleScribe) {
+				sidebarRole = int(campaigns.RoleOwner)
+			}
 			if typesErr == nil {
+				etypes = entities.TypesForViewer(etypes, sidebarRole)
 				sidebarTypes = sidebarTypesFrom(etypes)
 				ctx = layouts.SetEntityTypes(ctx, sidebarTypes)
 			}
@@ -4810,7 +5078,7 @@ func (a *App) RegisterRoutes() {
 			if session := auth.GetSession(c); session != nil {
 				layoutUserID = session.UserID
 			}
-			counts, countsErr := entityService.CountByType(reqCtx, cc.Campaign.ID, effectiveRole, layoutUserID)
+			counts, countsErr := entityService.CountByType(reqCtx, cc.Campaign.ID, sidebarRole, layoutUserID)
 			if countsErr == nil {
 				// CountByType already rolls child entity_type counts up into
 				// their parent under the sub-category-as-template model.
@@ -4893,6 +5161,22 @@ func (a *App) RegisterRoutes() {
 				cancel()
 			}
 
+			// The campaign's sky is drawn from its default calendar, so the
+			// Sky header background needs that calendar's id, and so does
+			// the Customize page's example header. Without one the header
+			// keeps its still night colours. A fragment swap never redraws
+			// the bar, so only a full page reads it for the header.
+			skyHeader := !middleware.IsHTMX(c)
+			if ts := layouts.GetTopbarStyle(ctx); ts == nil || ts.Mode != "sky" {
+				skyHeader = false
+			}
+			if (skyHeader || c.Path() == "/campaigns/:id/customize") && enabledSlugs[calendar.PluginSlug] && calendarHealthy {
+				skyCtx, cancel := context.WithTimeout(reqCtx, headerLiveTimeout)
+				ctx = layouts.SetSkyCalendarID(ctx, headerSkyCalendarID(skyCtx, calendarService, cc.Campaign.ID,
+					permissions.RequestViewer(cc.VisibilityRole(), layoutUserID)))
+				cancel()
+			}
+
 			// Extension widget scripts for campaign pages.
 			if widgetURLs := extHandler.GetWidgetScriptURLs(reqCtx, cc.Campaign.ID); len(widgetURLs) > 0 {
 				ctx = layouts.SetExtWidgetScripts(ctx, widgetURLs)
@@ -4966,11 +5250,20 @@ func (a *App) RegisterRoutes() {
 	wsHub := ws.NewHub()
 	go wsHub.Run()
 	campaignHandler.SetFoundryConnector(&foundryConnectorAdapter{keys: syncService, hub: wsHub, baseURL: a.Config.BaseURL, served: fvttOwnerUpdates})
+	// A player reads as in the world only while the world itself is connected.
+	syncHistoryHandler.SetWorldPresence(func(campaignID string) bool {
+		_, open := wsHub.FoundryPresence(campaignID)
+		return open
+	})
 
 	// Late-bind now that wsHub exists — see wsRevokerHolder above. From
 	// here on, every wired revoke path force-disconnects the sockets it
 	// affects instead of being a no-op.
 	wsRevoker.hub = wsHub
+
+	// Remember who has loaded a campaign page lately, for the DM Screen's
+	// "players here" count on pages that open no socket.
+	e.Use(campaignPageSeen(wsHub))
 
 	// Wire the WS hub's presence lookup into foundry_vtt. fvttHandler owns
 	// both GET /campaigns/:id/foundry-presence (live diagnostic JSON) and
@@ -4982,15 +5275,25 @@ func (a *App) RegisterRoutes() {
 	// DM Screen: the owner's and scribes' control panel. It owns no data and
 	// reads every section through the adapters in dm_screen_adapters.go;
 	// registered here because Foundry presence comes from wsHub.
-	dmScreenSvc := dmscreen.NewService(dmscreen.Sources{
+	dmSources := dmscreen.Sources{
 		Downtime: &dmDowntimeAdapter{stash: stashSvc, addons: addonService},
+		Notes:    &dmNotesAdapter{notes: noteSvc, members: campaignService},
+		Requests: &dmRequestsAdapter{stash: stashSvc, addons: addonService},
 		World:    &dmWorldAdapter{svc: calendarService},
 		Nights:   &dmNightAdapter{svc: sessionsService, members: campaignService},
 		Foundry:  wsHub,
+		Presence: &dmPresenceAdapter{members: campaignService, hub: wsHub, foundry: foundryPlayerRepo},
 		Party:    &dmPartyAdapter{entities: entityService, campaigns: campaignService},
 		Hidden:   &dmHiddenAdapter{entities: entityService, lists: characterListService},
 		System:   systemHandler,
-	})
+	}
+	// The Adventures tab needs its table; with the plugin degraded the rest of
+	// the screen still works and the tab is simply left out.
+	if a.PluginHealth.IsHealthy(dmscreen.PluginSlug) {
+		dmSources.Board = dmscreen.NewBoardRepository(a.DB)
+		dmSources.Adventures = &dmAdventuresAdapter{entities: entityService}
+	}
+	dmScreenSvc := dmscreen.NewService(dmSources)
 	dmscreen.RegisterRoutes(e, dmscreen.NewHandler(dmScreenSvc), campaignService, authService)
 	// The sync API routes are already registered; they answer 404 until this
 	// is set, and it is set before the server starts serving.
@@ -5029,6 +5332,14 @@ func (a *App) RegisterRoutes() {
 	questEntityEvts := newQuestEntityEvents(&entityEventPublisherAdapter{bus: wsEventBus})
 	entityService.SetEventPublisher(questEntityEvts)
 	relService.SetEventPublisher(&relationEventPublisherAdapter{bus: wsEventBus, shares: stashSvc})
+	// Calendar writes reach the Foundry module live; without this it only
+	// sees them on reconnect or a manual Pull. Reached by type assertion like
+	// the visibility gate, so the CalendarService interface stays unchanged.
+	if pub, ok := calendarService.(interface {
+		SetEventPublisher(calendar.CalendarEventPublisher)
+	}); ok {
+		pub.SetEventPublisher(&calendarEventPublisherAdapter{bus: wsEventBus})
+	}
 	stashEvents.bus = wsEventBus
 	entityService.SetSidebarAutoAdder(&sidebarAutoAdderAdapter{campaignService: campaignService})
 	noteSvc.SetEventPublisher(&noteEventPublisherAdapter{bus: wsEventBus})
@@ -5066,16 +5377,26 @@ func (a *App) RegisterRoutes() {
 	}
 
 	// Quest sheets and notice boards. Cross-plugin lookups go through the
-	// adapters in quests_adapters.go.
+	// adapters in quests_adapters.go. Both boards share quest_board_kit.js,
+	// so it loads first in each list (ADR-063).
+	a.registerPlugin(PluginRegistration{
+		Slug:     quests.PluginSlug,
+		StaticFS: echo.MustSubFS(quests.StaticAssetsFS, "static"),
+		Widgets: []PluginWidget{
+			{Name: "quest_board", Scripts: []string{"js/quest_board_kit.js", "js/quest_board.js"}},
+			{Name: "notice_boards", Scripts: []string{"js/quest_board_kit.js", "js/notice_boards.js"}},
+		},
+	})
 	if a.PluginHealth.IsHealthy(quests.PluginSlug) {
 		questEntities := &questEntityAdapter{svc: entityService, cards: entities.NewPageCards(a.DB)}
 		questMaps := &questMapAdapter{svc: mapsService, addons: addonService}
 		questRepo := quests.NewQuestRepository(a.DB)
 		questCal := &questCalendarAdapter{svc: calendarService, addons: addonService}
+		questTypes := &questTypeAdapter{svc: entityService}
 		questSvc, boardSvc := quests.WithAnnouncer(
 			quests.NewQuestService(questRepo, questEntities, questMaps, questCal),
-			quests.NewBoardService(quests.NewBoardRepository(a.DB), questRepo, questEntities, &questTypeAdapter{svc: entityService}, questMaps, &questMemberNamesAdapter{svc: campaignService}, questCal),
-			questEntities, &questAnnouncerAdapter{bus: wsEventBus})
+			quests.NewBoardService(quests.NewBoardRepository(a.DB), questRepo, questEntities, questTypes, questMaps, &questMemberNamesAdapter{svc: campaignService}, questCal),
+			questEntities, questTypes, &questAnnouncerAdapter{bus: wsEventBus})
 		questEntityEvts.attach(questSvc)
 		questPicker := quests.NewPickerService(questEntities, questMaps, &questCharacterAdapter{
 			dir:   stashDirectory,
@@ -5087,10 +5408,27 @@ func (a *App) RegisterRoutes() {
 		slog.Warn("quests plugin degraded — routes not registered")
 	}
 
+	// Read-aloud, Table and Steps block content.
+	a.registerPlugin(PluginRegistration{
+		Slug:     pageblocks.PluginSlug,
+		StaticFS: echo.MustSubFS(pageblocks.StaticAssetsFS, "static"),
+		Widgets: []PluginWidget{
+			{Name: "page_blocks", Scripts: []string{"js/page_blocks.js"}},
+		},
+	})
+	if a.PluginHealth.IsHealthy(pageblocks.PluginSlug) {
+		pageBlocksSvc := pageblocks.NewService(pageblocks.NewRepository(a.DB),
+			&pageBlocksEntityAdapter{svc: entityService, cards: entities.NewPageCards(a.DB)})
+		pageblocks.RegisterRoutes(e, pageblocks.NewHandler(pageBlocksSvc), campaignService, authService)
+	} else {
+		slog.Warn("pageblocks plugin degraded — routes not registered")
+	}
+
 	// AI Import's record kinds: the features beyond pages it may write.
 	// Wired here, after the rulebook and rolling tables exist; a degraded
 	// plugin's kind is left out, so its blocks are refused at review.
 	aiKinds := []records.Kind{
+		records.CalendarKind{Svc: calendarService, Pages: entityService},
 		records.EventKind{Svc: calendarService},
 		records.WeatherKind{Svc: calendarService},
 	}
@@ -5109,19 +5447,22 @@ func (a *App) RegisterRoutes() {
 		records.ShopStockKind(entityService, relService),
 		records.CarriedItemKind(entityService, relService),
 		records.PinKind{Svc: aiMapsAdapter{mapsService}, Entities: entityService},
+		records.MapSketchKind{Svc: aiMapSketchAdapter{maps: mapsService, drawings: drawingService}, Pins: aiMapsAdapter{mapsService}},
 		records.NoteKind{Svc: noteSvc, Entities: entityService},
 		aiHouseRules,
 		records.SystemEntryKind{Svc: systemEntrySvc},
-		records.GeneratorKind{Cal: calendarService, Tables: aiTables},
+		records.GeneratorKind{Cal: calendarService, Tables: aiTables, Weather: calendarService},
 	)
-	aiWorkspaceHandler.SetRecords(records.NewRegistry(aiKinds...))
+	aiRegistry := records.NewRegistry(aiKinds...)
+	aiWorkspaceHandler.SetRecords(aiRegistry)
 
-	// The read-only lookups an AI may ask for. Game-system entries wait on
-	// the character pick-list service (TODO(#1170)).
+	// The read-only lookups an AI may ask for.
 	aiLookups := &records.Lookups{
-		Cal: calendarService, Maps: aiMapsAdapter{mapsService}, Pages: entityService,
+		Cal: calendarService, Weather: calendarService, Maps: aiMapsAdapter{mapsService}, Pages: entityService,
 		Rels: relService, Notes: noteSvc, Rules: &aiHouseRules,
-		Party: &aiPartyAdapter{screen: dmScreenSvc, nights: sessionsService, members: campaignService},
+		Entries: aiSystemEntriesAdapter{choices: characterChoiceSvc},
+		Party:   &aiPartyAdapter{screen: dmScreenSvc, nights: sessionsService, members: campaignService},
+		Kinds:   aiRegistry,
 	}
 	if a.PluginHealth.IsHealthy(rolltables.PluginSlug) {
 		aiLookups.Tables = aiTables.Svc
@@ -5151,6 +5492,13 @@ func (a *App) RegisterRoutes() {
 			return "", err
 		}
 		return m.DrawWho(), nil
+	})
+	drawingService.SetMapFrameLookup(func(ctx context.Context, mapID string) (int, int, error) {
+		m, err := mapsService.GetMap(ctx, mapID)
+		if err != nil {
+			return 0, 0, err
+		}
+		return m.ImageWidth, m.ImageHeight, nil
 	})
 	drawingService.SetMediaVerifier(&mapMediaVerifierAdapter{svc: mediaService})
 	mapsService.SetEventPublisher(mapEvents)
@@ -5185,6 +5533,42 @@ func (a *App) RegisterRoutes() {
 	// Mount each registered plugin's static assets at /static/plugins/<slug>/.
 	// Must run AFTER all plugins have called a.registerPlugin() above.
 	a.mountPluginStatic()
+
+	// A wiring mistake leaves only the widgets it names unloaded, so it is
+	// logged rather than stopping the site.
+	m, err := buildWidgetManifest(coreWidgets, a.registeredPlugins, layouts.AssetURL)
+	if err != nil {
+		slog.Error("on-sight widget manifest", slog.Any("error", err))
+	}
+	widgetScripts = m
+}
+
+// coreWidgets are the on-sight widgets whose scripts live under
+// /static/js/widgets/ rather than in a plugin: each loads on the first page
+// that mounts it (ADR-063). Helpers come first, the registering script last.
+var coreWidgets = []PluginWidget{
+	{Name: "journal", Scripts: []string{"/static/js/widgets/journal_list.js", "/static/js/widgets/journal.js"}},
+	{Name: "permissions", Scripts: []string{"/static/js/widgets/permissions.js"}},
+	{Name: "groups", Scripts: []string{"/static/js/widgets/groups.js"}},
+	{Name: "relation-graph", Scripts: []string{"/static/js/widgets/relation_graph.js"}},
+	{Name: "db-explorer", Scripts: []string{"/static/js/widgets/db_explorer.js"}},
+	{Name: "entity-posts", Scripts: []string{"/static/js/widgets/entity_posts.js"}},
+	{Name: "entity-notes", Scripts: []string{"/static/js/widgets/entity_notes.js"}},
+	{Name: "entity_manager", Scripts: []string{"/static/js/widgets/entity_manager.js"}},
+	{Name: "bulk-actions", Scripts: []string{"/static/js/widgets/bulk_actions.js"}},
+	{Name: "ai-export", Scripts: []string{"/static/js/widgets/ai_export.js"}},
+	{Name: "impact_tree", Scripts: []string{"/static/js/widgets/impact_tree.js"}},
+	{Name: "entity-type-editor", Scripts: []string{"/static/js/widgets/entity_type_editor.js"}},
+	{Name: "template-editor", Scripts: []string{"/static/js/widgets/template_editor.js"}},
+	{Name: "layout-editor", Scripts: []string{"/static/js/widgets/layout_editor.js"}},
+	{Name: "customize-look", Scripts: []string{"/static/js/widgets/customize_look.js"}},
+	{Name: "customize-shell", Scripts: []string{"/static/js/widgets/customize_shell.js"}},
+	{Name: "customize-categories", Scripts: []string{"/static/js/widgets/customize_categories.js"}},
+	{Name: "site-look", Scripts: []string{"/static/js/widgets/site_look.js"}},
+	{Name: "page-tabs", Scripts: []string{"/static/js/widgets/page_tabs.js"}},
+	{Name: "era-pages", Scripts: []string{"/static/js/widgets/era_pages.js"}},
+	{Name: "dm-screen", Scripts: []string{"/static/js/widgets/dm_sheet.js", "/static/js/widgets/dm_screen.js"}},
+	{Name: "tile", Scripts: []string{"/static/js/widgets/tile.js"}},
 }
 
 // journalCharacterAdapter adapts EntityService to notes.CharacterLister: the
@@ -5314,6 +5698,56 @@ func (a *mediaUploadAdapter) UploadRaw(ctx context.Context, campaignID, userID s
 	return file.Filename, nil
 }
 
+// UploadPicture stores a picture written into a note and returns its media id.
+func (a *mediaUploadAdapter) UploadPicture(ctx context.Context, campaignID, userID string, fileBytes []byte, originalName, mimeType string) (string, error) {
+	file, err := a.svc.Upload(ctx, media.UploadInput{
+		CampaignID:   campaignID,
+		UploadedBy:   userID,
+		OriginalName: originalName,
+		MimeType:     mimeType,
+		FileSize:     int64(len(fileBytes)),
+		UsageType:    media.UsageNoteImage,
+		FileBytes:    fileBytes,
+	})
+	if err != nil {
+		return "", err
+	}
+	return file.ID, nil
+}
+
+// noteMediaAccessAdapter answers the media plugin's note-picture question
+// over the notes service, so media never touches note tables.
+type noteMediaAccessAdapter struct {
+	svc notes.NoteService
+}
+
+func (a *noteMediaAccessAdapter) CanReadNoteMedia(ctx context.Context, campaignID, mediaID string, role int, userID string) (bool, error) {
+	return a.svc.ViewerReadsMedia(ctx, campaignID, mediaID, permissions.RequestViewer(role, userID))
+}
+
+// pageAccessAdapter answers the media plugin's page-file question over the
+// entities service, so media never reads entity tables or repeats the page
+// visibility rule.
+type pageAccessAdapter struct {
+	svc entities.EntityService
+}
+
+// PageAccess says whether the viewer can see the page (which is false for a
+// page that is missing, in another campaign, in the Trash, or hidden from
+// them) and whether they can edit it. Editing is only asked of a page already
+// found visible, because CheckEntityAccess alone does not scope to a campaign.
+func (a *pageAccessAdapter) PageAccess(ctx context.Context, campaignID, entityID string, role int, userID string) (media.PageAccess, error) {
+	viewable, err := a.svc.FilterViewableEntityIDs(ctx, campaignID, []string{entityID}, role, userID)
+	if err != nil || !viewable[entityID] {
+		return media.PageAccess{}, err
+	}
+	ep, err := a.svc.CheckEntityAccess(ctx, entityID, role, userID)
+	if err != nil {
+		return media.PageAccess{}, err
+	}
+	return media.PageAccess{CanView: true, CanEdit: ep.CanEdit}, nil
+}
+
 // aiMapsAdapter is the maps service in AI Import's pin types, so the
 // ai_workspace plugin never imports maps.
 type aiMapsAdapter struct{ svc maps.MapService }
@@ -5385,6 +5819,38 @@ func (m aiMapsAdapter) UpdatePin(ctx context.Context, pinID string, in records.P
 // the same request.
 func (m aiMapsAdapter) DeletePin(ctx context.Context, pinID string, canAuthorDmOnly bool, actorID string, role int) error {
 	return m.svc.DeleteMarker(ctx, pinID, nil, canAuthorDmOnly, actorID, role)
+}
+
+// aiMapSketchAdapter makes the blank map and the drawings for AI Import's
+// map sketch through the same services, and checks, as the map page.
+type aiMapSketchAdapter struct {
+	maps     maps.MapService
+	drawings maps.DrawingService
+}
+
+func (m aiMapSketchAdapter) CreateGridMap(ctx context.Context, campaignID, name string, width, height, gridSize int) (string, error) {
+	mp, err := m.maps.CreateMap(ctx, maps.CreateMapInput{CampaignID: campaignID, Name: name, ImageWidth: width, ImageHeight: height})
+	if err != nil {
+		return "", err
+	}
+	grid, err := json.Marshal(map[string]any{"grid": map[string]any{"type": "square", "size": gridSize}})
+	if err != nil {
+		return "", err
+	}
+	return mp.ID, m.maps.UpdateMap(ctx, mp.ID, maps.UpdateMapInput{Name: mp.Name, DisplaySettings: patch.Of(json.RawMessage(grid))})
+}
+
+func (m aiMapSketchAdapter) Draw(ctx context.Context, mapID string, a records.Actor, d records.SketchDrawing) error {
+	pts, err := json.Marshal(d.Points)
+	if err != nil {
+		return err
+	}
+	_, err = m.drawings.CreateDrawing(ctx, maps.CreateDrawingInput{
+		MapID: mapID, DrawingType: d.Type, Points: pts, StrokeColor: d.StrokeColor, StrokeWidth: d.StrokeWidth,
+		TextContent: d.Text, FontSize: d.FontSize, Visibility: d.Visibility, CreatedBy: a.UserID,
+		CallerRole: a.Role, CallerIsDM: a.CanAuthorDmOnly(),
+	})
+	return err
 }
 
 // aiRollTablesAdapter is the rolltables service as AI Import's TableDoc,
@@ -5467,4 +5933,101 @@ func (a *notesOriginAllower) OriginAllowed(ctx context.Context, origin string) b
 		}
 	}
 	return false
+}
+
+// accountDeletionAdapter gives auth's account deletion the campaign-side
+// steps without auth importing the campaigns plugin.
+type accountDeletionAdapter struct {
+	campaigns campaigns.CampaignService
+}
+
+func (a *accountDeletionAdapter) OwnedCampaigns(ctx context.Context, userID string) ([]auth.OwnedCampaignRef, error) {
+	owned, err := a.campaigns.OwnedCampaigns(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]auth.OwnedCampaignRef, len(owned))
+	for i, o := range owned {
+		out[i] = auth.OwnedCampaignRef{ID: o.ID, Name: o.Name, MemberCount: o.MemberCount}
+	}
+	return out, nil
+}
+
+func (a *accountDeletionAdapter) LeaveAllCampaigns(ctx context.Context, userID string) error {
+	return a.campaigns.LeaveAllForDeletedAccount(ctx, userID)
+}
+
+// moveGuestThings hands a merged guest's characters, notes and page notes
+// in their campaign to the account they merged into. A store that can't
+// move is an error, never a skip: the guest's private notes are deleted
+// once the merge finishes, so anything left behind would be lost.
+func moveGuestThings(ctx context.Context, campaignID, guestID, targetID string, entityRepo, entityNotesRepo, noteRepo any) error {
+	type mover func(context.Context, string, string, string) (int64, error)
+	var steps []mover
+	if r, ok := entityRepo.(interface {
+		ReassignOwner(context.Context, string, string, string) (int64, error)
+	}); ok {
+		steps = append(steps, r.ReassignOwner)
+	}
+	if r, ok := noteRepo.(interface {
+		ReassignUser(context.Context, string, string, string) (int64, error)
+	}); ok {
+		steps = append(steps, r.ReassignUser)
+	}
+	if r, ok := entityNotesRepo.(interface {
+		ReassignAuthor(context.Context, string, string, string) (int64, error)
+	}); ok {
+		steps = append(steps, r.ReassignAuthor)
+	}
+	if len(steps) != 3 {
+		return fmt.Errorf("a store can't move a guest's things")
+	}
+	for _, fn := range steps {
+		if _, err := fn(ctx, campaignID, guestID, targetID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// forgetDeletedAccount clears what other plugins hold about a deleted
+// account: its characters' link to it, its private notes and its sync API
+// keys. Each repository is type-asserted so a test double without the
+// method just skips that step; a failure is logged and the rest still run.
+func forgetDeletedAccount(ctx context.Context, userID string, entityRepo, entityNotesRepo, noteRepo any, syncSvc syncapi.SyncAPIService) {
+	type cleaner func(context.Context, string) (int64, error)
+	steps := map[string]cleaner{}
+	if r, ok := entityRepo.(interface {
+		ClearOwnerForUser(context.Context, string) (int64, error)
+	}); ok {
+		steps["character links"] = r.ClearOwnerForUser
+	}
+	if r, ok := entityNotesRepo.(interface {
+		DeletePrivateByAuthor(context.Context, string) (int64, error)
+	}); ok {
+		steps["private page notes"] = r.DeletePrivateByAuthor
+	}
+	if r, ok := noteRepo.(interface {
+		DeletePrivateByUser(context.Context, string) (int64, error)
+	}); ok {
+		steps["private notes"] = r.DeletePrivateByUser
+	}
+	for name, fn := range steps {
+		if _, err := fn(ctx, userID); err != nil {
+			slog.Error("clearing deleted account data failed", slog.String("step", name), slog.String("user_id", userID), slog.Any("error", err))
+		}
+	}
+	if syncSvc == nil {
+		return
+	}
+	keys, err := syncSvc.ListKeysByUser(ctx, userID)
+	if err != nil {
+		slog.Error("listing deleted account's API keys failed", slog.String("user_id", userID), slog.Any("error", err))
+		return
+	}
+	for _, k := range keys {
+		if err := syncSvc.DeactivateKey(ctx, k.ID); err != nil {
+			slog.Error("deactivating deleted account's API key failed", slog.Int("key_id", k.ID), slog.Any("error", err))
+		}
+	}
 }

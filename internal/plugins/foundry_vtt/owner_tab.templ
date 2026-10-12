@@ -77,42 +77,42 @@ templ ownerEmptyState() {
 // install URL is the focal point, token rotation is a de-emphasized
 // secondary row at the bottom of the card.
 templ ownerInstallURLBlock(data OwnerTabData) {
-	<div class="card p-5 rounded-md border-2 border-accent/30 bg-accent/5 space-y-3">
+	<div class="card p-4 space-y-3">
 		<div>
 			<p class="text-sm font-semibold text-fg">
-				<i class="fa-solid fa-link mr-1"></i> Module Install URL
+				Module install URL
 			</p>
 			<p class="text-xs text-fg-secondary mt-1">
 				Install the Chronicle Sync module in your Foundry setup with this URL. Only whoever runs Foundry installs it; players never need it, because Foundry gives them the module when they join. The URL is unique to this campaign, so Foundry gets this campaign's module version and updates.
 			</p>
 		</div>
-		<div class="flex items-stretch gap-2">
+		<div class="flex items-center gap-2">
 			<input
 				id="fvtt-install-url"
 				type="text"
 				readonly
 				value={ data.InstallURL }
-				class="flex-1 px-3 py-2 rounded-md border border-edge bg-surface text-xs font-mono text-fg overflow-x-auto"
+				class="input flex-1 min-w-0 text-xs font-mono"
 			/>
 			<button
 				type="button"
 				onclick="(function(b){var t=document.getElementById('fvtt-install-url');if(t&&navigator.clipboard){navigator.clipboard.writeText(t.value).then(function(){var html=b.innerHTML;b.innerHTML='<i class=\'fa-solid fa-check text-emerald-500\'></i> Copied';setTimeout(function(){b.innerHTML=html;},2000);})}})(this)"
-				class="px-4 py-2 text-sm rounded-md bg-accent-fill text-on-accent hover:bg-accent-fill-hover whitespace-nowrap"
+				class="btn-primary btn-sm whitespace-nowrap"
 				title="Copy install URL to clipboard"
 			>
-				<i class="fa-solid fa-copy"></i> Copy
+				<i class="fa-solid fa-copy mr-1" aria-hidden="true"></i> Copy
 			</button>
 		</div>
-		<div class="flex items-center justify-between gap-2 pt-2 border-t border-edge/50">
-			<p class="text-xs text-fg-muted">
+		<div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 pt-3 border-t border-edge">
+			<p class="text-xs text-fg-muted flex-1 min-w-[16rem]">
 				Only rotate if this URL leaked. The URL saved in Foundry stops working, so reinstall the module there with the new one. Players are not affected.
 			</p>
 			<button
 				type="button"
 				onclick={ rotateTokenOnClick(data.CampaignID) }
-				class="px-3 py-1.5 text-xs rounded-md border border-amber-500/30 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10 whitespace-nowrap"
+				class="btn-secondary btn-sm whitespace-nowrap"
 			>
-				<i class="fa-solid fa-rotate mr-1"></i> Rotate Token
+				<i class="fa-solid fa-rotate mr-1" aria-hidden="true"></i> Rotate token
 			</button>
 		</div>
 	</div>
@@ -122,9 +122,10 @@ templ ownerInstallURLBlock(data OwnerTabData) {
 // follows to install the module in Foundry. Wrapped in <details>, collapsed by default,
 // so the install URL stays the primary content.
 templ ownerPlayerInstructions(data OwnerTabData) {
-	<details class="card p-4 rounded-md">
-		<summary class="text-xs font-semibold text-fg-muted uppercase tracking-wider cursor-pointer">
-			<i class="fa-solid fa-circle-question mr-1"></i> How to install in Foundry (click to expand)
+	<details class="card p-4 group">
+		<summary class="flex items-center gap-2 text-sm font-medium text-fg cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+			<i class="fa-solid fa-chevron-right text-xs text-fg-muted transition-transform duration-200 group-open:rotate-90" aria-hidden="true"></i>
+			How to install in Foundry
 		</summary>
 		<ol class="list-decimal list-inside text-sm text-fg-secondary space-y-1 mt-3">
 			<li>Open Foundry &rarr; Add-on Modules &rarr; Install Module</li>

@@ -17,10 +17,12 @@ package importer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/importer/htmlconv"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
@@ -42,13 +44,20 @@ type EntityCreator interface {
 	GetBySlug(ctx context.Context, campaignID, slug string) (*entities.Entity, error)
 	GetEntityTypeBySlug(ctx context.Context, campaignID, slug string) (*entities.EntityType, error)
 	GetEntityTypes(ctx context.Context, campaignID string) ([]entities.EntityType, error)
+	// CheckEntityAccess lets @[Name] links skip pages the viewer cannot see.
+	CheckEntityAccess(ctx context.Context, entityID string, role int, userID string) (*entities.EffectivePermission, error)
 }
 
 // Committer is the orchestrator. Constructed per request in the
 // handler from the campaigns-wired EntityCreator (entities.EntityService).
 type Committer struct {
 	creator EntityCreator
+	// eras writes `era:` blocks; nil refuses them with a plain reason.
+	eras EraWriter
 }
+
+// SetEraWriter wires pages by era. Optional.
+func (c *Committer) SetEraWriter(w EraWriter) { c.eras = w }
 
 // NewCommitter constructs a Committer.
 func NewCommitter(c EntityCreator) *Committer {
@@ -111,6 +120,12 @@ type RowDecision struct {
 	// row without it as StatusFailed (belt-and-suspenders against a
 	// client-side bypass of the gate).
 	DeleteConfirmed bool
+
+	// ReplaceGMOnlyConfirmed is the per-row "Replace the text anyway" tick.
+	// An update over a page that has GM-only parts is skipped without it;
+	// commitUpdate re-checks it so a client that never rendered the tick
+	// cannot apply the replace.
+	ReplaceGMOnlyConfirmed bool
 }
 
 // CommitInput bundles the per-request commit payload.
@@ -127,6 +142,10 @@ type CommitInput struct {
 	// (CampaignSettings.ResolveNewEntityPrivacy) instead of the
 	// importer's own hardcoded choice (#729).
 	CampaignDefaultPrivate bool
+
+	// Viewer is who the page links are resolved for: a name never becomes
+	// a link to a page this viewer cannot see.
+	Viewer Viewer
 }
 
 // RowOutcome is the per-row commit outcome. The result summary
@@ -198,14 +217,34 @@ func (c *Committer) Commit(ctx context.Context, campaignID string, in CommitInpu
 		result.NewCategoriesCreated = append(result.NewCategoriesCreated, slug)
 	}
 
-	// Phase 2: per-row commits.
+	// Phase 2: per-row commits. made maps a page's name slug to the entity
+	// this commit created or updated for it, so a later row's `parent:`
+	// finds a page from the same paste even when it was saved under a
+	// renamed slug.
+	made := map[string]string{}
+	links := NewPageLinks(ctx, c.creator, campaignID, in.Viewer)
+	pasteSlugs := pasteSlugsOf(in)
+	var relink []relinkRow
 	for i, page := range in.Pages {
 		dec := RowDecision{}
 		if i < len(in.Decisions) {
 			dec = in.Decisions[i]
 		}
 		result.Rows[i] = c.commitRow(ctx, campaignID, in.OwnerID,
-			i, page, dec, typesBySlug, newTypeIDs, failedTypes, in.CampaignDefaultPrivate)
+			i, page, dec, typesBySlug, newTypeIDs, failedTypes, in.CampaignDefaultPrivate, made, links, in.Viewer)
+		// An era block writes a version, not the page: it must not stand in
+		// for the page as a parent or link target, and its body must never
+		// be re-written onto the usual page by the relink pass.
+		if id := result.Rows[i].EntityID; id != "" && !page.FrontMatter.IsEra() && (result.Rows[i].Status == StatusCreated ||
+			result.Rows[i].Status == StatusRenamed || result.Rows[i].Status == StatusUpdated) {
+			made[entities.Slugify(page.Name)] = id
+			made[entities.Slugify(result.Rows[i].Name)] = id
+			links.Add(id, result.Rows[i].Name, page.Name)
+			if hasPendingLink(links, pasteSlugs) {
+				relink = append(relink, relinkRow{idx: i, id: id, body: page.Body})
+			}
+		}
+		links.missed = map[string]string{}
 		switch result.Rows[i].Status {
 		case StatusCreated:
 			result.Created++
@@ -222,7 +261,60 @@ func (c *Committer) Commit(ctx context.Context, campaignID string, in CommitInpu
 		}
 	}
 
+	c.relinkPending(ctx, relink, links, &result)
 	return result, nil
+}
+
+// pasteSlugsOf is the set of pages this commit will save, by name slug.
+func pasteSlugsOf(in CommitInput) map[string]bool {
+	out := map[string]bool{}
+	for i, p := range in.Pages {
+		if i >= len(in.Decisions) || !in.Decisions[i].Include || in.Decisions[i].Action == ActionDelete || p.FrontMatter.IsEra() {
+			continue
+		}
+		out[entities.Slugify(p.Name)] = true
+		out[entities.Slugify(in.Decisions[i].Name)] = true
+	}
+	delete(out, "")
+	return out
+}
+
+// hasPendingLink reports whether the row just saved named a page that is
+// still to come in this paste, so its first write left that name as text.
+func hasPendingLink(links *PageLinks, pasteSlugs map[string]bool) bool {
+	for slug := range links.missed {
+		if pasteSlugs[slug] {
+			return true
+		}
+	}
+	return false
+}
+
+// relinkRow is a saved page whose body named a page not yet saved.
+type relinkRow struct {
+	idx  int
+	id   string
+	body string
+}
+
+// relinkPending writes the bodies again once every page of the paste exists,
+// so two new pages that link each other both get working links. The first
+// write already left those names as plain text, so a failure here costs only
+// the links. It goes through the same body write as any import, so backlinks
+// and version history follow.
+func (c *Committer) relinkPending(ctx context.Context, rows []relinkRow, links *PageLinks, result *CommitResult) {
+	for _, r := range rows {
+		bodyHTML, err := MarkdownToHTML(r.body, WithPageLinks(links))
+		if err == nil {
+			var bodyJSON string
+			if bodyJSON, err = htmlconv.Convert(bodyHTML); err == nil {
+				err = c.creator.UpdateEntry(ctx, r.id, bodyJSON, bodyHTML)
+			}
+		}
+		if err != nil {
+			result.Rows[r.idx].Reason = "Saved, but the links to other pages in this paste could not be added."
+		}
+	}
 }
 
 // createNewCategories scans the decisions for "new:<slug>" specs and
@@ -250,9 +342,10 @@ func (c *Committer) createNewCategories(
 		}
 		seen[slug] = true
 
+		name, plural := categoryNames(slug)
 		input := entities.CreateEntityTypeInput{
-			Name:       cases_title(slug),
-			NamePlural: cases_title(slug) + "s",
+			Name:       name,
+			NamePlural: plural,
 			Icon:       "fa-cube",
 			Color:      "#6366f1", // accent fallback; operator can recolor later
 		}
@@ -298,6 +391,9 @@ func (c *Committer) commitRow(
 	newTypeIDs map[string]int,
 	failedNewTypes []string,
 	campaignDefaultPrivate bool,
+	made map[string]string,
+	links *PageLinks,
+	viewer Viewer,
 ) RowOutcome {
 	out := RowOutcome{Index: idx, Name: dec.Name}
 	if out.Name == "" {
@@ -316,12 +412,17 @@ func (c *Committer) commitRow(
 		return out
 	}
 
+	// An era block writes one era's version of a page, whatever its action.
+	if page.FrontMatter.IsEra() {
+		return c.commitEra(ctx, campaignID, ownerID, idx, page, dec, made, links, viewer)
+	}
+
 	// Action dispatch; empty Action defaults to "create".
 	switch dec.Action {
 	case ActionDelete:
 		return c.commitDelete(ctx, campaignID, page, dec, idx)
 	case ActionUpdate:
-		return c.commitUpdateExplicit(ctx, campaignID, page, dec, typesBySlug, newTypeIDs, failedNewTypes, idx)
+		return c.commitUpdateExplicit(ctx, campaignID, page, dec, typesBySlug, newTypeIDs, failedNewTypes, idx, made, links)
 	}
 	// Fall-through: ActionCreate (or empty).
 
@@ -347,7 +448,7 @@ func (c *Committer) commitRow(
 	// SEC-6 mirror — every entity-creation path funnels through
 	// MarkdownToHTML first. Per-row errors are operator-friendly;
 	// the underlying library error stays in slog (handler-side).
-	bodyHTML, err := MarkdownToHTML(page.Body)
+	bodyHTML, err := MarkdownToHTML(page.Body, WithPageLinks(links))
 	if err != nil {
 		out.Status = StatusFailed
 		out.Reason = "Could not parse the page's markdown body — check the heading structure."
@@ -388,10 +489,23 @@ func (c *Committer) commitRow(
 			out.Reason = "Skipped: name conflicts with " + strconv.Quote(existing.Name)
 			return out
 		case "update", "overwrite": // "overwrite" is a back-compat alias for "update"
-			return c.commitUpdate(ctx, existing, page, dec, typeID, bodyJSON, bodyHTML, isPrivate, idx)
+			parent, _, reason := c.resolveParent(ctx, campaignID, page, made)
+			if reason != "" {
+				out.Status = StatusFailed
+				out.Reason = reason
+				return out
+			}
+			return c.commitUpdate(ctx, existing, page, dec, typeID, bodyJSON, bodyHTML, isPrivate, parent, idx)
 		default: // "rename" (default mode)
 			finalName = c.suffixUntilFree(ctx, campaignID, finalName)
 		}
+	}
+
+	_, parentID, reason := c.resolveParent(ctx, campaignID, page, made)
+	if reason != "" {
+		out.Status = StatusFailed
+		out.Reason = reason
+		return out
 	}
 
 	// Create. Operator-facing errors stay friendly — the technical
@@ -402,11 +516,15 @@ func (c *Committer) commitRow(
 		EntityTypeID: typeID,
 		TypeLabel:    dec.Subcategory,
 		IsPrivate:    isPrivate,
+		ParentID:     parentID,
 		FieldsData:   map[string]any{},
 	})
 	if err != nil {
 		out.Status = StatusFailed
 		out.Reason = "Could not save this page. Try again in a moment."
+		if parentID != "" {
+			out.Reason = parentReason(err, out.Reason)
+		}
 		return out
 	}
 	if err := c.creator.UpdateEntry(ctx, ent.ID, bodyJSON, bodyHTML); err != nil {
@@ -441,9 +559,21 @@ func (c *Committer) commitUpdate(
 	typeID int,
 	bodyJSON, bodyHTML string,
 	isPrivate bool,
+	parent patch.Field[string],
 	idx int,
 ) RowOutcome {
 	out := RowOutcome{Index: idx, Name: existing.Name, Slug: existing.Slug, EntityID: existing.ID}
+
+	// The AI's copy of a page never carries its GM-only parts back, so a
+	// whole-text replace would delete them or publish the AI's copy of them.
+	// Measured here, from the entity as it is now, so both update paths and
+	// a stale review screen get the same answer. Checked before any write,
+	// including the settings update below.
+	if gm := GMOnlyPartsOf(existing); gm.Any() && !dec.ReplaceGMOnlyConfirmed {
+		out.Status = StatusSkipped
+		out.Reason = gm.SkipReason()
+		return out
+	}
 
 	// ParentID, IsPrivate, TypeLabel and FieldsData are absent unless
 	// explicitly set, meaning "preserve": an update must not flatten
@@ -472,12 +602,15 @@ func (c *Committer) commitUpdate(
 		Name:      patch.Of(existing.Name), // update keeps the existing name
 		TypeLabel: typeLabel,
 		IsPrivate: isPrivateField,
+		// Absent keeps the page where it is; the service validates a
+		// present parent (same campaign, no cycle).
+		ParentID: parent,
 		// FieldsData is ABSENT (nil), never an empty map: the service
 		// replaces all fields on any non-nil map, and the importer has
 		// no source of structured field data to replace them with.
 	}); err != nil {
 		out.Status = StatusFailed
-		out.Reason = "Could not update the existing page's settings. The original page is unchanged."
+		out.Reason = parentReason(err, "Could not update the existing page's settings. The original page is unchanged.")
 		return out
 	}
 	if err := c.creator.UpdateEntry(ctx, existing.ID, bodyJSON, bodyHTML); err != nil {
@@ -504,6 +637,8 @@ func (c *Committer) commitUpdateExplicit(
 	newTypeIDs map[string]int,
 	failedNewTypes []string,
 	idx int,
+	made map[string]string,
+	links *PageLinks,
 ) RowOutcome {
 	out := RowOutcome{Index: idx, Name: dec.Name}
 	if out.Name == "" {
@@ -541,7 +676,7 @@ func (c *Committer) commitUpdateExplicit(
 	// SEC-6 funnel — sanitize body markdown BEFORE handing to
 	// commitUpdate. The pin verifies this funnel exists in every
 	// non-exempt function calling creator.Update / UpdateEntry.
-	bodyHTML, err := MarkdownToHTML(page.Body)
+	bodyHTML, err := MarkdownToHTML(page.Body, WithPageLinks(links))
 	if err != nil {
 		out.Status = StatusFailed
 		out.Reason = "Could not parse the page's markdown body — check the heading structure."
@@ -554,8 +689,112 @@ func (c *Committer) commitUpdateExplicit(
 		return out
 	}
 
+	parent, _, reason := c.resolveParent(ctx, campaignID, page, made)
+	if reason != "" {
+		out.Status = StatusFailed
+		out.Reason = reason
+		return out
+	}
 	isPrivate := dec.Visibility == "private" || dec.Visibility == "dm_only"
-	return c.commitUpdate(ctx, existing, page, dec, typeID, bodyJSON, bodyHTML, isPrivate, idx)
+	return c.commitUpdate(ctx, existing, page, dec, typeID, bodyJSON, bodyHTML, isPrivate, parent, idx)
+}
+
+// commitEra writes (or, for action=delete, removes) one era's version of the
+// page the block names, leaving the usual page's name, type, visibility,
+// parent and tags alone. The era is re-resolved here rather than trusted from
+// the review. A non-empty body is converted through MarkdownToHTML and
+// htmlconv like every other body, so the SEC-6 pin covers this path; an
+// empty body leaves the version's text as it was.
+func (c *Committer) commitEra(
+	ctx context.Context,
+	campaignID, ownerID string,
+	idx int,
+	page ParsedPage,
+	dec RowDecision,
+	made map[string]string,
+	links *PageLinks,
+	viewer Viewer,
+) RowOutcome {
+	out := RowOutcome{Index: idx, Name: dec.Name}
+	if out.Name == "" {
+		out.Name = page.Name
+	}
+	fail := func(reason string) RowOutcome {
+		out.Status = StatusFailed
+		out.Reason = reason
+		return out
+	}
+	eraName := page.FrontMatter.EraName()
+	if c.eras == nil {
+		return fail(eraUnavailableReason)
+	}
+	eras, err := c.eras.Eras(ctx, campaignID, viewer)
+	if err != nil {
+		return fail(eraLookupFailReason)
+	}
+	era, ok := FindEra(eras, eraName)
+	if !ok {
+		return fail(eraNotFoundReason(eraName, eras))
+	}
+
+	// The page: one this commit saved earlier (it may sit under a renamed
+	// slug), else the campaign's page of that name.
+	entityID := made[entities.Slugify(out.Name)]
+	if entityID == "" {
+		entityID = made[entities.Slugify(page.Name)]
+	}
+	if entityID == "" {
+		if e, _ := c.creator.GetBySlug(ctx, campaignID, entities.Slugify(out.Name)); e != nil {
+			entityID = e.ID
+		}
+	}
+	if entityID == "" {
+		return fail(eraNoPageReason(eraName, out.Name))
+	}
+	out.EntityID = entityID
+	out.Slug = entities.Slugify(out.Name)
+
+	if dec.Action == ActionDelete {
+		if !dec.DeleteConfirmed {
+			return fail("Delete not confirmed — operator must check the per-row confirmation in the review screen.")
+		}
+		if err := c.eras.DeleteVersion(ctx, campaignID, entityID, era.ID); err != nil {
+			return fail("Could not remove the " + strconv.Quote(era.Name) + " version. Try again in a moment.")
+		}
+		out.Status = StatusUpdated
+		out.Reason = "Removed the " + era.Name + " version"
+		return out
+	}
+
+	write := EraVersionWrite{KnownAs: strings.TrimSpace(page.FrontMatter.KnownAs)}
+	if strings.TrimSpace(page.Body) != "" {
+		bodyHTML, err := MarkdownToHTML(page.Body, WithPageLinks(links))
+		if err != nil {
+			return fail("Could not parse the page's markdown body — check the heading structure.")
+		}
+		bodyJSON, err := htmlconv.Convert(bodyHTML)
+		if err != nil {
+			return fail("Could not convert the page's body to the editor format. Try simpler markdown.")
+		}
+		write.EntryJSON, write.EntryHTML = bodyJSON, bodyHTML
+	}
+	if err := c.eras.WriteVersion(ctx, campaignID, entityID, era.ID, ownerID, write); err != nil {
+		return fail(eraWriteReason(err, era.Name))
+	}
+	out.Status = StatusUpdated
+	out.Reason = "Wrote the " + era.Name + " version"
+	return out
+}
+
+// eraWriteReason shows the calendar's plain refusal (a name that is too
+// long) and otherwise keeps the generic wording, so no raw error reaches the
+// review screen.
+func eraWriteReason(err error, era string) string {
+	var ae *apperror.AppError
+	if errors.As(err, &ae) && ae.Code == 400 && ae.Message != "" {
+		return "Could not write the " + era + " version: " + ae.Message + "."
+	}
+	return "Could not write the " + era + " version. Try again in a moment."
 }
 
 // commitDelete handles action=delete: load the existing entity by
@@ -599,6 +838,44 @@ func (c *Committer) commitDelete(
 	}
 	out.Status = StatusDeleted
 	return out
+}
+
+// resolveParent turns the row's `parent:` into a patch for updates and an
+// id for creates. Absent stays absent so an update never moves a page
+// unasked; "none" is the explicit lift to the top level. A name is looked
+// up among pages this commit already saved before the campaign, because
+// the same-paste page may sit under a renamed slug. The entities service
+// still owns the real checks (same campaign, no cycle) when the id is used.
+func (c *Committer) resolveParent(ctx context.Context, campaignID string, page ParsedPage, made map[string]string) (patch.Field[string], string, string) {
+	if page.FrontMatter.LiftsParent() {
+		return patch.Null[string](), "", ""
+	}
+	key, ok := page.FrontMatter.ParentKey()
+	if !ok {
+		return patch.Absent[string](), "", ""
+	}
+	if key == "" || key == entities.Slugify(page.Name) {
+		return patch.Absent[string](), "", "A page cannot be its own parent, and the parent needs a usable name."
+	}
+	if id, ok := made[key]; ok {
+		return patch.Of(id), id, ""
+	}
+	if e, _ := c.creator.GetBySlug(ctx, campaignID, key); e != nil {
+		return patch.Of(e.ID), e.ID, ""
+	}
+	return patch.Absent[string](), "", "The parent " + strconv.Quote(strings.TrimSpace(page.FrontMatter.Parent)) +
+		" was not found or not saved, so this page was left alone. Include the parent above it, or fix the name."
+}
+
+// parentReason shows the entities service's plain refusal (circular
+// parent, wrong campaign) instead of a generic failure; anything else
+// keeps the fallback so no raw error reaches the review screen.
+func parentReason(err error, fallback string) string {
+	var ae *apperror.AppError
+	if errors.As(err, &ae) && ae.Code == 400 && ae.Message != "" {
+		return "Could not set the parent: " + ae.Message + "."
+	}
+	return fallback
 }
 
 // suffixUntilFree appends "(Imported)" then "-2", "-3", ... to the
@@ -653,6 +930,28 @@ func cases_title(s string) string {
 		return s
 	}
 	return strings.ToUpper(s[:1]) + s[1:]
+}
+
+// categoryNames turns a new category's slug into its singular and plural
+// names. AIs write the type either way ("race" or "races"), so a slug that
+// already reads as a plural is not pluralized again.
+func categoryNames(slug string) (name, plural string) {
+	t := cases_title(slug)
+	switch {
+	case strings.HasSuffix(t, "ies") && len(t) > 3:
+		return t[:len(t)-3] + "y", t
+	case strings.HasSuffix(t, "sses"), strings.HasSuffix(t, "xes"),
+		strings.HasSuffix(t, "ches"), strings.HasSuffix(t, "shes"):
+		return t[:len(t)-2], t
+	case strings.HasSuffix(t, "s") && !strings.HasSuffix(t, "ss") && len(t) > 1:
+		return t[:len(t)-1], t
+	case strings.HasSuffix(t, "y") && len(t) > 1 && !strings.ContainsRune("aeiou", rune(t[len(t)-2])):
+		return t, t[:len(t)-1] + "ies"
+	case strings.HasSuffix(t, "s"), strings.HasSuffix(t, "x"),
+		strings.HasSuffix(t, "ch"), strings.HasSuffix(t, "sh"):
+		return t, t + "es"
+	}
+	return t, t + "s"
 }
 
 // intToStr stringifies a small int without importing strconv from

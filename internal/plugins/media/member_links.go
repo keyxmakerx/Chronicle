@@ -65,10 +65,15 @@ func (h *Handler) SignedLinksForMember(ctx context.Context, campaignID, userID s
 			continue
 		}
 		// Only campaign content; avatars and backdrops have their own rules.
-		if file.UsageType != UsageAttachment && file.UsageType != UsageEntityImage {
+		if file.UsageType != UsageAttachment && file.UsageType != UsageEntityImage && file.UsageType != UsageNoteImage {
 			continue
 		}
-		allowed, err := h.checkEntityScopedAccess(ctx, file, userID)
+		var allowed bool
+		if file.IsNotePicture() {
+			allowed, err = h.checkNoteImageAccess(ctx, file, userID)
+		} else {
+			allowed, err = h.checkEntityScopedAccess(ctx, file, userID)
+		}
 		if err != nil {
 			slog.Error("media: member link access check failed; leaving it out",
 				slog.String("file_id", file.ID), slog.Any("error", err))

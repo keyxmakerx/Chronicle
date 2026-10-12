@@ -33,7 +33,7 @@ templ CalendarsListFragment(data CalendarsListData) {
 		data-created-id={ data.NewCalendarID }
 		x-init={ calv5CreatedInit }
 	>
-		<div class="calv5-wrap">
+		<div class="calv5-wrap list">
 			<div class="calv5-dhead">
 				<p class="kicker">{ fmt.Sprintf("Campaign · %s", data.CampaignName) }</p>
 				<h1 class="calv5-dtitle">Calendars</h1>
@@ -76,7 +76,11 @@ templ CalendarsListFragment(data CalendarsListData) {
 				Each card is a calendar in this campaign. Hover over or tap one to peek at its month, open it to see the whole calendar, or manage it from its menu.
 			</p>
 		</div>
-		<div id="calv5-wizard-root"></div>
+		if data.OpenWizard != "" {
+			<div id="calv5-wizard-root" hx-get={ data.OpenWizard } hx-trigger="load" hx-swap="outerHTML"></div>
+		} else {
+			<div id="calv5-wizard-root"></div>
+		}
 	</div>
 }
 

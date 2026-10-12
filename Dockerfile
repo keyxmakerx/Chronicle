@@ -10,6 +10,7 @@
 FROM alpine:3.24 AS tailwind
 
 # The standalone Tailwind CLI is a glibc binary; install compat layer for Alpine.
+# Keep the version in step with VERSION in tools/tailwind.sh.
 RUN apk add --no-cache libc6-compat \
     && wget -O /usr/local/bin/tailwindcss \
     https://github.com/tailwindlabs/tailwindcss/releases/download/v3.4.17/tailwindcss-linux-x64 \
@@ -29,7 +30,7 @@ FROM golang:1.27-alpine AS builder
 # the pinned runtime doesn't have. Keep generator and runtime in
 # lockstep; bumping templ is a deliberate change in three places
 # (go.mod, ci.yml, Dockerfile).
-RUN go install github.com/a-h/templ/cmd/templ@v0.3.1001
+RUN go install github.com/a-h/templ/cmd/templ@v0.3.1070
 
 # Install git so the Go toolchain can stamp the source revision into the
 # binary: with `git` on PATH and a checkout present, Go records vcs.revision /

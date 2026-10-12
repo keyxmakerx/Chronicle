@@ -107,6 +107,11 @@ func (a Actor) IsGM() bool { return a.Role >= permissions.RoleScribe }
 // these answer requests; a Scribe does not.
 func (a Actor) IsOwner() bool { return a.Role >= permissions.RoleOwner }
 
+// SeesDmOnly reports whether the actor may see and move DM-only inventory
+// lines. It follows Chronicle's DM-only rule (Owner or co-DM), not IsGM: a
+// Scribe manages stashes but does not see DM-only content anywhere else.
+func (a Actor) SeesDmOnly() bool { return permissions.CanSeeDmOnly(a.Role) }
+
 // StashService defines the contract the handlers call.
 type StashService interface {
 	StashesPage(ctx context.Context, campaignID string, a Actor) (*StashesPageView, error)

@@ -69,6 +69,14 @@ func TestPurchaseRequestRepoIntegration(t *testing.T) {
 		t.Errorf("u1 pending after settle = %d", n)
 	}
 
+	// A withdrawal removes only a still-pending row of its own campaign.
+	if ok, _ := repo.DeletePending(ctx, camp, a.ID); ok {
+		t.Error("deleted a settled request")
+	}
+	if ok, _ := repo.DeletePending(ctx, other, b.ID); ok {
+		t.Error("deleted another campaign's request")
+	}
+
 	hist, err := repo.ListForBuyer(ctx, camp, buyer, 2)
 	if err != nil || len(hist) != 2 || hist[0].ID != c.ID {
 		t.Fatalf("history = %+v err %v", hist, err)

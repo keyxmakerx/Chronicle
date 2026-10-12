@@ -206,15 +206,29 @@ func (d FoundryRowData) connectButtonLabel() string {
 }
 
 // foundryDotClass colours the status dot; the status text beside it carries
-// the meaning for anyone who cannot see colour.
+// the meaning for anyone who cannot see colour. Green is kept for a world
+// that is connected now, so a recent visit never reads as online.
 func foundryDotClass(l FoundryStatusLevel) string {
 	switch l {
-	case FoundryConnectedNow, FoundrySeenRecently:
+	case FoundryConnectedNow:
 		return "bg-emerald-500"
 	case FoundrySeenLongAgo:
 		return "bg-amber-500"
 	default:
 		return "bg-gray-400"
+	}
+}
+
+// foundryWorldWord is the summary pill's answer to "is the world open?".
+// Only a live connection reads as open; a recent visit is still closed.
+func foundryWorldWord(l FoundryStatusLevel) string {
+	switch l {
+	case FoundryConnectedNow:
+		return "Open now"
+	case FoundryNeverSeen:
+		return "Never connected"
+	default:
+		return "Closed"
 	}
 }
 

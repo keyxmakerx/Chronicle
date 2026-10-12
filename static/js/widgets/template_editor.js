@@ -365,8 +365,9 @@ Chronicle.register('template-editor', {
         <div class="flex-1"></div>
       `;
 
-      // Column layout picker for this row.
-      this.colPresets.forEach(preset => {
+      // Column layout picker for this row; a tile section has no columns to pick.
+      const isTiles = row.kind === 'tiles';
+      if (!isTiles) this.colPresets.forEach(preset => {
         const btn = document.createElement('button');
         btn.className = 'p-1 hover:bg-surface-alt rounded transition-colors';
         btn.title = preset.label;
@@ -408,6 +409,17 @@ Chronicle.register('template-editor', {
       }
 
       rowEl.appendChild(toolbar);
+
+      // This editor can't arrange tiles, so a tile section is kept as it is
+      // and shown as a note; saving leaves its kind and tiles untouched.
+      if (isTiles) {
+        const n = (row.tiles || []).length;
+        const note = document.createElement('div');
+        note.className = 'bg-surface border-2 border-dashed border-edge rounded-lg p-3 text-xs text-fg-muted';
+        note.textContent = `Tile section with ${n} ${n === 1 ? 'tile' : 'tiles'}. Tiles are arranged in the tile layout editor; this editor keeps them as they are.`;
+        rowEl.appendChild(note);
+        return rowEl;
+      }
 
       // Columns grid.
       const grid = document.createElement('div');
@@ -1465,6 +1477,7 @@ Chronicle.register('template-editor', {
 
   changeRowLayout(rowIdx, widths) {
     const row = this.layout.rows[rowIdx];
+    if (row.kind === 'tiles') return;
     const allBlocks = row.columns.flatMap(c => c.blocks);
 
     // Redistribute blocks: put them all in the first column.
@@ -1727,22 +1740,3 @@ Chronicle.register('template-editor', {
     this.el = null;
   },
 });
-
-// Inject styles for drop indicator animations and container block visuals.
-if (!document.getElementById('te-styles')) {
-  const style = document.createElement('style');
-  style.id = 'te-styles';
-  style.textContent = [
-    '@keyframes te-pulse { 0%, 100% { opacity: 0.2; } 50% { opacity: 0.4; } }',
-    // Container blocks should not shrink their sub-block zones on drag.
-    '.te-container-block .te-subzone { min-height: 36px; }',
-    // Subtle background tint for container zones so they stand out from the column bg.
-    '.te-container-block .te-subzone { background: var(--color-bg-tertiary, rgba(249,250,251,0.5)); }',
-    '.dark .te-container-block .te-subzone { background: var(--color-bg-tertiary, rgba(55,65,81,0.3)); }',
-    // Hide the empty-state hint when a drop indicator is showing.
-    '.te-subzone.border-accent .te-subzone-hint { display: none; }',
-    // Prevent container block drag handle from interfering with child interactions.
-    '.te-container-block > .p-2 { cursor: default; }',
-  ].join('\n');
-  document.head.appendChild(style);
-}

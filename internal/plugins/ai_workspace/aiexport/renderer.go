@@ -132,6 +132,16 @@ func RenderEntities(
 		typeByID[t.ID] = t
 	}
 
+	// Safe mode is the page as players see it now, so a page with a version
+	// for the current era is exported as that version (and no other).
+	if opts.Privacy == PrivacyModeSafe && len(opts.EraVersions) > 0 {
+		swapped := make([]entities.Entity, len(ents))
+		for i, e := range ents {
+			swapped[i] = withCurrentEraVersion(e, opts.EraVersions[e.ID])
+		}
+		ents = swapped
+	}
+
 	// Group entities by EntityTypeID. Stable order: EntityType.SortOrder,
 	// then EntityType.Name. Within a type: Entity.SortOrder then Name.
 	byType := make(map[int][]entities.Entity)
@@ -149,6 +159,11 @@ func RenderEntities(
 		}
 		return a.Name < b.Name
 	})
+
+	// Parent names come only from the rows being exported (already filtered
+	// to what the reader may see) plus opts.ParentNames, so a hidden parent
+	// is never named.
+	opts.ParentNames = visibleParentNames(ents, opts.ParentNames)
 
 	var b strings.Builder
 	b.WriteString("# Entities\n\n")
@@ -175,9 +190,68 @@ func RenderEntities(
 			if err := renderEntity(&b, &e, tagsByEntity[e.ID], relByEntity[e.ID], opts); err != nil {
 				return "", err
 			}
+			// Other modes also carry each era's version, as blocks AI Import
+			// reads back with `era:`.
+			if opts.Privacy != PrivacyModeSafe {
+				for _, v := range opts.EraVersions[e.ID] {
+					renderEraVersion(&b, &e, v)
+				}
+			}
 		}
 	}
 	return b.String(), nil
+}
+
+// withCurrentEraVersion lays the version for the calendar's current era over
+// the page, as the page itself does for every reader. A page with none, or
+// whose current-era version changes neither name nor text, is returned as is.
+func withCurrentEraVersion(e entities.Entity, versions []EraVersion) entities.Entity {
+	for _, v := range versions {
+		if !v.Current {
+			continue
+		}
+		if v.Name != nil && strings.TrimSpace(*v.Name) != "" {
+			e.Name = *v.Name
+		}
+		if v.EntryHTML != nil {
+			e.EntryHTML = v.EntryHTML
+		}
+		break
+	}
+	return e
+}
+
+// renderEraVersion writes one era's version of a page as a page block of its
+// own: `name:` names the usual page, `era:` the era, `known_as:` the version's
+// own name. The body is the version's text only; an empty body means the
+// version adds no text of its own. Importing the block writes that version
+// and nothing else.
+func renderEraVersion(b *strings.Builder, e *entities.Entity, v EraVersion) {
+	body, err := htmlToMarkdown(v.EntryHTML)
+	body = bodyOrSkip("era version body", e.Name, body, err)
+	b.WriteString("---\n")
+	fmt.Fprintf(b, "name: %s\n", strconv.Quote(e.Name))
+	fmt.Fprintf(b, "era: %s\n", strconv.Quote(v.EraName))
+	if v.Name != nil && strings.TrimSpace(*v.Name) != "" {
+		fmt.Fprintf(b, "known_as: %s\n", strconv.Quote(*v.Name))
+	}
+	b.WriteString("---\n\n")
+	if body != "" {
+		b.WriteString(body)
+		b.WriteString("\n\n")
+	}
+	b.WriteString("---\n\n")
+}
+
+func visibleParentNames(ents []entities.Entity, extra map[string]string) map[string]string {
+	names := make(map[string]string, len(ents)+len(extra))
+	for id, n := range extra {
+		names[id] = n
+	}
+	for _, e := range ents {
+		names[e.ID] = e.Name
+	}
+	return names
 }
 
 func renderEntity(
@@ -249,6 +323,14 @@ func renderEntity(
 		}
 		if len(names) > 0 {
 			fmt.Fprintf(b, "**Tags:** %s\n\n", strings.Join(names, ", "))
+		}
+	}
+
+	// Parent — where the page sits in the tree, so the AI can add sub-pages
+	// with `parent:`. Named only when the reader can see the parent.
+	if e.ParentID != nil {
+		if name := opts.ParentNames[*e.ParentID]; name != "" {
+			fmt.Fprintf(b, "**Parent:** %s\n\n", wikilink(name))
 		}
 	}
 

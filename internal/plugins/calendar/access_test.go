@@ -132,6 +132,9 @@ func (f *fakeCalendarSvc) ListCalendars(_ context.Context, _ string, v permissio
 func (f *fakeCalendarSvc) SetCurrentDate(context.Context, string, string, int, int, int, int, int) error {
 	return nil
 }
+func (f *fakeCalendarSvc) AdvanceCurrent(context.Context, string, string, int, int) error {
+	return nil
+}
 func (f *fakeCalendarSvc) GetPrimaryCalendarForViewer(ctx context.Context, campaignID string, v permissions.Viewer) (*Calendar, error) {
 	return f.GetDefaultCalendarForViewer(ctx, campaignID, v)
 }
@@ -261,7 +264,15 @@ func (f *fakeCalendarSvc) ListEventsForCalendar(context.Context, string, string,
 	return nil, nil
 }
 
+func (f *fakeCalendarSvc) ListEventIndexForViewer(context.Context, string, string, string, permissions.Viewer) ([]EventIndexEntry, bool, error) {
+	return nil, false, nil
+}
+
 func (f *fakeCalendarSvc) ListErasForCalendar(context.Context, string, string, int) ([]Era, error) {
+	return nil, nil
+}
+
+func (f *fakeCalendarSvc) MoonsForEntity(context.Context, string, string, permissions.Viewer) ([]EntityMoonRef, error) {
 	return nil, nil
 }
 

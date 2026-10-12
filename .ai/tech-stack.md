@@ -24,6 +24,7 @@
 | Library | Version | Role |
 |---------|---------|------|
 | TipTap | 3.x | Rich text editor widget (bundled via esbuild, see `static/vendor/tiptap-bundle.src.js`) |
+| Mermaid | 11.17.2 | Diagrams in pages (vendored single-file build in `static/vendor/mermaid.min.js`, loaded only when a diagram is drawn; `make mermaid-vendor`) |
 | Leaflet.js | 1.9.x | Interactive maps (vendored in `static/vendor/`) |
 | Font Awesome | 6 Free | UI icons (loaded from cdnjs in `base.templ`) |
 | Inter | latest | UI font (Google Fonts, loaded in `base.templ`) |
@@ -48,7 +49,7 @@
 |------|---------|
 | `air` | Hot reload for Go dev server |
 | `templ` | Generate Go from .templ files |
-| `tailwindcss` | Generate CSS (standalone binary) |
+| `tailwindcss` | Generate CSS (standalone binary pinned in `tools/tailwind.sh`, fetched into `bin/` by `make tailwind`) |
 | `golangci-lint` | Linting |
 | `gosec` | Security static analysis |
 | `migrate` | CLI for running migrations |

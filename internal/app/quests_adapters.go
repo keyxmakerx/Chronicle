@@ -186,7 +186,7 @@ type questTypeAdapter struct {
 
 // TypeInCampaign treats a missing type and one of another campaign alike, as
 // not found, so a foreign category id cannot be probed through the boards.
-func (a *questTypeAdapter) TypeInCampaign(ctx context.Context, campaignID string, typeID int) (bool, error) {
+func (a *questTypeAdapter) TypeInCampaign(ctx context.Context, campaignID string, typeID int, dmTeam bool) (bool, error) {
 	et, err := a.svc.GetEntityTypeByID(ctx, typeID)
 	if err != nil {
 		var appErr *apperror.AppError
@@ -194,6 +194,9 @@ func (a *questTypeAdapter) TypeInCampaign(ctx context.Context, campaignID string
 			return false, nil
 		}
 		return false, err
+	}
+	if et.DMOnly() && !dmTeam {
+		return false, nil
 	}
 	return et.CampaignID == campaignID, nil
 }

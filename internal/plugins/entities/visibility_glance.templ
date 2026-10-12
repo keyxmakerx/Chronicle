@@ -99,6 +99,9 @@ templ effectiveVisibilityBadge(cc *campaigns.CampaignContext, entity *Entity, ev
 		<div
 			class="group relative shrink-0"
 			data-entity-access
+			if entity.TypeDMOnly {
+				data-category-dm-only="true"
+			}
 			if canEdit {
 				data-widget="permissions"
 				data-layout="corner"

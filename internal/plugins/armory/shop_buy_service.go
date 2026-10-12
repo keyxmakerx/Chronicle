@@ -52,6 +52,9 @@ type ShopRequestService interface {
 	ApproveRequest(ctx context.Context, campaignID string, a Actor, requestID int64) (*PurchaseRequest, error)
 	// DeclineRequest turns a waiting purchase request down. Owner visibility only.
 	DeclineRequest(ctx context.Context, campaignID string, a Actor, requestID int64) (*PurchaseRequest, error)
+	// WithdrawRequest deletes a waiting request on the requester's or the
+	// Owner's say. A request that has been answered is a Conflict.
+	WithdrawRequest(ctx context.Context, campaignID string, a Actor, requestID int64) error
 }
 
 type shopBuyService struct {
@@ -103,9 +106,19 @@ func (s *shopBuyService) Buyers(ctx context.Context, campaignID, shopEntityID st
 	if err != nil {
 		return nil, err
 	}
+	// Every candidate of a non-Owner is already claimed by the caller; the
+	// Owner's list is every character, so ask which of them are theirs.
+	var claimed map[string]bool
+	if a.IsOwner() {
+		if claimed, err = s.stash.Directory.OwnedCharacterIDs(ctx, campaignID, a.UserID); err != nil {
+			return nil, err
+		}
+	}
 	view := &BuyersView{DowntimeOpen: open, CanBuyNow: open || a.IsOwner(), Buyers: []Buyer{}}
 	for i := range refs {
-		view.Buyers = append(view.Buyers, s.describeBuyer(ctx, &refs[i]))
+		b := s.describeBuyer(ctx, &refs[i])
+		b.Own = !a.IsOwner() || claimed[refs[i].ID]
+		view.Buyers = append(view.Buyers, b)
 	}
 	return view, nil
 }
@@ -476,7 +489,7 @@ func (s *shopBuyService) applyBasket(ctx context.Context, campaignID, shopEntity
 
 	for i := range lines {
 		l := lines[i]
-		ok, err := s.stash.adjustCarried(mctx, campaignID, buyer.ID, l.itemID, a.UserID, l.quantity, a.IsGM(), false)
+		ok, err := s.stash.adjustCarried(mctx, campaignID, buyer.ID, l.itemID, a.UserID, l.quantity, a.SeesDmOnly(), false)
 		if err != nil || !ok {
 			rollback()
 			if err == nil {
@@ -486,7 +499,7 @@ func (s *shopBuyService) applyBasket(ctx context.Context, campaignID, shopEntity
 		}
 		itemID, qty := l.itemID, l.quantity
 		undo = append(undo, func() {
-			if _, err := s.stash.adjustCarried(mctx, campaignID, buyer.ID, itemID, a.UserID, -qty, a.IsGM(), false); err != nil {
+			if _, err := s.stash.adjustCarried(mctx, campaignID, buyer.ID, itemID, a.UserID, -qty, a.SeesDmOnly(), false); err != nil {
 				slog.Error("shop buy: could not take a credited item back",
 					slog.String("character_id", buyer.ID), slog.String("item_id", itemID), slog.Any("error", err))
 			}
@@ -546,7 +559,7 @@ func (s *shopBuyService) priceBasket(ctx context.Context, campaignID, shopEntity
 			return nil, "", 0, apperror.NewInternal(err)
 		}
 		if rel == nil || rel.CampaignID != campaignID || rel.SourceEntityID != shopEntityID ||
-			rel.RelationType != shopSellsRelation || (rel.DmOnly && !a.IsGM()) {
+			rel.RelationType != shopSellsRelation || (rel.DmOnly && !a.SeesDmOnly()) {
 			return nil, "", 0, notFound("shop item")
 		}
 		meta := parseShopMeta(rel.Metadata)

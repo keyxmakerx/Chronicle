@@ -148,7 +148,7 @@ func (s *layoutPresetService) validateInput(name, desc, icon, layoutJSONRaw stri
 	// is campaign-dependent, and presets ship pre-vetted (any singleton
 	// duplication would be a packaging bug, not a user input we need to
 	// surface a friendly message for).
-	if err := ValidateLayout(layout, nil, nil); err != nil {
+	if err := ValidateLayout(layout, nil, nil, nil); err != nil {
 		return "", "", "", "", err
 	}
 

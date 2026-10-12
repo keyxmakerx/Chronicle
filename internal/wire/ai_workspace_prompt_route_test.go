@@ -19,6 +19,13 @@ import (
 // /ai-workspace/prompt/generate route registration includes the
 // requireOwner middleware argument.
 func TestAIWorkspacePromptRoute_HasOwnerGate(t *testing.T) {
+	for _, path := range []string{"ai-workspace/prompt/generate", "ai-workspace/prompt/instructions"} {
+		t.Run(path, func(t *testing.T) { checkOwnerGate(t, path) })
+	}
+}
+
+// checkOwnerGate asserts the GET route for path carries requireOwner.
+func checkOwnerGate(t *testing.T, path string) {
 	root := repoRoot(t)
 	routesPath := filepath.Join(root, "internal", "plugins", aiwsDirName, "routes.go")
 
@@ -50,7 +57,7 @@ func TestAIWorkspacePromptRoute_HasOwnerGate(t *testing.T) {
 		if !ok || lit.Kind != token.STRING {
 			return true
 		}
-		if !strings.Contains(lit.Value, "ai-workspace/prompt/generate") {
+		if !strings.Contains(lit.Value, path) {
 			return true
 		}
 		found = true
@@ -64,14 +71,14 @@ func TestAIWorkspacePromptRoute_HasOwnerGate(t *testing.T) {
 	})
 
 	if !found {
-		t.Fatalf("could not locate the ai-workspace/prompt/generate GET call in RegisterOwnerRoutes —" +
-			" route may have been renamed; locate by content + update this test alongside the rename")
+		t.Fatalf("could not locate the %s GET call in RegisterOwnerRoutes —"+
+			" route may have been renamed; locate by content + update this test alongside the rename", path)
 	}
 	if !hasOwnerGate {
-		t.Errorf("ai-workspace/prompt/generate route registration is missing the requireOwner middleware argument.\n"+
+		t.Errorf("%s route registration is missing the requireOwner middleware argument.\n"+
 			"The prompt builder can include DM-only campaign content in Permitted/Everything modes; "+
 			"exposing it to non-owner roles would leak GM-side material.\n"+
 			"Per cordinator/reports/chronicle/2026-05-26-c-ai-workspace-scoping.md §5,\n"+
-			"the route is owner-scoped. Restore requireOwner on the cg.GET call in %s.", routesPath)
+			"the route is owner-scoped. Restore requireOwner on the cg.GET call in %s.", path, routesPath)
 	}
 }

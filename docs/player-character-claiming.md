@@ -32,10 +32,18 @@ After enabling the addon:
   (or use **Manage** beside **Categories** on the campaign page)
 - Enabling creates a category named **Player Characters**, nested under the
   default **Characters** category, unless the campaign already has one or has a
-  game system's own character category (that one is nested under
-  **Characters** instead and serves as the claimable type)
+  game system. A game system's character sheet and fields go onto
+  **Characters** itself, which serves as the claimable type; no separate
+  category is made beside it
   - The new category is claimable by default
   - Characters in this category can be claimed by players
+
+**Characters split in two:** a campaign that has a separate system character
+category (for example **Heroes**) next to **Characters** shows a warning on the
+addon's setup page, "Your characters are split between ...". Answer the
+question there to move its pages into **Characters**. **Characters** takes over
+the sheet and fields, the old category is turned off, not deleted, and claims
+stay as they are.
 
 **Note:** A category with no explicit claimable setting counts as claimable
 when its preset is a character or its slug ends in `-character`; the checkbox
@@ -80,34 +88,23 @@ ownership.
 
 ## GM Workflow: Managing Ownership
 
-### View All Owners
+### Assign and Unclaim With the Players Box
 
-On any claimable category's dashboard (e.g., **Player Characters**):
+On the **Characters** page, Scribes and the owner get a **Players** button in
+the Party head. It opens the **Players** box:
 
-1. Look at the **Player Character Roster** panel near the top of the dashboard
-   (Scribe and owner only)
-2. See a table of the characters in that category and their current owners
-3. The panel shows:
-   - Character name
-   - Current owner ("Unclaimed", or "Unknown player" if the owner left the
-     campaign)
-   - Reassign dropdown (all campaign members)
-   - Unclaim button (only on a claimed character)
+- One row per player, with the character they play as a chip. The **x** on a
+  chip unclaims it (the owner is cleared and the character can be claimed
+  again).
+- **Give a character** on a row opens a finder; type a name and pick a result.
+  Giving with nothing typed lists only free characters.
+- **Free to pick** holds playable characters with no owner. The **x** on one
+  takes it off the list. **Add a character** puts a character on the list.
+- A player with no character yet sees **Pick your character** above the
+  Party, listing the free characters they can see.
 
-### Reassign Ownership
-
-1. Find the character in the **Player Character Roster**
-2. Open the dropdown in the **Reassign** column
-3. Select a new player from the list, or **Unclaimed** to clear the owner
-4. The change is saved immediately and the page reloads
-5. The activity log records the reassignment under the acting member's name
-
-### Unclaim a Character
-
-1. Find the character in the **Player Character Roster**
-2. Click the **Unclaim** button
-3. The owner is cleared
-4. The character becomes available for any player to claim again
+Reassigning is the same as giving: pick the new player. The activity log
+records the change under the acting member's name.
 
 ## Setup & Configuration
 
@@ -130,7 +127,7 @@ If you have an existing "Character" category and want to enable claiming:
 4. Uncheck: **"Players can claim entities of this type"**
 5. Save
 6. The claim button will no longer appear on characters in this category
-7. The Player Character Roster will not appear on the dashboard
+7. Its characters no longer appear in the Players box
 
 ### Create a Custom Claimable Category
 
@@ -173,7 +170,7 @@ If you disable the addon:
 2. Click **On** beside Player Character Claiming
 3. The claiming controls disappear:
    - Claim buttons on character pages are hidden
-   - The Player Character Roster is hidden from dashboards
+   - The Players button and box on the Characters page are hidden
    - Claiming toggles disappear from category settings
    - The claim and reassign requests are refused
    - A character that already has an owner still shows "Claimed by ..."
@@ -187,9 +184,9 @@ to their characters; the UI just hides until you re-enable the addon.
 ### Permanently Remove Claiming
 
 If you want to clear all ownership links (not recommended):
-1. For each claimable category, go to the dashboard
-2. Use the Player Character Roster to unclaim all characters
-3. Then disable the addon (the roster is hidden once it is off)
+1. Open the Players box on the Characters page
+2. Click the **x** on each character chip to unclaim it
+3. Then disable the addon (the box is hidden once it is off)
 
 There is no bulk-clear screen; the server administrator can clear the
 `owner_user_id` column of the `entities` table directly.
@@ -205,7 +202,7 @@ settings under Customize → Manage Categories.
 ### "Entity is already claimed by another player"
 
 The character is already owned by someone else. Only the GM can reassign it.
-Ask the GM to use the Player Character Roster to reassign.
+Ask the GM to reassign it from the Players box on the Characters page.
 
 ### Claim button doesn't appear
 
@@ -221,7 +218,7 @@ Ask the GM to use the Player Character Roster to reassign.
 
 The owner's account was deleted or is no longer in the campaign. The character
 still has a link to a user ID, but the display name couldn't be resolved.
-The GM can reassign the character to an active player via the Player Character Roster.
+The GM can reassign the character to an active player from the Players box on the Characters page.
 
 ## Best Practices
 

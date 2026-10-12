@@ -535,12 +535,12 @@
     var S = this.state, cal = this.view.cal, CalDate = Chronicle.calendarDate, md = this._monthDef();
     var grid = $('#cal5-wxcal', this.el), keys = this._keys(), self = this;
     var cols = Math.max(1, CalDate.weekLen(cal)), inter = !!(md.def && md.def.is_intercalary);
-    var off = inter ? 0 : Math.max(0, CalDate.weekdayCol(cal, S.y, S.m, 1));
+    var off = inter ? 0 : CalDate.gridLead(cal, S.y, S.m);
     if (!S.focus || keys.indexOf(S.focus) < 0) {
       var t = dkey(cal.current_year, cal.current_month, cal.current_day);
       S.focus = keys.indexOf(t) >= 0 ? t : (this._chosen()[0] || keys[0]);
     }
-    var h = inter ? '' : (cal.weekdays || []).map(function (w) {
+    var h = inter ? '' : CalDate.gridWeekdays(cal).map(function (w) {
       return '<div class="wxc-dow" role="columnheader" title="' + esc(w.name) + '">' + esc(String(w.name).slice(0, 3)) + '</div>';
     }).join('');
     for (var b = 0; b < off; b++) h += '<span class="wxc-d blank" aria-hidden="true"></span>';

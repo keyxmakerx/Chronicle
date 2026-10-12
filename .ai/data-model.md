@@ -80,7 +80,10 @@ numbered core migrations after it, tracked once each via `golang-migrate`'s
 
 | Table | Purpose | Notable columns |
 |---|---|---|
-| `users` | Accounts | `email` UNIQUE; `password_hash` (argon2id); `totp_secret`/`totp_enabled`; `is_admin`, `is_disabled`; `pending_email`/`email_verify_token` (email-change flow); `admin_nav_pins`, `view_prefs` JSON (the person's own pins and My view choices) |
+| `users` | Accounts | `email` UNIQUE; `password_hash` (argon2id); `totp_secret` (the authenticator key, AES-256-GCM under a key derived from `SECRET_KEY`)/`totp_enabled`; `is_admin`, `is_disabled`; `pending_email`/`email_verify_token` (email-change flow); `admin_nav_pins`, `view_prefs` JSON (the person's own pins and My view choices); `notify_prefs` JSON (which messages reach them on the bell and by email, `internal/notifyprefs`); `deleted_at` (set when the person deleted their own account: the row stays, emptied, disabled and named "Former member", because content references it); `guest_campaign_id` (set while the account is a guest: joined with a guest code, fenced to that one campaign, placeholder `guest+…@guest.invalid` email and no usable password; cleared when they keep the account); `last_seen_at` (when they last used Chronicle, in the browser or through a sync key, written at most once a day, used for an owner's "if you're away" hand-over) |
+| `user_recovery_codes` | Two-factor recovery codes, each good for one sign-in | `code_hash` (SHA-256 of the code without its dash); `used_at`; FK→`users` CASCADE |
+| `oidc_settings` | The site's one sign-in provider (OpenID Connect), singleton | `id` CHECK = 1; `client_secret_encrypted` AES-256-GCM under a key derived from `SECRET_KEY`; `allow_signup`, `hide_password`; `last_test_*` (the admin's last test sign-in, cleared on save) |
+| `user_identities` | Which provider account belongs to which Chronicle account | UNIQUE (`issuer`, `subject`); FK→`users` CASCADE; `email` as the provider gave it |
 | `password_reset_tokens` | Forgot-password flow | `token_hash` UNIQUE; FK→`users` CASCADE; 1h expiry |
 | `security_events` | Site-wide security audit log | `event_type`, `user_id`/`actor_id` nullable; `details` JSON; indexed by type/user/ip/actor + `created_at` |
 | `site_settings` | Global key/value settings | `setting_key` PK |
@@ -92,12 +95,15 @@ numbered core migrations after it, tracked once each via `golang-migrate`'s
 
 | Table | Purpose | Notable columns |
 |---|---|---|
-| `campaigns` | A worldbuilding project | `slug` UNIQUE; `settings`/`sidebar_config`/`dashboard_layout`/`owner_dashboard_layout` JSON; `is_public`; `archived_at` (soft-archive); `join_code` UNIQUE (shareable invite link) |
+| `campaigns` | A worldbuilding project | `slug` UNIQUE; `settings`/`sidebar_config`/`dashboard_layout`/`owner_dashboard_layout` JSON; `is_public`; `archived_at` (soft-archive); `join_code` UNIQUE (shareable invite link); `deleted_at`/`deleted_by`/`deleted_by_name` (site Trash, migration 48: every read filters `deleted_at IS NULL`, so a trashed campaign is 404 everywhere; the slug stays reserved); `purge_started_at` (set when the final delete begins, after which Undo is refused) |
 | `campaign_members` | Campaign ↔ user, with role | composite PK `(campaign_id, user_id)`; `role` CHECK IN (`owner`,`scribe`,`player`); `character_entity_id` FK→`entities` SET NULL; `nav_pins` JSON (the member's own pinned sidebar row keys, NULL for none) |
+| `campaign_guest_codes` | One-use guest codes an owner makes on the People page | `code_hash` UNIQUE (SHA-256 of the code; the code itself is shown once and never stored); `note`; `expires_at` (7 days); `used_at`/`used_by` (claimed in one UPDATE, so two people can't both use a code); FK→`campaigns` CASCADE |
+| `customize_drafts` | The owner's unsaved Customize work, one JSON object of named sections per owner per campaign | PK (`campaign_id`, `user_id`); `draft_json` MEDIUMTEXT (at most 1 MiB, checked in the service); `version` bumped on every write and echoed back by the writer (optimistic concurrency); FK→`campaigns` and `users` CASCADE |
 | `campaign_invites` | Email invitations | `token` UNIQUE; `role` CHECK IN (`player`,`scribe`); `expires_at`/`accepted_at` |
 | `ownership_transfers` | Pending campaign-owner handoff | one pending per campaign (`campaign_id` UNIQUE); `token` UNIQUE; 72h expiry |
 | `campaign_storage_limits` | Per-campaign upload/storage overrides | PK `campaign_id`; `bypass_*` columns |
 | `campaign_groups` / `campaign_group_members` | Named member groups (a permission `subject_type`) | `UNIQUE(campaign_id, name)`; members table is a plain junction |
+| `trash_batches` | One row per admin file clean-up waiting in the site Trash (migration 48; lives in core because the media and campaign columns ship with it) | `kind`; `label`; `item_count`/`byte_count`; `state` (`trashed`/`restoring`/`purging`, moved by single conditional UPDATEs so Undo and purge exclude each other); `deleted_by_name` copied |
 | `audit_log` | Per-campaign action log (create/update/delete) | `action`, `entity_type`, `entity_id`, `entity_name`, `details` JSON |
 
 ### Entity types & entities
@@ -105,7 +111,7 @@ numbered core migrations after it, tracked once each via `golang-migrate`'s
 | Table | Purpose | Notable columns |
 |---|---|---|
 | `entity_types` | Per-campaign content categories (Character, Location, ...) | `UNIQUE(campaign_id, slug)`; `fields`/`layout_json`/`dashboard_layout`/`pinned_entity_ids` JSON; `preset_category` (system-preset origin); `parent_type_id` self-FK (sub-types, SET NULL); `claimable` tri-state BOOLEAN (NULL = heuristic, see `isClaimableType`) |
-| `entities` | The core worldbuilding content unit | `UNIQUE(campaign_id, slug)`; `entity_type_id` FK; `parent_id` self-FK **or** `parent_node_id` FK→`sidebar_nodes` (mutually exclusive nesting); `owner_user_id` FK→`users` SET NULL (claim); `map_id` FK→`maps` SET NULL (cross-plugin FK added by maps plugin migration 005, since core can't reference a plugin table); `entry`/`entry_html`, `player_notes`/`player_notes_html` JSON+HTML pairs; `fields_data`/`field_overrides`/`popup_config` JSON; `search_text` FULLTEXT (backfilled from `entry_html`+`fields_data`); `visibility` enum; `is_private` legacy flag; `FULLTEXT(name)`; `deleted_at`/`deleted_by`/`trash_root_id` (Trash, ADR-060: every read excludes `deleted_at IS NOT NULL`); `entry_rev` (text revision for save clashes) |
+| `entities` | The core worldbuilding content unit | `UNIQUE(campaign_id, slug)`; `entity_type_id` FK; `parent_id` self-FK **or** `parent_node_id` FK→`sidebar_nodes` (mutually exclusive nesting); `owner_user_id` FK→`users` SET NULL (claim); `playable` bool (on the Characters page's roster with or without an owner; a claim sets it); `map_id` FK→`maps` SET NULL (cross-plugin FK added by maps plugin migration 005, since core can't reference a plugin table); `entry`/`entry_html`, `player_notes`/`player_notes_html` JSON+HTML pairs; `fields_data`/`field_overrides`/`popup_config` JSON; `search_text` FULLTEXT (backfilled from `entry_html`+`fields_data`); `visibility` enum; `is_private` legacy flag; `FULLTEXT(name)`; `deleted_at`/`deleted_by`/`trash_root_id` (Trash, ADR-060: every read excludes `deleted_at IS NOT NULL`); `entry_rev` (text revision for save clashes) |
 | `entity_versions` | A page's title and text history | FK→`entities` CASCADE; `kind` (`created`/`edit`/`restore`/`baseline`); `user_id` no FK (history outlives the account); `DATETIME(6)` times |
 | `entity_aliases` | Alternate names an entity is searchable/linkable by | `UNIQUE(entity_id, alias)`; `FULLTEXT(alias)` |
 | `sidebar_nodes` | Pure organizational folders in the sidebar tree (no page content) | `node_type` enum(`folder`); self-nestable via `parent_id` |
@@ -179,7 +185,9 @@ numbered core migrations after it, tracked once each via `golang-migrate`'s
 
 | Table | Purpose | Notable columns |
 |---|---|---|
-| `media_files` | Uploaded file metadata | `content_hash` (sha256, per-campaign dedup — `INDEX(campaign_id, content_hash)`); `thumbnail_paths` JSON; `usage_type` |
+| `media_files` | Uploaded file metadata | `content_hash` (sha256, per-campaign dedup — `INDEX(campaign_id, content_hash)`); `thumbnail_paths` JSON; `usage_type`; `trash_batch_id` (migration 48: set while the file sits in a Trash file clean-up batch; the file stays on disk until the batch is purged) |
+| `page_files` | Which page a `page_file` media file is attached to (migration 46) | `media_id` PK FK→`media_files` CASCADE; `entity_id` FK→`entities` CASCADE; `campaign_id`; `gm_only` |
+| `entity_places` | Extra places a page is listed in the page tree (migration 49); `entities.parent_id` stays the page's one real home | PK `(entity_id, parent_entity_id)`, both FK→`entities` CASCADE; `campaign_id`; `sort_order`; `created_by` (no FK) |
 | `addons` | Registry of installable features (systems/widgets/integrations/plugins) | `slug` UNIQUE; `category` enum; `status` enum(`active`,`planned`,`deprecated`); seeded by the baseline migration so the registry exists even if a plugin's own schema migration fails |
 | `campaign_addons` | Per-campaign addon enablement | `UNIQUE(campaign_id, addon_id)`; `config_json` (the `"setup"` key holds extension-settings wizard state, ADR-043) |
 | `extensions` | Installed WASM extension manifests | `ext_id` UNIQUE; `manifest` JSON |
@@ -221,7 +229,7 @@ plugin does with them: `internal/plugins/calendar/.ai.md`.
 |---|---|---|
 | `calendars` | A campaign's calendar | visibility columns; real-world date anchor and time zone; `hemisphere`, `forecasts_enabled`, `month_starts_new_week`; era look: `era_colors_on`, `era_feel`, `era_intensity`, `era_speed` (migration 024) |
 | `calendar_months`, `calendar_weekdays` | The year's shape | `sort_order`; months carry `is_intercalary`, `leap_year_days`; weekdays `is_rest_day` |
-| `calendar_moons`, `calendar_seasons` | Moons (cycle, offset, look, `hidden_from_players`) and seasons (start/end month and day) | per calendar, FK CASCADE |
+| `calendar_moons`, `calendar_seasons` | Moons (cycle, offset, look, `hidden_from_players`, `lore_entity_id` (migration 026)) and seasons (start/end month and day) | per calendar, FK CASCADE |
 | `calendar_eras` | Named stretches of years | `start_*`/`end_*`; look: `color`, `color_2`, `style`, `feel`; `lore_entity_id`, `dm_note`, `hidden_until_begins` (migration 024) |
 | `calendar_cycles`, `calendar_cycle_entries`, `calendar_festivals` | Repeating year-cycles and their entries; named festival days | `cycle_length`; festival `month`/`day` or `after_month` |
 | `calendar_event_kinds` | Per-campaign kinds of event (name, icon, colour, default announcement) | `UNIQUE`-slug per `campaign_id` |
@@ -231,6 +239,7 @@ plugin does with them: `internal/plugins/calendar/.ai.md`.
 | `calendar_weather_days` | Weather for one date, generated or set by hand | PK `(calendar_id, year, month, day)`; `source` (`manual` by default); `locked` keeps Generate from replacing it (migration 025) |
 | `calendar_weather_settings` | The world's climate and how long weather lasts | PK `calendar_id`; `climate`, `continuity`, `kinds` (the owner's own kinds of weather), `forecast_days` (migration 025) |
 | `entity_era_links`, `entity_event_links` | Pages tied to an era or an event | `participation_role` |
+| `entity_era_versions` | A page's version for one era: only what changes there (migration 027) | PK `(entity_id, era_id)`, both FK CASCADE; `name`, `image_path`, `entry`/`entry_html`/`entry_rev`, `fields_data` (changed values only); NULL means "as the usual page" |
 
 ### maps (`internal/plugins/maps/migrations/`)
 
@@ -238,9 +247,9 @@ plugin does with them: `internal/plugins/calendar/.ai.md`.
 |---|---|---|
 | `maps` | A campaign map image + viewer config | `image_id` FK→`media_files` SET NULL; `grid_*`/`background_color`/`initial_view_*`/`initial_zoom`; `foundry_scene_id` (Foundry sync); `display_settings` JSON nullable (frame/pins/kinds/grid/opening view/draw gate, validated in the service, NULL = all defaults; migration 007) |
 | `map_campaign_settings` | Campaign-wide default map frame | `campaign_id` PK, FK→`campaigns` CASCADE; `frame_style` (no row = `atlas`) |
-| `map_markers` | Pins on a map | `x`/`y` percentage 0–100; `entity_id` FK→`entities` SET NULL; `pin_category`; `visibility`/`visibility_rules`; `foundry_id` |
+| `map_markers` | Pins on a map | `x`/`y` percentage 0–100; `entity_id` FK→`entities` SET NULL; `linked_map_id` FK→`maps` SET NULL (the map the pin opens; same campaign, never its own map, checked in the service; migration 010); `pin_category`; `visibility`/`visibility_rules`; `foundry_id` |
 | `map_layers` | Ordered drawing/token/fog layers | `layer_type`; `is_visible`/`is_locked`/`opacity` |
-| `map_drawings` | Freehand/shape/text/shadow annotations and pictures on a layer | `points` JSON; `visibility`/`visibility_rules`; `foundry_id`; `image_id` (picture's media file, no FK), `crop` JSON, `sort_order` (migration 008, pictures only) |
+| `map_drawings` | Freehand/shape/text/shadow drawings, arrows, highlighter strokes, numbered steps, speech bubbles and pictures on a layer | `points` JSON; `visibility`/`visibility_rules`; `foundry_id`; `image_id` (picture's media file, no FK), `crop` JSON, `sort_order` (migration 008, pictures only) |
 | `map_tokens` | Positioned tokens (often an entity's avatar) | `entity_id` FK SET NULL; `bar1/2_value/max`, `aura_*`, `light_*`, `vision_enabled/range` (Foundry-parity fields); `status_effects`/`flags` JSON; `foundry_id` |
 | `map_fog` | Explored/unexplored fog-of-war polygons | `points` JSON; `is_explored` |
 | `map_hex_layers` | A map's hex layer (at most one per map, on when `display_settings` grid type is hex) | PK `map_id` FK→`maps` CASCADE; `anchor_drawing_id` (a picture on the map, no FK); `fog_enabled`; `party_col`/`party_row`; `miles_per_hex`, `miles_per_day`; `version` |
@@ -333,6 +342,18 @@ Foundry module repo for the wire contract.
 | `quest_board_type_looks` | Board and ledger looks for a category (entity type); FK cascade |
 | `quest_boards` | Boards on a place page or a category: exactly one of `entity_id` / `entity_type_id` is set; `who` = dm/scribe/all, `sort_order` |
 | `quest_board_items` | Pins: notice/note/page/map/string; `owner_user_id`, `by_dm`, `hidden`, `ref_id` (no FK) |
+
+### dmscreen (`internal/plugins/dmscreen/migrations/`)
+
+| Table | Purpose |
+|-------|---------|
+| `dm_screen_board_items` | The DM Screen's Adventures tab: `kind` = page/note; a pin has `entity_id` (unique per campaign; FK cascade to `entities` and `campaigns`), a note has `body` (500 characters); `created_by` carries no FK |
+
+### pageblocks (`internal/plugins/pageblocks/migrations/`)
+
+| Table | Purpose |
+|-------|---------|
+| `page_block_content` | One JSON document per (page, layout block): `PRIMARY KEY (entity_id, block_id)`, `kind` (`read_aloud`/`page_table`/`page_steps`), `version` for edit conflicts; FKs to `entities`, `campaigns` cascade |
 
 ### armory (`internal/plugins/armory/migrations/`)
 

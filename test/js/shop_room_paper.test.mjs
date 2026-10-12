@@ -1,7 +1,8 @@
 // shop_room_paper.test.mjs — the shop room's paper look
 // (static/js/widgets/shop_room_paper.js): every shop type and room shape
-// stands up as cut card from the same room the lit look draws, price tags
-// lean back to face the viewer, pointers map back onto the floor, and moving
+// stands up as cut card from the same room the lit look draws, seen from the
+// front with every card facing the viewer, price tags lean back to face the
+// viewer, pointers map back onto the floor, and moving
 // one of the room's own decorations never moves the goods.
 
 import { test } from 'node:test';
@@ -40,11 +41,15 @@ test('every shop type and room shape stands up as paper, with its goods and tags
       const view = room.draw();
       const html = Paper.html({ view, its: S.its, name: 'The Gilded Anvil', icons: room.ICONS, fx: 'full' }).html;
       const where = `${type} in a ${setting}`;
-      assert.equal(count(html, / data-p="/g), S.pieces.length, `${where}: one card per piece`);
+      const sideWindows = S.pieces.filter((p) => p.kind === 'window' && p.wall && p.wall !== 'Y').length;
+      assert.equal(count(html, / data-p="/g), S.pieces.length - sideWindows, `${where}: one card per piece, bar side-wall windows`);
+      assert.ok(!/rotateZ\(-45deg\)/.test(html), `${where}: seen from the front, not the corner`);
       const shown = view.placed.filter((q) => q.good !== undefined).length;
       assert.equal(count(html, / data-i="/g), shown, `${where}: one card per good on show`);
-      assert.equal(count(html, /class="srp-tag"[^>]*rotateX\(-56deg\)/g), shown, `${where}: every tag leans back to face the viewer`);
-      assert.equal(count(html, /class="srp-at srp-wall"/g), view.room.back.length, `${where}: one card per back wall`);
+      assert.equal(count(html, /class="srp-tag"[^>]*rotateX\(-60deg\)/g), shown, `${where}: every tag leans back to face the viewer`);
+      const facing = view.room.back.filter((e) => Math.abs(e.d[0]) >= Math.abs(e.d[1])).length;
+      assert.ok(facing > 0, `${where}: some wall faces the viewer`);
+      assert.equal(count(html, /class="srp-at srp-wall"/g), facing, `${where}: one card per wall facing the viewer`);
       assert.ok(!/mix-blend-mode/.test(html), `${where}: no blending inside the 3D book`);
       assert.match(html, /class="srp-at srp-keeper"/, `${where}: a keeper`);
     }
@@ -59,8 +64,10 @@ test('warm lights warm the cards near them, and the light setting draws them fla
   const full = Paper.html({ view, its: [], icons: room.ICONS, fx: 'full' }).html;
   assert.match(full, /class="srp-glow warm"/);
   assert.match(full, /sepia\(0\.[1-9]/, 'something near the forge is warmed');
+  assert.match(full, /class="srp-at srp-dust"/, 'dust turns in the forge light');
   const light = Paper.html({ view, its: [], icons: room.ICONS, fx: 'light' }).html;
   assert.ok(!/--lf:/.test(light));
+  assert.ok(!/srp-dust|srp-haze|srp-beam/.test(light), 'the light setting has no haze or dust');
 });
 
 test('a pointer maps back onto the floor exactly', () => {

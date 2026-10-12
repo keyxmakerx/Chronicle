@@ -21,6 +21,8 @@ type CampaignLookup interface {
 	GetBySlug(ctx context.Context, campaignID, slug string) (*entities.Entity, error)
 	GetEntityTypeBySlug(ctx context.Context, campaignID, slug string) (*entities.EntityType, error)
 	GetEntityTypes(ctx context.Context, campaignID string) ([]entities.EntityType, error)
+	// CheckEntityAccess lets @[Name] links skip pages the viewer cannot see.
+	CheckEntityAccess(ctx context.Context, entityID string, role int, userID string) (*entities.EffectivePermission, error)
 }
 
 // Classification is the per-page outcome of Classify. Stored on the
@@ -42,6 +44,11 @@ type Classification struct {
 	// already exists in the campaign. The commit handler reads this
 	// to drive the Rename / Overwrite handling.
 	ConflictEntity *entities.Entity
+
+	// GMOnly counts the GM-only parts of ConflictEntity's current text. The
+	// review screen puts a "Replace the text anyway" tick on any row that
+	// could update such a page.
+	GMOnly GMOnlyParts
 
 	// ProposedTypeSlug is the FrontMatter.Type lowercased + trimmed.
 	// "" when no type was specified in FM (operator picks via bulk
@@ -79,6 +86,17 @@ type Classifier struct {
 	cachedTypes  []entities.EntityType
 	typesBySlug  map[string]*entities.EntityType
 	typesFetched bool
+	// eras and viewer resolve `era:` blocks; without eras such a block is
+	// reported as unavailable.
+	eras   EraLookup
+	viewer Viewer
+}
+
+// WithEras lets the classifier check `era:` blocks against the main
+// calendar's eras as the importing viewer sees them.
+func (c *Classifier) WithEras(l EraLookup, v Viewer) *Classifier {
+	c.eras, c.viewer = l, v
+	return c
 }
 
 // NewClassifier constructs a per-request classifier. The lookup is
@@ -103,7 +121,76 @@ func (c *Classifier) ClassifyAll(ctx context.Context, pages []ParsedPage) ([]Cla
 		}
 		out[i] = cls
 	}
+	c.checkParents(ctx, pages, out)
+	c.checkEras(ctx, pages, out)
 	return out, nil
+}
+
+// checkParents turns an unusable `parent:` into a row problem. It runs
+// after every row is classified because "created earlier in this paste"
+// depends on the other rows, and it only ever downgrades a row, never
+// hides an existing problem.
+func (c *Classifier) checkParents(ctx context.Context, pages []ParsedPage, cls []Classification) {
+	for i, p := range pages {
+		if p.Status == StatusParseError || cls[i].Status == StatusParseError ||
+			cls[i].Status == StatusActionMismatch || p.FrontMatter.Action == ActionDelete ||
+			p.FrontMatter.IsEra() {
+			continue
+		}
+		key, ok := p.FrontMatter.ParentKey()
+		if !ok {
+			continue
+		}
+		if problem := c.parentProblem(ctx, pages, i, key); problem != "" {
+			cls[i].Status = StatusParentProblem
+			cls[i].Reason = problem
+		}
+	}
+}
+
+// parentProblem explains, in plain words, why page i's parent cannot be
+// used; "" means it resolves. Names match by slug, so two pastes of the
+// same name are the only way to be ambiguous: the campaign itself keeps
+// slugs unique.
+func (c *Classifier) parentProblem(ctx context.Context, pages []ParsedPage, i int, key string) string {
+	named := strings.TrimSpace(pages[i].FrontMatter.Parent)
+	quoted := `"` + named + `"`
+	if key == "" {
+		return "The parent " + quoted + " is not a usable page name."
+	}
+	if key == entities.Slugify(pages[i].Name) {
+		return "A page cannot be its own parent. Name a different page, or remove the parent line."
+	}
+	earlier, deleted := 0, false
+	for j, q := range pages {
+		if q.Status == StatusParseError || q.FrontMatter.IsEra() || entities.Slugify(q.Name) != key {
+			continue
+		}
+		if j < i {
+			if q.FrontMatter.Action == ActionDelete {
+				deleted = true
+				continue
+			}
+			earlier++
+		}
+	}
+	switch {
+	case earlier > 1:
+		return "The parent " + quoted + " matches more than one page in this paste. Give each page a distinct name."
+	case earlier == 1:
+		return ""
+	case deleted:
+		return "The parent " + quoted + " is being deleted in this paste."
+	}
+	if existing, _ := c.lookup.GetBySlug(ctx, c.campaignID, key); existing != nil {
+		return ""
+	}
+	for j := i + 1; j < len(pages); j++ {
+		if pages[j].Status != StatusParseError && !pages[j].FrontMatter.IsEra() && entities.Slugify(pages[j].Name) == key {
+			return "The parent " + quoted + " comes later in this paste. Move it above this page."
+		}
+	}
+	return "No page called " + quoted + " exists in this campaign or earlier in this paste."
 }
 
 // ensureTypes lazy-loads the entity-type registry. Called by
@@ -120,6 +207,15 @@ func (c *Classifier) ensureTypes(ctx context.Context) error {
 	c.typesBySlug = make(map[string]*entities.EntityType, len(types))
 	for i, t := range types {
 		c.typesBySlug[strings.ToLower(t.Slug)] = &c.cachedTypes[i]
+	}
+	// An AI writes the category as either name ("race" or "races"), so the
+	// plural name finds the type too, unless another type's slug is that word.
+	for i, t := range types {
+		if alias := entities.Slugify(t.NamePlural); alias != "" {
+			if _, taken := c.typesBySlug[alias]; !taken {
+				c.typesBySlug[alias] = &c.cachedTypes[i]
+			}
+		}
 	}
 	c.typesFetched = true
 	return nil
@@ -139,6 +235,13 @@ func (c *Classifier) classifyOne(ctx context.Context, p ParsedPage) (Classificat
 
 	cls.ResolvedSlug = entities.Slugify(p.Name)
 
+	// An era block names an existing page and never creates or renames it,
+	// so slug conflicts and categories do not apply; checkEras decides
+	// whether its era and page exist.
+	if p.FrontMatter.IsEra() {
+		return cls, nil
+	}
+
 	// Interpretation of an existing slug depends on the front-matter
 	// action: create treats it as StatusConflict (operator picks
 	// Skip/Rename/Update); update/delete treat it as the legitimate
@@ -148,6 +251,7 @@ func (c *Classifier) classifyOne(ctx context.Context, p ParsedPage) (Classificat
 	existing, _ := c.lookup.GetBySlug(ctx, c.campaignID, cls.ResolvedSlug)
 	if existing != nil {
 		cls.ConflictEntity = existing
+		cls.GMOnly = GMOnlyPartsOf(existing)
 	}
 
 	switch p.FrontMatter.Action {

@@ -183,3 +183,40 @@ func authTestUUID(t *testing.T) string {
 	}
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }
+
+// TestUserRepository_GetTimezonesByIDs_Integration runs the batch zone read
+// against a real MariaDB: set zones come back, NULL/empty and unknown ids are
+// absent, and an empty id list makes no query.
+func TestUserRepository_GetTimezonesByIDs_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test requires a database; skipped under -short")
+	}
+
+	db := openAuthTestDB(t)
+	defer db.Close()
+
+	ctx := context.Background()
+	repo := NewUserRepository(db)
+
+	withTZ, withEmpty, withNull := authTestUUID(t), authTestUUID(t), authTestUUID(t)
+	for _, id := range []string{withTZ, withEmpty, withNull} {
+		mustAuthExec(t, db, `INSERT INTO users (id, email, display_name, password_hash) VALUES (?, ?, ?, ?)`,
+			id, "tz-int-"+id+"@example.test", "TZ Int Test", "x")
+		defer mustAuthExec(t, db, `DELETE FROM users WHERE id = ?`, id)
+	}
+	mustAuthExec(t, db, `UPDATE users SET timezone = ? WHERE id = ?`, "Europe/Paris", withTZ)
+	mustAuthExec(t, db, `UPDATE users SET timezone = '' WHERE id = ?`, withEmpty)
+
+	got, err := repo.GetTimezonesByIDs(ctx, []string{withTZ, withEmpty, withNull, authTestUUID(t)})
+	if err != nil {
+		t.Fatalf("GetTimezonesByIDs: %v", err)
+	}
+	if len(got) != 1 || got[withTZ] != "Europe/Paris" {
+		t.Errorf("got %v, want only %s -> Europe/Paris", got, withTZ)
+	}
+
+	empty, err := repo.GetTimezonesByIDs(ctx, nil)
+	if err != nil || len(empty) != 0 {
+		t.Errorf("empty id list = %v, %v; want empty map, nil", empty, err)
+	}
+}

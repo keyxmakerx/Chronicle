@@ -148,6 +148,10 @@ always_allowed_prefixes=(
   # own error message names as a legitimate exception, not a cross-plugin
   # code dependency.
   "internal/app/calendar_import_body_limit_test.go"
+  # builtinAddons is the catalogue that names every plugin slug by design
+  # (one description per addon), so an edit to any entry would otherwise read
+  # as a new cross-plugin reference.
+  "internal/plugins/addons/service.go"
 )
 
 # ---------------------------------------------------------------------------
@@ -170,6 +174,12 @@ const_registry_files=(
   # The sync history's calendar kind: a label on the history wire that the
   # Foundry module sends too, not a use of the calendar plugin.
   "internal/plugins/syncapi/sync_history_kinds.go"
+  # AI Import's calendar block: the front-matter value `kind: calendar`, a
+  # word of the import format, not a use of the calendar plugin's slug.
+  "internal/plugins/ai_workspace/records/calendar_kind.go"
+  # AI Import's `what: calendar` lookup: a word of the import format, not a
+  # use of the calendar plugin's slug.
+  "internal/plugins/ai_workspace/records/lookup_calendar_info.go"
 )
 
 # ---------------------------------------------------------------------------

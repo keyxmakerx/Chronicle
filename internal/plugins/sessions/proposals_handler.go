@@ -7,13 +7,16 @@ import (
 	"html"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/labstack/echo/v4"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
+	"github.com/keyxmakerx/chronicle/internal/notifyprefs"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
 )
 
 // Slot-proposal HTTP surface. Handlers stay thin: bind, call the service,
@@ -25,6 +28,11 @@ import (
 // GET /campaigns/:id/proposals
 func (h *Handler) ListProposals(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
+	// Date polls are answered on the Game nights calendar; this list stays
+	// only for a campaign without one.
+	if calID, _ := h.realWorldCalendar(c); calID != "" {
+		return middleware.HTMXRedirect(c, gameNightsTarget(cc.Campaign.ID, calID, "", ""))
+	}
 	userID := auth.GetUserID(c)
 	canManage := cc.MemberRole >= campaigns.RoleScribe
 	summaries, err := h.svc.ListProposalSummaries(c.Request().Context(), cc.Campaign.ID, userID)
@@ -50,6 +58,12 @@ func (h *Handler) ShowProposal(c echo.Context) error {
 	view, err := h.svc.GetProposalView(c.Request().Context(), cc.Campaign.ID, c.Param("pid"), userID, viewerTZ, includeDetail)
 	if err != nil {
 		return c.JSON(apperror.SafeCode(err), map[string]string{"error": apperror.SafeMessage(err)})
+	}
+	// A poll is answered on the Game nights calendar, so every link to one
+	// (the bell, emails, Coming up) opens it there; this page stays only for
+	// a campaign without that calendar.
+	if calID, _ := h.realWorldCalendar(c); calID != "" {
+		return middleware.HTMXRedirect(c, pollTarget(cc.Campaign.ID, calID, view.Proposal.ID, pollLandingDate(view, time.Now().In(timeutil.LoadLocation(viewerTZ)).Format("2006-01-02"))))
 	}
 	if includeDetail {
 		h.fillResponderNames(c.Request().Context(), cc.Campaign.ID, view)
@@ -348,7 +362,7 @@ func (h *Handler) fanoutProposalCreated(ctx context.Context, campaignID, campaig
 		return
 	}
 	for _, m := range members {
-		if m.UserID == creatorID || m.Email == "" {
+		if m.UserID == creatorID || m.Email == "" || !h.emailWanted(ctx, m.UserID, notifyprefs.GameNightInvites) {
 			continue
 		}
 		h.sendProposalEmail(ctx, campaignID, campaignName, proposal, options, m)
@@ -400,8 +414,9 @@ func (h *Handler) sendProposalEmail(ctx context.Context, campaignID, campaignNam
 
 	subject := fmt.Sprintf("When can you play? — %s", campaignName)
 	// Plain-text body: no markup, so the raw values are safe as-is.
+	footPlain, footHTML := h.prefsFooter()
 	plainBody := fmt.Sprintf("You've been asked to weigh in on session times for %s.\n\nProposal: %s\nTimes shown in %s.\n\n%sThese links expire in 7 days.\n",
-		campaignName, proposal.Title, memberTZ, optionsText)
+		campaignName, proposal.Title, memberTZ, optionsText) + footPlain
 	// HTML body: escape every interpolated data value (campaign name, operator-
 	// authored proposal title, zone) so a title like `<img onerror=…>` can't
 	// inject markup into the email. optionsHTML is our own server-built markup
@@ -413,7 +428,8 @@ func (h *Handler) sendProposalEmail(ctx context.Context, campaignID, campaignNam
 <h2 style="font-size:16px;margin:0 0 12px">%s</h2>
 %s
 <p style="text-align:center;color:#999;font-size:12px;margin-top:20px">These links expire in 7 days.</p>
-</body></html>`, html.EscapeString(campaignName), html.EscapeString(memberTZ), html.EscapeString(proposal.Title), optionsHTML)
+%s
+</body></html>`, html.EscapeString(campaignName), html.EscapeString(memberTZ), html.EscapeString(proposal.Title), optionsHTML, footHTML)
 
 	if err := h.mailer.SendHTMLMail(ctx, []string{m.Email}, subject, plainBody, htmlBody); err != nil {
 		slog.Warn("failed to send proposal email", slog.Any("error", err), slog.String("to", m.Email))

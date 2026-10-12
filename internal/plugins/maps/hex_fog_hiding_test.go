@@ -247,13 +247,13 @@ func TestDrawingService_WithholdImages(t *testing.T) {
 	}
 }
 
-// fakeFogMedia answers FogWithholdsMedia for one withheld file.
+// fakeFogMedia answers WithholdsPictureFile for one withheld file.
 type fakeFogMedia struct {
 	withheld string
 	err      error
 }
 
-func (f fakeFogMedia) FogWithholdsMedia(_ context.Context, _, mediaID string) (bool, error) {
+func (f fakeFogMedia) WithholdsPictureFile(_ context.Context, _, mediaID string) (bool, error) {
 	return f.err != nil || mediaID == f.withheld, f.err
 }
 
@@ -261,7 +261,7 @@ func (f fakeFogMedia) FogWithholdsMedia(_ context.Context, _, mediaID string) (b
 func fogMapService(fog *FogMask, err error) *mapService {
 	s := shadowedMapService(nil, nil)
 	s.SetHexFogLookup(fakeFogLookup{mask: fog, err: err})
-	s.SetFogMediaLookup(fakeFogMedia{withheld: "media-picture-in-fog"})
+	s.SetPictureFileLookup(fakeFogMedia{withheld: "media-picture-in-fog"})
 	return s
 }
 
@@ -403,7 +403,7 @@ func TestFogWithheldPicture_GuardAndLinks(t *testing.T) {
 		t.Errorf("IsMapPicture = %v, %v; want true so no link is minted below owner", pic, err)
 	}
 	failing := fogMapService(nil, nil)
-	failing.SetFogMediaLookup(fakeFogMedia{err: errors.New("down")})
+	failing.SetPictureFileLookup(fakeFogMedia{err: errors.New("down")})
 	if hidden, err := failing.IsShadowedMapImage(context.Background(), "camp-1", "media-unused"); err == nil || !hidden {
 		t.Errorf("a failed picture check: %v, %v; want refused with an error", hidden, err)
 	}

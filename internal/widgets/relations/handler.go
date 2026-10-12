@@ -335,7 +335,7 @@ func (h *Handler) GraphPage(c echo.Context) error {
 	var entityTypes []EntityTypeSummary
 	if h.typeLister != nil {
 		var err error
-		entityTypes, err = h.typeLister.ListEntityTypesForGraph(c.Request().Context(), cc.Campaign.ID)
+		entityTypes, err = h.typeLister.ListEntityTypesForGraph(c.Request().Context(), cc.Campaign.ID, int(cc.VisibilityRole()))
 		if err != nil {
 			return apperror.NewInternal(err)
 		}

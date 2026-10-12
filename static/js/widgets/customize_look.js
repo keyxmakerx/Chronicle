@@ -250,13 +250,16 @@
       ['lift', 'Lift', 'Rises to meet the pointer and settles when pressed. Rounded corners.'],
       ['press', 'Press', 'A tactile key: it sinks onto its base when pressed.'],
       ['glow', 'Glow', 'A pill that gathers a soft light around itself on hover.'],
-      ['ink', 'Ink', 'Crisp square corners. Ink spreads from wherever you press.']
+      ['ink', 'Ink', 'Crisp square corners. Ink spreads from wherever you press.'],
+      ['keystone', 'Keystone', 'Soft, raised and rounded. Presses deep with an inner shadow and lets go slowly.']
     ];
-    var BTN_RADIUS = { lift:'8px', press:'6px', glow:'999px', ink:'3px' };
+    var BTN_RADIUS = { lift:'8px', press:'6px', glow:'999px', ink:'3px', keystone:'12px' };
     var ELEVATION = {
       flat:     { name:'Flat', lift:0, rest:{ light:'none', dark:'none' }, hover:{ light:'0 0 0 1.5px rgb(ACC / .35)', dark:'0 0 0 1.5px rgb(ACC / .45)' } },
       standard: { name:'Standard', lift:2, rest:{ light:'0 1px 2px 0 rgb(0 0 0 / .05)', dark:'0 1px 2px 0 rgb(0 0 0 / .3)' }, hover:{ light:'0 6px 16px -4px rgb(0 0 0 / .12), 0 2px 6px -2px rgb(0 0 0 / .08)', dark:'0 8px 20px -6px rgb(0 0 0 / .5), 0 2px 6px -2px rgb(0 0 0 / .35)' } },
-      dramatic: { name:'Dramatic', lift:4, rest:{ light:'0 2px 6px -1px rgb(0 0 0 / .10), 0 10px 22px -12px rgb(0 0 0 / .28)', dark:'0 2px 6px -1px rgb(0 0 0 / .4), 0 12px 26px -12px rgb(0 0 0 / .7)' }, hover:{ light:'0 22px 44px -14px rgb(0 0 0 / .38), 0 6px 14px -6px rgb(0 0 0 / .18)', dark:'0 24px 48px -14px rgb(0 0 0 / .85), 0 6px 14px -6px rgb(0 0 0 / .5)' } }
+      dramatic: { name:'Dramatic', lift:4, rest:{ light:'0 2px 6px -1px rgb(0 0 0 / .10), 0 10px 22px -12px rgb(0 0 0 / .28)', dark:'0 2px 6px -1px rgb(0 0 0 / .4), 0 12px 26px -12px rgb(0 0 0 / .7)' }, hover:{ light:'0 22px 44px -14px rgb(0 0 0 / .38), 0 6px 14px -6px rgb(0 0 0 / .18)', dark:'0 24px 48px -14px rgb(0 0 0 / .85), 0 6px 14px -6px rgb(0 0 0 / .5)' } },
+      // Ambient tints its shadows with the accent; keep in step with czElevation.
+      ambient:  { name:'Ambient', lift:3, rest:{ light:'0 1px 2px rgb(16 24 40 / .05), 0 6px 18px -8px rgb(ACC / .28)', dark:'0 1px 2px rgb(0 0 0 / .4), 0 8px 20px -8px rgb(ACC / .32)' }, hover:{ light:'0 2px 4px rgb(16 24 40 / .06), 0 18px 36px -12px rgb(ACC / .42), 0 0 0 1px rgb(ACC / .12)', dark:'0 2px 4px rgb(0 0 0 / .45), 0 20px 40px -12px rgb(ACC / .5), 0 0 0 1px rgb(ACC / .2)' } }
     };
     var SPEEDS = {
       snappy:    { name:'Snappy', d:110, d2:170, ease:'cubic-bezier(.3,.9,.3,1)' },
@@ -324,9 +327,10 @@
       date:    { name:'In-world date', desc:'Today in your world, from the calendar' },
       weather: { name:'Weather', desc:'Today’s weather from the calendar' },
       moon:    { name:'Moon', desc:'Tonight’s moon phase' },
+      era:     { name:'Era', desc:'The age your world is in, from the calendar' },
       session: { name:'Next game night', desc:'Counts down to the next session' }
     };
-    var WIDGET_ORDER = ['links', 'text', 'note', 'search', 'date', 'weather', 'moon', 'session'];
+    var WIDGET_ORDER = ['links', 'text', 'note', 'search', 'date', 'weather', 'moon', 'era', 'session'];
     // Sample text the preview shows for the data-backed widgets; the live
     // header reads the real calendar and sessions, and a widget with nothing
     // to show there simply does not appear.
@@ -334,9 +338,13 @@
       date:    ['Date', '14 Frostfall 1203'],
       weather: ['Weather', 'Clear, 4°'],
       moon:    ['Moon', 'Selûne waxing crescent'],
+      era:     ['Era', 'Age of Ash'],
       session: ['Next', 'Fri 7 pm']
     };
-    var LATER = ['Era'];
+    // The sky header's calendar, and the still night it is drawn over (the
+    // same colours as the real header's, topbarSkyNight).
+    var SKY = { calendarId:ROOT.getAttribute('data-sky-calendar') || '' };
+    var SKY_NIGHT = 'linear-gradient(to bottom, #04061a, #141d45 65%, #2a3768)';
     var WIDGET_SLOTS = 4;
 
     var SECTIONS = [
@@ -348,8 +356,12 @@
       { id:'type', name:'Type', icon:'i-type', desc:'The fonts for text and headings, and how large everything reads.' },
       { id:'buttons', name:'Buttons', icon:'i-cursor', desc:'The shape of buttons and how they move when you point at them and press.' },
       { id:'motion', name:'Motion and depth', icon:'i-depth', desc:'How far cards lift, how quickly things move, and a calmer option for everyone.' },
-      { id:'hover', name:'Hover cards', icon:'i-note', desc:'The card that opens when someone points at a linked page or a rule word. One look for the whole campaign.' }
+      { id:'hover', name:'Hover cards', icon:'i-note', desc:'The card that opens when someone points at a linked page or a rule word. One look for the whole campaign.' },
+      { id:'sheet', name:'Character sheets', icon:'i-journal', desc:'How character sheets look for everyone in this campaign.' }
     ];
+    // Same ids as the server's AppearanceSheetStyles, in that order.
+    var SHEET_STYLES = [['modern', 'Modern'], ['parchment', 'Parchment'], ['ledger', 'Ledger'], ['journal', 'Field journal'], ['vellum', 'Vellum'], ['night', 'Night'],
+      ['deck', 'Card deck'], ['pencil', 'Pencil'], ['starship', 'Starship'], ['neon', 'Neon terminal'], ['runes', 'Rune slate'], ['brass', 'Brass gauges']];
     var SEC_KEYS = {
       brand:['brand.name', 'brand.logo', 'brand.welcome', 'brand.backdrop'],
       header:['header.bg', 'header.height', 'header.solid', 'header.from', 'header.to', 'header.dir', 'header.image', 'header.scrim', 'header.widgets', 'header.links', 'header.text'],
@@ -359,7 +371,8 @@
       type:['type.body', 'type.heading', 'type.scale'],
       buttons:['buttons.style'],
       motion:['motion.elevation', 'motion.speed', 'motion.reduceAll'],
-      hover:['hover.look']
+      hover:['hover.look'],
+      sheet:['sheet.style']
     };
 
     /* ---------- Sample pictures, painted once so the page needs no files ---------- */
@@ -417,6 +430,7 @@
       if (!d.header.image) d.header.image = 'none';
       if (!d.sidebar.banner) d.sidebar.banner = 'none';
       if (!d.hover) d.hover = { look:'paper' };
+      if (!d.sheet) d.sheet = { style:'modern' };
       d.header.links = (d.header.links || []).map(function(l){ return { label:l.label || '', url:l.url || '', icon:l.icon || '' }; });
       while (d.header.links.length < LINK_ROWS) d.header.links.push({ label:'', url:'', icon:'' });
       return d;
@@ -425,6 +439,23 @@
     var saved = fromServer(STATE.draft);
     var BASE = clone(saved);
     var draft = clone(saved);
+    // Inside Customize's frame the draft is the frame's one draft: the look
+    // starts from its "look" section and every change goes back into it, and
+    // the frame's save bar saves it (customize_shell.js).
+    var SHELL = ROOT.closest('[data-widget="customize-shell"]');
+    var shellSent = 'null';
+    function shellDraft(){
+      if (Chronicle.customizeDraft) return Chronicle.customizeDraft();
+      try { return JSON.parse(SHELL.getAttribute('data-draft') || '{}') || {}; } catch (e) { return {}; }
+    }
+    function shellSet(v){
+      if (Chronicle.customizeSet) Chronicle.customizeSet('look', v);
+      else (Chronicle._customizeQueue = Chronicle._customizeQueue || []).push(['look', v]);
+    }
+    if (SHELL){
+      var held = shellDraft().look;
+      if (held && held.draft) draft = fromServer(held.draft);
+    }
     var memo = {};          // custom colours picked during this visit, per swatch group
     var undoDraft = null;   // what Discard threw away, for its Undo
     var uploaded = {};      // picture names stored during this visit, not yet known to be in use
@@ -469,7 +500,7 @@
     }
     // The header picks light or dark words from its own background.
     function headerLook(d, T){
-      var h = d.header, mode = h.bg === 'sky' ? 'solid' : h.bg;
+      var h = d.header, mode = h.bg;
       function col(c){ return c === 'page' ? T.card : c; }
       function words(cols){
         var w = Math.min.apply(null, cols.map(function(c){ return contrast(c, '#ffffff'); }));
@@ -479,6 +510,7 @@
       var bg, light, rep = 'none';
       if (mode === 'solid'){ bg = col(h.solid); light = words([bg]); }
       else if (mode === 'image'){ bg = '#0b0f1a'; light = true; }
+      else if (mode === 'sky'){ bg = SKY_NIGHT; light = true; }
       else {
         var a = col(h.from), b = col(h.to);
         bg = 'linear-gradient(' + HDR_DIRS[h.dir][0] + ', ' + a + ', ' + b + ')';
@@ -511,7 +543,7 @@
         '--p-sb':sb.bg, '--p-sb-text':sb.text, '--p-sb-text-2':sb.text2, '--p-sb-text-3':sb.text3, '--p-sb-hi':'#ffffff', '--p-sb-line':'rgb(255 255 255 / .07)', '--p-sb-accent':sbAcc,
         '--p-font':B[2], '--p-font-h':same_ ? B[2] : H[2], '--p-hw':same_ ? '700' : String(H[4]), '--p-hw-b':same_ ? '700' : String(H[4]), '--p-hls':H[6],
         '--p-fs':fs + 'px', '--p-h1':(fs * 1.8 * hz).toFixed(2) + 'px', '--p-h2':(fs * 1.38 * hz).toFixed(2) + 'px', '--p-h3':(fs * 1.16 * hz).toFixed(2) + 'px',
-        '--p-elev-rest':E.rest[theme], '--p-elev-hover':E.hover[theme].replace(/ACC/g, rgbCh(acc)), '--p-lift':E.lift + 'px',
+        '--p-elev-rest':E.rest[theme].replace(/ACC/g, rgbCh(acc)), '--p-elev-hover':E.hover[theme].replace(/ACC/g, rgbCh(acc)), '--p-lift':E.lift + 'px',
         '--p-dur':S.d + 'ms', '--p-dur2':S.d2 + 'ms', '--p-ease':S.ease, '--p-shadow-rgb':theme === 'dark' ? '0 0 0' : '15 23 42',
         '--p-br':BTN_RADIUS[d.buttons.style],
         '--p-tint-a':lively ? '.26' : '.15', '--p-rail-w':lively ? '3px' : '2px', '--p-edge-w':lively ? '2px' : '1px', '--p-trace-a':lively ? '1' : '.85', '--p-band-a':lively ? '.28' : '.16',
@@ -629,7 +661,7 @@
     }
     function tilesElev(){
       return Object.keys(ELEVATION).map(function(id){
-        var E = ELEVATION[id], k = { flat:'Cards sit on the page, with an outline on hover.', standard:'A soft shadow; cards lift a little on hover.', dramatic:'Deep shadows; cards rise clearly off the page.' }[id];
+        var E = ELEVATION[id], k = { flat:'Cards sit on the page, with an outline on hover.', standard:'A soft shadow; cards lift a little on hover.', dramatic:'Deep shadows; cards rise clearly off the page.', ambient:'Shadows tinted with your accent and a faint light from the top corner.' }[id];
         return '<label class="tile el"><input type="radio" name="t-elev" value="' + id + '" data-k="motion.elevation"><span class="tb">' +
           '<span class="el-s pv" aria-hidden="true"><i data-elev-sample="' + id + '"></i></span><span class="tn">' + E.name + '<span class="tck">' + IC('i-check') + '</span></span><span class="tk">' + k + '</span></span></label>';
       }).join('');
@@ -660,20 +692,21 @@
         fld('brand-backdrop', 'Backdrop', 'Behind the welcome', imgSlot('brand.backdrop', '', 'Upload', 'A soft shade keeps the welcome message readable over any picture. Up to 4 MB.')));
       if (id === 'header') return (
         fld('h-bg', 'Background', null,
-          opts('h-bg', 'header.bg', 'h-bg-l', HDR_MODES.map(function(m){ return m[0] === 'sky' ? [m[0], m[1], null, true, 'hint:sky', 'Coming soon'] : [m[0], m[1]]; })) +
+          opts('h-bg', 'header.bg', 'h-bg-l', HDR_MODES.map(function(m){ return [m[0], m[1]]; })) +
           '<div class="ctl" id="h-solid"><span class="hint" id="h-solid-l">Colour</span>' + swatches('hsolid', 'h-solid-l') + '</div>' +
           '<div class="ctl" id="h-grad"><span class="hint" id="h-from-l">From</span>' + swatches('hfrom', 'h-from-l') + '<span class="hint" id="h-to-l">To</span>' + swatches('hto', 'h-to-l') +
             '<span class="hint" id="h-dir-l">Direction</span>' + opts('h-dir', 'header.dir', 'h-dir-l', Object.keys(HDR_DIRS).map(function(k){ return [k, HDR_DIRS[k][1]]; })) +
             '<p class="hint" id="h-anim-h">The two colours drift slowly from side to side. They slow to a stop when nobody is using the page, and hold still for anyone who asks for less motion.</p></div>' +
           '<div class="ctl" id="h-img">' + imgSlot('header.image', '', 'Replace', 'Still or animated, 1.5 MB at most. The shade keeps the header’s words readable.') +
             '<span class="hint" id="h-scrim-l">Shade</span>' + opts('h-scrim', 'header.scrim', 'h-scrim-l', Object.keys(SCRIMS).map(function(k){ return [k, SCRIMS[k][1]]; })) + '</div>' +
+          '<div class="ctl" id="h-sky"><p class="hint">The animated sky from your calendar, the same one that sits over the month. It follows the world’s date, time of day and weather by itself, so there is nothing to set. Slow devices get the basic sky.</p>' +
+            (SKY.calendarId ? '' : '<p class="note"><svg class="i" aria-hidden="true"><use href="#cz-i-info"/></svg><span>Your campaign has no calendar yet, so the header shows a still night sky until it has one.</span></p>') + '</div>' +
           '<p class="hint">Words and buttons switch to white on dark backgrounds and pictures by themselves.</p>') +
         fld('h-height', 'Height', 'How tall the bar is', opts('h-height', 'header.height', 'h-height-l', HDR_HEIGHTS) +
           '<p class="hint">Slim is today’s bar. Tall gives pictures and moving colour more room.</p>') +
         fld('h-w', 'Widgets', 'Up to ' + WIDGET_SLOTS, '<p class="hint" id="w-full" aria-live="polite"></p><div class="wl" id="wl" aria-labelledby="h-w-l"></div>' +
           '<p class="hint">On a phone the bar shows the first widget and a +N button that opens the rest.</p>' +
-          '<div class="tape-note"><span class="tape" aria-hidden="true"></span><p><b>Under construction.</b> These are on their way. The date, weather and moon widgets above only ever show today in your world, never days ahead, and stay out of the bar when your calendar has nothing for today.</p>' +
-          '<div class="later-row"><span class="w-later">Sky background</span>' + LATER.map(function(n){ return '<span class="w-later">' + esc(n) + '</span>'; }).join('') + '</div></div>'));
+          '<p class="hint">The date, weather and moon widgets only ever show today in your world, never days ahead, and stay out of the bar when your calendar has nothing for today.</p>'));
       if (id === 'sidebar') return (
         fld('sb-col', 'Colour', 'The menu stays dark', menuColourOpts() +
           '<div class="ctl" id="sb-own"><span class="hint" id="sb-own-l">Your colour</span>' + swatches('sbown', 'sb-own-l') + '<p class="note" id="sb-own-note" hidden><svg class="i" aria-hidden="true"><use href="#cz-i-info"/></svg><span></span></p></div>' +
@@ -725,6 +758,9 @@
       if (id === 'hover') return (
         fld('h-look', 'Look', 'Every hover card in the campaign', '<div class="tiles two" role="radiogroup" aria-labelledby="h-look-l">' + tilesHover() + '</div>' +
           '<p class="hint">Point at a linked page or a rule word anywhere in the campaign to see it. What a card shows comes from each page’s own settings.</p>'));
+      if (id === 'sheet') return (
+        fld('sh-style', 'Style', 'Every character sheet in the campaign', opts('sh-style', 'sheet.style', 'sh-style-l', SHEET_STYLES) +
+          '<p class="hint">How character sheets look for everyone in this campaign. Modern matches the rest of Chronicle; the others are optional paper and screen styles.</p>'));
       return '';
     }
     function buildUI(){
@@ -749,8 +785,8 @@
 
     /* ---------- Building the preview ----------
        Real chrome at a small size: the navigation (pinned rows and folding
-       sections), the header, a dashboard and a
-       city page. Nothing here is a picture of the site. */
+       sections), the header, a dashboard, a city page and a character
+       sheet. Nothing here is a picture of the site. */
     function srow(id, icon, label, count, colour, withHL){
       return '<div class="s-row" data-row="' + id + '"' + (colour ? ' style="--c:' + colour + '"' : '') + '><span class="ic">' + IC(icon) + '</span><span class="lb">' + label + '</span>' +
         (count != null ? '<span class="ct">' + count + '</span>' : '') + (withHL ? '<span class="pn"></span>' + HL : '') + '</div>';
@@ -772,7 +808,8 @@
         '<div class="s-subs">' + ssub('regions', 'Regions', 6) + ssub('cities', 'Cities', 14, true) + ssub('dungeons', 'Dungeons', 11) + '</div>' +
         srow('factions', 'i-banner', 'Factions', 18, '#fbbf24') + srow('items', 'i-gem', 'Items', 53, '#a78bfa') + srow('lore', 'i-scroll', 'Lore', 29, '#34d399') +
         '</div></div>';
-      var hdr = '<div class="s-hdr"><div class="s-hdr-bg"><div class="s-hdr-drift" id="d-drift"></div><div class="s-hdr-img" id="d-himg"></div><div class="s-hdr-scrim"></div></div>' +
+      var hdr = '<div class="s-hdr"><div class="s-hdr-bg"><div class="s-hdr-drift" id="d-drift"></div><div class="s-hdr-img" id="d-himg"></div><div class="s-hdr-scrim"></div>' +
+        '<div class="s-hdr-sky" id="d-sky"><canvas></canvas></div><div class="s-hdr-skyscrim"></div></div>' +
         '<div class="s-path" id="d-path"></div><div class="s-rail" id="d-rail"></div><div class="s-tools" id="d-tools"></div></div>';
       var dash = '<div class="s-page" data-page="dash"><div class="d-banner" id="d-banner"><div class="d-img" id="d-img"></div><div class="d-scrim"></div><p class="d-welcome" id="d-welcome"></p></div>' +
         '<div class="d-title"><div class="h1" id="d-title"></div><div class="d-act">' + pbtn('pri', 'New page') + pbtn('sec', 'Invite players') + '</div></div>' +
@@ -792,7 +829,30 @@
           '<div class="d-act">' + pbtn('pri', 'Edit page') + pbtn('sec', 'Share with players') + '</div></div>' +
           '<div class="pcard lifts e-info"><p class="c-h">At a glance</p><dl><dt>Population</dt><dd>18,400</dd><dt>Ruler</dt><dd>Ysolde Vane</dd><dt>Founded</dt><dd>212 AF</dd></dl>' +
           '<div class="tags"><span class="tag">#cinder-reach</span><span class="tag">#capital</span></div></div></div></div>';
-      return '<div class="site" aria-hidden="true">' + sb + '<div class="s-main">' + hdr + dash + city + '</div></div>';
+      return '<div class="site" aria-hidden="true">' + sb + '<div class="s-main">' + hdr + dash + city + sheetHTML() + '</div></div>';
+    }
+    // A sample hero on a real sheet root built from the pieces a system's sheet
+    // uses (paper.css), so sheet_styles.css draws it in the draft's style exactly
+    // as it draws the campaign's own sheets. data-sheet-preview keeps the saved
+    // style from overriding the draft.
+    function sheetHTML(){
+      function stat(k, v){ return '<span class="ps-stat"><span class="paper-kind">' + k + '</span><b>' + v + '</b></span>'; }
+      function ab(k, score, mod){ return '<span class="ps-ab"><span>' + k + '</span><b>' + mod + '</b><small>' + score + '</small></span>'; }
+      function line(name, note){ return '<li><b>' + name + '</b><span>' + note + '</span></li>'; }
+      return '<div class="s-page" data-page="sheet" hidden><div class="pv-sheet" id="d-sheet" data-sheet data-sheet-preview data-sheet-style="modern">' +
+        '<div class="paper-stack"><div class="paper ps">' +
+          '<div class="ps-head"><span class="ps-por">SW</span><span class="ps-id"><span class="paper-kind">Ranger · Level 6</span><span class="paper-title">Sera Windrose</span></span>' +
+            '<span class="ps-stats">' + stat('Armour', '15') + stat('Speed', '30 ft') + '</span></div>' +
+          '<div class="ps-body"><div class="ps-col">' +
+            '<div class="paper-pull ps-sec"><span class="paper-kind">Health</span><span class="ps-hp"><b>38</b>/ 52</span><span class="ps-bar"><i></i></span></div>' +
+            '<div class="paper-pull ps-sec"><span class="paper-kind">Abilities</span><span class="ps-abs">' +
+              ab('Str', 10, '+0') + ab('Dex', 18, '+4') + ab('Con', 14, '+2') + ab('Int', 12, '+1') + ab('Wis', 16, '+3') + ab('Cha', 8, '−1') + '</span></div>' +
+          '</div><div class="ps-col">' +
+            '<div class="paper-pull ps-sec"><span class="paper-kind">Features</span><ul class="ps-list">' + line('Hunter’s Mark', '1 hour') + line('Favoured Foe', '3 a day') + line('Natural Explorer', 'Forest') + '</ul></div>' +
+            '<div class="paper-pull ps-sec"><span class="paper-kind">Items</span><ul class="ps-list">' + line('Longbow', '1d8 + 4') + line('Cloak of Embers', 'Attuned') + '</ul></div>' +
+            '<div class="paper-slip ps-slip">Owes Old Brannoc three silver for the room at the Warm Ash.</div>' +
+          '</div></div>' +
+        '</div></div></div></div>';
     }
     function piecesHTML(){
       function pc(label, body){ return '<div class="pc"><div class="pc-l">' + label + '</div>' + body + '</div>'; }
@@ -835,7 +895,6 @@
     }
     function railHTML(d){
       var h = d.header.widgets.map(function(w){
-        if (w === 'era') return '<div class="rw"><span class="k">Era</span><span class="v">Age of Ash</span></div>';
         if (w === 'links') return '<div class="rw"><span class="k">Links</span><span class="v">' + esc(d.header.links.map(function(l){ return l.label.trim(); }).filter(Boolean).join(' · ') || 'No links yet') + '</span></div>';
         if (w === 'text') return '<div class="rw q"><span class="k">Note</span><span class="v">' + esc(d.header.text.trim() || 'Nothing written yet') + '</span></div>';
         if (w === 'search') return '<div class="rw srch">' + IC('i-search') + '<span>Search ' + esc(CAMPAIGN) + '…</span></div>';
@@ -856,7 +915,7 @@
       pv.dataset.navChosen = d.nav.style;
       pv.dataset.strength = d.nav.strength;
       pv.dataset.btn = d.buttons.style;
-      pv.dataset.hdr = d.header.bg === 'sky' ? 'solid' : d.header.bg;
+      pv.dataset.hdr = d.header.bg;
       pv.dataset.hdrh = d.header.height;
       pv.dataset.corner = d.sidebar.corner;
       pv.dataset.reduce = reduce ? '1' : '0';
@@ -878,11 +937,15 @@
       setBg($('#d-bnr'), d.sidebar.corner === 'banner' ? imgURL(d.sidebar.banner) : '');
       setText($('#d-bsub'), d.sidebar.corner === 'subtitle' ? d.sidebar.subtitle.trim() : '');
       setBg($('#d-himg'), imgURL(d.header.image));
-      setHTML($('#d-path'), ui.page === 'dash' ? '<b>Dashboard</b>' : '<span>Locations</span>' + IC('i-chev-r') + '<span>Cities</span>' + IC('i-chev-r') + '<b>Emberfall</b>');
+      setHTML($('#d-path'), {
+        dash:'<b>Dashboard</b>',
+        city:'<span>Locations</span>' + IC('i-chev-r') + '<span>Cities</span>' + IC('i-chev-r') + '<b>Emberfall</b>',
+        sheet:'<span>Characters</span>' + IC('i-chev-r') + '<b>Sera Windrose</b>'
+      }[ui.page]);
       setHTML($('#d-rail'), railHTML(d));
       setHTML($('#d-tools'), toolsHTML(d));
       $$('.s-page', pv).forEach(function(p){ p.hidden = p.dataset.page !== ui.page; });
-      var act = ui.page === 'dash' ? 'dash' : 'cities';
+      var act = { dash:'dash', city:'cities', sheet:'' }[ui.page];
       $$('.site .s-row[data-row]', pv).forEach(function(r){ r.classList.toggle('on', r.dataset.row === act); });
       // The page name sits in the active row when it names a page inside it.
       $$('.s-row .pn').forEach(function(pn){
@@ -891,6 +954,10 @@
         setText(pn, name);
         var ct = $('.ct', row); if (ct) ct.hidden = !!name;
       });
+      // The engine loads the style's fonts and textures; it may arrive after the first render.
+      var sh = $('#d-sheet'), SM = window.Chronicle && Chronicle.sheetMotion;
+      if (sh.getAttribute('data-sheet-style') !== d.sheet.style) sh.setAttribute('data-sheet-style', d.sheet.style);
+      if (SM && SM.style && sh._st !== d.sheet.style){ SM.style(sh); sh._st = d.sheet.style; }
       var H = headFont(d.type.heading), B = bodyFont(d.type.body), sc = SCALES[d.type.scale];
       setHTML($('#ts-meta'), '<span>Headings <b>' + esc(H[0] === 'same' ? B[1] : H[1]) + '</b></span><span>Text <b>' + esc(B[1]) + '</b></span><span><b>' + sc[1] + '</b> size, ' + sc[0] + ' px text</span>');
     }
@@ -923,6 +990,7 @@
       $('#h-grad').hidden = bg !== 'gradient' && bg !== 'moving';
       $('#h-anim-h').hidden = bg !== 'moving';
       $('#h-img').hidden = bg !== 'image';
+      $('#h-sky').hidden = bg !== 'sky';
       var lg = logoHTML(d), lt = $('#brand-logo-t');
       if (!imgURL(d.brand.logo)){ lt.className = 'thumb sq'; setHTML(lt, IC('i-image')); lt.style.backgroundImage = ''; lt._bg = ''; }
       else { lt.className = 'thumb sq'; setHTML(lt, '<span class="' + lg[0] + '" style="width:44px;height:44px;border-radius:9px">' + lg[1] + '</span>'); }
@@ -1013,6 +1081,7 @@
       syncControls(theme);
       syncLookTiles(theme);
       syncStatus();
+      if (SHELL) toShell();
       runMotion();
     }
 
@@ -1074,12 +1143,27 @@
       $$('#preview .hl').forEach(function(hl){ hlMotion(hl, !reduce && !hl.closest('.zp.off') && hl.offsetParent !== null); });
       $$('.nt-s .hl').forEach(function(hl){ var vis = hl.offsetParent !== null; hlMotion(hl, vis && !reducedDevice() && !!hl.closest('.nav-tile.play'), vis && !reducedDevice()); });
       driftSync();
+      skySync();
     }
 
     /* ---------- The moving header, in the example ----------
        The same slide the real header makes (header_motion.js), on the shared
        MotionRest clock, so it rests when nobody is using the page. */
     var drift = null;
+    /* ---------- The sky header, in the example ----------
+       The campaign's own sky (header_sky.js) when it has a calendar; the
+       still night colours behind it otherwise. Held still under either
+       reduce choice, as the real header is. */
+    var sky = null;
+    function skyStop(){ if (sky){ if (sky.run) sky.run.destroy(); sky = null; } $('#d-sky').classList.remove('is-ready'); }
+    function skySync(){
+      var want = draft.header.bg === 'sky' && !!SKY.calendarId && !!(window.Chronicle && Chronicle.headerSky);
+      if (!want){ skyStop(); return; }
+      var still = reduceAll();
+      if (sky && sky.still === still) return;
+      skyStop();
+      sky = { run:Chronicle.headerSky.mount($('#d-sky'), { campaignId:CID, calendarId:SKY.calendarId, still:still }), still:still };
+    }
     function driftStop(){ if (drift){ if (drift.run) drift.run.destroy(); drift = null; } }
     function driftSync(){
       var el = $('#d-drift'), vertical = draft.header.dir === 'b';
@@ -1298,7 +1382,6 @@
       }
       if (t === 'btn'){ var b = BTN_STYLES.filter(function(x){ return x[0] === p[1]; })[0]; return '<b>' + esc(b[1]) + '</b><span>' + esc(b[2]) + '</span>'; }
       if (t === 'menu'){ var mc = MENU_COLOURS.filter(function(x){ return x[0] === p[1]; })[0]; return '<b>' + esc(mc[1]) + '</b><span>' + esc(mc[2]) + '</span>'; }
-      if (t === 'hint') return '<b>Sky</b><span>Coming soon: the living sky over your world as it is in the story right now.</span>';
       return '';
     }
     function hcCtl(el){ return el.matches('input, button') ? el : ($('input, button', el) || el); }
@@ -1370,6 +1453,7 @@
         if (openW) closeWset(false);
         if (id === 'nav' && ui.page !== 'city') setPage('city');
         else if (id === 'brand' && ui.page !== 'dash') setPage('dash');
+        else if (id === 'sheet' && ui.page !== 'sheet') setPage('sheet');
         else update();
         var tl = $('#tl');
         if (tl.scrollWidth > tl.clientWidth + 1) tl.scrollLeft = tab.offsetLeft - tl.offsetLeft - (tl.clientWidth - tab.offsetWidth) / 2;
@@ -1387,6 +1471,45 @@
       update(); settle(); tidyPictures();
       $('#tab-' + sec).focus();
       toast(sectionName(sec) + (sec === 'brand' ? ' is back to what is saved.' : ' is back to the ' + look(draft.look).name + ' look.'));
+    }
+
+    /* ---------- Inside Customize's frame ---------- */
+    // The look's section of the one draft: the editor's own state, the
+    // shape PUT /appearance takes (what Save applies), and the save bar's
+    // lines. Absent while the draft matches what is saved.
+    function shellValue(){
+      var ch = changedSections();
+      if (!ch.length) return null;
+      var base = '/campaigns/' + encodeURIComponent(CID) + '/customize/look#';
+      return { draft:draft, input:toInput(draft), _changes:ch.map(function(id){ return { label:'Look: ' + sectionName(id), href:base + id }; }) };
+    }
+    function toShell(){
+      var v = shellValue(), sig = JSON.stringify(v);
+      if (sig === shellSent) return;
+      shellSent = sig;
+      shellSet(v);
+    }
+    // The frame changed the draft (Undo, Redo, Discard, Save): show it.
+    function fromShell(e){
+      var d = e.detail || {};
+      if (!alive) return;
+      if (d.reason === 'publish'){
+        if ((d.applied || []).indexOf('look') < 0) return;
+        saved = clone(draft); BASE = clone(draft); lookTileTheme = null; ui.saved = true;
+        shellSent = 'null'; update();
+        refreshSite();
+        return;
+      }
+      var held = d.draft && d.draft.look;
+      clearErrors();
+      if (pick) closePicker(false);
+      draft = held && held.draft ? fromServer(held.draft) : clone(saved);
+      shellSent = JSON.stringify(shellValue());
+      update(); settle();
+    }
+    function sectionFromHash(){
+      var id = (location.hash || '').slice(1);
+      if (SECTIONS.some(function(s){ return s.id === id; })) selectSection(id, true);
     }
 
     /* ---------- Save, Discard, Undo ---------- */
@@ -1409,7 +1532,7 @@
           dir:drift ? 'to-' + h.dir : '', image:bg === 'image' ? pic(h.image) : '', scrim:h.scrim,
           widgets:h.widgets.slice(), links:h.links.filter(function(l){ return l.label.trim() || l.url.trim(); }), text:h.text },
         colours:{ accent:d.colours.accent, s1:d.colours.s1 || '', s2:d.colours.s2 || '', page:d.colours.page, contrast:d.colours.contrast },
-        nav:clone(d.nav), type:clone(d.type), buttons:clone(d.buttons), motion:clone(d.motion), hover:clone(d.hover),
+        nav:clone(d.nav), type:clone(d.type), buttons:clone(d.buttons), motion:clone(d.motion), hover:clone(d.hover), sheet:clone(d.sheet),
         // The companion of each choice is sent only while that choice is
         // selected, so nothing stale is stored.
         sidebar:{ colour:d.colours.sidebar, own:d.colours.sidebar === 'own' ? sb.own : '', corner:sb.corner,
@@ -1432,6 +1555,10 @@
     // failures are ignored and the file simply stays.
     function pictureNames(d){ return d ? [d.brand.logo, d.brand.backdrop, d.header.image, d.sidebar.banner] : []; }
     function tidyPictures(){
+      // A kept draft can bring any picture back later (Undo, another visit),
+      // so inside the frame nothing is tidied. TODO(#1361): tidy once the
+      // frame can say which pictures no draft or Undo step still holds.
+      if (SHELL) return;
       var keep = {};
       [draft, saved, undoDraft].forEach(function(d){ pictureNames(d).forEach(function(n){ keep[n] = true; }); });
       Object.keys(uploaded).forEach(function(n){
@@ -1619,13 +1746,14 @@
       colours:{ all:['.p-link', '.tag', '.chipe', '.czbadge', '.band', '.tev.now', '.av'], tip:'Links, tags, events and badges' },
       type:   { dash:['.d-title .h1', '.c-h'], city:['.e-head', '.e-body p'], tip:'Headings and text' },
       buttons:{ all:['.pbtn'], tip:'Every button' },
-      motion: { all:['.pcard'], tip:'Cards and how they lift' }
+      motion: { all:['.pcard'], tip:'Cards and how they lift' },
+      sheet:  { all:['#d-sheet'], tip:'Every character sheet' }
     };
     // Most specific first: a button inside a card is a button.
     var FZ_HIT = [['.pbtn', 'buttons'], ['.p-link, .tag, .chipe, .czbadge, .band, .tev.now, .av', 'colours'],
       ['.h1, .c-h, .e-head, .e-body p', 'type'], ['.s-bnr, .s-bsub', 'sidebar'], ['.s-brand, #d-banner', 'brand'], ['.s-hdr', 'header'], ['.s-list', 'nav'], ['.s-sb', 'sidebar'],
-      ['.pcard', 'motion'], ['.s-page', 'colours']];
-    var FZ_OF = { brand:'brand', header:'header', sidebar:'sidebar', nav:'nav', colours:'colours', type:'type', buttons:'buttons', motion:'motion' };
+      ['.pcard', 'motion'], ['[data-sheet]', 'sheet'], ['.s-page', 'colours']];
+    var FZ_OF = { brand:'brand', header:'header', sidebar:'sidebar', nav:'nav', colours:'colours', type:'type', buttons:'buttons', motion:'motion', sheet:'sheet' };
     var fzLock = false, fzLastFlash = {}, fzRaf = 0, fzHovSec = null;
     function fzSite(){ return $('#site-wrap .site'); }
     function fzRects(sec){
@@ -1789,6 +1917,12 @@
       // Chronicle's theme toggle flips the dark class; the preview follows it
       // until the owner picks Light or Dark for the preview themselves.
       if (window.MutationObserver){ mo = new MutationObserver(themeChanged); mo.observe(root, { attributes:true, attributeFilter:['class'] }); }
+      if (SHELL){
+        shellSent = JSON.stringify(shellValue());
+        on(document, 'chronicle:customize-draft', fromShell);
+        on(window, 'hashchange', sectionFromHash);
+        sectionFromHash();
+      }
     }
 
     /* ---------- Device motion and Chronicle's theme ---------- */
@@ -1810,6 +1944,7 @@
       if (mo) mo.disconnect();
       ringAnims.forEach(function (a) { a.forEach(function (x) { x.cancel(); }); });
       driftStop();
+      skyStop();
       clearTimeout(toastT); clearTimeout(hcTimer);
       cancelAnimationFrame(fzRaf); clearTimeout(discardT);
       playTimers.forEach(clearTimeout);

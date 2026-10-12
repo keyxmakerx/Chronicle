@@ -26,7 +26,6 @@
 {
   "id": "mysystem",
   "name": "My Game System",
-  "version": "1.0.0",
   "api_version": "1",
   "status": "available"
 }
@@ -40,7 +39,8 @@
 - Foundry system IDs may differ: `foundry_system_id: "draw-steel"`
 
 ### Version Numbering
-- Use semantic versioning: `MAJOR.MINOR.PATCH`
+- The version is the GitHub release tag; the manifest needs no `version` field
+- Tag releases with semantic versioning: `MAJOR.MINOR.PATCH`
 - Bump MAJOR for breaking manifest schema changes
 - Bump MINOR for new categories or significant data additions
 - Bump PATCH for data corrections and small additions
@@ -132,7 +132,6 @@ systems/mysystem/
   "id": "mysystem",
   "name": "My Game System",
   "description": "A custom TTRPG system for Chronicle.",
-  "version": "1.0.0",
   "author": "Your Name",
   "license": "CC-BY-4.0",
   "icon": "fa-dice-d20",

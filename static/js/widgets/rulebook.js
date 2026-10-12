@@ -14,15 +14,30 @@
  * rules (paragraphs, lists, bold, italic, [[terms]]) are applied to the escaped
  * result. Theme values only reach CSS through setProperty on an allow-list.
  *
- * Mount: <div data-widget="rulebook" data-campaign-id data-book-url>
+ * Mount: <div data-widget="rulebook" data-campaign-id data-book-url>, or
+ * data-book-json for a book shown inside another page (a draft under review),
+ * which keeps no place and only answers keys pressed inside it.
  */
 (function () {
   'use strict';
 
   var PLACE_KEY = 'chronicle.rulebook.place.';
   var NARROW_QUERY = '(max-width: 900px)';
+  // The screen folds away in this long; a card list this long gets a find box.
+  var SCREEN_CLOSE_MS = 380;
+  var FILTER_AT = 8;
   var TURN_MS = { flip: 780, slide: 520, fade: 380 };
   var SWIPE_PX = 60;
+  // The cover swings open this long; the Sections ribbon rolls up or down in
+  // BM_MS, and a page is only turned to once the ribbon has rolled back up.
+  var FRONT_MS = 1300;
+  var BM_MS = 560;
+  var LOOKS = { 'paper': 1, 'bold': 1 };
+  var FRONT_KEY = 'chronicle.rulebook.cover.';
+  // Cover and font addresses are same-origin paths the server wrote; anything
+  // else (another host, a scheme, a path climbing out) is not used.
+  var ASSET_RE = /^\/(?!\/)[A-Za-z0-9._~\/%-]{1,300}$/;
+  var MAX_FONTS = 8;
 
   var THEME_COLOURS = { 'paper': 1, 'paper-alt': 1, 'ink': 1, 'ink-soft': 1, 'muted': 1, 'edge': 1, 'accent': 1, 'cover': 1 };
   var THEME_FONTS = { 'heading-font': 1, 'body-font': 1 };
@@ -137,10 +152,13 @@
       systemName: str(json.systemName),
       turn: TURN_MS[turn] ? turn : 'flip',
       theme: isObj(json.theme) ? json.theme : {},
-      look: json.look === 'paper' ? 'paper' : '',
+      look: typeof json.look === 'string' && has(LOOKS, json.look) ? json.look : '',
+      cover: assetURL(json.cover),
+      fonts: readFonts(json.fonts),
       tabs: arr(json.tabs).filter(function (id) { return typeof id === 'string' && SLUG_RE.test(id); }),
       start: SLUG_RE.test(str(json.start)) ? str(json.start) : '',
       first: SLUG_RE.test(str(json.first)) ? str(json.first) : '',
+      screen: SLUG_RE.test(str(json.screen)) ? str(json.screen) : '',
       isDirector: json.isDirector === true,
       canEdit: json.canEdit === true,
       terms: terms,
@@ -171,6 +189,25 @@
     };
   }
 
+  function assetURL(v) {
+    var u = str(v);
+    return ASSET_RE.test(u) && u.indexOf('..') < 0 ? u : '';
+  }
+
+  function readFonts(list) {
+    var out = [];
+    arr(list).filter(isObj).slice(0, MAX_FONTS).forEach(function (f) {
+      var family = str(f.family).replace(/["',\\]/g, '').trim().slice(0, 100), url = assetURL(f.url);
+      if (!family || !url) return;
+      out.push({
+        family: family, url: url,
+        weight: intOr(f.weight, 100, 900, 400),
+        style: f.style === 'italic' ? 'italic' : 'normal'
+      });
+    });
+    return out;
+  }
+
   function errorMessage(err) {
     var s = err && err.status;
     if (s === 401 || s === 403) return 'You do not have access to this book.';
@@ -186,6 +223,9 @@
     this.el = el;
     this.campaignId = str(config.campaignId);
     this.url = str(config.bookUrl);
+    // data-book-json carries the book itself (a draft shown for review
+    // before it is saved); such a book has no address to search or edit.
+    this.inline = str(config.bookJson);
     this.data = null;
     this.view = 'director';
     this.items = [];
@@ -205,6 +245,13 @@
     this.pendingEntry = '';
     this.searchSeq = 0;
     this.searchTimer = 0;
+    this.screenTimer = 0;
+    this.screenPages = [];
+    this.screenAtStart = false;
+    this.deepLink = false;
+    this.frontShut = false;
+    this.frontTimer = 0;
+    this.faces = [];
     this.inst = ++uid;
   }
 
@@ -218,6 +265,7 @@
   Rulebook.prototype.start = function () {
     var self = this;
     this.el.classList.add('rb');
+    if (this.inline) this.el.classList.add('rb-inline');
     this.on(document, 'click', function (e) { self.onClick(e); });
     this.on(document, 'keydown', function (e) { self.onKey(e); });
     // Rule words open Chronicle's shared hover card, in the campaign's look.
@@ -248,9 +296,12 @@
     this.timers = [];
     clearTimeout(this.leafTimer);
     clearTimeout(this.searchTimer);
+    clearTimeout(this.screenTimer);
+    clearTimeout(this.frontTimer);
+    this.unloadFonts();
     this.destroyNested(this.el);
     this.el.innerHTML = '';
-    this.el.classList.remove('rb');
+    this.el.classList.remove('rb', 'rb-inline', 'rb-closed');
     this.el.removeAttribute('aria-busy');
   };
 
@@ -270,6 +321,13 @@
 
   Rulebook.prototype.load = function () {
     var self = this, seq = ++this.loadSeq;
+    if (this.inline) {
+      var parsed = null;
+      try { parsed = normalize(JSON.parse(this.inline)); } catch (e) { parsed = null; }
+      if (parsed) this.open(parsed);
+      else this.showState('error', errorMessage({ unreadable: true }));
+      return;
+    }
     if (!this.url) { this.showState('error', 'This page has no book address.'); return; }
     this.showState('loading');
     Chronicle.apiFetch(this.url).then(function (res) {
@@ -304,9 +362,14 @@
     this.data = data;
     this.applyTheme(data.theme);
     this.view = data.isDirector ? 'director' : 'player';
-    var place = loadPlace(this.campaignId);
+    var place = this.inline ? null : loadPlace(this.campaignId);
     if (data.isDirector && place && (place.view === 'player' || place.view === 'director')) this.view = place.view;
 
+    this.unloadFonts();
+    this.loadFonts();
+    this.frontShut = false;
+    this.el.classList.remove('rb-closed');
+    clearTimeout(this.frontTimer);
     this.el.innerHTML = this.frameHTML();
     this.el.setAttribute('aria-busy', 'false');
     var q = this.el.querySelector.bind(this.el);
@@ -324,7 +387,112 @@
     this.resultsEl = q('.rb-results');
 
     this.tabsEl = q('.rb-tabs');
-    this.rebuild(this.openingKey(place));
+    this.ribbonEl = q('.rb-ribbon');
+    this.screenEl = q('.rb-screen');
+    this.sscrimEl = q('.rb-sscrim');
+    this.frontEl = q('.rb-front');
+    this.bmEl = q('.rb-bm');
+    this.bmTab = q('.rb-bm-tab');
+    this.bmRoll = q('.rb-bm-roll');
+    this.bmList = q('.rb-bm-list');
+    var key = this.openingKey(place);
+    this.rebuild(key);
+    // The cover shows once per visit, and never over a link that names a
+    // chapter: that reader asked for a page, not the front of the book.
+    if (this.frontEl && !this.deepLink && !frontSeen(this.campaignId)) {
+      this.frontShut = true;
+      this.el.classList.add('rb-closed');
+      this.frontEl.hidden = false;
+    } else if (this.screenAtStart) {
+      this.openScreen();
+    }
+  };
+
+  // --- The book's own fonts and cover -------------------------------------
+  // Faces are registered with the FontFace API, which is @font-face without
+  // building CSS from package text. The theme's heading-font and body-font
+  // name the family to use; until a face loads the next font in that list
+  // shows.
+
+  Rulebook.prototype.loadFonts = function () {
+    var self = this;
+    if (this.inline || !window.FontFace || !document.fonts) return;
+    this.data.fonts.forEach(function (f) {
+      try {
+        // The family is passed bare: quotes here would become part of its name.
+        var face = new FontFace(f.family, 'url("' + f.url + '") format("woff2")', { weight: String(f.weight), style: f.style, display: 'swap' });
+        self.faces.push(face);
+        face.load().then(function () { if (!self.dead) document.fonts.add(face); }, function () { /* the theme's fallback font stays */ });
+      } catch (e) { /* the theme's fallback font stays */ }
+    });
+  };
+
+  Rulebook.prototype.unloadFonts = function () {
+    this.faces.forEach(function (face) { try { document.fonts.delete(face); } catch (e) { /* not added */ } });
+    this.faces = [];
+  };
+
+  function frontSeen(campaignId) {
+    try { return window.sessionStorage.getItem(FRONT_KEY + campaignId) === '1'; } catch (e) { return false; }
+  }
+
+  function markFrontSeen(campaignId) {
+    try { window.sessionStorage.setItem(FRONT_KEY + campaignId, '1'); } catch (e) { /* the cover shows again next time */ }
+  }
+
+  // The cover is a picture of the closed book laid over the pages. It
+  // belongs to the reader, not the page: the bar stays, the pages under it
+  // are hidden from sight and from the keyboard until it opens.
+  Rulebook.prototype.frontHTML = function () {
+    var d = this.data;
+    if (!d.cover || this.inline) return '';
+    return '<div class="rb-front" hidden><div class="rb-front-desk"></div><div class="rb-front-book"><div class="rb-front-board">' +
+      '<button type="button" class="rb-front-face" data-act="front" aria-label="Open the ' + esc(d.title) + '">' +
+      '<img src="' + esc(d.cover) + '" alt="' + esc(d.title) + ': the cover" draggable="false">' +
+      '<span class="rb-front-hint" aria-hidden="true">Open</span></button>' +
+      '<div class="rb-front-back" aria-hidden="true"></div></div></div></div>';
+  };
+
+  Rulebook.prototype.openFront = function () {
+    var self = this;
+    if (!this.frontEl || !this.frontShut) return;
+    // Focus follows only a keyboard opening; after a click it would draw a
+    // focus ring on a page the reader did not ask to focus.
+    var keyboard = !!document.activeElement && document.activeElement.matches && document.activeElement.matches(':focus-visible');
+    this.frontShut = false;
+    markFrontSeen(this.campaignId);
+    this.el.classList.remove('rb-closed');
+    this.frontEl.classList.add('open');
+    clearTimeout(this.frontTimer);
+    this.frontTimer = setTimeout(function () {
+      if (self.dead) return;
+      self.frontEl.hidden = true;
+      if (self.screenAtStart) { self.screenAtStart = false; self.openScreen(); return; }
+      var page = self.pr && self.pr.querySelector('.rb-scroll');
+      if (keyboard && page) page.focus({ preventScroll: true });
+    }, reduced() ? 0 : FRONT_MS);
+  };
+
+  Rulebook.prototype.shutFront = function () {
+    var self = this;
+    if (!this.frontEl || this.frontShut) return;
+    this.closeDrawer(false);
+    this.closeScreen(false);
+    this.bmSet(false, false);
+    this.hideCard();
+    this.closeResults();
+    this.frontShut = true;
+    this.frontEl.hidden = false;
+    this.frontEl.classList.add('open');
+    void this.frontEl.offsetWidth; // let the open state paint so the swing back is animated
+    this.frontEl.classList.remove('open');
+    clearTimeout(this.frontTimer);
+    this.frontTimer = setTimeout(function () {
+      if (self.dead) return;
+      self.el.classList.add('rb-closed');
+      var face = self.frontEl.querySelector('.rb-front-face');
+      if (face) face.focus({ preventScroll: true });
+    }, reduced() ? 0 : FRONT_MS);
   };
 
   // Where the book opens: a chapter named in the address (#making-a-hero),
@@ -334,10 +502,14 @@
     var d = this.data, hash = '';
     try { hash = decodeURIComponent(String(window.location.hash || '').slice(1)); } catch (e) { hash = ''; }
     var key = SLUG_RE.test(hash) ? this.chapterKey(hash) : '';
+    this.deepLink = !!key;
     if (key) return key;
     var saved = place && typeof place.key === 'string' ? place.key : '';
     if (!saved && d.first) key = this.chapterKey(d.first);
-    if (!key && d.start) key = this.chapterKey(d.start);
+    // A book that starts on its screen opens the screen over the page the
+    // reader was on, since the screen is not a page of its own.
+    if (d.start && d.start === d.screen) this.screenAtStart = !hash;
+    else if (!key && d.start) key = this.chapterKey(d.start);
     return key || saved;
   };
 
@@ -361,6 +533,7 @@
   };
 
   Rulebook.prototype.goChapter = function (id) {
+    if (id && id === this.data.screen) { this.openScreen(); return; }
     var n = this.firstItemOf(id);
     if (n >= 0) this.goItem(n);
   };
@@ -374,7 +547,7 @@
     d.parts.forEach(function (part) {
       part.chapters.forEach(function (ch) { seen[ch.id] = ch; });
     });
-    d.tabs.forEach(function (id) { if (seen[id]) tabs.push({ id: id, label: seen[id].title }); });
+    d.tabs.forEach(function (id) { if (seen[id] && id !== d.screen) tabs.push({ id: id, label: seen[id].title }); });
     var house = '';
     d.parts.forEach(function (part) {
       part.chapters.forEach(function (ch) { if (!house && ch.id.indexOf(HOUSE_PREFIX) === 0) house = ch.id; });
@@ -411,23 +584,115 @@
     var edit = d.canEdit && this.url
       ? '<button type="button" class="rb-btn" data-act="edit" data-href="' + esc(this.url.replace(/[?#].*$/, '').replace(/\/+$/, '') + '/edit') + '">Edit</button>'
       : '';
+    // The Directors' own ancestries, kits and other picks are house rules, so
+    // their page is reached from the rulebook; the same Directors may edit both.
+    var own = d.canEdit && this.campaignId && !this.inline
+      ? '<button type="button" class="rb-btn" data-act="edit" data-own-entries-link="true" data-href="/campaigns/' +
+        encodeURIComponent(this.campaignId) + '/characters/entries">Your own entries</button>'
+      : '';
     return '<div class="rb-bar">' +
       '<div class="rb-brand">' + (d.mark ? '<span class="rb-mark" aria-hidden="true">' + esc(d.mark) + '</span>' : '') +
       '<div class="rb-name"><span class="rb-title">' + esc(d.title) + '</span>' +
       (d.systemName ? '<small>' + esc(d.systemName) + '</small>' : '') + '</div></div>' +
       '<button type="button" class="rb-btn" data-act="toc" aria-expanded="false" aria-label="Open the contents"><span aria-hidden="true">☰</span> Contents</button>' +
       '<span class="rb-where"></span><span class="rb-sp"></span>' +
-      '<div class="rb-search" role="search"><span class="rb-search-ic" aria-hidden="true">⌕</span>' +
+      (this.inline ? '' : '<div class="rb-search" role="search"><span class="rb-search-ic" aria-hidden="true">⌕</span>' +
       '<input type="search" class="rb-search-in" data-search placeholder="Search the book" aria-label="Search the book" autocomplete="off" spellcheck="false"' +
       ' aria-controls="' + this.domId('results') + '" aria-expanded="false"><kbd aria-hidden="true">/</kbd>' +
-      '<div class="rb-results" id="' + this.domId('results') + '" role="region" aria-label="Search results" hidden></div></div>' +
-      edit + seg + '</div>' + this.tabsHTML() +
+      '<div class="rb-results" id="' + this.domId('results') + '" role="region" aria-label="Search results" hidden></div></div>') +
+      own + edit + seg + (d.cover && !this.inline ? '<button type="button" class="rb-btn rb-shut" data-act="shut">Close the book</button>' : '') +
+      this.ribbonHTML() + '</div>' + this.tabsHTML() + this.bmHTML() +
       '<div class="rb-book">' +
       '<article class="rb-page l"></article><div class="rb-spine" aria-hidden="true"></div><article class="rb-page r"></article>' +
       '<button type="button" class="rb-curl l" data-act="prev" aria-label="Previous page"></button>' +
       '<button type="button" class="rb-curl r" data-act="next" aria-label="Next page"></button>' +
-      '<div class="rb-scrim"></div><aside class="rb-drawer" aria-label="Contents"></aside></div>' +
+      '<div class="rb-scrim"></div><aside class="rb-drawer" aria-label="Contents"></aside>' +
+      (this.screenChapter() ? '<div class="rb-sscrim" data-act="screen"></div><section class="rb-screen" id="' + this.domId('screen') + '" aria-label="' +
+        esc(this.screenChapter().title) + '" hidden></section>' : '') + this.frontHTML() + '</div>' +
       '<div class="rb-sr" aria-live="polite"></div>';
+  };
+
+  // --- The screen ------------------------------------------------------------
+  // A book can name one chapter as its screen: the quick-reference pages a
+  // player reaches for mid-game. It is not a page of the book. A ribbon under
+  // the bar drops it over whatever page is open, and Escape, the ribbon or a
+  // click on the book folds it away.
+
+  Rulebook.prototype.screenChapter = function () {
+    var id = this.data.screen, found = null;
+    if (!id) return null;
+    this.data.parts.forEach(function (part) {
+      part.chapters.forEach(function (ch) { if (!found && ch.id === id) found = ch; });
+    });
+    return found;
+  };
+
+  Rulebook.prototype.ribbonHTML = function () {
+    var ch = this.screenChapter();
+    if (!ch) return '';
+    return '<button type="button" class="rb-ribbon" data-act="screen" aria-expanded="false" aria-controls="' + this.domId('screen') + '">' +
+      '<span class="rb-ribbon-t">' + esc(ch.title) + '</span> <span class="rb-chev" aria-hidden="true">\u25BE</span><kbd aria-hidden="true">P</kbd></button>';
+  };
+
+  Rulebook.prototype.screenOpen = function () { return !!this.screenEl && this.el.classList.contains('rb-screen-open'); };
+
+  // Each page of the screen chapter is one leaf; a long card list on a leaf
+  // gets a box to find one card in it.
+  Rulebook.prototype.screenHTML = function () {
+    var self = this;
+    return this.screenPages.map(function (sp, i) {
+      return '<div class="rb-sleaf" style="--i:' + i + '"><div class="rb-scroll" tabindex="-1">' + self.pageBodyHTML('', sp.p) + '</div></div>';
+    }).join('');
+  };
+
+  Rulebook.prototype.openScreen = function () {
+    if (!this.screenEl || !this.screenPages.length || this.screenOpen()) return;
+    this.bmSet(false, false);
+    this.closeDrawer(false);
+    this.hideCard();
+    this.closeResults();
+    clearTimeout(this.screenTimer);
+    this.screenEl.classList.remove('closing');
+    this.destroyNested(this.screenEl);
+    this.screenEl.innerHTML = this.screenHTML();
+    this.screenEl.style.setProperty('--n', String(Math.min(3, this.screenPages.length)));
+    [].forEach.call(this.screenEl.querySelectorAll('.rb-cards'), function (grid) {
+      if (grid.querySelectorAll('.rb-fc').length < FILTER_AT) return;
+      grid.insertAdjacentHTML('beforebegin', '<input type="search" class="rb-cfind" data-cfind placeholder="Find one…" aria-label="Find in this list" autocomplete="off" spellcheck="false">');
+    });
+    this.mountNested(this.screenEl);
+    this.screenEl.hidden = false;
+    this.el.classList.add('rb-screen-open');
+    this.ribbonEl.setAttribute('aria-expanded', 'true');
+    var first = this.screenEl.querySelector('button, input, select, [tabindex="0"]');
+    if (first) requestAnimationFrame(function () { first.focus({ preventScroll: true }); });
+  };
+
+  Rulebook.prototype.closeScreen = function (restoreFocus) {
+    if (!this.screenOpen()) return;
+    var self = this, el = this.screenEl, hadFocus = el.contains(document.activeElement);
+    this.hideCard();
+    this.el.classList.remove('rb-screen-open');
+    this.ribbonEl.setAttribute('aria-expanded', 'false');
+    el.classList.add('closing');
+    this.screenTimer = setTimeout(function () {
+      el.classList.remove('closing');
+      el.hidden = true;
+      self.destroyNested(el);
+      el.innerHTML = '';
+    }, reduced() ? 0 : SCREEN_CLOSE_MS);
+    if (restoreFocus && hadFocus) this.ribbonEl.focus({ preventScroll: true });
+  };
+
+  // Hides the cards in a screen list that do not match what was typed.
+  Rulebook.prototype.findCard = function (input) {
+    var grid = input.nextElementSibling, q = input.value.trim().toLowerCase();
+    if (!grid || !grid.classList.contains('rb-cards')) return;
+    [].forEach.call(grid.querySelectorAll('.rb-fold'), function (f) { f.hidden = true; });
+    [].forEach.call(grid.querySelectorAll('.rb-fc'), function (c) {
+      c.setAttribute('aria-expanded', 'false');
+      c.hidden = !!q && c.textContent.toLowerCase().indexOf(q) < 0;
+    });
   };
 
   // --- Page list -------------------------------------------------------------
@@ -447,6 +712,7 @@
       if (p.director && !dir) return false;
       return dir || p.blocks.some(function (b) { return !b.director; });
     };
+    var screen = this.data.screen, screenPages = [];
     this.data.parts.forEach(function (part, pi) {
       if (part.director && !dir) return;
       part.chapters.forEach(function (ch, ci) {
@@ -454,6 +720,10 @@
         var shown = [];
         ch.pages.forEach(function (p, gi) { if (pageShows(p)) shown.push({ p: p, gi: gi }); });
         if (!shown.length) return;
+        if (ch.id === screen) {
+          shown.forEach(function (s) { screenPages.push({ ch: ch, p: s.p }); });
+          return;
+        }
         var opener = { kind: 'open', part: part, ch: ch, key: pi + '.' + ci, wide: false, pages: [] };
         var solo = shown.length === 1 && shown[0].p.wide;
         if (!solo) items.push(opener);
@@ -466,6 +736,7 @@
     });
     items.forEach(function (it, i) { it.n = i; });
     this.items = items;
+    this.screenPages = screenPages;
   };
 
   Rulebook.prototype.buildSpreads = function () {
@@ -473,11 +744,10 @@
     if (this.narrow) {
       this.items.forEach(function (it) { sp.push({ items: [it], wide: false }); });
     } else {
-      // A handbook starts every chapter on a fresh spread, so a tab or link
-      // always lands on a spread that opens with that chapter.
-      var fresh = this.data.look === 'paper';
+      // Every chapter starts on a fresh spread, in either look, so a tab or
+      // link always lands on a spread that opens with that chapter.
       this.items.forEach(function (it) {
-        if (fresh && it.kind === 'open' && cur.length) { sp.push({ items: cur, wide: false }); cur = []; }
+        if (it.kind === 'open' && cur.length) { sp.push({ items: cur, wide: false }); cur = []; }
         if (it.wide) {
           if (cur.length) { sp.push({ items: cur, wide: false }); cur = []; }
           sp.push({ items: [it], wide: true });
@@ -523,6 +793,15 @@
       }
     }
     this.at = idx < 0 ? 0 : this.spreadOf(idx);
+    if (this.bmEl) { this.bmSet(false, false); this.bmEl.hidden = !this.items.length; }
+    if (this.ribbonEl) {
+      this.ribbonEl.hidden = !this.screenPages.length;
+      this.el.classList.toggle('rb-has-screen', !!this.screenPages.length);
+      if (this.screenOpen()) {
+        this.closeScreen(false);
+        if (this.screenPages.length) this.openScreen();
+      }
+    }
     var self = this;
     [].forEach.call(this.el.querySelectorAll('[data-act="view"]'), function (b) {
       b.setAttribute('aria-pressed', b.getAttribute('data-view') === self.view ? 'true' : 'false');
@@ -605,7 +884,7 @@
         first.ch.title + (first.kind === 'page' ? ', ' + first.p.title : '');
       var place = { key: first.key };
       if (this.data.isDirector) place.view = this.view;
-      savePlace(this.campaignId, place);
+      if (!this.inline) savePlace(this.campaignId, place);
     }
   };
 
@@ -724,7 +1003,8 @@
     // Once the page list is built, a link to a chapter this view does not
     // show (a Director previewing Player view) is left out, not left dead.
     var self = this, t = this.data.terms, items = arr(b.items).filter(function (it) {
-      return isObj(it) && SLUG_RE.test(str(it.chapter)) && (!self.items.length || self.firstItemOf(it.chapter) >= 0);
+      var id = str(it.chapter);
+      return isObj(it) && SLUG_RE.test(id) && (!self.items.length || self.firstItemOf(id) >= 0 || (id === self.data.screen && self.screenPages.length > 0));
     });
     if (!items.length) return '';
     return '<nav class="rb-links" aria-label="' + esc(str(b.title) || 'Turn to') + '">' +
@@ -883,6 +1163,7 @@
     var t = e.target;
     if (!t || !t.matches) return;
     if (t.matches('[data-ix-filter]')) { this.filterIndex(t); return; }
+    if (t.matches('[data-cfind]')) { this.findCard(t); return; }
     if (t.matches('[data-search]')) {
       var self = this;
       clearTimeout(this.searchTimer);
@@ -902,7 +1183,8 @@
 
   Rulebook.prototype.findPages = function (q) {
     var dir = this.showDirector(), hits = [];
-    this.items.forEach(function (it) {
+    var screen = this.screenPages.map(function (sp) { return { kind: 'page', ch: sp.ch, p: sp.p, n: 'screen' }; });
+    screen.concat(this.items).forEach(function (it) {
       if (it.kind !== 'page' || it.ch.generated || hits.length >= 8) return;
       var title = str(it.p.title), words = plain(arr(it.p.blocks).filter(function (b) {
         return isObj(b) && (dir || (b.director !== true && b.type !== 'note'));
@@ -999,6 +1281,7 @@
   };
 
   Rulebook.prototype.pickResult = function (btn) {
+    if (btn.getAttribute('data-hit') === 'screen') { this.closeResults(); this.openScreen(); return; }
     var n = +btn.getAttribute('data-hit'), id = btn.getAttribute('data-entry') || '';
     this.closeResults();
     this.pendingEntry = '';
@@ -1037,6 +1320,24 @@
     return a;
   };
 
+  // One side of a whole spread: the spread laid out at full book width and
+  // clipped to the left or right half, so a wide page can be cut at the spine.
+  Rulebook.prototype.half = function (pages, side) {
+    var h = document.createElement('div'), row = document.createElement('div');
+    h.className = 'rb-half ' + side;
+    row.className = 'rb-spread';
+    pages.forEach(function (p) { row.appendChild(p); });
+    h.appendChild(row);
+    return h;
+  };
+
+  // Fresh pages for a spread, laid out as the book would show it.
+  Rulebook.prototype.spreadPages = function (sp) {
+    var l = this.makePage(sp.items[0], 'l');
+    if (sp.wide) { l.classList.add('wide'); return [l]; }
+    return [l, this.makePage(sp.items[1] || null, 'r')];
+  };
+
   Rulebook.prototype.settled = function () {
     if (!this.refocus) return;
     this.refocus = false;
@@ -1052,14 +1353,32 @@
     this.hideCard();
     if (reduced()) { this.at = ns; this.paint(true); this.settled(); return; }
 
-    var style = this.data.turn, two = !this.narrow;
-    if (style === 'flip' && (oldSp.wide || newSp.wide)) style = 'slide';
+    var style = this.data.turn, two = !this.narrow, cover = null;
+    // A wide page fills the whole spread. A turn to or from one still turns a
+    // leaf about the spine: each face shows its half of the spread.
+    var whole = style === 'flip' && two && (oldSp.wide || newSp.wide);
     var leaf = document.createElement('div'), face, b;
     leaf.className = 'rb-leaf ' + style + (style === 'fade' ? '' : (fwd ? ' fwd' : ' back'));
     leaf.setAttribute('aria-hidden', 'true');
     leaf.setAttribute('inert', '');
 
-    if (style === 'flip') {
+    if (whole) {
+      var oldPages = [this.snapshot(this.pl), this.snapshot(this.pr)];
+      face = this.half(oldPages, fwd ? 'r' : 'l');
+      face.classList.add('rb-face');
+      face.insertAdjacentHTML('beforeend', '<div class="rb-shade"></div>');
+      b = this.half(this.spreadPages(newSp), fwd ? 'l' : 'r');
+      b.classList.add('rb-face', 'b');
+      leaf.appendChild(face);
+      leaf.appendChild(b);
+      // Until the leaf lands, the half it has not reached yet still shows
+      // the spread being left.
+      cover = this.half([this.snapshot(this.pl), this.snapshot(this.pr)], fwd ? 'l' : 'r');
+      cover.classList.add('rb-cover', fwd ? 'l' : 'r');
+      cover.setAttribute('aria-hidden', 'true');
+      this.at = ns;
+      this.paint(false);
+    } else if (style === 'flip') {
       face = document.createElement('div');
       face.className = 'rb-face';
       face.appendChild(this.snapshot(fwd || !two ? this.pr : this.pl));
@@ -1086,10 +1405,14 @@
 
     this.busy = true;
     this.bookEl.classList.add('is-turning');
+    if (cover) this.bookEl.appendChild(cover);
     this.bookEl.appendChild(leaf);
-    [].forEach.call(leaf.querySelectorAll('.rb-page'), function (p) {
-      var s = p.querySelector('.rb-scroll');
-      if (s && p._st) s.scrollTop = p._st;
+    [leaf, cover].forEach(function (layer) {
+      if (!layer) return;
+      [].forEach.call(layer.querySelectorAll('.rb-page'), function (p) {
+        var s = p.querySelector('.rb-scroll');
+        if (s && p._st) s.scrollTop = p._st;
+      });
     });
 
     var done = false;
@@ -1099,6 +1422,7 @@
       clearTimeout(self.leafTimer);
       self.finishNow = null;
       leaf.remove();
+      if (cover) cover.remove();
       self.bookEl.classList.remove('is-turning');
       self.busy = false;
       self.paint(true);
@@ -1112,9 +1436,96 @@
 
   Rulebook.prototype.goItem = function (n) {
     this.closeDrawer(false);
+    this.closeScreen(false);
     this.refocus = true;
     this.turnTo(this.spreadOf(n));
     if (!this.busy) this.settled();
+  };
+
+  // --- The Sections bookmark -------------------------------------------------
+  // A ribbon over the top of the right-hand page. Pulled down it lists every
+  // chapter (and the pages of a chapter with several); picking one rolls it
+  // back up first and only then turns the page, so the ribbon is never in
+  // the way of the turn.
+
+  Rulebook.prototype.bmHTML = function () {
+    if (this.inline) return '';
+    var id = this.domId('bm');
+    return '<div class="rb-bm-anchor"><div class="rb-bm" data-open="false" hidden><div class="rb-bm-roll">' +
+      '<button type="button" class="rb-bm-tab" data-act="bm" aria-expanded="false" aria-controls="' + id + '"><span>Sections</span>' +
+      '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M5 8l7 8 7-8z"/></svg></button>' +
+      '<ul class="rb-bm-list" id="' + id + '"></ul></div></div></div>';
+  };
+
+  Rulebook.prototype.bmListHTML = function () {
+    var self = this, h = '', open = false, lastPart = null, num = 0, parts = {};
+    var sp = this.spreads[this.at], cur = {}, curCh = sp ? sp.items[0].ch : null;
+    if (sp) sp.items.forEach(function (it) { cur[it.n] = true; });
+    this.items.forEach(function (it) { parts[it.part.title] = true; });
+    var grouped = Object.keys(parts).length > 1;
+    this.items.forEach(function (it) {
+      if (it.kind === 'open' || it.solo) {
+        if (open) h += '</li>';
+        if (grouped && it.part !== lastPart) {
+          lastPart = it.part;
+          h += '<li class="rb-bm-part">' + esc(it.part.title) + '</li>';
+        }
+        num++;
+        h += '<li><button type="button" data-bm="' + it.n + '"' + (it.ch === curCh ? ' aria-current="true"' : '') + '><i>' + num + '</i><span>' +
+          esc(it.ch.title) + '</span>' + (it.ch.director && !it.part.director ? '<em>Director</em>' : '') + '</button>';
+        open = true;
+        if (it.kind === 'open' && it.pages.length > 1) {
+          h += '<ul class="rb-bm-sub">' + it.pages.map(function (p) {
+            return '<li><button type="button" data-bm="' + p.n + '"' + (cur[p.n] ? ' aria-current="true"' : '') + '><span>' +
+              esc(p.p.title || 'Untitled page') + '</span>' + (p.p.director && !it.ch.director ? '<em>Director</em>' : '') + '</button></li>';
+          }).join('') + '</ul>';
+        }
+      }
+    });
+    if (open) h += '</li>';
+    return h;
+  };
+
+  Rulebook.prototype.bmOpen = function () { return !!this.bmEl && this.bmEl.getAttribute('data-open') === 'true'; };
+
+  Rulebook.prototype.bmSet = function (open, restoreFocus) {
+    var self = this;
+    if (!this.bmEl || open === this.bmOpen()) return;
+    var roll = this.bmRoll, tab = this.bmTab, list = this.bmList;
+    this.bmEl.setAttribute('data-open', open ? 'true' : 'false');
+    tab.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (open) {
+      this.closeDrawer(false);
+      this.closeScreen(false);
+      this.closeResults();
+      this.hideCard();
+      list.innerHTML = this.bmListHTML();
+      // The ribbon is as long as its list, but never longer than 80% of the
+      // window or the room left below it in the book; the list scrolls.
+      var want = tab.offsetHeight + list.scrollHeight;
+      var room = this.el.getBoundingClientRect().bottom - roll.getBoundingClientRect().top - 12;
+      var cap = Math.max(tab.offsetHeight + 40, Math.min(window.innerHeight * 0.8, room));
+      roll.style.height = Math.min(want, Math.round(cap)) + 'px';
+      roll.style.overflowY = want > cap ? 'auto' : 'hidden';
+      var first = list.querySelector('[aria-current="true"]') || list.querySelector('button');
+      var id = setTimeout(function () {
+        if (!self.dead && self.bmOpen() && first) first.focus({ preventScroll: true });
+      }, reduced() ? 0 : BM_MS);
+      this.timers.push(id);
+    } else {
+      var hadFocus = this.bmEl.contains(document.activeElement);
+      roll.style.height = '';
+      roll.style.overflowY = '';
+      roll.scrollTop = 0;
+      if (restoreFocus && hadFocus) tab.focus({ preventScroll: true });
+    }
+  };
+
+  Rulebook.prototype.bmPick = function (n) {
+    var self = this;
+    this.bmSet(false, true);
+    var id = setTimeout(function () { if (!self.dead) self.goItem(n); }, reduced() ? 0 : BM_MS);
+    this.timers.push(id);
   };
 
   // --- Contents drawer -------------------------------------------------------
@@ -1124,6 +1535,9 @@
     var cur = {};
     if (sp) sp.items.forEach(function (it) { cur[it.n] = true; });
     var curCh = sp ? sp.items[0].ch : null;
+    if (this.screenPages.length) {
+      h += '<button type="button" class="rb-dch rb-dscreen" data-act="screen"><span>' + esc(this.screenChapter().title) + '</span><span class="rb-pn">P</span></button>';
+    }
     this.items.forEach(function (it) {
       // A solo chapter (one wide page, no opener) is listed as a chapter.
       if (it.kind === 'open' || it.solo) {
@@ -1144,6 +1558,7 @@
   Rulebook.prototype.drawerOpen = function () { return this.drawerEl && this.drawerEl.classList.contains('open'); };
 
   Rulebook.prototype.openDrawer = function () {
+    this.bmSet(false, false);
     this.hideCard();
     this.drawerEl.innerHTML = this.drawerHTML();
     this.drawerEl.inert = false;
@@ -1269,15 +1684,27 @@
   Rulebook.prototype.setView = function (v) {
     if (!this.data.isDirector || v === this.view || (v !== 'player' && v !== 'director')) return;
     if (this.finishNow) this.finishNow();
-    var key = this.currentKey();
+    var key = this.currentKey(), tops = this.scrollTops();
     this.view = v;
     this.closeResults();
     this.rebuild(key);
+    // Still on the same spread: keep the reader where they were on it.
+    if (this.currentKey() === key) this.scrollTops(tops);
+  };
+
+  // Reads, or with an argument restores, how far each shown page is scrolled.
+  Rulebook.prototype.scrollTops = function (tops) {
+    return [this.pl, this.pr].map(function (page, i) {
+      var s = page.querySelector('.rb-scroll');
+      if (s && tops) s.scrollTop = tops[i];
+      return s ? s.scrollTop : 0;
+    });
   };
 
   Rulebook.prototype.onClick = function (e) {
     var t = e.target;
     if (!t || !t.closest) return;
+    if (this.bmOpen() && !t.closest('.rb-bm')) this.bmSet(false, false);
     if (!this.el.contains(t)) { this.closeResults(); return; }
     var x;
     if (!this.data) {
@@ -1286,6 +1713,7 @@
     }
     if ((x = t.closest('.rb-results [data-hit]'))) { this.pickResult(x); return; }
     if (!t.closest('.rb-search')) this.closeResults();
+    if ((x = t.closest('[data-bm]'))) { this.bmPick(+x.getAttribute('data-bm')); return; }
     if ((x = t.closest('[data-go]'))) { this.goItem(+x.getAttribute('data-go')); return; }
     if ((x = t.closest('[data-tab]'))) { this.goChapter(x.getAttribute('data-tab')); return; }
     if ((x = t.closest('[data-chapter]'))) { this.goChapter(x.getAttribute('data-chapter')); return; }
@@ -1295,6 +1723,10 @@
         case 'next': this.turnTo(this.at + 1); break;
         case 'edit': window.location.assign(x.getAttribute('data-href')); break;
         case 'toc': if (this.drawerOpen()) this.closeDrawer(true); else this.openDrawer(); break;
+        case 'screen': if (this.screenOpen()) this.closeScreen(true); else this.openScreen(); break;
+        case 'bm': this.bmSet(!this.bmOpen(), false); break;
+        case 'front': this.openFront(); break;
+        case 'shut': this.shutFront(); break;
         case 'view': this.setView(x.getAttribute('data-view')); break;
         case 'roll': this.doRoll(x.closest('[data-roll]')); break;
         case 'prev-step': this.stepExample(x, -1); break;
@@ -1310,12 +1742,25 @@
   Rulebook.prototype.onKey = function (e) {
     if (!this.data || !this.el.isConnected) return;
     var t = e.target;
+    // A book shown inside another page only answers keys pressed in it.
+    if (this.inline && !(t && this.el.contains(t))) return;
     if (t && t.closest) {
       if (this.searchKey(e, t)) return;
       if (t.closest('input,select,textarea,[contenteditable="true"]')) return;
       if (t.closest('.rb-wslot') && e.key !== 'Escape') return;
     }
-    if (e.key === 'Escape') { this.closeDrawer(true); this.hideCard(); this.closeResults(); return; }
+    if (this.frontShut) return;
+    if (e.key === 'Escape' && this.bmOpen()) { this.bmSet(false, true); return; }
+    if (e.key === 'Escape') {
+      if (this.screenOpen()) { this.closeScreen(true); return; }
+      this.closeDrawer(true); this.hideCard(); this.closeResults(); return;
+    }
+    if ((e.key === 'p' || e.key === 'P') && !e.altKey && !e.ctrlKey && !e.metaKey && this.ribbonEl && !this.ribbonEl.hidden) {
+      e.preventDefault();
+      if (this.screenOpen()) this.closeScreen(true); else this.openScreen();
+      return;
+    }
+    if (this.screenOpen()) return;
     if (e.key === '/' && !e.altKey && !e.ctrlKey && !e.metaKey && this.searchEl) { e.preventDefault(); this.searchEl.focus(); this.searchEl.select(); return; }
     if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
     if (e.key === 'ArrowRight') { this.turnTo(this.at + 1); e.preventDefault(); }
@@ -1327,7 +1772,7 @@
     if (!p || !this.data) return;
     if (start) {
       var t = e.target;
-      var ok = t && t.closest && t.closest('.rb-book') && !t.closest('.rb-drawer, .rb-wslot, .rb-roll, select');
+      var ok = !this.frontShut && t && t.closest && t.closest('.rb-book') && !t.closest('.rb-drawer, .rb-screen, .rb-wslot, .rb-roll, select');
       this.touch = ok ? { x: p.clientX, y: p.clientY } : null;
       return;
     }

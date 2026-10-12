@@ -146,6 +146,12 @@ const (
 	// TrashRetentionChoices; anything else reads as the default.
 	KeyTrashRetentionDays = "content.trash_retention_days"
 
+	// KeySiteTrashRetentionDays is how many days a deleted campaign or a file
+	// clean-up waits in the site Trash before it is removed for good. One of
+	// SiteTrashRetentionChoices; anything else reads as the default. Separate
+	// from KeyTrashRetentionDays, which is for pages inside a campaign.
+	KeySiteTrashRetentionDays = "content.site_trash_retention_days"
+
 	// --- Site look (pages outside a campaign) ---
 	// Stored as plain strings; internal/sitelook defines what each may hold.
 	// An absent key means "never saved", so a fresh site renders as before.
@@ -176,6 +182,13 @@ var TrashRetentionChoices = []int{30, 60, 90, 180, 365}
 
 // DefaultTrashRetentionDays applies while the setting is unset.
 const DefaultTrashRetentionDays = 30
+
+// SiteTrashRetentionChoices are the periods the admin can pick for the site
+// Trash (campaigns and file clean-ups), in days.
+var SiteTrashRetentionChoices = []int{7, 14, 30, 90}
+
+// DefaultSiteTrashRetentionDays applies while the setting is unset.
+const DefaultSiteTrashRetentionDays = 30
 
 // Registration mode values for KeyRegistrationMode. Defined here as the canonical
 // source of truth for the site setting; the auth service compares against its own

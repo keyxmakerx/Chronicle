@@ -151,6 +151,12 @@ func TestBuild_FrontMatterExample(t *testing.T) {
 		"tags: [trade-hub, coastal]",
 		"# Example Page Name",
 		"`private`, `dm_only`, or `public`",
+		"`parent: Name of the parent page`",
+		"`parent: none`",
+		"`era: Name of the era`",
+		"`known_as: Name in that era`",
+		"`@[Page Name]`",
+		"`@[Page Name|words to show]`",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("expected substring %q in output. Full:\n%s", want, got)
@@ -379,5 +385,126 @@ func TestBuild_Lookups(t *testing.T) {
 		if !strings.Contains(got, s) {
 			t.Errorf("prompt lacks %q", s)
 		}
+	}
+}
+
+// TestBuild_ContentMode_HouseRules pins the house-rules choice: its context
+// is only the house rules handed in, never the world export, and the
+// house-rule format comes along even without the front-matter example.
+func TestBuild_ContentMode_HouseRules(t *testing.T) {
+	tests := []struct {
+		name, rules, want string
+	}{
+		{"with rules", "## House rules\n\n### Table rules\n", "### Table rules"},
+		{"none yet", "", "There are no house rules yet."},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			exp := &stubExporter{markdown: "WORLD EXPORT"}
+			got, err := NewService(nil, nil, exp).Build(context.Background(), "Ashfall", "owner-1", "camp-1", Input{
+				ContentMode:         ContentHouseRules,
+				RecordDocs:          "### kind: house-rule (House rule)\n\npages and blocks",
+				RecordContext:       tc.rules,
+				OperatorInstruction: "Add a fumble rule.",
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if exp.calls != 0 || strings.Contains(got, "WORLD EXPORT") {
+				t.Errorf("the world export was used (%d calls)", exp.calls)
+			}
+			for _, want := range []string{"## Existing world context", tc.want, "kind: house-rule", "Add a fumble rule."} {
+				if !strings.Contains(got, want) {
+					t.Errorf("prompt lacks %q:\n%s", want, got)
+				}
+			}
+		})
+	}
+}
+
+// TestBuild_ContentMode_Calendar pins the Calendar choice: its context is
+// only the calendar answers handed in, never the world export, and the
+// calendar formats come along even without the front-matter example.
+func TestBuild_ContentMode_Calendar(t *testing.T) {
+	tests := []struct {
+		name, answers, want string
+	}{
+		{"with a calendar", "## Calendar: Harptos\n\nToday: Hammer 1 1492", "Today: Hammer 1 1492"},
+		{"unreadable", "", "ask a `what: calendar` lookup"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			exp := &stubExporter{markdown: "WORLD EXPORT"}
+			got, err := NewService(nil, nil, exp).Build(context.Background(), "Ashfall", "owner-1", "camp-1", Input{
+				ContentMode:         ContentCalendar,
+				RecordDocs:          "### kind: calendar (Calendar)\n\nmonths and moons",
+				RecordContext:       tc.answers,
+				OperatorInstruction: "Set up the Harptos calendar.",
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if exp.calls != 0 || strings.Contains(got, "WORLD EXPORT") {
+				t.Errorf("the world export was used (%d calls)", exp.calls)
+			}
+			for _, want := range []string{"## Existing world context", tc.want, "kind: calendar", "Set up the Harptos calendar."} {
+				if !strings.Contains(got, want) {
+					t.Errorf("prompt lacks %q:\n%s", want, got)
+				}
+			}
+		})
+	}
+}
+
+// TestBuild_Instructions pins the two halves: the standing instructions
+// carry the formats and rules but nothing about the campaign's content, and
+// the short prompt carries the request and content but not the formats.
+func TestBuild_Instructions(t *testing.T) {
+	base := Input{
+		IncludeFrontMatterExample: true,
+		IncludeCategoriesInUse:    false,
+		ContentMode:               "all",
+		Capabilities:              "- `kind: table`: rolling tables",
+		Lookups:                   "- `what: format`: how to write one kind of block.",
+		RecordDocs:                "### kind: table (Rolling table)\n\nentries",
+		PageIndex:                 "### Characters (1)\n- Ser Aldric",
+		OperatorInstruction:       "Five new NPCs.",
+	}
+	tests := []struct {
+		name      string
+		mode      string
+		want, not []string
+		exports   int
+	}{
+		{"standing instructions", InstructionsOnly,
+			[]string{"standing instructions", "## What you can do", "kind: table (Rolling table)", "## Format your output", "## How to answer my requests"},
+			[]string{"Ser Aldric", "WORLD EXPORT", "Five new NPCs.", "## What I want you to generate"}, 0},
+		{"short prompt", InstructionsSaved,
+			[]string{"Follow the Chronicle instructions", "Ser Aldric", "WORLD EXPORT", "Five new NPCs.", "from my Chronicle\ninstructions", "lookup blocks"},
+			[]string{"## What you can do", "kind: table (Rolling table)", "## Format your output"}, 1},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			exp := &stubExporter{markdown: "WORLD EXPORT"}
+			in := base
+			in.Instructions = tc.mode
+			got, err := NewService(nil, nil, exp).Build(context.Background(), "Ashfall", "owner-1", "camp-1", in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if exp.calls != tc.exports {
+				t.Errorf("exporter called %d times, want %d", exp.calls, tc.exports)
+			}
+			for _, w := range tc.want {
+				if !strings.Contains(got, w) {
+					t.Errorf("prompt lacks %q:\n%s", w, got)
+				}
+			}
+			for _, n := range tc.not {
+				if strings.Contains(got, n) {
+					t.Errorf("prompt has %q:\n%s", n, got)
+				}
+			}
+		})
 	}
 }

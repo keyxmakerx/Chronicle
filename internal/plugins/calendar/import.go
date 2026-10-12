@@ -22,6 +22,7 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"unicode"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -1582,16 +1583,46 @@ func parseFantasyCalendar(data []byte) (*ImportResult, error) {
 
 // --- Helpers ---
 
-// stripLocalizationKey removes Foundry VTT localization prefixes from names.
-// e.g. "CALENDARIA.Calendar.Gregorian.Month.January" → "January"
-// Strings without dots are returned unchanged.
+// stripLocalizationKey removes Foundry VTT localization prefixes from names,
+// e.g. "CALENDARIA.Calendar.Gregorian.Month.January" -> "January".
+// Only strings shaped like a key are stripped (no whitespace, no empty
+// segments, an UPPER_CASE namespace first); real names that merely contain a
+// dot ("St. Ives", "D.R.") are returned trimmed but otherwise untouched, so
+// a legitimate name is never truncated or emptied.
 func stripLocalizationKey(s string) string {
 	s = strings.TrimSpace(s)
-	if !strings.Contains(s, ".") {
+	if !looksLikeLocalizationKey(s) {
 		return s
 	}
 	parts := strings.Split(s, ".")
 	return parts[len(parts)-1]
+}
+
+// looksLikeLocalizationKey reports whether s is a dotted key whose first
+// segment is an upper-case namespace of at least two characters.
+func looksLikeLocalizationKey(s string) bool {
+	if strings.IndexFunc(s, unicode.IsSpace) >= 0 {
+		return false
+	}
+	parts := strings.Split(s, ".")
+	if len(parts) < 2 {
+		return false
+	}
+	for _, p := range parts {
+		if p == "" {
+			return false
+		}
+	}
+	ns := parts[0]
+	if len(ns) < 2 {
+		return false
+	}
+	for _, r := range ns {
+		if (r < 'A' || r > 'Z') && (r < '0' || r > '9') && r != '_' {
+			return false
+		}
+	}
+	return true
 }
 
 // normalizeColor makes an import-supplied color value safe to store: it
@@ -1974,6 +2005,19 @@ func clampCalendarStructure(result *ImportResult) error {
 				"season %q had a day outside its month's range; clamped", s.Name))
 		}
 		s.StartDay, s.EndDay = clampedStartDay, clampedEndDay
+	}
+	return nil
+}
+
+// MaxMonthDays is the longest month a calendar can hold.
+const MaxMonthDays = maxCalendarMonthDays
+
+// PrepareImport holds an ImportResult built in process (AI Import's
+// calendar block) to the same limits and clamps as an uploaded file, so a
+// calendar made that way can store nothing an upload could not.
+func PrepareImport(ir *ImportResult) error {
+	if err := clampCalendarStructure(ir); err != nil {
+		return apperror.NewBadRequest(err.Error())
 	}
 	return nil
 }

@@ -3,8 +3,7 @@
 // types the owner listed) and the NPCs (the npcs plugin's section, for the
 // types the owner listed; entities the GM tagged `cast` are featured). Each card is a
 // real link to the entity page and carries the data attributes characters.js
-// uses to launch a mini→full preview via the dynamic-surface frame. The card
-// visual language mirrors myCharacterCard so the two pages feel like siblings.
+// uses to launch a mini→full preview via the dynamic-surface frame.
 
 package entities
 
@@ -30,7 +29,7 @@ import (
 // characters_boosted_nav_test.go; do not put it back.
 templ CharactersPage(cc *campaigns.CampaignContext, view CastView) {
 	@layouts.App("Characters - " + cc.Campaign.Name) {
-		<div class="max-w-7xl mx-auto px-4 py-6" id="characters-root">
+		<div class="max-w-screen-2xl mx-auto px-4 py-6" id="characters-root">
 			@CharactersContent(cc, view)
 		</div>
 	}
@@ -48,7 +47,7 @@ templ CharactersContent(cc *campaigns.CampaignContext, view CastView) {
 				<p class="mt-1 text-sm text-fg-secondary">The cast of { cc.Campaign.Name }.</p>
 			</div>
 			if view.CanCreateHero {
-				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/characters/new", cc.Campaign.ID)) } class="btn-primary" data-create-hero="true">
+				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/characters/new", cc.Campaign.ID)) } class="btn-primary gap-2" data-create-hero="true">
 					<i class="fa-solid fa-feather-pointed" aria-hidden="true"></i>
 					Create hero
 				</a>
@@ -57,18 +56,21 @@ templ CharactersContent(cc *campaigns.CampaignContext, view CastView) {
 		if len(view.Yours) > 0 {
 			<section class="mb-8" data-yours="true">
 				<h2 class="section-header mb-3">Yours</h2>
-				<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+				<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6 gap-4">
 					for _, m := range view.Yours {
 						@castCard(cc.Campaign.ID, m)
 					}
 				</div>
 			</section>
 		}
+		if len(view.Pickable) > 0 {
+			@castPickBox(cc.Campaign.ID, view.CSRFToken, view.Pickable)
+		}
 		if view.ShowPlayers && (view.PartyListed || view.PartyEditor != nil || len(view.Party) > 0) {
 			<section class="mb-8" data-band="characters">
-				@castBandHead("The Party", view.PartyEditor, view.Landed)
-				if view.PartyEditor != nil {
-					@castBandFold(cc.Campaign.ID, view.CSRFToken, view.PartyEditor)
+				@castBandHead("The Party", view.PartyEditor, view.Landed, view.Roster != nil, view.Open)
+				if view.PartyEditor != nil || view.Roster != nil {
+					@castBandFold(cc.Campaign.ID, view.CSRFToken, view.PartyEditor, view.Roster, view.Open)
 				}
 				if !view.PartyListed && view.PartyEditor != nil {
 					@castBandEmpty()
@@ -79,7 +81,7 @@ templ CharactersContent(cc *campaigns.CampaignContext, view CastView) {
 						@castEmpty("fa-users", "No player characters yet", "Claimed characters appear here. Players can claim a character from its page.")
 					}
 				} else {
-					<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+					<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6 gap-4">
 						for _, m := range view.Party {
 							@castCard(cc.Campaign.ID, m)
 						}
@@ -89,9 +91,9 @@ templ CharactersContent(cc *campaigns.CampaignContext, view CastView) {
 		}
 		if view.NPCSection != nil || view.NPCEditor != nil {
 			<section data-band="npcs">
-				@castBandHead("NPCs", view.NPCEditor, view.Landed)
+				@castBandHead("NPCs", view.NPCEditor, view.Landed, false, "")
 				if view.NPCEditor != nil {
-					@castBandFold(cc.Campaign.ID, view.CSRFToken, view.NPCEditor)
+					@castBandFold(cc.Campaign.ID, view.CSRFToken, view.NPCEditor, nil, "")
 				}
 				if view.NPCSection != nil {
 					@view.NPCSection
@@ -111,8 +113,9 @@ templ CharactersContent(cc *campaigns.CampaignContext, view CastView) {
 
 // castBandHead is a band's heading. The owner's page adds the chosen types as
 // chips (each with an x that opens its in-place "stop showing" box) and the Add
-// button; everyone else sees the heading alone.
-templ castBandHead(label string, ed *CastBandEditor, landed int) {
+// button; staff who may reassign characters also get "Players".
+// Everyone else sees the heading alone.
+templ castBandHead(label string, ed *CastBandEditor, landed int, players bool, open string) {
 	<div class="ag-bandhead">
 		<h2 class="section-header">{ label }</h2>
 		if ed != nil {
@@ -126,8 +129,13 @@ templ castBandHead(label string, ed *CastBandEditor, landed int) {
 					</span>
 				}
 			</span>
-			<button type="button" class="ag-add" aria-expanded="false" onclick={ castFoldCall("add") }>
+			<button type="button" class="ag-add" data-opens="add" aria-expanded="false" onclick={ castFoldCall("add") }>
 				<i class="fa-solid fa-plus" aria-hidden="true"></i> Add
+			</button>
+		}
+		if players {
+			<button type="button" class="ag-add ag-players" data-opens="players" aria-expanded={ strconv.FormatBool(open == "players") } onclick={ castFoldCall("players") }>
+				<i class="fa-solid fa-user-shield" aria-hidden="true"></i> Players
 			</button>
 		}
 	</div>
@@ -142,11 +150,23 @@ templ castBandEmpty() {
 	</div>
 }
 
-// castBandFold holds the owner's boxes, closed until a control opens one: the
-// Add box and one "stop showing" box per chip. Each is a form posting to the
-// list endpoint, which answers with the refreshed page body.
-templ castBandFold(campaignID, csrf string, ed *CastBandEditor) {
-	<div class="ag-fold" data-open="">
+// castBandFold holds the band's boxes, closed until a control opens one: the
+// owner's Add box and one "stop showing" box per chip, and the staff's Players
+// box. Each posts a form whose answer is the refreshed page body;
+// open names the box that answer renders open.
+templ castBandFold(campaignID, csrf string, ed *CastBandEditor, roster *ClaimRoster, open string) {
+	<div class={ "ag-fold", templ.KV("is-open", open != "") } data-open={ open } style={ castFoldStyle(open) }>
+		if roster != nil {
+			@castPlayersBox(campaignID, csrf, roster, open == "players")
+		}
+		if ed != nil {
+			@castListBoxes(campaignID, csrf, ed)
+		}
+	</div>
+}
+
+// castListBoxes are the owner's Add box and "stop showing" boxes.
+templ castListBoxes(campaignID, csrf string, ed *CastBandEditor) {
 		<form
 			class="ag-box"
 			data-box="add"
@@ -223,7 +243,6 @@ templ castBandFold(campaignID, csrf string, ed *CastBandEditor) {
 				</div>
 			</form>
 		}
-	</div>
 }
 
 // castCard is one mini profile card. The whole card links to the entity page

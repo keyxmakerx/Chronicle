@@ -1,0 +1,249 @@
+# Selectors that must appear in the compiled stylesheet. One per line; blank
+# lines and '#' lines are ignored. Compared with whitespace and quotes
+# removed, so write them as they appear in static/css/input.css.
+# tools/check-css-emissions.sh fails when one is missing from the build.
+
+# Hand-written rules whose class names are built in JS or only used from
+# templates, the shape Tailwind's unused-class purge can drop silently.
+.btn-primary
+.card
+.input
+.badge
+.cal-touch-reveal
+.ce-img
+.ce-img--left
+.ce-img--w25
+.en-seg
+.en-callout
+.en-toast
+
+# Widget styles that used to be injected at runtime (unlayered, at the end of
+# input.css).
+.perm-trigger
+.perm-trigger:hover
+.perm-trigger:focus-visible
+.perm-trigger .perm-trigger-mode
+.perm-backdrop
+.perm-backdrop.perm-open
+.perm-card
+.perm-card.perm-open
+.perm-card-header
+.perm-card-title
+.perm-card-close
+.perm-card-close:hover
+.perm-card-body
+.perm-card-footer
+.perm-error
+.perm-error .perm-error-dismiss
+.perm-error-validation
+.perm-error-auth
+.perm-error-not_found
+.perm-error-internal
+.dark .perm-error-validation
+.dark .perm-error-auth
+.dark .perm-error-internal
+.dark .perm-error-not_found
+.perm-mode-list
+.perm-mode-option
+.perm-mode-option:hover
+.perm-mode-option.perm-mode-active
+.perm-mode-option.perm-mode-disabled
+.perm-mode-option input[type=radio]
+.perm-mode-icon
+.perm-mode-option.perm-mode-active .perm-mode-icon
+.perm-mode-label
+.perm-mode-desc
+.perm-section-header
+.perm-section-hint
+.perm-grant-row
+.perm-grant-row:last-child
+.perm-grant-name
+.perm-grant-name .perm-role-badge
+.perm-grant-name .perm-grant-icon
+.perm-toggle-group
+.perm-toggle
+.perm-toggle:first-child
+.perm-toggle:last-child
+.perm-toggle:not(:first-child):not(:last-child)
+.perm-toggle:hover:not(.perm-toggle-active)
+.perm-toggle-active
+.perm-warning
+.dark .perm-warning
+.perm-loading
+.perm-readonly-badge
+.perm-draft-note
+.perm-tag-note
+.perm-tag-note .perm-tag-note-title
+.perm-tag-note .perm-tag-chip
+.perm-trigger-widened
+.perm-inline .perm-trigger
+.perm-inline .perm-trigger .perm-trigger-chevron
+.perm-inline.perm-inline-open .perm-trigger .perm-trigger-chevron
+.perm-inline-panel
+.perm-inline-panel.perm-open
+.perm-inline-inner
+.perm-inline .perm-card-body
+.perm-inline .perm-card-footer
+.perm-inline-open .perm-trigger
+.perm-corner-panel
+.perm-corner-panel.perm-open
+.perm-corner-panel .perm-card-header
+.perm-corner-panel .perm-card-body
+.perm-corner-open [data-perm-corner-tip]
+.perm-corner-open [data-perm-corner-trigger]
+.perm-unsaved
+.dark .perm-unsaved
+.perm-unsaved.perm-unsaved-show
+.perm-corner-panel.perm-nudge
+.shop-inv
+.shop-inv-header
+.shop-inv-header h3
+.dark .shop-inv-header h3
+.shop-inv-add-btn
+.shop-inv-add-btn:hover
+.shop-inv-empty
+.shop-inv-list
+.shop-inv-item
+.dark .shop-inv-item
+.shop-inv-item-icon
+.shop-inv-item-info
+.shop-inv-item-name
+.shop-inv-item-name:hover
+.shop-inv-item-name-plain
+.dark .shop-inv-item-name
+.dark .shop-inv-item-name-plain
+.shop-inv-item-meta
+.shop-inv-item-controls
+.shop-inv-price
+.shop-inv-qty
+.shop-inv-qty input
+.dark .shop-inv-qty input
+.shop-inv-stock-toggle
+.shop-inv-stock-in
+.shop-inv-stock-out
+.shop-inv-remove
+.shop-inv-remove:hover
+.shop-inv-search
+.dark .shop-inv-search
+.shop-inv-search-results
+.shop-inv-search-item
+.shop-inv-search-item:hover
+.dark .shop-inv-search-item:hover
+.shop-inv-price-input
+.dark .shop-inv-price-input
+.shop-inv-add-panel
+.dark .shop-inv-add-panel
+.shop-inv-create-section
+.dark .shop-inv-create-section
+.shop-inv-create-row
+.shop-inv-create-input
+.dark .shop-inv-create-input
+.shop-inv-type-select
+.dark .shop-inv-type-select
+.shop-inv-action-btn
+.shop-inv-action-btn:disabled
+.shop-inv-action-btn.green
+.shop-inv-action-btn.green:hover:not(:disabled)
+.shop-inv-action-btn.blue
+.shop-inv-action-btn.blue:hover:not(:disabled)
+.shop-inv-label
+.shop-inv-tx-toggle
+.dark .shop-inv-tx-toggle
+.shop-inv-tx-toggle:hover
+.dark .shop-inv-tx-toggle:hover
+.shop-inv-tx-section
+.dark .shop-inv-tx-section
+.shop-inv-tx-title
+.shop-inv-tx-list
+.shop-inv-tx-row
+.shop-inv-tx-type
+.shop-inv-tx-type.purchase
+.shop-inv-tx-type.sale
+.shop-inv-tx-type.gift
+.shop-inv-tx-type.restock
+.shop-inv-tx-detail
+.dark .shop-inv-tx-detail
+.shop-inv-tx-price
+.shop-inv-tx-date
+.tp-chip
+.tp-chip-remove
+.tp-chip-remove:hover
+.tp-wrap
+.tp-add-btn
+.tp-add-btn:hover
+.tp-dropdown
+.dark .tp-dropdown
+.tp-search
+.dark .tp-search
+.tp-search:focus
+.tp-list
+.tp-option
+.dark .tp-option
+.tp-option:hover
+.dark .tp-option:hover
+.tp-option-check
+.tp-option-dot
+.tp-create
+.dark .tp-create
+.tp-create:hover
+.dark .tp-create:hover
+.tp-empty
+.tp-dm-badge
+.tp-option-dm
+.tp-dm-row
+.dark .tp-dm-row
+.tp-dm-row label
+.tp-dm-row input[type="checkbox"]
+.rel-card
+.rel-group-header
+.rel-item
+.rel-item:hover
+.rel-item + .rel-item
+.rel-icon
+.rel-icon i
+.rel-name
+.rel-name a
+.rel-name a:hover
+.rel-type-badge
+.rel-delete
+.rel-item:hover .rel-delete
+.rel-delete:focus-visible
+.rel-delete:hover
+.rel-add-btn
+.rel-add-btn:hover
+.rel-modal
+.rel-search
+.rel-search:focus
+.rel-results
+.rel-result
+.rel-result:hover
+.rel-result.selected
+.rel-result-icon
+.rel-result-icon i
+.rel-type-select
+.rel-type-select:focus
+.rel-custom-row
+.rel-custom-row input
+.rel-actions
+.rel-submit
+.rel-submit:hover
+.rel-submit:disabled
+.rel-cancel
+.rel-cancel:hover
+.rel-empty
+.rel-error
+.rel-label
+.rel-dm-badge
+.rel-dm-toggle
+.rel-dm-toggle input
+.te-container-block .te-subzone
+.dark .te-container-block .te-subzone
+.te-subzone[class~="border-accent"] .te-subzone-hint
+.te-container-block > [class~="p-2"]
+
+# Tile sections (internal/tilegrid): the grid and the per-size spans.
+.tile-grid
+.tile
+.tile[data-tile-w=2]
+.tile[data-tile-w=4]
+.tile[data-tile-h=2]

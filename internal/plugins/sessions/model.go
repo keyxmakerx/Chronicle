@@ -81,7 +81,14 @@ type Session struct {
 	CalendarYear  *int    `json:"calendar_year,omitempty"`
 	CalendarMonth *int    `json:"calendar_month,omitempty"`
 	CalendarDay   *int    `json:"calendar_day,omitempty"`
-	Status        string  `json:"status"`
+	// CalendarID names the calendar the in-world date above is a position
+	// in. Month and day are positions, so without it the same numbers mean
+	// different dates in a campaign with more than one calendar. The service
+	// stamps it whenever a complete in-world date is saved and clears it
+	// when the date is cleared; no request body carries it. Only FindByID
+	// loads it (the load-merge-write path needs it); list queries leave it nil.
+	CalendarID *string `json:"calendar_id,omitempty"`
+	Status     string  `json:"status"`
 
 	// Recurrence fields for repeating sessions (e.g. "every other Saturday").
 	IsRecurring         bool    `json:"is_recurring"`
@@ -260,6 +267,28 @@ type UpdateSessionInput struct {
 type SessionListData struct {
 	Sessions []Session
 	Campaign interface{} // *campaigns.Campaign, avoid import cycle.
+}
+
+// normalizeDates cuts the DATE columns back to YYYY-MM-DD. The driver runs
+// with parseTime, so a DATE scanned into a string arrives as RFC 3339
+// ("2026-10-14T00:00:00Z"), and every caller compares and parses these as
+// plain dates.
+func (s *Session) normalizeDates() {
+	s.ScheduledDate = plainDate(s.ScheduledDate)
+	s.RecurrenceEndDate = plainDate(s.RecurrenceEndDate)
+}
+
+// plainDate keeps the YYYY-MM-DD head of a scanned DATE, leaving anything
+// that is not a date untouched.
+func plainDate(v *string) *string {
+	if v == nil || len(*v) <= 10 {
+		return v
+	}
+	if _, err := time.Parse("2006-01-02", (*v)[:10]); err != nil {
+		return v
+	}
+	d := (*v)[:10]
+	return &d
 }
 
 // FormatScheduledDate returns a human-readable date string like "Sat, Mar 8, 2028"
