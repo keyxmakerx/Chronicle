@@ -147,7 +147,7 @@ async function withBook(fn, opts = {}) {
       if (p === FONT_URL) { fontRequests.push(p); return route.fulfill({ status: 200, contentType: 'font/woff2', body: 'wOF2' }); }
       return route.fulfill({ status: 404, body: '' });
     });
-    // Customize > Rulebook "Chronicle's look" reaches the page as this attribute.
+    // The attribute an older Customize setting wrote; the reader must ignore it.
     if (opts.standard) await page.addInitScript(() => document.addEventListener('DOMContentLoaded', () => document.documentElement.setAttribute('data-cz-book', 'standard')));
     await page.goto('https://chronicle.test/rules' + (opts.hash || ''));
     await page.waitForSelector('.rb-book');
@@ -209,7 +209,7 @@ test('switching between Player and Director view keeps the place on the page', a
   });
 });
 
-test("in Chronicle's look a tab still opens its own chapter", async () => {
+test('a tab opens its own chapter', async () => {
   await withBook(async (page) => {
     // Tests has an opener and two pages, so without a fresh spread per
     // chapter Combat's opener would share a spread with the last Tests page.
@@ -218,7 +218,7 @@ test("in Chronicle's look a tab still opens its own chapter", async () => {
       await page.waitForFunction(() => !document.querySelector('.rb-leaf'));
       assert.equal(await page.evaluate(() => document.querySelector('.rb-where b').textContent), title);
     }
-  }, { standard: true });
+  });
 });
 
 const screenState = (page) => page.evaluate(() => {
@@ -355,7 +355,7 @@ test('with reduced motion the cover is a still that a click dismisses at once', 
   }, { cover: true, reducedMotion: true });
 });
 
-test('look: bold draws dark banners, heavy headings and coloured tiers; Chronicle\'s look overrides it', async () => {
+test('look: bold draws dark banners, heavy headings and coloured tiers, whatever the site settings', async () => {
   const probe = (page) => page.evaluate(() => {
     const rb = document.querySelector('.rb');
     const kick = document.querySelector('.rb-page.l .rb-scroll > .rb-kicker');
@@ -380,11 +380,11 @@ test('look: bold draws dark banners, heavy headings and coloured tiers; Chronicl
     assert.deepEqual(tiers, [true, true, true]);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
   }, { bold: true });
+  // A game system's book keeps its own look whatever the site's settings say.
   await withBook(async (page) => {
     const p = await probe(page);
-    assert.equal(p.look, null);
-    assert.equal(p.bannerBg, 'rgba(0, 0, 0, 0)', "Chronicle's look draws no banner");
-    assert.notEqual(p.weight, '900');
+    assert.equal(p.look, 'bold');
+    assert.ok(p.bannerLum < 0.15, `banner is dark (${p.bannerLum})`);
   }, { bold: true, standard: true });
 });
 
