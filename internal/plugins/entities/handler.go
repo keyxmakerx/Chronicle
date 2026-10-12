@@ -602,7 +602,7 @@ func (h *Handler) Sheet(c echo.Context) error {
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
-	if !(cc.MemberRole >= campaigns.RoleScribe || cc.IsDmGranted) {
+	if cc.MemberRole < campaigns.RoleScribe && !cc.IsDmGranted {
 		return apperror.NewNotFound("entity not found")
 	}
 	p, err := h.prepareShow(c)
