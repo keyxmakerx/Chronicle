@@ -5399,14 +5399,16 @@ func (a *App) RegisterRoutes() {
 		records.SystemEntryKind{Svc: systemEntrySvc},
 		records.GeneratorKind{Cal: calendarService, Tables: aiTables, Weather: calendarService},
 	)
-	aiWorkspaceHandler.SetRecords(records.NewRegistry(aiKinds...))
+	aiRegistry := records.NewRegistry(aiKinds...)
+	aiWorkspaceHandler.SetRecords(aiRegistry)
 
-	// The read-only lookups an AI may ask for. Game-system entries wait on
-	// the character pick-list service (TODO(#1170)).
+	// The read-only lookups an AI may ask for.
 	aiLookups := &records.Lookups{
 		Cal: calendarService, Weather: calendarService, Maps: aiMapsAdapter{mapsService}, Pages: entityService,
 		Rels: relService, Notes: noteSvc, Rules: &aiHouseRules,
-		Party: &aiPartyAdapter{screen: dmScreenSvc, nights: sessionsService, members: campaignService},
+		Entries: aiSystemEntriesAdapter{choices: characterChoiceSvc},
+		Party:   &aiPartyAdapter{screen: dmScreenSvc, nights: sessionsService, members: campaignService},
+		Kinds:   aiRegistry,
 	}
 	if a.PluginHealth.IsHealthy(rolltables.PluginSlug) {
 		aiLookups.Tables = aiTables.Svc

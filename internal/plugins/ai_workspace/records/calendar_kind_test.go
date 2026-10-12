@@ -40,6 +40,17 @@ func (f *fakeStructure) ListCalendars(context.Context, string, permissions.Viewe
 	}
 	return out, nil
 }
+func (f *fakeStructure) GetCalendarForViewer(_ context.Context, id, _ string, _ permissions.Viewer) (*calendar.Calendar, error) {
+	for i := range f.others {
+		if f.others[i].ID == id {
+			return &f.others[i], nil
+		}
+	}
+	if f.cal != nil && f.cal.ID == id {
+		return f.cal, nil
+	}
+	return nil, apperror.NewNotFound("calendar not found")
+}
 func (f *fakeStructure) CreateCalendarFromImport(_ context.Context, _ string, ir *calendar.ImportResult, _ calendar.CreateCalendarFromImportOptions) (*calendar.Calendar, error) {
 	f.created = ir
 	return &calendar.Calendar{ID: "new"}, nil

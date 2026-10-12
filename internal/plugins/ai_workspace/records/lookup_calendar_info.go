@@ -16,6 +16,16 @@ const (
 	lookupWhatCalendar = "calendar"
 )
 
+// CalendarLookups are the lookups the prompt's Calendar content choice
+// answers up front: the calendar itself (or how to set one up) and its
+// kinds of weather.
+func CalendarLookups() []Record {
+	return []Record{
+		{Kind: "lookup", Fields: map[string]any{"what": lookupWhatCalendar}},
+		{Kind: "lookup", Fields: map[string]any{"what": "weather-kinds"}},
+	}
+}
+
 // WeatherSettingsAPI reads a calendar's climate and the owner's own kinds
 // of weather (calendar.CalendarService).
 type WeatherSettingsAPI interface {

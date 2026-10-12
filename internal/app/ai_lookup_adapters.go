@@ -8,6 +8,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/dmscreen"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
+	"github.com/keyxmakerx/chronicle/internal/systems"
 )
 
 // aiPartyAdapter answers the AI tool's `players` lookup from the DM Screen's
@@ -71,4 +72,24 @@ func (p *aiPartyAdapter) nextNight(ctx context.Context, campaignID string) *reco
 		return night
 	}
 	return nil
+}
+
+// aiSystemEntriesAdapter answers the AI tool's `system-entries` lookup from
+// the character pick lists, package and campaign-made entries alike.
+type aiSystemEntriesAdapter struct {
+	choices systems.CharacterChoiceService
+}
+
+// Entries reads the list as a Director only when the lookup's privacy mode
+// lets the AI see Director-only content, so Safe never lists hidden entries.
+func (a aiSystemEntriesAdapter) Entries(ctx context.Context, campaignID, field string, director bool) (string, []records.SystemEntry, error) {
+	l, err := a.choices.CharacterChoiceList(systems.WithChoiceViewer(ctx, director), campaignID, field)
+	if err != nil {
+		return "", nil, err
+	}
+	out := make([]records.SystemEntry, 0, len(l.Choices))
+	for _, c := range l.Choices {
+		out = append(out, records.SystemEntry{Name: c.Name, Slug: c.Slug, Source: c.Source, Summary: c.Summary})
+	}
+	return l.SystemName, out, nil
 }

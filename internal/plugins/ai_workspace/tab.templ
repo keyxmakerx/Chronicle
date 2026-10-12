@@ -10,6 +10,7 @@ package ai_workspace
 import (
 	"fmt"
 
+	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/prompt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
@@ -161,12 +162,36 @@ templ promptBuilderBody(cc *campaigns.CampaignContext) {
 			privacy: 'safe',
 			gmNotes: false,
 			instruction: '',
+			saved: false,
+			copyState: '',
+			async copyInstructions(url) {
+				this.copyState = 'busy';
+				try {
+					const text = fetch(url, { credentials: 'same-origin' }).then((r) => {
+						if (!r.ok) throw new Error(r.status);
+						return r.text();
+					});
+					// Handing the clipboard a pending item keeps the click's
+					// permission while the text loads (Safari needs this).
+					if (window.ClipboardItem && navigator.clipboard.write) {
+						await navigator.clipboard.write([new ClipboardItem({ 'text/plain': text.then((t) => new Blob([t], { type: 'text/plain' })) })]);
+					} else {
+						await navigator.clipboard.writeText(await text);
+					}
+					this.copyState = 'copied';
+				} catch (e) {
+					this.copyState = 'failed';
+				}
+				setTimeout(() => { if (this.copyState !== 'busy') this.copyState = ''; }, 4000);
+			},
 			get estimate() {
 				let chars = 600; // base preamble + boilerplate
-				if (this.schemaTypes) chars += 400;
+				if (this.saved) chars = 200;
+				if (this.schemaTypes && !this.saved) chars += 400;
 				if (this.schemaCategories) chars += 600;
-				if (this.schemaFrontMatter) chars += 500;
+				if (this.schemaFrontMatter && !this.saved) chars += 500;
 				if (this.contentMode === 'house-rules') chars += 4000;
+				else if (this.contentMode === 'calendar') chars += 6000;
 				else if (this.contentMode !== 'none') chars += 30000; // content dominates
 				chars += this.instruction.length;
 				return Math.ceil(chars / 4);
@@ -180,6 +205,27 @@ templ promptBuilderBody(cc *campaigns.CampaignContext) {
 			hx-indicator="#ai-prompt-generating"
 			class="space-y-5"
 		>
+			<div class="flex flex-wrap items-start gap-3 rounded-lg border border-edge p-3">
+				<div class="flex-1 min-w-[14rem] text-sm">
+					<strong class="font-medium text-fg">Save the instructions in your AI once</strong>
+					<span class="block text-xs text-fg-muted">Copies every block format, the lookups and the rules, without your campaign's content. Paste it into your AI's saved or project instructions, then tick "My AI already has the instructions" below so each prompt is only your request.</span>
+				</div>
+				<button
+					type="button"
+					class="btn-secondary text-sm shrink-0"
+					data-url={ fmt.Sprintf("/campaigns/%s/ai-workspace/prompt/instructions", cc.Campaign.ID) }
+					@click="copyInstructions($el.dataset.url)"
+					:disabled="copyState === 'busy'"
+				>
+					<i class="fa-regular fa-copy mr-1.5" aria-hidden="true"></i>
+					<span x-text="copyState === 'copied' ? 'Copied' : (copyState === 'busy' ? 'Copying…' : 'Copy AI instructions')">Copy AI instructions</span>
+				</button>
+				<p x-show="copyState === 'failed'" x-cloak role="alert" class="basis-full text-xs text-bad">
+					Couldn't copy. Your browser may have blocked the clipboard; try again, or use Generate below.
+				</p>
+				<span class="sr-only" aria-live="polite" x-text="copyState === 'copied' ? 'Instructions copied' : ''"></span>
+			</div>
+
 			<div>
 				<h3 class="text-sm font-medium text-fg mb-2">Schema bits</h3>
 				<p class="text-xs text-fg-muted mb-3">
@@ -228,6 +274,13 @@ templ promptBuilderBody(cc *campaigns.CampaignContext) {
 							<span class="block text-xs text-fg-muted">Your Handbook's house rules as they are now, and how to write pages with highlighted boxes, dice rolls, flaps and the rest. The AI can add, change or remove them.</span>
 						</span>
 					</label>
+					<label class="flex items-start gap-2 cursor-pointer">
+						<input type="radio" name="content_mode" value={ prompt.ContentCalendar } x-model="contentMode" class="mt-0.5 border-edge text-accent"/>
+						<span>
+							<strong>Calendar</strong>
+							<span class="block text-xs text-fg-muted">Your main calendar as it is now (or how to set one up), its climate and kinds of weather, and how to write calendars, events, weather and generators. The AI can create the calendar, choose the main one, and fill it in.</span>
+						</span>
+					</label>
 				</div>
 			</div>
 
@@ -256,7 +309,7 @@ templ promptBuilderBody(cc *campaigns.CampaignContext) {
 						</span>
 					</label>
 				</div>
-				<label x-show="contentMode !== 'house-rules'" class="flex items-center gap-2 cursor-pointer text-sm mt-3">
+				<label x-show="contentMode !== 'house-rules' && contentMode !== 'calendar'" class="flex items-center gap-2 cursor-pointer text-sm mt-3">
 					<input type="checkbox" name="gm_notes" value="on" x-model="gmNotes" class="rounded border-edge text-accent"/>
 					<span>
 						Include session GM notes
@@ -275,6 +328,14 @@ templ promptBuilderBody(cc *campaigns.CampaignContext) {
 					class="input w-full text-sm font-mono"
 				></textarea>
 			</div>
+
+			<label class="flex items-start gap-2 cursor-pointer text-sm">
+				<input type="checkbox" name="instructions_saved" value="on" x-model="saved" class="mt-0.5 rounded border-edge text-accent"/>
+				<span>
+					My AI already has the instructions
+					<span class="block text-xs text-fg-muted">Leaves out the block formats and rules, so the prompt is just your request and the content you picked.</span>
+				</span>
+			</label>
 
 			<div class="flex items-center gap-3 pt-2">
 				<button type="submit" class="btn-primary">

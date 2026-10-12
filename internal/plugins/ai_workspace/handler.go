@@ -692,6 +692,9 @@ func (h *Handler) GeneratePrompt(c echo.Context) error {
 		IncludeSessionGMNotes:     c.QueryParam("gm_notes") == "on",
 		OperatorInstruction:       c.QueryParam("instruction"),
 	}
+	if c.QueryParam("instructions_saved") == "on" {
+		in.Instructions = prompt.InstructionsSaved
+	}
 	if in.ContentMode == "" {
 		in.ContentMode = "none"
 	}
@@ -706,6 +709,8 @@ func (h *Handler) GeneratePrompt(c echo.Context) error {
 		}
 		if in.ContentMode == prompt.ContentHouseRules {
 			in.RecordDocs, in.RecordContext = h.houseRulesContext(c, cc, in.Privacy)
+		} else if in.ContentMode == prompt.ContentCalendar {
+			in.RecordDocs, in.RecordContext = h.calendarContext(c, cc, in.Privacy)
 		} else if in.ContentMode == "all" || hasCategory(in.ContentMode, recordsCategory) {
 			in.RecordContext = h.records.ExportAll(c.Request().Context(), cc.Campaign.ID, exportActor(c, cc, in.Privacy))
 		}
@@ -737,6 +742,60 @@ func (h *Handler) GeneratePrompt(c echo.Context) error {
 	}
 
 	return middleware.Render(c, http.StatusOK, PromptModal(out, ""))
+}
+
+// PromptInstructions returns the standing half of the prompt as plain text,
+// for the "Copy AI instructions" button: every block format, the lookups and
+// the rules, plus the campaign's page types, but none of its content, so an
+// operator can save it in their AI once and paste only short requests.
+//
+// GET /campaigns/:id/ai-workspace/prompt/instructions (owner only)
+func (h *Handler) PromptInstructions(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	if h.promptBuilder == nil {
+		return apperror.NewBadRequest("AI prompt builder is not configured on this server")
+	}
+	in := prompt.Input{
+		IncludeEntityTypes:        true,
+		IncludeFrontMatterExample: true,
+		ContentMode:               "none",
+		Instructions:              prompt.InstructionsOnly,
+	}
+	if h.lookups != nil {
+		in.Lookups = records.LookupDoc()
+	}
+	if h.records != nil {
+		in.Capabilities = h.records.Capabilities()
+		in.RecordDocs = h.records.Docs()
+	}
+	out, err := h.promptBuilder.Build(c.Request().Context(), cc.Campaign.Name, auth.GetUserID(c), cc.Campaign.ID, in)
+	if err != nil {
+		slog.Error("ai-workspace: prompt instructions failed",
+			slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", err))
+		return apperror.NewInternal(err)
+	}
+	if h.audit != nil {
+		h.audit.LogCampaignEvent(c.Request().Context(), cc.Campaign.ID, "campaign.ai_prompt.instructions_copied",
+			map[string]any{"prompt_byte_count": len(out)})
+	}
+	c.Response().Header().Set("Cache-Control", "no-store")
+	return c.String(http.StatusOK, out)
+}
+
+// calendarContext is the Calendar prompt's format and context: the docs of
+// the calendar kinds (always, since the AI must write those formats) and the
+// calendar and weather-kinds lookups in the chosen privacy, which say how to
+// set up a main calendar when there is none.
+func (h *Handler) calendarContext(c echo.Context, cc *campaigns.CampaignContext, privacy aiexport.PrivacyMode) (doc, answers string) {
+	doc = h.records.DocsFor(records.CalendarKinds...)
+	if h.lookups == nil {
+		return doc, ""
+	}
+	ans := h.lookups.Answer(c.Request().Context(), cc.Campaign.ID, exportActor(c, cc, privacy), records.CalendarLookups())
+	return doc, records.Markdown(ans)
 }
 
 // houseRulesContext is the house-rules prompt's format and context: the

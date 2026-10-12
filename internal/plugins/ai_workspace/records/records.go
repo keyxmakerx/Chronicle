@@ -145,15 +145,15 @@ func (r *Registry) Plan(ctx context.Context, campaignID string, a Actor, rec Rec
 	return k, k.Plan(ctx, campaignID, a, rec)
 }
 
-// PlanAll plans records in order. A row that makes the calendar lets the
-// rows after it be checked against that calendar, since commit applies
-// them in the same order.
+// PlanAll plans records in order. A row that makes the calendar, or makes
+// another one the main calendar, lets the rows after it be checked against
+// that calendar, since commit applies them in the same order.
 func (r *Registry) PlanAll(ctx context.Context, campaignID string, a Actor, recs []Record) ([]Kind, []Plan) {
 	kinds := make([]Kind, len(recs))
 	plans := make([]Plan, len(recs))
 	for i, rec := range recs {
 		kinds[i], plans[i] = r.Plan(ctx, campaignID, a, rec)
-		if ck, ok := kinds[i].(CalendarKind); ok && rec.Action == ActionCreate && plans[i].Error == "" {
+		if ck, ok := kinds[i].(CalendarKind); ok && (rec.Action == ActionCreate || rec.Has("main")) && plans[i].Error == "" {
 			if _, cal := ck.plan(ctx, campaignID, a, rec); cal != nil {
 				ctx = withPendingCalendar(ctx, cal)
 			}
@@ -188,6 +188,26 @@ func (r *Registry) Capabilities() string {
 			brief = k.Label()
 		}
 		b.WriteString("- `kind: " + k.Name() + "`: " + brief + "\n")
+	}
+	return b.String()
+}
+
+// CalendarKinds are the kinds the prompt's Calendar content choice
+// explains: the calendar itself and everything written onto it.
+var CalendarKinds = []string{KindCalendar, "event", "weather", "generator"}
+
+// DocsFor is Docs for the named kinds only, in that order; a name not
+// wired on this server is skipped.
+func (r *Registry) DocsFor(names ...string) string {
+	var b strings.Builder
+	for _, n := range names {
+		k, ok := r.Get(n)
+		if !ok {
+			continue
+		}
+		b.WriteString("### kind: " + k.Name() + " (" + k.Label() + ")\n\n")
+		b.WriteString(strings.TrimSpace(k.Doc()))
+		b.WriteString("\n\n")
 	}
 	return b.String()
 }

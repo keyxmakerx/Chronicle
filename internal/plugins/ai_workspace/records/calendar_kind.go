@@ -19,6 +19,7 @@ import (
 type CalendarStructureAPI interface {
 	GetDefaultCalendarForViewer(ctx context.Context, campaignID string, v permissions.Viewer) (*calendar.Calendar, error)
 	ListCalendars(ctx context.Context, campaignID string, v permissions.Viewer) ([]calendar.Calendar, error)
+	GetCalendarForViewer(ctx context.Context, calendarID, campaignID string, v permissions.Viewer) (*calendar.Calendar, error)
 	CreateCalendarFromImport(ctx context.Context, campaignID string, ir *calendar.ImportResult, opts calendar.CreateCalendarFromImportOptions) (*calendar.Calendar, error)
 	SetDefaultCalendar(ctx context.Context, campaignID, calendarID string) error
 	UpdateCalendar(ctx context.Context, calendarID, campaignID string, input calendar.UpdateCalendarInput) error
@@ -156,9 +157,10 @@ const needsCalendarPrefix = "Needs a calendar first: "
 
 type pendingCalendarKey struct{}
 
-// withPendingCalendar lets the rows after a `kind: calendar` create be
-// checked against the calendar that row will make. Review only: at commit
-// the calendar row has already run, so every row reads the real one.
+// withPendingCalendar lets the rows after a `kind: calendar` create (or a
+// switch of the main calendar) be checked against the calendar that row
+// will make main. Review only: at commit the calendar row has already run,
+// so every row reads the real one.
 func withPendingCalendar(ctx context.Context, cal *calendar.Calendar) context.Context {
 	return context.WithValue(ctx, pendingCalendarKey{}, cal)
 }
@@ -169,8 +171,11 @@ func pendingCalendar(ctx context.Context) *calendar.Calendar {
 }
 
 // defaultCalendar is the calendar events, weather and generators write to.
-// A pending calendar has no ID; callers skip reads keyed on it.
+// A pending calendar from a create has no ID; callers skip reads keyed on it.
 func defaultCalendar(ctx context.Context, svc defaultCalendarReader, campaignID string, a Actor) (*calendar.Calendar, error) {
+	if p := pendingCalendar(ctx); p != nil {
+		return p, nil
+	}
 	cal, err := svc.GetDefaultCalendarForViewer(ctx, campaignID, a.Viewer())
 	if err == nil && cal != nil {
 		return cal, nil
@@ -178,15 +183,12 @@ func defaultCalendar(ctx context.Context, svc defaultCalendarReader, campaignID 
 	if err != nil && apperror.SafeCode(err) != http.StatusNotFound {
 		return nil, apperror.NewBadRequest("could not read the campaign's calendar; try again in a moment")
 	}
-	if p := pendingCalendar(ctx); p != nil {
-		return p, nil
-	}
 	if l, ok := svc.(calendarLister); ok {
 		if cals, lerr := l.ListCalendars(ctx, campaignID, a.Viewer()); lerr == nil && len(cals) > 0 {
-			return nil, apperror.NewBadRequest(needsCalendarPrefix + "none of this campaign's calendars is set as the main one. Choose one on the Calendars page.")
+			return nil, apperror.NewBadRequest(needsCalendarPrefix + "none of this campaign's calendars is set as the main one. Put a `kind: calendar` block with `action: update`, the calendar's `name` and `main: true` above this one, or choose one on the Calendars page.")
 		}
 	}
-	return nil, apperror.NewBadRequest(needsCalendarPrefix + "this campaign has no calendar yet. Put a `kind: calendar` block above this one, or make a calendar on the Calendars page.")
+	return nil, apperror.NewBadRequest(needsCalendarPrefix + "this campaign has no calendar yet. Put a `kind: calendar` block with `action: create` above this one, or make a calendar on the Calendars page.")
 }
 
 // ---- the calendar kind ----
@@ -207,8 +209,9 @@ type CalendarKind struct {
 func (CalendarKind) Name() string  { return KindCalendar }
 func (CalendarKind) Label() string { return "Calendar" }
 func (CalendarKind) Doc() string {
-	return "The campaign calendar. `action: create` makes it when the campaign has none; `action: update` changes the main calendar (removing a calendar is done on the Calendars page). Keys, all optional on update:\n" +
+	return "The campaign calendar. `action: create` makes it when the campaign has no main calendar, and it becomes the main one; `action: update` changes the main calendar (removing a calendar is done on the Calendars page). Events, weather and generators all use the main calendar. Keys, all optional on update:\n" +
 		"- `name`; on update, `rename_to` renames it.\n" +
+		"- `main: true` (update only): makes the calendar called `name` the main one, for a campaign whose calendars have none set, or to switch to another of its calendars. The block's other keys then change that calendar.\n" +
 		"- `year_label`: what follows the year, e.g. DR.\n" +
 		"- `current_year`, `current_month` (number or name), `current_day`: today's date. Needed on create.\n" +
 		"- `months`: a list of `name`, `days`, optional `season`, `intercalary` (true for festival days outside the weeks), `leap_days`. Needed on create.\n" +
@@ -629,8 +632,12 @@ func (CalendarKind) ownerOnly(a Actor) string {
 	return ""
 }
 
-// existing is the main calendar, or nil when there is none.
+// existing is the main calendar, or nil when there is none. At review, a
+// switch earlier in the paste has already made its calendar the main one.
 func (k CalendarKind) existing(ctx context.Context, campaignID string, a Actor) (*calendar.Calendar, error) {
+	if p := pendingCalendar(ctx); p != nil && p.ID != "" {
+		return p, nil
+	}
 	cal, err := k.Svc.GetDefaultCalendarForViewer(ctx, campaignID, a.Viewer())
 	if err != nil {
 		if apperror.SafeCode(err) == http.StatusNotFound {
@@ -662,10 +669,55 @@ func (k CalendarKind) plan(ctx context.Context, campaignID string, a Actor, r Re
 	case ActionCreate:
 		return k.planCreate(ctx, campaignID, a, r, cal)
 	}
-	if cal == nil {
-		return Plan{Error: "this campaign has no calendar to change; use action: create to make one"}, nil
+	target, err := k.updateTarget(ctx, campaignID, a, r, cal)
+	if err != nil {
+		return Plan{Error: planError(err)}, nil
 	}
-	return k.planUpdate(ctx, campaignID, a, r, cal), nil
+	p := k.planUpdate(ctx, campaignID, a, r, target, cal)
+	if p.Error != "" || target == cal {
+		return p, nil
+	}
+	return p, target
+}
+
+// updateTarget is the calendar an update changes: the main one, or with
+// `main: true` the calendar called `name`, which the block makes the main
+// one. A hidden calendar reads as missing, so its name is never confirmed.
+func (k CalendarKind) updateTarget(ctx context.Context, campaignID string, a Actor, r Record, cal *calendar.Calendar) (*calendar.Calendar, error) {
+	main, has := r.Bool("main")
+	if has && !main {
+		return nil, badRequestf("main: false can't unset the main calendar; give main: true to the calendar that should be the main one")
+	}
+	if !has {
+		if cal != nil {
+			return cal, nil
+		}
+		if cals, err := k.Svc.ListCalendars(ctx, campaignID, a.Viewer()); err == nil && len(cals) > 0 {
+			return nil, badRequestf("none of this campaign's calendars is the main one; add main: true to make the calendar called name the main one, or use action: create")
+		}
+		return nil, badRequestf("this campaign has no calendar to change; use action: create to make one")
+	}
+	if r.Name == "" {
+		return nil, badRequestf("main: true needs the name of the calendar to make the main one")
+	}
+	if cal != nil && sameName(cal.Name, r.Name) {
+		return cal, nil
+	}
+	cals, err := k.Svc.ListCalendars(ctx, campaignID, a.Viewer())
+	if err != nil {
+		return nil, badRequestf("could not read the campaign's calendars; try again in a moment")
+	}
+	for _, c := range cals {
+		if !sameName(c.Name, r.Name) {
+			continue
+		}
+		full, err := k.Svc.GetCalendarForViewer(ctx, c.ID, campaignID, a.Viewer())
+		if err != nil || full == nil {
+			return nil, badRequestf("could not read the calendar %s; try again in a moment", quote(c.Name))
+		}
+		return full, nil
+	}
+	return nil, badRequestf("there is no calendar called %s; use action: create to make one", quote(r.Name))
 }
 
 func (k CalendarKind) planCreate(ctx context.Context, campaignID string, a Actor, r Record, cal *calendar.Calendar) (Plan, *calendar.Calendar) {
@@ -698,7 +750,7 @@ func (k CalendarKind) planCreate(ctx context.Context, campaignID string, a Actor
 	cals, err := k.Svc.ListCalendars(ctx, campaignID, a.Viewer())
 	for _, c := range cals {
 		if sameName(c.Name, r.Name) {
-			return Plan{Error: fmt.Sprintf("a calendar called %s already exists but is not the main one; make it the main one on the Calendars page", quote(r.Name))}, nil
+			return Plan{Error: fmt.Sprintf("a calendar called %s already exists but is not the main one; to use it, write action: update with main: true", quote(r.Name))}, nil
 		}
 	}
 	if err == nil && len(cals) > 0 {
@@ -840,9 +892,11 @@ func baseMoonIn(ms []calendar.MoonInput, name string) *calendar.MoonInput {
 	return nil
 }
 
-func (k CalendarKind) planUpdate(ctx context.Context, campaignID string, a Actor, r Record, cal *calendar.Calendar) Plan {
+// planUpdate checks an update of cal; main is the current main calendar
+// (nil when none is set), which differs from cal when `main: true` switches.
+func (k CalendarKind) planUpdate(ctx context.Context, campaignID string, a Actor, r Record, cal, main *calendar.Calendar) Plan {
 	if r.Name != "" && !sameName(r.Name, cal.Name) {
-		return Plan{Error: fmt.Sprintf("the main calendar is %s, not %s; to rename it, use rename_to", quote(cal.Name), quote(r.Name))}
+		return Plan{Error: fmt.Sprintf("the main calendar is %s, not %s; to rename it, use rename_to, or add main: true to switch to the calendar called name", quote(cal.Name), quote(r.Name))}
 	}
 	s, err := readCalSpec(r, cal)
 	if err != nil {
@@ -853,6 +907,12 @@ func (k CalendarKind) planUpdate(ctx context.Context, campaignID string, a Actor
 	}
 	var did []string
 	warn := s.warnings
+	if cal != main {
+		did = append(did, "makes it the main calendar")
+		if main != nil {
+			warn = append(warn, fmt.Sprintf("%s stops being the main calendar; events, weather and generators then use %s", quote(main.Name), quote(cal.Name)))
+		}
+	}
 	if to := r.Str("rename_to"); to != "" {
 		did = append(did, "renames it "+quote(to))
 	}
@@ -954,12 +1014,20 @@ func (k CalendarKind) Apply(ctx context.Context, campaignID string, a Actor, r R
 	if r.Action == ActionCreate {
 		return k.applyCreate(ctx, campaignID, a, r)
 	}
-	cal, err := k.existing(ctx, campaignID, a)
+	main, err := k.existing(ctx, campaignID, a)
 	if err != nil {
 		return err
 	}
-	if cal == nil {
-		return apperror.NewBadRequest("the calendar is gone")
+	cal, err := k.updateTarget(ctx, campaignID, a, r, main)
+	if err != nil {
+		return err
+	}
+	if cal != main {
+		// Switched first, so the block's other changes land on the calendar
+		// every other block now reads.
+		if err := k.Svc.SetDefaultCalendar(ctx, campaignID, cal.ID); err != nil {
+			return err
+		}
 	}
 	return k.applyUpdate(ctx, campaignID, a, r, cal)
 }

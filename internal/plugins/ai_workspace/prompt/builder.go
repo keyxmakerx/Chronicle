@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/aiexport"
+	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/records"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/widgets/tags"
 )
@@ -51,6 +52,20 @@ type Exporter interface {
 // context is only the campaign's house rules (RecordContext), so the
 // Exporter is not called.
 const ContentHouseRules = "house-rules"
+
+// ContentCalendar is the content choice for calendar work: the context is
+// the main calendar as a lookup describes it (or how to set one up), so
+// the Exporter is not called either.
+const ContentCalendar = records.KindCalendar
+
+// The two halves of a prompt, for an operator who saves the standing part
+// in their AI once and then pastes only short requests.
+const (
+	// InstructionsOnly is the standing part alone: formats, lookups, rules.
+	InstructionsOnly = "only"
+	// InstructionsSaved is the request alone, for an AI that has them.
+	InstructionsSaved = "saved"
+)
 
 // Service is the prompt builder's entry point. Wired in app/routes.go
 // with the same plugin Services that back the aiexport renderer.
@@ -85,7 +100,7 @@ type Input struct {
 
 	// --- Content picker ---
 
-	// ContentMode is one of "none", "all", ContentHouseRules, or a
+	// ContentMode is one of "none", "all", ContentHouseRules, ContentCalendar, or a
 	// comma-separated list of category slugs (mapping to aiexport.Category
 	// values). "none" short-circuits the Exporter call; the "Existing world
 	// context" block is omitted from the rendered prompt.
@@ -97,6 +112,10 @@ type Input struct {
 	// --- Custom ---
 
 	OperatorInstruction string
+
+	// Instructions is "" for the whole prompt, InstructionsOnly or
+	// InstructionsSaved for one half.
+	Instructions string
 
 	// Capabilities is the opening one-line-per-kind list
 	// (records.Registry.Capabilities); every prompt carries it.
@@ -141,6 +160,20 @@ func (s *Service) Build(
 		PageIndex:                 strings.TrimSpace(in.PageIndex),
 	}
 
+	switch in.Instructions {
+	case InstructionsOnly:
+		// Nothing about the campaign's current content: the AI keeps this.
+		data.InstructionsOnly = true
+		data.PageIndex, data.OperatorInstruction, data.ContentMode = "", "", "none"
+		data.IncludeCategoriesInUse, in.IncludeCategoriesInUse = false, false
+		in.ContentMode = "none"
+	case InstructionsSaved:
+		data.InstructionsSaved = true
+		data.Capabilities, data.RecordDocs = "", ""
+		data.IncludeEntityTypes, data.IncludeFrontMatterExample, data.IncludeSampleEntity = false, false, false
+		in.IncludeEntityTypes = false
+	}
+
 	if in.IncludeEntityTypes || in.IncludeCategoriesInUse {
 		if s.Entities == nil {
 			return "", fmt.Errorf("prompt: entity lister not wired")
@@ -165,6 +198,11 @@ func (s *Service) Build(
 		data.ExportedContent = strings.TrimSpace(in.RecordContext)
 		if data.ExportedContent == "" {
 			data.ExportedContent = "There are no house rules yet."
+		}
+	} else if in.ContentMode == ContentCalendar {
+		data.ExportedContent = strings.TrimSpace(in.RecordContext)
+		if data.ExportedContent == "" {
+			data.ExportedContent = "The calendar could not be read; ask a `what: calendar` lookup."
 		}
 	} else if in.ContentMode != "" && in.ContentMode != "none" {
 		if s.Exporter == nil {
