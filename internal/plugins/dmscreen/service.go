@@ -26,6 +26,13 @@ type Service interface {
 	Build(ctx context.Context, campaignID string, v Viewer) (*View, error)
 	Reveal(ctx context.Context, entityID, campaignID string, v Viewer) (string, error)
 	SetDowntime(ctx context.Context, campaignID string, v Viewer, open bool) (DowntimeResult, error)
+
+	// StepTime moves the world's date forward by one of the TimeSteps.
+	StepTime(ctx context.Context, campaignID string, v Viewer, stepKey string) error
+
+	// Note reads the screen's note; SaveNote replaces its text.
+	Note(ctx context.Context, campaignID string, v Viewer) (*NotesView, error)
+	SaveNote(ctx context.Context, campaignID string, v Viewer, text, version string) (*NotesView, error)
 }
 
 // DowntimeResult reports a downtime switch: the new state and how many
@@ -64,10 +71,23 @@ func (s *service) Build(ctx context.Context, campaignID string, v Viewer) (*View
 			view.Downtime = &DowntimeView{Open: open, CanToggle: v.IsOwner(), Pending: pending}
 		}
 	}
+	if s.src.Requests != nil {
+		reqs, ok, err := s.src.Requests.WaitingRequests(ctx, campaignID, v)
+		if err != nil {
+			warn("requests", err)
+		} else if ok {
+			view.Requests = trimRequests(reqs)
+		}
+	}
 	if s.src.World != nil {
 		w, err := s.src.World.World(ctx, campaignID, v)
 		if err != nil {
 			warn("world", err)
+		}
+		if w != nil {
+			// Same rule as Set today on the calendar page: the owner and
+			// DM-granted co-DMs only.
+			w.CanStep = w.CanStep && v.IsOwner()
 		}
 		view.World = w
 	}
@@ -81,6 +101,29 @@ func (s *service) Build(ctx context.Context, campaignID string, v Viewer) (*View
 	if s.src.Foundry != nil {
 		last, connected := s.src.Foundry.FoundryPresence(campaignID)
 		view.Foundry = FoundryView{Connected: connected, NeverSeen: last == nil && !connected, LastSeen: last}
+	}
+
+	// The DM note is for the owner and co-DMs only; a scribe never gets the tab.
+	if s.src.Notes != nil && v.IsOwner() {
+		nv, err := s.notesView(ctx, campaignID, v, view.Night)
+		if err != nil {
+			warn("notes", err)
+		} else {
+			view.Notes = nv
+		}
+	}
+
+	var presence map[string]bool
+	if s.src.Presence != nil {
+		players, err := s.src.Presence.Players(ctx, campaignID)
+		if err != nil {
+			warn("presence", err)
+		}
+		view.Presence = buildPresence(players)
+		presence = map[string]bool{}
+		for _, p := range players {
+			presence[p.UserID] = p.Here
+		}
 	}
 
 	var def *systems.DMScreenDef
@@ -107,6 +150,7 @@ func (s *service) Build(ctx context.Context, campaignID string, v Viewer) (*View
 		for _, h := range heroes {
 			hv := HeroView{
 				ID: h.ID, Name: h.Name, PlayerName: h.PlayerName,
+				PlayerUserID: h.PlayerUserID, PlayerHere: h.PlayerUserID != "" && presence[h.PlayerUserID],
 				Meters: buildMeters(meters, h.Fields),
 			}
 			if def != nil {
@@ -170,6 +214,116 @@ func (s *service) SetDowntime(ctx context.Context, campaignID string, v Viewer, 
 		return DowntimeResult{}, err
 	}
 	return DowntimeResult{Open: open, Applied: applied, Failed: failed}, nil
+}
+
+// nightForNote finds the night the note is kept with. A failing night source
+// only costs the label its night name.
+func (s *service) nightForNote(ctx context.Context, campaignID string, v Viewer) *NightView {
+	if s.src.Nights == nil {
+		return nil
+	}
+	n, err := s.src.Nights.NextNight(ctx, campaignID, v)
+	if err != nil {
+		return nil
+	}
+	return n
+}
+
+func (s *service) notesView(ctx context.Context, campaignID string, v Viewer, night *NightView) (*NotesView, error) {
+	label, _ := noteNames(night)
+	nv := &NotesView{Label: label}
+	n, err := s.src.Notes.Find(ctx, campaignID, nightKey(night), v)
+	if err != nil {
+		return nil, err
+	}
+	if n != nil {
+		nv.NoteID = n.ID
+		nv.Link = fmt.Sprintf("/campaigns/%s/journal/%s", campaignID, n.ID)
+		nv.Version = BodyVersion(n.Entry)
+		switch {
+		case n.Legacy != "":
+			nv.Text, nv.ReadOnly = n.Legacy, true
+		case !isPlainProse(n.Entry):
+			nv.Text, nv.ReadOnly = plainFromProse(n.Entry), true
+		default:
+			nv.Text = plainFromProse(n.Entry)
+		}
+	}
+	return nv, nil
+}
+
+// nightKey is the key a night's note is kept under; no night means the
+// campaign's standing note.
+func nightKey(n *NightView) string {
+	if n == nil {
+		return ""
+	}
+	return n.Key
+}
+
+// Note reads the screen's note for the GM side.
+func (s *service) Note(ctx context.Context, campaignID string, v Viewer) (*NotesView, error) {
+	// Scribes may open the screen but the note holds GM-only text, so the
+	// gate is the same one the notes widget uses for GM-shared notes.
+	if !v.IsOwner() {
+		return nil, apperror.NewForbidden("the DM notes are for the campaign owner and co-DMs")
+	}
+	if s.src.Notes == nil {
+		return nil, apperror.NewNotFound("notes are not available")
+	}
+	return s.notesView(ctx, campaignID, v, s.nightForNote(ctx, campaignID, v))
+}
+
+// SaveNote stores text as plain paragraphs in the screen's note for the next
+// game night (the standing note with no night), creating it on first save with
+// the night's title. It refuses a note holding formatting and a note that
+// changed since version was read.
+func (s *service) SaveNote(ctx context.Context, campaignID string, v Viewer, text, version string) (*NotesView, error) {
+	// Scribes may open the screen but the note holds GM-only text, so the
+	// gate is the same one the notes widget uses for GM-shared notes.
+	if !v.IsOwner() {
+		return nil, apperror.NewForbidden("the DM notes are for the campaign owner and co-DMs")
+	}
+	if s.src.Notes == nil {
+		return nil, apperror.NewNotFound("notes are not available")
+	}
+	if utf8.RuneCountInString(text) > maxNoteChars {
+		return nil, apperror.NewBadRequest("the note is too long for the DM Screen; open it in Notes")
+	}
+	night := s.nightForNote(ctx, campaignID, v)
+	cur, err := s.src.Notes.Find(ctx, campaignID, nightKey(night), v)
+	if err != nil {
+		return nil, err
+	}
+	if cur != nil && (cur.Legacy != "" || !isPlainProse(cur.Entry)) {
+		return nil, apperror.NewValidation("this note has formatting, so edit it in Notes")
+	}
+	label, title := noteNames(night)
+	entry, entryHTML := proseFromPlain(text)
+	n, err := s.src.Notes.Save(ctx, campaignID, nightKey(night), v, title, entry, entryHTML, version)
+	if err != nil {
+		return nil, err
+	}
+	return &NotesView{
+		Label: label, Text: plainFromProse(n.Entry), NoteID: n.ID, Version: BodyVersion(n.Entry),
+		Link: fmt.Sprintf("/campaigns/%s/journal/%s", campaignID, n.ID),
+	}, nil
+}
+
+// StepTime moves the date forward by the chip's amount. Only the owner and
+// DM-granted co-DMs may, as for Set today; the step must be one of TimeSteps.
+func (s *service) StepTime(ctx context.Context, campaignID string, v Viewer, stepKey string) error {
+	if !v.IsOwner() {
+		return apperror.NewForbidden("only the campaign owner can move the date")
+	}
+	step, ok := stepByKey(stepKey)
+	if !ok {
+		return apperror.NewBadRequest("unknown time step")
+	}
+	if s.src.World == nil {
+		return apperror.NewNotFound("the calendar is not available")
+	}
+	return s.src.World.Advance(ctx, campaignID, v, step.Hours, step.Days)
 }
 
 // buildMeters reads each declared meter from a hero's sheet fields. A meter
@@ -329,4 +483,51 @@ func pickConditions(items []systems.ReferenceItem, c *systems.DMScreenConditions
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
+}
+
+// requestsShown is how many waiting requests the panel answers in place; the
+// rest are counted and left to the Stashes page.
+const requestsShown = 5
+
+// trimRequests keeps the oldest requestsShown, oldest first, and counts the
+// rest. It returns nil when nothing waits so the block is left out.
+func trimRequests(reqs []Request) *RequestsView {
+	if len(reqs) == 0 {
+		return nil
+	}
+	sorted := append([]Request(nil), reqs...)
+	sort.SliceStable(sorted, func(i, j int) bool { return sorted[i].CreatedAt.Before(sorted[j].CreatedAt) })
+	rv := &RequestsView{}
+	for i, r := range sorted {
+		if i == requestsShown {
+			rv.More = len(sorted) - requestsShown
+			break
+		}
+		rv.Items = append(rv.Items, RequestView(r))
+	}
+	return rv
+}
+
+// buildPresence counts players who are here. It returns nil for no players so
+// the strip omits the count instead of reading "0 of 0".
+func buildPresence(players []PlayerPresence) *PresenceView {
+	if len(players) == 0 {
+		return nil
+	}
+	pv := &PresenceView{Total: len(players)}
+	for _, p := range players {
+		name := p.Name
+		if name == "" {
+			name = "A player"
+		}
+		if p.Here {
+			pv.Here++
+			pv.HereNames = append(pv.HereNames, name)
+		} else {
+			pv.AwayNames = append(pv.AwayNames, name)
+		}
+	}
+	sort.Strings(pv.HereNames)
+	sort.Strings(pv.AwayNames)
+	return pv
 }

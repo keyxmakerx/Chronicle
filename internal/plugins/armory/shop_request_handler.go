@@ -54,3 +54,20 @@ func (h *ShopBuyHandler) DeclineRequest(c echo.Context) error {
 	}
 	return done(c, cc, "Turned down.")
 }
+
+// WithdrawRequest handles POST /armory/purchase-requests/:rid/withdraw. The
+// service lets only the requester or the Owner through.
+func (h *ShopBuyHandler) WithdrawRequest(c echo.Context) error {
+	cc, a, err := caller(c)
+	if err != nil {
+		return err
+	}
+	id, err := requestID(c)
+	if err != nil {
+		return err
+	}
+	if err := h.svc.WithdrawRequest(c.Request().Context(), cc.Campaign.ID, a, id); err != nil {
+		return err
+	}
+	return done(c, cc, "Request withdrawn.")
+}

@@ -100,6 +100,10 @@ type Buyer struct {
 	Purse    map[string]float64 `json:"purse,omitempty"`
 	MoneyCp  *int64             `json:"moneyCp,omitempty"`
 	Kind     string             `json:"kind,omitempty"`
+	// Own marks a character the caller has claimed, so the widget can start
+	// its "Paying" picker on the viewer's own character even when the Owner's
+	// name-sorted list puts someone else first.
+	Own bool `json:"own,omitempty"`
 }
 
 // BuyersView is the response of the buyers endpoint.

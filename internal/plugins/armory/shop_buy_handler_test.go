@@ -44,6 +44,11 @@ func (f *fakeBuySvc) DeclineRequest(_ context.Context, _ string, a Actor, id int
 	return &PurchaseRequest{ID: id, Status: PurchaseDeclined}, f.err
 }
 
+func (f *fakeBuySvc) WithdrawRequest(_ context.Context, _ string, a Actor, id int64) error {
+	f.actor, f.answered = a, id
+	return f.err
+}
+
 func TestShopBuyHandler_Buy(t *testing.T) {
 	cases := []struct {
 		name     string

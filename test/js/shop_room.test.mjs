@@ -197,3 +197,13 @@ test('formatPurse lists coins largest first and skips empty ones', () => {
   assert.equal(SR.formatPurse({ cp: 3, sp: 7, gp: 9 }), '9 gp 7 sp 3 cp');
   assert.equal(SR.formatPurse({ gp: 0 }), '0 gp');
 });
+
+test('defaultPayer starts on the first own character, else the first listed', () => {
+  const cases = [
+    [[{ id: 'a' }, { id: 'b', own: true }, { id: 'c', own: true }], 'b'],
+    [[{ id: 'a' }, { id: 'b' }], 'a'],
+    [[{ id: 'a', own: true }], 'a'],
+    [[], ''],
+  ];
+  for (const [list, want] of cases) assert.equal(SR.defaultPayer(list), want);
+});
