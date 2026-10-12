@@ -2698,6 +2698,11 @@ func (h *Handler) EntityTypesPage(c echo.Context) error {
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
+	// Categories are set up in Customize now; an HTMX refresh of the old
+	// list (after its own create or delete) still gets the list.
+	if !middleware.IsHTMX(c) {
+		return c.Redirect(http.StatusSeeOther, "/campaigns/"+cc.Campaign.ID+"/customize/categories")
+	}
 
 	entityTypes, err := h.service.GetEntityTypes(c.Request().Context(), cc.Campaign.ID)
 	if err != nil {
@@ -3044,6 +3049,33 @@ func (h *Handler) EntityTypeAttributesFragment(c echo.Context) error {
 
 	csrfToken := middleware.GetCSRFToken(c)
 	return middleware.Render(c, http.StatusOK, EntityTypeAttributesFragmentTmpl(cc, et, csrfToken))
+}
+
+// EntityTypeCustomizeTab returns one of a category's Customize tabs that
+// still use today's editors: GET /campaigns/:id/entity-types/:etid/customize-tab/:tab
+// with tab "layout", "home" or "fields". Customize's category workspace
+// loads it under its own header.
+func (h *Handler) EntityTypeCustomizeTab(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	etID, err := strconv.Atoi(c.Param("etid"))
+	if err != nil {
+		return apperror.NewBadRequest("invalid entity type ID")
+	}
+	tab := c.Param("tab")
+	if tab != "layout" && tab != "home" && tab != "fields" {
+		return apperror.NewNotFound("that part of a category doesn't exist")
+	}
+	et, err := h.service.GetEntityTypeByID(c.Request().Context(), etID)
+	if err != nil {
+		return err
+	}
+	if et.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("entity type not found")
+	}
+	return middleware.Render(c, http.StatusOK, EntityTypeCustomizeTabTmpl(cc, et, tab, middleware.GetCSRFToken(c)))
 }
 
 // --- Layout API ---

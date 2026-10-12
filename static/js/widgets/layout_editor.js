@@ -1,9 +1,10 @@
 /**
  * Unified Layout Editor Widget
  *
- * Drag-and-drop layout editor used by layout_studio.js to edit campaign
- * dashboards, owner dashboards, category dashboards, and page templates
- * through one UI.
+ * Drag-and-drop layout editor for campaign dashboards, owner dashboards,
+ * category dashboards, and page templates through one UI. Customize's Home
+ * pages and category workspace mount it until the new page editor replaces
+ * it (#1362).
  *
  * Mount: data-widget="layout-editor". Config: data-endpoint (GET/PUT/DELETE
  * layout JSON), data-campaign-id, data-csrf-token, data-context

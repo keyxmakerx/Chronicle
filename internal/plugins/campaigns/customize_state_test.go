@@ -136,7 +136,7 @@ func TestBuildCustomizeState(t *testing.T) {
 func TestLookTab_MountsWithState(t *testing.T) {
 	cc := &CampaignContext{Campaign: &Campaign{ID: "camp-1", Name: `Ash "fall" <b>`}, MemberRole: RoleOwner}
 	var sb strings.Builder
-	if err := lookTab(cc, "tok").Render(context.Background(), &sb); err != nil {
+	if err := lookTab(cc, "tok", customizeStateJSON(context.Background(), cc)).Render(context.Background(), &sb); err != nil {
 		t.Fatalf("render lookTab: %v", err)
 	}
 	out := sb.String()
@@ -160,7 +160,7 @@ func TestLookTab_MountsWithState(t *testing.T) {
 		t.Error("without a calendar the example sky has no calendar to draw")
 	}
 	sb.Reset()
-	if err := lookTab(cc, "tok").Render(layouts.SetSkyCalendarID(context.Background(), "cal-9"), &sb); err != nil {
+	if err := lookTab(cc, "tok", "{}").Render(layouts.SetSkyCalendarID(context.Background(), "cal-9"), &sb); err != nil {
 		t.Fatalf("render lookTab: %v", err)
 	}
 	if !strings.Contains(sb.String(), `data-sky-calendar="cal-9"`) {
