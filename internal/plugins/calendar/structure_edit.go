@@ -20,6 +20,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"sort"
 	"strings"
@@ -661,6 +662,7 @@ func (s *calendarService) ApplyStructureEdit(ctx context.Context, calendarID, ca
 		return nil, err
 	}
 	var preview *StructurePreview
+	var monthRemap map[int]int
 	err := s.calRepo.ApplyStructure(ctx, calendarID, func(st *StructureState) (*StructureWrite, error) {
 		if err := refuseRealTime(st.Calendar); err != nil {
 			return nil, err
@@ -670,6 +672,7 @@ func (s *calendarService) ApplyStructureEdit(ctx context.Context, calendarID, ca
 		if fingerprint != plan.preview.Fingerprint {
 			return nil, apperror.NewConflict("this calendar changed after the preview was made; check the updated preview before saving")
 		}
+		monthRemap = plan.remap
 		return structureWriteFor(edit, plan), nil
 	})
 	if err != nil {
@@ -681,7 +684,25 @@ func (s *calendarService) ApplyStructureEdit(ctx context.Context, calendarID, ca
 		}
 		return nil, fmt.Errorf("apply structure: %w", err)
 	}
+	s.moveGameNightsWithMonths(ctx, campaignID, calendarID, monthRemap)
+	s.publish(PubStructureUpdated, campaignID, calendarID, nil)
 	return preview, nil
+}
+
+// moveGameNightsWithMonths carries the sessions plugin's game nights along
+// with their month, the way events follow theirs inside the save. The sessions
+// live outside the calendar's transaction, so this runs after it commits and
+// a failure is logged, not returned: the structure save is done and must not
+// read as failed, and retrying the same remap would move sessions twice.
+// Nothing is called when no month moved or the remapper is unwired.
+func (s *calendarService) moveGameNightsWithMonths(ctx context.Context, campaignID, calendarID string, remap map[int]int) {
+	if s.monthRemap == nil || len(remap) == 0 {
+		return
+	}
+	if err := s.monthRemap.RemapMonthPositions(ctx, campaignID, calendarID, remap); err != nil {
+		slog.Error("calendar: structure saved but game nights were not moved with their months",
+			slog.String("calendar_id", calendarID), slog.Any("error", err))
+	}
 }
 
 // structureWriteFor turns a validated edit and its plan into the write.

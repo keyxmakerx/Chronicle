@@ -81,7 +81,14 @@ type Session struct {
 	CalendarYear  *int    `json:"calendar_year,omitempty"`
 	CalendarMonth *int    `json:"calendar_month,omitempty"`
 	CalendarDay   *int    `json:"calendar_day,omitempty"`
-	Status        string  `json:"status"`
+	// CalendarID names the calendar the in-world date above is a position
+	// in. Month and day are positions, so without it the same numbers mean
+	// different dates in a campaign with more than one calendar. The service
+	// stamps it whenever a complete in-world date is saved and clears it
+	// when the date is cleared; no request body carries it. Only FindByID
+	// loads it (the load-merge-write path needs it); list queries leave it nil.
+	CalendarID *string `json:"calendar_id,omitempty"`
+	Status     string  `json:"status"`
 
 	// Recurrence fields for repeating sessions (e.g. "every other Saturday").
 	IsRecurring         bool    `json:"is_recurring"`
