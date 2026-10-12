@@ -151,6 +151,14 @@ jobs:
         # such package carries a hand-written doc.go. Self-tests on every run.
         run: ./tools/check-templ-packages.sh
 
+      - name: CSS emissions guard
+        # Builds the minified stylesheet with the pinned Tailwind binary
+        # (tools/tailwind.sh) and fails if a selector in
+        # tools/css-emissions.txt was purged. Self-tests on every run.
+        run: |
+          ./tools/test-css-emissions.sh
+          ./tools/check-css-emissions.sh
+
       - name: Test
         # Includes the cross-plugin import guard (TestPluginImportGuard in
         # internal/wire/plugin_import_guard_test.go): fails on any NEW

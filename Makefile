@@ -58,12 +58,12 @@ foundry-error-catalog: ## Regenerate the foundry_vtt error-catalog.json from err
 	go run ./cmd/foundry-error-catalog
 
 .PHONY: tailwind
-tailwind: ## Regenerate Tailwind CSS
-	tailwindcss -i static/css/input.css -o static/css/app.css --minify
+tailwind: ## Regenerate Tailwind CSS (pinned binary, fetched into bin/ on first use)
+	./tools/tailwind.sh -i static/css/input.css -o static/css/app.css --minify
 
 .PHONY: tailwind-watch
 tailwind-watch: ## Watch mode for Tailwind CSS
-	tailwindcss -i static/css/input.css -o static/css/app.css --watch
+	./tools/tailwind.sh -i static/css/input.css -o static/css/app.css --watch
 
 .PHONY: tiptap-bundle
 tiptap-bundle: ## Rebuild TipTap editor bundle (table extensions, etc.)
@@ -148,6 +148,8 @@ verify: ## Run the full local CI sequence (templ → build → vet → guards �
 	@echo "==> guard: widget-mounts";          ./tools/check-widget-mounts.sh
 	@echo "==> guard: customize-discipline";   ./tools/check-customize-discipline.sh
 	@echo "==> guard: templ-packages";         ./tools/check-templ-packages.sh
+	@echo "==> guard: css-emissions (self-test)"; ./tools/test-css-emissions.sh
+	@echo "==> guard: css-emissions";          ./tools/check-css-emissions.sh
 	@echo "==> go test ./... -short";          go test ./... -short
 	@echo "==> make test-js";                  $(MAKE) test-js
 	@echo "==> verify: OK"

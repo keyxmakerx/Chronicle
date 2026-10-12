@@ -49,7 +49,7 @@
 |------|---------|
 | `air` | Hot reload for Go dev server |
 | `templ` | Generate Go from .templ files |
-| `tailwindcss` | Generate CSS (standalone binary) |
+| `tailwindcss` | Generate CSS (standalone binary pinned in `tools/tailwind.sh`, fetched into `bin/` by `make tailwind`) |
 | `golangci-lint` | Linting |
 | `gosec` | Security static analysis |
 | `migrate` | CLI for running migrations |
