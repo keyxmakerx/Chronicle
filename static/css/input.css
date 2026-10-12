@@ -5581,7 +5581,6 @@ html[data-view-motion="calm"] .pl-chip, .nav-rm .pl-chip, html.rm .pl-chip, html
 .vi-fold > summary { cursor: pointer; padding: 0.625rem 0.875rem; list-style: none; }
 .vi-fold > summary::-webkit-details-marker { display: none; }
 
-<<<<<<< HEAD
 /* ============================================================ */
 /* Pages by era (internal/plugins/entities/era_panel.templ, era_pages.js).
    The panel grows out of the Eras button (Grow), a switch of era settles the
@@ -5665,7 +5664,6 @@ mark.era-w { background: var(--era-hl-strong); color: inherit; border-radius: 3p
 .moon-chip:hover { border-color: var(--color-accent); }
 .moon-chip-dot { width: 1rem; height: 1rem; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #f8fafc, #94a3b8); box-shadow: inset -5px -1px 0 rgb(15 23 42 / 0.5); }
 .moon-chip-phase { color: var(--color-text-muted); }
-=======
 /* Player Notes on a page (static/js/widgets/entity_notes.js). Rows settle in,
    glow when someone else's note arrives, flash where a note changed, and fold
    away when deleted; the composer grows out of New note. Colours are theme
@@ -5773,4 +5771,3 @@ mark.era-w { background: var(--era-hl-strong); color: inherit; border-radius: 3p
   .en-note { grid-template-columns: 24px minmax(0, 1fr) auto; }
   .en-ava { width: 24px; height: 24px; font-size: 10px; }
 }
->>>>>>> origin/main
