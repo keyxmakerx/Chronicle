@@ -32,9 +32,8 @@ for name in chronicle chronicle-db chronicle-redis; do
   fi
 done
 
-# ENV=development because production mode rejects the default DB password and
-# an http:// BASE_URL, neither of which a throwaway stack should need.
-export ENV="${ENV:-development}"
+# ENV is left to the compose default (production) so the check boots what
+# operators run; the throwaway values below satisfy production's checks.
 export SECRET_KEY="${SECRET_KEY:-ci-only-secret-key-not-for-real-use-0123456789}"
 export DB_PASSWORD="${DB_PASSWORD:-ci-only-db-password}"
 export MYSQL_ROOT_PASSWORD="${MYSQL_ROOT_PASSWORD:-ci-only-root-password}"

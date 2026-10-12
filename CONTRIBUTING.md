@@ -18,7 +18,8 @@ address.
 - MariaDB 10.11+ and Redis 7+, from Docker (`make docker-up`) or installed locally
 - The `templ` CLI (`go install github.com/a-h/templ/cmd/templ@v0.3.1070`, the
   version CI uses) and `air` for hot reload
-- The Tailwind standalone CLI for `make tailwind`
+- Nothing extra for `make tailwind`: it downloads the pinned standalone CLI
+  into `bin/` on first use
 - Node.js 20 for the JS tests (`make test-js`)
 - `golangci-lint` for `make lint`
 

@@ -70,8 +70,7 @@ function boot(loadData) {
     getElementById: (id) => styleRegistry[id] || null,
     createElement: (tag) => {
       const n = makeNode(tag);
-      // The widget tags the injected <style> with an id; register it so the
-      // "inject once" guard works across multiple inits.
+      // Elements given an id are registered so getElementById can find them.
       const origSet = Object.getOwnPropertyDescriptor(n, 'setAttribute');
       n.setAttribute = function (k, v) { origSet.value.call(n, k, v); };
       Object.defineProperty(n, 'id', { get() { return this._attrs.id; }, set(v) { this._attrs.id = v; styleRegistry[v] = this; } });

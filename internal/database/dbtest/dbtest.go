@@ -5,9 +5,8 @@
 // CHRONICLE_TEST_DB_DSN, create a uniquely named schema on it, migrate it, and
 // drop it afterwards. The schema is always a fresh one rather than the DSN's
 // own database because `make test-int-local` hands over a server-only DSN
-// that selects no database at all. Keeping the steps in one place stops the
-// copies drifting apart, which is how a missing-database failure once went
-// unnoticed in one package.
+// that selects no database at all. Keeping the steps in one place stops
+// copies drifting apart on details like that one.
 //
 // The package is test support only: nothing imports it from non-test code,
 // and it imports no plugin, so a plugin test can use it without creating a

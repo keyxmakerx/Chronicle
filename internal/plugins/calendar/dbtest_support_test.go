@@ -20,8 +20,7 @@ import (
 //
 // Skips only when no DB SERVER answers at all. Once the server has answered, a
 // migration failure is FATAL: it means this plugin's own migrations are
-// broken, and hiding that behind a skip is how "No database selected" once
-// went unnoticed here.
+// broken, and a skip would hide it.
 func openTestDB(t *testing.T) *sql.DB {
 	t.Helper()
 	sub, err := fs.Sub(MigrationsFS, database.PluginMigrationsSubdir)
