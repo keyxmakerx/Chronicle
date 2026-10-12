@@ -19,6 +19,11 @@ Chronicle is purpose-built for tabletop RPGs, open source, and designed to be se
 - **Rich Text Editor** — TipTap-powered WYSIWYG with @mentions, backlinks, GM secrets, and an insert menu
 - **Relations** — Bi-directional entity relationships with typed connections ("is spouse of", "leads", "enemy of")
 - **Entity Hierarchy** — Parent/child nesting with tree views and breadcrumb navigation
+- **Pages in More Than One Place** — List a page under extra parents in the page tree while it keeps one real home
+- **AI Import and Export** — Export a campaign as markdown for an AI tool and import its pages, edits and records back with a preview
+- **Obsidian and Markdown Import** — Bring in an Obsidian vault or a Notion or Trilium export as GM-only pages
+- **Mermaid Diagrams** — Flowcharts, sequence diagrams and more drawn from text in pages and notes
+- **House Rules Chapters** — Add your own chapters to a game system's rulebook
 - **Tags** — Color-coded tags with DM-only visibility controls
 - **Custom Attributes** — Per-category field templates (text, number, select, checkbox, URL) with per-entity overrides
 - **Drag-and-Drop Page Layouts** — Visual layout editor for entity profile pages
@@ -26,6 +31,7 @@ Chronicle is purpose-built for tabletop RPGs, open source, and designed to be se
 ### Calendar
 - **Custom Calendars** — Months, weekdays, moons, seasons and eras of your own, or the real-world calendar; import from Calendaria, Simple Calendar and Fantasy Calendar
 - **Events** — Kinds of event, repeats by rule with skipped or moved dates, and pages tied to events and eras
+- **Page Versions by Era** — A page can keep a version for each era, and eras and moons can link to lore pages
 - **Weather** — Climate-based generation, locked days and an optional player forecast
 - **Game Nights** — Plan a game night in the calendar, with a "Who's free" view of when everyone is available
 
@@ -38,6 +44,9 @@ Chronicle is purpose-built for tabletop RPGs, open source, and designed to be se
 - **Leaflet.js Maps** — Upload custom map images and place interactive markers
 - **Entity-Linked Markers** — Pin entities to map locations with click-through navigation
 - **DM-Only Markers** — Hide map pins from players
+- **Hex Maps** — A hex grid over the whole map or one picture, with painted hexes, fog and a walking party
+- **Measure Tool** — A private path with running distances for everyone, with a scale the owner or DM sets
+- **Pins That Open Maps** — A pin can open another map, with a trail back and a tree of linked maps
 
 ### Armory, Shops & Stashes
 - **Armory** — Item galleries with tag filters, collections and character money history
@@ -45,7 +54,7 @@ Chronicle is purpose-built for tabletop RPGs, open source, and designed to be se
 - **Stashes** — Shared hoards of items and money, with GM-approved moves and a downtime switch
 
 ### DM Screen
-- **GM Control Panel** — A three-leaf screen for owners and scribes: party at a glance, the world's date and weather, conditions and NPC reveals
+- **GM Control Panel** — A three-leaf screen for owners and scribes: party at a glance, the world's date and weather, conditions and NPC reveals, time-step buttons for the calendar, shop and stash requests waiting on you, and notes kept with the next game night
 
 ### Game Sessions
 - **Session Scheduling** — Plan game nights with date, location, and status tracking
@@ -56,13 +65,14 @@ Chronicle is purpose-built for tabletop RPGs, open source, and designed to be se
 - **Roles** — Owner (GM), Scribe, and Player roles with granular permissions
 - **Customizable Dashboards** — Drag-and-drop dashboard blocks (recent pages, maps, stats)
 - **Site and Campaign Look** — Admin > Site look sets the name, logo and sign-in background; each person's My view sets light/dark, calmer motion, text size and contrast
+- **Coming Up** — A dashboard card with the next game nights, what you still owe the table, and the next calendar events
 - **Customizable Sidebar** — Reorder, rename, and add custom navigation links
 - **Category Dashboards** — Per-category landing pages with their own layouts
 - **Public Campaigns** — Optionally make campaigns publicly viewable
 - **"View as Player"** — Toggle to see your campaign as players see it
 
 ### Player Notes
-- **Per-Entity Notes** — Private notes attached to any page
+- **Per-Entity Notes** — Notes attached to any page, private or shared with the GM, co-GMs or chosen people
 - **Shared Notes** — Share notes with the campaign (with edit locking)
 - **Version History** — View and restore previous note versions
 - **Page History and Trash** — Every page keeps its text history; deleted pages wait in Trash and save clashes are caught instead of overwritten
@@ -84,6 +94,10 @@ Chronicle is purpose-built for tabletop RPGs, open source, and designed to be se
 - **Rate Limiting** — Per-route rate limits on auth and upload endpoints
 - **Session Security** — Redis-backed sessions with force-logout and session termination
 - **Database TLS** — Configurable TLS encryption for database connections (`DB_TLS_MODE`)
+- **Two-Factor Sign-In** — Authenticator-app codes with recovery codes and remembered devices
+- **Outside Sign-In Provider** — One OpenID Connect provider, set up under Admin > Sign-ins & sessions
+- **Guest Codes** — A game master's code lets someone join one campaign with just a name
+- **Owner Hand-Over** — A site admin can hand an away owner's campaign to a member after 3, 6 or 12 months, if the owner opted in
 - **IDOR Protection** — Campaign-scoped access checks on every route
 - **Argon2id** — Password hashing with modern algorithm
 

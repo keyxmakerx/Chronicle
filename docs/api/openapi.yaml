@@ -771,7 +771,7 @@ paths:
       tags: [Calendar]
       summary: List eras
       operationId: getEras
-      description: Requires the calendar addon. The default calendar's eras, filtered for the caller (hidden moons and eras are Owner only).
+      description: Requires the calendar addon. The default calendar's eras, filtered for the caller (hidden moons and eras are Owner only). An era with `hidden_until_begins` is withheld from players until the calendar's date reaches its start.
       parameters:
         - $ref: "#/components/parameters/campaignId"
       responses:
@@ -3243,6 +3243,26 @@ components:
           format: double
         color:
           type: string
+        base_design:
+          type: string
+        tint:
+          type: string
+          nullable: true
+        phase_source:
+          type: string
+        size:
+          type: number
+          format: double
+        orbit_speed:
+          type: number
+          format: double
+        hidden_from_players:
+          type: boolean
+        lore_entity_id:
+          type: string
+          nullable: true
+        lore_entity_name:
+          type: string
 
     Season:
       type: object
@@ -3281,7 +3301,17 @@ components:
           type: string
         start_year:
           type: integer
+        start_month:
+          type: integer
+        start_day:
+          type: integer
         end_year:
+          type: integer
+          nullable: true
+        end_month:
+          type: integer
+          nullable: true
+        end_day:
           type: integer
           nullable: true
         description:
@@ -3291,6 +3321,27 @@ components:
           type: string
         sort_order:
           type: integer
+        color_2:
+          type: string
+          nullable: true
+        style:
+          type: string
+          enum: [gas, ink]
+        feel:
+          type: string
+          nullable: true
+          enum: [still, subtle, lively]
+        lore_entity_id:
+          type: string
+          nullable: true
+        lore_entity_name:
+          type: string
+        dm_note:
+          type: string
+          nullable: true
+          description: Director's private note; present only for a viewer who sees DM-only content.
+        hidden_until_begins:
+          type: boolean
 
     Event:
       type: object

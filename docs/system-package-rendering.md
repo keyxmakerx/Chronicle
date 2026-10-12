@@ -366,16 +366,15 @@ fill it, a system package ships:
    Chronicle-owned "Player Characters" type, without your package owning its
    slug. Ship one or both.
 
-When the addon is enabled in a campaign that has your system, it **nests your
-character type under "Characters"** as the player-character sub-category —
-without renaming it (your terminology is preserved) and without copying fields
-(your type already carries them and renders via your own renderer). A
-system-less campaign gets a generic "Player Characters" type instead.
+When the addon is enabled in a campaign that has your system, your character
+preset (fields and sheet) is applied to the existing top-level **Characters**
+category; no second category is created beside it. A system-less campaign gets a generic
+"Player Characters" type instead.
 
 **Modularity — this is the whole point.** A new system (e.g. D&D 5e) gets the
 **identical** behavior with **zero Chronicle core changes**: ship a manifest
 with a `category: "character"` preset (its fields) and a `character-sheet`
-renderer, and the same nesting, the same claiming, and the same sheet rendering
+renderer, and the same placement on Characters, the same claiming, and the same sheet rendering
 apply. Chronicle core detects "a system character type" generically (by preset
 category / claimability) and never references any system by name — every system
 specific (fields, widget, renderer, the type's name) lives in the package's

@@ -132,6 +132,8 @@ for _, tt := range tests {
 }
 ```
 
+DB-backed Go tests get a throwaway schema from `internal/database/dbtest`: `dbtest.Open` reads `CHRONICLE_TEST_DB_DSN`, creates a uniquely named migrated schema on that server and drops it afterwards (`make test-int-local` sets the DSN).
+
 ## Widget Registration (Frontend JS)
 
 Mounts to `data-widget="<slug>"` elements, fetches its own data, renders itself.
@@ -245,6 +247,7 @@ This repo is **not plain-`gofmt`-clean** (many committed files predate or differ
 | Wire-contract conformance | `internal/wire/wire_contract_test.go` + `routes_snapshot.txt` | FAIL (snapshot) | T-O2: every route the real `RegisterRoutes` registers is in the curated snapshot with its resolved path, auth class, handler and middleware chain |
 | Foundry public rate-limit pin | `internal/wire/foundry_public_ratelimit_test.go` | FAIL | T-B1: two AST assertions pin the Foundry public manifest rate-limit wiring (`g.Use(rateLimit)` in `foundry_vtt.RegisterPublicRoutes`) and call site (`middleware.RateLimit(...)` in `app.RegisterRoutes`) |
 | Sanitize-on-write invariant | `internal/sanitize/invariant_test.go` + snapshot | FAIL (snapshot + invariant) | T-B1: every `internal/plugins/*/service.go` (+ widgets) declaring HTML-typed inputs must call `sanitize.HTML` |
+| CSS emissions | `tools/check-css-emissions.sh` + `tools/css-emissions.txt` | FAIL (CI and `make verify`) | Every selector listed in `css-emissions.txt` survives into the built stylesheet; Tailwind's purge drops rules it thinks are unused (JS-built class names) with no build error |
 | Decision-citations | `tools/check-decision-citations.sh` | WARN (exit 0, `continue-on-error`) | T-O3: warns about a `cordinator/decisions/*.md` that nothing references; with no Cordinator checkout it has nothing to check |
 
 ### Pre-merge rules that no guard checks
@@ -377,7 +380,7 @@ Plugin CSS sub-layers under `@layer plugins` use **hyphens** matching the public
 
 ## Tailwind JIT safelist for runtime-injected classes
 
-Tailwind's JIT only emits classes found in source files, so classes added at runtime by JS or HTMX (e.g. `.htmx-added`, applied during the settle phase) won't be in the compiled CSS unless referenced: define base styling directly in `static/css/input.css` under an inline `@layer` rule (see the `.htmx-added` + `@starting-style` block there), or add a runtime Tailwind-utility class to the safelist in `tailwind.config.js`. Prefer the inline `@layer` for HTMX/Alpine-injected classes, since the JIT can't see them.
+Tailwind's JIT only emits classes found in source files, so classes added at runtime by JS or HTMX (e.g. `.htmx-added`, applied during the settle phase) won't be in the compiled CSS unless referenced: define base styling directly in `static/css/input.css` under an inline `@layer` rule (see the `.htmx-added` + `@starting-style` block there), or add a runtime Tailwind-utility class to the safelist in `tailwind.config.js`. Prefer the inline `@layer` for HTMX/Alpine-injected classes, since the JIT can't see them. Add the selector of any hand-written rule that must survive to `tools/css-emissions.txt`; `tools/check-css-emissions.sh` fails when the built stylesheet lacks it.
 
 ## Plugin registration + per-plugin static assets
 
