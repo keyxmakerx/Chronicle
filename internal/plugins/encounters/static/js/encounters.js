@@ -67,7 +67,7 @@
     if (n.creatures.length >= LIM.rows) return n;
     var last = n.creatures[n.creatures.length - 1];
     n.creatures.push({
-      id: uid(), entityId: pick.entityId || '', name: pick.name, count: 1,
+      id: uid(), entityId: pick.entityId || '', name: String(pick.name).slice(0, LIM.name), count: 1,
       group: last ? last.group : 'A', start: 'seen'
     });
     return n;
@@ -210,14 +210,16 @@
     }
   });
 
+  // load fetches the page's encounters. A first load that fails leaves the
+  // block out; a reload that fails keeps what is on screen.
   function load(S) {
     return api(S, 'GET', base(S) + '/pages/' + encodeURIComponent(S.cfg.entityId) + '/encounters').then(function (v) {
       S.list = ((v && v.encounters) || []).map(normalise);
       S.canEdit = !!(v && v.canEdit);
+      S.loaded = true;
       drawBlock(S);
     }).catch(function () {
-      // A block that cannot load is left out; the rest of the page is fine.
-      S.el.textContent = '';
+      if (!S.loaded) S.el.textContent = '';
     });
   }
 
@@ -254,14 +256,21 @@
   }
 
   function create(S) {
+    if (S.creating) return;
+    S.creating = true;
+    var newBtn = S.el.querySelector('.enc-new');
+    if (newBtn) newBtn.disabled = true;
     api(S, 'POST', base(S) + '/pages/' + encodeURIComponent(S.cfg.entityId) + '/encounters', {
       name: 'New encounter', ready: false, heroes: [], creatures: []
     }).then(function (e) {
+      S.creating = false;
       e = normalise(e);
       S.list.push(e);
       drawBlock(S);
       openDrawer(S, e.id, S.el.querySelector('.enc-new'), true);
     }).catch(function (err) {
+      S.creating = false;
+      drawBlock(S);
       var p = S.el.querySelector('.enc-empty') || S.el.appendChild(h('p', 'enc-empty'));
       p.textContent = err.message;
     });
