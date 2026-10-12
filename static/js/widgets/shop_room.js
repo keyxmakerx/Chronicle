@@ -1310,6 +1310,8 @@
     '.shr-addt{display:grid;justify-items:center;gap:3px;border:1px solid var(--color-border,#e5e7eb);background:var(--color-card-bg,#fff);color:var(--color-text-body,#374151);border-radius:8px;padding:7px 4px;font-size:.7rem;line-height:1.1;cursor:grab;touch-action:none;transition:transform .15s,border-color .15s}',
     '.shr-addt:hover{transform:translateY(-1px);border-color:var(--shr-acc)}.shr-addt i{font-size:1rem;color:var(--color-text-secondary,#6b7280)}',
     '.shr-addt svg{width:20px;height:20px}',
+    // A piece being dragged over another, or over the bin, turns see-through.
+    '.shr .shr-ghosted{opacity:.45}.shr .srp-pc.shr-ghosted{filter:saturate(.6)}',
     '.shr-ghost{position:fixed;z-index:10000;pointer-events:none;transform:translate(-50%,-50%) rotate(-2deg);animation:shr-lift var(--dur-micro,120ms) var(--ease-out,ease-out);transition:opacity 200ms var(--ease-out,ease-out),transform 200ms var(--ease-out,ease-out);padding:6px 10px;border-radius:999px;background:var(--color-card-bg,#fff);color:var(--color-text-primary,#111827);box-shadow:0 8px 24px -6px rgb(0 0 0/.4);font-size:.78rem;display:flex;align-items:center;gap:6px}',
     '.shr-ghost svg{width:18px;height:18px}',
     '.shr-bin{position:absolute;left:50%;bottom:12px;z-index:15;transform:translate(-50%,140%);display:flex;align-items:center;gap:8px;padding:9px 16px;border-radius:999px;background:rgb(127 29 29/.92);color:#fff;font-size:.8rem;pointer-events:none;opacity:0;transition:transform .3s cubic-bezier(.32,1.25,.5,1),opacity .2s}',
@@ -1481,6 +1483,7 @@
         root.classList.toggle('paper', paper);
         if (paper) window.ShopRoomPaper.render(pel, { view: view, its: S.its, name: S.name, image: ds.shopImage, icons: ICONS, fx: S.fx, mood: view.mood, efx: view.efx, arr: S.mode === 'arr', shut: root.classList.contains('cold') });
         else pel.innerHTML = '';
+        markGhost();
       }
       function paperOn() { return S.look === 'paper' && !!window.ShopRoomPaper; }
       function placeKeeper() {
@@ -1659,7 +1662,7 @@
         var g = e.target.closest('.piece'); if (!g) return;
         var p = byId(+g.getAttribute('data-p')); if (!p) return;
         var q = svgPt(e);
-        drag = { p: p, q: q, f: toFloor(q), x: p.x, y: p.y, moved: false };
+        drag = { p: p, q: q, f: toFloor(q), x: p.x, y: p.y, moved: false, ok: { x: p.x, y: p.y, off: p.off } };
         showBin(true);
         svg.setPointerCapture(e.pointerId); e.preventDefault();
       }
@@ -1689,13 +1692,13 @@
         if (dc) { pickDeco(e, +dc.getAttribute('data-up'), +dc.getAttribute('data-ua')); return; }
         var g = e.target.closest('.srp-pc'), p = g && byId(+g.getAttribute('data-p')), f = p && floorFrom(e);
         if (!f) return;
-        drag = { p: p, f: f, x: p.x, y: p.y, moved: false, paper: true };
+        drag = { p: p, f: f, x: p.x, y: p.y, moved: false, paper: true, ok: { x: p.x, y: p.y, off: p.off } };
         showBin(true);
         pel.setPointerCapture(e.pointerId); e.preventDefault();
       }
       function onPaperMove(e) {
         if (!drag || !drag.paper) return;
-        if (bin) bin.classList.toggle('hot', overBin(e));
+        if (bin) { bin.classList.toggle('hot', overBin(e)); markGhost(); }
         var p = drag.p, f = floorFrom(e), nx = drag.x, ny = drag.y;
         if (!f) return;
         if (room.isWall(p.kind)) { if (p.wall === 'Y') nx = room.snap(drag.x + f[0] - drag.f[0]); else ny = room.snap(drag.y + f[1] - drag.f[1]); }
@@ -1710,21 +1713,41 @@
       function moveTo(p, nx, ny) {
         if (nx === p.x && ny === p.y) return;
         var ox = p.x, oy = p.y, oo = p.off; p.x = nx; p.y = ny;
-        if ((room.isWall(p.kind) && !room.hug(p)) || room.clashes(p, S.pieces, room.size())) { p.x = ox; p.y = oy; p.off = oo; return; }
+        // It never leaves the room or its wall, but it can pass over other
+        // pieces as a see-through ghost; dropped there, it goes back to the
+        // last free spot it crossed.
+        if ((room.isWall(p.kind) && !room.hug(p)) || room.clashes(p, [], room.size())) { p.x = ox; p.y = oy; p.off = oo; return; }
+        drag.ghost = room.clashes(p, S.pieces, room.size());
+        if (!drag.ghost) drag.ok = { x: p.x, y: p.y, off: p.off };
         drag.moved = true; later();
+      }
+      function markGhost() {
+        if (!drag) return;
+        var on = !!drag.ghost || !!(bin && bin.classList.contains('hot'));
+        root.querySelectorAll('[data-p="' + drag.p.id + '"]').forEach(function (el) { el.classList.toggle('shr-ghosted', on); });
       }
       function onSvgUp(e) {
         if (!drag) return;
-        var p = drag.p, moved = drag.moved; drag = null; showBin(false);
-        if (e && overBin(e)) { removePiece(p); return; }
+        var p = drag.p, moved = drag.moved, back = drag.ghost ? drag.ok : null, sx = drag.x, sy = drag.y, binned = !!e && overBin(e); drag = null; showBin(false);
+        if (binned) { removePiece(p); return; }
+        if (back) { p.x = back.x; p.y = back.y; p.off = back.off; moved = back.x !== sx || back.y !== sy; }
         if (moved) p.pinned = true;
         draw(); if (moved) save();
+        if (back) status('No room there, so it went back.');
       }
-      function onSvgMoveBin(e) { if (drag) bin.classList.toggle('hot', overBin(e)); }
+      function onSvgMoveBin(e) { if (drag) { bin.classList.toggle('hot', overBin(e)); markGhost(); } }
 
       // ---- Adding furniture and decorations by hand ----
       function showBin(on) {
         if (!bin) { bin = document.createElement('div'); bin.className = 'shr-bin'; bin.setAttribute('aria-hidden', 'true'); bin.innerHTML = '<i class="fa-solid fa-trash-can"></i><span>Drop here to remove</span>'; scene.appendChild(bin); }
+        // A tall room can push the bin below the screen, so while dragging it
+        // sits at the bottom of the visible part of the room.
+        if (on) {
+          var r = scene.getBoundingClientRect(), pw = panel && root.classList.contains('arr') ? panel.offsetWidth : 0;
+          bin.style.position = 'fixed';
+          bin.style.left = Math.round(r.left + (r.width - pw) / 2) + 'px';
+          bin.style.bottom = Math.round(Math.max(12, window.innerHeight - r.bottom + 12)) + 'px';
+        }
         root.classList.toggle('dragging', on); if (!on) bin.classList.remove('hot');
       }
       function overBin(e) { if (!bin || !root.classList.contains('dragging')) return false; var r = bin.getBoundingClientRect(); return e.clientX >= r.left - 12 && e.clientX <= r.right + 12 && e.clientY >= r.top - 12 && e.clientY <= r.bottom + 12; }
