@@ -49,6 +49,15 @@
 /* A book shown inside another page (a draft under review) fills the box it
    is given instead of the screen; its pages scroll inside it. */
 .rb.rb-inline { min-height: 0; }
+/* On the Rules page the book fills the content area exactly,
+   whatever the header's height or a banner above it. A guessed screen height
+   left the page a little taller than the area, so the area scrolled, and
+   every focus move or repaint snapped it back to the top. Below the floor
+   (a phone held sideways) the area scrolls as before. */
+#main-content:has(> #module-content > [data-rulebook-fullbleed] > .rb) { display: flex; flex-direction: column; }
+#module-content:has(> [data-rulebook-fullbleed] > .rb) { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+[data-rulebook-fullbleed]:has(> .rb) { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+[data-rulebook-fullbleed] > .rb { flex: 1 1 0px; height: auto; min-height: 420px; }
 .rb *:where(:not(.rb-wslot *)), .rb *:where(:not(.rb-wslot *))::before, .rb *:where(:not(.rb-wslot *))::after { box-sizing: border-box; }
 .rb [hidden]:where(:not(.rb-wslot *)) { display: none !important; }
 /* The reset is written with :where so it weighs no more than a single class:
@@ -238,6 +247,13 @@
 .rb-leaf.flip.back:where(:not(.rb-wslot *)) { left: 0; transform-origin: right center; }
 .rb-leaf.flip .rb-face:where(:not(.rb-wslot *)) { backface-visibility: hidden; }
 .rb-leaf.flip .rb-face.b:where(:not(.rb-wslot *)) { transform: rotateY(180deg); }
+/* A turn to or from a wide page: each face and the still cover are one half
+   of a whole spread, drawn at book width and clipped at the spine. */
+.rb-half:where(:not(.rb-wslot *)) { position: absolute; inset: 0; overflow: hidden; }
+.rb-cover:where(:not(.rb-wslot *)) { inset: 0 auto 0 0; width: 50%; z-index: 9; pointer-events: none; }
+.rb-cover.r:where(:not(.rb-wslot *)) { left: 50%; }
+.rb-spread:where(:not(.rb-wslot *)) { position: absolute; top: 0; bottom: 0; left: 0; width: 200%; display: flex; }
+.rb-half.r > .rb-spread:where(:not(.rb-wslot *)) { left: -100%; }
 .rb-shade:where(:not(.rb-wslot *)) { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(90deg, rgba(0, 0, 0, 0.5), transparent 65%); opacity: 0; }
 .rb-leaf.flip.go:where(:not(.rb-wslot *)) { animation: var(--rb-turn) cubic-bezier(0.45, 0.05, 0.25, 1) forwards; }
 .rb-leaf.flip.fwd.go:where(:not(.rb-wslot *)) { animation-name: rb-turnF; }

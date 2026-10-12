@@ -364,7 +364,7 @@
     var SHEET_STYLES = [['modern', 'Modern'], ['parchment', 'Parchment'], ['ledger', 'Ledger'], ['journal', 'Field journal'], ['vellum', 'Vellum'], ['night', 'Night'],
       ['deck', 'Card deck'], ['pencil', 'Pencil'], ['starship', 'Starship'], ['neon', 'Neon terminal'], ['runes', 'Rune slate'], ['brass', 'Brass gauges']];
     // Same ids as the server's AppearanceBookLooks, in that order.
-    var BOOK_LOOKS = [['book', 'As the game system draws it'], ['standard', 'Standard']];
+    var BOOK_LOOKS = [['book', 'Game system’s look'], ['standard', 'Chronicle’s look']];
     var SEC_KEYS = {
       brand:['brand.name', 'brand.logo', 'brand.welcome', 'brand.backdrop'],
       header:['header.bg', 'header.height', 'header.solid', 'header.from', 'header.to', 'header.dir', 'header.image', 'header.scrim', 'header.widgets', 'header.links', 'header.text'],
@@ -751,7 +751,7 @@
           '<p class="hint">How character sheets look for everyone in this campaign. Modern matches the rest of Chronicle; the others are optional paper and screen styles.</p>'));
       if (id === 'book') return (
         fld('bk-look', 'Look', 'Every rulebook in the campaign', opts('bk-look', 'book.look', 'bk-look-l', BOOK_LOOKS) +
-          '<p class="hint">Some game systems draw their rules as a printed handbook. Standard shows every book in Chronicle’s own plain look instead. Character sheets keep their own style.</p>'));
+          '<p class="hint">There are two looks. Game system’s look shows each book the way its game system designed it; Draw Steel’s is a paper handbook. Chronicle’s look shows every book in the same colours as the rest of the site. Pages turn the same way in both. Character sheets keep their own style.</p>'));
       return '';
     }
     function buildUI(){
