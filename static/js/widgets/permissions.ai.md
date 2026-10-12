@@ -49,6 +49,6 @@ the handler is stored on the element and removed in `destroy()`.
   trigger and body never present the untouched defaults as "Everyone".
 - Role grants use the numeric role (`ROLE_OWNER` is 3 and must match the Go
   constant); owners are listed separately and cannot be restricted.
-- Styles are injected once into `#perm-widget-styles` and use the campaign
-  theme CSS variables with fallbacks.
+- Styles live in `static/css/input.css` (unlayered, `.perm-*`) and use the
+  campaign theme CSS variables with fallbacks.
 - `data-csrf` is not read; the CSRF header comes from `Chronicle.apiFetch`.

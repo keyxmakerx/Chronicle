@@ -721,11 +721,8 @@ keeps today's behaviour, because M4 already handles the miss.
 
 ### M6 / M7 — Formats and cleanups
 
-M6 as in §6. M7 folds in `packages.ReconcileOrphanedInstalls`
-(`internal/plugins/packages/service.go:1218`), which is declared, implemented, and
-**called by nothing** — verified across the whole tree. Either wire it into the
-boot reconciler set with the same admin visibility, or delete it. Do not leave a
-third option. M7 also carries the `map_tokens.image_path` shape constraint and
+M6 as in §6. M7's package orphan reconciler is settled: it was called by
+nothing, so it was deleted rather than wired in. M7 also carries the `map_tokens.image_path` shape constraint and
 points Data Hygiene's `Referenced` flag at the usage table.
 
 ---

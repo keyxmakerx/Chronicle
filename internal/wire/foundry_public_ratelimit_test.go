@@ -3,8 +3,9 @@
 // are guarded by rate-limit middleware. Without it an abusive client can
 // hammer the manifest endpoint for an easy DoS.
 //
-// This is a focused invariant, not full middleware-chain capture across
-// every route. Two AST assertions:
+// The wire-contract snapshot also records these routes' middleware chain;
+// this file stays as a source-level pin that names the call site and says
+// why the limiter must exist. Two AST assertions:
 //
 //  1. TestFoundryPublicRoutes_RegisterPublicRoutesWiresRateLimit — walks
 //     RegisterPublicRoutes's body for a g.Use(rateLimit) call.

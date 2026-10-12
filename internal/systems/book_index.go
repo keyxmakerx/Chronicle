@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"unicode"
 )
 
@@ -54,6 +55,14 @@ type indexEntries struct {
 	fields []FieldDef
 	label  string
 }
+
+// maxBookIndexCacheFiles bounds the parsed-file cache: the provider already
+// holds every data file for the enabled systems, so this second copy must not
+// grow with each package or campaign system ever opened.
+const maxBookIndexCacheFiles = 16
+
+// indexFileParses counts real file parses, so tests can prove a cache hit.
+var indexFileParses atomic.Int64
 
 // bookIndexCache holds parsed data files by path, size and modification
 // time, so the book and the index API don't re-read a large file per request.
@@ -108,6 +117,7 @@ func loadIndexEntries(sysDir string, manifest *SystemManifest, category string) 
 		}
 		ce = bookIndexCacheEntry{size: info.Size(), mtime: info.ModTime().UnixNano(), items: items}
 		bookIndexCache.Lock()
+		evictOne(bookIndexCache.m, path, maxBookIndexCacheFiles)
 		bookIndexCache.m[path] = ce
 		bookIndexCache.Unlock()
 	}
@@ -115,6 +125,7 @@ func loadIndexEntries(sysDir string, manifest *SystemManifest, category string) 
 }
 
 func readIndexItems(path, moduleID, category string) ([]ReferenceItem, error) {
+	indexFileParses.Add(1)
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("data/%s.json not found", category)
@@ -449,55 +460,4 @@ type BookFindResult struct {
 	Name    string `json:"name"`
 	Summary string `json:"summary,omitempty"`
 	Where   string `json:"where"`
-}
-
-// findInIndex searches the generated chapters a reader can see, names first.
-func findInIndex(sysDir string, manifest *SystemManifest, b *Book, query string) []BookFindResult {
-	q := strings.ToLower(strings.TrimSpace(query))
-	if q == "" {
-		return []BookFindResult{}
-	}
-	var named, other []BookFindResult
-	seen := map[string]bool{}
-	for _, ch := range indexChapters(b) {
-		for pi, p := range ch.Pages {
-			cat, s, ok := pageSlice(p)
-			if !ok {
-				continue
-			}
-			ie, err := loadIndexEntries(sysDir, manifest, cat)
-			if err != nil {
-				continue
-			}
-			for _, it := range ie.slice(s) {
-				k := cat + "/" + it.ID
-				if seen[k] {
-					continue
-				}
-				r := BookFindResult{Chapter: ch.ID, Page: pi, ID: it.ID, Name: it.Name,
-					Summary: flattenRefMarkup(it.Summary), Where: ch.Title + " · " + p.Title}
-				switch {
-				case strings.Contains(strings.ToLower(it.Name), q):
-					seen[k] = true
-					named = append(named, r)
-				case strings.Contains(strings.ToLower(flattenRefMarkup(it.Summary)), q):
-					seen[k] = true
-					other = append(other, r)
-				}
-			}
-		}
-	}
-	sort.SliceStable(named, func(i, j int) bool {
-		pi := strings.HasPrefix(strings.ToLower(named[i].Name), q)
-		pj := strings.HasPrefix(strings.ToLower(named[j].Name), q)
-		return pi && !pj
-	})
-	out := append(named, other...)
-	if len(out) > maxBookFindResults {
-		out = out[:maxBookFindResults]
-	}
-	if out == nil {
-		out = []BookFindResult{}
-	}
-	return out
 }

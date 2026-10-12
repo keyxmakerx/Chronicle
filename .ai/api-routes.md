@@ -12,8 +12,8 @@ the REST API. This file does not enumerate them — a hand-maintained table
 drifts from the code within weeks. Instead:
 
 - **The full, current route list** is `internal/wire/routes_snapshot.txt`,
-  a `(method, path, file)` inventory regenerated from the actual Echo
-  registrations and enforced by `internal/wire/wire_contract_test.go` in CI
+  a `(method, resolved path, auth class, handler, middleware chain)` inventory
+  recorded from the real route registration and enforced by `internal/wire/wire_contract_test.go` in CI
   (see `.ai/conventions.md` §"CI tenet-enforcement guards" for how to
   regenerate it after adding or removing a route).
 - **The public REST API** (for external clients like the Foundry module) is
@@ -21,11 +21,11 @@ drifts from the code within weeks. Instead:
 
 ## Finding a route's handler
 
-1. Grep `internal/wire/routes_snapshot.txt` for the path or method to find
-   which file registers it.
-2. Open that file's `routes.go` (or, for core routes, `internal/app/routes.go`)
-   and find the `e.GET` / `e.POST` / etc. call — it names the handler function
-   and the middleware chain.
+1. Grep `internal/wire/routes_snapshot.txt` for the full path or method. The
+   line names the handler function (`plugins/<slug>.(*Handler).Name`), its auth
+   class and the middleware chain in execution order.
+2. Open that plugin's `routes.go` (or, for core routes, `internal/app/routes.go`)
+   and find the registration if you need the source.
 3. The handler lives in the same plugin's `handler.go`. From there, `service.go`
    has the business logic and `repository.go` has the SQL.
 

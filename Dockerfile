@@ -10,6 +10,7 @@
 FROM alpine:3.24 AS tailwind
 
 # The standalone Tailwind CLI is a glibc binary; install compat layer for Alpine.
+# Keep the version in step with VERSION in tools/tailwind.sh.
 RUN apk add --no-cache libc6-compat \
     && wget -O /usr/local/bin/tailwindcss \
     https://github.com/tailwindlabs/tailwindcss/releases/download/v3.4.17/tailwindcss-linux-x64 \

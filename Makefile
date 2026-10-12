@@ -58,12 +58,12 @@ foundry-error-catalog: ## Regenerate the foundry_vtt error-catalog.json from err
 	go run ./cmd/foundry-error-catalog
 
 .PHONY: tailwind
-tailwind: ## Regenerate Tailwind CSS
-	tailwindcss -i static/css/input.css -o static/css/app.css --minify
+tailwind: ## Regenerate Tailwind CSS (pinned binary, fetched into bin/ on first use)
+	./tools/tailwind.sh -i static/css/input.css -o static/css/app.css --minify
 
 .PHONY: tailwind-watch
 tailwind-watch: ## Watch mode for Tailwind CSS
-	tailwindcss -i static/css/input.css -o static/css/app.css --watch
+	./tools/tailwind.sh -i static/css/input.css -o static/css/app.css --watch
 
 .PHONY: tiptap-bundle
 tiptap-bundle: ## Rebuild TipTap editor bundle (table extensions, etc.)
@@ -148,6 +148,8 @@ verify: ## Run the full local CI sequence (templ → build → vet → guards �
 	@echo "==> guard: widget-mounts";          ./tools/check-widget-mounts.sh
 	@echo "==> guard: customize-discipline";   ./tools/check-customize-discipline.sh
 	@echo "==> guard: templ-packages";         ./tools/check-templ-packages.sh
+	@echo "==> guard: css-emissions (self-test)"; ./tools/test-css-emissions.sh
+	@echo "==> guard: css-emissions";          ./tools/check-css-emissions.sh
 	@echo "==> go test ./... -short";          go test ./... -short
 	@echo "==> make test-js";                  $(MAKE) test-js
 	@echo "==> verify: OK"
@@ -227,6 +229,13 @@ docker-all: ## Start full stack from the PUBLISHED image (pulls first)
 .PHONY: docker-all-local
 docker-all-local: ## Start full stack from a LOCAL source build (chronicle:local)
 	docker compose -f $(DOCKER_COMP) -f $(DOCKER_COMP_BUILD) up -d --build
+
+# Same script CI runs. Uses its own compose project and throwaway secrets, and
+# deletes what it created; refuses to run beside a stack that uses the fixed
+# container names.
+.PHONY: full-stack-check
+full-stack-check: ## Build from source, boot the full compose stack, wait for /healthz, tear down
+	./tools/full-stack-check.sh
 
 # ============================================================================
 # Backup & Restore

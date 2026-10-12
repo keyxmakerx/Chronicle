@@ -559,26 +559,35 @@ func (h *SystemHandler) BookAPI(c echo.Context) error {
 // rules-index endpoints. Campaign edits are not merged: generated chapters
 // can't be edited, so the package's are the ones readers see.
 func (h *SystemHandler) viewerBook(c echo.Context) (*Book, string, *SystemManifest, bool, error) {
-	cc := campaigns.GetCampaignContext(c)
-	if cc == nil {
-		return nil, "", nil, false, apperror.NewMissingContext()
+	sysDir, manifest, director, err := h.viewerBookTarget(c)
+	if err != nil {
+		return nil, "", nil, false, err
 	}
-	mod := h.resolveSystem(c)
-	if mod == nil {
-		return nil, "", nil, false, apperror.NewNotFound("system not found")
-	}
-	sysDir := h.systemDir(c, mod)
-	if !HasBook(sysDir) {
-		return nil, "", nil, false, apperror.NewNotFound("this system has no book")
-	}
-	manifest := mod.Info()
 	b, err := LoadBook(sysDir, manifest)
 	if err != nil {
 		return nil, "", nil, false, apperror.NewNotFound("the rulebook could not be opened")
 	}
+	return FilterBook(b, director), sysDir, manifest, director, nil
+}
+
+// viewerBookTarget resolves which book a request reads and as whom, without
+// loading it, so the search can answer from its cached index.
+func (h *SystemHandler) viewerBookTarget(c echo.Context) (string, *SystemManifest, bool, error) {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return "", nil, false, apperror.NewMissingContext()
+	}
+	mod := h.resolveSystem(c)
+	if mod == nil {
+		return "", nil, false, apperror.NewNotFound("system not found")
+	}
+	sysDir := h.systemDir(c, mod)
+	if !HasBook(sysDir) {
+		return "", nil, false, apperror.NewNotFound("this system has no book")
+	}
 	// A Director previewing the player view asks for exactly what players get.
 	director := bookViewerIsDirector(cc) && c.QueryParam("view") != "player"
-	return FilterBook(b, director), sysDir, manifest, director, nil
+	return sysDir, mod.Info(), director, nil
 }
 
 // BookIndexAPI returns the entries one rules-index page shows. The query must
@@ -614,16 +623,20 @@ func (h *SystemHandler) BookIndexAPI(c echo.Context) error {
 // BookFindAPI searches the rules-index chapters the viewer's book shows.
 // GET /campaigns/:id/systems/:mod/book/find?q=
 func (h *SystemHandler) BookFindAPI(c echo.Context) error {
-	b, sysDir, manifest, _, err := h.viewerBook(c)
+	sysDir, manifest, director, err := h.viewerBookTarget(c)
 	if err != nil {
 		return err
+	}
+	idx, err := cachedBookFindIndex(sysDir, manifest, director)
+	if err != nil {
+		return apperror.NewNotFound("the rulebook could not be opened")
 	}
 	q := c.QueryParam("q")
 	if len(q) > 100 {
 		q = q[:100]
 	}
 	c.Response().Header().Set("Cache-Control", "private, no-store")
-	return c.JSON(http.StatusOK, map[string]any{"results": findInIndex(sysDir, manifest, b, q)})
+	return c.JSON(http.StatusOK, map[string]any{"results": idx.search(q)})
 }
 
 // bookViewerIsDirector: the campaign owner, or a member the owner granted
