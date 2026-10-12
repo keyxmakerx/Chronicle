@@ -750,10 +750,7 @@ func (h *Handler) calendarContext(c echo.Context, cc *campaigns.CampaignContext,
 	if h.lookups == nil {
 		return doc, ""
 	}
-	ans := h.lookups.Answer(c.Request().Context(), cc.Campaign.ID, exportActor(c, cc, privacy), []records.Record{
-		{Kind: "lookup", Fields: map[string]any{"what": "calendar"}},
-		{Kind: "lookup", Fields: map[string]any{"what": "weather-kinds"}},
-	})
+	ans := h.lookups.Answer(c.Request().Context(), cc.Campaign.ID, exportActor(c, cc, privacy), records.CalendarLookups())
 	return doc, records.Markdown(ans)
 }
 

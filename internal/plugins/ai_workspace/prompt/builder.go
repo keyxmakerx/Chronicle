@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/aiexport"
+	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/records"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/widgets/tags"
 )
@@ -55,7 +56,7 @@ const ContentHouseRules = "house-rules"
 // ContentCalendar is the content choice for calendar work: the context is
 // the main calendar as a lookup describes it (or how to set one up), so
 // the Exporter is not called either.
-const ContentCalendar = "calendar"
+const ContentCalendar = records.KindCalendar
 
 // Service is the prompt builder's entry point. Wired in app/routes.go
 // with the same plugin Services that back the aiexport renderer.

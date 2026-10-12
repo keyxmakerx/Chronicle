@@ -421,3 +421,37 @@ func TestBuild_ContentMode_HouseRules(t *testing.T) {
 		})
 	}
 }
+
+// TestBuild_ContentMode_Calendar pins the Calendar choice: its context is
+// only the calendar answers handed in, never the world export, and the
+// calendar formats come along even without the front-matter example.
+func TestBuild_ContentMode_Calendar(t *testing.T) {
+	tests := []struct {
+		name, answers, want string
+	}{
+		{"with a calendar", "## Calendar: Harptos\n\nToday: Hammer 1 1492", "Today: Hammer 1 1492"},
+		{"unreadable", "", "ask a `what: calendar` lookup"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			exp := &stubExporter{markdown: "WORLD EXPORT"}
+			got, err := NewService(nil, nil, exp).Build(context.Background(), "Ashfall", "owner-1", "camp-1", Input{
+				ContentMode:         ContentCalendar,
+				RecordDocs:          "### kind: calendar (Calendar)\n\nmonths and moons",
+				RecordContext:       tc.answers,
+				OperatorInstruction: "Set up the Harptos calendar.",
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if exp.calls != 0 || strings.Contains(got, "WORLD EXPORT") {
+				t.Errorf("the world export was used (%d calls)", exp.calls)
+			}
+			for _, want := range []string{"## Existing world context", tc.want, "kind: calendar", "Set up the Harptos calendar."} {
+				if !strings.Contains(got, want) {
+					t.Errorf("prompt lacks %q:\n%s", want, got)
+				}
+			}
+		})
+	}
+}

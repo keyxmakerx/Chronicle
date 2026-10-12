@@ -10,6 +10,7 @@ package ai_workspace
 import (
 	"fmt"
 
+	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/prompt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
@@ -230,7 +231,7 @@ templ promptBuilderBody(cc *campaigns.CampaignContext) {
 						</span>
 					</label>
 					<label class="flex items-start gap-2 cursor-pointer">
-						<input type="radio" name="content_mode" value="calendar" x-model="contentMode" class="mt-0.5 border-edge text-accent"/>
+						<input type="radio" name="content_mode" value={ prompt.ContentCalendar } x-model="contentMode" class="mt-0.5 border-edge text-accent"/>
 						<span>
 							<strong>Calendar</strong>
 							<span class="block text-xs text-fg-muted">Your main calendar as it is now (or how to set one up), its climate and kinds of weather, and how to write calendars, events, weather and generators. The AI can create the calendar, choose the main one, and fill it in.</span>
