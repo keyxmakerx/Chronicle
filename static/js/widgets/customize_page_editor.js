@@ -345,7 +345,23 @@
         else if (has) why = 'Nothing to show on ' + (pageName() || 'this page') + ' yet.';
         else { box.classList.add('is-wait'); return; }
         box.classList.remove('is-wait');
-        box.innerHTML = '<div class="cpe-ph-card">' + ic(box.getAttribute('data-icon')) + '<span><b>' + esc(name) + '</b><span>' + esc(why) + '</span></span></div>';
+        // Built with DOM calls: the name and icon come back from attributes.
+        var card = document.createElement('div');
+        card.className = 'cpe-ph-card';
+        var icon = document.createElement('i');
+        icon.className = 'fa-solid ' + fa(box.getAttribute('data-icon'));
+        icon.setAttribute('aria-hidden', 'true');
+        var words = document.createElement('span');
+        var b = document.createElement('b');
+        b.textContent = name;
+        var sub = document.createElement('span');
+        sub.textContent = why;
+        words.appendChild(b);
+        words.appendChild(sub);
+        card.appendChild(icon);
+        card.appendChild(words);
+        box.textContent = '';
+        box.appendChild(card);
         box.setAttribute('data-filled', '1');
       });
     }
