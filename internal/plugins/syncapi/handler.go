@@ -261,6 +261,8 @@ func (h *Handler) SyncStatusEmbed(c echo.Context) error {
 }
 
 // SyncOverviewFragment returns an HTMX fragment showing the sync summary card.
+// With embed=1 it is the lighter version that sits inside the Foundry page's
+// Connection card instead of a card of its own.
 // GET /campaigns/:id/api-keys/sync-overview
 func (h *Handler) SyncOverviewFragment(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
@@ -268,7 +270,11 @@ func (h *Handler) SyncOverviewFragment(c echo.Context) error {
 		return apperror.NewForbidden("campaign context required")
 	}
 
+	embed := c.QueryParam("embed") == "1"
 	if h.syncMapSvc == nil {
+		if embed {
+			return middleware.Render(c, http.StatusOK, SyncOverviewInlineTempl(nil))
+		}
 		return middleware.Render(c, http.StatusOK, SyncOverviewEmptyTempl())
 	}
 
@@ -277,6 +283,9 @@ func (h *Handler) SyncOverviewFragment(c echo.Context) error {
 		summary = &SyncSummary{}
 	}
 
+	if embed {
+		return middleware.Render(c, http.StatusOK, SyncOverviewInlineTempl(summary))
+	}
 	return middleware.Render(c, http.StatusOK, SyncOverviewCardTempl(summary))
 }
 

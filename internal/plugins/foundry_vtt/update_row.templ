@@ -12,11 +12,11 @@ package foundry_vtt
 // by one line.
 templ AppsUpdateRow(v *OwnerUpdateView, csrfToken string) {
 	if v == nil {
-		<section id={ updateRowID } class="card p-4 mb-6">
+		<section id={ updateRowID } class="card p-4">
 			<p class="text-sm text-fg-secondary">The Foundry module isn't installed on this Chronicle site yet. A site admin adds it under Admin &rsaquo; Packages.</p>
 		</section>
 	} else {
-		<section id={ updateRowID } class="card p-4 mb-6" aria-label={ v.Package }>
+		<section id={ updateRowID } class="card p-4" aria-label={ v.Package }>
 			<div class="flex flex-wrap items-start justify-between gap-3">
 				<div class="min-w-0">
 					<p class="text-sm font-semibold text-fg">

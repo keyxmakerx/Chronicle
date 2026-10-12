@@ -280,6 +280,17 @@ const (
 	PlayerNoFoundry PlayerStatus = "none"
 )
 
+// playerOnlineWindow is how long a report's "online" holds. The GM's client
+// reports every five minutes while the world is open and sends nothing when
+// it closes, so an older report says who was there, not who is.
+const playerOnlineWindow = 11 * time.Minute
+
+// onlineNow is whether a player reads as in the world now: Foundry said so in
+// a report recent enough to still hold, and the world is open.
+func onlineNow(p FoundryPlayer, worldOpen bool, now time.Time) bool {
+	return p.Online && worldOpen && now.Sub(p.ReportedAt) < playerOnlineWindow
+}
+
 // recentWindow is how long a synced change keeps a player Working and a
 // failed one keeps them marked.
 const recentWindow = 7 * 24 * time.Hour
@@ -321,8 +332,9 @@ type MemberRef struct {
 // buildPlayerRows joins Foundry's list with the campaign's members. Linked
 // Foundry users come first, then Foundry users nobody linked, then members
 // with no Foundry user (the owner is left out of that last group: the GM
-// account is theirs whether or not it is linked).
-func buildPlayerRows(players []FoundryPlayer, members []MemberRef, now time.Time) []PlayerRow {
+// account is theirs whether or not it is linked). worldOpen is whether the
+// campaign's Foundry world is connected now.
+func buildPlayerRows(players []FoundryPlayer, members []MemberRef, now time.Time, worldOpen bool) []PlayerRow {
 	byID := make(map[string]MemberRef, len(members))
 	for _, m := range members {
 		byID[m.UserID] = m
@@ -330,7 +342,7 @@ func buildPlayerRows(players []FoundryPlayer, members []MemberRef, now time.Time
 	linked := map[string]bool{}
 	var rows, unlinked []PlayerRow
 	for _, p := range players {
-		r := PlayerRow{FoundryName: p.Name, Online: p.Online, LastChangeAt: p.LastChangeAt,
+		r := PlayerRow{FoundryName: p.Name, Online: onlineNow(p, worldOpen, now), LastChangeAt: p.LastChangeAt,
 			LastFailedAt: p.LastFailedAt, LastFailure: p.LastFailure, FailedCount: p.FailedCount}
 		m, ok := byID[p.MemberUserID]
 		if !ok {

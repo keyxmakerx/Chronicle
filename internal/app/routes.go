@@ -5251,6 +5251,11 @@ func (a *App) RegisterRoutes() {
 	wsHub := ws.NewHub()
 	go wsHub.Run()
 	campaignHandler.SetFoundryConnector(&foundryConnectorAdapter{keys: syncService, hub: wsHub, baseURL: a.Config.BaseURL, served: fvttOwnerUpdates})
+	// A player reads as in the world only while the world itself is connected.
+	syncHistoryHandler.SetWorldPresence(func(campaignID string) bool {
+		_, open := wsHub.FoundryPresence(campaignID)
+		return open
+	})
 
 	// Late-bind now that wsHub exists — see wsRevokerHolder above. From
 	// here on, every wired revoke path force-disconnects the sockets it

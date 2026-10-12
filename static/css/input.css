@@ -1614,7 +1614,7 @@
 
   /* Currently-viewed entity highlight in sidebar tree. */
   .sidebar-tree-item[aria-current="page"] {
-    background-color: rgb(var(--color-accent-rgb, 99 102 241) / 0.12);
+    background-color: rgb(var(--color-accent-rgb) / 0.12);
     color: var(--color-sidebar-active, #e5e7eb);
     border-radius: 6px;
   }
@@ -6183,3 +6183,27 @@ mark.era-w { background: var(--era-hl-strong); color: inherit; border-radius: 3p
   .manage-split .manage-split-flat > :empty { margin: 0; }
   .manage-split .manage-split-main { grid-column: 1; grid-row: 1 / -1; margin: 0; }
 }
+
+/* Foundry page "Why?" (internal/plugins/syncapi/foundry_page.templ): a small
+   button that opens a bubble floating over the players table. The bubble is
+   the Grow move out of the button; the Calm and Off guards above settle it at
+   once. */
+.why-chip {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  padding: 0.125rem 0.5rem; border-radius: 999px;
+  font-size: 0.75rem; font-weight: 500; color: var(--color-accent);
+  transition: background-color 120ms var(--ease-out), color 120ms var(--ease-out);
+}
+.why-chip:hover, .why-chip[aria-expanded="true"] { background: rgb(var(--color-accent-rgb) / 0.12); }
+.why-chip:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.why-bubble {
+  position: fixed; z-index: 50;
+  width: min(20rem, calc(100vw - 1rem));
+  padding: 0.75rem; border-radius: 12px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-secondary);
+  box-shadow: var(--elev-hover);
+  font-size: 0.75rem; line-height: 1.45; color: var(--color-text-secondary);
+  animation: why-grow var(--dur-standard) var(--ease-out) both;
+}
+@keyframes why-grow { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: none; } }

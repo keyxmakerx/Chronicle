@@ -279,7 +279,7 @@ func TestBuildPlayerRows(t *testing.T) {
 		},
 		{
 			name:    "owner linked to a foundry user is listed as that user",
-			players: []FoundryPlayer{{FoundryUserID: "f0", Name: "Gamemaster", MemberUserID: "gm", Online: true, LastChangeAt: tptr(playersNow.Add(-time.Minute))}},
+			players: []FoundryPlayer{{FoundryUserID: "f0", Name: "Gamemaster", MemberUserID: "gm", Online: true, LastChangeAt: tptr(playersNow.Add(-time.Minute)), ReportedAt: playersNow}},
 			check: func(t *testing.T, rows []PlayerRow) {
 				if rows[0].MemberUserID != "gm" || rows[0].Status != PlayerWorking || !rows[0].Online {
 					t.Fatalf("got %+v", rows[0])
@@ -314,8 +314,42 @@ func TestBuildPlayerRows(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			tc.check(t, buildPlayerRows(tc.players, members, playersNow))
+			tc.check(t, buildPlayerRows(tc.players, members, playersNow, true))
 		})
+	}
+}
+
+func TestOnlineNow(t *testing.T) {
+	cases := []struct {
+		name      string
+		p         FoundryPlayer
+		worldOpen bool
+		want      bool
+	}{
+		{"fresh report, world open", FoundryPlayer{Online: true, ReportedAt: playersNow.Add(-time.Minute)}, true, true},
+		{"reported offline", FoundryPlayer{Online: false, ReportedAt: playersNow}, true, false},
+		{"world closed since the report", FoundryPlayer{Online: true, ReportedAt: playersNow.Add(-time.Minute)}, false, false},
+		{"report too old to hold", FoundryPlayer{Online: true, ReportedAt: playersNow.Add(-playerOnlineWindow)}, true, false},
+		{"last report from yesterday", FoundryPlayer{Online: true, ReportedAt: playersNow.Add(-24 * time.Hour)}, true, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := onlineNow(tc.p, tc.worldOpen, playersNow); got != tc.want {
+				t.Fatalf("got %v want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestBuildPlayerRows_ClosedWorldIsNobodyOnline(t *testing.T) {
+	players := []FoundryPlayer{
+		{FoundryUserID: "f0", Name: "Gamemaster", MemberUserID: "gm", Online: true, ReportedAt: playersNow},
+		{FoundryUserID: "f9", Name: "Stranger", Online: true, ReportedAt: playersNow},
+	}
+	for _, r := range buildPlayerRows(players, []MemberRef{{UserID: "gm", Name: "Gail", Owner: true}}, playersNow, false) {
+		if r.Online {
+			t.Fatalf("%s reads online in a closed world", r.FoundryName)
+		}
 	}
 }
 

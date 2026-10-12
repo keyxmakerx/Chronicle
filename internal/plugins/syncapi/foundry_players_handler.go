@@ -23,6 +23,12 @@ func (h *SyncHistoryHandler) SetFoundryPlayers(repo FoundryPlayerRepository) {
 	h.players = repo
 }
 
+// SetWorldPresence wires whether a campaign's Foundry world is connected
+// now. Without it a player's "online" rests on the report's age alone.
+func (h *SyncHistoryHandler) SetWorldPresence(open func(campaignID string) bool) {
+	h.worldOpen = open
+}
+
 // ReportPlayers replaces the campaign's Foundry player list with the GM
 // client's report. Only an owner or DM-access key may send it: a player's
 // own client never holds a key, and the list names who is linked to whom.
@@ -81,7 +87,8 @@ func (h *SyncHistoryHandler) playersView(ctx context.Context, cc *campaigns.Camp
 		refs = append(refs, MemberRef{UserID: m.UserID, Name: name,
 			Role: campaigns.MemberAccessLabel(cc.Campaign, m), Owner: m.Role == campaigns.RoleOwner})
 	}
-	v.Rows = buildPlayerRows(players, refs, v.Now)
+	worldOpen := h.worldOpen == nil || h.worldOpen(cc.Campaign.ID)
+	v.Rows = buildPlayerRows(players, refs, v.Now, worldOpen)
 	v.ReportedAt = latestReport(players)
 	return v, nil
 }
