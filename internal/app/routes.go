@@ -5490,6 +5490,11 @@ func (a *App) RegisterRoutes() {
 		records.NoteKind{Svc: noteSvc, Entities: entityService},
 		aiHouseRules,
 		records.SystemEntryKind{Svc: systemEntrySvc},
+	)
+	if encounterAPI.svc != nil {
+		aiKinds = append(aiKinds, records.EncounterKind{Svc: aiEncountersAdapter{svc: encounterAPI.svc}, Entities: entityService})
+	}
+	aiKinds = append(aiKinds,
 		records.GeneratorKind{Cal: calendarService, Tables: aiTables, Weather: calendarService},
 	)
 	aiRegistry := records.NewRegistry(aiKinds...)
