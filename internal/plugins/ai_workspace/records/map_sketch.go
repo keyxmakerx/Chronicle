@@ -245,8 +245,14 @@ func checkSketchShape(s *sketchShape, w, h int) string {
 	if s.Shape == "box" && (s.Points[0][0] == s.Points[1][0] || s.Points[0][1] == s.Points[1][1]) {
 		return "a " + s.Verb + " needs some width and height; its corners are in line."
 	}
-	if s.Shape == "circle" && s.Radius <= 0 {
-		return "a circle wall needs a radius above 0."
+	if s.Shape == "circle" {
+		c, r := s.Points[0], s.Radius
+		if r <= 0 {
+			return "a circle wall needs a radius above 0."
+		}
+		if c[0]-r < 0 || c[0]+r > float64(w) || c[1]-r < 0 || c[1]+r > float64(h) {
+			return fmt.Sprintf("a circle of radius %s around %s,%s runs off the %d by %d grid.", fmtNum(r), fmtNum(c[0]), fmtNum(c[1]), w, h)
+		}
 	}
 	if len([]rune(s.Name)) > maxSketchText {
 		return fmt.Sprintf("the name is longer than %d characters.", maxSketchText)

@@ -100,7 +100,7 @@ func TestParseSketchLine(t *testing.T) {
 }
 
 func TestParseSketch_BadLinesAreReportedNotFatal(t *testing.T) {
-	body := "# the keep\n\nroom \"Keep\" 1,1 to 4,4\nroom \"Off\" 1,1 to 50,4\nroom \"Flat\" 1,1 to 1,4\ntower 1,1\n```\npin \"Gate\" 2,2"
+	body := "# the keep\n\nroom \"Keep\" 1,1 to 4,4\nroom \"Off\" 1,1 to 50,4\nroom \"Flat\" 1,1 to 1,4\ntower 1,1\n```\npin \"Gate\" 2,2\nwall circle 3,3 radius 5"
 	p := parseSketch(body, 40, 26)
 	if len(p.Shapes) != 2 {
 		t.Fatalf("shapes = %+v, want the room and the pin", p.Shapes)
@@ -109,6 +109,7 @@ func TestParseSketch_BadLinesAreReportedNotFatal(t *testing.T) {
 		"Line 4: 50,4 is off the 40 by 26 grid.",
 		"Line 5: a room needs some width and height; its corners are in line.",
 		`Line 6: "tower" isn't one of`,
+		"Line 9: a circle of radius 5 around 3,3 runs off the 40 by 26 grid.",
 	}
 	if len(p.Errs) != len(want) {
 		t.Fatalf("errs = %q", p.Errs)
