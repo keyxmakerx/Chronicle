@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
 
 // stubRepo serves one fixed settings row.
@@ -146,6 +148,31 @@ func TestUpdateSettings_Port(t *testing.T) {
 			}
 			if !tc.wantErr && repo.row.Port != tc.wantPort {
 				t.Fatalf("saved port %d, want %d", repo.row.Port, tc.wantPort)
+			}
+		})
+	}
+}
+
+// A password saved under another SECRET_KEY must say how to fix it, not
+// fall back to the generic internal-error text.
+func TestSend_UnreadablePasswordSaysHowToFix(t *testing.T) {
+	enc, err := encrypt([]byte("pw"), "old-secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc := NewSMTPService(&stubRepo{row: &smtpRow{
+		Host: "127.0.0.1", Port: 587, Encryption: "starttls", Enabled: true,
+		Username: "u", PasswordEncrypted: enc, FromAddress: "chronicle@example.com",
+	}}, "new-secret")
+
+	for name, call := range map[string]func() error{
+		"send test":       func() error { return svc.SendTestEmail(context.Background(), "a@example.com") },
+		"test connection": func() error { return svc.TestConnection(context.Background()) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			err := call()
+			if got := apperror.UserMessage(err, ""); got != passwordUnreadableMsg {
+				t.Fatalf("message = %q", got)
 			}
 		})
 	}
