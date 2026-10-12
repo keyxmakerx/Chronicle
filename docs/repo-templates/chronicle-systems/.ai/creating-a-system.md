@@ -31,7 +31,6 @@ Create `systems/<system-id>/manifest.json` with the required structure.
   "id": "<system-id>",
   "name": "Full System Name",
   "description": "Short description of the system.",
-  "version": "0.1.0",
   "author": "Your Name",
   "license": "CC-BY-4.0",
   "icon": "fa-dice-d20",

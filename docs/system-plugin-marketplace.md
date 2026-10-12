@@ -30,12 +30,12 @@ See `docs/repo-templates/chronicle-systems/schema/manifest.schema.json` for the 
 |-------|------|-------------|
 | `id` | string | Unique identifier (lowercase, no spaces) |
 | `name` | string | Display name |
-| `version` | string | Semver (e.g., "1.0.0") |
 | `api_version` | string | Must be "1" |
 
 **Optional fields:**
 | Field | Type | Description |
 |-------|------|-------------|
+| `version` | string | Leave it out: the package manager sets it from the GitHub release tag on install (a manifest without one loads as "0.0.0") |
 | `description` | string | Short summary |
 | `author` | string | Creator name |
 | `license` | string | Content license (OGL-1.0a, CC-BY-4.0, ORC, etc.) |
@@ -46,6 +46,11 @@ See `docs/repo-templates/chronicle-systems/schema/manifest.schema.json` for the 
 | `categories` | array | Reference content types with field schemas |
 | `entity_presets` | array | Entity type templates |
 | `relation_presets` | array | Relation type templates |
+| `widgets` | array | JS widgets the package ships (`slug`, `name`, `script_file`) |
+| `text_renderers` | array | JS text renderers the package ships |
+| `renderers` | array | Binds one of this manifest's widgets to one of its entity presets (see `docs/system-package-rendering.md`) |
+| `dm_screen` | object | Which character fields the DM Screen shows for each hero |
+| `entity_panels` | array | Extra panels one of this manifest's widgets adds to NPC pages |
 
 ### Category Fields
 

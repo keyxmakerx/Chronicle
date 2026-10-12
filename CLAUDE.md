@@ -13,6 +13,10 @@ make tailwind-watch # Watch mode
 make test           # All tests
 make test-unit      # Unit tests only
 make test-int       # Integration tests (needs running DB)
+make test-js        # JS runtime tests (node --test)
+make test-freshdb   # Replay all migrations on a never-migrated schema (needs DB)
+make verify         # Full local CI sequence: build, vet, guards, tests
+make full-stack-check # Build and boot the compose stack, wait for /healthz
 make test-db-up     # Local MariaDB for tests, no Docker (port 13306)
 make test-db-down   # Stop that DB
 make test-int-local # Integration tests against it (starts it if needed)

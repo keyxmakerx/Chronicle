@@ -4,11 +4,15 @@
   "title": "Chronicle System Manifest",
   "description": "Schema for a Chronicle game system manifest.json file.",
   "type": "object",
-  "required": ["id", "name", "version", "api_version"],
+  "required": [
+    "id",
+    "name",
+    "api_version"
+  ],
   "properties": {
     "id": {
       "type": "string",
-      "pattern": "^[a-z0-9-]+$",
+      "pattern": "^[a-z0-9][a-z0-9_-]*$",
       "description": "Unique machine-readable identifier (e.g., 'dnd5e', 'drawsteel')."
     },
     "name": {
@@ -23,7 +27,7 @@
     "version": {
       "type": "string",
       "pattern": "^\\d+\\.\\d+\\.\\d+",
-      "description": "Semantic version string (e.g., '1.0.0')."
+      "description": "Optional. The package manager sets it from the GitHub release tag on install; a manifest without one loads as '0.0.0'."
     },
     "author": {
       "type": "string",
@@ -44,7 +48,10 @@
     },
     "status": {
       "type": "string",
-      "enum": ["available", "coming_soon"],
+      "enum": [
+        "available",
+        "coming_soon"
+      ],
       "default": "coming_soon",
       "description": "Whether the system is ready to use."
     },
@@ -58,25 +65,70 @@
     },
     "categories": {
       "type": "array",
-      "items": { "$ref": "#/$defs/CategoryDef" },
+      "items": {
+        "$ref": "#/$defs/CategoryDef"
+      },
       "description": "Reference content categories."
     },
     "entity_presets": {
       "type": "array",
-      "items": { "$ref": "#/$defs/EntityPresetDef" },
+      "items": {
+        "$ref": "#/$defs/EntityPresetDef"
+      },
       "description": "Entity type templates for campaigns."
     },
     "relation_presets": {
       "type": "array",
-      "items": { "$ref": "#/$defs/RelationPresetDef" },
+      "items": {
+        "$ref": "#/$defs/RelationPresetDef"
+      },
       "description": "Relation type templates."
+    },
+    "widgets": {
+      "type": "array",
+      "maxItems": 10,
+      "items": {
+        "$ref": "#/$defs/WidgetDef"
+      },
+      "description": "JS widgets the package ships."
+    },
+    "text_renderers": {
+      "type": "array",
+      "maxItems": 5,
+      "items": {
+        "$ref": "#/$defs/TextRendererDef"
+      },
+      "description": "JS text renderers the package ships."
+    },
+    "renderers": {
+      "type": "array",
+      "maxItems": 10,
+      "items": {
+        "$ref": "#/$defs/RendererDef"
+      },
+      "description": "Binds one of this manifest's widgets to one of its entity presets (by slug or by preset category); see docs/system-package-rendering.md."
+    },
+    "dm_screen": {
+      "$ref": "#/$defs/DMScreenDef"
+    },
+    "entity_panels": {
+      "type": "array",
+      "maxItems": 10,
+      "items": {
+        "$ref": "#/$defs/EntityPanelDef"
+      },
+      "description": "Extra panels one of this manifest's widgets adds to entity pages."
     }
   },
   "additionalProperties": false,
   "$defs": {
     "FieldDef": {
       "type": "object",
-      "required": ["key", "label", "type"],
+      "required": [
+        "key",
+        "label",
+        "type"
+      ],
       "properties": {
         "key": {
           "type": "string",
@@ -90,33 +142,126 @@
         },
         "type": {
           "type": "string",
-          "enum": ["string", "number", "list", "markdown"],
+          "enum": [
+            "string",
+            "number",
+            "boolean",
+            "list",
+            "markdown",
+            "enum",
+            "url"
+          ],
           "description": "Field data type."
         },
         "foundry_path": {
           "type": "string",
-          "pattern": "^system\\.",
-          "description": "Dot-notation path in Foundry Actor system data."
+          "description": "Dot-notation path in the Foundry actor document, usually under 'system.'."
         },
         "foundry_writable": {
           "type": "boolean",
           "description": "Whether Chronicle can write this field back to Foundry. Defaults to true when foundry_path is set."
         },
+        "gm_only": {
+          "type": "boolean",
+          "description": "Only the GM sees this field."
+        },
+        "owner_only": {
+          "type": "boolean",
+          "description": "Only the GM and the character's owner see this field."
+        },
+        "choices": {
+          "type": "string",
+          "description": "Choices for an enum field."
+        },
+        "foundry_choices": {
+          "type": "string",
+          "description": "How Chronicle values map to Foundry values for this field."
+        },
+        "foundry_format": {
+          "type": "string",
+          "description": "How the Foundry value is formatted when synced."
+        },
+        "foundry_collection": {
+          "type": "string",
+          "description": "The Foundry embedded collection this field reads (for example 'items')."
+        },
+        "foundry_item_type": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Foundry item types the collection is filtered to."
+        },
+        "foundry_item_fields": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Output key to Foundry item path, for each projected item."
+        },
+        "foundry_item_single": {
+          "type": "boolean",
+          "description": "Project the first matching item as one object instead of a list."
+        },
         "play": {
           "type": "object",
           "description": "Declares the field can be changed during play. Dropped at load if invalid; see docs/system-plugin-marketplace.md.",
-          "required": ["edit", "kind"],
+          "required": [
+            "edit",
+            "kind"
+          ],
           "properties": {
-            "edit": { "enum": ["owner", "gm", "none"] },
-            "kind": { "enum": ["counter", "resource", "conditions", "choice", "text"] },
-            "min": { "type": "number" },
-            "max": { "type": "number" },
-            "max_field": { "type": "string" },
-            "step": { "type": "number", "minimum": 0 },
-            "options": { "type": "array", "maxItems": 50, "items": { "type": "string", "minLength": 1, "maxLength": 64 } },
-            "max_length": { "type": "integer", "minimum": 0 },
-            "to_foundry": { "type": "boolean" },
-            "combat_authority": { "enum": ["foundry", "chronicle"] }
+            "edit": {
+              "enum": [
+                "owner",
+                "gm",
+                "none"
+              ]
+            },
+            "kind": {
+              "enum": [
+                "counter",
+                "resource",
+                "conditions",
+                "choice",
+                "text"
+              ]
+            },
+            "min": {
+              "type": "number"
+            },
+            "max": {
+              "type": "number"
+            },
+            "max_field": {
+              "type": "string"
+            },
+            "step": {
+              "type": "number",
+              "minimum": 0
+            },
+            "options": {
+              "type": "array",
+              "maxItems": 50,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              }
+            },
+            "max_length": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "to_foundry": {
+              "type": "boolean"
+            },
+            "combat_authority": {
+              "enum": [
+                "foundry",
+                "chronicle"
+              ]
+            }
           },
           "additionalProperties": false
         }
@@ -125,11 +270,14 @@
     },
     "CategoryDef": {
       "type": "object",
-      "required": ["slug", "name"],
+      "required": [
+        "slug",
+        "name"
+      ],
       "properties": {
         "slug": {
           "type": "string",
-          "pattern": "^[a-z0-9-]+$",
+          "pattern": "^[a-z0-9][a-z0-9_-]*$",
           "description": "URL-safe category identifier (e.g., 'spells', 'monsters')."
         },
         "name": {
@@ -143,7 +291,9 @@
         },
         "fields": {
           "type": "array",
-          "items": { "$ref": "#/$defs/FieldDef" },
+          "items": {
+            "$ref": "#/$defs/FieldDef"
+          },
           "description": "Schema for properties on items in this category."
         }
       },
@@ -151,11 +301,14 @@
     },
     "EntityPresetDef": {
       "type": "object",
-      "required": ["slug", "name"],
+      "required": [
+        "slug",
+        "name"
+      ],
       "properties": {
         "slug": {
           "type": "string",
-          "pattern": "^[a-z0-9-]+$",
+          "pattern": "^[a-z0-9][a-z0-9_-]*$",
           "description": "URL-safe identifier (e.g., 'dnd5e-character')."
         },
         "name": {
@@ -178,16 +331,31 @@
         },
         "category": {
           "type": "string",
-          "enum": ["character", "creature", "item", "location", "organization"],
+          "enum": [
+            "character",
+            "creature",
+            "item",
+            "location",
+            "organization"
+          ],
           "description": "Feature category for this preset."
         },
         "foundry_actor_type": {
           "type": "string",
           "description": "Foundry VTT Actor type (e.g., 'character', 'hero', 'npc')."
         },
+        "foundry_pull_fields": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The only field keys Foundry may send back for this preset."
+        },
         "fields": {
           "type": "array",
-          "items": { "$ref": "#/$defs/FieldDef" },
+          "items": {
+            "$ref": "#/$defs/FieldDef"
+          },
           "description": "Default field definitions for entities of this type."
         }
       },
@@ -195,11 +363,14 @@
     },
     "RelationPresetDef": {
       "type": "object",
-      "required": ["slug", "name"],
+      "required": [
+        "slug",
+        "name"
+      ],
       "properties": {
         "slug": {
           "type": "string",
-          "pattern": "^[a-z0-9-]+$",
+          "pattern": "^[a-z0-9][a-z0-9_-]*$",
           "description": "URL-safe identifier."
         },
         "name": {
@@ -223,17 +394,233 @@
     },
     "RelationFieldSchema": {
       "type": "object",
-      "required": ["type"],
+      "required": [
+        "type"
+      ],
       "properties": {
         "type": {
           "type": "string",
-          "enum": ["number", "boolean", "string"],
+          "enum": [
+            "number",
+            "boolean",
+            "string"
+          ],
           "description": "Field data type."
         },
         "default": {
           "description": "Default value for new relations."
         }
       },
+      "additionalProperties": false
+    },
+    "WidgetDef": {
+      "type": "object",
+      "required": [
+        "slug",
+        "name"
+      ],
+      "properties": {
+        "slug": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_-]*$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "icon": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "script_file": {
+          "type": "string",
+          "pattern": "\\.js$",
+          "description": "Path to the widget's JS file inside the package; no '..'."
+        },
+        "file": {
+          "type": "string",
+          "pattern": "\\.js$",
+          "description": "Older name for script_file."
+        },
+        "config": {
+          "type": "array",
+          "description": "Not read by Chronicle; a package may describe its widget's settings here for its own use."
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "script_file"
+          ]
+        },
+        {
+          "required": [
+            "file"
+          ]
+        }
+      ],
+      "additionalProperties": false
+    },
+    "TextRendererDef": {
+      "type": "object",
+      "required": [
+        "slug",
+        "file"
+      ],
+      "properties": {
+        "slug": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_-]*$"
+        },
+        "name": {
+          "type": "string"
+        },
+        "file": {
+          "type": "string",
+          "pattern": "\\.js$"
+        },
+        "entry_point": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "RendererDef": {
+      "type": "object",
+      "required": [
+        "widget"
+      ],
+      "properties": {
+        "slug": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_-]*$",
+          "description": "An entity_presets[].slug in this manifest."
+        },
+        "preset_category": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_-]*$",
+          "description": "An entity_presets[].category in this manifest."
+        },
+        "widget": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_-]*$",
+          "description": "A widgets[].slug in this manifest."
+        },
+        "description": {
+          "type": "string"
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "slug"
+          ]
+        },
+        {
+          "required": [
+            "preset_category"
+          ]
+        }
+      ],
+      "additionalProperties": false
+    },
+    "EntityPanelDef": {
+      "type": "object",
+      "required": [
+        "widget",
+        "applies_to"
+      ],
+      "properties": {
+        "widget": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_-]*$",
+          "description": "A widgets[].slug in this manifest."
+        },
+        "applies_to": {
+          "const": "npc"
+        }
+      },
+      "additionalProperties": false
+    },
+    "DMScreenDef": {
+      "type": "object",
+      "description": "What the DM Screen shows for this system's heroes. Every field name is a key of the character preset's fields.",
+      "properties": {
+        "party": {
+          "type": "array",
+          "maxItems": 6,
+          "items": {
+            "$ref": "#/$defs/DMScreenMeter"
+          }
+        },
+        "hero_subtitle": {
+          "type": "string"
+        },
+        "hero_conditions": {
+          "type": "string"
+        },
+        "conditions": {
+          "type": "object",
+          "required": [
+            "category"
+          ],
+          "properties": {
+            "category": {
+              "type": "string"
+            },
+            "property": {
+              "type": "string"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "DMScreenMeter": {
+      "type": "object",
+      "required": [
+        "current"
+      ],
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "label_field": {
+          "type": "string"
+        },
+        "current": {
+          "type": "string"
+        },
+        "max": {
+          "type": "string"
+        },
+        "warn_below": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "label"
+          ]
+        },
+        {
+          "required": [
+            "label_field"
+          ]
+        }
+      ],
       "additionalProperties": false
     }
   }
