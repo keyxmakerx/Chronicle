@@ -31,15 +31,15 @@
     document.addEventListener('keydown', onKey);
   }
 
-  // Back to the page as it is now, swapped in like the panel's own links.
-  function backToNow(b) {
-    var url = b && b.getAttribute('data-close-url');
-    if (!url) return;
+  // Back to the page as it is now: the same page with no era picked,
+  // swapped in like the panel's own links.
+  function backToNow() {
+    var url = location.pathname;
     if (window.htmx) {
       window.htmx.ajax('GET', url, { target: '#main-content', select: '#main-content', swap: 'innerHTML show:none' })
         .then(function () { try { history.pushState({}, '', url); } catch (e) { /* stays on the old address */ } });
     } else {
-      location.href = url;
+      location.search = '';
     }
   }
 
@@ -61,7 +61,7 @@
     // An era picked in the panel is in the address; leaving the panel
     // leaves that era too.
     if (/[?&]era=/.test(location.search)) {
-      backToNow(b);
+      backToNow();
       return;
     }
     f.classList.remove('is-open');

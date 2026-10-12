@@ -45,7 +45,6 @@ templ eraButton(cc *campaigns.CampaignContext, entity *Entity, class string) {
 			aria-controls="page-eras"
 			title="See and change this page in each era"
 			data-eras-btn
-			data-close-url={ string(eraPageLink(cc.Campaign.ID, entity.ID, "", "")) }
 			onclick={ eraCall("toggle") }
 		>
 			<svg class="mr-1" width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.5"></circle><path d="M8 1.5a6.5 6.5 0 0 1 0 13z" fill="currentColor"></path></svg>
