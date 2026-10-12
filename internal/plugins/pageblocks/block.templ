@@ -1,0 +1,24 @@
+package pageblocks
+
+import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
+
+// blockAssets loads the blocks' stylesheet. A page holding several of the
+// blocks loads it once, since the browser reuses a stylesheet it already has.
+templ blockAssets() {
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/css/page_blocks.css") }/>
+}
+
+// BlockMount is the mount point of the Read-aloud, Table and Steps blocks.
+// The widget fetches its content from the endpoint itself, so what it shows
+// is decided by the service for whoever is looking, not by this markup. kind
+// is the layout block type, which the endpoint needs for a block that has no
+// saved content yet.
+templ BlockMount(campaignID, entityID, blockID, kind, csrfToken string) {
+	@blockAssets()
+	<div
+		data-widget="page_blocks"
+		data-endpoint={ "/campaigns/" + campaignID + "/page-blocks/" + entityID + "/" + blockID }
+		data-kind={ kind }
+		data-csrf-token={ csrfToken }
+	></div>
+}

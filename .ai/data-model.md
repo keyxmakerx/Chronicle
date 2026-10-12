@@ -343,6 +343,12 @@ Foundry module repo for the wire contract.
 | `quest_boards` | Boards on a place page or a category: exactly one of `entity_id` / `entity_type_id` is set; `who` = dm/scribe/all, `sort_order` |
 | `quest_board_items` | Pins: notice/note/page/map/string; `owner_user_id`, `by_dm`, `hidden`, `ref_id` (no FK) |
 
+### pageblocks (`internal/plugins/pageblocks/migrations/`)
+
+| Table | Purpose |
+|-------|---------|
+| `page_block_content` | One JSON document per (page, layout block): `PRIMARY KEY (entity_id, block_id)`, `kind` (`read_aloud`/`page_table`/`page_steps`), `version` for edit conflicts; FKs to `entities`, `campaigns` cascade |
+
 ### armory (`internal/plugins/armory/migrations/`)
 
 | Table | Purpose | Notable columns |

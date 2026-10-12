@@ -35,7 +35,7 @@ business rules and footguns.
 - **Plugins** (`internal/plugins/<name>/`): addons, admin, ai_workspace (and
   ai_workspace/aiexport), armory, audit, auth, backup, bestiary, calendar,
   campaigns, designlab, dmscreen, entities, foundry_vtt, maps, media, npcs,
-  packages, quests, restore, rolltables, sessions, settings, smtp, syncapi,
+  packages, pageblocks, quests, restore, rolltables, sessions, settings, smtp, syncapi,
   systemstate, timeline, vault_import, widgetbindings.
   calendar's V5 rebuild (#741) is landing in parts — its `.ai.md` says
   which parts have shipped and which are still open.
@@ -53,7 +53,7 @@ business rules and footguns.
   `relation_graph`, `shop_inventory`, `template_editor`. A plugin's own
   widget scripts sit in `internal/plugins/<slug>/static/js/` with their
   `.ai.md` (timeline: `timeline_viz`, `timeline_widget`; quests: `quest_board`;
-  maps: `map_widget`).
+  pageblocks: `page_blocks`; maps: `map_widget`).
 - **Examples:** `extensions/example-wasm-go/`, `extensions/example-wasm-rust/`.
 
 ## Templates

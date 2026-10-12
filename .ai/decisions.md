@@ -1030,6 +1030,21 @@ Also under this ADR: the partial-update contract test only recognised structs na
 - A script that starts itself on `DOMContentLoaded` or an htmx event instead of registering a widget can't load on sight. It becomes a widget when its plugin moves.
 - Features move one plugin at a time (#1232), and the registry grows as they do. `tools/check-widget-mounts.sh` still requires every literal mount's script to be named in `base.templ` or `internal/app/routes.go`.
 
+## ADR-064: Text a DM types into a page block is stored per page and block, in its own table
+
+**Status:** Accepted (#1346, parent #1344).
+
+**Context:** The Read-aloud, Table and Steps blocks hold text a DM types on one page. The two existing places for block data do not fit: a block's `config` lives in the entity type's layout, so every page of that type would share it, and a widget binding allows one binding per host and widget type, so a page could not hold two tables.
+
+**Decision:**
+1. The `pageblocks` plugin keeps one table, `page_block_content`, keyed by `(entity_id, block_id)`; `block_id` is the layout block's id. Several tables on a page, and the same layout on many pages, each get their own row.
+2. The row holds one validated JSON document plus `kind` and `version`, as the quest sheet does, so a block's shape can grow without a schema change and concurrent edits get a 409.
+3. The service filters on read: a DM-only table column is removed for any viewer below Owner visibility. A viewer below it may not save a table that has such a column, rather than have the save merged with columns they cannot see.
+
+**Consequences:**
+- Deleting a page deletes its block content (cascade); removing a block from a layout leaves its rows orphaned but harmless until the page goes.
+- A new typed-in block kind adds a case to the plugin's validation, not a table.
+
 ## ADR-066: Customize keeps one draft, applied by the plugins that own each part
 
 **Status:** Accepted; operator sign-off on the Customize mockup, 2026-10-12 (#1361).
