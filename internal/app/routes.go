@@ -4363,16 +4363,19 @@ func (a *App) RegisterRoutes() {
 			Type: pageblocks.KindReadAloud, Label: "Read-aloud", Icon: "fa-bullhorn",
 			Description: "Boxed text the DM reads to the table",
 			Contexts:    []string{"template"},
+			TileSizes:   []string{"2x1", "2x2", "4x1", "4x2"},
 		},
 		{
 			Type: pageblocks.KindTable, Label: "Table", Icon: "fa-table",
 			Description: "Rows and columns typed in place, with columns only the DM sees",
 			Contexts:    []string{"template"},
+			TileSizes:   []string{"2x2", "4x2"},
 		},
 		{
 			Type: pageblocks.KindSteps, Label: "Steps", Icon: "fa-list-ol",
 			Description: "Numbered beats with a tick for each, for use during play",
 			Contexts:    []string{"template"},
+			TileSizes:   []string{"1x2", "2x2", "4x2"},
 		},
 	} {
 		kind := b.Type
