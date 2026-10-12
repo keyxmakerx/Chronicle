@@ -5443,6 +5443,7 @@ func (a *App) RegisterRoutes() {
 		records.ShopStockKind(entityService, relService),
 		records.CarriedItemKind(entityService, relService),
 		records.PinKind{Svc: aiMapsAdapter{mapsService}, Entities: entityService},
+		records.MapSketchKind{Svc: aiMapSketchAdapter{maps: mapsService, drawings: drawingService}, Pins: aiMapsAdapter{mapsService}},
 		records.NoteKind{Svc: noteSvc, Entities: entityService},
 		aiHouseRules,
 		records.SystemEntryKind{Svc: systemEntrySvc},
@@ -5814,6 +5815,38 @@ func (m aiMapsAdapter) UpdatePin(ctx context.Context, pinID string, in records.P
 // the same request.
 func (m aiMapsAdapter) DeletePin(ctx context.Context, pinID string, canAuthorDmOnly bool, actorID string, role int) error {
 	return m.svc.DeleteMarker(ctx, pinID, nil, canAuthorDmOnly, actorID, role)
+}
+
+// aiMapSketchAdapter makes the blank map and the drawings for AI Import's
+// map sketch through the same services, and checks, as the map page.
+type aiMapSketchAdapter struct {
+	maps     maps.MapService
+	drawings maps.DrawingService
+}
+
+func (m aiMapSketchAdapter) CreateGridMap(ctx context.Context, campaignID, name string, width, height, gridSize int) (string, error) {
+	mp, err := m.maps.CreateMap(ctx, maps.CreateMapInput{CampaignID: campaignID, Name: name, ImageWidth: width, ImageHeight: height})
+	if err != nil {
+		return "", err
+	}
+	grid, err := json.Marshal(map[string]any{"grid": map[string]any{"type": "square", "size": gridSize}})
+	if err != nil {
+		return "", err
+	}
+	return mp.ID, m.maps.UpdateMap(ctx, mp.ID, maps.UpdateMapInput{Name: mp.Name, DisplaySettings: patch.Of(json.RawMessage(grid))})
+}
+
+func (m aiMapSketchAdapter) Draw(ctx context.Context, mapID string, a records.Actor, d records.SketchDrawing) error {
+	pts, err := json.Marshal(d.Points)
+	if err != nil {
+		return err
+	}
+	_, err = m.drawings.CreateDrawing(ctx, maps.CreateDrawingInput{
+		MapID: mapID, DrawingType: d.Type, Points: pts, StrokeColor: d.StrokeColor, StrokeWidth: d.StrokeWidth,
+		TextContent: d.Text, FontSize: d.FontSize, Visibility: d.Visibility, CreatedBy: a.UserID,
+		CallerRole: a.Role, CallerIsDM: a.CanAuthorDmOnly(),
+	})
+	return err
 }
 
 // aiRollTablesAdapter is the rolltables service as AI Import's TableDoc,

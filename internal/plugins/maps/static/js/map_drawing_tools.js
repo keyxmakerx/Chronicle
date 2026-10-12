@@ -392,7 +392,9 @@
           if (latlngs.length >= 2) {
             var center = latlngs[0];
             var edge = latlngs[1];
-            var radius = center.distanceTo(edge);
+            // map.distance measures in the map's own flat units; LatLng's
+            // distanceTo is Earth's and makes a circle millions of pixels wide.
+            var radius = map.distance(center, edge);
             layer = L.circle(center, Object.assign({}, opts, { radius: radius }));
           }
           break;
@@ -420,6 +422,7 @@
         case 'area':
         case 'water':
         case 'wall':
+        case 'danger':
           if (shapes) layer = shapes.renderBox(d, { animate: !!animate });
           break;
         case 'arrow':
@@ -772,7 +775,7 @@
 
       function onMove(e) {
         if (circ && center) {
-          circ.setRadius(center.distanceTo(e.latlng));
+          circ.setRadius(map.distance(center, e.latlng));
         }
       }
 

@@ -172,6 +172,7 @@ var briefs = map[string]string{
 	"shop-stock":   "what a shop sells, its price and how many",
 	"carried-item": "items a character carries",
 	"pin":          "pins on the campaign's maps",
+	"map":          "new maps drawn from a sketch on a grid of squares: rooms, areas, water, danger zones, walls, roads, paths, labels and pins",
 	"note":         "my own notes only: my Journal notes and my jots on pages, never notes anyone else wrote",
 	"house-rule":   "house-rules chapters in the campaign's rulebook, written whole: pages with highlighted boxes, dice rolls, fold-out cards, flaps, worked examples, creatures and Director's notes",
 	"system-entry": "the campaign's own ancestries, kits, cultures, classes and other pick-list entries for its game system",

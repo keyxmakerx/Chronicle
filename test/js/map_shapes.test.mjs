@@ -34,6 +34,8 @@ test('the palette is the six kinds of the signed design, in order', () => {
   assert.deepEqual(S.KINDS.map((k) => k.key), ['room', 'area', 'water', 'wall', 'arrow', 'bubble']);
   assert.deepEqual(S.KINDS.map((k) => k.type), ['room', 'area', 'water', 'wall', 'arrow', 'callout']);
   assert.ok(S.isBoxType('wall') && !S.isBoxType('arrow') && !S.isBoxType('rectangle'));
+  // Danger zones come from the AI map sketch: a box, but no palette button.
+  assert.ok(S.isBoxType('danger') && !S.KINDS.some((k) => k.type === 'danger'));
   assert.ok(S.isShapeType('callout') && S.isShapeType('arrow') && !S.isShapeType('freehand'));
 });
 
@@ -223,6 +225,8 @@ test('labels name the field each shape has', () => {
   assert.equal(S.fieldLabel('room'), 'Name');
   assert.equal(S.fieldLabel('callout'), 'Bubble text');
   assert.equal(S.fieldLabel('wall'), '');
+  assert.equal(S.fieldLabel('danger'), 'Name');
+  assert.equal(S.typeLabel('danger'), 'Danger');
   assert.equal(S.fieldLabel('arrow'), '');
   assert.equal(S.typeLabel('callout'), 'Speech bubble');
 });
