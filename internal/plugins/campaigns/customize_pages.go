@@ -153,27 +153,13 @@ func (h *Handler) customizeFind(cc *CampaignContext, areas []CustomizeArea, cats
 	return string(b)
 }
 
-// customizeCategories reads the campaign's categories for the Categories
-// area and Find; an unwired lister or a failed read leaves them out rather
-// than failing the page.
-func (h *Handler) customizeCategories(ctx context.Context, cc *CampaignContext) []CustomizeCategory {
-	if h.customizeCategoryLister == nil {
-		return nil
-	}
-	cats, err := h.customizeCategoryLister.ListCustomizeCategories(ctx, cc.Campaign.ID)
-	if err != nil {
-		return nil
-	}
-	return cats
-}
-
 // renderCustomize draws an area inside the frame.
 func (h *Handler) renderCustomize(c echo.Context, cc *CampaignContext, area, title string, crumbs []CustomizeCrumb, cats []CustomizeCategory, body templ.Component) error {
 	ctx := c.Request().Context()
 	version, draft := h.CustomizeDraftFor(ctx, cc.Campaign.ID, auth.GetUserID(c))
 	areas := h.customizeAreas(cc)
 	if cats == nil {
-		cats = h.customizeCategories(ctx, cc)
+		cats = h.CustomizeCategories(ctx, cc.Campaign.ID)
 	}
 	d := customizeShellData{
 		Title:      cc.Campaign.Name + " - " + title,
@@ -275,7 +261,7 @@ func (h *Handler) CustomizeCategoriesPage(c echo.Context) error {
 		return apperror.NewMissingContext()
 	}
 	ctx := c.Request().Context()
-	cats := h.customizeCategories(ctx, cc)
+	cats := h.CustomizeCategories(ctx, cc.Campaign.ID)
 	return h.renderCustomize(c, cc, "categories", "Categories", []CustomizeCrumb{{Label: "Categories"}}, cats,
 		customizeCategoriesArea(cc, h.categoriesData(ctx, cc, cats, "", ""), "", ""))
 }
@@ -297,7 +283,7 @@ func (h *Handler) CustomizeCategory(c echo.Context) error {
 		return apperror.NewNotFound("that part of a category doesn't exist")
 	}
 	ctx := c.Request().Context()
-	cats := h.customizeCategories(ctx, cc)
+	cats := h.CustomizeCategories(ctx, cc.Campaign.ID)
 
 	name, etID := "New category", 0
 	if newCategoryKey.MatchString(key) {

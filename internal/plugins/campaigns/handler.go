@@ -36,27 +36,6 @@ type SettingsEntityType struct {
 	ParentTypeID *int    `json:"parent_type_id,omitempty"`
 }
 
-// EntityTypeLayoutFetcher fetches a single entity type's full layout and field
-// data for the page layout editor. Avoids importing the entities package directly.
-type EntityTypeLayoutFetcher interface {
-	GetEntityTypeForLayoutEditor(ctx context.Context, entityTypeID int) (*LayoutEditorEntityType, error)
-}
-
-// LayoutEditorEntityType holds the entity type data needed to mount the
-// template-editor widget in the Customization Hub's Page Layouts tab.
-// LayoutJSON and FieldsJSON are pre-serialized so templates can emit them
-// directly as data attributes.
-type LayoutEditorEntityType struct {
-	ID         int
-	CampaignID string
-	Name       string
-	NamePlural string
-	Icon       string
-	Color      string
-	LayoutJSON string
-	FieldsJSON string
-}
-
 // RecentEntityLister returns recently updated entities for the campaign dashboard.
 // Avoids importing the entities package directly.
 type RecentEntityLister interface {
@@ -161,7 +140,6 @@ type Handler struct {
 	service            CampaignService
 	groupSvc           GroupService
 	entityLister       EntityTypeLister
-	layoutFetcher      EntityTypeLayoutFetcher
 	recentLister       RecentEntityLister
 	auditLogger        AuditLogger
 	addonLister        AddonLister
@@ -211,12 +189,6 @@ func (h *Handler) SetGroupService(svc GroupService) {
 // Called after both plugins are wired to avoid circular dependencies.
 func (h *Handler) SetEntityLister(lister EntityTypeLister) {
 	h.entityLister = lister
-}
-
-// SetLayoutFetcher sets the entity type layout fetcher for the Page Layouts tab.
-// Called after both plugins are wired to avoid circular dependencies.
-func (h *Handler) SetLayoutFetcher(fetcher EntityTypeLayoutFetcher) {
-	h.layoutFetcher = fetcher
 }
 
 // SetRecentEntityLister sets the recent entity lister for the dashboard.

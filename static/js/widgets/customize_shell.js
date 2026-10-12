@@ -374,10 +374,17 @@
       var input = palette.querySelector('input'), res = palette.querySelector('.czs-res'), sel = 0, shown = [];
       function draw() {
         var q = words(input.value).trim().split(/\s+/).filter(Boolean);
-        shown = finds.filter(function (f) {
+        // A hit in the label ranks above one only in the path or the
+        // section's other words, so "colour" puts Colours first.
+        shown = finds.map(function (f, i) {
           var hay = words(f.label + ' ' + f.path + ' ' + (f.words || ''));
-          return q.every(function (w) { return hay.indexOf(w) >= 0; });
-        }).slice(0, 40);
+          if (!q.every(function (w) { return hay.indexOf(w) >= 0; })) return null;
+          var lab = words(f.label), rank = 2;
+          if (q.length && q.every(function (w) { return lab.indexOf(w) >= 0; })) rank = lab.indexOf(q[0]) === 0 ? 0 : 1;
+          return { f: f, rank: rank, i: i };
+        }).filter(Boolean).sort(function (a, b) {
+          return a.rank - b.rank || a.i - b.i;
+        }).slice(0, 40).map(function (r) { return r.f; });
         sel = Math.min(sel, Math.max(0, shown.length - 1));
         res.innerHTML = shown.length ? shown.map(function (f, i) {
           var icon = String(f.icon || 'fa-sliders').replace(/^fa-solid\s+/, '');
