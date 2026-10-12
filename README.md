@@ -213,7 +213,7 @@ Notable platforms we studied during development include [World Anvil](https://ww
 
 ## Contributing
 
-Chronicle is in active early development (pre-alpha). Contribution guidelines will be established as the project matures. In the meantime, feel free to open issues for bug reports or feature suggestions.
+Chronicle is in active early development (pre-alpha). Setup, tests, conventions and pull request expectations are in [CONTRIBUTING.md](CONTRIBUTING.md). Feel free to open issues for bug reports or feature suggestions.
 
 ---
 

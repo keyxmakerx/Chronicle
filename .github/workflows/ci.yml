@@ -446,6 +446,22 @@ jobs:
         # Blocking: a known vulnerability in code Chronicle calls fails CI.
         run: govulncheck ./...
 
+  # --- Full compose stack boot ---
+  # Builds the image from source, starts app + MariaDB + Redis exactly as
+  # docker-compose.yml defines them, and waits for /healthz. Catches Dockerfile,
+  # entrypoint, empty-database migration and compose breakage that the Go tests
+  # never execute. Separate job so a slow image build doesn't gate Build & Test.
+  fullstack:
+    name: Compose Stack Boot
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Boot the compose stack
+        # Throwaway secrets are set inside the script, not in repo settings.
+        run: make full-stack-check
+
   # --- Docker Build & Push to GHCR ---
   docker:
     name: Docker Image

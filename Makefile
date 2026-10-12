@@ -228,6 +228,13 @@ docker-all: ## Start full stack from the PUBLISHED image (pulls first)
 docker-all-local: ## Start full stack from a LOCAL source build (chronicle:local)
 	docker compose -f $(DOCKER_COMP) -f $(DOCKER_COMP_BUILD) up -d --build
 
+# Same script CI runs. Uses its own compose project and throwaway secrets, and
+# deletes what it created; refuses to run beside a stack that uses the fixed
+# container names.
+.PHONY: full-stack-check
+full-stack-check: ## Build from source, boot the full compose stack, wait for /healthz, tear down
+	./tools/full-stack-check.sh
+
 # ============================================================================
 # Backup & Restore
 # ============================================================================
