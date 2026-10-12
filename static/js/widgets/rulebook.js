@@ -23,6 +23,9 @@
 
   var PLACE_KEY = 'chronicle.rulebook.place.';
   var NARROW_QUERY = '(max-width: 900px)';
+  // The screen folds away in this long; a card list this long gets a find box.
+  var SCREEN_CLOSE_MS = 380;
+  var FILTER_AT = 8;
   var TURN_MS = { flip: 780, slide: 520, fade: 380 };
   var SWIPE_PX = 60;
 
@@ -143,6 +146,7 @@
       tabs: arr(json.tabs).filter(function (id) { return typeof id === 'string' && SLUG_RE.test(id); }),
       start: SLUG_RE.test(str(json.start)) ? str(json.start) : '',
       first: SLUG_RE.test(str(json.first)) ? str(json.first) : '',
+      screen: SLUG_RE.test(str(json.screen)) ? str(json.screen) : '',
       isDirector: json.isDirector === true,
       canEdit: json.canEdit === true,
       terms: terms,
@@ -210,6 +214,9 @@
     this.pendingEntry = '';
     this.searchSeq = 0;
     this.searchTimer = 0;
+    this.screenTimer = 0;
+    this.screenPages = [];
+    this.screenAtStart = false;
     this.inst = ++uid;
   }
 
@@ -254,6 +261,7 @@
     this.timers = [];
     clearTimeout(this.leafTimer);
     clearTimeout(this.searchTimer);
+    clearTimeout(this.screenTimer);
     this.destroyNested(this.el);
     this.el.innerHTML = '';
     this.el.classList.remove('rb', 'rb-inline');
@@ -345,7 +353,12 @@
     this.resultsEl = q('.rb-results');
 
     this.tabsEl = q('.rb-tabs');
-    this.rebuild(this.openingKey(place));
+    this.ribbonEl = q('.rb-ribbon');
+    this.screenEl = q('.rb-screen');
+    this.sscrimEl = q('.rb-sscrim');
+    var key = this.openingKey(place);
+    this.rebuild(key);
+    if (this.screenAtStart) this.openScreen();
   };
 
   // Where the book opens: a chapter named in the address (#making-a-hero),
@@ -358,7 +371,10 @@
     if (key) return key;
     var saved = place && typeof place.key === 'string' ? place.key : '';
     if (!saved && d.first) key = this.chapterKey(d.first);
-    if (!key && d.start) key = this.chapterKey(d.start);
+    // A book that starts on its screen opens the screen over the page the
+    // reader was on, since the screen is not a page of its own.
+    if (d.start && d.start === d.screen) this.screenAtStart = !hash;
+    else if (!key && d.start) key = this.chapterKey(d.start);
     return key || saved;
   };
 
@@ -382,6 +398,7 @@
   };
 
   Rulebook.prototype.goChapter = function (id) {
+    if (id && id === this.data.screen) { this.openScreen(); return; }
     var n = this.firstItemOf(id);
     if (n >= 0) this.goItem(n);
   };
@@ -395,7 +412,7 @@
     d.parts.forEach(function (part) {
       part.chapters.forEach(function (ch) { seen[ch.id] = ch; });
     });
-    d.tabs.forEach(function (id) { if (seen[id]) tabs.push({ id: id, label: seen[id].title }); });
+    d.tabs.forEach(function (id) { if (seen[id] && id !== d.screen) tabs.push({ id: id, label: seen[id].title }); });
     var house = '';
     d.parts.forEach(function (part) {
       part.chapters.forEach(function (ch) { if (!house && ch.id.indexOf(HOUSE_PREFIX) === 0) house = ch.id; });
@@ -448,13 +465,97 @@
       '<input type="search" class="rb-search-in" data-search placeholder="Search the book" aria-label="Search the book" autocomplete="off" spellcheck="false"' +
       ' aria-controls="' + this.domId('results') + '" aria-expanded="false"><kbd aria-hidden="true">/</kbd>' +
       '<div class="rb-results" id="' + this.domId('results') + '" role="region" aria-label="Search results" hidden></div></div>') +
-      own + edit + seg + '</div>' + this.tabsHTML() +
+      own + edit + seg + this.ribbonHTML() + '</div>' + this.tabsHTML() +
       '<div class="rb-book">' +
       '<article class="rb-page l"></article><div class="rb-spine" aria-hidden="true"></div><article class="rb-page r"></article>' +
       '<button type="button" class="rb-curl l" data-act="prev" aria-label="Previous page"></button>' +
       '<button type="button" class="rb-curl r" data-act="next" aria-label="Next page"></button>' +
-      '<div class="rb-scrim"></div><aside class="rb-drawer" aria-label="Contents"></aside></div>' +
+      '<div class="rb-scrim"></div><aside class="rb-drawer" aria-label="Contents"></aside>' +
+      (this.screenChapter() ? '<div class="rb-sscrim" data-act="screen"></div><section class="rb-screen" id="' + this.domId('screen') + '" aria-label="' +
+        esc(this.screenChapter().title) + '" hidden></section>' : '') + '</div>' +
       '<div class="rb-sr" aria-live="polite"></div>';
+  };
+
+  // --- The screen ------------------------------------------------------------
+  // A book can name one chapter as its screen: the quick-reference pages a
+  // player reaches for mid-game. It is not a page of the book. A ribbon under
+  // the bar drops it over whatever page is open, and Escape, the ribbon or a
+  // click on the book folds it away.
+
+  Rulebook.prototype.screenChapter = function () {
+    var id = this.data.screen, found = null;
+    if (!id) return null;
+    this.data.parts.forEach(function (part) {
+      part.chapters.forEach(function (ch) { if (!found && ch.id === id) found = ch; });
+    });
+    return found;
+  };
+
+  Rulebook.prototype.ribbonHTML = function () {
+    var ch = this.screenChapter();
+    if (!ch) return '';
+    return '<button type="button" class="rb-ribbon" data-act="screen" aria-expanded="false" aria-controls="' + this.domId('screen') + '">' +
+      esc(ch.title) + ' <span class="rb-chev" aria-hidden="true">\u25BE</span><kbd aria-hidden="true">P</kbd></button>';
+  };
+
+  Rulebook.prototype.screenOpen = function () { return !!this.screenEl && this.el.classList.contains('rb-screen-open'); };
+
+  // Each page of the screen chapter is one leaf; a long card list on a leaf
+  // gets a box to find one card in it.
+  Rulebook.prototype.screenHTML = function () {
+    var self = this;
+    return this.screenPages.map(function (sp, i) {
+      return '<div class="rb-sleaf" style="--i:' + i + '"><div class="rb-scroll" tabindex="-1">' + self.pageBodyHTML('', sp.p) + '</div></div>';
+    }).join('');
+  };
+
+  Rulebook.prototype.openScreen = function () {
+    if (!this.screenEl || !this.screenPages.length || this.screenOpen()) return;
+    this.closeDrawer(false);
+    this.hideCard();
+    this.closeResults();
+    clearTimeout(this.screenTimer);
+    this.screenEl.classList.remove('closing');
+    this.destroyNested(this.screenEl);
+    this.screenEl.innerHTML = this.screenHTML();
+    this.screenEl.style.setProperty('--n', String(Math.min(3, this.screenPages.length)));
+    [].forEach.call(this.screenEl.querySelectorAll('.rb-cards'), function (grid) {
+      if (grid.querySelectorAll('.rb-fc').length < FILTER_AT) return;
+      grid.insertAdjacentHTML('beforebegin', '<input type="search" class="rb-cfind" data-cfind placeholder="Find one…" aria-label="Find in this list" autocomplete="off" spellcheck="false">');
+    });
+    this.mountNested(this.screenEl);
+    this.screenEl.hidden = false;
+    this.el.classList.add('rb-screen-open');
+    this.ribbonEl.setAttribute('aria-expanded', 'true');
+    var first = this.screenEl.querySelector('button, input, select, [tabindex="0"]');
+    if (first) requestAnimationFrame(function () { first.focus({ preventScroll: true }); });
+  };
+
+  Rulebook.prototype.closeScreen = function (restoreFocus) {
+    if (!this.screenOpen()) return;
+    var self = this, el = this.screenEl, hadFocus = el.contains(document.activeElement);
+    this.hideCard();
+    this.el.classList.remove('rb-screen-open');
+    this.ribbonEl.setAttribute('aria-expanded', 'false');
+    el.classList.add('closing');
+    this.screenTimer = setTimeout(function () {
+      el.classList.remove('closing');
+      el.hidden = true;
+      self.destroyNested(el);
+      el.innerHTML = '';
+    }, reduced() ? 0 : SCREEN_CLOSE_MS);
+    if (restoreFocus && hadFocus) this.ribbonEl.focus({ preventScroll: true });
+  };
+
+  // Hides the cards in a screen list that do not match what was typed.
+  Rulebook.prototype.findCard = function (input) {
+    var grid = input.nextElementSibling, q = input.value.trim().toLowerCase();
+    if (!grid || !grid.classList.contains('rb-cards')) return;
+    [].forEach.call(grid.querySelectorAll('.rb-fold'), function (f) { f.hidden = true; });
+    [].forEach.call(grid.querySelectorAll('.rb-fc'), function (c) {
+      c.setAttribute('aria-expanded', 'false');
+      c.hidden = !!q && c.textContent.toLowerCase().indexOf(q) < 0;
+    });
   };
 
   // --- Page list -------------------------------------------------------------
@@ -474,6 +575,7 @@
       if (p.director && !dir) return false;
       return dir || p.blocks.some(function (b) { return !b.director; });
     };
+    var screen = this.data.screen, screenPages = [];
     this.data.parts.forEach(function (part, pi) {
       if (part.director && !dir) return;
       part.chapters.forEach(function (ch, ci) {
@@ -481,6 +583,10 @@
         var shown = [];
         ch.pages.forEach(function (p, gi) { if (pageShows(p)) shown.push({ p: p, gi: gi }); });
         if (!shown.length) return;
+        if (ch.id === screen) {
+          shown.forEach(function (s) { screenPages.push({ ch: ch, p: s.p }); });
+          return;
+        }
         var opener = { kind: 'open', part: part, ch: ch, key: pi + '.' + ci, wide: false, pages: [] };
         var solo = shown.length === 1 && shown[0].p.wide;
         if (!solo) items.push(opener);
@@ -493,6 +599,7 @@
     });
     items.forEach(function (it, i) { it.n = i; });
     this.items = items;
+    this.screenPages = screenPages;
   };
 
   Rulebook.prototype.buildSpreads = function () {
@@ -549,6 +656,14 @@
       }
     }
     this.at = idx < 0 ? 0 : this.spreadOf(idx);
+    if (this.ribbonEl) {
+      this.ribbonEl.hidden = !this.screenPages.length;
+      this.el.classList.toggle('rb-has-screen', !!this.screenPages.length);
+      if (this.screenOpen()) {
+        this.closeScreen(false);
+        if (this.screenPages.length) this.openScreen();
+      }
+    }
     var self = this;
     [].forEach.call(this.el.querySelectorAll('[data-act="view"]'), function (b) {
       b.setAttribute('aria-pressed', b.getAttribute('data-view') === self.view ? 'true' : 'false');
@@ -750,7 +865,8 @@
     // Once the page list is built, a link to a chapter this view does not
     // show (a Director previewing Player view) is left out, not left dead.
     var self = this, t = this.data.terms, items = arr(b.items).filter(function (it) {
-      return isObj(it) && SLUG_RE.test(str(it.chapter)) && (!self.items.length || self.firstItemOf(it.chapter) >= 0);
+      var id = str(it.chapter);
+      return isObj(it) && SLUG_RE.test(id) && (!self.items.length || self.firstItemOf(id) >= 0 || (id === self.data.screen && self.screenPages.length > 0));
     });
     if (!items.length) return '';
     return '<nav class="rb-links" aria-label="' + esc(str(b.title) || 'Turn to') + '">' +
@@ -909,6 +1025,7 @@
     var t = e.target;
     if (!t || !t.matches) return;
     if (t.matches('[data-ix-filter]')) { this.filterIndex(t); return; }
+    if (t.matches('[data-cfind]')) { this.findCard(t); return; }
     if (t.matches('[data-search]')) {
       var self = this;
       clearTimeout(this.searchTimer);
@@ -928,7 +1045,8 @@
 
   Rulebook.prototype.findPages = function (q) {
     var dir = this.showDirector(), hits = [];
-    this.items.forEach(function (it) {
+    var screen = this.screenPages.map(function (sp) { return { kind: 'page', ch: sp.ch, p: sp.p, n: 'screen' }; });
+    screen.concat(this.items).forEach(function (it) {
       if (it.kind !== 'page' || it.ch.generated || hits.length >= 8) return;
       var title = str(it.p.title), words = plain(arr(it.p.blocks).filter(function (b) {
         return isObj(b) && (dir || (b.director !== true && b.type !== 'note'));
@@ -1025,6 +1143,7 @@
   };
 
   Rulebook.prototype.pickResult = function (btn) {
+    if (btn.getAttribute('data-hit') === 'screen') { this.closeResults(); this.openScreen(); return; }
     var n = +btn.getAttribute('data-hit'), id = btn.getAttribute('data-entry') || '';
     this.closeResults();
     this.pendingEntry = '';
@@ -1179,6 +1298,7 @@
 
   Rulebook.prototype.goItem = function (n) {
     this.closeDrawer(false);
+    this.closeScreen(false);
     this.refocus = true;
     this.turnTo(this.spreadOf(n));
     if (!this.busy) this.settled();
@@ -1191,6 +1311,9 @@
     var cur = {};
     if (sp) sp.items.forEach(function (it) { cur[it.n] = true; });
     var curCh = sp ? sp.items[0].ch : null;
+    if (this.screenPages.length) {
+      h += '<button type="button" class="rb-dch rb-dscreen" data-act="screen"><span>' + esc(this.screenChapter().title) + '</span><span class="rb-pn">P</span></button>';
+    }
     this.items.forEach(function (it) {
       // A solo chapter (one wide page, no opener) is listed as a chapter.
       if (it.kind === 'open' || it.solo) {
@@ -1373,6 +1496,7 @@
         case 'next': this.turnTo(this.at + 1); break;
         case 'edit': window.location.assign(x.getAttribute('data-href')); break;
         case 'toc': if (this.drawerOpen()) this.closeDrawer(true); else this.openDrawer(); break;
+        case 'screen': if (this.screenOpen()) this.closeScreen(true); else this.openScreen(); break;
         case 'view': this.setView(x.getAttribute('data-view')); break;
         case 'roll': this.doRoll(x.closest('[data-roll]')); break;
         case 'prev-step': this.stepExample(x, -1); break;
@@ -1395,7 +1519,16 @@
       if (t.closest('input,select,textarea,[contenteditable="true"]')) return;
       if (t.closest('.rb-wslot') && e.key !== 'Escape') return;
     }
-    if (e.key === 'Escape') { this.closeDrawer(true); this.hideCard(); this.closeResults(); return; }
+    if (e.key === 'Escape') {
+      if (this.screenOpen()) { this.closeScreen(true); return; }
+      this.closeDrawer(true); this.hideCard(); this.closeResults(); return;
+    }
+    if ((e.key === 'p' || e.key === 'P') && !e.altKey && !e.ctrlKey && !e.metaKey && this.ribbonEl && !this.ribbonEl.hidden) {
+      e.preventDefault();
+      if (this.screenOpen()) this.closeScreen(true); else this.openScreen();
+      return;
+    }
+    if (this.screenOpen()) return;
     if (e.key === '/' && !e.altKey && !e.ctrlKey && !e.metaKey && this.searchEl) { e.preventDefault(); this.searchEl.focus(); this.searchEl.select(); return; }
     if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
     if (e.key === 'ArrowRight') { this.turnTo(this.at + 1); e.preventDefault(); }
@@ -1407,7 +1540,7 @@
     if (!p || !this.data) return;
     if (start) {
       var t = e.target;
-      var ok = t && t.closest && t.closest('.rb-book') && !t.closest('.rb-drawer, .rb-wslot, .rb-roll, select');
+      var ok = t && t.closest && t.closest('.rb-book') && !t.closest('.rb-drawer, .rb-screen, .rb-wslot, .rb-roll, select');
       this.touch = ok ? { x: p.clientX, y: p.clientY } : null;
       return;
     }

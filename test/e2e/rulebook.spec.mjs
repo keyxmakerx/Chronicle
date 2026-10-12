@@ -32,7 +32,8 @@ const longPage = (title) => ({
   blocks: [{ type: 'text', text: Array.from({ length: 40 }, (_, i) => `Paragraph ${i + 1} of ${title}.`).join('\n\n') }],
 });
 
-function bookFixture() {
+function bookFixture(opts = {}) {
+  if (opts.screen) return screenFixture();
   return {
     title: 'Handbook', systemName: 'Demo', turn: 'flip', look: 'paper',
     tabs: ['basics', 'screen', 'combat'], isDirector: true, start: 'basics',
@@ -43,6 +44,30 @@ function bookFixture() {
         { id: 'basics', title: 'Basics', pages: [longPage('Start here'), longPage('Rolling')] },
         { id: 'screen', title: 'Players Screen', pages: [{ title: 'At the table', wide: true, blocks: [{ type: 'text', text: 'Everything at once.' }] }] },
         { id: 'tests', title: 'Tests', pages: [longPage('Rolling a test'), longPage('Easy and hard')] },
+        { id: 'combat', title: 'Combat', pages: [longPage('Turns'), longPage('Moving')] },
+      ],
+    }],
+  };
+}
+
+// A book that names a screen chapter: three quick-reference pages that drop
+// over the book instead of being pages of it, a long card list among them.
+function screenFixture() {
+  const conditions = Array.from({ length: 9 }, (_, i) => ({ title: `Condition ${i + 1}`, text: `What condition ${i + 1} does.` }));
+  conditions[4].title = 'Grabbed';
+  return {
+    title: 'Handbook', systemName: 'Demo', turn: 'flip', look: 'paper',
+    tabs: ['screen', 'basics', 'combat'], isDirector: true, start: 'screen', screen: 'screen',
+    terms: {},
+    parts: [{
+      title: "Player's book",
+      chapters: [
+        { id: 'basics', title: 'Basics', pages: [longPage('Start here'), { title: 'Where next', blocks: [{ type: 'links', items: [{ title: 'Players Screen', chapter: 'screen' }] }] }] },
+        { id: 'screen', title: 'Players Screen', pages: [
+          { title: 'Your turn', blocks: [{ type: 'cards', items: [{ title: 'Main action', text: 'The heaviest part of your turn.' }] }] },
+          { title: 'The power roll', blocks: [{ type: 'text', text: 'Roll two ten-sided dice.' }] },
+          { title: 'Conditions', blocks: [{ type: 'cards', items: conditions }] },
+        ] },
         { id: 'combat', title: 'Combat', pages: [longPage('Turns'), longPage('Moving')] },
       ],
     }],
@@ -91,12 +116,12 @@ async function withBook(fn, opts = {}) {
       if (p === '/rules') return route.fulfill({ status: 200, contentType: 'text/html', body: harnessHTML() });
       if (p === '/static/css/rulebook.css') return route.fulfill({ status: 200, contentType: 'text/css', body: asset('static/css/rulebook.css') });
       if (p === '/static/js/widgets/rulebook.js') return route.fulfill({ status: 200, contentType: 'text/javascript', body: asset('static/js/widgets/rulebook.js') });
-      if (p === BOOK_URL) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(bookFixture()) });
+      if (p === BOOK_URL) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(bookFixture(opts)) });
       return route.fulfill({ status: 404, body: '' });
     });
     // Customize > Rulebook "Chronicle's look" reaches the page as this attribute.
     if (opts.standard) await page.addInitScript(() => document.addEventListener('DOMContentLoaded', () => document.documentElement.setAttribute('data-cz-book', 'standard')));
-    await page.goto('https://chronicle.test/rules');
+    await page.goto('https://chronicle.test/rules' + (opts.hash || ''));
     await page.waitForSelector('.rb-tabs');
     await fn(page);
     assert.deepEqual(errors, []);
@@ -166,4 +191,61 @@ test("in Chronicle's look a tab still opens its own chapter", async () => {
       assert.equal(await page.evaluate(() => document.querySelector('.rb-where b').textContent), title);
     }
   }, { standard: true });
+});
+
+const screenState = (page) => page.evaluate(() => {
+  const rb = document.querySelector('.rb'), sc = document.querySelector('.rb-screen'), rib = document.querySelector('.rb-ribbon');
+  return {
+    open: rb.classList.contains('rb-screen-open'), hidden: sc.hidden, leaves: sc.querySelectorAll('.rb-sleaf').length,
+    expanded: rib.getAttribute('aria-expanded'), focusIn: sc.contains(document.activeElement), ribbonFocused: document.activeElement === rib,
+  };
+});
+
+test('a book that starts on its screen opens the screen over the first page, never as a page', async () => {
+  await withBook(async (page) => {
+    let st = await screenState(page);
+    assert.equal(st.open, true);
+    assert.equal(st.leaves, 3);
+    assert.equal(st.expanded, 'true');
+    const tabs = await page.$$eval('.rb-tab', (ts) => ts.map((t) => t.textContent));
+    assert.deepEqual(tabs, ['Basics', 'Combat']);
+    // The screen's pages are not pages of the book.
+    assert.equal(await page.evaluate(() => document.querySelector('.rb-where b').textContent), 'Basics');
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => document.querySelector('.rb-screen').hidden);
+    st = await screenState(page);
+    assert.equal(st.open, false);
+    assert.equal(st.expanded, 'false');
+  }, { screen: true });
+});
+
+test('the ribbon, the P key and a link all drop the screen, and Escape returns to the ribbon', async () => {
+  await withBook(async (page) => {
+    // A chapter in the address wins over a start on the screen.
+    assert.equal((await screenState(page)).open, false);
+    await page.click('.rb-ribbon');
+    let st = await screenState(page);
+    assert.equal(st.open, true);
+    await page.waitForFunction(() => document.querySelector('.rb-screen').contains(document.activeElement));
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => document.querySelector('.rb-screen').hidden);
+    assert.equal((await screenState(page)).ribbonFocused, true);
+    await page.keyboard.press('p');
+    assert.equal((await screenState(page)).open, true);
+    await page.keyboard.press('p');
+    await page.waitForFunction(() => document.querySelector('.rb-screen').hidden);
+    // A link to the screen chapter opens the screen.
+    await page.click('[data-act="next"]');
+    await page.waitForFunction(() => !document.querySelector('.rb-leaf'));
+    await page.click('.rb-link[data-chapter="screen"]');
+    assert.equal((await screenState(page)).open, true);
+    // A long card list gets a find box.
+    await page.fill('.rb-screen [data-cfind]', 'grab');
+    const shown = await page.$$eval('.rb-screen .rb-sleaf:last-child .rb-fc', (cs) => cs.filter((c) => !c.hidden).map((c) => c.textContent));
+    assert.deepEqual(shown, ['Grabbed']);
+    // A click on the book behind folds it away.
+    const book = await page.$eval('.rb-book', (b) => { const r = b.getBoundingClientRect(); return { x: r.left + 20, y: r.bottom - 6 }; });
+    await page.mouse.click(book.x, book.y);
+    await page.waitForFunction(() => document.querySelector('.rb-screen').hidden);
+  }, { screen: true, hash: '#basics' });
 });

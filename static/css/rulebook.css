@@ -376,3 +376,47 @@
   .rb-leaf:where(:not(.rb-wslot *)), .rb-leaf.go:where(:not(.rb-wslot *)), .rb-fold:where(:not(.rb-wslot *)), .rb-body:where(:not(.rb-wslot *)), .rb-die.spin:where(:not(.rb-wslot *)), .rb-spinner:where(:not(.rb-wslot *)), .rb-results:where(:not(.rb-wslot *)) { animation: none !important; }
   .rb-drawer:where(:not(.rb-wslot *)), .rb-scrim:where(:not(.rb-wslot *)), .rb-tier:where(:not(.rb-wslot *)), .rb-curl:where(:not(.rb-wslot *))::before { transition: none; }
 }
+
+/* ---- the screen: a ribbon under the bar drops quick-reference leaves ----
+   Each leaf hangs from its top edge and swings down over the book. The
+   perspective is on each leaf's own transform, not on a parent, so a widget
+   mounted in a leaf keeps the page as its fixed-position container. */
+.rb-bar:where(:not(.rb-wslot *)) { position: relative; z-index: 45; }
+.rb-ribbon:where(:not(.rb-wslot *)) { position: absolute; top: 100%; left: 50%; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 8px; padding: 6px 16px 8px; border-radius: 0 0 10px 10px; background: var(--rb-acc3); color: #fff; font: 600 13px/1.2 var(--rb-ui); white-space: nowrap; box-shadow: 0 6px 14px -6px rgba(0, 0, 0, 0.6); transition: padding 0.2s ease, filter 0.2s; }
+.rb-ribbon:hover:where(:not(.rb-wslot *)) { padding-bottom: 12px; filter: brightness(1.12); }
+.rb-ribbon:focus-visible:where(:not(.rb-wslot *)) { outline-offset: 2px; }
+.rb-ribbon kbd:where(:not(.rb-wslot *)) { font: 600 10.5px var(--rb-ui); padding: 1px 6px; border-radius: 4px; background: rgba(255, 255, 255, 0.2); }
+.rb-chev:where(:not(.rb-wslot *)) { display: inline-block; transition: transform 0.3s ease; }
+.rb-screen-open .rb-chev:where(:not(.rb-wslot *)) { transform: rotate(180deg); }
+.rb.rb-has-screen .rb-tabs:where(:not(.rb-wslot *)), .rb.rb-has-screen[data-look] .rb-tabs:where(:not(.rb-wslot *)) { padding-top: 34px; }
+.rb-sscrim:where(:not(.rb-wslot *)) { position: absolute; inset: 0; z-index: 37; background: rgba(0, 0, 0, 0.38); opacity: 0; pointer-events: none; transition: opacity 0.3s; }
+.rb-screen-open .rb-sscrim:where(:not(.rb-wslot *)) { opacity: 1; pointer-events: auto; }
+.rb-screen:where(:not(.rb-wslot *)) { position: absolute; z-index: 38; top: 0; left: 14px; right: 14px; height: min(calc(100% - 24px), 680px); display: grid; grid-template-columns: repeat(var(--n, 3), minmax(0, 1fr)); }
+.rb-sleaf:where(:not(.rb-wslot *)) { position: relative; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--rb-paper); border: 1px solid var(--rb-edge); border-top: 0; box-shadow: 0 22px 40px -18px rgba(0, 0, 0, 0.6); transform-origin: top center; }
+.rb-sleaf + .rb-sleaf:where(:not(.rb-wslot *)) { border-left-color: var(--rb-edge2); }
+.rb-sleaf:first-child:where(:not(.rb-wslot *)) { border-bottom-left-radius: 12px; }
+.rb-sleaf:last-child:where(:not(.rb-wslot *)) { border-bottom-right-radius: 12px; }
+.rb-sleaf .rb-scroll:where(:not(.rb-wslot *)) { padding: 20px clamp(16px, 2vw, 26px) 22px; }
+.rb-sleaf .rb-kicker:empty:where(:not(.rb-wslot *)) { display: none; }
+.rb-sleaf h2:where(:not(.rb-wslot *)) { font-size: clamp(19px, 1.7vw, 24px); margin-top: 0; }
+.rb-sleaf .rb-blocks:where(:not(.rb-wslot *)) { gap: 14px; }
+.rb-sleaf:where(:not(.rb-wslot *))::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(180deg, rgba(0, 0, 0, 0.35), transparent 70%); opacity: 0; }
+.rb-screen-open .rb-sleaf:where(:not(.rb-wslot *)) { animation: rb-drop 620ms cubic-bezier(0.2, 0.9, 0.25, 1.12) calc(var(--i, 0) * 70ms) backwards; }
+.rb-screen-open .rb-sleaf:where(:not(.rb-wslot *))::after { animation: rb-lit 620ms ease calc(var(--i, 0) * 70ms) backwards; }
+.rb-screen.closing .rb-sleaf:where(:not(.rb-wslot *)) { animation: rb-lift 340ms cubic-bezier(0.5, 0, 0.75, 0) forwards; }
+@keyframes rb-drop { from { transform: perspective(1600px) rotateX(-96deg); } to { transform: perspective(1600px) rotateX(0); } }
+@keyframes rb-lift { from { transform: perspective(1600px) rotateX(0); } to { transform: perspective(1600px) rotateX(-96deg); } }
+@keyframes rb-lit { from { opacity: 1; } to { opacity: 0; } }
+.rb-cfind:where(:not(.rb-wslot *)) { width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--rb-edge); background: var(--rb-box); color: var(--rb-ink); font: 500 14px var(--rb-ui); }
+.rb-drawer .rb-dscreen:where(:not(.rb-wslot *)) { margin: 0 0 6px; color: var(--rb-ink); background: color-mix(in srgb, var(--rb-acc) 12%, var(--rb-box)); }
+@media (max-width: 900px) {
+  .rb-screen:where(:not(.rb-wslot *)) { left: 6px; right: 6px; height: calc(100% - 10px); grid-template-columns: minmax(0, 1fr); overflow: auto; overscroll-behavior: contain; border-radius: 0 0 12px 12px; }
+  .rb-sleaf:where(:not(.rb-wslot *)) { border-radius: 0; }
+  .rb-sleaf:last-child:where(:not(.rb-wslot *)) { border-radius: 0 0 12px 12px; }
+  .rb-sleaf .rb-scroll:where(:not(.rb-wslot *)) { flex: 0 0 auto; overflow: visible; }
+  .rb-ribbon kbd:where(:not(.rb-wslot *)) { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rb-screen-open .rb-sleaf:where(:not(.rb-wslot *)), .rb-screen-open .rb-sleaf:where(:not(.rb-wslot *))::after, .rb-screen.closing .rb-sleaf:where(:not(.rb-wslot *)) { animation: none; }
+  .rb-ribbon:where(:not(.rb-wslot *)), .rb-chev:where(:not(.rb-wslot *)), .rb-sscrim:where(:not(.rb-wslot *)) { transition: none; }
+}

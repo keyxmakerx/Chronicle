@@ -68,9 +68,12 @@ type Book struct {
 	Look string `json:"look,omitempty"`
 	// Tabs are the chapter ids given an edge tab. Start is the chapter the
 	// book opens on, and First the one it opens on for a first-time reader.
+	// Screen is the chapter the reader drops over any page as a quick
+	// reference instead of showing it as pages of the book.
 	Tabs       []string            `json:"tabs,omitempty"`
 	Start      string              `json:"start,omitempty"`
 	First      string              `json:"first,omitempty"`
+	Screen     string              `json:"screen,omitempty"`
 	IsDirector bool                `json:"isDirector"`
 	CanEdit    bool                `json:"canEdit"`
 	Terms      map[string]BookTerm `json:"terms"`
@@ -183,6 +186,7 @@ type bookIndexYAML struct {
 	Tabs     []string          `yaml:"tabs,omitempty"`
 	Start    string            `yaml:"start,omitempty"`
 	First    string            `yaml:"first,omitempty"`
+	Screen   string            `yaml:"screen,omitempty"`
 	Terms    map[string]string `yaml:"terms,omitempty"`
 	Parts    []bookPartYAML    `yaml:"parts"`
 }
@@ -376,7 +380,7 @@ func loadBookWithSource(sysDir string, manifest *SystemManifest) (*Book, *BookSo
 // maxBookTabs keeps the tab strip to one readable row.
 const maxBookTabs = 12
 
-// setBookNavigation checks the cover file's look, tabs, start and first
+// setBookNavigation checks the cover file's look, tabs, start, first and screen
 // against the chapters the book lists, so a typo is reported here rather
 // than leaving a tab that goes nowhere.
 func setBookNavigation(b *Book, idx bookIndexYAML) error {
@@ -410,7 +414,7 @@ func setBookNavigation(b *Book, idx bookIndexYAML) error {
 		key string
 		id  string
 		dst *string
-	}{{"start", idx.Start, &b.Start}, {"first", idx.First, &b.First}} {
+	}{{"start", idx.Start, &b.Start}, {"first", idx.First, &b.First}, {"screen", idx.Screen, &b.Screen}} {
 		if f.id == "" {
 			continue
 		}
@@ -812,6 +816,9 @@ func trimBookNavigation(b *Book) {
 	}
 	if !has[b.First] {
 		b.First = ""
+	}
+	if !has[b.Screen] {
+		b.Screen = ""
 	}
 	for pi := range b.Parts {
 		for ci := range b.Parts[pi].Chapters {
