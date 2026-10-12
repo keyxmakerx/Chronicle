@@ -566,8 +566,22 @@
   function setTouchPeek(slot) {
     clearTouchPeek();
     if (!slot) return;
+    placePeek(slot);
     slot.classList.add('peeking');
     touchPeek = slot;
+  }
+
+  // A peek drops below its card, unless that would run it past the bottom
+  // of what is on screen and there is more room above: then it rises over
+  // the card instead, so it is never cut off.
+  function placePeek(slot) {
+    var peek = slot.querySelector('.calv5-peek');
+    if (!peek) return;
+    var main = mainEl(), r = slot.getBoundingClientRect(), h = peek.offsetHeight + 8;
+    var top = 0, bottom = window.innerHeight;
+    if (main) { var m = main.getBoundingClientRect(); top = Math.max(top, m.top); bottom = Math.min(bottom, m.bottom); }
+    var below = bottom - r.bottom, above = r.top - top;
+    slot.classList.toggle('peek-up', below < h && above > below);
   }
 
   // ---- Listeners: document-level and delegated, so they hold no page DOM
@@ -612,6 +626,7 @@
     var slot = e.target.closest('.calv5-slot');
     if (!slot || (e.relatedTarget instanceof Element && slot.contains(e.relatedTarget))) return;
     clearTimeout(dwell);
+    placePeek(slot);
     var link = slot.querySelector('a[data-cal-open]');
     if (link) dwell = setTimeout(function () { prefetch(link); }, T.PREFETCH_DWELL);
   }
@@ -623,6 +638,7 @@
   function onFocusIn(e) {
     var link = e.target instanceof Element && e.target.closest('a[data-cal-open]');
     if (link && lastPointer !== 'touch') prefetch(link);
+    if (link && link.closest('.calv5-slot')) placePeek(link.closest('.calv5-slot'));
   }
 
   function onKeyDown(e) {
