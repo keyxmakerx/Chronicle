@@ -753,58 +753,6 @@ func (h *Handler) PluginHubFragment(c echo.Context) error {
 
 // --- Customization Hub ---
 
-// Customize renders the Campaign Customization Hub (GET /campaigns/:id/customize).
-// Owners use this page to control navigation, dashboards, and category layouts.
-func (h *Handler) Customize(c echo.Context) error {
-	cc := GetCampaignContext(c)
-	if cc == nil {
-		return apperror.NewMissingContext()
-	}
-
-	csrfToken := middleware.GetCSRFToken(c)
-
-	// Fetch entity types for the categories tabs and navigation editor.
-	var entityTypes []SettingsEntityType
-	if h.entityLister != nil {
-		entityTypes, _ = h.entityLister.GetEntityTypesForSettings(c.Request().Context(), cc.Campaign.ID)
-	}
-
-	return middleware.Render(c, http.StatusOK, CustomizePage(cc, entityTypes, csrfToken, h.customizeTabs(cc)))
-}
-
-// LayoutEditorFragment returns an HTMX fragment containing the template-editor
-// widget for a specific entity type. Used by the Page Layouts tab in the
-// Customization Hub to lazy-load editors one category at a time.
-// GET /campaigns/:id/customize/layout-editor/:etid
-func (h *Handler) LayoutEditorFragment(c echo.Context) error {
-	cc := GetCampaignContext(c)
-	if cc == nil {
-		return apperror.NewMissingContext()
-	}
-
-	etID, err := strconv.Atoi(c.Param("etid"))
-	if err != nil {
-		return apperror.NewBadRequest("invalid entity type ID")
-	}
-
-	if h.layoutFetcher == nil {
-		return apperror.NewMissingContext()
-	}
-
-	et, err := h.layoutFetcher.GetEntityTypeForLayoutEditor(c.Request().Context(), etID)
-	if err != nil {
-		return err
-	}
-
-	// IDOR protection: verify entity type belongs to this campaign.
-	if et.CampaignID != cc.Campaign.ID {
-		return apperror.NewNotFound("entity type not found")
-	}
-
-	csrfToken := middleware.GetCSRFToken(c)
-	return middleware.Render(c, http.StatusOK, LayoutEditorFragment(cc, et, csrfToken))
-}
-
 // --- Sidebar Config API ---
 
 // GetSidebarConfig returns the sidebar configuration as JSON (GET /campaigns/:id/sidebar-config).
