@@ -105,6 +105,33 @@ func TestCalendarsListPage_OwnerSeesOwnerActions(t *testing.T) {
 	}
 }
 
+// TestCalendarsListPage_OpensWizardStep: ?wizard=reallife opens that step over
+// the list for the owner; a player, or an unknown step, gets the plain list.
+func TestCalendarsListPage_OpensWizardStep(t *testing.T) {
+	roles := map[string]campaigns.Role{"u-owner": campaigns.RoleOwner, "u-player": campaigns.RolePlayer}
+	e, _ := newAccessTestRouter(false, true, roles)
+	const step = `hx-get="/campaigns/camp-1/calendars/wizard/reallife" hx-trigger="load"`
+	tests := []struct {
+		name, query, user string
+		want              bool
+	}{
+		{"owner, real-world step", "?wizard=reallife", "u-owner", true},
+		{"owner, unknown step", "?wizard=../../admin", "u-owner", false},
+		{"player", "?wizard=reallife", "u-player", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := doRequest(e, http.MethodGet, "/campaigns/camp-1/calendars"+tt.query, tt.user)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+			}
+			if got := strings.Contains(rec.Body.String(), step); got != tt.want {
+				t.Errorf("opens the step = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestCalendarsListPage_FullPageVsHTMXFragment(t *testing.T) {
 	roles := map[string]campaigns.Role{"u-owner": campaigns.RoleOwner}
 	e, _ := newAccessTestRouter(false, true, roles)
