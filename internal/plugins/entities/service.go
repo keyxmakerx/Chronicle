@@ -41,6 +41,9 @@ type EntityService interface {
 	UpdateFieldOverrides(ctx context.Context, entityID string, overrides *FieldOverrides) error
 	UpdateImage(ctx context.Context, entityID, imagePath string) error
 	UpdateCoverImage(ctx context.Context, entityID, coverImagePath string) error
+	// CheckImagePath refuses a picture path a page may not use: one outside
+	// the media store or from another campaign. An empty path passes.
+	CheckImagePath(ctx context.Context, entityID, imagePath string) error
 	// Delete moves the page and its sub-pages to the Trash when page safety
 	// is wired, and removes it for good otherwise.
 	Delete(ctx context.Context, entityID string) error
@@ -1135,14 +1138,8 @@ func (s *entityService) UpdateFieldOverrides(ctx context.Context, entityID strin
 // well-formed media ID, including one from a campaign the caller can't
 // see; the show page would then sign a URL for it regardless.
 func (s *entityService) UpdateImage(ctx context.Context, entityID, imagePath string) error {
-	if imagePath != "" {
-		// Reject absolute paths and directory traversal attempts.
-		if strings.HasPrefix(imagePath, "/") || strings.Contains(imagePath, "..") {
-			return apperror.NewBadRequest("invalid image path")
-		}
-		if err := s.verifyMediaInCampaign(ctx, entityID, imagePath); err != nil {
-			return err
-		}
+	if err := s.CheckImagePath(ctx, entityID, imagePath); err != nil {
+		return err
 	}
 	if err := s.entities.UpdateImage(ctx, entityID, imagePath); err != nil {
 		return err
@@ -1174,6 +1171,18 @@ func (s *entityService) UpdateCoverImage(ctx context.Context, entityID, coverIma
 		slog.String("cover_image_path", coverImagePath),
 	)
 	return nil
+}
+
+// CheckImagePath refuses an absolute or traversing path, and media that
+// isn't this page's campaign's.
+func (s *entityService) CheckImagePath(ctx context.Context, entityID, imagePath string) error {
+	if imagePath == "" {
+		return nil
+	}
+	if strings.HasPrefix(imagePath, "/") || strings.Contains(imagePath, "..") {
+		return apperror.NewBadRequest("invalid image path")
+	}
+	return s.verifyMediaInCampaign(ctx, entityID, imagePath)
 }
 
 // verifyMediaInCampaign confirms mediaID both exists and belongs to

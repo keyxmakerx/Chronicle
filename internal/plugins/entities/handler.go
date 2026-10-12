@@ -115,6 +115,8 @@ type Handler struct {
 	sessionSearcher    SessionSearcher
 	systemSearcher     SystemSearcher
 	memberLister       MemberLister
+	eraPages           EraPages
+	pageMoons          PageMoons
 	npcSection         NPCSectionProvider
 	charLists          CharacterListManager
 	heroPlanner        HeroPlanner
@@ -630,8 +632,14 @@ func (h *Handler) Show(c echo.Context) error {
 	// Point the sidebar at the entity's category (e.g. /campaigns/{id}/city):
 	// /entities/{eid} matches no category row. The hint also names the page,
 	// which the category's row shows while it is open.
+	// The page is shown as its version for the era the main calendar is in,
+	// when it has one; the DM can pick another era in the Eras panel.
+	entity, eraV := h.applyEraView(c.Request().Context(), cc, entity, entityType, userID, c.QueryParam("era"), c.QueryParam("hl"))
+
 	categoryPath := fmt.Sprintf("/campaigns/%s/%s", cc.Campaign.ID, entityType.Slug)
 	ctx := layouts.SetActivePath(c.Request().Context(), categoryPath)
+	ctx = withEraView(ctx, eraV)
+	ctx = withPageMoons(ctx, h.loadPageMoons(c.Request().Context(), cc, entity.ID, userID))
 	ctx = layouts.WithNavHint(ctx, layouts.NavHint{TypeID: entityType.ID, PageName: entity.Name})
 	// Install the per-request singleton tracker — RenderBlock uses it to
 	// detect duplicate singleton blocks (e.g., two map_editor on one
@@ -2233,6 +2241,7 @@ func (h *Handler) PreviewAPI(c echo.Context) error {
 	if err != nil {
 		return apperror.NewMissingContext()
 	}
+	entity = h.currentEraEntity(c.Request().Context(), cc, entity, entityType, userID)
 
 	cfg := entity.EffectivePopupConfig()
 

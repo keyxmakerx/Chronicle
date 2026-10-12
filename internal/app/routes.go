@@ -3491,6 +3491,10 @@ func (a *App) RegisterRoutes() {
 	calendarKindRepo := calendar.NewEventKindRepository(a.DB)
 	calendarWeatherRepo := calendar.NewWeatherRepository(a.DB)
 	calendarService := calendar.NewCalendarService(calendarRepo, calendarEventRepo, calendarKindRepo, calendarWeatherRepo)
+	// Pages by era and moon lore pages: the calendar owns eras, moons and
+	// each page's era versions; the entity page draws them.
+	entityHandler.SetEraPages(eraPagesAdapter{versions: calendar.NewEraVersionService(calendar.NewEraVersionRepository(a.DB), calendarService)})
+	entityHandler.SetPageMoons(pageMoonsAdapter{calendars: calendarService})
 	// An event's entity_id join reads straight from entities with no
 	// visibility filter of its own (calendar.EntityVisibilityGate's doc
 	// comment) — reuses the same entityVisibilityFilterAdapter sessions,
@@ -5458,6 +5462,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "customize-look", Scripts: []string{"/static/js/widgets/customize_look.js"}},
 	{Name: "site-look", Scripts: []string{"/static/js/widgets/site_look.js"}},
 	{Name: "page-tabs", Scripts: []string{"/static/js/widgets/page_tabs.js"}},
+	{Name: "era-pages", Scripts: []string{"/static/js/widgets/era_pages.js"}},
 }
 
 // journalCharacterAdapter adapts EntityService to notes.CharacterLister: the

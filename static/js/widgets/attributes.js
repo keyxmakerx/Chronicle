@@ -11,6 +11,11 @@
  *   data-endpoint   - Fields API endpoint (GET/PUT),
  *                     e.g. /campaigns/:id/entities/:eid/fields
  *   data-editable   - "true" if user can modify fields (Scribe+)
+ *   data-era        - "true" when the endpoint is a page's era version: the
+ *                     per-page field settings (the gear) belong to the usual
+ *                     page, so they are left out
+ *   data-era-highlight - "true" to mark the fields the version changes, with
+ *                     their usual value (the response's era_changed, GM only)
  */
 Chronicle.register('attributes', {
   init: function (el, config) {
@@ -24,12 +29,13 @@ Chronicle.register('attributes', {
       isSaving: false,
       loadingChoices: false, // Edit clicked, pick lists still arriving
       choiceLists: {},       // fieldKey -> {systemName, choices} for text fields
+      eraChanged: null,      // fieldKey -> usual value, for an era version's changes
       error: null
     };
 
     // Campaign and entity ids for the pick-from-the-system control.
     var idMatch = config.endpoint.match(/\/campaigns\/([^/]+)\/entities\/([^/]+)\/fields$/);
-    var campaignId = idMatch ? idMatch[1] : '';
+    var campaignId = idMatch ? idMatch[1] : String(config.campaignId || '');
 
     // Fields people commonly expect a system list for; when the system has
     // none we say so instead of leaving a bare text box unexplained.
@@ -55,23 +61,27 @@ Chronicle.register('attributes', {
     var overridesEndpoint = config.endpoint.replace(/\/fields$/, '/field-overrides');
 
     // Load field definitions and current values.
-    Chronicle.apiFetch(config.endpoint)
-      .then(function (r) {
-        if (!r.ok) throw new Error('Failed to load fields');
-        return r.json();
-      })
-      .then(function (data) {
-        state.fields = data.fields || [];
-        state.typeFields = data.type_fields || data.fields || [];
-        state.fieldsData = data.fields_data || {};
-        state.fieldOverrides = data.field_overrides || null;
-        render();
-      })
-      .catch(function (err) {
-        console.error('[attributes] Failed to load:', err);
-        state.error = 'Failed to load attributes.';
-        render();
-      });
+    function reload() {
+      return Chronicle.apiFetch(config.endpoint)
+        .then(function (r) {
+          if (!r.ok) throw new Error('Failed to load fields');
+          return r.json();
+        })
+        .then(function (data) {
+          state.fields = data.fields || [];
+          state.typeFields = data.type_fields || data.fields || [];
+          state.fieldsData = data.fields_data || {};
+          state.fieldOverrides = data.field_overrides || null;
+          state.eraChanged = data.era_changed || null;
+          render();
+        })
+        .catch(function (err) {
+          console.error('[attributes] Failed to load:', err);
+          state.error = 'Failed to load attributes.';
+          render();
+        });
+    }
+    reload();
 
     // --- Render ---
 
@@ -111,7 +121,7 @@ Chronicle.register('attributes', {
           state.isEditing = false;
           render();
         });
-        btnGroup.appendChild(gearBtn);
+        if (!config.era) btnGroup.appendChild(gearBtn);
 
         var editBtn = document.createElement('button');
         editBtn.type = 'button';
@@ -175,7 +185,9 @@ Chronicle.register('attributes', {
 
       state.fields.forEach(function (field) {
         var val = state.fieldsData[field.key];
-        if (val === undefined || val === null || val === '') return;
+        var marked = isMarked(field.key);
+        var blank = val === undefined || val === null || val === '';
+        if (blank && !marked) return;
 
         hasValues = true;
         var row = document.createElement('div');
@@ -201,10 +213,23 @@ Chronicle.register('attributes', {
           link.target = '_blank';
           link.rel = 'noopener noreferrer';
           value.appendChild(link);
+        } else if (blank) {
+          value.textContent = 'Cleared in this era';
+          value.style.color = 'var(--color-text-muted)';
         } else {
           value.textContent = String(val);
         }
 
+        if (marked) {
+          value.classList.add('era-hl-field');
+          row.appendChild(value);
+          var was = document.createElement('div');
+          was.className = 'era-was';
+          was.textContent = 'Usually ' + usualText(field);
+          row.appendChild(was);
+          container.appendChild(row);
+          return;
+        }
         row.appendChild(value);
         container.appendChild(row);
       });
@@ -218,6 +243,21 @@ Chronicle.register('attributes', {
           : 'No attributes set.';
         container.appendChild(empty);
       }
+    }
+
+    // isMarked reports whether a field is one the shown era version changes
+    // and highlights are on.
+    function isMarked(key) {
+      return !!(config.eraHighlight && state.eraChanged &&
+        Object.prototype.hasOwnProperty.call(state.eraChanged, key));
+    }
+
+    // usualText is a changed field's value on the usual page, as shown.
+    function usualText(field) {
+      var u = state.eraChanged ? state.eraChanged[field.key] : null;
+      if (u === undefined || u === null || u === '') return 'empty';
+      if (field.type === 'checkbox') return u === true || u === 'true' || u === 'on' ? 'Yes' : 'No';
+      return String(u);
     }
 
     // --- Edit form ---
@@ -315,10 +355,29 @@ Chronicle.register('attributes', {
           input.id = 'attr-' + field.key;
           input.setAttribute('data-field-key', field.key);
           row.appendChild(input);
+          if (state.eraChanged && Object.prototype.hasOwnProperty.call(state.eraChanged, field.key)) {
+            row.appendChild(usualButton(field, input));
+          }
 
           container.appendChild(row);
         });
       });
+    }
+
+    // usualButton puts a field the era version changes back to its usual
+    // value; the version then stops changing it once saved.
+    function usualButton(field, input) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'era-usual-val';
+      b.textContent = 'Use the usual value (' + usualText(field) + ')';
+      b.addEventListener('click', function () {
+        var u = state.eraChanged[field.key];
+        if (field.type === 'checkbox') input.checked = u === true || u === 'true' || u === 'on';
+        else input.value = u === undefined || u === null ? '' : String(u);
+        b.remove();
+      });
+      return b;
     }
 
     // --- Pick from the system's list ---
@@ -674,6 +733,9 @@ Chronicle.register('attributes', {
           state.isEditing = false;
           state.isSaving = false;
           render();
+          // An era version keeps only what differs from the usual page, so
+          // read back which fields it now changes.
+          if (config.era) reload();
         })
         .catch(function (err) {
           console.error('[attributes] Save failed:', err);

@@ -45,6 +45,15 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.PUT("/entities/:eid/image", h.UpdateImageAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.PUT("/entities/:eid/cover-image", h.UpdateCoverImageAPI, campaigns.RequireRole(campaigns.RoleScribe))
 
+	// A page's version for one era: making, removing and other eras are the
+	// GM's. Its reads sit with the public widget reads below.
+	cg.POST("/entities/:eid/eras/:eraID", h.CreateEraVersionAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.PATCH("/entities/:eid/eras/:eraID", h.UpdateEraIdentityAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.DELETE("/entities/:eid/eras/:eraID", h.DeleteEraVersionAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.PUT("/entities/:eid/eras/:eraID/image", h.UpdateEraImageAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.PUT("/entities/:eid/eras/:eraID/entry", h.UpdateEraEntryAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.PUT("/entities/:eid/eras/:eraID/fields", h.UpdateEraFieldsAPI, campaigns.RequireRole(campaigns.RoleScribe))
+
 	// Inline metadata API (Scribe+): name, descriptor, parent, privacy.
 	// Player-admitted like /fields: a claimed owner may send {name} only.
 	cg.PUT("/entities/:eid/metadata", h.UpdateMetadataAPI, campaigns.RequireRole(campaigns.RolePlayer))
@@ -184,6 +193,10 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// entity-level privacy checks (private entities require Scribe+).
 	pub.GET("/entities/:eid/entry", h.GetEntry, campaigns.RequireViewAccess())
 	pub.GET("/entities/:eid/fields", h.GetFieldsAPI, campaigns.RequireViewAccess())
+	// The same reads for the version of the era the page is shown in; anyone
+	// but the GM reaches only the current era's.
+	pub.GET("/entities/:eid/eras/:eraID/entry", h.GetEraEntryAPI, campaigns.RequireViewAccess())
+	pub.GET("/entities/:eid/eras/:eraID/fields", h.GetEraFieldsAPI, campaigns.RequireViewAccess())
 	// Aliases display data — the aliases widget mounts for every viewer, so
 	// its read must be public-capable like entry/fields. GetAliasesAPI
 	// enforces the same IDOR + entity-privacy gate.

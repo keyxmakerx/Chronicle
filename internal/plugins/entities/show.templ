@@ -254,6 +254,7 @@ templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 						></span>
 					}
 				</div>
+				@pageMoonChips(cc)
 				// Aliases ("aka") sit under the name they are alternatives to.
 				<div
 					data-widget="aliases"
@@ -288,6 +289,7 @@ templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 							</button>
 						</form>
 						@entityHistoryButton(cc, entity, "btn-ghost btn-sm")
+						@eraButton(cc, entity, "btn-ghost btn-sm")
 						if cc.MemberRole >= campaigns.RoleOwner {
 							<form
 								method="POST"
@@ -308,12 +310,14 @@ templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 			}
 		</div>
 		@entityPlacesLine(cc, entity)
+		@eraPanel(cc, entity, csrfToken)
 		// The History panel loads here when History is clicked.
 		if isScribe {
 			<div id="page-history-slot"></div>
 		}
 		if canRename {
-			@pageNameFold(cc, entity, isScribe)
+			// The fold renames the usual page, whichever era is shown.
+			@pageNameFold(cc, usualEntity(ctx, entity), isScribe)
 		}
 	</div>
 }
@@ -323,13 +327,13 @@ templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 // opens the file picker; image_upload.js adds the progress bar and the amber
 // error bar. Everyone else sees the picture alone.
 templ blockImage(cc *campaigns.CampaignContext, entity *Entity, csrfToken string) {
-	<div class="card overflow-hidden p-0">
+	<div class={ "card overflow-hidden p-0", templ.KV("era-settle", eraViewOf(ctx).Open()) }>
 		if entity.ImagePath != nil && *entity.ImagePath != "" {
 			if cc.MemberRole >= campaigns.RoleScribe {
 				<div
 					class="relative"
 					data-widget="image-upload"
-					data-endpoint={ fmt.Sprintf("/campaigns/%s/entities/%s/image", cc.Campaign.ID, entity.ID) }
+					data-endpoint={ widgetEndpoint(ctx, cc.Campaign.ID, entity.ID, "image") }
 					data-upload-url="/media/upload"
 					data-csrf-token={ csrfToken }
 				>
@@ -339,6 +343,7 @@ templ blockImage(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 						class="w-full h-56 object-cover"
 					/>
 					<button type="button" class="fx-chip is-corner" data-pick aria-label="Change image"><i class="fa-solid fa-camera"></i> Change</button>
+					@eraPictureLabel()
 				</div>
 			} else {
 				<img
@@ -352,7 +357,7 @@ templ blockImage(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 				<div
 					class="relative w-full h-40 bg-surface-alt flex flex-col items-center justify-center cursor-pointer hover:bg-surface transition-colors"
 					data-widget="image-upload"
-					data-endpoint={ fmt.Sprintf("/campaigns/%s/entities/%s/image", cc.Campaign.ID, entity.ID) }
+					data-endpoint={ widgetEndpoint(ctx, cc.Campaign.ID, entity.ID, "image") }
 					data-upload-url="/media/upload"
 					data-csrf-token={ csrfToken }
 				>
@@ -373,10 +378,21 @@ templ blockImage(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 }
 
 // blockEntry renders the TipTap rich text editor for the entity's main content.
+// With an era version on the page it edits that version; while the GM has
+// highlights on, it shows what the version changes instead.
 templ blockEntry(cc *campaigns.CampaignContext, entity *Entity, csrfToken string) {
+	if v := eraViewOf(ctx); v.HighlightText() {
+		@eraEntryDiff(cc, entity, v)
+	} else {
+		@blockEntryEditor(cc, entity, csrfToken)
+	}
+}
+
+templ blockEntryEditor(cc *campaigns.CampaignContext, entity *Entity, csrfToken string) {
 	<div
 		data-widget="editor"
-		data-endpoint={ fmt.Sprintf("/campaigns/%s/entities/%s/entry", cc.Campaign.ID, entity.ID) }
+		data-endpoint={ widgetEndpoint(ctx, cc.Campaign.ID, entity.ID, "entry") }
+		class={ templ.KV("era-settle", eraViewOf(ctx).Open()) }
 		data-campaign-id={ cc.Campaign.ID }
 		if cc.MemberRole >= campaigns.RoleScribe {
 			data-editable="true"
@@ -392,7 +408,9 @@ templ blockEntry(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 templ blockAttributes(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, csrfToken string) {
 	<div
 		data-widget="attributes"
-		data-endpoint={ fmt.Sprintf("/campaigns/%s/entities/%s/fields", cc.Campaign.ID, entity.ID) }
+		data-endpoint={ widgetEndpoint(ctx, cc.Campaign.ID, entity.ID, "fields") }
+		data-campaign-id={ cc.Campaign.ID }
+		{ eraFieldsAttrs(ctx)... }
 		if cc.MemberRole >= campaigns.RoleScribe {
 			data-editable="true"
 		}
