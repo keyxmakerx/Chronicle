@@ -61,15 +61,7 @@ func gameNightsTarget(campaignID, calendarID, sessionID, date string) string {
 // GET /campaigns/:id/game-nights[?session=ID&date=YYYY-MM-DD]
 func (h *Handler) GameNightsLink(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
-	calID, found := "", false // found: the lookup ran and answered
-	if h.calendarFinder != nil && cc.MemberRole >= campaigns.RolePlayer {
-		id, err := h.calendarFinder.RealWorldCalendarID(c.Request().Context(), cc.Campaign.ID, int(cc.MemberRole), auth.GetUserID(c))
-		if err != nil {
-			slog.Warn("game nights link: finding the real-world calendar failed", slog.Any("error", err))
-		} else {
-			calID, found = id, true
-		}
-	}
+	calID, found := h.realWorldCalendar(c)
 	sessionID := c.QueryParam("session")
 	if calID == "" && found && sessionID == "" && cc.MemberRole >= campaigns.RoleOwner {
 		// Game nights live in a real-world calendar; the owner is offered
@@ -79,6 +71,34 @@ func (h *Handler) GameNightsLink(c echo.Context) error {
 		return middleware.HTMXRedirect(c, "/campaigns/"+url.PathEscape(cc.Campaign.ID)+"/calendars?wizard=reallife")
 	}
 	return middleware.HTMXRedirect(c, gameNightsTarget(cc.Campaign.ID, calID, sessionID, c.QueryParam("date")))
+}
+
+// realWorldCalendar is the calendar game nights are answered in for this
+// viewer, or "" when there is none. found is false when the lookup didn't
+// run or failed, so a caller can tell "no calendar" from "couldn't tell".
+// Only members answer there, so a public viewer gets "".
+func (h *Handler) realWorldCalendar(c echo.Context) (calID string, found bool) {
+	cc := campaigns.GetCampaignContext(c)
+	if h.calendarFinder == nil || cc.MemberRole < campaigns.RolePlayer {
+		return "", false
+	}
+	id, err := h.calendarFinder.RealWorldCalendarID(c.Request().Context(), cc.Campaign.ID, int(cc.MemberRole), auth.GetUserID(c))
+	if err != nil {
+		slog.Warn("game nights link: finding the real-world calendar failed", slog.Any("error", err))
+		return "", false
+	}
+	return id, true
+}
+
+// pollTarget is where a date poll opens on the calendar: the day named
+// (its picked date, or the next date it suggests) with the poll picked out.
+func pollTarget(campaignID, calendarID, pollID, date string) string {
+	q := url.Values{}
+	q.Set("poll", pollID)
+	if _, err := time.Parse("2006-01-02", date); err == nil {
+		q.Set("date", date)
+	}
+	return "/campaigns/" + url.PathEscape(campaignID) + "/calendars/" + url.PathEscape(calendarID) + "/view?" + q.Encode()
 }
 
 // sidebarNightDate is the date the dashboard block's link opens a session on: a

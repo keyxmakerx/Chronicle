@@ -197,6 +197,7 @@ type SessionService interface {
 	CreateProposal(ctx context.Context, campaignID, createdBy string, req CreateProposalRequest) (*SlotProposal, error)
 	GetProposalView(ctx context.Context, campaignID, proposalID, viewerID, viewerTZ string, includeDetail bool) (*ProposalView, error)
 	ListProposalSummaries(ctx context.Context, campaignID, viewerID string) ([]ProposalSummary, error)
+	ListOpenProposalViews(ctx context.Context, campaignID, viewerID, viewerTZ string) ([]ProposalView, error)
 	RespondToOption(ctx context.Context, campaignID, proposalID, optionID, userID, response string) error
 	CreateProposalTokens(ctx context.Context, optionID, userID string) (map[string]string, error)
 	// Emailed-token redeem is split into a read-only validate (used by the GET
