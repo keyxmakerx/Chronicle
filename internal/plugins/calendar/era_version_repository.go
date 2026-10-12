@@ -120,6 +120,24 @@ func (r *eraVersionRepo) ForEntities(ctx context.Context, entityIDs []string, er
 	return out, rows.Err()
 }
 
+func (r *eraVersionRepo) ForEra(ctx context.Context, eraID int) ([]*EntityEraVersion, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT `+eraVersionCols+` FROM entity_era_versions WHERE era_id = ? ORDER BY entity_id`, eraID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*EntityEraVersion
+	for rows.Next() {
+		v, err := scanEraVersion(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
+}
+
 func (r *eraVersionRepo) Create(ctx context.Context, entityID string, eraID int, userID string) error {
 	_, err := r.db.ExecContext(ctx,
 		`INSERT IGNORE INTO entity_era_versions (entity_id, era_id, updated_by) VALUES (?, ?, ?)`,

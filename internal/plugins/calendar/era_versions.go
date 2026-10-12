@@ -69,6 +69,8 @@ type EraVersionService interface {
 	// ForEntities returns the versions for one era of the given pages, keyed
 	// by page id; pages without one are absent.
 	ForEntities(ctx context.Context, entityIDs []string, eraID int) (map[string]*EntityEraVersion, error)
+	// ForEra lists every page's version for one era, for a campaign backup.
+	ForEra(ctx context.Context, eraID int) ([]*EntityEraVersion, error)
 	// Create starts an empty version (the usual page in every respect). It
 	// is a no-op when one exists.
 	Create(ctx context.Context, campaignID, entityID string, eraID int, userID string) error
@@ -93,6 +95,7 @@ type EraVersionRepository interface {
 	Get(ctx context.Context, entityID string, eraID int) (*EntityEraVersion, error)
 	EraIDs(ctx context.Context, entityID string) ([]int, error)
 	ForEntities(ctx context.Context, entityIDs []string, eraID int) (map[string]*EntityEraVersion, error)
+	ForEra(ctx context.Context, eraID int) ([]*EntityEraVersion, error)
 	Create(ctx context.Context, entityID string, eraID int, userID string) error
 	SetIdentity(ctx context.Context, entityID string, eraID int, name, imagePath patch.Field[string], userID string) (bool, error)
 	SaveEntry(ctx context.Context, entityID string, eraID int, entry, entryHTML string, baseRev *int, userID string) (rev int, saved bool, err error)
@@ -183,6 +186,10 @@ func (s *eraVersionService) ForEntities(ctx context.Context, entityIDs []string,
 		return map[string]*EntityEraVersion{}, nil
 	}
 	return s.repo.ForEntities(ctx, entityIDs, eraID)
+}
+
+func (s *eraVersionService) ForEra(ctx context.Context, eraID int) ([]*EntityEraVersion, error) {
+	return s.repo.ForEra(ctx, eraID)
 }
 
 // checkScope refuses an era or page from another campaign with the same

@@ -3493,7 +3493,8 @@ func (a *App) RegisterRoutes() {
 	calendarService := calendar.NewCalendarService(calendarRepo, calendarEventRepo, calendarKindRepo, calendarWeatherRepo)
 	// Pages by era and moon lore pages: the calendar owns eras, moons and
 	// each page's era versions; the entity page draws them.
-	entityHandler.SetEraPages(eraPagesAdapter{versions: calendar.NewEraVersionService(calendar.NewEraVersionRepository(a.DB), calendarService)})
+	eraVersionService := calendar.NewEraVersionService(calendar.NewEraVersionRepository(a.DB), calendarService)
+	entityHandler.SetEraPages(eraPagesAdapter{versions: eraVersionService})
 	entityHandler.SetPageMoons(pageMoonsAdapter{calendars: calendarService})
 	// An event's entity_id join reads straight from entities with no
 	// visibility filter of its own (calendar.EntityVisibilityGate's doc
@@ -4559,7 +4560,7 @@ func (a *App) RegisterRoutes() {
 	// --- Campaign Export/Import ---
 	exportSvc := campaigns.NewExportImportService(campaignService)
 	exportSvc.SetEntityExporter(&entityExportAdapter{entitySvc: entityService, tagSvc: tagService, relationSvc: relService, placeSvc: placeService})
-	exportSvc.SetCalendarExporter(&calendarExportAdapter{svc: calendarService})
+	exportSvc.SetCalendarExporter(&calendarExportAdapter{svc: calendarService, versions: eraVersionService})
 	exportSvc.SetTimelineExporter(&timelineExportAdapter{svc: timelineSvc})
 	exportSvc.SetSessionExporter(&sessionExportAdapter{svc: sessionsService})
 	exportSvc.SetMapExporter(&mapExportAdapter{mapSvc: mapsService, drawingSvc: drawingService})
@@ -4568,7 +4569,7 @@ func (a *App) RegisterRoutes() {
 	exportSvc.SetMediaExporter(&mediaExportAdapter{svc: mediaService})
 	exportSvc.SetMediaBundler(&mediaBundleAdapter{svc: mediaService})
 	exportSvc.SetEntityImporter(&entityImportAdapter{entitySvc: entityService, tagSvc: tagService, relationSvc: relService, placeSvc: placeService})
-	exportSvc.SetCalendarImporter(&calendarImportAdapter{svc: calendarService})
+	exportSvc.SetCalendarImporter(&calendarImportAdapter{svc: calendarService, versions: eraVersionService})
 	exportSvc.SetTimelineImporter(&timelineImportAdapter{svc: timelineSvc})
 	exportSvc.SetSessionImporter(&sessionImportAdapter{svc: sessionsService})
 	exportSvc.SetMapImporter(&mapImportAdapter{mapSvc: mapsService, drawingSvc: drawingService})

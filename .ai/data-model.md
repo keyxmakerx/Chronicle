@@ -238,6 +238,7 @@ plugin does with them: `internal/plugins/calendar/.ai.md`.
 | `calendar_weather_days` | Weather for one date, generated or set by hand | PK `(calendar_id, year, month, day)`; `source` (`manual` by default); `locked` keeps Generate from replacing it (migration 025) |
 | `calendar_weather_settings` | The world's climate and how long weather lasts | PK `calendar_id`; `climate`, `continuity`, `kinds` (the owner's own kinds of weather), `forecast_days` (migration 025) |
 | `entity_era_links`, `entity_event_links` | Pages tied to an era or an event | `participation_role` |
+| `entity_era_versions` | A page's version for one era: only what changes there (migration 027) | PK `(entity_id, era_id)`, both FK CASCADE; `name`, `image_path`, `entry`/`entry_html`/`entry_rev`, `fields_data` (changed values only); NULL means "as the usual page" |
 
 ### maps (`internal/plugins/maps/migrations/`)
 

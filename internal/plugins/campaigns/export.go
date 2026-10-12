@@ -308,6 +308,19 @@ type ExportCalendarEra struct {
 	LoreEntitySlug    *string `json:"lore_entity_slug,omitempty"`
 	DMNote            *string `json:"dm_note,omitempty"`
 	HiddenUntilBegins bool    `json:"hidden_until_begins,omitempty"`
+	// PageVersions are the pages' versions for this era, each naming its
+	// page by slug. Additive; an older backup has none.
+	PageVersions []ExportEraPageVersion `json:"page_versions,omitempty"`
+}
+
+// ExportEraPageVersion is one page's version for an era: only what it
+// changes from the usual page. Its picture is not carried yet.
+type ExportEraPageVersion struct {
+	EntitySlug string         `json:"entity_slug"`
+	Name       *string        `json:"name,omitempty"`
+	Entry      *string        `json:"entry,omitempty"`
+	EntryHTML  *string        `json:"entry_html,omitempty"`
+	FieldsData map[string]any `json:"fields_data,omitempty"`
 }
 
 // ExportCalendarEraLook is a calendar's era colours setting for export.
