@@ -131,6 +131,8 @@ html[data-theme="dark"] .calv5 {
 
 /* ── The Calendars dashboard ── */
 .calv5-wrap { max-width: 1100px; margin: 0 auto; padding: 18px 20px 48px; }
+/* The list is a card grid, so it grows with the window like the other gallery pages. */
+.calv5-wrap.list { max-width: 1536px; }
 .calv5-dhead { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "k k" "t a" "s s"; align-items: center; column-gap: 16px; margin: 6px 4px 20px; }
 .calv5-dhead .kicker { grid-area: k; }
 .calv5 .kicker { margin: 0; font: 650 9.5px/1 var(--sans, sans-serif); letter-spacing: 0.14em; text-transform: uppercase; color: var(--mut); }

@@ -74,8 +74,9 @@ func (h *Handler) GameNightsLink(c echo.Context) error {
 	if calID == "" && found && sessionID == "" && cc.MemberRole >= campaigns.RoleOwner {
 		// Game nights live in a real-world calendar; the owner is offered
 		// one (a single press on the calendar wizard's review step) instead
-		// of being sent to the Sessions page.
-		return middleware.HTMXRedirect(c, "/campaigns/"+url.PathEscape(cc.Campaign.ID)+"/calendars/wizard/reallife")
+		// of being sent to the Sessions page. The step opens over the
+		// calendars page; the step's own URL is a dialog fragment.
+		return middleware.HTMXRedirect(c, "/campaigns/"+url.PathEscape(cc.Campaign.ID)+"/calendars?wizard=reallife")
 	}
 	return middleware.HTMXRedirect(c, gameNightsTarget(cc.Campaign.ID, calID, sessionID, c.QueryParam("date")))
 }
