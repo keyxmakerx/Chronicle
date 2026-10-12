@@ -1,0 +1,134 @@
+/*
+ * encounters.css: the Encounters block and its slide-out builder
+ * (internal/plugins/encounters/static/js/encounters.js).
+ *
+ * Everything is scoped under .enc. Colours come from the theme tokens, so the
+ * block follows light and dark with the rest of the page; the accent marks
+ * what can be acted on, and amber only ever means "starts hidden". The
+ * builder is a drawer: it slides in from the right edge in 280ms, or fades
+ * when the viewer asks for less motion.
+ */
+.enc { font-size: 14px; color: var(--color-text-body, #374151); }
+.enc *, .enc *::before, .enc *::after { box-sizing: border-box; }
+.enc-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.enc-title { margin: 0; font-size: 16px; font-weight: 600; color: var(--color-text-primary, #111827); }
+.enc-empty, .enc-muted { color: var(--color-text-muted, #6b7280); font-size: 12.5px; margin: 0; }
+.enc-muted { display: block; }
+
+/* Buttons */
+.enc-btn {
+  font: inherit; font-size: 12.5px; padding: 4px 12px; border-radius: 8px; cursor: pointer;
+  background: var(--color-card-bg, #fff); color: var(--color-text-secondary, #4b5563);
+  border: 1px solid var(--color-border, #e5e7eb); box-shadow: var(--elev-resting, none);
+  transition: background-color 120ms var(--ease-out, ease-out);
+}
+.enc-btn:hover:not(:disabled) { background: var(--color-bg-tertiary, #f3f4f6); }
+.enc-btn:active:not(:disabled) { transform: scale(.96); }
+.enc-btn:disabled { opacity: .5; cursor: not-allowed; }
+.enc-new { color: var(--color-accent, #6366f1); }
+.enc-new::before { content: "+ "; }
+.enc-danger { color: rgb(var(--color-bad-rgb, 192 57 43)); margin-left: auto; }
+.enc-danger[data-armed] { background: rgb(var(--color-bad-rgb, 192 57 43)); border-color: transparent; color: #fff; }
+.enc button:focus-visible, .enc input:focus-visible, .enc select:focus-visible, .enc-card:focus-visible {
+  outline: 2px solid var(--color-accent, #6366f1); outline-offset: 2px;
+}
+
+/* The block's cards */
+.enc-cards { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.enc-card {
+  all: unset; box-sizing: border-box; display: flex; flex-direction: column; gap: 2px; width: 100%; cursor: pointer;
+  padding: 8px 12px; border-radius: 8px; border: 1px solid var(--color-border, #e5e7eb);
+  background: var(--color-bg-secondary, #fff); box-shadow: var(--elev-resting, none);
+  transition: background-color 120ms var(--ease-out, ease-out), box-shadow 200ms var(--ease-out, ease-out);
+}
+.enc-card:hover { background: var(--color-bg-tertiary, #f3f4f6); box-shadow: var(--elev-hover, none); }
+.enc-card-top { display: flex; align-items: center; gap: 8px; }
+.enc-card-name { font-weight: 600; color: var(--color-text-primary, #111827); min-width: 0; overflow-wrap: anywhere; }
+.enc-card-name::before { content: "⚔ "; color: var(--color-accent, #6366f1); }
+.enc-card-sub { font-size: 12.5px; color: var(--color-text-muted, #6b7280); }
+.enc-ready {
+  font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 999px; margin-left: auto;
+  background: rgb(var(--color-ok-rgb, 22 163 74) / .14); color: rgb(var(--color-ok-rgb, 22 163 74));
+}
+
+/* The drawer */
+.enc-layer { position: fixed; inset: 0; z-index: 60; pointer-events: none; }
+.enc-layer.open { pointer-events: auto; }
+.enc-scrim { position: absolute; inset: 0; background: rgb(0 0 0 / .35); opacity: 0; transition: opacity 280ms var(--ease-out, ease-out); }
+.enc-layer.open .enc-scrim { opacity: 1; }
+.enc-drawer {
+  position: absolute; top: 0; right: 0; bottom: 0; width: min(460px, 100vw);
+  display: flex; flex-direction: column; background: var(--color-bg-secondary, #fff);
+  border-left: 1px solid var(--color-border, #e5e7eb); border-radius: 12px 0 0 12px; box-shadow: var(--elev-dragged, 0 10px 30px rgb(0 0 0 / .25));
+  transform: translateX(100%); transition: transform 280ms var(--ease-out, ease-out);
+  padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.enc-layer.open .enc-drawer { transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  .enc-drawer { transform: none; opacity: 0; transition: opacity 280ms linear; }
+  .enc-layer.open .enc-drawer { opacity: 1; }
+}
+.enc-d-top { display: flex; gap: 8px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--color-border, #e5e7eb); }
+.enc-d-body { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 24px; }
+.enc-d-foot {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 12px 16px;
+  border-top: 1px solid var(--color-border, #e5e7eb); font-size: 12.5px; color: var(--color-text-muted, #6b7280);
+}
+.enc-status { font-weight: 600; }
+.enc-status.err { color: rgb(var(--color-bad-rgb, 192 57 43)); }
+.enc-input {
+  font: inherit; width: 100%; padding: 6px 8px; border-radius: 8px; min-width: 0;
+  border: 1px solid var(--color-border, #e5e7eb); background: var(--color-bg-primary, #fff); color: var(--color-text-primary, #111827);
+}
+.enc-name { font-size: 16px; font-weight: 600; }
+.enc-x {
+  font: inherit; font-size: 18px; width: 32px; height: 32px; flex: none; border-radius: 6px; cursor: pointer;
+  background: transparent; color: var(--color-text-muted, #6b7280); border: 1px solid transparent;
+}
+.enc-x:hover { background: var(--color-bg-tertiary, #f3f4f6); color: var(--color-text-primary, #111827); }
+.enc-sec { display: flex; flex-direction: column; gap: 8px; }
+.enc-lab { margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--color-text-secondary, #4b5563); display: flex; gap: 8px; }
+.enc-lab b { text-transform: none; letter-spacing: 0; font-weight: 600; color: var(--color-text-muted, #6b7280); }
+.enc-system:empty { display: none; }
+
+.enc-heroes { display: flex; flex-wrap: wrap; gap: 8px; }
+.enc-hero {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--color-border, #e5e7eb); font-size: 12.5px;
+}
+.enc-hero.on { border-color: var(--color-accent, #6366f1); background: rgb(var(--color-accent-rgb, 99 102 241) / .1); }
+
+.enc-rows { display: flex; flex-direction: column; gap: 8px; }
+.enc-row {
+  display: grid; grid-template-columns: minmax(7em, 1fr) auto auto auto auto; gap: 8px; align-items: center;
+  padding: 8px; border-radius: 8px; border: 1px solid var(--color-border, #e5e7eb);
+}
+@media (max-width: 480px) {
+  .enc-row { grid-template-columns: auto auto 1fr auto; }
+  .enc-who { grid-column: 1 / -1; }
+  .enc-step { justify-self: start; }
+}
+.enc-who { min-width: 0; overflow-wrap: break-word; }
+.enc-sel {
+  font: inherit; font-size: 12.5px; padding: 3px 6px; border-radius: 6px;
+  border: 1px solid var(--color-border, #e5e7eb); background: var(--color-bg-primary, #fff); color: var(--color-text-primary, #111827);
+}
+.enc-sel.enc-start-hidden { border-color: rgb(var(--color-warn-rgb, 217 119 6)); }
+.enc-sel.enc-start-later { border-style: dashed; }
+.enc-step { display: inline-flex; align-items: center; border: 1px solid var(--color-border, #e5e7eb); border-radius: 8px; }
+.enc-step button { font: inherit; width: 28px; height: 28px; border: 0; background: none; cursor: pointer; color: var(--color-text-secondary, #4b5563); }
+.enc-step button:disabled { opacity: .35; cursor: not-allowed; }
+.enc-step output { min-width: 24px; text-align: center; font-variant-numeric: tabular-nums; font-weight: 600; }
+.enc-rm { width: 28px; height: 28px; font-size: 16px; }
+
+.enc-add { position: relative; }
+.enc-results { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; }
+.enc-results:empty { display: none; }
+.enc-results button {
+  all: unset; box-sizing: border-box; display: block; width: 100%; padding: 6px 8px; border-radius: 6px; cursor: pointer;
+}
+.enc-results button:hover, .enc-results button:focus-visible { background: var(--color-bg-tertiary, #f3f4f6); }
+.enc-byname { color: var(--color-text-muted, #6b7280); font-style: italic; }
+
+.enc-readybox { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; }
+.enc-readybox input { margin-top: 3px; }

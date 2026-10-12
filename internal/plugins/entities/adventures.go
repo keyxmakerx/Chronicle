@@ -183,6 +183,7 @@ func AdventureLayout() EntityTypeLayout {
 					{ID: "tile-adv-read", Type: "read_aloud", Size: "2x2"},
 					{ID: "tile-adv-steps", Type: "page_steps", Size: "2x2"},
 					{ID: "tile-adv-table", Type: "page_table", Size: "4x2"},
+					{ID: "tile-adv-encounters", Type: "page_encounters", Size: "2x2"},
 				},
 			},
 		},

@@ -41,6 +41,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/designlab"
 	"github.com/keyxmakerx/chronicle/internal/plugins/dmscreen"
+	"github.com/keyxmakerx/chronicle/internal/plugins/encounters"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/foundry_vtt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/maps"
@@ -2036,6 +2037,24 @@ func registerPageTextBlocks(blockRegistry *entities.BlockRegistry) {
 	}
 }
 
+// registerEncountersBlock registers the Encounters block: the fights a DM
+// plans on a page. Like the text blocks it is always registered, because the
+// Adventures layout places it and a layout fails to save without it. It
+// draws only for the DM; the service refuses everyone else as well.
+func registerEncountersBlock(blockRegistry *entities.BlockRegistry) {
+	blockRegistry.Register(entities.BlockMeta{
+		Type: encounters.BlockType, Label: "Encounters", Icon: "fa-khanda",
+		Description: "Fights planned on this page, ready to load in Foundry",
+		Contexts:    []string{"template"},
+		TileSizes:   []string{"1x2", "2x2", "4x2"},
+	}, func(rc entities.BlockRenderContext) templ.Component {
+		if rc.CC == nil || rc.Entity == nil || rc.CC.VisibilityRole() < permissions.RoleOwner {
+			return templ.NopComponent
+		}
+		return encounters.BlockMount(rc.CC.Campaign.ID, rc.Entity.ID, rc.CSRFToken)
+	})
+}
+
 // entityTypeListerForGraphAdapter wraps entities.EntityService to implement the
 // relations.EntityTypeListerForGraph interface for the graph filter dropdown.
 type entityTypeListerForGraphAdapter struct {
@@ -3934,6 +3953,8 @@ func (a *App) RegisterRoutes() {
 	// Quests for the Foundry module; the quest services attach below, once
 	// the quests plugin is built.
 	questAPI := &syncQuestAPIAdapter{stash: stashSvc, actors: stashAPI, signer: urlSigner}
+	// Encounters for the Foundry module; the service attaches below.
+	encounterAPI := &syncEncounterAPIAdapter{}
 
 	// REST API v1: versioned endpoints for external clients (Foundry VTT, etc.).
 	// Authenticates via API keys, not browser sessions.
@@ -3993,7 +4014,7 @@ func (a *App) RegisterRoutes() {
 	syncHistoryHandler.SetFoundryPlayers(foundryPlayerRepo)
 
 	if a.PluginHealth.IsHealthy("syncapi") {
-		syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, noteAPIHandler, tagAPIHandler, syncMappingHandler, syncChangesHandler, stashAPIHandler, syncService, addonService, authService, campaignService, syncapi.WithSyncHistory(syncHistoryHandler), syncapi.WithQuests(syncapi.NewQuestAPIHandler(questAPI, campaignService, "armory")))
+		syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, noteAPIHandler, tagAPIHandler, syncMappingHandler, syncChangesHandler, stashAPIHandler, syncService, addonService, authService, campaignService, syncapi.WithSyncHistory(syncHistoryHandler), syncapi.WithQuests(syncapi.NewQuestAPIHandler(questAPI, campaignService, "armory")), syncapi.WithEncounters(syncapi.NewEncounterAPIHandler(encounterAPI, campaignService)))
 		syncapi.RegisterSyncHistoryPageRoutes(e, syncHistoryHandler, campaignService, authService)
 		syncapi.RegisterFoundryPageRoutes(e, syncHistoryHandler, campaignService, authService)
 		syncapi.RegisterAdminSyncFlowRoute(adminGroup, syncHistoryHandler)
@@ -4397,6 +4418,7 @@ func (a *App) RegisterRoutes() {
 	})
 
 	registerPageTextBlocks(blockRegistry)
+	registerEncountersBlock(blockRegistry)
 
 	// Timeline plugin blocks (requires "timeline" addon).
 	blockRegistry.Register(entities.BlockMeta{
@@ -5422,6 +5444,23 @@ func (a *App) RegisterRoutes() {
 		pageblocks.RegisterRoutes(e, pageblocks.NewHandler(pageBlocksSvc), campaignService, authService)
 	} else {
 		slog.Warn("pageblocks plugin degraded — routes not registered")
+	}
+
+	// Encounters: fights planned on a page, loaded in Foundry.
+	a.registerPlugin(PluginRegistration{
+		Slug:     encounters.PluginSlug,
+		StaticFS: echo.MustSubFS(encounters.StaticAssetsFS, "static"),
+		Widgets: []PluginWidget{
+			{Name: "encounters", Scripts: []string{"js/encounters.js"}},
+		},
+	})
+	if a.PluginHealth.IsHealthy(encounters.PluginSlug) {
+		encounterSvc := encounters.NewService(encounters.NewRepository(a.DB),
+			&encountersPageAdapter{svc: entityService, cards: entities.NewPageCards(a.DB)})
+		encounterAPI.attach(encounterSvc)
+		encounters.RegisterRoutes(e, encounters.NewHandler(encounterSvc), campaignService, authService)
+	} else {
+		slog.Warn("encounters plugin degraded — routes not registered")
 	}
 
 	// AI Import's record kinds: the features beyond pages it may write.

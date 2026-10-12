@@ -355,6 +355,12 @@ Foundry module repo for the wire contract.
 |-------|---------|
 | `page_block_content` | One JSON document per (page, layout block): `PRIMARY KEY (entity_id, block_id)`, `kind` (`read_aloud`/`page_table`/`page_steps`), `version` for edit conflicts; FKs to `entities`, `campaigns` cascade |
 
+### encounters (`internal/plugins/encounters/migrations/`)
+
+| Table | Purpose |
+|-------|---------|
+| `encounters` | Fights a DM plans on a page: `entity_id` is the page, `name` and `ready` are columns for Foundry's sorted, searchable list, `data` is the JSON of hero page ids and creature rows (`entityId`, `name`, `count`, `group` A to H, `start` seen/hidden/later), `version` for edit conflicts; FKs to `entities`, `campaigns` cascade |
+
 ### armory (`internal/plugins/armory/migrations/`)
 
 | Table | Purpose | Notable columns |
