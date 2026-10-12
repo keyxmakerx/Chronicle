@@ -7,7 +7,8 @@ Plugins run in a sandboxed environment powered by Extism/wazero, with
 capability-based security controlling which host functions are available.
 
 Plugins can:
-- React to entity/calendar/tag events via hooks
+- Declare hooks for entity, calendar, tag and campaign events (only
+  `campaign.deleted` fires today, see "Hooks" below)
 - Read and write entities, tags, calendar events, and relations
 - Store per-plugin data in a key-value store
 - Send messages to other plugins
@@ -57,6 +58,11 @@ Plugins can:
 `calendar.event_*` hooks stay declared and registered, but the read/write
 functions return an error instead of data and the hooks never fire, until
 they are rewired to the calendar service.
+
+**Plugins load when a campaign enables their extension, not at startup
+(#1325).** After a server restart every call answers "plugin not loaded", and
+admin reload fails for the same reason, until the campaign owner turns the
+extension off and on again.
 
 ## Capabilities
 
@@ -179,22 +185,26 @@ When an event fires, Chronicle calls the plugin's `on_hook` export with:
 ```json
 {
   "type": "entity.created",
-  "entity_id": "abc-123",
   "campaign_id": "camp-456",
-  "data": { ... }
+  "payload": { ... },
+  "timestamp": "2026-10-12T01:23:45Z"
 }
 ```
 
+Event details (an entity id, for instance) are inside `payload`, not at the
+top level.
+
 | Hook | Fires When |
 |---|---|
-| `entity.created` | New entity created |
-| `entity.updated` | Entity modified |
-| `entity.deleted` | Entity deleted |
+| `entity.created` | New entity created (dormant: nothing calls the dispatcher, #1325) |
+| `entity.updated` | Entity modified (dormant, #1325) |
+| `entity.deleted` | Entity deleted (dormant, #1325) |
 | `calendar.event_created` | Calendar event created (currently dormant — nothing calls the dispatcher, see the note above) |
 | `calendar.event_updated` | Calendar event modified (currently dormant) |
 | `calendar.event_deleted` | Calendar event deleted (currently dormant) |
-| `tag.added` | Tag applied to entity |
-| `tag.removed` | Tag removed from entity |
+| `tag.added` | Tag applied to entity (dormant, #1325) |
+| `tag.removed` | Tag removed from entity (dormant, #1325) |
+| `campaign.deleted` | Campaign deleted (the one hook that fires today) |
 
 Hook dispatch is async (fire-and-forget). The hook handler's return value is
 logged but does not affect the triggering operation.
@@ -237,11 +247,17 @@ require github.com/extism/go-pdk v1.1.3
 # TinyGo (smaller binaries):
 tinygo build -o plugin.wasm -target wasip1 main.go
 
-# Go 1.24+ (native):
-GOOS=wasip1 GOARCH=wasm go build -o plugin.wasm main.go
+# Go 1.24+ (native; without -buildmode=c-shared every call traps):
+GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared -o plugin.wasm main.go
 ```
 
-See `extensions/example-wasm-go/` for a complete example.
+Host imports must match the host's signatures exactly: `chronicle_log` takes
+one offset and returns nothing, so a Go declaration with a result fails to
+instantiate.
+
+`extensions/example-wasm-go/` shows the shape but does not load as written:
+its `chronicle_log` import declares a result and it reads `entity_id` at the
+top level of the hook input (#1325).
 
 ### Other Languages
 
