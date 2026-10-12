@@ -51,6 +51,8 @@ func registerBookEditorRoutes(mg *echo.Group, h *SystemHandler) {
 	mg.GET("/book/index/:cat", h.BookIndexAPI)
 	mg.GET("/book/find", h.BookFindAPI)
 	mg.GET("/book/source", h.BookSourceAPI)
+	// Only the cover and fonts book.yaml declares; book/ is never served whole.
+	mg.GET("/book/files/:name", h.BookFileAPI)
 	mg.GET("/book/export", h.BookExport)
 	mg.POST("/book/chapters", h.BookChapterCreate)
 	mg.PUT("/book/chapters/:chapter", h.BookChapterUpdate)

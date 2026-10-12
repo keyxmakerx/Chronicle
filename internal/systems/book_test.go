@@ -340,6 +340,7 @@ func TestBookNavigation(t *testing.T) {
 tabs: [basics, monsters]
 start: monsters
 first: basics
+screen: monsters
 parts:`, 1)
 	files["book/chapters/basics.yaml"] = testBasics + `  - title: Where next
     columns: true
@@ -358,8 +359,8 @@ parts:`, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if b.Look != "paper" || b.Start != "monsters" || b.First != "basics" || len(b.Tabs) != 2 {
-		t.Fatalf("navigation = %q %v %q %q", b.Look, b.Tabs, b.Start, b.First)
+	if b.Look != "paper" || b.Start != "monsters" || b.First != "basics" || b.Screen != "monsters" || len(b.Tabs) != 2 {
+		t.Fatalf("navigation = %q %v %q %q %q", b.Look, b.Tabs, b.Start, b.First, b.Screen)
 	}
 	pages := b.Parts[0].Chapters[0].Pages
 	last := pages[len(pages)-1]
@@ -368,8 +369,8 @@ parts:`, 1)
 	}
 
 	p := FilterBook(b, false)
-	if len(p.Tabs) != 1 || p.Tabs[0] != "basics" || p.Start != "" || p.First != "basics" {
-		t.Errorf("player navigation = %v %q %q", p.Tabs, p.Start, p.First)
+	if len(p.Tabs) != 1 || p.Tabs[0] != "basics" || p.Start != "" || p.First != "basics" || p.Screen != "" {
+		t.Errorf("player navigation = %v %q %q %q", p.Tabs, p.Start, p.First, p.Screen)
 	}
 	pages = p.Parts[0].Chapters[0].Pages
 	last = pages[len(pages)-1]
@@ -382,6 +383,21 @@ parts:`, 1)
 	}
 	if len(FilterBook(b, true).Tabs) != 2 || len(b.Parts[0].Chapters[0].Pages[2].Blocks[0].Items) != 2 {
 		t.Error("filtering for a player must not change the loaded book")
+	}
+}
+
+// TestBookNavigation_UnknownChapter checks that a start, first or screen
+// naming a chapter the book does not list is reported when the book loads.
+func TestBookNavigation_UnknownChapter(t *testing.T) {
+	for _, key := range []string{"start", "first", "screen"} {
+		t.Run(key, func(t *testing.T) {
+			files := testBookFiles()
+			files["book/book.yaml"] = strings.Replace(testBookIndex, "parts:", key+": nowhere\nparts:", 1)
+			_, err := LoadBook(writeBook(t, files), &SystemManifest{})
+			if err == nil || !strings.Contains(err.Error(), key+` names "nowhere"`) {
+				t.Errorf("err = %v", err)
+			}
+		})
 	}
 }
 

@@ -549,9 +549,32 @@ func (h *SystemHandler) BookAPI(c echo.Context) error {
 		}
 	}
 	c.Response().Header().Set("Cache-Control", "private, no-store")
-	out := FilterBook(book, bookViewerIsDirector(cc))
+	out := FilterBook(book, bookViewerIsDirector(cc)).
+		WithAssetBase("/campaigns/" + cc.Campaign.ID + "/systems/" + manifest.ID + "/book/files")
 	out.CanEdit = h.bookEdits != nil && bookEditorAllowed(cc)
 	return c.JSON(http.StatusOK, out)
+}
+
+// BookFileAPI serves one cover or font file the book declares, behind the
+// same access checks as the book itself. The SVG cover is drawn by an <img>,
+// where scripts never run; the sandbox policy keeps it inert if someone opens
+// the address directly, and nosniff stops a font being read as anything else.
+//
+// GET /campaigns/:id/systems/:mod/book/files/:name
+func (h *SystemHandler) BookFileAPI(c echo.Context) error {
+	sysDir, _, _, err := h.viewerBookTarget(c)
+	if err != nil {
+		return err
+	}
+	data, contentType, err := BookAsset(sysDir, c.Param("name"))
+	if err != nil {
+		return apperror.NewNotFound("this book has no such file")
+	}
+	hdr := c.Response().Header()
+	hdr.Set("Content-Security-Policy", "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:")
+	hdr.Set("X-Content-Type-Options", "nosniff")
+	hdr.Set("Cache-Control", "private, max-age=3600")
+	return c.Blob(http.StatusOK, contentType, data)
 }
 
 // viewerBook loads the package book filtered for the viewer (or for a player,
