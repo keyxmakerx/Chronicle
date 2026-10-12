@@ -963,7 +963,8 @@ const entitySelectColumns = `e.id, e.campaign_id, e.entity_type_id, e.name, e.sl
 	                 e.image_path, e.cover_image_path, e.parent_id, e.parent_node_id, e.sort_order, e.type_label,
 	                 e.is_private, e.visibility, e.is_template, e.fields_data, e.field_overrides, e.popup_config,
 	                 e.created_by, e.owner_user_id, e.playable, e.map_id, e.created_at, e.updated_at,
-	                 et.name, et.name_plural, et.icon, et.color, et.slug`
+	                 et.name, et.name_plural, et.icon, et.color, et.slug,
+	                 (et.preset_category <=> '` + PresetCategoryAdventures + `')`
 
 // FindByID retrieves an entity with joined type info.
 func (r *entityRepository) FindByID(ctx context.Context, id string) (*Entity, error) {
@@ -997,6 +998,7 @@ func (r *entityRepository) scanEntity(row *sql.Row) (*Entity, error) {
 		&e.IsPrivate, &e.Visibility, &e.IsTemplate, &fieldsRaw, &overridesRaw, &popupRaw,
 		&e.CreatedBy, &e.OwnerUserID, &e.Playable, &e.MapID, &e.CreatedAt, &e.UpdatedAt,
 		&e.TypeName, &e.TypeNamePlural, &e.TypeIcon, &e.TypeColor, &e.TypeSlug,
+		&e.TypeDMOnly,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, apperror.NewNotFound("entity not found")
@@ -1471,12 +1473,15 @@ func (r *entityRepository) ListByCampaign(ctx context.Context, campaignID string
 // name/icon/color are populated for the card grid.
 //
 // Visibility filtering is intentionally absent — see the interface
-// docstring. Backed by the (campaign_id, owner_user_id) composite index.
+// docstring — except for DM-only categories: a page there is never a
+// player's own, even one claimed before it moved into the category.
+// Backed by the (campaign_id, owner_user_id) composite index.
 func (r *entityRepository) ListByOwner(ctx context.Context, campaignID, ownerUserID string) ([]Entity, error) {
 	query := `SELECT ` + entitySelectColumns + `
 	          FROM entities e
 	          INNER JOIN entity_types et ON et.id = e.entity_type_id
 	          WHERE e.campaign_id = ? AND e.owner_user_id = ?` + liveOnly + `
+	          AND (et.preset_category IS NULL OR et.preset_category <> '` + PresetCategoryAdventures + `')
 	          ORDER BY e.updated_at DESC`
 	rows, err := r.db.QueryContext(ctx, query, campaignID, ownerUserID)
 	if err != nil {
@@ -1904,7 +1909,8 @@ func (r *entityRepository) FindAncestors(ctx context.Context, entityID string, r
 	       e.image_path, e.cover_image_path, e.parent_id, e.parent_node_id, e.sort_order, e.type_label,
 	       e.is_private, e.visibility, e.is_template, e.fields_data, e.field_overrides, e.popup_config,
 	       e.created_by, e.owner_user_id, e.playable, e.map_id, e.created_at, e.updated_at,
-	       et.name, et.name_plural, et.icon, et.color, et.slug
+	       et.name, et.name_plural, et.icon, et.color, et.slug,
+	       (et.preset_category <=> '`+PresetCategoryAdventures+`')
 	FROM ancestors e
 	INNER JOIN entity_types et ON et.id = e.entity_type_id
 	%s
@@ -2206,6 +2212,7 @@ func (r *entityRepository) scanEntityRow(rows *sql.Rows) (*Entity, error) {
 		&e.IsPrivate, &e.Visibility, &e.IsTemplate, &fieldsRaw, &overridesRaw, &popupRaw,
 		&e.CreatedBy, &e.OwnerUserID, &e.Playable, &e.MapID, &e.CreatedAt, &e.UpdatedAt,
 		&e.TypeName, &e.TypeNamePlural, &e.TypeIcon, &e.TypeColor, &e.TypeSlug,
+		&e.TypeDMOnly,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("scanning entity row: %w", err)

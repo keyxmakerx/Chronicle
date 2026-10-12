@@ -174,6 +174,17 @@ func TestAdventuresVisibility_Integration(t *testing.T) {
 			t.Errorf("CheckEntityAccess(custom Adventures page) for %s = %v, want %v", r.name, perm.CanView, r.sees)
 		}
 	}
+
+	// A page owned by someone, then moved into Adventures, is no longer theirs
+	// to list: owner lists feed player-facing bands.
+	mustExec(t, db, `UPDATE entities SET owner_user_id = ? WHERE id IN (?, ?)`, userID, barkeep, crypt)
+	owned, err := repo.ListByOwner(ctx, camp, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := ids(owned); !got[barkeep] || got[crypt] {
+		t.Errorf("ListByOwner = %v, want the ordinary page and not the Adventures one", got)
+	}
 }
 
 // The seeded and the added category are the same shape, and pressing the

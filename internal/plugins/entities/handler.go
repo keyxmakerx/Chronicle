@@ -346,10 +346,15 @@ func (h *Handler) Index(c echo.Context) error {
 		}
 	}
 
-	// A DM-only category does not exist for a player: the same 404 as a
-	// category that was never made, so its name and page count never leak.
-	if activeEntityType != nil && !ViewerSeesType(activeEntityType, role) {
-		return apperror.NewNotFound("category not found")
+	// A DM-only category, or another campaign's, does not exist for this
+	// viewer: the page answers exactly as it does for a category that was
+	// never made (a slug falls back to All Pages, a type id lists nothing),
+	// so neither its name nor whether it exists can be told apart.
+	if activeEntityType != nil && (activeEntityType.CampaignID != campaignID || !ViewerSeesType(activeEntityType, role)) {
+		activeEntityType = nil
+		if activeTypeSlug != "" {
+			typeID = 0
+		}
 	}
 
 	// Fetch entity types for sidebar filter and counts. Non-fatal: degrade

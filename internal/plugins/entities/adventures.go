@@ -45,8 +45,8 @@ func ViewerSeesType(et *EntityType, role int) bool {
 	return !et.DMOnly() || role >= permissions.RoleScribe
 }
 
-// TypesForViewer drops the categories the viewer may not know exist. It never
-// returns the input slice's backing array to a caller that mutates it.
+// TypesForViewer drops the categories the viewer may not know exist. The DM
+// team gets the input slice back as is; anyone else gets a new slice.
 func TypesForViewer(types []EntityType, role int) []EntityType {
 	if role >= permissions.RoleScribe {
 		return types

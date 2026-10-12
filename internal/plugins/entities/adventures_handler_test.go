@@ -124,47 +124,69 @@ func TestPageReadEndpoints_AdventuresPageIs404ForPlayers(t *testing.T) {
 	}
 }
 
-func TestIndex_AdventuresCategoryIs404ForPlayers(t *testing.T) {
+// A player asking for the Adventures category gets exactly the answer a
+// category that was never made gets, so the response says nothing about
+// whether it exists.
+func TestIndex_AdventuresCategoryAnswersLikeAMissingOne(t *testing.T) {
 	tests := []struct {
-		name string
-		path string
+		name          string
+		hidden, never string // the Adventures request and a never-made one
+		slug          bool
 	}{
-		{"by type id", "/campaigns/c1/entities?type=9"},
+		{"by type id", "/campaigns/c1/entities?type=9", "/campaigns/c1/entities?type=77", false},
+		{"by slug shortcut", "adventures", "zzz", true},
+	}
+	run := func(t *testing.T, target string, slug bool) (int, string) {
+		t.Helper()
+		h := advHandlerEnv()
+		svc := h.service.(*entityService)
+		// The slug shortcut resolves through the type repository, which the
+		// env does not wire for slugs; resolve it the way the router would.
+		svc.types = &slugTypes{mockEntityTypeRepo: svc.types.(*mockEntityTypeRepo)}
+		path := target
+		if slug {
+			path = "/campaigns/c1/" + target
+		}
+		c, rec := advCtx(campaigns.RolePlayer, false, http.MethodGet, path)
+		c.SetParamNames("id")
+		c.SetParamValues("c1")
+		if slug {
+			c.Set("entity_type_slug", target)
+		}
+		if err := h.Index(c); err != nil {
+			t.Fatalf("Index(%s) err = %v, want the page", target, err)
+		}
+		return rec.Code, rec.Body.String()
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c, _ := advCtx(campaigns.RolePlayer, false, http.MethodGet, tt.path)
-			c.SetParamNames("id")
-			c.SetParamValues("c1")
-			if err := advHandlerEnv().Index(c); !notFound(err) {
-				t.Fatalf("Index err = %v, want a 404", err)
+			hc, hb := run(t, tt.hidden, tt.slug)
+			nc, nb := run(t, tt.never, tt.slug)
+			if hc != nc {
+				t.Fatalf("status %d for Adventures, %d for a missing category", hc, nc)
+			}
+			norm := strings.NewReplacer(tt.hidden, "X", tt.never, "X")
+			if norm.Replace(hb) != norm.Replace(nb) {
+				t.Fatal("the Adventures answer differs from a missing category's")
+			}
+			if strings.Contains(hb, "Adventures") || strings.Contains(hb, "Sunken Crypt") {
+				t.Fatal("the answer names the hidden category or its page")
 			}
 		})
 	}
-	t.Run("by slug shortcut", func(t *testing.T) {
-		h := advHandlerEnv()
-		// The slug shortcut resolves through the type repository, which the env
-		// does not wire for slugs; resolve it the way the router would.
-		svc := h.service.(*entityService)
-		svc.types = &slugTypes{mockEntityTypeRepo: svc.types.(*mockEntityTypeRepo)}
-		c, _ := advCtx(campaigns.RolePlayer, false, http.MethodGet, "/campaigns/c1/adventures")
-		c.SetParamNames("id")
-		c.SetParamValues("c1")
-		c.Set("entity_type_slug", "adventures")
-		if err := h.Index(c); !notFound(err) {
-			t.Fatalf("Index err = %v, want a 404", err)
-		}
-	})
 }
 
 // slugTypes answers the slug lookup with the Adventures category.
 type slugTypes struct{ *mockEntityTypeRepo }
 
 func (s *slugTypes) FindBySlug(ctx context.Context, _ string, slug string) (*EntityType, error) {
-	if slug == "adventures" {
+	switch slug {
+	case "adventures":
 		return s.FindByID(ctx, 9)
+	case "npc":
+		return s.FindByID(ctx, 1)
 	}
-	return s.FindByID(ctx, 1)
+	return nil, apperror.NewNotFound("entity type not found")
 }
 
 func TestEntityTypesAPI_HidesAdventuresFromPlayers(t *testing.T) {

@@ -1619,7 +1619,9 @@ func (s *entityService) MergeDuplicatePlayerCharacterType(ctx context.Context, c
 // Catches both the canonical preset path and the convention used by
 // system packages that ship their own character entity_type.
 func isClaimableType(et *EntityType) bool {
-	if et == nil {
+	// A DM-only category's pages never belong to a player, whatever its
+	// claimable setting says: an owner would see the page in their own lists.
+	if et == nil || et.DMOnly() {
 		return false
 	}
 	// Explicit Owner choice overrides the heuristic.

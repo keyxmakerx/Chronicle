@@ -4740,6 +4740,9 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
   .dms-sheet-btn:focus-visible { outline: 2px solid var(--color-accent, #6366f1); outline-offset: 2px; }
   .dms-sheet-x { font-size: 1.2rem; line-height: 1; padding: .1rem .6rem; }
   .dms-sheet-b { padding: 1rem; }
+  /* Rename, clone, history and delete act on the page as a whole and leave or
+     replace the screen, so the sheet keeps to reading and in-place edits. */
+  .dms-sheet-b [data-page-actions], .dms-sheet-b #page-name-fold { display: none; }
   .dms-sheet-wait { padding: 2rem 1rem; text-align: center; color: var(--color-text-muted, #6b7280); }
   .dms-sheet-still .dms-sheet-bg, .dms-sheet-still .dms-sheet-p { transition: none; clip-path: none; }
   @media (prefers-reduced-motion: reduce) {

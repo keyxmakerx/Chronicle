@@ -175,7 +175,7 @@ Chronicle.register('permissions', {
       trigger.appendChild(modeBadge);
       // Tag-widening dot: an amber pip when an otherwise hidden page is
       // exposed by a tag grant, mirroring the show-page badge.
-      if (mode !== 'everyone' && state.tagGrants && state.tagGrants.length > 0) {
+      if (mode !== 'everyone' && el.getAttribute('data-category-dm-only') !== 'true' && state.tagGrants && state.tagGrants.length > 0) {
         var widened = document.createElement('span');
         widened.className = 'perm-trigger-widened';
         widened.setAttribute('data-tag-widened', 'true');
@@ -196,6 +196,10 @@ Chronicle.register('permissions', {
     function renderCornerTrigger() {
       if (state.loading || state.loadFailed) return;
       var mode = getMode();
+      // A DM-only category hides the page from players whatever the page's
+      // own setting says, so "everyone" there still means the DM team.
+      var dmCategory = el.getAttribute('data-category-dm-only') === 'true';
+      if (dmCategory && mode === 'everyone') mode = 'dm_only';
       var icon = trigger.querySelector('[data-perm-corner-icon]');
       if (icon) {
         icon.className = 'fa-solid ' + (mode === 'everyone' ? 'fa-globe' : mode === 'dm_only' ? 'fa-lock' : 'fa-shield-halved') + ' text-[11px]';
@@ -206,7 +210,7 @@ Chronicle.register('permissions', {
       trigger.setAttribute('data-visibility-badge', mode);
       // Tags only widen a page that is otherwise hidden.
       var dot = trigger.querySelector('[data-perm-corner-dot]');
-      if (dot) dot.style.display = mode === 'everyone' ? 'none' : '';
+      if (dot) dot.style.display = mode === 'everyone' || dmCategory ? 'none' : '';
       var tip = el.querySelector('[data-perm-corner-tip]');
       if (tip && tip.getAttribute('data-perm-mode') !== mode && tip.hasAttribute('data-perm-mode')) {
         tip.textContent = cornerTip(mode);

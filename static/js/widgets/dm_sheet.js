@@ -116,6 +116,8 @@
       if (cur !== c || c.token !== token) return;
       body.innerHTML = html;
       body.removeAttribute('aria-busy');
+      // The page's own lazy loads (history, backlinks, files) are htmx.
+      if (window.htmx) window.htmx.process(body);
       if (C.mountWidgets) C.mountWidgets(body);
       c.panel.scrollTop = 0;
     }).catch(function () {

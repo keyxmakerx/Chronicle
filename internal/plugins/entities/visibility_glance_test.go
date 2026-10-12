@@ -24,6 +24,11 @@ func TestComputeEffectiveVisibility(t *testing.T) {
 		{"dm_only, widened by tag", &Entity{Visibility: VisibilityDefault, IsPrivate: true}, grant, VisStateDMOnly, true},
 		{"custom, no grants", &Entity{Visibility: VisibilityCustom}, nil, VisStateCustom, false},
 		{"custom, widened by tag", &Entity{Visibility: VisibilityCustom}, grant, VisStateCustom, true},
+		// A DM-only category hides the page whatever its own setting, and tag
+		// grants cannot widen past it.
+		{"everyone in a DM-only category", &Entity{Visibility: VisibilityDefault, TypeDMOnly: true}, nil, VisStateDMOnly, false},
+		{"DM-only category ignores tag grants", &Entity{Visibility: VisibilityDefault, TypeDMOnly: true}, grant, VisStateDMOnly, false},
+		{"custom in a DM-only category stays custom", &Entity{Visibility: VisibilityCustom, TypeDMOnly: true}, grant, VisStateCustom, false},
 	}
 	for _, tc := range tests {
 		tc := tc

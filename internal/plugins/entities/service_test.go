@@ -2287,6 +2287,8 @@ func TestIsClaimableType(t *testing.T) {
 		// An unset player_character preset is claimable via the flag default at
 		// create time, not via this heuristic — so heuristic-only resolves false.
 		{"unset player_character preset uses flag not heuristic", &EntityType{PresetCategory: strPtr(PresetCategoryPlayerCharacter)}, false},
+		// A DM-only category is never claimable, whatever its flag says.
+		{"adventures with flag true", &EntityType{Slug: "adventures", PresetCategory: strPtr(PresetCategoryAdventures), Claimable: boolPtr(true)}, false},
 	}
 	for _, tc := range cases {
 		if got := isClaimableType(tc.et); got != tc.want {

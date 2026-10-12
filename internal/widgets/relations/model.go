@@ -19,11 +19,11 @@ import (
 // a campaign. The service layer always creates relations in pairs (forward
 // and reverse) to maintain bi-directional consistency.
 type Relation struct {
-	ID                  int       `json:"id"`
-	CampaignID          string    `json:"campaignId"`
-	SourceEntityID      string    `json:"sourceEntityId"`
-	TargetEntityID      string    `json:"targetEntityId"`
-	RelationType        string    `json:"relationType"`
+	ID                  int             `json:"id"`
+	CampaignID          string          `json:"campaignId"`
+	SourceEntityID      string          `json:"sourceEntityId"`
+	TargetEntityID      string          `json:"targetEntityId"`
+	RelationType        string          `json:"relationType"`
 	ReverseRelationType string          `json:"reverseRelationType"`
 	Metadata            json.RawMessage `json:"metadata,omitempty"`
 	DmOnly              bool            `json:"dmOnly"`
