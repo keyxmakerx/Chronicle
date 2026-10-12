@@ -2615,6 +2615,11 @@ func (a *App) RegisterRoutes() {
 	campaignHandler.SetEntityLister(&entityTypeListerAdapter{svc: entityService})
 	campaignHandler.SetLayoutFetcher(&entityTypeLayoutFetcherAdapter{svc: entityService})
 	campaignHandler.SetRecentEntityLister(&recentEntityListerAdapter{svc: entityService})
+	campaignHandler.SetCustomizeCategoryLister(&customizeCategoryAdapter{svc: entityService})
+	campaignHandler.SetCustomizeDrafts(campaigns.NewCustomizeDraftService(campaigns.NewCustomizeDraftRepository(a.DB)))
+	// After the look, which NewHandler registers first: a category's menu
+	// setting is applied on top of the saved sidebar.
+	campaignHandler.RegisterCustomizeSection(newCategoriesSection(entityService, campaignService))
 	groupRepo := campaigns.NewGroupRepository(a.DB)
 	groupService := campaigns.NewGroupService(groupRepo)
 	campaignHandler.SetGroupService(groupService)
