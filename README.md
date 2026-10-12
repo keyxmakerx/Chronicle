@@ -184,6 +184,8 @@ Chronicle has three kinds of extension: plugins (feature apps), systems (game sy
 
 See [.ai/architecture.md](.ai/architecture.md) for the full architecture document.
 
+To build your own game system, widget, content pack, WASM plugin or API app, start at [docs/build/](docs/build/README.md).
+
 ---
 
 ## Tech Stack
