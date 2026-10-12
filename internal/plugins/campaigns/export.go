@@ -257,6 +257,10 @@ type ExportCalendarMoon struct {
 	PhaseSource       string  `json:"phase_source,omitempty"`
 	Size              float64 `json:"size,omitempty"`
 	OrbitSpeed        float64 `json:"orbit_speed,omitempty"`
+	// LoreEntitySlug names the moon's lore page by slug, re-pointed at the
+	// restored page on import, the way an era's is. Additive: an older
+	// backup has none.
+	LoreEntitySlug *string `json:"lore_entity_slug,omitempty"`
 }
 
 // ExportCalendarSeason is a season definition for export.

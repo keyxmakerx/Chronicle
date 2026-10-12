@@ -415,11 +415,17 @@ func (a *calendarExportAdapter) exportOne(ctx context.Context, cal *calendar.Cal
 		// produce the "unknown, pre-V5 backup" shape ImportCalendar treats
 		// as hidden — see ExportCalendarMoon's doc comment.
 		hidden := m.HiddenFromPlayers
+		var moonLoreSlug *string
+		if m.LoreEntityID != nil {
+			if s := entitySlugLookup(*m.LoreEntityID); s != "" {
+				moonLoreSlug = &s
+			}
+		}
 		data.Moons = append(data.Moons, campaigns.ExportCalendarMoon{
 			Ref: m.ID, Name: m.Name, CycleDays: m.CycleDays, PhaseOffset: m.PhaseOffset,
 			Color: m.Color, HiddenFromPlayers: &hidden,
 			BaseDesign: m.BaseDesign, Tint: m.Tint, PhaseSource: m.PhaseSource,
-			Size: m.Size, OrbitSpeed: m.OrbitSpeed,
+			Size: m.Size, OrbitSpeed: m.OrbitSpeed, LoreEntitySlug: moonLoreSlug,
 		})
 	}
 	for _, s := range cal.Seasons {
@@ -1627,6 +1633,12 @@ func (a *calendarImportAdapter) importOne(ctx context.Context, campaignID string
 	if len(data.Moons) > 0 {
 		moons := make([]calendar.MoonInput, len(data.Moons))
 		for i, m := range data.Moons {
+			var moonLoreID *string
+			if m.LoreEntitySlug != nil {
+				if id, ok := idMap.EntitySlugToID[*m.LoreEntitySlug]; ok {
+					moonLoreID = &id
+				}
+			}
 			moons[i] = calendar.MoonInput{
 				Name: m.Name, CycleDays: m.CycleDays, PhaseOffset: m.PhaseOffset,
 				Color: m.Color, HiddenFromPlayers: importMoonHidden(m.HiddenFromPlayers),
@@ -1635,7 +1647,7 @@ func (a *calendarImportAdapter) importOne(ctx context.Context, campaignID string
 				// way it would a hand-created moon's zero value — never an
 				// empty/invalid look.
 				BaseDesign: m.BaseDesign, Tint: m.Tint, PhaseSource: m.PhaseSource,
-				Size: m.Size, OrbitSpeed: m.OrbitSpeed,
+				Size: m.Size, OrbitSpeed: m.OrbitSpeed, LoreEntityID: moonLoreID,
 			}
 		}
 		if err := a.svc.SetMoons(ctx, cal.ID, campaignID, moons); err != nil {
