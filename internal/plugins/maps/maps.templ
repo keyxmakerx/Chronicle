@@ -274,6 +274,7 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 		data-shadow-src={ scriptURL("map_shadow.js") }
 		data-pictures-src={ scriptURL("map_pictures.js") }
 		data-annotations-src={ scriptURL("map_annotations.js") }
+		data-shapes-src={ scriptURL("map_shapes.js") }
 		data-hex-art-src={ scriptURL("map_hex_art.js") }
 		data-hexes-src={ scriptURL("map_hexes.js") }
 		data-live-src={ scriptURL("map_live.js") }
@@ -496,6 +497,9 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 		.mp-fly-label { flex-basis: 100%; font-size: 11px; color: var(--color-text-secondary); padding: 2px 4px 4px; text-transform: uppercase; letter-spacing: 0.06em; }
 		.mp-fly-gap { margin-top: 6px; }
 		#mp-fly-style { max-width: 260px; }
+		#mp-fly-shapes { max-width: 244px; }
+		/* A map with no picture is a blank sheet in the theme's card colour. */
+		.mp-sheet { fill: var(--color-card-bg); fill-opacity: 1; stroke: var(--color-border); stroke-width: 1px; vector-effect: non-scaling-stroke; }
 		.mp-fly-col { flex-direction: column; flex-wrap: nowrap; align-items: stretch; max-width: 250px; }
 		/* Menu rows (the Make a hex map flyout). */
 		.mp-mrow { display: flex; align-items: center; gap: 10px; width: 100%; border: 0; background: none; border-radius: 7px; padding: 7px 10px 7px 8px; text-align: left; font-size: 13px; line-height: 1.3; color: var(--color-text-primary); transition: background-color 0.12s, transform 0.08s; }
@@ -726,9 +730,9 @@ templ mapControls(data MapViewData) {
 	     other tools are for scribes. The viewer shows or hides the Hexes
 	     button as the grid changes. -->
 	<div class="mp-fl mp-rail" role="toolbar" aria-label="Map tools">
-		<button type="button" class="mp-btn" data-tool="move" aria-pressed="true" aria-label="Move the map (V)">
+		<button type="button" class="mp-btn" data-tool="move" aria-pressed="true" aria-label="Move the map and select shapes (V)">
 			<i class="fa-solid fa-hand" aria-hidden="true"></i>
-			<span class="mp-tip">Move the map <kbd>V</kbd></span>
+			<span class="mp-tip">Move the map, select shapes <kbd>V</kbd></span>
 		</button>
 		if data.IsScribe {
 			<button type="button" class="mp-btn" data-tool="pin" aria-pressed="false" aria-label="Drop a pin (P)">
@@ -754,6 +758,24 @@ templ mapControls(data MapViewData) {
 					<button type="button" class="mp-btn" data-shape="step" aria-pressed="false" aria-label="Numbered step"><svg class="mp-hexico mp-shapeico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M11 9l2-1v8"/></svg><span class="mp-tip">Numbered step</span></button>
 					<button type="button" class="mp-btn" data-shape="callout" aria-pressed="false" aria-label="Speech bubble"><svg class="mp-hexico mp-shapeico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg><span class="mp-tip">Speech bubble</span></button>
 					<button type="button" class="mp-btn" data-shape="text" aria-pressed="false" aria-label="Text"><i class="fa-solid fa-font" aria-hidden="true"></i><span class="mp-tip">Label</span></button>
+				</div>
+			</div>
+			<!-- The Shapes palette: the diagram vocabulary (rooms, areas, water,
+			     walls, arrows, bubbles). Picking one starts the placing tool; the
+			     placed shape is then selected under the Move tool. -->
+			<div class="mp-item">
+				<button type="button" class="mp-btn" data-tool="shapes" aria-pressed="false" aria-expanded="false" aria-controls="mp-fly-shapes" aria-label="Shapes (S)">
+					<svg class="mp-hexico mp-shapeico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="11" height="9" rx="1.5"/><path d="M14.5 10.5h5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-3"/></svg>
+					<span class="mp-tip">Shapes <kbd>S</kbd></span>
+				</button>
+				<div id="mp-fly-shapes" class="mp-fl mp-fly" role="group" aria-label="Shape to place" hidden>
+					<div class="mp-fly-label">Shapes</div>
+					<button type="button" class="mp-btn" data-pshape="room" aria-pressed="false" aria-label="Room"><svg class="mp-hexico mp-shapeico" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="1.5"/></svg><span class="mp-tip">Room</span></button>
+					<button type="button" class="mp-btn" data-pshape="area" aria-pressed="false" aria-label="Area"><svg class="mp-hexico mp-shapeico" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="1.5" stroke-dasharray="3 2.5"/></svg><span class="mp-tip">Area</span></button>
+					<button type="button" class="mp-btn" data-pshape="water" aria-pressed="false" aria-label="Water"><svg class="mp-hexico mp-shapeico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9c2.5-2 4.5-2 7 0s4.5 2 7 0l4 0M3 15c2.5-2 4.5-2 7 0s4.5 2 7 0l4 0"/></svg><span class="mp-tip">Water</span></button>
+					<button type="button" class="mp-btn" data-pshape="wall" aria-pressed="false" aria-label="Wall"><svg class="mp-hexico mp-shapeico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10h18v4H3z"/></svg><span class="mp-tip">Wall</span></button>
+					<button type="button" class="mp-btn" data-pshape="arrow" aria-pressed="false" aria-label="Arrow"><svg class="mp-hexico mp-shapeico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19L19 5M19 5h-8M19 5v8"/></svg><span class="mp-tip">Arrow</span></button>
+					<button type="button" class="mp-btn" data-pshape="bubble" aria-pressed="false" aria-label="Speech bubble"><svg class="mp-hexico mp-shapeico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg><span class="mp-tip">Speech bubble</span></button>
 				</div>
 			</div>
 			if data.CanShadow() {

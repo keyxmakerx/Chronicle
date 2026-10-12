@@ -253,3 +253,58 @@ func TestPictureDrawings_RoundTripAndHiddenFromPlayers_Integration(t *testing.T)
 		t.Errorf("owner sees %d drawings, want both pictures", len(staff))
 	}
 }
+
+// Diagram shapes round-trip their corners and name, and a shape hidden from
+// players (dm_only) is absent from a player's list while staff still get it.
+// The same predicate hides every drawing type, so this is the server-side
+// guarantee for the Shapes tool, not a client filter.
+func TestShapeDrawings_HiddenFromPlayers_Integration(t *testing.T) {
+	db := newMapsScratchDB(t)
+	ctx := context.Background()
+	repo := NewDrawingRepository(db)
+
+	userID := newMapsDBID(t)
+	campaignID := newMapsDBID(t)
+	mapID := newMapsDBID(t)
+	mustExecMaps(t, db, `INSERT INTO users (id, email, display_name, password_hash) VALUES (?, ?, ?, ?)`,
+		userID, userID+"@example.test", "Maps Shape Int Test", "x")
+	mustExecMaps(t, db, `INSERT INTO campaigns (id, name, slug, created_by) VALUES (?, ?, ?, ?)`,
+		campaignID, "Maps Shape Int Test", campaignID, userID)
+	mustExecMaps(t, db, `INSERT INTO maps (id, campaign_id, name) VALUES (?, ?, ?)`,
+		mapID, campaignID, "Blank Map")
+
+	name := "Vault"
+	shown := &Drawing{
+		ID: newMapsDBID(t), MapID: mapID, DrawingType: DrawingTypeRoom, Points: []byte(`[{"x":10,"y":10},{"x":30,"y":25}]`),
+		StrokeColor: "#1f2937", StrokeWidth: 2, Visibility: "everyone", TextContent: &name,
+	}
+	hidden := &Drawing{
+		ID: newMapsDBID(t), MapID: mapID, DrawingType: DrawingTypeWall, Points: []byte(`[{"x":40,"y":10},{"x":60,"y":11}]`),
+		StrokeColor: "#1f2937", StrokeWidth: 2, Visibility: "dm_only",
+	}
+	for _, d := range []*Drawing{shown, hidden} {
+		if err := repo.CreateDrawing(ctx, d); err != nil {
+			t.Fatalf("CreateDrawing: %v", err)
+		}
+	}
+
+	got, err := repo.GetDrawing(ctx, shown.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.DrawingType != DrawingTypeRoom || got.TextContent == nil || *got.TextContent != name {
+		t.Errorf("room did not round-trip: %+v", got)
+	}
+
+	players, err := repo.ListDrawings(ctx, mapID, int(permissions.RolePlayer), "u-player")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(players) != 1 || players[0].ID != shown.ID {
+		t.Errorf("player sees %d drawings, want only the public room", len(players))
+	}
+	staff, _ := repo.ListDrawings(ctx, mapID, int(permissions.RoleOwner), "u-owner")
+	if len(staff) != 2 {
+		t.Errorf("owner sees %d drawings, want both shapes", len(staff))
+	}
+}

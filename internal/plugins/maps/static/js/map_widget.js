@@ -54,14 +54,24 @@
           return res.json();
         })
         .then(function (m) {
-          if (!m || !(m.image_id || m.image_url) || !m.image_width || !m.image_height) {
+          if (!m) {
+            self._renderEmpty(mapId);
+            return;
+          }
+          var markers = Array.isArray(m.markers) ? m.markers : [];
+          // A map with no picture is a blank sheet to draw shapes on, the same
+          // 1000-unit square the full viewer uses.
+          if (!(m.image_id || m.image_url)) {
+            self._renderLeaflet('', m.image_width || 1000, m.image_height || 1000, markers, mapId);
+            return;
+          }
+          if (!m.image_width || !m.image_height) {
             self._renderEmpty(mapId);
             return;
           }
           // image_url stands in for image_id when the server will not hand this
           // viewer the original (a map with shadowed areas).
           var imageUrl = m.image_url || ('/media/' + encodeURIComponent(m.image_id));
-          var markers = Array.isArray(m.markers) ? m.markers : [];
           self._renderLeaflet(imageUrl, m.image_width, m.image_height, markers, mapId);
         })
         .catch(function (err) {
@@ -123,6 +133,9 @@
 
       if (imageUrl) {
         L.imageOverlay(imageUrl, bounds).addTo(map);
+      } else {
+        if (window.ChronicleMapShapes) window.ChronicleMapShapes.ensureStyle();
+        L.rectangle(bounds, { className: 'mp-sheet', interactive: false, weight: 1, fill: true }).addTo(map);
       }
       map.fitBounds(bounds);
 
@@ -383,11 +396,24 @@
           if (layer) layer.addTo(map);
           return;
         }
+        // Rooms, areas, water and walls come from the shapes module, drawn
+        // read-only; without it they are left out rather than drawn as lines.
+        var S = window.ChronicleMapShapes;
+        if (S && S.isBoxType(d.drawing_type)) {
+          var box = S.renderBox(Object.assign({}, d, { points: points }), {
+            map: map,
+            interactive: false,
+            toLatLng: function (p) { return L.latLng(imageH - (p.y / 100) * imageH, (p.x / 100) * imageW); }
+          });
+          if (box) box.addTo(map);
+          return;
+        }
         if (points.length < 2) return;
         // Shadows and pictures are drawn only by the full map page; as lines
         // here they would be misleading.
         if (d.drawing_type === 'shadow' || d.drawing_type === 'image' || d.drawing_type === 'arrow' ||
-            d.drawing_type === 'highlight' || d.drawing_type === 'step' || d.drawing_type === 'callout') return;
+            d.drawing_type === 'highlight' || d.drawing_type === 'step' || d.drawing_type === 'callout' ||
+            d.drawing_type === 'room' || d.drawing_type === 'area' || d.drawing_type === 'water' || d.drawing_type === 'wall') return;
 
         // Convert percentage coords to pixel coords for Leaflet CRS.Simple.
         var latlngs = points.map(function (p) {

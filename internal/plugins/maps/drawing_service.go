@@ -29,6 +29,11 @@ var validDrawingTypes = map[string]bool{
 	DrawingTypeHighlight: true,
 	DrawingTypeStep:      true,
 	DrawingTypeCallout:   true,
+	// Diagram boxes: see validateBoxShape.
+	DrawingTypeRoom:  true,
+	DrawingTypeArea:  true,
+	DrawingTypeWater: true,
+	DrawingTypeWall:  true,
 }
 
 // validLayerTypes enumerates allowed layer types.
@@ -524,6 +529,9 @@ func checkPointsSize(points json.RawMessage) error {
 func validateDrawingContent(d *Drawing, textWritten bool) error {
 	if isAnnotationType(d.DrawingType) {
 		return validateAnnotation(d)
+	}
+	if isBoxShapeType(d.DrawingType) {
+		return validateBoxShape(d)
 	}
 	if d.DrawingType == "text" && textWritten && d.TextContent != nil {
 		t, err := validateDrawingText(d.TextContent)
