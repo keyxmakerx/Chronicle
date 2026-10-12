@@ -4572,7 +4572,7 @@ func (a *App) RegisterRoutes() {
 	ai_workspace.RegisterOwnerRoutes(aiWorkspaceCampaignAuthed, aiWorkspaceHandler,
 		campaigns.RequireRole(campaigns.RoleOwner))
 
-	// --- Import from Obsidian or Markdown (Manage > Import) ---
+	// --- Import from Obsidian or Markdown (Settings > Import) ---
 	// Pages, pictures and page files are reached through the narrow adapters in
 	// vault_import_adapters.go, so the import follows the same rules as a page
 	// typed in the editor and never sees another plugin's repository.
@@ -4584,7 +4584,9 @@ func (a *App) RegisterRoutes() {
 		Audit:     &aiWorkspaceAuditAdapter{svc: auditService},
 		Lifecycle: a.ShutdownCtx,
 	})
-	vault_import.RegisterRoutes(e, vault_import.NewHandler(vaultImportService), authService, campaignService)
+	vaultImportHandler := vault_import.NewHandler(vaultImportService)
+	vault_import.RegisterRoutes(e, vaultImportHandler, authService, campaignService)
+	campaignHandler.RegisterSettingsTab(vaultImportHandler.SettingsTabFactory())
 
 	// --- Campaign Export/Import ---
 	exportSvc := campaigns.NewExportImportService(campaignService)

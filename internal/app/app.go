@@ -173,7 +173,7 @@ func (a *App) setupMiddleware() {
 		Skipper: func(c echo.Context) bool { return c.Request().URL.Path != siteLookPath },
 	}))
 
-	// Manage > Import's zip upload is exempt from the 2 MB limit above but gets
+	// Settings > Import's zip upload is exempt from the 2 MB limit above but gets
 	// its own cap here, for the same reason as the Site look form: the CSRF
 	// check below parses the multipart body before authentication, so an
 	// unauthenticated client could otherwise make the server spool any size.
@@ -225,7 +225,7 @@ func (a *App) setupMiddleware() {
 var calendarImportPathPattern = regexp.MustCompile(
 	`^/campaigns/[^/]+/calendars/(wizard/import/preview|wizard/build/preview|wizard/create|import/preview|import)$`)
 
-// vaultImportUploadPattern matches Manage > Import's zip upload. The handler
+// vaultImportUploadPattern matches Settings > Import's zip upload. The handler
 // caps the body itself (a vault is far larger than the global 2MB limit), so
 // the global limit must not apply here.
 var vaultImportUploadPattern = regexp.MustCompile(`^/campaigns/[^/]+/import/markdown/preview$`)

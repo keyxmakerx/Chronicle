@@ -21,10 +21,10 @@ func RegisterRoutes(e *echo.Echo, h *Handler, authSvc auth.AuthService, campaign
 	RegisterOwnerRoutes(cg, h, campaigns.RequireRole(campaigns.RoleOwner))
 }
 
-// RegisterOwnerRoutes mounts Manage > Import on a /campaigns/:id group that
-// already enforces sign-in and campaign access. Every route is owner-only:
-// the import creates pages and uploads files under the owner's name. The two
-// that take input or start work are also rate limited.
+// RegisterOwnerRoutes mounts Settings > Import's routes on a /campaigns/:id
+// group that already enforces sign-in and campaign access. Every route is
+// owner-only: the import creates pages and uploads files under the owner's
+// name. The two that take input or start work are also rate limited.
 func RegisterOwnerRoutes(cg *echo.Group, h *Handler, requireOwner echo.MiddlewareFunc) {
 	cg.GET("/import", h.Page, requireOwner)
 	cg.GET("/import/markdown/dropzone", h.DropZone, requireOwner)

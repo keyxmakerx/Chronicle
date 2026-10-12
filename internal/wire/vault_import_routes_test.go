@@ -1,4 +1,4 @@
-// vault_import_routes_test.go pins that every Manage > Import route carries the
+// vault_import_routes_test.go pins that every Settings > Import route carries the
 // requireOwner middleware. The import creates pages and uploads files under the
 // owner's name, so a route that slipped past the gate would let a lower role
 // write into the campaign.

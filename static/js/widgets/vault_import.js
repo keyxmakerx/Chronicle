@@ -1,5 +1,5 @@
 /*
- * vault_import.js -- the drop zone on Manage > Import.
+ * vault_import.js -- the drop zone on Settings > Import.
  *
  * The page itself is server-rendered and HTMX-driven (the preview, the Import
  * button and the progress bar are fragments the server sends). This widget
