@@ -33,6 +33,7 @@ func (a *customizeCategoryAdapter) ListCustomizeCategories(ctx context.Context, 
 			ID: in.Type.ID, Slug: in.Type.Slug, Name: in.Type.Name, NamePlural: in.Type.NamePlural,
 			Icon: in.Type.Icon, Color: in.Type.Color, ParentID: in.Type.ParentTypeID,
 			Claimable: in.Claimable, Pages: in.Pages, Trashed: in.Trashed, IsDefault: in.Type.IsDefault,
+			DMOnly: in.Type.DMOnly(),
 		}
 	}
 	return out, nil

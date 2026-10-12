@@ -329,6 +329,8 @@ func (h *APIHandler) ListEntityTypes(c echo.Context) error {
 		slog.Error("api: failed to list entity types", slog.Any("error", err))
 		return apperror.NewInternal(fmt.Errorf("failed to list entity types"))
 	}
+	// A DM-only category is not listed for a key below the DM team.
+	types = entities.TypesForViewer(types, h.visibilityRoleFor(c.Request().Context(), campaignID, h.resolveUserID(c), h.resolveRole(c)))
 	return c.JSON(http.StatusOK, map[string]any{
 		"data":  types,
 		"total": len(types),
@@ -350,6 +352,9 @@ func (h *APIHandler) GetEntityType(c echo.Context) error {
 
 	// Verify it belongs to the API key's campaign.
 	if et.CampaignID != c.Param("id") {
+		return apperror.NewNotFound("entity type not found")
+	}
+	if !entities.ViewerSeesType(et, h.visibilityRoleFor(c.Request().Context(), et.CampaignID, h.resolveUserID(c), h.resolveRole(c))) {
 		return apperror.NewNotFound("entity type not found")
 	}
 
@@ -1063,11 +1068,38 @@ func (h *APIHandler) ListEntityRelations(c echo.Context) error {
 	if entityID == "" {
 		return apperror.NewBadRequest("entity ID required")
 	}
+	ctx := c.Request().Context()
+	visRole, userID, err := h.requireViewableEntity(c, entityID)
+	if err != nil {
+		return err
+	}
 
-	rels, err := h.relationSvc.ListByEntity(c.Request().Context(), c.Param("id"), entityID)
+	rels, err := h.relationSvc.ListByEntity(ctx, c.Param("id"), entityID)
 	if err != nil {
 		slog.Error("listing entity relations", slog.String("entity_id", entityID), slog.String("error", err.Error()))
 		return apperror.NewInternal(fmt.Errorf("failed to list relations"))
+	}
+
+	// A relation names the page at its other end, so one to a page the caller
+	// cannot view (a DM-only Adventures page, a private page) is left out
+	// rather than reveal that the page exists.
+	if visRole < int(campaigns.RoleOwner) && len(rels) > 0 {
+		ids := make([]string, 0, 2*len(rels))
+		for i := range rels {
+			ids = append(ids, rels[i].SourceEntityID, rels[i].TargetEntityID)
+		}
+		viewable, ferr := h.entitySvc.FilterViewableEntityIDs(ctx, c.Param("id"), ids, visRole, userID)
+		if ferr != nil {
+			slog.Error("filtering entity relations", slog.String("entity_id", entityID), slog.String("error", ferr.Error()))
+			return apperror.NewInternal(fmt.Errorf("failed to list relations"))
+		}
+		kept := rels[:0:0]
+		for i := range rels {
+			if viewable[rels[i].SourceEntityID] && viewable[rels[i].TargetEntityID] {
+				kept = append(kept, rels[i])
+			}
+		}
+		rels = kept
 	}
 
 	if rels == nil {
@@ -1075,6 +1107,25 @@ func (h *APIHandler) ListEntityRelations(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, rels)
+}
+
+// requireViewableEntity answers 404 unless the page is in the key's campaign
+// and the caller may view it, with the same promotion for a member with DM
+// access that GetEntity applies. It returns the visibility role and user id
+// the caller resolved to, for reads that go on to filter by viewer.
+func (h *APIHandler) requireViewableEntity(c echo.Context, entityID string) (visRole int, userID string, err error) {
+	ctx := c.Request().Context()
+	entity, gerr := h.entitySvc.GetByID(ctx, entityID)
+	if gerr != nil || entity.CampaignID != c.Param("id") {
+		return 0, "", apperror.NewNotFound("entity not found")
+	}
+	userID = h.resolveUserID(c)
+	visRole = h.visibilityRoleFor(ctx, entity.CampaignID, userID, h.resolveRole(c))
+	access, aerr := h.entitySvc.CheckEntityAccess(ctx, entity.ID, visRole, userID)
+	if aerr != nil || !access.CanView {
+		return 0, "", apperror.NewNotFound("entity not found")
+	}
+	return visRole, userID, nil
 }
 
 // --- Entity Permissions ---
@@ -1097,14 +1148,15 @@ func (h *APIHandler) GetEntityPermissions(c echo.Context) error {
 	entityID := c.Param("entityID")
 	ctx := c.Request().Context()
 
+	// The page must be in the key's campaign and viewable by the caller: its
+	// grants say who else can see it, which a player has no business reading
+	// for a page they cannot open.
 	entity, err := h.entitySvc.GetByID(ctx, entityID)
 	if err != nil {
 		return apperror.NewNotFound("entity not found")
 	}
-
-	// Verify entity belongs to the API key's campaign.
-	if entity.CampaignID != c.Param("id") {
-		return apperror.NewNotFound("entity not found")
+	if _, _, err := h.requireViewableEntity(c, entityID); err != nil {
+		return err
 	}
 
 	grants, err := h.entitySvc.GetEntityPermissions(ctx, entityID)

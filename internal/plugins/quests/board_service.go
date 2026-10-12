@@ -78,7 +78,7 @@ func (s *boardService) requireHome(ctx context.Context, campaignID string, h Hom
 		if h.EntityID != "" {
 			return errNotFound("category")
 		}
-		ok, err := s.types.TypeInCampaign(ctx, campaignID, h.TypeID)
+		ok, err := s.types.TypeInCampaign(ctx, campaignID, h.TypeID, v.IsScribe())
 		if err != nil {
 			return apperrorInternal(err)
 		}
@@ -147,6 +147,16 @@ func (s *boardService) Homes(ctx context.Context, campaignID string, v Viewer) (
 	sort.Ints(typeIDs)
 	out := make([]HomeView, 0, len(homes))
 	for _, id := range typeIDs {
+		// A DM-only category's boards are not listed to players.
+		if !v.IsScribe() {
+			ok, err := s.types.TypeInCampaign(ctx, campaignID, id, false)
+			if err != nil {
+				return nil, apperrorInternal(err)
+			}
+			if !ok {
+				continue
+			}
+		}
 		out = append(out, HomeView{Kind: "category", ID: strconv.Itoa(id)})
 	}
 	if len(pageIDs) == 0 {

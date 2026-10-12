@@ -141,6 +141,8 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// Entity type management (Owner only).
 	cg.GET("/entity-types", h.EntityTypesPage, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.POST("/entity-types", h.CreateEntityType, campaigns.RequireRole(campaigns.RoleOwner))
+	// Customize's one-click Adventures category for a campaign that has none.
+	cg.POST("/entity-types/adventures", h.EnsureAdventuresAPI, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.PUT("/entity-types/:etid", h.UpdateEntityTypeAPI, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.DELETE("/entity-types/:etid", h.DeleteEntityType, campaigns.RequireRole(campaigns.RoleOwner))
 

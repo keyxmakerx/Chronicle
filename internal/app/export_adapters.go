@@ -1172,7 +1172,17 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 		}
 
 		var newType *entities.EntityType
-		if match := matchExistingType(existing, claimed, et); match != nil {
+		match := matchExistingType(existing, claimed, et)
+		if match == nil && derefStr(et.PresetCategory) == entities.PresetCategoryAdventures {
+			// CreateEntityType refuses the reserved marker, so the category
+			// is made by the one function that may set it.
+			if made, _, ensureErr := a.entitySvc.EnsureAdventures(ctx, campaignID); ensureErr != nil {
+				slog.Warn("import: adding the Adventures category failed", slog.Any("error", ensureErr))
+			} else {
+				match = made
+			}
+		}
+		if match != nil {
 			claimed[match.ID] = true
 			in := entities.UpdateEntityTypeInput{
 				Name: patch.Of(et.Name), NamePlural: patch.Of(et.NamePlural), Icon: patch.Of(et.Icon), Color: patch.Of(et.Color),
@@ -1535,6 +1545,7 @@ func importIsPlayerCharacterType(preset, slug string) bool {
 // campaign's copy had, since both were named by the same preset.
 func matchExistingType(existing []entities.EntityType, claimed map[int]bool, et campaigns.ExportEntityType) *entities.EntityType {
 	wantPC := importIsPlayerCharacterType(derefStr(et.PresetCategory), et.Slug)
+	wantDMOnly := derefStr(et.PresetCategory) == entities.PresetCategoryAdventures
 	for i := range existing {
 		t := &existing[i]
 		if claimed[t.ID] {
@@ -1546,8 +1557,18 @@ func matchExistingType(existing []entities.EntityType, claimed map[int]bool, et 
 	}
 	for i := range existing {
 		t := &existing[i]
-		if !claimed[t.ID] && t.Slug == et.Slug {
+		// The DM-only marker never moves between categories by a shared slug:
+		// that would either hide an ordinary category from players or show
+		// the Adventures pages to them.
+		if !claimed[t.ID] && t.Slug == et.Slug && t.DMOnly() == wantDMOnly {
 			return t
+		}
+	}
+	if wantDMOnly {
+		for i := range existing {
+			if t := &existing[i]; !claimed[t.ID] && t.DMOnly() {
+				return t
+			}
 		}
 	}
 	return nil

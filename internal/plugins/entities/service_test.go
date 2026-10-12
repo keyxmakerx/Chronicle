@@ -31,6 +31,8 @@ type mockEntityTypeRepo struct {
 	listChildTypesFn       func(ctx context.Context, parentID int) ([]EntityType, error)
 	resequenceChildTypesFn func(ctx context.Context, campaignID string, orderedIDs []int) error
 
+	listByPresetCategoryFn func(ctx context.Context, campaignID, category string) ([]EntityType, error)
+
 	adoptPresetCategoryFn func(ctx context.Context, toID int, category string, retireID *int) error
 	movePagesAndAdoptFn   func(ctx context.Context, campaignID string, fromID, toID int, category string) (int64, error)
 
@@ -87,6 +89,9 @@ func (m *mockEntityTypeRepo) ListAll(ctx context.Context) ([]EntityType, error) 
 }
 
 func (m *mockEntityTypeRepo) ListByPresetCategory(ctx context.Context, campaignID, category string) ([]EntityType, error) {
+	if m.listByPresetCategoryFn != nil {
+		return m.listByPresetCategoryFn(ctx, campaignID, category)
+	}
 	return nil, nil
 }
 
@@ -1675,6 +1680,16 @@ func TestCheckEntityAccess_OwnerAlwaysFullAccess(t *testing.T) {
 	}
 }
 
+// plainTypeRepo answers every type lookup with an ordinary category, for tests
+// of access rules that need a page's type to be readable but not special.
+func plainTypeRepo() *mockEntityTypeRepo {
+	return &mockEntityTypeRepo{
+		findByIDFn: func(_ context.Context, id int) (*EntityType, error) {
+			return &EntityType{ID: id, CampaignID: "camp-1", Slug: "note"}, nil
+		},
+	}
+}
+
 func TestCheckEntityAccess_DefaultVisibility_PublicEntity(t *testing.T) {
 	entityRepo := &mockEntityRepo{
 		findByIDFn: func(_ context.Context, _ string) (*Entity, error) {
@@ -1686,7 +1701,7 @@ func TestCheckEntityAccess_DefaultVisibility_PublicEntity(t *testing.T) {
 		},
 	}
 
-	svc := newTestService(entityRepo, &mockEntityTypeRepo{})
+	svc := newTestService(entityRepo, plainTypeRepo())
 
 	// Player (role 1) can view but not edit public entities.
 	perm, err := svc.CheckEntityAccess(context.Background(), "ent-1", 1, "player-1")
@@ -1763,7 +1778,7 @@ func TestCheckEntityAccess_CustomVisibility_DelegatesToRepo(t *testing.T) {
 		},
 	}
 
-	svc := NewEntityService(entityRepo, &mockEntityTypeRepo{}, permRepo)
+	svc := NewEntityService(entityRepo, plainTypeRepo(), permRepo)
 	perm, err := svc.CheckEntityAccess(context.Background(), "ent-1", 1, "user-42")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

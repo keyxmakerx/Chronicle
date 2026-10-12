@@ -310,6 +310,9 @@ func (s *navSectionsSource) NavSectionsFor(ctx context.Context, cc *campaigns.Ca
 	if err != nil {
 		return nil, err
 	}
+	// Same cut as the sidebar the member sees, so a DM-only category is not
+	// a row they could pin.
+	etypes = entities.TypesForViewer(etypes, cc.VisibilityRole())
 	list, err := s.addons.ListForCampaign(ctx, cc.Campaign.ID)
 	if err != nil {
 		return nil, err

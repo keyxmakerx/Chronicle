@@ -21,6 +21,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/changesource"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/patch"
+	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/audit"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -345,12 +346,19 @@ func (h *Handler) Index(c echo.Context) error {
 		}
 	}
 
+	// A DM-only category does not exist for a player: the same 404 as a
+	// category that was never made, so its name and page count never leak.
+	if activeEntityType != nil && !ViewerSeesType(activeEntityType, role) {
+		return apperror.NewNotFound("category not found")
+	}
+
 	// Fetch entity types for sidebar filter and counts. Non-fatal: degrade
 	// gracefully if these fail (page still renders, just without filters).
 	entityTypes, err := h.service.GetEntityTypes(c.Request().Context(), campaignID)
 	if err != nil {
 		slog.Warn("failed to load entity types for list page", slog.Any("error", err))
 	}
+	entityTypes = TypesForViewer(entityTypes, role)
 	counts, err := h.service.CountByType(c.Request().Context(), campaignID, role, userID)
 	if err != nil {
 		slog.Warn("failed to load entity counts for list page", slog.Any("error", err))
@@ -868,6 +876,7 @@ func (h *Handler) SearchPageHandler(c echo.Context) error {
 	if err != nil {
 		entityTypes = nil
 	}
+	entityTypes = TypesForViewer(entityTypes, cc.VisibilityRole())
 
 	return middleware.Render(c, http.StatusOK, SearchPage(cc, entityTypes))
 }
@@ -1404,6 +1413,17 @@ func (h *Handler) ToggleFavoriteAPI(c echo.Context) error {
 	entityID := c.Param("eid")
 	userID := auth.GetUserID(c)
 
+	// A bookmark echoes the page's name back in the favorites list, so only a
+	// page the viewer can open may be bookmarked (a DM-only category's pages
+	// never are for a player).
+	viewable, err := h.service.FilterViewableEntityIDs(c.Request().Context(), cc.Campaign.ID, []string{entityID}, int(cc.VisibilityRole()), userID)
+	if err != nil {
+		return err
+	}
+	if !viewable[entityID] {
+		return apperror.NewNotFound("entity not found")
+	}
+
 	favorited, err := h.favoriteRepo.Toggle(c.Request().Context(), userID, entityID, cc.Campaign.ID)
 	if err != nil {
 		return apperror.NewInternal(fmt.Errorf("toggling favorite: %w", err))
@@ -1429,6 +1449,25 @@ func (h *Handler) ListFavoritesAPI(c echo.Context) error {
 		items = []FavoriteItem{}
 	}
 
+	// A page may have become hidden since it was bookmarked.
+	if cc.VisibilityRole() < permissions.RoleOwner && len(items) > 0 {
+		ids := make([]string, len(items))
+		for i := range items {
+			ids[i] = items[i].EntityID
+		}
+		viewable, verr := h.service.FilterViewableEntityIDs(c.Request().Context(), cc.Campaign.ID, ids, int(cc.VisibilityRole()), userID)
+		if verr != nil {
+			return verr
+		}
+		kept := items[:0]
+		for _, it := range items {
+			if viewable[it.EntityID] {
+				kept = append(kept, it)
+			}
+		}
+		items = kept
+	}
+
 	return c.JSON(http.StatusOK, items)
 }
 
@@ -1447,9 +1486,23 @@ func (h *Handler) FavoriteIDsAPI(c echo.Context) error {
 		return apperror.NewInternal(fmt.Errorf("listing favorite IDs: %w", err))
 	}
 
-	// Convert to array for JSON.
+	// Convert to array for JSON, leaving out pages hidden from this viewer.
+	var viewable map[string]bool
+	if cc.VisibilityRole() < permissions.RoleOwner && len(ids) > 0 {
+		all := make([]string, 0, len(ids))
+		for id := range ids {
+			all = append(all, id)
+		}
+		viewable, err = h.service.FilterViewableEntityIDs(c.Request().Context(), cc.Campaign.ID, all, int(cc.VisibilityRole()), userID)
+		if err != nil {
+			return err
+		}
+	}
 	result := make([]string, 0, len(ids))
 	for id := range ids {
+		if viewable != nil && !viewable[id] {
+			continue
+		}
 		result = append(result, id)
 	}
 
@@ -1735,6 +1788,7 @@ func (h *Handler) EntityTypesAPI(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	types = TypesForViewer(types, cc.VisibilityRole())
 
 	items := make([]map[string]any, len(types))
 	for i, t := range types {
@@ -2729,6 +2783,34 @@ func (h *Handler) EntityTypesPage(c echo.Context) error {
 	}
 	return middleware.Render(c, http.StatusOK,
 		EntityTypesManagePage(cc, entityTypes, counts, csrfToken, "", claimingEnabled))
+}
+
+// EnsureAdventuresAPI adds the Adventures category when the campaign has none
+// (POST /campaigns/:id/entity-types/adventures). It is idempotent: pressing it
+// twice, or on a campaign that already has the category, changes nothing and
+// answers 200 with created=false.
+func (h *Handler) EnsureAdventuresAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	et, created, err := h.service.EnsureAdventures(c.Request().Context(), cc.Campaign.ID)
+	if err != nil {
+		return err
+	}
+	if created {
+		h.logAudit(c, cc.Campaign.ID, audit.ActionEntityTypeCreated, strconv.Itoa(et.ID), et.Name)
+	}
+	status := http.StatusOK
+	if created {
+		status = http.StatusCreated
+	}
+	return c.JSON(status, map[string]any{
+		"id":      et.ID,
+		"slug":    et.Slug,
+		"name":    et.NamePlural,
+		"created": created,
+	})
 }
 
 // CreateEntityType processes the entity type creation form.

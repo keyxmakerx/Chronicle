@@ -637,7 +637,7 @@ func (r *entityTypeRepository) ResequenceChildTypes(ctx context.Context, campaig
 }
 
 // defaultEntityTypes defines the entity types seeded when a campaign is created.
-var defaultEntityTypes = []EntityType{
+var defaultEntityTypes = withAdventures([]EntityType{
 	{Slug: "character", Name: "Character", NamePlural: "Characters", Icon: "fa-user", Color: "#3b82f6", SortOrder: 1, IsDefault: true, Enabled: true,
 		Fields: []FieldDefinition{
 			{Key: "title", Label: "Title", Type: "text", Section: "Basics"},
@@ -679,7 +679,7 @@ var defaultEntityTypes = []EntityType{
 			{Key: "currency", Label: "Currency", Type: "text", Section: "Basics"},
 			{Key: "price_modifier", Label: "Price Modifier (%)", Type: "number", Section: "Basics"},
 		}},
-}
+})
 
 // SeedFromTypes inserts a specific set of entity types for a campaign.
 // Used by genre presets to seed genre-specific types instead of defaults.
@@ -690,8 +690,8 @@ func (r *entityTypeRepository) SeedFromTypes(ctx context.Context, campaignID str
 	}
 	defer tx.Rollback()
 
-	query := `INSERT INTO entity_types (campaign_id, slug, name, name_plural, icon, color, fields, layout_json, sort_order, is_default, enabled)
-	          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	query := `INSERT INTO entity_types (campaign_id, slug, name, name_plural, icon, color, preset_category, fields, layout_json, sort_order, is_default, enabled)
+	          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	for _, et := range types {
 		fieldsJSON, err := json.Marshal(et.Fields)
@@ -709,7 +709,7 @@ func (r *entityTypeRepository) SeedFromTypes(ctx context.Context, campaignID str
 
 		_, err = tx.ExecContext(ctx, query,
 			campaignID, et.Slug, et.Name, et.NamePlural,
-			et.Icon, et.Color, fieldsJSON, layoutJSON, et.SortOrder,
+			et.Icon, et.Color, et.PresetCategory, fieldsJSON, layoutJSON, et.SortOrder,
 			et.IsDefault, et.Enabled,
 		)
 		if err != nil {
@@ -729,8 +729,8 @@ func (r *entityTypeRepository) SeedDefaults(ctx context.Context, campaignID stri
 	}
 	defer tx.Rollback()
 
-	query := `INSERT INTO entity_types (campaign_id, slug, name, name_plural, icon, color, fields, layout_json, sort_order, is_default, enabled)
-	          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	query := `INSERT INTO entity_types (campaign_id, slug, name, name_plural, icon, color, preset_category, fields, layout_json, sort_order, is_default, enabled)
+	          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	for _, et := range defaultEntityTypes {
 		fieldsJSON, err := json.Marshal(et.Fields)
@@ -744,7 +744,7 @@ func (r *entityTypeRepository) SeedDefaults(ctx context.Context, campaignID stri
 
 		_, err = tx.ExecContext(ctx, query,
 			campaignID, et.Slug, et.Name, et.NamePlural,
-			et.Icon, et.Color, fieldsJSON, layoutJSON, et.SortOrder,
+			et.Icon, et.Color, et.PresetCategory, fieldsJSON, layoutJSON, et.SortOrder,
 			et.IsDefault, et.Enabled,
 		)
 		if err != nil {
@@ -1269,6 +1269,10 @@ func tagFilterClause(tagSlugs []string) (string, []any) {
 //   - tag grants (additive, OR'd in): an otherwise-hidden entity becomes
 //     visible if a tag it bears carries a matching tag_permissions grant.
 //
+// A page of a DM-only category (Adventures) is never visible below Scribe,
+// whatever its own visibility or tag grants say: dmOnlyTypeClause sits in
+// front of the modes above and no grant can widen past it.
+//
 // Role-tier matching uses subject_id <= role, so a grant to RolePlayer (1)
 // excludes anonymous (role 0); 'public' matches every viewer including
 // anonymous.
@@ -1291,7 +1295,7 @@ func visibilityFilter(role int, userID string) (string, []any) {
 		return liveOnly, nil
 	}
 
-	filter := liveOnly + ` AND (
+	filter := liveOnly + dmOnlyTypeClause + ` AND (
 		(e.visibility = 'default' AND (? >= 2 OR e.is_private = false))
 		OR (e.visibility = 'custom' AND EXISTS (
 			SELECT 1 FROM entity_permissions ep
@@ -1323,7 +1327,7 @@ func visibilityFilter(role int, userID string) (string, []any) {
 			)
 		)
 	)`
-	return filter, []any{role, role, userID, userID, role, userID, userID}
+	return filter, []any{role, role, role, userID, userID, role, userID, userID}
 }
 
 // liveOnly keeps trashed pages out of a read. visibilityFilter carries it for

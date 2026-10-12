@@ -67,8 +67,10 @@ type MemberNames interface {
 // TypeDirectory answers whether a category (entity type) belongs to a campaign,
 // so a category id from another campaign can never be used as a board home.
 type TypeDirectory interface {
-	// TypeInCampaign is false for a missing type and for one of another campaign.
-	TypeInCampaign(ctx context.Context, campaignID string, typeID int) (bool, error)
+	// TypeInCampaign is false for a missing type and for one of another
+	// campaign. It is also false for a DM-only category unless dmTeam is set,
+	// so a player cannot learn that category exists through its boards.
+	TypeInCampaign(ctx context.Context, campaignID string, typeID int, dmTeam bool) (bool, error)
 }
 
 // DueDay is a day on the campaign calendar, as stored on a quest sheet.

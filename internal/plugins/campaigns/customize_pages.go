@@ -223,12 +223,14 @@ func (h *Handler) CustomizeHome(c echo.Context) error {
 
 // customizeCategoriesData is what the Categories area's script draws from.
 type customizeCategoriesData struct {
-	Base       string              `json:"base"`
-	Categories []CustomizeCategory `json:"categories"`
-	InMenu     map[int]bool        `json:"inMenu"`
-	Claiming   bool                `json:"claiming"`
-	Key        string              `json:"key,omitempty"` // The open category: its id, or a new-… draft key.
-	Tab        string              `json:"tab,omitempty"`
+	Base string `json:"base"`
+	// AdventuresURL is where the Add Adventures button posts.
+	AdventuresURL string              `json:"adventuresUrl"`
+	Categories    []CustomizeCategory `json:"categories"`
+	InMenu        map[int]bool        `json:"inMenu"`
+	Claiming      bool                `json:"claiming"`
+	Key           string              `json:"key,omitempty"` // The open category: its id, or a new-… draft key.
+	Tab           string              `json:"tab,omitempty"`
 }
 
 func (h *Handler) categoriesData(ctx context.Context, cc *CampaignContext, cats []CustomizeCategory, key, tab string) string {
@@ -240,12 +242,13 @@ func (h *Handler) categoriesData(ctx context.Context, cc *CampaignContext, cats 
 		cats = []CustomizeCategory{}
 	}
 	b, err := json.Marshal(customizeCategoriesData{
-		Base:       h.customizeBase(cc),
-		Categories: cats,
-		InMenu:     h.CategoryMenuVisible(cc),
-		Claiming:   claiming,
-		Key:        key,
-		Tab:        tab,
+		Base:          h.customizeBase(cc),
+		AdventuresURL: fmt.Sprintf("/campaigns/%s/entity-types/adventures", cc.Campaign.ID),
+		Categories:    cats,
+		InMenu:        h.CategoryMenuVisible(cc),
+		Claiming:      claiming,
+		Key:           key,
+		Tab:           tab,
 	})
 	if err != nil {
 		return "{}"

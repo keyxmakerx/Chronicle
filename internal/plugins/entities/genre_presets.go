@@ -39,7 +39,7 @@ func fantasyPreset() GenrePreset {
 		Name:        "Fantasy / D&D",
 		Description: "Classic fantasy with characters, locations, factions, items, and lore.",
 		Icon:        "fa-hat-wizard",
-		Types: []EntityType{
+		Types: withAdventures([]EntityType{
 			{Slug: "character", Name: "Character", NamePlural: "Characters", Icon: "fa-user", Color: "#3b82f6", SortOrder: 1, IsDefault: true, Enabled: true,
 				Fields: []FieldDefinition{
 					{Key: "title", Label: "Title", Type: "text", Section: "Basics"},
@@ -90,7 +90,7 @@ func fantasyPreset() GenrePreset {
 					{Key: "shop_keeper", Label: "Shopkeeper", Type: "text", Section: "Basics"},
 					{Key: "currency", Label: "Currency", Type: "text", Section: "Basics"},
 				}},
-		},
+		}),
 	}
 }
 
@@ -100,7 +100,7 @@ func sciFiPreset() GenrePreset {
 		Name:        "Sci-Fi / Space Opera",
 		Description: "Spaceships, planets, species, corporations, and technology.",
 		Icon:        "fa-rocket",
-		Types: []EntityType{
+		Types: withAdventures([]EntityType{
 			{Slug: "character", Name: "Character", NamePlural: "Characters", Icon: "fa-user", Color: "#3b82f6", SortOrder: 1, IsDefault: true, Enabled: true,
 				Fields: []FieldDefinition{
 					{Key: "species", Label: "Species", Type: "text", Section: "Basics"},
@@ -150,7 +150,7 @@ func sciFiPreset() GenrePreset {
 				}},
 			{Slug: "lore", Name: "Lore", NamePlural: "Lore", Icon: "fa-book", Color: "#64748b", SortOrder: 8, IsDefault: true, Enabled: true,
 				Fields: []FieldDefinition{}},
-		},
+		}),
 	}
 }
 
@@ -160,7 +160,7 @@ func horrorPreset() GenrePreset {
 		Name:        "Horror / Investigation",
 		Description: "Investigators, locations, clues, entities, and mysteries.",
 		Icon:        "fa-ghost",
-		Types: []EntityType{
+		Types: withAdventures([]EntityType{
 			{Slug: "investigator", Name: "Investigator", NamePlural: "Investigators", Icon: "fa-user-secret", Color: "#3b82f6", SortOrder: 1, IsDefault: true, Enabled: true,
 				Fields: []FieldDefinition{
 					{Key: "occupation", Label: "Occupation", Type: "text", Section: "Basics"},
@@ -200,7 +200,7 @@ func horrorPreset() GenrePreset {
 				}},
 			{Slug: "journal", Name: "Journal", NamePlural: "Journals", Icon: "fa-book", Color: "#64748b", SortOrder: 7, IsDefault: true, Enabled: true,
 				Fields: []FieldDefinition{}},
-		},
+		}),
 	}
 }
 
@@ -210,7 +210,7 @@ func modernPreset() GenrePreset {
 		Name:        "Modern / Urban",
 		Description: "Contemporary setting with people, places, organizations, and cases.",
 		Icon:        "fa-city",
-		Types: []EntityType{
+		Types: withAdventures([]EntityType{
 			{Slug: "character", Name: "Character", NamePlural: "Characters", Icon: "fa-user", Color: "#3b82f6", SortOrder: 1, IsDefault: true, Enabled: true,
 				Fields: []FieldDefinition{
 					{Key: "occupation", Label: "Occupation", Type: "text", Section: "Basics"},
@@ -243,7 +243,7 @@ func modernPreset() GenrePreset {
 				}},
 			{Slug: "note", Name: "Note", NamePlural: "Notes", Icon: "fa-sticky-note", Color: "#10b981", SortOrder: 6, IsDefault: true, Enabled: true,
 				Fields: []FieldDefinition{}},
-		},
+		}),
 	}
 }
 
@@ -253,7 +253,7 @@ func historicalPreset() GenrePreset {
 		Name:        "Historical / Period",
 		Description: "Historical figures, places, events, artifacts, and cultures.",
 		Icon:        "fa-landmark",
-		Types: []EntityType{
+		Types: withAdventures([]EntityType{
 			{Slug: "figure", Name: "Figure", NamePlural: "Figures", Icon: "fa-user", Color: "#3b82f6", SortOrder: 1, IsDefault: true, Enabled: true,
 				Fields: []FieldDefinition{
 					{Key: "title", Label: "Title / Rank", Type: "text", Section: "Basics"},
@@ -293,6 +293,6 @@ func historicalPreset() GenrePreset {
 				}},
 			{Slug: "note", Name: "Note", NamePlural: "Notes", Icon: "fa-book", Color: "#10b981", SortOrder: 7, IsDefault: true, Enabled: true,
 				Fields: []FieldDefinition{}},
-		},
+		}),
 	}
 }

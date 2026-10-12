@@ -171,7 +171,9 @@ type EntityTypeSummary struct {
 // EntityTypeListerForGraph provides entity type listings for the graph page.
 // Implemented by an adapter wrapping the entity service.
 type EntityTypeListerForGraph interface {
-	ListEntityTypesForGraph(ctx context.Context, campaignID string) ([]EntityTypeSummary, error)
+	// ListEntityTypesForGraph omits the categories the viewer's role may not
+	// know exist (a DM-only category is not offered to a player).
+	ListEntityTypesForGraph(ctx context.Context, campaignID string, role int) ([]EntityTypeSummary, error)
 }
 
 // EntityViewFilter reports which of a set of entity IDs a viewer may see,
