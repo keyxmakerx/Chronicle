@@ -31,9 +31,9 @@ const (
 	DrawingTypeCallout = "callout"
 )
 
-// The four diagram boxes. Together with arrow (a line with a head) and callout
+// The diagram boxes. Together with arrow (a line with a head) and callout
 // (a speech bubble) they are the vocabulary of the Shapes tool, and of the AI
-// map sketch that will create the same records. A box is two opposite corners
+// map sketch that creates the same records. A box is two opposite corners
 // in map percent, stored top-left first; text_content is its optional name
 // (a wall has none). What a kind looks like is the viewer's decision, so it
 // follows the light and dark themes: stroke_color and fill_color are accepted
@@ -47,6 +47,9 @@ const (
 	DrawingTypeWater = "water"
 	// DrawingTypeWall is a thick bar: a wall, fence or bridge.
 	DrawingTypeWall = "wall"
+	// DrawingTypeDanger is a hazard zone, tinted red. Only the map sketch
+	// creates it; the Shapes palette keeps its signed four.
+	DrawingTypeDanger = "danger"
 )
 
 // minBoxExtent is the smallest width or height, in map percent, a box may
@@ -88,10 +91,10 @@ func isAnnotationType(t string) bool {
 	return false
 }
 
-// isBoxShapeType reports whether t is one of the four diagram boxes.
+// isBoxShapeType reports whether t is one of the diagram boxes.
 func isBoxShapeType(t string) bool {
 	switch t {
-	case DrawingTypeRoom, DrawingTypeArea, DrawingTypeWater, DrawingTypeWall:
+	case DrawingTypeRoom, DrawingTypeArea, DrawingTypeWater, DrawingTypeWall, DrawingTypeDanger:
 		return true
 	}
 	return false

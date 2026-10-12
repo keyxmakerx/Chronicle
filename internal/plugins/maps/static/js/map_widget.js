@@ -396,7 +396,7 @@
           if (layer) layer.addTo(map);
           return;
         }
-        // Rooms, areas, water and walls come from the shapes module, drawn
+        // Rooms, areas, water, walls and danger zones come from the shapes module, drawn
         // read-only; without it they are left out rather than drawn as lines.
         var S = window.ChronicleMapShapes;
         if (S && S.isBoxType(d.drawing_type)) {
@@ -413,7 +413,7 @@
         // here they would be misleading.
         if (d.drawing_type === 'shadow' || d.drawing_type === 'image' || d.drawing_type === 'arrow' ||
             d.drawing_type === 'highlight' || d.drawing_type === 'step' || d.drawing_type === 'callout' ||
-            d.drawing_type === 'room' || d.drawing_type === 'area' || d.drawing_type === 'water' || d.drawing_type === 'wall') return;
+            d.drawing_type === 'room' || d.drawing_type === 'area' || d.drawing_type === 'water' || d.drawing_type === 'wall' || d.drawing_type === 'danger') return;
 
         // Convert percentage coords to pixel coords for Leaflet CRS.Simple.
         var latlngs = points.map(function (p) {

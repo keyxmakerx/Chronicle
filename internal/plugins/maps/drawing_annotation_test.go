@@ -536,3 +536,33 @@ func TestUpdateDrawing_OwnDrawingsOnlyForScribes(t *testing.T) {
 		})
 	}
 }
+
+// A danger zone is a box like a room: two corners, an optional name, and
+// the same refusals.
+func TestCreateDrawing_DangerZoneIsABox(t *testing.T) {
+	cases := []struct {
+		name   string
+		points string
+		text   *string
+		ok     bool
+	}{
+		{"named zone", `[{"x":40,"y":30},{"x":10,"y":10}]`, strp("Rockfall"), true},
+		{"unnamed zone", `[{"x":10,"y":10},{"x":40,"y":30}]`, nil, true},
+		{"one corner", `[{"x":10,"y":10}]`, nil, false},
+		{"too thin", `[{"x":10,"y":10},{"x":40,"y":10.2}]`, nil, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			in := annotationInput(DrawingTypeDanger)
+			in.Points, in.TextContent = pts(tc.points), tc.text
+			repo := &shadowRepo{}
+			_, err := NewDrawingService(repo).CreateDrawing(context.Background(), in)
+			if tc.ok != (err == nil) {
+				t.Fatalf("ok = %v, err = %v", tc.ok, err)
+			}
+			if tc.ok && string(repo.created.Points) != `[{"x":10,"y":10},{"x":40,"y":30}]` {
+				t.Errorf("corners stored as %s, want top-left first", repo.created.Points)
+			}
+		})
+	}
+}

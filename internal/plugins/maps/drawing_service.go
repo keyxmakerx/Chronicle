@@ -30,10 +30,11 @@ var validDrawingTypes = map[string]bool{
 	DrawingTypeStep:      true,
 	DrawingTypeCallout:   true,
 	// Diagram boxes: see validateBoxShape.
-	DrawingTypeRoom:  true,
-	DrawingTypeArea:  true,
-	DrawingTypeWater: true,
-	DrawingTypeWall:  true,
+	DrawingTypeRoom:   true,
+	DrawingTypeArea:   true,
+	DrawingTypeWater:  true,
+	DrawingTypeDanger: true,
+	DrawingTypeWall:   true,
 }
 
 // validLayerTypes enumerates allowed layer types.

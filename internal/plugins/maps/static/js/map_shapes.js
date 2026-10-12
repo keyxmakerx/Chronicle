@@ -9,7 +9,7 @@
  *   arrow                        points [tail, tip]
  *   callout                      points [where the bubble's tail points]; text_content is its text
  * What a box looks like is decided here, from theme tokens, so it follows the
- * light and dark themes; the stored colours are not used for the four boxes.
+ * light and dark themes; the stored colours are not used for the boxes.
  * The server validates and withholds shapes like any drawing (DM-only ones
  * never reach players), so this file is only what is on screen. User text is
  * only ever set with textContent or an input's value.
@@ -21,7 +21,9 @@
 (function () {
   'use strict';
 
-  var BOX_TYPES = ['room', 'area', 'water', 'wall'];
+  // danger is drawn and edited like the others but has no palette button: only
+  // the AI map sketch creates it.
+  var BOX_TYPES = ['room', 'area', 'water', 'wall', 'danger'];
   var SHAPE_TYPES = BOX_TYPES.concat(['arrow', 'callout']);
   // Mirrors minBoxExtent on the server: the smallest width or height, in map
   // percent, a box may have.
@@ -65,6 +67,7 @@
       case 'area': return 'Area';
       case 'water': return 'Water';
       case 'wall': return 'Wall';
+      case 'danger': return 'Danger';
       case 'arrow': return 'Arrow';
       case 'callout': return 'Speech bubble';
     }
@@ -74,7 +77,7 @@
   // fieldLabel names the text field a shape has, or '' for one with no text.
   function fieldLabel(t) {
     if (t === 'callout') return 'Bubble text';
-    if (t === 'room' || t === 'area' || t === 'water') return 'Name';
+    if (t === 'room' || t === 'area' || t === 'water' || t === 'danger') return 'Name';
     return '';
   }
 
@@ -312,6 +315,7 @@
       '.mp-shp-room { fill: var(--color-card-bg, #fff); fill-opacity: 0.92; stroke: var(--color-text-primary, #111827); stroke-width: 2px; }',
       '.mp-shp-area { fill: var(--mp-accent, rgb(var(--color-accent-rgb, 99 102 241))); fill-opacity: 0.14; stroke: var(--mp-accent, rgb(var(--color-accent-rgb, 99 102 241))); stroke-width: 1.5px; stroke-dasharray: 6 4; }',
       '.mp-shp-water { fill: rgb(59 130 246); fill-opacity: 0.3; stroke: rgb(59 130 246); stroke-width: 1.5px; }',
+      '.mp-shp-danger { fill: var(--color-danger-strong, #dc2626); fill-opacity: 0.16; stroke: var(--color-danger-strong, #dc2626); stroke-width: 1.5px; stroke-dasharray: 6 4; }',
       '.mp-shp-wall { fill: var(--color-text-primary, #111827); fill-opacity: 0.92; stroke: none; }',
       '.mp-shp-hit { stroke-linecap: round; }',
       '.mp-shp-live { cursor: pointer; }',
@@ -361,7 +365,7 @@
     return 'mpShapeLabels';
   }
 
-  // renderBox returns the Leaflet layer for a room, area, water or wall: the
+  // renderBox returns the Leaflet layer for a box (room, area, water, wall or danger): the
   // rectangle, plus its name inside the top-left corner when it has one and the
   // box is big enough on screen to show it. env: { map, toLatLng, interactive,
   // animate }. Returns null for a box too damaged to draw.
