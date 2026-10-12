@@ -92,6 +92,19 @@ templ customizeCategoryWorkspace(cc *CampaignContext, state, key, tab string, et
 				@contentTemplatesTab(cc)
 			</div>
 		</div>
+	} else if tab == "layout" && etID > 0 {
+		// The page editor saves through the draft like the rest of Customize.
+		<div
+			class="czs-ped-host"
+			hx-get={ fmt.Sprintf("/campaigns/%s/entity-types/%s/customize-tab/layout", cc.Campaign.ID, strconv.Itoa(etID)) }
+			hx-trigger="load"
+			hx-swap="innerHTML"
+		>
+			<div class="czs-legacy space-y-3" aria-busy="true">
+				<div class="h-4 w-1/3 rounded bg-surface-alt"></div>
+				<div class="h-40 rounded bg-surface-alt"></div>
+			</div>
+		</div>
 	} else if tab != "settings" && etID > 0 {
 		<div class="czs-legacy">
 			@customizeSavesAlone()

@@ -5564,6 +5564,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "customize-look", Scripts: []string{"/static/js/widgets/customize_look.js"}},
 	{Name: "customize-shell", Scripts: []string{"/static/js/widgets/customize_shell.js"}},
 	{Name: "customize-categories", Scripts: []string{"/static/js/widgets/customize_categories.js"}},
+	{Name: "customize-page-editor", Scripts: []string{"/static/js/widgets/customize_page_editor.js"}},
 	{Name: "site-look", Scripts: []string{"/static/js/widgets/site_look.js"}},
 	{Name: "page-tabs", Scripts: []string{"/static/js/widgets/page_tabs.js"}},
 	{Name: "era-pages", Scripts: []string{"/static/js/widgets/era_pages.js"}},

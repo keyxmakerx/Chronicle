@@ -1,34 +1,20 @@
 package entities
 
 import (
-	"fmt"
-
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
-// EntityTypeCustomizeTabTmpl is one tab of a category's Customize workspace
-// that still uses today's editors, each saving with its own button: the
-// page layout, the category home and the fields.
+// EntityTypeCustomizeTabTmpl is one tab of a category's Customize workspace.
+// The page layout is Customize's page editor, which saves with the rest of
+// the draft; the category home and the fields still use today's editors,
+// each saving with its own button.
 templ EntityTypeCustomizeTabTmpl(cc *campaigns.CampaignContext, et *EntityType, tab, csrfToken string) {
 	switch tab {
 		case "layout":
-			<div data-te-container>
-				<div class="flex items-center justify-end gap-2 mb-2">
-					<span id="te-save-status" class="text-xs text-fg-muted"></span>
-					<button type="button" id="te-save-btn" class="btn-primary text-sm">Save layout</button>
-				</div>
-				<div
-					data-widget="layout-editor"
-					data-context="template"
-					data-features="containers,visibility,height,presets,preview"
-					data-endpoint={ fmt.Sprintf("/campaigns/%s/entity-types/%d/layout", cc.Campaign.ID, et.ID) }
-					data-campaign-id={ cc.Campaign.ID }
-					data-csrf-token={ csrfToken }
-					data-layout={ layoutJSON(et) }
-					data-fields={ fieldsJSON(et) }
-					data-entity-type-name={ et.Name }
-				></div>
-			</div>
+			<div
+				data-widget="customize-page-editor"
+				data-state={ pageEditorState(cc, et) }
+			></div>
 		case "home":
 			<div class="max-w-4xl">
 				@categoryDashboardTab(cc, et, csrfToken)

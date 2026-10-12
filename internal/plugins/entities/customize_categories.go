@@ -10,6 +10,7 @@ package entities
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"sort"
@@ -50,6 +51,9 @@ type CustomizeCategoryItem struct {
 	// Menu is the players' sidebar-menu setting. The campaigns plugin owns the
 	// sidebar, so the caller applies it; this service only carries it.
 	Menu *bool `json:"menu,omitempty"`
+	// Layout replaces an existing category's page layout. It is checked by
+	// the same ValidateLayout a direct layout save runs.
+	Layout *EntityTypeLayout `json:"layout,omitempty"`
 	// Delete removes an existing category.
 	Delete bool `json:"delete,omitempty"`
 }
@@ -135,6 +139,19 @@ func (s *entityService) ApplyCustomizeCategories(ctx context.Context, campaignID
 	if err != nil {
 		return res, err
 	}
+	// Layouts are checked here too, so a bad one stops the Save before any
+	// category is written rather than halfway through.
+	for _, key := range plan.updates {
+		if l := in.Items[key].Layout; l != nil {
+			id, _ := strconv.Atoi(key)
+			if err := ValidateLayout(*l, s.isValidBlockType, s.isSingletonBlockType, s.tileSizesFor(ctx, id, *l)); err != nil {
+				return res, err
+			}
+			if b, err := json.Marshal(l); err != nil || len(b) > maxLayoutSize {
+				return res, apperror.NewBadRequest("layout exceeds maximum size")
+			}
+		}
+	}
 
 	// resolve turns a parent key into an id: an existing id as is, a new key
 	// through what has been created so far.
@@ -216,6 +233,11 @@ func (s *entityService) ApplyCustomizeCategories(ctx context.Context, campaignID
 				return res, err
 			}
 		}
+		if item.Layout != nil {
+			if err := s.UpdateEntityTypeLayout(ctx, id, *item.Layout); err != nil {
+				return res, err
+			}
+		}
 		res.Applied = append(res.Applied, key)
 	}
 
@@ -274,6 +296,9 @@ func planCustomizeCategories(items map[string]CustomizeCategoryItem, byID map[in
 			if it.Name == "" || it.NamePlural == "" {
 				return plan, apperror.NewBadRequest("a new category needs a name and a plural name")
 			}
+			if it.Layout != nil {
+				return plan, apperror.NewBadRequest("a new category gets its page layout once it is saved")
+			}
 			if it.CopyFrom != 0 {
 				if _, ok := byID[it.CopyFrom]; !ok {
 					return plan, apperror.NewNotFound("the category to copy was not found")
@@ -291,10 +316,13 @@ func planCustomizeCategories(items map[string]CustomizeCategoryItem, byID map[in
 			if it.CopyFrom != 0 {
 				return plan, apperror.NewBadRequest("only a new category can copy another")
 			}
+			if it.Delete && it.Layout != nil {
+				return plan, apperror.NewBadRequest("a category being deleted cannot get a new page layout")
+			}
 			if it.Delete {
 				deleting[k] = true
 				plan.deletes = append(plan.deletes, k)
-			} else if customizeItemChangesType(it) || it.Menu != nil {
+			} else if customizeItemChangesType(it) || it.Menu != nil || it.Layout != nil {
 				plan.updates = append(plan.updates, k)
 			}
 		default:

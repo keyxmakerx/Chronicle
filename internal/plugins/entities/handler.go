@@ -619,12 +619,17 @@ func (h *Handler) Sheet(c echo.Context) error {
 // request. Every denial is the same not-found, so a hidden page is
 // indistinguishable from a missing one.
 func (h *Handler) prepareShow(c echo.Context) (*showPage, error) {
+	return h.prepareShowFor(c, c.Param("eid"))
+}
+
+// prepareShowFor is prepareShow for a page named by the caller rather than
+// the route, so Customize's page editor can draw blocks as that page shows them.
+func (h *Handler) prepareShowFor(c echo.Context, entityID string) (*showPage, error) {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return nil, apperror.NewInternal(fmt.Errorf("campaign context is nil for entity show"))
 	}
 
-	entityID := c.Param("eid")
 	entity, err := h.service.GetByID(c.Request().Context(), entityID)
 	if err != nil {
 		return nil, err
@@ -3086,10 +3091,9 @@ func hideRedundantCharacterSurface(types []BlockMeta, systemOwnsCharacterSheet b
 	return kept
 }
 
-// TemplateEditor renders the visual template editor for an entity type.
+// TemplateEditor sends the old page-layout editor's address to the
+// category's Page layout tab in Customize, so saved links keep working.
 // GET /campaigns/:id/entity-types/:etid/template
-// Kept for backward compatibility; redirects are not needed since the
-// config page embeds the same template-editor widget.
 func (h *Handler) TemplateEditor(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
@@ -3110,12 +3114,12 @@ func (h *Handler) TemplateEditor(c echo.Context) error {
 		return apperror.NewNotFound("entity type not found")
 	}
 
-	csrfToken := middleware.GetCSRFToken(c)
-	return middleware.Render(c, http.StatusOK, TemplateEditorPage(cc, et, csrfToken))
+	// A category's page layout is edited in Customize now.
+	return c.Redirect(http.StatusSeeOther, fmt.Sprintf("/campaigns/%s/customize/categories/%d/layout", cc.Campaign.ID, et.ID))
 }
 
-// EntityTypeConfig renders the unified entity type configuration page.
-// Tabs: Layout, Attributes, Dashboard, Nav Panel.
+// EntityTypeConfig sends the old category configuration page's address to
+// the category's Customize workspace, so saved links keep working.
 // GET /campaigns/:id/entity-types/:etid/config
 func (h *Handler) EntityTypeConfig(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
@@ -3137,8 +3141,8 @@ func (h *Handler) EntityTypeConfig(c echo.Context) error {
 		return apperror.NewNotFound("entity type not found")
 	}
 
-	csrfToken := middleware.GetCSRFToken(c)
-	return middleware.Render(c, http.StatusOK, EntityTypeConfigPage(cc, et, csrfToken))
+	// Everything this page held is in the category's Customize workspace now.
+	return c.Redirect(http.StatusSeeOther, fmt.Sprintf("/campaigns/%s/customize/categories/%d/layout", cc.Campaign.ID, et.ID))
 }
 
 // EntityTypeCustomizeFragment returns an HTMX fragment for the Customization
