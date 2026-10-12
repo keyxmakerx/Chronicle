@@ -23,6 +23,8 @@ type CustomizeCategory struct {
 	Pages     int  `json:"pages"`
 	Trashed   int  `json:"trashed"`
 	IsDefault bool `json:"isDefault"`
+	// DMOnly marks the Adventures category, which only the DM team sees.
+	DMOnly bool `json:"dmOnly"`
 }
 
 // CustomizeCategoryLister lists a campaign's categories for the Customize

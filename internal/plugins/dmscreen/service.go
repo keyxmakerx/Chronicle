@@ -33,6 +33,13 @@ type Service interface {
 	// Note reads the screen's note; SaveNote replaces its text.
 	Note(ctx context.Context, campaignID string, v Viewer) (*NotesView, error)
 	SaveNote(ctx context.Context, campaignID string, v Viewer, text, version string) (*NotesView, error)
+
+	// The Adventures tab: pin an Adventures page, add a loose note, remove
+	// either, and list the pages the picker offers.
+	PinPage(ctx context.Context, campaignID string, v Viewer, entityID string) error
+	AddNote(ctx context.Context, campaignID string, v Viewer, text string) error
+	RemoveItem(ctx context.Context, campaignID string, v Viewer, itemID string) error
+	PickPages(ctx context.Context, campaignID string, v Viewer, query string) (*PickResult, error)
 }
 
 // DowntimeResult reports a downtime switch: the new state and how many
@@ -169,6 +176,15 @@ func (s *service) Build(ctx context.Context, campaignID string, v Viewer) (*View
 		view.HiddenMore = more
 		for _, h := range hidden {
 			view.Hidden = append(view.Hidden, HiddenView{ID: h.ID, Name: h.Name, TypeName: h.TypeName})
+		}
+	}
+
+	if s.src.Board != nil && s.src.Adventures != nil {
+		adv, err := s.adventures(ctx, campaignID, v)
+		if err != nil {
+			warn("adventures", err)
+		} else {
+			view.Adventures = adv
 		}
 	}
 

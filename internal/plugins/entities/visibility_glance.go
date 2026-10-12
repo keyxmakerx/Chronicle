@@ -54,7 +54,7 @@ func baseVisibilityState(entity *Entity) string {
 	switch {
 	case entity.Visibility == VisibilityCustom:
 		return VisStateCustom
-	case entity.IsPrivate:
+	case entity.IsPrivate, entity.TypeDMOnly:
 		return VisStateDMOnly
 	default:
 		return VisStateEveryone
@@ -68,8 +68,9 @@ func baseVisibilityState(entity *Entity) string {
 func ComputeEffectiveVisibility(entity *Entity, grants []EntityTagGrantInfo) EffectiveVisibility {
 	base := baseVisibilityState(entity)
 	return EffectiveVisibility{
-		BaseState:     base,
-		WidenedByTags: base != VisStateEveryone && len(grants) > 0,
+		BaseState: base,
+		// A DM-only category stops tag grants, so they widen nothing there.
+		WidenedByTags: base != VisStateEveryone && !entity.TypeDMOnly && len(grants) > 0,
 		TagGrants:     grants,
 	}
 }

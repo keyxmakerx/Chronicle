@@ -1034,7 +1034,11 @@ func (a *entityEventPublisherAdapter) PublishEntityTypeEvent(eventType, campaign
 	default:
 		return
 	}
-	a.bus.Publish(ws.NewMessage(msgType, campaignID, fmt.Sprintf("%d", entityType.ID), entityType))
+	msg := ws.NewMessage(msgType, campaignID, fmt.Sprintf("%d", entityType.ID), entityType)
+	// A DM-only category's existence is itself hidden from players, so its
+	// events never reach a socket below the DM team.
+	msg.RequiresDM = entityType.DMOnly()
+	a.bus.Publish(msg)
 }
 
 // sidebarConfigStore is the narrow slice of the campaign service the sidebar
@@ -1996,6 +2000,42 @@ func (a *mentionLinkAdapter) GetMentionLinksForGraph(ctx context.Context, campai
 	return result, nil
 }
 
+// registerPageTextBlocks registers Read-aloud, Table and Steps: text a DM types
+// in place, stored per page and block. They are always available (no addon) and
+// usable several times on a page; the widget fetches its own content, so these
+// only emit the mount point. A layout that places them (Adventures does) fails
+// to save without them, so every registry that validates layouts needs them.
+func registerPageTextBlocks(blockRegistry *entities.BlockRegistry) {
+	for _, b := range []entities.BlockMeta{
+		{
+			Type: pageblocks.KindReadAloud, Label: "Read-aloud", Icon: "fa-bullhorn",
+			Description: "Boxed text the DM reads to the table",
+			Contexts:    []string{"template"},
+			TileSizes:   []string{"2x1", "2x2", "4x1", "4x2"},
+		},
+		{
+			Type: pageblocks.KindTable, Label: "Table", Icon: "fa-table",
+			Description: "Rows and columns typed in place, with columns only the DM sees",
+			Contexts:    []string{"template"},
+			TileSizes:   []string{"2x2", "4x2"},
+		},
+		{
+			Type: pageblocks.KindSteps, Label: "Steps", Icon: "fa-list-ol",
+			Description: "Numbered beats with a tick for each, for use during play",
+			Contexts:    []string{"template"},
+			TileSizes:   []string{"1x2", "2x2", "4x2"},
+		},
+	} {
+		kind := b.Type
+		blockRegistry.Register(b, func(rc entities.BlockRenderContext) templ.Component {
+			if rc.CC == nil || rc.Entity == nil || rc.Block.ID == "" {
+				return templ.NopComponent
+			}
+			return pageblocks.BlockMount(rc.CC.Campaign.ID, rc.Entity.ID, rc.Block.ID, kind, rc.CSRFToken)
+		})
+	}
+}
+
 // entityTypeListerForGraphAdapter wraps entities.EntityService to implement the
 // relations.EntityTypeListerForGraph interface for the graph filter dropdown.
 type entityTypeListerForGraphAdapter struct {
@@ -2003,11 +2043,12 @@ type entityTypeListerForGraphAdapter struct {
 }
 
 // ListEntityTypesForGraph returns entity types as lightweight summaries.
-func (a *entityTypeListerForGraphAdapter) ListEntityTypesForGraph(ctx context.Context, campaignID string) ([]relations.EntityTypeSummary, error) {
+func (a *entityTypeListerForGraphAdapter) ListEntityTypesForGraph(ctx context.Context, campaignID string, role int) ([]relations.EntityTypeSummary, error) {
 	etypes, err := a.svc.GetEntityTypes(ctx, campaignID)
 	if err != nil {
 		return nil, err
 	}
+	etypes = entities.TypesForViewer(etypes, role)
 	result := make([]relations.EntityTypeSummary, 0, len(etypes))
 	for _, et := range etypes {
 		if !et.Enabled {
@@ -4355,37 +4396,7 @@ func (a *App) RegisterRoutes() {
 		return quests.CategoryBoardsMount(cc.Campaign.ID, et.ID, cc.CanControlWorldState(), int(cc.MemberRole))
 	})
 
-	// Read-aloud, Table and Steps: text a DM types in place, stored per page and
-	// block. Always available (no addon), usable several times on a page; the
-	// widget fetches its own content, so these only emit the mount point.
-	for _, b := range []entities.BlockMeta{
-		{
-			Type: pageblocks.KindReadAloud, Label: "Read-aloud", Icon: "fa-bullhorn",
-			Description: "Boxed text the DM reads to the table",
-			Contexts:    []string{"template"},
-			TileSizes:   []string{"2x1", "2x2", "4x1", "4x2"},
-		},
-		{
-			Type: pageblocks.KindTable, Label: "Table", Icon: "fa-table",
-			Description: "Rows and columns typed in place, with columns only the DM sees",
-			Contexts:    []string{"template"},
-			TileSizes:   []string{"2x2", "4x2"},
-		},
-		{
-			Type: pageblocks.KindSteps, Label: "Steps", Icon: "fa-list-ol",
-			Description: "Numbered beats with a tick for each, for use during play",
-			Contexts:    []string{"template"},
-			TileSizes:   []string{"1x2", "2x2", "4x2"},
-		},
-	} {
-		kind := b.Type
-		blockRegistry.Register(b, func(rc entities.BlockRenderContext) templ.Component {
-			if rc.CC == nil || rc.Entity == nil || rc.Block.ID == "" {
-				return templ.NopComponent
-			}
-			return pageblocks.BlockMount(rc.CC.Campaign.ID, rc.Entity.ID, rc.Block.ID, kind, rc.CSRFToken)
-		})
-	}
+	registerPageTextBlocks(blockRegistry)
 
 	// Timeline plugin blocks (requires "timeline" addon).
 	blockRegistry.Register(entities.BlockMeta{
@@ -5048,7 +5059,15 @@ func (a *App) RegisterRoutes() {
 			reqCtx := c.Request().Context()
 			var sidebarTypes []layouts.SidebarEntityType
 			etypes, typesErr := entityService.GetEntityTypes(reqCtx, cc.Campaign.ID)
+			// A member the owner gave DM access is on the DM team whatever
+			// their membership role, so the DM-only Adventures category is
+			// theirs to see; an owner viewing as a player is not.
+			sidebarRole := effectiveRole
+			if cc.IsDmGranted && sidebarRole < int(campaigns.RoleScribe) {
+				sidebarRole = int(campaigns.RoleOwner)
+			}
 			if typesErr == nil {
+				etypes = entities.TypesForViewer(etypes, sidebarRole)
 				sidebarTypes = sidebarTypesFrom(etypes)
 				ctx = layouts.SetEntityTypes(ctx, sidebarTypes)
 			}
@@ -5060,7 +5079,7 @@ func (a *App) RegisterRoutes() {
 			if session := auth.GetSession(c); session != nil {
 				layoutUserID = session.UserID
 			}
-			counts, countsErr := entityService.CountByType(reqCtx, cc.Campaign.ID, effectiveRole, layoutUserID)
+			counts, countsErr := entityService.CountByType(reqCtx, cc.Campaign.ID, sidebarRole, layoutUserID)
 			if countsErr == nil {
 				// CountByType already rolls child entity_type counts up into
 				// their parent under the sub-category-as-template model.
@@ -5252,7 +5271,7 @@ func (a *App) RegisterRoutes() {
 	// DM Screen: the owner's and scribes' control panel. It owns no data and
 	// reads every section through the adapters in dm_screen_adapters.go;
 	// registered here because Foundry presence comes from wsHub.
-	dmScreenSvc := dmscreen.NewService(dmscreen.Sources{
+	dmSources := dmscreen.Sources{
 		Downtime: &dmDowntimeAdapter{stash: stashSvc, addons: addonService},
 		Notes:    &dmNotesAdapter{notes: noteSvc, members: campaignService},
 		Requests: &dmRequestsAdapter{stash: stashSvc, addons: addonService},
@@ -5263,7 +5282,14 @@ func (a *App) RegisterRoutes() {
 		Party:    &dmPartyAdapter{entities: entityService, campaigns: campaignService},
 		Hidden:   &dmHiddenAdapter{entities: entityService, lists: characterListService},
 		System:   systemHandler,
-	})
+	}
+	// The Adventures tab needs its table; with the plugin degraded the rest of
+	// the screen still works and the tab is simply left out.
+	if a.PluginHealth.IsHealthy(dmscreen.PluginSlug) {
+		dmSources.Board = dmscreen.NewBoardRepository(a.DB)
+		dmSources.Adventures = &dmAdventuresAdapter{entities: entityService}
+	}
+	dmScreenSvc := dmscreen.NewService(dmSources)
 	dmscreen.RegisterRoutes(e, dmscreen.NewHandler(dmScreenSvc), campaignService, authService)
 	// The sync API routes are already registered; they answer 404 until this
 	// is set, and it is set before the server starts serving.
@@ -5362,10 +5388,11 @@ func (a *App) RegisterRoutes() {
 		questMaps := &questMapAdapter{svc: mapsService, addons: addonService}
 		questRepo := quests.NewQuestRepository(a.DB)
 		questCal := &questCalendarAdapter{svc: calendarService, addons: addonService}
+		questTypes := &questTypeAdapter{svc: entityService}
 		questSvc, boardSvc := quests.WithAnnouncer(
 			quests.NewQuestService(questRepo, questEntities, questMaps, questCal),
-			quests.NewBoardService(quests.NewBoardRepository(a.DB), questRepo, questEntities, &questTypeAdapter{svc: entityService}, questMaps, &questMemberNamesAdapter{svc: campaignService}, questCal),
-			questEntities, &questAnnouncerAdapter{bus: wsEventBus})
+			quests.NewBoardService(quests.NewBoardRepository(a.DB), questRepo, questEntities, questTypes, questMaps, &questMemberNamesAdapter{svc: campaignService}, questCal),
+			questEntities, questTypes, &questAnnouncerAdapter{bus: wsEventBus})
 		questEntityEvts.attach(questSvc)
 		questPicker := quests.NewPickerService(questEntities, questMaps, &questCharacterAdapter{
 			dir:   stashDirectory,
@@ -5535,7 +5562,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "site-look", Scripts: []string{"/static/js/widgets/site_look.js"}},
 	{Name: "page-tabs", Scripts: []string{"/static/js/widgets/page_tabs.js"}},
 	{Name: "era-pages", Scripts: []string{"/static/js/widgets/era_pages.js"}},
-	{Name: "dm-screen", Scripts: []string{"/static/js/widgets/dm_screen.js"}},
+	{Name: "dm-screen", Scripts: []string{"/static/js/widgets/dm_sheet.js", "/static/js/widgets/dm_screen.js"}},
 	{Name: "tile", Scripts: []string{"/static/js/widgets/tile.js"}},
 }
 

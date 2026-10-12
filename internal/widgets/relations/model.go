@@ -19,11 +19,11 @@ import (
 // a campaign. The service layer always creates relations in pairs (forward
 // and reverse) to maintain bi-directional consistency.
 type Relation struct {
-	ID                  int       `json:"id"`
-	CampaignID          string    `json:"campaignId"`
-	SourceEntityID      string    `json:"sourceEntityId"`
-	TargetEntityID      string    `json:"targetEntityId"`
-	RelationType        string    `json:"relationType"`
+	ID                  int             `json:"id"`
+	CampaignID          string          `json:"campaignId"`
+	SourceEntityID      string          `json:"sourceEntityId"`
+	TargetEntityID      string          `json:"targetEntityId"`
+	RelationType        string          `json:"relationType"`
 	ReverseRelationType string          `json:"reverseRelationType"`
 	Metadata            json.RawMessage `json:"metadata,omitempty"`
 	DmOnly              bool            `json:"dmOnly"`
@@ -171,7 +171,9 @@ type EntityTypeSummary struct {
 // EntityTypeListerForGraph provides entity type listings for the graph page.
 // Implemented by an adapter wrapping the entity service.
 type EntityTypeListerForGraph interface {
-	ListEntityTypesForGraph(ctx context.Context, campaignID string) ([]EntityTypeSummary, error)
+	// ListEntityTypesForGraph omits the categories the viewer's role may not
+	// know exist (a DM-only category is not offered to a player).
+	ListEntityTypesForGraph(ctx context.Context, campaignID string, role int) ([]EntityTypeSummary, error)
 }
 
 // EntityViewFilter reports which of a set of entity IDs a viewer may see,

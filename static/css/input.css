@@ -4668,7 +4668,90 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
   .dms-die { position: absolute; width: 120px; height: 120px; pointer-events: none; z-index: 2; }
   .dms-piece { position: absolute; inset: 0; background: var(--dms-die); will-change: transform, opacity; }
   .dms-piece b { position: absolute; left: 0; right: 0; top: 41%; text-align: center; color: #fff; font: 700 24px/1 system-ui, sans-serif; }
+  /* Adventures tab: pinned pages and loose notes as cards on a board (the same
+     shape as the quest notice board). Colours come from the screen's own
+     leaf tokens, which already have a dark set. */
+  .dms-loose { display: grid; grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr)); gap: .6rem; padding-top: .35rem; }
+  .dms-note {
+    position: relative; display: flex; flex-direction: column; gap: .15rem; min-width: 0;
+    border: 1px solid var(--dms-leaf-edge); border-radius: .6rem; background: rgba(127,127,127,.07);
+    font-size: .8rem; transition: transform .15s cubic-bezier(.2,.8,.2,1), border-color .15s, box-shadow .15s;
+  }
+  .dms-note::before {
+    content: ""; position: absolute; top: -5px; left: 50%; width: 10px; height: 10px; margin-left: -5px;
+    border-radius: 50%; background: var(--dms-hinge); box-shadow: 0 1px 2px rgba(0,0,0,.3); pointer-events: none;
+  }
+  .dms-note:hover, .dms-note:focus-within { transform: translateY(-2px); border-color: var(--dms-hinge); box-shadow: 0 6px 16px rgba(0,0,0,.18); }
+  .dms-note-open {
+    display: flex; flex-direction: column; gap: .15rem; width: 100%; text-align: left;
+    padding: .8rem .65rem .65rem; border-radius: .6rem; color: var(--dms-ink); cursor: pointer;
+  }
+  .dms-note-open:focus-visible, .dms-note-x:focus-visible, .dms-pick-item:focus-visible { outline: 2px solid var(--dms-hinge); outline-offset: 2px; }
+  .dms-note-n { font-size: .62rem; text-transform: uppercase; letter-spacing: .08em; font-weight: 700; color: var(--dms-warn); }
+  .dms-note-t { font-size: .98rem; font-weight: 700; line-height: 1.15; overflow-wrap: anywhere; }
+  .dms-note-s { color: var(--dms-ink-muted); overflow-wrap: anywhere; white-space: pre-line; }
+  .dms-note-x {
+    position: absolute; top: .15rem; right: .25rem; width: 1.4rem; height: 1.4rem; border-radius: 50%;
+    line-height: 1; color: var(--dms-ink-muted); opacity: 0; transition: opacity .15s;
+  }
+  .dms-note:hover .dms-note-x, .dms-note:focus-within .dms-note-x, .dms-note-x:focus-visible { opacity: 1; }
+  .dms-note-x:hover { background: rgba(127,127,127,.18); color: var(--dms-ink); }
+  .dms-jot { padding: .8rem .65rem .65rem; background: rgba(180,83,9,.09); border-color: transparent; }
+  .dms-jot::before { background: var(--dms-warn); }
+  .dms-jot:hover { transform: none; box-shadow: none; }
+  .dms-adv-add { display: grid; gap: .45rem; margin-top: .35rem; }
+  .dms-adv-row { display: flex; gap: .4rem; align-items: center; }
+  .dms-adv-row .dms-stepchip { flex-shrink: 0; }
+  .dms-pick { display: grid; gap: .35rem; }
+  .dms-pick-list { display: grid; gap: .15rem; max-height: 12rem; overflow-y: auto; }
+  .dms-pick-item {
+    display: flex; justify-content: space-between; gap: .5rem; align-items: baseline; text-align: left;
+    padding: .3rem .45rem; border-radius: .4rem; font-size: .88rem; color: var(--dms-ink);
+  }
+  .dms-pick-item:hover:not(:disabled) { background: var(--dms-ok-soft); }
+  .dms-pick-item:disabled { opacity: .6; cursor: default; }
+
+  /* The page opened over the screen. A layer of its own on <body>, above the
+     screen, which stays exactly as it was underneath. The panel grows from the
+     pressed card's box (the --ct/--cr/--cb/--cl insets are set from JS);
+     reduced motion shows it at once. Colours are the site's own tokens. */
+  .dms-sheet { position: fixed; inset: 0; z-index: 70; }
+  .dms-sheet-bg { position: absolute; inset: 0; background: rgba(10,10,20,.55); opacity: 0; transition: opacity .3s; }
+  .dms-sheet-open .dms-sheet-bg { opacity: 1; }
+  .dms-sheet-p {
+    position: absolute; inset: .75rem; overflow: auto; outline: none;
+    background: var(--color-bg-secondary, #f8fafc); color: var(--color-text-primary, #111827);
+    border: 1px solid var(--color-border, #e5e7eb); border-radius: .85rem; box-shadow: 0 24px 60px rgba(0,0,0,.35);
+    clip-path: inset(var(--ct, 40%) var(--cr, 40%) var(--cb, 40%) var(--cl, 40%) round .85rem);
+    transition: clip-path .42s cubic-bezier(.2,.8,.2,1);
+  }
+  .dms-sheet-open .dms-sheet-p { clip-path: inset(0 0 0 0 round .85rem); }
+  .dms-sheet-top {
+    position: sticky; top: 0; z-index: 4; display: flex; gap: .5rem; align-items: center; padding: .5rem .85rem;
+    background: var(--color-bg-primary, #fff); border-bottom: 1px solid var(--color-border, #e5e7eb);
+  }
+  .dms-sheet-crumb { flex: 1; min-width: 0; font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; font-weight: 600; color: var(--color-text-muted, #6b7280); }
+  .dms-sheet-btn {
+    border: 1px solid var(--color-border, #e5e7eb); border-radius: .5rem; padding: .2rem .65rem; font-size: .85rem;
+    color: var(--color-text-primary, #111827); background: transparent; cursor: pointer;
+  }
+  .dms-sheet-btn:hover:not(:disabled) { background: var(--color-bg-tertiary, #f1f5f9); }
+  .dms-sheet-btn:disabled { opacity: .45; cursor: default; }
+  .dms-sheet-btn:focus-visible { outline: 2px solid var(--color-accent, #6366f1); outline-offset: 2px; }
+  .dms-sheet-x { font-size: 1.2rem; line-height: 1; padding: .1rem .6rem; }
+  .dms-sheet-b { padding: 1rem; }
+  /* Rename, clone, history and delete act on the page as a whole and leave or
+     replace the screen, so the sheet keeps to reading and in-place edits. */
+  .dms-sheet-b [data-page-actions], .dms-sheet-b #page-name-fold { display: none; }
+  .dms-sheet-wait { padding: 2rem 1rem; text-align: center; color: var(--color-text-muted, #6b7280); }
+  .dms-sheet-still .dms-sheet-bg, .dms-sheet-still .dms-sheet-p { transition: none; clip-path: none; }
+  @media (prefers-reduced-motion: reduce) {
+    .dms-note, .dms-note-x, .dms-sheet-bg { transition: none; }
+    .dms-note:hover, .dms-note:focus-within { transform: none; }
+    .dms-sheet-p { transition: none; clip-path: none; }
+  }
   @media (max-width: 700px) {
+    .dms-sheet-p { inset: 0; border-radius: 0; }
     .dms-stage { padding-top: 3.75rem; }
     .dms-leaves { flex-direction: column; }
     .dms-leaf { flex: none; min-height: 0; }

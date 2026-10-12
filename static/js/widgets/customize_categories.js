@@ -68,11 +68,13 @@
         icon: f(c, 'icon', 'Icon') || 'fa-file', color: f(c, 'color', 'Color') || '#64748b',
         parent: f(c, 'parentId', 'parent_id') != null ? String(f(c, 'parentId', 'parent_id')) : (c.ParentID != null ? String(c.ParentID) : ''),
         claimable: !!f(c, 'claimable', 'Claimable'), pages: Number(f(c, 'pages', 'Pages')) || 0,
-        trashed: Number(f(c, 'trashed', 'Trashed')) || 0
+        trashed: Number(f(c, 'trashed', 'Trashed')) || 0,
+        dmOnly: !!f(c, 'dmOnly', 'DMOnly')
       };
     });
     var inMenu = state.inMenu || {};
     var claiming = !!state.claiming;
+    var ADVENTURES_URL = state.adventuresUrl || '';
     var KEY = state.key || '', TAB = state.tab || '';
     var alive = true, listeners = [];
     function on(t, type, fn, o) { t.addEventListener(type, fn, o); listeners.push([t, type, fn, o]); }
@@ -107,7 +109,7 @@
           icon: it.icon || c.icon, color: it.color || c.color,
           claimable: it.claimable !== undefined ? !!it.claimable : c.claimable,
           menu: it.menu !== undefined ? !!it.menu : inMenu[c.id] !== false,
-          parent: parent, pages: c.pages, trashed: c.trashed,
+          parent: parent, pages: c.pages, trashed: c.trashed, dmOnly: c.dmOnly,
           deleted: !!it.delete, changed: Object.keys(it).length > 0
         };
       });
@@ -175,8 +177,34 @@
         '<button type="button" class="btn-primary" data-new><i class="fa-solid fa-plus mr-1.5" aria-hidden="true"></i>New category</button></div>' +
         '<div class="czs-cat-grid" hx-boost="true" hx-target="#main-content" hx-select="#main-content" hx-swap="innerHTML show:window:top">' +
         top.map(card).join('') +
-        '<button type="button" class="czs-cat-card czs-add" data-new><span class="czs-plus"><i class="fa-solid fa-plus" aria-hidden="true"></i></span>New category</button></div>';
+        '<button type="button" class="czs-cat-card czs-add" data-new><span class="czs-plus"><i class="fa-solid fa-plus" aria-hidden="true"></i></span>New category</button></div>' +
+        (hasAdventures() || !ADVENTURES_URL ? '' : adventuresPanel());
       if (window.htmx) window.htmx.process(el);
+    }
+    function hasAdventures() { return saved.some(function (c) { return c.dmOnly; }); }
+    // The one-click offer for a campaign made before Adventures existed. It
+    // acts at once, not through the draft: adding the category is idempotent
+    // and a draft that holds other edits is kept across the reload.
+    function adventuresPanel() {
+      return '<div class="czs-panel czs-row-set czs-adv-offer"><div><span class="czs-lab"><i class="fa-solid fa-dungeon" aria-hidden="true"></i> Adventures</span>' +
+        '<p class="czs-hint">A category for your prep that only the DM team sees: the owner, co-DMs and scribes. Players get no menu entry, search result or link to it. It starts with a page layout for running an adventure at the table.</p>' +
+        '<p class="czs-err" data-adv-err role="alert" hidden></p></div>' +
+        '<button type="button" class="btn-secondary" data-add-adv><i class="fa-solid fa-plus mr-1.5" aria-hidden="true"></i>Add Adventures</button></div>';
+    }
+    function addAdventures(btn) {
+      var err = $('[data-adv-err]');
+      btn.disabled = true;
+      if (err) err.hidden = true;
+      Chronicle.apiFetch(ADVENTURES_URL, { method: 'POST' }).then(function (r) {
+        if (!r.ok) throw new Error('refused');
+        return shellFlush();
+      }).then(function () {
+        if (alive) location.reload();
+      }).catch(function () {
+        if (!alive) return;
+        btn.disabled = false;
+        if (err) { err.textContent = 'Adventures could not be added. Try again in a moment.'; err.hidden = false; }
+      });
     }
     function card(c) {
       var kids = kidsOf(c.key), href = BASE + '/categories/' + c.key + '/' + (c.isNew ? 'settings' : 'layout');
@@ -184,8 +212,9 @@
       if (c.isNew) pills.push('<span class="czs-pill is-new">New</span>');
       if (c.deleted) pills.push('<span class="czs-pill is-warn">Deleted when you save</span>');
       else if (c.changed && !c.isNew) pills.push('<span class="czs-pill is-new">Changed</span>');
-      pills.push('<span class="czs-pill">' + (c.menu ? 'In the menu' : 'Hidden from players’ menu') + '</span>');
-      if (claiming && c.claimable) pills.push('<span class="czs-pill">Players can claim</span>');
+      if (c.dmOnly) pills.push('<span class="czs-pill is-dm"><i class="fa-solid fa-lock" aria-hidden="true"></i> Only the DM team sees it</span>');
+      else pills.push('<span class="czs-pill">' + (c.menu ? 'In the menu' : 'Hidden from players’ menu') + '</span>');
+      if (claiming && c.claimable && !c.dmOnly) pills.push('<span class="czs-pill">Players can claim</span>');
       return '<a class="czs-cat-card' + (c.deleted ? ' is-gone' : '') + '" href="' + esc(href) + '">' +
         '<span class="czs-meta">' + chip(c) + '<span style="min-width:0"><span class="czs-nm">' + esc(c.plural || c.name) + '</span>' +
         '<span class="czs-sub">' + (c.isNew ? 'Made in your draft' : pagesText(c.pages)) + '</span></span></span>' +
@@ -209,7 +238,7 @@
         '<span><h1>' + esc(c.plural || c.name || 'New category') + '</h1><span class="czs-sub">' +
         (c.isNew ? 'New, saved with your other changes' : pagesText(c.pages)) +
         (parent ? ' · a kind of ' + esc(parent.plural || parent.name) : '') +
-        ' · ' + (c.menu ? 'in the menu' : 'hidden from players’ menu') +
+        ' · ' + (c.dmOnly ? 'only the DM team sees it' : c.menu ? 'in the menu' : 'hidden from players’ menu') +
         (c.deleted ? ' · deleted when you save' : '') + '</span></span></a>';
       tabs.setAttribute('role', 'tablist');
       tabs.innerHTML = TABS.map(function (t) {
@@ -234,11 +263,12 @@
         '<div class="czs-colors" role="group" aria-labelledby="czc-ic-l">' + COLORS.map(function (col) {
           return '<button type="button" data-col="' + col + '" aria-label="Colour ' + col + '" aria-pressed="' + (col.toLowerCase() === String(c.color).toLowerCase()) + '" style="background:' + col + '"></button>';
         }).join('') + '<input type="color" id="czc-color" value="' + esc(/^#[0-9a-fA-F]{6}$/.test(c.color) ? c.color : '#6366f1') + '" aria-label="Your own colour"></div></div>' +
-        (claiming ? '<div class="czs-panel czs-row-set"><div><span class="czs-lab">Players can claim a page</span><p class="czs-hint">A player can make a page their own, like their character.</p></div>' +
+        (c.dmOnly ? '<div class="czs-panel"><span class="czs-lab"><i class="fa-solid fa-lock" aria-hidden="true"></i> Only the DM team sees it</span><p class="czs-hint">Players get no menu entry, search result, link preview or relation for these pages, and cannot claim them. The owner, co-DMs and scribes see them as usual. Because of that it has no kinds of its own.</p></div>' : '') +
+        (claiming && !c.dmOnly ? '<div class="czs-panel czs-row-set"><div><span class="czs-lab">Players can claim a page</span><p class="czs-hint">A player can make a page their own, like their character.</p></div>' +
           '<button type="button" class="toggle" role="switch" id="czc-claim" aria-checked="' + !!c.claimable + '" aria-label="Players can claim a page"><span class="toggle-knob"></span></button></div>' : '') +
-        '<div class="czs-panel czs-row-set"><div><span class="czs-lab">Shown in players’ menu</span><p class="czs-hint">A hidden category still works: players reach it through search and links, and you still see it in your menu.</p></div>' +
-        '<button type="button" class="toggle" role="switch" id="czc-menu" aria-checked="' + !!c.menu + '" aria-label="Shown in players’ menu"><span class="toggle-knob"></span></button></div>' +
-        (parent ? '<div class="czs-panel czs-row-set"><div><span class="czs-lab">A kind of ' + esc(parent.plural || parent.name) + '</span><p class="czs-hint">It sits under ' + esc(parent.plural || parent.name) + ' in the menu.</p></div>' +
+        (c.dmOnly ? '' : '<div class="czs-panel czs-row-set"><div><span class="czs-lab">Shown in players’ menu</span><p class="czs-hint">A hidden category still works: players reach it through search and links, and you still see it in your menu.</p></div>' +
+        '<button type="button" class="toggle" role="switch" id="czc-menu" aria-checked="' + !!c.menu + '" aria-label="Shown in players’ menu"><span class="toggle-knob"></span></button></div>') +
+        (c.dmOnly ? '' : parent ?'<div class="czs-panel czs-row-set"><div><span class="czs-lab">A kind of ' + esc(parent.plural || parent.name) + '</span><p class="czs-hint">It sits under ' + esc(parent.plural || parent.name) + ' in the menu.</p></div>' +
           '<button type="button" class="btn-secondary btn-sm" id="czc-unparent">Make it a category of its own</button></div>' :
           '<div class="czs-field"><span class="czs-lab">Kinds within ' + esc(c.plural || 'this category') + '</span><p class="czs-hint">Like “Towns” within Places. Each kind is a category of its own that sits under this one in the menu.</p>' +
           '<div class="czs-kinds">' + (kids.length ? kids.map(function (k) {
@@ -279,7 +309,8 @@
       $('#czc-color', body).addEventListener('change', function () { write(c.key, { color: this.value }); drawWorkspace(); });
       var claim = $('#czc-claim', body);
       if (claim) claim.addEventListener('click', function () { write(c.key, { claimable: !c.claimable }); drawWorkspace(); });
-      $('#czc-menu', body).addEventListener('click', function () { write(c.key, { menu: !c.menu }); drawWorkspace(); });
+      var menuBtn = $('#czc-menu', body);
+      if (menuBtn) menuBtn.addEventListener('click', function () { write(c.key, { menu: !c.menu }); drawWorkspace(); });
       var un = $('#czc-unparent', body);
       if (un) un.addEventListener('click', function () {
         if (c.isNew) write(c.key, { parent: undefined });
@@ -441,7 +472,9 @@
     }
     on(el, 'click', function (e) {
       var b = e.target.closest('[data-new]');
-      if (b) { e.preventDefault(); newCategoryDialog(); }
+      if (b) { e.preventDefault(); newCategoryDialog(); return; }
+      var adv = e.target.closest('[data-add-adv]');
+      if (adv) { e.preventDefault(); addAdventures(adv); }
     });
     if (!KEY && location.hash === '#new') setTimeout(newCategoryDialog, 0);
 

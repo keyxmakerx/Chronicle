@@ -76,6 +76,11 @@ type EntityService interface {
 	GetEntityTypeBySlug(ctx context.Context, campaignID, slug string) (*EntityType, error)
 	GetEntityTypeByID(ctx context.Context, id int) (*EntityType, error)
 	GetEntityTypesByPresetCategory(ctx context.Context, campaignID, category string) ([]EntityType, error)
+
+	// EnsureAdventures makes the DM-only Adventures category if the campaign
+	// has none, and returns it either way. created is false when it was
+	// already there, so the call is safe to repeat (the Customize button).
+	EnsureAdventures(ctx context.Context, campaignID string) (et *EntityType, created bool, err error)
 	CountByType(ctx context.Context, campaignID string, role int, userID string) (map[int]int, error)
 
 	// Per-entity permissions
@@ -1614,7 +1619,9 @@ func (s *entityService) MergeDuplicatePlayerCharacterType(ctx context.Context, c
 // Catches both the canonical preset path and the convention used by
 // system packages that ship their own character entity_type.
 func isClaimableType(et *EntityType) bool {
-	if et == nil {
+	// A DM-only category's pages never belong to a player, whatever its
+	// claimable setting says: an owner would see the page in their own lists.
+	if et == nil || et.DMOnly() {
 		return false
 	}
 	// Explicit Owner choice overrides the heuristic.
@@ -2055,8 +2062,14 @@ func (s *entityService) CreateEntityType(ctx context.Context, campaignID string,
 		return nil, apperror.NewInternal(fmt.Errorf("querying max sort order: %w", err))
 	}
 
-	// Set preset category if provided (from system manifest presets).
+	// Set preset category if provided (from system manifest presets). The
+	// Adventures marker hides a category from players, so only EnsureAdventures
+	// may set it: a manifest or request naming it would otherwise hide a
+	// category without the owner meaning to.
 	var presetCategory *string
+	if input.PresetCategory == PresetCategoryAdventures {
+		return nil, apperror.NewBadRequest("that category is reserved; use the Add Adventures button in Customize")
+	}
 	if input.PresetCategory != "" {
 		presetCategory = &input.PresetCategory
 	}
@@ -2073,6 +2086,9 @@ func (s *entityService) CreateEntityType(ctx context.Context, campaignID string,
 		// Prevent deep nesting: parent must be a top-level type.
 		if parent.ParentTypeID != nil {
 			return nil, apperror.NewBadRequest("sub-types cannot be nested more than one level deep")
+		}
+		if parent.DMOnly() {
+			return nil, apperror.NewBadRequest(errNoKindsInAdventures)
 		}
 	}
 
@@ -2255,6 +2271,9 @@ func (s *entityService) UpdateEntityType(ctx context.Context, id int, input Upda
 		}
 		if parent.ParentTypeID != nil {
 			return nil, apperror.NewBadRequest("sub-types cannot be nested more than one level deep")
+		}
+		if parent.DMOnly() {
+			return nil, apperror.NewBadRequest(errNoKindsInAdventures)
 		}
 		et.ParentTypeID = input.ParentTypeID
 	}
@@ -3002,6 +3021,16 @@ func (s *entityService) CheckEntityAccess(ctx context.Context, entityID string, 
 	entity, err := s.entities.FindByID(ctx, entityID)
 	if err != nil {
 		return nil, err
+	}
+
+	// A page of a DM-only category (Adventures) is closed below Scribe whatever
+	// its own visibility or grants say. Checked before either mode, and a type
+	// that cannot be read fails closed: the page is then unknown, not shown.
+	if role < permissions.RoleScribe {
+		et, terr := s.types.FindByID(ctx, entity.EntityTypeID)
+		if terr != nil || et.DMOnly() {
+			return &EffectivePermission{}, nil
+		}
 	}
 
 	if entity.Visibility == VisibilityCustom {

@@ -571,6 +571,10 @@ PUT	/campaigns/:id/default-visibility	session	plugins/campaigns.(*Handler).Updat
 GET	/campaigns/:id/dm-grants	session	plugins/campaigns.(*Handler).GetDmGrantsAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/dm-grants	session	plugins/campaigns.(*Handler).UpdateDmGrantsAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/dm-screen	session	plugins/dmscreen.(*Handler).Show	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
+DELETE	/campaigns/:id/dm-screen/adventures/items/:itemID	session	plugins/dmscreen.(*Handler).RemoveBoardItem	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
+POST	/campaigns/:id/dm-screen/adventures/notes	session	plugins/dmscreen.(*Handler).AddBoardNote	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
+GET	/campaigns/:id/dm-screen/adventures/pages	session	plugins/dmscreen.(*Handler).PickPages	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
+POST	/campaigns/:id/dm-screen/adventures/pins	session	plugins/dmscreen.(*Handler).PinPage	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
 GET	/campaigns/:id/dm-screen/notes	session	plugins/dmscreen.(*Handler).ShowNote	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
 PUT	/campaigns/:id/dm-screen/notes	session	plugins/dmscreen.(*Handler).SaveNote	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
 POST	/campaigns/:id/dm-screen/reveal/:eid	session	plugins/dmscreen.(*Handler).Reveal	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
@@ -642,6 +646,7 @@ POST	/campaigns/:id/entities/:eid/relations	session	widgets/relations.(*Handler)
 DELETE	/campaigns/:id/entities/:eid/relations/:rid	session	widgets/relations.(*Handler).DeleteRelation	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/entities/:eid/relations/:rid/metadata	session	widgets/relations.(*Handler).UpdateRelationMetadata	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/entities/:eid/reorder	session	plugins/entities.(*Handler).ReorderAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware > plugins/campaigns.RequireRole
+GET	/campaigns/:id/entities/:eid/sheet	session	plugins/entities.(*Handler).Sheet	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware
 GET	/campaigns/:id/entities/:eid/system-state/:system/:key	session	plugins/systemstate.(*Handler).Get	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
 PUT	/campaigns/:id/entities/:eid/system-state/:system/:key	session	plugins/systemstate.(*Handler).Put	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
 GET	/campaigns/:id/entities/:eid/tags	public-capable	widgets/tags.(*Handler).GetEntityTags	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/campaigns.RequireViewAccess
@@ -674,6 +679,7 @@ GET	/campaigns/:id/entity-types/:etid/layout	session	plugins/entities.(*Handler)
 PUT	/campaigns/:id/entity-types/:etid/layout	session	plugins/entities.(*Handler).UpdateEntityTypeLayout	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/entity-types/:etid/reorder	session	plugins/entities.(*Handler).ReorderEntityTypeAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware > plugins/campaigns.RequireRole
 GET	/campaigns/:id/entity-types/:etid/template	session	plugins/entities.(*Handler).TemplateEditor	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware > plugins/campaigns.RequireRole
+POST	/campaigns/:id/entity-types/adventures	session	plugins/entities.(*Handler).EnsureAdventuresAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware > plugins/campaigns.RequireRole
 GET	/campaigns/:id/entity-types/block-types	session	plugins/entities.(*Handler).BlockTypesAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware > plugins/campaigns.RequireRole
 GET	/campaigns/:id/event-tier-definitions	session	plugins/campaigns.(*Handler).GetEventTierDefinitionsAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/event-tier-definitions	session	plugins/campaigns.(*Handler).UpdateEventTierDefinitionsAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole

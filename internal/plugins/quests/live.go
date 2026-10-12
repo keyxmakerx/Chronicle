@@ -19,11 +19,11 @@ type Announcer interface {
 
 // WithAnnouncer wraps the services so every successful change is announced.
 // A nil announcer returns them unchanged.
-func WithAnnouncer(q QuestService, b BoardService, entities EntityDirectory, a Announcer) (QuestService, BoardService) {
+func WithAnnouncer(q QuestService, b BoardService, entities EntityDirectory, types TypeDirectory, a Announcer) (QuestService, BoardService) {
 	if a == nil {
 		return q, b
 	}
-	l := liveAudience{entities: entities}
+	l := liveAudience{entities: entities, types: types}
 	return &liveQuests{QuestService: q, a: a, aud: l}, &liveBoards{BoardService: b, a: a, aud: l}
 }
 
@@ -33,6 +33,7 @@ func WithAnnouncer(q QuestService, b BoardService, entities EntityDirectory, a A
 // message would tell a player that the page exists.
 type liveAudience struct {
 	entities EntityDirectory
+	types    TypeDirectory
 }
 
 func (l liveAudience) dmOnly(ctx context.Context, campaignID, entityID string) bool {
@@ -40,11 +41,12 @@ func (l liveAudience) dmOnly(ctx context.Context, campaignID, entityID string) b
 	return err != nil || !ok[entityID]
 }
 
-// homeDMOnly: a category has no visibility of its own (every member can open
-// its page), so only a page home is checked.
+// homeDMOnly: a category home reaches players only when a player may know the
+// category exists; a page home follows the page's own visibility.
 func (l liveAudience) homeDMOnly(ctx context.Context, campaignID string, h Home) bool {
 	if h.IsType() {
-		return false
+		ok, err := l.types.TypeInCampaign(ctx, campaignID, h.TypeID, false)
+		return err != nil || !ok
 	}
 	return l.dmOnly(ctx, campaignID, h.EntityID)
 }

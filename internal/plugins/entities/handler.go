@@ -21,6 +21,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/changesource"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/patch"
+	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/audit"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -345,12 +346,24 @@ func (h *Handler) Index(c echo.Context) error {
 		}
 	}
 
+	// A DM-only category, or another campaign's, does not exist for this
+	// viewer: the page answers exactly as it does for a category that was
+	// never made (a slug falls back to All Pages, a type id lists nothing),
+	// so neither its name nor whether it exists can be told apart.
+	if activeEntityType != nil && (activeEntityType.CampaignID != campaignID || !ViewerSeesType(activeEntityType, role)) {
+		activeEntityType = nil
+		if activeTypeSlug != "" {
+			typeID = 0
+		}
+	}
+
 	// Fetch entity types for sidebar filter and counts. Non-fatal: degrade
 	// gracefully if these fail (page still renders, just without filters).
 	entityTypes, err := h.service.GetEntityTypes(c.Request().Context(), campaignID)
 	if err != nil {
 		slog.Warn("failed to load entity types for list page", slog.Any("error", err))
 	}
+	entityTypes = TypesForViewer(entityTypes, role)
 	counts, err := h.service.CountByType(c.Request().Context(), campaignID, role, userID)
 	if err != nil {
 		slog.Warn("failed to load entity counts for list page", slog.Any("error", err))
@@ -554,22 +567,72 @@ func (h *Handler) Create(c echo.Context) error {
 	return middleware.HTMXRedirect(c, "/campaigns/"+cc.Campaign.ID+"/entities/"+entity.ID)
 }
 
+// showPage is everything the entity page and the DM Screen's sheet draw from,
+// gathered once so the two views cannot disagree about what a viewer may see.
+type showPage struct {
+	cc              *campaigns.CampaignContext
+	entity          *Entity
+	entityType      *EntityType
+	ancestors       []Entity
+	children        []Entity
+	showAttributes  bool
+	showCalendar    bool
+	claimingEnabled bool
+	ownerName       string
+	csrfToken       string
+	userID          string
+}
+
 // Show renders the entity profile page (GET /campaigns/:id/entities/:eid).
 func (h *Handler) Show(c echo.Context) error {
+	p, err := h.prepareShow(c)
+	if err != nil {
+		return err
+	}
+	return middleware.Render(c, http.StatusOK, EntityShowPage(p.cc, p.entity, p.entityType, p.ancestors, p.children, p.showAttributes, p.showCalendar, p.claimingEnabled, p.ownerName, p.csrfToken, p.userID))
+}
+
+// Sheet renders a DM-only page's body without the site chrome, for the DM
+// Screen to open over itself (GET /campaigns/:id/entities/:eid/sheet). It is
+// for the DM team and for Adventures pages only; anything else answers the
+// same not-found as a page that does not exist, so the route cannot be used to
+// probe for pages.
+func (h *Handler) Sheet(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(fmt.Errorf("campaign context is nil for entity show"))
+		return apperror.NewMissingContext()
+	}
+	if cc.MemberRole < campaigns.RoleScribe && !cc.IsDmGranted {
+		return apperror.NewNotFound("entity not found")
+	}
+	p, err := h.prepareShow(c)
+	if err != nil {
+		return err
+	}
+	if !p.entityType.DMOnly() {
+		return apperror.NewNotFound("entity not found")
+	}
+	return middleware.Render(c, http.StatusOK, EntitySheet(p.cc, p.entity, p.entityType, p.ancestors, p.children, p.showAttributes, p.showCalendar, p.claimingEnabled, p.ownerName, p.csrfToken, p.userID))
+}
+
+// prepareShow loads the page for the viewer and puts the render context on the
+// request. Every denial is the same not-found, so a hidden page is
+// indistinguishable from a missing one.
+func (h *Handler) prepareShow(c echo.Context) (*showPage, error) {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return nil, apperror.NewInternal(fmt.Errorf("campaign context is nil for entity show"))
 	}
 
 	entityID := c.Param("eid")
 	entity, err := h.service.GetByID(c.Request().Context(), entityID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// IDOR protection: verify entity belongs to the campaign in the URL.
 	if entity.CampaignID != cc.Campaign.ID {
-		return apperror.NewNotFound("entity not found")
+		return nil, apperror.NewNotFound("entity not found")
 	}
 
 	// Visibility check: verify the user can view this entity.
@@ -579,12 +642,12 @@ func (h *Handler) Show(c echo.Context) error {
 	// entity (ADR-057 slice 1). Read (CanView) gate only.
 	access, err := h.service.CheckEntityAccess(c.Request().Context(), entity.ID, int(cc.VisibilityRole()), userID)
 	if err != nil || !access.CanView {
-		return apperror.NewNotFound("entity not found")
+		return nil, apperror.NewNotFound("entity not found")
 	}
 
 	entityType, err := h.service.GetEntityTypeByID(c.Request().Context(), entity.EntityTypeID)
 	if err != nil {
-		return apperror.NewInternal(fmt.Errorf("get entity type %d: %w", entity.EntityTypeID, err))
+		return nil, apperror.NewInternal(fmt.Errorf("get entity type %d: %w", entity.EntityTypeID, err))
 	}
 
 	// Fetch ancestor chain for breadcrumbs and children for sub-page listing.
@@ -698,7 +761,11 @@ func (h *Handler) Show(c echo.Context) error {
 
 	c.SetRequest(c.Request().WithContext(ctx))
 
-	return middleware.Render(c, http.StatusOK, EntityShowPage(cc, entity, entityType, ancestors, children, showAttributes, showCalendar, claimingEnabled, ownerName, csrfToken, userID))
+	return &showPage{
+		cc: cc, entity: entity, entityType: entityType, ancestors: ancestors, children: children,
+		showAttributes: showAttributes, showCalendar: showCalendar, claimingEnabled: claimingEnabled,
+		ownerName: ownerName, csrfToken: csrfToken, userID: userID,
+	}, nil
 }
 
 // Clone creates a copy of an entity (POST /campaigns/:id/entities/:eid/clone).
@@ -868,6 +935,7 @@ func (h *Handler) SearchPageHandler(c echo.Context) error {
 	if err != nil {
 		entityTypes = nil
 	}
+	entityTypes = TypesForViewer(entityTypes, cc.VisibilityRole())
 
 	return middleware.Render(c, http.StatusOK, SearchPage(cc, entityTypes))
 }
@@ -1404,6 +1472,17 @@ func (h *Handler) ToggleFavoriteAPI(c echo.Context) error {
 	entityID := c.Param("eid")
 	userID := auth.GetUserID(c)
 
+	// A bookmark echoes the page's name back in the favorites list, so only a
+	// page the viewer can open may be bookmarked (a DM-only category's pages
+	// never are for a player).
+	viewable, err := h.service.FilterViewableEntityIDs(c.Request().Context(), cc.Campaign.ID, []string{entityID}, int(cc.VisibilityRole()), userID)
+	if err != nil {
+		return err
+	}
+	if !viewable[entityID] {
+		return apperror.NewNotFound("entity not found")
+	}
+
 	favorited, err := h.favoriteRepo.Toggle(c.Request().Context(), userID, entityID, cc.Campaign.ID)
 	if err != nil {
 		return apperror.NewInternal(fmt.Errorf("toggling favorite: %w", err))
@@ -1429,6 +1508,25 @@ func (h *Handler) ListFavoritesAPI(c echo.Context) error {
 		items = []FavoriteItem{}
 	}
 
+	// A page may have become hidden since it was bookmarked.
+	if cc.VisibilityRole() < permissions.RoleOwner && len(items) > 0 {
+		ids := make([]string, len(items))
+		for i := range items {
+			ids[i] = items[i].EntityID
+		}
+		viewable, verr := h.service.FilterViewableEntityIDs(c.Request().Context(), cc.Campaign.ID, ids, int(cc.VisibilityRole()), userID)
+		if verr != nil {
+			return verr
+		}
+		kept := items[:0]
+		for _, it := range items {
+			if viewable[it.EntityID] {
+				kept = append(kept, it)
+			}
+		}
+		items = kept
+	}
+
 	return c.JSON(http.StatusOK, items)
 }
 
@@ -1447,9 +1545,23 @@ func (h *Handler) FavoriteIDsAPI(c echo.Context) error {
 		return apperror.NewInternal(fmt.Errorf("listing favorite IDs: %w", err))
 	}
 
-	// Convert to array for JSON.
+	// Convert to array for JSON, leaving out pages hidden from this viewer.
+	var viewable map[string]bool
+	if cc.VisibilityRole() < permissions.RoleOwner && len(ids) > 0 {
+		all := make([]string, 0, len(ids))
+		for id := range ids {
+			all = append(all, id)
+		}
+		viewable, err = h.service.FilterViewableEntityIDs(c.Request().Context(), cc.Campaign.ID, all, int(cc.VisibilityRole()), userID)
+		if err != nil {
+			return err
+		}
+	}
 	result := make([]string, 0, len(ids))
 	for id := range ids {
+		if viewable != nil && !viewable[id] {
+			continue
+		}
 		result = append(result, id)
 	}
 
@@ -1735,6 +1847,7 @@ func (h *Handler) EntityTypesAPI(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	types = TypesForViewer(types, cc.VisibilityRole())
 
 	items := make([]map[string]any, len(types))
 	for i, t := range types {
@@ -2729,6 +2842,34 @@ func (h *Handler) EntityTypesPage(c echo.Context) error {
 	}
 	return middleware.Render(c, http.StatusOK,
 		EntityTypesManagePage(cc, entityTypes, counts, csrfToken, "", claimingEnabled))
+}
+
+// EnsureAdventuresAPI adds the Adventures category when the campaign has none
+// (POST /campaigns/:id/entity-types/adventures). It is idempotent: pressing it
+// twice, or on a campaign that already has the category, changes nothing and
+// answers 200 with created=false.
+func (h *Handler) EnsureAdventuresAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	et, created, err := h.service.EnsureAdventures(c.Request().Context(), cc.Campaign.ID)
+	if err != nil {
+		return err
+	}
+	if created {
+		h.logAudit(c, cc.Campaign.ID, audit.ActionEntityTypeCreated, strconv.Itoa(et.ID), et.Name)
+	}
+	status := http.StatusOK
+	if created {
+		status = http.StatusCreated
+	}
+	return c.JSON(status, map[string]any{
+		"id":      et.ID,
+		"slug":    et.Slug,
+		"name":    et.NamePlural,
+		"created": created,
+	})
 }
 
 // CreateEntityType processes the entity type creation form.

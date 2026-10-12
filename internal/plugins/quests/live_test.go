@@ -50,6 +50,10 @@ func (s stubBoards) CreateItem(context.Context, string, Home, string, Viewer, It
 func (s stubBoards) DeleteBoard(context.Context, string, Home, string, Viewer) error { return s.err }
 
 func TestWithAnnouncer(t *testing.T) {
+	const liveDMType = 88
+	fakeDMOnlyTypes[liveDMType] = true
+	defer delete(fakeDMOnlyTypes, liveDMType)
+	types := fakeTypes{"c1": {13: true, liveDMType: true}, "c2": {14: true}}
 	ents := newFakeEntities()
 	ents.add("c1", "open", "Town", false)
 	ents.add("c1", "hidden", "Secret lair", true)
@@ -83,6 +87,12 @@ func TestWithAnnouncer(t *testing.T) {
 		{"a category's boards reach every member", func(_ QuestService, b BoardService) {
 			_ = b.DeleteBoard(context.Background(), "c1", TypeHome(13), "b1", Viewer{})
 		}, nil, []heard{{kind: "boards", home: TypeHome(13)}}},
+		{"a DM-only category's boards are DM only", func(_ QuestService, b BoardService) {
+			_ = b.DeleteBoard(context.Background(), "c1", TypeHome(liveDMType), "b1", Viewer{})
+		}, nil, []heard{{kind: "boards", home: TypeHome(liveDMType), dmOnly: true}}},
+		{"another campaign's category is DM only", func(_ QuestService, b BoardService) {
+			_ = b.DeleteBoard(context.Background(), "c1", TypeHome(14), "b1", Viewer{})
+		}, nil, []heard{{kind: "boards", home: TypeHome(14), dmOnly: true}}},
 		{"a refused board change says nothing", func(_ QuestService, b BoardService) {
 			_ = b.DeleteBoard(context.Background(), "c1", TypeHome(13), "b1", Viewer{})
 		}, failed, nil},
@@ -90,7 +100,7 @@ func TestWithAnnouncer(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			rec := &recAnnouncer{}
-			q, b := WithAnnouncer(stubQuests{err: tt.err}, stubBoards{err: tt.err}, ents, rec)
+			q, b := WithAnnouncer(stubQuests{err: tt.err}, stubBoards{err: tt.err}, ents, types, rec)
 			tt.call(q, b)
 			if len(rec.got) != len(tt.want) {
 				t.Fatalf("announced %+v, want %+v", rec.got, tt.want)
@@ -106,7 +116,7 @@ func TestWithAnnouncer(t *testing.T) {
 
 func TestWithAnnouncer_NilLeavesServicesAlone(t *testing.T) {
 	q, b := stubQuests{}, stubBoards{}
-	gq, gb := WithAnnouncer(q, b, newFakeEntities(), nil)
+	gq, gb := WithAnnouncer(q, b, newFakeEntities(), fakeTypes{}, nil)
 	if gq != QuestService(q) || gb != BoardService(b) {
 		t.Fatal("a nil announcer should return the services unchanged")
 	}

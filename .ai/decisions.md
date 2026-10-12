@@ -1098,3 +1098,21 @@ Also under this ADR: the partial-update contract test only recognised structs na
 - A reader that does not know the four types (the Foundry module's overlay) skips them, as it skips the annotations.
 - A kind that later needs its own colour or pattern adds a field to the contract and a rule here; until then a sketch cannot recolour a room.
 - Old rectangles stay rectangles: they keep their own tool and are not selectable by this one.
+
+## ADR-068: Adventures is a category only the DM team sees, closed in the one visibility predicate
+
+**Status:** Accepted; operator sign-off on the trial-page mockup, 2026-10-12 (#1344, #1348).
+
+**Context:** A DM's prep (an adventure, its trials, the read-aloud text) must live beside the world it uses, with the same links, search and relations, yet never reach a player. Page visibility is per page, so relying on each page being set to DM-only would leak the first time one was not. The rule has to be a property of the category that every read path obeys without remembering to.
+
+**Decision:**
+1. A category is DM-team-only when its `preset_category` is `adventures`. No new column and no migration: the marker already round-trips through campaign export and import. "DM team" is a visibility role of Scribe or above, which includes a member with DM access (`VisibilityRole()` promotes them to Owner).
+2. The rule sits in `visibilityFilter`, the one predicate every list, search, count, mention, relation, ancestor and backlink read shares (the calendar's mirror carries the same clause). No page-level setting can widen past it: a custom grant or tag grant on an Adventures page does nothing for a player. `CheckEntityAccess` applies it for the single-page gates (show, peek, preview, the editor's reads, the sync API, media), and fails closed when the category cannot be read.
+3. A category-level read hides the category itself the same way: the sidebar, the category list APIs, the search page's category filter, the relations graph's filter, a member's own menu pins, the quest boards' homes, the category home (a 404, like a category never made) and its websocket events (`RequiresDM`).
+4. The category cannot have kinds (sub-categories), and the marker is reserved: creating a category with it through the API or a package is refused. Only the idempotent `EnsureAdventures` sets it, from the seed lists for a new campaign and from the owner's Add Adventures button in Customize for an existing one. Existing campaigns are not changed by a migration, because the owner decides whether the category appears in their menu.
+5. The default page layout is a data constant (`AdventureLayout`): the story and facts as ordinary rows, then a tile section of Read-aloud, Steps and Table (ADR-065).
+
+**Consequences:**
+- A new read path over entities must use `visibilityFilter` or the service gates; one that writes its own SQL against `entities` must add the clause. `internal/plugins/entities/adventures_integration_test.go` proves each existing path against a real schema.
+- Moving a page out of Adventures, or deleting the category after moving its pages, makes those pages visible to players under their own visibility; that is the owner's explicit act.
+- Players' stored favourites of a page that becomes hidden are filtered out on read rather than deleted.

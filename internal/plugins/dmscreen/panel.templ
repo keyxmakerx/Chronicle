@@ -166,6 +166,9 @@ templ Panel(v *View, csrf string) {
 					if v.Notes != nil {
 						<button type="button" role="tab" aria-selected="false" data-dms-tab="notes">Notes</button>
 					}
+					if v.Adventures != nil {
+						<button type="button" role="tab" aria-selected="false" data-dms-tab="adventures">Adventures</button>
+					}
 				</div>
 				if len(v.Conditions) > 0 {
 					<div class="dms-blk" data-dms-pane="rules">
@@ -214,9 +217,96 @@ templ Panel(v *View, csrf string) {
 						<a class="dms-link" data-dms-note-link href={ templ.SafeURL(v.Notes.Link) } hidden?={ v.Notes.Link == "" }>Open in Notes</a>
 					</div>
 				}
+				if v.Adventures != nil {
+					<div class="dms-blk" data-dms-pane="adventures" hidden>
+						@adventuresPane(v.CampaignID, v.Adventures)
+					</div>
+				}
 			</section>
 		</div>
 	</div>
+}
+
+// adventuresPane is the Adventures tab: pinned Adventures pages and loose notes
+// as cards on a board, like a quest notice board. Pressing a page card opens
+// the page as a sheet over the screen (dm_sheet.js); nothing here navigates.
+// Every control carries its own inline handler (onclick_handlers.go) because
+// the panel is swapped whenever the screen refreshes.
+templ adventuresPane(campaignID string, a *AdventuresView) {
+	{{ base := fmt.Sprintf("/campaigns/%s/dm-screen/adventures", campaignID) }}
+	<div class="dms-loose" data-dms-board>
+		for _, it := range a.Items {
+			if it.Kind == "page" {
+				<div class="dms-note">
+					<button
+						type="button"
+						class="dms-note-open"
+						data-dms-sheet={ it.EntityID }
+						data-sheet-url={ fmt.Sprintf("/campaigns/%s/entities/%s/sheet", campaignID, it.EntityID) }
+						onclick={ openSheetOnClick() }
+					>
+						<span class="dms-note-n">{ it.Kicker }</span>
+						<span class="dms-note-t">{ it.Title }</span>
+						if it.Subtitle != "" {
+							<span class="dms-note-s">{ it.Subtitle }</span>
+						}
+					</button>
+					<button
+						type="button"
+						class="dms-note-x"
+						data-url={ fmt.Sprintf("%s/items/%s", base, it.ID) }
+						aria-label={ "Unpin " + it.Title }
+						title="Unpin"
+						onclick={ removeItemOnClick() }
+					>×</button>
+				</div>
+			} else {
+				<div class="dms-note dms-jot">
+					<span class="dms-note-n">Note</span>
+					<span class="dms-note-s">{ it.Text }</span>
+					<button
+						type="button"
+						class="dms-note-x"
+						data-url={ fmt.Sprintf("%s/items/%s", base, it.ID) }
+						aria-label="Delete this note"
+						title="Delete"
+						onclick={ removeItemOnClick() }
+					>×</button>
+				</div>
+			}
+		}
+		if len(a.Items) == 0 {
+			<p class="dms-small">Nothing here yet. Pin an adventure page or jot a note.</p>
+		}
+	</div>
+	if !a.Full {
+		<div class="dms-adv-add">
+			<div class="dms-adv-row" data-dms-adv-form>
+				<input
+					type="text"
+					class="dms-search"
+					maxlength="500"
+					placeholder="Jot a note for the table"
+					aria-label="New note"
+					data-dms-adv-text
+					onkeydown={ noteEnterOnKeyDown() }
+				/>
+				<button type="button" class="dms-stepchip" data-url={ base + "/notes" } onclick={ addNoteOnClick() }>Add note</button>
+			</div>
+			<button
+				type="button"
+				class="dms-stepchip"
+				aria-expanded="false"
+				data-url={ base + "/pages" }
+				data-pin-url={ base + "/pins" }
+				onclick={ pickPageOnClick() }
+			>Pin a page</button>
+			<div class="dms-pick" data-dms-pick hidden></div>
+		</div>
+	} else {
+		<p class="dms-small">The tab is full. Remove something to add more.</p>
+	}
+	<p class="dms-small">Only the DM team sees this tab.</p>
 }
 
 // waitingBlock lists the oldest waiting requests with Allow and Refuse. The

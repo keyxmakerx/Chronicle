@@ -300,6 +300,12 @@ func parseLooksPatch(t interface{ Fatal(...any) }, body string) LooksPatch {
 // fakeTypes maps a campaign to the category ids it owns.
 type fakeTypes map[string]map[int]bool
 
-func (f fakeTypes) TypeInCampaign(_ context.Context, campaignID string, typeID int) (bool, error) {
+// fakeDMOnlyTypes are category ids the fake treats as DM-only.
+var fakeDMOnlyTypes = map[int]bool{}
+
+func (f fakeTypes) TypeInCampaign(_ context.Context, campaignID string, typeID int, dmTeam bool) (bool, error) {
+	if fakeDMOnlyTypes[typeID] && !dmTeam {
+		return false, nil
+	}
 	return f[campaignID][typeID], nil
 }

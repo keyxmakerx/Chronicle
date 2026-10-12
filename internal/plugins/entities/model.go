@@ -365,6 +365,9 @@ type Entity struct {
 	TypeIcon       string `json:"type_icon,omitempty"`
 	TypeColor      string `json:"type_color,omitempty"`
 	TypeSlug       string `json:"type_slug,omitempty"`
+	// TypeDMOnly is set when the page's category is for the DM team only, so
+	// the page is hidden from players whatever its own visibility says.
+	TypeDMOnly bool `json:"-"`
 
 	// Tags is populated at the handler level via batch fetch, not by the repository.
 	Tags []EntityTagInfo `json:"tags,omitempty"`
