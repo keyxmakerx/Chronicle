@@ -739,3 +739,25 @@ test('the DM sees a day a player marked off although usually free', () => {
   assert.match(v._freeCellHTML(2026, 10, 8), /<span class="ln off"><\/span>/, 'on the month too');
   assert.doesNotMatch(v._freeWingHTML({ y: 2026, m: 10, d: 9 }), /ln off|Off, usually free/, 'only on that day');
 });
+
+test('whoever runs a night can remind a player to answer, and nobody else can', () => {
+  const { def } = load();
+  const v = view(def, [night()]);
+  Object.assign(v, { _gnReminded: {}, _gnRemindedAll: {}, canAuthorDmOnly: false });
+  const n = night({ roster: [...night().roster, { userId: 'p3', name: 'Cal', answer: 'maybe' }, { userId: 'p4', name: 'Dee', answer: 'no' }, { userId: 'p5', name: 'Eli', answer: '', excluded: true }], mine: { userId: 'dm', name: 'Kael', answer: 'yes' } });
+  v.userId = 'p1';
+  assert.doesNotMatch(v._gnRosterHTML(n), /data-gn-remind/, 'a player sees no reminders');
+  assert.doesNotMatch(v._gnRsvpHTML(n, true), /data-gn-remind-all/);
+  v.userId = 'dm';
+  const html = v._gnRosterHTML(n);
+  const reminded = [...html.matchAll(/data-gn-remind="([^"]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(reminded, ['p1', 'p2', 'p3'], 'no answer or a maybe; never a firm answer, the organiser or someone left out');
+  assert.match(html, /aria-label="Remind &lt;img src=x&gt;"/, 'names are escaped');
+  assert.match(v._gnRsvpHTML(n, true), /data-gn-remind-all/);
+  assert.deepEqual(v._gnSilent(n).map((a) => a.userId), ['p1', 'p2'], 'everyone means those with no answer at all');
+  v._gnReminded[v._gnId(n) + '|p1'] = true;
+  assert.match(v._gnRosterHTML(n), /data-gn-remind="p1" disabled aria-label="Reminded Bryn"/);
+  assert.doesNotMatch(v._gnRosterHTML(night({ past: true })), /data-gn-remind/, 'a played night takes no reminders');
+  v.userId = 'p1'; v.canAuthorDmOnly = true;
+  assert.match(v._gnRosterHTML(n), /data-gn-remind="p2"/, 'the owner or a co-Director can too');
+});

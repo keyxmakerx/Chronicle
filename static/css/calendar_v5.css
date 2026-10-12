@@ -152,6 +152,9 @@ html[data-theme="dark"] .calv5 {
 @media (hover: hover) { .calv5-slot:hover > .calv5-ccard { transform: translateY(-4px); box-shadow: 0 10px 22px -12px oklch(0.2 0.03 265 / 0.45); } }
 .calv5-slot.peeking .calv5-peek, .calv5-slot:has(.calv5-cc-open:focus-visible) .calv5-peek { opacity: 1; transform: none; }
 @media (hover: hover) { .calv5-slot:hover .calv5-peek { opacity: 1; transform: none; } }
+.calv5-slot.peek-up .calv5-peek { top: auto; bottom: 100%; margin: 0 0 8px; transform: translateY(calc(100% + 8px)); }
+.calv5-slot.peek-up.peeking .calv5-peek, .calv5-slot.peek-up:has(.calv5-cc-open:focus-visible) .calv5-peek { transform: none; }
+@media (hover: hover) { .calv5-slot.peek-up:hover .calv5-peek { transform: none; } }
 .calv5-pk-h { margin: 0 0 5px; font: 500 12.5px/1 var(--serif); color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .calv5-pk-h span { color: var(--mut); }
 .calv5-pk-grid { display: grid; grid-template-columns: repeat(var(--cols, 7), minmax(0, 1fr)); gap: 2px; }

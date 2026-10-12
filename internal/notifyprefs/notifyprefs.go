@@ -70,6 +70,7 @@ var Catalog = []Category{
 var bellTypes = map[string]string{
 	"proposal_created":             GameNightInvites,
 	"proposal_confirmed":           GameNightInvites,
+	"game_night_reminder":          GameNightInvites,
 	"session_moved":                GameNightChanges,
 	"session_cancelled":            GameNightChanges,
 	"session_restored":             GameNightChanges,

@@ -183,6 +183,9 @@ type SessionService interface {
 	PingMemberAvailability(ctx context.Context, campaignID, askerID, askerName, targetID, link string, members []overlayMemberInput) (*NudgeResult, error)
 	AskAllToConfirm(ctx context.Context, campaignID, askerID, askerName, link string, members []overlayMemberInput) (*NudgeResult, []string, error)
 	LastConfirmAsk(ctx context.Context, campaignID string) (time.Time, error)
+	// RemindNight asks one player, or everyone who hasn't answered, to say
+	// whether they're coming to one night; see night_reminders.go.
+	RemindNight(ctx context.Context, campaignID, sessionID, date, askerID, askerName, targetID, today string, members []NightMember) (*NightReminder, error)
 	// ListCampaignIDsUsingGameNights is every campaign with game-night data,
 	// for the addon reconciler.
 	ListCampaignIDsUsingGameNights(ctx context.Context) ([]string, error)
