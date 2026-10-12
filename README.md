@@ -15,41 +15,56 @@
 
 Chronicle is built for one table and one world at a time. Nothing is public unless you make it public, there is no paywall, and the data lives in your own MariaDB.
 
-## What it does
-
-### Pages for everything in your world
-
-Characters, places, factions, items, quests: each is a page with a rich-text entry, its own fields, and links to the pages it touches. GM secrets stay hidden from players inside the same page.
-
-![A character page with its entry, attributes and category](docs/images/readme/page.webp)
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/images/readme/page.webp" alt="A character page with its entry, attributes and category"><br>
+      <b>Pages for everything in your world</b><br>
+      Characters, places, factions, items and quests, each with a rich-text entry, its own fields and links to the pages it touches. GM secrets stay hidden inside the same page.
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/images/readme/map.webp" alt="A hex map of an island, painted in the Realistic style"><br>
+      <b>Maps you paint and annotate</b><br>
+      Upload a picture or paint terrain hex by hex. Pins open pages or other maps, fog hides what the party hasn't explored, and rooms, arrows and speech bubbles turn any map into a diagram.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/images/readme/handbook.webp" alt="The Draw Steel handbook open at How to Play"><br>
+      <b>A rulebook your players can read</b><br>
+      A game system's rules open as a book you turn the pages of, with a players' screen for lookups mid-fight. Rules terms explain themselves on hover, and you can add house-rule chapters of your own.
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/images/readme/dashboard.webp" alt="The campaign home with its categories and recently updated pages"><br>
+      <b>A campaign home</b><br>
+      The dashboard, sidebar and categories are yours to arrange. Members join as Owner, Scribe or Player, and "View as player" shows the campaign exactly as they see it.
+    </td>
+  </tr>
+</table>
 
 ### A calendar with a sky
 
-Your own months, weekdays, moons, seasons and eras, or the real-world calendar. Events repeat by rule, weather follows the climate, and the sky over the month shows the world's sun and moons at the hour it is.
+Your own months, weekdays, moons, seasons and eras, or the real-world calendar. Events repeat by rule, weather follows the climate, pages can keep a version for each era, and the sky over the month shows the sun and moons at the hour it is.
 
 ![Scrubbing through a day of the sky preview, from midnight to midnight](docs/images/readme/sky.gif)
 
-### Hex maps you paint
+### Make it look like your world
 
-Upload a map picture or paint terrain hex by hex. Pins link to pages, fog of war hides what the party hasn't explored, and a trip planner reads distances off the hexes.
+Customize keeps the campaign's look, categories and home pages in one place. Start from one of eight whole looks, then change colours, type, buttons, the header and the sidebar. Everything waits in a draft until you save it, so players never see a half-finished change.
 
-![A hex map of an island, painted in the Realistic style](docs/images/readme/map.webp)
-
-### A campaign home
-
-The dashboard, sidebar and categories are yours to arrange. Members join as Owner, Scribe or Player, and "View as player" shows the campaign exactly as they see it.
-
-![The campaign dashboard with its categories and recent pages](docs/images/readme/dashboard.webp)
+![Clicking through the looks in Customize, with the example site changing to match](docs/images/readme/looks.gif)
 
 ### And the rest
 
-- **Timeline**: a zoomable timeline of events, grouped into lanes.
+- **Game nights**: plan sessions on the calendar, run a date poll, see who's free, and collect RSVPs. The dashboard's Coming up card shows what's next.
+- **DM Screen**: the party, the world's date and weather, conditions, NPC reveals, waiting shop and stash requests, and an Adventures tab for the DM team's own pages.
 - **Armory, shops and stashes**: item galleries, a walk-in shop room players buy from, and shared party hoards with GM-approved moves.
-- **DM Screen**: the party, the world's date and weather, conditions and NPC reveals on one screen.
-- **Game nights**: schedule sessions, collect RSVPs and see who's free.
-- **Notes**: private and shared notes on any page, with version history; every page keeps its history and deleted pages wait in Trash.
+- **Notes**: notes on any page, private or shared with the GM or chosen players, with version history. Every page keeps its history, and deleted pages wait in Trash.
+- **Timeline**: a zoomable timeline of events, grouped into lanes.
+- **Bring your world in**: import an Obsidian vault or a Notion or Trilium export, or hand the campaign to an AI tool as markdown and review its edits before they land.
 - **Foundry VTT**: the [Chronicle Sync module](https://github.com/keyxmakerx/Chronicle-Foundry-Module) keeps journals, characters, maps, shops and the calendar in step both ways.
-- **Game systems**: rules content such as D&D 5e and Draw Steel installs from Admin > Packages.
+- **Game systems**: [Draw Steel](https://github.com/keyxmakerx/Chronicle-Draw-Steel) and [D&D 5e](https://github.com/keyxmakerx/Chronicle-DnD-5.5e) install from Admin > Packages.
+- **Sign-in**: two-factor codes, one outside OpenID Connect provider, and guest codes that let someone join one campaign with just a name.
 - **REST API**: per-campaign keys for pages, maps, calendar, media and sync. See [`docs/api/openapi.yaml`](docs/api/openapi.yaml).
 
 ## Quick start
@@ -108,9 +123,11 @@ Chronicle is a Go server (Echo, Templ, HTMX) with MariaDB and Redis. Features li
 | Maps and timeline | [Leaflet](https://leafletjs.com/), [D3](https://d3js.org/) |
 | Data | MariaDB 10.11, Redis 7 |
 
+To build your own game system, widget, content pack or API app, start at [`docs/build/`](docs/build/README.md).
+
 ## Contributing
 
-Chronicle is pre-alpha. Bug reports and ideas are welcome as [issues](https://github.com/keyxmakerx/Chronicle/issues).
+Chronicle is pre-alpha. Bug reports and ideas are welcome as [issues](https://github.com/keyxmakerx/Chronicle/issues). Setup, tests and pull request expectations are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 We studied [World Anvil](https://www.worldanvil.com/), [Kanka](https://kanka.io/), [LegendKeeper](https://www.legendkeeper.com/) and [Obsidian](https://obsidian.md/) while building it; Chronicle's design and code are its own.
 
