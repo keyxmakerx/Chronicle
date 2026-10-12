@@ -839,6 +839,8 @@ GET	/campaigns/:id/npcs/section	public-capable	plugins/npcs.(*Handler).SectionFr
 DELETE	/campaigns/:id/owner-dashboard-layout	session	plugins/campaigns.(*Handler).ResetOwnerDashboardLayout	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/owner-dashboard-layout	session	plugins/campaigns.(*Handler).GetOwnerDashboardLayout	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/owner-dashboard-layout	session	plugins/campaigns.(*Handler).UpdateOwnerDashboardLayout	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/page-blocks/:eid/:bid	public-capable	plugins/pageblocks.(*Handler).Get	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/campaigns.RequireViewAccess
+PUT	/campaigns/:id/page-blocks/:eid/:bid	session	plugins/pageblocks.(*Handler).Put	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/plugins	session	plugins/campaigns.(*Handler).PluginHub	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/plugins/fragment	session	plugins/campaigns.(*Handler).PluginHubFragment	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/proposals	session	plugins/sessions.(*Handler).ListProposals	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
@@ -1011,6 +1013,7 @@ POST	/rsvp/:token/suggest	none	plugins/sessions.(*Handler).ApplySuggestToken	-
 GET	/sessions/feed/:token	none	plugins/sessions.(*Handler).GameNightFeedICS	-
 GET	/static/plugins/entities*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-
 GET	/static/plugins/maps*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-
+GET	/static/plugins/pageblocks*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-
 GET	/static/plugins/quests*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-
 GET	/static/plugins/timeline*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-
 GET	/systems/browse	session	plugins/packages.(*OwnerHandler).BrowseSystems	plugins/auth.RequireAuth

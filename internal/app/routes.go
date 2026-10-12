@@ -47,6 +47,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/media"
 	"github.com/keyxmakerx/chronicle/internal/plugins/npcs"
 	"github.com/keyxmakerx/chronicle/internal/plugins/packages"
+	"github.com/keyxmakerx/chronicle/internal/plugins/pageblocks"
 	"github.com/keyxmakerx/chronicle/internal/plugins/quests"
 	"github.com/keyxmakerx/chronicle/internal/plugins/restore"
 	"github.com/keyxmakerx/chronicle/internal/plugins/rolltables"
@@ -4383,6 +4384,35 @@ func (a *App) RegisterRoutes() {
 		return quests.CategoryBoardsMount(cc.Campaign.ID, et.ID, cc.CanControlWorldState(), int(cc.MemberRole))
 	})
 
+	// Read-aloud, Table and Steps: text a DM types in place, stored per page and
+	// block. Always available (no addon), usable several times on a page; the
+	// widget fetches its own content, so these only emit the mount point.
+	for _, b := range []entities.BlockMeta{
+		{
+			Type: pageblocks.KindReadAloud, Label: "Read-aloud", Icon: "fa-bullhorn",
+			Description: "Boxed text the DM reads to the table",
+			Contexts:    []string{"template"},
+		},
+		{
+			Type: pageblocks.KindTable, Label: "Table", Icon: "fa-table",
+			Description: "Rows and columns typed in place, with columns only the DM sees",
+			Contexts:    []string{"template"},
+		},
+		{
+			Type: pageblocks.KindSteps, Label: "Steps", Icon: "fa-list-ol",
+			Description: "Numbered beats with a tick for each, for use during play",
+			Contexts:    []string{"template"},
+		},
+	} {
+		kind := b.Type
+		blockRegistry.Register(b, func(rc entities.BlockRenderContext) templ.Component {
+			if rc.CC == nil || rc.Entity == nil || rc.Block.ID == "" {
+				return templ.NopComponent
+			}
+			return pageblocks.BlockMount(rc.CC.Campaign.ID, rc.Entity.ID, rc.Block.ID, kind, rc.CSRFToken)
+		})
+	}
+
 	// Timeline plugin blocks (requires "timeline" addon).
 	blockRegistry.Register(entities.BlockMeta{
 		Type: "timeline", Label: "Timeline", Icon: "fa-timeline",
@@ -5369,6 +5399,22 @@ func (a *App) RegisterRoutes() {
 		quests.RegisterRoutes(e, quests.NewHandler(questSvc, boardSvc, questPicker), campaignService, authService)
 	} else {
 		slog.Warn("quests plugin degraded — routes not registered")
+	}
+
+	// Read-aloud, Table and Steps block content.
+	a.registerPlugin(PluginRegistration{
+		Slug:     pageblocks.PluginSlug,
+		StaticFS: echo.MustSubFS(pageblocks.StaticAssetsFS, "static"),
+		Widgets: []PluginWidget{
+			{Name: "page_blocks", Scripts: []string{"js/page_blocks.js"}},
+		},
+	})
+	if a.PluginHealth.IsHealthy(pageblocks.PluginSlug) {
+		pageBlocksSvc := pageblocks.NewService(pageblocks.NewRepository(a.DB),
+			&pageBlocksEntityAdapter{svc: entityService, cards: entities.NewPageCards(a.DB)})
+		pageblocks.RegisterRoutes(e, pageblocks.NewHandler(pageBlocksSvc), campaignService, authService)
+	} else {
+		slog.Warn("pageblocks plugin degraded — routes not registered")
 	}
 
 	// AI Import's record kinds: the features beyond pages it may write.
