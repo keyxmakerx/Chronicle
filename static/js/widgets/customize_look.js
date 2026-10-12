@@ -444,6 +444,23 @@
     var saved = fromServer(STATE.draft);
     var BASE = clone(saved);
     var draft = clone(saved);
+    // Inside Customize's frame the draft is the frame's one draft: the look
+    // starts from its "look" section and every change goes back into it, and
+    // the frame's save bar saves it (customize_shell.js).
+    var SHELL = ROOT.closest('[data-widget="customize-shell"]');
+    var shellSent = 'null';
+    function shellDraft(){
+      if (Chronicle.customizeDraft) return Chronicle.customizeDraft();
+      try { return JSON.parse(SHELL.getAttribute('data-draft') || '{}') || {}; } catch (e) { return {}; }
+    }
+    function shellSet(v){
+      if (Chronicle.customizeSet) Chronicle.customizeSet('look', v);
+      else (Chronicle._customizeQueue = Chronicle._customizeQueue || []).push(['look', v]);
+    }
+    if (SHELL){
+      var held = shellDraft().look;
+      if (held && held.draft) draft = fromServer(held.draft);
+    }
     var memo = {};          // custom colours picked during this visit, per swatch group
     var undoDraft = null;   // what Discard threw away, for its Undo
     var uploaded = {};      // picture names stored during this visit, not yet known to be in use
@@ -1072,6 +1089,7 @@
       syncControls(theme);
       syncLookTiles(theme);
       syncStatus();
+      if (SHELL) toShell();
       runMotion();
     }
 
@@ -1463,6 +1481,45 @@
       toast(sectionName(sec) + (sec === 'brand' ? ' is back to what is saved.' : ' is back to the ' + look(draft.look).name + ' look.'));
     }
 
+    /* ---------- Inside Customize's frame ---------- */
+    // The look's section of the one draft: the editor's own state, the
+    // shape PUT /appearance takes (what Save applies), and the save bar's
+    // lines. Absent while the draft matches what is saved.
+    function shellValue(){
+      var ch = changedSections();
+      if (!ch.length) return null;
+      var base = '/campaigns/' + encodeURIComponent(CID) + '/customize/look#';
+      return { draft:draft, input:toInput(draft), _changes:ch.map(function(id){ return { label:'Look: ' + sectionName(id), href:base + id }; }) };
+    }
+    function toShell(){
+      var v = shellValue(), sig = JSON.stringify(v);
+      if (sig === shellSent) return;
+      shellSent = sig;
+      shellSet(v);
+    }
+    // The frame changed the draft (Undo, Redo, Discard, Save): show it.
+    function fromShell(e){
+      var d = e.detail || {};
+      if (!alive) return;
+      if (d.reason === 'publish'){
+        if ((d.applied || []).indexOf('look') < 0) return;
+        saved = clone(draft); BASE = clone(draft); lookTileTheme = null; ui.saved = true;
+        shellSent = 'null'; update();
+        refreshSite();
+        return;
+      }
+      var held = d.draft && d.draft.look;
+      clearErrors();
+      if (pick) closePicker(false);
+      draft = held && held.draft ? fromServer(held.draft) : clone(saved);
+      shellSent = JSON.stringify(shellValue());
+      update(); settle();
+    }
+    function sectionFromHash(){
+      var id = (location.hash || '').slice(1);
+      if (SECTIONS.some(function(s){ return s.id === id; })) selectSection(id, true);
+    }
+
     /* ---------- Save, Discard, Undo ---------- */
     var toastT = 0;
     function toast(msg, undo){
@@ -1506,6 +1563,10 @@
     // failures are ignored and the file simply stays.
     function pictureNames(d){ return d ? [d.brand.logo, d.brand.backdrop, d.header.image, d.sidebar.banner] : []; }
     function tidyPictures(){
+      // A kept draft can bring any picture back later (Undo, another visit),
+      // so inside the frame nothing is tidied. TODO(#1361): tidy once the
+      // frame can say which pictures no draft or Undo step still holds.
+      if (SHELL) return;
       var keep = {};
       [draft, saved, undoDraft].forEach(function(d){ pictureNames(d).forEach(function(n){ keep[n] = true; }); });
       Object.keys(uploaded).forEach(function(n){
@@ -1864,6 +1925,12 @@
       // Chronicle's theme toggle flips the dark class; the preview follows it
       // until the owner picks Light or Dark for the preview themselves.
       if (window.MutationObserver){ mo = new MutationObserver(themeChanged); mo.observe(root, { attributes:true, attributeFilter:['class'] }); }
+      if (SHELL){
+        shellSent = JSON.stringify(shellValue());
+        on(document, 'chronicle:customize-draft', fromShell);
+        on(window, 'hashchange', sectionFromHash);
+        sectionFromHash();
+      }
     }
 
     /* ---------- Device motion and Chronicle's theme ---------- */

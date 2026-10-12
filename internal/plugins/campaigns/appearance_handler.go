@@ -1,6 +1,7 @@
 package campaigns
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"strings"
@@ -36,9 +37,49 @@ func (h *Handler) SaveAppearanceAPI(c echo.Context) error {
 	if err := c.Bind(&in); err != nil {
 		return apperror.NewBadRequest("invalid request body")
 	}
+	if err := h.saveAppearance(c.Request().Context(), cc, auth.GetUserID(c), in); err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// saveAppearance is the one place a look is validated and stored. Both the
+// PUT /appearance route and the Customize "look" section call it, so the two
+// can never differ on who may save or which pictures are accepted.
+func (h *Handler) saveAppearance(ctx context.Context, cc *CampaignContext, userID string, in AppearanceInput) error {
+	if cc.MemberRole < RoleOwner {
+		return apperror.NewForbidden("only campaign owners can change how the campaign looks")
+	}
 
 	// A picture is either the one already saved or one this campaign
 	// uploaded; anything else could point the page at another campaign's file.
+	stored := appearanceStoredPictures(cc)
+	for _, p := range in.AppearancePictures() {
+		if stored[p] {
+			continue
+		}
+		if h.mediaUploader == nil {
+			return apperror.NewBadRequest("pictures can't be checked right now")
+		}
+		ok, err := h.mediaUploader.OwnsFile(ctx, cc.Campaign.ID, p)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return apperror.NewBadRequest("that picture doesn't belong to this campaign")
+		}
+	}
+
+	if err := h.service.SaveAppearance(ctx, cc.Campaign.ID, in); err != nil {
+		return err
+	}
+	h.logAuditCtx(ctx, cc.Campaign.ID, userID, "campaign.appearance.saved", map[string]any{"look": in.Look})
+	return nil
+}
+
+// appearanceStoredPictures is the set of picture names the campaign already
+// saves, which need no upload-ownership check again.
+func appearanceStoredPictures(cc *CampaignContext) map[string]bool {
 	stored := map[string]bool{}
 	settings := cc.Campaign.ParseSettings()
 	stored[settings.BrandLogo] = true
@@ -51,27 +92,7 @@ func (h *Handler) SaveAppearanceAPI(c echo.Context) error {
 	if cc.Campaign.BackdropPath != nil {
 		stored[*cc.Campaign.BackdropPath] = true
 	}
-	for _, p := range in.AppearancePictures() {
-		if stored[p] {
-			continue
-		}
-		if h.mediaUploader == nil {
-			return apperror.NewBadRequest("pictures can't be checked right now")
-		}
-		ok, err := h.mediaUploader.OwnsFile(c.Request().Context(), cc.Campaign.ID, p)
-		if err != nil {
-			return err
-		}
-		if !ok {
-			return apperror.NewBadRequest("that picture doesn't belong to this campaign")
-		}
-	}
-
-	if err := h.service.SaveAppearance(c.Request().Context(), cc.Campaign.ID, in); err != nil {
-		return err
-	}
-	h.logAudit(c, cc.Campaign.ID, "campaign.appearance.saved", map[string]any{"look": in.Look})
-	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+	return stored
 }
 
 // UploadAppearancePictureAPI handles POST /campaigns/:id/appearance/picture.

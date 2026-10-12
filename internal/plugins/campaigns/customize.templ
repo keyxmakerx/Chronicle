@@ -1,146 +1,134 @@
-// customize.templ renders the Campaign Customization Hub -- a centralized page
-// for campaign owners to control all campaign customization in one place.
-//
-// Tabs:
-//   1. Layouts           — Unified Layout Studio: campaign dashboards, page templates,
-//                          and category management in a two-panel interface with
-//                          sidebar navigation and dynamic editor mounting.
-//   2. Content Templates — Manage content templates for entity creation.
-//   3. Appearance        — Branding, topbar, accent color, and backdrop customization.
-//
-// Navigation editing was moved to an inline sidebar editor (gear icon in sidebar header).
-//
-// Features/addons are managed on the dedicated Plugin Hub page (/campaigns/:id/plugins).
-//
-// Route: GET /campaigns/:id/customize
-// Permission: RoleOwner only.
+// customize.templ: the bodies of Customize's areas. The frame around them
+// (rail, header, save bar) is customize_shell.templ; the pages that pick an
+// area are customize_pages.go.
 
 package campaigns
 
 import (
 	"fmt"
-	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+	"strconv"
 )
 
-// CustomizePage renders the Campaign Customization Hub with tabbed interface.
-templ CustomizePage(cc *CampaignContext, entityTypes []SettingsEntityType, csrfToken string, extraTabs []CustomizeTab) {
-	@layouts.App(cc.Campaign.Name + " - Customize") {
-		// The page body below bleeds to the edges with negative margins, so
-		// the header gets its own padded wrapper above it.
-		<div class="px-4 pt-4 pb-6">
-			@layouts.ManageHeader("Customize")
-		</div>
-		<div class="h-full flex flex-col -mx-5 -mb-4" x-data="{ tab: 'layouts' }">
-			<!-- Header -->
-			<div class="bg-surface border-b border-edge px-6 py-3 flex items-center justify-between shrink-0">
-				<div class="flex items-center gap-3">
-					<a
-						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", cc.Campaign.ID)) }
-						class="text-fg-muted hover:text-fg transition-colors"
-						title="Back to campaign"
-					>
-						<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
-						</svg>
+// customizeAreaBlurb says what each of Customize's own areas holds.
+var customizeAreaBlurb = map[string]string{
+	"look":       "Colours, fonts, buttons, motion, the header and the sidebar. Eight whole looks to start from.",
+	"categories": "What kinds of pages you keep, and how each kind of page is set up.",
+	"home":       "The campaign home everyone lands on, and your own DM dashboard.",
+}
+
+// customizeOverview is Customize's front page: one card per area.
+templ customizeOverview(areas []CustomizeArea) {
+	<div class="czs-pad" hx-boost="true" hx-target="#main-content" hx-select="#main-content" hx-swap="innerHTML show:window:top">
+		<h1 class="czs-h1">Customize</h1>
+		<p class="czs-lede">Everything about how the campaign looks and how its pages are set up, in one place. Pick what you want to change, or press <kbd>/</kbd> and type it. Changes wait in one draft until you save them.</p>
+		<div class="czs-ov-grid">
+			for _, a := range areas {
+				if a.ID != "overview" {
+					<a class="czs-ov" href={ templ.SafeURL(a.Href) } data-czs-area={ a.ID }>
+						<span class="czs-t">
+							<span class="czs-ic"><i class={ "fa-solid " + a.Icon } aria-hidden="true"></i></span>
+							{ a.Label }
+							<span class="czs-dot" title="Unsaved changes" hidden></span>
+						</span>
+						if b, ok := customizeAreaBlurb[a.ID]; ok {
+							<p>{ b }</p>
+						} else {
+							<p>Settings this campaign's { a.Label } feature adds.</p>
+						}
 					</a>
-					<div>
-						<h2 class="text-base font-semibold text-fg">Campaign Customization</h2>
-						<p class="text-[11px] text-fg-secondary">Layouts, templates, and appearance</p>
-					</div>
+				}
+			}
+		</div>
+	</div>
+}
+
+// customizeSavesAlone marks a part that still saves with its own button
+// until its rebuild joins it to the one draft.
+templ customizeSavesAlone() {
+	<p class="czs-note"><i class="fa-solid fa-circle-info" aria-hidden="true"></i><span>This part still saves with its own button. It joins the one save bar in a later update.</span></p>
+}
+
+// customizePluginArea draws a plugin's area.
+templ customizePluginArea(t CustomizeTab) {
+	<div class="czs-pad">
+		<h1 class="czs-h1">{ t.Label }</h1>
+		<div class="mt-6">
+			@customizeSavesAlone()
+			@t.Content
+		</div>
+	</div>
+}
+
+// customizeCategoriesArea is the grid of categories; customize_categories.js
+// draws it from data-state with the draft laid over it.
+templ customizeCategoriesArea(cc *CampaignContext, state, key, tab string) {
+	<div class="czs-pad">
+		<div data-widget="customize-categories" data-state={ state } data-campaign-id={ cc.Campaign.ID }>
+			<div class="czs-head-row">
+				<div>
+					<h1 class="czs-h1">Categories</h1>
+					<p class="czs-lede">Each category is a kind of page. Open one to set up its page, its home, its fields and the text new pages start with.</p>
 				</div>
 			</div>
+		</div>
+	</div>
+}
 
-			<!-- Tab bar -->
-			<div class="bg-surface border-b border-edge px-6 flex gap-0 shrink-0 overflow-x-auto">
-				<button
-					class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
-					:class="tab === 'layouts' ? 'text-accent border-accent' : 'text-fg-secondary border-transparent hover:text-fg hover:border-edge'"
-					@click="tab = 'layouts'"
-				>
-					<i class="fa-solid fa-grip mr-1.5 text-xs"></i> Layouts
-				</button>
-				<button
-					class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
-					:class="tab === 'content-templates' ? 'text-accent border-accent' : 'text-fg-secondary border-transparent hover:text-fg hover:border-edge'"
-					@click="tab = 'content-templates'"
-				>
-					<i class="fa-solid fa-file-lines mr-1.5 text-xs"></i> Content Templates
-				</button>
-				<button
-					class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
-					:class="tab === 'appearance' ? 'text-accent border-accent' : 'text-fg-secondary border-transparent hover:text-fg hover:border-edge'"
-					@click="tab = 'appearance'"
-				>
-					<i class="fa-solid fa-palette mr-1.5 text-xs"></i> Appearance
-				</button>
-				// Tabs other plugins contribute (RegisterCustomizeTab).
-				for _, t := range extraTabs {
-					<button
-						class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
-						x-bind:class={ "tab === '" + t.ID + "' ? 'text-accent border-accent' : 'text-fg-secondary border-transparent hover:text-fg hover:border-edge'" }
-						x-on:click={ "tab = '" + t.ID + "'" }
-					>
-						<i class={ t.Icon + " mr-1.5 text-xs" }></i> { t.Label }
-					</button>
-				}
+// customizeCategoryWorkspace is one category: its header and tabs, drawn by
+// customize_categories.js, then the open tab. Settings is drawn by the same
+// script; the other tabs are today's editors until their rebuilds land.
+templ customizeCategoryWorkspace(cc *CampaignContext, state, key, tab string, etID int) {
+	<div data-widget="customize-categories" data-state={ state } data-campaign-id={ cc.Campaign.ID }>
+		<div class="czs-ws-head" data-czs-ws-head></div>
+		<div class="czs-tabs" data-czs-ws-tabs></div>
+		if tab == "settings" {
+			<div class="czs-pad" data-czs-ws-settings></div>
+		}
+	</div>
+	if tab == "text" {
+		<div class="czs-legacy">
+			@customizeSavesAlone()
+			<div class="max-w-3xl">
+				@contentTemplatesTab(cc)
 			</div>
-
-			<!-- Tab content -->
-			<div class="flex-1 overflow-hidden">
-				<!-- Layout Studio: unified dashboard + page template + category editor -->
-				<div x-show="tab === 'layouts'" x-cloak class="h-full overflow-hidden">
-					@layoutStudioTab(cc, entityTypes, csrfToken)
+		</div>
+	} else if tab != "settings" && etID > 0 {
+		<div class="czs-legacy">
+			@customizeSavesAlone()
+			<div
+				hx-get={ fmt.Sprintf("/campaigns/%s/entity-types/%s/customize-tab/%s", cc.Campaign.ID, strconv.Itoa(etID), tab) }
+				hx-trigger="load"
+				hx-swap="innerHTML"
+			>
+				<div class="space-y-3" aria-busy="true">
+					<div class="h-4 w-1/3 rounded bg-surface-alt"></div>
+					<div class="h-40 rounded bg-surface-alt"></div>
 				</div>
-
-				<!-- Content Templates tab: manage content templates for entity creation -->
-				<div x-show="tab === 'content-templates'" x-cloak class="h-full overflow-y-auto">
-					<div class="max-w-3xl mx-auto px-6 py-4">
-						@contentTemplatesTab(cc)
-					</div>
-				</div>
-
-				<!-- Appearance tab: the look editor, one Save for every setting -->
-				<div x-show="tab === 'appearance'" x-cloak class="h-full overflow-y-auto">
-					<div class="pt-4">
-						@lookTab(cc, csrfToken)
-					</div>
-				</div>
-
-				for _, t := range extraTabs {
-					<div x-show={ "tab === '" + t.ID + "'" } x-cloak class="h-full overflow-y-auto">
-						<div class="max-w-4xl mx-auto px-6 py-4">
-							@t.Content
-						</div>
-					</div>
-				}
 			</div>
 		</div>
 	}
 }
 
-// layoutStudioTab renders the unified Layout Studio: a two-panel interface
-// combining campaign dashboards, page templates, and category management.
-// Left panel has sidebar navigation; right panel dynamically mounts editors.
-templ layoutStudioTab(cc *CampaignContext, entityTypes []SettingsEntityType, csrfToken string) {
-	<div
-		class="h-full"
-		data-widget="layout-studio"
-		data-campaign-id={ cc.Campaign.ID }
-		data-csrf-token={ csrfToken }
-		data-entity-types={ entityTypesJSON(entityTypes) }
-	></div>
+// customizeHomePages holds the campaign home (with its versions for players
+// and Scribes) and the DM dashboard.
+templ customizeHomePages(cc *CampaignContext, csrfToken string) {
+	<div class="czs-pad">
+		<h1 class="czs-h1">Home pages</h1>
+		<p class="czs-lede">The campaign home everyone lands on, and your own DM dashboard.</p>
+		<div class="mt-6">
+			@customizeSavesAlone()
+			@dashboardEditorTab(cc, csrfToken)
+		</div>
+	</div>
 }
 
-// dashboardEditorTab renders the campaign dashboard layout editor with a
-// drag-and-drop block builder. Uses full-page flex layout so the editor
-// fills all available vertical space (matching Page Templates tab pattern).
-// Includes a role toggle (Default / Player / Scribe) so owners can create
-// per-role campaign page layouts.
+// dashboardEditorTab holds the campaign home's layout editor, with its
+// Default / Player / Scribe versions, and the DM dashboard's.
 templ dashboardEditorTab(cc *CampaignContext, csrfToken string) {
-	<div class="h-full flex flex-col">
-		<div class="px-6 pt-4 pb-2 shrink-0">
-			<div class="max-w-3xl mx-auto">
-				<h2 class="text-base font-semibold text-fg mb-0.5">Campaign Page</h2>
+	<div class="flex flex-col gap-2">
+		<div class="pb-2">
+			<div>
+				<h2 class="text-base font-semibold text-fg mb-0.5">Campaign home</h2>
 				<p class="text-xs text-fg-secondary mb-3">
 					Customize the layout of your campaign's main page. Use the role toggle
 					to create different layouts for Players and Scribes.
@@ -190,18 +178,17 @@ templ dashboardEditorTab(cc *CampaignContext, csrfToken string) {
 				</div>
 			</div>
 		</div>
-		<div class="flex-1 overflow-y-auto px-6 py-2">
+		<div class="py-2">
 			<!-- data-te-container scopes the layout editor's #te-save-btn lookup
 			     so this editor and the Owner Dashboard editor below each find
 			     their own save controls. -->
-			<div data-te-container class="h-full flex flex-col">
+			<div data-te-container class="flex flex-col">
 				<div class="flex items-center justify-end gap-2 mb-2">
 					<span id="te-save-status" class="text-xs text-fg-muted"></span>
 					<button id="te-save-btn" class="btn-primary text-sm">Save Layout</button>
 				</div>
 				<div
 					id="campaign-page-editor"
-					class="flex-1"
 					data-widget="layout-editor"
 					data-context="dashboard"
 					data-features="roles"
@@ -212,22 +199,21 @@ templ dashboardEditorTab(cc *CampaignContext, csrfToken string) {
 				></div>
 			</div>
 		</div>
-		<div class="px-6 pt-6 pb-2 shrink-0 border-t border-edge mt-4">
-			<div class="max-w-3xl mx-auto">
-				<h2 class="text-base font-semibold text-fg mb-0.5">Owner Dashboard</h2>
+		<div class="pt-6 pb-2 border-t border-edge mt-4">
+			<div>
+				<h2 class="text-base font-semibold text-fg mb-0.5">Your DM dashboard</h2>
 				<p class="text-xs text-fg-secondary">
-					Customize your private management dashboard (visible to owner and co-DMs only).
+					Your own dashboard, seen only by you and co-DMs.
 				</p>
 			</div>
 		</div>
-		<div class="flex-1 overflow-y-auto px-6 py-2">
-			<div data-te-container class="h-full flex flex-col">
+		<div class="py-2">
+			<div data-te-container class="flex flex-col">
 				<div class="flex items-center justify-end gap-2 mb-2">
 					<span id="te-save-status" class="text-xs text-fg-muted"></span>
 					<button id="te-save-btn" class="btn-primary text-sm">Save Layout</button>
 				</div>
 				<div
-					class="flex-1"
 					data-widget="layout-editor"
 					data-context="dashboard"
 					data-endpoint={ fmt.Sprintf("/campaigns/%s/owner-dashboard-layout", cc.Campaign.ID) }
@@ -236,173 +222,6 @@ templ dashboardEditorTab(cc *CampaignContext, csrfToken string) {
 				></div>
 			</div>
 		</div>
-	</div>
-}
-
-// categoriesTab renders a card grid of categories with links to each
-// category's full configuration page. Create/delete operations are
-// handled on the Manage Categories page.
-templ categoriesTab(cc *CampaignContext, entityTypes []SettingsEntityType, csrfToken string) {
-	<div class="space-y-4">
-		<div class="flex items-center justify-between">
-			<div>
-				<h2 class="text-base font-semibold text-fg mb-0.5">Categories</h2>
-				<p class="text-xs text-fg-secondary">
-					Each category has its own layout, attributes, navigation, and dashboard settings.
-				</p>
-			</div>
-			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entity-types", cc.Campaign.ID)) }
-				class="btn-secondary text-sm"
-			>
-				<i class="fa-solid fa-plus mr-1.5"></i> Manage Categories
-			</a>
-		</div>
-
-		if len(entityTypes) == 0 {
-			<div class="card p-8 text-center">
-				<i class="fa-solid fa-folder-open text-3xl text-fg-muted mb-3"></i>
-				<p class="text-sm text-fg-secondary mb-3">No categories yet. Create one to get started.</p>
-				<a
-					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entity-types", cc.Campaign.ID)) }
-					class="btn-primary text-sm inline-flex items-center gap-1.5"
-				>
-					<i class="fa-solid fa-plus text-xs"></i> Create Category
-				</a>
-			</div>
-		} else {
-			<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-				for _, et := range entityTypes {
-					<a
-						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entity-types/%d/config", cc.Campaign.ID, et.ID)) }
-						class="card p-4 hover:border-accent/40 transition-colors group"
-					>
-						<div class="flex items-center gap-3">
-							<div
-								class="w-10 h-10 rounded-lg flex items-center justify-center text-sm shrink-0"
-								style={ fmt.Sprintf("background-color: %s20; color: %s", et.Color, et.Color) }
-							>
-								if et.Icon != "" {
-									<i class={ "fa-solid " + et.Icon }></i>
-								} else {
-									<i class="fa-solid fa-file"></i>
-								}
-							</div>
-							<div class="flex-1 min-w-0">
-								<h3 class="text-sm font-semibold text-fg group-hover:text-accent transition-colors truncate">
-									{ et.NamePlural }
-								</h3>
-								if et.Description != nil && *et.Description != "" {
-									<p class="text-xs text-fg-secondary truncate">{ *et.Description }</p>
-								} else {
-									<p class="text-xs text-fg-muted italic">No description</p>
-								}
-							</div>
-							<i class="fa-solid fa-chevron-right text-[10px] text-fg-muted group-hover:text-accent transition-colors shrink-0"></i>
-						</div>
-					</a>
-				}
-			</div>
-		}
-	</div>
-}
-
-// pageTemplatesTab renders the page template editor tab. Shows category selector
-// buttons that lazy-load the template-editor widget via HTMX. Only one editor
-// is mounted at a time to keep things lightweight.
-templ pageTemplatesTab(cc *CampaignContext, entityTypes []SettingsEntityType, csrfToken string) {
-	if len(entityTypes) == 0 {
-		<div class="px-6 py-6">
-			<div class="max-w-3xl mx-auto">
-				<div class="card p-8 text-center">
-					<i class="fa-solid fa-layer-group text-3xl text-fg-muted mb-3"></i>
-					<p class="text-sm text-fg-secondary">No categories yet. Create categories first to customize their page templates.</p>
-				</div>
-			</div>
-		</div>
-	} else {
-		<div class="h-full flex flex-col">
-			<div class="px-6 pt-4 pb-2 shrink-0">
-				<div class="max-w-3xl mx-auto">
-					<div class="mb-1">
-						<h2 class="text-base font-semibold text-fg mb-0.5">Page Templates</h2>
-						<p class="text-xs text-fg-secondary">
-							Design the profile page layout for each category using drag-and-drop blocks.
-						</p>
-					</div>
-					<!-- Category selector buttons with HTMX triggers -->
-					<div class="flex flex-wrap gap-2 mt-3" x-data="{ selected: 0 }">
-						for _, et := range entityTypes {
-							<button
-								type="button"
-								class="flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors text-sm"
-								:class={ fmt.Sprintf("selected === %d ? 'border-accent bg-accent/10 text-accent font-medium' : 'border-edge bg-surface hover:border-accent/30 text-fg-secondary'", et.ID) }
-								@click={ fmt.Sprintf("selected = %d", et.ID) }
-								hx-get={ fmt.Sprintf("/campaigns/%s/customize/layout-editor/%d", cc.Campaign.ID, et.ID) }
-								hx-target="#layout-editor-container"
-								hx-swap="innerHTML"
-							>
-								<span
-									class="w-6 h-6 rounded flex items-center justify-center text-[10px] shrink-0"
-									style={ fmt.Sprintf("background-color: %s20; color: %s", et.Color, et.Color) }
-								>
-									if et.Icon != "" {
-										<i class={ "fa-solid " + et.Icon }></i>
-									} else {
-										<i class="fa-solid fa-file"></i>
-									}
-								</span>
-								{ et.NamePlural }
-							</button>
-						}
-					</div>
-				</div>
-			</div>
-			<!-- Container for the lazy-loaded template editor -->
-			<div id="layout-editor-container" class="flex-1 overflow-hidden">
-				<div class="h-full flex items-center justify-center text-fg-secondary text-sm">
-					<div class="text-center">
-						<i class="fa-solid fa-layer-group text-2xl text-fg-muted mb-2"></i>
-						<p>Select a category above to edit its page template.</p>
-					</div>
-				</div>
-			</div>
-		</div>
-	}
-}
-
-// LayoutEditorFragment renders the template-editor widget mount for a single
-// entity type. Returned as an HTMX fragment in the Page Templates tab. Includes
-// its own save button so the widget can find it via scoped lookup.
-templ LayoutEditorFragment(cc *CampaignContext, et *LayoutEditorEntityType, csrfToken string) {
-	<div data-te-container class="h-full flex flex-col">
-		<!-- Save controls inside the fragment for scoped binding -->
-		<div class="flex items-center justify-between px-4 py-2 bg-surface border-b border-edge shrink-0">
-			<div class="flex items-center gap-2">
-				<div
-					class="w-7 h-7 rounded-lg flex items-center justify-center text-xs"
-					style={ fmt.Sprintf("background-color: %s20; color: %s", et.Color, et.Color) }
-				>
-					<i class={ "fa-solid " + et.Icon }></i>
-				</div>
-				<span class="text-sm font-medium text-fg">{ et.Name } Page Template</span>
-			</div>
-			<div class="flex items-center gap-2">
-				<span id="te-save-status" class="text-xs text-fg-muted"></span>
-				<button id="te-save-btn" class="btn-primary text-sm">Save Layout</button>
-			</div>
-		</div>
-		<!-- Template editor widget mount -->
-		<div
-			class="flex-1 overflow-hidden"
-			data-widget="template-editor"
-			data-endpoint={ fmt.Sprintf("/campaigns/%s/entity-types/%d/layout", cc.Campaign.ID, et.ID) }
-			data-campaign-id={ cc.Campaign.ID }
-			data-layout={ et.LayoutJSON }
-			data-fields={ et.FieldsJSON }
-			data-entity-type-name={ et.Name }
-			data-csrf-token={ csrfToken }
-		></div>
 	</div>
 }
 

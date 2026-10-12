@@ -90,7 +90,7 @@ func TestGameNightsLink_NoRealWorldCalendar(t *testing.T) {
 		role               campaigns.Role
 		want               string
 	}{
-		{"the owner is offered a real-world calendar", "", "", campaigns.RoleOwner, "/campaigns/c1/calendars/wizard/reallife"},
+		{"the owner is offered a real-world calendar", "", "", campaigns.RoleOwner, "/campaigns/c1/calendars?wizard=reallife"},
 		{"a player keeps the Sessions page", "", "", campaigns.RolePlayer, "/campaigns/c1/sessions"},
 		{"a named session still opens its own page", "", "?session=s1&date=2026-10-08", campaigns.RoleOwner, "/campaigns/c1/sessions/s1"},
 		{"with a calendar, the calendar", "k1", "", campaigns.RoleOwner, "/campaigns/c1/calendars/k1/view?night=next"},
