@@ -19,7 +19,11 @@ templ OwnEntriesPage(cc *campaigns.CampaignContext, csrfToken string) {
 		<link rel="stylesheet" href={ layouts.AssetURL("/static/plugins/entities/css/hero_creator.css") }/>
 		<div class="max-w-7xl mx-auto px-4 py-6">
 			<nav class="mb-4 text-sm text-fg-muted" aria-label="Breadcrumb">
-				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/characters", cc.Campaign.ID)) } class="hover:text-fg">Characters</a>
+				if sys, ok := layouts.GetEnabledSystem(ctx); ok {
+					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/systems/%s", cc.Campaign.ID, sys.Slug)) } class="hover:text-fg">{ rulesCrumb(sys) }</a>
+				} else {
+					<a href={ templ.SafeURL("/campaigns/" + cc.Campaign.ID) } class="hover:text-fg">{ cc.Campaign.Name }</a>
+				}
 				<span aria-hidden="true">/</span>
 				<span class="text-fg">Your own entries</span>
 			</nav>
@@ -41,4 +45,14 @@ templ OwnEntriesPage(cc *campaigns.CampaignContext, csrfToken string) {
 			</div>
 		</div>
 	}
+}
+
+// rulesCrumb names the rulebook the way the sidebar does, by its system. The
+// page is reached from the rulebook, so the crumb leads back there; when the
+// sidebar has no rulebook link to copy, the crumb is the campaign.
+func rulesCrumb(sys layouts.EnabledSystem) string {
+	if sys.Name != "" {
+		return sys.Name
+	}
+	return "Rulebook"
 }

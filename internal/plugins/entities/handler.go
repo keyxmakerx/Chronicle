@@ -3578,7 +3578,6 @@ func (h *Handler) buildCastView(c echo.Context, cc *campaigns.CampaignContext) (
 		if _, access, err := h.heroTarget(c, cc); err == nil {
 			view.CanCreateHero = access.Allowed
 		}
-		view.CanManageEntries = cc.CanAuthorDmOnly()
 	}
 
 	var charTypes []int
