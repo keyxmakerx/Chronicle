@@ -1,238 +1,138 @@
-# Chronicle
+<h1 align="center">Chronicle</h1>
 
-**A self-hosted worldbuilding platform for tabletop RPG campaigns.**
+<p align="center">
+  <b>A self-hosted home for your tabletop RPG world.</b><br>
+  Lore, calendars, maps, shops and game nights for the GM and the players, on your own server.
+</p>
 
-Chronicle gives game masters and players a shared space to build worlds, track lore, and run campaigns — all on your own server, with no paywall, no forced public content, and full control over your data.
+<p align="center">
+  <a href="LICENSE"><img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-6366f1"></a>
+  <img alt="Go 1.27" src="https://img.shields.io/badge/go-1.27-00ADD8">
+  <img alt="Status: pre-alpha" src="https://img.shields.io/badge/status-pre--alpha-f59e0b">
+</p>
 
----
+![A campaign's calendar at dusk, with the world's two moons over the month view](docs/images/readme/calendar.webp)
 
-## Why Chronicle?
+Chronicle is built for one table and one world at a time. Nothing is public unless you make it public, there is no paywall, and the data lives in your own MariaDB.
 
-Chronicle is purpose-built for tabletop RPGs, open source, and designed to be self-hosted from day one. No paywalls, no forced public content, no vendor lock-in — your world, your server, your data.
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/images/readme/page.webp" alt="A character page with its entry, attributes and category"><br>
+      <b>Pages for everything in your world</b><br>
+      Characters, places, factions, items and quests, each with a rich-text entry, its own fields and links to the pages it touches. GM secrets stay hidden inside the same page.
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/images/readme/map.webp" alt="A hex map of an island, painted in the Realistic style"><br>
+      <b>Maps you paint and annotate</b><br>
+      Upload a picture or paint terrain hex by hex. Pins open pages or other maps, fog hides what the party hasn't explored, and rooms, arrows and speech bubbles turn any map into a diagram.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/images/readme/handbook.webp" alt="The Draw Steel handbook open at How to Play"><br>
+      <b>A rulebook your players can read</b><br>
+      A game system's rules open as a book you turn the pages of, with a players' screen for lookups mid-fight. Rules terms explain themselves on hover, and you can add house-rule chapters of your own.
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/images/readme/dashboard.webp" alt="The campaign home with its categories and recently updated pages"><br>
+      <b>A campaign home</b><br>
+      The dashboard, sidebar and categories are yours to arrange. Members join as Owner, Scribe or Player, and "View as player" shows the campaign exactly as they see it.
+    </td>
+  </tr>
+</table>
 
----
+### A calendar with a sky
 
-## Features
+Your own months, weekdays, moons, seasons and eras, or the real-world calendar. Events repeat by rule, weather follows the climate, pages can keep a version for each era, and the sky over the month shows the sun and moons at the hour it is.
 
-### Worldbuilding
-- **Pages & Categories** — Create any content type (characters, locations, factions, items, etc.) with custom categories and dynamic field schemas
-- **Rich Text Editor** — TipTap-powered WYSIWYG with @mentions, backlinks, GM secrets, and an insert menu
-- **Relations** — Bi-directional entity relationships with typed connections ("is spouse of", "leads", "enemy of")
-- **Entity Hierarchy** — Parent/child nesting with tree views and breadcrumb navigation
-- **Pages in More Than One Place** — List a page under extra parents in the page tree while it keeps one real home
-- **AI Import and Export** — Export a campaign as markdown for an AI tool and import its pages, edits and records back with a preview
-- **Obsidian and Markdown Import** — Bring in an Obsidian vault or a Notion or Trilium export as GM-only pages
-- **Mermaid Diagrams** — Flowcharts, sequence diagrams and more drawn from text in pages and notes
-- **House Rules Chapters** — Add your own chapters to a game system's rulebook
-- **Tags** — Color-coded tags with DM-only visibility controls
-- **Custom Attributes** — Per-category field templates (text, number, select, checkbox, URL) with per-entity overrides
-- **Drag-and-Drop Page Layouts** — Visual layout editor for entity profile pages
+![Scrubbing through a day of the sky preview, from midnight to midnight](docs/images/readme/sky.gif)
 
-### Calendar
-- **Custom Calendars** — Months, weekdays, moons, seasons and eras of your own, or the real-world calendar; import from Calendaria, Simple Calendar and Fantasy Calendar
-- **Events** — Kinds of event, repeats by rule with skipped or moved dates, and pages tied to events and eras
-- **Page Versions by Era** — A page can keep a version for each era, and eras and moons can link to lore pages
-- **Weather** — Climate-based generation, locked days and an optional player forecast
-- **Game Nights** — Plan a game night in the calendar, with a "Who's free" view of when everyone is available
+### Make it look like your world
 
-### Timeline
-- **Interactive D3 Visualization** — SVG-rendered timeline with zoom, pan, and minimap
-- **Standalone Events** — Calendar-free events, organized into swim-lanes by entity group
-- **Event Clustering** — Overlapping events at low zoom automatically group into count badges for readability
+Customize keeps the campaign's look, categories and home pages in one place. Start from one of eight whole looks, then change colours, type, buttons, the header and the sidebar. Everything waits in a draft until you save it, so players never see a half-finished change.
 
-### Maps
-- **Leaflet.js Maps** — Upload custom map images and place interactive markers
-- **Entity-Linked Markers** — Pin entities to map locations with click-through navigation
-- **DM-Only Markers** — Hide map pins from players
-- **Hex Maps** — A hex grid over the whole map or one picture, with painted hexes, fog and a walking party
-- **Measure Tool** — A private path with running distances for everyone, with a scale the owner or DM sets
-- **Pins That Open Maps** — A pin can open another map, with a trail back and a tree of linked maps
+![Clicking through the looks in Customize, with the example site changing to match](docs/images/readme/looks.gif)
 
-### Armory, Shops & Stashes
-- **Armory** — Item galleries with tag filters, collections and character money history
-- **Shops** — A Shop block you add to a page, opening onto a walk-in shop room; players buy as their character, or ask the GM to when downtime is closed
-- **Stashes** — Shared hoards of items and money, with GM-approved moves and a downtime switch
+### And the rest
 
-### DM Screen
-- **GM Control Panel** — A three-leaf screen for owners and scribes: party at a glance, the world's date and weather, conditions and NPC reveals, time-step buttons for the calendar, shop and stash requests waiting on you, and notes kept with the next game night
+- **Game nights**: plan sessions on the calendar, run a date poll, see who's free, and collect RSVPs. The dashboard's Coming up card shows what's next.
+- **DM Screen**: the party, the world's date and weather, conditions, NPC reveals, waiting shop and stash requests, and an Adventures tab for the DM team's own pages.
+- **Armory, shops and stashes**: item galleries, a walk-in shop room players buy from, and shared party hoards with GM-approved moves.
+- **Notes**: notes on any page, private or shared with the GM or chosen players, with version history. Every page keeps its history, and deleted pages wait in Trash.
+- **Timeline**: a zoomable timeline of events, grouped into lanes.
+- **Bring your world in**: import an Obsidian vault or a Notion or Trilium export, or hand the campaign to an AI tool as markdown and review its edits before they land.
+- **Foundry VTT**: the [Chronicle Sync module](https://github.com/keyxmakerx/Chronicle-Foundry-Module) keeps journals, characters, maps, shops and the calendar in step both ways.
+- **Game systems**: [Draw Steel](https://github.com/keyxmakerx/Chronicle-Draw-Steel) and [D&D 5e](https://github.com/keyxmakerx/Chronicle-DnD-5.5e) install from Admin > Packages.
+- **Sign-in**: two-factor codes, one outside OpenID Connect provider, and guest codes that let someone join one campaign with just a name.
+- **REST API**: per-campaign keys for pages, maps, calendar, media and sync. See [`docs/api/openapi.yaml`](docs/api/openapi.yaml).
 
-### Game Sessions
-- **Session Scheduling** — Plan game nights with date, location, and status tracking
-- **RSVP** — Going / Maybe / Can't buttons with attendee tracking
-- **Entity Linking** — Tag which pages were relevant to each session
+## Quick start
 
-### Campaign Management
-- **Roles** — Owner (GM), Scribe, and Player roles with granular permissions
-- **Customizable Dashboards** — Drag-and-drop dashboard blocks (recent pages, maps, stats)
-- **Site and Campaign Look** — Admin > Site look sets the name, logo and sign-in background; each person's My view sets light/dark, calmer motion, text size and contrast
-- **Coming Up** — A dashboard card with the next game nights, what you still owe the table, and the next calendar events
-- **Customizable Sidebar** — Reorder, rename, and add custom navigation links
-- **Category Dashboards** — Per-category landing pages with their own layouts
-- **Public Campaigns** — Optionally make campaigns publicly viewable
-- **"View as Player"** — Toggle to see your campaign as players see it
-
-### Player Notes
-- **Per-Entity Notes** — Notes attached to any page, private or shared with the GM, co-GMs or chosen people
-- **Shared Notes** — Share notes with the campaign (with edit locking)
-- **Version History** — View and restore previous note versions
-- **Page History and Trash** — Every page keeps its text history; deleted pages wait in Trash and save clashes are caught instead of overwritten
-- **Checklists** — Quick checklist blocks within notes
-
-### REST API
-- **API v1** — Full CRUD for entities, entity types, tags, relations, maps, drawings, tokens, layers, fog, media, and notes
-- **API Key Auth** — Per-campaign API keys with read/write/sync permissions and device fingerprint binding
-- **Sync History** — One record of what synced in both directions, with who, when and any failure (Manage › Sync history, for the owner and members with DM access); the Foundry module's History tab reads the same list
-- **Addon Discovery** — External tools can detect which features are enabled per campaign
-- **Bulk Operations** — Bulk tag assignment and entity type reassignment (up to 200 per request)
-- **Sync Protocol** — Sync mappings, WebSocket real-time events, and bidirectional Foundry VTT integration through the Chronicle Sync module (journals, characters, maps, shops, stashes, player notes)
-
-### Admin & Security
-- **Startup Health Checks** — Automatic migration validation, schema verification, DB connectivity checks, and security audit on every server start
-- **Pre-Migration Backups** — Optional mysqldump with gzip before schema changes, with automatic rotation
-- **User Management** — Admin dashboard for users, campaigns, storage, and security
-- **Audit Logging** — Full activity trail for all campaign mutations
-- **Rate Limiting** — Per-route rate limits on auth and upload endpoints
-- **Session Security** — Redis-backed sessions with force-logout and session termination
-- **Database TLS** — Configurable TLS encryption for database connections (`DB_TLS_MODE`)
-- **Two-Factor Sign-In** — Authenticator-app codes with recovery codes and remembered devices
-- **Outside Sign-In Provider** — One OpenID Connect provider, set up under Admin > Sign-ins & sessions
-- **Guest Codes** — A game master's code lets someone join one campaign with just a name
-- **Owner Hand-Over** — A site admin can hand an away owner's campaign to a member after 3, 6 or 12 months, if the owner opted in
-- **IDOR Protection** — Campaign-scoped access checks on every route
-- **Argon2id** — Password hashing with modern algorithm
-
----
-
-## Screenshots
-
-> Screenshots coming soon — see the feature list above for what Chronicle offers today.
-
----
-
-## Quick Start
-
-> For production deployment, backups, upgrades, and rollback procedures, see [`docs/deployment.md`](docs/deployment.md).
-
-### Docker (Recommended)
+With Docker:
 
 ```bash
-# Clone the repository
 git clone https://github.com/keyxmakerx/chronicle.git
 cd chronicle
 
-# Set required secrets
 export SECRET_KEY=$(openssl rand -base64 32)
 export DB_PASSWORD=your-secure-password
 export MYSQL_ROOT_PASSWORD=your-root-password
 
-# Start the full stack
 docker compose up -d
-
-# Chronicle is now running at http://localhost:8080
-# The first user to register becomes the site admin.
 ```
 
-### From Source
+Chronicle is then at http://localhost:8080. The first person to register becomes the site admin. Migrations run on startup.
 
-**Prerequisites:** Go 1.27+, Node.js (only for `make tiptap-bundle`), MariaDB 10.11+, Redis 7+
+For production, backups, upgrades and rollback, read [`docs/deployment.md`](docs/deployment.md).
+
+<details>
+<summary><b>Run from source</b></summary>
+
+Needs Go 1.27+, MariaDB 10.11+ and Redis 7+ (Node.js only to rebuild the editor bundle).
 
 ```bash
-# Clone and setup
 git clone https://github.com/keyxmakerx/chronicle.git
 cd chronicle
-cp .env.example .env       # Edit with your database credentials
-
-# Start dependencies
-make docker-up              # MariaDB + Redis via Docker
-
-# Generate templates and CSS
-make generate               # Runs templ generate + tailwindcss
-
-# Run the server
-make dev                    # Hot reload with air
-# or
-make run                    # Direct run
+cp .env.example .env    # add your database credentials
+make docker-up          # MariaDB + Redis
+make generate           # Templ + Tailwind
+make dev                # hot reload
 ```
 
-Database migrations run automatically on startup. The first user to register becomes the site admin.
-
----
+</details>
 
 ## Development
 
 ```bash
-make help            # Show all available commands
-make dev             # Start dev server with hot reload (air)
-make build           # Production binary build
-make test            # Run all tests
-make test-unit       # Unit tests only
-make lint            # Run golangci-lint
-make generate        # Regenerate Templ + Tailwind
-make docker-up       # Start MariaDB + Redis
-make docker-down     # Stop containers
+make help        # every command
+make dev         # dev server with hot reload
+make test        # all tests
+make lint        # golangci-lint
+make generate    # regenerate Templ and Tailwind
 ```
 
-### Project Structure
-
-```
-cmd/server/          # Application entrypoint
-internal/
-  plugins/           # Feature apps (auth, campaigns, entities, calendar, ...)
-  systems/           # Game system content packs (installed via package manager)
-  widgets/           # Reusable UI components (editor, tags, relations, notes, ...)
-  templates/         # Templ layouts and shared components
-  middleware/        # HTTP middleware (auth, CSRF, logging, recovery)
-  apperror/          # Domain error types
-  config/            # Environment configuration
-  database/          # Database connection and helpers
-static/
-  js/                # Client-side JavaScript (boot.js, widgets, search, shortcuts)
-  css/               # Tailwind input + compiled output
-  img/               # Static assets
-db/migrations/       # Sequential SQL migration files
-```
-
-### Architecture
-
-Chronicle has three kinds of extension: plugins (feature apps), systems (game system content packs installed from Admin > Packages) and widgets (reusable UI blocks).
-
-See [.ai/architecture.md](.ai/architecture.md) for the full architecture document.
-
-To build your own game system, widget, content pack, WASM plugin or API app, start at [docs/build/](docs/build/README.md).
-
----
-
-## Tech Stack
+Chronicle is a Go server (Echo, Templ, HTMX) with MariaDB and Redis. Features live in plugins under `internal/plugins/`, game systems install as packages, and reusable UI blocks are widgets under `internal/widgets/`. [`.ai/architecture.md`](.ai/architecture.md) has the full picture.
 
 | Layer | Technology |
 |-------|-----------|
-| **Backend** | Go 1.27, [Echo v4](https://echo.labstack.com/) |
-| **Templates** | [Templ](https://templ.guide/) (type-safe Go templates) |
-| **Frontend** | [HTMX](https://htmx.org/), [Alpine.js](https://alpinejs.dev/) |
-| **Editor** | [TipTap](https://tiptap.dev/) (ProseMirror-based) |
-| **CSS** | [Tailwind CSS](https://tailwindcss.com/) |
-| **Timeline** | [D3.js](https://d3js.org/) |
-| **Maps** | [Leaflet.js](https://leafletjs.com/) |
-| **Database** | MariaDB 10.11 |
-| **Cache/Sessions** | Redis 7 |
-| **Deployment** | Docker, multi-stage builds |
+| Backend | Go 1.27, [Echo v4](https://echo.labstack.com/) |
+| Templates | [Templ](https://templ.guide/) |
+| Frontend | [HTMX](https://htmx.org/), [Alpine.js](https://alpinejs.dev/), [Tailwind CSS](https://tailwindcss.com/) |
+| Editor | [TipTap](https://tiptap.dev/) |
+| Maps and timeline | [Leaflet](https://leafletjs.com/), [D3](https://d3js.org/) |
+| Data | MariaDB 10.11, Redis 7 |
 
----
-
-## Inspiration & Credits
-
-Chronicle was developed with reference to several existing worldbuilding and note-taking platforms in the TTRPG space. We're grateful to the broader community for establishing patterns and conventions that inform what users expect from tools like these.
-
-Notable platforms we studied during development include [World Anvil](https://www.worldanvil.com/), [Kanka](https://kanka.io/), [LegendKeeper](https://www.legendkeeper.com/), and [Obsidian](https://obsidian.md/). All design and code in Chronicle is original work.
-
----
+To build your own game system, widget, content pack or API app, start at [`docs/build/`](docs/build/README.md).
 
 ## Contributing
 
-Chronicle is in active early development (pre-alpha). Setup, tests, conventions and pull request expectations are in [CONTRIBUTING.md](CONTRIBUTING.md). Feel free to open issues for bug reports or feature suggestions.
+Chronicle is pre-alpha. Bug reports and ideas are welcome as [issues](https://github.com/keyxmakerx/Chronicle/issues). Setup, tests and pull request expectations are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
----
+We studied [World Anvil](https://www.worldanvil.com/), [Kanka](https://kanka.io/), [LegendKeeper](https://www.legendkeeper.com/) and [Obsidian](https://obsidian.md/) while building it; Chronicle's design and code are its own.
 
 ## License
 
-This project is licensed under the [GNU Affero General Public License v3.0](LICENSE).
+[GNU Affero General Public License v3.0](LICENSE).
+
+<sub>Screenshots are from a demo campaign running on Chronicle's own code.</sub>
