@@ -639,7 +639,7 @@
     var ch = this.screenChapter();
     if (!ch) return '';
     return '<button type="button" class="rb-ribbon" data-act="screen" aria-expanded="false" aria-controls="' + this.domId('screen') + '">' +
-      esc(ch.title) + ' <span class="rb-chev" aria-hidden="true">\u25BE</span><kbd aria-hidden="true">P</kbd></button>';
+      '<span class="rb-ribbon-t">' + esc(ch.title) + '</span> <span class="rb-chev" aria-hidden="true">\u25BE</span><kbd aria-hidden="true">P</kbd></button>';
   };
 
   Rulebook.prototype.screenOpen = function () { return !!this.screenEl && this.el.classList.contains('rb-screen-open'); };

@@ -429,13 +429,19 @@ for (const [name, viewport] of [['desktop', { width: 1280, height: 720 }], ['pho
 
 test('on a phone the Sections ribbon sits right of the screen ribbon, never over it', async () => {
   await withBook(async (page) => {
-    const r = await page.evaluate(() => {
+    const measure = () => page.evaluate(() => {
       const a = document.querySelector('.rb-ribbon').getBoundingClientRect(), b = document.querySelector('.rb-bm-roll').getBoundingClientRect();
       return { a: [a.left, a.right, a.top, a.bottom], b: [b.left, b.right, b.top, b.bottom] };
     });
-    const apart = r.a[1] <= r.b[0] || r.b[1] <= r.a[0] || r.a[3] <= r.b[2] || r.b[3] <= r.a[2];
-    assert.ok(apart, JSON.stringify(r));
-    assert.ok(r.b[1] <= 390 && r.b[0] >= 195, `right side: ${JSON.stringify(r)}`);
+    const check = (r) => {
+      const apart = r.a[1] <= r.b[0] || r.b[1] <= r.a[0] || r.a[3] <= r.b[2] || r.b[3] <= r.a[2];
+      assert.ok(apart, JSON.stringify(r));
+      assert.ok(r.b[1] <= 390 && r.b[0] >= 195, `right side: ${JSON.stringify(r)}`);
+    };
+    check(await measure());
+    // A long screen title, or wider fonts, is cut short rather than run under the bookmark.
+    await page.$eval('.rb-ribbon-t', (t) => { t.textContent = 'The players screen of quick rules for the table'; });
+    check(await measure());
   }, { screen: true, noTabs: true, viewport: { width: 390, height: 844 }, hash: '#basics' });
 });
 

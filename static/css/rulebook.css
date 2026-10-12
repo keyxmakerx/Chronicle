@@ -418,6 +418,10 @@
   .rb-sleaf:last-child:where(:not(.rb-wslot *)) { border-radius: 0 0 12px 12px; }
   .rb-sleaf .rb-scroll:where(:not(.rb-wslot *)) { flex: 0 0 auto; overflow: visible; }
   .rb-ribbon kbd:where(:not(.rb-wslot *)) { display: none; }
+  /* Beside the Sections bookmark the ribbon moves left and a long title is
+     cut short, so the two never meet whatever the fonts. */
+  .rb:has(.rb-bm) .rb-ribbon:where(:not(.rb-wslot *)) { left: 12px; transform: none; max-width: calc(100% - 148px); }
+  .rb-ribbon-t:where(:not(.rb-wslot *)) { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 }
 @media (prefers-reduced-motion: reduce) {
   .rb-screen-open .rb-sleaf:where(:not(.rb-wslot *)), .rb-screen-open .rb-sleaf:where(:not(.rb-wslot *))::after, .rb-screen.closing .rb-sleaf:where(:not(.rb-wslot *)) { animation: none; }
