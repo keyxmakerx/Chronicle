@@ -33,69 +33,75 @@ import (
 // degradation, matches AddonLister/MediaUploader/SMTPChecker shape).
 templ ExtensionsHubPage(cc *CampaignContext, addons []PluginHubAddon, csrfToken, systemOptionsJSON string, contentPacksCard templ.Component) {
 	@layouts.App(cc.Campaign.Name + " - Game & features") {
-		<div class="max-w-5xl mx-auto px-4 py-6" data-extensions-hub>
+		<div class="max-w-5xl min-[1600px]:max-w-screen-2xl mx-auto px-4 py-6" data-extensions-hub>
 			@layouts.ManageHeader("Game & features")
-			<div class="mb-6">
-				@gameSystemCard(cc, systemOptionsJSON)
-			</div>
-			<div class="mb-3">
-				<h2 class="text-base font-semibold text-fg">Features</h2>
-				<p class="text-sm text-fg-muted">
-					Turn parts of Chronicle on or off for this campaign. Turning one off hides it; nothing is deleted.
-				</p>
-			</div>
-			// Hub catalog — HTMX-refreshed in place after a toggle so
-			// the card list re-renders without a full nav.
-			<div
-				id="extensions-hub-list"
-				hx-get={ fmt.Sprintf("/campaigns/%s/extensions/fragment", cc.Campaign.ID) }
-				hx-trigger="extensions-hub-refresh from:body"
-				hx-swap="innerHTML"
-			>
-				@ExtensionsHubFragment(cc, addons, csrfToken)
-			</div>
-			// Inline-dashboard panel: an "Open dashboard" affordance on a
-			// card with HasDashboard=true swaps its registered dashboard
-			// fragment in here. Empty until expanded.
-			<div
-				id="extensions-hub-dashboard-panel"
-				class="mt-6"
-				aria-live="polite"
-			></div>
-			// Extension settings overlay target. An "Open setup" button on a
-			// card hx-gets the extension's settings page here; the GET returns a
-			// self-opening modal (ExtensionSettingsOverlay). Empty until opened.
-			<div id="extension-setup-modal"></div>
-			// Content Packs card — installable content from the admin
-			// install surface. Lifts the existing extensions plugin
-			// fragment so the per-pack enable/disable POSTs at
-			// /campaigns/:id/extensions/:extID/{enable,disable} keep
-			// working unchanged. Skipped when no renderer is wired.
-			if contentPacksCard != nil {
-				<div class="mt-6">
-					<div class="card-elev p-5 lift-hover">
-						<div class="flex items-center gap-3 mb-4">
-							<span class="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
-								<i class="fa-solid fa-box-archive text-accent text-lg"></i>
-							</span>
-							<div class="flex-1 min-w-0">
-								<h2 class="text-base font-semibold text-fg">Content Packs</h2>
-								<p class="text-xs text-fg-muted mt-0.5">
-									Installable content from your administrator. Disabling a pack does not delete data.
-								</p>
-							</div>
-						</div>
-						@contentPacksCard
-					</div>
+			<div class="manage-split">
+				<div class="mb-6">
+					@gameSystemCard(cc, systemOptionsJSON)
 				</div>
-			}
-			if addonEnabled(addons, "sync-api") {
-				<section class="card p-4 mt-6 flex flex-wrap items-center gap-3" data-foundry-moved>
-					<span class="w-8 h-8 rounded-lg bg-accent/10 text-accent text-sm font-bold flex items-center justify-center shrink-0" aria-hidden="true">F</span>
-					<p class="text-sm text-fg-secondary flex-1 min-w-0">Foundry setup, sync and its module version are on their own page.</p>
-					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/foundry", cc.Campaign.ID)) } class="btn-secondary text-xs">Open Foundry</a>
-				</section>
-			}
+				// The feature list is the main column on a big monitor; the game
+				// system, content packs and Foundry row stack beside it.
+				<div class="manage-split-main">
+					<div class="mb-3">
+						<h2 class="text-base font-semibold text-fg">Features</h2>
+						<p class="text-sm text-fg-muted">
+							Turn parts of Chronicle on or off for this campaign. Turning one off hides it; nothing is deleted.
+						</p>
+					</div>
+					// Hub catalog — HTMX-refreshed in place after a toggle so
+					// the card list re-renders without a full nav.
+					<div
+						id="extensions-hub-list"
+						hx-get={ fmt.Sprintf("/campaigns/%s/extensions/fragment", cc.Campaign.ID) }
+						hx-trigger="extensions-hub-refresh from:body"
+						hx-swap="innerHTML"
+					>
+						@ExtensionsHubFragment(cc, addons, csrfToken)
+					</div>
+					// Inline-dashboard panel: an "Open dashboard" affordance on a
+					// card with HasDashboard=true swaps its registered dashboard
+					// fragment in here. Empty until expanded.
+					<div
+						id="extensions-hub-dashboard-panel"
+						class="mt-6"
+						aria-live="polite"
+					></div>
+				</div>
+				// Extension settings overlay target. An "Open setup" button on a
+				// card hx-gets the extension's settings page here; the GET returns a
+				// self-opening modal (ExtensionSettingsOverlay). Empty until opened.
+				<div id="extension-setup-modal"></div>
+				// Content Packs card — installable content from the admin
+				// install surface. Lifts the existing extensions plugin
+				// fragment so the per-pack enable/disable POSTs at
+				// /campaigns/:id/extensions/:extID/{enable,disable} keep
+				// working unchanged. Skipped when no renderer is wired.
+				if contentPacksCard != nil {
+					<div class="mt-6">
+						<div class="card-elev p-5 lift-hover">
+							<div class="flex items-center gap-3 mb-4">
+								<span class="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
+									<i class="fa-solid fa-box-archive text-accent text-lg"></i>
+								</span>
+								<div class="flex-1 min-w-0">
+									<h2 class="text-base font-semibold text-fg">Content Packs</h2>
+									<p class="text-xs text-fg-muted mt-0.5">
+										Installable content from your administrator. Disabling a pack does not delete data.
+									</p>
+								</div>
+							</div>
+							@contentPacksCard
+						</div>
+					</div>
+				}
+				if addonEnabled(addons, "sync-api") {
+					<section class="card p-4 mt-6 flex flex-wrap items-center gap-3" data-foundry-moved>
+						<span class="w-8 h-8 rounded-lg bg-accent/10 text-accent text-sm font-bold flex items-center justify-center shrink-0" aria-hidden="true">F</span>
+						<p class="text-sm text-fg-secondary flex-1 min-w-0">Foundry setup, sync and its module version are on their own page.</p>
+						<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/foundry", cc.Campaign.ID)) } class="btn-secondary text-xs">Open Foundry</a>
+					</section>
+				}
+			</div>
 		</div>
 	}
 }
@@ -196,17 +202,23 @@ templ extensionsHubCard(cc *CampaignContext, addon PluginHubAddon, csrfToken str
 		data-extension-enabled={ extensionEnabledAttr(addon.Enabled) }
 	>
 		<div class="flex items-start gap-3">
-			<div class={ "w-10 h-10 rounded-lg flex items-center justify-center shrink-0 tier-transition",
+			<div
+				class={ "w-10 h-10 rounded-lg flex items-center justify-center shrink-0 tier-transition",
 				templ.KV("bg-accent/10", addon.Enabled),
-				templ.KV("bg-surface-alt", !addon.Enabled) }>
+				templ.KV("bg-surface-alt", !addon.Enabled) }
+			>
 				if addon.Icon != "" {
-					<i class={ "fa-solid " + addon.Icon, "text-lg",
+					<i
+						class={ "fa-solid " + addon.Icon, "text-lg",
 						templ.KV("text-accent", addon.Enabled),
-						templ.KV("text-fg-muted", !addon.Enabled) }></i>
+						templ.KV("text-fg-muted", !addon.Enabled) }
+					></i>
 				} else {
-					<i class={ "fa-solid fa-puzzle-piece text-lg",
+					<i
+						class={ "fa-solid fa-puzzle-piece text-lg",
 						templ.KV("text-accent", addon.Enabled),
-						templ.KV("text-fg-muted", !addon.Enabled) }></i>
+						templ.KV("text-fg-muted", !addon.Enabled) }
+					></i>
 				}
 			</div>
 			<div class="flex-1 min-w-0">
