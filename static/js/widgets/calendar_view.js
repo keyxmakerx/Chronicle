@@ -2685,6 +2685,8 @@
           self.loadWaiting();
         })
         .catch(function (msg) {
+          // A later answer already replaced this one; it has its own save.
+          if (o.mine !== ans) return;
           bump(ans, -1); bump(prev, 1); o.mine = prev;
           redraw();
           self.say((typeof msg === 'string' && msg) || 'Your answer could not be saved. Try again.');
@@ -2732,7 +2734,9 @@
         (self.polls || []).forEach(function (p) {
           if (p.id !== t.poll) return;
           (p.options || []).forEach(function (o) { if (!hit && o.date === t.date) hit = { p: p, o: o }; });
-          if (!hit && p.options && p.options.length) hit = { p: p, o: p.options[0] };
+          // The link's date can be a day off when it was worked out in the
+          // member's own zone; the poll's next date is the honest landing.
+          if (!hit && self._pollLanding(p)) hit = { p: p, o: self._pollLanding(p) };
         });
         if (!hit && !t.date) return null;
         if (!hit) self.say('That date poll is closed.');

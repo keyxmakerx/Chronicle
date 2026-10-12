@@ -219,6 +219,27 @@ func (s *sessionService) ListProposalSummaries(ctx context.Context, campaignID, 
 	return out, nil
 }
 
+// ListOpenProposalViews is every open date poll for one viewer, its dates
+// in viewerTZ, newest first as the repository lists them.
+func (s *sessionService) ListOpenProposalViews(ctx context.Context, campaignID, viewerID, viewerTZ string) ([]ProposalView, error) {
+	proposals, err := s.repo.ListProposals(ctx, campaignID)
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("listing proposals: %w", err))
+	}
+	out := []ProposalView{}
+	for _, p := range proposals {
+		if p.Status != ProposalOpen {
+			continue
+		}
+		v, err := s.GetProposalView(ctx, campaignID, p.ID, viewerID, viewerTZ, false)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *v)
+	}
+	return out, nil
+}
+
 // RespondToOption records a member's response to one option after verifying the
 // option belongs to the named proposal and the proposal belongs to the campaign
 // (IDOR guards) and is still open.

@@ -1,8 +1,6 @@
 package sessions
 
 import (
-	"context"
-	"fmt"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -45,27 +43,6 @@ type calendarPollOption struct {
 	No        int    `json:"no"`
 	// Mine is the viewer's own answer: yes, maybe, no or "".
 	Mine string `json:"mine"`
-}
-
-// ListOpenProposalViews is every open date poll for one viewer, its dates
-// in viewerTZ, newest first as the repository lists them.
-func (s *sessionService) ListOpenProposalViews(ctx context.Context, campaignID, viewerID, viewerTZ string) ([]ProposalView, error) {
-	proposals, err := s.repo.ListProposals(ctx, campaignID)
-	if err != nil {
-		return nil, apperror.NewInternal(fmt.Errorf("listing proposals: %w", err))
-	}
-	out := []ProposalView{}
-	for _, p := range proposals {
-		if p.Status != ProposalOpen {
-			continue
-		}
-		v, err := s.GetProposalView(ctx, campaignID, p.ID, viewerID, viewerTZ, false)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, *v)
-	}
-	return out, nil
 }
 
 // calendarPollsFrom shapes poll views for the calendar. names maps a user id
