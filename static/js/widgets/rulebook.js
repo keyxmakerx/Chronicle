@@ -494,11 +494,10 @@
     if (this.narrow) {
       this.items.forEach(function (it) { sp.push({ items: [it], wide: false }); });
     } else {
-      // A handbook starts every chapter on a fresh spread, so a tab or link
-      // always lands on a spread that opens with that chapter.
-      var fresh = this.data.look === 'paper';
+      // Every chapter starts on a fresh spread, in either look, so a tab or
+      // link always lands on a spread that opens with that chapter.
       this.items.forEach(function (it) {
-        if (fresh && it.kind === 'open' && cur.length) { sp.push({ items: cur, wide: false }); cur = []; }
+        if (it.kind === 'open' && cur.length) { sp.push({ items: cur, wide: false }); cur = []; }
         if (it.wide) {
           if (cur.length) { sp.push({ items: cur, wide: false }); cur = []; }
           sp.push({ items: [it], wide: true });
@@ -1058,6 +1057,24 @@
     return a;
   };
 
+  // One side of a whole spread: the spread laid out at full book width and
+  // clipped to the left or right half, so a wide page can be cut at the spine.
+  Rulebook.prototype.half = function (pages, side) {
+    var h = document.createElement('div'), row = document.createElement('div');
+    h.className = 'rb-half ' + side;
+    row.className = 'rb-spread';
+    pages.forEach(function (p) { row.appendChild(p); });
+    h.appendChild(row);
+    return h;
+  };
+
+  // Fresh pages for a spread, laid out as the book would show it.
+  Rulebook.prototype.spreadPages = function (sp) {
+    var l = this.makePage(sp.items[0], 'l');
+    if (sp.wide) { l.classList.add('wide'); return [l]; }
+    return [l, this.makePage(sp.items[1] || null, 'r')];
+  };
+
   Rulebook.prototype.settled = function () {
     if (!this.refocus) return;
     this.refocus = false;
@@ -1073,14 +1090,32 @@
     this.hideCard();
     if (reduced()) { this.at = ns; this.paint(true); this.settled(); return; }
 
-    var style = this.data.turn, two = !this.narrow;
-    if (style === 'flip' && (oldSp.wide || newSp.wide)) style = 'slide';
+    var style = this.data.turn, two = !this.narrow, cover = null;
+    // A wide page fills the whole spread. A turn to or from one still turns a
+    // leaf about the spine: each face shows its half of the spread.
+    var whole = style === 'flip' && two && (oldSp.wide || newSp.wide);
     var leaf = document.createElement('div'), face, b;
     leaf.className = 'rb-leaf ' + style + (style === 'fade' ? '' : (fwd ? ' fwd' : ' back'));
     leaf.setAttribute('aria-hidden', 'true');
     leaf.setAttribute('inert', '');
 
-    if (style === 'flip') {
+    if (whole) {
+      var oldPages = [this.snapshot(this.pl), this.snapshot(this.pr)];
+      face = this.half(oldPages, fwd ? 'r' : 'l');
+      face.classList.add('rb-face');
+      face.insertAdjacentHTML('beforeend', '<div class="rb-shade"></div>');
+      b = this.half(this.spreadPages(newSp), fwd ? 'l' : 'r');
+      b.classList.add('rb-face', 'b');
+      leaf.appendChild(face);
+      leaf.appendChild(b);
+      // Until the leaf lands, the half it has not reached yet still shows
+      // the spread being left.
+      cover = this.half([this.snapshot(this.pl), this.snapshot(this.pr)], fwd ? 'l' : 'r');
+      cover.classList.add('rb-cover', fwd ? 'l' : 'r');
+      cover.setAttribute('aria-hidden', 'true');
+      this.at = ns;
+      this.paint(false);
+    } else if (style === 'flip') {
       face = document.createElement('div');
       face.className = 'rb-face';
       face.appendChild(this.snapshot(fwd || !two ? this.pr : this.pl));
@@ -1107,10 +1142,14 @@
 
     this.busy = true;
     this.bookEl.classList.add('is-turning');
+    if (cover) this.bookEl.appendChild(cover);
     this.bookEl.appendChild(leaf);
-    [].forEach.call(leaf.querySelectorAll('.rb-page'), function (p) {
-      var s = p.querySelector('.rb-scroll');
-      if (s && p._st) s.scrollTop = p._st;
+    [leaf, cover].forEach(function (layer) {
+      if (!layer) return;
+      [].forEach.call(layer.querySelectorAll('.rb-page'), function (p) {
+        var s = p.querySelector('.rb-scroll');
+        if (s && p._st) s.scrollTop = p._st;
+      });
     });
 
     var done = false;
@@ -1120,6 +1159,7 @@
       clearTimeout(self.leafTimer);
       self.finishNow = null;
       leaf.remove();
+      if (cover) cover.remove();
       self.bookEl.classList.remove('is-turning');
       self.busy = false;
       self.paint(true);
@@ -1290,10 +1330,21 @@
   Rulebook.prototype.setView = function (v) {
     if (!this.data.isDirector || v === this.view || (v !== 'player' && v !== 'director')) return;
     if (this.finishNow) this.finishNow();
-    var key = this.currentKey();
+    var key = this.currentKey(), tops = this.scrollTops();
     this.view = v;
     this.closeResults();
     this.rebuild(key);
+    // Still on the same spread: keep the reader where they were on it.
+    if (this.currentKey() === key) this.scrollTops(tops);
+  };
+
+  // Reads, or with an argument restores, how far each shown page is scrolled.
+  Rulebook.prototype.scrollTops = function (tops) {
+    return [this.pl, this.pr].map(function (page, i) {
+      var s = page.querySelector('.rb-scroll');
+      if (s && tops) s.scrollTop = tops[i];
+      return s ? s.scrollTop : 0;
+    });
   };
 
   Rulebook.prototype.onClick = function (e) {

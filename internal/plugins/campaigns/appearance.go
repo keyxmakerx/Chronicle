@@ -40,7 +40,7 @@ type Appearance struct {
 	HeaderHeight    string `json:"header_height,omitempty"`    // "slim" (default) or "tall".
 	HoverCard       string `json:"hover_card,omitempty"`       // Hover card look: "paper" (default), "plain", "night" or "compact".
 	SheetStyle      string `json:"sheet_style,omitempty"`      // Character sheet style (AppearanceSheetStyles); "modern" is the default.
-	BookLook        string `json:"book_look,omitempty"`        // Rules page look: "book" (as the game system draws it, the default) or "standard".
+	BookLook        string `json:"book_look,omitempty"`        // Rules page look: "book" (the game system's own look, the default) or "standard" (Chronicle's).
 }
 
 // The allowed values of each Appearance choice. The first entry is the

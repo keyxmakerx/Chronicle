@@ -89,8 +89,8 @@ folding, counts in a pill sized to its number.
 - **The character sheet style is the owner's choice** (Customize › Character
   sheets; Modern by default). The choice reaches the page as `data-cz-sheet`
   on `<html>`, which `static/css/sheet_styles.css` and `sheet_motion.js` read.
-- **The rulebook's look is the owner's choice too** (Customize › Rulebook: as
-  the game system draws it, or Standard; the system's look by default).
+- **The rulebook's look is the owner's choice too** (Customize › Rulebook:
+  "Game system's look" or "Chronicle's look"; the system's by default).
   Standard reaches the page as `data-cz-book="standard"` on `<html>`;
   `rulebook.js` then ignores the book's colours and its paper look. The book
   editor's own panels always use the standard dark colours, so they stay
