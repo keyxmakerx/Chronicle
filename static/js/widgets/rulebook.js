@@ -427,7 +427,8 @@
     if (this.inline || !window.FontFace || !document.fonts) return;
     this.data.fonts.forEach(function (f) {
       try {
-        var face = new FontFace('"' + f.family + '"', 'url("' + f.url + '") format("woff2")', { weight: String(f.weight), style: f.style, display: 'swap' });
+        // The family is passed bare: quotes here would become part of its name.
+        var face = new FontFace(f.family, 'url("' + f.url + '") format("woff2")', { weight: String(f.weight), style: f.style, display: 'swap' });
         self.faces.push(face);
         face.load().then(function () { if (!self.dead) document.fonts.add(face); }, function () { /* the theme's fallback font stays */ });
       } catch (e) { /* the theme's fallback font stays */ }

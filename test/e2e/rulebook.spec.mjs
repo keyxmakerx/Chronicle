@@ -132,6 +132,11 @@ async function withBook(fn, opts = {}) {
     page.fontRequests = fontRequests;
     const errors = [];
     page.on('pageerror', (e) => errors.push(e.message));
+    await page.addInitScript(() => {
+      const Real = window.FontFace;
+      window.__faceFamilies = [];
+      window.FontFace = function (family, src, desc) { window.__faceFamilies.push(family); return new Real(family, src, desc); };
+    });
     await page.route('**/*', (route) => {
       const p = new URL(route.request().url()).pathname;
       if (p === '/rules') return route.fulfill({ status: 200, contentType: 'text/html', body: harnessHTML() });
@@ -294,6 +299,9 @@ test('a book with a cover shows it closed on the first visit, opens on Enter and
     assert.equal(await page.evaluate(() => document.querySelector('.rb-front-face img').naturalWidth > 0), true);
     // The book's fonts are asked for from the package route.
     assert.deepEqual(page.fontRequests, [FONT_URL]);
+    // The face is registered under the bare family name the theme asks for;
+    // quotes would become part of the name and no heading would match it.
+    assert.deepEqual(await page.evaluate(() => window.__faceFamilies), ['Big Shoulders Display']);
     // Nothing behind the cover answers the keyboard.
     await page.keyboard.press('ArrowRight');
     assert.equal(await page.evaluate(() => document.querySelector('.rb-where').textContent), 'Basics');
