@@ -129,6 +129,19 @@ func daysLeftLabel(t TrashItem, retention int, now time.Time) string {
 	return fmt.Sprintf("%d days left", n)
 }
 
+// trashNotesLine tells the owner what the page's removal will take with it:
+// the Player Notes wait in the Trash with the page and are deleted with it
+// when the retention runs out. The date is the same one "days left" counts
+// to; empty when the page has no notes.
+func trashNotesLine(t TrashItem, retention int) string {
+	if t.NoteCount == 0 {
+		return ""
+	}
+	when := t.DeletedAt.UTC().Add(time.Duration(retention) * 24 * time.Hour)
+	return fmt.Sprintf("Removed for good on %d %s, with the %d %s people wrote on it",
+		when.Day(), when.Format("Jan"), t.NoteCount, plural(t.NoteCount, "note", "notes"))
+}
+
 // HistoryPanel is the History box opened from a page's History button. It
 // replaces itself when a version is picked, so it needs no script of its own.
 templ HistoryPanel(d HistoryPanelData) {
@@ -229,6 +242,9 @@ templ TrashPage(cc *campaigns.CampaignContext, d TrashPageData) {
 								&middot; <span class="text-fg-secondary">{ trashWho(t, d.ViewerID) }</span>
 								if t.SubPages > 0 {
 									<span class="text-fg-muted"> &middot; with { fmt.Sprint(t.SubPages) } { plural(t.SubPages, "sub-page", "sub-pages") }</span>
+								}
+								if line := trashNotesLine(t, d.Retention); line != "" {
+									<span class="block text-xs text-fg-muted mt-0.5">{ line }</span>
 								}
 							</span>
 							<span class="flex items-center gap-3">

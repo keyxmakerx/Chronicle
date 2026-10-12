@@ -2,6 +2,7 @@ package websocket
 
 import (
 	"log/slog"
+	"sort"
 	"sync"
 	"time"
 
@@ -46,6 +47,15 @@ type Hub struct {
 	foundryMu       sync.RWMutex
 	foundryLastSeen map[string]time.Time
 
+	// browserSeen records, per campaign and user, the last signed-in page
+	// request, so "has Chronicle open" also covers pages that never open a
+	// socket. In-memory like foundryLastSeen: presence is transient.
+	browserMu        sync.Mutex
+	browserSeen      map[string]map[string]time.Time
+	browserLastSweep time.Time
+	// now is time.Now; tests replace it.
+	now func() time.Time
+
 	// pingEvery is fixed before any client connects; tests shorten it per hub.
 	pingEvery time.Duration
 }
@@ -58,6 +68,8 @@ func NewHub() *Hub {
 		register:        make(chan *Client),
 		unregister:      make(chan *Client),
 		foundryLastSeen: make(map[string]time.Time),
+		browserSeen:     make(map[string]map[string]time.Time),
+		now:             time.Now,
 		pingEvery:       pingPeriod,
 	}
 }
@@ -72,6 +84,58 @@ func (h *Hub) MarkFoundrySeen(campaignID string) {
 	h.foundryMu.Lock()
 	h.foundryLastSeen[campaignID] = time.Now()
 	h.foundryMu.Unlock()
+}
+
+// browserSeenRetention bounds how long a page request is remembered; readers
+// ask for a shorter window, so this only keeps the map from growing.
+const browserSeenRetention = 15 * time.Minute
+
+// MarkBrowserSeen records that userID just loaded a page of the campaign. It
+// is one map write under a mutex; once a minute it also drops entries older
+// than the retention window.
+func (h *Hub) MarkBrowserSeen(campaignID, userID string) {
+	if campaignID == "" || userID == "" {
+		return
+	}
+	now := h.now()
+	h.browserMu.Lock()
+	defer h.browserMu.Unlock()
+	users := h.browserSeen[campaignID]
+	if users == nil {
+		users = make(map[string]time.Time)
+		h.browserSeen[campaignID] = users
+	}
+	users[userID] = now
+	if now.Sub(h.browserLastSweep) < time.Minute {
+		return
+	}
+	h.browserLastSweep = now
+	for cid, us := range h.browserSeen {
+		for uid, t := range us {
+			if now.Sub(t) > browserSeenRetention {
+				delete(us, uid)
+			}
+		}
+		if len(us) == 0 {
+			delete(h.browserSeen, cid)
+		}
+	}
+}
+
+// RecentBrowserUsers lists the users who loaded a page of the campaign within
+// the window, sorted.
+func (h *Hub) RecentBrowserUsers(campaignID string, within time.Duration) []string {
+	now := h.now()
+	h.browserMu.Lock()
+	defer h.browserMu.Unlock()
+	var out []string
+	for uid, t := range h.browserSeen[campaignID] {
+		if now.Sub(t) <= within {
+			out = append(out, uid)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // FoundryPresence returns the last-seen timestamp and whether the
@@ -167,30 +231,7 @@ func (h *Hub) Run() {
 					continue
 				}
 
-				// A notes grant reaches notes only, so its socket gets note
-				// events and nothing else the campaign broadcasts.
-				if client.Source == NotesAppSource && !isNoteMessage(msg.Type) {
-					continue
-				}
-
-				// Audience gate: messages flagged RequiresDM only go to
-				// clients with Owner role or IsDmGranted=true — server-side
-				// defense pairing with client-side visibility filters, so
-				// clients can't receive what we never send.
-				if msg.RequiresDM && !permissions.CanSeeDmOnly(client.Role, client.IsDmGranted) {
-					continue
-				}
-
-				// Per-user visibility_rules gate: RequiresDM above only
-				// covers the binary dm_only case; a "specific" visibility
-				// marker/drawing needs its own allowed_users/denied_users
-				// check via msg.AudienceAllows, which must mirror the HTTP
-				// list path's SQL predicate (maps' ListMarkers/ListDrawings)
-				// or a marker/drawing leaks more or less visibility over the
-				// wire than the HTTP list shows. DM-equivalent clients
-				// bypass this too, matching HTTP — unless the message is
-				// StrictAudience (content private even from the GM).
-				if (msg.StrictAudience || !permissions.CanSeeDmOnly(client.Role, client.IsDmGranted)) && !msg.AudienceAllows(client.UserID) {
+				if !msg.DeliversTo(client) {
 					continue
 				}
 
@@ -209,6 +250,40 @@ func (h *Hub) Run() {
 			h.mu.RUnlock()
 		}
 	}
+}
+
+// DeliversTo is the per-recipient gate of the broadcast loop.
+func (m *Message) DeliversTo(client *Client) bool {
+	// A notes grant reaches notes only, so its socket gets note
+	// events and nothing else the campaign broadcasts.
+	if client.Source == NotesAppSource && !isNoteMessage(m.Type) {
+		return false
+	}
+
+	// Audience gate: messages flagged RequiresDM only go to
+	// clients with Owner role or IsDmGranted=true — server-side
+	// defense pairing with client-side visibility filters, so
+	// clients can't receive what we never send.
+	dmLike := permissions.CanSeeDmOnly(client.Role, client.IsDmGranted)
+	if m.RequiresDM && !dmLike {
+		return false
+	}
+
+	// Per-user visibility_rules gate: RequiresDM above only
+	// covers the binary dm_only case; a "specific" visibility
+	// marker/drawing needs its own allowed_users/denied_users
+	// check via m.AudienceAllows, which must mirror the HTTP
+	// list path's SQL predicate (maps' ListMarkers/ListDrawings)
+	// or a marker/drawing leaks more or less visibility over the
+	// wire than the HTTP list shows. DM-equivalent clients
+	// bypass this too, matching HTTP — unless the message is
+	// StrictAudience (content private even from the GM).
+	// AdmitScribes widens that bypass to co-DMs.
+	bypass := dmLike || (m.AdmitScribes && client.Role >= permissions.RoleScribe)
+	if (m.StrictAudience || !bypass) && !m.AudienceAllows(client.UserID) {
+		return false
+	}
+	return true
 }
 
 // AudienceAllows reports whether userID is in m's audience per its
@@ -280,6 +355,25 @@ func (h *Hub) CampaignClientCount(campaignID string) int {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	return len(h.clients[campaignID])
+}
+
+// BrowserUserIDs lists the users with a signed-in browser socket open in the
+// campaign, each once. Foundry, notes-grant and sync-key sockets are left out:
+// they say a tool is connected, not that this person is looking at Chronicle.
+func (h *Hub) BrowserUserIDs(campaignID string) []string {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	seen := map[string]bool{}
+	var out []string
+	for _, c := range h.clients[campaignID] {
+		if c.Source != "browser" || c.UserID == "" || seen[c.UserID] {
+			continue
+		}
+		seen[c.UserID] = true
+		out = append(out, c.UserID)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // TotalClientCount returns the total number of connected clients.

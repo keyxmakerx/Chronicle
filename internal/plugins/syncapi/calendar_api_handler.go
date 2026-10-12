@@ -494,6 +494,7 @@ func (h *CalendarAPIHandler) CreateEvent(c echo.Context) error {
 	}
 	evt, err := h.calendarSvc.CreateEvent(c.Request().Context(), cal.ID, cal.CampaignID, calendar.CreateEventInput{
 		CanAuthorDmOnly:          v.SkipsPerUserRules(),
+		Author:                   v,
 		Name:                     req.Name,
 		Description:              req.Description,
 		DescriptionHTML:          req.DescriptionHTML,

@@ -36,6 +36,14 @@ func (s *stubUserDir) GetUser(_ context.Context, userID string) (*auth.User, err
 	return &auth.User{ID: userID, DisplayName: "Player", Timezone: &tz}, nil
 }
 
+func (s *stubUserDir) GetTimezonesByIDs(_ context.Context, ids []string) (map[string]string, error) {
+	out := make(map[string]string, len(ids))
+	for _, id := range ids {
+		out[id] = s.tz
+	}
+	return out, nil
+}
+
 type captureMailer struct{ lastPlain, lastHTML string }
 
 func (m *captureMailer) SendHTMLMail(_ context.Context, _ []string, _, plainBody, htmlBody string) error {

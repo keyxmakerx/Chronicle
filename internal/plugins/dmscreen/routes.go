@@ -22,5 +22,8 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 		campaigns.RequireCampaignAccess(campaignSvc),
 	)
 	cg.GET("/dm-screen", h.Show, campaigns.RequireCapability(CanOpen, "the DM Screen is for the people running this campaign"))
+	cg.POST("/dm-screen/time", h.StepTime, campaigns.RequireCapability(CanOpen, "the DM Screen is for the people running this campaign"))
+	cg.GET("/dm-screen/notes", h.ShowNote, campaigns.RequireCapability(CanOpen, "the DM Screen is for the people running this campaign"))
+	cg.PUT("/dm-screen/notes", h.SaveNote, campaigns.RequireCapability(CanOpen, "the DM Screen is for the people running this campaign"))
 	cg.POST("/dm-screen/reveal/:eid", h.Reveal, campaigns.RequireCapability(CanOpen, "the DM Screen is for the people running this campaign"))
 }

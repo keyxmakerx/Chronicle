@@ -219,6 +219,37 @@ func (s *shopBuyService) DeclineRequest(ctx context.Context, campaignID string, 
 	return req, nil
 }
 
+// WithdrawRequest lets the player take back a basket the GM has not answered
+// yet; the Owner may too, to clear one a player left behind. A request is only
+// a note of intent (nothing was spent or reserved), so deleting the row is the
+// whole undo. The delete is conditional on "still pending", so it cannot
+// remove a request an approval or the downtime sweep has just claimed.
+func (s *shopBuyService) WithdrawRequest(ctx context.Context, campaignID string, a Actor, requestID int64) error {
+	if s.requests == nil {
+		return apperror.NewInternal(errors.New("purchase requests are not wired"))
+	}
+	unlock := s.stash.locks.lock(campaignID)
+	defer unlock()
+	req, err := s.requests.Get(ctx, campaignID, requestID)
+	if err != nil {
+		return asAppError(err)
+	}
+	if !a.IsOwner() && req.RequestedBy != a.UserID {
+		return forbidden()
+	}
+	if req.Status != PurchasePending {
+		return apperror.NewConflict("That request has already been answered.")
+	}
+	deleted, err := s.requests.DeletePending(ctx, campaignID, requestID)
+	if err != nil {
+		return apperror.NewInternal(err)
+	}
+	if !deleted {
+		return apperror.NewConflict("That request has already been answered.")
+	}
+	return nil
+}
+
 // sweepRequests applies every waiting request, oldest first, when downtime
 // opens. The caller (SetDowntime) holds the campaign lock. One request that
 // cannot go through is marked failed and the rest carry on.
@@ -357,6 +388,8 @@ func (s *shopBuyService) buyerHistory(ctx context.Context, campaignID string, a 
 			},
 			RequesterName: who,
 			Summary:       purchaseSummary(r, who, shop),
+			Purchase:      true,
+			CanWithdraw:   r.Status == PurchasePending && (r.RequestedBy == a.UserID || a.IsOwner()),
 		})
 	}
 	return out, nil

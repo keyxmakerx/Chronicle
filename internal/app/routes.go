@@ -973,34 +973,6 @@ func (a *wsNotesGrantAdapter) AuthenticateNotesGrantForWS(ctx context.Context, t
 	return g.CampaignID, g.UserID, nil
 }
 
-// CALV5-PLACEHOLDER: V5 must rebuild calendarEventPublisherAdapter — the
-// bridge from the calendar's PublishCalendarEvent to the websocket bus.
-// Nothing publishes calendar events now.
-//
-// A switch ending in `default: return` fails silently: an emitter whose event
-// type has no case here publishes into nothing, unreported. Rebuild it with a
-// test that walks every emitter's event type and asserts a case exists.
-// TODO(#778)
-//
-// The mapping it carried, so V5 has the checklist rather than rediscovering it:
-//   "event.created"                            -> ws.MsgCalendarEventCreated
-//   "event.updated"                            -> ws.MsgCalendarEventUpdated
-//   "event.deleted"                            -> ws.MsgCalendarEventDeleted
-//   "date.advanced"                            -> ws.MsgCalendarDateAdvanced
-//   "calendar.weather.changed"                 -> ws.MsgCalendarWeatherChanged
-//   "calendar.structure.updated"               -> ws.MsgCalendarStructureUpdated
-//   "calendar.season.changed"                  -> ws.MsgCalendarSeasonChanged
-//   "calendar.era.changed"                     -> ws.MsgCalendarEraChanged
-//   "calendar.moon.phase_changed"              -> ws.MsgCalendarMoonPhaseChanged
-//   "calendar.cycle.changed"                   -> ws.MsgCalendarCycleChanged
-//   "calendar.festival.changed"                -> ws.MsgCalendarFestivalChanged
-//   calendar.EventWorldStateChanged            -> ws.MsgCalendarWorldstateChanged
-//   calendar.EventWorldStateChangedDM          -> ws.MsgCalendarWorldstateChanged
-//   "calendar.weather.zones.changed"           -> ws.MsgCalendarWeatherZonesChanged
-//   (calendar.worldstate.changed also had a DM-gated twin that set
-//   RequiresDM = true — the dm_only worldstate payload must never reach a
-//   player's socket.)
-
 // relationEventPublisherAdapter bridges the websocket.EventBus to the
 // relations.RelationEventPublisher interface.
 type relationEventPublisherAdapter struct {
@@ -1279,10 +1251,9 @@ type entityNotesNotifierHolder struct {
 }
 
 // Notify is the entity_notes.Notifier callback. Translates the
-// service's string event into a websocket message type and broadcasts
-// to the campaign that owns the note. Never to specific users — the
-// audience filter is server-side on the next list refresh; clients
-// just need a "something changed, refetch" nudge.
+// service's string event into a websocket message type and sends it only
+// to the note's readers (entityNoteAudience); clients refetch the list,
+// where the repository's ACL decides what they get.
 func (h *entityNotesNotifierHolder) Notify(event string, note *entity_notes.Note, _ entity_notes.Audience) {
 	if h.bus == nil || note == nil || note.CampaignID == "" {
 		return
@@ -1302,10 +1273,32 @@ func (h *entityNotesNotifierHolder) Notify(event string, note *entity_notes.Note
 	// for fresh ACL filtering. We deliberately do NOT broadcast the note
 	// body so a private note's contents never leave the server, even
 	// if a misconfigured client subscribes to the wrong campaign.
-	h.bus.Publish(ws.NewMessage(msgType, note.CampaignID, note.ID, map[string]string{
+	msg := ws.NewMessage(msgType, note.CampaignID, note.ID, map[string]string{
 		"entityId": note.EntityID,
 		"noteId":   note.ID,
-	}))
+	})
+	msg.AllowedUsers, msg.StrictAudience, msg.AdmitScribes = entityNoteAudience(note)
+	h.bus.Publish(msg)
+}
+
+// entityNoteAudience maps a note onto the hub's audience fields so the
+// nudge reaches exactly who entity_notes.NotePassesACL lets read it: a
+// player must not learn that a hidden note exists on a page. The author
+// is always named, since they read their own note whatever its audience.
+func entityNoteAudience(note *entity_notes.Note) (allowed []string, strict, admitScribes bool) {
+	switch note.Audience {
+	case entity_notes.AudienceEveryone:
+		return nil, false, false
+	case entity_notes.AudienceDMOnly:
+		return []string{note.AuthorUserID}, false, false
+	case entity_notes.AudienceDMScribe:
+		return []string{note.AuthorUserID}, false, true
+	case entity_notes.AudienceCustom:
+		return append([]string{note.AuthorUserID}, note.SharedWith...), true, false
+	default:
+		// Private, or anything unknown: the author alone.
+		return []string{note.AuthorUserID}, true, false
+	}
 }
 
 // wsRevokerHolder bridges each plugin's own ConnectionRevoker interface
@@ -3322,6 +3315,11 @@ func (a *App) RegisterRoutes() {
 	// Also read by the Foundry page's version check; nil without packages.
 	var fvttOwnerUpdates foundry_vtt.OwnerUpdates
 	fvttHandler.SetActivityRecorder(adminActivity)
+	pkgHandler.SetTypeUI(packages.PackageTypeFoundryModule, packages.TypeUI{
+		ActionsFragmentURL: func(p packages.Package) string {
+			return foundry_vtt.AdminPackageActionsFragmentURL(p.ID)
+		},
+	})
 	if pkgUpdateSvc != nil {
 		// Owners are asked before a new module version reaches their campaign.
 		fvttOwnerUpdates = foundry_vtt.NewOwnerUpdates(pkgUpdateSvc, pkgService)
@@ -3693,6 +3691,26 @@ func (a *App) RegisterRoutes() {
 		SetGameNightsAffectedByAnchorMove(calendar.GameNightsAffectedByAnchorMove)
 	}); ok {
 		wired.SetGameNightsAffectedByAnchorMove(&gameNightsAnchorMoveAdapter{svc: sessionsService})
+	}
+	// A structure edit that reorders months moves game nights with them.
+	if wired, ok := calendarService.(interface {
+		SetSessionMonthRemapper(calendar.SessionMonthRemapper)
+	}); ok {
+		wired.SetSessionMonthRemapper(&sessionMonthRemapAdapter{svc: sessionsService})
+	}
+	// Records which calendar a session's in-world date belongs to, and
+	// stamps the dates saved before it was recorded. Best-effort: logs and
+	// never blocks startup; a campaign with no calendar is retried next boot.
+	defaultCalendarResolver := &sessionsDefaultCalendarAdapter{svc: calendarService}
+	if wired, ok := sessionsService.(interface {
+		SetDefaultCalendarResolver(sessions.DefaultCalendarResolver)
+	}); ok {
+		wired.SetDefaultCalendarResolver(defaultCalendarResolver)
+	}
+	if n, err := sessions.ReconcileWorldDateCalendars(context.Background(), sessionsService, defaultCalendarResolver); err != nil {
+		slog.Error("sessions: world date calendar backfill failed", slog.Any("error", err), slog.Int("stamped", n))
+	} else if n > 0 {
+		slog.Info("sessions: world date calendar backfill complete", slog.Int("sessions", n))
 	}
 	// Keeps Game nights on for campaigns that already use them; a recorded
 	// owner choice is left alone. Best-effort: logs and never blocks startup.
@@ -4172,6 +4190,10 @@ func (a *App) RegisterRoutes() {
 	pageSafetyRepo := entities.NewPageSafetyRepository(a.DB)
 	entityService.SetPageSafety(pageSafetyRepo)
 	pageSafetyService := entities.NewPageSafetyService(pageSafetyRepo, entityRepo, entityService, settingsService)
+	// Player Notes are counted (never read) so a delete and the Trash can say
+	// how many notes go with a page; without the wiring they just stay quiet.
+	pageSafetyService.SetNoteCounter(entityNotesService)
+	entityHandler.SetTrashNoteCounter(pageSafetyService)
 	entities.RegisterPageSafetyRoutes(e, entities.NewPageSafetyHandler(pageSafetyService, entityService, campaignService), campaignService, authService)
 	go pageSafetyService.StartPurger(a.ShutdownCtx)
 
@@ -4213,8 +4235,8 @@ func (a *App) RegisterRoutes() {
 	widgetRegistry.Register(maps.NewMapWidgetType(mapsService))
 	widgetBindingSvc := widgetbindings.NewService(widgetbindings.NewRepository(a.DB), widgetRegistry)
 	// The calendar/timeline services call OnInstanceDeleted on delete so a
-	// removed instance's bindings are swept promptly (render-time guard and
-	// Sweep are the backstop). Reached via a type assertion so the
+	// removed instance's bindings are swept promptly (Resolve's render-time
+	// guard skips and deletes any orphan this misses). Reached via a type assertion so the
 	// CalendarService/TimelineService interfaces stay unchanged.
 	if t, ok := timelineSvc.(interface {
 		SetBindingCleaner(timeline.BindingCleaner)
@@ -5208,6 +5230,10 @@ func (a *App) RegisterRoutes() {
 	// affects instead of being a no-op.
 	wsRevoker.hub = wsHub
 
+	// Remember who has loaded a campaign page lately, for the DM Screen's
+	// "players here" count on pages that open no socket.
+	e.Use(campaignPageSeen(wsHub))
+
 	// Wire the WS hub's presence lookup into foundry_vtt. fvttHandler owns
 	// both GET /campaigns/:id/foundry-presence (live diagnostic JSON) and
 	// /foundry-vtt/presence-pill-fragment (lazy-loaded pill on the map detail
@@ -5220,9 +5246,12 @@ func (a *App) RegisterRoutes() {
 	// registered here because Foundry presence comes from wsHub.
 	dmScreenSvc := dmscreen.NewService(dmscreen.Sources{
 		Downtime: &dmDowntimeAdapter{stash: stashSvc, addons: addonService},
+		Notes:    &dmNotesAdapter{notes: noteSvc, members: campaignService},
+		Requests: &dmRequestsAdapter{stash: stashSvc, addons: addonService},
 		World:    &dmWorldAdapter{svc: calendarService},
 		Nights:   &dmNightAdapter{svc: sessionsService, members: campaignService},
 		Foundry:  wsHub,
+		Presence: &dmPresenceAdapter{members: campaignService, hub: wsHub, foundry: foundryPlayerRepo},
 		Party:    &dmPartyAdapter{entities: entityService, campaigns: campaignService},
 		Hidden:   &dmHiddenAdapter{entities: entityService, lists: characterListService},
 		System:   systemHandler,
@@ -5265,6 +5294,14 @@ func (a *App) RegisterRoutes() {
 	questEntityEvts := newQuestEntityEvents(&entityEventPublisherAdapter{bus: wsEventBus})
 	entityService.SetEventPublisher(questEntityEvts)
 	relService.SetEventPublisher(&relationEventPublisherAdapter{bus: wsEventBus, shares: stashSvc})
+	// Calendar writes reach the Foundry module live; without this it only
+	// sees them on reconnect or a manual Pull. Reached by type assertion like
+	// the visibility gate, so the CalendarService interface stays unchanged.
+	if pub, ok := calendarService.(interface {
+		SetEventPublisher(calendar.CalendarEventPublisher)
+	}); ok {
+		pub.SetEventPublisher(&calendarEventPublisherAdapter{bus: wsEventBus})
+	}
 	stashEvents.bus = wsEventBus
 	entityService.SetSidebarAutoAdder(&sidebarAutoAdderAdapter{campaignService: campaignService})
 	noteSvc.SetEventPublisher(&noteEventPublisherAdapter{bus: wsEventBus})
@@ -5471,6 +5508,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "site-look", Scripts: []string{"/static/js/widgets/site_look.js"}},
 	{Name: "page-tabs", Scripts: []string{"/static/js/widgets/page_tabs.js"}},
 	{Name: "era-pages", Scripts: []string{"/static/js/widgets/era_pages.js"}},
+	{Name: "dm-screen", Scripts: []string{"/static/js/widgets/dm_screen.js"}},
 }
 
 // journalCharacterAdapter adapts EntityService to notes.CharacterLister: the

@@ -166,55 +166,6 @@ templ ImportReview(d ImportReviewData) {
 			}
 		</div>
 	</form>
-	// Alpine x-data factory, defined inline so the review screen
-	// doesn't require a separate JS bundle. Bulk action ops run via
-	// direct DOM mutation rather than a fully-reactive row model, to
-	// keep the templ-rendered server-side state authoritative and
-	// avoid a 3-way sync between FormData, the templ markup, and the
-	// Alpine store.
-	<script>
-		(function () {
-			if (window.aiImportReview) { return; }
-			window.aiImportReview = function () {
-				return {
-					applyDefaultsToAll: function () {
-						var form = this.$root;
-						var bulkCategory = form.querySelector('[name=bulk_default_category]')?.value || '';
-						var bulkVisibility = form.querySelector('[name=bulk_default_visibility]')?.value || '';
-						var bulkConflict = form.querySelector('[name=bulk_default_conflict]')?.value || '';
-						form.querySelectorAll('select[name$="_category"]').forEach(function (sel) {
-							if (sel.name === 'bulk_default_category') return;
-							if (bulkCategory && Array.from(sel.options).some(function (o) { return o.value === bulkCategory; })) {
-								sel.value = bulkCategory;
-								sel.dispatchEvent(new Event('change'));
-							}
-						});
-						form.querySelectorAll('select[name$="_visibility"]').forEach(function (sel) {
-							if (sel.name === 'bulk_default_visibility') return;
-							if (bulkVisibility) { sel.value = bulkVisibility; }
-						});
-						form.querySelectorAll('select[name$="_conflict"]').forEach(function (sel) {
-							if (sel.name === 'bulk_default_conflict') return;
-							if (bulkConflict) { sel.value = bulkConflict; }
-						});
-					},
-					skipAllConflicts: function () {
-						this.$root.querySelectorAll('select[name$="_conflict"]').forEach(function (sel) {
-							if (sel.name === 'bulk_default_conflict') return;
-							sel.value = 'skip';
-						});
-					},
-					toggleAll: function (event) {
-						var checked = event.target.checked;
-						this.$root.querySelectorAll('input[type=checkbox][name$="_include"]').forEach(function (cb) {
-							if (cb.disabled) return;
-							cb.checked = checked;
-						});
-					},
-				};
-			};
-		})();
-	</script>
 }
 
 // skippedNote says which rows the import leaves out and why, so a block
@@ -394,6 +345,12 @@ templ reviewRow(campaignID string, idx int, page importer.ParsedPage, cls import
 				if page.FrontMatter.Action == importer.ActionDelete {
 					@reviewRowDeleteConfirm(idx, page.Name, page.FrontMatter.EraName())
 				}
+				// A page with GM-only parts: any row that ends up replacing its
+				// text needs the tick (the dropdowns can turn a row into an
+				// update after this renders, so every non-delete row shows it).
+				if cls.GMOnly.Any() && page.Status != importer.StatusParseError && page.FrontMatter.Action != importer.ActionDelete {
+					@reviewRowGMOnlyConfirm(idx, page.Name, cls.GMOnly)
+				}
 				if len(page.Warnings) > 0 {
 					<details class="text-xs text-fg-muted mt-1">
 						<summary class="cursor-pointer">{ fmt.Sprintf("%d %s", len(page.Warnings), pluralize("warning", "warnings", len(page.Warnings))) }</summary>
@@ -463,6 +420,30 @@ templ reviewRowEraPill(page importer.ParsedPage) {
 				{ "known as " + page.FrontMatter.KnownAs }
 			</span>
 		}
+	</div>
+}
+
+// reviewRowGMOnlyConfirm renders the "Replace the text anyway" callout for a
+// page whose current text has GM-only parts. Unticked by default and not
+// `required`: leaving it unticked is a valid choice (the row is skipped), and
+// the committer re-checks the tick against the live page either way.
+templ reviewRowGMOnlyConfirm(idx int, name string, gm importer.GMOnlyParts) {
+	<div class="mt-2 p-2 rounded border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20" role="group" aria-label={ fmt.Sprintf("GM-only parts of %s", name) }>
+		<p class="text-xs text-amber-900 dark:text-amber-100">
+			<i class="fa-solid fa-triangle-exclamation mr-1" aria-hidden="true"></i>
+			{ gm.Warning() }
+		</p>
+		<label class="flex items-start gap-2 text-xs text-amber-900 dark:text-amber-100 cursor-pointer mt-1">
+			<input
+				type="checkbox"
+				name={ fmt.Sprintf("page_%d_replace_gm_confirmed", idx) }
+				class="mt-0.5 rounded border-amber-400 text-amber-600"
+			/>
+			<span>Replace the text anyway</span>
+		</label>
+		<p class="text-xs text-amber-900 dark:text-amber-100 mt-1">
+			Any GM-only words the AI copied into its text will be visible to players.
+		</p>
 	</div>
 }
 
@@ -844,6 +825,58 @@ templ importBody(cc *campaigns.CampaignContext) {
 
 		<div id="ai-import-review-host"></div>
 	</div>
+	@importReviewScript()
+}
+
+// importReviewScript defines the review screen's Alpine x-data factory
+// with the page, not inside the swapped-in review: Alpine reads x-data the
+// moment htmx inserts the form, before htmx runs scripts that came with it,
+// so a factory shipped in the fragment is always too late. Bulk actions
+// mutate the DOM directly to keep the server-rendered state authoritative.
+templ importReviewScript() {
+	<script>
+		(function () {
+			if (window.aiImportReview) { return; }
+			window.aiImportReview = function () {
+				return {
+					applyDefaultsToAll: function () {
+						var form = this.$root;
+						var bulkCategory = form.querySelector('[name=bulk_default_category]')?.value || '';
+						var bulkVisibility = form.querySelector('[name=bulk_default_visibility]')?.value || '';
+						var bulkConflict = form.querySelector('[name=bulk_default_conflict]')?.value || '';
+						form.querySelectorAll('select[name$="_category"]').forEach(function (sel) {
+							if (sel.name === 'bulk_default_category') return;
+							if (bulkCategory && Array.from(sel.options).some(function (o) { return o.value === bulkCategory; })) {
+								sel.value = bulkCategory;
+								sel.dispatchEvent(new Event('change'));
+							}
+						});
+						form.querySelectorAll('select[name$="_visibility"]').forEach(function (sel) {
+							if (sel.name === 'bulk_default_visibility') return;
+							if (bulkVisibility) { sel.value = bulkVisibility; }
+						});
+						form.querySelectorAll('select[name$="_conflict"]').forEach(function (sel) {
+							if (sel.name === 'bulk_default_conflict') return;
+							if (bulkConflict) { sel.value = bulkConflict; }
+						});
+					},
+					skipAllConflicts: function () {
+						this.$root.querySelectorAll('select[name$="_conflict"]').forEach(function (sel) {
+							if (sel.name === 'bulk_default_conflict') return;
+							sel.value = 'skip';
+						});
+					},
+					toggleAll: function (event) {
+						var checked = event.target.checked;
+						this.$root.querySelectorAll('input[type=checkbox][name$="_include"]').forEach(function (cb) {
+							if (cb.disabled) return;
+							cb.checked = checked;
+						});
+					},
+				};
+			};
+		})();
+	</script>
 }
 
 // ensure entities import is referenced (silences unused-import).

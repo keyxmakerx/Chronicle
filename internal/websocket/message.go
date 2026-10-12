@@ -200,6 +200,11 @@ type Message struct {
 	// GM sees everything" does not hold. Set only with a non-empty
 	// AllowedUsers: an empty allowlist still means everyone.
 	StrictAudience bool `json:"-"`
+
+	// AdmitScribes lets co-DMs (RoleScribe and up) past AllowedUsers the
+	// way DM-equivalent clients already pass, for content written for
+	// "the DM and co-DMs". Ignored under StrictAudience.
+	AdmitScribes bool `json:"-"`
 }
 
 // Encode serializes a Message to JSON bytes.

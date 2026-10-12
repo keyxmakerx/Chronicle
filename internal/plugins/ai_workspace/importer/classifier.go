@@ -45,6 +45,11 @@ type Classification struct {
 	// to drive the Rename / Overwrite handling.
 	ConflictEntity *entities.Entity
 
+	// GMOnly counts the GM-only parts of ConflictEntity's current text. The
+	// review screen puts a "Replace the text anyway" tick on any row that
+	// could update such a page.
+	GMOnly GMOnlyParts
+
 	// ProposedTypeSlug is the FrontMatter.Type lowercased + trimmed.
 	// "" when no type was specified in FM (operator picks via bulk
 	// default at review time).
@@ -203,6 +208,15 @@ func (c *Classifier) ensureTypes(ctx context.Context) error {
 	for i, t := range types {
 		c.typesBySlug[strings.ToLower(t.Slug)] = &c.cachedTypes[i]
 	}
+	// An AI writes the category as either name ("race" or "races"), so the
+	// plural name finds the type too, unless another type's slug is that word.
+	for i, t := range types {
+		if alias := entities.Slugify(t.NamePlural); alias != "" {
+			if _, taken := c.typesBySlug[alias]; !taken {
+				c.typesBySlug[alias] = &c.cachedTypes[i]
+			}
+		}
+	}
 	c.typesFetched = true
 	return nil
 }
@@ -237,6 +251,7 @@ func (c *Classifier) classifyOne(ctx context.Context, p ParsedPage) (Classificat
 	existing, _ := c.lookup.GetBySlug(ctx, c.campaignID, cls.ResolvedSlug)
 	if existing != nil {
 		cls.ConflictEntity = existing
+		cls.GMOnly = GMOnlyPartsOf(existing)
 	}
 
 	switch p.FrontMatter.Action {

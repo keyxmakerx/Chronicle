@@ -202,3 +202,20 @@ test('dayIndex only counts Julian days when tracks_real_time is set, matching Ca
   assert.equal(SW.dayIndex(manual, 2026, 9, 27), 739760);
   assert.equal(SW.dayIndex(tracked, 2026, 9, 27), 2461311);
 });
+
+// A real-time reallife calendar follows the Gregorian 4/100/400 rule, like
+// Calendar.MonthDays server-side; leap_year_every=4 alone would call 2100 leap.
+test('real-time calendars use the Gregorian leap rule; manual reallife keeps its own', () => {
+  const months = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31].map((days) => ({ days, leap_year_days: 0 }));
+  months[1].leap_year_days = 1;
+  const real = { mode: 'reallife', tracks_real_time: true, leap_year_every: 4, leap_year_offset: 0, months };
+  const cases = [[1996, true], [2000, true], [2023, false], [2024, true], [1900, false], [2100, false], [2400, true]];
+  for (const [year, leap] of cases) {
+    assert.equal(SW.isLeapYear(real, year), leap, "isLeapYear " + year);
+    assert.equal(SW.monthDays(real, 1, year), leap ? 29 : 28, "February " + year);
+  }
+  // Manual (non-real-time) reallife keeps the configured geometry.
+  const manual = { ...real, tracks_real_time: false };
+  assert.equal(SW.isLeapYear(manual, 2100), true);
+  assert.equal(SW.monthDays(manual, 1, 2100), 29);
+});

@@ -1,31 +1,31 @@
-// helpers.go — packages plugin helpers exposed to packages.templ.
+// helpers.go — per-type UI hooks the packages page consults.
 //
 // The per-row admin UI for a package type is rendered via an HTMX lazy-load
-// fragment owned by the type's plugin; this file holds the type→URL
-// dispatch. The owning-plugin slug appears as a URL-path literal, which the
-// plugin-isolation grep guard's regex (looking for a closing quote right
-// after the slug) does not flag, since it's a URL path, not an import.
-//
-// TODO(#721): give package types their own UI hooks instead of this
-// hard-coded URL dispatch.
+// fragment owned by the type's own plugin. The packages plugin must not import
+// that plugin, so the owner registers a hook at startup (internal/app) and the
+// page builder resolves it per row.
 
 package packages
 
-// actionsFragmentURLFor returns the URL of the per-row actions
-// fragment for the given package's type, or "" if the type has no
-// type-specific fragment. packages.templ calls this when rendering
-// each row's button group to know whether to insert an hx-get slot.
-//
-// Only foundry-module packages have a type-specific fragment; system
-// packages render no extra actions beyond the generic
-// Check/Versions/Usage/Delete buttons.
-func actionsFragmentURLFor(pkg Package) string {
-	switch pkg.Type {
-	case PackageTypeFoundryModule:
-		return "/admin/foundry-vtt/packages/" + pkg.ID + "/actions-fragment"
-	case PackageTypeSystem:
-		return ""
-	default:
+// TypeUI is one package type's contribution to the packages page.
+type TypeUI struct {
+	// ActionsFragmentURL returns the URL of the type's per-row actions
+	// fragment, or "" for no fragment. Nil means no fragment.
+	ActionsFragmentURL func(pkg Package) string
+}
+
+// typeUIHooks maps a package type to its registered UI hook. Held on the
+// Handler rather than in a package-level map so tests and a degraded boot
+// never share state.
+type typeUIHooks map[PackageType]TypeUI
+
+// actionsFragmentURLFor returns the per-row actions fragment URL for the
+// package's type, or "" when the type registered none (system packages render
+// only the generic Check/Versions/Usage/Delete buttons).
+func (hooks typeUIHooks) actionsFragmentURLFor(pkg Package) string {
+	ui, ok := hooks[pkg.Type]
+	if !ok || ui.ActionsFragmentURL == nil {
 		return ""
 	}
+	return ui.ActionsFragmentURL(pkg)
 }

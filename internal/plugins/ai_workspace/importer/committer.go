@@ -120,6 +120,12 @@ type RowDecision struct {
 	// row without it as StatusFailed (belt-and-suspenders against a
 	// client-side bypass of the gate).
 	DeleteConfirmed bool
+
+	// ReplaceGMOnlyConfirmed is the per-row "Replace the text anyway" tick.
+	// An update over a page that has GM-only parts is skipped without it;
+	// commitUpdate re-checks it so a client that never rendered the tick
+	// cannot apply the replace.
+	ReplaceGMOnlyConfirmed bool
 }
 
 // CommitInput bundles the per-request commit payload.
@@ -336,9 +342,10 @@ func (c *Committer) createNewCategories(
 		}
 		seen[slug] = true
 
+		name, plural := categoryNames(slug)
 		input := entities.CreateEntityTypeInput{
-			Name:       cases_title(slug),
-			NamePlural: cases_title(slug) + "s",
+			Name:       name,
+			NamePlural: plural,
 			Icon:       "fa-cube",
 			Color:      "#6366f1", // accent fallback; operator can recolor later
 		}
@@ -556,6 +563,17 @@ func (c *Committer) commitUpdate(
 	idx int,
 ) RowOutcome {
 	out := RowOutcome{Index: idx, Name: existing.Name, Slug: existing.Slug, EntityID: existing.ID}
+
+	// The AI's copy of a page never carries its GM-only parts back, so a
+	// whole-text replace would delete them or publish the AI's copy of them.
+	// Measured here, from the entity as it is now, so both update paths and
+	// a stale review screen get the same answer. Checked before any write,
+	// including the settings update below.
+	if gm := GMOnlyPartsOf(existing); gm.Any() && !dec.ReplaceGMOnlyConfirmed {
+		out.Status = StatusSkipped
+		out.Reason = gm.SkipReason()
+		return out
+	}
 
 	// ParentID, IsPrivate, TypeLabel and FieldsData are absent unless
 	// explicitly set, meaning "preserve": an update must not flatten
@@ -912,6 +930,28 @@ func cases_title(s string) string {
 		return s
 	}
 	return strings.ToUpper(s[:1]) + s[1:]
+}
+
+// categoryNames turns a new category's slug into its singular and plural
+// names. AIs write the type either way ("race" or "races"), so a slug that
+// already reads as a plural is not pluralized again.
+func categoryNames(slug string) (name, plural string) {
+	t := cases_title(slug)
+	switch {
+	case strings.HasSuffix(t, "ies") && len(t) > 3:
+		return t[:len(t)-3] + "y", t
+	case strings.HasSuffix(t, "sses"), strings.HasSuffix(t, "xes"),
+		strings.HasSuffix(t, "ches"), strings.HasSuffix(t, "shes"):
+		return t[:len(t)-2], t
+	case strings.HasSuffix(t, "s") && !strings.HasSuffix(t, "ss") && len(t) > 1:
+		return t[:len(t)-1], t
+	case strings.HasSuffix(t, "y") && len(t) > 1 && !strings.ContainsRune("aeiou", rune(t[len(t)-2])):
+		return t, t[:len(t)-1] + "ies"
+	case strings.HasSuffix(t, "s"), strings.HasSuffix(t, "x"),
+		strings.HasSuffix(t, "ch"), strings.HasSuffix(t, "sh"):
+		return t, t + "es"
+	}
+	return t, t + "s"
 }
 
 // intToStr stringifies a small int without importing strconv from

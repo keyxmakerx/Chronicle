@@ -34,6 +34,12 @@ type Service interface {
 
 	// Delete removes a note. Only the author may delete.
 	Delete(ctx context.Context, id string, viewer ViewerContext) error
+
+	// CountByEntities counts the notes on each page, any audience. It is
+	// the seam the Trash uses to say how many notes go with a page; it
+	// returns numbers only, so it can't leak a note a viewer may not read.
+	// Callers must already be allowed to manage the pages (owner-gated).
+	CountByEntities(ctx context.Context, campaignID string, entityIDs []string) (map[string]int, error)
 }
 
 // Notifier is the optional callback the service invokes after each
@@ -44,7 +50,7 @@ type Notifier func(event string, note *Note, audience Audience)
 
 // ErrAudienceForbidden is returned when the viewer's role doesn't
 // permit creating/updating a note with the requested audience
-// (e.g., a player attempting to create dm_only or dm_scribe).
+// (e.g., a player attempting to create dm_scribe).
 var ErrAudienceForbidden = errors.New("you do not have permission to use this audience")
 
 type service struct {
@@ -222,6 +228,17 @@ func (s *service) Delete(ctx context.Context, id string, viewer ViewerContext) e
 	return nil
 }
 
+func (s *service) CountByEntities(ctx context.Context, campaignID string, entityIDs []string) (map[string]int, error) {
+	if len(entityIDs) == 0 {
+		return map[string]int{}, nil
+	}
+	counts, err := s.repo.CountByEntities(ctx, campaignID, entityIDs)
+	if err != nil {
+		return nil, apperror.NewInternal(err)
+	}
+	return counts, nil
+}
+
 // --- ACL helpers (write-side) ---
 
 // checkAudienceWrite enforces the role gate on which audiences a viewer
@@ -232,15 +249,13 @@ func checkAudienceWrite(audience Audience, viewer ViewerContext) error {
 	switch audience {
 	case AudiencePrivate, AudienceEveryone, AudienceCustom:
 		return nil
+	case AudienceDMOnly:
+		// Any member may write a note only the DMs read (a player asking
+		// the DM something privately). The author's name shows on every
+		// note, so a player's DM-only note can't pass as the DM's.
+		return nil
 	case AudienceDMScribe:
 		if viewer.IsOwner || viewer.IsScribe || viewer.IsDMGranted {
-			return nil
-		}
-	case AudienceDMOnly:
-		// IsDmGranted users can read dm_only but only Owners can author
-		// them, so a dm-granted player can't post notes that pretend to be
-		// GM-authored.
-		if viewer.IsOwner {
 			return nil
 		}
 	}

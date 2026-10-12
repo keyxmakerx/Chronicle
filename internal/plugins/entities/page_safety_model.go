@@ -65,6 +65,21 @@ type TrashItem struct {
 	DeletedBy     *string   `json:"deleted_by,omitempty"`
 	DeletedByName string    `json:"deleted_by_name,omitempty"`
 	SubPages      int       `json:"sub_pages"`
+	// NoteCount is how many Player Notes sit on the page and its trashed
+	// sub-pages. They wait in the Trash with the page and go with it when
+	// the retention runs out. Zero also covers "not counted".
+	NoteCount int `json:"note_count"`
+}
+
+// NoteCounter counts Player Notes per page. The notes live in another
+// plugin; entities sees only this seam, so it never reads that plugin's
+// tables. Only counts cross it, never note content or audiences: a count
+// tells the owner what a delete costs without opening notes they may not be
+// meant to read.
+type NoteCounter interface {
+	// CountByEntities returns the number of notes on each page, any
+	// audience. Pages with none are absent from the map.
+	CountByEntities(ctx context.Context, campaignID string, entityIDs []string) (map[string]int, error)
 }
 
 // EntryConflict is what a save based on stale text gets back: the text that

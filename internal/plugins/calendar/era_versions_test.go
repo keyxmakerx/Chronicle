@@ -75,8 +75,10 @@ type fakeEraRepo struct {
 	gotHTML      string
 }
 
-func (f *fakeEraRepo) EraInCampaign(context.Context, int, string) (bool, error)    { return f.eraOK, nil }
-func (f *fakeEraRepo) EntityInCampaign(context.Context, string, string) (bool, error) { return f.entOK, nil }
+func (f *fakeEraRepo) EraInCampaign(context.Context, int, string) (bool, error) { return f.eraOK, nil }
+func (f *fakeEraRepo) EntityInCampaign(context.Context, string, string) (bool, error) {
+	return f.entOK, nil
+}
 func (f *fakeEraRepo) SaveEntry(_ context.Context, _ string, _ int, _, html string, _ *int, _ string) (int, bool, error) {
 	f.gotHTML = html
 	return 4, f.saved, nil

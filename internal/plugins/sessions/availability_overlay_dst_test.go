@@ -52,7 +52,9 @@ func runOverlayWithDeadline(t *testing.T, d time.Duration, fn func() WeekOverlay
 
 // TestOverlay_TerminatesInMidnightJumpZones is the direct regression: a member
 // free 22:00–24:00 local on the transition Sunday, rendered for a viewer in the
-// same zone. This is the exact shape the live repro used.
+// same zone. This is the exact shape the live repro used. It guards the loop's
+// own advance guard; the day boundary itself is guarded by
+// TestOverlay_MidnightJumpDayStartsAtFirstRealHour and the timeutil tests.
 func TestOverlay_TerminatesInMidnightJumpZones(t *testing.T) {
 	for _, tc := range dstMidnightZones {
 		t.Run(tc.zone, func(t *testing.T) {
@@ -234,5 +236,54 @@ func TestSplitToViewerDays_CrossesTheJumpDayBoundary(t *testing.T) {
 	// here would claim the member was free during an hour the clock skipped.
 	if segs[1].date != "2026-03-08" || segs[1].startMin != 60 || segs[1].endMin != 3*60 {
 		t.Errorf("second segment = %+v, want 2026-03-08 60..180 (the day starts at 01:00)", segs[1])
+	}
+}
+
+// TestOverlay_MidnightJumpDayStartsAtFirstRealHour pins the overlay's day
+// boundaries, which a termination check cannot: the advance guard in the split
+// loop keeps it finishing even when the day boundary is wrong, so only the
+// exact placement of the member's hours shows the boundary is right. A block
+// covering the first hours of the transition day must start at the first hour
+// the local clock really has.
+func TestOverlay_MidnightJumpDayStartsAtFirstRealHour(t *testing.T) {
+	for _, tc := range dstMidnightZones {
+		t.Run(tc.zone, func(t *testing.T) {
+			loc, err := time.LoadLocation(tc.zone)
+			if err != nil {
+				t.Skipf("tzdata missing for %s", tc.zone)
+			}
+			trans, err := time.Parse("2006-01-02", tc.transition)
+			if err != nil {
+				t.Fatalf("bad transition date: %v", err)
+			}
+			weekStart, err := timeutil.ParseCivilDate(tc.weekStart)
+			if err != nil {
+				t.Fatalf("bad week start: %v", err)
+			}
+			overlay := runOverlayWithDeadline(t, 10*time.Second, func() WeekOverlay {
+				return buildWeekOverlay(
+					[]overlayMemberInput{{UserID: "u1", Name: "Ana"}},
+					map[string][]AvailabilityBlock{"u1": {{
+						DayOfWeek: int(trans.Weekday()), StartMinute: 0, EndMinute: 3 * 60,
+						State: AvailAvailable, TZ: tc.zone,
+					}}}, nil, weekStart, loc, tc.zone, true)
+			})
+			col := -1
+			for i, d := range overlay.Days {
+				if d.Date == tc.transition {
+					col = i
+				}
+			}
+			if col < 0 {
+				t.Fatalf("transition date %s not found", tc.transition)
+			}
+			// The member's first real hours are 01:00 and 02:00; with the day
+			// boundary at the skipped 00:00 they land on the wrong day.
+			for _, h := range []int{1, 2} {
+				if got := overlay.Days[col].Hours[h].Free; got != 1 {
+					t.Errorf("free at %02d:00 = %d, want 1", h, got)
+				}
+			}
+		})
 	}
 }
