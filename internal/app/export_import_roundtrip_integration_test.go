@@ -75,6 +75,7 @@ func newRoundTripHarness(t *testing.T) *roundTripHarness {
 	blocks := entities.NewBlockRegistry()
 	entities.RegisterCoreBlocks(blocks)
 	registerPageTextBlocks(blocks)
+	registerEncountersBlock(blocks)
 	entitySvc.SetBlockRegistry(blocks)
 	mapSvc := maps.NewMapService(maps.NewMapRepository(db))
 	drawingSvc := maps.NewDrawingService(maps.NewDrawingRepository(db))

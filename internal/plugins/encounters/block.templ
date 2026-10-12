@@ -1,0 +1,17 @@
+package encounters
+
+import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
+
+// BlockMount is the mount point of the Encounters block. The widget fetches
+// the page's encounters itself, and the service refuses anyone but the DM,
+// so this markup carries no encounter data. The caller renders it only for
+// the DM, so a player never sees an empty box either.
+templ BlockMount(campaignID, entityID, csrfToken string) {
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/css/encounters.css") }/>
+	<div
+		data-widget="encounters"
+		data-campaign-id={ campaignID }
+		data-entity-id={ entityID }
+		data-csrf-token={ csrfToken }
+	></div>
+}

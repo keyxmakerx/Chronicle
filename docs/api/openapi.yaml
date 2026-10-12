@@ -36,6 +36,10 @@ tags:
       the key's Owner role. Only a caller who is themselves Owner or co-DM may
       name someone else (anyone else gets 403), so naming a player only narrows
       what the call may do.
+  - name: Encounters
+    description: >
+      Fights the DM planned on a page, for the Foundry module to load. For the
+      campaign owner or a co-DM only.
   - name: Quests
     description: >
       Quest boards and quest sheets, for the campaign owner or a co-DM only.
@@ -2466,6 +2470,59 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
 
+  /campaigns/{campaignId}/encounters:
+    get:
+      tags: [Encounters]
+      summary: The campaign's encounters, ready ones first, then the most recently changed
+      operationId: listEncounters
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - name: q
+          in: query
+          description: Matches the encounter's name or its page's name
+          schema: {type: string, maxLength: 120}
+        - name: limit
+          in: query
+          schema: {type: integer, default: 50, maximum: 100}
+      responses:
+        "200":
+          description: >
+            {"data": [{id, page: {id, name}, name, ready, creatureCount,
+            updatedAt}], "total": N}
+          content:
+            application/json:
+              schema: {type: object}
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /campaigns/{campaignId}/encounters/{encounterId}:
+    get:
+      tags: [Encounters]
+      summary: One encounter with its heroes and creature rows
+      description: >
+        Each creature row is {id, entityId, name, count, group, start}.
+        entityId is the creature's page, empty when the row has no page;
+        start is "seen", "hidden" or "later". Nothing here reveals anything:
+        Foundry places a hidden creature hidden and leaves a later one off
+        the scene.
+      operationId: getEncounter
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - name: encounterId
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: >
+            {id, page: {id, name}, name, ready, heroes: [{id, name}],
+            creatures: [...], version, updatedAt}
+          content:
+            application/json:
+              schema: {type: object}
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /campaigns/{campaignId}/quests/homes:
     get:
       tags: [Quests]

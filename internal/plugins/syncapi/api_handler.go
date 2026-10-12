@@ -59,6 +59,7 @@ type APIHandler struct {
 	systemState          SystemStateReader
 	history              *SyncHistoryHandler
 	quests               *QuestAPIHandler
+	encounters           *EncounterAPIHandler
 	signer               *media.URLSigner
 }
 

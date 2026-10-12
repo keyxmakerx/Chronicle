@@ -333,6 +333,13 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 		rewards.POST("/quests/give", q.Give, RequirePermission(PermWrite))
 	}
 
+	// Encounters: the DM's planned fights, for the Foundry module to load.
+	// Owner or co-DM only (checked in the handler).
+	if enc := api.encounters; enc != nil {
+		cg.GET("/encounters", enc.List, RequirePermission(PermRead))
+		cg.GET("/encounters/:encounterID", enc.Get, RequirePermission(PermRead))
+	}
+
 	// Stashes: move items and money as a named campaign member. The group is
 	// gated by the stash feature's addon (slug supplied by the wiring), and the
 	// acting member's own rules apply to each call — see StashAPIService.

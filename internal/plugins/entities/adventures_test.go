@@ -100,13 +100,14 @@ func TestSeedListsCarryAdventures(t *testing.T) {
 func TestAdventureLayout_UsesValidBlocksAndSizes(t *testing.T) {
 	// The sizes mirror the block registrations in internal/app.
 	sizes := map[string][]string{
-		"read_aloud": {"2x1", "2x2", "4x1", "4x2"},
-		"page_table": {"2x2", "4x2"},
-		"page_steps": {"1x2", "2x2", "4x2"},
+		"read_aloud":      {"2x1", "2x2", "4x1", "4x2"},
+		"page_table":      {"2x2", "4x2"},
+		"page_steps":      {"1x2", "2x2", "4x2"},
+		"page_encounters": {"1x2", "2x2", "4x2"},
 	}
 	valid := func(typ string) bool {
 		switch typ {
-		case "title", "entry", "image", "attributes", "details", BlockSubPages, "read_aloud", "page_table", "page_steps":
+		case "title", "entry", "image", "attributes", "details", BlockSubPages, "read_aloud", "page_table", "page_steps", "page_encounters":
 			return true
 		}
 		return false
