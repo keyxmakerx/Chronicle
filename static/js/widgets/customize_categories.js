@@ -8,11 +8,14 @@
  * owner presses Save. Section shape, applied by the entities plugin:
  *
  *   { items: { "<id>" | "new-<slug>": { new, name, name_plural, icon, color,
- *       claimable, parent, clear_parent, copy_from, menu, delete } },
+ *       claimable, parent, clear_parent, copy_from, menu, delete, layout } },
  *     _changes: [{ label, href }] }
  *
  * An existing category's item holds only what differs from what is saved,
- * so a change put back by hand leaves the draft.
+ * so a change put back by hand leaves the draft. The page editor
+ * (customize_page_editor.js) owns `layout` and writes it through
+ * Chronicle.customizeCategoryWrite, so the save bar's lines stay this
+ * widget's to make.
  */
 (function () {
   'use strict';
@@ -88,9 +91,9 @@
       if (Chronicle.customizeDraft) return Chronicle.customizeDraft();
       return SHELL ? parse(SHELL.getAttribute('data-draft'), {}) : {};
     }
-    function shellSet(v) {
-      if (Chronicle.customizeSet) Chronicle.customizeSet(SECTION, v);
-      else (Chronicle._customizeQueue = Chronicle._customizeQueue || []).push([SECTION, v]);
+    function shellSet(v, opts) {
+      if (Chronicle.customizeSet) Chronicle.customizeSet(SECTION, v, opts);
+      else (Chronicle._customizeQueue = Chronicle._customizeQueue || []).push([SECTION, v, opts]);
     }
     function shellFlush() { return Chronicle.customizeFlush ? Chronicle.customizeFlush() : Promise.resolve(true); }
     function section() { var d = shellDraft(); return (d && d[SECTION]) || { items: {} }; }
@@ -110,7 +113,7 @@
           claimable: it.claimable !== undefined ? !!it.claimable : c.claimable,
           menu: it.menu !== undefined ? !!it.menu : inMenu[c.id] !== false,
           parent: parent, pages: c.pages, trashed: c.trashed, dmOnly: c.dmOnly,
-          deleted: !!it.delete, changed: Object.keys(it).length > 0
+          deleted: !!it.delete, changed: settingsKeys(it).length > 0, layoutChanged: !!it.layout
         };
       });
       Object.keys(its).forEach(function (k) {
@@ -129,9 +132,11 @@
 
     // write puts one category's item back, keeping only what differs from
     // what is saved, then hands the whole section to the frame.
-    function write(key, patch) {
+    function write(key, patch, opts) {
       var its = items(), it = its[key] || {};
       Object.keys(patch).forEach(function (k) { if (patch[k] === undefined) delete it[k]; else it[k] = patch[k]; });
+      // A category being deleted keeps no layout change; Save would refuse both.
+      if (it.delete) delete it.layout;
       var s = savedById(key);
       if (s) {
         if (it.name === s.name) delete it.name;
@@ -145,12 +150,14 @@
         if (it.delete === false) delete it.delete;
       }
       if (Object.keys(it).length) its[key] = it; else delete its[key];
-      commit(its);
+      commit(its, opts);
     }
-    function commit(its) {
-      if (!Object.keys(its).length) { shellSet(null); return; }
-      shellSet({ items: its, _changes: changes(its) });
+    function commit(its, opts) {
+      if (!Object.keys(its).length) { shellSet(null, opts); return; }
+      shellSet({ items: its, _changes: changes(its) }, opts);
     }
+    // The keys of an item that the Settings tab shows.
+    function settingsKeys(it) { return Object.keys(it).filter(function (k) { return k !== 'layout'; }); }
     // The save bar's lines for this section.
     function changes(its) {
       var out = [], byKey = {};
@@ -159,7 +166,10 @@
         var it = its[k], s = savedById(k), nm = it.name_plural || (s && s.plural) || 'Category';
         if (it.new) out.push({ label: 'New category ' + nm, href: BASE + '/categories/' + k + '/settings' });
         else if (it.delete) out.push({ label: 'Delete ' + (s ? s.plural : nm), href: BASE + '/categories' });
-        else out.push({ label: nm + ' settings', href: BASE + '/categories/' + k + '/settings' });
+        else {
+          if (it.layout) out.push({ label: nm + ' page layout', href: BASE + '/categories/' + k + '/layout' });
+          if (settingsKeys(it).length) out.push({ label: nm + ' settings', href: BASE + '/categories/' + k + '/settings' });
+        }
       });
       return out;
     }
@@ -244,7 +254,7 @@
       tabs.innerHTML = TABS.map(function (t) {
         var lbl = '<i class="fa-solid ' + t[2] + '" aria-hidden="true"></i> ' + t[1];
         if (c.isNew && t[0] !== 'settings') return '<span title="Available once you save this category">' + lbl + '</span>';
-        var dot = t[0] === 'settings' && c.changed ? '<span class="czs-dot" title="Unsaved changes"></span>' : '';
+        var dot = (t[0] === 'settings' && c.changed) || (t[0] === 'layout' && c.layoutChanged) ? '<span class="czs-dot" title="Unsaved changes"></span>' : '';
         return '<a role="tab" href="' + esc(BASE + '/categories/' + c.key + '/' + t[0]) + '"' + (t[0] === TAB ? ' aria-current="page" aria-selected="true"' : ' aria-selected="false"') + '>' + lbl + dot + '</a>';
       }).join('');
       if (body && TAB === 'settings') drawSettings(c, body);
@@ -480,6 +490,15 @@
 
     function draw() { if (KEY) drawWorkspace(); else drawGrid(); }
 
+    // The page editor's way into this section; see the header.
+    var categoryWrite = function (key, patch, opts) {
+      if (!alive) return false;
+      write(key, patch, opts);
+      draw();
+      return true;
+    };
+    Chronicle.customizeCategoryWrite = categoryWrite;
+
     function onDraft(e) {
       var d = e.detail || {};
       if (d.reason === 'publish' && (d.applied || []).indexOf(SECTION) >= 0) {
@@ -499,6 +518,7 @@
     draw();
     return function destroy() {
       alive = false;
+      if (Chronicle.customizeCategoryWrite === categoryWrite) Chronicle.customizeCategoryWrite = null;
       listeners.forEach(function (l) { l[0].removeEventListener(l[1], l[2], l[3]); });
       $$('.czs-pop, .czs-scrim', document).forEach(function (p) { if (p._czsCat) p.remove(); });
     };

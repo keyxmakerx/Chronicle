@@ -304,6 +304,46 @@ func TestApplyCustomizeCategories_MenuOnlyItemIsApplied(t *testing.T) {
 	}
 }
 
+// oneBlockLayout is a valid page layout: one full-width column holding a title.
+func oneBlockLayout(width int) *EntityTypeLayout {
+	return &EntityTypeLayout{Rows: []TemplateRow{{ID: "r1", Columns: []TemplateColumn{{ID: "c1", Width: width, Blocks: []TemplateBlock{{ID: "b1", Type: "title"}}}}}}}
+}
+
+func TestApplyCustomizeCategories_Layout(t *testing.T) {
+	tests := []struct {
+		name     string
+		items    map[string]CustomizeCategoryItem
+		wantLog  []string
+		wantCode int
+	}{
+		{"layout alone writes only the layout", map[string]CustomizeCategoryItem{"1": {Layout: oneBlockLayout(12)}}, []string{"layout:1"}, 0},
+		{"layout with a rename writes both", map[string]CustomizeCategoryItem{"1": {Name: "Place", Layout: oneBlockLayout(12)}}, []string{"update:1", "layout:1"}, 0},
+		{"a bad layout stops the Save before any write", map[string]CustomizeCategoryItem{"1": {Name: "Place"}, "2": {Layout: oneBlockLayout(11)}}, nil, http.StatusBadRequest},
+		{"a new category cannot carry a layout", map[string]CustomizeCategoryItem{"new-a": {New: true, Name: "A", NamePlural: "As", Layout: oneBlockLayout(12)}}, nil, http.StatusBadRequest},
+		{"a deleted category cannot carry a layout", map[string]CustomizeCategoryItem{"3": {Delete: true, Layout: oneBlockLayout(12)}}, nil, http.StatusBadRequest},
+		{"another campaign's category is not found", map[string]CustomizeCategoryItem{"50": {Layout: oneBlockLayout(12)}}, nil, http.StatusNotFound},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w, svc := newCategoryWorld(
+				typ(1, "c1", "Places", nil),
+				typ(2, "c1", "Towns", ptrInt(1)),
+				typ(3, "c1", "Gods", nil),
+				typ(50, "other", "Secret", nil),
+			)
+			_, err := svc.ApplyCustomizeCategories(context.Background(), "c1", patchOf(tt.items))
+			if tt.wantCode != 0 {
+				assertAppError(t, err, tt.wantCode)
+			} else if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(w.log, tt.wantLog) {
+				t.Errorf("writes = %v, want %v", w.log, tt.wantLog)
+			}
+		})
+	}
+}
+
 func TestCustomizeCategories_Info(t *testing.T) {
 	yes, no := true, false
 	explicitNo := typ(2, "c1", "Heroes", nil)

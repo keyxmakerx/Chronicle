@@ -20,6 +20,10 @@
  *     area can read it whenever it mounts (Chronicle.customizeDraft()).
  *   - Chronicle.customizeFlush() resolves once the draft is kept, before an
  *     area opens a page that reads it.
+ *   - An area with its own Undo and Redo buttons (the page editor) calls
+ *     Chronicle.customizeUndo / customizeRedo and reads customizeHistory();
+ *     customizeSet(key, value, { step: true }) makes that change its own Undo
+ *     step rather than joining a quick run of edits to the same section.
  */
 (function () {
   'use strict';
@@ -53,10 +57,18 @@
     var el = document.querySelector('[data-widget="customize-shell"]');
     return el ? parse(el.getAttribute('data-draft'), {}) : {};
   };
-  Chronicle.customizeSet = function (key, value) {
-    if (active) active.set(key, value);
-    else Chronicle._customizeQueue.push([key, value]);
+  Chronicle.customizeSet = function (key, value, opts) {
+    if (active) active.set(key, value, opts);
+    else Chronicle._customizeQueue.push([key, value, opts]);
   };
+  Chronicle.customizeUndo = function () { if (active) active.undo(); };
+  Chronicle.customizeRedo = function () { if (active) active.redo(); };
+  Chronicle.customizeHistory = function () {
+    return active ? active.history() : { undo: false, redo: false };
+  };
+  // customizeToast shows a note in the frame's toast stack; undoFn adds an
+  // Undo button.
+  Chronicle.customizeToast = function (msg, bad, undoFn) { if (active) active.toast(msg, bad, undoFn); };
   // customizeFlush resolves once the draft as it stands is kept on the
   // server, for an area about to open a page that reads it.
   Chronicle.customizeFlush = function () {
@@ -102,7 +114,7 @@
       });
       return out;
     }
-    function set(key, value) {
+    function set(key, value, opts) {
       if (!alive || typeof key !== 'string' || !key) return;
       var before = snapshot();
       var empty = value == null || (typeof value === 'object' && !Object.keys(value).some(function (k) { return k.charAt(0) !== '_'; }));
@@ -110,7 +122,8 @@
       else draft[key] = parse(JSON.stringify(value), null);
       if (snapshot() === before) return;
       var now = Date.now();
-      if (!(key === lastKey && now - lastAt < COALESCE && past.length)) {
+      var step = !!(opts && opts.step);
+      if (step || !(key === lastKey && now - lastAt < COALESCE && past.length)) {
         past.push(before);
         if (past.length > MAX_UNDO) past.shift();
       }
@@ -452,9 +465,13 @@
     on(window, 'chronicle:save', publish);
     on(window, 'pagehide', function () { if (rev !== sentRev) send(true); });
 
-    var api_ = { read: function () { return parse(snapshot(), {}); }, set: set, flush: function () { return send(false); } };
+    var api_ = {
+      read: function () { return parse(snapshot(), {}); }, set: set, flush: function () { return send(false); },
+      undo: undo, redo: redo, toast: toast,
+      history: function () { return { undo: past.length > 0 && !publishing, redo: future.length > 0 && !publishing }; }
+    };
     active = api_;
-    Chronicle._customizeQueue.splice(0).forEach(function (q) { set(q[0], q[1]); });
+    Chronicle._customizeQueue.splice(0).forEach(function (q) { set(q[0], q[1], q[2]); });
     paint();
     if (location.hash === '#find') openFind();
 

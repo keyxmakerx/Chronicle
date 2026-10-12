@@ -31,6 +31,7 @@ JS_FILES=(
   "static/js/widgets/customize_look.js"
   "static/js/widgets/customize_shell.js"
   "static/js/widgets/customize_categories.js"
+  "static/js/widgets/customize_page_editor.js"
 )
 
 # require_file_exists <file>
