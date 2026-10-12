@@ -16,8 +16,9 @@ var unbind = Chronicle.hovercard.bind(root, '.my-term', function (el) {
 ```
 
 Content fields: `kind`, `kindIcon` (Font Awesome name), `title`, `locked`,
-`pic`, `facts` (`[[label, value]]`), `text`, `foot`, `link {href,label}`,
-`extraHTML`. All but `extraHTML` are escaped; `extraHTML` must already be
+`pic`, `badge` (a second, round picture on the corner of `pic`: a creature's
+token beside its art), `facts` (`[[label, value]]`), `text`, `foot`,
+`link {href,label}`, `extraHTML`. All but `extraHTML` are escaped; `extraHTML` must already be
 safe markup. Links are followed only for same-site paths, `#` fragments and http(s).
 `Chronicle.hovercard.html(content)` returns the markup for a still preview
 (the Customize tiles). `open`, `update`, `close`, `current` drive it by hand.
@@ -32,6 +33,9 @@ safe markup. Links are followed only for same-site paths, `#` fragments and http
 - One card at a time. Kept 8 px inside the window; flips above the trigger
   near the bottom. Scrolling closes an unpinned card and moves a pinned one.
 - Motion follows the device setting and the campaign's reduce-motion switch.
+- A card with a `badge` opens with its art settling into its frame (320 ms)
+  and the badge popping onto the corner a beat later (260 ms, 140 ms in);
+  reduced motion, Calm and Off show both still.
 
 ## Looks
 

@@ -23,6 +23,10 @@ that it holds previewable links; a document-wide binding does the work.
 
 ## Preview response
 
-`name`, `type_name`, `type_icon`, `type_label`, `image_path`, `is_private`,
-`attributes [{label, value}]`, `entry_excerpt`. Previews are LRU-cached
+`name`, `type_name`, `type_icon`, `type_label`, `image_path`, `token_path`,
+`is_private`, `attributes [{label, value}]`, `entry_excerpt`. `token_path` is
+the page's token picture (the `token_image` field, a media id a game system
+declares on its creature type; only when the viewer may see that field). With
+both pictures the card shows the art with the token on its corner; with one,
+that one is the picture. The token field is never listed among the facts. Previews are LRU-cached
 (100). A failed fetch (a deleted or hidden page) closes the card quietly.

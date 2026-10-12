@@ -138,6 +138,11 @@ place, and Off shows the end state.
   over the everyday page colour before the next page loads. The row presses
   deeper and lets go slower than other menu rows. Moving between admin
   pages plays nothing; Calm fades, and Off plays nothing.
+- **A creature's pictures settle into its hover card.** A card with both art
+  and a token (`badge`) opens with the art easing from slightly close into its
+  frame over 320 ms, `--ease-out`, and the token popping onto the corner
+  140 ms later over 260 ms with a small overshoot. Calm and Off show both
+  still while the card fades.
 - **How much motion is one attribute**: `html[data-motion]` is `calm` or `off`
   (absent means full), from `MotionLevel` in
   `internal/templates/layouts/appearance.go`. A device asking for reduced

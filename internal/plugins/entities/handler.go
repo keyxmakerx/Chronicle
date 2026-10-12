@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/a-h/templ"
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/redis/go-redis/v9"
 
@@ -2409,16 +2410,28 @@ func (h *Handler) PreviewAPI(c echo.Context) error {
 		imagePath = layouts.MediaURL(c.Request().Context(), *entity.ImagePath)
 	}
 
+	// Strip GM-only and owner-only field values for viewers who can't see
+	// them — this preview/tooltip is player-reachable via the public
+	// campaign route.
+	var fieldsData map[string]any
+	if entityType != nil {
+		fieldsData = FilterRestrictedFields(entity.FieldsData, entityType.Fields, cc.MemberRole >= campaigns.RoleScribe, entity.IsOwnedBy(userID))
+	}
+
+	var tokenPath string
+	if cfg.ShowImage {
+		tokenPath = previewTokenPath(c.Request().Context(), fieldsData)
+	}
+
 	// Build attributes list: field label + value pairs for the first few fields.
 	// Initialize to empty slice so JSON serializes as [] instead of null.
 	attributes := make([]map[string]string, 0)
 	if cfg.ShowAttributes && entityType != nil {
 		effectiveFields := MergeFields(entityType.Fields, entity.FieldOverrides)
-		// Strip GM-only and owner-only field values for viewers who can't see
-		// them — this preview/tooltip is player-reachable via the public
-		// campaign route.
-		fieldsData := FilterRestrictedFields(entity.FieldsData, entityType.Fields, cc.MemberRole >= campaigns.RoleScribe, entity.IsOwnedBy(userID))
 		for _, fd := range effectiveFields {
+			if fd.Key == TokenFieldKey {
+				continue // a picture, shown as one, never as its media id
+			}
 			val, ok := fieldsData[fd.Key]
 			if !ok || val == nil || fmt.Sprintf("%v", val) == "" {
 				continue
@@ -2448,11 +2461,34 @@ func (h *Handler) PreviewAPI(c echo.Context) error {
 		"type_icon":     entityType.Icon,
 		"type_color":    entityType.Color,
 		"image_path":    imagePath,
+		"token_path":    tokenPath,
 		"type_label":    typeLabel,
 		"is_private":    entity.IsPrivate,
 		"entry_excerpt": entryExcerpt,
 		"attributes":    attributes,
 	})
+}
+
+// TokenFieldKey is the field a page keeps its token picture in, as a media
+// id: a game system declares it on its creature type, the hover card shows it
+// on the corner of the page picture, and the Foundry module uses it as the
+// creature's token.
+const TokenFieldKey = "token_image"
+
+// previewTokenPath is the link to a page's token picture, or "" when the field
+// is empty or holds anything but a media id (it is free text to the editor).
+func previewTokenPath(ctx context.Context, fieldsData map[string]any) string {
+	s, _ := fieldsData[TokenFieldKey].(string)
+	s = strings.TrimSpace(s)
+	// uuid.Parse also takes braced and urn: forms; a stored id is the bare 36.
+	if len(s) != 36 {
+		return ""
+	}
+	id, err := uuid.Parse(s)
+	if err != nil {
+		return ""
+	}
+	return layouts.MediaURL(ctx, id.String())
 }
 
 // UpdatePopupConfigAPI saves the entity's hover preview tooltip configuration.

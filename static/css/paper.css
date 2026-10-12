@@ -127,6 +127,18 @@
 .chc__top { display: flex; gap: 12px; align-items: flex-start; }
 .chc__top > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
 .chc__pic { flex: 0 0 64px; width: 64px; height: 64px; object-fit: cover; border-radius: 8px; display: block; }
+/* Art with a badge (a creature's token): the art settles into its frame and the token pops onto the corner. */
+.chc__picw { position: relative; flex: 0 0 64px; width: 64px; height: 64px; }
+.chc__frame { display: block; width: 64px; height: 64px; overflow: hidden; border-radius: 8px; }
+.chc__badge { position: absolute; right: -8px; bottom: -8px; width: 28px; height: 28px; border-radius: 50%; object-fit: cover; box-shadow: 0 2px 5px rgb(0 0 0 / 0.35); }
+.chc--show .chc__frame .chc__pic { animation: chc-settle 320ms var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both; }
+.chc--show .chc__badge { animation: chc-pop 260ms cubic-bezier(0.34, 1.56, 0.64, 1) 140ms both; }
+@keyframes chc-settle { from { transform: scale(1.12); filter: blur(2px); } to { transform: none; filter: none; } }
+@keyframes chc-pop { from { transform: scale(0.4); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .chc--show .chc__frame .chc__pic, .chc--show .chc__badge { animation: none; }
+}
+html:is([data-motion="calm"], [data-motion="off"], [data-view-motion="calm"], [data-cz-reduce]) .chc--show :is(.chc__frame .chc__pic, .chc__badge) { animation: none; }
 .chc__facts { display: grid; grid-template-columns: auto 1fr; gap: 1px 10px; margin: 0; font-size: 12.5px; }
 .chc__facts dt { opacity: 0.7; }
 .chc__facts dd { margin: 0; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -148,6 +160,7 @@
 .chc[data-look="paper"] .chc__foot { border-top: 1px dashed var(--paper-edge); color: var(--paper-ink-soft); }
 .chc[data-look="paper"] .chc__link { color: var(--paper-accent); }
 .chc[data-look="paper"] .chc__pic { border-radius: 3px; box-shadow: 0 0 0 1px var(--paper-edge); }
+.chc[data-look="paper"] .chc__frame { border-radius: 3px; box-shadow: 0 0 0 1px var(--paper-edge); }
 
 /* Plain: the site's own surfaces and fonts, light and dark */
 .chc[data-look="plain"] .chc__in { background: var(--color-card-bg); color: var(--color-text-body); border: 1px solid var(--color-border); border-radius: 12px; box-shadow: 0 10px 28px -6px rgb(0 0 0 / 0.18); font-family: inherit; }
