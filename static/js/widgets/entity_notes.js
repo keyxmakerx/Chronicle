@@ -351,13 +351,11 @@
             }
           } else {
             sigs[n.id] = sig;
-            var at0 = listEl.children[i];
-            if (at0 !== row) listEl.insertBefore(row, at0 || null);
+            place(row, i);
             return;
           }
           sigs[n.id] = sig;
-          var at = listEl.children[i];
-          if (at !== row) listEl.insertBefore(row, at || null);
+          place(row, i);
           markFoldable(row);
         });
         Array.prototype.slice.call(listEl.querySelectorAll('.en-note:not(.is-leaving)')).forEach(function (row) {
@@ -388,6 +386,14 @@
           }
           lastCount = want.length;
         }
+      }
+
+      // Puts a row at position i among the rows that are staying; rows on
+      // their way out don't count, so nothing is moved (and re-animated)
+      // while one folds away.
+      function place(row, i) {
+        var at = listEl.querySelectorAll('.en-note:not(.is-leaving)')[i] || null;
+        if (at !== row) listEl.insertBefore(row, at);
       }
 
       function cssEscape(s) {
@@ -439,10 +445,16 @@
 
       // --- Toast (Undo, Saved) ---
 
-      function toast(message, undo) {
+      // One toast at a time. A delete whose Undo is pushed off by a newer
+      // toast is carried out then, so a note never goes later without an
+      // Undo on screen.
+      var onToastGone = null;
+      function toast(message, undo, onGone) {
         var old = block.querySelector('.en-toast');
         if (old) old.parentNode.removeChild(old);
         if (toastTimer) clearTimeout(toastTimer);
+        if (onToastGone) { var gone = onToastGone; onToastGone = null; gone(); }
+        onToastGone = onGone || null;
         var t = document.createElement('div');
         t.className = 'en-toast';
         t.setAttribute('role', 'status');
@@ -451,11 +463,15 @@
         block.appendChild(t);
         if (undo) {
           t.querySelector('button').addEventListener('click', function () {
+            onToastGone = null;
             undo();
             if (t.parentNode) t.parentNode.removeChild(t);
           });
         }
-        toastTimer = setTimeout(function () { if (t.parentNode) t.parentNode.removeChild(t); }, undo ? UNDO_MS : 1800);
+        toastTimer = setTimeout(function () {
+          if (t.parentNode) t.parentNode.removeChild(t);
+          if (onToastGone === onGone) onToastGone = null;
+        }, undo ? UNDO_MS : 1800);
       }
 
       // --- Writes ---
@@ -491,7 +507,7 @@
           clearTimeout(entry.timer);
           delete pendingDeletes[id];
           refresh(false);
-        });
+        }, function () { commitDelete(id, false); });
       }
 
       function commitDelete(id, keepalive) {

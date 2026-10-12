@@ -50,3 +50,8 @@ test('editing warns when the note changed or went elsewhere', () => {
   assert.match(c, /changed in another window/);
   assert.match(c, /deleted in another window/);
 });
+
+test('a delete whose Undo is pushed off by a newer toast is carried out then', () => {
+  assert.match(body('toast'), /onToastGone\) \{ var gone = onToastGone; onToastGone = null; gone\(\); \}/);
+  assert.match(body('del'), /function \(\) \{ commitDelete\(id, false\); \}\);/);
+});
