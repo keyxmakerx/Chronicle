@@ -5567,7 +5567,7 @@ html[data-view-motion="calm"] .pl-chip, .nav-rm .pl-chip, html.rm .pl-chip, html
 .pf-ask:not([hidden]) { transform-origin: right center; animation: pf-grow var(--dur-standard) var(--ease-out) both; }
 @keyframes pf-grow { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: none; } }
 
-/* Manage > Import (Obsidian or Markdown). Only transform and opacity move. */
+/* Settings > Import (Obsidian or Markdown). Only transform and opacity move. */
 .vi-drop { cursor: pointer; text-align: center; padding: 2.5rem 1.5rem; border: 2px dashed var(--color-border); border-radius: 0.75rem; background: var(--color-card-bg); transition: border-color var(--dur-micro) var(--ease-out), background-color var(--dur-micro) var(--ease-out); }
 .vi-drop:hover, .vi-drop.is-over { border-color: var(--color-accent); background: var(--color-bg-secondary); }
 .vi-drop:focus-within { outline: 2px solid var(--color-accent); outline-offset: 2px; }

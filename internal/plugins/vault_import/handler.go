@@ -13,8 +13,8 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
-// Handler serves Manage > Import. It binds the request and renders; the rules
-// live in Service.
+// Handler serves Settings > Import. It binds the request and renders; the
+// rules live in Service.
 type Handler struct {
 	svc *Service
 }
@@ -32,18 +32,37 @@ const maxFormOverhead = 1 << 20
 // body to disk) before the route's own limit could run.
 func RequestLimit(l Limits) int64 { return l.MaxUploadBytes + maxFormOverhead }
 
-// Page renders Manage > Import, resuming the progress bar if an import for this
-// campaign is still running.
+// Page sends the old Import page address to Settings > Import, so bookmarks
+// and links written before the move still land on the import.
 func (h *Handler) Page(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
-	var active *JobView
-	if j, ok := h.svc.ActiveJob(cc.Campaign.ID); ok {
-		active = &j
+	return c.Redirect(http.StatusSeeOther, "/campaigns/"+cc.Campaign.ID+"/settings?tab="+SettingsTabID)
+}
+
+// SettingsTabID is the Import tab's id on the campaign Settings page.
+const SettingsTabID = "import"
+
+// SettingsTabFactory returns the Settings > Import tab for the campaigns
+// plugin's tab registry. It sits right after Data & AI, is owner-only like
+// every import route, and resumes the progress bar of a running import.
+func (h *Handler) SettingsTabFactory() func(*campaigns.CampaignContext) campaigns.SettingsTab {
+	return func(cc *campaigns.CampaignContext) campaigns.SettingsTab {
+		var active *JobView
+		if j, ok := h.svc.ActiveJob(cc.Campaign.ID); ok {
+			active = &j
+		}
+		return campaigns.SettingsTab{
+			ID:        SettingsTabID,
+			Label:     "Import",
+			Icon:      "fa-solid fa-file-import",
+			MinRole:   campaigns.RoleOwner,
+			SortOrder: 55,
+			Content:   ImportTab(cc, active, h.svc.Limits()),
+		}
 	}
-	return middleware.Render(c, http.StatusOK, ImportPage(cc, active, h.svc.Limits()))
 }
 
 // DropZone renders the upload step on its own, for "choose a different file"

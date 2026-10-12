@@ -531,11 +531,12 @@ templ settingsAPIKeysTab(cc *CampaignContext, baseURL string) {
 	</div>
 }
 
-// SettingsDataSection is the campaign's export and import. It is the
-// built-in Data tab, and the AI plugin's Data & AI tab opens with it.
+// SettingsDataSection is the campaign's export. It is the built-in Data tab,
+// and the AI plugin's Data & AI tab opens with it. Importing lives on the
+// Import tab.
 templ SettingsDataSection(cc *CampaignContext) {
 	<div class="card p-4">
-		<h2 class="text-sm font-semibold text-fg mb-3">Data Export &amp; Import</h2>
+		<h2 class="text-sm font-semibold text-fg mb-3">Data Export</h2>
 		<p class="text-xs text-fg-secondary mb-3">Export your campaign as a JSON file, or as a ZIP that adds an archive of your media files, for backup or migration.</p>
 		<div class="flex flex-wrap items-center gap-3">
 			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/export", cc.Campaign.ID)) } class="btn-primary text-sm inline-flex items-center gap-1.5" download>
@@ -544,18 +545,12 @@ templ SettingsDataSection(cc *CampaignContext) {
 			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/export?include_media=1", cc.Campaign.ID)) } class="btn-primary text-sm inline-flex items-center gap-1.5" download>
 				<i class="fa-solid fa-file-zipper text-xs"></i> Export ZIP (+ media archive)
 			</a>
-			<a href="/campaigns/import" class="btn-secondary text-sm inline-flex items-center gap-1.5">
-				<i class="fa-solid fa-upload text-xs"></i> Import Campaign
-			</a>
-			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/import", cc.Campaign.ID)) } class="btn-secondary text-sm inline-flex items-center gap-1.5">
-				<i class="fa-solid fa-file-import text-xs"></i> Import from Obsidian or Markdown
-			</a>
 		</div>
 		<p class="text-[11px] text-fg-muted mt-2">
 			The ZIP contains <code>campaign.json</code> plus a <code>media/</code> folder holding your image
-			files. Importing the ZIP restores the campaign with its pictures in place. The JSON-only
-			export carries no pictures at all, so a campaign imported from it has none; use the ZIP for
-			a backup you can restore in full.
+			files. Importing the ZIP (Settings › Import) restores the campaign with its pictures in place.
+			The JSON-only export carries no pictures at all, so a campaign imported from it has none; use
+			the ZIP for a backup you can restore in full.
 		</p>
 	</div>
 
