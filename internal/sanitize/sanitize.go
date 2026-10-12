@@ -143,6 +143,24 @@ func StripSecretsHTML(html string) string {
 	return secretSpanRe.ReplaceAllString(html, "")
 }
 
+// CountSecrets reports how many GM-only parts a page's HTML holds: secret
+// passages, GM-only pictures and GM-only diagrams. It uses the same patterns
+// and order as StripSecretsHTML so the count matches exactly what a player
+// copy would lose; rollers are a DM tool, not page content, and are not
+// counted. Pictures and diagrams are removed before spans are counted so a
+// part is never counted twice.
+func CountSecrets(html string) (passages, pictures, diagrams int) {
+	if html == "" {
+		return 0, 0, 0
+	}
+	pictures = len(gmPictureRe.FindAllStringIndex(html, -1))
+	html = gmPictureRe.ReplaceAllString(html, "")
+	diagrams = len(gmDiagramRe.FindAllStringIndex(html, -1))
+	html = gmDiagramRe.ReplaceAllString(html, "")
+	passages = len(secretSpanRe.FindAllStringIndex(html, -1))
+	return passages, pictures, diagrams
+}
+
 // StripSecretsJSON removes nodes marked with the "secret" mark, GM-only
 // pictures, GM-only diagrams and rolling-table rollers from ProseMirror JSON content. Returns the modified JSON string. If the input
 // is not valid ProseMirror JSON, it is returned unchanged.

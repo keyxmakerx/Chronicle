@@ -115,6 +115,12 @@ type RowDecision struct {
 	// row without it as StatusFailed (belt-and-suspenders against a
 	// client-side bypass of the gate).
 	DeleteConfirmed bool
+
+	// ReplaceGMOnlyConfirmed is the per-row "Replace the text anyway" tick.
+	// An update over a page that has GM-only parts is skipped without it;
+	// commitUpdate re-checks it so a client that never rendered the tick
+	// cannot apply the replace.
+	ReplaceGMOnlyConfirmed bool
 }
 
 // CommitInput bundles the per-request commit payload.
@@ -543,6 +549,17 @@ func (c *Committer) commitUpdate(
 	idx int,
 ) RowOutcome {
 	out := RowOutcome{Index: idx, Name: existing.Name, Slug: existing.Slug, EntityID: existing.ID}
+
+	// The AI's copy of a page never carries its GM-only parts back, so a
+	// whole-text replace would delete them or publish the AI's copy of them.
+	// Measured here, from the entity as it is now, so both update paths and
+	// a stale review screen get the same answer. Checked before any write,
+	// including the settings update below.
+	if gm := GMOnlyPartsOf(existing); gm.Any() && !dec.ReplaceGMOnlyConfirmed {
+		out.Status = StatusSkipped
+		out.Reason = gm.SkipReason()
+		return out
+	}
 
 	// ParentID, IsPrivate, TypeLabel and FieldsData are absent unless
 	// explicitly set, meaning "preserve": an update must not flatten

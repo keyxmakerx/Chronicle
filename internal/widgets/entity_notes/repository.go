@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 // Repository defines the data access interface for entity notes.
@@ -35,6 +36,54 @@ type Repository interface {
 
 	// Delete removes a note by ID. Caller responsible for author check.
 	Delete(ctx context.Context, id string) error
+
+	// CountByEntities returns how many notes sit on each of the given
+	// pages, every audience included. It is deliberately not ACL-filtered:
+	// it returns counts only, for telling an owner what removing a page
+	// takes with it, and never any note content.
+	CountByEntities(ctx context.Context, campaignID string, entityIDs []string) (map[string]int, error)
+}
+
+// countChunk bounds the IN list so a page with a very large sub-tree stays
+// well under the driver's placeholder limit.
+const countChunk = 500
+
+func (r *repository) CountByEntities(ctx context.Context, campaignID string, entityIDs []string) (map[string]int, error) {
+	out := make(map[string]int)
+	for start := 0; start < len(entityIDs); start += countChunk {
+		end := start + countChunk
+		if end > len(entityIDs) {
+			end = len(entityIDs)
+		}
+		chunk := entityIDs[start:end]
+		args := make([]any, 0, len(chunk)+1)
+		args = append(args, campaignID)
+		for _, id := range chunk {
+			args = append(args, id)
+		}
+		rows, err := r.db.QueryContext(ctx,
+			`SELECT entity_id, COUNT(*) FROM entity_notes
+			WHERE campaign_id = ? AND entity_id IN (`+strings.TrimSuffix(strings.Repeat("?,", len(chunk)), ",")+`)
+			GROUP BY entity_id`, args...)
+		if err != nil {
+			return nil, err
+		}
+		for rows.Next() {
+			var id string
+			var n int
+			if err := rows.Scan(&id, &n); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			out[id] = n
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
 }
 
 // ViewerContext bundles the audience-relevant facts about the viewer

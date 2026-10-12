@@ -106,6 +106,7 @@ type Handler struct {
 	characterPanel     *PagePanel          // Optional panel under character pages; see page_panel.go.
 	systemPanels       SystemPanelResolver // Optional game-system panels under the title; see system_panels.go.
 	service            EntityService
+	trashNotes         TrashNoteCounter // Optional: Player Notes count in the post-delete message.
 	auditSvc           audit.AuditService
 	tagFetcher         EntityTagFetcher
 	addonSvc           AddonChecker
@@ -811,8 +812,35 @@ func (h *Handler) Delete(c echo.Context) error {
 
 	h.logAudit(c, cc.Campaign.ID, audit.ActionEntityDeleted, entityID, entity.Name)
 
-	// ?trashed= lets the list page offer Undo for the page that just went.
-	return middleware.HTMXRedirect(c, "/campaigns/"+cc.Campaign.ID+"/entities?trashed="+url.QueryEscape(entityID))
+	notes := 0
+	if h.trashNotes != nil {
+		notes = h.trashNotes.TrashedNoteCount(c.Request().Context(), cc.Campaign.ID, entityID)
+	}
+	return middleware.HTMXRedirect(c, trashedRedirectURL(cc.Campaign.ID, entityID, notes))
+}
+
+// trashedRedirectURL is where a delete lands. ?trashed= lets the list page
+// offer Undo for the page that just went; ?notes= lets its message say how
+// many Player Notes went with it. The count rides in the URL, not a second
+// request, because it is only knowable at delete time and is only a number.
+func trashedRedirectURL(campaignID, entityID string, notes int) string {
+	u := "/campaigns/" + campaignID + "/entities?trashed=" + url.QueryEscape(entityID)
+	if notes > 0 {
+		u += "&notes=" + strconv.Itoa(notes)
+	}
+	return u
+}
+
+// TrashNoteCounter counts the Player Notes on a Trash item. The page safety
+// service implements it.
+type TrashNoteCounter interface {
+	TrashedNoteCount(ctx context.Context, campaignID, rootID string) int
+}
+
+// SetTrashNoteCounter wires the note count shown after a delete. Unset, the
+// message just says the page moved to the Trash.
+func (h *Handler) SetTrashNoteCounter(nc TrashNoteCounter) {
+	h.trashNotes = nc
 }
 
 // SearchPageHandler renders the dedicated search page with real-time filtering.

@@ -1251,10 +1251,9 @@ type entityNotesNotifierHolder struct {
 }
 
 // Notify is the entity_notes.Notifier callback. Translates the
-// service's string event into a websocket message type and broadcasts
-// to the campaign that owns the note. Never to specific users — the
-// audience filter is server-side on the next list refresh; clients
-// just need a "something changed, refetch" nudge.
+// service's string event into a websocket message type and sends it only
+// to the note's readers (entityNoteAudience); clients refetch the list,
+// where the repository's ACL decides what they get.
 func (h *entityNotesNotifierHolder) Notify(event string, note *entity_notes.Note, _ entity_notes.Audience) {
 	if h.bus == nil || note == nil || note.CampaignID == "" {
 		return
@@ -1274,10 +1273,32 @@ func (h *entityNotesNotifierHolder) Notify(event string, note *entity_notes.Note
 	// for fresh ACL filtering. We deliberately do NOT broadcast the note
 	// body so a private note's contents never leave the server, even
 	// if a misconfigured client subscribes to the wrong campaign.
-	h.bus.Publish(ws.NewMessage(msgType, note.CampaignID, note.ID, map[string]string{
+	msg := ws.NewMessage(msgType, note.CampaignID, note.ID, map[string]string{
 		"entityId": note.EntityID,
 		"noteId":   note.ID,
-	}))
+	})
+	msg.AllowedUsers, msg.StrictAudience, msg.AdmitScribes = entityNoteAudience(note)
+	h.bus.Publish(msg)
+}
+
+// entityNoteAudience maps a note onto the hub's audience fields so the
+// nudge reaches exactly who entity_notes.NotePassesACL lets read it: a
+// player must not learn that a hidden note exists on a page. The author
+// is always named, since they read their own note whatever its audience.
+func entityNoteAudience(note *entity_notes.Note) (allowed []string, strict, admitScribes bool) {
+	switch note.Audience {
+	case entity_notes.AudienceEveryone:
+		return nil, false, false
+	case entity_notes.AudienceDMOnly:
+		return []string{note.AuthorUserID}, false, false
+	case entity_notes.AudienceDMScribe:
+		return []string{note.AuthorUserID}, false, true
+	case entity_notes.AudienceCustom:
+		return append([]string{note.AuthorUserID}, note.SharedWith...), true, false
+	default:
+		// Private, or anything unknown: the author alone.
+		return []string{note.AuthorUserID}, true, false
+	}
 }
 
 // wsRevokerHolder bridges each plugin's own ConnectionRevoker interface
@@ -4164,6 +4185,10 @@ func (a *App) RegisterRoutes() {
 	pageSafetyRepo := entities.NewPageSafetyRepository(a.DB)
 	entityService.SetPageSafety(pageSafetyRepo)
 	pageSafetyService := entities.NewPageSafetyService(pageSafetyRepo, entityRepo, entityService, settingsService)
+	// Player Notes are counted (never read) so a delete and the Trash can say
+	// how many notes go with a page; without the wiring they just stay quiet.
+	pageSafetyService.SetNoteCounter(entityNotesService)
+	entityHandler.SetTrashNoteCounter(pageSafetyService)
 	entities.RegisterPageSafetyRoutes(e, entities.NewPageSafetyHandler(pageSafetyService, entityService, campaignService), campaignService, authService)
 	go pageSafetyService.StartPurger(a.ShutdownCtx)
 

@@ -231,30 +231,7 @@ func (h *Hub) Run() {
 					continue
 				}
 
-				// A notes grant reaches notes only, so its socket gets note
-				// events and nothing else the campaign broadcasts.
-				if client.Source == NotesAppSource && !isNoteMessage(msg.Type) {
-					continue
-				}
-
-				// Audience gate: messages flagged RequiresDM only go to
-				// clients with Owner role or IsDmGranted=true — server-side
-				// defense pairing with client-side visibility filters, so
-				// clients can't receive what we never send.
-				if msg.RequiresDM && !permissions.CanSeeDmOnly(client.Role, client.IsDmGranted) {
-					continue
-				}
-
-				// Per-user visibility_rules gate: RequiresDM above only
-				// covers the binary dm_only case; a "specific" visibility
-				// marker/drawing needs its own allowed_users/denied_users
-				// check via msg.AudienceAllows, which must mirror the HTTP
-				// list path's SQL predicate (maps' ListMarkers/ListDrawings)
-				// or a marker/drawing leaks more or less visibility over the
-				// wire than the HTTP list shows. DM-equivalent clients
-				// bypass this too, matching HTTP — unless the message is
-				// StrictAudience (content private even from the GM).
-				if (msg.StrictAudience || !permissions.CanSeeDmOnly(client.Role, client.IsDmGranted)) && !msg.AudienceAllows(client.UserID) {
+				if !msg.DeliversTo(client) {
 					continue
 				}
 
@@ -273,6 +250,40 @@ func (h *Hub) Run() {
 			h.mu.RUnlock()
 		}
 	}
+}
+
+// DeliversTo is the per-recipient gate of the broadcast loop.
+func (m *Message) DeliversTo(client *Client) bool {
+	// A notes grant reaches notes only, so its socket gets note
+	// events and nothing else the campaign broadcasts.
+	if client.Source == NotesAppSource && !isNoteMessage(m.Type) {
+		return false
+	}
+
+	// Audience gate: messages flagged RequiresDM only go to
+	// clients with Owner role or IsDmGranted=true — server-side
+	// defense pairing with client-side visibility filters, so
+	// clients can't receive what we never send.
+	dmLike := permissions.CanSeeDmOnly(client.Role, client.IsDmGranted)
+	if m.RequiresDM && !dmLike {
+		return false
+	}
+
+	// Per-user visibility_rules gate: RequiresDM above only
+	// covers the binary dm_only case; a "specific" visibility
+	// marker/drawing needs its own allowed_users/denied_users
+	// check via m.AudienceAllows, which must mirror the HTTP
+	// list path's SQL predicate (maps' ListMarkers/ListDrawings)
+	// or a marker/drawing leaks more or less visibility over the
+	// wire than the HTTP list shows. DM-equivalent clients
+	// bypass this too, matching HTTP — unless the message is
+	// StrictAudience (content private even from the GM).
+	// AdmitScribes widens that bypass to co-DMs.
+	bypass := dmLike || (m.AdmitScribes && client.Role >= permissions.RoleScribe)
+	if (m.StrictAudience || !bypass) && !m.AudienceAllows(client.UserID) {
+		return false
+	}
+	return true
 }
 
 // AudienceAllows reports whether userID is in m's audience per its

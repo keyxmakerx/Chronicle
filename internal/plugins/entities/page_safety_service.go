@@ -167,6 +167,12 @@ type PageSafetyService interface {
 	ListTrash(ctx context.Context, campaignID string) ([]TrashItem, error)
 	// RestoreFromTrash brings a page and its sub-pages back.
 	RestoreFromTrash(ctx context.Context, campaignID, entityID string) (*TrashItem, error)
+	// TrashedNoteCount is how many Player Notes sit on a Trash item's pages;
+	// 0 when notes aren't wired or the count fails, since the number is
+	// only a courtesy and must not block a delete.
+	TrashedNoteCount(ctx context.Context, campaignID, rootID string) int
+	// SetNoteCounter wires the Player Notes count; nil leaves counts off.
+	SetNoteCounter(nc NoteCounter)
 	RetentionDays(ctx context.Context) int
 	// StartPurger deletes for good, hourly, pages that have waited out the
 	// retention. It returns when ctx ends.
@@ -187,6 +193,7 @@ type pageSafetyService struct {
 	entities  EntityRepository
 	svc       *entityService
 	retention TrashRetention
+	notes     NoteCounter // nil: the Trash and delete say nothing about notes
 }
 
 // NewPageSafetyService builds the History/Trash service. svc must be the
@@ -311,7 +318,53 @@ func (p *pageSafetyService) ListTrash(ctx context.Context, campaignID string) ([
 	if err != nil {
 		return nil, apperror.NewInternal(err)
 	}
+	if len(items) == 0 {
+		return items, nil
+	}
+	counts := p.noteCounts(ctx, campaignID)
+	for i := range items {
+		items[i].NoteCount = counts[items[i].ID]
+	}
 	return items, nil
+}
+
+func (p *pageSafetyService) SetNoteCounter(nc NoteCounter) { p.notes = nc }
+
+func (p *pageSafetyService) TrashedNoteCount(ctx context.Context, campaignID, rootID string) int {
+	return p.noteCounts(ctx, campaignID, rootID)[rootID]
+}
+
+// noteCounts totals Player Notes per Trash item (all items when rootIDs is
+// empty). Best-effort: a failure logs and yields no counts, so the Trash and
+// delete keep working without the extra line.
+func (p *pageSafetyService) noteCounts(ctx context.Context, campaignID string, rootIDs ...string) map[string]int {
+	if p.notes == nil {
+		return nil
+	}
+	byRoot, err := p.repo.TrashedPageIDs(ctx, campaignID, rootIDs...)
+	if err != nil {
+		slog.Warn("trash: listing pages to count notes", slog.Any("error", err))
+		return nil
+	}
+	var all []string
+	for _, ids := range byRoot {
+		all = append(all, ids...)
+	}
+	if len(all) == 0 {
+		return nil
+	}
+	perPage, err := p.notes.CountByEntities(ctx, campaignID, all)
+	if err != nil {
+		slog.Warn("trash: counting player notes", slog.Any("error", err))
+		return nil
+	}
+	totals := make(map[string]int, len(byRoot))
+	for root, ids := range byRoot {
+		for _, id := range ids {
+			totals[root] += perPage[id]
+		}
+	}
+	return totals
 }
 
 func (p *pageSafetyService) RestoreFromTrash(ctx context.Context, campaignID, entityID string) (*TrashItem, error) {
