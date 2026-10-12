@@ -244,40 +244,6 @@ func (a *recentEntityListerAdapter) ListRecentForDashboard(ctx context.Context, 
 	return result, nil
 }
 
-// entityTypeLayoutFetcherAdapter wraps entities.EntityService to implement the
-// campaigns.EntityTypeLayoutFetcher interface. Fetches a single entity type
-// with pre-serialized layout and fields JSON for the page layout editor.
-type entityTypeLayoutFetcherAdapter struct {
-	svc entities.EntityService
-}
-
-// GetEntityTypeForLayoutEditor returns entity type data formatted for the
-// template-editor widget mount. Layout and fields are pre-serialized to JSON.
-func (a *entityTypeLayoutFetcherAdapter) GetEntityTypeForLayoutEditor(ctx context.Context, entityTypeID int) (*campaigns.LayoutEditorEntityType, error) {
-	et, err := a.svc.GetEntityTypeByID(ctx, entityTypeID)
-	if err != nil {
-		return nil, err
-	}
-	layoutJSON, err := json.Marshal(et.Layout)
-	if err != nil {
-		return nil, fmt.Errorf("marshal entity type layout: %w", err)
-	}
-	fieldsJSON, err := json.Marshal(et.Fields)
-	if err != nil {
-		return nil, fmt.Errorf("marshal entity type fields: %w", err)
-	}
-	return &campaigns.LayoutEditorEntityType{
-		ID:         et.ID,
-		CampaignID: et.CampaignID,
-		Name:       et.Name,
-		NamePlural: et.NamePlural,
-		Icon:       et.Icon,
-		Color:      et.Color,
-		LayoutJSON: string(layoutJSON),
-		FieldsJSON: string(fieldsJSON),
-	}, nil
-}
-
 // campaignAuditAdapter wraps audit.AuditService to implement the
 // campaigns.AuditLogger interface without creating a circular import
 // (audit already imports campaigns for middleware).
@@ -2614,8 +2580,12 @@ func (a *App) RegisterRoutes() {
 	campaignHandler := campaigns.NewHandler(campaignService)
 	campaignHandler.SetBaseURL(a.Config.BaseURL)
 	campaignHandler.SetEntityLister(&entityTypeListerAdapter{svc: entityService})
-	campaignHandler.SetLayoutFetcher(&entityTypeLayoutFetcherAdapter{svc: entityService})
 	campaignHandler.SetRecentEntityLister(&recentEntityListerAdapter{svc: entityService})
+	campaignHandler.SetCustomizeCategoryLister(&customizeCategoryAdapter{svc: entityService})
+	campaignHandler.SetCustomizeDrafts(campaigns.NewCustomizeDraftService(campaigns.NewCustomizeDraftRepository(a.DB)))
+	// After the look, which NewHandler registers first: a category's menu
+	// setting is applied on top of the saved sidebar.
+	campaignHandler.RegisterCustomizeSection(newCategoriesSection(entityService, campaignService))
 	groupRepo := campaigns.NewGroupRepository(a.DB)
 	groupService := campaigns.NewGroupService(groupRepo)
 	campaignHandler.SetGroupService(groupService)
@@ -5553,8 +5523,9 @@ var coreWidgets = []PluginWidget{
 	{Name: "entity-type-editor", Scripts: []string{"/static/js/widgets/entity_type_editor.js"}},
 	{Name: "template-editor", Scripts: []string{"/static/js/widgets/template_editor.js"}},
 	{Name: "layout-editor", Scripts: []string{"/static/js/widgets/layout_editor.js"}},
-	{Name: "layout-studio", Scripts: []string{"/static/js/widgets/layout_studio.js"}},
 	{Name: "customize-look", Scripts: []string{"/static/js/widgets/customize_look.js"}},
+	{Name: "customize-shell", Scripts: []string{"/static/js/widgets/customize_shell.js"}},
+	{Name: "customize-categories", Scripts: []string{"/static/js/widgets/customize_categories.js"}},
 	{Name: "site-look", Scripts: []string{"/static/js/widgets/site_look.js"}},
 	{Name: "page-tabs", Scripts: []string{"/static/js/widgets/page_tabs.js"}},
 	{Name: "era-pages", Scripts: []string{"/static/js/widgets/era_pages.js"}},

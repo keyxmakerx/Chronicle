@@ -1044,3 +1044,21 @@ Also under this ADR: the partial-update contract test only recognised structs na
 **Consequences:**
 - Deleting a page deletes its block content (cascade); removing a block from a layout leaves its rows orphaned but harmless until the page goes.
 - A new typed-in block kind adds a case to the plugin's validation, not a table.
+
+## ADR-066: Customize keeps one draft, applied by the plugins that own each part
+
+**Status:** Accepted; operator sign-off on the Customize mockup, 2026-10-12 (#1361).
+
+**Context:** Customize grew as separate tabs, each with its own Save, its own unsaved state and no way back from a mistake. The rebuilt Customize is one frame over many areas, and the owner needs to see and save everything they changed in one place. The parts belong to different plugins: the look to campaigns, categories to entities, later the menu and the library.
+
+**Decision:**
+1. Each owner has one draft per campaign (`customize_drafts`), a JSON object of named sections with a version. The page stores it as the owner edits; a write with a stale version is refused with the current draft, so two tabs or devices never overwrite each other silently.
+2. A plugin owns its section: it registers how to apply it (`RegisterCustomizeSection`) and the page area that edits it writes only that key. Campaigns never imports the plugin; the apply runs through its service.
+3. Save applies the sections in registration order through the same validation as each part's own API. A section that fails stays in the draft and the reply names it; the rest are saved.
+4. Keys starting with `_` are the page's own (such as `_changes`, the save bar's list) and are never applied.
+5. Undo, redo and the save bar live in the page; the server keeps only the latest draft.
+
+**Consequences:**
+- A part moves into the draft by registering a section and writing its key; until then it keeps its own Save, and its area says so.
+- The draft is the owner's only. Co-DMs and AI editing are separate decisions.
+- Save is not one transaction across plugins: a partial save is reported, never hidden.

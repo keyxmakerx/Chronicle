@@ -25,9 +25,12 @@ set -euo pipefail
 TEMPL_FILES=(
   "internal/plugins/campaigns/customize.templ"
   "internal/plugins/campaigns/customize_look.templ"
+  "internal/plugins/campaigns/customize_shell.templ"
 )
 JS_FILES=(
   "static/js/widgets/customize_look.js"
+  "static/js/widgets/customize_shell.js"
+  "static/js/widgets/customize_categories.js"
 )
 
 # require_file_exists <file>

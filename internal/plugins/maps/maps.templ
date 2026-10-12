@@ -28,7 +28,7 @@ templ MapListFragment(cc *campaigns.CampaignContext, data MapListData) {
 
 // mapListContent renders the map list body.
 templ mapListContent(cc *campaigns.CampaignContext, data MapListData) {
-	<div class="max-w-4xl mx-auto py-6 px-4">
+	<div class="max-w-screen-2xl mx-auto py-6 px-4">
 		@mapFrameStyles()
 		@components.Breadcrumbs([]components.BreadcrumbItem{
 			{Label: cc.Campaign.Name, Href: fmt.Sprintf("/campaigns/%s", cc.Campaign.ID), Icon: "fa-dice-d20"},
@@ -55,7 +55,7 @@ templ mapListContent(cc *campaigns.CampaignContext, data MapListData) {
 			}
 		</div>
 		if len(data.Maps) > 0 {
-			<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+			<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
 				for _, m := range data.Maps {
 					<a
 						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/maps/%s", data.CampaignID, m.ID)) }
