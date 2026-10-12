@@ -2865,13 +2865,13 @@ func (s *entityService) UpdateCategoryDashboardLayout(ctx context.Context, id in
 			if sizesFor == nil {
 				sizesFor = s.tileSizesFor(ctx, id, EntityTypeLayout{Rows: []TemplateRow{{Kind: tilegrid.KindTiles}}})
 			}
-			if err := tilegrid.ValidateSection(rowIdx+1, len(row.Columns) > 0, row.Tiles, seenTileIDs, sizesFor); err != nil {
-				return err
-			}
 			for _, t := range row.Tiles {
 				if !campaigns.ValidBlockTypes[t.Type] && !IsExtraCategoryBlock(t.Type) {
 					return apperror.NewBadRequest(fmt.Sprintf("invalid block type: %s", t.Type))
 				}
+			}
+			if err := tilegrid.ValidateSection(rowIdx+1, len(row.Columns) > 0, row.Tiles, seenTileIDs, sizesFor); err != nil {
+				return err
 			}
 			continue
 		}

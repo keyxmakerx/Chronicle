@@ -365,8 +365,9 @@ Chronicle.register('template-editor', {
         <div class="flex-1"></div>
       `;
 
-      // Column layout picker for this row.
-      this.colPresets.forEach(preset => {
+      // Column layout picker for this row; a tile section has no columns to pick.
+      const isTiles = row.kind === 'tiles';
+      if (!isTiles) this.colPresets.forEach(preset => {
         const btn = document.createElement('button');
         btn.className = 'p-1 hover:bg-surface-alt rounded transition-colors';
         btn.title = preset.label;
@@ -408,6 +409,17 @@ Chronicle.register('template-editor', {
       }
 
       rowEl.appendChild(toolbar);
+
+      // This editor can't arrange tiles, so a tile section is kept as it is
+      // and shown as a note; saving leaves its kind and tiles untouched.
+      if (isTiles) {
+        const n = (row.tiles || []).length;
+        const note = document.createElement('div');
+        note.className = 'bg-surface border-2 border-dashed border-edge rounded-lg p-3 text-xs text-fg-muted';
+        note.textContent = `Tile section with ${n} ${n === 1 ? 'tile' : 'tiles'}. Tiles are arranged in the tile layout editor; this editor keeps them as they are.`;
+        rowEl.appendChild(note);
+        return rowEl;
+      }
 
       // Columns grid.
       const grid = document.createElement('div');
@@ -1465,6 +1477,7 @@ Chronicle.register('template-editor', {
 
   changeRowLayout(rowIdx, widths) {
     const row = this.layout.rows[rowIdx];
+    if (row.kind === 'tiles') return;
     const allBlocks = row.columns.flatMap(c => c.blocks);
 
     // Redistribute blocks: put them all in the first column.

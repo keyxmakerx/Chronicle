@@ -87,6 +87,15 @@
     { type: 'section',      label: 'Section',         icon: 'fa-caret-down',    desc: 'Collapsible accordion',     container: true },
   ];
 
+  // A read-only stand-in for a tile section, which this editor can't arrange.
+  function tileSectionNote(row) {
+    var n = (row.tiles || []).length;
+    var note = document.createElement('div');
+    note.className = 'bg-surface border-2 border-dashed border-edge rounded-lg p-3 text-xs text-fg-muted';
+    note.textContent = 'Tile section with ' + n + (n === 1 ? ' tile' : ' tiles') + '. Tiles are arranged in the tile layout editor; this editor keeps them as they are.';
+    return note;
+  }
+
   function uid(prefix) {
     return (prefix || 'le') + '_' + Math.random().toString(36).substr(2, 8);
   }
@@ -481,8 +490,9 @@
       toolbar.className = 'flex items-center gap-2 mb-1 opacity-0 group-hover/row:opacity-100 transition-opacity';
       toolbar.innerHTML = '<span class="text-[10px] text-fg-muted font-mono">Row ' + (rowIdx + 1) + '</span><div class="flex-1"></div>';
 
-      // Column layout picker buttons.
-      COL_PRESETS.forEach(function (preset) {
+      // Column layout picker buttons; a tile section has no columns to pick.
+      var isTiles = row.kind === 'tiles';
+      if (!isTiles) COL_PRESETS.forEach(function (preset) {
         var btn = document.createElement('button');
         btn.className = 'p-1 hover:bg-surface-alt rounded transition-colors';
         btn.title = preset.label;
@@ -524,6 +534,13 @@
       }
 
       rowEl.appendChild(toolbar);
+
+      // This editor can't arrange tiles, so a tile section is kept as it is
+      // and shown as a note; saving leaves its kind and tiles untouched.
+      if (isTiles) {
+        rowEl.appendChild(tileSectionNote(row));
+        return rowEl;
+      }
 
       // Columns grid.
       var grid = document.createElement('div');
@@ -1314,6 +1331,7 @@
 
     changeRowLayout: function (rowIdx, widths) {
       var row = this.layout.rows[rowIdx];
+      if (row.kind === 'tiles') return;
       var allBlocks = [];
       row.columns.forEach(function (c) { allBlocks = allBlocks.concat(c.blocks); });
       row.columns = widths.map(function (w, i) {
