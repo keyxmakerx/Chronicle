@@ -114,8 +114,8 @@ A lookup can ask for:
 
 {{ .Lookups }}
 If you need the exact format for one of the kinds above{{ if .RecordDocs }} beyond what is below{{ end }},
-reply with a short list that starts with ` + "`" + `NEED:` + "`" + `, for example
-` + "`" + `NEED: format for kind: table` + "`" + `.{{ else }} If you need the
+ask a ` + "`" + `what: format` + "`" + ` lookup with ` + "`" + `block:` + "`" + ` set to the kind, for example
+` + "`" + `block: calendar` + "`" + `.{{ else }} If you need the
 exact format for one of these{{ if .RecordDocs }} beyond what is below{{ end }}, or need to know what already exists
 (a table's entries, a map's pins, the date of an event), reply with only a
 short list that starts with ` + "`" + `NEED:` + "`" + `, for example

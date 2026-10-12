@@ -89,6 +89,8 @@ type Lookups struct {
 	Rules   *HouseRuleKind
 	Entries SystemEntriesAPI
 	Party   PartyAPI
+	// Kinds answers `what: format` with a kind's own doc.
+	Kinds *Registry
 }
 
 // LookupAnswer is one lookup's result: the chip shown on screen and the
@@ -116,6 +118,7 @@ var lookupWhats = []struct{ what, keys, brief string }{
 	{"house-rules", "none", "the house-rules chapters"},
 	{"system-entries", "`field` (e.g. ancestry, kit, race)", "the game system's entries for a character field"},
 	{"players", "none", "each player's character right now: level and class, meters, conditions, what they carry, and whether they are coming to the next game night"},
+	{lookupWhatFormat, "`block`, the kind to explain (e.g. `block: calendar`)", "how to write one kind of block: every key, the rules and an example"},
 }
 
 // LookupDoc is the prompt's description of lookup blocks.
@@ -176,7 +179,7 @@ func Markdown(ans []LookupAnswer) string {
 	var b strings.Builder
 	for _, a := range ans {
 		if a.Error != "" {
-			fmt.Fprintf(&b, "## %s\n\nNot answered: %s.\n\n", a.Chip, a.Error)
+			fmt.Fprintf(&b, "## %s\n\nNot answered: %s.\n\n", a.Chip, strings.TrimRight(a.Error, "."))
 			continue
 		}
 		b.WriteString(strings.TrimSpace(a.Text))
@@ -217,10 +220,15 @@ func (run *lookupRun) one(what string, r Record) LookupAnswer {
 		ans, err = run.systemEntries(firstNonEmpty(r.Str("field"), r.Str("category")))
 	case "players", "party":
 		ans, err = run.players()
+	case lookupWhatFormat, "formats", "how-to":
+		ans, err = run.format(firstNonEmpty(r.Str("block"), r.Name))
 	case "":
 		return LookupAnswer{Chip: "Lookup", Error: "it needs `what:`"}
 	default:
 		return LookupAnswer{Chip: what, Error: fmt.Sprintf("`what: %s` is not something Chronicle can look up", what)}
+	}
+	if isNoCalendar(err) {
+		return run.noCalendar(strings.SplitN(ans.Chip, " · ", 2)[0])
 	}
 	if err != nil {
 		if ans.Chip == "" {

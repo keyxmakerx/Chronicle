@@ -706,6 +706,8 @@ func (h *Handler) GeneratePrompt(c echo.Context) error {
 		}
 		if in.ContentMode == prompt.ContentHouseRules {
 			in.RecordDocs, in.RecordContext = h.houseRulesContext(c, cc, in.Privacy)
+		} else if in.ContentMode == prompt.ContentCalendar {
+			in.RecordDocs, in.RecordContext = h.calendarContext(c, cc, in.Privacy)
 		} else if in.ContentMode == "all" || hasCategory(in.ContentMode, recordsCategory) {
 			in.RecordContext = h.records.ExportAll(c.Request().Context(), cc.Campaign.ID, exportActor(c, cc, in.Privacy))
 		}
@@ -737,6 +739,22 @@ func (h *Handler) GeneratePrompt(c echo.Context) error {
 	}
 
 	return middleware.Render(c, http.StatusOK, PromptModal(out, ""))
+}
+
+// calendarContext is the Calendar prompt's format and context: the docs of
+// the calendar kinds (always, since the AI must write those formats) and the
+// calendar and weather-kinds lookups in the chosen privacy, which say how to
+// set up a main calendar when there is none.
+func (h *Handler) calendarContext(c echo.Context, cc *campaigns.CampaignContext, privacy aiexport.PrivacyMode) (doc, answers string) {
+	doc = h.records.DocsFor(records.CalendarKinds...)
+	if h.lookups == nil {
+		return doc, ""
+	}
+	ans := h.lookups.Answer(c.Request().Context(), cc.Campaign.ID, exportActor(c, cc, privacy), []records.Record{
+		{Kind: "lookup", Fields: map[string]any{"what": "calendar"}},
+		{Kind: "lookup", Fields: map[string]any{"what": "weather-kinds"}},
+	})
+	return doc, records.Markdown(ans)
 }
 
 // houseRulesContext is the house-rules prompt's format and context: the

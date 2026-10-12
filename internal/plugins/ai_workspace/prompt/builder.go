@@ -52,6 +52,11 @@ type Exporter interface {
 // Exporter is not called.
 const ContentHouseRules = "house-rules"
 
+// ContentCalendar is the content choice for calendar work: the context is
+// the main calendar as a lookup describes it (or how to set one up), so
+// the Exporter is not called either.
+const ContentCalendar = "calendar"
+
 // Service is the prompt builder's entry point. Wired in app/routes.go
 // with the same plugin Services that back the aiexport renderer.
 type Service struct {
@@ -85,7 +90,7 @@ type Input struct {
 
 	// --- Content picker ---
 
-	// ContentMode is one of "none", "all", ContentHouseRules, or a
+	// ContentMode is one of "none", "all", ContentHouseRules, ContentCalendar, or a
 	// comma-separated list of category slugs (mapping to aiexport.Category
 	// values). "none" short-circuits the Exporter call; the "Existing world
 	// context" block is omitted from the rendered prompt.
@@ -165,6 +170,11 @@ func (s *Service) Build(
 		data.ExportedContent = strings.TrimSpace(in.RecordContext)
 		if data.ExportedContent == "" {
 			data.ExportedContent = "There are no house rules yet."
+		}
+	} else if in.ContentMode == ContentCalendar {
+		data.ExportedContent = strings.TrimSpace(in.RecordContext)
+		if data.ExportedContent == "" {
+			data.ExportedContent = "The calendar could not be read; ask a `what: calendar` lookup."
 		}
 	} else if in.ContentMode != "" && in.ContentMode != "none" {
 		if s.Exporter == nil {
