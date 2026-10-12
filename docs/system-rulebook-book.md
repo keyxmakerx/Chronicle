@@ -81,14 +81,12 @@ parts:
   with `name` and `summary`. Each becomes a hover definition.
 - `look: paper` draws pages as paper inside a cover, with a soft crease
   between them. Set the paper colours in `theme` (light `paper`, dark `ink`).
-  A campaign owner can switch every book to Chronicle's standard look
-  (Customize › Rulebook); the book's colours and `look` are then ignored, and
-  only its fonts still apply.
+  A book's `look`, colours and fonts belong to its game system: the site's
+  Customize settings never change them.
 - `look: bold` draws a poster-style book: dark chapter banners, heavy
   headings and coloured result tiers. It takes its colours from `theme`
   (`accent` colours the banners' edge and the tiers), so a book chooses
-  `paper` or `bold`, not both. Customize › Rulebook's standard look
-  overrides `bold` exactly as it does `paper`.
+  `paper` or `bold`, not both.
 - `cover` is a drawn cover: the first time a reader opens the book in a
   visit it shows closed, and a click (or Enter or Space) swings it open. A
   **Close the book** button in the top bar swings it shut again. Draw the
