@@ -86,6 +86,17 @@ type Classifier struct {
 	cachedTypes  []entities.EntityType
 	typesBySlug  map[string]*entities.EntityType
 	typesFetched bool
+	// eras and viewer resolve `era:` blocks; without eras such a block is
+	// reported as unavailable.
+	eras   EraLookup
+	viewer Viewer
+}
+
+// WithEras lets the classifier check `era:` blocks against the main
+// calendar's eras as the importing viewer sees them.
+func (c *Classifier) WithEras(l EraLookup, v Viewer) *Classifier {
+	c.eras, c.viewer = l, v
+	return c
 }
 
 // NewClassifier constructs a per-request classifier. The lookup is
@@ -111,6 +122,7 @@ func (c *Classifier) ClassifyAll(ctx context.Context, pages []ParsedPage) ([]Cla
 		out[i] = cls
 	}
 	c.checkParents(ctx, pages, out)
+	c.checkEras(ctx, pages, out)
 	return out, nil
 }
 
@@ -121,7 +133,8 @@ func (c *Classifier) ClassifyAll(ctx context.Context, pages []ParsedPage) ([]Cla
 func (c *Classifier) checkParents(ctx context.Context, pages []ParsedPage, cls []Classification) {
 	for i, p := range pages {
 		if p.Status == StatusParseError || cls[i].Status == StatusParseError ||
-			cls[i].Status == StatusActionMismatch || p.FrontMatter.Action == ActionDelete {
+			cls[i].Status == StatusActionMismatch || p.FrontMatter.Action == ActionDelete ||
+			p.FrontMatter.IsEra() {
 			continue
 		}
 		key, ok := p.FrontMatter.ParentKey()
@@ -150,7 +163,7 @@ func (c *Classifier) parentProblem(ctx context.Context, pages []ParsedPage, i in
 	}
 	earlier, deleted := 0, false
 	for j, q := range pages {
-		if q.Status == StatusParseError || entities.Slugify(q.Name) != key {
+		if q.Status == StatusParseError || q.FrontMatter.IsEra() || entities.Slugify(q.Name) != key {
 			continue
 		}
 		if j < i {
@@ -173,7 +186,7 @@ func (c *Classifier) parentProblem(ctx context.Context, pages []ParsedPage, i in
 		return ""
 	}
 	for j := i + 1; j < len(pages); j++ {
-		if pages[j].Status != StatusParseError && entities.Slugify(pages[j].Name) == key {
+		if pages[j].Status != StatusParseError && !pages[j].FrontMatter.IsEra() && entities.Slugify(pages[j].Name) == key {
 			return "The parent " + quoted + " comes later in this paste. Move it above this page."
 		}
 	}
@@ -221,6 +234,13 @@ func (c *Classifier) classifyOne(ctx context.Context, p ParsedPage) (Classificat
 	}
 
 	cls.ResolvedSlug = entities.Slugify(p.Name)
+
+	// An era block names an existing page and never creates or renames it,
+	// so slug conflicts and categories do not apply; checkEras decides
+	// whether its era and page exist.
+	if p.FrontMatter.IsEra() {
+		return cls, nil
+	}
 
 	// Interpretation of an existing slug depends on the front-matter
 	// action: create treats it as StatusConflict (operator picks

@@ -1,0 +1,369 @@
+// era_panel.templ draws pages by era on the entity page: the Eras button by
+// History, the panel with the era ribbon, the line saying which version is
+// shown, and the highlights of what a version changes. Only the GM gets the
+// button, panel and highlights; a Scribe gets the one line saying their
+// edits change the current era's version; players get none of it.
+//
+// The panel's era choices are links, swapped into the page like the
+// sidebar's links but without jumping to the top; htmx adds the CSRF token to
+// its writes (boot.js); Chronicle.EraPages (static/js/widgets/era_pages.js) only opens
+// and shuts the panel.
+
+package entities
+
+import (
+	"fmt"
+	"strconv"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+)
+
+// eraCall builds an inline handler that calls Chronicle.EraPages.<method>
+// with the element it sits on. method is fixed text, never request data.
+func eraCall(method string) templ.ComponentScript {
+	return inlineHandler("era_pages_"+method,
+		`(function(el){if(window.Chronicle&&Chronicle.EraPages)Chronicle.EraPages.`+method+`(el);})(this)`)
+}
+
+// eraSegStyle sizes and colours one era on the ribbon.
+func eraSegStyle(e PageEra) string {
+	g := e.Color
+	if e.Color2 != "" {
+		g = fmt.Sprintf("linear-gradient(90deg, %s, %s)", e.Color, e.Color2)
+	}
+	return fmt.Sprintf("flex-grow:%.3f;--g:%s;--c:%s", e.Weight, g, e.Color)
+}
+
+// eraButton opens the Eras panel. Its count is how many eras the page has a
+// version for.
+templ eraButton(cc *campaigns.CampaignContext, entity *Entity, class string) {
+	if v := eraViewOf(ctx); v != nil && v.DM {
+		<button
+			type="button"
+			class={ class, "era-btn" }
+			aria-expanded={ boolAttr(v.Open()) }
+			aria-controls="page-eras"
+			title="See and change this page in each era"
+			data-eras-btn
+			onclick={ eraCall("toggle") }
+		>
+			<svg class="mr-1" width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.5"></circle><path d="M8 1.5a6.5 6.5 0 0 1 0 13z" fill="currentColor"></path></svg>
+			Eras
+			if n := v.VersionCount(); n > 0 {
+				<span class="era-count">{ strconv.Itoa(n) }</span>
+			}
+		</button>
+	}
+}
+
+// eraPanel is the Eras panel and the line under it saying which version is
+// on the page.
+templ eraPanel(cc *campaigns.CampaignContext, entity *Entity, csrfToken string) {
+	if v := eraViewOf(ctx); v != nil {
+		if v.DM {
+			<div id="page-eras" class={ "era-fold", templ.KV("is-open", v.Open()) } data-widget="era-pages" hidden?={ !v.Open() }>
+				<div class="era-box">
+					<div class="era-head">
+						<span class="era-title">This page through the eras</span>
+						<button type="button" class="era-x" aria-label="Close the eras panel" onclick={ eraCall("close") }>
+							<i class="fa-solid fa-xmark"></i>
+						</button>
+					</div>
+					@eraRibbon(cc, entity, v)
+					@eraDetails(cc, entity, v, csrfToken)
+				</div>
+			</div>
+		}
+		@eraBanner(cc, entity, v)
+	}
+}
+
+// eraRibbon is the main calendar's eras, oldest first, each sized by how
+// long it lasts and marked when the page has a version for it.
+templ eraRibbon(cc *campaigns.CampaignContext, entity *Entity, v *eraView) {
+	<div class="era-ribbon">
+		<div class="era-track" role="group" aria-label={ "Eras of " + v.Set.CalendarName }>
+			for _, e := range v.Set.Eras {
+				<a
+					href={ eraPageLink(cc.Campaign.ID, entity.ID, strconv.Itoa(e.ID), "") }
+					hx-boost="true"
+					hx-target="#main-content"
+					hx-select="#main-content"
+					hx-swap="innerHTML show:none"
+					class={ "era-seg", templ.KV("is-on", v.Selected == e.ID), templ.KV("is-hidden", e.Hidden) }
+					style={ eraSegStyle(e) }
+					aria-current={ boolAttr(v.Selected == e.ID) }
+					title={ eraSegTitle(e, v.HasVersion[e.ID]) }
+				>
+					<span class="era-lab">{ e.Name }</span>
+					if v.HasVersion[e.ID] {
+						<span class="era-ver" aria-hidden="true"></span>
+					}
+				</a>
+			}
+			if at := v.Set.hereLeft(); at >= 0 {
+				<span class="era-here" style={ fmt.Sprintf("left:%.2f%%", at) } aria-hidden="true"><span>now</span></span>
+			}
+		</div>
+	</div>
+}
+
+// eraSegTitle is the hover text of one era on the ribbon.
+func eraSegTitle(e PageEra, has bool) string {
+	t := e.Name
+	if e.Span != "" {
+		t += ", " + e.Span
+	}
+	if e.Hidden {
+		t += " (hidden from players)"
+	}
+	if has {
+		t += ". This page has a version for it."
+	}
+	return t
+}
+
+// eraDetails says what the picked era (or the usual page) shows, with what
+// can be done there.
+templ eraDetails(cc *campaigns.CampaignContext, entity *Entity, v *eraView, csrfToken string) {
+	{{
+		focus := v.Set.Era(v.FocusID())
+		base := fmt.Sprintf("/campaigns/%s/entities/%s/eras/%d", cc.Campaign.ID, entity.ID, v.FocusID())
+		hasVer := focus != nil && v.HasVersion[focus.ID]
+	}}
+	<div class="era-row">
+		<div class="era-info">
+			if v.Selected == eraUsual {
+				<b>The usual page</b>
+				<small>Shown in any era with no version of its own.</small>
+			} else if focus != nil {
+				<b>
+					{ focus.Name }
+					if focus.ID == v.Set.CurrentID {
+						<span class="era-tag is-now">now</span>
+					}
+					if focus.Hidden {
+						<span class="era-tag is-dm">hidden from players</span>
+					}
+				</b>
+				if focus.Span != "" {
+					<small>{ focus.Span }</small>
+				}
+				if hasVer && v.ShownID == focus.ID && v.Diff != nil {
+					<small>{ eraDiffSummary(v.Diff.Count()) }</small>
+				} else if !hasVer {
+					<small>No version for this era, so it shows the usual page.</small>
+				}
+			} else {
+				<b>No era right now</b>
+				<small>The main calendar's date is in no era. Pick one to see or make its version.</small>
+			}
+		</div>
+		<div class="era-acts">
+			<a
+				href={ eraPageLink(cc.Campaign.ID, entity.ID, "usual", "") }
+				hx-boost="true"
+				hx-target="#main-content"
+				hx-select="#main-content"
+				hx-swap="innerHTML show:none"
+				class={ "btn-ghost btn-sm era-usual", templ.KV("is-on", v.Selected == eraUsual) }
+				aria-current={ boolAttr(v.Selected == eraUsual) }
+			>Usual page</a>
+			if focus != nil && hasVer {
+				if v.Selected == focus.ID {
+					<a
+						href={ eraPageLink(cc.Campaign.ID, entity.ID, strconv.Itoa(focus.ID), highlightQuery(!v.Highlight)) }
+						hx-boost="true"
+						hx-target="#main-content"
+						hx-select="#main-content"
+						hx-swap="innerHTML show:none"
+						class="era-switch"
+						role="switch"
+						aria-checked={ boolAttr(v.Highlight) }
+					><span class="era-knob" aria-hidden="true"></span> Highlight differences</a>
+				}
+				if !v.Editing() {
+					<a
+						href={ eraPageLink(cc.Campaign.ID, entity.ID, strconv.Itoa(focus.ID), "hl=0") }
+						hx-boost="true"
+						hx-target="#main-content"
+						hx-select="#main-content"
+						hx-swap="innerHTML show:none"
+						class="btn-secondary btn-sm"
+					><i class="fa-solid fa-pen mr-1"></i> Edit this version</a>
+				}
+			} else if focus != nil && v.Selected != eraUsual {
+				<button
+					type="button"
+					class="btn-primary btn-sm"
+					hx-post={ base }
+				>Make a version for this era</button>
+			}
+		</div>
+	</div>
+	if v.Editing() && focus != nil {
+		@eraVersionIdentity(cc, entity, v, focus, base, csrfToken)
+	}
+}
+
+// eraVersionIdentity is the name and picture the page has in the era being
+// edited, and removing the version.
+templ eraVersionIdentity(cc *campaigns.CampaignContext, entity *Entity, v *eraView, focus *PageEra, base, csrfToken string) {
+	<div class="era-edit">
+		<form
+			class="era-name"
+			hx-patch={ base + "?era=" + strconv.Itoa(focus.ID) + "&hl=0" }
+		>
+			<label for="era-name-input">Name in this era</label>
+			<div class="era-name-row">
+				<input
+					id="era-name-input"
+					name="name"
+					type="text"
+					class="input input-sm"
+					maxlength="200"
+					value={ derefStr(v.Version.Name) }
+					placeholder={ v.Usual.Name }
+				/>
+				<button type="submit" class="btn-secondary btn-sm">Save name</button>
+			</div>
+			<small>Leave it empty to use the usual name, { v.Usual.Name }.</small>
+		</form>
+		<div class="era-edit-acts">
+			if v.Version.ImagePath != nil {
+				<button
+					type="button"
+					class="btn-ghost btn-sm"
+					hx-patch={ base + "?era=" + strconv.Itoa(focus.ID) + "&hl=0" }
+					hx-vals={ `{"usual_image":"1"}` }
+				><i class="fa-regular fa-image mr-1"></i> Use the usual picture</button>
+			}
+			<button
+				type="button"
+				class="btn-ghost btn-sm text-red-500 hover:text-red-700 dark:text-red-400"
+				hx-delete={ base }
+				hx-confirm={ "Remove the " + focus.Name + " version of this page? In that era it will show the usual page again." }
+			><i class="fa-solid fa-trash mr-1"></i> Remove version</button>
+		</div>
+	</div>
+}
+
+// eraBanner says which version is on the page. The GM sees it while the
+// panel is open; a Scribe sees it whenever their edits change a version.
+templ eraBanner(cc *campaigns.CampaignContext, entity *Entity, v *eraView) {
+	{{
+		cur := v.currentEra()
+		players := "Players see the usual page."
+		if cur != nil && v.HasVersion[cur.ID] {
+			players = "Players see the " + cur.Name + " version."
+		}
+	}}
+	if v.DM && v.Open() {
+		<div class={ "era-banner", templ.KV("is-now", v.Selected > 0 && v.Selected == v.Set.CurrentID) } role="status">
+			<span>
+				if v.Editing() {
+					Editing the <b>{ v.ShownEra().Name }</b> version. What you change here only shows in this era.
+				} else if v.Selected == eraUsual {
+					You are looking at the <b>usual page</b>. { players }
+				} else if se := v.SelectedEra(); se != nil {
+					if v.Shown() {
+						You are looking at the <b>{ se.Name }</b> version.
+					} else {
+						You are looking at <b>{ se.Name }</b>, which has no version, so the usual page.
+					}
+					if se.ID == v.Set.CurrentID {
+						This is what players see.
+					} else {
+						{ players }
+					}
+				}
+			</span>
+			if v.Selected != v.Set.CurrentID || v.Editing() {
+				<a
+					href={ eraPageLink(cc.Campaign.ID, entity.ID, "", "") }
+					hx-boost="true"
+					hx-target="#main-content"
+					hx-select="#main-content"
+					hx-swap="innerHTML show:none"
+				>Back to now</a>
+			}
+		</div>
+	} else if !v.DM && v.Shown() && cc.MemberRole >= campaigns.RoleScribe {
+		<div class="era-banner is-now" role="status">
+			<span>This is the page's <b>{ v.ShownEra().Name }</b> version, the era the calendar is in now. Your edits change this version.</span>
+		</div>
+	}
+}
+
+// eraEntryDiff draws the shown version's text with what differs from the
+// usual page highlighted, in place of the editor.
+templ eraEntryDiff(cc *campaigns.CampaignContext, entity *Entity, v *eraView) {
+	<div class="chronicle-editor era-diff era-settle">
+		<div class="chronicle-editor__header">
+			<span class="chronicle-editor__header-label">Entry</span>
+			<a
+				href={ eraPageLink(cc.Campaign.ID, entity.ID, strconv.Itoa(v.ShownID), "hl=0") }
+				hx-boost="true"
+				hx-target="#main-content"
+				hx-select="#main-content"
+				hx-swap="innerHTML show:none"
+				class="chronicle-editor__edit-btn"
+			><i class="fa-solid fa-pen" style="font-size:11px"></i> Edit</a>
+		</div>
+		<div class="chronicle-editor__content">
+			<div class="ProseMirror era-diff-text">
+				for _, b := range v.Diff.Text {
+					switch b.Kind {
+						case EraDiffSame:
+							@templ.Raw(b.HTML)
+						case EraDiffChanged:
+							<div class="era-hl">
+								@templ.Raw(b.HTML)
+							</div>
+						case EraDiffAdded:
+							<div class="era-hl is-added">
+								<span class="era-addtag">Added</span>
+								@templ.Raw(b.HTML)
+							</div>
+						case EraDiffRemoved:
+							<details class="era-gone">
+								<summary>A paragraph is removed in this era. <span class="era-gone-show">Show what it said</span></summary>
+								<div class="era-gone-text">
+									@templ.Raw(b.HTML)
+								</div>
+							</details>
+					}
+				}
+			</div>
+		</div>
+	</div>
+}
+
+// eraPictureLabel marks a picture the shown version changes.
+templ eraPictureLabel() {
+	if v := eraViewOf(ctx); v != nil && v.Highlight && v.Diff != nil && v.Diff.Image {
+		<span class="era-pic-chip">Changed in this era</span>
+	}
+}
+
+// pageMoonChips names the moons this page is the lore page of, with tonight's
+// phase, each linking to its calendar.
+templ pageMoonChips(cc *campaigns.CampaignContext) {
+	if moons := pageMoonsOf(ctx); len(moons) > 0 {
+		<div class="moon-chips">
+			for _, m := range moons {
+				<a
+					class="moon-chip"
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s/view", cc.Campaign.ID, m.CalendarID)) }
+					title={ "The moon " + m.Name + " on " + m.CalendarName }
+				>
+					<span class="moon-chip-dot" aria-hidden="true"></span>
+					{ m.Name }
+					if m.Phase != "" {
+						<span class="moon-chip-phase">{ m.Phase } tonight</span>
+					}
+				</a>
+			}
+		</div>
+	}
+}

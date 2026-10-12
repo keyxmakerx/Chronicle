@@ -46,6 +46,21 @@ type CalendarLister interface {
 	ListAllEventsForCalendar(ctx context.Context, campaignID, calendarID string) ([]calendar.Event, error)
 }
 
+// EraVersion is one page's version for one era of the main calendar. A nil
+// Name or EntryHTML means the version leaves that part as the usual page.
+type EraVersion struct {
+	EraName   string
+	Current   bool
+	Name      *string
+	EntryHTML *string
+}
+
+// EraVersionSource lists pages' era versions for the export. Only eras the
+// viewer may see are returned, so hidden eras never reach the document.
+type EraVersionSource interface {
+	EraVersionsFor(ctx context.Context, campaignID string, entityIDs []string, v permissions.Viewer) (map[string][]EraVersion, error)
+}
+
 // SessionLister loads sessions + their nested joins. Attendees +
 // SessionEntity slices are fetched per-session; the N+1 pattern is accepted
 // because session counts are modest (10-50 per campaign).

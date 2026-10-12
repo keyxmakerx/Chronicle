@@ -149,6 +149,11 @@ func (run *lookupRun) calendarInfo() (LookupAnswer, error) {
 			if m.HiddenFromPlayers {
 				line += " (hidden from players)"
 			}
+			// The service blanks a page the Actor may not open, so a name
+			// here is one they can.
+			if m.LoreEntityName != "" {
+				line += "; lore page " + quote(m.LoreEntityName)
+			}
 			b.WriteString(line + "\n")
 		}
 	}
@@ -166,6 +171,9 @@ func (run *lookupRun) calendarInfo() (LookupAnswer, error) {
 				}
 			} else {
 				line += ", ongoing"
+			}
+			if e.LoreEntityName != "" {
+				line += "; lore page " + quote(e.LoreEntityName)
 			}
 			b.WriteString(line + "\n")
 		}

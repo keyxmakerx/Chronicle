@@ -228,7 +228,7 @@ plugin does with them: `internal/plugins/calendar/.ai.md`.
 |---|---|---|
 | `calendars` | A campaign's calendar | visibility columns; real-world date anchor and time zone; `hemisphere`, `forecasts_enabled`, `month_starts_new_week`; era look: `era_colors_on`, `era_feel`, `era_intensity`, `era_speed` (migration 024) |
 | `calendar_months`, `calendar_weekdays` | The year's shape | `sort_order`; months carry `is_intercalary`, `leap_year_days`; weekdays `is_rest_day` |
-| `calendar_moons`, `calendar_seasons` | Moons (cycle, offset, look, `hidden_from_players`) and seasons (start/end month and day) | per calendar, FK CASCADE |
+| `calendar_moons`, `calendar_seasons` | Moons (cycle, offset, look, `hidden_from_players`, `lore_entity_id` (migration 026)) and seasons (start/end month and day) | per calendar, FK CASCADE |
 | `calendar_eras` | Named stretches of years | `start_*`/`end_*`; look: `color`, `color_2`, `style`, `feel`; `lore_entity_id`, `dm_note`, `hidden_until_begins` (migration 024) |
 | `calendar_cycles`, `calendar_cycle_entries`, `calendar_festivals` | Repeating year-cycles and their entries; named festival days | `cycle_length`; festival `month`/`day` or `after_month` |
 | `calendar_event_kinds` | Per-campaign kinds of event (name, icon, colour, default announcement) | `UNIQUE`-slug per `campaign_id` |
@@ -238,6 +238,7 @@ plugin does with them: `internal/plugins/calendar/.ai.md`.
 | `calendar_weather_days` | Weather for one date, generated or set by hand | PK `(calendar_id, year, month, day)`; `source` (`manual` by default); `locked` keeps Generate from replacing it (migration 025) |
 | `calendar_weather_settings` | The world's climate and how long weather lasts | PK `calendar_id`; `climate`, `continuity`, `kinds` (the owner's own kinds of weather), `forecast_days` (migration 025) |
 | `entity_era_links`, `entity_event_links` | Pages tied to an era or an event | `participation_role` |
+| `entity_era_versions` | A page's version for one era: only what changes there (migration 027) | PK `(entity_id, era_id)`, both FK CASCADE; `name`, `image_path`, `entry`/`entry_html`/`entry_rev`, `fields_data` (changed values only); NULL means "as the usual page" |
 
 ### maps (`internal/plugins/maps/migrations/`)
 

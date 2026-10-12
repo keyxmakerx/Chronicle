@@ -27,6 +27,8 @@ type Service struct {
 	Timelines TimelineLister
 	Relations RelationLister
 	Tags      TagLister
+	// EraVersions is optional: nil exports every page as its usual self.
+	EraVersions EraVersionSource
 }
 
 // NewService constructs a Service. Every dependency is required for
@@ -152,6 +154,21 @@ func (s *Service) renderCategory(
 			tagsByEntity, err = s.Tags.GetEntityTagsBatch(ctx, ids, opts.Privacy != PrivacyModeSafe)
 			if err != nil {
 				return "", err
+			}
+		}
+
+		// A failed era read costs only the versions: the pages still export.
+		if s.EraVersions != nil {
+			ids := make([]string, 0, len(ents))
+			for _, e := range ents {
+				ids = append(ids, e.ID)
+			}
+			vs, err := s.EraVersions.EraVersionsFor(ctx, campaignID, ids, permissions.RequestViewer(role, ownerID))
+			if err != nil {
+				slog.Warn("aiexport: exporting pages without their era versions",
+					slog.String("campaign_id", campaignID), slog.Any("error", err))
+			} else {
+				opts.EraVersions = vs
 			}
 		}
 

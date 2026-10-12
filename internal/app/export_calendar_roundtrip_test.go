@@ -271,6 +271,7 @@ func TestCampaignExportImport_CalendarRoundTrip(t *testing.T) {
 					// moon keeps its look instead of the library default.
 					BaseDesign: "moon-cratered", Tint: &moonTint, PhaseSource: "canvas-arc",
 					Size: 1.4, OrbitSpeed: 0.8,
+					LoreEntityID: &entityID,
 				},
 			},
 			Seasons: []calendar.Season{
@@ -351,6 +352,9 @@ func TestCampaignExportImport_CalendarRoundTrip(t *testing.T) {
 	if len(calData.Moons) != 1 || calData.Moons[0].BaseDesign != "moon-cratered" || calData.Moons[0].Tint == nil || *calData.Moons[0].Tint != moonTint ||
 		calData.Moons[0].PhaseSource != "canvas-arc" || calData.Moons[0].Size != 1.4 || calData.Moons[0].OrbitSpeed != 0.8 {
 		t.Errorf("exported moon lost its look fields: %+v", calData.Moons)
+	}
+	if calData.Moons[0].LoreEntitySlug == nil || *calData.Moons[0].LoreEntitySlug != "the-duke" {
+		t.Errorf("exported moon lost its lore page: %+v", calData.Moons[0].LoreEntitySlug)
 	}
 	if len(calData.Cycles) != 1 || calData.Cycles[0].Name != "Zodiac" || len(calData.Cycles[0].Entries) != 1 {
 		t.Errorf("exported calendar lost its cycles: %+v", calData.Cycles)
@@ -456,6 +460,9 @@ func TestCampaignExportImport_CalendarRoundTrip(t *testing.T) {
 	if len(dst.moons) != 1 || dst.moons[0].BaseDesign != "moon-cratered" || dst.moons[0].Tint == nil || *dst.moons[0].Tint != moonTint ||
 		dst.moons[0].PhaseSource != "canvas-arc" || dst.moons[0].Size != 1.4 || dst.moons[0].OrbitSpeed != 0.8 {
 		t.Errorf("imported moon lost its look fields: %+v", dst.moons)
+	}
+	if dst.moons[0].LoreEntityID == nil || *dst.moons[0].LoreEntityID != "new-entity-77" {
+		t.Errorf("imported moon's lore page was not re-linked by slug: %+v", dst.moons[0].LoreEntityID)
 	}
 	if len(dst.cycles) != 1 || dst.cycles[0].Name != "Zodiac" || len(dst.cycles[0].Entries) != 1 || dst.cycles[0].Entries[0].Name != "Rat" {
 		t.Errorf("imported calendar lost its cycles: %+v", dst.cycles)

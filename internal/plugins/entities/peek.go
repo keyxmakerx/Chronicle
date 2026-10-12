@@ -80,6 +80,7 @@ func (h *Handler) Peek(c echo.Context) error {
 	if err != nil {
 		return apperror.NewInternal(fmt.Errorf("get entity type %d: %w", entity.EntityTypeID, err))
 	}
+	entity = h.currentEraEntity(ctx, cc, entity, entityType, userID)
 
 	canSeeGM := cc.MemberRole >= campaigns.RoleScribe
 

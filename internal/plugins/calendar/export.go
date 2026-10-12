@@ -74,7 +74,9 @@ type ExportWeekday struct {
 	IsRestDay bool   `json:"is_rest_day"`
 }
 
-// ExportMoon is a moon definition for export.
+// ExportMoon is a moon definition for export. It carries no lore page: a
+// page id means nothing in another campaign (campaign export carries the
+// page by slug instead).
 type ExportMoon struct {
 	Name              string  `json:"name"`
 	CycleDays         float64 `json:"cycle_days"`

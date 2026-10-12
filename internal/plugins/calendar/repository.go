@@ -487,13 +487,23 @@ func deleteUnkept(ctx context.Context, ex dbExecutor, table, calendarID string, 
 // positionally; see calendarCols' doc comment for why appends are safe and
 // insertions are not.
 const moonCols = `id, calendar_id, name, cycle_days, phase_offset, color,
-        base_design, tint, phase_source, size, orbit_speed, hidden_from_players`
+        base_design, tint, phase_source, size, orbit_speed, hidden_from_players, lore_entity_id`
+
+// moonColsQualified is moonCols under the alias `mo`, for GetMoons, whose
+// join to calendars and entities shares column names with it.
+const moonColsQualified = `mo.id, mo.calendar_id, mo.name, mo.cycle_days, mo.phase_offset, mo.color,
+        mo.base_design, mo.tint, mo.phase_source, mo.size, mo.orbit_speed, mo.hidden_from_players, mo.lore_entity_id`
+
+// moonDests is the Scan destination list for moonCols/moonColsQualified, so
+// scanMoon and GetMoons (which appends the lore page's name) cannot drift.
+func moonDests(m *Moon) []any {
+	return []any{&m.ID, &m.CalendarID, &m.Name, &m.CycleDays, &m.PhaseOffset, &m.Color,
+		&m.BaseDesign, &m.Tint, &m.PhaseSource, &m.Size, &m.OrbitSpeed, &m.HiddenFromPlayers, &m.LoreEntityID}
+}
 
 func scanMoon(scanner interface{ Scan(...any) error }) (*Moon, error) {
 	var m Moon
-	err := scanner.Scan(&m.ID, &m.CalendarID, &m.Name, &m.CycleDays, &m.PhaseOffset, &m.Color,
-		&m.BaseDesign, &m.Tint, &m.PhaseSource, &m.Size, &m.OrbitSpeed, &m.HiddenFromPlayers)
-	if err != nil {
+	if err := scanner.Scan(moonDests(&m)...); err != nil {
 		return nil, err
 	}
 	return &m, nil
@@ -560,6 +570,9 @@ func upsertMoons(ctx context.Context, ex dbExecutor, calendarID string, moons []
 			); err != nil {
 				return err
 			}
+			if err := setMoonLore(ctx, ex, calendarID, *m.ID, m); err != nil {
+				return err
+			}
 			keep[*m.ID] = true
 			continue
 		}
@@ -576,11 +589,11 @@ func upsertMoons(ctx context.Context, ex dbExecutor, calendarID string, moons []
 func insertMoon(ctx context.Context, ex dbExecutor, calendarID string, m MoonInput) (int, error) {
 	res, err := ex.ExecContext(ctx,
 		`INSERT INTO calendar_moons (calendar_id, name, cycle_days, phase_offset, color, hidden_from_players,
-		        base_design, tint, phase_source, size, orbit_speed)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		        base_design, tint, phase_source, size, orbit_speed, lore_entity_id)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		calendarID, m.Name, m.CycleDays, m.PhaseOffset, m.Color, m.HiddenFromPlayers,
 		moonBaseDesignOrDefault(m.BaseDesign), m.Tint, moonPhaseSourceOrDefault(m.PhaseSource),
-		moonSizeOrDefault(m.Size), moonOrbitSpeedOrDefault(m.OrbitSpeed),
+		moonSizeOrDefault(m.Size), moonOrbitSpeedOrDefault(m.OrbitSpeed), m.LoreEntityID,
 	)
 	if err != nil {
 		return 0, err
@@ -590,6 +603,18 @@ func insertMoon(ctx context.Context, ex dbExecutor, calendarID string, m MoonInp
 		return 0, err
 	}
 	return int(id), nil
+}
+
+// setMoonLore writes an existing moon's lore page only when the writer said
+// so (MoonInput.LoreSet): a write that does not mention the page keeps it.
+func setMoonLore(ctx context.Context, ex dbExecutor, calendarID string, moonID int, m MoonInput) error {
+	if !m.LoreSet {
+		return nil
+	}
+	_, err := ex.ExecContext(ctx,
+		`UPDATE calendar_moons SET lore_entity_id = ? WHERE id = ? AND calendar_id = ?`,
+		m.LoreEntityID, moonID, calendarID)
+	return err
 }
 
 // SetMoons upserts a calendar's moons; see upsertMoons for the exact
@@ -607,13 +632,19 @@ func (r *calendarRepo) SetMoons(ctx context.Context, calendarID string, moons []
 	return tx.Commit()
 }
 
-// GetMoons returns all moons for a calendar, including the render params and
-// HiddenFromPlayers. A read path serving players (rather than the GM) must
-// filter out hidden moons itself; this method returns every moon regardless
-// of caller.
+// GetMoons returns all moons for a calendar, including the render params,
+// HiddenFromPlayers and the lore page's name. A read path serving players
+// (rather than the GM) must filter out hidden moons itself and redact the
+// lore page (redactMoonLore); this method returns every moon regardless of
+// caller. The page is joined only within the calendar's own campaign, so a
+// stray id from elsewhere reads as no name.
 func (r *calendarRepo) GetMoons(ctx context.Context, calendarID string) ([]Moon, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT `+moonCols+` FROM calendar_moons WHERE calendar_id = ?`, calendarID)
+		`SELECT `+moonColsQualified+`, COALESCE(ent.name, '')
+		 FROM calendar_moons mo
+		 JOIN calendars c ON c.id = mo.calendar_id
+		 LEFT JOIN entities ent ON ent.id = mo.lore_entity_id AND ent.campaign_id = c.campaign_id
+		 WHERE mo.calendar_id = ?`, calendarID)
 	if err != nil {
 		return nil, err
 	}
@@ -621,11 +652,11 @@ func (r *calendarRepo) GetMoons(ctx context.Context, calendarID string) ([]Moon,
 
 	var moons []Moon
 	for rows.Next() {
-		m, err := scanMoon(rows)
-		if err != nil {
+		var m Moon
+		if err := rows.Scan(append(moonDests(&m), &m.LoreEntityName)...); err != nil {
 			return nil, err
 		}
-		moons = append(moons, *m)
+		moons = append(moons, m)
 	}
 	return moons, rows.Err()
 }

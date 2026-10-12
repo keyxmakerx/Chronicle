@@ -52,7 +52,12 @@ type EntityCreator interface {
 // handler from the campaigns-wired EntityCreator (entities.EntityService).
 type Committer struct {
 	creator EntityCreator
+	// eras writes `era:` blocks; nil refuses them with a plain reason.
+	eras EraWriter
 }
+
+// SetEraWriter wires pages by era. Optional.
+func (c *Committer) SetEraWriter(w EraWriter) { c.eras = w }
 
 // NewCommitter constructs a Committer.
 func NewCommitter(c EntityCreator) *Committer {
@@ -226,8 +231,11 @@ func (c *Committer) Commit(ctx context.Context, campaignID string, in CommitInpu
 			dec = in.Decisions[i]
 		}
 		result.Rows[i] = c.commitRow(ctx, campaignID, in.OwnerID,
-			i, page, dec, typesBySlug, newTypeIDs, failedTypes, in.CampaignDefaultPrivate, made, links)
-		if id := result.Rows[i].EntityID; id != "" && (result.Rows[i].Status == StatusCreated ||
+			i, page, dec, typesBySlug, newTypeIDs, failedTypes, in.CampaignDefaultPrivate, made, links, in.Viewer)
+		// An era block writes a version, not the page: it must not stand in
+		// for the page as a parent or link target, and its body must never
+		// be re-written onto the usual page by the relink pass.
+		if id := result.Rows[i].EntityID; id != "" && !page.FrontMatter.IsEra() && (result.Rows[i].Status == StatusCreated ||
 			result.Rows[i].Status == StatusRenamed || result.Rows[i].Status == StatusUpdated) {
 			made[entities.Slugify(page.Name)] = id
 			made[entities.Slugify(result.Rows[i].Name)] = id
@@ -261,7 +269,7 @@ func (c *Committer) Commit(ctx context.Context, campaignID string, in CommitInpu
 func pasteSlugsOf(in CommitInput) map[string]bool {
 	out := map[string]bool{}
 	for i, p := range in.Pages {
-		if i >= len(in.Decisions) || !in.Decisions[i].Include || in.Decisions[i].Action == ActionDelete {
+		if i >= len(in.Decisions) || !in.Decisions[i].Include || in.Decisions[i].Action == ActionDelete || p.FrontMatter.IsEra() {
 			continue
 		}
 		out[entities.Slugify(p.Name)] = true
@@ -385,6 +393,7 @@ func (c *Committer) commitRow(
 	campaignDefaultPrivate bool,
 	made map[string]string,
 	links *PageLinks,
+	viewer Viewer,
 ) RowOutcome {
 	out := RowOutcome{Index: idx, Name: dec.Name}
 	if out.Name == "" {
@@ -401,6 +410,11 @@ func (c *Committer) commitRow(
 		out.Status = StatusSkipped
 		out.Reason = "Parse error: " + page.ParseError
 		return out
+	}
+
+	// An era block writes one era's version of a page, whatever its action.
+	if page.FrontMatter.IsEra() {
+		return c.commitEra(ctx, campaignID, ownerID, idx, page, dec, made, links, viewer)
 	}
 
 	// Action dispatch; empty Action defaults to "create".
@@ -683,6 +697,104 @@ func (c *Committer) commitUpdateExplicit(
 	}
 	isPrivate := dec.Visibility == "private" || dec.Visibility == "dm_only"
 	return c.commitUpdate(ctx, existing, page, dec, typeID, bodyJSON, bodyHTML, isPrivate, parent, idx)
+}
+
+// commitEra writes (or, for action=delete, removes) one era's version of the
+// page the block names, leaving the usual page's name, type, visibility,
+// parent and tags alone. The era is re-resolved here rather than trusted from
+// the review. A non-empty body is converted through MarkdownToHTML and
+// htmlconv like every other body, so the SEC-6 pin covers this path; an
+// empty body leaves the version's text as it was.
+func (c *Committer) commitEra(
+	ctx context.Context,
+	campaignID, ownerID string,
+	idx int,
+	page ParsedPage,
+	dec RowDecision,
+	made map[string]string,
+	links *PageLinks,
+	viewer Viewer,
+) RowOutcome {
+	out := RowOutcome{Index: idx, Name: dec.Name}
+	if out.Name == "" {
+		out.Name = page.Name
+	}
+	fail := func(reason string) RowOutcome {
+		out.Status = StatusFailed
+		out.Reason = reason
+		return out
+	}
+	eraName := page.FrontMatter.EraName()
+	if c.eras == nil {
+		return fail(eraUnavailableReason)
+	}
+	eras, err := c.eras.Eras(ctx, campaignID, viewer)
+	if err != nil {
+		return fail(eraLookupFailReason)
+	}
+	era, ok := FindEra(eras, eraName)
+	if !ok {
+		return fail(eraNotFoundReason(eraName, eras))
+	}
+
+	// The page: one this commit saved earlier (it may sit under a renamed
+	// slug), else the campaign's page of that name.
+	entityID := made[entities.Slugify(out.Name)]
+	if entityID == "" {
+		entityID = made[entities.Slugify(page.Name)]
+	}
+	if entityID == "" {
+		if e, _ := c.creator.GetBySlug(ctx, campaignID, entities.Slugify(out.Name)); e != nil {
+			entityID = e.ID
+		}
+	}
+	if entityID == "" {
+		return fail(eraNoPageReason(eraName, out.Name))
+	}
+	out.EntityID = entityID
+	out.Slug = entities.Slugify(out.Name)
+
+	if dec.Action == ActionDelete {
+		if !dec.DeleteConfirmed {
+			return fail("Delete not confirmed — operator must check the per-row confirmation in the review screen.")
+		}
+		if err := c.eras.DeleteVersion(ctx, campaignID, entityID, era.ID); err != nil {
+			return fail("Could not remove the " + strconv.Quote(era.Name) + " version. Try again in a moment.")
+		}
+		out.Status = StatusUpdated
+		out.Reason = "Removed the " + era.Name + " version"
+		return out
+	}
+
+	write := EraVersionWrite{KnownAs: strings.TrimSpace(page.FrontMatter.KnownAs)}
+	if strings.TrimSpace(page.Body) != "" {
+		bodyHTML, err := MarkdownToHTML(page.Body, WithPageLinks(links))
+		if err != nil {
+			return fail("Could not parse the page's markdown body — check the heading structure.")
+		}
+		bodyJSON, err := htmlconv.Convert(bodyHTML)
+		if err != nil {
+			return fail("Could not convert the page's body to the editor format. Try simpler markdown.")
+		}
+		write.EntryJSON, write.EntryHTML = bodyJSON, bodyHTML
+	}
+	if err := c.eras.WriteVersion(ctx, campaignID, entityID, era.ID, ownerID, write); err != nil {
+		return fail(eraWriteReason(err, era.Name))
+	}
+	out.Status = StatusUpdated
+	out.Reason = "Wrote the " + era.Name + " version"
+	return out
+}
+
+// eraWriteReason shows the calendar's plain refusal (a name that is too
+// long) and otherwise keeps the generic wording, so no raw error reaches the
+// review screen.
+func eraWriteReason(err error, era string) string {
+	var ae *apperror.AppError
+	if errors.As(err, &ae) && ae.Code == 400 && ae.Message != "" {
+		return "Could not write the " + era + " version: " + ae.Message + "."
+	}
+	return "Could not write the " + era + " version. Try again in a moment."
 }
 
 // commitDelete handles action=delete: load the existing entity by

@@ -336,16 +336,14 @@ templ reviewRow(campaignID string, idx int, page importer.ParsedPage, cls import
 					// Still expose the action chip so the operator can
 					// override (e.g. delete → create)
 					// without re-pasting.
-					@reviewRowFields(idx, page, cls, data)
-					@reviewRowMeta(page)
+					@reviewRowBody(idx, page, cls, data)
 				} else {
-					@reviewRowFields(idx, page, cls, data)
-					@reviewRowMeta(page)
+					@reviewRowBody(idx, page, cls, data)
 				}
 				// Per-row delete confirmation; renders only when the
 				// AI-suggested action is "delete".
 				if page.FrontMatter.Action == importer.ActionDelete {
-					@reviewRowDeleteConfirm(idx, page.Name)
+					@reviewRowDeleteConfirm(idx, page.Name, page.FrontMatter.EraName())
 				}
 				// A page with GM-only parts: any row that ends up replacing its
 				// text needs the tick (the dropdowns can turn a row into an
@@ -373,7 +371,7 @@ templ reviewRow(campaignID string, idx int, page importer.ParsedPage, cls import
 // attribute blocks Submit via the browser's form-validity gate until
 // every Delete row is confirmed; the committer re-checks
 // DeleteConfirmed independently against any client-side bypass.
-templ reviewRowDeleteConfirm(idx int, name string) {
+templ reviewRowDeleteConfirm(idx int, name, era string) {
 	<div class="mt-2 p-2 rounded border border-rose-300 dark:border-rose-700 bg-rose-50 dark:bg-rose-900/20">
 		<label class="flex items-start gap-2 text-xs text-rose-900 dark:text-rose-100 cursor-pointer">
 			<input
@@ -383,11 +381,45 @@ templ reviewRowDeleteConfirm(idx int, name string) {
 				class="mt-0.5 rounded border-rose-400 text-rose-600"
 				aria-label={ fmt.Sprintf("I confirm permanent deletion of %s", name) }
 			/>
-			<span>
-				I understand <strong>{ name }</strong> will be permanently deleted.
-				This cannot be undone.
-			</span>
+			if era != "" {
+				<span>
+					I understand the <strong>{ era }</strong> version of <strong>{ name }</strong> will be permanently deleted.
+					The usual page stays. This cannot be undone.
+				</span>
+			} else {
+				<span>
+					I understand <strong>{ name }</strong> will be permanently deleted.
+					This cannot be undone.
+				</span>
+			}
 		</label>
+	</div>
+}
+
+// reviewRowBody is what sits under a row's header: the page controls, or for
+// an era block just the pill saying which era's version it writes (the page's
+// category, visibility and conflict mode do not apply to a version).
+templ reviewRowBody(idx int, page importer.ParsedPage, cls importer.Classification, data ImportReviewData) {
+	if page.FrontMatter.IsEra() {
+		@reviewRowEraPill(page)
+	} else {
+		@reviewRowFields(idx, page, cls, data)
+		@reviewRowMeta(page)
+	}
+}
+
+// reviewRowEraPill marks a row that writes one era's version of a page.
+templ reviewRowEraPill(page importer.ParsedPage) {
+	<div class="flex flex-wrap items-center gap-1.5 mt-1">
+		<span class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-accent/10 text-accent">
+			<i class="fa-solid fa-hourglass-half text-[9px] mr-1" aria-hidden="true"></i>
+			{ page.FrontMatter.EraName() } version
+		</span>
+		if page.FrontMatter.KnownAs != "" {
+			<span class="text-[10px] text-fg-muted">
+				{ "known as " + page.FrontMatter.KnownAs }
+			</span>
+		}
 	</div>
 }
 

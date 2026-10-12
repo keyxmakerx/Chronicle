@@ -205,7 +205,7 @@ func LinkNames(markdown string) []string {
 func PasteSlugs(pages []ParsedPage) map[string]bool {
 	out := map[string]bool{}
 	for _, pg := range pages {
-		if pg.Status == StatusParseError || pg.FrontMatter.Action == ActionDelete {
+		if pg.Status == StatusParseError || pg.FrontMatter.Action == ActionDelete || pg.FrontMatter.IsEra() {
 			continue
 		}
 		if s := entities.Slugify(pg.Name); s != "" {

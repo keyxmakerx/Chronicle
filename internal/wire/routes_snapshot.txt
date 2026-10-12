@@ -42,6 +42,7 @@ DELETE	/data-hygiene/orphaned-api-keys	internal/plugins/admin/routes.go
 DELETE	/data-hygiene/orphaned-media	internal/plugins/admin/routes.go
 DELETE	/data-hygiene/stale-files	internal/plugins/admin/routes.go
 DELETE	/entities/:eid	internal/plugins/entities/routes.go
+DELETE	/entities/:eid/eras/:eraID	internal/plugins/entities/routes.go
 DELETE	/entities/:eid/field-overrides	internal/plugins/entities/routes.go
 DELETE	/entities/:eid/notes/:nid	internal/widgets/entity_notes/routes.go
 DELETE	/entities/:eid/places/:pid	internal/plugins/entities/routes.go
@@ -281,6 +282,8 @@ GET	/entities/:eid/backlinks	internal/plugins/entities/routes.go
 GET	/entities/:eid/edit	internal/plugins/entities/routes.go
 GET	/entities/:eid/entry	internal/plugins/entities/routes.go
 GET	/entities/:eid/entry	internal/plugins/entities/routes.go
+GET	/entities/:eid/eras/:eraID/entry	internal/plugins/entities/routes.go
+GET	/entities/:eid/eras/:eraID/fields	internal/plugins/entities/routes.go
 GET	/entities/:eid/fields	internal/plugins/entities/routes.go
 GET	/entities/:eid/fields	internal/plugins/entities/routes.go
 GET	/entities/:eid/history	internal/plugins/audit/routes.go
@@ -537,6 +540,7 @@ GET	/ws	internal/app/routes.go
 PATCH	/:id/visibility	internal/plugins/bestiary/routes.go
 PATCH	/category-boards/:tid/boards/:bid	internal/plugins/quests/routes.go
 PATCH	/category-boards/:tid/boards/:bid/items/:iid	internal/plugins/quests/routes.go
+PATCH	/entities/:eid/eras/:eraID	internal/plugins/entities/routes.go
 PATCH	/maps/:mapID/tokens/:tokenID/position	internal/plugins/syncapi/routes.go
 PATCH	/maps/:mid/hexes/cells	internal/plugins/maps/routes.go
 PATCH	/maps/:mid/tokens/:tid/position	internal/plugins/maps/routes.go
@@ -653,6 +657,7 @@ POST	/entities	internal/plugins/entities/routes.go
 POST	/entities	internal/plugins/syncapi/routes.go
 POST	/entities/:eid/claim	internal/plugins/entities/routes.go
 POST	/entities/:eid/clone	internal/plugins/entities/routes.go
+POST	/entities/:eid/eras/:eraID	internal/plugins/entities/routes.go
 POST	/entities/:eid/favorite	internal/plugins/entities/routes.go
 POST	/entities/:eid/history/:vid/restore	internal/plugins/entities/page_safety_handler.go
 POST	/entities/:eid/notes	internal/widgets/entity_notes/routes.go
@@ -866,6 +871,9 @@ PUT	/entities/:eid	internal/plugins/entities/routes.go
 PUT	/entities/:eid/aliases	internal/plugins/entities/routes.go
 PUT	/entities/:eid/cover-image	internal/plugins/entities/routes.go
 PUT	/entities/:eid/entry	internal/plugins/entities/routes.go
+PUT	/entities/:eid/eras/:eraID/entry	internal/plugins/entities/routes.go
+PUT	/entities/:eid/eras/:eraID/fields	internal/plugins/entities/routes.go
+PUT	/entities/:eid/eras/:eraID/image	internal/plugins/entities/routes.go
 PUT	/entities/:eid/field-overrides	internal/plugins/entities/routes.go
 PUT	/entities/:eid/fields	internal/plugins/entities/routes.go
 PUT	/entities/:eid/image	internal/plugins/entities/routes.go

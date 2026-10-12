@@ -10,6 +10,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
+	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 )
 
 // CalendarStructureAPI is the slice of calendar.CalendarService the
@@ -26,6 +27,116 @@ type CalendarStructureAPI interface {
 	ApplyStructureEdit(ctx context.Context, calendarID, campaignID, fingerprint string, edit calendar.StructureEdit) (*calendar.StructurePreview, error)
 	CreateEra(ctx context.Context, calendarID, campaignID string, input calendar.EraInput) (*calendar.Era, error)
 	UpdateEra(ctx context.Context, eraID int, calendarID, campaignID string, input calendar.UpdateEraInput) error
+}
+
+// PageResolver finds a campaign page by name and says which of them an
+// actor may see, so a moon's or an era's `page:` can only name a page the
+// operator can open. The entities service is one.
+type PageResolver interface {
+	EntityLookup
+	FilterViewableEntityIDs(ctx context.Context, campaignID string, entityIDs []string, role int, userID string) (map[string]bool, error)
+}
+
+// pageRef is a `page:` key on a moon or an era: absent keeps the lore page,
+// `none` clears it, a name sets it. id is filled by resolvePages.
+type pageRef struct {
+	set  bool
+	none bool
+	name string
+	id   string
+}
+
+// pageNone is the `page:` value that clears a lore page.
+const pageNone = "none"
+
+// readPageRef reads an entry's optional `page:` key. what names the entry
+// ("moon "Selune"") for the refusal.
+func readPageRef(it Record, what string) (pageRef, error) {
+	if !it.Has("page") {
+		return pageRef{}, nil
+	}
+	name := it.Str("page")
+	switch {
+	case name == "":
+		return pageRef{}, badRequestf("%s: page needs a page name, or none to clear it", what)
+	case strings.EqualFold(name, pageNone):
+		return pageRef{set: true, none: true}, nil
+	}
+	return pageRef{set: true, name: name}, nil
+}
+
+// resolve turns a named page into its id, or refuses in plain words. A page
+// that does not exist and one the actor may not see read the same, so the
+// refusal never confirms a hidden page's name.
+func (k CalendarKind) resolvePage(ctx context.Context, campaignID string, a Actor, ref *pageRef, what string) error {
+	if !ref.set || ref.none {
+		return nil
+	}
+	if k.Pages == nil {
+		return badRequestf("%s: pages can't be looked up right now, so page can't be set", what)
+	}
+	gone := badRequestf("%s: there is no page called %s that you can open", what, quote(ref.name))
+	e, err := k.Pages.GetBySlug(ctx, campaignID, entities.Slugify(ref.name))
+	if err != nil || e == nil || e.CampaignID != campaignID {
+		return gone
+	}
+	seen, err := k.Pages.FilterViewableEntityIDs(ctx, campaignID, []string{e.ID}, a.Role, a.UserID)
+	if err != nil {
+		return badRequestf("%s: could not check the page; try again in a moment", what)
+	}
+	if !seen[e.ID] {
+		return gone
+	}
+	ref.id = e.ID
+	return nil
+}
+
+// pageChanges counts the moons and eras whose `page:` sets or clears a lore
+// page, for the review row.
+func (s *calSpec) pageChanges() int {
+	n := 0
+	for _, p := range s.moonPages {
+		if p.set {
+			n++
+		}
+	}
+	for _, e := range s.eras {
+		if e.page.set {
+			n++
+		}
+	}
+	return n
+}
+
+// resolvePages resolves every moon's and era's `page:` and copies the result
+// onto the inputs the services take, so a moon carries LoreSet only when the
+// block said something about its page.
+func (k CalendarKind) resolvePages(ctx context.Context, campaignID string, a Actor, s *calSpec) error {
+	for i := range s.moons {
+		ref := &s.moonPages[i]
+		if err := k.resolvePage(ctx, campaignID, a, ref, "moon "+quote(s.moons[i].Name)); err != nil {
+			return err
+		}
+		if ref.set {
+			s.moons[i].LoreSet = true
+			s.moons[i].LoreEntityID = nil
+			if ref.id != "" {
+				id := ref.id
+				s.moons[i].LoreEntityID = &id
+			}
+		}
+	}
+	for i := range s.eras {
+		e := &s.eras[i]
+		if err := k.resolvePage(ctx, campaignID, a, &e.page, "era "+quote(e.in.Name)); err != nil {
+			return err
+		}
+		if e.page.id != "" {
+			id := e.page.id
+			e.in.LoreEntityID = &id
+		}
+	}
+	return nil
 }
 
 // ---- finding the calendar the other calendar kinds write to ----
@@ -86,7 +197,12 @@ const (
 )
 
 // CalendarKind makes the campaign's calendar, or changes the main one.
-type CalendarKind struct{ Svc CalendarStructureAPI }
+type CalendarKind struct {
+	Svc CalendarStructureAPI
+	// Pages resolves a moon's or an era's `page:`. Without it a block that
+	// names a page is refused rather than guessed at.
+	Pages PageResolver
+}
 
 func (CalendarKind) Name() string  { return KindCalendar }
 func (CalendarKind) Label() string { return "Calendar" }
@@ -98,11 +214,11 @@ func (CalendarKind) Doc() string {
 		"- `months`: a list of `name`, `days`, optional `season`, `intercalary` (true for festival days outside the weeks), `leap_days`. Needed on create.\n" +
 		"- `weekdays`: a list of names, or of `name` with `rest_day: true`. Needed on create.\n" +
 		"- `seasons`: a list of `name`, `start_month`, `start_day`, `end_month`, `end_day`, `color`. Without it, seasons are made from the months' `season`.\n" +
-		"- `moons`: a list of `name`, `cycle` (days from new moon to new moon), `phase_offset` (days), `color`.\n" +
-		"- `eras`: a list of `name`, `start_year` (optional `start_month`, `start_day`), optional `end_year`/`end_month`/`end_day`, `color`, `description`.\n" +
+		"- `moons`: a list of `name`, `cycle` (days from new moon to new moon), `phase_offset` (days), `color`, and optionally `page` (the name of a page that tells of the moon; `none` clears it, leaving it out keeps it).\n" +
+		"- `eras`: a list of `name`, `start_year` (optional `start_month`, `start_day`), optional `end_year`/`end_month`/`end_day`, `color`, `description`, and optionally `page` (the name of a page that tells of the era; `none` clears it, leaving it out keeps it).\n" +
 		"- `leap_year_every`: years between leap years (0 for none).\n" +
 		"The body is the calendar's description. On update, a `months`, `weekdays`, `seasons` or `moons` list replaces the whole list (events follow a month that keeps its name), and a key left out keeps what is there. Moons and eras are matched by name, and a key left out keeps what is there; a moon hidden from players is never removed here. Eras not listed are kept. An end with only `end_year` runs to the end of that year.\n\n" +
-		"```\n---\nkind: calendar\nname: Calendar of Harptos\nyear_label: DR\ncurrent_year: 1492\ncurrent_month: Hammer\ncurrent_day: 1\nmonths:\n  - {name: Hammer, days: 30, season: Winter}\n  - {name: Midwinter, days: 1, intercalary: true, season: Winter}\n  - {name: Alturiak, days: 30, season: Winter}\nweekdays: [First-day, Second-day, Third-day]\nmoons:\n  - {name: Selune, cycle: 30.4375, phase_offset: 0, color: \"#e8e8f0\"}\neras:\n  - {name: Dalereckoning, start_year: 1}\n---\n```"
+		"```\n---\nkind: calendar\nname: Calendar of Harptos\nyear_label: DR\ncurrent_year: 1492\ncurrent_month: Hammer\ncurrent_day: 1\nmonths:\n  - {name: Hammer, days: 30, season: Winter}\n  - {name: Midwinter, days: 1, intercalary: true, season: Winter}\n  - {name: Alturiak, days: 30, season: Winter}\nweekdays: [First-day, Second-day, Third-day]\nmoons:\n  - {name: Selune, cycle: 30.4375, phase_offset: 0, color: \"#e8e8f0\"}\neras:\n  - {name: Dalereckoning, start_year: 1, page: The Dalereckoning}\n---\n```"
 }
 
 // calSpec is a calendar block read and checked against the months it will
@@ -112,6 +228,7 @@ type calSpec struct {
 	weekdays  []calendar.WeekdayInput
 	seasons   []calendar.Season
 	moons     []calendar.MoonInput
+	moonPages []pageRef // one per moon, what its `page:` said
 	eras      []eraSpec
 	leapEvery *int
 	yearLabel *string
@@ -124,6 +241,7 @@ type eraSpec struct {
 	in       calendar.EraInput
 	keys     Record // the era's own keys, for a partial update
 	hasStart bool
+	page     pageRef
 }
 
 // listItems reads a list key whose entries are maps (or, where allowed,
@@ -304,6 +422,7 @@ func readCalSpec(r Record, base *calendar.Calendar) (*calSpec, error) {
 			return nil, err
 		}
 		s.moons = make([]calendar.MoonInput, len(items))
+		s.moonPages = make([]pageRef, len(items))
 		for i, it := range items {
 			cycle, ok, err := firstNum(it, "cycle", "cycle_days", "cycle_length")
 			if err != nil {
@@ -330,6 +449,9 @@ func readCalSpec(r Record, base *calendar.Calendar) (*calSpec, error) {
 				}
 			}
 			s.moons[i] = calendar.MoonInput{Name: it.Name, CycleDays: cycle, PhaseOffset: offset, Color: color}
+			if s.moonPages[i], err = readPageRef(it, "moon "+quote(it.Name)); err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -468,6 +590,9 @@ func readEra(cal *calendar.Calendar, it Record) (eraSpec, error) {
 	if s := it.Str("description"); s != "" {
 		e.in.Description = &s
 	}
+	if e.page, err = readPageRef(it, "era "+quote(it.Name)); err != nil {
+		return e, err
+	}
 	return e, nil
 }
 
@@ -540,7 +665,7 @@ func (k CalendarKind) plan(ctx context.Context, campaignID string, a Actor, r Re
 	if cal == nil {
 		return Plan{Error: "this campaign has no calendar to change; use action: create to make one"}, nil
 	}
-	return k.planUpdate(ctx, campaignID, r, cal), nil
+	return k.planUpdate(ctx, campaignID, a, r, cal), nil
 }
 
 func (k CalendarKind) planCreate(ctx context.Context, campaignID string, a Actor, r Record, cal *calendar.Calendar) (Plan, *calendar.Calendar) {
@@ -552,6 +677,9 @@ func (k CalendarKind) planCreate(ctx context.Context, campaignID string, a Actor
 	}
 	s, err := readCalSpec(r, nil)
 	if err != nil {
+		return Plan{Error: planError(err)}, nil
+	}
+	if err := k.resolvePages(ctx, campaignID, a, s); err != nil {
 		return Plan{Error: planError(err)}, nil
 	}
 	switch {
@@ -712,12 +840,15 @@ func baseMoonIn(ms []calendar.MoonInput, name string) *calendar.MoonInput {
 	return nil
 }
 
-func (k CalendarKind) planUpdate(ctx context.Context, campaignID string, r Record, cal *calendar.Calendar) Plan {
+func (k CalendarKind) planUpdate(ctx context.Context, campaignID string, a Actor, r Record, cal *calendar.Calendar) Plan {
 	if r.Name != "" && !sameName(r.Name, cal.Name) {
 		return Plan{Error: fmt.Sprintf("the main calendar is %s, not %s; to rename it, use rename_to", quote(cal.Name), quote(r.Name))}
 	}
 	s, err := readCalSpec(r, cal)
 	if err != nil {
+		return Plan{Error: planError(err)}
+	}
+	if err := k.resolvePages(ctx, campaignID, a, s); err != nil {
 		return Plan{Error: planError(err)}
 	}
 	var did []string
@@ -752,6 +883,9 @@ func (k CalendarKind) planUpdate(ctx context.Context, campaignID string, r Recor
 			did = append(did, "changes the leap rule")
 		}
 		warn = append(warn, structureWarnings(pv)...)
+	}
+	if n := s.pageChanges(); n > 0 {
+		did = append(did, "changes "+plural(n, "lore page", "lore pages"))
 	}
 	if s.today != nil {
 		if cal.UsesRealTime() {
@@ -818,7 +952,7 @@ func (k CalendarKind) Apply(ctx context.Context, campaignID string, a Actor, r R
 		return apperror.NewBadRequest(p.Error)
 	}
 	if r.Action == ActionCreate {
-		return k.applyCreate(ctx, campaignID, r)
+		return k.applyCreate(ctx, campaignID, a, r)
 	}
 	cal, err := k.existing(ctx, campaignID, a)
 	if err != nil {
@@ -827,17 +961,25 @@ func (k CalendarKind) Apply(ctx context.Context, campaignID string, a Actor, r R
 	if cal == nil {
 		return apperror.NewBadRequest("the calendar is gone")
 	}
-	return k.applyUpdate(ctx, campaignID, r, cal)
+	return k.applyUpdate(ctx, campaignID, a, r, cal)
 }
 
-func (k CalendarKind) applyCreate(ctx context.Context, campaignID string, r Record) error {
+func (k CalendarKind) applyCreate(ctx context.Context, campaignID string, a Actor, r Record) error {
 	s, err := readCalSpec(r, nil)
 	if err != nil {
+		return err
+	}
+	if err := k.resolvePages(ctx, campaignID, a, s); err != nil {
 		return err
 	}
 	ir := s.importResult(r)
 	if err := calendar.PrepareImport(ir); err != nil {
 		return err
+	}
+	// PrepareImport clears every era's page, as it must for an uploaded
+	// file; these were resolved above against this campaign, so they go back.
+	for i := range s.eras {
+		ir.Eras[i].LoreEntityID = s.eras[i].in.LoreEntityID
 	}
 	cal, err := k.Svc.CreateCalendarFromImport(ctx, campaignID, ir, calendar.CreateCalendarFromImportOptions{})
 	if err != nil {
@@ -850,9 +992,12 @@ func (k CalendarKind) applyCreate(ctx context.Context, campaignID string, r Reco
 
 // applyUpdate writes the structure first, so the current date and eras
 // are checked against the months the calendar now has.
-func (k CalendarKind) applyUpdate(ctx context.Context, campaignID string, r Record, cal *calendar.Calendar) error {
+func (k CalendarKind) applyUpdate(ctx context.Context, campaignID string, a Actor, r Record, cal *calendar.Calendar) error {
 	s, err := readCalSpec(r, cal)
 	if err != nil {
+		return err
+	}
+	if err := k.resolvePages(ctx, campaignID, a, s); err != nil {
 		return err
 	}
 	edit, err := structureEdit(s, cal)
@@ -924,6 +1069,14 @@ func eraUpdate(e eraSpec) calendar.UpdateEraInput {
 	if e.in.Description != nil {
 		in.Description = patch.Of(*e.in.Description)
 	}
+	// A page changes only when the entry said so: `none` clears it, a name
+	// replaces it, and a key left out keeps it.
+	switch {
+	case e.page.none:
+		in.LoreEntityID = patch.Null[string]()
+	case e.page.id != "":
+		in.LoreEntityID = patch.Of(e.page.id)
+	}
 	return in
 }
 
@@ -973,7 +1126,7 @@ func (k CalendarKind) Export(ctx context.Context, campaignID string, a Actor) (s
 	if len(cal.Moons) > 0 {
 		b.WriteString("moons:\n")
 		for _, m := range cal.Moons {
-			fmt.Fprintf(&b, "  - {name: %s, cycle: %v, phase_offset: %v, color: %s}\n", quote(m.Name), m.CycleDays, m.PhaseOffset, quote(m.Color))
+			fmt.Fprintf(&b, "  - {name: %s, cycle: %v, phase_offset: %v, color: %s%s}\n", quote(m.Name), m.CycleDays, m.PhaseOffset, quote(m.Color), pageKey(m.LoreEntityName))
 		}
 	}
 	// Eras are calendar structure only the Director sees; the service has
@@ -988,11 +1141,21 @@ func (k CalendarKind) Export(ctx context.Context, campaignID string, a Actor) (s
 					fmt.Fprintf(&b, ", end_month: %d, end_day: %d", *e.EndMonth, *e.EndDay)
 				}
 			}
-			b.WriteString("}\n")
+			b.WriteString(pageKey(e.LoreEntityName) + "}\n")
 		}
 	}
 	b.WriteString("---\n\n")
 	return b.String(), nil
+}
+
+// pageKey is ", page: "Name"" for an exported moon or era with a lore page,
+// else nothing. The service has already blanked a page the actor may not
+// see, so a player-safe export never names one.
+func pageKey(name string) string {
+	if name == "" {
+		return ""
+	}
+	return ", page: " + quote(name)
 }
 
 func clampIdx(i, n int) int {
