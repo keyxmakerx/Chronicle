@@ -727,6 +727,7 @@ func placeableWidgetMetas(manifest *SystemManifest) []entities.BlockMeta {
 			Icon:        icon,
 			Description: w.Description,
 			WidgetSlug:  w.Slug,
+			TileSizes:   w.TileSizes,
 		})
 	}
 	return metas

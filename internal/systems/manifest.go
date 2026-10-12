@@ -9,6 +9,8 @@ import (
 	"regexp"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/keyxmakerx/chronicle/internal/tilegrid"
 )
 
 // SystemManifest describes a module's metadata, capabilities, and content
@@ -169,6 +171,11 @@ type WidgetDef struct {
 
 	// File is an alias for ScriptFile for backward compatibility.
 	File string `json:"file"`
+
+	// TileSizes are the "WxH" sizes the widget supports in a tile section on
+	// a 4-column grid; the first is its default. Empty means it cannot be a
+	// tile. The widget is told its current size by data-tile-w / data-tile-h.
+	TileSizes []string `json:"tile_sizes,omitempty"`
 }
 
 // TextRendererDef describes a JS text renderer provided by a game system.
@@ -854,6 +861,9 @@ func ValidateManifest(m *SystemManifest) error {
 		}
 		if strings.Contains(w.ScriptFile, "..") {
 			return fmt.Errorf("widget %d (%s): script_file must not contain path traversal", i, w.Slug)
+		}
+		if err := tilegrid.ValidateSizeList(w.TileSizes); err != nil {
+			return fmt.Errorf("widget %d (%s): tile_sizes: %w", i, w.Slug, err)
 		}
 	}
 

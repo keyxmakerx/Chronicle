@@ -1,0 +1,46 @@
+package campaigns
+
+import "github.com/keyxmakerx/chronicle/internal/tilegrid"
+
+// dashTileSection draws a tile section of a dashboard layout: its tiles in
+// stored order on the shared tile grid. A tile whose type allows no size any
+// more shows a notice in a wide cell instead of failing the dashboard. A
+// DM-only tile is left out for viewers who cannot read DM-only content, before
+// its cell opens, so no hole is left.
+templ dashTileSection(cc *CampaignContext, row DashboardRow, rowIdx int, repeats map[[3]int]bool, recentEntities []RecentEntity) {
+	@tilegrid.Section(row.ID) {
+		for ti, t := range row.Tiles {
+			{{
+				w, h, ok := ResolveDashboardTile(ctx, cc.Campaign.ID, t)
+			}}
+			if !TileVisibleTo(t.Config, cc) || repeats[[3]int{rowIdx, -1, ti}] {
+				// Not for this viewer, or a second Coming up card.
+			} else if !ok {
+				@tilegrid.Cell(t.ID, 2, 1) {
+					@dashTileUnavailable(t.Type)
+				}
+			} else {
+				@tilegrid.Cell(t.ID, w, h) {
+					@DashboardBlockSwitch(cc, DashboardTileBlock(t), recentEntities)
+				}
+			}
+		}
+	}
+}
+
+// dashTileUnavailable is the notice for a tile whose block can no longer be
+// a tile. It reads like the entity page's not-available notice.
+templ dashTileUnavailable(blockType string) {
+	<div class="card p-3 border border-dashed border-edge text-fg-secondary">
+		<div class="flex items-start gap-2">
+			<i class="fa-solid fa-circle-info mt-0.5" aria-hidden="true"></i>
+			<div>
+				<p class="text-sm font-medium text-fg">Block not available here</p>
+				<p class="text-xs mt-1">
+					The <code class="text-xs font-mono">{ blockType }</code> block can't be shown as a tile.
+					Edit the layout and remove it, or move it into a column row.
+				</p>
+			</div>
+		</div>
+	</div>
+}

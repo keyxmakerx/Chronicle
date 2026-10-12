@@ -16,6 +16,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/sanitize"
 	"github.com/keyxmakerx/chronicle/internal/sitelook"
+	"github.com/keyxmakerx/chronicle/internal/tilegrid"
 )
 
 // transferTokenBytes is the number of random bytes in a transfer token.
@@ -1643,12 +1644,38 @@ const maxDashboardBlocksPerRow = 20
 
 // validateDashboardLayout validates block types, column widths, and sanitizes
 // text_block content. Shared by both campaign and owner dashboard layouts.
-func validateDashboardLayout(layout *DashboardLayout) error {
+//
+// A tile section (row kind "tiles") is checked by tilegrid against the sizes
+// each block type declares; the campaign scopes extension-widget lookups.
+func validateDashboardLayout(ctx context.Context, campaignID string, layout *DashboardLayout) error {
 	if len(layout.Rows) > maxDashboardRows {
 		return apperror.NewBadRequest("dashboard layout has too many rows")
 	}
 
-	for _, row := range layout.Rows {
+	seenTileIDs := make(map[string]bool)
+	for rowIdx, row := range layout.Rows {
+		if err := tilegrid.ValidateKind(rowIdx+1, row.Kind); err != nil {
+			return err
+		}
+		if row.Kind == tilegrid.KindTiles {
+			if err := tilegrid.ValidateSection(rowIdx+1, len(row.Columns) > 0, row.Tiles, seenTileIDs, tileSizesFunc(ctx, campaignID)); err != nil {
+				return err
+			}
+			for i, t := range row.Tiles {
+				if !ValidBlockTypes[t.Type] {
+					return apperror.NewBadRequest(fmt.Sprintf("unsupported block type: %s", t.Type))
+				}
+				if t.Type == "text_block" {
+					if content, ok := t.Config["content"].(string); ok {
+						row.Tiles[i].Config["content"] = sanitize.HTML(content)
+					}
+				}
+			}
+			continue
+		}
+		if len(row.Tiles) > 0 {
+			return apperror.NewBadRequest("tiles belong in a tile section")
+		}
 		totalWidth := 0
 		blockCount := 0
 		for _, col := range row.Columns {
@@ -1693,7 +1720,7 @@ func (s *campaignService) UpdateDashboardLayout(ctx context.Context, campaignID 
 	if layout == nil {
 		return s.repo.UpdateDashboardLayout(ctx, campaignID, nil)
 	}
-	if err := validateDashboardLayout(layout); err != nil {
+	if err := validateDashboardLayout(ctx, campaignID, layout); err != nil {
 		return err
 	}
 	layoutStr, err := marshalLayout(layout)
@@ -1741,7 +1768,7 @@ func (s *campaignService) UpdateOwnerDashboardLayout(ctx context.Context, campai
 	if layout == nil {
 		return s.repo.UpdateOwnerDashboardLayout(ctx, campaignID, nil)
 	}
-	if err := validateDashboardLayout(layout); err != nil {
+	if err := validateDashboardLayout(ctx, campaignID, layout); err != nil {
 		return err
 	}
 	layoutStr, err := marshalLayout(layout)

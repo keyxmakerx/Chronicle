@@ -40,6 +40,11 @@ type BlockMeta struct {
 	// but the editor no longer offers them, because another block took
 	// their place.
 	Retired bool `json:"retired,omitempty"`
+	// TileSizes are the "WxH" sizes this type can take in a tile section
+	// (internal/tilegrid), on a 4-column grid; the first is its default.
+	// Empty means the type cannot be a tile. An extension widget declares
+	// them as "tile_sizes" on its manifest widget entry.
+	TileSizes []string `json:"tile_sizes,omitempty"`
 }
 
 // ConfigFieldMeta describes a single configurable field for a block type.
@@ -92,6 +97,10 @@ type BlockRegistry struct {
 	entries      map[string]registeredBlock
 	order        []string // insertion order for stable palette ordering
 	addonChecker blockAddonChecker
+	// widgetLister answers which extension widgets a campaign has, so the
+	// tile sizes of an ext_widget block (declared per widget, not per block
+	// type) can be looked up. Nil in tests that don't wire one.
+	widgetLister WidgetBlockLister
 }
 
 // NewBlockRegistry creates an empty registry.
@@ -105,6 +114,43 @@ func NewBlockRegistry() *BlockRegistry {
 // whose addon is disabled. Must be called after addon service is initialized.
 func (r *BlockRegistry) SetAddonChecker(ac blockAddonChecker) {
 	r.addonChecker = ac
+}
+
+// SetWidgetLister sets the source of extension widget metadata used to
+// resolve tile sizes for ext_widget blocks.
+func (r *BlockRegistry) SetWidgetLister(wl WidgetBlockLister) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.widgetLister = wl
+}
+
+// TileSizesFor returns the tile sizes a block of blockType can take in the
+// given campaign, or nil when it cannot be a tile (including a type that is
+// not registered). An ext_widget block's sizes belong to the widget its
+// config names, so they come from that widget's manifest entry; a widget the
+// campaign no longer has therefore has no sizes, and its tile shows the
+// not-available notice instead of failing the page.
+func (r *BlockRegistry) TileSizesFor(ctx context.Context, campaignID, blockType string, config map[string]any) []string {
+	r.mu.RLock()
+	entry, ok := r.entries[blockType]
+	lister := r.widgetLister
+	r.mu.RUnlock()
+	if !ok {
+		return nil
+	}
+	if blockType != "ext_widget" {
+		return entry.meta.TileSizes
+	}
+	slug := BlockConfigString(config, "widget_slug")
+	if slug == "" || lister == nil {
+		return nil
+	}
+	for _, m := range lister.GetWidgetBlockMetas(ctx, campaignID) {
+		if m.WidgetSlug == slug {
+			return m.TileSizes
+		}
+	}
+	return nil
 }
 
 // Register adds a block type to the registry. If a type with the same name

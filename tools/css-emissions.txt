@@ -240,3 +240,10 @@
 .dark .te-container-block .te-subzone
 .te-subzone[class~="border-accent"] .te-subzone-hint
 .te-container-block > [class~="p-2"]
+
+# Tile sections (internal/tilegrid): the grid and the per-size spans.
+.tile-grid
+.tile
+.tile[data-tile-w=2]
+.tile[data-tile-w=4]
+.tile[data-tile-h=2]

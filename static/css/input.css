@@ -529,6 +529,42 @@
     100% { background-position: -200% 0; }
   }
 
+  /* ---- Tile sections ----
+   * A layout row of kind "tiles" (internal/tilegrid): widgets in the sizes
+   * they declare, packed in stored order. 4 columns, 2 below 640px, 12px gap.
+   * Rows are at least 104px; a tile spans whole rows but grows to fit its
+   * content and never scrolls inside (overflow stays visible). A tile wider
+   * than the narrow grid clamps to the full 2 columns. data-tile-w/-h are the
+   * size contract widgets read; see docs/build/widget.md. */
+  .tile-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-auto-rows: minmax(104px, auto);
+    grid-auto-flow: dense;
+    gap: 12px;
+  }
+  .tile {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: visible;
+  }
+  /* A card inside a tile fills the tile's height so a row of tiles lines up. */
+  .tile > .card { flex: 1 1 auto; }
+  .tile[data-tile-w="2"] { grid-column: span 2; }
+  .tile[data-tile-w="3"] { grid-column: span 3; }
+  .tile[data-tile-w="4"] { grid-column: span 4; }
+  .tile[data-tile-h="2"] { grid-row: span 2; }
+  .tile[data-tile-h="3"] { grid-row: span 3; }
+  .tile[data-tile-h="4"] { grid-row: span 4; }
+  .tile[data-tile-h="5"] { grid-row: span 5; }
+  .tile[data-tile-h="6"] { grid-row: span 6; }
+  @media (max-width: 639px) {
+    .tile-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .tile[data-tile-w="3"],
+    .tile[data-tile-w="4"] { grid-column: span 2; }
+  }
+
   /* ---- Cards ---- */
   .card {
     @apply bg-surface rounded-xl shadow-sm border border-edge p-4

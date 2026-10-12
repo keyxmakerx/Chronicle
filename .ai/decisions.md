@@ -1045,6 +1045,25 @@ Also under this ADR: the partial-update contract test only recognised structs na
 - Deleting a page deletes its block content (cascade); removing a block from a layout leaves its rows orphaned but harmless until the page goes.
 - A new typed-in block kind adds a case to the plugin's validation, not a table.
 
+## ADR-065: Tile sections sit beside rows, with sizes the widget declares
+
+**Status:** Accepted. The layout editor that arranges tiles belongs to the Customize redesign.
+
+**Context:** Rows of 12-unit columns suit prose pages, but a page of small widgets (a progress ring, a sky clock, a stat block) wants them at set sizes that pack side by side and grow when given room. The same need reaches entity pages, category dashboards, the campaign dashboard and game-system packages' own widgets (#1352, Chronicle-Draw-Steel#108), so one design has to serve all of them.
+
+**Decision:**
+1. A layout row gets an optional `kind`. Absent or empty is an ordinary row, so no stored layout changes and nothing is migrated; `"tiles"` is a tile section with no columns. A row is one or the other, and the save refuses a row that holds both. Tile sections sit beside rows, not in place of them; a page can mix both.
+2. A tile is `{id, type, size:"WxH", config}`. `type` is a block-registry type and `config` is that block's own config, `visibility` included. Placement is order only (no x/y), so a neighbour changing size can never leave a stale position. One `tilegrid.Tile` type is stored by entity layouts and dashboards alike.
+3. A block type declares the sizes it can take as `BlockMeta.TileSizes` (`tile_sizes`); empty means it cannot be a tile. A game-system or extension widget declares `tile_sizes` on its manifest widget entry, and the `ext_widget` block resolves sizes from the widget its config names (`BlockRegistry.TileSizesFor`), so a package supplies tile content without Chronicle knowing it.
+4. Save rejects a tile whose type has no sizes, whose size is not in the type's list, or whose size is malformed (canonical `WxH`, 1 to 4 wide, 1 to 6 tall). Draw never fails: a stored size the type no longer allows falls back to the type's first size; a type that now allows none (or is gone) shows the "Block not available here" notice.
+5. The grid is 4 columns, 2 below 640px (a tile wider than 2 clamps to 2), 12px gap, `grid-auto-flow: dense`, rows at least 104px. A tile grows to fit its content and never scrolls inside. Each cell carries `data-tile-w` / `data-tile-h`, which a widget reads at mount; `chronicle:tile-resize` announces later changes (`static/js/widgets/tile.js`).
+6. Dashboards reach the registry through `campaigns.SetTileSizeResolver`, because the registry lives in the entities plugin, which imports campaigns.
+
+**Consequences:**
+- A widget that wants to be a tile must render sensibly at every size it lists, from the attributes alone.
+- Withdrawing a size from a widget's list is safe for saved pages; removing every size turns its tiles into notices until the owner edits them.
+- Extension widgets are resolved per campaign, so a widget the campaign has disabled shows the notice.
+
 ## ADR-066: Customize keeps one draft, applied by the plugins that own each part
 
 **Status:** Accepted; operator sign-off on the Customize mockup, 2026-10-12 (#1361).

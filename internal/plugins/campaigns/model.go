@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/patch"
+	"github.com/keyxmakerx/chronicle/internal/tilegrid"
 )
 
 // --- Role System ---
@@ -351,6 +352,16 @@ func (l *DashboardLayout) ComingUpRepeats() map[[3]int]bool {
 	repeats := map[[3]int]bool{}
 	seen := false
 	for ri, row := range l.Rows {
+		// Tiles are keyed by column -1 and their position in the section.
+		for ti, t := range row.Tiles {
+			if t.Type != BlockComingUp && t.Type != BlockSessionTracker {
+				continue
+			}
+			if seen {
+				repeats[[3]int{ri, -1, ti}] = true
+			}
+			seen = true
+		}
 		for ci, col := range row.Columns {
 			for bi, b := range col.Blocks {
 				if b.Type != BlockComingUp && b.Type != BlockSessionTracker {
@@ -374,10 +385,14 @@ type DashboardLayout struct {
 	Rows []DashboardRow `json:"rows"`
 }
 
-// DashboardRow is a horizontal row in the dashboard grid.
+// DashboardRow is a horizontal row in the dashboard grid. An ordinary row
+// (Kind empty) holds columns of blocks. A tile section (Kind "tiles") holds
+// Tiles on a 4-column grid instead and has no columns; see internal/tilegrid.
 type DashboardRow struct {
 	ID      string            `json:"id"`
+	Kind    string            `json:"kind,omitempty"`
 	Columns []DashboardColumn `json:"columns"`
+	Tiles   []tilegrid.Tile   `json:"tiles,omitempty"`
 }
 
 // DashboardColumn is a column within a row. Width is 1-12 (12-column grid).

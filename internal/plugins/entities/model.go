@@ -16,6 +16,7 @@ import (
 	"github.com/a-h/templ"
 	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/tilegrid"
 )
 
 // --- Domain Models ---
@@ -67,10 +68,14 @@ type EntityTypeLayout struct {
 	Rows []TemplateRow `json:"rows"`
 }
 
-// TemplateRow is a horizontal row in the page template grid.
+// TemplateRow is a horizontal row in the page template grid. An ordinary row
+// (Kind empty) holds columns of blocks. A tile section (Kind "tiles") holds
+// Tiles on a 4-column grid instead and has no columns; see internal/tilegrid.
 type TemplateRow struct {
 	ID      string           `json:"id"`
+	Kind    string           `json:"kind,omitempty"`
 	Columns []TemplateColumn `json:"columns"`
+	Tiles   []tilegrid.Tile  `json:"tiles,omitempty"`
 }
 
 // TemplateColumn is a column within a row. Width uses a 12-column grid (1-12).

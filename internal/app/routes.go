@@ -1952,6 +1952,7 @@ func (a *widgetBlockListerAdapter) GetWidgetBlockMetas(ctx context.Context, camp
 				Icon:        icon,
 				Description: info.Description,
 				WidgetSlug:  info.Slug,
+				TileSizes:   info.TileSizes,
 			})
 		}
 	}
@@ -4471,6 +4472,8 @@ func (a *App) RegisterRoutes() {
 	blockRegistry.SetAddonChecker(addonService)
 	entityService.SetBlockRegistry(blockRegistry)
 	entities.SetGlobalBlockRegistry(blockRegistry)
+	// Dashboards check and draw tile sizes through the same registry.
+	campaigns.SetTileSizeResolver(blockRegistry)
 	entityHandler.SetBlockRegistry(blockRegistry)
 	entityHandler.SetWidgetBlockLister(&widgetBlockListerAdapter{extHandler: extHandler})
 
@@ -5530,6 +5533,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "page-tabs", Scripts: []string{"/static/js/widgets/page_tabs.js"}},
 	{Name: "era-pages", Scripts: []string{"/static/js/widgets/era_pages.js"}},
 	{Name: "dm-screen", Scripts: []string{"/static/js/widgets/dm_screen.js"}},
+	{Name: "tile", Scripts: []string{"/static/js/widgets/tile.js"}},
 }
 
 // journalCharacterAdapter adapts EntityService to notes.CharacterLister: the

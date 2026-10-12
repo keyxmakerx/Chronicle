@@ -867,7 +867,7 @@ func (h *Handler) UpdateDashboardLayout(c echo.Context) error {
 		return apperror.NewBadRequest("invalid JSON body")
 	}
 
-	if err := validateDashboardLayout(&layout); err != nil {
+	if err := validateDashboardLayout(c.Request().Context(), cc.Campaign.ID, &layout); err != nil {
 		return err
 	}
 

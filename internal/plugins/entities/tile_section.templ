@@ -1,0 +1,62 @@
+package entities
+
+import (
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/tilegrid"
+)
+
+// entityTileSection draws a tile section of an entity page layout: its tiles
+// in stored order on the shared tile grid.
+templ entityTileSection(row TemplateRow, cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, showAttributes bool, csrfToken string) {
+	@tilegrid.Section(row.ID) {
+		for _, t := range row.Tiles {
+			@entityTile(t, cc, entity, entityType, showAttributes, csrfToken)
+		}
+	}
+}
+
+// entityTile draws one tile. Visibility is decided before the cell opens so a
+// hidden tile leaves no hole. A tile whose type allows no size any more
+// (widget removed, sizes withdrawn) shows the not-available notice in a wide
+// cell, like any other block that cannot render here, rather than failing the
+// page. The block itself goes through entityBlock, so addon checks, the DM
+// Only badge and singleton handling match a block in a column.
+templ entityTile(t tilegrid.Tile, cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, showAttributes bool, csrfToken string) {
+	{{
+		block := tileBlock(t)
+		w, h, ok := resolveTile(ctx, cc, t)
+	}}
+	if blockHiddenFromViewer(block, cc, showAttributes) {
+		// Not for this viewer.
+	} else if !ok {
+		@tilegrid.Cell(t.ID, 2, 1) {
+			@blockUnavailablePlaceholder(t.Type)
+		}
+	} else {
+		@tilegrid.Cell(t.ID, w, h) {
+			@entityBlock(block, cc, entity, entityType, showAttributes, csrfToken)
+		}
+	}
+}
+
+// categoryTileSection draws a tile section of a category dashboard layout.
+templ categoryTileSection(row campaigns.DashboardRow, cc *campaigns.CampaignContext, et *EntityType, entities []Entity, total int) {
+	@tilegrid.Section(row.ID) {
+		for _, t := range row.Tiles {
+			{{
+				w, h, ok := resolveTile(ctx, cc, t)
+			}}
+			if !campaigns.TileVisibleTo(t.Config, cc) {
+				// Not for this viewer.
+			} else if !ok {
+				@tilegrid.Cell(t.ID, 2, 1) {
+					@blockUnavailablePlaceholder(t.Type)
+				}
+			} else {
+				@tilegrid.Cell(t.ID, w, h) {
+					@CategoryBlockSwitch(cc, et, campaigns.DashboardTileBlock(t), entities, total)
+				}
+			}
+		}
+	}
+}

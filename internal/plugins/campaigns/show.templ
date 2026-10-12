@@ -134,17 +134,21 @@ templ customDashboard(cc *CampaignContext, layout *DashboardLayout, recentEntiti
 	{{ repeats := layout.ComingUpRepeats() }}
 	<div class="space-y-6">
 		for ri, row := range layout.Rows {
-			<div class="grid grid-cols-1 md:grid-cols-12 gap-4">
-				for ci, col := range row.Columns {
-					<div class={ dashColSpan(col.Width) }>
-						for bi, block := range col.Blocks {
-							if !repeats[[3]int{ri, ci, bi}] {
-								@DashboardBlockSwitch(cc, block, recentEntities)
+			if row.Kind == "tiles" {
+				@dashTileSection(cc, row, ri, repeats, recentEntities)
+			} else {
+				<div class="grid grid-cols-1 md:grid-cols-12 gap-4">
+					for ci, col := range row.Columns {
+						<div class={ dashColSpan(col.Width) }>
+							for bi, block := range col.Blocks {
+								if !repeats[[3]int{ri, ci, bi}] {
+									@DashboardBlockSwitch(cc, block, recentEntities)
+								}
 							}
-						}
-					</div>
-				}
-			</div>
+						</div>
+					}
+				</div>
+			}
 		}
 	</div>
 }
