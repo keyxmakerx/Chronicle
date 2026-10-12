@@ -1029,3 +1029,36 @@ Also under this ADR: the partial-update contract test only recognised structs na
 - The first time a feature appears after a boosted click, its scripts arrive after the page. They're cached immutably from then on.
 - A script that starts itself on `DOMContentLoaded` or an htmx event instead of registering a widget can't load on sight. It becomes a widget when its plugin moves.
 - Features move one plugin at a time (#1232), and the registry grows as they do. `tools/check-widget-mounts.sh` still requires every literal mount's script to be named in `base.templ` or `internal/app/routes.go`.
+
+## ADR-064: Text a DM types into a page block is stored per page and block, in its own table
+
+**Status:** Accepted (#1346, parent #1344).
+
+**Context:** The Read-aloud, Table and Steps blocks hold text a DM types on one page. The two existing places for block data do not fit: a block's `config` lives in the entity type's layout, so every page of that type would share it, and a widget binding allows one binding per host and widget type, so a page could not hold two tables.
+
+**Decision:**
+1. The `pageblocks` plugin keeps one table, `page_block_content`, keyed by `(entity_id, block_id)`; `block_id` is the layout block's id. Several tables on a page, and the same layout on many pages, each get their own row.
+2. The row holds one validated JSON document plus `kind` and `version`, as the quest sheet does, so a block's shape can grow without a schema change and concurrent edits get a 409.
+3. The service filters on read: a DM-only table column is removed for any viewer below Owner visibility. A viewer below it may not save a table that has such a column, rather than have the save merged with columns they cannot see.
+
+**Consequences:**
+- Deleting a page deletes its block content (cascade); removing a block from a layout leaves its rows orphaned but harmless until the page goes.
+- A new typed-in block kind adds a case to the plugin's validation, not a table.
+
+## ADR-066: Customize keeps one draft, applied by the plugins that own each part
+
+**Status:** Accepted; operator sign-off on the Customize mockup, 2026-10-12 (#1361).
+
+**Context:** Customize grew as separate tabs, each with its own Save, its own unsaved state and no way back from a mistake. The rebuilt Customize is one frame over many areas, and the owner needs to see and save everything they changed in one place. The parts belong to different plugins: the look to campaigns, categories to entities, later the menu and the library.
+
+**Decision:**
+1. Each owner has one draft per campaign (`customize_drafts`), a JSON object of named sections with a version. The page stores it as the owner edits; a write with a stale version is refused with the current draft, so two tabs or devices never overwrite each other silently.
+2. A plugin owns its section: it registers how to apply it (`RegisterCustomizeSection`) and the page area that edits it writes only that key. Campaigns never imports the plugin; the apply runs through its service.
+3. Save applies the sections in registration order through the same validation as each part's own API. A section that fails stays in the draft and the reply names it; the rest are saved.
+4. Keys starting with `_` are the page's own (such as `_changes`, the save bar's list) and are never applied.
+5. Undo, redo and the save bar live in the page; the server keeps only the latest draft.
+
+**Consequences:**
+- A part moves into the draft by registering a section and writing its key; until then it keeps its own Save, and its area says so.
+- The draft is the owner's only. Co-DMs and AI editing are separate decisions.
+- Save is not one transaction across plugins: a partial save is reported, never hidden.

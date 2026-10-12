@@ -4,6 +4,7 @@
 package calendar
 
 import (
+	"fmt"
 	"log/slog"
 	"net/http"
 
@@ -30,6 +31,10 @@ type CalendarsListData struct {
 	// the URL, so a crafted link can't make the page announce arbitrary text.
 	JustCreated   string
 	NewCalendarID string
+	// OpenWizard is the wizard step the page opens on load (?wizard=), so a
+	// link can land on a step without the step's bare dialog becoming the
+	// whole page. Only known steps, and only for the owner; "" otherwise.
+	OpenWizard string
 }
 
 // Index renders the campaign's calendar list (GET /campaigns/:id/calendars).
@@ -97,6 +102,9 @@ func (h *Handler) Index(c echo.Context) error {
 				break
 			}
 		}
+	}
+	if data.IsOwner && c.QueryParam("wizard") == "reallife" {
+		data.OpenWizard = fmt.Sprintf("/campaigns/%s/calendars/wizard/reallife", cc.Campaign.ID)
 	}
 	if middleware.IsHTMX(c) {
 		return middleware.Render(c, http.StatusOK, CalendarsListFragment(data))

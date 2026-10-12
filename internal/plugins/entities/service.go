@@ -124,6 +124,13 @@ type EntityService interface {
 	// Characters the system's sheet and disables the emptied type. Owner-run.
 	MoveCharacterPresetHome(ctx context.Context, campaignID string) (CharacterHomeMove, error)
 	DeleteEntityType(ctx context.Context, id int) error
+	// ApplyCustomizeCategories applies the Customize page's category changes
+	// (create, edit, delete) through the methods above, stopping at the first
+	// failure and reporting what was done. See customize_categories.go.
+	ApplyCustomizeCategories(ctx context.Context, campaignID string, in CustomizeCategoriesPatch) (CustomizeCategoriesResult, error)
+	// CustomizeCategories lists the campaign's types with their effective
+	// claimable flag and live and trashed page counts.
+	CustomizeCategories(ctx context.Context, campaignID string) ([]CustomizeCategoryInfo, error)
 	UpdateEntityTypeLayout(ctx context.Context, id int, layout EntityTypeLayout) error
 	UpdateEntityTypeColor(ctx context.Context, id int, color string) error
 	UpdateEntityTypeDashboard(ctx context.Context, id int, description *string, pinnedIDs []string) error

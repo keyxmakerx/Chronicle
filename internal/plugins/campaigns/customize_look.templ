@@ -5,8 +5,9 @@ import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
 // lookTab is the Customize page's look editor: whole looks, seven sections
 // of settings, a live example site and one Save for everything. The
 // controls and the example site are built by customize_look.js from
-// data-state; this markup is the frame they fill.
-templ lookTab(cc *CampaignContext, csrfToken string) {
+// data-state; this markup is the frame they fill. Inside Customize's frame
+// its Save is the frame's save bar (customize_shell.js).
+templ lookTab(cc *CampaignContext, csrfToken, state string) {
 	<link rel="stylesheet" href={ layouts.AssetURL("/static/css/customize.css") }/>
 	@templ.Raw("<style>" + layouts.CustomizeFontsCSS() + "</style>")
 	<div
@@ -14,7 +15,7 @@ templ lookTab(cc *CampaignContext, csrfToken string) {
 		data-widget="customize-look"
 		data-campaign-id={ cc.Campaign.ID }
 		data-csrf={ csrfToken }
-		data-state={ customizeStateJSON(ctx, cc) }
+		data-state={ state }
 		data-sky-calendar={ layouts.GetSkyCalendarID(ctx) }
 	>
 		<div class="cz" id="cz">

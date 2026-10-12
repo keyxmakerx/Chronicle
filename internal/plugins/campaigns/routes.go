@@ -68,8 +68,20 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 	cg.GET("/settings", h.Settings, RequireRole(RoleOwner))
 	// /ai-export/generate is registered by ai_workspace.RegisterOwnerRoutes
 	// against this same campaign group.
+	// Customize's areas (customize_pages.go). Each has its own address so
+	// Find, the save bar and links can open one directly.
 	cg.GET("/customize", h.Customize, RequireRole(RoleOwner))
-	cg.GET("/customize/layout-editor/:etid", h.LayoutEditorFragment, RequireRole(RoleOwner))
+	cg.GET("/customize/look", h.CustomizeLook, RequireRole(RoleOwner))
+	cg.GET("/customize/home", h.CustomizeHome, RequireRole(RoleOwner))
+	cg.GET("/customize/categories", h.CustomizeCategoriesPage, RequireRole(RoleOwner))
+	cg.GET("/customize/categories/:key", h.CustomizeCategory, RequireRole(RoleOwner))
+	cg.GET("/customize/categories/:key/:tab", h.CustomizeCategory, RequireRole(RoleOwner))
+	cg.GET("/customize/x/:tab", h.CustomizePluginArea, RequireRole(RoleOwner))
+	// The one Customize draft, kept until the owner presses Save or Discard.
+	cg.GET("/customize/draft", h.GetCustomizeDraftAPI, RequireRole(RoleOwner))
+	cg.PUT("/customize/draft", h.PutCustomizeDraftAPI, RequireRole(RoleOwner))
+	cg.DELETE("/customize/draft", h.DeleteCustomizeDraftAPI, RequireRole(RoleOwner))
+	cg.POST("/customize/publish", h.PublishCustomizeAPI, RequireRole(RoleOwner))
 
 	// Top-level Extensions hub; Content Packs renders as a card inside it
 	// via ContentPacksCardRenderer. /extensions/fragment is the HTMX swap

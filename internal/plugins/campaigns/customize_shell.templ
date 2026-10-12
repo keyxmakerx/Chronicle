@@ -1,0 +1,94 @@
+package campaigns
+
+import (
+	"encoding/json"
+	"strconv"
+
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// CustomizeShell is Customize's frame: the rail of areas, the area header
+// with its trail and Find, the area itself, and the one save bar. The draft
+// rides on data-draft; customize_shell.js keeps it, saves it as the owner
+// edits, and draws the save bar.
+templ CustomizeShell(d customizeShellData, body templ.Component) {
+	@layouts.App(d.Title) {
+		<link rel="stylesheet" href={ layouts.AssetURL("/static/css/customize_shell.css") }/>
+		<div
+			class="czs"
+			data-widget="customize-shell"
+			data-campaign-id={ d.CampaignID }
+			data-csrf={ d.CSRF }
+			data-area={ d.Area }
+			data-version={ strconv.Itoa(d.Version) }
+			data-draft={ d.Draft }
+			data-find={ d.Find }
+			data-areas={ customizeAreasJSON(d.Areas) }
+		>
+			<nav class="czs-rail" aria-label="Customize" hx-boost="true" hx-target="#main-content" hx-select="#main-content" hx-swap="innerHTML show:window:top">
+				<h2>Customize</h2>
+				for i, a := range d.Areas {
+					if i == 4 {
+						<div class="czs-hr" role="presentation"></div>
+					}
+					<a
+						href={ templ.SafeURL(a.Href) }
+						data-czs-area={ a.ID }
+						if a.ID == d.Area {
+							aria-current="page"
+						}
+					>
+						<span class="czs-ic"><i class={ "fa-solid " + a.Icon } aria-hidden="true"></i></span>
+						<span class="czs-lbl">{ a.Label }</span>
+						<span class="czs-dot" title="Unsaved changes" hidden></span>
+					</a>
+				}
+			</nav>
+			<div class="czs-stage">
+				<div class="czs-top">
+					<nav class="czs-crumbs" aria-label="You are here" hx-boost="true" hx-target="#main-content" hx-select="#main-content" hx-swap="innerHTML show:window:top">
+						for i, cr := range d.Crumbs {
+							if i > 0 {
+								<span class="czs-sep" aria-hidden="true">/</span>
+							}
+							if cr.Href != "" && i < len(d.Crumbs)-1 {
+								<a href={ templ.SafeURL(cr.Href) }>{ cr.Label }</a>
+							} else {
+								<b aria-current="page">{ cr.Label }</b>
+							}
+						}
+					</nav>
+					<button type="button" class="czs-find" data-czs-find aria-haspopup="dialog" aria-keyshortcuts="/">
+						<i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+						<span>Find a setting</span>
+						<kbd>/</kbd>
+					</button>
+				</div>
+				<div class="czs-body">
+					@body
+				</div>
+				<div class="czs-savebar" role="region" aria-label="Unsaved changes" data-czs-savebar hidden>
+					<span class="czs-sdot" aria-hidden="true"></span>
+					<button type="button" class="czs-what" data-czs-what aria-haspopup="dialog"></button>
+					<button type="button" class="czs-icon-btn" data-czs-undo aria-label="Undo" title="Undo (Ctrl+Z)">
+						<i class="fa-solid fa-rotate-left" aria-hidden="true"></i>
+					</button>
+					<button type="button" class="czs-icon-btn" data-czs-redo aria-label="Redo" title="Redo (Ctrl+Shift+Z)">
+						<i class="fa-solid fa-rotate-right" aria-hidden="true"></i>
+					</button>
+					<button type="button" class="czs-ghost" data-czs-discard>Discard</button>
+					<button type="button" class="btn-primary btn-sm" data-czs-save>Save changes</button>
+				</div>
+			</div>
+			<div class="czs-toasts" data-czs-toasts role="status" aria-live="polite"></div>
+		</div>
+	}
+}
+
+func customizeAreasJSON(areas []CustomizeArea) string {
+	b, err := json.Marshal(areas)
+	if err != nil {
+		return "[]"
+	}
+	return string(b)
+}

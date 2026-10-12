@@ -99,7 +99,7 @@ templ NPCResults(cc *campaigns.CampaignContext, list NPCListView, csrfToken stri
 			No NPCs match your search.
 		</div>
 	} else {
-		<div id="npc-grid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+		<div id="npc-grid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 2xl:grid-cols-6 gap-4">
 			for i := range list.Cards {
 				@NPCCardComponent(cc, &list.Cards[i], csrfToken)
 			}

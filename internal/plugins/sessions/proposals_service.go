@@ -42,6 +42,7 @@ func renderLocalSlot(startUTC, endUTC time.Time, loc *time.Location, tzLabel str
 	return LocalSlot{
 		StartsAtUTC: startUTC.UTC().Format(time.RFC3339),
 		EndsAtUTC:   endUTC.UTC().Format(time.RFC3339),
+		Date:        ls.Format("2006-01-02"),
 		DateLabel:   ls.Format("Mon, Jan 2"),
 		TimeLabel:   timeLabel,
 		TZLabel:     tzLabel,
@@ -214,6 +215,27 @@ func (s *sessionService) ListProposalSummaries(ctx context.Context, campaignID, 
 			ResponderN:  len(responders),
 			MyResponded: myResponded,
 		})
+	}
+	return out, nil
+}
+
+// ListOpenProposalViews is every open date poll for one viewer, its dates
+// in viewerTZ, newest first as the repository lists them.
+func (s *sessionService) ListOpenProposalViews(ctx context.Context, campaignID, viewerID, viewerTZ string) ([]ProposalView, error) {
+	proposals, err := s.repo.ListProposals(ctx, campaignID)
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("listing proposals: %w", err))
+	}
+	out := []ProposalView{}
+	for _, p := range proposals {
+		if p.Status != ProposalOpen {
+			continue
+		}
+		v, err := s.GetProposalView(ctx, campaignID, p.ID, viewerID, viewerTZ, false)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *v)
 	}
 	return out, nil
 }
