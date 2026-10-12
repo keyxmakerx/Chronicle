@@ -193,3 +193,20 @@ func TestRegistry_DocsFor(t *testing.T) {
 		t.Error("docs must follow the order asked for")
 	}
 }
+
+// A calendar row after a switch is checked against the calendar the switch
+// made main, as commit will apply it.
+func TestPlanAll_CalendarRowAfterMakeMain(t *testing.T) {
+	f := &fakeStructure{others: []calendar.Calendar{harptosCal("h")}}
+	reg := NewRegistry(CalendarKind{Svc: f})
+	main := rec(KindCalendar, ActionUpdate, "Harptos", map[string]any{"main": true}, "")
+	label := rec(KindCalendar, ActionUpdate, "", map[string]any{"year_label": "DR"}, "")
+	again := rec(KindCalendar, ActionUpdate, "Harptos", map[string]any{"main": true, "year_label": "DR"}, "")
+	_, plans := reg.PlanAll(context.Background(), camp, owner, []Record{main, label, again})
+	if plans[1].Error != "" || !strings.Contains(plans[1].Summary, "on Harptos") {
+		t.Errorf("row after the switch: %+v", plans[1])
+	}
+	if plans[2].Error != "" || strings.Contains(plans[2].Summary, "makes it the main") {
+		t.Errorf("a repeated switch is already main: %+v", plans[2])
+	}
+}

@@ -390,6 +390,7 @@ GET	/campaigns/:id/ai-export/generate	session	plugins/ai_workspace.(*Handler).Ge
 POST	/campaigns/:id/ai-workspace/import/commit	session	plugins/ai_workspace.(*Handler).CommitImport	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/ai-workspace/import/parse	session	plugins/ai_workspace.(*Handler).ParseImport	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/ai-workspace/prompt/generate	session	plugins/ai_workspace.(*Handler).GeneratePrompt	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/ai-workspace/prompt/instructions	session	plugins/ai_workspace.(*Handler).PromptInstructions	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/api-keys	session	plugins/syncapi.(*Handler).KeysPage	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/api-keys	session	plugins/syncapi.(*Handler).CreateKey	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 DELETE	/campaigns/:id/api-keys/:keyID	session	plugins/syncapi.(*Handler).RevokeKey	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole

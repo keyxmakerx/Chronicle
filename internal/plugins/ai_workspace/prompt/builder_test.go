@@ -455,3 +455,56 @@ func TestBuild_ContentMode_Calendar(t *testing.T) {
 		})
 	}
 }
+
+// TestBuild_Instructions pins the two halves: the standing instructions
+// carry the formats and rules but nothing about the campaign's content, and
+// the short prompt carries the request and content but not the formats.
+func TestBuild_Instructions(t *testing.T) {
+	base := Input{
+		IncludeFrontMatterExample: true,
+		IncludeCategoriesInUse:    false,
+		ContentMode:               "all",
+		Capabilities:              "- `kind: table`: rolling tables",
+		Lookups:                   "- `what: format`: how to write one kind of block.",
+		RecordDocs:                "### kind: table (Rolling table)\n\nentries",
+		PageIndex:                 "### Characters (1)\n- Ser Aldric",
+		OperatorInstruction:       "Five new NPCs.",
+	}
+	tests := []struct {
+		name      string
+		mode      string
+		want, not []string
+		exports   int
+	}{
+		{"standing instructions", InstructionsOnly,
+			[]string{"standing instructions", "## What you can do", "kind: table (Rolling table)", "## Format your output", "## How to answer my requests"},
+			[]string{"Ser Aldric", "WORLD EXPORT", "Five new NPCs.", "## What I want you to generate"}, 0},
+		{"short prompt", InstructionsSaved,
+			[]string{"Follow the Chronicle instructions", "Ser Aldric", "WORLD EXPORT", "Five new NPCs.", "from my Chronicle\ninstructions", "lookup blocks"},
+			[]string{"## What you can do", "kind: table (Rolling table)", "## Format your output"}, 1},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			exp := &stubExporter{markdown: "WORLD EXPORT"}
+			in := base
+			in.Instructions = tc.mode
+			got, err := NewService(nil, nil, exp).Build(context.Background(), "Ashfall", "owner-1", "camp-1", in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if exp.calls != tc.exports {
+				t.Errorf("exporter called %d times, want %d", exp.calls, tc.exports)
+			}
+			for _, w := range tc.want {
+				if !strings.Contains(got, w) {
+					t.Errorf("prompt lacks %q:\n%s", w, got)
+				}
+			}
+			for _, n := range tc.not {
+				if strings.Contains(got, n) {
+					t.Errorf("prompt has %q:\n%s", n, got)
+				}
+			}
+		})
+	}
+}

@@ -46,6 +46,12 @@ type templateData struct {
 	Lookups string
 	// PageIndex is the compact list of page names per type.
 	PageIndex string
+
+	// InstructionsOnly renders only the standing part (formats, lookups,
+	// rules) for an AI to keep; InstructionsSaved renders only the request,
+	// for an AI that already has them. At most one is set.
+	InstructionsOnly  bool
+	InstructionsSaved bool
 }
 
 // entityTypeView is the slim shape the template iterates.
@@ -77,11 +83,18 @@ type tagView struct {
 // promptTemplate is the operator-visible wire format for the "Copy AI
 // Prompt" button; changing it changes what operators paste into AI
 // tools.
-const promptTemplate = `You are helping me extend my TTRPG campaign in Chronicle, an Obsidian-style
+const promptTemplate = `{{ if .InstructionsSaved }}This is a request for my Chronicle campaign. Follow the Chronicle instructions
+I gave you earlier (saved in this chat, project or custom instructions): the
+block formats, the lookups and the rules for what you write.
+{{ else }}You are helping me extend my TTRPG campaign in Chronicle, an Obsidian-style
 worldbuilding tool. Generate new content that conforms to my world's existing
 structure so I can paste your output back into Chronicle's AI Import flow
 and it will be accepted with minimal review.
-{{ if .Capabilities }}
+{{ if .InstructionsOnly }}
+These are standing instructions: keep them for the whole chat or project. Each
+time, I will send a short request (what I want, and sometimes what my campaign
+has now); answer it in the formats below.
+{{ end }}{{ end }}{{ if .Capabilities }}
 ## What you can do
 
 Each block you write adds, changes or removes one thing in my campaign. I
@@ -219,16 +232,23 @@ same way.
 
 {{ .ExportedContent }}
 {{ end }}
+{{ if .InstructionsOnly }}
+## How to answer my requests
 
+Answer each request with one or more blocks in the format above. Use
+front-matter for every block. Do not include any text outside the blocks (no
+preamble, no commentary between blocks){{ if .Capabilities }}, unless you are asking for more with
+{{ if .Lookups }}lookup blocks or {{ end }}` + "`" + `NEED:` + "`" + `{{ end }}.
+{{ else }}
 ## What I want you to generate
 
 {{ .OperatorInstruction }}
 
-Please output your response as one or more blocks in the format above.
-Use front-matter for every block. Do not include any text outside the
-blocks (no preamble, no commentary between blocks){{ if .Capabilities }}, unless you are asking
+Please output your response as one or more blocks in the format {{ if .InstructionsSaved }}from my Chronicle
+instructions{{ else }}above{{ end }}. Use front-matter for every block. Do not include any text outside the
+blocks (no preamble, no commentary between blocks){{ if or .Capabilities .InstructionsSaved }}, unless you are asking
 for more with {{ if .Lookups }}lookup blocks or {{ end }}` + "`" + `NEED:` + "`" + `{{ end }}.
-`
+{{ end }}`
 
 // tmpl is the parsed template, ready for Execute. Parsed once at
 // import time; thread-safe.

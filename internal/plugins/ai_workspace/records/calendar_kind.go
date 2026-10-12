@@ -632,8 +632,12 @@ func (CalendarKind) ownerOnly(a Actor) string {
 	return ""
 }
 
-// existing is the main calendar, or nil when there is none.
+// existing is the main calendar, or nil when there is none. At review, a
+// switch earlier in the paste has already made its calendar the main one.
 func (k CalendarKind) existing(ctx context.Context, campaignID string, a Actor) (*calendar.Calendar, error) {
+	if p := pendingCalendar(ctx); p != nil && p.ID != "" {
+		return p, nil
+	}
 	cal, err := k.Svc.GetDefaultCalendarForViewer(ctx, campaignID, a.Viewer())
 	if err != nil {
 		if apperror.SafeCode(err) == http.StatusNotFound {

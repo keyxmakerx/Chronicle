@@ -58,6 +58,15 @@ const ContentHouseRules = "house-rules"
 // the Exporter is not called either.
 const ContentCalendar = records.KindCalendar
 
+// The two halves of a prompt, for an operator who saves the standing part
+// in their AI once and then pastes only short requests.
+const (
+	// InstructionsOnly is the standing part alone: formats, lookups, rules.
+	InstructionsOnly = "only"
+	// InstructionsSaved is the request alone, for an AI that has them.
+	InstructionsSaved = "saved"
+)
+
 // Service is the prompt builder's entry point. Wired in app/routes.go
 // with the same plugin Services that back the aiexport renderer.
 type Service struct {
@@ -104,6 +113,10 @@ type Input struct {
 
 	OperatorInstruction string
 
+	// Instructions is "" for the whole prompt, InstructionsOnly or
+	// InstructionsSaved for one half.
+	Instructions string
+
 	// Capabilities is the opening one-line-per-kind list
 	// (records.Registry.Capabilities); every prompt carries it.
 	Capabilities string
@@ -145,6 +158,20 @@ func (s *Service) Build(
 		Capabilities:              strings.TrimSpace(in.Capabilities),
 		Lookups:                   strings.TrimSpace(in.Lookups),
 		PageIndex:                 strings.TrimSpace(in.PageIndex),
+	}
+
+	switch in.Instructions {
+	case InstructionsOnly:
+		// Nothing about the campaign's current content: the AI keeps this.
+		data.InstructionsOnly = true
+		data.PageIndex, data.OperatorInstruction, data.ContentMode = "", "", "none"
+		data.IncludeCategoriesInUse, in.IncludeCategoriesInUse = false, false
+		in.ContentMode = "none"
+	case InstructionsSaved:
+		data.InstructionsSaved = true
+		data.Capabilities, data.RecordDocs = "", ""
+		data.IncludeEntityTypes, data.IncludeFrontMatterExample, data.IncludeSampleEntity = false, false, false
+		in.IncludeEntityTypes = false
 	}
 
 	if in.IncludeEntityTypes || in.IncludeCategoriesInUse {
