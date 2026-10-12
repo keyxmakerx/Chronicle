@@ -13,6 +13,7 @@
 //     and is clamped (and the preview says so) only when its day is gone.
 //   - Moons and seasons keep their ids where the editor sent them back, so
 //     anything keyed to a moon's id (its hidden flag, its phases) survives.
+//     A moon's lore page changes only when the editor says so (LoreSet).
 package calendar
 
 import (
@@ -638,6 +639,9 @@ func (s *calendarService) PreviewStructureEdit(ctx context.Context, calendarID, 
 	if err := validateStructureEdit(edit); err != nil {
 		return nil, err
 	}
+	if err := s.checkMoonLore(ctx, campaignID, edit.Moons); err != nil {
+		return nil, err
+	}
 	st, err := s.structureState(ctx, calendarID, campaignID)
 	if err != nil {
 		return nil, err
@@ -653,6 +657,9 @@ func (s *calendarService) PreviewStructureEdit(ctx context.Context, calendarID, 
 // Conflict returned with the fresh preview, for the caller to show.
 func (s *calendarService) ApplyStructureEdit(ctx context.Context, calendarID, campaignID, fingerprint string, edit StructureEdit) (*StructurePreview, error) {
 	if err := validateStructureEdit(edit); err != nil {
+		return nil, err
+	}
+	if err := s.checkMoonLore(ctx, campaignID, edit.Moons); err != nil {
 		return nil, err
 	}
 	// Which campaign a calendar belongs to never changes, so this check
@@ -682,6 +689,19 @@ func (s *calendarService) ApplyStructureEdit(ctx context.Context, calendarID, ca
 		return nil, fmt.Errorf("apply structure: %w", err)
 	}
 	return preview, nil
+}
+
+// checkMoonLore confirms every lore page a structure save names is a page in
+// this campaign, the check an era's lore page gets. A page is checked
+// whenever one is named, not only when LoreSet says it will be written: a
+// moon id the calendar does not have is inserted fresh, with its page.
+func (s *calendarService) checkMoonLore(ctx context.Context, campaignID string, moons []MoonInput) error {
+	for _, m := range moons {
+		if err := s.checkLoreEntity(ctx, campaignID, m.LoreEntityID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // structureWriteFor turns a validated edit and its plan into the write.

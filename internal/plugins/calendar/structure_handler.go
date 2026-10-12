@@ -49,7 +49,7 @@ func (h *Handler) StructureEditPage(c echo.Context) error {
 // size cap and clamp a wizard build gets (parseWizardImportJSON): it is
 // browser-submitted, on the preview and again on the save.
 func bindStructureEdit(c echo.Context) (StructureEdit, string, error) {
-	ir, err := parseWizardImportJSON(c.FormValue("import_json"))
+	ir, err := parseImportJSON(c.FormValue("import_json"))
 	if err != nil {
 		return StructureEdit{}, "", apperror.NewBadRequest(err.Error())
 	}

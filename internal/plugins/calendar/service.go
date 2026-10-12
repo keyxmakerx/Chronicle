@@ -298,6 +298,12 @@ type CalendarService interface {
 	// Moon. Calendar structure; the hidden flag is gated CanAuthorDmOnly
 	// (Owner or a granted co-Director) at the route (routes.go).
 	SetMoonHidden(ctx context.Context, moonID int, calendarID, campaignID string, hidden bool) error
+	// MoonsForEntity lists the moons whose lore page is entityID, in every
+	// calendar v may open and, for anyone who does not skip the per-user
+	// layer, without hidden moons, each with tonight's phase name on its
+	// calendar's current date. It does not judge whether v may see the
+	// entity itself; the entity page asking has already shown it to them.
+	MoonsForEntity(ctx context.Context, campaignID, entityID string, v permissions.Viewer) ([]EntityMoonRef, error)
 
 	// PreviewAnchorMove is a READ-ONLY preview of moving a real-anchored
 	// calendar's anchor: it computes the day shift and up to three affected
@@ -750,6 +756,9 @@ func (s *calendarService) finishCalendarForViewer(ctx context.Context, cal *Cale
 	if err := s.redactEraLore(ctx, cal.CampaignID, cal.Eras, v); err != nil {
 		return nil, err
 	}
+	if err := s.redactMoonLore(ctx, cal.CampaignID, cal.Moons, v); err != nil {
+		return nil, err
+	}
 	return cal, nil
 }
 
@@ -801,27 +810,15 @@ func eraEndDay(cal *Calendar, e *Era) int {
 // may not see that page, the same treatment redactHiddenEntityLinks gives
 // an event's page, and fails closed the same way when no gate is wired.
 func (s *calendarService) redactEraLore(ctx context.Context, campaignID string, eras []Era, v permissions.Viewer) error {
-	if v.SkipsPerUserRules() {
-		return nil
-	}
 	var ids []string
 	for _, e := range eras {
 		if e.LoreEntityID != nil && *e.LoreEntityID != "" {
 			ids = append(ids, *e.LoreEntityID)
 		}
 	}
-	if len(ids) == 0 {
-		return nil
-	}
-	viewable := map[string]bool{}
-	if s.entityGate == nil {
-		slog.Error("calendar: entity visibility gate not configured; blanking all era lore pages",
-			slog.String("campaign_id", campaignID))
-	} else {
-		var err error
-		if viewable, err = s.entityGate.FilterViewableEntityIDs(ctx, campaignID, ids, v.Role(), v.UserID()); err != nil {
-			return fmt.Errorf("filter viewable era lore pages: %w", err)
-		}
+	viewable, err := s.viewableLorePages(ctx, campaignID, ids, v, "era")
+	if err != nil || viewable == nil {
+		return err
 	}
 	for i := range eras {
 		e := &eras[i]
@@ -831,6 +828,53 @@ func (s *calendarService) redactEraLore(ctx context.Context, campaignID string, 
 		}
 	}
 	return nil
+}
+
+// redactMoonLore is redactEraLore for a moon's lore page: a moon the viewer
+// may see can still point at a page they may not.
+func (s *calendarService) redactMoonLore(ctx context.Context, campaignID string, moons []Moon, v permissions.Viewer) error {
+	var ids []string
+	for _, m := range moons {
+		if m.LoreEntityID != nil && *m.LoreEntityID != "" {
+			ids = append(ids, *m.LoreEntityID)
+		}
+	}
+	viewable, err := s.viewableLorePages(ctx, campaignID, ids, v, "moon")
+	if err != nil || viewable == nil {
+		return err
+	}
+	for i := range moons {
+		m := &moons[i]
+		if m.LoreEntityID != nil && !viewable[*m.LoreEntityID] {
+			m.LoreEntityID = nil
+			m.LoreEntityName = ""
+		}
+	}
+	return nil
+}
+
+// viewableLorePages answers which of the lore page ids this viewer may see.
+// A nil map means nothing needs blanking (the viewer skips the per-user
+// layer, or there are no ids); a non-nil map is the allow-list, empty when
+// no entity gate is wired so the pages fail closed. kind only names the
+// owner of the pages in the log line.
+func (s *calendarService) viewableLorePages(ctx context.Context, campaignID string, ids []string, v permissions.Viewer, kind string) (map[string]bool, error) {
+	if v.SkipsPerUserRules() || len(ids) == 0 {
+		return nil, nil
+	}
+	if s.entityGate == nil {
+		slog.Error("calendar: entity visibility gate not configured; blanking all "+kind+" lore pages",
+			slog.String("campaign_id", campaignID))
+		return map[string]bool{}, nil
+	}
+	viewable, err := s.entityGate.FilterViewableEntityIDs(ctx, campaignID, ids, v.Role(), v.UserID())
+	if err != nil {
+		return nil, fmt.Errorf("filter viewable %s lore pages: %w", kind, err)
+	}
+	if viewable == nil {
+		viewable = map[string]bool{}
+	}
+	return viewable, nil
 }
 
 // dropSecretEraEvents removes events dated inside an era still hidden from
@@ -1174,6 +1218,20 @@ func (s *calendarService) TodayInZone(zone string) (int, int, int, error) {
 func (s *calendarService) CreateCalendarFromImport(ctx context.Context, campaignID string, ir *ImportResult, opts CreateCalendarFromImportOptions) (*Calendar, error) {
 	if ir == nil {
 		return nil, apperror.NewValidation("import result is required")
+	}
+
+	// Uploads and the wizard carry no page ids; a caller that does (AI
+	// Import's calendar block) has them checked against this campaign before
+	// anything is created.
+	for i := range ir.Moons {
+		if err := s.checkLoreEntity(ctx, campaignID, ir.Moons[i].LoreEntityID); err != nil {
+			return nil, err
+		}
+	}
+	for i := range ir.Eras {
+		if err := s.checkLoreEntity(ctx, campaignID, ir.Eras[i].LoreEntityID); err != nil {
+			return nil, err
+		}
 	}
 
 	name := ir.CalendarName
@@ -2663,6 +2721,9 @@ func (s *calendarService) SetMoons(ctx context.Context, calendarID, campaignID s
 			return err
 		}
 		moons[i].Color = normalizeColor(moons[i].Color)
+		if err := s.checkLoreEntity(ctx, campaignID, moons[i].LoreEntityID); err != nil {
+			return err
+		}
 	}
 	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
 		return err

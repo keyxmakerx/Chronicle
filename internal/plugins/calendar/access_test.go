@@ -265,6 +265,10 @@ func (f *fakeCalendarSvc) ListErasForCalendar(context.Context, string, string, i
 	return nil, nil
 }
 
+func (f *fakeCalendarSvc) MoonsForEntity(context.Context, string, string, permissions.Viewer) ([]EntityMoonRef, error) {
+	return nil, nil
+}
+
 func (f *fakeCalendarSvc) SetOccurrenceOverride(_ context.Context, _, _, _ string, _ DayDate, _ OccurrenceOverrideInput, v permissions.Viewer) (*OccurrenceOverride, error) {
 	f.lastViewer = v
 	return &OccurrenceOverride{}, nil

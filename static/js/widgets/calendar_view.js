@@ -1114,6 +1114,14 @@
   // box when the icon font is slow or blocked.
   var PAGE_GLYPH = '<svg width="13" height="15" viewBox="0 0 13 15" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"><path d="M2 1h6l3 3v10H2z"/><path d="M8 1v3h3M4.5 7.5h4M4.5 10h4"/></svg>';
 
+  // The link to a lore page, the one markup an era's panel and a moon's
+  // window share. Empty when the viewer was sent no page (the server blanks
+  // one they may not see), so nothing here decides who may follow it.
+  function lorePageLink(campaignId, id, name, extraClass) {
+    if (!id || !name) return '';
+    return '<a class="ep-lore' + (extraClass ? ' ' + extraClass : '') + '" href="/campaigns/' + encodeURIComponent(campaignId) + '/entities/' + encodeURIComponent(id) + '"><span class="li" aria-hidden="true">' + PAGE_GLYPH + '</span><span class="lt">' + esc(name) + '<small>Lore page</small></span><span class="lg" aria-hidden="true">›</span></a>';
+  }
+
   var EraMath = {
     startOf: function (e) { return { y: e.start_year, m: e.start_month || 1, d: e.start_day || 1 }; },
     // An end year with no month/day is the whole year, as on the server.
@@ -3864,9 +3872,7 @@
           ' aria-label="' + esc(x.era.name + ', ' + EraMath.when(cal, x).range + '. Go to its first month.') + '"' + (x === r ? ' aria-current="true"' : '') + '></button>';
       }).join('');
       var desc = e.description ? String(e.description).split(/\n{2,}/).map(function (p) { return '<p>' + esc(p).replace(/\n/g, '<br>') + '</p>'; }).join('') : '';
-      var lore = e.lore_entity_id && e.lore_entity_name
-        ? '<a class="ep-lore" href="/campaigns/' + encodeURIComponent(this.campaignId) + '/entities/' + encodeURIComponent(e.lore_entity_id) + '"><span class="li" aria-hidden="true">' + PAGE_GLYPH + '</span><span class="lt">' + esc(e.lore_entity_name) + '<small>Lore page</small></span><span class="lg" aria-hidden="true">›</span></a>'
-        : '';
+      var lore = lorePageLink(this.campaignId, e.lore_entity_id, e.lore_entity_name);
       var note = e.dm_note ? '<div class="ep-note"><div class="nh"><i class="fa-solid fa-lock"></i>Director’s note, players never see this</div>' + esc(e.dm_note) + '</div>' : '';
       var manage = this.canAuthorDmOnly && this.openEraManager ? '<button type="button" class="ep-manage" data-era-manage><i class="fa-solid fa-pencil"></i>Edit eras</button>' : '';
       return '<div class="ep-ribbon"><div class="rtrack" role="group" aria-label="Eras, oldest to newest">' + segs + '</div><div class="raxis" aria-hidden="true"></div><div class="rtip" role="tooltip" hidden></div></div>' +
@@ -4768,6 +4774,7 @@
               (moon ? '<div class="mvlit"><b>' + MoonMath.litPct(phase) + '%</b> lit · ' + esc(MoonMath.name(phase)) + '</div>' : '') +
             '</div></div>' +
             '<div class="mvstrip">' + strip + '</div>' +
+            (moon ? lorePageLink(this.campaignId, moon.lore_entity_id, moon.lore_entity_name, 'mv-lore') : '') +
           '</div>' +
           '<div class="mvr">' +
             '<div class="phead"><h4 class="plabel">This month</h4></div>' +

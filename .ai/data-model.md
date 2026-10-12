@@ -228,7 +228,7 @@ plugin does with them: `internal/plugins/calendar/.ai.md`.
 |---|---|---|
 | `calendars` | A campaign's calendar | visibility columns; real-world date anchor and time zone; `hemisphere`, `forecasts_enabled`, `month_starts_new_week`; era look: `era_colors_on`, `era_feel`, `era_intensity`, `era_speed` (migration 024) |
 | `calendar_months`, `calendar_weekdays` | The year's shape | `sort_order`; months carry `is_intercalary`, `leap_year_days`; weekdays `is_rest_day` |
-| `calendar_moons`, `calendar_seasons` | Moons (cycle, offset, look, `hidden_from_players`) and seasons (start/end month and day) | per calendar, FK CASCADE |
+| `calendar_moons`, `calendar_seasons` | Moons (cycle, offset, look, `hidden_from_players`, `lore_entity_id` (migration 026)) and seasons (start/end month and day) | per calendar, FK CASCADE |
 | `calendar_eras` | Named stretches of years | `start_*`/`end_*`; look: `color`, `color_2`, `style`, `feel`; `lore_entity_id`, `dm_note`, `hidden_until_begins` (migration 024) |
 | `calendar_cycles`, `calendar_cycle_entries`, `calendar_festivals` | Repeating year-cycles and their entries; named festival days | `cycle_length`; festival `month`/`day` or `after_month` |
 | `calendar_event_kinds` | Per-campaign kinds of event (name, icon, colour, default announcement) | `UNIQUE`-slug per `campaign_id` |
