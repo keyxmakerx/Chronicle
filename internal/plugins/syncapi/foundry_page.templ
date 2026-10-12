@@ -68,23 +68,65 @@ templ foundryPlayerRow(r PlayerRow, now time.Time) {
 		<td class="px-4 py-3 align-top">
 			@playerStatusChip(r.Status)
 			if r.Why != "" {
-				<details class="mt-2 text-xs">
-					<summary class="cursor-pointer text-accent">Why?</summary>
-					<div class="mt-1 rounded-md border border-edge bg-surface-alt/50 p-2 text-fg-secondary">
-						<p>{ r.Why }</p>
-						if len(r.Fix) > 0 {
-							<p class="mt-2 font-medium text-fg">What to do</p>
-							<ol class="list-decimal list-inside space-y-0.5">
-								for _, f := range r.Fix {
-									<li>{ f }</li>
-								}
-							</ol>
-						}
-					</div>
-				</details>
+				@playerWhyBubble(r)
 			}
 		</td>
 	</tr>
+}
+
+// playerWhyBubble is the "Why?" button and the bubble it opens, which floats
+// over the table rather than pushing the rows below it down. The bubble is
+// position:fixed and placed from the button's rectangle so the table's scroll
+// wrapper cannot clip it; it flips above the button near the bottom of the
+// window and closes on a click off it, Escape, scroll or resize. x-data is a
+// constant string: nothing from the row is spliced into script.
+templ playerWhyBubble(r PlayerRow) {
+	<div
+		class="mt-1.5"
+		x-data="{ open: false, top: 0, left: 0, origin: 'left top',
+			place() { const b = $refs.btn.getBoundingClientRect(), p = $refs.pop, h = p.offsetHeight, w = p.offsetWidth;
+				const below = b.bottom + h + 8 <= innerHeight || b.top - h - 8 < 0;
+				this.top = below ? b.bottom + 6 : b.top - h - 6;
+				this.left = Math.max(8, Math.min(b.left, innerWidth - w - 8));
+				this.origin = Math.round(b.left - this.left + 12) + 'px ' + (below ? 'top' : 'bottom'); },
+			show() { this.open = true; this.$nextTick(() => this.place()); } }"
+		@click.outside="open = false"
+		@keydown.escape.window="if (open) { open = false; $refs.btn.focus(); }"
+		@scroll.window.capture="open = false"
+		@resize.window="open = false"
+	>
+		<button
+			type="button"
+			x-ref="btn"
+			class="why-chip"
+			aria-haspopup="dialog"
+			aria-expanded="false"
+			:aria-expanded="open ? 'true' : 'false'"
+			@click="open ? open = false : show()"
+		>
+			<i class="fa-solid fa-circle-question" aria-hidden="true"></i>
+			Why?
+		</button>
+		<div
+			x-ref="pop"
+			x-show="open"
+			role="dialog"
+			aria-label="Why this status"
+			:style="'top:' + top + 'px;left:' + left + 'px;transform-origin:' + origin"
+			class="why-bubble"
+			style="display:none"
+		>
+			<p>{ r.Why }</p>
+			if len(r.Fix) > 0 {
+				<p class="mt-2 font-medium text-fg">What to do</p>
+				<ol class="mt-1 list-decimal pl-4 space-y-0.5">
+					for _, f := range r.Fix {
+						<li>{ f }</li>
+					}
+				</ol>
+			}
+		</div>
+	</div>
 }
 
 // playerStatusChip is the coloured status word, shared with the People page.
@@ -135,7 +177,7 @@ templ FoundryProblemsFragment(campaignID string, events []SyncEvent, now time.Ti
 							<p class="text-xs text-fg-secondary">{ problemLine(problemEvent(ev)) }</p>
 						</div>
 						<span class="text-xs text-fg-muted whitespace-nowrap">{ relativeTime(ev.OccurredAt) }</span>
-						<a href={ templ.SafeURL(flowHistoryURL(campaignID, ev.ID)) } class="btn-secondary text-xs">Show in sync history</a>
+						<a href={ templ.SafeURL(flowHistoryURL(campaignID, ev.ID)) } class="btn-secondary btn-sm">Show in sync history</a>
 					</li>
 				}
 			</ul>

@@ -138,9 +138,9 @@ templ foundryConnectRow(cc *CampaignContext, foundry FoundryRowData, csrfToken s
 					hx-disabled-elt="find button"
 				>
 					<input type="hidden" name="csrf_token" value={ csrfToken }/>
-					<button type="submit" class="btn-primary text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">{ foundry.connectButtonLabel() }</button>
+					<button type="submit" class="btn-primary btn-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">{ foundry.connectButtonLabel() }</button>
 				</form>
-				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings?tab=api-keys", cc.Campaign.ID)) } class="btn-secondary text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">All keys</a>
+				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings?tab=api-keys", cc.Campaign.ID)) } class="btn-secondary btn-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">All keys</a>
 			</div>
 		</div>
 		if foundry.NewLine != "" {
@@ -153,7 +153,7 @@ templ foundryConnectRow(cc *CampaignContext, foundry FoundryRowData, csrfToken s
 					<code id="foundry-connect-line" class="flex-1 min-w-0 p-2 bg-white dark:bg-gray-900 rounded text-xs font-mono text-fg break-all select-all">{ foundry.NewLine }</code>
 					<button
 						type="button"
-						class="btn-secondary text-xs shrink-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+						class="btn-secondary btn-sm shrink-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
 						onclick={ foundryCopyOnClick() }
 					>Copy</button>
 				</div>

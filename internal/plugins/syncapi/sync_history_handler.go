@@ -38,6 +38,7 @@ type SyncHistoryHandler struct {
 	editors     ChangeEditorLookup
 	namer       EntityNamer
 	players     FoundryPlayerRepository
+	worldOpen   func(campaignID string) bool
 	now         func() time.Time
 }
 
