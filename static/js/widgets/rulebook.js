@@ -494,11 +494,10 @@
     if (this.narrow) {
       this.items.forEach(function (it) { sp.push({ items: [it], wide: false }); });
     } else {
-      // A handbook starts every chapter on a fresh spread, so a tab or link
-      // always lands on a spread that opens with that chapter.
-      var fresh = this.data.look === 'paper';
+      // Every chapter starts on a fresh spread, in either look, so a tab or
+      // link always lands on a spread that opens with that chapter.
       this.items.forEach(function (it) {
-        if (fresh && it.kind === 'open' && cur.length) { sp.push({ items: cur, wide: false }); cur = []; }
+        if (it.kind === 'open' && cur.length) { sp.push({ items: cur, wide: false }); cur = []; }
         if (it.wide) {
           if (cur.length) { sp.push({ items: cur, wide: false }); cur = []; }
           sp.push({ items: [it], wide: true });

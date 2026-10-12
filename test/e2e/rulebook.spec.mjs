@@ -42,6 +42,7 @@ function bookFixture() {
       chapters: [
         { id: 'basics', title: 'Basics', pages: [longPage('Start here'), longPage('Rolling')] },
         { id: 'screen', title: 'Players Screen', pages: [{ title: 'At the table', wide: true, blocks: [{ type: 'text', text: 'Everything at once.' }] }] },
+        { id: 'tests', title: 'Tests', pages: [longPage('Rolling a test'), longPage('Easy and hard')] },
         { id: 'combat', title: 'Combat', pages: [longPage('Turns'), longPage('Moving')] },
       ],
     }],
@@ -79,7 +80,7 @@ function harnessHTML() {
 </body></html>`;
 }
 
-async function withBook(fn) {
+async function withBook(fn, opts = {}) {
   const browser = await chromium.launch({ headless: true });
   try {
     const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
@@ -93,6 +94,8 @@ async function withBook(fn) {
       if (p === BOOK_URL) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(bookFixture()) });
       return route.fulfill({ status: 404, body: '' });
     });
+    // Customize > Rulebook "Chronicle's look" reaches the page as this attribute.
+    if (opts.standard) await page.addInitScript(() => document.addEventListener('DOMContentLoaded', () => document.documentElement.setAttribute('data-cz-book', 'standard')));
     await page.goto('https://chronicle.test/rules');
     await page.waitForSelector('.rb-tabs');
     await fn(page);
@@ -151,4 +154,16 @@ test('switching between Player and Director view keeps the place on the page', a
     assert.deepEqual(await tops(), before);
     assert.equal(await mainOverflow(page), 0);
   });
+});
+
+test("in Chronicle's look a tab still opens its own chapter", async () => {
+  await withBook(async (page) => {
+    // Tests has an opener and two pages, so without a fresh spread per
+    // chapter Combat's opener would share a spread with the last Tests page.
+    for (const [tab, title] of [['combat', 'Combat'], ['basics', 'Basics'], ['combat', 'Combat']]) {
+      await page.click(`[data-tab="${tab}"]`);
+      await page.waitForFunction(() => !document.querySelector('.rb-leaf'));
+      assert.equal(await page.evaluate(() => document.querySelector('.rb-where b').textContent), title);
+    }
+  }, { standard: true });
 });
