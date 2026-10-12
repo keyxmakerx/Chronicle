@@ -17,6 +17,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/sanitize"
+	"github.com/keyxmakerx/chronicle/internal/tilegrid"
 )
 
 // EntityService handles business logic for entity operations.
@@ -2632,6 +2633,33 @@ func (s *entityService) isSingletonBlockType(blockType string) bool {
 	return s.blockRegistry.IsSingleton(blockType)
 }
 
+// tileSizesFor returns the tile-size lookup for a layout being saved to an
+// entity type, or nil when the layout has no tile section or no registry is
+// wired. Extension widgets declare their sizes per campaign, so the entity
+// type is read to find its campaign; layouts without tiles skip that read.
+func (s *entityService) tileSizesFor(ctx context.Context, entityTypeID int, layout EntityTypeLayout) tilegrid.SizesFunc {
+	if s.blockRegistry == nil {
+		return nil
+	}
+	hasTiles := false
+	for _, row := range layout.Rows {
+		if row.Kind == tilegrid.KindTiles {
+			hasTiles = true
+			break
+		}
+	}
+	if !hasTiles {
+		return nil
+	}
+	campaignID := ""
+	if et, err := s.types.FindByID(ctx, entityTypeID); err == nil && et != nil {
+		campaignID = et.CampaignID
+	}
+	return func(blockType string, config map[string]any) []string {
+		return s.blockRegistry.TileSizesFor(ctx, campaignID, blockType, config)
+	}
+}
+
 // defaultBlockTypes is used when no block registry is set (e.g., unit tests).
 var defaultBlockTypes = map[string]bool{
 	"title": true, "image": true, "entry": true,
@@ -2649,13 +2677,15 @@ const maxLayoutSize = 102400
 // availability is campaign-dependent). The optional isSingletonBlock
 // callback identifies block types that may only appear once per layout
 // (e.g., map_editor — see BlockMeta.Singleton); if nil, the singleton
-// check is skipped.
+// check is skipped. The optional tileSizes callback reports the sizes a
+// block type can take as a tile (BlockMeta.TileSizes); if nil, a tile
+// section's types and size membership are not checked, only its shape.
 //
 // Error messages are written for the *user* in the layout editor:
 // concise, no internal IDs, no block-system jargon. The save toast in
 // layout_editor.js surfaces them verbatim, so they're the operator's
 // only feedback when a save fails.
-func ValidateLayout(layout EntityTypeLayout, isValidBlock func(string) bool, isSingletonBlock func(string) bool) error {
+func ValidateLayout(layout EntityTypeLayout, isValidBlock func(string) bool, isSingletonBlock func(string) bool, tileSizes tilegrid.SizesFunc) error {
 	if len(layout.Rows) > maxLayoutRows {
 		return apperror.NewBadRequest(fmt.Sprintf("Layout has too many rows (max %d). Remove a row before saving.", maxLayoutRows))
 	}
@@ -2666,6 +2696,29 @@ func ValidateLayout(layout EntityTypeLayout, isValidBlock func(string) bool, isS
 	for rowIdx, row := range layout.Rows {
 		if strings.TrimSpace(row.ID) == "" {
 			return apperror.NewBadRequest("Internal: a row is missing its ID. Refresh the page and try again.")
+		}
+		if err := tilegrid.ValidateKind(rowIdx+1, row.Kind); err != nil {
+			return err
+		}
+		if row.Kind == tilegrid.KindTiles {
+			// Unknown types are reported before sizes, so a removed block
+			// says so instead of "can't be a tile".
+			for _, t := range row.Tiles {
+				if isValidBlock != nil && !isValidBlock(t.Type) {
+					return apperror.NewBadRequest(fmt.Sprintf("This layout contains an unknown block type (%q). It may have been removed or its addon disabled — delete the block and save again.", t.Type))
+				}
+				if isSingletonBlock != nil && isSingletonBlock(t.Type) {
+					singletonCount[t.Type]++
+					blockLabels[t.Type] = humanizeBlockType(t.Type)
+				}
+			}
+			if err := tilegrid.ValidateSection(rowIdx+1, len(row.Columns) > 0, row.Tiles, seenBlockIDs, tileSizes); err != nil {
+				return err
+			}
+			continue
+		}
+		if len(row.Tiles) > 0 {
+			return apperror.NewBadRequest(fmt.Sprintf("Row %d has tiles but is not a tile section. Make it a tile section, or move the tiles out.", rowIdx+1))
 		}
 		if len(row.Columns) == 0 || len(row.Columns) > maxLayoutCols {
 			return apperror.NewBadRequest(fmt.Sprintf("Row %d must have between 1 and %d columns.", rowIdx+1, maxLayoutCols))
@@ -2738,7 +2791,7 @@ func humanizeBlockType(t string) string {
 // UpdateEntityTypeLayout validates and persists a new layout for an entity type.
 // Accepts the new row/column/block format.
 func (s *entityService) UpdateEntityTypeLayout(ctx context.Context, id int, layout EntityTypeLayout) error {
-	if err := ValidateLayout(layout, s.isValidBlockType, s.isSingletonBlockType); err != nil {
+	if err := ValidateLayout(layout, s.isValidBlockType, s.isSingletonBlockType, s.tileSizesFor(ctx, id, layout)); err != nil {
 		return err
 	}
 
@@ -2802,7 +2855,29 @@ func (s *entityService) UpdateCategoryDashboardLayout(ctx context.Context, id in
 	if len(layout.Rows) > 50 {
 		return apperror.NewBadRequest("dashboard layout cannot exceed 50 rows")
 	}
-	for _, row := range layout.Rows {
+	var sizesFor tilegrid.SizesFunc
+	seenTileIDs := make(map[string]bool)
+	for rowIdx, row := range layout.Rows {
+		if err := tilegrid.ValidateKind(rowIdx+1, row.Kind); err != nil {
+			return err
+		}
+		if row.Kind == tilegrid.KindTiles {
+			if sizesFor == nil {
+				sizesFor = s.tileSizesFor(ctx, id, EntityTypeLayout{Rows: []TemplateRow{{Kind: tilegrid.KindTiles}}})
+			}
+			for _, t := range row.Tiles {
+				if !campaigns.ValidBlockTypes[t.Type] && !IsExtraCategoryBlock(t.Type) {
+					return apperror.NewBadRequest(fmt.Sprintf("invalid block type: %s", t.Type))
+				}
+			}
+			if err := tilegrid.ValidateSection(rowIdx+1, len(row.Columns) > 0, row.Tiles, seenTileIDs, sizesFor); err != nil {
+				return err
+			}
+			continue
+		}
+		if len(row.Tiles) > 0 {
+			return apperror.NewBadRequest("tiles belong in a tile section")
+		}
 		blockCount := 0
 		for _, col := range row.Columns {
 			if col.Width < 1 || col.Width > 12 {

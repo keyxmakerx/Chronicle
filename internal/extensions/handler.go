@@ -491,6 +491,8 @@ type WidgetBlockInfo struct {
 	Name        string `json:"name"`
 	Icon        string `json:"icon"`
 	Description string `json:"description"`
+	// TileSizes are the sizes the widget declared for tile sections.
+	TileSizes []string `json:"tile_sizes,omitempty"`
 }
 
 // GetWidgetBlockInfos returns metadata for all enabled extension widgets
@@ -515,7 +517,8 @@ func (h *Handler) GetWidgetBlockInfos(ctx context.Context, campaignID string) []
 				Slug        string `json:"slug"`
 				Name        string `json:"name"`
 				Icon        string `json:"icon"`
-				Description string `json:"description"`
+				Description string   `json:"description"`
+				TileSizes   []string `json:"tile_sizes"`
 			}
 			if err := json.Unmarshal(d.DataValue, &w); err == nil && w.Slug != "" {
 				blocks = append(blocks, WidgetBlockInfo{
@@ -523,6 +526,7 @@ func (h *Handler) GetWidgetBlockInfos(ctx context.Context, campaignID string) []
 					Name:        w.Name,
 					Icon:        w.Icon,
 					Description: w.Description,
+					TileSizes:   w.TileSizes,
 				})
 			}
 		}

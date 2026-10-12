@@ -1952,6 +1952,7 @@ func (a *widgetBlockListerAdapter) GetWidgetBlockMetas(ctx context.Context, camp
 				Icon:        icon,
 				Description: info.Description,
 				WidgetSlug:  info.Slug,
+				TileSizes:   info.TileSizes,
 			})
 		}
 	}
@@ -4362,16 +4363,19 @@ func (a *App) RegisterRoutes() {
 			Type: pageblocks.KindReadAloud, Label: "Read-aloud", Icon: "fa-bullhorn",
 			Description: "Boxed text the DM reads to the table",
 			Contexts:    []string{"template"},
+			TileSizes:   []string{"2x1", "2x2", "4x1", "4x2"},
 		},
 		{
 			Type: pageblocks.KindTable, Label: "Table", Icon: "fa-table",
 			Description: "Rows and columns typed in place, with columns only the DM sees",
 			Contexts:    []string{"template"},
+			TileSizes:   []string{"2x2", "4x2"},
 		},
 		{
 			Type: pageblocks.KindSteps, Label: "Steps", Icon: "fa-list-ol",
 			Description: "Numbered beats with a tick for each, for use during play",
 			Contexts:    []string{"template"},
+			TileSizes:   []string{"1x2", "2x2", "4x2"},
 		},
 	} {
 		kind := b.Type
@@ -4471,6 +4475,8 @@ func (a *App) RegisterRoutes() {
 	blockRegistry.SetAddonChecker(addonService)
 	entityService.SetBlockRegistry(blockRegistry)
 	entities.SetGlobalBlockRegistry(blockRegistry)
+	// Dashboards check and draw tile sizes through the same registry.
+	campaigns.SetTileSizeResolver(blockRegistry)
 	entityHandler.SetBlockRegistry(blockRegistry)
 	entityHandler.SetWidgetBlockLister(&widgetBlockListerAdapter{extHandler: extHandler})
 
@@ -5530,6 +5536,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "page-tabs", Scripts: []string{"/static/js/widgets/page_tabs.js"}},
 	{Name: "era-pages", Scripts: []string{"/static/js/widgets/era_pages.js"}},
 	{Name: "dm-screen", Scripts: []string{"/static/js/widgets/dm_screen.js"}},
+	{Name: "tile", Scripts: []string{"/static/js/widgets/tile.js"}},
 }
 
 // journalCharacterAdapter adapts EntityService to notes.CharacterLister: the

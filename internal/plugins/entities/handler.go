@@ -238,6 +238,11 @@ func (h *Handler) SetGroupLister(gl GroupLister) {
 // editor palette. Extension widgets appear as additional block types.
 func (h *Handler) SetWidgetBlockLister(wbl WidgetBlockLister) {
 	h.widgetBlockLister = wbl
+	// The registry resolves an extension widget's tile sizes through the
+	// same lister, so a tile section can be validated and drawn.
+	if h.blockRegistry != nil {
+		h.blockRegistry.SetWidgetLister(wbl)
+	}
 }
 
 // SetSidebarNodeRepo sets the sidebar node repository for folder operations.

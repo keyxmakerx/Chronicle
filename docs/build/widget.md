@@ -77,6 +77,46 @@ attributes, but the layout editor has no form for them yet, so always fall
 back to the default. Working example: `extensions/dice-roller/`.
 See [content-extension.md](content-extension.md).
 
+## Tiles: widgets in set sizes
+
+A page layout can hold a **tile section**: widgets on a 4-column grid (2 on
+narrow screens), each in a size the widget declares. A widget opts in with
+`tile_sizes` on its manifest entry, in a game system package or a content
+extension alike; the first size is its default.
+
+```json
+{ "slug": "steps", "name": "Steps", "script_file": "widgets/steps.js",
+  "tile_sizes": ["1x1", "1x2", "2x1", "2x2"] }
+```
+
+Sizes are `WxH`: 1 to 4 wide, 1 to 6 tall, a row being at least 104px. A widget
+with no `tile_sizes` is placed in columns only. The manifest check rejects a
+malformed or repeated size.
+
+The mount's parent is the tile cell, and the cell tells the widget its size:
+
+- `data-tile-w` and `data-tile-h` on the cell (`el.closest('.tile')`) hold the
+  size the tile is drawn at. Read them in `init` and show more as it grows
+  (a 1x1 progress ring, a 2x2 full list). Draw for every size you list.
+- A tile grows to fit its content and never scrolls inside, so do not set a
+  fixed height or `overflow: auto`; let the content decide.
+- On a narrow screen the grid has 2 columns and a wider tile spans both.
+  `detail.columns` below is the width in columns right now.
+- When the size changes (the layout editor resizing a tile) or the screen
+  crosses the narrow breakpoint, the cell dispatches a bubbling
+  `chronicle:tile-resize` event:
+
+```js
+el.closest('.tile').addEventListener('chronicle:tile-resize', function (e) {
+  // e.detail: { w, h, columns, narrow, previous: {w, h} | null }
+  render(e.detail.columns, e.detail.h);
+});
+```
+
+If an owner has a tile at a size you no longer list, Chronicle draws it at your
+first size; if you list none, the tile shows a "Block not available here"
+notice. Neither breaks the page.
+
 ## Placing a packaged widget
 
 Owner: Manage > Customize (`/campaigns/:id/customize`) > Layouts > pick a

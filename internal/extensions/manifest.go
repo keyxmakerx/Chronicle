@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/keyxmakerx/chronicle/internal/tilegrid"
 )
 
 // ExtensionManifest describes a content extension's metadata, compatibility,
@@ -172,6 +174,10 @@ type WidgetContribution struct {
 	Icon        string              `json:"icon,omitempty"`         // FontAwesome class.
 	File        string              `json:"file"`                   // Relative path to JS file.
 	Config      []WidgetConfigField `json:"config,omitempty"`       // Configurable data-* attributes.
+	// TileSizes are the "WxH" sizes the widget supports in a tile section on
+	// a 4-column grid; the first is its default. Empty means it cannot be a
+	// tile. The widget is told its current size by data-tile-w / data-tile-h.
+	TileSizes []string `json:"tile_sizes,omitempty"`
 }
 
 // WidgetConfigField describes a configuration option exposed via data-* attributes
@@ -351,6 +357,9 @@ func validateContributes(c *ManifestContributes) error {
 		}
 		if !strings.HasSuffix(strings.ToLower(w.File), ".js") {
 			return fmt.Errorf("widgets[%d].file: must be a .js file", i)
+		}
+		if err := tilegrid.ValidateSizeList(w.TileSizes); err != nil {
+			return fmt.Errorf("widgets[%d].tile_sizes: %w", i, err)
 		}
 	}
 
