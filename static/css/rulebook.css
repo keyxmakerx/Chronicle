@@ -69,7 +69,7 @@
 @keyframes rb-spin { to { transform: rotate(360deg); } }
 
 /* ---- bar ---- */
-.rb-bar:where(:not(.rb-wslot *)) { flex: 0 0 auto; display: flex; align-items: center; gap: 10px 14px; padding: 8px 14px; border-bottom: 1px solid var(--rb-edge2); background: var(--rb-bg); min-width: 0; }
+.rb-bar:where(:not(.rb-wslot *)) { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 8px 14px; border-bottom: 1px solid var(--rb-edge2); background: var(--rb-bg); min-width: 0; }
 .rb-brand:where(:not(.rb-wslot *)) { display: flex; align-items: center; gap: 9px; font-weight: 800; white-space: nowrap; }
 .rb-mark:where(:not(.rb-wslot *)) { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; font: 700 12px var(--rb-head); color: #fff; background: linear-gradient(135deg, color-mix(in srgb, var(--rb-acc) 82%, #000), var(--rb-acc3)); }
 .rb-name small:where(:not(.rb-wslot *)) { display: block; font: 600 9px var(--rb-ui); letter-spacing: 0.14em; text-transform: uppercase; color: var(--rb-mut); }

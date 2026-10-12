@@ -71,11 +71,16 @@ templ SystemIndexContent(cc *campaigns.CampaignContext, manifest *SystemManifest
 templ systemCategoryBrowser(cc *campaigns.CampaignContext, manifest *SystemManifest, cats []categoryInfo) {
 	<!-- System header -->
 	<div class="mb-6">
-		<div class="flex items-center gap-3 mb-2">
+		<div class="flex flex-wrap items-center gap-3 mb-2">
 			if manifest.Icon != "" {
 				<i class={ "fa-solid " + manifest.Icon + " text-2xl text-primary" }></i>
 			}
 			<h1 class="text-2xl font-bold text-fg">{ manifest.Name }</h1>
+			if bookEditorAllowed(cc) {
+				<span class="ml-auto">
+					@ownEntriesLink(cc)
+				</span>
+			}
 		</div>
 		if manifest.Description != "" {
 			<p class="text-fg-secondary">{ manifest.Description }</p>
@@ -241,4 +246,14 @@ templ ItemDetailContent(cc *campaigns.CampaignContext, manifest *SystemManifest,
 			}
 		</div>
 	</div>
+}
+
+// ownEntriesLink takes the Directors to their own ancestries, kits and other
+// picks for the hero creator: house rules, so they are reached from the rules.
+// The rulebook widget draws the same link in its own top bar.
+templ ownEntriesLink(cc *campaigns.CampaignContext) {
+	<a href={ templ.SafeURL("/campaigns/" + cc.Campaign.ID + "/characters/entries") } class="btn-secondary gap-2 shrink-0" data-own-entries-link="true">
+		<i class="fa-solid fa-book-open" aria-hidden="true"></i>
+		Your own entries
+	</a>
 }

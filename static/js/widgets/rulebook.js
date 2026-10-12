@@ -432,6 +432,12 @@
     var edit = d.canEdit && this.url
       ? '<button type="button" class="rb-btn" data-act="edit" data-href="' + esc(this.url.replace(/[?#].*$/, '').replace(/\/+$/, '') + '/edit') + '">Edit</button>'
       : '';
+    // The Directors' own ancestries, kits and other picks are house rules, so
+    // their page is reached from the rulebook; the same Directors may edit both.
+    var own = d.canEdit && this.campaignId && !this.inline
+      ? '<button type="button" class="rb-btn" data-act="edit" data-own-entries-link="true" data-href="/campaigns/' +
+        encodeURIComponent(this.campaignId) + '/characters/entries">Your own entries</button>'
+      : '';
     return '<div class="rb-bar">' +
       '<div class="rb-brand">' + (d.mark ? '<span class="rb-mark" aria-hidden="true">' + esc(d.mark) + '</span>' : '') +
       '<div class="rb-name"><span class="rb-title">' + esc(d.title) + '</span>' +
@@ -442,7 +448,7 @@
       '<input type="search" class="rb-search-in" data-search placeholder="Search the book" aria-label="Search the book" autocomplete="off" spellcheck="false"' +
       ' aria-controls="' + this.domId('results') + '" aria-expanded="false"><kbd aria-hidden="true">/</kbd>' +
       '<div class="rb-results" id="' + this.domId('results') + '" role="region" aria-label="Search results" hidden></div></div>') +
-      edit + seg + '</div>' + this.tabsHTML() +
+      own + edit + seg + '</div>' + this.tabsHTML() +
       '<div class="rb-book">' +
       '<article class="rb-page l"></article><div class="rb-spine" aria-hidden="true"></div><article class="rb-page r"></article>' +
       '<button type="button" class="rb-curl l" data-act="prev" aria-label="Previous page"></button>' +
