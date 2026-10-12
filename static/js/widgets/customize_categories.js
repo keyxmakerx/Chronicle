@@ -51,8 +51,9 @@
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
   // A colour the page shows as a background; anything else falls back so a
   // stored value can never break out of the style attribute.
-  function colour(c) { return /^#[0-9a-fA-F]{3,8}$/.test(c || '') ? c : '#64748b'; }
-  function icon(i) { return /^fa-[a-z0-9-]+$/.test(i || '') ? i : 'fa-file'; }
+  // Both go into markup, so they are escaped as well as checked.
+  function colour(c) { return /^#[0-9a-fA-F]{3,8}$/.test(c || '') ? esc(c) : '#64748b'; }
+  function icon(i) { return /^fa-[a-z0-9-]+$/.test(i || '') ? esc(i) : 'fa-file'; }
   function slugify(s) { return String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30) || 'category'; }
   function singular(s) { return String(s).replace(/ies$/i, 'y').replace(/([^s])s$/i, '$1'); }
   // Field names on the saved categories, in either spelling the server uses.
@@ -164,7 +165,7 @@
     function chip(c, cls) {
       return '<span class="czs-cat-ic' + (cls ? ' ' + cls : '') + '" style="background:' + colour(c.color) + '"><i class="fa-solid ' + icon(c.icon) + '" aria-hidden="true"></i></span>';
     }
-    function pagesText(n) { return n + (n === 1 ? ' page' : ' pages'); }
+    function pagesText(n) { n = Number(n) || 0; return n + (n === 1 ? ' page' : ' pages'); }
 
     /* ---------- The grid ---------- */
     function drawGrid() {
@@ -234,9 +235,9 @@
           return '<button type="button" data-col="' + col + '" aria-label="Colour ' + col + '" aria-pressed="' + (col.toLowerCase() === String(c.color).toLowerCase()) + '" style="background:' + col + '"></button>';
         }).join('') + '<input type="color" id="czc-color" value="' + esc(/^#[0-9a-fA-F]{6}$/.test(c.color) ? c.color : '#6366f1') + '" aria-label="Your own colour"></div></div>' +
         (claiming ? '<div class="czs-panel czs-row-set"><div><span class="czs-lab">Players can claim a page</span><p class="czs-hint">A player can make a page their own, like their character.</p></div>' +
-          '<button type="button" class="toggle" role="switch" id="czc-claim" aria-checked="' + c.claimable + '" aria-label="Players can claim a page"><span class="toggle-knob"></span></button></div>' : '') +
+          '<button type="button" class="toggle" role="switch" id="czc-claim" aria-checked="' + !!c.claimable + '" aria-label="Players can claim a page"><span class="toggle-knob"></span></button></div>' : '') +
         '<div class="czs-panel czs-row-set"><div><span class="czs-lab">Shown in players’ menu</span><p class="czs-hint">A hidden category still works: players reach it through search and links, and you still see it in your menu.</p></div>' +
-        '<button type="button" class="toggle" role="switch" id="czc-menu" aria-checked="' + c.menu + '" aria-label="Shown in players’ menu"><span class="toggle-knob"></span></button></div>' +
+        '<button type="button" class="toggle" role="switch" id="czc-menu" aria-checked="' + !!c.menu + '" aria-label="Shown in players’ menu"><span class="toggle-knob"></span></button></div>' +
         (parent ? '<div class="czs-panel czs-row-set"><div><span class="czs-lab">A kind of ' + esc(parent.plural || parent.name) + '</span><p class="czs-hint">It sits under ' + esc(parent.plural || parent.name) + ' in the menu.</p></div>' +
           '<button type="button" class="btn-secondary btn-sm" id="czc-unparent">Make it a category of its own</button></div>' :
           '<div class="czs-field"><span class="czs-lab">Kinds within ' + esc(c.plural || 'this category') + '</span><p class="czs-hint">Like “Towns” within Places. Each kind is a category of its own that sits under this one in the menu.</p>' +
@@ -395,7 +396,7 @@
           '<div class="czs-field"><span class="czs-lab" id="czc-sf">Start from</span><div class="czs-starts" role="group" aria-labelledby="czc-sf">' +
           '<button type="button" data-from="0" aria-pressed="' + (st.from === 0) + '"><span class="czs-cat-ic sm" style="background:#64748b"><i class="fa-solid fa-file" aria-hidden="true"></i></span><span><span class="czs-nm">Blank</span><span class="czs-ds">Name and text only</span></span></button>' +
           tops.map(function (c) {
-            return '<button type="button" data-from="' + c.id + '" aria-pressed="' + (st.from === c.id) + '">' + chip(c, 'sm') + '<span><span class="czs-nm">Like ' + esc(c.plural) + '</span><span class="czs-ds">Its page layout and fields</span></span></button>';
+            return '<button type="button" data-from="' + Number(c.id) + '" aria-pressed="' + (st.from === c.id) + '">' + chip(c, 'sm') + '<span><span class="czs-nm">Like ' + esc(c.plural) + '</span><span class="czs-ds">Its page layout and fields</span></span></button>';
           }).join('') + '</div><p class="czs-hint">You can change everything afterwards.</p></div>' +
           '<div class="czs-split"><div class="czs-field"><label for="czc-nn">Name</label><input class="input" id="czc-nn" maxlength="100" placeholder="Monsters" value="' + esc(st.plural) + '"></div>' +
           '<div class="czs-field"><label for="czc-no">One of them is called</label><input class="input" id="czc-no" maxlength="100" placeholder="Monster" value="' + esc(st.one) + '"></div></div>' +
