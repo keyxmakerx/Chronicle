@@ -907,6 +907,7 @@ PUT	/campaigns/:id/systems/:mod/book/chapters/:chapter/pages/:key	session	system
 POST	/campaigns/:id/systems/:mod/book/chapters/:chapter/pages/:key/keep	session	systems.(*SystemHandler).BookPageKeep	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
 GET	/campaigns/:id/systems/:mod/book/edit	session	systems.(*SystemHandler).BookEditPage	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
 GET	/campaigns/:id/systems/:mod/book/export	session	systems.(*SystemHandler).BookExport	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
+GET	/campaigns/:id/systems/:mod/book/files/:name	session	systems.(*SystemHandler).BookFileAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
 GET	/campaigns/:id/systems/:mod/book/find	session	systems.(*SystemHandler).BookFindAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
 GET	/campaigns/:id/systems/:mod/book/index/:cat	session	systems.(*SystemHandler).BookIndexAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
 GET	/campaigns/:id/systems/:mod/book/source	session	systems.(*SystemHandler).BookSourceAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon

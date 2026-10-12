@@ -17,6 +17,10 @@ your-package/
       basics.yaml        one file per chapter
       combat.yaml
       ...
+    art/
+      cover.svg          optional: the drawn cover
+    fonts/
+      display.woff2      optional: the book's own fonts
 ```
 
 A package has a book when `book/book.yaml` exists. Files are
@@ -28,6 +32,8 @@ as something other than text.
 
 The `book/` folder is never served to browsers as-is. Chronicle reads it, checks
 it, removes anything the reader isn't allowed to see, and sends only the rest.
+The one exception is the cover and font files that `book.yaml` names (below):
+those exact files, and no others, are sent to readers who may open the book.
 
 ## book.yaml
 
@@ -47,7 +53,13 @@ theme:                   # optional: colours and fonts, all optional
   heading-font: "Inter, system-ui, sans-serif"
   body-font: "Inter, system-ui, sans-serif"
   cover: "#2e2240"       # the leather around the pages (paper look only)
-look: paper              # optional: draw the book as a printed handbook
+look: paper              # optional: paper, bold, or left out
+cover: art/cover.svg     # optional: a drawn cover the book opens from
+fonts:                   # optional: the book's own fonts, at most 8
+  - family: "Big Shoulders Display"
+    file: fonts/big-shoulders-display-latin-900-normal.woff2
+    weight: 900          # optional: 100 to 900, default 400
+    style: normal        # optional: normal (default) or italic
 tabs: [players-screen, how-to-play, combat]   # optional: chapters with a tab
 start: players-screen    # optional: the chapter the book opens on
 first: how-to-play       # optional: where a first-time reader opens instead
@@ -72,6 +84,29 @@ parts:
   A campaign owner can switch every book to Chronicle's standard look
   (Customize › Rulebook); the book's colours and `look` are then ignored, and
   only its fonts still apply.
+- `look: bold` draws a poster-style book: dark chapter banners, heavy
+  headings and coloured result tiers. It takes its colours from `theme`
+  (`accent` colours the banners' edge and the tiers), so a book chooses
+  `paper` or `bold`, not both. Customize › Rulebook's standard look
+  overrides `bold` exactly as it does `paper`.
+- `cover` is a drawn cover: the first time a reader opens the book in a
+  visit it shows closed, and a click (or Enter or Space) swings it open. A
+  **Close the book** button in the top bar swings it shut again. Draw the
+  whole cover in the file, title lettering included; Chronicle adds only a
+  small "Open" label. The art is an SVG at 400 by 516, filling a closed book
+  and cropped to fit. It is shown as a picture, so scripts in it never run,
+  and the path must be `art/<name>.svg`. Readers who ask for reduced motion
+  see the cover as a still that a click dismisses.
+- `fonts` loads font files the book ships so it does not depend on a font
+  being installed. Each entry has the `family` name, a `file` that must be
+  `fonts/<name>.woff2`, and optionally a `weight` and `style`. Use faces whose
+  licence allows redistribution (the SIL Open Font License does). Name the
+  family in `theme`'s `heading-font` or `body-font` to use it. List one entry
+  per weight or style.
+- Cover and font file names use lower-case letters, digits and `-` and the
+  files must be in the package, at most 1 MB each. A missing or oversized
+  file, or a name outside these folders, is reported like any other mistake in
+  `book.yaml`.
 - `tabs` puts a row of tabs above the book, one per named chapter, in that
   order (at most 12). When the campaign has written house rules, a House
   rules tab is added at the end.
@@ -191,6 +226,17 @@ highest total it covers:
 
 A creature's `stats` and `note` are Director-only: players see the creature's
 look and what they notice, and a `?` where the numbers would be.
+
+## The Sections bookmark
+
+Every book has a crimson bookmark at the top of the right-hand page, labelled
+**Sections**. Pressing it pulls the ribbon down into a list of the book's
+chapters, grouped by part; a chapter with more than one page lists its pages
+beneath it. Picking an entry rolls the ribbon back up and then turns to that
+page. Escape or a click elsewhere rolls it up too. Directors see their
+Director-only parts and chapters in the list; players do not. The `screen`
+chapter is left out, since it has its own ribbon. Nothing needs writing for
+it: the list is made from `parts`.
 
 ## Player and Director
 
