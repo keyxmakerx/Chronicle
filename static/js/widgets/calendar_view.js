@@ -680,34 +680,42 @@
   // relative to containerEl before growOpen measures/animates it — the
   // panel is laid out at its FINAL position and size first (motion rule:
   // never animate a moving clip or a reflow), so only transform/opacity
-  // animate afterward.
+  // animate afterward. Every panel is also held to what is on screen: its
+  // body scrolls inside it, since a panel running past the screen's edge
+  // can't be scrolled into view while the pointer is over it.
   function positionPanel(panel, anchorEl, containerEl, opts) {
     opts = opts || {};
     panel.style.left = '0px';
     panel.style.top = '0px';
     panel.style.width = '';
     panel.style.minHeight = '';
+    panel.style.maxHeight = '';
     var cr = containerEl.getBoundingClientRect();
     var ar = (anchorEl || containerEl).getBoundingClientRect();
+    var B = visBand(containerEl);
     if (opts.cover) {
+      var ct = ar.top - cr.top;
       panel.style.width = ar.width + 'px';
       panel.style.minHeight = ar.height + 'px';
+      panel.style.maxHeight = Math.max(ar.height, B.vbot - ct) + 'px';
       panel.style.left = (ar.left - cr.left) + 'px';
-      panel.style.top = (ar.top - cr.top) + 'px';
+      panel.style.top = ct + 'px';
       return;
     }
     var x, y;
     if (opts.center) {
-      var w = Math.min(700, cr.width - 16);
+      var w = Math.min(700, cr.width - 16), room = Math.max(160, B.bot - B.top);
       panel.style.width = w + 'px';
+      panel.style.maxHeight = room + 'px';
       var ph2 = panel.offsetHeight;
       x = Math.max(8, (cr.width - w) / 2);
-      y = Math.max(8, (cr.height - ph2) / 2);
+      y = Math.max(8, B.top + (room - ph2) / 2);
     } else {
       var pw = panel.offsetWidth, ph = panel.offsetHeight;
       x = Math.min(Math.max(8, ar.left - cr.left), Math.max(8, cr.width - pw - 8));
       y = ar.bottom - cr.top + 8;
       if (y + ph > cr.height - 8) y = Math.max(8, ar.top - cr.top - ph - 8);
+      panel.style.maxHeight = Math.max(160, B.vbot - y) + 'px';
     }
     panel.style.left = x + 'px';
     panel.style.top = y + 'px';

@@ -622,7 +622,7 @@
 .cal-v5 .yrl{display:flex;flex-wrap:wrap;gap:3px 12px;margin-top:7px;font:500 11px/1.3 var(--sans);color:var(--mut)}
 .cal-v5 .yrl b{font-weight:550;color:var(--ink2)}
 /* Calendar switcher: every calendar this viewer can see, as peers. */
-.cal-v5 .pop{width:330px;max-width:calc(100vw - 16px);border-radius:4px 14px 14px 14px;transform-origin:top left;transform:perspective(1000px) rotateX(-80deg);--hg:linear-gradient(180deg,var(--crease),transparent 14px)}
+.cal-v5 .pop{width:330px;max-width:calc(100vw - 16px);border-radius:4px 14px 14px 14px;transform-origin:top left;overflow-y:auto;overscroll-behavior:contain;transform:perspective(1000px) rotateX(-80deg);--hg:linear-gradient(180deg,var(--crease),transparent 14px)}
 .cal-v5 .pop .list{padding:6px}
 .cal-v5 .hubi{display:flex;flex-direction:column;gap:3px;width:100%;padding:10px 12px;border-radius:10px}
 .cal-v5 .hubi:hover, .cal-v5 .hubi:focus-visible{background:var(--paper2);outline:none}
@@ -2038,7 +2038,7 @@
 .cal-v5 .waitbtn .wcount{font:650 12.5px/1 var(--sans);font-variant-numeric:tabular-nums}
 .cal-v5 .waitbtn:focus-visible{outline:1.5px solid var(--ink);outline-offset:2px}
 .cal-v5 .waitpop{position:absolute;right:0;top:calc(100% + 6px);z-index:40;width:min(360px, calc(100vw - 24px));background:var(--paper);border-radius:12px;
-  box-shadow:0 1px 2px oklch(.2 .02 265 / .08),0 12px 32px -12px oklch(.2 .02 265 / .3),inset 0 0 0 1px var(--hair);padding:6px;transform-origin:top right;animation:calWaitIn .16s var(--ease)}
+  box-shadow:0 1px 2px oklch(.2 .02 265 / .08),0 12px 32px -12px oklch(.2 .02 265 / .3),inset 0 0 0 1px var(--hair);padding:6px;max-height:min(420px, 70vh);overflow-y:auto;overscroll-behavior:contain;transform-origin:top right;animation:calWaitIn .16s var(--ease)}
 .cal-v5 .waitpop[hidden]{display:none}
 .cal-v5 .wlist{list-style:none;margin:0;padding:0}
 .cal-v5 .wrow{display:flex;align-items:center;gap:10px;width:100%;padding:7px 8px;border-radius:9px;text-align:left;color:var(--ink);text-decoration:none;background:none;border:0;font:inherit;cursor:pointer}
