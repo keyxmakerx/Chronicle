@@ -5,14 +5,17 @@
  * tools (freehand, arrow, rectangle, ellipse, polygon, highlighter, numbered
  * step, speech bubble, text, shadow) and pictures on Leaflet's native APIs
  * (no Leaflet.Draw dependency). The four annotations are drawn, and the in-map
- * text editor and delete confirm built, by map_annotations.js. It owns no UI: the map page's floating tool rail
+ * text editor and delete confirm built, by map_annotations.js. The Shapes palette
+ * (rooms, areas, water, walls, arrows, bubbles) places shapes here, and
+ * map_shapes.js makes them selectable, movable and resizable. It owns no UI: the map page's floating tool rail
  * drives it through `window.chronicleMap.draw`, so there is one control surface.
  *
  * Expects a global `window.chronicleMap` object set by the map show page:
  *   { map, campaignID, mapID, imageW, imageH, isScribe,
  *     onDrawingsChange(count), onUndoChange(count) }
  * and publishes `window.chronicleMap.draw` =
- *   { start(shape), cancel(), setStyle({color,width,picked}), setShadowStrength(alpha), undo(),
+ *   { start(shape) (a drawing tool, or 'pal:' + a palette key such as 'pal:room'), cancel(),
+ *     setStyle({color,width,picked}), setShadowStrength(alpha), undo(),
  *     setVisible(bool), count(), addPicture({id}), pictureSelectMode(bool),
  *     escape(), deleteSelected(), nextStep() }
  * and `window.chronicleMap.pictures` (when the picture module is present), which
@@ -107,6 +110,22 @@
       onChange: pictureChanged,
       hexCover: ctx.hexCover
     }) : null;
+    // Diagram shapes (rooms, areas, water, walls, arrows, bubbles): drawn by
+    // the annotation and shapes modules, selectable here. Optional like the
+    // others; without it shapes simply cannot be picked up.
+    var Shapes = window.ChronicleMapShapes || null;
+    var shapes = Shapes ? Shapes.attach(map, {
+      toLatLng: toLatLng,
+      toPercent: toPercent,
+      step: snapStep,
+      canEdit: function (d) { return !!isScribe && mayChange(d); },
+      canDelete: mayChange,
+      canDmOnly: !!ctx.canDmOnly,
+      replace: replaceDrawing,
+      patch: patchDrawing,
+      remove: confirmDelete,
+      beforeSelect: function () { if (pictures) pictures.escape(); }
+    }) : null;
     if (pictures) {
       // What the hex layer needs to know about pictures: which exist, where they
       // are right now (live while one is dragged), and when that changes.
@@ -143,6 +162,7 @@
     }
     ctx.onDestroy = function () {
       picSubs = [];
+      if (shapes) shapes.destroy();
       if (shadows) shadows.destroy();
       if (pictures) pictures.destroy();
     };
@@ -183,6 +203,14 @@
 
     function toLatLng(pt) {
       return L.latLng(h - (pt.y / 100) * h, (pt.x / 100) * w);
+    }
+
+    // One grid cell in map percent, which placed and moved shapes snap to. It
+    // follows the map's grid size whether or not the grid is drawn, so a blank
+    // map lays out on the same cells.
+    function snapStep() {
+      var D = typeof ctx.getDisplay === 'function' ? ctx.getDisplay() : null;
+      return Shapes ? Shapes.gridStep(D && D.grid_size, w, h) : { x: 5, y: 5 };
     }
 
     // --- API ---
@@ -297,6 +325,7 @@
 
     // applyDrawings replaces every drawing on the map with the given list.
     function applyDrawings(drawings) {
+      if (shapes) shapes.reset();
       drawingLayer.clearLayers();
       layersByID = {};
       picReg = {};
@@ -316,7 +345,7 @@
     // half drawn, a picture selected for moving, cropping or resizing.
     function drawingsBusy() {
       return !!(activeTool || currentShape || currentPoints.length ||
-        (pictures && pictures.selectedId()));
+        (pictures && pictures.selectedId()) || (shapes && shapes.busy()));
     }
 
     // What the viewer's live refresh (map_live.js) drives for drawings,
@@ -387,6 +416,12 @@
             });
           }
           break;
+        case 'room':
+        case 'area':
+        case 'water':
+        case 'wall':
+          if (shapes) layer = shapes.renderBox(d, { animate: !!animate });
+          break;
         case 'arrow':
         case 'highlight':
         case 'step':
@@ -402,6 +437,7 @@
       if (layer) {
         layer._drawingID = d.id;
         layer._drawingData = d;
+        if (shapes) shapes.wire(layer, d);
 
         // Right-click to delete (Scribe+ sees the confirm; the server still
         // decides who may delete).
@@ -432,6 +468,7 @@
     // server-side.
     function forget(id) {
       var layer = layersByID[id];
+      if (shapes) shapes.unwire(id);
       if (picReg[id]) { delete picReg[id]; delete picLive[id]; picNotify('list', id); }
       if (layer) {
         drawingLayer.removeLayer(layer);
@@ -905,6 +942,90 @@
       map._drawCleanup = cleanup;
     }
 
+    // Shapes palette: a room, area, water or wall is dragged out as a box, an
+    // arrow from its tail to its tip, and a bubble is one click. Every shape
+    // snaps to the grid (hold Alt to place freely). The new shape is selected
+    // with its name ready to type, and the Select tool takes over.
+    function startPlace(key) {
+      var kind = Shapes ? Shapes.kindOf(key) : null;
+      if (!kind) return;
+      setTool('pal:' + key);
+      var isBox = Shapes.isBoxType(kind.type);
+      var isArrow = kind.type === 'arrow';
+      var startLL = null;
+      var preview = null;
+      var placing = false;
+
+      function finish(points) {
+        var body = Shapes.bodyFor(key, points, { color: drawColor, width: drawWidth });
+        if (!body || placing) return;
+        placing = true;
+        saveDrawing(body.type, body.points, body.opts).then(function (d) {
+          placing = false;
+          if (!d) return;
+          addSaved(d);
+          if (typeof ctx.setTool === 'function') ctx.setTool('move');
+          else { cancelTool(); if (shapes) shapes.selectMode(true); }
+          if (shapes) shapes.select(d.id, { focus: true });
+        });
+      }
+
+      function onDown(e) {
+        if (activeTool !== 'pal:' + key) return cleanup();
+        startLL = e.latlng;
+        var dash = { color: '#6366f1', weight: 2, dashArray: '5,5', interactive: false };
+        preview = isBox ? L.rectangle([startLL, startLL], Object.assign({ fillOpacity: 0.12 }, dash))
+          : L.polyline([startLL, startLL], Object.assign({ opacity: 0.8 }, dash));
+        preview.addTo(map);
+        map.dragging.disable();
+      }
+
+      function onMove(e) {
+        if (!preview || !startLL) return;
+        if (isBox) preview.setBounds([startLL, e.latlng]); else preview.setLatLngs([startLL, e.latlng]);
+      }
+
+      function onUp(e) {
+        if (!startLL) return;
+        var a = startLL;
+        startLL = null;
+        map.dragging.enable();
+        if (preview) { map.removeLayer(preview); preview = null; }
+        var on = !(e.originalEvent && e.originalEvent.altKey);
+        var tiny = map.latLngToContainerPoint(a).distanceTo(map.latLngToContainerPoint(e.latlng)) < 8;
+        var step = snapStep();
+        var pa = toPercent(a), pb = toPercent(e.latlng);
+        if (isBox) finish(Shapes.pointsOfBox(Shapes.placeBox(kind.type, pa, pb, tiny, step, on)));
+        else finish(Shapes.placeArrow(pa, pb, tiny, step, on));
+      }
+
+      // A bubble is placed where it is clicked.
+      function onClick(e) {
+        if (activeTool !== 'pal:' + key) return cleanup();
+        var on = !(e.originalEvent && e.originalEvent.altKey);
+        finish(Shapes.placePoint(toPercent(e.latlng), snapStep(), on));
+      }
+
+      function cleanup() {
+        map.off('mousedown', onDown);
+        map.off('mousemove', onMove);
+        map.off('mouseup', onUp);
+        map.off('click', onClick);
+        map.dragging.enable();
+        if (preview) { map.removeLayer(preview); preview = null; }
+        startLL = null;
+      }
+
+      if (isBox || isArrow) {
+        map.on('mousedown', onDown);
+        map.on('mousemove', onMove);
+        map.on('mouseup', onUp);
+      } else {
+        map.on('click', onClick);
+      }
+      map._drawCleanup = cleanup;
+    }
+
     // --- Tool State ---
 
     function setTool(tool) {
@@ -936,6 +1057,8 @@
       step: startStep,
       callout: function () { startWords('callout'); }
     };
+    // The Shapes palette's tools are 'pal:' plus the palette key.
+    if (Shapes) Shapes.KINDS.forEach(function (k) { starters['pal:' + k.key] = function () { startPlace(k.key); }; });
 
     ctx.draw = {
       start: function (shape) {
@@ -957,11 +1080,21 @@
       addPicture: addPicture,
       // Pictures can be picked only while the move tool is active; any other
       // tool gets every click.
-      pictureSelectMode: function (on) { if (pictures) pictures.selectMode(on); },
-      // Esc: true when it only deselected a picture (or left cropping).
-      escape: function () { return pictures ? pictures.escape() : false; },
-      // Delete key: true when a picture was selected (the confirm follows).
-      deleteSelected: function () { return pictures ? pictures.deleteSelected() : false; },
+      // Shapes are picked under the same tool, so this turns both.
+      pictureSelectMode: function (on) {
+        if (pictures) pictures.selectMode(on);
+        if (shapes) shapes.selectMode(on);
+      },
+      // Esc: true when it only deselected a shape or picture (or left cropping).
+      escape: function () {
+        if (shapes && shapes.escape()) return true;
+        return pictures ? pictures.escape() : false;
+      },
+      // Delete key: true when a shape or picture was selected (the confirm follows).
+      deleteSelected: function () {
+        if (shapes && shapes.deleteSelected()) return true;
+        return pictures ? pictures.deleteSelected() : false;
+      },
       // The number the step tool places next, for the hint.
       nextStep: nextStep
     };

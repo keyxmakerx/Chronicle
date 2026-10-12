@@ -63,6 +63,13 @@
     if (window.ChronicleMapAnnotations || !cfg.annotationsSrc) return Promise.resolve();
     return loadScript(cfg.annotationsSrc).catch(function () { /* annotations simply do not render */ });
   }
+  // Rooms, areas, water, walls and the select/move/resize behaviour for them
+  // and for arrows and bubbles. Optional: without it those shapes are not drawn
+  // and cannot be picked up.
+  function ensureShapes(cfg) {
+    if (window.ChronicleMapShapes || !cfg.shapesSrc) return Promise.resolve();
+    return loadScript(cfg.shapesSrc).catch(function () { /* shapes simply do not render */ });
+  }
   // The live-refresh core is optional too: without it the page simply keeps
   // showing what it loaded until it is reloaded.
   function ensureLive(cfg) {
@@ -174,6 +181,12 @@
 	var imageLayer = null;
 	if (mapImageURL) {
 		imageLayer = L.imageOverlay(mapImageURL, bounds, { pane: 'mpBase' }).addTo(map);
+	}
+	// A map with no picture (drawn from nothing) is a blank sheet the size of the
+	// coordinate space, so its edges show and the grid and shapes have something
+	// to sit on. A picture set later goes over it.
+	if (!mapImageURL) {
+		L.rectangle(bounds, { pane: 'mpBase', className: 'mp-sheet', interactive: false, weight: 1, fill: true }).addTo(map);
 	}
 	// The hex layer swaps the picture for the server's fogged copy when land is
 	// explored or covered, so the address can change while the map is open.
@@ -851,7 +864,13 @@
 		text: 'Click where the label goes'
 	};
 	// The step hint names the number the next click places.
+	function isPaletteShape(s) { return typeof s === 'string' && s.indexOf('pal:') === 0; }
 	function shapeHint(shape) {
+		if (isPaletteShape(shape)) {
+			var S = window.ChronicleMapShapes;
+			var k = S && S.kindOf(shape.slice(4));
+			return (k ? k.hint : 'Place a shape') + ' · Alt skips the grid';
+		}
 		if (shape === 'step') {
 			var A = window.ChronicleMapAnnotations;
 			var n = draw() && draw().nextStep ? draw().nextStep() : 1;
@@ -918,15 +937,16 @@
 	var flyDraw = $id('mp-fly-draw');
 	var flyStyle = $id('mp-fly-style');
 	var flyShadow = $id('mp-fly-shadow');
+	var flyShapes = $id('mp-fly-shapes');
 	var flyHex = $id('mp-fly-hex');
 	var makeHexBtn = $id('mp-make-hex');
 	function closePopovers() {
 		var any = false;
-		[flyDraw, flyStyle, flyShadow, flyHex].forEach(function(f) {
+		[flyDraw, flyStyle, flyShadow, flyShapes, flyHex].forEach(function(f) {
 			if (f && !f.hidden) { f.hidden = true; any = true; }
 		});
 		if (makeHexBtn) makeHexBtn.setAttribute('aria-expanded', 'false');
-		document.querySelectorAll('[data-tool="draw"], [data-tool="shadow"]').forEach(function(b) {
+		document.querySelectorAll('[data-tool="draw"], [data-tool="shadow"], [data-tool="shapes"]').forEach(function(b) {
 			b.setAttribute('aria-expanded', 'false');
 		});
 		var sb = $id('mp-style-btn');
@@ -942,12 +962,20 @@
 	}
 
 	function syncRail() {
+		var placing = tool === 'draw' && isPaletteShape(drawShape);
 		document.querySelectorAll('[data-tool]').forEach(function(b) {
-			b.setAttribute('aria-pressed', b.dataset.tool === tool ? 'true' : 'false');
+			var on = b.dataset.tool === tool;
+			// Draw and Shapes both run the drawing module's tool state.
+			if (b.dataset.tool === 'draw') on = tool === 'draw' && !placing;
+			if (b.dataset.tool === 'shapes') on = placing;
+			b.setAttribute('aria-pressed', on ? 'true' : 'false');
+		});
+		document.querySelectorAll('[data-pshape]').forEach(function(b) {
+			b.setAttribute('aria-pressed', placing && drawShape === 'pal:' + b.dataset.pshape ? 'true' : 'false');
 		});
 		// The Draw button wears the chosen shape's icon, copied from the picker.
 		var db = document.querySelector('[data-tool="draw"]');
-		var src = document.querySelector('[data-shape="' + drawShape + '"]');
+		var src = isPaletteShape(drawShape) ? null : document.querySelector('[data-shape="' + drawShape + '"]');
 		var srcIcon = src && src.querySelector('i, svg');
 		var dbIcon = db && db.querySelector('i, svg');
 		if (srcIcon && dbIcon && dbIcon.getAttribute('data-shape-icon') !== drawShape) {
@@ -1018,6 +1046,7 @@
 		b.addEventListener('click', function() {
 			var t = b.dataset.tool;
 			if (t === 'draw') { openPopover(flyDraw, b); return; }
+			if (t === 'shapes') { openPopover(flyShapes, b); return; }
 			if (t === 'shadow') { openPopover(flyShadow, b); return; }
 			setTool(tool === t && t !== 'move' ? 'move' : t);
 		});
@@ -1031,6 +1060,9 @@
 	if (canDraw) {
 		document.querySelectorAll('[data-shape]').forEach(function(b) {
 			b.addEventListener('click', function() { startShape(b.dataset.shape); });
+		});
+		document.querySelectorAll('[data-pshape]').forEach(function(b) {
+			b.addEventListener('click', function() { startShape('pal:' + b.dataset.pshape); });
 		});
 		// Add a picture: the campaign media picker (a widget on this button)
 		// reports the choice, which the drawing module drops on the view.
@@ -1924,14 +1956,16 @@
 		if (lk === 'm' && measureTool()) { setTool(tool === 'measure' ? 'move' : 'measure'); e.preventDefault(); return; }
 		if (lk === 'v') { setTool('move'); e.preventDefault(); return; }
 		if (!isScribe) return;
-		// Delete removes the selected picture, after the usual confirm.
-		if (e.key === 'Delete' && canDraw && draw() && draw().deleteSelected) {
+		// Delete (or Backspace) removes the selected shape or picture, after the
+		// usual confirm.
+		if ((e.key === 'Delete' || e.key === 'Backspace') && canDraw && draw() && draw().deleteSelected) {
 			if (draw().deleteSelected()) e.preventDefault();
 			return;
 		}
 		var k = lk;
 		if (k === 'p') { setTool('pin'); e.preventDefault(); }
 		else if (k === 'd' && canDraw) { openPopover(flyDraw, document.querySelector('[data-tool="draw"]')); e.preventDefault(); }
+		else if (k === 's' && canDraw && flyShapes) { openPopover(flyShapes, document.querySelector('[data-tool="shapes"]')); e.preventDefault(); }
 		else if (k === 'b' && canShadow) { openPopover(flyShadow, document.querySelector('[data-tool="shadow"]')); e.preventDefault(); }
 		else if (k === 'i' && canDraw) { var pb = $id('mp-add-picture'); if (pb) pb.click(); e.preventDefault(); }
 	}
@@ -2289,6 +2323,8 @@
           return ensurePictures({ picturesSrc: d.picturesSrc });
         }).then(function () {
           return ensureAnnotations({ annotationsSrc: d.annotationsSrc });
+        }).then(function () {
+          return ensureShapes({ shapesSrc: d.shapesSrc });
         }).then(function () {
           return ensureDrawing({ drawSrc: d.drawSrc });
         }).then(function () {

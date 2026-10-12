@@ -1081,3 +1081,20 @@ Also under this ADR: the partial-update contract test only recognised structs na
 - A part moves into the draft by registering a section and writing its key; until then it keeps its own Save, and its area says so.
 - The draft is the owner's only. Co-DMs and AI editing are separate decisions.
 - Save is not one transaction across plugins: a partial save is reported, never hidden.
+
+## ADR-067: Diagram shapes are four new drawing types plus the arrow and the bubble
+
+**Status:** Accepted; operator sign-off on the round-three mockup (#1354).
+
+**Context:** The Shapes tool places rooms, areas, water, walls, arrows and speech bubbles on a map and lets them be selected, moved, resized and renamed. The AI map sketch (#1351) must later create the same records. Drawings already carry points, text, visibility and colours; there is no column for "what kind of box this is".
+
+**Decision:**
+1. A box kind is its own `drawing_type` (`room`, `area`, `water`, `wall`), not a `rectangle` plus a marker in another column. `drawing_type` is a VARCHAR(50) checked in Go, so this needs no migration, and the viewer, the server's validation and a sketch importer all read the kind from one field. Arrows and bubbles reuse `arrow` and `callout`.
+2. A box is two corners stored top-left first (the server normalises), with a minimum extent of 0.5 percent per side. A wall has no text; the others have an optional name.
+3. What a kind looks like belongs to the viewer and follows the theme, so the stored `stroke_color` and `fill_color` are valid hex but not used for these four kinds. A client that creates one sends type, points and name.
+4. Selecting is done by the Move tool, with partial `PUT`s of only the changed field. Nothing about permissions changes: the draw gate, edit-own, delete-own and DM-only hiding apply to the new types through the shared drawing rules.
+
+**Consequences:**
+- A reader that does not know the four types (the Foundry module's overlay) skips them, as it skips the annotations.
+- A kind that later needs its own colour or pattern adds a field to the contract and a rule here; until then a sketch cannot recolour a room.
+- Old rectangles stay rectangles: they keep their own tool and are not selectable by this one.

@@ -31,6 +31,29 @@ const (
 	DrawingTypeCallout = "callout"
 )
 
+// The four diagram boxes. Together with arrow (a line with a head) and callout
+// (a speech bubble) they are the vocabulary of the Shapes tool, and of the AI
+// map sketch that will create the same records. A box is two opposite corners
+// in map percent, stored top-left first; text_content is its optional name
+// (a wall has none). What a kind looks like is the viewer's decision, so it
+// follows the light and dark themes: stroke_color and fill_color are accepted
+// and checked like every annotation's but do not recolour these kinds.
+const (
+	// DrawingTypeRoom is a walled space, drawn solid.
+	DrawingTypeRoom = "room"
+	// DrawingTypeArea is a zone with no walls, drawn dashed and tinted.
+	DrawingTypeArea = "area"
+	// DrawingTypeWater is a lake, river or sea, drawn tinted.
+	DrawingTypeWater = "water"
+	// DrawingTypeWall is a thick bar: a wall, fence or bridge.
+	DrawingTypeWall = "wall"
+)
+
+// minBoxExtent is the smallest width or height, in map percent, a box may
+// have. It keeps a shape big enough to grab and select, and still allows a
+// wall one grid cell thick or less.
+const minBoxExtent = 0.5
+
 const (
 	// MaxDrawingTextRunes bounds the text of a label or speech bubble. The
 	// column is TEXT, so without a bound one drawing could carry 64 KB that
@@ -60,6 +83,15 @@ var hexColorPattern = regexp.MustCompile(`^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$`)
 func isAnnotationType(t string) bool {
 	switch t {
 	case DrawingTypeArrow, DrawingTypeHighlight, DrawingTypeStep, DrawingTypeCallout:
+		return true
+	}
+	return false
+}
+
+// isBoxShapeType reports whether t is one of the four diagram boxes.
+func isBoxShapeType(t string) bool {
+	switch t {
+	case DrawingTypeRoom, DrawingTypeArea, DrawingTypeWater, DrawingTypeWall:
 		return true
 	}
 	return false
@@ -225,6 +257,75 @@ func validateAnnotation(d *Drawing) error {
 		}
 		if d.FontSize != nil {
 			return apperror.NewBadRequest("this drawing has no text size")
+		}
+	}
+	if d.FontSize != nil && (*d.FontSize < minAnnotationFont || *d.FontSize > maxAnnotationFont) {
+		return apperror.NewBadRequest("text size must be " + strconv.Itoa(minAnnotationFont) + " to " + strconv.Itoa(maxAnnotationFont))
+	}
+	return nil
+}
+
+// validateBoxShape checks, and normalises in place, a diagram box as it will
+// be stored. It runs on create and on the merged row of an update, so moving
+// or resizing a box cannot leave one the viewer cannot select.
+//
+// Corners are stored top-left first whichever way the caller dragged, so every
+// reader (the viewer, the sketch importer, a sync module) can take points[0]
+// as the origin without sorting.
+func validateBoxShape(d *Drawing) error {
+	if !hexColorPattern.MatchString(d.StrokeColor) {
+		return apperror.NewBadRequest("colour must be a hex colour like #2563eb")
+	}
+	if d.FillColor != nil && !hexColorPattern.MatchString(*d.FillColor) {
+		return apperror.NewBadRequest("fill colour must be a hex colour like #2563eb")
+	}
+	if d.Rotation != 0 {
+		return apperror.NewBadRequest("this drawing cannot be turned")
+	}
+	if math.IsNaN(d.StrokeWidth) || d.StrokeWidth <= 0 || d.StrokeWidth > maxAnnotationStroke {
+		return apperror.NewBadRequest("line width must be above 0 and at most " + strconv.Itoa(maxAnnotationStroke))
+	}
+	if math.IsNaN(d.FillAlpha) || d.FillAlpha < 0 || d.FillAlpha > 1 {
+		return apperror.NewBadRequest("fill opacity must be between 0 and 1")
+	}
+	pts, err := annotationPoints(d.Points)
+	if err != nil {
+		return err
+	}
+	if len(pts) != 2 {
+		return apperror.NewBadRequest("a box needs exactly two corners")
+	}
+	minX, maxX := math.Min(pts[0].X, pts[1].X), math.Max(pts[0].X, pts[1].X)
+	minY, maxY := math.Min(pts[0].Y, pts[1].Y), math.Max(pts[0].Y, pts[1].Y)
+	if maxX-minX < minBoxExtent || maxY-minY < minBoxExtent {
+		return apperror.NewBadRequest("a box must be at least " + strconv.FormatFloat(minBoxExtent, 'f', -1, 64) + " percent of the map wide and high")
+	}
+	normal, err := json.Marshal([]pointXY{{X: minX, Y: minY}, {X: maxX, Y: maxY}})
+	if err != nil {
+		return apperror.NewBadRequest("points must be a list of {x, y}")
+	}
+	d.Points = normal
+
+	if d.DrawingType == DrawingTypeWall {
+		if d.TextContent != nil {
+			return apperror.NewBadRequest("this drawing has no text")
+		}
+		if d.FontSize != nil {
+			return apperror.NewBadRequest("this drawing has no text size")
+		}
+		return nil
+	}
+	// A name is optional; blank means none, so clearing the field in the
+	// editor and sending an empty string both read as "no name".
+	if d.TextContent != nil {
+		if strings.TrimSpace(*d.TextContent) == "" {
+			d.TextContent = nil
+		} else {
+			t, err := validateDrawingText(d.TextContent)
+			if err != nil {
+				return err
+			}
+			d.TextContent = t
 		}
 	}
 	if d.FontSize != nil && (*d.FontSize < minAnnotationFont || *d.FontSize > maxAnnotationFont) {
