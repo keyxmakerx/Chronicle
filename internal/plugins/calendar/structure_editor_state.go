@@ -27,10 +27,17 @@ type editorWeekday struct {
 
 // editorMoon carries an existing moon's ID so a save updates that moon in
 // place (MoonInput's upsert) instead of replacing it.
+//
+// Lore is the moon's lore page id ("" for none) and LoreName its name. They
+// are sent back only once the owner changes the picker (the editor's
+// loreDirty flag), so a save that never touched the page cannot overwrite a
+// page changed elsewhere since the editor opened.
 type editorMoon struct {
-	ID    *int    `json:"id"`
-	Name  string  `json:"name"`
-	Cycle float64 `json:"cycle"`
+	ID       *int    `json:"id"`
+	Name     string  `json:"name"`
+	Cycle    float64 `json:"cycle"`
+	Lore     string  `json:"lore"`
+	LoreName string  `json:"loreName"`
 }
 
 // editorSeason carries an existing season's ID for the same reason, and its
@@ -54,6 +61,9 @@ type editorState struct {
 	LeapEvery int
 	EraName   string
 	EraYear   int
+	// CampaignID is where the moon rows' lore page search looks; empty for a
+	// new calendar, whose moons have no picker.
+	CampaignID string
 }
 
 // newCalendarEditorState is the wizard's starting point: twelve months,
@@ -73,7 +83,7 @@ func newCalendarEditorState() editorState {
 // calendarEditorState prefills the editor from an existing calendar, which
 // must have Months, Weekdays, Moons and Seasons loaded.
 func calendarEditorState(cal *Calendar) editorState {
-	st := editorState{LeapOn: cal.LeapYearEvery > 0, LeapEvery: cal.LeapYearEvery}
+	st := editorState{LeapOn: cal.LeapYearEvery > 0, LeapEvery: cal.LeapYearEvery, CampaignID: cal.CampaignID}
 	if st.LeapEvery <= 0 {
 		st.LeapEvery = 4
 	}
@@ -93,7 +103,11 @@ func calendarEditorState(cal *Calendar) editorState {
 	}
 	for _, m := range cal.Moons {
 		id := m.ID
-		st.Moons = append(st.Moons, editorMoon{ID: &id, Name: m.Name, Cycle: m.CycleDays})
+		em := editorMoon{ID: &id, Name: m.Name, Cycle: m.CycleDays, LoreName: m.LoreEntityName}
+		if m.LoreEntityID != nil {
+			em.Lore = *m.LoreEntityID
+		}
+		st.Moons = append(st.Moons, em)
 	}
 	for _, s := range cal.Seasons {
 		st.Seasons = append(st.Seasons, editorSeason{
@@ -137,6 +151,7 @@ func structureEditorXData(st editorState, previewSlot string) string {
 	seasonsJSON, _ := json.Marshal(st.Seasons)
 	eraJSON, _ := json.Marshal(st.EraName)
 	slotJSON, _ := json.Marshal(previewSlot)
+	campaignJSON, _ := json.Marshal(st.CampaignID)
 
 	return fmt.Sprintf(`{
 months: %s,
@@ -149,13 +164,17 @@ eraName: %s,
 eraYear: %d,
 nextKey: %d,
 previewSlot: %s,
+campaignId: %s,
+loreSeq: 0,
 addMonth(){ this.months.push({key:'n'+(this.nextKey++), name:'Month '+(this.months.length+1), days:30, leap:0, inter:false}); },
 removeMonth(i){ if(this.months.length>1){ this.months.splice(i,1); } },
 moveMonth(i,dir){ var j=i+dir; if(j<0||j>=this.months.length) return; var t=this.months.splice(i,1)[0]; this.months.splice(j,0,t); },
 addWeekday(){ this.weekdays.push({name:'Day '+(this.weekdays.length+1), rest:false}); },
 removeWeekday(i){ if(this.weekdays.length>1){ this.weekdays.splice(i,1); } },
 moveWeekday(i,dir){ var j=i+dir; if(j<0||j>=this.weekdays.length) return; var t=this.weekdays.splice(i,1)[0]; this.weekdays.splice(j,0,t); },
-addMoon(){ this.moons.push({id:null, name:'Moon '+(this.moons.length+1), cycle:29.5}); },
+addMoon(){ this.moons.push({id:null, name:'Moon '+(this.moons.length+1), cycle:29.5, lore:'', loreName:'', loreDirty:false, q:'', res:null}); },
+searchLore(mo){ var self=this, q=(mo.q||'').trim(), seq=++this.loreSeq; if(q.length<2||!this.campaignId){ mo.res=null; return; } Chronicle.apiFetch('/campaigns/'+encodeURIComponent(this.campaignId)+'/entities/search?q='+encodeURIComponent(q)).then(function(r){ return r.ok?r.json():{results:[]}; }).then(function(b){ if(self.loreSeq!==seq) return; mo.res=(b.results||[]).filter(function(r){ return r.id && /\/entities\//.test(r.url||''); }).slice(0,8).map(function(r){ return {id:r.id, name:r.name, type:r.type_name||''}; }); }); },
+pickLore(mo,r){ mo.lore=r.id; mo.loreName=r.name; mo.loreDirty=true; mo.q=''; mo.res=null; },
 removeMoon(i){ this.moons.splice(i,1); },
 addSeason(){ var k=this.months.length?this.months[0].key:''; this.seasons.push({id:0, name:'Season '+(this.seasons.length+1), startKey:k, startDay:1, endKey:k, endDay:1}); },
 removeSeason(i){ this.seasons.splice(i,1); },
@@ -166,7 +185,7 @@ buildJSON(){
   var self=this;
   var months=this.months.map(function(mo,i){ return {name:(mo.name||('Month '+(i+1))), days:Math.max(1,parseInt(mo.days,10)||1), sort_order:i, is_intercalary:!!mo.inter, leap_year_days:Math.max(0,parseInt(mo.leap,10)||0)}; });
   var weekdays=this.weekdays.map(function(w,i){ return {name:(w.name||('Day '+(i+1))), sort_order:i, is_rest_day:!!w.rest}; });
-  var moons=this.moons.map(function(mo){ var o={name:(mo.name||'Moon'), cycle_days:(parseFloat(mo.cycle)||29.5), phase_offset:0, color:'#c0c0c0'}; if(mo.id){ o.id=mo.id; } return o; });
+  var moons=this.moons.map(function(mo){ var o={name:(mo.name||'Moon'), cycle_days:(parseFloat(mo.cycle)||29.5), phase_offset:0, color:'#c0c0c0'}; if(mo.id){ o.id=mo.id; } if(mo.loreDirty||(!mo.id&&mo.lore)){ o.lore_entity_id=mo.lore||null; o.lore_set=true; } return o; });
   var seasons=this.seasons.map(function(se,i){ var o={name:(se.name||('Season '+(i+1))), start_month:self.monthPos(se.startKey), start_day:Math.max(1,parseInt(se.startDay,10)||1), end_month:self.monthPos(se.endKey), end_day:Math.max(1,parseInt(se.endDay,10)||1), color:'#808080'}; if(se.id){ o.id=se.id; } return o; });
   var eras=this.eraName?[{name:this.eraName, start_year:(parseInt(this.eraYear,10)||1), start_month:1, start_day:1, color:'#6366f1'}]:[];
   var year=parseInt(this.eraYear,10)||1;
@@ -174,5 +193,5 @@ buildJSON(){
     settings:{mode:'fantasy', current_year:year, hours_per_day:24, minutes_per_hour:60, seconds_per_minute:60, leap_year_every:(this.leapOn?(parseInt(this.leapEvery,10)||0):0), leap_year_offset:0},
     today:{year:year}});
 }
-}`, monthsJSON, weekdaysJSON, moonsJSON, seasonsJSON, st.LeapOn, st.LeapEvery, eraJSON, st.EraYear, len(st.Months), slotJSON)
+}`, monthsJSON, weekdaysJSON, moonsJSON, seasonsJSON, st.LeapOn, st.LeapEvery, eraJSON, st.EraYear, len(st.Months), slotJSON, campaignJSON)
 }

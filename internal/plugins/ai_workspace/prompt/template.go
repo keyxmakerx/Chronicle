@@ -175,6 +175,15 @@ under Parent) or a page earlier in this same paste, so list parents first. With
 ` + "`" + `action: update` + "`" + `, ` + "`" + `parent:` + "`" + ` moves the page, ` + "`" + `parent: none` + "`" + ` lifts it to the top
 level, and leaving the line out keeps it where it is. A page cannot be its own parent.
 
+A page can read differently in each era of the main calendar. To write one era's
+version of a page, give a separate block the page's ` + "`" + `name:` + "`" + ` plus
+` + "`" + `era: Name of the era` + "`" + ` (matched ignoring case). The body is that era's text; leave it
+empty to keep the version's text as it is. ` + "`" + `known_as: Name in that era` + "`" + ` sets the
+page's name in the era and only works together with ` + "`" + `era:` + "`" + `. The usual page is never
+changed by an era block, and its ` + "`" + `type` + "`" + `, ` + "`" + `visibility` + "`" + `, ` + "`" + `parent` + "`" + ` and ` + "`" + `tags` + "`" + ` lines
+are ignored there. The page must already exist or come earlier in this paste in a block
+without ` + "`" + `era:` + "`" + `. ` + "`" + `action: delete` + "`" + ` with ` + "`" + `era:` + "`" + ` removes only that era's version.
+
 To link to another page inside a body, write ` + "`" + `@[Page Name]` + "`" + ` (shown as "@Page Name", with
 a hover card and click-to-preview, like an @mention typed in the editor) or
 ` + "`" + `@[Page Name|words to show]` + "`" + `. The name is an existing page or a page anywhere in this

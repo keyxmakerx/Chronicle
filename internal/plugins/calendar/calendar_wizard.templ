@@ -572,6 +572,10 @@ type structureEditorConfig struct {
 	// ShowFlags shows each month's "Festival" and each weekday's "Rest day"
 	// checkboxes, so an existing calendar's flags are visible and kept.
 	ShowFlags bool
+	// ShowMoonLore shows a "Lore page" picker on each moon row. Only an
+	// existing calendar has campaign pages to point at and a service that
+	// checks them; a new calendar's moons start with none.
+	ShowMoonLore bool
 	// ClearsPreview empties the preview slot named in XData whenever the
 	// structure changes, so a preview on screen always matches the editor.
 	ClearsPreview bool
@@ -701,6 +705,28 @@ templ structureEditorForm(cfg structureEditorConfig, csrfToken, formError string
 						<input type="text" class="nm" x-model="mo.name" placeholder="Name" maxlength="100"/>
 						<input type="number" class="num" x-model.number="mo.cycle" min="1" max="3660" step="0.1" placeholder="Cycle days"/>
 						<button type="button" class="mini" @click="removeMoon(i)">Remove</button>
+						if cfg.ShowMoonLore {
+							<div class="calv5-lore">
+								<span class="calv5-lore-l">Lore page</span>
+								<template x-if="mo.lore">
+									<span class="calv5-lore-pick">
+										<span class="lp-cur" x-text="mo.loreName || 'Linked page'"></span>
+										<button type="button" class="mini" @click="mo.q=''; mo.res=null; mo.lore=''; mo.loreName=''; mo.loreDirty=true">Remove</button>
+									</span>
+								</template>
+								<template x-if="!mo.lore">
+									<span class="calv5-lore-pick">
+										<input type="search" class="lp-q" x-model="mo.q" @input.debounce.220ms="searchLore(mo)" placeholder="Search pages to link" aria-label="Search pages to link" autocomplete="off"/>
+										<ul class="lp-res" role="listbox" aria-label="Pages" x-show="mo.res" x-cloak>
+											<template x-for="r in (mo.res || [])" x-bind:key="r.id">
+												<li><button type="button" role="option" @click="pickLore(mo, r)"><span x-text="r.name"></span><small x-text="r.type"></small></button></li>
+											</template>
+											<li class="none" x-show="mo.res && !mo.res.length">No pages match.</li>
+										</ul>
+									</span>
+								</template>
+							</div>
+						}
 					</div>
 				</template>
 			</div>

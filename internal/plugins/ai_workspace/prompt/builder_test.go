@@ -153,6 +153,8 @@ func TestBuild_FrontMatterExample(t *testing.T) {
 		"`private`, `dm_only`, or `public`",
 		"`parent: Name of the parent page`",
 		"`parent: none`",
+		"`era: Name of the era`",
+		"`known_as: Name in that era`",
 		"`@[Page Name]`",
 		"`@[Page Name|words to show]`",
 	} {

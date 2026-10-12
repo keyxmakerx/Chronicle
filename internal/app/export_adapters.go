@@ -282,6 +282,8 @@ func (a *entityExportAdapter) ExportEntities(ctx context.Context, campaignID str
 // calendarExportAdapter implements campaigns.CalendarExporter.
 type calendarExportAdapter struct {
 	svc calendar.CalendarService
+	// versions carries pages' era versions; nil leaves them out.
+	versions calendar.EraVersionService
 }
 
 // isNotFound reports whether err is an apperror.AppError carrying a 404 —
@@ -361,6 +363,30 @@ func (a *calendarExportAdapter) ExportCalendar(ctx context.Context, campaignID s
 // exportOne walks a single calendar. Event kinds are campaign-scoped, so only
 // the primary calendar (withKinds) carries them; repeating them on every
 // calendar would make the import create each kind once per calendar.
+// exportPageVersions lists the pages' versions for one era. A read failure
+// leaves them out of the backup rather than failing it, and is logged.
+func (a *calendarExportAdapter) exportPageVersions(ctx context.Context, eraID int, entitySlugLookup func(string) string) []campaigns.ExportEraPageVersion {
+	if a.versions == nil {
+		return nil
+	}
+	vs, err := a.versions.ForEra(ctx, eraID)
+	if err != nil {
+		slog.Warn("export: era page versions", slog.Int("era_id", eraID), slog.Any("error", err))
+		return nil
+	}
+	var out []campaigns.ExportEraPageVersion
+	for _, v := range vs {
+		slug := entitySlugLookup(v.EntityID)
+		if slug == "" {
+			continue
+		}
+		out = append(out, campaigns.ExportEraPageVersion{
+			EntitySlug: slug, Name: v.Name, Entry: v.Entry, EntryHTML: v.EntryHTML, FieldsData: v.FieldsData,
+		})
+	}
+	return out
+}
+
 func (a *calendarExportAdapter) exportOne(ctx context.Context, cal *calendar.Calendar, campaignID string, systemViewer permissions.Viewer, entitySlugLookup func(string) string, withKinds bool) (*campaigns.ExportCalendarData, error) {
 	events, err := a.svc.ListAllEventsForCalendar(ctx, cal.ID, campaignID, systemViewer)
 	if err != nil {
@@ -415,11 +441,17 @@ func (a *calendarExportAdapter) exportOne(ctx context.Context, cal *calendar.Cal
 		// produce the "unknown, pre-V5 backup" shape ImportCalendar treats
 		// as hidden — see ExportCalendarMoon's doc comment.
 		hidden := m.HiddenFromPlayers
+		var moonLoreSlug *string
+		if m.LoreEntityID != nil {
+			if s := entitySlugLookup(*m.LoreEntityID); s != "" {
+				moonLoreSlug = &s
+			}
+		}
 		data.Moons = append(data.Moons, campaigns.ExportCalendarMoon{
 			Ref: m.ID, Name: m.Name, CycleDays: m.CycleDays, PhaseOffset: m.PhaseOffset,
 			Color: m.Color, HiddenFromPlayers: &hidden,
 			BaseDesign: m.BaseDesign, Tint: m.Tint, PhaseSource: m.PhaseSource,
-			Size: m.Size, OrbitSpeed: m.OrbitSpeed,
+			Size: m.Size, OrbitSpeed: m.OrbitSpeed, LoreEntitySlug: moonLoreSlug,
 		})
 	}
 	for _, s := range cal.Seasons {
@@ -446,6 +478,7 @@ func (a *calendarExportAdapter) exportOne(ctx context.Context, cal *calendar.Cal
 			Description: e.Description, Color: e.Color, SortOrder: e.SortOrder,
 			Color2: e.Color2, Style: e.Style, Feel: e.Feel, LoreEntitySlug: loreSlug,
 			DMNote: e.DMNote, HiddenUntilBegins: e.HiddenUntilBegins,
+			PageVersions: a.exportPageVersions(ctx, e.ID, entitySlugLookup),
 		})
 	}
 	for _, k := range cal.EventKinds {
@@ -1524,6 +1557,41 @@ func matchExistingType(existing []entities.EntityType, claimed map[int]bool, et 
 // calendarExportAdapter.
 type calendarImportAdapter struct {
 	svc calendar.CalendarService
+	// versions restores pages' era versions; nil leaves them out.
+	versions calendar.EraVersionService
+}
+
+// importPageVersions restores the pages' versions for one restored era. A
+// version whose page was not restored is skipped; a failed write is
+// reported and the rest go on.
+func (a *calendarImportAdapter) importPageVersions(ctx context.Context, campaignID string, eraID int, e campaigns.ExportCalendarEra, idMap *campaigns.IDMap, report *campaigns.ImportReport) {
+	if a.versions == nil {
+		return
+	}
+	for _, v := range e.PageVersions {
+		entityID, ok := idMap.EntitySlugToID[v.EntitySlug]
+		if !ok {
+			continue
+		}
+		err := a.versions.Create(ctx, campaignID, entityID, eraID, "")
+		if err == nil && v.Name != nil {
+			err = a.versions.SetIdentity(ctx, campaignID, entityID, eraID, patch.Of(*v.Name), patch.Field[string]{}, "")
+		}
+		if err == nil && v.Entry != nil {
+			html := ""
+			if v.EntryHTML != nil {
+				html = *v.EntryHTML
+			}
+			_, _, err = a.versions.SaveEntry(ctx, campaignID, entityID, eraID, *v.Entry, html, nil, "")
+		}
+		if err == nil && len(v.FieldsData) > 0 {
+			err = a.versions.SaveFields(ctx, campaignID, entityID, eraID, v.FieldsData, "")
+		}
+		if err != nil {
+			slog.Warn("import: era page version failed", slog.String("era", e.Name), slog.String("page", v.EntitySlug), slog.Any("error", err))
+			report.Fail(campaigns.SectionCalendar, "era", e.Name+": "+v.EntitySlug, apperror.SafeMessage(err))
+		}
+	}
 }
 
 // ImportCalendar rebuilds one calendar (and its months/weekdays/moons/
@@ -1627,6 +1695,12 @@ func (a *calendarImportAdapter) importOne(ctx context.Context, campaignID string
 	if len(data.Moons) > 0 {
 		moons := make([]calendar.MoonInput, len(data.Moons))
 		for i, m := range data.Moons {
+			var moonLoreID *string
+			if m.LoreEntitySlug != nil {
+				if id, ok := idMap.EntitySlugToID[*m.LoreEntitySlug]; ok {
+					moonLoreID = &id
+				}
+			}
 			moons[i] = calendar.MoonInput{
 				Name: m.Name, CycleDays: m.CycleDays, PhaseOffset: m.PhaseOffset,
 				Color: m.Color, HiddenFromPlayers: importMoonHidden(m.HiddenFromPlayers),
@@ -1635,7 +1709,7 @@ func (a *calendarImportAdapter) importOne(ctx context.Context, campaignID string
 				// way it would a hand-created moon's zero value — never an
 				// empty/invalid look.
 				BaseDesign: m.BaseDesign, Tint: m.Tint, PhaseSource: m.PhaseSource,
-				Size: m.Size, OrbitSpeed: m.OrbitSpeed,
+				Size: m.Size, OrbitSpeed: m.OrbitSpeed, LoreEntityID: moonLoreID,
 			}
 		}
 		if err := a.svc.SetMoons(ctx, cal.ID, campaignID, moons); err != nil {
@@ -1726,16 +1800,19 @@ func (a *calendarImportAdapter) importOne(ctx context.Context, campaignID string
 				loreID = &id
 			}
 		}
-		if _, err := a.svc.CreateEra(ctx, cal.ID, campaignID, calendar.EraInput{
+		era, err := a.svc.CreateEra(ctx, cal.ID, campaignID, calendar.EraInput{
 			Name: e.Name, StartYear: e.StartYear, StartMonth: startMonth, StartDay: startDay,
 			EndYear: e.EndYear, EndMonth: endMonth, EndDay: endDay,
 			Description: e.Description, Color: e.Color, SortOrder: e.SortOrder,
 			Color2: e.Color2, Style: e.Style, Feel: e.Feel, LoreEntityID: loreID,
 			DMNote: e.DMNote, HiddenUntilBegins: e.HiddenUntilBegins,
-		}); err != nil {
+		})
+		if err != nil {
 			slog.Warn("import: create era failed", slog.String("name", e.Name), slog.Any("error", err))
 			report.Fail(campaigns.SectionCalendar, "era", e.Name, apperror.SafeMessage(err))
+			continue
 		}
+		a.importPageVersions(ctx, campaignID, era.ID, e, idMap, report)
 	}
 	if l := data.EraLook; l != nil {
 		if err := a.svc.SaveEraLook(ctx, cal.ID, campaignID, calendar.EraLook{

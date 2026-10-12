@@ -255,6 +255,24 @@ func bindWizardCreateForm(c echo.Context) wizardCreateForm {
 // any calendar needs, a day count past what a month can hold — fails here
 // exactly as it would have failed the upload it claims to be.
 func parseWizardImportJSON(raw string) (*ImportResult, error) {
+	parsed, err := parseImportJSON(raw)
+	if err != nil {
+		return nil, err
+	}
+	// A page id round-tripped through a form names a page in some other
+	// campaign, if any; a new calendar starts with no lore pages.
+	for i := range parsed.Moons {
+		parsed.Moons[i].LoreEntityID = nil
+		parsed.Moons[i].LoreSet = false
+	}
+	return parsed, nil
+}
+
+// parseImportJSON is parseWizardImportJSON's size cap, decode and clamp,
+// leaving a moon's lore page in place for the one reader that is allowed to
+// keep it: the structure editor, whose service checks each page against the
+// campaign before anything is written.
+func parseImportJSON(raw string) (*ImportResult, error) {
 	if len(raw) > maxCalendarImportSize {
 		return nil, fmt.Errorf("import data too large, maximum %d MB", maxCalendarImportSize/(1024*1024))
 	}

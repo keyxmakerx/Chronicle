@@ -45,6 +45,22 @@ type FrontMatter struct {
 	// hierarchy alone; ParentNone lifts the page to the top level. Matched
 	// by slug like every other name in the importer.
 	Parent string `yaml:"parent"`
+	// Era makes the block write one era's version of the page it names
+	// instead of the usual page. Matched to the main calendar's eras by
+	// name, ignoring case.
+	Era string `yaml:"era"`
+	// KnownAs is the page's name in that era. Only valid with Era.
+	KnownAs string `yaml:"known_as"`
+}
+
+// IsEra reports a block that writes an era's version of a page.
+func (f FrontMatter) IsEra() bool {
+	return strings.TrimSpace(f.Era) != ""
+}
+
+// EraName is the era the block names, trimmed.
+func (f FrontMatter) EraName() string {
+	return strings.TrimSpace(f.Era)
 }
 
 // ParentNone is the `parent:` value that lifts a page to the top level.

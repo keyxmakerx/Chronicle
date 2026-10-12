@@ -856,6 +856,11 @@ type Moon struct {
 	// HiddenFromPlayers lets the Director hide a moon from players entirely
 	// (undiscovered, or secret world lore) while it still renders for the GM.
 	HiddenFromPlayers bool `json:"hidden_from_players"`
+	// LoreEntityID links a page about the moon. LoreEntityName is read with
+	// it, scoped to the calendar's campaign; both are blanked for a viewer
+	// who may not see that page, exactly as an era's are.
+	LoreEntityID   *string `json:"lore_entity_id,omitempty"`
+	LoreEntityName string  `json:"lore_entity_name,omitempty"`
 }
 
 // MoonPhase returns the phase (0.0–1.0) of this moon on a given absolute day
@@ -1550,6 +1555,14 @@ type MoonInput struct {
 	PhaseSource       string  `json:"phase_source,omitempty"`
 	Size              float64 `json:"size,omitempty"`
 	OrbitSpeed        float64 `json:"orbit_speed,omitempty"`
+	// LoreEntityID is the moon's lore page. A plain pointer cannot tell an
+	// absent key from an explicit null, so LoreSet says whether the writer
+	// means it: an update with LoreSet false keeps the stored page, with
+	// LoreSet true replaces it (nil clears). A fresh insert always stores
+	// it. A file or a wizard round trip never reaches the database with
+	// either (a page id names a page in some other campaign, if any).
+	LoreEntityID *string `json:"lore_entity_id,omitempty"`
+	LoreSet      bool    `json:"lore_set,omitempty"`
 }
 
 // EraInput is the input for creating/updating an era. Field order matches
