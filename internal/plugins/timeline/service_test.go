@@ -514,6 +514,46 @@ func TestUpdateTimeline_Success(t *testing.T) {
 	}
 }
 
+func TestUpdateTimeline_DescriptionHTML(t *testing.T) {
+	stored := "<p>kept</p>"
+	tests := []struct {
+		name  string
+		input patch.Field[string]
+		want  *string
+	}{
+		{"absent keeps the stored HTML", patch.Field[string]{}, &stored},
+		{"script is stripped", patch.Of(`<p>hi</p><script>alert(1)</script>`), strPtr("<p>hi</p>")},
+		{"empty clears", patch.Of(""), nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var got *string
+			repo := &mockTimelineRepo{
+				getByIDFn: func(_ context.Context, _ string) (*Timeline, error) {
+					s := stored
+					return &Timeline{ID: "tl-1", Name: "Old", CampaignID: "camp-1", DescriptionHTML: &s}, nil
+				},
+				updateFn: func(_ context.Context, tl *Timeline) error {
+					got = tl.DescriptionHTML
+					return nil
+				},
+			}
+			svc := newTestTimelineService(repo)
+			if err := svc.UpdateTimeline(context.Background(), "tl-1", UpdateTimelineInput{
+				Name:            "Old",
+				Visibility:      patch.Of("everyone"),
+				ZoomDefault:     patch.Of(ZoomYear),
+				DescriptionHTML: tt.input,
+			}); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if (got == nil) != (tt.want == nil) || (got != nil && *got != *tt.want) {
+				t.Errorf("DescriptionHTML = %v, want %v", deref(got), deref(tt.want))
+			}
+		})
+	}
+}
+
 func TestUpdateTimeline_NotFound(t *testing.T) {
 	repo := &mockTimelineRepo{}
 	svc := newTestTimelineService(repo)

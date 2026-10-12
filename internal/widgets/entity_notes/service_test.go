@@ -623,9 +623,9 @@ func TestNotePassesACL_NilNoteDenies(t *testing.T) {
 //
 // The WebSocket broadcast must never carry the note body. The Notifier
 // signature gives us the full *Note, so it's the wiring's job (app/routes.go)
-// to extract only IDs; this test pins the function-typed contract and is a
-// reminder that the *Note received here must not be serialized wholesale
-// onto the wire.
+// to extract only IDs; this test pins the function-typed contract. The wire
+// payload itself is pinned by TestEntityNotesNotifier_WirePayloadIsIDsOnly in
+// internal/app.
 func TestService_NotifierReceivesNoteButContractIsIDsOnly(t *testing.T) {
 	var seen *Note
 	notifier := func(_ string, n *Note, _ Audience) { seen = n }

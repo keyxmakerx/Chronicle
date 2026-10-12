@@ -596,7 +596,7 @@ On top of `RequireSiteAdmin` + CSRF: an in-process single-flight lock (concurren
 
 ## ADR-038: Widget bindings — polymorphic, FK-free association table
 
-**Status:** Accepted
+**Status:** Accepted; amended (integrity rests on two mechanisms, not three)
 
 **Context:** The widget-binding framework maps a host (entity / entity-type / dashboard) to a data instance (a calendar / map / timeline) per widget type. A hard FK is impossible: `instance_id` references a different, plugin-owned table depending on `widget_type`, and core migrations run before plugin migrations, so a binding table can't FK into them.
 
@@ -605,12 +605,14 @@ On top of `RequireSiteAdmin` + CSRF: an in-process single-flight lock (concurren
 Because there is no DB-enforced integrity, the application is the only backstop, enforced as an AND of three mechanisms:
 1. A per-plugin delete hook (`Service.OnInstanceDeleted`) that owning plugins call when an instance is deleted.
 2. An always-on render-time orphan guard (`Resolve` validates every candidate via `WidgetType.InstanceExists`, which also enforces campaign scope, and skips/sweeps dead bindings).
-3. A periodic campaign integrity sweep (`Service.Sweep`).
+3. A periodic campaign integrity sweep (`Service.Sweep`). *(Amended: see below.)*
 
 Campaign scope is pushed down to the repository signature (an unscoped read is unrepresentable) and checked on both `host_id` and the resolved `instance_id`.
 
 **Consequences:**
-- New widget types need no migration; integrity depends entirely on the three mechanisms above staying in place.
+- New widget types need no migration; integrity depends on the two mechanisms in place (the delete hook and the render-time guard) staying in place.
+
+**Amendment:** Mechanism 3 is not part of the design as built. `Service.Sweep` exists as a callable function but nothing in production calls it, and Chronicle has no job runner (scheduler, boot pass or admin action) to run it from. Integrity rests on mechanisms 1 and 2 alone: an orphaned binding is skipped, and deleted, when `Resolve` next reaches it, so it never renders. Bindings nobody resolves again, and rows whose `host_id` host is gone (the package cannot check host existence without inverting plugin isolation), stay in the table as inert rows. A real sweep is added only when there is a place to run it.
 
 ---
 

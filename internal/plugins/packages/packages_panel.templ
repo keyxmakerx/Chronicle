@@ -22,7 +22,7 @@ templ packagePanel(data PackagesPageData) {
 			     package type's own links load via HTMX from the plugin that
 			     owns the type, with a pulsing skeleton while they load. Types
 			     without a fragment URL render no slot. -->
-			if url := actionsFragmentURLFor(r.Package); url != "" {
+			if url := r.ActionsFragmentURL; url != "" {
 				<span
 					hx-get={ url }
 					hx-trigger="load"

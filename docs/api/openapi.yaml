@@ -533,20 +533,47 @@ paths:
           $ref: "#/components/responses/InternalError"
 
   # --- Calendar ---
-  /campaigns/{campaignId}/calendar:
+  /campaigns/{campaignId}/calendars:
     get:
       tags: [Calendar]
-      summary: Get calendar
-      operationId: getCalendar
-      deprecated: true
-      description: Requires calendar addon to be enabled. Calendar is being rebuilt (#741); this endpoint always answers 503 until it lands.
+      summary: List calendars
+      operationId: listCalendars
+      description: Requires the calendar addon. The calendars the key owner may see.
       parameters:
         - $ref: "#/components/parameters/campaignId"
       responses:
-        "503":
-          $ref: "#/components/responses/CalendarRebuilding"
         "200":
-          description: Full calendar structure with months, weekdays, moons, seasons, eras
+          description: Calendars
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Calendar"
+                  total:
+                    type: integer
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /campaigns/{campaignId}/calendar:
+    get:
+      tags: [Calendar]
+      summary: Get the default calendar
+      operationId: getCalendar
+      description: Requires the calendar addon. The default calendar (the first one when none is marked default) with its structure. Takes `?audience=players`. 404 when the campaign has no calendar or it is hidden from the caller.
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - $ref: "#/components/parameters/audience"
+      responses:
+        "200":
+          description: Calendar with structure
           content:
             application/json:
               schema:
@@ -559,35 +586,44 @@ paths:
           $ref: "#/components/responses/RateLimited"
         "500":
           $ref: "#/components/responses/InternalError"
+    post:
+      tags: [Calendar]
+      summary: Create a calendar (retired)
+      operationId: createCalendar
+      description: Retired. Always answers 410 `calendar_route_retired`. Create the calendar in Chronicle's calendar; dates and events then sync.
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+      responses:
+        "410":
+          $ref: "#/components/responses/CalendarRouteRetired"
 
   /campaigns/{campaignId}/calendar/date:
     get:
       tags: [Calendar]
-      summary: Get current calendar date
+      summary: Get the current date
       operationId: getCurrentDate
-      deprecated: true
-      description: Calendar is being rebuilt (#741); this endpoint always answers 503 until it lands.
+      description: Requires the calendar addon. The current date and time with the season, era, moon phases and weather, and `tracks_real_time` (true means the date is read-only over the API). A read by a real API key records the served-date beacon. Takes `?audience=players`, which adds `"audience":"players"` to the answer.
       parameters:
         - $ref: "#/components/parameters/campaignId"
+        - $ref: "#/components/parameters/audience"
       responses:
-        "503":
-          $ref: "#/components/responses/CalendarRebuilding"
         "200":
-          description: Current in-game date/time
+          description: Current date
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/CalendarDate"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
         "429":
           $ref: "#/components/responses/RateLimited"
     put:
       tags: [Calendar]
-      summary: Set current date
+      summary: Set the current date
       operationId: setCurrentDate
-      deprecated: true
-      description: Calendar is being rebuilt (#741); this endpoint always answers 503 until it lands.
+      description: Requires the calendar addon, the write permission and an Owner key. 400 for a date outside the calendar's geometry; 422 when the calendar tracks real time.
       parameters:
         - $ref: "#/components/parameters/campaignId"
       requestBody:
@@ -595,32 +631,327 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/SetDateRequest"
+                $ref: "#/components/schemas/SetDateRequest"
       responses:
-        "503":
-          $ref: "#/components/responses/CalendarRebuilding"
         "200":
-          description: Date set successfully
+          description: Date set
           content:
             application/json:
               schema:
-                allOf:
-                  - $ref: "#/components/schemas/StatusOk"
-                  - $ref: "#/components/schemas/CalendarDate"
+                type: object
+                properties:
+                  status: {type: string, example: ok}
+                  year: {type: integer}
+                  month: {type: integer}
+                  day: {type: integer}
+                  hour: {type: integer}
+                  minute: {type: integer}
         "400":
           $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /campaigns/{campaignId}/calendar/date/confirm:
+    post:
+      tags: [Calendar]
+      summary: Confirm the applied date
+      operationId: confirmCalendarDate
+      description: Requires the calendar addon. The Foundry module reports the date it applied. Needs a real API key (403 on the session door).
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+                type: object
+                required: [year, month, day]
+                properties:
+                  year: {type: integer}
+                  month: {type: integer}
+                  day: {type: integer}
+      responses:
+        "204":
+          description: Recorded
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
         "429":
           $ref: "#/components/responses/RateLimited"
 
-  /campaigns/{campaignId}/calendar/events:
+  /campaigns/{campaignId}/calendar/seasons:
     get:
       tags: [Calendar]
-      summary: List events
-      operationId: listEvents
-      deprecated: true
-      description: Calendar is being rebuilt (#741); this endpoint always answers 503 until it lands.
+      summary: List seasons
+      operationId: getSeasons
+      description: Requires the calendar addon. The default calendar's seasons, filtered for the caller (hidden moons and eras are Owner only).
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+      responses:
+        "200":
+          description: Seasons
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Season"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+    put:
+      tags: [Calendar]
+      summary: Replace seasons (retired)
+      operationId: updateSeasons
+      description: Retired. Always answers 410 `calendar_route_retired`. Calendar structure is edited in Chronicle's calendar; dates and events sync.
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+      responses:
+        "410":
+          $ref: "#/components/responses/CalendarRouteRetired"
+
+  /campaigns/{campaignId}/calendar/moons:
+    get:
+      tags: [Calendar]
+      summary: List moons
+      operationId: getMoons
+      description: Requires the calendar addon. The default calendar's moons, filtered for the caller (hidden moons and eras are Owner only).
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+      responses:
+        "200":
+          description: Moons
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Moon"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+    put:
+      tags: [Calendar]
+      summary: Replace moons (retired)
+      operationId: updateMoons
+      description: Retired. Always answers 410 `calendar_route_retired`. Calendar structure is edited in Chronicle's calendar; dates and events sync.
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+      responses:
+        "410":
+          $ref: "#/components/responses/CalendarRouteRetired"
+
+  /campaigns/{campaignId}/calendar/eras:
+    get:
+      tags: [Calendar]
+      summary: List eras
+      operationId: getEras
+      description: Requires the calendar addon. The default calendar's eras, filtered for the caller (hidden moons and eras are Owner only).
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+      responses:
+        "200":
+          description: Eras
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Era"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+    put:
+      tags: [Calendar]
+      summary: Replace eras (retired)
+      operationId: updateEras
+      description: Retired. Always answers 410 `calendar_route_retired`. Calendar structure is edited in Chronicle's calendar; dates and events sync.
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+      responses:
+        "410":
+          $ref: "#/components/responses/CalendarRouteRetired"
+
+  /campaigns/{campaignId}/calendar/cycles:
+    get:
+      tags: [Calendar]
+      summary: List cycles
+      operationId: getCycles
+      description: Requires the calendar addon. The default calendar's cycles.
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+      responses:
+        "200":
+          description: Cycles
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+    put:
+      tags: [Calendar]
+      summary: Replace cycles (retired)
+      operationId: updateCycles
+      description: Retired. Always answers 410 `calendar_route_retired`. Calendar structure is edited in Chronicle's calendar; dates and events sync.
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+      responses:
+        "410":
+          $ref: "#/components/responses/CalendarRouteRetired"
+
+  /campaigns/{campaignId}/calendar/festivals:
+    get:
+      tags: [Calendar]
+      summary: List festivals
+      operationId: getFestivals
+      description: Requires the calendar addon. The default calendar's festivals.
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+      responses:
+        "200":
+          description: Festivals
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+    put:
+      tags: [Calendar]
+      summary: Replace festivals (retired)
+      operationId: updateFestivals
+      description: Retired. Always answers 410 `calendar_route_retired`. Calendar structure is edited in Chronicle's calendar; dates and events sync.
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+      responses:
+        "410":
+          $ref: "#/components/responses/CalendarRouteRetired"
+
+  /campaigns/{campaignId}/calendar/structure:
+    get:
+      tags: [Calendar]
+      summary: Get the calendar structure
+      operationId: getCalendarStructure
+      description: Requires the calendar addon. Months, weekdays, time system and leap rule of the default calendar.
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+      responses:
+        "200":
+          description: Structure
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: {type: string}
+                  name: {type: string}
+                  mode: {type: string}
+                  hours_per_day: {type: integer}
+                  minutes_per_hour: {type: integer}
+                  seconds_per_minute: {type: integer}
+                  epoch_name: {type: string, nullable: true}
+                  months: {type: array, items: {$ref: "#/components/schemas/Month"}}
+                  weekdays: {type: array, items: {$ref: "#/components/schemas/Weekday"}}
+                  leap_year:
+                    type: object
+                    properties:
+                      every: {type: integer}
+                      offset: {type: integer}
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /campaigns/{campaignId}/calendar/weather:
+    get:
+      tags: [Calendar]
+      summary: Get today's weather
+      operationId: getCalendarWeather
+      description: Requires the calendar addon. Today's weather, or an empty object when none is set.
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+      responses:
+        "200":
+          description: Weather
+          content:
+            application/json:
+              schema:
+                type: object
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+    put:
+      tags: [Calendar]
+      summary: Set weather (retired)
+      operationId: updateCalendarWeather
+      description: Retired. Always answers 410 `calendar_route_retired`. Weather is set per day in Chronicle's calendar; GET /calendar/weather still reads it.
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+      responses:
+        "410":
+          $ref: "#/components/responses/CalendarRouteRetired"
+
+  /campaigns/{campaignId}/calendar/weather/days:
+    get:
+      tags: [Calendar]
+      summary: List a month's day weather
+      operationId: listDayWeather
+      description: Requires the calendar addon. One month's day readings (defaults to the current month); below the Director only days up to today are returned. Takes `?audience=players`.
       parameters:
         - $ref: "#/components/parameters/campaignId"
         - name: year
@@ -631,15 +962,48 @@ paths:
           in: query
           schema:
             type: integer
-        - name: entity_id
+        - $ref: "#/components/parameters/audience"
+      responses:
+        "200":
+          description: Day weather
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                  total:
+                    type: integer
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /campaigns/{campaignId}/calendar/events:
+    get:
+      tags: [Calendar]
+      summary: List events
+      operationId: listEvents
+      description: Requires the calendar addon. Events in one month (defaults to the current month), filtered for the caller. A repeating event carries its dates in the month as `occurrences`. Visibility is `everyone` or `gm-only`. Takes `?audience=players`.
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - name: year
           in: query
           schema:
-            type: string
+            type: integer
+        - name: month
+          in: query
+          schema:
+            type: integer
+        - $ref: "#/components/parameters/audience"
       responses:
-        "503":
-          $ref: "#/components/responses/CalendarRebuilding"
         "200":
-          description: Events list
+          description: Events
           content:
             application/json:
               schema:
@@ -651,6 +1015,8 @@ paths:
                       $ref: "#/components/schemas/Event"
                   total:
                     type: integer
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
         "429":
@@ -659,10 +1025,9 @@ paths:
           $ref: "#/components/responses/InternalError"
     post:
       tags: [Calendar]
-      summary: Create event
+      summary: Create an event
       operationId: createEvent
-      deprecated: true
-      description: Calendar is being rebuilt (#741); this endpoint always answers 503 until it lands.
+      description: Requires the calendar addon and the write permission (Scribe and up). A `gm-only` event needs Owner or DM access.
       parameters:
         - $ref: "#/components/parameters/campaignId"
       requestBody:
@@ -670,10 +1035,8 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/CreateEventRequest"
+                $ref: "#/components/schemas/CreateEventRequest"
       responses:
-        "503":
-          $ref: "#/components/responses/CalendarRebuilding"
         "201":
           description: Created event
           content:
@@ -684,6 +1047,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
         "429":
@@ -692,32 +1057,30 @@ paths:
   /campaigns/{campaignId}/calendar/events/{eventId}:
     get:
       tags: [Calendar]
-      summary: Get event
+      summary: Get an event
       operationId: getEvent
-      deprecated: true
-      description: Calendar is being rebuilt (#741); this endpoint always answers 503 until it lands.
+      description: Requires the calendar addon.
       parameters:
         - $ref: "#/components/parameters/campaignId"
         - $ref: "#/components/parameters/eventId"
       responses:
-        "503":
-          $ref: "#/components/responses/CalendarRebuilding"
         "200":
-          description: Event details
+          description: Event
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Event"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
         "429":
           $ref: "#/components/responses/RateLimited"
     put:
       tags: [Calendar]
-      summary: Update event
+      summary: Update an event
       operationId: updateEvent
-      deprecated: true
-      description: Calendar is being rebuilt (#741); this endpoint always answers 503 until it lands.
+      description: "Requires the calendar addon and the write permission. Partial update: an absent field is kept, an explicit `null` clears it, a value replaces it. 404 for an event the caller cannot see; 403 for a visibility change the caller may not make."
       parameters:
         - $ref: "#/components/parameters/campaignId"
         - $ref: "#/components/parameters/eventId"
@@ -726,10 +1089,8 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/UpdateEventRequest"
+                $ref: "#/components/schemas/UpdateEventRequest"
       responses:
-        "503":
-          $ref: "#/components/responses/CalendarRebuilding"
         "200":
           description: Event updated
           content:
@@ -738,24 +1099,29 @@ paths:
                 $ref: "#/components/schemas/StatusOk"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
         "429":
           $ref: "#/components/responses/RateLimited"
     delete:
       tags: [Calendar]
-      summary: Delete event
+      summary: Delete an event
       operationId: deleteEvent
-      deprecated: true
-      description: Calendar is being rebuilt (#741); this endpoint always answers 503 until it lands.
+      description: Requires the calendar addon, the write permission and an Owner key.
       parameters:
         - $ref: "#/components/parameters/campaignId"
         - $ref: "#/components/parameters/eventId"
       responses:
-        "503":
-          $ref: "#/components/responses/CalendarRebuilding"
         "204":
           description: Event deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
         "429":
@@ -764,322 +1130,120 @@ paths:
   /campaigns/{campaignId}/calendar/settings:
     put:
       tags: [Calendar]
-      summary: Update calendar settings
+      summary: Update settings (retired)
       operationId: updateCalendarSettings
-      deprecated: true
-      description: Calendar is being rebuilt (#741); this endpoint always answers 503 until it lands.
+      description: Retired. Always answers 410 `calendar_route_retired`. Calendar settings are edited in Chronicle's calendar; dates and events sync.
       parameters:
         - $ref: "#/components/parameters/campaignId"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/UpdateCalendarSettingsRequest"
       responses:
-        "503":
-          $ref: "#/components/responses/CalendarRebuilding"
-        "200":
-          description: Settings updated
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/StatusOk"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "429":
-          $ref: "#/components/responses/RateLimited"
+        "410":
+          $ref: "#/components/responses/CalendarRouteRetired"
 
   /campaigns/{campaignId}/calendar/months:
     put:
       tags: [Calendar]
-      summary: Update months
+      summary: Replace months (retired)
       operationId: updateMonths
-      deprecated: true
-      description: Calendar is being rebuilt (#741); this endpoint always answers 503 until it lands.
+      description: Retired. Always answers 410 `calendar_route_retired`. Calendar structure is edited in Chronicle's calendar; dates and events sync.
       parameters:
         - $ref: "#/components/parameters/campaignId"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: array
-              items:
-                $ref: "#/components/schemas/MonthInput"
       responses:
-        "503":
-          $ref: "#/components/responses/CalendarRebuilding"
-        "200":
-          description: Months updated
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/StatusOk"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "429":
-          $ref: "#/components/responses/RateLimited"
+        "410":
+          $ref: "#/components/responses/CalendarRouteRetired"
 
   /campaigns/{campaignId}/calendar/weekdays:
     put:
       tags: [Calendar]
-      summary: Update weekdays
+      summary: Replace weekdays (retired)
       operationId: updateWeekdays
-      deprecated: true
-      description: Calendar is being rebuilt (#741); this endpoint always answers 503 until it lands.
+      description: Retired. Always answers 410 `calendar_route_retired`. Calendar structure is edited in Chronicle's calendar; dates and events sync.
       parameters:
         - $ref: "#/components/parameters/campaignId"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: array
-              items:
-                $ref: "#/components/schemas/WeekdayInput"
       responses:
-        "503":
-          $ref: "#/components/responses/CalendarRebuilding"
-        "200":
-          description: Weekdays updated
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/StatusOk"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "429":
-          $ref: "#/components/responses/RateLimited"
+        "410":
+          $ref: "#/components/responses/CalendarRouteRetired"
 
-  /campaigns/{campaignId}/calendar/moons:
+  /campaigns/{campaignId}/calendar/event-categories:
+    get:
+      tags: [Calendar]
+      summary: List event categories (retired)
+      operationId: getEventCategories
+      description: Retired. Always answers 410 `calendar_route_retired`. Event kinds replaced event categories; edit them in Chronicle's calendar.
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+      responses:
+        "410":
+          $ref: "#/components/responses/CalendarRouteRetired"
     put:
       tags: [Calendar]
-      summary: Update moons
-      operationId: updateMoons
-      deprecated: true
-      description: Calendar is being rebuilt (#741); this endpoint always answers 503 until it lands.
+      summary: Replace event categories (retired)
+      operationId: updateEventCategories
+      description: Retired. Always answers 410 `calendar_route_retired`. Event kinds replaced event categories; edit them in Chronicle's calendar.
       parameters:
         - $ref: "#/components/parameters/campaignId"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: array
-              items:
-                $ref: "#/components/schemas/MoonInput"
       responses:
-        "503":
-          $ref: "#/components/responses/CalendarRebuilding"
-        "200":
-          description: Moons updated
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/StatusOk"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "429":
-          $ref: "#/components/responses/RateLimited"
+        "410":
+          $ref: "#/components/responses/CalendarRouteRetired"
 
-  /campaigns/{campaignId}/calendar/eras:
-    put:
+  /campaigns/{campaignId}/calendar/world-state:
+    get:
       tags: [Calendar]
-      summary: Update eras
-      operationId: updateEras
-      deprecated: true
-      description: Calendar is being rebuilt (#741); this endpoint always answers 503 until it lands.
+      summary: Get world state (retired)
+      operationId: getWorldState
+      description: Retired. Always answers 410 `calendar_route_retired`. GET /calendar/date carries the current season, moon phases and weather.
       parameters:
         - $ref: "#/components/parameters/campaignId"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: array
-              items:
-                $ref: "#/components/schemas/EraInput"
       responses:
-        "503":
-          $ref: "#/components/responses/CalendarRebuilding"
-        "200":
-          description: Eras updated
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/StatusOk"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "429":
-          $ref: "#/components/responses/RateLimited"
+        "410":
+          $ref: "#/components/responses/CalendarRouteRetired"
 
   /campaigns/{campaignId}/calendar/advance:
     post:
       tags: [Calendar]
-      summary: Advance date by days
+      summary: Advance the date by days (retired)
       operationId: advanceDate
-      deprecated: true
-      description: Calendar is being rebuilt (#741); this endpoint always answers 503 until it lands.
+      description: Retired. Always answers 410 `calendar_route_retired`. Set the date with PUT /calendar/date.
       parameters:
         - $ref: "#/components/parameters/campaignId"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [days]
-              properties:
-                days:
-                  type: integer
-                  minimum: 1
-                  maximum: 3650
       responses:
-        "503":
-          $ref: "#/components/responses/CalendarRebuilding"
-        "200":
-          description: Date advanced
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: "#/components/schemas/StatusOk"
-                  - $ref: "#/components/schemas/CalendarDate"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "429":
-          $ref: "#/components/responses/RateLimited"
+        "410":
+          $ref: "#/components/responses/CalendarRouteRetired"
 
   /campaigns/{campaignId}/calendar/advance-time:
     post:
       tags: [Calendar]
-      summary: Advance time by hours/minutes
+      summary: Advance the time (retired)
       operationId: advanceTime
-      deprecated: true
-      description: Calendar is being rebuilt (#741); this endpoint always answers 503 until it lands.
+      description: Retired. Always answers 410 `calendar_route_retired`. Set the date with PUT /calendar/date.
       parameters:
         - $ref: "#/components/parameters/campaignId"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                hours:
-                  type: integer
-                  minimum: 0
-                minutes:
-                  type: integer
-                  minimum: 0
       responses:
-        "503":
-          $ref: "#/components/responses/CalendarRebuilding"
-        "200":
-          description: Time advanced
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: "#/components/schemas/StatusOk"
-                  - $ref: "#/components/schemas/CalendarDate"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "429":
-          $ref: "#/components/responses/RateLimited"
+        "410":
+          $ref: "#/components/responses/CalendarRouteRetired"
 
   /campaigns/{campaignId}/calendar/export:
     get:
       tags: [Calendar]
-      summary: Export calendar JSON
+      summary: Export the calendar (retired)
       operationId: exportCalendar
-      deprecated: true
-      description: Calendar is being rebuilt (#741); this endpoint always answers 503 until it lands.
+      description: Retired. Always answers 410 `calendar_route_retired`. Calendars are included in the campaign export.
       parameters:
         - $ref: "#/components/parameters/campaignId"
-        - name: events
-          in: query
-          description: Include events in export
-          schema:
-            type: string
-            enum: ["true", "false"]
       responses:
-        "503":
-          $ref: "#/components/responses/CalendarRebuilding"
-        "200":
-          description: Calendar export data
-          content:
-            application/json:
-              schema:
-                type: object
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "429":
-          $ref: "#/components/responses/RateLimited"
+        "410":
+          $ref: "#/components/responses/CalendarRouteRetired"
 
   /campaigns/{campaignId}/calendar/import:
     post:
       tags: [Calendar]
-      summary: Import calendar
+      summary: Import a calendar (retired)
       operationId: importCalendar
-      deprecated: true
-      description: Accepts Chronicle or Foundry SimpleCalendar JSON format (auto-detected). Calendar is being rebuilt (#741); this endpoint always answers 503 until it lands.
+      description: Retired. Always answers 410 `calendar_route_retired`. Create a calendar from a file with Chronicle's new-calendar wizard.
       parameters:
         - $ref: "#/components/parameters/campaignId"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
       responses:
-        "503":
-          $ref: "#/components/responses/CalendarRebuilding"
-        "200":
-          description: Import result summary
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    example: ok
-                  format:
-                    type: string
-                  name:
-                    type: string
-                  months:
-                    type: integer
-                  weekdays:
-                    type: integer
-                  moons:
-                    type: integer
-                  seasons:
-                    type: integer
-                  eras:
-                    type: integer
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "429":
-          $ref: "#/components/responses/RateLimited"
+        "410":
+          $ref: "#/components/responses/CalendarRouteRetired"
 
   # --- Media ---
   /campaigns/{campaignId}/media:
@@ -2475,6 +2639,13 @@ components:
         with permission levels: read, write, sync. Rate limited per key.
 
   parameters:
+    audience:
+      name: audience
+      in: query
+      description: 'The value `players` filters the read for an anonymous Player whatever the key''s role; the answer then carries `"audience":"players"`.'
+      schema:
+        type: string
+        enum: [players]
     campaignId:
       name: campaignId
       in: path
@@ -2589,8 +2760,14 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
-    CalendarRebuilding:
-      description: The calendar is being rebuilt (#741). Every calendar route stays registered and answers this until the rebuild lands.
+    UnprocessableEntity:
+      description: The request is well formed but cannot apply (for example a date write on a calendar that tracks real time)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    CalendarRouteRetired:
+      description: The route was retired with the calendar rebuild. It stays registered so a script still calling it learns it is gone for good, and the message says what to use instead.
       content:
         application/json:
           schema:
@@ -2598,10 +2775,10 @@ components:
             properties:
               error:
                 type: string
-                example: calendar_rebuilding
+                example: calendar_route_retired
               message:
                 type: string
-                example: "Chronicle's calendar is being rebuilt and is temporarily unavailable. Calendar sync is paused; maps, actors, items and notes are unaffected."
+                example: "This calendar API route was retired. Set the date with PUT /calendar/date."
 
   schemas:
     SyncHistoryEvent:
@@ -2928,47 +3105,33 @@ components:
     Calendar:
       type: object
       properties:
-        id:
-          type: string
-        campaign_id:
-          type: string
+        id: {type: string}
+        campaign_id: {type: string}
         mode:
           type: string
           enum: [fantasy, reallife]
-        name:
-          type: string
-        description:
-          type: string
-          nullable: true
-        epoch_name:
-          type: string
-          nullable: true
-        current_year:
-          type: integer
-        current_month:
-          type: integer
-        current_day:
-          type: integer
-        current_hour:
-          type: integer
-        current_minute:
-          type: integer
-        hours_per_day:
-          type: integer
-        minutes_per_hour:
-          type: integer
-        seconds_per_minute:
-          type: integer
-        leap_year_every:
-          type: integer
-        leap_year_offset:
-          type: integer
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
+        name: {type: string}
+        description: {type: string, nullable: true}
+        epoch_name: {type: string, nullable: true}
+        current_year: {type: integer}
+        current_month: {type: integer}
+        current_day: {type: integer}
+        current_hour: {type: integer}
+        current_minute: {type: integer}
+        hours_per_day: {type: integer}
+        minutes_per_hour: {type: integer}
+        seconds_per_minute: {type: integer}
+        leap_year_every: {type: integer}
+        leap_year_offset: {type: integer}
+        sort_order: {type: integer}
+        is_default: {type: boolean}
+        hemisphere: {type: string, nullable: true}
+        forecasts_enabled: {type: boolean}
+        month_starts_new_week: {type: boolean}
+        visibility: {type: string}
+        tracks_real_time:
+          type: boolean
+          description: True when the date follows the real clock and cannot be set over the API.
         months:
           type: array
           items:
@@ -2989,26 +3152,49 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Era"
-        event_categories:
-          type: array
-          items:
-            $ref: "#/components/schemas/EventCategory"
 
     CalendarDate:
       type: object
       properties:
-        mode:
+        mode: {type: string}
+        year: {type: integer}
+        month: {type: integer}
+        day: {type: integer}
+        hour: {type: integer}
+        minute: {type: integer}
+        tracks_real_time:
+          type: boolean
+          description: When true the module pauses its date push; PUT /calendar/date answers 422.
+        current_season:
+          type: object
+          properties:
+            id: {type: integer}
+            name: {type: string}
+            color: {type: string}
+        current_era:
+          type: object
+          description: Absent for a Player.
+          properties:
+            id: {type: integer}
+            name: {type: string}
+            start_year: {type: integer}
+            color: {type: string}
+        current_moon_phases:
+          type: array
+          items:
+            type: object
+            properties:
+              moon_id: {type: integer}
+              moon_name: {type: string}
+              phase_name: {type: string}
+              phase_position: {type: number}
+              phase_icon: {type: string}
+        current_weather:
+          type: object
+        audience:
           type: string
-        year:
-          type: integer
-        month:
-          type: integer
-        day:
-          type: integer
-        hour:
-          type: integer
-        minute:
-          type: integer
+          enum: [players]
+          description: Present when the read took `?audience=players`.
 
     Month:
       type: object
@@ -3106,233 +3292,128 @@ components:
         sort_order:
           type: integer
 
-    EventCategory:
-      type: object
-      properties:
-        id:
-          type: integer
-        calendar_id:
-          type: string
-        slug:
-          type: string
-        name:
-          type: string
-        icon:
-          type: string
-        color:
-          type: string
-        sort_order:
-          type: integer
-
     Event:
       type: object
       properties:
-        id:
-          type: string
-        calendar_id:
-          type: string
-        entity_id:
-          type: string
-          nullable: true
-        name:
-          type: string
-        description:
-          type: string
-          nullable: true
-        description_html:
-          type: string
-          nullable: true
-        year:
-          type: integer
-        month:
-          type: integer
-        day:
-          type: integer
-        start_hour:
-          type: integer
-          nullable: true
-        start_minute:
-          type: integer
-          nullable: true
-        end_year:
-          type: integer
-          nullable: true
-        end_month:
-          type: integer
-          nullable: true
-        end_day:
-          type: integer
-          nullable: true
-        end_hour:
-          type: integer
-          nullable: true
-        end_minute:
-          type: integer
-          nullable: true
-        is_recurring:
-          type: boolean
-        recurrence_type:
-          type: string
-          nullable: true
+        id: {type: string}
+        calendar_id: {type: string}
+        name: {type: string}
+        description: {type: string, nullable: true}
+        description_html: {type: string, nullable: true}
+        entity_id: {type: string, nullable: true}
+        year: {type: integer}
+        month: {type: integer}
+        day: {type: integer}
+        start_hour: {type: integer, nullable: true}
+        start_minute: {type: integer, nullable: true}
+        end_year: {type: integer, nullable: true}
+        end_month: {type: integer, nullable: true}
+        end_day: {type: integer, nullable: true}
+        end_hour: {type: integer, nullable: true}
+        end_minute: {type: integer, nullable: true}
+        is_recurring: {type: boolean}
+        recurrence_type: {type: string, nullable: true}
+        recurrence_interval: {type: integer, nullable: true}
+        recurrence_end_year: {type: integer, nullable: true}
+        recurrence_end_month: {type: integer, nullable: true}
+        recurrence_end_day: {type: integer, nullable: true}
+        recurrence_max_occurrences: {type: integer, nullable: true}
         visibility:
           type: string
-        category:
-          type: string
-          nullable: true
-        created_by:
-          type: string
-          nullable: true
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
-        entity_name:
-          type: string
-        entity_icon:
-          type: string
-        entity_color:
-          type: string
+          enum: [everyone, gm-only]
+        visibility_rules: {type: string, nullable: true}
+        kind_id: {type: integer, nullable: true}
+        announced: {type: string, nullable: true}
+        tier: {type: string, nullable: true}
+        color: {type: string, nullable: true}
+        icon: {type: string, nullable: true}
+        all_day: {type: boolean}
+        occurrences:
+          type: array
+          description: A repeating event's dates in the requested month, with skips and moves applied.
+          items: {type: object}
+        created_by: {type: string, nullable: true}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        entity_name: {type: string}
+        entity_icon: {type: string}
+        entity_color: {type: string}
+        kind_name: {type: string}
+        kind_slug: {type: string}
+        kind_icon: {type: string}
+        kind_color: {type: string}
 
     CreateEventRequest:
       type: object
       required: [name, year, month, day]
       properties:
-        name:
-          type: string
-        description:
-          type: string
-          nullable: true
-        description_html:
-          type: string
-          nullable: true
-        entity_id:
-          type: string
-          nullable: true
-        year:
-          type: integer
-        month:
-          type: integer
-        day:
-          type: integer
-        start_hour:
-          type: integer
-          nullable: true
-        start_minute:
-          type: integer
-          nullable: true
-        end_year:
-          type: integer
-          nullable: true
-        end_month:
-          type: integer
-          nullable: true
-        end_day:
-          type: integer
-          nullable: true
-        end_hour:
-          type: integer
-          nullable: true
-        end_minute:
-          type: integer
-          nullable: true
-        is_recurring:
-          type: boolean
-          default: false
-        recurrence_type:
-          type: string
-          nullable: true
+        name: {type: string}
+        description: {type: string, nullable: true}
+        description_html: {type: string, nullable: true}
+        entity_id: {type: string, nullable: true}
+        year: {type: integer}
+        month: {type: integer}
+        day: {type: integer}
+        start_hour: {type: integer, nullable: true}
+        start_minute: {type: integer, nullable: true}
+        end_year: {type: integer, nullable: true}
+        end_month: {type: integer, nullable: true}
+        end_day: {type: integer, nullable: true}
+        end_hour: {type: integer, nullable: true}
+        end_minute: {type: integer, nullable: true}
+        is_recurring: {type: boolean}
+        recurrence_type: {type: string, nullable: true}
+        recurrence_interval: {type: integer, nullable: true}
+        recurrence_end_year: {type: integer, nullable: true}
+        recurrence_end_month: {type: integer, nullable: true}
+        recurrence_end_day: {type: integer, nullable: true}
+        recurrence_max_occurrences: {type: integer, nullable: true}
         visibility:
           type: string
-          default: everyone
-        category:
-          type: string
-          nullable: true
+          enum: [everyone, gm-only]
+        visibility_rules: {type: string, nullable: true}
+        kind_id: {type: integer, nullable: true}
+        announced: {type: string, nullable: true}
+        tier: {type: string, nullable: true}
+        color: {type: string, nullable: true}
+        icon: {type: string, nullable: true}
+        all_day: {type: boolean}
 
     UpdateEventRequest:
       type: object
+      description: Partial update. An absent field is kept, an explicit null clears a nullable field, a value replaces it.
       properties:
-        name:
-          type: string
-        description:
-          type: string
-          nullable: true
-        description_html:
-          type: string
-          nullable: true
-        entity_id:
-          type: string
-          nullable: true
-        year:
-          type: integer
-        month:
-          type: integer
-        day:
-          type: integer
-        start_hour:
-          type: integer
-          nullable: true
-        start_minute:
-          type: integer
-          nullable: true
-        end_year:
-          type: integer
-          nullable: true
-        end_month:
-          type: integer
-          nullable: true
-        end_day:
-          type: integer
-          nullable: true
-        end_hour:
-          type: integer
-          nullable: true
-        end_minute:
-          type: integer
-          nullable: true
-        is_recurring:
-          type: boolean
-        recurrence_type:
-          type: string
-          nullable: true
+        name: {type: string}
+        description: {type: string, nullable: true}
+        description_html: {type: string, nullable: true}
+        entity_id: {type: string, nullable: true}
+        year: {type: integer}
+        month: {type: integer}
+        day: {type: integer}
+        start_hour: {type: integer, nullable: true}
+        start_minute: {type: integer, nullable: true}
+        end_year: {type: integer, nullable: true}
+        end_month: {type: integer, nullable: true}
+        end_day: {type: integer, nullable: true}
+        end_hour: {type: integer, nullable: true}
+        end_minute: {type: integer, nullable: true}
+        is_recurring: {type: boolean}
+        recurrence_type: {type: string, nullable: true}
+        recurrence_interval: {type: integer, nullable: true}
+        recurrence_end_year: {type: integer, nullable: true}
+        recurrence_end_month: {type: integer, nullable: true}
+        recurrence_end_day: {type: integer, nullable: true}
+        recurrence_max_occurrences: {type: integer, nullable: true}
         visibility:
           type: string
-        category:
-          type: string
-          nullable: true
-
-    UpdateCalendarSettingsRequest:
-      type: object
-      properties:
-        name:
-          type: string
-        description:
-          type: string
-          nullable: true
-        epoch_name:
-          type: string
-          nullable: true
-        current_year:
-          type: integer
-        current_month:
-          type: integer
-        current_day:
-          type: integer
-        current_hour:
-          type: integer
-        current_minute:
-          type: integer
-        hours_per_day:
-          type: integer
-        minutes_per_hour:
-          type: integer
-        seconds_per_minute:
-          type: integer
-        leap_year_every:
-          type: integer
-        leap_year_offset:
-          type: integer
+          enum: [everyone, gm-only]
+        visibility_rules: {type: string, nullable: true}
+        kind_id: {type: integer, nullable: true}
+        announced: {type: string, nullable: true}
+        tier: {type: string, nullable: true}
+        color: {type: string, nullable: true}
+        icon: {type: string, nullable: true}
+        all_day: {type: boolean}
 
     SetDateRequest:
       type: object
@@ -3350,67 +3431,6 @@ components:
         minute:
           type: integer
           default: 0
-
-    MonthInput:
-      type: object
-      required: [name, days]
-      properties:
-        name:
-          type: string
-        days:
-          type: integer
-        sort_order:
-          type: integer
-        is_intercalary:
-          type: boolean
-          default: false
-        leap_year_days:
-          type: integer
-          default: 0
-
-    WeekdayInput:
-      type: object
-      required: [name]
-      properties:
-        name:
-          type: string
-        sort_order:
-          type: integer
-
-    MoonInput:
-      type: object
-      required: [name, cycle_days]
-      properties:
-        name:
-          type: string
-        cycle_days:
-          type: number
-          format: double
-        phase_offset:
-          type: number
-          format: double
-          default: 0
-        color:
-          type: string
-
-    EraInput:
-      type: object
-      required: [name, start_year]
-      properties:
-        name:
-          type: string
-        start_year:
-          type: integer
-        end_year:
-          type: integer
-          nullable: true
-        description:
-          type: string
-          nullable: true
-        color:
-          type: string
-        sort_order:
-          type: integer
 
     # --- Media ---
     MediaFile:

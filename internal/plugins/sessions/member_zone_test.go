@@ -16,9 +16,28 @@ import (
 )
 
 // zoneUserDir answers users.timezone per user id; a user not in the map has none.
-type zoneUserDir struct{ byUser map[string]string }
+type zoneUserDir struct {
+	byUser map[string]string
+	// batchCalls and batchIDs record how the roster path reached the directory.
+	batchCalls int
+	batchIDs   []string
+	getCalls   int
+}
+
+func (d *zoneUserDir) GetTimezonesByIDs(_ context.Context, ids []string) (map[string]string, error) {
+	d.batchCalls++
+	d.batchIDs = append(d.batchIDs, ids...)
+	out := map[string]string{}
+	for _, id := range ids {
+		if tz, ok := d.byUser[id]; ok {
+			out[id] = tz
+		}
+	}
+	return out, nil
+}
 
 func (d *zoneUserDir) GetUser(_ context.Context, userID string) (*auth.User, error) {
+	d.getCalls++
 	u := &auth.User{ID: userID, DisplayName: "Player"}
 	if tz, ok := d.byUser[userID]; ok {
 		u.Timezone = &tz
@@ -140,5 +159,74 @@ func TestCampaignMemberZones_OneReadPerRoster(t *testing.T) {
 	if reads != 1 {
 		t.Errorf("the campaign's availability zones were read %d times for a 3-member roster; "+
 			"asking per member turns a roster render into an N+1 (WG-4)", reads)
+	}
+}
+
+// TestOverlayMembers_BatchesAccountZones pins the N+1 fix: however many members
+// lack an availability-page zone, the account zones are read in ONE batch call
+// that names only those members, never per member, and precedence holds
+// (availability zone, then a valid account zone, then unset).
+func TestOverlayMembers_BatchesAccountZones(t *testing.T) {
+	tests := []struct {
+		name        string
+		roster      []string
+		blocks      []AvailabilityBlock
+		account     map[string]string
+		wantTZ      map[string]string
+		wantBatch   int
+		wantBatched []string
+	}{
+		{
+			name:        "availability zone wins and is not batched",
+			roster:      []string{"a", "b"},
+			blocks:      []AvailabilityBlock{{UserID: "a", DayOfWeek: 1, StartMinute: 0, EndMinute: 60, State: AvailAvailable, TZ: "Europe/London"}},
+			account:     map[string]string{"a": "America/Denver", "b": "America/Denver"},
+			wantTZ:      map[string]string{"a": "Europe/London", "b": "America/Denver"},
+			wantBatch:   1,
+			wantBatched: []string{"b"},
+		},
+		{
+			name:        "many members without a zone, still one call",
+			roster:      []string{"a", "b", "c", "d"},
+			account:     map[string]string{"a": "UTC", "c": "Asia/Tokyo"},
+			wantTZ:      map[string]string{"a": "UTC", "b": "", "c": "Asia/Tokyo", "d": ""},
+			wantBatch:   1,
+			wantBatched: []string{"a", "b", "c", "d"},
+		},
+		{
+			name:        "invalid account zone is unset",
+			roster:      []string{"a"},
+			account:     map[string]string{"a": "Mars/Olympus_Mons"},
+			wantTZ:      map[string]string{"a": ""},
+			wantBatch:   1,
+			wantBatched: []string{"a"},
+		},
+		{
+			name:   "everyone has an availability zone, no batch call",
+			roster: []string{"a"},
+			blocks: []AvailabilityBlock{{UserID: "a", DayOfWeek: 1, StartMinute: 0, EndMinute: 60, State: AvailAvailable, TZ: "Europe/London"}},
+			wantTZ: map[string]string{"a": "Europe/London"},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			h := zoneHandler(tc.roster, tc.blocks, tc.account)
+			dir := h.userDir.(*zoneUserDir)
+			got := h.overlayMembers(context.Background(), "camp-1")
+			for _, m := range got {
+				if m.TZ != tc.wantTZ[m.UserID] {
+					t.Errorf("%s TZ = %q, want %q", m.UserID, m.TZ, tc.wantTZ[m.UserID])
+				}
+			}
+			if dir.batchCalls != tc.wantBatch {
+				t.Errorf("batch calls = %d, want %d", dir.batchCalls, tc.wantBatch)
+			}
+			if dir.getCalls != 0 {
+				t.Errorf("per-member GetUser calls = %d, want 0", dir.getCalls)
+			}
+			if len(dir.batchIDs) != len(tc.wantBatched) {
+				t.Errorf("batched ids = %v, want %v", dir.batchIDs, tc.wantBatched)
+			}
+		})
 	}
 }

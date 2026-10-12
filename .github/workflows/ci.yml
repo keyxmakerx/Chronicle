@@ -275,6 +275,8 @@ jobs:
           go test ./internal/plugins/auth/ -v -count=1 -run 'TestUserRepository_.*_Integration' 2>&1 | tee -a dbtests.log
           go test ./internal/plugins/quests/ -v -count=1 -run 'Integration' 2>&1 | tee -a dbtests.log
           go test ./internal/plugins/media/ ./internal/widgets/notes/ -v -count=1 -run 'TestDB_|TestADR058Integration_' 2>&1 | tee -a dbtests.log
+          go test ./internal/plugins/maps/... -v -count=1 -run 'Integration' 2>&1 | tee -a dbtests.log
+          go test ./internal/plugins/syncapi/ -v -count=1 -run 'Integration' 2>&1 | tee -a dbtests.log
           for want in TestDB_SessionRSVPTokenCannotBeSpentTwiceConcurrently \
                       TestDB_RemapMonthPositions \
                       TestDB_WorldDateCalendarScoping \
@@ -292,6 +294,7 @@ jobs:
                       TestVaultImport_DBImportsATreeGMOnly_Integration \
                       TestUserRepository_UpdateAvatarPath_Integration \
                       TestUserRepository_ClearAvatarPathIfMatches_Integration \
+                      TestUserRepository_GetTimezonesByIDs_Integration \
                       TestCalendarRepository_Integration \
                       TestEventRepository_Integration \
                       TestEventKindRepository_Integration \
@@ -305,6 +308,12 @@ jobs:
                       TestBoardRepositoryIntegration_Items \
                       TestBoardRepositoryIntegration_TypeHomes \
                       TestPageCards_Integration \
+                      TestListMarkers_DeniedUsersExcludesAnonymous_Integration \
+                      TestListDrawings_DeniedUsersExcludesAnonymous_Integration \
+                      TestPictureDrawings_RoundTripAndHiddenFromPlayers_Integration \
+                      TestHexFogRepository_Integration \
+                      TestHexMigration_Reapply_Integration \
+                      TestHexRepository_Integration \
                       TestDB_AppGrantRoundTrip \
                       TestDB_AttachmentSaves \
                       TestDB_ListVisibilityMatchesCanView \
@@ -321,6 +330,9 @@ jobs:
                       TestADR058Integration_CoDM_SeesWhatDMSees \
                       TestADR058Integration_Unreferenced_MembershipStillApplies \
                       TestADR058Integration_ReferenceLookupError_Denies \
+                      TestFindKeyByPrefixIntegration_DisabledOwner \
+                      TestSyncHistoryIntegration_ListFiltersAndSteps \
+                      TestCampaignSyncStatsIntegration_CountsKeysMappingsAndErrors \
                       TestDB_NotePictureAccess \
                       TestDB_NotePicturesStayOutOfListingsAndDedup \
                       TestDB_AdminListHidesNotePictureDetails \
@@ -348,6 +360,28 @@ jobs:
               exit 1
             }
           done
+
+  # --- Browser tests ---
+  e2e:
+    name: Browser tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: '20'
+
+      - name: Install Playwright and Chromium
+        # Global install matches the NODE_PATH lookup in `make test-e2e`; the
+        # version is pinned to the one the spec was written against.
+        run: |
+          npm install -g playwright@1.56.1
+          npx playwright install --with-deps chromium
+
+      - name: Browser tests
+        run: make test-e2e
 
   # --- Lint ---
   lint:

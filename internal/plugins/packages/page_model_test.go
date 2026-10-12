@@ -408,7 +408,7 @@ func TestBuildPackagesPage(t *testing.T) {
 		settings: &PackageSecuritySettings{RepoPolicy: RepoPolicyGitHubOnly},
 	}
 	q := parsePackagesQuery("", "", "", "ds", "")
-	data, err := buildPackagesPage(context.Background(), src, nil, q, "tok", time.Now())
+	data, err := buildPackagesPage(context.Background(), src, nil, nil, q, "tok", time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -439,7 +439,7 @@ func TestBuildPackagesPage(t *testing.T) {
 	}
 
 	q = parsePackagesQuery("settings", "", "", "gone", "")
-	data, err = buildPackagesPage(context.Background(), src, nil, q, "tok", time.Now())
+	data, err = buildPackagesPage(context.Background(), src, nil, nil, q, "tok", time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
