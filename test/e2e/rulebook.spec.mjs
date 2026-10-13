@@ -378,6 +378,35 @@ test('a book with a cover opens shut on it every visit, opens on Enter and shuts
   }, { cover: true, bold: true });
 });
 
+test('the inside of the cover carries the left-hand page and lands on it as the book opens', async () => {
+  await withBook(async (page) => {
+    await page.click('.rb-front-face');
+    // Mid-swing: the cover's inside holds a copy of the left page, with no
+    // ids of its own, while the real one waits hidden under it.
+    const mid = await page.evaluate(() => {
+      const back = document.querySelector('.rb-front-back'), copy = back.querySelector('.rb-page');
+      return {
+        copy: !!copy && copy.textContent === document.querySelector('.rb-book > .rb-page.l').textContent,
+        ids: back.querySelectorAll('[id]').length, inert: copy && copy.hasAttribute('inert'),
+        left: getComputedStyle(document.querySelector('.rb-book > .rb-page.l')).visibility,
+        right: getComputedStyle(document.querySelector('.rb-book > .rb-page.r')).visibility,
+      };
+    });
+    assert.deepEqual(mid, { copy: true, ids: 0, inert: true, left: 'hidden', right: 'visible' });
+    await page.waitForFunction(() => document.querySelector('.rb-front').hidden);
+    assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('.rb-book > .rb-page.l')).visibility), 'visible');
+    // Open, the cover is the right-hand page's size, so its inside lies exactly on the left one.
+    const fit = await page.evaluate(() => {
+      const front = document.querySelector('.rb-front');
+      front.hidden = false;
+      front.querySelectorAll('*').forEach((n) => { n.style.transition = 'none'; });
+      const f = document.querySelector('.rb-front-book').getBoundingClientRect(), r = document.querySelector('.rb-book > .rb-page.r').getBoundingClientRect();
+      return [f.left, f.top, f.width, f.height].map((v, i) => Math.abs(v - [r.left, r.top, r.width, r.height][i]) < 1.5);
+    });
+    assert.deepEqual(fit, [true, true, true, true]);
+  }, { cover: true, bold: true });
+});
+
 test('the shut cover keeps its shape in any window, so its art is never cropped', async () => {
   for (const viewport of [{ width: 1280, height: 720 }, { width: 1300, height: 1400 }, { width: 2560, height: 1440 }, { width: 412, height: 915 }]) {
     await withBook(async (page) => {
