@@ -35,6 +35,7 @@ glossary: rules-glossary.json
 theme:
   accent: "#a78bfa"
   heading-font: "Inter, system-ui, sans-serif"
+  ui-font: "Barlow Semi Condensed, system-ui, sans-serif"
 terms:
   Edge: A bonus on a roll.
 parts:
@@ -112,6 +113,9 @@ func TestLoadBook_Valid(t *testing.T) {
 	}
 	if b.Theme["accent"] != "#a78bfa" {
 		t.Errorf("theme accent = %q", b.Theme["accent"])
+	}
+	if b.Theme["ui-font"] != "Barlow Semi Condensed, system-ui, sans-serif" {
+		t.Errorf("theme ui-font = %q", b.Theme["ui-font"])
 	}
 	if got := b.Terms["bleeding"].Text; got != "Lose Stamina each turn." {
 		t.Errorf("glossary markup not flattened: %q", got)

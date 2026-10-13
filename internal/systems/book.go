@@ -50,6 +50,7 @@ var bookThemeKeys = map[string]*regexp.Regexp{
 	"cover":        bookColorPattern,
 	"heading-font": bookFontPattern,
 	"body-font":    bookFontPattern,
+	"ui-font":      bookFontPattern,
 }
 
 var (

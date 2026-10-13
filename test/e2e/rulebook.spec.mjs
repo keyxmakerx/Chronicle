@@ -307,14 +307,18 @@ const frontState = (page) => page.evaluate(() => {
     closed: rb.classList.contains('rb-closed'), shown: !!f && !f.hidden, open: !!f && f.classList.contains('open'),
     pageVisible: getComputedStyle(document.querySelector('.rb-book .rb-page.r')).visibility,
     focusOnFace: document.activeElement === document.querySelector('.rb-front-face'),
-    seen: sessionStorage.getItem('chronicle.rulebook.cover.camp-1'),
+    turn: [...document.querySelectorAll('.rb-turnbar button')].map((b) => b.textContent + (b.disabled ? ':off' : '')).join('|'),
+    where: (document.querySelector('.rb-turn-where') || {}).textContent,
   };
 });
 
-test('a book with a cover shows it closed on the first visit, opens on Enter and shuts again', async () => {
+test('a book with a cover opens shut on it every visit, opens on Enter and shuts again from the turn bar', async () => {
   await withBook(async (page) => {
     let st = await frontState(page);
-    assert.deepEqual([st.closed, st.shown, st.open, st.pageVisible, st.focusOnFace, st.seen], [true, true, false, 'hidden', false, null]);
+    assert.deepEqual([st.closed, st.shown, st.open, st.pageVisible, st.focusOnFace], [true, true, false, 'hidden', false]);
+    // The bold look turns pages from a bar under the book; shut, only Next works.
+    assert.deepEqual([st.turn, st.where], ['\u2039 Back:off|Close the book:off|Next \u203A', 'The cover']);
+    assert.equal(await page.evaluate(() => !!document.querySelector('.rb-bar [data-act="shut"]')), false);
     const face = await page.$eval('.rb-front-face', (b) => ({ label: b.getAttribute('aria-label'), alt: b.querySelector('img').alt, src: b.querySelector('img').getAttribute('src') }));
     assert.deepEqual(face, { label: 'Open the Handbook', alt: 'Handbook: the cover', src: '/campaigns/camp-1/systems/demo/book/files/cover.svg' });
     assert.equal(await page.evaluate(() => document.querySelector('.rb-front-face img').naturalWidth > 0), true);
@@ -334,23 +338,25 @@ test('a book with a cover shows it closed on the first visit, opens on Enter and
     await page.keyboard.press('Enter');
     await page.waitForFunction(() => document.querySelector('.rb-front').hidden);
     st = await frontState(page);
-    assert.deepEqual([st.closed, st.shown, st.pageVisible, st.seen], [false, false, 'visible', '1']);
+    assert.deepEqual([st.closed, st.shown, st.pageVisible], [false, false, 'visible']);
+    assert.equal(st.turn, '\u2039 Back:off|Close the book|Next \u203A');
+    assert.equal(st.where, 'Basics \u00B7 Start here');
     assert.equal(await page.evaluate(() => document.activeElement.closest('.rb-scroll') !== null), true);
 
-    await page.click('[data-act="shut"]');
+    await page.click('.rb-turnbar [data-act="shut"]');
     await page.waitForFunction(() => document.querySelector('.rb').classList.contains('rb-closed'));
     st = await frontState(page);
-    assert.deepEqual([st.shown, st.open, st.focusOnFace], [true, false, true]);
-    await page.click('.rb-front-face');
+    assert.deepEqual([st.shown, st.open, st.focusOnFace, st.where], [true, false, true, 'The cover']);
+    // Next opens a shut book.
+    await page.click('.rb-turnbar [data-act="next"]');
     await page.waitForFunction(() => document.querySelector('.rb-front').hidden);
     assert.equal((await frontState(page)).closed, false);
 
-    // The same visit does not show it again.
+    // Coming back to the page finds the book shut again.
     await page.reload();
     await page.waitForSelector('.rb-book');
     st = await frontState(page);
-    assert.deepEqual([st.closed, st.shown], [false, false]);
-    assert.equal(await page.evaluate(() => !!document.querySelector('[data-act="shut"]')), true);
+    assert.deepEqual([st.closed, st.shown], [true, true]);
   }, { cover: true, bold: true });
 });
 
@@ -409,6 +415,29 @@ test('look: bold draws dark banners, heavy headings and coloured tiers, whatever
   }, { bold: true, standard: true });
 });
 
+// Draw Steel's front page before 2.3.1 put these rules in a global
+// stylesheet; once it had rendered they crushed the reader's tiers and hid
+// its flaps.
+const OLD_WIDGET_CSS = '.rb-tiers{display:flex;gap:8px;margin-top:12px}' +
+  '.rb-flap{position:absolute;top:calc(100% - 3px);left:6px;right:6px;z-index:35;padding:12px 14px;opacity:0;visibility:hidden;pointer-events:none}' +
+  '.rb-grid{display:grid;grid-template-columns:1.55fr 1fr;grid-template-areas:"hero chars" "conds lair";gap:14px}' +
+  '.rb-brand .rb-mark{width:32px;height:32px;background:linear-gradient(135deg,#7c3aed,#6d28d9)}';
+
+test('an older package widget\'s stylesheet cannot restyle the reader\'s tiers', async () => {
+  await withBook(async (page) => {
+    await page.click('[data-act="next"]');
+    await page.waitForFunction(() => !document.querySelector('.rb-leaf'));
+    const probe = () => page.evaluate(() => {
+      const tiers = document.querySelector('.rb-page .rb-tiers'), mark = document.querySelector('.rb-mark') || tiers;
+      return { display: getComputedStyle(tiers).display, margin: getComputedStyle(tiers).marginTop, widths: [...tiers.children].map((t) => Math.round(t.getBoundingClientRect().width)), mark: getComputedStyle(mark).width };
+    });
+    const before = await probe();
+    await page.addStyleTag({ content: OLD_WIDGET_CSS });
+    assert.deepEqual(await probe(), before);
+    assert.equal(before.display, 'grid');
+  }, { bold: true });
+});
+
 // The words on the open page, in the tab row, and over the book's top edge.
 const wordsUnderRibbon = (page) => page.evaluate(() => {
   const bm = document.querySelector('.rb-bm-roll').getBoundingClientRect();
@@ -419,8 +448,11 @@ const wordsUnderRibbon = (page) => page.evaluate(() => {
       if (!n.nodeValue.trim() || n.parentElement.closest('.rb-bm, [hidden]') || getComputedStyle(n.parentElement).visibility === 'hidden') continue;
       const r = document.createRange();
       r.selectNodeContents(n);
-      for (const q of r.getClientRects()) {
-        if (q.width && q.height && q.left < bm.right && q.right > bm.left && q.top < bm.bottom && q.bottom > bm.top) hits.push(n.nodeValue.trim().slice(0, 30));
+      // Text cut short with an ellipsis is drawn only inside its box.
+      const box = getComputedStyle(n.parentElement).overflow === 'hidden' ? n.parentElement.getBoundingClientRect() : null;
+      for (const q0 of r.getClientRects()) {
+        const q = box ? { left: Math.max(q0.left, box.left), right: Math.min(q0.right, box.right), top: q0.top, bottom: q0.bottom } : q0;
+        if (q.right > q.left && q.bottom > q.top && q.left < bm.right && q.right > bm.left && q.top < bm.bottom && q.bottom > bm.top) hits.push(n.nodeValue.trim().slice(0, 30));
       }
     }
   }

@@ -33,14 +33,13 @@
   var FRONT_MS = 1300;
   var BM_MS = 560;
   var LOOKS = { 'paper': 1, 'bold': 1 };
-  var FRONT_KEY = 'chronicle.rulebook.cover.';
   // Cover and font addresses are same-origin paths the server wrote; anything
   // else (another host, a scheme, a path climbing out) is not used.
   var ASSET_RE = /^\/(?!\/)[A-Za-z0-9._~\/%-]{1,300}$/;
   var MAX_FONTS = 8;
 
   var THEME_COLOURS = { 'paper': 1, 'paper-alt': 1, 'ink': 1, 'ink-soft': 1, 'muted': 1, 'edge': 1, 'accent': 1, 'cover': 1 };
-  var THEME_FONTS = { 'heading-font': 1, 'body-font': 1 };
+  var THEME_FONTS = { 'heading-font': 1, 'body-font': 1, 'ui-font': 1 };
   var COLOUR_RE = /^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
   var FONT_RE = /^[A-Za-z0-9 ,'"._-]{1,200}$/;
   var SLUG_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
@@ -58,6 +57,12 @@
   function arr(v) { return Array.isArray(v) ? v : []; }
   function isObj(v) { return !!v && typeof v === 'object' && !Array.isArray(v); }
   function has(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
+
+  function roman(n) {
+    var out = '', vals = [[1000, 'M'], [900, 'CM'], [500, 'D'], [400, 'CD'], [100, 'C'], [90, 'XC'], [50, 'L'], [40, 'XL'], [10, 'X'], [9, 'IX'], [5, 'V'], [4, 'IV'], [1, 'I']];
+    vals.forEach(function (v) { while (n >= v[0]) { out += v[1]; n -= v[0]; } });
+    return out;
+  }
   function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
   function media(q) { try { return window.matchMedia(q).matches; } catch (e) { return false; } }
   function reduced() { return media('(prefers-reduced-motion: reduce)'); }
@@ -383,6 +388,7 @@
     this.tocBtn = q('[data-act="toc"]');
     this.curlPrev = q('.rb-curl.l');
     this.curlNext = q('.rb-curl.r');
+    this.turnEl = q('.rb-turnbar');
     this.searchEl = q('[data-search]');
     this.resultsEl = q('.rb-results');
 
@@ -397,12 +403,13 @@
     this.bmList = q('.rb-bm-list');
     var key = this.openingKey(place);
     this.rebuild(key);
-    // The cover shows once per visit, and never over a link that names a
-    // chapter: that reader asked for a page, not the front of the book.
-    if (this.frontEl && !this.deepLink && !frontSeen(this.campaignId)) {
+    // The book opens shut on its cover, as a book on the table does, but
+    // never over a link that names a chapter: that reader asked for a page.
+    if (this.frontEl && !this.deepLink) {
       this.frontShut = true;
       this.el.classList.add('rb-closed');
       this.frontEl.hidden = false;
+      this.syncTurnbar();
     } else if (this.screenAtStart) {
       this.openScreen();
     }
@@ -410,7 +417,7 @@
 
   // --- The book's own fonts and cover -------------------------------------
   // Faces are registered with the FontFace API, which is @font-face without
-  // building CSS from package text. The theme's heading-font and body-font
+  // building CSS from package text. The theme's heading-font, body-font and ui-font
   // name the family to use; until a face loads the next font in that list
   // shows.
 
@@ -432,14 +439,6 @@
     this.faces = [];
   };
 
-  function frontSeen(campaignId) {
-    try { return window.sessionStorage.getItem(FRONT_KEY + campaignId) === '1'; } catch (e) { return false; }
-  }
-
-  function markFrontSeen(campaignId) {
-    try { window.sessionStorage.setItem(FRONT_KEY + campaignId, '1'); } catch (e) { /* the cover shows again next time */ }
-  }
-
   // The cover is a picture of the closed book laid over the pages. It
   // belongs to the reader, not the page: the bar stays, the pages under it
   // are hidden from sight and from the keyboard until it opens.
@@ -460,8 +459,8 @@
     // focus ring on a page the reader did not ask to focus.
     var keyboard = !!document.activeElement && document.activeElement.matches && document.activeElement.matches(':focus-visible');
     this.frontShut = false;
-    markFrontSeen(this.campaignId);
     this.el.classList.remove('rb-closed');
+    this.syncTurnbar();
     this.frontEl.classList.add('open');
     clearTimeout(this.frontTimer);
     this.frontTimer = setTimeout(function () {
@@ -482,6 +481,7 @@
     this.hideCard();
     this.closeResults();
     this.frontShut = true;
+    this.syncTurnbar();
     this.frontEl.hidden = false;
     this.frontEl.classList.add('open');
     void this.frontEl.offsetWidth; // let the open state paint so the swing back is animated
@@ -575,7 +575,7 @@
   };
 
   Rulebook.prototype.frameHTML = function () {
-    var d = this.data, seg = '';
+    var d = this.data, seg = '', turnbar = d.look === 'bold' && !this.inline;
     if (d.isDirector) {
       seg = '<div class="rb-seg" role="group" aria-label="Book view">' +
         '<button type="button" data-act="view" data-view="player" aria-pressed="false">Player view</button>' +
@@ -600,7 +600,7 @@
       '<input type="search" class="rb-search-in" data-search placeholder="Search the book" aria-label="Search the book" autocomplete="off" spellcheck="false"' +
       ' aria-controls="' + this.domId('results') + '" aria-expanded="false"><kbd aria-hidden="true">/</kbd>' +
       '<div class="rb-results" id="' + this.domId('results') + '" role="region" aria-label="Search results" hidden></div></div>') +
-      own + edit + seg + (d.cover && !this.inline ? '<button type="button" class="rb-btn rb-shut" data-act="shut">Close the book</button>' : '') +
+      own + edit + seg + (d.cover && !this.inline && !turnbar ? '<button type="button" class="rb-btn rb-shut" data-act="shut">Close the book</button>' : '') +
       this.ribbonHTML() + '</div>' + this.tabsHTML() + this.bmHTML() +
       '<div class="rb-book">' +
       '<article class="rb-page l"></article><div class="rb-spine" aria-hidden="true"></div><article class="rb-page r"></article>' +
@@ -609,7 +609,34 @@
       '<div class="rb-scrim"></div><aside class="rb-drawer" aria-label="Contents"></aside>' +
       (this.screenChapter() ? '<div class="rb-sscrim" data-act="screen"></div><section class="rb-screen" id="' + this.domId('screen') + '" aria-label="' +
         esc(this.screenChapter().title) + '" hidden></section>' : '') + this.frontHTML() + '</div>' +
+      (turnbar ? this.turnbarHTML() : '') +
       '<div class="rb-sr" aria-live="polite"></div>';
+  };
+
+  // The bold look turns its pages from a bar under the book, as a printed
+  // handbook's reader would expect: back, where the reader is, close the
+  // book, next. While the book is shut, Next opens it.
+  Rulebook.prototype.turnbarHTML = function () {
+    return '<div class="rb-turnbar"><button type="button" class="rb-pill" data-act="prev">\u2039 Back</button>' +
+      '<span class="rb-turn-where" aria-hidden="true"></span><span class="rb-turn-ctl">' +
+      (this.data.cover ? '<button type="button" class="rb-pill" data-act="shut">Close the book</button>' : '') +
+      '<button type="button" class="rb-pill" data-act="next">Next \u203A</button></span></div>';
+  };
+
+  Rulebook.prototype.syncTurnbar = function () {
+    if (!this.turnEl) return;
+    var q = this.turnEl.querySelector.bind(this.turnEl), shut = this.frontShut;
+    var sp = this.spreads[this.at], last = this.spreads.length - 1, where = '';
+    if (shut) where = 'The cover';
+    else if (sp) {
+      where = sp.items.map(function (it) { return it.kind === 'page' && it.p.title ? it.p.title : it.ch.title; })
+        .filter(function (t, i, all) { return all.indexOf(t) === i; }).join(' \u00B7 ');
+    }
+    q('.rb-turn-where').textContent = where;
+    q('[data-act="prev"]').disabled = shut || this.at <= 0;
+    q('[data-act="next"]').disabled = !shut && this.at >= last;
+    var close = q('[data-act="shut"]');
+    if (close) close.disabled = shut;
   };
 
   // --- The screen ------------------------------------------------------------
@@ -878,6 +905,7 @@
       label = '<b>' + esc(first.ch.title) + '</b>' + (first.kind === 'page' && first.p.title ? ' · ' + esc(first.p.title) : '');
     }
     this.whereEl.innerHTML = label;
+    this.syncTurnbar();
     this.syncTabs();
     if (first) {
       this.srEl.textContent = 'Page ' + (first.n + 1) + (it !== first ? ' and ' + (it.n + 1) : '') + ' of ' + this.items.length + ': ' +
@@ -1491,7 +1519,7 @@
     var sp = this.spreads[this.at], cur = {}, curCh = sp ? sp.items[0].ch : null;
     if (sp) sp.items.forEach(function (it) { cur[it.n] = true; });
     this.items.forEach(function (it) { parts[it.part.title] = true; });
-    var grouped = Object.keys(parts).length > 1;
+    var grouped = Object.keys(parts).length > 1, bold = this.data.look === 'bold';
     this.items.forEach(function (it) {
       if (it.kind === 'open' || it.solo) {
         if (open) h += '</li>';
@@ -1500,7 +1528,7 @@
           h += '<li class="rb-bm-part">' + esc(it.part.title) + '</li>';
         }
         num++;
-        h += '<li><button type="button" data-bm="' + it.n + '"' + (it.ch === curCh ? ' aria-current="true"' : '') + '><i>' + num + '</i><span>' +
+        h += '<li><button type="button" data-bm="' + it.n + '"' + (it.ch === curCh ? ' aria-current="true"' : '') + '><i>' + (bold ? roman(num) : num) + '</i><span>' +
           esc(it.ch.title) + '</span>' + (it.ch.director && !it.part.director ? '<em>Director</em>' : '') + '</button>';
         open = true;
         if (it.kind === 'open' && it.pages.length > 1) {
@@ -1532,7 +1560,7 @@
       // The ribbon is as long as its list, but never longer than 80% of the
       // window or the room left below it in the book; the list scrolls.
       var want = tab.offsetHeight + list.scrollHeight;
-      var room = this.el.getBoundingClientRect().bottom - roll.getBoundingClientRect().top - 12;
+      var room = (this.bookEl || this.el).getBoundingClientRect().bottom - roll.getBoundingClientRect().top - 12;
       var cap = Math.max(tab.offsetHeight + 40, Math.min(window.innerHeight * 0.8, room));
       roll.style.height = Math.min(want, Math.round(cap)) + 'px';
       roll.style.overflowY = want > cap ? 'auto' : 'hidden';
@@ -1749,7 +1777,7 @@
     if ((x = t.closest('[data-act]'))) {
       switch (x.getAttribute('data-act')) {
         case 'prev': this.turnTo(this.at - 1); break;
-        case 'next': this.turnTo(this.at + 1); break;
+        case 'next': if (this.frontShut) this.openFront(); else this.turnTo(this.at + 1); break;
         case 'edit': window.location.assign(x.getAttribute('data-href')); break;
         case 'toc': if (this.drawerOpen()) this.closeDrawer(true); else this.openDrawer(); break;
         case 'screen': if (this.screenOpen()) this.closeScreen(true); else this.openScreen(); break;
