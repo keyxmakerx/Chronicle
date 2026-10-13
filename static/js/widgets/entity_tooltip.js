@@ -50,7 +50,10 @@
       kindIcon: data.type_icon ? String(data.type_icon).replace(/^fa-solid\s+/, '') : '',
       title: data.name,
       locked: !!data.is_private,
-      pic: data.image_path || '',
+      // A page with both pictures shows its art with its token on the
+      // corner; with only one, that one is the picture.
+      pic: data.image_path || data.token_path || '',
+      badge: data.image_path && data.token_path ? data.token_path : '',
       facts: (data.attributes || []).map(function (a) { return [a.label, a.value]; }),
       text: data.entry_excerpt || '',
       link: href && href !== '#' ? { href: href, label: 'Open page' } : null,

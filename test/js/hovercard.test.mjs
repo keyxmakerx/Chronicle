@@ -64,3 +64,18 @@ test('a card with no link or foot has no footer', () => {
   assert.ok(!h.includes('chc__foot'), h);
   assert.ok(h.includes('chc__title'), h);
 });
+
+test('a badge sits on the picture only when there is a picture, escaped', () => {
+  const hc = load();
+  const both = hc.html({ title: 'Goblin', pic: '/media/a', badge: '/media/t' });
+  assert.match(both, /<span class="chc__picw"><span class="chc__frame"><img class="chc__pic" src="\/media\/a" alt=""><\/span><img class="chc__badge" src="\/media\/t" alt=""><\/span>/);
+  assert.ok(!hc.html({ title: 'Goblin', pic: '/media/a' }).includes('chc__picw'), 'a lone picture keeps its plain markup');
+  assert.ok(!hc.html({ title: 'Goblin', badge: '/media/t' }).includes('chc__badge'), 'no badge without a picture');
+  assert.ok(!hc.html({ title: 'G', pic: '/a', badge: '/t" onerror="alert(1)' }).includes('" onerror'));
+});
+
+test('the badge motion is off for reduced motion and Chronicle\'s Calm and Off', () => {
+  const css = readFileSync(path.join(here, '..', '..', 'static', 'css', 'paper.css'), 'utf8');
+  assert.match(css, /prefers-reduced-motion: reduce\) \{\s*\.chc--show \.chc__frame \.chc__pic, \.chc--show \.chc__badge \{ animation: none; \}/);
+  assert.match(css, /html:is\(\[data-motion="calm"\], \[data-motion="off"\], \[data-view-motion="calm"\], \[data-cz-reduce\]\) \.chc--show :is\(\.chc__frame \.chc__pic, \.chc__badge\) \{ animation: none; \}/);
+});

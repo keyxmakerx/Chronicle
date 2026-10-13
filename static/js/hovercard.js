@@ -13,8 +13,9 @@
  *   Chronicle.hovercard.html(content) -> markup, for previews (Customize).
  *   Chronicle.hovercard.look() -> the campaign's look.
  *
- * Content: { kind, kindIcon, title, locked, pic, facts:[[label,value]],
- * text, extraHTML, foot, link:{href,label} }. Everything but extraHTML is
+ * Content: { kind, kindIcon, title, locked, pic, badge, facts:[[label,value]],
+ * text, extraHTML, foot, link:{href,label} }. badge is a second, round picture
+ * on the corner of pic (a creature's token beside its art). Everything but extraHTML is
  * escaped here; extraHTML must already be escaped by its caller.
  *
  * Behaviour (the UI standard's hover rules): opens after the pointer rests
@@ -69,7 +70,11 @@
     }
     var h = '<button type="button" class="chc__x" aria-label="Close">&times;</button>';
     if (c.kind) h += '<span class="chc__kind">' + (c.kindIcon ? '<i class="fa-solid ' + esc(c.kindIcon) + '" aria-hidden="true"></i>' : '') + esc(c.kind) + '</span>';
-    if (c.pic) h += '<div class="chc__top"><img class="chc__pic" src="' + esc(c.pic) + '" alt=""><div>' + title + facts + '</div></div>';
+    var pic = '<img class="chc__pic" src="' + esc(c.pic) + '" alt="">';
+    // A badge gets a frame for the art so the art can settle inside it while
+    // the badge sits over the frame's corner.
+    if (c.pic && c.badge) pic = '<span class="chc__picw"><span class="chc__frame">' + pic + '</span><img class="chc__badge" src="' + esc(c.badge) + '" alt=""></span>';
+    if (c.pic) h += '<div class="chc__top">' + pic + '<div>' + title + facts + '</div></div>';
     else h += title + facts;
     if (c.extraHTML) h += '<div class="chc__extra">' + c.extraHTML + '</div>';
     if (c.text) h += '<p class="chc__text">' + esc(c.text) + '</p>';
