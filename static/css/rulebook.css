@@ -459,10 +459,12 @@
 .rb.rb-closed .rb-tabs:where(:not(.rb-wslot *)),
 .rb.rb-closed .rb-bm-anchor:where(:not(.rb-wslot *)),
 .rb.rb-closed .rb-book > :not(.rb-front):where(:not(.rb-wslot *)) { visibility: hidden; }
-.rb-front:where(:not(.rb-wslot *)) { position: absolute; inset: 0; z-index: 50; perspective: 2200px; overflow: clip; }
+.rb-front:where(:not(.rb-wslot *)) { position: absolute; inset: 0; z-index: 50; perspective: 2200px; overflow: clip; container-type: size; }
 .rb-front-desk:where(:not(.rb-wslot *)) { position: absolute; inset: 0; background: var(--rb-bg); transition: opacity 900ms ease 350ms; }
 .rb-front.open .rb-front-desk:where(:not(.rb-wslot *)) { opacity: 0; }
-.rb-front-book:where(:not(.rb-wslot *)) { position: absolute; top: 14px; left: 50%; height: calc(100% - 28px); aspect-ratio: 400 / 516; max-width: 50%; transform: translateX(-50%); transform-style: preserve-3d; transition: transform 1100ms cubic-bezier(0.55, 0.05, 0.25, 1); }
+/* The shut cover keeps its own shape, as tall as fits but never wider than
+   the right-hand page it opens onto; any other shape crops the art. */
+.rb-front-book:where(:not(.rb-wslot *)) { --rb-cover-h: min(100cqh - 28px, 50cqw * 516 / 400); position: absolute; top: calc((100cqh - var(--rb-cover-h)) / 2); left: 50%; height: var(--rb-cover-h); aspect-ratio: 400 / 516; transform: translateX(-50%); transform-style: preserve-3d; transition: transform 1100ms cubic-bezier(0.55, 0.05, 0.25, 1); }
 .rb-front.open .rb-front-book:where(:not(.rb-wslot *)) { transform: none; }
 .rb-front-board:where(:not(.rb-wslot *)) { position: absolute; inset: 0; transform-origin: 0 50%; transform-style: preserve-3d; transition: transform 1300ms cubic-bezier(0.55, 0.05, 0.25, 1); }
 .rb-front.open .rb-front-board:where(:not(.rb-wslot *)) { transform: rotateY(-178deg); }
@@ -475,7 +477,6 @@
 /* On one page the cover is as large as fits, whole: cropping it would cut
    the title off. */
 @media (max-width: 900px) {
-  .rb-front:where(:not(.rb-wslot *)) { container-type: size; }
   .rb-front-book:where(:not(.rb-wslot *)), .rb-front.open .rb-front-book:where(:not(.rb-wslot *)) { top: 50%; left: 50%; width: min(100cqw, 100cqh * 400 / 516); height: min(100cqh, 100cqw * 516 / 400); max-width: none; aspect-ratio: auto; transform: translate(-50%, -50%); }
 }
 @media (prefers-reduced-motion: reduce) {
