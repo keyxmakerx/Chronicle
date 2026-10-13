@@ -378,6 +378,16 @@ test('a book with a cover opens shut on it every visit, opens on Enter and shuts
   }, { cover: true, bold: true });
 });
 
+test('the shut cover keeps its shape in any window, so its art is never cropped', async () => {
+  for (const viewport of [{ width: 1280, height: 720 }, { width: 1300, height: 1400 }, { width: 2560, height: 1440 }, { width: 412, height: 915 }]) {
+    await withBook(async (page) => {
+      const r = await page.$eval('.rb-front-face', (f) => { const b = f.getBoundingClientRect(), d = f.closest('.rb-front').getBoundingClientRect(); return { ratio: b.width / b.height, inside: b.top >= d.top && b.bottom <= d.bottom && b.left >= d.left && b.right <= d.right }; });
+      assert.ok(Math.abs(r.ratio - 400 / 516) < 0.01, `${viewport.width}x${viewport.height}: ${r.ratio}`);
+      assert.ok(r.inside, `${viewport.width}x${viewport.height}: the cover fits its desk`);
+    }, { cover: true, bold: true, viewport });
+  }
+});
+
 test('a link naming a chapter skips the cover, and a book without one has none', async () => {
   await withBook(async (page) => {
     const st = await frontState(page);
