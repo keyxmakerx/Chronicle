@@ -460,12 +460,14 @@
 .rb.rb-closed .rb-bm-anchor:where(:not(.rb-wslot *)),
 .rb.rb-closed .rb-book > :not(.rb-front):where(:not(.rb-wslot *)) { visibility: hidden; }
 .rb-front:where(:not(.rb-wslot *)) { position: absolute; inset: 0; z-index: 50; perspective: 2200px; overflow: clip; container-type: size; }
-.rb-front-desk:where(:not(.rb-wslot *)) { position: absolute; inset: 0; background: var(--rb-bg); transition: opacity 900ms ease 350ms; }
+.rb-front-desk:where(:not(.rb-wslot *)) { position: absolute; inset: 0; background: var(--rb-bg); transition: opacity 600ms ease 150ms; }
 .rb-front.open .rb-front-desk:where(:not(.rb-wslot *)) { opacity: 0; }
 /* The shut cover keeps its own shape, as tall as fits but never wider than
-   the right-hand page it opens onto; any other shape crops the art. */
-.rb-front-book:where(:not(.rb-wslot *)) { --rb-cover-h: min(100cqh - 28px, 50cqw * 516 / 400); position: absolute; top: calc((100cqh - var(--rb-cover-h)) / 2); left: 50%; height: var(--rb-cover-h); aspect-ratio: 400 / 516; transform: translateX(-50%); transform-style: preserve-3d; transition: transform 1100ms cubic-bezier(0.55, 0.05, 0.25, 1); }
-.rb-front.open .rb-front-book:where(:not(.rb-wslot *)) { transform: none; }
+   the right-hand page it opens onto; any other shape crops the art. As it
+   opens it grows to that page's size, so its inside lands exactly on the
+   left-hand page. */
+.rb-front-book:where(:not(.rb-wslot *)) { --rb-cover-h: min(100cqh - 28px, 50cqw * 516 / 400); position: absolute; top: calc((100cqh - var(--rb-cover-h)) / 2); left: 50%; height: var(--rb-cover-h); width: calc(var(--rb-cover-h) * 400 / 516); transform: translateX(-50%); transform-style: preserve-3d; transition: transform 1100ms cubic-bezier(0.55, 0.05, 0.25, 1), top 1100ms cubic-bezier(0.55, 0.05, 0.25, 1), height 1100ms cubic-bezier(0.55, 0.05, 0.25, 1), width 1100ms cubic-bezier(0.55, 0.05, 0.25, 1); }
+.rb-front.open .rb-front-book:where(:not(.rb-wslot *)) { top: 0; height: 100cqh; width: 50cqw; transform: none; }
 .rb-front-board:where(:not(.rb-wslot *)) { position: absolute; inset: 0; transform-origin: 0 50%; transform-style: preserve-3d; transition: transform 1300ms cubic-bezier(0.55, 0.05, 0.25, 1); }
 .rb-front.open .rb-front-board:where(:not(.rb-wslot *)) { transform: rotateY(-178deg); }
 .rb-front-face:where(:not(.rb-wslot *)), .rb-front-back:where(:not(.rb-wslot *)) { position: absolute; inset: 0; backface-visibility: hidden; overflow: hidden; }
@@ -474,6 +476,13 @@
 .rb-front-face:focus-visible:where(:not(.rb-wslot *)) { outline: 3px solid var(--rb-gold); outline-offset: -6px; }
 .rb-front-hint:where(:not(.rb-wslot *)) { position: absolute; top: 5%; right: 6%; padding: 7px 9px; border-radius: 2px; background: var(--rb-gold); color: #0d0a12; font: 700 11px/1 var(--rb-ui); letter-spacing: 0.16em; text-transform: uppercase; }
 .rb-front-back:where(:not(.rb-wslot *)) { transform: rotateY(180deg); border-radius: 6px 0 0 6px; background: var(--rb-paper); box-shadow: inset -28px 0 30px -26px rgba(0, 0, 0, 0.4); }
+.rb-front-back > .rb-page:where(:not(.rb-wslot *)) { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+.rb-front-back > .rb-front-half:where(:not(.rb-wslot *)) { width: 200%; }
+/* While the cover carries the left-hand page, the real one stays hidden. */
+@media (min-width: 901px) {
+  .rb.rb-unveil .rb-book > .rb-page.l:not(.wide):where(:not(.rb-wslot *)) { visibility: hidden; }
+  .rb.rb-unveil .rb-book > .rb-page.wide:where(:not(.rb-wslot *)) { clip-path: inset(0 0 0 50%); }
+}
 /* On one page the cover is as large as fits, whole: cropping it would cut
    the title off. */
 @media (max-width: 900px) {

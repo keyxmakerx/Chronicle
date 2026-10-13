@@ -373,7 +373,7 @@
     this.unloadFonts();
     this.loadFonts();
     this.frontShut = false;
-    this.el.classList.remove('rb-closed');
+    this.el.classList.remove('rb-closed', 'rb-unveil');
     clearTimeout(this.frontTimer);
     this.el.innerHTML = this.frameHTML();
     this.el.setAttribute('aria-busy', 'false');
@@ -461,15 +461,35 @@
     this.frontShut = false;
     this.el.classList.remove('rb-closed');
     this.syncTurnbar();
+    this.fillFrontBack();
     this.frontEl.classList.add('open');
     clearTimeout(this.frontTimer);
     this.frontTimer = setTimeout(function () {
       if (self.dead) return;
       self.frontEl.hidden = true;
+      self.el.classList.remove('rb-unveil');
       if (self.screenAtStart) { self.screenAtStart = false; self.openScreen(); return; }
       var page = self.pr && self.pr.querySelector('.rb-scroll');
       if (keyboard && page) page.focus({ preventScroll: true });
     }, reduced() ? 0 : FRONT_MS);
+  };
+
+  // The inside of the cover carries the left-hand page while it swings, so
+  // it lands on that page instead of a blank board; the real page stays
+  // hidden under it until the cover is put away. A page spread across both
+  // sides lends its left half.
+  Rulebook.prototype.fillFrontBack = function () {
+    var back = this.frontEl.querySelector('.rb-front-back');
+    var src = this.pl && !this.pl.classList.contains('gone') ? this.pl : this.pr;
+    back.textContent = '';
+    if (!src) return;
+    var copy = src.cloneNode(true);
+    copy.removeAttribute('id');
+    [].forEach.call(copy.querySelectorAll('[id]'), function (n) { n.removeAttribute('id'); });
+    copy.setAttribute('inert', '');
+    copy.classList.toggle('rb-front-half', src.classList.contains('wide'));
+    back.appendChild(copy);
+    this.el.classList.add('rb-unveil');
   };
 
   Rulebook.prototype.shutFront = function () {
@@ -482,6 +502,7 @@
     this.closeResults();
     this.frontShut = true;
     this.syncTurnbar();
+    this.fillFrontBack();
     this.frontEl.hidden = false;
     this.frontEl.classList.add('open');
     void this.frontEl.offsetWidth; // let the open state paint so the swing back is animated
@@ -490,6 +511,7 @@
     this.frontTimer = setTimeout(function () {
       if (self.dead) return;
       self.el.classList.add('rb-closed');
+      self.el.classList.remove('rb-unveil');
       var face = self.frontEl.querySelector('.rb-front-face');
       if (face) face.focus({ preventScroll: true });
     }, reduced() ? 0 : FRONT_MS);
