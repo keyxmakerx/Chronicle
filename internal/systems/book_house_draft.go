@@ -106,6 +106,7 @@ var draftBlockNames = map[string][2]string{
 	"creature": {"creature", "creatures"},
 	"note":     {"Director's note", "Director's notes"},
 	"links":    {"set of chapter links", "sets of chapter links"},
+	"contents": {"contents list", "contents lists"},
 	"widget":   {"widget", "widgets"},
 }
 

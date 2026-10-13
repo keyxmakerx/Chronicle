@@ -47,6 +47,12 @@ const rollPage = {
 
 function bookFixture(opts = {}) {
   if (opts.screen) return screenFixture(opts);
+  if (opts.contents) {
+    const book = bookFixture(Object.assign({}, opts, { contents: false }));
+    book.start = 'front';
+    book.parts[0].chapters.unshift({ id: 'front', title: 'Handbook', pages: [{ title: 'Contents', wide: true, blocks: [{ type: 'contents' }] }] });
+    return book;
+  }
   return {
     title: 'Handbook', systemName: 'Demo', turn: 'flip', look: opts.bold ? 'bold' : 'paper',
     theme: opts.bold ? BOLD_THEME : {},
@@ -219,6 +225,21 @@ test('a tab opens its own chapter', async () => {
       assert.equal(await page.evaluate(() => document.querySelector('.rb-where b').textContent), title);
     }
   });
+});
+
+test('a contents block numbers every other chapter with its page and turns to the one picked', async () => {
+  await withBook(async (page) => {
+    const rows = await page.$$eval('.rb-contents li', (ls) => ls.map((l) => [...l.querySelectorAll('button > span')].map((s) => s.textContent.trim())));
+    assert.deepEqual(rows.map((r) => r[0]), rows.map((_, i) => String(i + 1)));
+    assert.ok(!rows.some((r) => r[1] === 'Handbook'), 'the chapter holding the list is not in it');
+    assert.ok(rows.some((r) => r[1].startsWith('Running the game')), 'a Director sees Director chapters');
+    const combat = rows.find((r) => r[1] === 'Combat');
+    await page.click('.rb-contents [data-chapter="combat"]');
+    await page.waitForFunction(() => !document.querySelector('.rb-leaf'));
+    assert.equal(await page.evaluate(() => document.querySelector('.rb-where b').textContent), 'Combat');
+    const folios = await page.$$eval('.rb-page:not([hidden]) .rb-folio', (fs) => fs.map((f) => 'p. ' + f.textContent));
+    assert.ok(folios.includes(combat[2]), `Combat starts on ${combat[2]}, the spread shows ${folios}`);
+  }, { contents: true });
 });
 
 const screenState = (page) => page.evaluate(() => {
@@ -395,7 +416,7 @@ const wordsUnderRibbon = (page) => page.evaluate(() => {
   for (const root of document.querySelectorAll('.rb-book, .rb-tabs')) {
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
     for (let n = walker.nextNode(); n; n = walker.nextNode()) {
-      if (!n.nodeValue.trim() || n.parentElement.closest('.rb-bm, [hidden]')) continue;
+      if (!n.nodeValue.trim() || n.parentElement.closest('.rb-bm, [hidden]') || getComputedStyle(n.parentElement).visibility === 'hidden') continue;
       const r = document.createRange();
       r.selectNodeContents(n);
       for (const q of r.getClientRects()) {
@@ -403,7 +424,8 @@ const wordsUnderRibbon = (page) => page.evaluate(() => {
       }
     }
   }
-  return { hits, rect: { left: Math.round(bm.left), top: Math.round(bm.top), width: Math.round(bm.width), height: Math.round(bm.height) } };
+  const book = document.querySelector('.rb-book').getBoundingClientRect();
+  return { hits, rightPageMiddle: book.left + 0.75 * book.width, rect: { left: Math.round(bm.left), top: Math.round(bm.top), width: Math.round(bm.width), height: Math.round(bm.height) } };
 });
 
 for (const [name, viewport] of [['desktop', { width: 1280, height: 720 }], ['phone', { width: 390, height: 844 }]]) {
@@ -415,7 +437,7 @@ for (const [name, viewport] of [['desktop', { width: 1280, height: 720 }], ['pho
         for (let i = 0; i < 4; i++) {
           const w = await wordsUnderRibbon(page);
           assert.deepEqual(w.hits, [], `spread ${i}: ${JSON.stringify(w.rect)}`);
-          if (name === 'desktop') assert.ok(Math.abs(w.rect.left + w.rect.width / 2 - 0.75 * 1280) < 20, `centred over the right page: ${JSON.stringify(w.rect)}`);
+          if (name === 'desktop') assert.ok(Math.abs(w.rect.left + w.rect.width / 2 - w.rightPageMiddle) < 20, `centred over the right page: ${JSON.stringify(w)}`);
           assert.equal(w.rect.height, 46);
           const next = await page.$('[data-act="next"]:not([hidden])');
           if (!next) break;

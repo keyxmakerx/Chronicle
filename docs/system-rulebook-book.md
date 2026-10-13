@@ -201,6 +201,7 @@ Every block is one item under `blocks:`. Plain text needs no `type`.
 | creature | A creature as heroes see it; Directors also see its numbers | `name:`, `tagline:`, `look:`, `notice:` (list), `stats:` (list of `label:`/`value:`), `note:` |
 | note | A Director's note | `text:` (always Director-only) |
 | links | Buttons that turn to other chapters | `title:`, `items:` each with `title:`, `summary:`, `chapter:` (a chapter name) |
+| contents | Every chapter the reader can see except the one it is on, numbered, with the page each starts on; a pick turns to it. On a `wide` page it runs in two columns | `title:` (optional) |
 | widget | One of the package's own widgets, for things no block covers | `widget:` (a slug from `manifest.json`'s `widgets`) |
 
 A roll's `bands` go lowest first. Every band but the last has `max:`, the

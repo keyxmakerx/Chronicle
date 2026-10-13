@@ -260,6 +260,7 @@ func TestBuildBookBlock(t *testing.T) {
 		{"empty text", bookBlockYAML{Type: "text"}, "needs text"},
 		{"unknown type", bookBlockYAML{Type: "rol"}, `no block type "rol"`},
 		{"widget declared", bookBlockYAML{Type: "widget", Widget: "rulebook-frontpage"}, ""},
+		{"contents", bookBlockYAML{Type: "contents"}, ""},
 		{"widget not declared", bookBlockYAML{Type: "widget", Widget: "evil"}, "not one of"},
 		{"bad dice", bookBlockYAML{Type: "roll", Dice: "2d1000", Bands: []band{{Label: "x"}}}, "dice"},
 		{"bands out of order", bookBlockYAML{Type: "roll", Dice: "2d10", Bands: []band{{Max: max(16), Label: "a"}, {Max: max(11), Label: "b"}, {Label: "c"}}}, "lowest"},

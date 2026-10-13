@@ -906,9 +906,16 @@
       }
     } else {
       label = item.p.title || item.ch.title;
+      this.paintingChapter = item.ch.id;
       h = this.pageBodyHTML(item.ch.title, item.p);
+      this.paintingChapter = '';
     }
-    return '<div class="rb-scroll" tabindex="0" role="region" aria-label="Page ' + (item.n + 1) + ': ' + esc(label) + '">' + h + '</div>' +
+    // The running head repeats what the page already says, so readers skip
+    // it. A wide page keeps it all on the left, clear of the Sections ribbon.
+    var head = item.wide ? '<span>' + esc(this.data.title) + ' \u00B7 ' + esc(item.ch.title) + '</span>'
+      : '<span>' + esc(this.data.title) + '</span><span>' + esc(item.ch.title) + '</span>';
+    return '<div class="rb-fhd" aria-hidden="true">' + head + '</div>' +
+      '<div class="rb-scroll" tabindex="0" role="region" aria-label="Page ' + (item.n + 1) + ': ' + esc(label) + '">' + h + '</div>' +
       '<div class="rb-foot"><span class="rb-folio">' + (item.n + 1) + '</span></div>';
   };
 
@@ -941,6 +948,7 @@
       case 'cards': html = this.cardsHTML(b); break;
       case 'flaps': html = this.flapsHTML(b); break;
       case 'links': html = this.linksHTML(b); break;
+      case 'contents': html = this.contentsHTML(b); break;
       case 'example': html = this.exampleHTML(b); break;
       case 'creature': html = this.creatureHTML(b); break;
       case 'index': html = this.indexHTML(b); break;
@@ -1013,6 +1021,27 @@
         return '<button type="button" class="rb-link" data-chapter="' + esc(it.chapter) + '"><b>' + esc(it.title) + '</b>' +
           (str(it.summary) ? '<span>' + inline(it.summary, t) + '</span>' : '') + '<i aria-hidden="true">Turn to it \u2192</i></button>';
       }).join('') + '</div></nav>';
+  };
+
+  // contentsHTML numbers every chapter this view shows, except the one the
+  // list is on, with the page each starts on. The screen chapter is listed
+  // too and drops the screen, as its links do.
+  Rulebook.prototype.contentsHTML = function (b) {
+    var self = this, rows = [], seen = {}, here = this.paintingChapter;
+    this.data.parts.forEach(function (part) {
+      part.chapters.forEach(function (ch) {
+        if (seen[ch.id] || ch.id === here) return;
+        var n = self.firstItemOf(ch.id), screen = ch.id === self.data.screen && self.screenPages.length > 0;
+        if (n < 0 && !screen) return;
+        seen[ch.id] = true;
+        rows.push('<li><button type="button" data-chapter="' + esc(ch.id) + '"><span class="rb-pn">' + (rows.length + 1) + '</span><span>' + esc(ch.title) +
+          (ch.director ? ' ' + self.dirTag() : '') + '</span><span class="rb-cpg">' + (screen ? 'Screen' : 'p. ' + (n + 1)) + '</span></button></li>');
+      });
+    });
+    if (!rows.length) return '';
+    return '<nav class="rb-contents" aria-label="' + esc(str(b.title) || 'Contents') + '">' +
+      (str(b.title) ? '<b class="rb-links-hd">' + esc(b.title) + '</b>' : '') +
+      '<ol class="rb-toc">' + rows.join('') + '</ol></nav>';
   };
 
   Rulebook.prototype.flapsHTML = function (b) {
