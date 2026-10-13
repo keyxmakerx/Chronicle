@@ -321,7 +321,9 @@ test('a book with a cover opens shut on it every visit, opens on Enter and shuts
     assert.equal(await page.evaluate(() => !!document.querySelector('.rb-bar [data-act="shut"]')), false);
     const face = await page.$eval('.rb-front-face', (b) => ({ label: b.getAttribute('aria-label'), alt: b.querySelector('img').alt, src: b.querySelector('img').getAttribute('src') }));
     assert.deepEqual(face, { label: 'Open the Handbook', alt: 'Handbook: the cover', src: '/campaigns/camp-1/systems/demo/book/files/cover.svg' });
-    assert.equal(await page.evaluate(() => document.querySelector('.rb-front-face img').naturalWidth > 0), true);
+    // The cover is fetched after the book draws, so wait for it to load
+    // rather than read its size the moment it is added.
+    await page.waitForFunction(() => { const img = document.querySelector('.rb-front-face img'); return img.complete && img.naturalWidth > 0; }, null, { timeout: 5000 });
     // The book's fonts are asked for from the package route.
     assert.deepEqual(page.fontRequests, [FONT_URL]);
     // The face is registered under the bare family name the theme asks for;
