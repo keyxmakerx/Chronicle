@@ -27,7 +27,7 @@
   --rb-acc3: color-mix(in srgb, var(--rb-acc) 55%, #000);
   --rb-gold: #fbbf24;
   --rb-bad: #f87171;
-  --rb-ui: system-ui, "Segoe UI", Roboto, sans-serif;
+  --rb-ui: var(--book-ui-font, system-ui, "Segoe UI", Roboto, sans-serif);
   --rb-body: var(--book-body-font, "Spectral", Georgia, "Times New Roman", serif);
   --rb-head: var(--book-heading-font, "Spectral", Georgia, "Times New Roman", serif);
   --rb-pad: clamp(22px, 4vw, 56px);
@@ -457,8 +457,11 @@
 .rb-front-face:focus-visible:where(:not(.rb-wslot *)) { outline: 3px solid var(--rb-gold); outline-offset: -6px; }
 .rb-front-hint:where(:not(.rb-wslot *)) { position: absolute; top: 5%; right: 6%; padding: 7px 9px; border-radius: 2px; background: var(--rb-gold); color: #0d0a12; font: 700 11px/1 var(--rb-ui); letter-spacing: 0.16em; text-transform: uppercase; }
 .rb-front-back:where(:not(.rb-wslot *)) { transform: rotateY(180deg); border-radius: 6px 0 0 6px; background: var(--rb-paper); box-shadow: inset -28px 0 30px -26px rgba(0, 0, 0, 0.4); }
+/* On one page the cover is as large as fits, whole: cropping it would cut
+   the title off. */
 @media (max-width: 900px) {
-  .rb-front-book:where(:not(.rb-wslot *)) { top: 0; left: 0; width: 100%; height: 100%; max-width: none; aspect-ratio: auto; transform: none; }
+  .rb-front:where(:not(.rb-wslot *)) { container-type: size; }
+  .rb-front-book:where(:not(.rb-wslot *)), .rb-front.open .rb-front-book:where(:not(.rb-wslot *)) { top: 50%; left: 50%; width: min(100cqw, 100cqh * 400 / 516); height: min(100cqh, 100cqw * 516 / 400); max-width: none; aspect-ratio: auto; transform: translate(-50%, -50%); }
 }
 @media (prefers-reduced-motion: reduce) {
   .rb-front-desk:where(:not(.rb-wslot *)), .rb-front-book:where(:not(.rb-wslot *)), .rb-front-board:where(:not(.rb-wslot *)) { transition: none; }
@@ -611,3 +614,66 @@
 .rb[data-look="bold"] .rb-flap > button:where(:not(.rb-wslot *)) { font: 700 14px var(--rb-ui); letter-spacing: 0.08em; text-transform: uppercase; border-bottom-color: var(--rb-edge); }
 .rb[data-look="bold"] .rb-flap > button:where(:not(.rb-wslot *))::after { color: var(--rb-hot); }
 .rb[data-look="bold"] .rb-ctitle:where(:not(.rb-wslot *)), .rb[data-look="bold"] .rb-roll-hd span:where(:not(.rb-wslot *)) { font-family: var(--rb-ui); }
+
+/* The page-turn bar under the book: back, where the reader is, close the
+   book, next. */
+.rb[data-look="bold"] .rb-book:has(+ .rb-turnbar):where(:not(.rb-wslot *)) { margin-bottom: 0; }
+.rb-turnbar:where(:not(.rb-wslot *)) { flex: 0 0 auto; display: flex; justify-content: space-between; align-items: center; gap: 10px; width: min(100% - 28px, 1500px, (100dvh - 200px) * 1.6); min-width: min(100% - 28px, 720px); margin: 10px auto 14px; }
+.rb-turn-where:where(:not(.rb-wslot *)) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; font: 700 13px/1 var(--rb-ui); letter-spacing: 0.14em; text-transform: uppercase; color: var(--rb-ink2); }
+.rb-turn-ctl:where(:not(.rb-wslot *)) { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.rb .rb-pill:where(:not(.rb-wslot *)) { padding: 9px 12px; border: 1.5px solid var(--rb-ink); border-radius: 3px; font: 600 13px/1 var(--rb-ui); letter-spacing: 0.06em; text-transform: uppercase; color: var(--rb-ink); white-space: nowrap; }
+.rb .rb-pill:hover:not(:disabled):where(:not(.rb-wslot *)) { background: var(--rb-ink); color: var(--rb-paper); }
+.rb .rb-pill:disabled:where(:not(.rb-wslot *)) { opacity: 0.4; }
+.rb .rb-pill:focus-visible:where(:not(.rb-wslot *)) { outline: 2px solid var(--rb-hot); outline-offset: 2px; }
+@media (max-width: 760px) {
+  .rb-turnbar:where(:not(.rb-wslot *)) { width: calc(100% - 12px); min-width: 0; margin: 8px auto 10px; }
+  .rb-turn-where:where(:not(.rb-wslot *)) { display: none; }
+}
+
+/* Shut, the book lies on the desk without the open spread's shadow. */
+.rb[data-look="bold"].rb-closed .rb-book:where(:not(.rb-wslot *)) { box-shadow: none; }
+
+/* The Sections ribbon is crimson silk with gold stitching and gold numerals. */
+.rb[data-look="bold"]:where(:not(.rb-wslot *)) { --rb-thread: #f6dfa4; }
+.rb[data-look="bold"] .rb-bm-roll:where(:not(.rb-wslot *)) { color: #f6f1e6; background: linear-gradient(90deg, color-mix(in srgb, var(--rb-acc) 63%, #000), color-mix(in srgb, var(--rb-acc) 92%, #000) 22%, var(--rb-acc) 50%, color-mix(in srgb, var(--rb-acc) 92%, #000) 78%, color-mix(in srgb, var(--rb-acc) 63%, #000)); }
+.rb[data-look="bold"] .rb-bm-roll:where(:not(.rb-wslot *))::before { background: linear-gradient(color-mix(in srgb, var(--rb-acc) 32%, #000), color-mix(in srgb, var(--rb-acc) 55%, #000)); }
+.rb[data-look="bold"] .rb-bm-roll:where(:not(.rb-wslot *))::after { border-color: color-mix(in srgb, var(--rb-thread) 50%, transparent); }
+.rb[data-look="bold"] .rb-bm-tab:where(:not(.rb-wslot *)) { color: var(--rb-thread); }
+.rb[data-look="bold"] .rb-bm-tab:hover:where(:not(.rb-wslot *)) { filter: none; color: #fff; }
+.rb[data-look="bold"] .rb-bm-tab:focus-visible:where(:not(.rb-wslot *)) { color: #fff; outline-color: var(--rb-thread); }
+.rb[data-look="bold"] .rb-bm-list:where(:not(.rb-wslot *)) { border-top-color: color-mix(in srgb, var(--rb-thread) 45%, transparent); }
+.rb[data-look="bold"] .rb-bm-list button:where(:not(.rb-wslot *)) { color: #f6f1e6; }
+.rb[data-look="bold"] .rb-bm-list button i:where(:not(.rb-wslot *)) { font: 900 15px/1 var(--rb-display); color: var(--rb-thread); opacity: 1; }
+.rb[data-look="bold"] .rb-bm-list button[aria-current="true"]:where(:not(.rb-wslot *)) { box-shadow: inset 4px 0 0 #f0bb4f; }
+.rb[data-look="bold"] .rb-bm-list button em:where(:not(.rb-wslot *)) { color: var(--rb-thread); border-color: color-mix(in srgb, var(--rb-thread) 60%, transparent); }
+.rb[data-look="bold"] .rb-bm-part:where(:not(.rb-wslot *)) { color: color-mix(in srgb, var(--rb-thread) 80%, transparent); }
+
+/* On one page the ribbon hangs in the middle of the page head, between the
+   book's name and the chapter's. */
+@media (max-width: 900px) {
+  .rb[data-look="bold"] .rb-bm:where(:not(.rb-wslot *)), .rb[data-look="bold"] .rb-bm[data-open="true"]:where(:not(.rb-wslot *)) { left: 50%; right: auto; width: 170px; margin-left: -85px; }
+  .rb[data-look="bold"] .rb-page.r .rb-fhd:where(:not(.rb-wslot *)) { visibility: visible; }
+  .rb[data-look="bold"] .rb-fhd span:where(:not(.rb-wslot *)) { max-width: calc(50% - 97px); }
+  /* With no tabs between them, the screen's ribbon stops short of this one. */
+  .rb[data-look="bold"]:has(.rb-bm):not(:has(.rb-tabs)) .rb-ribbon:where(:not(.rb-wslot *)) { max-width: calc(50% - 105px); }
+}
+
+/* ---- older package widgets ----
+   A widget's stylesheet is global. Draw Steel's front page before 2.3.1
+   styled bare .rb-tiers, .rb-flap, .rb-grid, .rb-fold and .rb-brand for its
+   own markup, and once it had rendered those rules restyled every page of
+   the reader: tiers squeezed into slivers, flaps vanished, the bar's badge
+   changed. These restate what such a sheet changes, one class stronger. A
+   widget slot is its own stacking layer, so a widget's sticky header never
+   rises over the screen or the bookmark. */
+.rb .rb-wslot:where(:not(.rb-wslot *)) { isolation: isolate; }
+.rb .rb-brand .rb-mark:where(:not(.rb-wslot *)) { width: 28px; height: 28px; border-radius: 8px; font: 700 12px var(--rb-head); background: linear-gradient(135deg, color-mix(in srgb, var(--rb-acc) 82%, #000), var(--rb-acc3)); }
+.rb .rb-name small:where(:not(.rb-wslot *)) { font: 600 9px var(--rb-ui); color: var(--rb-mut); }
+.rb .rb-tiers:where(:not(.rb-wslot *)) { display: grid; gap: 8px; margin-top: 0; }
+.rb[data-look="bold"] .rb-tiers:where(:not(.rb-wslot *)) { gap: 4px; }
+.rb .rb-grid:where(:not(.rb-wslot *)) { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); grid-template-areas: none; gap: 1px; }
+.rb .rb-fold:where(:not(.rb-wslot *)) { font: inherit; color: var(--rb-ink2); animation: rb-unfold 0.42s cubic-bezier(0.3, 0.7, 0.2, 1); }
+.rb .rb-flap:where(:not(.rb-wslot *)) { position: static; inset: auto; z-index: auto; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; transform: none; opacity: 1; visibility: visible; pointer-events: auto; transition: none; }
+.rb .rb-flap p:where(:not(.rb-wslot *)) { margin: 0; font: 500 14.5px/1.65 var(--rb-body); color: inherit; }
+.rb .rb-flap p + p:where(:not(.rb-wslot *)) { margin-top: 8px; }
+.rb .rb-flap b:where(:not(.rb-wslot *)) { color: inherit; }

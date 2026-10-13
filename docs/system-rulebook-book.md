@@ -52,6 +52,7 @@ theme:                   # optional: colours and fonts, all optional
   accent: "#a78bfa"
   heading-font: "Inter, system-ui, sans-serif"
   body-font: "Inter, system-ui, sans-serif"
+  ui-font: "Inter, system-ui, sans-serif"   # labels, buttons and the bar
   cover: "#2e2240"       # the leather around the pages (paper look only)
 look: paper              # optional: paper, bold, or left out
 cover: art/cover.svg     # optional: a drawn cover the book opens from
@@ -99,7 +100,7 @@ parts:
   being installed. Each entry has the `family` name, a `file` that must be
   `fonts/<name>.woff2`, and optionally a `weight` and `style`. Use faces whose
   licence allows redistribution (the SIL Open Font License does). Name the
-  family in `theme`'s `heading-font` or `body-font` to use it. List one entry
+  family in `theme`'s `heading-font`, `body-font` or `ui-font` to use it. List one entry
   per weight or style.
 - Cover and font file names use lower-case letters, digits and `-` and the
   files must be in the package, at most 1 MB each. A missing or oversized
