@@ -600,7 +600,9 @@
       '<input type="search" class="rb-search-in" data-search placeholder="Search the book" aria-label="Search the book" autocomplete="off" spellcheck="false"' +
       ' aria-controls="' + this.domId('results') + '" aria-expanded="false"><kbd aria-hidden="true">/</kbd>' +
       '<div class="rb-results" id="' + this.domId('results') + '" role="region" aria-label="Search results" hidden></div></div>') +
-      own + edit + seg + (d.cover && !this.inline && !turnbar ? '<button type="button" class="rb-btn rb-shut" data-act="shut">Close the book</button>' : '') +
+      ((own || edit || seg) ? '<button type="button" class="rb-btn rb-more" data-act="more" aria-expanded="false" aria-controls="' + this.domId('tools') +
+        '" aria-label="More"><span aria-hidden="true">\u22EF</span></button><div class="rb-tools" id="' + this.domId('tools') + '">' + own + edit + seg + '</div>' : '') +
+      (d.cover && !this.inline && !turnbar ? '<button type="button" class="rb-btn rb-shut" data-act="shut">Close the book</button>' : '') +
       this.ribbonHTML() + '</div>' + this.tabsHTML() + this.bmHTML() +
       '<div class="rb-book">' +
       '<article class="rb-page l"></article><div class="rb-spine" aria-hidden="true"></div><article class="rb-page r"></article>' +
@@ -637,6 +639,20 @@
     q('[data-act="next"]').disabled = !shut && this.at >= last;
     var close = q('[data-act="shut"]');
     if (close) close.disabled = shut;
+  };
+
+  // On a phone the bar keeps one row: the book's own pages, Edit and the view
+  // switch fold under a More button.
+  Rulebook.prototype.moreOpen = function () {
+    var b = this.el && this.el.querySelector('.rb-more');
+    return !!b && b.getAttribute('aria-expanded') === 'true';
+  };
+
+  Rulebook.prototype.setMore = function (open) {
+    var b = this.el && this.el.querySelector('.rb-more');
+    if (!b) return;
+    b.setAttribute('aria-expanded', open ? 'true' : 'false');
+    this.el.querySelector('.rb-tools').classList.toggle('open', open);
   };
 
   // --- The screen ------------------------------------------------------------
@@ -1762,6 +1778,7 @@
     var t = e.target;
     if (!t || !t.closest) return;
     if (this.bmOpen() && !t.closest('.rb-bm')) this.bmSet(false, false);
+    if (!t.closest('.rb-more')) this.setMore(false);
     if (!this.el.contains(t)) { this.closeResults(); return; }
     var x;
     if (!this.data) {
@@ -1784,6 +1801,7 @@
         case 'bm': this.bmSet(!this.bmOpen(), false); break;
         case 'front': this.openFront(); break;
         case 'shut': this.shutFront(); break;
+        case 'more': this.setMore(x.getAttribute('aria-expanded') !== 'true'); break;
         case 'view': this.setView(x.getAttribute('data-view')); break;
         case 'roll': this.doRoll(x.closest('[data-roll]')); break;
         case 'prev-step': this.stepExample(x, -1); break;
@@ -1807,6 +1825,7 @@
       if (t.closest('.rb-wslot') && e.key !== 'Escape') return;
     }
     if (this.frontShut) return;
+    if (e.key === 'Escape' && this.moreOpen()) { this.setMore(false); this.el.querySelector('.rb-more').focus(); return; }
     if (e.key === 'Escape' && this.bmOpen()) { this.bmSet(false, true); return; }
     if (e.key === 'Escape') {
       if (this.screenOpen()) { this.closeScreen(true); return; }

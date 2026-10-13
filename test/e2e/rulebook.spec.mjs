@@ -415,6 +415,34 @@ test('look: bold draws dark banners, heavy headings and coloured tiers, whatever
   }, { bold: true, standard: true });
 });
 
+test('on a phone the bar is one row; the view switch folds under More, which closes on a pick or Escape', async () => {
+  await withBook(async (page) => {
+    const st = () => page.evaluate(() => {
+      const bar = document.querySelector('.rb-bar').getBoundingClientRect(), more = document.querySelector('.rb-more');
+      return { tall: Math.round(bar.height), expanded: more.getAttribute('aria-expanded'), seg: document.querySelector('.rb-seg').checkVisibility() ? 'shown' : 'hidden', wide: document.documentElement.scrollWidth <= innerWidth };
+    });
+    let s = await st();
+    assert.ok(s.tall < 60, `one row: ${s.tall}`);
+    assert.deepEqual([s.expanded, s.seg, s.wide], ['false', 'hidden', true]);
+    await page.click('.rb-more');
+    s = await st();
+    assert.deepEqual([s.expanded, s.seg], ['true', 'shown']);
+    await page.click('.rb-tools [data-view="player"]');
+    s = await st();
+    assert.deepEqual([s.expanded, s.seg], ['false', 'hidden']);
+    assert.equal(await page.evaluate(() => document.querySelector('[data-view="player"]').getAttribute('aria-pressed')), 'true');
+    await page.click('.rb-more');
+    await page.keyboard.press('Escape');
+    assert.equal((await st()).expanded, 'false');
+    assert.equal(await page.evaluate(() => document.activeElement.classList.contains('rb-more')), true);
+  }, { bold: true, viewport: { width: 390, height: 844 }, hash: '#basics' });
+  // On a wide screen everything stays in the bar and there is no More.
+  await withBook(async (page) => {
+    assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('.rb-more')).display), 'none');
+    assert.equal(await page.evaluate(() => document.querySelector('.rb-seg').checkVisibility()), true);
+  }, { bold: true, hash: '#basics' });
+});
+
 // Draw Steel's front page before 2.3.1 put these rules in a global
 // stylesheet; once it had rendered they crushed the reader's tiers and hid
 // its flaps.
