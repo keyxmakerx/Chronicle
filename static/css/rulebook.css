@@ -153,6 +153,11 @@
 .rb-toc button:where(:not(.rb-wslot *)) { width: 100%; display: grid; grid-template-columns: 1fr auto; gap: 12px; padding: 11px 2px; border-bottom: 1px solid var(--rb-edge2); text-align: left; font: 500 16px var(--rb-body); color: var(--rb-ink2); }
 .rb-toc button:hover:where(:not(.rb-wslot *)) { color: var(--rb-ink); }
 .rb-pn:where(:not(.rb-wslot *)) { color: var(--rb-mut); font-variant-numeric: tabular-nums; }
+.rb-contents .rb-toc:where(:not(.rb-wslot *)) { margin-top: 6px; }
+.rb-contents .rb-toc button:where(:not(.rb-wslot *)) { grid-template-columns: auto 1fr auto; align-items: center; }
+.rb-page.wide .rb-contents .rb-toc:where(:not(.rb-wslot *)) { columns: 2 300px; column-gap: 48px; }
+.rb-contents .rb-toc li:where(:not(.rb-wslot *)) { break-inside: avoid; }
+.rb-cpg:where(:not(.rb-wslot *)) { color: var(--rb-mut); font: 600 12px var(--rb-ui); letter-spacing: 0.08em; text-transform: uppercase; font-variant-numeric: tabular-nums; }
 
 /* ---- block: roll ---- */
 .rb-roll:where(:not(.rb-wslot *)) { border: 1px solid var(--rb-edge); border-radius: 16px; background: var(--rb-box); padding: 16px; display: flex; flex-direction: column; gap: 12px; }

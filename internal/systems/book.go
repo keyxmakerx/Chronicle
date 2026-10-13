@@ -656,6 +656,11 @@ func buildBookBlock(y bookBlockYAML, widgets map[string]bool) (BookBlock, error)
 			b.Items = append(b.Items, BookItem{Title: it.Title, Summary: it.Summary, Chapter: ch})
 		}
 		return b, nil
+	case "contents":
+		// The reader fills it in from the book it receives, so a player's
+		// copy lists only the chapters that player is sent.
+		b.Title = y.Title
+		return b, nil
 	case "example":
 		if len(y.Steps) == 0 {
 			return b, errors.New("an example block needs steps")

@@ -31,7 +31,8 @@
     example: { name: 'Worked example', hint: 'Stepped through one line at a time.' },
     creature: { name: 'Creature', hint: 'What heroes see; numbers for Directors.' },
     note: { name: 'Director\'s note', hint: 'Only Directors ever see this.' },
-    links: { name: 'Chapter links', hint: 'Buttons that turn to other chapters.' }
+    links: { name: 'Chapter links', hint: 'Buttons that turn to other chapters.' },
+    contents: { name: 'Contents', hint: 'Every chapter, numbered, with the page it starts on.' }
   };
   var PALETTE = ['text', 'callout', 'roll', 'cards', 'flaps', 'example', 'creature', 'note'];
   var WIDGET_TYPE = { name: 'Widget', hint: 'Part of the book that comes from the game system.' };
@@ -147,6 +148,7 @@
         put(o, 'note', b.note);
         break;
       case 'widget': o.widget = b.widget; break;
+      case 'contents': put(o, 'title', b.title); break;
       case 'links':
         put(o, 'title', b.title);
         o.items = b.items.map(function (it) {
@@ -194,6 +196,7 @@
         break;
       case 'widget': o.widget = b.widget; break;
       case 'links': o.title = b.title; o.items = b.items; break;
+      case 'contents': o.title = b.title; break;
     }
     return o;
   }
@@ -800,6 +803,9 @@
         break;
       case 'widget':
         h += '<p class="rbe-widget">This part of the page is the <b>' + esc(b.widget || 'unnamed') + '</b> widget from ' + esc(this.sys()) + '. It can be moved or removed here, but not edited.</p>';
+        break;
+      case 'contents':
+        h += '<p class="rbe-widget">Lists every chapter of the book with the page it starts on. It can be moved or removed here, but not edited.</p>';
         break;
       case 'links':
         h += '<p class="rbe-widget">Turns to: ' + b.items.map(function (it) { return '<b>' + esc(it.title) + '</b>'; }).join(', ') +
