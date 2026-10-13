@@ -876,7 +876,7 @@
     if (!dir && (model.director || n.ch.director || n.ch.part.director)) {
       return '<p class="rb-kicker">Player view</p><h2>Players never see this page</h2><div class="rb-prose"><p>It is for Directors only, so it is left out of the book players get.</p></div>';
     }
-    var html = window.ChronicleRulebook.renderPage(wirePage(model), { terms: this.src.terms, director: dir, chapterTitle: n.ch.title });
+    var html = window.ChronicleRulebook.renderPage(wirePage(model), { terms: this.src.terms, parts: this.parts, director: dir, chapterTitle: n.ch.title, chapterId: n.ch.id });
     var seen = dir || model.blocks.some(function (b) { return !b.director && b.type !== 'note'; });
     if (!seen && model.blocks.length) html += '<div class="rb-prose"><p class="rbe-empty">Every block on this page is for Directors, so players see an empty page.</p></div>';
     else if (!model.blocks.length) html += '<div class="rb-prose"><p class="rbe-empty">Add a block to start this page.</p></div>';
