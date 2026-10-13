@@ -101,7 +101,7 @@ function screenFixture(opts = {}) {
 
 // The app layout around the Rules page, sized as base.templ and app.templ
 // size it: the header and a banner take part of the screen, <main> scrolls.
-function harnessHTML() {
+function harnessHTML(opts = {}) {
   return `<!doctype html><html><head><meta charset="utf-8">
 <style>
   html, body { margin: 0; height: 100%; }
@@ -114,9 +114,9 @@ function harnessHTML() {
 <link rel="stylesheet" href="/static/css/rulebook.css">
 </head><body>
 <div class="hdr"></div><div class="banner"></div>
-<main id="main-content"><div id="module-content"><div data-rulebook-fullbleed>
+${opts.nested ? '<main id="main-content">' : ''}<main id="main-content"><div id="module-content"><div data-rulebook-fullbleed>
   <div data-widget="rulebook" data-campaign-id="camp-1" data-book-url="${BOOK_URL}"></div>
-</div></div></main>
+</div></div></main>${opts.nested ? '</main>' : ''}
 <script>
   window.Chronicle = {
     escapeHtml: function (s) { return String(s).replace(/[&<>"']/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; }); },
@@ -145,7 +145,7 @@ async function withBook(fn, opts = {}) {
     });
     await page.route('**/*', (route) => {
       const p = new URL(route.request().url()).pathname;
-      if (p === '/rules') return route.fulfill({ status: 200, contentType: 'text/html', body: harnessHTML() });
+      if (p === '/rules') return route.fulfill({ status: 200, contentType: 'text/html', body: harnessHTML(opts) });
       if (p === '/static/css/rulebook.css') return route.fulfill({ status: 200, contentType: 'text/css', body: asset('static/css/rulebook.css') });
       if (p === '/static/js/widgets/rulebook.js') return route.fulfill({ status: 200, contentType: 'text/javascript', body: asset('static/js/widgets/rulebook.js') });
       if (p === BOOK_URL) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(bookFixture(opts)) });
@@ -179,6 +179,22 @@ test('the book fills the content area, so it never scrolls the page under it', a
     await page.waitForTimeout(400);
     assert.equal(await page.evaluate(() => document.getElementById('main-content').scrollTop), 0);
   });
+});
+
+test('after a sidebar link nests the page in a second <main>, the book still fills the content area', async () => {
+  for (const viewport of [{ width: 1280, height: 720 }, { width: 412, height: 915 }]) {
+    await withBook(async (page) => {
+      const m = await page.evaluate(() => {
+        const outer = document.querySelector('body > #main-content');
+        const rb = document.querySelector('.rb').getBoundingClientRect();
+        const o = outer.getBoundingClientRect();
+        return { nested: !!outer.querySelector(':scope > #main-content'), rb: [rb.left, rb.width, Math.round(rb.height)], outer: [o.left, o.width, outer.clientHeight], overflow: outer.scrollHeight - outer.clientHeight };
+      });
+      assert.equal(m.nested, true);
+      assert.deepEqual(m.rb, m.outer, `${viewport.width}px: the book spans the outer <main> edge to edge`);
+      assert.equal(m.overflow, 0);
+    }, { nested: true, viewport });
+  }
 });
 
 test('a turn to and from a wide page turns a leaf instead of sliding', async () => {
