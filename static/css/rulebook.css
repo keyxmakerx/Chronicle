@@ -61,6 +61,12 @@
 #module-content:has(> [data-rulebook-fullbleed] > .rb) { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 [data-rulebook-fullbleed]:has(> .rb) { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 [data-rulebook-fullbleed] > .rb { flex: 1 1 0px; height: auto; min-height: 420px; }
+/* Chronicle's sidebar links swap in the new page's whole <main>, so after one
+   the Rules page sits in a <main> inside the old one. The outer one drops its
+   padding and hands its height down, or the book shrinks to its floor inside a
+   padded frame. */
+#main-content:has(> #main-content > #module-content > [data-rulebook-fullbleed] > .rb) { display: flex; flex-direction: column; padding: 0; }
+#main-content > #main-content:has(> #module-content > [data-rulebook-fullbleed] > .rb) { flex: 1 1 auto; min-height: 0; }
 .rb *:where(:not(.rb-wslot *)), .rb *:where(:not(.rb-wslot *))::before, .rb *:where(:not(.rb-wslot *))::after { box-sizing: border-box; }
 .rb [hidden]:where(:not(.rb-wslot *)) { display: none !important; }
 /* The reset is written with :where so it weighs no more than a single class:
