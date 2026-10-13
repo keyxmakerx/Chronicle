@@ -558,6 +558,29 @@
 .rb[data-look="bold"] .rb-tabs:where(:not(.rb-wslot *)) { padding: 12px 0 0; }
 .rb[data-look="bold"] .rb-book:where(:not(.rb-wslot *)) { margin-bottom: 18px; border-radius: 0 6px 6px 6px; box-shadow: 0 18px 30px -10px rgba(0, 0, 0, 0.5); }
 .rb[data-look="bold"] .rb-page.l:where(:not(.rb-wslot *)) { border-radius: 6px 0 0 6px; }
+/* The book lies on a desk in its cover: a darker desk than the paper, the
+   page block's edges showing under the pages and the cover board beyond them,
+   so the book reads as an object rather than a panel the colour of the page. */
+.rb[data-look="bold"]:where(:not(.rb-wslot *)) {
+  --rb-cover: var(--book-cover, var(--rb-steel));
+  --rb-bg: color-mix(in srgb, var(--rb-cover) 42%, var(--rb-paper));
+}
+.rb[data-look="bold"] .rb-bm-anchor:where(:not(.rb-wslot *)), .rb[data-look="bold"] .rb-book:not(.rb-bm-anchor + .rb-book):where(:not(.rb-wslot *)) { margin-top: 14px; }
+.rb[data-look="bold"]:not(.rb-closed) .rb-book:where(:not(.rb-wslot *)) {
+  --rb-leaf: color-mix(in srgb, var(--rb-paper) 90%, #fff);
+  --rb-leafline: color-mix(in srgb, var(--rb-paper) 72%, var(--rb-cover));
+  box-shadow:
+    0 1px 0 0.5px var(--rb-leafline),
+    0 2.5px 0 1.5px var(--rb-leaf),
+    0 3.5px 0 2px var(--rb-leafline),
+    0 5px 0 3px var(--rb-leaf),
+    0 6px 0 3.5px var(--rb-leafline),
+    0 4px 0 8px var(--rb-cover),
+    0 5px 0 9px color-mix(in srgb, var(--rb-cover) 70%, #000),
+    0 28px 36px -4px rgba(0, 0, 0, 0.5);
+}
+.rb[data-look="bold"] .rb-turnbar:where(:not(.rb-wslot *)) { margin-top: 24px; }
+.rb[data-look="bold"] .rb-turn-where:where(:not(.rb-wslot *)) { color: var(--rb-ink); }
 .rb[data-look="bold"] .rb-page .rb-scroll:where(:not(.rb-wslot *)) { --rb-top: 14px; }
 /* The running head over each page, as in a printed book. */
 .rb[data-look="bold"] .rb-fhd:where(:not(.rb-wslot *)) { flex: 0 0 auto; display: flex; justify-content: space-between; gap: 12px; padding: 14px var(--rb-pad) 0; font: 700 11px/1 var(--rb-ui); letter-spacing: 0.14em; text-transform: uppercase; color: var(--rb-ink2); white-space: nowrap; overflow: hidden; }
@@ -635,9 +658,16 @@
 .rb .rb-pill:hover:not(:disabled):where(:not(.rb-wslot *)) { background: var(--rb-ink); color: var(--rb-paper); }
 .rb .rb-pill:disabled:where(:not(.rb-wslot *)) { opacity: 0.4; }
 .rb .rb-pill:focus-visible:where(:not(.rb-wslot *)) { outline: 2px solid var(--rb-hot); outline-offset: 2px; }
+/* Chronicle's Jot notes tab is fixed in the window's bottom-right corner;
+   the bar ends above it so Next is never under it. */
+body:has(.jot-tab) .rb-turnbar:where(:not(.rb-wslot *)) { margin-bottom: calc(1.5rem + 50px); }
+@media (max-width: 639px) {
+  body:has(.jot-tab) .rb-turnbar:where(:not(.rb-wslot *)) { margin-bottom: calc(1rem + 50px); }
+}
 @media (max-width: 760px) {
-  .rb[data-look="bold"] .rb-tabs:where(:not(.rb-wslot *)), .rb[data-look="bold"] .rb-bm-anchor:where(:not(.rb-wslot *)), .rb[data-look="bold"] .rb-book:where(:not(.rb-wslot *)) { width: calc(100% - 12px); min-width: 0; }
+  .rb[data-look="bold"] .rb-tabs:where(:not(.rb-wslot *)), .rb[data-look="bold"] .rb-bm-anchor:where(:not(.rb-wslot *)), .rb[data-look="bold"] .rb-book:where(:not(.rb-wslot *)) { width: calc(100% - 24px); min-width: 0; }
   .rb-turnbar:where(:not(.rb-wslot *)) { width: calc(100% - 12px); min-width: 0; margin: 8px auto 10px; }
+  .rb[data-look="bold"] .rb-turnbar:where(:not(.rb-wslot *)) { margin-top: 20px; }
   .rb-turn-where:where(:not(.rb-wslot *)) { display: none; }
 }
 

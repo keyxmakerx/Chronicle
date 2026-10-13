@@ -443,6 +443,27 @@ test('on a phone the bar is one row; the view switch folds under More, which clo
   }, { bold: true, hash: '#basics' });
 });
 
+test('Next under the book is never covered by Chronicle\'s Jot notes tab', async () => {
+  for (const viewport of [{ width: 1280, height: 720 }, { width: 390, height: 844 }]) {
+    await withBook(async (page) => {
+      // The same fixed tab the app layout mounts when Jot notes is on.
+      await page.evaluate(() => {
+        const t = document.createElement('button');
+        t.className = 'jot-tab';
+        t.textContent = 'Jot notes';
+        const phone = innerWidth < 640;
+        t.style.cssText = `position:fixed;right:${phone ? 16 : 24}px;bottom:${phone ? 16 : 24}px;z-index:50;padding:10px 14px;font:700 12.5px system-ui`;
+        document.body.appendChild(t);
+      });
+      const r = await page.evaluate(() => {
+        const a = document.querySelector('.rb-turnbar [data-act="next"]').getBoundingClientRect(), b = document.querySelector('.jot-tab').getBoundingClientRect();
+        return { apart: a.bottom <= b.top || a.right <= b.left, next: a.bottom, tab: b.top };
+      });
+      assert.ok(r.apart, JSON.stringify(r));
+    }, { bold: true, viewport, hash: '#basics' });
+  }
+});
+
 // Draw Steel's front page before 2.3.1 put these rules in a global
 // stylesheet; once it had rendered they crushed the reader's tiers and hid
 // its flaps.
