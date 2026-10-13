@@ -73,6 +73,8 @@
 .rb :focus-visible:where(:not(.rb-wslot *)) { outline: 2px solid var(--rb-acc); outline-offset: 2px; border-radius: 6px; }
 .rb-sr:where(:not(.rb-wslot *)) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .rb-sp:where(:not(.rb-wslot *)) { flex: 1; }
+.rb-tools:where(:not(.rb-wslot *)) { display: contents; }
+.rb .rb-more:where(:not(.rb-wslot *)) { display: none; }
 
 /* ---- loading and error ---- */
 .rb-state:where(:not(.rb-wslot *)) { margin: auto; display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 40px 24px; text-align: center; color: var(--rb-ink2); max-width: 420px; }
@@ -374,7 +376,14 @@
   .rb-brand .rb-name:where(:not(.rb-wslot *)) { display: none; }
   .rb-bar:where(:not(.rb-wslot *)) { gap: 8px; padding: 8px 10px; }
   .rb-seg button:where(:not(.rb-wslot *)) { padding: 6px 8px; }
-  .rb-search-in:where(:not(.rb-wslot *)) { width: 92px; }
+  .rb-search-in:where(:not(.rb-wslot *)) { width: 100%; min-width: 0; }
+  .rb-bar .rb-search:where(:not(.rb-wslot *)) { flex: 1 1 0; }
+  .rb-bar .rb-sp:where(:not(.rb-wslot *)) { display: none; }
+  .rb .rb-more:where(:not(.rb-wslot *)) { display: inline-flex; padding: 6px 12px; font-size: 16px; line-height: 1; }
+  .rb-tools:where(:not(.rb-wslot *)) { display: none; }
+  .rb-tools.open:where(:not(.rb-wslot *)) { display: flex; flex-direction: column; align-items: stretch; gap: 8px; position: absolute; top: calc(100% + 4px); right: 8px; z-index: 46; min-width: 200px; padding: 10px; border: 1px solid var(--rb-edge); border-radius: 10px; background: inherit; box-shadow: 0 14px 30px -8px rgba(0, 0, 0, 0.55); }
+  .rb-tools .rb-seg:where(:not(.rb-wslot *)) { display: flex; }
+  .rb-tools .rb-seg button:where(:not(.rb-wslot *)) { flex: 1; }
   .rb-search kbd:where(:not(.rb-wslot *)) { display: none; }
   .rb-bar:where(:not(.rb-wslot *)) { position: relative; }
   .rb-search:where(:not(.rb-wslot *)) { position: static; }
@@ -542,9 +551,10 @@
 .rb[data-look="bold"] .rb-tab:where(:not(.rb-wslot *)) { border: 0; border-radius: 3px 3px 0 0; background: var(--rb-steel); color: var(--rb-on-steel); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; font-size: 12px; }
 .rb[data-look="bold"] .rb-tab:hover:where(:not(.rb-wslot *)) { background: color-mix(in srgb, var(--rb-steel) 80%, var(--rb-hot)); color: #fff; }
 .rb[data-look="bold"] .rb-tab[aria-current="true"]:where(:not(.rb-wslot *)) { background: var(--rb-paper); color: var(--rb-ink); box-shadow: inset 0 4px 0 var(--rb-hot); }
-/* The tabs, the bookmark and the book share one width: a spread in a book's
-   proportions, centred, never the whole window. */
-.rb[data-look="bold"] .rb-tabs:where(:not(.rb-wslot *)), .rb[data-look="bold"] .rb-bm-anchor:where(:not(.rb-wslot *)), .rb[data-look="bold"] .rb-book:where(:not(.rb-wslot *)) { width: min(100% - 28px, 1500px, (100dvh - 200px) * 1.6); min-width: min(100% - 28px, 720px); margin-inline: auto; }
+/* The tabs, the bookmark and the book share one width: as wide as the
+   window allows up to a printed spread's reading width, centred, so an
+   ultrawide screen gets a book with desk around it rather than a banner. */
+.rb[data-look="bold"] .rb-tabs:where(:not(.rb-wslot *)), .rb[data-look="bold"] .rb-bm-anchor:where(:not(.rb-wslot *)), .rb[data-look="bold"] .rb-book:where(:not(.rb-wslot *)) { width: min(100% - 28px, 1600px); min-width: min(100% - 28px, 720px); margin-inline: auto; }
 .rb[data-look="bold"] .rb-tabs:where(:not(.rb-wslot *)) { padding: 12px 0 0; }
 .rb[data-look="bold"] .rb-book:where(:not(.rb-wslot *)) { margin-bottom: 18px; border-radius: 0 6px 6px 6px; box-shadow: 0 18px 30px -10px rgba(0, 0, 0, 0.5); }
 .rb[data-look="bold"] .rb-page.l:where(:not(.rb-wslot *)) { border-radius: 6px 0 0 6px; }
@@ -618,7 +628,7 @@
 /* The page-turn bar under the book: back, where the reader is, close the
    book, next. */
 .rb[data-look="bold"] .rb-book:has(+ .rb-turnbar):where(:not(.rb-wslot *)) { margin-bottom: 0; }
-.rb-turnbar:where(:not(.rb-wslot *)) { flex: 0 0 auto; display: flex; justify-content: space-between; align-items: center; gap: 10px; width: min(100% - 28px, 1500px, (100dvh - 200px) * 1.6); min-width: min(100% - 28px, 720px); margin: 10px auto 14px; }
+.rb-turnbar:where(:not(.rb-wslot *)) { flex: 0 0 auto; display: flex; justify-content: space-between; align-items: center; gap: 10px; width: min(100% - 28px, 1600px); min-width: min(100% - 28px, 720px); margin: 10px auto 14px; }
 .rb-turn-where:where(:not(.rb-wslot *)) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; font: 700 13px/1 var(--rb-ui); letter-spacing: 0.14em; text-transform: uppercase; color: var(--rb-ink2); }
 .rb-turn-ctl:where(:not(.rb-wslot *)) { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .rb .rb-pill:where(:not(.rb-wslot *)) { padding: 9px 12px; border: 1.5px solid var(--rb-ink); border-radius: 3px; font: 600 13px/1 var(--rb-ui); letter-spacing: 0.06em; text-transform: uppercase; color: var(--rb-ink); white-space: nowrap; }
@@ -626,6 +636,7 @@
 .rb .rb-pill:disabled:where(:not(.rb-wslot *)) { opacity: 0.4; }
 .rb .rb-pill:focus-visible:where(:not(.rb-wslot *)) { outline: 2px solid var(--rb-hot); outline-offset: 2px; }
 @media (max-width: 760px) {
+  .rb[data-look="bold"] .rb-tabs:where(:not(.rb-wslot *)), .rb[data-look="bold"] .rb-bm-anchor:where(:not(.rb-wslot *)), .rb[data-look="bold"] .rb-book:where(:not(.rb-wslot *)) { width: calc(100% - 12px); min-width: 0; }
   .rb-turnbar:where(:not(.rb-wslot *)) { width: calc(100% - 12px); min-width: 0; margin: 8px auto 10px; }
   .rb-turn-where:where(:not(.rb-wslot *)) { display: none; }
 }
