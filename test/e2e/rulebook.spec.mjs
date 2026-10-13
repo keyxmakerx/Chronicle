@@ -90,7 +90,7 @@ function screenFixture(opts = {}) {
         { id: 'basics', title: 'Basics', pages: [longPage('Start here'), { title: 'Where next', blocks: [{ type: 'links', items: [{ title: 'Players Screen', chapter: 'screen' }] }] }] },
         { id: 'screen', title: 'Players Screen', pages: [
           { title: 'Your turn', blocks: [{ type: 'cards', items: [{ title: 'Main action', text: 'The heaviest part of your turn.' }] }] },
-          { title: 'The power roll', blocks: [{ type: 'text', text: 'Roll two ten-sided dice.' }] },
+          opts.longScreen ? longPage('The power roll') : { title: 'The power roll', blocks: [{ type: 'text', text: 'Roll two ten-sided dice.' }] },
           { title: 'Conditions', blocks: [{ type: 'cards', items: conditions }] },
         ] },
         { id: 'combat', title: 'Combat', pages: [longPage('Turns'), longPage('Moving')] },
@@ -564,6 +564,38 @@ test('on a phone the Sections ribbon sits right of the screen ribbon, never over
     await page.$eval('.rb-ribbon-t', (t) => { t.textContent = 'The players screen of quick rules for the table'; });
     check(await measure());
   }, { screen: true, noTabs: true, viewport: { width: 390, height: 844 }, hash: '#basics' });
+});
+
+test('on a phone the screen stacks its leaves at full height and scrolls, never cropping one under the next', async () => {
+  await withBook(async (page) => {
+    await page.click('.rb-ribbon');
+    await page.waitForFunction(() => document.querySelector('.rb').classList.contains('rb-screen-open'));
+    const leaves = await page.$$eval('.rb-screen .rb-sleaf', (ls) => ls.map((l) => ({ top: l.offsetTop, h: l.offsetHeight, body: l.querySelector('.rb-scroll').offsetHeight })));
+    assert.equal(leaves.length, 3);
+    leaves.forEach((l, i) => {
+      assert.ok(l.h >= l.body, `leaf ${i} shows all of its body: ${JSON.stringify(l)}`);
+      if (i) assert.ok(l.top + 1 >= leaves[i - 1].top + leaves[i - 1].h, `leaf ${i} starts below the one before: ${JSON.stringify(leaves)}`);
+    });
+    const sc = await page.$eval('.rb-screen', (s) => ({ sh: s.scrollHeight, ch: s.clientHeight }));
+    assert.ok(sc.sh > sc.ch, `the screen scrolls: ${JSON.stringify(sc)}`);
+  }, { screen: true, longScreen: true, noTabs: true, bold: true, viewport: { width: 390, height: 844 }, hash: '#basics' });
+});
+
+test('the editor\'s preview draws a contents page from the chapters it is given, without page numbers', async () => {
+  await withBook(async (page) => {
+    const draw = (ctx) => page.evaluate((c) => {
+      const div = document.createElement('div');
+      div.innerHTML = window.ChronicleRulebook.renderPage({ title: 'Contents', blocks: [{ type: 'contents' }] }, c);
+      return [...div.querySelectorAll('.rb-toc li')].map((li) => li.textContent);
+    }, ctx);
+    const parts = [
+      { title: "Player's book", chapters: [{ id: 'intro', title: 'Contents' }, { id: 'basics', title: 'Basics' }] },
+      { title: "Director's book", director: true, chapters: [{ id: 'running', title: 'Running the game' }] },
+    ];
+    assert.deepEqual(await draw({}), []);
+    assert.deepEqual(await draw({ parts, chapterId: 'intro' }), ['1Basics', '2Running the game']);
+    assert.deepEqual(await draw({ parts, chapterId: 'intro', director: false }), ['1Basics']);
+  }, { hash: '#basics' });
 });
 
 const bmState = (page) => page.evaluate(() => {

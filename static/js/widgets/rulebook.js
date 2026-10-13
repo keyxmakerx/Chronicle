@@ -1069,17 +1069,19 @@
 
   // contentsHTML numbers every chapter this view shows, except the one the
   // list is on, with the page each starts on. The screen chapter is listed
-  // too and drops the screen, as its links do.
+  // too and drops the screen, as its links do. A page drawn on its own (the
+  // editor's preview) has no laid-out book, so it lists the chapters it was
+  // given without page numbers.
   Rulebook.prototype.contentsHTML = function (b) {
-    var self = this, rows = [], seen = {}, here = this.paintingChapter;
-    this.data.parts.forEach(function (part) {
-      part.chapters.forEach(function (ch) {
+    var self = this, rows = [], seen = {}, here = this.paintingChapter, laidOut = this.items.length > 0;
+    arr(this.data.parts).filter(isObj).forEach(function (part) {
+      arr(part.chapters).filter(isObj).forEach(function (ch) {
         if (seen[ch.id] || ch.id === here) return;
         var n = self.firstItemOf(ch.id), screen = ch.id === self.data.screen && self.screenPages.length > 0;
-        if (n < 0 && !screen) return;
+        if (laidOut ? n < 0 && !screen : self.view !== 'director' && (ch.director || part.director)) return;
         seen[ch.id] = true;
         rows.push('<li><button type="button" data-chapter="' + esc(ch.id) + '"><span class="rb-pn">' + (rows.length + 1) + '</span><span>' + esc(ch.title) +
-          (ch.director ? ' ' + self.dirTag() : '') + '</span><span class="rb-cpg">' + (screen ? 'Screen' : 'p. ' + (n + 1)) + '</span></button></li>');
+          (ch.director ? ' ' + self.dirTag() : '') + '</span><span class="rb-cpg">' + (screen ? 'Screen' : laidOut ? 'p. ' + (n + 1) : '') + '</span></button></li>');
       });
     });
     if (!rows.length) return '';
@@ -1861,8 +1863,9 @@
 
   // Reuse by the page editor: draws one wire-format page (the same shape the
   // book JSON carries) with the book's own block renderers. ctx: { terms,
-  // director } where director=false previews the player view. The result is
-  // static markup; widget blocks are not mounted.
+  // parts, chapterId, director } where director=false previews the player
+  // view and parts feed a contents block. The result is static markup; widget
+  // blocks are not mounted.
   window.ChronicleRulebook = {
     renderPage: function (page, ctx) {
       ctx = ctx || {};
@@ -1874,8 +1877,9 @@
           if (isObj(t) && str(t.text)) terms[k.toLowerCase()] = { name: str(t.name) || k, text: str(t.text) };
         });
       }
-      r.data = { terms: terms, isDirector: true };
+      r.data = { terms: terms, isDirector: true, parts: arr(ctx.parts) };
       r.view = ctx.director === false ? 'player' : 'director';
+      r.paintingChapter = str(ctx.chapterId);
       return r.pageBodyHTML(str(ctx.chapterTitle), isObj(page) ? page : {});
     },
     // Sets the --book-* theme variables on el, through the same allow-list.

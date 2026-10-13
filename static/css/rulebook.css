@@ -435,7 +435,7 @@
 .rb-cfind:where(:not(.rb-wslot *)) { width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--rb-edge); background: var(--rb-box); color: var(--rb-ink); font: 500 14px var(--rb-ui); }
 .rb-drawer .rb-dscreen:where(:not(.rb-wslot *)) { margin: 0 0 6px; color: var(--rb-ink); background: color-mix(in srgb, var(--rb-acc) 12%, var(--rb-box)); }
 @media (max-width: 900px) {
-  .rb-screen:where(:not(.rb-wslot *)) { left: 6px; right: 6px; height: calc(100% - 10px); grid-template-columns: minmax(0, 1fr); overflow: auto; overscroll-behavior: contain; border-radius: 0 0 12px 12px; }
+  .rb-screen:where(:not(.rb-wslot *)) { left: 6px; right: 6px; height: calc(100% - 10px); grid-template-columns: minmax(0, 1fr); grid-auto-rows: max-content; overflow: auto; overscroll-behavior: contain; border-radius: 0 0 12px 12px; }
   .rb-sleaf:where(:not(.rb-wslot *)) { border-radius: 0; }
   .rb-sleaf:last-child:where(:not(.rb-wslot *)) { border-radius: 0 0 12px 12px; }
   .rb-sleaf .rb-scroll:where(:not(.rb-wslot *)) { flex: 0 0 auto; overflow: visible; }
