@@ -416,7 +416,7 @@ const wordsUnderRibbon = (page) => page.evaluate(() => {
   for (const root of document.querySelectorAll('.rb-book, .rb-tabs')) {
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
     for (let n = walker.nextNode(); n; n = walker.nextNode()) {
-      if (!n.nodeValue.trim() || n.parentElement.closest('.rb-bm, [hidden]')) continue;
+      if (!n.nodeValue.trim() || n.parentElement.closest('.rb-bm, [hidden]') || getComputedStyle(n.parentElement).visibility === 'hidden') continue;
       const r = document.createRange();
       r.selectNodeContents(n);
       for (const q of r.getClientRects()) {
@@ -424,7 +424,8 @@ const wordsUnderRibbon = (page) => page.evaluate(() => {
       }
     }
   }
-  return { hits, rect: { left: Math.round(bm.left), top: Math.round(bm.top), width: Math.round(bm.width), height: Math.round(bm.height) } };
+  const book = document.querySelector('.rb-book').getBoundingClientRect();
+  return { hits, rightPageMiddle: book.left + 0.75 * book.width, rect: { left: Math.round(bm.left), top: Math.round(bm.top), width: Math.round(bm.width), height: Math.round(bm.height) } };
 });
 
 for (const [name, viewport] of [['desktop', { width: 1280, height: 720 }], ['phone', { width: 390, height: 844 }]]) {
@@ -436,7 +437,7 @@ for (const [name, viewport] of [['desktop', { width: 1280, height: 720 }], ['pho
         for (let i = 0; i < 4; i++) {
           const w = await wordsUnderRibbon(page);
           assert.deepEqual(w.hits, [], `spread ${i}: ${JSON.stringify(w.rect)}`);
-          if (name === 'desktop') assert.ok(Math.abs(w.rect.left + w.rect.width / 2 - 0.75 * 1280) < 20, `centred over the right page: ${JSON.stringify(w.rect)}`);
+          if (name === 'desktop') assert.ok(Math.abs(w.rect.left + w.rect.width / 2 - w.rightPageMiddle) < 20, `centred over the right page: ${JSON.stringify(w)}`);
           assert.equal(w.rect.height, 46);
           const next = await page.$('[data-act="next"]:not([hidden])');
           if (!next) break;

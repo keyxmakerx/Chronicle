@@ -114,6 +114,7 @@
 .rb-foot:where(:not(.rb-wslot *)) { flex: 0 0 40px; display: flex; align-items: center; padding: 0 max(var(--rb-pad), 60px); }
 .rb-page.l .rb-foot:where(:not(.rb-wslot *)) { justify-content: flex-start; }
 .rb-page.r .rb-foot:where(:not(.rb-wslot *)), .rb-page.wide .rb-foot:where(:not(.rb-wslot *)) { justify-content: flex-end; }
+.rb-fhd:where(:not(.rb-wslot *)) { display: none; }
 .rb-folio:where(:not(.rb-wslot *)) { font: 500 12px var(--rb-body); color: var(--rb-mut); font-variant-numeric: tabular-nums; }
 .rb-empty:where(:not(.rb-wslot *)) { color: var(--rb-mut); font: italic 500 16px var(--rb-body); }
 
@@ -155,7 +156,8 @@
 .rb-pn:where(:not(.rb-wslot *)) { color: var(--rb-mut); font-variant-numeric: tabular-nums; }
 .rb-contents .rb-toc:where(:not(.rb-wslot *)) { margin-top: 6px; }
 .rb-contents .rb-toc button:where(:not(.rb-wslot *)) { grid-template-columns: auto 1fr auto; align-items: center; }
-.rb-page.wide .rb-contents .rb-toc:where(:not(.rb-wslot *)) { columns: 2 300px; column-gap: 48px; }
+.rb-page.wide .rb-blocks:has(> .rb-contents):where(:not(.rb-wslot *)) { max-width: none; }
+.rb-page.wide .rb-contents .rb-toc:where(:not(.rb-wslot *)) { columns: 2 300px; column-gap: calc(2 * var(--rb-pad)); }
 .rb-contents .rb-toc li:where(:not(.rb-wslot *)) { break-inside: avoid; }
 .rb-cpg:where(:not(.rb-wslot *)) { color: var(--rb-mut); font: 600 12px var(--rb-ui); letter-spacing: 0.08em; text-transform: uppercase; font-variant-numeric: tabular-nums; }
 
@@ -537,23 +539,40 @@
 .rb[data-look="bold"] .rb-tab:where(:not(.rb-wslot *)) { border: 0; border-radius: 3px 3px 0 0; background: var(--rb-steel); color: var(--rb-on-steel); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; font-size: 12px; }
 .rb[data-look="bold"] .rb-tab:hover:where(:not(.rb-wslot *)) { background: color-mix(in srgb, var(--rb-steel) 80%, var(--rb-hot)); color: #fff; }
 .rb[data-look="bold"] .rb-tab[aria-current="true"]:where(:not(.rb-wslot *)) { background: var(--rb-paper); color: var(--rb-ink); box-shadow: inset 0 4px 0 var(--rb-hot); }
-.rb[data-look="bold"] .rb-book:where(:not(.rb-wslot *)) { margin: 0 14px 14px; border-radius: 0 0 6px 6px; box-shadow: 0 18px 30px -10px rgba(0, 0, 0, 0.5); }
+/* The tabs, the bookmark and the book share one width: a spread in a book's
+   proportions, centred, never the whole window. */
+.rb[data-look="bold"] .rb-tabs:where(:not(.rb-wslot *)), .rb[data-look="bold"] .rb-bm-anchor:where(:not(.rb-wslot *)), .rb[data-look="bold"] .rb-book:where(:not(.rb-wslot *)) { width: min(100% - 28px, 1500px, (100dvh - 200px) * 1.6); min-width: min(100% - 28px, 720px); margin-inline: auto; }
+.rb[data-look="bold"] .rb-tabs:where(:not(.rb-wslot *)) { padding: 12px 0 0; }
+.rb[data-look="bold"] .rb-book:where(:not(.rb-wslot *)) { margin-bottom: 18px; border-radius: 0 6px 6px 6px; box-shadow: 0 18px 30px -10px rgba(0, 0, 0, 0.5); }
+.rb[data-look="bold"] .rb-page.l:where(:not(.rb-wslot *)) { border-radius: 6px 0 0 6px; }
+.rb[data-look="bold"] .rb-page .rb-scroll:where(:not(.rb-wslot *)) { --rb-top: 14px; }
+/* The running head over each page, as in a printed book. */
+.rb[data-look="bold"] .rb-fhd:where(:not(.rb-wslot *)) { flex: 0 0 auto; display: flex; justify-content: space-between; gap: 12px; padding: 14px var(--rb-pad) 0; font: 700 11px/1 var(--rb-ui); letter-spacing: 0.14em; text-transform: uppercase; color: var(--rb-ink2); white-space: nowrap; overflow: hidden; }
+.rb[data-look="bold"] .rb-fhd span:where(:not(.rb-wslot *)) { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* The Sections ribbon hangs over the right-hand page's head, so only the
+   left-hand page shows one; the right keeps the space so banners line up. */
+.rb[data-look="bold"] .rb-page.r .rb-fhd:where(:not(.rb-wslot *)) { visibility: hidden; }
 .rb[data-look="bold"] .rb-page.l:where(:not(.rb-wslot *)) { box-shadow: inset -28px 0 30px -26px rgba(0, 0, 0, 0.4); }
 .rb[data-look="bold"] .rb-page.r:where(:not(.rb-wslot *)) { box-shadow: inset 28px 0 30px -26px rgba(0, 0, 0, 0.4); }
-.rb[data-look="bold"] .rb-page.wide:where(:not(.rb-wslot *)) { box-shadow: none; }
+/* A wide page is still two pages of one spread: the gutter stays shaded. */
+.rb[data-look="bold"] .rb-page.wide:where(:not(.rb-wslot *)) { box-shadow: none; border-radius: 6px; background: linear-gradient(90deg, transparent calc(50% - 30px), rgba(0, 0, 0, 0.09) 50%, transparent calc(50% + 30px)), var(--rb-paper); }
 .rb[data-look="bold"] .rb-spine:where(:not(.rb-wslot *)) { background: transparent; }
 .rb[data-look="bold"] .rb-kicker:where(:not(.rb-wslot *)) { letter-spacing: 0.22em; font-weight: 700; }
 .rb[data-look="bold"] .rb-page h1:where(:not(.rb-wslot *)), .rb[data-look="bold"] .rb-page h2:where(:not(.rb-wslot *)), .rb[data-look="bold"] .rb-sleaf h2:where(:not(.rb-wslot *)) { font-family: var(--rb-display); font-weight: 900; text-transform: uppercase; letter-spacing: 0.01em; line-height: 0.92; }
 .rb[data-look="bold"] .rb-page h1:where(:not(.rb-wslot *)) { font-size: clamp(38px, 4.8vw, 62px); }
 .rb[data-look="bold"] .rb-page h2:where(:not(.rb-wslot *)) { font-size: clamp(30px, 3.6vw, 46px); }
-/* The kicker and the title that follows it read as one dark banner that
-   bleeds to the page edges and ends in a slant. */
+/* The kicker and the title that follows it read as one dark banner under the
+   running head. It bleeds to the page's outer edge only, so the spine stays
+   paper, and ends in a slant. */
 
 
-.rb[data-look="bold"] .rb-page .rb-scroll > .rb-kicker:first-child:where(:not(.rb-wslot *)) { margin: calc(-1 * var(--rb-top)) calc(-1 * var(--rb-pad)) 0; padding: var(--rb-top) var(--rb-pad) 12px; background: var(--rb-steel); color: color-mix(in srgb, var(--rb-acc) 70%, #fff); box-shadow: inset 0 -5px 0 var(--rb-hot); }
+.rb[data-look="bold"] .rb-page .rb-scroll > .rb-kicker:first-child:where(:not(.rb-wslot *)) { margin: 0 0 0 calc(-1 * var(--rb-pad)); padding: 14px 22px 12px var(--rb-pad); background: var(--rb-steel); color: color-mix(in srgb, var(--rb-acc) 70%, #fff); box-shadow: inset 0 -5px 0 var(--rb-hot); }
 .rb[data-look="bold"] .rb-page .rb-scroll > .rb-kicker:first-child:has(+ h1:where(:not(.rb-wslot *)), + h2):where(:not(.rb-wslot *)) { padding-bottom: 0; box-shadow: none; }
-.rb[data-look="bold"] .rb-page .rb-scroll > .rb-kicker:first-child + h1:where(:not(.rb-wslot *)), .rb[data-look="bold"] .rb-page .rb-scroll > .rb-kicker:first-child + h2:where(:not(.rb-wslot *)) { margin: -1px calc(-1 * var(--rb-pad)) 22px; padding: 5px var(--rb-pad) 18px; background: var(--rb-steel); color: var(--rb-on-steel); box-shadow: inset 0 -5px 0 var(--rb-hot); clip-path: polygon(0 0, 100% 0, calc(100% - 22px) 100%, 0 100%); }
+.rb[data-look="bold"] .rb-page .rb-scroll > .rb-kicker:first-child + h1:where(:not(.rb-wslot *)), .rb[data-look="bold"] .rb-page .rb-scroll > .rb-kicker:first-child + h2:where(:not(.rb-wslot *)) { margin: -1px 0 22px calc(-1 * var(--rb-pad)); padding: 5px 40px 18px var(--rb-pad); background: var(--rb-steel); color: var(--rb-on-steel); box-shadow: inset 0 -5px 0 var(--rb-hot); clip-path: polygon(0 0, 100% 0, calc(100% - 22px) 100%, 0 100%); }
 .rb[data-look="bold"] .rb-page .rb-scroll > .rb-kicker:first-child:not(:has(+ h1:where(:not(.rb-wslot *)), + h2)):where(:not(.rb-wslot *)) { margin-bottom: 22px; }
+.rb[data-look="bold"] .rb-page.r .rb-scroll > .rb-kicker:first-child:where(:not(.rb-wslot *)) { margin: 0 calc(-1 * var(--rb-pad)) 0 0; padding-left: 22px; }
+.rb[data-look="bold"] .rb-page.r .rb-scroll > .rb-kicker:first-child + h1:where(:not(.rb-wslot *)), .rb[data-look="bold"] .rb-page.r .rb-scroll > .rb-kicker:first-child + h2:where(:not(.rb-wslot *)) { margin: -1px calc(-1 * var(--rb-pad)) 22px 0; padding-left: 22px; }
+.rb[data-look="bold"] .rb-page.r .rb-scroll > .rb-kicker:first-child:not(:has(+ h1:where(:not(.rb-wslot *)), + h2)):where(:not(.rb-wslot *)) { margin-bottom: 22px; }
 .rb[data-look="bold"] .rb-kicker .rb-dir:where(:not(.rb-wslot *)) { color: var(--rb-on-steel); border-color: color-mix(in srgb, var(--rb-on-steel) 50%, transparent); }
 
 .rb[data-look="bold"] .rb-term:where(:not(.rb-wslot *)) { text-decoration: none; border-bottom: 2px dotted var(--rb-hot); border-radius: 0; }

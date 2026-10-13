@@ -910,7 +910,12 @@
       h = this.pageBodyHTML(item.ch.title, item.p);
       this.paintingChapter = '';
     }
-    return '<div class="rb-scroll" tabindex="0" role="region" aria-label="Page ' + (item.n + 1) + ': ' + esc(label) + '">' + h + '</div>' +
+    // The running head repeats what the page already says, so readers skip
+    // it. A wide page keeps it all on the left, clear of the Sections ribbon.
+    var head = item.wide ? '<span>' + esc(this.data.title) + ' \u00B7 ' + esc(item.ch.title) + '</span>'
+      : '<span>' + esc(this.data.title) + '</span><span>' + esc(item.ch.title) + '</span>';
+    return '<div class="rb-fhd" aria-hidden="true">' + head + '</div>' +
+      '<div class="rb-scroll" tabindex="0" role="region" aria-label="Page ' + (item.n + 1) + ': ' + esc(label) + '">' + h + '</div>' +
       '<div class="rb-foot"><span class="rb-folio">' + (item.n + 1) + '</span></div>';
   };
 
