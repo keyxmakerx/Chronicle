@@ -20,7 +20,9 @@ Six rules every screen is judged against.
   Keystone buttons in Customize.
 - **Nothing bounces or waits on show.** Motion slows to a stop, with no wobble
   or overshoot, and nothing runs past half a second unless it marks a big
-  moment. Entering Site admin is the one signed exception (under Motion).
+  moment. Two signed exceptions, both under Motion: entering Site admin, and
+  the page editor's tiles, which jiggle while the pointer is over their
+  section.
 - **Calm is always respected.** Under Calm nothing travels; under Off, or on
   a device set to reduce motion, things simply appear.
 - **One look, many campaigns.** The frame is quiet and the same everywhere;
@@ -164,6 +166,11 @@ place, and Off shows the end state.
 - **Looping animations rest when the person steps away.** Every loop takes
   its clock from `window.MotionRest` (`static/js/motion_rest.js`) and stops
   requesting frames once `still()`. One-shot transitions don't need it.
+- **The page editor's tiles jiggle while you are over them.** In Customize's
+  page layout, tiles rock by a fraction of a degree only while the pointer is
+  over their section, so the loop rests the moment the person moves away; the
+  tile under the pointer, a selected tile and a dragged one hold still. Calm,
+  Off and reduced motion turn it off.
 - **Durations and easing come from the tokens** in `static/css/input.css`;
   the owner's Motion speed retimes all of them, the paper moves included.
 - **Effects have depth and stay light**: no flat pastel fills, no bounces or

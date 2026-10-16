@@ -124,6 +124,82 @@
     return shows ? document.importNode(root, true) : null;
   }
 
+  /* ---------- Example content ----------
+   * Until a category has a page to draw with, or where the chosen page has
+   * nothing for a widget, the widget shows an example of what it holds, so
+   * the owner arranges a page that looks like a page. Every string here is
+   * fixed text; nothing from a page or the layout goes into it. */
+  function exHead(icon, name) { return '<div class="cpe-ex-h">' + ic(icon) + '<span>' + name + '</span></div>'; }
+  function exRows(rows) { return '<dl class="cpe-ex-dl">' + rows.map(function (r) { return '<dt>' + r[0] + '</dt><dd>' + r[1] + '</dd>'; }).join('') + '</dl>'; }
+  function exList(items) {
+    return '<div class="cpe-ex-list">' + items.map(function (x) {
+      return '<div class="cpe-ex-li"><span class="cpe-ex-av" style="background:' + x[2] + '">' + x[0].charAt(0) + '</span><b>' + x[0] + '</b><span>' + x[1] + '</span></div>';
+    }).join('') + '</div>';
+  }
+  var EX_SCENE = '<svg viewBox="0 0 320 180" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><path d="M0 120 L60 70 L110 105 L170 45 L230 95 L280 60 L320 85 V180 H0Z" fill="rgb(255 255 255 / 0.16)"/><path d="M0 150 L80 115 L150 140 L220 110 L320 135 V180 H0Z" fill="rgb(0 0 0 / 0.25)"/><circle cx="252" cy="38" r="16" fill="rgb(255 236 179 / 0.85)"/></svg>';
+  var EX_MAP = '<svg viewBox="0 0 320 180" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><rect width="320" height="180" fill="#e8dfc4"/><path d="M0 120 C60 100 90 140 160 118 S260 90 320 104" stroke="#8fb3c9" stroke-width="10" fill="none"/><circle cx="160" cy="70" r="34" fill="none" stroke="#5b5146" stroke-width="5"/><rect x="148" y="58" width="24" height="24" fill="#fff" stroke="#5b5146" stroke-width="2"/><circle cx="96" cy="44" r="7" fill="#6366f1"/><circle cx="236" cy="132" r="7" fill="#6366f1"/><circle cx="160" cy="104" r="7" fill="#dc2626"/></svg>';
+  var EX = {
+    title: function () { return '<div class="cpe-ex-title">Saltreach</div><div class="cpe-ex-sub"><span class="cpe-ex-chip">Location</span><span>Port city on the Grey Coast</span></div>'; },
+    image: function () { return '<div class="cpe-ex-img">' + EX_SCENE + '</div>'; },
+    cover_image: function () { return '<div class="cpe-ex-img cpe-ex-cover">' + EX_SCENE + '</div>'; },
+    entry: function (w, h) {
+      return exHead('fa-align-left', 'Story') + '<p class="cpe-ex-p">Saltreach clings to the cliffs above the harbour, its streets stacked like shelves. Every ship that comes in pays the tide-toll, and the Harbour Watch decides who pays twice.</p>' +
+        (h > 1 || w > 2 ? '<p class="cpe-ex-p">Under the old lighthouse, the smugglers keep a door the Watch pretends not to see.</p>' : '');
+    },
+    attributes: function () { return exHead('fa-list', 'Attributes') + exRows([['Population', '12,400'], ['Ruler', 'Harbourmaster Vell'], ['Danger', 'Moderate']]); },
+    details: function () { return exHead('fa-info-circle', 'Details') + exRows([['Created', '3 days ago'], ['Updated', 'Today'], ['Category', 'Locations']]); },
+    tags: function () { return '<div class="cpe-ex-tags"><span>coast</span><span>trade</span><span>smugglers</span><span>session 4</span></div>'; },
+    relations: function () { return exHead('fa-link', 'Relations') + exList([['Harbourmaster Vell', 'rules', '#6366f1'], ['The Tide Guild', 'based here', '#0d9488'], ['Brother Halvard', 'was born here', '#b45309']]); },
+    children: function (w) {
+      var t = [['Trial 1', 'The Siege'], ['Trial 2', 'The Riddle Tavern'], ['Trial 3', 'The Drowned Bell']].slice(0, w > 2 ? 3 : 2);
+      return exHead('fa-sitemap', 'Sub-pages') + '<div class="cpe-ex-book">' + t.map(function (x) { return '<div><span>' + x[0] + '</span><b>' + x[1] + '</b></div>'; }).join('') + '</div>';
+    },
+    posts: function () { return exHead('fa-layer-group', 'Posts') + '<div class="cpe-ex-post"><b>The toll riots</b><span>Three summers ago the Watch doubled the toll overnight…</span></div><div class="cpe-ex-post"><b>Rumours at the docks</b><span>A ship came in with no crew and a full hold.</span></div>'; },
+    backlinks: function () { return exHead('fa-arrow-turn-down', 'Mentioned in') + exList([['Session 4 notes', 'yesterday', '#64748b'], ['The Tide Guild', 'page', '#0d9488']]); },
+    writing_prompts: function () { return exHead('fa-feather', 'Prompts') + '<ul class="cpe-ex-ul"><li>Who keeps the lighthouse now?</li><li>What does the toll pay for?</li></ul>'; },
+    read_aloud: function () { return exHead('fa-bullhorn', 'Read aloud') + '<blockquote class="cpe-ex-read">Salt wind and gull cries. Below you, a hundred masts sway in the harbour, and every one of them flies the Watch’s grey flag.</blockquote>'; },
+    page_steps: function (w, h) {
+      if (w * h === 1) return exHead('fa-list-ol', 'Steps') + '<div class="cpe-ex-ring"><b>1 of 3</b><span>played</span></div>';
+      return exHead('fa-list-ol', 'Steps') + '<ol class="cpe-ex-steps"><li class="done"><i>✓</i>Arrive at the toll gate</li><li><i>2</i>Meet the harbourmaster</li><li><i>3</i>Find the smugglers’ door</li></ol>';
+    },
+    page_table: function () {
+      return exHead('fa-table', 'Table') + '<table class="cpe-ex-tbl"><thead><tr><th>Who</th><th>Wants</th><th class="dm">Secret</th></tr></thead><tbody>' +
+        '<tr><td>Harbourmaster Vell</td><td>The toll paid</td><td class="dm">Takes smugglers’ coin</td></tr><tr><td>Old Maudry</td><td>Her son home</td><td class="dm">He’s in the hold</td></tr></tbody></table>';
+    },
+    page_encounters: function () { return exHead('fa-dragon', 'Encounters') + exList([['Watch patrol', 'Medium · 4 foes', '#dc2626'], ['Dock rats', 'Easy · swarm', '#64748b']]); },
+    divider: function () { return '<hr class="cpe-ex-hr">'; },
+    map_full: function () { return '<div class="cpe-ex-img cpe-ex-map">' + EX_MAP + '</div>'; },
+    local_graph: function () { return '<div class="cpe-ex-img cpe-ex-map">' + EX_MAP + '</div>'; },
+    calendar_preview: function () { return exHead('fa-calendar-days', 'Calendar') + exList([['Festival of Tides', 'in 3 days', '#6366f1'], ['Toll day', 'next week', '#b45309']]); },
+    timeline_preview: function () { return exHead('fa-timeline', 'Timeline') + exList([['The lighthouse falls', '412 AS', '#64748b'], ['The Watch is founded', '430 AS', '#6366f1']]); },
+    entity_notes: function () { return exHead('fa-sticky-note', 'Player notes') + '<p class="cpe-ex-p">“Don’t trust the harbourmaster.” (Ilse)</p>'; },
+    text_block: function () { return '<p class="cpe-ex-p">Your own text goes here, the same on every page.</p>'; }
+  };
+  // exampleNode builds the example for a widget at a tile's size (columns
+  // count as wide), or a quiet skeleton for widgets with no example.
+  function exampleNode(type, name, icon, w, h) {
+    var f = Object.prototype.hasOwnProperty.call(EX, type) ? EX[type] : null;
+    var box = document.createElement('div');
+    box.className = 'cpe-ex';
+    if (f) { box.innerHTML = f(w || 4, h || 2); return box; }
+    // The name and icon come from the canvas's attributes, so DOM calls only.
+    var head = document.createElement('div');
+    head.className = 'cpe-ex-h';
+    var i = document.createElement('i');
+    i.className = 'fa-solid ' + fa(icon);
+    i.setAttribute('aria-hidden', 'true');
+    var s = document.createElement('span');
+    s.textContent = name;
+    head.appendChild(i);
+    head.appendChild(s);
+    var sk = document.createElement('div');
+    sk.className = 'cpe-ex-skel';
+    for (var k = 0; k < 3; k++) sk.appendChild(document.createElement('i'));
+    box.appendChild(head);
+    box.appendChild(sk);
+    return box;
+  }
+
   function groupOf(m) {
     var t = m.type;
     if (m.widgetSlug || t === 'ext_widget') return 'From packages';
@@ -339,10 +415,21 @@
           box.classList.remove('is-wait');
           return;
         }
+        if (!PV.failed && ((PV.loaded && !PV.entityId) || has)) {
+          // No page to draw with, or nothing on this one: show an example.
+          var z = sizeOf(box.getAttribute('data-size') || '4x2');
+          box.textContent = '';
+          box.appendChild(exampleNode(box.getAttribute('data-type'), name, box.getAttribute('data-icon'), z.w, z.h));
+          var tag = document.createElement('span');
+          tag.className = 'cpe-ex-tag';
+          tag.textContent = 'Example';
+          box.appendChild(tag);
+          box.setAttribute('data-filled', '1');
+          box.classList.remove('is-wait');
+          return;
+        }
         var why;
         if (PV.failed) why = 'Couldn’t draw it here. It still shows on pages.';
-        else if (PV.loaded && !PV.entityId) why = 'Shows each page’s own ' + name.toLowerCase() + '.';
-        else if (has) why = 'Nothing to show on ' + (pageName() || 'this page') + ' yet.';
         else { box.classList.add('is-wait'); return; }
         box.classList.remove('is-wait');
         // Built with DOM calls: the name and icon come back from attributes.
@@ -376,7 +463,7 @@
     /* ---------- The canvas ---------- */
     function gridCols() { return UI.device === 'phone' ? 2 : 4; }
     function live(item, m) {
-      return '<div class="cpe-live" inert data-pv="' + pvRef(pvKey(item)) + '" data-type="' + esc(item.type) + '" data-name="' + esc(m.name) + '" data-icon="' + esc(fa(m.icon)) + '">' +
+      return '<div class="cpe-live" inert data-pv="' + pvRef(pvKey(item)) + '" data-type="' + esc(item.type) + '" data-name="' + esc(m.name) + '" data-icon="' + esc(fa(m.icon)) + '"' + (item.size ? ' data-size="' + esc(item.size) + '"' : '') + '>' +
         '<div class="cpe-wait"><i></i><i></i><i></i></div></div>';
     }
     function marks(item, m, extra) {
@@ -411,8 +498,47 @@
         return '<div class="cpe-tile ghosted' + (sel ? ' sel' : '') + '" data-id="' + esc(t.id) + '" data-kind="tile" tabindex="0" style="grid-column:span ' + w + '">' + ic('fa-eye-slash') + ' ' + esc(m.name) + ': hidden</div>';
       }
       return '<div class="cpe-tile' + (sel ? ' sel' : '') + '" data-id="' + esc(t.id) + '" data-kind="tile" tabindex="0" aria-label="' + esc(m.name + ', ' + s.w + ' by ' + s.h) + '" style="grid-column:span ' + w + ';grid-row:span ' + s.h + '">' +
-        marks(t, m, ' · ' + s.w + '×' + s.h) + (m.missing ? '<div class="cpe-ph-card is-old">' + ic(m.icon) + '<span><b>' + esc(m.name) + '</b><span>' + esc(m.desc) + '</span></span></div>' : live(t, m)) +
+        (isDm(t) ? '<span class="cpe-dm">' + ic('fa-lock') + ' DM team only</span>' : '') + tileBar(t, m, s) + (m.missing ? '<div class="cpe-ph-card is-old">' + ic(m.icon) + '<span><b>' + esc(m.name) + '</b><span>' + esc(m.desc) + '</span></span></div>' : live(t, m)) +
         (m.sizes.length > 1 ? '<span class="cpe-rsz" data-rsz="' + esc(t.id) + '" title="Drag to resize"></span>' : '') + '</div>';
+    }
+    // addTileHTML is the last tile of a section: a few widgets that can go in
+    // as tiles, added here at their first size, and the way to the rest.
+    function addTileHTML(r) {
+      if (UI.viewAs === 'player' || r.tiles.length >= MAX_TILES) return '';
+      // Suggest what the page doesn't show yet; the gallery has the rest.
+      var picks = Object.keys(W).filter(function (k) {
+        var m = W[k];
+        return m.sizes.length && !m.widgetSlug && !hasType(m.type);
+      }).slice(0, 5);
+      var rid = esc(r.id);
+      return '<div class="cpe-addt" style="grid-column:span ' + (r.tiles.length ? 1 : 2) + '"><span class="cpe-addt-h">' + ic('fa-plus') + ' Add a widget</span>' +
+        picks.map(function (k) {
+          var m = W[k];
+          return '<button type="button" data-act="tadd" data-rid="' + rid + '" data-k="' + esc(k) + '">' + ic(m.icon) + '<b>' + esc(m.name) + '</b><span>' + esc(m.sizes.map(function (z) { return z.replace('x', '×'); }).join(' ')) + '</span></button>';
+        }).join('') +
+        '<button type="button" class="cpe-addt-more" data-act="tmore" data-rid="' + rid + '">' + (paletteState === 'ready' ? 'More widgets…' : 'Loading widgets…') + '</button></div>';
+    }
+    function addTile(rid, k) {
+      var m = W[k], item = null;
+      if (!m || !m.sizes.length) return;
+      if (edit(function (lay) {
+        if (refuseSingleton(m, lay)) return false;
+        var f = findRow(rid, lay);
+        if (!f || f.row.kind !== 'tiles' || f.row.tiles.length >= MAX_TILES) return false;
+        item = newItem(m, true);
+        f.row.tiles.push(item);
+        UI.sel = { kind: 'tile', id: item.id };
+        UI.insp = 'sel';
+      }) && item) { glow(item.id); toast('Added ' + m.name + '.'); }
+    }
+    // tileBar is the tile's own handle: its name and size, and move and
+    // remove buttons, so a tile is arranged where it sits.
+    function tileBar(t, m, s) {
+      var f = findItem(t.id), i = f ? f.i : 0, n = f ? f.list.length : 1, id = esc(t.id), nm = esc(m.name);
+      return '<div class="cpe-tbar"><span class="cpe-tbar-n">' + nm + '</span><span class="cpe-tbar-s">' + s.w + '×' + s.h + '</span>' +
+        '<button type="button" data-act="tmv" data-id="' + id + '" data-v="-1" aria-label="Move ' + nm + ' earlier"' + (i === 0 ? ' disabled' : '') + '>' + ic('fa-chevron-left') + '</button>' +
+        '<button type="button" data-act="tmv" data-id="' + id + '" data-v="1" aria-label="Move ' + nm + ' later"' + (i >= n - 1 ? ' disabled' : '') + '>' + ic('fa-chevron-right') + '</button>' +
+        '<button type="button" data-act="trm" data-id="' + id + '" aria-label="Remove ' + nm + ' from the layout">' + ic('fa-xmark') + '</button></div>';
     }
     function rowHTML(r) {
       var sel = UI.sel && UI.sel.kind === 'sec' && UI.sel.id === r.id;
@@ -421,7 +547,7 @@
         var tiles = r.tiles.map(function (t) { return tileHTML(t, cols); }).join('');
         return '<section class="cpe-sec' + (sel ? ' sel' : '') + '" data-rid="' + esc(r.id) + '"><button type="button" class="cpe-sec-tag" data-selsec="' + esc(r.id) + '">' + ic('fa-table-cells') + ' Tiles · ' + cols + ' across</button>' +
           '<div class="cpe-tiles" data-tiles="' + esc(r.id) + '" style="grid-template-columns:repeat(' + cols + ',minmax(0,1fr))">' +
-          (tiles || '<div class="cpe-empty" style="grid-column:1/-1">Drop widgets here. Each one snaps to a size it allows.</div>') + '</div></section>';
+          tiles + addTileHTML(r) + '</div></section>';
       }
       var stacked = UI.device === 'phone';
       var tpl = stacked ? '1fr' : r.columns.map(function (c) { return 'minmax(0,' + c.width + 'fr)'; }).join(' ');
@@ -450,7 +576,7 @@
       var h = '<div class="cpe-pagehead">' + ic('fa-file-lines') + '<span>';
       if (PV.failed) h += 'The page couldn’t be drawn here, so widgets show their names.';
       else if (!PV.loaded) h += 'Loading a page to show the layout with…';
-      else if (!PV.entityId) h += 'No ' + esc((S.plural || 'pages').toLowerCase()) + ' yet. Widgets show their names until there is a page to draw them with.';
+      else if (!PV.entityId) h += 'No ' + esc((S.plural || 'pages').toLowerCase()) + ' yet, so widgets show example content. Your pages will fill them with their own.';
       else h += 'Shown with ' + esc(pageName()) + ', one of your ' + esc((S.plural || 'pages').toLowerCase());
       h += '</span>' + (UI.viewAs === 'player' ? '<span class="cpe-pill dm">' + ic('fa-eye') + ' As a player sees it</span>' : '<span class="cpe-pill">' + ic('fa-eye') + ' As you see it</span>') + '</div>';
       var room = L.rows.length < MAX_ROWS;
@@ -970,7 +1096,7 @@
             var kr2 = k.getBoundingClientRect(), cx = kr2.left + kr2.width / 2, cy = kr2.top + kr2.height / 2, d = Math.hypot(ev.clientX - cx, (ev.clientY - cy) * 1.4);
             if (d < best) { best = d; ix = ev.clientX < cx ? j : j + 1; }
           });
-          t = { kind: 'tiles', rid: row.id, index: ix, el: tiles, before: ks[ix] || null }; key = 't' + row.id + ':' + ix;
+          t = { kind: 'tiles', rid: row.id, index: ix, el: tiles, before: ks[ix] || $(':scope > .cpe-addt', tiles) }; key = 't' + row.id + ':' + ix;
         }
       }
       if (key === D.key) return;
@@ -1143,6 +1269,10 @@
           case 'size': UI.keepInsp = true; edit(function (lay) { findSel(lay).item.size = v; }); return;
           case 'height': UI.keepInsp = true; edit(function (lay) { var c = cfgOf(findSel(lay).item); if (v) c.minHeight = v; else delete c.minHeight; }); return;
           case 'mv': UI.keepInsp = true; moveSel(Number(v)); return;
+          case 'tmv': UI.sel = { kind: 'tile', id: b.getAttribute('data-id') }; UI.insp = 'sel'; moveSel(Number(v)); return;
+          case 'trm': UI.sel = { kind: 'tile', id: b.getAttribute('data-id') }; removeSel(); return;
+          case 'tadd': e.stopPropagation(); addTile(b.getAttribute('data-rid'), b.getAttribute('data-k')); return;
+          case 'tmore': e.stopPropagation(); UI.sel = { kind: 'sec', id: b.getAttribute('data-rid') }; UI.insp = 'add'; UI.galTiles = true; UI.sheet = true; render(); return;
           case 'mvsec': UI.keepInsp = true; moveSection(Number(v)); return;
           case 'dup': case 'dupsec': duplicateSel(); return;
           case 'rm': removeSel(); return;
@@ -1159,6 +1289,7 @@
       }
     });
     on(el, 'pointerdown', function (e) {
+      if (e.target.closest('.cpe-tbar button, .cpe-addt')) return;
       if (e.target.closest('.cpe-rsz')) { resizeStart(e); return; }
       if (e.target.closest('.cpe-div')) { dividerStart(e); return; }
       var g = e.target.closest('.cpe-gw');
