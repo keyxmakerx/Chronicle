@@ -1,0 +1,117 @@
+/* The time line block (internal/plugins/calendar/page_timeline.templ): a
+   slim line from a page's first dated event to the campaign's today, a dot
+   for each event. The accent is the campaign's; a Director-only dot is
+   dashed and muted, and a dot still ahead of today is hollow and faint.
+
+   Motion uses the signed moves. Under full motion the line draws across and
+   the dots pop in one after another; Calm fades them in place; Off and a
+   device asking for reduced motion show the line drawn. */
+
+.ptl {
+  --ptl-acc: var(--color-accent);
+  --ptl-line: var(--color-border);
+  --ptl-dm: rgb(var(--color-warn-rgb));
+  padding: 10px 16px 6px;
+}
+.ptl-rail {
+  position: relative;
+  height: 44px;
+  /* Room for half a dot and a year label at either end. */
+  margin: 0 14px;
+}
+.ptl-track,
+.ptl-fill {
+  position: absolute;
+  left: 0;
+  top: 15px;
+  height: 2px;
+  border-radius: 2px;
+}
+.ptl-track { right: 0; background: var(--ptl-line); }
+.ptl-fill { background: var(--ptl-acc); transform-origin: left; }
+
+/* Today: a short upright tick in the accent. */
+.ptl-today {
+  position: absolute;
+  top: 8px;
+  width: 2px;
+  height: 16px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--ptl-acc);
+}
+
+.ptl-dots { list-style: none; margin: 0; padding: 0; }
+.ptl-dots > li { position: absolute; top: 9px; width: 0; }
+.ptl-ev {
+  position: absolute;
+  left: -7px;
+  top: 0;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--ptl-acc);
+  background: var(--color-card-bg);
+  transition: transform var(--dur-micro) var(--ease-out), box-shadow var(--dur-micro) var(--ease-out);
+}
+.ptl-ev:hover { transform: scale(1.25); box-shadow: var(--elev-resting); }
+.ptl-ev:focus-visible { outline: 2px solid var(--ptl-acc); outline-offset: 2px; }
+.ptl-ev--now { background: var(--ptl-acc); z-index: 1; }
+.ptl-ev--later { border-color: color-mix(in srgb, var(--ptl-acc) 45%, var(--ptl-line)); }
+.ptl-ev--dm {
+  border-style: dashed;
+  border-color: var(--ptl-dm);
+}
+/* A taller target for a finger than the dot itself, kept narrow so dots
+   close together still each take their own clicks. */
+.ptl-ev::before { content: ""; position: absolute; inset: -10px -2px; }
+.ptl-dots > li:is(:hover, :focus-within) { z-index: 2; }
+
+.ptl-yr {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 11px;
+  line-height: 1;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.ptl-none,
+.ptl-more {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+.ptl-more { margin-top: 2px; }
+.ptl-none a,
+.ptl-more a { color: var(--color-accent-link, var(--ptl-acc)); }
+
+/* Full motion: the line draws across, then each dot pops in turn. */
+html:not([data-motion]):not([data-cz-reduce]) .ptl-fill {
+  animation: ptl-draw 480ms var(--ease-out) both 120ms;
+}
+html:not([data-motion]):not([data-cz-reduce]) .ptl-ev {
+  animation: ptl-pop var(--dur-standard) var(--ease-out) backwards;
+  animation-delay: calc(220ms + min(var(--i, 0), 12) * 60ms);
+}
+@keyframes ptl-draw { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes ptl-pop { from { transform: scale(0.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+/* Calm: the line and its dots fade in where they are. */
+html[data-motion="calm"] :is(.ptl-rail, .ptl-ev) {
+  transition: opacity var(--dur-large) var(--ease-out);
+}
+@starting-style {
+  html[data-motion="calm"] :is(.ptl-rail, .ptl-ev) { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ptl-fill, .ptl-ev { animation: none !important; }
+}
+
+/* Annals: the line sits on the page like the title above it. */
+[data-cz-page="annals"] #main-content .ptl.cb-card { padding-left: 0; padding-right: 0; }

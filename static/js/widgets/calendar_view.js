@@ -1740,11 +1740,29 @@
 
     _openFromLink: function () {
       var self = this, t = this._linkTarget();
-      if (!t) return;
+      if (!t) { this._openEventLink(); return; }
       if (t.poll) { this._openPollLink(t).catch(function () { /* the calendar still shows; only the jump is lost */ }); return; }
       (t.next ? this._nextNight() : Promise.resolve(t)).then(function (n) {
         return n ? self._openNight(n) : null;
       }).catch(function () { /* the calendar still shows; only the jump is lost */ });
+    },
+
+    // A page's time line links here with ?event=<id>&date=<year>-<month>-<day>
+    // (any calendar, fantasy months included): it opens that day's card on
+    // the event, the way an era panel's event does.
+    _openEventLink: function () {
+      var q;
+      try { q = new URLSearchParams(window.location.search); } catch (e) { return; }
+      var id = q.get('event'), m = /^(-?\d+)-(\d{1,2})-(\d{1,2})$/.exec(q.get('date') || '');
+      if (!id || !m) return;
+      var self = this, y = +m[1], mo = +m[2], d = +m[3];
+      if (mo < 1 || mo > (this.cal.months || []).length) return;
+      this.view = { y: y, m: mo };
+      this.renderMonth();
+      this.fetchMonth(y, mo).then(function () {
+        if (self.view.y !== y || self.view.m !== mo) return;
+        self.openWing(dayKey(y, mo, d), id);
+      });
     },
 
     // _openNight moves to a night's month and opens its day with the night

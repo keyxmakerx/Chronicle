@@ -330,6 +330,14 @@ type CalendarService interface {
 	// calendar's current date. It does not judge whether v may see the
 	// entity itself; the entity page asking has already shown it to them.
 	MoonsForEntity(ctx context.Context, campaignID, entityID string, v permissions.Viewer) ([]EntityMoonRef, error)
+	// PageTimeline lays the events that belong to entityID (its linked
+	// events and its ties) on the campaign's calendar: the default one, else
+	// the first. Each event passes every filter a month read applies for v,
+	// so a player's line never holds what their calendar would not show;
+	// hideDMOnly also drops Director-only events for everyone (the block's
+	// own setting). NotFound when the campaign has no calendar v may open.
+	// Like MoonsForEntity it does not judge whether v may see the page.
+	PageTimeline(ctx context.Context, campaignID, entityID string, hideDMOnly bool, v permissions.Viewer) (*PageTimeline, error)
 
 	// PreviewAnchorMove is a READ-ONLY preview of moving a real-anchored
 	// calendar's anchor: it computes the day shift and up to three affected
