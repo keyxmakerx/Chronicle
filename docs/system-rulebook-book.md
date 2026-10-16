@@ -89,7 +89,10 @@ parts:
   (`accent` colours the banners' edge and the tiers), so a book chooses
   `paper` or `bold`, not both. Readers find their way by the Sections ribbon
   and the bar under the book, so a bold book has no contents drawer and no
-  row of tabs.
+  row of tabs. Each chapter gets its own colour from a fixed set, in book
+  order, for its banner edge, page numbers and the big first letter of its
+  intro. A chapter that is a single `wide` contents page takes the left page
+  instead, with the next chapter opening beside it.
 - `cover` is a drawn cover: the first time a reader opens the book in a
   visit it shows closed, and a click (or Enter or Space) swings it open. A
   **Close the book** button in the top bar swings it shut again. Draw the
