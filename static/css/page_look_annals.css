@@ -37,7 +37,9 @@
   position: relative;
   padding-bottom: 8px;
   line-height: 1.05;
-  font-size: clamp(1.75rem, 1.2rem + 1.6vw, 2.5rem);
+  font-size: clamp(1.5rem, 1.2rem + 1.6vw, 2.5rem);
+  min-width: 0;
+  overflow-wrap: break-word;
   color: var(--color-text-primary);
 }
 [data-cz-page="annals"] .cb-title::after {
@@ -49,6 +51,11 @@
 }
 [data-cz-page="annals"]:not([data-motion]):not([data-cz-reduce]) .cb-title::after {
   animation: annals-draw var(--dur-large, 300ms) var(--ease-out) both 120ms;
+}
+/* On a phone the tall title takes its own line and the page's actions wrap
+   under it, rather than squeezing the name. */
+@media (max-width: 640px) {
+  [data-cz-page="annals"] .flex:has(> .min-w-0 .cb-title) { flex-wrap: wrap; }
 }
 @keyframes annals-draw { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 
@@ -155,6 +162,7 @@
   border-radius: 8px;
   transition: background var(--dur-micro) var(--ease-out), box-shadow var(--dur-standard) var(--ease-out);
 }
+[data-cz-page="annals"] #main-content .rel-card.cb-card { overflow: visible; }
 [data-cz-page="annals"] #main-content .rel-item.cb-link { padding: 6px 8px; margin: 0 -8px; }
 [data-cz-page="annals"] #main-content .cb-link:hover {
   background: var(--color-card-bg);
@@ -167,7 +175,7 @@
    One amber everywhere: the mark itself, and a row the players can't see
    gets a thin amber edge. */
 [data-cz-page="annals"] .cb-dm { color: var(--annals-dm); }
-[data-cz-page="annals"] .cb-link[data-dm-only] {
+[data-cz-page="annals"] #main-content .cb-link[data-dm-only] {
   box-shadow: inset 3px 0 0 color-mix(in srgb, var(--annals-dm) 70%, transparent);
 }
 
