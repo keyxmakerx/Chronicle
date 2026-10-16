@@ -703,7 +703,7 @@ templ blockChildren(cc *campaigns.CampaignContext, entity *Entity, children []En
 			<h2 class="cb-head text-lg font-semibold text-fg">
 				Sub-pages
 				if len(children) > 0 {
-					<span class="cb-count cb-count-paren text-sm font-normal text-fg-muted ml-1">{ fmt.Sprintf("%d", len(children)) }</span>
+					@blockCount(len(children), len(children)-childrenHiddenFromPlayers(ctx, children))
 				}
 			</h2>
 			if cc.MemberRole >= campaigns.RoleScribe {
@@ -722,6 +722,7 @@ templ blockChildren(cc *campaigns.CampaignContext, entity *Entity, children []En
 					<a
 						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, child.ID)) }
 						class="cb-link card p-4 hover:bg-surface-alt transition-colors group"
+						data-dm-only?={ hiddenFromPlayers(ctx, child.ID) }
 					>
 						<div class="flex items-center gap-3">
 							if child.ImagePath != nil && *child.ImagePath != "" {
@@ -763,12 +764,12 @@ templ blockChildren(cc *campaigns.CampaignContext, entity *Entity, children []En
 // snippets showing text around the mention.
 templ blockBacklinks(cc *campaigns.CampaignContext, backlinks []BacklinkEntry) {
 	if len(backlinks) > 0 {
-		<div class="mt-8">
+		<div class="mt-8" data-dm-only?={ backlinksForPlayers(backlinks) == 0 }>
 			<div class="flex items-center gap-2 mb-3">
 				<i class="fa-solid fa-arrow-left text-xs text-fg-muted"></i>
 				<h2 class="cb-head text-lg font-semibold text-fg">
 					Referenced by
-					<span class="cb-count cb-count-paren text-sm font-normal text-fg-muted ml-1">{ fmt.Sprintf("%d", len(backlinks)) }</span>
+					@blockCount(len(backlinks), backlinksForPlayers(backlinks))
 				</h2>
 			</div>
 			<div class="space-y-2">
@@ -776,6 +777,7 @@ templ blockBacklinks(cc *campaigns.CampaignContext, backlinks []BacklinkEntry) {
 					<a
 						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, bl.Entity.ID)) }
 						class="cb-link flex items-start gap-3 px-3 py-2 rounded-lg bg-surface-alt hover:bg-surface border border-edge-light hover:border-edge transition-colors group"
+						data-dm-only?={ bl.DmOnly }
 					>
 						<span
 							class="w-6 h-6 rounded flex items-center justify-center shrink-0 mt-0.5"
@@ -945,4 +947,17 @@ templ blockUnavailablePlaceholder(blockType string) {
 			</div>
 		</div>
 	</div>
+}
+
+// blockCount is a block heading's count. When players would see fewer rows
+// than this viewer, it carries both numbers: the full one is Director-only and
+// the players' one shows only in player view.
+templ blockCount(total, forPlayers int) {
+	<span class="cb-count cb-count-paren text-sm font-normal text-fg-muted ml-1">
+		if forPlayers == total {
+			{ fmt.Sprintf("%d", total) }
+		} else {
+			<span data-dm-only>{ fmt.Sprintf("%d", total) }</span><span data-player-only>{ fmt.Sprintf("%d", forPlayers) }</span>
+		}
+	</span>
 }

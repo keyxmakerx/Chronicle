@@ -51,6 +51,7 @@ Chronicle.register('tag-picker', {
 
         // Show DM-only indicator for dm_only tags.
         if (tag.dmOnly) {
+          chip.setAttribute('data-dm-only', '');
           var dmBadge = document.createElement('i');
           dmBadge.className = 'fa-solid fa-eye-slash tp-dm-badge cb-dm';
           dmBadge.title = 'DM only';

@@ -906,6 +906,9 @@ type BacklinkEntity struct {
 type BacklinkEntry struct {
 	Entity  BacklinkEntity `json:"entity"`
 	Snippet string         `json:"snippet"`
+	// DmOnly marks a row a player wouldn't get, for a viewer who sees more
+	// than players; player view hides it. Always false for players.
+	DmOnly bool `json:"dmOnly,omitempty"`
 }
 
 // --- Mention Links (for graph visualization) ---

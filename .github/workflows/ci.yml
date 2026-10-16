@@ -179,11 +179,20 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Install Playwright and Chromium
+        # editor_diagram_browser.test.mjs draws real Mermaid in Chromium to
+        # guard the SVG allow-list; it fails rather than skips when CI is set.
+        # Global install, found through NODE_PATH like the e2e job.
+        run: |
+          npm install -g playwright-core@1.56.1
+          npx playwright-core install --with-deps chromium
+
       - name: JS tests
         # Gates the node --test JS suite (sidebar tree/reorder, boosted-nav
-        # highlight, calendar/world-state widgets, …) so red JS tests cannot
-        # linger on main unnoticed. Uses Node's built-in test runner, no deps.
-        run: make test-js
+        # highlight, calendar/world-state widgets, diagram sanitizer in a real
+        # browser, …) so red JS tests cannot linger on main unnoticed. Uses
+        # Node's built-in test runner.
+        run: NODE_PATH="$(npm root -g)" make test-js
 
       - name: Decision-citations lint (WARN-only)
         # Surfaces orphan cordinator/decisions/*.md docs. WARN-only: always

@@ -261,14 +261,20 @@
     var head = h('tr');
     d.columns.forEach(function (c) {
       var th = h('th', '', c.label, { scope: 'col' });
-      if (c.dmOnly) th.appendChild(h('span', 'pb-dm cb-dm', 'DM'));
+      // A Director-only column marks its header and every cell, so player
+      // view hides the whole column and the table keeps its shape.
+      if (c.dmOnly) { th.appendChild(h('span', 'pb-dm cb-dm', 'DM')); th.setAttribute('data-dm-only', ''); }
       head.appendChild(th);
     });
     table.appendChild(h('thead', '', '', null)).appendChild(head);
     var body = h('tbody');
     d.rows.forEach(function (r) {
       var tr = h('tr');
-      d.columns.forEach(function (c) { tr.appendChild(h('td', '', r.cells[c.id] || '')); });
+      d.columns.forEach(function (c) {
+        var td = h('td', '', r.cells[c.id] || '');
+        if (c.dmOnly) td.setAttribute('data-dm-only', '');
+        tr.appendChild(td);
+      });
       body.appendChild(tr);
     });
     table.appendChild(body);

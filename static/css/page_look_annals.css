@@ -179,6 +179,94 @@
   box-shadow: inset 3px 0 0 color-mix(in srgb, var(--annals-dm) 70%, transparent);
 }
 
+/* ---------- Following a connection ----------
+   static/js/annals_pull.js runs a view transition and names its parts: the
+   page (annals-page), the connections block (annals-rail) and each of its
+   rows (annals-rel-<id>, class annals-rel). Under "slide" the old page stays
+   and dims while the new one pulls out from under the block, from the side
+   the block is on; "back" reverses it. "fade" is Calm. The pull runs a
+   little longer than a sheet's slide because it moves a whole page. */
+[data-cz-page="annals"] {
+  --annals-pull: calc(var(--dur-slide, 360ms) * 1.22);
+  --annals-shade: rgb(17 24 39 / 0.45);
+}
+[data-cz-page="annals"] #main-content [data-widget="relations"] {
+  transition: box-shadow var(--dur-standard) var(--ease-out);
+}
+/* The block goes opaque and casts its shadow onto the page under it. */
+html[data-annals-mode="slide"] #main-content [data-widget="relations"] {
+  position: relative; z-index: 2;
+  background: var(--color-card-bg);
+  box-shadow: -14px 0 28px -14px var(--annals-shade);
+}
+html[data-annals-mode="slide"][data-annals-side="left"] #main-content [data-widget="relations"] {
+  box-shadow: 14px 0 28px -14px var(--annals-shade);
+}
+html[data-annals-mode]::view-transition-old(root),
+html[data-annals-mode]::view-transition-new(root) { animation: none; }
+html[data-annals-mode]::view-transition-old(annals-page),
+html[data-annals-mode]::view-transition-new(annals-page) { mix-blend-mode: normal; }
+html[data-annals-mode="slide"]::view-transition-group(annals-page) { overflow: clip; }
+html[data-annals-mode="slide"]::view-transition-group(*) {
+  animation-duration: var(--annals-pull);
+  animation-timing-function: var(--ease-slide);
+}
+/* Out: the old page dims in place, the new one pulls out over it. */
+html[data-annals-mode="slide"][data-annals-pull="out"]::view-transition-old(annals-page) {
+  animation: annals-dim var(--annals-pull) var(--ease-slide) both;
+}
+html[data-annals-mode="slide"][data-annals-pull="out"]::view-transition-new(annals-page) {
+  animation: annals-from-right var(--annals-pull) var(--ease-slide) both;
+}
+html[data-annals-mode="slide"][data-annals-pull="out"][data-annals-side="left"]::view-transition-new(annals-page) {
+  animation-name: annals-from-left;
+}
+/* Back: the page slides back under the block and the one beneath brightens. */
+html[data-annals-mode="slide"][data-annals-pull="back"]::view-transition-old(annals-page) {
+  z-index: 1;
+  animation: annals-from-right var(--annals-pull) var(--ease-slide) reverse both;
+}
+html[data-annals-mode="slide"][data-annals-pull="back"][data-annals-side="left"]::view-transition-old(annals-page) {
+  animation-name: annals-from-left;
+}
+html[data-annals-mode="slide"][data-annals-pull="back"]::view-transition-new(annals-page) {
+  animation: annals-dim var(--annals-pull) var(--ease-slide) reverse both;
+}
+/* Rows only one page has fold away or fold in; shared rows just move. */
+html[data-annals-mode="slide"]::view-transition-old(.annals-rel):only-child {
+  transform-origin: top;
+  animation: annals-fold-out var(--dur-standard, 200ms) var(--ease-out) both;
+}
+html[data-annals-mode="slide"]::view-transition-new(.annals-rel):only-child {
+  transform-origin: top;
+  animation: annals-fold-in var(--dur-standard, 200ms) var(--ease-out) both calc(var(--annals-pull) * 0.45);
+}
+/* The new page's own links glow as they arrive, the page you came from in
+   the accent. */
+[data-cz-page="annals"] #main-content .rel-item[data-annals-in] {
+  animation: annals-glow calc(var(--annals-pull) * 3) var(--ease-out);
+}
+[data-cz-page="annals"] #main-content .rel-item[data-annals-from] {
+  animation: annals-glow-from calc(var(--annals-pull) * 3.5) var(--ease-out);
+}
+/* Calm: the new page fades in where the old one was. */
+html[data-annals-mode="fade"]::view-transition-group(annals-page) { animation-duration: var(--dur-standard, 200ms); }
+html[data-annals-mode="fade"]::view-transition-old(annals-page),
+html[data-annals-mode="fade"]::view-transition-new(annals-page) { animation-duration: var(--dur-standard, 200ms); }
+@keyframes annals-dim { from { opacity: 1; } to { opacity: 0.55; } }
+@keyframes annals-from-right { from { transform: translateX(100%); } to { transform: none; } }
+@keyframes annals-from-left { from { transform: translateX(-100%); } to { transform: none; } }
+@keyframes annals-fold-out { to { opacity: 0; transform: scaleY(0.4); } }
+@keyframes annals-fold-in { from { opacity: 0; transform: scaleY(0.4); } }
+@keyframes annals-glow {
+  0%, 30% { background: color-mix(in srgb, var(--annals-acc) 14%, transparent); }
+  100% { background: transparent; }
+}
+@keyframes annals-glow-from {
+  0%, 30% { background: color-mix(in srgb, var(--annals-acc) 22%, transparent); box-shadow: inset 3px 0 0 var(--annals-acc); }
+  100% { background: transparent; box-shadow: inset 3px 0 0 transparent; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   [data-cz-page="annals"] .cb-title::after { animation: none !important; }
 }

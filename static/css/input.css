@@ -4307,6 +4307,20 @@ html.dark[data-view-contrast="high"] { /* the second out-ranks a campaign's :roo
 .cb-count-paren::after { content: ")"; }
 .rel-group-count, .cb-section-h { display: none; }
 
+/* Player view. While an owner views as a player, what is marked
+   Director-only (data-dm-only, and inline secrets, data-secret) is hidden and
+   what only players see (data-player-only, such as a count without the
+   Director's rows) shows, so the preview matches what the server sends a
+   player. Real players never receive the hidden content, so this is the
+   owner's preview only. On the page after the switch, data-pv-reveal holds
+   back what is about to fold in, and the title keeps its rule drawn since the
+   page is the same one (widgets/player_view.js). */
+[data-view-as-player] :is([data-dm-only], [data-secret]),
+:root:not([data-view-as-player]) [data-player-only],
+[data-pv-reveal] :is([data-dm-only], [data-secret]):not([data-pv-shown]),
+[data-pv-reveal] [data-pv-banner]:not([data-pv-shown]) { display: none !important; }
+[data-pv-reveal] .cb-title::after { animation-delay: 0s !important; animation-duration: 0s !important; }
+
 /* A custom header that needs light words gets the light ink set inside it. */
 .cz-hdr-light {
   --color-text-primary: #f9fafb;

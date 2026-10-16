@@ -45,6 +45,69 @@ func pageChildren(ctx context.Context) []Entity {
 	return c
 }
 
+type playerHiddenKey struct{}
+
+// withPlayerHidden carries the ids of the listed pages a player can't see,
+// so the Sub-pages and Referenced by rows can carry the Director-only mark
+// (data-dm-only) that player view hides.
+func withPlayerHidden(ctx context.Context, ids map[string]bool) context.Context {
+	return context.WithValue(ctx, playerHiddenKey{}, ids)
+}
+
+// hiddenFromPlayers reports whether the listed page id is one a player can't see.
+func hiddenFromPlayers(ctx context.Context, id string) bool {
+	ids, _ := ctx.Value(playerHiddenKey{}).(map[string]bool)
+	return ids[id]
+}
+
+// playerHiddenIDs lists which of the pages shown to this viewer a player
+// would not be shown: the ids in shown that are missing from asPlayer, the
+// same list read with the player role and no personal grants.
+func playerHiddenIDs(shown, asPlayer []string) map[string]bool {
+	seen := make(map[string]bool, len(asPlayer))
+	for _, id := range asPlayer {
+		seen[id] = true
+	}
+	hidden := map[string]bool{}
+	for _, id := range shown {
+		if !seen[id] {
+			hidden[id] = true
+		}
+	}
+	return hidden
+}
+
+// childrenHiddenFromPlayers counts the sub-pages a player can't see.
+func childrenHiddenFromPlayers(ctx context.Context, children []Entity) int {
+	n := 0
+	for _, c := range children {
+		if hiddenFromPlayers(ctx, c.ID) {
+			n++
+		}
+	}
+	return n
+}
+
+// backlinksForPlayers counts the Referenced by rows a player would get.
+func backlinksForPlayers(entries []BacklinkEntry) int {
+	n := 0
+	for _, e := range entries {
+		if !e.DmOnly {
+			n++
+		}
+	}
+	return n
+}
+
+// entityIDs lists the ids of the pages.
+func entityIDs(es []Entity) []string {
+	ids := make([]string, len(es))
+	for i, e := range es {
+		ids[i] = e.ID
+	}
+	return ids
+}
+
 type autoPanelKey struct{}
 
 // withAutoPagePanel marks that the items-and-money panel goes under the page

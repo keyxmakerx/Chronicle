@@ -138,6 +138,22 @@ place, and Off shows the end state.
   over the everyday page colour before the next page loads. The row presses
   deeper and lets go slower than other menu rows. Moving between admin
   pages plays nothing; Calm fades, and Off plays nothing.
+- **Annals: following a connection pulls the page out from under it.**
+  Under the Annals page look, a click on a link in the connections block
+  leaves the page being read where it is, scroll included, and dims it, while
+  the linked page slides out from under the block, from the side the block
+  sits on, over `--dur-slide` × 1.22 with `--ease-slide`. The block stays,
+  opaque, casting a shadow onto the page beneath, and swaps its links in
+  place: links both pages share move, links only the old page had fold away,
+  and the new page's own links fold in with a glow, the page you came from in
+  the accent. Following the link back to the page the last pull came from
+  slides the page back under. It is a same-document view transition around
+  the usual boosted swap of `#main-content` (`static/js/annals_pull.js`,
+  `html[data-annals-mode]`); the scroll resets only after the old page is
+  captured, so nothing jumps before the move. Calm fades; Off, reduced
+  motion, unsaved changes, a modified click and a browser without view
+  transitions keep the ordinary page load. The browser's Back button is the
+  ordinary history restore and plays nothing.
 - **A creature's pictures settle into its hover card.** A card with both art
   and a token (`badge`) opens with the art easing from slightly close into its
   frame over 320 ms, `--ease-out`, and the token popping onto the corner
@@ -273,10 +289,24 @@ their tokens.
   styles blocks only through the **shared block parts** every block marks:
   `cb-title`, `cb-head` and `cb-count`, `cb-card` (`cb-facts` keeps its
   edge), `cb-section` with `cb-section-h`, `cb-fact` with `cb-fact-l` and
-  `cb-fact-v`, `cb-group`, `cb-link`, and `cb-dm` or `data-dm-only` for what
-  only the Director sees. A new block or package widget marks the same parts
+  `cb-fact-v`, `cb-group`, `cb-link`, and `cb-dm` (the visible mark) with
+  `data-dm-only` (the row or block players don't get) for what only the
+  Director sees. A new block or package widget marks the same parts
   to follow the look. Standard draws them exactly as before (input.css,
-  "Shared block parts").
+  "Shared block parts"). Under Annals, following a connection pulls the
+  new page out from under the connections block ("Motion").
+- **View as player** (the owner's eye button in the header) hides everything
+  marked `data-dm-only`, and inline secrets (`data-secret`), while it is on
+  (`html[data-view-as-player]`), in any look, and shows what is marked
+  `data-player-only` (a count without the Director's rows). It is the owner's
+  preview, since the server never sends players that content. Rows are
+  marked where they are drawn: DM-only blocks, relations, notes for the DMs,
+  DM-only posts and tags, page-table columns, and the sub-pages and
+  Referenced by rows a player (no personal grants) wouldn't get. In Annals
+  the switch shows what changes: Director-only rows fold away before the
+  page reloads as a player sees it, the banner folds in, and coming back
+  folds them in with the list-add glow
+  (`static/js/widgets/player_view.js`). Calm fades, Off swaps.
 - The editor's example site (`static/js/widgets/customize_look.js`,
   `static/css/customize.css`) shows each choice and keeps its numbers in step
   with the server's.
