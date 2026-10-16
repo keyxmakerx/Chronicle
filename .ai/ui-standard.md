@@ -273,14 +273,19 @@ their tokens.
   styles blocks only through the **shared block parts** every block marks:
   `cb-title`, `cb-head` and `cb-count`, `cb-card` (`cb-facts` keeps its
   edge), `cb-section` with `cb-section-h`, `cb-fact` with `cb-fact-l` and
-  `cb-fact-v`, `cb-group`, `cb-link`, and `cb-dm` or `data-dm-only` for what
-  only the Director sees. A new block or package widget marks the same parts
+  `cb-fact-v`, `cb-group`, `cb-link`, and `cb-dm` (the visible mark) with
+  `data-dm-only` (the row or block players don't get) for what only the
+  Director sees. A new block or package widget marks the same parts
   to follow the look. Standard draws them exactly as before (input.css,
   "Shared block parts").
 - **View as player** (the owner's eye button in the header) hides everything
-  marked `data-dm-only` while it is on (`html[data-view-as-player]`), in any
-  look; it is the owner's preview, since the server never sends players that
-  content. In Annals the switch shows what changes: Director-only rows fold
+  marked `data-dm-only`, and inline secrets (`data-secret`), while it is on
+  (`html[data-view-as-player]`), in any look, and shows what is marked
+  `data-player-only` (a count without the Director's rows). It is the owner's
+  preview, since the server never sends players that content. Rows are
+  marked where they are drawn: DM-only blocks, relations, notes for the DMs,
+  DM-only posts and tags, page-table columns, and the sub-pages and
+  Referenced by rows a player (no personal grants) wouldn't get. In Annals the switch shows what changes: Director-only rows fold
   away before the page reloads as a player sees it, the banner folds in, and
   coming back folds them in with the list-add glow
   (`static/js/widgets/player_view.js`). Calm fades, Off swaps.

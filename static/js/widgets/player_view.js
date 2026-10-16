@@ -36,6 +36,9 @@
   // How long the page after the reload keeps catching Director-only rows
   // that widgets draw late, before it simply shows any still to come.
   var REVEAL_WINDOW = 2500;
+  // What player view folds: Director-only rows and blocks, and inline
+  // secrets in rich text.
+  var MARK = '[data-dm-only], [data-secret]';
 
   // arrival decides what this page plays: "" (nothing), "player" (the
   // banner folds in) or "director" (Director-only rows fold in).
@@ -73,11 +76,11 @@
     var v = parseFloat(getComputedStyle(h).getPropertyValue(name));
     return isNaN(v) ? fallback : v;
   }
-  function inline(el) { return getComputedStyle(el).display.indexOf('inline') === 0; }
+  // Only block-level boxes fold; chips, table cells and the like fade.
+  function inline(el) { return !/^(block|flex|grid|flow-root|list-item)$/.test(getComputedStyle(el).display); }
 
-  // A fold animates the element's real height (Fold move); inline marks such
-  // as tag chips can't fold, so they fade. Calm fades with the space opening
-  // or closing at once; Off swaps.
+  // A fold animates the element's real height (Fold move); other marks fade.
+  // Calm fades with the space opening or closing at once; Off swaps.
   function foldOut(el, mo) {
     return new Promise(function (done) {
       function end() { el.style.display = 'none'; done(); }
@@ -118,9 +121,9 @@
   function shownMarks() {
     var main = document.getElementById('main-content');
     if (!main) return [];
-    return Array.prototype.filter.call(main.querySelectorAll('[data-dm-only]'), function (el) {
+    return Array.prototype.filter.call(main.querySelectorAll(MARK), function (el) {
       // A mark inside another mark folds with it.
-      return el.getClientRects().length && !el.parentElement.closest('[data-dm-only]');
+      return el.getClientRects().length && !el.parentElement.closest(MARK);
     });
   }
 
@@ -177,13 +180,13 @@
     }
     var main = document.getElementById('main-content');
     function reveal(root) {
-      var list = root.matches && root.matches('[data-dm-only]') ? [root] : [];
-      if (root.querySelectorAll) list = list.concat(Array.prototype.slice.call(root.querySelectorAll('[data-dm-only]')));
+      var list = root.matches && root.matches(MARK) ? [root] : [];
+      if (root.querySelectorAll) list = list.concat(Array.prototype.slice.call(root.querySelectorAll(MARK)));
       list = list.filter(function (el) { return !el.hasAttribute('data-pv-shown'); });
       // A mark inside another shows with it, before the outer one is
       // measured, so the fold reaches the outer one's whole height.
       var outer = list.filter(function (el) {
-        if (el.parentElement && el.parentElement.closest('[data-dm-only]')) { el.setAttribute('data-pv-shown', ''); return false; }
+        if (el.parentElement && el.parentElement.closest(MARK)) { el.setAttribute('data-pv-shown', ''); return false; }
         return true;
       });
       outer.forEach(function (el) { foldIn(el, mo, true); });
