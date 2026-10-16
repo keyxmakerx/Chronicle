@@ -33,6 +33,10 @@
   // The server's limits (ValidateLayout, tilegrid), checked here so a change
   // Save would refuse is refused at once, with the reason.
   var MAX_ROWS = 20, MAX_BLOCKS = 10, MAX_TILES = 40, MAX_BYTES = 100 * 1024;
+  // Drag timing (signed with the editor's mockup): how long the pointer
+  // rests before the gap moves, how long widgets take to glide, and how far
+  // the pointer must go before the gap moves again.
+  var SETTLE = 110, GLIDE = 340, NUDGE = 12;
   var GROUPS = ['The page', 'Links and lists', 'Maps and time', 'Characters and play', 'From packages', 'More'];
   var BASICS = ['title', 'image', 'entry', 'attributes', 'details', 'tags', 'divider', 'text_block', 'heading', 'callout'];
   // Where an old container keeps its widgets, so they can be listed and unpacked.
@@ -129,7 +133,7 @@
    * nothing for a widget, the widget shows an example of what it holds, so
    * the owner arranges a page that looks like a page. Every string here is
    * fixed text; nothing from a page or the layout goes into it. */
-  function exHead(icon, name) { return '<div class="cpe-ex-h">' + ic(icon) + '<span>' + name + '</span></div>'; }
+  function exHead(icon, name) { return '<div class="cpe-ex-h cb-head">' + ic(icon) + '<span>' + name + '</span></div>'; }
   function exRows(rows) { return '<dl class="cpe-ex-dl">' + rows.map(function (r) { return '<dt>' + r[0] + '</dt><dd>' + r[1] + '</dd>'; }).join('') + '</dl>'; }
   function exList(items) {
     return '<div class="cpe-ex-list">' + items.map(function (x) {
@@ -139,7 +143,7 @@
   var EX_SCENE = '<svg viewBox="0 0 320 180" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><path d="M0 120 L60 70 L110 105 L170 45 L230 95 L280 60 L320 85 V180 H0Z" fill="rgb(255 255 255 / 0.16)"/><path d="M0 150 L80 115 L150 140 L220 110 L320 135 V180 H0Z" fill="rgb(0 0 0 / 0.25)"/><circle cx="252" cy="38" r="16" fill="rgb(255 236 179 / 0.85)"/></svg>';
   var EX_MAP = '<svg viewBox="0 0 320 180" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><rect width="320" height="180" fill="#e8dfc4"/><path d="M0 120 C60 100 90 140 160 118 S260 90 320 104" stroke="#8fb3c9" stroke-width="10" fill="none"/><circle cx="160" cy="70" r="34" fill="none" stroke="#5b5146" stroke-width="5"/><rect x="148" y="58" width="24" height="24" fill="#fff" stroke="#5b5146" stroke-width="2"/><circle cx="96" cy="44" r="7" fill="#6366f1"/><circle cx="236" cy="132" r="7" fill="#6366f1"/><circle cx="160" cy="104" r="7" fill="#dc2626"/></svg>';
   var EX = {
-    title: function () { return '<div class="cpe-ex-title">Saltreach</div><div class="cpe-ex-sub"><span class="cpe-ex-chip">Location</span><span>Port city on the Grey Coast</span></div>'; },
+    title: function () { return '<div class="cpe-ex-title cb-title">Saltreach</div><div class="cpe-ex-sub"><span class="cpe-ex-chip">Location</span><span>Port city on the Grey Coast</span></div>'; },
     image: function () { return '<div class="cpe-ex-img">' + EX_SCENE + '</div>'; },
     cover_image: function () { return '<div class="cpe-ex-img cpe-ex-cover">' + EX_SCENE + '</div>'; },
     entry: function (w, h) {
@@ -175,16 +179,20 @@
     entity_notes: function () { return exHead('fa-sticky-note', 'Player notes') + '<p class="cpe-ex-p">“Don’t trust the harbourmaster.” (Ilse)</p>'; },
     text_block: function () { return '<p class="cpe-ex-p">Your own text goes here, the same on every page.</p>'; }
   };
+  // The examples that are fact panels, which keep their edge in Annals.
+  var EX_FACTS = ['attributes', 'details'];
   // exampleNode builds the example for a widget at a tile's size (columns
   // count as wide), or a quiet skeleton for widgets with no example.
   function exampleNode(type, name, icon, w, h) {
     var f = Object.prototype.hasOwnProperty.call(EX, type) ? EX[type] : null;
     var box = document.createElement('div');
-    box.className = 'cpe-ex';
+    // Examples mark the shared block parts as real blocks do, so the page
+    // looks (Annals) draw them as they draw a page.
+    box.className = 'cpe-ex cb-card' + (EX_FACTS.indexOf(type) >= 0 ? ' cb-facts' : '');
     if (f) { box.innerHTML = f(w || 4, h || 2); return box; }
     // The name and icon come from the canvas's attributes, so DOM calls only.
     var head = document.createElement('div');
-    head.className = 'cpe-ex-h';
+    head.className = 'cpe-ex-h cb-head';
     var i = document.createElement('i');
     i.className = 'fa-solid ' + fa(icon);
     i.setAttribute('aria-hidden', 'true');
@@ -210,6 +218,29 @@
     return 'More';
   }
 
+  // lookNow is the page look the campaign's pages use now: the draft's, when
+  // the Look area changed it, else the one this page was drawn with.
+  function lookNow() {
+    var d = Chronicle.customizeDraft ? Chronicle.customizeDraft() : {};
+    var p = d && d.look && d.look.draft && d.look.draft.page;
+    if (p && (p.look === 'annals' || p.look === 'standard')) return p.look;
+    return document.documentElement.getAttribute('data-cz-page') === 'annals' ? 'annals' : 'standard';
+  }
+  // moving says whether the page allows moves: Calm fades only, and Off or a
+  // device asking for less motion keep things still.
+  function moving() {
+    var h = document.documentElement;
+    if (h.hasAttribute('data-motion') || h.hasAttribute('data-cz-reduce')) return false;
+    return !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  }
+
+  // fades says whether fades may play: everything but Off and a device
+  // asking for less motion.
+  function fades() {
+    if (document.documentElement.getAttribute('data-motion') === 'off') return false;
+    return !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  }
+
   function mount(el) {
     var S = parse(el.getAttribute('data-state'), {});
     var KEY = String(S.key || '');
@@ -220,7 +251,7 @@
     var saved = S.unsaved ? { rows: [] } : shown;
     var W = {};               // palette entries by key (type, or ext_widget:slug)
     var paletteState = 'loading';
-    var UI = { device: 'desktop', viewAs: 'dm', sel: null, insp: 'add', galQ: '', galTiles: false, sheet: false };
+    var UI = { device: 'desktop', viewAs: 'dm', sel: null, insp: 'add', galQ: '', galTiles: false, sheet: false, reading: false, look: lookNow(), addAt: null, peekKeep: false };
     // The page the layout is drawn with, and each widget's look on it, by
     // pvKey. A look is a node, or null when the widget draws nothing there.
     var PV = { entityId: '', pages: [], looks: {}, idx: {}, n: 0, pending: {}, busy: false, failed: false, loaded: false, timer: 0 };
@@ -256,11 +287,46 @@
       }
       L = next;
       var same = JSON.stringify(L) === JSON.stringify(saved);
+      var before = snap();
+      if (UI.glideFrom && UI.sel) before[UI.sel.id] = UI.glideFrom;
       Chronicle.customizeCategoryWrite(KEY, { layout: same ? undefined : clone(L) }, { step: true });
       render();
+      glide(before);
       return true;
     }
     function undo() { if (Chronicle.customizeUndo) Chronicle.customizeUndo(); }
+
+    /* ---------- The page look ----------
+     * The look bar previews the page in Standard or Annals. Annals is drawn
+     * by page_look_annals.css from <html data-cz-page>, so the preview sets
+     * that mark while the editor is open and puts back what the page came
+     * with when it closes. Which look pages use is chosen in Look. */
+    var LOOK0 = document.documentElement.getAttribute('data-cz-page') === 'annals' ? 'annals' : 'standard';
+    function showLook(look) {
+      var h = document.documentElement;
+      if (look === 'annals') h.setAttribute('data-cz-page', 'annals');
+      else h.removeAttribute('data-cz-page');
+    }
+
+    /* ---------- Glide ---------- */
+    // snap notes where each widget is; glide then moves each one from there
+    // to where it is drawn now, so a change slides rather than jumps.
+    function snap() {
+      var out = {};
+      $$('[data-page] [data-id]').forEach(function (n) { out[n.getAttribute('data-id')] = n.getBoundingClientRect(); });
+      return out;
+    }
+    function glide(before) {
+      if (!moving() || !before) return;
+      var frame = $('.cpe-frame'), z = frame && parseFloat(frame.style.zoom) || 1;
+      $$('[data-page] [data-id]').forEach(function (n) {
+        var a = before[n.getAttribute('data-id')];
+        if (!a || n.classList.contains('dragging')) return;
+        var b = n.getBoundingClientRect(), dx = (a.left - b.left) / z, dy = (a.top - b.top) / z;
+        if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+        n.animate([{ transform: 'translate(' + dx + 'px,' + dy + 'px)' }, { transform: 'none' }], { duration: GLIDE, easing: 'cubic-bezier(.2,.8,.2,1)' });
+      });
+    }
 
     /* ---------- Finding things ---------- */
     function findRow(rid, lay) {
@@ -475,6 +541,7 @@
       var m = meta(b.type, b.config), sel = UI.sel && UI.sel.id === b.id;
       var base = 'cpe-blk' + (sel ? ' sel' : '');
       if (isDm(b) && UI.viewAs === 'player') {
+        if (UI.reading) return '';
         return '<div class="' + base + ' ghosted" data-id="' + esc(b.id) + '" data-kind="block" tabindex="0">' + ic('fa-eye-slash') + ' ' + esc(m.name) + ': players don’t see this</div>';
       }
       var h = HEIGHT_PX[(b.config || {}).minHeight] || 0;
@@ -495,32 +562,42 @@
     function tileHTML(t, cols) {
       var m = meta(t.type, t.config), s = sizeOf(t.size), w = Math.min(s.w, cols), sel = UI.sel && UI.sel.id === t.id;
       if (isDm(t) && UI.viewAs === 'player') {
+        if (UI.reading) return '';
         return '<div class="cpe-tile ghosted' + (sel ? ' sel' : '') + '" data-id="' + esc(t.id) + '" data-kind="tile" tabindex="0" style="grid-column:span ' + w + '">' + ic('fa-eye-slash') + ' ' + esc(m.name) + ': hidden</div>';
       }
       return '<div class="cpe-tile' + (sel ? ' sel' : '') + '" data-id="' + esc(t.id) + '" data-kind="tile" tabindex="0" aria-label="' + esc(m.name + ', ' + s.w + ' by ' + s.h) + '" style="grid-column:span ' + w + ';grid-row:span ' + s.h + '">' +
         (isDm(t) ? '<span class="cpe-dm">' + ic('fa-lock') + ' DM team only</span>' : '') + tileBar(t, m, s) + (m.missing ? '<div class="cpe-ph-card is-old">' + ic(m.icon) + '<span><b>' + esc(m.name) + '</b><span>' + esc(m.desc) + '</span></span></div>' : live(t, m)) +
         (m.sizes.length > 1 ? '<span class="cpe-rsz" data-rsz="' + esc(t.id) + '" title="Drag to resize"></span>' : '') + '</div>';
     }
-    // addTileHTML is the last tile of a section: a few widgets that can go in
-    // as tiles, added here at their first size, and the way to the rest.
+    // addTileHTML is the last tile of a section. It opens no picker of its
+    // own: it marks the section and turns the panel to its widget list, so
+    // there is one place to choose from.
     function addTileHTML(r) {
-      if (UI.viewAs === 'player' || r.tiles.length >= MAX_TILES) return '';
-      // Suggest what the page doesn't show yet; the gallery has the rest.
-      var picks = Object.keys(W).filter(function (k) {
-        var m = W[k];
-        return m.sizes.length && !m.widgetSlug && !hasType(m.type);
-      }).slice(0, 5);
-      var rid = esc(r.id);
-      return '<div class="cpe-addt" style="grid-column:span ' + (r.tiles.length ? 1 : 2) + '"><span class="cpe-addt-h">' + ic('fa-plus') + ' Add a widget</span>' +
-        picks.map(function (k) {
-          var m = W[k];
-          return '<button type="button" data-act="tadd" data-rid="' + rid + '" data-k="' + esc(k) + '">' + ic(m.icon) + '<b>' + esc(m.name) + '</b><span>' + esc(m.sizes.map(function (z) { return z.replace('x', '×'); }).join(' ')) + '</span></button>';
-        }).join('') +
-        '<button type="button" class="cpe-addt-more" data-act="tmore" data-rid="' + rid + '">' + (paletteState === 'ready' ? 'More widgets…' : 'Loading widgets…') + '</button></div>';
+      if (UI.viewAs === 'player' || UI.reading || r.tiles.length >= MAX_TILES) return '';
+      var on = UI.addAt === r.id;
+      return '<button type="button" class="cpe-addt' + (on ? ' on' : '') + '" data-act="tat" data-rid="' + esc(r.id) + '" aria-pressed="' + on + '" style="grid-column:span ' + (r.tiles.length ? 1 : 2) + '">' +
+        ic(on ? 'fa-arrow-right' : 'fa-plus') + '<b>' + (on ? 'Pick one in the panel' : 'Add a widget') + '</b>' +
+        '<span>' + (on ? 'It goes in here. Click again to stop.' : 'Choose from the list beside the page') + '</span></button>';
+    }
+    // aimAdd marks a tiles section as where the next widget picked in the
+    // panel goes, and turns the panel to the list; again, it stops.
+    function aimAdd(rid) {
+      if (UI.addAt === rid) { UI.addAt = null; render(); return; }
+      UI.addAt = rid;
+      UI.sel = null;
+      UI.insp = 'add';
+      UI.galTiles = true;
+      UI.sheet = true;
+      render();
+      var q = document.getElementById('cpe-q'), body = $('.cpe-insp-body');
+      if (body) { body.scrollTop = 0; body.classList.remove('cpe-point'); void body.offsetWidth; body.classList.add('cpe-point'); }
+      if (q) q.focus({ preventScroll: true });
     }
     function addTile(rid, k) {
       var m = W[k], item = null;
-      if (!m || !m.sizes.length) return;
+      UI.addAt = null;
+      if (!m) return;
+      if (!m.sizes.length) { toast(m.name + ' can’t be a tile. Drag it into a columns section instead.', true); render(); return; }
       if (edit(function (lay) {
         if (refuseSingleton(m, lay)) return false;
         var f = findRow(rid, lay);
@@ -580,8 +657,9 @@
       else h += 'Shown with ' + esc(pageName()) + ', one of your ' + esc((S.plural || 'pages').toLowerCase());
       h += '</span>' + (UI.viewAs === 'player' ? '<span class="cpe-pill dm">' + ic('fa-eye') + ' As a player sees it</span>' : '<span class="cpe-pill">' + ic('fa-eye') + ' As you see it</span>') + '</div>';
       var room = L.rows.length < MAX_ROWS;
+      room = room && !UI.reading;
       L.rows.forEach(function (r, i) { h += (room ? insHTML(i) : '') + rowHTML(r); });
-      h += room ? insHTML(L.rows.length, true) : '<p class="cpe-hint cpe-full">A page holds ' + MAX_ROWS + ' sections at most. Remove one to add another.</p>';
+      if (!UI.reading) h += room ? insHTML(L.rows.length, true) : '<p class="cpe-hint cpe-full">A page holds ' + MAX_ROWS + ' sections at most. Remove one to add another.</p>';
       return '<div class="cpe-frame ' + UI.device + '"><div class="cpe-page" data-page>' + h + '</div></div>';
     }
 
@@ -600,6 +678,8 @@
         '<button class="cpe-icon-btn" type="button" data-act="redo" title="Redo (Ctrl+Shift+Z)" aria-label="Redo"' + (hist.redo ? '' : ' disabled') + '>' + ic('fa-rotate-right') + '</button><span class="cpe-vr"></span>' +
         seg('Screen size', 'dev', UI.device, [['desktop', 'fa-desktop', 'Computer', 'Computer'], ['tablet', 'fa-tablet-screen-button', 'Tablet', 'Tablet'], ['phone', 'fa-mobile-screen', 'Phone', 'Phone']]) +
         seg('See it as', 'as', UI.viewAs, [['dm', 'fa-user-shield', 'You'], ['player', 'fa-user', 'A player']]) +
+        seg('Page look', 'look', UI.look, [['standard', 'fa-file-lines', 'Standard', 'Preview the Standard look. Pages use the look chosen in Look.'], ['annals', 'fa-scroll', 'Annals', 'Preview the Annals look. Pages use the look chosen in Look.']]) +
+        '<span class="cpe-read"><button type="button" class="toggle" role="switch" data-act="read" aria-checked="' + UI.reading + '" aria-label="See the page as readers do"><span class="toggle-knob"></span></button><span class="cpe-hide-md">See the page as readers do</span></span>' +
         '<span class="cpe-sp"></span>' + pages +
         '<button class="btn-secondary btn-sm" type="button" data-act="start" title="Start from a layout in the Library" aria-label="Start from…">' + ic('fa-swatchbook') + '<span class="cpe-hide-md">Start from…</span></button>' +
         '<button class="btn-secondary btn-sm" type="button" data-act="keep" title="Keep a copy of this layout in the Library" aria-label="Keep in Library">' + ic('fa-bookmark') + '<span class="cpe-hide-md">Keep in Library</span></button></div>';
@@ -629,16 +709,18 @@
       });
       var h = '<div class="cpe-search">' + ic('fa-magnifying-glass') + '<input class="cpe-inp" id="cpe-q" data-act="q" placeholder="Search widgets" value="' + esc(UI.galQ) + '" autocomplete="off" aria-label="Search widgets"></div>' +
         '<div class="cpe-row-set"><span class="cpe-hint">Only ones that can be tiles</span><button type="button" class="toggle" role="switch" data-act="galtiles" aria-checked="' + UI.galTiles + '" aria-label="Only ones that can be tiles"><span class="toggle-knob"></span></button></div>' +
-        '<p class="cpe-hint">Drag a widget onto the page, or click it to add it ' + (UI.sel ? 'next to what you selected.' : 'at the end.') + '</p>';
+        (UI.addAt && findRow(UI.addAt) ? '<p class="cpe-hint cpe-aim">' + ic('fa-arrow-left') + ' Click a widget to put it in the tiles section you marked.</p>'
+          : '<p class="cpe-hint">Drag a widget onto the page, or click it to add it ' + (UI.sel ? 'next to what you selected.' : 'at the end.') + '</p>');
       var any = false;
       GROUPS.forEach(function (g) {
         if (!groups[g]) return;
         any = true;
         h += '<div class="cpe-gal-group"><h4>' + esc(g) + '</h4><div class="cpe-gal">' + groups[g].map(function (k) {
           var m = W[k], once = m.singleton && hasType(m.type);
-          return '<button type="button" class="cpe-gw" data-gw="' + esc(k) + '" title="' + esc(m.desc) + '"' + (once ? ' disabled' : '') + '>' +
+          return '<div class="cpe-gwrap"><button type="button" class="cpe-gw" data-gw="' + esc(k) + '" title="' + esc(m.desc) + '"' + (once ? ' disabled' : '') + '>' +
             '<span class="cpe-gw-ic">' + ic(m.icon) + '</span><span class="cpe-gw-nm">' + esc(m.name) + '</span>' +
-            '<span class="cpe-gw-sz">' + (once ? 'Already on the page' : m.sizes.length ? esc(m.sizes.map(function (s) { return s.replace('x', '×'); }).join(' · ')) : 'Columns only') + '</span></button>';
+            '<span class="cpe-gw-sz">' + (once ? 'Already on the page' : m.sizes.length ? esc(m.sizes.map(function (s) { return s.replace('x', '×'); }).join(' · ')) : 'Columns only') + '</span></button>' +
+            '<button type="button" class="cpe-eye" data-act="peek" data-k="' + esc(k) + '" aria-label="Preview ' + esc(m.name) + '" title="Preview">' + ic('fa-eye') + '</button></div>';
         }).join('') + '</div></div>';
       });
       if (!any) h += '<div class="cpe-note"><b>No widgets match “' + esc(UI.galQ) + '”</b><span>Try a shorter word' + (UI.galTiles ? ', or turn off “Only ones that can be tiles”' : '') + '.</span></div>';
@@ -662,7 +744,7 @@
       h += '<div class="cpe-grp"><span class="cpe-lab">Who sees it</span><div class="cpe-seg">' +
         '<button type="button" data-act="vis" data-v="" aria-pressed="' + !isDm(it) + '">' + ic('fa-users') + ' Everyone</button>' +
         '<button type="button" data-act="vis" data-v="dm_only" aria-pressed="' + isDm(it) + '">' + ic('fa-lock') + ' DM team only</button></div>' +
-        '<span class="cpe-hint">The DM team is you and the members you gave DM access.</span></div>';
+        '<span class="cpe-hint">This sets it for every page in ' + esc(S.plural || 'this category') + '. The DM team is you and the members you gave DM access.</span></div>';
       if (f.kind === 'tile') {
         h += '<div class="cpe-grp"><span class="cpe-lab">Size</span><div class="cpe-sizes">' + m.sizes.map(function (s) {
           return '<button type="button" data-act="size" data-v="' + esc(s) + '" aria-pressed="' + (it.size === s) + '">' + sizePic(s) + esc(s.replace('x', ' × ')) + '</button>';
@@ -758,8 +840,10 @@
       if (!alive) return;
       var cv = $('.cpe-canvas'), top = cv ? cv.scrollTop : 0, ib = $('.cpe-insp-body'), itop = ib ? ib.scrollTop : 0;
       var ae = document.activeElement, fid = ae && el.contains(ae) ? ae.id : '', pos = fid === 'cpe-q' ? ae.selectionStart : null;
-      el.innerHTML = '<div class="cpe">' + notices() + '<div class="cpe-editor"><div class="cpe-main">' + toolbarHTML() +
-        '<div class="cpe-canvas">' + canvasHTML() + '</div></div>' + inspectorHTML() + '</div></div>';
+      // The canvas carries the player-view mark while it shows a player's
+      // view, so marked Director-only parts inside drawn widgets hide too.
+      el.innerHTML = '<div class="cpe' + (UI.reading ? ' reading' : '') + '">' + notices() + '<div class="cpe-editor"><div class="cpe-main">' + toolbarHTML() +
+        '<div class="cpe-canvas"' + (UI.viewAs === 'player' ? ' data-view-as-player' : '') + '>' + canvasHTML() + '</div></div>' + (UI.reading ? '' : inspectorHTML()) + '</div></div>';
       cv = $('.cpe-canvas'); if (cv) cv.scrollTop = top;
       ib = $('.cpe-insp-body'); if (ib && UI.keepInsp) ib.scrollTop = itop;
       UI.keepInsp = false;
@@ -788,8 +872,23 @@
     }
 
     /* ---------- Changing the layout ---------- */
+    // readMode shows the page as its readers get it: no frames, labels,
+    // handles or panel. The frame fades across, the one change Calm allows.
+    function readMode(on) {
+      UI.reading = !!on;
+      UI.addAt = null;
+      closePop();
+      render();
+      fadeFrame();
+    }
+    // fadeFrame fades the page in after it changes how it is drawn.
+    function fadeFrame() {
+      var f = $('.cpe-frame');
+      if (f && f.animate && fades()) f.animate([{ opacity: 0.35 }, { opacity: 1 }], { duration: 200, easing: 'cubic-bezier(.2,.8,.2,1)' });
+    }
     function select(sel) {
       UI.sel = sel;
+      UI.addAt = null;
       UI.insp = sel ? 'sel' : 'add';
       if (sel) UI.sheet = true;
       render();
@@ -926,10 +1025,16 @@
     /* ---------- Menus ---------- */
     var popEl = null;
     function closePop() {
-      if (popEl) { popEl.remove(); popEl = null; }
+      if (popEl) {
+        var gone = popEl;
+        popEl = null;
+        gone.style.pointerEvents = 'none';
+        if (fades() && gone.animate) gone.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 120, easing: 'cubic-bezier(.4,0,1,1)' }).onfinish = function () { gone.remove(); };
+        else gone.remove();
+      }
       document.removeEventListener('pointerdown', popOff, true);
     }
-    function popOff(e) { if (popEl && !popEl.contains(e.target)) closePop(); }
+    function popOff(e) { if (popEl && !popEl.contains(e.target) && !popEl.hasAttribute('data-keep')) closePop(); }
     function openPop(anchor, html, align) {
       closePop();
       popEl = document.createElement('div');
@@ -947,6 +1052,46 @@
       var first = popEl.querySelector('button, input');
       if (first) first.focus();
       return popEl;
+    }
+    // peek opens a widget's example beside the panel. Its lists, chips and
+    // steps answer clicks, so the owner can try what it does; the switch
+    // keeps it open while they carry on arranging.
+    var TRY = '.cpe-ex-li, .cpe-ex-steps li, .cpe-ex-chip, .cpe-ex-tags span, .cpe-ex-book div, .cpe-ex-post, .cpe-ex-tbl tbody tr';
+    function peek(btn, k) {
+      var m = W[k];
+      if (!m) return;
+      var z = sizeOf(m.sizes[0] || '4x2');
+      var p = openPop(btn, '<div class="cpe-peek"><div class="cpe-peek-h"><span class="cpe-title-ic">' + ic(m.icon) + '</span><div><b>' + esc(m.name) + '</b><span>' +
+        (m.sizes.length ? 'As a tile, ' + esc(m.sizes.map(function (x) { return x.replace('x', '×'); }).join(', ')) : 'In columns') + '</span></div>' +
+        '<button type="button" class="cpe-icon-btn" data-peekx aria-label="Close the preview">' + ic('fa-xmark') + '</button></div>' +
+        (m.desc ? '<p class="cpe-hint">' + esc(m.desc) + '</p>' : '') +
+        '<div class="cpe-peek-box" style="width:' + Math.min(4, z.w) * 116 + 'px;min-height:' + z.h * 104 + 'px"></div>' +
+        '<div class="cpe-row-set"><span class="cpe-hint">Keep it open and try it</span><button type="button" class="toggle" role="switch" data-peekkeep aria-checked="' + UI.peekKeep + '" aria-label="Keep it open and try it"><span class="toggle-knob"></span></button></div>' +
+        '<p class="cpe-hint">Example content. Your pages fill it with their own.</p></div>');
+      p.classList.add('cpe-peek-pop');
+      if (UI.peekKeep) p.setAttribute('data-keep', '');
+      $('.cpe-peek-box', p).appendChild(exampleNode(m.type, m.name, m.icon, z.w, z.h));
+      // Beside the panel, level with the widget, rather than over the list.
+      var panel = $('.cpe-insp'), pr = panel && panel.getBoundingClientRect(), br = btn.getBoundingClientRect();
+      if (pr && window.innerWidth > 1100) {
+        p.style.left = Math.max(12, pr.left - p.offsetWidth - 12) + 'px';
+        p.style.top = Math.max(12, Math.min(br.top - 20, window.innerHeight - p.offsetHeight - 12)) + 'px';
+      }
+      // It grows in beside the panel; Calm only fades it in.
+      p.style.transformOrigin = 'right center';
+      if (fades() && p.animate) p.animate(moving() ? [{ opacity: 0, transform: 'scale(.97)' }, { opacity: 1, transform: 'none' }] : [{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: 'cubic-bezier(.2,.8,.2,1)' });
+      p.addEventListener('click', function (e) {
+        if (e.target.closest('[data-peekx]')) { closePop(); btn.focus(); return; }
+        var sw = e.target.closest('[data-peekkeep]');
+        if (sw) {
+          UI.peekKeep = !UI.peekKeep;
+          sw.setAttribute('aria-checked', String(UI.peekKeep));
+          if (UI.peekKeep) p.setAttribute('data-keep', ''); else p.removeAttribute('data-keep');
+          return;
+        }
+        var part = e.target.closest(TRY);
+        if (part && p.contains(part)) part.classList.toggle('on');
+      });
     }
     function sectionMenu(btn, at) {
       var p = openPop(btn, '<div class="cpe-pop-list">' + SECTION_KINDS.map(function (o) {
@@ -1013,6 +1158,7 @@
       function up() {
         off();
         if (started) dragEnd();
+        else if (src.from === 'gal' && UI.addAt) addTile(UI.addAt, src.key);
         else if (src.from === 'gal') addWidget(src.key);
         else select({ kind: src.from, id: src.id });
       }
@@ -1058,6 +1204,7 @@
       $$('.no-drop').forEach(function (p) { p.classList.remove('no-drop'); var w = $('.cpe-why', p); if (w) w.remove(); });
       $$('.cpe-ins.hot').forEach(function (p) { p.classList.remove('hot'); var b = $('button', p); if (b) b.innerHTML = ic('fa-plus') + ' Add section'; });
       $$('.cpe-empty').forEach(function (p) { p.style.display = ''; });
+      $$('.near').forEach(function (p) { p.classList.remove('near'); });
     }
     function refuse(sec, msg) {
       sec.classList.add('no-drop');
@@ -1069,12 +1216,19 @@
     function dragMove(ev) {
       var D = DRAG;
       if (!D) return;
+      D.last = [ev.clientX, ev.clientY];
       D.ghost.style.left = (ev.clientX - D.ox) + 'px';
       D.ghost.style.top = (ev.clientY - D.oy) + 'px';
       var cv = $('.cpe-canvas'), cr = cv.getBoundingClientRect();
       if (ev.clientY > cr.bottom - 40) cv.scrollTop += 12; else if (ev.clientY < cr.top + 40) cv.scrollTop -= 12;
       var under = document.elementFromPoint(ev.clientX, ev.clientY);
       if (!under || !el.contains(under)) { if (D.key) { D.key = ''; D.target = null; clearMarks(); } return; }
+      // Over the gap itself the drop stays where it is, so the tiles it moved
+      // can't move it back.
+      if (under.closest('.cpe-ph')) { clearTimeout(D.wait); D.want = D.key; return; }
+      // Moving the gap moves the widgets under a still pointer; until the
+      // pointer itself moves on, the gap stays.
+      if (D.key && D.at && Math.hypot(ev.clientX - D.at[0], ev.clientY - D.at[1]) < NUDGE) return;
       var m = D.src.m, tileable = m.sizes.length > 0, t = null, key = '';
       var srcList = D.src.from !== 'gal' ? findItem(D.src.id) : null;
       var ins = under.closest('.cpe-ins'), col = under.closest('.cpe-col'), tiles = under.closest('.cpe-tiles'), sec = under.closest('.cpe-sec');
@@ -1099,7 +1253,17 @@
           t = { kind: 'tiles', rid: row.id, index: ix, el: tiles, before: ks[ix] || $(':scope > .cpe-addt', tiles) }; key = 't' + row.id + ':' + ix;
         }
       }
-      if (key === D.key) return;
+      if (key === D.key) { clearTimeout(D.wait); D.want = key; return; }
+      // A new spot takes only once the pointer rests on it a moment, so
+      // passing over tiles doesn't shuffle them.
+      if (key === D.want) return;
+      D.want = key;
+      clearTimeout(D.wait);
+      D.wait = setTimeout(function () { if (DRAG === D) { D.at = D.last; mark(D, t, key); } }, t && t.kind !== 'bad' && D.key ? SETTLE : 0);
+    }
+    function mark(D, t, key) {
+      var m = D.src.m, tileable = m.sizes.length > 0, srcList = D.src.from !== 'gal' ? findItem(D.src.id) : null;
+      var before = snap();
       D.key = key;
       D.target = t && t.kind !== 'bad' ? t : null;
       clearMarks();
@@ -1122,11 +1286,18 @@
         ph.style.gridRow = 'span ' + sz.h;
       }
       t.el.insertBefore(ph, t.before);
+      // The widgets either side of the gap light up, and the ones it pushed
+      // glide to their new places.
+      [ph.previousElementSibling, ph.nextElementSibling].forEach(function (n) {
+        if (n && n !== D.src.el && n.matches('.cpe-tile, .cpe-blk')) n.classList.add('near');
+      });
+      glide(before);
     }
     function dragDone() {
       var D = DRAG;
       if (!D) return null;
       DRAG = null;
+      clearTimeout(D.wait);
       document.body.classList.remove('cpe-dragging');
       D.ghost.remove();
       clearMarks();
@@ -1135,6 +1306,8 @@
     }
     function dragCancel() { if (DRAG) { dragDone(); render(); } }
     function dragEnd() {
+      var ph = $('.cpe-ph:not(.line)');
+      UI.glideFrom = ph ? ph.getBoundingClientRect() : null;
       var D = dragDone();
       if (!D || !alive) return;
       var t = D.target;
@@ -1168,6 +1341,7 @@
         UI.sel = { kind: nf.kind, id: moved };
         UI.insp = 'sel';
       });
+      UI.glideFrom = null;
       if (ok && moved) { glow(moved); if (D.src.from === 'gal') toast('Added ' + m.name + '.'); }
     }
 
@@ -1185,10 +1359,11 @@
       tileEl.appendChild(lab);
       tileEl.classList.add('resizing');
       function show(sz) {
-        var z = sizeOf(sz);
+        var z = sizeOf(sz), before = snap();
         tileEl.style.gridColumn = 'span ' + Math.min(z.w, cols);
         tileEl.style.gridRow = 'span ' + z.h;
         lab.textContent = z.w + ' × ' + z.h;
+        glide(before);
       }
       show(cur);
       function mv(ev) {
@@ -1259,11 +1434,14 @@
           case 'redo': if (Chronicle.customizeRedo) Chronicle.customizeRedo(); return;
           case 'dev': UI.device = v; render(); return;
           case 'as': UI.viewAs = v; render(); return;
+          case 'look': UI.look = v === 'annals' ? 'annals' : 'standard'; showLook(UI.look); render(); fadeFrame(); return;
+          case 'read': readMode(!UI.reading); return;
           case 'insp': UI.insp = v; render(); return;
           case 'sheet': UI.sheet = !UI.sheet; $('.cpe-insp').classList.toggle('open', UI.sheet); return;
           case 'galtiles': UI.galTiles = !UI.galTiles; render(); return;
           case 'addsec': e.stopPropagation(); sectionMenu(b, Number(b.getAttribute('data-at'))); return;
           case 'start': presetsMenu(b); return;
+          case 'peek': e.stopPropagation(); peek(b, b.getAttribute('data-k')); return;
           case 'keep': keepMenu(b); return;
           case 'vis': UI.keepInsp = true; edit(function (lay) { var c = cfgOf(findSel(lay).item); if (v) c.visibility = v; else delete c.visibility; }); return;
           case 'size': UI.keepInsp = true; edit(function (lay) { findSel(lay).item.size = v; }); return;
@@ -1271,8 +1449,7 @@
           case 'mv': UI.keepInsp = true; moveSel(Number(v)); return;
           case 'tmv': UI.sel = { kind: 'tile', id: b.getAttribute('data-id') }; UI.insp = 'sel'; moveSel(Number(v)); return;
           case 'trm': UI.sel = { kind: 'tile', id: b.getAttribute('data-id') }; removeSel(); return;
-          case 'tadd': e.stopPropagation(); addTile(b.getAttribute('data-rid'), b.getAttribute('data-k')); return;
-          case 'tmore': e.stopPropagation(); UI.sel = { kind: 'sec', id: b.getAttribute('data-rid') }; UI.insp = 'add'; UI.galTiles = true; UI.sheet = true; render(); return;
+          case 'tat': e.stopPropagation(); aimAdd(b.getAttribute('data-rid')); return;
           case 'mvsec': UI.keepInsp = true; moveSection(Number(v)); return;
           case 'dup': case 'dupsec': duplicateSel(); return;
           case 'rm': removeSel(); return;
@@ -1280,6 +1457,7 @@
           case 'preset': UI.keepInsp = true; setColumns(v.split(',').map(Number)); return;
         }
       }
+      if (UI.reading) return;
       var tag = e.target.closest('[data-selsec]');
       if (tag) { e.stopPropagation(); select({ kind: 'sec', id: tag.getAttribute('data-selsec') }); return; }
       if (e.target.closest('.cpe-canvas') && !e.target.closest('.cpe-blk, .cpe-tile, .cpe-ins, .cpe-div')) {
@@ -1289,6 +1467,7 @@
       }
     });
     on(el, 'pointerdown', function (e) {
+      if (UI.reading) return;
       if (e.target.closest('.cpe-tbar button, .cpe-addt')) return;
       if (e.target.closest('.cpe-rsz')) { resizeStart(e); return; }
       if (e.target.closest('.cpe-div')) { dividerStart(e); return; }
@@ -1337,12 +1516,14 @@
     on(window, 'resize', fit);
 
     render();
+    showLook(UI.look);
     loadPalette();
     return function destroy() {
       alive = false;
       clearTimeout(PV.timer);
       closePop();
       if (DRAG) { DRAG.ghost.remove(); DRAG = null; document.body.classList.remove('cpe-dragging'); }
+      showLook(LOOK0);
       listeners.forEach(function (l) { l[0].removeEventListener(l[1], l[2], l[3]); });
     };
   }
