@@ -663,6 +663,15 @@ func (h *Handler) prepareShowFor(c echo.Context, entityID string) (*showPage, er
 	// Co-DM's breadcrumb/sub-page list (ADR-057 slice 2).
 	ancestors, _ := h.service.GetAncestors(c.Request().Context(), entity.ID, int(cc.VisibilityRole()), userID)
 	children, _ := h.service.GetChildren(c.Request().Context(), entity.ID, int(cc.VisibilityRole()), userID)
+	// For a viewer who sees more than players, mark the sub-pages a player
+	// (the player role, no personal grants) wouldn't see, so player view can
+	// hide them. Display only; access is decided above.
+	var playerHidden map[string]bool
+	if cc.VisibilityRole() > int(campaigns.RolePlayer) && len(children) > 0 {
+		if asPlayer, err := h.service.GetChildren(c.Request().Context(), entity.ID, int(campaigns.RolePlayer), ""); err == nil {
+			playerHidden = playerHiddenIDs(entityIDs(children), entityIDs(asPlayer))
+		}
+	}
 
 	// Check if the "attributes" addon is enabled for this campaign.
 	// Defaults to true (show attributes) if addon checker is not wired or
@@ -737,6 +746,7 @@ func (h *Handler) prepareShowFor(c echo.Context, entityID string) (*showPage, er
 	}
 
 	ctx = withPageChildren(ctx, children)
+	ctx = withPlayerHidden(ctx, playerHidden)
 	ctx = withPagePlaces(ctx, h.loadPagePlaces(c.Request().Context(), cc, entity,
 		cc.MemberRole >= campaigns.RoleScribe && access.CanEdit, userID))
 	ctx = withPageParent(ctx, parentOfEntity(entity, ancestors))
@@ -3673,6 +3683,25 @@ func (h *Handler) BacklinksFragment(c echo.Context) error {
 	}
 	if entries == nil {
 		entries = []BacklinkEntry{}
+	}
+	// For a viewer who sees more than players, mark the rows a player (the
+	// player role, no personal grants, secrets stripped) wouldn't get, so
+	// player view can hide them.
+	if role > int(campaigns.RolePlayer) && len(entries) > 0 {
+		if asPlayer, err := h.service.GetBacklinksWithSnippets(ctx, cc.Campaign.ID, entityID, int(campaigns.RolePlayer), "", false); err == nil {
+			shown := make([]string, len(entries))
+			for i, e := range entries {
+				shown[i] = e.Entity.ID
+			}
+			seen := make([]string, len(asPlayer))
+			for i, e := range asPlayer {
+				seen[i] = e.Entity.ID
+			}
+			hidden := playerHiddenIDs(shown, seen)
+			for i := range entries {
+				entries[i].DmOnly = hidden[entries[i].Entity.ID]
+			}
+		}
 	}
 
 	// Cache in Redis.

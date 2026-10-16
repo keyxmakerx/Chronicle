@@ -273,6 +273,14 @@
         return !isNaN(c) && !isNaN(u) && u - c > 1000;
       }
 
+      // A note only the DMs (or DMs and scribes) read is Director-only, so
+      // player view folds it away (shared block parts, data-dm-only).
+      function markDm(row, n) {
+        var a = AUDIENCES[n.audience];
+        if (a && a.tone === 'dm') row.setAttribute('data-dm-only', '');
+        else row.removeAttribute('data-dm-only');
+      }
+
       function noteHTML(n) {
         var mine = n.authorUserId === me;
         var who = authorName(n.authorUserId);
@@ -336,6 +344,7 @@
             row.className = 'en-note';
             row.setAttribute('data-en-id', n.id);
             row.innerHTML = noteHTML(n);
+            markDm(row, n);
             if (lastCount >= 0) {
               row.classList.add(fromServer && !isOwnEcho(n) ? 'en-glow' : 'en-arrive');
               row.addEventListener('animationend', function () { row.classList.remove('en-glow', 'en-arrive'); });
@@ -343,6 +352,7 @@
           } else if (sigs[n.id] !== sig) {
             var before = sigs[n.id] ? JSON.parse(sigs[n.id]) : [];
             row.innerHTML = noteHTML(n);
+            markDm(row, n);
             var textChanged = before[0] !== n.title || before[1] !== n.bodyHtml;
             if (fromServer && textChanged && !isOwnEcho(n)) {
               row.classList.remove('en-changed');
