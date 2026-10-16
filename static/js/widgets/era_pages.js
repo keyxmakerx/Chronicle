@@ -36,7 +36,7 @@
   function backToNow() {
     var url = location.pathname;
     if (window.htmx) {
-      window.htmx.ajax('GET', url, { target: '#main-content', select: '#main-content', swap: 'innerHTML show:none' })
+      window.htmx.ajax('GET', url, { target: '#main-content', select: '#main-content > *', swap: 'innerHTML show:none' })
         .then(function () { try { history.pushState({}, '', url); } catch (e) { /* stays on the old address */ } });
     } else {
       location.search = '';
