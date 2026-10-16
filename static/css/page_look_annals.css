@@ -1,0 +1,272 @@
+/* Annals: a page look that restyles every block through the shared block
+   parts (input.css, "Shared block parts") without moving anything. It is on
+   when the campaign's Customize page look is Annals, which puts
+   data-cz-page="annals" on <html>; the Customize page editor sets the same
+   attribute on its preview to show it. Everything here is scoped to it.
+
+   The look: headings in the campaign's heading face (tall capitals when the
+   owner picked none, set as --annals-* by AppearanceCSS), the campaign accent
+   as the one colour, and borders only where they carry meaning. Fact panels
+   and tools keep an edge; prose, connections and link lists sit on the page
+   and lift on hover. Motion follows the six signed moves: the title's rule
+   draws on arrival under full motion only. */
+
+[data-cz-page="annals"] {
+  --annals-acc: var(--color-accent);
+  --annals-link: var(--color-accent-link, var(--color-accent));
+  --annals-head: var(--annals-hf, var(--font-heading, inherit));
+  --annals-line: var(--color-border-light);
+  --annals-dm: rgb(var(--color-warn-rgb));
+}
+
+/* ---------- The header, a little thinner ----------
+   Every header function stays; the tall header the owner can pick wins. */
+[data-cz-page="annals"]:not([data-cz-hdr="tall"]) #app-topbar { height: 3rem; }
+[data-cz-page="annals"]:not([data-cz-hdr="tall"]):not([data-cz-corner="banner"]) .nav-brand { height: 3rem; }
+
+/* ---------- Headings ---------- */
+[data-cz-page="annals"] :is(.cb-title, .cb-head, .cb-section-h) {
+  font-family: var(--annals-head);
+  text-transform: var(--annals-hcase, none);
+  font-weight: var(--annals-hw, var(--cz-hw, 600));
+  letter-spacing: var(--annals-hls, var(--cz-hls, 0));
+}
+
+/* The page title, with the accent rule under it. */
+[data-cz-page="annals"] .cb-title {
+  position: relative;
+  padding-bottom: 8px;
+  line-height: 1.05;
+  font-size: clamp(1.5rem, 1.2rem + 1.6vw, 2.5rem);
+  min-width: 0;
+  overflow-wrap: break-word;
+  color: var(--color-text-primary);
+}
+[data-cz-page="annals"] .cb-title::after {
+  content: "";
+  position: absolute; left: 0; right: 0; bottom: 0;
+  height: 3px; border-radius: 2px;
+  background: linear-gradient(90deg, var(--annals-acc), color-mix(in srgb, var(--annals-acc) 30%, transparent));
+  transform-origin: left;
+}
+[data-cz-page="annals"]:not([data-motion]):not([data-cz-reduce]) .cb-title::after {
+  animation: annals-draw var(--dur-large, 300ms) var(--ease-out) both 120ms;
+}
+/* On a phone the tall title takes its own line and the page's actions wrap
+   under it, rather than squeezing the name. */
+@media (max-width: 640px) {
+  [data-cz-page="annals"] .flex:has(> .min-w-0 .cb-title) { flex-wrap: wrap; }
+}
+@keyframes annals-draw { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+/* Block headings read as section labels with a hairline under them. */
+[data-cz-page="annals"] .cb-head {
+  display: flex; align-items: baseline; gap: 8px;
+  flex: 1 1 auto;
+  font-size: 0.9rem;
+  color: var(--color-text-primary) !important;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--annals-line);
+}
+[data-cz-page="annals"] .cb-head > i { color: var(--annals-acc); font-size: 0.8em; }
+
+/* Counts become a quiet pill beside their heading. */
+[data-cz-page="annals"] .cb-count {
+  display: inline-block;
+  margin-left: 0;
+  font-family: var(--font-campaign, inherit);
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 11px; font-weight: 600; line-height: 18px;
+  padding: 0 7px; border-radius: 999px;
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+[data-cz-page="annals"] .cb-count-paren::before,
+[data-cz-page="annals"] .cb-count-paren::after { content: none; }
+
+/* ---------- Surfaces: borders only where they mean something ---------- */
+[data-cz-page="annals"] #main-content .cb-card {
+  border-color: transparent;
+  box-shadow: none;
+  background: transparent;
+}
+/* Fact panels and tools keep their edge. */
+[data-cz-page="annals"] #main-content .cb-card:is(.cb-facts, .en-block) {
+  border-color: var(--annals-line);
+  border-radius: 12px;
+  background: var(--color-card-bg);
+  box-shadow: var(--elev-resting);
+}
+/* Pictures keep their rounded frame, with no line round them. */
+[data-cz-page="annals"] #main-content .cb-card:has(> img) { border-radius: 12px; }
+
+/* Rich text sits on the page until it is being edited. */
+[data-cz-page="annals"] #main-content .chronicle-editor:not(.chronicle-editor--editing) {
+  border-color: transparent;
+  background: transparent;
+}
+[data-cz-page="annals"] #main-content .chronicle-editor .tiptap a:not([class]) {
+  color: var(--annals-link);
+  text-decoration: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--annals-link) 40%, transparent);
+}
+
+/* ---------- Fact sections and rows ---------- */
+[data-cz-page="annals"] .cb-section-h {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--annals-acc);
+  padding-top: 4px;
+}
+[data-cz-page="annals"] .cb-section > .cb-fact.cb-fact {
+  margin-top: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 9rem) minmax(0, 1fr);
+  gap: 12px;
+  padding: 7px 0;
+  border-top: 1px solid var(--annals-line);
+}
+[data-cz-page="annals"] .cb-section > .cb-section-h + .cb-fact,
+[data-cz-page="annals"] .cb-section > .cb-fact:first-child { border-top: 0; }
+[data-cz-page="annals"] .cb-fact-l {
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+  font-size: 0.85rem;
+  color: var(--color-text-muted) !important;
+}
+[data-cz-page="annals"] .cb-fact-v { margin-top: 0; font-variant-numeric: tabular-nums; }
+[data-cz-page="annals"] .cb-fact > .era-was { grid-column: 2; }
+@media (max-width: 480px) {
+  [data-cz-page="annals"] .cb-section > .cb-fact.cb-fact { grid-template-columns: minmax(0, 6rem) minmax(0, 1fr); }
+}
+
+/* ---------- Connections and link lists ----------
+   Groups are labelled in the accent with a count; rows sit on the page and
+   lift on hover. */
+[data-cz-page="annals"] .cb-group {
+  display: flex; align-items: center; gap: 6px;
+  border-bottom: 0;
+  background: none;
+  padding: 10px 0 2px;
+  font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--annals-acc);
+}
+[data-cz-page="annals"] .cb-group > i { display: none; }
+[data-cz-page="annals"] .cb-group > .cb-count { margin-left: auto; }
+[data-cz-page="annals"] #main-content .cb-link {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 8px;
+  transition: background var(--dur-micro) var(--ease-out), box-shadow var(--dur-standard) var(--ease-out);
+}
+[data-cz-page="annals"] #main-content .rel-card.cb-card { overflow: visible; }
+[data-cz-page="annals"] #main-content .rel-item.cb-link { padding: 6px 8px; margin: 0 -8px; }
+[data-cz-page="annals"] #main-content .cb-link:hover {
+  background: var(--color-card-bg);
+  box-shadow: var(--elev-resting);
+}
+[data-cz-page="annals"] .rel-item.cb-link .rel-icon { border-radius: 8px; }
+[data-cz-page="annals"] .rel-item.cb-link .rel-name a { font-weight: 600; }
+
+/* ---------- Director-only marks ----------
+   One amber everywhere: the mark itself, and a row the players can't see
+   gets a thin amber edge. */
+[data-cz-page="annals"] .cb-dm { color: var(--annals-dm); }
+[data-cz-page="annals"] #main-content .cb-link[data-dm-only] {
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--annals-dm) 70%, transparent);
+}
+
+/* ---------- Following a connection ----------
+   static/js/annals_pull.js runs a view transition and names its parts: the
+   page (annals-page), the connections block (annals-rail) and each of its
+   rows (annals-rel-<id>, class annals-rel). Under "slide" the old page stays
+   and dims while the new one pulls out from under the block, from the side
+   the block is on; "back" reverses it. "fade" is Calm. The pull runs a
+   little longer than a sheet's slide because it moves a whole page. */
+[data-cz-page="annals"] {
+  --annals-pull: calc(var(--dur-slide, 360ms) * 1.22);
+  --annals-shade: rgb(17 24 39 / 0.45);
+}
+[data-cz-page="annals"] #main-content [data-widget="relations"] {
+  transition: box-shadow var(--dur-standard) var(--ease-out);
+}
+/* The block goes opaque and casts its shadow onto the page under it. */
+html[data-annals-mode="slide"] #main-content [data-widget="relations"] {
+  position: relative; z-index: 2;
+  background: var(--color-card-bg);
+  box-shadow: -14px 0 28px -14px var(--annals-shade);
+}
+html[data-annals-mode="slide"][data-annals-side="left"] #main-content [data-widget="relations"] {
+  box-shadow: 14px 0 28px -14px var(--annals-shade);
+}
+html[data-annals-mode]::view-transition-old(root),
+html[data-annals-mode]::view-transition-new(root) { animation: none; }
+html[data-annals-mode]::view-transition-old(annals-page),
+html[data-annals-mode]::view-transition-new(annals-page) { mix-blend-mode: normal; }
+html[data-annals-mode="slide"]::view-transition-group(annals-page) { overflow: clip; }
+html[data-annals-mode="slide"]::view-transition-group(*) {
+  animation-duration: var(--annals-pull);
+  animation-timing-function: var(--ease-slide);
+}
+/* Out: the old page dims in place, the new one pulls out over it. */
+html[data-annals-mode="slide"][data-annals-pull="out"]::view-transition-old(annals-page) {
+  animation: annals-dim var(--annals-pull) var(--ease-slide) both;
+}
+html[data-annals-mode="slide"][data-annals-pull="out"]::view-transition-new(annals-page) {
+  animation: annals-from-right var(--annals-pull) var(--ease-slide) both;
+}
+html[data-annals-mode="slide"][data-annals-pull="out"][data-annals-side="left"]::view-transition-new(annals-page) {
+  animation-name: annals-from-left;
+}
+/* Back: the page slides back under the block and the one beneath brightens. */
+html[data-annals-mode="slide"][data-annals-pull="back"]::view-transition-old(annals-page) {
+  z-index: 1;
+  animation: annals-from-right var(--annals-pull) var(--ease-slide) reverse both;
+}
+html[data-annals-mode="slide"][data-annals-pull="back"][data-annals-side="left"]::view-transition-old(annals-page) {
+  animation-name: annals-from-left;
+}
+html[data-annals-mode="slide"][data-annals-pull="back"]::view-transition-new(annals-page) {
+  animation: annals-dim var(--annals-pull) var(--ease-slide) reverse both;
+}
+/* Rows only one page has fold away or fold in; shared rows just move. */
+html[data-annals-mode="slide"]::view-transition-old(.annals-rel):only-child {
+  transform-origin: top;
+  animation: annals-fold-out var(--dur-standard, 200ms) var(--ease-out) both;
+}
+html[data-annals-mode="slide"]::view-transition-new(.annals-rel):only-child {
+  transform-origin: top;
+  animation: annals-fold-in var(--dur-standard, 200ms) var(--ease-out) both calc(var(--annals-pull) * 0.45);
+}
+/* The new page's own links glow as they arrive, the page you came from in
+   the accent. */
+[data-cz-page="annals"] #main-content .rel-item[data-annals-in] {
+  animation: annals-glow calc(var(--annals-pull) * 3) var(--ease-out);
+}
+[data-cz-page="annals"] #main-content .rel-item[data-annals-from] {
+  animation: annals-glow-from calc(var(--annals-pull) * 3.5) var(--ease-out);
+}
+/* Calm: the new page fades in where the old one was. */
+html[data-annals-mode="fade"]::view-transition-group(annals-page) { animation-duration: var(--dur-standard, 200ms); }
+html[data-annals-mode="fade"]::view-transition-old(annals-page),
+html[data-annals-mode="fade"]::view-transition-new(annals-page) { animation-duration: var(--dur-standard, 200ms); }
+@keyframes annals-dim { from { opacity: 1; } to { opacity: 0.55; } }
+@keyframes annals-from-right { from { transform: translateX(100%); } to { transform: none; } }
+@keyframes annals-from-left { from { transform: translateX(-100%); } to { transform: none; } }
+@keyframes annals-fold-out { to { opacity: 0; transform: scaleY(0.4); } }
+@keyframes annals-fold-in { from { opacity: 0; transform: scaleY(0.4); } }
+@keyframes annals-glow {
+  0%, 30% { background: color-mix(in srgb, var(--annals-acc) 14%, transparent); }
+  100% { background: transparent; }
+}
+@keyframes annals-glow-from {
+  0%, 30% { background: color-mix(in srgb, var(--annals-acc) 22%, transparent); box-shadow: inset 3px 0 0 var(--annals-acc); }
+  100% { background: transparent; box-shadow: inset 3px 0 0 transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-cz-page="annals"] .cb-title::after { animation: none !important; }
+}

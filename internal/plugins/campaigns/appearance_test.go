@@ -108,6 +108,7 @@ func appearanceFieldCases() []fieldCase {
 		{"menu corner", func(in *AppearanceInput, v string) { in.Sidebar.Corner = v }, func(a *Appearance) string { return a.SidebarCorner }, "subtitle"},
 		{"hover card", func(in *AppearanceInput, v string) { in.Hover.Look = v }, func(a *Appearance) string { return a.HoverCard }, "night"},
 		{"character sheet style", func(in *AppearanceInput, v string) { in.Sheet.Style = v }, func(a *Appearance) string { return a.SheetStyle }, "brass"},
+		{"page look", func(in *AppearanceInput, v string) { in.Page.Look = v }, func(a *Appearance) string { return a.PageLook }, "annals"},
 	}
 }
 
@@ -153,6 +154,7 @@ func TestApplyAppearance_EveryListedValueAccepted(t *testing.T) {
 		"body font": AppearanceBodyFonts, "heading font": AppearanceHeadingFonts, "type scale": AppearanceTypeScales,
 		"button style": AppearanceButtonStyles, "elevation": AppearanceElevations, "motion speed": AppearanceSpeeds,
 		"hover card": AppearanceHoverCards, "character sheet style": AppearanceSheetStyles,
+		"page look": AppearancePageLooks,
 	}
 	for _, fc := range appearanceFieldCases() {
 		for _, v := range lists[fc.name] {

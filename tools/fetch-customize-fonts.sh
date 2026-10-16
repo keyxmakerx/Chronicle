@@ -24,7 +24,8 @@ cormorant|Cormorant+Garamond|wght@600
 fraunces|Fraunces|wght@600
 playfair|Playfair+Display|wght@600
 josefin|Josefin+Sans|wght@600
-chakra|Chakra+Petch|wght@600'
+chakra|Chakra+Petch|wght@600
+oswald|Oswald|wght@500;600'
 
 CSS_DIR=$(mktemp -d); trap 'rm -rf "$CSS_DIR"' EXIT
 while IFS='|' read -r id fam axes; do

@@ -57,6 +57,8 @@ func TestAppearanceAttrs(t *testing.T) {
 		{"sheet empty", AppearanceData{SheetStyle: ""}, map[string]string{}},
 		{"sheet modern", AppearanceData{SheetStyle: "modern"}, map[string]string{}},
 		{"sheet brass", AppearanceData{SheetStyle: "brass"}, map[string]string{"data-cz-sheet": "brass"}},
+		{"page standard", AppearanceData{PageLook: "standard"}, map[string]string{}},
+		{"page annals", AppearanceData{PageLook: "annals"}, map[string]string{"data-cz-page": "annals"}},
 		{"heading cinzel", AppearanceData{HeadingFont: "cinzel"}, map[string]string{"data-cz-heading": "cinzel"}},
 		{"all", AppearanceData{NavStyle: "comet", NavStrength: "lively", NavPageName: "hidden", ButtonStyle: "glow",
 			Elevation: "flat", TypeScale: "roomy", ReduceMotion: true, HoverCard: "night"},
@@ -783,6 +785,31 @@ func TestTopbarMoonText(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := topbarMoonText(tc.moons); got != tc.want {
 				t.Errorf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestAppearanceCSSAnnalsHeadings(t *testing.T) {
+	withTestFonts(t)
+	cases := []struct {
+		name       string
+		a          AppearanceData
+		wantOswald bool
+		wantFace   string
+	}{
+		{"standard adds nothing", AppearanceData{}, false, ""},
+		{"annals uses tall capitals", AppearanceData{PageLook: "annals"}, true, ""},
+		{"annals keeps the chosen face", AppearanceData{PageLook: "annals", HeadingFont: "cinzel"}, false, "'Cinzel'"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			css := AppearanceCSS(SetAppearance(context.Background(), &tc.a))
+			if got := strings.Contains(css, "font-family:'Oswald'") && strings.Contains(css, "--annals-hcase:uppercase;"); got != tc.wantOswald {
+				t.Errorf("Oswald capitals = %v, want %v: %s", got, tc.wantOswald, css)
+			}
+			if tc.wantFace != "" && !strings.Contains(css, "--font-heading:"+tc.wantFace) {
+				t.Errorf("css missing heading face %s: %s", tc.wantFace, css)
 			}
 		})
 	}

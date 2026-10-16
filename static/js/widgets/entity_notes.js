@@ -150,9 +150,9 @@
       // --- Shell ---
 
       el.innerHTML =
-        '<section class="card !p-0 en-block" aria-label="Notes on this page">' +
+        '<section class="card cb-card !p-0 en-block" aria-label="Notes on this page">' +
           '<header class="en-head">' +
-            '<h3 class="en-title"><i class="fa-solid fa-note-sticky" aria-hidden="true"></i>Notes <span class="en-count" data-en-count>0</span></h3>' +
+            '<h3 class="en-title cb-head"><i class="fa-solid fa-note-sticky" aria-hidden="true"></i>Notes <span class="en-count cb-count" data-en-count>0</span></h3>' +
             '<span class="en-spacer"></span>' +
             '<button type="button" class="btn btn-primary btn-sm" data-en-act="new"><i class="fa-solid fa-plus mr-1.5" aria-hidden="true"></i>New note</button>' +
           '</header>' +
@@ -283,7 +283,7 @@
         h += '<span class="en-ava" style="background:' + colourFor(n.authorUserId) + '" aria-hidden="true">' + esc(initials(mine ? (members && members[me]) || 'You' : who)) + '</span>';
         h += '<div class="en-meta">';
         h += '<span class="en-who">' + esc(who) + '</span>';
-        h += '<span class="en-aud' + (a.tone ? ' en-aud--' + a.tone : '') + '" title="' + esc(audienceTitle(n)) + '"><i class="fa-solid ' + a.icon + '" aria-hidden="true"></i>' + esc(audienceLabel(n)) + '</span>';
+        h += '<span class="en-aud' + (a.tone ? ' en-aud--' + a.tone : '') + (a.tone === 'dm' ? ' cb-dm' : '') + '" title="' + esc(audienceTitle(n)) + '"><i class="fa-solid ' + a.icon + '" aria-hidden="true"></i>' + esc(audienceLabel(n)) + '</span>';
         h += '<time datetime="' + esc(n.createdAt) + '" title="' + esc(fullDate(n.createdAt)) + '" data-en-ago>' + esc(ago(n.createdAt)) + '</time>';
         if (wasEdited(n)) h += '<span class="en-edited" title="Edited ' + esc(fullDate(n.updatedAt)) + '">edited</span>';
         if (n.pinned) h += '<span class="en-pin" title="Pinned"><i class="fa-solid fa-thumbtack" aria-hidden="true"></i><span class="sr-only">Pinned</span></span>';

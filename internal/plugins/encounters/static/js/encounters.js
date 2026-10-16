@@ -228,7 +228,7 @@
     el.textContent = '';
     var head = h('div', 'enc-head');
     append(head, [
-      h('h3', 'enc-title', 'Encounters'),
+      h('h3', 'enc-title cb-head', 'Encounters'),
       S.canEdit ? btn('New', 'enc-new', function () { create(S); }, {
         disabled: S.list.length >= LIM.perPage, 'aria-label': 'New encounter'
       }) : null

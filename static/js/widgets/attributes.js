@@ -94,14 +94,14 @@ Chronicle.register('attributes', {
       }
 
       var card = document.createElement('div');
-      card.className = 'card p-4';
+      card.className = 'card cb-card cb-facts p-4';
 
       // Header with title and edit toggle.
       var header = document.createElement('div');
       header.className = 'flex items-center justify-between mb-3';
 
       var title = document.createElement('h3');
-      title.className = 'text-xs font-semibold uppercase tracking-wider';
+      title.className = 'cb-head text-xs font-semibold uppercase tracking-wider';
       title.style.color = 'var(--color-text-secondary)';
       title.textContent = 'Attributes';
       header.appendChild(title);
@@ -182,6 +182,18 @@ Chronicle.register('attributes', {
 
     function renderReadOnly(container) {
       var hasValues = false;
+      // Fields are grouped by section in the edit form's order. Each group is
+      // a cb-section; its heading shows only in a page look that draws it.
+      var groups = {};
+      var order = [];
+      state.fields.forEach(function (field) {
+        var sec = field.section || 'General';
+        if (!groups[sec]) {
+          groups[sec] = document.createElement('div');
+          groups[sec].className = 'cb-section space-y-3';
+          order.push(sec);
+        }
+      });
 
       state.fields.forEach(function (field) {
         var val = state.fieldsData[field.key];
@@ -190,16 +202,24 @@ Chronicle.register('attributes', {
         if (blank && !marked) return;
 
         hasValues = true;
+        var group = groups[field.section || 'General'];
+        if (!group.childNodes.length && order.length > 1) {
+          var head = document.createElement('div');
+          head.className = 'cb-section-h';
+          head.textContent = field.section || 'General';
+          group.appendChild(head);
+        }
         var row = document.createElement('div');
+        row.className = 'cb-fact';
 
         var label = document.createElement('dt');
-        label.className = 'text-xs font-medium uppercase tracking-wider';
+        label.className = 'cb-fact-l text-xs font-medium uppercase tracking-wider';
         label.style.color = 'var(--color-text-secondary)';
         label.textContent = field.label;
         row.appendChild(label);
 
         var value = document.createElement('dd');
-        value.className = 'text-sm mt-0.5';
+        value.className = 'cb-fact-v text-sm mt-0.5';
         value.style.color = 'var(--color-text-primary)';
 
         // Format value based on field type.
@@ -227,11 +247,14 @@ Chronicle.register('attributes', {
           was.className = 'era-was';
           was.textContent = 'Usually ' + usualText(field);
           row.appendChild(was);
-          container.appendChild(row);
+          group.appendChild(row);
           return;
         }
         row.appendChild(value);
-        container.appendChild(row);
+        group.appendChild(row);
+      });
+      order.forEach(function (sec) {
+        if (groups[sec].childNodes.length) container.appendChild(groups[sec]);
       });
 
       if (!hasValues) {

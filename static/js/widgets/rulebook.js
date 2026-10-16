@@ -33,6 +33,10 @@
   var FRONT_MS = 1300;
   var BM_MS = 560;
   var LOOKS = { 'paper': 1, 'bold': 1 };
+  // The bold look gives each chapter its own colour, in the order of the
+  // signed demo, so chapters are told apart at a glance.
+  var CHAPTER_HUES = ['#1d7f80', '#c22f39', '#5a3a98', '#2f7a45', '#b45b1c', '#8e1f2b', '#4b5f86', '#7a4d8f',
+    '#1d7f80', '#c22f39', '#cf8218', '#5a3a98', '#2f7a45', '#b45b1c'];
   // Cover and font addresses are same-origin paths the server wrote; anything
   // else (another host, a scheme, a path climbing out) is not used.
   var ASSET_RE = /^\/(?!\/)[A-Za-z0-9._~\/%-]{1,300}$/;
@@ -192,6 +196,13 @@
         };
       })
     };
+  }
+
+  // hueStyle hands a chapter's colour to the bold look's accent parts.
+  function hueStyle(hue) { return hue ? ' style="--rb-hot:' + hue + '"' : ''; }
+
+  function isContentsPage(p) {
+    return p.blocks.length === 1 && str(p.blocks[0].type) === 'contents';
   }
 
   function assetURL(v) {
@@ -616,8 +627,9 @@
       '<div class="rb-brand">' + (d.mark ? '<span class="rb-mark" aria-hidden="true">' + esc(d.mark) + '</span>' : '') +
       '<div class="rb-name"><span class="rb-title">' + esc(d.title) + '</span>' +
       (d.systemName ? '<small>' + esc(d.systemName) + '</small>' : '') + '</div></div>' +
-      '<button type="button" class="rb-btn" data-act="toc" aria-expanded="false" aria-label="Open the contents"><span aria-hidden="true">☰</span> Contents</button>' +
-      '<span class="rb-where"></span><span class="rb-sp"></span>' +
+      // A bold book has the ribbon and turnbar; contents, tabs and "where" would repeat them.
+      (turnbar ? '' : '<button type="button" class="rb-btn" data-act="toc" aria-expanded="false" aria-label="Open the contents"><span aria-hidden="true">☰</span> Contents</button>') +
+      '<span class="rb-where"' + (turnbar ? ' hidden' : '') + '></span><span class="rb-sp"></span>' +
       (this.inline ? '' : '<div class="rb-search" role="search"><span class="rb-search-ic" aria-hidden="true">⌕</span>' +
       '<input type="search" class="rb-search-in" data-search placeholder="Search the book" aria-label="Search the book" autocomplete="off" spellcheck="false"' +
       ' aria-controls="' + this.domId('results') + '" aria-expanded="false"><kbd aria-hidden="true">/</kbd>' +
@@ -625,7 +637,7 @@
       ((own || edit || seg) ? '<button type="button" class="rb-btn rb-more" data-act="more" aria-expanded="false" aria-controls="' + this.domId('tools') +
         '" aria-label="More"><span aria-hidden="true">\u22EF</span></button><div class="rb-tools" id="' + this.domId('tools') + '">' + own + edit + seg + '</div>' : '') +
       (d.cover && !this.inline && !turnbar ? '<button type="button" class="rb-btn rb-shut" data-act="shut">Close the book</button>' : '') +
-      this.ribbonHTML() + '</div>' + this.tabsHTML() + this.bmHTML() +
+      this.ribbonHTML() + '</div>' + (turnbar ? '' : this.tabsHTML()) + this.bmHTML() +
       '<div class="rb-book">' +
       '<article class="rb-page l"></article><div class="rb-spine" aria-hidden="true"></div><article class="rb-page r"></article>' +
       '<button type="button" class="rb-curl l" data-act="prev" aria-label="Previous page"></button>' +
@@ -770,9 +782,11 @@
   // always holds two consecutive items; a wide page takes a spread alone. A
   // chapter that is one wide page (a system's own front page) needs no
   // opener. In a Director's player-view preview, a page whose blocks are all
-  // Director-only is skipped, as the server skips it for real players.
+  // Director-only is skipped, as the server skips it for real players. In the
+  // bold look such a chapter that is only a contents list takes the left page
+  // and the next chapter opens beside it, as in the signed demo.
   Rulebook.prototype.buildItems = function () {
-    var dir = this.showDirector(), items = [];
+    var dir = this.showDirector(), items = [], bold = this.data.look === 'bold', hue = 0;
     var pageShows = function (p) {
       if (p.director && !dir) return false;
       return dir || p.blocks.some(function (b) { return !b.director; });
@@ -791,9 +805,11 @@
         }
         var opener = { kind: 'open', part: part, ch: ch, key: pi + '.' + ci, wide: false, pages: [] };
         var solo = shown.length === 1 && shown[0].p.wide;
+        var leaf = bold && solo && isContentsPage(shown[0].p);
+        opener.hue = !bold || solo ? '' : CHAPTER_HUES[hue++ % CHAPTER_HUES.length];
         if (!solo) items.push(opener);
         shown.forEach(function (s) {
-          var it = { kind: 'page', part: part, ch: ch, p: s.p, key: pi + '.' + ci + '.' + s.gi, wide: s.p.wide && !media(NARROW_QUERY), solo: solo };
+          var it = { kind: 'page', part: part, ch: ch, p: s.p, key: pi + '.' + ci + '.' + s.gi, wide: s.p.wide && !leaf && !media(NARROW_QUERY), solo: solo, leaf: leaf, hue: opener.hue };
           items.push(it);
           opener.pages.push(it);
         });
@@ -810,9 +826,11 @@
       this.items.forEach(function (it) { sp.push({ items: [it], wide: false }); });
     } else {
       // Every chapter starts on a fresh spread, in either look, so a tab or
-      // link always lands on a spread that opens with that chapter.
+      // link always lands on a spread that opens with that chapter. The one
+      // exception is a bold book's contents page, which the next chapter
+      // shares.
       this.items.forEach(function (it) {
-        if (it.kind === 'open' && cur.length) { sp.push({ items: cur, wide: false }); cur = []; }
+        if (it.kind === 'open' && cur.length && !(cur.length === 1 && cur[0].leaf)) { sp.push({ items: cur, wide: false }); cur = []; }
         if (it.wide) {
           if (cur.length) { sp.push({ items: cur, wide: false }); cur = []; }
           sp.push({ items: [it], wide: true });
@@ -978,10 +996,11 @@
     }
     // The running head repeats what the page already says, so readers skip
     // it. A wide page keeps it all on the left, clear of the Sections ribbon.
-    var head = item.wide ? '<span>' + esc(this.data.title) + ' \u00B7 ' + esc(item.ch.title) + '</span>'
-      : '<span>' + esc(this.data.title) + '</span><span>' + esc(item.ch.title) + '</span>';
+    var chapter = item.ch.title === this.data.title ? '' : item.ch.title;
+    var head = item.wide ? '<span>' + esc(this.data.title) + (chapter ? ' \u00B7 ' + esc(chapter) : '') + '</span>'
+      : '<span>' + esc(this.data.title) + '</span><span>' + esc(chapter) + '</span>';
     return '<div class="rb-fhd" aria-hidden="true">' + head + '</div>' +
-      '<div class="rb-scroll" tabindex="0" role="region" aria-label="Page ' + (item.n + 1) + ': ' + esc(label) + '">' + h + '</div>' +
+      '<div class="rb-scroll" tabindex="0" role="region" aria-label="Page ' + (item.n + 1) + ': ' + esc(label) + '"' + hueStyle(item.hue) + '>' + h + '</div>' +
       '<div class="rb-foot"><span class="rb-folio">' + (item.n + 1) + '</span></div>';
   };
 
@@ -1102,7 +1121,7 @@
         var n = self.firstItemOf(ch.id), screen = ch.id === self.data.screen && self.screenPages.length > 0;
         if (laidOut ? n < 0 && !screen : self.view !== 'director' && (ch.director || part.director)) return;
         seen[ch.id] = true;
-        rows.push('<li><button type="button" data-chapter="' + esc(ch.id) + '"><span class="rb-pn">' + (rows.length + 1) + '</span><span>' + esc(ch.title) +
+        rows.push('<li><button type="button" data-chapter="' + esc(ch.id) + '"' + hueStyle(n >= 0 ? self.items[n].hue : '') + '><span class="rb-pn">' + (rows.length + 1) + '</span><span>' + esc(ch.title) +
           (ch.director ? ' ' + self.dirTag() : '') + '</span><span class="rb-cpg">' + (screen ? 'Screen' : laidOut ? 'p. ' + (n + 1) : '') + '</span></button></li>');
       });
     });

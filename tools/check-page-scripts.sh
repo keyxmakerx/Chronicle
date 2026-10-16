@@ -249,7 +249,7 @@ printf '%s' "${findings}"
 echo
 echo "WHY THIS IS BLOCKED. A <script src> in a page templ lands inside"
 echo "<main id=\"main-content\">. The sidebar navigates with hx-boost +"
-echo "hx-select=\"#main-content\", and htmx REMOVES script tags from a swapped"
+echo "hx-select=\"#main-content > *\", and htmx REMOVES script tags from a swapped"
 echo "fragment because boot.js sets allowScriptTags=false. Your script will load"
 echo "when someone types the URL and will silently NOT load when they click"
 echo "through the sidebar — and the page will look identical either way, because"

@@ -88,7 +88,7 @@ templ eraRibbon(cc *campaigns.CampaignContext, entity *Entity, v *eraView) {
 					href={ eraPageLink(cc.Campaign.ID, entity.ID, strconv.Itoa(e.ID), "") }
 					hx-boost="true"
 					hx-target="#main-content"
-					hx-select="#main-content"
+					hx-select="#main-content > *"
 					hx-swap="innerHTML show:none"
 					class={ "era-seg", templ.KV("is-on", v.Selected == e.ID), templ.KV("is-hidden", e.Hidden) }
 					style={ eraSegStyle(e) }
@@ -164,7 +164,7 @@ templ eraDetails(cc *campaigns.CampaignContext, entity *Entity, v *eraView, csrf
 				href={ eraPageLink(cc.Campaign.ID, entity.ID, "usual", "") }
 				hx-boost="true"
 				hx-target="#main-content"
-				hx-select="#main-content"
+				hx-select="#main-content > *"
 				hx-swap="innerHTML show:none"
 				class={ "btn-ghost btn-sm era-usual", templ.KV("is-on", v.Selected == eraUsual) }
 				aria-current={ boolAttr(v.Selected == eraUsual) }
@@ -175,7 +175,7 @@ templ eraDetails(cc *campaigns.CampaignContext, entity *Entity, v *eraView, csrf
 						href={ eraPageLink(cc.Campaign.ID, entity.ID, strconv.Itoa(focus.ID), highlightQuery(!v.Highlight)) }
 						hx-boost="true"
 						hx-target="#main-content"
-						hx-select="#main-content"
+						hx-select="#main-content > *"
 						hx-swap="innerHTML show:none"
 						class="era-switch"
 						role="switch"
@@ -187,7 +187,7 @@ templ eraDetails(cc *campaigns.CampaignContext, entity *Entity, v *eraView, csrf
 						href={ eraPageLink(cc.Campaign.ID, entity.ID, strconv.Itoa(focus.ID), "hl=0") }
 						hx-boost="true"
 						hx-target="#main-content"
-						hx-select="#main-content"
+						hx-select="#main-content > *"
 						hx-swap="innerHTML show:none"
 						class="btn-secondary btn-sm"
 					><i class="fa-solid fa-pen mr-1"></i> Edit this version</a>
@@ -283,7 +283,7 @@ templ eraBanner(cc *campaigns.CampaignContext, entity *Entity, v *eraView) {
 					href={ eraPageLink(cc.Campaign.ID, entity.ID, "", "") }
 					hx-boost="true"
 					hx-target="#main-content"
-					hx-select="#main-content"
+					hx-select="#main-content > *"
 					hx-swap="innerHTML show:none"
 				>Back to now</a>
 			}
@@ -305,7 +305,7 @@ templ eraEntryDiff(cc *campaigns.CampaignContext, entity *Entity, v *eraView) {
 				href={ eraPageLink(cc.Campaign.ID, entity.ID, strconv.Itoa(v.ShownID), "hl=0") }
 				hx-boost="true"
 				hx-target="#main-content"
-				hx-select="#main-content"
+				hx-select="#main-content > *"
 				hx-swap="innerHTML show:none"
 				class="chronicle-editor__edit-btn"
 			><i class="fa-solid fa-pen" style="font-size:11px"></i> Edit</a>

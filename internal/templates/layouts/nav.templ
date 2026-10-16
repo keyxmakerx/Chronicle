@@ -65,7 +65,7 @@ templ campaignNavTop() {
 		aria-label="Campaign"
 		hx-boost="true"
 		hx-target="#main-content"
-		hx-select="#main-content"
+		hx-select="#main-content > *"
 		hx-swap="innerHTML show:window:top"
 	>
 		<div class="nav-list" id="sidebar-nav-top-list">
@@ -96,7 +96,7 @@ templ campaignNavCategories() {
 			}
 			hx-boost="true"
 			hx-target="#main-content"
-			hx-select="#main-content"
+			hx-select="#main-content > *"
 			hx-swap="innerHTML show:window:top"
 		>
 			<div class="nav-list" id="sidebar-nav-list">

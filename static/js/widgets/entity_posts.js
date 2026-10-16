@@ -138,10 +138,10 @@
 
         // Header with create button.
         html += '<div class="flex items-center justify-between mb-3">';
-        html += '<h3 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">';
+        html += '<h3 class="cb-head text-sm font-semibold text-fg-secondary uppercase tracking-wider">';
         html += '<i class="fa-solid fa-layer-group mr-1.5"></i>Posts';
         if (state.posts.length > 0) {
-          html += ' <span class="text-xs font-normal text-fg-muted">(' + state.posts.length + ')</span>';
+          html += ' <span class="cb-count cb-count-paren text-xs font-normal text-fg-muted">' + state.posts.length + '</span>';
         }
         html += '</h3>';
         if (editable) {
@@ -202,7 +202,7 @@
 
         // Badges.
         if (post.isPrivate) {
-          h += '<span class="text-xs text-amber-500" title="DM only"><i class="fa-solid fa-lock"></i></span>';
+          h += '<span class="cb-dm text-xs text-amber-500" title="DM only"><i class="fa-solid fa-lock"></i></span>';
         }
 
         // Actions dropdown.

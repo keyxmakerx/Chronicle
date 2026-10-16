@@ -146,7 +146,7 @@ test('user text is placed as text and a DM-only header carries the DM tag', asyn
   });
   assert.equal(el.find((n) => n.tag === 'table').length, 1);
   assert.ok(el.find((n) => n.tag === 'td' && n._text === evil).length === 1, 'cell text kept verbatim as text');
-  assert.equal(el.find((n) => n.className === 'pb-dm').length, 1);
+  assert.equal(el.find((n) => (n.className || '').split(' ').includes('pb-dm')).length, 1);
   assert.equal(el.find((n) => n.tag === 'button').length, 0, 'a viewer who cannot edit gets no controls');
 });
 

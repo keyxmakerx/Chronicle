@@ -18,7 +18,7 @@ var customizeAreaBlurb = map[string]string{
 
 // customizeOverview is Customize's front page: one card per area.
 templ customizeOverview(areas []CustomizeArea) {
-	<div class="czs-pad" hx-boost="true" hx-target="#main-content" hx-select="#main-content" hx-swap="innerHTML show:window:top">
+	<div class="czs-pad" hx-boost="true" hx-target="#main-content" hx-select="#main-content > *" hx-swap="innerHTML show:window:top">
 		<h1 class="czs-h1">Customize</h1>
 		<p class="czs-lede">Everything about how the campaign looks and how its pages are set up, in one place. Pick what you want to change, or press <kbd>/</kbd> and type it. Changes wait in one draft until you save them.</p>
 		<div class="czs-ov-grid">

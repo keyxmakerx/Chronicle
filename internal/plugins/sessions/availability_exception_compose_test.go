@@ -128,7 +128,7 @@ func TestAddMyException_KeepsTheAuthoredZone(t *testing.T) {
 	svc := offerSvcWithRows(recurring, nil, &written)
 
 	// A client posting in UTC: 23:00–23:30 UTC on that Tuesday is 18:00 or
-	// 19:00 New York, inside the member's evening either way.
+	// 19:00 New York, inside the member's evening.
 	if err := svc.AddMyException(context.Background(), "c1", "u1", AddExceptionRequest{
 		OnDate: date, StartMinute: 23 * 60, EndMinute: 23*60 + 30, State: AvailUnavailable, TZ: "UTC",
 	}); err != nil {
@@ -145,14 +145,17 @@ func TestAddMyException_KeepsTheAuthoredZone(t *testing.T) {
 		t.Fatalf("day written = %s, want %s (23:00 UTC is still the same evening in New York)",
 			written[0].onDate, date)
 	}
-	// The New York offset depends on the date's daylight-saving state, so the
-	// expected window is converted rather than fixed at 19:00.
+	// The date moves with the clock, so it can fall on either side of a
+	// daylight-saving change: take New York's offset from the date itself.
 	ny, err := time.LoadLocation("America/New_York")
 	if err != nil {
-		t.Fatalf("loading zone: %v", err)
+		t.Fatal(err)
 	}
-	day, _ := time.Parse("2006-01-02", date)
-	local := day.Add(23 * time.Hour).In(ny)
+	at, err := time.Parse("2006-01-02 15:04", date+" 23:00")
+	if err != nil {
+		t.Fatal(err)
+	}
+	local := at.In(ny)
 	start := local.Hour()*60 + local.Minute()
 	var sawHole bool
 	for _, r := range written[0].rows {

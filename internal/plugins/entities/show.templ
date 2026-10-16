@@ -223,8 +223,8 @@ templ entityBlock(block TemplateBlock, cc *campaigns.CampaignContext, entity *En
 // entityBlockWithBadge renders the block content with an optional DM Only badge.
 templ entityBlockWithBadge(block TemplateBlock, cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, csrfToken string) {
 	if blockVisibility(block) == "dm_only" {
-		<div class="relative">
-			<div class="absolute top-1 right-1 z-10 flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 text-[10px] font-medium">
+		<div class="relative" data-dm-only>
+			<div class="cb-dm absolute top-1 right-1 z-10 flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 text-[10px] font-medium">
 				<i class="fa-solid fa-lock text-[9px]"></i> DM Only
 			</div>
 			@entityBlockInner(block, cc, entity, entityType, csrfToken)
@@ -252,7 +252,7 @@ templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 		<div class="flex items-start justify-between gap-3">
 			<div class="min-w-0">
 				<div class="flex items-center gap-2">
-					<h1 class="text-xl md:text-3xl font-bold text-fg" data-page-h1>{ entity.Name }</h1>
+					<h1 class="cb-title text-xl md:text-3xl font-bold text-fg" data-page-h1>{ entity.Name }</h1>
 					@entityFavoriteButton(entity)
 					// "Show in Foundry" for NPC pages. foundry_vtt owns it and
 					// answers empty for anything else, so this stays VTT-agnostic.
@@ -337,7 +337,7 @@ templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 // opens the file picker; image_upload.js adds the progress bar and the amber
 // error bar. Everyone else sees the picture alone.
 templ blockImage(cc *campaigns.CampaignContext, entity *Entity, csrfToken string) {
-	<div class={ "card overflow-hidden p-0", templ.KV("era-settle", eraViewOf(ctx).Open()) }>
+	<div class={ "card cb-card overflow-hidden p-0", templ.KV("era-settle", eraViewOf(ctx).Open()) }>
 		if entity.ImagePath != nil && *entity.ImagePath != "" {
 			if cc.MemberRole >= campaigns.RoleScribe {
 				<div
@@ -431,7 +431,7 @@ templ blockAttributes(cc *campaigns.CampaignContext, entity *Entity, entityType 
 // blockDetails renders the type badge, the shared visibility glance
 // (visibilityGlance gates itself by role, ADR-057), and metadata timestamps.
 templ blockDetails(cc *campaigns.CampaignContext, entity *Entity) {
-	<div class="card p-4 space-y-4">
+	<div class="card cb-card p-4 space-y-4">
 		<!-- Type badge -->
 		<div class="flex items-center gap-2 flex-wrap">
 			<span
@@ -669,7 +669,7 @@ templ blockEntityNotes(cc *campaigns.CampaignContext, entity *Entity, csrfToken 
 // blockTextBlock renders a static rich text / HTML content block.
 // The content is stored in the block config under the "content" key.
 templ blockTextBlock(config map[string]any) {
-	<div class="card p-4 prose prose-sm dark:prose-invert max-w-none">
+	<div class="card cb-card p-4 prose prose-sm dark:prose-invert max-w-none">
 		if entityBlockTextContent(config) != "" {
 			@templ.Raw(entityBlockTextContent(config))
 		} else {
@@ -700,10 +700,10 @@ func entityBlockTextContent(config map[string]any) string {
 templ blockChildren(cc *campaigns.CampaignContext, entity *Entity, children []Entity) {
 	<div class="mt-8">
 		<div class="flex items-center justify-between mb-4">
-			<h2 class="text-lg font-semibold text-fg">
+			<h2 class="cb-head text-lg font-semibold text-fg">
 				Sub-pages
 				if len(children) > 0 {
-					<span class="text-sm font-normal text-fg-muted ml-1">({ fmt.Sprintf("%d", len(children)) })</span>
+					<span class="cb-count cb-count-paren text-sm font-normal text-fg-muted ml-1">{ fmt.Sprintf("%d", len(children)) }</span>
 				}
 			</h2>
 			if cc.MemberRole >= campaigns.RoleScribe {
@@ -721,7 +721,7 @@ templ blockChildren(cc *campaigns.CampaignContext, entity *Entity, children []En
 				for _, child := range children {
 					<a
 						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, child.ID)) }
-						class="card p-4 hover:bg-surface-alt transition-colors group"
+						class="cb-link card p-4 hover:bg-surface-alt transition-colors group"
 					>
 						<div class="flex items-center gap-3">
 							if child.ImagePath != nil && *child.ImagePath != "" {
@@ -766,16 +766,16 @@ templ blockBacklinks(cc *campaigns.CampaignContext, backlinks []BacklinkEntry) {
 		<div class="mt-8">
 			<div class="flex items-center gap-2 mb-3">
 				<i class="fa-solid fa-arrow-left text-xs text-fg-muted"></i>
-				<h2 class="text-lg font-semibold text-fg">
+				<h2 class="cb-head text-lg font-semibold text-fg">
 					Referenced by
-					<span class="text-sm font-normal text-fg-muted ml-1">({ fmt.Sprintf("%d", len(backlinks)) })</span>
+					<span class="cb-count cb-count-paren text-sm font-normal text-fg-muted ml-1">{ fmt.Sprintf("%d", len(backlinks)) }</span>
 				</h2>
 			</div>
 			<div class="space-y-2">
 				for _, bl := range backlinks {
 					<a
 						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, bl.Entity.ID)) }
-						class="flex items-start gap-3 px-3 py-2 rounded-lg bg-surface-alt hover:bg-surface border border-edge-light hover:border-edge transition-colors group"
+						class="cb-link flex items-start gap-3 px-3 py-2 rounded-lg bg-surface-alt hover:bg-surface border border-edge-light hover:border-edge transition-colors group"
 					>
 						<span
 							class="w-6 h-6 rounded flex items-center justify-center shrink-0 mt-0.5"
@@ -894,7 +894,7 @@ templ blockCoverImage(cc *campaigns.CampaignContext, entity *Entity, csrfToken s
 // blockLocalGraph renders a mini relations graph showing the entity's
 // neighborhood (N hops). Reuses the relation-graph widget with focus mode.
 templ blockLocalGraph(cc *campaigns.CampaignContext, entity *Entity, config map[string]any) {
-	<div class="card p-0 overflow-hidden">
+	<div class="card cb-card p-0 overflow-hidden">
 		<div
 			data-widget="relation-graph"
 			data-campaign-id={ cc.Campaign.ID }

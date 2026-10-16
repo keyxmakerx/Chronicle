@@ -40,6 +40,7 @@ type Appearance struct {
 	HeaderHeight    string `json:"header_height,omitempty"`    // "slim" (default) or "tall".
 	HoverCard       string `json:"hover_card,omitempty"`       // Hover card look: "paper" (default), "plain", "night" or "compact".
 	SheetStyle      string `json:"sheet_style,omitempty"`      // Character sheet style (AppearanceSheetStyles); "modern" is the default.
+	PageLook        string `json:"page_look,omitempty"`        // How pages draw their blocks (AppearancePageLooks); "standard" is the default.
 }
 
 // The allowed values of each Appearance choice. The first entry is the
@@ -67,6 +68,9 @@ var (
 	// AppearanceSheetStyles are the character sheet styles sheet_styles.css
 	// knows, keyed by the data-cz-sheet value; "modern" is the unstyled default.
 	AppearanceSheetStyles = []string{"modern", "parchment", "ledger", "journal", "vellum", "night", "deck", "pencil", "starship", "neon", "runes", "brass"}
+	// AppearancePageLooks restyle every block on a page through the shared
+	// block parts without moving anything; page_look_annals.css draws Annals.
+	AppearancePageLooks = []string{"standard", "annals"}
 )
 
 // Text limits the Customize page shows. Brand name and welcome keep their
@@ -114,6 +118,9 @@ type AppearanceInput struct {
 	Sheet struct {
 		Style string `json:"style"`
 	} `json:"sheet"`
+	Page struct {
+		Look string `json:"look"`
+	} `json:"page"`
 }
 
 // AppearanceSidebarInput is the Sidebar section. Colour is the menu colour
@@ -386,6 +393,7 @@ func applyAppearance(s *CampaignSettings, in AppearanceInput) (*string, error) {
 		{&a.PeekGlow, "peek glow", in.Sidebar.Glow, AppearanceGlows},
 		{&a.HoverCard, "hover card look", in.Hover.Look, AppearanceHoverCards},
 		{&a.SheetStyle, "character sheet style", in.Sheet.Style, AppearanceSheetStyles},
+		{&a.PageLook, "page look", in.Page.Look, AppearancePageLooks},
 	}
 	for _, c := range checks {
 		if *c.dst, err = oneOf(c.name, c.v, c.allowed); err != nil {
