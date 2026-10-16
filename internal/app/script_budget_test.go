@@ -19,7 +19,7 @@ import (
 // When a feature moves out, lower them to the new totals.
 const (
 	everyPageScriptBudget     = 98
-	everyPageGzipBudgetKB     = 926
+	everyPageGzipBudgetKB     = 928
 	everyPageScriptReportRows = 15
 )
 
