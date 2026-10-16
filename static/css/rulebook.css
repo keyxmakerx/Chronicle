@@ -613,12 +613,15 @@
 .rb[data-look="bold"] .rb-page h1:where(:not(.rb-wslot *)), .rb[data-look="bold"] .rb-page h2:where(:not(.rb-wslot *)), .rb[data-look="bold"] .rb-sleaf h2:where(:not(.rb-wslot *)) { font-family: var(--rb-display); font-weight: 900; text-transform: uppercase; letter-spacing: 0.01em; line-height: 0.92; }
 .rb[data-look="bold"] .rb-page h1:where(:not(.rb-wslot *)) { font-size: clamp(38px, 4.8vw, 62px); }
 .rb[data-look="bold"] .rb-page h2:where(:not(.rb-wslot *)) { font-size: clamp(30px, 3.6vw, 46px); }
+/* A chapter opens with a big first letter in its own colour. */
+.rb[data-look="bold"] .rb-page .rb-lede:where(:not(.rb-wslot *)) { display: flow-root; }
+.rb[data-look="bold"] .rb-page .rb-lede:where(:not(.rb-wslot *))::first-letter { float: left; margin: 4px 8px 0 0; font: 900 3.4em/0.8 var(--rb-display); font-style: normal; color: var(--rb-hot); }
 /* The kicker and the title that follows it read as one dark banner under the
    running head. It bleeds to the page's outer edge only, so the spine stays
    paper, and ends in a slant. */
 
 
-.rb[data-look="bold"] .rb-page .rb-scroll > .rb-kicker:first-child:where(:not(.rb-wslot *)) { margin: 0 0 0 calc(-1 * var(--rb-pad)); padding: 14px 22px 12px var(--rb-pad); background: var(--rb-steel); color: color-mix(in srgb, var(--rb-acc) 70%, #fff); box-shadow: inset 0 -5px 0 var(--rb-hot); }
+.rb[data-look="bold"] .rb-page .rb-scroll > .rb-kicker:first-child:where(:not(.rb-wslot *)) { margin: 0 0 0 calc(-1 * var(--rb-pad)); padding: 14px 22px 12px var(--rb-pad); background: var(--rb-steel); color: color-mix(in srgb, var(--rb-hot) 55%, #fff); box-shadow: inset 0 -5px 0 var(--rb-hot); }
 .rb[data-look="bold"] .rb-page .rb-scroll > .rb-kicker:first-child:has(+ h1:where(:not(.rb-wslot *)), + h2):where(:not(.rb-wslot *)) { padding-bottom: 0; box-shadow: none; }
 .rb[data-look="bold"] .rb-page .rb-scroll > .rb-kicker:first-child + h1:where(:not(.rb-wslot *)), .rb[data-look="bold"] .rb-page .rb-scroll > .rb-kicker:first-child + h2:where(:not(.rb-wslot *)) { margin: -1px 0 22px calc(-1 * var(--rb-pad)); padding: 5px 40px 18px var(--rb-pad); background: var(--rb-steel); color: var(--rb-on-steel); box-shadow: inset 0 -5px 0 var(--rb-hot); clip-path: polygon(0 0, 100% 0, calc(100% - 22px) 100%, 0 100%); }
 .rb[data-look="bold"] .rb-page .rb-scroll > .rb-kicker:first-child:not(:has(+ h1:where(:not(.rb-wslot *)), + h2)):where(:not(.rb-wslot *)) { margin-bottom: 22px; }

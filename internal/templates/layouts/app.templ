@@ -203,7 +203,7 @@ templ Sidebar() {
 			if InSiteAdmin(ctx) {
 				@AdminSidebarNav()
 			} else {
-				<nav class="flex-1 py-4 overflow-y-auto" hx-boost="true" hx-target="#main-content" hx-select="#main-content" hx-swap="innerHTML show:window:top">
+				<nav class="flex-1 py-4 overflow-y-auto" hx-boost="true" hx-target="#main-content" hx-select="#main-content > *" hx-swap="innerHTML show:window:top">
 					@DefaultSidebarNav()
 				</nav>
 				if GetIsAdmin(ctx) {
@@ -259,7 +259,7 @@ templ AdminSidebarNav() {
 			</span>
 			Back to Chronicle
 		</a>
-		<div hx-boost="true" hx-target="#main-content" hx-select="#main-content" hx-swap="innerHTML show:window:top">
+		<div hx-boost="true" hx-target="#main-content" hx-select="#main-content > *" hx-swap="innerHTML show:window:top">
 			@adminNavLink(adminNav.Home)
 			if len(pinned) > 0 {
 				<div role="group" aria-label="Pinned admin pages">

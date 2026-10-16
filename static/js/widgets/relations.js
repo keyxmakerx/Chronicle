@@ -52,12 +52,20 @@ Chronicle.register('relations', {
         state.relationTypes = results[1] || [];
       }
       render();
+      loaded();
     }).catch(function (err) {
       console.error('[relations] Failed to load:', err);
       Chronicle.notify('Failed to load relations', 'error');
       state.error = 'Failed to load relations. Please refresh the page.';
       render();
+      loaded();
     });
+
+    // Says the first rows are drawn, for a page move that waits on them
+    // (annals_pull.js).
+    function loaded() {
+      el.dispatchEvent(new CustomEvent('chronicle:relations-rendered', { bubbles: true }));
+    }
 
     // --- Render ---
 
