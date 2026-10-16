@@ -52,6 +52,10 @@ type AppearanceData struct {
 	// SheetStyle is the character sheet style; "" and "modern" add no
 	// attribute, so sheets render as before.
 	SheetStyle string
+
+	// PageLook is how pages draw their blocks; "" and "standard" add no
+	// attribute, and "annals" sets data-cz-page for page_look_annals.css.
+	PageLook string
 }
 
 const keyAppearance ctxKey = "layout_appearance"
@@ -100,6 +104,9 @@ func AppearanceAttrs(ctx context.Context) templ.Attributes {
 	set("data-cz-hover", a.HoverCard)
 	if a.SheetStyle != "modern" {
 		set("data-cz-sheet", a.SheetStyle)
+	}
+	if a.PageLook == "annals" {
+		attrs["data-cz-page"] = a.PageLook
 	}
 	if a.HeadingFont != "" && a.HeadingFont != "same" {
 		attrs["data-cz-heading"] = a.HeadingFont
@@ -408,6 +415,15 @@ func AppearanceCSS(ctx context.Context) string {
 		fmt.Fprintf(&root, "--font-heading:%s;--cz-hw:%s;--cz-hls:%s;", czFontStacks[a.HeadingFont], h.weight, h.spacing)
 		if h.size != "" {
 			fmt.Fprintf(&root, "--cz-hz:%s;", h.size)
+		}
+	}
+
+	// Annals draws its headings in tall capitals unless the owner picked a
+	// heading face, which it then uses as it is (page_look_annals.css).
+	if a.PageLook == "annals" {
+		if _, ok := czHeadingFaces[a.HeadingFont]; !ok {
+			extra.WriteString(fontFaceCSS("oswald"))
+			root.WriteString("--annals-hf:'Oswald', 'Arial Narrow', sans-serif;--annals-hcase:uppercase;--annals-hw:600;--annals-hls:.01em;")
 		}
 	}
 

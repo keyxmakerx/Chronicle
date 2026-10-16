@@ -264,6 +264,19 @@ their tokens.
   under a faint light from the page's top corner.
 - **Motion speed** retimes the duration tokens; **menu highlight** and
   **hover card** looks are their own choices.
+- **Page look** (`data-cz-page`, `static/css/page_look_annals.css`):
+  Standard is the base; Annals restyles every block without moving any. Its
+  headings use the campaign's heading face, or Oswald capitals when there is
+  none; the accent is the one colour; borders stay only on fact panels and
+  tools, while prose, connections and link lists sit on the page and lift on
+  hover; the header is 48px unless the owner picked the tall one. A look
+  styles blocks only through the **shared block parts** every block marks:
+  `cb-title`, `cb-head` and `cb-count`, `cb-card` (`cb-facts` keeps its
+  edge), `cb-section` with `cb-section-h`, `cb-fact` with `cb-fact-l` and
+  `cb-fact-v`, `cb-group`, `cb-link`, and `cb-dm` or `data-dm-only` for what
+  only the Director sees. A new block or package widget marks the same parts
+  to follow the look. Standard draws them exactly as before (input.css,
+  "Shared block parts").
 - The editor's example site (`static/js/widgets/customize_look.js`,
   `static/css/customize.css`) shows each choice and keeps its numbers in step
   with the server's.

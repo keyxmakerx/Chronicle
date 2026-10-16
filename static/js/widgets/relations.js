@@ -87,12 +87,14 @@ Chronicle.register('relations', {
       // Render relation groups.
       if (groupOrder.length > 0) {
         var card = document.createElement('div');
-        card.className = 'rel-card';
+        card.className = 'rel-card cb-card';
 
         groupOrder.forEach(function (type) {
           var headerEl = document.createElement('div');
-          headerEl.className = 'rel-group-header';
-          headerEl.innerHTML = '<i class="fa-solid fa-link" style="font-size:10px"></i> ' + Chronicle.escapeHtml(type);
+          headerEl.className = 'rel-group-header cb-group';
+          // The count is drawn only by a page look that shows it (cb-count).
+          headerEl.innerHTML = '<i class="fa-solid fa-link" style="font-size:10px"></i> ' + Chronicle.escapeHtml(type) +
+            ' <span class="cb-count rel-group-count">' + groups[type].length + '</span>';
           card.appendChild(headerEl);
 
           groups[type].forEach(function (rel) {
@@ -140,7 +142,8 @@ Chronicle.register('relations', {
 
     function renderRelationItem(rel) {
       var item = document.createElement('div');
-      item.className = 'rel-item';
+      item.className = 'rel-item cb-link';
+      if (rel.dmOnly && config.isDm) item.setAttribute('data-dm-only', '');
 
       // Entity type icon.
       var icon = document.createElement('div');
@@ -170,7 +173,7 @@ Chronicle.register('relations', {
       // Show DM-only badge for DM users viewing DM-only relations.
       if (rel.dmOnly && config.isDm) {
         var dmBadge = document.createElement('span');
-        dmBadge.className = 'rel-dm-badge';
+        dmBadge.className = 'rel-dm-badge cb-dm';
         dmBadge.innerHTML = '<i class="fa-solid fa-lock" style="font-size:8px"></i> DM';
         nameWrap.appendChild(dmBadge);
       }
