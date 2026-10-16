@@ -1269,6 +1269,7 @@
       this.weatherByYear = {}; // year -> {'m_d': reading}, filled by fetchWeatherYear
       this.nightsByMonth = {}; // 'y_m' -> game nights, filled by fetchNights
       this._gnPages = {}; // session id -> its recap and linked pages
+      this._evPages = {}; // event id -> the pages tied to it
       this._gnReminded = {}; // night id + "|" + user id -> reminded this visit
       this._gnRemindedAll = {}; // night id -> "remind everyone" sent
       this.polls = []; // open date polls, filled by fetchPolls
@@ -4585,11 +4586,13 @@
         if (e.target.closest('[data-close]')) { self.closeEventDetail(); return; }
         if (e.target.closest('[data-gn-edit]')) { self._gnOpenEditor(self._findNight(self.evpEl.dataset.ev)); return; }
         if (self._gnExtraClick(e)) return;
+        if (self._evPagesClick(e)) return;
         if (self._gnRemindClick(e)) return;
         self._gnHandleClick(e);
       });
       this.evpEl.addEventListener('input', function (e) {
         if (e.target.matches('[data-gn-link-q]')) self._gnLinkSearch(e.target);
+        else if (e.target.matches('[data-evp-link-q]')) self._evLinkSearch(e.target);
       });
       // Enter saves a game night's note; Escape puts the note away without
       // closing the card around it.
@@ -5102,6 +5105,108 @@
       this._updateScrim();
     },
 
+    // --------------------------------------------------------------
+    // Pages linked to an event: the same chips and search a game night's
+    // page uses. Read like the event; a Scribe or above can link and
+    // unlink (the server also requires the event be visible to them).
+    // --------------------------------------------------------------
+    _evPagesBox: function (eid) {
+      if (!this._evPages[eid]) this._evPagesLoad(eid);
+      return '<div data-ev-pages="' + esc(eid) + '">' + this._evPagesHTML(eid) + '</div>';
+    },
+
+    _evPagesBase: function (eid) {
+      return '/campaigns/' + encodeURIComponent(this.campaignId) + '/calendars/' + encodeURIComponent(this.calendarId) +
+        '/events/' + encodeURIComponent(eid) + '/pages';
+    },
+
+    _evPagesLoad: function (eid) {
+      var self = this;
+      this._evPages[eid] = { loading: true, links: [] };
+      return Chronicle.apiFetch(this._evPagesBase(eid), { headers: { Accept: 'application/json' } })
+        .then(function (resp) { return resp.ok ? resp.json() : Promise.reject(); })
+        .then(function (list) { self._evPages[eid] = { links: Array.isArray(list) ? list : [] }; })
+        .catch(function () { self._evPages[eid] = { failed: true, links: [] }; })
+        .then(function () { self._evPagesRedraw(eid); });
+    },
+
+    _evPagesRedraw: function (eid, focusSel) {
+      var box = this.evpEl.classList.contains('open') && this.evpEl.querySelector('[data-ev-pages="' + eid + '"]');
+      if (!box) return;
+      box.innerHTML = this._evPagesHTML(eid);
+      var f = focusSel && box.querySelector(focusSel);
+      if (f) f.focus({ preventScroll: true });
+    },
+
+    _evPagesHTML: function (eid) {
+      var p = this._evPages[eid], scribe = this.role >= 2, cid = encodeURIComponent(this.campaignId);
+      // A player sees the list only when it has something in it.
+      if (!p || p.loading) return scribe ? '<section class="eps gnlinks"><h4>Linked pages</h4><div class="none">Loading…</div></section>' : '';
+      if (p.failed) return scribe ? '<section class="eps gnlinks"><h4>Linked pages</h4><div class="none">The linked pages could not be loaded.</div></section>' : '';
+      if (!p.links.length && !scribe) return '';
+      var h = '<section class="eps gnlinks"><h4>Linked pages</h4>';
+      h += p.links.length ? '<div class="gnchips">' + p.links.map(function (l) {
+        return '<span class="gnchip"><a href="/campaigns/' + cid + '/entities/' + encodeURIComponent(l.entity_id) + '">' + esc(l.entity_name) + '</a>' +
+          (scribe ? '<button type="button" data-evp-unlink="' + esc(l.entity_id) + '" aria-label="Unlink ' + esc(l.entity_name) + '"><i class="fa-solid fa-xmark"></i></button>' : '') + '</span>';
+      }).join('') + '</div>' : '<div class="none">No pages linked yet.</div>';
+      if (scribe) {
+        h += '<p class="gperr" role="alert" hidden></p>';
+        h += this._evLinkFor === eid
+          ? '<div class="gnfind"><input type="search" data-evp-link-q placeholder="Search pages to link" aria-label="Search pages to link" autocomplete="off"><ul class="lp-res" data-evp-link-res role="listbox" aria-label="Pages" hidden></ul></div>'
+          : '<button type="button" class="lnk" data-evp-link-open><i class="fa-solid fa-plus"></i> Link a page</button>';
+      }
+      return h + '</section>';
+    },
+
+    _evLinkSearch: function (input) {
+      var self = this, q = input.value.trim(), res = input.parentNode.querySelector('[data-evp-link-res]'), seq = (this._evLinkSeq || 0) + 1;
+      this._evLinkSeq = seq;
+      if (q.length < 2) { res.hidden = true; res.innerHTML = ''; return; }
+      Chronicle.apiFetch('/campaigns/' + encodeURIComponent(this.campaignId) + '/entities/search?q=' + encodeURIComponent(q), { headers: { Accept: 'application/json' } })
+        .then(function (resp) { return resp.ok ? resp.json() : { results: [] }; })
+        .then(function (body) {
+          if (self._evLinkSeq !== seq) return;
+          // Only pages: the search also returns other kinds of result.
+          var pages = (body.results || []).filter(function (r) { return r.id && /\/entities\//.test(r.url || ''); }).slice(0, 8);
+          res.innerHTML = pages.length
+            ? pages.map(function (r) { return '<li><button type="button" role="option" data-evp-link-id="' + esc(r.id) + '">' + esc(r.name) + (r.type_name ? '<small>' + esc(r.type_name) + '</small>' : '') + '</button></li>'; }).join('')
+            : '<li class="none">No pages match.</li>';
+          res.hidden = false;
+        });
+    },
+
+    // Link and unlink presses on an event's page. Returns true when handled.
+    _evPagesClick: function (e) {
+      var self = this, box = e.target.closest('[data-ev-pages]');
+      if (!box) return false;
+      var eid = box.dataset.evPages, base = this._evPagesBase(eid), t = e.target.closest('button');
+      if (!t) return true;
+      var fail = function (msg) {
+        var err = box.querySelector('.gperr');
+        if (err) { err.textContent = msg; err.hidden = false; } else self.say(msg);
+        $$('button, input', box).forEach(function (c) { c.disabled = false; });
+      };
+      var done = function (msg) { self.say(msg); return self._evPagesLoad(eid); };
+      if (t.hasAttribute('data-evp-link-open')) {
+        this._evLinkFor = eid; this._evPagesRedraw(eid, '[data-evp-link-q]');
+      } else if (t.dataset.evpLinkId) {
+        $$('button, input', box).forEach(function (c) { c.disabled = true; });
+        Chronicle.apiFetch(base, { method: 'POST', body: { entity_id: t.dataset.evpLinkId } })
+          .then(function (resp) {
+            if (!resp.ok) return Promise.reject();
+            self._evLinkFor = null;
+            return done('Page linked.');
+          })
+          .catch(function () { fail('That page could not be linked. Try again.'); });
+      } else if (t.dataset.evpUnlink) {
+        $$('button, input', box).forEach(function (c) { c.disabled = true; });
+        Chronicle.apiFetch(base + '/' + encodeURIComponent(t.dataset.evpUnlink), { method: 'DELETE' })
+          .then(function (resp) { return resp.ok ? done('Page unlinked.') : Promise.reject(); })
+          .catch(function () { fail('That page could not be unlinked. Try again.'); });
+      }
+      return true;
+    },
+
     _evpHTML: function (ev) {
       var cal = this.cal;
       var mc = CalDate.monthCount(cal), m0 = ((ev.month - 1) % mc + mc) % mc, monthDef = (cal.months || [])[m0];
@@ -5126,7 +5231,7 @@
           '<h3 class="ept">' + esc(ev.name) + (ev.kind_name ? ' <span class="dirnote">' + esc(ev.kind_name) + '</span>' : '') + '</h3>' +
           '<div class="espan">' + esc(label) + (time ? ' · ' + esc(time) : '') + ' ' + visBadge + '</div>' +
           (body ? '<div class="notes">' + body + '</div>' : '') +
-          recur + entity +
+          recur + entity + this._evPagesBox(ev.id) +
         '<!--EVP_FOOT--></div></div>';
     },
 

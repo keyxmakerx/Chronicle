@@ -545,6 +545,43 @@ func (h *Handler) DeleteEventAPI(c echo.Context) error {
 	return c.NoContent(http.StatusOK)
 }
 
+// ListEventPagesAPI lists the pages tied to an event that the caller may see.
+// GET /campaigns/:id/calendars/:calid/events/:eid/pages
+func (h *Handler) ListEventPagesAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	pages, err := h.svc.EventPages(c.Request().Context(), c.Param("eid"), c.Param("calid"), cc.Campaign.ID, viewerFrom(c, cc))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, pages)
+}
+
+// LinkEventPageAPI ties a page to an event.
+// POST /campaigns/:id/calendars/:calid/events/:eid/pages
+func (h *Handler) LinkEventPageAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	var req struct {
+		EntityID string `json:"entity_id"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request")
+	}
+	if err := h.svc.LinkEventPage(c.Request().Context(), c.Param("eid"), c.Param("calid"), cc.Campaign.ID, req.EntityID, viewerFrom(c, cc)); err != nil {
+		return err
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+// UnlinkEventPageAPI removes a page's tie to an event.
+// DELETE /campaigns/:id/calendars/:calid/events/:eid/pages/:entityID
+func (h *Handler) UnlinkEventPageAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if err := h.svc.UnlinkEventPage(c.Request().Context(), c.Param("eid"), c.Param("calid"), cc.Campaign.ID, c.Param("entityID"), viewerFrom(c, cc)); err != nil {
+		return err
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
 // SetEventVisibilityAPI is the dm_only toggle. Gated on
 // campaigns.CanAuthorDmOnly (the Owner, or a co-DM with a grant), not
 // RequireRole(Owner) — see routes.go.

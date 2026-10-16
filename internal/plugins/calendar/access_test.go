@@ -279,6 +279,18 @@ func (f *fakeCalendarSvc) PageTimeline(context.Context, string, string, bool, pe
 	return nil, nil
 }
 
+func (f *fakeCalendarSvc) EventPages(context.Context, string, string, string, permissions.Viewer) ([]EntityTieRef, error) {
+	return []EntityTieRef{}, nil
+}
+
+func (f *fakeCalendarSvc) LinkEventPage(context.Context, string, string, string, string, permissions.Viewer) error {
+	return nil
+}
+
+func (f *fakeCalendarSvc) UnlinkEventPage(context.Context, string, string, string, string, permissions.Viewer) error {
+	return nil
+}
+
 func (f *fakeCalendarSvc) SetOccurrenceOverride(_ context.Context, _, _, _ string, _ DayDate, _ OccurrenceOverrideInput, v permissions.Viewer) (*OccurrenceOverride, error) {
 	f.lastViewer = v
 	return &OccurrenceOverride{}, nil
@@ -405,6 +417,8 @@ func TestRouteGates_PlayerBlockedFromOwnerAndScribeRoutes(t *testing.T) {
 		{"create event (Scribe+)", http.MethodPost, "/campaigns/camp-1/calendars/cal-1/events"},
 		{"update event (Scribe+)", http.MethodPut, "/campaigns/camp-1/calendars/cal-1/events/evt-1"},
 		{"delete event (Owner only)", http.MethodDelete, "/campaigns/camp-1/calendars/cal-1/events/evt-1"},
+		{"link a page to an event (Scribe+)", http.MethodPost, "/campaigns/camp-1/calendars/cal-1/events/evt-1/pages"},
+		{"unlink a page from an event (Scribe+)", http.MethodDelete, "/campaigns/camp-1/calendars/cal-1/events/evt-1/pages/ent-1"},
 		{"set event visibility (the dm_only toggle, gated on CanAuthorDmOnly)", http.MethodPut, "/campaigns/camp-1/calendars/cal-1/events/evt-1/visibility"},
 		{"list event kinds (calendar structure, Owner only)", http.MethodGet, "/campaigns/camp-1/calendars/event-kinds"},
 		{"create event kind (CanAuthorDmOnly)", http.MethodPost, "/campaigns/camp-1/calendars/event-kinds"},
@@ -443,6 +457,14 @@ func TestRouteGates_ScribeCanCreateAndEditEventsButNotDeleteOrToggleVisibility(t
 	rec = doRequest(e, http.MethodPut, "/campaigns/camp-1/calendars/cal-1/events/evt-1", "u-scribe")
 	if rec.Code != http.StatusOK {
 		t.Errorf("Scribe must be able to update an event, got %d: %s", rec.Code, rec.Body.String())
+	}
+	rec = doRequestWithBody(e, http.MethodPost, "/campaigns/camp-1/calendars/cal-1/events/evt-1/pages", "u-scribe", `{"entity_id":"ent-1"}`)
+	if rec.Code != http.StatusNoContent {
+		t.Errorf("Scribe must be able to link a page to an event, got %d: %s", rec.Code, rec.Body.String())
+	}
+	rec = doRequest(e, http.MethodDelete, "/campaigns/camp-1/calendars/cal-1/events/evt-1/pages/ent-1", "u-scribe")
+	if rec.Code != http.StatusNoContent {
+		t.Errorf("Scribe must be able to unlink a page from an event, got %d: %s", rec.Code, rec.Body.String())
 	}
 	rec = doRequest(e, http.MethodDelete, "/campaigns/camp-1/calendars/cal-1/events/evt-1", "u-scribe")
 	if rec.Code != http.StatusForbidden {

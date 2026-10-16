@@ -243,6 +243,15 @@ type CalendarService interface {
 	// event is visible to v. Like ListEventsForMonth, a future event not yet
 	// announced (dropUnannouncedFutureEvents) is not found for a player.
 	GetEventForViewer(ctx context.Context, eventID, calendarID, campaignID string, v permissions.Viewer) (*Event, error)
+	// EventPages lists the pages tied to an event (entity_event_links) that v
+	// may see, by name. The event must pass GetEventForViewer's gates or this
+	// answers NotFound; a page v may not see is left out.
+	EventPages(ctx context.Context, eventID, calendarID, campaignID string, v permissions.Viewer) ([]EntityTieRef, error)
+	// LinkEventPage ties a page of the same campaign to an event, and
+	// UnlinkEventPage removes the tie (a no-op when there is none). Both are
+	// gated like UpdateEvent: the calendar and the event must be visible to v.
+	LinkEventPage(ctx context.Context, eventID, calendarID, campaignID, entityID string, v permissions.Viewer) error
+	UnlinkEventPage(ctx context.Context, eventID, calendarID, campaignID, entityID string, v permissions.Viewer) error
 	// ListEventsByIDsForViewer is GetEventForViewer for many ids in one
 	// round of queries: the same calendar gate, event visibility, unannounced
 	// and linked-entity redaction rules, with an event the viewer may not
