@@ -439,6 +439,24 @@ test('with reduced motion the cover is a still that a click dismisses at once', 
   }, { cover: true, reducedMotion: true });
 });
 
+test('the bold reader has one way around the book: no contents drawer, tab row or second "where" line', async () => {
+  await withBook(async (page) => {
+    const nav = await page.evaluate(() => ({
+      toc: !!document.querySelector('[data-act="toc"]'),
+      tabs: !!document.querySelector('.rb-tabs'),
+      where: !document.querySelector('.rb-bar .rb-where').hidden,
+      ribbon: !!document.querySelector('.rb-bm-tab'),
+      turnWhere: document.querySelector('.rb-turn-where').textContent,
+    }));
+    assert.deepEqual([nav.toc, nav.tabs, nav.where, nav.ribbon], [false, false, false, true]);
+    assert.ok(nav.turnWhere.length > 0, 'the bar under the book says where you are');
+  }, { bold: true });
+  // The paper look keeps its contents drawer and tab row.
+  await withBook(async (page) => {
+    assert.equal(await page.evaluate(() => !!document.querySelector('[data-act="toc"]')), true);
+  });
+});
+
 test('look: bold draws dark banners, heavy headings and coloured tiers, whatever the site settings', async () => {
   const probe = (page) => page.evaluate(() => {
     const rb = document.querySelector('.rb');

@@ -616,8 +616,9 @@
       '<div class="rb-brand">' + (d.mark ? '<span class="rb-mark" aria-hidden="true">' + esc(d.mark) + '</span>' : '') +
       '<div class="rb-name"><span class="rb-title">' + esc(d.title) + '</span>' +
       (d.systemName ? '<small>' + esc(d.systemName) + '</small>' : '') + '</div></div>' +
-      '<button type="button" class="rb-btn" data-act="toc" aria-expanded="false" aria-label="Open the contents"><span aria-hidden="true">☰</span> Contents</button>' +
-      '<span class="rb-where"></span><span class="rb-sp"></span>' +
+      // A bold book has the ribbon and turnbar; contents, tabs and "where" would repeat them.
+      (turnbar ? '' : '<button type="button" class="rb-btn" data-act="toc" aria-expanded="false" aria-label="Open the contents"><span aria-hidden="true">☰</span> Contents</button>') +
+      '<span class="rb-where"' + (turnbar ? ' hidden' : '') + '></span><span class="rb-sp"></span>' +
       (this.inline ? '' : '<div class="rb-search" role="search"><span class="rb-search-ic" aria-hidden="true">⌕</span>' +
       '<input type="search" class="rb-search-in" data-search placeholder="Search the book" aria-label="Search the book" autocomplete="off" spellcheck="false"' +
       ' aria-controls="' + this.domId('results') + '" aria-expanded="false"><kbd aria-hidden="true">/</kbd>' +
@@ -625,7 +626,7 @@
       ((own || edit || seg) ? '<button type="button" class="rb-btn rb-more" data-act="more" aria-expanded="false" aria-controls="' + this.domId('tools') +
         '" aria-label="More"><span aria-hidden="true">\u22EF</span></button><div class="rb-tools" id="' + this.domId('tools') + '">' + own + edit + seg + '</div>' : '') +
       (d.cover && !this.inline && !turnbar ? '<button type="button" class="rb-btn rb-shut" data-act="shut">Close the book</button>' : '') +
-      this.ribbonHTML() + '</div>' + this.tabsHTML() + this.bmHTML() +
+      this.ribbonHTML() + '</div>' + (turnbar ? '' : this.tabsHTML()) + this.bmHTML() +
       '<div class="rb-book">' +
       '<article class="rb-page l"></article><div class="rb-spine" aria-hidden="true"></div><article class="rb-page r"></article>' +
       '<button type="button" class="rb-curl l" data-act="prev" aria-label="Previous page"></button>' +
@@ -978,8 +979,9 @@
     }
     // The running head repeats what the page already says, so readers skip
     // it. A wide page keeps it all on the left, clear of the Sections ribbon.
-    var head = item.wide ? '<span>' + esc(this.data.title) + ' \u00B7 ' + esc(item.ch.title) + '</span>'
-      : '<span>' + esc(this.data.title) + '</span><span>' + esc(item.ch.title) + '</span>';
+    var chapter = item.ch.title === this.data.title ? '' : item.ch.title;
+    var head = item.wide ? '<span>' + esc(this.data.title) + (chapter ? ' \u00B7 ' + esc(chapter) : '') + '</span>'
+      : '<span>' + esc(this.data.title) + '</span><span>' + esc(chapter) + '</span>';
     return '<div class="rb-fhd" aria-hidden="true">' + head + '</div>' +
       '<div class="rb-scroll" tabindex="0" role="region" aria-label="Page ' + (item.n + 1) + ': ' + esc(label) + '">' + h + '</div>' +
       '<div class="rb-foot"><span class="rb-folio">' + (item.n + 1) + '</span></div>';

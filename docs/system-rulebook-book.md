@@ -87,7 +87,9 @@ parts:
 - `look: bold` draws a poster-style book: dark chapter banners, heavy
   headings and coloured result tiers. It takes its colours from `theme`
   (`accent` colours the banners' edge and the tiers), so a book chooses
-  `paper` or `bold`, not both.
+  `paper` or `bold`, not both. Readers find their way by the Sections ribbon
+  and the bar under the book, so a bold book has no contents drawer and no
+  row of tabs.
 - `cover` is a drawn cover: the first time a reader opens the book in a
   visit it shows closed, and a click (or Enter or Space) swings it open. A
   **Close the book** button in the top bar swings it shut again. Draw the
@@ -106,8 +108,8 @@ parts:
   files must be in the package, at most 1 MB each. A missing or oversized
   file, or a name outside these folders, is reported like any other mistake in
   `book.yaml`.
-- `tabs` puts a row of tabs above the book, one per named chapter, in that
-  order (at most 12). When the campaign has written house rules, a House
+- `tabs` puts a row of tabs above a paper book, one per named chapter, in
+  that order (at most 12). When the campaign has written house rules, a House
   rules tab is added at the end.
 - The book opens on `start`. A reader who has never opened it opens on
   `first`. A link to the Rules page ending in `#<chapter>` (for example
