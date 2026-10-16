@@ -3,8 +3,10 @@
 // the directive stripping only mean something against the real thing.
 //
 // Needs playwright-core and a Chromium. It looks in the usual places
-// (NODE_PATH, /opt/node-tools, PW_CHROMIUM or /opt/pw-browsers) and skips,
-// saying so, when none is found.
+// (NODE_PATH, /opt/node-tools, PW_CHROMIUM, /opt/pw-browsers, or the browser
+// `playwright install` fetched) and skips, saying so, when none is found.
+// Under CI a missing browser fails instead, so the sanitizer is never
+// silently unguarded.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -34,12 +36,18 @@ function findChromium() {
       if (d.startsWith('chromium-') && existsSync(c)) return c;
     }
   } catch (e) { /* none */ }
+  try {
+    const c = pw && pw.chromium.executablePath();
+    if (c && existsSync(c)) return c;
+  } catch (e) { /* none */ }
   return null;
 }
 
 const pw = findPlaywright();
 const chromePath = findChromium();
-const skip = !pw || !chromePath ? 'playwright-core or Chromium not found' : false;
+const missing = !pw || !chromePath ? 'playwright-core or Chromium not found' : false;
+if (missing && process.env.CI) throw new Error(missing + ': CI must run the diagram tests, not skip them');
+const skip = missing;
 
 const ALLOWED = ('svg g path rect circle ellipse line polyline polygon text tspan defs marker style title desc ' +
   'lineargradient radialgradient stop clippath use filter fedropshadow fegaussianblur feoffset femerge femergenode ' +
