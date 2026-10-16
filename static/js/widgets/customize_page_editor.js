@@ -33,7 +33,7 @@
   // The server's limits (ValidateLayout, tilegrid), checked here so a change
   // Save would refuse is refused at once, with the reason.
   var MAX_ROWS = 20, MAX_BLOCKS = 10, MAX_TILES = 40, MAX_BYTES = 100 * 1024;
-  // Drag timing (signed with the editor's mockup): how long the pointer
+  // Drag timing: how long the pointer
   // rests before the gap moves, how long widgets take to glide, and how far
   // the pointer must go before the gap moves again.
   var SETTLE = 110, GLIDE = 340, NUDGE = 12;
@@ -287,7 +287,7 @@
       }
       L = next;
       var same = JSON.stringify(L) === JSON.stringify(saved);
-      var before = snap();
+      var before = UI.glideBefore || snap();
       if (UI.glideFrom && UI.sel) before[UI.sel.id] = UI.glideFrom;
       Chronicle.customizeCategoryWrite(KEY, { layout: same ? undefined : clone(L) }, { step: true });
       render();
@@ -681,8 +681,8 @@
         seg('Page look', 'look', UI.look, [['standard', 'fa-file-lines', 'Standard', 'Preview the Standard look. Pages use the look chosen in Look.'], ['annals', 'fa-scroll', 'Annals', 'Preview the Annals look. Pages use the look chosen in Look.']]) +
         '<span class="cpe-read"><button type="button" class="toggle" role="switch" data-act="read" aria-checked="' + UI.reading + '" aria-label="See the page as readers do"><span class="toggle-knob"></span></button><span class="cpe-hide-md">See the page as readers do</span></span>' +
         '<span class="cpe-sp"></span>' + pages +
-        '<button class="btn-secondary btn-sm" type="button" data-act="start" title="Start from a layout in the Library" aria-label="Start from…">' + ic('fa-swatchbook') + '<span class="cpe-hide-md">Start from…</span></button>' +
-        '<button class="btn-secondary btn-sm" type="button" data-act="keep" title="Keep a copy of this layout in the Library" aria-label="Keep in Library">' + ic('fa-bookmark') + '<span class="cpe-hide-md">Keep in Library</span></button></div>';
+        (UI.reading ? '</div>' : '<button class="btn-secondary btn-sm" type="button" data-act="start" title="Start from a layout in the Library" aria-label="Start from…">' + ic('fa-swatchbook') + '<span class="cpe-hide-md">Start from…</span></button>' +
+        '<button class="btn-secondary btn-sm" type="button" data-act="keep" title="Keep a copy of this layout in the Library" aria-label="Keep in Library">' + ic('fa-bookmark') + '<span class="cpe-hide-md">Keep in Library</span></button></div>');
     }
 
     /* ---------- Inspector ---------- */
@@ -877,6 +877,7 @@
     function readMode(on) {
       UI.reading = !!on;
       UI.addAt = null;
+      if (on) { UI.sel = null; UI.insp = 'add'; }
       closePop();
       render();
       fadeFrame();
@@ -1176,7 +1177,7 @@
       document.addEventListener('keydown', escKey);
     }
     function dragBegin(src, ev) {
-      closePop();
+      if (!(popEl && popEl.hasAttribute('data-keep'))) closePop();
       var r = src.el.getBoundingClientRect(), g;
       if (src.from === 'gal') {
         g = document.createElement('div');
@@ -1222,13 +1223,13 @@
       var cv = $('.cpe-canvas'), cr = cv.getBoundingClientRect();
       if (ev.clientY > cr.bottom - 40) cv.scrollTop += 12; else if (ev.clientY < cr.top + 40) cv.scrollTop -= 12;
       var under = document.elementFromPoint(ev.clientX, ev.clientY);
-      if (!under || !el.contains(under)) { if (D.key) { D.key = ''; D.target = null; clearMarks(); } return; }
+      if (!under || !el.contains(under)) { clearTimeout(D.wait); D.want = ''; if (D.key) { D.key = ''; D.target = null; clearMarks(); } return; }
       // Over the gap itself the drop stays where it is, so the tiles it moved
       // can't move it back.
       if (under.closest('.cpe-ph')) { clearTimeout(D.wait); D.want = D.key; return; }
       // Moving the gap moves the widgets under a still pointer; until the
       // pointer itself moves on, the gap stays.
-      if (D.key && D.at && Math.hypot(ev.clientX - D.at[0], ev.clientY - D.at[1]) < NUDGE) return;
+      if (D.key && D.at && Math.hypot(ev.clientX - D.at[0], ev.clientY - D.at[1]) < NUDGE) { clearTimeout(D.wait); D.want = D.key; return; }
       var m = D.src.m, tileable = m.sizes.length > 0, t = null, key = '';
       var srcList = D.src.from !== 'gal' ? findItem(D.src.id) : null;
       var ins = under.closest('.cpe-ins'), col = under.closest('.cpe-col'), tiles = under.closest('.cpe-tiles'), sec = under.closest('.cpe-sec');
@@ -1308,10 +1309,12 @@
     function dragEnd() {
       var ph = $('.cpe-ph:not(.line)');
       UI.glideFrom = ph ? ph.getBoundingClientRect() : null;
+      // Where things are on screen, gap and all, so the drop glides from there.
+      UI.glideBefore = snap();
       var D = dragDone();
       if (!D || !alive) return;
       var t = D.target;
-      if (!t) { render(); return; }
+      if (!t) { UI.glideFrom = UI.glideBefore = null; render(); return; }
       var moved = null, m = D.src.m;
       var ok = edit(function (lay) {
         var item;
@@ -1342,6 +1345,7 @@
         UI.insp = 'sel';
       });
       UI.glideFrom = null;
+      UI.glideBefore = null;
       if (ok && moved) { glow(moved); if (D.src.from === 'gal') toast('Added ' + m.name + '.'); }
     }
 
@@ -1480,9 +1484,10 @@
       }
     });
     on(el, 'keydown', function (e) {
+      if (UI.reading) return;
       if (e.target.closest && e.target.closest('input, textarea, select')) return;
       var g = e.target.closest && e.target.closest('.cpe-gw');
-      if (g && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); addWidget(g.getAttribute('data-gw')); return; }
+      if (g && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); if (UI.addAt) addTile(UI.addAt, g.getAttribute('data-gw')); else addWidget(g.getAttribute('data-gw')); return; }
       var it = e.target.closest && e.target.closest('.cpe-blk, .cpe-tile');
       if (it && e.key === 'Enter') { e.preventDefault(); select({ kind: it.getAttribute('data-kind'), id: it.getAttribute('data-id') }); return; }
       if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && UI.sel && UI.sel.kind !== 'sec') {
@@ -1511,6 +1516,7 @@
     on(document, 'chronicle:customize-draft', function () {
       L = current();
       if (UI.sel && !findSel()) { UI.sel = null; UI.insp = 'add'; }
+      if (UI.addAt && !findRow(UI.addAt)) UI.addAt = null;
       render();
     });
     on(window, 'resize', fit);
