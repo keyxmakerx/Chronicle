@@ -1112,6 +1112,11 @@ func (s *entityService) UpdateFields(ctx context.Context, entityID string, field
 	// loaded), matching this method's existing tolerance of a load failure.
 	if entity != nil {
 		oldFields := cloneFields(entity.FieldsData)
+		// Re-read so the payload carries the row's new updated_at; consumers
+		// that version by it would otherwise sit one edit behind.
+		if fresh, err := s.entities.FindByID(ctx, entityID); err == nil && fresh != nil {
+			entity = fresh
+		}
 		entity.FieldsData = fieldsData
 		s.events.PublishEntityEvent("updated", entity.CampaignID, entityID, entity)
 		s.notifyFieldsChanged(ctx, entity, oldFields, fieldsData)
@@ -1157,6 +1162,7 @@ func (s *entityService) UpdateImage(ctx context.Context, entityID, imagePath str
 	if err := s.entities.UpdateImage(ctx, entityID, imagePath); err != nil {
 		return err
 	}
+	s.publishUpdatedFromStore(ctx, entityID)
 	slog.Info("entity image updated",
 		slog.String("entity_id", entityID),
 		slog.String("image_path", imagePath),
@@ -1179,11 +1185,23 @@ func (s *entityService) UpdateCoverImage(ctx context.Context, entityID, coverIma
 	if err := s.entities.UpdateCoverImage(ctx, entityID, coverImagePath); err != nil {
 		return err
 	}
+	s.publishUpdatedFromStore(ctx, entityID)
 	slog.Info("entity cover image updated",
 		slog.String("entity_id", entityID),
 		slog.String("cover_image_path", coverImagePath),
 	)
 	return nil
+}
+
+// publishUpdatedFromStore broadcasts "updated" with the entity as stored now,
+// so sync clients see a picture change without waiting for the page's next
+// edit. Best-effort: a failed re-read skips the event, never the write.
+func (s *entityService) publishUpdatedFromStore(ctx context.Context, entityID string) {
+	entity, err := s.entities.FindByID(ctx, entityID)
+	if err != nil || entity == nil {
+		return
+	}
+	s.events.PublishEntityEvent("updated", entity.CampaignID, entityID, entity)
 }
 
 // CheckImagePath refuses an absolute or traversing path, and media that
