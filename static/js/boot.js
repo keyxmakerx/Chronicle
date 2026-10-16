@@ -392,6 +392,13 @@
     }
   });
 
+  // Back and Forward fetch the page and swap in a whole new body without an
+  // afterSettle, so its widgets are mounted here.
+  document.addEventListener('htmx:historyRestore', function () {
+    mountWidgets(document.body);
+    scheduleUnmatchedWidgetScan(document.body);
+  });
+
   // Destroy widgets before HTMX removes content.
   // htmx:beforeSwap fires before old content is removed.
   document.addEventListener('htmx:beforeSwap', function (event) {
