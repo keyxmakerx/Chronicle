@@ -70,7 +70,7 @@ templ App(title string) {
 
 				<!-- "View as player" banner -->
 				if IsViewingAsPlayer(ctx) {
-					<div class="bg-amber-500/15 border-b border-amber-500/30 px-4 py-1.5 text-center text-sm text-amber-300">
+					<div class="bg-amber-500/15 border-b border-amber-500/30 px-4 py-1.5 text-center text-sm text-amber-300" data-pv-banner>
 						<i class="fa-solid fa-eye-slash mr-1"></i>
 						Viewing as player
 						<span class="text-amber-400/70 ml-1">— owner-only content is hidden</span>
@@ -877,6 +877,8 @@ templ Topbar() {
 			if InCampaign(ctx) && IsOwner(ctx) {
 				<button
 					hx-post={ "/campaigns/" + GetCampaignID(ctx) + "/toggle-view-mode" }
+					data-pv-toggle
+					data-widget="player-view"
 					hx-headers={ `{"X-CSRF-Token":"` + GetCSRFToken(ctx) + `"}` }
 					class={
 						"btn-ghost btn-icon",

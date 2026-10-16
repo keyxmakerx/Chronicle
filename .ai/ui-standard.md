@@ -277,6 +277,13 @@ their tokens.
   only the Director sees. A new block or package widget marks the same parts
   to follow the look. Standard draws them exactly as before (input.css,
   "Shared block parts").
+- **View as player** (the owner's eye button in the header) hides everything
+  marked `data-dm-only` while it is on (`html[data-view-as-player]`), in any
+  look; it is the owner's preview, since the server never sends players that
+  content. In Annals the switch shows what changes: Director-only rows fold
+  away before the page reloads as a player sees it, the banner folds in, and
+  coming back folds them in with the list-add glow
+  (`static/js/widgets/player_view.js`). Calm fades, Off swaps.
 - The editor's example site (`static/js/widgets/customize_look.js`,
   `static/css/customize.css`) shows each choice and keeps its numbers in step
   with the server's.

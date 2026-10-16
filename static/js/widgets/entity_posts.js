@@ -180,7 +180,7 @@
         var isExpanded = state.expandedPostId === post.id;
         var h = '';
 
-        h += '<div class="card overflow-hidden" data-post-id="' + esc(post.id) + '"';
+        h += '<div class="card overflow-hidden" data-post-id="' + esc(post.id) + '"' + (post.isPrivate ? ' data-dm-only' : '');
         if (editable) {
           h += ' draggable="true" data-post-index="' + index + '"';
         }

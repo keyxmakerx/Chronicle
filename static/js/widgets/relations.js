@@ -73,10 +73,14 @@ Chronicle.register('relations', {
         return;
       }
 
-      // Group relations by type.
+      // Group relations by type. While the owner views as a player, the
+      // Director-only links are left out here rather than only hidden, so
+      // the groups and their counts read as a player's would.
+      var preview = document.documentElement.hasAttribute('data-view-as-player');
       var groups = {};
       var groupOrder = [];
       state.relations.forEach(function (rel) {
+        if (preview && rel.dmOnly) return;
         if (!groups[rel.relationType]) {
           groups[rel.relationType] = [];
           groupOrder.push(rel.relationType);
