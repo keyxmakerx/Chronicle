@@ -189,6 +189,8 @@ templ Base(title string) {
 
 		<!-- Relations widget (bi-directional entity linking) -->
 		<script src={ AssetURL("/static/js/widgets/relations.js") } defer></script>
+		<!-- Annals: following a connection pulls the new page out from under it -->
+		<script src={ AssetURL("/static/js/annals_pull.js") } defer></script>
 
 		<!-- Shop inventory widget (item list with price/quantity/stock) -->
 		<script src={ AssetURL("/static/js/widgets/shop_inventory.js") } defer></script>

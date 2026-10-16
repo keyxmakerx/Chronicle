@@ -138,6 +138,22 @@ place, and Off shows the end state.
   over the everyday page colour before the next page loads. The row presses
   deeper and lets go slower than other menu rows. Moving between admin
   pages plays nothing; Calm fades, and Off plays nothing.
+- **Annals: following a connection pulls the page out from under it.**
+  Under the Annals page look, a click on a link in the connections block
+  leaves the page being read where it is, scroll included, and dims it, while
+  the linked page slides out from under the block, from the side the block
+  sits on, over `--dur-slide` × 1.22 with `--ease-slide`. The block stays,
+  opaque, casting a shadow onto the page beneath, and swaps its links in
+  place: links both pages share move, links only the old page had fold away,
+  and the new page's own links fold in with a glow, the page you came from in
+  the accent. Following the link back to the page the last pull came from
+  slides the page back under. It is a same-document view transition around
+  the usual boosted swap of `#main-content` (`static/js/annals_pull.js`,
+  `html[data-annals-mode]`); the scroll resets only after the old page is
+  captured, so nothing jumps before the move. Calm fades; Off, reduced
+  motion, unsaved changes, a modified click and a browser without view
+  transitions keep the ordinary page load. The browser's Back button is the
+  ordinary history restore and plays nothing.
 - **A creature's pictures settle into its hover card.** A card with both art
   and a token (`badge`) opens with the art easing from slightly close into its
   frame over 320 ms, `--ease-out`, and the token popping onto the corner
@@ -276,7 +292,8 @@ their tokens.
   `cb-fact-v`, `cb-group`, `cb-link`, and `cb-dm` or `data-dm-only` for what
   only the Director sees. A new block or package widget marks the same parts
   to follow the look. Standard draws them exactly as before (input.css,
-  "Shared block parts").
+  "Shared block parts"). Under Annals, following a connection pulls the
+  new page out from under the connections block ("Motion").
 - The editor's example site (`static/js/widgets/customize_look.js`,
   `static/css/customize.css`) shows each choice and keeps its numbers in step
   with the server's.
