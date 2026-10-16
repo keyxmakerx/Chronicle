@@ -616,9 +616,7 @@
       '<div class="rb-brand">' + (d.mark ? '<span class="rb-mark" aria-hidden="true">' + esc(d.mark) + '</span>' : '') +
       '<div class="rb-name"><span class="rb-title">' + esc(d.title) + '</span>' +
       (d.systemName ? '<small>' + esc(d.systemName) + '</small>' : '') + '</div></div>' +
-      // The bold reader navigates by its Sections ribbon and says where it is
-      // in the bar under the book, so a second contents list, a tab row and a
-      // second "where" line would only repeat them.
+      // A bold book has the ribbon and turnbar; contents, tabs and "where" would repeat them.
       (turnbar ? '' : '<button type="button" class="rb-btn" data-act="toc" aria-expanded="false" aria-label="Open the contents"><span aria-hidden="true">☰</span> Contents</button>') +
       '<span class="rb-where"' + (turnbar ? ' hidden' : '') + '></span><span class="rb-sp"></span>' +
       (this.inline ? '' : '<div class="rb-search" role="search"><span class="rb-search-ic" aria-hidden="true">⌕</span>' +
