@@ -2,52 +2,19 @@
 // Chromium (real DOMParser, the real vendored Mermaid) because cleanSvg and
 // the directive stripping only mean something against the real thing.
 //
-// Needs playwright-core and a Chromium. It looks in the usual places
-// (NODE_PATH, /opt/node-tools, PW_CHROMIUM, /opt/pw-browsers, or the browser
-// `playwright install` fetched) and skips, saying so, when none is found.
-// Under CI a missing browser fails instead, so the sanitizer is never
-// silently unguarded.
+// Needs playwright-core and a Chromium (see _browser_env.mjs); skips locally,
+// and fails under CI, when either is missing.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
-import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { pw, chromePath, skip } from './_browser_env.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const FIX = join(root, 'test/js/fixtures/mermaid');
 
-function findPlaywright() {
-  for (const base of [import.meta.url, '/opt/node-tools/', process.env.NODE_PATH ? process.env.NODE_PATH + '/' : null]) {
-    if (!base) continue;
-    try {
-      const req = createRequire(base.startsWith('file:') || base.startsWith('/') ? (base.startsWith('/') ? base + 'x.js' : base) : base);
-      return req('playwright-core');
-    } catch (e) { /* try the next place */ }
-  }
-  return null;
-}
-function findChromium() {
-  if (process.env.PW_CHROMIUM && existsSync(process.env.PW_CHROMIUM)) return process.env.PW_CHROMIUM;
-  try {
-    for (const d of readdirSync('/opt/pw-browsers')) {
-      const c = join('/opt/pw-browsers', d, 'chrome-linux', 'chrome');
-      if (d.startsWith('chromium-') && existsSync(c)) return c;
-    }
-  } catch (e) { /* none */ }
-  try {
-    const c = pw && pw.chromium.executablePath();
-    if (c && existsSync(c)) return c;
-  } catch (e) { /* none */ }
-  return null;
-}
-
-const pw = findPlaywright();
-const chromePath = findChromium();
-const missing = !pw || !chromePath ? 'playwright-core or Chromium not found' : false;
-if (missing && process.env.CI) throw new Error(missing + ': CI must run the diagram tests, not skip them');
-const skip = missing;
 
 const ALLOWED = ('svg g path rect circle ellipse line polyline polygon text tspan defs marker style title desc ' +
   'lineargradient radialgradient stop clippath use filter fedropshadow fegaussianblur feoffset femerge femergenode ' +
