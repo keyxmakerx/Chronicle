@@ -118,7 +118,7 @@
     return window.htmx.ajax('GET', url.pathname + url.search, {
       source: link,
       target: main,
-      select: '#main-content',
+      select: '#main-content > *',
       swap: 'innerHTML',
       headers: { 'HX-Boosted': 'true' }
     }).then(function () {
