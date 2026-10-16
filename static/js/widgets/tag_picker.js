@@ -52,7 +52,7 @@ Chronicle.register('tag-picker', {
         // Show DM-only indicator for dm_only tags.
         if (tag.dmOnly) {
           var dmBadge = document.createElement('i');
-          dmBadge.className = 'fa-solid fa-eye-slash tp-dm-badge';
+          dmBadge.className = 'fa-solid fa-eye-slash tp-dm-badge cb-dm';
           dmBadge.title = 'DM only';
           chip.appendChild(dmBadge);
         }

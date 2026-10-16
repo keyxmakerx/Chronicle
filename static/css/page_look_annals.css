@@ -1,0 +1,176 @@
+/* Annals: a page look that restyles every block through the shared block
+   parts (input.css, "Shared block parts") without moving anything. It is on
+   when the campaign's Customize page look is Annals, which puts
+   data-cz-page="annals" on <html>; the Customize page editor sets the same
+   attribute on its preview to show it. Everything here is scoped to it.
+
+   The look: headings in the campaign's heading face (tall capitals when the
+   owner picked none, set as --annals-* by AppearanceCSS), the campaign accent
+   as the one colour, and borders only where they carry meaning. Fact panels
+   and tools keep an edge; prose, connections and link lists sit on the page
+   and lift on hover. Motion follows the six signed moves: the title's rule
+   draws on arrival under full motion only. */
+
+[data-cz-page="annals"] {
+  --annals-acc: var(--color-accent);
+  --annals-link: var(--color-accent-link, var(--color-accent));
+  --annals-head: var(--annals-hf, var(--font-heading, inherit));
+  --annals-line: var(--color-border-light);
+  --annals-dm: rgb(var(--color-warn-rgb));
+}
+
+/* ---------- The header, a little thinner ----------
+   Every header function stays; the tall header the owner can pick wins. */
+[data-cz-page="annals"]:not([data-cz-hdr="tall"]) #app-topbar { height: 3rem; }
+[data-cz-page="annals"]:not([data-cz-hdr="tall"]):not([data-cz-corner="banner"]) .nav-brand { height: 3rem; }
+
+/* ---------- Headings ---------- */
+[data-cz-page="annals"] :is(.cb-title, .cb-head, .cb-section-h) {
+  font-family: var(--annals-head);
+  text-transform: var(--annals-hcase, none);
+  font-weight: var(--annals-hw, var(--cz-hw, 600));
+  letter-spacing: var(--annals-hls, var(--cz-hls, 0));
+}
+
+/* The page title, with the accent rule under it. */
+[data-cz-page="annals"] .cb-title {
+  position: relative;
+  padding-bottom: 8px;
+  line-height: 1.05;
+  font-size: clamp(1.75rem, 1.2rem + 1.6vw, 2.5rem);
+  color: var(--color-text-primary);
+}
+[data-cz-page="annals"] .cb-title::after {
+  content: "";
+  position: absolute; left: 0; right: 0; bottom: 0;
+  height: 3px; border-radius: 2px;
+  background: linear-gradient(90deg, var(--annals-acc), color-mix(in srgb, var(--annals-acc) 30%, transparent));
+  transform-origin: left;
+}
+[data-cz-page="annals"]:not([data-motion]):not([data-cz-reduce]) .cb-title::after {
+  animation: annals-draw var(--dur-large, 300ms) var(--ease-out) both 120ms;
+}
+@keyframes annals-draw { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+/* Block headings read as section labels with a hairline under them. */
+[data-cz-page="annals"] .cb-head {
+  display: flex; align-items: baseline; gap: 8px;
+  flex: 1 1 auto;
+  font-size: 0.9rem;
+  color: var(--color-text-primary) !important;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--annals-line);
+}
+[data-cz-page="annals"] .cb-head > i { color: var(--annals-acc); font-size: 0.8em; }
+
+/* Counts become a quiet pill beside their heading. */
+[data-cz-page="annals"] .cb-count {
+  display: inline-block;
+  margin-left: 0;
+  font-family: var(--font-campaign, inherit);
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 11px; font-weight: 600; line-height: 18px;
+  padding: 0 7px; border-radius: 999px;
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+[data-cz-page="annals"] .cb-count-paren::before,
+[data-cz-page="annals"] .cb-count-paren::after { content: none; }
+
+/* ---------- Surfaces: borders only where they mean something ---------- */
+[data-cz-page="annals"] #main-content .cb-card {
+  border-color: transparent;
+  box-shadow: none;
+  background: transparent;
+}
+/* Fact panels and tools keep their edge. */
+[data-cz-page="annals"] #main-content .cb-card:is(.cb-facts, .en-block) {
+  border-color: var(--annals-line);
+  border-radius: 12px;
+  background: var(--color-card-bg);
+  box-shadow: var(--elev-resting);
+}
+/* Pictures keep their rounded frame, with no line round them. */
+[data-cz-page="annals"] #main-content .cb-card:has(> img) { border-radius: 12px; }
+
+/* Rich text sits on the page until it is being edited. */
+[data-cz-page="annals"] #main-content .chronicle-editor:not(.chronicle-editor--editing) {
+  border-color: transparent;
+  background: transparent;
+}
+[data-cz-page="annals"] #main-content .chronicle-editor .tiptap a:not([class]) {
+  color: var(--annals-link);
+  text-decoration: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--annals-link) 40%, transparent);
+}
+
+/* ---------- Fact sections and rows ---------- */
+[data-cz-page="annals"] .cb-section-h {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--annals-acc);
+  padding-top: 4px;
+}
+[data-cz-page="annals"] .cb-section > .cb-fact.cb-fact {
+  margin-top: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 9rem) minmax(0, 1fr);
+  gap: 12px;
+  padding: 7px 0;
+  border-top: 1px solid var(--annals-line);
+}
+[data-cz-page="annals"] .cb-section > .cb-section-h + .cb-fact,
+[data-cz-page="annals"] .cb-section > .cb-fact:first-child { border-top: 0; }
+[data-cz-page="annals"] .cb-fact-l {
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+  font-size: 0.85rem;
+  color: var(--color-text-muted) !important;
+}
+[data-cz-page="annals"] .cb-fact-v { margin-top: 0; font-variant-numeric: tabular-nums; }
+[data-cz-page="annals"] .cb-fact > .era-was { grid-column: 2; }
+@media (max-width: 480px) {
+  [data-cz-page="annals"] .cb-section > .cb-fact.cb-fact { grid-template-columns: minmax(0, 6rem) minmax(0, 1fr); }
+}
+
+/* ---------- Connections and link lists ----------
+   Groups are labelled in the accent with a count; rows sit on the page and
+   lift on hover. */
+[data-cz-page="annals"] .cb-group {
+  display: flex; align-items: center; gap: 6px;
+  border-bottom: 0;
+  background: none;
+  padding: 10px 0 2px;
+  font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--annals-acc);
+}
+[data-cz-page="annals"] .cb-group > i { display: none; }
+[data-cz-page="annals"] .cb-group > .cb-count { margin-left: auto; }
+[data-cz-page="annals"] #main-content .cb-link {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 8px;
+  transition: background var(--dur-micro) var(--ease-out), box-shadow var(--dur-standard) var(--ease-out);
+}
+[data-cz-page="annals"] #main-content .rel-item.cb-link { padding: 6px 8px; margin: 0 -8px; }
+[data-cz-page="annals"] #main-content .cb-link:hover {
+  background: var(--color-card-bg);
+  box-shadow: var(--elev-resting);
+}
+[data-cz-page="annals"] .rel-item.cb-link .rel-icon { border-radius: 8px; }
+[data-cz-page="annals"] .rel-item.cb-link .rel-name a { font-weight: 600; }
+
+/* ---------- Director-only marks ----------
+   One amber everywhere: the mark itself, and a row the players can't see
+   gets a thin amber edge. */
+[data-cz-page="annals"] .cb-dm { color: var(--annals-dm); }
+[data-cz-page="annals"] .cb-link[data-dm-only] {
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--annals-dm) 70%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-cz-page="annals"] .cb-title::after { animation: none !important; }
+}

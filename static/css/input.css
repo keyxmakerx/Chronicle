@@ -4298,6 +4298,15 @@ html.dark[data-view-contrast="high"] { /* the second out-ranks a campaign's :roo
 /* The tall header. Unlayered, so it outranks the h-14 utility on the bar. */
 [data-cz-hdr="tall"] #app-topbar { height: 6rem; }
 
+/* Shared block parts. Blocks mark their heading (cb-head), count (cb-count),
+   fact section and row (cb-section, cb-fact), linked-page row (cb-link),
+   surface (cb-card) and Director-only marks (cb-dm, data-dm-only), so a page
+   look restyles every block alike (page_look_annals.css). The Standard look
+   has no rules of its own for them; these keep it drawing as before. */
+.cb-count-paren::before { content: "("; }
+.cb-count-paren::after { content: ")"; }
+.rel-group-count, .cb-section-h { display: none; }
+
 /* A custom header that needs light words gets the light ink set inside it. */
 .cz-hdr-light {
   --color-text-primary: #f9fafb;

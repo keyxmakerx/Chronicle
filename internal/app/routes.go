@@ -5027,6 +5027,7 @@ func (a *App) RegisterRoutes() {
 					HoverCard: ap.HoverCard,
 
 					SheetStyle: ap.SheetStyle,
+					PageLook:   ap.PageLook,
 				}
 				ctx = layouts.SetAppearance(ctx, ad)
 			}

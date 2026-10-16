@@ -261,7 +261,7 @@
     var head = h('tr');
     d.columns.forEach(function (c) {
       var th = h('th', '', c.label, { scope: 'col' });
-      if (c.dmOnly) th.appendChild(h('span', 'pb-dm', 'DM'));
+      if (c.dmOnly) th.appendChild(h('span', 'pb-dm cb-dm', 'DM'));
       head.appendChild(th);
     });
     table.appendChild(h('thead', '', '', null)).appendChild(head);
