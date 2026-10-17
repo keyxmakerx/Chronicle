@@ -77,3 +77,33 @@ func TestCreateEntityType_SubTypeInheritsSystemPanels(t *testing.T) {
 		})
 	}
 }
+
+// A creature type starts with the panels block so the game system's creature
+// panels (a stat block) show without the owner listing it as NPCs.
+func TestCreateEntityType_CreatureStartsWithSystemPanels(t *testing.T) {
+	tests := []struct {
+		name       string
+		input      CreateEntityTypeInput
+		wantPanels bool
+	}{
+		{"creature preset", CreateEntityTypeInput{Name: "Creature", PresetCategory: "creature"}, true},
+		{"named creature", CreateEntityTypeInput{Name: "Creature"}, true},
+		{"other preset", CreateEntityTypeInput{Name: "Spell", PresetCategory: "spell"}, false},
+		{"plain type", CreateEntityTypeInput{Name: "Location"}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var created *EntityType
+			repo := &mockEntityTypeRepo{
+				createFn: func(_ context.Context, et *EntityType) error { created = et; et.ID = 9; return nil },
+			}
+			svc := newTestService(&mockEntityRepo{}, repo)
+			if _, err := svc.CreateEntityType(context.Background(), "camp-1", tt.input); err != nil {
+				t.Fatal(err)
+			}
+			if got := layoutPlacesBlock(created.Layout, BlockSystemPanels); got != tt.wantPanels {
+				t.Errorf("places system panels = %v, want %v", got, tt.wantPanels)
+			}
+		})
+	}
+}

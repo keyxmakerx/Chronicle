@@ -31,6 +31,7 @@ func TestValidateManifest_EntityPanels(t *testing.T) {
 	}{
 		{"none", nil, ""},
 		{"valid", []EntityPanelDef{{Widget: "negotiation", AppliesTo: "npc"}}, ""},
+		{"creature audience", []EntityPanelDef{{Widget: "negotiation", AppliesTo: "creature"}}, ""},
 		{"unknown widget", []EntityPanelDef{{Widget: "nope", AppliesTo: "npc"}}, "must match a widgets[].slug"},
 		{"empty widget", []EntityPanelDef{{AppliesTo: "npc"}}, "widget is required"},
 		{"bad widget chars", []EntityPanelDef{{Widget: "Negotiation!", AppliesTo: "npc"}}, "lowercase"},

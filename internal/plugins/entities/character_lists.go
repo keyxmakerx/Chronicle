@@ -475,6 +475,37 @@ func isPCType(t EntityType) bool {
 		t.Slug == SlugPlayerCharacter
 }
 
+// isCreatureType reports whether a type holds creature pages: a game system's
+// creature preset, or a type named creature or *-monster.
+func isCreatureType(t EntityType) bool {
+	if t.PresetCategory != nil && *t.PresetCategory == "creature" {
+		return true
+	}
+	return t.Slug == "creature" || strings.HasSuffix(t.Slug, "-monster")
+}
+
+// CreatureTypeIDs is the enabled creature types and their enabled sub-types,
+// the pages a game system's creature panels go on. Unlike the NPC list it is
+// not a choice: a type is a creature type by what it is.
+func CreatureTypeIDs(types []EntityType) []int {
+	var roots []int
+	for _, t := range types {
+		if t.Enabled && isCreatureType(t) {
+			roots = append(roots, t.ID)
+		}
+	}
+	return ResolveCharacterTypeIDs(types, roots, true)
+}
+
+// CreatureTypeIDs is CreatureTypeIDs for one campaign.
+func (s *CharacterListService) CreatureTypeIDs(ctx context.Context, campaignID string) ([]int, error) {
+	types, err := s.types.GetEntityTypes(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	return CreatureTypeIDs(types), nil
+}
+
 // ResolveCharacterTypeIDs expands a list to the enabled types it shows: each
 // listed type plus every enabled sub-type under it. Sub-types come along
 // because that is how the lists always behaved, and a sub-type such as
@@ -516,12 +547,7 @@ func ResolveCharacterTypeIDs(types []EntityType, listed []int, skipPlayerCharact
 // in -character; sub-types of a root come along. Only the topmost types of
 // each family are stored, since a listed parent already covers its sub-types.
 func seedCharacterLists(types []EntityType) (characters, npcs []int) {
-	isCreature := func(t EntityType) bool {
-		if t.PresetCategory != nil && *t.PresetCategory == "creature" {
-			return true
-		}
-		return t.Slug == "creature" || strings.HasSuffix(t.Slug, "-monster")
-	}
+	isCreature := isCreatureType
 	isRoot := func(t EntityType) bool {
 		if isCreature(t) {
 			return false

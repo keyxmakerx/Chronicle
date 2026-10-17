@@ -4657,6 +4657,11 @@ func (a *App) RegisterRoutes() {
 	} else if n > 0 {
 		slog.Info("placed page extras into layouts", slog.Int("layouts", n))
 	}
+	if n, err := placeCreaturePanelsOnce(context.Background(), settingsRepo, campaignService, entityService); err != nil {
+		slog.Error("placing creature panels failed", slog.String("error", err.Error()))
+	} else if n > 0 {
+		slog.Info("placed game-system panels on creature types", slog.Int("layouts", n))
+	}
 
 	// One-time: Notes became Journal plus Jot notes, so campaigns that had
 	// Notes on keep both (see jot_notes_split.go). Retried on the next boot.
