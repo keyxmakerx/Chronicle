@@ -2212,8 +2212,18 @@ func (h *Handler) UpdateFieldsAPI(c echo.Context) error {
 			typeFields = append(typeFields, entity.FieldOverrides.Added...)
 		}
 	}
+	// A claimed owner's patch past the identity keys can only be hero builder
+	// picks, checked against the plan a player sees.
+	var picks builderPicks
+	if h.heroPlanner != nil && IsClaimedOwnerPlayer(cc.MemberRole, entity, auth.GetUserID(c)) && needsBuilderPicks(fieldsPatch) {
+		plan, err := h.heroPlanner.HeroPlan(c.Request().Context(), cc.Campaign.ID, false)
+		if err != nil {
+			return err
+		}
+		picks = builderPicksFrom(plan)
+	}
 	if err := authorizeFieldsWrite(cc.MemberRole, entity, auth.GetUserID(c), cc.Campaign.ID,
-		body.FieldsPatch == nil, fieldsPatch, typeFields); err != nil {
+		body.FieldsPatch == nil, fieldsPatch, typeFields, picks); err != nil {
 		return err
 	}
 	if err := h.requirePlayerCanView(c, cc, entity); err != nil {
