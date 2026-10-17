@@ -4620,6 +4620,7 @@ func (a *App) RegisterRoutes() {
 	// its repository.
 	aiEraVersions := calendar.NewEraVersionService(calendar.NewEraVersionRepository(a.DB), calendarService)
 	aiWorkspaceCommitter.SetEraWriter(aiImportEraAdapter{versions: aiEraVersions})
+	aiWorkspaceCommitter.SetTagWriter(tagService)
 	aiWorkspaceHandler.SetImportEras(aiImportEraAdapter{versions: aiEraVersions})
 	aiWorkspaceRenderer.EraVersions = aiExportEraAdapter{versions: aiEraVersions}
 	aiWorkspaceHandler.SetImportCommitter(aiWorkspaceCommitter)
@@ -5508,7 +5509,7 @@ func (a *App) RegisterRoutes() {
 	// plugin's kind is left out, so its blocks are refused at review.
 	aiKinds := []records.Kind{
 		records.CalendarKind{Svc: calendarService, Pages: entityService},
-		records.EventKind{Svc: calendarService},
+		records.EventKind{Svc: calendarService, Tiers: campaignService, Pages: entityService},
 		records.WeatherKind{Svc: calendarService},
 	}
 	aiTables := records.TableKind{Svc: aiRollTablesAdapter{rollTablesSvc}}
