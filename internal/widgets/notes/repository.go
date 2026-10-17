@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
@@ -40,6 +41,11 @@ type NoteRepository interface {
 	// ListVisibleLinking returns the notes v can see whose body links to the
 	// note (kind LinkNote) or page (LinkPage) targetID, newest first.
 	ListVisibleLinking(ctx context.Context, campaignID string, v permissions.Viewer, kind, targetID string) ([]Note, error)
+
+	// ListVisibleWrittenBetween returns the Journal notes (not folders, not
+	// jots) v can read that were created in [from, to), oldest first, at most
+	// limit of them.
+	ListVisibleWrittenBetween(ctx context.Context, campaignID string, v permissions.Viewer, from, to time.Time, limit int) ([]Note, error)
 
 	// ViewerReadsMedia reports whether v can read at least one note bound to
 	// the note picture mediaID in campaignID (the SQL twin of Note.CanView over
@@ -296,6 +302,23 @@ func (r *noteRepository) ListVisibleLinking(ctx context.Context, campaignID stri
 	query := `SELECT ` + noteColumns + ` FROM notes
 		WHERE campaign_id = ? AND ` + vis + ` AND entry_html LIKE ?
 		ORDER BY updated_at DESC LIMIT 500`
+	return r.scanNotes(ctx, query, args...)
+}
+
+// ListVisibleWrittenBetween lists the Journal notes v can read created in
+// [from, to). created_at is never changed by an edit, so a note stays with the
+// time it was first written.
+func (r *noteRepository) ListVisibleWrittenBetween(ctx context.Context, campaignID string, v permissions.Viewer, from, to time.Time, limit int) ([]Note, error) {
+	if v.UserID() == "" || limit <= 0 {
+		return nil, nil
+	}
+	vis, visArgs := visibleFilter(v)
+	args := append([]any{campaignID}, visArgs...)
+	args = append(args, from.UTC(), to.UTC(), limit)
+	query := `SELECT ` + noteColumns + ` FROM notes
+		WHERE campaign_id = ? AND ` + vis + ` AND entity_id IS NULL AND is_folder = FALSE
+		AND created_at >= ? AND created_at < ?
+		ORDER BY created_at, id LIMIT ?`
 	return r.scanNotes(ctx, query, args...)
 }
 

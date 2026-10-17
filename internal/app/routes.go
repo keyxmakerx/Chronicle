@@ -4100,6 +4100,10 @@ func (a *App) RegisterRoutes() {
 	notePages := &notesPagesAdapter{svc: entityService}
 	noteHandler.SetPageNamer(notePages)
 	noteHandler.SetPageLinker(notePages)
+	// A game night's page lists the notes written that night and builds the
+	// DM's check-in from the pages they name, through the notes' own
+	// visibility rule.
+	sessionsHandler.SetNightNotesService(sessions.NewNightNotesService(&nightNotesAdapter{svc: noteSvc}, notePages, sessions.NewSightingRepository(a.DB)))
 	notes.RegisterRoutes(e, noteHandler, campaignService, authService)
 	// A player can allow the Foundry notebook to use their notes. Grants go
 	// only to an address that may already call Chronicle across sites.
@@ -5682,6 +5686,37 @@ func (a *journalCharacterAdapter) ClaimedCharacters(ctx context.Context, campaig
 		out = append(out, notes.ClaimedCharacter{ID: e.ID, Name: e.Name, TypeName: e.TypeName})
 	}
 	return out, nil
+}
+
+// nightNotesAdapter adapts the notes widget to sessions.NightNotesReader:
+// the notes a viewer can read from one window, with the pages each names.
+type nightNotesAdapter struct {
+	svc notes.NoteService
+}
+
+func (a *nightNotesAdapter) NotesWrittenBetween(ctx context.Context, campaignID string, v permissions.Viewer, from, to time.Time) ([]sessions.NightNote, bool, error) {
+	list, truncated, err := a.svc.WrittenBetween(ctx, campaignID, v, from, to)
+	if err != nil {
+		return nil, false, err
+	}
+	out := make([]sessions.NightNote, 0, len(list))
+	for _, n := range list {
+		body := ""
+		if n.EntryHTML != nil {
+			body = *n.EntryHTML
+		}
+		nn := sessions.NightNote{ID: n.ID, Title: n.Title, AuthorID: n.UserID, CreatedAt: n.CreatedAt, Audience: string(n.Visibility)}
+		for _, l := range notes.ParseLinks(body) {
+			if l.Kind == notes.LinkPage {
+				nn.PageIDs = append(nn.PageIDs, l.ID)
+			}
+		}
+		if len(nn.PageIDs) > 0 {
+			nn.Lines = notes.MentionLines(body)
+		}
+		out = append(out, nn)
+	}
+	return out, truncated, nil
 }
 
 // notesPagesAdapter adapts EntityService to notes.PageNamer and

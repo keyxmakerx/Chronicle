@@ -216,6 +216,21 @@ func (s *noteService) PageRefs(ctx context.Context, campaignID string, v permiss
 	return s.refs(ctx, campaignID, v, journal, "")
 }
 
+// WrittenBetweenMax caps one window's notes; a game night past it is cut,
+// and says so.
+const WrittenBetweenMax = 500
+
+func (s *noteService) WrittenBetween(ctx context.Context, campaignID string, v permissions.Viewer, from, to time.Time) ([]Note, bool, error) {
+	list, err := s.repo.ListVisibleWrittenBetween(ctx, campaignID, v, from, to, WrittenBetweenMax+1)
+	if err != nil {
+		return nil, false, err
+	}
+	if len(list) > WrittenBetweenMax {
+		return list[:WrittenBetweenMax], true, nil
+	}
+	return list, false, nil
+}
+
 // refs turns linking notes (already newest first) into NoteRefs, labelling
 // any note links in their snippets through the viewer's own visibility.
 func (s *noteService) refs(ctx context.Context, campaignID string, v permissions.Viewer, linking []Note, exclude string) ([]NoteRef, error) {

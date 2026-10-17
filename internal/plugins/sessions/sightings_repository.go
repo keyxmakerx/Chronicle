@@ -19,6 +19,9 @@ type SightingRepository interface {
 	// ListLinksForEntity returns the page's session_entities links on live
 	// sessions of the campaign, with each session's date and recurrence.
 	ListLinksForEntity(ctx context.Context, campaignID, entityID string) ([]SightingLink, error)
+	// ListSightingsForNight returns every answer stored for one night, as
+	// entity id to state.
+	ListSightingsForNight(ctx context.Context, sessionID, occurrenceDate string) (map[string]string, error)
 }
 
 // SightingRow is one stored answer, with its session's name.
@@ -117,6 +120,25 @@ func (r *sightingRepository) ListLinksForEntity(ctx context.Context, campaignID,
 			return nil, fmt.Errorf("scanning session link: %w", err)
 		}
 		out = append(out, l)
+	}
+	return out, rows.Err()
+}
+
+func (r *sightingRepository) ListSightingsForNight(ctx context.Context, sessionID, occurrenceDate string) (map[string]string, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT entity_id, state FROM session_night_sightings WHERE session_id = ? AND occurrence_date = ?`,
+		sessionID, occurrenceDate)
+	if err != nil {
+		return nil, fmt.Errorf("listing a night's sightings: %w", err)
+	}
+	defer rows.Close()
+	out := map[string]string{}
+	for rows.Next() {
+		var id, state string
+		if err := rows.Scan(&id, &state); err != nil {
+			return nil, fmt.Errorf("scanning a night's sighting: %w", err)
+		}
+		out[id] = state
 	}
 	return out, rows.Err()
 }
