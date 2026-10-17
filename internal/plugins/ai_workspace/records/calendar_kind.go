@@ -70,18 +70,23 @@ func readPageRef(it Record, what string) (pageRef, error) {
 // that does not exist and one the actor may not see read the same, so the
 // refusal never confirms a hidden page's name.
 func (k CalendarKind) resolvePage(ctx context.Context, campaignID string, a Actor, ref *pageRef, what string) error {
+	return resolvePageRef(ctx, k.Pages, campaignID, a, ref, what)
+}
+
+// resolvePageRef is resolvePage for any kind that links a page.
+func resolvePageRef(ctx context.Context, pages PageResolver, campaignID string, a Actor, ref *pageRef, what string) error {
 	if !ref.set || ref.none {
 		return nil
 	}
-	if k.Pages == nil {
+	if pages == nil {
 		return badRequestf("%s: pages can't be looked up right now, so page can't be set", what)
 	}
 	gone := badRequestf("%s: there is no page called %s that you can open", what, quote(ref.name))
-	e, err := k.Pages.GetBySlug(ctx, campaignID, entities.Slugify(ref.name))
+	e, err := pages.GetBySlug(ctx, campaignID, entities.Slugify(ref.name))
 	if err != nil || e == nil || e.CampaignID != campaignID {
 		return gone
 	}
-	seen, err := k.Pages.FilterViewableEntityIDs(ctx, campaignID, []string{e.ID}, a.Role, a.UserID)
+	seen, err := pages.FilterViewableEntityIDs(ctx, campaignID, []string{e.ID}, a.Role, a.UserID)
 	if err != nil {
 		return badRequestf("%s: could not check the page; try again in a moment", what)
 	}
