@@ -174,6 +174,9 @@ type CampaignService interface {
 	// UpdateCharacterLists stores the page types the campaign lists as
 	// characters and as NPCs. Callers validate the IDs; this only persists.
 	UpdateCharacterLists(ctx context.Context, campaignID string, characterTypeIDs, npcTypeIDs []int) error
+	// ClearCharacterLists removes both lists, so the campaign is seeded from
+	// its own page types the next time they are read.
+	ClearCharacterLists(ctx context.Context, campaignID string) error
 	SetMediaCleaner(cleaner MediaCleaner)
 	SetHookDispatcher(dispatcher CampaignHookDispatcher)
 
@@ -331,6 +334,29 @@ func (s *campaignService) UpdateCharacterLists(ctx context.Context, campaignID s
 	settings := campaign.ParseSettings()
 	settings.CharacterTypeIDs = &characterTypeIDs
 	settings.NPCTypeIDs = &npcTypeIDs
+	settingsJSON, err := json.Marshal(settings)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("marshaling settings: %w", err))
+	}
+	return s.repo.UpdateSettings(ctx, campaignID, string(settingsJSON))
+}
+
+// ClearCharacterLists drops both lists from the settings JSON, leaving every
+// other setting as it was.
+func (s *campaignService) ClearCharacterLists(ctx context.Context, campaignID string) error {
+	campaign, err := s.repo.FindByID(ctx, campaignID)
+	if err != nil {
+		return err
+	}
+	if campaign == nil {
+		return apperror.NewNotFound("campaign not found")
+	}
+	settings := campaign.ParseSettings()
+	if settings.CharacterTypeIDs == nil && settings.NPCTypeIDs == nil {
+		return nil
+	}
+	settings.CharacterTypeIDs = nil
+	settings.NPCTypeIDs = nil
 	settingsJSON, err := json.Marshal(settings)
 	if err != nil {
 		return apperror.NewInternal(fmt.Errorf("marshaling settings: %w", err))

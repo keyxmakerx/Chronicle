@@ -20,12 +20,17 @@ type fakeEnabled struct{ sys systems.System }
 func (f fakeEnabled) EnabledSystem(context.Context, string) systems.System { return f.sys }
 
 type fakeNPCTypes struct {
-	ids []int
-	err error
+	ids       []int
+	creatures []int
+	err       error
 }
 
 func (f fakeNPCTypes) NPCTypeIDs(context.Context, string) ([]int, error) {
 	return f.ids, f.err
+}
+
+func (f fakeNPCTypes) CreatureTypeIDs(context.Context, string) ([]int, error) {
+	return f.creatures, f.err
 }
 
 func TestSystemPanelResolver(t *testing.T) {
@@ -35,6 +40,7 @@ func TestSystemPanelResolver(t *testing.T) {
 		{ID: 2, Slug: "location", Enabled: true},
 		{ID: 3, Slug: "drawsteel-monster", Enabled: true},
 		{ID: 4, Slug: "player-character", PresetCategory: cat(entities.PresetCategoryPlayerCharacter), Enabled: true},
+		{ID: 5, Slug: "drawsteel-creature", PresetCategory: cat("creature"), Enabled: true},
 	}
 	withPanel := &systems.SystemManifest{
 		ID: "drawsteel",
@@ -43,6 +49,14 @@ func TestSystemPanelResolver(t *testing.T) {
 		},
 	}
 	noPanel := &systems.SystemManifest{ID: "plain"}
+	creaturePanels := &systems.SystemManifest{
+		ID: "drawsteel",
+		EntityPanels: []systems.EntityPanelDef{
+			{Widget: "statblock", AppliesTo: systems.EntityPanelAppliesNPC},
+			{Widget: "statblock", AppliesTo: systems.EntityPanelAppliesCreature},
+			{Widget: "negotiation", AppliesTo: systems.EntityPanelAppliesNPC},
+		},
+	}
 
 	tests := []struct {
 		name     string
@@ -62,10 +76,17 @@ func TestSystemPanelResolver(t *testing.T) {
 		{"no system enabled", nil, 1, false, nil, nil},
 		{"claimed sheet of an npc type is a player character", fakeSystem{withPanel}, 1, true, nil, nil},
 		{"type lookup fails", fakeSystem{withPanel}, 1, false, errors.New("db down"), nil},
+		{"creature type gets creature panels without being an npc", fakeSystem{creaturePanels}, 5, false, nil,
+			[]entities.SystemPanel{{Widget: "statblock", SystemID: "drawsteel"}}},
+		{"npc-listed creature type mounts a shared widget once", fakeSystem{creaturePanels}, 3, false, nil,
+			[]entities.SystemPanel{{Widget: "statblock", SystemID: "drawsteel"}, {Widget: "negotiation", SystemID: "drawsteel"}}},
+		{"npc-only panel stays off a creature type", fakeSystem{withPanel}, 5, false, nil, nil},
+		{"claimed creature page gets no panels", fakeSystem{creaturePanels}, 5, true, nil, nil},
+		{"creature lookup fails", fakeSystem{creaturePanels}, 5, false, errors.New("db down"), nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resolve := newSystemPanelResolver(fakeEnabled{tt.sys}, fakeNPCTypes{[]int{1, 3}, tt.typesErr})
+			resolve := newSystemPanelResolver(fakeEnabled{tt.sys}, fakeNPCTypes{[]int{1, 3}, []int{3, 5}, tt.typesErr})
 			var et *entities.EntityType
 			for i := range types {
 				if types[i].ID == tt.typeID {
