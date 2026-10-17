@@ -132,18 +132,23 @@ would do.
 - **Long pages show their contents.** A page with several sections offers a
   contents rail or list that is easy to find without hunting (at the top or
   in the margin) and follows the reader.
-- **Things open from the content, not from a button.** A fold, a reason, a
-  "show all" or a detail opens from the thing it belongs to (its name, its
-  row, its heading) or from a quiet text control with no border, fill or
-  shadow. What opens grows out of what was clicked. A bordered button is only
-  for a real command ("Publish", "Add reason") or a value picker (a standing,
-  a name); a white, bordered, raised button with a chevron is never the way
-  to reveal more.
-- **Icons go only where a word won't.** An icon belongs in a margin or a
-  rail, or where there is no room for a word; everywhere else the word is
-  the control. Icons are monochrome Font Awesome.
-- **No emoji, anywhere.** A symbol on screen is never an emoji, in
-  templates, scripts or messages.
+- **Controls come in four weights, each for its place.** Like edges, a
+  control's weight says what it is, and the lightest one that fits wins. What
+  opens always grows out of what was clicked.
+
+  | Weight | Looks like | For |
+  |---|---|---|
+  | Quiet word | text in the accent, no border, fill or shadow; underline on hover | revealing more inside reading content: "Show all 6", "why" |
+  | Tab | a hairline on one or two sides, open toward what it opens | a drawer or fold that hangs from it and stays joined to it, such as a title's pull-down |
+  | Icon | a monochrome icon, no frame until hover | a margin, a rail, a row's end, or anywhere a word won't fit; always labelled for screen readers |
+  | Button | border, fill, resting shadow | a real command ("Publish", "Add reason") or a value picker (a standing, "Sort by") |
+
+  A fold or a reason can also open from the thing it belongs to (its name,
+  its row, its heading) with no control at all. A full button is never the
+  default way to reveal more, and one view never stacks several buttons where
+  quiet words would do.
+- **No emoji, anywhere.** Icons are monochrome Font Awesome; a symbol on
+  screen is never an emoji, in templates, scripts or messages.
 
 ## What is on a page
 
