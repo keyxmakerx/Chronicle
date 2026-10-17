@@ -56,11 +56,37 @@
     } catch (e) { return 1 + Math.floor(Math.random() * sides); }
   }
   // One roll against a list of n: the face and the entry it lands on.
-  function rollList(n) { var face = rollFace(sidesFor(n)); return { face: face, index: indexFor(n, face) }; }
 
-  function Builder(el, cfg) {
+  // Throws one roll per list ([{label, n}]) and resolves to each list's
+  // face. Chronicle's dice engine throws them on screen when the site has
+  // it (it decides the faces first and honours Calm and Off itself);
+  // otherwise, or if it refuses, the faces are drawn here at once.
+  function throwFor(lists, from) {
+    var instant = function () { return lists.map(function (l) { return rollFace(sidesFor(l.n)); }); };
+    var dice = window.Chronicle && Chronicle.dice;
+    if (!dice || typeof dice.roll !== 'function') return Promise.resolve(instant());
+    var groups = lists.map(function (l) {
+      return { label: l.label, dice: sidesFor(l.n) === 10 ? [{ sides: 10 }] : [{ sides: 10, tens: true }, { sides: 10 }] };
+    });
+    return Promise.resolve().then(function () {
+      return dice.roll(groups, {
+        from: from,
+        describe: function (g, values) { return g.label + ': ' + (values || []).join(' and '); }
+      });
+    }).then(function (res) {
+      return lists.map(function (l, i) {
+        var v = (res[i] && res[i].values) || [];
+        if (sidesFor(l.n) === 10) return v[0] >= 1 && v[0] <= 10 ? v[0] : rollFace(10);
+        // Percentile: the tens die reads 00-90, the ones die's 10 is a 0,
+        // and 00 with 0 is 100.
+        var t = (v[0] || 0) + ((v[1] || 0) % 10);
+        return t === 0 ? 100 : t;
+      });
+    }).catch(instant);
+  }
+
+  function Builder(el) {
     this.el = el;
-    this.cfg = cfg;
     this.planUrl = el.getAttribute('data-plan-url');
     this.createUrl = el.getAttribute('data-create-url');
     this.fieldsBase = el.getAttribute('data-fields-base');
@@ -389,8 +415,8 @@
     this.toastTimer = setTimeout(function () { t.hidden = true; self.undo = null; }, undo ? 6000 : 3500);
   };
 
-  Builder.prototype.pick = function (key, name, note) {
-    var p = this.panel, h = this.heroById(p.hero), self = this, v = {};
+  Builder.prototype.pick = function (heroId, key, name, note) {
+    var h = this.heroById(heroId), self = this, v = {};
     v[key] = name;
     // Choosing moves the panel on to the next blank, so filling in a hero is
     // one choice after another; with nothing left it closes.
@@ -415,30 +441,46 @@
     if (el) { if (el.classList.contains('hb-title')) el.setAttribute('tabindex', '-1'); el.focus({ preventScroll: true }); }
   };
 
-  Builder.prototype.rollOne = function () {
-    var st = this.stepByKey(this.panel.key), n = st.choices.length, r = rollList(n), c = st.choices[r.index];
-    this.pick(st.fieldKey, c.name, 'Rolled ' + fmtFace(n, r.face) + ' for ' + lower(st.label) + ': ' + c.name + '.');
+  Builder.prototype.rollOne = function (btn) {
+    var self = this, heroId = this.panel.hero, st = this.stepByKey(this.panel.key), n = st.choices.length;
+    if (this.rolling) return;
+    this.rolling = true;
+    throwFor([{ label: st.label, n: n }], btn).then(function (faces) {
+      self.rolling = false;
+      var c = st.choices[indexFor(n, faces[0])];
+      self.pick(heroId, st.fieldKey, c.name, 'Rolled ' + fmtFace(n, faces[0]) + ' for ' + lower(st.label) + ': ' + c.name + '.');
+    });
   };
 
-  Builder.prototype.rollAll = function (id) {
-    var h = this.heroById(id), self = this, v = {};
+  Builder.prototype.rollAll = function (id, btn) {
+    var h = this.heroById(id), self = this;
     var left = this.left(h);
-    if (!left.length) return;
-    left.forEach(function (st) { v[st.fieldKey] = st.choices[rollList(st.choices.length).index].name; });
-    this.panel = null;
-    var saving = this.apply(h, v);
-    this.redrawHero(h);
-    Object.keys(v).forEach(function (k) {
-      var b = self.el.querySelector('[data-blank="' + k + '"][data-hero="' + h.id + '"]');
-      if (b) b.classList.add('is-glow');
-    });
-    var names = left.map(function (st) { return v[st.fieldKey]; }).join(', ');
-    saving.then(function (before) {
-      self.toast('The dice chose ' + names + (h.isNew ? '.' : '. Saved.'), function () {
-        self.apply(h, before).then(function () { self.redrawHero(h); self.toast('Put back.'); }, function () {});
-        self.redrawHero(h);
+    if (!left.length || this.rolling) return;
+    this.rolling = true;
+    throwFor(left.map(function (st) { return { label: st.label, n: st.choices.length }; }), btn).then(function (faces) {
+      self.rolling = false;
+      var v = {};
+      // Only blanks still empty when the dice land are filled.
+      left.forEach(function (st, i) {
+        if (!h.values[st.fieldKey]) v[st.fieldKey] = st.choices[indexFor(st.choices.length, faces[i])].name;
       });
-    }, function () {});
+      var keys = Object.keys(v);
+      if (!keys.length) return;
+      self.panel = null;
+      var saving = self.apply(h, v);
+      self.redrawHero(h);
+      keys.forEach(function (k) {
+        var b = self.el.querySelector('[data-blank="' + k + '"][data-hero="' + h.id + '"]');
+        if (b) b.classList.add('is-glow');
+      });
+      var names = keys.map(function (k) { return v[k]; }).join(', ');
+      saving.then(function (before) {
+        self.toast('The dice chose ' + names + (h.isNew ? '.' : '. Saved.'), function () {
+          self.apply(h, before).then(function () { self.redrawHero(h); self.toast('Put back.'); }, function () {});
+          self.redrawHero(h);
+        });
+      }, function () {});
+    });
   };
 
   Builder.prototype.make = function () {
@@ -480,11 +522,11 @@
         self.focusEntry(+t.getAttribute('data-focus'));
       } else if (t.hasAttribute('data-choose')) {
         var st = self.stepByKey(self.panel.key), c = st.choices[self.panel.focus != null ? self.panel.focus : self.currentIndex(st)];
-        self.pick(st.fieldKey, c.name);
+        self.pick(self.panel.hero, st.fieldKey, c.name);
       } else if (t.hasAttribute('data-rollone')) {
-        self.rollOne();
+        self.rollOne(t);
       } else if (t.hasAttribute('data-rollall')) {
-        self.rollAll(t.getAttribute('data-rollall'));
+        self.rollAll(t.getAttribute('data-rollall'), t);
       } else if (t.hasAttribute('data-go')) {
         self.openPanel(self.panel.hero, t.getAttribute('data-go'));
       } else if (t.hasAttribute('data-make')) {
@@ -557,8 +599,8 @@
 
   function register() {
     Chronicle.register('hero-builder', {
-      init: function (el, cfg) {
-        var b = new Builder(el, cfg || {});
+      init: function (el) {
+        var b = new Builder(el);
         el._heroBuilder = b;
         b.wire();
         b.load();

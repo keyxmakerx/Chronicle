@@ -177,3 +177,32 @@ test('on a phone the panel opens under the hero and the page does not widen', { 
   const close = await p.locator('.hb-x').boundingBox();
   assert.ok(close.width >= 32 && close.height >= 32, 'the close button is a full hit area');
 });
+
+test('with the dice engine on the page, its faces pick the entry', { skip }, async (t) => {
+  const { p, sent } = await open(t);
+  // Career has 18 entries, so percentile dice: tens 40 and ones 7 is 47,
+  // which lands in Career 9 (45–50). Class has 2, so a d10: 7 is Tactician.
+  await p.evaluate(() => {
+    window.thrown = [];
+    Chronicle.dice = { roll: (groups, opts) => { window.thrown.push({ groups, from: !!opts.from }); return Promise.resolve(groups.map((g) => ({ label: g.label, values: g.dice.length === 2 ? [40, 7] : [7] }))); } };
+  });
+  await p.click('[data-rollall="e1"]');
+  await p.waitForSelector('.hb-toast [data-undo]');
+  assert.deepEqual(sent[0].body, { fields_patch: { class: 'Tactician', career: 'Career 9' } });
+  const thrown = await p.evaluate(() => window.thrown);
+  assert.deepEqual(thrown, [{ from: true, groups: [{ label: 'Class', dice: [{ sides: 10 }] }, { label: 'Career', dice: [{ sides: 10, tens: true }, { sides: 10 }] }] }]);
+
+  // 00 and a 10 on the ones die read as 100, the last entry.
+  await p.evaluate(() => { Chronicle.dice.roll = (groups) => Promise.resolve(groups.map((g) => ({ label: g.label, values: [0, 10] }))); });
+  await p.click('.hb-toast [data-undo]');
+  await p.click('[data-blank="career"]');
+  await p.click('.hb-panel [data-rollone]');
+  await p.waitForFunction(() => document.querySelector('[data-blank="career"]').textContent === 'Career 18');
+
+  // An engine that refuses falls back to an instant roll.
+  // The panel has moved on to the class, the one blank left.
+  await p.evaluate(() => { Chronicle.dice.roll = () => Promise.reject(new RangeError('no')); });
+  assert.equal(await p.locator('.hb-pt').innerText(), 'Choose Tess’s class');
+  await p.click('.hb-panel [data-rollone]');
+  await p.waitForFunction(() => document.querySelector('[data-blank="class"]').textContent !== 'class');
+});
