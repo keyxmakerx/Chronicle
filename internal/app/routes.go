@@ -3889,6 +3889,7 @@ func (a *App) RegisterRoutes() {
 	entityNotesNotifier := &entityNotesNotifierHolder{}
 	entityNotesService := entity_notes.NewService(entityNotesRepo, entityNotesNotifier.Notify)
 	entityNotesHandler := entity_notes.NewHandler(entityNotesService)
+	entityNotesHandler.SetEntityGate(&entityAccessAdapter{svc: entityService})
 	entity_notes.RegisterRoutes(e, entityNotesHandler, campaignService, authService, addonService)
 
 	// Tags widget: campaign-scoped entity tagging (CRUD + entity associations).
