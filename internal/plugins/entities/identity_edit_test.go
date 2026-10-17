@@ -59,7 +59,11 @@ func (s *identityStubSvc) Update(_ context.Context, _ string, in UpdateEntityInp
 
 func runIdentityCall(t *testing.T, svc *identityStubSvc, handler func(*Handler, echo.Context) error, role campaigns.Role, userID, campaignID, body string) error {
 	t.Helper()
-	h := &Handler{service: svc}
+	return runIdentityCallOn(t, &Handler{service: svc}, handler, role, userID, campaignID, body)
+}
+
+func runIdentityCallOn(t *testing.T, h *Handler, handler func(*Handler, echo.Context) error, role campaigns.Role, userID, campaignID, body string) error {
+	t.Helper()
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodPut, "/x", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -229,4 +233,82 @@ func TestCanEditIdentity(t *testing.T) {
 			t.Errorf("%s: got %v want %v", tc.name, got, tc.want)
 		}
 	}
+}
+
+// stubPlanner serves a fixed creator plan, and counts reads so a test can
+// show the plan is only loaded when a patch reaches past the identity keys.
+type stubPlanner struct {
+	plan  *HeroPlan
+	reads int
+}
+
+func (p *stubPlanner) HeroPlan(_ context.Context, _ string, director bool) (*HeroPlan, error) {
+	p.reads++
+	if director {
+		panic("the owner door must read the plan as a player sees it")
+	}
+	return p.plan, nil
+}
+
+// A claimed owner may set a hero builder step, but only to a name on that
+// step's list; the step does not turn the field into free text.
+func TestUpdateFieldsAPI_ClaimedOwnerBuilderPicks(t *testing.T) {
+	owner := "user-owner"
+	plan := &HeroPlan{Steps: []HeroStep{
+		{FieldKey: "class", Label: "Class", Choices: []HeroChoice{{Name: "Fury"}, {Name: "Shadow"}}},
+		{FieldKey: "ancestry", Label: "Ancestry", Choices: []HeroChoice{{Name: "Dwarf"}}},
+		{FieldKey: "background", Label: "Background", Choices: []HeroChoice{{Name: "Sage"}}},
+	}}
+	cases := []struct {
+		name       string
+		role       campaigns.Role
+		userID     string
+		body       string
+		wantStatus int
+		wantWrite  bool
+		wantReads  int
+	}{
+		{"owner sets a step to a listed name", campaigns.RolePlayer, owner, `{"fields_patch":{"class":"Shadow"}}`, 200, true, 1},
+		{"listed name in another case", campaigns.RolePlayer, owner, `{"fields_patch":{"class":"  fury "}}`, 200, true, 1},
+		{"owner clears a step", campaigns.RolePlayer, owner, `{"fields_patch":{"class":null}}`, 200, true, 1},
+		{"step with identity keys together", campaigns.RolePlayer, owner, `{"fields_patch":{"class":"Fury","culture":"anything"}}`, 200, true, 1},
+		{"name not on the step's list", campaigns.RolePlayer, owner, `{"fields_patch":{"class":"Wizard"}}`, 400, false, 1},
+		{"a step takes text, not a number", campaigns.RolePlayer, owner, `{"fields_patch":{"class":5}}`, 400, false, 1},
+		{"a step the type marks GM-only stays closed", campaigns.RolePlayer, owner, `{"fields_patch":{"background":"Sage"}}`, 403, false, 0},
+		{"a field that is not a step stays closed", campaigns.RolePlayer, owner, `{"fields_patch":{"class":"Fury","might":3}}`, 403, false, 1},
+		{"identity keys alone never load the plan", campaigns.RolePlayer, owner, `{"fields_patch":{"ancestry":"Anything"}}`, 200, true, 0},
+		{"other player denied without loading the plan", campaigns.RolePlayer, "user-other", `{"fields_patch":{"class":"Fury"}}`, 403, false, 0},
+		{"scribe never loads the plan", campaigns.RoleScribe, "user-scribe", `{"fields_patch":{"class":"Wizard"}}`, 200, true, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := &identityStubSvc{entity: &Entity{ID: "e1", CampaignID: "c1", Name: "Hero", OwnerUserID: &owner}}
+			pl := &stubPlanner{plan: plan}
+			err := runIdentityCallWith(t, svc, pl, (*Handler).UpdateFieldsAPI, tc.role, tc.userID, "c1", tc.body)
+			wantStatus(t, err, tc.wantStatus)
+			if (svc.writeCount > 0) != tc.wantWrite {
+				t.Fatalf("write reached = %v, want %v", svc.writeCount > 0, tc.wantWrite)
+			}
+			if pl.reads != tc.wantReads {
+				t.Fatalf("plan reads = %d, want %d", pl.reads, tc.wantReads)
+			}
+		})
+	}
+}
+
+// Without a planner (no game system wired) the door is exactly the identity
+// list, as before.
+func TestUpdateFieldsAPI_NoPlannerKeepsIdentityOnly(t *testing.T) {
+	owner := "user-owner"
+	svc := &identityStubSvc{entity: &Entity{ID: "e1", CampaignID: "c1", Name: "Hero", OwnerUserID: &owner}}
+	err := runIdentityCall(t, svc, (*Handler).UpdateFieldsAPI, campaigns.RolePlayer, owner, "c1", `{"fields_patch":{"class":"Fury"}}`)
+	wantStatus(t, err, 403)
+	if svc.writeCount != 0 {
+		t.Fatal("write reached without a plan")
+	}
+}
+
+func runIdentityCallWith(t *testing.T, svc *identityStubSvc, pl HeroPlanner, handler func(*Handler, echo.Context) error, role campaigns.Role, userID, campaignID, body string) error {
+	t.Helper()
+	return runIdentityCallOn(t, &Handler{service: svc, heroPlanner: pl}, handler, role, userID, campaignID, body)
 }

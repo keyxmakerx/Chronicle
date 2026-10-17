@@ -2698,11 +2698,14 @@ func (a *App) RegisterRoutes() {
 	entities.RegisterRoutes(e, entityHandler, campaignService, authService)
 
 	// Expose the entities plugin's embedded static assets at
-	// /static/plugins/entities/ (currently js/characters.js, the Characters
-	// page's mini→full launch enhancement).
+	// /static/plugins/entities/. The Characters page's hero builder loads on
+	// sight (ADR-063).
 	a.registerPlugin(PluginRegistration{
 		Slug:     entities.PluginSlug,
 		StaticFS: echo.MustSubFS(entities.StaticAssetsFS, "static"),
+		Widgets: []PluginWidget{
+			{Name: "hero-builder", Scripts: []string{"js/hero_builder.js"}},
+		},
 	})
 
 	// Content template routes (entity content blueprints).
