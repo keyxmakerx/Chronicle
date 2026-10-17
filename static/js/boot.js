@@ -122,11 +122,13 @@
 
   // --- Thrown dice on first use (ADR-063) ---
   // Chronicle.dice.roll exists on every page, but dice.js and its 3D
-  // libraries are fetched only when someone first rolls. The layout names the
-  // hashed URLs on an inert #chronicle-dice-src element; dice.js replaces
-  // this stub with the real Chronicle.dice when it runs.
+  // libraries are fetched only when someone first rolls, or a picker asks for
+  // the catalogue of looks. The layout names the hashed URLs on an inert
+  // #chronicle-dice-src element; dice.js replaces this stub with the real
+  // Chronicle.dice when it runs.
   var diceLoading = null;
   function loadDice() {
+    if (Chronicle.dice !== diceStub) return Promise.resolve();
     if (diceLoading) return diceLoading;
     diceLoading = new Promise(function (resolve, reject) {
       var src = document.getElementById('chronicle-dice-src');
@@ -142,20 +144,33 @@
         var v = src.getAttribute(a);
         if (v) s.setAttribute(a, v);
       });
-      s.onload = function () { resolve(); };
-      s.onerror = function () { diceLoading = null; reject(new Error('could not load ' + url)); };
+      // A request that hangs counts as failed, so a roll never waits on it for ever.
+      var wait = setTimeout(function () { diceLoading = null; reject(new Error('timed out loading ' + url)); }, 10000);
+      s.onload = function () { clearTimeout(wait); resolve(); };
+      s.onerror = function () { clearTimeout(wait); diceLoading = null; reject(new Error('could not load ' + url)); };
       document.head.appendChild(s);
     });
     return diceLoading;
   }
+  // stop() before dice.js has arrived still stops the rolls already asked for.
+  var diceStops = 0;
   var diceStub = {
     roll: function (groups, opts) {
+      var at = diceStops;
       return loadDice().then(function () {
         if (Chronicle.dice === diceStub) throw new Error('dice.js did not start');
-        return Chronicle.dice.roll(groups, opts);
+        var r = Chronicle.dice.roll(groups, opts);
+        if (diceStops !== at) Chronicle.dice.stop();
+        return r;
       });
     },
-    stop: function () {}
+    catalogue: function () {
+      return loadDice().then(function () {
+        if (Chronicle.dice === diceStub) throw new Error('dice.js did not start');
+        return Chronicle.dice.catalogue();
+      });
+    },
+    stop: function () { diceStops++; }
   };
   if (!Chronicle.dice) Chronicle.dice = diceStub;
 

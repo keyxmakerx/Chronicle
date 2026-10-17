@@ -168,8 +168,8 @@ templ Base(title string) {
 		<script src={ AssetURL("/static/js/widgets/editor_diagram.js") } data-mermaid-src={ AssetURL("/static/vendor/mermaid.min.js") } defer></script>
 		<script src={ AssetURL("/static/js/widgets/editor.js") } defer></script>
 		<!-- Thrown 3D dice (Chronicle.dice.roll): boot.js fetches dice.js, and it
-		     three.js and cannon-es, only when dice are first thrown. -->
-		<template id="chronicle-dice-src" data-src={ AssetURL("/static/js/dice.js") } data-three-src={ AssetURL("/static/vendor/three.module.min.js") } data-cannon-src={ AssetURL("/static/vendor/cannon-es.js") }></template>
+		     the dice engine, three.js and cannon-es, only when dice are first thrown. -->
+		<template id="chronicle-dice-src" data-src={ AssetURL("/static/js/dice.js") } data-three-src={ AssetURL("/static/vendor/three-dice.min.js") } data-cannon-src={ AssetURL("/static/vendor/cannon-es.js") }></template>
 
 		<!-- Image upload widget -->
 		<script src={ AssetURL("/static/js/widgets/image_upload.js") } defer></script>

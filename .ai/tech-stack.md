@@ -25,7 +25,7 @@
 |---------|---------|------|
 | TipTap | 3.x | Rich text editor widget (bundled via esbuild, see `static/vendor/tiptap-bundle.src.js`) |
 | Mermaid | 11.17.2 | Diagrams in pages (vendored single-file build in `static/vendor/mermaid.min.js`, loaded only when a diagram is drawn; `make mermaid-vendor`) |
-| three.js | 0.160.0 | Draws the 3D dice (`static/js/dice.js`); vendored ES module `static/vendor/three.module.min.js`, loaded on the first throw; `make dice-vendor` |
+| three.js | 0.160.0 | Draws the 3D dice (`static/js/dice.js`, `static/js/dice/`); three.js and the post-processing add-ons the dice use, bundled as one ES module `static/vendor/three-dice.min.js` from `static/vendor/three-dice.src.js`, loaded on the first throw; `make dice-vendor` |
 | cannon-es | 0.20.0 | Physics for the dice throw; vendored ES module `static/vendor/cannon-es.js`, loaded with three.js; `make dice-vendor` |
 | Leaflet.js | 1.9.x | Interactive maps (vendored in `static/vendor/`) |
 | Font Awesome | 6 Free | UI icons (loaded from cdnjs in `base.templ`) |
