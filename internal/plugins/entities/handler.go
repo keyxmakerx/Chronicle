@@ -40,7 +40,7 @@ import (
 type EntityTagFetcher interface {
 	GetEntityTagsBatch(ctx context.Context, entityIDs []string, includeDmOnly bool) (map[string][]EntityTagInfo, error)
 	GetEntityTags(ctx context.Context, entityID string, includeDmOnly bool) ([]EntityTagInfo, error)
-	SetEntityTags(ctx context.Context, entityID string, campaignID string, tagIDs []int) error
+	SetEntityTags(ctx context.Context, entityID string, campaignID string, tagIDs []int, includeDmOnly bool) error
 	GetEntityTagGrants(ctx context.Context, campaignID, entityID string) ([]EntityTagGrantInfo, error)
 }
 
@@ -1351,6 +1351,8 @@ func (h *Handler) BulkTagsAPI(c echo.Context) error {
 	ctx := c.Request().Context()
 	processed := 0
 	role, userID := int(cc.VisibilityRole()), auth.GetUserID(c)
+	// A caller who cannot see dm_only tags must not read, add or clear them.
+	seeDmOnly := cc.MemberRole >= campaigns.RoleOwner || cc.IsSiteAdmin || cc.IsDmGranted
 	for _, eid := range req.EntityIDs {
 		// Ids come from the body, so each must be a page in this campaign
 		// the caller can see; any other is skipped, as in BulkUpdateType.
@@ -1363,17 +1365,17 @@ func (h *Handler) BulkTagsAPI(c echo.Context) error {
 		}
 		switch req.Action {
 		case "add":
-			existing, _ := h.tagFetcher.GetEntityTags(ctx, eid, true)
+			existing, _ := h.tagFetcher.GetEntityTags(ctx, eid, seeDmOnly)
 			existingIDs := make([]int, len(existing))
 			for i, t := range existing {
 				existingIDs[i] = t.ID
 			}
 			merged := mergeIntSets(existingIDs, req.TagIDs)
-			if err := h.tagFetcher.SetEntityTags(ctx, eid, cc.Campaign.ID, merged); err == nil {
+			if err := h.tagFetcher.SetEntityTags(ctx, eid, cc.Campaign.ID, merged, seeDmOnly); err == nil {
 				processed++
 			}
 		case "remove":
-			existing, _ := h.tagFetcher.GetEntityTags(ctx, eid, true)
+			existing, _ := h.tagFetcher.GetEntityTags(ctx, eid, seeDmOnly)
 			removeSet := make(map[int]bool)
 			for _, id := range req.TagIDs {
 				removeSet[id] = true
@@ -1384,11 +1386,11 @@ func (h *Handler) BulkTagsAPI(c echo.Context) error {
 					remaining = append(remaining, t.ID)
 				}
 			}
-			if err := h.tagFetcher.SetEntityTags(ctx, eid, cc.Campaign.ID, remaining); err == nil {
+			if err := h.tagFetcher.SetEntityTags(ctx, eid, cc.Campaign.ID, remaining, seeDmOnly); err == nil {
 				processed++
 			}
 		case "set":
-			if err := h.tagFetcher.SetEntityTags(ctx, eid, cc.Campaign.ID, req.TagIDs); err == nil {
+			if err := h.tagFetcher.SetEntityTags(ctx, eid, cc.Campaign.ID, req.TagIDs, seeDmOnly); err == nil {
 				processed++
 			}
 		}

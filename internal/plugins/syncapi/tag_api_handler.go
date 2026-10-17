@@ -198,7 +198,8 @@ func (h *TagAPIHandler) SetEntityTags(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request body")
 	}
 
-	if err := h.tagSvc.SetEntityTags(ctx, entityID, campaignID, req.TagIDs); err != nil {
+	includeDmOnly := h.resolveRole(c) >= int(campaigns.RoleScribe)
+	if err := h.tagSvc.SetEntityTagsVisible(ctx, entityID, campaignID, req.TagIDs, includeDmOnly); err != nil {
 		return err
 	}
 
@@ -265,7 +266,7 @@ func (h *TagAPIHandler) BulkAssignTags(c echo.Context) error {
 		switch req.Action {
 		case "set":
 			// Replace all tags with the given set.
-			if err := h.tagSvc.SetEntityTags(ctx, entityID, campaignID, req.TagIDs); err != nil {
+			if err := h.tagSvc.SetEntityTagsVisible(ctx, entityID, campaignID, req.TagIDs, includeDmOnly); err != nil {
 				result.Status = "error"
 				result.Error = apperror.SafeMessage(err)
 			} else {
@@ -283,7 +284,7 @@ func (h *TagAPIHandler) BulkAssignTags(c echo.Context) error {
 				continue
 			}
 			merged := mergeTagIDs(current, req.TagIDs)
-			if err := h.tagSvc.SetEntityTags(ctx, entityID, campaignID, merged); err != nil {
+			if err := h.tagSvc.SetEntityTagsVisible(ctx, entityID, campaignID, merged, includeDmOnly); err != nil {
 				result.Status = "error"
 				result.Error = apperror.SafeMessage(err)
 			} else {
@@ -301,7 +302,7 @@ func (h *TagAPIHandler) BulkAssignTags(c echo.Context) error {
 				continue
 			}
 			filtered := subtractTagIDs(current, req.TagIDs)
-			if err := h.tagSvc.SetEntityTags(ctx, entityID, campaignID, filtered); err != nil {
+			if err := h.tagSvc.SetEntityTagsVisible(ctx, entityID, campaignID, filtered, includeDmOnly); err != nil {
 				result.Status = "error"
 				result.Error = apperror.SafeMessage(err)
 			} else {

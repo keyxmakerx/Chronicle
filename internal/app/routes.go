@@ -642,8 +642,8 @@ func (a *entityTagFetcherAdapter) GetEntityTags(ctx context.Context, entityID st
 }
 
 // SetEntityTags sets the tags for a single entity.
-func (a *entityTagFetcherAdapter) SetEntityTags(ctx context.Context, entityID string, campaignID string, tagIDs []int) error {
-	return a.svc.SetEntityTags(ctx, entityID, campaignID, tagIDs)
+func (a *entityTagFetcherAdapter) SetEntityTags(ctx context.Context, entityID string, campaignID string, tagIDs []int, includeDmOnly bool) error {
+	return a.svc.SetEntityTagsVisible(ctx, entityID, campaignID, tagIDs, includeDmOnly)
 }
 
 // GetEntityTagGrants resolves the tag-derived visibility grants on one entity
