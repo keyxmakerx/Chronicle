@@ -1531,15 +1531,6 @@ func (h *APIHandler) CreateRelation(c echo.Context) error {
 	entityID := c.Param("entityID")
 	ctx := c.Request().Context()
 
-	// Verify source entity belongs to this campaign.
-	entity, err := h.entitySvc.GetByID(ctx, entityID)
-	if err != nil {
-		return apperror.NewNotFound("entity not found")
-	}
-	if entity.CampaignID != campaignID {
-		return apperror.NewNotFound("entity not found")
-	}
-
 	var req apiCreateRelationRequest
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request body")
@@ -1547,6 +1538,14 @@ func (h *APIHandler) CreateRelation(c echo.Context) error {
 
 	if req.TargetEntityID == "" {
 		return apperror.NewBadRequest("target_entity_id is required")
+	}
+
+	// Both ends must be in the key's campaign and viewable by the caller: the
+	// target id comes from the body, and a listed relation shows its name.
+	for _, id := range []string{entityID, req.TargetEntityID} {
+		if _, _, err := h.requireViewableEntity(c, id); err != nil {
+			return err
+		}
 	}
 	if req.RelationType == "" {
 		return apperror.NewBadRequest("relation_type is required")
