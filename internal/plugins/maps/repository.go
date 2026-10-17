@@ -35,6 +35,12 @@ type MapRepository interface {
 	// least one pin opening another map, unfiltered: the caller reads each
 	// map's pins through the viewer's own marker filtering.
 	ListLinkSourceMaps(ctx context.Context, campaignID string) ([]string, error)
+	// ListMapsPinningEntity returns the ids of the campaign's maps that carry
+	// a pin on entityID, and ListMapsLinkingTo those that carry a pin opening
+	// mapID, both unfiltered and in the campaign's map order: the caller reads
+	// each map's pins through the viewer's own marker filtering.
+	ListMapsPinningEntity(ctx context.Context, campaignID, entityID string) ([]string, error)
+	ListMapsLinkingTo(ctx context.Context, campaignID, mapID string) ([]string, error)
 }
 
 // mapRepo is the MariaDB implementation of MapRepository.
@@ -323,6 +329,45 @@ func (r *mapRepo) ListLinkSourceMaps(ctx context.Context, campaignID string) ([]
 		var id string
 		if err := rows.Scan(&id); err != nil {
 			return nil, fmt.Errorf("scan linking map: %w", err)
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
+// ListMapsPinningEntity implements MapRepository.
+func (r *mapRepo) ListMapsPinningEntity(ctx context.Context, campaignID, entityID string) ([]string, error) {
+	return r.mapIDs(ctx, "pinning entity",
+		`SELECT DISTINCT src.id, src.sort_order, src.name
+		 FROM map_markers m
+		 JOIN maps src ON src.id = m.map_id
+		 WHERE src.campaign_id = ? AND m.entity_id = ?
+		 ORDER BY src.sort_order, src.name, src.id`, campaignID, entityID)
+}
+
+// ListMapsLinkingTo implements MapRepository.
+func (r *mapRepo) ListMapsLinkingTo(ctx context.Context, campaignID, mapID string) ([]string, error) {
+	return r.mapIDs(ctx, "linking to map",
+		`SELECT DISTINCT src.id, src.sort_order, src.name
+		 FROM map_markers m
+		 JOIN maps src ON src.id = m.map_id
+		 WHERE src.campaign_id = ? AND m.linked_map_id = ?
+		 ORDER BY src.sort_order, src.name, src.id`, campaignID, mapID)
+}
+
+// mapIDs runs a query whose first column is a map id (the rest only order it).
+func (r *mapRepo) mapIDs(ctx context.Context, what, query string, args ...any) ([]string, error) {
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list maps %s: %w", what, err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var id, name string
+		var order int
+		if err := rows.Scan(&id, &order, &name); err != nil {
+			return nil, fmt.Errorf("scan map %s: %w", what, err)
 		}
 		out = append(out, id)
 	}

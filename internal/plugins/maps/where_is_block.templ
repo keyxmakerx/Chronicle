@@ -1,0 +1,199 @@
+// where_is_block.templ renders the entity page's "Where it is" block: the maps
+// this page is pinned on, closest first, each wider than the last. It starts as
+// a row of small pictures; a click grows the enlarged map out of its card, over
+// the page, and nothing below moves. The ladder is read from Maps (the entity's
+// pin, then the pins that open maps), so the block has nothing to configure.
+//
+// The server renders every card and the panel's empty shell; static/js/
+// where_it_is.js fills the peek and the panel from the cards' data attributes
+// with textContent, so a map name never reaches innerHTML. Every handler is an
+// inline IIFE (whereCall) so the block works after an HTMX swap.
+//
+// What only the Director sees is marked data-dm-only (and is not sent to
+// anyone else): a step players cannot reach, and the "Set in Maps" notes.
+package maps
+
+import (
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// BlockWhereIsStyles links the block's stylesheet.
+templ whereIsStyles() {
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/css/where_it_is.css") }/>
+}
+
+// BlockWhereItIs renders the block. A player on a page that is on no map gets
+// nothing at all, and the Director gets one line saying how to put it on one.
+templ BlockWhereItIs(cc *campaigns.CampaignContext, entityID, entityName string, l *WhereLadder, dm bool) {
+	if len(l.Steps) == 0 {
+		if dm {
+			@whereIsStyles()
+			<div class="wi wi-empty" data-dm-only>
+				<p class="wi-note"><span class="wi-dmtag cb-dm">DM</span>Not on any map yet. Pin it in Maps.</p>
+			</div>
+		}
+	} else {
+		@whereIsStyles()
+		<section
+			class="wi"
+			data-widget="where-it-is"
+			data-entity-name={ entityName }
+			data-dm={ boolDigit(dm) }
+			aria-label="Where it is"
+		>
+			<div class="wi-h">
+				<h2 class="cb-head wi-title">
+					<i class="fa-solid fa-map-location-dot" aria-hidden="true"></i>
+					Where it is
+					if dm && whereHasDMOnly(l.Steps) {
+						<span class="cb-count wi-cnt" data-dm-only aria-live="polite">{ whereCountLabel(len(l.Steps)) }</span>
+						<span class="cb-count wi-cnt" data-player-only>{ whereCountLabel(wherePlayerCount(l.Steps)) }</span>
+					} else {
+						<span class="cb-count wi-cnt">{ whereCountLabel(len(l.Steps)) }</span>
+					}
+				</h2>
+				<span class="wi-dir">Closest first, zooming out</span>
+			</div>
+			<div class="wi-wrap">
+				<div class="wi-scroller">
+					<ol class="wi-lad" aria-label={ "Where " + entityName + " sits, from close to far" }>
+						for i, s := range l.Steps {
+							@whereStepCard(cc.Campaign.ID, l.Steps, i, s)
+						}
+					</ol>
+				</div>
+				<div class="wi-peek" aria-hidden="true"></div>
+				<section class="wi-panel" role="dialog" aria-label="Enlarged map" hidden>
+					<button type="button" class="wi-ibtn wi-close" aria-label="Close map" onclick={ whereCall("close") }>
+						<i class="fa-solid fa-xmark" aria-hidden="true"></i>
+					</button>
+					<div class="wi-pmap"></div>
+					<div class="wi-pside">
+						<div class="wi-phead">
+							<p class="wi-lab wi-pk"></p>
+							<h3 class="wi-pn"></h3>
+						</div>
+						<p class="wi-pabout"></p>
+						<dl class="wi-pdl"></dl>
+						if dm {
+							<p class="wi-pdm" data-dm-only hidden>
+								<span class="wi-dmtag cb-dm">DM</span>
+								<span class="wi-pdm-t"></span>
+								<a class="wi-lnk wi-pdm-a" href="#">Change in Maps</a>
+							</p>
+						}
+						<div class="wi-pact">
+							<button type="button" class="wi-ibtn wi-prev" aria-label="Closer map" onclick={ whereWalkCall(-1) }>
+								<i class="fa-solid fa-chevron-left" aria-hidden="true"></i>
+							</button>
+							<button type="button" class="wi-ibtn wi-next" aria-label="Wider map" onclick={ whereWalkCall(1) }>
+								<i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+							</button>
+							<span class="wi-grow"></span>
+							<a class="wi-btn wi-pri wi-open" href="#">
+								<i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i>Open map
+							</a>
+						</div>
+					</div>
+				</section>
+			</div>
+			<p class="wi-hint" aria-live="polite"></p>
+			if l.Truncated {
+				<p class="wi-note">The ladder goes further out than the maps shown here.</p>
+			}
+			if dm {
+				@whereDMLines(cc.Campaign.ID, l)
+			}
+			if len(l.Also) > 0 {
+				<p class="wi-also">
+					<i class="fa-solid fa-location-dot" aria-hidden="true"></i>
+					<span>Also pinned on:</span>
+					for i, a := range l.Also {
+						if i > 0 {
+							<span class="wi-sep" aria-hidden="true">/</span>
+						}
+						<a class="wi-lnk" href={ templ.SafeURL(mapPageURL(cc.Campaign.ID, a.Map.ID)) } data-dm-only?={ a.DMOnly }>
+							{ a.Map.Name }
+							if a.DMOnly {
+								<span class="wi-dmtag cb-dm">DM</span>
+							}
+						</a>
+					}
+				</p>
+			}
+		</section>
+	}
+}
+
+// whereStepCard is one map on the ladder: its picture with the pin spot
+// outlined, its name, and the handlers that peek and enlarge it.
+templ whereStepCard(campaignID string, steps []WhereStep, i int, s WhereStep) {
+	<li class="wi-cell" data-dm-only?={ s.DMOnly }>
+		<span class="wi-chev" aria-hidden="true"><i class="fa-solid fa-chevron-right"></i></span>
+		<button
+			type="button"
+			class="wi-mc"
+			aria-haspopup="dialog"
+			aria-expanded="false"
+			aria-label={ whereAriaLabel(s, i == 0) }
+			data-name={ s.Map.Name }
+			data-here={ boolDigit(i == 0) }
+			data-dm-step={ boolDigit(s.DMOnly) }
+			data-desc={ whereDesc(&s.Map) }
+			data-page={ mapPageURL(campaignID, s.Map.ID) }
+			data-big={ whereBigSrc(ctx, &s.Map) }
+			data-child={ whereChildName(steps, i) }
+			data-next={ whereNextName(steps, i) }
+			data-next-page={ whereNextPage(campaignID, steps, i) }
+			onclick={ whereCall("toggle") }
+			onmouseenter={ whereCall("enter") }
+			onmouseleave={ whereCall("leave") }
+			onfocus={ whereCall("focus") }
+			onblur={ whereCall("leave") }
+		>
+			<span class="wi-thumb">
+				<span class="wi-fit" style={ whereFitStyle(&s.Map) }>
+					if src := mapThumbSrc(ctx, &s.Map); src != "" {
+						<img src={ src } alt="" loading="lazy" decoding="async" draggable="false"/>
+					} else {
+						<i class="fa-solid fa-map wi-noimg" aria-hidden="true"></i>
+					}
+					if s.HasPin {
+						<span class="wi-ring" style={ whereSpotStyle(s.PinX, s.PinY) }></span>
+						<span class="wi-pin" style={ whereSpotStyle(s.PinX, s.PinY) }><i class="fa-solid fa-location-dot"></i></span>
+					}
+				</span>
+			</span>
+			<span class={ "wi-cp", templ.KV("wi-here", i == 0), templ.KV("wi-dm", s.DMOnly) }>
+				<span class="wi-nm">{ s.Map.Name }</span>
+				<span class="wi-kd">
+					if i == 0 {
+						<span class="wi-hereword">You are here</span>
+					}
+					if s.DMOnly {
+						<span class="wi-dmtag cb-dm">DM</span>
+					}
+				</span>
+			</span>
+		</button>
+	</li>
+}
+
+// whereDMLines are the Director's quiet notes under the ladder: where the
+// ladder is set, and which steps players do not get.
+templ whereDMLines(campaignID string, l *WhereLadder) {
+	if len(l.Steps) > 1 {
+		<p class="wi-dmline" data-dm-only>
+			<span class="wi-dmtag cb-dm">DM</span>
+			<span>Set in Maps: this map sits under the { l.Steps[1].Map.Name } pin.</span>
+			<a class="wi-lnk" href={ templ.SafeURL(mapPageURL(campaignID, l.Steps[1].Map.ID)) }>Change in Maps</a>
+		</p>
+	}
+	if line := whereHiddenLine(l.Steps); line != "" {
+		<p class="wi-dmline" data-dm-only>
+			<span class="wi-dmtag cb-dm">DM</span>
+			<span>{ line }</span>
+		</p>
+	}
+}

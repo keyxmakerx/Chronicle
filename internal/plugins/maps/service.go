@@ -102,6 +102,10 @@ type MapService interface {
 	// built from ListMarkers for the viewer so hidden pins add nothing.
 	ResolveTrail(ctx context.Context, campaignID, mapID string, from []string) ([]TrailStep, error)
 	LinkTree(ctx context.Context, campaignID string, role int, userID string) (*LinkTree, error)
+	// WhereIs is an entity's place in the maps, closest first: the map it is
+	// pinned on, then the map holding a pin that opens it, out to the top,
+	// plus the other maps it is pinned on. Every pin is read for this viewer.
+	WhereIs(ctx context.Context, campaignID, entityID string, role int, userID string) (*WhereLadder, error)
 
 	// ForViewer returns the map as a viewer of this (promoted visibility) role
 	// may receive it. For anyone who is not owner/DM-equivalent and a map with a
