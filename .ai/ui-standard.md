@@ -507,8 +507,9 @@ their tokens.
   values (TODO(#1447)). The tokens reach far enough that kits look plainly
   different at a glance: Sharp is a broadsheet (double title rule, ruled
   section heads, outlined capital buttons); Ornate is a bound volume (side
-  border ending in curls, swashes, dotted row leaders, double frames). The
-  motion, the edge vocabulary and the Director's amber stay the same in
+  border ending in curls, swashes, dotted row leaders, double frames). These
+  set each kit's character; a screen may vary the details as long as it
+  keeps that character. The motion, the edge vocabulary and the Director's amber stay the same in
   every kit. Character sheet styles stay their own
   choice.
 - **Buttons** (`data-cz-btn`): Lift is the base; Press, Glow and Ink restyle
