@@ -3547,6 +3547,9 @@ func (a *App) RegisterRoutes() {
 	calendarHandler.SetTimezoneLookup(authService)
 	a.registerPlugin(PluginRegistration{
 		Slug: calendar.PluginSlug,
+		Widgets: []PluginWidget{
+			{Name: "page_timeline", Scripts: []string{"/static/js/widgets/page_timeline.js"}},
+		},
 		HealthCheck: func() error {
 			if a.PluginHealth != nil && !a.PluginHealth.IsHealthy(calendar.PluginSlug) {
 				return errors.New("calendar schema unhealthy")
@@ -4389,6 +4392,23 @@ func (a *App) RegisterRoutes() {
 		Addon:       "calendar", Contexts: []string{"template", "dashboard"}, Singleton: true,
 	}, func(rc entities.BlockRenderContext) templ.Component {
 		return renderSkyboxBlock(context.Background(), calendarService, rc)
+	})
+
+	// page_timeline — the page's dated events on the campaign calendar, a
+	// slim line from the first to today. The calendar service filters every
+	// event for the viewer, so a player's line holds only what their
+	// calendar shows. show_dm "hide" leaves Director-only events off for
+	// everyone.
+	blockRegistry.Register(entities.BlockMeta{
+		Type: "page_timeline", Label: "Time line", Icon: "fa-timeline",
+		Description: "This page's dated events on the campaign calendar, up to today",
+		Addon:       "calendar", Contexts: []string{"template"}, Singleton: true,
+		ConfigFields: []entities.ConfigFieldMeta{
+			{Key: "show_dm", Label: "Director-only events", Type: "select", Default: "show",
+				Options: []entities.Option{{Label: "Show to the Director", Value: "show"}, {Label: "Hide", Value: "hide"}}},
+		},
+	}, func(rc entities.BlockRenderContext) templ.Component {
+		return renderPageTimelineBlock(context.Background(), calendarService, rc)
 	})
 
 	// Quest board and Notice boards: cork-board blocks for quest pages and
@@ -5724,6 +5744,39 @@ func renderSkyboxBlock(ctx context.Context, svc skyboxCalendarService, rc entiti
 		return templ.NopComponent
 	}
 	return skywidget.Mount(campaignID, cal.ID)
+}
+
+// pageTimelineCalendarService is the slice of calendar.CalendarService the
+// time line block reads.
+type pageTimelineCalendarService interface {
+	PageTimeline(ctx context.Context, campaignID, entityID string, hideDMOnly bool, v permissions.Viewer) (*calendar.PageTimeline, error)
+}
+
+// renderPageTimelineBlock draws the time line block for the page being
+// shown. A campaign with no calendar the viewer may open draws the empty
+// state (the Director's note, nothing for a player); any other failure
+// leaves the block out rather than failing the page.
+func renderPageTimelineBlock(ctx context.Context, svc pageTimelineCalendarService, rc entities.BlockRenderContext) templ.Component {
+	if rc.CC == nil || rc.CC.Campaign == nil || rc.Entity == nil {
+		return templ.NopComponent
+	}
+	campaignID := rc.CC.Campaign.ID
+	// Same viewer construction as renderSkyboxBlock: the promoted role, so
+	// a co-Director and the View as player preview get what they should.
+	viewer := permissions.RequestViewer(rc.CC.VisibilityRole(), rc.UserID)
+	hide := entities.BlockConfigString(rc.Block.Config, "show_dm") == "hide"
+	canAuthor := rc.CC.CanControlWorldState()
+	t, err := svc.PageTimeline(ctx, campaignID, rc.Entity.ID, hide, viewer)
+	if err != nil {
+		var ae *apperror.AppError
+		if errors.As(err, &ae) && ae.Code == http.StatusNotFound {
+			return calendar.PageTimelineBlock(campaignID, nil, canAuthor)
+		}
+		slog.Error("time line block: page timeline",
+			slog.String("campaign_id", campaignID), slog.Any("error", err))
+		return templ.NopComponent
+	}
+	return calendar.PageTimelineBlock(campaignID, t, canAuthor)
 }
 
 // mediaUploadAdapter adapts MediaService to the notes.MediaUploader interface.

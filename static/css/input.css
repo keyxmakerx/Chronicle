@@ -1658,9 +1658,13 @@
   .jot-tab:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; }
   .jot-tab-count { background: rgb(255 255 255 / .28); border-radius: 999px; padding: 1px 7px; font-size: 11px; }
   .jot-tab-count[hidden] { display: none; }
+  /* On the Journal the tab rises clear of the editor's footer (History,
+     Audio) and the list's note count, which sit along the bottom edge. */
+  body:has(.jnl) .jot-tab { bottom: calc(1.5rem + 2.25rem); }
   .jot-tab-hidden { opacity: 0; transform: translateY(8px) scale(.96); pointer-events: none; visibility: hidden; }
   @media (max-width: 639px) {
     .jot-tab { right: 1rem; bottom: 1rem; }
+    body:has(.jnl) .jot-tab { bottom: calc(1rem + 2.25rem); }
   }
 
   /* Panel: rises from the tab's corner. Users can resize it by the drag
@@ -1824,6 +1828,7 @@
   .notes-empty {
     @apply text-xs text-fg-secondary text-center py-8 italic;
   }
+  .notes-retry { margin-top: 8px; font-style: normal; font-weight: 600; color: var(--color-accent); text-decoration: underline; text-underline-offset: 3px; }
 
   /* A jot card: its colour is the left edge. */
   .note-card {
@@ -3829,7 +3834,7 @@
      once anything is selected every row shows it. */
   .nl-listwrap { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
   .nl-scroll { --row-h: 28px; flex: 1; min-height: 0; overflow-y: auto; padding: 2px 0 8px; outline: none; }
-  .nl-scroll:focus-visible { box-shadow: inset 0 0 0 1.5px var(--hair); }
+  .nl-scroll:focus-visible { box-shadow: inset 0 0 0 2px rgb(var(--color-accent-rgb) / .55); }
   .nl-empty { padding: 20px; text-align: center; font-size: 12px; color: var(--mut); }
   .nl-empty button { margin-top: 8px; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
   .nl-row { position: relative; display: flex; align-items: center; gap: 8px; height: var(--row-h); padding: 0 12px 0 10px; cursor: pointer; color: var(--ink2); -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
@@ -4051,6 +4056,10 @@
   }
   .dr-head { display: flex; align-items: center; gap: 6px; padding: 9px 10px; border-bottom: 1px solid var(--color-border); font-size: 12px; font-weight: 700; color: var(--color-text-primary); }
   .dr-head .ed-ibtn { width: 24px; height: 24px; }
+  /* With no note open the drawer says so instead of showing empty sections. */
+  .dr-none { padding: 20px 16px; text-align: center; font-size: 12px; color: var(--mut); }
+  .dr-none[hidden] { display: none; }
+  .jnl-drawer:has(.dr-none:not([hidden])) .dr-sec { display: none; }
   .dr-sec { padding: 12px 13px; border-bottom: 1px solid var(--color-border-light); }
   .dr-sec:last-child { border-bottom: 0; }
   .dr-title { font-size: 11px; font-weight: 650; text-transform: uppercase; letter-spacing: .12em; color: var(--mut); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
