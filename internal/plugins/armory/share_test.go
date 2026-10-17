@@ -377,10 +377,14 @@ func TestShareBox_Renders(t *testing.T) {
 	}
 	out := sb.String()
 	for _, want := range []string{"Who else can see Zephyr Cloak?", `name="user" value="u1"`, "Thorin", "<small>Tess</small>",
-		"They can open its page and the map. It stays on Mira.", "Not saved yet.", "/campaigns/camp/armory/characters/c2/items/z1/share"} {
+		"They can open its page and the map. It stays on Mira.", "/campaigns/camp/armory/characters/c2/items/z1/share"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q", want)
 		}
+	}
+	// An unsaved change is asked about by the shared slip, not a bar in the box.
+	if strings.Contains(out, "ag-warn") {
+		t.Error("the share box should carry no warn bar")
 	}
 	f.dir.ents["z1"].HandoutMapID = ""
 	v, _ = f.svc.ShareBox(ctx, "camp", robin, "c2", "z1")

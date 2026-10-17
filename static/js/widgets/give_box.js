@@ -9,9 +9,11 @@
  * the ... button opens a .ag-pop popover whose "Give to..." turns into the
  * same box. One box is open at a time.
  *
- * A box holding an unsent choice does not close on a click outside or on
- * Escape: it shakes and shows its warn bar, whose Discard throws the choice
- * away. Cancel and the close button always close.
+ * A box closes only on purpose: Cancel, the close button, Escape or the
+ * button that opened it; a click elsewhere never shuts it (the card's small
+ * menu still does, losing nothing). With an unsent choice, Escape and the
+ * opening button ask first in the shared slip (static/js/theme.js), which
+ * names what would be lost.
  *
  * Every control inside a server-rendered box calls in here through an inline
  * handler built Go-side (giveBoxCall), so nothing depends on a script inside
@@ -31,6 +33,7 @@
     });
   }
   function reduced() {
+    if (window.Chronicle && Chronicle.reducedMotion) return Chronicle.reducedMotion();
     var h = document.documentElement;
     return matchMedia('(prefers-reduced-motion: reduce)').matches || !!document.querySelector('.nav-rm, html.rm') ||
       h.hasAttribute('data-cz-reduce') || h.getAttribute('data-view-motion') === 'calm';
@@ -61,12 +64,26 @@
     setTimeout(fin, 420);
   }
 
-  // A box with an unsent choice shakes and says so instead of closing.
-  function nag(box) {
-    if (!box) return;
-    var w = box.querySelector('.ag-warn');
-    if (w) { w.classList.remove('is-on'); void w.offsetWidth; w.classList.add('is-on'); }
-    box.classList.remove('is-nagging'); void box.offsetWidth; box.classList.add('is-nagging');
+  // pickedName is the label of the row picked in a Give or Move box.
+  function pickedName(box) {
+    var r = picked(box);
+    var n = r && r.closest('.ag-row') && r.closest('.ag-row').querySelector('.ag-name');
+    return n ? n.textContent.trim() : '';
+  }
+
+  // ask says what closing would lose, under the box's foot.
+  function ask(box) {
+    if (!box || !window.Chronicle || !Chronicle.askSlip) return;
+    var name = pickedName(box), q;
+    if (box.hasAttribute('data-share-box')) {
+      q = { ask: 'Discard the change?', detail: 'Your ticks for who else can see it haven’t been saved.', discard: 'Discard' };
+    } else if (box.hasAttribute('data-move-box')) {
+      q = { ask: 'Close without moving it?', detail: (name ? 'You picked ' + name + '. ' : '') + 'Nothing has moved yet.', discard: 'Close anyway' };
+    } else {
+      q = { ask: 'Close without giving it?', detail: (name ? 'You picked ' + name + '. ' : '') + 'Nothing has been given yet.', discard: 'Close anyway' };
+    }
+    q.onDiscard = function () { close(true); };
+    Chronicle.askSlip(box, q);
   }
 
   function toast(msg) {
@@ -81,11 +98,13 @@
     setTimeout(function () { t.remove(); }, 3200);
   }
 
+  // Only the card's menu (or its collections list) closes on a click off it;
+  // a box being worked in stays.
   function outside(e) {
     if (!S) return;
     if (!S.host.isConnected) { forget(); return; }
     if (S.host.contains(e.target) || (S.btn && S.btn.contains(e.target))) return;
-    close(false);
+    if (S.kind === 'pop' && S.box === S.host) close(true);
   }
   function onKey(e) {
     if (e.key !== 'Escape' || !S) return;
@@ -100,12 +119,12 @@
   // A swap took the box away (its panel reloaded): let it go quietly.
   function forget() { S = null; listen(false); }
 
-  // close shuts the open box. Unless forced, an unsent choice nags instead
-  // and close returns false. after runs once the box has gone.
+  // close shuts the open box. Unless forced, an unsent choice asks first and
+  // close returns false. after runs once the box has gone.
   function close(force, after) {
     if (!S) { if (after) after(); return true; }
     if (!S.host.isConnected) { forget(); if (after) after(); return true; }
-    if (!force && S.dirty) { nag(S.box); return false; }
+    if (!force && S.dirty) { ask(S.box); return false; }
     var s = S;
     forget();
     if (s.btn) s.btn.setAttribute('aria-expanded', 'false');
@@ -159,7 +178,7 @@
     h.querySelector('span').textContent = text;
   }
 
-  function warnOff(box) { var w = box.querySelector('.ag-warn'); if (w) w.classList.remove('is-on'); }
+  function warnOff(box) { if (window.Chronicle && Chronicle.askSlip) Chronicle.askSlip.close(box); }
 
   function tab(btn) {
     var box = boxOf(btn); if (!box) return;
@@ -238,7 +257,6 @@
   }
 
   function cancel() { close(true); }
-  function discard() { close(true); }
 
   function errorOf(r) {
     return r.json().then(function (j) { return (j && j.message) || 'Could not do that. Try again.'; },
@@ -543,7 +561,7 @@
   window.Chronicle = window.Chronicle || {};
   window.Chronicle.GiveBox = {
     open: open, move: move, edited: edited, card: card, tab: tab, pick: pick, step: step,
-    search: search, cancel: cancel, discard: discard, give: give, tick: tick, save: save,
+    search: search, cancel: cancel, give: give, tick: tick, save: save,
     _internal: { clampQty: clampQty, esc: esc, close: close, toast: toast }
   };
 })();

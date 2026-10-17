@@ -411,7 +411,7 @@
       }
 
       // Clean up insert menu global click listener to prevent memory leaks.
-      var insertMenu = el.querySelector('.chronicle-editor__insert-wrapper');
+      var insertMenu = el.querySelector('.chronicle-editor__insert-menu');
       if (insertMenu && insertMenu._closeDropdownHandler) {
         document.removeEventListener('click', insertMenu._closeDropdownHandler);
       }
