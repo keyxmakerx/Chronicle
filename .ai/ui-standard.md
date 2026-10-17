@@ -470,6 +470,15 @@ their tokens.
   follow the look. Standard draws them exactly as before (input.css,
   "Shared block parts"). Under Annals, following a connection pulls the new
   page out from under the connections block ("Motion").
+- **Style kits change shape and ornament, never colour.** An owner can make
+  the whole site sharper, plainer or more ornate without touching the
+  campaign's colours, which stay their own choice. So every Material screen
+  takes its corners, edge weight and ornaments from shared tokens (corner
+  radii, how heavy an edge is, the title rule, section dividers and corner
+  flourishes) rather than fixed values, and a kit is just a set of those
+  values (TODO(#1447)). The motion, the edge vocabulary and the Director's
+  amber stay the same in every kit. Character sheet styles stay their own
+  choice.
 - **Buttons** (`data-cz-btn`): Lift is the base; Press, Glow and Ink restyle
   it; Keystone is soft, raised and rounded (12px), and gives every button the
   heavy press.
