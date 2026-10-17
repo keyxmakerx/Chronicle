@@ -99,6 +99,11 @@
   background: var(--color-card-bg);
   box-shadow: var(--elev-resting);
 }
+/* The notes panel's heading carries the one rule under it, running up to
+   New note as the facts panel's runs up to Edit, instead of the panel's own
+   full-width line. */
+[data-cz-page="annals"] #main-content .en-head { border-bottom: 0; padding-bottom: 4px; }
+[data-cz-page="annals"] #main-content .en-head > .en-spacer { display: none; }
 /* Pictures keep their rounded frame, with no line round them. */
 [data-cz-page="annals"] #main-content .cb-card:has(> img) { border-radius: 12px; }
 
@@ -175,7 +180,7 @@
    One amber everywhere: the mark itself, and a row the players can't see
    gets a thin amber edge. */
 [data-cz-page="annals"] .cb-dm { color: var(--annals-dm); }
-[data-cz-page="annals"] #main-content .cb-link[data-dm-only] {
+[data-cz-page="annals"] #main-content :is(.cb-link, .en-note)[data-dm-only] {
   box-shadow: inset 3px 0 0 color-mix(in srgb, var(--annals-dm) 70%, transparent);
 }
 
