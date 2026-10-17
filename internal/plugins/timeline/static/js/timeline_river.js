@@ -116,6 +116,7 @@
           '<div class="tlr-main">' +
             '<div class="tlr-stage" data-tlr="stage" tabindex="0" aria-label="Time line. Arrow keys move along it, plus and minus zoom, Tab reaches each event."><svg data-tlr="svg"></svg><span class="tlr-hint">Drag to move · scroll or pinch to zoom · click an event</span></div>' +
             '<div class="tlr-overview" data-tlr="ov" aria-label="The whole history. Drag the window to move."><svg data-tlr="ovsvg"></svg></div>' +
+            '<button type="button" class="tlr-monthlink" data-tlr="monthlink" data-act="cal" aria-expanded="false" hidden></button>' +
             '<div class="tlr-fold" data-tlr="fold"><div><div class="tlr-cal" data-tlr="cal" aria-label="Month"></div></div></div>' +
           '</div>' +
           '<aside class="tlr-side" aria-label="Event"><div class="in" data-tlr="side"></div></aside>' +
@@ -167,7 +168,7 @@
       if (motion() === 'full') { var w = (t1 - t0) * 0.15; this.view = { t0: t0 - w, t1: t1 + w }; this.svg.classList.add('intro'); var svgEl = this.svg; setTimeout(function () { svgEl.classList.remove('intro'); }, 1800); }
       else this.view = { t0: t0, t1: t1 };
       this.target = { t0: this.view.t0, t1: this.view.t1 };
-      this.draw();
+      this.draw(); this.renderCal();
       this.setTarget(t0, t1);
     },
 
@@ -233,7 +234,7 @@
       nav.hidden = false;
       nav.innerHTML = '<span class="tlr-lbl">Eras</span>' + this.eras.map(function (e, i) {
         return '<a href="#" data-era="' + i + '">' + esc(e.name) + '<small>' + e.a + (e.b === Infinity ? ' on' : ' to ' + (e.b - 1)) + '</small></a>';
-      }).join('') + '<span class="tlr-erastep"><button type="button" class="tlr-btn ghost" data-erastep="-1">' + ICON_L + 'Earlier era</button><button type="button" class="tlr-btn ghost" data-erastep="1">Later era' + ICON_R + '</button></span>';
+      }).join('') + '<span class="tlr-erastep"><button type="button" class="tlr-btn ghost" data-erastep="-1">Earlier era</button><button type="button" class="tlr-btn ghost" data-erastep="1">Later era</button></span>';
       this.eraLinks = Array.prototype.slice.call(nav.querySelectorAll('[data-era]'));
     },
 
@@ -472,8 +473,8 @@
       if (!this.cal) return;
       this.st.fold = open;
       if (open) this._remember('fold'); else this._forget('fold');
-      if (open && !this.st.month) { var p = this.geo.parts(this.today != null ? this.today : this.view.t0); this.st.month = { y: p.y, m: p.m }; }
-      this.renderCal(); this.renderSide();
+      if (open && !this.st.month) this.st.month = this._foldMonth();
+      this.renderCal();
     },
     closeLast: function () {
       var top = this.st.stack[this.st.stack.length - 1];
@@ -507,15 +508,24 @@
         (e.desc ? '<p class="desc">' + esc(e.desc) + '</p>' : '') +
         (e.page ? '<div class="pages"><span class="tlr-lbl">Linked page</span><br><a href="/campaigns/' + encodeURIComponent(this.cfg.campaignId) + '/entities/' + encodeURIComponent(e.page.id) + '">' + esc(e.page.name) + '</a></div>' : '') +
         rel('Came from', from) + rel('Led to', to) +
-        (this.cal ? '<div class="tlr-acts"><button type="button" class="tlr-btn pri" data-act="cal" aria-expanded="' + this.st.fold + '">' + (this.st.fold ? 'Hide the month' : 'Show the month') + '</button></div>' : '') +
         '<div class="tlr-keys"><span class="tlr-kbd">←</span> <span class="tlr-kbd">→</span> next event · <span class="tlr-kbd">Esc</span> closes</div>';
     },
 
     // The month under the line is the calendar page's own month grid, in its
     // own signed look (calendar-view.css), with that month's calendar events.
+    // The month opens from a quiet line right above where it unfolds, naming
+    // the month it will show.
+    _foldMonth: function () { var p = this.geo.parts(this.today != null ? this.today : this.view.t0); return { y: p.y, m: p.m }; },
+
     renderCal: function () {
-      var self = this, fold = this.$('fold'), box = this.$('cal');
+      var self = this, fold = this.$('fold'), box = this.$('cal'), link = this.$('monthlink');
       fold.classList.toggle('open', !!this.st.fold);
+      link.hidden = !this.cal;
+      if (this.cal) {
+        var LM = this.st.month || this._foldMonth();
+        link.textContent = this.st.fold ? 'Hide the month' : 'Show ' + this.geo.monthName(LM.m) + ' ' + LM.y + ' on the calendar';
+        link.setAttribute('aria-expanded', String(!!this.st.fold));
+      }
       if (!this.st.fold || !this.st.month || !this.cal) return;
       var M = this.st.month, key = M.y + '-' + M.m;
       this._calEvents = this._calEvents || {};
@@ -536,7 +546,7 @@
       return '<div class="tlr-cal-h"><button type="button" class="tlr-btn ghost sq" data-month="-1" aria-label="Previous month">' + ICON_L + '</button>' +
         '<button type="button" class="tlr-btn ghost sq" data-month="1" aria-label="Next month">' + ICON_R + '</button>' +
         '<h3>' + esc(this.geo.monthName(M.m)) + ' ' + M.y + '</h3><a href="' + this._calHref(M.y, M.m, 1) + '">Open the calendar</a>' +
-        '<button type="button" class="tlr-btn" data-act="closecal">' + ICON_X + 'Close</button></div>';
+        '<button type="button" class="tlr-btn" data-act="closecal">Close</button></div>';
     },
 
     // Which calendar events fall on a day, by the calendar page's own rules.
