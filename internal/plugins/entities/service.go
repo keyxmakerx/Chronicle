@@ -1063,12 +1063,13 @@ func (s *entityService) MergeFields(ctx context.Context, entityID string, patch 
 	if err != nil {
 		return err
 	}
-	return s.UpdateFields(ctx, entityID, mergeFieldPatch(entity.FieldsData, patch))
+	return s.UpdateFields(ctx, entityID, MergeFieldPatch(entity.FieldsData, patch))
 }
 
-// mergeFieldPatch returns a new map: current with patch applied (nil value
-// deletes the key). Neither input is modified.
-func mergeFieldPatch(current, patch map[string]any) map[string]any {
+// MergeFieldPatch returns a new map: current with patch applied (nil value
+// deletes the key). Neither input is modified. Exported so partial-update
+// callers of Update can merge before it replaces the whole map.
+func MergeFieldPatch(current, patch map[string]any) map[string]any {
 	merged := make(map[string]any, len(current)+len(patch))
 	for k, v := range current {
 		merged[k] = v

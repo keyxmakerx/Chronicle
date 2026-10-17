@@ -666,6 +666,13 @@ func (h *APIHandler) UpdateEntity(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request body")
 	}
 
+	// Update replaces the whole fields map, so a present fields_data is merged
+	// into the stored one first; absent leaves it nil and the service skips it.
+	fieldsData := req.FieldsData
+	if fieldsData != nil {
+		fieldsData = entities.MergeFieldPatch(entity.FieldsData, fieldsData)
+	}
+
 	// is_private: absent (and an explicit null, which a NOT NULL column has
 	// no room for) yields a nil pointer, which the service reads as
 	// "preserve"; a present true/false is written.
@@ -676,7 +683,7 @@ func (h *APIHandler) UpdateEntity(c echo.Context) error {
 		IsPrivate:         req.IsPrivate.Ptr(nil),
 		Entry:             req.Entry,
 		PlayerNotes:       req.PlayerNotes,
-		FieldsData:        req.FieldsData,
+		FieldsData:        fieldsData,
 		ExpectedUpdatedAt: req.ExpectedUpdatedAt,
 	})
 	if err != nil {
@@ -1007,13 +1014,18 @@ func (h *APIHandler) Sync(c echo.Context) error {
 				// single-entity PUT: absent preserves, a present value
 				// writes. is_private absent yields a nil pointer, which the
 				// service preserves.
+				// Same merge as the single-entity PUT: Update replaces the map.
+				fieldsData := change.FieldsData
+				if fieldsData != nil {
+					fieldsData = entities.MergeFieldPatch(existing.FieldsData, fieldsData)
+				}
 				_, err := h.entitySvc.Update(entities.WithSyncActor(ctx, h.resolveUserID(c)), change.EntityID, entities.UpdateEntityInput{
 					Name:       change.Name,
 					TypeLabel:  change.TypeLabel,
 					ParentID:   change.ParentID,
 					IsPrivate:  change.IsPrivate.Ptr(nil),
 					Entry:      change.Entry,
-					FieldsData: change.FieldsData,
+					FieldsData: fieldsData,
 				})
 				if err != nil {
 					result.Status = "error"
