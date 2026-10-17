@@ -139,7 +139,7 @@ would do.
   | Weight | Looks like | For |
   |---|---|---|
   | Quiet word | text in the accent, no border, fill or shadow; underline on hover | revealing more inside reading content: "Show all 6", "why" |
-  | Tab | a hairline on one or two sides, open toward what it opens | a drawer or fold that hangs from it and stays joined to it, such as a title's pull-down |
+  | Tab | small capitals with a hairline under them and up one side, like an index label; no fill, box or lift | a drawer or fold that hangs below it on that same side line, such as a title's pull-down |
   | Icon | a monochrome icon, no frame until hover | a margin, a rail, a row's end, or anywhere a word won't fit; always labelled for screen readers |
   | Button | border, fill, resting shadow | a real command ("Publish", "Add reason") or a value picker (a standing, "Sort by") |
 
@@ -504,8 +504,12 @@ their tokens.
   takes its corners, edge weight and ornaments from shared tokens (corner
   radii, how heavy an edge is, the title rule, section dividers and corner
   flourishes) rather than fixed values, and a kit is just a set of those
-  values (TODO(#1447)). The motion, the edge vocabulary and the Director's
-  amber stay the same in every kit. Character sheet styles stay their own
+  values (TODO(#1447)). The tokens reach far enough that kits look plainly
+  different at a glance: Sharp is a broadsheet (double title rule, ruled
+  section heads, outlined capital buttons); Ornate is a bound volume (side
+  border ending in curls, swashes, dotted row leaders, double frames). The
+  motion, the edge vocabulary and the Director's amber stay the same in
+  every kit. Character sheet styles stay their own
   choice.
 - **Buttons** (`data-cz-btn`): Lift is the base; Press, Glow and Ink restyle
   it; Keystone is soft, raised and rounded (12px), and gives every button the
