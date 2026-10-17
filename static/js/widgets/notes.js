@@ -28,7 +28,8 @@ Chronicle.register('notes', {
     var embedded = config.embed === 'true' || config.embed === true;
 
     var HEARTBEAT_INTERVAL = 2 * 60 * 1000; // 2 minutes
-    var STORAGE_KEY = 'chronicle_notes_size';
+    var STORAGE_KEY = 'chronicle_notes_size'; // older saves: size only
+    var STORAGE_PLACE = 'chronicle_jots_place';
     var STORAGE_TEXT_SIZE = 'chronicle_notes_text_size';
     var STORAGE_PINNED = 'chronicle_jots_pinned';
     var TEXT_SIZE_DEFAULT = 'md';
@@ -36,7 +37,6 @@ Chronicle.register('notes', {
 
     var state = {
       open: false,
-      collapsed: false,
       tab: entityId ? 'page' : 'mine', // 'page' (this page's jots) or 'mine' (all of mine)
       jots: [],       // the viewer's own jots, on every page
       pageJots: [],   // the jots on this page the viewer can see
@@ -98,27 +98,29 @@ Chronicle.register('notes', {
 
     // --- Saved preferences (localStorage) ---
 
-    function restoreSize() {
+    // Where the sheet sits: floating where it was left, pinned to a side, or
+    // folded to its title bar (jot_place.js holds the rules). A phone's
+    // sheet and an outside app's frame have one fixed place instead.
+    var JP = Chronicle.JotPlace;
+    var mainEl = document.getElementById('main-content');
+    var place = readPlace();
+    // While a dialog or an edit needs the space the sheet steps aside to
+    // aside.place, or off the edge for a dialog; the saved place is kept.
+    var aside = null;
+
+    function readPlace() {
+      var saved = null;
       try {
-        var saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
-        if (saved && saved.w && saved.h) {
-          panel.style.width = saved.w + 'px';
-          panel.style.height = saved.h + 'px';
-        }
-      } catch (e) { /* ignore */ }
+        saved = JSON.parse(localStorage.getItem(STORAGE_PLACE)) || JSON.parse(localStorage.getItem(STORAGE_KEY));
+      } catch (e) { /* a fresh place */ }
+      return JP.read(saved);
     }
 
-    function saveSize() {
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({
-          w: panel.offsetWidth,
-          h: panel.offsetHeight
-        }));
-      } catch (e) { /* ignore */ }
+    function savePlace() {
+      try { localStorage.setItem(STORAGE_PLACE, JSON.stringify(place)); } catch (e) { /* not remembered */ }
     }
 
-    // Apply saved size on desktop only (mobile uses full-width).
-    if (window.innerWidth >= 640) restoreSize();
+    function isDesk() { return !embedded && window.innerWidth >= 640; }
 
     /** Restore and apply the saved text size preference. */
     function restoreTextSize() {
@@ -150,43 +152,255 @@ Chronicle.register('notes', {
       try { return localStorage.getItem(STORAGE_PINNED) === '1'; } catch (e) { return false; }
     }
 
-    // --- Resize handle ---
+    // --- Moving, resizing and pinning ---
     // Document listeners live on el so destroy() can take them away: the
     // widget is re-mounted on every page change.
+    var header = panel.querySelector('.notes-header');
     var resizeHandle = panel.querySelector('.notes-resize-handle');
-    var resizing = false;
-    var startX, startY, startW, startH;
-    function resizeTo(x, y) {
-      // Dragging the top-left corner: moving left or up grows the panel.
-      panel.style.width = Math.max(280, startW - (x - startX)) + 'px';
-      panel.style.height = Math.max(300, startH - (y - startY)) + 'px';
+    var dockBtns = panel.querySelectorAll('.notes-dock-btn');
+    var collapseBtn = panel.querySelector('.notes-collapse-btn');
+    var gesture = null; // { kind: 'move' | 'size', ... } while a pointer drags
+
+    /** Draws the sheet at its place (or where it has stepped aside to). */
+    function applyPlace() {
+      var root = document.documentElement;
+      var desk = isDesk();
+      var docked = desk && state.open && !!place.dock;
+      var shown = aside && aside.place ? aside.place : place;
+      root.classList.toggle('jot-dock-l', docked && place.dock === 'l');
+      root.classList.toggle('jot-dock-r', docked && place.dock === 'r');
+      panel.classList.toggle('notes-panel-placed', desk);
+      panel.classList.toggle('notes-panel-docked', docked);
+      // An outside app's frame has no fold button, so it never shows folded.
+      panel.classList.toggle('notes-panel-collapsed', !embedded && !docked && !!shown.folded);
+      panel.classList.toggle('notes-panel-aside-l', !!aside && aside.off === 'l');
+      panel.classList.toggle('notes-panel-aside-r', !!aside && aside.off === 'r');
+      collapseBtn.setAttribute('aria-expanded', String(docked || !shown.folded));
+      collapseBtn.title = !docked && shown.folded ? 'Unfold' : 'Fold to the title bar';
+      dockBtns.forEach(function (b) {
+        var on = !!place.dock && b.getAttribute('data-dock') === place.dock;
+        b.setAttribute('aria-pressed', String(on));
+        b.classList.toggle('notes-pin-on', on);
+      });
+      var st = panel.style;
+      if (!desk) { st.left = st.top = st.width = st.height = ''; return; }
+      if (docked) {
+        var w = JP.dockWidth(place, window.innerWidth);
+        var col = mainEl && mainEl.parentElement ? mainEl.parentElement.getBoundingClientRect() : { left: 0, right: window.innerWidth };
+        var top = mainEl ? Math.max(0, mainEl.getBoundingClientRect().top) : 0;
+        root.style.setProperty('--jot-dock-w', w + 'px');
+        st.left = (place.dock === 'l' ? col.left : col.right - w) + 'px';
+        st.top = top + 'px';
+        st.width = w + 'px';
+        st.height = (window.innerHeight - top) + 'px';
+        return;
+      }
+      var q = JP.clamp(shown, window.innerWidth, window.innerHeight);
+      st.left = q.x + 'px';
+      st.top = q.y + 'px';
+      st.width = q.w + 'px';
+      st.height = q.folded ? '' : q.h + 'px';
     }
+
+    /** The sheet's place as drawn, for a gesture that starts from it. */
+    function drawnPlace() {
+      return JP.clamp(place, window.innerWidth, window.innerHeight);
+    }
+
+    // Any hand on the sheet takes it back from wherever it stepped aside to.
+    function takeBack() {
+      if (!aside) return;
+      aside = null;
+      panel.classList.remove('notes-panel-gliding');
+      applyPlace();
+    }
+
+    header.addEventListener('pointerdown', function (e) {
+      if (!isDesk() || e.button !== 0 || e.target.closest('button, input, .notes-settings-popover')) return;
+      // A press only becomes a move once the pointer travels, so a click on
+      // a pinned sheet's title bar (to focus it) leaves it pinned.
+      gesture = { kind: 'press', x: e.clientX, y: e.clientY };
+    });
+
+    function startMove(e) {
+      takeBack();
+      if (place.dock) {
+        // Pulled off its side, it floats under the pointer at its own size.
+        place.dock = null;
+        place.x = e.clientX - 120;
+        place.y = e.clientY - 18;
+        applyPlace();
+      }
+      var r = panel.getBoundingClientRect();
+      gesture = { kind: 'move', dx: e.clientX - r.left, dy: e.clientY - r.top };
+      panel.classList.add('notes-panel-moving');
+      document.body.style.userSelect = 'none';
+    }
+
     resizeHandle.addEventListener('pointerdown', function (e) {
+      if (!isDesk() || e.button !== 0) return;
       e.preventDefault();
-      resizing = true;
-      startX = e.clientX;
-      startY = e.clientY;
-      startW = panel.offsetWidth;
-      startH = panel.offsetHeight;
+      takeBack();
+      var p = drawnPlace();
+      gesture = { kind: 'size', x: e.clientX, y: e.clientY, w: p.w, h: p.h };
+      panel.classList.add('notes-panel-moving');
       document.body.style.userSelect = 'none';
     });
+
     el._notesPointerMove = function (e) {
-      if (resizing) resizeTo(e.clientX, e.clientY);
+      if (!gesture) return;
+      if (gesture.kind === 'press') {
+        if (Math.abs(e.clientX - gesture.x) + Math.abs(e.clientY - gesture.y) < 4) return;
+        startMove(e);
+      }
+      if (gesture.kind === 'move') {
+        place.x = e.clientX - gesture.dx;
+        place.y = e.clientY - gesture.dy;
+      } else {
+        place.w = gesture.w + (e.clientX - gesture.x);
+        place.h = gesture.h + (e.clientY - gesture.y);
+      }
+      applyPlace();
     };
     el._notesPointerUp = function () {
-      if (!resizing) return;
-      resizing = false;
+      if (!gesture) return;
+      var pressed = gesture.kind === 'press';
+      gesture = null;
+      if (pressed) return;
+      panel.classList.remove('notes-panel-moving');
       document.body.style.userSelect = '';
-      saveSize();
+      // Keep what was drawn, so a sheet dragged past an edge stays where it shows.
+      var p = drawnPlace();
+      place.x = p.x; place.y = p.y; place.w = p.w; place.h = p.h;
+      savePlace();
     };
     document.addEventListener('pointermove', el._notesPointerMove);
     document.addEventListener('pointerup', el._notesPointerUp);
+    document.addEventListener('pointercancel', el._notesPointerUp);
+
+    // Arrow keys on the title bar move the sheet; on the corner they resize it.
+    header.addEventListener('keydown', function (e) {
+      if (e.target !== header || !isDesk() || place.dock) return;
+      var m = JP.step(e.key, e.shiftKey);
+      if (!m) return;
+      e.preventDefault();
+      takeBack();
+      var p = drawnPlace();
+      place.x = p.x + m[0];
+      place.y = p.y + m[1];
+      applyPlace();
+      savePlace();
+    });
+    resizeHandle.addEventListener('keydown', function (e) {
+      var m = JP.step(e.key, e.shiftKey);
+      if (!m || !isDesk()) return;
+      e.preventDefault();
+      takeBack();
+      var p = drawnPlace();
+      place.w = p.w + m[0];
+      place.h = p.h + m[1];
+      applyPlace();
+      savePlace();
+    });
+
+    // Pinned to a side, the page narrows to make room; pressed again, it floats.
+    dockBtns.forEach(function (b) {
+      b.addEventListener('click', function () {
+        takeBack();
+        var side = b.getAttribute('data-dock');
+        place.dock = place.dock === side ? null : side;
+        place.folded = false;
+        applyPlace();
+        savePlace();
+      });
+    });
+
+    // --- Stepping aside ---
+    // A floating sheet never sits on what needs the space: it slides off its
+    // nearest edge while a dialog is open, and folds into the far corner
+    // while something under it is being edited. Both come back by
+    // themselves; a pinned sheet covers nothing, so it stays.
+    function sheetRect() {
+      return panel.getBoundingClientRect();
+    }
+
+    function openModal() {
+      var list = document.querySelectorAll('dialog[open], [aria-modal="true"]');
+      for (var i = 0; i < list.length; i++) {
+        if (!panel.contains(list[i]) && list[i].getClientRects().length) return list[i];
+      }
+      return null;
+    }
+
+    // Typing counts as editing; ticking a box or pressing an input button does not.
+    function isEditable(t) {
+      if (!t) return false;
+      if (t.isContentEditable || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT') return true;
+      return t.tagName === 'INPUT' && !/^(checkbox|radio|button|submit|reset|range|color|file|image|hidden)$/i.test(t.type);
+    }
+
+    function stepAside(kind, target) {
+      if (!state.open || !isDesk() || place.dock || gesture) return;
+      var tr = target.getBoundingClientRect();
+      if (!JP.overlaps(sheetRect(), tr)) return;
+      if (kind === 'dialog') {
+        var r = sheetRect();
+        aside = { kind: kind, off: (r.left + r.right) / 2 > window.innerWidth / 2 ? 'r' : 'l' };
+      } else {
+        aside = { kind: kind, place: JP.asideFor(place, tr, window.innerWidth, window.innerHeight) };
+        panel.classList.add('notes-panel-gliding');
+      }
+      applyPlace();
+    }
+
+    function comeBack() {
+      if (!aside) return;
+      aside = null;
+      applyPlace();
+      setTimeout(function () { if (!aside) panel.classList.remove('notes-panel-gliding'); }, 400);
+    }
+
+    el._notesFocusIn = function (e) {
+      var t = e.target;
+      if (!t || !t.closest || panel.contains(t) || fab.contains(t)) return;
+      var modal = t.closest('dialog[open], [aria-modal="true"]');
+      if (modal) {
+        if (!aside) stepAside('dialog', modal);
+        return;
+      }
+      if (aside && aside.kind === 'dialog') {
+        if (!openModal()) comeBack();
+        return;
+      }
+      if (isEditable(t) && mainEl && mainEl.contains(t)) {
+        if (aside) return;
+        stepAside('edit', t.closest('.ProseMirror, [contenteditable="true"]') || t);
+        return;
+      }
+      if (aside) comeBack();
+    };
+    // A dialog that closes without moving focus anywhere still lets it back.
+    el._notesDialogClose = function () {
+      if (aside && aside.kind === 'dialog') setTimeout(function () { if (!openModal()) comeBack(); }, 0);
+    };
+    document.addEventListener('focusin', el._notesFocusIn);
+    document.addEventListener('close', el._notesDialogClose, true);
+
+    window.addEventListener('resize', applyPlace);
+    el._notesOnResize = applyPlace;
+    // A pinned sheet follows the page's edges, which move without a window
+    // resize when the sidebar collapses or a banner appears above the page.
+    if (mainEl && typeof window.ResizeObserver === 'function') {
+      el._notesMainObserver = new ResizeObserver(function () {
+        if (state.open && place.dock) applyPlace();
+      });
+      el._notesMainObserver.observe(mainEl);
+    }
 
     // Cache panel elements.
     var headerTitle = panel.querySelector('.notes-header-title');
     var closeBtn = panel.querySelector('.notes-close');
     var pinPanelBtn = panel.querySelector('.notes-pin-panel');
-    var collapseBtn = panel.querySelector('.notes-collapse-btn');
     var tabBtns = panel.querySelectorAll('.notes-tab');
     var addBtn = panel.querySelector('.jot-add-btn');
     var notesList = panel.querySelector('.notes-list');
@@ -280,6 +494,7 @@ Chronicle.register('notes', {
       panel.classList.remove('notes-panel-hidden');
       fab.classList.add('jot-tab-hidden');
       fab.setAttribute('aria-expanded', 'true');
+      applyPlace();
       loadNotes();
       live.start();
     }
@@ -296,6 +511,10 @@ Chronicle.register('notes', {
       releaseLockIfHeld();
       state.editingId = null;
       state.versionsNoteId = null;
+      aside = null;
+      panel.classList.remove('notes-panel-gliding');
+      // The page gets its room back; the sheet keeps its shape while it fades.
+      document.documentElement.classList.remove('jot-dock-l', 'jot-dock-r');
       fab.focus({ preventScroll: true });
     }
 
@@ -316,14 +535,13 @@ Chronicle.register('notes', {
       pinPanelBtn.hidden = true;
       collapseBtn.hidden = true;
       resizeHandle.hidden = true;
+      dockBtns.forEach(function (b) { b.hidden = true; });
     }
 
-    // A pinned panel opens again by itself on the next page.
+    // A panel kept open opens again by itself on the next page.
     function paintPinPanel() {
       var on = isPinnedOpen();
-      pinPanelBtn.setAttribute('aria-pressed', String(on));
-      pinPanelBtn.classList.toggle('notes-pin-on', on);
-      pinPanelBtn.title = on ? 'Stop keeping the panel open' : 'Keep the panel open on every page';
+      pinPanelBtn.setAttribute('aria-checked', String(on));
     }
     pinPanelBtn.addEventListener('click', function () {
       try { localStorage.setItem(STORAGE_PINNED, isPinnedOpen() ? '0' : '1'); } catch (e) { /* not remembered */ }
@@ -331,11 +549,14 @@ Chronicle.register('notes', {
     });
     paintPinPanel();
 
+    // Fold to the title bar. A folded sheet floats; one stepped aside for an
+    // edit opens back where it was.
     collapseBtn.addEventListener('click', function () {
-      state.collapsed = !state.collapsed;
-      panel.classList.toggle('notes-panel-collapsed', state.collapsed);
-      collapseBtn.setAttribute('aria-expanded', String(!state.collapsed));
-      collapseBtn.title = state.collapsed ? 'Expand' : 'Collapse';
+      if (aside) { takeBack(); return; }
+      place.folded = !(place.folded && !place.dock);
+      if (place.folded) place.dock = null;
+      applyPlace();
+      savePlace();
     });
 
     // Escape inside the panel closes it (or its open popover first).
@@ -1644,13 +1865,14 @@ Chronicle.register('notes', {
         ? '<div class="jot-foot"><button class="jot-add-btn" type="button"><i class="fa-solid fa-plus" aria-hidden="true"></i> New jot on this page</button></div>'
         : '<div class="notes-foot-hint">Jots live on pages: open one to add a jot there.</div>';
 
-      return '<div class="notes-resize-handle" title="Drag to resize"></div>' +
-        '<div class="notes-header">' +
-        '<i class="fa-solid fa-note-sticky notes-header-icon" aria-hidden="true"></i>' +
+      // The title bar is the handle: drag it, or focus it and use the arrow keys.
+      return '<div class="notes-header" role="group" tabindex="0" aria-label="Jot notes title bar. Arrow keys move the panel.">' +
+        '<i class="fa-solid fa-grip-vertical notes-header-icon" aria-hidden="true"></i>' +
         '<span class="notes-header-title">Jot notes</span>' +
         '<div class="notes-header-actions">' +
-        '<button class="note-btn notes-pin-panel" type="button" aria-pressed="false" aria-label="Keep the panel open on every page"><i class="fa-solid fa-thumbtack" aria-hidden="true"></i></button>' +
-        '<button class="note-btn notes-collapse-btn" type="button" title="Collapse" aria-label="Collapse jot notes" aria-expanded="true"><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></button>' +
+        '<button class="note-btn notes-dock-btn" type="button" data-dock="l" title="Pin to the left" aria-label="Pin to the left side" aria-pressed="false"><i class="fa-solid fa-angles-left" aria-hidden="true"></i></button>' +
+        '<button class="note-btn notes-dock-btn" type="button" data-dock="r" title="Pin to the right" aria-label="Pin to the right side" aria-pressed="false"><i class="fa-solid fa-angles-right" aria-hidden="true"></i></button>' +
+        '<button class="note-btn notes-collapse-btn" type="button" title="Fold to the title bar" aria-label="Fold jot notes" aria-expanded="true"><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></button>' +
         '<button class="note-btn notes-settings-btn" type="button" title="Settings" aria-label="Jot notes settings" aria-haspopup="true" aria-expanded="false"><i class="fa-solid fa-gear" aria-hidden="true"></i></button>' +
         '<button class="note-btn notes-close" type="button" title="Close" aria-label="Close jot notes"><i class="fa-solid fa-xmark"></i></button>' +
         '</div>' +
@@ -1661,6 +1883,7 @@ Chronicle.register('notes', {
         '<button type="button" class="notes-size-opt" data-size="md" aria-label="Medium text" aria-pressed="false">M</button>' +
         '<button type="button" class="notes-size-opt" data-size="lg" aria-label="Large text" aria-pressed="false">L</button>' +
         '</div>' +
+        '<button type="button" class="notes-pin-panel" role="switch" aria-checked="false"><span>Keep open on every page</span><span class="notes-switch" aria-hidden="true"></span></button>' +
         '</div>' +
         '</div>' +
         '<div class="notes-body">' +
@@ -1669,7 +1892,8 @@ Chronicle.register('notes', {
         '<div class="notes-search"><input type="text" class="notes-search-input" placeholder="Filter jots…" aria-label="Filter jots" autocomplete="off"></div>' +
         '<div class="notes-list"></div>' +
         footHtml +
-        '</div>';
+        '</div>' +
+        '<button type="button" class="notes-resize-handle" title="Drag to resize" aria-label="Resize jot notes. Arrow keys change the size."></button>';
     }
 
     // Journal references in the refs box open in place when the Journal is up.
@@ -1719,7 +1943,7 @@ Chronicle.register('notes', {
     // below), but it costs nothing and rescues the common case.
     window.addEventListener('beforeunload', flushAutosave);
 
-    // A pinned panel reopens on the next page; otherwise just count this page.
+    // A panel kept open reopens on the next page; otherwise just count this page.
     if (embedded || isPinnedOpen()) openPanel(); else loadCount();
 
     // Store references for cleanup.
@@ -1754,6 +1978,19 @@ Chronicle.register('notes', {
     }
     document.removeEventListener('pointermove', el._notesPointerMove);
     document.removeEventListener('pointerup', el._notesPointerUp);
+    document.removeEventListener('pointercancel', el._notesPointerUp);
+    if (el._notesMainObserver) {
+      el._notesMainObserver.disconnect();
+      delete el._notesMainObserver;
+    }
+    document.removeEventListener('focusin', el._notesFocusIn);
+    document.removeEventListener('close', el._notesDialogClose, true);
+    if (el._notesOnResize) {
+      window.removeEventListener('resize', el._notesOnResize);
+      delete el._notesOnResize;
+    }
+    // The page gets its room back; a re-mount pins the sheet again if it is open.
+    document.documentElement.classList.remove('jot-dock-l', 'jot-dock-r');
     document.removeEventListener('click', el._notesDocClick);
     if (el._notesViewport && window.visualViewport) {
       window.visualViewport.removeEventListener('resize', el._notesViewport);
