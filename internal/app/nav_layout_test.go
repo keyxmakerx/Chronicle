@@ -519,8 +519,8 @@ func TestSidebar_HiddenLegacyHeadingReachesNobody(t *testing.T) {
 
 // TestMarkEmptyApps flags only the named apps.
 func TestMarkEmptyApps(t *testing.T) {
-	apps := []campaigns.NavApp{{Slug: "calendar"}, {Slug: "maps"}}
-	markEmptyApps(apps, map[string]bool{"calendar": true})
+	apps := []campaigns.NavApp{{Slug: calendar.PluginSlug}, {Slug: "forge"}}
+	markEmptyApps(apps, map[string]bool{calendar.PluginSlug: true})
 	if !apps[0].Empty || apps[1].Empty {
 		t.Errorf("Empty = %v, %v; want true, false", apps[0].Empty, apps[1].Empty)
 	}
