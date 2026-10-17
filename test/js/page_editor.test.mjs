@@ -26,12 +26,20 @@ test('the server counts bytes, and so do the checks', () => {
 
 test('other names split on commas the way the server stores them', () => {
   const cases = [
-    ['', []],
-    ['the Grey Gull', ['the Grey Gull']],
-    [' Gull ,  Grey   Gull,, ', ['Gull', 'Grey Gull']],
-    ['Gull, gull, GULL', ['Gull']],
+    ['', [], []],
+    ['the Grey Gull', [], ['the Grey Gull']],
+    // The server trims each name but keeps the spaces inside it.
+    [' Gull ,  Grey   Gull,, ', [], ['Gull', 'Grey   Gull']],
+    ['Gull, gull, GULL', [], ['Gull']],
+    // A saved name with a comma in it stays whole; a comma typed now splits.
+    ['Smith, John, Jack', ['Smith, John'], ['Smith, John', 'Jack']],
+    ['smith ,john', ['Smith, John'], ['smith ,john']],
+    ['Smith, John', [], ['Smith', 'John']],
+    ['Jack, Smith', ['Smith, John'], ['Jack', 'Smith']],
   ];
-  for (const [text, want] of cases) assert.deepEqual(plain(P.splitAliases(text)), want, text);
+  for (const [text, known, want] of cases) {
+    assert.deepEqual(plain(P.splitAliases(text, known)), want, text + ' / ' + known.join('|'));
+  }
 });
 
 test('other names the server would refuse wait', () => {

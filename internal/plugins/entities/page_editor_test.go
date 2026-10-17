@@ -213,7 +213,7 @@ func TestBlockDetails_LabelAlwaysDrawn(t *testing.T) {
 			if i < 0 {
 				t.Fatalf("no data-page-label")
 			}
-			tag := html[i:strings.Index(html[i:], ">")+i]
+			tag := html[i : strings.Index(html[i:], ">")+i]
 			if got := strings.Contains(tag, "hidden"); got != tc.hidden {
 				t.Errorf("hidden = %v, want %v (%s)", got, tc.hidden, tag)
 			}

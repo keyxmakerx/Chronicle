@@ -299,7 +299,9 @@ html[data-annals-mode="fade"]::view-transition-new(annals-page) { animation-dura
   transition: opacity var(--dur-standard, 200ms) var(--ease-standard), visibility 0s var(--dur-standard, 200ms);
 }
 [data-cz-page="annals"] [data-editing] .pe-hint { visibility: visible; opacity: 1; transition: opacity var(--dur-standard, 200ms) var(--ease-standard); }
-@media (max-width: 1023px) { [data-cz-page="annals"] .pe-hint { display: none; } }
+@media (max-width: 1279px) { [data-cz-page="annals"] .pe-hint { display: none; } }
+/* A layout with no part to edit keeps only the badge. */
+[data-cz-page="annals"] .pe-bar[data-pe-off] > :is(.pe-hint, .pe-saved, .pe-edit) { display: none; }
 /* On a phone the bar takes its own line, so the trail of pages keeps its width. */
 @media (max-width: 640px) {
   [data-cz-page="annals"] .flex:has(> .pe-bar) { flex-wrap: wrap; }
@@ -458,11 +460,11 @@ html[data-annals-mode="fade"]::view-transition-new(annals-page) { animation-dura
 }
 [data-cz-page="annals"][data-motion="calm"] .pe-part.is-open .pe-drape { clip-path: none; opacity: 1; transition: opacity var(--dur-standard, 200ms) var(--ease-standard), visibility 0s; }
 [data-cz-page="annals"][data-motion="calm"] .pe-drape-in { transform: none; }
-[data-cz-page="annals"]:is([data-motion="off"], [data-cz-reduce]) :is(.pe-pen, .pe-pen .pe-i-ok) { animation: none; }
-[data-cz-page="annals"]:is([data-motion="off"], [data-cz-reduce]) :is([data-pe-page], .pe-hint, .pe-drape, .pe-drape-in),
-[data-cz-page="annals"]:is([data-motion="off"], [data-cz-reduce]) .pe-part::before { transition: none; }
-[data-cz-page="annals"]:is([data-motion="off"], [data-cz-reduce]) :is(.pe-drape, .pe-part.is-open .pe-drape) { clip-path: none; }
-[data-cz-page="annals"]:is([data-motion="off"], [data-cz-reduce]) .pe-drape-in { transform: none; }
+[data-cz-page="annals"][data-motion="off"] :is(.pe-pen, .pe-pen .pe-i-ok) { animation: none; }
+[data-cz-page="annals"][data-motion="off"] :is([data-pe-page], .pe-hint, .pe-drape, .pe-drape-in),
+[data-cz-page="annals"][data-motion="off"] .pe-part::before { transition: none; }
+[data-cz-page="annals"][data-motion="off"] :is(.pe-drape, .pe-part.is-open .pe-drape) { clip-path: none; }
+[data-cz-page="annals"][data-motion="off"] .pe-drape-in { transform: none; }
 
 @media (prefers-reduced-motion: reduce) {
   [data-cz-page="annals"] .cb-title::after { animation: none !important; }

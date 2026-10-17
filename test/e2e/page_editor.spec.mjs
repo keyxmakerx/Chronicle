@@ -89,6 +89,7 @@ async function withPage(opts, fn) {
     const unexpected = [];
     const pageErrors = [];
     const puts = [];
+    const searches = [];
     page.on('pageerror', (err) => pageErrors.push(err.message));
     await page.route('**/*', async (route) => {
       const req = route.request();
@@ -99,19 +100,24 @@ async function withPage(opts, fn) {
         const type = p.endsWith('.css') ? 'text/css' : 'text/javascript';
         return route.fulfill({ status: 200, contentType: type, body: readFileSync(join(repoRoot, p.slice(1)), 'utf8') });
       }
-      if (p === `${BASE}/e1/aliases` && req.method() === 'GET') return json({ aliases: [{ alias: 'the Grey Gull' }] });
+      if (p === `${BASE}/e1/aliases` && req.method() === 'GET') {
+        return json({ aliases: (opts.aliases || ['the Grey Gull']).map((alias) => ({ alias })) });
+      }
       if (req.method() === 'PUT' && (p === `${BASE}/e1/aliases` || p === `${BASE}/e1/metadata`)) {
         const body = JSON.parse(req.postData() || '{}');
         puts.push({ path: p.slice(BASE.length + 4), body });
         return json({ status: 'ok', name: body.name });
       }
-      if (p === `${BASE}/search`) return json({ results: [{ id: 'p1', name: 'Highwater' }, { id: 'p2', name: 'The Salt Coast' }, { id: 'e1', name: 'Mara Vell' }] });
+      if (p === `${BASE}/search`) {
+        searches.push(new URL(req.url()).search);
+        return json({ results: [{ id: 'p1', name: 'Highwater' }, { id: 'p2', name: 'The Salt Coast' }, { id: 'e1', name: 'Mara Vell' }], total: opts.total || 3 });
+      }
       unexpected.push(`${req.method()} ${p}`);
       return route.fulfill({ status: 404, body: '' });
     });
     await page.goto('https://chronicle.test/page');
     await page.waitForFunction(() => window.Chronicle && window.Chronicle._pageEditor && document.querySelector('[data-widget="aliases"]').textContent.includes('Gull'));
-    await fn(page, puts);
+    await fn(page, puts, searches);
     assert.deepEqual(unexpected, [], 'no unexpected requests');
     assert.deepEqual(pageErrors, [], 'no uncaught errors');
   } finally {
@@ -169,6 +175,48 @@ test('a half-typed other name waits; a whole one saves the list', { timeout: 300
     await page.keyboard.type('ide');
     await page.waitForFunction(() => document.querySelector('[data-pe-saved]').textContent.includes('Saved'));
     assert.deepEqual(puts, [{ path: 'aliases', body: { aliases: ['the Grey Gull', 'Tide'] } }]);
+  });
+});
+
+test('opening and closing the header without a change sends nothing', { timeout: 30000 }, async () => {
+  await withPage({ aliases: ['the Grey Gull', 'Smith, John'] }, async (page, puts) => {
+    await page.click('[data-pe-edit]');
+    await page.click('[data-pe-pen]');
+    await page.waitForFunction(() => !document.querySelector('[data-pe-f="aka"]').disabled);
+    await page.click('[data-pe-f="aka"]');
+    await page.click('[data-pe-f="label"]');
+    await page.keyboard.press('Escape');
+    await page.click('[data-pe-edit]');
+    await page.waitForTimeout(1200);
+    assert.deepEqual(puts, []);
+  });
+});
+
+test('a saved other name with a comma in it stays whole', { timeout: 30000 }, async () => {
+  await withPage({ aliases: ['the Grey Gull', 'Smith, John'] }, async (page, puts) => {
+    await page.click('[data-pe-edit]');
+    await page.click('[data-pe-pen]');
+    await page.waitForFunction(() => !document.querySelector('[data-pe-f="aka"]').disabled);
+    await page.click('[data-pe-f="aka"]');
+    await page.keyboard.press('End');
+    await page.keyboard.type(', Jack');
+    await page.waitForFunction(() => document.querySelector('[data-pe-saved]').textContent.includes('Saved'));
+    assert.deepEqual(puts, [{ path: 'aliases', body: { aliases: ['the Grey Gull', 'Smith, John', 'Jack'] } }]);
+  });
+});
+
+test('the parent list offers pages only and says when more match', { timeout: 30000 }, async () => {
+  await withPage({ total: 40 }, async (page, puts, searches) => {
+    await page.click('[data-pe-edit]');
+    await page.click('[data-pe-pen]');
+    await page.click('[data-pe-f="parent"]');
+    await page.waitForSelector('#pe-parent-list:not([hidden]) [role="option"]');
+    assert.ok(searches.length > 0 && searches.every((q) => new URLSearchParams(q).get('pages') === '1'), searches.join(' '));
+    assert.equal(await page.textContent('#pe-parent-list .pe-opt-note'), 'More pages match. Type to narrow the list.');
+    await page.keyboard.press('ArrowUp');
+    assert.equal(await page.textContent('#pe-parent-list .is-active'), 'The Salt Coast', 'Up from the field goes to the last page');
+    await page.keyboard.press('ArrowDown');
+    assert.equal(await page.textContent('#pe-parent-list .is-active'), 'No parent page');
   });
 });
 

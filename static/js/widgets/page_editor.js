@@ -48,17 +48,30 @@
     return n;
   }
 
+  function commaKey(s) {
+    return s.split(',').map(function (x) { return x.trim(); }).join(',').toLowerCase();
+  }
+
   // splitAliases reads the comma-separated field as the list the server
-  // stores: trimmed, empties dropped, the first of any repeat kept.
-  function splitAliases(text) {
-    var seen = {}, out = [];
-    String(text || '').split(',').forEach(function (a) {
-      a = a.replace(/\s+/g, ' ').trim();
+  // stores: trimmed, empties dropped, the first of any repeat kept. A saved
+  // name that holds a comma itself ("Smith, John", from known) stays whole;
+  // commas typed now split.
+  function splitAliases(text, known) {
+    var whole = {}, seen = {}, out = [];
+    (known || []).forEach(function (k) { if (k.indexOf(',') >= 0) whole[commaKey(k)] = true; });
+    var parts = String(text || '').split(',');
+    for (var i = 0; i < parts.length; i++) {
+      var a = parts[i];
+      for (var j = parts.length; j > i + 1; j--) {
+        var run = parts.slice(i, j).join(',');
+        if (whole[commaKey(run)]) { a = run; i = j - 1; break; }
+      }
+      a = a.trim();
       var k = a.toLowerCase();
-      if (!a || seen[k]) return;
+      if (!a || seen[k]) continue;
       seen[k] = true;
       out.push(a);
-    });
+    }
     return out;
   }
 
@@ -142,24 +155,25 @@
     el.textContent = '';
   }
 
-  // fail says what was not saved: briefly in the bar, which keeps its width,
-  // and in full in a notice.
-  function fail(S, msg) {
-    S.failed = msg;
+  // fail says what a field could not save: briefly in the bar, which keeps
+  // its width, and in full in a notice.
+  function fail(f, msg) {
+    f.error = msg;
     if (C.notify) C.notify(msg, 'error', { duration: 8000 });
   }
 
   function settle(S) {
-    var busy = false, waiting = false;
+    var busy = false, waiting = false, bad = '';
     for (var k in S.fields) {
       var f = S.fields[k];
       if (f.busy) busy = true;
       if (f.timer || f.busy) waiting = true;
+      if (f.error) bad = f.error;
     }
     if (waiting) { if (C.markDirty) C.markDirty(DIRTY_ID); }
     else if (C.markClean) C.markClean(DIRTY_ID);
     if (busy) note(S, 'busy');
-    else if (S.failed) note(S, 'bad', S.failed);
+    else if (bad) note(S, 'bad', bad);
     else if (S.didSave) { S.didSave = false; note(S, 'ok'); }
   }
 
@@ -169,7 +183,7 @@
   // same(a, b), check(v) why it can't be saved yet or '', put(v) the save,
   // after(v, data) once saved, show(v) puts a value back on the page.
   function field(S, key, el, o) {
-    var f = { key: key, el: el, saved: o.saved, timer: 0, busy: false, again: false };
+    var f = { key: key, el: el, saved: o.saved, timer: 0, busy: false, again: false, error: '', refused: null };
     function same(a, b) { return o.same ? o.same(a, b) : a === b; }
     f.change = function (delay) {
       clearTimeout(f.timer);
@@ -179,19 +193,28 @@
     f.flush = function () {
       clearTimeout(f.timer);
       f.timer = 0;
-      var v = o.read();
-      if (same(v, f.saved) || (o.check && o.check(v))) { settle(S); return; }
+      // While a save is out, the next one waits for it and is measured
+      // against what it saved.
       if (f.busy) { f.again = true; return; }
+      var v = o.read();
+      // Back to what is saved, there is nothing left to say was not saved.
+      if (same(v, f.saved)) { f.error = ''; f.refused = null; settle(S); return; }
+      // A value the server refused is not sent again until it changes.
+      if ((f.refused !== null && same(v, f.refused)) || (o.check && o.check(v))) { settle(S); return; }
       f.busy = true;
+      f.refused = null;
       settle(S);
       o.put(v).then(function (data) {
         f.saved = v;
-        S.failed = '';
+        f.error = '';
         S.didSave = true;
         if (o.after) o.after(v, data);
       }, function (err) {
-        fail(S, 'Couldn’t save ' + WHAT[key] + ': ' + err.message);
+        f.refused = v;
+        fail(f, 'Couldn’t save ' + WHAT[key] + ': ' + err.message);
         if (!f.open()) o.show(f.saved);
+      }).catch(function () {
+        // Showing a saved value elsewhere failed; the save itself stands.
       }).then(function () {
         f.busy = false;
         if (f.again) { f.again = false; f.flush(); }
@@ -206,7 +229,7 @@
         clearTimeout(f.timer);
         f.timer = 0;
         o.show(f.saved);
-        fail(S, 'Not saved: ' + why);
+        fail(f, 'Not saved: ' + why);
         settle(S);
         return;
       }
@@ -245,7 +268,8 @@
         read: function () { return label.value.trim(); },
         put: function (v) { return send(meta, 'PUT', metadataBody('label', v)); },
         after: function (v) {
-          var shown = document.querySelectorAll('[data-page-label]');
+          if (!S.page.isConnected) return;
+          var shown = S.page.querySelectorAll('[data-page-label]');
           for (var i = 0; i < shown.length; i++) { shown[i].textContent = v; shown[i].hidden = v === ''; }
         },
         show: function (v) { label.value = v; }
@@ -254,16 +278,20 @@
     if (aka) {
       field(S, 'aka', aka, {
         saved: [],
-        read: function () { return H.akaLoaded ? splitAliases(aka.value) : S.fields.aka.saved; },
+        // Untouched text is the saved list, however it splits.
+        read: function () {
+          if (!H.akaLoaded || aka.value === H.akaText) return S.fields.aka.saved;
+          return splitAliases(aka.value, S.fields.aka.saved);
+        },
         same: function (a, b) { return a.join('\n') === b.join('\n'); },
         check: aliasProblem,
         put: function (v) { return send(S.bar.getAttribute('data-aliases-endpoint'), 'PUT', { aliases: v }); },
         after: function () {
           if (C.invalidateAutoLinkCache) C.invalidateAutoLinkCache(S.bar.getAttribute('data-campaign-id'));
           var chips = part.querySelector('[data-widget="aliases"]');
-          if (chips && C.destroyWidget && C.mountWidget) { C.destroyWidget(chips); C.mountWidget(chips); }
+          if (chips && chips.isConnected && C.destroyWidget && C.mountWidget) { C.destroyWidget(chips); C.mountWidget(chips); }
         },
-        show: function (v) { if (H.akaLoaded) aka.value = v.join(', '); }
+        show: function (v) { if (H.akaLoaded) H.akaText = aka.value = v.join(', '); }
       });
     }
     if (parent) {
@@ -281,18 +309,20 @@
     }
   }
 
-  // renamed carries a saved name to everything else on the page that shows it.
+  // renamed carries a saved name to everything else on the page that shows
+  // it. A save that lands after the page was left touches nothing of the next.
   function renamed(S, name) {
     var old = S.bar.getAttribute('data-name') || '';
-    var crumbs = document.querySelectorAll('[data-page-crumb]');
+    S.bar.setAttribute('data-name', name);
+    if (!S.page.isConnected) return;
+    var crumbs = S.page.querySelectorAll('[data-page-crumb]');
     for (var i = 0; i < crumbs.length; i++) crumbs[i].textContent = name;
     var id = S.bar.getAttribute('data-entity-id');
-    var stars = document.querySelectorAll('[data-favorite-toggle]');
+    var stars = S.page.querySelectorAll('[data-favorite-toggle]');
     for (var j = 0; j < stars.length; j++) {
       if (stars[j].getAttribute('data-favorite-toggle') === id) stars[j].setAttribute('data-entity-name', name);
     }
     if (old && document.title.indexOf(old) === 0) document.title = name + document.title.slice(old.length);
-    S.bar.setAttribute('data-name', name);
     document.dispatchEvent(new CustomEvent('chronicle:page-renamed', { bubbles: true, detail: { entityId: id, name: name } }));
   }
 
@@ -305,7 +335,7 @@
       .then(function (data) {
         var list = ((data && data.aliases) || []).map(function (a) { return a.alias; });
         S.fields.aka.saved = list;
-        H.aka.value = list.join(', ');
+        H.akaText = H.aka.value = list.join(', ');
         H.akaLoaded = true;
         H.aka.disabled = false;
       })
@@ -324,7 +354,7 @@
     if (!on) { H.parent.removeAttribute('aria-activedescendant'); H.active = -1; }
   }
 
-  function renderList(S, results, failed) {
+  function renderList(S, results, failed, total) {
     var H = S.header, list = H.list;
     var self = S.bar.getAttribute('data-entity-id');
     list.textContent = '';
@@ -342,11 +372,14 @@
       li.textContent = o.id === '' ? 'No parent page' : o.name;
       list.appendChild(li);
     });
-    if (failed || (results && results.length === 0)) {
+    var say = failed ? 'Couldn’t search the pages. Try again.'
+      : results && results.length === 0 ? 'No pages match.'
+      : results && total > results.length ? 'More pages match. Type to narrow the list.' : '';
+    if (say) {
       var m = document.createElement('li');
       m.className = 'pe-opt-note';
       m.setAttribute('role', 'presentation');
-      m.textContent = failed ? 'Couldn’t search the pages. Try again.' : 'No pages match.';
+      m.textContent = say;
       list.appendChild(m);
     }
     H.active = -1;
@@ -361,9 +394,10 @@
       // The search needs two letters; fewer lists the first pages by name.
       if (q.length < 2 || q === H.parentName) q = '';
       var seq = H.seq = (H.seq || 0) + 1;
-      C.apiFetch(S.bar.getAttribute('data-search-endpoint') + '?q=' + encodeURIComponent(q), { headers: { Accept: 'application/json' } })
+      // pages=1 leaves out maps, timelines and the rest, which a page can't sit under.
+      C.apiFetch(S.bar.getAttribute('data-search-endpoint') + '?pages=1&q=' + encodeURIComponent(q), { headers: { Accept: 'application/json' } })
         .then(function (res) { return res.ok ? res.json() : Promise.reject(new Error('search')); })
-        .then(function (data) { if (seq === H.seq && S.open) renderList(S, (data && data.results) || []); })
+        .then(function (data) { if (seq === H.seq && S.open) renderList(S, (data && data.results) || [], false, (data && data.total) || 0); })
         .catch(function () { if (seq === H.seq && S.open) renderList(S, [], true); });
     }, 200);
   }
@@ -462,7 +496,11 @@
 
   function setEditing(S, on) {
     if (!on) closePart(S, false);
-    else if (S.failed) { S.failed = ''; note(S, ''); }
+    else {
+      // A new round of editing starts without the last round's Not saved.
+      for (var k in S.fields) S.fields[k].error = '';
+      note(S, '');
+    }
     S.editing = on;
     S.page.toggleAttribute('data-editing', on);
     setMarked(S, false);
@@ -516,7 +554,9 @@
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
       if (!listOpen(S)) { searchParents(S); return; }
-      setActive(S, H.active + (e.key === 'ArrowDown' ? 1 : -1));
+      var down = e.key === 'ArrowDown';
+      // From the field, Down goes to the first option and Up to the last.
+      setActive(S, H.active < 0 ? (down ? 0 : -1) : H.active + (down ? 1 : -1));
     } else if (e.key === 'Enter' && listOpen(S) && H.active >= 0) {
       e.preventDefault();
       pick(S, H.active);
@@ -557,7 +597,8 @@
   }
 
   function onKey(S, e) {
-    if (!S.editing || !S.page.isConnected) return;
+    // A key something else already handled, a dialog's Escape say, is not ours.
+    if (!S.editing || !S.page.isConnected || e.defaultPrevented) return;
     var t = e.target;
     if (t !== document.body && t !== document.documentElement && !S.page.contains(t)) return;
     var act = keyAction(e, typingIn(t));
@@ -565,6 +606,9 @@
       e.preventDefault();
       setMarked(S, !S.page.hasAttribute('data-pe-marked'));
     } else if (act === 'back') {
+      // Escape in a field outside the open part, the Eras search say, is
+      // that field's own.
+      if (typingIn(t) && !(S.open && S.open.contains(t))) return;
       // The Eras panel closes on Escape by itself; that is this press.
       var eras = document.getElementById('page-eras');
       if (eras && !eras.hidden && eras.classList.contains('is-open')) return;
@@ -583,14 +627,15 @@
     init: function (bar) {
       var page = bar.closest('[data-pe-page]');
       if (!page || live.has(bar)) return;
-      // A layout with no part to edit has nothing for Edit page to do.
-      if (!page.querySelector('[data-pe-part]')) { bar.hidden = true; return; }
+      // A layout with no part to edit has nothing for Edit page to do; the
+      // badge beside it stays.
+      if (!page.querySelector('[data-pe-part]')) { bar.setAttribute('data-pe-off', ''); return; }
       var S = {
         page: page, bar: bar, fields: {}, open: null, editing: false,
         edit: bar.querySelector('[data-pe-edit]'),
         mark: bar.querySelector('[data-pe-mark]'),
         saved: bar.querySelector('[data-pe-saved]'),
-        failed: '', didSave: false, noteTimer: 0
+        didSave: false, noteTimer: 0
       };
       var head = page.querySelector('[data-pe-part="header"]');
       if (head) {
