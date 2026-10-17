@@ -159,7 +159,7 @@ func TestDashCalendarCards_VisitorGetsNoAppLink(t *testing.T) {
 				if got := strings.Contains(out, "/apps/calendar"); got != tt.wantLink {
 					t.Errorf("link to the calendar app = %v, want %v: %s", got, tt.wantLink, out)
 				}
-				if !strings.Contains(out, "data-drop-if-empty") || !strings.Contains(out, `data-block="calendar"`) {
+				if !strings.Contains(out, "data-drop-if-empty") || !strings.Contains(out, `data-block="upcoming"`) {
 					t.Errorf("lazy slot must be marked to drop its card when empty: %s", out)
 				}
 			}

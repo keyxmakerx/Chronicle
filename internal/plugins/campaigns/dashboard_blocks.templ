@@ -337,7 +337,7 @@ templ calendarCardUnavailableState(minHeightPx int) {
 // Config: limit (int, default 5).
 templ dashCalendarPreview(cc *CampaignContext, config map[string]any) {
 	if !calendarCardUnavailable(ctx) || cc.MemberRole >= RoleOwner {
-		<div data-block="calendar">
+		<div data-block="upcoming">
 			<div class="flex items-center justify-between mb-3">
 				<h2 class="cb-head text-sm font-semibold text-fg-secondary uppercase tracking-wider">
 					<i class="fa-solid fa-calendar-days mr-1.5"></i>Upcoming Events
@@ -568,7 +568,7 @@ func dashGraphHeight(config map[string]any) int {
 // Config: limit (int, default 10, max 20), height (int, default 400).
 templ dashCalendarFull(cc *CampaignContext, config map[string]any) {
 	if !calendarCardUnavailable(ctx) || cc.MemberRole >= RoleOwner {
-		<div data-block="calendar">
+		<div data-block="upcoming">
 			<div class="flex items-center justify-between mb-3">
 				<h2 class="cb-head text-sm font-semibold text-fg-secondary uppercase tracking-wider">
 					<i class="fa-solid fa-calendar-days mr-1.5"></i>Calendar
