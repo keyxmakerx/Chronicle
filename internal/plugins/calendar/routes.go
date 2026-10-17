@@ -155,6 +155,11 @@ func registerCalendarJSONRoutes(g *echo.Group, h *Handler) {
 	g.POST("/calendars/:calid/events", h.CreateEventAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	g.PUT("/calendars/:calid/events/:eid", h.UpdateEventAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	g.DELETE("/calendars/:calid/events/:eid", h.DeleteEventAPI, campaigns.RequireRole(campaigns.RoleOwner))
+	// Pages tied to an event: read like the event, changed like it (Scribe+;
+	// the service also requires the event be visible to the caller).
+	g.GET("/calendars/:calid/events/:eid/pages", h.ListEventPagesAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	g.POST("/calendars/:calid/events/:eid/pages", h.LinkEventPageAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	g.DELETE("/calendars/:calid/events/:eid/pages/:entityID", h.UnlinkEventPageAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	// "This one only": skip or move one occurrence of a repeating event, or
 	// undo that. Gated like editing the event (Scribe+; the service also
 	// requires the event be visible to the caller).

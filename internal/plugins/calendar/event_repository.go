@@ -75,6 +75,10 @@ type EventRepository interface {
 	// is role-filtered like the other event lists.
 	EventsForEntity(ctx context.Context, campaignID, entityID string, role int) ([]EntityEventTie, error)
 	ErasForEntity(ctx context.Context, campaignID, entityID string) ([]EntityEraTie, error)
+	// ListEventsForPage returns a calendar's events that belong to a page:
+	// those whose linked page is entityID and those tied to it, each once,
+	// role-filtered like the other event lists, in date order.
+	ListEventsForPage(ctx context.Context, calendarID, entityID string, role int) ([]Event, error)
 }
 
 // eventRepo is the MariaDB implementation of EventRepository.
@@ -550,6 +554,30 @@ func (r *eventRepo) ListEventsForEntity(ctx context.Context, entityID string, ro
 		ORDER BY e.year, e.month, e.day`, visFilter)
 
 	rows, err := r.db.QueryContext(ctx, query, entityID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	return scanEvents(rows)
+}
+
+// ListEventsForPage: see the EventRepository doc comment. The linked-page
+// column and the tie table are read together so an event linked both ways
+// is still one row.
+func (r *eventRepo) ListEventsForPage(ctx context.Context, calendarID, entityID string, role int) ([]Event, error) {
+	visFilter := "AND e.visibility = 'everyone'"
+	if permissions.CanSeeDmOnly(role) {
+		visFilter = ""
+	}
+	query := `
+		SELECT ` + eventCols + `
+		FROM calendar_events e ` + eventJoins + `
+		WHERE e.calendar_id = ?
+		  AND (e.entity_id = ? OR e.id IN (SELECT l.event_id FROM entity_event_links l WHERE l.entity_id = ?))
+		  ` + visFilter + `
+		ORDER BY e.year, e.month, e.day, COALESCE(e.start_hour, 99), COALESCE(e.start_minute, 99), e.name`
+	rows, err := r.db.QueryContext(ctx, query, calendarID, entityID, entityID)
 	if err != nil {
 		return nil, err
 	}
