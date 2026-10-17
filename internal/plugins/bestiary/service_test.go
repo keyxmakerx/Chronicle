@@ -329,7 +329,7 @@ type mockEntityCreator struct {
 	createFn func(ctx context.Context, campaignID, userID, name string, statblock json.RawMessage) (string, error)
 }
 
-func (m *mockEntityCreator) CreateFromStatblock(ctx context.Context, campaignID, userID, name string, statblock json.RawMessage) (string, error) {
+func (m *mockEntityCreator) CreateFromStatblock(ctx context.Context, campaignID, userID, name, _ string, statblock json.RawMessage) (string, error) {
 	if m.createFn != nil {
 		return m.createFn(ctx, campaignID, userID, name, statblock)
 	}

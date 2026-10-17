@@ -56,6 +56,9 @@ type EntityService interface {
 	// ReorderEntityType densely re-sequences a sub-category type's position
 	// among its parent's children. sortOrder is a desired 0-based index.
 	ReorderEntityType(ctx context.Context, campaignID string, typeID int, sortOrder int) error
+	// RestoreEntityTypePlacement sets a type's sort order, default flag and
+	// on/off state as a campaign export recorded them.
+	RestoreEntityTypePlacement(ctx context.Context, campaignID string, typeID, sortOrder int, isDefault, enabled bool) error
 
 	// Backlinks — always campaign-scoped; mention ids alone are not.
 	GetBacklinks(ctx context.Context, campaignID, entityID string, role int, userID string) ([]Entity, error)
@@ -73,6 +76,9 @@ type EntityService interface {
 	// PlacePageExtras places the page pieces that used to be drawn outside
 	// the layout into a campaign's entity types (see page_extras.go).
 	PlacePageExtras(ctx context.Context, campaignID string, plans map[int]PageExtrasPlan) (int, error)
+	// PlaceSystemPanels adds only the Game System Panels block to the given
+	// types (see page_extras.go).
+	PlaceSystemPanels(ctx context.Context, campaignID string, typeIDs []int) (int, error)
 	GetEntityTypeBySlug(ctx context.Context, campaignID, slug string) (*EntityType, error)
 	GetEntityTypeByID(ctx context.Context, id int) (*EntityType, error)
 	GetEntityTypesByPresetCategory(ctx context.Context, campaignID, category string) ([]EntityType, error)
@@ -985,6 +991,22 @@ func (s *entityService) ReorderEntityType(ctx context.Context, campaignID string
 
 	if err := s.types.ResequenceChildTypes(ctx, campaignID, ordered); err != nil {
 		return apperror.NewInternal(fmt.Errorf("re-sequencing sub-category types: %w", err))
+	}
+	return nil
+}
+
+// RestoreEntityTypePlacement writes the position, default flag and on/off
+// state an export recorded. No form edits these, so only an import calls it.
+func (s *entityService) RestoreEntityTypePlacement(ctx context.Context, campaignID string, typeID, sortOrder int, isDefault, enabled bool) error {
+	et, err := s.types.FindByID(ctx, typeID)
+	if err != nil {
+		return apperror.NewNotFound("entity type not found")
+	}
+	if et.CampaignID != campaignID {
+		return apperror.NewNotFound("entity type not found")
+	}
+	if err := s.types.UpdatePlacement(ctx, typeID, sortOrder, isDefault, enabled); err != nil {
+		return apperror.NewInternal(fmt.Errorf("restoring entity type placement: %w", err))
 	}
 	return nil
 }
@@ -2075,8 +2097,9 @@ func (s *entityService) CreateEntityType(ctx context.Context, campaignID string,
 	}
 
 	// Validate parent type if provided (sub-type hierarchy).
+	var parent *EntityType
 	if input.ParentTypeID != nil {
-		parent, err := s.types.FindByID(ctx, *input.ParentTypeID)
+		parent, err = s.types.FindByID(ctx, *input.ParentTypeID)
 		if err != nil {
 			return nil, apperror.NewBadRequest("parent entity type not found")
 		}
@@ -2135,6 +2158,11 @@ func (s *entityService) CreateEntityType(ctx context.Context, campaignID string,
 	layout := DefaultLayout()
 	if pcType {
 		layout = CharacterLayout()
+	}
+	// A sub-type of an NPC type is an NPC type too, so it shows the game
+	// system's panels where its parent does.
+	if parent != nil && !pcType && layoutPlacesBlock(parent.Layout, BlockSystemPanels) && !layoutPlacesBlock(layout, BlockSystemPanels) {
+		layout = insertAfterTitle(layout, TemplateBlock{ID: "blk-system-panels", Type: BlockSystemPanels})
 	}
 
 	et := &EntityType{

@@ -78,7 +78,8 @@ func (f *fakeNoteService) Update(_ context.Context, id string, _ permissions.Vie
 }
 
 // stubCampaignSvc is the minimum campaigns.CampaignService the export/import
-// service touches: GetByID for the export envelope, Create for the import.
+// service touches: GetByID for the export envelope, Create and the character
+// lists for the import.
 type stubCampaignSvc struct {
 	campaigns.CampaignService
 	campaign campaigns.Campaign
@@ -92,6 +93,12 @@ func (s *stubCampaignSvc) GetByID(context.Context, string) (*campaigns.Campaign,
 func (s *stubCampaignSvc) Create(_ context.Context, _ string, in campaigns.CreateCampaignInput) (*campaigns.Campaign, error) {
 	return &campaigns.Campaign{ID: "imported-campaign", Name: in.Name}, nil
 }
+
+func (s *stubCampaignSvc) UpdateCharacterLists(context.Context, string, []int, []int) error {
+	return nil
+}
+
+func (s *stubCampaignSvc) ClearCharacterLists(context.Context, string) error { return nil }
 
 func strptr(s string) *string { return &s }
 
