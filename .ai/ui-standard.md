@@ -208,6 +208,13 @@ leaving the list for another page.
 - **Find with "/".** A workshop with many settings has Find: "/" outside a
   text field, or the Find button, opens it, and it jumps to the setting by
   name.
+- **Single-key shortcuts never take a typed letter.** A shortcut with no
+  Ctrl, Cmd or Alt (E, "/", ?) does nothing while focus is in a text field,
+  a text area, a select or anything editable (`isContentEditable`), and
+  never calls `preventDefault` there, so the letter is typed. It works only
+  in its own view (the page being edited, the open workshop), never on keys
+  pressed anywhere else on the page. Each one also has a button, so the
+  shortcut is never the only way.
 - **Preview who and where.** A workshop that changes what people see offers
   Phone, Tablet and Computer, and "A player", so the owner sees what each
   gets before saving.
