@@ -40,7 +40,7 @@ links `calendar-view.css` for the folded month.
   the name, lighter in dark mode. Kind chips hide and show kinds.
 - **The month fold** builds the calendar page's own grid markup
   (`.cal-v5 .cal`) and asks `calendarDate` which events fall on each day.
-- **The month** opens from a quiet text line right above where it unfolds ("Show Ches 1492 on the calendar"), not a button.
+- **The month** is a drawer hanging from a tab right above it ("Show Ches 1492 on the calendar"), not a button.
 - **Closing** is always on purpose: Close, Escape (the last thing opened
   first), or clicking the open event again.
 - **Motion:** Full eases and coasts; Calm settles faster and drops travel;

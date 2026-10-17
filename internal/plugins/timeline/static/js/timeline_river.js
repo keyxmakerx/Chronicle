@@ -513,7 +513,7 @@
 
     // The month under the line is the calendar page's own month grid, in its
     // own signed look (calendar-view.css), with that month's calendar events.
-    // The month opens from a quiet line right above where it unfolds, naming
+    // The month is a drawer hanging from a tab right above it, which names
     // the month it will show.
     _foldMonth: function () { var p = this.geo.parts(this.today != null ? this.today : this.view.t0); return { y: p.y, m: p.m }; },
 
