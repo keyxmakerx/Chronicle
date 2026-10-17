@@ -57,6 +57,7 @@ type APIHandler struct {
 	shopBuyer            ShopBuyAPIService
 	dmScreen             DMScreenProvider
 	systemState          SystemStateReader
+	systemStateWriter    SystemStateWriter
 	history              *SyncHistoryHandler
 	quests               *QuestAPIHandler
 	encounters           *EncounterAPIHandler
