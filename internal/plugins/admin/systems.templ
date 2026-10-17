@@ -74,7 +74,7 @@ templ AdminSystemsPage(entries []SystemDiagnosticEntry, events []systems.LoadEve
 							</thead>
 							<tbody>
 								for _, e := range entries {
-									<tr class={ "border-b border-edge/50", templ.KV("bg-amber-50/50 dark:bg-amber-950/20", !e.Instantiated && e.Status == "available") }>
+									<tr class={ "border-b border-edge-light", templ.KV("bg-amber-50/50 dark:bg-amber-950/20", !e.Instantiated && e.Status == "available") }>
 										<td class="px-4 py-2.5 font-medium text-fg">{ e.Name }</td>
 										<td class="px-4 py-2.5 font-mono text-xs text-fg-muted">{ e.ID }</td>
 										<td class="px-4 py-2.5 text-fg-secondary">{ e.Version }</td>
@@ -145,7 +145,7 @@ templ AdminSystemsPage(entries []SystemDiagnosticEntry, events []systems.LoadEve
 							</thead>
 							<tbody>
 								for _, ev := range events {
-									<tr class={ "border-b border-edge/50", templ.KV("bg-red-50/50 dark:bg-red-950/20", ev.Kind == systems.EventFailed) }>
+									<tr class={ "border-b border-edge-light", templ.KV("bg-red-50/50 dark:bg-red-950/20", ev.Kind == systems.EventFailed) }>
 										<td class="px-4 py-2.5 text-fg-muted text-xs whitespace-nowrap">{ ev.Timestamp.Format("15:04:05") }</td>
 										<td class="px-4 py-2.5 font-mono text-xs">
 											if ev.Name != "" {
