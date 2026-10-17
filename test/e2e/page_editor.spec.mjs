@@ -220,6 +220,19 @@ test('the parent list offers pages only and says when more match', { timeout: 30
   });
 });
 
+test('a field clicked while the header opens keeps the focus', { timeout: 30000 }, async () => {
+  await withPage({}, async (page) => {
+    await page.click('[data-pe-edit]');
+    await page.click('[data-pe-pen]');
+    // Sooner than the name takes the focus on its own.
+    await page.$eval('[data-pe-f="parent"]', (e) => e.focus());
+    await page.waitForSelector('#pe-parent-list:not([hidden]) [role="option"]');
+    await page.waitForTimeout(150);
+    assert.equal(await page.evaluate(() => document.activeElement.getAttribute('data-pe-f')), 'parent');
+    assert.equal(await page.$eval('#pe-parent-list', (e) => e.hidden), false);
+  });
+});
+
 test('a parent picked from the list saves at once; Esc steps back one thing at a time', { timeout: 30000 }, async () => {
   await withPage({}, async (page, puts) => {
     await page.click('[data-pe-edit]');

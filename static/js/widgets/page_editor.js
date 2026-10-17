@@ -449,8 +449,10 @@
       H.h1.setAttribute('spellcheck', 'false');
       loadAliases(S);
       if (!('ontouchstart' in window)) {
+        // A field clicked while the part opens keeps the focus.
+        var from = document.activeElement;
         setTimeout(function () {
-          if (S.open !== part) return;
+          if (S.open !== part || document.activeElement !== from) return;
           H.h1.focus({ preventScroll: true });
           var r = document.createRange();
           r.selectNodeContents(H.h1);
