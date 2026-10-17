@@ -16,13 +16,19 @@ import { pw, chromePath, skip } from './_browser_env.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
+// The Notes tab's selectors, read from the template so the test fails if they
+// drift from what entity_notes.js draws.
+const TEMPL = readFileSync(join(root, 'internal/plugins/entities/page_tabs.templ'), 'utf8');
+const NOTES_TAB = TEMPL.match(/Key: "notes".*Count: "([^"]+)", Act: `([^`]+)`/);
+const [, NOTES_COUNT, NOTES_ACT] = NOTES_TAB;
+
 
 function tab(key, label, count, act) {
   const sel = key === 'notes' ? 'aria-selected="true"' : 'aria-selected="false" tabindex="-1"';
   return `<button type="button" class="pt-tab" role="tab" id="pt-tab-${key}" ${sel} data-pt-tab="${key}" data-pt-count='${count}' data-pt-act='${act}'>${label} <span class="pt-n" data-pt-n></span></button>`;
 }
 const MARKUP = `<section class="pt" data-widget="page-tabs"><div class="pt-bar"><div class="pt-tabs" role="tablist">
-${tab('notes', 'Notes', '.card.divide-y > [data-note-id]', '[data-action="toggle-compose"]')}
+${tab('notes', 'Notes', NOTES_COUNT, NOTES_ACT)}
 ${tab('items', 'Items', 'li[data-item-id]', '[data-open-give]')}
 ${tab('files', 'Files', '[data-pf-row]', '[data-pf-attach]')}
 ${tab('posts', 'Posts', '.card[data-post-id]', '[data-action="create-post"]')}
@@ -39,7 +45,8 @@ ${tab('links', 'Links', '', '.rel-add-btn')}
 
 // What each piece draws once its fetch lands, shaped as the real widgets draw it.
 const PIECES = {
-  notesEmpty: `document.querySelector('[data-widget="entity-notes"]').innerHTML = '<div class="flex"><h3>Player Notes</h3><button data-action="toggle-compose" onclick="this.textContent = this.textContent === \\'New Note\\' ? \\'Cancel\\' : \\'New Note\\'">New Note</button></div><div class="card p-6">No notes yet.</div>'`,
+  notesEmpty: `document.querySelector('[data-widget="entity-notes"]').innerHTML = '<section class="en-block"><header class="en-head"><h3>Notes</h3><button type="button" data-en-act="new" onclick="this.dataset.pressed = 1">New note</button></header><div data-en-comp></div><div class="en-list" data-en-list><div class="en-empty">No notes yet.</div></div></section>'`,
+  notes: `document.querySelector('[data-en-list]').innerHTML = '<article class="en-note" data-en-id="n1">Owes the smith</article><article class="en-note" data-en-id="n2">Hates boats</article><article class="en-note is-leaving" data-en-id="n3">Deleted</article>'`,
   items: `(function () { var m = document.querySelector('[data-pt-pane="items"] [hx-trigger="load"]'); m.dispatchEvent(new CustomEvent('htmx:afterRequest', { bubbles: true })); m.outerHTML = '<section id="armory-panel-e1"><button data-open-give>Give an item</button><ul data-items><li data-item-id="1">Rope</li><li data-item-id="2">Torch</li></ul></section>'; })()`,
   itemsNone: `(function () { var m = document.querySelector('[data-pt-pane="items"] [hx-trigger="load"]'); m.dispatchEvent(new CustomEvent('htmx:afterRequest', { bubbles: true })); m.outerHTML = ''; })()`,
   files204: `document.querySelector('[data-pt-pane="files"] [hx-trigger="load"]').dispatchEvent(new CustomEvent('htmx:afterRequest', { bubbles: true }))`,
@@ -94,10 +101,9 @@ test('a tab the viewer picked holds while later pieces load', { skip }, async (t
 test('the action button presses the piece\'s own button and wears its label', { skip }, async (t) => {
   const p = await page(t);
   await load(p, 'notesEmpty');
-  assert.equal((await state(p)).press, 'New Note');
+  assert.equal((await state(p)).press, 'New note');
   await p.click('[data-pt-press]');
-  await load(p);
-  assert.equal((await state(p)).press, 'Cancel');
+  assert.equal(await p.getAttribute('[data-en-act="new"]', 'data-pressed'), '1');
   await p.click('#pt-tab-links');
   await load(p, 'links');
   assert.equal((await state(p)).press, 'Add Relation');
@@ -119,4 +125,19 @@ test('arrow keys move between visible tabs', { skip }, async (t) => {
   assert.equal((await state(p)).selected, 'files');
   await p.keyboard.press('End');
   assert.equal((await state(p)).selected, 'links');
+});
+
+test('the Notes tab counts the notes widget\'s rows, not one leaving', { skip }, async (t) => {
+  const p = await page(t);
+  await load(p, 'notesEmpty', 'notes', 'itemsNone', 'files204');
+  const s = await state(p);
+  assert.equal(s.counts.notes, '2');
+  assert.equal(s.selected, 'notes');
+});
+
+test('the Notes tab selectors match what entity_notes.js draws', () => {
+  const js = readFileSync(join(root, 'static/js/widgets/entity_notes.js'), 'utf8');
+  assert.match(js, /row\.className = 'en-note';\s*row\.setAttribute\('data-en-id'/);
+  assert.match(js, /data-en-act="new"/);
+  assert.equal(NOTES_ACT, '[data-en-act="new"]');
 });

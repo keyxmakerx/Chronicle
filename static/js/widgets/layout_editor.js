@@ -50,7 +50,7 @@
   var FALLBACK_DASHBOARD_BLOCKS = [
     { type: 'welcome_banner',   label: 'Welcome Banner',   icon: 'fa-flag',              desc: 'Campaign name & description' },
     { type: 'quick_actions',    label: 'Quick Actions',    icon: 'fa-bolt',              desc: 'All Pages / Members / Categories cards' },
-    { type: 'category_grid',    label: 'Category Grid',    icon: 'fa-grid-2',            desc: 'Quick-nav entity type grid' },
+    { type: 'category_grid',    label: 'Category Grid',    icon: 'fa-table-cells-large',            desc: 'Quick-nav entity type grid' },
     { type: 'recent_pages',     label: 'Recent Pages',     icon: 'fa-clock',             desc: 'Recently updated entities' },
     { type: 'entity_list',      label: 'Entity List',      icon: 'fa-list',              desc: 'Filtered list by category' },
     { type: 'text_block',       label: 'Text Block',       icon: 'fa-align-left',        desc: 'Custom rich text / HTML' },

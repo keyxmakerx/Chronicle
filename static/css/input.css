@@ -5618,7 +5618,7 @@ html[data-view-motion="calm"] .pl-chip, .nav-rm .pl-chip, html.rm .pl-chip, html
 .pt-pane { padding: 16px; min-width: 0; }
 .pt-pane[hidden], .pt-empty[hidden], .pt-none[hidden] { display: none; }
 .pt-empty, .pt-none { margin: 0; color: var(--color-text-muted); font-size: 13.5px; }
-.pt-pane [data-widget="entity-notes"] > .flex.items-center.justify-between.mb-3,
+.pt-pane [data-widget="entity-notes"] .en-head,
 .pt-pane [data-widget="entity-posts"] > .flex.items-center.justify-between.mb-3,
 .pt-pane [id^="armory-panel-"] > .flex.items-center.justify-between > h3,
 .pt-pane [data-open-give], .pt-pane #page-files-title, .pt-pane [data-pf-attach], .pt-pane .rel-add-btn,

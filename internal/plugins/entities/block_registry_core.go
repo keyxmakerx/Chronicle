@@ -281,7 +281,7 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 	}, nil)
 
 	r.Register(BlockMeta{
-		Type: "category_grid", Label: "Category Grid", Icon: "fa-grid-2",
+		Type: "category_grid", Label: "Category Grid", Icon: "fa-table-cells-large",
 		Description: "Quick-nav entity type grid",
 		Contexts:    []string{"dashboard"},
 		ConfigFields: []ConfigFieldMeta{
@@ -414,7 +414,7 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 	}, nil)
 
 	r.Register(BlockMeta{
-		Type: "entity_grid", Label: "Entity Grid", Icon: "fa-grid-2",
+		Type: "entity_grid", Label: "Entity Grid", Icon: "fa-table-cells-large",
 		Description: "All entities as card grid",
 		Contexts: []string{"dashboard"},
 		ConfigFields: []ConfigFieldMeta{
