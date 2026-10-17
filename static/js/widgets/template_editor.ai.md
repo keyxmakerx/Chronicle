@@ -116,6 +116,12 @@ Container data:
 }
 ```
 
+### Tile sections
+
+A row with `kind: "tiles"` is kept as it is: the editor shows a note with the tile
+count, offers no column picker, `changeRowLayout` ignores it, and saving leaves
+its kind and tiles untouched. Tiles are arranged in the tile layout editor.
+
 ### Default Layout
 
 If no layout exists, generates a default: one row with 8/4 split — left column has
@@ -183,6 +189,7 @@ preset replaces the canvas after a confirm and still needs a save.
 - `Chronicle.apiFetch()` — Requests with CSRF
 - Font Awesome — Block type and control icons
 - TailwindCSS — Utility classes
+- `static/css/input.css` — the `te-*` drop-indicator and container-zone styles
 
 ## Known limitations
 

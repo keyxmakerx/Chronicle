@@ -16,7 +16,7 @@ rendered for the Owner only:
 
 | Mount | Attributes | Behaviour |
 |---|---|---|
-| Page corner | `data-layout="corner"`, `data-endpoint`, `data-editable` | Reuses the server-rendered `[data-perm-corner-trigger]` chip; the editor unfolds from it as a popover. Outside click closes it only when nothing is saving or failed, else a "Not saved yet" warning shows; Escape always closes |
+| Page corner | `data-layout="corner"`, `data-endpoint`, `data-editable` | Reuses the server-rendered `[data-perm-corner-trigger]` chip; the editor unfolds from it as a popover. Outside click closes it only when nothing is saving or failed, else a "Not saved yet" warning shows; Escape always closes. With `data-category-dm-only="true"` (a DM-only category such as Adventures) the chip reads as DM only even when the page's own mode is everyone, and the tag-widening dot is hidden |
 
 Two more mounts in `plugins/entities/form.templ`:
 

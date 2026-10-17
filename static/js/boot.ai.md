@@ -15,7 +15,7 @@ sidebar active link highlighting, and shared utilities.
    elements and calls the matching widget's `init()`. Uses a `WeakMap` to
    prevent double-initialization.
 3. **HTMX integration:** After `htmx:afterSettle`, re-scans the swapped target
-   for new widgets. Before `htmx:beforeSwap`, destroys outgoing widgets.
+   for new widgets (and after `htmx:historyRestore`, scans the whole body). Before `htmx:beforeSwap`, destroys outgoing widgets.
 4. **Config parsing:** Collects `data-*` attributes from mount elements,
    converts kebab-case to camelCase, auto-parses booleans and numbers.
 5. **Loading on sight:** a `[data-widget]` mount whose widget isn't registered
@@ -56,6 +56,7 @@ sidebar active link highlighting, and shared utilities.
 | `DOMContentLoaded` | Listens | Initial widget mount scan |
 | `htmx:afterSettle` | Listens | Re-scan for new widgets after swap |
 | `htmx:beforeSwap` | Listens | Destroy outgoing widgets |
+| `htmx:historyRestore` | Listens | Back/Forward swaps in a whole body with no afterSettle, so mount widgets across `document.body` |
 | `htmx:pushedIntoHistory` | Listens | Sidebar highlight + navigation event |
 | `htmx:configRequest` | Listens | CSRF token injection |
 

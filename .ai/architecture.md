@@ -23,7 +23,7 @@ System or Widget (see root `CLAUDE.md` for what each tier is).
 │  └──────────────────────────────────────────────────────┘    │
 │                                                               │
 │  ┌──────────────────────────────────────────────────────┐    │
-│  │  PLUGINS -- Feature Applications (30)                  │    │
+│  │  PLUGINS -- Feature Applications (31)                  │    │
 │  │  auth/  campaigns/  entities/  calendar/  maps/        │    │
 │  │  admin/  addons/  syncapi/  media/  audit/             │    │
 │  │  settings/  timeline/  sessions/  packages/            │    │
