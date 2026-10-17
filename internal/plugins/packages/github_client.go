@@ -12,8 +12,10 @@ import (
 	"time"
 )
 
-// repoPattern extracts owner/repo from a GitHub URL.
-var repoPattern = regexp.MustCompile(`github\.com[/:]([^/]+)/([^/.]+)`)
+// repoPattern extracts owner/repo from a GitHub URL. Repository names may
+// contain dots (Chronicle-DnD-5.5e), so only GitHub's name characters end
+// the match; a trailing ".git" is stripped by parseRepo.
+var repoPattern = regexp.MustCompile(`github\.com[/:]([A-Za-z0-9-]+)/([A-Za-z0-9._-]+)`)
 
 // GitHubRelease represents a release from the GitHub Releases API.
 type GitHubRelease struct {
@@ -55,7 +57,13 @@ func parseRepo(repoURL string) (owner, repo string, err error) {
 	if len(matches) < 3 {
 		return "", "", fmt.Errorf("cannot parse GitHub repo from URL: %s", repoURL)
 	}
-	return matches[1], strings.TrimSuffix(matches[2], ".git"), nil
+	repo = strings.TrimSuffix(matches[2], ".git")
+	// The repo name becomes the package slug and a directory name, so a
+	// dot-only name must never get through.
+	if strings.Trim(repo, ".") == "" {
+		return "", "", fmt.Errorf("cannot parse GitHub repo from URL: %s", repoURL)
+	}
+	return matches[1], repo, nil
 }
 
 // ListReleases fetches all releases for a GitHub repository.
