@@ -132,8 +132,18 @@ would do.
 - **Long pages show their contents.** A page with several sections offers a
   contents rail or list that is easy to find without hunting (at the top or
   in the margin) and follows the reader.
-- **No emoji, anywhere.** Icons are monochrome Font Awesome; a symbol on
-  screen is never an emoji, in templates, scripts or messages.
+- **Things open from the content, not from a button.** A fold, a reason, a
+  "show all" or a detail opens from the thing it belongs to (its name, its
+  row, its heading) or from a quiet text control with no border, fill or
+  shadow. What opens grows out of what was clicked. A bordered button is only
+  for a real command ("Publish", "Add reason") or a value picker (a standing,
+  a name); a white, bordered, raised button with a chevron is never the way
+  to reveal more.
+- **Icons go only where a word won't.** An icon belongs in a margin or a
+  rail, or where there is no room for a word; everywhere else the word is
+  the control. Icons are monochrome Font Awesome.
+- **No emoji, anywhere.** A symbol on screen is never an emoji, in
+  templates, scripts or messages.
 
 ## What is on a page
 
