@@ -5,14 +5,27 @@ change is checked against this page; a change that departs from it needs a
 signed mockup that says so. Tokens and helpers named here are the shared
 pieces to reuse, not copy.
 
+This is the **Material** look: things on screen behave like physical sheets
+(they have an edge, sit at a height, cast a shadow from one light and move
+only the way a real sheet could), and the page is as minimal as it needs to
+be, not as minimal as possible. It grew from the Annals page look and is the
+only look new work is designed in. Two older looks are still on parts of the
+site and are replaced when a change touches them (under **Older looks**).
+
 ## How it should feel
 
-Seven rules every screen is judged against.
+Eight rules every screen is judged against.
 
-- **Quiet first.** Type, spacing and thin rules carry the structure; a box,
-  border or fill is there only when it means something (a fact panel, a
-  field, a selection, a tool). One colour, the campaign's accent, says where
-  you are and what you can act on.
+- **Minimal as needed, not as possible.** Type, spacing and thin rules carry
+  the structure. A box, edge or fill is there when it means something (a fact
+  panel, a field, a selection, a tool, a sheet that lifts above the page), so
+  a page is neither boxed all over nor bare. One colour, the campaign's
+  accent, says where you are and what you can act on.
+- **Everything is physical.** Every surface is a sheet with an edge and a
+  height, lit from one light above. Every move has a physical reason: it
+  shows where the thing was, where it goes, and what it slid over or out
+  from under. A sheet that opens over content lies on top of it; it never
+  shoves the content aside unless the content is making room on purpose.
 - **It answers at once.** Every click or key shows a change within a tenth of
   a second: a press, a colour, a spinner.
 - **Things come from somewhere and go back there.** A menu grows out of its
@@ -53,7 +66,9 @@ Every screen is one of two kinds, and is designed in that kind's register.
   model: a rail on the left, the work in the middle, an inspector on the
   right, one save bar). A workshop shows the page it changes as the real
   page, never an abstract grid or a form describing it.
-- **Paper is an optional extra, mostly for players**: a look some in-world
+- **Paper is an optional extra, mostly for players.** Every surface already
+  behaves like a sheet (The material rules); paper is only the optional
+  texture and colours: a look some in-world
   things can wear (hover cards, a character sheet, the Handbook) where a
   signed mockup gives it to them, never a default for a new feature and
   never a reason to restyle a tool. Where it exists it builds on the shared
@@ -63,6 +78,62 @@ Every screen is one of two kinds, and is designed in that kind's register.
 - **The tools are never paper**: both sidebars, the header, lists, the
   calendar grid, maps, game nights, settings, Customize, admin, dialogs and
   forms use the theme tokens.
+
+## The material rules
+
+How the physical idea turns into pixels. Each rule names what a real sheet
+would do.
+
+- **One light, from above.** Shadows fall straight down and a little
+  forward, grow softer and wider the higher a sheet sits, and are tinted by
+  the surface under them, never a grey blob or a sideways offset. A sheet
+  lifted on hover casts the next level's shadow (`--elev-*`) and nothing
+  else changes shape.
+- **Sheets stack, they don't shove.** A pull-down, a peek, a hover card or a
+  slip lies over the content below it, with its shadow on that content, and
+  takes its space back when it closes. Content moves aside only when it is
+  making room on purpose: a fold opening in a list, a docked panel, a row
+  joining.
+- **Pull-downs drape from what holds them.** A title's drawer, a "last seen"
+  list or a widget's settings unrolls downward from the edge it hangs from,
+  like a blind, over the page beneath; it rolls back up the same way.
+- **Edges are a vocabulary, not a habit.** A page uses only these, each for
+  its meaning:
+
+  | Edge | Means | Used for |
+  |---|---|---|
+  | none | it is the page itself | prose, headings, lists of rows |
+  | hairline rule | the next thing starts here | between rows, under a block heading |
+  | full hairline edge | a sheet laid on the page | fact panels, pictures, a lifted card, menus, hover cards |
+  | field edge | you can type here | text fields, pickers |
+  | leading accent edge (2px) | selected, or where you are | a selected row, the current section |
+  | leading amber edge (3px) | only the Director sees this | `data-dm-only` rows and blocks |
+  | dashed edge | a place for something, not a thing yet | drop targets, an empty slot, "Add a widget" |
+
+  A sheet that already lifts with a shadow needs no heavier edge than a
+  hairline; two edges never stack on one thing.
+- **Small by default, bigger on request.** A widget on a reading page opens
+  at its smallest useful size (one line, a count, the latest item) and
+  unfolds or pulls down for the rest; nothing is drawn at full size just
+  because it can be. Design every list for one item, a few and many (hundreds),
+  and show all three in its mockup.
+- **Hit areas are generous.** Anything that answers to the pointer reacts
+  over at least 32 by 32 pixels (44 on touch), even where the mark you see is
+  smaller, such as a rail tick, a dot on a line or a spot on a picture.
+- **Every open thing shows its way out.** A panel, drawer, pinned card or
+  pull-down carries a visible close (or Done) control in the same place on
+  each, as well as Escape; nobody has to guess where to click to leave.
+- **Floating tools can be moved, pinned and resized, and step aside.** A
+  tool that floats over the page (Jot notes, the dice tray, the AI helper on
+  a reading page) can be dragged by its top edge, resized from its corner and
+  pinned to a side, remembers where it was, and slides out of the way when
+  something it would cover needs attention (a dialog, the part being
+  edited), coming back after.
+- **Long pages show their contents.** A page with several sections offers a
+  contents rail or list that is easy to find without hunting (at the top or
+  in the margin) and follows the reader.
+- **No emoji, anywhere.** Icons are monochrome Font Awesome; a symbol on
+  screen is never an emoji, in templates, scripts or messages.
 
 ## What is on a page
 
@@ -114,10 +185,13 @@ leaving the list for another page.
   page where it is drawn, as players will see it; empty widgets fill with
   content marked "Example". A workshop's preview is the real page's own
   markup, made inert, never a sketch of it.
-- **An editable part says so at rest.** Whatever can be edited is findable
-  without hovering first, on touch and with the keyboard; hover and focus
-  then outline the part with an accent hairline and name it. Hover alone is
-  never the only way to discover it.
+- **An editable part says so at rest, three ways.** While editing is on,
+  each editable part has a small named tab in the page margin beside it (on
+  a phone, on its top edge), so it is findable without hovering, on touch and
+  with the keyboard; hover and focus then outline the part with an accent
+  hairline; and E (or "Show what I can edit") marks every editable part on
+  the page at once until pressed again. Hover alone is never the only way to
+  discover it.
 - **An editor never covers what it edits.** It opens from the part (a
   popover for a few fields, a panel docked beside the page for a long form)
   and moves aside rather than sit on the part. A small part may edit in
@@ -137,13 +211,16 @@ leaving the list for another page.
 - **Preview who and where.** A workshop that changes what people see offers
   Phone, Tablet and Computer, and "A player", so the owner sees what each
   gets before saving.
-- **The AI helper docks beside the page**, narrowing it rather than covering
-  it, and closes and opens as needed; it is never in the way of the work.
+- **The AI helper never moves or covers the work.** In a workshop it docks
+  beside the page, narrowing it; on a reading page or a sheet it is a
+  floating tool (under The material rules) that sits beside the part it is
+  helping with and can be moved, pinned or closed. It never slides in over
+  the sheet it is working on.
 
 ## Opening and closing
 
-- **Panels open on click and close only on purpose**: their close button,
-  Escape, or a click on what opened them. A stray click elsewhere never
+- **Panels open on click and close only on purpose**: their visible close
+  button, Escape, or a click on what opened them. A stray click elsewhere never
   closes a panel you are working in. A small menu or picker (a dropdown, a
   blank's list) closes on a click off it, losing nothing.
 - **Hover is for a peek**: a preview of who or what, appearing where the
@@ -187,14 +264,15 @@ leaving the list for another page.
 
 ## Motion
 
-Every animation is one of eight moves. Each has a Calm version that fades in
+Every animation is one of nine moves. Each has a Calm version that fades in
 place, and Off shows the end state.
 
 | Move | Used for | Full | Calm |
 |---|---|---|---|
 | Peek | hover cards, the sidebar peek, availability bars | fade and a 4px rise, `--dur-micro`, `--ease-out` | fade only |
 | Grow | menus, pickers, dialogs, pop-out editors, out of the thing clicked | scale from the clicked edge, `--dur-standard`, `--ease-out` | fade only |
-| Fold | sections, rows that join or leave a list, calendar months | to the content's real height, `--dur-standard` in, `--dur-micro` + 40ms out | opens at once |
+| Fold | sections, rows that join or leave a list, calendar months | to the content's real height, pushing what follows down, `--dur-standard` in, `--dur-micro` + 40ms out | opens at once |
+| Drape | pull-downs: a title's drawer, a widget's longer list or settings | unrolls down from the edge it hangs from, over the page with its shadow, nothing below moves; rolls back up, `--dur-standard`, `--ease-out` | fade only |
 | Slide-out | sheet tabs, creator steps, slips, an editor from behind its part | out from behind its surface, then in front of it, `--dur-slide`, `--ease-slide` | appears in place with a fade |
 | Pull | following a connection, opening a list row's peek | the new content slides out from under the block that holds the link while the old stays and dims, `--dur-slide` × 1.22, `--ease-slide` | fade only |
 | Page turn | the Handbook only | a turn with a soft crease, `--dur-turn`, `--ease-turn` | the new spread fades in |
@@ -298,6 +376,7 @@ column's version; Off shows the end state.
 | Docked panel | a peek, the AI helper, a docked editor | the page narrows as the panel slides out from behind its edge | 200ms ease-out | fade |
 | Hover card | resting on a name or rule word | Peek after 250ms | 120ms | fade |
 | Fold | sections, groups, more details | to its real height; arrow turns | 200ms ease-out | opens at once |
+| Pull-down | a title's drawer, a small widget's full list | Drape from its edge over the page | 200ms ease-out, 150ms back up | fade |
 | Tab switch | changing tab or view | Settle | 280ms ease-out | fade |
 | Another page | any link to a new page | thin accent progress line, then Settle; the menu stays. Under Annals a connection Pulls instead | 280ms settle | line and fade |
 | Adding to a list | a new page, a tag | the row Folds open, fades in, Glows | 200ms, glow fades over 1.2s | fade and glow |
@@ -361,7 +440,8 @@ column's version; Off shows the end state.
 - **The header is slim**: 48px under the quiet look unless the owner picked
   the tall one; every header function stays.
 - Icons are monochrome Font Awesome in the text colour, or the accent beside
-  a heading or in a tool's selected state; colour is never decoration.
+  a heading or in a tool's selected state; colour is never decoration, and
+  an emoji is never an icon.
 - Buttons and pills size to their content; nothing stretches full width after
   a state change.
 - Words on screen are plain and short. No developer terms, IDs, or version
@@ -377,9 +457,10 @@ make it richer, never break it: Calm and Off still win, and the tools keep
 their tokens.
 
 - **Page look** (`data-cz-page`, `static/css/page_look_annals.css`): Annals
-  is the quiet look described under Look, and the one new pages and widgets
-  are designed in. Standard, the stored default, draws the same blocks with
-  the older card around each, and stays a choice; neither moves a block. A
+  is the Material page look described under Look, and the one new pages and
+  widgets are designed in. New campaigns start in Annals; Standard draws the
+  same blocks with the older card around each, and stays a choice for
+  campaigns that use it; neither moves a block. A
   look styles blocks only through the **shared block parts** every block
   marks: `cb-title`, `cb-head` and `cb-count`, `cb-card` (`cb-facts` keeps
   its edge), `cb-section` with `cb-section-h`, `cb-fact` with `cb-fact-l`
@@ -449,6 +530,25 @@ working and off states.
 - **Deleting asks first** in a dialog naming exactly what goes, unless it can
   be undone.
 
+## Older looks
+
+Two older looks are still on parts of the site. A change that touches a
+screen in one brings that screen (not just the changed part) to the Material
+look in the same piece of work, or files the issue to do it.
+
+- **The boxed look (v1)**: raw Tailwind palette classes instead of tokens
+  (`bg-white`, `bg-gray-*`, `text-gray-*`, `border-gray-*`, `dark:bg-gray-*`),
+  a shadow and a rounded box on every section, emoji as icons. Replace with
+  the tokens and the edge vocabulary.
+- **The carded look (v2)**: the right tokens, but every section in a
+  bordered `.card`, lists as grids of cards, and menus and popovers as boxes
+  with a heavy shadow. On a page, take the box away and mark the shared
+  block parts; in a workshop the frame stays, on the tokens.
+- **Signed looks of their own** (the calendar, the quest board's looks, the
+  rulebook's book, the map frames, character sheet styles) stay as signed
+  until a new mockup is signed; the tools around them (headers, menus,
+  dialogs, lists) follow this page.
+
 ## Designing a change
 
 - **Hard design questions get real research**, including apps outside
@@ -456,8 +556,9 @@ working and off states.
   museum conventions), and come back as several distinct options, at least
   one of them a new idea rather than the familiar version redrawn. The
   recommendation is marked, and each option is playable.
-- **A new design starts from this page's quiet look**, not from an older
-  mockup or the Standard page look.
+- **A new design starts from the Material look**, not from an older mockup
+  or the Standard page look, and its motion says what physical thing each
+  move is.
 - A visible change gets a mockup first, on the real page as it is on `main`,
   at shipped quality: never placeholders or a lean out-of-context fragment.
 - Motion decisions are shown as playable clips, never stills.
