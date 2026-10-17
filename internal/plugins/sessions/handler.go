@@ -41,6 +41,8 @@ type Handler struct {
 	campaignReader CampaignReader
 	// recipients drops people who switched an email off. Nil sends to all.
 	recipients RecipientFilter
+	// sightings records who the party saw on which night. Nil-safe.
+	sightings SightingService
 }
 
 // SetRecipientFilter wires people's notification choices into the emails.
