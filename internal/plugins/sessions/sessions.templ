@@ -102,7 +102,7 @@ templ SessionListFragment(cc *campaigns.CampaignContext, sessions []Session, csr
 								</span>
 							}
 							if s.IsRecurring {
-								<span class="inline-flex items-center px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400">
+								<span class="inline-flex items-center px-1.5 py-0.5 rounded bg-surface-alt text-fg-secondary border border-edge">
 									<i class="fa-solid fa-repeat text-[10px] mr-0.5"></i>
 									{ s.RecurrenceLabel() }
 								</span>
@@ -262,7 +262,7 @@ templ SessionDetailPage(cc *campaigns.CampaignContext, session *Session, csrfTok
 							</span>
 						}
 						if session.IsRecurring {
-							<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400">
+							<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-surface-alt text-fg-secondary border border-edge">
 								<i class="fa-solid fa-repeat text-[10px] mr-0.5"></i>
 								{ session.RecurrenceLabel() }
 							</span>
