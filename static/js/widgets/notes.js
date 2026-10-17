@@ -137,7 +137,9 @@ Chronicle.register('notes', {
       panel.classList.remove('notes-size-sm', 'notes-size-md', 'notes-size-lg');
       panel.classList.add('notes-size-' + size);
       panel.querySelectorAll('.notes-size-opt').forEach(function (btn) {
-        btn.classList.toggle('notes-size-opt-active', btn.getAttribute('data-size') === size);
+        var on = btn.getAttribute('data-size') === size;
+        btn.classList.toggle('notes-size-opt-active', on);
+        btn.setAttribute('aria-pressed', String(on));
       });
       try { localStorage.setItem(STORAGE_TEXT_SIZE, size); } catch (e) { /* ignore */ }
     }
@@ -343,6 +345,7 @@ Chronicle.register('notes', {
       if (pop) { pop.classList.add('note-share-hidden'); e.preventDefault(); return; }
       if (!settingsPopover.classList.contains('notes-settings-hidden')) {
         settingsPopover.classList.add('notes-settings-hidden');
+        settingsBtn.setAttribute('aria-expanded', 'false');
         e.preventDefault();
         return;
       }
@@ -403,7 +406,8 @@ Chronicle.register('notes', {
     var settingsPopover = panel.querySelector('.notes-settings-popover');
     settingsBtn.addEventListener('click', function (e) {
       e.stopPropagation();
-      settingsPopover.classList.toggle('notes-settings-hidden');
+      var open = settingsPopover.classList.toggle('notes-settings-hidden') === false;
+      settingsBtn.setAttribute('aria-expanded', String(open));
     });
     settingsPopover.querySelectorAll('.notes-size-opt').forEach(function (btn) {
       btn.addEventListener('click', function (e) {
@@ -417,6 +421,7 @@ Chronicle.register('notes', {
       if (!settingsPopover.classList.contains('notes-settings-hidden') &&
           !settingsPopover.contains(e.target) && !settingsBtn.contains(e.target)) {
         settingsPopover.classList.add('notes-settings-hidden');
+        settingsBtn.setAttribute('aria-expanded', 'false');
       }
       panel.querySelectorAll('.note-share-popover:not(.note-share-hidden)').forEach(function (p) {
         var shareBtn = p.previousElementSibling;
@@ -895,8 +900,12 @@ Chronicle.register('notes', {
         list = list.filter(function (n) { return n.title && n.title.toLowerCase().indexOf(q) !== -1; });
       }
       if (!list.length) {
-        var emptyMsg = state.loadFailed ? 'Couldn\'t load your jots. Click the tab to try again.'
-          : state.searchFilter ? 'No matching jots'
+        if (state.loadFailed) {
+          notesList.innerHTML = '<div class="notes-empty">Couldn\'t load your jots.<br><button type="button" class="notes-retry" data-jot-retry>Try again</button></div>';
+          notesList.querySelector('[data-jot-retry]').addEventListener('click', function () { loadNotes(); });
+          return;
+        }
+        var emptyMsg = state.searchFilter ? 'No matching jots'
           : state.tab === 'page' ? 'No jots here yet — add one below.'
             : 'No jots yet. Jots live on pages: open one to add a jot.';
         notesList.innerHTML = '<div class="notes-empty">' + Chronicle.escapeHtml(emptyMsg) + '</div>';
@@ -1640,17 +1649,17 @@ Chronicle.register('notes', {
         '<i class="fa-solid fa-note-sticky notes-header-icon" aria-hidden="true"></i>' +
         '<span class="notes-header-title">Jot notes</span>' +
         '<div class="notes-header-actions">' +
-        '<button class="note-btn notes-pin-panel" type="button" aria-pressed="false"><i class="fa-solid fa-thumbtack"></i></button>' +
-        '<button class="note-btn notes-collapse-btn" type="button" title="Collapse" aria-expanded="true"><i class="fa-solid fa-chevron-down"></i></button>' +
-        '<button class="note-btn notes-settings-btn" type="button" title="Settings"><i class="fa-solid fa-gear"></i></button>' +
+        '<button class="note-btn notes-pin-panel" type="button" aria-pressed="false" aria-label="Keep the panel open on every page"><i class="fa-solid fa-thumbtack" aria-hidden="true"></i></button>' +
+        '<button class="note-btn notes-collapse-btn" type="button" title="Collapse" aria-label="Collapse jot notes" aria-expanded="true"><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></button>' +
+        '<button class="note-btn notes-settings-btn" type="button" title="Settings" aria-label="Jot notes settings" aria-haspopup="true" aria-expanded="false"><i class="fa-solid fa-gear" aria-hidden="true"></i></button>' +
         '<button class="note-btn notes-close" type="button" title="Close" aria-label="Close jot notes"><i class="fa-solid fa-xmark"></i></button>' +
         '</div>' +
         '<div class="notes-settings-popover notes-settings-hidden">' +
         '<div class="notes-settings-label">Text Size</div>' +
         '<div class="notes-settings-sizes">' +
-        '<button class="notes-size-opt" data-size="sm">S</button>' +
-        '<button class="notes-size-opt" data-size="md">M</button>' +
-        '<button class="notes-size-opt" data-size="lg">L</button>' +
+        '<button type="button" class="notes-size-opt" data-size="sm" aria-label="Small text" aria-pressed="false">S</button>' +
+        '<button type="button" class="notes-size-opt" data-size="md" aria-label="Medium text" aria-pressed="false">M</button>' +
+        '<button type="button" class="notes-size-opt" data-size="lg" aria-label="Large text" aria-pressed="false">L</button>' +
         '</div>' +
         '</div>' +
         '</div>' +

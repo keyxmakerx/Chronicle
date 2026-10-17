@@ -389,6 +389,7 @@
   Journal.prototype.drawRows = function () {
     var inner = this.dom.inner;
     this.hidePeek();
+    this.dom.scroll.removeAttribute('aria-activedescendant');
     if (this.loadFailed && !this.notes.length) {
       inner.innerHTML = '<div class="nl-empty">The notes didn’t load.<br><button type="button" data-retry>Try again</button></div>';
       return;
@@ -1017,7 +1018,22 @@
     this.savePrefs();
     this.renderList();
     var head = this.dom.inner.querySelector('[data-group="' + CSS.escape(key) + '"]');
-    if (head && document.activeElement === this.dom.scroll) head.classList.add('is-focused');
+    if (head && document.activeElement === this.dom.scroll) this.markFocused(head);
+  };
+
+  /**
+   * The list keeps focus itself and points at the walked row, so a screen
+   * reader names each note as the arrows reach it. Group headers aren't
+   * options, so on one the pointer clears.
+   */
+  Journal.prototype.markFocused = function (el) {
+    el.classList.add('is-focused');
+    if (el.hasAttribute('data-note')) {
+      if (!el.id) el.id = 'nl-opt-' + el.getAttribute('data-note');
+      this.dom.scroll.setAttribute('aria-activedescendant', el.id);
+    } else {
+      this.dom.scroll.removeAttribute('aria-activedescendant');
+    }
   };
 
   /** Arrow keys walk the rows and group headers; Enter opens or folds. */
@@ -1041,7 +1057,7 @@
     } else return;
     e.preventDefault();
     if (cur !== -1) items[cur].classList.remove('is-focused');
-    items[next].classList.add('is-focused');
+    this.markFocused(items[next]);
     items[next].scrollIntoView({ block: 'nearest' });
     this.growList();
     if (items[next].hasAttribute('data-note') && canHover()) this.showPeek(items[next]);
@@ -1590,6 +1606,9 @@
     this.dom.body.innerHTML = '';
     this.setUrl(null);
     this.setDrawer(false);
+    this.drawerFor = null;
+    var none = this.dom.drawer.querySelector('[data-dr-none]');
+    if (none) none.hidden = false;
     this.markActiveRow();
   };
 
@@ -2155,6 +2174,8 @@
 
   /** History and audio load when the drawer is first shown for a note. */
   Journal.prototype.loadDrawerDetails = function () {
+    var none = this.dom.drawer.querySelector('[data-dr-none]');
+    if (none) none.hidden = !!this.active;
     if (!this.active || this.drawerFor === this.active.id) return;
     this.drawerFor = this.active.id;
     this.loadHistory();

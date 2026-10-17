@@ -1,6 +1,6 @@
 // notes_tab_feedback.test.mjs — pins that a click on a jot panel tab always
 // shows something: the open tab reloads with the loading line, and a failed
-// load says so instead of claiming there are no jots. notes.js is a browser
+// load says so, with Try again, instead of claiming there are no jots. notes.js is a browser
 // IIFE, so these pin the wiring by source contract, as notes_live.test.mjs does.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -29,5 +29,10 @@ test('clicking the open tab reloads it with the loading line', () => {
 test('a failed load is not shown as "no jots"', () => {
   assert.match(src, /state\.loadFailed = true;/, 'the catch must mark the failure');
   assert.match(src, /state\.loadFailed = false;/, 'a good load must clear it');
-  assert.match(src, /var emptyMsg = state\.loadFailed \?/, 'the empty line must check the failure first');
+  const fail = src.indexOf('if (state.loadFailed) {');
+  const empty = src.indexOf('var emptyMsg =');
+  assert.ok(fail >= 0 && empty > fail, 'the failure must be checked before the empty line');
+  const branch = src.slice(fail, empty);
+  assert.match(branch, /data-jot-retry/, 'a failed load offers Try again');
+  assert.match(branch, /addEventListener\('click', function \(\) \{ loadNotes\(\); \}\)/, 'Try again reloads');
 });
