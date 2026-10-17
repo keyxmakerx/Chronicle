@@ -249,7 +249,9 @@ templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 		canRename := CanEditIdentity(cc.MemberRole, entity, layouts.GetUserID(ctx))
 	}}
 	<div>
-		<div class="flex items-start justify-between gap-3">
+		// The actions wrap under the name when both don't fit, so on a phone
+		// they never overlap the name or squeeze it to a word per line.
+		<div class="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
 			<div class="min-w-0">
 				<div class="flex items-center gap-2">
 					<h1 class="cb-title text-xl md:text-3xl font-bold text-fg" data-page-h1>{ entity.Name }</h1>
@@ -274,7 +276,7 @@ templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 				></div>
 			</div>
 			if canRename {
-				<div class="flex items-center gap-2" data-page-actions>
+				<div class="flex flex-wrap items-center gap-2 whitespace-nowrap" data-page-actions>
 					<button
 						type="button"
 						class="btn-ghost btn-sm"
