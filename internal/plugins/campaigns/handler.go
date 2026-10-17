@@ -1083,6 +1083,7 @@ func (h *Handler) Members(c echo.Context) error {
 		for i := range members {
 			members[i].AvatarPath = resolveAvatarPath(mediaCtx, members[i].AvatarPath)
 		}
+		redactMemberEmails(members, auth.GetUserID(c), cc.MemberRole >= RoleOwner)
 		return c.JSON(http.StatusOK, members)
 	}
 
@@ -1714,6 +1715,21 @@ func (h *Handler) GroupsPage(c echo.Context) error {
 	csrfToken := middleware.GetCSRFToken(c)
 
 	return middleware.Render(c, http.StatusOK, GroupsManagePage(cc, groups, members, csrfToken))
+}
+
+// redactMemberEmails blanks every email the viewer may not see: only the
+// owner and each member themselves see an address, as the People page
+// promises. The roster JSON is open to every member for mentions, and a guest
+// code is enough to become one.
+func redactMemberEmails(members []CampaignMember, viewerID string, isOwner bool) {
+	if isOwner {
+		return
+	}
+	for i := range members {
+		if members[i].UserID != viewerID {
+			members[i].Email = ""
+		}
+	}
 }
 
 // resolveAvatarPath turns a stored avatar media id into a link for JSON
