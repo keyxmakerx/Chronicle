@@ -198,9 +198,11 @@ func defaultCalendar(ctx context.Context, svc defaultCalendarReader, campaignID 
 
 // ---- the calendar kind ----
 
-// KindCalendar is the calendar block's `kind:` value.
+// KindCalendar is the calendar block's `kind:` value; fieldCalendar is the
+// event block's key naming which calendar it writes to.
 const (
-	KindCalendar = "calendar"
+	KindCalendar  = "calendar"
+	fieldCalendar = "calendar"
 )
 
 // CalendarKind makes the campaign's calendar, or changes the main one.

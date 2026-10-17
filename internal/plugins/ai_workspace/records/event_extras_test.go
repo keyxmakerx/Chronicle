@@ -162,7 +162,7 @@ func TestEventKind_NamedCalendar(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := multiCal{fakeCal: extrasCal(), other: other}
 			k := extrasKind(svc)
-			r := rec("event", ActionCreate, "Revel", map[string]any{"calendar": tt.cal, "year": 3, "month": tt.month, "day": 2}, "")
+			r := rec("event", ActionCreate, "Revel", map[string]any{fieldCalendar: tt.cal, "year": 3, "month": tt.month, "day": 2}, "")
 			p := k.Plan(context.Background(), camp, owner, r)
 			if tt.wantErr != "" {
 				if !strings.Contains(p.Error, tt.wantErr) {
@@ -180,7 +180,7 @@ func TestEventKind_NamedCalendar(t *testing.T) {
 // Without the calendar list, naming a calendar is refused, never guessed.
 func TestEventKind_NamedCalendarUnwired(t *testing.T) {
 	k := extrasKind(extrasCal())
-	r := rec("event", ActionCreate, "Revel", eventFields(map[string]any{"calendar": "Moon Court"}), "")
+	r := rec("event", ActionCreate, "Revel", eventFields(map[string]any{fieldCalendar: "Moon Court"}), "")
 	if p := k.Plan(context.Background(), camp, owner, r); !strings.Contains(p.Error, "only the main calendar") {
 		t.Fatalf("plan %+v", p)
 	}

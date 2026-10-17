@@ -24,7 +24,7 @@ type calendarByID interface {
 // `calendar:` names, else the main one. A calendar the operator cannot see
 // reads as missing, so its name is never confirmed.
 func (k EventKind) eventCalendar(ctx context.Context, campaignID string, a Actor, r Record) (*calendar.Calendar, error) {
-	name := r.Str("calendar")
+	name := r.Str(fieldCalendar)
 	if name == "" {
 		return defaultCalendar(ctx, k.Svc, campaignID, a)
 	}
@@ -62,8 +62,8 @@ func (k EventKind) eventCalendar(ctx context.Context, campaignID string, a Actor
 // matches nothing is refused with the names that do exist.
 type eventExtras struct {
 	tier, page patch.Field[string]
-	kindID           patch.Field[int]
-	labels           []string // for the review summary
+	kindID     patch.Field[int]
+	labels     []string // for the review summary
 }
 
 // readEventExtras checks the keys against the campaign's importance levels,
