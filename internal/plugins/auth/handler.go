@@ -608,9 +608,11 @@ func (h *Handler) ChangePasswordAPI(c echo.Context) error {
 		return apperror.NewBadRequest("new password and confirmation do not match")
 	}
 
-	if err := h.service.ChangePassword(c.Request().Context(), userID, req.CurrentPassword, req.NewPassword); err != nil {
+	token, err := h.service.ChangePassword(c.Request().Context(), userID, req.CurrentPassword, req.NewPassword, c.RealIP(), c.Request().UserAgent())
+	if err != nil {
 		return err
 	}
+	setSessionCookie(c, token, h.sessionTTL)
 
 	h.logSecurityEvent(c.Request().Context(), "password.changed", userID, "", c.RealIP(), c.Request().UserAgent(), nil)
 
