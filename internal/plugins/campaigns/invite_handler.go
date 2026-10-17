@@ -72,15 +72,14 @@ func (h *InviteHandler) RevokeInviteAPI(c echo.Context) error {
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
-	_ = cc // Used for auth check via route middleware.
 
 	inviteID := c.Param("inviteId")
 	if inviteID == "" {
 		return apperror.NewBadRequest("invite ID required")
 	}
 
-	if err := h.service.RevokeInvite(c.Request().Context(), inviteID); err != nil {
-		return apperror.NewInternal(err)
+	if err := h.service.RevokeInvite(c.Request().Context(), cc.Campaign.ID, inviteID); err != nil {
+		return err
 	}
 
 	return c.NoContent(http.StatusNoContent)

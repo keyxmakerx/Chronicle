@@ -12,7 +12,9 @@ type InviteRepository interface {
 	GetByToken(ctx context.Context, token string) (*Invite, error)
 	ListByCampaign(ctx context.Context, campaignID string) ([]Invite, error)
 	MarkAccepted(ctx context.Context, id string) error
-	Delete(ctx context.Context, id string) error
+	// Delete removes an invite of the given campaign and reports whether a row
+	// was deleted, so a foreign or unknown ID is distinguishable from success.
+	Delete(ctx context.Context, campaignID, id string) (bool, error)
 	DeleteExpired(ctx context.Context, campaignID string) (int64, error)
 	GetByEmailAndCampaign(ctx context.Context, email, campaignID string) (*Invite, error)
 }
@@ -97,14 +99,19 @@ func (r *inviteRepository) MarkAccepted(ctx context.Context, id string) error {
 	return nil
 }
 
-// Delete removes an invite by ID.
-func (r *inviteRepository) Delete(ctx context.Context, id string) error {
-	query := `DELETE FROM campaign_invites WHERE id = ?`
-	_, err := r.db.ExecContext(ctx, query, id)
+// Delete removes an invite by ID within a campaign; the campaign condition
+// keeps one campaign's owner from revoking another campaign's invite.
+func (r *inviteRepository) Delete(ctx context.Context, campaignID, id string) (bool, error) {
+	query := `DELETE FROM campaign_invites WHERE id = ? AND campaign_id = ?`
+	result, err := r.db.ExecContext(ctx, query, id, campaignID)
 	if err != nil {
-		return fmt.Errorf("deleting invite: %w", err)
+		return false, fmt.Errorf("deleting invite: %w", err)
 	}
-	return nil
+	n, err := result.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("deleting invite: %w", err)
+	}
+	return n > 0, nil
 }
 
 // DeleteExpired removes all expired invites for a campaign.
