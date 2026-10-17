@@ -348,7 +348,13 @@ place, and Off shows the end state.
   page layout, tiles rock by a fraction of a degree only while the pointer is
   over their section, so the loop rests the moment the person moves away; the
   tile under the pointer, a selected tile and a dragged one hold still. Calm,
-  Off and reduced motion turn it off.
+  Off and reduced motion turn it off. It rocks 0.55° each way every 0.36 s,
+  every third tile a little slower so they don't move in step.
+- **Dragging a widget in the page editor** opens a gap at its size where it
+  will land. The gap moves once the pointer rests on a new spot for 110 ms
+  and has moved on from the last one, so the widgets it pushes never move it
+  back. The widgets either side of the gap glow, and every widget that moves
+  glides to its place over 340 ms. Calm keeps them still.
 - **Durations and easing come from the tokens** in `static/css/input.css`;
   the owner's Motion speed retimes all of them, the paper moves included.
 - **Effects have depth and stay light**: no flat pastel fills, no bounces or
