@@ -40,14 +40,16 @@ Eight rules every screen is judged against.
   Keystone buttons in Customize.
 - **Nothing bounces, jumps or waits on show.** Motion slows to a stop, with
   no wobble or overshoot, nothing moves before its transition starts, and
-  nothing runs past half a second unless it marks a big moment. Two signed
-  exceptions, both under Motion: entering Site admin, and the page editor's
-  tiles, which jiggle while the pointer is over their section.
+  nothing runs past half a second unless it marks a big moment. Three signed
+  exceptions: entering Site admin and the page editor's tiles, which jiggle
+  while the pointer is over their section (both under Motion), and a style
+  kit's own opening and pointer response, which may settle or sway as its
+  row under **Style kits** says.
 - **Calm is always respected.** Under Calm nothing travels; under Off, or on
   a device set to reduce motion, things simply appear.
 - **One look, many campaigns.** The frame is the same everywhere; a
-  campaign's colour, pictures and heading face bring the character, and the
-  owner's Customize choices go further (below).
+  campaign's colour, pictures, heading face and style kit bring the
+  character, and the owner's Customize choices go further (below).
 
 ## Two kinds of screen
 
@@ -424,9 +426,13 @@ column's version; Off shows the end state.
 - **Workshops are framed** on the same tokens: cards and panels on
   `--color-bg-secondary` with a 1px edge, a rail, an inspector and the save
   bar, as in `customize_shell.css`.
+- The corner, depth, glow and face rules below describe the base kit,
+  Material. Another style kit may replace them on the pages it dresses, only
+  as its own row under **Style kits** says.
 - Theme tokens (`bg-surface`, `text-fg`, `text-fg-muted`, `border-edge`,
   `text-accent`), never hard-coded colours, and both light and dark. Dark mode
-  uses the same rules with lighter surfaces and a lighter accent, not glows.
+  uses the same rules with lighter surfaces and a lighter accent, not glows
+  (Lumen's glow is its kit's character and the one exception).
 - **Colour roles**: page `--color-bg-primary`, panel `--color-bg-secondary`,
   hover and alternate rows `--color-bg-tertiary`, menu `--color-sidebar-bg`,
   headings `--color-text-primary`, labels `--color-text-secondary`.
@@ -450,9 +456,10 @@ column's version; Off shows the end state.
   not glows.
 - **Corners**: 8 for controls and rows, 12 for panels, dialogs, drawers and
   pictures, 4 for tags, 6 for small things, pills for counts and status
-  labels. Nothing sharper than 4 or rounder than 12 except pills, and the
+  labels. Nothing sharper than 4 or rounder than 12 except pills, the
   page editor's own frames (tiles 14, the phone preview 28), which stand for
-  a device.
+  a device, and the corners a style kit names (Sharp's square frames,
+  Flowing's uneven rounded ones, Sketchbook's hand-drawn ones).
 - **Type**: headings in the campaign's heading face; when the owner picked
   none, pages under Annals use tall capitals (Oswald, 600, set by
   `AppearanceCSS`) and everything else Inter. Page titles 24 to 40 (fluid)
@@ -498,20 +505,8 @@ their tokens.
   follow the look. Standard draws them exactly as before (input.css,
   "Shared block parts"). Under Annals, following a connection pulls the new
   page out from under the connections block ("Motion").
-- **Style kits change shape and ornament, never colour.** An owner can make
-  the whole site sharper, plainer or more ornate without touching the
-  campaign's colours, which stay their own choice. So every Material screen
-  takes its corners, edge weight and ornaments from shared tokens (corner
-  radii, how heavy an edge is, the title rule, section dividers and corner
-  flourishes) rather than fixed values, and a kit is just a set of those
-  values (TODO(#1447)). The tokens reach far enough that kits look plainly
-  different at a glance: Sharp is a broadsheet (double title rule, ruled
-  section heads, outlined capital buttons); Ornate is a bound volume (side
-  border ending in curls, swashes, dotted row leaders, double frames). These
-  set each kit's character; a screen may vary the details as long as it
-  keeps that character. The motion, the edge vocabulary and the Director's amber stay the same in
-  every kit. Character sheet styles stay their own
-  choice.
+- **Style kits** give a campaign a whole character, set out under **Style
+  kits** below.
 - **Buttons** (`data-cz-btn`): Lift is the base; Press, Glow and Ink restyle
   it; Keystone is soft, raised and rounded (12px), and gives every button the
   heavy press.
@@ -537,6 +532,99 @@ their tokens.
 - The editor's example site (`static/js/widgets/customize_look.js`,
   `static/css/customize.css`) shows each choice and keeps its numbers in step
   with the server's.
+
+## Style kits
+
+A style kit is a campaign's character: its top bar, dividers, boxes, faces,
+palette, how things answer the pointer, and how a card opens and closes. The
+owner picks one in the Customizer. There are six, and each one works in light
+and dark mode, takes the campaign's colour, and behaves differently as well
+as looking different. The signed mockup is the contract for each kit's
+character: https://claude.ai/artifact/YMuDg5AgHP7V6L6G5rSDnc. A screen may
+vary the details as long as it keeps that character. Building the kits is
+#1447.
+
+| Kit | Top bar | Dividers and rows | Boxes | Pointer | A card opens | Faces |
+|---|---|---|---|---|---|---|
+| Material (the base) | tinted surface lifted by a soft shadow; the current place is a raised pill | space and an accent label; hairlines in lists | filled, 12px corners, resting shadow, no edge | lifts (shadow) | grows out of what was clicked, its shape stretching into the card's | Inter |
+| Sharp (broadsheet) | masthead: condensed capitals over a thick and a thin rule; places split by short rules, current one underlined | a heavy rule over each section head; hairlines between rows; a dateline | square ink frame, no fill or shadow; heading knocked out of the frame | inverts, nothing moves | unrolls straight down from the edge clicked, quick, no fade | Oswald, Source Serif 4 |
+| Ornate (bound volume) | deep band, name centred, a double gilt line broken by a small ornament | a centred flourish between sections; dotted leaders across rows | double gilt frame on warm paper, curled corners | fills with the band colour | swings down from what was clicked on a hinge and settles | Cormorant Garamond, EB Garamond |
+| Flowing (watercolour) | a wash between two tints, its lower edge a soft wave; the current place has a wavy underline | a drawn wave line; rows are separate soft "pebbles" | no edge, uneven rounded corners, a faint wash and a low shadow | outlines slowly change shape | spreads from what was clicked like ink in water, its edge settling into shape | Fraunces, Nunito |
+| Lumen (soft light) | a night band with a fine line of light under it; a slow sheen crosses the name; the current place is a lit dot | a hairline fading at both ends, with an occasional travelling glint | a fine edge with a soft glow that breathes slowly | glow brightens | a ring of light spreads from what was clicked and the card blooms out of it into focus | Marcellus, Jost |
+| Sketchbook (pen on paper) | no band: the name is handwritten over a pen stroke; the current place is circled by hand | a scribbled pen line; section names highlighted; dashed row underlines | hand-inked outline that wobbles slightly, on paper (cream in light, a chalkboard in dark) | gives a small wiggle | a taped note drops out of what was clicked and lands slightly askew | Kalam for headings and short labels, Atkinson Hyperlegible for text |
+
+- **What every kit keeps.** What opens comes out of what was clicked and goes
+  back into it, with a visible close; Escape and the rules under **Opening
+  and closing** hold. The four control weights, the layout, the Director's
+  amber and its 3px edge, state colours meaning state, and the accent marking
+  what you can act on stay the same in every kit.
+- **A kit's opening replaces Grow and Drape** for cards and panels that come
+  out of something clicked on a page. The other moves under **Motion** keep
+  their timing in every kit.
+- **Calm and Off still win.** Under Calm or the device's reduced-motion
+  setting, every kit's opening is a short fade in place, and every ambient or
+  pointer movement stops at rest: Lumen's sheen, glint and breathing hold
+  still with a steady glow, Flowing's outlines and Sketchbook's wiggle don't
+  move. Off shows the end state. Ambient movement also runs only on what is
+  on screen, and stops when the tab is hidden.
+- **Faces are each kit's suggestion.** A heading face the owner picked wins
+  over the kit's. A hand-drawn or display face is for headings and short
+  labels only, never reading text. If a face fails to load, its fallback
+  stack is a plain face of the same kind, never a script.
+- **Kits dress pages, not tools.** The kit reaches the header and every page
+  under the page look. Workshops (the Customizer, settings, site admin,
+  editors' own panels) stay in Material so the tools stay predictable. Looks
+  that are signed as their own (character sheets, the rulebook, the
+  calendar, the quest board, map frames, encounters, the hover card) keep
+  them in every kit.
+- **Ornate's gilt is brass** (light `#8a8350`, dark `#b8b07f`), well apart
+  from the Director's amber, and does not take the campaign's colour.
+
+### The campaign's colour in a kit
+
+- **The campaign's colour replaces each kit's accent** when the owner has
+  picked one, and everything the kit derives from its accent follows it:
+  Lumen's glow and line, Flowing's wash, Sketchbook's highlighter and tape.
+  With no colour picked, each kit keeps the colour it was designed with.
+- **Lifted for dark mode.** The light-mode accent is the colour darkened
+  slightly (mixed 88% with black). The dark-mode accent is the colour mixed
+  55% with white, so one choice reads on both.
+- **Colours near the Director's amber are refused** (hue 22 to 58 degrees,
+  saturation above 45%, lightness above 30%). The colour picker says why in
+  words and keeps the previous colour.
+
+### Exceptions
+
+Some colours will not read in some kits, and some blocks will not draw well
+in some kits. Each has a named way out. None of them is a one-off override
+in a template.
+
+- **Contrast is checked per kit and per theme, when the page is drawn.**
+  Each kit's accent must reach 4.5:1 against that kit's page and paper as
+  link text, and 3:1 as an edge or a glow. A colour that falls short is
+  stepped toward the kit's ink in lightness only, keeping its hue, until it
+  passes, in that kit and that theme only. Light Lumen, the chalkboard and
+  Ornate's warm paper each move a different colour, which is why the check
+  is per kit. The Customizer's colour field shows the adjusted swatch beside
+  the picked one when this happens.
+- **A colour that would read as a state colour is moved off it.** Beside
+  the green, amber and red of state, a picked colour within 12 degrees of
+  red or green has its saturation lowered until the two are told apart.
+  Amber is refused outright, as above.
+- **Expensive effects step down when they cost too much.** Sketchbook's
+  hand-drawn edge (an SVG displacement filter) and Lumen's glows draw on
+  what the page has a sensible number of. On a long list or table, rows use
+  a plain edge in the kit's line colour and glows rest without breathing.
+  Printing uses plain edges and no glow.
+- **A block that a kit draws badly can ask to be drawn plain.** A block or
+  package widget that has been tried in a kit and found to break (a chart,
+  an embedded map, a dense table) marks itself `data-kit-plain`, and is drawn
+  with the Material parts inside that kit. Every such case is listed here
+  with its kit, its reason and an issue to fix it.
+
+| Block | Kit | Why it is plain | Issue |
+|---|---|---|---|
+| none yet | | | |
 
 ## Every control has every state
 
