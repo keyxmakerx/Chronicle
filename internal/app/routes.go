@@ -3830,12 +3830,14 @@ func (a *App) RegisterRoutes() {
 	}
 	timelineHandler := timeline.NewHandler(timelineSvc)
 	timelineHandler.SetMemberLister(campaignService)
-	// The timeline page's chart and the dashboard/category preview cards load
-	// their scripts on sight, so pages without a timeline never fetch them.
+	// The timeline page's River line, the entity-page chart and the
+	// dashboard/category preview cards load their scripts on sight, so pages
+	// without a timeline never fetch them.
 	a.registerPlugin(PluginRegistration{
 		Slug:     timeline.PluginSlug,
 		StaticFS: echo.MustSubFS(timeline.StaticAssetsFS, "static"),
 		Widgets: []PluginWidget{
+			{Name: "timeline-river", Scripts: []string{"js/timeline_river.js"}},
 			{Name: "timeline-viz", Scripts: []string{"js/timeline_viz.js"}},
 			{Name: "timeline-widget", Scripts: []string{"js/timeline_widget.js"}},
 		},
