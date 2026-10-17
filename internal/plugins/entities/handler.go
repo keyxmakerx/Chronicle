@@ -3831,9 +3831,12 @@ func (h *Handler) buildCastView(c echo.Context, cc *campaigns.CampaignContext) (
 	view.IsMember = cc.MemberRole >= campaigns.RolePlayer
 	view.CSRFToken = middleware.GetCSRFToken(c)
 	isOwner := cc.MemberRole >= campaigns.RoleOwner
+	var heroType *EntityType
+	var heroAcc heroAccess
 	if h.heroPlanner != nil {
-		if _, access, err := h.heroTarget(c, cc); err == nil {
+		if t, access, err := h.heroTarget(c, cc); err == nil {
 			view.CanCreateHero = access.Allowed
+			heroType, heroAcc = t, access
 		}
 	}
 
@@ -3852,6 +3855,9 @@ func (h *Handler) buildCastView(c echo.Context, cc *campaigns.CampaignContext) (
 	}
 
 	view.Yours = h.buildYours(ctx, campaignID, userID)
+	if h.heroPlanner != nil && view.IsMember {
+		view.Builder = h.buildHeroBuilder(c, cc, view.Yours, charTypes, heroType, heroAcc)
+	}
 	if pcOn {
 		view.Party = filterCastByType(h.buildCastParty(ctx, cc, userID), charTypes)
 		h.fillCastRoster(ctx, cc, userID, charTypes, &view)
@@ -3888,6 +3894,33 @@ func (h *Handler) buildCastView(c echo.Context, cc *campaigns.CampaignContext) (
 		}
 	}
 	return view, nil
+}
+
+// buildHeroBuilder gathers the hero builder's mount: the viewer's own heroes
+// and, when they may make one, the new hero's page type. nil when there is
+// nothing to build. A failed type lookup leaves the builder out rather than
+// breaking the page.
+func (h *Handler) buildHeroBuilder(c echo.Context, cc *campaigns.CampaignContext, yours []CastMember, charTypes []int, target *EntityType, access heroAccess) *HeroBuilderView {
+	types, err := h.service.GetEntityTypes(c.Request().Context(), cc.Campaign.ID)
+	if err != nil {
+		slog.Warn("cast page: hero builder types failed", slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", err))
+		return nil
+	}
+	heroes := builderHeroes(yours, charTypes, types, cc.MemberRole >= campaigns.RoleScribe)
+	if len(heroes) == 0 && !access.Allowed {
+		return nil
+	}
+	b := &HeroBuilderView{
+		CampaignID: cc.Campaign.ID,
+		CSRFToken:  middleware.GetCSRFToken(c),
+		CanCreate:  access.Allowed,
+		ForSelf:    access.ForSelf,
+		Heroes:     heroes,
+	}
+	if target != nil {
+		b.TypeName = target.Name
+	}
+	return b
 }
 
 // fillCastRoster adds the Players box data: the full roster for staff who
