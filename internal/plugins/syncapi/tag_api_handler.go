@@ -102,10 +102,11 @@ func (h *TagAPIHandler) CreateTag(c echo.Context) error {
 
 // apiUpdateTagRequest is the JSON body for updating a tag via the API.
 // PARTIAL update: absent preserves, a present value replaces (ADR-056) —
-// see tags.UpdateTagInput. Color/DmOnly must stay pointers: a value type
-// would let a {name}-only rename push turn every DM-only tag public.
+// see tags.UpdateTagInput. Name, Color and DmOnly must stay pointers: a value
+// type would let a {name}-only rename push turn every DM-only tag public, and
+// would make a {color}-only push fail the service's non-empty-name check.
 type apiUpdateTagRequest struct {
-	Name   string  `json:"name"`
+	Name   *string `json:"name"`
 	Color  *string `json:"color"`
 	DmOnly *bool   `json:"dm_only"`
 }
@@ -133,8 +134,15 @@ func (h *TagAPIHandler) UpdateTag(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request body")
 	}
 
+	// The service requires a name, so an absent one is filled from the stored
+	// tag; a present-but-blank one still reaches it and is rejected.
+	name := existing.Name
+	if req.Name != nil {
+		name = *req.Name
+	}
+
 	tag, err := h.tagSvc.Update(c.Request().Context(), tagID, tags.UpdateTagInput{
-		Name:   req.Name,
+		Name:   name,
 		Color:  req.Color,
 		DmOnly: req.DmOnly,
 	})
