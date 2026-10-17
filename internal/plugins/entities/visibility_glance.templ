@@ -25,7 +25,7 @@ func visibilityGlanceVisible(cc *campaigns.CampaignContext) bool {
 
 // visibilityGlance is the one indicator: globe (everyone) / lock (dm_only) /
 // shield (custom). Colour comes from tokens (ADR-057): shield uses
-// var(--color-accent), globe and lock use var(--color-fg-muted).
+// var(--color-accent), globe and lock use var(--color-text-muted).
 //
 // ev carries the tag-widening safety contract: when a tag grant exposes an
 // otherwise-hidden entity, the amber corner dot and the tooltip naming the
@@ -48,9 +48,9 @@ templ visibilityGlance(cc *campaigns.CampaignContext, entity *Entity, ev *Effect
 			if state == VisStateCustom {
 				<i class="fa-solid fa-shield-halved text-[11px]" style="color: var(--color-accent);"></i>
 			} else if state == VisStateDMOnly {
-				<i class="fa-solid fa-lock text-[11px]" style="color: var(--color-fg-muted);"></i>
+				<i class="fa-solid fa-lock text-[11px]" style="color: var(--color-text-muted);"></i>
 			} else {
-				<i class="fa-solid fa-globe text-[11px]" style="color: var(--color-fg-muted);"></i>
+				<i class="fa-solid fa-globe text-[11px]" style="color: var(--color-text-muted);"></i>
 			}
 			if widened {
 				<span class="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-amber-400 ring-1 ring-surface" aria-hidden="true"></span>
@@ -129,7 +129,7 @@ templ effectiveVisibilityBadge(cc *campaigns.CampaignContext, entity *Entity, ev
 					if state == VisStateCustom {
 						style="color: var(--color-accent);"
 					} else {
-						style="color: var(--color-fg-muted);"
+						style="color: var(--color-text-muted);"
 					}
 					data-perm-corner-icon
 				></i>
