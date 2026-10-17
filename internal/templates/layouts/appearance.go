@@ -71,6 +71,13 @@ func GetAppearance(ctx context.Context) *AppearanceData {
 	return a
 }
 
+// PageLookAnnals reports whether the campaign draws its pages in the Annals
+// look, for markup that exists only there (the page editor).
+func PageLookAnnals(ctx context.Context) bool {
+	a := GetAppearance(ctx)
+	return a != nil && a.PageLook == "annals"
+}
+
 // AppearanceAttrs are the <html> attributes the site's CSS keys its
 // Customize styles on (input.css, "Customize: campaign styles").
 func AppearanceAttrs(ctx context.Context) templ.Attributes {

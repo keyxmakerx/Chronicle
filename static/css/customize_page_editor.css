@@ -1,4 +1,4 @@
-/* Customize's page editor (customize_page_editor.js): the canvas a category's
+/* The Customizer (customize_page_editor.js): the canvas a category's
    page layout is arranged on, and its panel. Tool chrome, so theme tokens
    only (ui-standard: the tools are never paper); the page inside the frame
    is the real page's own markup and keeps the real page's styles. */

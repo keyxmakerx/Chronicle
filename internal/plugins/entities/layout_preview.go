@@ -1,4 +1,4 @@
-// layout_preview.go serves Customize's page editor the blocks of a category's
+// layout_preview.go serves the Customizer the blocks of a category's
 // page layout drawn for one of that category's real pages, so the owner
 // arranges the page they will actually get rather than grey boxes.
 

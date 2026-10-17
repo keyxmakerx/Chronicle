@@ -624,7 +624,7 @@ func (h *Handler) prepareShow(c echo.Context) (*showPage, error) {
 }
 
 // prepareShowFor is prepareShow for a page named by the caller rather than
-// the route, so Customize's page editor can draw blocks as that page shows them.
+// the route, so the Customizer can draw blocks as that page shows them.
 func (h *Handler) prepareShowFor(c echo.Context, entityID string) (*showPage, error) {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {

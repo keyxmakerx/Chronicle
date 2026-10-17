@@ -20,7 +20,7 @@
  *     area can read it whenever it mounts (Chronicle.customizeDraft()).
  *   - Chronicle.customizeFlush() resolves once the draft is kept, before an
  *     area opens a page that reads it.
- *   - An area with its own Undo and Redo buttons (the page editor) calls
+ *   - An area with its own Undo and Redo buttons (the Customizer) calls
  *     Chronicle.customizeUndo / customizeRedo and reads customizeHistory();
  *     customizeSet(key, value, { step: true }) makes that change its own Undo
  *     step rather than joining a quick run of edits to the same section.

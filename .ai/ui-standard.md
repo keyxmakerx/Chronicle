@@ -41,7 +41,7 @@ Eight rules every screen is judged against.
 - **Nothing bounces, jumps or waits on show.** Motion slows to a stop, with
   no wobble or overshoot, nothing moves before its transition starts, and
   nothing runs past half a second unless it marks a big moment. Two signed
-  exceptions, both under Motion: entering Site admin, and the page editor's
+  exceptions, both under Motion: entering Site admin, and the Customizer's
   tiles, which jiggle while the pointer is over their section.
 - **Calm is always respected.** Under Calm nothing travels; under Off, or on
   a device set to reduce motion, things simply appear.
@@ -61,7 +61,8 @@ Every screen is one of two kinds, and is designed in that kind's register.
   this way first and marks the shared block parts (under Customize) so every
   page look can style it.
 - **Workshops** are where the owner arranges and configures: Customize and
-  its page editor, the calendar, map and book editors, settings, Site admin.
+  the Customizer (its page layout), the calendar, map and book editors,
+  settings, Site admin.
   They are framed tools on the theme tokens (`customize_shell.css` is the
   model: a rail on the left, the work in the middle, an inspector on the
   right, one save bar). A workshop shows the page it changes as the real
@@ -200,20 +201,30 @@ leaving the list for another page.
   page where it is drawn, as players will see it; empty widgets fill with
   content marked "Example". A workshop's preview is the real page's own
   markup, made inert, never a sketch of it.
+- **Two editors, two names.** The page editor is where a page's words are
+  written, on the page itself (`page_editor.js`); the Customizer is where
+  widgets are arranged (Customize's page layout). UI text never calls both
+  "editor".
 - **An editable part says so at rest, three ways.** While editing is on,
-  each editable part has a small named tab in the page margin beside it (on
-  a phone, on its top edge), so it is findable without hovering, on touch and
-  with the keyboard; hover and focus then outline the part with an accent
-  hairline; and E (or "Show what I can edit") marks every editable part on
-  the page at once until pressed again. Hover alone is never the only way to
-  discover it.
+  each editable part has a pen beside its heading, an icon with no word, so
+  it is findable without hovering, on touch and with the keyboard; hover and
+  focus then outline the part with an accent hairline; and E (or the E in the
+  editing hint) outlines every editable part on the page at once until
+  pressed again. Hover alone is never the only way to discover it.
+- **A part opens where it stands.** Its pen, or a click on the part, opens
+  it: the pen becomes its tick in the same spot, its values become fields in
+  place with no fill, only a line under them that turns the accent on focus
+  (a title's own rule is its writing line), and what has no room drapes on a
+  sheet below it, over the page. Esc closes the open thing first, then leaves
+  editing. Each field saves as it is typed, and the page says Saving… then
+  Saved.
 - **An editor never covers what it edits.** It opens from the part (a
   popover for a few fields, a panel docked beside the page for a long form)
   and moves aside rather than sit on the part. A small part may edit in
   place; a part too big for that opens the docked panel.
 - **One clear editing state.** When editing is on, the page says so (the
-  edge in the campaign colour, Done where Edit was) and nothing else about
-  the page changes.
+  edge in the campaign colour, Done where Edit page was) and nothing else
+  about the page changes.
 - **Arranging saves as one draft; a single choice saves at once.** Moving,
   adding and resizing many things (Customize, a page layout) collects into
   one draft with the save bar (`customize_shell.js`): what is waiting, Undo,
@@ -366,13 +377,13 @@ place, and Off shows the end state.
 - **Looping animations rest when the person steps away.** Every loop takes
   its clock from `window.MotionRest` (`static/js/motion_rest.js`) and stops
   requesting frames once `still()`. One-shot transitions don't need it.
-- **The page editor's tiles jiggle while you are over them.** In Customize's
+- **The Customizer's tiles jiggle while you are over them.** In Customize's
   page layout, tiles rock by a fraction of a degree only while the pointer is
   over their section, so the loop rests the moment the person moves away; the
   tile under the pointer, a selected tile and a dragged one hold still. Calm,
   Off and reduced motion turn it off. It rocks 0.55° each way every 0.36 s,
   every third tile a little slower so they don't move in step.
-- **Dragging a widget in the page editor** opens a gap at its size where it
+- **Dragging a widget in the Customizer** opens a gap at its size where it
   will land. The gap moves once the pointer rests on a new spot for 110 ms
   and has moved on from the last one, so the widgets it pushes never move it
   back. The widgets either side of the gap glow, and every widget that moves
@@ -451,7 +462,7 @@ column's version; Off shows the end state.
 - **Corners**: 8 for controls and rows, 12 for panels, dialogs, drawers and
   pictures, 4 for tags, 6 for small things, pills for counts and status
   labels. Nothing sharper than 4 or rounder than 12 except pills, and the
-  page editor's own frames (tiles 14, the phone preview 28), which stand for
+  Customizer's own frames (tiles 14, the phone preview 28), which stand for
   a device.
 - **Type**: headings in the campaign's heading face; when the owner picked
   none, pages under Annals use tall capitals (Oswald, 600, set by
