@@ -132,6 +132,21 @@ would do.
 - **Long pages show their contents.** A page with several sections offers a
   contents rail or list that is easy to find without hunting (at the top or
   in the margin) and follows the reader.
+- **Controls come in four weights, each for its place.** Like edges, a
+  control's weight says what it is, and the lightest one that fits wins. What
+  opens always grows out of what was clicked.
+
+  | Weight | Looks like | For |
+  |---|---|---|
+  | Quiet word | text in the accent, no border, fill or shadow; underline on hover | revealing more inside reading content: "Show all 6", "why" |
+  | Tab | small capitals with a hairline under them and up one side, like an index label; no fill, box or lift | a drawer or fold that hangs below it on that same side line, such as a title's pull-down |
+  | Icon | a monochrome icon, no frame until hover | a margin, a rail, a row's end, or anywhere a word won't fit; always labelled for screen readers |
+  | Button | border, fill, resting shadow | a real command ("Publish", "Add reason") or a value picker (a standing, "Sort by") |
+
+  A fold or a reason can also open from the thing it belongs to (its name,
+  its row, its heading) with no control at all. A full button is never the
+  default way to reveal more, and one view never stacks several buttons where
+  quiet words would do.
 - **No emoji, anywhere.** Icons are monochrome Font Awesome; a symbol on
   screen is never an emoji, in templates, scripts or messages.
 
@@ -208,6 +223,13 @@ leaving the list for another page.
 - **Find with "/".** A workshop with many settings has Find: "/" outside a
   text field, or the Find button, opens it, and it jumps to the setting by
   name.
+- **Single-key shortcuts never take a typed letter.** A shortcut with no
+  Ctrl, Cmd or Alt (E, "/", ?) does nothing while focus is in a text field,
+  a text area, a select or anything editable (`isContentEditable`), and
+  never calls `preventDefault` there, so the letter is typed. It works only
+  in its own view (the page being edited, the open workshop), never on keys
+  pressed anywhere else on the page. Each one also has a button, so the
+  shortcut is never the only way.
 - **Preview who and where.** A workshop that changes what people see offers
   Phone, Tablet and Computer, and "A player", so the owner sees what each
   gets before saving.
@@ -482,8 +504,13 @@ their tokens.
   takes its corners, edge weight and ornaments from shared tokens (corner
   radii, how heavy an edge is, the title rule, section dividers and corner
   flourishes) rather than fixed values, and a kit is just a set of those
-  values (TODO(#1447)). The motion, the edge vocabulary and the Director's
-  amber stay the same in every kit. Character sheet styles stay their own
+  values (TODO(#1447)). The tokens reach far enough that kits look plainly
+  different at a glance: Sharp is a broadsheet (double title rule, ruled
+  section heads, outlined capital buttons); Ornate is a bound volume (side
+  border ending in curls, swashes, dotted row leaders, double frames). These
+  set each kit's character; a screen may vary the details as long as it
+  keeps that character. The motion, the edge vocabulary and the Director's amber stay the same in
+  every kit. Character sheet styles stay their own
   choice.
 - **Buttons** (`data-cz-btn`): Lift is the base; Press, Glow and Ink restyle
   it; Keystone is soft, raised and rounded (12px), and gives every button the
