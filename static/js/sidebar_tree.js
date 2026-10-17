@@ -1312,10 +1312,10 @@
     '  position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);',
     '  z-index: 9999; display: flex; gap: 8px; align-items: center;',
     '  padding: 8px 16px; border-radius: 10px;',
-    '  background: var(--color-surface-raised, #1e1e2e);',
+    '  background: var(--color-bg-secondary, #1e1e2e);',
     '  border: 1px solid var(--color-border, #333);',
     '  box-shadow: 0 8px 32px rgba(0,0,0,0.4);',
-    '  font-size: 12px; color: var(--color-fg, #e0e0e0);',
+    '  font-size: 12px; color: var(--color-text-primary, #e0e0e0);',
     '}'
   ].join('\n');
   document.head.appendChild(style);
