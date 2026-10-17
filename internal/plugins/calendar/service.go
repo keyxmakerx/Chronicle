@@ -243,6 +243,15 @@ type CalendarService interface {
 	// event is visible to v. Like ListEventsForMonth, a future event not yet
 	// announced (dropUnannouncedFutureEvents) is not found for a player.
 	GetEventForViewer(ctx context.Context, eventID, calendarID, campaignID string, v permissions.Viewer) (*Event, error)
+	// EventPages lists the pages tied to an event (entity_event_links) that v
+	// may see, by name. The event must pass GetEventForViewer's gates or this
+	// answers NotFound; a page v may not see is left out.
+	EventPages(ctx context.Context, eventID, calendarID, campaignID string, v permissions.Viewer) ([]EntityTieRef, error)
+	// LinkEventPage ties a page of the same campaign to an event, and
+	// UnlinkEventPage removes the tie (a no-op when there is none). Both are
+	// gated like UpdateEvent: the calendar and the event must be visible to v.
+	LinkEventPage(ctx context.Context, eventID, calendarID, campaignID, entityID string, v permissions.Viewer) error
+	UnlinkEventPage(ctx context.Context, eventID, calendarID, campaignID, entityID string, v permissions.Viewer) error
 	// ListEventsByIDsForViewer is GetEventForViewer for many ids in one
 	// round of queries: the same calendar gate, event visibility, unannounced
 	// and linked-entity redaction rules, with an event the viewer may not
@@ -330,6 +339,14 @@ type CalendarService interface {
 	// calendar's current date. It does not judge whether v may see the
 	// entity itself; the entity page asking has already shown it to them.
 	MoonsForEntity(ctx context.Context, campaignID, entityID string, v permissions.Viewer) ([]EntityMoonRef, error)
+	// PageTimeline lays the events that belong to entityID (its linked
+	// events and its ties) on the campaign's calendar: the default one, else
+	// the first. Each event passes every filter a month read applies for v,
+	// so a player's line never holds what their calendar would not show;
+	// hideDMOnly also drops Director-only events for everyone (the block's
+	// own setting). NotFound when the campaign has no calendar v may open.
+	// Like MoonsForEntity it does not judge whether v may see the page.
+	PageTimeline(ctx context.Context, campaignID, entityID string, hideDMOnly bool, v permissions.Viewer) (*PageTimeline, error)
 
 	// PreviewAnchorMove is a READ-ONLY preview of moving a real-anchored
 	// calendar's anchor: it computes the day shift and up to three affected

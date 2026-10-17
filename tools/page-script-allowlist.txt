@@ -30,4 +30,3 @@
 
 1 internal/plugins/designlab/design_lab.templ
 1 internal/plugins/sessions/availability.templ
-1 internal/plugins/timeline/timeline.templ

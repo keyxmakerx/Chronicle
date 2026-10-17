@@ -235,6 +235,7 @@ type fakeEventRepo struct {
 	listForYearFn         func(ctx context.Context, calendarID string, year, role int) ([]Event, error)
 	listForDateRangeFn    func(ctx context.Context, calendarID string, year, startMonth, startDay, endMonth, endDay, role int) ([]Event, error)
 	listForEntityFn       func(ctx context.Context, entityID string, role int) ([]Event, error)
+	listForPageFn         func(ctx context.Context, calendarID, entityID string, role int) ([]Event, error)
 	listUpcomingFn        func(ctx context.Context, calendarID string, year, month, day, role, limit int) ([]Event, error)
 	searchFn              func(ctx context.Context, calendarID, query string, role int) ([]Event, error)
 	listAllFn             func(ctx context.Context, calendarID string) ([]Event, error)
@@ -332,6 +333,12 @@ func (m *fakeEventRepo) ListEventsForDateRange(ctx context.Context, calendarID s
 func (m *fakeEventRepo) ListEventsForEntity(ctx context.Context, entityID string, role int) ([]Event, error) {
 	if m.listForEntityFn != nil {
 		return m.listForEntityFn(ctx, entityID, role)
+	}
+	return nil, nil
+}
+func (m *fakeEventRepo) ListEventsForPage(ctx context.Context, calendarID, entityID string, role int) ([]Event, error) {
+	if m.listForPageFn != nil {
+		return m.listForPageFn(ctx, calendarID, entityID, role)
 	}
 	return nil, nil
 }
