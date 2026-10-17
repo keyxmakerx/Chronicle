@@ -69,6 +69,12 @@ func RegisterRoutes(e *echo.Echo, h *Handler,
 	cg.GET("/sessions/nights", h.ListGameNightsAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	// A night's recap and visible linked pages, for its page in the calendar.
 	cg.GET("/sessions/:sid/page", h.NightPageAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	// Who the party saw on which night. Any member may read a page's
+	// sightings (the service hides suggestions and dismissals from players);
+	// only the owner or a co-Director records or clears an answer.
+	cg.GET("/sessions/sightings", h.SightingsAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.PUT("/sessions/:sid/sightings", h.RecordSightingAPI, ownerOrCoDirector())
+	cg.DELETE("/sessions/:sid/sightings", h.ClearSightingAPI, ownerOrCoDirector())
 	// Reminding players to answer a night: Player+ on the route, and in the
 	// handler only the night's organiser, the owner or a co-Director.
 	cg.POST("/sessions/:sid/remind", h.RemindNightAPI, campaigns.RequireRole(campaigns.RolePlayer))

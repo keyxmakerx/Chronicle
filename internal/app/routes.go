@@ -3763,6 +3763,10 @@ func (a *App) RegisterRoutes() {
 	// the game-night emails.
 	sessionsHandler.SetRecipientFilter(authService)
 	sessions.ConfigureRecipientFilter(sessionsService, authService)
+	// Per-night sightings: the after-night check-in and a page's Last seen
+	// read and write the same rows.
+	sessionsHandler.SetSightingService(sessions.NewSightingService(sessions.NewSightingRepository(a.DB), sessionsRepo,
+		&entityCampaignCheckerAdapter{svc: entityService}, &entityVisibilityFilterAdapter{svc: entityService}))
 	// Game-night links open the real-world calendar; with the calendar plugin
 	// down they keep going to the Sessions page.
 	if a.PluginHealth.IsHealthy(calendar.PluginSlug) {
