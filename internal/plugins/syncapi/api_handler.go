@@ -1653,6 +1653,11 @@ type apiCreateEntityTypeRequest struct {
 func (h *APIHandler) CreateEntityType(c echo.Context) error {
 	campaignID := c.Param("id")
 
+	// Same bar as the web route: entity types shape the whole campaign.
+	if h.resolveRole(c) < int(campaigns.RoleOwner) {
+		return apperror.NewForbidden("only campaign owners can manage entity types")
+	}
+
 	var req apiCreateEntityTypeRequest
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request body")
@@ -1686,6 +1691,11 @@ type apiUpdateEntityTypeRequest struct {
 // PUT /api/v1/campaigns/:id/entity-types/:typeID
 func (h *APIHandler) UpdateEntityType(c echo.Context) error {
 	campaignID := c.Param("id")
+
+	// Same bar as the web route: entity types shape the whole campaign.
+	if h.resolveRole(c) < int(campaigns.RoleOwner) {
+		return apperror.NewForbidden("only campaign owners can manage entity types")
+	}
 	typeID, err := strconv.Atoi(c.Param("typeID"))
 	if err != nil {
 		return apperror.NewBadRequest("invalid entity type ID")
