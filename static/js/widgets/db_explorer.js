@@ -16,6 +16,18 @@
 
   var D3_SRC = '/static/vendor/d3.min.js';
 
+  // Under Calm, Off or the device's reduce-motion setting the graph is drawn
+  // already settled and zooms jump, so nothing drifts on screen.
+  function reduced() {
+    return window.Chronicle && Chronicle.reducedMotion ? Chronicle.reducedMotion() :
+      !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  }
+  function settleNow(simulation) {
+    simulation.stop();
+    for (var i = 0; i < 300; i++) simulation.tick();
+    simulation.on('tick').call(simulation);
+  }
+
   // Plugin color palette — tuned for both light and dark modes.
   var PLUGIN_COLORS = {
     core:       { bg: '#64748b', text: '#f8fafc' },
@@ -385,6 +397,10 @@
             return 'translate(' + d.x + ',' + d.y + ')';
           });
         });
+        if (reduced()) {
+          settleNow(simulation);
+          zoomToFit(svg, g, zoom, width, height, nodes);
+        }
 
         // Render legend.
         renderLegend(svg, width, height, pluginList);
@@ -417,7 +433,7 @@
         var tx = (width - graphW * scale) / 2 - minX * scale + 40 * scale;
         var ty = (height - graphH * scale) / 2 - minY * scale + 40 * scale;
 
-        svg.transition().duration(750)
+        (reduced() ? svg : svg.transition().duration(750))
           .call(zoom.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
       }
 

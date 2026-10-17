@@ -142,4 +142,17 @@
     html.classList.toggle('nav-rm', off || calm);
   };
 
+  /**
+   * True when moves should not travel: the device asks for reduced motion,
+   * or the page is Calm or Off (html[data-motion], or the older nav-rm and
+   * data-view-motion flags the first-paint script and syncMotion also set).
+   * Read at the moment of the move, so a My view change applies at once.
+   */
+  window.Chronicle.reducedMotion = function () {
+    var html = document.documentElement;
+    return !!(html.getAttribute('data-motion') || html.classList.contains('nav-rm') ||
+      html.getAttribute('data-view-motion') === 'calm' ||
+      (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches));
+  };
+
 })();

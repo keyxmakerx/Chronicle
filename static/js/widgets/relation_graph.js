@@ -14,6 +14,18 @@
 
   var D3_SRC = '/static/vendor/d3.min.js';
 
+  // Under Calm, Off or the device's reduce-motion setting the graph is drawn
+  // already settled and zooms jump, so nothing drifts on screen.
+  function reduced() {
+    return window.Chronicle && Chronicle.reducedMotion ? Chronicle.reducedMotion() :
+      !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  }
+  function settleNow(simulation) {
+    simulation.stop();
+    for (var i = 0; i < 300; i++) simulation.tick();
+    simulation.on('tick').call(simulation);
+  }
+
   Chronicle.register('relation-graph', {
     init: function (el, config) {
       var apiUrl = config.apiUrl || '';
@@ -484,6 +496,7 @@
 
           nodes.attr('transform', function (d) { return 'translate(' + d.x + ',' + d.y + ')'; });
         });
+        if (reduced()) settleNow(simulation);
 
         // Controls bar (zoom buttons).
         var controls = document.createElement('div');
@@ -498,20 +511,20 @@
         zoomIn.className = 'btn-secondary text-xs';
         zoomIn.innerHTML = '<i class="fa-solid fa-plus"></i>';
         zoomIn.title = 'Zoom in';
-        zoomIn.addEventListener('click', function () { svg.transition().call(zoom.scaleBy, 1.5); });
+        zoomIn.addEventListener('click', function () { (reduced() ? svg : svg.transition()).call(zoom.scaleBy, 1.5); });
 
         var zoomOut = document.createElement('button');
         zoomOut.className = 'btn-secondary text-xs';
         zoomOut.innerHTML = '<i class="fa-solid fa-minus"></i>';
         zoomOut.title = 'Zoom out';
-        zoomOut.addEventListener('click', function () { svg.transition().call(zoom.scaleBy, 0.67); });
+        zoomOut.addEventListener('click', function () { (reduced() ? svg : svg.transition()).call(zoom.scaleBy, 0.67); });
 
         var resetBtn = document.createElement('button');
         resetBtn.className = 'btn-secondary text-xs';
         resetBtn.innerHTML = '<i class="fa-solid fa-expand"></i>';
         resetBtn.title = 'Reset view';
         resetBtn.addEventListener('click', function () {
-          svg.transition().call(zoom.transform, d3.zoomIdentity);
+          (reduced() ? svg : svg.transition()).call(zoom.transform, d3.zoomIdentity);
         });
 
         // Export PNG button.
