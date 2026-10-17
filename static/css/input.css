@@ -1720,7 +1720,35 @@
   @media (min-width: 640px) {
     .notes-panel-hidden { transform: translateY(14px) scale(.96); transform-origin: bottom right; }
   }
-  /* Collapsed: just the header bar. */
+  /* Placed by notes.js (jot_place.js): it floats where it was left, so its
+     corner comes from left/top rather than the tab's corner. */
+  @media (min-width: 640px) {
+    .notes-panel.notes-panel-placed { right: auto; bottom: auto; max-height: none; }
+    .notes-panel-placed .notes-header { cursor: grab; touch-action: none; }
+    .notes-panel-moving .notes-header { cursor: grabbing; }
+    .notes-panel-moving { transition: none; }
+    /* Pinned to a side: full height beside the page, which narrows to make
+       room, with only the inner edge drawn. */
+    .notes-panel.notes-panel-docked { border-radius: 0; border-top: 0; border-bottom: 0; box-shadow: var(--elev-resting); }
+    .notes-panel-docked .notes-resize-handle { display: none; }
+    #main-content { transition: margin var(--dur-standard) var(--ease-out); }
+    .jot-dock-l #main-content { margin-left: var(--jot-dock-w, 320px); }
+    .jot-dock-r #main-content { margin-right: var(--jot-dock-w, 320px); }
+    /* Stepping aside: off the nearest edge while a dialog is open, or a
+       glide to the far corner while something under it is edited. */
+    .notes-panel.notes-panel-aside-r { transform: translateX(calc(100% + 32px)); opacity: 0; visibility: hidden; }
+    .notes-panel.notes-panel-aside-l { transform: translateX(calc(-100% - 32px)); opacity: 0; visibility: hidden; }
+    .notes-panel.notes-panel-gliding {
+      transition: left var(--dur-large) var(--ease-slide), top var(--dur-large) var(--ease-slide),
+                  opacity var(--dur-standard) var(--ease-out), transform var(--dur-standard) var(--ease-out);
+    }
+  }
+  .notes-header:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+  .notes-dock-btn { display: none; }
+  @media (min-width: 640px) { .notes-dock-btn { display: inline-flex; } }
+  .note-btn.notes-dock-btn[hidden] { display: none; }
+
+  /* Folded: just the title bar. */
   .notes-panel.notes-panel-collapsed { top: auto; height: auto !important; }
   .notes-panel-collapsed .notes-body,
   .notes-panel-collapsed .notes-resize-handle { display: none; }
@@ -1728,32 +1756,38 @@
   .notes-panel-collapsed .notes-collapse-btn i { transform: rotate(180deg); }
   .notes-body { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
 
-  /* Resize handle: sits at the top-left corner, draggable. A phone's sheet
-     has a fixed size, so it has none. */
+  /* Resize handle: the bottom-right corner, draggable or moved with the
+     arrow keys. A phone's sheet has a fixed size, so it has none. */
   @media (max-width: 639px) {
     .notes-resize-handle { display: none; }
   }
   .notes-resize-handle {
     @apply absolute cursor-nwse-resize;
-    top: 0;
-    left: 0;
-    width: 18px;
-    height: 18px;
+    right: 0;
+    bottom: 0;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: 0;
+    background: none;
     z-index: 10;
+    touch-action: none;
   }
   .notes-resize-handle::after {
     content: '';
-    @apply absolute rounded-full;
-    background-color: color-mix(in srgb, var(--color-text-muted) 30%, transparent);
-    top: 5px;
-    left: 5px;
+    position: absolute;
+    right: 5px;
+    bottom: 5px;
     width: 8px;
     height: 8px;
-    transition: background-color 0.15s;
+    border-right: 2px solid color-mix(in srgb, var(--color-text-muted) 45%, transparent);
+    border-bottom: 2px solid color-mix(in srgb, var(--color-text-muted) 45%, transparent);
+    border-bottom-right-radius: 2px;
+    transition: border-color var(--dur-micro);
   }
-  .notes-resize-handle:hover::after {
-    background-color: color-mix(in srgb, var(--color-text-muted) 60%, transparent);
-  }
+  .notes-resize-handle:hover::after, .notes-resize-handle:focus-visible::after { border-color: var(--color-accent); }
+  .notes-resize-handle:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; border-radius: 4px; }
+  .notes-resize-handle[hidden] { display: none; }
 
   /* Text size presets -- applied via modifier class on the panel.
      Default is "md" (14px). Users toggle S/M/L via the settings gear;
@@ -1953,6 +1987,17 @@
     @apply bg-indigo-600 text-white border-indigo-600
            hover:bg-indigo-500 hover:text-white;
   }
+  /* Keep open on every page: a switch under the text sizes. */
+  .notes-pin-panel {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%;
+    margin-top: 10px; padding: 0; border: 0; background: none; cursor: pointer;
+    font-size: 12px; font-weight: 500; color: var(--color-text-body); white-space: nowrap;
+  }
+  .notes-switch { position: relative; flex: none; width: 28px; height: 16px; border-radius: 999px; background: var(--color-border); transition: background-color var(--dur-micro); }
+  .notes-switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / .25); transition: transform var(--dur-micro) var(--ease-out); }
+  .notes-pin-panel[aria-checked="true"] .notes-switch { background: var(--color-accent); }
+  .notes-pin-panel[aria-checked="true"] .notes-switch::after { transform: translateX(12px); }
+  .notes-pin-panel:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; border-radius: 4px; }
 
   .note-shared-badge {
     @apply inline-flex items-center justify-center w-5 h-5 rounded
