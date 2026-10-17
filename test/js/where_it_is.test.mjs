@@ -81,3 +81,10 @@ test('panelRows and dmLine read the card, never the markup', () => {
   assert.equal(W.dmLine(first), 'Set in Maps: this map sits under the Dockside pin.');
   assert.equal(W.dmLine(top), 'Set in Maps: no pin leads up from this map.');
 });
+
+test('a step whose next map is DM-only names it only in the Director\'s note', () => {
+  const d = { here: false, child: 'A', next: '', dmNext: 'The Shattered Coast' };
+  assert.deepEqual(JSON.parse(JSON.stringify(W.panelRows(d, 'x', true))), [['Pin on this map', 'A'], ['Reach', 'Widest map players can see']]);
+  assert.deepEqual(JSON.parse(JSON.stringify(W.panelRows(d, 'x', false))), [['Pin on this map', 'A'], ['Reach', 'Widest map you can see']]);
+  assert.equal(W.dmLine(d), 'Set in Maps: this map sits under the The Shattered Coast pin.');
+});

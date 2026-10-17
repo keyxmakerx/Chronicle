@@ -95,14 +95,15 @@
     rows.push(d.here ? ['This place', entityName + ' is here'] : ['Pin on this map', d.child || '']);
     rows.push(d.next
       ? ['Zooms out to', d.next]
-      : ['Reach', dm ? 'Widest map in this ladder' : 'Widest map you can see']);
+      : ['Reach', dm ? (d.dmNext ? 'Widest map players can see' : 'Widest map in this ladder') : 'Widest map you can see']);
     return rows.filter(function (r) { return r[1]; });
   }
 
   /** dmLine: the Director's note on how this map is placed in Maps. */
   function dmLine(d) {
-    return d.next
-      ? 'Set in Maps: this map sits under the ' + d.next + ' pin.'
+    var up = d.dmNext || d.next;
+    return up
+      ? 'Set in Maps: this map sits under the ' + up + ' pin.'
       : 'Set in Maps: no pin leads up from this map.';
   }
 
@@ -144,7 +145,11 @@
       big: btn.getAttribute('data-big') || '',
       child: btn.getAttribute('data-child') || '',
       next: btn.getAttribute('data-next') || '',
-      nextPage: btn.getAttribute('data-next-page') || ''
+      nextPage: btn.getAttribute('data-next-page') || '',
+      // Only on a step whose next map is DM-only, and only for the Director;
+      // used by the Director's note alone, never by what a player preview shows.
+      dmNext: btn.getAttribute('data-dm-next') || '',
+      dmNextPage: btn.getAttribute('data-dm-next-page') || ''
     };
   }
 
@@ -321,8 +326,9 @@
       dmp.hidden = false;
       $(dmp, '.wi-pdm-t').textContent = dmLine(d);
       var a = $(dmp, '.wi-pdm-a');
-      a.hidden = !d.nextPage;
-      if (d.nextPage) a.setAttribute('href', d.nextPage);
+      var up = d.dmNextPage || d.nextPage;
+      a.hidden = !up;
+      if (up) a.setAttribute('href', up);
     }
     $(panel, '.wi-open').setAttribute('href', d.page);
     var list = shown(root);

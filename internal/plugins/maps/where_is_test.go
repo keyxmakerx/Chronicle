@@ -25,7 +25,8 @@ type whPin struct {
 func whRepo(mapIDs []string, pins []whPin) *mockMapRepo {
 	var ms []Map
 	for _, id := range mapIDs {
-		ms = append(ms, Map{ID: id, CampaignID: "camp-1", Name: id})
+		img := "img-" + id
+		ms = append(ms, Map{ID: id, CampaignID: "camp-1", Name: id, ImageID: &img})
 	}
 	byMap := map[string][]Marker{}
 	pinning := map[string][]string{}
@@ -287,5 +288,134 @@ func TestWhereIs_EntityHiddenFromViewer(t *testing.T) {
 	}
 	if len(got.Steps) != 0 {
 		t.Errorf("steps = %v, want none", whShape(got))
+	}
+}
+
+// Pins hidden from the viewer must not use up the caps: an entity pinned on 60
+// maps whose first 55 pins are DM-only still shows a player the 5 they can see.
+func TestWhereIs_HiddenPinsDoNotUseTheCap(t *testing.T) {
+	var ids []string
+	var pins []whPin
+	for i := 0; i < 60; i++ {
+		id := fmt.Sprintf("m%02d", i)
+		ids = append(ids, id)
+		pins = append(pins, whPin{on: id, ent: "ent-1", dmOnly: i < 55})
+	}
+	svc := NewMapService(whRepo(ids, pins))
+	svc.(*mapService).SetEntityVisibilityGate(&fakeEntityVisibilityGate{viewable: map[string]bool{"ent-1": true}})
+	got, err := svc.WhereIs(context.Background(), "camp-1", "ent-1", int(permissions.RolePlayer), "u-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s, a := whShape(got), whAlso(got); s != "m55" || a != "m56,m57,m58,m59" {
+		t.Errorf("player sees steps %q also %q, want m55 and m56..m59", s, a)
+	}
+	if got.Truncated {
+		t.Error("nothing visible was cut, so the ladder is not truncated")
+	}
+}
+
+// More visible pinned maps than the cap: the list stops and says so.
+func TestWhereIs_VisibleStartsCapMarksTruncated(t *testing.T) {
+	var ids []string
+	var pins []whPin
+	for i := 0; i < 60; i++ {
+		id := fmt.Sprintf("m%02d", i)
+		ids = append(ids, id)
+		pins = append(pins, whPin{on: id, ent: "ent-1"})
+	}
+	svc := NewMapService(whRepo(ids, pins))
+	svc.(*mapService).SetEntityVisibilityGate(&fakeEntityVisibilityGate{viewable: map[string]bool{"ent-1": true}})
+	got, err := svc.WhereIs(context.Background(), "camp-1", "ent-1", int(permissions.RolePlayer), "u-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := len(got.Steps) + len(got.Also); n != maxWhereStarts || !got.Truncated {
+		t.Errorf("%d maps (truncated %v), want %d and truncated", n, got.Truncated, maxWhereStarts)
+	}
+}
+
+// Many maps opening one map: visible candidates are capped, and the walk's
+// marker reads stay within the budget however many there are.
+func TestWhereIs_ParentFanOutIsBounded(t *testing.T) {
+	ids := []string{"room"}
+	pins := []whPin{{on: "room", ent: "ent-1"}}
+	for i := 0; i < 400; i++ {
+		id := fmt.Sprintf("p%03d", i)
+		ids = append(ids, id)
+		pins = append(pins, whPin{on: id, opens: "room"})
+	}
+	repo := whRepo(ids, pins)
+	reads := 0
+	inner := repo.listMarkersFn
+	repo.listMarkersFn = func(c context.Context, mapID string, role int) ([]Marker, error) {
+		reads++
+		return inner(c, mapID, role)
+	}
+	svc := NewMapService(repo)
+	svc.(*mapService).SetEntityVisibilityGate(&fakeEntityVisibilityGate{viewable: map[string]bool{"ent-1": true}})
+	for _, role := range []int{int(permissions.RolePlayer), int(permissions.RoleOwner)} {
+		reads = 0
+		got, err := svc.WhereIs(context.Background(), "camp-1", "ent-1", role, "u-1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if reads > maxWhereReads || !got.Truncated || len(got.Steps) < 2 {
+			t.Errorf("role %d: %d reads (budget %d), truncated %v, steps %q", role, reads, maxWhereReads, got.Truncated, whShape(got))
+		}
+	}
+}
+
+// A page on no map costs one query: the maps are not even listed.
+func TestWhereIs_NoMapSkipsListMaps(t *testing.T) {
+	repo := whRepo([]string{"room"}, nil)
+	repo.listMapsFn = func(context.Context, string) ([]Map, error) {
+		t.Error("ListMaps must not run for a page on no map")
+		return nil, nil
+	}
+	got, err := NewMapService(repo).WhereIs(context.Background(), "camp-1", "ent-1", int(permissions.RolePlayer), "u-1")
+	if err != nil || len(got.Steps) != 0 {
+		t.Fatalf("steps %v err %v", got, err)
+	}
+}
+
+// A player gets the player-safe picture of every step and of Also; the DM gets
+// the original.
+func TestWhereIs_PlayersGetThePlayerSafePicture(t *testing.T) {
+	pins := []whPin{{on: "room", ent: "ent-1"}, {on: "inn", opens: "room"}, {on: "coast", ent: "ent-1"}}
+	svc := NewMapService(whRepo([]string{"room", "inn", "coast"}, pins)).(*mapService)
+	svc.SetEntityVisibilityGate(&fakeEntityVisibilityGate{viewable: map[string]bool{"ent-1": true}})
+	svc.SetShadowLookup(fakeShadowLookup{areas: []ShadowArea{{MinX: 80, MinY: 80, MaxX: 95, MaxY: 95, Strength: ShadowAlphaHint}}})
+	cases := []struct {
+		name         string
+		role         int
+		wantOriginal bool
+	}{
+		{"player", int(permissions.RolePlayer), false},
+		{"owner", int(permissions.RoleOwner), true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := svc.WhereIs(context.Background(), "camp-1", "ent-1", tc.role, "u-1")
+			if err != nil {
+				t.Fatal(err)
+			}
+			var all []Map
+			for _, s := range got.Steps {
+				all = append(all, s.Map)
+			}
+			for _, a := range got.Also {
+				all = append(all, a.Map)
+			}
+			if len(all) != 3 {
+				t.Fatalf("%d maps, want 3", len(all))
+			}
+			for _, m := range all {
+				hasOriginal := m.ImageID != nil
+				if hasOriginal != tc.wantOriginal || (!tc.wantOriginal && m.PlayerImageURL == "") {
+					t.Errorf("%s: original=%v playerURL=%q, want original=%v", m.ID, hasOriginal, m.PlayerImageURL, tc.wantOriginal)
+				}
+			}
+		})
 	}
 }

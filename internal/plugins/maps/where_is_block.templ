@@ -14,6 +14,7 @@
 package maps
 
 import (
+	"fmt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
@@ -99,8 +100,8 @@ templ BlockWhereItIs(cc *campaigns.CampaignContext, entityID, entityName string,
 				</section>
 			</div>
 			<p class="wi-hint" aria-live="polite"></p>
-			if l.Truncated {
-				<p class="wi-note">The ladder goes further out than the maps shown here.</p>
+			if l.Truncated && dm {
+				<p class="wi-note" data-dm-only><span class="wi-dmtag cb-dm">DM</span>{ fmt.Sprintf("Showing the first %d maps; there are more than this page reads.", whereShownCount(l)) }</p>
 			}
 			if dm {
 				@whereDMLines(cc.Campaign.ID, l)
@@ -146,6 +147,10 @@ templ whereStepCard(campaignID string, steps []WhereStep, i int, s WhereStep) {
 			data-child={ whereChildName(steps, i) }
 			data-next={ whereNextName(steps, i) }
 			data-next-page={ whereNextPage(campaignID, steps, i) }
+			if i+1 < len(steps) && steps[i+1].DMOnly {
+				data-dm-next={ whereDMNextName(steps, i) }
+				data-dm-next-page={ whereDMNextPage(campaignID, steps, i) }
+			}
 			onclick={ whereCall("toggle") }
 			onmouseenter={ whereCall("enter") }
 			onmouseleave={ whereCall("leave") }

@@ -82,6 +82,10 @@ func whereDesc(m *Map) string {
 	return strings.TrimSpace(string(r[:whereDescMax])) + "..."
 }
 
+// whereShownCount is how many maps the block names, for the Director's note
+// that a read was cut short.
+func whereShownCount(l *WhereLadder) int { return len(l.Steps) + len(l.Also) }
+
 // whereCountLabel is the heading's count of maps on the ladder.
 func whereCountLabel(n int) string {
 	return mapCountLabel(n)
@@ -103,16 +107,35 @@ func whereHasDMOnly(steps []WhereStep) bool {
 	return wherePlayerCount(steps) != len(steps)
 }
 
-// whereNextName is the name of the map one step wider than step i, or "".
+// whereNextName is the name of the map one step wider than step i, or "" when
+// there is none or that step is DM-only: the page names only what a player
+// could be told, so the Director's own player preview never names a hidden map.
 func whereNextName(steps []WhereStep, i int) string {
+	if i+1 < len(steps) && !steps[i+1].DMOnly {
+		return steps[i+1].Map.Name
+	}
+	return ""
+}
+
+// whereNextPage is the page of the map whereNextName names, or "".
+func whereNextPage(campaignID string, steps []WhereStep, i int) string {
+	if i+1 < len(steps) && !steps[i+1].DMOnly {
+		return mapPageURL(campaignID, steps[i+1].Map.ID)
+	}
+	return ""
+}
+
+// whereDMNextName and whereDMNextPage name the next map even when it is
+// DM-only. They feed only elements marked data-dm-only (the "Set in Maps"
+// note), so a player never receives them and the player preview hides them.
+func whereDMNextName(steps []WhereStep, i int) string {
 	if i+1 < len(steps) {
 		return steps[i+1].Map.Name
 	}
 	return ""
 }
 
-// whereNextPage is the page of the map one step wider than step i, or "".
-func whereNextPage(campaignID string, steps []WhereStep, i int) string {
+func whereDMNextPage(campaignID string, steps []WhereStep, i int) string {
 	if i+1 < len(steps) {
 		return mapPageURL(campaignID, steps[i+1].Map.ID)
 	}

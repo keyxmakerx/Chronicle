@@ -23,10 +23,15 @@ import (
 const WhereItIsBlockType = "where_it_is"
 
 const (
-	// maxWhereStarts caps how many maps pinning the entity are read.
-	maxWhereStarts = 50
-	// maxWhereParents caps how many maps linking to one map are read per step.
+	// maxWhereStarts caps how many maps the viewer can see the entity pinned
+	// on, and maxWhereParents how many maps they can see opening one map. The
+	// caps count visible results, so pins hidden from the viewer never use them up.
+	maxWhereStarts  = 50
 	maxWhereParents = 50
+	// maxWhereReads is the most marker lists one call reads (a DM's baseline
+	// player read counts too), so the cost is bounded however many maps link
+	// to each other. Past it the ladder stops and says so.
+	maxWhereReads = 200
 )
 
 // WhereStep is one map on the ladder.
@@ -55,7 +60,8 @@ type WhereAlso struct {
 type WhereLadder struct {
 	Steps []WhereStep
 	Also  []WhereAlso
-	// Truncated is set when the depth bound stopped a ladder that goes further.
+	// Truncated is set when the depth bound, a cap on visible maps or the read
+	// budget kept the ladder or the Also list from being complete.
 	Truncated bool
 }
 
@@ -68,96 +74,132 @@ type whereEdge struct {
 	Open bool
 }
 
-// WhereIs implements MapService.
-func (s *mapService) WhereIs(ctx context.Context, campaignID, entityID string, role int, userID string) (*WhereLadder, error) {
-	ms, err := s.repo.ListMaps(ctx, campaignID)
+// whereWalk is one WhereIs call: the viewer, what has been read, and the
+// budget. Marker lists are memoised per map and role, and each real read is
+// counted against maxWhereReads.
+type whereWalk struct {
+	s          *mapService
+	ctx        context.Context
+	campaignID string
+	role       int
+	userID     string
+	dm         bool
+	byID       map[string]*Map
+	memo       map[whereKey][]Marker
+	reads      int
+	truncated  bool
+}
+
+type whereKey struct {
+	mapID  string
+	player bool
+}
+
+// pinsOn is the map's pins for the viewer (or, with asPlayer, for an ordinary
+// player). ok is false once the read budget is spent.
+func (w *whereWalk) pinsOn(mapID string, asPlayer bool) (pins []Marker, ok bool, err error) {
+	k := whereKey{mapID, asPlayer}
+	if v, hit := w.memo[k]; hit {
+		return v, true, nil
+	}
+	if w.reads >= maxWhereReads {
+		w.truncated = true
+		return nil, false, nil
+	}
+	w.reads++
+	r, uid := w.role, w.userID
+	if asPlayer {
+		r, uid = int(permissions.RolePlayer), ""
+	}
+	v, err := w.s.ListMarkers(w.ctx, w.campaignID, mapID, r, uid)
 	if err != nil {
-		return nil, fmt.Errorf("list maps for where-is: %w", err)
+		return nil, false, err
 	}
-	byID := make(map[string]*Map, len(ms))
-	for i := range ms {
-		byID[ms[i].ID] = &ms[i]
-	}
-	dm := permissions.CanSeeDmOnly(role)
+	w.memo[k] = v
+	return v, true, nil
+}
 
-	// Reads are memoised: the same map is asked about once as the viewer and,
-	// for a DM, once as the baseline player who tells which pins are DM-only.
-	type key struct {
-		mapID  string
-		player bool
+// edgeOn finds, among the viewer's pins on map from, the pin that matches
+// (the entity's pin, or a pin opening a map). A DM also learns whether players
+// can follow it. ok is false when the budget ran out or nothing matches.
+func (w *whereWalk) edgeOn(from *Map, match func(*Marker) bool) (*whereEdge, error) {
+	pins, ok, err := w.pinsOn(from.ID, false)
+	if err != nil || !ok {
+		return nil, err
 	}
-	memo := make(map[key][]Marker)
-	pinsOn := func(mapID string, asPlayer bool) ([]Marker, error) {
-		k := key{mapID, asPlayer}
-		if v, ok := memo[k]; ok {
-			return v, nil
-		}
-		r, uid := role, userID
-		if asPlayer {
-			r, uid = int(permissions.RolePlayer), ""
-		}
-		v, err := s.ListMarkers(ctx, campaignID, mapID, r, uid)
-		if err != nil {
+	var open map[string]bool
+	if w.dm {
+		pp, ok, err := w.pinsOn(from.ID, true)
+		if err != nil || !ok {
 			return nil, err
 		}
-		memo[k] = v
-		return v, nil
-	}
-	// openPins is the set of pin ids on a map that an ordinary player sees.
-	openPins := func(mapID string) (map[string]bool, error) {
-		out := map[string]bool{}
-		v, err := pinsOn(mapID, true)
-		if err != nil {
-			return nil, err
+		open = make(map[string]bool, len(pp))
+		for i := range pp {
+			open[pp[i].ID] = true
 		}
-		for i := range v {
-			out[v[i].ID] = true
-		}
-		return out, nil
 	}
+	// With several matching pins the map is outlined at the first, and is open
+	// to players if any of them is.
+	var pick *whereEdge
+	for i := range pins {
+		if !match(&pins[i]) {
+			continue
+		}
+		e := whereEdge{From: from, Pin: &pins[i], Open: !w.dm || open[pins[i].ID]}
+		if pick == nil || (e.Open && !pick.Open) {
+			c := e
+			pick = &c
+		}
+	}
+	return pick, nil
+}
 
+// WhereIs implements MapService. Cost: one query when the entity is on no map
+// (the common page); otherwise at most maxWhereReads marker-list reads plus
+// two queries per step, whatever the campaign holds.
+func (s *mapService) WhereIs(ctx context.Context, campaignID, entityID string, role int, userID string) (*WhereLadder, error) {
 	pinnedIDs, err := s.repo.ListMapsPinningEntity(ctx, campaignID, entityID)
 	if err != nil {
 		return nil, fmt.Errorf("list maps pinning entity: %w", err)
 	}
-	if len(pinnedIDs) > maxWhereStarts {
-		pinnedIDs = pinnedIDs[:maxWhereStarts]
+	ladder := &WhereLadder{}
+	if len(pinnedIDs) == 0 {
+		return ladder, nil
 	}
+	ms, err := s.repo.ListMaps(ctx, campaignID)
+	if err != nil {
+		return nil, fmt.Errorf("list maps for where-is: %w", err)
+	}
+	w := &whereWalk{
+		s: s, ctx: ctx, campaignID: campaignID, role: role, userID: userID,
+		dm: permissions.CanSeeDmOnly(role), byID: make(map[string]*Map, len(ms)), memo: map[whereKey][]Marker{},
+	}
+	for i := range ms {
+		w.byID[ms[i].ID] = &ms[i]
+	}
+
+	// The cap counts maps the viewer can see the entity on, so pins hidden
+	// from them cannot crowd the visible ones out.
 	var starts []whereEdge
 	for _, id := range pinnedIDs {
-		m := byID[id]
+		m := w.byID[id]
 		if m == nil {
 			continue
 		}
-		pins, err := pinsOn(id, false)
+		if len(starts) >= maxWhereStarts || w.reads >= maxWhereReads {
+			w.truncated = true
+			break
+		}
+		e, err := w.edgeOn(m, func(mk *Marker) bool { return mk.EntityID != nil && *mk.EntityID == entityID })
 		if err != nil {
 			return nil, err
 		}
-		var open map[string]bool
-		if dm {
-			if open, err = openPins(id); err != nil {
-				return nil, err
-			}
-		}
-		// A map with several pins of the entity is outlined at the first, and
-		// is open to players if any of them is.
-		var pick *whereEdge
-		for i := range pins {
-			if pins[i].EntityID == nil || *pins[i].EntityID != entityID {
-				continue
-			}
-			e := whereEdge{From: m, Pin: &pins[i], Open: !dm || open[pins[i].ID]}
-			if pick == nil || (e.Open && !pick.Open) {
-				c := e
-				pick = &c
-			}
-		}
-		if pick != nil {
-			starts = append(starts, *pick)
+		if e != nil {
+			starts = append(starts, *e)
 		}
 	}
-	ladder := &WhereLadder{}
 	if len(starts) == 0 {
+		ladder.Truncated = w.truncated
 		return ladder, nil
 	}
 	// The DM's ladder leads with a map players can see, so the part of it they
@@ -167,10 +209,9 @@ func (s *mapService) WhereIs(ctx context.Context, campaignID, entityID string, r
 	first := starts[0]
 	visited := map[string]bool{first.From.ID: true}
 	steps := []WhereStep{{Map: *first.From, HasPin: true, PinX: first.Pin.X, PinY: first.Pin.Y, DMOnly: !first.Open}}
-
 	for len(steps) < MaxLinkTreeDepth {
 		cur := steps[len(steps)-1]
-		next, err := s.nextWhereEdge(ctx, campaignID, cur.Map.ID, byID, visited, dm, pinsOn, openPins)
+		next, err := w.nextEdge(cur.Map.ID, visited)
 		if err != nil {
 			return nil, err
 		}
@@ -184,11 +225,13 @@ func (s *mapService) WhereIs(ctx context.Context, campaignID, entityID string, r
 		})
 	}
 	if len(steps) == MaxLinkTreeDepth {
-		more, err := s.nextWhereEdge(ctx, campaignID, steps[len(steps)-1].Map.ID, byID, visited, dm, pinsOn, openPins)
+		more, err := w.nextEdge(steps[len(steps)-1].Map.ID, visited)
 		if err != nil {
 			return nil, err
 		}
-		ladder.Truncated = more != nil
+		if more != nil {
+			w.truncated = true
+		}
 	}
 
 	for _, st := range starts[1:] {
@@ -215,54 +258,38 @@ func (s *mapService) WhereIs(ctx context.Context, campaignID, entityID string, r
 		ladder.Also[i].Map = *vm
 	}
 	ladder.Steps = steps
+	ladder.Truncated = w.truncated
 	return ladder, nil
 }
 
-// nextWhereEdge picks the pin that takes the ladder one map further out from
+// nextEdge picks the pin that takes the ladder one map further out from
 // mapID: a pin, on a map not yet on the ladder, that opens mapID. Several
 // maps may open it; the pick is deterministic (a map players can follow into
 // first, then by name, then id), so the same page always draws the same ladder
-// and a cycle cannot send it round again (visited).
-func (s *mapService) nextWhereEdge(
-	ctx context.Context, campaignID, mapID string, byID map[string]*Map, visited map[string]bool, dm bool,
-	pinsOn func(string, bool) ([]Marker, error), openPins func(string) (map[string]bool, error),
-) (*whereEdge, error) {
-	srcs, err := s.repo.ListMapsLinkingTo(ctx, campaignID, mapID)
+// and a cycle cannot send it round again (visited). Reading stops at
+// maxWhereParents visible candidates or when the read budget is spent, and
+// either marks the walk truncated.
+func (w *whereWalk) nextEdge(mapID string, visited map[string]bool) (*whereEdge, error) {
+	srcs, err := w.s.repo.ListMapsLinkingTo(w.ctx, w.campaignID, mapID)
 	if err != nil {
 		return nil, fmt.Errorf("list maps linking to map: %w", err)
 	}
-	if len(srcs) > maxWhereParents {
-		srcs = srcs[:maxWhereParents]
-	}
 	var cands []whereEdge
 	for _, id := range srcs {
-		from := byID[id]
+		from := w.byID[id]
 		if from == nil || visited[id] {
 			continue
 		}
-		pins, err := pinsOn(id, false)
+		if len(cands) >= maxWhereParents || w.reads >= maxWhereReads {
+			w.truncated = true
+			break
+		}
+		e, err := w.edgeOn(from, func(mk *Marker) bool { return mk.LinkedMapID != nil && *mk.LinkedMapID == mapID })
 		if err != nil {
 			return nil, err
 		}
-		var open map[string]bool
-		if dm {
-			if open, err = openPins(id); err != nil {
-				return nil, err
-			}
-		}
-		var pick *whereEdge
-		for i := range pins {
-			if pins[i].LinkedMapID == nil || *pins[i].LinkedMapID != mapID {
-				continue
-			}
-			e := whereEdge{From: from, Pin: &pins[i], Open: !dm || open[pins[i].ID]}
-			if pick == nil || (e.Open && !pick.Open) {
-				c := e
-				pick = &c
-			}
-		}
-		if pick != nil {
-			cands = append(cands, *pick)
+		if e != nil {
+			cands = append(cands, *e)
 		}
 	}
 	if len(cands) == 0 {
