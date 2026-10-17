@@ -172,6 +172,19 @@ func (s *service) present(ctx context.Context, campaignID string, rows []Row, v 
 // row keeps its name: a form change needs a row with a page, an arrival needs
 // a row, and a Stamina trigger on a missing row falls back to manual. A stage
 // emptied this way is kept so the DM sees it and decides.
+// CarryStages keeps an encounter's stages across a save that replaces its
+// rows: references to rows that are gone are dropped, and a stage left with
+// nothing to do is dropped too, since a save would refuse it.
+func CarryStages(in []Stage, rows []Creature) []Stage {
+	out := []Stage{}
+	for _, st := range readStages(in, rows) {
+		if len(st.Forms) > 0 || len(st.Arrive) > 0 {
+			out = append(out, st)
+		}
+	}
+	return out
+}
+
 func readStages(in []Stage, rows []Creature) []Stage {
 	byID := make(map[string]Creature, len(rows))
 	for _, r := range rows {
