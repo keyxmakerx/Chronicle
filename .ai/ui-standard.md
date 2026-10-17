@@ -280,7 +280,7 @@ leaving the list for another page.
   `Chronicle.markDirty(id)` / `markClean(id)` (`static/js/boot.js`); a
   closing panel or a page change checks `Chronicle.isDirty()`. A small box
   asks in place with the shared slip (`Chronicle.askSlip`,
-  `static/js/ask_slip.js`): it slides out from under the box's foot, says
+  `static/js/theme.js`): it slides out from under the box's foot, says
   what would be thrown away, and offers Keep editing beside a red button
   that names the loss. The box never shakes and never closes behind you.
 - **Big editors pop out** over the page, as the calendar editor does, rather

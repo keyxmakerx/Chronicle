@@ -12,7 +12,7 @@
  *
  * The fold closes only on purpose: Cancel, the close button, Escape or Edit
  * name again; a click elsewhere never shuts it. With unsaved changes, Escape
- * and Edit name ask first in the shared slip (static/js/ask_slip.js), which
+ * and Edit name ask first in the shared slip (static/js/theme.js), which
  * names what would be thrown away. Every control calls in here through an
  * inline handler built Go-side, so nothing depends on a script inside a
  * swapped fragment; the Escape listener lives only while the fold is open.

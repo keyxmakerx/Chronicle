@@ -1,6 +1,6 @@
 // ask_slip_browser.test.mjs — the shared "Ask in place" slip.
 //
-// Runs static/js/ask_slip.js in a real Chromium with its rules from
+// Runs the slip's part of static/js/theme.js in a real Chromium with its rules from
 // input.css, on its own and inside the Edit name fold (page_name_fold.js),
 // which is one of the boxes that use it.
 //
@@ -16,6 +16,9 @@ import { pw, chromePath, skip } from './_browser_env.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const read = (f) => readFileSync(join(root, f), 'utf8');
+// The slip is the last part of theme.js, which every page loads.
+const THEME = read('static/js/theme.js');
+const SLIP_JS = THEME.slice(THEME.indexOf('/**\n * The "Ask in place" slip'));
 
 // The slip's own rules, and the motion tokens they use.
 const CSS = ':root{--dur-slide:360ms;--ease-slide:ease;--dur-standard:200ms;--ease-out:ease}' +
@@ -31,7 +34,7 @@ async function page(t, body, motion) {
   p.on('pageerror', (e) => errors.push(e.message));
   t.after(() => assert.deepEqual(errors, []));
   await p.setContent('<!doctype html><html' + (motion ? ' data-motion="' + motion + '"' : '') + '><head><style>' + CSS + '</style></head><body>' + body + '</body></html>');
-  await p.addScriptTag({ content: read('static/js/ask_slip.js') });
+  await p.addScriptTag({ content: SLIP_JS });
   return p;
 }
 const settle = (p) => p.waitForTimeout(450);

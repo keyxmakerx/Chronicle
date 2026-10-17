@@ -5467,7 +5467,7 @@ html[data-view-motion="calm"] .pl-chip, .nav-rm .pl-chip, html.rm .pl-chip, html
 .nav-rm .ag-warn.is-on, .nav-rm .ag-landed, .nav-rm .ag-pop, .nav-rm .ag-toast { animation: none !important; }
 .nav-rm .ag-fold { transition: none !important; }
 
-/* The "Ask in place" slip (static/js/ask_slip.js): a box with unsaved work
+/* The "Ask in place" slip (static/js/theme.js): a box with unsaved work
    asks before it closes. The slip slides out from under the box's foot and
    the box grows to hold it (the Slide-out move); under Calm it fades in
    place, under Off it appears. It inherits the box's lower corners. */

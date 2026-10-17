@@ -30,7 +30,7 @@
  *
  * Calling pickChoice again on an anchor whose fold is open closes it. With a
  * pick not yet saved, that and Escape ask first in the shared slip
- * (static/js/ask_slip.js); Cancel and the close button always close.
+ * (static/js/theme.js); Cancel and the close button always close.
  */
 (function () {
   'use strict';

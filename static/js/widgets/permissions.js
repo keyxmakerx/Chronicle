@@ -11,7 +11,7 @@
  *      reuses the server-rendered control as the trigger and unfolds the
  *      editor from it. It closes only on purpose (its close button, Escape
  *      or the control); while a change is unsaved it asks first, in the
- *      shared slip (static/js/ask_slip.js).
+ *      shared slip (static/js/theme.js).
  *   2. `data-mode="draft"` + `data-draft-target` (create form): no
  *      endpoint yet, writes is_private into the target hidden input;
  *      Custom mode is disabled until the entity has an ID.

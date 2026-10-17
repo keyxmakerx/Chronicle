@@ -12,7 +12,7 @@
  * A box closes only on purpose: Cancel, the close button, Escape or the
  * button that opened it; a click elsewhere never shuts it (the card's small
  * menu still does, losing nothing). With an unsent choice, Escape and the
- * opening button ask first in the shared slip (static/js/ask_slip.js), which
+ * opening button ask first in the shared slip (static/js/theme.js), which
  * names what would be lost.
  *
  * Every control inside a server-rendered box calls in here through an inline
