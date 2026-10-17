@@ -10,12 +10,12 @@
  * absent key keeps the stored value, null clears it). A claimed player's fold
  * holds the name alone, which is all the server takes from them.
  *
- * A fold with unsaved changes does not close on a click outside or on Escape:
- * it shakes and shows its amber bar, whose Discard throws the changes away.
- * Cancel and the close button always close. Every control calls in here
- * through an inline handler built Go-side, so nothing depends on a script
- * inside a swapped fragment; the outside-click and Escape listeners live only
- * while the fold is open.
+ * The fold closes only on purpose: Cancel, the close button, Escape or Edit
+ * name again; a click elsewhere never shuts it. With unsaved changes, Escape
+ * and Edit name ask first in the shared slip (static/js/ask_slip.js), which
+ * names what would be thrown away. Every control calls in here through an
+ * inline handler built Go-side, so nothing depends on a script inside a
+ * swapped fragment; the Escape listener lives only while the fold is open.
  */
 (function () {
   'use strict';
@@ -30,6 +30,7 @@
   var searchSeq = 0;
 
   function reduced() {
+    if (C.reducedMotion) return C.reducedMotion();
     return matchMedia('(prefers-reduced-motion: reduce)').matches ||
       !!document.querySelector('.nav-rm, html.rm, html[data-cz-reduce], html[data-view-motion="calm"]');
   }
@@ -66,10 +67,22 @@
     setTimeout(fin, 420);
   }
 
-  function nag(box) {
-    var w = $(box, '.ag-warn');
-    if (w) { w.classList.remove('is-on'); void w.offsetWidth; w.classList.add('is-on'); }
-    box.classList.remove('is-nagging'); void box.offsetWidth; box.classList.add('is-nagging');
+  // ask says what leaving would throw away, under the fold's foot.
+  function ask(box) {
+    if (!C.askSlip) return;
+    var c = changes(box), keys = Object.keys(c);
+    var only = keys.length === 1 && keys[0] === 'name';
+    var what = keys.map(function (k) {
+      return { name: 'the new name', type_label: 'the new descriptor', parent_id: 'the new parent' }[k];
+    });
+    var list = what.length > 1 ? what.slice(0, -1).join(', ') + ' and ' + what[what.length - 1] : what[0];
+    C.askSlip(box, {
+      ask: only ? 'Discard the new name?' : 'Discard your changes?',
+      detail: only && c.name ? '“' + c.name + '” hasn’t been saved.'
+        : list.charAt(0).toUpperCase() + list.slice(1) + (what.length > 1 ? ' haven’t' : ' hasn’t') + ' been saved.',
+      discard: 'Discard',
+      onDiscard: function () { close(true); }
+    });
   }
 
   function toast(msg) {
@@ -137,8 +150,7 @@
     if (dirty) { if (C.markDirty) C.markDirty(DIRTY_ID); }
     else {
       if (C.markClean) C.markClean(DIRTY_ID);
-      var w = $(box, '.ag-warn');
-      if (w) w.classList.remove('is-on');
+      if (C.askSlip) C.askSlip.close(box);
     }
     return dirty;
   }
@@ -154,8 +166,7 @@
     box.setAttribute('data-sel-name', box.getAttribute('data-parent-name') || '');
     showError(box, '');
     setSaveState(box, 'idle');
-    var w = $(box, '.ag-warn');
-    if (w) w.classList.remove('is-on');
+    if (C.askSlip) C.askSlip.close(box);
     renderParents(box, null);
     sync(box);
   }
@@ -243,21 +254,14 @@
 
   // ---- open and close ----
 
-  function outside(e) {
-    if (!S) return;
-    if (!S.host.isConnected) { forget(); return; }
-    if (S.host.contains(e.target) || (S.trigger && S.trigger.contains(e.target))) return;
-    close(false);
-  }
   function onKey(e) {
     if (e.key !== 'Escape' || !S) return;
+    if (!S.host.isConnected) { forget(); return; }
     var t = S.trigger;
     if (close(false) && t && t.isConnected) t.focus();
   }
   function listen(on) {
-    var m = on ? 'addEventListener' : 'removeEventListener';
-    document[m]('mousedown', outside, true);
-    document[m]('keydown', onKey, true);
+    document[on ? 'addEventListener' : 'removeEventListener']('keydown', onKey, true);
   }
   function forget() {
     S = null;
@@ -265,12 +269,12 @@
     if (C.markClean) C.markClean(DIRTY_ID);
   }
 
-  // close shuts the fold. Unless forced, unsaved changes nag instead and
-  // close returns false.
+  // close shuts the fold. Unless forced, unsaved changes ask first and close
+  // returns false.
   function close(force, after) {
     if (!S) { if (after) after(); return true; }
     if (!S.host.isConnected) { forget(); if (after) after(); return true; }
-    if (!force && !saving && isDirty(S.box)) { nag(S.box); return false; }
+    if (!force && !saving && isDirty(S.box)) { ask(S.box); return false; }
     var s = S;
     forget();
     if (s.trigger) s.trigger.setAttribute('aria-expanded', 'false');
@@ -303,8 +307,8 @@
   H._fold = { changes: changes, isDirty: isDirty };
 
   H.nameClose = function () { close(true); };
-  H.nameDiscard = function () { close(true); };
-  H.nameInput = function (el) { var b = boxOf(el); if (b) { showError(b, ''); setSaveState(b, 'idle'); sync(b); } };
+  // Typing again answers the slip: the person is back at work.
+  H.nameInput = function (el) { var b = boxOf(el); if (b) { showError(b, ''); setSaveState(b, 'idle'); if (C.askSlip) C.askSlip.close(b); sync(b); } };
 
   // ---- save ----
 

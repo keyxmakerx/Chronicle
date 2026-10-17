@@ -287,7 +287,6 @@
         (names ? '' : '<button type="button" class="rt-ghost" data-edit aria-expanded="' + S.editing + '"><i class="fa-solid fa-pen" aria-hidden="true"></i>' + (S.editing ? 'Close table' : 'Edit table') + '</button>') + '</div>' +
         '<div class="rt-ed" data-ed></div>' +
         (S.editing ? '' : '<div class="rt-rows" aria-live="polite">' + S.rows.map(rowHTML).join('') + '</div>') +
-        '<div class="rt-warn" data-warn role="alert"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i><span>Not saved yet. Save the table, or throw the changes away.</span><button type="button" data-discard>Discard</button></div>' +
         (S.editing ? '' : '<div class="rt-foot"><button type="button" class="rt-main" data-roll><i class="fa-solid fa-dice" aria-hidden="true"></i>' + (anyPin() ? 'Reroll the rest' : 'Roll') + '</button>' +
           '<button type="button" class="rt-sec" data-put><i class="fa-solid fa-arrow-turn-up" aria-hidden="true"></i>Put in page</button>' +
           '<span class="rt-sp"></span><span class="rt-note"><i class="fa-solid fa-eye-slash" aria-hidden="true"></i> Players don’t see the roller, only what you put in the page</span></div>');
@@ -384,12 +383,18 @@
       ed.style.height = ed.offsetHeight + 'px'; void ed.offsetHeight; ed.style.height = '0px';
       setTimeout(done, 320);
     }
-    function nag() {
-      B.classList.remove('is-nagging'); void B.offsetWidth; B.classList.add('is-nagging');
-      var w = B.querySelector('[data-warn]');
-      w.classList.remove('is-on'); void w.offsetWidth; w.classList.add('is-on');
-      var s = B.querySelector('[data-save]');
-      if (s) s.focus({ preventScroll: true });
+    // ask says the table's changes would be lost, under the block's foot.
+    // then runs instead of closing the editor (switching tables).
+    function ask(then) {
+      if (!window.Chronicle || !Chronicle.askSlip) return;
+      readDraft();
+      var n = S.draft && S.draft.name && S.draft.name.trim();
+      Chronicle.askSlip(B, {
+        ask: 'Discard your changes?',
+        detail: (n ? 'Your changes to “' + n + '”' : 'Your changes to this table') + ' haven’t been saved.',
+        discard: 'Discard',
+        onDiscard: function () { S.dirty = false; if (then) then(); else closeEditor(); }
+      });
     }
     function choose(id) {
       S.table = id; S.rows = []; S.picking = false;
@@ -423,7 +428,12 @@
       var t = e.target.closest('button');
       if (!t || !B.contains(t)) return;
       if (t.hasAttribute('data-pick')) { S.picking = !S.picking; draw(); return; }
-      if (t.hasAttribute('data-t')) { if (S.editing && S.dirty) { S.picking = false; draw(); nag(); return; } S.editing = false; S.draft = null; choose(t.getAttribute('data-t')); return; }
+      if (t.hasAttribute('data-t')) {
+        var id = t.getAttribute('data-t');
+        var go = function () { S.editing = false; S.draft = null; choose(id); };
+        if (S.editing && S.dirty) { S.picking = false; readDraft(); draw(); ask(go); return; }
+        go(); return;
+      }
       if (t.hasAttribute('data-new')) {
         S.picking = false; S.editing = true; S.dirty = true;
         S.draft = { id: freeId(S.G, S.list, 'my-table'), name: 'New table', entries: [{ name: '', brief: '', weight: 1 }, { name: '', brief: '', weight: 1 }, { name: '', brief: '', weight: 1 }] };
@@ -433,7 +443,7 @@
       }
       if (t.hasAttribute('data-n')) { S.count = +t.getAttribute('data-n'); S.rows = S.rows.slice(0, S.count); if (opts.onAttrs) opts.onAttrs(S.table, S.count); rollAll(); return; }
       if (t.hasAttribute('data-edit')) {
-        if (S.editing) { if (S.dirty) nag(); else closeEditor(); return; }
+        if (S.editing) { if (S.dirty) ask(); else closeEditor(); return; }
         S.editing = true;
         var o = own(S.list, S.table);
         S.draft = o ? { id: o.id, name: o.name, entries: entriesFor(S.G, S.list, o.id), credit: o.credit || null } : null;
@@ -448,7 +458,6 @@
       if (t.hasAttribute('data-add')) { readDraft(); S.draft.entries.push({ name: '', brief: '', weight: 1 }); S.dirty = true; draw(); var ins = B.querySelectorAll('.rt-ent [data-n]'); ins[ins.length - 1].focus(); return; }
       if (t.hasAttribute('data-del')) { readDraft(); S.draft.entries.splice(+t.closest('.rt-ent').getAttribute('data-e'), 1); S.dirty = true; draw(); return; }
       if (t.hasAttribute('data-save')) { saveDraft(); return; }
-      if (t.hasAttribute('data-discard')) { S.dirty = false; closeEditor(); return; }
       if (t.hasAttribute('data-roll')) { rollAll(); return; }
       if (t.hasAttribute('data-pin')) { var i = +t.closest('.rt-row').getAttribute('data-i'); S.rows[i].pin = !S.rows[i].pin; draw(); return; }
       if (t.hasAttribute('data-one')) { rollOne(+t.closest('.rt-row').getAttribute('data-i')); return; }
@@ -468,13 +477,12 @@
     B.addEventListener('keydown', function (e) {
       if (e.key !== 'Escape') return;
       if (S.picking) { e.stopPropagation(); S.picking = false; draw(); B.querySelector('[data-pick]').focus(); }
-      else if (S.editing) { e.stopPropagation(); if (S.dirty) nag(); else closeEditor(); }
+      else if (S.editing) { e.stopPropagation(); if (S.dirty) ask(); else closeEditor(); }
     });
-    /* Click-off: the picker just closes; the editor closes only when nothing is unsaved. */
+    /* Click-off closes the table picker only; the editor closes on purpose. */
     function outside(e) {
       if (B.contains(e.target)) return;
-      if (S.picking) { S.picking = false; draw(); return; }
-      if (S.editing) { if (S.dirty) nag(); else closeEditor(); }
+      if (S.picking) { S.picking = false; draw(); }
     }
     document.addEventListener('mousedown', outside);
 
@@ -536,8 +544,7 @@
         '<div class="rtd-act"><button type="button" class="rt-btn" data-roll title="Roll again" aria-label="Roll again"><i class="fa-solid fa-dice"></i></button>' +
         '<button type="button" class="rt-main" data-put' + (S.res && !S.res.problem && !S.busy ? '' : ' disabled') + '><i class="fa-solid fa-calendar-plus" aria-hidden="true"></i>' + (S.busy ? 'Putting it on the day…' : 'Put on this day') + '</button>' +
         '<button type="button" class="rt-ghost" data-cancel>Cancel</button></div>' +
-        '<p class="rt-note rtd-hid"><i class="fa-solid fa-eye-slash" aria-hidden="true"></i> Only you see it until you show it.</p>' +
-        '<div class="rt-warn" data-warn role="alert"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i><span>This roll isn’t on the day yet.</span><button type="button" data-discard>Discard</button></div>';
+        '<p class="rt-note rtd-hid"><i class="fa-solid fa-eye-slash" aria-hidden="true"></i> Only you see it until you show it.</p>';
     }
     function rollIt() {
       if (!S.G) return;
@@ -568,11 +575,17 @@
       setTimeout(fin, 340);
     }
     function isDirty() { return !closed && !!S.res && !S.res.problem; }
+    // nag asks, under the roller's foot, before the roll is thrown away.
+    // Asking again while the slip is out leaves it out, so clicks around
+    // the calendar don't flick it open and shut.
     function nag() {
-      var card = P.closest('.wing') || P;
-      card.classList.remove('is-nagging'); void card.offsetWidth; card.classList.add('is-nagging');
-      var w = P.querySelector('[data-warn]');
-      w.classList.remove('is-on'); void w.offsetWidth; w.classList.add('is-on');
+      if (!window.Chronicle || !Chronicle.askSlip || !S.res || Chronicle.askSlip.isOpen(P)) return;
+      Chronicle.askSlip(P, {
+        ask: 'Discard this roll?',
+        detail: '“' + S.res.name + '” isn’t on the day yet.',
+        discard: 'Discard',
+        onDiscard: function () { S.res = null; close(); }
+      });
     }
     P.addEventListener('click', function (e) {
       var t = e.target.closest('button');
@@ -581,7 +594,7 @@
       if (t.hasAttribute('data-t')) { S.table = t.getAttribute('data-t'); rollIt(); return; }
       if (t.hasAttribute('data-more')) { S.more = true; draw(); return; }
       if (t.hasAttribute('data-roll')) { rollIt(); return; }
-      if (t.hasAttribute('data-cancel') || t.hasAttribute('data-discard')) { S.res = null; close(); return; }
+      if (t.hasAttribute('data-cancel')) { S.res = null; close(); return; }
       if (t.hasAttribute('data-put') && S.res && !S.busy) {
         S.busy = true; draw();
         Promise.resolve(opts.onPut(S.res)).then(function () { S.res = null; close(); })

@@ -483,11 +483,15 @@ func TestGiveDialog_Renders(t *testing.T) {
 		"Robin gets a notification. It shows on Mira in Foundry too.",
 		"Robin, Mira’s player, will be able to see this item’s page. Nobody else will.",
 		"Mira gets “Map: Dungeon”. Opening it shows the map. Only players holding it can see its page.",
-		"How many", "Not given yet. Give it, or throw the choice away.", "Discard",
+		"How many",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("character box missing %q", want)
 		}
+	}
+	// An unsent pick is asked about by the shared slip, not a bar in the box.
+	if strings.Contains(out, "ag-warn") {
+		t.Error("the give box should carry no warn bar")
 	}
 	if n := strings.Count(out, "has it"); n != 1 {
 		t.Errorf("only the held map is tagged, got %d", n)

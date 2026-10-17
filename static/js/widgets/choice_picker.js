@@ -28,7 +28,9 @@
  *   Chronicle.fetchChoices(campaignId, fieldKey)
  *     -> Promise<{systemName, choices: [{slug,name,summary,source}]}>
  *
- * Calling pickChoice again on an anchor whose fold is open closes it.
+ * Calling pickChoice again on an anchor whose fold is open closes it. With a
+ * pick not yet saved, that and Escape ask first in the shared slip
+ * (static/js/ask_slip.js); Cancel and the close button always close.
  */
 (function () {
   'use strict';
@@ -128,7 +130,7 @@
 
     // Second call on the same anchor closes the open fold.
     var existing = anchor[OPEN];
-    if (existing) { existing.close(null); return Promise.resolve(null); }
+    if (existing) { existing.leave(); return Promise.resolve(null); }
 
     var label = opts.label || opts.fieldKey;
     var willSave = !!opts.entityId && opts.save !== false;
@@ -159,7 +161,18 @@
       if (anchor.focus) anchor.focus();
       resolveFn(result);
     }
-    anchor[OPEN] = { close: close };
+    // leave closes unless a pick is waiting to be saved; then it asks first.
+    function leave() {
+      var v = list ? chosen() : '';
+      if (!v || v === current || !Chronicle.askSlip) { close(null); return; }
+      Chronicle.askSlip(box, {
+        ask: willSave ? 'Close without saving it?' : 'Close without using it?',
+        detail: 'You picked ' + v + (willSave ? '. It hasn’t been saved.' : '.'),
+        discard: 'Discard',
+        onDiscard: function () { close(null); }
+      });
+    }
+    anchor[OPEN] = { close: close, leave: leave };
 
     function header(srcName) {
       return '<div class="ag-head"><h4>' + esc(label) + '</h4>' +
@@ -286,8 +299,9 @@
         else if (t.hasAttribute('data-retry')) load();
         else if (t.hasAttribute('data-own-only')) { list = { systemName: '', choices: [] }; renderBody(); }
       };
-      box.onchange = function (e) { if (e.target.type === 'radio') update(); };
+      box.onchange = function (e) { if (e.target.type === 'radio') { update(); if (Chronicle.askSlip) Chronicle.askSlip.close(box); } };
       box.oninput = function (e) {
+        if (Chronicle.askSlip) Chronicle.askSlip.close(box);
         if (e.target.hasAttribute('data-own')) { update(); return; }
         if (!e.target.hasAttribute('data-q')) return;
         var keep = box.querySelector('input[type=radio]:checked');
@@ -300,7 +314,7 @@
         update();
       };
       box.onkeydown = function (e) {
-        if (e.key === 'Escape') { e.stopPropagation(); close(null); return; }
+        if (e.key === 'Escape') { e.stopPropagation(); leave(); return; }
         if (e.key === 'Enter' && (e.target.hasAttribute('data-q') || e.target.hasAttribute('data-own'))) {
           e.preventDefault();
           commit();
