@@ -5149,6 +5149,19 @@ func (a *App) RegisterRoutes() {
 			if typesErr == nil {
 				in := navInputsFor(cc, sidebarTypes, counts, enabledSlugs, enabledSystem)
 				navOwner := effectiveRole >= int(campaigns.RoleOwner)
+				// Calendar is left out for anyone who can see no calendar in
+				// it; its page would only say there is none. The owner keeps
+				// it, so they can set one up.
+				if !navOwner && enabledSlugs[calendar.PluginSlug] &&
+					(a.PluginHealth == nil || a.PluginHealth.IsHealthy(calendar.PluginSlug)) {
+					cals, err := calendarService.ListCalendars(reqCtx, cc.Campaign.ID,
+						permissions.RequestViewer(sidebarRole, layoutUserID))
+					if err == nil && len(cals) == 0 {
+						markEmptyApps(in.apps, map[string]bool{calendar.PluginSlug: true})
+					} else if err != nil {
+						slog.Warn("sidebar: listing calendars for the viewer", slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", err))
+					}
+				}
 				// A member who is not the owner has pins of their own; they
 				// are read for this user only.
 				var pins []string
