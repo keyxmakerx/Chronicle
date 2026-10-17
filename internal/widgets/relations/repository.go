@@ -205,7 +205,16 @@ func (r *relationRepository) UpdateMetadata(ctx context.Context, id int, metadat
 	if err != nil {
 		return fmt.Errorf("checking rows affected: %w", err)
 	}
-	if rowsAffected == 0 {
+	if rowsAffected > 0 {
+		return nil
+	}
+	// MariaDB reports 0 for an UPDATE that matched but changed nothing (the
+	// DSN has no clientFoundRows), so zero alone does not mean the relation is gone.
+	var exists bool
+	if err := r.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM entity_relations WHERE id = ?)`, id).Scan(&exists); err != nil {
+		return fmt.Errorf("checking relation exists: %w", err)
+	}
+	if !exists {
 		return apperror.NewNotFound("relation not found")
 	}
 
