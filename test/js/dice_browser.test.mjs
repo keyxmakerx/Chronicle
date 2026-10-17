@@ -1,5 +1,6 @@
-// dice_browser.test.mjs — Chronicle.dice in a real Chromium: the vendored
-// three.js and cannon-es load from the script tag's data attributes, a throw
+// dice_browser.test.mjs — Chronicle.dice in a real Chromium, loaded the way
+// the layout does it: boot.js's stub fetches dice.js on the first roll, the
+// vendored three.js and cannon-es load from the URLs the layout lists, a throw
 // draws over the page and resolves with the decided values once the dice
 // land, the canvas clears itself away, and Calm and Off resolve at once.
 //
@@ -18,7 +19,8 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const HTML = (motion) => `<!doctype html><html${motion ? ` data-motion="${motion}"` : ''}><head><meta charset="utf-8">
 <style>html,body{margin:0;height:100%}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}</style></head><body>
 <header id="app-topbar" style="height:56px"></header><button id="roll" style="position:absolute;left:40px;bottom:40px">Roll</button>
-<script src="/static/js/dice.js" data-three-src="/static/vendor/three.module.min.js" data-cannon-src="/static/vendor/cannon-es.js" defer></script>
+<template id="chronicle-dice-src" data-src="/static/js/dice.js" data-three-src="/static/vendor/three.module.min.js" data-cannon-src="/static/vendor/cannon-es.js"></template>
+<script src="/static/vendor/htmx.min.js" defer></script><script src="/static/js/boot.js" defer></script>
 </body></html>`;
 
 async function page(t, motion) {
@@ -39,6 +41,16 @@ async function page(t, motion) {
   await p.waitForFunction(() => window.Chronicle && window.Chronicle.dice);
   return p;
 }
+
+test('dice.js is fetched on the first roll, not with the page', { skip }, async (t) => {
+  const p = await page(t, 'off');
+  const before = await p.evaluate(() => !!document.querySelector('script[src*="dice.js"]'));
+  const res = await p.evaluate(() => Chronicle.dice.roll([{ label: 'd20', dice: [{ sides: 20 }] }], { results: [[17]] }));
+  const after = await p.evaluate(() => document.querySelectorAll('script[src*="dice.js"]').length);
+  assert.equal(before, false);
+  assert.deepEqual(res, [{ label: 'd20', values: [17] }]);
+  assert.equal(after, 1);
+});
 
 const GROUPS = [{ label: 'Power roll', dice: [{ sides: 10 }, { sides: 10 }] }, { label: 'Damage', dice: [{ sides: 6 }, { sides: 20 }, { sides: 4 }] }];
 const RESULTS = [[9, 10], [6, 20, 3]];

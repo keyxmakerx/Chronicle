@@ -120,6 +120,45 @@
     return true;
   }
 
+  // --- Thrown dice on first use (ADR-063) ---
+  // Chronicle.dice.roll exists on every page, but dice.js and its 3D
+  // libraries are fetched only when someone first rolls. The layout names the
+  // hashed URLs on an inert #chronicle-dice-src element; dice.js replaces
+  // this stub with the real Chronicle.dice when it runs.
+  var diceLoading = null;
+  function loadDice() {
+    if (diceLoading) return diceLoading;
+    diceLoading = new Promise(function (resolve, reject) {
+      var src = document.getElementById('chronicle-dice-src');
+      var url = src && src.getAttribute('data-src');
+      if (!url || !WIDGET_SCRIPT_URL.test(url) || url.indexOf('..') !== -1) {
+        reject(new Error('dice script not listed'));
+        return;
+      }
+      var s = document.createElement('script');
+      s.src = url;
+      // dice.js reads its library URLs from its own tag.
+      ['data-three-src', 'data-cannon-src'].forEach(function (a) {
+        var v = src.getAttribute(a);
+        if (v) s.setAttribute(a, v);
+      });
+      s.onload = function () { resolve(); };
+      s.onerror = function () { diceLoading = null; reject(new Error('could not load ' + url)); };
+      document.head.appendChild(s);
+    });
+    return diceLoading;
+  }
+  var diceStub = {
+    roll: function (groups, opts) {
+      return loadDice().then(function () {
+        if (Chronicle.dice === diceStub) throw new Error('dice.js did not start');
+        return Chronicle.dice.roll(groups, opts);
+      });
+    },
+    stop: function () {}
+  };
+  if (!Chronicle.dice) Chronicle.dice = diceStub;
+
   /**
    * Report `data-widget` names that are mounted in the DOM but have no
    * registered implementation, once per name per page.
