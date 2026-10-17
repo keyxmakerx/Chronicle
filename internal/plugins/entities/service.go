@@ -693,8 +693,10 @@ func (s *entityService) Update(ctx context.Context, entityID string, input Updat
 		return nil, apperror.NewBadRequest("entity name must be at most 200 characters")
 	}
 
-	// Regenerate slug if name changed.
-	if name != entity.Name {
+	// Regenerate the slug only when the new name maps to a different one:
+	// SlugExists counts this page's own slug, so a case-only rename would
+	// otherwise become "name-2" and break links.
+	if name != entity.Name && !slugMatchesName(entity.Slug, name) {
 		slug, err := s.generateSlug(ctx, entity.CampaignID, name)
 		if err != nil {
 			return nil, apperror.NewInternal(fmt.Errorf("generating slug: %w", err))
@@ -2236,8 +2238,8 @@ func (s *entityService) UpdateEntityType(ctx context.Context, id int, input Upda
 		return nil, apperror.NewBadRequest("color must be a valid hex value like #ff0000")
 	}
 
-	// Regenerate slug if name changed.
-	if name != et.Name {
+	// Same rule as pages: keep the slug when the new name maps to it.
+	if name != et.Name && !slugMatchesName(et.Slug, name) {
 		slug, err := s.generateEntityTypeSlug(ctx, et.CampaignID, name)
 		if err != nil {
 			return nil, apperror.NewInternal(fmt.Errorf("generating entity type slug: %w", err))
@@ -3091,6 +3093,19 @@ func (s *entityService) SeedGenre(ctx context.Context, campaignID string, genre 
 // maxSlugAttempts caps slug deduplication iterations to prevent DoS from
 // adversarial name collisions (e.g., creating "test", "test-2" ... "test-N").
 const maxSlugAttempts = 100
+
+// uniqueSuffixPattern matches the "-2" / "-<hex>" tail generateSlug appends.
+var uniqueSuffixPattern = regexp.MustCompile(`^-(\d+|[0-9a-f]{8})$`)
+
+// slugMatchesName reports whether current is already the slug name produces,
+// either exactly or with the uniqueness suffix generateSlug added to it.
+func slugMatchesName(current, name string) bool {
+	base := Slugify(name)
+	if current == base {
+		return true
+	}
+	return strings.HasPrefix(current, base) && uniqueSuffixPattern.MatchString(current[len(base):])
+}
 
 // generateSlug creates a unique slug for an entity within a campaign.
 // If the base slug is taken, appends -2, -3, etc. After maxSlugAttempts,
