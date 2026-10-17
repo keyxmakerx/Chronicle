@@ -9,8 +9,8 @@ real people, so changes are small, verified and reviewed.
 Do not post details in a public issue. Use the **Report a vulnerability**
 button on the repository's Security tab if it is there; otherwise open an issue
 that only says you have a security report, and the maintainer will arrange a
-private way to share it. There is no `SECURITY.md` and no published contact
-address.
+private way to share it. The repository has no security policy file and no
+published contact address.
 
 ## Prerequisites
 
@@ -20,7 +20,9 @@ address.
   version CI uses) and `air` for hot reload
 - Nothing extra for `make tailwind`: it downloads the pinned standalone CLI
   into `bin/` on first use
-- Node.js 20 for the JS tests (`make test-js`)
+- Node.js 20 for the JS tests (`make test-js`). The browser tests
+  (`make test-e2e`, and the browser-driven cases in `make test-js`) also need a
+  global Playwright install with Chromium; CI installs version 1.56.1.
 - `golangci-lint` for `make lint`
 
 ## Local setup
@@ -46,6 +48,7 @@ again; CI runs the same command.
 - `make verify` runs the same sequence as the CI "Build & Test" job: templ,
   build, vet, the repository guards, `go test ./... -short`, and the JS tests.
   Run it before you push.
+- `make test-e2e` runs the Playwright specs in `test/e2e/` against Chromium.
 - `make test-int-local` runs the database-backed tests against the local test
   MariaDB. Those tests skip when no database answers, so a plain `go test`
   can pass without running them.

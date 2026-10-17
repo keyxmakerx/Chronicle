@@ -12,6 +12,7 @@ new item page on the spot, and shows a recent-transactions panel.
 by a `<script defer>` tag in `layouts/base.templ`. Mounted by the shop
 inventory block in `plugins/entities/show.templ`, next to the shop-room mount.
 The block type is registered in `plugins/entities/block_registry_core.go`.
+Its `.shop-inv*` styles live in `static/css/input.css`, not in the script.
 
 | Attribute | Meaning |
 |---|---|

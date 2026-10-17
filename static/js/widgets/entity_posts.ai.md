@@ -35,6 +35,10 @@ Each editable post renders a child `data-widget="editor"` element
 the script calls `Chronicle.mountWidgets(el)` shortly after a post expands.
 If `Chronicle.hydrateNoteLinks` exists it is applied to the mount.
 
+A private post's card carries `data-dm-only` and its lock badge `cb-dm`, so a
+Director in player view sees it folded away; the heading and count carry the
+shared `cb-head` and `cb-count` classes the page looks style.
+
 ## Events
 
 None emitted or listened to beyond DOM clicks and native drag events.
