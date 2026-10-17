@@ -403,7 +403,7 @@ func (h *Handler) Index(c echo.Context) error {
 		for i := range entities {
 			parentIDs[i] = entities[i].ID
 		}
-		if links := h.loadTreePlaces(c.Request().Context(), cc, parentIDs, userID, nil); len(links) > 0 {
+		if links := h.loadTreePlaces(c.Request().Context(), cc, parentIDs, int(cc.VisibilityRole()), userID, nil); len(links) > 0 {
 			c.SetRequest(c.Request().WithContext(withTreePlaces(c.Request().Context(), links)))
 		}
 		if middleware.IsHTMX(c) {
@@ -977,6 +977,11 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 	isSidebar := c.QueryParam("sidebar") == "1"
 	if isSidebar {
 		opts.PerPage = 50
+		// An owner previewing as a player gets the player's tree, matching
+		// the category counts beside it.
+		if campaigns.ViewingAsPlayer(c, cc) {
+			role = int(campaigns.RolePlayer)
+		}
 	}
 
 	// Tag filtering: comma-separated tag slugs (AND logic).
@@ -1116,7 +1121,7 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 		}
 
 		// Players don't see individually hidden entities at all.
-		if cc.MemberRole < campaigns.RoleScribe && len(hiddenIDs) > 0 {
+		if role < int(campaigns.RoleScribe) && len(hiddenIDs) > 0 {
 			filtered := results[:0]
 			for _, e := range results {
 				if !hiddenIDs[e.ID] {
@@ -1144,7 +1149,7 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 			for i := range results {
 				parentIDs[i] = results[i].ID
 			}
-			if links := h.loadTreePlaces(c.Request().Context(), cc, parentIDs, userID, hiddenIDs); len(links) > 0 {
+			if links := h.loadTreePlaces(c.Request().Context(), cc, parentIDs, role, userID, hiddenIDs); len(links) > 0 {
 				c.SetRequest(c.Request().WithContext(withTreePlaces(c.Request().Context(), links)))
 			}
 		}
