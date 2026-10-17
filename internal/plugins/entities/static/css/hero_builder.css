@@ -34,7 +34,7 @@
   transform-origin: left; animation: hb-draw var(--dur-large) var(--ease-out) both 120ms;
 }
 @keyframes hb-draw { from { transform: scaleX(0); } to { transform: scaleX(1); } }
-.hb-tools { display: flex; flex-wrap: wrap; gap: 8px; }
+.hb-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 
 .hb-sentence { max-width: 34em; font-size: clamp(18px, 2.1vw, 24px); line-height: 1.8; color: var(--color-text-primary); text-wrap: pretty; }
 .hb-blank {
@@ -89,7 +89,6 @@
 .hb-btn:active { transform: translateY(1px); box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.12); }
 .hb-btn:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 .hb-btn[disabled] { opacity: 0.6; cursor: default; }
-.hb-btn i { font-size: 12px; color: var(--color-text-secondary); }
 .hb-go { border-color: transparent; background: var(--color-accent-fill, var(--color-accent)); color: var(--color-accent-on-fill, #fff); }
 .hb-go[aria-pressed="true"] { background: var(--hb-acc-soft); color: var(--color-text-primary); border-color: var(--hb-acc-line); }
 .hb-link {
@@ -97,7 +96,6 @@
   background: none; color: var(--color-accent); font-size: 13px; font-weight: 500; cursor: pointer;
 }
 .hb-link:hover { background: var(--hb-acc-soft); }
-.hb-link i { font-size: 11px; }
 
 /* The choose panel: docked beside the sentences, held in view while the page
    scrolls, sliding out from behind its edge when it opens. */

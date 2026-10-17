@@ -206,8 +206,8 @@
     var sheet = this.fieldsBase.replace(/\/$/, '') + '/' + encodeURIComponent(h.id);
     return '<article class="hb-hero" data-hero-card="' + esc(h.id) + '">' +
       '<header class="hb-head"><div class="hb-names"><span class="hb-kicker">Your hero</span><h2 class="hb-title">' + esc(h.name) + '</h2></div>' +
-      '<div class="hb-tools"><a class="hb-btn" href="' + esc(sheet) + '"><i class="fa-solid fa-scroll" aria-hidden="true"></i>Open the sheet</a>' +
-      (left ? '<button type="button" class="hb-btn" data-rollall="' + esc(h.id) + '"><i class="fa-solid fa-dice-d20" aria-hidden="true"></i>Roll everything left</button>' : '') +
+      '<div class="hb-tools"><a class="hb-link" href="' + esc(sheet) + '">Open the sheet</a>' +
+      (left ? '<button type="button" class="hb-btn" data-rollall="' + esc(h.id) + '">Roll everything left</button>' : '') +
       '</div></header>' + this.sentenceHtml(h, esc(possessive(h.name))) + this.progressHtml(h) + '</article>';
   };
 
@@ -220,7 +220,7 @@
       ' choices for heroes yet, so a new hero only needs a name.</p>';
     return '<article class="hb-hero hb-fresh" data-hero-card="new">' +
       '<header class="hb-head"><div class="hb-names"><span class="hb-kicker">' + (this.heroes.length ? 'Another hero' : 'A new hero') + '</span></div>' +
-      (left ? '<div class="hb-tools"><button type="button" class="hb-btn" data-rollall="new"><i class="fa-solid fa-dice-d20" aria-hidden="true"></i>Roll everything left</button></div>' : '') +
+      (left ? '<div class="hb-tools"><button type="button" class="hb-btn" data-rollall="new">Roll everything left</button></div>' : '') +
       '</header>' + none + (this.plan.steps.length ? this.sentenceHtml(h, who) : '<p class="hb-sentence">' + who.replace('’s', '') + '</p>') +
       this.progressHtml(h) +
       '<div class="hb-make"><button type="button" class="hb-btn hb-go" data-make>Make this hero</button><span class="hb-note">' + whose + ' Anything left blank can be chosen later.</span></div>' +
@@ -250,11 +250,11 @@
     var chosen = cur && lower(cur) === lower(fo.name);
     html += '<div class="hb-pf"><button type="button" class="hb-btn hb-go" data-choose' + (chosen ? ' aria-pressed="true"' : '') + '>' +
       (chosen ? 'Keep ' : 'Choose ') + esc(fo.name) + '</button>' +
-      '<button type="button" class="hb-btn" data-rollone><i class="fa-solid fa-dice-d20" aria-hidden="true"></i>Roll for me</button></div>';
+      '<button type="button" class="hb-btn" data-rollone>Roll for me</button></div>';
     var prev = steps[idx - 1], next = steps[idx + 1];
     html += '<div class="hb-pf hb-steps">' +
-      (prev ? '<button type="button" class="hb-link" data-go="' + esc(prev.fieldKey) + '"><i class="fa-solid fa-chevron-left" aria-hidden="true"></i>' + esc(prev.label) + '</button>' : '<span></span>') +
-      (next ? '<button type="button" class="hb-link" data-go="' + esc(next.fieldKey) + '">' + esc(next.label) + '<i class="fa-solid fa-chevron-right" aria-hidden="true"></i></button>' : '<span></span>') + '</div>';
+      (prev ? '<button type="button" class="hb-link" data-go="' + esc(prev.fieldKey) + '">Back to ' + esc(lower(prev.label)) + '</button>' : '<span></span>') +
+      (next ? '<button type="button" class="hb-link" data-go="' + esc(next.fieldKey) + '">On to ' + esc(lower(next.label)) + '</button>' : '<span></span>') + '</div>';
     return html;
   };
 
@@ -400,7 +400,7 @@
     if (!b || h.isNew) return;
     var t = document.createElement('span');
     t.className = 'hb-tick';
-    t.innerHTML = '<i class="fa-solid fa-check" aria-hidden="true"></i>Saved';
+    t.textContent = 'Saved';
     b.insertAdjacentElement('afterend', t);
     setTimeout(function () { t.remove(); }, 1900);
   };
