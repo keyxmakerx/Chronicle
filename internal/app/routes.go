@@ -3763,6 +3763,10 @@ func (a *App) RegisterRoutes() {
 	// the game-night emails.
 	sessionsHandler.SetRecipientFilter(authService)
 	sessions.ConfigureRecipientFilter(sessionsService, authService)
+	// Per-night sightings: the after-night check-in and a page's Last seen
+	// read and write the same rows.
+	sessionsHandler.SetSightingService(sessions.NewSightingService(sessions.NewSightingRepository(a.DB), sessionsRepo,
+		&entityCampaignCheckerAdapter{svc: entityService}, &entityVisibilityFilterAdapter{svc: entityService}))
 	// Game-night links open the real-world calendar; with the calendar plugin
 	// down they keep going to the Sessions page.
 	if a.PluginHealth.IsHealthy(calendar.PluginSlug) {
@@ -4620,6 +4624,7 @@ func (a *App) RegisterRoutes() {
 	// its repository.
 	aiEraVersions := calendar.NewEraVersionService(calendar.NewEraVersionRepository(a.DB), calendarService)
 	aiWorkspaceCommitter.SetEraWriter(aiImportEraAdapter{versions: aiEraVersions})
+	aiWorkspaceCommitter.SetTagWriter(tagService)
 	aiWorkspaceHandler.SetImportEras(aiImportEraAdapter{versions: aiEraVersions})
 	aiWorkspaceRenderer.EraVersions = aiExportEraAdapter{versions: aiEraVersions}
 	aiWorkspaceHandler.SetImportCommitter(aiWorkspaceCommitter)
@@ -4708,10 +4713,13 @@ func (a *App) RegisterRoutes() {
 	// --- WASM Runtime (Layer 3 Logic Extensions) ---
 	// Wire the WASM plugin manager with read-only host functions that let
 	// sandboxed WASM plugins query entities, calendar, and tags.
+	wasmEntityInCampaign := func(ctx context.Context, campaignID, entityID string) (*entities.Entity, error) {
+		return entityInCampaign(ctx, entityService, campaignID, entityID)
+	}
 	wasmEntityReader := extensions.NewWASMEntityAdapter(
 		// get_entity: returns entity JSON by ID.
-		func(ctx context.Context, id string) (json.RawMessage, error) {
-			ent, err := entityService.GetByID(ctx, id)
+		func(ctx context.Context, campaignID, id string) (json.RawMessage, error) {
+			ent, err := wasmEntityInCampaign(ctx, campaignID, id)
 			if err != nil {
 				return nil, err
 			}
@@ -4767,7 +4775,10 @@ func (a *App) RegisterRoutes() {
 	// Wire write adapters for WASM host functions.
 	wasmHostEnv.SetEntityWriter(extensions.NewWASMEntityWriteAdapter(
 		// update_entity_fields: unmarshal JSON fields and delegate to entity service.
-		func(ctx context.Context, entityID string, fieldsData json.RawMessage) error {
+		func(ctx context.Context, campaignID, entityID string, fieldsData json.RawMessage) error {
+			if _, err := wasmEntityInCampaign(ctx, campaignID, entityID); err != nil {
+				return err
+			}
 			var fields map[string]any
 			if err := json.Unmarshal(fieldsData, &fields); err != nil {
 				return fmt.Errorf("invalid fields JSON: %w", err)
@@ -4793,10 +4804,16 @@ func (a *App) RegisterRoutes() {
 			if err := json.Unmarshal(tagIDsJSON, &tagIDs); err != nil {
 				return fmt.Errorf("invalid tag_ids JSON: %w", err)
 			}
+			if _, err := wasmEntityInCampaign(ctx, campaignID, entityID); err != nil {
+				return err
+			}
 			return tagService.SetEntityTags(ctx, entityID, campaignID, tagIDs)
 		},
 		// get_entity_tags: return tags as JSON (include DM-only for WASM plugins).
-		func(ctx context.Context, entityID string) (json.RawMessage, error) {
+		func(ctx context.Context, campaignID, entityID string) (json.RawMessage, error) {
+			if _, err := wasmEntityInCampaign(ctx, campaignID, entityID); err != nil {
+				return nil, err
+			}
 			entityTags, err := tagService.GetEntityTags(ctx, entityID, true)
 			if err != nil {
 				return nil, err
@@ -4819,6 +4836,11 @@ func (a *App) RegisterRoutes() {
 			}
 			if err := json.Unmarshal(input, &req); err != nil {
 				return nil, fmt.Errorf("invalid relation input: %w", err)
+			}
+			for _, id := range []string{req.SourceEntityID, req.TargetEntityID} {
+				if _, err := wasmEntityInCampaign(ctx, campaignID, id); err != nil {
+					return nil, err
+				}
 			}
 			rel, err := relService.Create(ctx, campaignID, req.SourceEntityID, req.TargetEntityID,
 				req.RelationType, req.ReverseRelationType, req.CreatedBy, req.Metadata, req.DmOnly)
@@ -5491,7 +5513,7 @@ func (a *App) RegisterRoutes() {
 	// plugin's kind is left out, so its blocks are refused at review.
 	aiKinds := []records.Kind{
 		records.CalendarKind{Svc: calendarService, Pages: entityService},
-		records.EventKind{Svc: calendarService},
+		records.EventKind{Svc: calendarService, Tiers: campaignService, Pages: entityService},
 		records.WeatherKind{Svc: calendarService},
 	}
 	aiTables := records.TableKind{Svc: aiRollTablesAdapter{rollTablesSvc}}
