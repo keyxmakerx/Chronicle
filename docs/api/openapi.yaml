@@ -2547,7 +2547,11 @@ paths:
         entityId is the creature's page, empty when the row has no page;
         start is "seen", "hidden" or "later". Nothing here reveals anything:
         Foundry places a hidden creature hidden and leaves a later one off
-        the scene.
+        the scene. Stages are {id, when: {kind, row, percent, round}, forms:
+        [{row, form, formName}], arrive: [creature row ids], how, note}; kind
+        is "manual", "stamina" (row watched, due at or below percent) or
+        "round" (due at the start of that round), how is "reveal" or "quiet".
+        A stage is only ever started by the DM; none starts on its own.
       operationId: getEncounter
       parameters:
         - $ref: "#/components/parameters/campaignId"
@@ -2559,7 +2563,7 @@ paths:
         "200":
           description: >
             {id, page: {id, name}, name, ready, heroes: [{id, name}],
-            creatures: [...], version, updatedAt}
+            creatures: [...], stages: [...], version, updatedAt}
           content:
             application/json:
               schema: {type: object}
