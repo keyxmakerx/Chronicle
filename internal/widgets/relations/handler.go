@@ -113,6 +113,24 @@ func (h *Handler) ListRelations(c echo.Context) error {
 	return c.JSON(http.StatusOK, relations)
 }
 
+// requireViewableEntity answers 404 unless the entity is in the URL's campaign
+// and the caller may view it, failing closed when no gate is wired. It uses
+// cc.VisibilityRole() like ListRelations (ADR-057).
+func (h *Handler) requireViewableEntity(c echo.Context, cc *campaigns.CampaignContext, entityID, userID string) error {
+	if h.entityGate == nil {
+		return apperror.NewInternal(errors.New("relations: entity gate not configured"))
+	}
+	campaignID, canView, err := h.entityGate.ResolveViewableEntity(
+		c.Request().Context(), entityID, int(cc.VisibilityRole()), userID)
+	if err != nil {
+		return err // NotFound for a missing entity; propagates real errors.
+	}
+	if campaignID != cc.Campaign.ID || !canView {
+		return apperror.NewNotFound("entity not found")
+	}
+	return nil
+}
+
 // filterByTargetVisibility drops relations whose target entity the viewer cannot
 // see, using one batched visibility query for all distinct targets (no per-row
 // N+1). Callers must have already confirmed h.entityGate is non-nil.
@@ -168,6 +186,14 @@ func (h *Handler) CreateRelation(c echo.Context) error {
 	}
 
 	userID := auth.GetUserID(c)
+
+	// Both ends come from the request, so both must be in this campaign and
+	// visible to the caller; a listed relation shows the target's name.
+	for _, id := range []string{sourceEntityID, req.TargetEntityID} {
+		if err := h.requireViewableEntity(c, cc, id, userID); err != nil {
+			return err
+		}
+	}
 
 	// Only DMs (owners) and site admins can create DM-only relations.
 	dmOnly := req.DmOnly

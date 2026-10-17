@@ -1350,7 +1350,17 @@ func (h *Handler) BulkTagsAPI(c echo.Context) error {
 
 	ctx := c.Request().Context()
 	processed := 0
+	role, userID := int(cc.VisibilityRole()), auth.GetUserID(c)
 	for _, eid := range req.EntityIDs {
+		// Ids come from the body, so each must be a page in this campaign
+		// the caller can see; any other is skipped, as in BulkUpdateType.
+		entity, err := h.service.GetByID(ctx, eid)
+		if err != nil || entity.CampaignID != cc.Campaign.ID {
+			continue
+		}
+		if access, err := h.service.CheckEntityAccess(ctx, eid, role, userID); err != nil || !access.CanView {
+			continue
+		}
 		switch req.Action {
 		case "add":
 			existing, _ := h.tagFetcher.GetEntityTags(ctx, eid, true)
@@ -3593,6 +3603,21 @@ func (h *Handler) SetAliasesAPI(c echo.Context) error {
 	}
 
 	entityID := c.Param("eid")
+
+	// The page must be in this campaign and visible to the caller, as for
+	// GetAliasesAPI; the service writes by entity id alone.
+	entity, err := h.service.GetByID(c.Request().Context(), entityID)
+	if err != nil {
+		return err
+	}
+	if entity.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("entity not found")
+	}
+	access, err := h.service.CheckEntityAccess(c.Request().Context(), entity.ID, int(cc.VisibilityRole()), auth.GetUserID(c))
+	if err != nil || !access.CanView {
+		return apperror.NewNotFound("entity not found")
+	}
+
 	var input SetAliasesInput
 	if err := c.Bind(&input); err != nil {
 		return apperror.NewBadRequest("invalid request body")
