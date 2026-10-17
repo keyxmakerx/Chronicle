@@ -26,7 +26,7 @@ templ CustomizeShell(d customizeShellData, body templ.Component) {
 			data-find={ d.Find }
 			data-areas={ customizeAreasJSON(d.Areas) }
 		>
-			<nav class="czs-rail" aria-label="Customize" hx-boost="true" hx-target="#main-content" hx-select="#main-content" hx-swap="innerHTML show:window:top">
+			<nav class="czs-rail" aria-label="Customize" hx-boost="true" hx-target="#main-content" hx-select="#main-content > *" hx-swap="innerHTML show:window:top">
 				<h2>Customize</h2>
 				for i, a := range d.Areas {
 					if i == 4 {
@@ -47,7 +47,7 @@ templ CustomizeShell(d customizeShellData, body templ.Component) {
 			</nav>
 			<div class="czs-stage">
 				<div class="czs-top">
-					<nav class="czs-crumbs" aria-label="You are here" hx-boost="true" hx-target="#main-content" hx-select="#main-content" hx-swap="innerHTML show:window:top">
+					<nav class="czs-crumbs" aria-label="You are here" hx-boost="true" hx-target="#main-content" hx-select="#main-content > *" hx-swap="innerHTML show:window:top">
 						for i, cr := range d.Crumbs {
 							if i > 0 {
 								<span class="czs-sep" aria-hidden="true">/</span>

@@ -185,7 +185,7 @@
       el.innerHTML = '<div class="czs-head-row"><div><h1 class="czs-h1">Categories</h1>' +
         '<p class="czs-lede">Each category is a kind of page. Open one to set up its page, its home, its fields and the text new pages start with.</p></div>' +
         '<button type="button" class="btn-primary" data-new><i class="fa-solid fa-plus mr-1.5" aria-hidden="true"></i>New category</button></div>' +
-        '<div class="czs-cat-grid" hx-boost="true" hx-target="#main-content" hx-select="#main-content" hx-swap="innerHTML show:window:top">' +
+        '<div class="czs-cat-grid" hx-boost="true" hx-target="#main-content" hx-select="#main-content > *" hx-swap="innerHTML show:window:top">' +
         top.map(card).join('') +
         '<button type="button" class="czs-cat-card czs-add" data-new><span class="czs-plus"><i class="fa-solid fa-plus" aria-hidden="true"></i></span>New category</button></div>' +
         (hasAdventures() || !ADVENTURES_URL ? '' : adventuresPanel());
@@ -505,7 +505,7 @@
         // What is saved changed under this page; read it again.
         var to = /^new-/.test(KEY) ? BASE + '/categories' : location.pathname;
         if (window.htmx && to === location.pathname) {
-          window.htmx.ajax('GET', to, { target: '#main-content', select: '#main-content', swap: 'innerHTML' });
+          window.htmx.ajax('GET', to, { target: '#main-content', select: '#main-content > *', swap: 'innerHTML' });
         } else {
           location.href = to;
         }
