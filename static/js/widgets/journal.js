@@ -30,6 +30,7 @@
   var COMPACT_PX = 210;
   var WIDE_PX = 600;
   var MIN_EDITOR_PX = 260;
+  var DRAWER_PX = 280;
   var ID_RE = /^[0-9a-fA-F-]{8,64}$/;
   var SIZE_KEY = 'chronicle.journal.listSize';
 
@@ -2266,6 +2267,8 @@
     var was = d.classList.contains('open');
     d.classList.toggle('open', !!open);
     this.dom.drawerBtn.setAttribute('aria-expanded', String(!!open));
+    // A wide list gives way while the drawer is docked, and takes the room back after.
+    if (!!open !== was && this.size === 'wide') this.applySize('wide', { first: true });
     if (open && !was) {
       this.loadDrawerDetails();
       if (fromKeyboard) { var c = d.querySelector('[data-act="drawer-close"]'); if (c) c.focus(); }
@@ -2598,7 +2601,9 @@
   };
 
   Journal.prototype.wideMax = function () {
-    return Math.max(COMPACT_PX + 40, this.rowWidth() - MIN_EDITOR_PX - 13);
+    // The docked details drawer takes its width from the row as well.
+    var drawer = !isPhone() && this.dom.drawer.classList.contains('open') ? DRAWER_PX : 0;
+    return Math.max(COMPACT_PX + 40, this.rowWidth() - MIN_EDITOR_PX - drawer - 13);
   };
 
   /**
