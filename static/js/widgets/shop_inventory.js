@@ -39,6 +39,8 @@ Chronicle.register('shop_inventory', {
       searchResults: [],
       searchTimer: null,
       entityTypes: [],
+      // The shop page's local words, so a reader sees the coin's local name.
+      words: {},
     };
     el._shopState = state;
 
@@ -258,13 +260,17 @@ Chronicle.register('shop_inventory', {
         };
         var priceLabel = document.createElement('span');
         priceLabel.className = 'shop-inv-price';
-        priceLabel.textContent = 'gp';
+        // The coin as stored; the editor sees the usual word it will save.
+        priceLabel.textContent = meta.currency || 'gp';
         controls.appendChild(priceInput);
         controls.appendChild(priceLabel);
       } else {
         var priceSpan = document.createElement('span');
         priceSpan.className = 'shop-inv-price';
-        priceSpan.textContent = (meta.price || 0) + ' gp';
+        var cur = meta.currency || 'gp';
+        var coin = Chronicle.localName ? Chronicle.localName(state.words, cur) : { text: cur, usual: '' };
+        priceSpan.textContent = (meta.price || 0) + ' ' + coin.text;
+        if (coin.usual) priceSpan.title = (meta.price || 0) + ' ' + coin.usual;
         controls.appendChild(priceSpan);
       }
 
@@ -471,6 +477,10 @@ Chronicle.register('shop_inventory', {
     // --- API Calls ---
 
     function loadInventory() {
+      var ids = (relationsEndpoint || '').match(/\/campaigns\/([^/]+)\/entities\/([^/]+)\//) || [];
+      if (Chronicle.localWords && !editable) {
+        Chronicle.localWords(ids[1], ids[2]).then(function (w) { state.words = w || {}; if (!state.loading) render(); });
+      }
       Chronicle.apiFetch(relationsEndpoint, { method: 'GET' })
         .then(function (res) {
           if (!res.ok) throw new Error('Failed to load inventory: ' + res.status);

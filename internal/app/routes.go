@@ -44,6 +44,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/dmscreen"
 	"github.com/keyxmakerx/chronicle/internal/plugins/encounters"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
+	"github.com/keyxmakerx/chronicle/internal/plugins/fieldrules"
 	"github.com/keyxmakerx/chronicle/internal/plugins/foundry_vtt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/homebrew"
 	"github.com/keyxmakerx/chronicle/internal/plugins/maps"
@@ -5839,6 +5840,24 @@ func (a *App) RegisterRoutes() {
 		slog.Warn("rumours plugin degraded — the Rumours block is not available")
 	}
 
+	// Homebrew rules and local words: a field worked out from another, and what
+	// a place or era calls a word. Pages read them; without the tables, rule
+	// fields show only values typed by hand and nothing is renamed.
+	a.registerPlugin(PluginRegistration{Slug: fieldrules.PluginSlug})
+	var fieldRulesSvc fieldrules.Service
+	if a.PluginHealth.IsHealthy(fieldrules.PluginSlug) {
+		fieldRulesSvc = fieldrules.NewService(fieldrules.NewRepository(a.DB),
+			fieldRulesWorld{pages: entityService, calendars: calendarService, eras: eraVersionService})
+		fieldrules.RegisterRoutes(e, fieldrules.NewHandler(fieldRulesSvc), campaignService, authService)
+		words := fieldWordsAdapter{svc: fieldRulesSvc}
+		entityHandler.SetFieldWords(words)
+		if fw, ok := entityService.(interface{ SetFieldWords(entities.FieldWords) }); ok {
+			fw.SetFieldWords(words)
+		}
+	} else {
+		slog.Warn("fieldrules plugin degraded — homebrew rules and local words are not available")
+	}
+
 	// The Homebrew Workshop's registry. Plugins below that plug kinds of part,
 	// events or actions into the Workshop register here, so it is made before
 	// any of them.
@@ -5950,6 +5969,17 @@ func (a *App) RegisterRoutes() {
 		aiHouseRules,
 		records.SystemEntryKind{Svc: systemEntrySvc},
 	)
+	// A category field of type rule needs the rules; without them the kind
+	// still adds every other kind of field.
+	var aiHomebrew records.HomebrewAPI
+	if fieldRulesSvc != nil {
+		aiHomebrew = aiHomebrewAdapter{svc: fieldRulesSvc}
+		aiKinds = append(aiKinds,
+			records.FieldRuleKind{Svc: aiHomebrew},
+			records.LocalWordKind{Svc: aiHomebrew, Entities: entityService},
+		)
+	}
+	aiKinds = append(aiKinds, records.CategoryFieldKind{Types: entityService, Rules: aiHomebrew})
 	if encounterAPI.svc != nil {
 		aiKinds = append(aiKinds, records.EncounterKind{Svc: aiEncountersAdapter{svc: encounterAPI.svc}, Entities: entityService})
 	}
@@ -6085,6 +6115,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "era-pages", Scripts: []string{"/static/js/widgets/era_pages.js"}},
 	{Name: "dm-screen", Scripts: []string{"/static/js/widgets/dm_sheet.js", "/static/js/widgets/dm_screen.js"}},
 	{Name: "tile", Scripts: []string{"/static/js/widgets/tile.js"}},
+	{Name: "shop_inventory", Scripts: []string{"/static/js/widgets/shop_inventory.js"}},
 }
 
 // journalCharacterAdapter adapts EntityService to notes.CharacterLister: the

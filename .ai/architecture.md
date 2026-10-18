@@ -32,6 +32,7 @@ System or Widget (see root `CLAUDE.md` for what each tier is).
 │  │  widgetbindings/  dmscreen/  systemstate/              │    │
 │  │  quests/  rolltables/  vault_import/  pageblocks/      │    │
 │  │  encounters/  rumours/  trackers/  pagetests/          │    │
+│  │  fieldrules/                                           │    │
 │  │  homebrew/                                             │    │
 │  └──────────────────────────────────────────────────────┘    │
 │                                                               │

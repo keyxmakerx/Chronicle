@@ -37,7 +37,7 @@ function fakeBox({ saved, form, structure = true }) {
 
 test('every call the fold controls make exists', () => {
   const H = load();
-  for (const m of ['nameFold', 'nameClose', 'nameDiscard', 'nameInput', 'nameSave', 'parentSearch']) {
+  for (const m of ['nameFold', 'nameClose', 'nameInput', 'nameSave', 'parentSearch']) {
     assert.equal(typeof H[m], 'function', m);
   }
 });

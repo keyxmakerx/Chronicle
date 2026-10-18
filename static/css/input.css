@@ -5355,15 +5355,12 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
 .cal-v5 .rtd { --rt-ink: var(--ink); --rt-ink2: var(--ink2); --rt-mut: var(--mut); --rt-edge: var(--edge); --rt-paper: var(--paper); --rt-fill: var(--paper2); }
 @keyframes rt-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @keyframes rt-pop { from { opacity: 0; transform: translateY(-4px) scale(.97); } to { opacity: 1; transform: none; } }
-@keyframes rt-shake { 0%, 100% { translate: 0; } 20% { translate: -9px; } 40% { translate: 7px; } 60% { translate: -4px; } 80% { translate: 2px; } }
-@keyframes rt-glow { 0% { box-shadow: 0 0 0 0 rgba(217, 119, 6, .55); } 100% { box-shadow: 0 0 0 12px rgba(217, 119, 6, 0); } }
 @keyframes rt-land { 0% { background: rgb(var(--rt-acc-rgb) / .16); } 100% { background: transparent; } }
 @keyframes rt-spin { from { rotate: 0deg; } to { rotate: 360deg; } }
 @keyframes rt-flick { from { opacity: .3; transform: translateY(-6px); } to { opacity: .55; transform: none; } }
 
 .ce-roll { margin: 14px 0; }
 .rt-block { container-type: inline-size; position: relative; border: 1px solid var(--rt-edge); border-radius: 12px; background: var(--rt-paper); box-shadow: 0 1px 2px rgba(0, 0, 0, .04); font-size: 14px; line-height: 1.45; color: var(--rt-ink); }
-.rt-block.is-nagging, .wing.is-nagging { animation: rt-shake .42s cubic-bezier(.36, .07, .19, .97); }
 .rt-block .rt-loading { padding: 14px; color: var(--rt-mut); font-size: 13px; }
 .rt-block .rt-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--rt-edge); }
 .rt-block .rt-ic { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; background: rgb(var(--rt-acc-rgb) / .12); color: var(--rt-acc); }
@@ -5424,10 +5421,6 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
 .rt-block .rt-en { font-weight: 600; }
 .rt-block .rt-eb { font-size: 13px; color: var(--rt-ink2); }
 .rt-block .rt-brace { color: var(--rt-acc); font-weight: 600; }
-.rt-block .rt-warn, .rtd .rt-warn { display: none; align-items: center; gap: 8px; margin: 0 12px 10px; padding: 9px 10px 9px 12px; border-radius: 10px; background: oklch(.95 .06 80); color: oklch(.38 .09 60); box-shadow: inset 0 0 0 1px oklch(.8 .1 75); font-size: 12.5px; font-weight: 600; line-height: 1.3; }
-.rt-block .rt-warn span, .rtd .rt-warn span { flex: 1; }
-.rt-block .rt-warn.is-on, .rtd .rt-warn.is-on { display: flex; animation: rt-in .28s ease-out both, rt-glow .9s ease-out .1s; }
-.rt-block .rt-warn button, .rtd .rt-warn button { border: 0; background: transparent; color: inherit; font: inherit; text-decoration: underline; cursor: pointer; padding: 4px; }
 
 /* Calendar day: "Roll one" sits beside "Add an event"; the panel opens below. */
 .cal-v5 .rtd-open { display: flex; gap: 6px; margin-top: 12px; }
@@ -5455,11 +5448,11 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
   .rt-block .rt-foot .rt-note { flex-basis: 100%; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .rt-block.is-nagging, .wing.is-nagging, .rt-warn.is-on, .rt-row.is-landed, .rt-pick, .rt-btn.is-spinning i, .rt-reel { animation: none !important; }
+  .rt-row.is-landed, .rt-pick, .rt-btn.is-spinning i, .rt-reel { animation: none !important; }
   .rt-ed, .rtd { transition: none !important; }
 }
 /* The in-app reduced-motion setting (.nav-rm) stills the rollers too. */
-.nav-rm .rt-block.is-nagging, .nav-rm .wing.is-nagging, .nav-rm .rt-warn.is-on, .nav-rm .rt-row.is-landed, .nav-rm .rt-pick, .nav-rm .rt-btn.is-spinning i, .nav-rm .rt-reel { animation: none !important; }
+.nav-rm .rt-row.is-landed, .nav-rm .rt-pick, .nav-rm .rt-btn.is-spinning i, .nav-rm .rt-reel { animation: none !important; }
 .nav-rm .rt-ed, .nav-rm .rtd { transition: none !important; }
 
 /* Give and Share boxes (armory): they open in place inside the character
@@ -5468,7 +5461,6 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
 .ag-fold { overflow: hidden; height: 0; transition: height .34s cubic-bezier(.3, .9, .4, 1), opacity .25s; opacity: 0; }
 .ag-fold.is-open { opacity: 1; }
 .ag-box { margin: 2px 0 12px; border: 1px solid var(--color-border); border-radius: 11px; background: var(--color-bg-secondary); }
-.ag-box.is-nagging { animation: ag-shake .42s cubic-bezier(.36, .07, .19, .97); }
 .ag-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px 0; }
 .ag-head h4 { flex: 1; margin: 0; font-size: 13px; font-weight: 600; color: var(--color-text-primary); }
 .ag-x { width: 26px; height: 26px; border: 0; border-radius: 7px; background: transparent; color: var(--color-text-muted); cursor: pointer; }
@@ -5634,15 +5626,33 @@ html[data-view-motion="calm"] .pl-chip, .nav-rm .pl-chip, html.rm .pl-chip, html
 @keyframes ag-pop { from { opacity: 0; transform: translateY(-4px) scale(.97); } to { opacity: 1; transform: none; } }
 @keyframes ag-glow { 0% { box-shadow: 0 0 0 0 rgba(217, 119, 6, .55); } 100% { box-shadow: 0 0 0 12px rgba(217, 119, 6, 0); } }
 @keyframes ag-land { 0% { background: rgb(99 102 241 / .16); } 100% { background: transparent; } }
-@keyframes ag-shake { 10%, 90% { transform: translateX(-1px); } 20%, 80% { transform: translateX(2px); } 30%, 50%, 70% { transform: translateX(-4px); } 40%, 60% { transform: translateX(4px); } }
 @media (prefers-reduced-motion: reduce) {
-  .ag-box.is-nagging, .ag-warn.is-on, .ag-landed, .ag-pop, .ag-toast { animation: none !important; }
+  .ag-warn.is-on, .ag-landed, .ag-pop, .ag-toast { animation: none !important; }
   .ag-fold { transition: none !important; }
 }
 .ag-qty { display: inline-flex; align-items: center; gap: 8px; }
 /* The in-app reduced-motion setting (.nav-rm) stills them too. */
-.nav-rm .ag-box.is-nagging, .nav-rm .ag-warn.is-on, .nav-rm .ag-landed, .nav-rm .ag-pop, .nav-rm .ag-toast { animation: none !important; }
+.nav-rm .ag-warn.is-on, .nav-rm .ag-landed, .nav-rm .ag-pop, .nav-rm .ag-toast { animation: none !important; }
 .nav-rm .ag-fold { transition: none !important; }
+
+/* The "Ask in place" slip (static/js/theme.js): a box with unsaved work
+   asks before it closes. The slip slides out from under the box's foot and
+   the box grows to hold it (the Slide-out move); under Calm it fades in
+   place, under Off it appears. It inherits the box's lower corners. */
+.ask-slip { display: grid; grid-template-rows: 0fr; transition: grid-template-rows var(--dur-slide) var(--ease-slide); border-bottom-left-radius: inherit; border-bottom-right-radius: inherit; }
+.ask-slip-clip { overflow: hidden; min-height: 0; border-radius: inherit; }
+.ask-slip-in { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px 10px; padding: 12px 14px 14px; border-top: 1px solid var(--color-border); background: var(--color-bg-tertiary); visibility: hidden; transform: translateY(-100%); transition: transform var(--dur-slide) var(--ease-slide), visibility 0s linear var(--dur-slide); }
+.ask-slip.is-on { grid-template-rows: 1fr; }
+.ask-slip.is-on .ask-slip-in { visibility: visible; transform: none; transition-delay: 0s; }
+.ask-slip-q { flex: 1 1 100%; display: flex; align-items: flex-start; gap: 8px; margin: 0; font-size: 13.5px; line-height: 1.4; color: var(--color-text-primary); }
+.ask-slip-q i { margin-top: 3px; color: var(--color-text-muted); }
+.ask-slip-q b { display: block; font-weight: 600; }
+.ask-slip-q span span { display: block; color: var(--color-text-secondary, var(--color-text-muted)); font-size: 12.5px; }
+:is(html[data-motion], html[data-view-motion="calm"], .nav-rm) .ask-slip { transition: none; }
+:is(html[data-motion], html[data-view-motion="calm"], .nav-rm) .ask-slip-in { transform: none; opacity: 0; transition: opacity var(--dur-standard) var(--ease-out), visibility 0s linear var(--dur-standard); }
+:is(html[data-motion], html[data-view-motion="calm"], .nav-rm) .ask-slip.is-on .ask-slip-in { opacity: 1; transition-delay: 0s; }
+html[data-motion="off"] .ask-slip-in, html[data-motion="off"] .ask-slip.is-on .ask-slip-in { transition: none; }
+@media (prefers-reduced-motion: reduce) { .ask-slip, .ask-slip-in { transition: none !important; transform: none !important; } }
 
 /* Picture box in the user menu, and member avatars. The box reuses the
    ag-fold/ag-box/ag-warn pieces above; static/js/widgets/picture_box.js drives it. */
@@ -5786,7 +5796,7 @@ html[data-view-motion="calm"] .pl-chip, .nav-rm .pl-chip, html.rm .pl-chip, html
 .pt-pane { padding: 16px; min-width: 0; }
 .pt-pane[hidden], .pt-empty[hidden], .pt-none[hidden] { display: none; }
 .pt-empty, .pt-none { margin: 0; color: var(--color-text-muted); font-size: 13.5px; }
-.pt-pane [data-widget="entity-notes"] > .flex.items-center.justify-between.mb-3,
+.pt-pane [data-widget="entity-notes"] .en-head,
 .pt-pane [data-widget="entity-posts"] > .flex.items-center.justify-between.mb-3,
 .pt-pane [id^="armory-panel-"] > .flex.items-center.justify-between > h3,
 .pt-pane [data-open-give], .pt-pane #page-files-title, .pt-pane [data-pf-attach], .pt-pane .rel-add-btn,
@@ -6198,13 +6208,7 @@ mark.era-w { background: var(--era-hl-strong); color: inherit; border-radius: 3p
 .perm-chip.perm-chip-static { cursor: default; }
 .perm-chip.perm-chip-static:hover { background: var(--perm-chip-fill, var(--color-bg-tertiary, #f3f4f6)); box-shadow: none; }
 .perm-corner-open [data-perm-corner-trigger] { background: var(--color-card-bg, #fff); box-shadow: var(--perm-chip-lift, var(--elev-hover)); }
-.perm-unsaved { display: none; margin: 0 16px 12px; padding: 8px 10px; border-radius: 8px; font-size: 12px; background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
-.dark .perm-unsaved { background: #451a03; color: #fbbf24; border-color: #92400e; }
-.perm-unsaved.perm-unsaved-show { display: block; animation: perm-unsaved-in var(--dur-standard, 200ms) var(--ease-out, ease-out); }
-.perm-corner-panel.perm-nudge { animation: perm-nudge 360ms var(--ease-in-out, ease-in-out); }
-@keyframes perm-unsaved-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
-@keyframes perm-nudge { 20%, 60% { transform: translateX(-5px); } 40%, 80% { transform: translateX(5px); } }
-@media (prefers-reduced-motion: reduce) { .perm-corner-panel { transition: none; } .perm-corner-panel.perm-nudge, .perm-unsaved.perm-unsaved-show { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .perm-corner-panel { transition: none; } }
 
 /* ---- shop_inventory.js ---- */
 .shop-inv { font-size: 0.875rem; }
