@@ -41,7 +41,7 @@ Eight rules every screen is judged against.
 - **Nothing bounces, jumps or waits on show.** Motion slows to a stop, with
   no wobble or overshoot, nothing moves before its transition starts, and
   nothing runs past half a second unless it marks a big moment. Three signed
-  exceptions: entering Site admin and the page editor's tiles, which jiggle
+  exceptions: entering Site admin and the Customizer's layout tiles, which jiggle
   while the pointer is over their section (both under Motion), and a style
   kit's own opening and pointer response, which may settle or sway as its
   row under **Style kits** says.
@@ -62,8 +62,8 @@ Every screen is one of two kinds, and is designed in that kind's register.
   labels and "you are here". A new page block or package widget is drawn
   this way first and marks the shared block parts (under Customize) so every
   page look can style it.
-- **Workshops** are where the owner arranges and configures: Customize and
-  its page editor, the calendar, map and book editors, settings, Site admin.
+- **Workshops** are where the owner arranges and configures: the
+  Customizer, the calendar, map and book editors, settings, Site admin.
   They are framed tools on the theme tokens (`customize_shell.css` is the
   model: a rail on the left, the work in the middle, an inspector on the
   right, one save bar). A workshop shows the page it changes as the real
@@ -180,6 +180,15 @@ would do.
   both sidebars (`SiteAdminEntry`, the tools icon `SiteAdminIcon`): a dark
   plate edged in admin red with a red icon, whose hover brightens the edge
   rather than the everyday glow; its icon alone when the menu is folded.
+- **The table is one tab away.** Every campaign page has one "Table" tab in
+  the campaign header. It opens a drawer of three leaves, like a DM screen;
+  each leaf picks its own section, and the arrangement is remembered for each
+  person. The drawer is Material surfaces, never paper. A roll arrives as a
+  slim island that slides out from behind the Table tab and back, styled by
+  the style kit; clicking it, or a row of the roll log, drapes the roll's
+  details down from it. T opens the table and R the rolls, never while
+  typing; each person has quick 2D dice. The Handbook's Rules ribbon and its
+  P key stay as they are (TODO(#1475)).
 - **Who sees what follows one check.** DM-only content is visible to everyone
   who can write it: the owner and members with DM access
   (`CampaignContext.VisibilityRole()` to see it, `CanAuthorDmOnly()` to write
@@ -198,6 +207,11 @@ leaving the list for another page.
 
 ## Editing
 
+- **Two names, two jobs.** The **page editor** is where you write a page's
+  words. **The Customizer** is where you place widgets and arrange pages:
+  a category's home, the campaign home and its versions for each role, and
+  the campaign's look. Screens, buttons and docs use these two names and
+  never call one by the other's.
 - **Edit on the real page.** An owner changes a page, a layout or a home
   page where it is drawn, as players will see it; empty widgets fill with
   content marked "Example". A workshop's preview is the real page's own
@@ -368,13 +382,13 @@ place, and Off shows the end state.
 - **Looping animations rest when the person steps away.** Every loop takes
   its clock from `window.MotionRest` (`static/js/motion_rest.js`) and stops
   requesting frames once `still()`. One-shot transitions don't need it.
-- **The page editor's tiles jiggle while you are over them.** In Customize's
-  page layout, tiles rock by a fraction of a degree only while the pointer is
+- **The Customizer's layout tiles jiggle while you are over them.** In the
+  Customizer's page layout, tiles rock by a fraction of a degree only while the pointer is
   over their section, so the loop rests the moment the person moves away; the
   tile under the pointer, a selected tile and a dragged one hold still. Calm,
   Off and reduced motion turn it off. It rocks 0.55° each way every 0.36 s,
   every third tile a little slower so they don't move in step.
-- **Dragging a widget in the page editor** opens a gap at its size where it
+- **Dragging a widget in the Customizer** opens a gap at its size where it
   will land. The gap moves once the pointer rests on a new spot for 110 ms
   and has moved on from the last one, so the widgets it pushes never move it
   back. The widgets either side of the gap glow, and every widget that moves
@@ -457,7 +471,7 @@ column's version; Off shows the end state.
 - **Corners**: 8 for controls and rows, 12 for panels, dialogs, drawers and
   pictures, 4 for tags, 6 for small things, pills for counts and status
   labels. Nothing sharper than 4 or rounder than 12 except pills, the
-  page editor's own frames (tiles 14, the phone preview 28), which stand for
+  Customizer's own frames (tiles 14, the phone preview 28), which stand for
   a device, and the corners a style kit names (Sharp's square frames,
   Flowing's uneven rounded ones, Sketchbook's hand-drawn ones).
 - **Type**: headings in the campaign's heading face; when the owner picked
