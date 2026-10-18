@@ -61,6 +61,13 @@ type EraVersionSource interface {
 	EraVersionsFor(ctx context.Context, campaignID string, entityIDs []string, v permissions.Viewer) (map[string][]EraVersion, error)
 }
 
+// FolderNamer names the sidebar folders by id, so a page's export can say
+// which folder it sits in. Folder names are shown to every member in the
+// sidebar, so they carry no extra privacy rule.
+type FolderNamer interface {
+	FolderNames(ctx context.Context, campaignID string) (map[string]string, error)
+}
+
 // SessionLister loads sessions + their nested joins. Attendees +
 // SessionEntity slices are fetched per-session; the N+1 pattern is accepted
 // because session counts are modest (10-50 per campaign).

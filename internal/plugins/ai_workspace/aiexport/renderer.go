@@ -342,6 +342,14 @@ func renderEntity(
 		}
 	}
 
+	// Folder — the sidebar folder the page is filed in, so a round trip keeps
+	// it (the AI writes it back as `folder:`).
+	if e.ParentNodeID != nil {
+		if name := opts.FolderNames[*e.ParentNodeID]; name != "" {
+			fmt.Fprintf(b, "**Folder:** %s\n\n", name)
+		}
+	}
+
 	// Relations — both endpoints per operator decision. The relation
 	// row already carries the relationship type label + target name
 	// from the join, so rendering doesn't require a second lookup.

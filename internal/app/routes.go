@@ -2916,6 +2916,8 @@ func (a *App) RegisterRoutes() {
 	favoriteRepo := entities.NewFavoriteRepository(a.DB)
 	entityHandler := entities.NewHandler(entityService)
 	entityHandler.SetSidebarNodeRepo(sidebarNodeRepo)
+	folderService := entities.NewFolderService(sidebarNodeRepo, entityRepo, entityTypeRepo)
+	entityHandler.SetFolderService(folderService)
 	entityHandler.SetFavoriteRepo(favoriteRepo)
 	entityHandler.SetSavedFilterRepo(entities.NewSavedFilterRepository(a.DB))
 	entities.RegisterRoutes(e, entityHandler, campaignService, authService)
@@ -4908,8 +4910,11 @@ func (a *App) RegisterRoutes() {
 	aiEraVersions := calendar.NewEraVersionService(calendar.NewEraVersionRepository(a.DB), calendarService)
 	aiWorkspaceCommitter.SetEraWriter(aiImportEraAdapter{versions: aiEraVersions})
 	aiWorkspaceCommitter.SetTagWriter(tagService)
+	aiWorkspaceCommitter.SetFolders(folderService)
+	aiWorkspaceHandler.SetImportFolders(folderService)
 	aiWorkspaceHandler.SetImportEras(aiImportEraAdapter{versions: aiEraVersions})
 	aiWorkspaceRenderer.EraVersions = aiExportEraAdapter{versions: aiEraVersions}
+	aiWorkspaceRenderer.Folders = aiFolderNames{folders: folderService}
 	aiWorkspaceHandler.SetImportCommitter(aiWorkspaceCommitter)
 
 	campaignHandler.RegisterSettingsTab(aiWorkspaceHandler.SettingsTabFactory())
@@ -5868,6 +5873,7 @@ func (a *App) RegisterRoutes() {
 	}
 	aiNights := aiGameNightsAdapter{svc: sessionsService, members: campaignService}
 	aiKinds = append(aiKinds,
+		records.FolderKind{Svc: aiFoldersAdapter{folders: folderService, types: entityService}},
 		records.GameNightKind{Svc: aiNights},
 		records.TagKind{Svc: tagService, Pages: entityService},
 	)
@@ -5884,7 +5890,8 @@ func (a *App) RegisterRoutes() {
 
 	// The read-only lookups an AI may ask for.
 	aiLookups := &records.Lookups{
-		Cal: calendarService, Weather: calendarService, Maps: aiMapsAdapter{mapsService}, Pages: entityService,
+		Folders: aiFolderNames{folders: folderService},
+		Cal:     calendarService, Weather: calendarService, Maps: aiMapsAdapter{mapsService}, Pages: entityService,
 		Rels: relService, Notes: noteSvc, Rules: &aiHouseRules,
 		Entries:  aiSystemEntriesAdapter{choices: characterChoiceSvc},
 		Party:    &aiPartyAdapter{screen: dmScreenSvc, nights: sessionsService, members: campaignService},

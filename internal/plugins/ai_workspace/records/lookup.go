@@ -114,6 +114,9 @@ type Lookups struct {
 	PageMaps PageMapsAPI
 	// Kinds answers `what: format` with a kind's own doc.
 	Kinds *Registry
+	// Folders names the sidebar folders so pages show which one holds them;
+	// nil leaves folders out.
+	Folders aiexport.FolderNamer
 }
 
 // LookupAnswer is one lookup's result: the chip shown on screen and the
@@ -338,11 +341,29 @@ func (run *lookupRun) parentNames() map[string]string {
 	return names
 }
 
-// withParent labels a page "Name (in Parent)" when its parent is visible.
-func withParent(p entities.Entity, names map[string]string) string {
+// folderNames maps folder ids to names; empty when folders are not wired.
+func (run *lookupRun) folderNames() map[string]string {
+	if run.l.Folders == nil {
+		return nil
+	}
+	names, err := run.l.Folders.FolderNames(run.ctx, run.campaignID)
+	if err != nil {
+		return nil
+	}
+	return names
+}
+
+// withParent labels a page "Name (in Parent)" when its parent is visible, or
+// "Name (in folder Gods)" when it is filed in a folder.
+func withParent(p entities.Entity, names, folders map[string]string) string {
 	if p.ParentID != nil {
 		if parent := names[*p.ParentID]; parent != "" {
 			return p.Name + " (in " + parent + ")"
+		}
+	}
+	if p.ParentNodeID != nil {
+		if f := folders[*p.ParentNodeID]; f != "" {
+			return p.Name + " (in folder " + f + ")"
 		}
 	}
 	return p.Name
@@ -402,7 +423,7 @@ func (run *lookupRun) pagesIndex(typeName, tagName string) (LookupAnswer, error)
 		return LookupAnswer{Chip: "Pages"}, badRequestf("tags can't be looked up on this server")
 	}
 	groups, order := map[string][]string{}, []string{}
-	parents := run.parentNames()
+	parents, folders := run.parentNames(), run.folderNames()
 	for _, p := range pages {
 		label := firstNonEmpty(p.TypeNamePlural, p.TypeName, "Pages")
 		if typeName != "" && !sameName(p.TypeName, typeName) && !sameName(p.TypeNamePlural, typeName) && !sameName(p.TypeSlug, typeName) {
@@ -414,7 +435,7 @@ func (run *lookupRun) pagesIndex(typeName, tagName string) (LookupAnswer, error)
 		if _, ok := groups[label]; !ok {
 			order = append(order, label)
 		}
-		line := withParent(p, parents)
+		line := withParent(p, parents, folders)
 		if names := pageTagNames(byPage[p.ID]); len(names) > 0 {
 			line += " [" + strings.Join(names, ", ") + "]"
 		}
@@ -475,7 +496,7 @@ func hasTag(ts []tags.Tag, slug string) bool {
 // PageIndex is the prompt's compact list of page names per type, capped,
 // so the AI knows what it can ask about without the whole world. A
 // sub-page reads "Name (in Parent)" so the AI can place new pages with
-// `parent:`; a parent the reader cannot see is not named.
+// `parent:` or `folder:`; a parent the reader cannot see is not named.
 func (l *Lookups) PageIndex(ctx context.Context, campaignID string, a Actor) string {
 	if l == nil || l.Pages == nil {
 		return ""
@@ -487,13 +508,13 @@ func (l *Lookups) PageIndex(ctx context.Context, campaignID string, a Actor) str
 	}
 	const perType = 40
 	groups, order := map[string][]string{}, []string{}
-	parents := run.parentNames()
+	parents, folders := run.parentNames(), run.folderNames()
 	for _, p := range pages {
 		label := firstNonEmpty(p.TypeNamePlural, p.TypeName, "Pages")
 		if _, ok := groups[label]; !ok {
 			order = append(order, label)
 		}
-		groups[label] = append(groups[label], withParent(p, parents))
+		groups[label] = append(groups[label], withParent(p, parents, folders))
 	}
 	var b strings.Builder
 	for _, label := range order {
@@ -534,6 +555,7 @@ func (run *lookupRun) page(name string) (LookupAnswer, error) {
 	if run.l.Tags != nil {
 		pageTagMap, _ = run.l.Tags.GetEntityTagsBatch(run.ctx, []string{e.ID}, run.director())
 	}
+	opts.FolderNames = run.folderNames()
 	md, err := aiexport.RenderEntities(run.ctx, []entities.Entity{*e}, types, pageTagMap, map[string][]relations.Relation{e.ID: rels}, opts)
 	if err != nil {
 		return ans, err
