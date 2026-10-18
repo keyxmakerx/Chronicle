@@ -77,7 +77,7 @@ var lookSections = []struct{ ID, Name, Words string }{
 	{"type", "Type", "font fonts text headings size"},
 	{"buttons", "Buttons", "button shape press"},
 	{"motion", "Motion and depth", "animation calm shadows elevation speed"},
-	{"hover", "Hover cards", "peek preview tooltip"},
+	{"hover", "Hover cards", "peek preview tooltip popup time line"},
 	{"sheet", "Character sheets", "sheet style"},
 	{"book", "Rulebook", "rules book"},
 }

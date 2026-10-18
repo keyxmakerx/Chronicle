@@ -282,6 +282,15 @@ leaving the list for another page.
   Paper, Plain, Night, Compact; Paper by default). Paper stays paper in dark
   mode, and its tokens and classes (`static/css/paper.css`) are the shared
   paper look for every paper-styled page.
+- **The popup on a time line is the owner's choice** (Customize › Hover
+  cards › Popups on time lines): the classic hover card, or the fading
+  corner, which has no box. Its corner sits on the event's bead on a short
+  stem, an edge in the campaign colour runs up the side and along the
+  bottom, each fading from the corner, over a background solid behind the
+  text that feathers out; it flips to the bead's left near the right edge.
+  New campaigns start on the fading corner. It reaches the page as
+  `data-cz-tlpop="corner"` on `<html>`, read by `page_timeline.js` (through
+  the hover card's `corner` option) and `timeline_river.js` (its peek).
 - **The character sheet style is the owner's choice** (Customize › Character
   sheets; Modern by default). The choice reaches the page as `data-cz-sheet`
   on `<html>`, which `static/css/sheet_styles.css` and `sheet_motion.js` read.

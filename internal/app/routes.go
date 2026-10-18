@@ -5353,9 +5353,10 @@ func (a *App) RegisterRoutes() {
 					PeekGlow: ap.PeekGlow, PeekGlowColour: ap.PeekGlowColour,
 					HoverCard: ap.HoverCard,
 
-					SheetStyle: ap.SheetStyle,
-					PageLook:   ap.PageLook,
-					StyleKit:   ap.StyleKit,
+					SheetStyle:    ap.SheetStyle,
+					PageLook:      ap.PageLook,
+					StyleKit:      ap.StyleKit,
+					TimelinePopup: ap.TimelinePopup,
 				}
 				ctx = layouts.SetAppearance(ctx, ad)
 			}

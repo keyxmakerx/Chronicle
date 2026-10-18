@@ -48,6 +48,10 @@ page time line block links here that way.
 - **The bar** holds the range, Find (it opens on the search icon or `/`) and
   the View menu: All of it / Today, zoom, kinds, era steps, and the overview
   strip under the line, which is off until asked for.
+- **The peek** after a 250ms rest on a bead shows its name and date. It is
+  a small card, or the fading corner over the bead on a stem when the owner
+  picked it (`<html data-cz-tlpop="corner">`, Customize › Hover cards ›
+  Popups on time lines), flipping to the bead's left near the right end.
 - **An open event** lights its span and draws a playhead under the line;
   everything outside its chain of causes and effects steps back.
 - **The line's gradient** is set in pixels on every draw, so the blend at
