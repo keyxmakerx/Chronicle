@@ -53,13 +53,9 @@ templ CampaignShowPage(cc *CampaignContext, transfer *OwnershipTransfer, recentE
 				@welcomeMessageBanner(cc.Campaign.ID, msg)
 			}
 
-			// Render from role-aware custom layout, falling back to a
-			// synthesized default layout that the customization editor
-			// can also load and edit — same render path either way.
-			{{ layout := cc.Campaign.ParseRoleDashboardLayout(cc.MemberRole) }}
-			if layout == nil {
-				{{ layout = DefaultDashboardLayout() }}
-			}
+			// The viewer's own home (Director, guest or their role), with the
+			// same fallbacks the Customizer shows, so both draw one layout.
+			{{ layout, _ := cc.Campaign.HomeLayout(cc.HomeAudience()) }}
 			@customDashboard(cc, layout, recentEntities)
 
 			<!-- Footer meta -->
