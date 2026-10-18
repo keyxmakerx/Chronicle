@@ -72,6 +72,30 @@ func TestSystemEntryRepository_Integration(t *testing.T) {
 		t.Fatalf("count = %d", n)
 	}
 
+	// A character entry keeps its character, shows in the player list (the
+	// service narrows it to that player) and loses the character when opened up.
+	forOne := mk(campA, "fairy", "Fairy", "character")
+	forOne.ForEntityID = bookTestUUID(t)
+	if err := repo.Create(ctx, forOne); err != nil {
+		t.Fatal(err)
+	}
+	if g, _ := repo.Get(ctx, campA, forOne.ID); g == nil || g.ForEntityID != forOne.ForEntityID || g.Visibility != "character" {
+		t.Fatalf("character entry = %+v", g)
+	}
+	if l, _ := repo.List(ctx, campA, "sys", "ancestry", false); len(l) != 2 {
+		t.Fatalf("player list with a character entry = %d, want 2", len(l))
+	}
+	forOne.Visibility, forOne.ForEntityID = "everyone", ""
+	if err := repo.Update(ctx, forOne); err != nil {
+		t.Fatal(err)
+	}
+	if g, _ := repo.Get(ctx, campA, forOne.ID); g.ForEntityID != "" || g.Visibility != "everyone" {
+		t.Fatalf("after opening up = %+v", g)
+	}
+	if ok, _ := repo.Delete(ctx, campA, forOne.ID); !ok {
+		t.Fatal("delete character entry failed")
+	}
+
 	hidden.Name, hidden.Properties, hidden.Visibility = "Renamed", map[string]any{}, "everyone"
 	if err := repo.Update(ctx, hidden); err != nil {
 		t.Fatal(err)

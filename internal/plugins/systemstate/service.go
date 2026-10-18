@@ -12,6 +12,10 @@ import (
 // a content store, and the cap keeps one page from growing an unbounded row.
 const MaxHalfBytes = 16 * 1024
 
+// MaxListItems caps the campaign-wide listing. The service asks for one more
+// row than this so it can tell "exactly the cap" from "more exist".
+const MaxListItems = 200
+
 // idPattern is the shape of a system id and a state key. It is the same for
 // both so a key can never smuggle in separators or case variants that would
 // split one document across spellings.
@@ -49,6 +53,10 @@ type Service interface {
 	// keeps the stored half, a non-nil half replaces it. Returns the state
 	// as stored.
 	Put(ctx context.Context, campaignID, entityID, systemID, key string, gm, public *json.RawMessage, userID string) (State, error)
+	// ListByKey returns the live pages of the campaign that carry the key,
+	// by entity name, at most MaxListItems; truncated reports that more exist.
+	// Both halves are returned unfiltered; the caller decides the audience.
+	ListByKey(ctx context.Context, campaignID, systemID, key string) (items []ListItem, truncated bool, err error)
 }
 
 type service struct {
@@ -118,6 +126,20 @@ func (s *service) Put(ctx context.Context, campaignID, entityID, systemID, key s
 		s.publisher.PublishSystemStateUpdated(campaignID, entityID, systemID, key)
 	}
 	return s.Get(ctx, campaignID, entityID, systemID, key)
+}
+
+func (s *service) ListByKey(ctx context.Context, campaignID, systemID, key string) ([]ListItem, bool, error) {
+	if err := validateIDs(systemID, key); err != nil {
+		return nil, false, err
+	}
+	rows, err := s.repo.ListByKey(ctx, campaignID, systemID, key, MaxListItems+1)
+	if err != nil {
+		return nil, false, apperrorInternal(err)
+	}
+	if len(rows) > MaxListItems {
+		return rows[:MaxListItems], true, nil
+	}
+	return rows, false, nil
 }
 
 // checkEntity enforces that the entity exists in the stated campaign. A

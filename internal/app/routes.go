@@ -2933,8 +2933,9 @@ func (a *App) RegisterRoutes() {
 
 	// Expose the entities plugin's embedded static assets at
 	// /static/plugins/entities/ (js/characters.js, the Characters page's
-	// mini→full launch enhancement, and the Contents block's script, loaded
-	// on sight).
+	// mini→full launch enhancement, and the scripts below, each loaded on
+	// sight: the Contents block's, Standing's, the Family tree's and the
+	// Characters page's hero builder).
 	a.registerPlugin(PluginRegistration{
 		Slug:     entities.PluginSlug,
 		StaticFS: echo.MustSubFS(entities.StaticAssetsFS, "static"),
@@ -2942,6 +2943,7 @@ func (a *App) RegisterRoutes() {
 			{Name: entities.ContentsWidgetName, Scripts: []string{"js/page_contents.js"}},
 			{Name: "standing", Scripts: []string{"js/standing.js"}},
 			{Name: entities.FamilyTreeWidgetName, Scripts: []string{"js/family_tree.js"}},
+			{Name: "hero-builder", Scripts: []string{"js/hero_builder.js"}},
 		},
 	})
 
@@ -5187,9 +5189,12 @@ func (a *App) RegisterRoutes() {
 				return nil
 			}
 			return systems.Find(c.ParseSettings().SystemID)
-		})
+		},
+		systems.WithEntryCharacters(entryCharactersAdapter{entities: entityService, lists: characterListService}))
 	systems.RegisterSystemEntryChoices(systemEntrySvc)
 	systems.RegisterSystemEntryRoutes(e, systems.NewSystemEntryHandler(systemEntrySvc), authService, campaignService)
+	// Foundry fills the items it makes for these entries from the player view.
+	syncAPIHandler.SetSystemEntryLister(systemEntrySvc)
 	// Pick lists (Ancestry, Kit, Race, Class…) for the character attributes editor.
 	characterChoiceSvc := systems.NewCharacterChoiceService(addonService, campaignSystemMgr)
 	systems.RegisterCharacterChoiceRoutes(e, systems.NewCharacterChoiceHandler(characterChoiceSvc), authService, campaignService)

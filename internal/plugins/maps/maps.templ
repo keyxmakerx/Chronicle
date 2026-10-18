@@ -955,7 +955,7 @@ templ markerModal(data MapViewData) {
 					<div id="mk-delete-zone" class="hidden">
 						<button
 							type="button"
-							class="text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 px-2 py-1 rounded transition-colors"
+							class="text-xs text-bad hover:text-bad/80 hover:bg-bad/10 px-2 py-1 rounded transition-colors"
 							onclick="showMarkerDeleteConfirm()"
 						>
 							<i class="fa-solid fa-trash mr-1"></i> Delete
@@ -977,7 +977,7 @@ templ markerModal(data MapViewData) {
 			<div id="mk-delete-confirm" class="hidden">
 				<div class="border-t border-edge pt-4 mt-2">
 					<div class="flex items-center gap-2 mb-3">
-						<i class="fa-solid fa-triangle-exclamation text-red-400"></i>
+						<i class="fa-solid fa-triangle-exclamation text-bad"></i>
 						<span class="text-sm font-medium text-fg">Delete this marker?</span>
 					</div>
 					<p class="text-xs text-fg-secondary mb-3">This action cannot be undone.</p>
@@ -985,7 +985,7 @@ templ markerModal(data MapViewData) {
 						<button type="button" class="btn-secondary text-xs" onclick="hideMarkerDeleteConfirm()">
 							Cancel
 						</button>
-						<button type="button" class="text-xs px-3 py-1.5 rounded-md bg-red-500 text-white hover:bg-red-600 transition-colors" onclick="deleteMarker()">
+						<button type="button" class="text-xs px-3 py-1.5 rounded-md bg-bad text-white hover:bg-bad/90 transition-colors" onclick="deleteMarker()">
 							<i class="fa-solid fa-trash mr-1"></i> Delete
 						</button>
 					</div>
