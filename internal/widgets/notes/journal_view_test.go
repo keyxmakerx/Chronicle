@@ -110,7 +110,9 @@ func TestShowJournal_RendersThroughTheLayoutInjector(t *testing.T) {
 	if !strings.Contains(body, `data-user-id="u-player"`) || !strings.Contains(body, `data-widget="journal"`) {
 		t.Fatalf("the Journal must render with the viewer's id:\n%.400s", body)
 	}
-	if !strings.Contains(body, "Shared with GM") || strings.Contains(body, "GM only") {
-		t.Error("a player's GM chip says Shared with GM")
+	// The sharing menu words the GM audience from data-gm: a player's says
+	// "Shared with GM", never "GM only".
+	if !strings.Contains(body, `data-gm="false"`) {
+		t.Error("a player's Journal must render data-gm=false")
 	}
 }

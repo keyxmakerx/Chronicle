@@ -4056,19 +4056,36 @@
   .dt-badge { position: absolute; top: 1px; right: 1px; min-width: 14px; height: 14px; padding: 0 3px; border-radius: 999px; background: var(--color-accent); color: #fff; font-size: 9px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
   .dt-badge[hidden] { display: none; }
   .ed-metarow { display: flex; align-items: center; gap: 8px; margin-top: 7px; flex-wrap: wrap; }
-  .vis-control { display: flex; gap: 4px; flex-wrap: wrap; }
-  .vis-chip {
-    display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 999px; cursor: pointer;
-    font-size: 11.3px; font-weight: 700; border: 1px solid var(--color-border); background: var(--color-bg-secondary); color: var(--color-text-secondary);
+  /* Who can see the note: a value picker, so a button that names the current
+     audience and opens the sharing menu. The icon carries the audience's
+     colour; a reader who doesn't own the note sees it as a plain label. */
+  .vis-pick {
+    display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 9px 0 10px; cursor: pointer;
+    border: 1px solid var(--color-border); border-radius: var(--jnl-r-ctl); background: var(--color-bg-secondary); box-shadow: var(--elev-resting);
+    font-size: 12px; font-weight: 650; color: var(--color-text-primary);
+    transition: background var(--dur-micro) var(--ease-out), box-shadow var(--dur-micro) var(--ease-out);
   }
-  .vis-chip i { font-size: 10.5px; }
-  .vis-chip:hover:not(:disabled) { color: var(--color-text-primary); }
-  .vis-chip:disabled { cursor: default; }
-  .vis-control.readonly .vis-chip[aria-pressed="false"] { display: none; }
-  .vis-chip[aria-pressed="true"].v-private { background: var(--color-bg-tertiary); color: var(--color-text-primary); border-color: var(--color-text-faint); }
-  .vis-chip[aria-pressed="true"].v-party { background: var(--ok-bg); color: var(--ok); border-color: var(--ok); }
-  .vis-chip[aria-pressed="true"].v-gm { background: var(--warn-bg); color: var(--warn); border-color: var(--warn); }
-  .vis-chip[aria-pressed="true"].v-custom { background: rgb(var(--color-accent-rgb) / .1); color: var(--color-accent); border-color: var(--color-accent); }
+  .vis-pick .vp-icon { font-size: 11px; }
+  .vis-pick .vp-caret { font-size: 9px; color: var(--mut); margin-left: 1px; transition: transform var(--dur-micro) var(--ease-out); }
+  .vis-pick:hover:not(:disabled) { background: var(--color-bg-tertiary); box-shadow: var(--elev-hover); }
+  .vis-pick:active:not(:disabled) { box-shadow: none; transform: translateY(1px); }
+  .vis-pick:focus-visible { outline: none; box-shadow: 0 0 0 3px rgb(var(--color-accent-rgb) / .3); }
+  .vis-pick[aria-expanded="true"] .vp-caret { transform: rotate(180deg); }
+  .vis-pick.readonly { border-color: transparent; background: none; box-shadow: none; padding: 0; cursor: default; color: var(--color-text-secondary); }
+  .vis-pick.readonly .vp-caret { display: none; }
+  .vis-pick.v-private .vp-icon, .vis-opt.v-private > i:first-child { color: var(--color-text-secondary); }
+  .vis-pick.v-party .vp-icon, .vis-opt.v-party > i:first-child { color: var(--ok); }
+  .vis-pick.v-gm .vp-icon, .vis-opt.v-gm > i:first-child { color: var(--warn); }
+  .vis-pick.v-custom .vp-icon, .vis-opt.v-custom > i:first-child { color: var(--color-accent); }
+  .jnl-pop.vis-menu { width: 250px; }
+  .jnl-pop .vis-opt { align-items: flex-start; }
+  .jnl-pop .vis-opt > i:first-child { margin-top: 2px; }
+  .jnl-pop .vis-opt .vo-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+  .jnl-pop .vis-opt .vo-hint { font-size: 11px; font-weight: 450; color: var(--mut); }
+  .jnl-pop .vis-opt .vo-check { margin-top: 2px; color: var(--color-accent); }
+  .jnl-pop .vis-opt[aria-checked="true"] { background: rgb(var(--color-accent-rgb) / .1); color: var(--ink); font-weight: 700; }
+  .jnl-pop .vis-warn { display: flex; gap: 8px; align-items: flex-start; }
+  .jnl-pop .vis-warn i { color: var(--warn); margin-top: 3px; }
   .ed-owner { font-size: 11.5px; color: var(--mut); }
   .ed-lock { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 600; background: var(--color-bg-tertiary); color: var(--color-text-secondary); }
   .ed-lock[hidden], .ed-owner[hidden] { display: none; }

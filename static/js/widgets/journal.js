@@ -32,6 +32,7 @@
   var MIN_EDITOR_PX = 260;
   var DRAWER_PX = 280;
   var ID_RE = /^[0-9a-fA-F-]{8,64}$/;
+  var VIS_ICON = { private: 'fa-eye-slash', party: 'fa-users', gm: 'fa-shield-halved', custom: 'fa-user-group' };
   var SIZE_KEY = 'chronicle.journal.listSize';
 
   var JL = null; // Chronicle.JournalList, resolved when the first Journal mounts
@@ -163,7 +164,7 @@
       pinBtn: this.q('[data-act="pin"]'),
       drawerBtn: this.q('[data-act="drawer"]'),
       badge: this.q('.dt-badge'),
-      chips: this.q('.vis-control'),
+      visPick: this.q('.vis-pick'),
       night: this.q('.ed-night'),
       owner: this.q('.ed-owner'),
       lock: this.q('.ed-lock'),
@@ -1100,7 +1101,7 @@
 
   Journal.prototype.peekHtml = function (n) {
     var where = JL.folderPath(n.parentId, this.folders) || 'No folder';
-    var visIcon = { private: 'fa-eye-slash', gm: 'fa-shield-halved', custom: 'fa-user-group' }[n.visibility] || 'fa-users';
+    var visIcon = VIS_ICON[n.visibility] || VIS_ICON.party;
     var out = (n.links || []).length;
     var html = '<div class="p-ttl">' + esc(n.title || 'Untitled') + '</div>' +
       (n.snippet ? '<div class="p-body">' + esc(n.snippet) + '</div>' : '') +
@@ -1788,19 +1789,17 @@
     var n = this.active;
     if (!n) return;
     var own = this.isOwner();
-    var chips = this.dom.chips;
-    chips.classList.toggle('readonly', !own);
-    Array.prototype.forEach.call(chips.querySelectorAll('.vis-chip'), function (b) {
-      var on = b.getAttribute('data-vis') === n.visibility;
-      b.setAttribute('aria-pressed', String(on));
-      b.disabled = !own;
-      b.title = own ? '' : 'Only the note’s owner can change who sees it';
-    });
-    var custom = chips.querySelector('[data-vis="custom"] span');
-    if (custom) {
-      var count = own && n.visibility === 'custom' && n.sharedWith ? n.sharedWith.length : 0;
-      custom.textContent = count ? 'Specific people (' + count + ')' : 'Specific people';
-    }
+    var vis = VIS_ICON[n.visibility] ? n.visibility : 'private';
+    var pick = this.dom.visPick;
+    var label = this.visLabel(vis);
+    var count = own && vis === 'custom' && n.sharedWith ? n.sharedWith.length : 0;
+    if (count) label += ' (' + count + ')';
+    pick.className = 'vis-pick v-' + vis + (own ? '' : ' readonly');
+    pick.querySelector('.vp-icon').className = 'fa-solid ' + VIS_ICON[vis] + ' vp-icon';
+    pick.querySelector('.vp-label').textContent = label;
+    pick.disabled = !own;
+    pick.title = own ? '' : 'Only the note’s owner can change who sees it';
+    pick.setAttribute('aria-label', 'Who can see this note: ' + label);
     var pin = this.dom.pinBtn;
     pin.hidden = !own;
     pin.setAttribute('aria-pressed', String(!!n.pinned));
@@ -2117,6 +2116,84 @@
     }).catch(function () {
       Chronicle.notify('Could not change who sees this note.', 'error');
     });
+  };
+
+  /** Who each audience lets read a note, in the words the sharing menu uses. */
+  Journal.prototype.visHint = function (v) {
+    if (v === 'private') return 'Only you';
+    if (v === 'party') return 'Everyone in the campaign';
+    if (v === 'gm') return this.isGM ? 'You and the other GMs' : 'You and the GM';
+    return 'The people you pick';
+  };
+
+  /**
+   * The sharing menu: the four audiences, the current one ticked. A move to
+   * the party asks first, in the same panel, because once players have read
+   * a note it can't be taken back.
+   */
+  Journal.prototype.openVisMenu = function (anchor) {
+    var self = this;
+    var n = this.active;
+    if (!n || !this.isOwner()) return;
+    var cur = n.visibility;
+    var html = '<span class="pop-label">Who can see this note</span><div role="menu" aria-label="Who can see this note">' +
+      ['private', 'party', 'gm', 'custom'].map(function (v) {
+        var on = v === cur;
+        return '<button type="button" class="pop-opt vis-opt v-' + v + '" role="menuitemradio" aria-checked="' + on + '" data-vis-to="' + v + '">' +
+          '<i class="fa-solid ' + VIS_ICON[v] + '" aria-hidden="true"></i>' +
+          '<span class="vo-text"><span class="vo-name">' + esc(self.visLabel(v)) + '</span><span class="vo-hint">' + esc(self.visHint(v)) + '</span></span>' +
+          (on ? '<i class="fa-solid fa-check vo-check" aria-hidden="true"></i>' : '') + '</button>';
+      }).join('') + '</div>';
+    this.openPop(anchor, html, function (pop) {
+      pop.classList.add('vis-menu');
+      anchor.setAttribute('aria-expanded', 'true');
+      var checked = pop.querySelector('[aria-checked="true"]');
+      if (checked) checked.focus({ preventScroll: true });
+      pop.addEventListener('keydown', function (e) {
+        if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+        var opts = Array.prototype.slice.call(pop.querySelectorAll('.vis-opt'));
+        var i = opts.indexOf(document.activeElement);
+        if (i < 0) return;
+        e.preventDefault();
+        opts[(i + (e.key === 'ArrowDown' ? 1 : opts.length - 1)) % opts.length].focus();
+      });
+      pop.addEventListener('click', function (e) {
+        var b = e.target.closest('[data-vis-to]');
+        if (!b) return;
+        var to = b.getAttribute('data-vis-to');
+        if (to === 'custom') { self.openPeoplePop(anchor); return; }
+        if (to === cur) { self.closePop(true); return; }
+        if (to === 'party' && cur !== 'party') { self.confirmParty(pop, anchor); return; }
+        self.closePop(true);
+        self.setVisibility(to);
+      });
+    });
+  };
+
+  /**
+   * The ask before a note goes to the party, shown in the menu's own panel.
+   * It names who will read it; a GM is reminded that players will, and a game
+   * night entry says so, since that is where a GM's plans for the night live.
+   */
+  Journal.prototype.confirmParty = function (pop, anchor) {
+    var self = this;
+    var others = (this.memberList || []).filter(function (m) { return m.id !== self.uid; }).length;
+    var who = others === 1 ? 'The 1 other person in this campaign' : others ? 'All ' + others + ' other people in this campaign' : 'Everyone who joins this campaign';
+    var what = this.nightRow() ? 'this game night entry' : 'this note';
+    var text = who + ' will be able to read ' + what + (this.isGM ? ', players included. Anything you wrote only for yourself will be in front of them.' : '.');
+    pop.innerHTML = '<span class="pop-label">Share with the party?</span>' +
+      '<p class="pop-text vis-warn"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i><span>' + esc(text) + '</span></p>' +
+      '<div class="pop-foot"><button type="button" class="jnl-btn ghost" data-pop-cancel>Cancel</button><button type="button" class="jnl-btn" data-pop-ok>Share</button></div>';
+    pop.setAttribute('role', 'alertdialog');
+    pop.setAttribute('aria-label', 'Share with the party?');
+    pop.querySelector('[data-pop-cancel]').addEventListener('click', function (e) { e.stopPropagation(); self.closePop(true); });
+    pop.querySelector('[data-pop-ok]').addEventListener('click', function (e) {
+      e.stopPropagation();
+      self.closePop(true);
+      self.setVisibility('party');
+    });
+    // Cancel holds the focus so a stray Enter keeps the note where it was.
+    pop.querySelector('[data-pop-cancel]').focus({ preventScroll: true });
   };
 
   Journal.prototype.openPeoplePop = function (anchor) {
@@ -2534,18 +2611,17 @@
       }
     });
     d.note.querySelector('.ed-head').addEventListener('click', function (e) {
-      var b = e.target.closest('[data-act], [data-vis]');
+      var b = e.target.closest('[data-act]');
       if (!b || b.disabled) return;
       var act = b.getAttribute('data-act');
-      if (act === 'archive') self.toggleArchive();
+      if (act === 'vis') {
+        if (self.popEl && self.popAnchor === b) self.closePop(true);
+        else self.openVisMenu(b);
+      }
+      else if (act === 'archive') self.toggleArchive();
       else if (act === 'pin') self.togglePin();
       else if (act === 'drawer') self.setDrawer(!d.drawer.classList.contains('open'), e.detail === 0);
       else if (act === 'unlock') self.forceUnlock();
-      else if (b.hasAttribute('data-vis')) {
-        var vis = b.getAttribute('data-vis');
-        if (vis === 'custom') self.openPeoplePop(b);
-        else if (!self.active || vis !== self.active.visibility) self.setVisibility(vis);
-      }
     });
     d.toolbar.addEventListener('mousedown', function (e) {
       // Keep the editor's selection when a formatting button is pressed.
@@ -2753,6 +2829,7 @@
     this.popEl = null;
     this.popAnchor = null;
     pop.remove();
+    if (anchor && anchor.hasAttribute('aria-expanded') && anchor.getAttribute('aria-haspopup')) anchor.setAttribute('aria-expanded', 'false');
     if (restore && anchor && anchor.isConnected) anchor.focus();
   };
 
