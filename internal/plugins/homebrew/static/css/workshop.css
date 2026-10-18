@@ -113,6 +113,31 @@ textarea.hbw-in { resize: vertical; }
 .hbw-seg button[aria-pressed="true"] { background: var(--hb-acc); color: #fff; }
 .hbw-seg button:disabled { cursor: default; opacity: .6; }
 
+/* Live preview and where it shows up, under the inspector. */
+.hbw-sec { padding: 12px; display: grid; gap: 8px; border-top: 1px solid var(--hb-line); }
+.hbw-prev { display: grid; gap: 8px; }
+.hbw-pv { display: grid; gap: 4px; padding: 8px; background: var(--hb-tint); border-radius: var(--hb-r-sm); }
+.hbw-pv-part { display: grid; gap: 6px; padding: 6px; border-radius: 6px; cursor: pointer; outline: 1.5px dashed transparent; outline-offset: -1px; }
+.hbw-pv-part:hover { outline-color: var(--hb-acc); }
+.hbw-pv-part > .hbw-row { align-items: center; flex-wrap: nowrap; gap: 4px; }
+.hbw-pv-name { flex: 1; min-width: 0; color: var(--hb-ink); overflow-wrap: anywhere; }
+.hbw-pill { display: inline-flex; align-items: center; gap: 4px; padding: 1px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 600;
+  background: var(--hb-panel); color: var(--hb-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.hbw-pill.dm { color: var(--hb-dm); }
+.hbw-bar { display: flex; gap: 3px; }
+.hbw-bar i { flex: 1; height: 8px; border-radius: 4px; background: var(--hb-line); }
+.hbw-bar i.on { background: var(--hb-acc); }
+.hbw-band { font-size: 12.5px; padding: 6px 8px; border-radius: 6px; background: var(--hb-panel); overflow-wrap: anywhere; }
+.hbw-ic:disabled { opacity: .4; cursor: default; background: none; }
+.hbw-pv-acts { display: flex; flex-wrap: wrap; gap: 6px; }
+.hbw-wait { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.hbw-wait li { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--hb-line); border-radius: var(--hb-r-sm); cursor: pointer; }
+.hbw-wait li > span { flex: 1; min-width: 0; font-size: 13px; color: var(--hb-ink); }
+.hbw-wait small { display: block; font-size: 11.5px; color: var(--hb-muted); }
+.hbw-log { margin: 0; padding-left: 18px; font-size: 12px; color: var(--hb-muted); display: grid; gap: 2px; }
+.hbw-card.peek { box-shadow: 0 0 0 2px var(--hb-acc), var(--hb-elev-hover); }
+.hbw-card.flash { box-shadow: 0 0 0 3px var(--hb-acc), var(--hb-elev-hover); }
+
 @media (max-width: 1000px) {
   .hbw-work { grid-template-columns: minmax(0, 1fr); height: auto; }
   .hbw-lib .hbw-scroll { max-height: 280px; }

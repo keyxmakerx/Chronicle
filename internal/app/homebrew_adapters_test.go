@@ -105,6 +105,20 @@ func TestRegisterTrackerParts(t *testing.T) {
 		t.Errorf("fields = %v, want %v", fields, wantFields)
 	}
 
+	// The live preview acts trackers out from these, so each must match what
+	// the rule does at the table.
+	previews := map[string]string{}
+	for _, l := range [][]homebrew.CatalogEntry{cat.Parts, cat.Events, cat.Actions} {
+		for _, e := range l {
+			previews[e.Name] = fmt.Sprint(e.Preview)
+		}
+	}
+	wantPreviews := map[string]string{"tracker": "shape", "clock": "shape", "tracker.reached": "&{reach value}",
+		"step": "&{add by}", "set": "&{set to}", "tick": "&{add }"}
+	if fmt.Sprint(previews) != fmt.Sprint(wantPreviews) {
+		t.Errorf("previews = %v, want %v", previews, wantPreviews)
+	}
+
 	t.Run("a second call fails as a duplicate", func(t *testing.T) {
 		if err := registerTrackerParts(reg); err == nil {
 			t.Error("registering twice succeeded")

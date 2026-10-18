@@ -218,3 +218,75 @@ func TestRegistryFields(t *testing.T) {
 		})
 	}
 }
+
+func TestRegistryPreview(t *testing.T) {
+	by := []Field{{Name: "by", Label: "By", Type: FieldWhole}, {Name: "note", Label: "Note", Type: FieldText}}
+	parts := []string{"tracker"}
+	tests := []struct {
+		name    string
+		reg     func(r *Registry) error
+		wantErr bool
+	}{
+		{"part shape", func(r *Registry) error { return r.RegisterPart(PartKind{Name: "p", Preview: PreviewShape, Check: okCheck}) }, false},
+		{"part unknown preview", func(r *Registry) error { return r.RegisterPart(PartKind{Name: "p", Preview: "dial", Check: okCheck}) }, true},
+		{"event reach", func(r *Registry) error {
+			return r.RegisterEvent(EventDef{Name: "e", PartKinds: parts, Fields: by, Preview: &Preview{Op: PreviewReach, Arg: "by"}, Check: okCheck})
+		}, false},
+		{"event may not add", func(r *Registry) error {
+			return r.RegisterEvent(EventDef{Name: "e", PartKinds: parts, Fields: by, Preview: &Preview{Op: PreviewAdd, Arg: "by"}, Check: okCheck})
+		}, true},
+		{"reach needs an arg", func(r *Registry) error {
+			return r.RegisterEvent(EventDef{Name: "e", PartKinds: parts, Preview: &Preview{Op: PreviewReach}, Check: okCheck})
+		}, true},
+		{"event with no part", func(r *Registry) error {
+			return r.RegisterEvent(EventDef{Name: "e", Fields: by, Preview: &Preview{Op: PreviewReach, Arg: "by"}, Check: okCheck})
+		}, true},
+		{"add with no arg is 1", func(r *Registry) error {
+			return r.RegisterAction(ActionDef{Name: "a", PartKinds: parts, Preview: &Preview{Op: PreviewAdd}, Check: okCheck})
+		}, false},
+		{"set reads a whole field", func(r *Registry) error {
+			return r.RegisterAction(ActionDef{Name: "a", PartKinds: parts, Fields: by, Preview: &Preview{Op: PreviewSet, Arg: "by"}, Check: okCheck})
+		}, false},
+		{"set needs an arg", func(r *Registry) error {
+			return r.RegisterAction(ActionDef{Name: "a", PartKinds: parts, Preview: &Preview{Op: PreviewSet}, Check: okCheck})
+		}, true},
+		{"arg must be declared", func(r *Registry) error {
+			return r.RegisterAction(ActionDef{Name: "a", PartKinds: parts, Fields: by, Preview: &Preview{Op: PreviewAdd, Arg: "to"}, Check: okCheck})
+		}, true},
+		{"arg must be whole", func(r *Registry) error {
+			return r.RegisterAction(ActionDef{Name: "a", PartKinds: parts, Fields: by, Preview: &Preview{Op: PreviewAdd, Arg: "note"}, Check: okCheck})
+		}, true},
+		{"action may not reach", func(r *Registry) error {
+			return r.RegisterAction(ActionDef{Name: "a", PartKinds: parts, Fields: by, Preview: &Preview{Op: PreviewReach, Arg: "by"}, Check: okCheck})
+		}, true},
+		{"client-run may not preview", func(r *Registry) error {
+			return r.RegisterAction(ActionDef{Name: "a", PartKinds: parts, ClientRun: true, Preview: &Preview{Op: PreviewAdd}, Check: okCheck})
+		}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := tt.reg(NewRegistry()); (err != nil) != tt.wantErr {
+				t.Errorf("err = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+
+	t.Run("catalog carries it", func(t *testing.T) {
+		r := NewRegistry()
+		if err := r.RegisterPart(PartKind{Name: "p", Preview: PreviewShape, Check: okCheck}); err != nil {
+			t.Fatal(err)
+		}
+		if err := r.RegisterAction(ActionDef{Name: "a", PartKinds: parts, Fields: by, Preview: &Preview{Op: PreviewAdd, Arg: "by"}, Check: okCheck}); err != nil {
+			t.Fatal(err)
+		}
+		if err := r.RegisterAction(ActionDef{Name: "b", PartKinds: parts, Check: okCheck}); err != nil {
+			t.Fatal(err)
+		}
+		b, _ := json.Marshal(r.Catalog())
+		for _, want := range []string{`"name":"p","label":"","preview":"shape"`, `"preview":{"op":"add","arg":"by"}`, `{"name":"b","label":"","partKinds":["tracker"]}`} {
+			if !strings.Contains(string(b), want) {
+				t.Errorf("catalog %s lacks %s", b, want)
+			}
+		}
+	})
+}

@@ -125,9 +125,179 @@
     return a;
   }
 
+  // ---------- Live preview (pure; tested beside the helpers above) ----------
+  //
+  // The preview acts a recipe out in the page, with nothing saved: a part
+  // whose kind previews as a shape holds a number, and events and actions
+  // whose owners declared a preview op move it. Bounds, clamping and bands
+  // follow the trackers ledger, so the preview shows what the block would.
+
+  function findDef(cat, list, name) {
+    return ((cat && cat[list]) || []).filter(function (d) { return d.name === name; })[0] || null;
+  }
+
+  function hasNumber(cat, part) {
+    var k = part && findDef(cat, 'parts', part.kind);
+    return !!(k && k.preview === 'shape');
+  }
+
+  // bounds is the lowest and highest value a shape allows; hi is null for a
+  // count with no top, and floor is false for a count with no bottom.
+  function bounds(d) {
+    d = d || {};
+    if (d.shape === 'steps') return { lo: 0, hi: Math.max(0, (d.steps || []).length - 1), floor: true };
+    if (d.shape === 'clock') return { lo: 0, hi: d.max == null ? 0 : d.max, floor: true };
+    return { lo: d.min == null ? 0 : d.min, hi: d.max == null ? null : d.max, floor: d.min != null };
+  }
+
+  function clampV(d, v) {
+    var b = bounds(d);
+    if (b.floor && v < b.lo) return b.lo;
+    if (b.hi != null && v > b.hi) return b.hi;
+    return v;
+  }
+
+  // nowText is what value v means: a step's name and text, or the band in
+  // force (the highest starting at or below v).
+  function nowText(d, v) {
+    d = d || {};
+    if (d.shape === 'steps') {
+      var s = (d.steps || [])[v];
+      return s ? (s.text ? s.name + ': ' + s.text : s.name) : '';
+    }
+    var best = null;
+    (d.bands || []).forEach(function (b) { if (b.at <= v && (!best || b.at >= best.at)) best = b; });
+    return best ? best.text : '';
+  }
+
+  // simStart is a fresh preview: every number at its lowest, nothing logged.
+  function simStart(doc, cat) {
+    var st = { v: {}, log: [], waiting: [] };
+    simSync(doc, cat, st);
+    return st;
+  }
+
+  // simSync keeps the preview in step with an edited recipe: a new part
+  // starts at its lowest, a changed shape re-clamps, a removed part and any
+  // waiting rule that no longer exists are dropped.
+  function simSync(doc, cat, st) {
+    var keep = {};
+    doc.parts.forEach(function (p) {
+      if (!hasNumber(cat, p)) return;
+      keep[p.key] = clampV(p.data, st.v[p.key] == null ? bounds(p.data).lo : st.v[p.key]);
+    });
+    st.v = keep;
+    // A waiting rule is held by the rule itself, so removing an earlier rule
+    // (which renumbers the rest) keeps it pointing at the right one.
+    st.waiting = st.waiting.filter(function (w) { w.rule = doc.rules.indexOf(w.ref); return w.rule >= 0; });
+    return st;
+  }
+
+  var LIMIT = 50;
+
+  // run starts a rule. A rule timed for later waits; one that runs now does
+  // each Then in order. Returns the cards it lit, in order.
+  function run(doc, cat, st, i, now, ctx) {
+    var rule = doc.rules[i];
+    if (!rule) return;
+    var ev = findDef(cat, 'events', rule.when.event), p = rule.when.part ? doc.parts.filter(function (x) { return x.key === rule.when.part; })[0] : null;
+    var what = (ev ? ev.label : rule.when.event) + (p ? ': ' + p.label : '');
+    ctx.lit.push('r' + i);
+    if (rule.timing !== 'now' && !now) {
+      st.waiting.push({ rule: i, ref: rule, what: what, timing: rule.timing });
+      st.log.push(what + ', waits' + (rule.timing === 'held' ? ' for you to run it' : ' for the encounter to end'));
+      return;
+    }
+    rule.then.forEach(function (d, j) {
+      if (ctx.steps++ >= LIMIT) { ctx.stopped = true; return; }
+      ctx.lit.push('r' + i + '.' + j);
+      var act = findDef(cat, 'actions', d.action), tp = doc.parts.filter(function (x) { return x.key === d.part; })[0];
+      var label = act ? act.label : d.action;
+      if (act && act.preview && tp && hasNumber(cat, tp)) {
+        var n = act.preview.arg ? Number((d.args || {})[act.preview.arg]) : 1;
+        if (!Number.isFinite(n)) n = 0;
+        var was = st.v[tp.key], to = clampV(tp.data, act.preview.op === 'set' ? n : was + n);
+        ctx.lit.push('p:' + tp.key);
+        st.log.push(label + ': ' + tp.label + ' ' + was + ' to ' + to);
+        change(doc, cat, st, tp.key, was, to, ctx);
+      } else {
+        st.log.push((act && act.clientRun ? 'You would be asked to run: ' : 'At the table this would: ') + label + (tp ? ', ' + tp.label : ''));
+      }
+    });
+  }
+
+  // change sets a part's number and starts every rule whose When it meets: a
+  // reach fires when the number lands on its value or moves past it.
+  function change(doc, cat, st, key, was, to, ctx) {
+    st.v[key] = to;
+    if (was === to) return;
+    doc.rules.forEach(function (r, i) {
+      if (ctx.stopped || r.when.part !== key) return;
+      var ev = findDef(cat, 'events', r.when.event);
+      if (!(ev && ev.preview && ev.preview.op === 'reach')) return;
+      var at = Number((r.when.args || {})[ev.preview.arg]);
+      if ((was < at && to >= at) || (was > at && to <= at)) run(doc, cat, st, i, false, ctx);
+    });
+  }
+
+  function done(st, ctx) {
+    if (ctx.stopped) st.log.push('Stopped after ' + LIMIT + ' steps: these rules keep setting each other off.');
+    if (st.log.length > 40) st.log.splice(0, st.log.length - 40);
+    return ctx.lit;
+  }
+
+  // simFire acts out rule i's When happening; now runs it even when it is
+  // timed for later, as Run does in the drawer.
+  function simFire(doc, cat, st, i, now) {
+    var ctx = { lit: [], steps: 0, stopped: false };
+    run(doc, cat, st, i, now, ctx);
+    return done(st, ctx);
+  }
+
+  // simRunWaiting runs the waiting rule at index w now.
+  function simRunWaiting(doc, cat, st, w) {
+    var item = st.waiting.splice(w, 1)[0];
+    return item ? simFire(doc, cat, st, item.rule, true) : [];
+  }
+
+  // simNudge moves a part's number by hand, one step, as the block's
+  // buttons do; rules that watch it react.
+  function simNudge(doc, cat, st, key, by) {
+    var p = doc.parts.filter(function (x) { return x.key === key; })[0], ctx = { lit: ['p:' + key], steps: 0, stopped: false };
+    if (!p || st.v[key] == null) return [];
+    var was = st.v[key], to = clampV(p.data, was + by);
+    if (to !== was) st.log.push('By hand: ' + p.label + ' ' + was + ' to ' + to);
+    change(doc, cat, st, key, was, to, ctx);
+    return done(st, ctx);
+  }
+
+  // simSetTo puts a part's number at v, as Try it does for a rule that
+  // watches it; null when the shape can't hold v or it is already there.
+  function simSetTo(doc, cat, st, key, v) {
+    var p = doc.parts.filter(function (x) { return x.key === key; })[0];
+    if (!p || st.v[key] == null || !Number.isFinite(v) || clampV(p.data, v) !== v || st.v[key] === v) return null;
+    var was = st.v[key], ctx = { lit: ['p:' + key], steps: 0, stopped: false };
+    st.log.push('Try it: ' + p.label + ' ' + was + ' to ' + v);
+    change(doc, cat, st, key, was, v, ctx);
+    return done(st, ctx);
+  }
+
+  // firable lists the rules the preview can't start from a number (an event
+  // from outside the recipe, or one with no preview), each a button.
+  function firable(doc, cat) {
+    var out = [];
+    doc.rules.forEach(function (r, i) {
+      var ev = findDef(cat, 'events', r.when.event);
+      if (!(ev && ev.preview)) out.push(i);
+    });
+    return out;
+  }
+
   var H = {
     partKey: partKey, startArgs: startArgs, freeSpot: freeSpot, cardsOf: cardsOf, edgesOf: edgesOf, shapeText: shapeText, argsText: argsText,
-    compatible: compatible, removePart: removePart, defaultData: defaultData
+    compatible: compatible, removePart: removePart, defaultData: defaultData,
+    bounds: bounds, clampV: clampV, nowText: nowText, simStart: simStart, simSync: simSync, simFire: simFire,
+    simRunWaiting: simRunWaiting, simNudge: simNudge, simSetTo: simSetTo, firable: firable
   };
   if (typeof window !== 'undefined') window.HomebrewWorkshop = H;
   if (typeof Chronicle === 'undefined' || !Chronicle.register) return;
@@ -250,6 +420,7 @@
   function fresh(S) {
     S.cur = { id: null, version: 0, name: 'Untitled recipe', doc: { parts: [], rules: [], layout: {} } };
     S.sel = null; S.dirty = false;
+    S.sim = simStart(S.cur.doc, S.catalog);
     redraw(S, true);
   }
 
@@ -259,6 +430,7 @@
       r.doc.parts.forEach(function (p) { p.data = p.data || {}; });
       r.doc.rules.forEach(function (rule) { rule.when.args = rule.when.args || {}; rule.then.forEach(function (d) { d.args = d.args || {}; }); });
       S.cur = r; S.sel = null; S.dirty = false;
+      S.sim = simStart(r.doc, S.catalog);
       redraw(S, true);
       setStatus(S, '');
     }).catch(function (e) { setStatus(S, e.message, true); });
@@ -317,9 +489,12 @@
       ])
     ]);
     S.inspTitle = h('h2', 'hbw-h', 'Recipe');
-    S.inspEl = h('div', 'hbw-scroll hbw-insp');
+    S.inspEl = h('div', 'hbw-insp');
+    S.prevEl = h('div', 'hbw-prev', '', { 'aria-live': 'polite' });
+    S.whereEl = h('div', 'hbw-where');
+    S.tryBtn = btn('Try it', '', function () { tryIt(S); }, 'fa-play');
     append(el, [
-      append(h('div', 'hbw-top'), [h('span', 'hbw-sp'), S.statusEl, S.saveBtn]),
+      append(h('div', 'hbw-top'), [h('span', 'hbw-sp'), S.statusEl, S.tryBtn, S.saveBtn]),
       append(h('div', 'hbw-work'), [
         append(h('section', 'hbw-pane hbw-lib', '', { 'aria-label': 'Your homebrew' }), [
           append(h('div', 'hbw-pane-h'), [h('h2', 'hbw-h', 'Your homebrew'),
@@ -330,7 +505,12 @@
           append(h('div', 'hbw-pane-h'), [S.titleEl]), S.wrapEl
         ]),
         append(h('section', 'hbw-pane', '', { 'aria-label': 'Inspector' }), [
-          append(h('div', 'hbw-pane-h'), [S.inspTitle]), S.inspEl
+          append(h('div', 'hbw-pane-h'), [S.inspTitle]),
+          append(h('div', 'hbw-scroll'), [
+            S.inspEl,
+            append(h('section', 'hbw-sec', '', { 'aria-label': 'Live preview' }), [h('h3', 'hbw-lab', 'Live preview'), S.prevEl]),
+            append(h('section', 'hbw-sec', '', { 'aria-label': 'Where it shows up' }), [h('h3', 'hbw-lab', 'Where it shows up'), S.whereEl])
+          ])
         ])
       ])
     ]);
@@ -338,11 +518,14 @@
   }
 
   function redraw(S, refit) {
+    simSync(S.cur.doc, S.catalog, S.sim);
     S.titleEl.textContent = S.cur.name || 'Untitled recipe';
     S.saveBtn.disabled = !S.dirty;
     drawLibrary(S);
     drawCanvas(S);
     drawInspector(S);
+    drawPreview(S);
+    drawWhere(S);
     if (refit) window.requestAnimationFrame(function () { fit(S); });
   }
 
@@ -700,6 +883,8 @@
     touch(S);
     S.titleEl.textContent = S.cur.name || 'Untitled recipe';
     drawCanvas(S);
+    simSync(S.cur.doc, S.catalog, S.sim);
+    drawPreview(S);
   }
 
   function recipeForm(S, box) {
@@ -865,5 +1050,156 @@
         S.sel = 'r' + i; touch(S); redraw(S);
       }, 'hbw-danger')])
     ]);
+  }
+
+  // ---------- Live preview ----------
+
+  // valueText is a part's number in words: a step's name, "3 / 6", or a
+  // bare number for a count with no top.
+  function valueText(d, v) {
+    if (d.shape === 'steps') { var s = (d.steps || [])[v]; return (s ? s.name : v) + ' (' + (v + 1) + ' of ' + (d.steps || []).length + ')'; }
+    var b = bounds(d);
+    return b.hi == null ? String(v) : v + ' / ' + b.hi;
+  }
+
+  // bar draws a value as segments when there are few enough to read.
+  function bar(d, v) {
+    var b = bounds(d);
+    if (b.hi == null || b.hi - b.lo < 1 || b.hi - b.lo > 24) return null;
+    var row = h('div', 'hbw-bar', '', { 'aria-hidden': 'true' });
+    for (var i = b.lo + (d.shape === 'steps' ? 0 : 1); i <= b.hi; i++) row.appendChild(h('i', i <= v ? 'on' : ''));
+    return row;
+  }
+
+  // src ties a preview line to its card: pointing at it lights the card,
+  // clicking it selects the card and brings it into view.
+  function src(S, el, id) {
+    el.setAttribute('data-src', id);
+    el.addEventListener('mouseenter', function () { peek(S, id, true); });
+    el.addEventListener('mouseleave', function () { peek(S, id, false); });
+    el.addEventListener('click', function (ev) {
+      if (ev.target.closest('button')) return;
+      pick(S, id); reveal(S, id);
+    });
+    return el;
+  }
+
+  function peek(S, id, on) {
+    var c = S.cvEl.querySelector('[data-card="' + id + '"]');
+    if (c) c.classList.toggle('peek', on);
+  }
+
+  // flash lights the cards a run went through, one after another, so the
+  // Director sees which wires carried it.
+  function flash(S, ids) {
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    ids.forEach(function (id, i) {
+      window.setTimeout(function () {
+        var c = S.cvEl.querySelector('[data-card="' + id + '"]');
+        if (!c) return;
+        c.classList.add('flash');
+        window.setTimeout(function () { c.classList.remove('flash'); }, reduce ? 1200 : 700);
+      }, reduce ? 0 : i * 160);
+    });
+  }
+
+  function acted(S, lit) {
+    drawPreview(S);
+    flash(S, lit);
+  }
+
+  function drawPreview(S) {
+    var box = S.prevEl, doc = S.cur.doc, cat = S.catalog, st = S.sim;
+    box.textContent = '';
+    if (!doc.parts.length && !doc.rules.length) {
+      box.appendChild(h('p', 'hbw-muted', 'Add a part and its preview shows here.'));
+      return;
+    }
+    var card = h('div', 'hbw-pv');
+    doc.parts.forEach(function (p) {
+      var row = src(S, h('div', 'hbw-pv-part'), 'p:' + p.key), k = def(S, 'parts', p.kind);
+      var head = append(h('div', 'hbw-row'), [h('strong', 'hbw-pv-name', p.label)]);
+      if (p.see !== 'party') {
+        head.appendChild(append(h('span', 'hbw-pill' + (p.see === 'director' ? ' dm' : '')), [fa(SEE_ICON[p.see]),
+          document.createTextNode(' ' + SEE.filter(function (x) { return x[0] === p.see; })[0][1])]));
+      }
+      row.appendChild(head);
+      if (st.v[p.key] == null) {
+        row.appendChild(h('p', 'hbw-muted', (k ? k.label : p.kind) + '. Set up where it lives in the campaign.'));
+      } else {
+        var v = st.v[p.key], b = bounds(p.data), now = nowText(p.data, v);
+        append(head, [h('span', 'hbw-pill', valueText(p.data, v)),
+          iconBtn('fa-minus', 'Step ' + p.label + ' down', function () { acted(S, simNudge(doc, cat, st, p.key, -1)); }),
+          iconBtn('fa-plus', 'Step ' + p.label + ' up', function () { acted(S, simNudge(doc, cat, st, p.key, 1)); })]);
+        var minus = head.children[head.children.length - 2], plus = head.children[head.children.length - 1];
+        minus.disabled = b.floor && v <= b.lo; plus.disabled = b.hi != null && v >= b.hi;
+        append(row, [bar(p.data, v), now ? h('div', 'hbw-band', now) : null]);
+      }
+      card.appendChild(row);
+    });
+    box.appendChild(card);
+
+    var fire = firable(doc, cat);
+    if (fire.length) {
+      var acts = h('div', 'hbw-pv-acts');
+      fire.forEach(function (i) {
+        var r = doc.rules[i], ev = def(S, 'events', r.when.event), p = partOf(doc, r.when.part);
+        acts.appendChild(btn((ev ? ev.label : r.when.event) + (p ? ': ' + p.label : ''), '', function () { acted(S, simFire(doc, cat, st, i)); }, 'fa-bolt'));
+      });
+      append(box, [acts, h('p', 'hbw-muted', 'Press one to act out that When. Rules that watch a number run when you step it.')]);
+    } else if (doc.rules.length) {
+      box.appendChild(h('p', 'hbw-muted', 'Step a part up or down and the rules that watch it run.'));
+    }
+
+    if (st.waiting.length) {
+      var wl = h('ul', 'hbw-wait');
+      st.waiting.forEach(function (w, n) {
+        wl.appendChild(append(src(S, h('li', ''), 'r' + w.rule), [
+          append(h('span', ''), [document.createTextNode(w.what), h('small', '', w.timing === 'held' ? 'Held until you run it' : 'At the end of the encounter')]),
+          btn('Run', '', function () { acted(S, simRunWaiting(doc, cat, st, n)); }, 'fa-play')
+        ]));
+      });
+      append(box, [h('h4', 'hbw-lab', 'Waiting'), wl]);
+    }
+
+    if (st.log.length) {
+      var log = h('ol', 'hbw-log');
+      st.log.slice(-6).forEach(function (l) { log.appendChild(h('li', '', l)); });
+      append(box, [log]);
+    }
+    append(box, [append(h('div', 'hbw-row'), [
+      h('span', 'hbw-muted hbw-sp', 'Only you see this, and nothing is saved.'),
+      quiet('Start over', function () { S.sim = simStart(doc, cat); drawPreview(S); })
+    ])]);
+  }
+
+  // tryIt acts out the first rule: its When happening, or for a rule that
+  // watches a number, that number landing on its value.
+  function tryIt(S) {
+    var doc = S.cur.doc, cat = S.catalog, st = S.sim;
+    if (!doc.rules.length) { setStatus(S, 'Add a When from the left to have something to try.'); return; }
+    var r = doc.rules[0], ev = def(S, 'events', r.when.event), lit;
+    if (ev && ev.preview && st.v[r.when.part] != null) {
+      var p = partOf(doc, r.when.part), at = Number(r.when.args[ev.preview.arg]);
+      lit = simSetTo(doc, cat, st, p.key, at);
+      if (!lit) {
+        setStatus(S, st.v[p.key] === at ? p.label + ' is already at ' + at + '. Start over to try it again.'
+          : p.label + ' can\'t reach ' + at + '. Check the rule\'s number.', true);
+        return;
+      }
+    } else {
+      lit = simFire(doc, cat, st, 0);
+    }
+    setStatus(S, '');
+    acted(S, lit);
+    S.prevEl.scrollIntoView({ block: 'nearest' });
+  }
+
+  // drawWhere lists the places the recipe shows up. Nothing places a recipe
+  // yet, so it says so rather than listing places it might go.
+  // TODO(#1619): list the pages and categories the Customizer placed it on.
+  function drawWhere(S) {
+    S.whereEl.textContent = '';
+    S.whereEl.appendChild(h('p', 'hbw-muted', S.cur.id ? 'Not placed on any page yet.' : 'Save the recipe first. It is not on any page yet.'));
   }
 })();
