@@ -113,14 +113,27 @@ func (c *Classifier) folderProblem(ctx context.Context, p ParsedPage, cls Classi
 		}
 		return ""
 	}
-	if node != nil || c.pendingFolders[strings.ToLower(strings.TrimSpace(name))] {
+	if node != nil {
 		return ""
+	}
+	// A folder made in this paste counts only for the category it is made in;
+	// the folder block may spell the category by name, plural or slug.
+	for _, cat := range []string{et.Name, et.NamePlural, et.Slug} {
+		if cat != "" && c.pendingFolders[PendingFolderKey(cat, name)] {
+			return ""
+		}
 	}
 	return "No folder called " + quoted + " exists in the " + et.Name + " category or is made in this paste."
 }
 
+// PendingFolderKey keys a folder this paste makes by category and name, both
+// lower-cased, so two categories may each have a folder of one name.
+func PendingFolderKey(category, name string) string {
+	return strings.ToLower(strings.TrimSpace(category)) + "|" + strings.ToLower(strings.TrimSpace(name))
+}
+
 // WithFolders lets the classifier check `folder:` names. pending holds the
-// lower-cased names of folders this paste makes, which exist by commit time.
+// PendingFolderKey of each folder this paste makes, which exists by commit time.
 func (c *Classifier) WithFolders(f FolderAccess, pending map[string]bool) *Classifier {
 	c.folders, c.pendingFolders = f, pending
 	return c

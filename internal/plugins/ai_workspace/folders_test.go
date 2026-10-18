@@ -42,17 +42,23 @@ func TestEarlyFolders(t *testing.T) {
 }
 
 func TestPendingFolderNames(t *testing.T) {
+	inCat := func(p importer.ParsedPage, cat string) importer.ParsedPage {
+		p.Fields["category"] = cat
+		return p
+	}
 	got := pendingFolderNames([]importer.ParsedPage{
-		folderBlock("create", " Gods ", ""),
-		folderBlock("update", "Cosmology", "The Heavens"),
-		folderBlock("delete", "Old", ""),
+		inCat(folderBlock("create", " Gods ", ""), "Lore"),
+		inCat(folderBlock("update", "Cosmology", "The Heavens"), "Lore"),
+		inCat(folderBlock("delete", "Old", ""), "Lore"),
 	})
-	for _, want := range []string{"gods", "cosmology", "the heavens"} {
+	for _, want := range []string{"lore|gods", "lore|cosmology", "lore|the heavens"} {
 		if !got[want] {
 			t.Errorf("missing %q in %v", want, got)
 		}
 	}
-	if got["old"] {
-		t.Error("a removed folder must not count as made")
+	for _, not := range []string{"lore|old", "gods", "places|gods"} {
+		if got[not] {
+			t.Errorf("unexpected %q in %v", not, got)
+		}
 	}
 }

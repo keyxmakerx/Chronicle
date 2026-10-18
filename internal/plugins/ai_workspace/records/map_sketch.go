@@ -28,8 +28,8 @@ type MapSketchAPI interface {
 	// only way a later sketch can tell its own shapes from the ones people
 	// drew.
 	SketchLayer(ctx context.Context, mapID string) (string, error)
-	// ClearSketch deletes the drawings on the sketch layer and returns how
-	// many it removed.
+	// ClearSketch deletes every drawing on the sketch layer, whoever drew it,
+	// and returns how many it removed.
 	ClearSketch(ctx context.Context, mapID, layerID string, a Actor) (int, error)
 }
 
@@ -189,8 +189,10 @@ func (s sketchShape) drawingWith(w, h int, vis string, conv func([2]float64, int
 	return d
 }
 
-// SketchLayerName is the layer a sketch's shapes live on; finding it again is
-// how a later sketch tells its own shapes from the ones people drew.
+// SketchLayerName is the layer a sketch's shapes live on. A later sketch
+// replaces whatever is on this layer: it cannot tell a shape the AI drew from
+// one a person drew onto the same layer, so people should keep their own
+// shapes on other layers.
 const SketchLayerName = "AI sketch"
 
 // MapSketchKind makes a new map from a sketch on a grid of squares, or adds
@@ -205,7 +207,7 @@ type MapSketchKind struct {
 func (MapSketchKind) Name() string  { return "map" }
 func (MapSketchKind) Label() string { return "Map sketch" }
 func (MapSketchKind) Doc() string {
-	return "A map drawn from a sketch on a grid of squares: a new map (`action: create`), or shapes and pins added onto a map that exists (`action: update`). Keys: `name`, `grid` (squares across x down, 4 to 100 each way, like `40 x 26`), optional `visibility: dm_only` (hides every shape and pin from players; the map itself is still listed). `action: update` names the map in `name` (or `map`); it never changes the map's picture, which can only be uploaded by hand. On an update the grid is spread over the whole map, so pick one with the picture's proportions (a 1500 x 1000 picture suits `39 x 26`); the review row warns when the squares would stretch. Shapes the AI sketched earlier on that map are replaced by the new ones; shapes and pins people drew themselves are never touched. A pin whose name is already on the map is left out, so repeating a sketch does not stack pins. Each body line is one thing, with points as `x,y` in squares from the top-left (0,0) to the bottom-right (the grid size):\n\n" +
+	return "A map drawn from a sketch on a grid of squares: a new map (`action: create`), or shapes and pins added onto a map that exists (`action: update`). Keys: `name`, `grid` (squares across x down, 4 to 100 each way, like `40 x 26`), optional `visibility: dm_only` (hides every shape and pin from players; the map itself is still listed). `action: update` names the map in `name` (or `map`); it never changes the map's picture, which can only be uploaded by hand. On an update the grid is spread over the whole map, so pick one with the picture's proportions (a 1500 x 1000 picture suits `39 x 26`); the review row warns when the squares would stretch. Everything on that map's \"AI sketch\" layer is replaced by the new shapes, including a shape a person drew on that layer; shapes on other layers and pins are not touched. If a shape cannot be drawn, the earlier sketch is already gone and is not restored. A pin whose name is already on the map is left out, so repeating a sketch does not stack pins. Each body line is one thing, with points as `x,y` in squares from the top-left (0,0) to the bottom-right (the grid size):\n\n" +
 		"- `room \"Name\" x,y to x,y` (also `area`, `water`, `danger`): a box from one corner to the other; the name is optional\n" +
 		"- `wall x,y to x,y` a thick wall box, `wall x,y x,y x,y …` a wall line, `wall circle x,y radius r` a round wall\n" +
 		"- `road \"Name\" x,y to x,y …` and `path \"Name\" x,y to x,y …`: lines through the points\n" +
@@ -346,7 +348,7 @@ func (k MapSketchKind) Plan(ctx context.Context, campaignID string, a Actor, r R
 		out := Plan{Summary: fmt.Sprintf("adds %s and %s onto the %s map",
 			plural(shapes, "shape", "shapes"), plural(pins, "pin", "pins"), t.ref.Name), Warnings: p.Errs}
 		if t.info.Sketched > 0 {
-			out.Summary += fmt.Sprintf("; replaces the %s an earlier sketch drew there (shapes people drew are kept)",
+			out.Summary += fmt.Sprintf("; replaces the %s on its AI sketch layer, whoever drew them, and the old ones are not restored if a new shape fails",
 				plural(t.info.Sketched, "shape", "shapes"))
 		} else {
 			out.Summary += "; nothing is replaced, as no earlier sketch is on it"
@@ -400,8 +402,10 @@ func (k MapSketchKind) Apply(ctx context.Context, campaignID string, a Actor, r 
 		}
 		mapID, conv = t.ref.ID, toExactPercent
 		pins, _ = newPins(p, t.pins)
-		// The layer is read and cleared before anything is drawn, so a
-		// refusal leaves the earlier sketch whole.
+		// The layer is cleared before drawing because ClearSketch removes the
+		// whole layer and would take the new shapes with it afterwards. A
+		// failed draw therefore leaves no old sketch; only a failure to
+		// clear leaves it whole.
 		if layer, err = k.Svc.SketchLayer(ctx, mapID); err != nil {
 			return badRequestf("could not prepare the %s map for a sketch: %s", t.ref.Name, planError(err))
 		}

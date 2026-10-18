@@ -135,6 +135,17 @@ func normKind(s string) string {
 	return strings.ReplaceAll(strings.ToLower(strings.TrimSpace(s)), "_", "-")
 }
 
+// RefuseGMMarkers rejects a record body that carries a GM-only marker. Record
+// texts (events, notes, descriptions) reach players without the strip that
+// page text gets, so honouring or keeping a marker there would publish it.
+// The error is a 400 so the review and result screens show its wording.
+func RefuseGMMarkers(r Record) error {
+	if importer.HasSecretMarkerText(r.Body) {
+		return apperror.NewBadRequest(importer.SecretNotInTextReason)
+	}
+	return nil
+}
+
 // Plan validates a record, refusing unknown kinds and bad actions up front.
 func (r *Registry) Plan(ctx context.Context, campaignID string, a Actor, rec Record) (Kind, Plan) {
 	k, ok := r.Get(rec.Kind)
@@ -145,6 +156,9 @@ func (r *Registry) Plan(ctx context.Context, campaignID string, a Actor, rec Rec
 	case ActionCreate, ActionUpdate, ActionDelete:
 	default:
 		return k, Plan{Error: fmt.Sprintf("action: %q is not valid (must be create, update or delete)", rec.Action)}
+	}
+	if err := RefuseGMMarkers(rec); err != nil {
+		return k, Plan{Error: importer.SecretNotInTextReason}
 	}
 	return k, k.Plan(ctx, campaignID, a, rec)
 }

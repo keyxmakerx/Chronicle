@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -262,5 +263,25 @@ func TestFolderService_SetEntityFolder(t *testing.T) {
 				t.Errorf("parent page cleared = %v, want %v", cleared, tt.wantPar)
 			}
 		})
+	}
+}
+
+// Stored data can hold a loop (A under B under A) that the moved folder is
+// not part of; the walk must stop and refuse rather than spin.
+func TestFolderService_MoveFolderRefusesExistingLoop(t *testing.T) {
+	svc, nodes, _ := folderFixture()
+	nodes.nodes["gods"].ParentID = ptr("elder") // gods <-> elder
+	done := make(chan error, 1)
+	go func() { done <- svc.MoveFolder(context.Background(), "c1", "dup1", ptr("gods")) }()
+	select {
+	case err := <-done:
+		if err == nil || !strings.Contains(err.Error(), "loop") {
+			t.Fatalf("err = %v, want a loop refusal", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("MoveFolder never returned")
+	}
+	if _, ok := nodes.parents["dup1"]; ok {
+		t.Error("the move was written")
 	}
 }

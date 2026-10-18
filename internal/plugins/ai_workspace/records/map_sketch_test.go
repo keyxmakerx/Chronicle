@@ -326,7 +326,7 @@ func TestMapSketchKind_UpdatePlan(t *testing.T) {
 			want: []string{"adds 2 shapes and 1 pin onto the Imix map", "nothing is replaced"},
 			warn: []string{"Left out, already pinned on this map: Old ferry"}},
 		{name: "replaces the earlier sketch", sketched: 5, w: 1500, h: 1000, grid: "39 x 26",
-			want: []string{"replaces the 5 shapes an earlier sketch drew there (shapes people drew are kept)"}},
+			want: []string{"replaces the 5 shapes on its AI sketch layer, whoever drew them"}},
 		{name: "stretch is called out", w: 1500, h: 1000, grid: "40 x 40",
 			want: []string{"adds 2 shapes"}, warn: []string{"The map's picture is 1500 x 1000, so a 40 x 40 grid stretches the sketch; 40 x 27 keeps squares square"}},
 		{name: "unknown picture size is not nagged", w: 0, h: 0, grid: "40 x 40",

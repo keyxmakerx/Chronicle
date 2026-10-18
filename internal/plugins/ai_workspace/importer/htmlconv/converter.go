@@ -298,6 +298,24 @@ func convertInlineWithMark(s *goquery.Selection, tag string) []Node {
 		if n.Type == "text" && !(mark.Type == "secret" && hasMark(n, "secret")) {
 			n.Marks = append(n.Marks, mark)
 		}
+		// A picture or break carries no marks, so inside a passage it is
+		// flagged the way the editor flags GM-only pictures; otherwise
+		// hoistPictures would lift it out as public content.
+		if mark.Type == "secret" {
+			switch n.Type {
+			case "chronicleImage":
+				attrs := map[string]any{}
+				for k, v := range n.Attrs {
+					attrs[k] = v
+				}
+				attrs["gmOnly"] = true
+				n.Attrs = attrs
+			case "hardBreak":
+				if !hasMark(n, "secret") {
+					n.Marks = append(n.Marks, mark)
+				}
+			}
+		}
 		out = append(out, n)
 	}
 	return out

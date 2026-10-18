@@ -167,7 +167,15 @@ func (s *folderService) MoveFolder(ctx context.Context, campaignID, folderID str
 	if parentID != nil {
 		// Walk up from the new parent: reaching the folder itself would make
 		// a loop that hides both from the sidebar.
+		// Stored data can already hold a loop that does not include this
+		// folder (the sidebar reorder API can make one), so a visited set
+		// stops the walk instead of spinning forever.
+		seen := map[string]bool{}
 		for cur := *parentID; cur != ""; {
+			if seen[cur] {
+				return apperror.NewBadRequest("the parent folder sits in a loop of folders; fix the folder tree first")
+			}
+			seen[cur] = true
 			if cur == folderID {
 				return apperror.NewBadRequest("a folder cannot be moved into itself or one of its own sub-folders")
 			}

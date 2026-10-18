@@ -109,6 +109,16 @@ type renderOpts struct {
 	// markers converts GM-only markers without a permission check; only for
 	// measuring a body, never for text that is stored.
 	markers bool
+	// passages turns markers into GM-only spans for a viewer who may write
+	// them; set only for page bodies, whose readers get passages stripped.
+	passages bool
+}
+
+// WithGMOnlyPassages lets MarkdownToHTML accept {gm{…}gm}. Only page bodies
+// (and era versions of pages) may pass it: the text must be one that is
+// stripped of GM-only spans for players.
+func WithGMOnlyPassages() RenderOption {
+	return func(o *renderOpts) { o.passages = true }
 }
 
 // WithPageLinks makes MarkdownToHTML turn @[Name] into page links. Without
@@ -194,7 +204,7 @@ func linkText(text string, p *PageLinks) string {
 // code, without repeats, in a stable order.
 func LinkNames(markdown string) []string {
 	p := NewPageLinks(context.Background(), noPages{}, "-", Viewer{})
-	if _, err := MarkdownToHTML(markdown, WithPageLinks(p)); err != nil {
+	if _, err := MarkdownToHTML(markdown, WithPageLinks(p), WithGMOnlyPassages()); err != nil {
 		return nil
 	}
 	names := make([]string, 0, len(p.missed))

@@ -80,7 +80,23 @@ func tagKeys(r Record) (color *string, dmOnly *bool, err error) {
 		color = &c
 	}
 	if r.Has("dm_only") {
-		v, _ := r.Bool("dm_only")
+		// Anything but true or false is refused: Bool reads an unknown word
+		// as false, which would make a tag the AI meant to hide public.
+		var v bool
+		switch t := r.Fields["dm_only"].(type) {
+		case bool:
+			v = t
+		case string:
+			switch strings.ToLower(strings.TrimSpace(t)) {
+			case "true":
+				v = true
+			case "false":
+			default:
+				return nil, nil, badRequestf("dm_only: %q is not true or false", t)
+			}
+		default:
+			return nil, nil, badRequestf("dm_only: %v is not true or false", t)
+		}
 		dmOnly = &v
 	}
 	return color, dmOnly, nil

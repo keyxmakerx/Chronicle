@@ -25,6 +25,36 @@ const (
 // importing user may not write GM-only text.
 var ErrSecretNotAllowed = errors.New("importer: GM-only passages need the campaign owner or a co-DM")
 
+// ErrSecretUnbalanced means a marker pair was not closed (or not opened)
+// inside one paragraph or list item. The editor's secret is inline, so a pair
+// can never span blocks; publishing such a row would leak the text after the
+// block break, so the row is refused instead.
+var ErrSecretUnbalanced = errors.New("importer: unbalanced GM-only marker")
+
+// ErrSecretInAttribute means a marker sits inside a link address or a picture
+// description. An attribute cannot carry the secret mark, so the words would
+// reach players as plain text.
+var ErrSecretInAttribute = errors.New("importer: GM-only marker inside a link or picture")
+
+// ErrSecretNotInText means a GM-only marker appeared in text that has no
+// GM-only passages (calendar events, notes and other records). Those texts are
+// sent to players unfiltered, so the marker must not be accepted there.
+var ErrSecretNotInText = errors.New("importer: GM-only passage outside page text")
+
+// SecretNotInTextReason is the plain wording for ErrSecretNotInText.
+const SecretNotInTextReason = "DM-only passages only work in page text"
+
+// secretUnbalancedReason tells the AI how to fix an unbalanced marker.
+const secretUnbalancedReason = "Not imported: a GM-only marker ({gm{ or }gm}) was left open or had no partner inside one paragraph or list item. A passage cannot continue into the next paragraph; put {gm{ and }gm} around each secret paragraph or list item on its own."
+
+// secretAttributeReason tells the AI a marker cannot sit in a link or picture.
+const secretAttributeReason = "Not imported: a GM-only marker ({gm{ or }gm}) sits inside a link address or picture description, where it cannot hide anything. Keep markers in plain paragraph text."
+
+// HasSecretMarkerText reports whether text carries either GM-only marker.
+func HasSecretMarkerText(s string) bool {
+	return strings.Contains(s, SecretOpen) || strings.Contains(s, SecretClose)
+}
+
 // secretWriter reports whether a viewer may author GM-only text. The role is
 // the visibility role, which already folds a co-DM grant into the owner tier.
 func secretWriter(v Viewer) bool { return v.Role >= int(campaigns.RoleOwner) }
@@ -56,9 +86,9 @@ type openTag struct{ name, raw string }
 // covers exactly the text between its markers, even when the markdown nested
 // emphasis across them; the HTML parser would otherwise drop the tail of the
 // passage out of the span and publish it.
-func convertSecretMarkers(htmlIn string) string {
-	if !hasSecretMarker(htmlIn) {
-		return htmlIn
+func convertSecretMarkers(htmlIn string) (string, error) {
+	if !HasSecretMarkerText(htmlIn) {
+		return htmlIn, nil
 	}
 	var (
 		out       strings.Builder
@@ -81,19 +111,23 @@ func convertSecretMarkers(htmlIn string) string {
 		tt := z.Next()
 		if tt == htmltok.ErrorToken {
 			if depth > 0 {
-				closeSpan()
+				return "", ErrSecretUnbalanced
 			}
-			return out.String()
+			return out.String(), nil
 		}
 		raw := string(z.Raw())
 		switch tt {
 		case htmltok.StartTagToken, htmltok.SelfClosingTagToken:
 			nameB, _ := z.TagName()
 			name := string(nameB)
+			if HasSecretMarkerText(raw) {
+				return "", ErrSecretInAttribute
+			}
 			if blockTags[name] {
+				// A passage never survives a block boundary; an open one here
+				// would have its tail published.
 				if depth > 0 {
-					closeSpan()
-					depth = 0
+					return "", ErrSecretUnbalanced
 				}
 				stack = stack[:0]
 			} else if tt == htmltok.StartTagToken && !voidTags[name] {
@@ -115,8 +149,7 @@ func convertSecretMarkers(htmlIn string) string {
 			}
 			if blockTags[name] {
 				if depth > 0 {
-					closeSpan()
-					depth = 0
+					return "", ErrSecretUnbalanced
 				}
 				stack = stack[:0]
 				out.WriteString(raw)
@@ -144,7 +177,7 @@ func convertSecretMarkers(htmlIn string) string {
 			}
 			out.WriteString(raw)
 		case htmltok.TextToken:
-			if skip > 0 || !hasSecretMarker(raw) && !strings.Contains(raw, SecretClose) {
+			if skip > 0 || !HasSecretMarkerText(raw) {
 				out.WriteString(raw)
 				continue
 			}
@@ -169,9 +202,10 @@ func convertSecretMarkers(htmlIn string) string {
 						closeSpan()
 					}
 				case c >= 0:
-					// A close with nothing open is ordinary text.
-					out.WriteString(rest[:c+len(SecretClose)])
-					rest = rest[c+len(SecretClose):]
+					// A close with nothing open: the opener was lost or sat in
+					// an earlier block, so the text before it may be a secret
+					// tail that would otherwise go out as public text.
+					return "", ErrSecretUnbalanced
 				default:
 					out.WriteString(rest)
 					rest = ""

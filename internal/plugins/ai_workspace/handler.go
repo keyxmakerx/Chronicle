@@ -613,6 +613,8 @@ func (h *Handler) commitRecord(c echo.Context, cc *campaigns.CampaignContext, i 
 		out.Status, out.Reason = importer.StatusFailed, "This server cannot import "+rec.Kind
 	case rec.Action == records.ActionDelete && c.FormValue(prefix+"delete_confirmed") != "on":
 		out.Status, out.Reason = importer.StatusFailed, "Removal was not confirmed"
+	case records.RefuseGMMarkers(rec) != nil:
+		out.Status, out.Reason = importer.StatusFailed, importer.SecretNotInTextReason
 	default:
 		rec.Generated = c.FormValue(prefix + "generated")
 		if err := k.Apply(c.Request().Context(), cc.Campaign.ID, actorFor(c, cc), rec); err != nil {
@@ -655,8 +657,9 @@ func (h *Handler) commitEarlyFolders(c echo.Context, cc *campaigns.CampaignConte
 	return early
 }
 
-// pendingFolderNames are the lower-cased names of folders this paste makes
-// or renames to, so the review accepts a page that files itself in one.
+// pendingFolderNames are the category-and-name keys of folders this paste makes
+// or renames to, so the review accepts a page that files itself in one of its
+// own category only.
 func pendingFolderNames(recs []importer.ParsedPage) map[string]bool {
 	out := map[string]bool{}
 	for _, p := range recs {
@@ -666,7 +669,7 @@ func pendingFolderNames(recs []importer.ParsedPage) map[string]bool {
 		r := toRecord(0, p, nil)
 		for _, n := range []string{r.Name, r.Str("rename_to")} {
 			if n != "" {
-				out[strings.ToLower(strings.TrimSpace(n))] = true
+				out[importer.PendingFolderKey(r.Str("category"), n)] = true
 			}
 		}
 	}
@@ -676,6 +679,9 @@ func pendingFolderNames(recs []importer.ParsedPage) map[string]bool {
 // recordError shows a refusal's own wording (the kinds and services word
 // them for people) and hides anything else, such as a database error.
 func recordError(err error) string {
+	if errors.Is(err, importer.ErrSecretNotInText) {
+		return importer.SecretNotInTextReason
+	}
 	var ae *apperror.AppError
 	if errors.As(err, &ae) && ae.Code < 500 {
 		return ae.Message

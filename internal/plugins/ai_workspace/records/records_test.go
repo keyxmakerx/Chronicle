@@ -620,3 +620,30 @@ func (linkPages) GetBySlug(_ context.Context, c, slug string) (*entities.Entity,
 func (linkPages) CheckEntityAccess(context.Context, string, int, string) (*entities.EffectivePermission, error) {
 	return &entities.EffectivePermission{CanView: true}, nil
 }
+
+// A GM-only marker in a record body would reach players unfiltered, so every
+// kind's body is refused with the plain reason, at review and at commit.
+func TestRecordBodies_RefuseGMMarkers(t *testing.T) {
+	const reason = "DM-only passages only work in page text"
+	body := "Feast. {gm{the mayor is the cult leader}gm}"
+	reg := NewRegistry(EventKind{Svc: newCal()})
+	_, p := reg.Plan(context.Background(), camp, owner, rec("event", ActionCreate, "Feast", map[string]any{"year": 1492, "month": 1, "day": 1}, body))
+	if p.Error != reason {
+		t.Errorf("plan error = %q", p.Error)
+	}
+	c := newCal()
+	k := EventKind{Svc: c}
+	links := importer.NewPageLinks(context.Background(), nil, "c", importer.Viewer{Role: 3})
+	for _, l := range []*importer.PageLinks{nil, links} {
+		r := rec("event", ActionCreate, "Feast", map[string]any{"year": 1492, "month": 1, "day": 1}, body)
+		r.Links = l
+		err := k.Apply(context.Background(), camp, owner, r)
+		var ae *apperror.AppError
+		if !errors.As(err, &ae) || ae.Message != reason || len(c.events) != 0 {
+			t.Errorf("links=%v: apply err = %v, events = %d", l != nil, err, len(c.events))
+		}
+	}
+	if err := RefuseGMMarkers(rec("event", ActionCreate, "x", nil, "plain }gm}")); err == nil {
+		t.Error("a stray close marker was accepted")
+	}
+}

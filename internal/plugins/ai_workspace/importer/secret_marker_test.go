@@ -30,8 +30,6 @@ func TestMarkdownToHTML_SecretMarkers(t *testing.T) {
 		{"emphasis inside", "{gm{the **mayor** did it}gm}", []string{"the mayor did it"}, ""},
 		{"emphasis straddles close", "**bold {gm{hidden** tail}gm} after", []string{"hidden", "tail"}, ""},
 		{"emphasis straddles open", "{gm{hidden **tail}gm} bold**", []string{"hidden tail"}, ""},
-		{"unclosed hides rest of paragraph only", "{gm{oops\n\nnext paragraph", []string{"oops"}, "<p>next paragraph</p>"},
-		{"stray close is text", "plain }gm} text", nil, "}gm}"},
 		{"code untouched", "`{gm{x}gm}`", nil, "{gm{x}gm}"},
 		{"list item", "- {gm{secret item}gm}\n- open item", []string{"secret item"}, ""},
 		{"nested keeps the outer one", "{gm{a {gm{b}gm} c}gm} d", []string{"a b c"}, ""},
@@ -71,7 +69,7 @@ func TestMarkdownToHTML_SecretWriterGate(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			links := NewPageLinks(context.Background(), &stubLookup{}, "c", Viewer{Role: tt.role, UserID: "u"})
-			out, err := MarkdownToHTML("a {gm{b}gm}", WithPageLinks(links))
+			out, err := MarkdownToHTML("a {gm{b}gm}", WithPageLinks(links), WithGMOnlyPassages())
 			if tt.ok {
 				if err != nil || !strings.Contains(out, "data-secret") {
 					t.Errorf("owner: err=%v out=%s", err, out)
@@ -195,6 +193,124 @@ func TestCommit_SecretMarkers(t *testing.T) {
 				}
 			} else if len(f.updateEntries) > 0 {
 				t.Errorf("wrote despite %q", tt.wantStatus)
+			}
+		})
+	}
+}
+
+func pageLinksFor(role int) *PageLinks {
+	return NewPageLinks(context.Background(), &stubLookup{}, "c", Viewer{Role: role, UserID: "u"})
+}
+
+// A heading id is made from the heading words and no strip pass reads
+// attributes, so no secret word may reach one.
+func TestMarkdownToHTML_NoSecretInAttributes(t *testing.T) {
+	for _, md := range []string{
+		"# {gm{Heading secret}gm}",
+		"## Public {gm{Hidden words}gm} title",
+		"- {gm{item}gm}\n\n### {gm{Another}gm}",
+	} {
+		out, err := MarkdownToHTML(md, WithPageLinks(pageLinksFor(3)), WithGMOnlyPassages())
+		if err != nil {
+			t.Fatal(err)
+		}
+		public := sanitize.StripSecretsHTML(out)
+		for _, w := range []string{"secret", "Hidden", "hidden", "item", "Another", "another", "gm"} {
+			if strings.Contains(public, w) && w != "gm" {
+				t.Errorf("%q: public html holds %q: %s", md, w, public)
+			}
+		}
+		if strings.Contains(public, "id=") {
+			t.Errorf("%q: heading kept an id: %s", md, public)
+		}
+	}
+}
+
+// Markers in an attribute cannot be hidden, so the row is refused.
+func TestMarkdownToHTML_MarkerInAttributeRefused(t *testing.T) {
+	for _, md := range []string{
+		`![{gm{alt}gm}](/media/0b6a3f0e-8c1d-4f6a-9a51-2f3c4d5e6f70)`,
+		`[text](https://x.test "{gm{t}gm}")`,
+	} {
+		_, err := MarkdownToHTML(md, WithPageLinks(pageLinksFor(3)), WithGMOnlyPassages())
+		if err != ErrSecretInAttribute {
+			t.Errorf("%q: err = %v", md, err)
+		}
+	}
+}
+
+func TestMarkdownToHTML_UnbalancedMarkersRefused(t *testing.T) {
+	tests := []struct{ name, md string }{
+		{"passage across paragraphs", "{gm{para one\n\npara two}gm}"},
+		{"passage across list items", "- {gm{one\n- two}gm}"},
+		{"unclosed at end", "text {gm{oops"},
+		{"unclosed before next paragraph", "{gm{oops\n\nnext paragraph"},
+		{"close with nothing open", "plain }gm} text"},
+		{"close in list", "- a}gm}"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out, err := MarkdownToHTML(tt.md, WithPageLinks(pageLinksFor(3)), WithGMOnlyPassages())
+			if err != ErrSecretUnbalanced || out != "" {
+				t.Errorf("err = %v, out = %q", err, out)
+			}
+			if r := markdownFailReason(err); !strings.Contains(r, "each secret paragraph") {
+				t.Errorf("reason does not tell the AI what to do: %s", r)
+			}
+		})
+	}
+	// Markers in code are text, not markers.
+	if _, err := MarkdownToHTML("`}gm}` and `{gm{`\n\n```\n{gm{\n```", WithPageLinks(pageLinksFor(3)), WithGMOnlyPassages()); err != nil {
+		t.Errorf("code refused: %v", err)
+	}
+}
+
+// Without the page-body option a marker is refused, even with a resolver.
+func TestMarkdownToHTML_MarkersNeedPageOption(t *testing.T) {
+	for _, md := range []string{"a {gm{b}gm}", "stray }gm}"} {
+		_, err := MarkdownToHTML(md, WithPageLinks(pageLinksFor(3)))
+		if err != ErrSecretNotInText {
+			t.Errorf("%q with links: err = %v", md, err)
+		}
+		if _, err := MarkdownToHTML(md); err != ErrSecretNotInText {
+			t.Errorf("%q bare: err = %v", md, err)
+		}
+	}
+	if got := markdownFailReason(ErrSecretNotInText); got != "DM-only passages only work in page text" {
+		t.Errorf("reason = %q", got)
+	}
+}
+
+// A picture, link or break inside a passage must be hidden in the JSON too,
+// which is what players receive.
+func TestSecretPassage_NonTextNodesHiddenInJSONAndHTML(t *testing.T) {
+	const id = "0b6a3f0e-8c1d-4f6a-9a51-2f3c4d5e6f70"
+	tests := []struct{ name, md string }{
+		{"picture", "Map: {gm{![lair](/media/" + id + ")}gm} end"},
+		{"picture with words", "Map: {gm{lair ![lair](/media/" + id + ") deep}gm} end"},
+		{"emphasised picture", "Map: {gm{**![lair](/media/" + id + ")**}gm} end"},
+		{"link", "See {gm{[the cult](https://x.test/cult)}gm} now"},
+		{"hard break", "See {gm{cult\nleader}gm} now"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h, err := MarkdownToHTML(tt.md, WithPageLinks(pageLinksFor(3)), WithGMOnlyPassages())
+			if err != nil {
+				t.Fatal(err)
+			}
+			j, err := htmlconv.Convert(h)
+			if err != nil {
+				t.Fatal(err)
+			}
+			pubJSON := sanitize.StripSecretsJSON(j)
+			pubHTML := sanitize.StripSecretsHTML(h)
+			for _, leak := range []string{id, "lair", "cult", "leader", "deep", "hardBreak", "x.test"} {
+				if strings.Contains(pubJSON, leak) {
+					t.Errorf("JSON leaks %q: %s", leak, pubJSON)
+				}
+				if strings.Contains(pubHTML, leak) {
+					t.Errorf("HTML leaks %q: %s", leak, pubHTML)
+				}
 			}
 		})
 	}

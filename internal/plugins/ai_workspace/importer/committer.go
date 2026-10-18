@@ -310,7 +310,7 @@ type relinkRow struct {
 // and version history follow.
 func (c *Committer) relinkPending(ctx context.Context, rows []relinkRow, links *PageLinks, result *CommitResult) {
 	for _, r := range rows {
-		bodyHTML, err := MarkdownToHTML(r.body, WithPageLinks(links))
+		bodyHTML, err := MarkdownToHTML(r.body, WithPageLinks(links), WithGMOnlyPassages())
 		if err == nil {
 			var bodyJSON string
 			if bodyJSON, err = htmlconv.Convert(bodyHTML); err == nil {
@@ -454,7 +454,7 @@ func (c *Committer) commitRow(
 	// SEC-6 mirror — every entity-creation path funnels through
 	// MarkdownToHTML first. Per-row errors are operator-friendly;
 	// the underlying library error stays in slog (handler-side).
-	bodyHTML, err := MarkdownToHTML(page.Body, WithPageLinks(links))
+	bodyHTML, err := MarkdownToHTML(page.Body, WithPageLinks(links), WithGMOnlyPassages())
 	if err != nil {
 		out.Status = StatusFailed
 		out.Reason = markdownFailReason(err)
@@ -740,7 +740,7 @@ func (c *Committer) commitUpdateExplicit(
 	// SEC-6 funnel — sanitize body markdown BEFORE handing to
 	// commitUpdate. The pin verifies this funnel exists in every
 	// non-exempt function calling creator.Update / UpdateEntry.
-	bodyHTML, err := MarkdownToHTML(page.Body, WithPageLinks(links))
+	bodyHTML, err := MarkdownToHTML(page.Body, WithPageLinks(links), WithGMOnlyPassages())
 	if err != nil {
 		out.Status = StatusFailed
 		out.Reason = markdownFailReason(err)
@@ -832,7 +832,7 @@ func (c *Committer) commitEra(
 
 	write := EraVersionWrite{KnownAs: strings.TrimSpace(page.FrontMatter.KnownAs)}
 	if strings.TrimSpace(page.Body) != "" {
-		bodyHTML, err := MarkdownToHTML(page.Body, WithPageLinks(links))
+		bodyHTML, err := MarkdownToHTML(page.Body, WithPageLinks(links), WithGMOnlyPassages())
 		if err != nil {
 			return fail(markdownFailReason(err))
 		}
