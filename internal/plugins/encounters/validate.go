@@ -21,6 +21,8 @@ const (
 	MaxStageArrive   = 30
 	MaxNoteChars     = 200
 	MaxFormNameChars = 80
+	MaxVersions      = 6
+	MaxVersionAdds   = 10
 	// MaxPerPage keeps one page's widget a list a DM can scan; a campaign
 	// can still hold any number of encounters across its pages.
 	MaxPerPage = 50
@@ -107,41 +109,147 @@ func validateInput(in SaveInput) (name string, d doc, err error) {
 	rowIDs := map[string]bool{}
 	d.Creatures = make([]Creature, 0, len(in.Creatures))
 	for _, c := range in.Creatures {
-		if !validToken(c.ID) || rowIDs[c.ID] {
-			return "", doc{}, errInvalid("a creature row has a bad id")
-		}
-		rowIDs[c.ID] = true
-		if c.EntityID != "" && !validToken(c.EntityID) {
-			return "", doc{}, errInvalid("a creature is not a page")
-		}
-		if c.Name, err = cleanLine("creature name", c.Name, MaxNameChars); err != nil {
+		if c, err = validateRow(c, rowIDs); err != nil {
 			return "", doc{}, err
-		}
-		if c.Name == "" {
-			return "", doc{}, errInvalid("every creature row needs a name")
-		}
-		if c.Count < 1 || c.Count > MaxCreatureCount {
-			return "", doc{}, errInvalid(fmt.Sprintf("%s: a row holds 1 to %d creatures", c.Name, MaxCreatureCount))
-		}
-		c.Group = strings.ToUpper(strings.TrimSpace(c.Group))
-		if c.Group == "" {
-			c.Group = "A"
-		}
-		if !groups[c.Group] {
-			return "", doc{}, errInvalid(c.Name + ": initiative groups are A to H")
-		}
-		if c.Start == "" {
-			c.Start = StartSeen
-		}
-		if !validStart(c.Start) {
-			return "", doc{}, errInvalid(c.Name + ": a creature starts seen, hidden or later")
 		}
 		d.Creatures = append(d.Creatures, c)
 	}
-	if d.Stages, err = validateStages(in.Stages, d.Creatures); err != nil {
+	if d.Versions, err = validateVersions(in.Versions, d.Creatures, rowIDs); err != nil {
+		return "", doc{}, err
+	}
+	if d.Stages, err = validateStages(in.Stages, allRows(d)); err != nil {
 		return "", doc{}, err
 	}
 	return name, d, nil
+}
+
+// validateRow checks one creature row, cleaned: trimmed name, group
+// upper-cased, a missing start read as seen. ids holds the row ids already
+// taken in this save, and the row's id joins it.
+func validateRow(c Creature, ids map[string]bool) (Creature, error) {
+	var err error
+	if !validToken(c.ID) || ids[c.ID] {
+		return Creature{}, errInvalid("a creature row has a bad id")
+	}
+	ids[c.ID] = true
+	if c.EntityID != "" && !validToken(c.EntityID) {
+		return Creature{}, errInvalid("a creature is not a page")
+	}
+	if c.Name, err = cleanLine("creature name", c.Name, MaxNameChars); err != nil {
+		return Creature{}, err
+	}
+	if c.Name == "" {
+		return Creature{}, errInvalid("every creature row needs a name")
+	}
+	if c.Count < 1 || c.Count > MaxCreatureCount {
+		return Creature{}, errInvalid(fmt.Sprintf("%s: a row holds 1 to %d creatures", c.Name, MaxCreatureCount))
+	}
+	c.Group = strings.ToUpper(strings.TrimSpace(c.Group))
+	if c.Group == "" {
+		c.Group = "A"
+	}
+	if !groups[c.Group] {
+		return Creature{}, errInvalid(c.Name + ": initiative groups are A to H")
+	}
+	if c.Start == "" {
+		c.Start = StartSeen
+	}
+	if !validStart(c.Start) {
+		return Creature{}, errInvalid(c.Name + ": a creature starts seen, hidden or later")
+	}
+	return c, nil
+}
+
+// allRows is every row any version of the fight can have: the base rows and
+// each version's added ones. Stages may name any of them; a stage naming a
+// row the version being played doesn't have simply skips it.
+func allRows(d doc) []Creature {
+	out := append([]Creature{}, d.Creatures...)
+	for _, v := range d.Versions {
+		out = append(out, v.Add...)
+	}
+	return out
+}
+
+// validateVersions checks each version against the base rows saved with it.
+// Added rows take ids no other row of the encounter has, so a stage or
+// Foundry can name any row without saying which version it came from. A
+// version may remove a base row or change its count, never both, and two
+// versions are never picked by the same result. Whether a pick's test exists
+// is the service's check, since it needs the directory.
+func validateVersions(in []Version, base []Creature, ids map[string]bool) ([]Version, error) {
+	if len(in) > MaxVersions {
+		return nil, errInvalid(fmt.Sprintf("an encounter has at most %d versions", MaxVersions))
+	}
+	baseIDs := make(map[string]bool, len(base))
+	for _, c := range base {
+		baseIDs[c.ID] = true
+	}
+	vids := map[string]bool{}
+	picks := map[Pick]bool{}
+	out := make([]Version, 0, len(in))
+	for _, v := range in {
+		var err error
+		if !validToken(v.ID) || vids[v.ID] {
+			return nil, errInvalid("a version has a bad id")
+		}
+		vids[v.ID] = true
+		if v.Name, err = cleanLine("version name", v.Name, MaxFormNameChars); err != nil {
+			return nil, err
+		}
+		if v.Name == "" {
+			return nil, errInvalid("every version needs a name")
+		}
+		if v.Pick != nil {
+			p := Pick{Test: v.Pick.Test, Result: v.Pick.Result}
+			if !validToken(p.Test) || !validToken(p.Result) {
+				return nil, errInvalid(v.Name + ": pick a test and one of its results, or neither")
+			}
+			if picks[p] {
+				return nil, errInvalid("two versions are picked by the same result")
+			}
+			picks[p] = true
+			v.Pick = &p
+		}
+		if len(v.Add) > MaxVersionAdds {
+			return nil, errInvalid(fmt.Sprintf("%s: a version adds at most %d rows", v.Name, MaxVersionAdds))
+		}
+		add := make([]Creature, 0, len(v.Add))
+		for _, c := range v.Add {
+			if c, err = validateRow(c, ids); err != nil {
+				return nil, err
+			}
+			add = append(add, c)
+		}
+		v.Add = add
+		if len(v.Remove) > MaxCreatureRows || len(v.Counts) > MaxCreatureRows {
+			return nil, errInvalid(v.Name + ": a version changes each base row at most once")
+		}
+		touched := map[string]bool{}
+		remove := make([]string, 0, len(v.Remove))
+		for _, id := range v.Remove {
+			if !baseIDs[id] || touched[id] {
+				return nil, errInvalid(v.Name + ": a version removes a row that is not in the base list, or removes it twice")
+			}
+			touched[id] = true
+			remove = append(remove, id)
+		}
+		v.Remove = remove
+		counts := make([]CountChange, 0, len(v.Counts))
+		for _, cc := range v.Counts {
+			if !baseIDs[cc.Row] || touched[cc.Row] {
+				return nil, errInvalid(v.Name + ": a version changes a row that is not in the base list, or changes it twice")
+			}
+			touched[cc.Row] = true
+			if cc.Count < 1 || cc.Count > MaxCreatureCount {
+				return nil, errInvalid(fmt.Sprintf("%s: a row holds 1 to %d creatures", v.Name, MaxCreatureCount))
+			}
+			counts = append(counts, cc)
+		}
+		v.Counts = counts
+		out = append(out, v)
+	}
+	return out, nil
 }
 
 // validateStages checks the stages against the rows saved with them, so a

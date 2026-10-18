@@ -2121,3 +2121,72 @@
 .cal-v5 .cal.picking .day:not(.past){cursor:copy}
 .cal-v5 .day.ppick::before{opacity:1;background:var(--freeBand);box-shadow:inset 0 0 0 1.5px var(--free)}
 .cal-v5 .fvpoll{margin-top:10px}
+
+/* Event rolls. The editor's Roll section and the night results are the
+   Director's, so they carry the amber edge; a player's told result is plain. */
+.cal-v5 .rlsec{border-left:3px solid rgb(var(--color-warn-rgb));padding-left:12px;margin-left:-15px}
+.cal-v5 .rlsec h4{display:flex;align-items:center;gap:8px}
+.cal-v5 .rldm{margin-left:auto;display:inline-flex;align-items:center;gap:5px;font:550 10.5px/1 var(--sans);letter-spacing:0;text-transform:none;color:rgb(var(--color-warn-rgb))}
+.cal-v5 .rlrow{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
+.cal-v5 .rldice input{width:7.5em;font-variant-numeric:tabular-nums;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+.cal-v5 .rltable{flex:1 1 180px}
+.cal-v5 .rlhint{margin:0;font:500 11.5px/1.45 var(--sans);color:var(--mut)}
+.cal-v5 .rlsub{display:flex;align-items:center;gap:8px;margin-top:4px;font:650 9.5px/1 var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--mut)}
+.cal-v5 .rlsub>span:not(.rlyear){letter-spacing:0;text-transform:none;font-weight:500;font-size:11px}
+.cal-v5 .rlyear{margin-left:auto;display:inline-flex;align-items:center;gap:2px;letter-spacing:0;text-transform:none;font:600 12.5px/1 var(--sans);color:var(--ink2)}
+.cal-v5 .rlq{align-self:flex-start;min-height:32px;padding:0;border:0;background:none;font:550 12.5px/1.3 var(--sans);color:var(--ink);text-decoration:underline;text-decoration-color:var(--edge);text-underline-offset:3px}
+.cal-v5 .rlq:hover{text-decoration-color:var(--ink)}
+.cal-v5 .rlq[disabled]{opacity:.5}
+.cal-v5 .rlrm{color:var(--mut)}
+.cal-v5 .rlic{width:32px;height:32px;flex:none;display:grid;place-items:center;border:0;border-radius:8px;background:none;color:var(--mut)}
+.cal-v5 .rlic:hover:not([disabled]){background:var(--hair2);color:var(--ink)}
+.cal-v5 .rlic[aria-pressed="true"]{color:var(--ink)}
+.cal-v5 .rlic[disabled]{opacity:.35}
+.cal-v5 .rltell{display:flex;align-items:center;gap:7px;min-height:28px;font:500 12px/1.3 var(--sans);color:var(--ink2);cursor:pointer}
+.cal-v5 .rltell input{accent-color:var(--ink);width:15px;height:15px}
+.cal-v5 .rlbands{display:flex;flex-direction:column}
+.cal-v5 .rlband{display:grid;grid-template-columns:62px minmax(0,1fr) 32px;gap:4px 10px;padding:10px 0;border-top:1px solid var(--hair2);align-items:start}
+.cal-v5 .rlband:first-child{border-top:0}
+.cal-v5 .rlband .rng{display:flex;flex-direction:column;gap:2px;padding-top:7px;font:600 12px/1.3 var(--sans);color:var(--ink2);font-variant-numeric:tabular-nums}
+.cal-v5 .rlband .rng span{font-weight:500;color:var(--mut)}
+.cal-v5 .rlband .rng .lo{font-weight:600;color:var(--ink2)}
+.cal-v5 .rlband .rng input{width:3.2em;height:28px;padding:0 4px;border:0;border-bottom:1px solid var(--edge);border-radius:0;background:none;font:inherit;color:var(--ink);text-align:center}
+.cal-v5 .rlband .rng input:focus{outline:none;border-bottom-color:var(--ink)}
+.cal-v5 .rlband .bt{display:flex;flex-direction:column;gap:5px;min-width:0}
+.cal-v5 .rlband .nm{height:32px;padding:0 8px;border-radius:8px;border:1px solid var(--edge);background:var(--paper2);font:600 14px/1.2 var(--serif);color:var(--ink);min-width:0}
+.cal-v5 .rlband .lbl{display:flex;align-items:center;gap:5px;margin-top:2px;font:650 9.5px/1 var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--mut)}
+.cal-v5 .rlband .lbl.dm{color:rgb(var(--color-warn-rgb))}
+.cal-v5 .rlband textarea{width:100%;min-height:30px;padding:5px 8px;border:0;border-left:2px solid var(--edge);border-radius:0 8px 8px 0;background:var(--paper2);font:500 12.5px/1.4 var(--sans);color:var(--ink);resize:vertical;overflow:hidden}
+.cal-v5 .rlband textarea.gm{border-left:3px solid rgb(var(--color-warn-rgb));background:rgb(var(--color-warn-rgb) / .07)}
+.cal-v5 .rlband .nm:focus, .cal-v5 .rlband textarea:focus, .cal-v5 .rldice input:focus{outline:1.5px solid var(--ink);outline-offset:0}
+.cal-v5 .rlacts{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px}
+.cal-v5 .rlerr{margin:0;font:550 12px/1.4 var(--sans);color:var(--off)}
+.cal-v5 .rlnights{display:flex;flex-direction:column}
+.cal-v5 .rlnight{display:grid;grid-template-columns:minmax(80px,1fr) 30px minmax(0,1.4fr) auto;gap:8px;align-items:center;min-height:38px;border-top:1px solid var(--hair2);font:500 12.5px/1.3 var(--sans)}
+.cal-v5 .rlnights>.rlq + .rlnight, .cal-v5 .rlnight:first-child{border-top:0}
+.cal-v5 .rlnight .d{color:var(--ink2);font-variant-numeric:tabular-nums}
+.cal-v5 .rlnight.past .d{color:var(--mut)}
+.cal-v5 .rlnight .tot{text-align:right;font:700 14px/1 var(--sans);font-variant-numeric:tabular-nums;color:var(--ink)}
+.cal-v5 .rlnight .bn{display:flex;align-items:center;gap:6px;min-width:0}
+.cal-v5 .rlnight .bn b{font:600 12.5px/1.2 var(--serif);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cal-v5 .rlnight .bn.wait{font-style:italic;color:var(--mut)}
+.cal-v5 .rlnight .acts{display:flex}
+.cal-v5 .rlnight .tick{width:8px;height:8px;flex:none;border-radius:50%;background:var(--mut)}
+.cal-v5 .rlnight .tick.t1{background:var(--bldT)}
+.cal-v5 .rlnight .tick.t2{background:var(--bldL)}
+.cal-v5 .rlsec .told, .cal-v5 .evroll .told{flex:none;padding:2px 6px;border:1px solid var(--edge);border-radius:99px;font:600 10px/1 var(--sans);letter-spacing:.03em;color:var(--mut);white-space:nowrap}
+.cal-v5 .rlcode{margin:0;padding:10px 12px;overflow-x:auto;border:1px solid var(--hair);border-radius:8px;background:var(--paper2);font:12px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;color:var(--ink2);white-space:pre}
+.cal-v5 .evroll{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:5px;font:500 12px/1.35 var(--sans);color:var(--ink2)}
+.cal-v5 .evroll b{font-weight:650;color:var(--ink)}
+.cal-v5 .evroll.dm{color:rgb(var(--color-warn-rgb))}
+.cal-v5 .evroll.dm b{color:inherit}
+.cal-v5 .evrollc{margin:12px 0 4px;padding:8px 0 8px 12px;border-left:2px solid var(--edge)}
+.cal-v5 .evrollc.dm{border-left:3px solid rgb(var(--color-warn-rgb))}
+.cal-v5 .evrollc .lb{display:flex;align-items:center;gap:5px;font:650 9.5px/1 var(--sans);letter-spacing:.12em;text-transform:uppercase;color:var(--mut)}
+.cal-v5 .evrollc.dm .lb{color:rgb(var(--color-warn-rgb))}
+.cal-v5 .evrollc p{margin:6px 0 0;font:500 13px/1.45 var(--sans);color:var(--ink)}
+.cal-v5 .evrollc p.pl{font-size:12px;color:var(--mut)}
+@media (max-width:560px){
+  .cal-v5 .rlband{grid-template-columns:52px minmax(0,1fr) 32px}
+  .cal-v5 .rlnight{grid-template-columns:minmax(72px,1fr) 26px minmax(0,1fr) auto}
+}

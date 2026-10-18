@@ -953,8 +953,8 @@
   // ------------------------------------------------------------------
   CalendarEditor.prototype._wrapEvpRendering = function () {
     var self = this, view = this.view, original = view._evpHTML.bind(view);
-    view._evpHTML = function (ev) {
-      var html = original(ev);
+    view._evpHTML = function (ev, day) {
+      var html = original(ev, day);
       var canDelete = view.role >= ROLE_OWNER;
       var foot = self._occurrenceHTML(ev) + '<div class="efoot"><button type="button" class="btn quiet" data-edit-event="' + esc(ev.id) + '"><i class="fa-solid fa-pencil"></i> Edit</button><span class="sp"></span>' +
         (canDelete ? '<button type="button" class="btn danger" data-delete-event="' + esc(ev.id) + '"><i class="fa-solid fa-trash"></i> Delete</button>' : '') + '</div>';

@@ -164,3 +164,29 @@
 .enc-seg-opt input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
 .enc-seg-opt.on { background: rgb(var(--color-accent-rgb, 99 102 241) / .12); color: var(--color-accent, #6366f1); font-weight: 600; }
 .enc-seg-opt:has(input:focus-visible) { outline: 2px solid var(--color-accent, #6366f1); outline-offset: -2px; }
+
+/* Versions: small-capital tabs with a hairline under them and up one side,
+   the panel hanging from the same line. */
+.enc-picked { color: var(--color-text-secondary, #4b5563); }
+.enc-tabs { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 4px 16px; border-bottom: 1px solid var(--color-border, #e5e7eb); }
+.enc-tab {
+  all: unset; box-sizing: border-box; cursor: pointer; min-height: 32px; padding: 4px 8px; display: inline-flex; align-items: center;
+  font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--color-text-muted, #6b7280);
+  border-left: 1px solid transparent; margin-bottom: -1px; border-bottom: 1px solid transparent; max-width: 100%; overflow-wrap: anywhere;
+}
+.enc-tab:hover { color: var(--color-text-primary, #111827); }
+.enc-tab.on {
+  color: var(--color-accent, #6366f1); font-weight: 600;
+  border-left-color: var(--color-accent, #6366f1); border-bottom-color: var(--color-accent, #6366f1);
+}
+.enc-tab:focus-visible { outline: 2px solid var(--color-accent, #6366f1); outline-offset: 2px; }
+.enc-tabs .enc-quiet { margin-left: auto; }
+.enc-version { border-top-left-radius: 0; border-top-right-radius: 0; border-top: 0; margin-top: -8px; }
+.enc-vrow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.enc-vrow.out .enc-vkeep span { color: var(--color-text-muted, #6b7280); text-decoration: line-through; }
+.enc-vkeep { display: inline-flex; align-items: center; gap: 8px; min-height: 32px; cursor: pointer; flex: 1 1 10em; min-width: 0; overflow-wrap: anywhere; }
+.enc-vwas { display: inline; }
+@media (prefers-reduced-motion: no-preference) {
+  .enc-version { animation: enc-settle 280ms var(--ease-out, ease-out); }
+}
+@keyframes enc-settle { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }

@@ -102,7 +102,7 @@ test('the save body is the whole encounter in the server\'s shape', () => {
   const e = H.normalise({ id: 'e1', name: '  ', version: 3, ready: true, heroes: [{ id: 'h1', name: 'Ash' }],
     creatures: [{ id: 'r1', entityId: 'gob', name: 'Goblin', count: 2, group: 'B', start: 'hidden' }] });
   assert.deepEqual(plain(H.toSave(e)), {
-    name: 'Untitled encounter', ready: true, heroes: ['h1'], version: 3, stages: [],
+    name: 'Untitled encounter', ready: true, heroes: ['h1'], version: 3, stages: [], versions: [],
     creatures: [{ id: 'r1', entityId: 'gob', name: 'Goblin', count: 2, group: 'B', start: 'hidden' }]
   });
 });
@@ -215,4 +215,97 @@ test('stages are capped, and removing a row takes it out of every stage', () => 
   assert.deepEqual(plain(e.stages[0].arrive), []);
   assert.equal(e.stages[0].when.row, '');
   assert.equal(H.stageReady(e, e.stages[0]), false);
+});
+
+const base = () => ({
+  id: 'e1', name: 'Stalkers', version: 3,
+  creatures: [{ id: 'r1', name: 'Stalker', count: 4 }, { id: 'r2', name: 'Hound', count: 2 }]
+});
+
+test('normalise reads versions and drops a half pick', () => {
+  const { H } = load();
+  const e = H.normalise({ ...base(), versions: [
+    { id: 'v1', name: 'Won', pick: { test: 't1', result: 'win' }, remove: ['r2', 7], counts: [{ row: 'r1', count: 99 }, {}] },
+    { id: 'v2', pick: { test: 't1' } }
+  ] });
+  assert.equal(e.versions.length, 2);
+  assert.deepEqual(plain(e.versions[0].remove), ['r2']);
+  assert.deepEqual(plain(e.versions[0].counts), [{ row: 'r1', count: H.LIM.count }]);
+  assert.equal(e.versions[1].pick, null);
+  assert.deepEqual(plain(e.versions[1].add), []);
+});
+
+test('a version keeps, leaves out and recounts base rows', () => {
+  const { H } = load();
+  let e = H.addVersion(H.normalise(base()));
+  const id = e.versions[0].id;
+  assert.equal(e.versions[0].name, 'Version 1');
+  e = H.setVersionCount(e, id, 'r1', 6);
+  assert.equal(H.versionCount(e, e.versions[0], 'r1'), 6);
+  e = H.setVersionCount(e, id, 'r1', 4);
+  assert.deepEqual(plain(e.versions[0].counts), [], 'the base count is stored as no change');
+  e = H.setVersionCount(e, id, 'r2', 3);
+  e = H.keepRow(e, id, 'r2', false);
+  assert.equal(H.versionCount(e, e.versions[0], 'r2'), 0);
+  assert.deepEqual(plain(e.versions[0].counts), [], 'a left-out row loses its count');
+  e = H.keepRow(e, id, 'r2', true);
+  assert.equal(H.versionCount(e, e.versions[0], 'r2'), 2);
+  assert.equal(H.versionTotal(e, e.versions[0]), 6);
+});
+
+test('a version adds its own rows and removing it cleans the stages', () => {
+  const { H } = load();
+  let e = H.addVersion(H.normalise(base()));
+  const id = e.versions[0].id;
+  e = H.addVersionRow(e, id, { entityId: 'p9', name: 'Matriarch' });
+  e = H.addVersionRow(e, id, { entityId: 'p9', name: 'Matriarch' });
+  assert.equal(e.versions[0].add.length, 1);
+  assert.equal(e.versions[0].add[0].count, 2);
+  const row = e.versions[0].add[0].id;
+  e = H.setVersionRow(e, id, row, 'count', 99);
+  assert.equal(e.versions[0].add[0].count, H.LIM.count);
+  e = H.addStage(e);
+  e.stages[0].arrive = [row, 'r1'];
+  const gone = H.removeVersion(e, id);
+  assert.deepEqual(plain(gone.versions), []);
+  assert.deepEqual(plain(gone.stages[0].arrive), ['r1']);
+  const rowGone = H.removeVersionRow(e, id, row);
+  assert.deepEqual(plain(rowGone.stages[0].arrive), ['r1']);
+});
+
+test('one result chooses one version, and removing a base row cleans versions', () => {
+  const { H } = load();
+  let e = H.addVersion(H.addVersion(H.normalise(base())));
+  const [a, b] = e.versions.map((v) => v.id);
+  e = H.setPick(e, a, 't1', 'win');
+  e = H.setPick(e, b, 't1', 'win');
+  assert.equal(e.versions[0].pick, null);
+  assert.equal(e.versions[1].pick.result, 'win');
+  e = H.setPick(e, b, '', '');
+  assert.equal(e.versions[1].pick, null);
+  e = H.keepRow(H.setVersionCount(e, a, 'r1', 1), b, 'r1', false);
+  e = H.removeRow(e, 'r1');
+  assert.deepEqual(plain(e.versions[0].counts), []);
+  assert.deepEqual(plain(e.versions[1].remove), []);
+});
+
+test('toSave sends versions without the read-only names', () => {
+  const { H } = load();
+  const e = H.normalise({ ...base(), versions: [
+    { id: 'v1', name: '  ', pick: { test: 't1', result: 'win', testName: 'Hunt', resultLabel: 'Won' }, add: [{ id: 'a1', name: 'Matriarch' }], counts: [{ row: 'r1', count: 2 }] }
+  ] });
+  assert.deepEqual(plain(H.toSave(e).versions), [{
+    id: 'v1', name: 'Untitled version', pick: { test: 't1', result: 'win' },
+    add: [{ id: 'a1', entityId: '', name: 'Matriarch', count: 1, group: 'A', start: 'seen' }],
+    remove: [], counts: [{ row: 'r1', count: 2 }]
+  }]);
+});
+
+test('pickedLine says which version the recorded result chooses', () => {
+  const { H } = load();
+  const e = (picked) => H.normalise({ ...base(), versions: [{ id: 'v1', name: 'Won' }], picked });
+  assert.equal(H.pickedLine(e({ version: 'v1', test: 't1', result: 'win', open: [] })), 'The recorded result chooses Won.');
+  assert.match(H.pickedLine(e({ version: '', open: ['t1'] })), /No result recorded yet/);
+  assert.match(H.pickedLine(e({ version: '', open: [] })), /base list plays/);
+  assert.equal(H.pickedLine(H.normalise(base())), '');
 });

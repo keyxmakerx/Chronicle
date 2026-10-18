@@ -102,7 +102,7 @@
       }
       var hc = window.Chronicle && Chronicle.hovercard;
       var corner = document.documentElement.getAttribute('data-cz-tlpop') === 'corner';
-      if (hc) el._ptlUnbind = hc.bind(el, '.ptl-ev', contentFor, { corner: corner });
+      if (hc) el._ptlUnbind = hc.bind(el, '.ptl-ev', contentFor, { corner: corner, kit: true });
     },
     destroy: function (el) {
       if (el._ptlUnbind) el._ptlUnbind();

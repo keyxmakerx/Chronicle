@@ -13,13 +13,18 @@
    for Director only, a hollow grey ring for the death. Beads closer than a
    bead's width share one bead with a second ring (page_timeline.js).
 
+   A style kit draws its own line, beads and years through the --kit-tl-*
+   tokens it sets in style_kits.css (a thicker rule, a masked double line,
+   wave or pen stroke, square or hand-drawn beads, a ring, a glow); with no
+   kit each falls back to the values here. The lit colour is the kit's
+   accent, which is the campaign's colour when the owner picked one.
+
    Motion uses the signed moves. Under full motion the line draws across and
    the beads pop in one after another; Calm fades them in place; Off and a
    device asking for reduced motion show the line drawn. */
 
 .ptl {
-  --ptl-acc: var(--color-accent);
-  --ptl-acc-rgb: var(--color-accent-rgb);
+  --ptl-acc: var(--kit-acc, var(--color-accent));
   --ptl-bg: var(--color-bg-primary);
   --ptl-grey: color-mix(in srgb, var(--color-text-muted) 45%, var(--color-border));
   --ptl-dm: rgb(var(--color-warn-rgb));
@@ -32,32 +37,36 @@
 
 .ptl-rail { position: relative; height: 40px; }
 .ptl-tr {
-  position: absolute; left: 0; right: 0; top: 12px; height: 1px;
-  transform-origin: left;
+  position: absolute; left: 0; right: 0;
+  top: var(--kit-tl-top, 12px); height: var(--kit-tl-h, 1px);
+  filter: var(--kit-tl-glow, none);
+  -webkit-mask: var(--kit-tl-shape, none);
+  mask: var(--kit-tl-shape, none);
   background: linear-gradient(to right,
-    rgb(var(--ptl-acc-rgb) / 0) 0, var(--ptl-acc) 18px,
-    var(--ptl-acc) calc(var(--ptl-at) - 10px), rgb(var(--ptl-acc-rgb) / .4) calc(var(--ptl-at) + 10px),
-    rgb(var(--ptl-acc-rgb) / .4) calc(100% - var(--ptl-tail)), rgb(var(--ptl-acc-rgb) / 0) 100%);
+    color-mix(in srgb, var(--ptl-acc) 0%, transparent) 0, var(--ptl-acc) 18px,
+    var(--ptl-acc) calc(var(--ptl-at) - 10px), color-mix(in srgb, var(--ptl-acc) 40%, transparent) calc(var(--ptl-at) + 10px),
+    color-mix(in srgb, var(--ptl-acc) 40%, transparent) calc(100% - var(--ptl-tail)), color-mix(in srgb, var(--ptl-acc) 0%, transparent) 100%);
 }
 /* Today is at or past the last event: lit all the way, then the fade. */
 .ptl--lit .ptl-tr {
   background: linear-gradient(to right,
-    rgb(var(--ptl-acc-rgb) / 0) 0, var(--ptl-acc) 18px,
-    var(--ptl-acc) calc(100% - var(--ptl-tail)), rgb(var(--ptl-acc-rgb) / 0) 100%);
+    color-mix(in srgb, var(--ptl-acc) 0%, transparent) 0, var(--ptl-acc) 18px,
+    var(--ptl-acc) calc(100% - var(--ptl-tail)), color-mix(in srgb, var(--ptl-acc) 0%, transparent) 100%);
 }
 .ptl--dead .ptl-tr {
   background: linear-gradient(to right,
-    rgb(var(--ptl-acc-rgb) / 0) 0, var(--ptl-acc) 18px,
+    color-mix(in srgb, var(--ptl-acc) 0%, transparent) 0, var(--ptl-acc) 18px,
     var(--ptl-acc) calc(var(--ptl-at) - 2px), var(--ptl-grey) calc(var(--ptl-at) + 14px),
     transparent 100%);
 }
 /* The wash: a soft fall of the accent under the lit stretch. */
 .ptl-wa {
   position: absolute; left: 0; top: 13px; height: 12px; width: var(--ptl-at);
-  background: linear-gradient(to bottom, rgb(var(--ptl-acc-rgb) / .13), rgb(var(--ptl-acc-rgb) / 0));
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--ptl-acc) 13%, transparent), color-mix(in srgb, var(--ptl-acc) 0%, transparent));
   -webkit-mask-image: linear-gradient(to right, transparent 0, #000 40px);
   mask-image: linear-gradient(to right, transparent 0, #000 40px);
   pointer-events: none;
+  display: var(--kit-tl-wash, block);
 }
 
 .ptl-in { position: absolute; top: 0; bottom: 0; left: 18px; right: var(--ptl-tail); }
@@ -67,17 +76,19 @@
 .ptl-dots > li { position: absolute; top: 12px; width: 0; }
 .ptl-dots > li[hidden] { display: none; }
 .ptl-ev {
-  position: absolute; left: -5.5px; top: -5.5px; width: 11px; height: 11px;
-  border-radius: 50%;
+  --ptl-b: var(--kit-tl-bead, 11px);
+  position: absolute; left: calc(var(--ptl-b) / -2); top: calc(var(--ptl-b) / -2);
+  width: var(--ptl-b); height: var(--ptl-b);
+  border-radius: var(--kit-tl-bead-r, 50%);
   background: var(--ptl-acc);
-  box-shadow: 0 0 0 2px var(--ptl-bg);
+  box-shadow: 0 0 0 2px var(--ptl-bg), var(--kit-tl-ring, 0 0 #0000);
   transition: transform var(--dur-micro) var(--ease-out);
 }
-.ptl-ev--later { background: var(--ptl-bg); box-shadow: inset 0 0 0 1px rgb(var(--ptl-acc-rgb) / .6), 0 0 0 2px var(--ptl-bg); }
+.ptl-ev--later { background: var(--ptl-bg); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ptl-acc) 60%, transparent), 0 0 0 2px var(--ptl-bg), var(--kit-tl-ring-soft, 0 0 #0000); }
 .ptl-ev--dm { background: var(--ptl-dm); }
-.ptl-ev--death { background: var(--ptl-bg); box-shadow: inset 0 0 0 1.5px var(--ptl-grey), 0 0 0 2px var(--ptl-bg); }
+.ptl-ev--death { background: var(--ptl-bg); box-shadow: inset 0 0 0 1.5px var(--ptl-grey), 0 0 0 2px var(--ptl-bg), var(--kit-tl-ring-soft, 0 0 #0000); }
 /* Several events on one bead: a faint second ring. */
-.ptl-ev--multi { box-shadow: 0 0 0 2px var(--ptl-bg), 0 0 0 3.5px rgb(var(--ptl-acc-rgb) / .55); }
+.ptl-ev--multi { box-shadow: 0 0 0 2px var(--ptl-bg), 0 0 0 3.5px color-mix(in srgb, var(--ptl-acc) 55%, transparent); }
 .ptl-ev--multi.ptl-ev--dm { box-shadow: 0 0 0 2px var(--ptl-bg), 0 0 0 3.5px rgb(var(--color-warn-rgb) / .6); }
 .ptl-ev:hover, .ptl-ev:focus-visible { transform: scale(1.45); }
 .ptl-ev:focus-visible { outline: 2px solid var(--ptl-acc); outline-offset: 2px; }
@@ -87,7 +98,7 @@
 .ptl-dots > li:is(:hover, :focus-within) { z-index: 2; }
 
 .ptl-yr {
-  position: absolute; top: 12px; left: 50%;
+  position: absolute; top: var(--kit-tl-yr-top, 12px); left: 50%;
   transform: translateX(-50%);
   font-size: 10.5px; line-height: 1;
   color: var(--color-text-muted);
@@ -116,7 +127,9 @@ html:not([data-motion]):not([data-cz-reduce]) .ptl-ev {
   animation: ptl-pop var(--dur-standard) var(--ease-out) backwards;
   animation-delay: calc(220ms + min(var(--i, 0), 12) * 60ms);
 }
-@keyframes ptl-draw { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+/* Drawn by uncovering it, so a kit's wave or pen stroke is never squeezed;
+   the overhang keeps Lumen's glow. */
+@keyframes ptl-draw { from { clip-path: inset(-8px 100% -8px -8px); } to { clip-path: inset(-8px); } }
 @keyframes ptl-pop { from { transform: scale(0.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
 /* Calm: the line and its beads fade in where they are. */

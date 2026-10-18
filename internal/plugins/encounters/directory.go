@@ -20,3 +20,20 @@ type PageAccess struct {
 	CanView bool
 	CanEdit bool
 }
+
+// ResultDirectory is how an encounter reads the tests that pick its
+// versions. It is implemented in internal/app over the Tests block, so
+// encounters never imports that plugin; it is nil when the Tests block is
+// unavailable, and every pick then reads as unknown.
+type ResultDirectory interface {
+	// Outcomes returns, for the tests among ids the viewer may see, their
+	// name, results (id to label) and recorded result id, keyed by id.
+	Outcomes(ctx context.Context, campaignID string, ids []string, v Viewer) (map[string]TestOutcome, error)
+}
+
+// TestOutcome is one test as a version's pick needs it.
+type TestOutcome struct {
+	Name     string
+	Results  map[string]string
+	Recorded string
+}

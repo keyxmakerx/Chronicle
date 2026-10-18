@@ -94,6 +94,8 @@ type PartyNight struct {
 type Lookups struct {
 	Cal     CalendarAPI
 	Weather WeatherSettingsAPI
+	// Rolls adds each rolled night to the `events` answer; nil leaves them out.
+	Rolls   EventRollAPI
 	Tables  RollTablesAPI
 	Maps    MapsAPI
 	Pages   PagesAPI
