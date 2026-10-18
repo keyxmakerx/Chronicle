@@ -585,6 +585,12 @@ func (s *packageService) installVersion(ctx context.Context, packageID, version 
 	if err != nil {
 		return fmt.Errorf("creating staging directory: %w", err)
 	}
+	// MkdirTemp makes the folder 0700; it becomes the install folder, which
+	// has always been 0755.
+	if err := os.Chmod(stageDir, 0o755); err != nil {
+		_ = os.RemoveAll(stageDir)
+		return fmt.Errorf("creating staging directory: %w", err)
+	}
 	defer func() { _ = os.RemoveAll(stageDir) }()
 
 	zipName := fmt.Sprintf("%s-%s.zip", pkg.Slug, version)
@@ -743,9 +749,9 @@ func (s *packageService) installVersion(ctx context.Context, packageID, version 
 }
 
 // swapInstallDir moves stageDir to destDir. A folder already at destDir is set
-// aside first; the rollback puts things back as they were (the old folder restored, or none
-// if there was none) and commit discards the old folder. The aside folder is a sibling of stageDir so the renames stay
-// on one filesystem.
+// aside first. rollback puts things back as they were (the old folder
+// restored, or none if there was none); commit discards the old folder. The
+// aside folder is a sibling of stageDir so the renames stay on one filesystem.
 func swapInstallDir(stageDir, destDir string) (rollback, commit func(), err error) {
 	if err := os.MkdirAll(filepath.Dir(destDir), 0o755); err != nil {
 		return nil, nil, err
