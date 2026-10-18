@@ -11,6 +11,8 @@
  *     following it (rule words). Links leave it off so a click still navigates.
  *     opts.corner: draw the card as the fading corner (time lines), its corner
  *     on a short stem over the trigger, in place of the campaign's look.
+ *     opts.kit: while the page wears a style kit, draw the card in the kit
+ *     (look "kit") in place of the campaign's look (time lines).
  *   Chronicle.hovercard.open(trigger, content, {pin}) / .close() / .update(content)
  *   Chronicle.hovercard.html(content) -> markup, for previews (Customize).
  *   Chronicle.hovercard.look() -> the campaign's look.
@@ -176,7 +178,8 @@
     current = trigger;
     pinned = !!(opts && opts.pin);
     corner = !!(opts && opts.corner);
-    card.dataset.look = corner ? 'corner' : look();
+    card.dataset.look = corner ? 'corner'
+      : opts && opts.kit && document.documentElement.hasAttribute('data-cz-kit') ? 'kit' : look();
     card.style.maxWidth = '';
     if (!corner) card.classList.remove('chc--cr', 'chc--cd');
     card.classList.toggle('chc--pinned', pinned);
@@ -218,9 +221,9 @@
 
   // Resolve the caller's content (value or Promise) and show it, with a
   // loading line while a fetch is in flight. A null answer closes the card.
-  function show(trigger, contentFn, pin, cornered) {
+  function show(trigger, contentFn, pin, bopts) {
     var my = ++token;
-    var res, o = { pin: pin, corner: cornered };
+    var res, o = { pin: pin, corner: !!bopts.corner, kit: !!bopts.kit };
     try { res = contentFn(trigger); } catch (e) { res = null; }
     if (res && typeof res.then === 'function') {
       open(trigger, { title: trigger.textContent.trim(), loading: true }, o);
@@ -246,7 +249,7 @@
       if (!within(t) || (pinned && current)) return;
       if (t === current) { clearTimeout(closeTimer); return; }
       clearTimeout(openTimer);
-      openTimer = setTimeout(function () { show(t, contentFn, false, !!opts.corner); }, OPEN_DELAY);
+      openTimer = setTimeout(function () { show(t, contentFn, false, opts); }, OPEN_DELAY);
     }
     function onOut(e) {
       if (e.pointerType === 'touch') return;
@@ -259,7 +262,7 @@
     function onFocusIn(e) {
       if (restoringFocus) return;
       var t = find(e);
-      if (within(t) && !(pinned && current) && t !== current) show(t, contentFn, false, !!opts.corner);
+      if (within(t) && !(pinned && current) && t !== current) show(t, contentFn, false, opts);
     }
     function onFocusOut(e) {
       var t = find(e);
@@ -275,14 +278,14 @@
       e.preventDefault();
       e.stopPropagation();
       if (t === current && pinned) { close(); return; }
-      show(t, contentFn, true, !!opts.corner);
+      show(t, contentFn, true, opts);
     }
     function onKey(e) {
       if (!opts.pinOnClick || (e.key !== 'Enter' && e.key !== ' ')) return;
       var t = find(e);
       if (!within(t) || t.tagName === 'A' || t.tagName === 'BUTTON') return;
       e.preventDefault();
-      if (t === current && pinned) close(); else show(t, contentFn, true, !!opts.corner);
+      if (t === current && pinned) close(); else show(t, contentFn, true, opts);
     }
     // On touch, links open pinned on a long press so a tap still follows them.
     function onTouchStart(e) {
@@ -290,7 +293,7 @@
       if (!within(t) || opts.pinOnClick) return;
       clearTimeout(pressTimer);
       pressed = false;
-      pressTimer = setTimeout(function () { pressed = true; show(t, contentFn, true, !!opts.corner); }, LONG_PRESS);
+      pressTimer = setTimeout(function () { pressed = true; show(t, contentFn, true, opts); }, LONG_PRESS);
     }
     function cancelPress() { clearTimeout(pressTimer); }
 
