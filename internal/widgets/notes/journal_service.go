@@ -3,6 +3,7 @@ package notes
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -33,6 +34,37 @@ type IndexRow struct {
 	InCount    int        `json:"inCount"`
 	HasAudio   bool       `json:"hasAudio"`
 	LockedBy   *string    `json:"lockedBy,omitempty"`
+	// Night is set on a game night's entry: the night it belongs to.
+	Night *NightTag `json:"night,omitempty"`
+}
+
+// NightEntries is the game-night side of the Journal, supplied by the
+// sessions plugin. Each member's entry for a game night is an ordinary note
+// it makes for them; the Journal asks for those to be made when it opens and
+// tags each one with its night.
+type NightEntries interface {
+	// EnsureEntries makes v's entries for the game nights that are due.
+	EnsureEntries(ctx context.Context, campaignID string, v permissions.Viewer) error
+	// Nights returns, for those of noteIDs that are game-night entries, the
+	// night each belongs to.
+	Nights(ctx context.Context, campaignID string, noteIDs []string) (map[string]NightTag, error)
+}
+
+// NightTag is the game night an entry belongs to.
+type NightTag struct {
+	SessionID string `json:"sessionId"`
+	Date      string `json:"date"`
+	Name      string `json:"name"`
+	Time      string `json:"time,omitempty"`
+	// Started is whether the night has begun: from then on the entry is
+	// read for the DM's check-in, if the DM can read it.
+	Started bool `json:"started"`
+}
+
+// SetNightEntries wires game-night entries into the Journal. Without it the
+// Journal has none.
+func (s *noteService) SetNightEntries(n NightEntries) {
+	s.nights = n
 }
 
 // JournalIndex is the Journal's list: every visible Journal note and folder.
@@ -92,6 +124,12 @@ const snippetLen = 180
 // folders, each with a snippet, its outgoing links and how many notes the
 // viewer can see link to it.
 func (s *noteService) JournalIndex(ctx context.Context, campaignID string, v permissions.Viewer) (*JournalIndex, error) {
+	if s.nights != nil {
+		// The Journal still opens without them; the next load tries again.
+		if err := s.nights.EnsureEntries(ctx, campaignID, v); err != nil {
+			slog.Warn("making game-night entries failed", slog.String("campaign_id", campaignID), slog.Any("error", err))
+		}
+	}
 	all, err := s.repo.ListVisible(ctx, campaignID, v, ListScope{})
 	if err != nil {
 		return nil, err
@@ -149,7 +187,32 @@ func (s *noteService) JournalIndex(ctx context.Context, campaignID string, v per
 		}
 		idx.Notes = append(idx.Notes, row)
 	}
+	s.tagNights(ctx, campaignID, idx.Notes)
 	return idx, nil
+}
+
+// tagNights sets Night on the rows that are game-night entries. A failed
+// read leaves the rows untagged rather than failing the Journal.
+func (s *noteService) tagNights(ctx context.Context, campaignID string, rows []IndexRow) {
+	if s.nights == nil {
+		return
+	}
+	ids := make([]string, 0, len(rows))
+	for _, r := range rows {
+		if !r.IsFolder {
+			ids = append(ids, r.ID)
+		}
+	}
+	tags, err := s.nights.Nights(ctx, campaignID, ids)
+	if err != nil {
+		slog.Warn("tagging game-night entries failed", slog.String("campaign_id", campaignID), slog.Any("error", err))
+		return
+	}
+	for i := range rows {
+		if t, ok := tags[rows[i].ID]; ok {
+			rows[i].Night = &t
+		}
+	}
 }
 
 // Search returns the viewer's notes whose title or text contains q, each
@@ -214,21 +277,6 @@ func (s *noteService) PageRefs(ctx context.Context, campaignID string, v permiss
 		}
 	}
 	return s.refs(ctx, campaignID, v, journal, "")
-}
-
-// WrittenBetweenMax caps one window's notes; a game night past it is cut,
-// and says so.
-const WrittenBetweenMax = 500
-
-func (s *noteService) WrittenBetween(ctx context.Context, campaignID string, v permissions.Viewer, from, to time.Time) ([]Note, bool, error) {
-	list, err := s.repo.ListVisibleWrittenBetween(ctx, campaignID, v, from, to, WrittenBetweenMax+1)
-	if err != nil {
-		return nil, false, err
-	}
-	if len(list) > WrittenBetweenMax {
-		return list[:WrittenBetweenMax], true, nil
-	}
-	return list, false, nil
 }
 
 // refs turns linking notes (already newest first) into NoteRefs, labelling

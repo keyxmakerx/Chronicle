@@ -2015,15 +2015,13 @@
 .cal-v5 .gnfind input:focus{outline:1.5px solid var(--ink);outline-offset:0}
 .cal-v5 .gnfind .lp-res[hidden]{display:none}
 .cal-v5 .gnrecap .lnk, .cal-v5 .gnlinks .lnk{display:inline-flex;align-items:center;gap:6px;padding:0;font:550 12px/1.3 var(--sans);color:var(--ink2)}
-/* Written that night: one row per note, time first. */
-.cal-v5 .gncount{margin-left:6px;letter-spacing:0;text-transform:none;font-weight:500}
+/* Entries for this night: one row per Journal entry. */
 .cal-v5 .gnnotes{display:grid}
-.cal-v5 .gnnrow{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:2px 10px;align-items:baseline;padding:8px 0;border-bottom:1px solid var(--hair2)}
+.cal-v5 .gnnrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:baseline;padding:8px 0;border-bottom:1px solid var(--hair2)}
 .cal-v5 .gnnrow:last-child{border-bottom:0}
-.cal-v5 .gnnrow .tm{min-width:52px;font:500 12px/1.3 var(--sans);font-variant-numeric:tabular-nums;color:var(--mut)}
 .cal-v5 .gnnrow a{min-width:0;font:600 13px/1.3 var(--sans);color:var(--ink);text-decoration:none;overflow-wrap:anywhere}
 .cal-v5 .gnnrow a:hover{text-decoration:underline}
-.cal-v5 .gnnrow .who{grid-column:2/-1;font:500 12px/1.3 var(--sans);color:var(--mut)}
+.cal-v5 .gnnrow .who{grid-column:1/-1;font:500 12px/1.3 var(--sans);color:var(--mut)}
 .cal-v5 .gnaud{padding:1px 6px;border-radius:5px;box-shadow:inset 0 0 0 1px var(--edge);font:500 11px/1.3 var(--sans);color:var(--mut);white-space:nowrap}
 .cal-v5 .gnaud.dm{color:rgb(var(--color-warn-rgb));box-shadow:inset 0 0 0 1px rgb(var(--color-warn-rgb) / .45)}
 .cal-v5 .gnrule{margin:8px 0 0;font:500 11.5px/1.5 var(--sans);color:var(--mut)}

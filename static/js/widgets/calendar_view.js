@@ -476,11 +476,6 @@
     var h = Math.floor(m / 60) % 24, mm = m % 60, suf = h < 12 ? 'am' : 'pm', h12 = h % 12 || 12;
     return h12 + (mm ? ':' + pad2(mm) : '') + suf;
   }
-  // A note's time on the viewer's own clock, as "7:02pm".
-  function gnClock(iso) {
-    var t = new Date(iso);
-    return isNaN(t) ? '' : ampm(t.getHours() * 60 + t.getMinutes());
-  }
   // Two letters for a page's round mark: "Brother Ansel" is "BA".
   function gnInitials(name) {
     return String(name || '').split(/\s+/).filter(Boolean).slice(0, 2).map(function (w) { return w.charAt(0).toUpperCase(); }).join('');
@@ -1283,7 +1278,7 @@
       this.forecastByDay = {};
       this.weatherByYear = {}; // year -> {'m_d': reading}, filled by fetchWeatherYear
       this.nightsByMonth = {}; // 'y_m' -> game nights, filled by fetchNights
-      this._gnPages = {}; // session id + "|" + date -> its recap, linked pages and notes
+      this._gnPages = {}; // session id + "|" + date -> its recap, linked pages and entries
       this._gnChk = {}; // session id + "|" + date -> the check-in's view state
       this._evPages = {}; // event id -> the pages tied to it
       this._gnReminded = {}; // night id + "|" + user id -> reminded this visit
@@ -2074,10 +2069,10 @@
         '</div></div>';
     },
 
-    // A night's recap, linked pages and the notes written that night sit
-    // below its answers, with the Director's check-in first. They are read
-    // when the page opens; until then the page says so. A repeating night's
-    // notes are its own date's, so the page is kept per date.
+    // A night's recap, linked pages and Journal entries sit below its
+    // answers, with the Director's check-in first. They are read when the
+    // page opens; until then the page says so. A repeating night's entries
+    // are its own date's, so the page is kept per date.
     _gnPageExtraHTML: function (n) {
       var sid = n.sessionId;
       if (!this._gnPages[sid + '|' + n.date]) this._gnLoadPage(sid, n.date);
@@ -2092,11 +2087,11 @@
           var night = p.night || {};
           self._gnPages[key] = {
             recap: p.recap || '', recapHtml: p.recapHtml || '', links: Array.isArray(p.links) ? p.links : [],
-            notes: Array.isArray(night.notes) ? night.notes : [], truncated: !!night.truncated,
+            entries: Array.isArray(night.entries) ? night.entries : [],
             checkIn: Array.isArray(night.checkIn) ? night.checkIn : null
           };
         })
-        .catch(function () { self._gnPages[key] = { failed: true, recap: '', recapHtml: '', links: [], notes: [], checkIn: null }; })
+        .catch(function () { self._gnPages[key] = { failed: true, recap: '', recapHtml: '', links: [], entries: [], checkIn: null }; })
         .then(function () { self._gnRedrawExtra(sid); });
     },
 
@@ -2111,7 +2106,7 @@
     _gnExtraHTML: function (sid, date) {
       var p = this._gnPages[sid + '|' + date], scribe = this.role >= 2, cid = encodeURIComponent(this.campaignId);
       if (!p) return '<section class="eps"><h4>Recap</h4><div class="none">Loading…</div></section>';
-      if (p.failed) return '<section class="eps"><h4>Recap</h4><div class="none">The recap, linked pages and notes could not be loaded.</div></section>';
+      if (p.failed) return '<section class="eps"><h4>Recap</h4><div class="none">The recap, linked pages and entries could not be loaded.</div></section>';
       var h = this._gnCheckInHTML(sid, date, p) + '<section class="eps gnrecap"><h4>Recap</h4>';
       // Editing here is plain text, so a recap with formatting is shown but
       // never edited here: saving it would drop the formatting.
@@ -2136,44 +2131,44 @@
           ? '<div class="gnfind"><input type="search" data-gn-link-q placeholder="Search pages to link" aria-label="Search pages to link" autocomplete="off"><ul class="lp-res" data-gn-link-res role="listbox" aria-label="Pages" hidden></ul></div>'
           : '<button type="button" class="lnk" data-gn-link-open><i class="fa-solid fa-plus"></i> Link a page</button>';
       }
-      return h + '</section>' + this._gnWroteHTML(p);
+      return h + '</section>' + this._gnEntriesHTML(p);
     },
 
-    // "Written that night": every note the viewer can already read whose
-    // writing began in the night's window, oldest first.
-    _gnWroteHTML: function (p) {
-      var self = this, cid = encodeURIComponent(this.campaignId), notes = p.notes || [], n = notes.length;
-      var h = '<section class="eps gnwrote"><h4>Written that night' + (n ? ' <span class="gncount">' + n + (n === 1 ? ' note' : ' notes') + '</span>' : '') + '</h4>';
-      if (!n) h += '<div class="none">No notes were written during this night.</div>';
-      else h += '<div class="gnnotes">' + notes.map(function (x) {
+    // "Entries for this night": the night's Journal entries the viewer can
+    // read, their own first. Each member's entry is made for them when the
+    // night is due.
+    _gnEntriesHTML: function (p) {
+      var self = this, cid = encodeURIComponent(this.campaignId), list = p.entries || [];
+      var h = '<section class="eps gnwrote"><h4>Entries for this night</h4>';
+      if (!list.length) h += '<div class="none">No Journal entries for this night yet.</div>';
+      else h += '<div class="gnnotes">' + list.map(function (x) {
         var mine = x.authorId === self.userId;
-        return '<div class="gnnrow"><span class="tm">' + esc(gnClock(x.createdAt)) + '</span>' +
-          '<a href="/campaigns/' + cid + '/journal/' + encodeURIComponent(x.id) + '">' + esc(x.title || 'Untitled note') + '</a>' +
+        return '<div class="gnnrow">' +
+          '<a href="/campaigns/' + cid + '/journal/' + encodeURIComponent(x.id) + '">' + esc(mine ? 'Your entry' : (x.title || 'Untitled note')) + '</a>' +
           gnAudience(x.audience, self.canAuthorDmOnly) +
           '<span class="who">' + esc(mine ? 'You' : (x.authorName || 'A member')) + '</span></div>';
       }).join('') + '</div>';
-      if (p.truncated) h += '<div class="none">Only the first ' + n + ' notes are listed.</div>';
-      return h + '<p class="gnrule">A note joins the night it was written in: from an hour before the start until 6 in the morning, in the night’s time zone. Editing it later never moves it. ' +
-        (this.canAuthorDmOnly ? 'Players see only the notes they could already read.' : 'You see only the notes you could already read.') + '</p></section>';
+      return h + '<p class="gnrule">' + (this.canAuthorDmOnly
+        ? 'Everyone in the campaign gets an entry in their Journal for each game night. You see the ones you can read; a player’s private entry stays private and is never read for the check-in.'
+        : 'Everyone in the campaign gets an entry in their Journal for each game night. Share yours with the GM if you want the people you met counted.') + '</p></section>';
     },
 
     // The after-night check-in, for the Director only: the pages named in
-    // the night's notes, each answered Seen or Not seen. The server sends it
+    // the night's entries, each answered Seen or Not seen. The server sends it
     // only to someone who sees DM-only content, once the night has started.
     _gnCheckInHTML: function (sid, date, p) {
       if (!p.checkIn) return '';
       var cid = encodeURIComponent(this.campaignId), st = this._gnChk[sid + '|' + date] || {};
       var all = p.checkIn, pend = all.filter(function (x) { return !x.answer; });
       var names = all.map(function (x) { return x.name; });
-      var fromNotes = all.every(function (x) { return x.noteId; });
+      var fromEntries = all.every(function (x) { return x.noteId; });
       var ask = all.length > 4
-        ? (fromNotes ? 'You mentioned ' + all.length + ' people in this night’s notes.' : all.length + ' people came up on this night.')
-        : (fromNotes ? 'You mentioned ' + listWords(names) + ' in this night’s notes.' : listWords(names) + ' came up on this night.');
+        ? all.length + ' people came up ' + (fromEntries ? 'in this night’s entries.' : 'on this night.')
+        : listWords(names) + ' came up ' + (fromEntries ? 'in this night’s entries.' : 'on this night.');
       var h = '<section class="eps gnchk" data-dm-only aria-label="After-night check-in"><div class="gnchk-h"><p>' +
-        (all.length ? esc(ask) + ' Did the players see them?' : 'Nobody was named in this night’s notes, so there is no one to ask about.') +
+        (all.length ? esc(ask) + ' Did the players see them?' : 'Nobody was named in the entries you can read, so there is no one to ask about.') +
         '</p><span class="dirnote"><i class="fa-solid fa-eye-slash"></i>Director only</span></div>';
       if (!all.length) return h + '</section>';
-      if (p.truncated) h += '<p class="gnrule">Only the first ' + p.notes.length + ' notes were read for this check-in.</p>';
       if (!pend.length && !st.change) {
         var seen = all.filter(function (x) { return x.answer === 'seen'; }).map(function (x) { return x.name; });
         var no = all.filter(function (x) { return x.answer === 'not_seen'; }).map(function (x) { return x.name; });
@@ -2187,8 +2182,8 @@
       h += '<div class="gnchk-l">' + rows.map(function (x) {
         var open = st.open && st.open[x.entityId], src;
         if (x.noteId) {
-          src = 'In <a href="/campaigns/' + cid + '/journal/' + encodeURIComponent(x.noteId) + '">' + esc(x.noteTitle || 'Untitled note') + '</a>, ' + esc(gnClock(x.noteAt)) +
-            (x.moreNotes ? ', and ' + x.moreNotes + (x.moreNotes === 1 ? ' more note' : ' more notes') : '') + '.';
+          src = 'In <a href="/campaigns/' + cid + '/journal/' + encodeURIComponent(x.noteId) + '">' + esc(x.noteTitle || 'Untitled note') + '</a>' +
+            (x.moreNotes ? ', and ' + x.moreNotes + (x.moreNotes === 1 ? ' more entry' : ' more entries') : '') + '.';
           if (x.line) src += ' <button type="button" class="lnk" data-gn-chk="line" data-gn-ent="' + esc(x.entityId) + '" aria-expanded="' + !!open + '">' + (open ? 'Hide the line' : 'Show the line') + '</button>';
         } else {
           src = x.answer ? 'Answered for this night.' : 'Linked to this game night as mentioned.';

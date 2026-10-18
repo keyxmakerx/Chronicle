@@ -41,10 +41,6 @@ type NoteService interface {
 	Search(ctx context.Context, campaignID string, v permissions.Viewer, q string, withJots bool) ([]SearchHit, error)
 	Backlinks(ctx context.Context, campaignID string, v permissions.Viewer, noteID string) ([]NoteRef, error)
 	PageRefs(ctx context.Context, campaignID string, v permissions.Viewer, entityID string) ([]NoteRef, error)
-	// WrittenBetween returns the Journal notes v can read created in
-	// [from, to), oldest first. Truncated is set when there were more than
-	// WrittenBetweenMax.
-	WrittenBetween(ctx context.Context, campaignID string, v permissions.Viewer, from, to time.Time) (notes []Note, truncated bool, err error)
 	Labels(ctx context.Context, campaignID string, v permissions.Viewer, ids []string) (map[string]*NoteLabel, error)
 	Bulk(ctx context.Context, campaignID string, v permissions.Viewer, req BulkRequest) (*BulkResult, error)
 
@@ -147,6 +143,7 @@ type noteService struct {
 	repo    NoteRepository
 	attRepo AttachmentRepository
 	events  NoteEventPublisher
+	nights  NightEntries
 }
 
 // NewNoteService creates a new note service.

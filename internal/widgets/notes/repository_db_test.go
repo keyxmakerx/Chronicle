@@ -323,68 +323,6 @@ func TestDB_LinkQueries(t *testing.T) {
 	}
 }
 
-// TestDB_WrittenBetween proves the game-night window query: created_at
-// decides, the window's end is exclusive, folders and jots stay out, and a
-// private note is never read for anyone but its owner.
-func TestDB_WrittenBetween(t *testing.T) {
-	db := newNotesScratchDB(t)
-	ctx := context.Background()
-	repo := NewNoteRepository(db)
-	camp, u := seedNotesCampaign(t, db, "gm", "ana")
-	from := time.Date(2026, 10, 10, 18, 0, 0, 0, time.UTC)
-	to := from.Add(12 * time.Hour)
-
-	page := newUUID(t)
-	mk := func(owner, title string, shared, folder bool, entity *string, at time.Time) string {
-		t.Helper()
-		n := &Note{ID: newUUID(t), CampaignID: camp, UserID: u[owner], Title: title, Content: []Block{}, Color: "#374151", IsShared: shared, IsFolder: folder, EntityID: entity}
-		if err := repo.Create(ctx, n); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := db.Exec(`UPDATE notes SET created_at = ? WHERE id = ?`, at, n.ID); err != nil {
-			t.Fatal(err)
-		}
-		return n.ID
-	}
-	mk("gm", "Prep", true, false, nil, from.Add(-time.Minute))
-	first := mk("gm", "Mill", true, false, nil, from)
-	second := mk("ana", "Ana's private", false, false, nil, from.Add(time.Hour))
-	third := mk("ana", "Ana's shared", true, false, nil, from.Add(2*time.Hour))
-	mk("gm", "Folder", true, true, nil, from.Add(time.Hour))
-	mk("gm", "Jot", true, false, &page, from.Add(time.Hour))
-	mk("gm", "Next day", true, false, nil, to)
-
-	ids := func(list []Note) []string {
-		out := make([]string, len(list))
-		for i, n := range list {
-			out[i] = n.ID
-		}
-		return out
-	}
-	gm := permissions.RequestViewer(permissions.RoleOwner, u["gm"])
-	ana := permissions.RequestViewer(permissions.RolePlayer, u["ana"])
-	for _, tt := range []struct {
-		name  string
-		v     permissions.Viewer
-		limit int
-		want  []string
-	}{
-		{"the gm never reads ana's private note", gm, 10, []string{first, third}},
-		{"ana reads her own", ana, 10, []string{first, second, third}},
-		{"limit", ana, 2, []string{first, second}},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := repo.ListVisibleWrittenBetween(ctx, camp, tt.v, from, to, tt.limit)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if g := ids(got); fmt.Sprint(g) != fmt.Sprint(tt.want) {
-				t.Errorf("got %v, want %v", g, tt.want)
-			}
-		})
-	}
-}
-
 // seedNotePicture inserts a note_image media row uploaded by uploader.
 func seedNotePicture(t *testing.T, db *sql.DB, campaignID, uploader string) string {
 	t.Helper()

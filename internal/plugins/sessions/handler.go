@@ -43,8 +43,8 @@ type Handler struct {
 	recipients RecipientFilter
 	// sightings records who the party saw on which night. Nil-safe.
 	sightings SightingService
-	// nightNotes files notes under the night they were written in. Nil-safe.
-	nightNotes NightNotesService
+	// nightEntries gives each game night its Journal entries. Nil-safe.
+	nightEntries NightEntryService
 }
 
 // SetRecipientFilter wires people's notification choices into the emails.

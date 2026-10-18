@@ -764,32 +764,34 @@ test('whoever runs a night can remind a player to answer, and nobody else can', 
 
 // A night page as the server sends it with ?date=.
 function nightPage(over) {
-  const at = (h, m) => new Date(2026, 9, 8, h, m).toISOString();
   return Object.assign({
-    recap: '', recapHtml: '', links: [], truncated: false,
-    notes: [
-      { id: 'n1', title: 'At the mill', authorId: 'dm', authorName: 'Kael', createdAt: at(19, 2), audience: 'party' },
-      { id: 'n2', title: '', authorId: 'p1', authorName: '<b>Bryn</b>', createdAt: at(21, 40), audience: 'gm' },
+    recap: '', recapHtml: '', links: [],
+    entries: [
+      { id: 'n2', title: '', authorId: 'p1', authorName: '<b>Bryn</b>', audience: 'gm' },
+      { id: 'n1', title: 'Game night, Thu 8 Oct', authorId: 'dm', authorName: 'Kael', audience: 'private' },
     ],
     checkIn: [
-      { entityId: 'e1', name: 'Maudry', noteId: 'n1', noteTitle: 'At the mill', noteAt: at(19, 2), moreNotes: 2, line: 'Met <Maudry> at the mill.' },
-      { entityId: 'e2', name: 'Brother Ansel', noteId: 'n1', noteTitle: 'At the mill', noteAt: at(19, 2) },
+      { entityId: 'e1', name: 'Maudry', noteId: 'n1', noteTitle: 'At the mill', moreNotes: 2, line: 'Met <Maudry> at the mill.' },
+      { entityId: 'e2', name: 'Brother Ansel', noteId: 'n1', noteTitle: 'At the mill' },
     ],
   }, over || {});
 }
 
-test('a night lists the notes written during it, escaped, in the Journal\'s words', () => {
+test('a night lists its Journal entries, escaped, in the Journal\'s words', () => {
   const { def } = load();
   const v = view(def, [night()]);
   v.userId = 'dm'; v.canAuthorDmOnly = true;
   v._gnPages = { 's1|2026-10-08': nightPage({ checkIn: null }) };
   const html = v._gnExtraHTML('s1', '2026-10-08');
-  assert.match(html, /<h4>Written that night <span class="gncount">2 notes<\/span><\/h4>/);
-  assert.match(html, /<span class="tm">7:02pm<\/span><a href="\/campaigns\/c1\/journal\/n1">At the mill<\/a><span class="gnaud">Shared with party<\/span><span class="who">You<\/span>/);
+  assert.match(html, /<h4>Entries for this night<\/h4>/);
+  assert.match(html, /<a href="\/campaigns\/c1\/journal\/n1">Your entry<\/a><span class="gnaud">Private<\/span><span class="who">You<\/span>/);
   assert.match(html, />Untitled note<\/a><span class="gnaud dm">GM only<\/span><span class="who">&lt;b&gt;Bryn&lt;\/b&gt;<\/span>/);
+  assert.match(html, /a player’s private entry stays private and is never read/);
   assert.doesNotMatch(html, /gnchk/, 'no check-in unless the server sent one');
-  v._gnPages['s1|2026-10-08'] = nightPage({ notes: [], checkIn: null });
-  assert.match(v._gnExtraHTML('s1', '2026-10-08'), /No notes were written during this night/);
+  v.canAuthorDmOnly = false; v.userId = 'p1';
+  assert.match(v._gnExtraHTML('s1', '2026-10-08'), /Share yours with the GM if you want the people you met counted/);
+  v._gnPages['s1|2026-10-08'] = nightPage({ entries: [], checkIn: null });
+  assert.match(v._gnExtraHTML('s1', '2026-10-08'), /No Journal entries for this night yet/);
 });
 
 test('the Director is asked who the players saw, with the line on request', () => {
@@ -799,8 +801,8 @@ test('the Director is asked who the players saw, with the line on request', () =
   v._gnPages = { 's1|2026-10-08': nightPage() };
   let html = v._gnExtraHTML('s1', '2026-10-08');
   assert.match(html, /<section class="eps gnchk" data-dm-only/, 'the amber DM-only block');
-  assert.match(html, /You mentioned Maudry and Brother Ansel in this night’s notes\. Did the players see them\?/);
-  assert.match(html, /In <a href="\/campaigns\/c1\/journal\/n1">At the mill<\/a>, 7:02pm, and 2 more notes\./);
+  assert.match(html, /Maudry and Brother Ansel came up in this night’s entries\. Did the players see them\?/);
+  assert.match(html, /In <a href="\/campaigns\/c1\/journal\/n1">At the mill<\/a>, and 2 more entries\./);
   assert.match(html, /data-gn-seen="seen" data-gn-ent="e1" aria-pressed="false"/);
   assert.match(html, /data-gn-chk="rest">Mark the rest not seen/);
   assert.doesNotMatch(html, /class="line"/, 'the line stays folded');
@@ -861,7 +863,7 @@ test('answering saves one night\'s sighting and undo clears it', async () => {
 });
 
 test('a night page is read for its own date', async () => {
-  const { def, calls } = load({ nights: () => ({ recap: '', links: [], night: { notes: [], checkIn: [] } }) });
+  const { def, calls } = load({ nights: () => ({ recap: '', links: [], night: { entries: [], checkIn: [] } }) });
   const v = view(def, [night()]);
   v._gnRedrawExtra = () => {};
   await v._gnLoadPage('s1', '2026-10-15');

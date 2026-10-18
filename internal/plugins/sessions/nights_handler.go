@@ -55,7 +55,7 @@ type nightPage struct {
 	Recap     string          `json:"recap"`
 	RecapHTML string          `json:"recapHtml"`
 	Links     []nightPageLink `json:"links"`
-	// Night is the notes written that night and the DM's check-in, sent
+	// Night is the night's Journal entries and the DM's check-in, sent
 	// when the page asks for one night by date.
 	Night *NightNotes `json:"night,omitempty"`
 }
@@ -73,8 +73,8 @@ type nightPageLink struct {
 // the calendar. Linked pages go through the same visibility filter as the
 // Sessions page (ADR-055 rule 3): a page the viewer can't open is absent,
 // not named.
-// With ?date= (one of the session's nights) it adds the notes written that
-// night and, for the DM, the check-in.
+// With ?date= (one of the session's nights) it adds the night's Journal
+// entries the viewer can read and, for the DM, the check-in.
 // GET /campaigns/:id/sessions/:sid/page[?date=YYYY-MM-DD]
 func (h *Handler) NightPageAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
@@ -90,33 +90,33 @@ func (h *Handler) NightPageAPI(c echo.Context) error {
 	for _, e := range visible {
 		out.Links = append(out.Links, nightPageLink{EntityID: e.EntityID, Name: e.EntityName, Slug: e.EntitySlug, Role: e.Role})
 	}
-	if date := c.QueryParam("date"); date != "" && h.nightNotes != nil {
-		night, err := h.nightNotes.ForNight(c.Request().Context(), session, date, sightingViewer(c), time.Now())
+	if date := c.QueryParam("date"); date != "" && h.nightEntries != nil {
+		night, err := h.nightEntries.ForNight(c.Request().Context(), session, date, sightingViewer(c), time.Now())
 		if err != nil {
 			return err
 		}
-		h.nameAuthors(c, night.Notes)
+		h.nameAuthors(c, night.Entries)
 		out.Night = night
 	}
 	return c.JSON(http.StatusOK, out)
 }
 
-// SetNightNotesService wires the notes written on a night and the check-in.
+// SetNightEntryService wires the night's Journal entries and the check-in.
 // Without it a night's page shows neither.
-func (h *Handler) SetNightNotesService(s NightNotesService) {
-	h.nightNotes = s
+func (h *Handler) SetNightEntryService(s NightEntryService) {
+	h.nightEntries = s
 }
 
-// nameAuthors fills each note's author name from the member list. A name
+// nameAuthors fills each entry's writer name from the member list. A name
 // that can't be read leaves the row unnamed rather than failing the page.
-func (h *Handler) nameAuthors(c echo.Context, rows []NightNoteRow) {
+func (h *Handler) nameAuthors(c echo.Context, rows []NightEntryView) {
 	if len(rows) == 0 || h.memberLister == nil {
 		return
 	}
 	cc := campaigns.GetCampaignContext(c)
 	list, err := h.memberLister.ListMembers(c.Request().Context(), cc.Campaign.ID)
 	if err != nil {
-		slog.Warn("naming night note authors", slog.Any("error", err))
+		slog.Warn("naming night entry writers", slog.Any("error", err))
 		return
 	}
 	names := make(map[string]string, len(list))

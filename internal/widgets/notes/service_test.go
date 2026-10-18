@@ -23,7 +23,6 @@ type mockNoteRepo struct {
 	listTreeFn             func(ctx context.Context, campaignID string) ([]TreeRow, error)
 	reparentToTopFn        func(ctx context.Context, ids []string) error
 	findByIDsFn            func(ctx context.Context, ids []string) ([]Note, error)
-	listWrittenBetweenFn func(ctx context.Context, campaignID string, v permissions.Viewer, from, to time.Time, limit int) ([]Note, error)
 	listVisibleLinkingFn   func(ctx context.Context, campaignID string, v permissions.Viewer, kind, targetID string) ([]Note, error)
 	listSharedByCampaignFn func(ctx context.Context, campaignID string) ([]Note, error)
 	acquireLockFn          func(ctx context.Context, noteID, userID string) (bool, error)
@@ -88,13 +87,6 @@ func (m *mockNoteRepo) FindByIDs(ctx context.Context, ids []string) ([]Note, err
 func (m *mockNoteRepo) ListVisibleLinking(ctx context.Context, campaignID string, v permissions.Viewer, kind, targetID string) ([]Note, error) {
 	if m.listVisibleLinkingFn != nil {
 		return m.listVisibleLinkingFn(ctx, campaignID, v, kind, targetID)
-	}
-	return nil, nil
-}
-
-func (m *mockNoteRepo) ListVisibleWrittenBetween(ctx context.Context, campaignID string, v permissions.Viewer, from, to time.Time, limit int) ([]Note, error) {
-	if m.listWrittenBetweenFn != nil {
-		return m.listWrittenBetweenFn(ctx, campaignID, v, from, to, limit)
 	}
 	return nil, nil
 }
