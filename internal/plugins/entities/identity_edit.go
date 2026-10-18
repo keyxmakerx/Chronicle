@@ -2,7 +2,9 @@ package entities
 
 import (
 	"encoding/json"
+	"fmt"
 	"sort"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -11,8 +13,9 @@ import (
 
 // identity_edit.go is the one narrow door that lets a Player-role member edit
 // a page the fields and metadata routes otherwise reserve for Scribes: their
-// own claimed character's identity. Everything outside this file still needs
-// Scribe, so widening the door means editing the constants below, nowhere else.
+// own claimed character's identity, and the picks the hero builder offers
+// them. Everything outside this file still needs Scribe, so widening the door
+// means editing this file, nowhere else.
 
 // maxOwnerIdentityValue bounds an identity value a player writes: a name such
 // as "Dragon Knight", never a document.
@@ -57,14 +60,48 @@ func CanEditIdentity(role campaigns.Role, entity *Entity, userID string) bool {
 	return role >= campaigns.RoleScribe || IsClaimedOwnerPlayer(role, entity, userID)
 }
 
+// builderPicks is what the hero builder lets a player choose: for each step's
+// field key, the names on that step's list, keyed by their lower-case form.
+type builderPicks map[string]map[string]bool
+
+// builderPicksFrom turns the campaign's creator plan, as a player sees it,
+// into builderPicks. A nil plan gives none, so the door stays at identity.
+func builderPicksFrom(plan *HeroPlan) builderPicks {
+	out := builderPicks{}
+	if plan == nil {
+		return out
+	}
+	for _, st := range plan.Steps {
+		names := make(map[string]bool, len(st.Choices))
+		for _, ch := range st.Choices {
+			names[strings.ToLower(strings.TrimSpace(ch.Name))] = true
+		}
+		out[st.FieldKey] = names
+	}
+	return out
+}
+
+// needsBuilderPicks reports whether a patch reaches past the identity keys,
+// so the handler loads the creator plan only when it can matter.
+func needsBuilderPicks(patch map[string]any) bool {
+	for k := range patch {
+		if !ownerIdentityFieldKeys[k] {
+			return true
+		}
+	}
+	return false
+}
+
 // authorizeFieldsWrite decides whether a fields PUT may proceed. Scribes pass
-// untouched. A claimed owner may send only fields_patch whose every key is in
-// ownerIdentityFieldKeys; fields_data replaces the whole map, so it is never
-// allowed to a Player, and one disallowed key rejects the whole request rather
-// than being silently dropped. A key the type marks GM-only is refused even if
-// allowlisted, since the owner may not see it, and each value must be a short
-// string or null so the narrow path cannot store anything else.
-func authorizeFieldsWrite(role campaigns.Role, entity *Entity, userID, campaignID string, hasFieldsData bool, patch map[string]any, typeFields []FieldDefinition) error {
+// untouched. A claimed owner may send only fields_patch; fields_data replaces
+// the whole map, so it is never allowed to a Player, and one disallowed key
+// rejects the whole request rather than being silently dropped. Each key must
+// be in ownerIdentityFieldKeys, which take short free text, or be a hero
+// builder step in picks, which takes only a name from that step's list, so a
+// player can choose their class but never type a stat into it. A key the type
+// marks GM-only is refused either way, since the owner may not see it, and
+// every value must be a string or null.
+func authorizeFieldsWrite(role campaigns.Role, entity *Entity, userID, campaignID string, hasFieldsData bool, patch map[string]any, typeFields []FieldDefinition, picks builderPicks) error {
 	if role >= campaigns.RoleScribe {
 		return nil
 	}
@@ -81,7 +118,8 @@ func authorizeFieldsWrite(role campaigns.Role, entity *Entity, userID, campaignI
 		}
 	}
 	for k, v := range patch {
-		if !ownerIdentityFieldKeys[k] || gmOnly[k] {
+		listed, isStep := picks[k]
+		if gmOnly[k] || (!ownerIdentityFieldKeys[k] && !isStep) {
 			return apperror.NewForbidden("you can only change your character's identity fields")
 		}
 		switch val := v.(type) {
@@ -89,6 +127,9 @@ func authorizeFieldsWrite(role campaigns.Role, entity *Entity, userID, campaignI
 		case string:
 			if utf8.RuneCountInString(val) > maxOwnerIdentityValue {
 				return apperror.NewBadRequest("that value is too long")
+			}
+			if !ownerIdentityFieldKeys[k] && !listed[strings.ToLower(strings.TrimSpace(val))] {
+				return apperror.NewBadRequest(fmt.Sprintf("%q is not on the %s list", val, k))
 			}
 		default:
 			return apperror.NewBadRequest("identity fields take text")
