@@ -2055,6 +2055,33 @@ func registerEncountersBlock(blockRegistry *entities.BlockRegistry) {
 	})
 }
 
+// registerWhereItIsBlock registers the "Where it is" block: the maps a page is
+// pinned on, closest first, read from Maps. It has no settings, because the
+// ladder is whatever the Director set in Maps, and one per page, because its
+// enlarged map is a single sheet. What a viewer is shown is decided by the
+// maps service from the pins they can see; the block adds no rule of its own.
+func registerWhereItIsBlock(blockRegistry *entities.BlockRegistry, mapsService maps.MapService) {
+	blockRegistry.Register(entities.BlockMeta{
+		Type: maps.WhereItIsBlockType, Label: "Where it is", Icon: "fa-map-location-dot",
+		Description: "The maps this page is pinned on, closest first, zooming out",
+		Addon:       "maps", Contexts: []string{"template"},
+		TileSizes: []string{"4x2", "2x2"},
+		Singleton: true,
+	}, func(rc entities.BlockRenderContext) templ.Component {
+		if rc.CC == nil || rc.CC.Campaign == nil || rc.Entity == nil {
+			return templ.NopComponent
+		}
+		role := rc.CC.VisibilityRole()
+		ladder, err := mapsService.WhereIs(context.Background(), rc.CC.Campaign.ID, rc.Entity.ID, role, rc.UserID)
+		if err != nil {
+			slog.Error("where it is: cannot read the page's place in the maps",
+				slog.String("entity_id", rc.Entity.ID), slog.Any("error", err))
+			return templ.NopComponent
+		}
+		return maps.BlockWhereItIs(rc.CC, rc.Entity.ID, rc.Entity.Name, ladder, permissions.CanSeeDmOnly(role))
+	})
+}
+
 // entityTypeListerForGraphAdapter wraps entities.EntityService to implement the
 // relations.EntityTypeListerForGraph interface for the graph filter dropdown.
 type entityTypeListerForGraphAdapter struct {
@@ -3701,6 +3728,7 @@ func (a *App) RegisterRoutes() {
 			{Name: "entity-map", Scripts: []string{"js/map_viewer.js", "js/map_focus.js", "js/entity_map.js"}},
 			{Name: "map-widget", Scripts: []string{"js/map_annotations.js", "js/map_shapes.js", "js/map_widget.js"}},
 			{Name: "map-block-picker", Scripts: []string{"js/map_block_picker.js"}},
+			{Name: "where-it-is", Scripts: []string{"js/where_it_is.js"}},
 		},
 	})
 	if a.PluginHealth.IsHealthy(maps.PluginSlug) {
@@ -4493,6 +4521,8 @@ func (a *App) RegisterRoutes() {
 		}
 		return renderBoundBlock(maps.WidgetTypeMap, rc, legacyID)
 	})
+
+	registerWhereItIsBlock(blockRegistry, mapsService)
 
 	// NPC gallery block — embeds a compact NPC grid on entity pages/dashboards.
 	blockRegistry.Register(entities.BlockMeta{

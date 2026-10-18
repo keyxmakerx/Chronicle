@@ -171,6 +171,7 @@
         '<tr><td>Harbourmaster Vell</td><td>The toll paid</td><td class="dm">Takes smugglers’ coin</td></tr><tr><td>Old Maudry</td><td>Her son home</td><td class="dm">He’s in the hold</td></tr></tbody></table>';
     },
     page_encounters: function () { return exHead('fa-dragon', 'Encounters') + exList([['Watch patrol', 'Medium · 4 foes', '#dc2626'], ['Dock rats', 'Easy · swarm', '#64748b']]); },
+    where_it_is: function () { return exHead('fa-map-location-dot', 'Where it is') + exList([['Common room', 'you are here', '#6366f1'], ['The Gilded Flagon', 'one step out', '#0d9488'], ['Port Varrow', 'the city', '#b45309']]); },
     divider: function () { return '<hr class="cpe-ex-hr">'; },
     map_full: function () { return '<div class="cpe-ex-img cpe-ex-map">' + EX_MAP + '</div>'; },
     local_graph: function () { return '<div class="cpe-ex-img cpe-ex-map">' + EX_MAP + '</div>'; },

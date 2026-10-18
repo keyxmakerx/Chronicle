@@ -1,0 +1,169 @@
+/*
+ * where_it_is.css: the entity page's "Where it is" block
+ * (internal/plugins/maps/where_is_block.templ, behaviour in
+ * internal/plugins/maps/static/js/where_it_is.js).
+ *
+ * Everything is scoped under .wi. Colours, edges and shadows come from the
+ * theme tokens, so the block follows light and dark and the page look. A
+ * picture has a full hairline edge, the leading accent edge marks "you are
+ * here", the leading amber edge marks what only the Director sees. The peek
+ * fades in with a 4px rise; the enlarged map grows from its card (the script
+ * animates it). Calm and Off are applied by the global motion guard in
+ * input.css and by the script, which reads html[data-motion].
+ */
+.wi {
+  --wi-line: var(--color-border-light, #e5e7eb);
+  --wi-line-strong: var(--color-border, #d1d5db);
+  --wi-hit: 32px;
+  --wi-dm: rgb(var(--color-warn-rgb, 217 119 6));
+  --wi-thumb-h: 70px;
+  position: relative;
+  min-width: 0;
+  container: wi / inline-size;
+  font-size: 14px;
+  color: var(--color-text-body, #374151);
+}
+@media (pointer: coarse) { .wi { --wi-hit: 44px; } }
+.wi *, .wi *::before, .wi *::after { box-sizing: border-box; }
+.wi [hidden] { display: none !important; }
+.wi :focus-visible { outline: 2px solid var(--color-accent, #6366f1); outline-offset: 2px; }
+.wi p { margin: 0; }
+
+/* Heading */
+.wi-h { display: flex; justify-content: space-between; align-items: baseline; gap: 6px 10px; flex-wrap: wrap; margin-bottom: 4px; }
+.wi-title { margin: 0; display: inline-flex; align-items: baseline; gap: 8px; font-size: 1.125rem; font-weight: 600; color: var(--color-text-primary, #111827); }
+.wi-title > i { color: var(--color-accent, #6366f1); font-size: .8em; }
+.wi-cnt {
+  display: inline-block; font-size: 11px; font-weight: 600; line-height: 18px; padding: 0 7px; border-radius: 999px;
+  background: var(--color-bg-tertiary, #f3f4f6); color: var(--color-text-muted, #6b7280); font-variant-numeric: tabular-nums;
+}
+.wi-dir { font-size: 12.5px; color: var(--color-text-muted, #6b7280); }
+
+/* The row of maps */
+.wi-wrap { position: relative; }
+.wi-scroller { overflow-x: auto; overflow-y: hidden; margin: 0 -4px; padding: 10px 4px 8px; scroll-snap-type: x proximity; scrollbar-width: thin; }
+.wi-lad { list-style: none; margin: 0; padding: 0; display: flex; align-items: flex-start; }
+.wi-cell { display: flex; align-items: flex-start; flex: 1 1 0; min-width: 112px; max-width: 196px; scroll-snap-align: start; }
+.wi-chev { flex: none; width: 20px; height: var(--wi-thumb-h); display: grid; place-items: center; color: var(--color-text-muted, #6b7280); font-size: 11px; }
+.wi-cell:first-child .wi-chev { display: none; }
+.wi-mc {
+  flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 6px; text-align: left; font: inherit; color: inherit;
+  background: none; border: 0; padding: 0; cursor: pointer; border-radius: 12px; min-height: var(--wi-hit);
+  transition: transform var(--dur-standard, 200ms) var(--ease-out, ease-out);
+}
+.wi-mc:active { transform: scale(.97); transition-duration: 60ms; }
+.wi-thumb {
+  display: block; position: relative; aspect-ratio: 240 / 168; container-type: size; overflow: hidden; line-height: 0;
+  border-radius: 12px; border: 1px solid var(--wi-line); background: var(--color-bg-tertiary, #f3f4f6);
+  box-shadow: var(--elev-resting, none); transition: box-shadow var(--dur-standard, 200ms) var(--ease-out, ease-out);
+}
+.wi-mc:hover .wi-thumb { box-shadow: var(--elev-hover, none); }
+.wi-mc:active .wi-thumb { box-shadow: inset 0 2px 4px rgb(0 0 0 / .18); }
+.wi-mc[aria-expanded="true"] .wi-thumb { border-color: var(--color-accent, #6366f1); }
+/* The picture box has the picture's own shape, so a spot in percent lands on
+   the same place of the map whatever the frame around it. */
+.wi-fit {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); aspect-ratio: var(--ar, 1.4286);
+  width: min(100cqw, calc(100cqh * var(--ar, 1.4286)));
+}
+.wi-fit img { display: block; width: 100%; height: 100%; object-fit: fill; }
+.wi-noimg { position: absolute; inset: 0; display: grid; place-items: center; font-size: 22px; color: var(--color-text-muted, #6b7280); opacity: .6; }
+.wi-ring {
+  position: absolute; width: 26px; height: 26px; margin: -13px 0 0 -13px; border-radius: 50%;
+  border: 1.6px dashed var(--color-accent, #6366f1); background: rgb(var(--color-accent-rgb, 99 102 241) / .12); opacity: .7;
+  transition: opacity var(--dur-micro, 120ms), transform var(--dur-standard, 200ms) var(--ease-out, ease-out);
+}
+.wi-pin {
+  position: absolute; width: 14px; height: 16px; margin: -15px 0 0 -7px; display: grid; place-items: center; font-size: 15px; line-height: 1;
+  color: var(--color-accent, #6366f1); filter: drop-shadow(0 1px 1px rgb(0 0 0 / .45)); transform-origin: 50% 100%;
+  transition: transform var(--dur-standard, 200ms) var(--ease-out, ease-out);
+}
+.wi-hot .wi-ring { opacity: 1; transform: scale(1.18); }
+.wi-hot .wi-pin { transform: scale(1.35); }
+
+/* Caption: name, then "You are here" and the DM tag */
+.wi-cp { display: grid; padding: 1px 0 1px 8px; min-width: 0; }
+.wi-nm { font-size: 13px; font-weight: 600; line-height: 1.3; color: var(--color-text-primary, #111827); overflow-wrap: anywhere; }
+.wi-kd { display: flex; flex-wrap: wrap; align-items: center; gap: 0 6px; }
+.wi-cp.wi-here { box-shadow: inset 2px 0 0 var(--color-accent, #6366f1); }
+.wi-cp.wi-dm { box-shadow: inset 3px 0 0 color-mix(in srgb, var(--wi-dm) 70%, transparent); }
+.wi-hereword { font-size: 11.5px; font-weight: 600; color: var(--color-accent, #6366f1); }
+.wi-dmtag { font-size: 10px; font-weight: 600; letter-spacing: .06em; line-height: 1.6; padding: 0 5px; border-radius: 4px; color: var(--wi-dm); background: color-mix(in srgb, var(--wi-dm) 14%, transparent); display: inline-block; }
+
+/* Hint and notes */
+.wi-hint { min-height: 21px; margin-top: 2px; font-size: 12.5px; color: var(--color-text-muted, #6b7280); }
+.wi-hint b { color: var(--color-text-primary, #111827); font-weight: 600; }
+.wi-note { font-size: 12.5px; color: var(--color-text-muted, #6b7280); display: flex; align-items: baseline; gap: 8px; }
+.wi-dmline, .wi-pdm {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 10px; padding: 6px 10px; margin: 2px -10px 0; border-radius: 8px; font-size: 13px;
+  color: var(--color-text-primary, #111827); box-shadow: inset 3px 0 0 color-mix(in srgb, var(--wi-dm) 70%, transparent);
+}
+.wi-also { display: flex; flex-wrap: wrap; align-items: center; gap: 0 8px; margin-top: 6px; font-size: 13px; color: var(--color-text-muted, #6b7280); }
+.wi-sep { color: var(--wi-line-strong); }
+.wi-lnk {
+  display: inline-flex; align-items: center; gap: 6px; min-height: var(--wi-hit); padding: 0 2px; border-radius: 4px; background: none; border: 0; cursor: pointer;
+  font: inherit; font-weight: 500; color: var(--color-accent, #6366f1); text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--color-accent, #6366f1) 40%, transparent); text-underline-offset: 3px;
+  transition: color var(--dur-micro, 120ms);
+}
+.wi-lnk:hover { color: var(--color-text-primary, #111827); }
+
+/* Peek: a slightly bigger preview that fades in with a 4px rise */
+.wi-peek {
+  position: absolute; z-index: 4; top: 0; left: 0; width: 252px; padding: 8px; pointer-events: none;
+  background: var(--color-card-bg, #fff); border: 1px solid var(--wi-line); border-radius: 12px; box-shadow: var(--elev-hover, none);
+  opacity: 0; visibility: hidden; transform: translateY(4px);
+  transition: opacity var(--dur-micro, 120ms), transform var(--dur-micro, 120ms) var(--ease-out, ease-out), visibility 0s linear var(--dur-micro, 120ms);
+}
+.wi-peek.wi-open { opacity: 1; visibility: visible; transform: none; transition-delay: 0s; }
+.wi-peek .wi-thumb { border-radius: 8px; box-shadow: none; }
+.wi-ptt { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 8px 2px 0; color: var(--color-text-primary, #111827); }
+.wi-ptt b { font-size: 14px; font-weight: 600; }
+.wi-peek p { margin: 2px; font-size: 12.5px; color: var(--color-text-muted, #6b7280); }
+
+/* The enlarged map: a sheet laid over the page from its card */
+.wi-panel {
+  position: absolute; z-index: 6; top: 0; left: 0; right: 0; transform-origin: 0 0; padding: 16px;
+  display: grid; grid-template-columns: minmax(0, 340px) minmax(0, 1fr); gap: 20px;
+  background: var(--color-card-bg, #fff); border: 1px solid var(--wi-line); border-radius: 12px; box-shadow: var(--elev-dragged, 0 10px 30px rgb(0 0 0 / .25));
+}
+.wi-pmap { align-self: start; }
+.wi-pmap .wi-thumb { border-radius: 12px; box-shadow: none; }
+.wi-pside { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.wi-phead { padding-right: calc(var(--wi-hit) + 4px); min-height: var(--wi-hit); }
+.wi-lab { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--color-accent, #6366f1); }
+.wi-pn { margin: 2px 0 0; font-size: 20px; font-weight: 600; line-height: 1.15; color: var(--color-text-primary, #111827); overflow-wrap: anywhere; }
+.wi-pabout { color: var(--color-text-body, #374151); }
+.wi-pdl { margin: 0; display: grid; }
+.wi-pdl div { display: grid; grid-template-columns: 7rem minmax(0, 1fr); gap: 10px; padding: 6px 0; border-top: 1px solid var(--wi-line); font-size: 13px; }
+.wi-pdl dt { color: var(--color-text-muted, #6b7280); }
+.wi-pdl dd { margin: 0; color: var(--color-text-primary, #111827); overflow-wrap: anywhere; }
+.wi-pact { display: flex; align-items: center; gap: 8px; margin-top: auto; flex-wrap: wrap; }
+.wi-grow { flex: 1; }
+.wi-close { position: absolute; top: 8px; right: 8px; }
+.wi-ibtn {
+  display: inline-grid; place-items: center; width: var(--wi-hit); height: var(--wi-hit); flex: none; border: 0; border-radius: 8px; background: none; cursor: pointer;
+  color: var(--color-text-muted, #6b7280); font-size: 14px;
+  transition: background-color var(--dur-micro, 120ms), color var(--dur-micro, 120ms), transform var(--dur-standard, 200ms) var(--ease-out, ease-out);
+}
+.wi-ibtn:hover { background: var(--color-bg-tertiary, #f3f4f6); color: var(--color-text-primary, #111827); }
+.wi-ibtn:active { transform: scale(.94); transition-duration: 60ms; }
+.wi-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: var(--wi-hit); padding: 0 13px; border-radius: 8px; cursor: pointer;
+  font: inherit; font-size: 13px; font-weight: 500; text-decoration: none; border: 1px solid var(--wi-line-strong);
+  background: var(--color-card-bg, #fff); color: var(--color-text-primary, #111827); box-shadow: var(--elev-resting, none);
+  transition: background-color var(--dur-micro, 120ms), transform var(--dur-standard, 200ms) var(--ease-out, ease-out), box-shadow var(--dur-standard, 200ms) var(--ease-out, ease-out);
+}
+.wi-btn:hover { box-shadow: var(--elev-hover, none); }
+.wi-btn:active { transform: scale(.96); box-shadow: inset 0 2px 4px rgb(0 0 0 / .18); transition-duration: 60ms; }
+.wi-pri { background: var(--color-accent, #6366f1); border-color: var(--color-accent, #6366f1); color: #fff; }
+.wi-pri:hover { background: var(--color-accent-hover, #4f46e5); }
+
+/* A narrow block (a phone, or a small tile) lays the sheet out in one column */
+@container wi (max-width: 560px) {
+  .wi-panel { grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 12px; }
+  .wi-phead { padding-top: 0; }
+  .wi-cell { flex: 0 0 132px; min-width: 0; }
+  .wi-peek { width: 236px; }
+}
+@media (pointer: coarse) { .wi-cell { scroll-snap-type: x proximity; } }
