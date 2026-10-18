@@ -272,6 +272,42 @@ func TestViewNav_AppsNeedAccessAndMustBeOn(t *testing.T) {
 	}
 }
 
+// An app with nothing the viewer may see is left out of their sidebar; the
+// owner keeps it so they can fill it.
+func TestViewNav_EmptyAppsReachOnlyTheOwner(t *testing.T) {
+	apps := navTestApps()
+	for i := range apps {
+		if apps[i].Slug == "dates" {
+			apps[i].Empty = true
+		}
+	}
+	layout := NormalizeNav(nil, apps, navTestCats())
+	tests := []struct {
+		name   string
+		viewer NavViewer
+		want   bool
+	}{
+		{"owner keeps an empty app", NavViewer{Owner: true, Access: NavAccessMember}, true},
+		{"a member does not get it", NavViewer{Access: NavAccessMember}, false},
+		{"a site admin looking in does not get it", NavViewer{Access: NavAccessMemberOrAdmin}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := false
+			for _, s := range ViewNav(layout, apps, navTestCats(), tt.viewer) {
+				for _, r := range s.Rows {
+					if r.Key == "app:dates" {
+						got = true
+					}
+				}
+			}
+			if got != tt.want {
+				t.Errorf("empty app shown = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestViewNav_PersonalPins(t *testing.T) {
 	layout := NormalizeNav(nil, navTestApps(), navTestCats())
 	hiddenLayout := NormalizeNav([]SidebarItem{{Type: "category", TypeID: 3, Visible: false}}, navTestApps(), navTestCats())

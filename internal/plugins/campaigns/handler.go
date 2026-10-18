@@ -177,6 +177,7 @@ func NewHandler(service CampaignService) *Handler {
 	// The look is the campaign's own data, so it registers here and always
 	// applies first; other plugins register their sections after it.
 	h.RegisterCustomizeSection(CustomizeSection{Key: customizeSectionLook, Apply: h.applyLookSection})
+	h.RegisterCustomizeSection(CustomizeSection{Key: customizeSectionHomes, Apply: h.applyHomesSection})
 	return h
 }
 
@@ -818,18 +819,32 @@ func (h *Handler) SidebarDrill(c echo.Context) error {
 
 // --- Dashboard Layout ---
 
+// homeAudienceParam reads ?role= (default when absent) and refuses a name that
+// isn't a home audience, so a typo can't overwrite the Default home.
+func homeAudienceParam(c echo.Context) (string, error) {
+	roleName := c.QueryParam("role")
+	if roleName == "" {
+		roleName = HomeDefault
+	}
+	if !ValidHomeAudience(roleName) {
+		return "", apperror.NewBadRequest("unknown home: " + roleName)
+	}
+	return roleName, nil
+}
+
 // GetDashboardLayout returns the current dashboard layout as JSON (GET /campaigns/:id/dashboard-layout).
-// Supports ?role= query param (default/player/scribe) for role-specific layouts.
-// Returns null if no custom layout is set (meaning the default is in use).
+// Supports ?role= (default/player/scribe/director/guest). With nothing saved
+// for that audience it returns the layout the audience sees instead, so the
+// editor opens on the real page; X-Layout-Saved says which it is.
 func (h *Handler) GetDashboardLayout(c echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
 
-	roleName := c.QueryParam("role")
-	if roleName == "" {
-		roleName = "default"
+	roleName, err := homeAudienceParam(c)
+	if err != nil {
+		return err
 	}
 
 	// Fetch campaign to access the raw dashboard_layout JSON.
@@ -838,28 +853,22 @@ func (h *Handler) GetDashboardLayout(c echo.Context) error {
 		return err
 	}
 
-	layout := campaign.GetRoleDashboardJSON(roleName)
-	// When no layout is saved for this role, hand the editor the
-	// synthesized default — same structure the live page renders so the
-	// operator can immediately drag/edit/delete the pre-populated blocks
-	// instead of staring at an empty canvas.
-	if layout == nil {
-		layout = DefaultDashboardLayout()
-	}
+	layout, saved := campaign.HomeLayout(roleName)
+	c.Response().Header().Set("X-Layout-Saved", strconv.FormatBool(saved))
 	return c.JSON(http.StatusOK, layout)
 }
 
 // UpdateDashboardLayout saves a new dashboard layout (PUT /campaigns/:id/dashboard-layout).
-// Supports ?role= query param (default/player/scribe) to update a specific role's layout.
+// Supports ?role= (default/player/scribe/director/guest) to update one audience's layout.
 func (h *Handler) UpdateDashboardLayout(c echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
 
-	roleName := c.QueryParam("role")
-	if roleName == "" {
-		roleName = "default"
+	roleName, err := homeAudienceParam(c)
+	if err != nil {
+		return err
 	}
 
 	var layout DashboardLayout
@@ -891,17 +900,17 @@ func (h *Handler) UpdateDashboardLayout(c echo.Context) error {
 }
 
 // ResetDashboardLayout removes the custom dashboard layout (DELETE /campaigns/:id/dashboard-layout).
-// Supports ?role= query param. If "default", resets entire layout. If "player"/"scribe",
-// removes only that role's override.
+// Supports ?role=. If "default", resets entire layout; any other audience
+// removes only its own layout.
 func (h *Handler) ResetDashboardLayout(c echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
 
-	roleName := c.QueryParam("role")
-	if roleName == "" {
-		roleName = "default"
+	roleName, err := homeAudienceParam(c)
+	if err != nil {
+		return err
 	}
 
 	// For "default" reset with no role param, clear the entire column.
@@ -1005,6 +1014,17 @@ func (h *Handler) ResetOwnerDashboardLayout(c echo.Context) error {
 // viewAsPlayerCookie is the cookie name for the "view as player" display toggle.
 const viewAsPlayerCookie = "chronicle_view_as_player"
 
+// ViewingAsPlayer reports whether an owner has "view as player" on. Handlers
+// read it themselves because the layout context that also carries it is
+// only filled in when a page renders. Display only: never use it to grant.
+func ViewingAsPlayer(c echo.Context, cc *CampaignContext) bool {
+	if cc == nil || cc.MemberRole < RoleOwner {
+		return false
+	}
+	cookie, err := c.Cookie(viewAsPlayerCookie)
+	return err == nil && cookie.Value == "1"
+}
+
 // ToggleViewAsPlayer toggles the "view as player" cookie for campaign owners
 // (POST /campaigns/:id/toggle-view-mode). When active, templates render as
 // if the owner has the Player role -- hiding owner-only UI and private entities.
@@ -1083,6 +1103,7 @@ func (h *Handler) Members(c echo.Context) error {
 		for i := range members {
 			members[i].AvatarPath = resolveAvatarPath(mediaCtx, members[i].AvatarPath)
 		}
+		redactMemberEmails(members, cc.MemberRole, auth.GetUserID(c))
 		return c.JSON(http.StatusOK, members)
 	}
 
@@ -1096,6 +1117,21 @@ func (h *Handler) Members(c echo.Context) error {
 		return err
 	}
 	return h.renderPeoplePage(c, cc, members, "")
+}
+
+// redactMemberEmails blanks email addresses for viewers below Owner, except
+// the viewer's own. The member list is open to every member for mentions and
+// pickers, which need display names only; addresses are the owner's
+// People-page data.
+func redactMemberEmails(members []CampaignMember, viewer Role, viewerID string) {
+	if viewer >= RoleOwner {
+		return
+	}
+	for i := range members {
+		if viewerID == "" || members[i].UserID != viewerID {
+			members[i].Email = ""
+		}
+	}
 }
 
 // renderPeoplePage renders the People page. The add-member error path shares

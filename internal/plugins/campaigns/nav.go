@@ -72,6 +72,9 @@ type NavApp struct {
 	// DefaultPinned starts the app in Pinned for a campaign whose owner has
 	// never arranged the sidebar; every other app starts in Apps.
 	DefaultPinned bool
+	// Empty marks an app with nothing this viewer may see (every calendar
+	// hidden from them, say). Only the owner, who can fill it, still gets it.
+	Empty bool
 }
 
 // NavCategory is a top-level category and its sub-categories.
@@ -492,7 +495,8 @@ func navSectionTitle(s NavLayoutSection) string {
 
 // ViewNav cuts a layout down to what one viewer's sidebar shows. A row hidden
 // from players is kept only for an owner, and marked. An app is kept only
-// when it is turned on and the viewer may open its page, and a link only when
+// when it is turned on, the viewer may open its page and, unless they own the
+// campaign, it holds something they may see; a link only when
 // its target is safe to follow. A non-owner's own pins then move their rows
 // into Pinned, after the campaign's pins, so no row is ever shown twice.
 func ViewNav(layout NavLayout, apps []NavApp, cats []NavCategory, viewer NavViewer) []NavSection {
@@ -582,7 +586,7 @@ func navRowFor(it NavLayoutItem, apps map[string]NavApp, cats map[int]NavCategor
 	switch kind {
 	case NavRowApp:
 		a, found := apps[ref]
-		if !found || !a.Enabled || viewer.Access < a.Access || a.URL == "" {
+		if !found || !a.Enabled || viewer.Access < a.Access || a.URL == "" || (a.Empty && !viewer.Owner) {
 			return NavRow{}, false
 		}
 		return NavRow{

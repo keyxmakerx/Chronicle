@@ -58,6 +58,9 @@ type EntityTypeRepository interface {
 	// tie-safe — the ordering surfaced in the parent's +New variant picker and
 	// aggregated listing, which both read ORDER BY sort_order, name.
 	ResequenceChildTypes(ctx context.Context, campaignID string, orderedIDs []int) error
+	// UpdatePlacement writes a type's position, default flag and on/off state,
+	// which no edit form changes; a campaign import restores them.
+	UpdatePlacement(ctx context.Context, id, sortOrder int, isDefault, enabled bool) error
 	SeedDefaults(ctx context.Context, campaignID string) error
 	SeedFromTypes(ctx context.Context, campaignID string, types []EntityType) error
 }
@@ -583,6 +586,18 @@ func (r *entityTypeRepository) SlugExists(ctx context.Context, campaignID, slug 
 	return exists, nil
 }
 
+// UpdatePlacement writes sort_order, is_default and enabled for one type.
+func (r *entityTypeRepository) UpdatePlacement(ctx context.Context, id, sortOrder int, isDefault, enabled bool) error {
+	result, err := r.db.ExecContext(ctx,
+		`UPDATE entity_types SET sort_order = ?, is_default = ?, enabled = ? WHERE id = ?`,
+		sortOrder, isDefault, enabled, id,
+	)
+	if err != nil {
+		return fmt.Errorf("updating entity type placement: %w", err)
+	}
+	return r.changedOrExists(ctx, result, id)
+}
+
 // MaxSortOrder returns the highest sort_order value for entity types in a campaign.
 // Returns 0 if the campaign has no entity types.
 func (r *entityTypeRepository) MaxSortOrder(ctx context.Context, campaignID string) (int, error) {
@@ -806,6 +821,11 @@ type EntityRepository interface {
 	// pointer to clear (unassign). Service-level callers are responsible
 	// for verifying the new owner is a campaign member.
 	UpdateOwner(ctx context.Context, entityID string, ownerUserID *string) error
+
+	// ClaimOwner makes userID the owner only if the entity is unowned or
+	// already theirs, in one statement, so two players claiming the same
+	// character at once cannot both win. Reports whether userID owns it after.
+	ClaimOwner(ctx context.Context, entityID, userID string) (bool, error)
 
 	// SetPlayable marks or unmarks an entity as one a player may play.
 	SetPlayable(ctx context.Context, entityID string, playable bool) error
@@ -1546,6 +1566,28 @@ func (r *entityRepository) UpdateOwner(ctx context.Context, entityID string, own
 		return fmt.Errorf("updating entity owner: %w", err)
 	}
 	return nil
+}
+
+// ClaimOwner is UpdateOwner guarded by the current owner. The driver reports
+// changed rows, not matched ones, so a claim that changes nothing (already the
+// caller's) reads back the owner rather than counting as a loss.
+func (r *entityRepository) ClaimOwner(ctx context.Context, entityID, userID string) (bool, error) {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE entities SET owner_user_id = ?, playable = 1, updated_at = NOW()
+		 WHERE id = ? AND (owner_user_id IS NULL OR owner_user_id = ?)`,
+		userID, entityID, userID)
+	if err != nil {
+		return false, fmt.Errorf("claiming entity: %w", err)
+	}
+	if n, err := res.RowsAffected(); err == nil && n > 0 {
+		return true, nil
+	}
+	var owner sql.NullString
+	err = r.db.QueryRowContext(ctx, `SELECT owner_user_id FROM entities WHERE id = ?`, entityID).Scan(&owner)
+	if err != nil {
+		return false, fmt.Errorf("reading entity owner after claim: %w", err)
+	}
+	return owner.Valid && owner.String == userID, nil
 }
 
 // SetPlayable sets entities.playable.

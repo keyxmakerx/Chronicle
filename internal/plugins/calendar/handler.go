@@ -90,6 +90,12 @@ func (h *Handler) PreviewUpcomingEvents(c echo.Context) error {
 	if err != nil {
 		var ae *apperror.AppError
 		if errors.As(err, &ae) && ae.Code == http.StatusNotFound {
+			// Only the owner is told none is set up. Anyone else may just
+			// have every calendar hidden from them, so they get an empty
+			// body and the card holding the fragment removes itself.
+			if cc.MemberRole < campaigns.RoleOwner {
+				return c.HTML(http.StatusOK, "")
+			}
 			return middleware.Render(c, http.StatusOK, UpcomingEventsEmbed(cc, nil, nil))
 		}
 		return err

@@ -20,12 +20,16 @@ merriweather|Merriweather|ital,wght@0,400;0,700;1,400
 cinzel|Cinzel|wght@600
 marcellus|Marcellus|wght@400
 imfell|IM+Fell+English|wght@400
-cormorant|Cormorant+Garamond|wght@600
-fraunces|Fraunces|wght@600
+cormorant|Cormorant+Garamond|ital,wght@0,600;1,500
+fraunces|Fraunces|ital,wght@0,600;1,500
 playfair|Playfair+Display|wght@600
 josefin|Josefin+Sans|wght@600
 chakra|Chakra+Petch|wght@600
-oswald|Oswald|wght@500;600'
+oswald|Oswald|wght@500;600
+ebgaramond|EB+Garamond|ital,wght@0,400;0,500;1,400
+nunito|Nunito|wght@400;600;700
+jost|Jost|wght@300;400;500
+kalam|Kalam|wght@400;700'
 
 CSS_DIR=$(mktemp -d); trap 'rm -rf "$CSS_DIR"' EXIT
 while IFS='|' read -r id fam axes; do

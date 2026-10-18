@@ -1,0 +1,135 @@
+// last_seen_block.templ renders the entity page's "Last seen" block: one quiet
+// line saying when the party last met this page, with a count of nights. A
+// click grows a sheet out of the line that lists every night, newest first.
+//
+// The server renders the line and the sheet's empty shell for the viewer;
+// static/js/last_seen.js fetches the list when the sheet opens and fills it
+// with textContent, so a session name never reaches innerHTML. Every handler
+// on the shell is an inline IIFE (lastSeenCall) so the block works after an
+// HTMX swap.
+//
+// What only the Director sees is marked data-dm-only and is not rendered for
+// anyone else: the suggestions bar, "Add a sighting" and the Director's
+// review count. A player's block therefore has no gap where they would be.
+package sessions
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+templ lastSeenStyles() {
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/css/last_seen.css") }/>
+}
+
+// BlockLastSeen renders the block. The caller has already decided it should
+// draw (ShowLastSeen), so this renders unconditionally.
+templ BlockLastSeen(campaignID, entityID, entityName, userID string, v LastSeenView, dm bool) {
+	@lastSeenStyles()
+	<section
+		class="ls"
+		data-widget="last-seen"
+		data-campaign={ campaignID }
+		data-entity={ entityID }
+		data-entity-name={ entityName }
+		data-user={ userID }
+		data-dm={ lastSeenDigit(dm) }
+		aria-label="Last seen"
+	>
+		<div class="ls-wrap">
+			<div class="ls-line" onclick={ lastSeenCall("toggle") }>
+				<span class="ls-lab">Last seen</span>
+				<b class="ls-what" data-ls-what>{ v.What }</b>
+				<span class="ls-when" data-ls-when>
+					if v.When != "" {
+						{ v.When }
+					}
+				</span>
+				if dm {
+					<span class="ls-rev" data-dm-only data-ls-rev>
+						if v.Review > 0 {
+							<span class="ls-dmtag">DM</span>
+							{ fmt.Sprintf("%d to review", v.Review) }
+						}
+					</span>
+				}
+				<button
+					type="button"
+					class="ls-more"
+					aria-expanded="false"
+					aria-controls={ "ls-sheet-" + entityID }
+					aria-label={ nightsLabel(v.Seen) + " seen, open the list" }
+					data-ls-tog
+				>
+					<span data-ls-count>{ nightsLabel(v.Seen) }</span>
+					<i class="fa-solid fa-chevron-down ls-chev" aria-hidden="true"></i>
+				</button>
+			</div>
+			<div class="ls-drape" id={ "ls-sheet-" + entityID } role="region" aria-label={ "Every night " + entityName + " was seen" }>
+				<div class="ls-sheet">
+					<div class="ls-c">
+						<div class="ls-dh">
+							<div class="ls-dh1">
+								<span class="ls-lab">Game nights</span>
+								<span class="ls-sm" data-ls-sum></span>
+								<span class="ls-seg" role="group" aria-label="Which nights">
+									<button type="button" data-v="seen" aria-pressed="true" onclick={ lastSeenModeCall("seen") }>Only seen</button>
+									<button type="button" data-v="all" aria-pressed="false" onclick={ lastSeenModeCall("all") }>Every night</button>
+								</span>
+							</div>
+							<div class="ls-strip" role="group" aria-label="Game nights, newest first"></div>
+							<div class="ls-ends"><span>Newest</span><span>Oldest</span></div>
+							<div class="ls-tip" role="tooltip"></div>
+						</div>
+						if dm {
+							<div class="ls-dmbar" data-dm-only data-ls-dmbar>
+								<button type="button" class="ls-q" aria-expanded="false" data-ls-sugtog onclick={ lastSeenCall("suggestions") } hidden>
+									<span class="ls-dmtag">DM</span>
+									<span data-ls-suglbl></span>
+									<i class="fa-solid fa-chevron-down ls-chev" aria-hidden="true"></i>
+								</button>
+								<span class="ls-none" data-ls-nosug hidden><span class="ls-dmtag">DM</span> No other nights mention this page</span>
+								<button type="button" class="ls-q ls-sp" aria-expanded="false" aria-haspopup="dialog" data-ls-addopen onclick={ lastSeenCall("addOpen") }>
+									<i class="fa-solid fa-plus" aria-hidden="true"></i>Add a sighting
+								</button>
+							</div>
+						}
+						<div class="ls-scroll" tabindex="0" aria-label="Nights, newest first" aria-live="polite"></div>
+						<div class="ls-foot">
+							<span class="ls-sm">Newest first</span>
+							<button type="button" class="ls-btn ls-ghost" data-ls-close onclick={ lastSeenCall("close") }>
+								<i class="fa-solid fa-xmark" aria-hidden="true"></i> Close
+							</button>
+						</div>
+					</div>
+				</div>
+			</div>
+			if dm {
+				<form class="ls-addf" data-dm-only data-ls-addf role="dialog" aria-label="Add a sighting" novalidate onsubmit={ lastSeenCall("addSave") }>
+					<div class="ls-af-in">
+						<div class="ls-af-h">
+							<span class="ls-lab">Add a sighting</span>
+							<span class="ls-dmtag">DM</span>
+							<button type="button" class="ls-btn ls-ghost" aria-label="Close the form" data-ls-addx onclick={ lastSeenCall("addClose") }>
+								<i class="fa-solid fa-xmark" aria-hidden="true"></i>
+							</button>
+						</div>
+						<label class="ls-af-l">Which night<select data-ls-night></select></label>
+						<div class="ls-af-f">
+							<span class="ls-sm">Counts as seen.</span>
+							<button type="button" class="ls-btn ls-ghost" data-ls-addx onclick={ lastSeenCall("addClose") }>Cancel</button>
+							<button type="submit" class="ls-btn ls-pri" data-ls-addgo>Save</button>
+						</div>
+					</div>
+				</form>
+			}
+		</div>
+	</section>
+}
+
+func lastSeenDigit(b bool) string {
+	if b {
+		return "1"
+	}
+	return "0"
+}

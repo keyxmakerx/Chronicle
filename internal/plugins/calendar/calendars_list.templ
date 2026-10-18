@@ -109,17 +109,18 @@ func calendarsSubtitle(cals []Calendar) string {
 	return fmt.Sprintf("%d calendars · no main calendar set", len(cals))
 }
 
-// calendarsEmptyState renders when a campaign has no calendars yet.
+// calendarsEmptyState renders when the viewer can see no calendar. For anyone
+// but the owner that may mean every calendar is hidden from them, so it never
+// claims there is none.
 templ calendarsEmptyState(data CalendarsListData) {
 	<div class="calv5-empty">
-		<p style="font:500 15px var(--serif, serif);color:var(--ink);margin:0 0 4px">No calendars yet</p>
-		<p style="margin:0">
-			if data.IsOwner {
-				Start from a preset or import one from Simple Calendar, Calendaria or a Chronicle export.
-			} else {
-				The campaign owner hasn't set up a calendar yet.
-			}
-		</p>
+		if data.IsOwner {
+			<p style="font:500 15px var(--serif, serif);color:var(--ink);margin:0 0 4px">No calendars yet</p>
+			<p style="margin:0">Start from a preset or import one from Simple Calendar, Calendaria or a Chronicle export.</p>
+		} else {
+			<p style="font:500 15px var(--serif, serif);color:var(--ink);margin:0 0 4px">No calendars shared with you</p>
+			<p style="margin:0">When the Director shares a calendar with you, it shows here.</p>
+		}
 	</div>
 }
 

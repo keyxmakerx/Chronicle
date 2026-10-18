@@ -1,15 +1,18 @@
 /**
- * customize_page_editor.js: Customize's page editor, a category's Page
- * layout tab (entity_type_customize_tab.templ).
+ * customize_page_editor.js: the Customizer's page layout, for a category's
+ * Page layout and Category home tabs (entity_type_customize_tab.templ, scope
+ * "cathome" for the home) and for each of the campaign's homes (Customize >
+ * Home pages, scope "home").
  *
- * It draws the category's page layout on one of the category's own pages:
- * each widget's content is that page's, drawn by the server
- * (POST .../layout-preview) and shown inert, so nothing here can open, edit
- * or save the page itself. The owner adds, moves and sizes widgets in
- * sections of columns or of tiles (internal/tilegrid), and every change goes
- * into the one Customize draft as the category's `layout`, through
- * Chronicle.customizeCategoryWrite (customize_categories.js). Save applies it
- * with the checks any layout save runs.
+ * It draws a category's page layout on one of the category's own pages, or a
+ * home as that home draws it: each widget's content is drawn by the server
+ * (POST .../layout-preview or .../home-preview) and shown inert, so nothing
+ * here can open, edit or save the page itself. The owner adds, moves and
+ * sizes widgets in sections of columns or of tiles (internal/tilegrid), and
+ * every change goes into the one Customize draft: a category's `layout`,
+ * `home` and `description` through Chronicle.customizeCategoryWrite
+ * (customize_categories.js), a campaign home's in the draft's "homes"
+ * section. Save applies it with the checks any layout save runs.
  *
  * Old container widgets (two columns, tabs, section) stay one unit with their
  * contents. Pages cannot draw them, so the editor offers to unpack them.
@@ -124,7 +127,7 @@
         if ((k === 'href' || k === 'src') && /^\s*javascript:/i.test(a.value)) n.removeAttribute(a.name);
       });
     });
-    var shows = root.textContent.replace(/\s+/g, '') !== '' || !!root.querySelector('img, svg, canvas, video, picture');
+    var shows = root.textContent.replace(/\s+/g, '') !== '' || !!root.querySelector('img, svg, canvas, video, picture, input, select, textarea');
     return shows ? document.importNode(root, true) : null;
   }
 
@@ -171,6 +174,12 @@
         '<tr><td>Harbourmaster Vell</td><td>The toll paid</td><td class="dm">Takes smugglers’ coin</td></tr><tr><td>Old Maudry</td><td>Her son home</td><td class="dm">He’s in the hold</td></tr></tbody></table>';
     },
     page_encounters: function () { return exHead('fa-dragon', 'Encounters') + exList([['Watch patrol', 'Medium · 4 foes', '#dc2626'], ['Dock rats', 'Easy · swarm', '#64748b']]); },
+    where_it_is: function () { return exHead('fa-map-location-dot', 'Where it is') + exList([['Common room', 'you are here', '#6366f1'], ['The Gilded Flagon', 'one step out', '#0d9488'], ['Port Varrow', 'the city', '#b45309']]); },
+    last_seen: function () { return exHead('fa-eye', 'Last seen') + '<div class="cpe-ex-sub"><b>The Drowned Bell</b><span>5 weeks ago</span><span class="cpe-ex-chip">6 nights</span></div>'; },
+    contents: function () { return exHead('fa-list-ul', 'Contents') + '<div class="cpe-ex-sub"><b>History</b><span>The Docks</span><span>Who rules</span><span class="cpe-ex-chip">+4</span></div>'; },
+    standing: function () { return exHead('fa-scale-balanced', 'Standing') + '<div class="cpe-ex-sub"><b>Wary</b><span>Why: Brawled in the guildhall and 2 more</span></div>'; },
+    rumours: function () { return exHead('fa-ear-listen', 'Rumours') + exList([['She sank her own ship for the insurance.', 'Old Bram · Swears by it', '#64748b'], ['Dessa Quill took the ship’s treasure.', 'Mara · Heard it', '#64748b']]); },
+    family_tree: function () { return exHead('fa-sitemap', 'Family tree') + exList([['Ione Fenwick', 'parent', '#6366f1'], ['Maud Fenwick', 'you are here', '#0d9488'], ['Tam Ash', 'child', '#b45309']]); },
     divider: function () { return '<hr class="cpe-ex-hr">'; },
     map_full: function () { return '<div class="cpe-ex-img cpe-ex-map">' + EX_MAP + '</div>'; },
     local_graph: function () { return '<div class="cpe-ex-img cpe-ex-map">' + EX_MAP + '</div>'; },
@@ -179,6 +188,8 @@
     entity_notes: function () { return exHead('fa-sticky-note', 'Player notes') + '<p class="cpe-ex-p">“Don’t trust the harbourmaster.” (Ilse)</p>'; },
     text_block: function () { return '<p class="cpe-ex-p">Your own text goes here, the same on every page.</p>'; }
   };
+  // The names the save bar gives each home, as the Home pages tabs do.
+  var HOME_NAMES = { default: 'Everyone', player: 'Players', scribe: 'Scribes', director: 'The Director', guest: 'Guests', dm: 'DM dashboard' };
   // The examples that are fact panels, which keep their edge in Annals.
   var EX_FACTS = ['attributes', 'details'];
   // exampleNode builds the example for a widget at a tile's size (columns
@@ -245,6 +256,18 @@
     var S = parse(el.getAttribute('data-state'), {});
     var KEY = String(S.key || '');
     var CID = String(S.campaignId || '');
+    // A campaign home has no category and no page to pick: it is drawn as
+    // the campaign home draws it, and its layout lives in the "homes"
+    // section. A category home is drawn as the category's landing page, and
+    // its layout is the category item's `home`.
+    var HOME = S.scope === 'home';
+    var CATHOME = S.scope === 'cathome';
+    var ANYHOME = HOME || CATHOME;
+    var NOUN = ANYHOME ? 'home' : 'page';
+    var FIELD = CATHOME ? 'home' : 'layout';
+    // Only these widgets draw on this kind of page; the rest are left out of
+    // the palette. No list means every widget the server offers.
+    var ONLY = Array.isArray(S.only) ? S.only.reduce(function (o, t) { o[t] = true; return o; }, {}) : null;
     // What the pages show now. With nothing saved they draw a built-in
     // arrangement; the editor starts from it, and Save stores it once changed.
     var shown = canon(S.layout);
@@ -263,10 +286,34 @@
     function toast(msg, bad, undoFn) { if (Chronicle.customizeToast) Chronicle.customizeToast(msg, bad, undoFn); }
 
     /* ---------- The draft ---------- */
-    function current() {
+    function draftItem() {
       var d = Chronicle.customizeDraft ? Chronicle.customizeDraft() : {};
-      var it = d && d.categories && d.categories.items && d.categories.items[KEY];
-      return canon(it && it.layout ? it.layout : shown);
+      var sec = d && (HOME ? d.homes : d.categories);
+      return sec && sec.items && sec.items[KEY];
+    }
+    function current() {
+      var it = draftItem();
+      return canon(it && it[FIELD] ? it[FIELD] : shown);
+    }
+    // description is the category's description as the draft has it.
+    function description() {
+      var it = draftItem();
+      return it && typeof it.description === 'string' ? it.description : String(S.description || '');
+    }
+    // homeWrite puts this home's layout in the draft's "homes" section, or
+    // takes it out when it matches what is saved, keeping the other homes.
+    function homeWrite(layout, opts) {
+      if (!Chronicle.customizeSet) return false;
+      var d = Chronicle.customizeDraft ? Chronicle.customizeDraft() : {};
+      var its = clone((d && d.homes && d.homes.items) || {});
+      if (layout) its[KEY] = { layout: layout }; else delete its[KEY];
+      var keys = Object.keys(its);
+      if (!keys.length) { Chronicle.customizeSet('homes', null, opts); return true; }
+      var base = location.pathname.replace(/\/customize\/.*$/, '/customize/home/');
+      Chronicle.customizeSet('homes', { items: its, _changes: keys.map(function (k) {
+        return { label: 'Home pages: ' + (HOME_NAMES[k] || k), href: base + encodeURIComponent(k) };
+      }) }, opts);
+      return true;
     }
     var L = current();
     // edit applies fn to a copy of the layout and, when it changed, puts the
@@ -278,9 +325,9 @@
       if (JSON.stringify(next) === JSON.stringify(L)) { render(); return true; }
       // A page with no sections draws the built-in arrangement instead, so an
       // empty layout would not mean what it shows here.
-      if (!next.rows.length) { toast('A page needs at least one section. Add another before removing this one.', true); render(); return false; }
+      if (!next.rows.length) { toast('A ' + NOUN + ' needs at least one section. Add another before removing this one.', true); render(); return false; }
       if (JSON.stringify(next).length > MAX_BYTES) { toast('This layout is too big to save. Remove some widgets or shorten their text.', true); render(); return false; }
-      if (!Chronicle.customizeCategoryWrite) {
+      if (HOME ? !Chronicle.customizeSet : !Chronicle.customizeCategoryWrite) {
         toast('This change could not reach your draft. Reload Customize and try again.', true);
         render();
         return false;
@@ -289,7 +336,12 @@
       var same = JSON.stringify(L) === JSON.stringify(saved);
       var before = UI.glideBefore || snap();
       if (UI.glideFrom && UI.sel) before[UI.sel.id] = UI.glideFrom;
-      Chronicle.customizeCategoryWrite(KEY, { layout: same ? undefined : clone(L) }, { step: true });
+      if (HOME) homeWrite(same ? null : clone(L), { step: true });
+      else {
+        var patch = {};
+        patch[FIELD] = same ? undefined : clone(L);
+        Chronicle.customizeCategoryWrite(KEY, patch, { step: true });
+      }
       render();
       glide(before);
       return true;
@@ -381,6 +433,7 @@
         (Array.isArray(list) ? list : (list && list.data) || []).forEach(function (b) {
           if (!b || !b.type) return;
           if (b.type === 'ext_widget' && !b.widget_slug) return;
+          if (ONLY && !ONLY[b.type]) return;
           var k = b.widget_slug ? 'ext_widget:' + b.widget_slug : b.type;
           W[k] = {
             key: k, type: b.type, widgetSlug: b.widget_slug || '', name: b.label || humanize(b.type), icon: b.icon || 'fa-cube',
@@ -437,7 +490,9 @@
       if (PV.loaded && !PV.entityId) return;
       PV.busy = true;
       var forPage = PV.entityId;
-      Chronicle.apiFetch(S.preview, { method: 'POST', body: { entityId: forPage, blocks: want } }).then(function (r) {
+      var body = { entityId: forPage, blocks: want };
+      if (CATHOME) body.description = description();
+      Chronicle.apiFetch(S.preview, { method: 'POST', body: body }).then(function (r) {
         if (!r.ok) throw new Error('preview ' + r.status);
         return r.json();
       }).then(function (res) {
@@ -446,7 +501,7 @@
         PV.failed = false;
         PV.loaded = true;
         PV.pages = Array.isArray(res.pages) ? res.pages : [];
-        PV.entityId = res.entityId || '';
+        PV.entityId = ANYHOME ? 'home' : (res.entityId || '');
         var html = res.blocks || {};
         want.forEach(function (w) {
           var key = PV.byRef[w.id];
@@ -517,6 +572,16 @@
         box.appendChild(card);
         box.setAttribute('data-filled', '1');
       });
+    }
+    // setDescription puts the category's description in the draft and draws
+    // the heading again with it.
+    function setDescription(v) {
+      if (!Chronicle.customizeCategoryWrite || v === description()) return;
+      UI.keepInsp = true;
+      Chronicle.customizeCategoryWrite(KEY, { description: v === String(S.description || '') ? undefined : v }, { step: true });
+      Object.keys(PV.looks).forEach(function (k) { if (k.indexOf('category_header|') === 0) delete PV.looks[k]; });
+      render();
+      queuePreview();
     }
     function showWith(id) {
       if (id === PV.entityId) return;
@@ -653,6 +718,8 @@
       var h = '<div class="cpe-pagehead">' + ic('fa-file-lines') + '<span>';
       if (PV.failed) h += 'The page couldn’t be drawn here, so widgets show their names.';
       else if (!PV.loaded) h += 'Loading a page to show the layout with…';
+      else if (HOME) h += 'Your ' + (KEY === 'dm' ? 'DM dashboard' : 'campaign home') + ' as it is drawn, with your own pages';
+      else if (CATHOME) h += 'The ' + esc(S.plural || 'category') + ' home as it is drawn, with your own pages';
       else if (!PV.entityId) h += 'No ' + esc((S.plural || 'pages').toLowerCase()) + ' yet, so widgets show example content. Your pages will fill them with their own.';
       else h += 'Shown with ' + esc(pageName()) + ', one of your ' + esc((S.plural || 'pages').toLowerCase());
       h += '</span>' + (UI.viewAs === 'player' ? '<span class="cpe-pill dm">' + ic('fa-eye') + ' As a player sees it</span>' : '<span class="cpe-pill">' + ic('fa-eye') + ' As you see it</span>') + '</div>';
@@ -678,10 +745,10 @@
         '<button class="cpe-icon-btn" type="button" data-act="redo" title="Redo (Ctrl+Shift+Z)" aria-label="Redo"' + (hist.redo ? '' : ' disabled') + '>' + ic('fa-rotate-right') + '</button><span class="cpe-vr"></span>' +
         seg('Screen size', 'dev', UI.device, [['desktop', 'fa-desktop', 'Computer', 'Computer'], ['tablet', 'fa-tablet-screen-button', 'Tablet', 'Tablet'], ['phone', 'fa-mobile-screen', 'Phone', 'Phone']]) +
         seg('See it as', 'as', UI.viewAs, [['dm', 'fa-user-shield', 'You'], ['player', 'fa-user', 'A player']]) +
-        seg('Page look', 'look', UI.look, [['standard', 'fa-file-lines', 'Standard', 'Preview the Standard look. Pages use the look chosen in Look.'], ['annals', 'fa-scroll', 'Annals', 'Preview the Annals look. Pages use the look chosen in Look.']]) +
+        seg('Page look', 'look', UI.look, [['standard', 'fa-file-lines', 'Standard', 'Preview the Standard look. Pages use the look chosen in Look › Pages.'], ['annals', 'fa-scroll', 'Material', 'Preview the Material look. Pages use the look chosen in Look › Pages.']]) +
         '<span class="cpe-read"><button type="button" class="toggle" role="switch" data-act="read" aria-checked="' + UI.reading + '" aria-label="See the page as readers do"><span class="toggle-knob"></span></button><span class="cpe-hide-md">See the page as readers do</span></span>' +
         '<span class="cpe-sp"></span>' + pages +
-        (UI.reading ? '</div>' : '<button class="btn-secondary btn-sm" type="button" data-act="start" title="Start from a layout in the Library" aria-label="Start from…">' + ic('fa-swatchbook') + '<span class="cpe-hide-md">Start from…</span></button>' +
+        (UI.reading || ANYHOME ? '</div>' : '<button class="btn-secondary btn-sm" type="button" data-act="start" title="Start from a layout in the Library" aria-label="Start from…">' + ic('fa-swatchbook') + '<span class="cpe-hide-md">Start from…</span></button>' +
         '<button class="btn-secondary btn-sm" type="button" data-act="keep" title="Keep a copy of this layout in the Library" aria-label="Keep in Library">' + ic('fa-bookmark') + '<span class="cpe-hide-md">Keep in Library</span></button></div>');
     }
 
@@ -744,7 +811,7 @@
       h += '<div class="cpe-grp"><span class="cpe-lab">Who sees it</span><div class="cpe-seg">' +
         '<button type="button" data-act="vis" data-v="" aria-pressed="' + !isDm(it) + '">' + ic('fa-users') + ' Everyone</button>' +
         '<button type="button" data-act="vis" data-v="dm_only" aria-pressed="' + isDm(it) + '">' + ic('fa-lock') + ' DM team only</button></div>' +
-        '<span class="cpe-hint">This sets it for every page in ' + esc(S.plural || 'this category') + '. The DM team is you and the members you gave DM access.</span></div>';
+        '<span class="cpe-hint">' + (ANYHOME ? 'This sets it on this home.' : 'This sets it for every page in ' + esc(S.plural || 'this category') + '.') + ' The DM team is you and the members you gave DM access.</span></div>';
       if (f.kind === 'tile') {
         h += '<div class="cpe-grp"><span class="cpe-lab">Size</span><div class="cpe-sizes">' + m.sizes.map(function (s) {
           return '<button type="button" data-act="size" data-v="' + esc(s) + '" aria-pressed="' + (it.size === s) + '">' + sizePic(s) + esc(s.replace('x', ' × ')) + '</button>';
@@ -755,6 +822,11 @@
         }).join('') + '</div><span class="cpe-hint">Fit grows with what’s inside. The others keep at least that much room.</span></div>';
       }
       h += fieldsHTML(m, cfg);
+      if (CATHOME && it.type === 'category_header') {
+        h += '<div class="cpe-grp"><label class="cpe-lab" for="cpe-desc">Description</label>' +
+          '<textarea class="cpe-inp" rows="4" id="cpe-desc" maxlength="2000" placeholder="Say what belongs in ' + esc(S.plural || 'this category') + '">' + esc(description()) + '</textarea>' +
+          '<span class="cpe-hint">Shown under the heading. It saves with the rest of your changes.</span></div>';
+      }
       if (it.type === 'attributes' && S.fieldsUrl) {
         h += '<div class="cpe-grp"><span class="cpe-lab">Which fields</span><p class="cpe-hint">This shows the fields the category asks for' +
           (S.fields ? ': ' + Number(S.fields) + (Number(S.fields) === 1 ? ' field' : ' fields') : '') + '.</p>' +
@@ -1035,7 +1107,9 @@
       }
       document.removeEventListener('pointerdown', popOff, true);
     }
-    function popOff(e) { if (popEl && !popEl.contains(e.target) && !popEl.hasAttribute('data-keep')) closePop(); }
+    // Small menus close on a click off them; the peek is a panel, so it
+    // closes only on its X, Escape or the eye that opened it.
+    function popOff(e) { if (popEl && !popEl.contains(e.target) && !popEl.hasAttribute('data-keep') && !popEl.hasAttribute('data-panel')) closePop(); }
     function openPop(anchor, html, align) {
       closePop();
       popEl = document.createElement('div');
@@ -1061,6 +1135,7 @@
     function peek(btn, k) {
       var m = W[k];
       if (!m) return;
+      if (popEl && popEl.getAttribute('data-panel') === k) { closePop(); return; }
       var z = sizeOf(m.sizes[0] || '4x2');
       var p = openPop(btn, '<div class="cpe-peek"><div class="cpe-peek-h"><span class="cpe-title-ic">' + ic(m.icon) + '</span><div><b>' + esc(m.name) + '</b><span>' +
         (m.sizes.length ? 'As a tile, ' + esc(m.sizes.map(function (x) { return x.replace('x', '×'); }).join(', ')) : 'In columns') + '</span></div>' +
@@ -1070,6 +1145,7 @@
         '<div class="cpe-row-set"><span class="cpe-hint">Keep it open and try it</span><button type="button" class="toggle" role="switch" data-peekkeep aria-checked="' + UI.peekKeep + '" aria-label="Keep it open and try it"><span class="toggle-knob"></span></button></div>' +
         '<p class="cpe-hint">Example content. Your pages fill it with their own.</p></div>');
       p.classList.add('cpe-peek-pop');
+      p.setAttribute('data-panel', k);
       if (UI.peekKeep) p.setAttribute('data-keep', '');
       $('.cpe-peek-box', p).appendChild(exampleNode(m.type, m.name, m.icon, z.w, z.h));
       // Beside the panel, level with the widget, rather than over the list.
@@ -1499,12 +1575,17 @@
       }
       if (e.key === 'Escape' && UI.sel && !popEl) select(null);
     });
+    // Escape closes the peek wherever focus is, since clicks elsewhere don't.
+    on(document, 'keydown', function (e) {
+      if (e.key === 'Escape' && popEl && popEl.hasAttribute('data-panel') && !DRAG) closePop();
+    });
     on(el, 'input', function (e) {
       if (e.target.id === 'cpe-q') { UI.galQ = e.target.value; render(); }
     });
     on(el, 'change', function (e) {
       var t = e.target;
       if (t.id === 'cpe-page') { showWith(t.value); return; }
+      if (t.id === 'cpe-desc') { setDescription(t.value); return; }
       var key = t.getAttribute('data-cfg');
       if (key == null) return;
       var f = findSel();
@@ -1513,7 +1594,11 @@
       UI.keepInsp = true;
       setConfig(key, t.value, fd);
     });
-    on(document, 'chronicle:customize-draft', function () {
+    on(document, 'chronicle:customize-draft', function (e) {
+      // A home that Save stored leaves the draft; what it stored is now
+      // what the home shows. (A saved category reloads its page instead.)
+      var d = (e && e.detail) || {};
+      if (HOME && d.reason === 'publish' && !draftItem() && JSON.stringify(L) !== JSON.stringify(shown)) { shown = clone(L); saved = shown; }
       L = current();
       if (UI.sel && !findSel()) { UI.sel = null; UI.insp = 'add'; }
       if (UI.addAt && !findRow(UI.addAt)) UI.addAt = null;

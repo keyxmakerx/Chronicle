@@ -21,14 +21,25 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/timeutil"
 )
 
-// sanitizeRedirect returns raw only if it is a safe same-site path (starts with
-// a single "/", not "//" or "/\" which are protocol-relative open-redirect
-// vectors). Anything else becomes "" so the caller falls back to a default.
+// sanitizeRedirect returns raw only if it is a safe same-site path. Anything
+// else becomes "" so the caller falls back to a default. Control characters
+// and backslashes are rejected outright because browsers strip tabs and
+// newlines and treat "\" as "/", turning "/\t/evil.example" into the
+// protocol-relative "//evil.example".
 func sanitizeRedirect(raw string) string {
 	if raw == "" || !strings.HasPrefix(raw, "/") {
 		return ""
 	}
-	if strings.HasPrefix(raw, "//") || strings.HasPrefix(raw, "/\\") {
+	if strings.HasPrefix(raw, "//") {
+		return ""
+	}
+	for i := 0; i < len(raw); i++ {
+		if ch := raw[i]; ch < 0x20 || ch == 0x7f || ch == '\\' {
+			return ""
+		}
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "" || u.Host != "" {
 		return ""
 	}
 	return raw
@@ -597,9 +608,11 @@ func (h *Handler) ChangePasswordAPI(c echo.Context) error {
 		return apperror.NewBadRequest("new password and confirmation do not match")
 	}
 
-	if err := h.service.ChangePassword(c.Request().Context(), userID, req.CurrentPassword, req.NewPassword); err != nil {
+	token, err := h.service.ChangePassword(c.Request().Context(), userID, req.CurrentPassword, req.NewPassword, c.RealIP(), c.Request().UserAgent())
+	if err != nil {
 		return err
 	}
+	setSessionCookie(c, token, h.sessionTTL)
 
 	h.logSecurityEvent(c.Request().Context(), "password.changed", userID, "", c.RealIP(), c.Request().UserAgent(), nil)
 

@@ -39,17 +39,17 @@ func (h *Handler) loadPagePlaces(ctx context.Context, cc *campaigns.CampaignCont
 }
 
 // loadTreePlaces reads the listings to draw under the given parents for this
-// viewer. Players never see a page their sidebar setting hides.
-func (h *Handler) loadTreePlaces(ctx context.Context, cc *campaigns.CampaignContext, parentIDs []string, userID string, hidden map[string]bool) []PlaceLink {
+// viewer at role. Players never see a page their sidebar setting hides.
+func (h *Handler) loadTreePlaces(ctx context.Context, cc *campaigns.CampaignContext, parentIDs []string, role int, userID string, hidden map[string]bool) []PlaceLink {
 	if h.placeSvc == nil || len(parentIDs) == 0 {
 		return nil
 	}
-	links, err := h.placeSvc.PlacesUnder(ctx, cc.Campaign.ID, parentIDs, int(cc.VisibilityRole()), userID)
+	links, err := h.placeSvc.PlacesUnder(ctx, cc.Campaign.ID, parentIDs, role, userID)
 	if err != nil {
 		slog.Warn("tree places: read failed", slog.Any("error", err))
 		return nil
 	}
-	if cc.MemberRole >= campaigns.RoleScribe || len(hidden) == 0 {
+	if role >= int(campaigns.RoleScribe) || len(hidden) == 0 {
 		return links
 	}
 	out := links[:0]

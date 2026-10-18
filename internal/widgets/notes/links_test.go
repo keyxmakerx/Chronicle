@@ -62,3 +62,39 @@ func TestSnippets(t *testing.T) {
 		t.Error("containsFold ignores case")
 	}
 }
+
+func TestMentionLines(t *testing.T) {
+	const a, b = "11111111-aaaa", "22222222-bbbb"
+	tests := []struct {
+		name string
+		body string
+		want map[string]string
+	}{
+		{"none", `<p>Nothing here</p>`, map[string]string{}},
+		{
+			"each page gets its own paragraph, first one wins",
+			`<p>The party met <a data-mention-id="` + a + `">@Maudry</a> at the mill.</p>` +
+				`<ul><li>Later <a data-mention-id="` + b + `">@Ansel</a> and <a data-mention-id="` + a + `">@Maudry</a> argued.</li></ul>`,
+			map[string]string{a: "The party met @Maudry at the mill.", b: "Later @Ansel and @Maudry argued."},
+		},
+		{
+			"note links keep their neutral text",
+			`<p><a data-mention-id="` + a + `">@Maudry</a> read <a data-note-id="33333333-cccc">Journal note</a>.</p>`,
+			map[string]string{a: "@Maudry read Journal note."},
+		},
+		{"bad id ignored", `<p><a data-mention-id="x%">@X</a></p>`, map[string]string{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := MentionLines(tt.body)
+			if len(got) != len(tt.want) {
+				t.Fatalf("got %v, want %v", got, tt.want)
+			}
+			for k, v := range tt.want {
+				if got[k] != v {
+					t.Errorf("%s = %q, want %q", k, got[k], v)
+				}
+			}
+		})
+	}
+}

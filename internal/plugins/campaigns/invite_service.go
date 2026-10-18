@@ -26,7 +26,7 @@ type InviteMailer interface {
 type InviteService interface {
 	CreateInvite(ctx context.Context, campaignID, createdBy string, input CreateInviteInput) (*Invite, error)
 	ListInvites(ctx context.Context, campaignID string) ([]Invite, error)
-	RevokeInvite(ctx context.Context, inviteID string) error
+	RevokeInvite(ctx context.Context, campaignID, inviteID string) error
 	AcceptInvite(ctx context.Context, token string, userID string) (*Invite, error)
 	GetInviteByToken(ctx context.Context, token string) (*Invite, error)
 }
@@ -159,8 +159,15 @@ func (s *inviteService) ListInvites(ctx context.Context, campaignID string) ([]I
 }
 
 // RevokeInvite deletes a pending invite.
-func (s *inviteService) RevokeInvite(ctx context.Context, inviteID string) error {
-	return s.repo.Delete(ctx, inviteID)
+func (s *inviteService) RevokeInvite(ctx context.Context, campaignID, inviteID string) error {
+	deleted, err := s.repo.Delete(ctx, campaignID, inviteID)
+	if err != nil {
+		return apperror.NewInternal(err)
+	}
+	if !deleted {
+		return apperror.NewNotFound("invite not found")
+	}
+	return nil
 }
 
 // AcceptInvite validates the token and adds the user to the campaign.

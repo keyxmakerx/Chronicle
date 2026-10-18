@@ -146,11 +146,12 @@ func (s *entityService) EnsureAdventures(ctx context.Context, campaignID string)
 }
 
 // AdventureLayout is the trial page: the story on the left with the at-a-glance
-// facts beside it, the page's own sub-pages (its trials) under the story, then
-// a tile section of the table's tools. The Read-aloud, Steps and Table blocks
-// hold text a DM types in place; their ids are the keys that text is stored
-// under, so they are fixed here and stay stable for every page of the
-// category.
+// facts beside it, the page's map under the story, its own sub-pages (its
+// trials) after that, then a tile section of the table's tools. The Map,
+// Read-aloud, Steps and Table blocks hold content a DM makes in place; their
+// ids are the keys that content is stored under, so they are fixed here and
+// stay stable for every page of the category. Existing campaigns keep the
+// layout they have; the map is added there in Customize.
 func AdventureLayout() EntityTypeLayout {
 	return EntityTypeLayout{
 		Rows: []TemplateRow{
@@ -162,6 +163,7 @@ func AdventureLayout() EntityTypeLayout {
 						Blocks: []TemplateBlock{
 							{ID: "blk-title", Type: "title"},
 							{ID: "blk-entry", Type: "entry"},
+							{ID: "blk-adv-map", Type: "page_map"},
 							{ID: "blk-trials", Type: BlockSubPages},
 						},
 					},

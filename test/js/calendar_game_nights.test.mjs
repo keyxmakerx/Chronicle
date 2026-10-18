@@ -51,7 +51,7 @@ function view(def, nights) {
   const nullEl = { querySelector: () => null, classList: { contains: () => false }, dataset: {} };
   Object.assign(v, {
     campaignId: 'c1', cal: { mode: 'reallife', tracks_real_time: true }, view: { y: 2026, m: 10 },
-    nightsByMonth: { '2026_10': nights }, eventsByMonth: {}, showNights: true, _gnNoteFor: null,
+    nightsByMonth: { '2026_10': nights }, eventsByMonth: {}, showNights: true, _gnNoteFor: null, _gnPages: {}, _gnChk: {},
     wingEl: nullEl, evpEl: nullEl,
     _announce() {}, _toast() {}, refreshWing() {}, _paintMonth() {},
   });
@@ -638,17 +638,17 @@ test('a recap with formatting is never edited as plain text in the calendar', ()
   const v = view(def, [night()]);
   v.role = 2;
   v._gnPages = {
-    plain: { recap: 'The vault opened.', recapHtml: '<p>The vault opened.</p>', links: [] },
-    rich: { recap: 'The vault opened.', recapHtml: '<p>The <strong>vault</strong> opened.</p><ul><li>Loot</li></ul>', links: [] },
+    'plain|2026-10-08': { recap: 'The vault opened.', recapHtml: '<p>The vault opened.</p>', links: [] },
+    'rich|2026-10-08': { recap: 'The vault opened.', recapHtml: '<p>The <strong>vault</strong> opened.</p><ul><li>Loot</li></ul>', links: [] },
   };
-  assert.match(v._gnExtraHTML('plain'), /data-gn-recap="edit"><i class="fa-solid fa-pen"><\/i> Edit the recap/);
-  const rich = v._gnExtraHTML('rich');
+  assert.match(v._gnExtraHTML('plain', '2026-10-08'), /data-gn-recap="edit"><i class="fa-solid fa-pen"><\/i> Edit the recap/);
+  const rich = v._gnExtraHTML('rich', '2026-10-08');
   assert.doesNotMatch(rich, /data-gn-recap="edit"/, 'no plain-text editor for a formatted recap');
   assert.match(rich, /<a class="lnk" href="\/campaigns\/c1\/sessions\/rich">.*Edit on the page/);
   v._gnRecapFor = 'rich';
-  assert.doesNotMatch(v._gnExtraHTML('rich'), /data-gn-recap-input/, 'even when asked, the textarea never opens on it');
+  assert.doesNotMatch(v._gnExtraHTML('rich', '2026-10-08'), /data-gn-recap-input/, 'even when asked, the textarea never opens on it');
   v.role = 1;
-  assert.doesNotMatch(v._gnExtraHTML('plain'), /data-gn-recap="edit"/, 'players read the recap only');
+  assert.doesNotMatch(v._gnExtraHTML('plain', '2026-10-08'), /data-gn-recap="edit"/, 'players read the recap only');
 });
 
 test('the Director can remind any one player, never themselves', () => {
@@ -760,4 +760,113 @@ test('whoever runs a night can remind a player to answer, and nobody else can', 
   assert.doesNotMatch(v._gnRosterHTML(night({ past: true })), /data-gn-remind/, 'a played night takes no reminders');
   v.userId = 'p1'; v.canAuthorDmOnly = true;
   assert.match(v._gnRosterHTML(n), /data-gn-remind="p2"/, 'the owner or a co-Director can too');
+});
+
+// A night page as the server sends it with ?date=.
+function nightPage(over) {
+  return Object.assign({
+    recap: '', recapHtml: '', links: [],
+    entries: [
+      { id: 'n2', title: '', authorId: 'p1', authorName: '<b>Bryn</b>', audience: 'gm' },
+      { id: 'n1', title: 'Game night, Thu 8 Oct', authorId: 'dm', authorName: 'Kael', audience: 'private' },
+    ],
+    checkIn: [
+      { entityId: 'e1', name: 'Maudry', noteId: 'n1', noteTitle: 'At the mill', moreNotes: 2, line: 'Met <Maudry> at the mill.' },
+      { entityId: 'e2', name: 'Brother Ansel', noteId: 'n1', noteTitle: 'At the mill' },
+    ],
+  }, over || {});
+}
+
+test('a night lists its Journal entries, escaped, in the Journal\'s words', () => {
+  const { def } = load();
+  const v = view(def, [night()]);
+  v.userId = 'dm'; v.canAuthorDmOnly = true;
+  v._gnPages = { 's1|2026-10-08': nightPage({ checkIn: null }) };
+  const html = v._gnExtraHTML('s1', '2026-10-08');
+  assert.match(html, /<h4>Entries for this night<\/h4>/);
+  assert.match(html, /<a href="\/campaigns\/c1\/journal\/n1">Your entry<\/a><span class="gnaud">Private<\/span><span class="who">You<\/span>/);
+  assert.match(html, />Untitled note<\/a><span class="gnaud dm">GM only<\/span><span class="who">&lt;b&gt;Bryn&lt;\/b&gt;<\/span>/);
+  assert.match(html, /a player’s private entry stays private and is never read/);
+  assert.doesNotMatch(html, /gnchk/, 'no check-in unless the server sent one');
+  v.canAuthorDmOnly = false; v.userId = 'p1';
+  assert.match(v._gnExtraHTML('s1', '2026-10-08'), /Share yours with the GM if you want the people you met counted/);
+  v._gnPages['s1|2026-10-08'] = nightPage({ entries: [], checkIn: null });
+  assert.match(v._gnExtraHTML('s1', '2026-10-08'), /No Journal entries for this night yet/);
+});
+
+test('the Director is asked who the players saw, with the line on request', () => {
+  const { def } = load();
+  const v = view(def, [night({ past: true })]);
+  v.canAuthorDmOnly = true;
+  v._gnPages = { 's1|2026-10-08': nightPage() };
+  let html = v._gnExtraHTML('s1', '2026-10-08');
+  assert.match(html, /<section class="eps gnchk" data-dm-only/, 'the amber DM-only block');
+  assert.match(html, /Maudry and Brother Ansel came up in this night’s entries\. Did the players see them\?/);
+  assert.match(html, /In <a href="\/campaigns\/c1\/journal\/n1">At the mill<\/a>, and 2 more entries\./);
+  assert.match(html, /data-gn-seen="seen" data-gn-ent="e1" aria-pressed="false"/);
+  assert.match(html, /data-gn-chk="rest">Mark the rest not seen/);
+  assert.doesNotMatch(html, /class="line"/, 'the line stays folded');
+  v._gnChk = { 's1|2026-10-08': { open: { e1: true } } };
+  html = v._gnExtraHTML('s1', '2026-10-08');
+  assert.match(html, /<q class="line">Met &lt;Maudry&gt; at the mill\.<\/q>/);
+  assert.match(html, /aria-expanded="true">Hide the line/);
+});
+
+test('a check-in of many shows five, then all on request', () => {
+  const { def } = load();
+  const v = view(def, [night()]);
+  const many = Array.from({ length: 14 }, (_, i) => ({ entityId: 'e' + i, name: 'Person ' + i }));
+  v._gnPages = { 's1|2026-10-08': nightPage({ checkIn: many }) };
+  let html = v._gnExtraHTML('s1', '2026-10-08');
+  assert.match(html, /14 people came up on this night\./);
+  assert.equal((html.match(/class="gncrow"/g) || []).length, 5);
+  assert.match(html, /data-gn-chk="all">Show all 14/);
+  assert.match(html, /Linked to this game night as mentioned\./);
+  v._gnChk = { 's1|2026-10-08': { all: true } };
+  assert.equal((v._gnExtraHTML('s1', '2026-10-08').match(/class="gncrow"/g) || []).length, 14);
+});
+
+test('a finished check-in says who was seen and can be changed', () => {
+  const { def } = load();
+  const v = view(def, [night()]);
+  const p = nightPage();
+  p.checkIn[0].answer = 'seen'; p.checkIn[1].answer = 'not_seen';
+  v._gnPages = { 's1|2026-10-08': p };
+  let html = v._gnExtraHTML('s1', '2026-10-08');
+  assert.match(html, /Checked\. Maudry is in their Last seen for this night\. Brother Ansel stayed unseen\./);
+  assert.match(html, /data-gn-chk="change">Change answers/);
+  v._gnChk = { 's1|2026-10-08': { change: true } };
+  html = v._gnExtraHTML('s1', '2026-10-08');
+  assert.match(html, /data-gn-seen="seen" data-gn-ent="e1" aria-pressed="true"/);
+  assert.match(html, /data-gn-seen="not_seen" data-gn-ent="e2" aria-pressed="true"/);
+  assert.match(html, /data-gn-chk="done">Done/);
+});
+
+test('answering saves one night\'s sighting and undo clears it', async () => {
+  const { def, calls } = load();
+  const v = view(def, [night()]);
+  let action = null;
+  v.say = (msg, a) => { action = a; };
+  v._gnRedrawExtra = () => {};
+  v._gnPages = { 's1|2026-10-08': nightPage() };
+  v._gnAnswer('s1', '2026-10-08', ['e1'], 'seen', 'Maudry added.');
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(v._gnPages['s1|2026-10-08'].checkIn[0].answer, 'seen', 'shown at once');
+  const put = calls.find((c) => c.opts && c.opts.method === 'PUT');
+  assert.equal(put.url, '/campaigns/c1/sessions/s1/sightings');
+  assert.deepEqual(JSON.parse(JSON.stringify(put.opts.body)), { entityId: 'e1', date: '2026-10-08', state: 'seen', source: 'checkin' });
+  action.run();
+  await new Promise((r) => setTimeout(r, 0));
+  const del = calls.find((c) => c.opts && c.opts.method === 'DELETE');
+  assert.equal(del.url, '/campaigns/c1/sessions/s1/sightings?entity=e1&date=2026-10-08');
+  assert.equal(v._gnPages['s1|2026-10-08'].checkIn[0].answer, '');
+});
+
+test('a night page is read for its own date', async () => {
+  const { def, calls } = load({ nights: () => ({ recap: '', links: [], night: { entries: [], checkIn: [] } }) });
+  const v = view(def, [night()]);
+  v._gnRedrawExtra = () => {};
+  await v._gnLoadPage('s1', '2026-10-15');
+  assert.equal(calls[0].url, '/campaigns/c1/sessions/s1/page?date=2026-10-15');
+  assert.deepEqual(JSON.parse(JSON.stringify(v._gnPages['s1|2026-10-15'].checkIn)), []);
 });

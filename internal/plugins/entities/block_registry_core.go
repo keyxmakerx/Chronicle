@@ -61,6 +61,8 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 		return blockCharacterSurface(ctx.CC, ctx.Entity, ctx.EntityType, ctx.CSRFToken, ctx.UserID)
 	})
 
+	registerContentsBlock(r)
+
 	r.Register(BlockMeta{
 		Type: "details", Label: "Details", Icon: "fa-info-circle",
 		TileSizes: []string{"2x1", "2x2"},

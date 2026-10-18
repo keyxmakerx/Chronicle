@@ -28,6 +28,15 @@ type fakeCreator struct {
 	updateEntryFn func(id, entryJSON, entryHTML string) error
 	deleteFn      func(id string) error
 	hidden        map[string]bool // entity ID → the viewer may not open it
+	mergeCalls    map[string]map[string]any
+}
+
+func (f *fakeCreator) MergeFields(_ context.Context, id string, patch map[string]any) error {
+	if f.mergeCalls == nil {
+		f.mergeCalls = map[string]map[string]any{}
+	}
+	f.mergeCalls[id] = patch
+	return nil
 }
 
 func (f *fakeCreator) CheckEntityAccess(_ context.Context, id string, _ int, _ string) (*entities.EffectivePermission, error) {

@@ -492,3 +492,76 @@ func TestCampaignExportImport_PlacesInTree_DBRoundTrip(t *testing.T) {
 		t.Fatalf("Mira's real parent after import = %q (%v), want Port City", parentName, err)
 	}
 }
+
+// TestCampaignExportImport_CategoryStateAndLists_DBRoundTrip: each category
+// comes back with its position, default flag and on/off state, and the
+// owner's character and NPC lists name the imported campaign's own
+// categories. Before, every category came back switched on in creation order,
+// and the lists were not restored at all.
+func TestCampaignExportImport_CategoryStateAndLists_DBRoundTrip(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test requires a database; skipped under -short")
+	}
+	h := newRoundTripHarness(t)
+	ctx := context.Background()
+	owner := h.newUser("owner")
+	src, _ := h.sourceWithPlayerCharacter(owner)
+
+	character, location, note := h.typeID(src.ID, "character"), h.typeID(src.ID, "location"), h.typeID(src.ID, "note")
+	if err := h.entities.RestoreEntityTypePlacement(ctx, src.ID, note, 0, true, false); err != nil {
+		t.Fatalf("switch off note: %v", err)
+	}
+	if err := h.entities.RestoreEntityTypePlacement(ctx, src.ID, location, 40, false, true); err != nil {
+		t.Fatalf("move location: %v", err)
+	}
+	if err := h.campaigns.UpdateCharacterLists(ctx, src.ID, []int{character}, []int{character, location}); err != nil {
+		t.Fatalf("set lists: %v", err)
+	}
+	src, err := h.campaigns.GetByID(ctx, src.ID)
+	if err != nil {
+		t.Fatalf("reload source: %v", err)
+	}
+
+	newID, body := h.importBlob(h.newUser("importer"), "campaign.zip", h.exportZip(src, owner))
+	if strings.Contains(body, "Imported with losses") {
+		t.Errorf("round trip reported losses:\n%s", body)
+	}
+
+	state := func(campaignID string) map[string]string {
+		rows, err := h.db.Query(`SELECT slug, sort_order, is_default, enabled FROM entity_types WHERE campaign_id = ?`, campaignID)
+		if err != nil {
+			t.Fatalf("list type state: %v", err)
+		}
+		defer rows.Close()
+		out := map[string]string{}
+		for rows.Next() {
+			var slug string
+			var order int
+			var def, on bool
+			if err := rows.Scan(&slug, &order, &def, &on); err != nil {
+				t.Fatalf("scan type state: %v", err)
+			}
+			out[slug] = fmt.Sprintf("order=%d default=%v enabled=%v", order, def, on)
+		}
+		return out
+	}
+	want, got := state(src.ID), state(newID)
+	for slug, w := range want {
+		if got[slug] != w {
+			t.Errorf("category %q = %s, want %s", slug, got[slug], w)
+		}
+	}
+
+	imported, err := h.campaigns.GetByID(ctx, newID)
+	if err != nil {
+		t.Fatalf("load imported campaign: %v", err)
+	}
+	st := imported.ParseSettings()
+	newChar, newLocation := h.typeID(newID, "character"), h.typeID(newID, "location")
+	if st.CharacterTypeIDs == nil || fmt.Sprint(*st.CharacterTypeIDs) != fmt.Sprint([]int{newChar}) {
+		t.Errorf("character list = %v, want [%d]", st.CharacterTypeIDs, newChar)
+	}
+	if st.NPCTypeIDs == nil || fmt.Sprint(*st.NPCTypeIDs) != fmt.Sprint([]int{newChar, newLocation}) {
+		t.Errorf("NPC list = %v, want [%d %d]", st.NPCTypeIDs, newChar, newLocation)
+	}
+}

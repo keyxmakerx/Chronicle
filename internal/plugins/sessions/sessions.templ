@@ -320,8 +320,9 @@ templ SessionDetailPage(cc *campaigns.CampaignContext, session *Session, csrfTok
 					<p class="text-sm text-fg-body whitespace-pre-wrap">{ *session.Summary }</p>
 				</div>
 			}
-			<!-- Session Recap (visible to all members, editable by Scribes+) -->
-			if session.Status == StatusCompleted {
+			<!-- Session Recap (members only, editable by Scribes+): a recap has no
+			     visibility of its own, so a public campaign's visitors never see it. -->
+			if session.Status == StatusCompleted && cc.IsMember {
 				<div class="card p-4 mb-6">
 					<div class="flex items-center justify-between mb-2">
 						<h2 class="text-sm font-semibold text-fg">

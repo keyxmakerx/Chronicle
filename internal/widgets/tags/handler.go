@@ -226,16 +226,22 @@ func (h *Handler) SetEntityTags(c echo.Context) error {
 		return apperror.NewBadRequest("entity ID is required")
 	}
 
+	// The page must be in this campaign and visible to the caller: the tag ids
+	// are checked against the campaign, but the entity id comes from the URL.
+	if err := h.requireViewableEntity(c, cc, entityID); err != nil {
+		return err
+	}
+
 	var req SetEntityTagsRequest
 	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
 		return apperror.NewBadRequest("invalid JSON body")
 	}
 
-	if err := h.service.SetEntityTags(c.Request().Context(), entityID, cc.Campaign.ID, req.TagIDs); err != nil {
+	if err := h.service.SetEntityTagsVisible(c.Request().Context(), entityID, cc.Campaign.ID, req.TagIDs, canSeeDmOnly(cc)); err != nil {
 		return err
 	}
 
-	// Return the updated set of tags for the entity (Scribes see all tags).
+	// Return the updated set of tags for the entity (dm_only tags only for roles that can see them).
 	tags, err := h.service.GetEntityTags(c.Request().Context(), entityID, canSeeDmOnly(cc))
 	if err != nil {
 		return err
@@ -245,6 +251,25 @@ func (h *Handler) SetEntityTags(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, tags)
+}
+
+// requireViewableEntity answers 404 unless the entity is in the URL's campaign
+// and the caller may view it. It fails closed when no gate is wired. The role
+// is cc.VisibilityRole(), not the raw cc.MemberRole, so a Co-DM (Player + DM
+// grant) clears it before canSeeDmOnly checks IsDmGranted (ADR-057).
+func (h *Handler) requireViewableEntity(c echo.Context, cc *campaigns.CampaignContext, entityID string) error {
+	if h.entityGate == nil {
+		return apperror.NewInternal(errors.New("tags: entity gate not configured"))
+	}
+	campaignID, canView, err := h.entityGate.ResolveViewableEntity(
+		c.Request().Context(), entityID, int(cc.VisibilityRole()), auth.GetUserID(c))
+	if err != nil {
+		return err // NotFound for a missing entity; propagates real errors.
+	}
+	if campaignID != cc.Campaign.ID || !canView {
+		return apperror.NewNotFound("entity not found")
+	}
+	return nil
 }
 
 // GetEntityTags returns all tags for an entity as JSON
@@ -266,20 +291,8 @@ func (h *Handler) GetEntityTags(c echo.Context) error {
 	// and require the caller's view access. Without this an anonymous visitor
 	// could read the (often spoilery) tag names of a private entity, or of any
 	// entity in another campaign given its ID.
-	if h.entityGate == nil {
-		// Fail closed: a missing gate must never serve ungated entity tags.
-		return apperror.NewInternal(errors.New("tags: entity gate not configured"))
-	}
-	// Use cc.VisibilityRole(), not the raw cc.MemberRole, so a Co-DM (Player +
-	// DM grant) clears this gate before canSeeDmOnly checks IsDmGranted below
-	// (ADR-057).
-	campaignID, canView, err := h.entityGate.ResolveViewableEntity(
-		c.Request().Context(), entityID, int(cc.VisibilityRole()), auth.GetUserID(c))
-	if err != nil {
-		return err // NotFound for a missing entity; propagates real errors.
-	}
-	if campaignID != cc.Campaign.ID || !canView {
-		return apperror.NewNotFound("entity not found")
+	if err := h.requireViewableEntity(c, cc, entityID); err != nil {
+		return err
 	}
 
 	tags, err := h.service.GetEntityTags(c.Request().Context(), entityID, canSeeDmOnly(cc))

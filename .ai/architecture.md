@@ -31,7 +31,7 @@ System or Widget (see root `CLAUDE.md` for what each tier is).
 │  │  ai_workspace/  backup/  foundry_vtt/  restore/        │    │
 │  │  widgetbindings/  dmscreen/  systemstate/              │    │
 │  │  quests/  rolltables/  vault_import/  pageblocks/      │    │
-│  │  encounters/                                           │    │
+│  │  encounters/  rumours/                                 │    │
 │  └──────────────────────────────────────────────────────┘    │
 │                                                               │
 │  ┌──────────────────────────────────────────────────────┐    │
@@ -195,6 +195,8 @@ chronicle/
 │   ├── js/                           # Global scripts (boot.js is the widget auto-mounter;
 │   │   │                             #   keyboard_shortcuts.js, search_modal.js, sidebar_drill.js,
 │   │   │                             #   theme.js, command_palette.js, and more)
+│   │   ├── dice/                     # The thrown dice's engine, one file per set and per crit
+│   │   │                             #   (see dice.ai.md)
 │   │   └── widgets/                  # One file per widget (editor.js, attributes.js,
 │   │                                 #   tag_picker.js, editor_mention.js, notes.js, etc.)
 │   ├── vendor/                       # Vendored CDN libs

@@ -24,7 +24,7 @@ func TestMergeFieldPatch(t *testing.T) {
 			for k, v := range tc.current {
 				before[k] = v
 			}
-			got := mergeFieldPatch(tc.current, tc.patch)
+			got := MergeFieldPatch(tc.current, tc.patch)
 			if !reflect.DeepEqual(got, tc.want) {
 				t.Errorf("got %v, want %v", got, tc.want)
 			}

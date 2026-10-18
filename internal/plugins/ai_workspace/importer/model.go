@@ -51,6 +51,13 @@ type FrontMatter struct {
 	Era string `yaml:"era"`
 	// KnownAs is the page's name in that era. Only valid with Era.
 	KnownAs string `yaml:"known_as"`
+	// Reason is the AI's one-line why, shown beside the change at review.
+	// Never saved: it explains the request, it is not part of the page.
+	Reason string `yaml:"reason"`
+	// Fields sets values on the page's sheet, by field key. Checked
+	// against the category's own fields (CheckFields); on an update only
+	// the named fields change, and a null clears one.
+	Fields map[string]any `yaml:"fields"`
 }
 
 // IsEra reports a block that writes an era's version of a page.
@@ -123,6 +130,10 @@ const (
 	// (missing, ambiguous, itself, later in the paste, or being deleted).
 	// Default-EXCLUDE; the Reason says what to fix.
 	StatusParentProblem ParseStatus = "parent_problem"
+	// StatusFieldProblem means the row's `fields:` don't fit its
+	// category's sheet (an unknown field, a wrong type, or no category).
+	// Never imported as written; the Reason says what to fix.
+	StatusFieldProblem ParseStatus = "field_problem"
 )
 
 // ParsedPage is one page detected in the multi-page input. The

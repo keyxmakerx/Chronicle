@@ -476,6 +476,16 @@
     var h = Math.floor(m / 60) % 24, mm = m % 60, suf = h < 12 ? 'am' : 'pm', h12 = h % 12 || 12;
     return h12 + (mm ? ':' + pad2(mm) : '') + suf;
   }
+  // Two letters for a page's round mark: "Brother Ansel" is "BA".
+  function gnInitials(name) {
+    return String(name || '').split(/\s+/).filter(Boolean).slice(0, 2).map(function (w) { return w.charAt(0).toUpperCase(); }).join('');
+  }
+  // Who can read a note, in the words the Journal uses. A note for the
+  // Director carries the Director's amber.
+  function gnAudience(a, isGM) {
+    if (a === 'gm') return '<span class="gnaud dm">' + (isGM ? 'GM only' : 'Shared with GM') + '</span>';
+    return '<span class="gnaud">' + ({ party: 'Shared with party', custom: 'Specific people' }[a] || 'Private') + '</span>';
+  }
   // "Oct 17", "Oct 17 and Oct 31", "Oct 3, Oct 17 and Oct 31".
   function listWords(a) {
     return a.length < 2 ? (a[0] || '') : a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1];
@@ -1268,7 +1278,8 @@
       this.forecastByDay = {};
       this.weatherByYear = {}; // year -> {'m_d': reading}, filled by fetchWeatherYear
       this.nightsByMonth = {}; // 'y_m' -> game nights, filled by fetchNights
-      this._gnPages = {}; // session id -> its recap and linked pages
+      this._gnPages = {}; // session id + "|" + date -> its recap, linked pages and entries
+      this._gnChk = {}; // session id + "|" + date -> the check-in's view state
       this._evPages = {}; // event id -> the pages tied to it
       this._gnReminded = {}; // night id + "|" + user id -> reminded this visit
       this._gnRemindedAll = {}; // night id -> "remind everyone" sent
@@ -2058,38 +2069,45 @@
         '</div></div>';
     },
 
-    // A night's recap and linked pages sit below its answers. They are read
-    // when the page opens; until then the page says so.
+    // A night's recap, linked pages and Journal entries sit below its
+    // answers, with the Director's check-in first. They are read when the
+    // page opens; until then the page says so. A repeating night's entries
+    // are its own date's, so the page is kept per date.
     _gnPageExtraHTML: function (n) {
       var sid = n.sessionId;
-      if (!this._gnPages[sid]) this._gnLoadPage(sid);
-      return '<div data-gn-extra="' + esc(sid) + '">' + this._gnExtraHTML(sid) + '</div>';
+      if (!this._gnPages[sid + '|' + n.date]) this._gnLoadPage(sid, n.date);
+      return '<div data-gn-extra="' + esc(sid) + '" data-gn-date="' + esc(n.date) + '">' + this._gnExtraHTML(sid, n.date) + '</div>';
     },
 
-    _gnLoadPage: function (sid) {
-      var self = this;
-      return Chronicle.apiFetch('/campaigns/' + encodeURIComponent(this.campaignId) + '/sessions/' + encodeURIComponent(sid) + '/page')
+    _gnLoadPage: function (sid, date) {
+      var self = this, key = sid + '|' + date;
+      return Chronicle.apiFetch('/campaigns/' + encodeURIComponent(this.campaignId) + '/sessions/' + encodeURIComponent(sid) + '/page?date=' + encodeURIComponent(date))
         .then(function (resp) { return resp.ok ? resp.json() : Promise.reject(); })
         .then(function (p) {
-          self._gnPages[sid] = { recap: p.recap || '', recapHtml: p.recapHtml || '', links: Array.isArray(p.links) ? p.links : [] };
+          var night = p.night || {};
+          self._gnPages[key] = {
+            recap: p.recap || '', recapHtml: p.recapHtml || '', links: Array.isArray(p.links) ? p.links : [],
+            entries: Array.isArray(night.entries) ? night.entries : [],
+            checkIn: Array.isArray(night.checkIn) ? night.checkIn : null
+          };
         })
-        .catch(function () { self._gnPages[sid] = { failed: true, recap: '', recapHtml: '', links: [] }; })
+        .catch(function () { self._gnPages[key] = { failed: true, recap: '', recapHtml: '', links: [], entries: [], checkIn: null }; })
         .then(function () { self._gnRedrawExtra(sid); });
     },
 
     _gnRedrawExtra: function (sid, focusSel) {
       var box = this.evpEl.classList.contains('open') && this.evpEl.querySelector('[data-gn-extra="' + sid + '"]');
       if (!box) return;
-      box.innerHTML = this._gnExtraHTML(sid);
+      box.innerHTML = this._gnExtraHTML(sid, box.dataset.gnDate);
       var f = focusSel && box.querySelector(focusSel);
       if (f) f.focus({ preventScroll: true });
     },
 
-    _gnExtraHTML: function (sid) {
-      var p = this._gnPages[sid], scribe = this.role >= 2, cid = encodeURIComponent(this.campaignId);
+    _gnExtraHTML: function (sid, date) {
+      var p = this._gnPages[sid + '|' + date], scribe = this.role >= 2, cid = encodeURIComponent(this.campaignId);
       if (!p) return '<section class="eps"><h4>Recap</h4><div class="none">Loading…</div></section>';
-      if (p.failed) return '<section class="eps"><h4>Recap</h4><div class="none">The recap and linked pages could not be loaded.</div></section>';
-      var h = '<section class="eps gnrecap"><h4>Recap</h4>';
+      if (p.failed) return '<section class="eps"><h4>Recap</h4><div class="none">The recap, linked pages and entries could not be loaded.</div></section>';
+      var h = this._gnCheckInHTML(sid, date, p) + '<section class="eps gnrecap"><h4>Recap</h4>';
       // Editing here is plain text, so a recap with formatting is shown but
       // never edited here: saving it would drop the formatting.
       var rich = !!p.recapHtml && /<(?!\/?p\b|br\b)[a-z]/i.test(p.recapHtml);
@@ -2113,7 +2131,105 @@
           ? '<div class="gnfind"><input type="search" data-gn-link-q placeholder="Search pages to link" aria-label="Search pages to link" autocomplete="off"><ul class="lp-res" data-gn-link-res role="listbox" aria-label="Pages" hidden></ul></div>'
           : '<button type="button" class="lnk" data-gn-link-open><i class="fa-solid fa-plus"></i> Link a page</button>';
       }
-      return h + '</section>';
+      return h + '</section>' + this._gnEntriesHTML(p);
+    },
+
+    // "Entries for this night": the night's Journal entries the viewer can
+    // read, their own first. Each member's entry is made for them when the
+    // night is due.
+    _gnEntriesHTML: function (p) {
+      var self = this, cid = encodeURIComponent(this.campaignId), list = p.entries || [];
+      var h = '<section class="eps gnwrote"><h4>Entries for this night</h4>';
+      if (!list.length) h += '<div class="none">No Journal entries for this night yet.</div>';
+      else h += '<div class="gnnotes">' + list.map(function (x) {
+        var mine = x.authorId === self.userId;
+        return '<div class="gnnrow">' +
+          '<a href="/campaigns/' + cid + '/journal/' + encodeURIComponent(x.id) + '">' + esc(mine ? 'Your entry' : (x.title || 'Untitled note')) + '</a>' +
+          gnAudience(x.audience, self.canAuthorDmOnly) +
+          '<span class="who">' + esc(mine ? 'You' : (x.authorName || 'A member')) + '</span></div>';
+      }).join('') + '</div>';
+      return h + '<p class="gnrule">' + (this.canAuthorDmOnly
+        ? 'Everyone in the campaign gets an entry in their Journal for each game night. You see the ones you can read; a player’s private entry stays private and is never read for the check-in.'
+        : 'Everyone in the campaign gets an entry in their Journal for each game night. Share yours with the GM if you want the people you met counted.') + '</p></section>';
+    },
+
+    // The after-night check-in, for the Director only: the pages named in
+    // the night's entries, each answered Seen or Not seen. The server sends it
+    // only to someone who sees DM-only content, once the night has started.
+    _gnCheckInHTML: function (sid, date, p) {
+      if (!p.checkIn) return '';
+      var cid = encodeURIComponent(this.campaignId), st = this._gnChk[sid + '|' + date] || {};
+      var all = p.checkIn, pend = all.filter(function (x) { return !x.answer; });
+      var names = all.map(function (x) { return x.name; });
+      var fromEntries = all.every(function (x) { return x.noteId; });
+      var ask = all.length > 4
+        ? all.length + ' people came up ' + (fromEntries ? 'in this night’s entries.' : 'on this night.')
+        : listWords(names) + ' came up ' + (fromEntries ? 'in this night’s entries.' : 'on this night.');
+      var h = '<section class="eps gnchk" data-dm-only aria-label="After-night check-in"><div class="gnchk-h"><p>' +
+        (all.length ? esc(ask) + ' Did the players see them?' : 'Nobody was named in the entries you can read, so there is no one to ask about.') +
+        '</p><span class="dirnote"><i class="fa-solid fa-eye-slash"></i>Director only</span></div>';
+      if (!all.length) return h + '</section>';
+      if (!pend.length && !st.change) {
+        var seen = all.filter(function (x) { return x.answer === 'seen'; }).map(function (x) { return x.name; });
+        var no = all.filter(function (x) { return x.answer === 'not_seen'; }).map(function (x) { return x.name; });
+        h += '<p class="gndone"><i class="fa-solid fa-check"></i> Checked. ' +
+          esc(seen.length ? listWords(seen) + (seen.length > 1 ? ' are' : ' is') + ' in their Last seen for this night.' : 'Nobody was added to Last seen.') +
+          (no.length ? ' ' + esc(listWords(no)) + ' stayed unseen.' : '') + '</p>' +
+          '<div class="gnchk-f"><button type="button" class="lnk" data-gn-chk="change">Change answers</button></div>';
+        return h + '</section>';
+      }
+      var list = st.change ? all : pend, rows = (st.all || list.length <= 6) ? list : list.slice(0, 5);
+      h += '<div class="gnchk-l">' + rows.map(function (x) {
+        var open = st.open && st.open[x.entityId], src;
+        if (x.noteId) {
+          src = 'In <a href="/campaigns/' + cid + '/journal/' + encodeURIComponent(x.noteId) + '">' + esc(x.noteTitle || 'Untitled note') + '</a>' +
+            (x.moreNotes ? ', and ' + x.moreNotes + (x.moreNotes === 1 ? ' more entry' : ' more entries') : '') + '.';
+          if (x.line) src += ' <button type="button" class="lnk" data-gn-chk="line" data-gn-ent="' + esc(x.entityId) + '" aria-expanded="' + !!open + '">' + (open ? 'Hide the line' : 'Show the line') + '</button>';
+        } else {
+          src = x.answer ? 'Answered for this night.' : 'Linked to this game night as mentioned.';
+        }
+        return '<div class="gncrow"><span class="av" aria-hidden="true">' + esc(gnInitials(x.name)) + '</span>' +
+          '<a class="nm" href="/campaigns/' + cid + '/entities/' + encodeURIComponent(x.entityId) + '">' + esc(x.name) + '</a>' +
+          '<span class="seg3 gnpick" role="group" aria-label="' + esc('Did the players see ' + x.name + '?') + '">' +
+            '<button type="button" data-gn-seen="seen" data-gn-ent="' + esc(x.entityId) + '" aria-pressed="' + (x.answer === 'seen') + '"><i class="fa-solid fa-check"></i>Seen</button>' +
+            '<button type="button" data-gn-seen="not_seen" data-gn-ent="' + esc(x.entityId) + '" aria-pressed="' + (x.answer === 'not_seen') + '">Not seen</button></span>' +
+          '<span class="src">' + src + '</span>' +
+          (open && x.line ? '<q class="line">' + esc(x.line) + '</q>' : '') + '</div>';
+      }).join('') + '</div><div class="gnchk-f">';
+      if (rows.length < list.length) h += '<button type="button" class="lnk" data-gn-chk="all">Show all ' + list.length + '</button>';
+      if (pend.length > 1) h += '<button type="button" class="lnk" data-gn-chk="rest">Mark the rest not seen</button>';
+      if (st.change && !pend.length) h += '<button type="button" class="lnk" data-gn-chk="done">Done</button>';
+      return h + '<span class="gnrule">Seen adds this night to their Last seen. Not seen is kept as an answer and adds nothing.</span></div></section>';
+    },
+
+    // Saves check-in answers, shown at once and undone from the toast. An
+    // answer that was empty is undone by clearing it.
+    _gnAnswer: function (sid, date, ids, state, msg) {
+      var self = this, p = this._gnPages[sid + '|' + date];
+      if (!p || !p.checkIn) return;
+      var base = '/campaigns/' + encodeURIComponent(this.campaignId) + '/sessions/' + encodeURIComponent(sid) + '/sightings';
+      var people = p.checkIn.filter(function (x) { return ids.indexOf(x.entityId) >= 0; });
+      var before = people.map(function (x) { return x.answer || ''; });
+      var put = function (x, s) {
+        if (!s) return Chronicle.apiFetch(base + '?entity=' + encodeURIComponent(x.entityId) + '&date=' + encodeURIComponent(date), { method: 'DELETE' });
+        return Chronicle.apiFetch(base, { method: 'PUT', body: { entityId: x.entityId, date: date, state: s, source: 'checkin' } });
+      };
+      var apply = function (states) {
+        people.forEach(function (x, i) { x.answer = states[i]; });
+        // The pressed row may be gone; keep focus in the check-in.
+        self._gnRedrawExtra(sid, '[data-gn-seen], [data-gn-chk="change"]');
+        return Promise.all(people.map(function (x, i) { return put(x, states[i]); })).then(function (rs) {
+          if (rs.some(function (r) { return !r.ok; })) return Promise.reject();
+        });
+      };
+      apply(people.map(function () { return state; }))
+        .then(function () {
+          self.say(msg, { label: 'Undo', run: function () {
+            apply(before).then(function () { self._announce('Answer undone.'); })
+              .catch(function () { self.say('That couldn’t be undone. Try again.'); self._gnLoadPage(sid, date); });
+          } });
+        })
+        .catch(function () { self.say('That answer didn’t save. Try again.'); self._gnLoadPage(sid, date); });
     },
 
     _gnLinkSearch: function (input) {
@@ -2137,10 +2253,11 @@
     _gnExtraClick: function (e) {
       var self = this, box = e.target.closest('[data-gn-extra]');
       if (!box) return false;
-      var sid = box.dataset.gnExtra, base = '/campaigns/' + encodeURIComponent(this.campaignId) + '/sessions/' + encodeURIComponent(sid);
+      var sid = box.dataset.gnExtra, date = box.dataset.gnDate, base = '/campaigns/' + encodeURIComponent(this.campaignId) + '/sessions/' + encodeURIComponent(sid);
       var t = e.target.closest('button');
       if (!t) return true;
-      var reload = function (msg) { self.say(msg); return self._gnLoadPage(sid); };
+      var reload = function (msg) { self.say(msg); return self._gnLoadPage(sid, date); };
+      if (t.dataset.gnSeen || t.dataset.gnChk) return this._gnCheckInClick(t, sid, date), true;
       var fail = function (msg) {
         var err = box.querySelector('.gperr');
         if (err) { err.textContent = msg; err.hidden = false; } else self.say(msg);
@@ -2180,6 +2297,33 @@
           .catch(function () { fail('That page could not be unlinked. Try again.'); });
       }
       return true;
+    },
+
+    _gnCheckInClick: function (t, sid, date) {
+      var key = sid + '|' + date, st = this._gnChk[key] = this._gnChk[key] || {}, p = this._gnPages[key];
+      if (!p || !p.checkIn) return;
+      var id = t.dataset.gnEnt, act = t.dataset.gnChk;
+      var person = p.checkIn.filter(function (x) { return x.entityId === id; })[0];
+      if (t.dataset.gnSeen && person) {
+        var state = t.dataset.gnSeen;
+        this._gnAnswer(sid, date, [id], state, state === 'seen' ? person.name + ' added to Last seen for this night.' : person.name + ' marked not seen.');
+      } else if (act === 'line') {
+        st.open = st.open || {};
+        st.open[id] = !st.open[id];
+        this._gnRedrawExtra(sid, '[data-gn-chk="line"][data-gn-ent="' + id + '"]');
+      } else if (act === 'all') {
+        st.all = true;
+        this._gnRedrawExtra(sid);
+      } else if (act === 'rest') {
+        var rest = p.checkIn.filter(function (x) { return !x.answer; }).map(function (x) { return x.entityId; });
+        this._gnAnswer(sid, date, rest, 'not_seen', 'The rest marked not seen.');
+      } else if (act === 'change') {
+        st.change = true;
+        this._gnRedrawExtra(sid, '[data-gn-seen]');
+      } else if (act === 'done') {
+        st.change = false;
+        this._gnRedrawExtra(sid, '[data-gn-chk="change"]');
+      }
     },
 
     // Redraws every visible copy of a night's answer block (day card and
