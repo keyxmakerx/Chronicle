@@ -156,3 +156,126 @@ test('a new card is moved down until it covers no other card', () => {
   assert.ok(spot.y >= 250, `moved below both parts, got ${spot.y}`);
   assert.deepEqual(plain(H.freeSpot(doc, { x: 2000, y: 50 })), { x: 2000, y: 50 }, 'an empty place is kept');
 });
+
+// The catalog the trackers adapter registers, as the live preview reads it.
+const CAT = {
+  parts: [{ name: 'tracker', label: 'Tracker', preview: 'shape' }, { name: 'clock', label: 'Clock', preview: 'shape' },
+    { name: 'creature-mark', label: 'Creature mark', forceSee: 'director' }],
+  events: [{ name: 'tracker.reached', label: 'A tracker reaches', partKinds: ['tracker', 'clock'], preview: { op: 'reach', arg: 'value' } },
+    { name: 'moon', label: 'The moon turns' }],
+  actions: [{ name: 'step', label: 'Step a tracker', partKinds: ['tracker', 'clock'], preview: { op: 'add', arg: 'by' } },
+    { name: 'set', label: 'Set a tracker', partKinds: ['tracker', 'clock'], preview: { op: 'set', arg: 'to' } },
+    { name: 'tick', label: 'Tick a clock', partKinds: ['clock'], preview: { op: 'add' } },
+    { name: 'rise-as-variant', label: 'Rise as its variant', partKinds: ['creature-mark'], clientRun: true }]
+};
+
+test('the preview keeps a shape\'s bounds and bands as the trackers ledger does', () => {
+  const { H } = load();
+  const cases = [
+    [{ shape: 'count', min: 0, max: 5 }, 9, 5], [{ shape: 'count', min: 0, max: 5 }, -2, 0],
+    [{ shape: 'count' }, -7, -7], [{ shape: 'count', max: 3 }, -7, -7], [{ shape: 'count', min: 2 }, 900, 900],
+    [{ shape: 'clock', max: 6 }, 8, 6], [{ shape: 'clock', max: 6 }, -1, 0],
+    [{ shape: 'steps', steps: [{ name: 'a' }, { name: 'b' }, { name: 'c' }] }, 5, 2]
+  ];
+  for (const [d, v, want] of cases) assert.equal(H.clampV(d, v), want, JSON.stringify(d) + ' ' + v);
+  assert.deepEqual(plain(H.bounds({ shape: 'count' })), { lo: 0, hi: null, floor: false });
+  const banded = { shape: 'count', max: 5, bands: [{ at: 4, text: 'Changes on the 24th' }, { at: 2, text: 'Bane to resist' }] };
+  assert.equal(H.nowText(banded, 1), '');
+  assert.equal(H.nowText(banded, 3), 'Bane to resist');
+  assert.equal(H.nowText(banded, 5), 'Changes on the 24th');
+  assert.equal(H.nowText({ shape: 'steps', steps: [{ name: 'Calm', text: '' }, { name: 'Angry', text: 'Attacks' }] }, 1), 'Angry: Attacks');
+});
+
+test('a new preview starts each numbered part at its lowest and leaves other kinds alone', () => {
+  const { H } = load();
+  const doc = sample();
+  doc.parts.push({ key: 'mark', kind: 'creature-mark', label: 'Mark', see: 'director', data: {} });
+  doc.parts[0].data.min = 1;
+  const st = H.simStart(doc, CAT);
+  assert.deepEqual(plain(st.v), { need: 1, doom: 0 });
+  doc.parts[0].data.max = 0; doc.parts[0].data.min = -3;
+  st.v.need = 4;
+  H.simSync(doc, CAT, st);
+  assert.equal(st.v.need, 0, 'a changed shape re-clamps');
+  doc.parts.shift();
+  H.simSync(doc, CAT, st);
+  assert.deepEqual(plain(st.v), { doom: 0 }, 'a removed part is dropped');
+});
+
+test('stepping a part runs the rules that watch it, in order, and lights their cards', () => {
+  const { H } = load();
+  const doc = sample();
+  const st = H.simStart(doc, CAT);
+  let lit = [];
+  for (let i = 0; i < 3; i++) lit = H.simNudge(doc, CAT, st, 'need', 1);
+  assert.equal(st.v.need, 3);
+  assert.deepEqual(plain(lit), ['p:need'], 'nothing watches 3');
+  lit = H.simNudge(doc, CAT, st, 'need', 1);
+  // Reaching 4 ticks Doom, then sets Need back to 0.
+  assert.deepEqual(plain(lit), ['p:need', 'r0', 'r0.0', 'p:doom', 'r0.1', 'p:need']);
+  assert.deepEqual(plain(st.v), { need: 0, doom: 1 });
+  assert.match(st.log.at(-1), /Set a tracker: Need 4 to 0/);
+  assert.deepEqual(plain(H.simNudge(doc, CAT, st, 'need', -1)), ['p:need'], 'a step past the floor is lost');
+  assert.equal(st.v.need, 0);
+});
+
+test('a reach fires when the number lands on its value or moves past it, either way', () => {
+  const { H } = load();
+  const doc = sample();
+  doc.rules[0].then = [{ action: 'tick', part: 'doom', args: {} }];
+  const st = H.simStart(doc, CAT);
+  H.simSetTo(doc, CAT, st, 'need', 5);
+  assert.equal(st.v.doom, 1, 'jumping past 4 counts');
+  H.simSetTo(doc, CAT, st, 'need', 2);
+  assert.equal(st.v.doom, 2, 'coming down past 4 counts');
+  assert.equal(H.simSetTo(doc, CAT, st, 'need', 2), null, 'already there');
+  assert.equal(H.simSetTo(doc, CAT, st, 'need', 9), null, 'past the top');
+});
+
+test('a rule timed for later waits until it is run', () => {
+  const { H } = load();
+  const doc = sample();
+  doc.rules[0].timing = 'held';
+  const st = H.simStart(doc, CAT);
+  H.simSetTo(doc, CAT, st, 'need', 4);
+  assert.equal(st.v.doom, 0);
+  assert.deepEqual(plain(st.waiting.map((w) => [w.rule, w.what, w.timing])), [[0, 'A tracker reaches: Need', 'held']]);
+  // Removing an earlier rule keeps the waiting one pointing at itself.
+  doc.rules.unshift({ when: { event: 'moon', part: '', args: {} }, timing: 'now', then: [] });
+  H.simSync(doc, CAT, st);
+  assert.equal(st.waiting[0].rule, 1);
+  const lit = H.simRunWaiting(doc, CAT, st, 0);
+  assert.deepEqual(plain(lit), ['r1', 'r1.0', 'p:doom', 'r1.1', 'p:need']);
+  assert.deepEqual(plain(st.v), { need: 0, doom: 1 });
+  assert.equal(st.waiting.length, 0);
+});
+
+test('a When from outside the recipe is a button, and actions it can\'t act out say what they would do', () => {
+  const { H } = load();
+  const doc = sample();
+  doc.parts.push({ key: 'mark', kind: 'creature-mark', label: 'Mark', see: 'director', data: {} });
+  doc.rules[1].then.push({ action: 'rise-as-variant', part: 'mark', args: {} });
+  assert.deepEqual(plain(H.firable(doc, CAT)), [1]);
+  const st = H.simStart(doc, CAT);
+  assert.deepEqual(plain(H.simFire(doc, CAT, st, 1)), ['r1'], 'a held rule only waits');
+  assert.equal(st.waiting.length, 1);
+  doc.rules[1].timing = 'now';
+  const lit = H.simFire(doc, CAT, st, 1);
+  assert.deepEqual(plain(lit), ['r1', 'r1.0', 'p:need', 'r1.1']);
+  assert.equal(st.v.need, 1);
+  assert.equal(st.log.at(-1), 'You would be asked to run: Rise as its variant, Mark');
+});
+
+test('rules that set each other off stop instead of hanging the page', () => {
+  const { H } = load();
+  const doc = sample();
+  doc.parts[0].data = { shape: 'count' };
+  doc.rules = [
+    { when: { event: 'tracker.reached', part: 'need', args: { value: 1 } }, timing: 'now', then: [{ action: 'set', part: 'need', args: { to: 0 } }] },
+    { when: { event: 'tracker.reached', part: 'need', args: { value: 0 } }, timing: 'now', then: [{ action: 'set', part: 'need', args: { to: 1 } }] }
+  ];
+  const st = H.simStart(doc, CAT);
+  H.simNudge(doc, CAT, st, 'need', 1);
+  assert.match(st.log.at(-1), /^Stopped after 50 steps/);
+  assert.ok(st.log.length <= 40, 'the log stays short');
+});
