@@ -3,7 +3,7 @@
 // guard against a silent flip-to-public data-disclosure regression:
 //
 //   1. EntityCreateFormComponent must not render a `<input ... id="is_private" ...>`
-//      checkbox. Permissions are set via the slide-in card instead.
+//      checkbox. Permissions are set with the page's visibility chip instead.
 //
 //   2. EntityEditFormComponent must not render a hidden
 //      `<input type="hidden" name="is_private" ...>` — the form no longer
@@ -27,9 +27,9 @@ import (
 )
 
 // TestEntityCreateFormComponent_NoIsPrivateCheckbox pins that the
-// create form no longer renders the legacy DM-only checkbox. The
-// permissions slide-in card replaces it; the hidden `is_private` input
-// driven by the card is allowed (and necessary).
+// create form no longer renders the legacy DM-only checkbox. The page's
+// visibility chip replaces it; the hidden `is_private` input the chip's
+// editor writes is allowed (and necessary).
 func TestEntityCreateFormComponent_NoIsPrivateCheckbox(t *testing.T) {
 	cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1", Name: "Test"}}
 	entityTypes := []EntityType{{ID: 1, Name: "Character", Enabled: true}}
@@ -41,7 +41,7 @@ func TestEntityCreateFormComponent_NoIsPrivateCheckbox(t *testing.T) {
 	}
 	html := buf.String()
 
-	// Hidden input set up by the slide-in card stays — the create
+	// Hidden input written by the chip's editor stays — the create
 	// handler still reads is_private from form post. What must NOT
 	// be present is the user-visible checkbox.
 	if strings.Contains(html, `type="checkbox" id="is_private"`) {
@@ -51,10 +51,15 @@ func TestEntityCreateFormComponent_NoIsPrivateCheckbox(t *testing.T) {
 		t.Errorf("create form re-introduced the 'Private (visible to GM only)' label; dispatch C-PERMISSIONS-INLINE-COMPONENT removed it")
 	}
 
-	// Positive assertion: the permissions card mount must be present
-	// so the JS widget renders the slide-in trigger in its place.
+	// Positive assertion: the permissions mount must be present, as the
+	// page's own chip unfolding the corner editor, not the old slide-in.
 	if !strings.Contains(html, `data-widget="permissions"`) {
-		t.Errorf("create form is missing the permissions widget mount; the slide-in card cannot render without it")
+		t.Errorf("create form is missing the permissions widget mount")
+	}
+	for _, want := range []string{`data-layout="corner"`, `class="perm-chip"`, "data-perm-corner-trigger", `id="is_private_draft"`, `data-draft-target="#is_private_draft"`} {
+		if !strings.Contains(html, want) {
+			t.Errorf("create form's visibility control is missing %s; it must be the page's chip in draft mode", want)
+		}
 	}
 	if !strings.Contains(html, `data-mode="draft"`) {
 		t.Errorf("create form's permissions mount must declare draft mode so the widget skips the (nonexistent) save endpoint")

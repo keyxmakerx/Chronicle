@@ -24,3 +24,13 @@ var emptyObject = json.RawMessage(`{}`)
 func emptyState() State {
 	return State{GM: emptyObject, Public: emptyObject}
 }
+
+// ListItem is one page carrying a given key, as the campaign-wide listing
+// returns it.
+type ListItem struct {
+	EntityID   string
+	EntityName string
+	GM         json.RawMessage
+	Public     json.RawMessage
+	UpdatedAt  time.Time
+}

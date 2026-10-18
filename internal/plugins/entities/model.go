@@ -748,6 +748,9 @@ type CastView struct {
 	// Open names the band box rendered open, so a reassign answers with the
 	// list still in view.
 	Open string
+	// Builder is the hero builder for the viewer's own heroes and a new
+	// one; nil hides it.
+	Builder *HeroBuilderView
 }
 
 // --- Slug Generation ---
