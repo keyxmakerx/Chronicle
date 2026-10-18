@@ -38,10 +38,17 @@ const (
 // it, and the campaign keeps its pin meanwhile. See CampaignBinding.
 const PinModeApproveFirst = "approve_first"
 
+// PinModeAutomatic is "Update automatically" chosen through the update modes.
+// It serves exactly like "promote", but it is a choice: the boot pass and an
+// install move a campaign with no choice onto ask-first, and they must not
+// mistake this one for it.
+const PinModeAutomatic = "automatic"
+
 // UpdateModeFromLegacy maps a campaign's stored pin and pin_mode onto the
 // shared update modes without changing what the campaign is served:
 //
 //   - approve_first stays approve_first (the stored choice wins);
+//   - automatic is automatic unless a pin is set (the pin is what is served);
 //   - any non-empty pin is pinned, whatever pin_mode says;
 //   - "preserve" with no pin is pinned (it freezes on the next install);
 //   - everything else, including empty, "promote" and a bare "pinned" with
@@ -66,7 +73,7 @@ func UpdateModeFromLegacy(pin, pinMode string) (packages.UpdateMode, string) {
 // valid here; callers that handle it should check separately.
 func IsValidPinMode(mode string) bool {
 	switch mode {
-	case PinModePreserve, PinModePromote, PinModePinned, PinModeApproveFirst:
+	case PinModePreserve, PinModePromote, PinModePinned, PinModeApproveFirst, PinModeAutomatic:
 		return true
 	default:
 		return false

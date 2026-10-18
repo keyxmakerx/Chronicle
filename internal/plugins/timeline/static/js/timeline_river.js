@@ -463,6 +463,8 @@
     },
 
     // Peek: a hover card after a short rest, so sweeping across the line stays quiet.
+    // The owner's fading corner (data-cz-tlpop) sits on the event's bead on a
+    // stem instead, flipping to the bead's left near the right end.
     _placePeek: function () {
       var self = this, st = this.st, id = st.hover && st.hover !== st.sel ? st.hover : null;
       if (id !== this._peekFor) {
@@ -473,11 +475,17 @@
       if (!id || this._peekReady !== id || !this.byId[id]) return;
       var e = this.byId[id];
       if (!this._peekEl) {
-        this._peekEl = document.createElement('div'); this._peekEl.className = 'tlr-peek';
-        this._peekEl.innerHTML = '<b>' + esc(e.name) + '</b>' + esc(this.whenText(e)) + (e.dm ? ' · <span class="d">Director only</span>' : '');
+        this._peekEl = document.createElement('div');
+        this._peekEl.className = 'tlr-peek' + (document.documentElement.getAttribute('data-cz-tlpop') === 'corner' ? ' tlr-peek--corner' : '');
+        this._peekEl.innerHTML = '<b>' + esc(e.name) + '</b>' + esc(this.whenText(e)) + (e.dm ? ' · <span class="d">Director only</span>' : '') + '<i class="tlr-peek-st" aria-hidden="true"></i>';
         this.stage.appendChild(this._peekEl);
       }
-      this._peekEl.style.left = Math.max(130, Math.min(this.W - 130, this.X(e.t))) + 'px'; this._peekEl.style.top = (this.Y - 4) + 'px';
+      var pk = this._peekEl, x = this.X(e.t);
+      if (pk.classList.contains('tlr-peek--corner')) {
+        pk.classList.toggle('r', x + pk.offsetWidth > this.W - 8 && x > this.W - x);
+        pk.style.left = x + 'px';
+      } else pk.style.left = Math.max(130, Math.min(this.W - 130, x)) + 'px';
+      pk.style.top = (this.Y - 4) + 'px';
     },
 
     // Motion: the view eases toward its target and coasts after a drag; Calm settles faster, Off jumps.

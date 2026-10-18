@@ -57,6 +57,9 @@ type AppearanceData struct {
 	// attribute, and "annals" sets data-cz-page for page_look_annals.css.
 	PageLook string
 
+	// TimelinePopup is what opens over a time line's event; "corner" sets
+	// data-cz-tlpop for the fading corner, and "" is the classic hover card.
+	TimelinePopup string
 	// StyleKit is the pages' character under Annals; "" and "material" add
 	// no attribute, and the others set data-cz-kit for style_kits.css.
 	StyleKit string
@@ -121,6 +124,9 @@ func AppearanceAttrs(ctx context.Context) templ.Attributes {
 		if _, ok := czKits[a.StyleKit]; ok {
 			attrs["data-cz-kit"] = a.StyleKit
 		}
+	}
+	if a.TimelinePopup == "corner" {
+		attrs["data-cz-tlpop"] = "corner"
 	}
 	if a.HeadingFont != "" && a.HeadingFont != "same" {
 		attrs["data-cz-heading"] = a.HeadingFont

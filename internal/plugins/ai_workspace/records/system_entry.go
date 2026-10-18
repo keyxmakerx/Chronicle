@@ -16,6 +16,7 @@ var systemEntryReserved = map[string]bool{
 	"kind": true, "action": true, "name": true, "entry": true, "summary": true,
 	"director": true, "rename_to": true, "type": true, "subcategory": true,
 	"visibility": true, "tags": true, "description": true, "reason": true,
+	"for": true,
 }
 
 // SystemEntryKind adds, changes and removes the campaign's own pick-list
@@ -29,7 +30,7 @@ type SystemEntryKind struct {
 func (SystemEntryKind) Name() string  { return "system-entry" }
 func (SystemEntryKind) Label() string { return "System entry" }
 func (SystemEntryKind) Doc() string {
-	return "An entry the campaign adds to its game system's pick list for a character field (an ancestry, kit, culture, career, class, race...). `entry` is the character field's key (for example `ancestry`; ask `what: system-entries` with no `field` for the keys that have entries); matched by `entry` + `name`. Give a one-line `summary`. The body is the description. Optional `director: true` keeps it to Directors; `rename_to`. Any other key (for example `size`, `speed`) is stored as a detail and must be plain text, a number or yes/no, or a list of items that each have a `name` and optionally a whole-number `cost` and a plain-text `description` (for traits a hero buys with points, shape it like the system's own entries: a `*_points` budget beside the list). It never changes the game system's own entries.\n\n```\n---\nkind: system-entry\nentry: ancestry\nname: Stoneborn\nsummary: Hardy folk of the deep mountains.\nsize: 1M\nspeed: 5\nancestry_points: 3\nsignature_traits:\n  - name: Rooted\n    description: You can't be pushed while standing on stone.\npurchased_traits:\n  - name: Deep Sight\n    cost: 1\n    description: You see in darkness as well as in dim light.\n  - name: Stone Skin\n    cost: 2\n    description: The first strike against you each round deals 2 less damage.\n---\nStoneborn are shaped by lives lived under rock.\n```"
+	return "An entry the campaign adds to its game system's pick list for a character field (an ancestry, kit, culture, career, class, race...). `entry` is the character field's key (for example `ancestry`; ask `what: system-entries` with no `field` for the keys that have entries); matched by `entry` + `name`. Give a one-line `summary`. The body is the description. Optional `director: true` keeps it to Directors; `for: <character name>` instead keeps it to Directors and whoever plays that character page (a penciled option shown to one player), and `director: false` on an update opens it to everyone; `rename_to`. Any other key (for example `size`, `speed`) is stored as a detail and must be plain text, a number or yes/no, or a list of items that each have a `name` and optionally a whole-number `cost` and a plain-text `description` (for traits a hero buys with points, shape it like the system's own entries: a `*_points` budget beside the list). It never changes the game system's own entries.\n\n```\n---\nkind: system-entry\nentry: ancestry\nname: Stoneborn\nsummary: Hardy folk of the deep mountains.\nsize: 1M\nspeed: 5\nancestry_points: 3\nsignature_traits:\n  - name: Rooted\n    description: You can't be pushed while standing on stone.\npurchased_traits:\n  - name: Deep Sight\n    cost: 1\n    description: You see in darkness as well as in dim light.\n  - name: Stone Skin\n    cost: 2\n    description: The first strike against you each round deals 2 less damage.\n---\nStoneborn are shaped by lives lived under rock.\n```"
 }
 
 func (k SystemEntryKind) actor(a Actor) systems.EntryActor {
@@ -50,6 +51,23 @@ func (k SystemEntryKind) find(ctx context.Context, campaignID string, a Actor, r
 	return k.Svc.FindByName(ctx, campaignID, r.Str("entry"), r.Name, k.actor(a))
 }
 
+// forCharacter resolves `for:` to the character page's id; "" when the
+// block names none. A name that matches no single character page is an error.
+func (k SystemEntryKind) forCharacter(ctx context.Context, campaignID string, r Record) (string, error) {
+	name := r.Str("for")
+	if name == "" {
+		return "", nil
+	}
+	c, err := k.Svc.FindCharacter(ctx, campaignID, name)
+	if err != nil {
+		return "", err
+	}
+	if c == nil {
+		return "", apperror.NewValidation("no single character page is called " + quote(name))
+	}
+	return c.ID, nil
+}
+
 func (k SystemEntryKind) Plan(ctx context.Context, campaignID string, a Actor, r Record) Plan {
 	if !a.CanAuthorDmOnly() {
 		return Plan{Error: "only the campaign's Directors can change its system entries"}
@@ -60,6 +78,13 @@ func (k SystemEntryKind) Plan(ctx context.Context, campaignID string, a Actor, r
 	if r.Str("entry") == "" {
 		return Plan{Error: "a system entry needs `entry:` (the character field it belongs to, for example ancestry)"}
 	}
+	if v, ok := r.Bool("director"); ok && v && r.Str("for") != "" {
+		return Plan{Error: "use either `director: true` or `for:`, not both"}
+	}
+	forID, err := k.forCharacter(ctx, campaignID, r)
+	if err != nil {
+		return Plan{Error: planError(err)}
+	}
 	cur, err := k.find(ctx, campaignID, a, r)
 	if err != nil {
 		return Plan{Error: planError(err)}
@@ -69,9 +94,12 @@ func (k SystemEntryKind) Plan(ctx context.Context, campaignID string, a Actor, r
 		if cur != nil {
 			return Plan{Error: "a " + r.Str("entry") + " called " + quote(r.Name) + " already exists; use action: update"}
 		}
-		in := k.createInput(r)
+		in := k.createInput(r, forID)
 		if err := k.Svc.CheckCreate(ctx, campaignID, k.actor(a), in); err != nil {
 			return Plan{Error: planError(err)}
+		}
+		if forID != "" {
+			return Plan{Summary: "new " + r.Str("entry") + " entry, shown only to " + r.Str("for") + "'s player and Directors"}
 		}
 		return Plan{Summary: "new " + r.Str("entry") + " entry"}
 	case ActionUpdate:
@@ -93,14 +121,17 @@ func (k SystemEntryKind) Plan(ctx context.Context, campaignID string, a Actor, r
 	}
 }
 
-func (k SystemEntryKind) createInput(r Record) systems.CreateSystemEntryInput {
+func (k SystemEntryKind) createInput(r Record, forID string) systems.CreateSystemEntryInput {
 	vis := systems.EntryVisibilityEveryone
 	if v, ok := r.Bool("director"); ok && v {
 		vis = systems.EntryVisibilityDirectors
 	}
+	if forID != "" {
+		vis = systems.EntryVisibilityCharacter
+	}
 	return systems.CreateSystemEntryInput{
 		FieldKey: r.Str("entry"), Name: r.Name, Summary: r.Str("summary"),
-		Description: strings.TrimSpace(r.Body), Properties: k.details(r), Visibility: vis,
+		Description: strings.TrimSpace(r.Body), Properties: k.details(r), Visibility: vis, ForEntityID: forID,
 	}
 }
 
@@ -121,6 +152,10 @@ func (k SystemEntryKind) Apply(ctx context.Context, campaignID string, a Actor, 
 	if p := k.Plan(ctx, campaignID, a, r); p.Error != "" {
 		return apperror.NewBadRequest(p.Error)
 	}
+	forID, err := k.forCharacter(ctx, campaignID, r)
+	if err != nil {
+		return err
+	}
 	cur, err := k.find(ctx, campaignID, a, r)
 	if err != nil {
 		return err
@@ -130,7 +165,7 @@ func (k SystemEntryKind) Apply(ctx context.Context, campaignID string, a Actor, 
 		if cur != nil {
 			return apperror.NewBadRequest("it changed while you were reviewing; check it again")
 		}
-		_, err = k.Svc.Create(ctx, campaignID, k.actor(a), k.createInput(r))
+		_, err = k.Svc.Create(ctx, campaignID, k.actor(a), k.createInput(r, forID))
 		return err
 	}
 	if cur == nil {
@@ -157,6 +192,10 @@ func (k SystemEntryKind) Apply(ctx context.Context, campaignID string, a Actor, 
 		}
 		in.Visibility = patch.Of(vis)
 	}
+	if forID != "" {
+		in.Visibility = patch.Of(systems.EntryVisibilityCharacter)
+		in.ForEntityID = patch.Of(forID)
+	}
 	if len(k.details(r)) > 0 {
 		in.Properties = patch.Of(k.merged(cur, r))
 	}
@@ -175,8 +214,11 @@ func (k SystemEntryKind) Export(ctx context.Context, campaignID string, a Actor)
 	var b strings.Builder
 	for _, e := range list {
 		b.WriteString("- " + e.FieldKey + ": " + e.Name)
-		if e.Visibility == systems.EntryVisibilityDirectors {
+		switch e.Visibility {
+		case systems.EntryVisibilityDirectors:
 			b.WriteString(" (Directors only)")
+		case systems.EntryVisibilityCharacter:
+			b.WriteString(" (for " + e.ForName + ")")
 		}
 		b.WriteString("\n")
 	}

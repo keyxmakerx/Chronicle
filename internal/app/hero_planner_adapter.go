@@ -14,8 +14,8 @@ type heroPlannerAdapter struct {
 	choices systems.CharacterChoiceService
 }
 
-func (a heroPlannerAdapter) HeroPlan(ctx context.Context, campaignID string, director bool) (*entities.HeroPlan, error) {
-	p, err := a.choices.CreatorPlan(systems.WithChoiceViewer(ctx, director), campaignID)
+func (a heroPlannerAdapter) HeroPlan(ctx context.Context, campaignID, userID string, director bool) (*entities.HeroPlan, error) {
+	p, err := a.choices.CreatorPlan(systems.WithChoiceViewerUser(systems.WithChoiceViewer(ctx, director), userID), campaignID)
 	if err != nil {
 		return nil, err
 	}

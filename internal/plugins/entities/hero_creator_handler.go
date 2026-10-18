@@ -66,7 +66,7 @@ func (h *Handler) heroPlan(c echo.Context, cc *campaigns.CampaignContext) (*Hero
 	if h.heroPlanner == nil {
 		return &HeroPlan{Steps: []HeroStep{}}, nil
 	}
-	return h.heroPlanner.HeroPlan(c.Request().Context(), cc.Campaign.ID, cc.CanAuthorDmOnly())
+	return h.heroPlanner.HeroPlan(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c), cc.CanAuthorDmOnly())
 }
 
 // NewHero renders the hero creator (GET /campaigns/:id/characters/new).

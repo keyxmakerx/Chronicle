@@ -99,6 +99,28 @@
 .tlr-peek b { color: var(--tlr-ink); display: block; font-weight: 600; }
 .tlr-peek .d { color: var(--tlr-dm); font-weight: 600; }
 @keyframes tlr-peek { from { opacity: 0; transform: translate(-50%, calc(-100% - 12px)); } }
+.tlr-peek-st { display: none; }
+/* The fading corner (Customize › Hover cards › Popups on time lines): no box.
+   Its corner sits over the bead on a short stem; an edge in the campaign
+   colour runs up the side and along the bottom, each fading away from the
+   corner, over a background solid behind the text that feathers out past it.
+   .r flips it to the bead's left near the right end. */
+.tlr-peek--corner { --tlr-pk-h: to right; transform: translate(-.75px, calc(-100% - 16px)); background: none; border: 0; box-shadow: none;
+  border-radius: 0 0 0 var(--tlr-k-r-sheet); padding: 9px 16px 9px 13px; color: var(--tlr-muted); isolation: isolate; animation-name: tlr-peek-fade; }
+.tlr-peek--corner.r { --tlr-pk-h: to left; transform: translate(calc(-100% + .75px), calc(-100% - 16px)); border-radius: 0 0 var(--tlr-k-r-sheet) 0; padding: 9px 13px 9px 16px; text-align: right; }
+.tlr-peek--corner::before, .tlr-peek--corner::after { content: ""; position: absolute; z-index: -1; inset: -18px -44px 0 0; border-radius: inherit;
+  -webkit-mask-composite: source-in; mask-composite: intersect; }
+.tlr-peek--corner.r::before, .tlr-peek--corner.r::after { inset: -18px 0 0 -44px; }
+.tlr-peek--corner::before { background: var(--tlr-panel);
+  -webkit-mask-image: linear-gradient(to top, #000 calc(100% - 30px), transparent), linear-gradient(var(--tlr-pk-h), #000 calc(100% - 56px), transparent);
+  mask-image: linear-gradient(to top, #000 calc(100% - 30px), transparent), linear-gradient(var(--tlr-pk-h), #000 calc(100% - 56px), transparent); }
+.tlr-peek--corner::after { border: 0 solid var(--tlr-acc); border-left-width: 1.5px; border-bottom-width: 1.5px;
+  -webkit-mask-image: linear-gradient(to top, #000 25%, transparent), linear-gradient(var(--tlr-pk-h), #000 25%, transparent);
+  mask-image: linear-gradient(to top, #000 25%, transparent), linear-gradient(var(--tlr-pk-h), #000 25%, transparent); }
+.tlr-peek--corner.r::after { border-left-width: 0; border-right-width: 1.5px; }
+.tlr-peek--corner .tlr-peek-st { display: block; position: absolute; left: 0; bottom: -8px; width: 1.5px; height: 8px; background: var(--tlr-acc); }
+.tlr-peek--corner.r .tlr-peek-st { left: auto; right: 0; }
+@keyframes tlr-peek-fade { from { opacity: 0; } }
 
 /* The line */
 .tlr .river-line { stroke-width: 2px; }
