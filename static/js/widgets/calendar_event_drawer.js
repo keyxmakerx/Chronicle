@@ -18,6 +18,10 @@
  * by itself. Loaded on every page with the other calendar scripts and inert
  * until opened.
  *
+ * The Roll section (calendar_event_roll.js, loaded on sight) is the
+ * Director's: dice or a rolling table each night the event lands on. Its
+ * settings save after the event, with the same Save.
+ *
  * The mockup's linked pages and RSVPs are not here: the events API has no
  * write surface for either yet (see the calendar plugin's .ai.md, "Honest
  * gaps"), so the drawer leaves them out rather than show controls that
@@ -98,6 +102,7 @@
   // a calendar torn down (boosted navigation) leaves nothing behind.
   Drawer.prototype.destroy = function () {
     this._stopPreview();
+    this._dropRoll();
     this._offs.forEach(function (o) { o[0].removeEventListener(o[1], o[2], o[3]); });
     this._offs = [];
     this.state = null;
@@ -106,6 +111,12 @@
   Drawer.prototype._on = function (target, type, fn, capture) {
     target.addEventListener(type, fn, !!capture);
     this._offs.push([target, type, fn, !!capture]);
+  };
+
+  Drawer.prototype._dropRoll = function () {
+    var host = $('#cal5-edRoll', this.el);
+    if (host && Chronicle.destroyWidget) Chronicle.destroyWidget(host);
+    this.roll = null;
   };
 
   Drawer.prototype.isOpen = function () { return this.el.classList.contains('open'); };
@@ -148,6 +159,14 @@
       }
     };
     this.el.innerHTML = this._html(ev, s, e);
+    // The Roll section is its own widget, fetched the first time it is
+    // shown; until it arrives there is nothing in it to save.
+    var rollHost = $('#cal5-edRoll', this.el), self0 = this, S0 = this.state;
+    this.roll = null;
+    if (rollHost && Chronicle.mountWidget) {
+      rollHost._calRoll = { view: view, ev: ev, ready: function (ctl) { if (self0.state === S0) self0.roll = ctl; } };
+      Chronicle.mountWidget(rollHost);
+    }
     void this.el.offsetWidth;
     this.el.classList.add('open');
     view.dockEl.classList.add('on');
@@ -166,6 +185,7 @@
     if (!this.isOpen()) return;
     var back = this.state && this.state.back;
     this._stopPreview();
+    this._dropRoll();
     this.el.classList.remove('open');
     this.view.dockEl.classList.remove('on');
     this.state = null;
@@ -229,6 +249,12 @@
       '<div class="fld eann">Players see it<div class="segs" role="group" aria-label="Players see it">' + [['', 'As its kind says'], ['ahead', 'Ahead of time'], ['on_day', 'On the day']].map(function (o) {
         return '<button type="button" data-ann="' + o[0] + '" aria-pressed="' + (S.announced === o[0]) + '">' + o[1] + '</button>';
       }).join('') + '</div></div></section>';
+    }
+    // The roll belongs to a saved event, and only the Director sets it.
+    if (view.canAuthorDmOnly) {
+      h += S.isNew
+        ? '<section class="esec rlsec" data-dm-only><h4>Roll</h4><p class="rlhint">Save the event first, then open it again to add a roll for each night it lands on.</p></section>'
+        : '<section class="esec rlsec" id="cal5-edRoll" data-widget="calendar_event_roll" data-dm-only><h4>Roll</h4><p class="rlhint">Loading…</p></section>';
     }
     h += '<button type="button" class="moreb" data-e="more" aria-expanded="false" aria-controls="cal5-edMore">More <i class="fa-solid fa-chevron-down"></i></button>' +
       '<div class="moresec" id="cal5-edMore" hidden><div class="fields" style="margin-top:0">' +
@@ -688,6 +714,8 @@
     var self = this, S = this.state, view = this.view;
     var out = this._body();
     if (!out) return;
+    var roll = this.roll, rollBad = roll ? roll.check() : '';
+    if (rollBad) { this._fail(rollBad, $('#cal5-edRoll', this.el)); return; }
     var btn = $('[data-save]', this.el);
     btn.disabled = true;
     var req = S.isNew
@@ -698,17 +726,28 @@
         btn.disabled = false;
         return resp.json().then(function (j) { self._fail((j && (j.message || j.error)) || 'That didn’t save. Try again.'); }, function () { self._fail('That didn’t save. Try again.'); });
       }
-      self.close(true);
-      view.eventsByMonth = {};
-      if (out.start.y !== view.view.y || out.start.m !== view.view.m) view.view = { y: out.start.y, m: out.start.m };
-      view.renderMonth();
-      view.say('Saved ' + out.body.name + '.');
-      var cell = $('.day[data-key="' + out.start.y + '_' + out.start.m + '_' + out.start.d + '"]', view.stageEl);
-      if (cell) cell.focus({ preventScroll: true });
+      // The event is saved; a changed roll saves after it. If the roll
+      // fails the drawer stays open so nothing typed is lost.
+      return (roll && roll.isDirty() ? roll.save() : Promise.resolve('')).then(function (bad) {
+        if (self.state !== S) return;
+        if (bad) { btn.disabled = false; self._fail('The event saved, but its roll didn’t: ' + bad); return; }
+        self._saved(out);
+      });
     }, function () {
       btn.disabled = false;
       self._fail('That didn’t save. Check your connection and try again.');
     });
+  };
+
+  Drawer.prototype._saved = function (out) {
+    var view = this.view;
+    this.close(true);
+    view.eventsByMonth = {};
+    if (out.start.y !== view.view.y || out.start.m !== view.view.m) view.view = { y: out.start.y, m: out.start.m };
+    view.renderMonth();
+    view.say('Saved ' + out.body.name + '.');
+    var cell = $('.day[data-key="' + out.start.y + '_' + out.start.m + '_' + out.start.d + '"]', view.stageEl);
+    if (cell) cell.focus({ preventScroll: true });
   };
 
   Drawer.prototype._delete = function () {
