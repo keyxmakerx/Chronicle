@@ -191,23 +191,22 @@ func FieldsSummary(defs []entities.FieldDefinition, checked map[string]any) stri
 		if !ok {
 			continue
 		}
-		switch {
-		case v == nil:
+		if v == nil {
 			parts = append(parts, d.Label+" cleared")
-		default:
-			s := fmt.Sprint(v)
-			if strings.HasPrefix(s, "[") || strings.HasPrefix(s, "{") {
-				var list []any
-				if json.Unmarshal([]byte(s), &list) == nil {
-					s = fmt.Sprintf("%d %s", len(list), pluralWord(len(list), "entry", "entries"))
-				} else {
-					s = "set"
-				}
-			} else if r := []rune(s); len(r) > 40 {
-				s = string(r[:37]) + "..."
-			}
-			parts = append(parts, d.Label+" "+s)
+			continue
 		}
+		s := fmt.Sprint(v)
+		if strings.HasPrefix(s, "[") || strings.HasPrefix(s, "{") {
+			var list []any
+			if json.Unmarshal([]byte(s), &list) == nil {
+				s = fmt.Sprintf("%d %s", len(list), pluralWord(len(list), "entry", "entries"))
+			} else {
+				s = "set"
+			}
+		} else if r := []rune(s); len(r) > 40 {
+			s = string(r[:37]) + "..."
+		}
+		parts = append(parts, d.Label+" "+s)
 	}
 	return strings.Join(parts, ", ")
 }
