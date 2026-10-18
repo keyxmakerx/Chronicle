@@ -825,6 +825,37 @@
     return fetch(url, fetchOpts);
   };
 
+  // Local words for one page, per visit: what the page's place or the
+  // current era calls a word (a coin, a rank). Keyed by the lower-cased usual
+  // word; {} when there are none or the read fails.
+  var localWordsCache = {};
+  Chronicle.localWords = function (campaignId, entityId) {
+    if (!campaignId || !entityId) return Promise.resolve({});
+    var key = campaignId + '/' + entityId;
+    if (!localWordsCache[key]) {
+      localWordsCache[key] = Chronicle.apiFetch('/campaigns/' + encodeURIComponent(campaignId) +
+        '/entities/' + encodeURIComponent(entityId) + '/local-words')
+        .then(function (r) { return r.ok ? r.json() : {}; })
+        .then(function (d) { return (d && d.words) || {}; })
+        .catch(function () { return {}; });
+    }
+    return localWordsCache[key];
+  };
+
+  /**
+   * The local name for text, or text itself. Matches the server's rule: the
+   * word ignoring case, or its plural made with a trailing "s".
+   * @returns {{text: string, usual: string}} usual is '' when nothing changed.
+   */
+  Chronicle.localName = function (words, text) {
+    var t = String(text == null ? '' : text);
+    var k = t.trim().toLowerCase();
+    if (!words || !k) return { text: t, usual: '' };
+    var l = Object.prototype.hasOwnProperty.call(words, k) ? words[k] : null;
+    if (l == null && k.slice(-1) === 's' && Object.prototype.hasOwnProperty.call(words, k.slice(0, -1))) l = words[k.slice(0, -1)];
+    return l == null || l === t ? { text: t, usual: '' } : { text: l, usual: t };
+  };
+
   /**
    * Go to a Chronicle address. On the site this is a plain navigation;
    * inside an outside app's frame, Chronicle.embed.go decides (a page opens

@@ -120,6 +120,14 @@ func fieldValue(def entities.FieldDefinition, v any) (any, string) {
 			return nil, fmt.Sprintf("%q is not an http or https address.", s)
 		}
 		return s, ""
+	case entities.FieldTypeLink:
+		// A page's name; the committer turns it into the page's id once every
+		// page in the paste is saved (LinkFields).
+		s, ok := scalarText(v)
+		if !ok || s == "" {
+			return nil, "needs the name of a page."
+		}
+		return s, ""
 	default: // text, textarea, and anything older
 		if s, ok := scalarText(v); ok {
 			return s, ""
@@ -216,4 +224,32 @@ func pluralWord(n int, one, many string) string {
 		return one
 	}
 	return many
+}
+
+// LinkFields turns the page names a sheet's link fields were given into
+// those pages' ids, resolved like @[Name] links: pages this paste saved
+// first, then pages of the campaign the operator can see. Whether the page
+// is of the field's category is the entity service's check, at the write.
+func LinkFields(defs []entities.FieldDefinition, checked map[string]any, links *PageLinks) []string {
+	var problems []string
+	for _, d := range defs {
+		if d.Type != entities.FieldTypeLink {
+			continue
+		}
+		name, ok := checked[d.Key].(string)
+		if !ok || name == "" {
+			continue
+		}
+		if links == nil {
+			problems = append(problems, fmt.Sprintf("%s: pages can't be looked up here.", d.Label))
+			continue
+		}
+		l, found := links.Resolve(name)
+		if !found {
+			problems = append(problems, fmt.Sprintf("%s: there is no page called %q (a page this paste makes must come before the page linking to it).", d.Label, name))
+			continue
+		}
+		checked[d.Key] = l.ID
+	}
+	return problems
 }

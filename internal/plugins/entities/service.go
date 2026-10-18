@@ -392,6 +392,7 @@ type entityService struct {
 	safety        PageSafetyRepository // nil: no history, no Trash (tests)
 	placeGuard    PlaceGuard           // nil: no extra listings (tests)
 	fieldObserver FieldChangeObserver
+	fieldWords    FieldWords // nil: rule fields are not checked against rules
 }
 
 // NewEntityService creates a new entity service with the given dependencies.
@@ -573,6 +574,9 @@ func (s *entityService) Create(ctx context.Context, campaignID, userID string, i
 		OwnerUserID:  ownerUserIDPtr,
 		CreatedAt:    now,
 		UpdatedAt:    now,
+	}
+	if err := s.checkLinkValues(ctx, entity, nil, fieldsData); err != nil {
+		return nil, err
 	}
 
 	if err := s.entities.Create(ctx, entity); err != nil {
@@ -805,6 +809,9 @@ func (s *entityService) Update(ctx context.Context, entityID string, input Updat
 	var oldFields map[string]any
 	fieldsWritten := input.FieldsData != nil
 	if fieldsWritten {
+		if err := s.checkLinkValues(ctx, entity, entity.FieldsData, input.FieldsData); err != nil {
+			return nil, err
+		}
 		oldFields = cloneFields(entity.FieldsData)
 		entity.FieldsData = input.FieldsData
 	}
@@ -1116,6 +1123,11 @@ func (s *entityService) UpdateFields(ctx context.Context, entityID string, field
 	// Load the current entity (best-effort) for search_text composition and the
 	// post-update broadcast below.
 	entity, _ := s.entities.FindByID(ctx, entityID)
+	if entity != nil {
+		if err := s.checkLinkValues(ctx, entity, entity.FieldsData, fieldsData); err != nil {
+			return err
+		}
+	}
 
 	// Build search_text from existing entry HTML + new field values.
 	var entryHTML string
@@ -2291,6 +2303,9 @@ func (s *entityService) UpdateEntityType(ctx context.Context, id int, input Upda
 
 	// Update fields if provided.
 	if input.Fields != nil {
+		if err := s.checkFieldKinds(ctx, et.CampaignID, input.Fields); err != nil {
+			return nil, err
+		}
 		et.Fields = input.Fields
 	}
 
