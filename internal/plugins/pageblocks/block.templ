@@ -40,3 +40,19 @@ templ PageMapMount(campaignID, entityID, blockID, csrfToken string) {
 		data-csrf-token={ csrfToken }
 	></div>
 }
+
+// ChecklistMount is the mount point of the Checklist block. canDM only decides
+// whether the editor offers the DM's own controls (hiding the block or an
+// item, and thresholds); the service enforces the same rule on every save.
+templ ChecklistMount(campaignID, entityID, blockID, csrfToken string, canDM bool) {
+	@blockAssets()
+	<div
+		data-widget="page_blocks"
+		data-endpoint={ "/campaigns/" + campaignID + "/page-blocks/" + entityID + "/" + blockID }
+		data-kind={ KindChecklist }
+		data-csrf-token={ csrfToken }
+		if canDM {
+			data-can-dm="true"
+		}
+	></div>
+}

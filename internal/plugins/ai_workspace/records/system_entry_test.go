@@ -17,6 +17,7 @@ type fakeEntrySvc struct {
 	deleted   []int64
 	checkErr  error
 	lastActor systems.EntryActor
+	chars     []systems.EntryCharacter
 }
 
 func (f *fakeEntrySvc) List(_ context.Context, _, _ string, _ systems.EntryActor) ([]systems.SystemEntry, error) {
@@ -51,6 +52,14 @@ func (f *fakeEntrySvc) Delete(_ context.Context, _ string, _ systems.EntryActor,
 	return nil
 }
 func (f *fakeEntrySvc) Choices(context.Context, string, string) ([]systems.Choice, error) {
+	return nil, nil
+}
+func (f *fakeEntrySvc) FindCharacter(_ context.Context, _, name string) (*systems.EntryCharacter, error) {
+	for _, c := range f.chars {
+		if strings.EqualFold(c.Name, name) {
+			return &c, nil
+		}
+	}
 	return nil, nil
 }
 
@@ -161,4 +170,64 @@ func TestSystemEntryKind_Export(t *testing.T) {
 	if out, _ := (SystemEntryKind{Svc: svc}).Export(context.Background(), camp, player); out != "" {
 		t.Fatalf("player export leaked: %q", out)
 	}
+}
+
+func TestSystemEntryKind_ForCharacter(t *testing.T) {
+	ctx := context.Background()
+	wren := systems.EntryCharacter{ID: "ent-wren", Name: "Wren", OwnerUserID: "u-tyne"}
+	tests := []struct {
+		name    string
+		fields  map[string]any
+		wantErr string
+		wantSum string
+	}{
+		{"named character", map[string]any{"entry": "ancestry", "for": "wren"}, "", "shown only to wren's player"},
+		{"unknown character", map[string]any{"entry": "ancestry", "for": "Nobody"}, "no single character page", ""},
+		{"both director and for", map[string]any{"entry": "ancestry", "for": "Wren", "director": true}, "either", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := &fakeEntrySvc{chars: []systems.EntryCharacter{wren}}
+			p := SystemEntryKind{Svc: svc}.Plan(ctx, camp, owner, rec("system-entry", "create", "Fairy", tt.fields, ""))
+			if tt.wantErr != "" {
+				if !strings.Contains(p.Error, tt.wantErr) {
+					t.Fatalf("error = %q, want %q", p.Error, tt.wantErr)
+				}
+				return
+			}
+			if p.Error != "" || !strings.Contains(p.Summary, tt.wantSum) {
+				t.Fatalf("plan = %+v, want summary with %q", p, tt.wantSum)
+			}
+		})
+	}
+
+	t.Run("create keeps it to the character", func(t *testing.T) {
+		svc := &fakeEntrySvc{chars: []systems.EntryCharacter{wren}}
+		r := rec("system-entry", "create", "Fairy", map[string]any{"entry": "ancestry", "for": "Wren"}, "")
+		if err := (SystemEntryKind{Svc: svc}).Apply(ctx, camp, owner, r); err != nil {
+			t.Fatal(err)
+		}
+		in := svc.created[0]
+		if in.Visibility != systems.EntryVisibilityCharacter || in.ForEntityID != "ent-wren" {
+			t.Fatalf("create input = %+v", in)
+		}
+		if _, isDetail := in.Properties["for"]; isDetail {
+			t.Fatal("`for` stored as a detail")
+		}
+	})
+
+	t.Run("update moves it to the character", func(t *testing.T) {
+		svc := &fakeEntrySvc{chars: []systems.EntryCharacter{wren}, rows: []systems.SystemEntry{{ID: 9, FieldKey: "ancestry", Name: "Fairy"}}}
+		r := rec("system-entry", "update", "Fairy", map[string]any{"entry": "ancestry", "for": "Wren"}, "")
+		if err := (SystemEntryKind{Svc: svc}).Apply(ctx, camp, owner, r); err != nil {
+			t.Fatal(err)
+		}
+		in := svc.updated[9]
+		if v, _ := in.Visibility.Get(); v != systems.EntryVisibilityCharacter {
+			t.Fatalf("visibility = %q", v)
+		}
+		if v, _ := in.ForEntityID.Get(); v != "ent-wren" {
+			t.Fatalf("forEntityId = %q", v)
+		}
+	})
 }

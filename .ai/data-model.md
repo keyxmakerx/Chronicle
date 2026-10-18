@@ -179,7 +179,7 @@ numbered core migrations after it, tracked once each via `golang-migrate`'s
 
 | Table | Purpose | Notable columns |
 |---|---|---|
-| `campaign_system_entries` | A campaign's own pick-list entries (ancestry, kit, culture, class...) for its game system, kept apart from the package's data | `UNIQUE(campaign_id, system_id, field_key, slug)`; `visibility` enum(`everyone`,`directors`); `properties` JSON (flat scalars); `description` sanitized HTML; `created_by` carries no FK; FK to `campaigns` CASCADE |
+| `campaign_system_entries` | A campaign's own pick-list entries (ancestry, kit, culture, class...) for its game system, kept apart from the package's data | `UNIQUE(campaign_id, system_id, field_key, slug)`; `visibility` enum(`everyone`,`directors`,`character`); `for_entity_id` the character page a `character` entry is kept to (no FK: a deleted character leaves the entry with Directors); `properties` JSON (flat scalars); `description` sanitized HTML; `created_by` carries no FK; FK to `campaigns` CASCADE |
 
 ### Media, addons & extensions
 
@@ -361,7 +361,7 @@ Foundry module repo for the wire contract.
 
 | Table | Purpose |
 |-------|---------|
-| `page_block_content` | One JSON document per (page, layout block): `PRIMARY KEY (entity_id, block_id)`, `kind` (`read_aloud`/`page_table`/`page_steps`), `version` for edit conflicts; FKs to `entities`, `campaigns` cascade |
+| `page_block_content` | One JSON document per (page, layout block): `PRIMARY KEY (entity_id, block_id)`, `kind` (`read_aloud`/`page_table`/`page_steps`/`page_checklist`/`page_map`), `version` for edit conflicts; FKs to `entities`, `campaigns` cascade |
 
 ### rumours (`internal/plugins/rumours/migrations/`)
 
@@ -375,6 +375,14 @@ Foundry module repo for the wire contract.
 |-------|---------|
 | `field_rules` | A campaign's worked-out rules: `name` (unique per campaign), `follows` (the field key it reads), `rows_json` (rows of `is` or `from`/`to` with `gives`, read and written whole); FK to `campaigns` cascades |
 | `local_words` | What one place or era calls a word: `word`, `local_word`, `place_id` (FK to `entities`, cascades) or `era_id` (no FK; eras are the calendar's), `scope_key` (`p:<page id>`/`e:<era id>`) for the one-per-place-or-era unique key, `dm_only`; FK to `campaigns` cascades |
+
+### trackers (`internal/plugins/trackers/migrations/`)
+
+| Table | Purpose |
+|-------|---------|
+| `tracker_kinds` | A campaign's saved kinds of tracker: `name` (unique per campaign), `shape` (`count`/`steps`/`clock`), `min_value`/`max_value` (a clock's segments are `max_value`), `steps` and `bands` as JSON text, default `visibility` (`directors`/`everyone`), optional `every_type_id` (the kind appears on every page of that category without being placed), `version` for edit conflicts; FK to `campaigns` cascades. At most 200 per campaign |
+| `trackers` | A kind placed on one page: `name` (unique per page), `visibility`, `sort_order`; FKs to `entities`, `campaigns` and `tracker_kinds` cascade (the last so a campaign delete never depends on row order; the service refuses to delete a kind in use, in one statement). At most 40 per page |
+| `tracker_entries` | The ledger. One line per change: `op` (`add`/`set`), `amount`, `note` (Directors only), `source`, the in-game date it was logged on (`game_year`/`game_month`/`game_day`/`game_label`, null without a calendar), `struck_at`/`struck_by` (a struck line stays but no longer counts). A tracker's value is the fold of its unstruck lines, clamped per line. FK to `trackers` cascades. At most 10,000 per tracker |
 
 ### encounters (`internal/plugins/encounters/migrations/`)
 

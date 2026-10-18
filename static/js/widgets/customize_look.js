@@ -357,7 +357,7 @@
       { id:'buttons', name:'Buttons', icon:'i-cursor', desc:'The shape of buttons and how they move when you point at them and press.' },
       { id:'motion', name:'Motion and depth', icon:'i-depth', desc:'How far cards lift, how quickly things move, and a calmer option for everyone.' },
       { id:'page', name:'Pages', icon:'i-scroll', desc:'How every page in the campaign draws its sections. Workshops like this one keep their own look.' },
-      { id:'hover', name:'Hover cards', icon:'i-note', desc:'The card that opens when someone points at a linked page or a rule word. One look for the whole campaign.' },
+      { id:'hover', name:'Hover cards', icon:'i-note', desc:'The card that opens when someone points at a linked page, a rule word or an event on a time line. One look for the whole campaign.' },
       { id:'sheet', name:'Character sheets', icon:'i-journal', desc:'How character sheets look for everyone in this campaign.' }
     ];
     // Same ids as the server's AppearanceSheetStyles, in that order.
@@ -378,7 +378,7 @@
       buttons:['buttons.style'],
       motion:['motion.elevation', 'motion.speed', 'motion.reduceAll'],
       page:['page.look', 'page.kit'],
-      hover:['hover.look'],
+      hover:['hover.look', 'hover.timelinePopup'],
       sheet:['sheet.style']
     };
 
@@ -440,6 +440,7 @@
       if (!d.sheet) d.sheet = { style:'modern' };
       if (!d.page) d.page = { look:'', kit:'material' };
       if (!d.page.kit) d.page.kit = 'material';
+      if (!d.hover.timelinePopup) d.hover.timelinePopup = 'classic';
       d.header.links = (d.header.links || []).map(function(l){ return { label:l.label || '', url:l.url || '', icon:l.icon || '' }; });
       while (d.header.links.length < LINK_ROWS) d.header.links.push({ label:'', url:'', icon:'' });
       return d;
@@ -668,6 +669,24 @@
           '<span class="tn">' + esc(h[1]) + '<span class="tck">' + IC('i-check') + '</span></span><span class="tk">' + esc(h[2]) + '</span></span></label>';
       }).join('');
     }
+    // Same ids as the server's AppearanceTimelinePopups. Each tile holds a
+    // stretch of time line with its popup held open over a bead, drawn by the
+    // real hover card, so what the owner picks is what readers see. The
+    // classic card takes the hover card look chosen above (syncControls).
+    var TL_POPUPS = [
+      ['classic', 'Classic card', 'A small card with an edge and a shadow, in your hover card look.'],
+      ['corner', 'Fading corner', 'No box. An edge in the corner nearest the event, fading away, over a soft background.']
+    ];
+    function tilesTlPop(){
+      var hc = window.Chronicle && Chronicle.hovercard;
+      var sample = hc ? hc.html({ kind:'Battle', title:'The Siege of Emberfall', facts:[['Date', 'Thaw 9, 1388']] }) : '';
+      return TL_POPUPS.map(function(p){
+        return '<label class="tile tlp-tile"><input type="radio" name="t-tlpop" value="' + p[0] + '" data-k="hover.timelinePopup"><span class="tb">' +
+          (sample ? '<span class="tlp-sample tlp-' + p[0] + '" aria-hidden="true"><span class="tlp-line"></span><span class="tlp-bead"></span>' +
+            '<span class="chc chc--show" data-look="' + (p[0] === 'corner' ? 'corner' : 'paper') + '"><i class="chc__stem"></i><span class="chc__in">' + sample + '</span></span></span>' : '') +
+          '<span class="tn">' + esc(p[1]) + '<span class="tck">' + IC('i-check') + '</span></span><span class="tk">' + esc(p[2]) + '</span></span></label>';
+      }).join('');
+    }
     function tilesElev(){
       return Object.keys(ELEVATION).map(function(id){
         var E = ELEVATION[id], k = { flat:'Cards sit on the page, with an outline on hover.', standard:'A soft shadow; cards lift a little on hover.', dramatic:'Deep shadows; cards rise clearly off the page.', ambient:'Shadows tinted with your accent and a faint light from the top corner.' }[id];
@@ -771,7 +790,9 @@
           '<p class="hint">A kit changes the header, dividers, boxes, faces and how rows answer the pointer, in light and dark mode. Sharp is a broadsheet, Ornate a bound volume, Flowing watercolour, Lumen soft light and Sketchbook pen on paper. Your campaign colour and any fonts you picked still win. Kits only dress pages in the Material look; save and open any page to see yours.</p>'));
       if (id === 'hover') return (
         fld('h-look', 'Look', 'Every hover card in the campaign', '<div class="tiles two" role="radiogroup" aria-labelledby="h-look-l">' + tilesHover() + '</div>' +
-          '<p class="hint">Point at a linked page or a rule word anywhere in the campaign to see it. What a card shows comes from each page’s own settings.</p>'));
+          '<p class="hint">Point at a linked page or a rule word anywhere in the campaign to see it. What a card shows comes from each page’s own settings.</p>') +
+        fld('h-tl', 'Popups on time lines', 'What opens over an event on a time line', '<div class="tiles two" role="radiogroup" aria-labelledby="h-tl-l">' + tilesTlPop() + '</div>' +
+          '<p class="hint">Used on the time line page and on the time line under a page’s title. A click still opens the event.</p>'));
       if (id === 'sheet') return (
         fld('sh-style', 'Style', 'Every character sheet in the campaign', opts('sh-style', 'sheet.style', 'sh-style-l', SHEET_STYLES) +
           '<p class="hint">How character sheets look for everyone in this campaign. Modern matches the rest of Chronicle; the others are optional paper and screen styles.</p>'));
@@ -988,6 +1009,7 @@
         if (inp.checked !== on) inp.checked = on;
       });
       $('#m-reduce').checked = !!d.motion.reduceAll;
+      $$('.tlp-classic .chc').forEach(function(c){ if (c.dataset.look !== d.hover.look) c.dataset.look = d.hover.look; });
       syncText('#b-name', d.brand.name); syncText('#b-welcome', d.brand.welcome);
       setText($('#b-name-c'), d.brand.name.length + ' / 40');
       setText($('#b-welcome-c'), d.brand.welcome.length + ' / ' + welcomeMax());
