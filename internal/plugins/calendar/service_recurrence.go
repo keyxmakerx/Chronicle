@@ -60,7 +60,7 @@ func (s *calendarService) loadRuleGeometry(ctx context.Context, cal *Calendar) e
 		return err
 	}
 	var err error
-	if cal.Moons, err = s.calRepo.GetMoons(ctx, cal.ID); err != nil {
+	if err = s.loadMoons(ctx, cal); err != nil {
 		return fmt.Errorf("load moons: %w", err)
 	}
 	if cal.Seasons, err = s.calRepo.GetSeasons(ctx, cal.ID); err != nil {
@@ -209,7 +209,7 @@ func (s *calendarService) expandMonth(ctx context.Context, cal *Calendar, events
 	}
 	if anyRule {
 		var err error
-		if cal.Moons, err = s.calRepo.GetMoons(ctx, cal.ID); err != nil {
+		if err = s.loadMoons(ctx, cal); err != nil {
 			return nil, fmt.Errorf("load moons: %w", err)
 		}
 		if cal.Seasons, err = s.calRepo.GetSeasons(ctx, cal.ID); err != nil {

@@ -861,12 +861,32 @@ type Moon struct {
 	// who may not see that page, exactly as an era's are.
 	LoreEntityID   *string `json:"lore_entity_id,omitempty"`
 	LoreEntityName string  `json:"lore_entity_name,omitempty"`
+	// PhaseMode is MoonCycle or MoonManual. A manual moon has no cycle: it
+	// holds the state of its latest mark (moon_marks.go). CycleDays and
+	// PhaseOffset are kept, so switching back restores the cycle.
+	PhaseMode string `json:"phase_mode"`
+	// StateNames are the Director's words for a manual moon's states, by
+	// state; a state not named reads its default.
+	StateNames map[string]string `json:"state_names,omitempty"`
+	// Marks are a manual moon's marks, oldest first, once loaded and
+	// indexed (Calendar.indexMoonMarks). A player's copy holds only the
+	// marks they were shown.
+	Marks []MoonMark `json:"marks,omitempty"`
+	// marksIndexed says Marks carry their day counters.
+	marksIndexed bool
 }
 
 // MoonPhase returns the phase (0.0–1.0) of this moon on a given absolute day
 // number (days since year 0 day 0). 0=new, 0.25=first quarter, 0.5=full,
 // 0.75=last quarter.
 func (m *Moon) MoonPhase(absoluteDay int) float64 {
+	if m.Manual() {
+		mk := m.markOn(absoluteDay)
+		if mk == nil {
+			return 0
+		}
+		return moonStatePhase[mk.State]
+	}
 	if m.CycleDays <= 0 {
 		return 0
 	}
@@ -878,8 +898,12 @@ func (m *Moon) MoonPhase(absoluteDay int) float64 {
 	return phase
 }
 
-// MoonPhaseName returns the nearest named phase, centered on its turning point.
+// MoonPhaseName returns the nearest named phase, centered on its turning
+// point. A manual moon reads its state's word instead.
 func (m *Moon) MoonPhaseName(absoluteDay int) string {
+	if m.Manual() {
+		return m.StateWordOn(absoluteDay)
+	}
 	phase := m.MoonPhase(absoluteDay)
 	switch {
 	case phase < 0.0625 || phase >= 0.9375:

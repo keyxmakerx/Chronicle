@@ -3789,6 +3789,12 @@ func (a *App) RegisterRoutes() {
 		rolls.SetEventRollRepository(calendar.NewEventRollRepository(a.DB))
 		rolls.SetRollTableSource(calendarRollTablesAdapter{svc: rolltables.NewService(rolltables.NewRepository(a.DB))})
 	}
+	// Moons the Director sets by hand: their marks' storage.
+	if marks, ok := calendarService.(interface {
+		SetMoonMarkRepository(calendar.MoonMarkRepository)
+	}); ok {
+		marks.SetMoonMarkRepository(calendar.NewMoonMarkRepository(a.DB))
+	}
 	calendarHandler := calendar.NewHandler(calendarService)
 	// Optional UX nicety: suggest the owner's own stored account timezone as
 	// the real-world calendar wizard step's starting default (see
@@ -5911,6 +5917,10 @@ func (a *App) RegisterRoutes() {
 	}
 	if aiRolls != nil {
 		aiKinds = append(aiKinds, records.RollNightKind{Cal: calendarService, Rolls: aiRolls})
+	}
+	// Moons set by hand: the calendar service's moon mark half.
+	if ms, ok := calendarService.(calendar.MoonMarkService); ok {
+		aiKinds = append(aiKinds, records.MoonKind{Cal: calendarService, Marks: ms})
 	}
 	aiHouseRules := records.HouseRuleKind{Book: systemHandler, SystemOf: func(ctx context.Context, campaignID string) string {
 		c, err := campaignService.GetByID(ctx, campaignID)

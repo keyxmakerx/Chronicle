@@ -330,8 +330,54 @@
   // (model.go) so the client's phase reads agree with the values the
   // server itself would compute for the same absolute day.
   // -----------------------------------------------------------------
+  // A moon set by hand (moon_marks.go) has no cycle: it holds the state of
+  // its latest mark. index() gives each moon's marks their day counters once
+  // the calendar is known; the reads below then work from (moon, day) alone.
+  var MOON_STATE_PHASE = { full: 0.5, half: 0.25, crescent: 0.125, dark: 0, vanished: 0 };
+  var MOON_STATE_WORD = { full: 'Full', half: 'Half', crescent: 'Crescent', dark: 'Dark', vanished: 'Vanished' };
   var MoonMath = {
+    index: function (cal) {
+      (cal.moons || []).forEach(function (mo) {
+        mo._marks = (mo.phase_mode === 'manual' ? mo.marks || [] : []).map(function (k) {
+          return { abs: CalDate.dayIndex(cal, k.year, k.month, k.day), k: k };
+        }).sort(function (a, b) { return a.abs - b.abs; });
+      });
+    },
+    manual: function (moon) { return moon.phase_mode === 'manual'; },
+    // markOn is the mark a day falls under, null before the first.
+    markOn: function (moon, absoluteDay) {
+      var list = moon._marks || [], lo = 0, hi = list.length;
+      while (lo < hi) { var mid = (lo + hi) >> 1; if (list[mid].abs <= absoluteDay) lo = mid + 1; else hi = mid; }
+      return lo ? list[lo - 1].k : null;
+    },
+    // state is a hand-set moon's state on a day, '' before its first mark.
+    state: function (moon, absoluteDay) { var k = MoonMath.markOn(moon, absoluteDay); return k ? k.state : ''; },
+    word: function (moon, state) {
+      var w = moon.state_names && moon.state_names[state];
+      return w && String(w).trim() ? String(w).trim() : MOON_STATE_WORD[state] || state;
+    },
+    // label names the moon's look on a day: a hand-set moon's word, or the
+    // cycle's phase name.
+    label: function (moon, absoluteDay) {
+      if (!MoonMath.manual(moon)) return MoonMath.name(MoonMath.phase(moon, absoluteDay));
+      var st = MoonMath.state(moon, absoluteDay);
+      return st ? MoonMath.word(moon, st) : 'Not set';
+    },
+    // describe adds how lit a cycling moon is; a hand-set moon's word is
+    // all there is to say.
+    describe: function (moon, absoluteDay) {
+      if (MoonMath.manual(moon)) return MoonMath.label(moon, absoluteDay);
+      var p = MoonMath.phase(moon, absoluteDay);
+      return MoonMath.name(p) + ' · ' + MoonMath.litPct(p) + '% lit';
+    },
+    // unseen: a hand-set moon that is gone, or not set yet, on that day.
+    unseen: function (moon, absoluteDay) {
+      if (!MoonMath.manual(moon)) return false;
+      var st = MoonMath.state(moon, absoluteDay);
+      return !st || st === 'vanished';
+    },
     phase: function (moon, absoluteDay) {
+      if (MoonMath.manual(moon)) return MOON_STATE_PHASE[MoonMath.state(moon, absoluteDay)] || 0;
       if (!moon.cycle_days || moon.cycle_days <= 0) return 0;
       var raw = (absoluteDay + (moon.phase_offset || 0)) / moon.cycle_days;
       var phase = raw - Math.floor(raw);
@@ -1246,6 +1292,9 @@
   Chronicle.calendarEras = EraMath;
   Chronicle.calendarPanel = { growOpen: growOpen, growClose: growClose };
   Chronicle.calendarColor = sanitizeColor;
+  // Shared with calendar_editor.js so the Director's moon controls read a
+  // hand-set moon exactly as the grid draws it.
+  Chronicle.calendarMoon = MoonMath;
   Chronicle.calendarPageGlyph = PAGE_GLYPH;
   Chronicle.calendarWeatherIcon = weatherIcon;
   Chronicle.calendarWindWords = windWords;
@@ -1270,6 +1319,7 @@
 
       var cfgEl = $('#calendar-config', el);
       try { this.cal = JSON.parse(cfgEl.dataset.calendar || '{}'); } catch (e) { this.cal = {}; }
+      MoonMath.index(this.cal);
       var initialEvents;
       try { initialEvents = JSON.parse(cfgEl.dataset.events || '[]'); } catch (e2) { initialEvents = []; }
       if (!Array.isArray(initialEvents)) initialEvents = [];
@@ -4250,10 +4300,14 @@
       var isPast = CalDate.dayIndex(cal, y, m, d) < CalDate.dayIndex(cal, cal.current_year, cal.current_month, cal.current_day);
       var moon = this.mainMoon();
       var moonHTML = '';
+      if (moon && !this.canAuthorDmOnly && MoonMath.manual(moon) && !MoonMath.state(moon, CalDate.dayIndex(cal, y, m, d))) moon = null;
       if (moon) {
         var abs = CalDate.dayIndex(cal, y, m, d);
-        var phase = MoonMath.phase(moon, abs);
-        moonHTML = '<span class="msil" data-moon-day="' + key + '" title="' + esc(moon.name + ', ' + MoonMath.name(phase)) + '">' + this._moonSilSVG(phase) + '</span>';
+        // The DM team sees a hand-set moon faded where players have not been
+        // told of the mark it stands under.
+        var mk = MoonMath.manual(moon) && this.canAuthorDmOnly ? MoonMath.markOn(moon, abs) : null;
+        var unshown = mk && !mk.shown;
+        moonHTML = '<span class="msil' + (unshown ? ' dim' : '') + '" data-moon-day="' + key + '" title="' + esc(moon.name + ', ' + MoonMath.label(moon, abs) + (unshown ? ' (players don’t see this)' : '')) + '">' + this._moonSilFor(moon, abs) + '</span>';
       }
       return '<button type="button" class="day' + (isToday ? ' today' : '') + (isPast ? ' past' : '') + '" data-key="' + key + '">' +
         moonHTML + weatherMarkHTML(this.weatherOnDay(y, m, d), !isPast && !isToday) + this.forecastMarkOn(y, m, d, !isPast && !isToday) +
@@ -4296,6 +4350,15 @@
       // moon_silhouette.templ).
       var path = MoonMath.litPath(phase, 6);
       return '<svg class="sil" width="14" height="14" viewBox="-7 -7 14 14" aria-hidden="true"><circle class="db" r="6"/>' + (path ? '<path class="dl" d="' + path + '"/>' : '') + '</svg>';
+    },
+
+    // _moonSilFor draws a moon on a day: its phase disc, or a dashed ring
+    // for a hand-set moon that is gone or not set yet.
+    _moonSilFor: function (moon, abs) {
+      if (MoonMath.unseen(moon, abs)) {
+        return '<svg class="sil gone" width="14" height="14" viewBox="-7 -7 14 14" aria-hidden="true"><circle class="dg" r="5.5"/></svg>';
+      }
+      return this._moonSilSVG(MoonMath.phase(moon, abs));
     },
 
     // --------------------------------------------------------------
@@ -4700,7 +4763,7 @@
         var msil = e.target.closest('.msil');
         var day = e.target.closest('.day');
         if (mk) { self.openWing(day.dataset.key, mk.dataset.ev); return; }
-        if (msil) { self.openMoonView(); return; }
+        if (msil) { self.mvDay = msil.dataset.moonDay; self.openMoonView(); return; }
         if (day && day.dataset.key) self.openWing(day.dataset.key);
       });
 
@@ -4765,7 +4828,7 @@
         if (self._gnHandleClick(e)) return;
         if (e.target.closest('[data-sky-day]')) { var sd = parseDayKey(self.wingFor); self.previewSky(sd.y, sd.m, sd.d); return; }
         var mr = e.target.closest('.mrow');
-        if (mr) { self.mvMoonId = mr.dataset.moon; self.openMoonView(); return; }
+        if (mr) { self.mvMoonId = mr.dataset.moon; self.mvDay = self.wingFor; self.openMoonView(); return; }
         var evd = e.target.closest('.evd');
         if (evd) self.openEventDetail(evd.dataset.ev);
       });
@@ -4818,6 +4881,8 @@
         if (e.target.closest('[data-close]')) self.closeMoonView();
         var strip = e.target.closest('.msi');
         if (strip) self.selectMoon(strip.dataset.moon);
+        var tick = e.target.closest('[data-mv-day]');
+        if (tick) { self.mvDay = tick.dataset.mvDay; self._refreshMv(); }
       });
       this.popEl.addEventListener('click', function (e) {
         if (e.target.closest('[data-close]')) self.closePop();
@@ -5163,7 +5228,7 @@
         why: function (r) {
           var abs = CalDate.dayIndex(cal, d.y, d.m, d.d), w = '';
           var moon = (r.moon && (cal.moons || []).filter(function (mo) { return mo.name === r.moon; })[0]) || self.mainMoon();
-          if (moon) w += '<em><i class="fa-solid fa-moon"></i> ' + esc(moon.name) + ': ' + MoonMath.name(MoonMath.phase(moon, abs)) + '</em>';
+          if (moon) w += '<em><i class="fa-solid fa-moon"></i> ' + esc(moon.name) + ': ' + esc(MoonMath.label(moon, abs)) + '</em>';
           var season = self.seasonForDate(d.m, d.d);
           if (season) w += '<em><i class="fa-solid fa-leaf"></i> ' + esc(season.name) + '</em>';
           return w;
@@ -5200,9 +5265,12 @@
       var reading = this.weatherOnDay(d.y, d.m, d.d), fc = this.forecastOn(d.y, d.m, d.d);
       var isForecast = !this.canAuthorDmOnly && isFuture && !reading && !!fc;
       var weatherFact = isForecast ? forecastFactHTML(fc) : weatherFactHTML(reading, isFuture) + (this.canAuthorDmOnly && fc ? playersSeeHTML(fc) : '');
+      var dmMoons = this.canAuthorDmOnly;
       var moonRows = (cal.moons || []).map(function (mo) {
-        var abs = CalDate.dayIndex(cal, d.y, d.m, d.d), phase = MoonMath.phase(mo, abs);
-        return '<button type="button" class="mrow" data-moon="' + esc(mo.id) + '"><span class="mt"><b>' + esc(mo.name) + '</b><small>' + esc(MoonMath.name(phase)) + ' · ' + MoonMath.litPct(phase) + '% lit</small></span><i class="fa-solid fa-chevron-right chev"></i></button>';
+        var abs = CalDate.dayIndex(cal, d.y, d.m, d.d);
+        // A player learns of a hand-set moon only from a change shown to them.
+        if (!dmMoons && MoonMath.manual(mo) && !MoonMath.state(mo, abs)) return '';
+        return '<button type="button" class="mrow" data-moon="' + esc(mo.id) + '"><span class="mt"><b>' + esc(mo.name) + '</b><small>' + esc(MoonMath.describe(mo, abs)) + '</small></span><i class="fa-solid fa-chevron-right chev"></i></button>';
       }).join('');
 
       var evs = this.eventsOnDay(d.y, d.m, d.d);
@@ -5253,8 +5321,8 @@
         var moon = this.mainMoon();
         if (!moon) return;
         var d = parseDayKey(mk.dataset.moonDay);
-        var abs = CalDate.dayIndex(this.cal, d.y, d.m, d.d), phase = MoonMath.phase(moon, abs);
-        html = '<div class="gh"><b>' + esc(moon.name) + '</b></div><div class="gw">' + esc(MoonMath.name(phase)) + ' · ' + MoonMath.litPct(phase) + '% lit</div>';
+        var abs = CalDate.dayIndex(this.cal, d.y, d.m, d.d);
+        html = '<div class="gh"><b>' + esc(moon.name) + '</b></div><div class="gw">' + esc(MoonMath.describe(moon, abs)) + '</div>';
       } else if (mk.classList.contains('avl')) {
         html = this._freeGlanceHTML(mk.dataset.avl);
         if (!html) return;
@@ -5539,6 +5607,24 @@
 
     selectMoon: function (id) { this.mvMoonId = id; this._refreshMv(); },
 
+    // mvDayDate is the day the moon view reads: the one picked from the
+    // calendar or the panel, else today.
+    mvDayDate: function () {
+      var cal = this.cal;
+      return this.mvDay ? parseDayKey(this.mvDay) : { y: cal.current_year, m: cal.current_month, d: cal.current_day };
+    },
+
+    // setMoon puts the moon as the server now has it into the calendar and
+    // redraws everything that shows it.
+    setMoon: function (moon) {
+      var list = this.cal.moons || [];
+      for (var i = 0; i < list.length; i++) if (String(list[i].id) === String(moon.id)) list[i] = moon;
+      MoonMath.index(this.cal);
+      this._paintMonth();
+      if (this.wingFor) this.refreshWing();
+      if (this.mvEl.classList.contains('open')) this._refreshMv();
+    },
+
     _refreshMv: function () {
       var scrollLeft = this.mvEl.querySelector('.gframe') ? this.mvEl.querySelector('.gframe').scrollLeft : 0;
       this.mvEl.innerHTML = this._mvHTML();
@@ -5549,13 +5635,12 @@
 
     _mvHTML: function () {
       var cal = this.cal, moon = this.moonById(this.mvMoonId) || (cal.moons || [])[0];
-      var abs = CalDate.dayIndex(cal, cal.current_year, cal.current_month, cal.current_day);
+      var day = this.mvDayDate(), abs = CalDate.dayIndex(cal, day.y, day.m, day.d);
       var phase = moon ? MoonMath.phase(moon, abs) : 0;
 
       var strip = (cal.moons || []).map(function (mo) {
-        var p = MoonMath.phase(mo, abs);
         return '<button type="button" class="msi' + (mo.id === (moon && moon.id) ? ' on' : '') + '" data-moon="' + esc(mo.id) + '" aria-pressed="' + (mo.id === (moon && moon.id)) + '">' +
-          '<span class="msw">' + this._moonSilSVG(p) + '</span><span class="mst"><b>' + esc(mo.name) + '</b></span></button>';
+          '<span class="msw">' + this._moonSilFor(mo, abs) + '</span><span class="mst"><b>' + esc(mo.name) + '</b></span></button>';
       }.bind(this)).join('');
 
       var graph = this._mvGraphHTML(moon);
@@ -5566,7 +5651,8 @@
           '<div class="mvl">' +
             '<div class="mvbig"><div class="mvhead">' +
               '<h3 class="mvname">' + esc(moon ? moon.name : 'No moons') + '</h3>' +
-              (moon ? '<div class="mvlit"><b>' + MoonMath.litPct(phase) + '%</b> lit · ' + esc(MoonMath.name(phase)) + '</div>' : '') +
+              (moon ? '<div class="mvlit">' + (MoonMath.manual(moon) ? '<b>' + esc(MoonMath.label(moon, abs)) + '</b>' : '<b>' + MoonMath.litPct(phase) + '%</b> lit · ' + esc(MoonMath.name(phase))) +
+                (day.y !== cal.current_year || day.m !== cal.current_month || day.d !== cal.current_day ? ' · ' + esc(this._dateLabel(day.y, day.m, day.d)) : '') + '</div>' : '') +
             '</div></div>' +
             '<div class="mvstrip">' + strip + '</div>' +
             (moon ? lorePageLink(this.campaignId, moon.lore_entity_id, moon.lore_entity_name, 'mv-lore') : '') +
@@ -5574,6 +5660,7 @@
           '<div class="mvr">' +
             '<div class="phead"><h4 class="plabel">This month</h4></div>' +
             graph +
+            (moon && this._mvDirectorHTML ? this._mvDirectorHTML(moon, day) : '') +
           '</div>' +
         '</div>';
     },
@@ -5585,15 +5672,16 @@
     // .still class (calendar-view.css already guards .gframe.still).
     _mvGraphHTML: function (moon) {
       if (!moon) return '';
-      var cal = this.cal, y = this.cal.current_year, m = this.cal.current_month;
+      var sel = this.mvDayDate(), cal = this.cal, y = sel.y, m = sel.m;
       var mc = CalDate.monthCount(cal), m0 = ((m - 1) % mc + mc) % mc, days = CalDate.monthDays(cal, m0, y);
-      var todayD = cal.current_day;
+      var todayD = y === cal.current_year && m === cal.current_month ? cal.current_day : 0;
+      // The Director picks a day here to set a hand-set moon on it.
+      var pick = this.canAuthorDmOnly && MoonMath.manual(moon);
       var evs = this.eventsFor(y, m).filter(function (e) { return e.payload; });
       var self = this;
       var ticks = '';
       for (var d = 1; d <= days; d++) {
         var abs = CalDate.dayIndex(cal, y, m, d);
-        var phase = MoonMath.phase(moon, abs);
         var badge = '';
         evs.forEach(function (e) {
           if (!CalDate.withinSpan(cal, e, y, m, d) && !(e.year === y && e.month === m && e.day === d)) return;
@@ -5607,7 +5695,10 @@
         // to zero height (every child pulled out of flow, nothing left to
         // size the container). .gtick is this strip's own flow-layout
         // class instead, styled fresh further down calendar-view.css.
-        ticks += '<div class="gtick' + (d === todayD ? ' today' : '') + '"' + badge + ' title="' + esc(MoonMath.name(phase)) + '">' + this._moonSilSVG(phase) + '<span>' + d + '</span></div>';
+        var tag = pick ? 'button type="button" data-mv-day="' + dayKey(y, m, d) + '" aria-pressed="' + (d === sel.d) + '"' : 'div';
+        var marked = pick && MoonMath.markOn(moon, abs) && (moon._marks || []).some(function (x) { return x.abs === abs; });
+        ticks += '<' + tag + ' class="gtick' + (d === todayD ? ' today' : '') + (pick && d === sel.d ? ' sel' : '') + (marked ? ' mkd' : '') + '"' + badge +
+          ' title="' + esc(MoonMath.label(moon, abs)) + '">' + this._moonSilFor(moon, abs) + '<span>' + d + '</span></' + (pick ? 'button' : 'div') + '>';
       }
       return '<div class="gframe" tabindex="0">' + ticks + '</div>';
     },

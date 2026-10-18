@@ -250,8 +250,12 @@ func shiftDate(cal *Calendar, d DayDate, n int) (DayDate, bool) {
 // (0 new … 0.75 last quarter) falls on the day whose counter is abs: the
 // one day per cycle nearest that moment, so it is always a day the moon
 // view names with that phase (for any cycle of eight days or more). A
-// cycle shorter than a day reaches every phase every day.
+// cycle shorter than a day reaches every phase every day. A moon set by
+// hand reaches a phase on the day the Director set it to the matching state.
 func moonPhaseFalls(m *Moon, abs int, target float64) bool {
+	if m != nil && m.Manual() {
+		return m.startsStateOn(abs, moonRuleState(target))
+	}
 	if m == nil || m.CycleDays <= 0 {
 		return false
 	}
