@@ -5186,9 +5186,12 @@ func (a *App) RegisterRoutes() {
 				return nil
 			}
 			return systems.Find(c.ParseSettings().SystemID)
-		})
+		},
+		systems.WithEntryCharacters(entryCharactersAdapter{entities: entityService, lists: characterListService}))
 	systems.RegisterSystemEntryChoices(systemEntrySvc)
 	systems.RegisterSystemEntryRoutes(e, systems.NewSystemEntryHandler(systemEntrySvc), authService, campaignService)
+	// Foundry fills the items it makes for these entries from the player view.
+	syncAPIHandler.SetSystemEntryLister(systemEntrySvc)
 	// Pick lists (Ancestry, Kit, Race, Class…) for the character attributes editor.
 	characterChoiceSvc := systems.NewCharacterChoiceService(addonService, campaignSystemMgr)
 	systems.RegisterCharacterChoiceRoutes(e, systems.NewCharacterChoiceHandler(characterChoiceSvc), authService, campaignService)

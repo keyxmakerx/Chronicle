@@ -44,9 +44,10 @@ type HeroPlan struct {
 }
 
 // HeroPlanner supplies a campaign's creator steps. director says whether the
-// viewer may see entries the Directors kept from players.
+// viewer may see entries the Directors kept from players; userID lets a
+// player see the entries kept to a character they play.
 type HeroPlanner interface {
-	HeroPlan(ctx context.Context, campaignID string, director bool) (*HeroPlan, error)
+	HeroPlan(ctx context.Context, campaignID, userID string, director bool) (*HeroPlan, error)
 }
 
 // HeroPick is what the creator sends for one step: the chosen entry's name

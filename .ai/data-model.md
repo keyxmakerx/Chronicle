@@ -179,7 +179,7 @@ numbered core migrations after it, tracked once each via `golang-migrate`'s
 
 | Table | Purpose | Notable columns |
 |---|---|---|
-| `campaign_system_entries` | A campaign's own pick-list entries (ancestry, kit, culture, class...) for its game system, kept apart from the package's data | `UNIQUE(campaign_id, system_id, field_key, slug)`; `visibility` enum(`everyone`,`directors`); `properties` JSON (flat scalars); `description` sanitized HTML; `created_by` carries no FK; FK to `campaigns` CASCADE |
+| `campaign_system_entries` | A campaign's own pick-list entries (ancestry, kit, culture, class...) for its game system, kept apart from the package's data | `UNIQUE(campaign_id, system_id, field_key, slug)`; `visibility` enum(`everyone`,`directors`,`character`); `for_entity_id` the character page a `character` entry is kept to (no FK: a deleted character leaves the entry with Directors); `properties` JSON (flat scalars); `description` sanitized HTML; `created_by` carries no FK; FK to `campaigns` CASCADE |
 
 ### Media, addons & extensions
 
