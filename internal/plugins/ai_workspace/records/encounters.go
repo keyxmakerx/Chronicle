@@ -190,8 +190,8 @@ func (k EncounterKind) read(ctx context.Context, campaignID string, a Actor, r R
 		}
 		if p := k.page(ctx, campaignID, c.Name); p != nil {
 			c.EntityID, c.Name = p.ID, p.Name
-		} else {
-			d.warnings = append(d.warnings, quote(c.Name)+" is not a page yet; it goes in by name, and Foundry looks its actor up by name")
+		} else if !r.Made[entities.Slugify(c.Name)] {
+			d.warnings = append(d.warnings, quote(c.Name)+" is not a page yet; it goes in by name with no stat block, and Foundry looks its actor up by name")
 		}
 		d.creatures = append(d.creatures, c)
 	}
@@ -242,13 +242,17 @@ func (k EncounterKind) Plan(ctx context.Context, campaignID string, a Actor, r R
 		if r.Action != ActionCreate {
 			return Plan{Error: "no page called " + quote(r.Str("page"))}
 		}
-		p.Warnings = append(p.Warnings, "No page called "+quote(r.Str("page"))+" yet; it must be created in this import")
+		if !r.Made[entities.Slugify(r.Str("page"))] {
+			p.Warnings = append(p.Warnings, "No page called "+quote(r.Str("page"))+" yet; it must be created in this import")
+		}
 	}
 	for _, h := range d.missing {
 		if r.Action == ActionDelete {
 			break
 		}
-		p.Warnings = append(p.Warnings, "No hero page called "+quote(h)+" yet; it must be created in this import")
+		if !r.Made[entities.Slugify(h)] {
+			p.Warnings = append(p.Warnings, "No hero page called "+quote(h)+" yet; it must be created in this import")
+		}
 	}
 	switch r.Action {
 	case ActionCreate:
