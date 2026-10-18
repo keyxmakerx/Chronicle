@@ -1070,7 +1070,7 @@ func (s *entityService) MergeFields(ctx context.Context, entityID string, patch 
 // deletes the key). Neither input is modified. Exported so partial-update
 // callers of Update can merge before it replaces the whole map.
 func MergeFieldPatch(current, patch map[string]any) map[string]any {
-	merged := make(map[string]any, len(current)+len(patch))
+	merged := make(map[string]any, len(current))
 	for k, v := range current {
 		merged[k] = v
 	}

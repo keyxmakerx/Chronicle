@@ -59,6 +59,9 @@ type entityTypeView struct {
 	Name           string
 	Slug           string
 	PresetCategory string
+	// Fields are the category's sheet fields, one line each: the key the
+	// AI writes under `fields:` and what value it takes.
+	Fields []string
 }
 
 // categoryInUseView is the "Categories currently in use" row.
@@ -147,7 +150,16 @@ The pages in my campaign, by type. Ask a ` + "`" + `what: page` + "`" + ` lookup
 
 {{ range .EntityTypes }}
 - **{{ .Name }}** (slug: ` + "`" + `{{ .Slug }}` + "`" + `){{ if .PresetCategory }} — preset: {{ .PresetCategory }}{{ end }}
+{{- if .Fields }}{{ range .Fields }}
+  - {{ . }}{{ end }}{{ end }}
 {{ end }}
+
+A page's sheet is set with a ` + "`" + `fields:` + "`" + ` map in its front matter, using the field keys
+listed under its type, for example ` + "`" + `fields: {level: 3, stamina: 30}` + "`" + `. Only those keys
+work, and each value must fit its field. On ` + "`" + `action: update` + "`" + ` only the fields you name
+change, and ` + "`" + `null` + "`" + ` clears one. A field that holds a list (a stat block's traits or
+abilities, say) takes a YAML list. To build a monster, give its page the creature type
+and every stat block field, then name that page in an encounter's creatures.
 {{ end }}
 
 {{ if .IncludeCategoriesInUse }}

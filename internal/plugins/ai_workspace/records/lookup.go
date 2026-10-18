@@ -10,6 +10,8 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/aiexport"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/widgets/relations"
+
+	"gopkg.in/yaml.v3"
 )
 
 // KindLookup is the front-matter kind of a read-only question an AI asks
@@ -473,9 +475,42 @@ func (run *lookupRun) page(name string) (LookupAnswer, error) {
 	md = strings.Replace(md, "### ", "## Page: ", 1)
 	md = strings.Replace(md, " {#"+anchorOf(md)+"}", "", 1)
 	md = strings.TrimSuffix(strings.TrimSpace(md), "---")
+	md += sheetFieldsText(e, types, run.director(), e.OwnerUserID != nil && *e.OwnerUserID == run.a.UserID)
 	ans.Chip = "Page · " + e.Name
 	ans.Text = md
 	return ans, nil
+}
+
+// sheetFieldsText is the page's sheet as a `fields:` block the AI can edit
+// and send back, in the category's own field order. GM-only and owner-only
+// values are left out exactly as the page's API leaves them out for this
+// reader.
+func sheetFieldsText(e *entities.Entity, types []entities.EntityType, canSeeGM, isOwner bool) string {
+	var defs []entities.FieldDefinition
+	for _, t := range types {
+		if t.ID == e.EntityTypeID {
+			defs = t.Fields
+		}
+	}
+	vals := entities.FilterRestrictedFields(e.FieldsData, defs, canSeeGM, isOwner)
+	var b strings.Builder
+	for _, d := range defs {
+		v, ok := vals[d.Key]
+		if !ok || v == nil || v == "" {
+			continue
+		}
+		line, err := yaml.Marshal(map[string]any{d.Key: v})
+		if err != nil {
+			continue
+		}
+		b.WriteString("  ")
+		b.WriteString(strings.TrimRight(string(line), "\n"))
+		b.WriteString("\n")
+	}
+	if b.Len() == 0 {
+		return ""
+	}
+	return "\n\n### Sheet\n\n```yaml\nfields:\n" + b.String() + "```\n"
 }
 
 // anchorOf is the {#slug} anchor on the rendered page's heading, if any.

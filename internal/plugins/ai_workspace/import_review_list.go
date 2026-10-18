@@ -17,12 +17,16 @@ type reviewProblem struct {
 }
 
 // reviewProblems lists the unusable blocks in paste order: pages whose
-// markdown would not parse and records the server refused.
+// markdown would not parse or whose sheet fields don't fit, and records the
+// server refused.
 func reviewProblems(d ImportReviewData) []reviewProblem {
 	var out []reviewProblem
-	for _, p := range d.Pages {
-		if p.Status == importer.StatusParseError {
+	for i, p := range d.Pages {
+		switch {
+		case p.Status == importer.StatusParseError:
 			out = append(out, reviewProblem{Block: p.SourceIndex + 1, Say: p.ParseError})
+		case d.Classes[i].Status == importer.StatusFieldProblem:
+			out = append(out, reviewProblem{Block: p.SourceIndex + 1, Say: p.Name + ": " + d.Classes[i].Reason})
 		}
 	}
 	for _, r := range d.Records {
@@ -42,7 +46,7 @@ func reviewProblems(d ImportReviewData) []reviewProblem {
 func usablePages(d ImportReviewData) []int {
 	var out []int
 	for i, p := range d.Pages {
-		if p.Status != importer.StatusParseError {
+		if p.Status != importer.StatusParseError && d.Classes[i].Status != importer.StatusFieldProblem {
 			out = append(out, i)
 		}
 	}

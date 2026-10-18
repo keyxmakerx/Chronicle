@@ -508,3 +508,28 @@ func TestBuild_Instructions(t *testing.T) {
 		})
 	}
 }
+
+// TestBuild_SheetFields pins that each category's sheet fields reach the
+// prompt in the shape the importer's `fields:` check accepts.
+func TestBuild_SheetFields(t *testing.T) {
+	types := []entities.EntityType{{ID: 7, Name: "Creature", Slug: "creature", Enabled: true, Fields: []entities.FieldDefinition{
+		{Key: "level", Label: "Level", Type: "number"},
+		{Key: "organization", Label: "Organization", Type: "select", Options: []string{"Minion", "Horde"}},
+		{Key: "abilities_json", Label: "Abilities", Type: "textarea"},
+	}}}
+	svc := NewService(&stubEntityLister{types: types}, stubTagLister{}, &stubExporter{})
+	got, err := svc.Build(context.Background(), "Ashfall", "owner-1", "camp-1", Input{IncludeEntityTypes: true, ContentMode: "none"})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	for _, want := range []string{
+		"  - `level` (Level): a number",
+		"  - `organization` (Organization): one of: Minion, Horde",
+		"  - `abilities_json` (Abilities): text, or a list",
+		"`fields: {level: 3, stamina: 30}`",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("prompt is missing %q:\n%s", want, got)
+		}
+	}
+}

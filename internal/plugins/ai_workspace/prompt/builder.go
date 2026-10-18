@@ -254,6 +254,7 @@ func mapEntityTypes(types []entities.EntityType) []entityTypeView {
 			Name:           t.Name,
 			Slug:           t.Slug,
 			PresetCategory: preset,
+			Fields:         fieldLines(t.Fields),
 		})
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].Name < out[j].Name })
@@ -310,4 +311,31 @@ func (s *Service) categoriesInUse(
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].TypeName < out[j].TypeName })
 	return out, nil
+}
+
+// fieldLines describes a category's sheet fields for the prompt: the key,
+// its label, and the value it takes, matching what the importer's
+// CheckFields accepts.
+func fieldLines(defs []entities.FieldDefinition) []string {
+	out := make([]string, 0, len(defs))
+	for _, d := range defs {
+		var takes string
+		switch d.Type {
+		case "number":
+			takes = "a number"
+		case "checkbox":
+			takes = "yes or no"
+		case "select":
+			takes = "one of: " + strings.Join(d.Options, ", ")
+			if len(d.Options) == 0 {
+				takes = "text"
+			}
+		case "url":
+			takes = "an http or https address"
+		default:
+			takes = "text, or a list"
+		}
+		out = append(out, "`"+d.Key+"` ("+d.Label+"): "+takes)
+	}
+	return out
 }
