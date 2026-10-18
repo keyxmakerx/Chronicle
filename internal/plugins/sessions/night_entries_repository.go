@@ -20,6 +20,12 @@ type NightEntryRepository interface {
 	// ListNightEntriesByNote returns the entries among noteIDs that belong
 	// to a live game night of the campaign, with the night's name and time.
 	ListNightEntriesByNote(ctx context.Context, campaignID string, noteIDs []string) ([]NightEntryNight, error)
+	// ListBellNights returns, across every campaign, the sessions that are
+	// planned or completed and may have a night in [from, to].
+	ListBellNights(ctx context.Context, from, to string) ([]Session, error)
+	// ClaimNightBell records that one bell item goes to userID for one night;
+	// false means it was already claimed and must not be sent again.
+	ClaimNightBell(ctx context.Context, sessionID, date, userID, kind string) (bool, error)
 }
 
 // NightEntryRow is one recorded entry.
@@ -139,6 +145,47 @@ func (r *nightEntryRepository) byNote(ctx context.Context, campaignID string, no
 		out = append(out, e)
 	}
 	return out, rows.Err()
+}
+
+func (r *nightEntryRepository) ListBellNights(ctx context.Context, from, to string) ([]Session, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, campaign_id, name, scheduled_date, scheduled_time, scheduled_tz, status,
+		       is_recurring, recurrence_type, recurrence_interval, recurrence_day_of_week, recurrence_end_date
+		FROM sessions
+		WHERE deleted_at IS NULL AND status IN ('planned', 'completed')
+		  AND ((scheduled_date BETWEEN ? AND ?)
+		       OR (is_recurring = 1 AND scheduled_date <= ?
+		           AND (recurrence_end_date IS NULL OR recurrence_end_date >= ?)))`,
+		from, to, to, from)
+	if err != nil {
+		return nil, fmt.Errorf("listing nights for bells: %w", err)
+	}
+	defer rows.Close()
+	var out []Session
+	for rows.Next() {
+		var s Session
+		if err := rows.Scan(&s.ID, &s.CampaignID, &s.Name, &s.ScheduledDate, &s.ScheduledTime, &s.ScheduledTZ, &s.Status,
+			&s.IsRecurring, &s.RecurrenceType, &s.RecurrenceInterval, &s.RecurrenceDayOfWeek, &s.RecurrenceEndDate); err != nil {
+			return nil, fmt.Errorf("scanning night for bells: %w", err)
+		}
+		s.normalizeDates()
+		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
+func (r *nightEntryRepository) ClaimNightBell(ctx context.Context, sessionID, date, userID, kind string) (bool, error) {
+	res, err := r.db.ExecContext(ctx, `
+		INSERT IGNORE INTO session_night_bells (session_id, occurrence_date, user_id, kind)
+		VALUES (?, ?, ?, ?)`, sessionID, date, userID, kind)
+	if err != nil {
+		return false, fmt.Errorf("claiming night bell: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("claiming night bell: %w", err)
+	}
+	return n == 1, nil
 }
 
 // placeholders is "?, ?, ?" for n values.

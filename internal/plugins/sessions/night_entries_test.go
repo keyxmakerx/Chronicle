@@ -87,6 +87,8 @@ func (f *fakeSessionLister) ListByDateRange(context.Context, string, string, str
 type fakeEntryRepo struct {
 	rows   []NightEntryRow
 	nights []NightEntryNight
+	bell   []Session
+	claims map[string]bool
 }
 
 func (f *fakeEntryRepo) InsertNightEntry(_ context.Context, r NightEntryRow) error {
@@ -118,6 +120,20 @@ func (f *fakeEntryRepo) ListUserNightEntries(_ context.Context, userID string, _
 }
 func (f *fakeEntryRepo) ListNightEntriesByNote(context.Context, string, []string) ([]NightEntryNight, error) {
 	return f.nights, nil
+}
+func (f *fakeEntryRepo) ListBellNights(context.Context, string, string) ([]Session, error) {
+	return f.bell, nil
+}
+func (f *fakeEntryRepo) ClaimNightBell(_ context.Context, sessionID, date, userID, kind string) (bool, error) {
+	if f.claims == nil {
+		f.claims = map[string]bool{}
+	}
+	k := sessionID + "|" + date + "|" + userID + "|" + kind
+	if f.claims[k] {
+		return false, nil
+	}
+	f.claims[k] = true
+	return true, nil
 }
 
 // fakeJournal holds notes by id; readable lists who may read each.
