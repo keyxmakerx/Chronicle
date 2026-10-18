@@ -50,6 +50,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/npcs"
 	"github.com/keyxmakerx/chronicle/internal/plugins/packages"
 	"github.com/keyxmakerx/chronicle/internal/plugins/pageblocks"
+	"github.com/keyxmakerx/chronicle/internal/plugins/pagetests"
 	"github.com/keyxmakerx/chronicle/internal/plugins/quests"
 	"github.com/keyxmakerx/chronicle/internal/plugins/restore"
 	"github.com/keyxmakerx/chronicle/internal/plugins/rolltables"
@@ -5811,6 +5812,27 @@ func (a *App) RegisterRoutes() {
 		slog.Warn("rumours plugin degraded — the Rumours block is not available")
 	}
 
+	// Tests: montages and other long tests on a page, and how they ended.
+	// Built before encounters, whose versions are picked by a test's result.
+	encounterPages := &encountersPageAdapter{svc: entityService, cards: entities.NewPageCards(a.DB)}
+	var encounterResults encounters.ResultDirectory
+	a.registerPlugin(PluginRegistration{
+		Slug:     pagetests.PluginSlug,
+		StaticFS: echo.MustSubFS(pagetests.StaticAssetsFS, "static"),
+		Widgets: []PluginWidget{
+			{Name: "page_tests", Scripts: []string{"js/page_tests.js"}},
+		},
+	})
+	if a.PluginHealth.IsHealthy(pagetests.PluginSlug) {
+		testsSvc := pagetests.NewService(pagetests.NewRepository(a.DB), &pageTestsPageAdapter{pages: encounterPages},
+			pageTestsCalendar{cal: &questCalendarAdapter{svc: calendarService, addons: addonService}})
+		pagetests.RegisterRoutes(e, pagetests.NewHandler(testsSvc), campaignService, authService)
+		registerPageTestsBlock(blockRegistry, testsSvc)
+		encounterResults = encounterResultsAdapter{svc: testsSvc}
+	} else {
+		slog.Warn("page tests plugin degraded — the Tests block is not available")
+	}
+
 	// Encounters: fights planned on a page, loaded in Foundry.
 	a.registerPlugin(PluginRegistration{
 		Slug:     encounters.PluginSlug,
@@ -5820,8 +5842,7 @@ func (a *App) RegisterRoutes() {
 		},
 	})
 	if a.PluginHealth.IsHealthy(encounters.PluginSlug) {
-		encounterSvc := encounters.NewService(encounters.NewRepository(a.DB),
-			&encountersPageAdapter{svc: entityService, cards: entities.NewPageCards(a.DB)})
+		encounterSvc := encounters.NewService(encounters.NewRepository(a.DB), encounterPages, encounterResults)
 		encounterAPI.attach(encounterSvc)
 		encounters.RegisterRoutes(e, encounters.NewHandler(encounterSvc), campaignService, authService)
 	} else {

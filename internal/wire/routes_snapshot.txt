@@ -888,6 +888,8 @@ GET	/campaigns/:id/page-blocks/:eid/:bid/sketch	session	plugins/pageblocks.(*Han
 POST	/campaigns/:id/page-blocks/:eid/:bid/sketch	session	plugins/pageblocks.(*Handler).Sketch	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/pages/:eid/encounters	session	plugins/encounters.(*Handler).List	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
 POST	/campaigns/:id/pages/:eid/encounters	session	plugins/encounters.(*Handler).Create	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
+GET	/campaigns/:id/pages/:eid/tests	session	plugins/pagetests.(*Handler).List	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
+POST	/campaigns/:id/pages/:eid/tests	session	plugins/pagetests.(*Handler).Create	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
 GET	/campaigns/:id/plugins	session	plugins/campaigns.(*Handler).PluginHub	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/plugins/fragment	session	plugins/campaigns.(*Handler).PluginHubFragment	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/proposals	session	plugins/sessions.(*Handler).ListProposals	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
@@ -981,6 +983,11 @@ PUT	/campaigns/:id/tags/:tagId	session	widgets/tags.(*Handler).UpdateTag	plugins
 GET	/campaigns/:id/tags/:tagId/grants	session	widgets/tags.(*Handler).ListGrants	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/tags/:tagId/grants	session	widgets/tags.(*Handler).CreateGrant	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 DELETE	/campaigns/:id/tags/:tagId/grants/:grantId	session	widgets/tags.(*Handler).DeleteGrant	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/tests	session	plugins/pagetests.(*Handler).Choices	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
+DELETE	/campaigns/:id/tests/:tid	session	plugins/pagetests.(*Handler).Delete	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
+PUT	/campaigns/:id/tests/:tid	session	plugins/pagetests.(*Handler).Update	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
+POST	/campaigns/:id/tests/:tid/record	session	plugins/pagetests.(*Handler).Record	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
+POST	/campaigns/:id/tests/:tid/tally	session	plugins/pagetests.(*Handler).Tally	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
 GET	/campaigns/:id/timelines	public-capable	plugins/timeline.(*Handler).Index	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireViewAccess
 POST	/campaigns/:id/timelines	session	plugins/timeline.(*Handler).CreateForm	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
 DELETE	/campaigns/:id/timelines/:tid	session	plugins/timeline.(*Handler).DeleteAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
@@ -1067,6 +1074,7 @@ GET	/sessions/feed/:token	none	plugins/sessions.(*Handler).GameNightFeedICS	-
 GET	/static/plugins/encounters*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-
 GET	/static/plugins/entities*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-
 GET	/static/plugins/maps*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-
+GET	/static/plugins/page_tests*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-
 GET	/static/plugins/pageblocks*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-
 GET	/static/plugins/quests*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-
 GET	/static/plugins/rumours*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-

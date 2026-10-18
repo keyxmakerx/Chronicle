@@ -24,7 +24,7 @@
   'use strict';
 
   // The server's limits, mirrored so the builder can stop short of a refusal.
-  var LIM = { name: 120, heroes: 12, rows: 30, count: 40, perPage: 50, stages: 8, forms: 10, arrive: 30, note: 200, formName: 80 };
+  var LIM = { name: 120, heroes: 12, rows: 30, count: 40, perPage: 50, stages: 8, forms: 10, arrive: 30, note: 200, formName: 80, versions: 6, versionAdds: 10, versionName: 80 };
   var FIRST_FORM = 'Its first form';
   var GROUPS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
   var STARTS = [
@@ -82,15 +82,34 @@
       version: e.version || 0,
       page: e.page || { id: '', name: '' },
       heroes: (e.heroes || []).map(function (h) { return { id: h.id, name: h.name || '' }; }),
-      creatures: (e.creatures || []).map(function (c) {
-        return {
-          id: c.id || uid(), entityId: c.entityId || '', name: c.name || '',
-          count: Math.max(1, Math.min(LIM.count, c.count || 1)),
-          group: GROUPS.indexOf(c.group) >= 0 ? c.group : 'A',
-          start: c.start === 'hidden' || c.start === 'later' ? c.start : 'seen'
-        };
-      }),
-      stages: (e.stages || []).map(normaliseStage)
+      creatures: (e.creatures || []).map(normaliseRow),
+      stages: (e.stages || []).map(normaliseStage),
+      versions: (e.versions || []).map(normaliseVersion),
+      picked: e.picked || null
+    };
+  }
+
+  function normaliseRow(c) {
+    return {
+      id: c.id || uid(), entityId: c.entityId || '', name: c.name || '',
+      count: Math.max(1, Math.min(LIM.count, c.count || 1)),
+      group: GROUPS.indexOf(c.group) >= 0 ? c.group : 'A',
+      start: c.start === 'hidden' || c.start === 'later' ? c.start : 'seen'
+    };
+  }
+
+  function normaliseVersion(v) {
+    v = v && typeof v === 'object' ? v : {};
+    var p = v.pick && v.pick.test && v.pick.result ? v.pick : null;
+    return {
+      id: v.id || uid(),
+      name: typeof v.name === 'string' ? v.name : '',
+      pick: p ? { test: p.test, result: p.result, testName: p.testName || '', resultLabel: p.resultLabel || '' } : null,
+      add: (v.add || []).map(normaliseRow),
+      remove: (v.remove || []).filter(function (id) { return typeof id === 'string'; }),
+      counts: (v.counts || []).filter(function (x) { return x && x.row; }).map(function (x) {
+        return { row: x.row, count: Math.max(1, Math.min(LIM.count, x.count || 1)) };
+      })
     };
   }
 
@@ -137,6 +156,10 @@
       s.forms = s.forms.filter(function (f) { return f.row !== rowId; });
       s.arrive = s.arrive.filter(function (id) { return id !== rowId; });
       if (s.when.kind === 'stamina' && s.when.row === rowId) s.when.row = n.creatures.length ? n.creatures[0].id : '';
+    });
+    n.versions.forEach(function (v) {
+      v.remove = v.remove.filter(function (id) { return id !== rowId; });
+      v.counts = v.counts.filter(function (x) { return x.row !== rowId; });
     });
     return n;
   }
@@ -240,6 +263,145 @@
     return n;
   }
 
+  // ---------- Versions ----------
+  // A version stores only its changes to the base rows, so editing a shared
+  // row once changes every version.
+
+  function versionById(n, id) {
+    return n.versions.filter(function (v) { return v.id === id; })[0];
+  }
+
+  function addVersion(e) {
+    var n = clone(e);
+    if (n.versions.length < LIM.versions) {
+      n.versions.push({ id: uid(), name: 'Version ' + (n.versions.length + 1), pick: null, add: [], remove: [], counts: [] });
+    }
+    return n;
+  }
+
+  // removeVersion also takes its added rows out of every stage.
+  function removeVersion(e, id) {
+    var n = clone(e), v = versionById(n, id);
+    if (!v) return n;
+    var gone = v.add.map(function (c) { return c.id; });
+    n.versions = n.versions.filter(function (x) { return x.id !== id; });
+    n.stages.forEach(function (s) {
+      s.forms = s.forms.filter(function (f) { return gone.indexOf(f.row) < 0; });
+      s.arrive = s.arrive.filter(function (r) { return gone.indexOf(r) < 0; });
+    });
+    return n;
+  }
+
+  function setVersionName(e, id, name) {
+    var n = clone(e), v = versionById(n, id);
+    if (v) v.name = String(name).slice(0, LIM.versionName);
+    return n;
+  }
+
+  // setPick sets the result that chooses a version. A result another version
+  // already uses moves here, since one result can choose only one version.
+  function setPick(e, id, test, result) {
+    var n = clone(e), v = versionById(n, id);
+    if (!v) return n;
+    if (!test || !result) { v.pick = null; return n; }
+    n.versions.forEach(function (x) {
+      if (x.id !== id && x.pick && x.pick.test === test && x.pick.result === result) x.pick = null;
+    });
+    v.pick = { test: test, result: result, testName: '', resultLabel: '' };
+    return n;
+  }
+
+  // keepRow puts a base row in or out of a version. A row left out loses its
+  // changed count, since the server refuses both on one row.
+  function keepRow(e, id, rowId, on) {
+    var n = clone(e), v = versionById(n, id);
+    if (!v) return n;
+    v.remove = v.remove.filter(function (r) { return r !== rowId; });
+    if (!on) {
+      v.remove.push(rowId);
+      v.counts = v.counts.filter(function (x) { return x.row !== rowId; });
+    }
+    return n;
+  }
+
+  // setVersionCount plays a base row with another count; the base count
+  // itself is stored as no change.
+  function setVersionCount(e, id, rowId, count) {
+    var n = clone(e), v = versionById(n, id);
+    var row = n.creatures.filter(function (c) { return c.id === rowId; })[0];
+    if (!v || !row) return n;
+    count = Math.max(1, Math.min(LIM.count, count));
+    v.counts = v.counts.filter(function (x) { return x.row !== rowId; });
+    if (count !== row.count) v.counts.push({ row: rowId, count: count });
+    return n;
+  }
+
+  // versionCount is how many of a base row a version plays; 0 when left out.
+  function versionCount(e, v, rowId) {
+    if (v.remove.indexOf(rowId) >= 0) return 0;
+    var ch = v.counts.filter(function (x) { return x.row === rowId; })[0];
+    if (ch) return ch.count;
+    var row = e.creatures.filter(function (c) { return c.id === rowId; })[0];
+    return row ? row.count : 0;
+  }
+
+  // addVersionRow adds a creature only this version has; one already added
+  // gets one more.
+  function addVersionRow(e, id, pick) {
+    var n = clone(e), v = versionById(n, id);
+    if (!v) return n;
+    var same = v.add.filter(function (c) {
+      return pick.entityId ? c.entityId === pick.entityId : !c.entityId && c.name.toLowerCase() === pick.name.toLowerCase();
+    })[0];
+    if (same) { same.count = Math.min(LIM.count, same.count + 1); return n; }
+    if (v.add.length >= LIM.versionAdds) return n;
+    var last = n.creatures[n.creatures.length - 1];
+    v.add.push({
+      id: uid(), entityId: pick.entityId || '', name: String(pick.name).slice(0, LIM.name), count: 1,
+      group: last ? last.group : 'A', start: 'seen'
+    });
+    return n;
+  }
+
+  function setVersionRow(e, id, rowId, key, value) {
+    var n = clone(e), v = versionById(n, id);
+    if (!v) return n;
+    v.add.forEach(function (c) {
+      if (c.id !== rowId) return;
+      c[key] = key === 'count' ? Math.max(1, Math.min(LIM.count, value)) : value;
+    });
+    return n;
+  }
+
+  function removeVersionRow(e, id, rowId) {
+    var n = clone(e), v = versionById(n, id);
+    if (!v) return n;
+    v.add = v.add.filter(function (c) { return c.id !== rowId; });
+    n.stages.forEach(function (s) {
+      s.forms = s.forms.filter(function (f) { return f.row !== rowId; });
+      s.arrive = s.arrive.filter(function (r) { return r !== rowId; });
+    });
+    return n;
+  }
+
+  // versionTotal counts the creatures a version plays.
+  function versionTotal(e, v) {
+    var n = 0;
+    e.creatures.forEach(function (c) { n += versionCount(e, v, c.id); });
+    v.add.forEach(function (c) { n += c.count; });
+    return n;
+  }
+
+  // pickedLine says, in words, which version the recorded results choose.
+  function pickedLine(e) {
+    var p = e.picked;
+    if (!e.versions.length || !p) return '';
+    var v = p.version ? versionById(e, p.version) : null;
+    if (v) return 'The recorded result chooses ' + (v.name || 'a version') + '.';
+    if (p.open && p.open.length) return 'No result recorded yet, so the base list plays until one is.';
+    return 'No recorded result chooses a version, so the base list plays.';
+  }
+
   function totalCreatures(e) {
     return e.creatures.reduce(function (s, c) { return s + c.count; }, 0);
   }
@@ -279,6 +441,17 @@
           arrive: s.arrive.slice(), how: s.how, note: s.note.trim()
         };
       }),
+      versions: e.versions.map(function (v) {
+        return {
+          id: v.id, name: v.name.trim() || 'Untitled version',
+          pick: v.pick ? { test: v.pick.test, result: v.pick.result } : null,
+          add: v.add.map(function (c) {
+            return { id: c.id, entityId: c.entityId, name: c.name, count: c.count, group: c.group, start: c.start };
+          }),
+          remove: v.remove.slice(),
+          counts: v.counts.map(function (x) { return { row: x.row, count: x.count }; })
+        };
+      }),
       version: e.version
     };
   }
@@ -296,7 +469,10 @@
     countByStart: countByStart, summary: summary, toSave: toSave, pickTypes: pickTypes,
     FIRST_FORM: FIRST_FORM, addStage: addStage, removeStage: removeStage, setWhen: setWhen,
     setStageField: setStageField, addForm: addForm, setForm: setForm, removeForm: removeForm,
-    toggleArrive: toggleArrive, arriveOrder: arriveOrder, stageReady: stageReady, pagedRows: pagedRows
+    toggleArrive: toggleArrive, arriveOrder: arriveOrder, stageReady: stageReady, pagedRows: pagedRows,
+    addVersion: addVersion, removeVersion: removeVersion, setVersionName: setVersionName, setPick: setPick,
+    keepRow: keepRow, setVersionCount: setVersionCount, versionCount: versionCount, addVersionRow: addVersionRow,
+    setVersionRow: setVersionRow, removeVersionRow: removeVersionRow, versionTotal: versionTotal, pickedLine: pickedLine
   };
 
   if (typeof Chronicle === 'undefined' || typeof document === 'undefined') return;
@@ -451,6 +627,7 @@
     // The panel slides in on the next frame so the browser sees it move.
     requestAnimationFrame(function () { root.classList.add('open'); });
     loadPickers(S);
+    loadTests(S);
     S.formsMap = null; S.formsKey = '';
     askForms(S);
   }
@@ -634,7 +811,7 @@
 
     var body = h('div', 'enc-d-body');
     var slot = h('div', 'enc-system', '', { 'data-encounter-budget': true });
-    append(body, [heroSection(S), slot, creatureSection(S), stageSection(S), readySection(S)]);
+    append(body, [heroSection(S), slot, creatureSection(S), versionSection(S), stageSection(S), readySection(S)]);
 
     var foot = h('div', 'enc-d-foot');
     append(foot, [
@@ -713,20 +890,23 @@
       rows.appendChild(row);
     });
     sec.appendChild(rows);
-    if (edit) sec.appendChild(addBox(S));
+    if (edit) {
+      sec.appendChild(addBox(S, 'add', d.creatures.length >= LIM.rows, function (p) {
+        change(S, addCreature(S.draft, p), 'add');
+      }));
+    }
     return sec;
   }
 
   // addBox searches the creature pages as the DM types. Enter, or the last
   // choice, adds a creature by name when no page fits.
-  function addBox(S) {
+  function addBox(S, key, full, onPick, placeholder) {
     var box = h('div', 'enc-add');
-    var full = S.draft.creatures.length >= LIM.rows;
     var results = h('ul', 'enc-results', '', { role: 'listbox', 'aria-label': 'Creature pages' });
     var seq = 0;
     var input = h('input', 'enc-input', '', {
-      type: 'search', placeholder: full ? 'This encounter has the most rows it can hold' : 'Add a creature page',
-      'aria-label': 'Add a creature', 'data-k': 'add', maxlength: String(LIM.name), disabled: full, autocomplete: 'off'
+      type: 'search', placeholder: full ? 'This list has the most rows it can hold' : (placeholder || 'Add a creature page'),
+      'aria-label': placeholder || 'Add a creature', 'data-k': key, maxlength: String(LIM.name), disabled: full, autocomplete: 'off'
     }, {
       input: function () {
         var q = input.value.trim(), mine = ++seq;
@@ -742,7 +922,7 @@
         if (first) first.click();
       }
     });
-    function pick(p) { change(S, addCreature(S.draft, p), 'add'); }
+    function pick(p) { onPick(p); }
     function showResults(found, q) {
       results.textContent = '';
       found.forEach(function (p) {
@@ -760,6 +940,184 @@
     }
     append(box, [input, results]);
     return box;
+  }
+
+  // ---------- Versions ----------
+
+  // loadTests fetches the tests a version can be picked by. A failure leaves
+  // the picks already saved readable and offers no new ones.
+  function loadTests(S) {
+    S.tests = S.canEdit ? null : [];
+    if (!S.canEdit) return;
+    api(S, 'GET', base(S) + '/tests').then(function (list) {
+      S.tests = Array.isArray(list) ? list : [];
+      if (S.drawer) drawDrawer(S);
+    }).catch(function () {
+      S.tests = [];
+      if (S.drawer) drawDrawer(S);
+    });
+  }
+
+  function versionSection(S) {
+    var d = S.draft, sec = h('section', 'enc-sec'), edit = S.canEdit;
+    var label = h('p', 'enc-lab', 'Versions');
+    if (d.versions.length) label.appendChild(h('b', '', String(d.versions.length)));
+    sec.appendChild(label);
+    if (!d.versions.length) {
+      sec.appendChild(h('p', 'enc-muted', 'A version is this fight played another way: some creatures added, left out or in other numbers. A test result can choose which one plays.'));
+      if (edit) sec.appendChild(btn('Add a version', 'enc-quiet', function () { openVersion(S, addVersion(S.draft)); }, { 'data-k': 'add-version' }));
+      return sec;
+    }
+    if (!versionById(d, S.vtab)) S.vtab = d.versions[0].id;
+    var saved = S.list.filter(function (x) { return x.id === S.open; })[0];
+    var line = saved ? pickedLine(saved) : '';
+    if (line) sec.appendChild(h('p', 'enc-muted enc-picked', line));
+
+    var tabs = h('div', 'enc-tabs', '', { role: 'tablist', 'aria-label': 'Versions' });
+    d.versions.forEach(function (v) {
+      var on = v.id === S.vtab;
+      tabs.appendChild(h('button', 'enc-tab' + (on ? ' on' : ''), v.name || 'Untitled version', {
+        type: 'button', role: 'tab', 'aria-selected': on ? 'true' : 'false', 'data-k': 'vt-' + v.id
+      }, { click: function () { S.vtab = v.id; drawDrawer(S, 'vt-' + v.id); } }));
+    });
+    if (edit) {
+      tabs.appendChild(btn('Add a version', 'enc-quiet', function () { openVersion(S, addVersion(S.draft)); }, {
+        'data-k': 'add-version', disabled: d.versions.length >= LIM.versions
+      }));
+    }
+    sec.appendChild(tabs);
+    sec.appendChild(versionPanel(S, versionById(d, S.vtab)));
+    return sec;
+  }
+
+  // openVersion saves a new version and shows its tab.
+  function openVersion(S, next) {
+    var v = next.versions[next.versions.length - 1];
+    if (v) S.vtab = v.id;
+    change(S, next, v ? 'vn-' + v.id : 'add-version');
+  }
+
+  function versionPanel(S, v) {
+    var d = S.draft, edit = S.canEdit, k = v.id;
+    var card = h('div', 'enc-stage enc-version', '', { role: 'tabpanel', 'data-version': v.id });
+
+    var name = h('input', 'enc-input', '', {
+      type: 'text', maxlength: String(LIM.versionName), 'aria-label': 'Version name', 'data-k': 'vn-' + k, readonly: !edit
+    }, {
+      input: function () { S.draft = setVersionName(S.draft, v.id, name.value); schedule(S); }
+    });
+    name.value = v.name;
+    card.appendChild(field('Name', name));
+    card.appendChild(field('Chosen by', pickSelect(S, v)));
+
+    // The base rows, each kept, left out or played in other numbers.
+    var rows = h('div', 'enc-rows');
+    if (!d.creatures.length) rows.appendChild(h('span', 'enc-muted', 'No creature rows yet.'));
+    d.creatures.forEach(function (c) {
+      var n = versionCount(d, v, c.id), kept = n > 0;
+      var row = h('div', 'enc-vrow' + (kept ? '' : ' out'));
+      var lab = h('label', 'enc-vkeep');
+      var cb = h('input', '', '', { type: 'checkbox', 'data-k': 'vk-' + k + '-' + c.id, disabled: !edit }, {
+        change: function () { change(S, keepRow(S.draft, v.id, c.id, cb.checked), 'vk-' + k + '-' + c.id); }
+      });
+      cb.checked = kept;
+      append(lab, [cb, h('span', '', c.name)]);
+      row.appendChild(lab);
+      if (kept) {
+        row.appendChild(stepper(S, c.name, n, 'vc-' + k + '-' + c.id, function (to) {
+          return setVersionCount(S.draft, v.id, c.id, to);
+        }));
+        if (n !== c.count) row.appendChild(h('span', 'enc-muted enc-vwas', 'base ' + c.count));
+      } else {
+        row.appendChild(h('span', 'enc-muted', 'Left out'));
+      }
+      rows.appendChild(row);
+    });
+    card.appendChild(field('From the base list', rows));
+
+    // Rows only this version has.
+    var adds = h('div', 'enc-rows');
+    v.add.forEach(function (c) {
+      var row = h('div', 'enc-row');
+      var st = h('select', 'enc-sel enc-start-' + c.start, '', { 'aria-label': 'How ' + c.name + ' starts', 'data-k': 'vs-' + c.id, disabled: !edit }, {
+        change: function () { change(S, setVersionRow(S.draft, v.id, c.id, 'start', st.value), 'vs-' + c.id); }
+      });
+      STARTS.forEach(function (o) { st.appendChild(h('option', '', o.label, { value: o.v, selected: o.v === c.start })); });
+      var grp = h('select', 'enc-sel', '', { 'aria-label': 'Initiative group for ' + c.name, 'data-k': 'vg-' + c.id, disabled: !edit }, {
+        change: function () { change(S, setVersionRow(S.draft, v.id, c.id, 'group', grp.value), 'vg-' + c.id); }
+      });
+      GROUPS.forEach(function (g) { grp.appendChild(h('option', '', 'Group ' + g, { value: g, selected: g === c.group })); });
+      var who = h('div', 'enc-who');
+      append(who, [h('b', '', c.name), c.entityId ? null : h('span', 'enc-muted', 'No page yet')]);
+      append(row, [who, grp, st, stepper(S, c.name, c.count, 'va-' + c.id, function (to) {
+        return setVersionRow(S.draft, v.id, c.id, 'count', to);
+      }), edit ? h('button', 'enc-x enc-rm', '×', { type: 'button', 'aria-label': 'Remove ' + c.name + ' from this version' }, {
+        click: function () { change(S, removeVersionRow(S.draft, v.id, c.id), 'vadd-' + k); }
+      }) : null]);
+      adds.appendChild(row);
+    });
+    if (edit) {
+      adds.appendChild(addBox(S, 'vadd-' + k, v.add.length >= LIM.versionAdds, function (p) {
+        change(S, addVersionRow(S.draft, v.id, p), 'vadd-' + k);
+      }, 'Add a creature only this version has'));
+    } else if (!v.add.length) {
+      adds.appendChild(h('span', 'enc-muted', 'None.'));
+    }
+    card.appendChild(field('Only in this version', adds));
+
+    var foot = h('div', 'enc-stage-head');
+    var total = versionTotal(d, v);
+    append(foot, [
+      h('span', 'enc-muted', total + (total === 1 ? ' creature' : ' creatures') + ' in this version'),
+      edit ? btn('Remove version', 'enc-ghost', function () { change(S, removeVersion(S.draft, v.id), 'add-version'); }, { 'data-k': 'rv-' + k }) : null
+    ]);
+    card.appendChild(foot);
+    return card;
+  }
+
+  // stepper is the − count + control; next returns the draft after a step.
+  function stepper(S, name, count, key, next) {
+    var edit = S.canEdit, step = h('span', 'enc-step');
+    append(step, [
+      h('button', '', '−', { type: 'button', 'aria-label': 'One fewer ' + name, 'data-k': key + '-m', disabled: !edit || count <= 1 }, {
+        click: function () { change(S, next(count - 1), key + '-m'); }
+      }),
+      h('output', '', String(count), { 'aria-label': count + ' ' + name }),
+      h('button', '', '+', { type: 'button', 'aria-label': 'One more ' + name, 'data-k': key + '-p', disabled: !edit || count >= LIM.count }, {
+        click: function () { change(S, next(count + 1), key + '-p'); }
+      })
+    ]);
+    return step;
+  }
+
+  // pickSelect lists every test result that can choose this version. A saved
+  // pick the list does not have (not loaded, or the list failed) stays shown
+  // so opening the builder never silently changes it.
+  function pickSelect(S, v) {
+    var cur = v.pick ? v.pick.test + '\u0000' + v.pick.result : '';
+    var sel = h('select', 'enc-sel', '', { 'aria-label': 'Test result that chooses this version', 'data-k': 'vp-' + v.id, disabled: !S.canEdit }, {
+      change: function () {
+        var parts = sel.value ? sel.value.split('\u0000') : ['', ''];
+        change(S, setPick(S.draft, v.id, parts[0], parts[1]), 'vp-' + v.id);
+      }
+    });
+    sel.appendChild(h('option', '', 'Only I choose it', { value: '', selected: !cur }));
+    var found = !cur;
+    (S.tests || []).forEach(function (t) {
+      var g = h('optgroup', '', '', { label: t.name + (t.page && t.page.name ? ' (' + t.page.name + ')' : '') });
+      (t.results || []).forEach(function (r) {
+        var val = t.id + '\u0000' + r.id;
+        if (val === cur) found = true;
+        g.appendChild(h('option', '', t.name + ': ' + r.label, { value: val, selected: val === cur }));
+      });
+      sel.appendChild(g);
+    });
+    if (!found) {
+      sel.appendChild(h('option', '', (v.pick.testName || 'A test') + ': ' + (v.pick.resultLabel || 'a result'), { value: cur, selected: true }));
+    }
+    if (S.tests == null) sel.appendChild(h('option', '', 'Loading tests…', { value: '', disabled: true }));
+    else if (!S.tests.length && S.canEdit) sel.appendChild(h('option', '', 'No tests yet. Add one to a quest or adventure page.', { value: '', disabled: true }));
+    return sel;
   }
 
   // ---------- Stages ----------

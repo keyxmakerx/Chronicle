@@ -31,7 +31,7 @@ System or Widget (see root `CLAUDE.md` for what each tier is).
 │  │  ai_workspace/  backup/  foundry_vtt/  restore/        │    │
 │  │  widgetbindings/  dmscreen/  systemstate/              │    │
 │  │  quests/  rolltables/  vault_import/  pageblocks/      │    │
-│  │  encounters/  rumours/                                 │    │
+│  │  encounters/  rumours/  pagetests/                     │    │
 │  └──────────────────────────────────────────────────────┘    │
 │                                                               │
 │  ┌──────────────────────────────────────────────────────┐    │
