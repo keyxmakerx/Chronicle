@@ -2149,6 +2149,33 @@ func registerStandingBlock(blockRegistry *entities.BlockRegistry, standing entit
 	})
 }
 
+// registerFamilyTreeBlock registers the "Family tree" block: a page's parents,
+// children and partners, read from its entity relations. It has no settings
+// (the family is whatever the Relations block holds) and is one per page,
+// because its tree is a single sheet. What a viewer is shown is decided by the
+// family tree service for that viewer; the block adds no rule of its own.
+func registerFamilyTreeBlock(blockRegistry *entities.BlockRegistry, family entities.FamilyTreeService) {
+	blockRegistry.Register(entities.BlockMeta{
+		Type: entities.FamilyTreeBlockType, Label: "Family tree", Icon: "fa-sitemap",
+		Description: "Parents, children and partners drawn from this page's relations",
+		Contexts:    []string{"template"},
+		TileSizes:   []string{"4x1", "2x1"},
+		Singleton:   true,
+	}, func(rc entities.BlockRenderContext) templ.Component {
+		if rc.CC == nil || rc.CC.Campaign == nil || rc.Entity == nil {
+			return templ.NopComponent
+		}
+		role := rc.CC.VisibilityRole()
+		tree, err := family.Tree(context.Background(), rc.CC.Campaign.ID, rc.Entity.ID, role, rc.UserID)
+		if err != nil {
+			slog.Error("family tree: cannot read the page's family",
+				slog.String("entity_id", rc.Entity.ID), slog.Any("error", err))
+			return templ.NopComponent
+		}
+		return entities.BlockFamilyTree(rc.CC.Campaign.ID, rc.Entity.ID, rc.Entity.Name, tree, permissions.CanSeeDmOnly(role))
+	})
+}
+
 // entityTypeListerForGraphAdapter wraps entities.EntityService to implement the
 // relations.EntityTypeListerForGraph interface for the graph filter dropdown.
 type entityTypeListerForGraphAdapter struct {
@@ -2801,6 +2828,7 @@ func (a *App) RegisterRoutes() {
 		Widgets: []PluginWidget{
 			{Name: entities.ContentsWidgetName, Scripts: []string{"js/page_contents.js"}},
 			{Name: "standing", Scripts: []string{"js/standing.js"}},
+			{Name: entities.FamilyTreeWidgetName, Scripts: []string{"js/family_tree.js"}},
 		},
 	})
 
@@ -4575,6 +4603,11 @@ func (a *App) RegisterRoutes() {
 
 	registerPageTextBlocks(blockRegistry)
 	registerEncountersBlock(blockRegistry)
+	familyTree := entities.NewFamilyTreeService(
+		&familyLinksAdapter{svc: relService}, entities.NewPageCards(a.DB), entityService)
+	registerFamilyTreeBlock(blockRegistry, familyTree)
+	entityHandler.SetFamilyEdit(entities.NewFamilyEditService(
+		newFamilyWriterAdapter(relService), entityService, entityService, familyTree))
 
 	// Timeline plugin blocks (requires "timeline" addon).
 	blockRegistry.Register(entities.BlockMeta{
