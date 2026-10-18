@@ -1,0 +1,91 @@
+// contents_block.templ renders the entity page's "Contents" block. The server
+// draws only the shell: a rail (an icon over a strip of marks), a labelled
+// button for narrow pages, and the empty panel the list slides out into.
+// static/js/page_contents.js reads the page's headings, decides whether the
+// page has enough of them (four), chooses rail or button from the room beside
+// the navigation sidebar, and fills the panel with textContent, so a heading
+// never reaches innerHTML. Every handler is an inline IIFE (contentsCall) so
+// the block works after an HTMX swap.
+//
+// The shell sits inside a <template> and starts hidden (data-ct="off"), so a
+// page that is too short, or a browser without the script, shows nothing at
+// all, and the Customizer's inert preview (which drops templates) shows its
+// Example instead of an unstyled rail. The script clones the shell into place;
+// the inline handlers travel with the clone.
+package entities
+
+import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
+
+templ contentsStyles() {
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/css/page_contents.css") }/>
+}
+
+templ contentsIcon() {
+	<svg class="ct-ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 4h8M5.5 8h8M5.5 12h8"></path><circle cx="2.5" cy="4" r=".6"></circle><circle cx="2.5" cy="8" r=".6"></circle><circle cx="2.5" cy="12" r=".6"></circle></svg>
+}
+
+// blockContents renders the block's shell.
+templ blockContents(entity *Entity) {
+	@contentsStyles()
+	<section class="ct" data-widget={ ContentsWidgetName } data-ct="off" aria-label="Contents">
+		<template data-ct-shell>
+		<div class="ct-rail">
+			<div class="ct-cwrap">
+				<button
+					type="button"
+					class="ct-cico"
+					aria-label="Contents"
+					aria-expanded="false"
+					aria-controls={ contentsPanelID(entity) }
+					data-ct-open
+					onclick={ contentsCall("toggle") }
+					onpointerenter={ contentsCall("icoEnter") }
+					onpointerleave={ contentsCall("icoLeave") }
+					onfocus={ contentsCall("icoFocus") }
+					onblur={ contentsCall("icoLeave") }
+				>
+					@contentsIcon()
+				</button>
+				<span class="ct-ptip" aria-hidden="true">Contents</span>
+			</div>
+			<div
+				class="ct-strip"
+				tabindex="0"
+				role="group"
+				aria-label="Contents rail. Up and Down arrows choose, Enter jumps."
+				onpointermove={ contentsCall("stripMove") }
+				onpointerleave={ contentsCall("stripLeave") }
+				onclick={ contentsCall("stripClick") }
+				onkeydown={ contentsCall("stripKey") }
+				onfocus={ contentsCall("stripFocus") }
+				onblur={ contentsCall("stripLeave") }
+			>
+				<div class="ct-lit"></div>
+				<div class="ct-tip"></div>
+			</div>
+		</div>
+		<button
+			type="button"
+			class="ct-btn"
+			aria-expanded="false"
+			aria-controls={ contentsPanelID(entity) }
+			data-ct-open
+			onclick={ contentsCall("toggle") }
+		>
+			@contentsIcon()
+			<span>Contents</span>
+		</button>
+		<div class="ct-pn" id={ contentsPanelID(entity) } role="region" aria-label="Contents" onkeydown={ contentsCall("panelKey") }>
+			<div class="ct-ph">
+				<span class="ct-lab">On this page</span>
+				<button type="button" class="ct-x" aria-label="Close contents" onclick={ contentsCall("close") }>
+					<svg class="ct-ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"></path></svg>
+				</button>
+			</div>
+			<input class="ct-fld" type="text" placeholder="Find a heading" aria-label="Find a heading" autocomplete="off" oninput={ contentsCall("filter") }/>
+			<ul class="ct-pl"></ul>
+			<div class="ct-empty" hidden>No heading matches.</div>
+		</div>
+		</template>
+	</section>
+}

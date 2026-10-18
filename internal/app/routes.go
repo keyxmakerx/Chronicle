@@ -2760,11 +2760,15 @@ func (a *App) RegisterRoutes() {
 	entities.RegisterRoutes(e, entityHandler, campaignService, authService)
 
 	// Expose the entities plugin's embedded static assets at
-	// /static/plugins/entities/ (currently js/characters.js, the Characters
-	// page's mini→full launch enhancement).
+	// /static/plugins/entities/ (js/characters.js, the Characters page's
+	// mini→full launch enhancement, and the Contents block's script, loaded
+	// on sight).
 	a.registerPlugin(PluginRegistration{
 		Slug:     entities.PluginSlug,
 		StaticFS: echo.MustSubFS(entities.StaticAssetsFS, "static"),
+		Widgets: []PluginWidget{
+			{Name: entities.ContentsWidgetName, Scripts: []string{"js/page_contents.js"}},
+		},
 	})
 
 	// Content template routes (entity content blueprints).

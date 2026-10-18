@@ -1,0 +1,164 @@
+/*
+ * page_contents.css: the entity page's "Contents" block
+ * (internal/plugins/entities/contents_block.templ, behaviour in
+ * internal/plugins/entities/static/js/page_contents.js).
+ *
+ * Everything is scoped under .ct. Colours, edges and shadows come from the
+ * theme tokens, so the block follows light and dark and the page look. The
+ * rail and the panel are position:fixed pieces the script places in the left
+ * margin of the page area (#main-content), so they sit beside the navigation
+ * sidebar and never over it, whatever width it is in. In the rail the block
+ * takes no room of its own; on a narrow page its Contents button is a row in
+ * the page. The panel slides out of the rail's edge over the page text and
+ * nothing below moves. The leading amber edge marks what only the Director
+ * sees. Calm fades in place; Off shows the end state (html[data-motion], the
+ * person's and owner's reduce switches, and the device setting).
+ */
+.ct {
+  --ct-line: var(--color-border-light, #e5e7eb);
+  --ct-line-strong: var(--color-border, #d1d5db);
+  --ct-panel: var(--color-card-bg, #fff);
+  --ct-tint: var(--color-bg-tertiary, #f3f4f6);
+  --ct-bg: var(--color-bg-primary, #f9fafb);
+  --ct-ink: var(--color-text-primary, #111827);
+  --ct-muted: var(--color-text-secondary, #6b7280);
+  --ct-acc: var(--color-accent, #6366f1);
+  --ct-acc-soft: rgb(var(--color-accent-rgb, 99 102 241) / .12);
+  --ct-dm: rgb(var(--color-warn-rgb, 217 119 6));
+  --ct-hit: 32px;
+  --ct-ease: var(--ease-out, cubic-bezier(.16, 1, .3, 1));
+  --ct-micro: var(--dur-micro, 120ms);
+  --ct-std: var(--dur-standard, 200ms);
+  --ct-large: var(--dur-large, 280ms);
+  min-width: 0;
+  font-size: 14px;
+  color: var(--color-text-body, #374151);
+}
+@media (pointer: coarse) { .ct { --ct-hit: 44px; } }
+.ct *, .ct *::before, .ct *::after { box-sizing: border-box; }
+.ct [hidden] { display: none !important; }
+.ct :focus-visible { outline: 2px solid var(--ct-acc); outline-offset: 2px; }
+.ct button, .ct input { font: inherit; color: inherit; }
+.ct-ic { width: 14px; height: 14px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+/* Which pieces draw: nothing until the script has found four headings, then
+   the rail, or on a narrow page the button. The panel is hidden until opened. */
+.ct[data-ct="off"] > .ct-rail, .ct[data-ct="off"] > .ct-btn, .ct[data-ct="off"] > .ct-pn { display: none; }
+.ct[data-ct="rail"] > .ct-btn { display: none; }
+.ct[data-ct="button"] > .ct-rail { display: none; }
+
+/* The gutter the rail lives in: held on the page area's left while a rail is
+   wanted, so the text starts beside the rail and not under it. */
+@media (min-width: 768px) {
+  #main-content.ct-railed { padding-left: calc(1.25rem + 40px); transition: padding-left var(--dur-standard, 200ms) var(--ease-out, ease-out); }
+}
+
+/* The rail: the icon on top, the marks below. The whole strip is the hit
+   area; the marks are only the picture. */
+.ct-rail { position: fixed; z-index: 31; left: 0; top: 0; width: 32px; }
+.ct-cwrap { position: absolute; left: 0; top: 6px; width: 32px; height: 32px; }
+.ct-cico {
+  width: 100%; height: 100%; display: grid; place-items: center; padding: 0; border: 0; border-radius: 8px; background: transparent;
+  color: var(--ct-muted); cursor: pointer;
+  transition: background-color var(--ct-micro), color var(--ct-micro), transform var(--ct-std) var(--ct-ease);
+}
+.ct-cico .ct-ic { width: 18px; height: 18px; }
+.ct-rail:hover .ct-cico, .ct-cico:hover, .ct-cico:focus-visible, .ct-cico[aria-expanded="true"] { color: var(--ct-acc); background: var(--ct-acc-soft); }
+.ct-cico:focus-visible { outline-offset: 0; }
+.ct-cico:active { transform: scale(.94); transition-duration: 60ms; }
+.ct-ptip, .ct-tip {
+  position: absolute; left: 38px; z-index: 4; display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; padding: 0 10px; height: 28px;
+  border-radius: 8px; font-size: 12.5px; font-weight: 500; color: var(--ct-ink); background: var(--ct-panel);
+  border: 1px solid var(--ct-line-strong); box-shadow: var(--elev-hover, 0 6px 16px -4px rgb(0 0 0 / .12));
+  opacity: 0; visibility: hidden; pointer-events: none; transform: translate(4px, -50%);
+  transition: opacity var(--ct-micro) var(--ct-ease), transform var(--ct-micro) var(--ct-ease), visibility 0s linear var(--ct-micro);
+}
+.ct-ptip { top: 50%; z-index: 9; }
+.ct-tip { top: 0; }
+.ct-ptip.ct-on, .ct-tip.ct-on { opacity: 1; visibility: visible; transform: translate(0, -50%); transition-delay: 0s; }
+.ct-tip small { color: var(--ct-muted); font-size: 11.5px; }
+
+.ct-strip { position: absolute; left: 0; top: 44px; bottom: 0; width: 32px; cursor: pointer; border-radius: 8px; }
+.ct-strip:focus-visible { outline-offset: -2px; }
+.ct-mk { position: absolute; left: 14px; width: 4px; border-radius: 2px; background: var(--ct-line-strong); pointer-events: none; transition: background-color var(--ct-micro); }
+.ct-mk.ct-dm { background: color-mix(in srgb, var(--ct-dm) 55%, var(--ct-line-strong)); }
+.ct-rail:hover .ct-mk, .ct-isopen .ct-mk, .ct-strip:focus-visible .ct-mk { background: color-mix(in srgb, var(--ct-acc) 42%, var(--ct-line-strong)); }
+.ct-rail:hover .ct-mk.ct-dm, .ct-isopen .ct-mk.ct-dm, .ct-strip:focus-visible .ct-mk.ct-dm { background: color-mix(in srgb, var(--ct-dm) 62%, var(--ct-line-strong)); }
+.ct-mk.ct-hov, .ct-rail:hover .ct-mk.ct-hov { background: var(--ct-acc); }
+.ct-mk.ct-dm.ct-hov, .ct-rail:hover .ct-mk.ct-dm.ct-hov { background: var(--ct-dm); }
+.ct-lit {
+  position: absolute; left: 14px; width: 4px; border-radius: 2px; background: var(--ct-acc); pointer-events: none; z-index: 1; top: 0; height: 0; opacity: 0;
+  transition: top var(--ct-std) var(--ct-ease), height var(--ct-std) var(--ct-ease), opacity var(--ct-micro);
+}
+.ct-lit.ct-dm { background: var(--ct-dm); }
+
+/* The button for a narrow page: a row in the page, at its end. */
+.ct[data-ct="button"] { display: flex; justify-content: flex-end; }
+.ct-btn {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent;
+  color: var(--ct-muted); cursor: pointer; font-size: 13px; font-weight: 500;
+  transition: background-color var(--ct-micro), color var(--ct-micro), transform var(--ct-std) var(--ct-ease);
+}
+.ct-btn .ct-ic { width: 18px; height: 18px; }
+.ct-btn:hover, .ct-btn[aria-expanded="true"] { color: var(--ct-acc); background: var(--ct-acc-soft); }
+.ct-btn:active { transform: scale(.96); transition-duration: 60ms; }
+
+/* The panel: grows out of the rail's edge, over the page text; nothing below moves. */
+.ct-pn {
+  position: fixed; z-index: 30; left: 0; top: 0; display: flex; flex-direction: column; max-width: 100vw;
+  background: var(--ct-panel); border-right: 1px solid var(--ct-line-strong); border-radius: 0 12px 12px 0; box-shadow: var(--elev-dragged, 0 16px 36px -8px rgb(0 0 0 / .22));
+  clip-path: inset(0 100% 0 0); visibility: hidden;
+  transition: clip-path var(--ct-large) var(--ct-ease), visibility 0s linear var(--ct-large);
+}
+.ct-pn.ct-show { clip-path: inset(0 -40px 0 0); visibility: visible; transition: clip-path var(--ct-large) var(--ct-ease), visibility 0s; }
+.ct-ph { flex: none; height: 44px; display: flex; align-items: center; justify-content: space-between; padding: 0 6px 0 52px; }
+.ct-lab { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--ct-acc); }
+.ct-x {
+  width: var(--ct-hit); height: var(--ct-hit); display: inline-grid; place-items: center; border-radius: 8px; border: 0; background: none; color: var(--ct-muted); cursor: pointer;
+  transition: background-color var(--ct-micro), color var(--ct-micro);
+}
+.ct-x:hover { background: var(--ct-tint); color: var(--ct-ink); }
+.ct-fld {
+  display: none; flex: none; min-height: var(--ct-hit); margin: 0 10px 6px 48px; padding: 0 10px; font-size: 13px; background: var(--color-input-bg, #fff); color: var(--ct-ink);
+  border: 1px solid var(--color-input-border, #d1d5db); border-radius: 8px;
+}
+.ct-many .ct-fld { display: block; }
+.ct-pl { position: relative; flex: 1 1 auto; min-height: 0; list-style: none; margin: 0; padding: 0 0 8px; overflow: auto; overscroll-behavior: contain; }
+.ct-pl.ct-al { overflow: hidden; padding: 0; }
+.ct-pl.ct-al li { position: absolute; left: 0; right: 0; height: 32px; }
+.ct-row {
+  display: flex; align-items: center; gap: 8px; width: calc(100% - 48px); height: 100%; min-height: var(--ct-hit); margin: 0 8px 0 40px; padding: 0 10px; border: 0; border-radius: 8px;
+  background: none; color: var(--ct-ink); font-size: 13.5px; text-align: left; cursor: pointer; transition: background-color var(--ct-micro);
+}
+.ct-row:hover { background: var(--ct-tint); }
+.ct-row.ct-sel { background: var(--ct-acc-soft); font-weight: 600; }
+.ct-nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ct-row .ct-dmtag { margin-left: auto; }
+.ct-pm { display: none; width: 4px; height: 18px; border-radius: 2px; flex: none; background: var(--ct-line-strong); }
+.ct-row.ct-dm .ct-pm { background: color-mix(in srgb, var(--ct-dm) 55%, var(--ct-line-strong)); }
+.ct-row.ct-sel .ct-pm { background: var(--ct-acc); }
+.ct-row.ct-dm.ct-sel .ct-pm { background: var(--ct-dm); }
+.ct-dmtag { font-size: 10px; font-weight: 600; letter-spacing: .06em; line-height: 16px; padding: 0 5px; border-radius: 4px; color: var(--ct-dm); background: color-mix(in srgb, var(--ct-dm) 14%, transparent); flex: none; }
+.ct-empty { padding: 10px 12px 10px 52px; font-size: 13px; color: var(--ct-muted); }
+
+/* A narrow page: no rail, so the panel carries its own bullets and the
+   rail's 40px lane is not needed. */
+.ct[data-ct="button"] .ct-ph { padding-left: 16px; height: 52px; }
+.ct[data-ct="button"] .ct-x { width: 44px; height: 44px; }
+.ct[data-ct="button"] .ct-fld { margin-left: 12px; min-height: 44px; }
+.ct[data-ct="button"] .ct-row { width: calc(100% - 16px); margin-left: 8px; min-height: 44px; }
+.ct[data-ct="button"] .ct-pm { display: block; }
+.ct[data-ct="button"] .ct-empty { padding-left: 16px; }
+
+/* Calm fades the panel in place; Off and a device asking for less motion show
+   the end state. */
+html[data-motion="calm"] .ct-pn, html[data-view-motion="calm"] .ct-pn, html[data-cz-reduce] .ct-pn { clip-path: none; opacity: 0; transition: opacity var(--ct-std), visibility 0s linear var(--ct-std); }
+html[data-motion="calm"] .ct-pn.ct-show, html[data-view-motion="calm"] .ct-pn.ct-show, html[data-cz-reduce] .ct-pn.ct-show { opacity: 1; transition: opacity var(--ct-std), visibility 0s; }
+html[data-motion="calm"] .ct-ptip, html[data-motion="calm"] .ct-tip, html[data-motion="calm"] .ct-ptip.ct-on, html[data-motion="calm"] .ct-tip.ct-on,
+html[data-view-motion="calm"] .ct-ptip, html[data-view-motion="calm"] .ct-tip { transform: translate(0, -50%); }
+html[data-motion="off"] .ct-pn { clip-path: none; transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  .ct-pn { clip-path: none; transition: none; }
+  .ct-ptip, .ct-tip, .ct-cico, .ct-btn, .ct-lit { transition: none; }
+  #main-content.ct-railed { transition: none; }
+}
