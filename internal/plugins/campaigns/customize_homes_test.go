@@ -168,7 +168,7 @@ func TestAdoptMaterialPageLook(t *testing.T) {
 	}
 }
 
-func TestPageLookChoice(t *testing.T) {
+func TestHomesPageLookChoice(t *testing.T) {
 	material := &Appearance{PageLook: "annals"}
 	tests := []struct {
 		name    string
