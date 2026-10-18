@@ -27,9 +27,6 @@ const customizeSectionHomes = "homes"
 // only ever seen by the DM team.
 const HomeDM = "dm"
 
-// homeKeys are the homes in the order the Customizer offers them.
-var homeKeys = []string{HomeDefault, HomePlayer, HomeScribe, HomeDirector, HomeGuest, HomeDM}
-
 // validHomeKey reports whether key names a home the Customizer arranges.
 func validHomeKey(key string) bool {
 	return key == HomeDM || ValidHomeAudience(key)
@@ -120,7 +117,7 @@ type homeTab struct {
 	Key, Label, Icon, Hint string
 }
 
-// homeTabs are the Home pages area's tabs, in homeKeys order.
+// homeTabs are the Home pages area's tabs, in the order it offers them.
 var homeTabs = []homeTab{
 	{HomeDefault, "Everyone", "fa-users", "Every member sees this home unless their role has one of its own."},
 	{HomePlayer, "Players", "fa-user", "Players see this instead of the Everyone home."},
