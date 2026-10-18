@@ -5176,7 +5176,8 @@ func (a *App) RegisterRoutes() {
 				return nil
 			}
 			return systems.Find(c.ParseSettings().SystemID)
-		})
+		},
+		systems.WithEntryCharacters(entryCharactersAdapter{entities: entityService, lists: characterListService}))
 	systems.RegisterSystemEntryChoices(systemEntrySvc)
 	systems.RegisterSystemEntryRoutes(e, systems.NewSystemEntryHandler(systemEntrySvc), authService, campaignService)
 	// Foundry fills the items it makes for these entries from the player view.

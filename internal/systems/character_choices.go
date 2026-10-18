@@ -49,6 +49,9 @@ type Choice struct {
 	// the one-line Summary, such as a character creator. The picker ignores them.
 	Description string         `json:"description,omitempty"`
 	Properties  map[string]any `json:"properties,omitempty"`
+	// ForName is set on a campaign entry kept to one character: the picker
+	// marks it as a draft only that character's player and Directors see.
+	ForName string `json:"forName,omitempty"`
 }
 
 // ChoiceList is the full answer for one field: the choices plus the system
@@ -78,6 +81,21 @@ type choiceViewerKey struct{}
 // WithChoiceViewer records whether the pick list is being read by a Director.
 func WithChoiceViewer(ctx context.Context, isDirector bool) context.Context {
 	return context.WithValue(ctx, choiceViewerKey{}, isDirector)
+}
+
+// choiceViewerUserKey carries the account reading the pick list, so a source
+// can include entries kept to a character that person plays.
+type choiceViewerUserKey struct{}
+
+// WithChoiceViewerUser records which account is reading the pick list.
+func WithChoiceViewerUser(ctx context.Context, userID string) context.Context {
+	return context.WithValue(ctx, choiceViewerUserKey{}, userID)
+}
+
+// ChoiceViewerUser reports what WithChoiceViewerUser recorded, "" when none.
+func ChoiceViewerUser(ctx context.Context) string {
+	v, _ := ctx.Value(choiceViewerUserKey{}).(string)
+	return v
 }
 
 // ChoiceViewerIsDirector reports what WithChoiceViewer recorded; a context

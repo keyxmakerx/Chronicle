@@ -60,19 +60,37 @@ type SystemEntryService interface {
 	// Delete removes the entry only. Characters keep the name they stored.
 	Delete(ctx context.Context, campaignID string, actor EntryActor, id int64) error
 	// Choices is the ChoiceSource body: the entries this viewer may see
-	// (ChoiceViewerIsDirector), shaped for the picker.
+	// (ChoiceViewerIsDirector, ChoiceViewerUser), shaped for the picker.
 	Choices(ctx context.Context, campaignID, fieldKey string) ([]Choice, error)
+	// FindCharacter returns the campaign's character page with this name, for
+	// callers that name the character an entry is kept to; nil when none.
+	FindCharacter(ctx context.Context, campaignID, name string) (*EntryCharacter, error)
 }
 
 type systemEntryService struct {
 	repo     SystemEntryRepository
 	manifest EntryManifestResolver
+	chars    EntryCharacters
+}
+
+// EntryServiceOption adds an optional dependency to the service.
+type EntryServiceOption func(*systemEntryService)
+
+// WithEntryCharacters lets entries be kept to one character. Without it an
+// entry cannot be made for a character, and one already stored is shown to
+// Directors only.
+func WithEntryCharacters(c EntryCharacters) EntryServiceOption {
+	return func(s *systemEntryService) { s.chars = c }
 }
 
 // NewSystemEntryService wires the service to its repository and to the
 // resolver that says which system a campaign plays.
-func NewSystemEntryService(repo SystemEntryRepository, manifest EntryManifestResolver) SystemEntryService {
-	return &systemEntryService{repo: repo, manifest: manifest}
+func NewSystemEntryService(repo SystemEntryRepository, manifest EntryManifestResolver, opts ...EntryServiceOption) SystemEntryService {
+	s := &systemEntryService{repo: repo, manifest: manifest}
+	for _, o := range opts {
+		o(s)
+	}
+	return s
 }
 
 // RegisterSystemEntryChoices plugs the campaign's entries into the character
@@ -128,13 +146,71 @@ func (s *systemEntryService) List(ctx context.Context, campaignID, fieldKey stri
 		return []SystemEntry{}, nil
 	}
 	entries, err := s.repo.List(ctx, campaignID, m.ID, fieldKey, actor.IsDirector)
-	if err != nil || actor.IsDirector {
-		return entries, err
+	if err != nil {
+		return nil, err
 	}
-	for i := range entries {
-		entries[i].Description = sanitize.StripSecretsHTML(entries[i].Description)
+	return s.visible(ctx, campaignID, entries, actor)
+}
+
+// visible keeps the entries this actor may see and shapes them for them.
+// Directors see everything, with the name of the character a 'character'
+// entry is kept to. Anyone else sees 'everyone' entries and the 'character'
+// entries of a character they play, with secret spans stripped.
+func (s *systemEntryService) visible(ctx context.Context, campaignID string, entries []SystemEntry, actor EntryActor) ([]SystemEntry, error) {
+	owners := map[string]*EntryCharacter{}
+	character := func(id string) (*EntryCharacter, error) {
+		if c, ok := owners[id]; ok {
+			return c, nil
+		}
+		var c *EntryCharacter
+		if s.chars != nil && id != "" {
+			var err error
+			if c, err = s.chars.Character(ctx, campaignID, id); err != nil {
+				return nil, err
+			}
+		}
+		owners[id] = c
+		return c, nil
 	}
-	return entries, nil
+	out := make([]SystemEntry, 0, len(entries))
+	for _, e := range entries {
+		if actor.IsDirector {
+			if e.Visibility == EntryVisibilityCharacter {
+				c, err := character(e.ForEntityID)
+				if err != nil {
+					return nil, err
+				}
+				if c != nil {
+					e.ForName = c.Name
+				}
+			}
+			out = append(out, e)
+			continue
+		}
+		switch e.Visibility {
+		case EntryVisibilityEveryone:
+		case EntryVisibilityCharacter:
+			c, err := character(e.ForEntityID)
+			if err != nil {
+				return nil, err
+			}
+			if !playedBy(c, actor.UserID) {
+				continue
+			}
+			e.ForName = c.Name
+		default:
+			continue
+		}
+		e.Description = sanitize.StripSecretsHTML(e.Description)
+		out = append(out, e)
+	}
+	return out, nil
+}
+
+// playedBy reports whether userID plays the character. An unclaimed or
+// missing character is played by nobody, so its entry stays with Directors.
+func playedBy(c *EntryCharacter, userID string) bool {
+	return c != nil && userID != "" && c.OwnerUserID == userID
 }
 
 func (s *systemEntryService) manifestOrNil(ctx context.Context, campaignID string) *SystemManifest {
@@ -153,14 +229,39 @@ func (s *systemEntryService) FindByName(ctx context.Context, campaignID, fieldKe
 	if err != nil || e == nil {
 		return nil, err
 	}
-	if actor.IsDirector {
-		return e, nil
+	seen, err := s.visible(ctx, campaignID, []SystemEntry{*e}, actor)
+	if err != nil || len(seen) == 0 {
+		return nil, err
 	}
-	if e.Visibility == EntryVisibilityDirectors {
+	return &seen[0], nil
+}
+
+// FindCharacter resolves a character page by name for an entry kept to it.
+func (s *systemEntryService) FindCharacter(ctx context.Context, campaignID, name string) (*EntryCharacter, error) {
+	name = strings.TrimSpace(name)
+	if s.chars == nil || name == "" {
 		return nil, nil
 	}
-	e.Description = sanitize.StripSecretsHTML(e.Description)
-	return e, nil
+	return s.chars.CharacterNamed(ctx, campaignID, name)
+}
+
+// checkForCharacter makes sure a 'character' entry names a character page
+// of this campaign.
+func (s *systemEntryService) checkForCharacter(ctx context.Context, campaignID string, e *SystemEntry) error {
+	if e.Visibility != EntryVisibilityCharacter {
+		return nil
+	}
+	if s.chars == nil {
+		return apperror.NewValidation("Entries can't be kept to one character here.")
+	}
+	c, err := s.chars.Character(ctx, campaignID, e.ForEntityID)
+	if err != nil {
+		return err
+	}
+	if c == nil {
+		return apperror.NewValidation("That character isn't a character page in this campaign.")
+	}
+	return nil
 }
 
 func (s *systemEntryService) CheckCreate(ctx context.Context, campaignID string, actor EntryActor, in CreateSystemEntryInput) error {
@@ -185,7 +286,7 @@ func (s *systemEntryService) prepareCreate(ctx context.Context, campaignID strin
 		CampaignID: campaignID, SystemID: m.ID, FieldKey: in.FieldKey,
 		Name: strings.TrimSpace(in.Name), Summary: strings.TrimSpace(in.Summary),
 		Description: in.Description, Properties: in.Properties,
-		Visibility: in.Visibility, CreatedBy: actor.UserID,
+		Visibility: in.Visibility, ForEntityID: strings.TrimSpace(in.ForEntityID), CreatedBy: actor.UserID,
 	}
 	if e.Visibility == "" {
 		e.Visibility = EntryVisibilityEveryone
@@ -194,6 +295,9 @@ func (s *systemEntryService) prepareCreate(ctx context.Context, campaignID strin
 		e.Properties = map[string]any{}
 	}
 	if err := normalizeEntry(e); err != nil {
+		return nil, err
+	}
+	if err := s.checkForCharacter(ctx, campaignID, e); err != nil {
 		return nil, err
 	}
 	if dup, err := s.repo.FindByName(ctx, campaignID, m.ID, e.FieldKey, e.Name); err != nil {
@@ -254,12 +358,23 @@ func (s *systemEntryService) Update(ctx context.Context, campaignID string, acto
 		e.Description = ""
 	}
 	e.Visibility = in.Visibility.Val(e.Visibility)
+	if v, ok := in.ForEntityID.Get(); ok {
+		e.ForEntityID = strings.TrimSpace(v)
+	} else if in.ForEntityID.IsNull() {
+		e.ForEntityID = ""
+	}
+	if e.Visibility != EntryVisibilityCharacter {
+		e.ForEntityID = ""
+	}
 	if in.Properties.IsNull() {
 		e.Properties = map[string]any{}
 	} else if v, ok := in.Properties.Get(); ok {
 		e.Properties = v
 	}
 	if err := normalizeEntry(e); err != nil {
+		return nil, err
+	}
+	if err := s.checkForCharacter(ctx, campaignID, e); err != nil {
 		return nil, err
 	}
 	if renamed {
@@ -294,26 +409,25 @@ func (s *systemEntryService) Choices(ctx context.Context, campaignID, fieldKey s
 	if m == nil || !ValidChoiceFieldKey(fieldKey) {
 		return nil, nil
 	}
-	// A context the pick-list handler didn't mark counts as a player's, so
-	// Directors-only entries and secret spans stay hidden by default.
-	director := ChoiceViewerIsDirector(ctx)
-	entries, err := s.repo.List(ctx, campaignID, m.ID, fieldKey, director)
+	// A context the pick-list handler didn't mark counts as a player's with
+	// no account, so hidden entries and secret spans stay out by default.
+	actor := EntryActor{UserID: ChoiceViewerUser(ctx), IsDirector: ChoiceViewerIsDirector(ctx)}
+	entries, err := s.repo.List(ctx, campaignID, m.ID, fieldKey, actor.IsDirector)
 	if err != nil {
+		return nil, err
+	}
+	if entries, err = s.visible(ctx, campaignID, entries, actor); err != nil {
 		return nil, err
 	}
 	out := make([]Choice, 0, len(entries))
 	for _, e := range entries {
-		desc := e.Description
-		if !director {
-			desc = sanitize.StripSecretsHTML(desc)
-		}
 		sum := e.Summary
 		if sum == "" {
-			sum = cleanSummary(desc)
+			sum = cleanSummary(e.Description)
 		}
 		out = append(out, Choice{
 			Slug: e.Slug, Name: e.Name, Summary: sum, Source: ChoiceSourceCampaign,
-			Description: desc, Properties: e.Properties,
+			Description: e.Description, Properties: e.Properties, ForName: e.ForName,
 		})
 	}
 	return out, nil
@@ -339,8 +453,15 @@ func normalizeEntry(e *SystemEntry) error {
 	e.Description = sanitize.HTML(e.Description)
 	switch e.Visibility {
 	case EntryVisibilityEveryone, EntryVisibilityDirectors:
+		if e.ForEntityID != "" {
+			return apperror.NewValidation("Only an entry kept to one character names a character.")
+		}
+	case EntryVisibilityCharacter:
+		if e.ForEntityID == "" {
+			return apperror.NewValidation("Say which character the entry is for.")
+		}
 	default:
-		return apperror.NewValidation("Visibility must be \"everyone\" or \"directors\".")
+		return apperror.NewValidation("Visibility must be \"everyone\", \"directors\" or \"character\".")
 	}
 	return validateEntryProperties(e.Properties)
 }

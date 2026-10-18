@@ -1,6 +1,7 @@
 package systems
 
 import (
+	"context"
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/patch"
@@ -17,6 +18,10 @@ const (
 	// EntryVisibilityDirectors keeps the entry to the owner and co-Directors,
 	// for an option the party has not discovered yet.
 	EntryVisibilityDirectors = "directors"
+	// EntryVisibilityCharacter shows the entry to Directors and to whoever
+	// plays one character page (ForEntityID): a penciled option shown to the
+	// one player it is meant for.
+	EntryVisibilityCharacter = "character"
 
 	// ChoiceSourceCampaign marks pick-list entries a campaign made itself.
 	ChoiceSourceCampaign = "campaign"
@@ -39,9 +44,15 @@ type SystemEntry struct {
 	// of scalars, so every consumer can render a value without a schema.
 	Properties map[string]any `json:"properties"`
 	Visibility string         `json:"visibility"`
-	CreatedBy  string         `json:"createdBy,omitempty"`
-	CreatedAt  time.Time      `json:"createdAt"`
-	UpdatedAt  time.Time      `json:"updatedAt"`
+	// ForEntityID is the character page a 'character' entry is kept to;
+	// empty for every other visibility.
+	ForEntityID string `json:"forEntityId,omitempty"`
+	// ForName is that character's name, filled for Directors on read so a
+	// list can say who an entry is for. Not stored.
+	ForName   string    `json:"forName,omitempty"`
+	CreatedBy string    `json:"createdBy,omitempty"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
 }
 
 // EntryActor is who is asking. The service decides what they may do; the
@@ -61,6 +72,9 @@ type CreateSystemEntryInput struct {
 	Properties  map[string]any `json:"properties"`
 	// Visibility defaults to "everyone" when empty.
 	Visibility string `json:"visibility"`
+	// ForEntityID names the character page; required with visibility
+	// "character" and refused with any other.
+	ForEntityID string `json:"forEntityId"`
 }
 
 // UpdateSystemEntryInput is a PARTIAL update: an absent key keeps the stored
@@ -73,4 +87,27 @@ type UpdateSystemEntryInput struct {
 	Description patch.Field[string]         `json:"description"`
 	Properties  patch.Field[map[string]any] `json:"properties"`
 	Visibility  patch.Field[string]         `json:"visibility"`
+	// ForEntityID changes the character a 'character' entry is kept to.
+	// Moving to another visibility clears it.
+	ForEntityID patch.Field[string] `json:"forEntityId"`
+}
+
+// EntryCharacter is a character page an entry can be kept to.
+type EntryCharacter struct {
+	ID   string
+	Name string
+	// OwnerUserID is the player who plays it; empty when nobody has claimed it.
+	OwnerUserID string
+}
+
+// EntryCharacters finds the campaign's character pages for entries kept to
+// one character. Implemented at the composition root over the entities
+// plugin, which this package cannot import.
+type EntryCharacters interface {
+	// Character returns the character page with this id in the campaign, or
+	// nil when there is none.
+	Character(ctx context.Context, campaignID, entityID string) (*EntryCharacter, error)
+	// CharacterNamed returns the campaign's one character page with this
+	// name (any casing), or nil when there is none or more than one.
+	CharacterNamed(ctx context.Context, campaignID, name string) (*EntryCharacter, error)
 }

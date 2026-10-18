@@ -182,6 +182,7 @@
       else if (!Array.isArray(v) && v !== null && typeof v !== 'object') facts.push({ label: words(k), value: String(v), key: k });
     });
     return { id: e.id, name: e.name || '', summary: e.summary || '', text: e.description || '', who: e.visibility || 'everyone',
+      forName: e.visibility === 'character' ? (e.forName || '') : undefined,
       budget: budget, lists: lists, facts: facts };
   }
   // The writing box's HTML reduced to the few tags it can make, parsed in an
@@ -236,6 +237,7 @@
     var rows = mine.length ? '<ul class="oe-list">' + mine.map(function (e) {
       return '<li><button type="button" class="hc-row" data-open="' + esc(e.id) + '" aria-expanded="' + (self.open === String(e.id)) + '"><b>' + esc(e.name) +
         (e.visibility === 'directors' ? ' <span class="hc-seal oe-seal--dm">Directors only</span>' : '') +
+        (e.visibility === 'character' ? ' <span class="hc-seal oe-seal--dm">For ' + esc(e.forName || 'one character') + '</span>' : '') +
         '</b><span class="hc-row__go" aria-hidden="true">Edit ›</span><small>' + esc(e.summary) + '</small></button></li>';
     }).join('') + '</ul>'
       : '<p class="hc-empty">No ' + esc(pl) + ' of your own yet. Add one and players see it next to ' + esc(this.system) + '’s ' + esc(pl) + ' when they make a hero.</p>';
@@ -287,10 +289,14 @@
         '<div><button type="button" class="oe-link" data-act="addfact">+ Add a fact</button></div></div>' +
       budget + lists +
       '<fieldset class="oe-f oe-who"><legend class="oe-k">Who sees it</legend>' +
-        '<label><input type="radio" name="oe-who" value="everyone"' + (d.who !== 'directors' ? ' checked' : '') + '><span>Everyone</span>' +
+        '<label><input type="radio" name="oe-who" value="everyone"' + (d.who === 'everyone' ? ' checked' : '') + '><span>Everyone</span>' +
           '<small>Players can pick it in the hero creator and on their sheet.</small></label>' +
         '<label><input type="radio" name="oe-who" value="directors"' + (d.who === 'directors' ? ' checked' : '') + '><span>Directors only</span>' +
-          '<small>For ' + an(f.label) + ' ' + esc(lower(f.label)) + ' the party hasn’t discovered yet. Switch it to Everyone when they do.</small></label></fieldset>' +
+          '<small>For ' + an(f.label) + ' ' + esc(lower(f.label)) + ' the party hasn’t discovered yet. Switch it to Everyone when they do.</small></label>' +
+        // Kept to one character (set from the AI page): offered only while it is, so a save never opens it by accident.
+        (d.forName !== undefined ? '<label><input type="radio" name="oe-who" value="character"' + (d.who === 'character' ? ' checked' : '') + '><span>Only ' + esc(d.forName || 'one character') + '’s player</span>' +
+          '<small>Directors and whoever plays ' + esc(d.forName || 'that character') + ' see it.</small></label>' : '') +
+        '</fieldset>' +
       '</div>';
   };
 
@@ -567,7 +573,7 @@
     if (built.error) { this.fail(built.error); return; }
     var text = tidy(d.text);
     var body = { name: d.name.trim(), summary: d.summary.trim(), description: text.textContent.trim() ? text.innerHTML : '',
-      properties: built.props, visibility: d.who === 'directors' ? 'directors' : 'everyone' };
+      properties: built.props, visibility: d.who === 'directors' || d.who === 'character' ? d.who : 'everyone' };
     var isNew = !d.id;
     if (isNew) body.fieldKey = f.key;
     this.busy = true;
@@ -669,7 +675,9 @@
     f.lists.forEach(function (l) { lists[l.key] = []; });
     d.name = String(data.name);
     d.summary = data.summary ? String(data.summary) : '';
-    d.who = (data.director === true || data.visibility === 'directors') ? 'directors' : 'everyone';
+    // A paste that doesn't say who sees it keeps the entry's current choice.
+    if (data.director === true || data.visibility === 'directors') d.who = 'directors';
+    else if (data.director === false || data.visibility === 'everyone') d.who = 'everyone';
     d.facts = [];
     var txt = body || (typeof data.description === 'string' ? data.description : '');
     d.text = txt ? txt.split(/\n\s*\n/).map(function (para) { return '<p>' + esc(para.trim()).replace(/\n/g, '<br>') + '</p>'; }).join('') : '';

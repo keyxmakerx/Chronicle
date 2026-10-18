@@ -3,6 +3,7 @@ package systems
 import (
 	"context"
 	"encoding/json"
+	"sort"
 	"strings"
 	"testing"
 
@@ -22,7 +23,7 @@ func (f *fakeEntryRepo) List(_ context.Context, camp, sys, field string, dirs bo
 		if r.CampaignID != camp || r.SystemID != sys || (field != "" && r.FieldKey != field) {
 			continue
 		}
-		if !dirs && r.Visibility != EntryVisibilityEveryone {
+		if !dirs && r.Visibility == EntryVisibilityDirectors {
 			continue
 		}
 		out = append(out, r)
@@ -400,3 +401,158 @@ func TestSystemEntryService_PerFieldCap(t *testing.T) {
 }
 
 func readJSONForTest(body string, dst any) error { return json.Unmarshal([]byte(body), dst) }
+
+// fakeCharacters is a campaign with two players' characters and one nobody plays.
+type fakeCharacters map[string]EntryCharacter
+
+func (f fakeCharacters) Character(_ context.Context, camp, id string) (*EntryCharacter, error) {
+	if c, ok := f[id]; ok && camp == "c1" {
+		return &c, nil
+	}
+	return nil, nil
+}
+func (f fakeCharacters) CharacterNamed(_ context.Context, camp, name string) (*EntryCharacter, error) {
+	for _, c := range f {
+		if strings.EqualFold(c.Name, name) && camp == "c1" {
+			return &c, nil
+		}
+	}
+	return nil, nil
+}
+
+var testCharacters = fakeCharacters{
+	"wren": {ID: "wren", Name: "Wren", OwnerUserID: "tyne"},
+	"ash":  {ID: "ash", Name: "Ash", OwnerUserID: "pl"},
+	"npc":  {ID: "npc", Name: "Unclaimed"},
+}
+
+func newCharEntrySvc(t *testing.T) SystemEntryService {
+	t.Helper()
+	m := entryTestManifest()
+	svc := NewSystemEntryService(&fakeEntryRepo{}, func(context.Context, string) *SystemManifest { return m }, WithEntryCharacters(testCharacters))
+	ctx := context.Background()
+	for _, in := range []CreateSystemEntryInput{
+		{FieldKey: "ancestry", Name: "Open"},
+		{FieldKey: "ancestry", Name: "Secret", Visibility: EntryVisibilityDirectors},
+		{FieldKey: "ancestry", Name: "Fairy", Visibility: EntryVisibilityCharacter, ForEntityID: "wren",
+			Description: `<p>Wings.</p><span data-secret="true">Twist</span>`},
+		{FieldKey: "ancestry", Name: "Nobody's", Visibility: EntryVisibilityCharacter, ForEntityID: "npc"},
+	} {
+		if _, err := svc.Create(ctx, "c1", dirActor, in); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return svc
+}
+
+// An entry kept to a character reaches only Directors and whoever plays that
+// character, in every read path, and never with its secret spans.
+func TestSystemEntryService_ForCharacterVisibility(t *testing.T) {
+	svc := newCharEntrySvc(t)
+	ctx := context.Background()
+	tyne := EntryActor{UserID: "tyne"}
+	tests := []struct {
+		name  string
+		actor EntryActor
+		want  []string
+	}{
+		{"director sees all, named", dirActor, []string{"Fairy", "Nobody's", "Open", "Secret"}},
+		{"Wren's player sees Fairy", tyne, []string{"Fairy", "Open"}},
+		{"another player does not", playerActor, []string{"Open"}},
+		{"no account sees only open", EntryActor{}, []string{"Open"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l, err := svc.List(ctx, "c1", "ancestry", tt.actor)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var got []string
+			for _, e := range l {
+				got = append(got, e.Name)
+			}
+			sort.Strings(got)
+			if strings.Join(got, ",") != strings.Join(tt.want, ",") {
+				t.Fatalf("list = %v, want %v", got, tt.want)
+			}
+			ctxV := WithChoiceViewerUser(WithChoiceViewer(ctx, tt.actor.IsDirector), tt.actor.UserID)
+			ch, _ := svc.Choices(ctxV, "c1", "ancestry")
+			if len(ch) != len(tt.want) {
+				t.Fatalf("choices = %+v, want %d", ch, len(tt.want))
+			}
+		})
+	}
+	e, _ := svc.FindByName(ctx, "c1", "ancestry", "fairy", tyne)
+	if e == nil || e.ForName != "Wren" || strings.Contains(e.Description, "Twist") {
+		t.Fatalf("Wren's player lookup = %+v", e)
+	}
+	if e, _ := svc.FindByName(ctx, "c1", "ancestry", "fairy", playerActor); e != nil {
+		t.Fatal("another player found the draft by name")
+	}
+	if d, _ := svc.FindByName(ctx, "c1", "ancestry", "fairy", dirActor); d == nil || d.ForName != "Wren" || !strings.Contains(d.Description, "Twist") {
+		t.Fatalf("Director lookup = %+v", d)
+	}
+	ch, _ := svc.Choices(WithChoiceViewerUser(ctx, "tyne"), "c1", "ancestry")
+	for _, c := range ch {
+		if c.Name == "Fairy" && c.ForName != "Wren" {
+			t.Fatalf("the pick list does not mark the draft: %+v", c)
+		}
+	}
+}
+
+func TestSystemEntryService_ForCharacterWrites(t *testing.T) {
+	svc := newCharEntrySvc(t)
+	ctx := context.Background()
+	tests := []struct {
+		name    string
+		in      CreateSystemEntryInput
+		wantErr string
+	}{
+		{"character needed", CreateSystemEntryInput{FieldKey: "ancestry", Name: "A", Visibility: EntryVisibilityCharacter}, "which character"},
+		{"unknown character", CreateSystemEntryInput{FieldKey: "ancestry", Name: "B", Visibility: EntryVisibilityCharacter, ForEntityID: "ghost"}, "isn't a character page"},
+		{"character on an open entry", CreateSystemEntryInput{FieldKey: "ancestry", Name: "C", ForEntityID: "wren"}, "Only an entry kept"},
+		{"player cannot", CreateSystemEntryInput{FieldKey: "ancestry", Name: "D", Visibility: EntryVisibilityCharacter, ForEntityID: "ash"}, "only the campaign's Directors"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			actor := dirActor
+			if tt.name == "player cannot" {
+				actor = playerActor
+			}
+			_, err := svc.Create(ctx, "c1", actor, tt.in)
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("err = %v, want %q", err, tt.wantErr)
+			}
+		})
+	}
+
+	fairy, _ := svc.FindByName(ctx, "c1", "ancestry", "Fairy", dirActor)
+	// Opening it to everyone forgets the character.
+	open, err := svc.Update(ctx, "c1", dirActor, fairy.ID, UpdateSystemEntryInput{Visibility: patch.Of(EntryVisibilityEveryone)})
+	if err != nil || open.ForEntityID != "" || open.Visibility != EntryVisibilityEveryone {
+		t.Fatalf("open = %+v, %v", open, err)
+	}
+	// Keeping it to a character again needs the character.
+	if _, err := svc.Update(ctx, "c1", dirActor, fairy.ID, UpdateSystemEntryInput{Visibility: patch.Of(EntryVisibilityCharacter)}); err == nil {
+		t.Fatal("kept to a character with none named")
+	}
+	moved, err := svc.Update(ctx, "c1", dirActor, fairy.ID, UpdateSystemEntryInput{
+		Visibility: patch.Of(EntryVisibilityCharacter), ForEntityID: patch.Of("ash")})
+	if err != nil || moved.ForEntityID != "ash" {
+		t.Fatalf("moved = %+v, %v", moved, err)
+	}
+}
+
+// Without the character lookup no entry can be kept to a character, and a
+// stored one stays with Directors.
+func TestSystemEntryService_ForCharacterWithoutLookup(t *testing.T) {
+	svc, repo := newEntrySvc(entryTestManifest())
+	ctx := context.Background()
+	if _, err := svc.Create(ctx, "c1", dirActor, CreateSystemEntryInput{FieldKey: "ancestry", Name: "X", Visibility: EntryVisibilityCharacter, ForEntityID: "wren"}); err == nil {
+		t.Fatal("created a character entry with no character lookup")
+	}
+	repo.rows = append(repo.rows, SystemEntry{ID: 99, CampaignID: "c1", SystemID: "sys", FieldKey: "ancestry", Name: "Stored", Visibility: EntryVisibilityCharacter, ForEntityID: "wren"})
+	if l, _ := svc.List(ctx, "c1", "ancestry", EntryActor{UserID: "tyne"}); len(l) != 0 {
+		t.Fatalf("player saw %+v", l)
+	}
+}
