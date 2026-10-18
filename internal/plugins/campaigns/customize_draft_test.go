@@ -218,10 +218,10 @@ func TestRegisterCustomizeSection(t *testing.T) {
 		}
 	})
 
-	t.Run("NewHandler registers look first", func(t *testing.T) {
+	t.Run("NewHandler registers look, then homes, first", func(t *testing.T) {
 		h := NewHandler(nil)
 		h.RegisterCustomizeSection(CustomizeSection{Key: "categories", Apply: noop})
-		if got := strings.Join(h.CustomizeSectionKeys(), ","); got != "look,categories" {
+		if got := strings.Join(h.CustomizeSectionKeys(), ","); got != "look,homes,categories" {
 			t.Errorf("keys = %q", got)
 		}
 	})

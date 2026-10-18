@@ -210,15 +210,24 @@ func (h *Handler) CustomizeLook(c echo.Context) error {
 		lookTab(cc, middleware.GetCSRFToken(c), string(stateJSON)))
 }
 
-// CustomizeHome holds the campaign home and the DM dashboard:
-// GET /campaigns/:id/customize/home.
+// CustomizeHome arranges one home, the campaign home for an audience or the
+// DM dashboard: GET /campaigns/:id/customize/home[/:who].
 func (h *Handler) CustomizeHome(c echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
-	return h.renderCustomize(c, cc, "home", "Home pages", []CustomizeCrumb{{Label: "Home pages"}}, nil,
-		customizeHomePages(cc, middleware.GetCSRFToken(c)))
+	key := c.Param("who")
+	if key == "" {
+		key = HomeDefault
+	}
+	if !validHomeKey(key) {
+		return apperror.NewNotFound("that home doesn't exist")
+	}
+	tab := homeTabFor(key)
+	crumbs := []CustomizeCrumb{{Label: "Home pages", Href: h.customizeBase(cc) + "/home"}, {Label: tab.Label}}
+	return h.renderCustomize(c, cc, "home", "Home pages - "+tab.Label, crumbs, nil,
+		customizeHomePages(cc, key, h.homeHint(cc, key), h.homeEditorState(cc, key)))
 }
 
 // customizeCategoriesData is what the Categories area's script draws from.

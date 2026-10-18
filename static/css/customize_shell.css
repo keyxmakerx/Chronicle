@@ -223,6 +223,8 @@
 .czs-tabs > span { opacity: 0.5; cursor: not-allowed; }
 .czs-tabs .czs-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--czs-warn); }
 .czs-legacy { padding: 20px 24px 120px; }
+/* Who sees the open home, under the Home pages tabs. */
+.czs-home-hint { font-size: 12.5px; color: var(--color-text-secondary); margin: 0; padding: 12px 24px 0; max-width: 80ch; }
 
 /* Settings form. */
 .czs-form { display: flex; flex-direction: column; gap: 18px; max-width: 640px; }
@@ -336,7 +338,7 @@
   .czs-find { width: auto; flex: none; }
   .czs-find span, .czs-find kbd { display: none; }
   .czs-pad { padding: 20px 16px 120px; }
-  .czs-ws-head, .czs-tabs { padding-left: 16px; padding-right: 16px; }
+  .czs-ws-head, .czs-tabs, .czs-home-hint { padding-left: 16px; padding-right: 16px; }
   .czs-legacy { padding: 16px 12px 120px; }
   .czs-split { grid-template-columns: 1fr; }
   .czs-savebar .czs-what { max-width: 38vw; }

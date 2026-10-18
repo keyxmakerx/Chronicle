@@ -4735,6 +4735,15 @@ func (a *App) RegisterRoutes() {
 		slog.Info("placed page extras into layouts", slog.Int("layouts", n))
 	}
 
+	// One-time: existing campaigns move to the Material page look
+	// (material_page_look.go). Only a failure to read the marker or list
+	// campaigns runs it again on the next boot.
+	if n, err := materialPageLookOnce(context.Background(), settingsRepo, campaignService); err != nil {
+		slog.Error("moving campaigns to the Material page look failed", slog.String("error", err.Error()))
+	} else if n > 0 {
+		slog.Info("moved campaigns to the Material page look", slog.Int("campaigns", n))
+	}
+
 	// One-time: Notes became Journal plus Jot notes, so campaigns that had
 	// Notes on keep both (see jot_notes_split.go). Retried on the next boot.
 	if n, err := splitJotNotesOnce(context.Background(), settingsRepo, addonService); err != nil {

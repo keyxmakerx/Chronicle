@@ -105,6 +105,9 @@ type CampaignService interface {
 	// SaveAppearance writes one Save from the Customize page, every
 	// setting at once.
 	SaveAppearance(ctx context.Context, campaignID string, in AppearanceInput) error
+	// AdoptMaterialPageLook moves a campaign that never chose a page look to
+	// the Material one (Annals) and reports whether it changed anything.
+	AdoptMaterialPageLook(ctx context.Context, campaignID string) (bool, error)
 
 	// GetEventTierDefinitions returns the campaign's event tier vocabulary.
 	// Returns the platform default trio (major/standard/detail) when the

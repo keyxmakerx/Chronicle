@@ -498,6 +498,33 @@ func (s *campaignService) SaveAppearance(ctx context.Context, campaignID string,
 	return s.repo.UpdateSettings(ctx, campaignID, string(settingsJSON))
 }
 
+// AdoptMaterialPageLook stores the Material page look for a campaign whose
+// page look is unset. Standard is stored as
+// unset too, so this runs once per site (the app's materialPageLookOnce),
+// before any owner could pick Standard.
+func (s *campaignService) AdoptMaterialPageLook(ctx context.Context, campaignID string) (bool, error) {
+	campaign, err := s.repo.FindByID(ctx, campaignID)
+	if err != nil {
+		return false, err
+	}
+	settings := campaign.ParseSettings()
+	if settings.Appearance != nil && settings.Appearance.PageLook != "" {
+		return false, nil
+	}
+	if settings.Appearance == nil {
+		settings.Appearance = &Appearance{}
+	}
+	settings.Appearance.PageLook = "annals"
+	settingsJSON, err := json.Marshal(settings)
+	if err != nil {
+		return false, apperror.NewInternal(fmt.Errorf("marshaling settings: %w", err))
+	}
+	if err := s.repo.UpdateSettings(ctx, campaignID, string(settingsJSON)); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 // samePath compares two optional paths, treating nil and "" alike.
 func samePath(a, b *string) bool {
 	av, bv := "", ""
