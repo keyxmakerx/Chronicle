@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 )
@@ -128,6 +129,21 @@ func fieldValue(def entities.FieldDefinition, v any) (any, string) {
 			return nil, "needs the name of a page."
 		}
 		return s, ""
+	case entities.FieldTypeCalendarDate:
+		// year-month-day with the month by number; the server checks the day
+		// is on the campaign's calendar when the page is saved.
+		var s string
+		switch t := v.(type) {
+		case time.Time:
+			s = fmt.Sprintf("%d-%d-%d", t.Year(), int(t.Month()), t.Day())
+		default:
+			s, _ = scalarText(v)
+		}
+		d, ok := entities.ParseFieldDate(s)
+		if !ok {
+			return nil, fmt.Sprintf("needs a date as year-month-day with the month's number, like 1043-3-22, not %s.", shown(v))
+		}
+		return d.String(), ""
 	default: // text, textarea, and anything older
 		if s, ok := scalarText(v); ok {
 			return s, ""

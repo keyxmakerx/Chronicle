@@ -54,6 +54,8 @@ type FieldShown struct {
 	// the rule would show instead.
 	ByHand    bool   `json:"byHand,omitempty"`
 	RuleGives string `json:"ruleGives,omitempty"`
+	// Date is a calendar date field's "how long ago" and countdowns.
+	Date *DateShown `json:"date,omitempty"`
 }
 
 // linkedPage is a link field's target as the viewer may see it.
@@ -104,8 +106,8 @@ func shapeFields(defs []FieldDefinition, data map[string]any, links map[string]l
 				continue
 			}
 			out[d.Key] = local(sh)
-		case "number", "checkbox", "url", "textarea":
-			// Numbers, ticks, links and prose are never renamed.
+		case "number", "checkbox", "url", "textarea", FieldTypeCalendarDate:
+			// Numbers, ticks, links, prose and dates are never renamed.
 		default:
 			if text == "" {
 				continue
@@ -151,9 +153,10 @@ func restrictedKeys(canSeeGM, isOwner bool, defLists ...[]FieldDefinition) map[s
 
 // shownFields is shapeFields with the lookups done: the linked pages this
 // viewer may open, the rules' results and the page's local words. It never
-// fails; a lookup that errs leaves its fields as stored.
+// fails; a lookup that errs leaves its fields as stored. director sees
+// countdowns kept from players.
 func (h *Handler) shownFields(ctx context.Context, campaignID string, entity *Entity, allDefs []FieldDefinition,
-	data map[string]any, hidden map[string]bool, role int, userID string) map[string]FieldShown {
+	data map[string]any, hidden map[string]bool, role int, userID string, director bool) map[string]FieldShown {
 	defs := make([]FieldDefinition, 0, len(allDefs))
 	for _, d := range allDefs {
 		if !hidden[d.Key] {
@@ -178,7 +181,7 @@ func (h *Handler) shownFields(ctx context.Context, campaignID string, entity *En
 			}
 		case FieldTypeRule:
 			ruleIDs = append(ruleIDs, d.RuleID)
-		case "number", "checkbox", "url", "textarea":
+		case "number", "checkbox", "url", "textarea", FieldTypeCalendarDate:
 		default:
 			hasText = true
 		}
@@ -195,7 +198,21 @@ func (h *Handler) shownFields(ctx context.Context, campaignID string, entity *En
 			rename = h.fieldWords.Rename
 		}
 	}
-	return shapeFields(defs, data, links, gives, words, rename)
+	out := shapeFields(defs, data, links, gives, words, rename)
+	var book FieldDateBook
+	bookRead := false
+	for _, d := range defs {
+		if d.Type != FieldTypeCalendarDate || data[d.Key] == nil {
+			continue
+		}
+		if !bookRead {
+			book, bookRead = fieldDateBook(ctx, h.fieldCalendar, campaignID), true
+		}
+		if sh, ok := shapeDate(d, data[d.Key], book, director); ok {
+			out[d.Key] = sh
+		}
+	}
+	return out
 }
 
 // visibleLink is a linked page the viewer may open, in this campaign and the
@@ -235,16 +252,16 @@ type linkChecker interface {
 	checkLinkValues(ctx context.Context, e *Entity, oldData, newData map[string]any) error
 }
 
-// checkFieldKinds checks a category's link and rule fields before they are
-// saved: a link names a category of this campaign, a rule names one of its
-// homebrew rules. Settings for another type are dropped so a field turned
+// checkFieldKinds checks a category's link, rule and calendar date fields
+// before they are saved: a link names a category of this campaign, a rule
+// names one of its homebrew rules, a date's countdowns are well formed. Settings for another type are dropped so a field turned
 // back into text carries nothing stale.
 func (s *entityService) checkFieldKinds(ctx context.Context, campaignID string, fields []FieldDefinition) error {
 	for i := range fields {
 		f := &fields[i]
 		switch f.Type {
 		case FieldTypeLink:
-			f.RuleID = 0
+			f.RuleID, f.DateAgo, f.Countdowns = 0, false, nil
 			if f.LinkTo == 0 {
 				return apperror.NewBadRequest(fmt.Sprintf("say which category the %s field links to", f.Label))
 			}
@@ -253,23 +270,29 @@ func (s *entityService) checkFieldKinds(ctx context.Context, campaignID string, 
 				return apperror.NewBadRequest(fmt.Sprintf("the %s field links to a category this campaign doesn't have", f.Label))
 			}
 		case FieldTypeRule:
-			f.LinkTo = 0
+			f.LinkTo, f.DateAgo, f.Countdowns = 0, false, nil
 			if f.RuleID == 0 {
 				return apperror.NewBadRequest(fmt.Sprintf("say which rule works out the %s field", f.Label))
 			}
 			if s.fieldWords != nil && !s.fieldWords.RuleExists(ctx, campaignID, f.RuleID) {
 				return apperror.NewBadRequest(fmt.Sprintf("the %s field follows a rule this campaign doesn't have", f.Label))
 			}
-		default:
+		case FieldTypeCalendarDate:
 			f.LinkTo, f.RuleID = 0, 0
+			if err := CheckDateSettings(f); err != nil {
+				return err
+			}
+		default:
+			f.LinkTo, f.RuleID, f.DateAgo, f.Countdowns = 0, 0, false, nil
 		}
 	}
 	return nil
 }
 
 // checkLinkValues refuses a link field value that is not a page of the
-// field's category in this campaign. Only values that changed are checked,
-// so a link whose page was later removed never blocks saving other fields.
+// field's category in this campaign, and a calendar date value that is not a
+// day on the campaign's calendar. Only values that changed are checked, so a
+// link whose page was later removed never blocks saving other fields.
 func (s *entityService) checkLinkValues(ctx context.Context, e *Entity, oldData, newData map[string]any) error {
 	if e == nil {
 		return nil
@@ -282,7 +305,21 @@ func (s *entityService) checkLinkValues(ctx context.Context, e *Entity, oldData,
 	if e.FieldOverrides != nil {
 		defs = append(defs, e.FieldOverrides.Added...)
 	}
+	var book FieldDateBook
+	bookRead := false
 	for _, d := range defs {
+		if d.Type == FieldTypeCalendarDate {
+			if fieldText(newData[d.Key]) == fieldText(oldData[d.Key]) {
+				continue
+			}
+			if !bookRead {
+				book, bookRead = fieldDateBook(ctx, s.fieldCalendar, e.CampaignID), true
+			}
+			if err := checkDateValue(d, newData[d.Key], book); err != nil {
+				return err
+			}
+			continue
+		}
 		if d.Type != FieldTypeLink {
 			continue
 		}

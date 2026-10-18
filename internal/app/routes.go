@@ -3793,6 +3793,12 @@ func (a *App) RegisterRoutes() {
 		rolls.SetEventRollRepository(calendar.NewEventRollRepository(a.DB))
 		rolls.SetRollTableSource(calendarRollTablesAdapter{svc: rolltables.NewService(rolltables.NewRepository(a.DB))})
 	}
+	// Moons the Director sets by hand: their marks' storage.
+	if marks, ok := calendarService.(interface {
+		SetMoonMarkRepository(calendar.MoonMarkRepository)
+	}); ok {
+		marks.SetMoonMarkRepository(calendar.NewMoonMarkRepository(a.DB))
+	}
 	calendarHandler := calendar.NewHandler(calendarService)
 	// Optional UX nicety: suggest the owner's own stored account timezone as
 	// the real-world calendar wizard step's starting default (see
@@ -5786,6 +5792,13 @@ func (a *App) RegisterRoutes() {
 		slog.Warn("rolltables plugin degraded — routes not registered")
 	}
 
+	// Pages' calendar date fields ("Died on") read the campaign calendar.
+	fieldDates := fieldDatesAdapter{svc: calendarService, addons: addonService}
+	entityHandler.SetFieldCalendar(fieldDates)
+	if fc, ok := entityService.(interface{ SetFieldCalendar(entities.FieldCalendar) }); ok {
+		fc.SetFieldCalendar(fieldDates)
+	}
+
 	// Quest sheets and notice boards. Cross-plugin lookups go through the
 	// adapters in quests_adapters.go. Both boards share quest_board_kit.js,
 	// so it loads first in each list (ADR-063).
@@ -5975,6 +5988,10 @@ func (a *App) RegisterRoutes() {
 	if aiRolls != nil {
 		aiKinds = append(aiKinds, records.RollNightKind{Cal: calendarService, Rolls: aiRolls})
 	}
+	// Moons set by hand: the calendar service's moon mark half.
+	if ms, ok := calendarService.(calendar.MoonMarkService); ok {
+		aiKinds = append(aiKinds, records.MoonKind{Cal: calendarService, Marks: ms})
+	}
 	aiHouseRules := records.HouseRuleKind{Book: systemHandler, SystemOf: func(ctx context.Context, campaignID string) string {
 		c, err := campaignService.GetByID(ctx, campaignID)
 		if err != nil {
@@ -6133,6 +6150,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "bulk-actions", Scripts: []string{"/static/js/widgets/bulk_actions.js"}},
 	{Name: "ai-export", Scripts: []string{"/static/js/widgets/ai_export.js"}},
 	{Name: "impact_tree", Scripts: []string{"/static/js/widgets/impact_tree.js"}},
+	{Name: "attributes", Scripts: []string{"/static/js/widgets/attributes.js"}},
 	{Name: "entity-type-editor", Scripts: []string{"/static/js/widgets/entity_type_editor.js"}},
 	{Name: "template-editor", Scripts: []string{"/static/js/widgets/template_editor.js"}},
 	{Name: "layout-editor", Scripts: []string{"/static/js/widgets/layout_editor.js"}},

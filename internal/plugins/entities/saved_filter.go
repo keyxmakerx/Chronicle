@@ -16,12 +16,12 @@ import (
 
 // SavedFilter represents a user's saved tag filter preset.
 type SavedFilter struct {
-	ID           string   `json:"id"`
-	UserID       string   `json:"user_id"`
-	CampaignID   string   `json:"campaign_id"`
-	EntityTypeID *int     `json:"entity_type_id,omitempty"` // NULL = all types.
-	Name         string   `json:"name"`
-	TagSlugs     []string `json:"tag_slugs"`
+	ID           string    `json:"id"`
+	UserID       string    `json:"user_id"`
+	CampaignID   string    `json:"campaign_id"`
+	EntityTypeID *int      `json:"entity_type_id,omitempty"` // NULL = all types.
+	Name         string    `json:"name"`
+	TagSlugs     []string  `json:"tag_slugs"`
 	CreatedAt    time.Time `json:"created_at"`
 }
 

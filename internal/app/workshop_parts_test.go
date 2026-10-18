@@ -18,7 +18,7 @@ func TestRegisterWorkshopParts(t *testing.T) {
 		labels = append(labels, s.Label)
 	}
 	sort.Strings(labels)
-	if want := []string{"ancestries", "creature variants", "field rules", "trackers"}; !reflect.DeepEqual(labels, want) {
+	if want := []string{"ancestries", "creature variants", "field rules", "the calendar", "trackers"}; !reflect.DeepEqual(labels, want) {
 		t.Fatalf("workshop sources = %v, want %v", labels, want)
 	}
 

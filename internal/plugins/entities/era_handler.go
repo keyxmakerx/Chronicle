@@ -318,7 +318,7 @@ func (h *Handler) GetEraFieldsAPI(c echo.Context) error {
 		"field_overrides": overrides,
 		"type_fields":     et.Fields,
 		"shown": h.shownFields(c.Request().Context(), t.cc.Campaign.ID, t.entity, effective, visible,
-			restrictedKeys(canSeeGM, isOwner, et.Fields, effective), int(t.cc.VisibilityRole()), t.userID),
+			restrictedKeys(canSeeGM, isOwner, et.Fields, effective), int(t.cc.VisibilityRole()), t.userID, canSeeGM),
 	}
 	if t.cc.CanAuthorDmOnly() {
 		usual := map[string]any{}

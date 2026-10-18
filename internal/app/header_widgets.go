@@ -158,7 +158,8 @@ func headerMoons(c *calendar.Calendar) []layouts.TopbarMoon {
 	out := make([]layouts.TopbarMoon, 0, len(c.Moons))
 	for i := range c.Moons {
 		m := &c.Moons[i]
-		if m.CycleDays <= 0 {
+		// A hand-set moon shows once it has a state this viewer may know.
+		if m.Manual() && m.StateOn(day) == "" || !m.Manual() && m.CycleDays <= 0 {
 			continue
 		}
 		out = append(out, layouts.TopbarMoon{Name: m.Name, Phase: m.MoonPhaseName(day)})
