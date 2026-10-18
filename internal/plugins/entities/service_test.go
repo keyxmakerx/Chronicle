@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/patch"
@@ -206,6 +207,7 @@ type mockEntityRepo struct {
 	updateEntryFn      func(ctx context.Context, id, entryJSON, entryHTML string) error
 	updateImageFn      func(ctx context.Context, id, imagePath string) error
 	updateCoverImageFn func(ctx context.Context, id, coverImagePath string) error
+	updateFieldsFn     func(ctx context.Context, id string, fieldsData map[string]any, searchText string) error
 	deleteFn           func(ctx context.Context, id string) error
 	slugExistsFn       func(ctx context.Context, campaignID, slug string) (bool, error)
 	listByCampaignFn   func(ctx context.Context, campaignID string, typeIDs []int, role int, userID string, opts ListOptions) ([]Entity, int, error)
@@ -284,6 +286,9 @@ func (m *mockEntityRepo) UpdatePlayerNotes(ctx context.Context, id, notesJSON, n
 }
 
 func (m *mockEntityRepo) UpdateFields(ctx context.Context, id string, fieldsData map[string]any, searchText string) error {
+	if m.updateFieldsFn != nil {
+		return m.updateFieldsFn(ctx, id, fieldsData, searchText)
+	}
 	return nil
 }
 
@@ -2102,6 +2107,67 @@ func TestUpdateFields_PublishesUpdatedEvent(t *testing.T) {
 			t.Errorf("expected no event when the entity can't be loaded, got %d", len(pub.events))
 		}
 	})
+}
+
+// TestUpdateFields_BroadcastCarriesNewUpdatedAt pins that the payload's
+// updated_at is the post-write value, not the pre-write row's.
+func TestUpdateFields_BroadcastCarriesNewUpdatedAt(t *testing.T) {
+	oldAt := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	newAt := oldAt.Add(time.Hour)
+	written := false
+	repo := &mockEntityRepo{
+		findByIDFn: func(_ context.Context, _ string) (*Entity, error) {
+			at := oldAt
+			if written {
+				at = newAt
+			}
+			return &Entity{ID: "ent-1", CampaignID: "camp-1", UpdatedAt: at}, nil
+		},
+		updateFieldsFn: func(_ context.Context, _ string, _ map[string]any, _ string) error {
+			written = true
+			return nil
+		},
+	}
+	pub := &capturingEntityEventPublisher{}
+	svc := NewEntityService(repo, &mockEntityTypeRepo{}, &mockPermissionRepo{})
+	svc.SetEventPublisher(pub)
+
+	if err := svc.UpdateFields(context.Background(), "ent-1", map[string]any{"hp": 1}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(pub.events) != 1 || !pub.events[0].entity.UpdatedAt.Equal(newAt) {
+		t.Fatalf("published updated_at = %v, want %v", pub.events, newAt)
+	}
+}
+
+// TestUpdateImages_PublishUpdatedEvent pins that a picture change reaches
+// sync clients as entity.updated carrying the reloaded entity.
+func TestUpdateImages_PublishUpdatedEvent(t *testing.T) {
+	cases := []struct {
+		name string
+		call func(svc EntityService) error
+	}{
+		{"image", func(svc EntityService) error { return svc.UpdateImage(context.Background(), "e1", "") }},
+		{"cover image", func(svc EntityService) error { return svc.UpdateCoverImage(context.Background(), "e1", "") }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := &mockEntityRepo{
+				findByIDFn:         func(_ context.Context, _ string) (*Entity, error) { return &Entity{ID: "e1", CampaignID: "campA"}, nil },
+				updateImageFn:      func(_ context.Context, _, _ string) error { return nil },
+				updateCoverImageFn: func(_ context.Context, _, _ string) error { return nil },
+			}
+			pub := &capturingEntityEventPublisher{}
+			svc := newTestService(repo, &mockEntityTypeRepo{})
+			svc.SetEventPublisher(pub)
+			if err := tc.call(svc); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(pub.events) != 1 || pub.events[0].eventType != "updated" || pub.events[0].campaignID != "campA" {
+				t.Fatalf("events = %+v, want one updated for campA", pub.events)
+			}
+		})
+	}
 }
 
 // strPtr returns a pointer to the given string.
