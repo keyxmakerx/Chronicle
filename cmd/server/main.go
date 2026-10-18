@@ -24,6 +24,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/encounters"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/foundry_vtt"
+	"github.com/keyxmakerx/chronicle/internal/plugins/homebrew"
 	"github.com/keyxmakerx/chronicle/internal/plugins/maps"
 	"github.com/keyxmakerx/chronicle/internal/plugins/packages"
 	"github.com/keyxmakerx/chronicle/internal/plugins/pageblocks"
@@ -332,6 +333,8 @@ func registeredPlugins() []database.PluginSchema {
 		// trackers: kinds, trackers and their log. Foreign keys point at core
 		// tables (entities, campaigns) and at its own tables only.
 		{Slug: trackers.PluginSlug, MigrationsFS: mustSub(trackers.MigrationsFS, database.PluginMigrationsSubdir)},
+		// homebrew: Workshop recipes. Its one foreign key points at campaigns.
+		{Slug: homebrew.PluginSlug, MigrationsFS: mustSub(homebrew.MigrationsFS, database.PluginMigrationsSubdir)},
 		// encounters: fights planned on a page; foreign keys point at core
 		// tables (entities, campaigns) only.
 		{Slug: encounters.PluginSlug, MigrationsFS: mustSub(encounters.MigrationsFS, database.PluginMigrationsSubdir)},

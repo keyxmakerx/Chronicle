@@ -45,6 +45,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/encounters"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/foundry_vtt"
+	"github.com/keyxmakerx/chronicle/internal/plugins/homebrew"
 	"github.com/keyxmakerx/chronicle/internal/plugins/maps"
 	"github.com/keyxmakerx/chronicle/internal/plugins/media"
 	"github.com/keyxmakerx/chronicle/internal/plugins/npcs"
@@ -5822,6 +5823,11 @@ func (a *App) RegisterRoutes() {
 		slog.Warn("rumours plugin degraded — the Rumours block is not available")
 	}
 
+	// The Homebrew Workshop's registry. Plugins below that plug kinds of part,
+	// events or actions into the Workshop register here, so it is made before
+	// any of them.
+	homebrewReg := homebrew.NewRegistry()
+
 	// Trackers: counters, named steps and clocks on pages, each with a dated
 	// log. The block and its routes exist only while its tables migrated.
 	a.registerPlugin(PluginRegistration{
@@ -5837,8 +5843,21 @@ func (a *App) RegisterRoutes() {
 			&trackersClockAdapter{svc: calendarService})
 		trackers.RegisterRoutes(e, trackers.NewHandler(trackersSvc), campaignService, authService)
 		registerTrackersBlock(blockRegistry)
+		if err := registerTrackerParts(homebrewReg); err != nil {
+			slog.Error("trackers could not join the Homebrew Workshop", slog.Any("error", err))
+		}
 	} else {
 		slog.Warn("trackers plugin degraded — the Trackers block is not available")
+	}
+
+	// Homebrew Workshop: saved recipes of parts and When/Then rules. The
+	// store and its routes exist only while its table migrated.
+	a.registerPlugin(PluginRegistration{Slug: homebrew.PluginSlug})
+	if a.PluginHealth.IsHealthy(homebrew.PluginSlug) {
+		homebrewSvc := homebrew.NewService(homebrew.NewRepository(a.DB), homebrewReg)
+		homebrew.RegisterRoutes(e, homebrew.NewHandler(homebrewSvc), campaignService, authService)
+	} else {
+		slog.Warn("homebrew plugin degraded — the Homebrew Workshop is not available")
 	}
 
 	// Encounters: fights planned on a page, loaded in Foundry.
