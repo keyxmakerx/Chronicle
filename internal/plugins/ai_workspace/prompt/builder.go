@@ -251,6 +251,10 @@ func (s *Service) Build(
 // by entity-type SortOrder + Name for deterministic prompt output.
 func mapEntityTypes(types []entities.EntityType, notes func(entities.EntityType) map[string]string) []entityTypeView {
 	out := make([]entityTypeView, 0, len(types))
+	names := make(map[int]string, len(types))
+	for _, t := range types {
+		names[t.ID] = t.Name
+	}
 	for _, t := range types {
 		if !t.Enabled {
 			continue
@@ -263,7 +267,7 @@ func mapEntityTypes(types []entities.EntityType, notes func(entities.EntityType)
 			Name:           t.Name,
 			Slug:           t.Slug,
 			PresetCategory: preset,
-			Fields:         fieldLines(t.Fields, notes(t)),
+			Fields:         fieldLines(t.Fields, names, notes(t)),
 		})
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].Name < out[j].Name })
@@ -335,7 +339,7 @@ func (s *Service) notesFor(ctx context.Context, campaignID string) func(entities
 // fieldLines describes a category's sheet fields for the prompt: the key,
 // its label, and the value it takes, matching what the importer's
 // CheckFields accepts.
-func fieldLines(defs []entities.FieldDefinition, notes map[string]string) []string {
+func fieldLines(defs []entities.FieldDefinition, typeNames map[int]string, notes map[string]string) []string {
 	out := make([]string, 0, len(defs))
 	for _, d := range defs {
 		var takes string
@@ -351,6 +355,13 @@ func fieldLines(defs []entities.FieldDefinition, notes map[string]string) []stri
 			}
 		case "url":
 			takes = "an http or https address"
+		case entities.FieldTypeLink:
+			takes = "the name of a page"
+			if n := typeNames[d.LinkTo]; n != "" {
+				takes = "the name of a " + n + " page"
+			}
+		case entities.FieldTypeRule:
+			takes = "worked out by its rule; leave it out unless setting it by hand"
 		default:
 			takes = "text, or a list"
 		}

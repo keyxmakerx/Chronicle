@@ -120,6 +120,7 @@ type Handler struct {
 	systemSearcher     SystemSearcher
 	memberLister       MemberLister
 	eraPages           EraPages
+	fieldWords         FieldWords // Optional: homebrew rules and local words; see field_kinds.go.
 	pageMoons          PageMoons
 	npcSection         NPCSectionProvider
 	charLists          CharacterListManager
@@ -2132,11 +2133,14 @@ func (h *Handler) GetFieldsAPI(c echo.Context) error {
 	// an owner-only value is also kept for the entity's own claimed owner.
 	canSeeGM := cc.MemberRole >= campaigns.RoleScribe
 	isOwner := entity.IsOwnedBy(userID)
+	visible := FilterRestrictedFields(entity.FieldsData, et.Fields, canSeeGM, isOwner)
 	response := map[string]any{
 		"fields":          effectiveFields,
-		"fields_data":     FilterRestrictedFields(entity.FieldsData, et.Fields, canSeeGM, isOwner),
+		"fields_data":     visible,
 		"field_overrides": overrides,
 		"type_fields":     et.Fields,
+		"shown": h.shownFields(c.Request().Context(), cc.Campaign.ID, entity, effectiveFields, visible,
+			restrictedKeys(canSeeGM, isOwner, et.Fields, effectiveFields), int(cc.VisibilityRole()), userID),
 	}
 	return c.JSON(http.StatusOK, response)
 }

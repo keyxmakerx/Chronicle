@@ -43,8 +43,8 @@ func TestMarkerIconCatalog_Integrity(t *testing.T) {
 }
 
 func TestMarkerIcon_Validation(t *testing.T) {
-	if !IsValidMarkerIcon("fa-castle") {
-		t.Errorf("fa-castle should be valid")
+	if !IsValidMarkerIcon("fa-chess-rook") {
+		t.Errorf("fa-chess-rook should be valid")
 	}
 	if IsValidMarkerIcon("fa-not-a-real-icon") {
 		t.Errorf("unknown icon should be invalid")
@@ -52,7 +52,7 @@ func TestMarkerIcon_Validation(t *testing.T) {
 	if !IsValidMarkerIcon(DefaultMarkerIcon) {
 		t.Errorf("the default icon must itself be in the catalog")
 	}
-	if got := NormalizeMarkerIcon("fa-castle"); got != "fa-castle" {
+	if got := NormalizeMarkerIcon("fa-chess-rook"); got != "fa-chess-rook" {
 		t.Errorf("NormalizeMarkerIcon kept a valid icon wrong: %q", got)
 	}
 	if got := NormalizeMarkerIcon("bogus"); got != DefaultMarkerIcon {
