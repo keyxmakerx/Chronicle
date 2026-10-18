@@ -303,6 +303,19 @@
   });
   window.addEventListener('reauth-cancelled', function () { reauthPending = null; });
 
+  // --- Lazy blocks with nothing for this viewer ---
+  // A lazy block's fragment comes back empty when the plugin serving it has
+  // nothing this viewer may see. A slot marked data-drop-if-empty then
+  // removes its whole block (the nearest [data-block]), heading included,
+  // rather than leave a heading over an empty card.
+  document.addEventListener('htmx:afterSwap', function (evt) {
+    var slot = evt.detail && evt.detail.target;
+    if (!slot || !slot.hasAttribute || !slot.hasAttribute('data-drop-if-empty')) return;
+    if (slot.textContent.trim() || slot.querySelector('img, svg, canvas, iframe')) return;
+    var block = slot.closest('[data-block]');
+    if (block) block.remove();
+  });
+
   // --- HTMX Security Hardening ---
   // Restrict HTMX to same-origin requests only, preventing injected hx-get/hx-post
   // attributes from making cross-origin requests.
