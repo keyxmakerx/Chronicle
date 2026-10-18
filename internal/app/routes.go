@@ -2095,8 +2095,8 @@ func (a *mentionLinkAdapter) GetMentionLinksForGraph(ctx context.Context, campai
 	return result, nil
 }
 
-// registerPageTextBlocks registers Read-aloud, Table and Steps: text a DM types
-// in place, stored per page and block. They are always available (no addon) and
+// registerPageTextBlocks registers Read-aloud, Table, Steps and the Page map:
+// content a DM types or draws in place, stored per page and block. They are always available (no addon) and
 // usable several times on a page; the widget fetches its own content, so these
 // only emit the mount point. A layout that places them (Adventures does) fails
 // to save without them, so every registry that validates layouts needs them.
@@ -2120,11 +2120,20 @@ func registerPageTextBlocks(blockRegistry *entities.BlockRegistry) {
 			Contexts:    []string{"template"},
 			TileSizes:   []string{"1x2", "2x2", "4x2"},
 		},
+		{
+			Type: pageblocks.KindPageMap, Label: "Page map", Icon: "fa-map-location-dot",
+			Description: "A map drawn in place from rooms, walls and markers, with hover cards for linked pages",
+			Contexts:    []string{"template"},
+			TileSizes:   []string{"2x2", "4x2", "4x3"},
+		},
 	} {
 		kind := b.Type
 		blockRegistry.Register(b, func(rc entities.BlockRenderContext) templ.Component {
 			if rc.CC == nil || rc.Entity == nil || rc.Block.ID == "" {
 				return templ.NopComponent
+			}
+			if kind == pageblocks.KindPageMap {
+				return pageblocks.PageMapMount(rc.CC.Campaign.ID, rc.Entity.ID, rc.Block.ID, rc.CSRFToken)
 			}
 			return pageblocks.BlockMount(rc.CC.Campaign.ID, rc.Entity.ID, rc.Block.ID, kind, rc.CSRFToken)
 		})
@@ -5770,6 +5779,7 @@ func (a *App) RegisterRoutes() {
 		StaticFS: echo.MustSubFS(pageblocks.StaticAssetsFS, "static"),
 		Widgets: []PluginWidget{
 			{Name: "page_blocks", Scripts: []string{"js/page_blocks.js"}},
+			{Name: "page_map", Scripts: []string{"js/page_map.js"}},
 		},
 	})
 	if a.PluginHealth.IsHealthy(pageblocks.PluginSlug) {

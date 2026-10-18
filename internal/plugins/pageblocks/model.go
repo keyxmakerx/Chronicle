@@ -8,6 +8,7 @@ const (
 	KindReadAloud = "read_aloud"
 	KindTable     = "page_table"
 	KindSteps     = "page_steps"
+	KindPageMap   = "page_map"
 )
 
 // Viewer is who is asking, taken from the campaign context in the handler.
