@@ -2117,6 +2117,37 @@ func registerLastSeenBlock(blockRegistry *entities.BlockRegistry, sightings sess
 	})
 }
 
+// registerStandingBlock registers the "Standing" block: how a page feels about
+// the party or one character, with the Director's reasons. It has no settings
+// in the layout (the page's "players can see this" switch is stored with the
+// standing), and one per page, because its reasons are a single sheet. What a
+// viewer is told is decided by the standing service for that viewer; the block
+// adds no rule of its own, and a block the service hides for the viewer draws
+// nothing.
+func registerStandingBlock(blockRegistry *entities.BlockRegistry, standing entities.StandingService) {
+	blockRegistry.Register(entities.BlockMeta{
+		Type: entities.StandingBlockType, Label: "Standing", Icon: "fa-scale-balanced",
+		Description: "How this page feels about the party, and why",
+		Contexts:    []string{"template"},
+		TileSizes:   []string{"4x1", "2x1"},
+		Singleton:   true,
+	}, func(rc entities.BlockRenderContext) templ.Component {
+		if rc.CC == nil || rc.CC.Campaign == nil || rc.Entity == nil {
+			return templ.NopComponent
+		}
+		view, err := standing.View(context.Background(), rc.CC.Campaign.ID, rc.Entity.ID, rc.CC.VisibilityRole(), rc.UserID)
+		if err != nil {
+			slog.Error("standing: cannot read the page's standing",
+				slog.String("entity_id", rc.Entity.ID), slog.Any("error", err))
+			return templ.NopComponent
+		}
+		if view.Hidden {
+			return templ.NopComponent
+		}
+		return entities.BlockStanding(rc.CC.Campaign.ID, rc.Entity.ID, rc.Entity.Name, view)
+	})
+}
+
 // entityTypeListerForGraphAdapter wraps entities.EntityService to implement the
 // relations.EntityTypeListerForGraph interface for the graph filter dropdown.
 type entityTypeListerForGraphAdapter struct {
@@ -2768,6 +2799,7 @@ func (a *App) RegisterRoutes() {
 		StaticFS: echo.MustSubFS(entities.StaticAssetsFS, "static"),
 		Widgets: []PluginWidget{
 			{Name: entities.ContentsWidgetName, Scripts: []string{"js/page_contents.js"}},
+			{Name: "standing", Scripts: []string{"js/standing.js"}},
 		},
 	})
 
@@ -4342,6 +4374,15 @@ func (a *App) RegisterRoutes() {
 	// This drives validation, rendering, and the template editor palette.
 	blockRegistry := entities.NewBlockRegistry()
 	entities.RegisterCoreBlocks(blockRegistry)
+	// The Standing block and its routes exist only while its tables migrated
+	// (its script loads on sight from the entities plugin's assets).
+	if a.PluginHealth.IsHealthy(entities.StandingPluginSlug) {
+		standingService := entities.NewStandingService(entities.NewStandingRepository(a.DB), entityService)
+		entities.RegisterStandingRoutes(e, entities.NewStandingHandler(standingService, entityService), campaignService, authService)
+		registerStandingBlock(blockRegistry, standingService)
+	} else {
+		slog.Warn("standing tables degraded — the Standing block is not available")
+	}
 	blockRegistry.Register(entities.BlockMeta{
 		Type: entities.BlockCharacterItems, Label: "Items & Money", Icon: "fa-sack-dollar",
 		Description: "What a character carries, their money and recent moves",
