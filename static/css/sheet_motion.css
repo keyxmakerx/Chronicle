@@ -86,6 +86,9 @@ html[data-motion="off"] [data-sheet] [data-move] { transition: none !important; 
 [data-sheet-folio] { position: relative; isolation: isolate; transition: transform var(--dur-slide) var(--ease-slide); }
 [data-sheet-folio].is-shifted { transform: translateX(calc(var(--shift, 0px) * -1)); }
 html:is([data-motion="calm"], [data-motion="off"], [data-view-motion="calm"], [data-cz-reduce]) [data-sheet-folio] { transition: none; }
+/* The folio isolates, so a paper's own z-index only counts inside the sheet. While a paper is out the sheet itself lifts,
+   above the page content after it (notes, items) and below the site's bars. */
+[data-sheet]:has(.paper-well) { z-index: 10; }
 @container sheet (max-width: 819px) {
   [data-sheet-folio].is-shifted { transform: none; }
   .paper-peek { display: none; }
