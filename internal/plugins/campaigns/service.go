@@ -391,7 +391,8 @@ func (s *campaignService) SetSiteLookSource(src SiteLookSource) {
 // default and is stored as empty, like every other default. A failed read
 // only means the campaign starts as Classic: creating a campaign must not
 // depend on the site look. Every new campaign draws its pages in the Material
-// page look (Annals); Standard stays a choice for campaigns that use it.
+// page look (Annals) and opens time line events in the fading corner; Standard
+// and the classic card stay choices for campaigns that use them.
 func (s *campaignService) newCampaignSettings(ctx context.Context) string {
 	var settings CampaignSettings
 	if s.siteLook != nil {
@@ -406,6 +407,7 @@ func (s *campaignService) newCampaignSettings(ctx context.Context) string {
 		settings.Appearance = &Appearance{}
 	}
 	settings.Appearance.PageLook = "annals"
+	settings.Appearance.TimelinePopup = "corner"
 	b, err := json.Marshal(settings)
 	if err != nil {
 		return "{}"

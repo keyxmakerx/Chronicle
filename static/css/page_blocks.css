@@ -1,5 +1,5 @@
 /*
- * page_blocks.css: the Read-aloud, Table and Steps page blocks
+ * page_blocks.css: the Read-aloud, Table, Steps and Checklist page blocks
  * (internal/plugins/pageblocks/static/js/page_blocks.js).
  *
  * Everything is scoped under .pb. Colours come from the theme tokens, so the
@@ -103,6 +103,72 @@ button.pb-num:hover { border-color: var(--color-accent, #6366f1); }
 .pb-edit-steps .pb-step { align-items: flex-start; }
 .pb-add { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
+/* Checklist: a page part, not a sheet laid on it, so it has no box of its
+   own. Hairlines between rows, the accent for the first side and the muted
+   ink for the second, all from the theme tokens a style kit redefines. The
+   Director's amber edge marks what players don't see. */
+.pb-cl { display: flex; flex-direction: column; gap: 8px; }
+.pb-cl-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; padding-bottom: 4px; border-bottom: 1px solid var(--color-border-light, var(--color-border, #e5e7eb)); }
+.pb-cl-title { font-weight: 600; color: var(--color-text-primary, #111827); overflow-wrap: anywhere; }
+.pb-cl[data-dm-only] > .pb-cl-head { border-left: 3px solid rgb(var(--color-warn-rgb, 217 119 6)); }
+.pb-cl-dm { padding-left: 8px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: rgb(var(--color-warn-rgb, 217 119 6)); }
+.pb-cl[data-dm-only] > .pb-cl-head { padding-left: 10px; }
+.pb-cl-legend { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.pb-cl-side { font-weight: 600; color: var(--color-text-primary, #111827); }
+.pb-cl-none { color: var(--color-text-muted, #6b7280); }
+.pb-cl-bar { display: flex; gap: 2px; min-height: 10px; }
+.pb-cl-seg { flex: 1 1 0; min-width: 2px; height: 10px; background: var(--color-bg-tertiary, #f3f4f6); box-shadow: inset 0 0 0 1px var(--color-border, #e5e7eb); }
+.pb-cl-seg.pb-cl-a { background: var(--color-accent, #6366f1); box-shadow: none; }
+.pb-cl-seg.pb-cl-b { background: var(--color-text-secondary, #6b7280); box-shadow: none; }
+.pb-cl-reached { border-left: 3px solid rgb(var(--color-warn-rgb, 217 119 6)); padding: 2px 0 2px 10px; font-size: 13px; overflow-wrap: anywhere; }
+.pb-cl-reached b { color: var(--color-text-primary, #111827); }
+.pb-quiet {
+  font: inherit; font-size: 13px; padding: 0; min-height: 32px; align-self: flex-start; cursor: pointer;
+  background: none; border: 0; color: var(--color-accent-link, var(--color-accent, #6366f1));
+}
+.pb-quiet:hover { text-decoration: underline; }
+.pb-quiet:focus-visible, .pb-cl-opt:focus-visible, .pb-cl-popt:focus-visible { outline: 2px solid var(--color-accent, #6366f1); outline-offset: 2px; }
+.pb-cl-rows { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--color-border-light, var(--color-border, #e5e7eb)); }
+.pb-cl-rows[hidden] { display: none; }
+.pb-cl-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 4px 0; min-height: 40px; border-bottom: 1px solid var(--color-border-light, var(--color-border, #e5e7eb)); }
+.pb-cl-row[data-dm-only] { border-left: 3px solid rgb(var(--color-warn-rgb, 217 119 6)); padding-left: 10px; }
+.pb-cl-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--color-bg-tertiary, #f3f4f6); box-shadow: inset 0 0 0 1px var(--color-border, #e5e7eb); }
+.pb-cl-held-a .pb-cl-dot { background: var(--color-accent, #6366f1); box-shadow: none; }
+.pb-cl-held-b .pb-cl-dot { background: var(--color-text-secondary, #6b7280); box-shadow: none; }
+.pb-cl-name { flex: 1 1 12ch; min-width: 0; color: var(--color-text-primary, #111827); overflow-wrap: anywhere; }
+a.pb-cl-name { color: var(--color-accent-link, var(--color-accent, #6366f1)); text-decoration: none; }
+a.pb-cl-name:hover { text-decoration: underline; }
+.pb-cl-holder { font-size: 12.5px; color: var(--color-text-muted, #6b7280); }
+.pb-cl-pick { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+.pb-cl-opt {
+  font: inherit; font-size: 12.5px; min-height: 32px; padding: 2px 10px; cursor: pointer; border-radius: 8px;
+  background: transparent; color: var(--color-text-secondary, #4b5563); border: 1px solid transparent;
+}
+.pb-cl-opt:hover { border-color: var(--color-border, #e5e7eb); }
+.pb-cl-opt[aria-pressed="true"] { color: var(--color-accent-link, var(--color-accent, #6366f1)); border-color: var(--color-accent, #6366f1); font-weight: 600; }
+
+/* Checklist editor */
+.pb-cl-sides, .pb-cl-edline { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pb-cl-sides .pb-input { flex: 1 1 12ch; width: auto; }
+.pb-cl-edlist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.pb-cl-edrow { display: flex; flex-direction: column; gap: 4px; padding: 8px 0; border-bottom: 1px solid var(--color-border-light, var(--color-border, #e5e7eb)); }
+.pb-cl-edline > .pb-input:first-child { flex: 1 1 16ch; width: auto; }
+.pb-cl-sel { width: auto; flex: none; }
+.pb-cl-num { width: 72px; flex: none; }
+.pb-cl-page { position: relative; flex: 1 1 16ch; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pb-cl-page .pb-input { flex: 1; }
+.pb-cl-plist {
+  position: absolute; z-index: 5; top: 100%; left: 0; right: 0; margin: 4px 0 0; padding: 4px; list-style: none;
+  background: var(--color-card-bg, #fff); border: 1px solid var(--color-border, #e5e7eb); border-radius: 8px; box-shadow: var(--elev-hover, 0 6px 16px -4px rgb(0 0 0 / .12));
+}
+.pb-cl-plist[hidden] { display: none; }
+.pb-cl-popt { font: inherit; width: 100%; text-align: left; min-height: 32px; padding: 4px 8px; border: 0; border-radius: 6px; background: none; color: var(--color-text-primary, #111827); cursor: pointer; }
+.pb-cl-popt:hover { background: var(--color-bg-tertiary, #f3f4f6); }
+.pb-cl-thr { display: flex; flex-direction: column; gap: 8px; border-left: 3px solid rgb(var(--color-warn-rgb, 217 119 6)); padding-left: 12px; }
+.pb-cl-thr-h { font-size: 12.5px; font-weight: 600; color: var(--color-text-secondary, #4b5563); }
+.pb-cl-thr .pb-cl-edline > .pb-input:not(.pb-cl-sel):not(.pb-cl-num) { flex: 1 1 16ch; width: auto; }
+.pb-cl-thr > .pb-btn { align-self: flex-start; }
+
 @keyframes pb-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 
 @media (max-width: 640px) {
@@ -119,3 +185,8 @@ button.pb-num:hover { border-color: var(--color-accent, #6366f1); }
 html[data-motion="calm"] .pb-ed, html[data-motion="off"] .pb-ed { animation: none; }
 html[data-motion="calm"] .pb-btn:active:not(:disabled), html[data-motion="off"] .pb-btn:active:not(:disabled) { transform: none; }
 html[data-motion="off"] .pb-btn, html[data-motion="off"] button.pb-num { transition: none; }
+
+/* Checklist controls meet the 44px touch target on coarse pointers. */
+@media (pointer: coarse) {
+  .pb-cl-opt, .pb-quiet, .pb-cl-popt { min-height: 44px; min-width: 44px; }
+}

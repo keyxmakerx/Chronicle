@@ -58,6 +58,7 @@ type APIHandler struct {
 	dmScreen             DMScreenProvider
 	systemState          SystemStateReader
 	systemStateWriter    SystemStateWriter
+	systemEntries        SystemEntryLister
 	history              *SyncHistoryHandler
 	quests               *QuestAPIHandler
 	encounters           *EncounterAPIHandler

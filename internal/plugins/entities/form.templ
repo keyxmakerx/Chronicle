@@ -59,6 +59,12 @@ templ EntityCreateFormComponent(cc *campaigns.CampaignContext, entityTypes []Ent
 			hx-swap="outerHTML"
 			data-track-changes="entity-create"
 		>
+			// Who can see the new page: the page's own chip, at the top right
+			// where the finished page shows it. First in the form, so the
+			// form's spacing doesn't push it down.
+			<div class="flex justify-end -mt-2 -mb-2">
+				@draftVisibilityControl()
+			</div>
 			<input type="hidden" name="csrf_token" value={ csrfToken }/>
 
 			if errMsg != "" {
@@ -176,22 +182,10 @@ templ EntityCreateFormComponent(cc *campaigns.CampaignContext, entityTypes []Ent
 
 			@parentSelector(cc.Campaign.ID, parentEntity)
 
-			// Permissions trigger + slide-in card. The widget runs in draft
-			// mode here (no endpoint): the mode selection is written to the
-			// hidden `is_private` input below, which the Create handler
-			// reads. Custom mode is shown but disabled — granular grants
-			// need an entity ID (PUT /entities/:eid/permissions).
-			<input type="hidden" name="is_private" value="false" id="is_private_draft"/>
-			<div
-				data-widget="permissions"
-				data-mode="draft"
-				data-draft-target="#is_private_draft"
-				data-editable="true"
-			></div>
-
 			<div class="flex items-center space-x-4">
 				<button type="submit" class="btn-primary">Create Page</button>
-				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) } class="btn-secondary">Cancel</a>
+				// Leaving isn't a command, so Cancel is a quiet word.
+				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) } class="quiet-word">Cancel</a>
 			</div>
 		</form>
 	</div>

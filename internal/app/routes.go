@@ -60,6 +60,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/syncapi"
 	"github.com/keyxmakerx/chronicle/internal/plugins/systemstate"
 	"github.com/keyxmakerx/chronicle/internal/plugins/timeline"
+	"github.com/keyxmakerx/chronicle/internal/plugins/trackers"
 	"github.com/keyxmakerx/chronicle/internal/plugins/vault_import"
 	"github.com/keyxmakerx/chronicle/internal/plugins/widgetbindings"
 	"github.com/keyxmakerx/chronicle/internal/systems"
@@ -2095,7 +2096,7 @@ func (a *mentionLinkAdapter) GetMentionLinksForGraph(ctx context.Context, campai
 	return result, nil
 }
 
-// registerPageTextBlocks registers Read-aloud, Table, Steps and the Page map:
+// registerPageTextBlocks registers Read-aloud, Table, Steps, Checklist and the Page map:
 // content a DM types or draws in place, stored per page and block. They are always available (no addon) and
 // usable several times on a page; the widget fetches its own content, so these
 // only emit the mount point. A layout that places them (Adventures does) fails
@@ -2121,6 +2122,12 @@ func registerPageTextBlocks(blockRegistry *entities.BlockRegistry) {
 			TileSizes:   []string{"1x2", "2x2", "4x2"},
 		},
 		{
+			Type: pageblocks.KindChecklist, Label: "Checklist", Icon: "fa-circle-half-stroke",
+			Description: "Named things each held by one of two sides you name, with notes for you when a side reaches a count",
+			Contexts:    []string{"template"},
+			TileSizes:   []string{"2x1", "2x2", "4x2"},
+		},
+		{
 			Type: pageblocks.KindPageMap, Label: "Page map", Icon: "fa-map-location-dot",
 			Description: "A map drawn in place from rooms, walls and markers, with hover cards for linked pages",
 			Contexts:    []string{"template"},
@@ -2134,6 +2141,9 @@ func registerPageTextBlocks(blockRegistry *entities.BlockRegistry) {
 			}
 			if kind == pageblocks.KindPageMap {
 				return pageblocks.PageMapMount(rc.CC.Campaign.ID, rc.Entity.ID, rc.Block.ID, rc.CSRFToken)
+			}
+			if kind == pageblocks.KindChecklist {
+				return pageblocks.ChecklistMount(rc.CC.Campaign.ID, rc.Entity.ID, rc.Block.ID, rc.CSRFToken, rc.CC.CanAuthorDmOnly())
 			}
 			return pageblocks.BlockMount(rc.CC.Campaign.ID, rc.Entity.ID, rc.Block.ID, kind, rc.CSRFToken)
 		})
@@ -2922,8 +2932,9 @@ func (a *App) RegisterRoutes() {
 
 	// Expose the entities plugin's embedded static assets at
 	// /static/plugins/entities/ (js/characters.js, the Characters page's
-	// mini→full launch enhancement, and the Contents block's script, loaded
-	// on sight).
+	// mini→full launch enhancement, and the scripts below, each loaded on
+	// sight: the Contents block's, Standing's, the Family tree's and the
+	// Characters page's hero builder).
 	a.registerPlugin(PluginRegistration{
 		Slug:     entities.PluginSlug,
 		StaticFS: echo.MustSubFS(entities.StaticAssetsFS, "static"),
@@ -2931,6 +2942,7 @@ func (a *App) RegisterRoutes() {
 			{Name: entities.ContentsWidgetName, Scripts: []string{"js/page_contents.js"}},
 			{Name: "standing", Scripts: []string{"js/standing.js"}},
 			{Name: entities.FamilyTreeWidgetName, Scripts: []string{"js/family_tree.js"}},
+			{Name: "hero-builder", Scripts: []string{"js/hero_builder.js"}},
 		},
 	})
 
@@ -5186,9 +5198,12 @@ func (a *App) RegisterRoutes() {
 				return nil
 			}
 			return systems.Find(c.ParseSettings().SystemID)
-		})
+		},
+		systems.WithEntryCharacters(entryCharactersAdapter{entities: entityService, lists: characterListService}))
 	systems.RegisterSystemEntryChoices(systemEntrySvc)
 	systems.RegisterSystemEntryRoutes(e, systems.NewSystemEntryHandler(systemEntrySvc), authService, campaignService)
+	// Foundry fills the items it makes for these entries from the player view.
+	syncAPIHandler.SetSystemEntryLister(systemEntrySvc)
 	// Pick lists (Ancestry, Kit, Race, Class…) for the character attributes editor.
 	characterChoiceSvc := systems.NewCharacterChoiceService(addonService, campaignSystemMgr)
 	systems.RegisterCharacterChoiceRoutes(e, systems.NewCharacterChoiceHandler(characterChoiceSvc), authService, campaignService)
@@ -5363,9 +5378,10 @@ func (a *App) RegisterRoutes() {
 					PeekGlow: ap.PeekGlow, PeekGlowColour: ap.PeekGlowColour,
 					HoverCard: ap.HoverCard,
 
-					SheetStyle: ap.SheetStyle,
-					PageLook:   ap.PageLook,
-					StyleKit:   ap.StyleKit,
+					SheetStyle:    ap.SheetStyle,
+					PageLook:      ap.PageLook,
+					StyleKit:      ap.StyleKit,
+					TimelinePopup: ap.TimelinePopup,
 				}
 				ctx = layouts.SetAppearance(ctx, ad)
 			}
@@ -5819,6 +5835,25 @@ func (a *App) RegisterRoutes() {
 		registerRumoursBlock(blockRegistry, rumoursSvc)
 	} else {
 		slog.Warn("rumours plugin degraded — the Rumours block is not available")
+	}
+
+	// Trackers: counters, named steps and clocks on pages, each with a dated
+	// log. The block and its routes exist only while its tables migrated.
+	a.registerPlugin(PluginRegistration{
+		Slug:     trackers.PluginSlug,
+		StaticFS: echo.MustSubFS(trackers.StaticAssetsFS, "static"),
+		Widgets: []PluginWidget{
+			{Name: "trackers", Scripts: []string{"js/trackers.js"}},
+		},
+	})
+	if a.PluginHealth.IsHealthy(trackers.PluginSlug) {
+		trackersSvc := trackers.NewService(trackers.NewRepository(a.DB),
+			&trackersEntityAdapter{svc: entityService, cards: entities.NewPageCards(a.DB)},
+			&trackersClockAdapter{svc: calendarService})
+		trackers.RegisterRoutes(e, trackers.NewHandler(trackersSvc), campaignService, authService)
+		registerTrackersBlock(blockRegistry)
+	} else {
+		slog.Warn("trackers plugin degraded — the Trackers block is not available")
 	}
 
 	// Encounters: fights planned on a page, loaded in Foundry.

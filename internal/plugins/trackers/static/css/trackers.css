@@ -1,0 +1,94 @@
+/* trackers.css: the Trackers block, drawn to .ai/ui-standard.md. Colours come
+ * from the theme tokens, and the accent from --annals-acc, which a page look
+ * and a style kit both remap, so the block follows a customized page without
+ * rules of its own. The block takes no paper look: kits dress pages, not
+ * tools. TODO(#1447): take corners from the shared kit tokens once they exist. */
+.tk {
+  --tk-r: 8px;
+  --tk-ink: var(--color-text-primary); --tk-body: var(--color-text-body, var(--color-text-primary)); --tk-muted: var(--color-text-muted);
+  --tk-line: var(--color-border); --tk-tint: var(--color-bg-tertiary); --tk-panel: var(--color-card-bg, var(--color-bg-primary));
+  --tk-acc: var(--annals-acc, var(--color-accent));
+  --tk-dm: rgb(var(--color-warn-rgb, 217 119 6));
+  display: grid; gap: 10px; color: var(--tk-body); font-size: 14px;
+}
+.tk :focus-visible { outline: 2px solid var(--tk-acc); outline-offset: 2px; }
+.tk-head { display: flex; align-items: center; gap: 8px; }
+.tk-title { margin: 0; font-size: 15px; font-weight: 600; color: var(--tk-ink); }
+.tk-count { font-size: 12px; color: var(--tk-muted); }
+.tk-sp { flex: 1; }
+.tk-empty, .tk-more, .tk-none { margin: 0; color: var(--tk-muted); font-size: 13px; }
+.tk-status { margin: 0; min-height: 1em; font-size: 12px; color: var(--tk-muted); }
+.tk-status.err { color: rgb(var(--color-danger-rgb, 220 38 38)); }
+.tk-list { display: grid; gap: 8px; }
+
+/* Controls: quiet word, icon and button weights, each at least 32px to hit. */
+.tk-q { font: inherit; font-size: 13px; color: var(--tk-muted); background: none; border: 0; min-height: 32px; padding: 0 6px; border-radius: var(--tk-r); cursor: pointer; }
+.tk-q:hover { color: var(--tk-ink); background: var(--tk-tint); }
+.tk-q.tk-danger:hover { color: rgb(var(--color-danger-rgb, 220 38 38)); }
+.tk-ic { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border: 1px solid transparent; border-radius: var(--tk-r); background: none; color: var(--tk-muted); cursor: pointer; flex: none; }
+.tk-ic:hover:not(:disabled) { color: var(--tk-ink); border-color: var(--tk-line); background: var(--tk-tint); }
+.tk-ic:disabled { opacity: .4; cursor: default; }
+.tk-btn { font: inherit; font-size: 13px; font-weight: 500; min-height: 32px; padding: 0 13px; border-radius: var(--tk-r); border: 1px solid var(--tk-acc); background: var(--tk-acc); color: #fff; cursor: pointer; justify-self: start; }
+.tk-btn:disabled { opacity: .5; cursor: default; }
+
+/* One tracker. The Director-only amber edge comes from data-dm-only, which
+ * the player preview also hides. */
+.tk-row { display: grid; gap: 6px; padding: 8px 10px; border: 1px solid var(--tk-line); border-radius: var(--tk-r); background: var(--tk-panel); position: relative; }
+.tk-row[data-dm-only] { box-shadow: inset 3px 0 0 var(--tk-dm); }
+.tk-top { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.tk-name { font-weight: 600; color: var(--tk-ink); flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tk-who { font-size: 11px; color: var(--tk-muted); white-space: nowrap; }
+.tk-who.cb-dm { color: var(--tk-dm); }
+.tk-row > .tk-q { justify-self: start; }
+.tk-val { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--tk-ink); min-width: 2.5em; text-align: center; }
+.tk-now { margin: 0; font-size: 13px; color: var(--tk-body); }
+.tk-menu { display: flex; flex-wrap: wrap; gap: 2px; padding-top: 2px; border-top: 1px solid var(--tk-line); }
+
+/* Named steps: a run of chips, the current one in the accent. */
+.tk-steps { display: flex; flex-wrap: wrap; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.tk-step { display: inline-flex; align-items: center; font: inherit; font-size: 12px; min-height: 32px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--tk-line); background: none; color: var(--tk-muted); }
+button.tk-step { cursor: pointer; }
+.tk-step.past { color: var(--tk-body); }
+.tk-step.on { border-color: var(--tk-acc); background: color-mix(in srgb, var(--tk-acc) 14%, transparent); color: var(--tk-ink); font-weight: 600; }
+
+/* A clock: segments of a ring, filled in the accent. */
+.tk-clock { display: flex; align-items: center; gap: 10px; }
+.tk-face { width: 56px; height: 56px; flex: none; }
+.tk-seg { fill: var(--tk-tint); stroke: var(--tk-panel); stroke-width: 2px; vector-effect: non-scaling-stroke; }
+.tk-seg.on { fill: var(--tk-acc); }
+
+/* Bands: one mark per band, lit up to the band in force; the words for the
+ * band in force are the "now" line under it. */
+.tk-bands { display: flex; gap: 3px; margin: 0; padding: 0; list-style: none; }
+.tk-band { flex: 1; height: 6px; border-radius: 3px; background: var(--tk-tint); }
+.tk-band.on { background: color-mix(in srgb, var(--tk-acc) 55%, transparent); }
+.tk-band.here { background: var(--tk-acc); }
+
+/* The log. A struck line stays, crossed out, for the record. */
+.tk-log { display: grid; gap: 6px; padding-top: 4px; border-top: 1px solid var(--tk-line); }
+.tk-lines { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.tk-line .tk-ic { width: 32px; height: 32px; }
+.tk-line { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+.tk-line .tk-what { flex: 1; min-width: 0; }
+.tk-line .tk-after { color: var(--tk-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.tk-line.struck .tk-what { text-decoration: line-through; color: var(--tk-muted); }
+
+/* Forms: the log form and Add a tracker. */
+.tk-form { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 10px; align-items: center; }
+.tk-form .tk-btn, .tk-form fieldset { grid-column: 1 / -1; }
+.tk-l { font-size: 12.5px; color: var(--tk-muted); }
+.tk-field { font: inherit; font-size: 13px; min-height: 32px; padding: 4px 8px; border: 1px solid var(--tk-line); border-radius: var(--tk-r); background: var(--color-bg-primary); color: var(--tk-ink); min-width: 0; }
+textarea.tk-field { resize: vertical; }
+.tk-num { max-width: 8em; }
+.tk-add { display: grid; gap: 10px; padding: 10px; border: 1px solid var(--tk-line); border-radius: var(--tk-r); background: var(--tk-panel); }
+.tk-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--tk-line); }
+.tk-tab { font: inherit; font-size: 13px; min-height: 32px; padding: 0 10px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--tk-muted); cursor: pointer; }
+.tk-tab.on { color: var(--tk-ink); border-bottom-color: var(--tk-acc); }
+.tk-shapes { display: flex; flex-wrap: wrap; gap: 4px 14px; border: 0; margin: 0; padding: 0; }
+.tk-shapes legend { padding: 0; margin-bottom: 4px; }
+.tk-radio { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; cursor: pointer; }
+.tk-radio input { accent-color: var(--tk-acc); }
+
+@media (max-width: 480px) {
+  .tk-form { grid-template-columns: minmax(0, 1fr); }
+}

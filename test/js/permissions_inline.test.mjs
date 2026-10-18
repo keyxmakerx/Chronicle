@@ -228,3 +228,50 @@ test('no tag note or pip when there are no tag grants', async () => {
   assert.equal(findByClass(el, 'perm-tag-note'), null, 'no note without grants');
   assert.equal(findByClass(el, 'perm-trigger-widened'), null, 'no pip without grants');
 });
+
+// Find the first descendant matching a predicate.
+function findWhere(root, pred) {
+  for (const c of root.children || []) {
+    if (pred(c)) return c;
+    const deep = findWhere(c, pred);
+    if (deep) return deep;
+  }
+  return null;
+}
+
+test('corner layout in draft mode drives the Create form chip and hidden input', () => {
+  const { sandbox, document, apiCalls } = boot();
+  const impl = sandbox.Chronicle._impls.permissions;
+  const hidden = { value: 'false' };
+  document.querySelector = (sel) => (sel === '#is_private_draft' ? hidden : null);
+
+  // The server-rendered chip the corner layout reuses as its trigger.
+  const icon = makeNode('i');
+  const label = makeNode('span');
+  const chip = makeNode('button');
+  chip.querySelector = (sel) => (sel === '[data-perm-corner-icon]' ? icon : sel === '[data-perm-corner-label]' ? label : null);
+  const el = makeNode('div');
+  el.querySelector = (sel) => (sel === '[data-perm-corner-trigger]' ? chip : null);
+  el.contains = () => false;
+
+  impl.init(el, { layout: 'corner', mode: 'draft', draftTarget: '#is_private_draft', editable: true });
+
+  assert.equal(apiCalls.length, 0, 'draft mode never calls the API');
+  assert.equal(chip.getAttribute('data-visibility-badge'), 'everyone');
+  const panel = findByClass(el, 'perm-corner-panel');
+  assert.ok(panel, 'the editor unfolds from the chip, inside the mount');
+
+  chip.dispatch('click');
+  assert.ok(panel.classList.contains('perm-open'), 'clicking the chip opens the editor');
+
+  const dmOnly = findWhere(panel, (n) => n.tagName === 'INPUT' && n.value === 'dm_only');
+  assert.ok(dmOnly, 'DM team only is offered');
+  dmOnly.dispatch('change');
+  assert.equal(hidden.value, 'true', 'DM team only writes is_private=true for the Create handler');
+  assert.equal(label.textContent, 'DM team only', 'the chip says the new choice');
+  assert.equal(chip.getAttribute('data-visibility-badge'), 'dm_only');
+
+  const custom = findWhere(panel, (n) => n.tagName === 'INPUT' && n.value === 'custom');
+  assert.ok(custom && custom.disabled, 'Custom waits until the page exists');
+  assert.equal(apiCalls.length, 0, 'still no API call after a change');
+});
