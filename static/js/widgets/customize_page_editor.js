@@ -1,5 +1,5 @@
 /**
- * customize_page_editor.js: Customize's page editor, a category's Page
+ * customize_page_editor.js: the Customizer's page layout, a category's Page
  * layout tab (entity_type_customize_tab.templ).
  *
  * It draws the category's page layout on one of the category's own pages:

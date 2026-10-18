@@ -1,8 +1,8 @@
 /* Annals: a page look that restyles every block through the shared block
    parts (input.css, "Shared block parts") without moving anything. It is on
    when the campaign's Customize page look is Annals, which puts
-   data-cz-page="annals" on <html>; the Customize page editor sets the same
-   attribute on its preview to show it. Everything here is scoped to it.
+   data-cz-page="annals" on <html>; the Customizer sets the same attribute on
+   its preview to show it. Everything here is scoped to it.
 
    The look: headings in the campaign's heading face (tall capitals when the
    owner picked none, set as --annals-* by AppearanceCSS), the campaign accent
@@ -340,6 +340,200 @@ html[data-annals-mode="fade"]::view-transition-new(annals-page) { animation-dura
   0%, 30% { background: color-mix(in srgb, var(--annals-acc) 22%, transparent); box-shadow: inset 3px 0 0 var(--annals-acc); }
   100% { background: transparent; box-shadow: inset 3px 0 0 transparent; }
 }
+
+/* ---------- The page editor ----------
+   One page edited where it stands (static/js/widgets/page_editor.js). Edit
+   page gives the page the campaign-colour edge and becomes Done in the same
+   spot; a pen sits beside each part and is its tick while it is open. An open
+   part's values become fields with a writing line under them, and what has
+   no room drapes on a sheet below, over the page. Nothing moves: the pens
+   keep their room at rest, and the edge is drawn outside the page. */
+[data-cz-page="annals"] [data-pe-page] {
+  --pe-wline: color-mix(in srgb, var(--color-text-muted) 55%, transparent);
+  border-radius: 12px;
+  outline: 2px solid transparent;
+  outline-offset: 6px;
+  transition: outline-color var(--dur-standard, 200ms) var(--ease-out);
+}
+[data-cz-page="annals"] [data-pe-page][data-editing] { outline-color: var(--annals-acc); }
+
+/* The bar: the keys, the Saving/Saved note, the visibility badge and Edit
+   page, which keeps its width as Done. The keys and the note hold their room
+   at rest so showing them moves nothing (a reason not saved goes to a
+   notice); a narrow screen, seldom on a keyboard, leaves the keys out. */
+[data-cz-page="annals"] .pe-bar { display: flex; align-items: center; gap: 12px; flex-shrink: 0; min-height: 2rem; }
+[data-cz-page="annals"] .pe-hint {
+  font-size: 0.78rem; color: var(--color-text-muted); white-space: nowrap;
+  visibility: hidden; opacity: 0;
+  transition: opacity var(--dur-standard, 200ms) var(--ease-standard), visibility 0s var(--dur-standard, 200ms);
+}
+[data-cz-page="annals"] [data-editing] .pe-hint { visibility: visible; opacity: 1; transition: opacity var(--dur-standard, 200ms) var(--ease-standard); }
+@media (max-width: 1279px) { [data-cz-page="annals"] .pe-hint { display: none; } }
+/* A layout with no part to edit keeps only the badge. */
+[data-cz-page="annals"] .pe-bar[data-pe-off] > :is(.pe-hint, .pe-saved, .pe-edit) { display: none; }
+/* On a phone the bar takes its own line, so the trail of pages keeps its width. */
+@media (max-width: 640px) {
+  [data-cz-page="annals"] .flex:has(> .pe-bar) { flex-wrap: wrap; }
+  [data-cz-page="annals"] .pe-bar { width: 100%; justify-content: flex-end; }
+}
+[data-cz-page="annals"] .pe-key {
+  font: inherit; font-size: 11px; font-weight: 600; line-height: 1.4;
+  padding: 0 5px; border: 1px solid var(--color-border); border-bottom-width: 2px; border-radius: 4px;
+  color: var(--color-text-primary); background: var(--color-card-bg);
+}
+[data-cz-page="annals"] button.pe-key { cursor: pointer; transition: border-color var(--dur-micro, 120ms), color var(--dur-micro, 120ms); }
+[data-cz-page="annals"] button.pe-key:hover,
+[data-cz-page="annals"] button.pe-key[aria-pressed="true"] { border-color: var(--annals-acc); color: var(--annals-acc); }
+[data-cz-page="annals"] button.pe-key:focus-visible { outline: 2px solid var(--annals-acc); outline-offset: 2px; }
+[data-cz-page="annals"] .pe-saved {
+  display: inline-flex; align-items: center; justify-content: flex-end; gap: 4px; min-width: 4.75rem; white-space: nowrap;
+  font-size: 0.78rem; font-weight: 600; color: rgb(var(--color-ok-rgb));
+  opacity: 0; transition: opacity var(--dur-micro, 120ms);
+}
+[data-cz-page="annals"] .pe-saved.is-on { opacity: 1; }
+[data-cz-page="annals"] .pe-saved.is-busy { color: var(--color-text-muted); font-weight: 500; }
+[data-cz-page="annals"] .pe-saved.is-bad { color: rgb(var(--color-bad-rgb)); font-weight: 500; }
+[data-cz-page="annals"] .pe-saved .pe-i { width: 13px; height: 13px; }
+[data-cz-page="annals"] .pe-edit { min-width: 6.5rem; justify-content: center; }
+[data-cz-page="annals"] .pe-edit.is-done { color: var(--annals-acc); font-weight: 600; }
+
+/* Line icons: the pen and its tick, and the Saved tick. */
+[data-cz-page="annals"] .pe-i {
+  width: 15px; height: 15px; flex-shrink: 0;
+  fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+}
+
+/* A part: the page itself at rest. While editing, a hairline answers the
+   pointer and focus, and E draws it round every part at once; it sits
+   outside the part so it never crosses the pen. */
+[data-cz-page="annals"] .pe-part { position: relative; }
+[data-cz-page="annals"] .pe-part::before {
+  content: ""; position: absolute; inset: -8px -10px; border-radius: 10px; pointer-events: none;
+  box-shadow: 0 0 0 1px transparent;
+  transition: box-shadow var(--dur-micro, 120ms) var(--ease-standard);
+}
+[data-cz-page="annals"] [data-editing] .pe-part:not(.is-open) { cursor: pointer; }
+[data-cz-page="annals"] [data-editing] .pe-part:not(.is-open):hover::before,
+[data-cz-page="annals"] [data-editing] .pe-part:not(.is-open):focus-within::before,
+[data-cz-page="annals"] [data-editing][data-pe-marked] .pe-part:not(.is-open)::before {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--annals-acc) 70%, transparent);
+}
+[data-cz-page="annals"] .pe-part.is-open { z-index: 20; }
+
+/* The pen: an icon with no frame until hover, beside the part's heading. */
+[data-cz-page="annals"] .pe-pen {
+  position: relative; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  width: 28px; height: 28px; padding: 0; border: 1px solid transparent; border-radius: 8px;
+  background: none; color: var(--annals-acc); cursor: pointer; visibility: hidden;
+  transition: border-color var(--dur-micro, 120ms), transform var(--dur-standard, 200ms) var(--ease-out);
+}
+[data-cz-page="annals"] .pe-pen::after { content: ""; position: absolute; inset: -3px; }
+[data-cz-page="annals"] [data-editing] .pe-pen {
+  visibility: visible;
+  animation: pe-set 260ms var(--ease-out) both;
+  animation-delay: calc(var(--pe-n, 0) * 50ms);
+}
+[data-cz-page="annals"] .pe-pen:hover,
+[data-cz-page="annals"] [data-editing] .pe-part:hover .pe-pen { border-color: var(--annals-line); }
+[data-cz-page="annals"] .pe-pen:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--color-card-bg), 0 0 0 4px var(--annals-acc); }
+[data-cz-page="annals"] .pe-pen:active { transform: scale(0.92); }
+[data-cz-page="annals"] .pe-pen .pe-i-ok,
+[data-cz-page="annals"] .pe-part.is-open .pe-pen .pe-i-pen { display: none; }
+[data-cz-page="annals"] .pe-part.is-open .pe-pen,
+[data-cz-page="annals"] [data-editing] .pe-part.is-open:hover .pe-pen { border-color: color-mix(in srgb, var(--annals-acc) 45%, transparent); }
+[data-cz-page="annals"] .pe-part.is-open .pe-pen .pe-i-ok { display: block; animation: pe-tick var(--dur-standard, 200ms) var(--ease-out); }
+@keyframes pe-set { from { opacity: 0; transform: translateY(-5px) rotate(-12deg); } to { opacity: 1; transform: none; } }
+@keyframes pe-tick { from { opacity: 0; transform: scale(0.6) rotate(-20deg); } to { opacity: 1; transform: none; } }
+@keyframes pe-fade { from { opacity: 0; } to { opacity: 1; } }
+
+/* The name is its own field: its accent rule is the writing line, quiet
+   while the part is open and the accent again while you type. */
+[data-cz-page="annals"] .pe-part.is-open .cb-title { cursor: text; min-width: 4ch; outline: none; }
+[data-cz-page="annals"] .pe-part.is-open .cb-title::after { background: var(--pe-wline); }
+[data-cz-page="annals"] .pe-part.is-open .cb-title:focus::after { background: var(--annals-acc); }
+
+/* The drape: unrolls from the part's lower edge over the page and rolls
+   back up (the Drape move); Calm fades it. */
+[data-cz-page="annals"] .pe-drape {
+  position: absolute; left: -10px; right: -10px; top: calc(100% + 8px); z-index: 1;
+  min-width: min(26rem, calc(100vw - 2rem));
+  clip-path: inset(0 -40px 100% -40px); visibility: hidden;
+  transition: clip-path 150ms var(--ease-out), visibility 0s 150ms;
+}
+[data-cz-page="annals"] .pe-drape-in { transform: translateY(-12px); transition: transform var(--dur-standard, 200ms) var(--ease-out); }
+[data-cz-page="annals"] .pe-part.is-open .pe-drape {
+  clip-path: inset(0 -40px -40px -40px); visibility: visible;
+  transition: clip-path var(--dur-standard, 200ms) var(--ease-out), visibility 0s;
+}
+[data-cz-page="annals"] .pe-part.is-open .pe-drape-in { transform: none; }
+[data-cz-page="annals"] .pe-sheet {
+  display: grid; gap: 10px; padding: 12px 14px;
+  background: var(--color-card-bg); border: 1px solid var(--annals-line); border-radius: 12px;
+  box-shadow: var(--elev-hover);
+}
+[data-cz-page="annals"] .pe-row { display: grid; grid-template-columns: 7.5rem minmax(0, 1fr); gap: 8px; align-items: center; min-height: 32px; }
+[data-cz-page="annals"] .pe-row > span,
+[data-cz-page="annals"] .pe-row > label { font-size: 0.8125rem; color: var(--color-text-muted); }
+@media (max-width: 640px) { [data-cz-page="annals"] .pe-row { grid-template-columns: minmax(0, 1fr); gap: 2px; } }
+
+/* A field has no fill or box of its own, only a line under it that turns
+   the accent while you type. */
+[data-cz-page="annals"] .pe-fld {
+  width: 100%; min-width: 0; padding: 6px 2px;
+  font: inherit; font-size: 0.8125rem; color: var(--color-text-primary);
+  background: none; border: 0; border-bottom: 1px solid var(--pe-wline); border-radius: 0; box-shadow: none;
+  transition: border-color var(--dur-micro, 120ms), box-shadow var(--dur-micro, 120ms);
+}
+[data-cz-page="annals"] .pe-fld:focus { outline: none; border-color: var(--annals-acc); box-shadow: inset 0 -1px 0 var(--annals-acc); }
+[data-cz-page="annals"] .pe-fld:disabled { color: var(--color-text-muted); }
+[data-cz-page="annals"] .pe-fld::placeholder { color: var(--color-text-muted); opacity: 0.8; }
+
+/* The parent page list hangs under its field. */
+[data-cz-page="annals"] .pe-combo { position: relative; }
+[data-cz-page="annals"] .pe-list {
+  position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 2;
+  max-height: 13rem; overflow: auto; margin: 0; padding: 4px; list-style: none;
+  background: var(--color-card-bg); border: 1px solid var(--annals-line); border-radius: 8px; box-shadow: var(--elev-hover);
+}
+[data-cz-page="annals"] .pe-opt { padding: 6px 8px; border-radius: 6px; font-size: 0.8125rem; color: var(--color-text-primary); cursor: pointer; }
+[data-cz-page="annals"] .pe-opt:hover,
+[data-cz-page="annals"] .pe-opt.is-active { background: color-mix(in srgb, var(--annals-acc) 10%, transparent); }
+[data-cz-page="annals"] .pe-opt[aria-selected="true"] { color: var(--annals-acc); font-weight: 600; }
+[data-cz-page="annals"] .pe-opt.is-none { color: var(--color-text-muted); }
+[data-cz-page="annals"] .pe-opt-note { padding: 6px 8px; font-size: 0.78rem; color: var(--color-text-muted); }
+
+/* Quiet words: the lightest control, accent text with no border, fill or
+   icon, underlined on hover. */
+[data-cz-page="annals"] .pe-qws {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 4px 16px;
+  padding-top: 10px; border-top: 1px solid var(--annals-line);
+}
+[data-cz-page="annals"] .pe-sp { flex: 1; }
+[data-cz-page="annals"] .pe-qw {
+  position: relative; min-height: 32px; padding: 0; border: 0; background: none; box-shadow: none;
+  font-size: 0.8125rem; font-weight: 500; color: var(--annals-acc); cursor: pointer;
+  text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 3px;
+  transition: text-decoration-color var(--dur-micro, 120ms) var(--ease-standard);
+}
+[data-cz-page="annals"] .pe-qw:hover,
+[data-cz-page="annals"] .pe-qw:focus-visible { text-decoration-color: currentColor; outline: none; }
+[data-cz-page="annals"] .pe-qw.is-bad { color: rgb(var(--color-bad-rgb)); }
+[data-cz-page="annals"] .pe-qw > :is(i, svg) { display: none; }
+
+/* Calm fades the pens in and the drape for its unroll; Off swaps. */
+[data-cz-page="annals"][data-motion="calm"] [data-editing] .pe-pen { animation-name: pe-fade; animation-duration: var(--dur-standard, 200ms); }
+[data-cz-page="annals"][data-motion="calm"] .pe-part.is-open .pe-pen .pe-i-ok { animation: none; }
+[data-cz-page="annals"][data-motion="calm"] .pe-drape {
+  clip-path: none; opacity: 0;
+  transition: opacity 150ms var(--ease-standard), visibility 0s 150ms;
+}
+[data-cz-page="annals"][data-motion="calm"] .pe-part.is-open .pe-drape { clip-path: none; opacity: 1; transition: opacity var(--dur-standard, 200ms) var(--ease-standard), visibility 0s; }
+[data-cz-page="annals"][data-motion="calm"] .pe-drape-in { transform: none; }
+[data-cz-page="annals"][data-motion="off"] :is(.pe-pen, .pe-pen .pe-i-ok) { animation: none; }
+[data-cz-page="annals"][data-motion="off"] :is([data-pe-page], .pe-hint, .pe-drape, .pe-drape-in),
+[data-cz-page="annals"][data-motion="off"] .pe-part::before { transition: none; }
+[data-cz-page="annals"][data-motion="off"] :is(.pe-drape, .pe-part.is-open .pe-drape) { clip-path: none; }
+[data-cz-page="annals"][data-motion="off"] .pe-drape-in { transform: none; }
 
 @media (prefers-reduced-motion: reduce) {
   [data-cz-page="annals"] .cb-title::after { animation: none !important; }

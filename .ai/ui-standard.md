@@ -217,19 +217,25 @@ leaving the list for another page.
   content marked "Example". A workshop's preview is the real page's own
   markup, made inert, never a sketch of it.
 - **An editable part says so at rest, three ways.** While editing is on,
-  each editable part has a small named tab in the page margin beside it (on
-  a phone, on its top edge), so it is findable without hovering, on touch and
-  with the keyboard; hover and focus then outline the part with an accent
-  hairline; and E (or "Show what I can edit") marks every editable part on
-  the page at once until pressed again. Hover alone is never the only way to
-  discover it.
+  each editable part has a pen beside its heading, an icon with no word, so
+  it is findable without hovering, on touch and with the keyboard; hover and
+  focus then outline the part with an accent hairline; and E (or the E in the
+  editing hint) outlines every editable part on the page at once until
+  pressed again. Hover alone is never the only way to discover it.
+- **A part opens where it stands.** Its pen, or a click on the part, opens
+  it: the pen becomes its tick in the same spot, its values become fields in
+  place with no fill, only a line under them that turns the accent on focus
+  (a title's own rule is its writing line), and what has no room drapes on a
+  sheet below it, over the page. Esc closes the open thing first, then leaves
+  editing. Each field saves as it is typed, and the page says Saving… then
+  Saved.
 - **An editor never covers what it edits.** It opens from the part (a
   popover for a few fields, a panel docked beside the page for a long form)
   and moves aside rather than sit on the part. A small part may edit in
   place; a part too big for that opens the docked panel.
 - **One clear editing state.** When editing is on, the page says so (the
-  edge in the campaign colour, Done where Edit was) and nothing else about
-  the page changes.
+  edge in the campaign colour, Done where Edit page was) and nothing else
+  about the page changes.
 - **Arranging saves as one draft; a single choice saves at once.** Moving,
   adding and resizing many things (Customize, a page layout) collects into
   one draft with the save bar (`customize_shell.js`): what is waiting, Undo,
