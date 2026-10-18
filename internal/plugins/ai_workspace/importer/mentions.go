@@ -204,7 +204,9 @@ func linkText(text string, p *PageLinks) string {
 // code, without repeats, in a stable order.
 func LinkNames(markdown string) []string {
 	p := NewPageLinks(context.Background(), noPages{}, "-", Viewer{})
-	if _, err := MarkdownToHTML(markdown, WithPageLinks(p), WithGMOnlyPassages()); err != nil {
+	// Markers are converted without a permission check: this only collects
+	// names, and refusing a passage here would hide a broken link.
+	if _, err := MarkdownToHTML(markdown, WithPageLinks(p), func(o *renderOpts) { o.markers = true }); err != nil {
 		return nil
 	}
 	names := make([]string, 0, len(p.missed))

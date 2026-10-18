@@ -135,15 +135,38 @@ func normKind(s string) string {
 	return strings.ReplaceAll(strings.ToLower(strings.TrimSpace(s)), "_", "-")
 }
 
-// RefuseGMMarkers rejects a record body that carries a GM-only marker. Record
-// texts (events, notes, descriptions) reach players without the strip that
-// page text gets, so honouring or keeping a marker there would publish it.
-// The error is a 400 so the review and result screens show its wording.
+// RefuseGMMarkers rejects a record whose body, name or any front-matter text
+// carries a GM-only marker. Record texts (events, notes, summaries,
+// descriptions) reach players without the strip that page text gets, so
+// honouring or keeping a marker there would publish it. The error is a 400 so
+// the review and result screens show its wording.
 func RefuseGMMarkers(r Record) error {
-	if importer.HasSecretMarkerText(r.Body) {
+	if importer.HasSecretMarkerText(r.Body) || importer.HasSecretMarkerText(r.Name) || anyMarker(r.Fields) {
 		return apperror.NewBadRequest(importer.SecretNotInTextReason)
 	}
 	return nil
+}
+
+// anyMarker reports whether a front-matter value, at any depth, holds a
+// GM-only marker.
+func anyMarker(v any) bool {
+	switch t := v.(type) {
+	case string:
+		return importer.HasSecretMarkerText(t)
+	case map[string]any:
+		for _, x := range t {
+			if anyMarker(x) {
+				return true
+			}
+		}
+	case []any:
+		for _, x := range t {
+			if anyMarker(x) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // Plan validates a record, refusing unknown kinds and bad actions up front.

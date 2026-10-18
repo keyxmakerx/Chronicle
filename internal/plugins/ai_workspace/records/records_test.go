@@ -646,4 +646,16 @@ func TestRecordBodies_RefuseGMMarkers(t *testing.T) {
 	if err := RefuseGMMarkers(rec("event", ActionCreate, "x", nil, "plain }gm}")); err == nil {
 		t.Error("a stray close marker was accepted")
 	}
+	for name, r := range map[string]Record{
+		"summary":     rec("game-night", ActionCreate, "x", map[string]any{"summary": "{gm{the mayor}gm}"}, ""),
+		"nested list": rec("event", ActionCreate, "x", map[string]any{"items": []any{map[string]any{"description": "a {gm{b}gm}"}}}, ""),
+		"name":        rec("tag", ActionCreate, "{gm{Cult}gm}", nil, ""),
+	} {
+		if err := RefuseGMMarkers(r); err == nil {
+			t.Errorf("%s: a marker outside the body was accepted", name)
+		}
+	}
+	if err := RefuseGMMarkers(rec("event", ActionCreate, "Feast", map[string]any{"summary": "plain", "year": 1492}, "plain")); err != nil {
+		t.Errorf("plain record refused: %v", err)
+	}
 }
