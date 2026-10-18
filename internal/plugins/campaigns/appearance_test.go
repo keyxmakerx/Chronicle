@@ -170,7 +170,9 @@ func TestApplyAppearance_EveryListedValueAccepted(t *testing.T) {
 					got = fc.get(s.Appearance)
 				}
 				want := v
-				if v == lists[fc.name][0] {
+				// The first value is the default and stored as unset, except
+				// the page look, which stores Standard by name.
+				if v == lists[fc.name][0] && fc.name != "page look" {
 					want = ""
 				}
 				if got != want {
@@ -759,5 +761,30 @@ func TestApplyAppearance_EditorPayload(t *testing.T) {
 	}
 	if got := strings.Join(s.TopbarContent.Widgets, ","); got != "search,note" || s.TopbarContent.Mode != "widgets" {
 		t.Errorf("TopbarContent = %+v", s.TopbarContent)
+	}
+}
+
+func TestPageLookChoice(t *testing.T) {
+	tests := []struct {
+		name    string
+		v       string
+		prev    *Appearance
+		want    string
+		wantErr bool
+	}{
+		{"not sent, nothing stored", "", nil, "", false},
+		{"not sent keeps Material", "", &Appearance{PageLook: "annals"}, "annals", false},
+		{"not sent keeps Standard", "", &Appearance{PageLook: "standard"}, "standard", false},
+		{"Standard is stored by name", "standard", nil, "standard", false},
+		{"Material", "annals", &Appearance{PageLook: "standard"}, "annals", false},
+		{"unknown refused", "glossy", nil, "", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := pageLookChoice(tt.v, tt.prev)
+			if (err != nil) != tt.wantErr || got != tt.want {
+				t.Errorf("pageLookChoice(%q) = %q, %v; want %q", tt.v, got, err, tt.want)
+			}
+		})
 	}
 }

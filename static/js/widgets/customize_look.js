@@ -436,7 +436,7 @@
       if (!d.sidebar.banner) d.sidebar.banner = 'none';
       if (!d.hover) d.hover = { look:'paper' };
       if (!d.sheet) d.sheet = { style:'modern' };
-      if (!d.page) d.page = { look:'standard' };
+      if (!d.page) d.page = { look:'' };
       d.header.links = (d.header.links || []).map(function(l){ return { label:l.label || '', url:l.url || '', icon:l.icon || '' }; });
       while (d.header.links.length < LINK_ROWS) d.header.links.push({ label:'', url:'', icon:'' });
       return d;
@@ -978,7 +978,8 @@
         var v = getP(d, inp.dataset.k), val = inp.value, on;
         if (val === '__follow') on = v == null;
         else if (val === '__custom') on = v != null && v !== 'page' && !inList(inp.dataset.g, v);
-        else on = v === val;
+        // An unset page look draws as Standard, so it shows as Standard.
+        else on = v === val || (!v && inp.dataset.k === 'page.look' && val === 'standard');
         if (inp.checked !== on) inp.checked = on;
       });
       $('#m-reduce').checked = !!d.motion.reduceAll;

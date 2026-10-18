@@ -229,7 +229,10 @@ func buildCustomizeState(ctx context.Context, cc *CampaignContext) customizeStat
 	d.Motion.ReduceAll = a.ReduceMotion
 	d.Hover.Look = orDefault(a.HoverCard, AppearanceHoverCards)
 	d.Sheet.Style = orDefault(a.SheetStyle, AppearanceSheetStyles)
-	d.Page.Look = orDefault(a.PageLook, AppearancePageLooks)
+	// Unset means the owner never chose a page look, and stays unset until
+	// they do (pageLookChoice); the editor shows it as Standard, which is how
+	// such a campaign draws.
+	d.Page.Look = a.PageLook
 	return st
 }
 

@@ -32,6 +32,6 @@ test('the page look has its own section and is part of Save, Discard and Reset',
   assert.match(src, /\{ id:'page', name:'Pages'/, 'SECTIONS must list Pages');
   assert.match(src, /page:\['page\.look'\]/, 'SEC_KEYS must list page.look');
   assert.match(src, /sheet:clone\(d\.sheet\), page:clone\(d\.page\)/, 'toInput must send page');
-  assert.match(src, /if \(!d\.page\) d\.page = \{ look:'standard' \}/, 'fromServer must default to standard');
+  assert.match(src, /if \(!d\.page\) d\.page = \{ look:'' \}/, 'fromServer must keep an unset page look unset');
   assert.match(src, /opts\('pg-look', 'page\.look'/, 'a control must bind page.look');
 });
