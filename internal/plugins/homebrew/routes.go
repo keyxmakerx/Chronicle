@@ -17,6 +17,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 		campaigns.RequireCampaignAccess(campaignSvc),
 		campaigns.RequireRole(campaigns.RolePlayer),
 	)
+	cg.GET("", h.Page)
 	cg.GET("/catalog", h.Catalog)
 	cg.GET("/recipes", h.List)
 	cg.POST("/recipes", h.Create)

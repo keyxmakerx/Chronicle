@@ -2,6 +2,7 @@ package records
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -81,6 +82,9 @@ func bodyHTML(body string, links *importer.PageLinks) (*string, error) {
 		opts = append(opts, importer.WithPageLinks(links))
 	}
 	h, err := importer.MarkdownToHTML(body, opts...)
+	if errors.Is(err, importer.ErrSecretNotInText) {
+		return nil, apperror.NewBadRequest(importer.SecretNotInTextReason)
+	}
 	if err != nil {
 		return nil, err
 	}

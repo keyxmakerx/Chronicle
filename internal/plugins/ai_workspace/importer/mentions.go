@@ -104,7 +104,22 @@ func (p *PageLinks) Missed() map[string]string { return p.missed }
 // RenderOption adjusts MarkdownToHTML.
 type RenderOption func(*renderOpts)
 
-type renderOpts struct{ links *PageLinks }
+type renderOpts struct {
+	links *PageLinks
+	// markers converts GM-only markers without a permission check; only for
+	// measuring a body, never for text that is stored.
+	markers bool
+	// passages turns markers into GM-only spans for a viewer who may write
+	// them; set only for page bodies, whose readers get passages stripped.
+	passages bool
+}
+
+// WithGMOnlyPassages lets MarkdownToHTML accept {gm{…}gm}. Only page bodies
+// (and era versions of pages) may pass it: the text must be one that is
+// stripped of GM-only spans for players.
+func WithGMOnlyPassages() RenderOption {
+	return func(o *renderOpts) { o.passages = true }
+}
 
 // WithPageLinks makes MarkdownToHTML turn @[Name] into page links. Without
 // it the text stays as written.
@@ -189,7 +204,9 @@ func linkText(text string, p *PageLinks) string {
 // code, without repeats, in a stable order.
 func LinkNames(markdown string) []string {
 	p := NewPageLinks(context.Background(), noPages{}, "-", Viewer{})
-	if _, err := MarkdownToHTML(markdown, WithPageLinks(p)); err != nil {
+	// Markers are converted without a permission check: this only collects
+	// names, and refusing a passage here would hide a broken link.
+	if _, err := MarkdownToHTML(markdown, WithPageLinks(p), func(o *renderOpts) { o.markers = true }); err != nil {
 		return nil
 	}
 	names := make([]string, 0, len(p.missed))

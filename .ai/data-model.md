@@ -388,7 +388,7 @@ Foundry module repo for the wire contract.
 
 | Table | Purpose |
 |-------|---------|
-| `homebrew_recipes` | Homebrew Workshop recipes: `name` (unique per campaign), `doc` (JSON: parts and When/Then rules, validated by the service and by each part's owning plugin), `version` for edit conflicts, `created_by`; FK to `campaigns` cascades. At most 200 per campaign |
+| `homebrew_recipes` | Homebrew Workshop recipes: `name` (unique per campaign), `doc` (JSON: parts, When/Then rules and the canvas `layout`, validated by the service and by each part's owning plugin), `version` for edit conflicts, `created_by`; FK to `campaigns` cascades. At most 200 per campaign |
 
 ### encounters (`internal/plugins/encounters/migrations/`)
 

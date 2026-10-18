@@ -161,6 +161,10 @@
           "type": "boolean",
           "description": "Whether Chronicle can write this field back to Foundry. Defaults to true when foundry_path is set."
         },
+        "format": {
+          "type": "string",
+          "description": "How the value is written when it is not plain text or a number, such as the shape of one entry in a JSON list. AI Import shows it beside the field."
+        },
         "gm_only": {
           "type": "boolean",
           "description": "Only the GM sees this field."

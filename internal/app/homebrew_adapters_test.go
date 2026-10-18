@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -89,6 +90,19 @@ func TestRegisterTrackerParts(t *testing.T) {
 		if strings.Join(a.PartKinds, ",") != want {
 			t.Errorf("action %s works on %v, want %s", a.Name, a.PartKinds, want)
 		}
+	}
+
+	// The Workshop draws its inspector from these fields; each must name the
+	// arg key the matching Check reads.
+	fields := map[string]string{}
+	for _, e := range append(append([]homebrew.CatalogEntry{}, cat.Events...), cat.Actions...) {
+		for _, f := range e.Fields {
+			fields[e.Name] += f.Name + ":" + f.Type
+		}
+	}
+	wantFields := map[string]string{"tracker.reached": "value:whole", "step": "by:whole", "set": "to:whole"}
+	if fmt.Sprint(fields) != fmt.Sprint(wantFields) {
+		t.Errorf("fields = %v, want %v", fields, wantFields)
 	}
 
 	t.Run("a second call fails as a duplicate", func(t *testing.T) {
