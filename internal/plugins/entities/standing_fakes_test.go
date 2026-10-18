@@ -73,7 +73,7 @@ func (f *fakeStandingRepo) ReasonsFor(_ context.Context, ids []string, includeDM
 		if !want[r.StandingID] || (r.DMOnly && !includeDM && !f.leaky) {
 			continue
 		}
-		if !(r.DMOnly && !includeDM) {
+		if !r.DMOnly || includeDM {
 			counts[r.StandingID]++
 		}
 		if len(out[r.StandingID]) < per {
