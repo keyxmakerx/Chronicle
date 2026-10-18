@@ -684,7 +684,7 @@
         '<button class="cpe-icon-btn" type="button" data-act="redo" title="Redo (Ctrl+Shift+Z)" aria-label="Redo"' + (hist.redo ? '' : ' disabled') + '>' + ic('fa-rotate-right') + '</button><span class="cpe-vr"></span>' +
         seg('Screen size', 'dev', UI.device, [['desktop', 'fa-desktop', 'Computer', 'Computer'], ['tablet', 'fa-tablet-screen-button', 'Tablet', 'Tablet'], ['phone', 'fa-mobile-screen', 'Phone', 'Phone']]) +
         seg('See it as', 'as', UI.viewAs, [['dm', 'fa-user-shield', 'You'], ['player', 'fa-user', 'A player']]) +
-        seg('Page look', 'look', UI.look, [['standard', 'fa-file-lines', 'Standard', 'Preview the Standard look. Pages use the look chosen in Look.'], ['annals', 'fa-scroll', 'Annals', 'Preview the Annals look. Pages use the look chosen in Look.']]) +
+        seg('Page look', 'look', UI.look, [['standard', 'fa-file-lines', 'Standard', 'Preview the Standard look. Pages use the look chosen in Look › Pages.'], ['annals', 'fa-scroll', 'Material', 'Preview the Material look. Pages use the look chosen in Look › Pages.']]) +
         '<span class="cpe-read"><button type="button" class="toggle" role="switch" data-act="read" aria-checked="' + UI.reading + '" aria-label="See the page as readers do"><span class="toggle-knob"></span></button><span class="cpe-hide-md">See the page as readers do</span></span>' +
         '<span class="cpe-sp"></span>' + pages +
         (UI.reading ? '</div>' : '<button class="btn-secondary btn-sm" type="button" data-act="start" title="Start from a layout in the Library" aria-label="Start from…">' + ic('fa-swatchbook') + '<span class="cpe-hide-md">Start from…</span></button>' +

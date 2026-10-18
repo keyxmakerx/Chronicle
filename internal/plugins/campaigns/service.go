@@ -361,23 +361,22 @@ func (s *campaignService) SetSiteLookSource(src SiteLookSource) {
 // so it renders in the site look at once and Customize opens on it. Classic is the Appearance
 // default and is stored as empty, like every other default. A failed read
 // only means the campaign starts as Classic: creating a campaign must not
-// depend on the site look.
+// depend on the site look. Every new campaign draws its pages in the Material
+// page look (Annals); Standard stays a choice for campaigns that use it.
 func (s *campaignService) newCampaignSettings(ctx context.Context) string {
-	if s.siteLook == nil {
-		return "{}"
-	}
-	look, err := s.siteLook.GetSiteLook(ctx)
-	if err != nil {
-		slog.Warn("reading the site look for a new campaign", slog.Any("error", err))
-		return "{}"
-	}
-	if look.Look == "" || look.Look == AppearanceLooks[0] {
-		return "{}"
-	}
 	var settings CampaignSettings
-	if !seedLook(&settings, look.Look) {
-		return "{}"
+	if s.siteLook != nil {
+		look, err := s.siteLook.GetSiteLook(ctx)
+		if err != nil {
+			slog.Warn("reading the site look for a new campaign", slog.Any("error", err))
+		} else if look.Look != "" && look.Look != AppearanceLooks[0] && !seedLook(&settings, look.Look) {
+			settings = CampaignSettings{}
+		}
 	}
+	if settings.Appearance == nil {
+		settings.Appearance = &Appearance{}
+	}
+	settings.Appearance.PageLook = "annals"
 	b, err := json.Marshal(settings)
 	if err != nil {
 		return "{}"
