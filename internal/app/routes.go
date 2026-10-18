@@ -5840,15 +5840,23 @@ func (a *App) RegisterRoutes() {
 		slog.Warn("rumours plugin degraded — the Rumours block is not available")
 	}
 
+	// The Homebrew Workshop's registry. Plugins below that plug kinds of part,
+	// events or actions into the Workshop register here, so it is made before
+	// any of them.
+	homebrewReg := homebrew.NewRegistry()
+
 	// Homebrew rules and local words: a field worked out from another, and what
 	// a place or era calls a word. Pages read them; without the tables, rule
 	// fields show only values typed by hand and nothing is renamed.
 	a.registerPlugin(PluginRegistration{Slug: fieldrules.PluginSlug})
 	var fieldRulesSvc fieldrules.Service
 	if a.PluginHealth.IsHealthy(fieldrules.PluginSlug) {
-		fieldRulesSvc = fieldrules.NewService(fieldrules.NewRepository(a.DB),
-			fieldRulesWorld{pages: entityService, calendars: calendarService, eras: eraVersionService})
+		frWorld := fieldRulesWorld{pages: entityService, calendars: calendarService, eras: eraVersionService}
+		fieldRulesSvc = fieldrules.NewService(fieldrules.NewRepository(a.DB), frWorld)
 		fieldrules.RegisterRoutes(e, fieldrules.NewHandler(fieldRulesSvc), campaignService, authService)
+		if err := registerFieldRuleParts(homebrewReg, frWorld.PlaceName); err != nil {
+			slog.Error("field rules could not join the Homebrew Workshop", slog.Any("error", err))
+		}
 		words := fieldWordsAdapter{svc: fieldRulesSvc}
 		entityHandler.SetFieldWords(words)
 		if fw, ok := entityService.(interface{ SetFieldWords(entities.FieldWords) }); ok {
@@ -5857,11 +5865,6 @@ func (a *App) RegisterRoutes() {
 	} else {
 		slog.Warn("fieldrules plugin degraded — homebrew rules and local words are not available")
 	}
-
-	// The Homebrew Workshop's registry. Plugins below that plug kinds of part,
-	// events or actions into the Workshop register here, so it is made before
-	// any of them.
-	homebrewReg := homebrew.NewRegistry()
 
 	// Trackers: counters, named steps and clocks on pages, each with a dated
 	// log. The block and its routes exist only while its tables migrated.
