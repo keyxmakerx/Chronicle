@@ -4686,21 +4686,45 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
 
 /* ============================================================ */
 /* DM Screen (internal/plugins/dmscreen, static/js/widgets/dm_screen.js).
-   A full-window overlay; the panel is three parchment leaves joined by
-   hinges, like a paper GM screen. The opening is driven from JS with the
-   Web Animations API, so the reduced-motion guard above doesn't cover it;
-   the widget checks prefers-reduced-motion itself. */
+   A full-window overlay; the panel is three leaves joined by hinges, like a
+   folding GM screen. It is a tool, so its colours are the theme tokens; the
+   --dms-* names below are only this block's aliases for them. Under the
+   Material page look with a style kit on, the screen wears the kit's palette,
+   faces, accent and corners (style_kits.css), so the owner's Customize
+   choices reach it too. The opening is driven from JS with the Web Animations
+   API, so the reduced-motion guard above doesn't cover it; the widget checks
+   prefers-reduced-motion itself. */
 @layer components {
   .dms-overlay {
     position: fixed; inset: 0; z-index: 60;
-    --dms-leaf: #fbf7ee; --dms-leaf-edge: #c9b998; --dms-ink: #2b2418; --dms-ink-muted: #6e624c;
-    --dms-hinge: #8a7650; --dms-ok: #16a34a; --dms-ok-soft: rgba(22,163,74,.15); --dms-warn: #b45309;
-    --dms-die: var(--color-accent, #6366f1);
+    --dms-leaf: var(--surface-raised); --dms-leaf-edge: var(--surface-border);
+    --dms-ink: var(--surface-text); --dms-ink-muted: var(--surface-text-muted);
+    --dms-acc: var(--color-accent, #6366f1);
+    --dms-hinge: color-mix(in srgb, var(--dms-ink) 30%, var(--dms-leaf));
+    --dms-ok: rgb(var(--color-ok-rgb)); --dms-ok-soft: rgb(var(--color-ok-rgb) / .15);
+    --dms-warn: rgb(var(--color-warn-rgb));
+    --dms-die: var(--dms-acc);
+    --dms-r: .75rem; --dms-shadow: var(--elev-dragged);
   }
-  .dark .dms-overlay {
-    --dms-leaf: #2a251d; --dms-leaf-edge: #5c4f37; --dms-ink: #efe6d2; --dms-ink-muted: #b8a986;
-    --dms-hinge: #a08a5c; --dms-ok: #4ade80; --dms-ok-soft: rgba(74,222,128,.16); --dms-warn: #f59e0b;
+  /* A kit's palette is set on <html> but only wears on Material pages; the
+     overlay sits on <body>, outside #main-content, so it takes it here. */
+  [data-cz-page="annals"][data-cz-kit] .dms-overlay {
+    --surface-raised: var(--k-paper); --surface-alt: color-mix(in srgb, var(--k-ink) 6%, var(--k-paper));
+    --surface-text: var(--k-ink); --surface-text-muted: var(--k-mut); --surface-border: var(--k-hair);
+    --color-text-secondary: var(--k-mut); --color-accent: var(--kit-acc);
+    font-family: var(--kit-bf, inherit);
   }
+  [data-cz-page="annals"][data-cz-kit] .dms-overlay :is(.dms-head h2, .dms-leaf h3) { font-family: var(--kit-hf, inherit); letter-spacing: var(--cz-hls, .02em); }
+  [data-cz-page="annals"][data-cz-kit] .dms-overlay .dms-lbl { font-family: var(--kit-lf, inherit); }
+  /* Each kit's boxes, from its row under ui-standard.md "Style kits". */
+  [data-cz-page="annals"][data-cz-kit="sharp"] .dms-overlay { --dms-r: 0; --dms-shadow: none; --dms-leaf-edge: var(--k-ink); --dms-hinge: var(--k-ink); }
+  [data-cz-page="annals"][data-cz-kit="ornate"] .dms-overlay { --dms-leaf-edge: var(--k-gilt); --dms-hinge: var(--k-gilt); --dms-r: .2rem; }
+  [data-cz-page="annals"][data-cz-kit="ornate"] .dms-overlay .dms-leaf { outline: 1px solid var(--k-gilt); outline-offset: -5px; }
+  [data-cz-page="annals"][data-cz-kit="flowing"] .dms-overlay { --dms-r: 1.6rem; --dms-leaf-edge: transparent; --dms-hinge: var(--k-hair); --dms-shadow: 0 14px 34px var(--k-shadow); }
+  [data-cz-page="annals"][data-cz-kit="flowing"] .dms-overlay .dms-leaf { background: linear-gradient(180deg, var(--k-wash), var(--k-paper) 9rem); }
+  [data-cz-page="annals"][data-cz-kit="lumen"] .dms-overlay { --dms-hinge: var(--k-hair); --dms-shadow: 0 0 0 1px var(--k-hair), 0 0 22px var(--k-glow), var(--elev-dragged); }
+  [data-cz-page="annals"][data-cz-kit="sketchbook"] .dms-overlay { --dms-leaf-edge: var(--k-line); --dms-hinge: var(--k-line); --dms-r: 1.1rem .4rem; --dms-shadow: 2px 3px 0 var(--k-hair); }
+  [data-cz-page="annals"][data-cz-kit="sketchbook"] .dms-overlay .dms-leaf { border-width: 1.5px; }
   .dms-dim { position: absolute; inset: 0; background: rgba(10,10,20,.5); }
   .dms-stage {
     position: absolute; inset: 0; display: flex; justify-content: center; align-items: flex-start;
@@ -4710,7 +4734,7 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
   /* The bar is a tool's title bar on the theme tokens, solid so the page
      behind never shows through it, and the handle the window drags by. */
   .dms-titlebar {
-    margin: 0 0 .4rem; padding: .3rem .4rem .4rem .75rem; border-radius: .75rem;
+    margin: 0 0 .4rem; padding: .3rem .4rem .4rem .75rem; border-radius: var(--dms-r);
     background: var(--surface-raised); color: var(--surface-text);
     border: 1px solid var(--surface-border); box-shadow: var(--elev-hover);
   }
@@ -4723,7 +4747,7 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
     transition: background-color var(--dur-micro), color var(--dur-micro), border-color var(--dur-micro);
   }
   .dms-close:hover { color: var(--surface-text); background: var(--surface-alt); border-color: var(--surface-border); }
-  .dms-close:focus-visible, .dms button:focus-visible, .dms a:focus-visible, .dms summary:focus-visible { outline: 2px solid var(--color-accent, #6366f1); outline-offset: 2px; }
+  .dms-close:focus-visible, .dms button:focus-visible, .dms a:focus-visible, .dms summary:focus-visible { outline: 2px solid var(--dms-acc); outline-offset: 2px; }
   .dms-strip { display: flex; flex-wrap: wrap; gap: .2rem 1rem; align-items: center; color: var(--color-text-secondary); font-size: .85rem; }
   .dms-strip b { color: var(--surface-text); font-weight: 600; }
   /* The window state: nothing in the overlay catches clicks except the screen
@@ -4747,11 +4771,11 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
   .dms-leaf {
     flex: 1 1 0; min-width: 0; display: grid; gap: .65rem; align-content: start; padding: .9rem;
     background: var(--dms-leaf); border: 1px solid var(--dms-leaf-edge); min-height: 24rem;
-    box-shadow: 0 12px 30px rgba(0,0,0,.28); backface-visibility: hidden;
+    box-shadow: var(--dms-shadow); backface-visibility: hidden;
   }
-  .dms-leaf-l { border-radius: .6rem 0 0 .6rem; transform-origin: right center; }
+  .dms-leaf-l { border-radius: var(--dms-r) 0 0 var(--dms-r); transform-origin: right center; }
   .dms-leaf-m { transform-origin: center bottom; border-left: 3px double var(--dms-hinge); border-right: 3px double var(--dms-hinge); }
-  .dms-leaf-r { border-radius: 0 .6rem .6rem 0; transform-origin: left center; }
+  .dms-leaf-r { border-radius: 0 var(--dms-r) var(--dms-r) 0; transform-origin: left center; }
   .dms-leaf h3 { font-weight: 700; letter-spacing: .04em; border-bottom: 1px solid var(--dms-leaf-edge); padding-bottom: .25rem; }
   .dms-blk { display: grid; gap: .3rem; }
   .dms-lbl { font-size: .7rem; text-transform: uppercase; letter-spacing: .08em; font-weight: 700; color: var(--dms-ink-muted); }
@@ -4762,7 +4786,7 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
   .dms-seg button { padding: .4rem; font-size: .88rem; color: var(--dms-ink); }
   .dms-seg button[aria-pressed="true"] { background: var(--dms-ok-soft); font-weight: 700; }
   .dms-seg button:disabled { cursor: default; }
-  .dms-confirm { display: grid; gap: .4rem; padding: .5rem .6rem; border: 1px solid var(--dms-warn); border-radius: .5rem; background: rgba(180,83,9,.07); font-size: .88rem; }
+  .dms-confirm { display: grid; gap: .4rem; padding: .5rem .6rem; border: 1px solid var(--dms-warn); border-radius: .5rem; background: color-mix(in srgb, var(--dms-warn) 8%, transparent); font-size: .88rem; }
   .dms-confirm-btns { display: flex; flex-wrap: wrap; gap: .4rem; }
   .dms-confirm-btns button { border: 1px solid var(--dms-leaf-edge); border-radius: .35rem; padding: .15rem .6rem; color: var(--dms-ink); }
   .dms-confirm-btns .dms-confirm-yes { background: var(--dms-warn); border-color: var(--dms-warn); color: #fff; font-weight: 700; }
@@ -4777,7 +4801,7 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
   .dms-hero.dms-open { background: rgba(127,127,127,.09); }
   .dms-hrow { width: 100%; display: grid; grid-template-columns: minmax(4.5em, auto) 1fr auto 1em; align-items: center; gap: .5rem; padding: .3rem .4rem; border-radius: .4rem; text-align: left; color: var(--dms-ink); }
   .dms-hrow:hover { background: rgba(127,127,127,.08); }
-  .dms-hrow:focus-visible { outline: 2px solid var(--dms-hinge); }
+  .dms-hrow:focus-visible { outline: 2px solid var(--dms-acc); }
   .dms-hero-name { font-weight: 700; font-size: .9rem; }
   .dms-who { display: flex; justify-content: space-between; gap: .5rem; font-size: .78rem; color: var(--dms-ink-muted); }
   .dms-cdot { font-style: normal; font-size: .65rem; min-width: 1.3em; margin-left: .25rem; padding: 0 .2rem; text-align: center; border-radius: 999px; border: 1px solid var(--dms-warn); color: var(--dms-warn); }
@@ -4800,7 +4824,7 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
   .dms-num { font-variant-numeric: tabular-nums; color: var(--dms-ink); }
   .dms-tabs { display: flex; gap: .25rem; border-bottom: 1px solid var(--dms-leaf-edge); }
   .dms-tabs button { padding: .25rem .55rem; font-size: .85rem; color: var(--dms-ink-muted); border-bottom: 2px solid transparent; }
-  .dms-tabs button[aria-selected="true"] { color: var(--dms-ink); border-bottom-color: var(--dms-hinge); font-weight: 700; }
+  .dms-tabs button[aria-selected="true"] { color: var(--dms-ink); border-bottom-color: var(--dms-acc); font-weight: 700; }
   .dms-search { width: 100%; font-size: .85rem; border: 1px solid var(--dms-leaf-edge); border-radius: .4rem; background: transparent; color: var(--dms-ink); padding: .3rem .5rem; }
   .dms-cond { border-top: 1px dashed var(--dms-leaf-edge); padding: .3rem 0; font-size: .88rem; }
   .dms-cond summary { cursor: pointer; font-weight: 600; }
@@ -4831,8 +4855,7 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
   }
   .dms-flash-page { position: fixed; z-index: 61; width: 120px; height: 120px; }
   /* Adventures tab: pinned pages and loose notes as cards on a board (the same
-     shape as the quest notice board). Colours come from the screen's own
-     leaf tokens, which already have a dark set. */
+     shape as the quest notice board), on the screen's tokens above. */
   .dms-loose { display: grid; grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr)); gap: .6rem; padding-top: .35rem; }
   .dms-note {
     position: relative; display: flex; flex-direction: column; gap: .15rem; min-width: 0;
@@ -4848,7 +4871,7 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
     display: flex; flex-direction: column; gap: .15rem; width: 100%; text-align: left;
     padding: .8rem .65rem .65rem; border-radius: .6rem; color: var(--dms-ink); cursor: pointer;
   }
-  .dms-note-open:focus-visible, .dms-note-x:focus-visible, .dms-pick-item:focus-visible { outline: 2px solid var(--dms-hinge); outline-offset: 2px; }
+  .dms-note-open:focus-visible, .dms-note-x:focus-visible, .dms-pick-item:focus-visible { outline: 2px solid var(--dms-acc); outline-offset: 2px; }
   .dms-note-n { font-size: .62rem; text-transform: uppercase; letter-spacing: .08em; font-weight: 700; color: var(--dms-warn); }
   .dms-note-t { font-size: .98rem; font-weight: 700; line-height: 1.15; overflow-wrap: anywhere; }
   .dms-note-s { color: var(--dms-ink-muted); overflow-wrap: anywhere; white-space: pre-line; }
@@ -4858,7 +4881,7 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
   }
   .dms-note:hover .dms-note-x, .dms-note:focus-within .dms-note-x, .dms-note-x:focus-visible { opacity: 1; }
   .dms-note-x:hover { background: rgba(127,127,127,.18); color: var(--dms-ink); }
-  .dms-jot { padding: .8rem .65rem .65rem; background: rgba(180,83,9,.09); border-color: transparent; }
+  .dms-jot { padding: .8rem .65rem .65rem; background: color-mix(in srgb, var(--dms-warn) 10%, transparent); border-color: transparent; }
   .dms-jot::before { background: var(--dms-warn); }
   .dms-jot:hover { transform: none; box-shadow: none; }
   .dms-adv-add { display: grid; gap: .45rem; margin-top: .35rem; }
