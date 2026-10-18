@@ -45,7 +45,7 @@ var markerIconCatalog = []MarkerIcon{
 	{"fa-campground", "Camp", "Settlements"},
 	// Fortifications
 	{"fa-chess-rook", "Castle", "Fortifications"},
-	{"fa-chess-rook", "Tower", "Fortifications"},
+	{"fa-monument", "Tower", "Fortifications"},
 	{"fa-shield-halved", "Fortress", "Fortifications"},
 	{"fa-tower-observation", "Watchtower", "Fortifications"},
 	// Dungeons & Ruins
