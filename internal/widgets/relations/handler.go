@@ -219,6 +219,27 @@ func (h *Handler) CreateRelation(c echo.Context) error {
 	return c.JSON(http.StatusCreated, rel)
 }
 
+// requireRelationAccess answers 404 unless the caller may see the relation: it
+// is in the URL campaign, both ends are viewable, and a dm_only relation is
+// only reachable by the same viewers ListRelations shows it to. Delete and
+// metadata edits take a bare relation ID, so without this a caller could
+// change a relation whose entities or visibility they cannot see.
+func (h *Handler) requireRelationAccess(c echo.Context, cc *campaigns.CampaignContext, rel *Relation) error {
+	if rel.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("relation not found")
+	}
+	if rel.DmOnly && cc.MemberRole != campaigns.RoleOwner && !cc.IsSiteAdmin && !cc.IsDmGranted {
+		return apperror.NewNotFound("relation not found")
+	}
+	userID := auth.GetUserID(c)
+	for _, id := range []string{rel.SourceEntityID, rel.TargetEntityID} {
+		if err := h.requireViewableEntity(c, cc, id, userID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // DeleteRelation removes a relation and its reverse direction
 // (DELETE /campaigns/:id/entities/:eid/relations/:rid).
 func (h *Handler) DeleteRelation(c echo.Context) error {
@@ -232,13 +253,12 @@ func (h *Handler) DeleteRelation(c echo.Context) error {
 		return apperror.NewBadRequest("invalid relation ID")
 	}
 
-	// Verify the relation belongs to this campaign before deleting.
 	existing, err := h.service.GetByID(c.Request().Context(), relationID)
 	if err != nil {
 		return err
 	}
-	if existing.CampaignID != cc.Campaign.ID {
-		return apperror.NewNotFound("relation not found")
+	if err := h.requireRelationAccess(c, cc, existing); err != nil {
+		return err
 	}
 
 	if err := h.service.Delete(c.Request().Context(), relationID); err != nil {
@@ -265,8 +285,8 @@ func (h *Handler) UpdateRelationMetadata(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if existing.CampaignID != cc.Campaign.ID {
-		return apperror.NewNotFound("relation not found")
+	if err := h.requireRelationAccess(c, cc, existing); err != nil {
+		return err
 	}
 
 	var req UpdateRelationMetadataRequest

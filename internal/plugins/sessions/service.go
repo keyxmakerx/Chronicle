@@ -800,36 +800,61 @@ func (s *sessionService) generateNextOccurrence(ctx context.Context, completed *
 	return next
 }
 
-// computeNextOccurrence calculates the next scheduled date based on recurrence.
+// computeNextOccurrence calculates the date one step after the session's own
+// scheduled date. Callers that walk a series must use occurrenceAt instead:
+// chaining this call re-anchors on each result, which cannot recover a day of
+// month that a short month clamped.
 func computeNextOccurrence(session *Session) string {
-	if session.ScheduledDate == nil || session.RecurrenceType == nil {
+	return occurrenceAt(session, 1)
+}
+
+// occurrenceAt returns the nth occurrence (0 is the scheduled date itself) of
+// a recurring session, counted from its scheduled date. Monthly steps are
+// computed from the start date rather than from the previous result, so a
+// series on the 31st lands on each month's last day and returns to the 31st
+// instead of drifting (Jan 31, Feb 28, Mar 31, not Mar 3).
+func occurrenceAt(session *Session, n int) string {
+	if session.ScheduledDate == nil || session.RecurrenceType == nil || n < 0 {
 		return ""
 	}
 
-	anchor, err := time.Parse("2006-01-02", *session.ScheduledDate)
+	start, err := time.Parse("2006-01-02", *session.ScheduledDate)
 	if err != nil {
 		return ""
 	}
 
-	var next time.Time
+	var at time.Time
 	switch *session.RecurrenceType {
 	case RecurrenceWeekly:
-		next = anchor.AddDate(0, 0, 7)
+		at = start.AddDate(0, 0, 7*n)
 	case RecurrenceBiWeekly:
-		next = anchor.AddDate(0, 0, 14)
+		at = start.AddDate(0, 0, 14*n)
 	case RecurrenceMonthly:
-		next = anchor.AddDate(0, 1, 0)
+		at = addMonthsClamped(start, n)
 	case RecurrenceCustom:
 		interval := session.RecurrenceInterval
 		if interval < 1 {
 			interval = 1
 		}
-		next = anchor.AddDate(0, 0, interval*7)
+		at = start.AddDate(0, 0, interval*7*n)
 	default:
 		return ""
 	}
 
-	return next.Format("2006-01-02")
+	return at.Format("2006-01-02")
+}
+
+// addMonthsClamped adds n calendar months to t, clamping the day to the last
+// day of the target month. time.AddDate normalises overflow forward instead
+// (Jan 31 + 1 month is Mar 3), which would shift the whole series.
+func addMonthsClamped(t time.Time, n int) time.Time {
+	year, month, day := t.Date()
+	firstOfTarget := time.Date(year, month+time.Month(n), 1, 0, 0, 0, 0, time.UTC)
+	lastDay := firstOfTarget.AddDate(0, 1, -1).Day()
+	if day > lastDay {
+		day = lastDay
+	}
+	return time.Date(firstOfTarget.Year(), firstOfTarget.Month(), day, 0, 0, 0, 0, time.UTC)
 }
 
 // generateToken creates a secure random token for RSVP email links.

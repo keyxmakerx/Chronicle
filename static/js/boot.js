@@ -398,10 +398,14 @@
 
   // Re-mount widgets after HTMX content swaps.
   // htmx:afterSettle fires after new content is settled in the DOM.
+  // An outerHTML swap settles on the old, already-detached target, so its new
+  // content is found from the live document instead; mounting there is safe
+  // because already-mounted elements are skipped.
   document.addEventListener('htmx:afterSettle', function (event) {
     if (event.detail && event.detail.target) {
-      mountWidgets(event.detail.target);
-      scheduleUnmatchedWidgetScan(event.detail.target);
+      var root = event.detail.target.isConnected === false ? document.body : event.detail.target;
+      mountWidgets(root);
+      scheduleUnmatchedWidgetScan(root);
     }
   });
 
@@ -414,8 +418,10 @@
 
   // Destroy widgets before HTMX removes content.
   // htmx:beforeSwap fires before old content is removed.
+  // htmx fires beforeSwap for error and empty responses too, then leaves the
+  // old content in place; only a swap that will happen may destroy it.
   document.addEventListener('htmx:beforeSwap', function (event) {
-    if (event.detail && event.detail.target) {
+    if (event.detail && event.detail.target && event.detail.shouldSwap !== false) {
       var elements = event.detail.target.querySelectorAll('[data-widget]');
       for (var i = 0; i < elements.length; i++) {
         destroyElement(elements[i]);

@@ -1,6 +1,7 @@
 package restore
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -68,7 +69,10 @@ func (h *Handler) Run(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "type RESTORE in the confirmation field")
 	}
 
-	ctx := c.Request().Context()
+	// Detached from the request: a closed tab or proxy timeout must not
+	// SIGKILL restore.sh halfway through replacing the database. The
+	// service's own timeout still bounds the run.
+	ctx := context.WithoutCancel(c.Request().Context())
 
 	// A restore replaces the database, and the change log lives in it, so a
 	// row written only afterwards survives while one written only before is
@@ -79,7 +83,7 @@ func (h *Handler) Run(c echo.Context) error {
 	if !h.svc.IsRunning() {
 		h.recordActivity(c, "restore.started", "backup", "", manifest)
 	}
-	_, err := h.svc.RunRestore(ctx, manifest)
+	result, err := h.svc.RunRestore(ctx, manifest)
 	if err != nil {
 		if errors.Is(err, ErrAlreadyRunning) {
 			return echo.NewHTTPError(http.StatusConflict, "a restore is already running; wait for it to finish")
@@ -87,6 +91,10 @@ func (h *Handler) Run(c echo.Context) error {
 		slog.Error("restore run failed", slog.Any("error", err))
 		return echo.NewHTTPError(http.StatusInternalServerError, "The restore could not be completed. Open the technical details on this page, or check the server log.")
 	}
-	h.recordActivity(c, "restore.run", "backup", "", manifest)
+	// A script failure comes back as a nil error with a failed result; the
+	// "started" row is the trace of that, so "run" is only for a clean finish.
+	if result != nil && result.Succeeded() {
+		h.recordActivity(c, "restore.run", "backup", "", manifest)
+	}
 	return middleware.HTMXRedirect(c, "/admin/restore")
 }

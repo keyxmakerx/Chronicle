@@ -410,8 +410,11 @@ const standaloneEventCols = `te.id, te.timeline_id, te.entity_id, te.name, te.de
        te.created_by, te.created_at, te.updated_at,
        COALESCE(ent.name, ''), COALESCE(et.icon, '')`
 
-// standaloneEventJoins is the JOIN clause for standalone event queries.
-const standaloneEventJoins = `LEFT JOIN entities ent ON ent.id = te.entity_id AND ent.deleted_at IS NULL
+// standaloneEventJoins is the JOIN clause for standalone event queries. The
+// linked page is joined only within the timeline's own campaign so a stray
+// entity_id cannot carry another campaign's page name or icon out.
+const standaloneEventJoins = `JOIN timelines tl ON tl.id = te.timeline_id
+     LEFT JOIN entities ent ON ent.id = te.entity_id AND ent.campaign_id = tl.campaign_id AND ent.deleted_at IS NULL
      LEFT JOIN entity_types et ON et.id = ent.entity_type_id`
 
 // scanStandaloneEvent reads a row into a TimelineEvent struct.
@@ -622,7 +625,9 @@ func (r *timelineRepo) listGroupMembers(ctx context.Context, groupID int) ([]Ent
 		`SELECT m.id, m.group_id, m.entity_id,
 		        COALESCE(e.name, ''), COALESCE(et.icon, '')
 		 FROM timeline_entity_group_members m
-		 LEFT JOIN entities e ON e.id = m.entity_id AND e.deleted_at IS NULL
+		 JOIN timeline_entity_groups g ON g.id = m.group_id
+		 JOIN timelines tl ON tl.id = g.timeline_id
+		 LEFT JOIN entities e ON e.id = m.entity_id AND e.campaign_id = tl.campaign_id AND e.deleted_at IS NULL
 		 LEFT JOIN entity_types et ON et.id = e.entity_type_id
 		 WHERE m.group_id = ?
 		 ORDER BY e.name`,
