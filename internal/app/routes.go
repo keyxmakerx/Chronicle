@@ -5368,6 +5368,7 @@ func (a *App) RegisterRoutes() {
 
 					SheetStyle: ap.SheetStyle,
 					PageLook:   ap.PageLook,
+					StyleKit:   ap.StyleKit,
 				}
 				ctx = layouts.SetAppearance(ctx, ad)
 			}

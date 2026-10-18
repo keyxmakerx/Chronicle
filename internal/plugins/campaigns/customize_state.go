@@ -74,6 +74,7 @@ type customizeDraft struct {
 	} `json:"sheet"`
 	Page struct {
 		Look string `json:"look"`
+		Kit  string `json:"kit"`
 	} `json:"page"`
 }
 
@@ -233,6 +234,7 @@ func buildCustomizeState(ctx context.Context, cc *CampaignContext) customizeStat
 	// they do (pageLookChoice); the editor shows it as Standard, which is how
 	// such a campaign draws.
 	d.Page.Look = a.PageLook
+	d.Page.Kit = orDefault(a.StyleKit, AppearanceStyleKits)
 	return st
 }
 
