@@ -4135,6 +4135,10 @@ func (a *App) RegisterRoutes() {
 		&nightJournalAdapter{svc: noteSvc}, notePages, sessions.NewSightingRepository(a.DB))
 	sessionsHandler.SetNightEntryService(nightEntries)
 	noteSvc.SetNightEntries(&journalNightsAdapter{svc: nightEntries, addons: addonService})
+	// The day before each night, and after it, the entries put items in the
+	// bell; a loop sends them.
+	nightEntries.SetBells(&nightBellCampaignsAdapter{campaigns: campaignService, addons: addonService}, sessionsService, sessionsService)
+	go sessions.StartNightBells(a.ShutdownCtx, nightEntries)
 	notes.RegisterRoutes(e, noteHandler, campaignService, authService)
 	// A player can allow the Foundry notebook to use their notes. Grants go
 	// only to an address that may already call Chronicle across sites.
@@ -5836,6 +5840,41 @@ func (a *journalNightsAdapter) Nights(ctx context.Context, campaignID string, no
 	out := make(map[string]notes.NightTag, len(tags))
 	for id, t := range tags {
 		out[id] = notes.NightTag{SessionID: t.SessionID, Date: t.Date, Name: t.Name, Time: t.Time, Started: t.Started}
+	}
+	return out, nil
+}
+
+// nightBellCampaignsAdapter gives the game-night bells the campaign's
+// switch and members, with a co-DM's role raised to Owner as on a request.
+type nightBellCampaignsAdapter struct {
+	campaigns campaigns.CampaignService
+	addons    addons.AddonService
+}
+
+func (a *nightBellCampaignsAdapter) GameNightsOn(ctx context.Context, campaignID string) (bool, error) {
+	return a.addons.IsEnabledForCampaign(ctx, campaignID, sessions.SessionsAddonSlug)
+}
+
+func (a *nightBellCampaignsAdapter) BellMembers(ctx context.Context, campaignID string) ([]sessions.NightBellMember, error) {
+	c, err := a.campaigns.GetByID(ctx, campaignID)
+	if err != nil || c == nil {
+		return nil, err
+	}
+	granted := map[string]bool{}
+	for _, id := range c.ParseSettings().DmGrantIDs {
+		granted[id] = true
+	}
+	list, err := a.campaigns.ListMembers(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]sessions.NightBellMember, 0, len(list))
+	for _, m := range list {
+		role := int(m.Role)
+		if granted[m.UserID] {
+			role = int(campaigns.RoleOwner)
+		}
+		out = append(out, sessions.NightBellMember{UserID: m.UserID, Role: role})
 	}
 	return out, nil
 }
