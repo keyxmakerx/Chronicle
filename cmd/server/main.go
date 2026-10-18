@@ -28,6 +28,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/maps"
 	"github.com/keyxmakerx/chronicle/internal/plugins/packages"
 	"github.com/keyxmakerx/chronicle/internal/plugins/pageblocks"
+	"github.com/keyxmakerx/chronicle/internal/plugins/pagetests"
 	"github.com/keyxmakerx/chronicle/internal/plugins/quests"
 	"github.com/keyxmakerx/chronicle/internal/plugins/rolltables"
 	"github.com/keyxmakerx/chronicle/internal/plugins/rumours"
@@ -338,6 +339,9 @@ func registeredPlugins() []database.PluginSchema {
 		// encounters: fights planned on a page; foreign keys point at core
 		// tables (entities, campaigns) only.
 		{Slug: encounters.PluginSlug, MigrationsFS: mustSub(encounters.MigrationsFS, database.PluginMigrationsSubdir)},
+		// page_tests: the Tests block's table; foreign keys point at core
+		// tables (entities, campaigns) only.
+		{Slug: pagetests.PluginSlug, MigrationsFS: mustSub(pagetests.MigrationsFS, database.PluginMigrationsSubdir)},
 		// dmscreen: the Adventures tab's pins and loose notes. Foreign keys
 		// point at core campaigns and entities only.
 		{Slug: dmscreen.PluginSlug, MigrationsFS: mustSub(dmscreen.MigrationsFS, database.PluginMigrationsSubdir)},
