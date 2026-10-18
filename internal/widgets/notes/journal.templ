@@ -113,19 +113,9 @@ templ journalContent(cc *campaigns.CampaignContext, view JournalView) {
 							</button>
 						</div>
 						<div class="ed-metarow">
-							<div class="vis-control" role="group" aria-label="Who can see this note">
-								<button type="button" class="vis-chip v-private" data-vis="private" aria-pressed="false"><i class="fa-solid fa-eye-slash" aria-hidden="true"></i>Private</button>
-								<button type="button" class="vis-chip v-party" data-vis="party" aria-pressed="false"><i class="fa-solid fa-users" aria-hidden="true"></i>Shared with party</button>
-								<button type="button" class="vis-chip v-gm" data-vis="gm" aria-pressed="false">
-									<i class="fa-solid fa-shield-halved" aria-hidden="true"></i>
-									if view.IsGM {
-										GM only
-									} else {
-										Shared with GM
-									}
-								</button>
-								<button type="button" class="vis-chip v-custom" data-vis="custom" aria-pressed="false"><i class="fa-solid fa-user-group" aria-hidden="true"></i><span>Specific people</span></button>
-							</div>
+							<button type="button" class="vis-pick v-private" data-act="vis" aria-haspopup="menu" aria-expanded="false" aria-label="Who can see this note: Private">
+								<i class="fa-solid fa-eye-slash vp-icon" aria-hidden="true"></i><span class="vp-label">Private</span><i class="fa-solid fa-chevron-down vp-caret" aria-hidden="true"></i>
+							</button>
 							<span class="ed-night" hidden></span>
 							<span class="ed-owner" hidden></span>
 							<span class="ed-lock" hidden>
