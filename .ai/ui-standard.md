@@ -511,7 +511,8 @@ Customize choices (`AppearanceData`, emitted as `data-cz-*` on the page) can
 make it richer, never break it: Calm and Off still win, and the tools keep
 their tokens.
 
-- **Page look** (`data-cz-page`, `static/css/page_look_annals.css`): Annals
+- **Page look** (`data-cz-page`, `static/css/page_look_annals.css`, chosen in
+  Customize › Look › Pages, where Annals is named Material): Annals
   is the Material page look described under Look, and the one new pages and
   widgets are designed in. New campaigns start in Annals; Standard draws the
   same blocks with the older card around each, and stays a choice for

@@ -356,12 +356,16 @@
       { id:'type', name:'Type', icon:'i-type', desc:'The fonts for text and headings, and how large everything reads.' },
       { id:'buttons', name:'Buttons', icon:'i-cursor', desc:'The shape of buttons and how they move when you point at them and press.' },
       { id:'motion', name:'Motion and depth', icon:'i-depth', desc:'How far cards lift, how quickly things move, and a calmer option for everyone.' },
+      { id:'page', name:'Pages', icon:'i-scroll', desc:'How every page in the campaign draws its sections. Workshops like this one keep their own look.' },
       { id:'hover', name:'Hover cards', icon:'i-note', desc:'The card that opens when someone points at a linked page or a rule word. One look for the whole campaign.' },
       { id:'sheet', name:'Character sheets', icon:'i-journal', desc:'How character sheets look for everyone in this campaign.' }
     ];
     // Same ids as the server's AppearanceSheetStyles, in that order.
     var SHEET_STYLES = [['modern', 'Modern'], ['parchment', 'Parchment'], ['ledger', 'Ledger'], ['journal', 'Field journal'], ['vellum', 'Vellum'], ['night', 'Night'],
       ['deck', 'Card deck'], ['pencil', 'Pencil'], ['starship', 'Starship'], ['neon', 'Neon terminal'], ['runes', 'Rune slate'], ['brass', 'Brass gauges']];
+    // Same ids as the server's AppearancePageLooks, in that order. Annals is
+    // the Material page look in the UI standard, so the owner sees that name.
+    var PAGE_LOOKS = [['standard', 'Standard'], ['annals', 'Material']];
     var SEC_KEYS = {
       brand:['brand.name', 'brand.logo', 'brand.welcome', 'brand.backdrop'],
       header:['header.bg', 'header.height', 'header.solid', 'header.from', 'header.to', 'header.dir', 'header.image', 'header.scrim', 'header.widgets', 'header.links', 'header.text'],
@@ -371,6 +375,7 @@
       type:['type.body', 'type.heading', 'type.scale'],
       buttons:['buttons.style'],
       motion:['motion.elevation', 'motion.speed', 'motion.reduceAll'],
+      page:['page.look'],
       hover:['hover.look'],
       sheet:['sheet.style']
     };
@@ -756,6 +761,9 @@
           '<p class="hint">Point at the cards and buttons in the preview to feel it.</p>') +
         fld('m-red', 'For everyone', null, '<label class="switch"><input type="checkbox" id="m-reduce" data-k="motion.reduceAll"><span class="trk"><span class="knob"></span></span>' +
           '<span class="sw-t"><b>Reduce motion for everyone in this campaign</b>Things fade instead of moving, the header holds still and the menu highlight stays still.</span></label>'));
+      if (id === 'page') return (
+        fld('pg-look', 'Page look', 'Every page in the campaign', opts('pg-look', 'page.look', 'pg-look-l', PAGE_LOOKS) +
+          '<p class="hint">Material draws sections without boxes or borders: headings over a rule, rows on hairlines, and an edge only on fact panels and tools. Standard puts a bordered card around each section. Nothing moves on the page either way.</p>'));
       if (id === 'hover') return (
         fld('h-look', 'Look', 'Every hover card in the campaign', '<div class="tiles two" role="radiogroup" aria-labelledby="h-look-l">' + tilesHover() + '</div>' +
           '<p class="hint">Point at a linked page or a rule word anywhere in the campaign to see it. What a card shows comes from each page’s own settings.</p>'));
