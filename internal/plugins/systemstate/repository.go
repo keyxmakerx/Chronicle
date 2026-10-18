@@ -20,6 +20,9 @@ type Repository interface {
 	// Upsert writes the row in one statement. A nil half keeps the stored half
 	// (and is stored as {} when the row is new); a non-nil half replaces it.
 	Upsert(ctx context.Context, w Write) error
+	// ListByKey returns up to limit rows for the key in one campaign, ordered
+	// by entity name. Trashed pages are excluded.
+	ListByKey(ctx context.Context, campaignID, systemID, key string, limit int) ([]ListItem, error)
 }
 
 // Write is one upsert. GM and Public are nil to keep the stored half.
@@ -92,4 +95,39 @@ func (r *sqlRepository) Upsert(ctx context.Context, w Write) error {
 		return fmt.Errorf("upsert system state: %w", err)
 	}
 	return nil
+}
+
+func (r *sqlRepository) ListByKey(ctx context.Context, campaignID, systemID, key string, limit int) ([]ListItem, error) {
+	// Both tables are filtered on campaign_id so a row whose entity moved or
+	// was mis-stored can never surface under another campaign. deleted_at is
+	// the entities plugin's live-only rule; with it this matches what an
+	// Owner-level viewer (the only audience of this listing) can see.
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT s.entity_id, e.name, s.gm_data, s.public_data, s.updated_at
+		   FROM entity_system_state s
+		   JOIN entities e ON e.id = s.entity_id
+		  WHERE s.campaign_id = ? AND e.campaign_id = ?
+		    AND s.system_id = ? AND s.state_key = ?
+		    AND e.deleted_at IS NULL
+		  ORDER BY e.name, s.entity_id
+		  LIMIT ?`,
+		campaignID, campaignID, systemID, key, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list system state: %w", err)
+	}
+	defer rows.Close()
+	var out []ListItem
+	for rows.Next() {
+		var it ListItem
+		var gm, pub []byte
+		if err := rows.Scan(&it.EntityID, &it.EntityName, &gm, &pub, &it.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scan system state: %w", err)
+		}
+		it.GM, it.Public = gm, pub
+		out = append(out, it)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list system state: %w", err)
+	}
+	return out, nil
 }

@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -16,6 +18,7 @@ import (
 // service's partial-update behaviour can be observed end to end.
 type fakeRepo struct {
 	rows    map[string]*State
+	names   map[string]string // entity id -> name for ListByKey
 	upserts int
 }
 
@@ -49,6 +52,33 @@ func (f *fakeRepo) Upsert(_ context.Context, w Write) error {
 		row.Public = w.Public
 	}
 	return nil
+}
+
+// ListByKey mimics the SQL: campaign/system/key scope, name order, row limit.
+// Names default to the entity id; fakeNames overrides them per test.
+func (f *fakeRepo) ListByKey(_ context.Context, campaignID, systemID, key string, limit int) ([]ListItem, error) {
+	var out []ListItem
+	for k, r := range f.rows {
+		parts := strings.SplitN(k, "/", 4)
+		if len(parts) != 4 || parts[0] != campaignID || parts[2] != systemID || parts[3] != key {
+			continue
+		}
+		name := parts[1]
+		if n, ok := f.names[parts[1]]; ok {
+			name = n
+		}
+		out = append(out, ListItem{EntityID: parts[1], EntityName: name, GM: r.GM, Public: r.Public, UpdatedAt: *r.UpdatedAt})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].EntityName != out[j].EntityName {
+			return out[i].EntityName < out[j].EntityName
+		}
+		return out[i].EntityID < out[j].EntityID
+	})
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
 }
 
 type fakeEntities map[string]string // entity id -> campaign id
@@ -199,5 +229,67 @@ func TestService_GetEmptyAndScoped(t *testing.T) {
 	}
 	if _, err := svc.Get(ctx, "camp-1", "npc-1", "BAD", "negotiation"); errCode(err) != http.StatusUnprocessableEntity {
 		t.Errorf("bad system id get code = %d", errCode(err))
+	}
+}
+
+func TestService_ListByKey(t *testing.T) {
+	seed := func(repo *fakeRepo, campaign string, n int) {
+		now := time.Now()
+		for i := 0; i < n; i++ {
+			id := fmt.Sprintf("e%03d", i)
+			repo.rows[rowKey(campaign, id, "drawsteel", "negotiation")] = &State{GM: json.RawMessage(`{"g":1}`), Public: json.RawMessage(`{}`), UpdatedAt: &now}
+		}
+	}
+	tests := []struct {
+		name          string
+		campaign      string
+		system, key   string
+		seedCount     int
+		wantLen       int
+		wantTruncated bool
+		wantCode      int
+	}{
+		{"empty", "camp-1", "drawsteel", "negotiation", 0, 0, false, 0},
+		{"few", "camp-1", "drawsteel", "negotiation", 3, 3, false, 0},
+		{"exactly the cap is not truncated", "camp-1", "drawsteel", "negotiation", MaxListItems, MaxListItems, false, 0},
+		{"over the cap is flagged", "camp-1", "drawsteel", "negotiation", MaxListItems + 1, MaxListItems, true, 0},
+		{"other campaign rows never appear", "camp-2", "drawsteel", "negotiation", 0, 0, false, 0},
+		{"bad system id", "camp-1", "BAD", "negotiation", 0, 0, false, http.StatusUnprocessableEntity},
+		{"bad key", "camp-1", "drawsteel", "a/b", 0, 0, false, http.StatusUnprocessableEntity},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, repo, _ := newTestService()
+			seed(repo, "camp-1", tt.seedCount)
+			items, truncated, err := svc.ListByKey(context.Background(), tt.campaign, tt.system, tt.key)
+			if tt.wantCode != 0 {
+				if errCode(err) != tt.wantCode {
+					t.Fatalf("code = %d (err %v), want %d", errCode(err), err, tt.wantCode)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(items) != tt.wantLen || truncated != tt.wantTruncated {
+				t.Errorf("len=%d truncated=%v, want %d/%v", len(items), truncated, tt.wantLen, tt.wantTruncated)
+			}
+		})
+	}
+}
+
+func TestService_ListByKeyOrdersByName(t *testing.T) {
+	svc, repo, _ := newTestService()
+	now := time.Now()
+	repo.names = map[string]string{"a": "Zed", "b": "Alma"}
+	for _, id := range []string{"a", "b"} {
+		repo.rows[rowKey("camp-1", id, "drawsteel", "negotiation")] = &State{GM: json.RawMessage(`{}`), Public: json.RawMessage(`{}`), UpdatedAt: &now}
+	}
+	items, _, err := svc.ListByKey(context.Background(), "camp-1", "drawsteel", "negotiation")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 2 || items[0].EntityName != "Alma" || items[1].EntityName != "Zed" {
+		t.Errorf("order = %+v", items)
 	}
 }
