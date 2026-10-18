@@ -365,11 +365,15 @@
   // asking first they can be taken back: the map as it was is kept until the
   // next change, and Undo (or Ctrl+Z) puts it back.
   function offerUndo(S, before, msg) {
-    S.undo = before; S.undoMsg = msg;
+    S.undo = before; S.note = msg;
     syncUndo(S);
     setStatus(S, msg);
   }
+  // dropUndo runs on every change, so the line saying what could be taken
+  // back goes with the offer.
   function dropUndo(S) {
+    if (S.note && S.status === S.note) setStatus(S, '');
+    S.note = '';
     if (!S.undo) return;
     S.undo = null;
     syncUndo(S);
@@ -388,7 +392,8 @@
     S.insts.forEach(function (i) { i.sel = null; i.drape = null; i.temp = null; });
     changed(S);
     frameAll(S);
-    setStatus(S, 'Put back.');
+    S.note = 'Put back.';
+    setStatus(S, S.note);
     flush(S);
   }
 
@@ -412,16 +417,17 @@
     var run = function () {
       if (S.dead && !leaving) return null;
       var seq = S.seq;
-      // While Undo is on offer its line stays, saying what can be taken back.
-      setStatus(S, S.undo ? S.undoMsg : 'Saving…');
+      // A note (what Undo would take back, or that it did) outlasts the save.
+      setStatus(S, S.note || 'Saving…');
       return api(S, 'PUT', '', { kind: S.kind, data: toWire(S.doc), version: S.version }, { keepalive: leaving }).then(function (v) {
         if (S.dead) return;
         S.version = (v && v.version) || S.version;
         merge(S, v && v.data);
         if (seq === S.seq && !S.dirty) {
           if (Chronicle.markClean) Chronicle.markClean(S.id);
-          setStatus(S, S.undo ? S.undoMsg : 'Saved');
-          setTimeout(function () { if (!S.dead && S.status === 'Saved') setStatus(S, ''); }, 2000);
+          setStatus(S, S.note || 'Saved');
+          if (!S.undo) S.note = '';
+          setTimeout(function () { if (!S.dead && !S.undo && (S.status === 'Saved' || S.status === 'Put back.')) setStatus(S, ''); }, 2000);
         }
       }, function (err) { if (!S.dead) saveFailed(S, err); });
     };
