@@ -5165,18 +5165,26 @@ func (a *App) RegisterRoutes() {
 	systems.RegisterRoutes(e, systemHandler, addonService, authService, campaignService)
 	// The campaign's own pick-list entries, merged into the pick lists below.
 	// The manifest is the campaign's custom upload, else its chosen built-in.
-	systemEntrySvc := systems.NewSystemEntryService(
-		systems.NewSystemEntryRepository(a.DB),
-		func(ctx context.Context, campaignID string) *systems.SystemManifest {
-			if m := campaignSystemMgr.GetManifest(campaignID); m != nil {
-				return m
-			}
-			c, err := campaignService.GetByID(ctx, campaignID)
-			if err != nil {
-				return nil
-			}
-			return systems.Find(c.ParseSettings().SystemID)
-		})
+	manifestFor := campaignManifest(func(ctx context.Context, campaignID string) *systems.SystemManifest {
+		if m := campaignSystemMgr.GetManifest(campaignID); m != nil {
+			return m
+		}
+		c, err := campaignService.GetByID(ctx, campaignID)
+		if err != nil {
+			return nil
+		}
+		return systems.Find(c.ParseSettings().SystemID)
+	})
+	systemEntrySvc := systems.NewSystemEntryService(systems.NewSystemEntryRepository(a.DB), systems.EntryManifestResolver(manifestFor))
+	// AI Import's brief carries the system's notes on sheet fields, and the
+	// categories the system's sheets live on get its fields once
+	// (system_sheet_fields.go).
+	aiWorkspacePrompt.Notes = aiFieldNotes{manifest: manifestFor, lists: characterListService, types: entityService}
+	if n, err := addSystemSheetFieldsOnce(context.Background(), settingsRepo, campaignService, manifestFor, entityService, characterListService); err != nil {
+		slog.Error("adding system sheet fields failed", slog.String("error", err.Error()))
+	} else if n > 0 {
+		slog.Info("added game-system sheet fields to existing categories", slog.Int("fields", n))
+	}
 	systems.RegisterSystemEntryChoices(systemEntrySvc)
 	systems.RegisterSystemEntryRoutes(e, systems.NewSystemEntryHandler(systemEntrySvc), authService, campaignService)
 	// Pick lists (Ancestry, Kit, Race, Class…) for the character attributes editor.
