@@ -1,0 +1,185 @@
+// standing_block.templ renders the entity page's "Standing" block: how this
+// page (a guild, a faction, a person) feels about the party or one character.
+// At rest it is small, the word and its five steps with one quiet line, "Why:
+// ...". A click on the word, the steps or that line drapes the reasons down
+// over the page from where it was clicked; nothing below moves, a visible
+// Close and Escape roll it up.
+//
+// The server renders the resting state for the first subject and carries every
+// subject's standing for THIS viewer as one JSON script; static/js/standing.js
+// draws the rest from it with textContent, so a reason never reaches
+// innerHTML. What a viewer may see was decided in StandingService before it
+// got here: the JSON of a player's block holds no DM-only reason, and the
+// Director-only parts are also marked data-dm-only (and are not rendered for
+// players at all). Every handler is an inline IIFE (standingCall) so the block
+// works after an HTMX swap.
+package entities
+
+import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
+
+templ standingStyles() {
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/css/standing.css") }/>
+}
+
+// BlockStanding renders the block. The caller has already dropped a block
+// that is Hidden for the viewer, so this renders unconditionally.
+templ BlockStanding(campaignID, entityID, entityName string, v *StandingView) {
+	@standingStyles()
+	{{ first := standingFirst(v) }}
+	<section
+		class="sg"
+		data-widget="standing"
+		data-campaign={ campaignID }
+		data-entity={ entityID }
+		data-entity-name={ entityName }
+		data-dm={ standingDigit(v.CanEdit) }
+		data-current={ first.Key }
+		aria-label="Standing"
+	>
+		@templ.JSONScript("sg-data-"+entityID, v)
+		<div class="sg-h">
+			<h2 class="cb-head sg-title">
+				<i class="fa-solid fa-scale-balanced" aria-hidden="true"></i>
+				Standing
+			</h2>
+			if len(v.Subjects) > 1 {
+				<span class="sg-pick">
+					<button
+						type="button"
+						class="sg-btn sg-sm"
+						data-sg-subjbtn
+						aria-haspopup="menu"
+						aria-expanded="false"
+						onclick={ standingCall("menu") }
+					>
+						<span data-sg-subjlab>{ first.Name }</span>
+						<i class="fa-solid fa-chevron-down sg-chev" aria-hidden="true"></i>
+					</button>
+					<div class="sg-menu" data-sg-menu role="menu" aria-label="Whose standing">
+						for _, s := range v.Subjects {
+							<button
+								type="button"
+								role="menuitemradio"
+								data-key={ s.Key }
+								aria-checked={ standingDigitBool(s.Key == first.Key) }
+								onclick={ standingCall("subject") }
+							>{ s.Name }</button>
+						}
+					</div>
+				</span>
+			}
+		</div>
+		<div class="sg-stand">
+			<div class={ "sg-srow", templ.KV("sg-dm", standingDMOnlyShown(v)) } data-sg-srow onclick={ standingCall("toggle") }>
+				<span class="sg-word" data-sg-word aria-live="polite" aria-atomic="true">
+					<span class={ "sg-w", templ.KV("sg-unset", !first.Set) }>{ standingWordText(first) }</span>
+				</span>
+				<span class="sg-steps" data-sg-steps role="img" aria-label={ standingStepsLabel(first) }>
+					<span class="sg-bar"></span><span class="sg-bar"></span><span class="sg-bar"></span><span class="sg-bar"></span><span class="sg-bar"></span>
+					<span class="sg-thumb" data-sg-thumb style={ standingThumbStyle(first) } hidden?={ !first.Set }></span>
+				</span>
+				if v.CanEdit {
+					<span class="sg-dmtag cb-dm" data-dm-only data-sg-dmtag hidden?={ !standingDMOnlyShown(v) }>DM</span>
+				}
+			</div>
+			<div class="sg-wl">
+				<button
+					type="button"
+					class="sg-why"
+					data-sg-why
+					aria-expanded="false"
+					aria-controls={ "sg-drape-" + entityID }
+					onclick={ standingCall("toggle") }
+				>
+					<span class="sg-wt" data-sg-wt>{ standingWhyFor(first) }</span>
+					<i class="fa-solid fa-chevron-down sg-chev" aria-hidden="true"></i>
+				</button>
+				<div class="sg-drape" id={ "sg-drape-" + entityID } data-sg-drape role="region" aria-label={ "Why " + entityName + " feels this way about " + first.Name }>
+					<div class="sg-dh">
+						<span class="sg-lab">Why</span>
+						<span class="cb-count sg-cnt" data-sg-cnt>{ standingItoa(first.Total) }</span>
+						<span class="sg-sm sg-info" data-sg-info>Newest first</span>
+						<span class="sg-sp"></span>
+						<button type="button" class="sg-btn sg-ghost sg-xbtn" data-sg-close aria-label="Close the reasons" onclick={ standingCall("close") }>
+							<i class="fa-solid fa-xmark" aria-hidden="true"></i>Close
+						</button>
+					</div>
+					<div class="sg-dscale" aria-hidden="true">
+						for i, w := range standingWords {
+							<span class={ templ.KV("sg-cur", first.Set && i == first.Level) }>{ w }</span>
+						}
+					</div>
+					<div class="sg-tools" data-sg-tools hidden>
+						<div class="sg-fld">
+							<label class="sg-sr" for={ "sg-find-" + entityID }>Find a reason</label>
+							<input type="text" id={ "sg-find-" + entityID } data-sg-find placeholder="Find a reason" autocomplete="off" oninput={ standingCall("find") }/>
+						</div>
+						<div class="sg-seg" role="group" aria-label="Show">
+							<button type="button" data-v="all" aria-pressed="true" onclick={ standingValueCall("filter", "all") }>All</button>
+							<button type="button" data-v="up" aria-pressed="false" onclick={ standingValueCall("filter", "up") }>Raised</button>
+							<button type="button" data-v="down" aria-pressed="false" onclick={ standingValueCall("filter", "down") }>Lowered</button>
+						</div>
+					</div>
+					<ul class="sg-list" data-sg-list></ul>
+					if v.CanEdit {
+						@standingDMTools(entityID, first, v)
+					}
+				</div>
+			</div>
+		</div>
+		<span class="sg-sr" role="status" data-sg-live></span>
+	</section>
+}
+
+// standingDMTools are the Director's parts of the drape: the row that becomes
+// the "Add a reason" form, and the page switch for players. None of it is
+// rendered for anyone else.
+templ standingDMTools(entityID string, first StandingSubjectView, v *StandingView) {
+	<div class="sg-addrow" data-dm-only data-sg-addrow>
+		<button type="button" class="sg-addb" data-sg-add aria-expanded="false" aria-controls={ "sg-form-" + entityID } onclick={ standingCall("addOpen") }>
+			<i class="fa-solid fa-plus" aria-hidden="true"></i>Add a reason
+		</button>
+		<form class="sg-addf" id={ "sg-form-" + entityID } data-sg-form role="group" aria-label="Add a reason" novalidate hidden onsubmit={ standingCall("addSave") }>
+			<div class="sg-ph sg-full"><strong>Add a reason</strong><span class="sg-sm" data-sg-for>{ "for " + first.Name }</span></div>
+			<div class="sg-fl sg-full">
+				<label for={ "sg-s-" + entityID }>What happened</label>
+				<input type="text" id={ "sg-s-" + entityID } data-sg-s maxlength="90" autocomplete="off" placeholder="Paid off the harbour debt"/>
+				<span class="sg-err" data-sg-err></span>
+			</div>
+			<div class="sg-fl sg-full">
+				<span class="sg-fh" id={ "sg-dl-" + entityID }>Effect</span>
+				<div class="sg-seg" data-sg-dir role="group" aria-labelledby={ "sg-dl-" + entityID }>
+					<button type="button" data-v="up" aria-pressed="true" onclick={ standingValueCall("dir", "up") }><i class="fa-solid fa-arrow-up" aria-hidden="true"></i>Raises</button>
+					<button type="button" data-v="down" aria-pressed="false" onclick={ standingValueCall("dir", "down") }><i class="fa-solid fa-arrow-down" aria-hidden="true"></i>Lowers</button>
+					<button type="button" data-v="none" aria-pressed="false" onclick={ standingValueCall("dir", "none") }><i class="fa-solid fa-minus" aria-hidden="true"></i>No change</button>
+				</div>
+			</div>
+			<div class="sg-fl">
+				<label for={ "sg-w-" + entityID }>The word becomes</label>
+				<select id={ "sg-w-" + entityID } data-sg-w>
+					<option value="0">Hostile</option>
+					<option value="1">Wary</option>
+					<option value="2">Neutral</option>
+					<option value="3">Warm</option>
+					<option value="4">Trusted</option>
+				</select>
+			</div>
+			<div class="sg-fl">
+				<label for={ "sg-n-" + entityID }>When</label>
+				<input type="text" id={ "sg-n-" + entityID } data-sg-n maxlength="30" autocomplete="off" placeholder="session 13"/>
+			</div>
+			<div class="sg-full">
+				<button type="button" class="sg-swr" role="switch" aria-checked="true" data-sg-vis onclick={ standingCall("vis") }><span class="sg-trk"></span>Players can see this reason</button>
+				<div class="sg-sm sg-swhint" data-sg-vishint hidden>Off: only the DM sees it, marked DM.</div>
+			</div>
+			<div class="sg-acts sg-full">
+				<button type="button" class="sg-quiet" onclick={ standingCall("addCancel") }>Cancel</button>
+				<button type="submit" class="sg-btn sg-pri" data-sg-save>Save</button>
+			</div>
+		</form>
+	</div>
+	<div class="sg-seerow" data-dm-only>
+		<button type="button" class="sg-swr" role="switch" aria-checked={ standingDigitBool(v.PlayersSee == nil || *v.PlayersSee) } data-sg-see onclick={ standingCall("seeToggle") }><span class="sg-trk"></span>Players can see this standing</button>
+		<div class="sg-sm sg-swhint" data-sg-seehint hidden?={ v.PlayersSee == nil || *v.PlayersSee }>Off: players see no Standing block on this page.</div>
+	</div>
+}

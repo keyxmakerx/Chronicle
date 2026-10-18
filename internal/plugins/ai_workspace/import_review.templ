@@ -1,19 +1,17 @@
-// import_review.templ renders the per-page review screen returned
-// by POST /ai-workspace/import/parse. The operator inspects every
-// parsed page + bulk-defaults bar and decides Include / Name /
-// Category / Visibility / Conflict-mode per row before Submit posts
-// to CommitImport.
+// import_review.templ renders the review screen returned by POST
+// /ai-workspace/import/parse: every change the AI asks for, answered Yes or
+// No, before Apply posts to CommitImport.
 
 package ai_workspace
 
 import (
 	"fmt"
 	"strconv"
-	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/importer"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
 // ImportReviewData bundles everything the templ needs. Built by
@@ -43,21 +41,23 @@ type ReviewSummary struct {
 	Conflicts  int
 	NewCategories int
 	ParseErrors int
-	// Blocked counts records the review refused (a missing calendar, a
-	// bad key), kept apart from blocks whose markdown would not parse.
+	// Blocked counts blocks the review refused (a missing calendar, a bad
+	// key, sheet fields that don't fit), kept apart from blocks whose
+	// markdown would not parse.
 	Blocked int
 }
 
-// skipped is every row the import leaves out whatever the operator ticks.
-func (s ReviewSummary) skipped() int { return s.ParseErrors + s.Blocked }
-
-// ImportReview renders the review fragment + the bulk-defaults bar
-// + the Submit button. HTMX swaps this into #ai-import-review-host.
+// ImportReview renders the review: the AI's requests as one list, each
+// answered Yes or No, with the blocks that can't be used on top and one save
+// bar. HTMX swaps it into #ai-import-review-host.
 //
 // hx-push-url registers a history entry on commit so browser Back
 // after the result render lands on a fresh settings page rather than
 // re-POSTing; review state is deliberately not restored.
 templ ImportReview(d ImportReviewData) {
+	{{ listed := listedCount(d) }}
+	{{ startYes := startingYesCount(d) }}
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/css/ai_review.css") }/>
 	<form
 		id="ai-import-review"
 		hx-post={ fmt.Sprintf("/campaigns/%s/ai-workspace/import/commit", d.CampaignID) }
@@ -65,11 +65,13 @@ templ ImportReview(d ImportReviewData) {
 		hx-swap="innerHTML"
 		hx-indicator="#ai-import-committing"
 		hx-push-url={ fmt.Sprintf("/campaigns/%s/settings?tab=ai-workspace", d.CampaignID) }
-		x-data="aiImportReview()"
+		x-data={ fmt.Sprintf("aiImportReview(%d)", startYes) }
+		@change="onChange($event)"
+		@keydown.window="onKey($event)"
 		data-engine-src={ d.EngineSrc }
 		role="region"
 		aria-labelledby="ai-import-review-heading"
-		class="card p-4 mt-4"
+		class="air card mt-4"
 	>
 		// Re-pass the original markdown source so the commit handler
 		// can re-parse + match form fields by index, instead of
@@ -77,108 +79,124 @@ templ ImportReview(d ImportReviewData) {
 		<input type="hidden" name="markdown_source" value={ d.MarkdownSource }/>
 
 		// `sr-only focus:not-sr-only` lets keyboard-only operators
-		// jump straight to Submit; invisible to sighted operators.
+		// jump straight to Apply; invisible to sighted operators.
 		<a
 			href="#ai-import-submit"
 			class="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-10 focus:bg-accent-fill focus:text-on-accent focus:px-3 focus:py-1.5 focus:rounded focus:text-xs"
 		>
-			Skip to Submit
+			Skip to Apply
 		</a>
 
-		<div class="flex items-baseline justify-between mb-3">
-			<h3 id="ai-import-review-heading" class="text-base font-semibold text-fg">
-				Review — { strconv.Itoa(d.SummaryCounts.Total) } { itemWord(d, d.SummaryCounts.Total) } detected
-			</h3>
+		<div class="air-body">
+			<div class="air-head">
+				<h3 id="ai-import-review-heading">
+					From your AI · { strconv.Itoa(d.SummaryCounts.Total) } { pluralize("request", "requests", d.SummaryCounts.Total) }
+				</h3>
+				<span class="air-tally">
+					{ fmt.Sprintf("%d %s", d.SummaryCounts.Conflicts, pluralize("conflict", "conflicts", d.SummaryCounts.Conflicts)) } ·
+					{ fmt.Sprintf("%d new %s", d.SummaryCounts.NewCategories, pluralize("category", "categories", d.SummaryCounts.NewCategories)) } ·
+					{ fmt.Sprintf("%d parse %s", d.SummaryCounts.ParseErrors, pluralize("error", "errors", d.SummaryCounts.ParseErrors)) }
+					if d.SummaryCounts.Blocked > 0 {
+						· { fmt.Sprintf("%d can't be imported", d.SummaryCounts.Blocked) }
+					}
+				</span>
+			</div>
+
+			@reviewProblemsBox(d)
+
+			if listed > 0 {
+				<div class="air-tools">
+					<span class="air-small">Keys: <kbd>J</kbd> <kbd>K</kbd> move, <kbd>Y</kbd> <kbd>N</kbd> answer</span>
+					<span class="air-fill"></span>
+					<button type="button" class="air-quiet" @click="answerAll(true)" aria-label="Answer Yes to every request except removals">Yes to all but removals</button>
+					<button type="button" class="air-quiet" @click="answerAll(false)" aria-label="Answer No to every request">No to all</button>
+				</div>
+			}
+			if len(usablePages(d)) > 0 {
+				@bulkDefaultsBar(d)
+			}
+
+			if listed > 0 {
+				<div role="list" aria-label="Changes the AI asks for">
+					if pages := usablePages(d); len(pages) > 0 {
+						<div class="air-group" aria-hidden="true">
+							<h4>Pages</h4>
+							<span class="air-small">{ strconv.Itoa(len(pages)) }</span>
+						</div>
+						for _, i := range pages {
+							@reviewRow(d.CampaignID, i, d.Pages[i], d.Classes[i], d)
+						}
+					}
+					for _, g := range recordGroups(d) {
+						<div class="air-group" aria-hidden="true">
+							<h4>{ g.Label }</h4>
+							<span class="air-small">{ strconv.Itoa(len(g.Rows)) }</span>
+						</div>
+						for _, r := range g.Rows {
+							@reviewRecordRow(d.CampaignID, r)
+						}
+					}
+				</div>
+			} else {
+				<p class="air-small">Nothing in this paste can be used yet. Fix the blocks above in your AI's answer and paste it again.</p>
+			}
+		</div>
+
+		<div class="air-savebar">
+			<span id="ai-import-count" class="air-count" role="status" aria-live="polite">
+				<b x-text="yes">{ strconv.Itoa(startYes) }</b>
+				<b>{ " of " + strconv.Itoa(listed) }</b>
+				{ pluralize(" change", " changes", listed) } will be made<span x-show="removals > 0" x-cloak>, including <b class="air-bad" x-text="removals === 1 ? '1 removal' : removals + ' removals'"></b></span>.
+			</span>
+			<span id="ai-import-committing" class="htmx-indicator air-small" role="status" aria-live="polite">
+				<i class="fa-solid fa-spinner fa-spin mr-1" aria-hidden="true"></i> Applying...
+			</span>
 			// Navigates (boosted full-page move) rather than hx-targeting
 			// the settings route into the review host: that route
 			// renders a full page (no fragment branch), so
 			// fragment-targeting it would nest the app inside itself.
 			<a
 				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings?tab=ai-workspace", d.CampaignID)) }
-				class="text-xs text-fg-muted hover:text-fg"
-				aria-label="Discard the parsed pages and return to the import form"
-				title="Discard parse and start over"
+				class="btn-secondary"
+				aria-label="Discard the paste and return to the import form"
 			>
-				<i class="fa-solid fa-rotate-left mr-1" aria-hidden="true"></i> Cancel
+				Discard the paste
 			</a>
-		</div>
-
-		<div class="text-xs text-fg-muted mb-3">
-			{ fmt.Sprintf("%d new", d.SummaryCounts.Selectable - d.SummaryCounts.Conflicts - d.SummaryCounts.NewCategories) } ·
-			{ fmt.Sprintf("%d %s", d.SummaryCounts.Conflicts, pluralize("conflict", "conflicts", d.SummaryCounts.Conflicts)) } ·
-			{ fmt.Sprintf("%d new %s", d.SummaryCounts.NewCategories, pluralize("category", "categories", d.SummaryCounts.NewCategories)) } ·
-			{ fmt.Sprintf("%d parse %s", d.SummaryCounts.ParseErrors, pluralize("error", "errors", d.SummaryCounts.ParseErrors)) }
-			if d.SummaryCounts.Blocked > 0 {
-				· { fmt.Sprintf("%d can't be imported", d.SummaryCounts.Blocked) }
-			}
-		</div>
-
-		if len(d.Pages) > 0 {
-			@bulkDefaultsBar(d)
-			<div class="space-y-3 mt-4" role="list" aria-label="Parsed pages to review">
-				for i, page := range d.Pages {
-					@reviewRow(d.CampaignID, i, page, d.Classes[i], d)
-				}
-			</div>
-		}
-		if len(d.Records) > 0 {
-			<div class="space-y-3 mt-4" role="list" aria-label="Other changes to review">
-				for _, r := range d.Records {
-					@reviewRecordRow(d.CampaignID, r)
-				}
-			</div>
-		}
-
-		<div class="flex items-center gap-3 mt-5 pt-4 border-t border-edge">
-			// Submit POSTs to /ai-workspace/import/commit, which
-			// creates entities (per-row autonomy) and any confirmed
-			// new categories, then swaps in the import_result
-			// fragment.
-			if d.SummaryCounts.skipped() > 0 {
-				<button
-					id="ai-import-submit"
-					type="submit"
-					class="btn-primary"
-					disabled?={ d.SummaryCounts.Selectable == 0 }
-					aria-describedby="ai-import-parse-errors-note"
-				>
-					<i class="fa-solid fa-file-import mr-1.5" aria-hidden="true"></i>
-					Import { strconv.Itoa(d.SummaryCounts.Selectable) } { itemWord(d, d.SummaryCounts.Selectable) }
-				</button>
-			} else {
-				<button
-					id="ai-import-submit"
-					type="submit"
-					class="btn-primary"
-					disabled?={ d.SummaryCounts.Selectable == 0 }
-				>
-					<i class="fa-solid fa-file-import mr-1.5" aria-hidden="true"></i>
-					Import { strconv.Itoa(d.SummaryCounts.Selectable) } { itemWord(d, d.SummaryCounts.Selectable) }
-				</button>
-			}
-			<span id="ai-import-committing" class="htmx-indicator text-xs text-fg-muted" role="status" aria-live="polite">
-				<i class="fa-solid fa-spinner fa-spin mr-1" aria-hidden="true"></i> Committing...
-			</span>
-			if d.SummaryCounts.skipped() > 0 {
-				<span id="ai-import-parse-errors-note" class="text-xs text-fg-muted">
-					{ skippedNote(d.SummaryCounts) }
-				</span>
-			}
+			// Apply POSTs to /ai-workspace/import/commit, which makes every
+			// change answered Yes, then swaps in the import_result fragment.
+			<button
+				id="ai-import-submit"
+				type="submit"
+				class="btn-primary"
+				disabled?={ listed == 0 }
+				:disabled="yes === 0"
+			>
+				Apply
+			</button>
 		</div>
 	</form>
 }
 
-// skippedNote says which rows the import leaves out and why, so a block
-// refused at review (one waiting on a calendar, say) is not reported as markdown that failed to parse.
-func skippedNote(s ReviewSummary) string {
-	var parts []string
-	if s.ParseErrors > 0 {
-		parts = append(parts, fmt.Sprintf("%d parse-error %s", s.ParseErrors, pluralize("row", "rows", s.ParseErrors)))
+// reviewProblemsBox lists the blocks that can't be used, above the list.
+// They are never saved; each says where it is in the paste and what is
+// wrong, so the operator can fix it in the AI's answer.
+templ reviewProblemsBox(d ImportReviewData) {
+	if probs := reviewProblems(d); len(probs) > 0 {
+		<div class="air-problems" role="region" aria-labelledby="ai-import-problems-heading">
+			<h4 id="ai-import-problems-heading">
+				{ strconv.Itoa(len(probs)) } { pluralize("block", "blocks", len(probs)) } from the AI can't be used, and will be left out
+			</h4>
+			for _, p := range probs {
+				<div class="air-problem" role="alert">
+					<span class="air-where">{ fmt.Sprintf("Block %d", p.Block) }</span>
+					<span class="air-say">
+						<i class="fa-solid fa-circle-xmark mr-1" aria-hidden="true"></i>
+						{ p.Say }
+					</span>
+				</div>
+			}
+		</div>
 	}
-	if s.Blocked > 0 {
-		parts = append(parts, fmt.Sprintf("%d %s that can't be imported", s.Blocked, pluralize("row", "rows", s.Blocked)))
-	}
-	return "(" + strings.Join(parts, " and ") + " will be skipped)"
 }
 
 // pluralize returns singular when n==1, plural otherwise.
@@ -187,15 +205,6 @@ func pluralize(singular, plural string, n int) string {
 		return singular
 	}
 	return plural
-}
-
-// itemWord counts pages as "pages", and anything mixed with records as
-// "changes".
-func itemWord(d ImportReviewData, n int) string {
-	if len(d.Records) > 0 {
-		return pluralize("change", "changes", n)
-	}
-	return pluralize("page", "pages", n)
 }
 
 // countRowsForProposedSlug counts how many included rows reference
@@ -211,21 +220,12 @@ func countRowsForProposedSlug(d ImportReviewData, slug string) int {
 	return n
 }
 
-// bulkDefaultsBar renders the top-of-table controls + action
-// buttons (Apply / Skip-conflicts / Toggle-all), wired to the
-// form-level Alpine factory; the dropdowns back the per-row
-// default-fill logic on Submit.
-//
-// `position: sticky; top: 0` keeps the bar reachable on long
-// imports; z-index lifts it above row cards.
+// bulkDefaultsBar folds the defaults for every page under a quiet word:
+// most pastes need none of it, and the list stays the first thing seen.
 templ bulkDefaultsBar(d ImportReviewData) {
-	<div
-		class="card p-3 bg-surface-alt text-xs space-y-2 sticky top-0 z-10"
-		role="region"
-		aria-labelledby="ai-import-bulk-heading"
-	>
-		<div id="ai-import-bulk-heading" class="font-medium text-fg">Bulk defaults</div>
-		<div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+	<details class="air-defaults" role="region" aria-labelledby="ai-import-bulk-heading">
+		<summary id="ai-import-bulk-heading" class="air-quiet">Defaults for every page</summary>
+		<div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
 			<label class="space-y-1">
 				<span class="block text-fg-muted">Default category (for rows without front-matter)</span>
 				<select name="bulk_default_category" class="input text-xs w-full" aria-label="Default category to apply to rows without front-matter">
@@ -256,192 +256,180 @@ templ bulkDefaultsBar(d ImportReviewData) {
 			</label>
 		</div>
 		// Pure client-side ops via the form's Alpine factory; no
-		// server round-trip until Submit.
-		<div class="flex flex-wrap items-center gap-2 pt-2">
+		// server round-trip until Apply.
+		<div class="flex flex-wrap items-center gap-3 pt-2">
 			<button
 				type="button"
-				class="btn-secondary text-[11px] px-2 py-1"
+				class="air-quiet"
 				@click="applyDefaultsToAll()"
 				aria-label="Apply the bulk defaults above to every row"
 			>
-				<i class="fa-solid fa-arrow-down-to-bracket mr-1" aria-hidden="true"></i>
-				Apply defaults to all
+				Use these on every page
 			</button>
 			if d.SummaryCounts.Conflicts > 0 {
 				<button
 					type="button"
-					class="btn-secondary text-[11px] px-2 py-1"
+					class="air-quiet"
 					@click="skipAllConflicts()"
 					aria-label="Set every name-conflict row to Skip"
 				>
-					<i class="fa-solid fa-forward mr-1" aria-hidden="true"></i>
-					Skip all conflicts
+					Skip every name conflict
 				</button>
 			}
-			<label class="inline-flex items-center gap-1 text-[11px] text-fg-muted ml-auto cursor-pointer">
-				<input
-					type="checkbox"
-					class="rounded border-edge text-accent"
-					@change="toggleAll($event)"
-					aria-label="Toggle every row's Include checkbox at once"
-				/>
-				Toggle all
-			</label>
 		</div>
-	</div>
+	</details>
 }
 
-// reviewRow renders one row per ParsedPage. The row's render
-// variant depends on Status — parse errors get a different shape
-// from successful rows.
+// reviewRow is one page the AI asks to add, change or remove: the verb, the
+// change in one line, the detail and the AI's reason, and a Yes / No at the
+// end. The controls that tune the row fold under "Change the details".
 //
 // The data parameter is the full ImportReviewData so the row can
 // compute its "applies to N rows" hint without per-row pre-
 // aggregation in the handler.
 templ reviewRow(campaignID string, idx int, page importer.ParsedPage, cls importer.Classification, data ImportReviewData) {
-	// `card-elev` composes on `.card` to add the elevation-tier
-	// shadow + hover lift; `transition-colors` additionally animates
-	// the border color on status changes.
+	{{ verb := pageVerb(page.FrontMatter.Action) }}
+	{{ problem := cls.Status == importer.StatusActionMismatch || cls.Status == importer.StatusParentProblem }}
 	<div
 		role="listitem"
-		aria-label={ fmt.Sprintf("Page %d: %s", idx+1, statusLabel(cls.Status)) }
-		class={
-			"card card-elev p-3 transition-colors",
-			templ.KV("border-rose-300 dark:border-rose-700", cls.Status == importer.StatusParseError || cls.Status == importer.StatusActionMismatch || cls.Status == importer.StatusParentProblem),
-			templ.KV("border-amber-300 dark:border-amber-700", cls.Status == importer.StatusConflict),
-			templ.KV("border-sky-300 dark:border-sky-700", cls.Status == importer.StatusNewCategory),
+		tabindex="-1"
+		data-air-row
+		data-air-verb={ verb }
+		if problem {
+			data-air-hold
 		}
+		if cls.GMOnly.Any() && page.FrontMatter.Action != importer.ActionDelete {
+			data-air-gm
+		}
+		if page.FrontMatter.Visibility == "dm_only" {
+			data-dm-only
+		}
+		aria-label={ fmt.Sprintf("Page %d: %s", idx+1, statusLabel(cls.Status)) }
+		class="air-row"
 	>
-		<div class="flex items-start gap-3">
-			<input
-				type="checkbox"
-				name={ fmt.Sprintf("page_%d_include", idx) }
-				checked?={ page.Status != importer.StatusParseError && cls.Status != importer.StatusParentProblem }
-				disabled?={ page.Status == importer.StatusParseError }
-				class="mt-1 rounded border-edge text-accent"
-				aria-label={ fmt.Sprintf("Include page %d (%s) in this import", idx+1, page.Name) }
-			/>
-			<div class="flex-1 min-w-0 space-y-1">
-				@reviewRowHeader(idx, page, cls)
-				if page.Status == importer.StatusParseError {
-					<div class="text-xs text-rose-700 dark:text-rose-300 mt-1" role="alert">
-						<i class="fa-solid fa-triangle-exclamation mr-1" aria-hidden="true"></i>
-						{ page.ParseError }
-					</div>
-				} else if cls.Status == importer.StatusActionMismatch || cls.Status == importer.StatusParentProblem {
-					<div class="text-xs text-rose-700 dark:text-rose-300 mt-1" role="alert">
-						<i class="fa-solid fa-triangle-exclamation mr-1" aria-hidden="true"></i>
-						{ cls.Reason }
-					</div>
-					// Still expose the action chip so the operator can
-					// override (e.g. delete → create)
-					// without re-pasting.
-					@reviewRowBody(idx, page, cls, data)
-				} else {
-					@reviewRowBody(idx, page, cls, data)
+		<span class={ verbClass(verb) }>{ verb }</span>
+		<div class="air-main">
+			<span class="air-what">{ pageWhatLead(page) } <b>{ page.Name }</b></span>
+			if line := pageDetail(page, cls); line != "" {
+				<span class="air-line">{ line }</span>
+			}
+			if page.FrontMatter.KnownAs != "" {
+				<span class="air-line">{ "Known as " + page.FrontMatter.KnownAs + " in that era" }</span>
+			}
+			@reviewRowMeta(page)
+			if cls.FieldsSummary != "" {
+				<span class="air-line">{ cls.FieldsSummary }</span>
+			}
+			if cls.ConflictEntity != nil {
+				<span class="air-line">
+					<i class="fa-solid fa-triangle-exclamation mr-1" aria-hidden="true"></i>
+					A page called { cls.ConflictEntity.Name } already exists. This one gets a new name unless you pick otherwise in the details.
+				</span>
+			}
+			if problem {
+				<span class="air-line air-bad" role="alert">
+					<i class="fa-solid fa-circle-xmark mr-1" aria-hidden="true"></i>
+					{ cls.Reason }
+				</span>
+			}
+			if page.FrontMatter.Reason != "" {
+				<span class="air-line">AI's reason: <i>{ page.FrontMatter.Reason }</i></span>
+			}
+			// A page with GM-only parts: any row that ends up replacing its
+			// text needs the tick (the details can turn a row into an
+			// update after this renders, so every non-delete row shows it).
+			if cls.GMOnly.Any() && page.FrontMatter.Action != importer.ActionDelete {
+				@reviewRowGMOnlyConfirm(idx, page.Name, cls.GMOnly)
+			}
+			if page.FrontMatter.Action == importer.ActionDelete {
+				@reviewRowDeleteConfirm(idx, page.Name, page.FrontMatter.EraName())
+			}
+			if len(page.Warnings) > 0 {
+				<details class="air-more">
+					<summary>{ fmt.Sprintf("%d %s", len(page.Warnings), pluralize("warning", "warnings", len(page.Warnings))) }</summary>
+					<ul class="list-disc ml-4 space-y-0.5 air-line">
+						for _, w := range page.Warnings {
+							<li>{ w }</li>
+						}
+					</ul>
+				</details>
+			}
+			<details class="air-more" open?={ problem }>
+				<summary>Change the details</summary>
+				@reviewRowHeader(idx, page)
+				// An era version has no category, visibility or conflict of
+				// its own: those belong to the usual page.
+				if !page.FrontMatter.IsEra() {
+					@reviewRowFields(idx, page, cls, data)
 				}
-				// Per-row delete confirmation; renders only when the
-				// AI-suggested action is "delete".
-				if page.FrontMatter.Action == importer.ActionDelete {
-					@reviewRowDeleteConfirm(idx, page.Name, page.FrontMatter.EraName())
-				}
-				// A page with GM-only parts: any row that ends up replacing its
-				// text needs the tick (the dropdowns can turn a row into an
-				// update after this renders, so every non-delete row shows it).
-				if cls.GMOnly.Any() && page.Status != importer.StatusParseError && page.FrontMatter.Action != importer.ActionDelete {
-					@reviewRowGMOnlyConfirm(idx, page.Name, cls.GMOnly)
-				}
-				if len(page.Warnings) > 0 {
-					<details class="text-xs text-fg-muted mt-1">
-						<summary class="cursor-pointer">{ fmt.Sprintf("%d %s", len(page.Warnings), pluralize("warning", "warnings", len(page.Warnings))) }</summary>
-						<ul class="list-disc ml-4 mt-1 space-y-0.5">
-							for _, w := range page.Warnings {
-								<li>{ w }</li>
-							}
-						</ul>
-					</details>
-				}
-			</div>
+			</details>
 		</div>
+		@yesNo(fmt.Sprintf("page_%d_include", idx), pageStartsYes(page, cls), fmt.Sprintf("%s %s", pageWhatLead(page), page.Name))
 	</div>
 }
 
-// reviewRowDeleteConfirm renders the per-row "I understand X will be
-// permanently deleted" confirmation block. The checkbox's `required`
-// attribute blocks Submit via the browser's form-validity gate until
-// every Delete row is confirmed; the committer re-checks
-// DeleteConfirmed independently against any client-side bypass.
-templ reviewRowDeleteConfirm(idx int, name, era string) {
-	<div class="mt-2 p-2 rounded border border-rose-300 dark:border-rose-700 bg-rose-50 dark:bg-rose-900/20">
-		<label class="flex items-start gap-2 text-xs text-rose-900 dark:text-rose-100 cursor-pointer">
-			<input
-				type="checkbox"
-				name={ fmt.Sprintf("page_%d_delete_confirmed", idx) }
-				required
-				class="mt-0.5 rounded border-rose-400 text-rose-600"
-				aria-label={ fmt.Sprintf("I confirm permanent deletion of %s", name) }
-			/>
-			if era != "" {
-				<span>
-					I understand the <strong>{ era }</strong> version of <strong>{ name }</strong> will be permanently deleted.
-					The usual page stays. This cannot be undone.
-				</span>
-			} else {
-				<span>
-					I understand <strong>{ name }</strong> will be permanently deleted.
-					This cannot be undone.
-				</span>
-			}
+// yesNo is a row's answer, a two-part segmented control over one radio
+// pair. "on" is what the committer reads as Yes, so No posts "off".
+templ yesNo(name string, startYes bool, what string) {
+	<div class="air-yn" role="radiogroup" aria-label={ "Make this change: " + what }>
+		<label class="air-y">
+			<input type="radio" name={ name } value="on" checked?={ startYes }/>
+			Yes
+		</label>
+		<label class="air-n">
+			<input type="radio" name={ name } value="off" checked?={ !startYes }/>
+			No
 		</label>
 	</div>
 }
 
-// reviewRowBody is what sits under a row's header: the page controls, or for
-// an era block just the pill saying which era's version it writes (the page's
-// category, visibility and conflict mode do not apply to a version).
-templ reviewRowBody(idx int, page importer.ParsedPage, cls importer.Classification, data ImportReviewData) {
-	if page.FrontMatter.IsEra() {
-		@reviewRowEraPill(page)
-	} else {
-		@reviewRowFields(idx, page, cls, data)
-		@reviewRowMeta(page)
-	}
-}
-
-// reviewRowEraPill marks a row that writes one era's version of a page.
-templ reviewRowEraPill(page importer.ParsedPage) {
-	<div class="flex flex-wrap items-center gap-1.5 mt-1">
-		<span class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-accent/10 text-accent">
-			<i class="fa-solid fa-hourglass-half text-[9px] mr-1" aria-hidden="true"></i>
-			{ page.FrontMatter.EraName() } version
-		</span>
-		if page.FrontMatter.KnownAs != "" {
-			<span class="text-[10px] text-fg-muted">
-				{ "known as " + page.FrontMatter.KnownAs }
+// reviewRowDeleteConfirm is the "removed for good" tick on a removal. It
+// shows once the row is answered Yes, and the page script makes it required
+// then, so Apply can't send a removal without it; the committer re-checks
+// DeleteConfirmed independently against any client-side bypass.
+templ reviewRowDeleteConfirm(idx int, name, era string) {
+	<label class="air-confirm">
+		<input
+			type="checkbox"
+			name={ fmt.Sprintf("page_%d_delete_confirmed", idx) }
+			data-air-confirm
+			class="mt-0.5 rounded"
+			aria-label={ fmt.Sprintf("I confirm permanent deletion of %s", name) }
+		/>
+		if era != "" {
+			<span>
+				I understand the <strong>{ era }</strong> version of <strong>{ name }</strong> will be permanently deleted.
+				The usual page stays. This cannot be undone.
+			</span>
+		} else {
+			<span>
+				I understand <strong>{ name }</strong> will be permanently deleted.
+				This cannot be undone.
 			</span>
 		}
-	</div>
+	</label>
 }
 
-// reviewRowGMOnlyConfirm renders the "Replace the text anyway" callout for a
-// page whose current text has GM-only parts. Unticked by default and not
+// reviewRowGMOnlyConfirm is the "Replace the text anyway" tick for a page
+// whose current text has GM-only parts. Unticked by default and not
 // `required`: leaving it unticked is a valid choice (the row is skipped), and
 // the committer re-checks the tick against the live page either way.
 templ reviewRowGMOnlyConfirm(idx int, name string, gm importer.GMOnlyParts) {
-	<div class="mt-2 p-2 rounded border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20" role="group" aria-label={ fmt.Sprintf("GM-only parts of %s", name) }>
-		<p class="text-xs text-amber-900 dark:text-amber-100">
-			<i class="fa-solid fa-triangle-exclamation mr-1" aria-hidden="true"></i>
+	<div class="air-line" role="group" aria-label={ fmt.Sprintf("GM-only parts of %s", name) }>
+		<p>
+			<i class="fa-solid fa-eye-slash mr-1" aria-hidden="true"></i>
 			{ gm.Warning() }
 		</p>
-		<label class="flex items-start gap-2 text-xs text-amber-900 dark:text-amber-100 cursor-pointer mt-1">
+		<label class="flex items-start gap-2 cursor-pointer mt-1 text-fg">
 			<input
 				type="checkbox"
 				name={ fmt.Sprintf("page_%d_replace_gm_confirmed", idx) }
-				class="mt-0.5 rounded border-amber-400 text-amber-600"
+				data-air-gm-tick
+				class="mt-0.5 rounded"
 			/>
 			<span>Replace the text anyway</span>
 		</label>
-		<p class="text-xs text-amber-900 dark:text-amber-100 mt-1">
+		<p class="mt-1">
 			Any GM-only words the AI copied into its text will be visible to players.
 		</p>
 	</div>
@@ -452,15 +440,15 @@ templ reviewRowGMOnlyConfirm(idx int, name string, gm importer.GMOnlyParts) {
 // avoid stale-empty whitespace.
 templ reviewRowMeta(page importer.ParsedPage) {
 	if len(page.FrontMatter.Tags) > 0 || page.FrontMatter.Subcategory != "" {
-		<div class="flex flex-wrap items-center gap-1.5 mt-1">
+		<div class="flex flex-wrap items-center gap-1.5">
 			if page.FrontMatter.Subcategory != "" {
-				<span class="text-[10px] uppercase tracking-wide text-fg-muted px-1.5 py-0.5 rounded bg-fg-secondary/5">
+				<span class="text-[11px] text-fg-muted">
 					<i class="fa-solid fa-folder-tree text-[9px] mr-1" aria-hidden="true"></i>
 					{ page.FrontMatter.Subcategory }
 				</span>
 			}
 			for _, t := range page.FrontMatter.Tags {
-				<span class="text-[10px] px-1.5 py-0.5 rounded bg-accent/10 text-accent">
+				<span class="text-[11px] text-fg-muted">
 					<i class="fa-solid fa-tag text-[9px] mr-1" aria-hidden="true"></i>
 					{ t }
 				</span>
@@ -486,16 +474,16 @@ func statusLabel(s importer.ParseStatus) string {
 		return "Action target missing"
 	case importer.StatusParentProblem:
 		return "Parent problem"
+	case importer.StatusFieldProblem:
+		return "Sheet fields problem"
 	default:
 		return "Page"
 	}
 }
 
-// reviewRowHeader renders the name input + Action chip + status chip.
-// The action chip is a writable select so the operator can
-// override the AI's suggested action without re-pasting markdown; the
-// status chip remains read-only as the parser+classifier's diagnosis.
-templ reviewRowHeader(idx int, page importer.ParsedPage, cls importer.Classification) {
+// reviewRowHeader is the name field and the action the row takes, so the
+// operator can rename or change what the AI asked without re-pasting.
+templ reviewRowHeader(idx int, page importer.ParsedPage) {
 	<div class="flex items-center gap-2">
 		<input
 			type="text"
@@ -503,33 +491,22 @@ templ reviewRowHeader(idx int, page importer.ParsedPage, cls importer.Classifica
 			value={ page.Name }
 			placeholder="Page name"
 			class="input text-sm flex-1 min-w-0"
-			disabled?={ page.Status == importer.StatusParseError }
 			aria-label={ fmt.Sprintf("Page %d name (editable)", idx+1) }
 		/>
-		if page.Status != importer.StatusParseError {
-			@reviewRowActionChip(idx, page.FrontMatter.Action)
-		}
-		@statusChip(cls.Status)
+		@reviewRowActionChip(idx, page.FrontMatter.Action)
 	</div>
 }
 
-// reviewRowActionChip renders the per-row Action chip as a writable
-// select styled as a chip, so the operator can override the
-// AI-suggested action verb without re-pasting markdown.
+// reviewRowActionChip is the row's action as a picker.
 templ reviewRowActionChip(idx int, action string) {
 	<select
 		name={ fmt.Sprintf("page_%d_action", idx) }
-		class={
-			"text-xs px-2 py-0.5 rounded-full border border-edge cursor-pointer",
-			templ.KV("bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300", action == importer.ActionCreate || action == ""),
-			templ.KV("bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300", action == importer.ActionUpdate),
-			templ.KV("bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300", action == importer.ActionDelete),
-		}
+		class="input text-xs"
 		aria-label={ fmt.Sprintf("Action verb for page %d", idx+1) }
 	>
-		@actionOption(importer.ActionCreate, "Create", action)
-		@actionOption(importer.ActionUpdate, "Update", action)
-		@actionOption(importer.ActionDelete, "Delete", action)
+		@actionOption(importer.ActionCreate, "Add", action)
+		@actionOption(importer.ActionUpdate, "Change", action)
+		@actionOption(importer.ActionDelete, "Remove", action)
 	</select>
 }
 
@@ -540,36 +517,6 @@ templ actionOption(value, label, currentAction string) {
 		<option value={ value } selected>{ label }</option>
 	} else {
 		<option value={ value }>{ label }</option>
-	}
-}
-
-// statusChip renders the small badge for the row's overall status.
-templ statusChip(s importer.ParseStatus) {
-	switch s {
-		case importer.StatusNew:
-			<span class="text-xs px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300">
-				<i class="fa-solid fa-check mr-1"></i> New
-			</span>
-		case importer.StatusConflict:
-			<span class="text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300">
-				<i class="fa-solid fa-triangle-exclamation mr-1"></i> Name conflict
-			</span>
-		case importer.StatusNewCategory:
-			<span class="text-xs px-2 py-0.5 rounded-full bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300">
-				<i class="fa-solid fa-folder-plus mr-1"></i> New category
-			</span>
-		case importer.StatusParseError:
-			<span class="text-xs px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300">
-				<i class="fa-solid fa-circle-xmark mr-1"></i> Parse error
-			</span>
-		case importer.StatusActionMismatch:
-			<span class="text-xs px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300">
-				<i class="fa-solid fa-circle-xmark mr-1"></i> Target missing
-			</span>
-		case importer.StatusParentProblem:
-			<span class="text-xs px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300">
-				<i class="fa-solid fa-circle-xmark mr-1"></i> Parent problem
-			</span>
 	}
 }
 
@@ -632,7 +579,7 @@ templ reviewRowFields(idx int, page importer.ParsedPage, cls importer.Classifica
 					<option value="skip">Skip</option>
 					<option value="overwrite">Overwrite</option>
 				</select>
-				<span class="block text-[10px] text-amber-700 dark:text-amber-400 mt-0.5">
+				<span class="block text-[10px] text-fg-muted mt-0.5">
 					Exists as: { cls.ConflictEntity.Name }
 				</span>
 			</label>
@@ -666,8 +613,8 @@ templ newCategoryControl(idx int, page importer.ParsedPage, cls importer.Classif
 				aria-label={ fmt.Sprintf("Create a new %q category", cls.ProposedTypeSlug) }
 			/>
 			<span class="text-[11px]">
-				<i class="fa-solid fa-wand-magic-sparkles mr-0.5 text-sky-500" aria-hidden="true"></i>
-				Create new:&nbsp;<code class="text-sky-700 dark:text-sky-300">{ cls.ProposedTypeSlug }</code>
+				<i class="fa-solid fa-folder-plus mr-0.5 text-accent" aria-hidden="true"></i>
+				Create new:&nbsp;<code class="text-accent">{ cls.ProposedTypeSlug }</code>
 			</span>
 		</label>
 		<label class="flex items-start gap-1.5 cursor-pointer">
@@ -701,7 +648,7 @@ templ newCategoryControl(idx int, page importer.ParsedPage, cls importer.Classif
 			:value={ fmt.Sprintf(`catMode === 'new' ? 'new:%s' : mapTarget`, cls.ProposedTypeSlug) }
 		/>
 		if shared > 1 {
-			<div class="text-[10px] text-sky-700 dark:text-sky-400 mt-0.5">
+			<div class="text-[10px] text-accent mt-0.5">
 				<i class="fa-solid fa-circle-info mr-0.5" aria-hidden="true"></i>
 				Creating &quot;{ cls.ProposedTypeSlug }&quot; will apply to { strconv.Itoa(shared) } { pluralize("row", "rows", shared) }.
 			</div>
@@ -831,14 +778,73 @@ templ importBody(cc *campaigns.CampaignContext) {
 // importReviewScript defines the review screen's Alpine x-data factory
 // with the page, not inside the swapped-in review: Alpine reads x-data the
 // moment htmx inserts the form, before htmx runs scripts that came with it,
-// so a factory shipped in the fragment is always too late. Bulk actions
-// mutate the DOM directly to keep the server-rendered state authoritative.
+// so a factory shipped in the fragment is always too late. The answers live
+// in the form's own radios; the factory only counts them, keeps a removal's
+// tick required while it is answered Yes, and adds J/K/Y/N.
 templ importReviewScript() {
 	<script>
 		(function () {
 			if (window.aiImportReview) { return; }
-			window.aiImportReview = function () {
+			function typing(ev) {
+				var t = ev.target;
+				return t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
+			}
+			function answer(row, yes) {
+				var radio = row.querySelector('.air-yn input[value="' + (yes ? 'on' : 'off') + '"]');
+				if (radio) { radio.checked = true; }
+			}
+			window.aiImportReview = function (startYes) {
 				return {
+					yes: startYes || 0,
+					removals: 0,
+					at: -1,
+					init: function () { this.sync(); },
+					rows: function () { return Array.prototype.slice.call(this.$root.querySelectorAll('[data-air-row]')); },
+					// sync recounts the answers and makes each removal's tick
+					// required exactly while that removal is answered Yes.
+					sync: function () {
+						var yes = 0, removals = 0;
+						this.rows().forEach(function (row) {
+							var on = !!row.querySelector('.air-y input:checked');
+							var confirm = row.querySelector('[data-air-confirm]');
+							if (confirm) { confirm.required = on; }
+							var gm = row.hasAttribute('data-air-gm') ? row.querySelector('[data-air-gm-tick]') : null;
+							if (on && !(gm && !gm.checked)) { yes++; }
+							if (on && row.dataset.airVerb === 'Remove') { removals++; }
+						});
+						this.yes = yes;
+						this.removals = removals;
+					},
+					onChange: function () { this.sync(); },
+					answerAll: function (yes) {
+						// Yes skips removals (set back to No) and rows held on No
+						// because the AI's request can't go through as written.
+						this.rows().forEach(function (row) {
+							if (yes && row.hasAttribute('data-air-hold')) { return; }
+							answer(row, yes && row.dataset.airVerb !== 'Remove');
+						});
+						this.sync();
+					},
+					onKey: function (ev) {
+						if (typing(ev) || ev.ctrlKey || ev.metaKey || ev.altKey || !this.$root.isConnected) { return; }
+						var k = (ev.key || '').toLowerCase();
+						if ('jkyn'.indexOf(k) < 0 || k.length !== 1) { return; }
+						var rows = this.rows();
+						if (!rows.length) { return; }
+						var cur = rows.indexOf(document.activeElement && document.activeElement.closest('[data-air-row]'));
+						if (cur >= 0) { this.at = cur; }
+						// Y and N answer only a row the operator has moved to, so
+						// a stray key never answers the first row unseen.
+						var picked = this.at >= 0;
+						if (k === 'j') { this.at = Math.min(rows.length - 1, this.at + 1); }
+						if (k === 'k') { this.at = Math.max(0, this.at - 1); }
+						if (this.at < 0) { this.at = 0; }
+						var row = rows[this.at];
+						row.focus();
+						row.scrollIntoView({ block: 'nearest' });
+						if ((k === 'y' || k === 'n') && picked) { answer(row, k === 'y'); this.sync(); }
+						ev.preventDefault();
+					},
 					applyDefaultsToAll: function () {
 						var form = this.$root;
 						var bulkCategory = form.querySelector('[name=bulk_default_category]')?.value || '';
@@ -864,13 +870,6 @@ templ importReviewScript() {
 						this.$root.querySelectorAll('select[name$="_conflict"]').forEach(function (sel) {
 							if (sel.name === 'bulk_default_conflict') return;
 							sel.value = 'skip';
-						});
-					},
-					toggleAll: function (event) {
-						var checked = event.target.checked;
-						this.$root.querySelectorAll('input[type=checkbox][name$="_include"]').forEach(function (cb) {
-							if (cb.disabled) return;
-							cb.checked = checked;
 						});
 					},
 				};

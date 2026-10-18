@@ -102,7 +102,7 @@ test('the save body is the whole encounter in the server\'s shape', () => {
   const e = H.normalise({ id: 'e1', name: '  ', version: 3, ready: true, heroes: [{ id: 'h1', name: 'Ash' }],
     creatures: [{ id: 'r1', entityId: 'gob', name: 'Goblin', count: 2, group: 'B', start: 'hidden' }] });
   assert.deepEqual(plain(H.toSave(e)), {
-    name: 'Untitled encounter', ready: true, heroes: ['h1'], version: 3,
+    name: 'Untitled encounter', ready: true, heroes: ['h1'], version: 3, stages: [],
     creatures: [{ id: 'r1', entityId: 'gob', name: 'Goblin', count: 2, group: 'B', start: 'hidden' }]
   });
 });
@@ -113,4 +113,106 @@ test('pickers take heroes from character categories and creatures from creature 
   assert.deepEqual(plain(H.pickTypes(types, 'creature')), [2, 4]);
   assert.deepEqual(plain(H.pickTypes(types, 'character')), [1]);
   assert.deepEqual(plain(H.pickTypes(null, 'creature')), []);
+});
+
+// ---- Stages ----
+
+const queen = () => H0().normalise({
+  id: 'e1', version: 2,
+  creatures: [
+    { id: 'r1', entityId: 'queen', name: 'Hollow Queen', count: 1, start: 'seen' },
+    { id: 'r2', entityId: '', name: 'Rat swarm', count: 3, start: 'later' }
+  ]
+});
+function H0() { return load().H; }
+
+test('an encounter with no stages reads and saves as none', () => {
+  const H = H0();
+  const e = H.normalise({ id: 'e1', name: 'Old' });
+  assert.deepEqual(plain(e.stages), []);
+  assert.deepEqual(plain(H.toSave(e).stages), []);
+});
+
+test('normalise keeps a stage within the server\'s ranges', () => {
+  const H = H0();
+  const e = H.normalise({ stages: [{ id: 's1', when: { kind: 'weekly', percent: 500, round: 1 }, how: 'loud', forms: [{ row: 'r1' }], arrive: ['r2', 7] }] });
+  const s = e.stages[0];
+  assert.equal(s.when.kind, 'manual');
+  assert.equal(s.when.percent, 99);
+  assert.equal(s.when.round, 2);
+  assert.equal(s.how, 'reveal');
+  assert.deepEqual(plain(s.arrive), ['r2']);
+  assert.deepEqual(plain(s.forms[0]), { row: 'r1', form: '', formName: '' });
+});
+
+test('the Hollow Queen stage builds and saves in the server\'s shape', () => {
+  const H = H0();
+  let e = H.addStage(queen());
+  const id = e.stages[0].id;
+  assert.equal(H.stageReady(e, e.stages[0]), false, 'a stage that does nothing is not saved');
+  assert.deepEqual(plain(H.toSave(e).stages), []);
+  e = H.setWhen(e, id, { kind: 'stamina' });
+  assert.equal(e.stages[0].when.row, 'r1', 'Stamina picks the first row');
+  e = H.setWhen(e, id, { percent: 50 });
+  e = H.addForm(e, id);
+  e = H.setForm(e, id, 0, { form: 'unmasked', formName: 'Unmasked' });
+  e = H.toggleArrive(e, id, 'r2', true);
+  e = H.setStageField(e, id, 'note', '  Dim the lights ');
+  assert.deepEqual(plain(H.toSave(e).stages), [{
+    id, when: { kind: 'stamina', row: 'r1', percent: 50, round: 0 },
+    forms: [{ row: 'r1', form: 'unmasked', formName: 'Unmasked' }], arrive: ['r2'], how: 'reveal', note: 'Dim the lights'
+  }]);
+});
+
+test('only the trigger\'s own fields are sent', () => {
+  const H = H0();
+  let e = H.addStage(queen());
+  const id = e.stages[0].id;
+  e = H.toggleArrive(e, id, 'r2', true);
+  e = H.setWhen(e, id, { kind: 'round', round: 3 });
+  assert.deepEqual(plain(H.toSave(e).stages[0].when), { kind: 'round', row: '', percent: 0, round: 3 });
+  e = H.setWhen(e, id, { kind: 'manual' });
+  assert.deepEqual(plain(H.toSave(e).stages[0].when), { kind: 'manual', row: '', percent: 0, round: 0 });
+});
+
+test('form changes need a row with a page and follow the chosen option', () => {
+  const H = H0();
+  let e = H.addStage(queen());
+  const id = e.stages[0].id;
+  e = H.addForm(e, id);
+  assert.deepEqual(plain(e.stages[0].forms[0]), { row: 'r1', form: '', formName: H.FIRST_FORM });
+  e = H.setForm(e, id, 0, { form: 'unmasked', formName: 'Unmasked' });
+  e = H.setForm(e, id, 0, { form: '' });
+  assert.equal(e.stages[0].forms[0].formName, H.FIRST_FORM, 'the first form has its own name');
+  e = H.setForm(e, id, 0, { form: 'unmasked', formName: 'Unmasked' });
+  e = H.setForm(e, id, 0, { row: 'r1' });
+  assert.equal(e.stages[0].forms[0].form, 'unmasked', 'the same creature keeps its form');
+  e = H.removeForm(e, id, 0);
+  assert.equal(e.stages[0].forms.length, 0);
+  const noPage = H.normalise({ creatures: [{ id: 'r1', name: 'Rat' }] });
+  const s = H.addStage(noPage);
+  assert.equal(H.addForm(s, s.stages[0].id).stages[0].forms.length, 0);
+});
+
+test('rows that start later are listed first for arrivals', () => {
+  const H = H0();
+  assert.deepEqual(plain(H.arriveOrder(queen()).map((c) => c.id)), ['r2', 'r1']);
+});
+
+test('stages are capped, and removing a row takes it out of every stage', () => {
+  const H = H0();
+  let e = queen();
+  for (let i = 0; i < H.LIM.stages + 2; i++) e = H.addStage(e);
+  assert.equal(e.stages.length, H.LIM.stages);
+  const id = e.stages[0].id;
+  e = H.setWhen(e, id, { kind: 'stamina', row: 'r1' });
+  e = H.addForm(e, id);
+  e = H.toggleArrive(e, id, 'r2', true);
+  e = H.removeRow(e, 'r1');
+  assert.equal(e.stages[0].forms.length, 0);
+  assert.equal(e.stages[0].when.row, 'r2', 'the watched row falls to a row that still exists');
+  e = H.removeRow(e, 'r2');
+  assert.deepEqual(plain(e.stages[0].arrive), []);
+  assert.equal(e.stages[0].when.row, '');
+  assert.equal(H.stageReady(e, e.stages[0]), false);
 });

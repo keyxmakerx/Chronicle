@@ -91,6 +91,11 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.POST("/entities/bulk-visibility", h.BulkVisibilityAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.POST("/entities/bulk-delete", h.BulkDeleteAPI, campaigns.RequireRole(campaigns.RoleOwner))
 
+	// The Family tree block's Edit tab: Director only (owner or granted
+	// co-Director), not a Scribe. The handler's service checks again.
+	cg.GET("/entities/:eid/family/candidates", h.FamilyCandidatesAPI, RequireFamilyDirector())
+	cg.POST("/entities/:eid/family", h.FamilyEditAPI, RequireFamilyDirector())
+
 	// Saved filter presets (per-user tag filter combos, Player+).
 	cg.GET("/saved-filters", h.ListSavedFiltersAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.POST("/saved-filters", h.CreateSavedFilterAPI, campaigns.RequireRole(campaigns.RolePlayer))
@@ -146,8 +151,6 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// Entity type management (Owner only).
 	cg.GET("/entity-types", h.EntityTypesPage, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.POST("/entity-types", h.CreateEntityType, campaigns.RequireRole(campaigns.RoleOwner))
-	// Customize's one-click Adventures category for a campaign that has none.
-	cg.POST("/entity-types/adventures", h.EnsureAdventuresAPI, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.PUT("/entity-types/:etid", h.UpdateEntityTypeAPI, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.DELETE("/entity-types/:etid", h.DeleteEntityType, campaigns.RequireRole(campaigns.RoleOwner))
 
@@ -172,6 +175,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.GET("/entity-types/:etid/layout", h.GetEntityTypeLayout, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.PUT("/entity-types/:etid/layout", h.UpdateEntityTypeLayout, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.POST("/entity-types/:etid/layout-preview", h.LayoutPreview, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.POST("/entity-types/:etid/home-preview", h.CategoryHomePreview, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.PUT("/entity-types/:etid/color", h.UpdateEntityTypeColor, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.PUT("/entity-types/:etid/dashboard", h.UpdateEntityTypeDashboard, campaigns.RequireRole(campaigns.RoleOwner))
 

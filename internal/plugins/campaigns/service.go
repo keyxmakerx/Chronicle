@@ -105,6 +105,9 @@ type CampaignService interface {
 	// SaveAppearance writes one Save from the Customize page, every
 	// setting at once.
 	SaveAppearance(ctx context.Context, campaignID string, in AppearanceInput) error
+	// AdoptMaterialPageLook moves a campaign that never chose a page look to
+	// the Material one (Annals) and reports whether it changed anything.
+	AdoptMaterialPageLook(ctx context.Context, campaignID string) (bool, error)
 
 	// GetEventTierDefinitions returns the campaign's event tier vocabulary.
 	// Returns the platform default trio (major/standard/detail) when the
@@ -174,6 +177,9 @@ type CampaignService interface {
 	// UpdateCharacterLists stores the page types the campaign lists as
 	// characters and as NPCs. Callers validate the IDs; this only persists.
 	UpdateCharacterLists(ctx context.Context, campaignID string, characterTypeIDs, npcTypeIDs []int) error
+	// ClearCharacterLists removes both lists, so the campaign is seeded from
+	// its own page types the next time they are read.
+	ClearCharacterLists(ctx context.Context, campaignID string) error
 	SetMediaCleaner(cleaner MediaCleaner)
 	SetHookDispatcher(dispatcher CampaignHookDispatcher)
 
@@ -338,6 +344,29 @@ func (s *campaignService) UpdateCharacterLists(ctx context.Context, campaignID s
 	return s.repo.UpdateSettings(ctx, campaignID, string(settingsJSON))
 }
 
+// ClearCharacterLists drops both lists from the settings JSON, leaving every
+// other setting as it was.
+func (s *campaignService) ClearCharacterLists(ctx context.Context, campaignID string) error {
+	campaign, err := s.repo.FindByID(ctx, campaignID)
+	if err != nil {
+		return err
+	}
+	if campaign == nil {
+		return apperror.NewNotFound("campaign not found")
+	}
+	settings := campaign.ParseSettings()
+	if settings.CharacterTypeIDs == nil && settings.NPCTypeIDs == nil {
+		return nil
+	}
+	settings.CharacterTypeIDs = nil
+	settings.NPCTypeIDs = nil
+	settingsJSON, err := json.Marshal(settings)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("marshaling settings: %w", err))
+	}
+	return s.repo.UpdateSettings(ctx, campaignID, string(settingsJSON))
+}
+
 // SetMediaCleaner sets the media cleaner for campaign deletion cleanup.
 // Called after all plugins are wired to avoid initialization order issues.
 func (s *campaignService) SetMediaCleaner(cleaner MediaCleaner) {
@@ -361,23 +390,22 @@ func (s *campaignService) SetSiteLookSource(src SiteLookSource) {
 // so it renders in the site look at once and Customize opens on it. Classic is the Appearance
 // default and is stored as empty, like every other default. A failed read
 // only means the campaign starts as Classic: creating a campaign must not
-// depend on the site look.
+// depend on the site look. Every new campaign draws its pages in the Material
+// page look (Annals); Standard stays a choice for campaigns that use it.
 func (s *campaignService) newCampaignSettings(ctx context.Context) string {
-	if s.siteLook == nil {
-		return "{}"
-	}
-	look, err := s.siteLook.GetSiteLook(ctx)
-	if err != nil {
-		slog.Warn("reading the site look for a new campaign", slog.Any("error", err))
-		return "{}"
-	}
-	if look.Look == "" || look.Look == AppearanceLooks[0] {
-		return "{}"
-	}
 	var settings CampaignSettings
-	if !seedLook(&settings, look.Look) {
-		return "{}"
+	if s.siteLook != nil {
+		look, err := s.siteLook.GetSiteLook(ctx)
+		if err != nil {
+			slog.Warn("reading the site look for a new campaign", slog.Any("error", err))
+		} else if look.Look != "" && look.Look != AppearanceLooks[0] && !seedLook(&settings, look.Look) {
+			settings = CampaignSettings{}
+		}
 	}
+	if settings.Appearance == nil {
+		settings.Appearance = &Appearance{}
+	}
+	settings.Appearance.PageLook = "annals"
 	b, err := json.Marshal(settings)
 	if err != nil {
 		return "{}"

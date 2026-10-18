@@ -59,6 +59,9 @@ type entityTypeView struct {
 	Name           string
 	Slug           string
 	PresetCategory string
+	// Fields are the category's sheet fields, one line each: the key the
+	// AI writes under `fields:` and what value it takes.
+	Fields []string
 }
 
 // categoryInUseView is the "Categories currently in use" row.
@@ -147,7 +150,16 @@ The pages in my campaign, by type. Ask a ` + "`" + `what: page` + "`" + ` lookup
 
 {{ range .EntityTypes }}
 - **{{ .Name }}** (slug: ` + "`" + `{{ .Slug }}` + "`" + `){{ if .PresetCategory }} — preset: {{ .PresetCategory }}{{ end }}
+{{- if .Fields }}{{ range .Fields }}
+  - {{ . }}{{ end }}{{ end }}
 {{ end }}
+
+A page's sheet is set with a ` + "`" + `fields:` + "`" + ` map in its front matter, using the field keys
+listed under its type, for example ` + "`" + `fields: {level: 3, stamina: 30}` + "`" + `. Only those keys
+work, and each value must fit its field. On ` + "`" + `action: update` + "`" + ` only the fields you name
+change, and ` + "`" + `null` + "`" + ` clears one. A field that holds a list (a stat block's traits or
+abilities, say) takes a YAML list. To build a monster, give its page the creature type
+and every stat block field, then name that page in an encounter's creatures.
 {{ end }}
 
 {{ if .IncludeCategoriesInUse }}
@@ -171,6 +183,7 @@ type: location
 subcategory: city
 visibility: private
 tags: [trade-hub, coastal]
+reason: The players asked where the caravan was headed.
 ---
 
 # Example Page Name
@@ -180,7 +193,12 @@ The body of the page in markdown.
 
 Valid ` + "`" + `type` + "`" + ` values are the slugs listed above. ` + "`" + `visibility` + "`" + ` must be one of
 ` + "`" + `private` + "`" + `, ` + "`" + `dm_only` + "`" + `, or ` + "`" + `public` + "`" + `. ` + "`" + `tags` + "`" + ` is optional; use the campaign's
-existing tag vocabulary where possible.
+existing tag vocabulary where possible; a tag that doesn't exist yet is made. On
+` + "`" + `action: update` + "`" + `, ` + "`" + `tags` + "`" + ` replaces the page's tags, ` + "`" + `tags: []` + "`" + ` clears them, and leaving
+the line out keeps them. A page's GM-only tags always stay.
+
+` + "`" + `reason` + "`" + ` is one sentence saying why you are asking for this change. I see it
+beside the change when I review, and it is never saved.
 
 To put a page under another page, add ` + "`" + `parent: Name of the parent page` + "`" + `. The parent
 is an existing page (an index line like "Name (in Parent)" means that page already sits
@@ -212,7 +230,8 @@ Besides pages, a block can change other parts of the campaign. Give it
 ` + "`" + `kind:` + "`" + ` (below) and ` + "`" + `action:` + "`" + ` (` + "`" + `create` + "`" + `, ` + "`" + `update` + "`" + ` or ` + "`" + `delete` + "`" + `), matched by
 ` + "`" + `name` + "`" + `. I review every change, and confirm each removal myself, before
 anything happens. For a page, ` + "`" + `action: update` + "`" + ` and ` + "`" + `action: delete` + "`" + ` work the
-same way.
+same way. Any block can add ` + "`" + `reason:` + "`" + ` with one sentence saying why, above all a
+removal.
 
 {{ .RecordDocs }}
 {{ end }}

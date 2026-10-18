@@ -22,6 +22,10 @@ type stubImportEntitySvc struct {
 	created []entities.CreateEntityInput
 }
 
+func (s *stubImportEntitySvc) GetEntityTypesByPresetCategory(_ context.Context, campaignID, _ string) ([]entities.EntityType, error) {
+	return []entities.EntityType{{ID: 5, CampaignID: campaignID, Slug: "creature", Enabled: true}}, nil
+}
+
 func (s *stubImportEntitySvc) Create(_ context.Context, campaignID, _ string, input entities.CreateEntityInput) (*entities.Entity, error) {
 	s.created = append(s.created, input)
 	return &entities.Entity{ID: "ent-new", CampaignID: campaignID, Name: input.Name}, nil
@@ -84,7 +88,7 @@ func TestBestiaryImport_HonoursCampaignDefaultVisibility(t *testing.T) {
 				campaignSvc: &stubImportCampaignSvc{defaultVis: tc.defaultVis},
 			}
 
-			id, err := a.CreateFromStatblock(context.Background(), "camp-1", "user-1", "Goblin Boss",
+			id, err := a.CreateFromStatblock(context.Background(), "camp-1", "user-1", "Goblin Boss", "",
 				json.RawMessage(`{"hp":21}`))
 			if err != nil {
 				t.Fatalf("CreateFromStatblock: %v", err)
@@ -123,7 +127,7 @@ func TestBestiaryImport_UnreadableCampaignFailsClosed(t *testing.T) {
 				a.campaignSvc = tc.svc
 			}
 
-			if _, err := a.CreateFromStatblock(context.Background(), "camp-1", "user-1", "Goblin Boss",
+			if _, err := a.CreateFromStatblock(context.Background(), "camp-1", "user-1", "Goblin Boss", "",
 				json.RawMessage(`{"hp":21}`)); err != nil {
 				t.Fatalf("CreateFromStatblock: %v", err)
 			}

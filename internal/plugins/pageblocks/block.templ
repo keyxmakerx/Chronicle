@@ -22,3 +22,21 @@ templ BlockMount(campaignID, entityID, blockID, kind, csrfToken string) {
 		data-csrf-token={ csrfToken }
 	></div>
 }
+
+// pageMapAssets loads the page map's stylesheet.
+templ pageMapAssets() {
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/css/page_map.css") }/>
+}
+
+// PageMapMount is the mount point of the Map block. Like the other blocks the
+// widget fetches its content itself, so what it shows is decided by the
+// service for whoever is looking.
+templ PageMapMount(campaignID, entityID, blockID, csrfToken string) {
+	@pageMapAssets()
+	<div
+		data-widget="page_map"
+		data-endpoint={ "/campaigns/" + campaignID + "/page-blocks/" + entityID + "/" + blockID }
+		data-kind={ KindPageMap }
+		data-csrf-token={ csrfToken }
+	></div>
+}

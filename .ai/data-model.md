@@ -349,11 +349,25 @@ Foundry module repo for the wire contract.
 |-------|---------|
 | `dm_screen_board_items` | The DM Screen's Adventures tab: `kind` = page/note; a pin has `entity_id` (unique per campaign; FK cascade to `entities` and `campaigns`), a note has `body` (500 characters); `created_by` carries no FK |
 
+### entities standing (`internal/plugins/entities/migrations/`, registry slug `entity_standing`)
+
+| Table | Purpose |
+|-------|---------|
+| `entity_standings` | How a page feels about the party or one character (the Standing block): one row per `(entity_id, subject_key)`; `subject_key` is `''` for the party, else the character's page id (no FK, so the party shares the unique key; reads join the live page, so a deleted or trashed character's row is never shown); `level` 0-4 (Hostile..Trusted), set by the Director; FK cascade to `entities` and `campaigns`; `updated_by` carries no FK |
+| `entity_standing_reasons` | The Director's explanations, newest first: `direction` (`up`/`down`/`none`, checked by the service), `reason` (90 characters), `when_label` (30), `dm_only`; FK cascade to `entity_standings`; at most 300 per standing; `created_by` carries no FK |
+| `entity_standing_settings` | Whether players see a page's standing at all: PK `entity_id`, `players_see` (a page with no row lets them); FK cascade to `entities` and `campaigns` |
+
 ### pageblocks (`internal/plugins/pageblocks/migrations/`)
 
 | Table | Purpose |
 |-------|---------|
 | `page_block_content` | One JSON document per (page, layout block): `PRIMARY KEY (entity_id, block_id)`, `kind` (`read_aloud`/`page_table`/`page_steps`), `version` for edit conflicts; FKs to `entities`, `campaigns` cascade |
+
+### rumours (`internal/plugins/rumours/migrations/`)
+
+| Table | Purpose |
+|-------|---------|
+| `page_rumours` | What the party has heard about a page: `quote`, `source` (who said it), `sure` 1 to 3, `truth` (`open`/`true`/`false`, the Director's alone and never selected for anyone else), `belief` (`''`/`true`/`false`/`unsure`, what the party thinks) with `belief_by` and `belief_by_dm`, `by_dm` and `created_by` for the byline; FKs to `entities` and `campaigns` cascade. Capped at 200 per page |
 
 ### encounters (`internal/plugins/encounters/migrations/`)
 

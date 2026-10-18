@@ -12,8 +12,8 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"strconv"
-	"strings"
+
+	"github.com/keyxmakerx/chronicle/internal/semver"
 )
 
 // Status represents the implementation status of a module.
@@ -133,24 +133,11 @@ func ScanPackageDir(dir string) {
 // otherwise exact tie it falls back to string comparison so selection stays
 // deterministic. Tolerant of arbitrary component counts ("1.2" vs "1.2.3").
 func versionLess(a, b string) bool {
-	pa := strings.Split(a, ".")
-	pb := strings.Split(b, ".")
-	n := len(pa)
-	if len(pb) > n {
-		n = len(pb)
+	if c := semver.Compare(a, b); c != 0 {
+		return c < 0
 	}
-	for i := 0; i < n; i++ {
-		var ai, bi int
-		if i < len(pa) {
-			ai, _ = strconv.Atoi(pa[i])
-		}
-		if i < len(pb) {
-			bi, _ = strconv.Atoi(pb[i])
-		}
-		if ai != bi {
-			return ai < bi
-		}
-	}
+	// Equal versions spelled differently ("1.2" and "1.2.0") still order the
+	// same way every scan.
 	return a < b
 }
 

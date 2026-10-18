@@ -40,7 +40,7 @@ import (
 type EntityTagFetcher interface {
 	GetEntityTagsBatch(ctx context.Context, entityIDs []string, includeDmOnly bool) (map[string][]EntityTagInfo, error)
 	GetEntityTags(ctx context.Context, entityID string, includeDmOnly bool) ([]EntityTagInfo, error)
-	SetEntityTags(ctx context.Context, entityID string, campaignID string, tagIDs []int) error
+	SetEntityTags(ctx context.Context, entityID string, campaignID string, tagIDs []int, includeDmOnly bool) error
 	GetEntityTagGrants(ctx context.Context, campaignID, entityID string) ([]EntityTagGrantInfo, error)
 }
 
@@ -81,7 +81,7 @@ type SessionSearcher interface {
 // SystemSearcher provides game system search results for the quick
 // search popup. Implemented by systems.SystemSearchAdapter.
 type SystemSearcher interface {
-	SearchSystemContent(ctx context.Context, campaignID, query string) ([]map[string]string, error)
+	SearchSystemContent(ctx context.Context, campaignID, query string, director bool) ([]map[string]string, error)
 }
 
 // MemberLister retrieves campaign members for the permissions UI.
@@ -108,6 +108,7 @@ type Handler struct {
 	characterPanel     *PagePanel          // Optional panel under character pages; see page_panel.go.
 	systemPanels       SystemPanelResolver // Optional game-system panels under the title; see system_panels.go.
 	service            EntityService
+	familyEdit         FamilyEditService
 	trashNotes         TrashNoteCounter // Optional: Player Notes count in the post-delete message.
 	auditSvc           audit.AuditService
 	tagFetcher         EntityTagFetcher
@@ -403,7 +404,7 @@ func (h *Handler) Index(c echo.Context) error {
 		for i := range entities {
 			parentIDs[i] = entities[i].ID
 		}
-		if links := h.loadTreePlaces(c.Request().Context(), cc, parentIDs, userID, nil); len(links) > 0 {
+		if links := h.loadTreePlaces(c.Request().Context(), cc, parentIDs, int(cc.VisibilityRole()), userID, nil); len(links) > 0 {
 			c.SetRequest(c.Request().WithContext(withTreePlaces(c.Request().Context(), links)))
 		}
 		if middleware.IsHTMX(c) {
@@ -624,7 +625,7 @@ func (h *Handler) prepareShow(c echo.Context) (*showPage, error) {
 }
 
 // prepareShowFor is prepareShow for a page named by the caller rather than
-// the route, so Customize's page editor can draw blocks as that page shows them.
+// the route, so the Customizer's page layout can draw blocks as that page shows them.
 func (h *Handler) prepareShowFor(c echo.Context, entityID string) (*showPage, error) {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
@@ -701,10 +702,11 @@ func (h *Handler) prepareShowFor(c echo.Context, entityID string) (*showPage, er
 
 	// Player Character Claiming: gate the claim affordance on the
 	// addon, and resolve the current owner's display name for the "Claimed by"
-	// banner. The member lookup only runs when the entity is actually claimed.
+	// banner. The member lookup only runs when the entity is actually claimed,
+	// and only for members: a visitor sees the character, not who plays it.
 	claimingEnabled := h.isAddonEnabled(c.Request().Context(), cc.Campaign.ID, AddonPlayerCharacterClaiming)
 	ownerName := ""
-	if entity.OwnerUserID != nil && h.memberLister != nil {
+	if entity.OwnerUserID != nil && h.memberLister != nil && cc.MemberRole >= campaigns.RolePlayer {
 		if members, mErr := h.memberLister.ListMembers(c.Request().Context(), cc.Campaign.ID); mErr == nil {
 			ownerName = resolveOwnerName(entity.OwnerUserID, ownerDisplayNames(members))
 		} else {
@@ -977,6 +979,11 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 	isSidebar := c.QueryParam("sidebar") == "1"
 	if isSidebar {
 		opts.PerPage = 50
+		// An owner previewing as a player gets the player's tree, matching
+		// the category counts beside it.
+		if campaigns.ViewingAsPlayer(c, cc) {
+			role = int(campaigns.RolePlayer)
+		}
 	}
 
 	// Tag filtering: comma-separated tag slugs (AND logic).
@@ -1098,6 +1105,7 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 		if h.systemSearcher != nil && query != "" {
 			if modResults, err := h.systemSearcher.SearchSystemContent(
 				c.Request().Context(), cc.Campaign.ID, query,
+				cc.VisibilityRole() >= int(campaigns.RoleOwner),
 			); err == nil {
 				items = append(items, toAnyMaps(modResults)...)
 				total += len(modResults)
@@ -1116,7 +1124,7 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 		}
 
 		// Players don't see individually hidden entities at all.
-		if cc.MemberRole < campaigns.RoleScribe && len(hiddenIDs) > 0 {
+		if role < int(campaigns.RoleScribe) && len(hiddenIDs) > 0 {
 			filtered := results[:0]
 			for _, e := range results {
 				if !hiddenIDs[e.ID] {
@@ -1144,7 +1152,7 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 			for i := range results {
 				parentIDs[i] = results[i].ID
 			}
-			if links := h.loadTreePlaces(c.Request().Context(), cc, parentIDs, userID, hiddenIDs); len(links) > 0 {
+			if links := h.loadTreePlaces(c.Request().Context(), cc, parentIDs, role, userID, hiddenIDs); len(links) > 0 {
 				c.SetRequest(c.Request().WithContext(withTreePlaces(c.Request().Context(), links)))
 			}
 		}
@@ -1350,20 +1358,32 @@ func (h *Handler) BulkTagsAPI(c echo.Context) error {
 
 	ctx := c.Request().Context()
 	processed := 0
+	role, userID := int(cc.VisibilityRole()), auth.GetUserID(c)
+	// A caller who cannot see dm_only tags must not read, add or clear them.
+	seeDmOnly := cc.MemberRole >= campaigns.RoleOwner || cc.IsSiteAdmin || cc.IsDmGranted
 	for _, eid := range req.EntityIDs {
+		// Ids come from the body, so each must be a page in this campaign
+		// the caller can see; any other is skipped, as in BulkUpdateType.
+		entity, err := h.service.GetByID(ctx, eid)
+		if err != nil || entity.CampaignID != cc.Campaign.ID {
+			continue
+		}
+		if access, err := h.service.CheckEntityAccess(ctx, eid, role, userID); err != nil || !access.CanView {
+			continue
+		}
 		switch req.Action {
 		case "add":
-			existing, _ := h.tagFetcher.GetEntityTags(ctx, eid, true)
+			existing, _ := h.tagFetcher.GetEntityTags(ctx, eid, seeDmOnly)
 			existingIDs := make([]int, len(existing))
 			for i, t := range existing {
 				existingIDs[i] = t.ID
 			}
 			merged := mergeIntSets(existingIDs, req.TagIDs)
-			if err := h.tagFetcher.SetEntityTags(ctx, eid, cc.Campaign.ID, merged); err == nil {
+			if err := h.tagFetcher.SetEntityTags(ctx, eid, cc.Campaign.ID, merged, seeDmOnly); err == nil {
 				processed++
 			}
 		case "remove":
-			existing, _ := h.tagFetcher.GetEntityTags(ctx, eid, true)
+			existing, _ := h.tagFetcher.GetEntityTags(ctx, eid, seeDmOnly)
 			removeSet := make(map[int]bool)
 			for _, id := range req.TagIDs {
 				removeSet[id] = true
@@ -1374,11 +1394,11 @@ func (h *Handler) BulkTagsAPI(c echo.Context) error {
 					remaining = append(remaining, t.ID)
 				}
 			}
-			if err := h.tagFetcher.SetEntityTags(ctx, eid, cc.Campaign.ID, remaining); err == nil {
+			if err := h.tagFetcher.SetEntityTags(ctx, eid, cc.Campaign.ID, remaining, seeDmOnly); err == nil {
 				processed++
 			}
 		case "set":
-			if err := h.tagFetcher.SetEntityTags(ctx, eid, cc.Campaign.ID, req.TagIDs); err == nil {
+			if err := h.tagFetcher.SetEntityTags(ctx, eid, cc.Campaign.ID, req.TagIDs, seeDmOnly); err == nil {
 				processed++
 			}
 		}
@@ -2895,34 +2915,6 @@ func (h *Handler) EntityTypesPage(c echo.Context) error {
 		EntityTypesManagePage(cc, entityTypes, counts, csrfToken, "", claimingEnabled))
 }
 
-// EnsureAdventuresAPI adds the Adventures category when the campaign has none
-// (POST /campaigns/:id/entity-types/adventures). It is idempotent: pressing it
-// twice, or on a campaign that already has the category, changes nothing and
-// answers 200 with created=false.
-func (h *Handler) EnsureAdventuresAPI(c echo.Context) error {
-	cc := campaigns.GetCampaignContext(c)
-	if cc == nil {
-		return apperror.NewMissingContext()
-	}
-	et, created, err := h.service.EnsureAdventures(c.Request().Context(), cc.Campaign.ID)
-	if err != nil {
-		return err
-	}
-	if created {
-		h.logAudit(c, cc.Campaign.ID, audit.ActionEntityTypeCreated, strconv.Itoa(et.ID), et.Name)
-	}
-	status := http.StatusOK
-	if created {
-		status = http.StatusCreated
-	}
-	return c.JSON(status, map[string]any{
-		"id":      et.ID,
-		"slug":    et.Slug,
-		"name":    et.NamePlural,
-		"created": created,
-	})
-}
-
 // CreateEntityType processes the entity type creation form.
 // POST /campaigns/:id/entity-types
 func (h *Handler) CreateEntityType(c echo.Context) error {
@@ -3593,6 +3585,21 @@ func (h *Handler) SetAliasesAPI(c echo.Context) error {
 	}
 
 	entityID := c.Param("eid")
+
+	// The page must be in this campaign and visible to the caller, as for
+	// GetAliasesAPI; the service writes by entity id alone.
+	entity, err := h.service.GetByID(c.Request().Context(), entityID)
+	if err != nil {
+		return err
+	}
+	if entity.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("entity not found")
+	}
+	access, err := h.service.CheckEntityAccess(c.Request().Context(), entity.ID, int(cc.VisibilityRole()), auth.GetUserID(c))
+	if err != nil || !access.CanView {
+		return apperror.NewNotFound("entity not found")
+	}
+
 	var input SetAliasesInput
 	if err := c.Bind(&input); err != nil {
 		return apperror.NewBadRequest("invalid request body")

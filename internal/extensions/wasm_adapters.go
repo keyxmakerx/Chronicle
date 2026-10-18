@@ -9,14 +9,14 @@ import (
 // This avoids importing heavy plugin packages directly — the caller wires
 // concrete service methods at startup in app/routes.go.
 type wasmEntityAdapter struct {
-	getByID        func(ctx context.Context, id string) (json.RawMessage, error)
+	getByID        func(ctx context.Context, campaignID, id string) (json.RawMessage, error)
 	search         func(ctx context.Context, campaignID, query string, limit int) (json.RawMessage, error)
 	listTypes      func(ctx context.Context, campaignID string) (json.RawMessage, error)
 }
 
 // NewWASMEntityAdapter creates an EntityReader from function closures.
 func NewWASMEntityAdapter(
-	getByID func(ctx context.Context, id string) (json.RawMessage, error),
+	getByID func(ctx context.Context, campaignID, id string) (json.RawMessage, error),
 	search func(ctx context.Context, campaignID, query string, limit int) (json.RawMessage, error),
 	listTypes func(ctx context.Context, campaignID string) (json.RawMessage, error),
 ) EntityReader {
@@ -29,7 +29,7 @@ func NewWASMEntityAdapter(
 
 // GetEntityJSON implements EntityReader.
 func (a *wasmEntityAdapter) GetEntityJSON(ctx context.Context, campaignID, entityID string) (json.RawMessage, error) {
-	return a.getByID(ctx, entityID)
+	return a.getByID(ctx, campaignID, entityID)
 }
 
 // SearchEntitiesJSON implements EntityReader.
@@ -90,19 +90,19 @@ func (a *wasmTagAdapter) ListTagsJSON(ctx context.Context, campaignID string) (j
 
 // wasmEntityWriteAdapter implements EntityWriter by delegating to a function closure.
 type wasmEntityWriteAdapter struct {
-	updateFields func(ctx context.Context, entityID string, fieldsData json.RawMessage) error
+	updateFields func(ctx context.Context, campaignID, entityID string, fieldsData json.RawMessage) error
 }
 
 // NewWASMEntityWriteAdapter creates an EntityWriter from a function closure.
 func NewWASMEntityWriteAdapter(
-	updateFields func(ctx context.Context, entityID string, fieldsData json.RawMessage) error,
+	updateFields func(ctx context.Context, campaignID, entityID string, fieldsData json.RawMessage) error,
 ) EntityWriter {
 	return &wasmEntityWriteAdapter{updateFields: updateFields}
 }
 
 // UpdateFieldsJSON implements EntityWriter.
-func (a *wasmEntityWriteAdapter) UpdateFieldsJSON(ctx context.Context, entityID string, fieldsData json.RawMessage) error {
-	return a.updateFields(ctx, entityID, fieldsData)
+func (a *wasmEntityWriteAdapter) UpdateFieldsJSON(ctx context.Context, campaignID, entityID string, fieldsData json.RawMessage) error {
+	return a.updateFields(ctx, campaignID, entityID, fieldsData)
 }
 
 // wasmCalendarWriteAdapter implements CalendarWriter by delegating to a function closure.
@@ -125,13 +125,13 @@ func (a *wasmCalendarWriteAdapter) CreateEventJSON(ctx context.Context, campaign
 // wasmTagWriteAdapter implements TagWriter by delegating to function closures.
 type wasmTagWriteAdapter struct {
 	setTags func(ctx context.Context, entityID, campaignID string, tagIDs json.RawMessage) error
-	getTags func(ctx context.Context, entityID string) (json.RawMessage, error)
+	getTags func(ctx context.Context, campaignID, entityID string) (json.RawMessage, error)
 }
 
 // NewWASMTagWriteAdapter creates a TagWriter from function closures.
 func NewWASMTagWriteAdapter(
 	setTags func(ctx context.Context, entityID, campaignID string, tagIDs json.RawMessage) error,
-	getTags func(ctx context.Context, entityID string) (json.RawMessage, error),
+	getTags func(ctx context.Context, campaignID, entityID string) (json.RawMessage, error),
 ) TagWriter {
 	return &wasmTagWriteAdapter{setTags: setTags, getTags: getTags}
 }
@@ -142,8 +142,8 @@ func (a *wasmTagWriteAdapter) SetEntityTagsJSON(ctx context.Context, entityID, c
 }
 
 // GetEntityTagsJSON implements TagWriter.
-func (a *wasmTagWriteAdapter) GetEntityTagsJSON(ctx context.Context, entityID string) (json.RawMessage, error) {
-	return a.getTags(ctx, entityID)
+func (a *wasmTagWriteAdapter) GetEntityTagsJSON(ctx context.Context, campaignID, entityID string) (json.RawMessage, error) {
+	return a.getTags(ctx, campaignID, entityID)
 }
 
 // wasmRelationWriteAdapter implements RelationWriter by delegating to a function closure.

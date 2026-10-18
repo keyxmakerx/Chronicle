@@ -24,7 +24,6 @@
   function esc(s) { return Chronicle.escapeHtml(String(s == null ? '' : s)); }
   // A colour from data lands in a style attribute, so only a plain hex passes.
   function safeHex(c) { return typeof c === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(c) ? c : null; }
-  function hashHue(s) { var h = 0; for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 360; return h; }
   function motion() { return document.documentElement.getAttribute('data-motion') || 'full'; }
   function coarse() { return !!(window.matchMedia && matchMedia('(pointer: coarse)').matches); }
 
@@ -79,6 +78,7 @@
       if (this.raf) cancelAnimationFrame(this.raf);
       if (this._ro) this._ro.disconnect();
       if (this._onKey) document.removeEventListener('keydown', this._onKey);
+      if (this._onDown) document.removeEventListener('pointerdown', this._onDown);
       clearTimeout(this._peekTimer);
       this.el.innerHTML = '';
     },
@@ -104,14 +104,19 @@
       this.el.classList.add('tlr-wrap');
       this.el.innerHTML = '<div class="tlr">' +
         '<nav class="tlr-eras" data-tlr="eras" aria-label="Eras" hidden></nav>' +
-        '<div class="tlr-tools">' +
-          '<span class="tlr-seg" role="group" aria-label="Zoom to"><button type="button" data-fit="all">All</button><button type="button" data-fit="now">Today</button></span>' +
-          '<button type="button" class="tlr-btn sq" data-zoom="0.5" aria-label="Zoom in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>' +
-          '<button type="button" class="tlr-btn sq" data-zoom="2" aria-label="Zoom out"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14"/></svg></button>' +
+        '<div class="tlr-bar">' +
           '<span class="tlr-range" data-tlr="range" aria-live="polite"></span><span class="tlr-grow"></span>' +
-          '<label class="tlr-find"><span class="tlr-sr">Find an event</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input data-tlr="q" type="search" placeholder="Find an event" autocomplete="off"><span class="tlr-kbd" aria-hidden="true">/</span></label>' +
+          '<label class="tlr-find" data-tlr="find"><span class="tlr-sr">Find an event</span><input data-tlr="q" type="search" placeholder="Find an event" autocomplete="off"></label>' +
+          '<button type="button" class="tlr-ico" data-x="find" aria-label="Find an event (/)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>' +
+          '<span class="tlr-menuwrap"><button type="button" class="tlr-ico" data-x="menu" aria-haspopup="true" aria-expanded="false" aria-label="View options"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></button>' +
+          '<div class="tlr-menu" data-tlr="menu" role="dialog" aria-label="View options" hidden>' +
+            '<div class="tlr-mrow"><span class="tlr-lbl">Show</span><span class="tlr-seg" role="group" aria-label="Zoom to"><button type="button" data-fit="all">All of it</button><button type="button" data-fit="now">Today</button></span>' +
+            '<span class="tlr-zoom"><button type="button" class="tlr-ico" data-zoom="2" aria-label="Zoom out"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14"/></svg></button><button type="button" class="tlr-ico" data-zoom="0.5" aria-label="Zoom in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button></span></div>' +
+            '<div class="tlr-kinds" data-tlr="kinds" role="group" aria-label="Kinds of event" hidden></div>' +
+            '<div class="tlr-mrow" data-tlr="erasteps" hidden><span class="tlr-lbl">Eras</span><button type="button" class="tlr-q" data-erastep="-1">Earlier era</button><button type="button" class="tlr-q" data-erastep="1">Later era</button></div>' +
+            '<label class="tlr-mrow tlr-chk"><input type="checkbox" data-x="ov"> Show the whole history under the line</label>' +
+          '</div></span>' +
         '</div>' +
-        '<div class="tlr-kinds" data-tlr="kinds" role="group" aria-label="Kinds of event" hidden></div>' +
         '<div class="tlr-body" data-tlr="body">' +
           '<div class="tlr-main">' +
             '<div class="tlr-stage" data-tlr="stage" tabindex="0" aria-label="Time line. Arrow keys move along it, plus and minus zoom, Tab reaches each event."><svg data-tlr="svg"></svg><span class="tlr-hint">Drag to move · scroll or pinch to zoom · click an event</span></div>' +
@@ -122,12 +127,39 @@
           '<aside class="tlr-side" aria-label="Event"><div class="in" data-tlr="side"></div></aside>' +
         '</div></div>';
       this.stage = this.$('stage'); this.svg = this.$('svg'); this.ov = this.$('ov'); this.ovsvg = this.$('ovsvg'); this.body = this.$('body'); this.side = this.$('side');
-      this.svg.innerHTML = '<g data-l="back"></g><g data-l="ticks"></g><path class="river-base" style="fill:none;stroke:var(--tlr-line-strong);stroke-width:2"></path>' +
-        '<path class="river-fill" pathLength="1" style="fill:none;stroke:var(--tlr-acc);stroke-width:2;stroke-dasharray:1"></path><g data-l="bars"></g><g data-l="arcs"></g><g data-l="labs"></g><g data-l="cl"></g><g data-l="dots"></g>';
+      // Gradient and mask ids must be unique per mount, since two lines can share a page.
+      var gid = 'tlr' + Math.random().toString(36).slice(2, 8);
+      this.svg.innerHTML = '<defs><linearGradient id="' + gid + 'l" class="lg" gradientUnits="userSpaceOnUse" x1="0" x2="100" y1="0" y2="0">' +
+          '<stop class="pa" stop-opacity="0"/><stop class="pa"/><stop class="pa"/><stop class="fu"/><stop class="fu"/><stop class="fu" stop-opacity="0"/></linearGradient>' +
+        '<linearGradient id="' + gid + 'w" x1="0" x2="0" y1="0" y2="1"><stop class="w0" offset="0"/><stop class="wm" offset=".35"/><stop class="w1" offset="1"/></linearGradient>' +
+        '<linearGradient id="' + gid + 'e" class="eg" gradientUnits="userSpaceOnUse" x1="0" x2="100" y1="0" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop stop-color="#fff"/><stop stop-color="#fff"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>' +
+        '<mask id="' + gid + 'm" maskUnits="userSpaceOnUse" x="-10" y="-10" width="9999" height="9999"><rect class="mk" x="0" y="0" width="100" height="100" fill="url(#' + gid + 'e)"/></mask></defs>' +
+        '<g data-l="back"></g><g data-l="ticks"></g><rect class="wash" style="fill:url(#' + gid + 'w);mask:url(#' + gid + 'm)"/>' +
+        '<path class="river-line" style="fill:none;stroke:url(#' + gid + 'l)"></path><g data-l="bars"></g><g data-l="arcs"></g><g data-l="labs"></g><g data-l="cl"></g><g data-l="dots"></g>';
       var g = {}, svg = this.svg;
       ['back', 'ticks', 'bars', 'arcs', 'labs', 'cl', 'dots'].forEach(function (k) { g[k] = svg.querySelector('[data-l="' + k + '"]'); });
-      this.g = g; this.base = svg.querySelector('.river-base'); this.fill = svg.querySelector('.river-fill');
+      this.g = g; this.line = svg.querySelector('.river-line'); this.lg = svg.querySelector('.lg'); this.eg = svg.querySelector('.eg'); this.wash = svg.querySelector('.wash'); this.mk = svg.querySelector('.mk');
       this._bind();
+      this._bindBar();
+    },
+
+    // The bar's Find opens on demand and the View menu closes on Escape or a click outside it.
+    _bindBar: function () {
+      var self = this, el = this.el, menu = this.$('menu'), mb = el.querySelector('[data-x="menu"]'), find = this.$('find'), q = this.$('q');
+      function setMenu(open) { menu.hidden = !open; mb.setAttribute('aria-expanded', String(open)); }
+      el.addEventListener('click', function (ev) {
+        var x = ev.target.closest('[data-x]'); if (!x || !el.contains(x)) return;
+        if (x.dataset.x === 'menu') setMenu(menu.hidden);
+        if (x.dataset.x === 'find') { find.classList.add('open'); q.focus(); }
+      });
+      el.addEventListener('change', function (ev) {
+        if (ev.target.dataset && ev.target.dataset.x === 'ov') { el.querySelector('.tlr').classList.toggle('show-ov', ev.target.checked); self.draw(); }
+      });
+      q.addEventListener('focus', function () { find.classList.add('open'); });
+      q.addEventListener('blur', function () { if (!q.value) find.classList.remove('open'); });
+      this._onDown = function (ev) { if (!menu.hidden && !menu.parentNode.contains(ev.target)) setMenu(false); };
+      document.addEventListener('pointerdown', this._onDown);
+      el.addEventListener('keydown', function (ev) { if (ev.key === 'Escape' && !menu.hidden) { ev.stopPropagation(); setMenu(false); mb.focus(); } });
     },
 
     // Shapes the viewer-filtered payload into what the line draws.
@@ -138,7 +170,7 @@
       var evs = (data.events || []).filter(function (e) { return e.event_year != null && e.event_year === e.event_year; }).map(function (e) {
         var kind = (e.event_category || '').trim() || 'Event';
         var col = safeHex(e.color_override);
-        if (!kinds[kind]) { kinds[kind] = { name: kind, color: col || 'oklch(var(--tlr-kL) var(--tlr-kC) ' + hashHue(kind.toLowerCase()) + ')' }; kindOrder.push(kind); }
+        if (!kinds[kind]) { kinds[kind] = { name: kind, color: col || 'var(--tlr-k' + (kindOrder.length % 8) + ')' }; kindOrder.push(kind); }
         var vis = e.visibility_override || e.event_visibility || 'everyone';
         var t = geo.t(e.event_year, e.event_month, e.event_day);
         var end = e.event_end_year != null ? geo.t(e.event_end_year, e.event_end_month || e.event_month, e.event_end_day || e.event_day) : null;
@@ -170,6 +202,9 @@
       this.target = { t0: this.view.t0, t1: this.view.t1 };
       this.draw(); this.renderCal();
       this.setTarget(t0, t1);
+      // A page's own time line links here naming the event to open at.
+      var at = new URLSearchParams(window.location.search).get('event');
+      if (at && this.byId[at]) this.openEvent(at, { fly: true, glow: true });
     },
 
     X: function (t) { return (t - this.view.t0) / (this.view.t1 - this.view.t0) * this.W; },
@@ -206,10 +241,10 @@
         d.setAttribute('class', 'ev'); d.setAttribute('data-id', e.id); d.setAttribute('tabindex', '0'); d.setAttribute('role', 'button');
         d.setAttribute('aria-label', e.name + ', ' + self.whenText(e) + (e.dm ? ', Director only' : ''));
         d.style.setProperty('--k', self.kindColor(e));
-        d.innerHTML = '<circle class="ring" r="14.5"/><circle class="halo" r="12.5"/><circle class="core" r="5.5" style="animation-delay:' + (380 + Math.min(i, 24) * 45) + 'ms"/><circle class="hit" r="' + hit + '"/>';
+        d.innerHTML = '<circle class="ring" r="14"/><circle class="halo" r="9.5"/><circle class="sel" r="8.5"/><circle class="core" r="4" style="animation-delay:' + (380 + Math.min(i, 24) * 45) + 'ms"/><circle class="hit" r="' + hit + '"/>';
         self.g.dots.appendChild(d);
         var lab = document.createElementNS(NS, 'g');
-        lab.setAttribute('class', 'elab off'); lab.innerHTML = self._labHTML(e);
+        lab.setAttribute('class', 'elab off'); lab.style.setProperty('--k', self.kindColor(e)); lab.innerHTML = self._labHTML(e);
         self.g.labs.appendChild(lab);
         var n = Math.min(32, e.name.length), dl = self.geo.dateText(e.t).length + (e.dm ? 15 : 0);
         self.nodes[e.id] = { dot: d, lab: lab, w: Math.min(230, Math.max(n * 6.7, dl * 6, 110) + 16) };
@@ -230,11 +265,12 @@
 
     _buildEras: function () {
       var nav = this.$('eras');
-      if (!this.eras.length) { nav.hidden = true; return; }
+      if (!this.eras.length) { nav.hidden = true; this.$('erasteps').hidden = true; return; }
       nav.hidden = false;
       nav.innerHTML = '<span class="tlr-lbl">Eras</span>' + this.eras.map(function (e, i) {
         return '<a href="#" data-era="' + i + '">' + esc(e.name) + '<small>' + e.a + (e.b === Infinity ? ' on' : ' to ' + (e.b - 1)) + '</small></a>';
-      }).join('') + '<span class="tlr-erastep"><button type="button" class="tlr-btn ghost" data-erastep="-1">Earlier era</button><button type="button" class="tlr-btn ghost" data-erastep="1">Later era</button></span>';
+      }).join('');
+      this.$('erasteps').hidden = this.eras.length < 2;
       this.eraLinks = Array.prototype.slice.call(nav.querySelectorAll('[data-era]'));
     },
 
@@ -322,6 +358,8 @@
       this.eras.forEach(function (e, i) {
         var l = self.X(e.a), r = e.b === Infinity ? W : self.X(e.b); if (r < 0 || l > W) return;
         var cl = Math.max(0, l), cr = Math.min(W, r);
+        // Every other era is tinted so the reader can see where one ends.
+        if (i % 2) h += '<rect x="' + cl + '" y="0" width="' + (cr - cl) + '" height="' + H + '" style="fill:var(--tlr-tint);opacity:.5"/>';
         if (l > 0) h += '<line x1="' + l + '" x2="' + l + '" y1="0" y2="' + H + '" style="stroke:var(--tlr-line)"/>';
         if (cr - cl > e.name.length * 7.6 + 24) h += '<text class="t-era" data-era-i="' + i + '" x="' + (cl + 10) + '" y="20">' + esc(e.name) + '</text>';
       });
@@ -334,13 +372,45 @@
       });
       var tx = this.today != null ? this.X(this.today) : null;
       if (tx != null && tx >= 0 && tx <= W) h += '<line x1="' + tx + '" x2="' + tx + '" y1="' + axis + '" y2="' + H + '" style="stroke:var(--tlr-acc);stroke-width:1.5;stroke-dasharray:2 4;opacity:.6"/>' +
-        '<rect x="' + (tx - 24) + '" y="' + (axis + 4) + '" width="48" height="17" rx="4" style="fill:var(--tlr-bg);stroke:var(--tlr-acc-link)"/><text class="t-today" x="' + tx + '" y="' + (axis + 16) + '" text-anchor="middle">TODAY</text>';
+        '<rect x="' + (tx - 24) + '" y="' + (axis + 4) + '" width="48" height="17" rx="4" style="fill:var(--tlr-acc)"/><text class="t-today" x="' + tx + '" y="' + (axis + 16) + '" text-anchor="middle">TODAY</text>';
       this.g.ticks.innerHTML = h;
-      this.base.setAttribute('d', 'M0 ' + Y + ' H' + W);
-      // The drawn-in stretch of river is the history up to today.
-      this.fill.setAttribute('d', tx == null ? 'M0 ' + Y : 'M' + Math.max(-4, this.X(this.MIN)) + ' ' + Y + ' H' + Math.min(W + 4, tx));
+      this.line.setAttribute('d', 'M0 ' + Y + ' H' + W);
+      // Gradient stops in pixels along the line, kept in order however far today is scrolled off either side.
+      var EF = Math.min(36, W * 0.08), BL = 14, now = tx == null ? W + BL : tx, clp = function (v) { return Math.max(EF, Math.min(W - EF, v)) / W; };
+      var offs = [0, EF / W, clp(now - BL), clp(now + BL), (W - EF) / W, 1], stops = this.lg.querySelectorAll('stop'), si;
+      if (now - BL <= EF) offs[2] = offs[1];
+      if (now + BL >= W - EF) offs[3] = offs[4];
+      for (si = 0; si < 3; si++) stops[si].setAttribute('class', now <= 0 ? 'fu' : 'pa');
+      for (si = 3; si < 6; si++) stops[si].setAttribute('class', now >= W ? 'pa' : 'fu');
+      for (si = 0; si < 6; si++) stops[si].setAttribute('offset', offs[si]);
+      this.lg.setAttribute('x2', W); this.eg.setAttribute('x2', W);
+      var es = this.eg.querySelectorAll('stop'); es[1].setAttribute('offset', EF / W); es[2].setAttribute('offset', (W - EF) / W);
+      this.mk.setAttribute('width', W); this.mk.setAttribute('height', H);
+      // The wash runs under the history, from the first event (or the left edge) to today.
+      var wx0 = Math.max(0, this.X(this.MIN)), wx1 = Math.min(W, now);
+      this.wash.setAttribute('x', wx0); this.wash.setAttribute('y', Y); this.wash.setAttribute('width', Math.max(0, wx1 - wx0)); this.wash.setAttribute('height', 72);
       var vis = this.shown(), lit = this.chain(st.sel), inCl = this._cluster(vis), bars = '';
-      vis.forEach(function (e) { if (e.end) bars += '<line x1="' + self.X(e.t) + '" x2="' + self.X(e.end) + '" y1="' + Y + '" y2="' + Y + '" style="stroke:' + self.kindColor(e) + ';stroke-width:8;stroke-linecap:round;opacity:.28"/>'; });
+      // With an event open, everything outside its story steps back, and its span is lit under the line.
+      var inChain = {}, brow = [], se = st.sel && this.byId[st.sel];
+      if (st.sel) { inChain[st.sel] = 1; Object.keys(lit).forEach(function (k) { k.split('>').forEach(function (x) { inChain[x] = 1; }); }); }
+      var story = function (id) { return st.sel ? (inChain[id] ? ' chain' : ' dim') : ''; };
+      if (se) {
+        var sx0 = this.X(se.t), sx1 = se.end ? this.X(se.end) : sx0;
+        if (se.end) bars += '<rect class="span-lit" x="' + sx0 + '" y="' + axis + '" width="' + Math.max(1, sx1 - sx0) + '" height="' + (H - axis) + '"/>';
+        bars += '<line class="playhead" x1="' + sx0 + '" x2="' + sx0 + '" y1="' + axis + '" y2="' + H + '"/>';
+      }
+      // A duration branches off the line on a curve and rejoins it; overlapping ones stack outward.
+      vis.forEach(function (e) {
+        if (!e.end) return;
+        var x1 = self.X(e.t), x2 = self.X(e.end), r = 0;
+        while (brow[r] != null && brow[r] > x1 - 4) r++;
+        brow[r] = x2;
+        if (x2 - x1 < 12) return;
+        var lift = 7 + r * 6, run = Math.min(lift * 2, (x2 - x1) / 2), yb = Y - lift;
+        var bd = 'M' + x1.toFixed(1) + ' ' + Y + ' C' + (x1 + run * 0.55).toFixed(1) + ' ' + Y + ' ' + (x1 + run * 0.45).toFixed(1) + ' ' + yb + ' ' + (x1 + run).toFixed(1) + ' ' + yb +
+          ' H' + (x2 - run).toFixed(1) + ' C' + (x2 - run * 0.45).toFixed(1) + ' ' + yb + ' ' + (x2 - run * 0.55).toFixed(1) + ' ' + Y + ' ' + x2.toFixed(1) + ' ' + Y;
+        bars += '<path class="bar' + (e.id === st.sel ? ' on' : '') + story(e.id) + '" d="' + bd + '" style="--k:' + self.kindColor(e) + '"/>';
+      });
       this.g.bars.innerHTML = bars;
       var visIds = {}; vis.forEach(function (e) { if (!inCl[e.id]) visIds[e.id] = 1; });
       Object.keys(this.arcs).forEach(function (k) {
@@ -353,20 +423,20 @@
         var on = !!lit[k];
         if (on !== p.classList.contains('lit')) { p.classList.toggle('lit', on); if (on) { p.style.animation = 'none'; void p.getBoundingClientRect(); p.style.animation = ''; } }
       });
-      var placed = this._placeLabels(vis.filter(function (e) { return visIds[e.id]; }), Math.max(1, Math.floor((Y - axis - 54) / 38)));
+      var placed = this._placeLabels(vis.filter(function (e) { return visIds[e.id]; }), Math.max(1, Math.floor((Y - axis - 64) / 38)));
       this.events.forEach(function (e) {
         var n = self.nodes[e.id], x = self.X(e.t), on = !!visIds[e.id];
         n.dot.setAttribute('transform', 'translate(' + x.toFixed(1) + ',' + Y + ')');
         var cls = 'ev' + (on ? '' : ' gone') + (e.dm ? ' dm' : '') + (self.today != null && e.t > self.today + 1e-9 ? ' later' : '') +
-          (e.id === st.sel ? ' on' : '') + (e.id === st.hover ? ' hov' : '') + (self.matches(e) ? ' hit' : '') + (n.dot.classList.contains('glow') ? ' glow' : '');
+          (e.id === st.sel ? ' on' : '') + (e.id === st.hover ? ' hov' : '') + (self.matches(e) ? ' hit' : '') + (n.dot.classList.contains('glow') ? ' glow' : '') + story(e.id);
         if (n.dot.getAttribute('class') !== cls) n.dot.setAttribute('class', cls);
         n.dot.setAttribute('tabindex', on ? '0' : '-1');
         var pl = placed[e.id];
         if (pl && on) {
-          var ly = Y - 34 - pl.row * 38, stem = n.lab.querySelector('.stem'), sx = pl.x - pl.l;
+          var ly = Y - 44 - pl.row * 38, stem = n.lab.querySelector('.stem'), sx = pl.x - pl.l;
           n.lab.setAttribute('transform', 'translate(' + pl.l.toFixed(1) + ',' + ly + ')');
           stem.setAttribute('x1', sx); stem.setAttribute('x2', sx); stem.setAttribute('y1', 18); stem.setAttribute('y2', Y - ly - 9);
-          n.lab.setAttribute('class', 'elab' + (e.id === st.sel ? ' on' : '') + (e.dm ? ' dmo' : ''));
+          n.lab.setAttribute('class', 'elab' + (e.id === st.sel ? ' on' : '') + (e.dm ? ' dmo' : '') + story(e.id));
         } else n.lab.setAttribute('class', 'elab off');
       });
       this._drawOverview(vis);

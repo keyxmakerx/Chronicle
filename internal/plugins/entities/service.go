@@ -56,6 +56,9 @@ type EntityService interface {
 	// ReorderEntityType densely re-sequences a sub-category type's position
 	// among its parent's children. sortOrder is a desired 0-based index.
 	ReorderEntityType(ctx context.Context, campaignID string, typeID int, sortOrder int) error
+	// RestoreEntityTypePlacement sets a type's sort order, default flag and
+	// on/off state as a campaign export recorded them.
+	RestoreEntityTypePlacement(ctx context.Context, campaignID string, typeID, sortOrder int, isDefault, enabled bool) error
 
 	// Backlinks — always campaign-scoped; mention ids alone are not.
 	GetBacklinks(ctx context.Context, campaignID, entityID string, role int, userID string) ([]Entity, error)
@@ -73,6 +76,9 @@ type EntityService interface {
 	// PlacePageExtras places the page pieces that used to be drawn outside
 	// the layout into a campaign's entity types (see page_extras.go).
 	PlacePageExtras(ctx context.Context, campaignID string, plans map[int]PageExtrasPlan) (int, error)
+	// PlaceSystemPanels adds only the Game System Panels block to the given
+	// types (see page_extras.go).
+	PlaceSystemPanels(ctx context.Context, campaignID string, typeIDs []int) (int, error)
 	GetEntityTypeBySlug(ctx context.Context, campaignID, slug string) (*EntityType, error)
 	GetEntityTypeByID(ctx context.Context, id int) (*EntityType, error)
 	GetEntityTypesByPresetCategory(ctx context.Context, campaignID, category string) ([]EntityType, error)
@@ -693,8 +699,10 @@ func (s *entityService) Update(ctx context.Context, entityID string, input Updat
 		return nil, apperror.NewBadRequest("entity name must be at most 200 characters")
 	}
 
-	// Regenerate slug if name changed.
-	if name != entity.Name {
+	// Regenerate the slug only when the new name maps to a different one:
+	// SlugExists counts this page's own slug, so a case-only rename would
+	// otherwise become "name-2" and break links.
+	if name != entity.Name && !slugMatchesName(entity.Slug, name) {
 		slug, err := s.generateSlug(ctx, entity.CampaignID, name)
 		if err != nil {
 			return nil, apperror.NewInternal(fmt.Errorf("generating slug: %w", err))
@@ -989,6 +997,22 @@ func (s *entityService) ReorderEntityType(ctx context.Context, campaignID string
 	return nil
 }
 
+// RestoreEntityTypePlacement writes the position, default flag and on/off
+// state an export recorded. No form edits these, so only an import calls it.
+func (s *entityService) RestoreEntityTypePlacement(ctx context.Context, campaignID string, typeID, sortOrder int, isDefault, enabled bool) error {
+	et, err := s.types.FindByID(ctx, typeID)
+	if err != nil {
+		return apperror.NewNotFound("entity type not found")
+	}
+	if et.CampaignID != campaignID {
+		return apperror.NewNotFound("entity type not found")
+	}
+	if err := s.types.UpdatePlacement(ctx, typeID, sortOrder, isDefault, enabled); err != nil {
+		return apperror.NewInternal(fmt.Errorf("restoring entity type placement: %w", err))
+	}
+	return nil
+}
+
 // GetBacklinks returns entities in campaignID that reference the given entity
 // via @mention links in their entry content. Respects visibility filtering.
 func (s *entityService) GetBacklinks(ctx context.Context, campaignID, entityID string, role int, userID string) ([]Entity, error) {
@@ -1061,13 +1085,14 @@ func (s *entityService) MergeFields(ctx context.Context, entityID string, patch 
 	if err != nil {
 		return err
 	}
-	return s.UpdateFields(ctx, entityID, mergeFieldPatch(entity.FieldsData, patch))
+	return s.UpdateFields(ctx, entityID, MergeFieldPatch(entity.FieldsData, patch))
 }
 
-// mergeFieldPatch returns a new map: current with patch applied (nil value
-// deletes the key). Neither input is modified.
-func mergeFieldPatch(current, patch map[string]any) map[string]any {
-	merged := make(map[string]any, len(current)+len(patch))
+// MergeFieldPatch returns a new map: current with patch applied (nil value
+// deletes the key). Neither input is modified. Exported so partial-update
+// callers of Update can merge before it replaces the whole map.
+func MergeFieldPatch(current, patch map[string]any) map[string]any {
+	merged := make(map[string]any, len(current))
 	for k, v := range current {
 		merged[k] = v
 	}
@@ -1677,12 +1702,18 @@ func (s *entityService) ClaimEntity(ctx context.Context, entityID, userID string
 		return nil, apperror.NewBadRequest("only character entities can be claimed")
 	}
 
-	if err := s.entities.UpdateOwner(ctx, entityID, &userID); err != nil {
+	// The read above can be stale by now: another player may have claimed
+	// the same character in between, so the write itself checks the owner.
+	won, err := s.entities.ClaimOwner(ctx, entityID, userID)
+	if err != nil {
 		return nil, apperror.NewInternal(err)
+	}
+	if !won {
+		return nil, apperror.NewConflict("entity is already claimed by another player")
 	}
 
 	entity.OwnerUserID = &userID
-	entity.Playable = true // UpdateOwner marks it in the same statement.
+	entity.Playable = true // ClaimOwner marks it in the same statement.
 	s.events.PublishEntityEvent("updated", entity.CampaignID, entityID, entity)
 	slog.Info("entity claimed",
 		slog.String("entity_id", entityID),
@@ -2068,15 +2099,16 @@ func (s *entityService) CreateEntityType(ctx context.Context, campaignID string,
 	// category without the owner meaning to.
 	var presetCategory *string
 	if input.PresetCategory == PresetCategoryAdventures {
-		return nil, apperror.NewBadRequest("that category is reserved; use the Add Adventures button in Customize")
+		return nil, apperror.NewBadRequest("that category is reserved for Adventures, which every campaign is given when it is made")
 	}
 	if input.PresetCategory != "" {
 		presetCategory = &input.PresetCategory
 	}
 
 	// Validate parent type if provided (sub-type hierarchy).
+	var parent *EntityType
 	if input.ParentTypeID != nil {
-		parent, err := s.types.FindByID(ctx, *input.ParentTypeID)
+		parent, err = s.types.FindByID(ctx, *input.ParentTypeID)
 		if err != nil {
 			return nil, apperror.NewBadRequest("parent entity type not found")
 		}
@@ -2135,6 +2167,13 @@ func (s *entityService) CreateEntityType(ctx context.Context, campaignID string,
 	layout := DefaultLayout()
 	if pcType {
 		layout = CharacterLayout()
+	}
+	// A creature type shows the game system's creature panels (a stat block)
+	// from the start, and a sub-type shows the panels where its parent does.
+	creature := isCreatureType(EntityType{Slug: slug, PresetCategory: presetCategory})
+	inherits := parent != nil && !pcType && layoutPlacesBlock(parent.Layout, BlockSystemPanels)
+	if (creature || inherits) && !layoutPlacesBlock(layout, BlockSystemPanels) {
+		layout = insertAfterTitle(layout, TemplateBlock{ID: "blk-system-panels", Type: BlockSystemPanels})
 	}
 
 	et := &EntityType{
@@ -2236,8 +2275,8 @@ func (s *entityService) UpdateEntityType(ctx context.Context, id int, input Upda
 		return nil, apperror.NewBadRequest("color must be a valid hex value like #ff0000")
 	}
 
-	// Regenerate slug if name changed.
-	if name != et.Name {
+	// Same rule as pages: keep the slug when the new name maps to it.
+	if name != et.Name && !slugMatchesName(et.Slug, name) {
 		slug, err := s.generateEntityTypeSlug(ctx, et.CampaignID, name)
 		if err != nil {
 			return nil, apperror.NewInternal(fmt.Errorf("generating entity type slug: %w", err))
@@ -2869,8 +2908,15 @@ func (s *entityService) UpdateCategoryDashboardLayout(ctx context.Context, id in
 	if err := json.Unmarshal([]byte(layoutJSON), &layout); err != nil {
 		return apperror.NewBadRequest("invalid dashboard layout JSON")
 	}
+	if err := s.validateCategoryDashboardLayout(ctx, id, layout); err != nil {
+		return err
+	}
+	return s.types.UpdateDashboardLayout(ctx, id, &layoutJSON)
+}
 
-	// Validate structure.
+// validateCategoryDashboardLayout checks a category home's layout the way
+// every save of one does.
+func (s *entityService) validateCategoryDashboardLayout(ctx context.Context, id int, layout campaigns.DashboardLayout) error {
 	if len(layout.Rows) > 50 {
 		return apperror.NewBadRequest("dashboard layout cannot exceed 50 rows")
 	}
@@ -2913,8 +2959,7 @@ func (s *entityService) UpdateCategoryDashboardLayout(ctx context.Context, id in
 			return apperror.NewBadRequest("a row cannot have more than 20 blocks")
 		}
 	}
-
-	return s.types.UpdateDashboardLayout(ctx, id, &layoutJSON)
+	return nil
 }
 
 // ResetCategoryDashboardLayout removes the custom dashboard layout for an
@@ -3091,6 +3136,19 @@ func (s *entityService) SeedGenre(ctx context.Context, campaignID string, genre 
 // maxSlugAttempts caps slug deduplication iterations to prevent DoS from
 // adversarial name collisions (e.g., creating "test", "test-2" ... "test-N").
 const maxSlugAttempts = 100
+
+// uniqueSuffixPattern matches the "-2" / "-<hex>" tail generateSlug appends.
+var uniqueSuffixPattern = regexp.MustCompile(`^-(\d+|[0-9a-f]{8})$`)
+
+// slugMatchesName reports whether current is already the slug name produces,
+// either exactly or with the uniqueness suffix generateSlug added to it.
+func slugMatchesName(current, name string) bool {
+	base := Slugify(name)
+	if current == base {
+		return true
+	}
+	return strings.HasPrefix(current, base) && uniqueSuffixPattern.MatchString(current[len(base):])
+}
 
 // generateSlug creates a unique slug for an entity within a campaign.
 // If the base slug is taken, appends -2, -3, etc. After maxSlugAttempts,

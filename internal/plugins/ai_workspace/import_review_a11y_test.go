@@ -101,7 +101,9 @@ func TestImportReview_A11y_FormControlsLabelled(t *testing.T) {
 		"Existing category to map this page to",     // map-to-existing dropdown
 		"Apply the bulk defaults above to every row",
 		"Set every name-conflict row to Skip",
-		"Toggle every row's Include checkbox at once",
+		"Answer Yes to every request except removals",
+		"Answer No to every request",
+		"Make this change: ", // each row's Yes / No
 	}
 	for _, want := range wantLabels {
 		if !strings.Contains(out, want) {

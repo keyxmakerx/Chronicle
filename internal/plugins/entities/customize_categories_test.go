@@ -5,9 +5,11 @@ import (
 	"net/http"
 	"reflect"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
 // categoryWorld is an in-memory set of entity types across two campaigns,
@@ -69,6 +71,18 @@ func newCategoryWorld(types ...EntityType) (*categoryWorld, EntityService) {
 				return apperror.NewInternal(nil)
 			}
 			w.log = append(w.log, "layout:"+strconv.Itoa(id))
+			return nil
+		},
+		updateDashboardLayoutFn: func(_ context.Context, id int, _ *string) error {
+			w.log = append(w.log, "home:"+strconv.Itoa(id))
+			return nil
+		},
+		updateDashboardFn: func(_ context.Context, id int, desc *string, pinned []string) error {
+			d := "<none>"
+			if desc != nil {
+				d = *desc
+			}
+			w.log = append(w.log, "desc:"+strconv.Itoa(id)+":"+d+":"+strings.Join(pinned, ","))
 			return nil
 		},
 		deleteFn: func(_ context.Context, id int) error {
@@ -368,5 +382,43 @@ func TestCustomizeCategories_Info(t *testing.T) {
 	}
 	if got[2].Claimable || !got[3].Claimable || !got[4].Claimable {
 		t.Errorf("claimable: explicit-no=%v explicit-yes=%v heuristic=%v", got[2].Claimable, got[3].Claimable, got[4].Claimable)
+	}
+}
+
+func TestApplyCustomizeCategories_Home(t *testing.T) {
+	home := func(blockType string) *campaigns.DashboardLayout {
+		return &campaigns.DashboardLayout{Rows: []campaigns.DashboardRow{{ID: "r", Columns: []campaigns.DashboardColumn{{ID: "c", Width: 12, Blocks: []campaigns.DashboardBlock{{ID: "b", Type: blockType}}}}}}}
+	}
+	str := func(v string) *string { return &v }
+	tests := []struct {
+		name     string
+		items    map[string]CustomizeCategoryItem
+		wantLog  []string
+		wantCode int
+	}{
+		{"home alone writes only the home", map[string]CustomizeCategoryItem{"1": {Home: home("category_header")}}, []string{"home:1"}, 0},
+		{"description keeps the pinned pages", map[string]CustomizeCategoryItem{"1": {Description: str("Where things are")}}, []string{"desc:1:Where things are:p1,p2"}, 0},
+		{"an empty description clears it", map[string]CustomizeCategoryItem{"1": {Description: str("")}}, []string{"desc:1:<none>:p1,p2"}, 0},
+		{"a bad home stops the Save before any write", map[string]CustomizeCategoryItem{"1": {Name: "Place"}, "3": {Home: home("no_such_block")}}, nil, http.StatusBadRequest},
+		{"too long a description is refused", map[string]CustomizeCategoryItem{"1": {Description: str(strings.Repeat("a", 2001))}}, nil, http.StatusBadRequest},
+		{"a new category cannot carry a home", map[string]CustomizeCategoryItem{"new-a": {New: true, Name: "A", NamePlural: "As", Description: str("x")}}, nil, http.StatusBadRequest},
+		{"a deleted category cannot carry a home", map[string]CustomizeCategoryItem{"3": {Delete: true, Home: home("category_header")}}, nil, http.StatusBadRequest},
+		{"another campaign's category is not found", map[string]CustomizeCategoryItem{"50": {Home: home("category_header")}}, nil, http.StatusNotFound},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			places := typ(1, "c1", "Places", nil)
+			places.PinnedEntityIDs = []string{"p1", "p2"}
+			w, svc := newCategoryWorld(places, typ(3, "c1", "Gods", nil), typ(50, "other", "Secret", nil))
+			_, err := svc.ApplyCustomizeCategories(context.Background(), "c1", patchOf(tt.items))
+			if tt.wantCode != 0 {
+				assertAppError(t, err, tt.wantCode)
+			} else if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(w.log, tt.wantLog) {
+				t.Errorf("writes = %v, want %v", w.log, tt.wantLog)
+			}
+		})
 	}
 }

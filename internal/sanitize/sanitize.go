@@ -7,9 +7,11 @@ package sanitize
 import (
 	"encoding/json"
 	"regexp"
+	"strings"
 	"sync"
 
 	"github.com/microcosm-cc/bluemonday"
+	"golang.org/x/net/html"
 )
 
 // noteIDPattern is the shape a note link's data-note-id must have.
@@ -106,13 +108,6 @@ func HTMLPtr(p *string) *string {
 	return &s
 }
 
-// secretSpanRe matches <span data-secret="true" ...>...</span> elements.
-// Uses (?s) dotall flag so . matches newlines in multi-line secret content.
-// Assumes flat spans without nested <span> elements, which is consistent with
-// TipTap editor output. The ProseMirror JSON stripper (StripSecretsJSON) provides
-// a more robust secondary defense for the JSON storage path.
-var secretSpanRe = regexp.MustCompile(`(?s)<span[^>]*\bdata-secret\b[^>]*>.*?</span>`)
-
 // gmPictureRe matches a GM-only picture from the editor: a <figure> whose
 // class list holds ce-img--gm. The editor writes a figure as one img plus an
 // optional plain-text figcaption, never a nested figure, so the lazy match
@@ -140,7 +135,68 @@ func StripSecretsHTML(html string) string {
 	html = gmPictureRe.ReplaceAllString(html, "")
 	html = gmDiagramRe.ReplaceAllString(html, "")
 	html = rollerRe.ReplaceAllString(html, "")
-	return secretSpanRe.ReplaceAllString(html, "")
+	out, _ := stripSecretSpans(html)
+	return out
+}
+
+// stripSecretSpans removes every <span data-secret> element and returns the
+// remaining HTML plus how many secret spans it removed. It tracks span depth
+// from each secret's opening tag because API and import paths can submit
+// nested spans, and a lazy "first </span>" match would leave the tail of the
+// secret in the output. An unclosed secret is removed to the end of the
+// input: failing closed is safer than leaking. Untouched markup is copied
+// byte for byte from the tokenizer's raw output.
+func stripSecretSpans(src string) (string, int) {
+	z := html.NewTokenizer(strings.NewReader(src))
+	var out strings.Builder
+	out.Grow(len(src))
+	depth, count := 0, 0
+	for {
+		tt := z.Next()
+		if tt == html.ErrorToken {
+			// Raw bytes already consumed are emitted below; the error token
+			// itself carries none, so stopping here keeps the input intact.
+			return out.String(), count
+		}
+		raw := z.Raw()
+		if depth > 0 {
+			switch tt {
+			case html.StartTagToken:
+				if name, _ := z.TagName(); string(name) == "span" {
+					depth++
+				}
+			case html.EndTagToken:
+				if name, _ := z.TagName(); string(name) == "span" {
+					depth--
+				}
+			}
+			continue
+		}
+		if tt == html.StartTagToken || tt == html.SelfClosingTagToken {
+			name, hasAttr := z.TagName()
+			if string(name) == "span" && hasAttr && hasSecretAttr(z) {
+				count++
+				if tt == html.StartTagToken {
+					depth = 1
+				}
+				continue
+			}
+		}
+		out.Write(raw)
+	}
+}
+
+// hasSecretAttr reports whether the tokenizer's current tag carries data-secret.
+func hasSecretAttr(z *html.Tokenizer) bool {
+	for {
+		key, _, more := z.TagAttr()
+		if string(key) == "data-secret" {
+			return true
+		}
+		if !more {
+			return false
+		}
+	}
 }
 
 // CountSecrets reports how many GM-only parts a page's HTML holds: secret
@@ -157,7 +213,7 @@ func CountSecrets(html string) (passages, pictures, diagrams int) {
 	html = gmPictureRe.ReplaceAllString(html, "")
 	diagrams = len(gmDiagramRe.FindAllStringIndex(html, -1))
 	html = gmDiagramRe.ReplaceAllString(html, "")
-	passages = len(secretSpanRe.FindAllStringIndex(html, -1))
+	_, passages = stripSecretSpans(html)
 	return passages, pictures, diagrams
 }
 

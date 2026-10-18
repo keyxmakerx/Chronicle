@@ -71,6 +71,7 @@ func (gateFakeNotesSvc) List(_ context.Context, _ string, _ ViewerContext) ([]No
 func newGateRouter(enabled bool) *echo.Echo {
 	e := echo.New()
 	h := NewHandler(gateFakeNotesSvc{})
+	h.SetEntityGate(allowAllGate{})
 	RegisterRoutes(e, h, gateFakeCampaignSvc{}, gateFakeAuthSvc{}, gateFakeAddonSvc{enabled: enabled})
 	return e
 }
@@ -104,4 +105,12 @@ func TestEntityNotesRoutes_ServedWhenAddonEnabled(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("entity_notes route refused a normal request with the player-notes addon enabled: got %d, body %q", rec.Code, rec.Body.String())
 	}
+}
+
+// allowAllGate lets every entity through so the addon gate is the only thing
+// under test here.
+type allowAllGate struct{}
+
+func (allowAllGate) ResolveViewableEntity(_ context.Context, _ string, _ int, _ string) (string, bool, error) {
+	return "camp-1", true, nil
 }

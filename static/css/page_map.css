@@ -1,0 +1,285 @@
+/*
+ * page_map.css: the Map page block
+ * (internal/plugins/pageblocks/static/js/page_map.js).
+ *
+ * Everything is scoped under .pm (and .pm-pop for Bigger). Colours come from
+ * the theme tokens and the eight --map-c-* marker colours in input.css, so
+ * the map follows light and dark; the accent marks what can be acted on and
+ * the Director's amber marks what only the DM sees. The block lays itself out
+ * from its own width (a container query), so it works in the side column and
+ * across the page alike.
+ */
+.pm, .pm-pop {
+  /* TODO(#1447): the style kits set these; until they land every kit uses
+     the Material values. */
+  --pm-r-sheet: 12px;
+  --pm-r-ctl: 8px;
+  --pm-edge: 1px solid var(--color-border);
+  --pm-map-edge: 0 solid transparent;
+
+  --pm-sheet: var(--color-card-bg);
+  --pm-sunk: var(--color-bg-tertiary);
+  --pm-text: var(--color-text-primary);
+  --pm-body: var(--color-text-body);
+  --pm-muted: var(--color-text-secondary);
+  --pm-rule: var(--color-border);
+  --pm-acc: var(--color-accent);
+  --pm-acc-soft: rgb(var(--color-accent-rgb) / 0.12);
+  --pm-dm: rgb(var(--color-warn-rgb));
+  --pm-bad: rgb(var(--color-bad-rgb));
+
+  --pm-map-bg: color-mix(in srgb, var(--color-bg-tertiary) 70%, var(--color-card-bg));
+  --pm-map-grid: color-mix(in srgb, var(--color-text-secondary) 16%, transparent);
+  --pm-map-ink: color-mix(in srgb, var(--color-text-primary) 72%, transparent);
+  --pm-map-room: var(--color-card-bg);
+  --pm-map-area: color-mix(in srgb, var(--color-accent) 9%, var(--color-card-bg));
+  --pm-map-water: color-mix(in srgb, var(--map-c-0) 18%, var(--color-card-bg));
+  --pm-map-water-ink: var(--map-c-0);
+  --pm-map-danger: color-mix(in srgb, var(--map-c-3) 15%, var(--color-card-bg));
+  --pm-map-danger-ink: var(--map-c-3);
+}
+
+.pm {
+  container-type: inline-size;
+  position: relative;
+  font-size: 14px; color: var(--pm-body);
+  background: var(--pm-sheet); border: var(--pm-edge); border-radius: var(--pm-r-sheet);
+  box-shadow: var(--elev-resting); padding: 12px 12px 8px;
+}
+.pm:empty, .pm[hidden] { display: none; }
+.pm *, .pm *::before, .pm *::after, .pm-pop *, .pm-pop *::before, .pm-pop *::after { box-sizing: border-box; }
+.pm button, .pm input, .pm select, .pm textarea, .pm-pop button { font: inherit; color: inherit; }
+.pm button, .pm-pop button { cursor: pointer; }
+.pm :focus-visible, .pm-pop :focus-visible { outline: 2px solid var(--pm-acc); outline-offset: 2px; }
+.pm.pm-editing:not(.pm-big) { border-color: var(--pm-acc); }
+
+/* ---------- One fixed-height header row: the title or the tools ---------- */
+.pm-head { display: flex; align-items: center; gap: 2px; height: 36px; margin: -4px 0 8px; }
+.pm .pm-head .cb-head { margin: 0; padding-bottom: 0; border-bottom: 0; flex: 0 1 auto; }
+.pm-title { font-size: 1rem; font-weight: 600; color: var(--pm-text); margin: 0; }
+.pm-sp { flex: 1; }
+.pm-tools { overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+.pm-tools::-webkit-scrollbar { display: none; }
+.pm-tsep { width: 1px; height: 20px; background: var(--pm-rule); margin: 0 4px; flex: none; }
+.pm-one { font-weight: 700; font-size: 0.78rem; font-variant-numeric: tabular-nums; }
+.pm-status { font-size: 12.5px; color: var(--pm-muted); white-space: nowrap; margin: 0 4px; }
+.pm-status.err { color: var(--pm-bad); white-space: normal; }
+
+/* Icon: no frame until hover; 32px so the hit area is generous. */
+.pm-icon {
+  border: 0; background: none; width: 32px; height: 32px; padding: 0; border-radius: var(--pm-r-ctl);
+  display: inline-grid; place-items: center; color: var(--pm-muted); font-size: 0.9rem; flex: none;
+  transition: background-color var(--dur-micro, 120ms) var(--ease-out), color var(--dur-micro, 120ms) var(--ease-out);
+}
+.pm-icon:hover { background: var(--pm-sunk); color: var(--pm-text); box-shadow: inset 0 0 0 1px var(--pm-rule); }
+.pm-icon[aria-pressed="true"] { color: var(--pm-acc); background: var(--pm-acc-soft); }
+@media (pointer: coarse) { .pm-icon { width: 44px; height: 44px; } }
+
+/* Quiet word and button */
+.pm-quiet { border: 0; background: none; padding: 0; color: var(--pm-acc); font-weight: 600; font-size: inherit; }
+.pm-quiet:hover { text-decoration: underline; }
+.pm-head .pm-quiet { font-size: 0.8rem; white-space: nowrap; margin: 0 8px; }
+.pm-btn {
+  border: 1px solid var(--pm-rule); background: var(--pm-sheet); border-radius: var(--pm-r-ctl);
+  padding: 4px 12px; font-weight: 600; font-size: 12.5px; box-shadow: var(--elev-resting); color: var(--pm-text);
+  transition: background-color var(--dur-micro, 120ms) var(--ease-out), transform 60ms var(--ease-out);
+}
+.pm-btn:hover:not(:disabled) { background: var(--pm-sunk); box-shadow: var(--elev-hover); }
+.pm-btn:active:not(:disabled) { transform: scale(0.96); }
+.pm-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.pm-btn.primary { background: var(--pm-acc); border-color: var(--pm-acc); color: var(--color-accent-on-fill, var(--pm-sheet)); }
+.pm-btn.danger { color: var(--pm-bad); }
+
+/* ---------- The map ---------- */
+.pm-body { display: grid; gap: 12px; }
+.pm-main { min-width: 0; }
+.pm-wrap { position: relative; border-radius: calc(var(--pm-r-ctl) + 2px); overflow: hidden; background: var(--pm-map-bg); border: var(--pm-map-edge); }
+.pm-wrap.blank { border: 1.5px dashed var(--pm-rule); background: var(--pm-sunk); }
+.pm-svg { display: block; width: 100%; height: auto; user-select: none; -webkit-user-select: none; }
+.pm:not(.pm-editing) .pm-svg { cursor: zoom-in; }
+.pm-big:not(.pm-editing) .pm-svg { cursor: default; }
+.pm-svg.edit { cursor: crosshair; touch-action: none; }
+.pm-svg.edit.tool-select { cursor: default; }
+.pm-svg.edit.tool-select .pm-sh, .pm-svg.edit.tool-select .pm-pin { cursor: grab; }
+.pm-svg.dragging, .pm-svg.dragging * { cursor: grabbing !important; }
+.pm-svg.dragging .pm-selbox, .pm-svg.dragging .pm-hd { display: none; }
+.pm-svg .lifted { filter: drop-shadow(0 3px 4px rgb(0 0 0 / 0.28)); }
+.pm-blank { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 12px; font-size: 0.86rem; color: var(--pm-muted); pointer-events: none; }
+.pm-blank b { display: block; color: var(--pm-text); font-weight: 600; margin-bottom: 2px; }
+.pm-blank .pm-quiet { pointer-events: auto; }
+.pm-cap { display: block; font-size: 12.5px; line-height: 1.35; color: var(--pm-muted); margin: 6px 0 0; min-height: 2.7em; }
+
+/* Background patterns */
+.pm-bgline { fill: none; stroke: var(--pm-map-grid); stroke-width: 0.5; }
+.pm-bgline.faint { opacity: 0.7; }
+.pm-bgdot { fill: color-mix(in srgb, var(--color-text-secondary) 45%, transparent); }
+
+/* Shapes */
+.pm-sh-room { fill: var(--pm-map-room); stroke: var(--pm-map-ink); stroke-width: 1.4; }
+.pm-sh-area { fill: var(--pm-map-area); stroke: var(--pm-map-ink); stroke-width: 0.8; stroke-dasharray: 4 3; }
+.pm-sh-water { fill: var(--pm-map-water); stroke: var(--pm-map-water-ink); stroke-width: 1; }
+.pm-sh-danger { fill: var(--pm-map-danger); stroke: var(--pm-map-danger-ink); stroke-width: 1; }
+.pm-sh-wall { fill: none; stroke: var(--pm-map-ink); stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+.pm-sh-path { fill: none; stroke: var(--pm-map-ink); stroke-width: 1.4; stroke-dasharray: 5 4; stroke-linecap: round; }
+.pm-sh-hit { fill: none; stroke: transparent; stroke-width: 12; }
+.pm-sh-name { font-weight: 600; font-size: 8px; fill: var(--pm-muted); letter-spacing: 0.08em; text-transform: uppercase; pointer-events: none; }
+.pm-sh-label { font-style: italic; font-weight: 600; font-size: 13px; font-family: var(--font-heading, inherit); fill: var(--pm-text); }
+.pm-sh.tinted rect, .pm-sh.tinted path:not(.pm-sh-hit) { fill: color-mix(in srgb, var(--tint) 16%, var(--color-card-bg)); stroke: var(--tint); }
+.pm-sh.tinted .pm-sh-wall, .pm-sh.tinted .pm-sh-path { fill: none; }
+.pm-sh.tinted .pm-sh-name, .pm-sh-label.tinted { fill: var(--tint); }
+.pm-selbox { fill: none; stroke: var(--pm-acc); stroke-width: 1.2; stroke-dasharray: 4 3; pointer-events: none; }
+.pm-hd { fill: var(--pm-sheet); stroke: var(--pm-acc); stroke-width: 1.6; cursor: nwse-resize; }
+
+/* Markers. The disc takes the marker's colour, the theme's accent, or the
+   Director's amber for a DM-only marker with no colour of its own. */
+.pm-pin { cursor: pointer; outline: none; }
+.pm-pin .pm-hit { fill: transparent; }
+.pm-pin .pm-disc { fill: var(--pc, var(--pm-acc)); stroke: var(--pm-sheet); stroke-width: 2; }
+.pm-pin.dm .pm-disc { stroke: var(--pm-dm); stroke-width: 2.2; }
+.pm-pin.dm:not(.tinted) .pm-disc { fill: var(--pm-dm); stroke: var(--pm-sheet); stroke-width: 2; }
+.pm-pin .pm-halo { fill: none; stroke: var(--pm-acc); stroke-width: 2; opacity: 0; transition: opacity var(--dur-micro, 120ms) var(--ease-out); }
+.pm-pin.hot .pm-halo, .pm-pin.selp .pm-halo, .pm-pin:focus-visible .pm-halo { opacity: 1; }
+.pm-num, .pm-glyph { text-anchor: middle; dominant-baseline: central; pointer-events: none; fill: var(--color-accent-on-fill, var(--map-ink-light)); }
+.pm-num { font-weight: 700; font-size: 9px; font-variant-numeric: tabular-nums; }
+.pm-glyph { font-family: "Font Awesome 6 Free"; font-weight: 900; font-size: 9px; }
+.pm-pin.tinted .pm-num, .pm-pin.tinted .pm-glyph, .pm-pin.dm:not(.tinted) .pm-num, .pm-pin.dm:not(.tinted) .pm-glyph { fill: var(--map-c-on); }
+.pm-pin.ink-dark .pm-num, .pm-pin.ink-dark .pm-glyph { fill: var(--map-ink-dark); }
+.pm-pin.ink-light .pm-num, .pm-pin.ink-light .pm-glyph { fill: var(--map-ink-light); }
+
+/* ---------- The marker list (editing only) ---------- */
+.pm-side { min-width: 0; }
+.pm-side-h { font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--pm-muted); margin: 2px 0 4px 6px; }
+.pm-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.pm-legend li[data-dm-only] { box-shadow: inset 3px 0 0 var(--pm-dm); border-radius: 0 var(--pm-r-ctl) var(--pm-r-ctl) 0; }
+.pm-legend li button {
+  all: unset; box-sizing: border-box; display: flex; gap: 8px; align-items: center; width: 100%; min-height: 32px;
+  padding: 4px 6px 4px 8px; border-radius: var(--pm-r-ctl); cursor: pointer; font-size: 0.88rem; color: var(--pm-text);
+  transition: background-color var(--dur-micro, 120ms) var(--ease-out);
+}
+.pm-legend li button:hover, .pm-legend li button.hot { background: var(--pm-acc-soft); }
+.pm-legend li button:focus-visible { outline: 2px solid var(--pm-acc); }
+.pm-lname { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pm-mk {
+  width: 20px; height: 20px; border-radius: 50%; background: var(--pc, var(--pm-acc)); flex: none;
+  color: var(--color-accent-on-fill, var(--map-ink-light)); display: grid; place-items: center; font-size: 0.66rem; font-weight: 700;
+}
+.pm-mk i { font-size: 0.62rem; }
+.pm-legend .tinted .pm-mk, .pm-legend .dm:not(.tinted) .pm-mk { color: var(--map-c-on); }
+.pm-legend .ink-dark .pm-mk { color: var(--map-ink-dark); }
+.pm-legend .ink-light .pm-mk { color: var(--map-ink-light); }
+.pm-legend .dm .pm-mk { box-shadow: 0 0 0 2px var(--pm-dm); }
+.pm-legend .dm:not(.tinted) .pm-mk { background: var(--pm-dm); box-shadow: none; }
+.pm-lk { margin-left: auto; font-size: 10px; font-weight: 600; color: var(--pm-muted); letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; }
+.pm-lk.cb-dm { color: var(--pm-dm); }
+.pm-lgnone { font-size: 0.82rem; color: var(--pm-muted); padding: 4px 6px; line-height: 1.4; }
+
+/* ---------- Settings under the map: one fixed height, so nothing jumps ---------- */
+.pm-slot { border-top: 1px solid var(--pm-rule); margin-top: 12px; padding-top: 12px; }
+.pm-drape { display: flex; flex-direction: column; gap: 10px; min-height: 150px; }
+.pm-drape .pm-drow { margin-top: auto; }
+.pm-drape.empty { display: grid; place-items: center; border: 1.5px dashed var(--pm-rule); border-radius: 10px; background: var(--pm-sunk); padding: 12px; }
+.pm-emptyin { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.pm-emptyin .pm-fld { align-items: center; gap: 6px; }
+.pm-hint { font-size: 0.86rem; color: var(--pm-muted); margin: 0; text-align: center; max-width: 36em; }
+.pm-hint b { color: var(--pm-text); font-weight: 600; }
+.pm-sgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px 24px; }
+.pm-scol { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.pm-igrid { display: grid; grid-template-columns: repeat(6, 32px); }
+.pm-fld { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; color: var(--pm-muted); }
+.pm-fld.grow { flex: 1; min-height: 0; }
+.pm-fld.grow textarea { flex: 1; min-height: 0; resize: none; }
+.pm-fld input:not([type]), .pm-fld input[type="text"], .pm-fld select, .pm-fld textarea {
+  border: 0; border-bottom: 1px solid var(--pm-rule); background: none; padding: 4px 0; font-size: 0.9rem;
+  color: var(--pm-text); border-radius: 0; width: 100%;
+}
+.pm-fld textarea { border: 1px solid var(--color-input-border, var(--pm-rule)); border-radius: var(--pm-r-ctl); padding: 6px 8px; resize: vertical; }
+.pm-fld input:focus, .pm-fld select:focus, .pm-fld textarea:focus { outline: none; border-color: var(--pm-acc); }
+.pm-fld select { background: var(--pm-sheet); }
+.pm-radios { display: flex; gap: 14px; font-size: 0.86rem; color: var(--pm-text); }
+.pm-radios label { display: flex; gap: 6px; align-items: center; cursor: pointer; }
+.pm-radios input { accent-color: var(--pm-acc); }
+.pm-drow { display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.pm-chk { display: flex; gap: 6px; align-items: center; font-size: 0.84rem; color: var(--pm-text); cursor: pointer; padding-left: 8px; box-shadow: inset 3px 0 0 var(--pm-dm); }
+.pm-chk input { accent-color: var(--pm-dm); }
+.pm-sketch { font: 500 0.76rem/1.55 ui-monospace, Menlo, Consolas, monospace; min-height: 140px; }
+.pm-skerr, .pm-cerr { font-size: 12.5px; color: var(--pm-bad); margin: 0; }
+.pm-cerr:empty { display: none; }
+.pm-seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--pm-rule); border-radius: var(--pm-r-ctl); padding: 2px; background: var(--pm-sheet); }
+.pm-seg button { border: 0; background: none; border-radius: calc(var(--pm-r-ctl) - 2px); min-height: 30px; padding: 0 14px; font-weight: 600; font-size: 0.82rem; color: var(--pm-muted); }
+.pm-seg button[aria-pressed="true"] { background: var(--pm-acc-soft); color: var(--pm-acc); }
+
+/* Colour: the theme's own colour, a named one, or any colour */
+.pm-sw { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.pm-sw button, .pm-sw label.cust {
+  width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--pm-sheet); box-shadow: 0 0 0 1px var(--pm-rule);
+  padding: 0; background: var(--c); position: relative; display: inline-block; cursor: pointer;
+}
+.pm-sw button[aria-pressed="true"], .pm-sw label.cust.on { box-shadow: 0 0 0 2px var(--pm-text); }
+.pm-sw button.theme { background: conic-gradient(var(--pm-acc) 0 50%, var(--pm-dm) 50% 100%); }
+.pm-sw label.cust { background: conic-gradient(var(--map-c-3), var(--map-c-7), var(--map-c-4), var(--map-c-0), var(--map-c-5), var(--map-c-3)); }
+.pm-sw label.cust input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; padding: 0; border: 0; }
+@media (pointer: coarse) { .pm-sw button, .pm-sw label.cust { width: 34px; height: 34px; } }
+
+/* Page search: a picker that lies over the page */
+.pm-pick { position: relative; }
+.pm-plist {
+  position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 20; list-style: none; margin: 0; padding: 4px;
+  max-height: 248px; overflow: auto; background: var(--color-bg-secondary); border: 1px solid var(--pm-rule);
+  border-radius: var(--pm-r-sheet); box-shadow: var(--elev-hover);
+  transform-origin: top; animation: pm-grow var(--dur-standard, 200ms) var(--ease-out) both;
+}
+.pm-plist[hidden] { display: none; }
+.pm-plist li { display: flex; gap: 8px; align-items: baseline; padding: 6px 8px; border-radius: var(--pm-r-ctl); font-size: 0.86rem; color: var(--pm-text); cursor: pointer; }
+.pm-pname { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pm-plist li small { margin-left: auto; color: var(--pm-muted); font-size: 0.72rem; white-space: nowrap; }
+.pm-plist li[aria-selected="true"], .pm-plist li[role="option"]:hover { background: var(--pm-acc-soft); }
+.pm-plist li mark { background: none; color: var(--pm-acc); font-weight: 600; }
+.pm-plist .pm-more { cursor: default; color: var(--pm-muted); font-size: 0.76rem; justify-content: center; }
+
+/* Small: the tools wrap onto two rows rather than hide off the edge, and the
+   marker list sits under the map. Wide: the list sits beside it. */
+@container (max-width: 559px) {
+  .pm-tools { height: auto; flex-wrap: wrap; overflow: visible; }
+}
+@container (min-width: 560px) {
+  .pm-body { grid-template-columns: minmax(0, 1fr) 210px; }
+  .pm-body:not(:has(.pm-side)) { grid-template-columns: minmax(0, 1fr); }
+  .pm-side { position: relative; }
+  .pm-side-in { position: absolute; inset: 0; overflow: auto; }
+  .pm-drape { height: 236px; }
+}
+
+/* ---------- Bigger: the same map grown over the page ---------- */
+.pm-pop {
+  position: fixed; inset: 0; z-index: 900; display: grid; place-items: center;
+  padding: 24px max(16px, env(safe-area-inset-right, 0px)) 24px max(16px, env(safe-area-inset-left, 0px));
+}
+.pm-pop[hidden] { display: none; }
+.pm-scrim { position: absolute; inset: 0; background: var(--surface-overlay); animation: pm-fade var(--dur-standard, 200ms) both; }
+.pm-bigsheet {
+  position: relative; width: min(1080px, 100%); max-height: 100%; overflow: auto;
+  background: var(--pm-sheet); border: var(--pm-edge); border-radius: var(--pm-r-sheet); box-shadow: var(--elev-dragged);
+  padding: 12px 16px 16px; color: var(--pm-body);
+  transform-origin: var(--pm-ox, 90%) var(--pm-oy, 30%);
+  animation: pm-grow-big var(--dur-standard, 200ms) var(--ease-out) both;
+}
+.pm-bighead { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.pm-bigtitle { font-size: 1.25rem; font-weight: 600; color: var(--pm-text); margin: 0; font-family: var(--font-heading, inherit); }
+.pm-big { border: 0; box-shadow: none; padding: 0; }
+.pm-pop.out .pm-bigsheet { animation: pm-shrink-big 150ms var(--ease-in) both; }
+.pm-pop.out .pm-scrim { animation: pm-fade 150ms reverse both; }
+
+@keyframes pm-grow { from { opacity: 0; transform: scaleY(0.6); } to { opacity: 1; transform: none; } }
+@keyframes pm-grow-big { from { opacity: 0; transform: scale(0.4); } to { opacity: 1; transform: none; } }
+@keyframes pm-shrink-big { from { opacity: 1; transform: none; } to { opacity: 0; transform: scale(0.4); } }
+@keyframes pm-fade { from { opacity: 0; } to { opacity: 1; } }
+
+/* Calm fades in place; Off and reduced motion show the end state. */
+html[data-motion="calm"] .pm-bigsheet, html[data-cz-reduce] .pm-bigsheet { animation-name: pm-fade; }
+html[data-motion="calm"] .pm-pop.out .pm-bigsheet, html[data-cz-reduce] .pm-pop.out .pm-bigsheet { animation: pm-fade 150ms reverse both; }
+html[data-motion="calm"] .pm-plist, html[data-cz-reduce] .pm-plist { animation-name: pm-fade; }
+html[data-motion="calm"] .pm-btn:active:not(:disabled), html[data-motion="off"] .pm-btn:active:not(:disabled) { transform: none; }
+html[data-motion="off"] :is(.pm, .pm-pop) *, html[data-motion="off"] .pm-pop { animation: none !important; transition: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  :is(.pm, .pm-pop) *, .pm-pop { animation: none !important; transition: none !important; }
+}

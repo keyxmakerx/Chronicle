@@ -74,7 +74,9 @@ type ExportEntityType struct {
 	Layout          json.RawMessage `json:"layout"`
 	SortOrder       int             `json:"sort_order"`
 	IsDefault       bool            `json:"is_default"`
-	Enabled         bool            `json:"enabled"`
+	// Enabled is a pointer so a file without the key leaves the type on
+	// rather than switching it off.
+	Enabled *bool `json:"enabled"`
 	// PresetCategory, ParentTypeSlug and Claimable are additive. They are
 	// what makes a type the campaign's Player Character category (and a
 	// sub-category of its parent); without them a restored PC type comes

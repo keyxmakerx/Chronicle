@@ -166,11 +166,11 @@ templ CategoryListContent(cc *campaigns.CampaignContext, manifest *SystemManifes
 									{ item.Name }
 								</a>
 							</td>
-							<td class="px-4 py-3 text-fg-secondary hidden sm:table-cell truncate max-w-xs">{ item.Summary }</td>
+							<td class="px-4 py-3 text-fg-secondary hidden sm:table-cell truncate max-w-xs">{ flattenRefMarkup(item.Summary) }</td>
 							for _, field := range cat.Fields {
 								if field.Key != "classes" {
 									<td class="px-4 py-3 text-fg-secondary hidden md:table-cell">
-										{ propString(item.Properties, field.Key) }
+										{ propText(item.Properties, field.Key) }
 									</td>
 								}
 							}
@@ -220,7 +220,7 @@ templ ItemDetailContent(cc *campaigns.CampaignContext, manifest *SystemManifest,
 				<div class="bg-surface border border-edge rounded-lg p-4 mb-6">
 					<div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
 						for _, field := range cat.Fields {
-							if val := propString(item.Properties, field.Key); val != "" {
+							if val := propText(item.Properties, field.Key); val != "" {
 								<div>
 									<dt class="text-xs font-medium text-fg-secondary uppercase tracking-wide">{ field.Label }</dt>
 									<dd class="text-sm text-fg mt-0.5">{ val }</dd>
@@ -241,7 +241,7 @@ templ ItemDetailContent(cc *campaigns.CampaignContext, manifest *SystemManifest,
 			<!-- Description -->
 			if item.Description != "" {
 				<div class="prose prose-sm max-w-none text-fg">
-					<p class="whitespace-pre-line">{ item.Description }</p>
+					<p class="whitespace-pre-line">{ flattenRefMarkup(item.Description) }</p>
 				</div>
 			}
 		</div>

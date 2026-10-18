@@ -68,3 +68,44 @@ func (h *Handler) Put(c echo.Context) error {
 	}
 	return c.JSON(http.StatusOK, out)
 }
+
+// sketchBody is the POST sketch body.
+type sketchBody struct {
+	Text string `json:"text"`
+}
+
+// SketchText handles GET /campaigns/:id/page-blocks/:eid/:bid/sketch: the map
+// as text, for the editor's "edit as text".
+func (h *Handler) SketchText(c echo.Context) error {
+	cid, v, err := viewerFrom(c)
+	if err != nil {
+		return err
+	}
+	text, version, err := h.svc.EditorSketchText(c.Request().Context(), cid, c.Param("eid"), c.Param("bid"), v)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]any{"text": text, "version": version})
+}
+
+// Sketch handles POST /campaigns/:id/page-blocks/:eid/:bid/sketch: it parses
+// text into a map for the editor to show and does not save it.
+func (h *Handler) Sketch(c echo.Context) error {
+	cid, v, err := viewerFrom(c)
+	if err != nil {
+		return err
+	}
+	raw, rerr := io.ReadAll(io.LimitReader(c.Request().Body, MaxBodyBytes+1))
+	if rerr != nil || len(raw) == 0 || len(raw) > MaxBodyBytes {
+		return apperror.NewBadRequest("request body is missing or too large")
+	}
+	var in sketchBody
+	if err := json.Unmarshal(raw, &in); err != nil {
+		return apperror.NewBadRequest("request body is not valid JSON")
+	}
+	out, err := h.svc.PreviewSketch(c.Request().Context(), cid, c.Param("eid"), c.Param("bid"), v, in.Text)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
+}
