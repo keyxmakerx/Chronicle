@@ -202,6 +202,9 @@
       this.target = { t0: this.view.t0, t1: this.view.t1 };
       this.draw(); this.renderCal();
       this.setTarget(t0, t1);
+      // A page's own time line links here naming the event to open at.
+      var at = new URLSearchParams(window.location.search).get('event');
+      if (at && this.byId[at]) this.openEvent(at, { fly: true, glow: true });
     },
 
     X: function (t) { return (t - this.view.t0) / (this.view.t1 - this.view.t0) * this.W; },

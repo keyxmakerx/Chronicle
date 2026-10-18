@@ -1,8 +1,9 @@
-// page_timeline.templ draws the time line block: a slim line from a page's
-// first dated event to the campaign's today, a dot for each event. The
+// page_timeline.templ draws the time line block: a lean hairline with no box,
+// meant to sit under a page's title, from the page's first dated event to the
+// campaign's today (or the subject's death), a bead for each event. The
 // server has already filtered the events for the viewer, so nothing here is
-// hidden by CSS. page_timeline.js opens the hover card on a dot; the styles
-// and the arrival moves are in static/css/page_timeline.css.
+// hidden by CSS. page_timeline.js merges beads that would touch and opens
+// the hover card; the styles are in static/css/page_timeline.css.
 package calendar
 
 import (
@@ -17,14 +18,14 @@ import (
 templ PageTimelineBlock(campaignID string, t *PageTimeline, canAuthor bool) {
 	if t == nil {
 		if canAuthor {
-			<section class="ptl cb-card card" aria-label="Time line">
+			<section class="ptl" aria-label="Time line">
 				@pageTimelineStyles()
 				<p class="ptl-none">The time line draws from the campaign calendar, and this campaign has none yet.</p>
 			</section>
 		}
 	} else if len(t.Events) == 0 {
 		if canAuthor {
-			<section class="ptl cb-card card" aria-label="Time line">
+			<section class="ptl" aria-label="Time line">
 				@pageTimelineStyles()
 				<p class="ptl-none">
 					No dated events belong to this page yet.
@@ -33,47 +34,61 @@ templ PageTimelineBlock(campaignID string, t *PageTimeline, canAuthor bool) {
 			</section>
 		}
 	} else {
-		<section class="ptl cb-card card" data-widget="page_timeline" aria-label={ "Time line, " + t.CalendarName }>
+		<section
+			class={ "ptl", templ.KV("ptl--dead", t.Dead), templ.KV("ptl--lit", !t.Dead && t.Today >= t.End) }
+			data-widget="page_timeline"
+			aria-label={ "Time line, " + t.CalendarName }
+			style={ fmt.Sprintf("--ptl-lit:%.4f", t.FillPercent()/100) }
+		>
 			@pageTimelineStyles()
-			<p class="sr-only">Today is { t.TodayLabel }.</p>
-			<div class="ptl-rail">
-				<div class="ptl-track" aria-hidden="true"></div>
-				<div class="ptl-fill" aria-hidden="true" style={ fmt.Sprintf("width:%.2f%%", t.FillPercent()) }></div>
-				if t.Today >= t.Start && t.Today <= t.End {
-					<span class="ptl-today" aria-hidden="true" title={ "Today: " + t.TodayLabel } style={ fmt.Sprintf("left:%.2f%%", t.Percent(t.Today)) }></span>
-				}
-				<ol class="ptl-dots">
-					for i, e := range t.Events {
-						<li style={ fmt.Sprintf("left:%.2f%%;--i:%d", t.Percent(e.Abs), i) }>
-							<a
-								class={ "ptl-ev", templ.KV("ptl-ev--dm cb-dm", e.DMOnly), templ.KV("ptl-ev--now", e.Abs == t.Today), templ.KV("ptl-ev--later", e.Abs > t.Today) }
-								href={ templ.SafeURL(pageTimelineEventURL(campaignID, t.CalendarID, e)) }
-								aria-label={ pageTimelineEventLabel(e) }
-								data-ptl-name={ e.Name }
-								data-ptl-date={ e.DateLabel }
-								data-ptl-kind={ e.KindName }
-								data-ptl-icon={ e.KindIcon }
-								if e.DMOnly {
-									data-dm-only
-								}
-								if e.Repeats {
-									data-ptl-repeats
-								}
-							>
-								if e.Labelled {
-									<span class="ptl-yr" aria-hidden="true">{ fmt.Sprintf("%d", e.Year) }</span>
-								}
-							</a>
-						</li>
-					}
-				</ol>
-			</div>
-			if t.Truncated() {
-				<p class="ptl-more">
-					Showing the first { fmt.Sprintf("%d", len(t.Events)) } of { fmt.Sprintf("%d", t.Total) } events.
-					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s/view", campaignID, t.CalendarID)) }>Open the calendar</a>
-				</p>
+			if t.Dead {
+				<p class="sr-only">This line ends at a death.</p>
+			} else {
+				<p class="sr-only">Today is { t.TodayLabel }.</p>
 			}
+			<div class="ptl-rail">
+				<div class="ptl-tr" aria-hidden="true"></div>
+				<div class="ptl-wa" aria-hidden="true"></div>
+				<div class="ptl-in">
+					if t.ShowsToday() {
+						<span class="ptl-now" aria-hidden="true" title={ "Today: " + t.TodayLabel } style={ fmt.Sprintf("left:%.2f%%", t.Percent(t.Today)) }></span>
+					}
+					<ol class="ptl-dots">
+						for i, e := range t.Events {
+							<li style={ fmt.Sprintf("left:%.2f%%;--i:%d", t.Percent(e.Abs), i) } data-ptl-at={ fmt.Sprintf("%.3f", t.Percent(e.Abs)) } data-ptl-year={ fmt.Sprintf("%d", e.Year) }>
+								<a
+									class={ "ptl-ev", templ.KV("ptl-ev--dm cb-dm", e.DMOnly), templ.KV("ptl-ev--later", t.Later(e)), templ.KV("ptl-ev--death", e.Death) }
+									href={ templ.SafeURL(pageTimelineEventURL(campaignID, t.CalendarID, e)) }
+									aria-label={ pageTimelineEventLabel(e) }
+									data-ptl-name={ e.Name }
+									data-ptl-date={ e.DateLabel }
+									data-ptl-kind={ e.KindName }
+									data-ptl-icon={ e.KindIcon }
+									if e.EndLabel != "" {
+										data-ptl-end={ e.EndLabel }
+									}
+									if e.DMOnly {
+										data-dm-only
+									}
+									if e.Repeats {
+										data-ptl-repeats
+									}
+								>
+									if e.Labelled {
+										<span class="ptl-yr" aria-hidden="true">{ fmt.Sprintf("%d", e.Year) }</span>
+									}
+								</a>
+							</li>
+						}
+					</ol>
+				</div>
+			</div>
+			<p class="ptl-more">
+				if t.Truncated() {
+					Showing the first { fmt.Sprintf("%d", len(t.Events)) } of { fmt.Sprintf("%d", t.Total) } events.
+				}
+				<a href={ templ.SafeURL(t.OpenURL) }>{ t.OpenLabel }</a>
+			</p>
 		</section>
 	}
 }
@@ -90,9 +105,13 @@ func pageTimelineEventURL(campaignID, calendarID string, e PageTimelineEvent) st
 	return fmt.Sprintf("/campaigns/%s/calendars/%s/view?event=%s&date=%d-%d-%d", campaignID, calendarID, e.ID, e.Year, e.Month, e.Day)
 }
 
-// pageTimelineEventLabel is what a screen reader hears for a dot.
+// pageTimelineEventLabel is what a screen reader hears for a bead.
 func pageTimelineEventLabel(e PageTimelineEvent) string {
-	s := e.DateLabel + ": " + e.Name
+	s := e.DateLabel
+	if e.EndLabel != "" {
+		s += " to " + e.EndLabel
+	}
+	s += ": " + e.Name
 	if e.DMOnly {
 		s += " (Director only)"
 	}
