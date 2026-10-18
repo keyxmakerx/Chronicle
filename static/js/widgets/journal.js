@@ -30,6 +30,7 @@
   var COMPACT_PX = 210;
   var WIDE_PX = 600;
   var MIN_EDITOR_PX = 260;
+  var DRAWER_PX = 280;
   var ID_RE = /^[0-9a-fA-F-]{8,64}$/;
   var SIZE_KEY = 'chronicle.journal.listSize';
 
@@ -163,6 +164,7 @@
       drawerBtn: this.q('[data-act="drawer"]'),
       badge: this.q('.dt-badge'),
       chips: this.q('.vis-control'),
+      night: this.q('.ed-night'),
       owner: this.q('.ed-owner'),
       lock: this.q('.ed-lock'),
       toolbar: this.q('.ed-toolbar'),
@@ -192,6 +194,9 @@
     this.bindDrawer();
     this.bindResize();
     this.bindGlobal();
+    if (Chronicle.hovercard) {
+      this.offNightCard = Chronicle.hovercard.bind(this.dom.night, '.ed-nighttag', function () { return self.nightCard(); }, { pinOnClick: true });
+    }
     this.renderTabs();
     this.updatePill();
 
@@ -1811,6 +1816,103 @@
     var lockedBy = this.lockedByOther();
     this.dom.lock.hidden = !lockedBy;
     if (lockedBy) this.dom.lock.querySelector('.who').textContent = 'Editing: ' + this.memberName(lockedBy);
+    this.renderNight();
+  };
+
+  /** A night's date and start in words: "Sat 17 Oct, 7:00pm". */
+  function nightWhen(date, hhmm) {
+    var p = String(date || '').split('-'), d = new Date(+p[0], +p[1] - 1, +p[2]);
+    if (isNaN(d)) return date;
+    var s = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()] + ' ' + d.getDate() + ' ' +
+      ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getMonth()];
+    var t = /^(\d\d):(\d\d)$/.exec(hhmm || '');
+    if (t) s += ', ' + ((+t[1] % 12) || 12) + ':' + t[2] + (+t[1] < 12 ? 'am' : 'pm');
+    return s;
+  }
+
+  /** The open note's game-night row, when it is a game night's entry. */
+  Journal.prototype.nightRow = function () {
+    var row = this.active && this.byId[this.active.id];
+    return row && row.night ? row : null;
+  };
+
+  /**
+   * Whether the entry is read for the GM's check-in: a GM can read it. A GM
+   * can read every note they see; otherwise it must be shared with the GM or
+   * the party, or with someone who owns the campaign.
+   */
+  Journal.prototype.readByGM = function (row) {
+    if (this.isGM || row.visibility === 'gm' || row.visibility === 'party') return true;
+    if (row.visibility !== 'custom') return false;
+    var owners = {};
+    (this.memberList || []).forEach(function (m) { if (m.role === 'owner') owners[m.id] = true; });
+    return (row.sharedWith || []).some(function (id) { return owners[id]; });
+  };
+
+  /** "wait" until the night starts, then "read" or "unread". */
+  Journal.prototype.nightState = function (row) {
+    if (!row.night.started) return 'wait';
+    return this.readByGM(row) ? 'read' : 'unread';
+  };
+
+  /** The page names the open entry links, as written in it. */
+  Journal.prototype.nightNames = function () {
+    var links = this.editor ? this.editorLinks() : ((this.nightRow() || {}).links || []);
+    var seen = {}, out = [];
+    links.forEach(function (l) {
+      if (l.kind === 'page' && !seen[l.id]) { seen[l.id] = true; out.push(l.label || 'A page'); }
+    });
+    return out;
+  };
+
+  /**
+   * The tag on a game night's entry. It says whether the entry is read for
+   * the check-in; resting on it (or focusing it) opens the hover card that
+   * explains.
+   */
+  Journal.prototype.renderNight = function () {
+    var box = this.dom.night;
+    if (!box) return;
+    var row = this.nightRow();
+    box.hidden = !row;
+    if (!row) { box.innerHTML = ''; return; }
+    var state = this.nightState(row), n = this.nightNames().length;
+    var label = state === 'wait' ? 'Read after the night'
+      : state === 'unread' ? 'Not read'
+      : 'Read · ' + (n ? n + (n === 1 ? ' name' : ' names') + ' found' : 'no names yet');
+    box.innerHTML = '<button type="button" class="ed-nighttag s-' + state + '">' +
+      '<i class="fa-solid ' + (state === 'read' ? 'fa-check' : state === 'unread' ? 'fa-eye-slash' : 'fa-wand-magic-sparkles') + '" aria-hidden="true"></i>' +
+      esc(label) + '</button>';
+  };
+
+  /** The hover card for the tag: what reading the entry does, for this state. */
+  Journal.prototype.nightCard = function () {
+    var row = this.nightRow();
+    if (!row) return null;
+    var night = row.night, state = this.nightState(row), names = this.nightNames(), mine = row.userId === this.uid;
+    var by = this.isGM ? 'you confirm it' : 'the GM confirms it';
+    var text;
+    if (state === 'wait') {
+      text = 'This entry is read once the night has started. The pages it links to, people and places, are offered ' +
+        (this.isGM ? 'to you' : 'to the GM') + ' in the night’s check-in. Nothing is added to anyone until ' + by + '.' +
+        (mine && !this.readByGM(row) ? ' A private entry is read only once you share it with the GM.' : '');
+    } else if (state === 'unread') {
+      text = mine
+        ? 'The GM can’t read this entry, so it isn’t read for the check-in. Share it with the GM and the people you name are offered to them.'
+        : 'The GM can’t read this entry, so it isn’t read for the check-in.';
+    } else if (!names.length) {
+      text = 'No names found yet. Type [[ to link a person or place, and they are offered in the night’s check-in.';
+    } else {
+      var shown = names.length > 4 ? names.slice(0, 3).concat([(names.length - 3) + ' more']) : names;
+      text = 'Found ' + (shown.length < 2 ? shown[0] : shown.slice(0, -1).join(', ') + ' and ' + shown[shown.length - 1]) + '. ' +
+        (this.isGM ? 'They’re waiting in the night’s check-in. Nothing is added until you confirm it.' : 'The GM checks each one before it counts.');
+    }
+    var q = '?session=' + encodeURIComponent(night.sessionId) + '&date=' + encodeURIComponent(night.date);
+    return {
+      kind: 'Game night', kindIcon: 'fa-calendar-day', title: night.name, text: text,
+      facts: [['When', nightWhen(night.date, night.time)]],
+      link: { href: '/campaigns/' + encodeURIComponent(this.cid) + '/game-nights' + q, label: 'Open the night' }
+    };
   };
 
   Journal.prototype.renderUpdated = function () {
@@ -2165,6 +2267,8 @@
     var was = d.classList.contains('open');
     d.classList.toggle('open', !!open);
     this.dom.drawerBtn.setAttribute('aria-expanded', String(!!open));
+    // A wide list gives way while the drawer is docked, and takes the room back after.
+    if (!!open !== was && this.size === 'wide') this.applySize('wide', { first: true });
     if (open && !was) {
       this.loadDrawerDetails();
       if (fromKeyboard) { var c = d.querySelector('[data-act="drawer-close"]'); if (c) c.focus(); }
@@ -2197,6 +2301,7 @@
   /** Links out, read from the editor: notes are labelled per viewer, never from the body. */
   Journal.prototype.renderLinksOut = function () {
     var self = this;
+    this.renderNight();
     var links = this.editor ? this.editorLinks() : ((this.active && this.byId[this.active.id] && this.byId[this.active.id].links) || []);
     var box = this.dom.out;
     if (!links.length) {
@@ -2496,7 +2601,9 @@
   };
 
   Journal.prototype.wideMax = function () {
-    return Math.max(COMPACT_PX + 40, this.rowWidth() - MIN_EDITOR_PX - 13);
+    // The docked details drawer takes its width from the row as well.
+    var drawer = !isPhone() && this.dom.drawer.classList.contains('open') ? DRAWER_PX : 0;
+    return Math.max(COMPACT_PX + 40, this.rowWidth() - MIN_EDITOR_PX - drawer - 13);
   };
 
   /**
@@ -2837,6 +2944,7 @@
     this.closePop();
     this.hidePeek();
     if (this.offLabels) this.offLabels();
+    if (this.offNightCard) this.offNightCard();
     window.removeEventListener('pagehide', this.onPageHide);
     window.removeEventListener('chronicle:note-created', this.onNoteCreated);
     window.removeEventListener('chronicle:open-note', this.onOpenNote);

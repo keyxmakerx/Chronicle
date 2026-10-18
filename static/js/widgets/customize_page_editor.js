@@ -1,5 +1,5 @@
 /**
- * customize_page_editor.js: Customize's page editor, a category's Page
+ * customize_page_editor.js: the Customizer's page layout, a category's Page
  * layout tab (entity_type_customize_tab.templ).
  *
  * It draws the category's page layout on one of the category's own pages:
@@ -171,6 +171,12 @@
         '<tr><td>Harbourmaster Vell</td><td>The toll paid</td><td class="dm">Takes smugglers’ coin</td></tr><tr><td>Old Maudry</td><td>Her son home</td><td class="dm">He’s in the hold</td></tr></tbody></table>';
     },
     page_encounters: function () { return exHead('fa-dragon', 'Encounters') + exList([['Watch patrol', 'Medium · 4 foes', '#dc2626'], ['Dock rats', 'Easy · swarm', '#64748b']]); },
+    where_it_is: function () { return exHead('fa-map-location-dot', 'Where it is') + exList([['Common room', 'you are here', '#6366f1'], ['The Gilded Flagon', 'one step out', '#0d9488'], ['Port Varrow', 'the city', '#b45309']]); },
+    last_seen: function () { return exHead('fa-eye', 'Last seen') + '<div class="cpe-ex-sub"><b>The Drowned Bell</b><span>5 weeks ago</span><span class="cpe-ex-chip">6 nights</span></div>'; },
+    contents: function () { return exHead('fa-list-ul', 'Contents') + '<div class="cpe-ex-sub"><b>History</b><span>The Docks</span><span>Who rules</span><span class="cpe-ex-chip">+4</span></div>'; },
+    standing: function () { return exHead('fa-scale-balanced', 'Standing') + '<div class="cpe-ex-sub"><b>Wary</b><span>Why: Brawled in the guildhall and 2 more</span></div>'; },
+    rumours: function () { return exHead('fa-ear-listen', 'Rumours') + exList([['She sank her own ship for the insurance.', 'Old Bram · Swears by it', '#64748b'], ['Dessa Quill took the ship’s treasure.', 'Mara · Heard it', '#64748b']]); },
+    family_tree: function () { return exHead('fa-sitemap', 'Family tree') + exList([['Ione Fenwick', 'parent', '#6366f1'], ['Maud Fenwick', 'you are here', '#0d9488'], ['Tam Ash', 'child', '#b45309']]); },
     divider: function () { return '<hr class="cpe-ex-hr">'; },
     map_full: function () { return '<div class="cpe-ex-img cpe-ex-map">' + EX_MAP + '</div>'; },
     local_graph: function () { return '<div class="cpe-ex-img cpe-ex-map">' + EX_MAP + '</div>'; },
@@ -1035,7 +1041,9 @@
       }
       document.removeEventListener('pointerdown', popOff, true);
     }
-    function popOff(e) { if (popEl && !popEl.contains(e.target) && !popEl.hasAttribute('data-keep')) closePop(); }
+    // Small menus close on a click off them; the peek is a panel, so it
+    // closes only on its X, Escape or the eye that opened it.
+    function popOff(e) { if (popEl && !popEl.contains(e.target) && !popEl.hasAttribute('data-keep') && !popEl.hasAttribute('data-panel')) closePop(); }
     function openPop(anchor, html, align) {
       closePop();
       popEl = document.createElement('div');
@@ -1061,6 +1069,7 @@
     function peek(btn, k) {
       var m = W[k];
       if (!m) return;
+      if (popEl && popEl.getAttribute('data-panel') === k) { closePop(); return; }
       var z = sizeOf(m.sizes[0] || '4x2');
       var p = openPop(btn, '<div class="cpe-peek"><div class="cpe-peek-h"><span class="cpe-title-ic">' + ic(m.icon) + '</span><div><b>' + esc(m.name) + '</b><span>' +
         (m.sizes.length ? 'As a tile, ' + esc(m.sizes.map(function (x) { return x.replace('x', '×'); }).join(', ')) : 'In columns') + '</span></div>' +
@@ -1070,6 +1079,7 @@
         '<div class="cpe-row-set"><span class="cpe-hint">Keep it open and try it</span><button type="button" class="toggle" role="switch" data-peekkeep aria-checked="' + UI.peekKeep + '" aria-label="Keep it open and try it"><span class="toggle-knob"></span></button></div>' +
         '<p class="cpe-hint">Example content. Your pages fill it with their own.</p></div>');
       p.classList.add('cpe-peek-pop');
+      p.setAttribute('data-panel', k);
       if (UI.peekKeep) p.setAttribute('data-keep', '');
       $('.cpe-peek-box', p).appendChild(exampleNode(m.type, m.name, m.icon, z.w, z.h));
       // Beside the panel, level with the widget, rather than over the list.
@@ -1498,6 +1508,10 @@
         if (n) n.focus();
       }
       if (e.key === 'Escape' && UI.sel && !popEl) select(null);
+    });
+    // Escape closes the peek wherever focus is, since clicks elsewhere don't.
+    on(document, 'keydown', function (e) {
+      if (e.key === 'Escape' && popEl && popEl.hasAttribute('data-panel') && !DRAG) closePop();
     });
     on(el, 'input', function (e) {
       if (e.target.id === 'cpe-q') { UI.galQ = e.target.value; render(); }

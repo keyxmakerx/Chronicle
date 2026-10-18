@@ -73,9 +73,12 @@ func TestImport_RecordsReview(t *testing.T) {
 	for _, want := range []string{
 		`name="rec_0_include"`, "Rolling table", "2 entries",
 		`name="rec_1_delete_confirmed"`, "will be removed for good",
-		"is not something AI Import can change", "Import 2 changes",
+		"is not something AI Import can change",
+		// Two rows listed; the removal starts on No, so one starts on Yes.
+		`x-data="aiImportReview(1)"`, " of 2", `name="rec_1_include" value="off" checked`,
+		"1 block from the AI can't be used",
 		// A refused record is not markdown that failed to parse.
-		"0 parse errors", "1 can&#39;t be imported", "(1 row that can&#39;t be imported will be skipped)",
+		"0 parse errors", "1 can&#39;t be imported",
 	} {
 		if !strings.Contains(html, want) {
 			t.Errorf("review missing %q", want)

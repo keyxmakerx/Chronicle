@@ -822,6 +822,11 @@ type EntityRepository interface {
 	// for verifying the new owner is a campaign member.
 	UpdateOwner(ctx context.Context, entityID string, ownerUserID *string) error
 
+	// ClaimOwner makes userID the owner only if the entity is unowned or
+	// already theirs, in one statement, so two players claiming the same
+	// character at once cannot both win. Reports whether userID owns it after.
+	ClaimOwner(ctx context.Context, entityID, userID string) (bool, error)
+
 	// SetPlayable marks or unmarks an entity as one a player may play.
 	SetPlayable(ctx context.Context, entityID string, playable bool) error
 
@@ -1561,6 +1566,28 @@ func (r *entityRepository) UpdateOwner(ctx context.Context, entityID string, own
 		return fmt.Errorf("updating entity owner: %w", err)
 	}
 	return nil
+}
+
+// ClaimOwner is UpdateOwner guarded by the current owner. The driver reports
+// changed rows, not matched ones, so a claim that changes nothing (already the
+// caller's) reads back the owner rather than counting as a loss.
+func (r *entityRepository) ClaimOwner(ctx context.Context, entityID, userID string) (bool, error) {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE entities SET owner_user_id = ?, playable = 1, updated_at = NOW()
+		 WHERE id = ? AND (owner_user_id IS NULL OR owner_user_id = ?)`,
+		userID, entityID, userID)
+	if err != nil {
+		return false, fmt.Errorf("claiming entity: %w", err)
+	}
+	if n, err := res.RowsAffected(); err == nil && n > 0 {
+		return true, nil
+	}
+	var owner sql.NullString
+	err = r.db.QueryRowContext(ctx, `SELECT owner_user_id FROM entities WHERE id = ?`, entityID).Scan(&owner)
+	if err != nil {
+		return false, fmt.Errorf("reading entity owner after claim: %w", err)
+	}
+	return owner.Valid && owner.String == userID, nil
 }
 
 // SetPlayable sets entities.playable.

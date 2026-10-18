@@ -220,6 +220,22 @@ type CategoryDef struct {
 	// Fields defines the schema for Properties keys on ReferenceItems
 	// in this category. Used for structured display and filtering.
 	Fields []FieldDef `json:"fields,omitempty"`
+
+	// Director keeps the category to the campaign's Directors: its reference
+	// pages, search hits, tooltips and raw data/<slug>.json file. It is for
+	// content the system's book keeps in a Director-only chapter, so the
+	// data cannot show players what the book hides.
+	Director bool `json:"director,omitempty"`
+}
+
+// DirectorOnly reports whether the category slug is marked Director-only.
+func (m *SystemManifest) DirectorOnly(slug string) bool {
+	for i := range m.Categories {
+		if m.Categories[i].Slug == slug {
+			return m.Categories[i].Director
+		}
+	}
+	return false
 }
 
 // FieldDef describes a single field in a category's reference item schema.

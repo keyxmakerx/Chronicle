@@ -1,7 +1,9 @@
 package entity_notes
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -11,15 +13,50 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
+// EntityGate is the narrow cross-plugin seam used to honor entity visibility
+// and campaign binding without importing the entities repo (plugin
+// isolation). Implemented by an adapter over the entity service, wired in
+// app/routes.go.
+type EntityGate interface {
+	// ResolveViewableEntity returns the entity's owning campaign ID and whether
+	// the viewer (role, userID) may view it. A missing entity returns a
+	// not-found error.
+	ResolveViewableEntity(ctx context.Context, entityID string, role int, userID string) (campaignID string, canView bool, err error)
+}
+
 // Handler is the HTTP boundary for entity_notes. Handlers stay thin:
 // build a ViewerContext from CampaignContext + auth, decode the
 // request body, delegate to the service, return JSON.
 type Handler struct {
-	svc Service
+	svc        Service
+	entityGate EntityGate
 }
 
 // NewHandler constructs an HTTP handler against a service.
 func NewHandler(svc Service) *Handler { return &Handler{svc: svc} }
+
+// SetEntityGate injects the entity-visibility gate. Called during app wiring.
+func (h *Handler) SetEntityGate(gate EntityGate) { h.entityGate = gate }
+
+// requireViewableEntity rejects an entity that is not in the URL campaign or
+// that the caller may not view. Both cases are the same 404 so a foreign or
+// hidden entity ID is indistinguishable from a missing one.
+func (h *Handler) requireViewableEntity(c echo.Context, cc *campaigns.CampaignContext, entityID string) error {
+	if h.entityGate == nil {
+		// Fail closed: a missing gate must never serve ungated notes.
+		return apperror.NewInternal(errors.New("entity_notes: entity gate not configured"))
+	}
+	// VisibilityRole, not MemberRole (ADR-057): a Co-DM sees dm_only entities.
+	campaignID, canView, err := h.entityGate.ResolveViewableEntity(
+		c.Request().Context(), entityID, int(cc.VisibilityRole()), auth.GetUserID(c))
+	if err != nil {
+		return err
+	}
+	if campaignID != cc.Campaign.ID || !canView {
+		return apperror.NewNotFound("entity not found")
+	}
+	return nil
+}
 
 // viewerFrom collapses the framework-supplied CampaignContext into the
 // audience-relevant facts the service needs. The IsScribe assertion
@@ -47,6 +84,9 @@ func (h *Handler) List(c echo.Context) error {
 	if entityID == "" {
 		return apperror.NewBadRequest("entity ID is required")
 	}
+	if err := h.requireViewableEntity(c, cc, entityID); err != nil {
+		return err
+	}
 	viewer := viewerFrom(cc, auth.GetUserID(c))
 	notes, err := h.svc.List(c.Request().Context(), entityID, viewer)
 	if err != nil {
@@ -70,6 +110,9 @@ func (h *Handler) Create(c echo.Context) error {
 	if entityID == "" {
 		return apperror.NewBadRequest("entity ID is required")
 	}
+	if err := h.requireViewableEntity(c, cc, entityID); err != nil {
+		return err
+	}
 	var req CreateNoteRequest
 	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
 		return apperror.NewBadRequest("invalid JSON body")
@@ -89,14 +132,22 @@ func (h *Handler) Get(c echo.Context) error {
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
+	entityID := c.Param("eid")
 	noteID := c.Param("nid")
-	if noteID == "" {
-		return apperror.NewBadRequest("note ID is required")
+	if entityID == "" || noteID == "" {
+		return apperror.NewBadRequest("entity and note ID are required")
+	}
+	if err := h.requireViewableEntity(c, cc, entityID); err != nil {
+		return err
 	}
 	viewer := viewerFrom(cc, auth.GetUserID(c))
 	note, err := h.svc.Get(c.Request().Context(), noteID, viewer)
 	if err != nil {
 		return err
+	}
+	// The note must hang off the gated entity, not just share the campaign.
+	if note.CampaignID != cc.Campaign.ID || note.EntityID != entityID {
+		return apperror.NewNotFound("note not found")
 	}
 	return c.JSON(http.StatusOK, note)
 }

@@ -1,0 +1,116 @@
+// family_tree_block.templ renders the entity page's "Family tree" block: a
+// page's parents, children and partners, read from its relations. At rest it
+// is one quiet line of circles (portraits, or initials for a person without
+// one); a click on the word Family or on any circle turns that line into the
+// tree, drawn over the page from the line's own place, and a visible Close or
+// Escape folds it back into the line. Nothing below the block moves.
+//
+// The server renders the frame, the count and a plain list of the page's
+// nearest kin; the whole family for THIS viewer travels as one JSON script and
+// static/js/family_tree.js draws the strip and the tree from it with
+// textContent, so a name never reaches innerHTML. What a viewer may see was
+// decided in FamilyTreeService before it got here: a player's JSON holds no
+// relative they cannot open and no Director-only relation, and the Director's
+// extras are also marked data-dm-only (and are not rendered for anyone else).
+// Every handler on the shell is an inline IIFE (familyCall) so the block works
+// after an HTMX swap.
+package entities
+
+import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
+
+templ familyStyles() {
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/css/family_tree.css") }/>
+}
+
+// BlockFamilyTree renders the block. A page with no family links draws
+// nothing for a player; the Director gets the block anyway, with a hint in the
+// strip, because the Edit tab is how family is first added. dm is also what
+// shows the Edit tab and its save bar and hands the script the two edit
+// endpoints; the endpoints check the Director again on every call.
+templ BlockFamilyTree(campaignID, entityID, entityName string, t *FamilyTree, dm bool) {
+	if t.Relatives() > 0 || dm {
+		@familyStyles()
+		<section
+			class="fm"
+			data-widget="family-tree"
+			data-entity={ entityID }
+			data-entity-name={ entityName }
+			data-dm={ familyDigit(dm) }
+			data-edit-url={ familyEditURL(dm, campaignID, entityID, "") }
+			data-pick-url={ familyEditURL(dm, campaignID, entityID, "/candidates") }
+			data-pages-url={ familyPagesURL(dm, campaignID) }
+			aria-label="Family tree"
+		>
+			@templ.JSONScript("fm-data-"+entityID, familyWireOf(ctx, campaignID, t))
+			<div class="fm-anchor" data-fm-anchor>
+				<div class="fm-hs" data-fm-strip-box>
+					<button
+						type="button"
+						class="fm-hs-lab"
+						data-fm-open
+						aria-expanded="false"
+						aria-controls={ familySheetID(entityID) }
+						aria-label="Family, open the family tree"
+						onclick={ familyCall("toggle") }
+					>Family</button>
+					<div class="fm-hs-tr" data-fm-strip role="group" aria-label="Line of descent">
+						for _, p := range familyCloseKin(t) {
+							<a class="fm-kin" href={ templ.SafeURL("/campaigns/" + campaignID + "/entities/" + p.ID) } data-dm-only?={ p.DMOnly }>{ p.Name }</a>
+						}
+					</div>
+					<span class="fm-hs-cnt" data-fm-cnt>{ familyCountLabel(t) }</span>
+				</div>
+				<div class="fm-hd" id={ familySheetID(entityID) } role="region" aria-label="Family tree" data-fm-sheet>
+					<div class="fm-hd-c" data-fm-hdc>
+						<div class="fm-hd-hd">
+							<span class="fm-ttl">Family</span>
+							<div class="fm-trail" data-fm-trail aria-label="Whose family is in the middle"></div>
+							<button type="button" class="fm-q" data-fm-sib aria-pressed="false" onclick={ familyCall("siblings") }>Siblings</button>
+							if dm {
+								<button type="button" class="fm-q" data-fm-edit data-dm-only aria-pressed="false" onclick={ familyCall("edit") }>Edit</button>
+							}
+							<button type="button" class="fm-x" data-fm-close aria-label="Close the family tree" onclick={ familyCall("close") }>
+								<svg class="fm-ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"></path></svg>
+							</button>
+						</div>
+						<div class="fm-body" data-fm-body>
+							<div class="fm-tvw">
+								<div class="fm-tv" data-fm-tv tabindex="-1">
+									<div class="fm-in" data-fm-in>
+										<svg class="fm-lk fm-lk-base" data-fm-lk aria-hidden="true"></svg>
+										<svg class="fm-lk fm-lk-lit" data-fm-lit aria-hidden="true"></svg>
+										<div data-fm-rows></div>
+									</div>
+								</div>
+							</div>
+							<aside class="fm-dock" data-fm-dock aria-label="Person card"><div class="fm-dkc" data-fm-dkc></div></aside>
+						</div>
+						<div class="fm-ft" data-fm-legend>
+							<span class="fm-lg"><svg class="fm-k" viewBox="0 0 26 6" aria-hidden="true"><path d="M0 3H26" stroke="currentColor" stroke-width="1.5" fill="none"></path></svg>by birth</span>
+							<span class="fm-lg"><svg class="fm-k" viewBox="0 0 26 6" aria-hidden="true"><path d="M0 3H26" stroke="currentColor" stroke-width="1.5" stroke-dasharray="6 4" fill="none"></path></svg>adopted</span>
+							<span class="fm-lg"><svg class="fm-k" viewBox="0 0 26 6" aria-hidden="true"><path d="M0 3H26" stroke="currentColor" stroke-width="2.4" stroke-dasharray=".1 6" stroke-linecap="round" fill="none"></path></svg>guardian</span>
+							if dm && familyHasDMOnly(t) {
+								<span class="fm-lg" data-dm-only><span class="fm-dmtag cb-dm">DM</span>hidden from players</span>
+							}
+							<span class="fm-n" data-fm-shown></span>
+						</div>
+						if dm {
+							<div class="fm-ft fm-save" data-fm-savebar data-dm-only hidden>
+								<span class="fm-dmtag cb-dm">DM</span>
+								<span class="fm-savemsg" data-fm-savemsg role="status" aria-live="polite">No changes yet</span>
+								<span class="fm-sp"></span>
+								<button type="button" class="fm-q" data-fm-undo disabled onclick={ familyCall("undo") }>Undo</button>
+								<button type="button" class="fm-pri" data-fm-save disabled onclick={ familyCall("save") }>Save</button>
+							</div>
+						}
+					</div>
+				</div>
+				<div class="fm-peek" data-fm-peek role="tooltip"></div>
+			</div>
+			if note := familyCutNote(t); note != "" {
+				<p class="fm-cut" data-fm-cut>{ note }</p>
+			}
+			<span class="fm-sr" role="status" aria-live="polite" data-fm-live></span>
+		</section>
+	}
+}

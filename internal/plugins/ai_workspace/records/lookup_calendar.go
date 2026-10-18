@@ -197,7 +197,21 @@ func (run *lookupRun) events(r Record) (LookupAnswer, error) {
 			if e.Visibility == "dm_only" {
 				who = "Directors only"
 			}
-			lines = append(lines, fmt.Sprintf("- %s: %s, %s", e.Name, when, who))
+			line := fmt.Sprintf("- %s: %s, %s", e.Name, when, who)
+			// What an event block can send back; a player's view (Safe)
+			// carries none of it, as in the export.
+			if run.a.CanAuthorDmOnly() {
+				if e.Tier != nil && *e.Tier != "" {
+					line += ", importance " + *e.Tier
+				}
+				if e.KindName != "" {
+					line += ", category " + e.KindName
+				}
+				if e.EntityName != "" {
+					line += ", page " + e.EntityName
+				}
+			}
+			lines = append(lines, line)
 		}
 	}
 	ans.Chip = fmt.Sprintf("Calendar events · %s · %d", label, len(lines))

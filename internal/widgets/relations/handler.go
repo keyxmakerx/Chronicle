@@ -113,6 +113,24 @@ func (h *Handler) ListRelations(c echo.Context) error {
 	return c.JSON(http.StatusOK, relations)
 }
 
+// requireViewableEntity answers 404 unless the entity is in the URL's campaign
+// and the caller may view it, failing closed when no gate is wired. It uses
+// cc.VisibilityRole() like ListRelations (ADR-057).
+func (h *Handler) requireViewableEntity(c echo.Context, cc *campaigns.CampaignContext, entityID, userID string) error {
+	if h.entityGate == nil {
+		return apperror.NewInternal(errors.New("relations: entity gate not configured"))
+	}
+	campaignID, canView, err := h.entityGate.ResolveViewableEntity(
+		c.Request().Context(), entityID, int(cc.VisibilityRole()), userID)
+	if err != nil {
+		return err // NotFound for a missing entity; propagates real errors.
+	}
+	if campaignID != cc.Campaign.ID || !canView {
+		return apperror.NewNotFound("entity not found")
+	}
+	return nil
+}
+
 // filterByTargetVisibility drops relations whose target entity the viewer cannot
 // see, using one batched visibility query for all distinct targets (no per-row
 // N+1). Callers must have already confirmed h.entityGate is non-nil.
@@ -169,6 +187,14 @@ func (h *Handler) CreateRelation(c echo.Context) error {
 
 	userID := auth.GetUserID(c)
 
+	// Both ends come from the request, so both must be in this campaign and
+	// visible to the caller; a listed relation shows the target's name.
+	for _, id := range []string{sourceEntityID, req.TargetEntityID} {
+		if err := h.requireViewableEntity(c, cc, id, userID); err != nil {
+			return err
+		}
+	}
+
 	// Only DMs (owners) and site admins can create DM-only relations.
 	dmOnly := req.DmOnly
 	if dmOnly && cc.MemberRole != campaigns.RoleOwner && !cc.IsSiteAdmin {
@@ -193,6 +219,27 @@ func (h *Handler) CreateRelation(c echo.Context) error {
 	return c.JSON(http.StatusCreated, rel)
 }
 
+// requireRelationAccess answers 404 unless the caller may see the relation: it
+// is in the URL campaign, both ends are viewable, and a dm_only relation is
+// only reachable by the same viewers ListRelations shows it to. Delete and
+// metadata edits take a bare relation ID, so without this a caller could
+// change a relation whose entities or visibility they cannot see.
+func (h *Handler) requireRelationAccess(c echo.Context, cc *campaigns.CampaignContext, rel *Relation) error {
+	if rel.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("relation not found")
+	}
+	if rel.DmOnly && cc.MemberRole != campaigns.RoleOwner && !cc.IsSiteAdmin && !cc.IsDmGranted {
+		return apperror.NewNotFound("relation not found")
+	}
+	userID := auth.GetUserID(c)
+	for _, id := range []string{rel.SourceEntityID, rel.TargetEntityID} {
+		if err := h.requireViewableEntity(c, cc, id, userID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // DeleteRelation removes a relation and its reverse direction
 // (DELETE /campaigns/:id/entities/:eid/relations/:rid).
 func (h *Handler) DeleteRelation(c echo.Context) error {
@@ -206,13 +253,12 @@ func (h *Handler) DeleteRelation(c echo.Context) error {
 		return apperror.NewBadRequest("invalid relation ID")
 	}
 
-	// Verify the relation belongs to this campaign before deleting.
 	existing, err := h.service.GetByID(c.Request().Context(), relationID)
 	if err != nil {
 		return err
 	}
-	if existing.CampaignID != cc.Campaign.ID {
-		return apperror.NewNotFound("relation not found")
+	if err := h.requireRelationAccess(c, cc, existing); err != nil {
+		return err
 	}
 
 	if err := h.service.Delete(c.Request().Context(), relationID); err != nil {
@@ -239,13 +285,16 @@ func (h *Handler) UpdateRelationMetadata(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if existing.CampaignID != cc.Campaign.ID {
-		return apperror.NewNotFound("relation not found")
+	if err := h.requireRelationAccess(c, cc, existing); err != nil {
+		return err
 	}
 
 	var req UpdateRelationMetadataRequest
 	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
 		return apperror.NewBadRequest("invalid JSON body")
+	}
+	if len(req.Metadata) == 0 {
+		return apperror.NewBadRequest("metadata is required")
 	}
 
 	if err := h.service.UpdateMetadata(c.Request().Context(), relationID, req.Metadata); err != nil {

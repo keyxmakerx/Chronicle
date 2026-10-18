@@ -1720,7 +1720,35 @@
   @media (min-width: 640px) {
     .notes-panel-hidden { transform: translateY(14px) scale(.96); transform-origin: bottom right; }
   }
-  /* Collapsed: just the header bar. */
+  /* Placed by notes.js (jot_place.js): it floats where it was left, so its
+     corner comes from left/top rather than the tab's corner. */
+  @media (min-width: 640px) {
+    .notes-panel.notes-panel-placed { right: auto; bottom: auto; max-height: none; }
+    .notes-panel-placed .notes-header { cursor: grab; touch-action: none; }
+    .notes-panel-moving .notes-header { cursor: grabbing; }
+    .notes-panel-moving { transition: none; }
+    /* Pinned to a side: full height beside the page, which narrows to make
+       room, with only the inner edge drawn. */
+    .notes-panel.notes-panel-docked { border-radius: 0; border-top: 0; border-bottom: 0; box-shadow: var(--elev-resting); }
+    .notes-panel-docked .notes-resize-handle { display: none; }
+    #main-content { transition: margin var(--dur-standard) var(--ease-out); }
+    .jot-dock-l #main-content { margin-left: var(--jot-dock-w, 320px); }
+    .jot-dock-r #main-content { margin-right: var(--jot-dock-w, 320px); }
+    /* Stepping aside: off the nearest edge while a dialog is open, or a
+       glide to the far corner while something under it is edited. */
+    .notes-panel.notes-panel-aside-r { transform: translateX(calc(100% + 32px)); opacity: 0; visibility: hidden; }
+    .notes-panel.notes-panel-aside-l { transform: translateX(calc(-100% - 32px)); opacity: 0; visibility: hidden; }
+    .notes-panel.notes-panel-gliding {
+      transition: left var(--dur-large) var(--ease-slide), top var(--dur-large) var(--ease-slide),
+                  opacity var(--dur-standard) var(--ease-out), transform var(--dur-standard) var(--ease-out);
+    }
+  }
+  .notes-header:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+  .notes-dock-btn { display: none; }
+  @media (min-width: 640px) { .notes-dock-btn { display: inline-flex; } }
+  .note-btn.notes-dock-btn[hidden] { display: none; }
+
+  /* Folded: just the title bar. */
   .notes-panel.notes-panel-collapsed { top: auto; height: auto !important; }
   .notes-panel-collapsed .notes-body,
   .notes-panel-collapsed .notes-resize-handle { display: none; }
@@ -1728,32 +1756,38 @@
   .notes-panel-collapsed .notes-collapse-btn i { transform: rotate(180deg); }
   .notes-body { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
 
-  /* Resize handle: sits at the top-left corner, draggable. A phone's sheet
-     has a fixed size, so it has none. */
+  /* Resize handle: the bottom-right corner, draggable or moved with the
+     arrow keys. A phone's sheet has a fixed size, so it has none. */
   @media (max-width: 639px) {
     .notes-resize-handle { display: none; }
   }
   .notes-resize-handle {
     @apply absolute cursor-nwse-resize;
-    top: 0;
-    left: 0;
-    width: 18px;
-    height: 18px;
+    right: 0;
+    bottom: 0;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: 0;
+    background: none;
     z-index: 10;
+    touch-action: none;
   }
   .notes-resize-handle::after {
     content: '';
-    @apply absolute rounded-full;
-    background-color: color-mix(in srgb, var(--color-text-muted) 30%, transparent);
-    top: 5px;
-    left: 5px;
+    position: absolute;
+    right: 5px;
+    bottom: 5px;
     width: 8px;
     height: 8px;
-    transition: background-color 0.15s;
+    border-right: 2px solid color-mix(in srgb, var(--color-text-muted) 45%, transparent);
+    border-bottom: 2px solid color-mix(in srgb, var(--color-text-muted) 45%, transparent);
+    border-bottom-right-radius: 2px;
+    transition: border-color var(--dur-micro);
   }
-  .notes-resize-handle:hover::after {
-    background-color: color-mix(in srgb, var(--color-text-muted) 60%, transparent);
-  }
+  .notes-resize-handle:hover::after, .notes-resize-handle:focus-visible::after { border-color: var(--color-accent); }
+  .notes-resize-handle:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; border-radius: 4px; }
+  .notes-resize-handle[hidden] { display: none; }
 
   /* Text size presets -- applied via modifier class on the panel.
      Default is "md" (14px). Users toggle S/M/L via the settings gear;
@@ -1953,6 +1987,17 @@
     @apply bg-indigo-600 text-white border-indigo-600
            hover:bg-indigo-500 hover:text-white;
   }
+  /* Keep open on every page: a switch under the text sizes. */
+  .notes-pin-panel {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%;
+    margin-top: 10px; padding: 0; border: 0; background: none; cursor: pointer;
+    font-size: 12px; font-weight: 500; color: var(--color-text-body); white-space: nowrap;
+  }
+  .notes-switch { position: relative; flex: none; width: 28px; height: 16px; border-radius: 999px; background: var(--color-border); transition: background-color var(--dur-micro); }
+  .notes-switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / .25); transition: transform var(--dur-micro) var(--ease-out); }
+  .notes-pin-panel[aria-checked="true"] .notes-switch { background: var(--color-accent); }
+  .notes-pin-panel[aria-checked="true"] .notes-switch::after { transform: translateX(12px); }
+  .notes-pin-panel:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; border-radius: 4px; }
 
   .note-shared-badge {
     @apply inline-flex items-center justify-center w-5 h-5 rounded
@@ -3627,10 +3672,12 @@
 
 /* === The Journal ===================================================
    internal/widgets/notes/journal.templ + static/js/widgets/journal.js.
-   The list pane speaks the calendar's ink-on-paper language: one quiet
-   command bar, text tabs, sticky small-caps group headers, circle
-   selection, a hover peek and a paper bulk pill. Tokens are scoped to
-   .jnl so the rest of the app keeps its own.
+   The Material look (.ai/ui-standard.md): the list is a tool on the panel
+   colour, the open note is a quiet page, details dock beside the note, and
+   the campaign accent is the one colour. The short names below (--ink,
+   --paper, --hair...) are this file's aliases for the theme tokens, so light
+   and dark both come from the theme. Corners come from --jnl-r-* so a style
+   kit can retune them in one place (TODO(#1447)).
 
    Motion follows the house rules: panels come out of what was touched,
    only transform/opacity are animated, a box that holds text never
@@ -3638,25 +3685,34 @@
    crossfade (the block at the end). */
 @layer components {
   .jnl {
-    --ink:   oklch(.24 .012 265);
-    --ink2:  oklch(.40 .012 265);
-    --mut:   oklch(.52 .012 265);
-    --hair:  oklch(.24 .02 265 / .09);
-    --hair2: oklch(.24 .02 265 / .05);
-    --paper: oklch(.993 .003 90);
-    --paper2:oklch(.978 .005 85);
-    --edge:  oklch(.24 .02 265 / .13);
-    --lift:  oklch(1 0 0 / .5);
-    --shadow-s: 0 1px 2px oklch(.2 .02 265 / .07), 0 8px 24px -10px oklch(.2 .02 265 / .18);
-    --shadow-l: 0 2px 6px oklch(.2 .02 265 / .07), 0 24px 52px -16px oklch(.2 .03 265 / .30);
-    --spring: cubic-bezier(.34, 1.3, .4, 1);
-    --calm:   cubic-bezier(.22, .8, .24, 1);
+    --ink:   var(--color-text-primary);
+    --ink2:  var(--color-text-body);
+    --mut:   var(--color-text-secondary);
+    --hair:  var(--color-border);
+    --hair2: var(--color-bg-tertiary);
+    --paper: var(--color-bg-primary);
+    --paper2:var(--color-bg-secondary);
+    --panel: var(--color-bg-secondary);
+    --edge:  var(--color-border);
+    --lift:  var(--color-bg-tertiary);
+    --acc:   var(--color-accent);
+    --acc-soft: rgb(var(--color-accent-rgb) / .12);
+    --shadow-s: var(--elev-resting);
+    --shadow-l: var(--elev-hover);
+    /* No overshoot anywhere in the Journal: both curves slow to a stop. */
+    --spring: var(--ease-out);
+    --calm:   var(--ease-slide);
     --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Charter, "Bitstream Charter", Georgia, "Liberation Serif", serif;
-    --ok:     #16a34a;  --ok-bg:     #f0fdf4;
-    --bad:    #dc2626;  --bad-bg:    #fef2f2;
-    --warn:   #b45309;  --warn-bg:   #fffbeb;
+    --ok:     rgb(var(--color-ok-rgb));  --ok-bg:   rgb(var(--color-ok-rgb) / .12);
+    --bad:    rgb(var(--color-bad-rgb)); --bad-bg:  rgb(var(--color-bad-rgb) / .12);
+    --warn:   rgb(var(--color-warn-rgb)); --warn-bg: rgb(var(--color-warn-rgb) / .14);
     --teal:   #0d9488;
+    --jnl-r-sm: 6px;
+    --jnl-r-ctl: 8px;
+    --jnl-r-panel: 12px;
 
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border) transparent;
     position: relative;
     display: flex;
     flex-direction: column;
@@ -3670,24 +3726,10 @@
   @media (min-width: 768px) {
     .jnl { margin: -1rem -1.25rem; height: calc(100% + 2rem); }
   }
-  .dark .jnl {
-    color-scheme: dark;
-    --ink:   oklch(.94 .006 265);
-    --ink2:  oklch(.82 .008 265);
-    --mut:   oklch(.68 .01 265);
-    --hair:  oklch(.94 .01 265 / .085);
-    --hair2: oklch(.94 .01 265 / .05);
-    --paper: oklch(.27 .01 265);
-    --paper2:oklch(.235 .01 265);
-    --edge:  oklch(.94 .01 265 / .12);
-    --lift:  oklch(1 0 0 / .035);
-    --shadow-s: 0 1px 2px oklch(0 0 0 / .4), 0 10px 26px -10px oklch(0 0 0 / .6);
-    --shadow-l: 0 2px 8px oklch(0 0 0 / .35), 0 26px 56px -16px oklch(0 0 0 / .72);
-    --ok:     #4ade80;  --ok-bg:     rgb(22 163 74 / .15);
-    --bad:    #f87171;  --bad-bg:    rgb(220 38 38 / .15);
-    --warn:   #fbbf24;  --warn-bg:   rgb(217 119 6 / .15);
-    --teal:   #2dd4bf;
-  }
+  .dark .jnl { color-scheme: dark; --teal: #2dd4bf; }
+  .jnl ::-webkit-scrollbar { width: 8px; height: 8px; }
+  .jnl ::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 999px; border: 2px solid transparent; background-clip: padding-box; }
+  .jnl ::-webkit-scrollbar-track { background: transparent; }
   .jnl :where(button) { font: inherit; color: inherit; }
   .jnl .grow { flex: 1 1 auto; min-width: 0; }
   .jnl .nl-ico { display: inline-flex; align-items: center; justify-content: center; width: 14px; flex-shrink: 0; font-size: 12px; }
@@ -3698,7 +3740,7 @@
   .jnl-list {
     position: relative; display: flex; flex-direction: column; flex-shrink: 0; min-height: 0;
     width: clamp(300px, 38%, 420px); overflow: hidden;
-    background: var(--paper); border-right: 1px solid var(--edge);
+    background: var(--panel); border-right: 1px solid var(--edge);
     opacity: 1; transition: opacity .2s var(--calm);
   }
   .jnl :where(.jnl-list) button { border: 0; background: none; padding: 0; margin: 0; cursor: pointer; text-align: left; -webkit-appearance: none; appearance: none; }
@@ -3706,9 +3748,9 @@
   .nl-bar { flex-shrink: 0; padding: 10px 10px 8px; display: flex; align-items: center; gap: 5px; }
   .nl-search {
     flex: 1; min-width: 0; display: flex; align-items: center; gap: 5px;
-    height: 34px; padding: 0 8px; border-radius: 9px; border: 1px solid var(--edge); background: var(--paper2);
+    height: 34px; padding: 0 8px; border-radius: var(--jnl-r-ctl); border: 1px solid var(--color-input-border); background: var(--color-input-bg);
   }
-  .nl-search:focus-within { box-shadow: 0 0 0 1.5px var(--ink); border-color: transparent; }
+  .nl-search:focus-within { border-color: var(--acc); box-shadow: 0 0 0 3px var(--acc-soft); }
   .nl-search > .nl-ico { color: var(--mut); }
   .nl-search-field {
     flex: 1 1 auto; min-width: 28px; outline: none; font-size: 13px; font-weight: 500; line-height: 1.3; color: var(--ink);
@@ -3744,12 +3786,13 @@
   /* View options: paper that folds down from the View button, hinged at its top edge. */
   .nl-fold {
     position: fixed; z-index: 46; top: 0; left: 0; width: 236px; max-height: min(70vh, 460px); overflow: auto;
-    border: 1px solid var(--edge); border-radius: 4px 12px 12px 12px; box-shadow: var(--shadow-l); background: var(--paper);
-    transform-origin: top right; transform: perspective(1000px) rotateX(-86deg);
-    opacity: 0; visibility: hidden; pointer-events: none;
-    transition: transform .48s var(--spring), opacity .2s var(--calm), visibility 0s linear .48s;
+    border: 1px solid var(--edge); border-radius: 0 0 var(--jnl-r-panel) var(--jnl-r-panel); box-shadow: var(--shadow-l); background: var(--panel);
+    /* A pull-down drapes from the View button over the list, and rolls back up. */
+    clip-path: inset(0 -40px 100% -40px);
+    visibility: hidden; pointer-events: none;
+    transition: clip-path var(--dur-standard) var(--ease-out), visibility 0s linear var(--dur-standard);
   }
-  .nl-fold.open { opacity: 1; visibility: visible; pointer-events: auto; transform: none; transition: transform .48s var(--spring), opacity .18s var(--calm), visibility 0s; }
+  .nl-fold.open { visibility: visible; pointer-events: auto; clip-path: inset(0 -40px -40px -40px); transition: clip-path var(--dur-standard) var(--ease-out), visibility 0s; }
   .nl-fold-sec { padding: 9px 12px; border-top: 1px solid var(--hair); }
   .nl-fold-sec:first-child { border-top: 0; padding-top: 12px; }
   .nl-fold-sec:last-child { padding-bottom: 12px; }
@@ -3767,23 +3810,23 @@
   .nl-seg2 { display: inline-flex; border: 1px solid var(--edge); border-radius: 8px; padding: 2px; gap: 2px; }
   .jnl .nl-seg2 button { flex: 1; border: 0; background: none; font-size: 11px; font-weight: 550; line-height: 1; color: var(--ink2); padding: 5px 8px; border-radius: 6px; cursor: pointer; white-space: nowrap; }
   .jnl .nl-seg2 button:hover { background: var(--hair2); }
-  .jnl .nl-seg2 button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+  .jnl .nl-seg2 button[aria-pressed="true"] { background: var(--acc-soft); color: var(--acc); }
   .nl-check-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 2px 0; }
   .nl-check-row span { font-size: 12.5px; font-weight: 500; color: var(--ink2); }
   .jnl .nl-tog { position: relative; width: 32px; height: 19px; border: 0; padding: 0; border-radius: 99px; background: var(--hair); flex-shrink: 0; box-shadow: inset 0 0 0 1px var(--edge); cursor: pointer; }
-  .jnl .nl-tog::after { content: ''; position: absolute; top: 2.5px; left: 2.5px; width: 14px; height: 14px; border-radius: 50%; background: var(--paper); box-shadow: 0 1px 2px oklch(0 0 0 / .25); transition: transform .35s var(--spring); }
-  .jnl .nl-tog[aria-checked="true"] { background: var(--ink); }
+  .jnl .nl-tog::after { content: ''; position: absolute; top: 2.5px; left: 2.5px; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / .25); transition: transform .16s var(--spring); }
+  .jnl .nl-tog[aria-checked="true"] { background: var(--acc); }
   .jnl .nl-tog[aria-checked="true"]::after { transform: translateX(13px); }
 
   /* "+ New" is a split button: the body makes a note, the caret offers note or folder. */
   .nl-newsplit { flex-shrink: 0; display: inline-flex; border-radius: 9px; position: relative; }
-  .jnl .nl-newbody, .jnl .nl-newcaret { display: inline-flex; align-items: center; gap: 4px; height: 34px; background: var(--ink); color: var(--paper); font-size: 12.5px; font-weight: 600; line-height: 1; }
-  .jnl .nl-newbody { padding: 0 8px 0 9px; border-radius: 9px 0 0 9px; }
-  .jnl .nl-newcaret { width: 21px; justify-content: center; border-left: 1px solid oklch(1 0 0 / .18); border-radius: 0 9px 9px 0; }
-  .jnl .nl-newbody:hover, .jnl .nl-newcaret:hover { background: var(--ink2); }
+  .jnl .nl-newbody, .jnl .nl-newcaret { display: inline-flex; align-items: center; gap: 4px; height: 34px; background: var(--acc); color: #fff; font-size: 12.5px; font-weight: 600; line-height: 1; }
+  .jnl .nl-newbody { padding: 0 8px 0 9px; border-radius: var(--jnl-r-ctl) 0 0 var(--jnl-r-ctl); }
+  .jnl .nl-newcaret { width: 24px; justify-content: center; border-left: 1px solid rgb(255 255 255 / .22); border-radius: 0 var(--jnl-r-ctl) var(--jnl-r-ctl) 0; }
+  .jnl .nl-newbody:hover, .jnl .nl-newcaret:hover { background: var(--color-accent-hover); }
   .nl-newmenu {
     position: absolute; z-index: 46; top: 38px; right: 0; width: 150px; padding: 5px; border-radius: 10px;
-    border: 1px solid var(--edge); background: var(--paper); box-shadow: var(--shadow-l);
+    border: 1px solid var(--edge); background: var(--panel); box-shadow: var(--shadow-l);
     opacity: 0; visibility: hidden; transform: translateY(-4px) scale(.98); transform-origin: top right;
     transition: opacity .16s var(--calm), transform .22s var(--spring), visibility 0s linear .22s;
   }
@@ -3800,7 +3843,7 @@
     border-bottom: 1.5px solid transparent; margin-bottom: -1px; display: flex; align-items: center; gap: 5px;
   }
   .jnl .nl-tab:hover { color: var(--ink2); }
-  .jnl .nl-tab.on { color: var(--ink); border-color: var(--ink); font-weight: 650; }
+  .jnl .nl-tab.on { color: var(--ink); border-color: var(--acc); border-bottom-width: 2px; font-weight: 650; }
   .nl-tab .x { width: 13px; height: 13px; border-radius: 50%; color: var(--mut); display: inline-flex; align-items: center; justify-content: center; font-size: 8px; }
   .nl-tab .x:hover { background: var(--hair); color: var(--ink); }
   .jnl .nl-tab.add { color: var(--mut); font-weight: 600; }
@@ -3809,7 +3852,7 @@
   /* Token suggestions, in the fold's paper. */
   .nl-suggest {
     position: fixed; z-index: 48; width: min(260px, 90vw); max-height: 240px; overflow: auto;
-    border: 1px solid var(--edge); border-radius: 10px; background: var(--paper); box-shadow: var(--shadow-l); padding: 5px;
+    border: 1px solid var(--edge); border-radius: 10px; background: var(--panel); box-shadow: var(--shadow-l); padding: 5px;
     opacity: 0; visibility: hidden; transform: translateY(4px) scale(.98); transform-origin: top left; pointer-events: none;
     transition: opacity .14s var(--calm), transform .14s var(--calm), visibility 0s linear .14s;
   }
@@ -3838,16 +3881,17 @@
   .nl-empty { padding: 20px; text-align: center; font-size: 12px; color: var(--mut); }
   .nl-empty button { margin-top: 8px; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
   .nl-row { position: relative; display: flex; align-items: center; gap: 8px; height: var(--row-h); padding: 0 12px 0 10px; cursor: pointer; color: var(--ink2); -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  .nl-row + .nl-row { box-shadow: inset 0 1px 0 var(--color-border-light); }
   .nl-row:hover { background: var(--lift); }
-  .nl-row:focus-visible, .nl-row.is-focused { outline: none; box-shadow: inset 0 0 0 1.5px var(--ink); border-radius: 6px; }
-  .nl-row.active { background: var(--paper); box-shadow: inset 0 0 0 1px var(--edge), var(--shadow-s); border-radius: 8px; margin: 0 4px; padding-left: 9px; }
-  .nl-row.active::before { content: ''; position: absolute; left: 0; top: 6px; bottom: 6px; width: 2.5px; border-radius: 2px; background: var(--ink); }
+  .nl-row:focus-visible, .nl-row.is-focused { outline: 2px solid var(--acc); outline-offset: -2px; }
+  .nl-row.active { background: var(--acc-soft); }
+  .nl-row.active::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: var(--acc); }
   .nl-gutter { width: 15px; height: 15px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
   .nl-circle { width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid var(--edge); opacity: 0; transition: opacity .12s linear; }
   .nl-scroll.selecting .nl-circle { opacity: 1; }
   @media (hover: hover) { .nl-row:hover .nl-circle { opacity: 1; } }
-  .nl-row.selected .nl-circle { opacity: 1; background: var(--ink); border-color: var(--ink); }
-  .nl-row.selected .nl-circle::after { content: ''; display: block; width: 100%; height: 100%; background: var(--paper); -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' d='M3.5 8.5 6.5 11.5 12.5 4.5'/%3E%3C/svg%3E") center/10px no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' d='M3.5 8.5 6.5 11.5 12.5 4.5'/%3E%3C/svg%3E") center/10px no-repeat; }
+  .nl-row.selected .nl-circle { opacity: 1; background: var(--acc); border-color: var(--acc); }
+  .nl-row.selected .nl-circle::after { content: ''; display: block; width: 100%; height: 100%; background: #fff; -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' d='M3.5 8.5 6.5 11.5 12.5 4.5'/%3E%3C/svg%3E") center/10px no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' d='M3.5 8.5 6.5 11.5 12.5 4.5'/%3E%3C/svg%3E") center/10px no-repeat; }
   .nl-vis { width: 13px; flex-shrink: 0; color: var(--mut); font-size: 10.5px; text-align: center; }
   .nl-pin { width: 10px; flex-shrink: 0; color: var(--mut); font-size: 9px; }
   .nl-title { flex-shrink: 0; max-width: 56%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 500; line-height: 1.3; color: var(--ink); }
@@ -3862,16 +3906,16 @@
 
   /* Group headers: small caps, a count, a hairline, sticky while scrolling. */
   .nl-ghead {
-    position: sticky; top: 0; z-index: 3; display: flex; align-items: center; gap: 7px; height: 26px; padding: 0 12px;
-    background: var(--paper); cursor: pointer; font-size: 9.5px; font-weight: 650; line-height: 1; letter-spacing: .12em; text-transform: uppercase; color: var(--mut);
+    position: sticky; top: 0; z-index: 3; display: flex; align-items: center; gap: 7px; height: 32px; padding: 0 12px;
+    background: var(--panel); cursor: pointer; font-size: 11px; font-weight: 600; line-height: 1; letter-spacing: .08em; text-transform: uppercase; color: var(--acc);
     border-bottom: 1px solid var(--hair); user-select: none;
   }
-  .nl-ghead:hover { color: var(--ink2); }
+  .nl-ghead:hover { color: var(--color-accent-hover); }
   .nl-ghead .chev { width: 10px; flex-shrink: 0; font-size: 8px; transform: rotate(90deg); transition: transform .3s var(--spring); }
   .nl-ghead.collapsed .chev { transform: rotate(0deg); }
   .nl-ghead .lbl { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .nl-ghead .cnt { font-weight: 600; color: var(--mut); letter-spacing: 0; text-transform: none; }
-  .nl-ghead.pinned .lbl { color: var(--ink2); }
+  .nl-ghead .cnt { font-weight: 600; color: var(--mut); letter-spacing: 0; text-transform: none; font-variant-numeric: tabular-nums; background: var(--hair2); border-radius: 999px; padding: 2px 7px; }
+  .nl-ghead.pinned .lbl { color: var(--acc); }
   .jnl .nl-ghead .gmenu { width: 18px; height: 18px; border-radius: 5px; display: inline-flex; align-items: center; justify-content: center; color: var(--mut); font-size: 10px; letter-spacing: 0; opacity: 0; }
   .nl-ghead:hover .gmenu, .nl-ghead .gmenu:focus-visible { opacity: 1; }
   .jnl .nl-ghead .gmenu:hover { background: var(--hair); color: var(--ink); }
@@ -3879,7 +3923,7 @@
   /* Hover peek: a glance, never a destination. It never takes the pointer
      and hides on its own quick linear fade the moment the row is left. */
   .nl-peek {
-    position: fixed; z-index: 49; width: 264px; padding: 12px 14px; background: var(--paper); border: 1px solid var(--edge);
+    position: fixed; z-index: 49; width: 264px; padding: 12px 14px; background: var(--panel); border: 1px solid var(--edge);
     border-radius: 12px; box-shadow: var(--shadow-l); pointer-events: none;
     opacity: 0; visibility: hidden; transform: translate3d(0, 5px, 0) scale(.985); transform-origin: top left;
     transition: opacity .08s linear, transform .08s linear, visibility 0s linear .08s;
@@ -3895,7 +3939,7 @@
   /* Bulk pill: floats up from the bottom of the list once anything is selected. */
   .nl-bulkpill {
     position: absolute; z-index: 20; left: 10px; right: 10px; bottom: 10px; display: flex; align-items: center; gap: 4px;
-    padding: 7px 8px; border-radius: 12px; background: var(--paper); border: 1px solid var(--edge); box-shadow: var(--shadow-l);
+    padding: 7px 8px; border-radius: var(--jnl-r-panel); background: var(--panel); border: 1px solid var(--edge); box-shadow: var(--shadow-l);
     opacity: 0; visibility: hidden; transform: translateY(10px) scale(.98); pointer-events: none;
     transition: opacity .2s var(--calm), transform .3s var(--spring), visibility 0s linear .3s;
   }
@@ -3904,8 +3948,8 @@
   .nl-bulkpill .sp { flex: 1 1 auto; min-width: 4px; }
   .jnl .nl-bulkpill button { flex-shrink: 0; width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: var(--ink2); font-size: 13px; }
   .jnl .nl-bulkpill button:hover { background: var(--hair2); color: var(--ink); }
-  .jnl .nl-bulkpill button.danger { color: oklch(.55 .12 28); }
-  .jnl .nl-bulkpill button.danger:hover { background: oklch(.55 .12 28 / .1); }
+  .jnl .nl-bulkpill button.danger { color: var(--bad); }
+  .jnl .nl-bulkpill button.danger:hover { background: var(--bad-bg); }
   .jnl .nl-bulkpill button.x { width: 26px; height: 26px; border-radius: 50%; color: var(--mut); font-size: 12px; }
 
   .nl-foot { flex-shrink: 0; padding: 7px 14px 8px; font-size: 11px; font-weight: 500; line-height: 1.3; color: var(--mut); text-align: center; }
@@ -3931,24 +3975,26 @@
     .jnl-list[data-size="compact"] .jnl-claim .claim-badge { display: none; }
     .jnl-list[data-size="wide"] .nl-title { max-width: 74%; }
 
+    /* The grab zone sits wholly on the note's side of the line, so the
+       list's own scroll bar stays grabbable right up to the edge. */
     .tp-handle {
-      display: block; position: relative; flex-shrink: 0; width: 13px; margin: 0 -6px; z-index: 8;
+      display: block; position: relative; flex-shrink: 0; width: 13px; margin: 0 -12px 0 0; z-index: 8;
       cursor: col-resize; touch-action: none; -webkit-user-select: none; user-select: none; outline: none;
     }
     .tp-handle::before {
-      content: ''; position: absolute; top: 0; bottom: 0; left: 6px; width: 1px;
-      background: var(--edge); transform-origin: center; transition: transform .15s linear, background-color .15s linear;
+      content: ''; position: absolute; top: 0; bottom: 0; left: 0; width: 1px;
+      background: var(--edge); transform-origin: left; transition: transform .15s linear, background-color .15s linear;
     }
-    .tp-handle:hover::before, .tp-handle.dragging::before { background: var(--ink2); transform: scaleX(2); }
+    .tp-handle:hover::before, .tp-handle.dragging::before { background: var(--acc); transform: scaleX(2); }
     .tp-handle:focus-visible::before { background: var(--color-accent); transform: scaleX(2); box-shadow: 0 0 0 3px rgb(var(--color-accent-rgb) / .25); }
     .jnl .tp-cycle {
-      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      position: absolute; top: 50%; left: 1px; transform: translate(-50%, -50%);
       width: 22px; height: 22px; padding: 0; border-radius: 999px; display: flex; align-items: center; justify-content: center;
-      background: var(--paper); border: 1px solid var(--edge); box-shadow: var(--shadow-s); color: var(--mut); font-size: 10px;
-      opacity: .55; cursor: pointer;
+      background: var(--panel); border: 1px solid var(--edge); box-shadow: var(--shadow-s); color: var(--mut); font-size: 10px;
+      opacity: 0; cursor: pointer;
       transition: opacity .15s linear, color .15s linear, transform .18s var(--spring);
     }
-    .tp-handle:hover .tp-cycle, .tp-handle:focus-within .tp-cycle, .jnl .tp-cycle:hover, .jnl .tp-cycle:focus-visible { opacity: 1; color: var(--ink); }
+    .tp-handle:hover .tp-cycle, .tp-handle.dragging .tp-cycle, .tp-handle:focus-within .tp-cycle, .jnl .tp-cycle:hover, .jnl .tp-cycle:focus-visible { opacity: 1; color: var(--acc); }
     .jnl-list[data-size="collapsed"] + .tp-handle .tp-cycle { opacity: 1; }
     .jnl .tp-cycle:active { transform: translate(-50%, -50%) scale(.92); }
   }
@@ -3959,16 +4005,22 @@
   .jnl-blank > i { font-size: 30px; opacity: .35; margin-bottom: 8px; }
   .jnl-blank .t { font-size: 15px; font-weight: 600; color: var(--ink2); }
   .jnl-blank .s { font-size: 12.5px; }
-  .jnl-btn { margin-top: 12px; display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border: 0; border-radius: 9px; background: var(--ink); color: var(--paper); font-size: 12.5px; font-weight: 600; cursor: pointer; }
-  .jnl-btn:hover { background: var(--ink2); }
+  .jnl-btn { margin-top: 12px; display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border: 0; border-radius: var(--jnl-r-ctl); background: var(--acc); color: #fff; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+  .jnl-btn:hover { background: var(--color-accent-hover); }
   .jnl-btn.ghost { margin: 0; background: none; color: var(--ink2); box-shadow: inset 0 0 0 1px var(--edge); }
   .jnl-btn.ghost:hover { background: var(--hair2); color: var(--ink); }
   .jnl-btn.danger { background: var(--bad); color: #fff; }
   .jnl-note { flex: 1; min-height: 0; display: flex; flex-direction: column; }
   .jnl-note[hidden], .jnl-blank[hidden] { display: none; }
-  .ed-head { padding: 10px 14px 8px; border-bottom: 1px solid var(--color-border); flex-shrink: 0; }
-  .ed-titlerow { display: flex; align-items: center; gap: 8px; }
-  .ed-title { flex: 1; min-width: 0; border: 0; padding: 0; background: transparent; font-family: var(--serif); font-size: 19px; font-weight: 500; color: var(--ink); outline: none; }
+  .ed-head { padding: 12px 16px 8px; border-bottom: 1px solid var(--color-border-light); flex-shrink: 0; }
+  .ed-titlerow { position: relative; display: flex; align-items: center; gap: 8px; padding-bottom: 6px; }
+  /* The title in the campaign's heading face, with the accent rule under it. */
+  .ed-titlerow::after { content: ''; position: absolute; left: 0; right: 80px; bottom: 0; height: 2px; border-radius: 2px; background: linear-gradient(90deg, var(--acc), rgb(var(--color-accent-rgb) / .25)); pointer-events: none; }
+  .ed-title {
+    flex: 1; min-width: 0; border: 0; padding: 0; background: transparent; outline: none; color: var(--ink);
+    font-family: var(--annals-head, var(--font-heading, var(--serif))); text-transform: var(--annals-hcase, none);
+    font-weight: var(--annals-hw, var(--cz-hw, 600)); letter-spacing: var(--annals-hls, var(--cz-hls, 0)); font-size: 22px; line-height: 1.15;
+  }
   .ed-title::placeholder { color: var(--mut); }
   .ed-title:focus { box-shadow: none; }
   .ed-ibtn { position: relative; width: 32px; height: 32px; flex-shrink: 0; border: 0; border-radius: 8px; background: transparent; color: var(--color-text-secondary); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; font-size: 13px; }
@@ -3990,13 +4042,20 @@
   .vis-control.readonly .vis-chip[aria-pressed="false"] { display: none; }
   .vis-chip[aria-pressed="true"].v-private { background: var(--color-bg-tertiary); color: var(--color-text-primary); border-color: var(--color-text-faint); }
   .vis-chip[aria-pressed="true"].v-party { background: var(--ok-bg); color: var(--ok); border-color: var(--ok); }
-  .vis-chip[aria-pressed="true"].v-gm { background: var(--bad-bg); color: var(--bad); border-color: var(--bad); }
+  .vis-chip[aria-pressed="true"].v-gm { background: var(--warn-bg); color: var(--warn); border-color: var(--warn); }
   .vis-chip[aria-pressed="true"].v-custom { background: rgb(var(--color-accent-rgb) / .1); color: var(--color-accent); border-color: var(--color-accent); }
   .ed-owner { font-size: 11.5px; color: var(--mut); }
   .ed-lock { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 600; background: var(--color-bg-tertiary); color: var(--color-text-secondary); }
   .ed-lock[hidden], .ed-owner[hidden] { display: none; }
   .ed-lock i { font-size: 10px; }
   .ed-lock button { border: 0; background: none; padding: 0 0 0 4px; color: var(--color-accent); font-weight: 700; cursor: pointer; }
+  /* A game night's entry: a tag saying whether it is read for the check-in;
+     its hover card explains. A status, not a command, so no border. */
+  .ed-night[hidden] { display: none; }
+  .ed-nighttag { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border: 0; border-radius: 999px; cursor: help; font-size: 11.5px; font-weight: 600; background: rgb(var(--color-accent-rgb) / .1); color: var(--color-accent); }
+  .ed-nighttag i { font-size: 10px; }
+  .ed-nighttag.s-read { background: var(--ok-bg); color: var(--ok); }
+  .ed-nighttag.s-unread { background: var(--color-bg-tertiary); color: var(--color-text-secondary); }
   .ed-toolbar { display: flex; align-items: center; gap: 2px; padding: 6px 10px; border-bottom: 1px solid var(--color-border); flex-shrink: 0; flex-wrap: wrap; background: var(--color-bg-tertiary); }
   .ed-btn { width: 28px; height: 28px; border: 0; border-radius: 6px; background: transparent; color: var(--color-text-secondary); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; font-size: 13px; }
   .ed-btn:hover, .ed-btn.on { background: var(--color-bg-secondary); color: var(--color-text-primary); }
@@ -4043,16 +4102,18 @@
   /* ---- Details drawer: links, backlinks, history, audio ---- */
   .jnl-drawer {
     width: 280px; flex-shrink: 0; min-height: 0; overflow-y: auto; border-left: 1px solid var(--color-border);
-    background: var(--color-bg-secondary);
+    background: var(--panel);
   }
+  /* Docked beside the note: the note narrows as the drawer slides out from
+     behind its edge, so nothing in the note is covered. */
   @media (min-width: 761px) {
     .jnl-drawer {
-      position: absolute; top: 0; bottom: 0; right: 0; z-index: 12;
-      box-shadow: -10px 0 24px -10px rgb(0 0 0 / .28);
-      transform: translateX(100%); visibility: hidden;
-      transition: transform var(--dur-large) var(--ease-out), visibility 0s linear var(--dur-large);
+      width: 0; overflow: hidden; border-left-width: 0; visibility: hidden;
+      transition: width var(--dur-standard) var(--ease-out), visibility 0s linear var(--dur-standard);
     }
-    .jnl-drawer.open { transform: none; visibility: visible; transition: transform var(--dur-large) var(--ease-out), visibility 0s; }
+    .jnl-drawer > * { width: 280px; transform: translateX(-40%); opacity: 0; transition: transform var(--dur-slide) var(--ease-slide), opacity var(--dur-standard); }
+    .jnl-drawer.open { width: 280px; border-left-width: 1px; overflow-y: auto; visibility: visible; transition: width var(--dur-standard) var(--ease-out), visibility 0s; }
+    .jnl-drawer.open > * { transform: none; opacity: 1; }
   }
   .dr-head { display: flex; align-items: center; gap: 6px; padding: 9px 10px; border-bottom: 1px solid var(--color-border); font-size: 12px; font-weight: 700; color: var(--color-text-primary); }
   .dr-head .ed-ibtn { width: 24px; height: 24px; }
@@ -4062,11 +4123,12 @@
   .jnl-drawer:has(.dr-none:not([hidden])) .dr-sec { display: none; }
   .dr-sec { padding: 12px 13px; border-bottom: 1px solid var(--color-border-light); }
   .dr-sec:last-child { border-bottom: 0; }
-  .dr-title { font-size: 11px; font-weight: 650; text-transform: uppercase; letter-spacing: .12em; color: var(--mut); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
-  .dr-list { display: flex; flex-direction: column; gap: 5px; }
-  .dr-item { display: block; width: 100%; padding: 8px 9px; border: 0; border-radius: 8px; background: var(--color-bg-tertiary); cursor: pointer; text-align: left; text-decoration: none; }
-  .dr-item:hover { background: rgb(var(--color-accent-rgb) / .12); }
-  .dr-item .ttl { font-size: 12px; font-weight: 700; color: var(--color-text-primary); display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .dr-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--acc); margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
+  .dr-list { display: flex; flex-direction: column; }
+  .dr-item { display: block; width: 100%; padding: 7px 8px; border: 0; border-radius: 0; background: none; cursor: pointer; text-align: left; text-decoration: none; }
+  .dr-item + .dr-item { box-shadow: inset 0 1px 0 var(--color-border-light); }
+  .dr-item:hover { background: var(--lift); }
+  .dr-item .ttl { font-size: 12.5px; font-weight: 500; color: var(--color-text-primary); display: flex; align-items: center; gap: 6px; min-width: 0; }
   .dr-item .ttl span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .dr-item .ttl i { width: 12px; flex-shrink: 0; text-align: center; font-size: 10.5px; color: var(--color-text-muted); }
   .dr-item.page .ttl i { color: var(--teal); }
@@ -4086,7 +4148,7 @@
   /* ---- Popovers (bulk move / visibility, folder menu, save view, people) ---- */
   .jnl-pop {
     position: fixed; z-index: 47; width: 230px; max-height: min(60vh, 360px); overflow: auto; padding: 10px;
-    background: var(--paper); border: 1px solid var(--edge); border-radius: 10px; box-shadow: var(--shadow-l);
+    background: var(--panel); border: 1px solid var(--edge); border-radius: 10px; box-shadow: var(--shadow-l);
     opacity: 0; transform: translateY(4px) scale(.98); transform-origin: top left;
     transition: opacity var(--dur-micro) var(--ease-out), transform var(--dur-micro) var(--ease-out);
   }
@@ -4189,7 +4251,7 @@
   .jnl .nl-bulkpill, .jnl .nl-bulkpill.on,
   .jnl .jnl-pop, .jnl .jnl-pop.open,
   .jnl .jnl-toast, .jnl .jnl-toast.open,
-  .jnl .jnl-drawer, .jnl .jnl-drawer.open,
+  .jnl .jnl-drawer, .jnl .jnl-drawer.open, .jnl .jnl-drawer > *,
   .nl-ac, .nl-ac.is-open,
   .notes-panel, .notes-panel-hidden, .jot-tab, .jot-tab-hidden {
     transform: none !important;

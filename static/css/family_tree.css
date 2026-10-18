@@ -1,0 +1,316 @@
+/*
+ * family_tree.css: the entity page's "Family tree" block
+ * (internal/plugins/entities/family_tree_block.templ, behaviour in
+ * internal/plugins/entities/static/js/family_tree.js).
+ *
+ * Everything is scoped under .fm. Colours, edges and shadows come from the
+ * theme tokens, so the block follows light and dark and the page look. This
+ * is the Material look only: filled tonal surfaces with a resting shadow, 14px
+ * corners, no border and no dividers (space separates), rounded elbow
+ * connectors. The strip is the surface that becomes the tree: the script
+ * grows the sheet out of the strip's own rect, radius and fill (a container
+ * transform) and folds it back into it. Calm and Off are applied by the global
+ * motion guard in input.css and by the script, which reads html[data-motion].
+ *
+ * The Director's Edit tab adds three things to the same surface: empty places
+ * drawn as dashed circles (the leading dashed edge means "a place for something,
+ * not a thing yet"), a remove mark on each linked relative, a picker that grows
+ * from the place it was opened from, and a save bar whose leading amber edge says
+ * only the Director sees it.
+ *
+ * A person's circle is their portrait when they have one, else their initials,
+ * ringed in a hue taken from their id. The leading 3px amber edge and the DM
+ * tag mark what only the Director sees; no other meaning uses amber here.
+ */
+.fm {
+  --fm-bg: var(--color-bg-primary, #fff);
+  --fm-panel: var(--color-card-bg, #fff);
+  --fm-tint: var(--color-bg-tertiary, #f3f4f6);
+  --fm-ink: var(--color-text-primary, #111827);
+  --fm-body: var(--color-text-body, #374151);
+  --fm-muted: var(--color-text-muted, #6b7280);
+  --fm-line: var(--color-border-light, #e5e7eb);
+  --fm-line-strong: var(--color-border, #d1d5db);
+  --fm-acc: var(--color-accent, #6366f1);
+  --fm-acc-soft: rgb(var(--color-accent-rgb, 99 102 241) / .12);
+  --fm-acc-link: rgb(var(--color-accent-rgb, 99 102 241) / .42);
+  --fm-dm: rgb(var(--color-warn-rgb, 217 119 6));
+  --fm-r: 14px;
+  --fm-hit: 32px;
+  --fm-surface: color-mix(in srgb, var(--fm-panel) 94%, var(--fm-acc));
+  --fm-dock-bg: color-mix(in srgb, var(--fm-tint) 60%, var(--fm-surface));
+  --fm-shc: 20 24 33;
+  --fm-sh-sm: 0 1px 2px rgb(var(--fm-shc) / .08), 0 3px 8px -3px rgb(var(--fm-shc) / .14);
+  --fm-sh-md: 0 1px 2px rgb(var(--fm-shc) / .08), 0 8px 18px -6px rgb(var(--fm-shc) / .22);
+  --fm-sh: 0 1px 2px rgb(var(--fm-shc) / .08), 0 4px 8px -2px rgb(var(--fm-shc) / .10), 0 16px 32px -10px rgb(var(--fm-shc) / .20), 0 36px 60px -28px rgb(var(--fm-shc) / .30);
+  --fm-link: color-mix(in srgb, var(--fm-muted) 70%, transparent);
+  --fm-pic-sh: 0 1px 2px rgb(var(--fm-shc) / .2), 0 3px 7px -2px rgb(var(--fm-shc) / .28);
+  position: relative;
+  min-width: 0;
+  font-size: 14px;
+  color: var(--fm-body);
+}
+.dark .fm { --fm-shc: 0 0 0; }
+@media (pointer: coarse) { .fm { --fm-hit: 44px; } }
+.fm *, .fm *::before, .fm *::after { box-sizing: border-box; }
+.fm [hidden] { display: none !important; }
+.fm :focus-visible { outline: 2px solid var(--fm-acc); outline-offset: 2px; }
+.fm p { margin: 0; }
+.fm button { font: inherit; color: inherit; }
+.fm-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.fm-ic { width: 14px; height: 14px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; vertical-align: -2px; }
+
+.fm-dmtag { font-size: 10px; font-weight: 600; letter-spacing: .06em; line-height: 1.6; padding: 0 5px; border-radius: 4px; color: var(--fm-dm); background: color-mix(in srgb, var(--fm-dm) 14%, transparent); display: inline-block; white-space: nowrap; }
+.fm-note { font-size: 12.5px; color: var(--fm-muted); display: flex; align-items: baseline; gap: 8px; }
+.fm-cut { margin-top: 6px; font-size: 12.5px; color: var(--fm-muted); }
+
+/* The block is the anchor the sheet and the peek are placed against. */
+.fm-anchor { position: relative; }
+
+/* The line of descent at rest: a surface in the Material style, the thing that becomes the tree. */
+.fm-hs {
+  position: relative; display: flex; align-items: flex-start; gap: 14px; padding: 12px 14px 10px; min-height: 78px;
+  background: var(--fm-surface); border-radius: var(--fm-r); box-shadow: var(--fm-sh-sm);
+  transition: opacity 140ms ease 150ms, visibility 0s;
+}
+.fm-hs.fm-away { opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 140ms ease 0s, visibility 0s linear 140ms; }
+.fm-hs-lab {
+  flex: none; font-weight: 600; font-size: 14.5px; letter-spacing: .01em; color: var(--fm-ink); background: none; border: 0;
+  min-height: var(--fm-hit); padding: 0 8px; margin: -1px -8px 0 -8px; border-radius: 8px; cursor: pointer;
+}
+.fm-hs-lab:hover { background: var(--fm-acc-soft); color: var(--fm-acc); }
+.fm-hs-tr {
+  position: relative; flex: 1 1 auto; min-width: 0; display: flex; align-items: flex-start; gap: 6px; overflow-x: auto; overflow-y: hidden;
+  padding: 12px 4px 2px; margin-top: -12px; scrollbar-width: thin;
+}
+.fm-hs-tr::before {
+  content: ""; position: absolute; left: 0; right: 0; top: 34px; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--fm-line-strong) 6%, var(--fm-line-strong) 94%, transparent);
+}
+/* Before the script draws the circles: the nearest kin as plain links. */
+.fm-kin { position: relative; font-size: 13px; color: var(--fm-acc); white-space: nowrap; padding: 6px 4px; }
+.fm-hs-gap { flex: none; width: 14px; }
+.fm-hs-it, .fm-b {
+  position: relative; flex: none; display: flex; flex-direction: column; align-items: center; background: none; border: 0; padding: 0 4px;
+  cursor: pointer; color: var(--fm-body); border-radius: 8px; text-align: center;
+}
+.fm-hs-it { width: 62px; --d: 32px; min-height: 58px; }
+.fm-hs-it.fm-me { --d: 44px; width: 72px; }
+.fm-hs-it .fm-pw { margin: calc((44px - var(--d)) / 2) 0; }
+.fm-hs-cnt { flex: none; font-size: 11.5px; color: var(--fm-muted); align-self: flex-start; margin-top: 12px; white-space: nowrap; }
+
+/* Circles: a portrait when the person has one, tidy initials when not; one soft ring. */
+.fm-pw { display: block; position: relative; width: var(--d); height: var(--d); flex: none; }
+.fm-pic {
+  position: absolute; inset: 0; border-radius: 50%; display: grid; place-items: center;
+  --ringc: color-mix(in srgb, hsl(var(--h, 220) 34% 44%) 45%, transparent);
+  background: hsl(var(--h, 220) 30% 91%); color: hsl(var(--h, 220) 40% 26%);
+  outline: 1px solid var(--ringc); outline-offset: 2px; box-shadow: var(--fm-pic-sh);
+  transition: transform var(--dur-micro, 120ms) var(--ease-out, ease-out);
+}
+.dark .fm-pic { background: hsl(var(--h, 220) 18% 22%); color: hsl(var(--h, 220) 42% 84%); }
+.fm-pic.fm-img { overflow: hidden; background: hsl(var(--h, 220) 32% 80%); }
+.fm-pic img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.fm-pic.fm-ini { font: 600 calc(var(--d) * .38) / 1 Georgia, "Iowan Old Style", "Palatino Linotype", Palatino, "Times New Roman", serif; letter-spacing: .06em; }
+.fm-pic.fm-ini i { font-style: normal; padding-left: .06em; position: relative; top: -.02em; }
+.fm-pic.fm-ini::before { content: ""; position: absolute; inset: calc(var(--d) * .085); border-radius: 50%; border: 1px solid hsl(var(--h, 220) 30% 46% / .32); }
+.fm-halo {
+  position: absolute; inset: -9px; border-radius: 50%; background: var(--fm-acc-soft); opacity: 0; transform: scale(.45);
+  transition: opacity var(--dur-standard, 200ms) var(--ease-out, ease-out), transform var(--dur-standard, 200ms) var(--ease-out, ease-out);
+}
+.fm-me .fm-halo, .fm-hs-it:hover .fm-halo, .fm-hs-it:focus-visible .fm-halo, .fm-dot.fm-on .fm-halo, .fm-b:focus-visible .fm-halo { opacity: 1; transform: none; }
+.fm-hs-it:hover .fm-pic, .fm-b:hover .fm-pic { transform: scale(1.08); }
+.fm-nm {
+  display: block; margin-top: 8px; font-size: 11.5px; line-height: 1.25; max-width: 76px; overflow: hidden; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; color: var(--fm-body);
+}
+.fm-me .fm-nm { color: var(--fm-ink); font-weight: 600; }
+.fm-ad .fm-pic { outline-style: dashed; }
+.fm-gd .fm-pic { outline-style: dotted; outline-width: 2px; }
+.fm-dmp .fm-pic { outline: 2px dashed var(--fm-dm); }
+.fm-pw .fm-dmtag { position: absolute; top: -8px; right: -14px; z-index: 2; background: var(--fm-panel); }
+.fm-pic.fm-bub { background: var(--fm-panel) !important; color: var(--fm-acc); outline: 2px solid var(--fm-acc-link); font-weight: 600; font-size: 12px; line-height: 1; box-shadow: none; }
+
+/* The sheet: the strip's own surface, grown over the page; it covers the strip while open. */
+.fm-hd {
+  position: absolute; left: 0; right: 0; top: 0; z-index: 5; display: none; background: var(--fm-surface);
+  border-radius: var(--fm-r); box-shadow: var(--fm-sh); overflow: hidden;
+}
+.fm-hd.fm-show { display: block; }
+.fm-hd-c { position: relative; }
+.fm-hd-hd { display: flex; align-items: center; gap: 4px; min-height: 56px; padding: 10px 56px 8px 20px; position: relative; }
+.fm-ttl { font-weight: 600; font-size: 14.5px; color: var(--fm-ink); margin-right: 8px; }
+.fm-x {
+  position: absolute; top: 50%; margin-top: -18px; right: 8px; width: 36px; height: 36px; display: grid; place-items: center; border: 0; background: none;
+  border-radius: 8px; color: var(--fm-muted); cursor: pointer;
+}
+.fm-x:hover { background: var(--fm-tint); color: var(--fm-ink); }
+.fm-x .fm-ic { width: 16px; height: 16px; }
+.fm-trail { display: flex; align-items: center; gap: 0; min-width: 0; flex: 1 1 auto; overflow: hidden; }
+.fm-trail .fm-ic { width: 11px; height: 11px; color: var(--fm-line-strong); margin: 0 1px; }
+.fm-q {
+  font-weight: 500; font-size: 12.5px; line-height: 1; color: var(--fm-muted); background: none; border: 0; min-height: var(--fm-hit); padding: 0 10px;
+  border-radius: 8px; cursor: pointer; white-space: nowrap; flex: none; display: inline-flex; align-items: center; gap: 6px;
+}
+.fm-q:hover { background: var(--fm-acc-soft); color: var(--fm-acc); }
+.fm-q[aria-pressed="true"] { color: var(--fm-acc); background: var(--fm-acc-soft); }
+.fm-trail .fm-q { color: var(--fm-acc); text-decoration: underline; text-decoration-color: var(--fm-acc-link); text-underline-offset: 3px; padding: 0 6px; }
+.fm-trail b { font-weight: 600; font-size: 12.5px; color: var(--fm-ink); padding: 0 6px; white-space: nowrap; }
+.fm-body { position: relative; overflow: hidden; }
+.fm-tvw { position: relative; z-index: 1; }
+.fm-body.fm-docked .fm-tvw { margin-right: 280px; }
+.fm-tv { overflow: auto; max-height: min(76vh, 580px); scrollbar-width: thin; }
+.fm-in { position: relative; min-width: 100%; }
+.fm-lk { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; }
+.fm-lk path { fill: none; stroke: var(--fm-link); stroke-width: 1.5; stroke-linecap: round; opacity: .5; }
+.fm-lk path.fm-ad { stroke-dasharray: 6 4; }
+.fm-lk path.fm-gd { stroke-dasharray: 1 5; stroke-width: 2; }
+.fm-lk path.fm-dml { stroke: var(--fm-dm); }
+.fm-lk-base { transition: opacity 220ms; }
+.fm-lk-lit path { stroke: var(--fm-acc); stroke-width: 2.6; opacity: .95; stroke-dasharray: 1; animation: fm-draw 420ms var(--ease-out, ease-out) both; filter: drop-shadow(0 0 3px var(--fm-acc-link)); }
+.fm-lk-lit path.fm-ad { stroke-dasharray: 6 4; animation: none; }
+.fm-lk-lit path.fm-gd { stroke-dasharray: 1 5; animation: none; }
+@keyframes fm-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@keyframes fm-fade { from { opacity: 0; } }
+@keyframes fm-pop { from { opacity: 0; transform: scale(.3); } }
+.fm-gl { position: absolute; left: 0; height: 1px; background: linear-gradient(90deg, transparent, var(--fm-line-strong) 4%, var(--fm-line-strong) 96%, transparent); opacity: .8; }
+.fm-rl { position: absolute; left: calc(var(--sl, 0px) + 20px); font-size: 10.5px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; color: var(--fm-muted); white-space: nowrap; }
+.fm-dot { position: absolute; left: 0; top: 0; width: 88px; display: flex; justify-content: center; transition: opacity 200ms; }
+html:not([data-motion]) .fm-dot { transition: transform 380ms var(--ease-slide, cubic-bezier(.22, .8, .24, 1)), opacity 200ms; }
+.fm-dot.fm-gone { opacity: 0; pointer-events: none; }
+.fm-dot.fm-new .fm-pw { animation: fm-pop 380ms var(--ease-out, ease-out) both; }
+html[data-motion="calm"] .fm-dot.fm-new .fm-pw { animation: fm-fade 220ms both; }
+.fm-b { --d: 40px; padding: 6px 4px; }
+.fm-dot.fm-me .fm-b { --d: 56px; }
+.fm-dot.fm-me .fm-nm { font-size: 12.5px; max-width: 84px; }
+.fm-dot.fm-sel .fm-pic { outline-width: 3px; }
+
+/* The card of the person picked, docked at the right (over the tree on a phone). */
+.fm-dock { position: absolute; z-index: 2; top: 0; bottom: 0; right: 0; width: 280px; overflow: hidden; background: var(--fm-dock-bg); box-shadow: -10px 0 22px -14px rgb(var(--fm-shc) / .35); visibility: hidden; }
+.fm-body.fm-docked .fm-dock, .fm-body.fm-dk-keep .fm-dock { visibility: visible; }
+.fm-dkc { position: absolute; left: 0; top: 0; bottom: 0; width: 100%; overflow: auto; padding: 14px 16px; }
+.fm-dk-top { display: flex; gap: 14px; align-items: center; padding-right: 30px; margin-bottom: 10px; }
+.fm-dk-top .fm-pw { --d: 56px; }
+.fm-dk-top b { display: block; font-size: 15px; line-height: 1.2; color: var(--fm-ink); overflow-wrap: anywhere; }
+.fm-dk-top .fm-r { font-size: 12px; color: var(--fm-muted); }
+.fm-dkx { position: absolute; top: 6px; right: 6px; width: 32px; height: 32px; display: grid; place-items: center; border: 0; background: none; border-radius: 8px; color: var(--fm-muted); cursor: pointer; }
+.fm-dkx:hover { background: var(--fm-tint); color: var(--fm-ink); }
+.fm-dock p { margin: 0 0 10px; font-size: 13px; color: var(--fm-body); }
+.fm-fact { display: grid; grid-template-columns: 5.2rem minmax(0, 1fr); gap: 8px; padding: 6px 0; font-size: 12.5px; }
+.fm-fact span:first-child { color: var(--fm-muted); }
+.fm-fact span:last-child { color: var(--fm-ink); overflow-wrap: anywhere; }
+.fm-dmnote { box-shadow: inset 3px 0 0 color-mix(in srgb, var(--fm-dm) 70%, transparent); padding: 7px 10px; margin: 12px 0; border-radius: 8px; font-size: 12.5px; color: var(--fm-ink); display: flex; gap: 10px; align-items: baseline; }
+.fm-act { display: flex; gap: 6px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
+.fm-cmd {
+  font-weight: 500; font-size: 13px; line-height: 1; min-height: var(--fm-hit); padding: 0 13px; border-radius: 8px; border: 0; background: var(--fm-acc-soft);
+  color: var(--fm-acc); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; text-decoration: none;
+}
+.fm-cmd:hover { background: var(--fm-acc); color: #fff; }
+.fm-lnk {
+  font-weight: 500; font-size: 12.5px; color: var(--fm-acc); background: none; border: 0; min-height: var(--fm-hit); padding: 0 10px; border-radius: 8px;
+  display: inline-flex; align-items: center; gap: 6px; text-decoration: underline; text-decoration-color: var(--fm-acc-link); text-underline-offset: 3px; cursor: pointer;
+}
+.fm-lnk:hover { background: var(--fm-acc-soft); }
+.fm-ft { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; min-height: 46px; padding: 8px 20px; font-size: 12px; color: var(--fm-muted); }
+.fm-lg { display: inline-flex; align-items: center; gap: 6px; }
+.fm-k { width: 26px; height: 6px; }
+.fm-n { margin-left: auto; color: var(--fm-ink); font-weight: 600; }
+
+/* The Peek: a small card beside a circle. It sits where it hides no other circle and none of the
+   hovered person's own lit lines (the script places it), above the circles but below nothing. */
+.fm-peek {
+  position: absolute; z-index: 8; width: 236px; display: flex; gap: 12px; align-items: center; background: var(--fm-surface); border-radius: var(--fm-r);
+  box-shadow: var(--fm-sh-md); padding: 10px 14px 10px 12px; font-size: 12px; line-height: 1.35; color: var(--fm-muted); pointer-events: none;
+  opacity: 0; visibility: hidden; transform: translate(-50%, calc(-100% + 2px)); transition: opacity var(--dur-micro, 120ms), transform var(--dur-micro, 120ms) var(--ease-out, ease-out), visibility 0s linear var(--dur-micro, 120ms);
+}
+.fm-peek.fm-on { opacity: 1; visibility: visible; transform: translate(-50%, calc(-100% - 2px)); transition-delay: 0s; }
+.fm-peek.fm-beside, .fm-peek.fm-beside.fm-on { transform: none; }
+.fm-peek.fm-flat { padding: 3px 12px 3px 8px; gap: 8px; }
+.fm-peek.fm-flat .fm-pk-pw { width: 26px; height: 26px; --d: 26px; }
+.fm-peek.fm-flat b { display: inline; margin-right: 6px; }
+.fm-peek.fm-flat .fm-pk-t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.25; }
+.fm-peek .fm-pk-pw { flex: none; width: 34px; height: 34px; --d: 34px; position: relative; }
+.fm-peek .fm-pk-t { min-width: 0; }
+.fm-peek b { display: block; font-size: 13px; color: var(--fm-ink); overflow-wrap: anywhere; }
+.fm-peek.fm-dmpk { box-shadow: inset 3px 0 0 color-mix(in srgb, var(--fm-dm) 70%, transparent), var(--fm-sh-md); }
+.fm-peek .fm-dmtag { position: static; }
+
+/* A phone: the card docks over the tree, buttons grow to a thumb. */
+.fm.fm-phone .fm-q, .fm.fm-phone .fm-hs-lab, .fm.fm-phone .fm-cmd, .fm.fm-phone .fm-lnk { min-height: 44px; }
+.fm.fm-phone .fm-x { width: 44px; height: 44px; margin-top: -22px; }
+.fm.fm-phone .fm-hd-hd { flex-wrap: wrap; padding-right: 52px; }
+.fm.fm-phone .fm-ttl { display: none; }
+.fm.fm-phone .fm-trail { flex-basis: 100%; order: -1; }
+.fm.fm-phone .fm-hs { gap: 8px; }
+.fm.fm-phone .fm-hs-cnt { display: none; }
+.fm.fm-phone .fm-body.fm-docked .fm-tvw { margin-right: 0; }
+.fm.fm-phone .fm-dock { z-index: 3; width: 84%; box-shadow: var(--fm-sh-md); }
+.fm.fm-phone .fm-dkc { padding-left: 14px; }
+.fm.fm-phone .fm-rl { left: calc(var(--sl, 0px) + 10px); }
+.fm.fm-phone .fm-ft { padding: 8px 14px; }
+
+/* The Director's Edit tab. */
+.fm-hs-none { align-self: center; font-size: 12.5px; color: var(--fm-muted); padding: 0 8px; white-space: normal; }
+.fm-slot .fm-pic { background: none !important; outline: 1.5px dashed var(--fm-acc-link); color: var(--fm-acc); box-shadow: none; font-size: 20px; font-weight: 400; line-height: 1; }
+.fm-slot .fm-nm { color: var(--fm-acc); max-width: 76px; font-size: 11px; display: block; -webkit-line-clamp: unset; }
+.fm-slot:hover .fm-pic { transform: scale(1.08); }
+.fm-slot:hover .fm-halo, .fm-slot:focus-visible .fm-halo { opacity: 1; transform: none; }
+/* The remove mark is hidden until the person is pointed at or focused, but stays in the tab order. */
+.fm .fm-rm {
+  position: absolute; top: -1px; right: 12px; z-index: 3; width: 20px; height: 20px; border-radius: 50%; padding: 0; display: grid; place-items: center;
+  border: 1px solid var(--fm-line-strong); background: var(--fm-panel); color: var(--fm-muted); cursor: pointer; box-shadow: var(--fm-sh-sm);
+  opacity: 0; pointer-events: none; transition: opacity var(--dur-micro, 120ms);
+}
+.fm-rm::after { content: ""; position: absolute; inset: -7px; }
+.fm-rm .fm-ic { width: 10px; height: 10px; }
+.fm .fm-rm:hover { color: var(--color-danger-strong, #dc2626); border-color: var(--color-danger-strong, #dc2626); }
+.fm-dot:hover .fm-rm, .fm-dot:focus-within .fm-rm, .fm-rm:focus-visible { opacity: 1; pointer-events: auto; }
+@media (pointer: coarse) { .fm-rm { opacity: 1; pointer-events: auto; width: 24px; height: 24px; } }
+.fm.fm-phone .fm-rm { opacity: 1; pointer-events: auto; width: 24px; height: 24px; }
+
+.fm-save { box-shadow: inset 3px 0 0 color-mix(in srgb, var(--fm-dm) 70%, transparent); padding-left: 22px; gap: 8px 12px; }
+.fm-savemsg { flex: 1 1 14rem; min-width: 0; color: var(--fm-ink); overflow-wrap: anywhere; }
+.fm-save.fm-err .fm-savemsg { color: var(--color-danger-strong, #dc2626); }
+.fm-sp { flex: 0 0 0; }
+.fm .fm-q:disabled { opacity: .4; cursor: default; background: none; color: var(--fm-muted); }
+.fm .fm-pri {
+  font-weight: 600; font-size: 13px; line-height: 1; min-height: var(--fm-hit); padding: 0 16px; border-radius: 8px; border: 0;
+  background: var(--fm-acc); color: #fff; cursor: pointer;
+}
+.fm .fm-pri:disabled { opacity: .4; cursor: default; }
+.fm.fm-phone .fm-pri { min-height: 44px; }
+
+/* The picker grows from the empty place it was opened from, over the tree. */
+.fm-pick {
+  position: absolute; z-index: 6; width: 250px; background: var(--fm-surface); border-radius: var(--fm-r); box-shadow: var(--fm-sh-md);
+  padding: 8px 10px; transform-origin: var(--px, 50%) var(--py, 0); animation: fm-grow var(--dur-large, 300ms) var(--ease-out, ease-out) both;
+}
+@keyframes fm-grow { from { opacity: 0; transform: scale(.7); } }
+html[data-motion="calm"] .fm-pick { animation: fm-fade 160ms both; }
+html[data-motion="off"] .fm-pick { animation: none; }
+.fm.fm-phone .fm-pick { width: 230px; }
+.fm-pick-h { display: flex; align-items: center; justify-content: space-between; font-weight: 600; font-size: 13px; color: var(--fm-ink); margin-bottom: 4px; }
+.fm .fm-pkx { width: 32px; height: 32px; margin: -4px -6px -4px 0; border: 0; background: none; border-radius: 8px; color: var(--fm-muted); display: grid; place-items: center; cursor: pointer; }
+.fm-pkx:hover { background: var(--fm-tint); color: var(--fm-ink); }
+.fm-seg { display: flex; width: 100%; margin: 2px 0 8px; background: var(--fm-tint); border-radius: 8px; padding: 2px; gap: 2px; }
+.fm .fm-seg button { flex: 1; min-height: 30px; padding: 0 6px; font-size: 12px; font-weight: 500; border: 0; border-radius: 6px; background: none; color: var(--fm-muted); cursor: pointer; }
+.fm.fm-phone .fm-seg button { min-height: 40px; }
+.fm .fm-seg button[aria-pressed="true"] { background: var(--fm-panel); color: var(--fm-acc); box-shadow: var(--fm-sh-sm); }
+.fm-pick input {
+  width: 100%; min-height: 34px; border: 1px solid var(--fm-line-strong); border-radius: 8px; background: var(--fm-bg); color: var(--fm-ink); font: inherit; font-size: 13px; padding: 0 10px;
+}
+.fm.fm-phone .fm-pick input { min-height: 44px; font-size: 16px; }
+.fm-pick input:focus { outline: 2px solid var(--fm-acc); outline-offset: 1px; }
+.fm-pl { max-height: 150px; overflow: auto; margin: 6px 0 2px; }
+.fm .fm-pl button, .fm .fm-mk {
+  display: flex; gap: 8px; align-items: baseline; width: 100%; min-height: 32px; padding: 4px 8px; border: 0; background: none; border-radius: 8px; color: var(--fm-ink);
+  font-size: 13px; text-align: left; cursor: pointer;
+}
+.fm.fm-phone .fm-pl button, .fm.fm-phone .fm-mk { min-height: 44px; }
+.fm .fm-slot { -webkit-tap-highlight-color: transparent; }
+.fm-pl .fm-pl-n { min-width: 0; overflow-wrap: anywhere; }
+.fm .fm-pl button small { color: var(--fm-muted); font-size: 11.5px; margin-left: auto; white-space: nowrap; }
+.fm .fm-pl button:hover, .fm .fm-mk:hover { background: var(--fm-acc-soft); }
+.fm .fm-mk { margin-top: 2px; border-top: 1px solid var(--fm-line); border-radius: 0 0 8px 8px; color: var(--fm-acc); font-weight: 500; overflow-wrap: anywhere; }
+.fm-none { padding: 6px 8px; font-size: 12px; color: var(--fm-muted); }
+.fm-pl .fm-dmtag { position: static; flex: none; }

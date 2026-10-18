@@ -858,10 +858,16 @@
     // Scroll into view so virtual keyboard doesn't cover the input.
     setTimeout(function () { input.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, 100);
 
+    // Removing the input fires blur, which would run save() again; the
+    // first Enter, Escape or blur settles the rename and the rest do nothing.
+    var settled = false;
+
     function save() {
+      if (settled) return;
+      settled = true;
       var newName = input.value.trim();
       if (!newName || newName === oldName) {
-        cancel();
+        restore();
         return;
       }
       Chronicle.apiFetch('/campaigns/' + campaignId + '/sidebar-nodes/' + nodeId, {
@@ -882,6 +888,12 @@
     }
 
     function cancel() {
+      if (settled) return;
+      settled = true;
+      restore();
+    }
+
+    function restore() {
       nameSpan.textContent = oldName;
       nameSpan._renaming = false;
     }
@@ -1552,7 +1564,8 @@
       countPages: countPages,
       placeRequest: placeRequest,
       placeTargetId: placeTargetId,
-      addPlace: addPlace
+      addPlace: addPlace,
+      startInlineRename: startInlineRename
     };
   }
 })();
