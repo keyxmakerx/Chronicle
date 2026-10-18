@@ -44,7 +44,7 @@ var markerIconCatalog = []MarkerIcon{
 	{"fa-tent", "Village", "Settlements"},
 	{"fa-campground", "Camp", "Settlements"},
 	// Fortifications
-	{"fa-castle", "Castle", "Fortifications"},
+	{"fa-chess-rook", "Castle", "Fortifications"},
 	{"fa-chess-rook", "Tower", "Fortifications"},
 	{"fa-shield-halved", "Fortress", "Fortifications"},
 	{"fa-tower-observation", "Watchtower", "Fortifications"},
