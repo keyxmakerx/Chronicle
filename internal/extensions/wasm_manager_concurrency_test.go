@@ -28,7 +28,7 @@ func TestPluginManagerCallConcurrent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewPlugin: %v", err)
 	}
-	defer p.Close(ctx)
+	defer func() { _ = p.Close(ctx) }()
 
 	pm := NewPluginManager(t.TempDir(), NewHostEnvironment(nil, nil, nil, nil))
 	pm.limits = WASMLimits{TimeoutMS: 5000}

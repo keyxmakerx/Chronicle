@@ -228,7 +228,7 @@ func (h *Handler) requireRelationAccess(c echo.Context, cc *campaigns.CampaignCo
 	if rel.CampaignID != cc.Campaign.ID {
 		return apperror.NewNotFound("relation not found")
 	}
-	if rel.DmOnly && !(cc.MemberRole == campaigns.RoleOwner || cc.IsSiteAdmin || cc.IsDmGranted) {
+	if rel.DmOnly && cc.MemberRole != campaigns.RoleOwner && !cc.IsSiteAdmin && !cc.IsDmGranted {
 		return apperror.NewNotFound("relation not found")
 	}
 	userID := auth.GetUserID(c)

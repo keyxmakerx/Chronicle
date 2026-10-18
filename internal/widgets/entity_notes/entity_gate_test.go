@@ -93,7 +93,8 @@ func TestNotesRoutes_EntityGate(t *testing.T) {
 			req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "tok"})
 			rec := httptest.NewRecorder()
 			e.ServeHTTP(rec, req)
-			if rec.Code != tt.wantStatus && !(tt.method == http.MethodPost && tt.wantStatus == http.StatusOK && rec.Code == http.StatusCreated) {
+			createdOK := tt.method == http.MethodPost && tt.wantStatus == http.StatusOK && rec.Code == http.StatusCreated
+			if rec.Code != tt.wantStatus && !createdOK {
 				t.Fatalf("status = %d, want %d (%s)", rec.Code, tt.wantStatus, rec.Body.String())
 			}
 			if svc.calls != tt.wantCalls {
