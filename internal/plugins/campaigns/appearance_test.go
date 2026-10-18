@@ -170,7 +170,9 @@ func TestApplyAppearance_EveryListedValueAccepted(t *testing.T) {
 					got = fc.get(s.Appearance)
 				}
 				want := v
-				if v == lists[fc.name][0] {
+				// The first value is the default and stored as unset, except
+				// the page look, which stores Standard by name.
+				if v == lists[fc.name][0] && fc.name != "page look" {
 					want = ""
 				}
 				if got != want {

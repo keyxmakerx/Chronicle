@@ -167,3 +167,28 @@ func TestAdoptMaterialPageLook(t *testing.T) {
 		})
 	}
 }
+
+func TestPageLookChoice(t *testing.T) {
+	material := &Appearance{PageLook: "annals"}
+	tests := []struct {
+		name    string
+		v       string
+		prev    *Appearance
+		want    string
+		wantErr bool
+	}{
+		{name: "standard is stored by name", v: "standard", prev: material, want: "standard"},
+		{name: "material", v: "annals", want: "annals"},
+		{name: "not sent keeps the stored look", v: "", prev: material, want: "annals"},
+		{name: "not sent and never chosen", v: "", want: ""},
+		{name: "unknown look", v: "paper", wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := pageLookChoice(tt.v, tt.prev)
+			if (err != nil) != tt.wantErr || got != tt.want {
+				t.Errorf("got %q, %v; want %q (err %v)", got, err, tt.want, tt.wantErr)
+			}
+		})
+	}
+}

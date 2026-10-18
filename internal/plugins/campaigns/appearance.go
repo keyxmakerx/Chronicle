@@ -197,6 +197,25 @@ func oneOf(name, v string, allowed []string) (string, error) {
 	return "", apperror.NewBadRequest(fmt.Sprintf("invalid %s", name))
 }
 
+// pageLookChoice is the page look a save stores. Unlike the other choices,
+// Standard is stored by name: an unset page look means the owner never chose,
+// which the one-time move to Material relies on. An editor that does not send
+// a page look keeps the stored one rather than resetting it.
+func pageLookChoice(v string, prev *Appearance) (string, error) {
+	if v == "" {
+		if prev != nil {
+			return prev.PageLook, nil
+		}
+		return "", nil
+	}
+	for _, a := range AppearancePageLooks {
+		if v == a {
+			return v, nil
+		}
+	}
+	return "", apperror.NewBadRequest("invalid page look")
+}
+
 // calmColour validates an optional #RRGGBB and tones it down the way the
 // colour picker does, so a hand-sent request can't store a neon colour the
 // page would never offer. deep allows the darker range header colours use.
@@ -393,12 +412,14 @@ func applyAppearance(s *CampaignSettings, in AppearanceInput) (*string, error) {
 		{&a.PeekGlow, "peek glow", in.Sidebar.Glow, AppearanceGlows},
 		{&a.HoverCard, "hover card look", in.Hover.Look, AppearanceHoverCards},
 		{&a.SheetStyle, "character sheet style", in.Sheet.Style, AppearanceSheetStyles},
-		{&a.PageLook, "page look", in.Page.Look, AppearancePageLooks},
 	}
 	for _, c := range checks {
 		if *c.dst, err = oneOf(c.name, c.v, c.allowed); err != nil {
 			return fail(err)
 		}
+	}
+	if a.PageLook, err = pageLookChoice(in.Page.Look, s.Appearance); err != nil {
+		return fail(err)
 	}
 	a.ReduceMotion = in.Motion.ReduceAll
 	if err := applySidebar(&a, in.Sidebar); err != nil {
@@ -499,9 +520,8 @@ func (s *campaignService) SaveAppearance(ctx context.Context, campaignID string,
 }
 
 // AdoptMaterialPageLook stores the Material page look for a campaign whose
-// page look is unset. Standard is stored as
-// unset too, so this runs once per site (the app's materialPageLookOnce),
-// before any owner could pick Standard.
+// page look is unset, meaning its owner never chose one; an owner who picked
+// Standard has it stored by name (pageLookChoice) and is left alone.
 func (s *campaignService) AdoptMaterialPageLook(ctx context.Context, campaignID string) (bool, error) {
 	campaign, err := s.repo.FindByID(ctx, campaignID)
 	if err != nil {

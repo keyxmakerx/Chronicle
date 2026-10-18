@@ -11,9 +11,9 @@ import (
 )
 
 // material_page_look.go is the one-time reconciler that moves every existing
-// campaign to the Material page look; an owner can pick Standard again.
-// Standard is stored as an unset page look, so this must run only once per
-// site: afterwards an unset look is a choice.
+// campaign whose owner never chose a page look to Material. A Standard pick
+// is stored by name and skipped. It runs once per site all the same: a
+// build that stored Standard as unset may have run before this one.
 
 // materialPageLookKey is the site setting that records the reconciler ran.
 const materialPageLookKey = "reconcile.material_page_look"
