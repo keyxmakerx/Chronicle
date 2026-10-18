@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -28,6 +29,7 @@ const (
 	MaxBodyBytes     = 512 << 10
 	MaxIDChars       = 64
 	maxPartKeyLength = 40
+	MaxCanvas        = 20000 // how far from the origin a card may sit
 )
 
 var keyRe = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`)
@@ -213,7 +215,48 @@ func validateDoc(ctx context.Context, reg *Registry, campaignID string, in Doc) 
 		}
 		out.Rules = append(out.Rules, rule)
 	}
+	out.Layout = cleanLayout(in.Layout, out)
 	return out, nil
+}
+
+var ruleCardRe = regexp.MustCompile(`^r(0|[1-9]\d?)(?:\.(0|[1-9]\d?))?$`)
+
+// cleanLayout keeps only the positions of cards the doc has, clamped to the
+// canvas. A stale or unknown key is dropped rather than refused: the layout
+// is the Workshop's own, and a card without a place is simply laid out again.
+func cleanLayout(in map[string]Pos, d Doc) map[string]Pos {
+	if len(in) == 0 {
+		return nil
+	}
+	parts := map[string]bool{}
+	for _, p := range d.Parts {
+		parts[p.Key] = true
+	}
+	out := map[string]Pos{}
+	for k, pos := range in {
+		ok := false
+		if key, isPart := strings.CutPrefix(k, "p:"); isPart {
+			ok = parts[key]
+		} else if m := ruleCardRe.FindStringSubmatch(k); m != nil {
+			r, _ := strconv.Atoi(m[1]) // the pattern admits only digits
+			ok = r < len(d.Rules)
+			if ok && m[2] != "" {
+				t, _ := strconv.Atoi(m[2])
+				ok = t < len(d.Rules[r].Then)
+			}
+		}
+		if ok {
+			out[k] = Pos{X: clampCanvas(pos.X), Y: clampCanvas(pos.Y)}
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func clampCanvas(n int) int {
+	return max(-MaxCanvas, min(MaxCanvas, n))
 }
 
 // checkTarget checks a rule's part reference: it must name a part of this

@@ -95,6 +95,9 @@ type Classifier struct {
 	// reported as unavailable.
 	eras   EraLookup
 	viewer Viewer
+	// folders checks `folder:` names; nil refuses any row that names one.
+	folders        FolderAccess
+	pendingFolders map[string]bool
 }
 
 // WithEras lets the classifier check `era:` blocks against the main
@@ -127,6 +130,7 @@ func (c *Classifier) ClassifyAll(ctx context.Context, pages []ParsedPage) ([]Cla
 		out[i] = cls
 	}
 	c.checkParents(ctx, pages, out)
+	c.checkFolders(ctx, pages, out)
 	c.checkEras(ctx, pages, out)
 	c.checkFields(pages, out)
 	return out, nil
@@ -309,7 +313,7 @@ func (c *Classifier) classifyOne(ctx context.Context, p ParsedPage) (Classificat
 	existing, _ := c.lookup.GetBySlug(ctx, c.campaignID, cls.ResolvedSlug)
 	if existing != nil {
 		cls.ConflictEntity = existing
-		cls.GMOnly = GMOnlyPartsOf(existing)
+		cls.GMOnly = GMOnlyPartsForMarkdown(existing, p.Body)
 	}
 
 	switch p.FrontMatter.Action {

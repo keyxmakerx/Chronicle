@@ -72,6 +72,7 @@ func registerTrackerParts(reg *homebrew.Registry) error {
 		},
 		func() error {
 			return reg.RegisterEvent(homebrew.EventDef{Name: "tracker.reached", Label: "A tracker reaches", PartKinds: both,
+				Fields: []homebrew.Field{{Name: "value", Label: "Reaches", Type: homebrew.FieldWhole}},
 				Check: needInt("the value", func(raw json.RawMessage) (*int, error) {
 					var a valueArgs
 					return a.Value, strictJSON(raw, &a)
@@ -79,6 +80,7 @@ func registerTrackerParts(reg *homebrew.Registry) error {
 		},
 		func() error {
 			return reg.RegisterAction(homebrew.ActionDef{Name: "step", Label: "Step a tracker", PartKinds: both,
+				Fields: []homebrew.Field{{Name: "by", Label: "By", Type: homebrew.FieldWhole}},
 				Check: needInt("the step", func(raw json.RawMessage) (*int, error) {
 					var a byArgs
 					return a.By, strictJSON(raw, &a)
@@ -86,6 +88,7 @@ func registerTrackerParts(reg *homebrew.Registry) error {
 		},
 		func() error {
 			return reg.RegisterAction(homebrew.ActionDef{Name: "set", Label: "Set a tracker", PartKinds: both,
+				Fields: []homebrew.Field{{Name: "to", Label: "To", Type: homebrew.FieldWhole}},
 				Check: needInt("the value", func(raw json.RawMessage) (*int, error) {
 					var a toArgs
 					return a.To, strictJSON(raw, &a)

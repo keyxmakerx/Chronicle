@@ -41,6 +41,16 @@ type Recipe struct {
 type Doc struct {
 	Parts []Part `json:"parts"`
 	Rules []Rule `json:"rules"`
+	// Layout is where each card sits on the Workshop canvas, keyed by card:
+	// "p:<part key>", "r<rule>" for a rule's When, "r<rule>.<step>" for one
+	// of its Thens (both counted from 0). Only the Workshop reads it.
+	Layout map[string]Pos `json:"layout,omitempty"`
+}
+
+// Pos is a card's top-left corner on the canvas, in canvas pixels.
+type Pos struct {
+	X int `json:"x"`
+	Y int `json:"y"`
 }
 
 // Part is one widget or owned record in a recipe. Data belongs to the kind's

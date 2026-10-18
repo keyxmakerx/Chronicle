@@ -10,6 +10,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -38,6 +39,20 @@ func bind(c echo.Context, dst any) error {
 		return apperror.NewBadRequest("request body is not valid JSON")
 	}
 	return nil
+}
+
+// Page handles GET /campaigns/:id/homebrew: the Workshop itself. The
+// catalog call is the service's Director check, so the page and its API
+// keep everyone else out by the same rule.
+func (h *Handler) Page(c echo.Context) error {
+	_, v, err := viewerFrom(c)
+	if err != nil {
+		return err
+	}
+	if _, err := h.svc.Catalog(v); err != nil {
+		return err
+	}
+	return middleware.Render(c, http.StatusOK, WorkshopPage(campaigns.GetCampaignContext(c), middleware.GetCSRFToken(c)))
 }
 
 // Catalog handles GET /campaigns/:id/homebrew/catalog.

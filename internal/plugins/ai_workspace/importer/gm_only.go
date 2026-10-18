@@ -8,24 +8,59 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/sanitize"
 )
 
-// GMOnlyParts counts the GM-only parts of a page's current text. The AI never
-// receives them in a form it can return (the export strips them or flattens
-// them to ordinary words), so an update that replaces the whole text would
-// delete them or publish the AI's copy to players. The review screen and the
-// committer both measure it from the live entity so the two cannot disagree.
+// GMOnlyParts counts the GM-only parts of a page's current text that an update
+// would lose. Pictures and diagrams never come back through markdown. A
+// passage does, as a {gm{…}gm} marker, but only when the export was made in a
+// mode that wrote it; the AI's text may come from a safe-mode export, or the
+// AI may have dropped or unmarked it. So a passage counts as kept only if the
+// incoming text carries a marked passage with the same words. The review
+// screen and the committer both measure it from the live entity so the two
+// cannot disagree.
 type GMOnlyParts struct {
 	Passages int
 	Pictures int
 	Diagrams int
 }
 
-// GMOnlyPartsOf measures an existing page; a page with no text has none.
+// GMOnlyPartsOf measures an existing page against a replacement that carries
+// no GM-only passages at all; a page with no text has none.
 func GMOnlyPartsOf(e *entities.Entity) GMOnlyParts {
+	return GMOnlyPartsAfter(e, "")
+}
+
+// GMOnlyPartsAfter measures what replacing the page's text with incomingHTML
+// (already converted from the AI's markdown) would lose. Passages are matched
+// as a multiset on their words, so a repeated line is not covered by one copy.
+func GMOnlyPartsAfter(e *entities.Entity, incomingHTML string) GMOnlyParts {
 	if e == nil || e.EntryHTML == nil {
 		return GMOnlyParts{}
 	}
-	p, pic, d := sanitize.CountSecrets(*e.EntryHTML)
-	return GMOnlyParts{Passages: p, Pictures: pic, Diagrams: d}
+	_, pic, d := sanitize.CountSecrets(*e.EntryHTML)
+	have := map[string]int{}
+	for _, s := range secretPassages(incomingHTML) {
+		have[s]++
+	}
+	missing := 0
+	for _, s := range secretPassages(*e.EntryHTML) {
+		if have[s] > 0 {
+			have[s]--
+			continue
+		}
+		missing++
+	}
+	// A passage with no words has nothing to lose, so it never blocks an
+	// update.
+	return GMOnlyParts{Passages: missing, Pictures: pic, Diagrams: d}
+}
+
+// GMOnlyPartsForMarkdown is GMOnlyPartsAfter for the AI's raw page body, used
+// where the review screen has no converted HTML yet.
+func GMOnlyPartsForMarkdown(e *entities.Entity, body string) GMOnlyParts {
+	html, err := MarkdownToHTML(body, func(o *renderOpts) { o.markers = true })
+	if err != nil {
+		html = ""
+	}
+	return GMOnlyPartsAfter(e, html)
 }
 
 // Any reports whether the page has GM-only parts a text replace would lose.

@@ -130,6 +130,7 @@ type Handler struct {
 	widgetBlockLister  WidgetBlockLister
 	contentTemplateSvc ContentTemplateService
 	sidebarNodeRepo    SidebarNodeRepository
+	folders            FolderService
 	favoriteRepo       FavoriteRepository
 	savedFilterRepo    SavedFilterRepository
 	blockRegistry      *BlockRegistry
@@ -249,6 +250,10 @@ func (h *Handler) SetWidgetBlockLister(wbl WidgetBlockLister) {
 		h.blockRegistry.SetWidgetLister(wbl)
 	}
 }
+
+// SetFolderService wires the folder rules behind the sidebar's create,
+// rename and delete endpoints.
+func (h *Handler) SetFolderService(f FolderService) { h.folders = f }
 
 // SetSidebarNodeRepo sets the sidebar node repository for folder operations.
 func (h *Handler) SetSidebarNodeRepo(repo SidebarNodeRepository) {
@@ -1703,22 +1708,12 @@ func (h *Handler) CreateSidebarNodeAPI(c echo.Context) error {
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request")
 	}
-	if err := apperror.ValidateRequired("name", req.Name); err != nil {
+
+	node, err := h.folders.CreateFolder(c.Request().Context(), cc.Campaign.ID, CreateSidebarNodeInput{
+		Name: req.Name, EntityTypeID: req.EntityTypeID,
+	})
+	if err != nil {
 		return err
-	}
-
-	node := &SidebarNode{
-		ID:           generateNodeID(),
-		CampaignID:   cc.Campaign.ID,
-		EntityTypeID: req.EntityTypeID,
-		Name:         strings.TrimSpace(req.Name),
-		SortOrder:    0,
-		NodeType:     "folder",
-		CreatedAt:    time.Now().UTC(),
-	}
-
-	if err := h.sidebarNodeRepo.Create(c.Request().Context(), node); err != nil {
-		return apperror.NewInternal(fmt.Errorf("creating sidebar node: %w", err))
 	}
 
 	return c.JSON(http.StatusCreated, map[string]string{
@@ -1727,8 +1722,8 @@ func (h *Handler) CreateSidebarNodeAPI(c echo.Context) error {
 	})
 }
 
-// DeleteSidebarNodeAPI deletes a sidebar folder node. Children are
-// reparented to root.
+// DeleteSidebarNodeAPI deletes a sidebar folder node. Sub-folders move up
+// to its parent and its pages return to the top level of the category.
 // DELETE /campaigns/:id/sidebar-nodes/:nid
 func (h *Handler) DeleteSidebarNodeAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
@@ -1736,17 +1731,8 @@ func (h *Handler) DeleteSidebarNodeAPI(c echo.Context) error {
 		return apperror.NewMissingContext()
 	}
 
-	nodeID := c.Param("nid")
-	node, err := h.sidebarNodeRepo.FindByID(c.Request().Context(), nodeID)
-	if err != nil {
+	if err := h.folders.DeleteFolder(c.Request().Context(), cc.Campaign.ID, c.Param("nid")); err != nil {
 		return err
-	}
-	if node.CampaignID != cc.Campaign.ID {
-		return apperror.NewNotFound("sidebar node not found")
-	}
-
-	if err := h.sidebarNodeRepo.Delete(c.Request().Context(), nodeID); err != nil {
-		return apperror.NewInternal(fmt.Errorf("deleting sidebar node: %w", err))
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
@@ -1760,28 +1746,14 @@ func (h *Handler) RenameSidebarNodeAPI(c echo.Context) error {
 		return apperror.NewMissingContext()
 	}
 
-	nodeID := c.Param("nid")
-	node, err := h.sidebarNodeRepo.FindByID(c.Request().Context(), nodeID)
-	if err != nil {
-		return err
-	}
-	if node.CampaignID != cc.Campaign.ID {
-		return apperror.NewNotFound("sidebar node not found")
-	}
-
 	var req struct {
 		Name string `json:"name"`
 	}
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request")
 	}
-	if err := apperror.ValidateRequired("name", req.Name); err != nil {
+	if err := h.folders.RenameFolder(c.Request().Context(), cc.Campaign.ID, c.Param("nid"), req.Name); err != nil {
 		return err
-	}
-
-	node.Name = strings.TrimSpace(req.Name)
-	if err := h.sidebarNodeRepo.Update(c.Request().Context(), node); err != nil {
-		return apperror.NewInternal(fmt.Errorf("renaming sidebar node: %w", err))
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})

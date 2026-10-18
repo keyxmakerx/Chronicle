@@ -24,8 +24,8 @@ func (c *Committer) SetTagWriter(w TagWriter) { c.tags = w }
 // maxTagName is tags.name's column width.
 const maxTagName = 100
 
-// tagSlug matches tags.generateSlug, so "Trade Hub" finds the tag trade-hub.
-func tagSlug(name string) string {
+// TagSlug matches tags.generateSlug, so "Trade Hub" finds the tag trade-hub.
+func TagSlug(name string) string {
 	var b strings.Builder
 	dash := false
 	for _, r := range strings.ToLower(strings.TrimSpace(name)) {
@@ -80,7 +80,7 @@ func (c *Committer) applyTags(ctx context.Context, campaignID, entityID string, 
 		if len(name) > maxTagName {
 			return fmt.Sprintf("Saved the page, but the tag %q is longer than %d characters, so no tags were set.", string([]rune(name)[:20])+"…", maxTagName)
 		}
-		t, ok := bySlug[tagSlug(name)]
+		t, ok := bySlug[TagSlug(name)]
 		if !ok {
 			made, err := c.tags.Create(ctx, campaignID, name, "", false)
 			if err != nil {

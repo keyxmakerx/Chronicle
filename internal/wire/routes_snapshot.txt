@@ -781,6 +781,7 @@ GET	/campaigns/:id/guest-codes	session	plugins/campaigns.(*GuestCodeHandler).Car
 POST	/campaigns/:id/guest-codes	session	plugins/campaigns.(*GuestCodeHandler).Create	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > middleware.RateLimit
 DELETE	/campaigns/:id/guest-codes/:gcid	session	plugins/campaigns.(*GuestCodeHandler).Remove	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/handover-setting	session	plugins/campaigns.(*Handler).UpdateHandoverSettingAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/homebrew	session	plugins/homebrew.(*Handler).Page	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/homebrew/catalog	session	plugins/homebrew.(*Handler).Catalog	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/homebrew/recipes	session	plugins/homebrew.(*Handler).List	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/homebrew/recipes	session	plugins/homebrew.(*Handler).Create	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
@@ -1120,6 +1121,7 @@ POST	/rsvp/:token/suggest	none	plugins/sessions.(*Handler).ApplySuggestToken	-
 GET	/sessions/feed/:token	none	plugins/sessions.(*Handler).GameNightFeedICS	-
 GET	/static/plugins/encounters*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-
 GET	/static/plugins/entities*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-
+GET	/static/plugins/homebrew*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-
 GET	/static/plugins/maps*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-
 GET	/static/plugins/page_tests*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-
 GET	/static/plugins/pageblocks*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-
