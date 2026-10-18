@@ -5430,7 +5430,9 @@ func (a *App) RegisterRoutes() {
 		systemstate.RegisterRoutes(e,
 			systemstate.NewHandler(systemStateSvc, &entityAccessAdapter{svc: entityService}),
 			campaignService, authService)
-		syncAPIHandler.SetSystemStateReader(&systemStateSyncReader{svc: systemStateSvc})
+		systemStateSync := &systemStateSyncReader{svc: systemStateSvc}
+		syncAPIHandler.SetSystemStateReader(systemStateSync)
+		syncAPIHandler.SetSystemStateWriter(systemStateSync)
 	} else {
 		slog.Warn("systemstate plugin degraded — routes not registered")
 	}
