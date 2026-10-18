@@ -78,3 +78,25 @@ func TestImportReview_ListAnswers(t *testing.T) {
 		t.Errorf("a refused record must not be offered as a row")
 	}
 }
+
+// TestImportReview_SheetFields pins the row's sheet line, and that a page
+// whose fields don't fit sits in the problems box instead of the list.
+func TestImportReview_SheetFields(t *testing.T) {
+	d := representativeReviewData()
+	d.Classes[0].FieldsSummary = "Sheet: Level 3, Stamina 30"
+	d.Pages[2].SourceIndex = 2
+	d.Classes[2].Status = importer.StatusFieldProblem
+	d.Classes[2].Reason = `These sheet fields don't fit the Creature category: "hp" is not one of this category's fields.`
+	out := renderReview(t, d)
+	for _, want := range []string{
+		"Sheet: Level 3, Stamina 30",
+		"Block 3", "Ash-Wraith: These sheet fields don&#39;t fit",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("review is missing %q", want)
+		}
+	}
+	if strings.Contains(out, `name="page_2_include"`) {
+		t.Errorf("a page whose fields don't fit must not be offered as a row")
+	}
+}

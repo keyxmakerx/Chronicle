@@ -140,26 +140,32 @@ func TestHomeAudienceParam(t *testing.T) {
 	}
 }
 
-func TestDashboardEditorTab_DirectorAndGuestTabs(t *testing.T) {
-	render := func(column *string) string {
+func TestCustomizeHomePages_TabsAndBorrowedHints(t *testing.T) {
+	h := &Handler{}
+	render := func(column *string, key string) string {
 		cc := &CampaignContext{Campaign: &Campaign{ID: "c1", DashboardLayout: column}, MemberRole: RoleOwner, IsMember: true}
 		var buf strings.Builder
-		if err := dashboardEditorTab(cc, "tok").Render(context.Background(), &buf); err != nil {
+		if err := customizeHomePages(cc, key, h.homeHint(cc, key), h.homeEditorState(cc, key)).Render(context.Background(), &buf); err != nil {
 			t.Fatal(err)
 		}
 		return buf.String()
 	}
-	fresh := render(nil)
-	for _, want := range []string{"dashRole = 'director'", "For the Director", "dashRole = 'guest'", "For guests", "Same as home until you change it.", "they get a starter home"} {
+	fresh := render(nil, HomeDirector)
+	for _, want := range []string{"/customize/home/director", "/customize/home/guest", "/customize/home/dm", "The Director", "Guests", "DM dashboard", "same as the Everyone home until you change it", `data-widget="customize-page-editor"`, `&#34;scope&#34;:&#34;home&#34;`} {
 		if !strings.Contains(fresh, want) {
 			t.Errorf("fresh campaign: missing %q", want)
 		}
 	}
+	if !strings.Contains(render(nil, HomeGuest), "they get a starter home") {
+		t.Error("guest tab: should say a fresh campaign's guests get a starter home")
+	}
 	saved := `{"director":{"rows":[{"id":"r","columns":[]}]},"guest":{"rows":[{"id":"r","columns":[]}]}}`
-	both := render(&saved)
-	for _, gone := range []string{"Same as home until you change it.", "they get a starter home"} {
-		if strings.Contains(both, gone) {
-			t.Errorf("saved homes: still says %q", gone)
+	for _, key := range []string{HomeDirector, HomeGuest} {
+		out := render(&saved, key)
+		for _, gone := range []string{"until you change it", "they get a starter home"} {
+			if strings.Contains(out, gone) {
+				t.Errorf("saved %s home: still says %q", key, gone)
+			}
 		}
 	}
 }

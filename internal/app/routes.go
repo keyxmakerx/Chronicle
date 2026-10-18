@@ -4833,6 +4833,15 @@ func (a *App) RegisterRoutes() {
 		slog.Info("placed game-system panels on creature types", slog.Int("layouts", n))
 	}
 
+	// One-time: existing campaigns move to the Material page look
+	// (material_page_look.go). Only a failure to read the marker or list
+	// campaigns runs it again on the next boot.
+	if n, err := materialPageLookOnce(context.Background(), settingsRepo, campaignService); err != nil {
+		slog.Error("moving campaigns to the Material page look failed", slog.String("error", err.Error()))
+	} else if n > 0 {
+		slog.Info("moved campaigns to the Material page look", slog.Int("campaigns", n))
+	}
+
 	// One-time: Notes became Journal plus Jot notes, so campaigns that had
 	// Notes on keep both (see jot_notes_split.go). Retried on the next boot.
 	if n, err := splitJotNotesOnce(context.Background(), settingsRepo, addonService); err != nil {
@@ -5837,6 +5846,7 @@ func (a *App) RegisterRoutes() {
 		aiKinds = append(aiKinds, records.EncounterKind{Svc: aiEncountersAdapter{svc: encounterAPI.svc}, Entities: entityService})
 	}
 	aiKinds = append(aiKinds,
+		records.GameNightKind{Svc: aiGameNightsAdapter{svc: sessionsService, members: campaignService}},
 		records.GeneratorKind{Cal: calendarService, Tables: aiTables, Weather: calendarService},
 	)
 	aiRegistry := records.NewRegistry(aiKinds...)

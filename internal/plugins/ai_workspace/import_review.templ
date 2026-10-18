@@ -41,8 +41,9 @@ type ReviewSummary struct {
 	Conflicts  int
 	NewCategories int
 	ParseErrors int
-	// Blocked counts records the review refused (a missing calendar, a
-	// bad key), kept apart from blocks whose markdown would not parse.
+	// Blocked counts blocks the review refused (a missing calendar, a bad
+	// key, sheet fields that don't fit), kept apart from blocks whose
+	// markdown would not parse.
 	Blocked int
 }
 
@@ -316,6 +317,9 @@ templ reviewRow(campaignID string, idx int, page importer.ParsedPage, cls import
 				<span class="air-line">{ "Known as " + page.FrontMatter.KnownAs + " in that era" }</span>
 			}
 			@reviewRowMeta(page)
+			if cls.FieldsSummary != "" {
+				<span class="air-line">{ cls.FieldsSummary }</span>
+			}
 			if cls.ConflictEntity != nil {
 				<span class="air-line">
 					<i class="fa-solid fa-triangle-exclamation mr-1" aria-hidden="true"></i>
@@ -470,6 +474,8 @@ func statusLabel(s importer.ParseStatus) string {
 		return "Action target missing"
 	case importer.StatusParentProblem:
 		return "Parent problem"
+	case importer.StatusFieldProblem:
+		return "Sheet fields problem"
 	default:
 		return "Page"
 	}

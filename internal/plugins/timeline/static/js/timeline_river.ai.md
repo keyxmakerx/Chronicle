@@ -3,10 +3,12 @@
 ## Purpose
 
 The time line page's River view: one line through history that drags, wheel-
-and pinch-zooms, and coasts. Events are dots coloured by kind, cause and
-effect are arcs under the line, crowded dots gather into counted bubbles, the
-open event docks beside the line, and the calendar's own month folds down
-under it. Styles are `../css/timeline_river.css`.
+and pinch-zooms, and coasts. The line is the accent up to today and quiet
+after it, fading out at both edges, with a soft wash of the accent under the
+history. Events are small beads coloured by kind, durations branch off the
+line on curves, cause and effect are arcs under the line, crowded beads gather
+into counted bubbles, the open event docks beside the line, and the calendar's
+own month folds down under it. Styles are `../css/timeline_river.css`.
 
 ## Mount
 
@@ -36,8 +38,17 @@ links `calendar-view.css` for the folded month.
   (loaded on every page by `calendar_view.js`), so days land where the
   calendar puts them. With no calendar, months are twelve thirty-day months.
 - **Kinds:** an event's kind is its free-text category ("Event" when empty);
-  colour is the link's `color_override` (plain hex only) or a hue hashed from
-  the name, lighter in dark mode. Kind chips hide and show kinds.
+  colour is the link's `color_override` (plain hex only) or the next of the
+  eight `--tlr-k0`…`--tlr-k7` palette colours, in the order kinds first appear
+  (lighter in dark mode). Kind chips in the View menu hide and show kinds.
+- **The bar** holds the range, Find (it opens on the search icon or `/`) and
+  the View menu: All of it / Today, zoom, kinds, era steps, and the overview
+  strip under the line, which is off until asked for.
+- **An open event** lights its span and draws a playhead under the line;
+  everything outside its chain of causes and effects steps back.
+- **The line's gradient** is set in pixels on every draw, so the blend at
+  today and the edge fades stay in place however the line is panned. Gradient
+  and mask ids are random per mount, since two lines can share a page.
 - **The month fold** builds the calendar page's own grid markup
   (`.cal-v5 .cal`) and asks `calendarDate` which events fall on each day.
 - **The month** is a drawer hanging from a tab right above it ("Show Ches 1492 on the calendar"), not a button.
@@ -48,8 +59,9 @@ links `calendar-view.css` for the folded month.
 
 ## Events
 
-None emitted. Listens on `document` for `/`, Escape and arrow keys while
-mounted; `destroy()` removes that listener and the ResizeObserver.
+None emitted. Listens on `document` for `/`, Escape and arrow keys, and for
+pointerdown to close the View menu, while mounted; `destroy()` removes those
+listeners and the ResizeObserver.
 
 ## Gotchas
 

@@ -177,6 +177,7 @@ func NewHandler(service CampaignService) *Handler {
 	// The look is the campaign's own data, so it registers here and always
 	// applies first; other plugins register their sections after it.
 	h.RegisterCustomizeSection(CustomizeSection{Key: customizeSectionLook, Apply: h.applyLookSection})
+	h.RegisterCustomizeSection(CustomizeSection{Key: customizeSectionHomes, Apply: h.applyHomesSection})
 	return h
 }
 

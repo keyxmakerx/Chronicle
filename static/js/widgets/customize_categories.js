@@ -77,7 +77,6 @@
     });
     var inMenu = state.inMenu || {};
     var claiming = !!state.claiming;
-    var ADVENTURES_URL = state.adventuresUrl || '';
     var KEY = state.key || '', TAB = state.tab || '';
     var alive = true, listeners = [];
     function on(t, type, fn, o) { t.addEventListener(type, fn, o); listeners.push([t, type, fn, o]); }
@@ -187,34 +186,8 @@
         '<button type="button" class="btn-primary" data-new><i class="fa-solid fa-plus mr-1.5" aria-hidden="true"></i>New category</button></div>' +
         '<div class="czs-cat-grid" hx-boost="true" hx-target="#main-content" hx-select="#main-content > *" hx-swap="innerHTML show:window:top">' +
         top.map(card).join('') +
-        '<button type="button" class="czs-cat-card czs-add" data-new><span class="czs-plus"><i class="fa-solid fa-plus" aria-hidden="true"></i></span>New category</button></div>' +
-        (hasAdventures() || !ADVENTURES_URL ? '' : adventuresPanel());
+        '<button type="button" class="czs-cat-card czs-add" data-new><span class="czs-plus"><i class="fa-solid fa-plus" aria-hidden="true"></i></span>New category</button></div>';
       if (window.htmx) window.htmx.process(el);
-    }
-    function hasAdventures() { return saved.some(function (c) { return c.dmOnly; }); }
-    // The one-click offer for a campaign made before Adventures existed. It
-    // acts at once, not through the draft: adding the category is idempotent
-    // and a draft that holds other edits is kept across the reload.
-    function adventuresPanel() {
-      return '<div class="czs-panel czs-row-set czs-adv-offer"><div><span class="czs-lab"><i class="fa-solid fa-dungeon" aria-hidden="true"></i> Adventures</span>' +
-        '<p class="czs-hint">A category for your prep that only the DM team sees: the owner, co-DMs and scribes. Players get no menu entry, search result or link to it. It starts with a page layout for running an adventure at the table.</p>' +
-        '<p class="czs-err" data-adv-err role="alert" hidden></p></div>' +
-        '<button type="button" class="btn-secondary" data-add-adv><i class="fa-solid fa-plus mr-1.5" aria-hidden="true"></i>Add Adventures</button></div>';
-    }
-    function addAdventures(btn) {
-      var err = $('[data-adv-err]');
-      btn.disabled = true;
-      if (err) err.hidden = true;
-      Chronicle.apiFetch(ADVENTURES_URL, { method: 'POST' }).then(function (r) {
-        if (!r.ok) throw new Error('refused');
-        return shellFlush();
-      }).then(function () {
-        if (alive) location.reload();
-      }).catch(function () {
-        if (!alive) return;
-        btn.disabled = false;
-        if (err) { err.textContent = 'Adventures could not be added. Try again in a moment.'; err.hidden = false; }
-      });
     }
     function card(c) {
       var kids = kidsOf(c.key), href = BASE + '/categories/' + c.key + '/' + (c.isNew ? 'settings' : 'layout');
@@ -482,9 +455,7 @@
     }
     on(el, 'click', function (e) {
       var b = e.target.closest('[data-new]');
-      if (b) { e.preventDefault(); newCategoryDialog(); return; }
-      var adv = e.target.closest('[data-add-adv]');
-      if (adv) { e.preventDefault(); addAdventures(adv); }
+      if (b) { e.preventDefault(); newCategoryDialog(); }
     });
     if (!KEY && location.hash === '#new') setTimeout(newCategoryDialog, 0);
 
