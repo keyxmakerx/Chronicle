@@ -121,11 +121,9 @@
   }
 
   // --- Thrown dice on first use (ADR-063) ---
-  // Chronicle.dice.roll exists on every page, but dice.js and its 3D
-  // libraries are fetched only when someone first rolls, or a picker asks for
-  // the catalogue of looks. The layout names the hashed URLs on an inert
-  // #chronicle-dice-src element; dice.js replaces this stub with the real
-  // Chronicle.dice when it runs.
+  // Chronicle.dice exists on every page; dice.js and its 3D libraries are
+  // fetched on the first roll or catalogue call, from the hashed URLs on the
+  // inert #chronicle-dice-src element. dice.js then replaces this stub.
   var diceLoading = null;
   function loadDice() {
     if (Chronicle.dice !== diceStub) return Promise.resolve();
@@ -144,7 +142,7 @@
         var v = src.getAttribute(a);
         if (v) s.setAttribute(a, v);
       });
-      // A request that hangs counts as failed, so a roll never waits on it for ever.
+      // A hung request counts as failed, so no roll waits for ever.
       var wait = setTimeout(function () { diceLoading = null; reject(new Error('timed out loading ' + url)); }, 10000);
       s.onload = function () { clearTimeout(wait); resolve(); };
       s.onerror = function () { clearTimeout(wait); diceLoading = null; reject(new Error('could not load ' + url)); };
@@ -152,7 +150,7 @@
     });
     return diceLoading;
   }
-  // stop() before dice.js has arrived still stops the rolls already asked for.
+  // A stop() before dice.js arrives still stops the rolls asked for.
   var diceStops = 0;
   var diceStub = {
     roll: function (groups, opts) {
