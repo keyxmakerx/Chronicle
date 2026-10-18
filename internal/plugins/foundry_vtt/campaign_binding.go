@@ -110,7 +110,7 @@ func (b *campaignBinding) State(ctx context.Context, campaignID string, _ *packa
 	// maps to pinned.
 	pinMode, _ := b.settings.GetFoundryModulePinMode(ctx, campaignID)
 	mode, version := UpdateModeFromLegacy(pin, pinMode)
-	return packages.CampaignPackageState{CampaignID: campaignID, Mode: mode, Version: version, Explicit: pinMode == PinModeApproveFirst}, nil
+	return packages.CampaignPackageState{CampaignID: campaignID, Mode: mode, Version: version, Explicit: explicitPinMode(pinMode)}, nil
 }
 
 func (b *campaignBinding) Campaigns(ctx context.Context, _ *packages.Package) ([]packages.CampaignPackageState, error) {
@@ -123,10 +123,17 @@ func (b *campaignBinding) Campaigns(ctx context.Context, _ *packages.Package) ([
 		mode, version := UpdateModeFromLegacy(r.Pin, r.PinMode)
 		out = append(out, packages.CampaignPackageState{
 			CampaignID: r.CampaignID, CampaignName: r.CampaignName, OwnerName: r.OwnerName,
-			Mode: mode, Version: version, Explicit: r.PinMode == PinModeApproveFirst,
+			Mode: mode, Version: version, Explicit: explicitPinMode(r.PinMode),
 		})
 	}
 	return out, nil
+}
+
+// explicitPinMode reports whether a stored pin mode was chosen through the
+// update modes. "promote" and empty are older data or no choice at all, which
+// the Foundry module treats as ask-first.
+func explicitPinMode(pinMode string) bool {
+	return pinMode == PinModeApproveFirst || pinMode == PinModeAutomatic
 }
 
 // Apply writes the pin through the existing Service paths, so the on-disk
@@ -139,7 +146,7 @@ func (b *campaignBinding) Apply(ctx context.Context, campaignID string, _ *packa
 		if err := b.svc.SetPinnedVersion(ctx, campaignID, ""); err != nil {
 			return err
 		}
-		return b.settings.SetFoundryModulePinMode(ctx, campaignID, PinModePromote)
+		return b.settings.SetFoundryModulePinMode(ctx, campaignID, PinModeAutomatic)
 	case packages.UpdateModePinned, packages.UpdateModeApproveFirst:
 		var err error
 		if actor.Admin {
