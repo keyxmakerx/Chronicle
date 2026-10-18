@@ -5739,6 +5739,7 @@ func (a *App) RegisterRoutes() {
 		aiKinds = append(aiKinds, records.EncounterKind{Svc: aiEncountersAdapter{svc: encounterAPI.svc}, Entities: entityService})
 	}
 	aiKinds = append(aiKinds,
+		records.GameNightKind{Svc: aiGameNightsAdapter{svc: sessionsService, members: campaignService}},
 		records.GeneratorKind{Cal: calendarService, Tables: aiTables, Weather: calendarService},
 	)
 	aiRegistry := records.NewRegistry(aiKinds...)
