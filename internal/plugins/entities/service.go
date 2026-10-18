@@ -2077,7 +2077,7 @@ func (s *entityService) CreateEntityType(ctx context.Context, campaignID string,
 	// category without the owner meaning to.
 	var presetCategory *string
 	if input.PresetCategory == PresetCategoryAdventures {
-		return nil, apperror.NewBadRequest("that category is reserved; use the Add Adventures button in Customize")
+		return nil, apperror.NewBadRequest("that category is reserved for Adventures, which every campaign is given when it is made")
 	}
 	if input.PresetCategory != "" {
 		presetCategory = &input.PresetCategory

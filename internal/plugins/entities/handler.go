@@ -2915,34 +2915,6 @@ func (h *Handler) EntityTypesPage(c echo.Context) error {
 		EntityTypesManagePage(cc, entityTypes, counts, csrfToken, "", claimingEnabled))
 }
 
-// EnsureAdventuresAPI adds the Adventures category when the campaign has none
-// (POST /campaigns/:id/entity-types/adventures). It is idempotent: pressing it
-// twice, or on a campaign that already has the category, changes nothing and
-// answers 200 with created=false.
-func (h *Handler) EnsureAdventuresAPI(c echo.Context) error {
-	cc := campaigns.GetCampaignContext(c)
-	if cc == nil {
-		return apperror.NewMissingContext()
-	}
-	et, created, err := h.service.EnsureAdventures(c.Request().Context(), cc.Campaign.ID)
-	if err != nil {
-		return err
-	}
-	if created {
-		h.logAudit(c, cc.Campaign.ID, audit.ActionEntityTypeCreated, strconv.Itoa(et.ID), et.Name)
-	}
-	status := http.StatusOK
-	if created {
-		status = http.StatusCreated
-	}
-	return c.JSON(status, map[string]any{
-		"id":      et.ID,
-		"slug":    et.Slug,
-		"name":    et.NamePlural,
-		"created": created,
-	})
-}
-
 // CreateEntityType processes the entity type creation form.
 // POST /campaigns/:id/entity-types
 func (h *Handler) CreateEntityType(c echo.Context) error {
