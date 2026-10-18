@@ -73,6 +73,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler,
 	// sightings (the service hides suggestions and dismissals from players);
 	// only the owner or a co-Director records or clears an answer.
 	cg.GET("/sessions/sightings", h.SightingsAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.GET("/sessions/sightings/nights", h.SightingNightsAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.PUT("/sessions/:sid/sightings", h.RecordSightingAPI, ownerOrCoDirector())
 	cg.DELETE("/sessions/:sid/sightings", h.ClearSightingAPI, ownerOrCoDirector())
 	// Reminding players to answer a night: Player+ on the route, and in the

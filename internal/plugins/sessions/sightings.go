@@ -65,6 +65,10 @@ type SightingService interface {
 	RecordSighting(ctx context.Context, campaignID string, in RecordSightingInput, v permissions.Viewer) error
 	// ClearSighting removes one answer, so the night is unanswered again. DM only.
 	ClearSighting(ctx context.Context, campaignID, sessionID, date, entityID string, v permissions.Viewer) error
+	// NightsFor lists the campaign's game nights that have already been
+	// played, newest first, so a page's Last seen can draw every night and
+	// let the DM answer one. Any member may read it.
+	NightsFor(ctx context.Context, campaignID, today string) (*SightingNights, error)
 }
 
 type sightingService struct {

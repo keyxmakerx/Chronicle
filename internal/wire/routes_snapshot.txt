@@ -914,6 +914,7 @@ POST	/campaigns/:id/sessions/feed/token	session	plugins/sessions.(*Handler).GetF
 POST	/campaigns/:id/sessions/feed/token/replace	session	plugins/sessions.(*Handler).ReplaceFeedTokenAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
 GET	/campaigns/:id/sessions/nights	session	plugins/sessions.(*Handler).ListGameNightsAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
 GET	/campaigns/:id/sessions/sightings	session	plugins/sessions.(*Handler).SightingsAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
+GET	/campaigns/:id/sessions/sightings/nights	session	plugins/sessions.(*Handler).SightingNightsAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
 GET	/campaigns/:id/settings	session	plugins/campaigns.(*Handler).Settings	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/sidebar-config	session	plugins/campaigns.(*Handler).GetSidebarConfig	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/sidebar-config	session	plugins/campaigns.(*Handler).UpdateSidebarConfig	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
@@ -1052,6 +1053,7 @@ GET	/static/plugins/entities*	none	github.com/labstack/echo/v4.StaticDirectoryHa
 GET	/static/plugins/maps*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-
 GET	/static/plugins/pageblocks*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-
 GET	/static/plugins/quests*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-
+GET	/static/plugins/sessions*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-
 GET	/static/plugins/timeline*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-
 GET	/systems/browse	session	plugins/packages.(*OwnerHandler).BrowseSystems	plugins/auth.RequireAuth
 GET	/systems/my-submissions	session	plugins/packages.(*OwnerHandler).MySubmissions	plugins/auth.RequireAuth
