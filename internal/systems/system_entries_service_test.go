@@ -555,4 +555,8 @@ func TestSystemEntryService_ForCharacterWithoutLookup(t *testing.T) {
 	if l, _ := svc.List(ctx, "c1", "ancestry", EntryActor{UserID: "tyne"}); len(l) != 0 {
 		t.Fatalf("player saw %+v", l)
 	}
+	// Its text can still be edited while the link stays as it was.
+	if e, err := svc.Update(ctx, "c1", dirActor, 99, UpdateSystemEntryInput{Summary: patch.Of("still penciled")}); err != nil || e.ForEntityID != "wren" {
+		t.Fatalf("edit of an orphaned entry = %+v, %v", e, err)
+	}
 }

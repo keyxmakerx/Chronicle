@@ -357,6 +357,10 @@ func (s *systemEntryService) Update(ctx context.Context, campaignID string, acto
 	if in.Description.IsNull() {
 		e.Description = ""
 	}
+	// A character that has since gone keeps its entry Directors-only on read;
+	// re-checking an unchanged link would lock the Director out of editing it.
+	keptFor := e.Visibility == EntryVisibilityCharacter
+	prevFor := e.ForEntityID
 	e.Visibility = in.Visibility.Val(e.Visibility)
 	if v, ok := in.ForEntityID.Get(); ok {
 		e.ForEntityID = strings.TrimSpace(v)
@@ -374,8 +378,10 @@ func (s *systemEntryService) Update(ctx context.Context, campaignID string, acto
 	if err := normalizeEntry(e); err != nil {
 		return nil, err
 	}
-	if err := s.checkForCharacter(ctx, campaignID, e); err != nil {
-		return nil, err
+	if !keptFor || e.ForEntityID != prevFor {
+		if err := s.checkForCharacter(ctx, campaignID, e); err != nil {
+			return nil, err
+		}
 	}
 	if renamed {
 		if dup, err := s.repo.FindByName(ctx, campaignID, e.SystemID, e.FieldKey, e.Name); err != nil {

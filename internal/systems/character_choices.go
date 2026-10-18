@@ -49,8 +49,8 @@ type Choice struct {
 	// the one-line Summary, such as a character creator. The picker ignores them.
 	Description string         `json:"description,omitempty"`
 	Properties  map[string]any `json:"properties,omitempty"`
-	// ForName is set on a campaign entry kept to one character: the picker
-	// marks it as a draft only that character's player and Directors see.
+	// ForName is set on a campaign entry kept to one character, so a picker
+	// can say only that character's player and Directors see it.
 	ForName string `json:"forName,omitempty"`
 }
 
