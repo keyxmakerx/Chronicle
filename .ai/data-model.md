@@ -361,7 +361,7 @@ Foundry module repo for the wire contract.
 
 | Table | Purpose |
 |-------|---------|
-| `page_block_content` | One JSON document per (page, layout block): `PRIMARY KEY (entity_id, block_id)`, `kind` (`read_aloud`/`page_table`/`page_steps`), `version` for edit conflicts; FKs to `entities`, `campaigns` cascade |
+| `page_block_content` | One JSON document per (page, layout block): `PRIMARY KEY (entity_id, block_id)`, `kind` (`read_aloud`/`page_table`/`page_steps`/`page_checklist`/`page_map`), `version` for edit conflicts; FKs to `entities`, `campaigns` cascade |
 
 ### rumours (`internal/plugins/rumours/migrations/`)
 

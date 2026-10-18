@@ -2096,7 +2096,7 @@ func (a *mentionLinkAdapter) GetMentionLinksForGraph(ctx context.Context, campai
 	return result, nil
 }
 
-// registerPageTextBlocks registers Read-aloud, Table, Steps and the Page map:
+// registerPageTextBlocks registers Read-aloud, Table, Steps, Checklist and the Page map:
 // content a DM types or draws in place, stored per page and block. They are always available (no addon) and
 // usable several times on a page; the widget fetches its own content, so these
 // only emit the mount point. A layout that places them (Adventures does) fails
@@ -2122,6 +2122,12 @@ func registerPageTextBlocks(blockRegistry *entities.BlockRegistry) {
 			TileSizes:   []string{"1x2", "2x2", "4x2"},
 		},
 		{
+			Type: pageblocks.KindChecklist, Label: "Checklist", Icon: "fa-circle-half-stroke",
+			Description: "Named things each held by one of two sides you name, with notes for you when a side reaches a count",
+			Contexts:    []string{"template"},
+			TileSizes:   []string{"2x1", "2x2", "4x2"},
+		},
+		{
 			Type: pageblocks.KindPageMap, Label: "Page map", Icon: "fa-map-location-dot",
 			Description: "A map drawn in place from rooms, walls and markers, with hover cards for linked pages",
 			Contexts:    []string{"template"},
@@ -2135,6 +2141,9 @@ func registerPageTextBlocks(blockRegistry *entities.BlockRegistry) {
 			}
 			if kind == pageblocks.KindPageMap {
 				return pageblocks.PageMapMount(rc.CC.Campaign.ID, rc.Entity.ID, rc.Block.ID, rc.CSRFToken)
+			}
+			if kind == pageblocks.KindChecklist {
+				return pageblocks.ChecklistMount(rc.CC.Campaign.ID, rc.Entity.ID, rc.Block.ID, rc.CSRFToken, rc.CC.CanAuthorDmOnly())
 			}
 			return pageblocks.BlockMount(rc.CC.Campaign.ID, rc.Entity.ID, rc.Block.ID, kind, rc.CSRFToken)
 		})
