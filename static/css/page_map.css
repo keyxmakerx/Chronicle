@@ -122,8 +122,8 @@
 .pm-sh-wall { fill: none; stroke: var(--pm-map-ink); stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
 .pm-sh-path { fill: none; stroke: var(--pm-map-ink); stroke-width: 1.4; stroke-dasharray: 5 4; stroke-linecap: round; }
 .pm-sh-hit { fill: none; stroke: transparent; stroke-width: 12; }
-.pm-sh-name { font: 600 8px var(--font-campaign, inherit); fill: var(--pm-muted); letter-spacing: 0.08em; text-transform: uppercase; pointer-events: none; }
-.pm-sh-label { font: italic 600 13px var(--font-heading, var(--font-campaign, inherit)); fill: var(--pm-text); }
+.pm-sh-name { font-weight: 600; font-size: 8px; fill: var(--pm-muted); letter-spacing: 0.08em; text-transform: uppercase; pointer-events: none; }
+.pm-sh-label { font-style: italic; font-weight: 600; font-size: 13px; font-family: var(--font-heading, inherit); fill: var(--pm-text); }
 .pm-sh.tinted rect, .pm-sh.tinted path:not(.pm-sh-hit) { fill: color-mix(in srgb, var(--tint) 16%, var(--color-card-bg)); stroke: var(--tint); }
 .pm-sh.tinted .pm-sh-wall, .pm-sh.tinted .pm-sh-path { fill: none; }
 .pm-sh.tinted .pm-sh-name, .pm-sh-label.tinted { fill: var(--tint); }
@@ -140,7 +140,7 @@
 .pm-pin .pm-halo { fill: none; stroke: var(--pm-acc); stroke-width: 2; opacity: 0; transition: opacity var(--dur-micro, 120ms) var(--ease-out); }
 .pm-pin.hot .pm-halo, .pm-pin.selp .pm-halo, .pm-pin:focus-visible .pm-halo { opacity: 1; }
 .pm-num, .pm-glyph { text-anchor: middle; dominant-baseline: central; pointer-events: none; fill: var(--color-accent-on-fill, var(--map-ink-light)); }
-.pm-num { font: 700 9px var(--font-campaign, inherit); font-variant-numeric: tabular-nums; }
+.pm-num { font-weight: 700; font-size: 9px; font-variant-numeric: tabular-nums; }
 .pm-glyph { font-family: "Font Awesome 6 Free"; font-weight: 900; font-size: 9px; }
 .pm-pin.tinted .pm-num, .pm-pin.tinted .pm-glyph, .pm-pin.dm:not(.tinted) .pm-num, .pm-pin.dm:not(.tinted) .pm-glyph { fill: var(--map-c-on); }
 .pm-pin.ink-dark .pm-num, .pm-pin.ink-dark .pm-glyph { fill: var(--map-ink-dark); }
