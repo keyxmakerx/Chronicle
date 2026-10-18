@@ -272,6 +272,11 @@ type FieldDef struct {
 	// to the plural of the field key (ancestry -> ancestries.json).
 	Choices string `json:"choices,omitempty"`
 
+	// Format says how the value is written when it is not plain text or a
+	// number, such as the shape of one entry in a JSON list. AI Import shows
+	// it beside the field so an AI writes what the system's widgets read.
+	Format string `json:"format,omitempty"`
+
 	// FoundryPath is the dot-notation path to the corresponding field in
 	// a Foundry VTT Actor's system data (e.g., "system.abilities.str.value").
 	// Used by the generic Foundry adapter to auto-generate field mappings.

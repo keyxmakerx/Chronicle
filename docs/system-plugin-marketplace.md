@@ -92,6 +92,7 @@ Character presets can include `foundry_path` for automatic VTT sync:
 
 - `foundry_path`: Dot-notation path in Foundry Actor system data
 - `foundry_writable`: Whether Chronicle can write this field back (default: true)
+- `format` (optional, any preset field): how the value is written when it is not plain text or a number, such as the shape of one entry in a JSON list. AI Import's brief shows it beside the field
 
 ### Play Controls (`play`)
 
