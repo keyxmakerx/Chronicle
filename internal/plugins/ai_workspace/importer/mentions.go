@@ -104,7 +104,12 @@ func (p *PageLinks) Missed() map[string]string { return p.missed }
 // RenderOption adjusts MarkdownToHTML.
 type RenderOption func(*renderOpts)
 
-type renderOpts struct{ links *PageLinks }
+type renderOpts struct {
+	links *PageLinks
+	// markers converts GM-only markers without a permission check; only for
+	// measuring a body, never for text that is stored.
+	markers bool
+}
 
 // WithPageLinks makes MarkdownToHTML turn @[Name] into page links. Without
 // it the text stays as written.

@@ -291,7 +291,15 @@ func renderEntity(
 		stripped := sanitize.StripSecretsHTML(*entry)
 		entry = &stripped
 	}
-	body, err := htmlToMarkdown(entry)
+	// The director's modes write GM-only passages as markers so a round-trip
+	// keeps them; safe mode already stripped them above.
+	var body string
+	var err error
+	if opts.Privacy == PrivacyModeSafe {
+		body, err = htmlToMarkdown(entry)
+	} else {
+		body, err = htmlToMarkdownWithSecrets(entry)
+	}
 	body = bodyOrSkip("entity body", e.Name, body, err)
 	if body != "" {
 		b.WriteString(body)

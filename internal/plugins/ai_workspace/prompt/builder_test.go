@@ -157,6 +157,8 @@ func TestBuild_FrontMatterExample(t *testing.T) {
 		"`known_as: Name in that era`",
 		"`@[Page Name]`",
 		"`@[Page Name|words to show]`",
+		"`{gm{`",
+		"`}gm}`",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("expected substring %q in output. Full:\n%s", want, got)

@@ -455,7 +455,7 @@ func (c *Committer) commitRow(
 	bodyHTML, err := MarkdownToHTML(page.Body, WithPageLinks(links))
 	if err != nil {
 		out.Status = StatusFailed
-		out.Reason = "Could not parse the page's markdown body — check the heading structure."
+		out.Reason = markdownFailReason(err)
 		return out
 	}
 	bodyJSON, err := htmlconv.Convert(bodyHTML)
@@ -582,12 +582,13 @@ func (c *Committer) commitUpdate(
 ) RowOutcome {
 	out := RowOutcome{Index: idx, Name: existing.Name, Slug: existing.Slug, EntityID: existing.ID}
 
-	// The AI's copy of a page never carries its GM-only parts back, so a
-	// whole-text replace would delete them or publish the AI's copy of them.
+	// The AI's copy of a page carries its GM-only passages back only when
+	// its export wrote them, and never its pictures or diagrams, so a
+	// whole-text replace could delete them or publish the AI's copy.
 	// Measured here, from the entity as it is now, so both update paths and
 	// a stale review screen get the same answer. Checked before any write,
 	// including the settings update below.
-	if gm := GMOnlyPartsOf(existing); gm.Any() && !dec.ReplaceGMOnlyConfirmed {
+	if gm := GMOnlyPartsAfter(existing, bodyHTML); gm.Any() && !dec.ReplaceGMOnlyConfirmed {
 		out.Status = StatusSkipped
 		out.Reason = gm.SkipReason()
 		return out
@@ -717,7 +718,7 @@ func (c *Committer) commitUpdateExplicit(
 	bodyHTML, err := MarkdownToHTML(page.Body, WithPageLinks(links))
 	if err != nil {
 		out.Status = StatusFailed
-		out.Reason = "Could not parse the page's markdown body — check the heading structure."
+		out.Reason = markdownFailReason(err)
 		return out
 	}
 	bodyJSON, err := htmlconv.Convert(bodyHTML)
@@ -808,7 +809,7 @@ func (c *Committer) commitEra(
 	if strings.TrimSpace(page.Body) != "" {
 		bodyHTML, err := MarkdownToHTML(page.Body, WithPageLinks(links))
 		if err != nil {
-			return fail("Could not parse the page's markdown body — check the heading structure.")
+			return fail(markdownFailReason(err))
 		}
 		bodyJSON, err := htmlconv.Convert(bodyHTML)
 		if err != nil {
