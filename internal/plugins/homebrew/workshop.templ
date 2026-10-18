@@ -1,0 +1,53 @@
+// workshop.templ: the Homebrew Workshop page, reached from the rulebook's
+// House rules in Director view. The page is a mount point; the
+// homebrew-workshop widget reads the catalog and recipes from this plugin's
+// API and draws the library, the canvas and the inspector.
+
+package homebrew
+
+import (
+	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// WorkshopPage renders the Workshop inside the App shell.
+templ WorkshopPage(cc *campaigns.CampaignContext, csrfToken string) {
+	@layouts.App("Homebrew workshop - " + cc.Campaign.Name) {
+		<link rel="stylesheet" href={ layouts.AssetURL("/static/plugins/homebrew/css/workshop.css") }/>
+		<div class="hbw-page">
+			<nav class="hbw-crumb" aria-label="Breadcrumb">
+				if sys, ok := layouts.GetEnabledSystem(ctx); ok {
+					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/systems/%s", cc.Campaign.ID, sys.Slug)) }>{ bookName(sys) }</a>
+				} else {
+					<a href={ templ.SafeURL("/campaigns/" + cc.Campaign.ID) }>{ cc.Campaign.Name }</a>
+				}
+				<span aria-hidden="true">·</span>
+				<span>House rules</span>
+				<span aria-hidden="true">·</span>
+				<b>Homebrew workshop</b>
+			</nav>
+			<div
+				class="hbw"
+				data-widget="homebrew-workshop"
+				data-endpoint={ fmt.Sprintf("/campaigns/%s/homebrew", cc.Campaign.ID) }
+				data-csrf={ csrfToken }
+			>
+				<p class="hbw-loading" role="status">Opening the workshop…</p>
+				<noscript>
+					<p>The workshop needs JavaScript.</p>
+				</noscript>
+			</div>
+		</div>
+	}
+}
+
+// bookName names the rulebook the way the sidebar does, by its system, so
+// the crumb leads back to where the Director came from.
+func bookName(sys layouts.EnabledSystem) string {
+	if sys.Name != "" {
+		return sys.Name
+	}
+	return "Rulebook"
+}

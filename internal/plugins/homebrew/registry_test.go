@@ -186,3 +186,35 @@ func TestRegistryEmptyCatalogIsNotNil(t *testing.T) {
 		t.Errorf("empty catalog JSON = %s", b)
 	}
 }
+
+func TestRegistryFields(t *testing.T) {
+	tests := []struct {
+		name    string
+		fields  []Field
+		wantErr bool
+	}{
+		{"none", nil, false},
+		{"whole and text", []Field{{Name: "by", Label: "By", Type: FieldWhole}, {Name: "note", Label: "Note", Type: FieldText}}, false},
+		{"camelCase name", []Field{{Name: "dayCount", Label: "Days", Type: FieldWhole}}, false},
+		{"repeated name", []Field{{Name: "by", Label: "By", Type: FieldWhole}, {Name: "by", Label: "Again", Type: FieldWhole}}, true},
+		{"bad name", []Field{{Name: "By", Label: "By", Type: FieldWhole}}, true},
+		{"no label", []Field{{Name: "by", Label: " ", Type: FieldWhole}}, true},
+		{"unknown type", []Field{{Name: "by", Label: "By", Type: "dice"}}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reg := NewRegistry()
+			errE := reg.RegisterEvent(EventDef{Name: "e", Fields: tt.fields, Check: okCheck})
+			errA := reg.RegisterAction(ActionDef{Name: "a", Fields: tt.fields, Check: okCheck})
+			if (errE != nil) != tt.wantErr || (errA != nil) != tt.wantErr {
+				t.Errorf("event err %v, action err %v, want error %v", errE, errA, tt.wantErr)
+			}
+			if !tt.wantErr {
+				c := reg.Catalog()
+				if len(c.Events[0].Fields) != len(tt.fields) || len(c.Actions[0].Fields) != len(tt.fields) {
+					t.Errorf("catalog lost the fields: %+v", c)
+				}
+			}
+		})
+	}
+}
