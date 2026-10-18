@@ -5866,8 +5866,10 @@ func (a *App) RegisterRoutes() {
 	if encounterAPI.svc != nil {
 		aiKinds = append(aiKinds, records.EncounterKind{Svc: aiEncountersAdapter{svc: encounterAPI.svc}, Entities: entityService})
 	}
+	aiNights := aiGameNightsAdapter{svc: sessionsService, members: campaignService}
 	aiKinds = append(aiKinds,
-		records.GameNightKind{Svc: aiGameNightsAdapter{svc: sessionsService, members: campaignService}},
+		records.GameNightKind{Svc: aiNights},
+		records.TagKind{Svc: tagService, Pages: entityService},
 	)
 	var aiPageMaps records.PageMapsAPI
 	if pageBlocksSvc != nil {
@@ -5886,6 +5888,9 @@ func (a *App) RegisterRoutes() {
 		Rels: relService, Notes: noteSvc, Rules: &aiHouseRules,
 		Entries:  aiSystemEntriesAdapter{choices: characterChoiceSvc},
 		Party:    &aiPartyAdapter{screen: dmScreenSvc, nights: sessionsService, members: campaignService},
+		Tags:     tagService,
+		Tiers:    campaignService,
+		Nights:   aiNights,
 		Kinds:    aiRegistry,
 		PageMaps: aiPageMaps,
 	}
