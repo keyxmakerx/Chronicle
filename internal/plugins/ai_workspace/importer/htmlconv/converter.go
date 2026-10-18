@@ -295,7 +295,7 @@ func convertInlineWithMark(s *goquery.Selection, tag string) []Node {
 	var out []Node
 	for _, n := range convertInline(s) {
 		// Nested passages stay one mark: a doubled mark is not a valid document.
-		if n.Type == "text" && !(mark.Type == "secret" && hasMark(n, "secret")) {
+		if n.Type == "text" && (mark.Type != "secret" || !hasMark(n, "secret")) {
 			n.Marks = append(n.Marks, mark)
 		}
 		// A picture or break carries no marks, so inside a passage it is

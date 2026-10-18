@@ -169,7 +169,6 @@ type fakeSketchMaps struct {
 	// Update-path state: the target's size and earlier sketch, and the calls
 	// made against it.
 	target  SketchTarget
-	layer   string
 	cleared []string
 	order   []string
 }

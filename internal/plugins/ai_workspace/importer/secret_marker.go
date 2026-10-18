@@ -59,9 +59,6 @@ func HasSecretMarkerText(s string) bool {
 // the visibility role, which already folds a co-DM grant into the owner tier.
 func secretWriter(v Viewer) bool { return v.Role >= int(campaigns.RoleOwner) }
 
-// hasSecretMarker is a cheap pre-check on markdown or HTML text.
-func hasSecretMarker(s string) bool { return strings.Contains(s, SecretOpen) }
-
 // blockTags end any open GM-only passage: the editor's secret is inline, so a
 // passage can never straddle a block boundary. An unclosed marker therefore
 // hides the rest of its block and no more (failing closed).
