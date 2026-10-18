@@ -154,7 +154,14 @@ func newTestService(repo *fakeRepo) Service {
 }
 
 // wantCode asserts err is an AppError carrying the HTTP status.
-func wantCode(t *testing.T, err error, code int) *apperror.AppError {
+// wantCode fails the test unless err is an AppError with code.
+func wantCode(t *testing.T, err error, code int) {
+	t.Helper()
+	_ = wantAppErr(t, err, code)
+}
+
+// wantAppErr is wantCode returning the error, for checks on its message.
+func wantAppErr(t *testing.T, err error, code int) *apperror.AppError {
 	t.Helper()
 	var ae *apperror.AppError
 	if !errors.As(err, &ae) {
@@ -278,7 +285,7 @@ func TestCleanRule(t *testing.T) {
 				}
 				return
 			}
-			ae := wantCode(t, err, http.StatusBadRequest)
+			ae := wantAppErr(t, err, http.StatusBadRequest)
 			if !strings.Contains(ae.Message, tc.wantMsg) {
 				t.Errorf("message %q does not contain %q", ae.Message, tc.wantMsg)
 			}
@@ -352,7 +359,7 @@ func TestSaveRuleLimitAndErrors(t *testing.T) {
 	})
 	t.Run("duplicate on create is conflict", func(t *testing.T) {
 		_, err := newTestService(&fakeRepo{dupRule: true}).SaveRule(ctx, camp, validRule(), director)
-		ae := wantCode(t, err, http.StatusConflict)
+		ae := wantAppErr(t, err, http.StatusConflict)
 		if !strings.Contains(ae.Message, "Rank") {
 			t.Errorf("message %q should name the rule", ae.Message)
 		}
@@ -442,7 +449,7 @@ func TestCleanWord(t *testing.T) {
 				}
 				return
 			}
-			ae := wantCode(t, err, http.StatusBadRequest)
+			ae := wantAppErr(t, err, http.StatusBadRequest)
 			if !strings.Contains(ae.Message, tc.wantMsg) {
 				t.Errorf("message %q does not contain %q", ae.Message, tc.wantMsg)
 			}
@@ -494,7 +501,7 @@ func TestSaveWord(t *testing.T) {
 	})
 	t.Run("duplicate create is conflict naming place", func(t *testing.T) {
 		_, err := newTestService(&fakeRepo{dupWord: true}).SaveWord(ctx, camp, in, director)
-		ae := wantCode(t, err, http.StatusConflict)
+		ae := wantAppErr(t, err, http.StatusConflict)
 		if !strings.Contains(ae.Message, "Townsville") {
 			t.Errorf("message %q should name the place", ae.Message)
 		}
@@ -502,7 +509,7 @@ func TestSaveWord(t *testing.T) {
 	t.Run("duplicate update is conflict naming era", func(t *testing.T) {
 		repo := &fakeRepo{dupWord: true, words: []LocalWord{{ID: 5}}}
 		_, err := newTestService(repo).SaveWord(ctx, camp, WordInput{ID: 5, Word: "c", Local: "m", EraID: 2}, director)
-		ae := wantCode(t, err, http.StatusConflict)
+		ae := wantAppErr(t, err, http.StatusConflict)
 		if !strings.Contains(ae.Message, "Age of Ash") {
 			t.Errorf("message %q should name the era", ae.Message)
 		}
