@@ -366,6 +366,8 @@
     // Same ids as the server's AppearancePageLooks, in that order. Annals is
     // the Material page look in the UI standard, so the owner sees that name.
     var PAGE_LOOKS = [['standard', 'Standard'], ['annals', 'Material']];
+    // Same ids as the server's AppearanceStyleKits, in that order.
+    var STYLE_KITS = [['material', 'Material'], ['sharp', 'Sharp'], ['ornate', 'Ornate'], ['flowing', 'Flowing'], ['lumen', 'Lumen'], ['sketchbook', 'Sketchbook']];
     var SEC_KEYS = {
       brand:['brand.name', 'brand.logo', 'brand.welcome', 'brand.backdrop'],
       header:['header.bg', 'header.height', 'header.solid', 'header.from', 'header.to', 'header.dir', 'header.image', 'header.scrim', 'header.widgets', 'header.links', 'header.text'],
@@ -375,7 +377,7 @@
       type:['type.body', 'type.heading', 'type.scale'],
       buttons:['buttons.style'],
       motion:['motion.elevation', 'motion.speed', 'motion.reduceAll'],
-      page:['page.look'],
+      page:['page.look', 'page.kit'],
       hover:['hover.look'],
       sheet:['sheet.style']
     };
@@ -436,7 +438,8 @@
       if (!d.sidebar.banner) d.sidebar.banner = 'none';
       if (!d.hover) d.hover = { look:'paper' };
       if (!d.sheet) d.sheet = { style:'modern' };
-      if (!d.page) d.page = { look:'' };
+      if (!d.page) d.page = { look:'', kit:'material' };
+      if (!d.page.kit) d.page.kit = 'material';
       d.header.links = (d.header.links || []).map(function(l){ return { label:l.label || '', url:l.url || '', icon:l.icon || '' }; });
       while (d.header.links.length < LINK_ROWS) d.header.links.push({ label:'', url:'', icon:'' });
       return d;
@@ -763,7 +766,9 @@
           '<span class="sw-t"><b>Reduce motion for everyone in this campaign</b>Things fade instead of moving, the header holds still and the menu highlight stays still.</span></label>'));
       if (id === 'page') return (
         fld('pg-look', 'Page look', 'Every page in the campaign', opts('pg-look', 'page.look', 'pg-look-l', PAGE_LOOKS) +
-          '<p class="hint">Material draws sections without boxes or borders: headings over a rule, rows on hairlines, and an edge only on fact panels and tools. Standard puts a bordered card around each section. Nothing moves on the page either way.</p>'));
+          '<p class="hint">Material draws sections without boxes or borders: headings over a rule, rows on hairlines, and an edge only on fact panels and tools. Standard puts a bordered card around each section. Nothing moves on the page either way.</p>') +
+        fld('pg-kit', 'Style kit', 'The character of pages drawn in Material', opts('pg-kit', 'page.kit', 'pg-kit-l', STYLE_KITS) +
+          '<p class="hint">A kit changes the header, dividers, boxes, faces and how rows answer the pointer, in light and dark mode. Sharp is a broadsheet, Ornate a bound volume, Flowing watercolour, Lumen soft light and Sketchbook pen on paper. Your campaign colour and any fonts you picked still win. Kits only dress pages in the Material look; save and open any page to see yours.</p>'));
       if (id === 'hover') return (
         fld('h-look', 'Look', 'Every hover card in the campaign', '<div class="tiles two" role="radiogroup" aria-labelledby="h-look-l">' + tilesHover() + '</div>' +
           '<p class="hint">Point at a linked page or a rule word anywhere in the campaign to see it. What a card shows comes from each page’s own settings.</p>'));

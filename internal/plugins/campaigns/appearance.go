@@ -41,6 +41,7 @@ type Appearance struct {
 	HoverCard       string `json:"hover_card,omitempty"`       // Hover card look: "paper" (default), "plain", "night" or "compact".
 	SheetStyle      string `json:"sheet_style,omitempty"`      // Character sheet style (AppearanceSheetStyles); "modern" is the default.
 	PageLook        string `json:"page_look,omitempty"`        // How pages draw their blocks (AppearancePageLooks); "standard" is the default.
+	StyleKit        string `json:"style_kit,omitempty"`        // The pages' character under the Material page look (AppearanceStyleKits); "material" is the default.
 }
 
 // The allowed values of each Appearance choice. The first entry is the
@@ -71,6 +72,9 @@ var (
 	// AppearancePageLooks restyle every block on a page through the shared
 	// block parts without moving anything; page_look_annals.css draws Annals.
 	AppearancePageLooks = []string{"standard", "annals"}
+	// AppearanceStyleKits are the signed style kits style_kits.css draws
+	// (ui-standard.md, "Style kits"); "material" is the base and adds nothing.
+	AppearanceStyleKits = []string{"material", "sharp", "ornate", "flowing", "lumen", "sketchbook"}
 )
 
 // Text limits the Customize page shows. Brand name and welcome keep their
@@ -120,6 +124,7 @@ type AppearanceInput struct {
 	} `json:"sheet"`
 	Page struct {
 		Look string `json:"look"`
+		Kit  string `json:"kit"`
 	} `json:"page"`
 }
 
@@ -214,6 +219,19 @@ func pageLookChoice(v string, prev *Appearance) (string, error) {
 		}
 	}
 	return "", apperror.NewBadRequest("invalid page look")
+}
+
+// styleKitChoice is the style kit a save stores: Material as unset, like the
+// other defaults, but a save that sends no kit keeps the stored one, so an
+// editor that predates kits can't quietly drop the owner's choice.
+func styleKitChoice(v string, prev *Appearance) (string, error) {
+	if v == "" {
+		if prev != nil {
+			return prev.StyleKit, nil
+		}
+		return "", nil
+	}
+	return oneOf("style kit", v, AppearanceStyleKits)
 }
 
 // calmColour validates an optional #RRGGBB and tones it down the way the
@@ -419,6 +437,9 @@ func applyAppearance(s *CampaignSettings, in AppearanceInput) (*string, error) {
 		}
 	}
 	if a.PageLook, err = pageLookChoice(in.Page.Look, s.Appearance); err != nil {
+		return fail(err)
+	}
+	if a.StyleKit, err = styleKitChoice(in.Page.Kit, s.Appearance); err != nil {
 		return fail(err)
 	}
 	a.ReduceMotion = in.Motion.ReduceAll
