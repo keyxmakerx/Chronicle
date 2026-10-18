@@ -27,6 +27,15 @@ func (f *fakeSightingRepo) DeleteSighting(_ context.Context, sessionID, date, en
 func (f *fakeSightingRepo) ListSightingsForEntity(context.Context, string, string) ([]SightingRow, error) {
 	return f.rows, nil
 }
+func (f *fakeSightingRepo) ListSightingsForNight(_ context.Context, sessionID, date string) (map[string]string, error) {
+	out := map[string]string{}
+	for _, r := range f.rows {
+		if r.SessionID == sessionID && r.OccurrenceDate == date {
+			out[r.EntityID] = r.State
+		}
+	}
+	return out, nil
+}
 func (f *fakeSightingRepo) ListLinksForEntity(context.Context, string, string) ([]SightingLink, error) {
 	return f.links, nil
 }

@@ -65,6 +65,11 @@ func TestDB_Sightings(t *testing.T) {
 		t.Errorf("rows = %v, want %v", got, want)
 	}
 
+	night, err := repo.ListSightingsForNight(ctx, weekly, "2026-10-10")
+	if err != nil || len(night) != 1 || night[entityID] != SightingSeen {
+		t.Errorf("night 2026-10-10 = %v, %v; want the one seen answer", night, err)
+	}
+
 	if err := repo.DeleteSighting(ctx, weekly, "2026-10-17", entityID); err != nil {
 		t.Fatalf("delete: %v", err)
 	}

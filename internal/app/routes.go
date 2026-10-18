@@ -4101,6 +4101,12 @@ func (a *App) RegisterRoutes() {
 	notePages := &notesPagesAdapter{svc: entityService}
 	noteHandler.SetPageNamer(notePages)
 	noteHandler.SetPageLinker(notePages)
+	// Each game night gives every member a Journal entry; the night's page
+	// reads the ones the DM can read for the check-in.
+	nightEntries := sessions.NewNightEntryService(sessionsRepo, sessions.NewNightEntryRepository(a.DB),
+		&nightJournalAdapter{svc: noteSvc}, notePages, sessions.NewSightingRepository(a.DB))
+	sessionsHandler.SetNightEntryService(nightEntries)
+	noteSvc.SetNightEntries(&journalNightsAdapter{svc: nightEntries, addons: addonService})
 	notes.RegisterRoutes(e, noteHandler, campaignService, authService)
 	// A player can allow the Foundry notebook to use their notes. Grants go
 	// only to an address that may already call Chronicle across sites.
@@ -5683,6 +5689,123 @@ func (a *journalCharacterAdapter) ClaimedCharacters(ctx context.Context, campaig
 	out := make([]notes.ClaimedCharacter, 0, len(owned))
 	for _, e := range owned {
 		out = append(out, notes.ClaimedCharacter{ID: e.ID, Name: e.Name, TypeName: e.TypeName})
+	}
+	return out, nil
+}
+
+// nightJournalAdapter adapts the notes widget to sessions.NightJournal. A
+// member's game-night entries go in a "Game nights" folder of their own,
+// made with the first entry; its id is fixed per member, so a renamed or
+// moved folder keeps receiving them.
+type nightJournalAdapter struct {
+	svc notes.NoteService
+}
+
+// nightFolderNamespace seeds each member's Game nights folder id.
+var nightFolderNamespace = uuid.MustParse("5e0c1f4a-2b7d-4c39-9a61-3f8e2d7b4c10")
+
+// nightFolderTitle is the folder's name when it is made.
+const nightFolderTitle = "Game nights"
+
+func (a *nightJournalAdapter) CreateEntry(ctx context.Context, campaignID string, v permissions.Viewer, id, title string) error {
+	if done, err := a.exists(ctx, id); done || err != nil {
+		return err
+	}
+	folder, err := a.folder(ctx, campaignID, v)
+	if err != nil {
+		return err
+	}
+	if _, err := a.svc.Create(ctx, campaignID, v, notes.CreateNoteRequest{ID: id, Title: title, ParentID: &folder}); err != nil {
+		// Another load made it a moment ago (duplicate key).
+		if done, _ := a.exists(ctx, id); done {
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
+// folder returns the member's Game nights folder, making it when missing.
+func (a *nightJournalAdapter) folder(ctx context.Context, campaignID string, v permissions.Viewer) (string, error) {
+	id := uuid.NewSHA1(nightFolderNamespace, []byte(campaignID+"\x00"+v.UserID())).String()
+	if done, err := a.exists(ctx, id); done || err != nil {
+		return id, err
+	}
+	if _, err := a.svc.Create(ctx, campaignID, v, notes.CreateNoteRequest{ID: id, Title: nightFolderTitle, IsFolder: true}); err != nil {
+		if done, _ := a.exists(ctx, id); done {
+			return id, nil
+		}
+		return "", err
+	}
+	return id, nil
+}
+
+func (a *nightJournalAdapter) exists(ctx context.Context, id string) (bool, error) {
+	n, err := a.svc.GetByID(ctx, id)
+	if err != nil {
+		if isNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return n != nil, nil
+}
+
+func (a *nightJournalAdapter) ReadableEntries(ctx context.Context, campaignID string, v permissions.Viewer, ids []string) ([]sessions.NightNote, error) {
+	out := make([]sessions.NightNote, 0, len(ids))
+	for _, id := range ids {
+		n, err := a.svc.GetByID(ctx, id)
+		if err != nil {
+			if isNotFound(err) {
+				continue // deleted by its writer
+			}
+			return nil, err
+		}
+		// The same predicate the notes routes apply before showing a note.
+		if n == nil || n.IsFolder || n.EntityID != nil || !n.CanView(v, campaignID) {
+			continue
+		}
+		body := ""
+		if n.EntryHTML != nil {
+			body = *n.EntryHTML
+		}
+		nn := sessions.NightNote{ID: n.ID, Title: n.Title, AuthorID: n.UserID, UpdatedAt: n.UpdatedAt, Audience: string(n.Visibility)}
+		for _, l := range notes.ParseLinks(body) {
+			if l.Kind == notes.LinkPage {
+				nn.PageIDs = append(nn.PageIDs, l.ID)
+			}
+		}
+		if len(nn.PageIDs) > 0 {
+			nn.Lines = notes.MentionLines(body)
+		}
+		out = append(out, nn)
+	}
+	return out, nil
+}
+
+// journalNightsAdapter adapts the sessions plugin to notes.NightEntries.
+// Entries are made only in campaigns with Game nights turned on.
+type journalNightsAdapter struct {
+	svc    sessions.NightEntryService
+	addons addons.AddonService
+}
+
+func (a *journalNightsAdapter) EnsureEntries(ctx context.Context, campaignID string, v permissions.Viewer) error {
+	on, err := a.addons.IsEnabledForCampaign(ctx, campaignID, sessions.SessionsAddonSlug)
+	if err != nil || !on {
+		return err
+	}
+	return a.svc.EnsureEntries(ctx, campaignID, v, time.Now())
+}
+
+func (a *journalNightsAdapter) Nights(ctx context.Context, campaignID string, noteIDs []string) (map[string]notes.NightTag, error) {
+	tags, err := a.svc.Tags(ctx, campaignID, noteIDs, time.Now())
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]notes.NightTag, len(tags))
+	for id, t := range tags {
+		out[id] = notes.NightTag{SessionID: t.SessionID, Date: t.Date, Name: t.Name, Time: t.Time, Started: t.Started}
 	}
 	return out, nil
 }

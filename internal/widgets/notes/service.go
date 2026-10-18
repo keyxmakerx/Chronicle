@@ -143,6 +143,7 @@ type noteService struct {
 	repo    NoteRepository
 	attRepo AttachmentRepository
 	events  NoteEventPublisher
+	nights  NightEntries
 }
 
 // NewNoteService creates a new note service.
