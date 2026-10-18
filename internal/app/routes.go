@@ -5784,8 +5784,10 @@ func (a *App) RegisterRoutes() {
 			{Name: "page_map", Scripts: []string{"js/page_map.js"}},
 		},
 	})
+	// Kept for the AI page's page-map kind; nil while the plugin is degraded.
+	var pageBlocksSvc pageblocks.Service
 	if a.PluginHealth.IsHealthy(pageblocks.PluginSlug) {
-		pageBlocksSvc := pageblocks.NewService(pageblocks.NewRepository(a.DB),
+		pageBlocksSvc = pageblocks.NewService(pageblocks.NewRepository(a.DB),
 			&pageBlocksEntityAdapter{svc: entityService, cards: entities.NewPageCards(a.DB)})
 		pageblocks.RegisterRoutes(e, pageblocks.NewHandler(pageBlocksSvc), campaignService, authService)
 	} else {
@@ -5860,6 +5862,13 @@ func (a *App) RegisterRoutes() {
 	}
 	aiKinds = append(aiKinds,
 		records.GameNightKind{Svc: aiGameNightsAdapter{svc: sessionsService, members: campaignService}},
+	)
+	var aiPageMaps records.PageMapsAPI
+	if pageBlocksSvc != nil {
+		aiPageMaps = aiPageMapsAdapter{svc: pageBlocksSvc}
+		aiKinds = append(aiKinds, records.PageMapKind{Svc: aiPageMaps, Entities: entityService})
+	}
+	aiKinds = append(aiKinds,
 		records.GeneratorKind{Cal: calendarService, Tables: aiTables, Weather: calendarService},
 	)
 	aiRegistry := records.NewRegistry(aiKinds...)
@@ -5869,9 +5878,10 @@ func (a *App) RegisterRoutes() {
 	aiLookups := &records.Lookups{
 		Cal: calendarService, Weather: calendarService, Maps: aiMapsAdapter{mapsService}, Pages: entityService,
 		Rels: relService, Notes: noteSvc, Rules: &aiHouseRules,
-		Entries: aiSystemEntriesAdapter{choices: characterChoiceSvc},
-		Party:   &aiPartyAdapter{screen: dmScreenSvc, nights: sessionsService, members: campaignService},
-		Kinds:   aiRegistry,
+		Entries:  aiSystemEntriesAdapter{choices: characterChoiceSvc},
+		Party:    &aiPartyAdapter{screen: dmScreenSvc, nights: sessionsService, members: campaignService},
+		Kinds:    aiRegistry,
+		PageMaps: aiPageMaps,
 	}
 	if a.PluginHealth.IsHealthy(rolltables.PluginSlug) {
 		aiLookups.Tables = aiTables.Svc
