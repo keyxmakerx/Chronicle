@@ -40,9 +40,11 @@ func (s *service) loadPageMap(ctx context.Context, campaignID, entityID, blockID
 // pageMapForViewer returns d as v may see it: DM-only markers removed for a
 // viewer below Owner visibility, and a link to a page v cannot open removed
 // (the marker stays, as a note), with the linked page's name and path added to
-// the links that remain. hidden reports that something was removed, which is
-// what makes the map read-only for v. It copies; the stored document is never
-// altered.
+// the links that remain. hidden reports that something v may not see was
+// removed, which is what makes the map read-only for v. A link to a page that
+// no longer exists is dropped too but does not count as hidden: nobody can
+// see it, so a save that loses it takes nothing from anyone. It copies; the
+// stored document is never altered.
 func (s *service) pageMapForViewer(ctx context.Context, campaignID string, d mapsketch.Doc, v Viewer) (out mapsketch.Doc, hidden bool, err error) {
 	out = d
 	out.Pins = make([]mapsketch.Pin, 0, len(d.Pins))
@@ -61,6 +63,10 @@ func (s *service) pageMapForViewer(ctx context.Context, campaignID string, d map
 	if err != nil {
 		return mapsketch.Doc{}, false, apperrorInternal(err)
 	}
+	unseen, err := s.unseenLivePages(ctx, campaignID, ids, links)
+	if err != nil {
+		return mapsketch.Doc{}, false, err
+	}
 	for i := range out.Pins {
 		p := &out.Pins[i]
 		if p.EntityID == "" {
@@ -68,13 +74,35 @@ func (s *service) pageMapForViewer(ctx context.Context, campaignID string, d map
 		}
 		l, ok := links[p.EntityID]
 		if !ok {
+			if unseen[p.EntityID] {
+				hidden = true
+			}
 			p.EntityID = ""
-			hidden = true
 			continue
 		}
 		p.EntityName, p.EntityURL = l.Name, l.URL
 	}
 	return out, hidden, nil
+}
+
+// unseenLivePages returns the ids among ids that still exist but are missing
+// from links, the pages the viewer may open. It asks only when something is
+// missing.
+func (s *service) unseenLivePages(ctx context.Context, campaignID string, ids []string, links map[string]PageLink) (map[string]bool, error) {
+	var missing []string
+	for _, id := range ids {
+		if _, ok := links[id]; !ok {
+			missing = append(missing, id)
+		}
+	}
+	if len(missing) == 0 {
+		return nil, nil
+	}
+	live, err := s.entities.Live(ctx, campaignID, missing)
+	if err != nil {
+		return nil, apperrorInternal(err)
+	}
+	return live, nil
 }
 
 // checkPageMapWrite enforces, for a save by v, that v neither erases nor
@@ -96,13 +124,18 @@ func (s *service) checkPageMapWrite(ctx context.Context, campaignID string, v Vi
 		}
 	}
 	// A save from someone who cannot see a stored link would drop it, since
-	// they never received it.
+	// they never received it. A link to a page that is gone is nobody's to
+	// lose.
 	if ids := pinEntityIDs(prev); len(ids) > 0 {
 		links, err := s.entities.FilterViewable(ctx, campaignID, ids, v)
 		if err != nil {
 			return apperrorInternal(err)
 		}
-		if len(links) < len(ids) {
+		unseen, err := s.unseenLivePages(ctx, campaignID, ids, links)
+		if err != nil {
+			return err
+		}
+		if len(unseen) > 0 {
 			return errForbidden("this map links to pages you can't open, so you can't edit it")
 		}
 	}
@@ -175,18 +208,45 @@ func (s *service) EditorSketchText(ctx context.Context, campaignID, entityID, bl
 	return sketchText(fd), st.Version, nil
 }
 
-// resolvePages turns each marker's page name into a link the viewer may open.
-// A name that matches nothing, or only a page v cannot see, is reported the
-// same way and the marker keeps its note.
-func (s *service) resolvePages(ctx context.Context, campaignID string, v Viewer, d *mapsketch.Doc) ([]string, error) {
+// knownPages maps each page name the current map (as v sees it) links to, by
+// NameKey, to that link. Text written from the map names its links, so reading
+// it back finds the same pages, even when two pages share a name or a name
+// makes no usable slug. A name the map links to two different pages is left
+// out, and falls back to the lookup by name.
+func knownPages(cur mapsketch.Doc) map[string]*PageLink {
+	known := map[string]*PageLink{}
+	clash := map[string]bool{}
+	for _, p := range cur.Pins {
+		if p.EntityID == "" || p.EntityName == "" {
+			continue
+		}
+		k := mapsketch.NameKey(p.EntityName)
+		if l, ok := known[k]; ok && l.ID != p.EntityID {
+			clash[k] = true
+			continue
+		}
+		known[k] = &PageLink{ID: p.EntityID, Name: p.EntityName, URL: p.EntityURL}
+	}
+	for k := range clash {
+		delete(known, k)
+	}
+	return known
+}
+
+// resolvePages turns each marker's page name into a link the viewer may open:
+// first a page the current map already links to by that name, then a lookup
+// by name. A name that matches nothing, or only a page v cannot see, is
+// reported the same way and the marker keeps its note.
+func (s *service) resolvePages(ctx context.Context, campaignID string, v Viewer, cur mapsketch.Doc, d *mapsketch.Doc) ([]string, error) {
 	warnings := []string{}
-	cache := map[string]*PageLink{}
+	cache := knownPages(cur)
 	for i := range d.Pins {
 		p := &d.Pins[i]
 		if p.Page == "" {
 			continue
 		}
-		link, done := cache[p.Page]
+		key := mapsketch.NameKey(p.Page)
+		link, done := cache[key]
 		if !done {
 			l, ok, err := s.entities.FindByName(ctx, campaignID, p.Page, v)
 			if err != nil {
@@ -195,7 +255,7 @@ func (s *service) resolvePages(ctx context.Context, campaignID string, v Viewer,
 			if ok {
 				link = &l
 			}
-			cache[p.Page] = link
+			cache[key] = link
 		}
 		if link == nil {
 			who := "the marker"
@@ -210,10 +270,15 @@ func (s *service) resolvePages(ctx context.Context, campaignID string, v Viewer,
 	return warnings, nil
 }
 
-// parseSketch reads text and resolves its names, for an editor.
-func (s *service) parseSketch(ctx context.Context, campaignID string, v Viewer, text string) (mapsketch.Result, []string, error) {
+// parseSketch reads text and resolves its names, for an editor, against the
+// stored map cur.
+func (s *service) parseSketch(ctx context.Context, campaignID string, v Viewer, cur mapsketch.Doc, text string) (mapsketch.Result, []string, error) {
 	res := mapsketch.Parse(normalizeNewlines(text))
-	warnings, err := s.resolvePages(ctx, campaignID, v, &res.Doc)
+	seen, _, err := s.pageMapForViewer(ctx, campaignID, cur, v)
+	if err != nil {
+		return mapsketch.Result{}, nil, err
+	}
+	warnings, err := s.resolvePages(ctx, campaignID, v, seen, &res.Doc)
 	if err != nil {
 		return mapsketch.Result{}, nil, err
 	}
@@ -231,10 +296,11 @@ func (s *service) PreviewSketch(ctx context.Context, campaignID, entityID, block
 	if !a.CanEdit {
 		return nil, errForbidden("you can't edit this page")
 	}
-	if _, _, _, err := s.loadPageMap(ctx, campaignID, entityID, blockID); err != nil {
+	cur, _, _, err := s.loadPageMap(ctx, campaignID, entityID, blockID)
+	if err != nil {
 		return nil, err
 	}
-	res, warnings, err := s.parseSketch(ctx, campaignID, v, text)
+	res, warnings, err := s.parseSketch(ctx, campaignID, v, cur, text)
 	if err != nil {
 		return nil, err
 	}
@@ -265,18 +331,22 @@ func (s *service) SavePageMapText(ctx context.Context, campaignID, entityID, blo
 	if !a.CanEdit {
 		return mapsketch.Result{}, errForbidden("you can't edit this page")
 	}
-	_, st, found, err := s.loadPageMap(ctx, campaignID, entityID, blockID)
+	cur, st, found, err := s.loadPageMap(ctx, campaignID, entityID, blockID)
 	if err != nil {
 		return mapsketch.Result{}, err
 	}
-	res, warnings, err := s.parseSketch(ctx, campaignID, v, text)
+	res, warnings, err := s.parseSketch(ctx, campaignID, v, cur, text)
 	if err != nil {
 		return mapsketch.Result{}, err
 	}
-	// A replacement that read as nothing but problems would wipe the map for
-	// text that was probably meant as something else.
-	if res.Shapes+res.Markers == 0 && len(res.Problems) > 0 {
-		return mapsketch.Result{}, errInvalid("nothing on the map could be read. " + res.Problems[0])
+	// A replacement with nothing on it would wipe the map, and text that
+	// draws nothing was probably meant as something else. Clearing a map is
+	// the editor's job, where it can be undone.
+	if res.Shapes+res.Markers == 0 {
+		if len(res.Problems) > 0 {
+			return mapsketch.Result{}, errInvalid("nothing on the map could be read. " + res.Problems[0])
+		}
+		return mapsketch.Result{}, errInvalid("the text draws nothing, so the map was left as it is")
 	}
 	clean, err := checkPageMap(res.Doc)
 	if err != nil {

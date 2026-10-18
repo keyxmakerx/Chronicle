@@ -142,7 +142,9 @@ func TestParse_Problems(t *testing.T) {
 		{"amber brown", `pin 1,1 color #8b6a2b`, "Line 1: color #8b6a2b is too close to amber"},
 		{"long name", `room "` + long + `" 1,1 to 2,2`, "Line 1: the name is longer than 80"},
 		{"long note", `pin 1,1: ` + strings.Repeat("n", MaxNote+1), "Line 1: the note is longer than 500"},
-		{"long page", `pin 1,1 page "` + long + `"`, "Line 1: the page name is longer than 80"},
+		{"long page", `pin 1,1 page "` + strings.Repeat("p", MaxPageName+1) + `"`, "Line 1: the page name is longer than 200"},
+		{"gold", `pin 1,1 color #ffd700`, "Line 1: color #ffd700 is too close to amber"},
+		{"orange edge of amber", `pin 1,1 color #ff7000`, "Line 1: color #ff7000 is too close to amber"},
 		{"too many points", `path ` + strings.Repeat("1,1 ", MaxPoints+1), "Line 1: a line holds at most 100 points."},
 	}
 	for _, tt := range tests {
@@ -155,8 +157,8 @@ func TestParse_Problems(t *testing.T) {
 	}
 }
 
-func TestParse_PaleHueAndGreyAreAllowed(t *testing.T) {
-	for _, c := range []string{"#a09080", "#808080", "#fff3e0", "#3366cc"} {
+func TestParse_MutedHueAndGreyAreAllowed(t *testing.T) {
+	for _, c := range []string{"#a09080", "#808080", "#3366cc"} {
 		if r := Parse("room 1,1 to 2,2 color " + c); len(r.Problems) != 0 {
 			t.Errorf("%s refused: %q", c, r.Problems)
 		}
@@ -258,5 +260,26 @@ func TestNormalizeColor(t *testing.T) {
 	}
 	if n, p := NormalizeColor(""); n != "" || p == "" {
 		t.Errorf("empty colour should be refused by NormalizeColor, got %q %q", n, p)
+	}
+}
+
+func TestNormalizeColorAmberBand(t *testing.T) {
+	tests := []struct {
+		hex     string
+		refused bool
+	}{
+		{"#d97706", true},
+		{"#ffd700", true},
+		{"#ff7000", true},
+		{"#b39a5c", false}, // muted tan, saturation under 45%
+		{"#5c4a1f", false}, // dark, lightness under 30%
+		{"#fdf6e3", true},  // pale cream is still bright amber in HSL
+		{"#3366cc", false},
+	}
+	for _, tt := range tests {
+		_, problem := NormalizeColor(tt.hex)
+		if (problem != "") != tt.refused {
+			t.Errorf("NormalizeColor(%s) problem = %q, want refused=%v", tt.hex, problem, tt.refused)
+		}
 	}
 }

@@ -10,6 +10,11 @@ import (
 )
 
 func pageMapEnv() (Service, *fakeRepo) {
+	svc, repo, _ := pageMapEnvEnts()
+	return svc, repo
+}
+
+func pageMapEnvEnts() (Service, *fakeRepo, *fakeEntities) {
 	ents := &fakeEntities{pages: map[string]fakePage{
 		page:     {campaign: camp, editable: true, mapBlock: "blk-adv-map"},
 		"locked": {campaign: camp, editable: false},
@@ -18,7 +23,7 @@ func pageMapEnv() (Service, *fakeRepo) {
 		"far":    {campaign: other, name: "Faraway", editable: true},
 	}}
 	repo := newFakeRepo()
-	return NewService(repo, ents), repo
+	return NewService(repo, ents), repo, ents
 }
 
 func putMap(svc Service, v Viewer, doc string, version int) (*View, error) {
@@ -342,9 +347,12 @@ func TestSavePageMapText_Rules(t *testing.T) {
 		if repo.saves != saves {
 			t.Error("wrote")
 		}
-		// Empty text, on the other hand, clears the map on purpose.
-		if res, err := svc.SavePageMapText(ctx, camp, page, blk, dm, ""); err != nil || res.Shapes != 0 {
-			t.Fatalf("res %+v err %v", res, err)
+		// Empty text is refused too: clearing a map is the editor's job.
+		if _, err := svc.SavePageMapText(ctx, camp, page, blk, dm, ""); code(err) != 422 {
+			t.Fatalf("empty: code = %d", code(err))
+		}
+		if repo.saves != saves {
+			t.Error("empty text wrote")
 		}
 	})
 	t.Run("another kind in the block is refused", func(t *testing.T) {
@@ -412,5 +420,77 @@ func TestFirstPageMapBlock(t *testing.T) {
 	}
 	if _, ok, _ := svc.FirstPageMapBlock(ctx, other, page); ok {
 		t.Error("foreign campaign must find nothing")
+	}
+}
+
+// A link to a page that was deleted or trashed is nobody's to lose, so it
+// neither locks the map nor counts as hidden.
+func TestPageMap_LinkToGonePage(t *testing.T) {
+	ctx := context.Background()
+	doc := `{"grid":{"w":40,"h":26},"shapes":[],"pins":[{"id":"p1","x":2,"y":2,"style":"number","entityId":"keep"},{"id":"p2","x":3,"y":3,"style":"number","entityId":"vault"}]}`
+	for _, tt := range []struct {
+		name     string
+		v        Viewer
+		gone     []string
+		wantEdit bool
+	}{
+		{"owner, linked page deleted", dm, []string{"keep"}, true},
+		{"scribe, every unseen link deleted", scribe, []string{"vault"}, true},
+		{"scribe, a live hidden link remains", scribe, []string{"keep"}, false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, _, ents := pageMapEnvEnts()
+			if _, err := putMap(svc, dm, doc, 0); err != nil {
+				t.Fatal(err)
+			}
+			for _, id := range tt.gone {
+				delete(ents.pages, id)
+			}
+			if got := viewMap(t, svc, tt.v).CanEdit; got != tt.wantEdit {
+				t.Fatalf("canEdit = %v, want %v", got, tt.wantEdit)
+			}
+			_, err := putMap(svc, tt.v, `{"grid":{"w":40,"h":26},"shapes":[],"pins":[]}`, 1)
+			if tt.wantEdit && err != nil {
+				t.Fatalf("put: %v", err)
+			}
+			if !tt.wantEdit && code(err) != 403 {
+				t.Fatalf("put code = %d, want 403", code(err))
+			}
+			_, _, err = svc.EditorSketchText(ctx, camp, page, blk, tt.v)
+			if tt.wantEdit == (err != nil) {
+				t.Fatalf("sketch text err = %v", err)
+			}
+		})
+	}
+}
+
+// Text written from a map reads back to the same links, even when two pages
+// share a name or a name makes no Latin slug.
+func TestPageMap_TextRoundTripKeepsLinks(t *testing.T) {
+	ctx := context.Background()
+	svc, _, ents := pageMapEnvEnts()
+	ents.pages["gate-a"] = fakePage{campaign: camp, name: "The Gate", editable: true}
+	ents.pages["gate-b"] = fakePage{campaign: camp, name: "The Gate", editable: true}
+	ents.pages["kyiv"] = fakePage{campaign: camp, name: "Київ \"Old\" Town", editable: true}
+	doc := `{"grid":{"w":40,"h":26},"shapes":[],"pins":[{"id":"p1","x":2,"y":2,"style":"number","entityId":"gate-b"},{"id":"p2","x":3,"y":3,"style":"number","entityId":"kyiv"}]}`
+	if _, err := putMap(svc, dm, doc, 0); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 20; i++ {
+		text, _, err := svc.EditorSketchText(ctx, camp, page, blk, dm)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res, err := svc.SavePageMapText(ctx, camp, page, blk, dm, text)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(res.Problems) != 0 {
+			t.Fatalf("problems %q for text %q", res.Problems, text)
+		}
+		got := mapOf(t, viewMap(t, svc, dm))
+		if len(got.Pins) != 2 || got.Pins[0].EntityID != "gate-b" || got.Pins[1].EntityID != "kyiv" {
+			t.Fatalf("round %d: pins = %+v from %q", i, got.Pins, text)
+		}
 	}
 }

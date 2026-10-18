@@ -15,6 +15,11 @@ type EntityDirectory interface {
 	// that v may see, keyed by id. A missing, foreign or hidden id is simply
 	// absent, so the two cases cannot be told apart.
 	FilterViewable(ctx context.Context, campaignID string, ids []string, v Viewer) (map[string]PageLink, error)
+	// Live returns which of ids are pages of campaignID that still exist (not
+	// deleted or in the Trash), whoever is asking. It is how a link to a page
+	// that is gone is told apart from one the viewer may not open; the answer
+	// never reaches a viewer.
+	Live(ctx context.Context, campaignID string, ids []string) (map[string]bool, error)
 	// FindByName finds a page by the name it is written with, among the pages
 	// v may see. ok is false for an unknown name and for a hidden page alike.
 	FindByName(ctx context.Context, campaignID, name string, v Viewer) (link PageLink, ok bool, err error)

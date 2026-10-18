@@ -17,6 +17,9 @@ const (
 	MaxPins   = 200
 	MaxName   = 80
 	MaxNote   = 500
+	// MaxPageName matches the longest name a page may have, so any page can
+	// be linked by name.
+	MaxPageName = 200
 	// MaxPoints bounds one polyline; a circle wall uses circleSegments+1.
 	MaxPoints = 100
 
@@ -313,8 +316,8 @@ func checkPageEntry(e *Entry) string {
 	if len([]rune(e.Name)) > MaxName {
 		return fmt.Sprintf("the name is longer than %d characters.", MaxName)
 	}
-	if len([]rune(e.Page)) > MaxName {
-		return fmt.Sprintf("the page name is longer than %d characters.", MaxName)
+	if len([]rune(e.Page)) > MaxPageName {
+		return fmt.Sprintf("the page name is longer than %d characters.", MaxPageName)
 	}
 	if len([]rune(e.Note)) > MaxNote {
 		return fmt.Sprintf("the note is longer than %d characters.", MaxNote)
@@ -410,8 +413,18 @@ func oneLine(s string) string {
 }
 
 func quoted(s string) string {
-	s = strings.NewReplacer(`"`, "'", "“", "'", "”", "'").Replace(oneLine(s))
-	return `"` + s + `"`
+	return `"` + quoteSafe(s) + `"`
+}
+
+func quoteSafe(s string) string {
+	return strings.NewReplacer(`"`, "'", "“", "'", "”", "'").Replace(oneLine(s))
+}
+
+// NameKey is the form two names are compared in: what Format would write,
+// trimmed and in lower case, so a name read back from Format's text matches
+// the name it was written from.
+func NameKey(s string) string {
+	return strings.ToLower(strings.TrimSpace(quoteSafe(s)))
 }
 
 func pt(x, y float64) string { return fmtNum(round2(x)) + "," + fmtNum(round2(y)) }

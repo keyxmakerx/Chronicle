@@ -44,6 +44,16 @@ func (f *fakeEntities) FilterViewable(_ context.Context, campaignID string, ids 
 	return out, nil
 }
 
+func (f *fakeEntities) Live(_ context.Context, campaignID string, ids []string) (map[string]bool, error) {
+	out := map[string]bool{}
+	for _, id := range ids {
+		if p, ok := f.pages[id]; ok && p.campaign == campaignID {
+			out[id] = true
+		}
+	}
+	return out, nil
+}
+
 func (f *fakeEntities) FindByName(_ context.Context, campaignID, name string, v Viewer) (PageLink, bool, error) {
 	for id, p := range f.pages {
 		if p.name == name && f.visible(p, campaignID, v) {

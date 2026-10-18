@@ -58,21 +58,21 @@
   }
 
   function isHex(c) { return /^#[0-9a-f]{6}$/i.test(str(c)); }
-  // amberish mirrors the server's refusal of a saturated colour in the
-  // amber hue band: amber is the Director's mark, so a marker that wore it
+  // amberish mirrors the server's refusal of a bright colour in the amber
+  // band (hue 22 to 58, HSL saturation over 45%, lightness over 30%): amber is the Director's mark, so a marker that wore it
   // would read as hidden from players.
   function amberish(hex) {
     if (!isHex(hex)) return false;
     var r = parseInt(hex.slice(1, 3), 16) / 255, g = parseInt(hex.slice(3, 5), 16) / 255, b = parseInt(hex.slice(5, 7), 16) / 255;
     var mx = Math.max(r, g, b), mn = Math.min(r, g, b);
     if (mx === 0 || mx === mn) return false;
-    var sat = (mx - mn) / mx, hue;
+    var l = (mx + mn) / 2, sat = (mx - mn) / (1 - Math.abs(2 * l - 1)), hue;
     if (mx === r) hue = ((g - b) / (mx - mn)) % 6;
     else if (mx === g) hue = (b - r) / (mx - mn) + 2;
     else hue = (r - g) / (mx - mn) + 4;
     hue *= 60;
     if (hue < 0) hue += 360;
-    return hue >= 30 && hue <= 50 && sat >= 0.35 && mx >= 0.25;
+    return hue >= 22 && hue <= 58 && sat > 0.45 && l > 0.30;
   }
   // validColor keeps the three kinds a colour may be: "" (the theme's own),
   // one of the eight names, or #rrggbb outside amber. Anything else falls
@@ -349,6 +349,7 @@
     S.version = v.version || 0;
     S.canEdit = !!v.canEdit;
     S.show = {}; S.stash = {};
+    S.undo = null;
   }
 
   function setStatus(S, msg, isErr) {
@@ -359,6 +360,38 @@
     });
   }
 
+  // ---------- Undo ----------
+  // Removing something and drawing from text save at once, so instead of
+  // asking first they can be taken back: the map as it was is kept until the
+  // next change, and Undo (or Ctrl+Z) puts it back.
+  function offerUndo(S, before, msg) {
+    S.undo = before; S.undoMsg = msg;
+    syncUndo(S);
+    setStatus(S, msg);
+  }
+  function dropUndo(S) {
+    if (!S.undo) return;
+    S.undo = null;
+    syncUndo(S);
+  }
+  function syncUndo(S) {
+    S.insts.forEach(function (i) {
+      var b = i.el.querySelector('[data-act="undo"]');
+      if (b) b.hidden = !S.undo;
+    });
+  }
+  function snapshot(S) { return { doc: clone(S.doc), show: clone(S.show), stash: clone(S.stash) }; }
+  function undo(S) {
+    var u = S.undo;
+    if (!u) return;
+    S.doc = u.doc; S.show = u.show; S.stash = u.stash;
+    S.insts.forEach(function (i) { i.sel = null; i.drape = null; i.temp = null; });
+    changed(S);
+    frameAll(S);
+    setStatus(S, 'Put back.');
+    flush(S);
+  }
+
   // ---------- Saving ----------
   // Every change waits a moment and then the whole map saves at once; saves
   // go one at a time so each carries the version the last one returned.
@@ -367,6 +400,7 @@
     S.dirty = true;
     if (Chronicle.markDirty) Chronicle.markDirty(S.id);
     if (S.statusErr) setStatus(S, '');
+    dropUndo(S);
     clearTimeout(S.saveT);
     S.saveT = setTimeout(function () { flush(S); }, 700);
   }
@@ -378,14 +412,15 @@
     var run = function () {
       if (S.dead && !leaving) return null;
       var seq = S.seq;
-      setStatus(S, 'Saving…');
+      // While Undo is on offer its line stays, saying what can be taken back.
+      setStatus(S, S.undo ? S.undoMsg : 'Saving…');
       return api(S, 'PUT', '', { kind: S.kind, data: toWire(S.doc), version: S.version }, { keepalive: leaving }).then(function (v) {
         if (S.dead) return;
         S.version = (v && v.version) || S.version;
         merge(S, v && v.data);
         if (seq === S.seq && !S.dirty) {
           if (Chronicle.markClean) Chronicle.markClean(S.id);
-          setStatus(S, 'Saved');
+          setStatus(S, S.undo ? S.undoMsg : 'Saved');
           setTimeout(function () { if (!S.dead && S.status === 'Saved') setStatus(S, ''); }, 2000);
         }
       }, function (err) { if (!S.dead) saveFailed(S, err); });
@@ -466,6 +501,7 @@
         '<button type="button" class="pm-icon" data-mk="number" aria-pressed="' + (t.tool === 'pin' && t.marker === 'number') + '" aria-label="Numbered marker" title="Numbered marker"><span class="pm-one" aria-hidden="true">1</span></button>' +
         '<button type="button" class="pm-icon" data-mk="' + t.icon + '" aria-pressed="' + (t.tool === 'pin' && t.marker === 'icon') + '" aria-label="Icon marker" title="Icon marker (pick its icon after placing)"><i class="fa-solid fa-' + t.icon + '" aria-hidden="true"></i></button>' +
         '<span class="pm-sp"></span><span class="pm-status' + (S.statusErr ? ' err' : '') + '" role="status" aria-live="polite">' + esc(S.status) + '</span>' +
+        '<button type="button" class="pm-quiet" data-act="undo"' + (S.undo ? '' : ' hidden') + '>Undo</button>' +
         '<button type="button" class="pm-quiet" data-act="text">From text</button>' +
         (t.big ? '' : '<button type="button" class="pm-icon" data-act="done" aria-label="Done editing the map" title="Done"><i class="fa-solid fa-check" aria-hidden="true"></i></button>') +
         '</div>';
@@ -749,14 +785,16 @@
         errLine.textContent = warns[0] || 'There is nothing to draw in those lines.';
         return;
       }
+      var before = snapshot(S);
       S.doc = doc; S.show = {}; S.stash = {};
       S.insts.forEach(function (i) { i.sel = null; i.drape = null; i.temp = null; i.tool = 'select'; });
+      changed(S);
       frameAll(S);
+      offerUndo(S, before, 'Drawn from text.');
       if (warns.length) {
         var cap = t.el.querySelector('.pm-cap');
         if (cap) cap.textContent = 'Drawn, leaving out ' + warns.length + ' line' + (warns.length > 1 ? 's' : '') + ': ' + warns.join(' ');
       }
-      changed(S);
       flush(S);
     }).catch(function (err) {
       button.disabled = false; button.textContent = 'Draw it';
@@ -851,6 +889,7 @@
     if (a === 'closedrape') { t.drape = null; t.sel = null; t.drawDrape(); t.paint(); return; }
     if (a === 'drawtext') { drawText(t, b); return; }
     if (a === 'remove') { removeSelected(t); return; }
+    if (a === 'undo') { undo(S); return; }
     if (b.hasAttribute('data-tool')) { t.tool = b.getAttribute('data-tool'); t.sel = null; t.drape = null; t.frame(); return; }
     if (b.hasAttribute('data-mk')) {
       var mk = b.getAttribute('data-mk');
@@ -886,6 +925,7 @@
 
   function stopEditing(t) {
     flush(t.S);
+    dropUndo(t.S);
     t.editing = false; t.sel = null; t.drape = null; t.temp = null; t.tool = 'select';
     t.frame();
     var pen = t.el.querySelector('[data-act="pen"]');
@@ -895,6 +935,7 @@
   function removeSelected(t) {
     var S = t.S, id = t.sel;
     if (!id) return;
+    var before = snapshot(S), o = t.selected();
     S.doc.shapes = S.doc.shapes.filter(function (s) { return s.id !== id; });
     S.doc.pins = S.doc.pins.filter(function (p) { return p.id !== id; });
     delete S.show[id]; delete S.stash[id];
@@ -902,6 +943,7 @@
     S.insts.forEach(function (i) { if (i.live() && i.layer) { i.drawDrape(); i.paint(); } });
     if (isBlank(S.doc)) frameAll(S);
     changed(S);
+    offerUndo(S, before, (o && isPin(o) ? 'Marker' : 'Shape') + ' removed.');
   }
 
   function onField(t, ev) {
@@ -1220,6 +1262,11 @@
       if (t.editing && (t.drape || t.sel)) { t.drape = null; t.sel = null; t.drawDrape(); t.paint(); ev.preventDefault(); return; }
       if (bigOpen) { closeBig(S); ev.preventDefault(); return; }
       if (t.editing) { stopEditing(t); ev.preventDefault(); }
+      return;
+    }
+    if ((ev.ctrlKey || ev.metaKey) && !ev.shiftKey && !ev.altKey && (ev.key === 'z' || ev.key === 'Z') && t.editing && S.undo && !S.drag && !typingIn(ev.target)) {
+      ev.preventDefault();
+      undo(S);
       return;
     }
     if (ev.ctrlKey || ev.metaKey || ev.altKey || typingIn(ev.target)) return;

@@ -10,6 +10,7 @@ import (
 	"net/http"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/mapsketch"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/pageblocks"
@@ -77,9 +78,27 @@ func (a *pageBlocksEntityAdapter) FilterViewable(ctx context.Context, campaignID
 	return out, nil
 }
 
+// Live asks the campaign-scoped card reader, which returns only live pages.
+func (a *pageBlocksEntityAdapter) Live(ctx context.Context, campaignID string, ids []string) (map[string]bool, error) {
+	out := map[string]bool{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	cards, err := a.cards.InCampaign(ctx, campaignID, ids)
+	if err != nil {
+		return nil, err
+	}
+	for id := range cards {
+		out[id] = true
+	}
+	return out, nil
+}
+
 // FindByName looks a page up by the slug its name makes, the way AI Import
-// resolves a `page:` name, then asks the visibility filter, so a page the
-// viewer cannot open reads exactly like one that does not exist.
+// resolves a `page:` name, keeps it only when its name is the one written (a
+// slug can stand for many names, and every name with no Latin letters makes
+// the same one), then asks the visibility filter, so a page the viewer cannot
+// open reads exactly like one that does not exist.
 func (a *pageBlocksEntityAdapter) FindByName(ctx context.Context, campaignID, name string, v pageblocks.Viewer) (pageblocks.PageLink, bool, error) {
 	e, err := a.svc.GetBySlug(ctx, campaignID, entities.Slugify(name))
 	if err != nil {
@@ -89,7 +108,7 @@ func (a *pageBlocksEntityAdapter) FindByName(ctx context.Context, campaignID, na
 		}
 		return pageblocks.PageLink{}, false, err
 	}
-	if e == nil || e.CampaignID != campaignID {
+	if e == nil || e.CampaignID != campaignID || mapsketch.NameKey(e.Name) != mapsketch.NameKey(name) {
 		return pageblocks.PageLink{}, false, nil
 	}
 	links, err := a.FilterViewable(ctx, campaignID, []string{e.ID}, v)

@@ -86,11 +86,14 @@ test('colours: the theme, a named token, or a hex outside amber', () => {
   const { H } = load();
   const cases = [
     ['', ''], ['teal', 'var(--map-c-1)'], ['LIME', 'var(--map-c-7)'], ['#3366CC', '#3366cc'],
-    ['red', ''], ['#abc', ''], ['url(x)', ''], ['#f59e0b', ''], ['#d97706', ''], ['#fdf6e3', '#fdf6e3']
+    ['red', ''], ['#abc', ''], ['url(x)', ''], ['#f59e0b', ''], ['#d97706', ''], ['#fdf6e3', ''], ['#a09080', '#a09080']
   ];
   for (const [c, want] of cases) assert.equal(H.colorVal(c), want, JSON.stringify(c));
   assert.equal(H.amberish('#fbbf24'), true);
   assert.equal(H.amberish('#808080'), false, 'grey is not amber');
+  assert.equal(H.amberish('#ffd700'), true, 'gold is inside the band');
+  assert.equal(H.amberish('#ff7000'), true, 'hue 26 is inside the band');
+  assert.equal(H.amberish('#b39a5c'), false, 'a muted tan is allowed');
   assert.equal(H.inkFor('#ffff99'), 'dark');
   assert.equal(H.inkFor('#1e3a8a'), 'light');
   assert.equal(H.inkFor('sky'), '', 'named colours carry their own ink');

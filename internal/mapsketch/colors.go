@@ -36,9 +36,9 @@ func NormalizeColor(c string) (norm, problem string) {
 	return c, ""
 }
 
-// isAmberish reports a saturated colour whose hue is 30 to 50 degrees. Pale
-// and grey colours in that hue stay allowed: only the saturated ones read as
-// the DM marker.
+// isAmberish applies the UI standard's amber band: hue 22 to 58 degrees,
+// HSL saturation above 45% and lightness above 30%. Muted and dark colours in
+// that hue stay allowed: only the bright ones read as the DM marker.
 func isAmberish(hex string) bool {
 	r64, _ := strconv.ParseUint(hex[1:3], 16, 8)
 	g64, _ := strconv.ParseUint(hex[3:5], 16, 8)
@@ -49,7 +49,8 @@ func isAmberish(hex string) bool {
 	if mx == 0 || mx-mn == 0 {
 		return false
 	}
-	sat := (mx - mn) / mx
+	l := (mx + mn) / 2
+	sat := (mx - mn) / (1 - math.Abs(2*l-1))
 	var hue float64
 	switch mx {
 	case r:
@@ -63,5 +64,5 @@ func isAmberish(hex string) bool {
 	if hue < 0 {
 		hue += 360
 	}
-	return hue >= 30 && hue <= 50 && sat >= 0.35 && mx >= 0.25
+	return hue >= 22 && hue <= 58 && sat > 0.45 && l > 0.30
 }
