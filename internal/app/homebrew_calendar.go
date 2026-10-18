@@ -13,6 +13,15 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/homebrew"
 )
 
+func init() {
+	addWorkshopSource("the calendar", func(reg *homebrew.Registry, d workshopDeps) error {
+		if !d.Health.IsHealthy(calendar.PluginSlug) {
+			return nil
+		}
+		return registerCalendarHomebrew(reg)
+	})
+}
+
 // Limits on what a calendar rule may hold. They match what the calendar
 // itself keeps: a moon or event name, a roll band's name, a short effect.
 const (

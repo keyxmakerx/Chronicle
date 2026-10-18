@@ -11,6 +11,15 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/trackers"
 )
 
+func init() {
+	addWorkshopSource("trackers", func(reg *homebrew.Registry, d workshopDeps) error {
+		if !d.Health.IsHealthy(trackers.PluginSlug) {
+			return nil
+		}
+		return registerTrackerParts(reg)
+	})
+}
+
 // registerTrackerParts plugs trackers into the Homebrew Workshop: a tracker
 // part carries a kind's shape, a clock part is that shape fixed to a clock,
 // and rules can react to a tracker reaching a value and step, set or tick

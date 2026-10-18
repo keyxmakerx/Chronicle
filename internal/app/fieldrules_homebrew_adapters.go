@@ -15,6 +15,15 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/homebrew"
 )
 
+func init() {
+	addWorkshopSource("field rules", func(reg *homebrew.Registry, d workshopDeps) error {
+		if d.FieldRules == nil {
+			return nil
+		}
+		return registerFieldRuleParts(reg, d.FieldRules.PlaceName)
+	})
+}
+
 // Limits on what one Workshop part may describe; a recipe is capped at 16 KB
 // anyway, these keep each list readable in the inspector.
 const (
