@@ -177,6 +177,11 @@ func (d DiceExpr) Range() (lo, hi int) {
 // Roll throws the dice with crypto/rand, as Chronicle.dice does in the
 // browser: a stored result is a real roll, not a seeded one.
 func (d DiceExpr) Roll() (total int, faces []int, err error) {
+	// ParseDice already bounds these; checked again because a DiceExpr can
+	// be built without it, and the count sizes an allocation.
+	if d.Count < 1 || d.Count > maxRollDiceCount || d.Sides < 2 || d.Sides > maxRollDiceSides {
+		return 0, nil, apperror.NewValidation("dice are out of range")
+	}
 	faces = make([]int, d.Count)
 	total = d.Modifier
 	for i := range faces {

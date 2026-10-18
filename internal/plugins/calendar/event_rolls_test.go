@@ -460,3 +460,12 @@ func TestNoRollYetListsNightsForTheDirector(t *testing.T) {
 type fakeTables map[string]*RollTable
 
 func (f fakeTables) RollTable(_ context.Context, _, id string) (*RollTable, error) { return f[id], nil }
+
+// Roll refuses an expression built past the limits without ParseDice.
+func TestDiceRollRefusesOutOfRange(t *testing.T) {
+	for _, d := range []DiceExpr{{Count: maxRollDiceCount + 1, Sides: 6}, {Count: 0, Sides: 6}, {Count: 1, Sides: 1}} {
+		if _, _, err := d.Roll(); err == nil {
+			t.Errorf("%+v rolled", d)
+		}
+	}
+}
