@@ -237,11 +237,11 @@ func (h *Handler) SetEntityTags(c echo.Context) error {
 		return apperror.NewBadRequest("invalid JSON body")
 	}
 
-	if err := h.service.SetEntityTags(c.Request().Context(), entityID, cc.Campaign.ID, req.TagIDs); err != nil {
+	if err := h.service.SetEntityTagsVisible(c.Request().Context(), entityID, cc.Campaign.ID, req.TagIDs, canSeeDmOnly(cc)); err != nil {
 		return err
 	}
 
-	// Return the updated set of tags for the entity (Scribes see all tags).
+	// Return the updated set of tags for the entity (dm_only tags only for roles that can see them).
 	tags, err := h.service.GetEntityTags(c.Request().Context(), entityID, canSeeDmOnly(cc))
 	if err != nil {
 		return err

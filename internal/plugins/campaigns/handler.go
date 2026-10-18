@@ -1083,6 +1083,7 @@ func (h *Handler) Members(c echo.Context) error {
 		for i := range members {
 			members[i].AvatarPath = resolveAvatarPath(mediaCtx, members[i].AvatarPath)
 		}
+		redactMemberEmails(members, cc.MemberRole, auth.GetUserID(c))
 		return c.JSON(http.StatusOK, members)
 	}
 
@@ -1096,6 +1097,21 @@ func (h *Handler) Members(c echo.Context) error {
 		return err
 	}
 	return h.renderPeoplePage(c, cc, members, "")
+}
+
+// redactMemberEmails blanks email addresses for viewers below Owner, except
+// the viewer's own. The member list is open to every member for mentions and
+// pickers, which need display names only; addresses are the owner's
+// People-page data.
+func redactMemberEmails(members []CampaignMember, viewer Role, viewerID string) {
+	if viewer >= RoleOwner {
+		return
+	}
+	for i := range members {
+		if viewerID == "" || members[i].UserID != viewerID {
+			members[i].Email = ""
+		}
+	}
 }
 
 // renderPeoplePage renders the People page. The add-member error path shares

@@ -375,6 +375,50 @@ paths:
           description: The system id or key is malformed
         "429":
           $ref: "#/components/responses/RateLimited"
+    put:
+      tags: [Entities]
+      summary: Write a page's per-system state
+      operationId: putEntitySystemState
+      description: >-
+        Requires a key with the write permission whose owner is the campaign
+        owner or has DM access; anyone else gets 403. Partial: an absent half
+        keeps what is stored, a present half replaces it, `{}` clears it, and
+        `null` or any other member is rejected. Each half is a JSON object of
+        at most 16 KiB. The system must be enabled for the campaign.
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - $ref: "#/components/parameters/entityId"
+        - name: systemId
+          in: path
+          required: true
+          schema: { type: string, pattern: "^[a-z0-9][a-z0-9_-]{0,63}$" }
+        - name: stateKey
+          in: path
+          required: true
+          schema: { type: string, pattern: "^[a-z0-9][a-z0-9_-]{0,63}$" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                public: { type: object }
+                gm: { type: object }
+      responses:
+        "200":
+          description: The stored state after the write (same shape as GET, with gm)
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: The caller is not the campaign owner or a DM-access member
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          description: A half or member is invalid, or the system is not enabled
+        "429":
+          $ref: "#/components/responses/RateLimited"
 
   /campaigns/{campaignId}/armory/shops/{entityId}/room:
     get:
@@ -2503,7 +2547,11 @@ paths:
         entityId is the creature's page, empty when the row has no page;
         start is "seen", "hidden" or "later". Nothing here reveals anything:
         Foundry places a hidden creature hidden and leaves a later one off
-        the scene.
+        the scene. Stages are {id, when: {kind, row, percent, round}, forms:
+        [{row, form, formName}], arrive: [creature row ids], how, note}; kind
+        is "manual", "stamina" (row watched, due at or below percent) or
+        "round" (due at the start of that round), how is "reveal" or "quiet".
+        A stage is only ever started by the DM; none starts on its own.
       operationId: getEncounter
       parameters:
         - $ref: "#/components/parameters/campaignId"
@@ -2515,7 +2563,7 @@ paths:
         "200":
           description: >
             {id, page: {id, name}, name, ready, heroes: [{id, name}],
-            creatures: [...], version, updatedAt}
+            creatures: [...], stages: [...], version, updatedAt}
           content:
             application/json:
               schema: {type: object}

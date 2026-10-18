@@ -177,7 +177,7 @@ func TestTwoFactorLogin(t *testing.T) {
 	// Changing the password forgets remembered devices and ends a
 	// half-finished sign-in.
 	pending := r.passwordStep(t, "mara", "")
-	if err := r.svc.ChangePassword(ctx, "mara", "correct horse", "correct horse"); err != nil {
+	if _, err := r.svc.ChangePassword(ctx, "mara", "correct horse", "correct horse", "", ""); err != nil {
 		t.Fatal(err)
 	}
 	r.passwordStep(t, "mara", res.TrustedDevice)
@@ -353,5 +353,27 @@ func TestForgotPasswordPageWithoutEmail(t *testing.T) {
 	ConfigureMailSender(svc, &mockMailSender{isConfiguredFn: func(context.Context) bool { return false }}, "")
 	if svc.CanEmailResetLinks(context.Background()) {
 		t.Error("unconfigured email counts as sendable")
+	}
+}
+
+// Changing the password ends every session, so the caller must get a fresh
+// one back or the next click signs them out.
+func TestChangePasswordKeepsCallerSignedIn(t *testing.T) {
+	r := newTwoFactorRig(t)
+	ctx := context.Background()
+	old, _, err := r.svc.Login(ctx, LoginInput{Email: "mara@example.com", Password: "correct horse"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	token, err := r.svc.ChangePassword(ctx, "mara", "correct horse", "another horse", "1.2.3.4", "ua")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.svc.ValidateSession(ctx, old); err == nil {
+		t.Fatal("old session survived the password change")
+	}
+	sess, err := r.svc.ValidateSession(ctx, token)
+	if err != nil || sess.UserID != "mara" {
+		t.Fatalf("fresh session = %+v, %v", sess, err)
 	}
 }
