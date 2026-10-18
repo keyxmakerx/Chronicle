@@ -555,7 +555,7 @@ func (s *calendarService) RollEventNights(ctx context.Context, eventID, calendar
 		today := calToday(t.cal)
 		targets = targets[:0:0]
 		for _, d := range all {
-			if !(d.before(today) && have[d]) {
+			if !d.before(today) || !have[d] {
 				targets = append(targets, d)
 			}
 		}

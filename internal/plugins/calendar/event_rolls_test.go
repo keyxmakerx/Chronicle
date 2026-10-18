@@ -244,7 +244,7 @@ func (f *fakeRollRepo) SetTold(_ context.Context, id string, d DayDate, told *bo
 func (f *fakeRollRepo) ClearNights(_ context.Context, id string, ds []DayDate, keepLocked bool) (int, error) {
 	c := 0
 	for _, d := range ds {
-		if n, ok := f.nights[id][d]; ok && !(keepLocked && n.Locked) {
+		if n, ok := f.nights[id][d]; ok && (!keepLocked || !n.Locked) {
 			delete(f.nights[id], d)
 			c++
 		}
