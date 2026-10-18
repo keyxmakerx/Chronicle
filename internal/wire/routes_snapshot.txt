@@ -948,6 +948,7 @@ GET	/campaigns/:id/system-entries	session	systems.(*SystemEntryHandler).ListAPI	
 POST	/campaigns/:id/system-entries	session	systems.(*SystemEntryHandler).CreateAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 DELETE	/campaigns/:id/system-entries/:entryId	session	systems.(*SystemEntryHandler).DeleteAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/system-entries/:entryId	session	systems.(*SystemEntryHandler).UpdateAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/system-state/:system/:key	session	plugins/systemstate.(*Handler).List	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
 GET	/campaigns/:id/systems/:mod	session	systems.(*SystemHandler).Index	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
 GET	/campaigns/:id/systems/:mod/:cat	session	systems.(*SystemHandler).CategoryList	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
 GET	/campaigns/:id/systems/:mod/:cat/:item	session	systems.(*SystemHandler).ItemDetail	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > systems.requireSystemAddon
