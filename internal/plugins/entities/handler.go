@@ -701,10 +701,11 @@ func (h *Handler) prepareShowFor(c echo.Context, entityID string) (*showPage, er
 
 	// Player Character Claiming: gate the claim affordance on the
 	// addon, and resolve the current owner's display name for the "Claimed by"
-	// banner. The member lookup only runs when the entity is actually claimed.
+	// banner. The member lookup only runs when the entity is actually claimed,
+	// and only for members: a visitor sees the character, not who plays it.
 	claimingEnabled := h.isAddonEnabled(c.Request().Context(), cc.Campaign.ID, AddonPlayerCharacterClaiming)
 	ownerName := ""
-	if entity.OwnerUserID != nil && h.memberLister != nil {
+	if entity.OwnerUserID != nil && h.memberLister != nil && cc.MemberRole >= campaigns.RolePlayer {
 		if members, mErr := h.memberLister.ListMembers(c.Request().Context(), cc.Campaign.ID); mErr == nil {
 			ownerName = resolveOwnerName(entity.OwnerUserID, ownerDisplayNames(members))
 		} else {
