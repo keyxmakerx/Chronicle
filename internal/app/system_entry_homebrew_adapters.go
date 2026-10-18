@@ -10,6 +10,12 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/systems"
 )
 
+func init() {
+	addWorkshopSource("ancestries", func(reg *homebrew.Registry, d workshopDeps) error {
+		return registerAncestryParts(reg, d.SystemEntries)
+	})
+}
+
 // ancestryEntries is the part of systems.SystemEntryService an ancestry part
 // needs: the campaign's own ancestry entries, as a Director sees them.
 type ancestryEntries interface {

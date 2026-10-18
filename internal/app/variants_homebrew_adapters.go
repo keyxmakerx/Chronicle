@@ -12,6 +12,22 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/systemstate"
 )
 
+func init() {
+	addWorkshopSource("creature variants", func(reg *homebrew.Registry, d workshopDeps) error {
+		if d.SystemState == nil {
+			return nil
+		}
+		return registerVariantParts(reg, d.SystemState,
+			&systemStateEntityLookup{entities: d.Entities},
+			func(ctx context.Context, campaignID string) string {
+				if sys := d.Systems.EnabledSystem(ctx, campaignID); sys != nil {
+					return sys.Info().ID
+				}
+				return ""
+			})
+	})
+}
+
 // variantKey is the system-state key a game system keeps its creature variant
 // recipes and links under. The record itself belongs to the system package;
 // Chronicle reads only whether a page is a recipe and which part it is.

@@ -5757,18 +5757,12 @@ func (a *App) RegisterRoutes() {
 	// Game-system widget panels under NPC page titles (manifest entity_panels).
 	entityHandler.SetSystemPanelResolver(newSystemPanelResolver(systemHandler, characterListService))
 
-	// The Homebrew Workshop's registry. Plugins below that plug kinds of part,
-	// events or actions into the Workshop register here, so it is made before
-	// any of them.
-	homebrewReg := homebrew.NewRegistry()
-	if err := registerAncestryParts(homebrewReg, systemEntrySvc); err != nil {
-		slog.Error("ancestries could not join the Homebrew Workshop", slog.Any("error", err))
-	}
-
 	// Per-page game-system state. system_state.updated is not a change-feed
-	// type, so the recording wrapper passes it straight to the hub.
+	// type, so the recording wrapper passes it straight to the hub. Kept for
+	// the Homebrew Workshop; nil while the plugin is degraded.
+	var systemStateSvc systemstate.Service
 	if a.PluginHealth.IsHealthy(systemstate.PluginSlug) {
-		systemStateSvc := systemstate.NewService(
+		systemStateSvc = systemstate.NewService(
 			systemstate.NewRepository(a.DB),
 			&systemStateEntityLookup{entities: entityService},
 			&systemStateSystemChecker{systems: systemHandler},
@@ -5780,16 +5774,6 @@ func (a *App) RegisterRoutes() {
 		systemStateSync := &systemStateSyncReader{svc: systemStateSvc}
 		syncAPIHandler.SetSystemStateReader(systemStateSync)
 		syncAPIHandler.SetSystemStateWriter(systemStateSync)
-		if err := registerVariantParts(homebrewReg, systemStateSvc,
-			&systemStateEntityLookup{entities: entityService},
-			func(ctx context.Context, campaignID string) string {
-				if sys := systemHandler.EnabledSystem(ctx, campaignID); sys != nil {
-					return sys.Info().ID
-				}
-				return ""
-			}); err != nil {
-			slog.Error("creature variants could not join the Homebrew Workshop", slog.Any("error", err))
-		}
 	} else {
 		slog.Warn("systemstate plugin degraded — routes not registered")
 	}
@@ -5876,13 +5860,11 @@ func (a *App) RegisterRoutes() {
 	// fields show only values typed by hand and nothing is renamed.
 	a.registerPlugin(PluginRegistration{Slug: fieldrules.PluginSlug})
 	var fieldRulesSvc fieldrules.Service
+	var frWorld *fieldRulesWorld
 	if a.PluginHealth.IsHealthy(fieldrules.PluginSlug) {
-		frWorld := fieldRulesWorld{pages: entityService, calendars: calendarService, eras: eraVersionService}
-		fieldRulesSvc = fieldrules.NewService(fieldrules.NewRepository(a.DB), frWorld)
+		frWorld = &fieldRulesWorld{pages: entityService, calendars: calendarService, eras: eraVersionService}
+		fieldRulesSvc = fieldrules.NewService(fieldrules.NewRepository(a.DB), *frWorld)
 		fieldrules.RegisterRoutes(e, fieldrules.NewHandler(fieldRulesSvc), campaignService, authService)
-		if err := registerFieldRuleParts(homebrewReg, frWorld.PlaceName); err != nil {
-			slog.Error("field rules could not join the Homebrew Workshop", slog.Any("error", err))
-		}
 		words := fieldWordsAdapter{svc: fieldRulesSvc}
 		entityHandler.SetFieldWords(words)
 		if fw, ok := entityService.(interface{ SetFieldWords(entities.FieldWords) }); ok {
@@ -5907,9 +5889,6 @@ func (a *App) RegisterRoutes() {
 			&trackersClockAdapter{svc: calendarService})
 		trackers.RegisterRoutes(e, trackers.NewHandler(trackersSvc), campaignService, authService)
 		registerTrackersBlock(blockRegistry)
-		if err := registerTrackerParts(homebrewReg); err != nil {
-			slog.Error("trackers could not join the Homebrew Workshop", slog.Any("error", err))
-		}
 	} else {
 		slog.Warn("trackers plugin degraded — the Trackers block is not available")
 	}
@@ -5936,7 +5915,18 @@ func (a *App) RegisterRoutes() {
 	}
 
 	// Homebrew Workshop: saved recipes of parts and When/Then rules. The
-	// store and its routes exist only while its table migrated.
+	// store and its routes exist only while its table migrated. Features add
+	// their parts from their own files (workshop_parts.go), so this block is
+	// not edited when one joins.
+	homebrewReg := homebrew.NewRegistry()
+	registerWorkshopParts(homebrewReg, workshopDeps{
+		Entities:      entityService,
+		FieldRules:    frWorld,
+		Health:        a.PluginHealth,
+		SystemEntries: systemEntrySvc,
+		SystemState:   systemStateSvc,
+		Systems:       systemHandler,
+	})
 	a.registerPlugin(PluginRegistration{
 		Slug:     homebrew.PluginSlug,
 		StaticFS: echo.MustSubFS(homebrew.StaticAssetsFS, "static"),
