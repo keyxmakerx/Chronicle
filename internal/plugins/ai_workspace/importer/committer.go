@@ -58,6 +58,8 @@ type Committer struct {
 	eras EraWriter
 	// tags sets a page's `tags:`; nil saves the page without them and says so.
 	tags TagWriter
+	// folders files pages into sidebar folders; nil refuses `folder:` rows.
+	folders FolderAccess
 }
 
 // SetEraWriter wires pages by era. Optional.
@@ -308,7 +310,7 @@ type relinkRow struct {
 // and version history follow.
 func (c *Committer) relinkPending(ctx context.Context, rows []relinkRow, links *PageLinks, result *CommitResult) {
 	for _, r := range rows {
-		bodyHTML, err := MarkdownToHTML(r.body, WithPageLinks(links))
+		bodyHTML, err := MarkdownToHTML(r.body, WithPageLinks(links), WithGMOnlyPassages())
 		if err == nil {
 			var bodyJSON string
 			if bodyJSON, err = htmlconv.Convert(bodyHTML); err == nil {
@@ -452,10 +454,10 @@ func (c *Committer) commitRow(
 	// SEC-6 mirror — every entity-creation path funnels through
 	// MarkdownToHTML first. Per-row errors are operator-friendly;
 	// the underlying library error stays in slog (handler-side).
-	bodyHTML, err := MarkdownToHTML(page.Body, WithPageLinks(links))
+	bodyHTML, err := MarkdownToHTML(page.Body, WithPageLinks(links), WithGMOnlyPassages())
 	if err != nil {
 		out.Status = StatusFailed
-		out.Reason = "Could not parse the page's markdown body — check the heading structure."
+		out.Reason = markdownFailReason(err)
 		return out
 	}
 	bodyJSON, err := htmlconv.Convert(bodyHTML)
@@ -520,6 +522,12 @@ func (c *Committer) commitRow(
 		out.Reason = reason
 		return out
 	}
+	folder, reason := c.resolveFolder(ctx, campaignID, typeID, page, true, false)
+	if reason != "" {
+		out.Status = StatusFailed
+		out.Reason = reason
+		return out
+	}
 
 	// Create. Operator-facing errors stay friendly — the technical
 	// detail is captured by the handler's slog before this Reason is
@@ -550,6 +558,11 @@ func (c *Committer) commitRow(
 	out.EntityID = ent.ID
 	out.Slug = ent.Slug
 	out.Name = finalName
+	if reason := c.applyFolder(ctx, campaignID, ent.ID, folder); reason != "" {
+		out.Status = StatusFailed
+		out.Reason = reason
+		return out
+	}
 	if reason := c.applyTags(ctx, campaignID, ent.ID, page.FrontMatter.Tags, false); reason != "" {
 		out.Status = StatusFailed
 		out.Reason = reason
@@ -583,12 +596,13 @@ func (c *Committer) commitUpdate(
 ) RowOutcome {
 	out := RowOutcome{Index: idx, Name: existing.Name, Slug: existing.Slug, EntityID: existing.ID}
 
-	// The AI's copy of a page never carries its GM-only parts back, so a
-	// whole-text replace would delete them or publish the AI's copy of them.
+	// The AI's copy of a page carries its GM-only passages back only when
+	// its export wrote them, and never its pictures or diagrams, so a
+	// whole-text replace could delete them or publish the AI's copy.
 	// Measured here, from the entity as it is now, so both update paths and
 	// a stale review screen get the same answer. Checked before any write,
 	// including the settings update below.
-	if gm := GMOnlyPartsOf(existing); gm.Any() && !dec.ReplaceGMOnlyConfirmed {
+	if gm := GMOnlyPartsAfter(existing, bodyHTML); gm.Any() && !dec.ReplaceGMOnlyConfirmed {
 		out.Status = StatusSkipped
 		out.Reason = gm.SkipReason()
 		return out
@@ -596,6 +610,13 @@ func (c *Committer) commitUpdate(
 	// An update never changes the category, so its fields are checked
 	// against the page's own, before any write.
 	fields, reason := c.sheetFields(ctx, existing.CampaignID, existing.EntityTypeID, page, links)
+	if reason != "" {
+		out.Status = StatusFailed
+		out.Reason = reason
+		return out
+	}
+
+	folder, reason := c.resolveFolder(ctx, existing.CampaignID, existing.EntityTypeID, page, false, parent.Present() && !parent.IsNull())
 	if reason != "" {
 		out.Status = StatusFailed
 		out.Reason = reason
@@ -651,6 +672,11 @@ func (c *Committer) commitUpdate(
 			out.Reason = "Updated the page, but could not write its sheet fields. Open the page to set them."
 			return out
 		}
+	}
+	if reason := c.applyFolder(ctx, existing.CampaignID, existing.ID, folder); reason != "" {
+		out.Status = StatusFailed
+		out.Reason = reason
+		return out
 	}
 	if reason := c.applyTags(ctx, existing.CampaignID, existing.ID, page.FrontMatter.Tags, true); reason != "" {
 		out.Status = StatusFailed
@@ -715,10 +741,10 @@ func (c *Committer) commitUpdateExplicit(
 	// SEC-6 funnel — sanitize body markdown BEFORE handing to
 	// commitUpdate. The pin verifies this funnel exists in every
 	// non-exempt function calling creator.Update / UpdateEntry.
-	bodyHTML, err := MarkdownToHTML(page.Body, WithPageLinks(links))
+	bodyHTML, err := MarkdownToHTML(page.Body, WithPageLinks(links), WithGMOnlyPassages())
 	if err != nil {
 		out.Status = StatusFailed
-		out.Reason = "Could not parse the page's markdown body — check the heading structure."
+		out.Reason = markdownFailReason(err)
 		return out
 	}
 	bodyJSON, err := htmlconv.Convert(bodyHTML)
@@ -807,9 +833,9 @@ func (c *Committer) commitEra(
 
 	write := EraVersionWrite{KnownAs: strings.TrimSpace(page.FrontMatter.KnownAs)}
 	if strings.TrimSpace(page.Body) != "" {
-		bodyHTML, err := MarkdownToHTML(page.Body, WithPageLinks(links))
+		bodyHTML, err := MarkdownToHTML(page.Body, WithPageLinks(links), WithGMOnlyPassages())
 		if err != nil {
-			return fail("Could not parse the page's markdown body — check the heading structure.")
+			return fail(markdownFailReason(err))
 		}
 		bodyJSON, err := htmlconv.Convert(bodyHTML)
 		if err != nil {

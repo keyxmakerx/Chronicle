@@ -94,4 +94,8 @@ func TestLinkNames_And_Warnings(t *testing.T) {
 	if len(warns) != 1 || !strings.Contains(warns[0], "@[Ghost]") {
 		t.Errorf("warnings = %v", warns)
 	}
+	// A GM-only passage must not hide the links around it from the review.
+	if names := LinkNames("{gm{secret}gm} see @[Missing Page]"); strings.Join(names, ",") != "Missing Page" {
+		t.Errorf("names with a passage = %v", names)
+	}
 }

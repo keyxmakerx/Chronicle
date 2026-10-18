@@ -188,6 +188,11 @@ func convertElement(s *goquery.Selection) ([]Node, bool) {
 			return []Node{n}, false
 		}
 		return nil, true
+	case "span":
+		// The editor's GM-only passage; any other span is just text.
+		if _, ok := s.Attr("data-secret"); ok {
+			return convertInlineWithMark(s, tag), true
+		}
 	case "br":
 		return []Node{{Type: "hardBreak"}}, true
 	case "table":
@@ -289,8 +294,27 @@ func convertInlineWithMark(s *goquery.Selection, tag string) []Node {
 	}
 	var out []Node
 	for _, n := range convertInline(s) {
-		if n.Type == "text" {
+		// Nested passages stay one mark: a doubled mark is not a valid document.
+		if n.Type == "text" && (mark.Type != "secret" || !hasMark(n, "secret")) {
 			n.Marks = append(n.Marks, mark)
+		}
+		// A picture or break carries no marks, so inside a passage it is
+		// flagged the way the editor flags GM-only pictures; otherwise
+		// hoistPictures would lift it out as public content.
+		if mark.Type == "secret" {
+			switch n.Type {
+			case "chronicleImage":
+				attrs := map[string]any{}
+				for k, v := range n.Attrs {
+					attrs[k] = v
+				}
+				attrs["gmOnly"] = true
+				n.Attrs = attrs
+			case "hardBreak":
+				if !hasMark(n, "secret") {
+					n.Marks = append(n.Marks, mark)
+				}
+			}
 		}
 		out = append(out, n)
 	}
@@ -312,6 +336,8 @@ func tagToMark(tag string, s *goquery.Selection) Mark {
 		return Mark{Type: "strike"}
 	case "code":
 		return Mark{Type: "code"}
+	case "span":
+		return Mark{Type: "secret"}
 	case "a":
 		attrs := map[string]any{}
 		if href, ok := s.Attr("href"); ok {
@@ -382,4 +408,13 @@ func convertTable(s *goquery.Selection) Node {
 		}
 	})
 	return Node{Type: "table", Content: rows}
+}
+
+func hasMark(n Node, typ string) bool {
+	for _, m := range n.Marks {
+		if m.Type == typ {
+			return true
+		}
+	}
+	return false
 }

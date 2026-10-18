@@ -157,6 +157,8 @@ func TestBuild_FrontMatterExample(t *testing.T) {
 		"`known_as: Name in that era`",
 		"`@[Page Name]`",
 		"`@[Page Name|words to show]`",
+		"`{gm{`",
+		"`}gm}`",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("expected substring %q in output. Full:\n%s", want, got)
@@ -531,5 +533,29 @@ func TestBuild_SheetFields(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Errorf("prompt is missing %q:\n%s", want, got)
 		}
+	}
+}
+
+type stubNotes map[string]string
+
+func (s stubNotes) FieldNotes(_ context.Context, _ string, t entities.EntityType) map[string]string {
+	if t.ID == 1 {
+		return s
+	}
+	return nil
+}
+
+// The game system's notes sit on the field's own line.
+func TestBuild_FieldNotes(t *testing.T) {
+	types := defaultEntityTypes()
+	types[0].Fields = []entities.FieldDefinition{{Key: "class", Label: "Class", Type: "text"}, {Key: "level", Label: "Level", Type: "number"}}
+	svc := NewService(&stubEntityLister{types: types}, stubTagLister{}, &stubExporter{})
+	svc.Notes = stubNotes{"class": "Foundry keeps this one: leave it out"}
+	got, err := svc.Build(context.Background(), "Ashfall", "owner-1", "camp-1", Input{IncludeEntityTypes: true, ContentMode: "none"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, "`class` (Class): text, or a list. Foundry keeps this one: leave it out") || !strings.Contains(got, "`level` (Level): a number\n") {
+		t.Errorf("field lines wrong:\n%s", got)
 	}
 }

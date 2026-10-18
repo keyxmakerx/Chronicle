@@ -144,7 +144,7 @@ func TestLookups_Answers(t *testing.T) {
 		{"inventory shows them to a Director", lookup("inventory", map[string]any{"character": "Ser Aldric"}), owner, []string{"Rope x2", "The Rusty Anchor"}, nil, ""},
 		{"only my notes", lookup("notes", nil), owner, []string{"Who poisoned the duke? (Journal)"}, []string{"Their plans"}, ""},
 		{"players, live", lookup("players", nil), player, []string{"Ser Aldric (Mira): Level 3 Fury. Stamina 31 of 42. Carries Rope x2. Coming to the next game night.", "Next game night: Session 12"}, []string{"The Ghost"}, ""},
-		{"game-system entries need a field", lookup("system-entries", nil), owner, nil, nil, "needs `field:`"},
+		{"game-system entry fields not wired", lookup("system-entries", nil), owner, nil, nil, "can't be looked up on this server yet"},
 		{"game-system entries not wired", lookup("system-entries", map[string]any{"field": "ancestry"}), owner, nil, nil, "can't be looked up on this server yet"},
 		{"unknown what", lookup("secrets", nil), owner, nil, nil, "not something Chronicle can look up"},
 	}

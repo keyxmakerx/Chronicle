@@ -99,6 +99,10 @@ type Options struct {
 	// parent's name never reaches the AI.
 	ParentNames map[string]string
 
+	// FolderNames maps a sidebar folder id to its name. A page whose folder
+	// is named here gets a Folder line; nil leaves folders out.
+	FolderNames map[string]string
+
 	// EraVersions maps a page id to its versions for the eras the reader
 	// may see (oldest era first), with the calendar's current era marked.
 	// Filled by Service.Generate; nil leaves every page as its usual self.
