@@ -9,7 +9,7 @@
 
 > The migrations are the source of truth: `db/migrations/*.up.sql` (core, runs
 > first) and each plugin's `internal/plugins/<name>/migrations/*.up.sql`
-> (plugin, runs after core, in the order `cmd/server/main.go` registers them).
+> (plugin, runs after core, in rank order, `cmd/server/plugin_schemas.go`).
 > This file is a derived summary — regenerate the parts that changed whenever
 > a migration is added.
 
@@ -198,8 +198,9 @@ numbered core migrations after it, tracked once each via `golang-migrate`'s
 
 ## Plugin schema
 
-Plugin migrations run after core, in the order `registeredPlugins()` lists
-them in `cmd/server/main.go`. A plugin's schema failing to migrate degrades that
+Plugin migrations run after core, in rank order: each plugin registers with
+`addPluginSchema(rank, slug, fs)` from an `init` in `cmd/server`
+(`plugin_schemas.go`). A plugin's schema failing to migrate degrades that
 plugin only (`internal/database/plugin_health.go`) — it never blocks boot.
 
 ### bestiary (`internal/plugins/bestiary/migrations/`)
