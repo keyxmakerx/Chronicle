@@ -25,4 +25,8 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 		campaigns.RequireCampaignAccess(campaignSvc),
 	)
 	cg.PUT("/page-blocks/:eid/:bid", h.Put, campaigns.RequireRole(campaigns.RolePlayer))
+	// The page map's text form: the service refuses anyone who may not edit
+	// the page, as it does for PUT.
+	cg.GET("/page-blocks/:eid/:bid/sketch", h.SketchText, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.POST("/page-blocks/:eid/:bid/sketch", h.Sketch, campaigns.RequireRole(campaigns.RolePlayer))
 }

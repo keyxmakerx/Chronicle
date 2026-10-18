@@ -4,11 +4,10 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"regexp"
-	"strconv"
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/mapsketch"
 )
 
 // MapSketchAPI is what a map sketch needs from the maps plugin beyond pins,
@@ -60,31 +59,9 @@ const (
 	sketchBoxStroke  = "#334155"
 )
 
-// sketchVerbs are the words a sketch line can start with, in the order
-// the refusal lists them.
-var sketchVerbs = []string{"room", "area", "water", "danger", "wall", "path", "road", "label", "pin"}
-
-var (
-	sketchGridRe   = regexp.MustCompile(`^\s*(\d+)\s*(?:x|X|×|by)\s*(\d+)\s*$`)
-	sketchPointRe  = regexp.MustCompile(`-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?`)
-	sketchRadiusRe = regexp.MustCompile(`(?i)\bradius\s+(\d+(?:\.\d+)?)`)
-	sketchQuoteRe  = regexp.MustCompile(`"([^"]*)"|“([^”]*)”`)
-	sketchToRe     = regexp.MustCompile(`(?i)\bto\b`)
-	sketchCircleRe = regexp.MustCompile(`(?i)\bcircle\b`)
-	sketchPinCatRe = regexp.MustCompile(`(?i)\b(danger|treasure|quest|note|location)\b`)
-)
-
-// sketchShape is one parsed sketch line, in grid squares.
-type sketchShape struct {
-	Line     int
-	Verb     string // a sketchVerbs word
-	Shape    string // box, circle, line, label or pin
-	Name     string
-	Points   [][2]float64
-	Radius   float64
-	Category string // pins only
-	Note     string // pins only
-}
+// sketchShape is one parsed sketch line, in grid squares. The parser lives in
+// internal/mapsketch so the page map block reads the same words.
+type sketchShape struct{ mapsketch.Entry }
 
 // sketchPlan is a parsed sketch: the shapes that will be drawn and a plain
 // line for each line that will not.
@@ -107,14 +84,9 @@ func (p sketchPlan) counts() (shapes, pins int) {
 
 // parseSketchGrid reads "40 x 26".
 func parseSketchGrid(s string) (w, h int, err error) {
-	m := sketchGridRe.FindStringSubmatch(s)
-	if m == nil {
-		return 0, 0, badRequestf("grid must be two numbers of squares, across and down, like 40 x 26")
-	}
-	w, _ = strconv.Atoi(m[1])
-	h, _ = strconv.Atoi(m[2])
-	if w < sketchGridMin || w > sketchGridMax || h < sketchGridMin || h > sketchGridMax {
-		return 0, 0, badRequestf("grid must be %d to %d squares each way", sketchGridMin, sketchGridMax)
+	w, h, err = mapsketch.ParseGridSize(s)
+	if err != nil {
+		return 0, 0, badRequestf("%s", err.Error())
 	}
 	return w, h, nil
 }
@@ -122,148 +94,19 @@ func parseSketchGrid(s string) (w, h int, err error) {
 // parseSketch reads a sketch body. A line it cannot draw is reported and
 // skipped; it never stops the rest of the map.
 func parseSketch(body string, w, h int) sketchPlan {
-	p := sketchPlan{W: w, H: h}
-	for i, raw := range strings.Split(body, "\n") {
-		n := i + 1
-		l := strings.TrimSpace(raw)
-		l = strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(l, "- "), "* "))
-		if l == "" || strings.HasPrefix(l, "#") || strings.HasPrefix(l, "```") {
-			continue
-		}
-		s, err := parseSketchLine(n, l)
-		if err == "" {
-			err = checkSketchShape(&s, w, h)
-		}
-		if err != "" {
-			p.Errs = append(p.Errs, fmt.Sprintf("Line %d: %s", n, err))
-			continue
-		}
-		p.Shapes = append(p.Shapes, s)
+	mp := mapsketch.ParseEntries(body, w, h)
+	p := sketchPlan{W: w, H: h, Errs: mp.Errs}
+	for _, e := range mp.Entries {
+		p.Shapes = append(p.Shapes, sketchShape{e})
 	}
 	return p
 }
 
 // parseSketchLine reads one line, or says in plain words why it cannot.
 func parseSketchLine(n int, l string) (sketchShape, string) {
-	s := sketchShape{Line: n}
-	rest := l
-	if m := sketchQuoteRe.FindStringSubmatchIndex(l); m != nil {
-		if m[2] >= 0 {
-			s.Name = strings.TrimSpace(l[m[2]:m[3]])
-		} else {
-			s.Name = strings.TrimSpace(l[m[4]:m[5]])
-		}
-		rest = l[:m[0]] + " " + l[m[1]:]
-	}
-	// A pin's note is everything after the first colon that follows its
-	// name, so the note may hold commas and numbers of its own.
-	if fields := strings.Fields(rest); len(fields) > 0 && strings.EqualFold(fields[0], "pin") {
-		if c := strings.Index(rest, ":"); c >= 0 {
-			s.Note = strings.TrimSpace(rest[c+1:])
-			rest = rest[:c]
-		}
-	}
-	fields := strings.Fields(rest)
-	if len(fields) == 0 {
-		return s, "there is nothing to draw on this line."
-	}
-	s.Verb = strings.ToLower(fields[0])
-	for _, m := range sketchPointRe.FindAllString(rest, -1) {
-		xy := strings.SplitN(m, ",", 2)
-		x, _ := strconv.ParseFloat(strings.TrimSpace(xy[0]), 64)
-		y, _ := strconv.ParseFloat(strings.TrimSpace(xy[1]), 64)
-		s.Points = append(s.Points, [2]float64{x, y})
-	}
-	switch s.Verb {
-	case "room", "area", "water", "danger":
-		if len(s.Points) != 2 {
-			return s, "a " + s.Verb + " needs two corners, like 3,4 to 9,8."
-		}
-		s.Shape = "box"
-	case "wall":
-		switch {
-		case sketchCircleRe.MatchString(rest):
-			r := sketchRadiusRe.FindStringSubmatch(rest)
-			if len(s.Points) != 1 || r == nil {
-				return s, "a circle wall needs a centre and a radius, like 20,13 radius 9."
-			}
-			s.Radius, _ = strconv.ParseFloat(r[1], 64)
-			s.Shape = "circle"
-		case len(s.Points) == 2 && sketchToRe.MatchString(rest):
-			s.Shape = "box"
-			// A wall with no thickness is a line, not a box the map
-			// would refuse as too thin.
-			if s.Points[0][0] == s.Points[1][0] || s.Points[0][1] == s.Points[1][1] {
-				s.Shape = "line"
-			}
-		case len(s.Points) >= 2:
-			s.Shape = "line"
-		default:
-			return s, "a wall needs two corners, like 3,4 to 9,4, or a line of points."
-		}
-	case "path", "road":
-		if len(s.Points) < 2 {
-			return s, "a " + s.Verb + " needs at least two points."
-		}
-		s.Shape = "line"
-	case "label":
-		if len(s.Points) < 1 {
-			return s, "a label needs a point."
-		}
-		if s.Name == "" {
-			return s, "a label needs its words in quotes."
-		}
-		s.Points = s.Points[:1]
-		s.Shape = "label"
-	case "pin":
-		if len(s.Points) < 1 {
-			return s, "a pin needs a point."
-		}
-		s.Points = s.Points[:1]
-		if s.Name == "" {
-			s.Name = "Pin"
-		}
-		s.Category = "location"
-		if m := sketchPinCatRe.FindStringSubmatch(rest); m != nil {
-			s.Category = strings.ToLower(m[1])
-		}
-		s.Shape = "pin"
-	default:
-		return s, fmt.Sprintf("%q isn't one of %s.", fields[0], strings.Join(sketchVerbs, ", "))
-	}
-	return s, ""
+	e, msg := mapsketch.ParseEntry(n, l)
+	return sketchShape{e}, msg
 }
-
-// checkSketchShape refuses what the map would refuse: points off the grid,
-// boxes with no width or height, names longer than a drawing may hold.
-func checkSketchShape(s *sketchShape, w, h int) string {
-	for _, pt := range s.Points {
-		if pt[0] < 0 || pt[0] > float64(w) || pt[1] < 0 || pt[1] > float64(h) {
-			return fmt.Sprintf("%s,%s is off the %d by %d grid.", fmtNum(pt[0]), fmtNum(pt[1]), w, h)
-		}
-	}
-	if s.Shape == "box" && (s.Points[0][0] == s.Points[1][0] || s.Points[0][1] == s.Points[1][1]) {
-		return "a " + s.Verb + " needs some width and height; its corners are in line."
-	}
-	if s.Shape == "circle" {
-		c, r := s.Points[0], s.Radius
-		if r <= 0 {
-			return "a circle wall needs a radius above 0."
-		}
-		if c[0]-r < 0 || c[0]+r > float64(w) || c[1]-r < 0 || c[1]+r > float64(h) {
-			return fmt.Sprintf("a circle of radius %s around %s,%s runs off the %d by %d grid.", fmtNum(r), fmtNum(c[0]), fmtNum(c[1]), w, h)
-		}
-	}
-	if len([]rune(s.Name)) > maxSketchText {
-		return fmt.Sprintf("the name is longer than %d characters.", maxSketchText)
-	}
-	return ""
-}
-
-// maxSketchText mirrors the maps plugin's bound on a drawing's text.
-const maxSketchText = 500
-
-func fmtNum(f float64) string { return strconv.FormatFloat(f, 'f', -1, 64) }
 
 // sketchGridSize is a square's size as the map's grid setting measures it.
 func sketchGridSize(w int) int { return sketchMapWidth / w }
