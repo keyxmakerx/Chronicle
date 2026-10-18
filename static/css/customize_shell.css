@@ -192,8 +192,6 @@
 .czs-pill.is-new { background: var(--czs-accent-soft); color: var(--color-accent); font-weight: 600; }
 .czs-pill.is-warn { background: rgb(var(--color-warn-rgb) / 0.15); color: var(--czs-warn); font-weight: 600; }
 .czs-pill.is-dm { background: var(--czs-accent-soft); color: var(--color-accent); font-weight: 600; }
-.czs-adv-offer { margin-top: 16px; align-items: center; }
-.czs-adv-offer .czs-hint { max-width: 62ch; }
 
 /* Workspace: the category's header and tabs. */
 .czs-ws-head { display: flex; align-items: center; gap: 12px; padding: 16px 24px 0; min-width: 0; flex-wrap: wrap; }
