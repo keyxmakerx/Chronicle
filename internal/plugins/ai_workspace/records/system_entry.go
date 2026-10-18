@@ -15,7 +15,7 @@ import (
 var systemEntryReserved = map[string]bool{
 	"kind": true, "action": true, "name": true, "entry": true, "summary": true,
 	"director": true, "rename_to": true, "type": true, "subcategory": true,
-	"visibility": true, "tags": true, "description": true,
+	"visibility": true, "tags": true, "description": true, "reason": true,
 }
 
 // SystemEntryKind adds, changes and removes the campaign's own pick-list

@@ -171,6 +171,7 @@ type: location
 subcategory: city
 visibility: private
 tags: [trade-hub, coastal]
+reason: The players asked where the caravan was headed.
 ---
 
 # Example Page Name
@@ -183,6 +184,9 @@ Valid ` + "`" + `type` + "`" + ` values are the slugs listed above. ` + "`" + `v
 existing tag vocabulary where possible; a tag that doesn't exist yet is made. On
 ` + "`" + `action: update` + "`" + `, ` + "`" + `tags` + "`" + ` replaces the page's tags, ` + "`" + `tags: []` + "`" + ` clears them, and leaving
 the line out keeps them. A page's GM-only tags always stay.
+
+` + "`" + `reason` + "`" + ` is one sentence saying why you are asking for this change. I see it
+beside the change when I review, and it is never saved.
 
 To put a page under another page, add ` + "`" + `parent: Name of the parent page` + "`" + `. The parent
 is an existing page (an index line like "Name (in Parent)" means that page already sits
@@ -214,7 +218,8 @@ Besides pages, a block can change other parts of the campaign. Give it
 ` + "`" + `kind:` + "`" + ` (below) and ` + "`" + `action:` + "`" + ` (` + "`" + `create` + "`" + `, ` + "`" + `update` + "`" + ` or ` + "`" + `delete` + "`" + `), matched by
 ` + "`" + `name` + "`" + `. I review every change, and confirm each removal myself, before
 anything happens. For a page, ` + "`" + `action: update` + "`" + ` and ` + "`" + `action: delete` + "`" + ` work the
-same way.
+same way. Any block can add ` + "`" + `reason:` + "`" + ` with one sentence saying why, above all a
+removal.
 
 {{ .RecordDocs }}
 {{ end }}

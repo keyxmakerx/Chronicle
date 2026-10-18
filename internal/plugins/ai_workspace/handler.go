@@ -238,7 +238,10 @@ func (h *Handler) planRecords(c echo.Context, cc *campaigns.CampaignContext, rec
 	all := make([]records.Record, len(recs))
 	for i, p := range recs {
 		all[i] = toRecord(i, p, nil)
-		rows[i] = RecordRow{Index: i, Label: all[i].Kind, Action: all[i].Action, Name: all[i].Name}
+		rows[i] = RecordRow{
+			Index: i, Label: all[i].Kind, Action: all[i].Action, Name: all[i].Name,
+			Block: p.SourceIndex + 1, Reason: all[i].Str("reason"),
+		}
 	}
 	if h.records == nil {
 		for i := range rows {

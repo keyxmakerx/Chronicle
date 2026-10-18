@@ -155,24 +155,29 @@ Body.`
 
 	// Page count + per-status counters (singular grammar: "1
 	// conflict", not "1 conflicts").
-	mustContain(t, out, "5 pages detected")
+	mustContain(t, out, "From your AI · 5 requests")
 	mustContain(t, out, "1 conflict")
 	mustContain(t, out, "1 new category")
 	mustContain(t, out, "1 parse error")
 
-	// Per-row chips — each status appears at least once. Match the
-	// icon classes (stable across copy edits to the chip text).
-	mustContain(t, out, "fa-check mr-1")              // StatusNew chip icon
-	mustContain(t, out, "fa-triangle-exclamation")    // StatusConflict chip icon
-	mustContain(t, out, "fa-folder-plus")             // StatusNewCategory chip icon
-	mustContain(t, out, "fa-circle-xmark")            // StatusParseError chip icon
+	// Each status shows at least once. Match the icon classes (stable
+	// across copy edits to the wording).
+	mustContain(t, out, "air-pill is-add")         // a new page's verb pill
+	mustContain(t, out, "fa-triangle-exclamation") // the name-conflict line
+	mustContain(t, out, "fa-folder-plus")          // the new-category control
+	mustContain(t, out, "fa-circle-xmark")         // the parse error, in the problems box
 
 	// Specific row name inputs — match the `value=` attribute.
 	mustContain(t, out, `value="Maro Halvi"`)
 	mustContain(t, out, `value="The Drowned Reach"`)
 	mustContain(t, out, `value="Lyra Vance"`)
 	mustContain(t, out, `value="Ash-Wraith"`)
-	mustContain(t, out, `value="Bone Citadel"`)
+	// A block that won't parse is never offered as a row: it sits in the
+	// problems box with where it is in the paste.
+	mustContain(t, out, "Block 5")
+	if strings.Contains(out, `value="Bone Citadel"`) {
+		t.Errorf("a parse-error block should not be offered in the list")
+	}
 
 	// New-category UI surface: Create-new / Map-to-existing radio
 	// pair; the proposed slug surfaces in a <code> chip next to the
