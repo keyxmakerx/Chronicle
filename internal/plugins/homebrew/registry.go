@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
+	"strings"
 	"sync"
 )
 
@@ -30,8 +31,23 @@ type EventDef struct {
 	// PartKinds are the kinds of part that fire it; empty means it comes from
 	// outside any part (a moon changing, a respite).
 	PartKinds []string
+	Fields    []Field // the args the Workshop asks for; nil when there are none
 	Check     CheckFunc
 }
+
+// Field is one arg of an event or action, as the Workshop's inspector asks
+// for it. The owner's Check still has the last word on its value.
+type Field struct {
+	Name  string `json:"name"`  // the arg's JSON key
+	Label string `json:"label"` // what the inspector calls it
+	Type  string `json:"type"`  // FieldWhole or FieldText
+}
+
+// Field types the inspector can draw.
+const (
+	FieldWhole = "whole" // a whole number
+	FieldText  = "text"  // one line of text
+)
 
 // ActionDef is something a rule can do.
 type ActionDef struct {
@@ -43,6 +59,7 @@ type ActionDef struct {
 	// system package registered there, only when the Director presses Run.
 	// The server records and validates them but never runs them.
 	ClientRun bool
+	Fields    []Field
 	Check     CheckFunc
 }
 
@@ -74,6 +91,24 @@ func checkName(what, name string, check CheckFunc) error {
 	return nil
 }
 
+var fieldNameRe = regexp.MustCompile(`^[a-z][a-zA-Z0-9]{0,39}$`)
+
+// checkFields keeps an owner's arg list drawable: camelCase keys, each once,
+// with a label and a type the inspector knows.
+func checkFields(what, name string, fields []Field) error {
+	seen := map[string]bool{}
+	for _, f := range fields {
+		if !fieldNameRe.MatchString(f.Name) || seen[f.Name] {
+			return fmt.Errorf("homebrew: %s %q has a bad or repeated field %q", what, name, f.Name)
+		}
+		if strings.TrimSpace(f.Label) == "" || (f.Type != FieldWhole && f.Type != FieldText) {
+			return fmt.Errorf("homebrew: %s %q field %q needs a label and a known type", what, name, f.Name)
+		}
+		seen[f.Name] = true
+	}
+	return nil
+}
+
 // RegisterPart adds a kind of part. A second registration of a name is an
 // error: two owners for one kind would make validation ambiguous.
 func (r *Registry) RegisterPart(k PartKind) error {
@@ -97,6 +132,9 @@ func (r *Registry) RegisterEvent(e EventDef) error {
 	if err := checkName("event", e.Name, e.Check); err != nil {
 		return err
 	}
+	if err := checkFields("event", e.Name, e.Fields); err != nil {
+		return err
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if _, dup := r.events[e.Name]; dup {
@@ -109,6 +147,9 @@ func (r *Registry) RegisterEvent(e EventDef) error {
 // RegisterAction adds an action.
 func (r *Registry) RegisterAction(a ActionDef) error {
 	if err := checkName("action", a.Name, a.Check); err != nil {
+		return err
+	}
+	if err := checkFields("action", a.Name, a.Fields); err != nil {
 		return err
 	}
 	r.mu.Lock()
@@ -155,6 +196,7 @@ type CatalogEntry struct {
 	ForceSee  string   `json:"forceSee,omitempty"`
 	PartKinds []string `json:"partKinds,omitempty"`
 	ClientRun bool     `json:"clientRun,omitempty"`
+	Fields    []Field  `json:"fields,omitempty"`
 }
 
 // Catalog lists everything registered, sorted by name so the palette is
@@ -167,10 +209,10 @@ func (r *Registry) Catalog() Catalog {
 		c.Parts = append(c.Parts, CatalogEntry{Name: k.Name, Label: k.Label, ForceSee: k.ForceSee})
 	}
 	for _, e := range r.events {
-		c.Events = append(c.Events, CatalogEntry{Name: e.Name, Label: e.Label, PartKinds: e.PartKinds})
+		c.Events = append(c.Events, CatalogEntry{Name: e.Name, Label: e.Label, PartKinds: e.PartKinds, Fields: e.Fields})
 	}
 	for _, a := range r.actions {
-		c.Actions = append(c.Actions, CatalogEntry{Name: a.Name, Label: a.Label, PartKinds: a.PartKinds, ClientRun: a.ClientRun})
+		c.Actions = append(c.Actions, CatalogEntry{Name: a.Name, Label: a.Label, PartKinds: a.PartKinds, ClientRun: a.ClientRun, Fields: a.Fields})
 	}
 	for _, l := range [][]CatalogEntry{c.Parts, c.Events, c.Actions} {
 		sort.Slice(l, func(i, j int) bool { return l[i].Name < l[j].Name })

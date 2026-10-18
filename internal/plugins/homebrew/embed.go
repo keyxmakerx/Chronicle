@@ -17,3 +17,9 @@ const PluginSlug = "homebrew"
 //
 //go:embed migrations/*.sql
 var MigrationsFS embed.FS
+
+// StaticAssetsFS holds the Workshop widget and its styles, served at
+// /static/plugins/homebrew/.
+//
+//go:embed static
+var StaticAssetsFS embed.FS

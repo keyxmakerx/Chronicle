@@ -450,3 +450,41 @@ func TestValidateDocOutputShape(t *testing.T) {
 		}
 	})
 }
+
+func TestValidateDocLayout(t *testing.T) {
+	reg := testRegistry(t)
+	doc := Doc{
+		Parts: []Part{w("a"), w("b")},
+		Rules: []Rule{
+			rule("widget.hit", "a", "", Do{Action: "bump", Part: "b"}, Do{Action: "ping"}),
+			rule("moon", "", "", Do{Action: "ping"}),
+		},
+	}
+	tests := []struct {
+		name   string
+		layout map[string]Pos
+		want   map[string]Pos
+	}{
+		{"none stays none", nil, nil},
+		{"known cards kept", map[string]Pos{"p:a": {1, 2}, "r0": {3, 4}, "r0.1": {5, 6}, "r1.0": {7, 8}},
+			map[string]Pos{"p:a": {1, 2}, "r0": {3, 4}, "r0.1": {5, 6}, "r1.0": {7, 8}}},
+		{"unknown part dropped", map[string]Pos{"p:zzz": {1, 1}, "p:b": {2, 2}}, map[string]Pos{"p:b": {2, 2}}},
+		{"rule out of range dropped", map[string]Pos{"r2": {1, 1}, "r0.2": {1, 1}, "r1.1": {1, 1}}, nil},
+		{"odd keys dropped", map[string]Pos{"r01": {1, 1}, "r-1": {1, 1}, "x": {1, 1}, "p:": {1, 1}, "r0.": {1, 1}}, nil},
+		{"far cards pulled in", map[string]Pos{"p:a": {MaxCanvas + 5, -MaxCanvas - 5}},
+			map[string]Pos{"p:a": {MaxCanvas, -MaxCanvas}}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			in := doc
+			in.Layout = tt.layout
+			out, err := validateDoc(context.Background(), reg, "c1", in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if fmt.Sprint(out.Layout) != fmt.Sprint(tt.want) {
+				t.Errorf("layout = %v, want %v", out.Layout, tt.want)
+			}
+		})
+	}
+}

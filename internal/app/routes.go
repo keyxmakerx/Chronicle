@@ -5934,7 +5934,13 @@ func (a *App) RegisterRoutes() {
 
 	// Homebrew Workshop: saved recipes of parts and When/Then rules. The
 	// store and its routes exist only while its table migrated.
-	a.registerPlugin(PluginRegistration{Slug: homebrew.PluginSlug})
+	a.registerPlugin(PluginRegistration{
+		Slug:     homebrew.PluginSlug,
+		StaticFS: echo.MustSubFS(homebrew.StaticAssetsFS, "static"),
+		Widgets: []PluginWidget{
+			{Name: "homebrew-workshop", Scripts: []string{"js/homebrew_workshop.js"}},
+		},
+	})
 	if a.PluginHealth.IsHealthy(homebrew.PluginSlug) {
 		homebrewSvc := homebrew.NewService(homebrew.NewRepository(a.DB), homebrewReg)
 		homebrew.RegisterRoutes(e, homebrew.NewHandler(homebrewSvc), campaignService, authService)
