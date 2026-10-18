@@ -277,12 +277,19 @@ template); nothing is added to a page the owner has not placed it on:
 ```
 
 - `widget` must match one of this manifest's `widgets[].slug`.
-- `applies_to` must be `"npc"`, the only audience for now. Any other value is
-  rejected at install so a typo is loud. "NPC" means the same page types
-  as the NPC gallery: the ones the campaign owner listed as NPCs on the
-  Characters page, with their sub-types but not the player-character type, and
-  never a page a player has claimed as their character. A system's creature
-  types are not NPCs until the owner lists them.
+- `applies_to` is `"npc"` or `"creature"`. Any other value is rejected at
+  install so a typo is loud.
+  - `"npc"` means the same page types as the NPC gallery: the ones the
+    campaign owner listed as NPCs on the Characters page, with their sub-types
+    but not the player-character type. A system's creature types are not NPCs
+    until the owner lists them.
+  - `"creature"` means creature page types: preset category `creature`, or a
+    slug of `creature` or `*-monster`, with their sub-types, listed as NPCs or
+    not. Use it for a stat block that belongs on every bestiary page.
+  - Neither ever matches a page a player has claimed as their character, and a
+    widget aimed at both mounts once on a page that is both.
+  - A Chronicle older than the `"creature"` audience rejects a manifest that
+    uses it, so ship it once the instances you target have it.
 - A manifest declares no more than 10 panels.
 
 The host emits `<div data-widget="…" data-campaign-id="…" data-entity-id="…"

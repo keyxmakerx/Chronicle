@@ -546,7 +546,7 @@
           "description": "A widgets[].slug in this manifest."
         },
         "applies_to": {
-          "const": "npc"
+          "enum": ["npc", "creature"]
         }
       },
       "additionalProperties": false

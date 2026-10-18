@@ -58,6 +58,9 @@ type EntityTypeRepository interface {
 	// tie-safe — the ordering surfaced in the parent's +New variant picker and
 	// aggregated listing, which both read ORDER BY sort_order, name.
 	ResequenceChildTypes(ctx context.Context, campaignID string, orderedIDs []int) error
+	// UpdatePlacement writes a type's position, default flag and on/off state,
+	// which no edit form changes; a campaign import restores them.
+	UpdatePlacement(ctx context.Context, id, sortOrder int, isDefault, enabled bool) error
 	SeedDefaults(ctx context.Context, campaignID string) error
 	SeedFromTypes(ctx context.Context, campaignID string, types []EntityType) error
 }
@@ -581,6 +584,18 @@ func (r *entityTypeRepository) SlugExists(ctx context.Context, campaignID, slug 
 		return false, fmt.Errorf("checking entity type slug existence: %w", err)
 	}
 	return exists, nil
+}
+
+// UpdatePlacement writes sort_order, is_default and enabled for one type.
+func (r *entityTypeRepository) UpdatePlacement(ctx context.Context, id, sortOrder int, isDefault, enabled bool) error {
+	result, err := r.db.ExecContext(ctx,
+		`UPDATE entity_types SET sort_order = ?, is_default = ?, enabled = ? WHERE id = ?`,
+		sortOrder, isDefault, enabled, id,
+	)
+	if err != nil {
+		return fmt.Errorf("updating entity type placement: %w", err)
+	}
+	return r.changedOrExists(ctx, result, id)
 }
 
 // MaxSortOrder returns the highest sort_order value for entity types in a campaign.

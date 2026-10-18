@@ -262,8 +262,10 @@ type ModerateInput struct {
 
 // EntityCreator creates campaign entities from imported bestiary statblocks.
 // Implemented via an adapter wrapping the entities service in routes.go.
+// systemID is the publication's game system, so the page lands on that
+// system's creature type when the campaign has more than one.
 type EntityCreator interface {
-	CreateFromStatblock(ctx context.Context, campaignID, userID, name string, statblock json.RawMessage) (entityID string, err error)
+	CreateFromStatblock(ctx context.Context, campaignID, userID, name, systemID string, statblock json.RawMessage) (entityID string, err error)
 }
 
 // CampaignRoleChecker verifies a user's role in a campaign.

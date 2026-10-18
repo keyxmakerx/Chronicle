@@ -112,24 +112,116 @@ type bestiaryEntityCreatorAdapter struct {
 	campaignSvc campaigns.CampaignService
 }
 
-// CreateFromStatblock creates a new entity in a campaign from a bestiary statblock.
-// Uses entity type ID 0 (default) since the real type depends on system configuration.
+// CreateFromStatblock creates a creature page in a campaign from a bestiary
+// statblock, on the campaign's creature type with the type's fields filled
+// from the statblock (see creatureFields). A campaign with no creature type
+// is refused with a message saying so: the page needs a type to exist at all.
 //
 // Visibility comes from the campaign's DefaultVisibility setting: the
 // bestiary's EntityCreator interface has no is_private parameter and the
 // import UI has no per-import visibility control, so the campaign default is
 // the only input there is.
-func (a *bestiaryEntityCreatorAdapter) CreateFromStatblock(ctx context.Context, campaignID, userID, name string, statblock json.RawMessage) (string, error) {
+func (a *bestiaryEntityCreatorAdapter) CreateFromStatblock(ctx context.Context, campaignID, userID, name, systemID string, statblock json.RawMessage) (string, error) {
+	et, err := a.creatureType(ctx, campaignID, systemID)
+	if err != nil {
+		return "", err
+	}
 	input := entities.CreateEntityInput{
-		Name:       name,
-		FieldsData: map[string]any{"statblock_json": string(statblock)},
-		IsPrivate:  a.defaultPrivate(ctx, campaignID),
+		Name:         name,
+		EntityTypeID: et.ID,
+		FieldsData:   creatureFields(et.Fields, statblock),
+		IsPrivate:    a.defaultPrivate(ctx, campaignID),
 	}
 	ent, err := a.svc.Create(ctx, campaignID, userID, input)
 	if err != nil {
 		return "", err
 	}
 	return ent.ID, nil
+}
+
+// creatureType picks the campaign's switched-on creature type, preferring the
+// publication's system's own ("<system>-creature") when there are several.
+func (a *bestiaryEntityCreatorAdapter) creatureType(ctx context.Context, campaignID, systemID string) (*entities.EntityType, error) {
+	types, err := a.svc.GetEntityTypesByPresetCategory(ctx, campaignID, "creature")
+	if err != nil {
+		return nil, err
+	}
+	var pick *entities.EntityType
+	for i := range types {
+		if !types[i].Enabled {
+			continue
+		}
+		if systemID != "" && types[i].Slug == systemID+"-creature" {
+			return &types[i], nil
+		}
+		if pick == nil {
+			pick = &types[i]
+		}
+	}
+	if pick == nil {
+		return nil, apperror.NewBadRequest("this campaign has no creature page type to add the creature to; enable its game system, or add a category for creatures, and try again")
+	}
+	return pick, nil
+}
+
+// creatureFields fills a creature type's fields from a published statblock,
+// in the shapes game systems keep them: a statblock value fills the type's
+// field of the same key. A list or object goes to the "<key>_json" field as
+// JSON text when the type declares one, else to the key itself: a list of
+// plain values (keywords) as comma text, anything else as JSON text. Keys the
+// type does not declare are left out; the whole statblock is kept under
+// statblock_json, as before, so nothing in it is lost.
+func creatureFields(defs []entities.FieldDefinition, statblock json.RawMessage) map[string]any {
+	out := map[string]any{"statblock_json": string(statblock)}
+	var sb map[string]any
+	if json.Unmarshal(statblock, &sb) != nil {
+		return out
+	}
+	declared := make(map[string]bool, len(defs))
+	for _, d := range defs {
+		declared[d.Key] = true
+	}
+	for k, v := range sb {
+		switch v := v.(type) {
+		case nil:
+		case map[string]any, []any:
+			key := k
+			if declared[k+"_json"] {
+				key = k + "_json"
+			} else if !declared[k] {
+				continue
+			}
+			if text, ok := plainList(v); ok && !strings.HasSuffix(key, "_json") {
+				out[key] = text
+			} else if raw, err := json.Marshal(v); err == nil {
+				out[key] = string(raw)
+			}
+		default:
+			if declared[k] {
+				out[k] = v
+			}
+		}
+	}
+	return out
+}
+
+// plainList joins a list of plain values with commas; ok is false for
+// anything else.
+func plainList(v any) (string, bool) {
+	list, ok := v.([]any)
+	if !ok {
+		return "", false
+	}
+	parts := make([]string, 0, len(list))
+	for _, item := range list {
+		switch item.(type) {
+		case string, float64, bool:
+			parts = append(parts, fmt.Sprint(item))
+		default:
+			return "", false
+		}
+	}
+	return strings.Join(parts, ", "), true
 }
 
 // defaultPrivate reports whether this campaign's DefaultVisibility setting
@@ -2859,6 +2951,7 @@ func (a *App) RegisterRoutes() {
 	// types its defaults provide.
 	characterListService := entities.NewCharacterListService(entityService, &characterListStore{camps: campaignService})
 	campaignService.SetCharacterListSeeder(characterListService)
+	characterListService.SetPanelPlacer(entityService)
 	entityHandler.SetCharacterLists(characterListService)
 
 	// Media plugin: file upload, storage, thumbnailing, serving.
@@ -4733,6 +4826,11 @@ func (a *App) RegisterRoutes() {
 		slog.Error("placing page extras failed", slog.String("error", err.Error()))
 	} else if n > 0 {
 		slog.Info("placed page extras into layouts", slog.Int("layouts", n))
+	}
+	if n, err := placeCreaturePanelsOnce(context.Background(), settingsRepo, campaignService, entityService); err != nil {
+		slog.Error("placing creature panels failed", slog.String("error", err.Error()))
+	} else if n > 0 {
+		slog.Info("placed game-system panels on creature types", slog.Int("layouts", n))
 	}
 
 	// One-time: existing campaigns move to the Material page look
