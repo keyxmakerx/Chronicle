@@ -4665,11 +4665,25 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
     padding: 4.5rem 1rem 1rem; overflow-y: auto;
   }
   .dms { width: min(980px, 100%); color: var(--dms-ink); }
-  .dms-head { display: flex; align-items: center; justify-content: space-between; margin: 0 .25rem .4rem; color: #fff; }
-  .dms-head h2 { font-size: 1.05rem; font-weight: 700; letter-spacing: .06em; text-shadow: 0 1px 2px rgba(0,0,0,.5); }
-  .dms-close { background: rgba(0,0,0,.35); border: 1px solid rgba(255,255,255,.3); color: #fff; border-radius: .5rem; padding: .15rem .7rem; }
+  /* The bar is a tool's title bar on the theme tokens, solid so the page
+     behind never shows through it, and the handle the window drags by. */
+  .dms-titlebar {
+    margin: 0 0 .4rem; padding: .3rem .4rem .4rem .75rem; border-radius: .75rem;
+    background: var(--surface-raised); color: var(--surface-text);
+    border: 1px solid var(--surface-border); box-shadow: var(--elev-hover);
+  }
+  .dms-head { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+  .dms-head h2 { display: flex; align-items: center; gap: .5rem; font-size: 1rem; font-weight: 700; letter-spacing: .04em; }
+  .dms-grip { font-size: .8rem; color: var(--surface-text-muted); }
+  .dms-close {
+    display: grid; place-items: center; width: 2rem; height: 2rem; border-radius: .5rem;
+    color: var(--surface-text-muted); background: transparent; border: 1px solid transparent;
+    transition: background-color var(--dur-micro), color var(--dur-micro), border-color var(--dur-micro);
+  }
+  .dms-close:hover { color: var(--surface-text); background: var(--surface-alt); border-color: var(--surface-border); }
   .dms-close:focus-visible, .dms button:focus-visible, .dms a:focus-visible, .dms summary:focus-visible { outline: 2px solid var(--color-accent, #6366f1); outline-offset: 2px; }
-  .dms-strip { display: flex; flex-wrap: wrap; gap: .3rem 1rem; align-items: center; background: rgba(0,0,0,.5); color: #fff; border-radius: .5rem; padding: .35rem .75rem; margin: 0 .25rem .4rem; font-size: .85rem; }
+  .dms-strip { display: flex; flex-wrap: wrap; gap: .2rem 1rem; align-items: center; color: var(--color-text-secondary); font-size: .85rem; }
+  .dms-strip b { color: var(--surface-text); font-weight: 600; }
   /* The window state: nothing in the overlay catches clicks except the screen
      itself, so the page behind stays usable. Close and Escape still close it. */
   .dms-windowed { pointer-events: none; }
@@ -4677,12 +4691,15 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
   .dms-windowed .dms-stage { overflow: visible; }
   .dms-windowed .dms { pointer-events: auto; max-height: calc(100vh - 2rem); overflow-y: auto; }
   .dms-dimmed-off .dms-dim { display: none; }
-  .dms-windowed .dms-head { cursor: move; touch-action: none; user-select: none; }
-  .dms-windowed .dms-head button { cursor: pointer; }
-  .dms-dragging, .dms-dragging .dms-head { cursor: grabbing; }
+  .dms-windowed .dms-titlebar { cursor: grab; touch-action: none; user-select: none; }
+  .dms-windowed .dms-titlebar button { cursor: pointer; }
+  .dms-dragging, .dms-dragging .dms-titlebar { cursor: grabbing; }
+  .dms-dragging .dms-titlebar { box-shadow: var(--elev-dragged); }
+  .dms-grip { display: none; }
+  .dms-windowed .dms-grip { display: inline; }
   .dms-settle { transition: translate .3s cubic-bezier(.2,.8,.2,1); }
-  .dms-dot { display: inline-block; width: .5rem; height: .5rem; border-radius: 50%; border: 1px solid #fff; margin-right: .35rem; }
-  .dms-dot-on { background: #4ade80; border-color: #4ade80; }
+  .dms-dot { display: inline-block; width: .5rem; height: .5rem; border-radius: 50%; border: 1px solid currentColor; margin-right: .35rem; }
+  .dms-dot-on { background: var(--dms-ok); border-color: var(--dms-ok); }
   .dms-dot-after { margin: 0 0 0 .3rem; vertical-align: middle; background: var(--dms-ok); border-color: var(--dms-ok); }
   .dms-leaves { display: flex; perspective: 1400px; transform-style: preserve-3d; }
   .dms-leaf {
@@ -4759,9 +4776,18 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
   .dms-done { font-size: .78rem; color: var(--dms-ok); }
   .dms-overlay [hidden], .dms-overlay[hidden] { display: none; }
   .dms-skip { position: absolute; right: .75rem; bottom: .75rem; font-size: .85rem; color: #fff; background: rgba(0,0,0,.5); border-radius: .4rem; padding: .15rem .5rem; }
-  .dms-die { position: absolute; width: 120px; height: 120px; pointer-events: none; z-index: 2; }
-  .dms-piece { position: absolute; inset: 0; background: var(--dms-die); will-change: transform, opacity; }
-  .dms-piece b { position: absolute; left: 0; right: 0; top: 41%; text-align: center; color: #fff; font: 700 24px/1 system-ui, sans-serif; }
+  /* The burst's pieces are shards of light, not a second die: the thrown
+     rune die has already shown its 20. The glow is on the wrapper because a
+     clip-path would cut it off each piece. */
+  .dms-die { position: absolute; width: 90px; height: 90px; pointer-events: none; z-index: 2;
+    filter: drop-shadow(0 0 6px color-mix(in srgb, var(--dms-die) 80%, #fff)); }
+  .dms-piece { position: absolute; inset: 0; will-change: transform, opacity;
+    background: linear-gradient(160deg, #fff 0, color-mix(in srgb, var(--dms-die) 45%, #fff) 35%, var(--dms-die) 100%); }
+  .dms-flash {
+    position: absolute; width: 160px; height: 160px; border-radius: 50%; pointer-events: none; z-index: 1;
+    background: radial-gradient(circle, rgb(255 255 255 / .95) 0, color-mix(in srgb, var(--dms-die) 70%, transparent) 38%, transparent 70%);
+  }
+  .dms-flash-page { position: fixed; z-index: 61; width: 120px; height: 120px; }
   /* Adventures tab: pinned pages and loose notes as cards on a board (the same
      shape as the quest notice board). Colours come from the screen's own
      leaf tokens, which already have a dark set. */
