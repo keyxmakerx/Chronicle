@@ -91,6 +91,9 @@ type Lookups struct {
 	Rules   *HouseRuleKind
 	Entries SystemEntriesAPI
 	Party   PartyAPI
+	// PageMaps adds a page's map lines to the `page` answer; nil leaves
+	// them out.
+	PageMaps PageMapsAPI
 	// Kinds answers `what: format` with a kind's own doc.
 	Kinds *Registry
 }
@@ -476,6 +479,7 @@ func (run *lookupRun) page(name string) (LookupAnswer, error) {
 	md = strings.Replace(md, " {#"+anchorOf(md)+"}", "", 1)
 	md = strings.TrimSuffix(strings.TrimSpace(md), "---")
 	md += sheetFieldsText(e, types, run.director(), e.OwnerUserID != nil && *e.OwnerUserID == run.a.UserID)
+	md += pageMapText(run.ctx, run.l.PageMaps, run.campaignID, e, run.a)
 	ans.Chip = "Page · " + e.Name
 	ans.Text = md
 	return ans, nil
