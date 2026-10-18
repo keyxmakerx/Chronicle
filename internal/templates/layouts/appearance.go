@@ -56,6 +56,10 @@ type AppearanceData struct {
 	// PageLook is how pages draw their blocks; "" and "standard" add no
 	// attribute, and "annals" sets data-cz-page for page_look_annals.css.
 	PageLook string
+
+	// TimelinePopup is what opens over a time line's event; "corner" sets
+	// data-cz-tlpop for the fading corner, and "" is the classic hover card.
+	TimelinePopup string
 }
 
 const keyAppearance ctxKey = "layout_appearance"
@@ -114,6 +118,9 @@ func AppearanceAttrs(ctx context.Context) templ.Attributes {
 	}
 	if a.PageLook == "annals" {
 		attrs["data-cz-page"] = a.PageLook
+	}
+	if a.TimelinePopup == "corner" {
+		attrs["data-cz-tlpop"] = "corner"
 	}
 	if a.HeadingFont != "" && a.HeadingFont != "same" {
 		attrs["data-cz-heading"] = a.HeadingFont

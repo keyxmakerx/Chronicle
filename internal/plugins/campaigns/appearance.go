@@ -41,6 +41,7 @@ type Appearance struct {
 	HoverCard       string `json:"hover_card,omitempty"`       // Hover card look: "paper" (default), "plain", "night" or "compact".
 	SheetStyle      string `json:"sheet_style,omitempty"`      // Character sheet style (AppearanceSheetStyles); "modern" is the default.
 	PageLook        string `json:"page_look,omitempty"`        // How pages draw their blocks (AppearancePageLooks); "standard" is the default.
+	TimelinePopup   string `json:"timeline_popup,omitempty"`   // What opens on a time line's event: "classic" (default) or "corner".
 }
 
 // The allowed values of each Appearance choice. The first entry is the
@@ -71,6 +72,9 @@ var (
 	// AppearancePageLooks restyle every block on a page through the shared
 	// block parts without moving anything; page_look_annals.css draws Annals.
 	AppearancePageLooks = []string{"standard", "annals"}
+	// AppearanceTimelinePopups are what opens over an event on a time line:
+	// the classic hover card, or the fading corner that grows out of the bead.
+	AppearanceTimelinePopups = []string{"classic", "corner"}
 )
 
 // Text limits the Customize page shows. Brand name and welcome keep their
@@ -121,6 +125,9 @@ type AppearanceInput struct {
 	Page struct {
 		Look string `json:"look"`
 	} `json:"page"`
+	Timeline struct {
+		Popup string `json:"popup"`
+	} `json:"timeline"`
 }
 
 // AppearanceSidebarInput is the Sidebar section. Colour is the menu colour
@@ -214,6 +221,20 @@ func pageLookChoice(v string, prev *Appearance) (string, error) {
 		}
 	}
 	return "", apperror.NewBadRequest("invalid page look")
+}
+
+// timelinePopupChoice is the time line popup a save stores. New campaigns
+// start on the fading corner while older ones keep the classic card, so an
+// editor that does not send a popup keeps the stored one rather than
+// resetting it; Classic, the default, is stored as empty.
+func timelinePopupChoice(v string, prev *Appearance) (string, error) {
+	if v == "" {
+		if prev != nil {
+			return prev.TimelinePopup, nil
+		}
+		return "", nil
+	}
+	return oneOf("time line popup", v, AppearanceTimelinePopups)
 }
 
 // calmColour validates an optional #RRGGBB and tones it down the way the
@@ -419,6 +440,9 @@ func applyAppearance(s *CampaignSettings, in AppearanceInput) (*string, error) {
 		}
 	}
 	if a.PageLook, err = pageLookChoice(in.Page.Look, s.Appearance); err != nil {
+		return fail(err)
+	}
+	if a.TimelinePopup, err = timelinePopupChoice(in.Timeline.Popup, s.Appearance); err != nil {
 		return fail(err)
 	}
 	a.ReduceMotion = in.Motion.ReduceAll

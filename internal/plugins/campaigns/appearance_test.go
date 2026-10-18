@@ -109,6 +109,7 @@ func appearanceFieldCases() []fieldCase {
 		{"hover card", func(in *AppearanceInput, v string) { in.Hover.Look = v }, func(a *Appearance) string { return a.HoverCard }, "night"},
 		{"character sheet style", func(in *AppearanceInput, v string) { in.Sheet.Style = v }, func(a *Appearance) string { return a.SheetStyle }, "brass"},
 		{"page look", func(in *AppearanceInput, v string) { in.Page.Look = v }, func(a *Appearance) string { return a.PageLook }, "annals"},
+		{"time line popup", func(in *AppearanceInput, v string) { in.Timeline.Popup = v }, func(a *Appearance) string { return a.TimelinePopup }, "corner"},
 	}
 }
 
@@ -154,7 +155,7 @@ func TestApplyAppearance_EveryListedValueAccepted(t *testing.T) {
 		"body font": AppearanceBodyFonts, "heading font": AppearanceHeadingFonts, "type scale": AppearanceTypeScales,
 		"button style": AppearanceButtonStyles, "elevation": AppearanceElevations, "motion speed": AppearanceSpeeds,
 		"hover card": AppearanceHoverCards, "character sheet style": AppearanceSheetStyles,
-		"page look": AppearancePageLooks,
+		"page look": AppearancePageLooks, "time line popup": AppearanceTimelinePopups,
 	}
 	for _, fc := range appearanceFieldCases() {
 		for _, v := range lists[fc.name] {
@@ -784,6 +785,31 @@ func TestPageLookChoice(t *testing.T) {
 			got, err := pageLookChoice(tt.v, tt.prev)
 			if (err != nil) != tt.wantErr || got != tt.want {
 				t.Errorf("pageLookChoice(%q) = %q, %v; want %q", tt.v, got, err, tt.want)
+			}
+		})
+	}
+}
+
+func TestTimelinePopupChoice(t *testing.T) {
+	tests := []struct {
+		name    string
+		v       string
+		prev    *Appearance
+		want    string
+		wantErr bool
+	}{
+		{"not sent, nothing stored", "", nil, "", false},
+		{"not sent keeps the corner", "", &Appearance{TimelinePopup: "corner"}, "corner", false},
+		{"not sent keeps the classic card", "", &Appearance{}, "", false},
+		{"classic is stored as empty", "classic", &Appearance{TimelinePopup: "corner"}, "", false},
+		{"corner", "corner", nil, "corner", false},
+		{"unknown refused", "bubble", nil, "", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := timelinePopupChoice(tt.v, tt.prev)
+			if (err != nil) != tt.wantErr || got != tt.want {
+				t.Errorf("timelinePopupChoice(%q) = %q, %v; want %q", tt.v, got, err, tt.want)
 			}
 		})
 	}

@@ -38,6 +38,14 @@ func TestBuildCustomizeState(t *testing.T) {
 			if d.Header.Widgets == nil || d.Header.Links == nil {
 				t.Error("widgets and links must be empty lists, never null")
 			}
+			if d.Timeline.Popup != "classic" {
+				t.Errorf("an unset time line popup is the classic card, got %q", d.Timeline.Popup)
+			}
+		}},
+		{"time line popup reads back", `{"appearance":{"timeline_popup":"corner"}}`, nil, func(t *testing.T, st customizeState) {
+			if st.Draft.Timeline.Popup != "corner" {
+				t.Errorf("time line popup = %q, want corner", st.Draft.Timeline.Popup)
+			}
 		}},
 		{"older slots carry over", `{"accent_color":"#3b82f6","accent_app":"#10b981","font_family":"serif","topbar_style":{"mode":"gradient","gradient_from":"#0f172a","gradient_to":"#3b1d5e","gradient_dir":"to-br"},"topbar_content":{"mode":"quote","quote":"Hi"}}`, nil, func(t *testing.T, st customizeState) {
 			d := st.Draft

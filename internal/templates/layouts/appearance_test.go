@@ -59,6 +59,8 @@ func TestAppearanceAttrs(t *testing.T) {
 		{"sheet brass", AppearanceData{SheetStyle: "brass"}, map[string]string{"data-cz-sheet": "brass"}},
 		{"page standard", AppearanceData{PageLook: "standard"}, map[string]string{}},
 		{"page annals", AppearanceData{PageLook: "annals"}, map[string]string{"data-cz-page": "annals"}},
+		{"time line popup classic", AppearanceData{TimelinePopup: "classic"}, map[string]string{}},
+		{"time line popup corner", AppearanceData{TimelinePopup: "corner"}, map[string]string{"data-cz-tlpop": "corner"}},
 		{"heading cinzel", AppearanceData{HeadingFont: "cinzel"}, map[string]string{"data-cz-heading": "cinzel"}},
 		{"all", AppearanceData{NavStyle: "comet", NavStrength: "lively", NavPageName: "hidden", ButtonStyle: "glow",
 			Elevation: "flat", TypeScale: "roomy", ReduceMotion: true, HoverCard: "night"},
