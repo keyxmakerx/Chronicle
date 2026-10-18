@@ -2172,7 +2172,7 @@ func (h *Handler) GetFieldsAPI(c echo.Context) error {
 			restrictedKeys(canSeeGM, isOwner, et.Fields, effectiveFields), int(cc.VisibilityRole()), userID, canSeeGM),
 	}
 	if cal := h.dateFieldCalendar(c.Request().Context(), cc.Campaign.ID, effectiveFields); cal != nil {
-		response["calendar"] = cal
+		response["dateBook"] = cal
 	}
 	return c.JSON(http.StatusOK, response)
 }

@@ -75,7 +75,7 @@ Chronicle.register('attributes', {
           state.fieldOverrides = data.field_overrides || null;
           state.eraChanged = data.era_changed || null;
           state.shown = data.shown || {};
-          state.calendar = data.calendar || null;
+          state.calendar = data.dateBook || null;
           render();
         })
         .catch(function (err) {
