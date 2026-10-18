@@ -38,15 +38,11 @@ type SketchPoint struct {
 	Y float64 `json:"y"`
 }
 
-// The sketch's grid bounds. A square is 1000/width pixels on a map 1000
-// wide, and the maps plugin keeps a grid square between 10 and 300, so a
-// sketch 4 to 100 squares across draws exactly on the map's own grid.
-const (
-	sketchGridMin = 4
-	sketchGridMax = 100
-	// sketchMapWidth is the blank map's width; the grid is measured against it.
-	sketchMapWidth = 1000
-)
+// sketchMapWidth is the blank map's width; the grid is measured against it. A
+// square is 1000/width pixels, and the maps plugin keeps a grid square between
+// 10 and 300, so a sketch mapsketch.GridMin to GridMax squares across draws
+// exactly on the map's own grid.
+const sketchMapWidth = 1000
 
 // The look of what a sketch draws that is not a box (boxes take their look
 // from the viewer, which follows the theme). Lines and labels keep their
