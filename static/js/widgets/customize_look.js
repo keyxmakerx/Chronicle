@@ -376,7 +376,7 @@
       buttons:['buttons.style'],
       motion:['motion.elevation', 'motion.speed', 'motion.reduceAll'],
       page:['page.look'],
-      hover:['hover.look', 'timeline.popup'],
+      hover:['hover.look', 'hover.timelinePopup'],
       sheet:['sheet.style']
     };
 
@@ -437,7 +437,7 @@
       if (!d.hover) d.hover = { look:'paper' };
       if (!d.sheet) d.sheet = { style:'modern' };
       if (!d.page) d.page = { look:'' };
-      if (!d.timeline) d.timeline = { popup:'classic' };
+      if (!d.hover.timelinePopup) d.hover.timelinePopup = 'classic';
       d.header.links = (d.header.links || []).map(function(l){ return { label:l.label || '', url:l.url || '', icon:l.icon || '' }; });
       while (d.header.links.length < LINK_ROWS) d.header.links.push({ label:'', url:'', icon:'' });
       return d;
@@ -678,7 +678,7 @@
       var hc = window.Chronicle && Chronicle.hovercard;
       var sample = hc ? hc.html({ kind:'Battle', title:'The Siege of Emberfall', facts:[['Date', 'Thaw 9, 1388']] }) : '';
       return TL_POPUPS.map(function(p){
-        return '<label class="tile tlp-tile"><input type="radio" name="t-tlpop" value="' + p[0] + '" data-k="timeline.popup"><span class="tb">' +
+        return '<label class="tile tlp-tile"><input type="radio" name="t-tlpop" value="' + p[0] + '" data-k="hover.timelinePopup"><span class="tb">' +
           (sample ? '<span class="tlp-sample tlp-' + p[0] + '" aria-hidden="true"><span class="tlp-line"></span><span class="tlp-bead"></span>' +
             '<span class="chc chc--show" data-look="' + (p[0] === 'corner' ? 'corner' : 'paper') + '"><i class="chc__stem"></i><span class="chc__in">' + sample + '</span></span></span>' : '') +
           '<span class="tn">' + esc(p[1]) + '<span class="tck">' + IC('i-check') + '</span></span><span class="tk">' + esc(p[2]) + '</span></span></label>';
@@ -1564,7 +1564,7 @@
           dir:drift ? 'to-' + h.dir : '', image:bg === 'image' ? pic(h.image) : '', scrim:h.scrim,
           widgets:h.widgets.slice(), links:h.links.filter(function(l){ return l.label.trim() || l.url.trim(); }), text:h.text },
         colours:{ accent:d.colours.accent, s1:d.colours.s1 || '', s2:d.colours.s2 || '', page:d.colours.page, contrast:d.colours.contrast },
-        nav:clone(d.nav), type:clone(d.type), buttons:clone(d.buttons), motion:clone(d.motion), hover:clone(d.hover), sheet:clone(d.sheet), page:clone(d.page), timeline:clone(d.timeline),
+        nav:clone(d.nav), type:clone(d.type), buttons:clone(d.buttons), motion:clone(d.motion), hover:clone(d.hover), sheet:clone(d.sheet), page:clone(d.page),
         // The companion of each choice is sent only while that choice is
         // selected, so nothing stale is stored.
         sidebar:{ colour:d.colours.sidebar, own:d.colours.sidebar === 'own' ? sb.own : '', corner:sb.corner,

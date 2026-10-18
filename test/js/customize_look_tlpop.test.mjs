@@ -28,9 +28,9 @@ test('TL_POPUPS match the server allow-list, in order', () => {
 });
 
 test('the popup is in Hover cards and part of Save, Discard and Reset', () => {
-  assert.match(src, /hover:\['hover\.look', 'timeline\.popup'\]/, 'SEC_KEYS must list timeline.popup under hover');
-  assert.match(src, /page:clone\(d\.page\), timeline:clone\(d\.timeline\)/, 'toInput must send timeline');
-  assert.match(src, /if \(!d\.timeline\) d\.timeline = \{ popup:'classic' \}/, 'fromServer must fill a missing popup as the classic card');
-  assert.match(src, /data-k="timeline\.popup"/, 'a control must bind timeline.popup');
+  assert.match(src, /hover:\['hover\.look', 'hover\.timelinePopup'\]/, 'SEC_KEYS must list hover.timelinePopup');
+  assert.match(src, /hover:clone\(d\.hover\)/, 'toInput must send hover, which carries the popup');
+  assert.match(src, /if \(!d\.hover\.timelinePopup\) d\.hover\.timelinePopup = 'classic';/, 'fromServer must fill a missing popup as the classic card');
+  assert.match(src, /data-k="hover\.timelinePopup"/, 'a control must bind hover.timelinePopup');
   assert.match(src, /fld\('h-tl', 'Popups on time lines'/, 'the field must carry the signed name');
 });

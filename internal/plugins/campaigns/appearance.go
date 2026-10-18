@@ -117,7 +117,8 @@ type AppearanceInput struct {
 	} `json:"motion"`
 	Sidebar AppearanceSidebarInput `json:"sidebar"`
 	Hover   struct {
-		Look string `json:"look"`
+		Look          string `json:"look"`
+		TimelinePopup string `json:"timelinePopup"`
 	} `json:"hover"`
 	Sheet struct {
 		Style string `json:"style"`
@@ -125,9 +126,6 @@ type AppearanceInput struct {
 	Page struct {
 		Look string `json:"look"`
 	} `json:"page"`
-	Timeline struct {
-		Popup string `json:"popup"`
-	} `json:"timeline"`
 }
 
 // AppearanceSidebarInput is the Sidebar section. Colour is the menu colour
@@ -442,7 +440,7 @@ func applyAppearance(s *CampaignSettings, in AppearanceInput) (*string, error) {
 	if a.PageLook, err = pageLookChoice(in.Page.Look, s.Appearance); err != nil {
 		return fail(err)
 	}
-	if a.TimelinePopup, err = timelinePopupChoice(in.Timeline.Popup, s.Appearance); err != nil {
+	if a.TimelinePopup, err = timelinePopupChoice(in.Hover.TimelinePopup, s.Appearance); err != nil {
 		return fail(err)
 	}
 	a.ReduceMotion = in.Motion.ReduceAll

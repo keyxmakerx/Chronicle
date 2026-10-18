@@ -109,7 +109,7 @@ func appearanceFieldCases() []fieldCase {
 		{"hover card", func(in *AppearanceInput, v string) { in.Hover.Look = v }, func(a *Appearance) string { return a.HoverCard }, "night"},
 		{"character sheet style", func(in *AppearanceInput, v string) { in.Sheet.Style = v }, func(a *Appearance) string { return a.SheetStyle }, "brass"},
 		{"page look", func(in *AppearanceInput, v string) { in.Page.Look = v }, func(a *Appearance) string { return a.PageLook }, "annals"},
-		{"time line popup", func(in *AppearanceInput, v string) { in.Timeline.Popup = v }, func(a *Appearance) string { return a.TimelinePopup }, "corner"},
+		{"time line popup", func(in *AppearanceInput, v string) { in.Hover.TimelinePopup = v }, func(a *Appearance) string { return a.TimelinePopup }, "corner"},
 	}
 }
 

@@ -67,7 +67,8 @@ type customizeDraft struct {
 		ReduceAll bool   `json:"reduceAll"`
 	} `json:"motion"`
 	Hover struct {
-		Look string `json:"look"`
+		Look          string `json:"look"`
+		TimelinePopup string `json:"timelinePopup"` // "classic" or "corner".
 	} `json:"hover"`
 	Sheet struct {
 		Style string `json:"style"`
@@ -75,9 +76,6 @@ type customizeDraft struct {
 	Page struct {
 		Look string `json:"look"`
 	} `json:"page"`
-	Timeline struct {
-		Popup string `json:"popup"`
-	} `json:"timeline"`
 }
 
 // customizeState is everything the Customize page starts from.
@@ -236,7 +234,7 @@ func buildCustomizeState(ctx context.Context, cc *CampaignContext) customizeStat
 	// they do (pageLookChoice); the editor shows it as Standard, which is how
 	// such a campaign draws.
 	d.Page.Look = a.PageLook
-	d.Timeline.Popup = orDefault(a.TimelinePopup, AppearanceTimelinePopups)
+	d.Hover.TimelinePopup = orDefault(a.TimelinePopup, AppearanceTimelinePopups)
 	return st
 }
 
