@@ -52,6 +52,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/quests"
 	"github.com/keyxmakerx/chronicle/internal/plugins/restore"
 	"github.com/keyxmakerx/chronicle/internal/plugins/rolltables"
+	"github.com/keyxmakerx/chronicle/internal/plugins/rumours"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/settings"
 	"github.com/keyxmakerx/chronicle/internal/plugins/smtp"
@@ -5636,6 +5637,24 @@ func (a *App) RegisterRoutes() {
 		pageblocks.RegisterRoutes(e, pageblocks.NewHandler(pageBlocksSvc), campaignService, authService)
 	} else {
 		slog.Warn("pageblocks plugin degraded — routes not registered")
+	}
+
+	// Rumours: what the party has heard about a page. The block and its routes
+	// exist only while its table migrated, so a failed migration leaves out
+	// this block alone.
+	a.registerPlugin(PluginRegistration{
+		Slug:     rumours.PluginSlug,
+		StaticFS: echo.MustSubFS(rumours.StaticAssetsFS, "static"),
+		Widgets: []PluginWidget{
+			{Name: "rumours", Scripts: []string{"js/rumours.js"}},
+		},
+	})
+	if a.PluginHealth.IsHealthy(rumours.PluginSlug) {
+		rumoursSvc := rumours.NewService(rumours.NewRepository(a.DB))
+		rumours.RegisterRoutes(e, rumours.NewHandler(rumoursSvc, &rumoursPagesAdapter{svc: entityService}), campaignService, authService)
+		registerRumoursBlock(blockRegistry, rumoursSvc)
+	} else {
+		slog.Warn("rumours plugin degraded — the Rumours block is not available")
 	}
 
 	// Encounters: fights planned on a page, loaded in Foundry.

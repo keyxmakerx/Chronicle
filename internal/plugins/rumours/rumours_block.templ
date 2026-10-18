@@ -1,0 +1,203 @@
+// rumours_block.templ renders the entity page's "Rumours" block: what the
+// party has heard about this page, who said it, how sure they were, what the
+// Director knows is true and what the party has decided to believe.
+//
+// The server decides what each viewer may be told (Service.View) and renders
+// the newest rumours at rest, plus every rumour this viewer may see as one
+// JSON script; static/js/rumours.js draws the rest from it with textContent,
+// so a rumour never reaches innerHTML. The Director's truth is in neither the
+// markup nor the JSON of anyone else's block, and the Director-only controls
+// are not rendered for anyone else at all. Every control the server renders
+// is an inline IIFE (call), so the block works after an HTMX swap.
+package rumours
+
+import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
+
+templ rumourStyles() {
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/css/rumours.css") }/>
+}
+
+// BlockRumours renders the block. The caller has already dropped a block that
+// is Hidden for the viewer, so this renders unconditionally.
+templ BlockRumours(campaignID, entityID string, v *View) {
+	@rumourStyles()
+	<section
+		class="rm"
+		data-widget="rumours"
+		data-campaign={ campaignID }
+		data-entity={ entityID }
+		data-dm={ digit(v.IsDM) }
+		data-add={ digit(v.CanAdd) }
+		data-mark={ digit(v.CanMark) }
+		aria-label="Rumours"
+	>
+		@templ.JSONScript("rm-data-"+entityID, v)
+		<div class="rm-h">
+			<h2 class="cb-head rm-title">
+				<i class="fa-solid fa-ear-listen" aria-hidden="true"></i>
+				Rumours
+				<span class="cb-count rm-cnt" data-rm-cnt>{ itoa(v.Total) }</span>
+			</h2>
+			<span class="rm-acts">
+				<span class="rm-filt" data-rm-filters role="group" aria-label="Filter rumours" hidden></span>
+				if v.CanAdd {
+					<button
+						type="button"
+						class="rm-quiet"
+						data-rm-add
+						aria-expanded="false"
+						aria-controls={ "rm-pop-" + entityID }
+						onclick={ call("addToggle") }
+					>
+						<i class="fa-solid fa-plus" aria-hidden="true"></i>Add a rumour
+					</button>
+				}
+			</span>
+		</div>
+		<div class="rm-list" id={ "rm-list-" + entityID } data-rm-list>
+			for _, r := range firstShown(v) {
+				@rumourRow(r, v)
+			}
+			if len(v.Rumours) == 0 {
+				<div class="rm-empty">No rumours here yet.</div>
+			}
+			if earlier(v) > 0 {
+				<div class="rm-tail" data-rm-tail>
+					<button type="button" class="rm-quiet" data-tail data-mode="open" aria-expanded="false" aria-controls={ "rm-list-" + entityID } onclick={ call("tail") }>
+						{ earlierLabel(earlier(v)) }
+						<i class="fa-solid fa-chevron-down rm-chev" aria-hidden="true"></i>
+					</button>
+					<button type="button" class="rm-quiet" data-fewer hidden onclick={ call("fewer") }>
+						Show fewer
+						<i class="fa-solid fa-chevron-down rm-chev rm-up" aria-hidden="true"></i>
+					</button>
+				</div>
+			}
+		</div>
+		if v.Cut() {
+			<p class="rm-cut" data-rm-cut>{ cutNotice(v) }</p>
+		}
+		<template data-rm-tpl>
+			@rumourRow(RumourView{Sure: SureDefault}, v)
+		</template>
+		<div class="rm-menu" data-rm-menu role="menu" hidden></div>
+		if v.CanAdd {
+			@rumourAddForm(entityID, v)
+		}
+		<span class="rm-sr" role="status" aria-live="polite" data-rm-live></span>
+	</section>
+}
+
+// rumourRow is one rumour. The same component draws the rows at rest and the
+// blank row the script copies for the rest, so there is one markup; the script
+// fills every row from the JSON on mount. A viewer who may not see a control
+// is never sent it.
+templ rumourRow(r RumourView, v *View) {
+	<article class="rm-rum" data-id={ r.ID } data-belief={ r.Belief }>
+		<div class="rm-body">
+			<p class="rm-quote" title={ r.Quote } ondblclick={ call("dblEdit") }>{ r.Quote }</p>
+			if v.CanAdd {
+				<div class="rm-editor" data-rm-editor hidden>
+					<textarea class="rm-edit" data-e="quote" rows="2" maxlength="280" aria-label="What was said" onkeydown={ call("editKey") }></textarea>
+					<div class="rm-erow">
+						<div>
+							<span class="rm-lbl">Who said it</span>
+							<input type="text" class="rm-edit" data-e="who" maxlength="80" autocomplete="off" aria-label="Who said it" onkeydown={ call("editKey") }/>
+						</div>
+						<div>
+							<span class="rm-lbl">How sure were they</span>
+							<div class="rm-choices" role="radiogroup" aria-label="How sure were they" data-esure>
+								<button type="button" role="radio" data-v="1" aria-checked="false" onclick={ valueCall("esure", "1") }>Heard it</button>
+								<button type="button" role="radio" data-v="2" aria-checked="false" onclick={ valueCall("esure", "2") }>Fairly sure</button>
+								<button type="button" role="radio" data-v="3" aria-checked="false" onclick={ valueCall("esure", "3") }>Swears by it</button>
+							</div>
+						</div>
+					</div>
+					<p class="rm-err" data-rm-eerr hidden></p>
+					<div class="rm-macts">
+						<button type="button" class="rm-btn rm-sm" data-cancel-edit onclick={ call("editCancel") }>Cancel</button>
+						<button type="button" class="rm-btn rm-sm rm-pri" data-save onclick={ call("editSave") }>Save</button>
+					</div>
+				</div>
+			}
+			<p class="rm-meta">
+				<span class="rm-who">{ r.Who }</span>
+				<span aria-hidden="true">·</span>
+				<span class="rm-when">{ r.When }</span>
+				<span aria-hidden="true">·</span>
+				<span class="rm-sure">
+					<span class="rm-dots" aria-hidden="true"><i class={ dotClass(0, r.Sure) }></i><i class={ dotClass(1, r.Sure) }></i><i class={ dotClass(2, r.Sure) }></i></span>
+					<span class="rm-sl">{ SureWord(r.Sure) }</span>
+				</span>
+				<span class="rm-by">
+					if r.AddedBy != "" {
+						<span aria-hidden="true">·</span>
+						<span>{ "added by " + r.AddedBy }</span>
+					}
+				</span>
+			</p>
+			<div class="rm-marks" data-rm-marks data-bel={ digit(r.Belief != "") } hidden?={ marksHidden(v, r) }>
+				if v.IsDM {
+					<span class="rm-pair" data-pair data-dm-only data-s={ pairState(r.Truth, r.Belief) } role="group" aria-label="What is true and what the party thinks">
+						<span class="rm-dmend">
+							<span class="rm-dmtag cb-dm">DM</span>
+							<button type="button" class="rm-word" data-truth data-v={ truthValue(r.Truth) } aria-haspopup="menu" aria-label={ truthLabel(r.Truth) } onclick={ call("truthMenu") }>{ truthWord(r.Truth) }</button>
+						</span>
+						<span class="rm-pj" aria-hidden="true">≠</span>
+						<button type="button" class="rm-word rm-pb" data-pbel aria-haspopup="menu" aria-label={ partyLabel(r) } onclick={ call("pbelMenu") }>{ pairText(r.Truth, r.Belief) }</button>
+						<span class="rm-pt" role="tooltip">{ pairTip(r) }</span>
+					</span>
+					<span class="rm-word static" data-bel-static data-player-only hidden?={ r.Belief == "" } title={ beliefTitle(r) }>Party thinks: <b>{ beliefWord(r.Belief) }</b></span>
+				} else if v.CanMark {
+					<button type="button" class="rm-word" data-belief aria-haspopup="menu" title={ beliefTitle(r) } onclick={ call("beliefMenu") }>Party thinks: <b>{ beliefWord(r.Belief) }</b></button>
+				} else {
+					<span class="rm-word static" data-bel-static hidden?={ r.Belief == "" } title={ beliefTitle(r) }>Party thinks: <b>{ beliefWord(r.Belief) }</b></span>
+				}
+			</div>
+		</div>
+		if v.CanAdd {
+			<div class="rm-end">
+				<button type="button" class="rm-ibtn" data-more aria-haspopup="menu" aria-label="Edit or remove this rumour" aria-disabled={ digitBool(!r.CanEdit) } onclick={ call("moreMenu") }>
+					<i class="fa-solid fa-ellipsis" aria-hidden="true"></i>
+				</button>
+			</div>
+		}
+	</article>
+}
+
+// rumourAddForm is the form the Add button grows into. Only a viewer who may
+// add is sent it.
+templ rumourAddForm(entityID string, v *View) {
+	<div class="rm-pop" id={ "rm-pop-" + entityID } data-rm-pop role="dialog" aria-label="Add a rumour" tabindex="-1" hidden>
+		<div class="rm-pop-in">
+			<div class="rm-pop-c">
+				<div class="rm-pop-h">
+					<span class="rm-grp">Add a rumour</span>
+					<button type="button" class="rm-ibtn" data-close aria-label="Close" onclick={ call("addClose") }><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+				</div>
+				<p class="rm-note">{ addNote(v) }</p>
+				<div>
+					<label class="rm-lbl" for={ "rm-q-" + entityID }>What was said</label>
+					<textarea id={ "rm-q-" + entityID } data-a="quote" rows="2" maxlength="280" placeholder="She sank her own ship for the insurance." oninput={ call("addInput") }></textarea>
+				</div>
+				<div>
+					<label class="rm-lbl" for={ "rm-w-" + entityID }>Who said it</label>
+					<input type="text" id={ "rm-w-" + entityID } data-a="who" maxlength="80" placeholder="Old Bram at the Gilded Flagon" autocomplete="off"/>
+				</div>
+				<div>
+					<span class="rm-lbl" id={ "rm-sl-" + entityID }>How sure were they</span>
+					<div class="rm-choices" role="radiogroup" aria-labelledby={ "rm-sl-" + entityID } data-sure>
+						<button type="button" role="radio" data-v="1" aria-checked="false" onclick={ valueCall("sure", "1") }>Heard it</button>
+						<button type="button" role="radio" data-v="2" aria-checked="true" onclick={ valueCall("sure", "2") }>Fairly sure</button>
+						<button type="button" role="radio" data-v="3" aria-checked="false" onclick={ valueCall("sure", "3") }>Swears by it</button>
+					</div>
+				</div>
+				<p class="rm-err" data-rm-err hidden></p>
+				<div class="rm-macts">
+					<button type="button" class="rm-btn" data-cancel onclick={ call("addClose") }>Cancel</button>
+					<button type="button" class="rm-btn rm-pri" data-ok aria-disabled="true" onclick={ call("addSave") }>Add rumour</button>
+				</div>
+			</div>
+		</div>
+	</div>
+}

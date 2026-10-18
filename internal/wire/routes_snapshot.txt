@@ -658,6 +658,12 @@ POST	/campaigns/:id/entities/:eid/relations	session	widgets/relations.(*Handler)
 DELETE	/campaigns/:id/entities/:eid/relations/:rid	session	widgets/relations.(*Handler).DeleteRelation	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/entities/:eid/relations/:rid/metadata	session	widgets/relations.(*Handler).UpdateRelationMetadata	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/entities/:eid/reorder	session	plugins/entities.(*Handler).ReorderAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware > plugins/campaigns.RequireRole
+GET	/campaigns/:id/entities/:eid/rumours	session	plugins/rumours.(*Handler).List	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/entities/:eid/rumours	session	plugins/rumours.(*Handler).Add	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
+DELETE	/campaigns/:id/entities/:eid/rumours/:rid	session	plugins/rumours.(*Handler).Remove	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
+PUT	/campaigns/:id/entities/:eid/rumours/:rid	session	plugins/rumours.(*Handler).Update	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
+PUT	/campaigns/:id/entities/:eid/rumours/:rid/belief	session	plugins/rumours.(*Handler).SetBelief	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
+PUT	/campaigns/:id/entities/:eid/rumours/:rid/truth	session	plugins/rumours.(*Handler).SetTruth	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
 GET	/campaigns/:id/entities/:eid/sheet	session	plugins/entities.(*Handler).Sheet	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware
 PUT	/campaigns/:id/entities/:eid/standing-settings	session	plugins/entities.(*StandingHandler).SetSettings	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware > plugins/campaigns.RequireCapability
 GET	/campaigns/:id/entities/:eid/standing/:subject	session	plugins/entities.(*StandingHandler).Get	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware > plugins/campaigns.RequireRole
@@ -1057,6 +1063,7 @@ GET	/static/plugins/entities*	none	github.com/labstack/echo/v4.StaticDirectoryHa
 GET	/static/plugins/maps*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-
 GET	/static/plugins/pageblocks*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-
 GET	/static/plugins/quests*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-
+GET	/static/plugins/rumours*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-
 GET	/static/plugins/sessions*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-
 GET	/static/plugins/timeline*	none	github.com/labstack/echo/v4.StaticDirectoryHandler	-
 GET	/systems/browse	session	plugins/packages.(*OwnerHandler).BrowseSystems	plugins/auth.RequireAuth

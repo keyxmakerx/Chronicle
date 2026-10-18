@@ -363,6 +363,12 @@ Foundry module repo for the wire contract.
 |-------|---------|
 | `page_block_content` | One JSON document per (page, layout block): `PRIMARY KEY (entity_id, block_id)`, `kind` (`read_aloud`/`page_table`/`page_steps`), `version` for edit conflicts; FKs to `entities`, `campaigns` cascade |
 
+### rumours (`internal/plugins/rumours/migrations/`)
+
+| Table | Purpose |
+|-------|---------|
+| `page_rumours` | What the party has heard about a page: `quote`, `source` (who said it), `sure` 1 to 3, `truth` (`open`/`true`/`false`, the Director's alone and never selected for anyone else), `belief` (`''`/`true`/`false`/`unsure`, what the party thinks) with `belief_by` and `belief_by_dm`, `by_dm` and `created_by` for the byline; FKs to `entities` and `campaigns` cascade. Capped at 200 per page |
+
 ### encounters (`internal/plugins/encounters/migrations/`)
 
 | Table | Purpose |

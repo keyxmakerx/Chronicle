@@ -29,6 +29,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/pageblocks"
 	"github.com/keyxmakerx/chronicle/internal/plugins/quests"
 	"github.com/keyxmakerx/chronicle/internal/plugins/rolltables"
+	"github.com/keyxmakerx/chronicle/internal/plugins/rumours"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/syncapi"
 	"github.com/keyxmakerx/chronicle/internal/plugins/systemstate"
@@ -323,6 +324,10 @@ func registeredPlugins() []database.PluginSchema {
 		// pageblocks: one table of per-block page content; foreign keys point at
 		// core tables (entities, campaigns) only.
 		{Slug: pageblocks.PluginSlug, MigrationsFS: mustSub(pageblocks.MigrationsFS, database.PluginMigrationsSubdir)},
+		// rumours: the Rumours block's table, in a migrations directory and
+		// under a slug of its own so a failure here leaves only that block
+		// out. Foreign keys point at core tables (entities, campaigns) only.
+		{Slug: rumours.PluginSlug, MigrationsFS: mustSub(rumours.MigrationsFS, database.PluginMigrationsSubdir)},
 		// encounters: fights planned on a page; foreign keys point at core
 		// tables (entities, campaigns) only.
 		{Slug: encounters.PluginSlug, MigrationsFS: mustSub(encounters.MigrationsFS, database.PluginMigrationsSubdir)},
