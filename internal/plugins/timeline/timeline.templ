@@ -250,12 +250,12 @@ templ TimelineShowFragment(cc *campaigns.CampaignContext, data TimelineViewData)
 	@timelineShowContent(cc, data)
 }
 
-// timelineShowContent renders the timeline detail page with D3.js visualization.
+// timelineShowContent renders the timeline detail page around the River line.
+// The month under the line is the calendar's own grid, so it borrows the
+// calendar page's stylesheet.
 templ timelineShowContent(cc *campaigns.CampaignContext, data TimelineViewData) {
-	<!-- D3.js (loaded only on timeline detail pages — large library, not in base layout).
-	     W1 (R1): served from the vendored copy, not jsdelivr — the CSP is
-	     `script-src 'self'`, so the CDN script was blocked and the viz never ran. -->
-	<script src={ layouts.AssetURL("/static/vendor/d3.min.js") }></script>
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/css/calendar-view.css") }/>
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/plugins/timeline/css/timeline_river.css") }/>
 	<div class="sm:max-w-5xl mx-auto py-6 px-2 sm:px-4" x-data="{ manageOpen: false, adminTab: 'visibility' }">
 		@components.Breadcrumbs([]components.BreadcrumbItem{
 			{Label: cc.Campaign.Name, Href: fmt.Sprintf("/campaigns/%s", cc.Campaign.ID), Icon: "fa-dice-d20"},
@@ -374,11 +374,13 @@ templ timelineShowContent(cc *campaigns.CampaignContext, data TimelineViewData) 
 			<!-- Visualization view -->
 			<div x-show="viewMode === 'viz'">
 				<div
-					data-widget="timeline-viz"
+					data-widget="timeline-river"
 					data-campaign-id={ data.CampaignID }
 					data-timeline-id={ data.Timeline.ID }
-					data-timeline-color={ data.Timeline.Color }
 					data-api-url={ fmt.Sprintf("/campaigns/%s/timelines/%s/data", data.CampaignID, data.Timeline.ID) }
+					if data.Timeline.HasCalendar() {
+						data-calendar-id={ *data.Timeline.CalendarID }
+					}
 				></div>
 			</div>
 			<!-- Event list view -->

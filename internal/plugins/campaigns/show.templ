@@ -53,13 +53,9 @@ templ CampaignShowPage(cc *CampaignContext, transfer *OwnershipTransfer, recentE
 				@welcomeMessageBanner(cc.Campaign.ID, msg)
 			}
 
-			// Render from role-aware custom layout, falling back to a
-			// synthesized default layout that the customization editor
-			// can also load and edit — same render path either way.
-			{{ layout := cc.Campaign.ParseRoleDashboardLayout(cc.MemberRole) }}
-			if layout == nil {
-				{{ layout = DefaultDashboardLayout() }}
-			}
+			// The viewer's own home (Director, guest or their role), with the
+			// same fallbacks the Customizer shows, so both draw one layout.
+			{{ layout, _ := cc.Campaign.HomeLayout(cc.HomeAudience()) }}
 			@customDashboard(cc, layout, recentEntities)
 
 			<!-- Footer meta -->
@@ -286,10 +282,13 @@ templ defaultOwnerDashboard(cc *CampaignContext, recentEntities []RecentEntity, 
 templ RecentEntityCard(cc *CampaignContext, re *RecentEntity) {
 	<a
 		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, re.ID)) }
-		class="card p-0 overflow-hidden hover:shadow-md transition-shadow block group"
+		class="cb-link cb-row card p-0 overflow-hidden hover:shadow-md transition-shadow block group"
+		if re.IsPrivate {
+			data-dm-only
+		}
 	>
 		if re.ImagePath != nil && *re.ImagePath != "" {
-			<div class="h-20 bg-surface-alt overflow-hidden">
+			<div class="cb-band h-20 bg-surface-alt overflow-hidden">
 				<img
 					src={ layouts.MediaURL(ctx, *re.ImagePath) }
 					alt={ re.Name }
@@ -297,26 +296,26 @@ templ RecentEntityCard(cc *CampaignContext, re *RecentEntity) {
 				/>
 			</div>
 		} else {
-			<div class="h-10 flex items-center justify-center" style={ fmt.Sprintf("background-color: %s10", re.TypeColor) }>
+			<div class="cb-band h-10 flex items-center justify-center" style={ fmt.Sprintf("background-color: %s10", re.TypeColor) }>
 				if re.TypeIcon != "" {
 					<i class={ "fa-solid " + re.TypeIcon, "text-sm opacity-30" } style={ fmt.Sprintf("color: %s", re.TypeColor) }></i>
 				}
 			</div>
 		}
-		<div class="px-3 py-2">
-			<div class="flex items-center justify-between gap-1.5 mb-0.5">
-				<h3 class="text-sm font-semibold text-fg truncate group-hover:text-accent transition-colors">
+		<div class="cb-row-body px-3 py-2">
+			<div class="cb-row-main flex items-center justify-between gap-1.5 mb-0.5">
+				<h3 class="cb-row-name text-sm font-semibold text-fg truncate group-hover:text-accent transition-colors">
 					{ re.Name }
 				</h3>
 				if re.IsPrivate && cc.MemberRole >= RoleScribe {
-					<span class="text-fg-muted shrink-0" title="Private (DM only)">
+					<span class="cb-dm text-fg-muted shrink-0" title="Private (DM only)">
 						<i class="fa-solid fa-lock text-[9px]"></i>
 					</span>
 				}
 			</div>
-			<div class="flex items-center justify-between gap-2">
+			<div class="cb-row-meta flex items-center justify-between gap-2">
 				<span
-					class="inline-flex items-center gap-1 px-1.5 py-px rounded-full text-[10px] font-medium"
+					class="cb-kind inline-flex items-center gap-1 px-1.5 py-px rounded-full text-[10px] font-medium"
 					style={ fmt.Sprintf("background-color: %s20; color: %s", re.TypeColor, re.TypeColor) }
 				>
 					if re.TypeIcon != "" {

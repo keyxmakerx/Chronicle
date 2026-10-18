@@ -54,6 +54,8 @@ type Committer struct {
 	creator EntityCreator
 	// eras writes `era:` blocks; nil refuses them with a plain reason.
 	eras EraWriter
+	// tags sets a page's `tags:`; nil saves the page without them and says so.
+	tags TagWriter
 }
 
 // SetEraWriter wires pages by era. Optional.
@@ -537,6 +539,11 @@ func (c *Committer) commitRow(
 	out.EntityID = ent.ID
 	out.Slug = ent.Slug
 	out.Name = finalName
+	if reason := c.applyTags(ctx, campaignID, ent.ID, page.FrontMatter.Tags, false); reason != "" {
+		out.Status = StatusFailed
+		out.Reason = reason
+		return out
+	}
 	if finalName != dec.Name && finalName != page.Name {
 		out.Status = StatusRenamed
 		out.Reason = "Original name conflicted; saved as " + strconv.Quote(finalName)
@@ -616,6 +623,11 @@ func (c *Committer) commitUpdate(
 	if err := c.creator.UpdateEntry(ctx, existing.ID, bodyJSON, bodyHTML); err != nil {
 		out.Status = StatusFailed
 		out.Reason = "Updated the page's settings, but could not write the new body."
+		return out
+	}
+	if reason := c.applyTags(ctx, existing.CampaignID, existing.ID, page.FrontMatter.Tags, true); reason != "" {
+		out.Status = StatusFailed
+		out.Reason = reason
 		return out
 	}
 	out.Status = StatusUpdated

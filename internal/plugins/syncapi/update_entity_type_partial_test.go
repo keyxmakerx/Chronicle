@@ -6,6 +6,7 @@ package syncapi
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -13,6 +14,8 @@ import (
 
 	"github.com/labstack/echo/v4"
 
+	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 )
 
@@ -58,7 +61,7 @@ func TestUpdateEntityType_PartialBody(t *testing.T) {
 				ID: 3, CampaignID: "camp-1", Name: "Location", NamePlural: "Places",
 				Icon: "fa-map", Color: "#112233", Slug: "location",
 			}}
-			h := NewAPIHandler(nil, entities.NewEntityService(nil, repo, nil), nil, nil)
+			h := NewAPIHandler(nil, entities.NewEntityService(nil, repo, nil), stubCampaignSvcOwner{}, nil)
 
 			req := httptest.NewRequest(http.MethodPut, "/api/v1/campaigns/camp-1/entity-types/3", strings.NewReader(tt.body))
 			req.Header.Set("Content-Type", "application/json")
@@ -66,6 +69,7 @@ func TestUpdateEntityType_PartialBody(t *testing.T) {
 			c := echo.New().NewContext(req, rec)
 			c.SetParamNames("id", "typeID")
 			c.SetParamValues("camp-1", "3")
+			c.Set(apiKeyContextKey, &APIKey{ID: synthKeySessionID, CampaignID: "camp-1", UserID: "user-1", IsActive: true})
 
 			if err := h.UpdateEntityType(c); err != nil {
 				t.Fatalf("UpdateEntityType: %v", err)
@@ -81,4 +85,47 @@ func TestUpdateEntityType_PartialBody(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Entity types are an Owner-only surface on the web; the API must not be a
+// way around that for a Scribe or a player.
+func TestEntityTypeWrites_RequireOwner(t *testing.T) {
+	for _, role := range []campaigns.Role{campaigns.RolePlayer, campaigns.RoleScribe} {
+		for _, door := range []string{"create", "update"} {
+			t.Run(door, func(t *testing.T) {
+				repo := &storedTypeRepo{stored: entities.EntityType{ID: 3, CampaignID: "camp-1", Name: "Location", Slug: "location"}}
+				h := NewAPIHandler(nil, entities.NewEntityService(nil, repo, nil), stubCampaignSvcRole{role: role}, nil)
+				req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"name":"Site"}`))
+				req.Header.Set("Content-Type", "application/json")
+				c := echo.New().NewContext(req, httptest.NewRecorder())
+				c.SetParamNames("id", "typeID")
+				c.SetParamValues("camp-1", "3")
+				c.Set(apiKeyContextKey, &APIKey{ID: synthKeySessionID, CampaignID: "camp-1", UserID: "user-1", IsActive: true})
+
+				var err error
+				if door == "create" {
+					err = h.CreateEntityType(c)
+				} else {
+					err = h.UpdateEntityType(c)
+				}
+				var ae *apperror.AppError
+				if !errors.As(err, &ae) || ae.Code != http.StatusForbidden {
+					t.Fatalf("role %v: err = %v, want 403", role, err)
+				}
+				if repo.written != nil {
+					t.Fatal("a forbidden call still wrote")
+				}
+			})
+		}
+	}
+}
+
+// stubCampaignSvcRole answers resolveRole's membership lookup with a fixed role.
+type stubCampaignSvcRole struct {
+	campaigns.CampaignService
+	role campaigns.Role
+}
+
+func (s stubCampaignSvcRole) GetMember(_ context.Context, campaignID, userID string) (*campaigns.CampaignMember, error) {
+	return &campaigns.CampaignMember{CampaignID: campaignID, UserID: userID, Role: s.role}, nil
 }

@@ -3,9 +3,13 @@ package campaigns
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"net/http"
 	"testing"
 	"time"
+
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
 
 // --- Mock Invite Repository ---
@@ -50,9 +54,13 @@ func (m *mockInviteRepo) MarkAccepted(_ context.Context, id string) error {
 	return nil
 }
 
-func (m *mockInviteRepo) Delete(_ context.Context, id string) error {
+func (m *mockInviteRepo) Delete(_ context.Context, campaignID, id string) (bool, error) {
+	inv, ok := m.invites[id]
+	if !ok || inv.CampaignID != campaignID {
+		return false, nil
+	}
 	delete(m.invites, id)
-	return nil
+	return true, nil
 }
 
 func (m *mockInviteRepo) DeleteExpired(_ context.Context, _ string) (int64, error) {
@@ -391,7 +399,7 @@ func TestRevokeInvite(t *testing.T) {
 		Role:  "player",
 	})
 
-	err := svc.RevokeInvite(context.Background(), invite.ID)
+	err := svc.RevokeInvite(context.Background(), "camp-1", invite.ID)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -401,6 +409,44 @@ func TestRevokeInvite(t *testing.T) {
 	if len(invites) != 0 {
 		t.Errorf("expected 0 invites after revoke, got %d", len(invites))
 	}
+}
+
+func TestRevokeInvite_ScopedToCampaign(t *testing.T) {
+	tests := []struct {
+		name       string
+		campaignID string
+		inviteID   func(*Invite) string
+		wantStatus int // 0 = revoked
+		wantLeft   int
+	}{
+		{"own campaign", "camp-1", func(i *Invite) string { return i.ID }, 0, 0},
+		{"another campaign's invite", "camp-2", func(i *Invite) string { return i.ID }, http.StatusNotFound, 1},
+		{"unknown invite", "camp-1", func(*Invite) string { return "nope" }, http.StatusNotFound, 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := NewInviteService(newMockInviteRepo(), newMockCampaignRepoForInvites(), nil, "http://localhost:3000")
+			invite, _ := svc.CreateInvite(context.Background(), "camp-1", "user-1", CreateInviteInput{Email: "p@example.com", Role: "player"})
+
+			err := svc.RevokeInvite(context.Background(), tt.campaignID, tt.inviteID(invite))
+			if tt.wantStatus == 0 {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+			} else if !isHTTPStatus(err, tt.wantStatus) {
+				t.Fatalf("err = %v, want status %d", err, tt.wantStatus)
+			}
+			left, _ := svc.ListInvites(context.Background(), "camp-1")
+			if len(left) != tt.wantLeft {
+				t.Errorf("invites left = %d, want %d", len(left), tt.wantLeft)
+			}
+		})
+	}
+}
+
+func isHTTPStatus(err error, code int) bool {
+	var ae *apperror.AppError
+	return errors.As(err, &ae) && ae.Code == code
 }
 
 func TestListInvites(t *testing.T) {
