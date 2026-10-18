@@ -5862,6 +5862,9 @@ func (a *App) RegisterRoutes() {
 	// events or actions into the Workshop register here, so it is made before
 	// any of them.
 	homebrewReg := homebrew.NewRegistry()
+	if err := registerAncestryParts(homebrewReg, systemEntrySvc); err != nil {
+		slog.Error("ancestries could not join the Homebrew Workshop", slog.Any("error", err))
+	}
 
 	// Trackers: counters, named steps and clocks on pages, each with a dated
 	// log. The block and its routes exist only while its tables migrated.
