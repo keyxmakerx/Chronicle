@@ -99,17 +99,42 @@ type CastBandEditor struct {
 	Options []CastTypeOption
 }
 
+// SystemPanelPlacer puts the Game System Panels block on page types.
+type SystemPanelPlacer interface {
+	PlaceSystemPanels(ctx context.Context, campaignID string, typeIDs []int) (int, error)
+}
+
 // CharacterListService implements CharacterListManager and the campaigns
 // plugin's CharacterListSeeder.
 type CharacterListService struct {
 	types    CharacterTypeSource
 	store    CharacterListStore
+	panels   SystemPanelPlacer
 	onChange func(campaignID string)
 }
 
 // NewCharacterListService wires the service.
 func NewCharacterListService(types CharacterTypeSource, store CharacterListStore) *CharacterListService {
 	return &CharacterListService{types: types, store: store}
+}
+
+// SetPanelPlacer registers what places the Game System Panels block on a type
+// that joins the NPC list. Game-system panels show only where a layout places
+// that block, so without it a type listed after the one-time placement shows
+// none.
+func (s *CharacterListService) SetPanelPlacer(p SystemPanelPlacer) { s.panels = p }
+
+// placeNPCPanels gives every type the NPC list ids cover, sub-types included,
+// the panels block. Best effort: a failure costs only the panels, which the
+// owner can still place by hand.
+func (s *CharacterListService) placeNPCPanels(ctx context.Context, campaignID string, types []EntityType, npcIDs []int) {
+	if s.panels == nil || len(npcIDs) == 0 {
+		return
+	}
+	if _, err := s.panels.PlaceSystemPanels(ctx, campaignID, ResolveCharacterTypeIDs(types, npcIDs, true)); err != nil {
+		slog.Warn("placing system panels on NPC types failed",
+			slog.String("campaign_id", campaignID), slog.String("error", err.Error()))
+	}
 }
 
 // SetChangeHook registers a callback run after the lists change, so a cache
@@ -208,7 +233,13 @@ func (s *CharacterListService) Add(ctx context.Context, campaignID string, kind 
 	}
 	sort.Ints(next)
 	chosen.set(kind, next)
-	return name, s.save(ctx, campaignID, chosen)
+	if err := s.save(ctx, campaignID, chosen); err != nil {
+		return "", err
+	}
+	if kind == CharacterListNPCs {
+		s.placeNPCPanels(ctx, campaignID, types, []int{typeID})
+	}
+	return name, nil
 }
 
 // Remove unlists a type. Saving also drops IDs of deleted types.
@@ -272,7 +303,11 @@ func (s *CharacterListService) Seed(ctx context.Context, campaignID string) erro
 		// once the campaign has its types.
 		return nil
 	}
-	return s.save(ctx, campaignID, CharacterLists{CharacterTypeIDs: chars, NPCTypeIDs: npcs})
+	if err := s.save(ctx, campaignID, CharacterLists{CharacterTypeIDs: chars, NPCTypeIDs: npcs}); err != nil {
+		return err
+	}
+	s.placeNPCPanels(ctx, campaignID, types, npcs)
+	return nil
 }
 
 // seedOnRead fills a campaign that never chose, the first time its lists are
@@ -287,7 +322,9 @@ func (s *CharacterListService) seedOnRead(ctx context.Context, campaignID string
 	if err := s.save(ctx, campaignID, lists); err != nil {
 		slog.Warn("saving seeded character lists failed",
 			slog.String("campaign_id", campaignID), slog.String("error", err.Error()))
+		return lists
 	}
+	s.placeNPCPanels(ctx, campaignID, types, npcs)
 	return lists
 }
 
@@ -438,6 +475,37 @@ func isPCType(t EntityType) bool {
 		t.Slug == SlugPlayerCharacter
 }
 
+// isCreatureType reports whether a type holds creature pages: a game system's
+// creature preset, or a type named creature or *-monster.
+func isCreatureType(t EntityType) bool {
+	if t.PresetCategory != nil && *t.PresetCategory == "creature" {
+		return true
+	}
+	return t.Slug == "creature" || strings.HasSuffix(t.Slug, "-monster")
+}
+
+// CreatureTypeIDs is the enabled creature types and their enabled sub-types,
+// the pages a game system's creature panels go on. Unlike the NPC list it is
+// not a choice: a type is a creature type by what it is.
+func CreatureTypeIDs(types []EntityType) []int {
+	var roots []int
+	for _, t := range types {
+		if t.Enabled && isCreatureType(t) {
+			roots = append(roots, t.ID)
+		}
+	}
+	return ResolveCharacterTypeIDs(types, roots, true)
+}
+
+// CreatureTypeIDs is CreatureTypeIDs for one campaign.
+func (s *CharacterListService) CreatureTypeIDs(ctx context.Context, campaignID string) ([]int, error) {
+	types, err := s.types.GetEntityTypes(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	return CreatureTypeIDs(types), nil
+}
+
 // ResolveCharacterTypeIDs expands a list to the enabled types it shows: each
 // listed type plus every enabled sub-type under it. Sub-types come along
 // because that is how the lists always behaved, and a sub-type such as
@@ -479,12 +547,7 @@ func ResolveCharacterTypeIDs(types []EntityType, listed []int, skipPlayerCharact
 // in -character; sub-types of a root come along. Only the topmost types of
 // each family are stored, since a listed parent already covers its sub-types.
 func seedCharacterLists(types []EntityType) (characters, npcs []int) {
-	isCreature := func(t EntityType) bool {
-		if t.PresetCategory != nil && *t.PresetCategory == "creature" {
-			return true
-		}
-		return t.Slug == "creature" || strings.HasSuffix(t.Slug, "-monster")
-	}
+	isCreature := isCreatureType
 	isRoot := func(t EntityType) bool {
 		if isCreature(t) {
 			return false

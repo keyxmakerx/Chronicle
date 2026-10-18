@@ -32,6 +32,7 @@ type mockEntityTypeRepo struct {
 	maxSortOrderFn          func(ctx context.Context, campaignID string) (int, error)
 	listChildTypesFn        func(ctx context.Context, parentID int) ([]EntityType, error)
 	resequenceChildTypesFn  func(ctx context.Context, campaignID string, orderedIDs []int) error
+	updatePlacementFn       func(ctx context.Context, id, sortOrder int, isDefault, enabled bool) error
 
 	listByPresetCategoryFn func(ctx context.Context, campaignID, category string) ([]EntityType, error)
 
@@ -79,6 +80,13 @@ func (m *mockEntityTypeRepo) ListChildTypes(ctx context.Context, parentID int) (
 func (m *mockEntityTypeRepo) ResequenceChildTypes(ctx context.Context, campaignID string, orderedIDs []int) error {
 	if m.resequenceChildTypesFn != nil {
 		return m.resequenceChildTypesFn(ctx, campaignID, orderedIDs)
+	}
+	return nil
+}
+
+func (m *mockEntityTypeRepo) UpdatePlacement(ctx context.Context, id, sortOrder int, isDefault, enabled bool) error {
+	if m.updatePlacementFn != nil {
+		return m.updatePlacementFn(ctx, id, sortOrder, isDefault, enabled)
 	}
 	return nil
 }

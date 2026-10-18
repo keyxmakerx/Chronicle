@@ -418,7 +418,7 @@ func unknownYAMLKeys(rawYAML string) []string {
 		"name": true, "type": true, "subcategory": true,
 		"visibility": true, "tags": true, "description": true,
 		"action": true, "kind": true, "parent": true,
-		"era": true, "known_as": true, "reason": true,
+		"era": true, "known_as": true, "reason": true, "fields": true,
 	}
 	var unknown []string
 	for _, line := range strings.Split(rawYAML, "\n") {

@@ -102,9 +102,16 @@ type SystemManifest struct {
 	EntityPanels []EntityPanelDef `json:"entity_panels,omitempty"`
 }
 
-// EntityPanelAppliesNPC is the only audience an entity panel can target for
-// now: pages whose type is in the NPC family (NPCs and monsters).
-const EntityPanelAppliesNPC = "npc"
+// The audiences an entity panel can target.
+const (
+	// EntityPanelAppliesNPC is pages whose type the owner listed as NPCs,
+	// with their sub-types.
+	EntityPanelAppliesNPC = "npc"
+	// EntityPanelAppliesCreature is pages of a creature type (the "creature"
+	// preset category, or a slug of "creature" or "*-monster"), with their
+	// sub-types, so a bestiary page gets its stat block without being an NPC.
+	EntityPanelAppliesCreature = "creature"
+)
 
 // EntityPanelDef mounts one of this manifest's widgets on matching pages of
 // campaigns that have the system enabled.
@@ -112,7 +119,7 @@ type EntityPanelDef struct {
 	// Widget is the slug of a widget declared in this manifest's widgets list.
 	Widget string `json:"widget"`
 
-	// AppliesTo names which pages get the panel. Only "npc" exists today; any
+	// AppliesTo names which pages get the panel: "npc" or "creature". Any
 	// other value is rejected at load so a typo is loud, not a silently
 	// missing panel.
 	AppliesTo string `json:"applies_to"`
@@ -993,8 +1000,8 @@ func validateEntityPanels(m *SystemManifest) error {
 		if _, ok := widgetSlugs[p.Widget]; !ok {
 			return fmt.Errorf("panel %d: widget %q must match a widgets[].slug declared in this manifest", i, p.Widget)
 		}
-		if p.AppliesTo != EntityPanelAppliesNPC {
-			return fmt.Errorf("panel %d: applies_to %q is not supported (only %q)", i, p.AppliesTo, EntityPanelAppliesNPC)
+		if p.AppliesTo != EntityPanelAppliesNPC && p.AppliesTo != EntityPanelAppliesCreature {
+			return fmt.Errorf("panel %d: applies_to %q is not supported (only %q or %q)", i, p.AppliesTo, EntityPanelAppliesNPC, EntityPanelAppliesCreature)
 		}
 	}
 	return nil

@@ -215,3 +215,17 @@ func TestEncounterKind_ExportRoundTrips(t *testing.T) {
 		t.Error("a player's export must be empty")
 	}
 }
+
+// A creature, hero or page this paste creates is not warned about at
+// review: pages commit before records, so it exists when the encounter does.
+func TestEncounterKind_PlanMadeInPaste(t *testing.T) {
+	r := encounterRecord(ActionCreate, map[string]any{
+		"page": "New Trial", "heroes": []any{"Zed"}, "creatures": []any{"2 Skeleton Archer, group C"},
+	})
+	r.Made = map[string]bool{"new-trial": true, "zed": true, "skeleton-archer": true}
+	k := EncounterKind{Svc: &fakeEncounters{byPage: map[string][]EncounterRef{}}, Entities: encounterPages()}
+	p := k.Plan(context.Background(), camp, owner, r)
+	if p.Error != "" || len(p.Warnings) != 0 {
+		t.Fatalf("want a clean plan, got error %q warnings %q", p.Error, p.Warnings)
+	}
+}

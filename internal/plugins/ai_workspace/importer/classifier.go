@@ -9,6 +9,7 @@ package importer
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
@@ -74,6 +75,10 @@ type Classification struct {
 	// rows, rendered verbatim by the review-screen templ. Empty for
 	// all other statuses.
 	Reason string
+
+	// FieldsSummary is the review line for the row's `fields:`, checked
+	// against the category the row will have; "" when it sets none.
+	FieldsSummary string
 }
 
 // Classifier holds the lookup + a per-classify-call type cache.
@@ -123,7 +128,60 @@ func (c *Classifier) ClassifyAll(ctx context.Context, pages []ParsedPage) ([]Cla
 	}
 	c.checkParents(ctx, pages, out)
 	c.checkEras(ctx, pages, out)
+	c.checkFields(pages, out)
 	return out, nil
+}
+
+// checkFields checks each row's `fields:` against the sheet of the
+// category it will have: the page's own on an update (an update never
+// changes the category), the front matter's on a create. A row whose
+// fields don't fit becomes StatusFieldProblem; the committer checks again
+// against the category finally picked.
+func (c *Classifier) checkFields(pages []ParsedPage, cls []Classification) {
+	for i, p := range pages {
+		if len(p.FrontMatter.Fields) == 0 || p.Status == StatusParseError || cls[i].Status == StatusActionMismatch ||
+			p.FrontMatter.Action == ActionDelete {
+			continue
+		}
+		if p.FrontMatter.IsEra() {
+			cls[i].Status = StatusFieldProblem
+			cls[i].Reason = "Sheet fields can't be set on an era version. Put them on the usual page's block."
+			continue
+		}
+		var et *entities.EntityType
+		switch {
+		case p.FrontMatter.Action == ActionUpdate && cls[i].ConflictEntity != nil:
+			et = c.typeByID(cls[i].ConflictEntity.EntityTypeID)
+		case cls[i].IsNewCategory:
+			cls[i].Status = StatusFieldProblem
+			cls[i].Reason = "The category " + `"` + cls[i].ProposedTypeSlug + `"` + " is new, so it has no sheet fields yet. Use an existing category, or leave the fields out."
+			continue
+		case cls[i].ExistingType != nil:
+			et = cls[i].ExistingType
+		}
+		if et == nil {
+			n := len(p.FrontMatter.Fields)
+			cls[i].FieldsSummary = fmt.Sprintf("Sets %d sheet %s, checked against the category picked here", n, pluralWord(n, "field", "fields"))
+			continue
+		}
+		checked, problems := CheckFields(et.Fields, p.FrontMatter.Fields)
+		if len(problems) > 0 {
+			cls[i].Status = StatusFieldProblem
+			cls[i].Reason = "These sheet fields don't fit the " + et.Name + " category: " + strings.Join(problems, " ")
+			continue
+		}
+		cls[i].FieldsSummary = "Sheet: " + FieldsSummary(et.Fields, checked)
+	}
+}
+
+// typeByID finds a cached category by id; nil when it is not there.
+func (c *Classifier) typeByID(id int) *entities.EntityType {
+	for i := range c.cachedTypes {
+		if c.cachedTypes[i].ID == id {
+			return &c.cachedTypes[i]
+		}
+	}
+	return nil
 }
 
 // checkParents turns an unusable `parent:` into a row problem. It runs

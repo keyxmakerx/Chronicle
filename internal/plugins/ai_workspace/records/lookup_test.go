@@ -15,7 +15,10 @@ import (
 
 // fakePages hides private pages from anyone below a co-DM, as the real
 // role filter does.
-type fakePages struct{ all []entities.Entity }
+type fakePages struct {
+	all   []entities.Entity
+	types []entities.EntityType
+}
 
 func (f *fakePages) List(_ context.Context, _ string, _ int, role int, _ string, o entities.ListOptions) ([]entities.Entity, int, error) {
 	if o.Page > 1 {
@@ -30,7 +33,7 @@ func (f *fakePages) List(_ context.Context, _ string, _ int, role int, _ string,
 	return out, len(out), nil
 }
 func (f *fakePages) GetEntityTypes(context.Context, string) ([]entities.EntityType, error) {
-	return nil, nil
+	return f.types, nil
 }
 
 type fakeRels struct{ rels []relations.Relation }
@@ -291,6 +294,48 @@ func TestLookups_PageIndexShowsVisibleParentOnly(t *testing.T) {
 			for _, w := range tt.notWant {
 				if strings.Contains(idx, w) {
 					t.Errorf("unexpected %q in:\n%s", w, idx)
+				}
+			}
+		})
+	}
+}
+
+// A page's sheet comes back as a `fields:` block the AI can edit and send
+// back, with GM-only values left out for a player.
+func TestLookups_PageSheet(t *testing.T) {
+	brute := page("brute", "Orc Brute", "Creature", false)
+	brute.EntityTypeID = 7
+	brute.FieldsData = map[string]any{"level": 3, "stamina": 30, "abilities_json": `[{"name":"Spear"}]`, "book_source": "Monsters p. 12", "faction": ""}
+	l := world()
+	l.Pages = &fakePages{all: []entities.Entity{brute}, types: []entities.EntityType{{ID: 7, Name: "Creature", Fields: []entities.FieldDefinition{
+		{Key: "level", Label: "Level", Type: "number"},
+		{Key: "stamina", Label: "Stamina", Type: "number"},
+		{Key: "faction", Label: "Faction", Type: "text"},
+		{Key: "abilities_json", Label: "Abilities", Type: "textarea"},
+		{Key: "book_source", Label: "Book source", Type: "text", GMOnly: true},
+	}}}}
+	for _, tc := range []struct {
+		name    string
+		a       Actor
+		want    []string
+		notWant []string
+	}{
+		{"director", owner, []string{"### Sheet", "fields:\n  level: 3\n  stamina: 30\n  abilities_json: '[{\"name\":\"Spear\"}]'\n  book_source: Monsters p. 12\n"}, []string{"faction"}},
+		{"player", player, []string{"### Sheet", "level: 3"}, []string{"book_source", "Monsters p. 12"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ans := l.Answer(context.Background(), camp, tc.a, []Record{lookup("page", map[string]any{"name": "Orc Brute"})})
+			if ans[0].Error != "" {
+				t.Fatal(ans[0].Error)
+			}
+			for _, w := range tc.want {
+				if !strings.Contains(ans[0].Text, w) {
+					t.Errorf("answer lacks %q:\n%s", w, ans[0].Text)
+				}
+			}
+			for _, w := range tc.notWant {
+				if strings.Contains(ans[0].Text, w) {
+					t.Errorf("answer leaks %q:\n%s", w, ans[0].Text)
 				}
 			}
 		})

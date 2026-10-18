@@ -44,6 +44,10 @@ type Record struct {
 	// Links resolves @[Page] in Body to page links. Nil leaves the text as
 	// written (e.g. when planning).
 	Links *importer.PageLinks
+	// Made holds the slugs of pages this paste creates or keeps, which
+	// exist by the time records commit (pages commit first). Set when
+	// planning, so a review doesn't warn about a page the paste makes.
+	Made map[string]bool
 }
 
 // Actor is the operator running the import.
