@@ -138,3 +138,15 @@ test('applyViewPref theme: device follows the OS, explicit wins', () => {
   a.C.applyViewPref('theme', 'light');
   assert.equal(a.classes.has('dark'), false);
 });
+
+test('reducedMotion: true under Calm, Off or the older flags, and follows a My view change', () => {
+  assert.equal(load().C.reducedMotion(), false);
+  for (const attrs of [{ 'data-motion': 'calm' }, { 'data-motion': 'off' }, { 'data-view-motion': 'calm' }]) {
+    assert.equal(load({ attrs }).C.reducedMotion(), true, JSON.stringify(attrs));
+  }
+  const { C } = load();
+  C.applyViewPref('motion', 'calm');
+  assert.equal(C.reducedMotion(), true);
+  C.applyViewPref('motion', 'full');
+  assert.equal(C.reducedMotion(), false);
+});

@@ -291,6 +291,11 @@ leaving the list for another page.
   New campaigns start on the fading corner. It reaches the page as
   `data-cz-tlpop="corner"` on `<html>`, read by `page_timeline.js` (through
   the hover card's `corner` option) and `timeline_river.js` (its peek).
+  In a style kit, the line under a page's title and both popups are drawn
+  in the kit (signed in the time line mockup,
+  https://claude.ai/artifact/9VLxhJvNYDooSeaByKfxt6): the classic card
+  becomes a small box with the kit's edge and shadow, and the corner takes
+  the kit's radius, edge and fill. Every other hover card keeps its look.
 - **The character sheet style is the owner's choice** (Customize › Character
   sheets; Modern by default). The choice reaches the page as `data-cz-sheet`
   on `<html>`, which `static/css/sheet_styles.css` and `sheet_motion.js` read.
@@ -309,7 +314,11 @@ leaving the list for another page.
   of, or slide from behind, the thing clicked, never in from the window edge.
 - **Leaving unsaved changes warns first.** Register edits with
   `Chronicle.markDirty(id)` / `markClean(id)` (`static/js/boot.js`); a
-  closing panel or a page change checks `Chronicle.isDirty()`.
+  closing panel or a page change checks `Chronicle.isDirty()`. A small box
+  asks in place with the shared slip (`Chronicle.askSlip`,
+  `static/js/theme.js`): it slides out from under the box's foot, says
+  what would be thrown away, and offers Keep editing beside a red button
+  that names the loss. The box never shakes and never closes behind you.
 - **Big editors pop out** over the page, as the calendar editor does, rather
   than living as a long form in a settings tab.
 - **Actions that change a lot ask first** (downtime, removals, resets). A
@@ -608,8 +617,9 @@ it. Each kit's opening is still to be built (#1548).
   editors' own panels) stay in Material so the tools stay predictable. Looks
   that are signed as their own (character sheets, the rulebook, the
   calendar, the quest board, map frames, encounters, the hover card) keep
-  them in every kit. The DM Screen is the one tool that wears the kit,
-  since the Director keeps it open over the pages at the table.
+  them in every kit, with two exceptions: the DM Screen wears the kit,
+  since the Director keeps it open over the pages at the table, and so does
+  the hover card on a time line (under **Opening and closing**).
 - **Ornate's gilt is brass** (light `#8a8350`, dark `#b8b07f`), well apart
   from the Director's amber, and does not take the campaign's colour.
 

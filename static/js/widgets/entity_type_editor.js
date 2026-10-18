@@ -37,6 +37,7 @@
     { value: 'checkbox', label: 'Checkbox' },
     { value: 'url', label: 'URL' }
   ];
+  var KEPT_TYPES = { link: 'Link to a page', rule: 'Worked out' };
 
   Chronicle.register('entity-type-editor', {
     destroy: function (el) {
@@ -190,13 +191,17 @@
           // Type select.
           var typeSelect = document.createElement('select');
           typeSelect.className = 'input text-xs py-1 w-24';
-          FIELD_TYPES.forEach(function (ft) {
+          // A link or worked-out field carries its category or rule, which
+          // this editor can't choose, so its type is shown and not changed.
+          var kept = KEPT_TYPES[field.type];
+          (kept ? [{ value: field.type, label: kept }] : FIELD_TYPES).forEach(function (ft) {
             var opt = document.createElement('option');
             opt.value = ft.value;
             opt.textContent = ft.label;
             if (ft.value === field.type) opt.selected = true;
             typeSelect.appendChild(opt);
           });
+          if (kept) typeSelect.disabled = true;
           typeSelect.addEventListener('change', function () {
             fields[idx].type = this.value;
           });

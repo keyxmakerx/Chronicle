@@ -22,7 +22,8 @@
   var cur = null; // the open sheet's state, or null
 
   function reduced() {
-    return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    return window.Chronicle && Chronicle.reducedMotion ? Chronicle.reducedMotion() :
+      !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   }
 
   function cards() {

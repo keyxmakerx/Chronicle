@@ -5204,7 +5204,7 @@
     },
 
     // _rollHolds keeps the day card open while it holds a roll not yet put
-    // on the day: the card shakes and says so instead of closing.
+    // on the day: the roller asks first, in its slip, instead of closing.
     _rollHolds: function () {
       if (this._roll && this._roll.isDirty()) { this._roll.nag(); return true; }
       return false;

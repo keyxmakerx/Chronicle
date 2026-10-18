@@ -53,7 +53,11 @@
     try { localStorage.setItem(POS_KEY, JSON.stringify(p)); } catch (e) { /* not remembered */ }
   }
 
-  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // Asked at each move, so a Calm or Off pick in My view applies at once.
+  function reduce() {
+    return window.Chronicle && Chronicle.reducedMotion ? Chronicle.reducedMotion() :
+      !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  }
 
   function narrow() { return window.matchMedia('(max-width: 700px)').matches; }
 
@@ -156,7 +160,7 @@
         if (bottom > list.scrollTop + list.clientHeight) target = bottom - list.clientHeight + 4;
         if (top < target) target = Math.max(0, top - 4);
         if (target === list.scrollTop) return;
-        if (list.scrollTo) list.scrollTo({ top: target, behavior: reduce ? 'auto' : 'smooth' });
+        if (list.scrollTo) list.scrollTo({ top: target, behavior: reduce() ? 'auto' : 'smooth' });
         else list.scrollTop = target;
       }
 
@@ -486,7 +490,7 @@
       function placeWindow(settle) {
         var r = root(); if (!r || !st.off) return;
         if (st.windowed) r.setAttribute('aria-modal', 'false'); // a refetch restores the template's value
-        r.classList.toggle('dms-settle', !!settle && !reduce);
+        r.classList.toggle('dms-settle', !!settle && !reduce());
         r.style.translate = st.off.x + 'px ' + st.off.y + 'px';
       }
 
@@ -681,7 +685,7 @@
         var loaded = load();
         var me = st.seq = (st.seq || 0) + 1;
 
-        if (reduce) {
+        if (reduce()) {
           loaded.then(function (html) {
             if (me !== st.seq) return;
             var r = mount(html);
@@ -736,7 +740,7 @@
         document.removeEventListener('keydown', onKey);
         var r = root(), o = st.overlay;
         var done = function () { exitWindow(); o.hidden = true; o.querySelector('[data-dms-stage]').innerHTML = ''; openBtn.focus({ preventScroll: true }); };
-        if (!r || reduce) { done(); return; }
+        if (!r || reduce()) { done(); return; }
         st.closing = true;
         var side = narrow() ? 'rotateX' : 'rotateY';
         var L = r.querySelector('[data-dms-leaf="l"]'), M = r.querySelector('[data-dms-leaf="m"]'), R = r.querySelector('[data-dms-leaf="r"]');

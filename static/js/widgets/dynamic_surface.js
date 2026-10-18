@@ -42,9 +42,10 @@
     return cssVar(name, fallback || 'ease');
   }
 
-  // reducedMotion reflects the user's OS "reduce motion" preference.
+  // reducedMotion is true under Calm, Off or the device's reduce-motion setting.
   function reducedMotion() {
-    return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    return window.Chronicle && Chronicle.reducedMotion ? Chronicle.reducedMotion() :
+      !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   }
 
   // applyFinal jumps an element to a keyframe's end state (WAAPI-less fallback).
