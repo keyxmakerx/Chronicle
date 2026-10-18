@@ -762,7 +762,8 @@ func (b *storedElsewhereBinding) Campaigns(context.Context, *Package) ([]Campaig
 }
 func (b *storedElsewhereBinding) Apply(_ context.Context, id string, _ *Package, m UpdateMode, v string, _ ActorInfo) error {
 	b.applies++
-	b.states[id] = &CampaignPackageState{Mode: m, Version: v}
+	// Like the Foundry binding: a mode set through Apply is a choice.
+	b.states[id] = &CampaignPackageState{Mode: m, Version: v, Explicit: m == UpdateModeApproveFirst || m == UpdateModeAutomatic}
 	return nil
 }
 

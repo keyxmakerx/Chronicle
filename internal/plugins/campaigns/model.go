@@ -728,6 +728,8 @@ type CampaignSettings struct {
 	//   "pinned"   → explicit version pin; install doesn't touch.
 	//   "approve_first" → on install, the campaign keeps its pin and the
 	//                new version is held until the owner approves it.
+	//   "automatic" → serves like "promote", but the owner chose it, so
+	//                the ask-first default never replaces it.
 	// Empty string means "not yet set"; AutoPinOnInstall treats it the
 	// same as "promote".
 	FoundryModulePinMode string `json:"foundry_module_pin_mode,omitempty"`
