@@ -3,6 +3,7 @@ package encounters
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 
 	"github.com/google/uuid"
 
@@ -35,13 +36,16 @@ const (
 )
 
 type service struct {
-	repo  Repository
-	pages PageDirectory
+	repo    Repository
+	pages   PageDirectory
+	results ResultDirectory
 }
 
-// NewService builds the service.
-func NewService(repo Repository, pages PageDirectory) Service {
-	return &service{repo: repo, pages: pages}
+// NewService builds the service. results may be nil when the Tests block is
+// unavailable: versions still save and play, but none can be picked by a
+// result.
+func NewService(repo Repository, pages PageDirectory, results ResultDirectory) Service {
+	return &service{repo: repo, pages: pages, results: results}
 }
 
 // isDM is the rule DM-only blocks use on a page: Owner visibility, which an
@@ -82,8 +86,9 @@ func (s *service) editable(ctx context.Context, campaignID, entityID string, v V
 // checkPages refuses a hero or creature page that is not a live page of
 // this campaign, so a saved encounter never points across campaigns.
 func (s *service) checkPages(ctx context.Context, campaignID string, d doc, v Viewer) error {
+	rows := allRows(d)
 	ids := append([]string{}, d.Heroes...)
-	for _, c := range d.Creatures {
+	for _, c := range rows {
 		if c.EntityID != "" {
 			ids = append(ids, c.EntityID)
 		}
@@ -100,12 +105,168 @@ func (s *service) checkPages(ctx context.Context, campaignID string, d doc, v Vi
 			return errInvalid("a hero is not a page in this campaign")
 		}
 	}
-	for _, c := range d.Creatures {
+	for _, c := range rows {
 		if _, ok := names[c.EntityID]; c.EntityID != "" && !ok {
 			return errInvalid(c.Name + " is not a page in this campaign")
 		}
 	}
 	return nil
+}
+
+// pickTests lists the tests the versions' picks name.
+func pickTests(versions []Version) []string {
+	var ids []string
+	for _, v := range versions {
+		if v.Pick != nil {
+			ids = append(ids, v.Pick.Test)
+		}
+	}
+	return ids
+}
+
+// checkPicks refuses a pick whose test is not a test of this campaign the
+// DM may see, or whose result is not one of that test's results.
+func (s *service) checkPicks(ctx context.Context, campaignID string, d doc, v Viewer) error {
+	ids := pickTests(d.Versions)
+	if len(ids) == 0 {
+		return nil
+	}
+	if s.results == nil {
+		return errInvalid("tests are not available, so a version can't be picked by a result")
+	}
+	outs, err := s.results.Outcomes(ctx, campaignID, ids, v)
+	if err != nil {
+		return apperrorInternal(err)
+	}
+	for _, ver := range d.Versions {
+		if ver.Pick == nil {
+			continue
+		}
+		o, ok := outs[ver.Pick.Test]
+		if !ok {
+			return errInvalid(ver.Name + ": the test that picks it is not in this campaign")
+		}
+		if _, ok := o.Results[ver.Pick.Result]; !ok {
+			return errInvalid(ver.Name + ": the result that picks it is not one of " + o.Name + "'s results")
+		}
+	}
+	return nil
+}
+
+// outcomes reads the tests the given versions' picks name. A failure to read
+// them must not take the encounter down with it, so it reads as unknown
+// (nil): the picks are kept as stored rather than cleared, so a save made
+// while the tests cannot be read never drops them.
+func (s *service) outcomes(ctx context.Context, campaignID string, ids []string, v Viewer) map[string]TestOutcome {
+	if s.results == nil || len(ids) == 0 {
+		return map[string]TestOutcome{}
+	}
+	outs, err := s.results.Outcomes(ctx, campaignID, ids, v)
+	if err != nil {
+		slog.Warn("encounters: cannot read the tests that pick versions",
+			slog.String("campaign_id", campaignID), slog.Any("error", err))
+		return nil
+	}
+	if outs == nil {
+		outs = map[string]TestOutcome{}
+	}
+	return outs
+}
+
+// readVersions names each pick's test and result, and clears a pick whose
+// test or result has gone, the way an unlinked row keeps its name: the
+// version stays and the DM picks it by hand. It returns which version the
+// recorded results choose. With outs nil (the tests could not be read) the
+// picks stay as stored, unnamed, and there is no answer to give.
+func readVersions(in []Version, outs map[string]TestOutcome) ([]Version, *Picked) {
+	if len(in) == 0 {
+		return []Version{}, nil
+	}
+	if outs == nil {
+		out := make([]Version, 0, len(in))
+		for _, ver := range in {
+			ver.Add = nonNilRows(ver.Add)
+			if ver.Remove == nil {
+				ver.Remove = []string{}
+			}
+			if ver.Counts == nil {
+				ver.Counts = []CountChange{}
+			}
+			if ver.Pick != nil {
+				ver.Pick = &Pick{Test: ver.Pick.Test, Result: ver.Pick.Result}
+			}
+			out = append(out, ver)
+		}
+		return out, nil
+	}
+	picked := &Picked{Open: []string{}}
+	open := map[string]bool{}
+	out := make([]Version, 0, len(in))
+	for _, ver := range in {
+		ver.Add = nonNilRows(ver.Add)
+		if ver.Remove == nil {
+			ver.Remove = []string{}
+		}
+		if ver.Counts == nil {
+			ver.Counts = []CountChange{}
+		}
+		if ver.Pick != nil {
+			o, ok := outs[ver.Pick.Test]
+			label, has := o.Results[ver.Pick.Result]
+			if !ok || !has {
+				ver.Pick = nil
+			} else {
+				ver.Pick = &Pick{Test: ver.Pick.Test, Result: ver.Pick.Result, TestName: o.Name, ResultLabel: label}
+				switch {
+				case o.Recorded == ver.Pick.Result && picked.Version == "":
+					picked.Version, picked.Test, picked.Result = ver.ID, o.Name, label
+				case o.Recorded == "" && !open[ver.Pick.Test]:
+					open[ver.Pick.Test] = true
+					picked.Open = append(picked.Open, o.Name)
+				}
+			}
+		}
+		out = append(out, ver)
+	}
+	return out, picked
+}
+
+func nonNilRows(in []Creature) []Creature {
+	if in == nil {
+		return []Creature{}
+	}
+	return in
+}
+
+// CarryVersions keeps an encounter's versions across a save that replaces
+// its base rows: a removal or count change of a row that is gone is dropped,
+// and the rest of the version, its added rows and its pick, is kept.
+func CarryVersions(in []Version, rows []Creature) []Version {
+	ids := make(map[string]bool, len(rows))
+	for _, r := range rows {
+		ids[r.ID] = true
+	}
+	out := make([]Version, 0, len(in))
+	for _, ver := range in {
+		remove := []string{}
+		for _, id := range ver.Remove {
+			if ids[id] {
+				remove = append(remove, id)
+			}
+		}
+		counts := []CountChange{}
+		for _, cc := range ver.Counts {
+			if ids[cc.Row] {
+				counts = append(counts, cc)
+			}
+		}
+		ver.Remove, ver.Counts = remove, counts
+		if ver.Pick != nil {
+			ver.Pick = &Pick{Test: ver.Pick.Test, Result: ver.Pick.Result}
+		}
+		out = append(out, ver)
+	}
+	return out
 }
 
 // decode reads a stored document. It passed validation when saved; a row
@@ -123,7 +284,7 @@ func decode(r Row) (doc, error) {
 // dropped from heroes and unlinked from its row, which keeps its name.
 func (s *service) present(ctx context.Context, campaignID string, rows []Row, v Viewer) ([]Encounter, error) {
 	docs := make([]doc, len(rows))
-	var ids []string
+	var ids, tests []string
 	for i, r := range rows {
 		d, err := decode(r)
 		if err != nil {
@@ -132,12 +293,14 @@ func (s *service) present(ctx context.Context, campaignID string, rows []Row, v 
 		docs[i] = d
 		ids = append(ids, r.EntityID)
 		ids = append(ids, d.Heroes...)
-		for _, c := range d.Creatures {
+		for _, c := range allRows(d) {
 			if c.EntityID != "" {
 				ids = append(ids, c.EntityID)
 			}
 		}
+		tests = append(tests, pickTests(d.Versions)...)
 	}
+	outs := s.outcomes(ctx, campaignID, tests, v)
 	names := map[string]string{}
 	if len(ids) > 0 {
 		var err error
@@ -149,20 +312,32 @@ func (s *service) present(ctx context.Context, campaignID string, rows []Row, v 
 	for i, r := range rows {
 		e := Encounter{
 			ID: r.ID, Page: Page{ID: r.EntityID, Name: names[r.EntityID]}, Name: r.Name, Ready: r.Ready,
-			Heroes: []Hero{}, Creatures: []Creature{}, Stages: []Stage{}, Version: r.Version, UpdatedAt: r.UpdatedAt,
+			Heroes: []Hero{}, Creatures: []Creature{}, Stages: []Stage{}, Versions: []Version{}, Version: r.Version, UpdatedAt: r.UpdatedAt,
 		}
 		for _, id := range docs[i].Heroes {
 			if n, ok := names[id]; ok {
 				e.Heroes = append(e.Heroes, Hero{ID: id, Name: n})
 			}
 		}
-		for _, c := range docs[i].Creatures {
+		unlink := func(c Creature) Creature {
 			if _, ok := names[c.EntityID]; c.EntityID != "" && !ok {
 				c.EntityID = ""
 			}
-			e.Creatures = append(e.Creatures, c)
+			return c
 		}
-		e.Stages = readStages(docs[i].Stages, e.Creatures)
+		for _, c := range docs[i].Creatures {
+			e.Creatures = append(e.Creatures, unlink(c))
+		}
+		for _, ver := range docs[i].Versions {
+			add := make([]Creature, 0, len(ver.Add))
+			for _, c := range ver.Add {
+				add = append(add, unlink(c))
+			}
+			ver.Add = add
+			e.Versions = append(e.Versions, ver)
+		}
+		e.Versions, e.Picked = readVersions(e.Versions, outs)
+		e.Stages = readStages(docs[i].Stages, allRows(doc{Creatures: e.Creatures, Versions: e.Versions}))
 		out[i] = e
 	}
 	return out, nil
@@ -289,6 +464,9 @@ func (s *service) Create(ctx context.Context, campaignID, entityID string, v Vie
 	if err := s.checkPages(ctx, campaignID, d, v); err != nil {
 		return nil, err
 	}
+	if err := s.checkPicks(ctx, campaignID, d, v); err != nil {
+		return nil, err
+	}
 	existing, err := s.repo.ListForPage(ctx, campaignID, entityID)
 	if err != nil {
 		return nil, apperrorInternal(err)
@@ -333,6 +511,9 @@ func (s *service) Update(ctx context.Context, campaignID, id string, v Viewer, i
 		return nil, err
 	}
 	if err := s.checkPages(ctx, campaignID, d, v); err != nil {
+		return nil, err
+	}
+	if err := s.checkPicks(ctx, campaignID, d, v); err != nil {
 		return nil, err
 	}
 	raw, err := json.Marshal(d)

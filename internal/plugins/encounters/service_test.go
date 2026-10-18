@@ -17,8 +17,13 @@ var (
 )
 
 func newTestService() (Service, *memRepo, *fakePages) {
-	repo, pages := newMemRepo(), newFakePages()
-	return NewService(repo, pages), repo, pages
+	svc, repo, pages, _ := newVersionService()
+	return svc, repo, pages
+}
+
+func newVersionService() (Service, *memRepo, *fakePages, *fakeResults) {
+	repo, pages, results := newMemRepo(), newFakePages(), newFakeResults()
+	return NewService(repo, pages, results), repo, pages, results
 }
 
 func intp(n int) *int { return &n }
