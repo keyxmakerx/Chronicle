@@ -121,55 +121,32 @@
   }
 
   // --- Thrown dice on first use (ADR-063) ---
-  // Chronicle.dice exists on every page; dice.js and its 3D libraries are
-  // fetched on the first roll or catalogue call, from the hashed URLs on the
-  // inert #chronicle-dice-src element. dice.js then replaces this stub.
-  var diceLoading = null;
-  function loadDice() {
-    if (Chronicle.dice !== diceStub) return Promise.resolve();
-    if (diceLoading) return diceLoading;
-    diceLoading = new Promise(function (resolve, reject) {
-      var src = document.getElementById('chronicle-dice-src');
-      var url = src && src.getAttribute('data-src');
-      if (!url || !WIDGET_SCRIPT_URL.test(url) || url.indexOf('..') !== -1) {
-        reject(new Error('dice script not listed'));
-        return;
-      }
-      var s = document.createElement('script');
-      s.src = url;
-      // dice.js reads its library URLs from its own tag.
-      ['data-three-src', 'data-cannon-src'].forEach(function (a) {
-        var v = src.getAttribute(a);
-        if (v) s.setAttribute(a, v);
+  // A stub until its first call loads dice.js (#chronicle-dice-src), which
+  // replaces it. A load fails after 10 s; a stop() before then still stops
+  // the rolls asked for.
+  var diceLoading = null, diceStops = 0;
+  function viaDice(fn) {
+    return function () {
+      var args = arguments, at = diceStops;
+      diceLoading = diceLoading || new Promise(function (resolve, reject) {
+        var src = document.getElementById('chronicle-dice-src'), url = src && src.getAttribute('data-src');
+        var s = document.createElement('script');
+        function fail() { if (s.onerror && Chronicle.dice === diceStub) diceLoading = null; s.onerror = null; reject(new Error('could not load dice.js')); }
+        if (!WIDGET_SCRIPT_URL.test(url) || url.indexOf('..') !== -1) return fail();
+        s.src = url;
+        s.onload = function () { if (Chronicle.dice === diceStub) fail(); else resolve(); };
+        s.onerror = fail;
+        setTimeout(fail, 10000);
+        document.head.appendChild(s);
       });
-      // A hung request counts as failed, so no roll waits for ever.
-      var wait = setTimeout(function () { diceLoading = null; reject(new Error('timed out loading ' + url)); }, 10000);
-      s.onload = function () { clearTimeout(wait); resolve(); };
-      s.onerror = function () { clearTimeout(wait); diceLoading = null; reject(new Error('could not load ' + url)); };
-      document.head.appendChild(s);
-    });
-    return diceLoading;
-  }
-  // A stop() before dice.js arrives still stops the rolls asked for.
-  var diceStops = 0;
-  var diceStub = {
-    roll: function (groups, opts) {
-      var at = diceStops;
-      return loadDice().then(function () {
-        if (Chronicle.dice === diceStub) throw new Error('dice.js did not start');
-        var r = Chronicle.dice.roll(groups, opts);
-        if (diceStops !== at) Chronicle.dice.stop();
+      return diceLoading.then(function () {
+        var d = Chronicle.dice, r = d[fn].apply(d, args);
+        if (diceStops !== at) d.stop();
         return r;
       });
-    },
-    catalogue: function () {
-      return loadDice().then(function () {
-        if (Chronicle.dice === diceStub) throw new Error('dice.js did not start');
-        return Chronicle.dice.catalogue();
-      });
-    },
-    stop: function () { diceStops++; }
-  };
+    };
+  }
+  var diceStub = { roll: viaDice('roll'), catalogue: viaDice('catalogue'), stop: function () { diceStops++; } };
   if (!Chronicle.dice) Chronicle.dice = diceStub;
 
   /**

@@ -45,7 +45,8 @@
   'use strict';
 
   var W = typeof window !== 'undefined' ? window : globalThis;
-  var SELF = typeof document !== 'undefined' ? document.currentScript : null;
+  // The layout lists the hashed library URLs beside dice.js's own.
+  var SELF = typeof document !== 'undefined' ? document.getElementById('chronicle-dice-src') || document.currentScript : null;
   var THREE_SRC = (SELF && SELF.getAttribute('data-three-src')) || '/static/vendor/three-dice.min.js';
   var CANNON_SRC = (SELF && SELF.getAttribute('data-cannon-src')) || '/static/vendor/cannon-es.js';
   // Bare, with no version query: the set and crit files import the engine by this same URL
