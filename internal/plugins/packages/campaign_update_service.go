@@ -833,7 +833,7 @@ func (s *campaignUpdateService) OnInstall(ctx context.Context, pkg *Package, pre
 
 	var failures []error
 	for _, st := range states {
-		if asksByDefault(b) && st.Mode == UpdateModeAutomatic {
+		if asksByDefault(b) && st.Mode == UpdateModeAutomatic && !st.Explicit {
 			// Nothing was chosen for it: it asks like the rest, from the
 			// version it was running. A previous version that is no longer on
 			// disk was not being served, so there is nothing to hold it on.
@@ -925,8 +925,10 @@ func (s *campaignUpdateService) Reconcile(ctx context.Context) (ReconcileResult,
 
 // adoptDefaults moves every campaign of an ask-by-default package that has no
 // choice of its own onto ask-first, frozen on the installed version, so a
-// campaign created or restored since the last install is covered too. It is
-// best effort: a campaign it cannot freeze is logged and retried next boot.
+// campaign created or restored since the last install is covered too. An
+// owner who chose automatic has made a choice and is left alone, or every
+// boot would undo it. It is best effort: a campaign it cannot freeze is
+// logged and retried next boot.
 func (s *campaignUpdateService) adoptDefaults(ctx context.Context, pkg *Package) {
 	b, ok := s.bindings[pkg.Type]
 	if !ok || !asksByDefault(b) || !s.versionOnDisk(pkg, pkg.InstalledVersion) {
@@ -938,7 +940,7 @@ func (s *campaignUpdateService) adoptDefaults(ctx context.Context, pkg *Package)
 		return
 	}
 	for _, st := range states {
-		if st.Mode != UpdateModeAutomatic {
+		if st.Mode != UpdateModeAutomatic || st.Explicit {
 			continue
 		}
 		if err := b.Apply(ctx, st.CampaignID, pkg, UpdateModeApproveFirst, pkg.InstalledVersion, ActorInfo{}); err != nil {

@@ -807,8 +807,8 @@ func (r *bestiaryRepo) GetBestiaryStats(ctx context.Context) (*BestiaryStats, er
 	err := r.db.QueryRowContext(ctx,
 		`SELECT
 		   COUNT(*),
-		   SUM(CASE WHEN visibility = 'published' THEN 1 ELSE 0 END),
-		   SUM(CASE WHEN visibility = 'flagged' THEN 1 ELSE 0 END),
+		   COALESCE(SUM(CASE WHEN visibility = 'published' THEN 1 ELSE 0 END), 0),
+		   COALESCE(SUM(CASE WHEN visibility = 'flagged' THEN 1 ELSE 0 END), 0),
 		   COALESCE(SUM(rating_count), 0),
 		   COALESCE(SUM(downloads), 0),
 		   COUNT(DISTINCT creator_id)

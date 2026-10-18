@@ -17,7 +17,8 @@ import (
 type SystemEntryRepository interface {
 	// List returns the entries for a system, optionally for one field key
 	// ("" = all), ordered by name. includeDirectors false hides 'directors'
-	// entries.
+	// entries but keeps 'character' ones, which the service filters by who
+	// plays the character.
 	List(ctx context.Context, campaignID, systemID, fieldKey string, includeDirectors bool) ([]SystemEntry, error)
 	// Get returns one entry; apperror not-found when absent.
 	Get(ctx context.Context, campaignID string, id int64) (*SystemEntry, error)
@@ -46,13 +47,13 @@ func NewSystemEntryRepository(db *sql.DB) SystemEntryRepository {
 }
 
 const systemEntryColumns = `id, campaign_id, system_id, field_key, slug, name, summary, description,
-	properties, visibility, COALESCE(created_by, ''), created_at, updated_at`
+	properties, visibility, COALESCE(for_entity_id, ''), COALESCE(created_by, ''), created_at, updated_at`
 
 func scanSystemEntry(s rowScanner) (*SystemEntry, error) {
 	var e SystemEntry
 	var props []byte
 	if err := s.Scan(&e.ID, &e.CampaignID, &e.SystemID, &e.FieldKey, &e.Slug, &e.Name, &e.Summary,
-		&e.Description, &props, &e.Visibility, &e.CreatedBy, &e.CreatedAt, &e.UpdatedAt); err != nil {
+		&e.Description, &props, &e.Visibility, &e.ForEntityID, &e.CreatedBy, &e.CreatedAt, &e.UpdatedAt); err != nil {
 		return nil, err
 	}
 	e.Properties = map[string]any{}
@@ -73,7 +74,7 @@ func (r *systemEntryRepository) List(ctx context.Context, campaignID, systemID, 
 		args = append(args, fieldKey)
 	}
 	if !includeDirectors {
-		q += ` AND visibility = 'everyone'`
+		q += ` AND visibility IN ('everyone', 'character')`
 	}
 	q += ` ORDER BY field_key, name, id`
 	rows, err := r.db.QueryContext(ctx, q, args...)
@@ -152,9 +153,9 @@ func (r *systemEntryRepository) Create(ctx context.Context, e *SystemEntry) erro
 	}
 	res, err := r.db.ExecContext(ctx,
 		`INSERT INTO campaign_system_entries
-		   (campaign_id, system_id, field_key, slug, name, summary, description, properties, visibility, created_by)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULLIF(?, ''))`,
-		e.CampaignID, e.SystemID, e.FieldKey, e.Slug, e.Name, e.Summary, e.Description, string(props), e.Visibility, e.CreatedBy)
+		   (campaign_id, system_id, field_key, slug, name, summary, description, properties, visibility, for_entity_id, created_by)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULLIF(?, ''), NULLIF(?, ''))`,
+		e.CampaignID, e.SystemID, e.FieldKey, e.Slug, e.Name, e.Summary, e.Description, string(props), e.Visibility, e.ForEntityID, e.CreatedBy)
 	if err != nil {
 		var me *mysql.MySQLError
 		if errors.As(err, &me) && me.Number == 1062 {
@@ -173,9 +174,9 @@ func (r *systemEntryRepository) Update(ctx context.Context, e *SystemEntry) erro
 	}
 	_, err = r.db.ExecContext(ctx,
 		`UPDATE campaign_system_entries
-		    SET name = ?, summary = ?, description = ?, properties = ?, visibility = ?
+		    SET name = ?, summary = ?, description = ?, properties = ?, visibility = ?, for_entity_id = NULLIF(?, '')
 		  WHERE campaign_id = ? AND id = ?`,
-		e.Name, e.Summary, e.Description, string(props), e.Visibility, e.CampaignID, e.ID)
+		e.Name, e.Summary, e.Description, string(props), e.Visibility, e.ForEntityID, e.CampaignID, e.ID)
 	if err != nil {
 		return apperror.NewInternal(err)
 	}

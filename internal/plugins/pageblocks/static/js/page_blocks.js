@@ -1,7 +1,7 @@
 /**
- * page_blocks.js: the Read-aloud, Table and Steps page blocks.
+ * page_blocks.js: the Read-aloud, Table, Steps and Checklist page blocks.
  *
- * One widget draws all three; data-kind says which. It fetches the block's
+ * One widget draws all four; data-kind says which. It fetches the block's
  * content from data-endpoint, so what it shows is whatever the server decided
  * this viewer may see: a DM-only table column never arrives here. Every piece
  * of user text goes in with textContent, never as markup. The pure helpers at
@@ -15,9 +15,10 @@
   // The server's limits, mirrored so the editor can stop short of a refusal.
   var LIM = {
     readAloud: 4000, columns: 8, rows: 60, label: 80, cell: 500,
-    steps: 30, stepTitle: 120, stepText: 1000
+    steps: 30, stepTitle: 120, stepText: 1000,
+    items: 60, itemName: 120, side: 40, thresholds: 10, note: 500, title: 120
   };
-  var KINDS = { read_aloud: 'Read-aloud', page_table: 'Table', page_steps: 'Steps' };
+  var KINDS = { read_aloud: 'Read-aloud', page_table: 'Table', page_steps: 'Steps', page_checklist: 'Checklist' };
 
   // ---------- Pure helpers ----------
   function uid(prefix) {
@@ -29,6 +30,7 @@
     if (kind === 'read_aloud') return { text: '' };
     if (kind === 'page_table') return { columns: [], rows: [] };
     if (kind === 'page_steps') return { steps: [] };
+    if (kind === 'page_checklist') return { title: '', sideA: 'Party', sideB: 'The other side', dmOnly: false, items: [], thresholds: [] };
     return {};
   }
 
@@ -51,14 +53,29 @@
         })
       };
     }
+    if (kind === 'page_checklist') {
+      return {
+        title: str(d.title), sideA: str(d.sideA), sideB: str(d.sideB), dmOnly: !!d.dmOnly,
+        items: (d.items || []).map(function (it) {
+          var o = { id: it.id, name: str(it.name), holder: it.holder === 'a' || it.holder === 'b' ? it.holder : '', dm: !!it.dm };
+          if (it.entityId) { o.entityId = str(it.entityId); o.entityName = str(it.entityName); o.entityUrl = str(it.entityUrl); }
+          return o;
+        }),
+        thresholds: (d.thresholds || []).map(function (t) {
+          return { id: t.id, side: t.side === 'b' ? 'b' : 'a', count: Math.max(1, Number(t.count) || 1), note: str(t.note) };
+        })
+      };
+    }
     return d;
   }
+  function str(v) { return typeof v === 'string' ? v : ''; }
 
   // isEmpty is what decides whether a non-editor sees anything at all.
   function isEmpty(kind, d) {
     if (kind === 'read_aloud') return !String(d.text || '').trim();
     if (kind === 'page_table') return !d.columns.length;
     if (kind === 'page_steps') return !d.steps.length;
+    if (kind === 'page_checklist') return !d.items.length;
     return true;
   }
 
@@ -109,10 +126,63 @@
     return d.steps.some(function (s) { return s.done; });
   }
 
+  // ---- Checklist ----
+  // counts is how many items each side holds.
+  function counts(d) {
+    var c = { a: 0, b: 0, none: 0 };
+    d.items.forEach(function (it) { if (it.holder === 'a') c.a++; else if (it.holder === 'b') c.b++; else c.none++; });
+    return c;
+  }
+  // segments orders the strip: side a's items from the left, side b's from
+  // the right, the unheld between, so the two sides read as a tug of war.
+  function segments(d) {
+    var c = counts(d), out = [], i;
+    for (i = 0; i < c.a; i++) out.push('a');
+    for (i = 0; i < c.none; i++) out.push('');
+    for (i = 0; i < c.b; i++) out.push('b');
+    return out;
+  }
+  // reached is the thresholds whose side holds at least their count. It
+  // matches ReachedThresholds on the server.
+  function reached(d) {
+    var c = counts(d);
+    return d.thresholds.filter(function (t) { return c[t.side] >= t.count; });
+  }
+  // newlyReached is what a change crossed into: reached after, not before.
+  function newlyReached(before, after) {
+    var was = {};
+    reached(before).forEach(function (t) { was[t.id] = true; });
+    return reached(after).filter(function (t) { return !was[t.id]; });
+  }
+  function setHolder(d, id, holder) {
+    var n = clone(d);
+    n.items.forEach(function (it) { if (it.id === id) it.holder = holder === 'a' || holder === 'b' ? holder : ''; });
+    return n;
+  }
+  function addItem(d) {
+    var n = clone(d);
+    if (n.items.length >= LIM.items) return n;
+    n.items.push({ id: uid('i'), name: '', holder: '', dm: false });
+    return n;
+  }
+  function addThreshold(d) {
+    var n = clone(d);
+    if (n.thresholds.length >= LIM.thresholds) return n;
+    n.thresholds.push({ id: uid('t'), side: 'a', count: Math.max(1, n.items.length), note: '' });
+    return n;
+  }
+  function sideName(d, side) {
+    if (side === 'a') return d.sideA || 'Side A';
+    if (side === 'b') return d.sideB || 'Side B';
+    return 'Nobody';
+  }
+
   var H = {
     LIM: LIM, uid: uid, emptyData: emptyData, normalise: normalise, isEmpty: isEmpty,
     move: move, addColumn: addColumn, removeColumn: removeColumn, addRow: addRow,
-    addStep: addStep, setDone: setDone, clearTicks: clearTicks, anyDone: anyDone
+    addStep: addStep, setDone: setDone, clearTicks: clearTicks, anyDone: anyDone,
+    counts: counts, segments: segments, reached: reached, newlyReached: newlyReached,
+    setHolder: setHolder, addItem: addItem, addThreshold: addThreshold, sideName: sideName
   };
   if (typeof window !== 'undefined') window.PageBlocksHelpers = H;
   if (typeof Chronicle === 'undefined' || !Chronicle.register) return;
@@ -168,7 +238,7 @@
       var S = {
         el: el, cfg: cfg, kind: cfg.kind, id: 'pb' + (++uidCount),
         view: null, data: null, draft: null, editing: false, status: '', statusErr: false,
-        saving: Promise.resolve(), focus: null
+        saving: Promise.resolve(), focus: null, open: false, canDm: cfg.canDm === true
       };
       el.classList.add('pb');
       el._pb = S;
@@ -227,7 +297,8 @@
   var PROMPTS = {
     read_aloud: 'Add the text you read to the table',
     page_table: 'Add a table of anything you want to look up at the table',
-    page_steps: 'Add the beats of this scene, in order'
+    page_steps: 'Add the beats of this scene, in order',
+    page_checklist: 'Add things each held by one of two sides, like relics the party or a rival holds'
   };
 
   function emptyPrompt(S) {
@@ -252,7 +323,68 @@
   function readView(S) {
     if (S.kind === 'read_aloud') return h('blockquote', 'pb-read', S.data.text);
     if (S.kind === 'page_table') return tableView(S.data);
+    if (S.kind === 'page_checklist') return checklistView(S);
     return stepsView(S);
+  }
+
+  // checklistView is the strip at rest: each side's count and one segment per
+  // item, with a quiet "Show all" that unfolds the rows. Thresholds only ever
+  // arrive for the DM; the ones reached are shown under the strip.
+  function checklistView(S) {
+    var d = S.data, c = counts(d), editable = canEdit(S);
+    var box = h('div', 'pb-cl');
+    if (d.dmOnly) box.setAttribute('data-dm-only', '');
+    if (d.title || d.dmOnly) {
+      var head = h('div', 'pb-cl-head');
+      append(head, [
+        d.title ? h('span', 'pb-cl-title cb-head', d.title) : null,
+        d.dmOnly ? h('span', 'pb-cl-dm cb-dm', 'Only you see this') : null
+      ]);
+      box.appendChild(head);
+    }
+    var legend = h('div', 'pb-cl-legend');
+    append(legend, [
+      h('span', 'pb-cl-side', sideName(d, 'a') + ' ' + c.a),
+      c.none ? h('span', 'pb-cl-none', c.none + ' held by nobody') : null,
+      h('span', 'pb-cl-side', c.b + ' ' + sideName(d, 'b'))
+    ]);
+    var bar = h('div', 'pb-cl-bar', '', { role: 'img',
+      'aria-label': sideName(d, 'a') + ' holds ' + c.a + ', ' + sideName(d, 'b') + ' holds ' + c.b + ', of ' + d.items.length });
+    segments(d).forEach(function (side) { bar.appendChild(h('span', 'pb-cl-seg' + (side ? ' pb-cl-' + side : ''))); });
+    append(box, [legend, bar]);
+    reached(d).forEach(function (t) {
+      var n = h('div', 'pb-cl-reached', '', { 'data-dm-only': true });
+      append(n, [h('b', '', sideName(d, t.side) + ' holds ' + t.count + '.'), t.note ? h('span', '', ' ' + t.note) : null]);
+      box.appendChild(n);
+    });
+    var rowsId = S.id + '-rows';
+    var more = h('button', 'pb-quiet', S.open ? 'Show less' : 'Show all ' + d.items.length,
+      { type: 'button', 'aria-expanded': S.open ? 'true' : 'false', 'aria-controls': rowsId },
+      { click: function () { S.open = !S.open; draw(S); } });
+    box.appendChild(more);
+    var ul = h('ul', 'pb-cl-rows', '', { id: rowsId });
+    if (!S.open) ul.setAttribute('hidden', '');
+    d.items.forEach(function (it) {
+      var li = h('li', 'pb-cl-row pb-cl-held-' + (it.holder || 'none'));
+      if (it.dm) li.setAttribute('data-dm-only', '');
+      var name = it.entityUrl
+        ? h('a', 'pb-cl-name', it.name || it.entityName, { href: it.entityUrl })
+        : h('span', 'pb-cl-name', it.name);
+      append(li, [h('span', 'pb-cl-dot', '', { 'aria-hidden': 'true' }), name, it.dm ? h('span', 'pb-dm cb-dm', 'DM') : null]);
+      if (editable) {
+        var pick = h('div', 'pb-cl-pick', '', { role: 'group', 'aria-label': 'Who holds ' + (it.name || 'this') });
+        ['a', 'b', ''].forEach(function (side) {
+          pick.appendChild(h('button', 'pb-cl-opt', sideName(d, side), { type: 'button', 'aria-pressed': it.holder === side ? 'true' : 'false' },
+            { click: function () { if (it.holder !== side) hold(S, it.id, side); } }));
+        });
+        li.appendChild(pick);
+      } else {
+        li.appendChild(h('span', 'pb-cl-holder', it.holder ? sideName(d, it.holder) : ''));
+      }
+      ul.appendChild(li);
+    });
+    box.appendChild(ul);
+    return box;
   }
 
   function tableView(d) {
@@ -342,6 +474,24 @@
     });
   }
 
+  // hold moves an item to a side and saves at once. A threshold the move
+  // reaches is said in the status line, so the DM hears it where they clicked.
+  function hold(S, id, side) {
+    var prev = S.data;
+    S.data = setHolder(S.data, id, side);
+    var fresh = newlyReached(prev, S.data);
+    draw(S);
+    save(S, S.data).then(function () {
+      draw(S);
+      setStatus(S, fresh.length ? fresh.map(function (t) {
+        return sideName(S.data, t.side) + ' holds ' + t.count + '.' + (t.note ? ' ' + t.note : '');
+      }).join(' ') : 'Saved');
+    }).catch(function (err) {
+      S.data = prev; draw(S);
+      reloadAfterConflict(S, err);
+    });
+  }
+
   function tickAll(S) {
     var prev = S.data;
     S.data = clearTicks(S.data); draw(S);
@@ -382,7 +532,8 @@
 
   function editor(S) {
     var ed = h('div', 'pb-ed');
-    var body = S.kind === 'read_aloud' ? textEditor(S) : S.kind === 'page_table' ? tableEditor(S) : stepsEditor(S);
+    var body = S.kind === 'read_aloud' ? textEditor(S) : S.kind === 'page_table' ? tableEditor(S)
+      : S.kind === 'page_checklist' ? checklistEditor(S) : stepsEditor(S);
     var foot = h('div', 'pb-bar');
     var saveBtn = btn('Save', 'pb-primary', function () { commit(S, saveBtn); });
     append(foot, [
@@ -509,5 +660,151 @@
       h('span', 'pb-count', d.steps.length + ' of ' + LIM.steps + ' steps')
     ]);
     return append(wrap, [list, add]);
+  }
+  // checklistEditor edits the whole list at once; Save keeps it, Cancel drops
+  // it. The DM's own parts (hiding the block or an item, thresholds) are only
+  // offered to someone who may author DM-only content; the server refuses
+  // them from anyone else either way.
+  function checklistEditor(S) {
+    var d = S.draft, dm = S.canDm;
+    var wrap = h('div', 'pb-field pb-cl-ed');
+    var title = h('input', 'pb-input', '', { type: 'text', maxlength: String(LIM.title), 'aria-label': 'Checklist name',
+      placeholder: 'Name, like The hidden god’s hearts', 'data-first': true }, { input: function () { d.title = title.value; } });
+    title.value = d.title;
+    var sides = h('div', 'pb-cl-sides');
+    var a = h('input', 'pb-input', '', { type: 'text', maxlength: String(LIM.side), 'aria-label': 'First side', placeholder: 'Party' },
+      { input: function () { d.sideA = a.value; } });
+    a.value = d.sideA;
+    var b = h('input', 'pb-input', '', { type: 'text', maxlength: String(LIM.side), 'aria-label': 'Second side', placeholder: 'The other side' },
+      { input: function () { d.sideB = b.value; } });
+    b.value = d.sideB;
+    append(sides, [a, h('span', 'pb-count', 'against'), b]);
+    append(wrap, [title, sides]);
+    if (dm) wrap.appendChild(check('Only you see this checklist', d.dmOnly, function (v) { d.dmOnly = v; }));
+
+    var list = h('ol', 'pb-cl-edlist');
+    d.items.forEach(function (it, i) {
+      var li = h('li', 'pb-cl-edrow', '', { 'data-item': it.id });
+      var name = h('input', 'pb-input', '', { type: 'text', maxlength: String(LIM.itemName), 'aria-label': 'Item ' + (i + 1) + ' name',
+        placeholder: 'Item name' }, { input: function () { it.name = name.value; } });
+      name.value = it.name;
+      var holder = h('select', 'pb-input pb-cl-sel', '', { 'aria-label': 'Who holds item ' + (i + 1) },
+        { change: function () { it.holder = holder.value; } });
+      ['', 'a', 'b'].forEach(function (side) {
+        var o = h('option', '', sideName(d, side), { value: side });
+        if (it.holder === side) o.setAttribute('selected', '');
+        holder.appendChild(o);
+      });
+      var tools = h('div', 'pb-tools');
+      append(tools, [
+        iconBtn('↑', 'Move item ' + (i + 1) + ' up', function () { d.items = move(d.items, i, -1); redraw(S, '.pb-ed [data-item="' + it.id + '"] input'); }, i === 0),
+        iconBtn('↓', 'Move item ' + (i + 1) + ' down', function () { d.items = move(d.items, i, 1); redraw(S, '.pb-ed [data-item="' + it.id + '"] input'); }, i === d.items.length - 1),
+        iconBtn('×', 'Remove item ' + (i + 1), function () { d.items = d.items.filter(function (x) { return x.id !== it.id; }); redraw(S); })
+      ]);
+      var line = h('div', 'pb-cl-edline');
+      append(line, [name, holder, tools]);
+      var extra = h('div', 'pb-cl-edline');
+      append(extra, [pagePicker(S, it, i), dm ? check('Only you see it', it.dm, function (v) { it.dm = v; }) : null]);
+      append(li, [line, extra]);
+      list.appendChild(li);
+    });
+    var add = h('div', 'pb-add');
+    append(add, [
+      btn('Add item', '', function () { S.draft = addItem(d); redraw(S, '.pb-ed .pb-cl-edrow:last-child input'); }, { disabled: d.items.length >= LIM.items }),
+      h('span', 'pb-count', d.items.length + ' of ' + LIM.items + ' items')
+    ]);
+    append(wrap, [list, add]);
+    if (dm) wrap.appendChild(thresholdEditor(S));
+    return wrap;
+  }
+
+  function check(label, on, set) {
+    var lab = h('label', 'pb-check');
+    var cb = h('input', '', '', { type: 'checkbox' }, { change: function () { set(cb.checked); } });
+    cb.checked = !!on;
+    return append(lab, [cb, h('span', '', label)]);
+  }
+
+  // thresholdEditor lists "when a side holds N" lines, each with the note the
+  // DM sees when it is reached. They never reach players.
+  function thresholdEditor(S) {
+    var d = S.draft;
+    var box = h('div', 'pb-cl-thr', '', { 'data-dm-only': true });
+    box.appendChild(h('div', 'pb-cl-thr-h', 'Notes for you when a side reaches a count'));
+    d.thresholds.forEach(function (t, i) {
+      var row = h('div', 'pb-cl-edline', '', { 'data-thr': t.id });
+      var side = h('select', 'pb-input pb-cl-sel', '', { 'aria-label': 'Threshold ' + (i + 1) + ' side' }, { change: function () { t.side = side.value; } });
+      ['a', 'b'].forEach(function (s2) {
+        var o = h('option', '', sideName(d, s2), { value: s2 });
+        if (t.side === s2) o.setAttribute('selected', '');
+        side.appendChild(o);
+      });
+      var count = h('input', 'pb-input pb-cl-num', '', { type: 'number', min: '1', max: String(LIM.items), 'aria-label': 'Threshold ' + (i + 1) + ' count' },
+        { input: function () { t.count = Math.max(1, Math.min(LIM.items, parseInt(count.value, 10) || 1)); } });
+      count.value = String(t.count);
+      var note = h('input', 'pb-input', '', { type: 'text', maxlength: String(LIM.note), 'aria-label': 'Threshold ' + (i + 1) + ' note',
+        placeholder: 'What it means, for you' }, { input: function () { t.note = note.value; } });
+      note.value = t.note;
+      append(row, [h('span', 'pb-count', 'When'), side, h('span', 'pb-count', 'holds'), count, note,
+        iconBtn('×', 'Remove threshold ' + (i + 1), function () { d.thresholds = d.thresholds.filter(function (x) { return x.id !== t.id; }); redraw(S); })]);
+      box.appendChild(row);
+    });
+    box.appendChild(btn('Add a note at a count', '', function () { S.draft = addThreshold(d); redraw(S, '.pb-ed .pb-cl-thr [data-thr]:last-of-type input[type=text]'); },
+      { disabled: d.thresholds.length >= LIM.thresholds }));
+    return box;
+  }
+
+  // pagePicker links an item to a page found by typing, using the same
+  // search the page map's picker uses. A linked item shows its page with a
+  // way to unlink it.
+  function pagePicker(S, it, i) {
+    var box = h('div', 'pb-cl-page');
+    if (it.entityId) {
+      append(box, [h('span', 'pb-count', 'Links to ' + (it.entityName || 'a page')),
+        h('button', 'pb-quiet', 'Unlink', { type: 'button', 'aria-label': 'Unlink item ' + (i + 1) + ' from its page' }, {
+          click: function () { delete it.entityId; delete it.entityName; delete it.entityUrl; redraw(S, '.pb-ed [data-item="' + it.id + '"] .pb-cl-page input'); }
+        })]);
+      return box;
+    }
+    var list = h('ul', 'pb-cl-plist', '', { hidden: true });
+    var timer = null, token = 0;
+    var inp = h('input', 'pb-input', '', { type: 'search', 'aria-label': 'Link item ' + (i + 1) + ' to a page (optional)',
+      placeholder: 'Link to a page (optional)' }, {
+      input: function () {
+        clearTimeout(timer);
+        var q = inp.value.trim(), my = ++token;
+        if (q.length < 2) { list.textContent = ''; list.setAttribute('hidden', ''); return; }
+        timer = setTimeout(function () {
+          var url = '/campaigns/' + encodeURIComponent(campaignOf(S)) + '/entities/search?q=' + encodeURIComponent(q) + '&pages=1';
+          Chronicle.apiFetch(url, { headers: { Accept: 'application/json' } }).then(function (res) {
+            return res.ok ? res.json() : { results: [] };
+          }).then(function (data) {
+            if (my !== token) return;
+            var rows = (data && Array.isArray(data.results) ? data.results : []).filter(function (r) { return r && r.id; }).slice(0, 8);
+            list.textContent = '';
+            rows.forEach(function (r) {
+              var li = h('li');
+              li.appendChild(h('button', 'pb-cl-popt', str(r.name), { type: 'button' }, {
+                click: function () {
+                  it.entityId = str(r.id); it.entityName = str(r.name); it.entityUrl = str(r.url);
+                  if (!it.name) it.name = it.entityName;
+                  redraw(S, '.pb-ed [data-item="' + it.id + '"] input');
+                }
+              }));
+              list.appendChild(li);
+            });
+            if (!rows.length) list.appendChild(h('li', 'pb-count', 'No page by that name.'));
+            list.removeAttribute('hidden');
+          }).catch(function () {});
+        }, 220);
+      }
+    });
+    return append(box, [inp, list]);
+  }
+
+  // campaignOf reads the campaign id from the block's endpoint.
+  function campaignOf(S) {
+    var m = /^\/campaigns\/([^/]+)\//.exec(S.cfg.endpoint || '');
+    return m ? decodeURIComponent(m[1]) : '';
   }
 })();

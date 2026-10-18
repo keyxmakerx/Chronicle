@@ -35,6 +35,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/syncapi"
 	"github.com/keyxmakerx/chronicle/internal/plugins/systemstate"
 	"github.com/keyxmakerx/chronicle/internal/plugins/timeline"
+	"github.com/keyxmakerx/chronicle/internal/plugins/trackers"
 	"github.com/keyxmakerx/chronicle/internal/plugins/widgetbindings"
 	"github.com/keyxmakerx/chronicle/internal/systems"
 )
@@ -329,6 +330,9 @@ func registeredPlugins() []database.PluginSchema {
 		// under a slug of its own so a failure here leaves only that block
 		// out. Foreign keys point at core tables (entities, campaigns) only.
 		{Slug: rumours.PluginSlug, MigrationsFS: mustSub(rumours.MigrationsFS, database.PluginMigrationsSubdir)},
+		// trackers: kinds, trackers and their log. Foreign keys point at core
+		// tables (entities, campaigns) and at its own tables only.
+		{Slug: trackers.PluginSlug, MigrationsFS: mustSub(trackers.MigrationsFS, database.PluginMigrationsSubdir)},
 		// encounters: fights planned on a page; foreign keys point at core
 		// tables (entities, campaigns) only.
 		{Slug: encounters.PluginSlug, MigrationsFS: mustSub(encounters.MigrationsFS, database.PluginMigrationsSubdir)},

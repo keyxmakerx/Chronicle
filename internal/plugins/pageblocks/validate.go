@@ -33,7 +33,7 @@ const (
 // validKind reports whether kind is one this plugin stores.
 func validKind(kind string) bool {
 	switch kind {
-	case KindReadAloud, KindTable, KindSteps, KindPageMap:
+	case KindReadAloud, KindTable, KindSteps, KindPageMap, KindChecklist:
 		return true
 	}
 	return false
@@ -109,6 +109,8 @@ func emptyDoc(kind string) any {
 		return Steps{Steps: []Step{}}
 	case KindPageMap:
 		return mapsketch.NewDoc()
+	case KindChecklist:
+		return emptyChecklist()
 	}
 	return nil
 }
@@ -132,6 +134,8 @@ func validateDoc(kind string, raw json.RawMessage) (any, error) {
 		return validateSteps(raw)
 	case KindPageMap:
 		return validatePageMap(raw)
+	case KindChecklist:
+		return validateChecklist(raw)
 	}
 	return nil, errInvalid("unknown block kind")
 }

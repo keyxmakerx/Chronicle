@@ -173,6 +173,7 @@
       return exHead('fa-table', 'Table') + '<table class="cpe-ex-tbl"><thead><tr><th>Who</th><th>Wants</th><th class="dm">Secret</th></tr></thead><tbody>' +
         '<tr><td>Harbourmaster Vell</td><td>The toll paid</td><td class="dm">Takes smugglers’ coin</td></tr><tr><td>Old Maudry</td><td>Her son home</td><td class="dm">He’s in the hold</td></tr></tbody></table>';
     },
+    page_checklist: function () { return exHead('fa-circle-half-stroke', 'Checklist') + '<div class="cpe-ex-sub"><b>Smugglers’ ledgers</b><span>Party 3 · The Watch 2</span></div>'; },
     page_encounters: function () { return exHead('fa-dragon', 'Encounters') + exList([['Watch patrol', 'Medium · 4 foes', '#dc2626'], ['Dock rats', 'Easy · swarm', '#64748b']]); },
     where_it_is: function () { return exHead('fa-map-location-dot', 'Where it is') + exList([['Common room', 'you are here', '#6366f1'], ['The Gilded Flagon', 'one step out', '#0d9488'], ['Port Varrow', 'the city', '#b45309']]); },
     last_seen: function () { return exHead('fa-eye', 'Last seen') + '<div class="cpe-ex-sub"><b>The Drowned Bell</b><span>5 weeks ago</span><span class="cpe-ex-chip">6 nights</span></div>'; },

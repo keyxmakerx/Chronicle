@@ -23,7 +23,7 @@ System or Widget (see root `CLAUDE.md` for what each tier is).
 │  └──────────────────────────────────────────────────────┘    │
 │                                                               │
 │  ┌──────────────────────────────────────────────────────┐    │
-│  │  PLUGINS -- Feature Applications (30)                  │    │
+│  │  PLUGINS -- Feature Applications (31)                  │    │
 │  │  auth/  campaigns/  entities/  calendar/  maps/        │    │
 │  │  admin/  addons/  syncapi/  media/  audit/             │    │
 │  │  settings/  timeline/  sessions/  packages/            │    │
@@ -31,7 +31,7 @@ System or Widget (see root `CLAUDE.md` for what each tier is).
 │  │  ai_workspace/  backup/  foundry_vtt/  restore/        │    │
 │  │  widgetbindings/  dmscreen/  systemstate/              │    │
 │  │  quests/  rolltables/  vault_import/  pageblocks/      │    │
-│  │  encounters/  rumours/  pagetests/                     │    │
+│  │  encounters/  rumours/  trackers/  pagetests/          │    │
 │  └──────────────────────────────────────────────────────┘    │
 │                                                               │
 │  ┌──────────────────────────────────────────────────────┐    │

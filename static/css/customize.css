@@ -239,6 +239,17 @@
 .czp .hc-sample .chc__in{ font-size:12.5px; }
 .czp .hc-sample .chc__title{ font-size:15px; }
 .czp .hc-sample .chc__text{ -webkit-line-clamp:3; }
+/* Time line popup tiles: a stretch of time line with the popup held open over
+   its bead, the classic card below it as on a page, the fading corner above. */
+.czp .tlp-sample{ position:relative; display:block; height:156px; border-radius:6px; background:var(--bg); overflow:hidden; }
+.czp .tlp-line{ position:absolute; left:0; right:0; height:1px; background:linear-gradient(to right, transparent, var(--color-accent) 18px, var(--color-accent) calc(100% - 40px), transparent); }
+.czp .tlp-bead{ position:absolute; left:34px; width:11px; height:11px; margin:-5.5px 0 0 -5.5px; border-radius:50%; background:var(--color-accent); box-shadow:0 0 0 2px var(--bg); }
+.czp .tlp-classic .tlp-line, .czp .tlp-classic .tlp-bead{ top:18px; }
+.czp .tlp-corner .tlp-line, .czp .tlp-corner .tlp-bead{ top:128px; }
+.czp .tlp-sample .chc{ position:absolute; isolation:isolate; opacity:1; transform:none; pointer-events:none; transition:none; }
+.czp .tlp-classic .chc{ left:28px; right:8px; top:32px; width:auto; }
+.czp .tlp-corner .chc{ left:33.25px; bottom:43px; max-width:calc(100% - 44px); }
+.czp .tlp-sample .chc__in{ font-size:12.5px; }
 .czp .ft-line{ font-size:12px; line-height:1.3; color:var(--body); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
 /* Switch */
