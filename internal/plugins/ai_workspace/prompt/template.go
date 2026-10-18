@@ -221,6 +221,15 @@ a hover card and click-to-preview, like an @mention typed in the editor) or
 same paste. A name that matches no page I can see is saved as plain text, so use
 the exact page name. Do not link inside code, and do not use a markdown link for a
 page.
+
+To hide part of a body from players, put it between ` + "`" + `{gm{` + "`" + ` and ` + "`" + `}gm}` + "`" + `, for example
+` + "`" + `The mayor is {gm{secretly a cultist.}gm} He greets everyone.` + "`" + `. It becomes a GM-only
+passage that only I (the director) can see. A passage cannot cross a blank line, so
+open and close the markers again in each paragraph, and an unclosed ` + "`" + `{gm{` + "`" + ` hides
+only the rest of its paragraph. When you edit a page my export shows with these
+markers, keep them around the same words; text I exported without them is not
+GM-only, and a page update that leaves out one of its existing GM-only passages needs
+my extra confirmation. Do not use the markers for anything else.
 {{ end }}
 
 {{ if .RecordDocs }}

@@ -9,6 +9,7 @@ package importer
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 
 	"github.com/yuin/goldmark"
@@ -47,6 +48,10 @@ var md = goldmark.New(
 //
 // WithPageLinks additionally turns @[Page] / @[Page|text] into page links.
 //
+// {gm{…}gm} passages become the editor's GM-only spans (see SecretOpen); a
+// viewer below owner/co-DM gets ErrSecretNotAllowed rather than a silent
+// downgrade to public text.
+//
 // Returns the empty string for empty input. Parse-failure errors are
 // friendly-worded for operator UIs; the goldmark error is preserved
 // via %w for log-side debugging.
@@ -63,9 +68,26 @@ func MarkdownToHTML(input string, opts ...RenderOption) (string, error) {
 		opt(&o)
 	}
 	out := buf.String()
+	// Markers become GM-only text only for a viewer allowed to write it, so a
+	// scribe's import cannot hide or reveal passages. Without a resolver
+	// (records, previews) the text stays as written.
+	if hasSecretMarker(out) && (o.links != nil || o.markers) {
+		if o.links != nil && !o.markers && !secretWriter(o.links.viewer) {
+			return "", ErrSecretNotAllowed
+		}
+		out = convertSecretMarkers(out)
+	}
 	if o.links != nil {
 		// Before sanitize, so the anchors are vetted like any other markup.
 		out = linkMentions(out, o.links)
 	}
 	return sanitize.HTML(out), nil
+}
+
+// markdownFailReason is the row-level wording for a MarkdownToHTML error.
+func markdownFailReason(err error) string {
+	if errors.Is(err, ErrSecretNotAllowed) {
+		return "Not imported: this page has GM-only passages ({gm{…}gm}), which only the campaign owner or a co-DM may import."
+	}
+	return "Could not parse the page's markdown body — check the heading structure."
 }

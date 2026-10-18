@@ -6515,12 +6515,83 @@ func (m aiMapSketchAdapter) Draw(ctx context.Context, mapID string, a records.Ac
 	if err != nil {
 		return err
 	}
+	var layerID *string
+	if d.LayerID != "" {
+		layerID = &d.LayerID
+	}
 	_, err = m.drawings.CreateDrawing(ctx, maps.CreateDrawingInput{
-		MapID: mapID, DrawingType: d.Type, Points: pts, StrokeColor: d.StrokeColor, StrokeWidth: d.StrokeWidth,
+		MapID: mapID, LayerID: layerID, DrawingType: d.Type, Points: pts, StrokeColor: d.StrokeColor, StrokeWidth: d.StrokeWidth,
 		TextContent: d.Text, FontSize: d.FontSize, Visibility: d.Visibility, CreatedBy: a.UserID,
 		CallerRole: a.Role, CallerIsDM: a.CanAuthorDmOnly(),
 	})
 	return err
+}
+
+// sketchLayerOf finds the map's sketch layer without making one.
+func (m aiMapSketchAdapter) sketchLayerOf(ctx context.Context, mapID string) (string, error) {
+	layers, err := m.drawings.ListLayers(ctx, mapID)
+	if err != nil {
+		return "", err
+	}
+	for _, l := range layers {
+		if l.LayerType == "drawing" && l.Name == records.SketchLayerName {
+			return l.ID, nil
+		}
+	}
+	return "", nil
+}
+
+func (m aiMapSketchAdapter) Inspect(ctx context.Context, mapID string, a records.Actor) (records.SketchTarget, error) {
+	mp, err := m.maps.GetMap(ctx, mapID)
+	if err != nil {
+		return records.SketchTarget{}, err
+	}
+	t := records.SketchTarget{Width: mp.ImageWidth, Height: mp.ImageHeight}
+	layer, err := m.sketchLayerOf(ctx, mapID)
+	if err != nil || layer == "" {
+		return t, err
+	}
+	ds, err := m.drawings.ListDrawings(ctx, mapID, a.Role, a.UserID)
+	if err != nil {
+		return t, err
+	}
+	for _, d := range ds {
+		if d.LayerID != nil && *d.LayerID == layer {
+			t.Sketched++
+		}
+	}
+	return t, nil
+}
+
+func (m aiMapSketchAdapter) SketchLayer(ctx context.Context, mapID string) (string, error) {
+	if id, err := m.sketchLayerOf(ctx, mapID); err != nil || id != "" {
+		return id, err
+	}
+	l, err := m.drawings.CreateLayer(ctx, maps.CreateLayerInput{
+		MapID: mapID, Name: records.SketchLayerName, LayerType: "drawing", IsVisible: true, Opacity: 1,
+	})
+	if err != nil {
+		return "", err
+	}
+	return l.ID, nil
+}
+
+func (m aiMapSketchAdapter) ClearSketch(ctx context.Context, mapID, layerID string, a records.Actor) (int, error) {
+	ds, err := m.drawings.ListDrawings(ctx, mapID, a.Role, a.UserID)
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	for _, d := range ds {
+		if d.LayerID == nil || *d.LayerID != layerID {
+			continue
+		}
+		if err := m.drawings.DeleteDrawing(ctx, d.ID, mapID, nil, a.UserID, a.Role, a.CanAuthorDmOnly()); err != nil {
+			return n, err
+		}
+		n++
+	}
+	return n, nil
 }
 
 // aiRollTablesAdapter is the rolltables service as AI Import's TableDoc,

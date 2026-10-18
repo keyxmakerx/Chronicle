@@ -309,7 +309,7 @@ func (c *Classifier) classifyOne(ctx context.Context, p ParsedPage) (Classificat
 	existing, _ := c.lookup.GetBySlug(ctx, c.campaignID, cls.ResolvedSlug)
 	if existing != nil {
 		cls.ConflictEntity = existing
-		cls.GMOnly = GMOnlyPartsOf(existing)
+		cls.GMOnly = GMOnlyPartsForMarkdown(existing, p.Body)
 	}
 
 	switch p.FrontMatter.Action {

@@ -26,7 +26,7 @@ var (
 func getConverter() *md.Converter {
 	converterOnce.Do(func() {
 		converter = md.NewConverter("", true, nil)
-		converter.AddRules(mentionRule())
+		converter.AddRules(mentionRule(), secretRule())
 	})
 	return converter
 }
@@ -41,7 +41,32 @@ func getConverter() *md.Converter {
 //
 // Every renderer that emits user HTML MUST funnel through this function; the
 // renderer_test.go AST structural pin enforces it.
+//
+// GM-only passages come out as plain words here: callers that may show them
+// to the owner's AI use htmlToMarkdownWithSecrets, and a player-safe export
+// strips them from the HTML before this runs.
 func htmlToMarkdown(p *string) (string, error) {
+	return convertToMarkdown(p, false)
+}
+
+// htmlToMarkdownWithSecrets is htmlToMarkdown, but writes each GM-only
+// passage between the {gm{ and }gm} markers AI Import reads back, so a
+// round-trip keeps it GM-only. Only for the director's privacy modes.
+func htmlToMarkdownWithSecrets(p *string) (string, error) {
+	return convertToMarkdown(p, true)
+}
+
+// Private-use code points stand in for the markers while the converter runs:
+// the rule cannot emit the real markers, because text the page already holds
+// could contain them and would then be read back as a secret.
+const (
+	secretOpenMark  = "\uE000"
+	secretCloseMark = "\uE001"
+	secretOpenText  = "{gm{"
+	secretCloseText = "}gm}"
+)
+
+func convertToMarkdown(p *string, keepSecrets bool) (string, error) {
 	if p == nil || *p == "" {
 		return "", nil
 	}
@@ -49,11 +74,49 @@ func htmlToMarkdown(p *string) (string, error) {
 	if clean == nil || *clean == "" {
 		return "", nil
 	}
-	got, err := getConverter().ConvertString(*clean)
+	in := strings.NewReplacer(secretOpenMark, "", secretCloseMark, "").Replace(*clean)
+	got, err := getConverter().ConvertString(in)
 	if err != nil {
 		return "", err
 	}
-	return strings.TrimSpace(got), nil
+	got = strings.TrimSpace(got)
+	// Literal marker text in the page is broken with a zero-width space so
+	// the only markers in the output are the ones written below.
+	got = strings.NewReplacer(
+		secretOpenText, "{\u200bgm{",
+		secretCloseText, "}\u200bgm}",
+	).Replace(got)
+	if keepSecrets {
+		return strings.NewReplacer(secretOpenMark, secretOpenText, secretCloseMark, secretCloseText).Replace(got), nil
+	}
+	return strings.NewReplacer(secretOpenMark, "", secretCloseMark, "").Replace(got), nil
+}
+
+// secretRule brackets the editor's GM-only span with the stand-in code
+// points. The editor's secret is inline, so each paragraph of a longer secret
+// gets its own pair; surrounding spaces stay outside so emphasis next to a
+// passage still parses.
+func secretRule() md.Rule {
+	return md.Rule{
+		Filter: []string{"span"},
+		Replacement: func(content string, sel *goquery.Selection, _ *md.Options) *string {
+			if _, ok := sel.Attr("data-secret"); !ok {
+				return nil
+			}
+			lead := content[:len(content)-len(strings.TrimLeft(content, " \t\n"))]
+			trail := content[len(strings.TrimRight(content, " \t\n")):]
+			core := strings.TrimSpace(content)
+			if core == "" {
+				return md.String(content)
+			}
+			parts := strings.Split(core, "\n\n")
+			for i, part := range parts {
+				parts[i] = secretOpenMark + strings.TrimSpace(part) + secretCloseMark
+			}
+			out := strings.TrimRight(lead, "\n") + strings.Join(parts, "\n\n") + strings.TrimLeft(trail, "\n")
+			return &out
+		},
+	}
 }
 
 // convertSkipMarker is emitted in place of a single field whose HTML could
