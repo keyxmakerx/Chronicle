@@ -242,7 +242,7 @@ type stubPlanner struct {
 	reads int
 }
 
-func (p *stubPlanner) HeroPlan(_ context.Context, _ string, director bool) (*HeroPlan, error) {
+func (p *stubPlanner) HeroPlan(_ context.Context, _, _ string, director bool) (*HeroPlan, error) {
 	p.reads++
 	if director {
 		panic("the owner door must read the plan as a player sees it")
