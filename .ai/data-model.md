@@ -369,6 +369,13 @@ Foundry module repo for the wire contract.
 |-------|---------|
 | `page_rumours` | What the party has heard about a page: `quote`, `source` (who said it), `sure` 1 to 3, `truth` (`open`/`true`/`false`, the Director's alone and never selected for anyone else), `belief` (`''`/`true`/`false`/`unsure`, what the party thinks) with `belief_by` and `belief_by_dm`, `by_dm` and `created_by` for the byline; FKs to `entities` and `campaigns` cascade. Capped at 200 per page |
 
+### fieldrules (`internal/plugins/fieldrules/migrations/`)
+
+| Table | Purpose |
+|-------|---------|
+| `field_rules` | A campaign's worked-out rules: `name` (unique per campaign), `follows` (the field key it reads), `rows_json` (rows of `is` or `from`/`to` with `gives`, read and written whole); FK to `campaigns` cascades |
+| `local_words` | What one place or era calls a word: `word`, `local_word`, `place_id` (FK to `entities`, cascades) or `era_id` (no FK; eras are the calendar's), `scope_key` (`p:<page id>`/`e:<era id>`) for the one-per-place-or-era unique key, `dm_only`; FK to `campaigns` cascades |
+
 ### encounters (`internal/plugins/encounters/migrations/`)
 
 | Table | Purpose |

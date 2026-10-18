@@ -635,6 +635,7 @@ GET	/campaigns/:id/entities/:eid/history	session	plugins/audit.(*Handler).Entity
 GET	/campaigns/:id/entities/:eid/history	session	plugins/entities.(*PageSafetyHandler).History	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware > plugins/campaigns.RequireRole
 POST	/campaigns/:id/entities/:eid/history/:vid/restore	session	plugins/entities.(*PageSafetyHandler).RestoreVersion	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/entities/:eid/image	session	plugins/entities.(*Handler).UpdateImageAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware > plugins/campaigns.RequireRole
+GET	/campaigns/:id/entities/:eid/local-words	public-capable	plugins/entities.(*Handler).GetLocalWordsAPI	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/campaigns.RequireViewAccess
 PUT	/campaigns/:id/entities/:eid/map	session	plugins/entities.(*Handler).AssignMap	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/entities/:eid/metadata	session	plugins/entities.(*Handler).UpdateMetadataAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware > plugins/campaigns.RequireRole
 GET	/campaigns/:id/entities/:eid/notes	session	widgets/entity_notes.(*Handler).List	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
@@ -759,6 +760,14 @@ GET	/campaigns/:id/guest-codes	session	plugins/campaigns.(*GuestCodeHandler).Car
 POST	/campaigns/:id/guest-codes	session	plugins/campaigns.(*GuestCodeHandler).Create	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole > middleware.RateLimit
 DELETE	/campaigns/:id/guest-codes/:gcid	session	plugins/campaigns.(*GuestCodeHandler).Remove	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/handover-setting	session	plugins/campaigns.(*Handler).UpdateHandoverSettingAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/homebrew/rules	session	plugins/fieldrules.(*Handler).ListRules	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
+POST	/campaigns/:id/homebrew/rules	session	plugins/fieldrules.(*Handler).SaveRule	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
+DELETE	/campaigns/:id/homebrew/rules/:rid	session	plugins/fieldrules.(*Handler).DeleteRule	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
+PUT	/campaigns/:id/homebrew/rules/:rid	session	plugins/fieldrules.(*Handler).SaveRule	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
+GET	/campaigns/:id/homebrew/words	session	plugins/fieldrules.(*Handler).ListWords	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
+POST	/campaigns/:id/homebrew/words	session	plugins/fieldrules.(*Handler).SaveWord	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
+DELETE	/campaigns/:id/homebrew/words/:wid	session	plugins/fieldrules.(*Handler).DeleteWord	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
+PUT	/campaigns/:id/homebrew/words/:wid	session	plugins/fieldrules.(*Handler).SaveWord	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
 GET	/campaigns/:id/import	session	plugins/vault_import.(*Handler).Page	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/import/markdown/dropzone	session	plugins/vault_import.(*Handler).DropZone	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/import/markdown/jobs/:job	session	plugins/vault_import.(*Handler).Job	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole

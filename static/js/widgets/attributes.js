@@ -36,6 +36,7 @@ Chronicle.register('attributes', {
     // Campaign and entity ids for the pick-from-the-system control.
     var idMatch = config.endpoint.match(/\/campaigns\/([^/]+)\/entities\/([^/]+)\/fields$/);
     var campaignId = idMatch ? idMatch[1] : String(config.campaignId || '');
+    var entityId = idMatch ? idMatch[2] : '';
 
     // Fields people commonly expect a system list for; when the system has
     // none we say so instead of leaving a bare text box unexplained.
@@ -73,6 +74,7 @@ Chronicle.register('attributes', {
           state.fieldsData = data.fields_data || {};
           state.fieldOverrides = data.field_overrides || null;
           state.eraChanged = data.era_changed || null;
+          state.shown = data.shown || {};
           render();
         })
         .catch(function (err) {
@@ -198,7 +200,10 @@ Chronicle.register('attributes', {
       state.fields.forEach(function (field) {
         var val = state.fieldsData[field.key];
         var marked = isMarked(field.key);
-        var blank = val === undefined || val === null || val === '';
+        // shown is how a field reads when that isn't its stored value: a
+        // link's page name, a rule's result, a local word.
+        var sh = shownOf(field.key);
+        var blank = sh ? !sh.text : (val === undefined || val === null || val === '');
         if (blank && !marked) return;
 
         hasValues = true;
@@ -236,8 +241,27 @@ Chronicle.register('attributes', {
         } else if (blank) {
           value.textContent = 'Cleared in this era';
           value.style.color = 'var(--color-text-muted)';
+        } else if (sh && sh.href) {
+          var page = document.createElement('a');
+          page.href = sh.href;
+          page.textContent = sh.text;
+          page.className = 'text-accent hover:underline';
+          page.setAttribute('hx-boost', 'true');
+          value.appendChild(page);
+        } else if (sh) {
+          value.textContent = sh.text;
+          if (sh.usual) value.title = 'Usually called ' + sh.usual;
         } else {
           value.textContent = String(val);
+        }
+        if (sh && sh.byHand && sh.ruleGives) {
+          row.appendChild(value);
+          var hand = document.createElement('div');
+          hand.className = 'era-was';
+          hand.textContent = 'Set by hand. The rule gives ' + sh.ruleGives + '.';
+          row.appendChild(hand);
+          group.appendChild(row);
+          return;
         }
 
         if (marked) {
@@ -266,6 +290,10 @@ Chronicle.register('attributes', {
           : 'No attributes set.';
         container.appendChild(empty);
       }
+    }
+
+    function shownOf(key) {
+      return state.shown && Object.prototype.hasOwnProperty.call(state.shown, key) ? state.shown[key] : null;
     }
 
     // isMarked reports whether a field is one the shown era version changes
@@ -348,6 +376,26 @@ Chronicle.register('attributes', {
               });
               break;
 
+            case 'link':
+              row.appendChild(buildPagePicker(field, String(currentVal)));
+              container.appendChild(row);
+              return;
+
+            case 'rule':
+              // Empty follows the rule; anything typed wins over it.
+              var sh = shownOf(field.key);
+              var gives = sh ? (sh.byHand ? sh.ruleGives || '' : sh.text) : '';
+              input = document.createElement('input');
+              input.type = 'text';
+              input.className = 'input';
+              input.value = String(currentVal);
+              input.placeholder = gives ? gives + ' (worked out)' : 'Worked out by its rule';
+              var ruleNote = document.createElement('p');
+              ruleNote.className = 'ag-note';
+              ruleNote.textContent = 'Leave empty to follow the rule, or type a value to set it by hand.';
+              row.appendChild(ruleNote);
+              break;
+
             case 'checkbox':
               input = document.createElement('input');
               input.type = 'checkbox';
@@ -401,6 +449,68 @@ Chronicle.register('attributes', {
         b.remove();
       });
       return b;
+    }
+
+    // --- Pick a page for a link field ---
+
+    // The hidden input holds the page id the save step reads; the visible box
+    // searches the field's category by name. Pages the viewer can't open
+    // never come back from the search, so none can be picked.
+    function buildPagePicker(field, currentVal) {
+      var wrap = document.createElement('div');
+      var hidden = document.createElement('input');
+      hidden.type = 'hidden';
+      hidden.value = currentVal;
+      hidden.setAttribute('data-field-key', field.key);
+      wrap.appendChild(hidden);
+
+      var listId = 'attr-' + field.key + '-pages';
+      var box = document.createElement('input');
+      box.type = 'search';
+      box.className = 'input';
+      box.id = 'attr-' + field.key;
+      box.setAttribute('list', listId);
+      box.placeholder = 'Type a page name';
+      var sh = shownOf(field.key);
+      box.value = sh && sh.text ? sh.text : '';
+      var list = document.createElement('datalist');
+      list.id = listId;
+      wrap.appendChild(box);
+      wrap.appendChild(list);
+
+      var found = {}, timer = null, seq = 0;
+      function search() {
+        var q = box.value.trim(), mine = ++seq;
+        var url = '/campaigns/' + encodeURIComponent(campaignId) + '/entities/search?q=' + encodeURIComponent(q) +
+          (field.link_to ? '&type=' + encodeURIComponent(field.link_to) : '');
+        Chronicle.apiFetch(url).then(function (r) { return r.ok ? r.json() : { results: [] }; }).then(function (d) {
+          if (mine !== seq) return;
+          list.innerHTML = '';
+          found = {};
+          (d.results || []).forEach(function (p) {
+            if (p.id === entityId) return;
+            found[p.name.toLowerCase()] = p.id;
+            var o = document.createElement('option');
+            o.value = p.name;
+            list.appendChild(o);
+          });
+          pick();
+        }).catch(function () {});
+      }
+      // An exact name sets the link; an emptied box clears it; anything else
+      // keeps the page already linked until a name matches.
+      function pick() {
+        var name = box.value.trim().toLowerCase();
+        if (!name) hidden.value = '';
+        else if (found[name]) hidden.value = found[name];
+      }
+      box.addEventListener('input', function () {
+        pick();
+        clearTimeout(timer);
+        timer = setTimeout(search, 200);
+      });
+      search();
+      return wrap;
     }
 
     // --- Pick from the system's list ---
@@ -758,7 +868,10 @@ Chronicle.register('attributes', {
           render();
           // An era version keeps only what differs from the usual page, so
           // read back which fields it now changes.
-          if (config.era) reload();
+          // Links, rules and local words are worked out by the server, so
+          // they are read back too.
+          if (config.era || Object.keys(state.shown || {}).length ||
+            state.fields.some(function (f) { return f.type === 'link' || f.type === 'rule'; })) reload();
         })
         .catch(function (err) {
           console.error('[attributes] Save failed:', err);

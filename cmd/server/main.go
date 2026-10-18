@@ -23,6 +23,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/dmscreen"
 	"github.com/keyxmakerx/chronicle/internal/plugins/encounters"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
+	"github.com/keyxmakerx/chronicle/internal/plugins/fieldrules"
 	"github.com/keyxmakerx/chronicle/internal/plugins/foundry_vtt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/maps"
 	"github.com/keyxmakerx/chronicle/internal/plugins/packages"
@@ -328,6 +329,9 @@ func registeredPlugins() []database.PluginSchema {
 		// under a slug of its own so a failure here leaves only that block
 		// out. Foreign keys point at core tables (entities, campaigns) only.
 		{Slug: rumours.PluginSlug, MigrationsFS: mustSub(rumours.MigrationsFS, database.PluginMigrationsSubdir)},
+		// fieldrules: homebrew rules and local words. Foreign keys point at core
+		// tables (campaigns, entities) only.
+		{Slug: fieldrules.PluginSlug, MigrationsFS: mustSub(fieldrules.MigrationsFS, database.PluginMigrationsSubdir)},
 		// encounters: fights planned on a page; foreign keys point at core
 		// tables (entities, campaigns) only.
 		{Slug: encounters.PluginSlug, MigrationsFS: mustSub(encounters.MigrationsFS, database.PluginMigrationsSubdir)},

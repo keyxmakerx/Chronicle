@@ -499,7 +499,7 @@ func (c *Committer) commitRow(
 				out.Reason = reason
 				return out
 			}
-			return c.commitUpdate(ctx, existing, page, dec, typeID, bodyJSON, bodyHTML, isPrivate, parent, idx)
+			return c.commitUpdate(ctx, existing, page, dec, typeID, bodyJSON, bodyHTML, isPrivate, parent, idx, links)
 		default: // "rename" (default mode)
 			finalName = c.suffixUntilFree(ctx, campaignID, finalName)
 		}
@@ -508,7 +508,7 @@ func (c *Committer) commitRow(
 	// The sheet fields are checked before anything is written, against the
 	// category this row creates the page in; a skip or an update into an
 	// existing page never reaches here.
-	fields, reason := c.sheetFields(ctx, campaignID, typeID, page)
+	fields, reason := c.sheetFields(ctx, campaignID, typeID, page, links)
 	if reason != "" {
 		out.Status = StatusFailed
 		out.Reason = reason
@@ -579,6 +579,7 @@ func (c *Committer) commitUpdate(
 	isPrivate bool,
 	parent patch.Field[string],
 	idx int,
+	links *PageLinks,
 ) RowOutcome {
 	out := RowOutcome{Index: idx, Name: existing.Name, Slug: existing.Slug, EntityID: existing.ID}
 
@@ -594,7 +595,7 @@ func (c *Committer) commitUpdate(
 	}
 	// An update never changes the category, so its fields are checked
 	// against the page's own, before any write.
-	fields, reason := c.sheetFields(ctx, existing.CampaignID, existing.EntityTypeID, page)
+	fields, reason := c.sheetFields(ctx, existing.CampaignID, existing.EntityTypeID, page, links)
 	if reason != "" {
 		out.Status = StatusFailed
 		out.Reason = reason
@@ -734,7 +735,7 @@ func (c *Committer) commitUpdateExplicit(
 		return out
 	}
 	isPrivate := dec.Visibility == "private" || dec.Visibility == "dm_only"
-	return c.commitUpdate(ctx, existing, page, dec, typeID, bodyJSON, bodyHTML, isPrivate, parent, idx)
+	return c.commitUpdate(ctx, existing, page, dec, typeID, bodyJSON, bodyHTML, isPrivate, parent, idx, links)
 }
 
 // commitEra writes (or, for action=delete, removes) one era's version of the
@@ -1000,7 +1001,7 @@ func intToStr(n int) string {
 
 // sheetFields checks a page's `fields:` against the sheet of the category
 // with typeID. "" reason means they fit (or there are none).
-func (c *Committer) sheetFields(ctx context.Context, campaignID string, typeID int, page ParsedPage) (map[string]any, string) {
+func (c *Committer) sheetFields(ctx context.Context, campaignID string, typeID int, page ParsedPage, links *PageLinks) (map[string]any, string) {
 	if len(page.FrontMatter.Fields) == 0 {
 		return nil, ""
 	}
@@ -1013,6 +1014,9 @@ func (c *Committer) sheetFields(ctx context.Context, campaignID string, typeID i
 			continue
 		}
 		checked, problems := CheckFields(t.Fields, page.FrontMatter.Fields)
+		if len(problems) == 0 {
+			problems = LinkFields(t.Fields, checked, links)
+		}
 		if len(problems) > 0 {
 			return nil, "Not saved. These sheet fields don't fit the " + t.Name + " category: " + strings.Join(problems, " ")
 		}

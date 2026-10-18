@@ -310,11 +310,15 @@ func (h *Handler) GetEraFieldsAPI(c echo.Context) error {
 	canSeeGM := t.cc.MemberRole >= campaigns.RoleScribe
 	isOwner := t.entity.IsOwnedBy(t.userID)
 	merged := mergeEraFields(t.entity.FieldsData, v.FieldsData)
+	effective := MergeFields(et.Fields, t.entity.FieldOverrides)
+	visible := FilterRestrictedFields(merged, et.Fields, canSeeGM, isOwner)
 	resp := map[string]any{
-		"fields":          MergeFields(et.Fields, t.entity.FieldOverrides),
-		"fields_data":     FilterRestrictedFields(merged, et.Fields, canSeeGM, isOwner),
+		"fields":          effective,
+		"fields_data":     visible,
 		"field_overrides": overrides,
 		"type_fields":     et.Fields,
+		"shown": h.shownFields(c.Request().Context(), t.cc.Campaign.ID, t.entity, effective, visible,
+			restrictedKeys(canSeeGM, isOwner, et.Fields, effective), int(t.cc.VisibilityRole()), t.userID),
 	}
 	if t.cc.CanAuthorDmOnly() {
 		usual := map[string]any{}
@@ -364,12 +368,18 @@ func (h *Handler) UpdateEraFieldsAPI(c echo.Context) error {
 		}
 	}
 	full := mergeEraFields(usual, v.FieldsData)
+	before := mergeEraFields(usual, v.FieldsData)
 	for k, val := range changes {
 		if val == nil {
 			delete(full, k)
 			continue
 		}
 		full[k] = val
+	}
+	if lc, ok := h.service.(linkChecker); ok {
+		if err := lc.checkLinkValues(c.Request().Context(), t.entity, before, full); err != nil {
+			return err
+		}
 	}
 	if err := h.eraPages.SaveVersionFields(c.Request().Context(), t.cc.Campaign.ID, t.entity.ID, t.eraID, eraFieldChanges(usual, full), t.userID); err != nil {
 		return err
