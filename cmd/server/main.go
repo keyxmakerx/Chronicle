@@ -22,6 +22,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/dmscreen"
 	"github.com/keyxmakerx/chronicle/internal/plugins/encounters"
+	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/foundry_vtt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/maps"
 	"github.com/keyxmakerx/chronicle/internal/plugins/packages"
@@ -328,6 +329,11 @@ func registeredPlugins() []database.PluginSchema {
 		// dmscreen: the Adventures tab's pins and loose notes. Foreign keys
 		// point at core campaigns and entities only.
 		{Slug: dmscreen.PluginSlug, MigrationsFS: mustSub(dmscreen.MigrationsFS, database.PluginMigrationsSubdir)},
+		// entity_standing: the Standing block's tables (how a page feels about
+		// the party, and why). Foreign keys point at core campaigns and
+		// entities only; its slug is separate from "entities" so a failure
+		// here leaves only that block out.
+		{Slug: entities.StandingPluginSlug, MigrationsFS: mustSub(entities.MigrationsFS, database.PluginMigrationsSubdir)},
 		{Slug: "syncapi", MigrationsFS: mustSub(syncapi.MigrationsFS, database.PluginMigrationsSubdir)},
 		{Slug: "packages", MigrationsFS: mustSub(packages.MigrationsFS, database.PluginMigrationsSubdir)},
 		// foundry_vtt's migration 001 renames foundry_module_campaign_tokens

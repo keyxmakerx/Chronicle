@@ -174,6 +174,7 @@
     where_it_is: function () { return exHead('fa-map-location-dot', 'Where it is') + exList([['Common room', 'you are here', '#6366f1'], ['The Gilded Flagon', 'one step out', '#0d9488'], ['Port Varrow', 'the city', '#b45309']]); },
     last_seen: function () { return exHead('fa-eye', 'Last seen') + '<div class="cpe-ex-sub"><b>The Drowned Bell</b><span>5 weeks ago</span><span class="cpe-ex-chip">6 nights</span></div>'; },
     contents: function () { return exHead('fa-list-ul', 'Contents') + '<div class="cpe-ex-sub"><b>History</b><span>The Docks</span><span>Who rules</span><span class="cpe-ex-chip">+4</span></div>'; },
+    standing: function () { return exHead('fa-scale-balanced', 'Standing') + '<div class="cpe-ex-sub"><b>Wary</b><span>Why: Brawled in the guildhall and 2 more</span></div>'; },
     divider: function () { return '<hr class="cpe-ex-hr">'; },
     map_full: function () { return '<div class="cpe-ex-img cpe-ex-map">' + EX_MAP + '</div>'; },
     local_graph: function () { return '<div class="cpe-ex-img cpe-ex-map">' + EX_MAP + '</div>'; },
