@@ -100,8 +100,8 @@ var _impl = {
     // Show loading state in the SVG container area.
     this.svgContainer.innerHTML =
       '<div class="timeline-viz-empty">' +
-        '<i class="fa-solid fa-spinner fa-spin text-2xl mb-3" style="color: var(--color-fg-muted)"></i>' +
-        '<p class="text-sm" style="color: var(--color-fg-muted)">Loading visualization...</p>' +
+        '<i class="fa-solid fa-spinner fa-spin text-2xl mb-3" style="color: var(--color-text-muted)"></i>' +
+        '<p class="text-sm" style="color: var(--color-text-muted)">Loading visualization...</p>' +
       '</div>';
 
     // Check if another script element is already loading D3.
@@ -136,9 +136,9 @@ var _impl = {
   _showD3Error: function() {
     this.svgContainer.innerHTML =
       '<div class="timeline-viz-empty">' +
-        '<i class="fa-solid fa-triangle-exclamation text-3xl mb-3" style="color: var(--color-fg-muted)"></i>' +
+        '<i class="fa-solid fa-triangle-exclamation text-3xl mb-3" style="color: var(--color-text-muted)"></i>' +
         '<p style="font-weight: 600">Unable to load visualization library</p>' +
-        '<p class="text-xs mt-1" style="color: var(--color-fg-muted)">' +
+        '<p class="text-xs mt-1" style="color: var(--color-text-muted)">' +
           'D3.js failed to load. Check your internet connection or try refreshing the page.</p>' +
       '</div>';
   },
@@ -319,9 +319,9 @@ var _impl = {
         console.warn('[timeline-viz] Failed to load data:', err);
         self.svgContainer.innerHTML =
           '<div class="timeline-viz-empty">' +
-            '<i class="fa-solid fa-triangle-exclamation text-3xl mb-3" style="color: var(--color-fg-muted)"></i>' +
+            '<i class="fa-solid fa-triangle-exclamation text-3xl mb-3" style="color: var(--color-text-muted)"></i>' +
             '<p style="font-weight: 600">Failed to load timeline data</p>' +
-            '<p class="text-xs mt-1" style="color: var(--color-fg-muted)">' + Chronicle.escapeHtml(String(err)) + '</p>' +
+            '<p class="text-xs mt-1" style="color: var(--color-text-muted)">' + Chronicle.escapeHtml(String(err)) + '</p>' +
           '</div>';
       });
   },
@@ -334,9 +334,9 @@ var _impl = {
       this.svgContainer.innerHTML =
         '<div class="timeline-viz-empty">' +
           '<div class="timeline-viz-empty-line"></div>' +
-          '<i class="fa-solid fa-calendar-plus text-4xl mb-3" style="color: var(--color-fg-muted)"></i>' +
+          '<i class="fa-solid fa-calendar-plus text-4xl mb-3" style="color: var(--color-text-muted)"></i>' +
           '<p style="font-weight: 600">No events to display</p>' +
-          '<p class="text-xs mt-1" style="color: var(--color-fg-muted)">Link calendar events to see them on the timeline.</p>' +
+          '<p class="text-xs mt-1" style="color: var(--color-text-muted)">Link calendar events to see them on the timeline.</p>' +
           '<button class="timeline-viz-btn mt-4" style="width:auto; padding:6px 16px; font-size:12px" ' +
             'onclick="var m=document.getElementById(\'event-picker-modal\'); if(m) m.classList.remove(\'hidden\')">' +
             '<i class="fa-solid fa-link" style="margin-right:6px"></i>Link Events' +
@@ -438,7 +438,7 @@ var _impl = {
     svg.append('rect')
       .attr('width', width)
       .attr('height', height)
-      .attr('fill', 'var(--color-surface, #1a1b26)')
+      .attr('fill', 'var(--color-card-bg, #1a1b26)')
       .attr('rx', 8);
 
     // Era bands group (behind everything except background).
@@ -460,7 +460,7 @@ var _impl = {
       .attr('height', yScale.bandwidth())
       .attr('fill', function(d, i) {
         return i % 2 === 0
-          ? 'var(--color-surface-alt, #24253a)'
+          ? 'var(--color-bg-tertiary, #24253a)'
           : 'transparent';
       })
       .attr('opacity', lanes.length > 1 ? 1 : 0)
@@ -732,7 +732,7 @@ var _impl = {
 
     primaryG.append('line')
       .attr('y1', -14).attr('y2', 14)
-      .attr('stroke', 'var(--color-fg-secondary, #a9b1d6)')
+      .attr('stroke', 'var(--color-text-secondary, #a9b1d6)')
       .attr('stroke-width', 1.5)
       .attr('opacity', 0.5);
 
@@ -751,7 +751,7 @@ var _impl = {
       .attr('transform', function(d) { return 'translate(' + self.xScale(d) + ',0)'; })
       .append('line')
       .attr('y1', -8).attr('y2', 8)
-      .attr('stroke', 'var(--color-fg-muted, #565f89)')
+      .attr('stroke', 'var(--color-text-muted, #565f89)')
       .attr('stroke-width', 1)
       .attr('opacity', 0.3);
 
@@ -764,7 +764,7 @@ var _impl = {
       .attr('transform', function(d) { return 'translate(' + self.xScale(d) + ',0)'; })
       .append('line')
       .attr('y1', -4).attr('y2', 4)
-      .attr('stroke', 'var(--color-fg-muted, #565f89)')
+      .attr('stroke', 'var(--color-text-muted, #565f89)')
       .attr('stroke-width', 0.5)
       .attr('opacity', 0.2);
 
@@ -806,7 +806,7 @@ var _impl = {
             .attr('y', m.top)
             .attr('width', bw)
             .attr('height', contentHeight)
-            .attr('fill', 'var(--color-fg, #c0caf5)')
+            .attr('fill', 'var(--color-text-primary, #c0caf5)')
             .attr('opacity', 0.02);
         }
       }
@@ -820,7 +820,7 @@ var _impl = {
       .attr('x2', function(d) { return self.xScale(d); })
       .attr('y1', m.top)
       .attr('y2', m.top + contentHeight)
-      .attr('stroke', 'var(--color-edge, #2a2b3d)')
+      .attr('stroke', 'var(--color-border, #2a2b3d)')
       .attr('stroke-width', 1)
       .attr('opacity', 0.15);
 
@@ -833,7 +833,7 @@ var _impl = {
       .attr('x2', function(d) { return self.xScale(d); })
       .attr('y1', m.top)
       .attr('y2', m.top + contentHeight)
-      .attr('stroke', 'var(--color-edge, #2a2b3d)')
+      .attr('stroke', 'var(--color-border, #2a2b3d)')
       .attr('stroke-dasharray', '2,6')
       .attr('stroke-width', 0.5)
       .attr('opacity', 0.08);
@@ -1107,14 +1107,14 @@ var _impl = {
         .attr('x', -pillW / 2).attr('y', -11)
         .attr('width', pillW).attr('height', 22)
         .attr('rx', 11)
-        .attr('fill', 'var(--color-surface-alt, #24253a)')
+        .attr('fill', 'var(--color-bg-tertiary, #24253a)')
         .attr('stroke', 'var(--color-accent, #6366f1)')
         .attr('stroke-width', 1.5);
       g.append('text')
         .attr('class', 'timeline-cluster-label')
         .attr('text-anchor', 'middle')
         .attr('y', 4)
-        .attr('fill', 'var(--color-fg, #c0caf5)')
+        .attr('fill', 'var(--color-text-primary, #c0caf5)')
         .attr('font-size', '10px')
         .attr('font-weight', '600')
         .text(label);
@@ -1126,7 +1126,7 @@ var _impl = {
       .attr('class', 'timeline-event-dot')
       .attr('r', style.radius)
       .attr('fill', function(d) { return self._eventColor(d); })
-      .attr('stroke', 'var(--color-surface, #1a1b26)')
+      .attr('stroke', 'var(--color-card-bg, #1a1b26)')
       .attr('stroke-width', style.strokeWidth)
       .attr('filter', useGlow ? 'url(#event-glow)' : null);
 
@@ -1357,7 +1357,7 @@ var _impl = {
     // Background.
     miniSvg.append('rect')
       .attr('width', width).attr('height', height)
-      .attr('fill', 'var(--color-surface-alt, #24253a)')
+      .attr('fill', 'var(--color-bg-tertiary, #24253a)')
       .attr('rx', 0);
 
     // Mini scale spanning full event range.
@@ -1381,7 +1381,7 @@ var _impl = {
     miniSvg.append('line')
       .attr('x1', 4).attr('x2', width - 4)
       .attr('y1', height / 2).attr('y2', height / 2)
-      .attr('stroke', 'var(--color-edge, #2a2b3d)')
+      .attr('stroke', 'var(--color-border, #2a2b3d)')
       .attr('stroke-width', 1)
       .attr('opacity', 0.4);
 
@@ -1695,11 +1695,11 @@ var _impl = {
 
     var html = '<div style="font-weight:700; font-size:13px; margin-bottom:4px">' +
       Chronicle.escapeHtml(label) + '</div>';
-    html += '<div style="font-family:ui-monospace,monospace; font-size:11px; color:var(--color-fg-muted); margin-bottom:4px">' +
+    html += '<div style="font-family:ui-monospace,monospace; font-size:11px; color:var(--color-text-muted); margin-bottom:4px">' +
       date + '</div>';
 
     if (d.event_entity_name) {
-      html += '<div style="display:inline-flex; align-items:center; gap:4px; font-size:12px; color:var(--color-fg-secondary); margin-bottom:3px">';
+      html += '<div style="display:inline-flex; align-items:center; gap:4px; font-size:12px; color:var(--color-text-secondary); margin-bottom:3px">';
       if (d.event_entity_icon) {
         html += '<i class="fa-solid ' + Chronicle.escapeHtml(d.event_entity_icon) + '"></i>';
       }
@@ -1711,7 +1711,7 @@ var _impl = {
     if (d.event_description) {
       var desc = d.event_description;
       if (desc.length > 120) desc = desc.substring(0, 120) + '...';
-      html += '<div style="font-size:11px; color:var(--color-fg-muted); margin-top:4px; line-height:1.4">' +
+      html += '<div style="font-size:11px; color:var(--color-text-muted); margin-top:4px; line-height:1.4">' +
         Chronicle.escapeHtml(desc) + '</div>';
     }
 

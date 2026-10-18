@@ -203,7 +203,7 @@ Chronicle.register('permissions', {
       var icon = trigger.querySelector('[data-perm-corner-icon]');
       if (icon) {
         icon.className = 'fa-solid ' + (mode === 'everyone' ? 'fa-globe' : mode === 'dm_only' ? 'fa-lock' : 'fa-shield-halved') + ' text-[11px]';
-        icon.style.color = mode === 'custom' ? 'var(--color-accent)' : 'var(--color-fg-muted)';
+        icon.style.color = mode === 'custom' ? 'var(--color-accent)' : 'var(--color-text-muted)';
       }
       var label = trigger.querySelector('[data-perm-corner-label]');
       if (label) label.textContent = mode === 'everyone' ? 'Everyone' : mode === 'dm_only' ? 'DM team only' : 'Custom';
@@ -451,7 +451,7 @@ Chronicle.register('permissions', {
 
             var accessLabel = document.createElement('span');
             accessLabel.style.fontSize = '12px';
-            accessLabel.style.color = 'var(--color-fg-muted, #9ca3af)';
+            accessLabel.style.color = 'var(--color-text-muted, #9ca3af)';
             accessLabel.textContent = 'Full access';
             row.appendChild(accessLabel);
 
@@ -513,7 +513,7 @@ Chronicle.register('permissions', {
     function showStatus(type, message) {
       if (!statusEl) return;
       statusEl.textContent = message || '';
-      statusEl.style.color = type === 'saved' ? '#16a34a' : (type === 'error' ? '#dc2626' : 'var(--color-fg-muted, #6b7280)');
+      statusEl.style.color = type === 'saved' ? '#16a34a' : (type === 'error' ? '#dc2626' : 'var(--color-text-muted, #6b7280)');
     }
 
     function save() {
