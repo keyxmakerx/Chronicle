@@ -192,3 +192,12 @@ func TestHomesPageLookChoice(t *testing.T) {
 		})
 	}
 }
+
+// Every widget Home pages offers must be one a save accepts.
+func TestHomeBlockTypesAreSaveable(t *testing.T) {
+	for _, ty := range homeBlockTypes {
+		if !ValidBlockTypes[ty] {
+			t.Errorf("%s is offered but a save refuses it", ty)
+		}
+	}
+}

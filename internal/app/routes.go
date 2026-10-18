@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -4657,8 +4658,8 @@ func (a *App) RegisterRoutes() {
 		return renderSkyboxBlock(context.Background(), calendarService, rc)
 	})
 
-	// page_timeline — the page's dated events on the campaign calendar, a
-	// slim line from the first to today. The calendar service filters every
+	// page_timeline — the page's dated events on the campaign calendar, the
+	// lean line from the first to today (or the subject's death). The calendar service filters every
 	// event for the viewer, so a player's line holds only what their
 	// calendar shows. show_dm "hide" leaves Director-only events off for
 	// everyone.
@@ -4671,7 +4672,7 @@ func (a *App) RegisterRoutes() {
 				Options: []entities.Option{{Label: "Show to the Director", Value: "show"}, {Label: "Hide", Value: "hide"}}},
 		},
 	}, func(rc entities.BlockRenderContext) templ.Component {
-		return renderPageTimelineBlock(context.Background(), calendarService, rc)
+		return renderPageTimelineBlock(context.Background(), calendarService, &pageTimelineLinker{timelines: timelineSvc, addons: addonService}, rc)
 	})
 
 	// Quest board and Notice boards: cork-board blocks for quest pages and
@@ -6253,11 +6254,62 @@ type pageTimelineCalendarService interface {
 	PageTimeline(ctx context.Context, campaignID, entityID string, hideDMOnly bool, v permissions.Viewer) (*calendar.PageTimeline, error)
 }
 
+// pageTimelineFullLink finds the full time line a page's line links to.
+type pageTimelineFullLink interface {
+	FullTimeline(ctx context.Context, campaignID, calendarID string, v permissions.Viewer) (string, bool)
+}
+
+// pageTimelineLinker answers with the first time line, visible to the
+// viewer, that follows the campaign calendar, when the time line add-on is
+// on. It lives here because the calendar plugin may not read time lines.
+type pageTimelineLinker struct {
+	timelines interface {
+		ListTimelinesForCalendar(ctx context.Context, calendarID string, v permissions.Viewer) ([]timeline.Timeline, error)
+	}
+	addons interface {
+		IsEnabledForCampaign(ctx context.Context, campaignID, slug string) (bool, error)
+	}
+}
+
+// FullTimeline returns that time line's ID.
+func (l *pageTimelineLinker) FullTimeline(ctx context.Context, campaignID, calendarID string, v permissions.Viewer) (string, bool) {
+	if on, err := l.addons.IsEnabledForCampaign(ctx, campaignID, "timeline"); err != nil || !on {
+		return "", false
+	}
+	tls, err := l.timelines.ListTimelinesForCalendar(ctx, calendarID, v)
+	if err != nil {
+		slog.Warn("time line block: list time lines for calendar",
+			slog.String("campaign_id", campaignID), slog.Any("error", err))
+		return "", false
+	}
+	for _, tl := range tls {
+		if tl.CampaignID == campaignID {
+			return tl.ID, true
+		}
+	}
+	return "", false
+}
+
+// pageTimelineFocus is the event the full time line opens at: the page's
+// latest event up to today, or its first when all lie ahead.
+func pageTimelineFocus(t *calendar.PageTimeline) string {
+	focus := t.Events[0].ID
+	for _, e := range t.Events {
+		if t.Later(e) {
+			break
+		}
+		focus = e.ID
+	}
+	return focus
+}
+
 // renderPageTimelineBlock draws the time line block for the page being
 // shown. A campaign with no calendar the viewer may open draws the empty
 // state (the Director's note, nothing for a player); any other failure
-// leaves the block out rather than failing the page.
-func renderPageTimelineBlock(ctx context.Context, svc pageTimelineCalendarService, rc entities.BlockRenderContext) templ.Component {
+// leaves the block out rather than failing the page. The link under the line
+// goes to a full time line that follows the calendar when there is one, at
+// the page's latest event, and to the calendar otherwise.
+func renderPageTimelineBlock(ctx context.Context, svc pageTimelineCalendarService, links pageTimelineFullLink, rc entities.BlockRenderContext) templ.Component {
 	if rc.CC == nil || rc.CC.Campaign == nil || rc.Entity == nil {
 		return templ.NopComponent
 	}
@@ -6276,6 +6328,12 @@ func renderPageTimelineBlock(ctx context.Context, svc pageTimelineCalendarServic
 		slog.Error("time line block: page timeline",
 			slog.String("campaign_id", campaignID), slog.Any("error", err))
 		return templ.NopComponent
+	}
+	if links != nil && len(t.Events) > 0 {
+		if tid, ok := links.FullTimeline(ctx, campaignID, t.CalendarID, viewer); ok {
+			t.OpenURL = fmt.Sprintf("/campaigns/%s/timelines/%s?event=%s", campaignID, tid, url.QueryEscape("calendar:"+pageTimelineFocus(t)))
+			t.OpenLabel = "Open the full time line"
+		}
 	}
 	return calendar.PageTimelineBlock(campaignID, t, canAuthor)
 }

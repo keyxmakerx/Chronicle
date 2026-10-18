@@ -23,6 +23,10 @@ links `calendar-view.css` for the folded month.
 | `data-api-url` | `/campaigns/:id/timelines/:tid/data` |
 | `data-calendar-id` | Only when the time line follows a calendar; turns on real calendar dates, Today and the month fold |
 
+The page's `?event=<source>:<id>` (for example `calendar:<event id>`) opens
+that event once the line loads, when it is on this time line; the calendar's
+page time line block links here that way.
+
 ## Data it calls
 
 - `GET /campaigns/:id/timelines/:tid/data`: `events` (EventLink), `eras`
