@@ -16,11 +16,19 @@ type stubRestoreSvc struct {
 	Service
 	err     error
 	running bool
+	result  *RunResult
+	gotCtx  *context.Context
 }
 
 func (s stubRestoreSvc) IsRunning() bool { return s.running }
 
-func (s stubRestoreSvc) RunRestore(context.Context, string) (*RunResult, error) {
+func (s stubRestoreSvc) RunRestore(ctx context.Context, _ string) (*RunResult, error) {
+	if s.gotCtx != nil {
+		*s.gotCtx = ctx
+	}
+	if s.result != nil {
+		return s.result, s.err
+	}
 	return &RunResult{}, s.err
 }
 
@@ -38,16 +46,18 @@ func TestRunRecordsActivity(t *testing.T) {
 		name    string
 		err     error
 		running bool
+		result  *RunResult
 		want    []string
 	}{
-		{"success logs start then finish", nil, false, []string{"restore.started", "restore.run"}},
-		{"failure logs only the start", errors.New("boom"), false, []string{"restore.started"}},
-		{"busy logs nothing", ErrAlreadyRunning, true, nil},
+		{"success logs start then finish", nil, false, nil, []string{"restore.started", "restore.run"}},
+		{"failure logs only the start", errors.New("boom"), false, nil, []string{"restore.started"}},
+		{"failed script logs only the start", nil, false, &RunResult{ExitCode: 1}, []string{"restore.started"}},
+		{"busy logs nothing", ErrAlreadyRunning, true, nil, nil},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			rec := &recordingActivity{}
-			h := NewHandler(stubRestoreSvc{err: tc.err, running: tc.running})
+			h := NewHandler(stubRestoreSvc{err: tc.err, running: tc.running, result: tc.result})
 			h.SetActivityRecorder(rec)
 
 			form := url.Values{"manifest": {"m.txt"}, "confirm": {confirmationToken}}
@@ -61,5 +71,29 @@ func TestRunRecordsActivity(t *testing.T) {
 				t.Errorf("recorded %v, want %v", rec.actions, tc.want)
 			}
 		})
+	}
+}
+
+// TestRunSurvivesRequestCancel pins that the restore runs on a context the
+// browser cannot cancel: an aborted request would otherwise SIGKILL the
+// script mid-import.
+func TestRunSurvivesRequestCancel(t *testing.T) {
+	reqCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+	var got context.Context
+	h := NewHandler(stubRestoreSvc{gotCtx: &got})
+
+	form := url.Values{"manifest": {"m.txt"}, "confirm": {confirmationToken}}
+	req := httptest.NewRequest(http.MethodPost, "/admin/restore/run", strings.NewReader(form.Encode())).WithContext(reqCtx)
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
+	c := echo.New().NewContext(req, httptest.NewRecorder())
+
+	_ = h.Run(c)
+
+	if got == nil {
+		t.Fatal("service was not called")
+	}
+	if got.Err() != nil {
+		t.Errorf("run context cancelled with the request: %v", got.Err())
 	}
 }

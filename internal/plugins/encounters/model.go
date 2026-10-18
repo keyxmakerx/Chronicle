@@ -36,6 +36,54 @@ type Creature struct {
 	Start string `json:"start"`
 }
 
+// How a form change is shown to players. "reveal" tells them; "quiet" swaps
+// the token without announcing it.
+const (
+	HowReveal = "reveal"
+	HowQuiet  = "quiet"
+)
+
+// When a stage is due. Only the DM presses Start; the kind just tells the DM
+// Screen when to say a stage is waiting.
+const (
+	WhenManual  = "manual"
+	WhenStamina = "stamina"
+	WhenRound   = "round"
+)
+
+// Stage says when something changes mid-fight: creatures take another form
+// and/or "later" rows arrive. It never fires on its own.
+type Stage struct {
+	ID     string      `json:"id"`
+	When   StageWhen   `json:"when"`
+	Forms  []StageForm `json:"forms"`
+	Arrive []string    `json:"arrive"`
+	How    string      `json:"how"`
+	// Note is the DM's reminder, plain text.
+	Note string `json:"note"`
+}
+
+// StageWhen is what makes a stage due. Row, Percent and Round are read only
+// for the kind that uses them.
+type StageWhen struct {
+	Kind string `json:"kind"`
+	// Row is the creature row whose Stamina is watched (stamina).
+	Row string `json:"row"`
+	// Percent is due at or below this share of Stamina, 1 to 99 (stamina).
+	Percent int `json:"percent"`
+	// Round is due at the start of this round, 2 to 99 (round).
+	Round int `json:"round"`
+}
+
+// StageForm is one creature changing form.
+type StageForm struct {
+	Row string `json:"row"`
+	// Form is the game system's form id, or empty for the creature's first.
+	Form string `json:"form"`
+	// FormName is kept so the stage reads right if the system's forms change.
+	FormName string `json:"formName"`
+}
+
 // Hero is one hero page the encounter was built for.
 type Hero struct {
 	ID   string `json:"id"`
@@ -56,6 +104,7 @@ type Encounter struct {
 	Ready     bool       `json:"ready"`
 	Heroes    []Hero     `json:"heroes"`
 	Creatures []Creature `json:"creatures"`
+	Stages    []Stage    `json:"stages"`
 	Version   int        `json:"version"`
 	UpdatedAt time.Time  `json:"updatedAt"`
 }
@@ -84,11 +133,15 @@ type SaveInput struct {
 	Ready     bool       `json:"ready"`
 	Heroes    []string   `json:"heroes"`
 	Creatures []Creature `json:"creatures"`
+	Stages    []Stage    `json:"stages"`
 	Version   *int       `json:"version"`
 }
 
 // doc is the JSON stored in the data column.
+// Documents saved before stages existed have no "stages" member and read as
+// having none.
 type doc struct {
 	Heroes    []string   `json:"heroes"`
 	Creatures []Creature `json:"creatures"`
+	Stages    []Stage    `json:"stages"`
 }

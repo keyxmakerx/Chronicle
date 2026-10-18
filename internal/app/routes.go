@@ -642,8 +642,8 @@ func (a *entityTagFetcherAdapter) GetEntityTags(ctx context.Context, entityID st
 }
 
 // SetEntityTags sets the tags for a single entity.
-func (a *entityTagFetcherAdapter) SetEntityTags(ctx context.Context, entityID string, campaignID string, tagIDs []int) error {
-	return a.svc.SetEntityTags(ctx, entityID, campaignID, tagIDs)
+func (a *entityTagFetcherAdapter) SetEntityTags(ctx context.Context, entityID string, campaignID string, tagIDs []int, includeDmOnly bool) error {
+	return a.svc.SetEntityTagsVisible(ctx, entityID, campaignID, tagIDs, includeDmOnly)
 }
 
 // GetEntityTagGrants resolves the tag-derived visibility grants on one entity
@@ -2052,6 +2052,33 @@ func registerEncountersBlock(blockRegistry *entities.BlockRegistry) {
 			return templ.NopComponent
 		}
 		return encounters.BlockMount(rc.CC.Campaign.ID, rc.Entity.ID, rc.CSRFToken)
+	})
+}
+
+// registerWhereItIsBlock registers the "Where it is" block: the maps a page is
+// pinned on, closest first, read from Maps. It has no settings, because the
+// ladder is whatever the Director set in Maps, and one per page, because its
+// enlarged map is a single sheet. What a viewer is shown is decided by the
+// maps service from the pins they can see; the block adds no rule of its own.
+func registerWhereItIsBlock(blockRegistry *entities.BlockRegistry, mapsService maps.MapService) {
+	blockRegistry.Register(entities.BlockMeta{
+		Type: maps.WhereItIsBlockType, Label: "Where it is", Icon: "fa-map-location-dot",
+		Description: "The maps this page is pinned on, closest first, zooming out",
+		Addon:       "maps", Contexts: []string{"template"},
+		TileSizes: []string{"4x2", "2x2"},
+		Singleton: true,
+	}, func(rc entities.BlockRenderContext) templ.Component {
+		if rc.CC == nil || rc.CC.Campaign == nil || rc.Entity == nil {
+			return templ.NopComponent
+		}
+		role := rc.CC.VisibilityRole()
+		ladder, err := mapsService.WhereIs(context.Background(), rc.CC.Campaign.ID, rc.Entity.ID, role, rc.UserID)
+		if err != nil {
+			slog.Error("where it is: cannot read the page's place in the maps",
+				slog.String("entity_id", rc.Entity.ID), slog.Any("error", err))
+			return templ.NopComponent
+		}
+		return maps.BlockWhereItIs(rc.CC, rc.Entity.ID, rc.Entity.Name, ladder, permissions.CanSeeDmOnly(role))
 	})
 }
 
@@ -3701,6 +3728,7 @@ func (a *App) RegisterRoutes() {
 			{Name: "entity-map", Scripts: []string{"js/map_viewer.js", "js/map_focus.js", "js/entity_map.js"}},
 			{Name: "map-widget", Scripts: []string{"js/map_annotations.js", "js/map_shapes.js", "js/map_widget.js"}},
 			{Name: "map-block-picker", Scripts: []string{"js/map_block_picker.js"}},
+			{Name: "where-it-is", Scripts: []string{"js/where_it_is.js"}},
 		},
 	})
 	if a.PluginHealth.IsHealthy(maps.PluginSlug) {
@@ -3763,6 +3791,10 @@ func (a *App) RegisterRoutes() {
 	// the game-night emails.
 	sessionsHandler.SetRecipientFilter(authService)
 	sessions.ConfigureRecipientFilter(sessionsService, authService)
+	// Per-night sightings: the after-night check-in and a page's Last seen
+	// read and write the same rows.
+	sessionsHandler.SetSightingService(sessions.NewSightingService(sessions.NewSightingRepository(a.DB), sessionsRepo,
+		&entityCampaignCheckerAdapter{svc: entityService}, &entityVisibilityFilterAdapter{svc: entityService}))
 	// Game-night links open the real-world calendar; with the calendar plugin
 	// down they keep going to the Sessions page.
 	if a.PluginHealth.IsHealthy(calendar.PluginSlug) {
@@ -3885,6 +3917,7 @@ func (a *App) RegisterRoutes() {
 	entityNotesNotifier := &entityNotesNotifierHolder{}
 	entityNotesService := entity_notes.NewService(entityNotesRepo, entityNotesNotifier.Notify)
 	entityNotesHandler := entity_notes.NewHandler(entityNotesService)
+	entityNotesHandler.SetEntityGate(&entityAccessAdapter{svc: entityService})
 	entity_notes.RegisterRoutes(e, entityNotesHandler, campaignService, authService, addonService)
 
 	// Tags widget: campaign-scoped entity tagging (CRUD + entity associations).
@@ -4096,6 +4129,12 @@ func (a *App) RegisterRoutes() {
 	notePages := &notesPagesAdapter{svc: entityService}
 	noteHandler.SetPageNamer(notePages)
 	noteHandler.SetPageLinker(notePages)
+	// Each game night gives every member a Journal entry; the night's page
+	// reads the ones the DM can read for the check-in.
+	nightEntries := sessions.NewNightEntryService(sessionsRepo, sessions.NewNightEntryRepository(a.DB),
+		&nightJournalAdapter{svc: noteSvc}, notePages, sessions.NewSightingRepository(a.DB))
+	sessionsHandler.SetNightEntryService(nightEntries)
+	noteSvc.SetNightEntries(&journalNightsAdapter{svc: nightEntries, addons: addonService})
 	notes.RegisterRoutes(e, noteHandler, campaignService, authService)
 	// A player can allow the Foundry notebook to use their notes. Grants go
 	// only to an address that may already call Chronicle across sites.
@@ -4483,6 +4522,8 @@ func (a *App) RegisterRoutes() {
 		return renderBoundBlock(maps.WidgetTypeMap, rc, legacyID)
 	})
 
+	registerWhereItIsBlock(blockRegistry, mapsService)
+
 	// NPC gallery block — embeds a compact NPC grid on entity pages/dashboards.
 	blockRegistry.Register(entities.BlockMeta{
 		Type: "npc_gallery", Label: "NPC Gallery", Icon: "fa-users",
@@ -4620,6 +4661,7 @@ func (a *App) RegisterRoutes() {
 	// its repository.
 	aiEraVersions := calendar.NewEraVersionService(calendar.NewEraVersionRepository(a.DB), calendarService)
 	aiWorkspaceCommitter.SetEraWriter(aiImportEraAdapter{versions: aiEraVersions})
+	aiWorkspaceCommitter.SetTagWriter(tagService)
 	aiWorkspaceHandler.SetImportEras(aiImportEraAdapter{versions: aiEraVersions})
 	aiWorkspaceRenderer.EraVersions = aiExportEraAdapter{versions: aiEraVersions}
 	aiWorkspaceHandler.SetImportCommitter(aiWorkspaceCommitter)
@@ -4708,10 +4750,13 @@ func (a *App) RegisterRoutes() {
 	// --- WASM Runtime (Layer 3 Logic Extensions) ---
 	// Wire the WASM plugin manager with read-only host functions that let
 	// sandboxed WASM plugins query entities, calendar, and tags.
+	wasmEntityInCampaign := func(ctx context.Context, campaignID, entityID string) (*entities.Entity, error) {
+		return entityInCampaign(ctx, entityService, campaignID, entityID)
+	}
 	wasmEntityReader := extensions.NewWASMEntityAdapter(
 		// get_entity: returns entity JSON by ID.
-		func(ctx context.Context, id string) (json.RawMessage, error) {
-			ent, err := entityService.GetByID(ctx, id)
+		func(ctx context.Context, campaignID, id string) (json.RawMessage, error) {
+			ent, err := wasmEntityInCampaign(ctx, campaignID, id)
 			if err != nil {
 				return nil, err
 			}
@@ -4767,7 +4812,10 @@ func (a *App) RegisterRoutes() {
 	// Wire write adapters for WASM host functions.
 	wasmHostEnv.SetEntityWriter(extensions.NewWASMEntityWriteAdapter(
 		// update_entity_fields: unmarshal JSON fields and delegate to entity service.
-		func(ctx context.Context, entityID string, fieldsData json.RawMessage) error {
+		func(ctx context.Context, campaignID, entityID string, fieldsData json.RawMessage) error {
+			if _, err := wasmEntityInCampaign(ctx, campaignID, entityID); err != nil {
+				return err
+			}
 			var fields map[string]any
 			if err := json.Unmarshal(fieldsData, &fields); err != nil {
 				return fmt.Errorf("invalid fields JSON: %w", err)
@@ -4793,10 +4841,16 @@ func (a *App) RegisterRoutes() {
 			if err := json.Unmarshal(tagIDsJSON, &tagIDs); err != nil {
 				return fmt.Errorf("invalid tag_ids JSON: %w", err)
 			}
+			if _, err := wasmEntityInCampaign(ctx, campaignID, entityID); err != nil {
+				return err
+			}
 			return tagService.SetEntityTags(ctx, entityID, campaignID, tagIDs)
 		},
 		// get_entity_tags: return tags as JSON (include DM-only for WASM plugins).
-		func(ctx context.Context, entityID string) (json.RawMessage, error) {
+		func(ctx context.Context, campaignID, entityID string) (json.RawMessage, error) {
+			if _, err := wasmEntityInCampaign(ctx, campaignID, entityID); err != nil {
+				return nil, err
+			}
 			entityTags, err := tagService.GetEntityTags(ctx, entityID, true)
 			if err != nil {
 				return nil, err
@@ -4819,6 +4873,11 @@ func (a *App) RegisterRoutes() {
 			}
 			if err := json.Unmarshal(input, &req); err != nil {
 				return nil, fmt.Errorf("invalid relation input: %w", err)
+			}
+			for _, id := range []string{req.SourceEntityID, req.TargetEntityID} {
+				if _, err := wasmEntityInCampaign(ctx, campaignID, id); err != nil {
+					return nil, err
+				}
 			}
 			rel, err := relService.Create(ctx, campaignID, req.SourceEntityID, req.TargetEntityID,
 				req.RelationType, req.ReverseRelationType, req.CreatedBy, req.Metadata, req.DmOnly)
@@ -5421,7 +5480,9 @@ func (a *App) RegisterRoutes() {
 		systemstate.RegisterRoutes(e,
 			systemstate.NewHandler(systemStateSvc, &entityAccessAdapter{svc: entityService}),
 			campaignService, authService)
-		syncAPIHandler.SetSystemStateReader(&systemStateSyncReader{svc: systemStateSvc})
+		systemStateSync := &systemStateSyncReader{svc: systemStateSvc}
+		syncAPIHandler.SetSystemStateReader(systemStateSync)
+		syncAPIHandler.SetSystemStateWriter(systemStateSync)
 	} else {
 		slog.Warn("systemstate plugin degraded — routes not registered")
 	}
@@ -5504,7 +5565,7 @@ func (a *App) RegisterRoutes() {
 	// plugin's kind is left out, so its blocks are refused at review.
 	aiKinds := []records.Kind{
 		records.CalendarKind{Svc: calendarService, Pages: entityService},
-		records.EventKind{Svc: calendarService},
+		records.EventKind{Svc: calendarService, Tiers: campaignService, Pages: entityService},
 		records.WeatherKind{Svc: calendarService},
 	}
 	aiTables := records.TableKind{Svc: aiRollTablesAdapter{rollTablesSvc}}
@@ -5671,6 +5732,123 @@ func (a *journalCharacterAdapter) ClaimedCharacters(ctx context.Context, campaig
 	out := make([]notes.ClaimedCharacter, 0, len(owned))
 	for _, e := range owned {
 		out = append(out, notes.ClaimedCharacter{ID: e.ID, Name: e.Name, TypeName: e.TypeName})
+	}
+	return out, nil
+}
+
+// nightJournalAdapter adapts the notes widget to sessions.NightJournal. A
+// member's game-night entries go in a "Game nights" folder of their own,
+// made with the first entry; its id is fixed per member, so a renamed or
+// moved folder keeps receiving them.
+type nightJournalAdapter struct {
+	svc notes.NoteService
+}
+
+// nightFolderNamespace seeds each member's Game nights folder id.
+var nightFolderNamespace = uuid.MustParse("5e0c1f4a-2b7d-4c39-9a61-3f8e2d7b4c10")
+
+// nightFolderTitle is the folder's name when it is made.
+const nightFolderTitle = "Game nights"
+
+func (a *nightJournalAdapter) CreateEntry(ctx context.Context, campaignID string, v permissions.Viewer, id, title string) error {
+	if done, err := a.exists(ctx, id); done || err != nil {
+		return err
+	}
+	folder, err := a.folder(ctx, campaignID, v)
+	if err != nil {
+		return err
+	}
+	if _, err := a.svc.Create(ctx, campaignID, v, notes.CreateNoteRequest{ID: id, Title: title, ParentID: &folder}); err != nil {
+		// Another load made it a moment ago (duplicate key).
+		if done, _ := a.exists(ctx, id); done {
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
+// folder returns the member's Game nights folder, making it when missing.
+func (a *nightJournalAdapter) folder(ctx context.Context, campaignID string, v permissions.Viewer) (string, error) {
+	id := uuid.NewSHA1(nightFolderNamespace, []byte(campaignID+"\x00"+v.UserID())).String()
+	if done, err := a.exists(ctx, id); done || err != nil {
+		return id, err
+	}
+	if _, err := a.svc.Create(ctx, campaignID, v, notes.CreateNoteRequest{ID: id, Title: nightFolderTitle, IsFolder: true}); err != nil {
+		if done, _ := a.exists(ctx, id); done {
+			return id, nil
+		}
+		return "", err
+	}
+	return id, nil
+}
+
+func (a *nightJournalAdapter) exists(ctx context.Context, id string) (bool, error) {
+	n, err := a.svc.GetByID(ctx, id)
+	if err != nil {
+		if isNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return n != nil, nil
+}
+
+func (a *nightJournalAdapter) ReadableEntries(ctx context.Context, campaignID string, v permissions.Viewer, ids []string) ([]sessions.NightNote, error) {
+	out := make([]sessions.NightNote, 0, len(ids))
+	for _, id := range ids {
+		n, err := a.svc.GetByID(ctx, id)
+		if err != nil {
+			if isNotFound(err) {
+				continue // deleted by its writer
+			}
+			return nil, err
+		}
+		// The same predicate the notes routes apply before showing a note.
+		if n == nil || n.IsFolder || n.EntityID != nil || !n.CanView(v, campaignID) {
+			continue
+		}
+		body := ""
+		if n.EntryHTML != nil {
+			body = *n.EntryHTML
+		}
+		nn := sessions.NightNote{ID: n.ID, Title: n.Title, AuthorID: n.UserID, UpdatedAt: n.UpdatedAt, Audience: string(n.Visibility)}
+		for _, l := range notes.ParseLinks(body) {
+			if l.Kind == notes.LinkPage {
+				nn.PageIDs = append(nn.PageIDs, l.ID)
+			}
+		}
+		if len(nn.PageIDs) > 0 {
+			nn.Lines = notes.MentionLines(body)
+		}
+		out = append(out, nn)
+	}
+	return out, nil
+}
+
+// journalNightsAdapter adapts the sessions plugin to notes.NightEntries.
+// Entries are made only in campaigns with Game nights turned on.
+type journalNightsAdapter struct {
+	svc    sessions.NightEntryService
+	addons addons.AddonService
+}
+
+func (a *journalNightsAdapter) EnsureEntries(ctx context.Context, campaignID string, v permissions.Viewer) error {
+	on, err := a.addons.IsEnabledForCampaign(ctx, campaignID, sessions.SessionsAddonSlug)
+	if err != nil || !on {
+		return err
+	}
+	return a.svc.EnsureEntries(ctx, campaignID, v, time.Now())
+}
+
+func (a *journalNightsAdapter) Nights(ctx context.Context, campaignID string, noteIDs []string) (map[string]notes.NightTag, error) {
+	tags, err := a.svc.Tags(ctx, campaignID, noteIDs, time.Now())
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]notes.NightTag, len(tags))
+	for id, t := range tags {
+		out[id] = notes.NightTag{SessionID: t.SessionID, Date: t.Date, Name: t.Name, Time: t.Time, Started: t.Started}
 	}
 	return out, nil
 }

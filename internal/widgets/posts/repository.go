@@ -22,7 +22,7 @@ type PostRepository interface {
 	// Delete removes a post by its ID.
 	Delete(ctx context.Context, id string) error
 	// Reorder updates the sort_order for a list of post IDs within an entity.
-	Reorder(ctx context.Context, entityID string, postIDs []string) error
+	Reorder(ctx context.Context, campaignID, entityID string, postIDs []string) error
 }
 
 type postRepository struct {
@@ -100,21 +100,21 @@ func (r *postRepository) Delete(ctx context.Context, id string) error {
 	return err
 }
 
-func (r *postRepository) Reorder(ctx context.Context, entityID string, postIDs []string) error {
+func (r *postRepository) Reorder(ctx context.Context, campaignID, entityID string, postIDs []string) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	stmt, err := tx.PrepareContext(ctx, `UPDATE entity_posts SET sort_order = ? WHERE id = ? AND entity_id = ?`)
+	stmt, err := tx.PrepareContext(ctx, `UPDATE entity_posts SET sort_order = ? WHERE id = ? AND entity_id = ? AND campaign_id = ?`)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = stmt.Close() }()
 
 	for i, id := range postIDs {
-		if _, err := stmt.ExecContext(ctx, i, id, entityID); err != nil {
+		if _, err := stmt.ExecContext(ctx, i, id, entityID, campaignID); err != nil {
 			return err
 		}
 	}

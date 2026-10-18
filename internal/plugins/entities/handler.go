@@ -40,7 +40,7 @@ import (
 type EntityTagFetcher interface {
 	GetEntityTagsBatch(ctx context.Context, entityIDs []string, includeDmOnly bool) (map[string][]EntityTagInfo, error)
 	GetEntityTags(ctx context.Context, entityID string, includeDmOnly bool) ([]EntityTagInfo, error)
-	SetEntityTags(ctx context.Context, entityID string, campaignID string, tagIDs []int) error
+	SetEntityTags(ctx context.Context, entityID string, campaignID string, tagIDs []int, includeDmOnly bool) error
 	GetEntityTagGrants(ctx context.Context, campaignID, entityID string) ([]EntityTagGrantInfo, error)
 }
 
@@ -81,7 +81,7 @@ type SessionSearcher interface {
 // SystemSearcher provides game system search results for the quick
 // search popup. Implemented by systems.SystemSearchAdapter.
 type SystemSearcher interface {
-	SearchSystemContent(ctx context.Context, campaignID, query string) ([]map[string]string, error)
+	SearchSystemContent(ctx context.Context, campaignID, query string, director bool) ([]map[string]string, error)
 }
 
 // MemberLister retrieves campaign members for the permissions UI.
@@ -1099,6 +1099,7 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 		if h.systemSearcher != nil && query != "" {
 			if modResults, err := h.systemSearcher.SearchSystemContent(
 				c.Request().Context(), cc.Campaign.ID, query,
+				cc.VisibilityRole() >= int(campaigns.RoleOwner),
 			); err == nil {
 				items = append(items, toAnyMaps(modResults)...)
 				total += len(modResults)
@@ -1351,20 +1352,32 @@ func (h *Handler) BulkTagsAPI(c echo.Context) error {
 
 	ctx := c.Request().Context()
 	processed := 0
+	role, userID := int(cc.VisibilityRole()), auth.GetUserID(c)
+	// A caller who cannot see dm_only tags must not read, add or clear them.
+	seeDmOnly := cc.MemberRole >= campaigns.RoleOwner || cc.IsSiteAdmin || cc.IsDmGranted
 	for _, eid := range req.EntityIDs {
+		// Ids come from the body, so each must be a page in this campaign
+		// the caller can see; any other is skipped, as in BulkUpdateType.
+		entity, err := h.service.GetByID(ctx, eid)
+		if err != nil || entity.CampaignID != cc.Campaign.ID {
+			continue
+		}
+		if access, err := h.service.CheckEntityAccess(ctx, eid, role, userID); err != nil || !access.CanView {
+			continue
+		}
 		switch req.Action {
 		case "add":
-			existing, _ := h.tagFetcher.GetEntityTags(ctx, eid, true)
+			existing, _ := h.tagFetcher.GetEntityTags(ctx, eid, seeDmOnly)
 			existingIDs := make([]int, len(existing))
 			for i, t := range existing {
 				existingIDs[i] = t.ID
 			}
 			merged := mergeIntSets(existingIDs, req.TagIDs)
-			if err := h.tagFetcher.SetEntityTags(ctx, eid, cc.Campaign.ID, merged); err == nil {
+			if err := h.tagFetcher.SetEntityTags(ctx, eid, cc.Campaign.ID, merged, seeDmOnly); err == nil {
 				processed++
 			}
 		case "remove":
-			existing, _ := h.tagFetcher.GetEntityTags(ctx, eid, true)
+			existing, _ := h.tagFetcher.GetEntityTags(ctx, eid, seeDmOnly)
 			removeSet := make(map[int]bool)
 			for _, id := range req.TagIDs {
 				removeSet[id] = true
@@ -1375,11 +1388,11 @@ func (h *Handler) BulkTagsAPI(c echo.Context) error {
 					remaining = append(remaining, t.ID)
 				}
 			}
-			if err := h.tagFetcher.SetEntityTags(ctx, eid, cc.Campaign.ID, remaining); err == nil {
+			if err := h.tagFetcher.SetEntityTags(ctx, eid, cc.Campaign.ID, remaining, seeDmOnly); err == nil {
 				processed++
 			}
 		case "set":
-			if err := h.tagFetcher.SetEntityTags(ctx, eid, cc.Campaign.ID, req.TagIDs); err == nil {
+			if err := h.tagFetcher.SetEntityTags(ctx, eid, cc.Campaign.ID, req.TagIDs, seeDmOnly); err == nil {
 				processed++
 			}
 		}
@@ -3594,6 +3607,21 @@ func (h *Handler) SetAliasesAPI(c echo.Context) error {
 	}
 
 	entityID := c.Param("eid")
+
+	// The page must be in this campaign and visible to the caller, as for
+	// GetAliasesAPI; the service writes by entity id alone.
+	entity, err := h.service.GetByID(c.Request().Context(), entityID)
+	if err != nil {
+		return err
+	}
+	if entity.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("entity not found")
+	}
+	access, err := h.service.CheckEntityAccess(c.Request().Context(), entity.ID, int(cc.VisibilityRole()), auth.GetUserID(c))
+	if err != nil || !access.CanView {
+		return apperror.NewNotFound("entity not found")
+	}
+
 	var input SetAliasesInput
 	if err := c.Bind(&input); err != nil {
 		return apperror.NewBadRequest("invalid request body")

@@ -180,7 +180,9 @@ The body of the page in markdown.
 
 Valid ` + "`" + `type` + "`" + ` values are the slugs listed above. ` + "`" + `visibility` + "`" + ` must be one of
 ` + "`" + `private` + "`" + `, ` + "`" + `dm_only` + "`" + `, or ` + "`" + `public` + "`" + `. ` + "`" + `tags` + "`" + ` is optional; use the campaign's
-existing tag vocabulary where possible.
+existing tag vocabulary where possible; a tag that doesn't exist yet is made. On
+` + "`" + `action: update` + "`" + `, ` + "`" + `tags` + "`" + ` replaces the page's tags, ` + "`" + `tags: []` + "`" + ` clears them, and leaving
+the line out keeps them. A page's GM-only tags always stay.
 
 To put a page under another page, add ` + "`" + `parent: Name of the parent page` + "`" + `. The parent
 is an existing page (an index line like "Name (in Parent)" means that page already sits

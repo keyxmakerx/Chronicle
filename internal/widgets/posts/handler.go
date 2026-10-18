@@ -42,6 +42,29 @@ func (h *Handler) SetEntityGate(gate EntityGate) {
 	h.entityGate = gate
 }
 
+// requireViewableEntity mirrors the entity Show page gate: the entity must
+// belong to the URL campaign (kills the cross-campaign IDOR) and the caller
+// must be able to view it (anon = RoleNone). Every post route runs it so a
+// private or foreign entity's posts can be neither read nor changed.
+func (h *Handler) requireViewableEntity(c echo.Context, cc *campaigns.CampaignContext, entityID string) error {
+	if h.entityGate == nil {
+		// Fail closed: a missing gate must never serve ungated posts.
+		return apperror.NewInternal(errors.New("posts: entity gate not configured"))
+	}
+	// Use cc.VisibilityRole(), not the raw cc.MemberRole (ADR-057): the
+	// dm_only content check in ListPosts looks at cc.IsDmGranted directly, but
+	// this gate used to 404 a Co-DM before that branch could ever run.
+	campaignID, canView, err := h.entityGate.ResolveViewableEntity(
+		c.Request().Context(), entityID, int(cc.VisibilityRole()), auth.GetUserID(c))
+	if err != nil {
+		return err // NotFound for a missing entity; propagates real errors.
+	}
+	if campaignID != cc.Campaign.ID || !canView {
+		return apperror.NewNotFound("entity not found")
+	}
+	return nil
+}
+
 // ListPosts returns all posts for an entity as JSON.
 // GET /campaigns/:id/entities/:eid/posts
 func (h *Handler) ListPosts(c echo.Context) error {
@@ -55,26 +78,8 @@ func (h *Handler) ListPosts(c echo.Context) error {
 		return apperror.NewBadRequest("entity ID is required")
 	}
 
-	// Entity-privacy gate (mirrors the entity Show page): resolve the entity,
-	// require it to belong to the URL campaign (kills the cross-campaign IDOR),
-	// and require the caller's view access (anon = RoleNone). Without this an
-	// anonymous visitor to a public campaign could read the posts of a private
-	// entity, or of any entity in another campaign given its ID.
-	if h.entityGate == nil {
-		// Fail closed: a missing gate must never serve ungated posts.
-		return apperror.NewInternal(errors.New("posts: entity gate not configured"))
-	}
-	// Use cc.VisibilityRole(), not the raw cc.MemberRole (ADR-057):
-	// includeDMOnly just below already checks cc.IsDmGranted
-	// directly for dm_only post content, but this gate used to 404 a Co-DM
-	// before that branch could ever run.
-	campaignID, canView, err := h.entityGate.ResolveViewableEntity(
-		c.Request().Context(), entityID, int(cc.VisibilityRole()), auth.GetUserID(c))
-	if err != nil {
-		return err // NotFound for a missing entity; propagates real errors.
-	}
-	if campaignID != cc.Campaign.ID || !canView {
-		return apperror.NewNotFound("entity not found")
+	if err := h.requireViewableEntity(c, cc, entityID); err != nil {
+		return err
 	}
 
 	// Scribes and above see DM-only posts; DM-granted users also see them.
@@ -108,6 +113,10 @@ func (h *Handler) CreatePost(c echo.Context) error {
 		return apperror.NewBadRequest("entity ID is required")
 	}
 
+	if err := h.requireViewableEntity(c, cc, entityID); err != nil {
+		return err
+	}
+
 	var req CreatePostRequest
 	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
 		return apperror.NewBadRequest("invalid JSON body")
@@ -131,9 +140,13 @@ func (h *Handler) UpdatePost(c echo.Context) error {
 		return apperror.NewMissingContext()
 	}
 
+	entityID := c.Param("eid")
 	postID := c.Param("pid")
-	if postID == "" {
-		return apperror.NewBadRequest("post ID is required")
+	if entityID == "" || postID == "" {
+		return apperror.NewBadRequest("entity and post ID are required")
+	}
+	if err := h.requireViewableEntity(c, cc, entityID); err != nil {
+		return err
 	}
 
 	// Verify post belongs to this campaign.
@@ -141,7 +154,7 @@ func (h *Handler) UpdatePost(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if existing.CampaignID != cc.Campaign.ID {
+	if existing.CampaignID != cc.Campaign.ID || existing.EntityID != entityID {
 		return apperror.NewNotFound("post not found")
 	}
 
@@ -166,9 +179,13 @@ func (h *Handler) DeletePost(c echo.Context) error {
 		return apperror.NewMissingContext()
 	}
 
+	entityID := c.Param("eid")
 	postID := c.Param("pid")
-	if postID == "" {
-		return apperror.NewBadRequest("post ID is required")
+	if entityID == "" || postID == "" {
+		return apperror.NewBadRequest("entity and post ID are required")
+	}
+	if err := h.requireViewableEntity(c, cc, entityID); err != nil {
+		return err
 	}
 
 	// Verify post belongs to this campaign.
@@ -176,7 +193,7 @@ func (h *Handler) DeletePost(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if existing.CampaignID != cc.Campaign.ID {
+	if existing.CampaignID != cc.Campaign.ID || existing.EntityID != entityID {
 		return apperror.NewNotFound("post not found")
 	}
 
@@ -200,12 +217,16 @@ func (h *Handler) ReorderPosts(c echo.Context) error {
 		return apperror.NewBadRequest("entity ID is required")
 	}
 
+	if err := h.requireViewableEntity(c, cc, entityID); err != nil {
+		return err
+	}
+
 	var req ReorderPostsRequest
 	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
 		return apperror.NewBadRequest("invalid JSON body")
 	}
 
-	if err := h.service.Reorder(c.Request().Context(), entityID, req.PostIDs); err != nil {
+	if err := h.service.Reorder(c.Request().Context(), cc.Campaign.ID, entityID, req.PostIDs); err != nil {
 		return err
 	}
 

@@ -222,3 +222,54 @@ outer:
 	}
 	return -1
 }
+
+// mentionLineMax caps one quoted line, so a page-long paragraph quotes as a
+// line.
+const mentionLineMax = 240
+
+// MentionLines returns, for each page linked in body, the text of the first
+// paragraph (or list item, heading, cell) that links it, so a reader can be
+// shown the line a page was named in. Note links keep their stored neutral
+// text, never a title.
+func MentionLines(body string) map[string]string {
+	out := map[string]string{}
+	if body == "" || !strings.Contains(body, "data-mention-id") {
+		return out
+	}
+	var line strings.Builder
+	var ids []string
+	flush := func() {
+		text := strings.Join(strings.Fields(line.String()), " ")
+		for _, id := range ids {
+			if _, done := out[id]; !done && text != "" {
+				out[id] = snippet(text, mentionLineMax)
+			}
+		}
+		line.Reset()
+		ids = ids[:0]
+	}
+	z := html.NewTokenizer(strings.NewReader(body))
+	for {
+		switch z.Next() {
+		case html.ErrorToken:
+			flush()
+			return out
+		case html.StartTagToken, html.SelfClosingTagToken:
+			tok := z.Token()
+			if isBlock(tok.Data) {
+				flush()
+			}
+			if tok.Data == "a" {
+				if id, ok := attr(tok, "data-mention-id"); ok && idPattern.MatchString(id) {
+					ids = append(ids, id)
+				}
+			}
+		case html.EndTagToken:
+			if isBlock(z.Token().Data) {
+				flush()
+			}
+		case html.TextToken:
+			line.Write(z.Text())
+		}
+	}
+}

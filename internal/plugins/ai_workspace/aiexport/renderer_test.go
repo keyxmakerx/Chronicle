@@ -574,3 +574,30 @@ func TestRenderEntities_NamesOnlyVisibleParent(t *testing.T) {
 		})
 	}
 }
+
+// An event's importance, category and linked page reach the AI only outside
+// Safe mode: the export reads as the owner, so the page may be one players
+// can't open, and categories are calendar structure.
+func TestRenderCalendarEvents_ExtrasOutsideSafeOnly(t *testing.T) {
+	cal := &calendar.Calendar{ID: "c", Name: "Harptos", CurrentYear: 1500, Months: []calendar.Month{{Name: "Hammer", Days: 30}}}
+	ev := []calendar.Event{{ID: "e", Name: "Siege", Year: 1492, Month: 1, Day: 3, Visibility: "everyone",
+		Tier: sp("major"), KindName: "Battle", EntityName: "Hidden Fortress"}}
+	tests := []struct {
+		mode PrivacyMode
+		want bool
+	}{
+		{PrivacyModeSafe, false},
+		{PrivacyModeEverything, true},
+	}
+	for _, tt := range tests {
+		out, err := RenderCalendarEvents(context.Background(), cal, ev, Options{Privacy: tt.mode})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, s := range []string{"Importance: major", "Category: Battle", "Page: Hidden Fortress"} {
+			if strings.Contains(out, s) != tt.want {
+				t.Errorf("mode %v: contains %q = %v; want %v\n%s", tt.mode, s, !tt.want, tt.want, out)
+			}
+		}
+	}
+}

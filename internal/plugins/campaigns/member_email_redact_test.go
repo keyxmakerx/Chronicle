@@ -23,7 +23,11 @@ func TestRedactMemberEmails(t *testing.T) {
 				{UserID: "u2", Email: "b@x", Role: RolePlayer},
 				{UserID: "u3", Email: "c@x", Role: RolePlayer},
 			}
-			redactMemberEmails(members, tc.viewer, tc.isOwner)
+			role := RolePlayer
+			if tc.isOwner {
+				role = RoleOwner
+			}
+			redactMemberEmails(members, role, tc.viewer)
 			for _, m := range members {
 				if m.Email != tc.want[m.UserID] {
 					t.Errorf("%s: email = %q, want %q", m.UserID, m.Email, tc.want[m.UserID])

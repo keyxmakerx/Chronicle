@@ -149,7 +149,7 @@ func (s *service) present(ctx context.Context, campaignID string, rows []Row, v 
 	for i, r := range rows {
 		e := Encounter{
 			ID: r.ID, Page: Page{ID: r.EntityID, Name: names[r.EntityID]}, Name: r.Name, Ready: r.Ready,
-			Heroes: []Hero{}, Creatures: []Creature{}, Version: r.Version, UpdatedAt: r.UpdatedAt,
+			Heroes: []Hero{}, Creatures: []Creature{}, Stages: []Stage{}, Version: r.Version, UpdatedAt: r.UpdatedAt,
 		}
 		for _, id := range docs[i].Heroes {
 			if n, ok := names[id]; ok {
@@ -162,9 +162,55 @@ func (s *service) present(ctx context.Context, campaignID string, rows []Row, v 
 			}
 			e.Creatures = append(e.Creatures, c)
 		}
+		e.Stages = readStages(docs[i].Stages, e.Creatures)
 		out[i] = e
 	}
 	return out, nil
+}
+
+// readStages drops what a stage points at that is gone, the way an unlinked
+// row keeps its name: a form change needs a row with a page, an arrival needs
+// a row, and a Stamina trigger on a missing row falls back to manual. A stage
+// emptied this way is kept so the DM sees it and decides.
+// CarryStages keeps an encounter's stages across a save that replaces its
+// rows: references to rows that are gone are dropped, and a stage left with
+// nothing to do is dropped too, since a save would refuse it.
+func CarryStages(in []Stage, rows []Creature) []Stage {
+	out := []Stage{}
+	for _, st := range readStages(in, rows) {
+		if len(st.Forms) > 0 || len(st.Arrive) > 0 {
+			out = append(out, st)
+		}
+	}
+	return out
+}
+
+func readStages(in []Stage, rows []Creature) []Stage {
+	byID := make(map[string]Creature, len(rows))
+	for _, r := range rows {
+		byID[r.ID] = r
+	}
+	out := make([]Stage, 0, len(in))
+	for _, st := range in {
+		if _, ok := byID[st.When.Row]; st.When.Kind == WhenStamina && !ok {
+			st.When = StageWhen{Kind: WhenManual}
+		}
+		forms := []StageForm{}
+		for _, f := range st.Forms {
+			if r, ok := byID[f.Row]; ok && r.EntityID != "" {
+				forms = append(forms, f)
+			}
+		}
+		arrive := []string{}
+		for _, id := range st.Arrive {
+			if _, ok := byID[id]; ok {
+				arrive = append(arrive, id)
+			}
+		}
+		st.Forms, st.Arrive = forms, arrive
+		out = append(out, st)
+	}
+	return out
 }
 
 func (s *service) presentOne(ctx context.Context, campaignID string, r Row, v Viewer) (*Encounter, error) {
