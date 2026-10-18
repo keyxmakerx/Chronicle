@@ -56,6 +56,10 @@ type AppearanceData struct {
 	// PageLook is how pages draw their blocks; "" and "standard" add no
 	// attribute, and "annals" sets data-cz-page for page_look_annals.css.
 	PageLook string
+
+	// StyleKit is the pages' character under Annals; "" and "material" add
+	// no attribute, and the others set data-cz-kit for style_kits.css.
+	StyleKit string
 }
 
 const keyAppearance ctxKey = "layout_appearance"
@@ -114,6 +118,9 @@ func AppearanceAttrs(ctx context.Context) templ.Attributes {
 	}
 	if a.PageLook == "annals" {
 		attrs["data-cz-page"] = a.PageLook
+		if _, ok := czKits[a.StyleKit]; ok {
+			attrs["data-cz-kit"] = a.StyleKit
+		}
 	}
 	if a.HeadingFont != "" && a.HeadingFont != "same" {
 		attrs["data-cz-heading"] = a.HeadingFont
@@ -426,8 +433,12 @@ func AppearanceCSS(ctx context.Context) string {
 	}
 
 	// Annals draws its headings in tall capitals unless the owner picked a
-	// heading face, which it then uses as it is (page_look_annals.css).
-	if a.PageLook == "annals" {
+	// heading face, which it then uses as it is (page_look_annals.css). A
+	// style kit brings its own faces instead.
+	kit, hasKit := czKits[a.StyleKit]
+	if a.PageLook == "annals" && hasKit {
+		kitCSS(&root, &dark, &extra, a, kit, accent)
+	} else if a.PageLook == "annals" {
 		if _, ok := czHeadingFaces[a.HeadingFont]; !ok {
 			extra.WriteString(fontFaceCSS("oswald"))
 			root.WriteString("--annals-hf:'Oswald', 'Arial Narrow', sans-serif;--annals-hcase:uppercase;--annals-hw:600;--annals-hls:.01em;")
