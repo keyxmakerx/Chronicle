@@ -2,11 +2,13 @@ package syncapi
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
 	"time"
 
+	"github.com/go-sql-driver/mysql"
 	"github.com/google/uuid"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -35,6 +37,9 @@ var validSyncDirections = map[string]bool{
 	"push": true,
 	"pull": true,
 }
+
+// mysqlDuplicateEntry is MariaDB's ER_DUP_ENTRY error number.
+const mysqlDuplicateEntry = 1062
 
 // SyncMappingService handles sync mapping business logic.
 type SyncMappingService interface {
@@ -114,6 +119,12 @@ func (s *syncMappingService) CreateMapping(ctx context.Context, campaignID strin
 	}
 
 	if err := s.repo.Create(ctx, mapping); err != nil {
+		// The pre-check above races a concurrent create; the unique key is
+		// the real guard. Clients match on "already exists" to recover.
+		var myErr *mysql.MySQLError
+		if errors.As(err, &myErr) && myErr.Number == mysqlDuplicateEntry {
+			return nil, apperror.NewConflict("sync mapping already exists for this object")
+		}
 		return nil, err
 	}
 

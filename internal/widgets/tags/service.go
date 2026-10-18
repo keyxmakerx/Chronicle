@@ -44,6 +44,11 @@ type TagService interface {
 	// Performs a diff: removes tags not in the new set, adds tags not currently present.
 	SetEntityTags(ctx context.Context, entityID string, campaignID string, tagIDs []int) error
 
+	// SetEntityTagsVisible is SetEntityTags for a caller who may not see
+	// dm_only tags: existing dm_only tags are left untouched and a request
+	// naming one is rejected as if it did not exist.
+	SetEntityTagsVisible(ctx context.Context, entityID string, campaignID string, tagIDs []int, includeDmOnly bool) error
+
 	// GetEntityTags returns all tags associated with an entity. When
 	// includeDmOnly is false, dm_only tags are excluded.
 	GetEntityTags(ctx context.Context, entityID string, includeDmOnly bool) ([]Tag, error)
@@ -163,11 +168,18 @@ func (s *tagService) Delete(ctx context.Context, id int) error {
 // All provided tag IDs are validated to belong to the same campaign as the
 // entity to prevent cross-campaign tag assignment.
 func (s *tagService) SetEntityTags(ctx context.Context, entityID string, campaignID string, tagIDs []int) error {
+	return s.SetEntityTagsVisible(ctx, entityID, campaignID, tagIDs, true)
+}
+
+// SetEntityTagsVisible is SetEntityTags limited to the tags the caller may
+// see. A caller who cannot see dm_only tags works on a filtered view of both
+// the campaign's tags and the entity's, so the diff can neither remove a
+// dm_only tag it never saw nor add one it should not know about.
+func (s *tagService) SetEntityTagsVisible(ctx context.Context, entityID string, campaignID string, tagIDs []int, includeDmOnly bool) error {
 	// Validate that all provided tag IDs belong to the correct campaign.
 	// This prevents users from assigning tags from other campaigns.
 	if len(tagIDs) > 0 {
-		// Include dm_only tags in validation — Scribes can assign any tag.
-		campaignTags, err := s.repo.ListByCampaign(ctx, campaignID, true)
+		campaignTags, err := s.repo.ListByCampaign(ctx, campaignID, includeDmOnly)
 		if err != nil {
 			return fmt.Errorf("listing campaign tags for validation: %w", err)
 		}
@@ -184,8 +196,8 @@ func (s *tagService) SetEntityTags(ctx context.Context, entityID string, campaig
 		}
 	}
 
-	// Get current tags to compute the diff (include all for accurate diff).
-	currentTags, err := s.repo.GetEntityTags(ctx, entityID, true)
+	// Diff only against what the caller can see; hidden dm_only tags stay.
+	currentTags, err := s.repo.GetEntityTags(ctx, entityID, includeDmOnly)
 	if err != nil {
 		return fmt.Errorf("getting current entity tags: %w", err)
 	}

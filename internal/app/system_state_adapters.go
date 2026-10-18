@@ -66,7 +66,7 @@ func (p *systemStatePublisher) PublishSystemStateUpdated(campaignID, entityID, s
 }
 
 // systemStateSyncReader adapts the system-state service to the sync API's
-// read seam.
+// read and write seams.
 type systemStateSyncReader struct {
 	svc systemstate.Service
 }
@@ -74,6 +74,16 @@ type systemStateSyncReader struct {
 // ReadSystemState returns both halves; the sync handler decides which leave.
 func (a *systemStateSyncReader) ReadSystemState(ctx context.Context, campaignID, entityID, systemID, key string) (json.RawMessage, json.RawMessage, *time.Time, error) {
 	st, err := a.svc.Get(ctx, campaignID, entityID, systemID, key)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return st.GM, st.Public, st.UpdatedAt, nil
+}
+
+// WriteSystemState applies a partial write through the service, which owns
+// validation, limits, the enabled-system check and the publish.
+func (a *systemStateSyncReader) WriteSystemState(ctx context.Context, campaignID, entityID, systemID, key string, gm, public *json.RawMessage, userID string) (json.RawMessage, json.RawMessage, *time.Time, error) {
+	st, err := a.svc.Put(ctx, campaignID, entityID, systemID, key, gm, public, userID)
 	if err != nil {
 		return nil, nil, nil, err
 	}

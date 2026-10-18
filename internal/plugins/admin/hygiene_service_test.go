@@ -238,3 +238,33 @@ func backdate(t *testing.T, path string) {
 		t.Fatalf("failed to backdate file: %v", err)
 	}
 }
+
+func TestScanStaleFiles_SkipsCampaignSystems(t *testing.T) {
+	dir := t.TempDir()
+
+	paths := []string{
+		filepath.Join(dir, "systems", "camp-1", "manifest.json"),
+		filepath.Join(dir, "systems", "camp-1", "data", "spells.json"),
+		filepath.Join(dir, "2026", "10", "orphan.png"),
+	}
+	for _, p := range paths {
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		writeTestFile(t, p, 10)
+		backdate(t, p)
+	}
+
+	svc := &hygieneService{
+		mediaRepo: &mockHygieneMediaRepo{filenames: map[string]bool{}},
+		mediaPath: dir,
+	}
+
+	stale, err := svc.ScanStaleFiles(context.Background())
+	if err != nil {
+		t.Fatalf("ScanStaleFiles() error: %v", err)
+	}
+	if len(stale) != 1 || stale[0].Path != filepath.Join("2026", "10", "orphan.png") {
+		t.Fatalf("stale = %+v, want only the untracked upload", stale)
+	}
+}

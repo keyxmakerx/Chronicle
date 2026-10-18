@@ -413,12 +413,93 @@ type DashboardBlock struct {
 
 // RoleDashboardLayouts holds per-role campaign page layouts. When the
 // dashboard_layout column uses the new role-keyed format, each role can have
-// its own layout. Players and Scribes fall back to Default when their
-// role-specific layout is nil.
+// its own layout. Players, Scribes and the Director fall back to Default when
+// their own layout is nil; guests fall back to DefaultGuestDashboardLayout
+// instead, so a home arranged for members never reaches a visitor.
 type RoleDashboardLayouts struct {
-	Default *DashboardLayout `json:"default,omitempty"`
-	Player  *DashboardLayout `json:"player,omitempty"`
-	Scribe  *DashboardLayout `json:"scribe,omitempty"`
+	Default  *DashboardLayout `json:"default,omitempty"`
+	Player   *DashboardLayout `json:"player,omitempty"`
+	Scribe   *DashboardLayout `json:"scribe,omitempty"`
+	Director *DashboardLayout `json:"director,omitempty"`
+	Guest    *DashboardLayout `json:"guest,omitempty"`
+}
+
+// isEmpty reports whether no role has a saved layout.
+func (r *RoleDashboardLayouts) isEmpty() bool {
+	return r.Default == nil && r.Player == nil && r.Scribe == nil && r.Director == nil && r.Guest == nil
+}
+
+// Home audiences: who a campaign home is arranged for. The names are the
+// `?role=` values of the dashboard-layout endpoint.
+const (
+	HomeDefault  = "default"
+	HomePlayer   = "player"
+	HomeScribe   = "scribe"
+	HomeDirector = "director"
+	HomeGuest    = "guest"
+)
+
+// ValidHomeAudience reports whether name is one of the home audiences.
+func ValidHomeAudience(name string) bool {
+	switch name {
+	case HomeDefault, HomePlayer, HomeScribe, HomeDirector, HomeGuest:
+		return true
+	}
+	return false
+}
+
+// HomeAudience returns which saved home this viewer gets: the owner and every
+// co-DM get the Director's, a viewer with no membership gets the guest one,
+// and members get their role's.
+func (cc *CampaignContext) HomeAudience() string {
+	switch {
+	case cc.CanAuthorDmOnly():
+		return HomeDirector
+	case !cc.IsMember:
+		return HomeGuest
+	case cc.MemberRole == RoleScribe:
+		return HomeScribe
+	case cc.MemberRole == RolePlayer:
+		return HomePlayer
+	}
+	return HomeDefault
+}
+
+// DefaultGuestDashboardLayout is the home a visitor sees until the owner
+// arranges one for guests: the about, the pages open to them and the latest
+// of those. It holds no block a visitor can't use.
+func DefaultGuestDashboardLayout() *DashboardLayout {
+	full := DefaultDashboardLayout()
+	guest := &DashboardLayout{}
+	for _, row := range full.Rows {
+		if row.ID == "row-quick" {
+			continue
+		}
+		guest.Rows = append(guest.Rows, row)
+	}
+	return guest
+}
+
+// HasSavedHome reports whether the audience has a layout of its own saved.
+func (c *Campaign) HasSavedHome(audience string) bool {
+	return c.GetRoleDashboardJSON(audience) != nil
+}
+
+// HomeLayout returns the layout an audience sees and whether it is that
+// audience's own saved layout (false means it is borrowed from a fallback).
+// Fallbacks: guest → the built-in guest home; every other audience → the
+// saved Default → the built-in home.
+func (c *Campaign) HomeLayout(audience string) (*DashboardLayout, bool) {
+	if own := c.GetRoleDashboardJSON(audience); own != nil {
+		return own, true
+	}
+	if audience == HomeGuest {
+		return DefaultGuestDashboardLayout(), false
+	}
+	if def := c.ParseDashboardLayout(); def != nil {
+		return def, false
+	}
+	return DefaultDashboardLayout(), false
 }
 
 // ParseDashboardLayout parses the campaign's dashboard_layout JSON into a
@@ -493,7 +574,7 @@ func (c *Campaign) parseRoleDashboardLayouts() *RoleDashboardLayouts {
 	if err := json.Unmarshal([]byte(*c.DashboardLayout), &roles); err != nil {
 		return nil
 	}
-	if roles.Default == nil && roles.Player == nil && roles.Scribe == nil {
+	if roles.isEmpty() {
 		return nil
 	}
 	return &roles
@@ -521,10 +602,14 @@ func (c *Campaign) GetRoleDashboardJSON(roleName string) *DashboardLayout {
 		return nil
 	}
 	switch roleName {
-	case "player":
+	case HomePlayer:
 		return roles.Player
-	case "scribe":
+	case HomeScribe:
 		return roles.Scribe
+	case HomeDirector:
+		return roles.Director
+	case HomeGuest:
+		return roles.Guest
 	default:
 		return roles.Default
 	}
@@ -549,16 +634,20 @@ func (c *Campaign) SetRoleDashboardJSON(roleName string, layout *DashboardLayout
 	}
 
 	switch roleName {
-	case "player":
+	case HomePlayer:
 		roles.Player = layout
-	case "scribe":
+	case HomeScribe:
 		roles.Scribe = layout
+	case HomeDirector:
+		roles.Director = layout
+	case HomeGuest:
+		roles.Guest = layout
 	default:
 		roles.Default = layout
 	}
 
 	// If all roles are nil, return nil (reset to default).
-	if roles.Default == nil && roles.Player == nil && roles.Scribe == nil {
+	if roles.isEmpty() {
 		return nil, nil
 	}
 

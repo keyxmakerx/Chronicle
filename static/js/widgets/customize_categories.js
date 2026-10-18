@@ -12,7 +12,7 @@
  *     _changes: [{ label, href }] }
  *
  * An existing category's item holds only what differs from what is saved,
- * so a change put back by hand leaves the draft. The Customizer
+ * so a change put back by hand leaves the draft. The Customizer's page layout
  * (customize_page_editor.js) owns `layout` and writes it through
  * Chronicle.customizeCategoryWrite, so the save bar's lines stay this
  * widget's to make.
@@ -490,7 +490,7 @@
 
     function draw() { if (KEY) drawWorkspace(); else drawGrid(); }
 
-    // The Customizer's way into this section; see the header.
+    // The page layout's way into this section; see the header.
     var categoryWrite = function (key, patch, opts) {
       if (!alive) return false;
       write(key, patch, opts);

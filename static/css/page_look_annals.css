@@ -184,6 +184,75 @@
   box-shadow: inset 3px 0 0 color-mix(in srgb, var(--annals-dm) 70%, transparent);
 }
 
+/* ---------- The campaign home ----------
+   The same blocks read as a front page: the name over its rule, the
+   description as an epigraph, the owner's shortcuts as quiet words, and the
+   categories and recent pages as rows with no colour of their own. */
+[data-cz-page="annals"] .cb-hero { align-items: flex-start; gap: 16px; }
+[data-cz-page="annals"] .cb-hero > .min-w-0 { flex: 1 1 auto; }
+[data-cz-page="annals"] .cb-epi {
+  margin-top: 12px;
+  max-width: 62ch;
+  font-style: italic;
+  font-size: 1.02rem;
+  line-height: 1.55;
+  color: var(--color-text-secondary);
+}
+/* Settings is a quiet word beside the name, not a button. */
+[data-cz-page="annals"] .cb-hero .cb-quiet {
+  border: 0; background: none; box-shadow: none;
+  padding: 6px 2px; min-height: 32px;
+  color: var(--annals-link);
+  font-weight: 500;
+}
+[data-cz-page="annals"] .cb-hero .cb-quiet:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+/* Shortcuts: a line of quiet words with monochrome icons. */
+[data-cz-page="annals"] .cb-shortcuts { display: flex; flex-wrap: wrap; gap: 4px 22px; }
+[data-cz-page="annals"] #main-content .cb-shortcut {
+  border-color: transparent; background: none; box-shadow: none;
+  padding: 4px 0; min-height: 32px;
+  transform: none;
+}
+[data-cz-page="annals"] .cb-shortcut > div { gap: 8px; }
+[data-cz-page="annals"] .cb-shortcut .cb-tile { width: auto; height: auto; background: none; }
+[data-cz-page="annals"] .cb-shortcut .cb-tile > i { color: var(--color-text-muted); font-size: 0.85rem; }
+[data-cz-page="annals"] .cb-shortcut h3 { font-weight: 500; font-size: 0.9rem; color: var(--annals-link); }
+[data-cz-page="annals"] .cb-shortcut:hover h3 { text-decoration: underline; text-underline-offset: 3px; }
+[data-cz-page="annals"] .cb-shortcut .cb-sub { display: none; }
+
+/* Categories and recent pages: one row each, lifting on hover. */
+[data-cz-page="annals"] :is(.cb-contents, .cb-recent) .cb-rows {
+  display: flex; flex-direction: column; gap: 0;
+}
+[data-cz-page="annals"] #main-content :is(.cb-contents, .cb-recent) .cb-row {
+  display: flex; align-items: baseline; gap: 12px;
+  padding: 7px 8px; margin: 0 -8px;
+  min-height: 32px;
+  transform: none;
+  overflow: visible;
+}
+[data-cz-page="annals"] .cb-row .cb-swatch,
+[data-cz-page="annals"] .cb-row .cb-band { display: none; }
+[data-cz-page="annals"] .cb-row .cb-row-main { flex: 1 1 auto; min-width: 0; margin: 0; }
+[data-cz-page="annals"] .cb-row .cb-row-name { font-weight: 600; font-size: 0.9rem; }
+[data-cz-page="annals"] .cb-row .cb-row-meta {
+  flex: none; padding-left: 0; gap: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
+}
+[data-cz-page="annals"] .cb-recent .cb-row-body { display: flex; align-items: baseline; gap: 12px; flex: 1 1 auto; min-width: 0; padding: 0; }
+/* The kind is a plain word: no tint, no icon. */
+[data-cz-page="annals"] .cb-row .cb-kind {
+  background: none !important; color: var(--color-text-muted) !important;
+  padding: 0; font-size: 0.8rem; font-weight: 400;
+}
+[data-cz-page="annals"] .cb-row .cb-kind > i { display: none; }
+[data-cz-page="annals"] .cb-row .cb-row-meta > span:last-child { font-size: 0.75rem; }
+@media (max-width: 480px) {
+  [data-cz-page="annals"] .cb-recent .cb-row-body { flex-wrap: wrap; row-gap: 2px; }
+}
+
 /* ---------- Following a connection ----------
    static/js/annals_pull.js runs a view transition and names its parts: the
    page (annals-page), the connections block (annals-rail) and each of its

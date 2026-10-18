@@ -5,8 +5,8 @@ import (
 )
 
 // EntityTypeCustomizeTabTmpl is one tab of a category's Customize workspace.
-// The page layout is the Customizer, which saves with the rest of
-// the draft; the category home and the fields still use today's editors,
+// The page layout is the Customizer's layout tool, which saves with the rest
+// of the draft; the category home and the fields still use today's editors,
 // each saving with its own button.
 templ EntityTypeCustomizeTabTmpl(cc *campaigns.CampaignContext, et *EntityType, tab, csrfToken string) {
 	switch tab {

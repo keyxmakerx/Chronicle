@@ -149,7 +149,16 @@ func (r *tagRepository) Update(ctx context.Context, tag *Tag) error {
 	if err != nil {
 		return fmt.Errorf("checking rows affected: %w", err)
 	}
-	if rowsAffected == 0 {
+	if rowsAffected > 0 {
+		return nil
+	}
+	// MariaDB reports 0 for an UPDATE that matched but changed nothing (the
+	// DSN has no clientFoundRows), so zero alone does not mean the tag is gone.
+	var exists bool
+	if err := r.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM tags WHERE id = ?)`, tag.ID).Scan(&exists); err != nil {
+		return fmt.Errorf("checking tag exists: %w", err)
+	}
+	if !exists {
 		return apperror.NewNotFound("tag not found")
 	}
 

@@ -7,10 +7,10 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
-// pageEditorState is what the Customizer (customize_page_editor.js) starts
-// from: the category's layout as its pages show it, whether nothing is
-// saved yet (the page then draws a built-in arrangement), and the addresses
-// it reads.
+// pageEditorState is what the Customizer's page layout
+// (customize_page_editor.js) starts from: the category's layout as its pages
+// show it, whether nothing is saved yet (the page then draws a built-in
+// arrangement), and the addresses it reads.
 func pageEditorState(cc *campaigns.CampaignContext, et *EntityType) string {
 	base := fmt.Sprintf("/campaigns/%s", cc.Campaign.ID)
 	layout, unsaved := et.Layout, len(et.Layout.Rows) == 0

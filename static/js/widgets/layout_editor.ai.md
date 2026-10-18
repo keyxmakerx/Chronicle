@@ -7,7 +7,7 @@ page layout (`data-context="template"`). Mounted directly via
 `data-widget="layout-editor"` by Customize's Home pages
 (`customize.templ`), its category workspace
 (`entity_type_customize_tab.templ`) and `entity_type_config.templ`. The new
-Customizer replaces it (#1362).
+Customizer's page layout replaces it (#1362).
 
 ## Mount
 ```html

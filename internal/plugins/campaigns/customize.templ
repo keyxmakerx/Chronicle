@@ -93,7 +93,7 @@ templ customizeCategoryWorkspace(cc *CampaignContext, state, key, tab string, et
 			</div>
 		</div>
 	} else if tab == "layout" && etID > 0 {
-		// The Customizer saves through the draft like the rest of Customize.
+		// The Customizer's page layout saves through the draft like the rest of Customize.
 		<div
 			class="czs-ped-host"
 			hx-get={ fmt.Sprintf("/campaigns/%s/entity-types/%s/customize-tab/layout", cc.Campaign.ID, strconv.Itoa(etID)) }
@@ -122,8 +122,8 @@ templ customizeCategoryWorkspace(cc *CampaignContext, state, key, tab string, et
 	}
 }
 
-// customizeHomePages holds the campaign home (with its versions for players
-// and Scribes) and the DM dashboard.
+// customizeHomePages holds the campaign home (with its versions for players,
+// Scribes, the Director and guests) and the DM dashboard.
 templ customizeHomePages(cc *CampaignContext, csrfToken string) {
 	<div class="czs-pad">
 		<h1 class="czs-h1">Home pages</h1>
@@ -136,15 +136,16 @@ templ customizeHomePages(cc *CampaignContext, csrfToken string) {
 }
 
 // dashboardEditorTab holds the campaign home's layout editor, with its
-// Default / Player / Scribe versions, and the DM dashboard's.
+// Default / Player / Scribe / Director / guest versions, and the DM
+// dashboard's.
 templ dashboardEditorTab(cc *CampaignContext, csrfToken string) {
 	<div class="flex flex-col gap-2">
 		<div class="pb-2">
 			<div>
 				<h2 class="text-base font-semibold text-fg mb-0.5">Campaign home</h2>
 				<p class="text-xs text-fg-secondary mb-3">
-					Customize the layout of your campaign's main page. Use the role toggle
-					to create different layouts for Players and Scribes.
+					Customize the layout of your campaign's main page. Use the toggle to
+					arrange a different home for Players, Scribes, the Director and guests.
 				</p>
 				<!-- Role toggle buttons -->
 				<div
@@ -182,11 +183,39 @@ templ dashboardEditorTab(cc *CampaignContext, csrfToken string) {
 						>
 							<i class="fa-solid fa-feather mr-1"></i>Scribe
 						</button>
+						<button
+							type="button"
+							class="text-xs px-3 py-1.5 rounded-md font-medium transition-colors"
+							:class="dashRole === 'director' ? 'bg-surface text-fg shadow-sm' : 'text-fg-secondary hover:text-fg'"
+							@click="dashRole = 'director'"
+						>
+							<i class="fa-solid fa-crown mr-1"></i>For the Director
+						</button>
+						<button
+							type="button"
+							class="text-xs px-3 py-1.5 rounded-md font-medium transition-colors"
+							:class="dashRole === 'guest' ? 'bg-surface text-fg shadow-sm' : 'text-fg-secondary hover:text-fg'"
+							@click="dashRole = 'guest'"
+						>
+							<i class="fa-solid fa-door-open mr-1"></i>For guests
+						</button>
 					</div>
 					<p class="text-xs text-fg-muted">
 						<span x-show="dashRole === 'default'">All members see this layout unless a role-specific override is set.</span>
 						<span x-show="dashRole === 'player'" x-cloak>Players see this layout. Falls back to Default if not customized.</span>
 						<span x-show="dashRole === 'scribe'" x-cloak>Scribes see this layout. Falls back to Default if not customized.</span>
+						<span x-show="dashRole === 'director'" x-cloak>
+							You and every co-DM see this layout.
+							if !cc.Campaign.HasSavedHome(HomeDirector) {
+								Same as home until you change it.
+							}
+						</span>
+						<span x-show="dashRole === 'guest'" x-cloak>
+							Visitors who aren't members see this layout.
+							if !cc.Campaign.HasSavedHome(HomeGuest) {
+								Until you change it, they get a starter home: the about, the pages open to them and the latest of those.
+							}
+						</span>
 					</p>
 				</div>
 			</div>

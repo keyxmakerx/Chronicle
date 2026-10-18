@@ -120,6 +120,35 @@
     return true;
   }
 
+  // --- Thrown dice on first use (ADR-063) ---
+  // A stub until its first call loads dice.js (#chronicle-dice-src), which
+  // replaces it. A load fails after 10 s; a stop() before then still stops
+  // the rolls asked for.
+  var diceLoading = null, diceStops = 0;
+  function viaDice(fn) {
+    return function () {
+      var args = arguments, at = diceStops;
+      diceLoading = diceLoading || new Promise(function (resolve, reject) {
+        var src = document.getElementById('chronicle-dice-src'), url = src && src.getAttribute('data-src');
+        var s = document.createElement('script');
+        function fail() { if (s.onerror && Chronicle.dice === diceStub) diceLoading = null; s.onerror = null; reject(new Error('could not load dice.js')); }
+        if (!WIDGET_SCRIPT_URL.test(url) || url.indexOf('..') !== -1) return fail();
+        s.src = url;
+        s.onload = function () { if (Chronicle.dice === diceStub) fail(); else resolve(); };
+        s.onerror = fail;
+        setTimeout(fail, 10000);
+        document.head.appendChild(s);
+      });
+      return diceLoading.then(function () {
+        var d = Chronicle.dice, r = d[fn].apply(d, args);
+        if (diceStops !== at) d.stop();
+        return r;
+      });
+    };
+  }
+  var diceStub = { roll: viaDice('roll'), catalogue: viaDice('catalogue'), stop: function () { diceStops++; } };
+  if (!Chronicle.dice) Chronicle.dice = diceStub;
+
   /**
    * Report `data-widget` names that are mounted in the DOM but have no
    * registered implementation, once per name per page.
@@ -303,6 +332,19 @@
   });
   window.addEventListener('reauth-cancelled', function () { reauthPending = null; });
 
+  // --- Lazy blocks with nothing for this viewer ---
+  // A lazy block's fragment comes back empty when the plugin serving it has
+  // nothing this viewer may see. A slot marked data-drop-if-empty then
+  // removes its whole block (the nearest [data-block]), heading included,
+  // rather than leave a heading over an empty card.
+  document.addEventListener('htmx:afterSwap', function (evt) {
+    var slot = evt.detail && evt.detail.target;
+    if (!slot || !slot.hasAttribute || !slot.hasAttribute('data-drop-if-empty')) return;
+    if (slot.textContent.trim() || slot.querySelector('img, svg, canvas, iframe')) return;
+    var block = slot.closest('[data-block]');
+    if (block) block.remove();
+  });
+
   // --- HTMX Security Hardening ---
   // Restrict HTMX to same-origin requests only, preventing injected hx-get/hx-post
   // attributes from making cross-origin requests.
@@ -385,10 +427,14 @@
 
   // Re-mount widgets after HTMX content swaps.
   // htmx:afterSettle fires after new content is settled in the DOM.
+  // An outerHTML swap settles on the old, already-detached target, so its new
+  // content is found from the live document instead; mounting there is safe
+  // because already-mounted elements are skipped.
   document.addEventListener('htmx:afterSettle', function (event) {
     if (event.detail && event.detail.target) {
-      mountWidgets(event.detail.target);
-      scheduleUnmatchedWidgetScan(event.detail.target);
+      var root = event.detail.target.isConnected === false ? document.body : event.detail.target;
+      mountWidgets(root);
+      scheduleUnmatchedWidgetScan(root);
     }
   });
 
@@ -401,8 +447,10 @@
 
   // Destroy widgets before HTMX removes content.
   // htmx:beforeSwap fires before old content is removed.
+  // htmx fires beforeSwap for error and empty responses too, then leaves the
+  // old content in place; only a swap that will happen may destroy it.
   document.addEventListener('htmx:beforeSwap', function (event) {
-    if (event.detail && event.detail.target) {
+    if (event.detail && event.detail.target && event.detail.shouldSwap !== false) {
       var elements = event.detail.target.querySelectorAll('[data-widget]');
       for (var i = 0; i < elements.length; i++) {
         destroyElement(elements[i]);
