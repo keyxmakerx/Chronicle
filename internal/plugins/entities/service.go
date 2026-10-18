@@ -2878,8 +2878,15 @@ func (s *entityService) UpdateCategoryDashboardLayout(ctx context.Context, id in
 	if err := json.Unmarshal([]byte(layoutJSON), &layout); err != nil {
 		return apperror.NewBadRequest("invalid dashboard layout JSON")
 	}
+	if err := s.validateCategoryDashboardLayout(ctx, id, layout); err != nil {
+		return err
+	}
+	return s.types.UpdateDashboardLayout(ctx, id, &layoutJSON)
+}
 
-	// Validate structure.
+// validateCategoryDashboardLayout checks a category home's layout the way
+// every save of one does.
+func (s *entityService) validateCategoryDashboardLayout(ctx context.Context, id int, layout campaigns.DashboardLayout) error {
 	if len(layout.Rows) > 50 {
 		return apperror.NewBadRequest("dashboard layout cannot exceed 50 rows")
 	}
@@ -2922,8 +2929,7 @@ func (s *entityService) UpdateCategoryDashboardLayout(ctx context.Context, id in
 			return apperror.NewBadRequest("a row cannot have more than 20 blocks")
 		}
 	}
-
-	return s.types.UpdateDashboardLayout(ctx, id, &layoutJSON)
+	return nil
 }
 
 // ResetCategoryDashboardLayout removes the custom dashboard layout for an

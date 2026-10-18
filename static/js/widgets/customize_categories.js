@@ -8,19 +8,22 @@
  * owner presses Save. Section shape, applied by the entities plugin:
  *
  *   { items: { "<id>" | "new-<slug>": { new, name, name_plural, icon, color,
- *       claimable, parent, clear_parent, copy_from, menu, delete, layout } },
+ *       claimable, parent, clear_parent, copy_from, menu, delete, layout,
+ *       home, description } },
  *     _changes: [{ label, href }] }
  *
  * An existing category's item holds only what differs from what is saved,
  * so a change put back by hand leaves the draft. The Customizer's page layout
- * (customize_page_editor.js) owns `layout` and writes it through
- * Chronicle.customizeCategoryWrite, so the save bar's lines stay this
- * widget's to make.
+ * (customize_page_editor.js) owns `layout`, `home` and `description` and
+ * writes them through Chronicle.customizeCategoryWrite, so the save bar's
+ * lines stay this widget's to make.
  */
 (function () {
   'use strict';
 
   var SECTION = 'categories';
+  // The item keys the Category home tab writes.
+  var HOME_KEYS = { home: true, description: true };
   var COLORS = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#8b5cf6', '#64748b'];
   // Icons the picker offers, with the words a search matches beyond the name.
   var ICONS = [
@@ -134,8 +137,9 @@
     function write(key, patch, opts) {
       var its = items(), it = its[key] || {};
       Object.keys(patch).forEach(function (k) { if (patch[k] === undefined) delete it[k]; else it[k] = patch[k]; });
-      // A category being deleted keeps no layout change; Save would refuse both.
-      if (it.delete) delete it.layout;
+      // A category being deleted keeps no layout or home change; Save would
+      // refuse them.
+      if (it.delete) { delete it.layout; delete it.home; delete it.description; }
       var s = savedById(key);
       if (s) {
         if (it.name === s.name) delete it.name;
@@ -155,8 +159,9 @@
       if (!Object.keys(its).length) { shellSet(null, opts); return; }
       shellSet({ items: its, _changes: changes(its) }, opts);
     }
-    // The keys of an item that the Settings tab shows.
-    function settingsKeys(it) { return Object.keys(it).filter(function (k) { return k !== 'layout'; }); }
+    // The keys of an item that the Settings tab shows; the page layout and
+    // the category home have tabs of their own.
+    function settingsKeys(it) { return Object.keys(it).filter(function (k) { return !HOME_KEYS[k] && k !== 'layout'; }); }
     // The save bar's lines for this section.
     function changes(its) {
       var out = [], byKey = {};
@@ -167,6 +172,7 @@
         else if (it.delete) out.push({ label: 'Delete ' + (s ? s.plural : nm), href: BASE + '/categories' });
         else {
           if (it.layout) out.push({ label: nm + ' page layout', href: BASE + '/categories/' + k + '/layout' });
+          if (it.home || it.description !== undefined) out.push({ label: nm + ' home', href: BASE + '/categories/' + k + '/home' });
           if (settingsKeys(it).length) out.push({ label: nm + ' settings', href: BASE + '/categories/' + k + '/settings' });
         }
       });

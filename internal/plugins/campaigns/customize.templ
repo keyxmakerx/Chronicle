@@ -92,11 +92,11 @@ templ customizeCategoryWorkspace(cc *CampaignContext, state, key, tab string, et
 				@contentTemplatesTab(cc)
 			</div>
 		</div>
-	} else if tab == "layout" && etID > 0 {
-		// The Customizer's page layout saves through the draft like the rest of Customize.
+	} else if (tab == "layout" || tab == "home") && etID > 0 {
+		// The page layout and the category home save through the draft like the rest of Customize.
 		<div
 			class="czs-ped-host"
-			hx-get={ fmt.Sprintf("/campaigns/%s/entity-types/%s/customize-tab/layout", cc.Campaign.ID, strconv.Itoa(etID)) }
+			hx-get={ fmt.Sprintf("/campaigns/%s/entity-types/%s/customize-tab/%s", cc.Campaign.ID, strconv.Itoa(etID), tab) }
 			hx-trigger="load"
 			hx-swap="innerHTML"
 		>

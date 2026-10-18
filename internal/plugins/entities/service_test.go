@@ -16,20 +16,22 @@ import (
 
 // mockEntityTypeRepo implements EntityTypeRepository for testing.
 type mockEntityTypeRepo struct {
-	findByIDFn             func(ctx context.Context, id int) (*EntityType, error)
-	findBySlugFn           func(ctx context.Context, campaignID, slug string) (*EntityType, error)
-	listByCampaignFn       func(ctx context.Context, campaignID string) ([]EntityType, error)
-	listAllFn              func(ctx context.Context) ([]EntityType, error)
-	updateLayoutFn         func(ctx context.Context, id int, layoutJSON string) error
-	updateFieldsSchemaFn   func(ctx context.Context, id int, fieldsJSON string) error
-	seedDefaultsFn         func(ctx context.Context, campaignID string) error
-	createFn               func(ctx context.Context, et *EntityType) error
-	updateFn               func(ctx context.Context, et *EntityType) error
-	deleteFn               func(ctx context.Context, id int) error
-	slugExistsFn           func(ctx context.Context, campaignID, slug string) (bool, error)
-	maxSortOrderFn         func(ctx context.Context, campaignID string) (int, error)
-	listChildTypesFn       func(ctx context.Context, parentID int) ([]EntityType, error)
-	resequenceChildTypesFn func(ctx context.Context, campaignID string, orderedIDs []int) error
+	findByIDFn              func(ctx context.Context, id int) (*EntityType, error)
+	findBySlugFn            func(ctx context.Context, campaignID, slug string) (*EntityType, error)
+	listByCampaignFn        func(ctx context.Context, campaignID string) ([]EntityType, error)
+	listAllFn               func(ctx context.Context) ([]EntityType, error)
+	updateLayoutFn          func(ctx context.Context, id int, layoutJSON string) error
+	updateDashboardFn       func(ctx context.Context, id int, description *string, pinnedIDs []string) error
+	updateDashboardLayoutFn func(ctx context.Context, id int, layoutJSON *string) error
+	updateFieldsSchemaFn    func(ctx context.Context, id int, fieldsJSON string) error
+	seedDefaultsFn          func(ctx context.Context, campaignID string) error
+	createFn                func(ctx context.Context, et *EntityType) error
+	updateFn                func(ctx context.Context, et *EntityType) error
+	deleteFn                func(ctx context.Context, id int) error
+	slugExistsFn            func(ctx context.Context, campaignID, slug string) (bool, error)
+	maxSortOrderFn          func(ctx context.Context, campaignID string) (int, error)
+	listChildTypesFn        func(ctx context.Context, parentID int) ([]EntityType, error)
+	resequenceChildTypesFn  func(ctx context.Context, campaignID string, orderedIDs []int) error
 
 	listByPresetCategoryFn func(ctx context.Context, campaignID, category string) ([]EntityType, error)
 
@@ -128,10 +130,16 @@ func (m *mockEntityTypeRepo) MovePagesAndAdoptPresetCategory(ctx context.Context
 }
 
 func (m *mockEntityTypeRepo) UpdateDashboard(ctx context.Context, id int, description *string, pinnedIDs []string) error {
+	if m.updateDashboardFn != nil {
+		return m.updateDashboardFn(ctx, id, description, pinnedIDs)
+	}
 	return nil
 }
 
 func (m *mockEntityTypeRepo) UpdateDashboardLayout(ctx context.Context, id int, layoutJSON *string) error {
+	if m.updateDashboardLayoutFn != nil {
+		return m.updateDashboardLayoutFn(ctx, id, layoutJSON)
+	}
 	return nil
 }
 
