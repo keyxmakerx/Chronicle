@@ -1,13 +1,15 @@
 // Package calendar - page_timeline.go answers the time line block's question
 // "which dated events belong to this page, and where do they sit between the
-// first of them and the campaign's today?". It reads one calendar, the one
-// the campaign uses, so every dot is placed on the same day counter.
+// first of them and the campaign's today, or the subject's death?". It reads
+// one calendar, the one the campaign uses, so every bead is placed on the
+// same day counter.
 package calendar
 
 import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
@@ -34,6 +36,14 @@ type PageTimeline struct {
 	// Start and End bound the line and Today marks the calendar's current
 	// date, all as Calendar.AbsoluteDay numbers.
 	Start, End, Today int
+	// Dead is set when one of the page's events is a death (isDeathKind);
+	// DeathAbs is that day. The line is then lit to the death, not to today.
+	Dead     bool
+	DeathAbs int
+	// OpenURL and OpenLabel are the link under the line: the calendar by
+	// default, or a time line page that follows this calendar when the app
+	// finds one (the calendar plugin cannot see time lines itself).
+	OpenURL, OpenLabel string
 }
 
 // PageTimelineEvent is one dot: what the peek says and where it goes.
@@ -53,6 +63,11 @@ type PageTimelineEvent struct {
 	DMOnly bool
 	// Repeats is true for a repeating event, which sits on its first date.
 	Repeats bool
+	// EndLabel is the last day of an event that runs over several, as the
+	// calendar writes a date; empty for a one-day event.
+	EndLabel string
+	// Death marks the event that ends a dead subject's line.
+	Death bool
 	// Labelled says whether the dot carries its year under it; see
 	// labelYears.
 	Labelled bool
@@ -77,16 +92,41 @@ func (t *PageTimeline) Percent(abs int) float64 {
 	return p
 }
 
-// FillPercent is how far the filled part of the line runs: up to today.
+// FillPercent is how far the filled part of the line runs: up to today, or
+// up to the death on a dead subject's line.
 func (t *PageTimeline) FillPercent() float64 {
+	if t.Dead {
+		return t.Percent(t.DeathAbs)
+	}
 	if t.Today < t.Start {
 		return 0
 	}
 	return t.Percent(t.Today)
 }
 
-// newPageTimeline lays events (already filtered and in date order) on a
-// line from the first of them to today, or to the last when some lie ahead.
+// ShowsToday says whether the line marks today: a living subject's line that
+// reaches it.
+func (t *PageTimeline) ShowsToday() bool {
+	return !t.Dead && t.Today >= t.Start && t.Today <= t.End
+}
+
+// Later says whether an event is still to come. A dead subject's line has
+// no today, so nothing on it is.
+func (t *PageTimeline) Later(e PageTimelineEvent) bool {
+	return !t.Dead && e.Abs > t.Today
+}
+
+// isDeathKind says whether an event's kind is a death. Chronicle stores no
+// death date for a page, so a Death event on the calendar is what ends a
+// subject's line; "Died" is accepted for campaigns that named the kind so.
+func isDeathKind(e Event) bool {
+	return e.KindSlug == "death" || strings.EqualFold(strings.TrimSpace(e.KindName), "death") || strings.EqualFold(strings.TrimSpace(e.KindName), "died")
+}
+
+// newPageTimeline lays events (already filtered) on a line from the first of
+// them to today, or to the last when some lie ahead. A page with a death
+// event runs from the first to the death (or a later event), whatever today
+// is.
 func newPageTimeline(cal *Calendar, events []Event) *PageTimeline {
 	t := &PageTimeline{
 		CalendarID:   cal.ID,
@@ -94,9 +134,11 @@ func newPageTimeline(cal *Calendar, events []Event) *PageTimeline {
 		TodayLabel:   cal.FullDateLabel(),
 		Today:        cal.CurrentAbsoluteDay(),
 		Total:        len(events),
+		OpenURL:      fmt.Sprintf("/campaigns/%s/calendars/%s/view", cal.CampaignID, cal.ID),
+		OpenLabel:    "Open the calendar",
 	}
 	for _, e := range events {
-		t.Events = append(t.Events, PageTimelineEvent{
+		pe := PageTimelineEvent{
 			ID:        e.ID,
 			Name:      e.Name,
 			Year:      e.Year,
@@ -108,9 +150,26 @@ func newPageTimeline(cal *Calendar, events []Event) *PageTimeline {
 			Abs:       cal.AbsoluteDay(e.Year, e.Month, e.Day),
 			DMOnly:    e.Visibility == "dm_only",
 			Repeats:   e.IsRecurring,
-		})
+			Death:     isDeathKind(e),
+		}
+		if e.EndYear != nil && e.EndMonth != nil && e.EndDay != nil {
+			pe.EndLabel = fmt.Sprintf("%s %d, %d", cal.MonthName(*e.EndMonth), *e.EndDay, *e.EndYear)
+		}
+		t.Events = append(t.Events, pe)
 	}
 	sort.SliceStable(t.Events, func(i, j int) bool { return t.Events[i].Abs < t.Events[j].Abs })
+	// The latest death wins, so a subject raised and slain again ends at the second.
+	for i := len(t.Events) - 1; i >= 0; i-- {
+		if t.Events[i].Death {
+			t.Dead, t.DeathAbs = true, t.Events[i].Abs
+			break
+		}
+	}
+	for i := range t.Events {
+		if t.Events[i].Death && t.Events[i].Abs != t.DeathAbs {
+			t.Events[i].Death = false
+		}
+	}
 	if len(t.Events) > maxPageTimelineEvents {
 		t.Events = t.Events[:maxPageTimelineEvents]
 	}
@@ -120,11 +179,17 @@ func newPageTimeline(cal *Calendar, events []Event) *PageTimeline {
 	}
 	t.Start = t.Events[0].Abs
 	t.End = t.Events[len(t.Events)-1].Abs
-	if t.Today < t.Start {
-		t.Start = t.Today
-	}
-	if t.Today > t.End {
-		t.End = t.Today
+	if t.Dead {
+		if t.DeathAbs > t.End {
+			t.End = t.DeathAbs
+		}
+	} else {
+		if t.Today < t.Start {
+			t.Start = t.Today
+		}
+		if t.Today > t.End {
+			t.End = t.Today
+		}
 	}
 	labelYears(t)
 	return t
