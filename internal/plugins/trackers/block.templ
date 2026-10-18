@@ -1,0 +1,18 @@
+package trackers
+
+import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
+
+// BlockMount is the mount point of the Trackers block. The widget fetches the
+// page's trackers itself, so what it shows is decided by the service for
+// whoever is looking, not by this markup.
+templ BlockMount(campaignID, entityID, csrfToken string) {
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/plugins/trackers/css/trackers.css") }/>
+	<div
+		class="tk"
+		data-widget="trackers"
+		data-campaign-id={ campaignID }
+		data-endpoint={ "/campaigns/" + campaignID + "/trackers/page/" + entityID }
+		data-kinds-endpoint={ "/campaigns/" + campaignID + "/tracker-kinds" }
+		data-csrf-token={ csrfToken }
+	></div>
+}

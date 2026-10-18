@@ -246,7 +246,7 @@ templ PruneCard(res *PruneResult, csrfToken string) {
 				</thead>
 				<tbody>
 					for _, s := range res.Reclaimable {
-						<tr class="border-b border-edge/50">
+						<tr class="border-b border-edge-light">
 							<td class="py-1.5 pr-4 font-mono text-xs">{ s.Slug }</td>
 							<td class="py-1.5 pr-4 font-mono text-xs">{ s.Version }</td>
 							<td class="py-1.5 text-right text-fg-secondary">{ prettyBytes(s.Size) }</td>

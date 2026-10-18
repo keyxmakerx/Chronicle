@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/labstack/echo/v4"
 
@@ -208,6 +209,7 @@ func TestSystemStateRoutes_WriteIsDMTeamOnly(t *testing.T) {
 	}
 	s := string(src)
 	for _, want := range []string{
+		`cg.GET("/system-state/:system/:key", h.List, dmTeam)`,
 		`cg.GET("/entities/:eid/system-state/:system/:key", h.Get)`,
 		`cg.PUT("/entities/:eid/system-state/:system/:key", h.Put, dmTeam)`,
 		`return cc.CanAuthorDmOnly()`,
@@ -215,5 +217,90 @@ func TestSystemStateRoutes_WriteIsDMTeamOnly(t *testing.T) {
 		if !strings.Contains(s, want) {
 			t.Errorf("routes.go missing %s", want)
 		}
+	}
+}
+
+func callList(h *Handler, system, key string, cc *campaigns.CampaignContext) (*httptest.ResponseRecorder, error) {
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/campaigns/camp-1/system-state/"+system+"/"+key, nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id", "system", "key")
+	c.SetParamValues("camp-1", system, key)
+	c.Set("campaign_context", cc)
+	return rec, h.List(c)
+}
+
+func TestHandler_List(t *testing.T) {
+	seed := func(t *testing.T) *Handler {
+		svc, repo, _ := newTestService()
+		repo.names = map[string]string{"npc-1": "Baron", "other-npc": "Intruder"}
+		ctx := context.Background()
+		if _, err := svc.Put(ctx, "camp-1", "npc-1", "drawsteel", "negotiation", raw(`{"secret":1}`), raw(`{"open":2}`), "u"); err != nil {
+			t.Fatal(err)
+		}
+		// A row in another campaign under the same key must never be listed.
+		now := time.Now()
+		repo.rows[rowKey("camp-2", "other-npc", "drawsteel", "negotiation")] = &State{GM: json.RawMessage(`{}`), Public: json.RawMessage(`{}`), UpdatedAt: &now}
+		return NewHandler(svc, fakeAccess{})
+	}
+	tests := []struct {
+		name      string
+		cc        *campaigns.CampaignContext
+		system    string
+		key       string
+		wantCode  int
+		wantItems int
+	}{
+		{"owner lists", ctxFor(campaigns.RoleOwner, false), "drawsteel", "negotiation", 0, 1},
+		{"dm grantee lists", ctxFor(campaigns.RolePlayer, true), "drawsteel", "negotiation", 0, 1},
+		{"scribe forbidden", ctxFor(campaigns.RoleScribe, false), "drawsteel", "negotiation", http.StatusForbidden, 0},
+		{"player forbidden", ctxFor(campaigns.RolePlayer, false), "drawsteel", "negotiation", http.StatusForbidden, 0},
+		{"unknown key is empty", ctxFor(campaigns.RoleOwner, false), "drawsteel", "nothing", 0, 0},
+		{"bad system id", ctxFor(campaigns.RoleOwner, false), "BAD", "negotiation", http.StatusUnprocessableEntity, 0},
+		{"no campaign context", nil, "drawsteel", "negotiation", -1, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec, err := callList(seed(t), tt.system, tt.key, tt.cc)
+			if tt.wantCode != 0 {
+				if tt.wantCode == -1 {
+					if err == nil {
+						t.Fatal("want error")
+					}
+					return
+				}
+				if errCode(err) != tt.wantCode {
+					t.Fatalf("code = %d (err %v), want %d", errCode(err), err, tt.wantCode)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			var body struct {
+				SystemID  string `json:"systemId"`
+				Key       string `json:"key"`
+				Truncated bool   `json:"truncated"`
+				Items     []struct {
+					EntityID   string          `json:"entityId"`
+					EntityName string          `json:"entityName"`
+					Public     json.RawMessage `json:"public"`
+					GM         json.RawMessage `json:"gm"`
+				} `json:"items"`
+			}
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+				t.Fatal(err)
+			}
+			if body.SystemID != tt.system || body.Key != tt.key || body.Truncated || body.Items == nil || len(body.Items) != tt.wantItems {
+				t.Fatalf("body = %s", rec.Body.String())
+			}
+			if tt.wantItems == 1 {
+				it := body.Items[0]
+				if it.EntityID != "npc-1" || it.EntityName != "Baron" || string(it.GM) != `{"secret":1}` || string(it.Public) != `{"open":2}` {
+					t.Errorf("item = %+v", it)
+				}
+			}
+		})
 	}
 }
