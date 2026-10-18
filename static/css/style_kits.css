@@ -437,6 +437,28 @@
 @keyframes kit-wiggle { 25% { transform: rotate(-0.6deg); } 75% { transform: rotate(0.5deg); } }
 [data-cz-page="annals"][data-cz-kit="sketchbook"] .cb-count { background: none; border: 1.3px solid var(--k-hair); border-radius: 50% 46% 52% 44%; }
 
+/* ---------- The page's visibility chip ----------
+   The chip and the editor it unfolds take their shape from tokens
+   (input.css, .perm-chip), so each kit here is values only. */
+[data-cz-page="annals"][data-cz-kit="sharp"] #main-content {
+  --perm-chip-r: 0; --perm-chip-fill: transparent; --perm-chip-edge: 1px solid var(--k-ink); --perm-chip-lift: none;
+  --perm-panel-r: 0; --perm-panel-edge: 1.5px solid var(--k-ink);
+}
+[data-cz-page="annals"][data-cz-kit="sharp"] #main-content .perm-chip:not(.perm-chip-static):hover { background: var(--k-ink); color: var(--k-page); }
+[data-cz-page="annals"][data-cz-kit="ornate"] #main-content {
+  --perm-chip-r: 6px; --perm-chip-fill: var(--k-paper); --perm-chip-edge: 1px solid var(--k-gilt);
+  --perm-panel-r: 8px; --perm-panel-edge: 1px solid var(--k-gilt);
+}
+[data-cz-page="annals"][data-cz-kit="ornate"] #main-content .perm-chip:not(.perm-chip-static):hover { background: var(--k-band); color: var(--k-band-fg); }
+[data-cz-page="annals"][data-cz-kit="lumen"] #main-content {
+  --perm-chip-fill: var(--k-paper); --perm-chip-edge: 1px solid var(--k-hair); --perm-chip-lift: 0 0 0 3px var(--k-glow);
+  --perm-panel-edge: 1px solid var(--k-hair);
+}
+[data-cz-page="annals"][data-cz-kit="sketchbook"] #main-content {
+  --perm-chip-r: 255px 15px 225px 15px / 15px 225px 15px 255px; --perm-chip-fill: var(--k-paper); --perm-chip-edge: 1.5px solid var(--k-line); --perm-chip-lift: none;
+  --perm-panel-r: 4px; --perm-panel-edge: 1.5px solid var(--k-line);
+}
+
 /* ---------- The Director's mark is the same in every kit ----------
    A kit may restyle a row's edge and shadow, never the amber edge on what
    only the Director sees. */

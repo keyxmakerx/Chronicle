@@ -2932,8 +2932,9 @@ func (a *App) RegisterRoutes() {
 
 	// Expose the entities plugin's embedded static assets at
 	// /static/plugins/entities/ (js/characters.js, the Characters page's
-	// mini→full launch enhancement, and the Contents block's script, loaded
-	// on sight).
+	// mini→full launch enhancement, and the scripts below, each loaded on
+	// sight: the Contents block's, Standing's, the Family tree's and the
+	// Characters page's hero builder).
 	a.registerPlugin(PluginRegistration{
 		Slug:     entities.PluginSlug,
 		StaticFS: echo.MustSubFS(entities.StaticAssetsFS, "static"),
@@ -2941,6 +2942,7 @@ func (a *App) RegisterRoutes() {
 			{Name: entities.ContentsWidgetName, Scripts: []string{"js/page_contents.js"}},
 			{Name: "standing", Scripts: []string{"js/standing.js"}},
 			{Name: entities.FamilyTreeWidgetName, Scripts: []string{"js/family_tree.js"}},
+			{Name: "hero-builder", Scripts: []string{"js/hero_builder.js"}},
 		},
 	})
 
