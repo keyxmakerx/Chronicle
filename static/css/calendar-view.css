@@ -2190,3 +2190,41 @@
   .cal-v5 .rlband{grid-template-columns:52px minmax(0,1fr) 32px}
   .cal-v5 .rlnight{grid-template-columns:minmax(72px,1fr) 26px minmax(0,1fr) auto}
 }
+
+/* A hand-set moon that is gone, or not set yet, draws as a dashed ring. */
+.cal-v5 .sil.gone .dg{fill:none;stroke:var(--ss,var(--silS));stroke-width:1;stroke-dasharray:2 1.6}
+/* The Director picks a day in the moon strip to set a hand-set moon on it. */
+.cal-v5 button.gtick{border:0;background:none;padding:3px 0 4px;border-radius:7px;cursor:pointer}
+.cal-v5 button.gtick:hover{background:color-mix(in oklch,var(--gsel) 10%,transparent)}
+.cal-v5 button.gtick:focus-visible{outline:1.5px solid var(--gtx);outline-offset:1px}
+.cal-v5 .gtick.sel{background:color-mix(in oklch,var(--gsel) 14%,transparent);box-shadow:inset 0 0 0 1.5px var(--gsel);color:var(--gsel)}
+.cal-v5 .gtick.mkd::after{content:"";position:absolute;bottom:-2px;left:50%;width:4px;height:4px;margin-left:-2px;border-radius:50%;background:var(--gtx2)}
+/* The Director's controls for a hand-set moon, under the strip. */
+.cal-v5 .mvdm{margin-top:14px;padding-top:12px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:8px}
+.cal-v5 .mvrow{display:flex;align-items:center;flex-wrap:wrap;gap:6px 12px}
+.cal-v5 .mvlab{font:600 11px/1 var(--sans);color:var(--mut)}
+.cal-v5 .mvhint{margin:0;font:500 11.5px/1.45 var(--sans);color:var(--mut)}
+.cal-v5 .mvsec{margin-top:6px}
+.cal-v5 .mvsec .plabel b{font-weight:650;color:var(--ink);letter-spacing:0;text-transform:none;font-size:11px}
+.cal-v5 .mvcount{font:600 11px/1 var(--sans);color:var(--mut);font-variant-numeric:tabular-nums}
+.cal-v5 .mvpick{display:grid;grid-template-columns:repeat(auto-fit,minmax(58px,1fr));gap:6px}
+.cal-v5 .mvpick button{display:flex;flex-direction:column;align-items:center;gap:6px;min-height:58px;padding:9px 4px 8px;border:1px solid var(--edge);border-radius:10px;background:var(--paper);font:550 12px/1.15 var(--sans);color:var(--ink2);text-align:center;min-width:0}
+.cal-v5 .mvpick button span{max-width:100%;overflow-wrap:anywhere}
+.cal-v5 .mvpick button:hover{background:var(--paper2)}
+.cal-v5 .mvpick button[aria-pressed="true"]{border-color:var(--ink);color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+.cal-v5 .mvpick .sil{width:20px;height:20px}
+.cal-v5 .mvmarks{display:flex;flex-direction:column;max-height:220px;overflow-y:auto}
+.cal-v5 .mvmark{display:grid;grid-template-columns:18px minmax(0,1fr) auto auto;gap:6px;align-items:center;min-height:38px;border-top:1px solid var(--hair2);font:500 12.5px/1.3 var(--sans);color:var(--mut)}
+.cal-v5 .mvmark:first-child{border-top:0}
+.cal-v5 .mvmark .sil{width:16px;height:16px}
+.cal-v5 .mvmark.hid{border-left:3px solid rgb(var(--color-warn-rgb));padding-left:8px}
+.cal-v5 .mvmd{border:0;background:none;padding:6px 0;text-align:left;color:inherit;font:inherit;min-width:0;cursor:pointer}
+.cal-v5 .mvmd b{font-weight:550;color:var(--ink);font-variant-numeric:tabular-nums}
+.cal-v5 .mvmd:hover b{text-decoration:underline}
+.cal-v5 .mvact{width:32px;height:32px;border:0;background:none;border-radius:8px;color:var(--mut);display:grid;place-items:center}
+.cal-v5 .mvact:hover{background:var(--hair2);color:var(--ink)}
+.cal-v5 .mvwords summary{cursor:pointer;font:600 12px/1.3 var(--sans);color:var(--ink2);padding:4px 0}
+.cal-v5 .mvwords[open] summary{margin-bottom:6px}
+.cal-v5 .mvwgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;margin:8px 0}
+.cal-v5 .msil.dim{opacity:.45}
+.cal-v5 .gframe .sil.gone .dg{stroke:var(--gtx2)}

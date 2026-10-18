@@ -35,7 +35,8 @@
     { value: 'textarea', label: 'Textarea' },
     { value: 'select', label: 'Select' },
     { value: 'checkbox', label: 'Checkbox' },
-    { value: 'url', label: 'URL' }
+    { value: 'url', label: 'URL' },
+    { value: 'calendar_date', label: 'Calendar date' }
   ];
   var KEPT_TYPES = { link: 'Link to a page', rule: 'Worked out' };
 
@@ -190,7 +191,7 @@
 
           // Type select.
           var typeSelect = document.createElement('select');
-          typeSelect.className = 'input text-xs py-1 w-24';
+          typeSelect.className = 'input text-xs py-1 w-32';
           // A link or worked-out field carries its category or rule, which
           // this editor can't choose, so its type is shown and not changed.
           var kept = KEPT_TYPES[field.type];
@@ -204,6 +205,8 @@
           if (kept) typeSelect.disabled = true;
           typeSelect.addEventListener('change', function () {
             fields[idx].type = this.value;
+            // A calendar date has settings of its own, shown under its row.
+            renderFields();
           });
           row.appendChild(typeSelect);
 
@@ -263,7 +266,114 @@
           row.appendChild(removeBtn);
 
           fieldsList.appendChild(row);
+          if (field.type === 'calendar_date') fieldsList.appendChild(dateSettings(field));
         });
+      }
+
+      // dateSettings edits a calendar date field: who sees it, "how long
+      // ago", and the countdowns that run from it (field_dates.go checks
+      // them on save).
+      function dateSettings(field) {
+        var box = document.createElement('div');
+        box.className = 'ml-4 p-3 rounded border border-gray-200 dark:border-gray-700 space-y-2 text-xs';
+        box.appendChild(check('Only the Director sees this date', !!field.gm_only, function (v) { field.gm_only = v; }));
+        box.appendChild(check('Say how long ago it was', !!field.date_ago, function (v) { field.date_ago = v; }));
+        var head = document.createElement('div');
+        head.className = 'font-semibold text-gray-700 dark:text-gray-300 pt-1';
+        head.textContent = 'Countdowns from this date';
+        box.appendChild(head);
+        field.countdowns = field.countdowns || [];
+        field.countdowns.forEach(function (cd, ci) {
+          var cdBox = document.createElement('div');
+          cdBox.className = 'p-2 rounded bg-gray-50 dark:bg-gray-800 space-y-1.5';
+          var top = document.createElement('div');
+          top.className = 'flex items-center gap-2';
+          top.appendChild(text(cd.name, 'Countdown name, like Soul lingers', 'flex-1', function (v) { cd.name = v; }));
+          top.appendChild(iconBtn('fa-trash-can', 'Remove this countdown', function () { field.countdowns.splice(ci, 1); renderFields(); }));
+          cdBox.appendChild(top);
+          cd.lengths = cd.lengths && cd.lengths.length ? cd.lengths : [{ days: 3 }];
+          cd.lengths.forEach(function (len, li) {
+            var lr = document.createElement('div');
+            lr.className = 'flex items-center gap-2';
+            if (li === 0) {
+              var usual = document.createElement('span');
+              usual.className = 'flex-1 text-gray-500 dark:text-gray-400';
+              usual.textContent = cd.lengths.length > 1 ? 'Usually' : 'Runs';
+              lr.appendChild(usual);
+            } else {
+              lr.appendChild(text(len.name, 'When it runs longer, like Strong-willed', 'flex-1', function (v) { len.name = v; }));
+            }
+            var days = document.createElement('input');
+            days.type = 'number';
+            days.min = '1';
+            days.max = '3650';
+            days.value = len.days || '';
+            days.className = 'input text-xs py-1 w-16';
+            days.setAttribute('aria-label', 'Length in days');
+            days.addEventListener('input', function () { len.days = parseInt(this.value, 10) || 0; });
+            lr.appendChild(days);
+            var dl = document.createElement('span');
+            dl.textContent = 'days';
+            lr.appendChild(dl);
+            if (li > 0) lr.appendChild(iconBtn('fa-xmark', 'Remove this length', function () { cd.lengths.splice(li, 1); renderFields(); }));
+            cdBox.appendChild(lr);
+          });
+          var more = document.createElement('button');
+          more.type = 'button';
+          more.className = 'text-blue-600 dark:text-blue-400 hover:underline';
+          more.textContent = 'Add another length';
+          more.addEventListener('click', function () { cd.lengths.push({ name: '', days: cd.lengths[0].days || 3 }); renderFields(); });
+          cdBox.appendChild(more);
+          cdBox.appendChild(check('Only the Director sees the countdown', !!cd.gm_only, function (v) { cd.gm_only = v; }));
+          box.appendChild(cdBox);
+        });
+        var add = document.createElement('button');
+        add.type = 'button';
+        add.className = 'text-blue-600 dark:text-blue-400 hover:underline';
+        add.innerHTML = '<i class="fa-solid fa-plus mr-1"></i> Add a countdown';
+        add.addEventListener('click', function () { field.countdowns.push({ name: '', lengths: [{ days: 3 }] }); renderFields(); });
+        box.appendChild(add);
+        var hint = document.createElement('p');
+        hint.className = 'text-gray-500 dark:text-gray-400';
+        hint.textContent = 'Each page picks one of a countdown\u2019s lengths. Pages count from the campaign calendar\u2019s today.';
+        box.appendChild(hint);
+        return box;
+      }
+
+      function check(label, on, set) {
+        var l = document.createElement('label');
+        l.className = 'flex items-center gap-2 text-gray-700 dark:text-gray-300';
+        var c = document.createElement('input');
+        c.type = 'checkbox';
+        c.checked = on;
+        c.className = 'h-4 w-4 rounded';
+        c.addEventListener('change', function () { set(this.checked); });
+        l.appendChild(c);
+        l.appendChild(document.createTextNode(label));
+        return l;
+      }
+
+      function text(value, placeholder, cls, set) {
+        var i = document.createElement('input');
+        i.type = 'text';
+        i.value = value || '';
+        i.placeholder = placeholder;
+        i.maxLength = 60;
+        i.className = 'input text-xs py-1 ' + cls;
+        i.setAttribute('aria-label', placeholder);
+        i.addEventListener('input', function () { set(this.value); });
+        return i;
+      }
+
+      function iconBtn(icon, label, onClick) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'text-gray-400 hover:text-red-500 text-xs';
+        b.innerHTML = '<i class="fa-solid ' + icon + '"></i>';
+        b.title = label;
+        b.setAttribute('aria-label', label);
+        b.addEventListener('click', onClick);
+        return b;
       }
 
       renderFields();

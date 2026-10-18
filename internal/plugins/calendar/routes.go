@@ -216,6 +216,15 @@ func registerCalendarJSONRoutes(g *echo.Group, h *Handler) {
 		campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
 			"only the campaign owner or a granted co-DM may change a moon's visibility"))
 
+	// A moon set by hand: its mode and state words, and each day's mark.
+	// Gated like the hidden flag; players read marks only through the
+	// calendar, cut to the ones they were shown.
+	dmMoon := campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
+		"only the campaign owner or a granted co-DM may set a moon")
+	g.PUT("/calendars/:calid/moons/:moonID/mode", h.SetMoonModeAPI, dmMoon)
+	g.PUT("/calendars/:calid/moons/:moonID/marks", h.SetMoonMarkAPI, dmMoon)
+	g.DELETE("/calendars/:calid/moons/:moonID/marks", h.DeleteMoonMarkAPI, dmMoon)
+
 	// Day weather: one reading per day. Read Player (the service hides
 	// future days from anyone who can't see dm_only content); painting,
 	// storing generated weather, clearing and locking are gated CanAuthorDmOnly like

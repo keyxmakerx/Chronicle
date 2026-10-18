@@ -272,7 +272,7 @@ func convertLegacyLayout(sections []struct {
 type FieldDefinition struct {
 	Key     string   `json:"key"`     // Machine-readable identifier (e.g., "age", "alignment").
 	Label   string   `json:"label"`   // Human-readable label (e.g., "Age", "Alignment").
-	Type    string   `json:"type"`    // Input type: text, number, select, textarea, checkbox, url, link, rule.
+	Type    string   `json:"type"`    // Input type: text, number, select, textarea, checkbox, url, link, rule, calendar_date.
 	Section string   `json:"section"` // Grouping for display (e.g., "Basics", "Appearance").
 	Options []string `json:"options"` // Valid values for select fields. Empty for other types.
 	// GMOnly marks the field's VALUE as GM-only: it is stripped from
@@ -303,6 +303,10 @@ type FieldDefinition struct {
 	// RuleID is the homebrew rule a "rule" field is worked out by. A stored
 	// value is one typed by hand and wins over the rule.
 	RuleID int `json:"rule_id,omitempty"`
+	// DateAgo says how long ago a "calendar_date" field's date was.
+	DateAgo bool `json:"date_ago,omitempty"`
+	// Countdowns run from a "calendar_date" field's date (field_dates.go).
+	Countdowns []FieldCountdown `json:"countdowns,omitempty"`
 }
 
 // FieldPlay mirrors the manifest's play block. It is a separate type from the

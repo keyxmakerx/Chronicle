@@ -1256,10 +1256,14 @@
   };
 
   // ------------------------------------------------------------------
-  // Moon hidden toggle, added to the moon view's strip. Gated
-  // CanAuthorDmOnly (routes.go: PUT .../moons/:id/hidden), same as
-  // event-kind creation and era management below.
+  // The Director's moon controls, added to the moon view: the hidden
+  // toggle on every moon, and for a moon set by hand (moon_marks.go) its
+  // mode, the state on the picked day, its marks and the words for its
+  // states. Every write here is gated CanAuthorDmOnly in routes.go.
   // ------------------------------------------------------------------
+  var MOON_STATES = ['full', 'half', 'crescent', 'dark', 'vanished'];
+  var MOON_STATE_DEFAULT = { full: 'Full', half: 'Half', crescent: 'Crescent', dark: 'Dark', vanished: 'Vanished' };
+
   CalendarEditor.prototype._wrapMvRendering = function () {
     var self = this, view = this.view, original = view._mvHTML.bind(view);
     view._mvHTML = function () {
@@ -1271,23 +1275,135 @@
         '<button type="button" class="tog" role="switch" aria-checked="' + !moon.hidden_from_players + '" data-toggle-moon="' + moon.id + '"></button></div>';
       return html.replace('<div class="mvstrip">', toggle + '<div class="mvstrip">');
     };
+    if (view.canAuthorDmOnly) view._mvDirectorHTML = function (moon, day) { return self._moonHandHTML(moon, day); };
+  };
+
+  // _moonStateSil draws a state the way the grid draws a day in it.
+  CalendarEditor.prototype._moonStateSil = function (state) {
+    return this.view._moonSilFor({ phase_mode: 'manual', _marks: [{ abs: 0, k: { state: state } }] }, 0);
+  };
+
+  CalendarEditor.prototype._moonHandHTML = function (moon, day) {
+    var view = this.view, MoonMath = Chronicle.calendarMoon, self = this;
+    var name = esc(moon.name), manual = MoonMath.manual(moon);
+    var realWorld = view.cal.mode === 'reallife';
+    var html = '<div class="mvdm">';
+    if (realWorld) {
+      html += '<p class="mvhint">' + name + ' follows the real Moon, so it cannot be set by hand.</p>';
+      return html + '</div>';
+    }
+    html += '<div class="mvrow"><span class="mvlab">How it moves</span><div class="seg" role="group" aria-label="How ' + name + ' moves">' +
+      '<button type="button" data-moon-mode="cycle" aria-pressed="' + !manual + '">Follows a cycle</button>' +
+      '<button type="button" data-moon-mode="manual" aria-pressed="' + manual + '">Set by hand</button></div></div>' +
+      '<p class="mvhint">' + (manual
+        ? name + ' has no cycle. It stays as you last set it until you set it again, so an old month still shows what ' + name + ' was then.'
+        : 'Following a cycle, ' + name + ' works its phase out from its length and offset. Marks you set by hand are kept, and come back if you switch back.') + '</p>';
+    if (!manual) return html + '</div>';
+
+    var abs = Chronicle.calendarDate.dayIndex(view.cal, day.y, day.m, day.d);
+    var here = (moon._marks || []).filter(function (x) { return x.abs === abs; })[0];
+    here = here ? here.k : null;
+    html += '<div class="phead mvsec"><h4 class="plabel">Set ' + name + ' on <b>' + esc(view._dateLabel(day.y, day.m, day.d)) + '</b></h4></div>' +
+      '<div class="mvpick" role="group" aria-label="State on this day">' + MOON_STATES.map(function (st) {
+        return '<button type="button" data-moon-state="' + st + '" aria-pressed="' + !!(here && here.state === st) + '">' +
+          self._moonStateSil(st) + '<span>' + esc(MoonMath.word(moon, st)) + '</span></button>';
+      }).join('') + '</div>' +
+      '<div class="sw"><span>Players see this change<small>' + (here ? (here.shown ? 'They see this mark.' : 'Only you see this mark.') : 'Applies to the next state you set.') + '</small></span>' +
+      '<button type="button" class="tog" role="switch" aria-checked="' + !!(here ? here.shown : this._moonShowNext) + '" data-moon-shown></button></div>' +
+      '<p class="mvhint">Holds from this day until your next mark. Pick another day in the strip above.</p>';
+
+    var marks = moon._marks || [];
+    html += '<div class="phead mvsec"><h4 class="plabel">Marks</h4><span class="sp"></span><span class="mvcount">' + marks.length + '</span></div>';
+    html += marks.length ? '<div class="mvmarks">' + marks.map(function (x) {
+      var k = x.k, key = k.year + '_' + k.month + '_' + k.day;
+      return '<div class="mvmark' + (k.shown ? '' : ' hid') + '">' + self._moonStateSil(k.state) +
+        '<button type="button" class="mvmd" data-mv-day="' + key + '"><b>' + esc(view._dateLabel(k.year, k.month, k.day)) + '</b> ' +
+        esc(MoonMath.word(moon, k.state)) + (k.shown ? ', players see it' : ', only you') + '</button>' +
+        '<button type="button" class="mvact" data-mark-eye="' + key + '" aria-label="' + (k.shown ? 'Hide this mark from players' : 'Show this mark to players') + '"><i class="fa-solid ' + (k.shown ? 'fa-eye' : 'fa-eye-slash') + '"></i></button>' +
+        '<button type="button" class="mvact" data-mark-del="' + key + '" aria-label="Remove this mark"><i class="fa-solid fa-trash-can"></i></button></div>';
+    }).join('') + '</div>' : '<p class="mvhint">No marks yet. Pick a day and a state.</p>';
+
+    html += '<details class="mvwords"><summary>Words for each state</summary><p class="mvhint">Your words show everywhere ' + name + ' does, so “Vanished” can read “Gone below”.</p>' +
+      '<div class="mvwgrid">' + MOON_STATES.map(function (st) {
+        var v = moon.state_names && moon.state_names[st] ? moon.state_names[st] : '';
+        return '<label class="fld"><span>' + MOON_STATE_DEFAULT[st] + '</span><input type="text" maxlength="40" data-moon-word="' + st + '" value="' + esc(v) + '" placeholder="' + MOON_STATE_DEFAULT[st] + '"></label>';
+      }).join('') + '</div><button type="button" class="btn sm" data-moon-words>Save words</button></details>';
+    return html + '</div>';
   };
 
   CalendarEditor.prototype._bindMvCapture = function () {
     var self = this, view = this.view;
+    var moonURL = function (moon, tail) { return view.apiBase + '/moons/' + moon.id + tail; };
+    // write sends one change and redraws from the moon the server returns.
+    var write = function (url, opts, done) {
+      Chronicle.apiFetch(url, opts).then(function (resp) {
+        return resp.json().catch(function () { return {}; }).then(function (body) {
+          if (!resp.ok) { view.say(body && body.message ? body.message : 'Could not change the moon.'); return; }
+          view.setMoon(body);
+          if (done) view.say(done);
+        });
+      }).catch(function () { view.say('Could not reach the server. Nothing changed.'); });
+    };
     view.mvEl.addEventListener('click', function (e) {
+      var moon = view.moonById(view.mvMoonId) || (view.cal.moons || [])[0];
       var t = e.target.closest('[data-toggle-moon]');
-      if (!t) return;
-      e.stopPropagation();
-      var moon = view.moonById(t.dataset.toggleMoon);
+      if (t) {
+        e.stopPropagation();
+        moon = view.moonById(t.dataset.toggleMoon);
+        if (!moon) return;
+        var hidden = !moon.hidden_from_players;
+        Chronicle.apiFetch(moonURL(moon, '/hidden'), { method: 'PUT', body: { hidden: hidden } }).then(function (resp) {
+          if (!resp.ok) { view.say('Could not change the moon’s visibility.'); return; }
+          moon.hidden_from_players = hidden;
+          view._refreshMv();
+          view.say(moon.name + (hidden ? ' hidden from players.' : ' shown to players.'));
+        });
+        return;
+      }
       if (!moon) return;
-      var hidden = !moon.hidden_from_players;
-      Chronicle.apiFetch(view.apiBase + '/moons/' + moon.id + '/hidden', { method: 'PUT', body: { hidden: hidden } }).then(function (resp) {
-        if (!resp.ok) { view.say('Could not change the moon’s visibility.'); return; }
-        moon.hidden_from_players = hidden;
-        view._refreshMv();
-        view.say(moon.name + (hidden ? ' hidden from players.' : ' shown to players.'));
-      });
+      var day = view.mvDayDate(), abs = Chronicle.calendarDate.dayIndex(view.cal, day.y, day.m, day.d);
+      var here = (moon._marks || []).filter(function (x) { return x.abs === abs; })[0];
+      here = here ? here.k : null;
+
+      if ((t = e.target.closest('[data-moon-mode]'))) {
+        e.stopPropagation();
+        if (t.getAttribute('aria-pressed') === 'true') return;
+        var mode = t.dataset.moonMode;
+        write(moonURL(moon, '/mode'), { method: 'PUT', body: { mode: mode, state_names: moon.state_names || null } },
+          moon.name + (mode === 'manual' ? ' is set by hand now.' : ' follows its cycle now.'));
+      } else if ((t = e.target.closest('[data-moon-state]'))) {
+        e.stopPropagation();
+        var k = { year: day.y, month: day.m, day: day.d, state: t.dataset.moonState, shown: here ? !!here.shown : !!self._moonShowNext };
+        write(moonURL(moon, '/marks'), { method: 'PUT', body: k },
+          moon.name + ' is ' + Chronicle.calendarMoon.word(moon, k.state) + ' from ' + view._dateLabel(day.y, day.m, day.d) + '.');
+      } else if ((t = e.target.closest('[data-moon-shown]'))) {
+        e.stopPropagation();
+        if (!here) {
+          self._moonShowNext = !self._moonShowNext;
+          view._refreshMv();
+          return;
+        }
+        write(moonURL(moon, '/marks'), { method: 'PUT', body: { year: here.year, month: here.month, day: here.day, state: here.state, shown: !here.shown } },
+          here.shown ? 'Players no longer see that change.' : 'Players see that change.');
+      } else if ((t = e.target.closest('[data-mark-eye]'))) {
+        e.stopPropagation();
+        var p = t.dataset.markEye.split('_').map(Number);
+        var m2 = (moon.marks || []).filter(function (x) { return x.year === p[0] && x.month === p[1] && x.day === p[2]; })[0];
+        if (!m2) return;
+        write(moonURL(moon, '/marks'), { method: 'PUT', body: { year: m2.year, month: m2.month, day: m2.day, state: m2.state, shown: !m2.shown } },
+          m2.shown ? 'Players no longer see that change.' : 'Players see that change.');
+      } else if ((t = e.target.closest('[data-mark-del]'))) {
+        e.stopPropagation();
+        var q = t.dataset.markDel.split('_').map(Number);
+        write(moonURL(moon, '/marks?year=' + q[0] + '&month=' + q[1] + '&day=' + q[2]), { method: 'DELETE' }, 'Mark removed.');
+      } else if ((t = e.target.closest('[data-moon-words]'))) {
+        e.stopPropagation();
+        var names = {};
+        Array.prototype.forEach.call(view.mvEl.querySelectorAll('[data-moon-word]'), function (inp) {
+          if (inp.value.trim()) names[inp.dataset.moonWord] = inp.value.trim();
+        });
+        write(moonURL(moon, '/mode'), { method: 'PUT', body: { mode: moon.phase_mode || 'manual', state_names: names } }, 'Words saved.');
+      }
     }, true);
   };
 

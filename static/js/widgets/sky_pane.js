@@ -86,6 +86,13 @@
   // Phase name thresholds mirror Moon.MoonPhaseName exactly (Go,
   // internal/plugins/calendar/model.go) so the pane's caption and the
   // server's own phase name never disagree.
+  // handWord names a hand-set moon's state today in the Director's word.
+  var HAND_WORD = { full: 'Full', half: 'Half', crescent: 'Crescent', dark: 'Dark', vanished: 'Vanished' };
+  function handWord(cal, mo) {
+    var st = SW.handState(cal, mo, SW.dayIndex(cal, cal.current_year, cal.current_month, cal.current_day));
+    var w = mo.state_names && mo.state_names[st];
+    return w && String(w).trim() ? String(w).trim() : HAND_WORD[st] || '';
+  }
   function phaseName(p) {
     if (p < .0625 || p >= .9375) return 'New Moon';
     if (p < .1875) return 'Waxing Crescent';
@@ -155,7 +162,14 @@
     // and actively wrong for a GM — it would hide the GM's own hidden moon
     // from the GM. The server decides what a viewer receives; this widget
     // trusts the response as-is (CLAUDE.md).
-    var astro = (cal.moons || []).map(function (mo) {
+    // A moon set by hand is missing from the sky while it is vanished, or
+    // before the first mark this viewer was shown.
+    var today = Math.floor(tCont);
+    var astro = (cal.moons || []).filter(function (mo) {
+      if (mo.phase_mode !== 'manual') return true;
+      var st = SW.handState(cal, mo, today);
+      return st && st !== 'vanished';
+    }).map(function (mo) {
       var m = skym.moon(mo, tCont, year, month, day, h24);
       return { mo: mo, m: m, up: m.alt > -6 * SW.D2R };
     });
@@ -303,7 +317,7 @@
   // The sky in words: weather, the brightest moon and its phase, the time.
   function describe(model, st) {
     var cal = model.calendar, bits = [st.weatherLabel], b = brightestMoon(st);
-    if (b) bits.push(b.mo.name + ' – ' + phaseName(b.m.p));
+    if (b) bits.push(b.mo.name + ' – ' + (b.mo.phase_mode === 'manual' ? handWord(cal, b.mo) : phaseName(b.m.p)));
     bits.push(hhmm(cal.current_hour || 0, cal.current_minute || 0));
     return bits.join(' · ');
   }

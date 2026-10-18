@@ -5987,6 +5987,13 @@ mark.era-w { background: var(--era-hl-strong); color: inherit; border-radius: 3p
 .era-hl-field { align-self: flex-start; display: inline-block; background: var(--era-hl); border-radius: 0.3125rem; box-shadow: -3px 0 0 var(--era-hl-line); padding: 0 0.375rem; animation: era-fade var(--dur-large) var(--ease-out) both; }
 .era-was { font-size: 0.72rem; color: var(--color-text-muted); margin-top: 0.125rem; }
 .era-usual-val { margin-top: 0.25rem; font-size: 0.72rem; color: var(--color-text-muted); text-decoration: underline; }
+/* A calendar date field's "how long ago" and its countdowns (attributes.js). */
+.cd-when { display: block; font-size: 0.75rem; color: var(--color-text-muted); }
+.cd-left { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.cd-ticks { display: inline-flex; gap: 3px; }
+.cd-ticks i { width: 6px; height: 6px; border-radius: 50%; background: var(--color-border); }
+.cd-ticks i.on { background: var(--color-accent); }
+.cd-dm { margin-left: 0.375rem; font-size: 0.7rem; color: rgb(var(--color-warn-rgb)); }
 /* The moon chip under a moon's lore page's name. */
 .moon-chips { display: flex; width: fit-content; flex-wrap: wrap; gap: 0.375rem; margin-top: 0.375rem; }
 .moon-chip { white-space: nowrap; display: inline-flex; align-items: center; gap: 0.375rem; border: 1px solid var(--color-border); border-radius: 9999px; padding: 0.1875rem 0.625rem 0.1875rem 0.25rem; font-size: 0.8rem; color: var(--color-text-primary); background: var(--color-card-bg); transition: border-color var(--dur-micro) var(--ease-out); }
