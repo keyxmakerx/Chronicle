@@ -21,6 +21,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 		return cc.CanAuthorDmOnly()
 	}, "only the campaign owner or a member with DM access may do this")
 
+	cg.GET("/system-state/:system/:key", h.List, dmTeam)
 	cg.GET("/entities/:eid/system-state/:system/:key", h.Get)
 	cg.PUT("/entities/:eid/system-state/:system/:key", h.Put, dmTeam)
 }

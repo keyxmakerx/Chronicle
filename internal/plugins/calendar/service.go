@@ -454,6 +454,8 @@ type calendarService struct {
 	gameNights  GameNightsAffectedByAnchorMove
 	publisher   CalendarEventPublisher
 	monthRemap  SessionMonthRemapper
+	rollRepo    EventRollRepository
+	rollTables  RollTableSource
 }
 
 // NewCalendarService constructs a CalendarService over the four

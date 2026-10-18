@@ -51,6 +51,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/npcs"
 	"github.com/keyxmakerx/chronicle/internal/plugins/packages"
 	"github.com/keyxmakerx/chronicle/internal/plugins/pageblocks"
+	"github.com/keyxmakerx/chronicle/internal/plugins/pagetests"
 	"github.com/keyxmakerx/chronicle/internal/plugins/quests"
 	"github.com/keyxmakerx/chronicle/internal/plugins/restore"
 	"github.com/keyxmakerx/chronicle/internal/plugins/rolltables"
@@ -2933,8 +2934,9 @@ func (a *App) RegisterRoutes() {
 
 	// Expose the entities plugin's embedded static assets at
 	// /static/plugins/entities/ (js/characters.js, the Characters page's
-	// mini→full launch enhancement, and the Contents block's script, loaded
-	// on sight).
+	// mini→full launch enhancement, and the scripts below, each loaded on
+	// sight: the Contents block's, Standing's, the Family tree's and the
+	// Characters page's hero builder).
 	a.registerPlugin(PluginRegistration{
 		Slug:     entities.PluginSlug,
 		StaticFS: echo.MustSubFS(entities.StaticAssetsFS, "static"),
@@ -2942,6 +2944,7 @@ func (a *App) RegisterRoutes() {
 			{Name: entities.ContentsWidgetName, Scripts: []string{"js/page_contents.js"}},
 			{Name: "standing", Scripts: []string{"js/standing.js"}},
 			{Name: entities.FamilyTreeWidgetName, Scripts: []string{"js/family_tree.js"}},
+			{Name: "hero-builder", Scripts: []string{"js/hero_builder.js"}},
 		},
 	})
 
@@ -3778,6 +3781,15 @@ func (a *App) RegisterRoutes() {
 	}); ok {
 		gated.SetEntityVisibilityGate(&entityVisibilityFilterAdapter{svc: entityService})
 	}
+	// Event rolls: their storage, and the rolling tables a table roll draws
+	// from, read through the rolltables service (never its storage).
+	if rolls, ok := calendarService.(interface {
+		SetEventRollRepository(calendar.EventRollRepository)
+		SetRollTableSource(calendar.RollTableSource)
+	}); ok {
+		rolls.SetEventRollRepository(calendar.NewEventRollRepository(a.DB))
+		rolls.SetRollTableSource(calendarRollTablesAdapter{svc: rolltables.NewService(rolltables.NewRepository(a.DB))})
+	}
 	calendarHandler := calendar.NewHandler(calendarService)
 	// Optional UX nicety: suggest the owner's own stored account timezone as
 	// the real-world calendar wizard step's starting default (see
@@ -3823,7 +3835,8 @@ func (a *App) RegisterRoutes() {
 	// mount's data-can-edit="true" and opens calendar_event_drawer.js's full
 	// event editor and calendar_weather_sheet.js's weather calendar (both
 	// loaded first so they exist when the editor binds; the drawer's
-	// repeat-by-rule logic is calendar_rule.js, loaded before it), and
+	// repeat-by-rule logic is calendar_rule.js, loaded before it; its Roll
+	// section is the on-sight widget calendar_event_roll), and
 	// calendar_open.js peeks and opens the Calendars page's cards. rulebook.js
 	// mounts on the Rules page's data-widget="rulebook" when a system ships a
 	// book, and rulebook_editor.js on the editor page's
@@ -5863,6 +5876,27 @@ func (a *App) RegisterRoutes() {
 		slog.Warn("trackers plugin degraded — the Trackers block is not available")
 	}
 
+	// Tests: montages and other long tests on a page, and how they ended.
+	// Built before encounters, whose versions are picked by a test's result.
+	encounterPages := &encountersPageAdapter{svc: entityService, cards: entities.NewPageCards(a.DB)}
+	var encounterResults encounters.ResultDirectory
+	a.registerPlugin(PluginRegistration{
+		Slug:     pagetests.PluginSlug,
+		StaticFS: echo.MustSubFS(pagetests.StaticAssetsFS, "static"),
+		Widgets: []PluginWidget{
+			{Name: "page_tests", Scripts: []string{"js/page_tests.js"}},
+		},
+	})
+	if a.PluginHealth.IsHealthy(pagetests.PluginSlug) {
+		testsSvc := pagetests.NewService(pagetests.NewRepository(a.DB), &pageTestsPageAdapter{pages: encounterPages},
+			pageTestsCalendar{cal: &questCalendarAdapter{svc: calendarService, addons: addonService}})
+		pagetests.RegisterRoutes(e, pagetests.NewHandler(testsSvc), campaignService, authService)
+		registerPageTestsBlock(blockRegistry, testsSvc)
+		encounterResults = encounterResultsAdapter{svc: testsSvc}
+	} else {
+		slog.Warn("page tests plugin degraded — the Tests block is not available")
+	}
+
 	// Encounters: fights planned on a page, loaded in Foundry.
 	a.registerPlugin(PluginRegistration{
 		Slug:     encounters.PluginSlug,
@@ -5872,8 +5906,7 @@ func (a *App) RegisterRoutes() {
 		},
 	})
 	if a.PluginHealth.IsHealthy(encounters.PluginSlug) {
-		encounterSvc := encounters.NewService(encounters.NewRepository(a.DB),
-			&encountersPageAdapter{svc: entityService, cards: entities.NewPageCards(a.DB)})
+		encounterSvc := encounters.NewService(encounters.NewRepository(a.DB), encounterPages, encounterResults)
 		encounterAPI.attach(encounterSvc)
 		encounters.RegisterRoutes(e, encounters.NewHandler(encounterSvc), campaignService, authService)
 	} else {
@@ -5883,12 +5916,21 @@ func (a *App) RegisterRoutes() {
 	// AI Import's record kinds: the features beyond pages it may write.
 	// Wired here, after the rulebook and rolling tables exist; a degraded
 	// plugin's kind is left out, so its blocks are refused at review.
-	aiKinds := []records.Kind{
-		records.CalendarKind{Svc: calendarService, Pages: entityService},
-		records.EventKind{Svc: calendarService, Tiers: campaignService, Pages: entityService},
-		records.WeatherKind{Svc: calendarService},
+	// Event rolls are the calendar service's roll half; nil (a service
+	// without one) leaves `roll:`, the rolls generator and rolled nights out.
+	var aiRolls records.EventRollAPI
+	if rs, ok := calendarService.(calendar.EventRollService); ok {
+		aiRolls = rs
 	}
 	aiTables := records.TableKind{Svc: aiRollTablesAdapter{rollTablesSvc}}
+	aiKinds := []records.Kind{
+		records.CalendarKind{Svc: calendarService, Pages: entityService},
+		records.EventKind{Svc: calendarService, Tiers: campaignService, Pages: entityService, Rolls: aiRolls, Tables: aiTables.Svc},
+		records.WeatherKind{Svc: calendarService},
+	}
+	if aiRolls != nil {
+		aiKinds = append(aiKinds, records.RollNightKind{Cal: calendarService, Rolls: aiRolls})
+	}
 	aiHouseRules := records.HouseRuleKind{Book: systemHandler, SystemOf: func(ctx context.Context, campaignID string) string {
 		c, err := campaignService.GetByID(ctx, campaignID)
 		if err != nil {
@@ -5931,14 +5973,14 @@ func (a *App) RegisterRoutes() {
 		aiKinds = append(aiKinds, records.PageMapKind{Svc: aiPageMaps, Entities: entityService})
 	}
 	aiKinds = append(aiKinds,
-		records.GeneratorKind{Cal: calendarService, Tables: aiTables, Weather: calendarService},
+		records.GeneratorKind{Cal: calendarService, Tables: aiTables, Weather: calendarService, Rolls: aiRolls},
 	)
 	aiRegistry := records.NewRegistry(aiKinds...)
 	aiWorkspaceHandler.SetRecords(aiRegistry)
 
 	// The read-only lookups an AI may ask for.
 	aiLookups := &records.Lookups{
-		Cal: calendarService, Weather: calendarService, Maps: aiMapsAdapter{mapsService}, Pages: entityService,
+		Cal: calendarService, Weather: calendarService, Rolls: aiRolls, Maps: aiMapsAdapter{mapsService}, Pages: entityService,
 		Rels: relService, Notes: noteSvc, Rules: &aiHouseRules,
 		Entries:  aiSystemEntriesAdapter{choices: characterChoiceSvc},
 		Party:    &aiPartyAdapter{screen: dmScreenSvc, nights: sessionsService, members: campaignService},
@@ -6028,6 +6070,7 @@ func (a *App) RegisterRoutes() {
 // /static/js/widgets/ rather than in a plugin: each loads on the first page
 // that mounts it (ADR-063). Helpers come first, the registering script last.
 var coreWidgets = []PluginWidget{
+	{Name: "calendar_event_roll", Scripts: []string{"/static/js/widgets/calendar_event_roll.js"}},
 	{Name: "journal", Scripts: []string{"/static/js/widgets/journal_list.js", "/static/js/widgets/journal.js"}},
 	{Name: "permissions", Scripts: []string{"/static/js/widgets/permissions.js"}},
 	{Name: "groups", Scripts: []string{"/static/js/widgets/groups.js"}},

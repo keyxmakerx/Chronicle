@@ -1,6 +1,7 @@
 package entities
 
 import (
+	"html"
 	"strconv"
 	"strings"
 
@@ -13,9 +14,12 @@ import (
 // self-contained handler, built here from fixed text and integer IDs only.
 
 // inlineHandler wraps a JS body in a ComponentScript with an empty Function so
-// templ writes only the call into the attribute and emits no script tag.
+// templ writes only the call into the attribute and emits no script tag. templ
+// writes Call into the double-quoted attribute as is, so the body is
+// HTML-escaped here: a double quote in it (markup the handler inserts) would
+// otherwise end the attribute and print the rest of the script on the page.
 func inlineHandler(name, body string) templ.ComponentScript {
-	return templ.ComponentScript{Name: name, Function: "", Call: body}
+	return templ.ComponentScript{Name: name, Function: "", Call: html.EscapeString(body)}
 }
 
 // castFoldJS opens the named box in the band's fold, or closes the fold when

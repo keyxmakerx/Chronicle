@@ -69,7 +69,7 @@ templ UpcomingEventsEmbed(cc *campaigns.CampaignContext, cal *Calendar, events [
 func eventDotStyle(evt Event) string {
 	color := evt.KindColor
 	if color == "" {
-		return "background-color: var(--color-fg-secondary, #6b7280); opacity: 0.6; color: white"
+		return "background-color: var(--color-text-secondary, #6b7280); opacity: 0.6; color: white"
 	}
 	return fmt.Sprintf("background-color: %s; color: white", color)
 }

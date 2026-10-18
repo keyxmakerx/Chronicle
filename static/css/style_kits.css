@@ -437,6 +437,176 @@
 @keyframes kit-wiggle { 25% { transform: rotate(-0.6deg); } 75% { transform: rotate(0.5deg); } }
 [data-cz-page="annals"][data-cz-kit="sketchbook"] .cb-count { background: none; border: 1.3px solid var(--k-hair); border-radius: 50% 46% 52% 44%; }
 
+/* ---------- Time lines ----------
+   The lean line under a page's title (page_timeline.css) and both of its
+   popups (the fading corner and the classic card, paper.css) are drawn from
+   these --kit-tl-* tokens: the line's weight and shape, the beads' size,
+   corners and ring, the corner popup's radius, edge, stem, fill and glow, and
+   the classic card's corners, edge, fill and shadow. The lit colour is the
+   kit's accent, so the campaign's colour when the owner picked one. The
+   popup (#chc) opens outside the page, so it takes the kit's palette and
+   faces here; the Customizer's sample popups stay in Material. */
+[data-cz-kit] #chc:is([data-look="corner"], [data-look="kit"]) {
+  --color-card-bg: var(--k-paper);
+  --color-text-primary: var(--k-ink);
+  --color-text-body: var(--k-ink);
+  --color-text-secondary: var(--k-mut);
+  --color-text-muted: var(--k-mut);
+  --color-border: var(--k-hair);
+  --color-accent: var(--kit-acc);
+  --color-accent-link: var(--kit-acc);
+  font-family: var(--kit-bf, inherit);
+}
+[data-cz-kit] #chc[data-look="corner"] .chc__title { font-family: var(--kit-hf, var(--annals-head)); }
+[data-cz-kit] #chc[data-look="kit"] .chc__title { font-family: var(--kit-hf, var(--annals-head)); }
+
+/* Sharp: a crisp two-pixel rule, square beads, an ink corner, a square ink
+   frame under a heavy top rule. */
+[data-cz-kit="sharp"] {
+  --kit-tl-h: 2px;
+  --kit-tl-top: 11px;
+  --kit-tl-wash: none;
+  --kit-tl-bead: 10px;
+  --kit-tl-bead-r: 0;
+}
+[data-cz-kit="sharp"] #chc {
+  --kit-tl-pop-r: 0px;
+  --kit-tl-pop-ew: 2px;
+  --kit-tl-pop-sw: 2px;
+  --kit-tl-pop-edge: var(--k-ink);
+  --kit-tl-card-r: 0;
+  --kit-tl-card-b: 1.5px solid var(--k-ink);
+  --kit-tl-card-sh: none;
+}
+[data-cz-kit="sharp"] .ptl-yr { font-family: var(--kit-lf, var(--kit-hf, inherit)); font-weight: 500; letter-spacing: 0.1em; }
+[data-cz-kit="sharp"] #chc[data-look="kit"] .chc__in { border-top-width: 4px; }
+[data-cz-kit="sharp"] #chc:is([data-look="corner"], [data-look="kit"]) .chc__title { font-size: 14px; }
+
+/* Ornate: a double gilt line, beads ringed in gilt, a double gilt corner
+   and frame; the popup's words in italic. */
+[data-cz-kit="ornate"] {
+  --kit-tl-h: 4px;
+  --kit-tl-top: 10px;
+  --kit-tl-wash: none;
+  --kit-tl-shape: linear-gradient(#000 0 1px, transparent 1px 3px, #000 3px);
+  --kit-tl-ring: 0 0 0 3px var(--k-gilt);
+  --kit-tl-ring-soft: 0 0 0 3px var(--k-gilt);
+  --kit-tl-yr-top: 13px;
+}
+[data-cz-kit="ornate"] #chc {
+  --kit-tl-pop-r: 0px;
+  --kit-tl-pop-ew: 3px;
+  --kit-tl-pop-es: double;
+  --kit-tl-pop-sw: 1px;
+  --kit-tl-pop-edge: var(--k-gilt);
+  --kit-tl-card-r: 0;
+  --kit-tl-card-b: 3px double var(--k-gilt);
+  --kit-tl-card-sh: 0 10px 24px -10px rgb(40 20 10 / 0.45);
+}
+.dark[data-cz-kit="ornate"] #chc { --kit-tl-card-sh: 0 12px 26px -10px rgb(0 0 0 / 0.7); }
+[data-cz-kit="ornate"] .ptl-yr { font-family: var(--kit-hf, inherit); font-style: italic; font-weight: 500; font-size: 13px; }
+[data-cz-kit="ornate"] #chc:is([data-look="corner"], [data-look="kit"]) .chc__in { font-style: italic; font-size: 13.5px; }
+[data-cz-kit="ornate"] #chc:is([data-look="corner"], [data-look="kit"]) .chc__title { font-style: normal; font-size: 17px; line-height: 1.15; }
+
+/* Flowing: a drawn wave over the wash, pebble beads, a soft corner with no
+   edge on the wash, an uneven rounded card with a low shadow. */
+[data-cz-kit="flowing"] {
+  --kit-tl-h: 8px;
+  --kit-tl-top: 8px;
+  --kit-tl-shape: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='8'%3E%3Cpath d='M0 4 Q12 0.6 24 4 T48 4' fill='none' stroke='black' stroke-width='1.6'/%3E%3C/svg%3E") 0 0 / 48px 8px repeat-x;
+  --kit-tl-bead-r: 58% 42% 55% 45% / 48% 56% 44% 52%;
+}
+[data-cz-kit="flowing"] #chc {
+  --kit-tl-pop-r: 22px;
+  --kit-tl-pop-ew: 0px;
+  --kit-tl-pop-bg: color-mix(in srgb, var(--k-wash) 55%, var(--k-paper));
+  --kit-tl-card-r: 22px 14px 24px 16px;
+  --kit-tl-card-b: 0 solid transparent;
+  --kit-tl-card-bg: linear-gradient(160deg, var(--k-paper), color-mix(in srgb, var(--k-wash) 60%, var(--k-paper)));
+  --kit-tl-card-sh: 0 14px 30px -16px var(--k-shadow);
+}
+[data-cz-kit="flowing"] .ptl-yr { font-family: var(--kit-hf, inherit); font-style: italic; font-weight: 500; font-size: 12.5px; }
+[data-cz-kit="flowing"] #chc:is([data-look="corner"], [data-look="kit"]) .chc__title { font-size: 15.5px; line-height: 1.25; }
+
+/* Lumen: a line of light with a passing glint, glowing beads, a fine
+   glowing corner and edge. */
+[data-cz-kit="lumen"] {
+  --kit-tl-glow: drop-shadow(0 0 3px color-mix(in srgb, var(--kit-acc) 70%, transparent));
+  --kit-tl-ring: 0 0 10px 1px color-mix(in srgb, var(--kit-acc) 60%, transparent);
+}
+[data-cz-kit="lumen"] #chc {
+  --kit-tl-pop-r: 10px;
+  --kit-tl-pop-ew: 1px;
+  --kit-tl-pop-sw: 1px;
+  --kit-tl-pop-glow: drop-shadow(0 0 4px color-mix(in srgb, var(--kit-acc) 80%, transparent));
+  --kit-tl-card-r: 10px;
+  --kit-tl-card-b: 1px solid var(--k-hair);
+  --kit-tl-card-sh: 0 0 0 1px color-mix(in srgb, var(--kit-acc) 18%, transparent), 0 0 26px -4px color-mix(in srgb, var(--kit-acc) 45%, transparent);
+}
+[data-cz-kit="lumen"] .ptl-yr { font-family: var(--kit-bf, inherit); font-size: 11px; letter-spacing: 0.12em; }
+[data-cz-kit="lumen"] #chc:is([data-look="corner"], [data-look="kit"]) .chc__title { font-weight: 400; font-size: 15.5px; line-height: 1.25; }
+/* The glint crosses the line now and then, under full motion only. */
+[data-cz-kit="lumen"]:not([data-motion]):not([data-cz-reduce]) .ptl-tr::after {
+  content: ""; position: absolute; inset: -1px 0; pointer-events: none;
+  background: linear-gradient(90deg, transparent, var(--k-shine), transparent) -70px 0 / 70px 100% no-repeat;
+  opacity: 0;
+  animation: kit-glint 9s ease-in-out 1s infinite;
+}
+@keyframes kit-glint {
+  0%, 50% { background-position: -70px 0; opacity: 0; }
+  55%, 85% { opacity: 0.9; }
+  95%, 100% { background-position: calc(100% + 70px) 0; opacity: 0; }
+}
+
+/* Sketchbook: a pen line, hand-drawn beads, a pen corner on paper, and a
+   taped note set slightly askew. */
+[data-cz-kit="sketchbook"] {
+  --kit-tl-h: 8px;
+  --kit-tl-top: 8px;
+  --kit-tl-wash: none;
+  --kit-tl-shape: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='150' height='8'%3E%3Cpath d='M0 4.4C20 3.2 38 5.2 60 3.9S104 4.9 126 3.6 146 4.3 150 4.4' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round'/%3E%3C/svg%3E") 0 0 / 150px 8px repeat-x;
+  --kit-tl-bead-r: 52% 46% 55% 44% / 47% 55% 45% 53%;
+}
+[data-cz-kit="sketchbook"] #chc {
+  --kit-tl-pop-r: 8px 12px;
+  --kit-tl-pop-ew: 1.7px;
+  --kit-tl-pop-sw: 1.7px;
+  --kit-tl-pop-edge: var(--k-line);
+  --kit-tl-pop-bg: var(--k-paper);
+  --kit-tl-pop-tilt: -1deg;
+  --kit-tl-card-r: 4px 9px 6px 8px;
+  --kit-tl-card-b: 1.6px solid var(--k-line);
+  --kit-tl-card-sh: 3px 4px 0 color-mix(in srgb, var(--k-line) 18%, transparent);
+}
+[data-cz-kit="sketchbook"] .ptl-yr { font-family: var(--kit-hf, inherit); font-size: 13px; }
+[data-cz-kit="sketchbook"] #chc:is([data-look="corner"], [data-look="kit"]) .chc__title { font-weight: 700; font-size: 16px; line-height: 1.15; }
+[data-cz-kit="sketchbook"] #chc[data-look="kit"] .chc__in::before {
+  content: ""; position: absolute; left: 50%; top: -9px; width: 46px; height: 15px; margin-left: -23px;
+  background: color-mix(in srgb, var(--kit-acc) 22%, transparent); rotate: 3deg; pointer-events: none;
+}
+
+/* ---------- The page's visibility chip ----------
+   The chip and the editor it unfolds take their shape from tokens
+   (input.css, .perm-chip), so each kit here is values only. */
+[data-cz-page="annals"][data-cz-kit="sharp"] #main-content {
+  --perm-chip-r: 0; --perm-chip-fill: transparent; --perm-chip-edge: 1px solid var(--k-ink); --perm-chip-lift: none;
+  --perm-panel-r: 0; --perm-panel-edge: 1.5px solid var(--k-ink);
+}
+[data-cz-page="annals"][data-cz-kit="sharp"] #main-content .perm-chip:not(.perm-chip-static):hover { background: var(--k-ink); color: var(--k-page); }
+[data-cz-page="annals"][data-cz-kit="ornate"] #main-content {
+  --perm-chip-r: 6px; --perm-chip-fill: var(--k-paper); --perm-chip-edge: 1px solid var(--k-gilt);
+  --perm-panel-r: 8px; --perm-panel-edge: 1px solid var(--k-gilt);
+}
+[data-cz-page="annals"][data-cz-kit="ornate"] #main-content .perm-chip:not(.perm-chip-static):hover { background: var(--k-band); color: var(--k-band-fg); }
+[data-cz-page="annals"][data-cz-kit="lumen"] #main-content {
+  --perm-chip-fill: var(--k-paper); --perm-chip-edge: 1px solid var(--k-hair); --perm-chip-lift: 0 0 0 3px var(--k-glow);
+  --perm-panel-edge: 1px solid var(--k-hair);
+}
+[data-cz-page="annals"][data-cz-kit="sketchbook"] #main-content {
+  --perm-chip-r: 255px 15px 225px 15px / 15px 225px 15px 255px; --perm-chip-fill: var(--k-paper); --perm-chip-edge: 1.5px solid var(--k-line); --perm-chip-lift: none;
+  --perm-panel-r: 4px; --perm-panel-edge: 1.5px solid var(--k-line);
+}
+
 /* ---------- The Director's mark is the same in every kit ----------
    A kit may restyle a row's edge and shadow, never the amber edge on what
    only the Director sees. */

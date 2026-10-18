@@ -193,15 +193,20 @@ func (a aiEncountersAdapter) Create(ctx context.Context, campaignID, pageID stri
 func (a aiEncountersAdapter) Update(ctx context.Context, campaignID, id string, act records.Actor, in records.EncounterInput, version int) error {
 	body := aiEncounterSave(in)
 	body.Version = &version
-	// An AI block knows nothing of stages, so the stages the DM planned are
-	// kept: a row for the same page keeps its old id, and what the stages
-	// still point at survives.
+	// An AI block knows nothing of stages or versions, so the ones the DM
+	// planned are kept: a row for the same page keeps its old id, and what
+	// the stages and versions still point at survives.
 	cur, err := a.svc.Get(ctx, campaignID, id, aiEncounterViewer(act))
 	if err != nil {
 		return err
 	}
 	keepRowIDs(body.Creatures, cur.Creatures)
-	body.Stages = encounters.CarryStages(cur.Stages, body.Creatures)
+	body.Versions = encounters.CarryVersions(cur.Versions, body.Creatures)
+	rows := append([]encounters.Creature{}, body.Creatures...)
+	for _, ver := range body.Versions {
+		rows = append(rows, ver.Add...)
+	}
+	body.Stages = encounters.CarryStages(cur.Stages, rows)
 	_, err = a.svc.Update(ctx, campaignID, id, aiEncounterViewer(act), body)
 	return err
 }

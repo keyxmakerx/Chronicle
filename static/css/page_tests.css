@@ -1,0 +1,106 @@
+/*
+ * page_tests.css: the Tests block (internal/plugins/pagetests, behaviour in
+ * its static/js/page_tests.js).
+ *
+ * Layout only. The heading, count, sections and the Director's
+ * marks are the shared block parts (cb-head, cb-count, cb-section, cb-dm,
+ * data-dm-only), so the page look and the style kit give them their
+ * corners, edges, faces and colours. What is drawn here takes the theme
+ * tokens: a recorded result is a selected row (a tint and a 2px accent edge
+ * on its leading side), and a test only the Director sees carries the
+ * Director's 3px amber edge, which stays the same in every kit.
+ */
+.pt {
+  --pt-line: var(--color-border-light, #e5e7eb);
+  --pt-tint: var(--color-bg-tertiary, #f3f4f6);
+  --pt-ink: var(--color-text-primary, #111827);
+  --pt-muted: var(--color-text-secondary, #6b7280);
+  --pt-acc: var(--color-accent, #6366f1);
+  --pt-dm: rgb(var(--color-warn-rgb, 217 119 6));
+  --pt-bad: rgb(var(--color-bad-rgb, 220 38 38));
+  /* Material's control corner. TODO(#1447): take it from the style kit's
+     shared corner token once kits carry one, so Sharp's square corners
+     reach the editor's fields too. */
+  --pt-r-ctl: 8px;
+  min-width: 0;
+  container: pt / inline-size;
+}
+.pt-h { display: flex; align-items: baseline; gap: 12px; }
+.pt-title { margin: 0; flex: 1 1 auto; min-width: 0; }
+.pt-empty, .pt-meta { color: var(--pt-muted); font-size: 0.85rem; }
+.pt-empty { margin: 6px 0 0; }
+.pt-test { padding: 10px 0 8px; border-top: 1px solid var(--pt-line); min-width: 0; }
+.pt-h + .pt-test, .pt-h + .pt-empty + .pt-test { border-top: 0; }
+.pt-test[data-dm-only] { box-shadow: inset 3px 0 0 color-mix(in srgb, var(--pt-dm) 70%, transparent); padding-left: 12px; }
+.pt-top { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.pt-name { margin: 0; font-size: 0.95rem; font-weight: 600; color: var(--pt-ink); min-width: 0; overflow-wrap: anywhere; }
+.pt-top .pt-icon { margin-left: auto; }
+.pt-dm { font-size: 0.75rem; color: var(--pt-dm); white-space: nowrap; }
+.pt-meta { margin: 2px 0 0; }
+.pt-said { margin: 4px 0 0; color: var(--pt-ink); }
+
+.pt-tally { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; margin-top: 6px; font-variant-numeric: tabular-nums; }
+.pt-side { display: inline-flex; align-items: center; gap: 4px; }
+.pt-n { min-width: 4.5ch; text-align: center; color: var(--pt-ink); font-weight: 600; }
+
+.pt-results { list-style: none; margin: 6px 0 0; padding: 0; }
+.pt-li { display: flex; align-items: center; gap: 8px; border-top: 1px solid var(--pt-line); }
+.pt-li:first-child { border-top: 0; }
+.pt-res {
+  flex: 1 1 auto; min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px;
+  padding: 6px 8px; margin: 0; text-align: left; font: inherit; color: inherit;
+  background: none; border: 0; cursor: pointer;
+  transition: background var(--dur-micro, 120ms) var(--ease-out, ease-out);
+}
+.pt-res:hover:not(:disabled) { background: var(--pt-tint); }
+.pt-res.on { background: var(--pt-tint); box-shadow: inset 2px 0 0 var(--pt-acc); cursor: default; }
+.pt-res.on .pt-res-l { font-weight: 600; color: var(--pt-ink); }
+.pt-res.offer .pt-res-n { color: var(--pt-acc); }
+.pt-res-n { font-size: 0.8rem; color: var(--pt-muted); }
+.pt-err { margin: 6px 0 0; font-size: 0.85rem; color: var(--pt-bad); }
+
+/* Controls: a quiet word, a monochrome icon framed on hover, and a button
+   only for Save. */
+.pt-quiet {
+  font: inherit; font-size: 0.85rem; padding: 2px 4px; background: none; border: 0;
+  color: var(--pt-acc); cursor: pointer; white-space: nowrap;
+}
+.pt-quiet:hover:not(:disabled) { text-decoration: underline; }
+.pt-quiet:disabled, .pt-icon:disabled, .pt-res:disabled { opacity: 0.5; cursor: default; }
+.pt-danger { color: var(--pt-bad); }
+.pt-icon {
+  display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px;
+  padding: 0; background: none; border: 1px solid transparent; border-radius: var(--pt-r-ctl);
+  color: var(--pt-muted); cursor: pointer; font-size: 0.8rem;
+}
+.pt-icon:hover:not(:disabled) { border-color: var(--pt-line); color: var(--pt-ink); }
+.pt :focus-visible { outline: 2px solid var(--pt-acc); outline-offset: 2px; }
+
+/* The editor hangs under the test it changes. */
+.pt-editor { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--pt-line); }
+.pt-field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.pt-flab { font-size: 0.8rem; color: var(--pt-muted); margin: 0; }
+.pt-input {
+  font: inherit; font-size: 0.9rem; min-width: 0; padding: 5px 8px;
+  color: var(--pt-ink); background: var(--color-input-bg, #fff);
+  border: 1px solid var(--color-input-border, #d1d5db); border-radius: var(--pt-r-ctl);
+}
+.pt-num { width: 6rem; }
+.pt-ends { display: flex; flex-wrap: wrap; gap: 12px 24px; }
+.pt-erows { display: flex; flex-direction: column; gap: 6px; }
+.pt-erow { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 13rem) 28px; gap: 6px; align-items: center; }
+.pt-check { display: flex; align-items: center; gap: 8px; font-size: 0.9rem; }
+.pt-eacts { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.pt-eacts .pt-danger { margin-left: auto; }
+.pt-btn {
+  font: inherit; font-size: 0.9rem; font-weight: 600; padding: 6px 14px; cursor: pointer;
+  color: var(--color-accent-on-fill, #fff); background: var(--color-accent-fill, var(--pt-acc));
+  border: 0; border-radius: var(--pt-r-ctl);
+}
+.pt-btn:disabled { opacity: 0.6; cursor: default; }
+@container pt (max-width: 420px) {
+  .pt-erow { grid-template-columns: minmax(0, 1fr) 28px; }
+  .pt-erow .pt-sel { grid-column: 1; }
+}
+@media (prefers-reduced-motion: reduce) { .pt-res { transition: none; } }
+:root[data-motion="off"] .pt-res, :root[data-motion="calm"] .pt-res { transition: none; }

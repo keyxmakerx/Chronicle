@@ -213,6 +213,7 @@ func (run *lookupRun) events(r Record) (LookupAnswer, error) {
 			}
 			lines = append(lines, line)
 		}
+		lines = append(lines, run.rollLines(cal, m, from, to, evs)...)
 	}
 	ans.Chip = fmt.Sprintf("Calendar events · %s · %d", label, len(lines))
 	var b strings.Builder
@@ -295,4 +296,44 @@ func decodeMeta(raw json.RawMessage) map[string]any {
 		_ = json.Unmarshal(raw, &m)
 	}
 	return m
+}
+
+// rollLines are a month's rolled nights within [from, to], for the owner or
+// a co-DM: the result, its total, and whether players are told. A failed
+// read leaves them out rather than failing the lookup.
+func (run *lookupRun) rollLines(cal *calendar.Calendar, m, from, to calDate, evs []calendar.Event) []string {
+	if run.l.Rolls == nil || !run.a.CanAuthorDmOnly() {
+		return nil
+	}
+	byEvent, err := run.l.Rolls.ListMonthRolls(run.ctx, cal.ID, run.campaignID, m.Y, m.M, run.a.Viewer())
+	if err != nil || len(byEvent) == 0 {
+		return nil
+	}
+	names := make(map[string]string, len(evs))
+	for _, e := range evs {
+		names[e.ID] = e.Name
+	}
+	var out []string
+	for _, e := range evs {
+		for _, n := range byEvent[e.ID] {
+			d := calDate{n.Year, n.Month, n.Day}
+			if d.Before(from) || to.Before(d) {
+				continue
+			}
+			line := fmt.Sprintf("- %s roll, %s: %s", names[e.ID], dateText(cal, d), n.Result)
+			if n.Total != nil {
+				line += fmt.Sprintf(" (rolled %d)", *n.Total)
+			}
+			if n.Locked != nil && *n.Locked {
+				line += ", locked"
+			}
+			if n.Told != nil && *n.Told {
+				line += ", players told"
+			} else {
+				line += ", players not told"
+			}
+			out = append(out, line)
+		}
+	}
+	return out
 }

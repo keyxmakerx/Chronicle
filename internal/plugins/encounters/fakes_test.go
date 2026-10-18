@@ -128,3 +128,32 @@ func (f *fakePages) Names(_ context.Context, campaignID string, ids []string, _ 
 	}
 	return out, nil
 }
+
+// fakeResults is a ResultDirectory over a fixed set of tests in campaign c1.
+type fakeResults struct {
+	tests map[string]TestOutcome
+	err   error
+}
+
+func newFakeResults() *fakeResults {
+	return &fakeResults{tests: map[string]TestOutcome{
+		"lastwell": {Name: "Restore the Lastwell core", Results: map[string]string{"win": "Total success", "part": "Partial success", "lose": "Total failure"}},
+		"hunt":     {Name: "Track the stalkers", Results: map[string]string{"found": "Found them"}},
+	}}
+}
+
+func (f *fakeResults) Outcomes(_ context.Context, campaignID string, ids []string, _ Viewer) (map[string]TestOutcome, error) {
+	out := map[string]TestOutcome{}
+	if f.err != nil {
+		return nil, f.err
+	}
+	if campaignID != "c1" {
+		return out, nil
+	}
+	for _, id := range ids {
+		if o, ok := f.tests[id]; ok {
+			out[id] = o
+		}
+	}
+	return out, nil
+}
