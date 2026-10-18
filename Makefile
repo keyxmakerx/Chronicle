@@ -106,6 +106,12 @@ mermaid-vendor: ## Copy the pinned Mermaid build (package.json) into static/vend
 	npm ci --no-audit --no-fund
 	cp node_modules/mermaid/dist/mermaid.min.js static/vendor/mermaid.min.js
 
+.PHONY: dice-vendor
+dice-vendor: ## Rebuild the dice's three.js bundle and copy cannon-es (pinned in package.json) into static/vendor
+	npm ci --no-audit --no-fund
+	npx esbuild static/vendor/three-dice.src.js --bundle --minify --format=esm --legal-comments=eof --outfile=static/vendor/three-dice.min.js
+	cp node_modules/cannon-es/dist/cannon-es.js static/vendor/cannon-es.js
+
 .PHONY: test-js
 test-js: ## Run JS runtime tests (sidebar, availability, widgets — node --test)
 	node --test test/js/*.test.mjs

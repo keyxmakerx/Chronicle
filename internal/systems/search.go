@@ -22,7 +22,8 @@ func NewSystemSearchAdapter(addonSvc addons.AddonService) *SystemSearchAdapter {
 
 // SearchSystemContent searches all enabled modules for the given campaign
 // and returns results formatted for the entity search API response.
-func (a *SystemSearchAdapter) SearchSystemContent(ctx context.Context, campaignID, query string) ([]map[string]string, error) {
+// Director-only categories are left out unless director is set.
+func (a *SystemSearchAdapter) SearchSystemContent(ctx context.Context, campaignID, query string, director bool) ([]map[string]string, error) {
 	if query == "" {
 		return nil, nil
 	}
@@ -50,6 +51,9 @@ func (a *SystemSearchAdapter) SearchSystemContent(ctx context.Context, campaignI
 
 		// Format results to match the entity search API shape.
 		for _, item := range items {
+			if !director && info.DirectorOnly(item.Category) {
+				continue
+			}
 			results = append(results, map[string]string{
 				"id":        item.ID,
 				"name":      item.Name,

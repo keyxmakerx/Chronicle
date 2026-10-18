@@ -181,11 +181,12 @@ const markerCols = `m.id, m.map_id, m.name, m.description,
        COALESCE(ent.name, ''), COALESCE(et.icon, ''), COALESCE(lm.name, '')`
 
 // markerJoins is the JOIN clause for entity and linked-map display data. The
-// linked map is joined only within the pin's own campaign, and its id is read
-// from that join, so a link that somehow named another campaign's map reads
-// as no link at all rather than carrying that map's name out.
+// linked map and the linked page are joined only within the pin's own
+// campaign, and the map id is read from that join, so a link that somehow
+// named another campaign's map or page reads as no link at all rather than
+// carrying its name out.
 const markerJoins = `JOIN maps src ON src.id = m.map_id
-     LEFT JOIN entities ent ON ent.id = m.entity_id AND ent.deleted_at IS NULL
+     LEFT JOIN entities ent ON ent.id = m.entity_id AND ent.campaign_id = src.campaign_id AND ent.deleted_at IS NULL
      LEFT JOIN entity_types et ON et.id = ent.entity_type_id
      LEFT JOIN maps lm ON lm.id = m.linked_map_id AND lm.campaign_id = src.campaign_id`
 

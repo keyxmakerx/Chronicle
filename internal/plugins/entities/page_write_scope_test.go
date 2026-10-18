@@ -37,7 +37,7 @@ func (f scopeFakeTagFetcher) GetEntityTags(_ context.Context, _ string, _ bool) 
 	return nil, nil
 }
 
-func (f scopeFakeTagFetcher) SetEntityTags(_ context.Context, entityID, _ string, _ []int) error {
+func (f scopeFakeTagFetcher) SetEntityTags(_ context.Context, entityID, _ string, _ []int, _ bool) error {
 	*f.wrote = append(*f.wrote, entityID)
 	return nil
 }

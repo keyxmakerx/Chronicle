@@ -642,8 +642,8 @@ func (a *entityTagFetcherAdapter) GetEntityTags(ctx context.Context, entityID st
 }
 
 // SetEntityTags sets the tags for a single entity.
-func (a *entityTagFetcherAdapter) SetEntityTags(ctx context.Context, entityID string, campaignID string, tagIDs []int) error {
-	return a.svc.SetEntityTags(ctx, entityID, campaignID, tagIDs)
+func (a *entityTagFetcherAdapter) SetEntityTags(ctx context.Context, entityID string, campaignID string, tagIDs []int, includeDmOnly bool) error {
+	return a.svc.SetEntityTagsVisible(ctx, entityID, campaignID, tagIDs, includeDmOnly)
 }
 
 // GetEntityTagGrants resolves the tag-derived visibility grants on one entity
@@ -3917,6 +3917,7 @@ func (a *App) RegisterRoutes() {
 	entityNotesNotifier := &entityNotesNotifierHolder{}
 	entityNotesService := entity_notes.NewService(entityNotesRepo, entityNotesNotifier.Notify)
 	entityNotesHandler := entity_notes.NewHandler(entityNotesService)
+	entityNotesHandler.SetEntityGate(&entityAccessAdapter{svc: entityService})
 	entity_notes.RegisterRoutes(e, entityNotesHandler, campaignService, authService, addonService)
 
 	// Tags widget: campaign-scoped entity tagging (CRUD + entity associations).
@@ -5460,7 +5461,9 @@ func (a *App) RegisterRoutes() {
 		systemstate.RegisterRoutes(e,
 			systemstate.NewHandler(systemStateSvc, &entityAccessAdapter{svc: entityService}),
 			campaignService, authService)
-		syncAPIHandler.SetSystemStateReader(&systemStateSyncReader{svc: systemStateSvc})
+		systemStateSync := &systemStateSyncReader{svc: systemStateSvc}
+		syncAPIHandler.SetSystemStateReader(systemStateSync)
+		syncAPIHandler.SetSystemStateWriter(systemStateSync)
 	} else {
 		slog.Warn("systemstate plugin degraded — routes not registered")
 	}

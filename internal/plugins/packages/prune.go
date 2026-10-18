@@ -18,9 +18,9 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"strconv"
-	"strings"
 	"time"
+
+	"github.com/keyxmakerx/chronicle/internal/semver"
 )
 
 // StaleVersion is one on-disk version folder the cleanup may reclaim.
@@ -227,37 +227,8 @@ func pruneTotal(res *PruneResult) int64 {
 	return t
 }
 
-// pruneVersionLess is a numeric-aware semver comparator (local copy of the
-// systems loader's versionLess — packages must not import systems; keep in
-// sync with internal/systems/registry.go). Non-numeric segments compare
-// lexically; missing segments count as 0.
+// pruneVersionLess orders package versions newest-last; see internal/semver
+// for the rules (a pre-release sorts below its release).
 func pruneVersionLess(a, b string) bool {
-	as := strings.Split(strings.TrimPrefix(a, "v"), ".")
-	bs := strings.Split(strings.TrimPrefix(b, "v"), ".")
-	n := len(as)
-	if len(bs) > n {
-		n = len(bs)
-	}
-	for i := 0; i < n; i++ {
-		var av, bv string
-		if i < len(as) {
-			av = as[i]
-		}
-		if i < len(bs) {
-			bv = bs[i]
-		}
-		ai, aerr := strconv.Atoi(av)
-		bi, berr := strconv.Atoi(bv)
-		switch {
-		case aerr == nil && berr == nil:
-			if ai != bi {
-				return ai < bi
-			}
-		default:
-			if av != bv {
-				return av < bv
-			}
-		}
-	}
-	return false
+	return semver.Less(a, b)
 }

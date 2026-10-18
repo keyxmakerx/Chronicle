@@ -23,7 +23,7 @@ type scopeTagService struct {
 	wrote *[]string
 }
 
-func (s scopeTagService) SetEntityTags(_ context.Context, entityID, _ string, _ []int) error {
+func (s scopeTagService) SetEntityTagsVisible(_ context.Context, entityID, _ string, _ []int, _ bool) error {
 	*s.wrote = append(*s.wrote, entityID)
 	return nil
 }

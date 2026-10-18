@@ -1,6 +1,7 @@
 package syncapi
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -85,7 +86,13 @@ func (h *SyncHandler) CreateMapping(c echo.Context) error {
 
 	mapping, err := h.syncMappingSvc.CreateMapping(c.Request().Context(), campaignID, input)
 	if err != nil {
-		return apperror.NewBadRequest(err.Error())
+		// The service already returns typed errors with client-safe
+		// messages; re-wrapping as 400 hid conflicts and leaked internals.
+		var appErr *apperror.AppError
+		if errors.As(err, &appErr) {
+			return err
+		}
+		return apperror.NewInternal(err)
 	}
 
 	return c.JSON(http.StatusCreated, mapping)

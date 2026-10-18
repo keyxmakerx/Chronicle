@@ -266,3 +266,49 @@ func TestInstallVersion_NilValidatorSkips(t *testing.T) {
 		t.Errorf("InstalledVersion = %q, want 0.2.0", stored.InstalledVersion)
 	}
 }
+
+// TestInstallVersion_ReinstallKeepsLiveFolder pins that installing a version
+// whose folder already exists (a re-install, or a pinned version) never
+// touches that folder unless the new copy passed every check, and that a
+// passing re-install replaces it whole rather than merging into it.
+func TestInstallVersion_ReinstallKeepsLiveFolder(t *testing.T) {
+	tests := []struct {
+		name       string
+		validator  func(string) error
+		wantErr    bool
+		wantLive   bool // the old marker file must survive
+		wantNewDir bool // the new manifest must be installed
+	}{
+		{"failed validation keeps live folder", func(string) error { return errors.New("rejected") }, true, true, false},
+		{"passing re-install replaces the folder", func(string) error { return nil }, false, false, true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			svc, _, _ := installTestEnv(t, buildZip(t, map[string]string{"manifest.json": validManifest}))
+			SetManifestValidator(svc, tc.validator)
+
+			destDir := svc.(*packageService).installDir(PackageTypeSystem, "testsys", "0.2.0")
+			if err := os.MkdirAll(destDir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			marker := filepath.Join(destDir, "live.txt")
+			if err := os.WriteFile(marker, []byte("live"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+
+			err := svc.InstallVersion(context.Background(), "pkg-1", "0.2.0")
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("InstallVersion error = %v, wantErr %v", err, tc.wantErr)
+			}
+			if _, statErr := os.Stat(marker); (statErr == nil) != tc.wantLive {
+				t.Errorf("live marker present = %v, want %v", statErr == nil, tc.wantLive)
+			}
+			if _, statErr := os.Stat(filepath.Join(destDir, "manifest.json")); (statErr == nil) != tc.wantNewDir {
+				t.Errorf("new manifest present = %v, want %v", statErr == nil, tc.wantNewDir)
+			}
+			if entries, _ := os.ReadDir(filepath.Join(filepath.Dir(filepath.Dir(filepath.Dir(destDir))), "staging")); len(entries) != 0 {
+				t.Errorf("staging folder left behind: %d entries", len(entries))
+			}
+		})
+	}
+}
