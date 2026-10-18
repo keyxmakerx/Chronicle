@@ -2199,8 +2199,8 @@
 
   .timeline-viz-container {
     @apply overflow-hidden sm:rounded-xl;
-    background: var(--color-surface, #1a1b26);
-    border: 1px solid var(--color-edge, #2a2b3d);
+    background: var(--color-card-bg, #1a1b26);
+    border: 1px solid var(--color-border, #2a2b3d);
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
   }
   /* On mobile, let the viz bleed to screen edges. */
@@ -2216,8 +2216,8 @@
 
   .timeline-viz-toolbar {
     @apply flex items-center justify-between px-4 py-2.5 border-b gap-3;
-    border-color: var(--color-edge, #2a2b3d);
-    background: var(--color-surface-alt, #24253a);
+    border-color: var(--color-border, #2a2b3d);
+    background: var(--color-bg-tertiary, #24253a);
   }
 
   .timeline-viz-toolbar-left,
@@ -2232,18 +2232,18 @@
 
   .timeline-viz-toolbar-divider {
     @apply w-px h-5 mx-1;
-    background: var(--color-edge, #2a2b3d);
+    background: var(--color-border, #2a2b3d);
   }
 
   .timeline-viz-btn {
     @apply w-8 h-8 flex items-center justify-center rounded-md text-xs transition-all;
-    color: var(--color-fg-secondary, #a9b1d6);
-    background: var(--color-surface, #1a1b26);
-    border: 1px solid var(--color-edge, #2a2b3d);
+    color: var(--color-text-secondary, #a9b1d6);
+    background: var(--color-card-bg, #1a1b26);
+    border: 1px solid var(--color-border, #2a2b3d);
   }
   .timeline-viz-btn:hover {
-    color: var(--color-fg, #c0caf5);
-    background: var(--color-surface-alt, #24253a);
+    color: var(--color-text-primary, #c0caf5);
+    background: var(--color-bg-tertiary, #24253a);
     transform: scale(1.05);
   }
 
@@ -2257,14 +2257,14 @@
   /* Segmented zoom level button group */
   .timeline-viz-zoom-buttons {
     @apply flex items-center rounded-md overflow-hidden ml-2;
-    border: 1px solid var(--color-edge, #2a2b3d);
+    border: 1px solid var(--color-border, #2a2b3d);
   }
   .timeline-viz-zoom-btn {
     @apply text-xs font-medium px-2.5 py-1 transition-all;
-    color: var(--color-fg-muted, #565f89);
-    background: var(--color-surface, #1a1b26);
+    color: var(--color-text-muted, #565f89);
+    background: var(--color-card-bg, #1a1b26);
     border: none;
-    border-right: 1px solid var(--color-edge, #2a2b3d);
+    border-right: 1px solid var(--color-border, #2a2b3d);
     cursor: pointer;
     line-height: 1;
   }
@@ -2272,8 +2272,8 @@
     border-right: none;
   }
   .timeline-viz-zoom-btn:hover {
-    color: var(--color-fg, #c0caf5);
-    background: var(--color-surface-alt, #24253a);
+    color: var(--color-text-primary, #c0caf5);
+    background: var(--color-bg-tertiary, #24253a);
   }
   .timeline-viz-zoom-btn.active {
     color: white;
@@ -2282,14 +2282,14 @@
 
   .timeline-viz-skip-label {
     @apply text-xs;
-    color: var(--color-fg-muted, #565f89);
+    color: var(--color-text-muted, #565f89);
   }
 
   .timeline-viz-skip-input {
     @apply w-20 h-8 text-xs rounded-md px-2;
-    background: var(--color-surface, #1a1b26);
-    border: 1px solid var(--color-edge, #2a2b3d);
-    color: var(--color-fg, #c0caf5);
+    background: var(--color-card-bg, #1a1b26);
+    border: 1px solid var(--color-border, #2a2b3d);
+    color: var(--color-text-primary, #c0caf5);
   }
 
   .timeline-viz-search-wrap {
@@ -2298,18 +2298,18 @@
 
   .timeline-viz-search-icon {
     @apply absolute left-2.5 text-xs;
-    color: var(--color-fg-muted, #565f89);
+    color: var(--color-text-muted, #565f89);
     pointer-events: none;
   }
 
   .timeline-viz-search-input {
     @apply w-56 h-8 text-xs rounded-md pl-8 pr-7;
-    background: var(--color-surface, #1a1b26);
-    border: 1px solid var(--color-edge, #2a2b3d);
-    color: var(--color-fg, #c0caf5);
+    background: var(--color-card-bg, #1a1b26);
+    border: 1px solid var(--color-border, #2a2b3d);
+    color: var(--color-text-primary, #c0caf5);
   }
   .timeline-viz-search-input::placeholder {
-    color: var(--color-fg-muted, #565f89);
+    color: var(--color-text-muted, #565f89);
   }
   .timeline-viz-search-input:focus {
     outline: none;
@@ -2319,13 +2319,13 @@
 
   .timeline-viz-search-clear {
     @apply absolute right-1.5 w-5 h-5 flex items-center justify-center rounded text-xs;
-    color: var(--color-fg-muted, #565f89);
+    color: var(--color-text-muted, #565f89);
     background: transparent;
     border: none;
     cursor: pointer;
   }
   .timeline-viz-search-clear:hover {
-    color: var(--color-fg, #c0caf5);
+    color: var(--color-text-primary, #c0caf5);
   }
 
   .timeline-viz-svg-wrap {
@@ -2338,38 +2338,38 @@
   }
 
   .timeline-viz-svg .timeline-axis text {
-    fill: var(--color-fg-secondary, #a9b1d6);
+    fill: var(--color-text-secondary, #a9b1d6);
     font-size: 12px;
   }
   .timeline-viz-svg .timeline-axis line,
   .timeline-viz-svg .timeline-axis path {
-    stroke: var(--color-edge, #2a2b3d);
+    stroke: var(--color-border, #2a2b3d);
     stroke-width: 1.5;
   }
 
   .timeline-viz-svg .timeline-event-label {
-    fill: var(--color-fg, #c0caf5);
+    fill: var(--color-text-primary, #c0caf5);
     font-size: 11px;
     font-weight: 600;
     pointer-events: none;
   }
 
   .timeline-viz-svg .timeline-event-date {
-    fill: var(--color-fg-muted, #565f89);
+    fill: var(--color-text-muted, #565f89);
     font-size: 10px;
     pointer-events: none;
     font-family: ui-monospace, monospace;
   }
 
   .timeline-viz-svg .timeline-event-entity {
-    fill: var(--color-fg-secondary, #a9b1d6);
+    fill: var(--color-text-secondary, #a9b1d6);
     font-size: 10px;
     font-style: italic;
     pointer-events: none;
   }
 
   .timeline-viz-svg .timeline-lane-label {
-    fill: var(--color-fg-muted, #565f89);
+    fill: var(--color-text-muted, #565f89);
     font-size: 10px;
     font-weight: 600;
     text-transform: uppercase;
@@ -2385,9 +2385,9 @@
     font-size: 12px;
     line-height: 1.6;
     pointer-events: none;
-    background: var(--color-surface-alt, #24253a);
-    border: 1px solid var(--color-edge, #2a2b3d);
-    color: var(--color-fg, #c0caf5);
+    background: var(--color-bg-tertiary, #24253a);
+    border: 1px solid var(--color-border, #2a2b3d);
+    color: var(--color-text-primary, #c0caf5);
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
     backdrop-filter: blur(8px);
     opacity: 0;
@@ -2399,14 +2399,14 @@
 
   .timeline-viz-tooltip-cat {
     @apply inline-block text-xs px-2 py-0.5 rounded-full mt-1;
-    background: var(--color-surface, #1a1b26);
-    color: var(--color-fg-secondary, #a9b1d6);
-    border: 1px solid var(--color-edge, #2a2b3d);
+    background: var(--color-card-bg, #1a1b26);
+    color: var(--color-text-secondary, #a9b1d6);
+    border: 1px solid var(--color-border, #2a2b3d);
   }
 
   .timeline-viz-empty {
     @apply flex flex-col items-center justify-center text-center py-16;
-    color: var(--color-fg-secondary, #a9b1d6);
+    color: var(--color-text-secondary, #a9b1d6);
     font-size: 14px;
     position: relative;
   }
@@ -2416,8 +2416,8 @@
     margin-bottom: 20px;
     background: repeating-linear-gradient(
       90deg,
-      var(--color-edge, #2a2b3d) 0px,
-      var(--color-edge, #2a2b3d) 6px,
+      var(--color-border, #2a2b3d) 0px,
+      var(--color-border, #2a2b3d) 6px,
       transparent 6px,
       transparent 12px
     );
@@ -2431,12 +2431,12 @@
 
   /* D3 card markers (day zoom) */
   .tl-viz-card {
-    background: var(--color-surface-alt, #24253a);
-    border: 1px solid var(--color-edge, #2a2b3d);
+    background: var(--color-bg-tertiary, #24253a);
+    border: 1px solid var(--color-border, #2a2b3d);
     border-radius: 8px;
     padding: 6px 10px;
     font-size: 11px;
-    color: var(--color-fg, #c0caf5);
+    color: var(--color-text-primary, #c0caf5);
     pointer-events: all;
     cursor: pointer;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
@@ -2460,13 +2460,13 @@
   }
   .tl-viz-card-date {
     font-size: 10px;
-    color: var(--color-fg-muted, #565f89);
+    color: var(--color-text-muted, #565f89);
     font-family: ui-monospace, monospace;
     margin-top: 1px;
   }
   .tl-viz-card-entity {
     font-size: 10px;
-    color: var(--color-fg-secondary, #a9b1d6);
+    color: var(--color-text-secondary, #a9b1d6);
     font-style: italic;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -2479,9 +2479,9 @@
   .tl-viz-card-cat {
     @apply inline-block text-xs px-1.5 py-0 rounded-full mt-1;
     font-size: 9px;
-    background: var(--color-surface, #1a1b26);
-    color: var(--color-fg-muted, #565f89);
-    border: 1px solid var(--color-edge, #2a2b3d);
+    background: var(--color-card-bg, #1a1b26);
+    color: var(--color-text-muted, #565f89);
+    border: 1px solid var(--color-border, #2a2b3d);
   }
   .tl-viz-card-color-bar {
     width: 3px;
@@ -2533,7 +2533,7 @@
 
   /* Ruler label styling */
   .ruler-label-primary {
-    fill: var(--color-fg-secondary, #a9b1d6);
+    fill: var(--color-text-secondary, #a9b1d6);
     font-size: 11px;
     font-weight: 600;
     font-family: ui-monospace, monospace;
@@ -2543,36 +2543,36 @@
   /* Event list cards */
   .tl-event-card {
     @apply flex gap-3 p-3 rounded-lg border transition-all;
-    background: var(--color-surface, #1a1b26);
-    border-color: var(--color-edge, #2a2b3d);
+    background: var(--color-card-bg, #1a1b26);
+    border-color: var(--color-border, #2a2b3d);
   }
   .tl-event-card:hover {
-    background: var(--color-surface-alt, #24253a);
+    background: var(--color-bg-tertiary, #24253a);
     border-color: rgba(99, 102, 241, 0.3);
   }
 
   /* Admin manage section */
   .tl-manage-section {
     @apply mt-6 rounded-xl border overflow-hidden;
-    background: var(--color-surface, #1a1b26);
-    border-color: var(--color-edge, #2a2b3d);
+    background: var(--color-card-bg, #1a1b26);
+    border-color: var(--color-border, #2a2b3d);
   }
   .tl-manage-header {
     @apply flex items-center gap-2 px-4 py-3 text-sm font-medium border-b cursor-pointer transition-colors;
-    background: var(--color-surface-alt, #24253a);
-    border-color: var(--color-edge, #2a2b3d);
-    color: var(--color-fg-secondary, #a9b1d6);
+    background: var(--color-bg-tertiary, #24253a);
+    border-color: var(--color-border, #2a2b3d);
+    color: var(--color-text-secondary, #a9b1d6);
   }
   .tl-manage-header:hover {
-    color: var(--color-fg, #c0caf5);
+    color: var(--color-text-primary, #c0caf5);
   }
   .tl-manage-tab {
     @apply px-4 py-2 text-xs font-medium transition-colors cursor-pointer;
-    color: var(--color-fg-muted, #565f89);
+    color: var(--color-text-muted, #565f89);
     border-bottom: 2px solid transparent;
   }
   .tl-manage-tab:hover {
-    color: var(--color-fg-secondary, #a9b1d6);
+    color: var(--color-text-secondary, #a9b1d6);
   }
   .tl-manage-tab.active {
     color: var(--color-accent, #6366f1);
@@ -2587,7 +2587,7 @@
   .timeline-viz-skeleton-bar {
     height: 2px;
     border-radius: 1px;
-    background: var(--color-edge, #2a2b3d);
+    background: var(--color-border, #2a2b3d);
     animation: tl-skeleton-pulse 1.5s ease-in-out infinite;
   }
   .timeline-viz-skeleton-dots {
@@ -2595,7 +2595,7 @@
   }
   .timeline-viz-skeleton-dots span {
     @apply block w-3 h-3 rounded-full;
-    background: var(--color-edge, #2a2b3d);
+    background: var(--color-border, #2a2b3d);
     animation: tl-skeleton-pulse 1.5s ease-in-out infinite;
   }
   .timeline-viz-skeleton-dots span:nth-child(2) { animation-delay: 0.15s; }
@@ -2615,9 +2615,9 @@
     max-height: 80vh;
     overflow-y: auto;
     border-radius: 12px;
-    background: var(--color-surface-alt, #24253a);
-    border: 1px solid var(--color-edge, #2a2b3d);
-    color: var(--color-fg, #c0caf5);
+    background: var(--color-bg-tertiary, #24253a);
+    border: 1px solid var(--color-border, #2a2b3d);
+    color: var(--color-text-primary, #c0caf5);
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
     backdrop-filter: blur(12px);
     opacity: 0;
@@ -2635,15 +2635,15 @@
     top: 8px;
     right: 8px;
     @apply w-7 h-7 flex items-center justify-center rounded-md text-xs;
-    color: var(--color-fg-muted, #565f89);
+    color: var(--color-text-muted, #565f89);
     background: transparent;
     border: none;
     cursor: pointer;
     z-index: 1;
   }
   .timeline-viz-detail-close:hover {
-    color: var(--color-fg, #c0caf5);
-    background: var(--color-surface, #1a1b26);
+    color: var(--color-text-primary, #c0caf5);
+    background: var(--color-card-bg, #1a1b26);
   }
   .timeline-viz-detail-body {
     padding: 16px;
@@ -2667,44 +2667,44 @@
   .timeline-viz-detail-date {
     font-size: 12px;
     font-family: ui-monospace, monospace;
-    color: var(--color-fg-muted, #565f89);
+    color: var(--color-text-muted, #565f89);
     margin-bottom: 8px;
   }
   .timeline-viz-detail-entity {
     @apply flex items-center gap-1.5 text-xs mb-2;
-    color: var(--color-fg-secondary, #a9b1d6);
+    color: var(--color-text-secondary, #a9b1d6);
   }
   .timeline-viz-detail-cat {
     @apply inline-block text-xs px-2.5 py-0.5 rounded-full mb-3;
-    background: var(--color-surface, #1a1b26);
-    color: var(--color-fg-secondary, #a9b1d6);
-    border: 1px solid var(--color-edge, #2a2b3d);
+    background: var(--color-card-bg, #1a1b26);
+    color: var(--color-text-secondary, #a9b1d6);
+    border: 1px solid var(--color-border, #2a2b3d);
   }
   .timeline-viz-detail-desc {
     font-size: 12px;
     line-height: 1.6;
-    color: var(--color-fg-secondary, #a9b1d6);
-    border-top: 1px solid var(--color-edge, #2a2b3d);
+    color: var(--color-text-secondary, #a9b1d6);
+    border-top: 1px solid var(--color-border, #2a2b3d);
     padding-top: 10px;
     margin-top: 4px;
     white-space: pre-line;
   }
   .timeline-viz-detail-source {
     @apply flex items-center gap-1.5 text-xs mt-3 pt-3;
-    color: var(--color-fg-muted, #565f89);
-    border-top: 1px solid var(--color-edge, #2a2b3d);
+    color: var(--color-text-muted, #565f89);
+    border-top: 1px solid var(--color-border, #2a2b3d);
   }
 
   /* Unified viz + event list tabbed view */
   .tl-view-tabs {
     @apply flex border-b;
-    border-color: var(--color-edge, #2a2b3d);
-    background: var(--color-surface-alt, #24253a);
+    border-color: var(--color-border, #2a2b3d);
+    background: var(--color-bg-tertiary, #24253a);
     border-radius: 12px 12px 0 0;
   }
   .tl-view-tab {
     @apply flex items-center gap-1.5 px-5 py-2.5 text-sm font-medium transition-colors cursor-pointer;
-    color: var(--color-fg-muted, #565f89);
+    color: var(--color-text-muted, #565f89);
     border-bottom: 2px solid transparent;
     background: transparent;
     border-left: none;
@@ -2712,7 +2712,7 @@
     border-top: none;
   }
   .tl-view-tab:hover {
-    color: var(--color-fg-secondary, #a9b1d6);
+    color: var(--color-text-secondary, #a9b1d6);
   }
   .tl-view-tab.active {
     color: var(--color-accent, #6366f1);
@@ -2720,8 +2720,8 @@
   }
   .tl-view-tab-count {
     @apply text-xs px-1.5 py-0 rounded-full;
-    background: var(--color-surface, #1a1b26);
-    color: var(--color-fg-muted, #565f89);
+    background: var(--color-card-bg, #1a1b26);
+    color: var(--color-text-muted, #565f89);
     font-size: 10px;
   }
 
@@ -2729,14 +2729,14 @@
 
   /* Central ruler line ("spine" of the timeline) */
   .timeline-viz-svg .timeline-ruler-line {
-    stroke: var(--color-edge, #2a2b3d);
+    stroke: var(--color-border, #2a2b3d);
     stroke-width: 2.5;
     opacity: 0.8;
   }
 
   /* Ruler tick labels */
   .timeline-viz-svg .ruler-label-primary {
-    fill: var(--color-fg-secondary, #a9b1d6);
+    fill: var(--color-text-secondary, #a9b1d6);
     font-size: 11px;
     font-weight: 600;
     font-family: ui-monospace, SFMono-Regular, monospace;
@@ -2785,9 +2785,9 @@
   .timeline-viz-minimap {
     width: 100%;
     height: 36px;
-    border-top: 1px solid var(--color-edge, #2a2b3d);
+    border-top: 1px solid var(--color-border, #2a2b3d);
     cursor: pointer;
-    background: var(--color-surface-alt, #24253a);
+    background: var(--color-bg-tertiary, #24253a);
   }
   .timeline-viz-minimap-svg {
     display: block;
@@ -2800,7 +2800,7 @@
   .timeline-viz-range {
     font-size: 11px;
     font-family: ui-monospace, SFMono-Regular, monospace;
-    color: var(--color-fg-muted, #565f89);
+    color: var(--color-text-muted, #565f89);
     white-space: nowrap;
   }
 }
@@ -5545,7 +5545,7 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
 .pl-list { margin-top: 8px; max-height: 220px; overflow-y: auto; border: 1px solid var(--color-border); border-radius: 9px; background: var(--color-card-bg); }
 .pl-row { display: flex; width: 100%; align-items: center; gap: 10px; padding: 8px 10px; border: 0; border-top: 1px solid var(--color-border); background: transparent; color: var(--color-text-primary); font: inherit; font-size: 13.5px; text-align: left; cursor: pointer; transition: background var(--dur-micro); }
 .pl-row:first-child { border-top: 0; }
-.pl-row:hover, .pl-row:focus-visible { background: var(--color-surface-alt, rgba(0,0,0,.04)); }
+.pl-row:hover, .pl-row:focus-visible { background: var(--color-bg-tertiary, rgba(0,0,0,.04)); }
 .pl-row-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pl-row-type { flex: none; font-size: 11px; color: var(--color-text-muted); }
 .pl-more { padding: 8px 10px; font-size: 12px; color: var(--color-text-muted); }
@@ -5598,7 +5598,7 @@ html[data-view-motion="calm"] .pl-chip, .nav-rm .pl-chip, html.rm .pl-chip, html
 .pw-av { width: 28px; height: 28px; border-radius: 999px; display: grid; place-items: center; background: rgba(99, 102, 241, .14); color: rgb(var(--color-accent-rgb, 99 102 241)); font-weight: 600; font-size: 12px; }
 .pw-name { font-weight: 600; font-size: 13.5px; color: var(--color-text-primary); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pw-chars { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
-.pw-chip { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 4px 0 9px; border-radius: 999px; border: 1px solid var(--color-border); background: var(--color-surface-alt, var(--color-bg-secondary)); font-size: 12.5px; color: var(--color-text-primary); max-width: 100%; }
+.pw-chip { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 4px 0 9px; border-radius: 999px; border: 1px solid var(--color-border); background: var(--color-bg-tertiary, var(--color-bg-secondary)); font-size: 12.5px; color: var(--color-text-primary); max-width: 100%; }
 .pw-chip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pw-chip > i { font-size: 11px; color: #8b5cf6; }
 .pw-chipx { width: 20px; height: 20px; border: 0; border-radius: 999px; background: transparent; color: var(--color-text-muted); cursor: pointer; display: grid; place-items: center; font-size: 11px; flex: none; }
@@ -5641,7 +5641,7 @@ html[data-view-motion="calm"] .pl-chip, .nav-rm .pl-chip, html.rm .pl-chip, html
    place, under Off it appears. It inherits the box's lower corners. */
 .ask-slip { display: grid; grid-template-rows: 0fr; transition: grid-template-rows var(--dur-slide) var(--ease-slide); border-bottom-left-radius: inherit; border-bottom-right-radius: inherit; }
 .ask-slip-clip { overflow: hidden; min-height: 0; border-radius: inherit; }
-.ask-slip-in { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px 10px; padding: 12px 14px 14px; border-top: 1px solid var(--color-edge, var(--color-border)); background: var(--color-surface-alt, var(--color-bg-tertiary)); visibility: hidden; transform: translateY(-100%); transition: transform var(--dur-slide) var(--ease-slide), visibility 0s linear var(--dur-slide); }
+.ask-slip-in { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px 10px; padding: 12px 14px 14px; border-top: 1px solid var(--color-border); background: var(--color-bg-tertiary); visibility: hidden; transform: translateY(-100%); transition: transform var(--dur-slide) var(--ease-slide), visibility 0s linear var(--dur-slide); }
 .ask-slip.is-on { grid-template-rows: 1fr; }
 .ask-slip.is-on .ask-slip-in { visibility: visible; transform: none; transition-delay: 0s; }
 .ask-slip-q { flex: 1 1 100%; display: flex; align-items: flex-start; gap: 8px; margin: 0; font-size: 13.5px; line-height: 1.4; color: var(--color-text-primary); }

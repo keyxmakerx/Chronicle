@@ -170,7 +170,7 @@
           .append('svg')
           .attr('width', width)
           .attr('height', height)
-          .style('background', 'var(--color-surface, #ffffff)')
+          .style('background', 'var(--color-card-bg, #ffffff)')
           .style('border-radius', '0 0 8px 8px');
 
         svgNode = svg.node();
@@ -197,7 +197,7 @@
           .attr('orient', 'auto')
           .append('path')
           .attr('d', 'M0,-5L10,0L0,5')
-          .attr('fill', 'var(--color-fg-muted, #9ca3af)');
+          .attr('fill', 'var(--color-text-muted, #9ca3af)');
 
         // Force simulation.
         simulation = d3.forceSimulation(nodes)
@@ -224,7 +224,7 @@
           .selectAll('line')
           .data(edges)
           .join('line')
-          .attr('stroke', 'var(--color-fg-muted, #9ca3af)')
+          .attr('stroke', 'var(--color-text-muted, #9ca3af)')
           .attr('stroke-opacity', 0.4)
           .attr('stroke-width', 1.5)
           .attr('marker-end', 'url(#db-arrow)');
@@ -236,7 +236,7 @@
           .join('text')
           .text(function (d) { return d.fromColumn; })
           .attr('font-size', '8px')
-          .attr('fill', 'var(--color-fg-muted, #9ca3af)')
+          .attr('fill', 'var(--color-text-muted, #9ca3af)')
           .attr('text-anchor', 'middle')
           .attr('dy', -4);
 
@@ -272,7 +272,7 @@
           .attr('rx', NODE_RX)
           .attr('ry', NODE_RX)
           .attr('fill', function (d) { return d.color.bg; })
-          .attr('stroke', 'var(--color-edge, #e5e7eb)')
+          .attr('stroke', 'var(--color-border, #e5e7eb)')
           .attr('stroke-width', 1)
           .attr('opacity', 0.9);
 
@@ -315,7 +315,7 @@
           .on('mouseleave', function () {
             d3.select(this).select('rect')
               .attr('stroke-width', 1)
-              .attr('stroke', 'var(--color-edge, #e5e7eb)');
+              .attr('stroke', 'var(--color-border, #e5e7eb)');
           });
 
         // Click background to dismiss detail.
@@ -447,8 +447,8 @@
           .attr('width', 120)
           .attr('height', plugins.length * 20 + 16)
           .attr('rx', 6)
-          .attr('fill', 'var(--color-surface, white)')
-          .attr('stroke', 'var(--color-edge, #e5e7eb)')
+          .attr('fill', 'var(--color-card-bg, white)')
+          .attr('stroke', 'var(--color-border, #e5e7eb)')
           .attr('opacity', 0.9);
 
         plugins.forEach(function (p, i) {
@@ -466,7 +466,7 @@
             .attr('x', 18)
             .attr('y', 10)
             .attr('font-size', '10px')
-            .attr('fill', 'var(--color-fg, #374151)');
+            .attr('fill', 'var(--color-text-primary, #374151)');
         });
       }
 
