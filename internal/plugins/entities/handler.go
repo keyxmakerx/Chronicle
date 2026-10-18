@@ -2236,7 +2236,7 @@ func (h *Handler) UpdateFieldsAPI(c echo.Context) error {
 	// picks, checked against the plan a player sees.
 	var picks builderPicks
 	if h.heroPlanner != nil && IsClaimedOwnerPlayer(cc.MemberRole, entity, auth.GetUserID(c)) && needsBuilderPicks(fieldsPatch) {
-		plan, err := h.heroPlanner.HeroPlan(c.Request().Context(), cc.Campaign.ID, false)
+		plan, err := h.heroPlanner.HeroPlan(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c), false)
 		if err != nil {
 			return err
 		}
