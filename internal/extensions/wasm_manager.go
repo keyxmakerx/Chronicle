@@ -32,6 +32,13 @@ type loadedPlugin struct {
 	info         WASMPluginInfo
 	contribution WASMContribution
 	cancel       context.CancelFunc // For timeout enforcement.
+
+	// callMu serializes calls: an extism.Plugin is not safe for concurrent
+	// use, and hooks, HTTP calls and plugin messages each call from their own
+	// goroutine. It also covers the per-plugin host call context and log
+	// buffer, which are keyed by extension and slug and would otherwise mix
+	// concurrent calls together.
+	callMu sync.Mutex
 }
 
 // NewPluginManager creates a new WASM plugin manager.
@@ -236,6 +243,12 @@ func (pm *PluginManager) Call(ctx context.Context, extID, slug, function string,
 	if lp.plugin == nil {
 		return nil, fmt.Errorf("plugin %s is in error state: %s", key, lp.info.ErrorMsg)
 	}
+
+	// Held through the call and the log drain. Plugin-to-plugin messages are
+	// dispatched on a new goroutine, so a plugin messaging itself waits for
+	// the current call to finish instead of deadlocking.
+	lp.callMu.Lock()
+	defer lp.callMu.Unlock()
 
 	// Determine timeout.
 	timeoutMS := pm.limits.TimeoutMS

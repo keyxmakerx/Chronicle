@@ -202,9 +202,10 @@ func (r *repository) Create(ctx context.Context, n *Note) error {
 
 func (r *repository) FindByID(ctx context.Context, id string, viewer ViewerContext) (*Note, error) {
 	query := `SELECT ` + noteColumns + ` FROM entity_notes
-		WHERE id = ? AND ` + noteACLFilter
+		WHERE id = ? AND campaign_id = ? AND ` + noteACLFilter
 	row := r.db.QueryRowContext(ctx, query,
 		id,
+		viewer.CampaignID,
 		viewer.UserID,
 		viewer.UserID,
 		viewer.CanSeeDMScribe(),
@@ -231,10 +232,11 @@ func (r *repository) FindByIDForAuthor(ctx context.Context, id, authorUserID str
 
 func (r *repository) ListByEntity(ctx context.Context, entityID string, viewer ViewerContext) ([]Note, error) {
 	query := `SELECT ` + noteColumns + ` FROM entity_notes
-		WHERE entity_id = ? AND ` + noteACLFilter + `
+		WHERE entity_id = ? AND campaign_id = ? AND ` + noteACLFilter + `
 		ORDER BY pinned DESC, updated_at DESC`
 	rows, err := r.db.QueryContext(ctx, query,
 		entityID,
+		viewer.CampaignID,
 		viewer.UserID,
 		viewer.UserID,
 		viewer.CanSeeDMScribe(),

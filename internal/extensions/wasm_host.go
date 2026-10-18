@@ -11,6 +11,9 @@ import (
 )
 
 // EntityReader provides read-only access to entities for WASM host functions.
+// Here and in the writers below, campaignID is the campaign the extension was
+// called for; an implementation must refuse any entity outside it, since the
+// entity ids come from the extension.
 type EntityReader interface {
 	GetEntityJSON(ctx context.Context, campaignID, entityID string) (json.RawMessage, error)
 	SearchEntitiesJSON(ctx context.Context, campaignID, query string, limit int) (json.RawMessage, error)
@@ -30,7 +33,7 @@ type TagReader interface {
 
 // EntityWriter provides write access to entity fields for WASM host functions.
 type EntityWriter interface {
-	UpdateFieldsJSON(ctx context.Context, entityID string, fieldsData json.RawMessage) error
+	UpdateFieldsJSON(ctx context.Context, campaignID, entityID string, fieldsData json.RawMessage) error
 }
 
 // CalendarWriter provides write access to calendar events for WASM host functions.
@@ -41,7 +44,7 @@ type CalendarWriter interface {
 // TagWriter provides write access to entity tags for WASM host functions.
 type TagWriter interface {
 	SetEntityTagsJSON(ctx context.Context, entityID, campaignID string, tagIDs json.RawMessage) error
-	GetEntityTagsJSON(ctx context.Context, entityID string) (json.RawMessage, error)
+	GetEntityTagsJSON(ctx context.Context, campaignID, entityID string) (json.RawMessage, error)
 }
 
 // RelationWriter provides write access to entity relations for WASM host functions.
@@ -662,7 +665,13 @@ func (h *HostEnvironment) buildUpdateEntityFieldsFunction() extism.HostFunction 
 				return
 			}
 
-			if err := h.entityWriter.UpdateFieldsJSON(ctx, req.EntityID, req.Fields); err != nil {
+			campaignID := h.getCampaignIDFromContext(ctx)
+			if campaignID == "" {
+				h.writeHostError(p, stack, "no campaign context")
+				return
+			}
+
+			if err := h.entityWriter.UpdateFieldsJSON(ctx, campaignID, req.EntityID, req.Fields); err != nil {
 				h.writeHostError(p, stack, fmt.Sprintf("update_entity_fields failed: %v", err))
 				return
 			}
@@ -789,7 +798,13 @@ func (h *HostEnvironment) buildGetEntityTagsFunction() extism.HostFunction {
 				return
 			}
 
-			result, err := h.tagWriter.GetEntityTagsJSON(ctx, req.EntityID)
+			campaignID := h.getCampaignIDFromContext(ctx)
+			if campaignID == "" {
+				h.writeHostError(p, stack, "no campaign context")
+				return
+			}
+
+			result, err := h.tagWriter.GetEntityTagsJSON(ctx, campaignID, req.EntityID)
 			if err != nil {
 				h.writeHostError(p, stack, fmt.Sprintf("get_entity_tags failed: %v", err))
 				return

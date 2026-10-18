@@ -201,6 +201,13 @@ func (s *hygieneService) ScanStaleFiles(ctx context.Context) ([]StaleFile, error
 			return nil
 		}
 
+		// Game systems owners upload to a campaign live in systems/ with no
+		// media_files row either; purging them deletes the system at the
+		// next restart.
+		if strings.HasPrefix(rel, "systems"+string(filepath.Separator)) {
+			return nil
+		}
+
 		if !knownFiles[rel] {
 			// Skip recent files (may be in-flight uploads).
 			if time.Since(info.ModTime()) < 15*time.Minute {

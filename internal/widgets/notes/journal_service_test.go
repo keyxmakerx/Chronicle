@@ -266,3 +266,45 @@ func TestUpdate_OnlyContentEditsAddVersions(t *testing.T) {
 		t.Errorf("a content edit must add one version, got %d", versions)
 	}
 }
+
+// fakeNights records what the Journal asked of the sessions side.
+type fakeNights struct {
+	ensuredFor string
+	askedIDs   []string
+	ensureErr  error
+}
+
+func (f *fakeNights) EnsureEntries(_ context.Context, _ string, v permissions.Viewer) error {
+	f.ensuredFor = v.UserID()
+	return f.ensureErr
+}
+
+func (f *fakeNights) Nights(_ context.Context, _ string, ids []string) (map[string]NightTag, error) {
+	f.askedIDs = ids
+	return map[string]NightTag{idB: {SessionID: "s1", Date: "2026-10-10", Name: "Game night", Started: true}}, nil
+}
+
+func TestJournalIndex_GameNightEntries(t *testing.T) {
+	repo, _ := journalRepo(ashkeep()...)
+	svc := NewNoteServiceWithAttachments(repo, nil)
+	nights := &fakeNights{ensureErr: context.DeadlineExceeded}
+	svc.SetNightEntries(nights)
+	idx, err := svc.JournalIndex(context.Background(), "c1", player("u-ana"))
+	if err != nil {
+		t.Fatalf("a failed ensure must not fail the Journal: %v", err)
+	}
+	if nights.ensuredFor != "u-ana" {
+		t.Errorf("entries were made for %q, want the viewer", nights.ensuredFor)
+	}
+	for _, id := range nights.askedIDs {
+		if r := rowByID(idx, id); r == nil || r.IsFolder {
+			t.Errorf("asked about %s, which is not a listed note", id)
+		}
+	}
+	if r := rowByID(idx, idB); r == nil || r.Night == nil || r.Night.Name != "Game night" || !r.Night.Started {
+		t.Errorf("the entry must carry its night: %+v", r)
+	}
+	if r := rowByID(idx, idP); r == nil || r.Night != nil {
+		t.Errorf("an ordinary note has no night: %+v", r)
+	}
+}

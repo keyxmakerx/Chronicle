@@ -53,7 +53,7 @@ func TestCreateEntityType_IconNormalised(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := &captureTypeRepo{}
-			h := NewAPIHandler(nil, entities.NewEntityService(nil, repo, nil), nil, nil)
+			h := NewAPIHandler(nil, entities.NewEntityService(nil, repo, nil), stubCampaignSvcOwner{}, nil)
 
 			e := echo.New()
 			req := httptest.NewRequest(http.MethodPost, "/api/v1/campaigns/camp-1/entity-types", strings.NewReader(tt.body))
@@ -62,6 +62,7 @@ func TestCreateEntityType_IconNormalised(t *testing.T) {
 			c := e.NewContext(req, rec)
 			c.SetParamNames("id")
 			c.SetParamValues("camp-1")
+			c.Set(apiKeyContextKey, &APIKey{ID: synthKeySessionID, CampaignID: "camp-1", UserID: "user-1", IsActive: true})
 
 			err := h.CreateEntityType(c)
 			if tt.wantStatus != http.StatusCreated {

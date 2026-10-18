@@ -120,7 +120,7 @@ type AuthService interface {
 	DeleteOwnAccount(ctx context.Context, userID string, input DeleteAccountInput) error
 	UpdateDisplayName(ctx context.Context, userID, displayName string) error
 	UpdateAvatarPath(ctx context.Context, userID string, avatarPath *string) error
-	ChangePassword(ctx context.Context, userID, currentPassword, newPassword string) error
+	ChangePassword(ctx context.Context, userID, currentPassword, newPassword, ip, userAgent string) (string, error)
 
 	// UploadAvatar stores fileBytes as userID's avatar through the wired
 	// AvatarUploader (media.MediaService, usage_type "avatar", no campaign)
@@ -1239,39 +1239,44 @@ func (s *authService) refreshSessionAvatar(ctx context.Context, userID string, a
 	}
 }
 
-// ChangePassword verifies the current password and sets a new one.
-func (s *authService) ChangePassword(ctx context.Context, userID, currentPassword, newPassword string) error {
+// ChangePassword verifies the current password, sets a new one, and returns
+// the token of a fresh session for the calling device. Every older session is
+// ended, so without the fresh one the caller would be signed out too.
+func (s *authService) ChangePassword(ctx context.Context, userID, currentPassword, newPassword, ip, userAgent string) (string, error) {
 	user, err := s.repo.FindByID(ctx, userID)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	// Verify current password.
 	if !verifyPassword(currentPassword, user.PasswordHash) {
-		return apperror.NewBadRequest("current password is incorrect")
+		return "", apperror.NewBadRequest("current password is incorrect")
 	}
 
 	// Validate new password.
 	if len(newPassword) < 8 {
-		return apperror.NewBadRequest("new password must be at least 8 characters")
+		return "", apperror.NewBadRequest("new password must be at least 8 characters")
 	}
 	if len(newPassword) > 128 {
-		return apperror.NewBadRequest("new password must be at most 128 characters")
+		return "", apperror.NewBadRequest("new password must be at most 128 characters")
 	}
 
 	// Hash and store.
 	hash, err := hashPassword(newPassword)
 	if err != nil {
-		return fmt.Errorf("hashing new password: %w", err)
+		return "", fmt.Errorf("hashing new password: %w", err)
 	}
 	if err := s.repo.UpdatePassword(ctx, userID, hash); err != nil {
-		return err
+		return "", err
 	}
 
 	// Invalidate all existing sessions so any compromised session is terminated.
-	// The caller is responsible for creating a fresh session for the current user.
 	s.destroyUserSessions(ctx, userID)
-	return nil
+	token, err := s.createSession(ctx, user, ip, userAgent)
+	if err != nil {
+		return "", apperror.NewInternal(fmt.Errorf("creating session: %w", err))
+	}
+	return token, nil
 }
 
 // --- Email Change ---

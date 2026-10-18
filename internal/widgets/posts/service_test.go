@@ -55,7 +55,7 @@ func (m *mockPostRepo) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-func (m *mockPostRepo) Reorder(ctx context.Context, entityID string, postIDs []string) error {
+func (m *mockPostRepo) Reorder(ctx context.Context, campaignID, entityID string, postIDs []string) error {
 	if m.reorderFn != nil {
 		return m.reorderFn(ctx, entityID, postIDs)
 	}
@@ -236,7 +236,7 @@ func TestReorder_Success(t *testing.T) {
 	repo := &mockPostRepo{}
 	svc := NewPostService(repo)
 
-	err := svc.Reorder(context.Background(), "ent-1", []string{"p-1", "p-2", "p-3"})
+	err := svc.Reorder(context.Background(), "camp-1", "ent-1", []string{"p-1", "p-2", "p-3"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -246,6 +246,6 @@ func TestReorder_EmptyIDs(t *testing.T) {
 	repo := &mockPostRepo{}
 	svc := NewPostService(repo)
 
-	err := svc.Reorder(context.Background(), "ent-1", []string{})
+	err := svc.Reorder(context.Background(), "camp-1", "ent-1", []string{})
 	assertAppError(t, err, 400)
 }
