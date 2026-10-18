@@ -114,7 +114,7 @@ func (r *relationRepository) ListByEntity(ctx context.Context, campaignID, entit
 	                  e.name, COALESCE(et.icon, 'fa-file'), COALESCE(et.color, '#6b7280'),
 	                  e.slug, COALESCE(et.name, '')
 	           FROM entity_relations er
-	           INNER JOIN entities e ON e.id = er.target_entity_id AND e.deleted_at IS NULL
+	           INNER JOIN entities e ON e.id = er.target_entity_id AND e.deleted_at IS NULL AND e.campaign_id = er.campaign_id
 	           LEFT JOIN entity_types et ON et.id = e.entity_type_id
 	           WHERE er.source_entity_id = ? AND er.campaign_id = ?
 	           ORDER BY er.relation_type ASC, e.name ASC`
@@ -205,7 +205,16 @@ func (r *relationRepository) UpdateMetadata(ctx context.Context, id int, metadat
 	if err != nil {
 		return fmt.Errorf("checking rows affected: %w", err)
 	}
-	if rowsAffected == 0 {
+	if rowsAffected > 0 {
+		return nil
+	}
+	// MariaDB reports 0 for an UPDATE that matched but changed nothing (the
+	// DSN has no clientFoundRows), so zero alone does not mean the relation is gone.
+	var exists bool
+	if err := r.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM entity_relations WHERE id = ?)`, id).Scan(&exists); err != nil {
+		return fmt.Errorf("checking relation exists: %w", err)
+	}
+	if !exists {
 		return apperror.NewNotFound("relation not found")
 	}
 
@@ -253,8 +262,8 @@ func (r *relationRepository) ListByCampaign(ctx context.Context, campaignID stri
 	                  et.name, COALESCE(ett.icon, 'fa-file'), COALESCE(ett.color, '#6b7280'),
 	                  et.slug, COALESCE(ett.name, '')
 	           FROM entity_relations er
-	           INNER JOIN entities es ON es.id = er.source_entity_id AND es.deleted_at IS NULL
-	           INNER JOIN entities et ON et.id = er.target_entity_id AND et.deleted_at IS NULL
+	           INNER JOIN entities es ON es.id = er.source_entity_id AND es.deleted_at IS NULL AND es.campaign_id = er.campaign_id
+	           INNER JOIN entities et ON et.id = er.target_entity_id AND et.deleted_at IS NULL AND et.campaign_id = er.campaign_id
 	           LEFT JOIN entity_types ets ON ets.id = es.entity_type_id
 	           LEFT JOIN entity_types ett ON ett.id = et.entity_type_id
 	           WHERE er.campaign_id = ?

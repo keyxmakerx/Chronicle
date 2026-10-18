@@ -642,6 +642,21 @@ func renderCalendarEvent(b *strings.Builder, e *calendar.Event, opts Options) er
 	if e.Visibility == "dm_only" {
 		meta = append(meta, "_GM-only_")
 	}
+	// Importance, category and linked page are what an event block sends
+	// back. Safe mode is the player's view, which carries none of them: the
+	// export reads as the owner, so a linked page here may be one players
+	// can't open, and categories are calendar structure.
+	if opts.Privacy != PrivacyModeSafe {
+		if e.Tier != nil && *e.Tier != "" {
+			meta = append(meta, "Importance: "+*e.Tier)
+		}
+		if e.KindName != "" {
+			meta = append(meta, "Category: "+e.KindName)
+		}
+		if e.EntityName != "" {
+			meta = append(meta, "Page: "+e.EntityName)
+		}
+	}
 	if len(meta) > 0 {
 		b.WriteString(strings.Join(meta, " · "))
 		b.WriteString("\n\n")

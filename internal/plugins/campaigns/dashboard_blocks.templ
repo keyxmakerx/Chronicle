@@ -62,11 +62,16 @@ templ DashboardBlockSwitch(cc *CampaignContext, block DashboardBlock, recentEnti
 			// the old block shows the new card in its place.
 			@dashComingUp(cc)
 		case "activity_feed":
-			@dashActivityFeed(cc, block.Config)
+			// The activity embed is the owner's (audit routes), so nobody
+			// else is shown a card that can only fail to load.
+			if cc.MemberRole >= RoleOwner {
+				@dashActivityFeed(cc, block.Config)
+			}
 		case "sync_status":
 			// Lazy-loaded from foundry_vtt (DashboardSyncBlock) to keep
 			// this plugin VTT-agnostic; shows a loading skeleton until
-			// the fragment swaps in.
+			// the fragment swaps in. Its status read is owner-only.
+			if cc.MemberRole >= RoleOwner {
 			<div
 				hx-get={ fmt.Sprintf("/campaigns/%s/foundry-vtt/dashboard-sync-block", cc.Campaign.ID) }
 				hx-trigger="load"
@@ -82,6 +87,7 @@ templ DashboardBlockSwitch(cc *CampaignContext, block DashboardBlock, recentEnti
 					</div>
 				</div>
 			</div>
+			}
 	}
 }
 
@@ -105,22 +111,22 @@ templ dashWelcomeBanner(cc *CampaignContext) {
 					}
 				</div>
 				if cc.MemberRole >= RoleOwner {
-					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings", cc.Campaign.ID)) } class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-white/20 text-white hover:bg-white/30 backdrop-blur-sm transition-colors">
+					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings", cc.Campaign.ID)) } class="cb-quiet inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-white/20 text-white hover:bg-white/30 backdrop-blur-sm transition-colors">
 						<i class="fa-solid fa-gear text-xs"></i> Settings
 					</a>
 				}
 			</div>
 		</div>
 	} else {
-		<div class="flex items-center justify-between">
-			<div>
-				<h1 class="text-3xl font-bold text-fg">{ cc.Campaign.Name }</h1>
+		<div class="cb-hero flex items-center justify-between">
+			<div class="min-w-0">
+				<h1 class="cb-title text-3xl font-bold text-fg">{ cc.Campaign.Name }</h1>
 				if cc.Campaign.Description != nil && *cc.Campaign.Description != "" {
-					<p class="text-fg-secondary mt-2 max-w-2xl">{ *cc.Campaign.Description }</p>
+					<p class="cb-epi text-fg-secondary mt-2 max-w-2xl">{ *cc.Campaign.Description }</p>
 				}
 			</div>
 			if cc.MemberRole >= RoleOwner {
-				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings", cc.Campaign.ID)) } class="btn-secondary text-sm">
+				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings", cc.Campaign.ID)) } class="cb-quiet btn-secondary text-sm">
 					<i class="fa-solid fa-gear mr-1.5 text-xs"></i> Settings
 				</a>
 			}
@@ -129,62 +135,49 @@ templ dashWelcomeBanner(cc *CampaignContext) {
 }
 
 // dashQuickActions renders the All Pages / Members / Categories shortcut
-// cards lifted from the legacy defaultDashboard. Non-owners see a
-// disabled Maps placeholder card in the third slot to preserve the
-// 3-column visual layout from before.
+// cards lifted from the legacy defaultDashboard. Members and Categories are
+// the owner's pages, so everyone else gets All Pages alone.
 templ dashQuickActions(cc *CampaignContext) {
-	<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-		<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) } class="card p-5 hover:shadow-md hover:-translate-y-0.5 block group">
+	<div class="cb-shortcuts grid grid-cols-1 md:grid-cols-3 gap-4">
+		<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) } class="cb-shortcut card p-5 hover:shadow-md hover:-translate-y-0.5 block group">
 			<div class="flex items-center gap-3">
-				<div class="w-10 h-10 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center shrink-0">
+				<div class="cb-tile w-10 h-10 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center shrink-0">
 					<i class="fa-solid fa-scroll text-indigo-600 dark:text-indigo-400"></i>
 				</div>
 				<div>
 					<h3 class="font-semibold text-fg group-hover:text-accent transition-colors">All Pages</h3>
-					<p class="text-xs text-fg-secondary">Browse all pages</p>
+					<p class="cb-sub text-xs text-fg-secondary">Browse all pages</p>
 				</div>
 			</div>
 		</a>
 
 		// The People page is the owner's; anyone else would get a 403.
 		if cc.MemberRole >= RoleOwner {
-			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/members", cc.Campaign.ID)) } class="card p-5 hover:shadow-md hover:-translate-y-0.5 block group">
+			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/members", cc.Campaign.ID)) } class="cb-shortcut card p-5 hover:shadow-md hover:-translate-y-0.5 block group">
 				<div class="flex items-center gap-3">
-					<div class="w-10 h-10 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center shrink-0">
+					<div class="cb-tile w-10 h-10 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center shrink-0">
 						<i class="fa-solid fa-users text-blue-600 dark:text-blue-400"></i>
 					</div>
 					<div>
 						<h3 class="font-semibold text-fg group-hover:text-accent transition-colors">Members</h3>
-						<p class="text-xs text-fg-secondary">View campaign members</p>
+						<p class="cb-sub text-xs text-fg-secondary">View campaign members</p>
 					</div>
 				</div>
 			</a>
 		}
 
 		if cc.MemberRole >= RoleOwner {
-			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entity-types", cc.Campaign.ID)) } class="card p-5 hover:shadow-md hover:-translate-y-0.5 block group">
+			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entity-types", cc.Campaign.ID)) } class="cb-shortcut card p-5 hover:shadow-md hover:-translate-y-0.5 block group">
 				<div class="flex items-center gap-3">
-					<div class="w-10 h-10 rounded-lg bg-purple-50 dark:bg-purple-900/30 flex items-center justify-center shrink-0">
+					<div class="cb-tile w-10 h-10 rounded-lg bg-purple-50 dark:bg-purple-900/30 flex items-center justify-center shrink-0">
 						<i class="fa-solid fa-layer-group text-purple-600 dark:text-purple-400"></i>
 					</div>
 					<div>
 						<h3 class="font-semibold text-fg group-hover:text-accent transition-colors">Categories</h3>
-						<p class="text-xs text-fg-secondary">Manage page types &amp; layouts</p>
+						<p class="cb-sub text-xs text-fg-secondary">Manage page types &amp; layouts</p>
 					</div>
 				</div>
 			</a>
-		} else {
-			<div class="card p-5 opacity-40">
-				<div class="flex items-center gap-3">
-					<div class="w-10 h-10 rounded-lg bg-surface-alt flex items-center justify-center shrink-0">
-						<i class="fa-solid fa-map text-fg-muted"></i>
-					</div>
-					<div>
-						<h3 class="font-semibold text-fg">Maps</h3>
-						<p class="text-xs text-fg-muted">Coming soon</p>
-					</div>
-				</div>
-			</div>
 		}
 	</div>
 }
@@ -192,27 +185,28 @@ templ dashQuickActions(cc *CampaignContext) {
 // dashCategoryGrid renders a quick-nav grid of entity types with counts.
 // Config: columns (int, default 4).
 templ dashCategoryGrid(cc *CampaignContext, config map[string]any) {
-	if len(layouts.GetEntityTypes(ctx)) > 0 {
-		<div>
-			<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider mb-3">Categories</h2>
-			<div class={ dashGridClass(config) }>
-				for _, et := range layouts.GetEntityTypes(ctx) {
+	{{ types := dashVisibleCategories(ctx, cc) }}
+	if len(types) > 0 {
+		<div class="cb-contents">
+			<h2 class="cb-head text-sm font-semibold text-fg-secondary uppercase tracking-wider mb-3">Categories</h2>
+			<div class={ "cb-rows", dashGridClass(config) }>
+				for _, et := range types {
 					<a
 						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/%s", cc.Campaign.ID, et.Slug)) }
-						class="card px-4 py-3 hover:shadow-md hover:-translate-y-0.5 block group"
+						class="cb-link cb-row card px-4 py-3 hover:shadow-md hover:-translate-y-0.5 block group"
 					>
-						<div class="flex items-center gap-2.5 mb-1">
+						<div class="cb-row-main flex items-center gap-2.5 mb-1">
 							<span
-								class="w-7 h-7 rounded flex items-center justify-center shrink-0 text-sm"
+								class="cb-swatch w-7 h-7 rounded flex items-center justify-center shrink-0 text-sm"
 								style={ fmt.Sprintf("background-color: %s20; color: %s", et.Color, et.Color) }
 							>
 								if et.Icon != "" {
 									<i class={ "fa-solid " + et.Icon }></i>
 								}
 							</span>
-							<span class="text-sm font-medium text-fg truncate group-hover:text-accent transition-colors">{ et.NamePlural }</span>
+							<span class="cb-row-name text-sm font-medium text-fg truncate group-hover:text-accent transition-colors">{ et.NamePlural }</span>
 						</div>
-						<div class="pl-[2.375rem] text-xs text-fg-muted">
+						<div class="cb-row-meta pl-[2.375rem] text-xs text-fg-muted">
 							{ strconv.Itoa(layouts.GetEntityCount(ctx, et.ID)) } pages
 						</div>
 					</a>
@@ -222,21 +216,39 @@ templ dashCategoryGrid(cc *CampaignContext, config map[string]any) {
 	}
 }
 
+// dashVisibleCategories is the category grid's list: every category for the
+// owner, who fills them, and for anyone else only the ones holding a page they
+// can open. The counts are already the viewer's own (the layout injector
+// counts by the viewer's role), so a zero means nothing here for them.
+func dashVisibleCategories(ctx context.Context, cc *CampaignContext) []layouts.SidebarEntityType {
+	all := layouts.GetEntityTypes(ctx)
+	if cc.MemberRole >= RoleOwner {
+		return all
+	}
+	var out []layouts.SidebarEntityType
+	for _, et := range all {
+		if layouts.GetEntityCount(ctx, et.ID) > 0 {
+			out = append(out, et)
+		}
+	}
+	return out
+}
+
 // dashRecentPages renders recently updated entities in a card grid.
 // Config: limit (int, default 8).
 templ dashRecentPages(cc *CampaignContext, config map[string]any, recentEntities []RecentEntity) {
 	if len(recentEntities) > 0 {
-		<div>
+		<div class="cb-recent">
 			<div class="flex items-center justify-between mb-3">
-				<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">Recently Updated</h2>
+				<h2 class="cb-head text-sm font-semibold text-fg-secondary uppercase tracking-wider">Recently Updated</h2>
 				<a
 					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) }
-					class="text-xs text-accent hover:underline"
+					class="cb-more text-xs text-accent hover:underline"
 				>
 					View all
 				</a>
 			</div>
-			<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+			<div class="cb-rows grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
 				for _, re := range limitRecentEntities(recentEntities, config) {
 					@RecentEntityCard(cc, &re)
 				}
@@ -262,7 +274,7 @@ templ dashEntityList(cc *CampaignContext, config map[string]any) {
 // dashTextBlock renders custom HTML content.
 // Config: content (string). Content is sanitized to prevent stored XSS.
 templ dashTextBlock(config map[string]any) {
-	<div class="card p-4 prose prose-sm dark:prose-invert max-w-none">
+	<div class="cb-card card p-4 prose prose-sm dark:prose-invert max-w-none">
 		if content, ok := config["content"].(string); ok && content != "" {
 			@templ.Raw(sanitize.HTML(content))
 		} else {
@@ -302,8 +314,8 @@ func calendarCardUnavailable(ctx context.Context) bool {
 }
 
 // calendarCardUnavailableState is the quiet neutral state calendar cards
-// render instead of their hx-get shell when calendarCardUnavailable is
-// true: no spinner (nothing is loading), no error (nothing is wrong for
+// render for the owner instead of their hx-get shell when
+// calendarCardUnavailable is true: no spinner (nothing is loading), no error (nothing is wrong for
 // this viewer specifically) — just an honest "not here" message, the same
 // register as calendar.UpcomingEventsEmbed's own "no calendar yet" state.
 templ calendarCardUnavailableState(minHeightPx int) {
@@ -319,33 +331,41 @@ templ calendarCardUnavailableState(minHeightPx int) {
 // and dashActivityFeed already use for their own
 // dashboard cards, since campaigns cannot import the calendar plugin
 // directly (plugin isolation) and each plugin owns its own embed fragment.
+// Only the owner is shown the card while the calendar is off, since only they
+// can turn it on. The calendar app is members-only, so a visitor gets no
+// link into it, and a fragment with nothing for them drops the card.
 // Config: limit (int, default 5).
 templ dashCalendarPreview(cc *CampaignContext, config map[string]any) {
-	<div>
-		<div class="flex items-center justify-between mb-3">
-			<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
-				<i class="fa-solid fa-calendar-days mr-1.5"></i>Upcoming Events
-			</h2>
-			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/apps/calendar", cc.Campaign.ID)) }
-				class="text-xs text-accent hover:underline"
-			>
-				View calendar
-			</a>
-		</div>
-		if calendarCardUnavailable(ctx) {
-			@calendarCardUnavailableState(60)
-		} else {
-			<div
-				hx-get={ fmt.Sprintf("/campaigns/%s/calendars/upcoming?limit=%d", cc.Campaign.ID, dashCalendarLimit(config)) }
-				hx-trigger="intersect once"
-				hx-swap="innerHTML"
-				class="card divide-y divide-edge min-h-[60px]"
-			>
-				<div class="px-4 py-3 text-sm text-fg-muted">Loading...</div>
+	if !calendarCardUnavailable(ctx) || cc.MemberRole >= RoleOwner {
+		<div data-block="upcoming">
+			<div class="flex items-center justify-between mb-3">
+				<h2 class="cb-head text-sm font-semibold text-fg-secondary uppercase tracking-wider">
+					<i class="fa-solid fa-calendar-days mr-1.5"></i>Upcoming Events
+				</h2>
+				if cc.IsMember {
+					<a
+						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/apps/calendar", cc.Campaign.ID)) }
+						class="cb-more text-xs text-accent hover:underline"
+					>
+						View calendar
+					</a>
+				}
 			</div>
-		}
-	</div>
+			if calendarCardUnavailable(ctx) {
+				@calendarCardUnavailableState(60)
+			} else {
+				<div
+					hx-get={ fmt.Sprintf("/campaigns/%s/calendars/upcoming?limit=%d", cc.Campaign.ID, dashCalendarLimit(config)) }
+					hx-trigger="intersect once"
+					hx-swap="innerHTML"
+					data-drop-if-empty
+					class="cb-card cb-list card divide-y divide-edge min-h-[60px]"
+				>
+					<div class="px-4 py-3 text-sm text-fg-muted">Loading...</div>
+				</div>
+			}
+		</div>
+	}
 }
 
 // dashCalendarLimit extracts the event limit from block config (default 5).
@@ -429,12 +449,12 @@ templ dashTimelinePreview(cc *CampaignContext, config map[string]any) {
 		data-limit={ fmt.Sprintf("%d", dashCalendarLimit(config)) }
 	>
 		<div class="flex items-center justify-between mb-3">
-			<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
+			<h2 class="cb-head text-sm font-semibold text-fg-secondary uppercase tracking-wider">
 				<i class="fa-solid fa-timeline mr-1.5"></i>Timelines
 			</h2>
 			<a
 				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/timelines", cc.Campaign.ID)) }
-				class="text-xs text-accent hover:underline"
+				class="cb-more text-xs text-accent hover:underline"
 			>
 				View all
 			</a>
@@ -443,7 +463,7 @@ templ dashTimelinePreview(cc *CampaignContext, config map[string]any) {
 			hx-get={ fmt.Sprintf("/campaigns/%s/timelines/preview?limit=%d", cc.Campaign.ID, dashCalendarLimit(config)) }
 			hx-trigger="intersect once"
 			hx-swap="innerHTML"
-			class="card divide-y divide-edge min-h-[60px]"
+			class="cb-card cb-list card divide-y divide-edge min-h-[60px]"
 		>
 			<div class="px-4 py-3 text-sm text-fg-muted">Loading...</div>
 		</div>
@@ -460,20 +480,20 @@ templ dashMapPreview(cc *CampaignContext, config map[string]any) {
 		data-map-id={ dashMapID(config) }
 	>
 		<div class="flex items-center justify-between mb-3">
-			<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
+			<h2 class="cb-head text-sm font-semibold text-fg-secondary uppercase tracking-wider">
 				<i class="fa-solid fa-map mr-1.5"></i>Map
 			</h2>
 			if dashMapID(config) != "" {
 				<a
 					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/maps/%s", cc.Campaign.ID, dashMapID(config))) }
-					class="text-xs text-accent hover:underline"
+					class="cb-more text-xs text-accent hover:underline"
 				>
 					Open map
 				</a>
 			} else {
 				<a
 					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/maps", cc.Campaign.ID)) }
-					class="text-xs text-accent hover:underline"
+					class="cb-more text-xs text-accent hover:underline"
 				>
 					View all maps
 				</a>
@@ -498,12 +518,12 @@ func dashMapID(config map[string]any) string {
 templ dashRelationsGraph(cc *CampaignContext, config map[string]any) {
 	<div>
 		<div class="flex items-center justify-between mb-3">
-			<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
+			<h2 class="cb-head text-sm font-semibold text-fg-secondary uppercase tracking-wider">
 				<i class="fa-solid fa-diagram-project mr-1.5"></i>Relations Graph
 			</h2>
 			<a
 				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/relations-graph/page", cc.Campaign.ID)) }
-				class="text-xs text-accent hover:underline"
+				class="cb-more text-xs text-accent hover:underline"
 			>
 				Full view
 			</a>
@@ -547,32 +567,37 @@ func dashGraphHeight(config map[string]any) int {
 // higher default limit and a taller card): real V5 data, not a placeholder.
 // Config: limit (int, default 10, max 20), height (int, default 400).
 templ dashCalendarFull(cc *CampaignContext, config map[string]any) {
-	<div>
-		<div class="flex items-center justify-between mb-3">
-			<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
-				<i class="fa-solid fa-calendar-days mr-1.5"></i>Calendar
-			</h2>
-			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/apps/calendar", cc.Campaign.ID)) }
-				class="text-xs text-accent hover:underline"
-			>
-				Open calendar
-			</a>
-		</div>
-		if calendarCardUnavailable(ctx) {
-			@calendarCardUnavailableState(dashGraphHeight(config))
-		} else {
-			<div
-				hx-get={ fmt.Sprintf("/campaigns/%s/calendars/upcoming?limit=%d", cc.Campaign.ID, dashCalendarFullLimit(config)) }
-				hx-trigger="intersect once"
-				hx-swap="innerHTML"
-				class="card divide-y divide-edge overflow-y-auto"
-				style={ fmt.Sprintf("min-height: %dpx", dashGraphHeight(config)) }
-			>
-				<div class="px-4 py-3 text-sm text-fg-muted">Loading...</div>
+	if !calendarCardUnavailable(ctx) || cc.MemberRole >= RoleOwner {
+		<div data-block="upcoming">
+			<div class="flex items-center justify-between mb-3">
+				<h2 class="cb-head text-sm font-semibold text-fg-secondary uppercase tracking-wider">
+					<i class="fa-solid fa-calendar-days mr-1.5"></i>Calendar
+				</h2>
+				if cc.IsMember {
+					<a
+						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/apps/calendar", cc.Campaign.ID)) }
+						class="cb-more text-xs text-accent hover:underline"
+					>
+						Open calendar
+					</a>
+				}
 			</div>
-		}
-	</div>
+			if calendarCardUnavailable(ctx) {
+				@calendarCardUnavailableState(dashGraphHeight(config))
+			} else {
+				<div
+					hx-get={ fmt.Sprintf("/campaigns/%s/calendars/upcoming?limit=%d", cc.Campaign.ID, dashCalendarFullLimit(config)) }
+					hx-trigger="intersect once"
+					hx-swap="innerHTML"
+					data-drop-if-empty
+					class="cb-card cb-list card divide-y divide-edge overflow-y-auto"
+					style={ fmt.Sprintf("min-height: %dpx", dashGraphHeight(config)) }
+				>
+					<div class="px-4 py-3 text-sm text-fg-muted">Loading...</div>
+				</div>
+			}
+		</div>
+	}
 }
 
 // dashCalendarFullLimit is dashCalendarLimit's sibling for the "full" block,
@@ -590,12 +615,12 @@ func dashCalendarFullLimit(config map[string]any) int {
 templ dashTimelineFull(cc *CampaignContext, config map[string]any) {
 	<div>
 		<div class="flex items-center justify-between mb-3">
-			<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
+			<h2 class="cb-head text-sm font-semibold text-fg-secondary uppercase tracking-wider">
 				<i class="fa-solid fa-timeline mr-1.5"></i>Timeline
 			</h2>
 			<a
 				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/timelines", cc.Campaign.ID)) }
-				class="text-xs text-accent hover:underline"
+				class="cb-more text-xs text-accent hover:underline"
 			>
 				Open full page
 			</a>
@@ -620,12 +645,12 @@ templ dashTimelineFull(cc *CampaignContext, config map[string]any) {
 templ dashRelationsGraphFull(cc *CampaignContext, config map[string]any) {
 	<div>
 		<div class="flex items-center justify-between mb-3">
-			<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
+			<h2 class="cb-head text-sm font-semibold text-fg-secondary uppercase tracking-wider">
 				<i class="fa-solid fa-diagram-project mr-1.5"></i>Relations Graph
 			</h2>
 			<a
 				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/relations-graph/page", cc.Campaign.ID)) }
-				class="text-xs text-accent hover:underline"
+				class="cb-more text-xs text-accent hover:underline"
 			>
 				Open full page
 			</a>
@@ -674,20 +699,20 @@ func dashTimelineID(config map[string]any) string {
 templ dashMapFull(cc *CampaignContext, config map[string]any) {
 	<div>
 		<div class="flex items-center justify-between mb-3">
-			<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
+			<h2 class="cb-head text-sm font-semibold text-fg-secondary uppercase tracking-wider">
 				<i class="fa-solid fa-map mr-1.5"></i>Map
 			</h2>
 			if dashMapID(config) != "" {
 				<a
 					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/maps/%s", cc.Campaign.ID, dashMapID(config))) }
-					class="text-xs text-accent hover:underline"
+					class="cb-more text-xs text-accent hover:underline"
 				>
 					Open full editor
 				</a>
 			} else {
 				<a
 					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/maps", cc.Campaign.ID)) }
-					class="text-xs text-accent hover:underline"
+					class="cb-more text-xs text-accent hover:underline"
 				>
 					View all maps
 				</a>
@@ -722,7 +747,7 @@ templ dashComingUp(cc *CampaignContext) {
 		hx-swap="outerHTML"
 	>
 		<div class="flex items-center justify-between mb-3">
-			<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
+			<h2 class="cb-head text-sm font-semibold text-fg-secondary uppercase tracking-wider">
 				<i class="fa-solid fa-dice-d20 mr-1.5"></i>Coming up
 			</h2>
 		</div>
@@ -738,12 +763,12 @@ templ dashComingUp(cc *CampaignContext) {
 templ dashActivityFeed(cc *CampaignContext, config map[string]any) {
 	<div>
 		<div class="flex items-center justify-between mb-3">
-			<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
+			<h2 class="cb-head text-sm font-semibold text-fg-secondary uppercase tracking-wider">
 				<i class="fa-solid fa-clock-rotate-left mr-1.5"></i>Recent Activity
 			</h2>
 			<a
 				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/activity", cc.Campaign.ID)) }
-				class="text-xs text-accent hover:underline"
+				class="cb-more text-xs text-accent hover:underline"
 			>
 				View all
 			</a>
@@ -752,7 +777,7 @@ templ dashActivityFeed(cc *CampaignContext, config map[string]any) {
 			hx-get={ fmt.Sprintf("/campaigns/%s/activity/embed?limit=%d", cc.Campaign.ID, dashActivityLimit(config)) }
 			hx-trigger="intersect once"
 			hx-swap="innerHTML"
-			class="card divide-y divide-edge min-h-[60px]"
+			class="cb-card cb-list card divide-y divide-edge min-h-[60px]"
 		>
 			<div class="px-4 py-3 text-sm text-fg-muted">Loading activity...</div>
 		</div>

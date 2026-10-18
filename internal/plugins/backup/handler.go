@@ -1,6 +1,7 @@
 package backup
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -117,8 +118,10 @@ func (h *Handler) SaveSchedule(c echo.Context) error {
 // another admin is running one), we return 409 rather than coalescing
 // — operators benefit from knowing their click didn't start a fresh run.
 func (h *Handler) Run(c echo.Context) error {
-	ctx := c.Request().Context()
-	_, err := h.svc.RunBackup(ctx)
+	// Detached from the request: a closed tab or proxy timeout must not
+	// SIGKILL backup.sh mid-dump. The service's own timeout still bounds it.
+	ctx := context.WithoutCancel(c.Request().Context())
+	result, err := h.svc.RunBackup(ctx)
 	if err != nil {
 		if errors.Is(err, ErrAlreadyRunning) {
 			return echo.NewHTTPError(http.StatusConflict, "a backup is already running; wait for it to finish")
@@ -128,7 +131,11 @@ func (h *Handler) Run(c echo.Context) error {
 		slog.Error("backup run failed", slog.Any("error", err))
 		return echo.NewHTTPError(http.StatusInternalServerError, "The backup could not be completed. Open the technical details on this page, or check the server log.")
 	}
-	h.recordActivity(c, "backup.run", "backup", "", "")
+	// A script failure is a nil error with a failed result; only a clean
+	// finish counts as a backup in the change log.
+	if result != nil && result.Succeeded() {
+		h.recordActivity(c, "backup.run", "backup", "", "")
+	}
 	return middleware.HTMXRedirect(c, "/admin/backup")
 }
 

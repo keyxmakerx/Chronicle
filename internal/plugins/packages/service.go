@@ -573,9 +573,25 @@ func (s *packageService) installVersion(ctx context.Context, packageID, version 
 	if destDir == "" {
 		return apperror.NewValidation("invalid package version")
 	}
-	if err := os.MkdirAll(destDir, 0o755); err != nil {
-		return fmt.Errorf("creating install directory: %w", err)
+	// Extract and validate in a scratch folder outside the scanned version
+	// folders, and swap it in only once everything passed. Extracting onto
+	// destDir would mutate, then on failure delete, a live install when the
+	// same version is installed again (a re-install or an admin pin).
+	stagingRoot := filepath.Join(s.packagesDir(), "staging")
+	if err := os.MkdirAll(stagingRoot, 0o755); err != nil {
+		return fmt.Errorf("creating staging directory: %w", err)
 	}
+	stageDir, err := os.MkdirTemp(stagingRoot, "install-")
+	if err != nil {
+		return fmt.Errorf("creating staging directory: %w", err)
+	}
+	// MkdirTemp makes the folder 0700; it becomes the install folder, which
+	// has always been 0755.
+	if err := os.Chmod(stageDir, 0o755); err != nil {
+		_ = os.RemoveAll(stageDir)
+		return fmt.Errorf("creating staging directory: %w", err)
+	}
+	defer func() { _ = os.RemoveAll(stageDir) }()
 
 	zipName := fmt.Sprintf("%s-%s.zip", pkg.Slug, version)
 	zipPath := filepath.Join(dlDir, zipName)
@@ -584,15 +600,13 @@ func (s *packageService) installVersion(ctx context.Context, packageID, version 
 		return fmt.Errorf("downloading version %s: %w", version, err)
 	}
 
-	if err := extractZip(zipPath, destDir); err != nil {
-		_ = os.RemoveAll(destDir)
+	if err := extractZip(zipPath, stageDir); err != nil {
 		return fmt.Errorf("extracting version %s: %w", version, err)
 	}
 
 	// Run content validation on extracted files.
 	secSettings, _ := s.GetSecuritySettings(ctx)
-	if err := ValidatePackageContents(destDir, secSettings.ValidateManifest, secSettings.ScanContent, secSettings.MaxFileSize); err != nil {
-		_ = os.RemoveAll(destDir)
+	if err := ValidatePackageContents(stageDir, secSettings.ValidateManifest, secSettings.ScanContent, secSettings.MaxFileSize); err != nil {
 		return fmt.Errorf("content validation failed for %s: %w", version, err)
 	}
 
@@ -615,8 +629,7 @@ func (s *packageService) installVersion(ctx context.Context, packageID, version 
 	// with a stale version misleads downstream tooling. Cleanup + retry on
 	// failure.
 	if pkg.Type == PackageTypeSystem {
-		if err := rewriteSystemManifestVersion(destDir, version); err != nil {
-			_ = os.RemoveAll(destDir)
+		if err := rewriteSystemManifestVersion(stageDir, version); err != nil {
 			return fmt.Errorf("rewriting system manifest.json version: %w", err)
 		}
 
@@ -628,8 +641,7 @@ func (s *packageService) installVersion(ctx context.Context, packageID, version 
 		// after the version rewrite so it validates exactly the bytes
 		// that will be served.
 		if s.manifestValidator != nil {
-			if err := s.manifestValidator(filepath.Join(destDir, "manifest.json")); err != nil {
-				_ = os.RemoveAll(destDir)
+			if err := s.manifestValidator(filepath.Join(stageDir, "manifest.json")); err != nil {
 				return fmt.Errorf("manifest validation failed for %s: %w", version, err)
 			}
 		}
@@ -651,10 +663,16 @@ func (s *packageService) installVersion(ctx context.Context, packageID, version 
 		if hook.PackageType() != pkg.Type {
 			continue
 		}
-		if err := hook.AfterInstall(ctx, pkg, version, previousVersion, destDir); err != nil {
-			_ = os.RemoveAll(destDir)
+		if err := hook.AfterInstall(ctx, pkg, version, previousVersion, stageDir); err != nil {
 			return fmt.Errorf("post-install hook for %q: %w", pkg.Type, err)
 		}
+	}
+
+	// Everything validated: swap the new folder in. The old folder is kept
+	// aside until the catalog row is written so a failed update can restore it.
+	rollback, commit, err := swapInstallDir(stageDir, destDir)
+	if err != nil {
+		return fmt.Errorf("installing version %s: %w", version, err)
 	}
 
 	now := time.Now()
@@ -665,9 +683,10 @@ func (s *packageService) installVersion(ctx context.Context, packageID, version 
 		// Keep disk consistent with the DB: leaving the new dir behind
 		// would make the next boot's highest-version scan serve a
 		// version the catalog doesn't record.
-		_ = os.RemoveAll(destDir)
+		rollback()
 		return fmt.Errorf("updating package record: %w", err)
 	}
+	commit()
 
 	slog.Info("package version installed",
 		slog.String("package", pkg.Slug),
@@ -727,6 +746,42 @@ func (s *packageService) installVersion(ctx context.Context, packageID, version 
 	}
 
 	return nil
+}
+
+// swapInstallDir moves stageDir to destDir. A folder already at destDir is set
+// aside first. rollback puts things back as they were (the old folder
+// restored, or none if there was none); commit discards the old folder. The
+// aside folder is a sibling of stageDir so the renames stay on one filesystem.
+func swapInstallDir(stageDir, destDir string) (rollback, commit func(), err error) {
+	if err := os.MkdirAll(filepath.Dir(destDir), 0o755); err != nil {
+		return nil, nil, err
+	}
+	aside := ""
+	if _, err := os.Stat(destDir); err == nil {
+		aside = stageDir + ".old"
+		_ = os.RemoveAll(aside)
+		if err := os.Rename(destDir, aside); err != nil {
+			return nil, nil, err
+		}
+	}
+	if err := os.Rename(stageDir, destDir); err != nil {
+		if aside != "" {
+			_ = os.Rename(aside, destDir)
+		}
+		return nil, nil, err
+	}
+	rollback = func() {
+		_ = os.RemoveAll(destDir)
+		if aside != "" {
+			_ = os.Rename(aside, destDir)
+		}
+	}
+	commit = func() {
+		if aside != "" {
+			_ = os.RemoveAll(aside)
+		}
+	}
+	return rollback, commit, nil
 }
 
 // SetPinnedVersion pins a package to a specific version, preventing auto-updates.
