@@ -120,7 +120,7 @@ var governedFieldExceptions = map[string]string{
 // The reason has to be a fact about the callers, and it has to stay true — a
 // new caller that sends a subset moves the struct to contractGoverned.
 var fullReplaceByDesign = map[string]string{
-	"relations.UpdateRelationMetadataRequest": "PUT .../relations/:rid/metadata — the endpoint exists to replace the relation's one opaque metadata blob, and its callers (the inventory widget, the Foundry item sync) send the complete object; the blob is replaced wholesale by design, not merged key by key",
+	"relations.UpdateRelationMetadataRequest": "PUT .../relations/:rid/metadata — the endpoint exists to replace the relation's one opaque metadata blob, and its callers (the inventory widget, the Foundry item sync) send the complete object; the blob is replaced wholesale by design, not merged key by key; a body with no metadata key is refused (400) so it cannot clear the blob",
 	"smtp.UpdateSMTPRequest":                  "PUT /admin/smtp is the admin settings page's hx-put form, which posts every field on each save (the unticked Enable checkbox is absent by HTML's design, so it cannot be presence-aware on a form bind; an empty password already keeps the stored secret). Nothing else calls it",
 	"campaigns.UpdateCampaignRequest":         "PUT /campaigns/:id is the settings page's hx-put form, which posts name, description and the is_public checkbox together; a checkbox is absent when unticked by HTML's own design, so is_public cannot be presence-aware on a form bind. No script or API client calls it",
 	"campaigns.UpdateCampaignInput":           "the service-side twin of campaigns.UpdateCampaignRequest: Update requires a name and states the whole record, and its only caller is the settings form handler",

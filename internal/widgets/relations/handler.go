@@ -293,6 +293,9 @@ func (h *Handler) UpdateRelationMetadata(c echo.Context) error {
 	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
 		return apperror.NewBadRequest("invalid JSON body")
 	}
+	if len(req.Metadata) == 0 {
+		return apperror.NewBadRequest("metadata is required")
+	}
 
 	if err := h.service.UpdateMetadata(c.Request().Context(), relationID, req.Metadata); err != nil {
 		return err
