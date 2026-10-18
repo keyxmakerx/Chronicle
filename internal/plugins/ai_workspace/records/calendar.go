@@ -97,13 +97,17 @@ type EventKind struct {
 	Tiers TierLister
 	// Pages resolves `page:`; without it the key is refused.
 	Pages PageResolver
+	// Rolls stores `roll:`; without it the key is refused. Tables names a
+	// table roll's table.
+	Rolls  EventRollAPI
+	Tables RollTablesAPI
 }
 
 func (EventKind) Name() string  { return "event" }
 func (EventKind) Label() string { return "Calendar event" }
 func (EventKind) Doc() string {
 	return "A calendar event, matched by `name`. Keys: `year`, `month` (number or month name), `day`; optional `end_year`/`end_month`/`end_day`, `hour`, `minute` (whole numbers), `all_day` (true/false), `visibility` (`everyone` or `dm_only`), `color` (#hex), `icon` (Font Awesome name), `rename_to`, `importance` (one of the campaign's importance levels, such as major; major events are an era's key events), `category` (one of the calendar's event categories, by name), `page` (the name of a page the event belongs to), `calendar` (the calendar's name; leave it out for the main calendar). On update, `importance: none`, `category: none` and `page: none` clear them, and leaving a key out keeps it. The body is the description; `@[Page Name]` or `@[Page Name|words]` in it links a page. When two events share a name, give the date too. On `action: update`, `year`/`month`/`day` say which event to change; to move it to another date add `move_to_year`/`move_to_month`/`move_to_day` (all three).\n\n" +
-		"To repeat, add `repeat:` (" + repeatTypes() + "; `none` on update stops it). The date is the first time. `yearly` repeats on the same month and day; `repeat_every` is the step (years for yearly, months for monthly, weeks for custom, where it is required, every Nth matching day for rule; not for weekly or biweekly). Optional end: `repeat_until_year`/`repeat_until_month`/`repeat_until_day` or `repeat_times`. `repeat: rule` takes `repeat_on`, a list of conditions a day must all meet, each one of: `moon` + `phase` (new, first_quarter, full, last_quarter); `weekday`, optionally with `nth` (1 to 5 or last) in its month; `weekdays` (a list); `day` (of the month, or last); `month`; `months` (a list); `season` (any day in it); `season_start` (a season's first day, or any); `event` (an event already on the calendar), optionally with `days` after it (negative for before). `repeat_offset_days` moves every match. Names are the calendar's own; ask `what: calendar` for them. Naming a repeat on update replaces the event's whole repeat.\n\n" +
+		"To repeat, add `repeat:` (" + repeatTypes() + "; `none` on update stops it). The date is the first time. `yearly` repeats on the same month and day; `repeat_every` is the step (years for yearly, months for monthly, weeks for custom, where it is required, every Nth matching day for rule; not for weekly or biweekly). Optional end: `repeat_until_year`/`repeat_until_month`/`repeat_until_day` or `repeat_times`. `repeat: rule` takes `repeat_on`, a list of conditions a day must all meet, each one of: `moon` + `phase` (new, first_quarter, full, last_quarter); `weekday`, optionally with `nth` (1 to 5 or last) in its month; `weekdays` (a list); `day` (of the month, or last); `month`; `months` (a list); `season` (any day in it); `season_start` (a season's first day, or any); `event` (an event already on the calendar), optionally with `days` after it (negative for before). `repeat_offset_days` moves every match. Names are the calendar's own; ask `what: calendar` for them. Naming a repeat on update replaces the event's whole repeat.\n\n" + rollDoc + "\n\n" +
 		"```\n---\nkind: event\nname: Midwinter Feast\nyear: 1492\nmonth: Hammer\nday: 21\nvisibility: everyone\nrepeat: yearly\n---\nThe lords of the city open their halls.\n```\n\n```\n---\nkind: event\nname: Night of Wolves\nyear: 1492\nmonth: 1\nday: 1\nrepeat: rule\nrepeat_on:\n  - moon: Selune\n    phase: full\n  - season: Winter\n---\n```"
 }
 
@@ -193,12 +197,25 @@ func (k EventKind) Plan(ctx context.Context, campaignID string, a Actor, r Recor
 	if r.Action == ActionDelete && len(x.labels) > 0 {
 		return Plan{Error: "importance, category and page don't go with action: delete"}
 	}
+	roll, err := readRoll(ctx, campaignID, a, r, k.Tables)
+	if err != nil {
+		return Plan{Error: planError(err)}
+	}
+	if roll.set && r.Action == ActionDelete {
+		return Plan{Error: "roll doesn't go with action: delete"}
+	}
+	if roll.set && roll.remove && r.Action == ActionCreate {
+		return Plan{Error: "roll: none only applies to action: update; leave roll out instead"}
+	}
+	if roll.set && k.Rolls == nil {
+		return Plan{Error: "event rolls aren't available on this server"}
+	}
 	switch r.Action {
 	case ActionCreate:
 		if !dated {
 			return Plan{Error: "a new event needs year, month and day"}
 		}
-		p := Plan{Summary: x.summary(withRepeat(dateLabel(cal, y, m, d)+" on "+cal.Name, rep))}
+		p := Plan{Summary: withRoll(x.summary(withRepeat(dateLabel(cal, y, m, d)+" on "+cal.Name, rep)), roll)}
 		if existing != nil {
 			p.Warnings = append(p.Warnings, "An event with this name already exists; this adds another")
 		}
@@ -208,9 +225,9 @@ func (k EventKind) Plan(ctx context.Context, campaignID string, a Actor, r Recor
 			return Plan{Error: "no event called " + quote(r.Name) + " to change"}
 		}
 		if moving {
-			return Plan{Summary: x.summary(withRepeat("moves the event on "+dateLabel(cal, existing.Year, existing.Month, existing.Day)+" to "+dateLabel(cal, my, mm, md), rep))}
+			return Plan{Summary: withRoll(x.summary(withRepeat("moves the event on "+dateLabel(cal, existing.Year, existing.Month, existing.Day)+" to "+dateLabel(cal, my, mm, md), rep)), roll)}
 		}
-		return Plan{Summary: x.summary(withRepeat("changes the event on "+dateLabel(cal, existing.Year, existing.Month, existing.Day), rep))}
+		return Plan{Summary: withRoll(x.summary(withRepeat("changes the event on "+dateLabel(cal, existing.Year, existing.Month, existing.Day), rep)), roll)}
 	default:
 		if existing == nil {
 			return Plan{Error: "no event called " + quote(r.Name) + " to remove"}
@@ -230,6 +247,13 @@ func (k EventKind) repeat(ctx context.Context, campaignID string, a Actor, cal *
 		}
 	}
 	return readRepeat(cal, r, evs)
+}
+
+func withRoll(summary string, roll rollSpec) string {
+	if s := roll.summary(); s != "" {
+		return summary + ", " + s
+	}
+	return summary
 }
 
 func withRepeat(summary string, rep repeatSpec) string {
@@ -261,6 +285,10 @@ func (k EventKind) Apply(ctx context.Context, campaignID string, a Actor, r Reco
 	if err != nil {
 		return err
 	}
+	roll, err := readRoll(ctx, campaignID, a, r, k.Tables)
+	if err != nil {
+		return err
+	}
 	if r.Action == ActionCreate {
 		in := calendar.CreateEventInput{
 			Name: r.Name, Year: y, Month: m, Day: d,
@@ -286,8 +314,11 @@ func (k EventKind) Apply(ctx context.Context, campaignID string, a Actor, r Reco
 		}
 		rep.toCreate(&in)
 		x.toCreate(&in)
-		_, err := k.Svc.CreateEvent(ctx, cal.ID, campaignID, in)
-		return err
+		ev, err := k.Svc.CreateEvent(ctx, cal.ID, campaignID, in)
+		if err != nil {
+			return err
+		}
+		return applyRoll(ctx, k.Rolls, cal, campaignID, ev.ID, a, roll)
 	}
 	ev, err := k.find(ctx, campaignID, a, cal, r)
 	if err != nil {
@@ -334,7 +365,10 @@ func (k EventKind) Apply(ctx context.Context, campaignID string, a Actor, r Reco
 	}
 	rep.toUpdate(&in)
 	x.toUpdate(&in)
-	return k.Svc.UpdateEvent(ctx, ev.ID, cal.ID, campaignID, in, a.Viewer())
+	if err := k.Svc.UpdateEvent(ctx, ev.ID, cal.ID, campaignID, in, a.Viewer()); err != nil {
+		return err
+	}
+	return applyRoll(ctx, k.Rolls, cal, campaignID, ev.ID, a, roll)
 }
 
 // Export is empty: the Calendar events category of the export already

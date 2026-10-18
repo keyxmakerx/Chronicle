@@ -1278,6 +1278,7 @@
       this.forecastByDay = {};
       this.weatherByYear = {}; // year -> {'m_d': reading}, filled by fetchWeatherYear
       this.nightsByMonth = {}; // 'y_m' -> game nights, filled by fetchNights
+      this.rollsByMonth = {}; // 'y_m' -> {events, byEvent}, filled by fetchRolls
       this._gnPages = {}; // session id + "|" + date -> its recap, linked pages and entries
       this._gnChk = {}; // session id + "|" + date -> the check-in's view state
       this._evPages = {}; // event id -> the pages tied to it
@@ -1609,6 +1610,70 @@
           return list;
         })
         .catch(function () { return []; });
+    },
+
+    // fetchRolls loads a month's event roll results, by event id. They are
+    // kept with the events list they were read beside, so a refetch of the
+    // month's events (after a save) refetches them too. The server leaves
+    // out what this viewer may not see: a player gets only told nights that
+    // have arrived. Returns a Promise.
+    fetchRolls: function (y, m) {
+      var self = this, key = this.monthKey(y, m), evs = this.eventsByMonth[key], have = this.rollsByMonth[key];
+      if (have && have.events === evs) return Promise.resolve(have.byEvent);
+      return Chronicle.apiFetch(this.apiBase + '/rolls?year=' + y + '&month=' + m)
+        .then(function (resp) { return resp.ok ? resp.json() : {}; })
+        .then(function (byEvent) {
+          if (!byEvent || typeof byEvent !== 'object') byEvent = {};
+          self.rollsByMonth[key] = { events: self.eventsByMonth[key], byEvent: byEvent };
+          return byEvent;
+        })
+        .catch(function () { return {}; });
+    },
+
+    // rollOn returns an event's roll result on one night, or null.
+    rollOn: function (eventId, y, m, d) {
+      var have = this.rollsByMonth[this.monthKey(y, m)], list = have && have.byEvent[eventId];
+      if (!list) return null;
+      for (var i = 0; i < list.length; i++) if (list[i].day === d && list[i].month === m && list[i].year === y) return list[i];
+      return null;
+    },
+
+    // _rollArrived says the night is today or past, when told players have
+    // actually seen it.
+    _rollArrived: function (r) {
+      var cal = this.cal;
+      return CalDate.dayIndex(cal, r.year, r.month, r.day) <= CalDate.dayIndex(cal, cal.current_year, cal.current_month, cal.current_day);
+    },
+
+    _rollIsToday: function (r) {
+      var cal = this.cal;
+      return r.year === cal.current_year && r.month === cal.current_month && r.day === cal.current_day;
+    },
+
+    // _rollLineHTML is a night's result under its event: the Director sees
+    // the total and result with the amber edge (only they see it), a player
+    // the result they were told.
+    _rollLineHTML: function (r) {
+      if (!r) return '';
+      if (this.canAuthorDmOnly) {
+        return '<div class="evroll dm"><i class="fa-solid fa-dice-d20" aria-hidden="true"></i>' +
+          (r.total != null ? '<b>' + esc(String(r.total)) + '</b> · ' : '') + esc(r.result || 'Rolled') +
+          (r.told ? '<span class="told">' + (this._rollArrived(r) ? 'Players told' : 'Players told on the night') + '</span>' : '') + '</div>';
+      }
+      return '<div class="evroll"><b>' + esc(r.result || '') + '</b>' + (r.players && r.players !== r.result ? ' ' + esc(r.players) : '') + '</div>';
+    },
+
+    // _rollFactsHTML is the night's result on the event's full card.
+    _rollFactsHTML: function (r) {
+      if (!r) return '';
+      if (!this.canAuthorDmOnly) {
+        return '<div class="evrollc"><div class="lb">' + (this._rollIsToday(r) ? 'Tonight' : 'That night') + '</div><p><b>' + esc(r.result || '') + '.</b> ' + (r.players && r.players !== r.result ? esc(r.players) : '') + '</p></div>';
+      }
+      var faces = r.faces && r.faces.length ? ' (' + r.faces.join(' + ') + ')' : '';
+      return '<div class="evrollc dm" data-dm-only><div class="lb"><i class="fa-solid fa-eye-slash" aria-hidden="true"></i> Only you see this roll</div>' +
+        '<p><b>' + esc(r.result || 'Rolled') + '</b>' + (r.total != null ? ' · ' + esc(String(r.total)) + esc(faces) : '') + (r.locked ? ' · <i class="fa-solid fa-lock" aria-label="Locked"></i>' : '') + '</p>' +
+        (r.director ? '<p>' + esc(r.director) + '</p>' : '') +
+        '<p class="pl">' + (r.told ? (this._rollArrived(r) ? 'Players are told: ' : 'Players are told on the night: ') + esc(r.players || r.result || '') : 'Players aren’t told anything.') + '</p></div>';
     },
 
     // fetchWeatherYear loads (and caches) a year's day weather. The server
@@ -4099,7 +4164,8 @@
     renderMonth: function () {
       var self = this, cal = this.cal;
       this.renderHeader();
-      Promise.all([this.fetchMonth(this.view.y, this.view.m), this.fetchWeatherYear(this.view.y), this.fetchForecast(), this.fetchNights(this.view.y, this.view.m),
+      var vy = this.view.y, vm = this.view.m;
+      Promise.all([this.fetchMonth(vy, vm).then(function () { return self.fetchRolls(vy, vm); }), this.fetchWeatherYear(this.view.y), this.fetchForecast(), this.fetchNights(this.view.y, this.view.m),
         this._pollsLoaded(), this.showFree ? this.fetchFreeMonth(this.view.y, this.view.m) : null]).then(function () {
         self._paintMonth();
         self.refreshFreeView();
@@ -5148,6 +5214,7 @@
         return '<div class="evd go' + hl + (occ.skipped ? ' skip' : '') + '" data-ev="' + esc(e.id) + '">' +
           '<div class="evh"><span class="ric" style="' + eventColorStyle(e) + '">' + esc(eventGlyph(e)) + '</span><span class="qt0">' + esc(e.name) + '</span></div>' +
           (time || note ? '<div class="evm">' + (time ? '<span>' + esc(time) + '</span>' : '') + (note ? '<span>' + esc(note) + '</span>' : '') + '</div>' : '') +
+          (occ.skipped ? '' : self._rollLineHTML(self.rollOn(e.id, d.y, d.m, d.d))) +
           '</div>';
       }).join('') : '<div class="none">Nothing on the calendar today.</div>';
       var self = this, nights = this.nightsOnDay(d.y, d.m, d.d);
@@ -5232,7 +5299,7 @@
     openEventDetail: function (id) {
       var self = this, night = String(id).indexOf('gn:') === 0 ? this._findNight(id) : null, ev = night ? null : this._findEvent(id);
       if (!ev && !night) return;
-      this.evpEl.innerHTML = night ? this._gnPageHTML(night) : this._evpHTML(ev);
+      this.evpEl.innerHTML = night ? this._gnPageHTML(night) : this._evpHTML(ev, this.wingFor ? parseDayKey(this.wingFor) : null);
       // The full-detail overlay covers the day card it grew out of (the
       // motion this UI ports, per #741's rules): its final box matches the
       // wing's own rect, not the smaller event row that was clicked.
@@ -5351,7 +5418,9 @@
       return true;
     },
 
-    _evpHTML: function (ev) {
+    // day is the day card the detail opened from, when there is one: a
+    // repeating event's roll result belongs to that night.
+    _evpHTML: function (ev, day) {
       var cal = this.cal;
       var mc = CalDate.monthCount(cal), m0 = ((ev.month - 1) % mc + mc) % mc, monthDef = (cal.months || [])[m0];
       var label = (monthDef ? monthDef.name : ev.month) + ' ' + ev.day + ', ' + ev.year;
@@ -5375,6 +5444,7 @@
           '<h3 class="ept">' + esc(ev.name) + (ev.kind_name ? ' <span class="dirnote">' + esc(ev.kind_name) + '</span>' : '') + '</h3>' +
           '<div class="espan">' + esc(label) + (time ? ' · ' + esc(time) : '') + ' ' + visBadge + '</div>' +
           (body ? '<div class="notes">' + body + '</div>' : '') +
+          (day ? this._rollFactsHTML(this.rollOn(ev.id, day.y, day.m, day.d)) : '') +
           recur + entity + this._evPagesBox(ev.id) +
         '<!--EVP_FOOT--></div></div>';
     },

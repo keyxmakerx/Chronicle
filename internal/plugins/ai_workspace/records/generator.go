@@ -34,6 +34,8 @@ type GeneratorKind struct {
 	Cal     CalendarAPI
 	Tables  TableKind
 	Weather WeatherSettingsAPI
+	// Rolls runs the `rolls` generator; without it that generator is refused.
+	Rolls EventRollAPI
 }
 
 // Weather tuning a row may set, with the generator's own bounds.
@@ -71,7 +73,8 @@ func (GeneratorKind) Doc() string {
 		"- `weather`: weather for days of the default calendar, from `year`/`month`/`day` to `end_year`/`end_month`/`end_day`. It follows the calendar's own seasons, climate, how long its weather lasts, and the owner's own kinds of weather. Optional, for this run only: `climate` (" + climateIDs() + "), `continuity` (0 changes every day, 1 long spells), `warmer` (-15 to 15 degrees C), `wetter` and `windier` (-1 to 1). Days set by hand or locked are kept.\n" +
 		"- `events`: festivals and other calendar events for one `year`.\n" +
 		"- `sky`: sky events (eclipses, meteor showers, comets) for one `year`.\n" +
-		"- `names`: `count` names (up to 30) of `names` kind `people` or `places`, in a `theme` (pastoral, nautical, dwarven, elven, desert, imperial, fey, grim), added to the rolling table `table`.\n\n" +
+		"- `names`: `count` names (up to 30) of `names` kind `people` or `places`, in a `theme` (pastoral, nautical, dwarven, elven, desert, imperial, fey, grim), added to the rolling table `table`.\n" +
+		"- `rolls` (owner or co-DM): rolls every night of one `year` for the `event` (by name) that has a `roll:`, on Chronicle's own server roller. Locked nights keep their result (`keep_locked: true`, the only choice), and a night that has passed keeps a result it already has. `only_unrolled: true` rolls just the nights with no result yet.\n\n" +
 		"```\n---\nkind: generator\nname: Spring weather\ngenerator: weather\nyear: 1492\nmonth: 3\nday: 1\nend_year: 1492\nend_month: 3\nend_day: 30\nclimate: temperate\n---\n```"
 }
 
@@ -166,7 +169,7 @@ func (k GeneratorKind) plan(ctx context.Context, campaignID string, a Actor, r R
 		return p, nil, fmt.Sprintf("%d %s names into the table %s", n, kind, quote(r.Str("table"))), nil
 	case "weather", "events", "sky":
 	default:
-		return p, nil, "", apperror.NewBadRequest("generator must be weather, events, sky or names")
+		return p, nil, "", apperror.NewBadRequest("generator must be weather, events, sky, names or rolls")
 	}
 	if g == "weather" && !a.CanAuthorDmOnly() {
 		return p, nil, "", apperror.NewBadRequest("only the owner or a co-DM can set weather")
@@ -270,7 +273,78 @@ func (k GeneratorKind) weatherDetails(ctx context.Context, campaignID string, a 
 	return details, " in the " + climateLabel(c) + " climate" + from, nil
 }
 
+// rollsRow is a checked rolls row. It runs on the server at Import, so it
+// hands the browser nothing to run.
+type rollsRow struct {
+	cal   *calendar.Calendar
+	ev    *calendar.Event // nil until the event exists
+	year  int
+	only  bool
+	what  string
+	noRol bool // the event exists but has no roll yet
+}
+
+// planRolls checks a rolls row. The event may be made, or given its roll,
+// by an earlier row of the same paste, so at review a missing event or roll
+// is a warning and Apply looks again.
+func (k GeneratorKind) planRolls(ctx context.Context, campaignID string, a Actor, r Record) (rollsRow, error) {
+	var row rollsRow
+	if r.Action != ActionCreate {
+		return row, apperror.NewBadRequest("generators only add things; use action: create")
+	}
+	if !a.CanAuthorDmOnly() {
+		return row, apperror.NewBadRequest("only the owner or a co-DM can roll an event's nights")
+	}
+	if k.Rolls == nil {
+		return row, apperror.NewBadRequest("event rolls aren't available on this server")
+	}
+	if v, ok := r.Bool("keep_locked"); ok && !v {
+		return row, apperror.NewBadRequest("locked nights always keep their result; unlock them first (kind: roll_night)")
+	}
+	if r.Str("event") == "" {
+		return row, apperror.NewBadRequest("say which event to roll (`event`)")
+	}
+	y, ok, err := r.Int("year")
+	if err != nil || !ok {
+		return row, apperror.NewBadRequest("rolls needs a year")
+	}
+	cal, err := defaultCalendar(ctx, k.Cal, campaignID, a)
+	if err != nil {
+		return row, err
+	}
+	row.cal, row.year = cal, y
+	row.only, _ = r.Bool("only_unrolled")
+	row.what = "every night"
+	if row.only {
+		row.what = "every night with no result yet"
+	}
+	ev, err := rollEvent(ctx, k.Cal, cal, campaignID, a, r.Str("event"))
+	if err != nil {
+		return row, nil
+	}
+	row.ev = ev
+	got, err := k.Rolls.GetEventRoll(ctx, ev.ID, cal.ID, campaignID, y, a.Viewer())
+	if err != nil {
+		return row, err
+	}
+	row.noRol = got.Config == nil
+	return row, nil
+}
+
 func (k GeneratorKind) Plan(ctx context.Context, campaignID string, a Actor, r Record) Plan {
+	if strings.EqualFold(r.Str("generator"), "rolls") {
+		row, err := k.planRolls(ctx, campaignID, a, r)
+		if err != nil {
+			return Plan{Error: planError(err)}
+		}
+		p := Plan{Summary: fmt.Sprintf("rolls %s of %s in %d, keeping locked nights.", row.what, r.Str("event"), row.year)}
+		if row.ev == nil {
+			p.Warnings = append(p.Warnings, "No single event called "+quote(r.Str("event"))+" yet; an earlier block must add it with a roll")
+		} else if row.noRol {
+			p.Warnings = append(p.Warnings, quote(row.ev.Name)+" has no roll yet; an earlier block must give it `roll:`")
+		}
+		return p
+	}
 	p, _, summary, err := k.plan(ctx, campaignID, a, r)
 	if err != nil {
 		return Plan{Error: planError(err)}
@@ -311,6 +385,19 @@ type genDay struct {
 }
 
 func (k GeneratorKind) Apply(ctx context.Context, campaignID string, a Actor, r Record) error {
+	if strings.EqualFold(r.Str("generator"), "rolls") {
+		row, err := k.planRolls(ctx, campaignID, a, r)
+		if err != nil {
+			return err
+		}
+		if row.ev == nil {
+			_, err := rollEvent(ctx, k.Cal, row.cal, campaignID, a, r.Str("event"))
+			return err
+		}
+		_, err = k.Rolls.RollEventNights(ctx, row.ev.ID, row.cal.ID, campaignID,
+			calendar.RollNightsInput{Year: row.year, OnlyUnrolled: row.only}, a.Viewer())
+		return err
+	}
 	p, cal, _, err := k.plan(ctx, campaignID, a, r)
 	if err != nil {
 		return err

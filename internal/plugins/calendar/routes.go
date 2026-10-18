@@ -236,6 +236,28 @@ func registerCalendarJSONRoutes(g *echo.Group, h *Handler) {
 	// The forecast is the one future weather a player may read, blurred by
 	// the service; it has the same gate as the day readings it is built from.
 	g.GET("/calendars/:calid/weather/forecast", h.ListWeatherForecastAPI, campaigns.RequireRole(campaigns.RolePlayer))
+
+	// Event rolls: read Player (the service gives a player only the player
+	// text of a told night that has arrived); every write is gated
+	// CanAuthorDmOnly like the day weather, since a result can reveal what
+	// is coming.
+	g.GET("/calendars/:calid/rolls", h.ListMonthRollsAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	g.GET("/calendars/:calid/events/:eid/roll", h.GetEventRollAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	g.PUT("/calendars/:calid/events/:eid/roll", h.SetEventRollAPI,
+		campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
+			"only the campaign owner or a granted co-DM may change an event's roll"))
+	g.POST("/calendars/:calid/events/:eid/roll/nights", h.RollEventNightsAPI,
+		campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
+			"only the campaign owner or a granted co-DM may roll an event's nights"))
+	g.POST("/calendars/:calid/events/:eid/roll/nights/lock", h.LockEventRollNightsAPI,
+		campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
+			"only the campaign owner or a granted co-DM may lock an event's nights"))
+	g.POST("/calendars/:calid/events/:eid/roll/nights/tell", h.TellEventRollNightAPI,
+		campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
+			"only the campaign owner or a granted co-DM may tell players a night's result"))
+	g.POST("/calendars/:calid/events/:eid/roll/nights/clear", h.ClearEventRollNightsAPI,
+		campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
+			"only the campaign owner or a granted co-DM may clear an event's nights"))
 }
 
 // RegisterAppRoutes mounts the calendar on the routes of an app a member
