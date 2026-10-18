@@ -60,6 +60,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/syncapi"
 	"github.com/keyxmakerx/chronicle/internal/plugins/systemstate"
 	"github.com/keyxmakerx/chronicle/internal/plugins/timeline"
+	"github.com/keyxmakerx/chronicle/internal/plugins/trackers"
 	"github.com/keyxmakerx/chronicle/internal/plugins/vault_import"
 	"github.com/keyxmakerx/chronicle/internal/plugins/widgetbindings"
 	"github.com/keyxmakerx/chronicle/internal/systems"
@@ -5809,6 +5810,25 @@ func (a *App) RegisterRoutes() {
 		registerRumoursBlock(blockRegistry, rumoursSvc)
 	} else {
 		slog.Warn("rumours plugin degraded — the Rumours block is not available")
+	}
+
+	// Trackers: counters, named steps and clocks on pages, each with a dated
+	// log. The block and its routes exist only while its tables migrated.
+	a.registerPlugin(PluginRegistration{
+		Slug:     trackers.PluginSlug,
+		StaticFS: echo.MustSubFS(trackers.StaticAssetsFS, "static"),
+		Widgets: []PluginWidget{
+			{Name: "trackers", Scripts: []string{"js/trackers.js"}},
+		},
+	})
+	if a.PluginHealth.IsHealthy(trackers.PluginSlug) {
+		trackersSvc := trackers.NewService(trackers.NewRepository(a.DB),
+			&trackersEntityAdapter{svc: entityService, cards: entities.NewPageCards(a.DB)},
+			&trackersClockAdapter{svc: calendarService})
+		trackers.RegisterRoutes(e, trackers.NewHandler(trackersSvc), campaignService, authService)
+		registerTrackersBlock(blockRegistry)
+	} else {
+		slog.Warn("trackers plugin degraded — the Trackers block is not available")
 	}
 
 	// Encounters: fights planned on a page, loaded in Foundry.

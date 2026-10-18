@@ -369,6 +369,14 @@ Foundry module repo for the wire contract.
 |-------|---------|
 | `page_rumours` | What the party has heard about a page: `quote`, `source` (who said it), `sure` 1 to 3, `truth` (`open`/`true`/`false`, the Director's alone and never selected for anyone else), `belief` (`''`/`true`/`false`/`unsure`, what the party thinks) with `belief_by` and `belief_by_dm`, `by_dm` and `created_by` for the byline; FKs to `entities` and `campaigns` cascade. Capped at 200 per page |
 
+### trackers (`internal/plugins/trackers/migrations/`)
+
+| Table | Purpose |
+|-------|---------|
+| `tracker_kinds` | A campaign's saved kinds of tracker: `name` (unique per campaign), `shape` (`count`/`steps`/`clock`), `min_value`/`max_value` (a clock's segments are `max_value`), `steps` and `bands` as JSON text, default `visibility` (`directors`/`everyone`), optional `every_type_id` (the kind appears on every page of that category without being placed), `version` for edit conflicts; FK to `campaigns` cascades. At most 200 per campaign |
+| `trackers` | A kind placed on one page: `name` (unique per page), `visibility`, `sort_order`; FKs to `entities`, `campaigns` and `tracker_kinds` cascade (the last so a campaign delete never depends on row order; the service refuses to delete a kind in use, in one statement). At most 40 per page |
+| `tracker_entries` | The ledger. One line per change: `op` (`add`/`set`), `amount`, `note` (Directors only), `source`, the in-game date it was logged on (`game_year`/`game_month`/`game_day`/`game_label`, null without a calendar), `struck_at`/`struck_by` (a struck line stays but no longer counts). A tracker's value is the fold of its unstruck lines, clamped per line. FK to `trackers` cascades. At most 10,000 per tracker |
+
 ### encounters (`internal/plugins/encounters/migrations/`)
 
 | Table | Purpose |
