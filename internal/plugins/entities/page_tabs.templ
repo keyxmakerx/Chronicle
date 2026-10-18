@@ -119,7 +119,7 @@ templ systemPageTabs(cc *campaigns.CampaignContext, entity *Entity, entityType *
 func systemPageTabList(ctx context.Context, cc *campaigns.CampaignContext) []pageTab {
 	var tabs []pageTab
 	if layouts.GetUserID(ctx) != "" {
-		tabs = append(tabs, pageTab{Key: "notes", Label: "Notes", Count: ".card.divide-y > [data-note-id]", Act: `[data-action="toggle-compose"]`})
+		tabs = append(tabs, pageTab{Key: "notes", Label: "Notes", Count: ".en-note[data-en-id]:not(.is-leaving)", Act: `[data-en-act="new"]`})
 	}
 	if autoPagePanel(ctx) && pagePanelURL(ctx) != "" {
 		tabs = append(tabs, pageTab{Key: "items", Label: "Items", Count: "li[data-item-id]", Act: "[data-open-give]"})

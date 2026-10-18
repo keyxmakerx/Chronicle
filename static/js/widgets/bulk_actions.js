@@ -145,7 +145,7 @@
 
         if (!actionBar) {
           actionBar = document.createElement('div');
-          actionBar.className = 'fixed bottom-4 left-1/2 -translate-x-1/2 z-50 bg-surface border border-edge rounded-xl shadow-xl px-4 py-3 flex items-center gap-3 text-sm';
+          actionBar.className = 'bulk-action-bar fixed bottom-4 left-1/2 -translate-x-1/2 z-50 bg-surface border border-edge rounded-xl shadow-xl px-4 py-3 flex items-center gap-3 text-sm';
           document.body.appendChild(actionBar);
         }
 
@@ -272,16 +272,21 @@
       injectCheckboxes();
 
       // Re-inject after HTMX swaps (pagination, filtering).
-      document.addEventListener('htmx:afterSettle', function (e) {
+      el._bulkAfterSettle = function (e) {
         if (el.contains(e.detail.target)) {
           injectCheckboxes();
         }
-      });
+      };
+      document.addEventListener('htmx:afterSettle', el._bulkAfterSettle);
     },
 
-    destroy: function () {
+    destroy: function (el) {
       var bar = document.querySelector('.bulk-action-bar');
       if (bar) bar.remove();
+      if (el && el._bulkAfterSettle) {
+        document.removeEventListener('htmx:afterSettle', el._bulkAfterSettle);
+        el._bulkAfterSettle = null;
+      }
     }
   });
 })();
