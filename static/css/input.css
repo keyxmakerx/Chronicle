@@ -90,6 +90,22 @@
     --color-bad-rgb:  220 38 38;   /* red-600 */
     --color-sidebar-bg:    #1a1c23;  /* always dark */
 
+    /* Map marker and shape colours a DM can pick by name (page_map.js):
+       sky, teal, orchid, rose, green, violet, cyan, lime. Each reads on the
+       map in both themes; --map-c-on is the glyph ink on any of them, and
+       the two inks are for a colour picked freely. */
+    --map-c-0: #0284c7;
+    --map-c-1: #0d9488;
+    --map-c-2: #c026d3;
+    --map-c-3: #e11d48;
+    --map-c-4: #16a34a;
+    --map-c-5: #7c3aed;
+    --map-c-6: #0e7490;
+    --map-c-7: #65a30d;
+    --map-c-on: #ffffff;
+    --map-ink-light: #ffffff;
+    --map-ink-dark: #111827;
+
     /* State colours for older widgets that style themselves in JS. */
     --color-danger:        #ef4444;
     --color-danger-strong: #dc2626;
@@ -234,6 +250,15 @@
     --color-warn-rgb: 251 191 36;  /* amber-400 */
     --color-bad-rgb:  248 113 113; /* red-400 */
     --color-sidebar-bg:    #1a1c23;  /* always dark */
+    --map-c-0: #38bdf8;
+    --map-c-1: #2dd4bf;
+    --map-c-2: #e879f9;
+    --map-c-3: #fb7185;
+    --map-c-4: #4ade80;
+    --map-c-5: #a78bfa;
+    --map-c-6: #22d3ee;
+    --map-c-7: #a3e635;
+    --map-c-on: #111827;
     --color-danger-bg:     #451a1a;
     --color-warn:          #fbbf24;
     --color-warn-bg:       #451a03;
