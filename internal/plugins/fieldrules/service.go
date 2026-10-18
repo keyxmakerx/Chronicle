@@ -122,6 +122,11 @@ func cleanRule(in RuleInput) (Rule, error) {
 	return r, nil
 }
 
+// CleanRule checks a rule and returns it trimmed, the way it would be saved.
+// It reads nothing, so a rule kept elsewhere (a Workshop recipe) is held to
+// the same limits.
+func CleanRule(in RuleInput) (Rule, error) { return cleanRule(in) }
+
 func (s *service) CheckRule(in RuleInput) error {
 	_, err := cleanRule(in)
 	return err

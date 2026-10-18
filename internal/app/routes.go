@@ -5877,9 +5877,12 @@ func (a *App) RegisterRoutes() {
 	a.registerPlugin(PluginRegistration{Slug: fieldrules.PluginSlug})
 	var fieldRulesSvc fieldrules.Service
 	if a.PluginHealth.IsHealthy(fieldrules.PluginSlug) {
-		fieldRulesSvc = fieldrules.NewService(fieldrules.NewRepository(a.DB),
-			fieldRulesWorld{pages: entityService, calendars: calendarService, eras: eraVersionService})
+		frWorld := fieldRulesWorld{pages: entityService, calendars: calendarService, eras: eraVersionService}
+		fieldRulesSvc = fieldrules.NewService(fieldrules.NewRepository(a.DB), frWorld)
 		fieldrules.RegisterRoutes(e, fieldrules.NewHandler(fieldRulesSvc), campaignService, authService)
+		if err := registerFieldRuleParts(homebrewReg, frWorld.PlaceName); err != nil {
+			slog.Error("field rules could not join the Homebrew Workshop", slog.Any("error", err))
+		}
 		words := fieldWordsAdapter{svc: fieldRulesSvc}
 		entityHandler.SetFieldWords(words)
 		if fw, ok := entityService.(interface{ SetFieldWords(entities.FieldWords) }); ok {
