@@ -392,7 +392,8 @@ type entityService struct {
 	safety        PageSafetyRepository // nil: no history, no Trash (tests)
 	placeGuard    PlaceGuard           // nil: no extra listings (tests)
 	fieldObserver FieldChangeObserver
-	fieldWords    FieldWords // nil: rule fields are not checked against rules
+	fieldWords    FieldWords    // nil: rule fields are not checked against rules
+	fieldCalendar FieldCalendar // nil: date fields are checked for form only
 }
 
 // NewEntityService creates a new entity service with the given dependencies.

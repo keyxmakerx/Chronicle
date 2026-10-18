@@ -5777,6 +5777,13 @@ func (a *App) RegisterRoutes() {
 		slog.Warn("rolltables plugin degraded — routes not registered")
 	}
 
+	// Pages' calendar date fields ("Died on") read the campaign calendar.
+	fieldDates := fieldDatesAdapter{svc: calendarService, addons: addonService}
+	entityHandler.SetFieldCalendar(fieldDates)
+	if fc, ok := entityService.(interface{ SetFieldCalendar(entities.FieldCalendar) }); ok {
+		fc.SetFieldCalendar(fieldDates)
+	}
+
 	// Quest sheets and notice boards. Cross-plugin lookups go through the
 	// adapters in quests_adapters.go. Both boards share quest_board_kit.js,
 	// so it loads first in each list (ADR-063).
@@ -6111,6 +6118,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "bulk-actions", Scripts: []string{"/static/js/widgets/bulk_actions.js"}},
 	{Name: "ai-export", Scripts: []string{"/static/js/widgets/ai_export.js"}},
 	{Name: "impact_tree", Scripts: []string{"/static/js/widgets/impact_tree.js"}},
+	{Name: "attributes", Scripts: []string{"/static/js/widgets/attributes.js"}},
 	{Name: "entity-type-editor", Scripts: []string{"/static/js/widgets/entity_type_editor.js"}},
 	{Name: "template-editor", Scripts: []string{"/static/js/widgets/template_editor.js"}},
 	{Name: "layout-editor", Scripts: []string{"/static/js/widgets/layout_editor.js"}},

@@ -120,7 +120,8 @@ type Handler struct {
 	systemSearcher     SystemSearcher
 	memberLister       MemberLister
 	eraPages           EraPages
-	fieldWords         FieldWords // Optional: homebrew rules and local words; see field_kinds.go.
+	fieldWords         FieldWords    // Optional: homebrew rules and local words; see field_kinds.go.
+	fieldCalendar      FieldCalendar // Optional: the campaign calendar for date fields; see field_dates.go.
 	pageMoons          PageMoons
 	npcSection         NPCSectionProvider
 	charLists          CharacterListManager
@@ -2168,7 +2169,10 @@ func (h *Handler) GetFieldsAPI(c echo.Context) error {
 		"field_overrides": overrides,
 		"type_fields":     et.Fields,
 		"shown": h.shownFields(c.Request().Context(), cc.Campaign.ID, entity, effectiveFields, visible,
-			restrictedKeys(canSeeGM, isOwner, et.Fields, effectiveFields), int(cc.VisibilityRole()), userID),
+			restrictedKeys(canSeeGM, isOwner, et.Fields, effectiveFields), int(cc.VisibilityRole()), userID, canSeeGM),
+	}
+	if cal := h.dateFieldCalendar(c.Request().Context(), cc.Campaign.ID, effectiveFields); cal != nil {
+		response["calendar"] = cal
 	}
 	return c.JSON(http.StatusOK, response)
 }

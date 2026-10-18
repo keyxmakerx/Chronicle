@@ -343,6 +343,22 @@ func fieldLines(defs []entities.FieldDefinition, typeNames map[int]string) []str
 			}
 		case entities.FieldTypeRule:
 			takes = "worked out by its rule; leave it out unless setting it by hand"
+		case entities.FieldTypeCalendarDate:
+			takes = "a date on the campaign calendar as year-month-day, month by number (1043-3-22)"
+			var picks []string
+			for _, cd := range d.Countdowns {
+				if len(cd.Lengths) < 2 {
+					continue
+				}
+				var ls []string
+				for i, l := range cd.Lengths[1:] {
+					ls = append(ls, fmt.Sprintf("%d for %s", i+1, l.Name))
+				}
+				picks = append(picks, cd.Name+": "+strings.Join(ls, ", "))
+			}
+			if len(picks) > 0 {
+				takes += "; to pick a longer countdown length add |N, or |N,M for several countdowns in order (" + strings.Join(picks, "; ") + ")"
+			}
 		default:
 			takes = "text, or a list"
 		}
