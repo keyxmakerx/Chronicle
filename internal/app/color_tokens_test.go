@@ -25,6 +25,7 @@ var (
 var knownUndefinedColorTokens = map[string]bool{
 	"--color-success":          true,
 	"--color-warning":          true,
+	"--color-danger-rgb":       true,
 	"--color-sidebar-active":   true,
 	"--color-accent-surface-N": true,
 }

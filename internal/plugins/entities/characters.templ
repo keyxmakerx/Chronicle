@@ -53,6 +53,9 @@ templ CharactersContent(cc *campaigns.CampaignContext, view CastView) {
 				</a>
 			}
 		</div>
+		if view.Builder != nil {
+			@heroBuilder(view.Builder)
+		}
 		if len(view.Yours) > 0 {
 			<section class="mb-8" data-yours="true">
 				<h2 class="section-header mb-3">Yours</h2>
@@ -109,6 +112,31 @@ templ CharactersContent(cc *campaigns.CampaignContext, view CastView) {
 			</div>
 		}
 	</div>
+}
+
+// heroBuilder is the mount for the hero builder: each of the viewer's heroes
+// as one sentence whose blanks open a panel of every choice, plus a sentence
+// for a new hero when they may make one. hero_builder.js draws it on sight
+// (ADR-063); without script the Create hero button still leads to the
+// creator page.
+templ heroBuilder(b *HeroBuilderView) {
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/plugins/entities/css/hero_builder.css") }/>
+	<section
+		class="hb mb-8"
+		aria-label="Hero builder"
+		data-widget="hero-builder"
+		data-plan-url={ fmt.Sprintf("/campaigns/%s/characters/new/plan", b.CampaignID) }
+		data-create-url={ fmt.Sprintf("/campaigns/%s/characters/new", b.CampaignID) }
+		data-fields-base={ fmt.Sprintf("/campaigns/%s/entities/", b.CampaignID) }
+		data-campaign-id={ b.CampaignID }
+		data-csrf={ b.CSRFToken }
+		data-can-create={ strconv.FormatBool(b.CanCreate) }
+		data-for-self={ strconv.FormatBool(b.ForSelf) }
+		data-type-name={ b.TypeName }
+		data-heroes={ b.HeroesJSON() }
+	>
+		<p class="hb-wait">Opening the hero builder…</p>
+	</section>
 }
 
 // castBandHead is a band's heading. The owner's page adds the chosen types as

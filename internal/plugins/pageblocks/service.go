@@ -91,7 +91,8 @@ func (s *service) load(ctx context.Context, campaignID, entityID, blockID, kindH
 // forViewer filters doc for v and decides canEdit.
 //
 // A viewer below Owner visibility who may edit the page still cannot edit a
-// table that has DM-only columns, or a page map that has DM-only markers:
+// table that has DM-only columns, a page map that has DM-only markers, or a
+// checklist with DM-only parts:
 // they never receive the hidden parts, so whatever they saved would erase
 // them. Refusing the edit is simpler and safer than merging. A page map that
 // links to a page the viewer cannot open is refused for the same reason.
@@ -107,6 +108,15 @@ func (s *service) forViewer(ctx context.Context, campaignID string, doc any, a P
 		}
 	case mapsketch.Doc:
 		out, hidden, err := s.pageMapForViewer(ctx, campaignID, d, v)
+		if err != nil {
+			return nil, false, err
+		}
+		if hidden {
+			canEdit = false
+		}
+		doc = out
+	case Checklist:
+		out, hidden, err := s.checklistForViewer(ctx, campaignID, d, v)
 		if err != nil {
 			return nil, false, err
 		}
@@ -200,6 +210,10 @@ func (s *service) commit(ctx context.Context, campaignID, entityID, blockID stri
 		}
 	case KindPageMap:
 		if err := s.checkPageMapWrite(ctx, campaignID, v, prev, found, doc.(mapsketch.Doc)); err != nil {
+			return nil, err
+		}
+	case KindChecklist:
+		if err := s.checkChecklistWrite(ctx, campaignID, v, prev, found, doc.(Checklist)); err != nil {
 			return nil, err
 		}
 	}

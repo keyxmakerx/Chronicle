@@ -9,6 +9,7 @@ const (
 	KindTable     = "page_table"
 	KindSteps     = "page_steps"
 	KindPageMap   = "page_map"
+	KindChecklist = "page_checklist"
 )
 
 // Viewer is who is asking, taken from the campaign context in the handler.
@@ -58,6 +59,47 @@ type Step struct {
 // Steps is the Steps block's document.
 type Steps struct {
 	Steps []Step `json:"steps"`
+}
+
+// Holder sides of a checklist item. An item nobody holds yet has "".
+const (
+	SideA = "a"
+	SideB = "b"
+)
+
+// ChecklistItem is one named thing in a Checklist, held by side a, side b or
+// nobody. EntityID optionally links it to a page; EntityName and EntityURL
+// are added on read for the links the viewer may open, and ignored on save.
+// DM items are removed for a viewer below Owner visibility.
+type ChecklistItem struct {
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	EntityID   string `json:"entityId,omitempty"`
+	EntityName string `json:"entityName,omitempty"`
+	EntityURL  string `json:"entityUrl,omitempty"`
+	Holder     string `json:"holder"`
+	DM         bool   `json:"dm"`
+}
+
+// Threshold is a count of items one side may reach, with a note for the DM
+// when it does. Thresholds are the DM's alone: they never reach a viewer
+// below Owner visibility.
+type Threshold struct {
+	ID    string `json:"id"`
+	Side  string `json:"side"`
+	Count int    `json:"count"`
+	Note  string `json:"note"`
+}
+
+// Checklist is the Checklist block's document: named items, each held by one
+// of two sides the owner names. DMOnly hides the whole block from players.
+type Checklist struct {
+	Title      string          `json:"title"`
+	SideA      string          `json:"sideA"`
+	SideB      string          `json:"sideB"`
+	DMOnly     bool            `json:"dmOnly"`
+	Items      []ChecklistItem `json:"items"`
+	Thresholds []Threshold     `json:"thresholds"`
 }
 
 // View is what the widget receives: the document already filtered for the

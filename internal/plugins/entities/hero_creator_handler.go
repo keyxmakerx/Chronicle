@@ -66,7 +66,25 @@ func (h *Handler) heroPlan(c echo.Context, cc *campaigns.CampaignContext) (*Hero
 	if h.heroPlanner == nil {
 		return &HeroPlan{Steps: []HeroStep{}}, nil
 	}
-	return h.heroPlanner.HeroPlan(c.Request().Context(), cc.Campaign.ID, cc.CanAuthorDmOnly())
+	return h.heroPlanner.HeroPlan(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c), cc.CanAuthorDmOnly())
+}
+
+// mayReadHeroPlan reports whether a viewer below Director may read the
+// creator plan: they may make a hero, or they own a page of one of the
+// campaign's character types.
+func (h *Handler) mayReadHeroPlan(c echo.Context, cc *campaigns.CampaignContext) (bool, error) {
+	_, access, err := h.heroTarget(c, cc)
+	if err != nil || access.Allowed {
+		return access.Allowed, err
+	}
+	if h.charLists == nil || cc.MemberRole < campaigns.RolePlayer {
+		return false, nil
+	}
+	ids, err := h.charLists.CharacterTypeIDs(c.Request().Context(), cc.Campaign.ID)
+	if err != nil {
+		return false, err
+	}
+	return h.ownsCharacter(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c), ids)
 }
 
 // NewHero renders the hero creator (GET /campaigns/:id/characters/new).
@@ -97,10 +115,14 @@ func (h *Handler) HeroPlanAPI(c echo.Context) error {
 	}
 	// Directors also read the plan: the "Your own entries" page takes its
 	// pick lists from it, whether or not they could make a hero themselves.
+	// So does a player who already has a hero, whose builder fills in that
+	// hero from the same lists.
 	if !cc.CanAuthorDmOnly() {
-		if _, access, err := h.heroTarget(c, cc); err != nil {
+		ok, err := h.mayReadHeroPlan(c, cc)
+		if err != nil {
 			return err
-		} else if !access.Allowed {
+		}
+		if !ok {
 			return apperror.NewForbidden("you can't create a hero in this campaign")
 		}
 	}

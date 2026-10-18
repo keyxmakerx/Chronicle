@@ -10,7 +10,9 @@
  *
  * The card is the shared hover card (hovercard.js), so it behaves like every
  * other one: after a 250ms rest, on keyboard focus, closed by Escape. A click
- * follows a bead to its day on the calendar.
+ * follows a bead to its day on the calendar. The owner picks how it is drawn
+ * (Customize › Hover cards › Popups on time lines): the classic card, or the
+ * fading corner when <html> carries data-cz-tlpop="corner".
  */
 (function () {
   'use strict';
@@ -99,7 +101,8 @@
         el._ptlRO.observe(el);
       }
       var hc = window.Chronicle && Chronicle.hovercard;
-      if (hc) el._ptlUnbind = hc.bind(el, '.ptl-ev', contentFor);
+      var corner = document.documentElement.getAttribute('data-cz-tlpop') === 'corner';
+      if (hc) el._ptlUnbind = hc.bind(el, '.ptl-ev', contentFor, { corner: corner });
     },
     destroy: function (el) {
       if (el._ptlUnbind) el._ptlUnbind();
