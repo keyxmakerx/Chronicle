@@ -19,6 +19,8 @@ type RecordRow struct {
 	Action string
 	Name   string
 	Plan   records.Plan
+	Block  int    // 1-based position in the paste, for the problems list
+	Reason string // the AI's `reason:` line, if it gave one
 }
 
 // actionWord is the plain verb the chip shows.
@@ -41,78 +43,57 @@ func (r RecordRow) title() string {
 	return r.Label
 }
 
+// reviewRecordRow is one record the AI asks to add, change or remove, in
+// the same shape as a page row. Records the server refused never reach the
+// list; they sit in the problems box instead.
 templ reviewRecordRow(campaignID string, r RecordRow) {
 	<div
 		role="listitem"
+		tabindex="-1"
+		data-air-row
+		data-air-verb={ r.actionWord() }
 		aria-label={ fmt.Sprintf("%s %s: %s", r.actionWord(), r.Label, r.title()) }
-		class={
-			"card card-elev p-3 transition-colors",
-			templ.KV("border-rose-300 dark:border-rose-700", r.Plan.Error != "" || r.Action == records.ActionDelete),
-			templ.KV("border-sky-300 dark:border-sky-700", r.Plan.Client != "" && r.Plan.Error == ""),
-		}
-		if r.Plan.Client != "" && r.Plan.Error == "" {
+		class="air-row"
+		if r.Plan.Client != "" {
 			data-ai-gen={ r.Plan.Client }
 		}
 	>
-		<div class="flex items-start gap-3">
-			<input
-				type="checkbox"
-				name={ fmt.Sprintf("rec_%d_include", r.Index) }
-				checked?={ r.Plan.Error == "" }
-				disabled?={ r.Plan.Error != "" }
-				class="mt-1 rounded border-edge text-accent"
-				aria-label={ fmt.Sprintf("Include %s in this import", r.title()) }
-			/>
-			<div class="flex-1 min-w-0 space-y-1">
-				<div class="flex items-center gap-2 flex-wrap">
-					<span class="text-sm font-medium text-fg">{ r.title() }</span>
-					<span class="text-xs px-2 py-0.5 rounded-full border border-edge text-fg-secondary">{ r.Label }</span>
-					<span
-						class={
-							"text-xs px-2 py-0.5 rounded-full",
-							templ.KV("bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300", r.Action == records.ActionCreate),
-							templ.KV("bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300", r.Action == records.ActionUpdate),
-							templ.KV("bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300", r.Action == records.ActionDelete),
-						}
-					>{ r.actionWord() }</span>
-				</div>
-				if r.Plan.Error != "" {
-					<div class="text-xs text-rose-700 dark:text-rose-300" role="alert">
-						<i class="fa-solid fa-triangle-exclamation mr-1" aria-hidden="true"></i>
-						{ r.Plan.Error }
-					</div>
-				} else {
-					<div class="text-xs text-fg-muted">{ r.Plan.Summary }</div>
-				}
-				if r.Plan.Preview != "" && r.Plan.Error == "" {
-					@recordPreview(campaignID, r)
-				}
-				if r.Plan.Client != "" {
-					<input type="hidden" name={ fmt.Sprintf("rec_%d_generated", r.Index) } value=""/>
-				}
-				if r.Action == records.ActionDelete && r.Plan.Error == "" {
-					<div class="mt-2 p-2 rounded border border-rose-300 dark:border-rose-700 bg-rose-50 dark:bg-rose-900/20">
-						<label class="flex items-start gap-2 text-xs text-rose-900 dark:text-rose-100 cursor-pointer">
-							<input
-								type="checkbox"
-								name={ fmt.Sprintf("rec_%d_delete_confirmed", r.Index) }
-								required
-								class="mt-0.5 rounded border-rose-400 text-rose-600"
-								aria-label={ fmt.Sprintf("I confirm %s will be removed", r.title()) }
-							/>
-							<span>I understand <strong>{ r.title() }</strong> will be removed for good.</span>
-						</label>
-					</div>
-				}
-				if len(r.Plan.Warnings) > 0 {
-					<ul class="text-xs text-amber-700 dark:text-amber-300 list-disc ml-4">
-						for _, w := range r.Plan.Warnings {
-							<li>{ w }</li>
-						}
-					</ul>
-				}
-			</div>
+		<span class={ verbClass(r.actionWord()) }>{ r.actionWord() }</span>
+		<div class="air-main">
+			<span class="air-what"><b>{ r.title() }</b></span>
+			<span class="air-line">{ r.Plan.Summary }</span>
+			if r.Reason != "" {
+				<span class="air-line">AI's reason: <i>{ r.Reason }</i></span>
+			}
+			if r.Plan.Preview != "" {
+				@recordPreview(campaignID, r)
+			}
+			if r.Plan.Client != "" {
+				<input type="hidden" name={ fmt.Sprintf("rec_%d_generated", r.Index) } value=""/>
+			}
+			// Shown and required only while the removal is answered Yes;
+			// the committer refuses a removal without it either way.
+			if r.Action == records.ActionDelete {
+				<label class="air-confirm">
+					<input
+						type="checkbox"
+						name={ fmt.Sprintf("rec_%d_delete_confirmed", r.Index) }
+						data-air-confirm
+						class="mt-0.5 rounded"
+						aria-label={ fmt.Sprintf("I confirm %s will be removed", r.title()) }
+					/>
+					<span>I understand <strong>{ r.title() }</strong> will be removed for good.</span>
+				</label>
+			}
+			if len(r.Plan.Warnings) > 0 {
+				<ul class="air-line list-disc ml-4">
+					for _, w := range r.Plan.Warnings {
+						<li>{ w }</li>
+					}
+				</ul>
+			}
 		</div>
+		@yesNo(fmt.Sprintf("rec_%d_include", r.Index), recordStartsYes(r), fmt.Sprintf("%s %s", r.actionWord(), r.title()))
 	</div>
 }
 
@@ -120,8 +101,8 @@ templ reviewRecordRow(campaignID string, r RecordRow) {
 // itself, so the pages show in the campaign's Handbook look (its own style,
 // or Standard if the owner chose that) with their working rolls and flaps.
 templ recordPreview(campaignID string, r RecordRow) {
-	<details class="mt-2" open>
-		<summary class="text-xs font-medium text-accent cursor-pointer">Read it as the Handbook will show it</summary>
+	<details class="air-more mt-1">
+		<summary>Read it as the Handbook will show it</summary>
 		<link rel="stylesheet" href={ layouts.AssetURL("/static/css/rulebook.css") }/>
 		<div class="mt-2 rounded-lg overflow-hidden border border-edge" style="height: 560px">
 			<div

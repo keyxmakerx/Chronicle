@@ -71,3 +71,18 @@ func (h *Handler) ClearSightingAPI(c echo.Context) error {
 	}
 	return c.NoContent(http.StatusNoContent)
 }
+
+// SightingNightsAPI returns the played game nights, for a page's Last seen to
+// draw every night and let the DM answer one:
+// GET /campaigns/:id/sessions/sightings/nights.
+func (h *Handler) SightingNightsAPI(c echo.Context) error {
+	if h.sightings == nil {
+		return apperror.NewNotFound("sightings are not available")
+	}
+	cc := campaigns.GetCampaignContext(c)
+	out, err := h.sightings.NightsFor(c.Request().Context(), cc.Campaign.ID, gameNightsToday())
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
+}

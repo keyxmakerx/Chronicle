@@ -1575,6 +1575,7 @@ func (h *APIHandler) CreateRelation(c echo.Context) error {
 }
 
 // apiUpdateRelationRequest is the JSON body for updating a relation's metadata.
+// As on the web route, a missing metadata key is refused, not a clear.
 type apiUpdateRelationRequest struct {
 	Metadata json.RawMessage `json:"metadata"`
 }
@@ -1603,6 +1604,9 @@ func (h *APIHandler) UpdateRelation(c echo.Context) error {
 	var req apiUpdateRelationRequest
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request body")
+	}
+	if len(req.Metadata) == 0 {
+		return apperror.NewBadRequest("metadata is required")
 	}
 
 	if err := h.relationSvc.UpdateMetadata(c.Request().Context(), relationID, req.Metadata); err != nil {

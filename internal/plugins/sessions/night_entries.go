@@ -114,6 +114,10 @@ type NightEntryService interface {
 	// Tags returns, for those of noteIDs that are game-night entries in the
 	// campaign, the night each belongs to.
 	Tags(ctx context.Context, campaignID string, noteIDs []string, now time.Time) (map[string]NightTag, error)
+	// SetBells wires the game-night bell items; see night_bells.go.
+	SetBells(campaigns NightBellCampaigns, sessions NightBellSessions, notify NightBellNotifier)
+	// SendBells sends the bell items due at now that haven't gone out.
+	SendBells(ctx context.Context, now time.Time) error
 }
 
 type nightEntryService struct {
@@ -122,6 +126,10 @@ type nightEntryService struct {
 	journal   NightJournal
 	pages     NightPageNamer
 	sightings SightingRepository
+
+	bellCampaigns NightBellCampaigns
+	bellSessions  NightBellSessions
+	notify        NightBellNotifier
 }
 
 // NewNightEntryService creates the service. All five are required.

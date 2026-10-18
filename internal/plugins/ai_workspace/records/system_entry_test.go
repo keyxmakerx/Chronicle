@@ -98,6 +98,7 @@ func TestSystemEntryKind_Apply(t *testing.T) {
 		svc := &fakeEntrySvc{}
 		r := rec("system-entry", "create", "Dune Folk", map[string]any{
 			"entry": "ancestry", "summary": "Desert nomads.", "director": true, "size": "Medium", "speed": 6, "kind": "system-entry", "action": "create",
+			"reason": "The players met them in the desert.",
 		}, "  Lore text.  ")
 		if err := (SystemEntryKind{Svc: svc}).Apply(ctx, camp, owner, r); err != nil {
 			t.Fatal(err)

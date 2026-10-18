@@ -54,7 +54,7 @@ func ValidateRepoURL(repoURL, policy string) error {
 			return fmt.Errorf("only GitHub repositories are allowed (current policy: GitHub Only)")
 		}
 		// Must match github.com/owner/repo pattern.
-		if !repoPattern.MatchString(repoURL) {
+		if _, _, err := parseRepo(repoURL); err != nil {
 			return fmt.Errorf("invalid GitHub repository URL format (expected: https://github.com/owner/repo)")
 		}
 

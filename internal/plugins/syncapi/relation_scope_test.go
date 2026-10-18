@@ -192,3 +192,39 @@ func TestRelationScope_UnknownRelationIs404(t *testing.T) {
 		t.Fatalf("want 404 not-found AppError, got %#v", err)
 	}
 }
+
+// TestUpdateRelation_MissingMetadataKeyKeepsBlob pins that a body without the
+// metadata key is refused instead of clearing the stored blob, while an
+// explicit null still clears it.
+func TestUpdateRelation_MissingMetadataKeyKeepsBlob(t *testing.T) {
+	tests := []struct {
+		name     string
+		body     string
+		wantErr  bool
+		wantMeta string
+	}{
+		{"empty object", `{}`, true, `{"price":5}`},
+		{"other keys only", `{"price":1}`, true, `{"price":5}`},
+		{"explicit null clears", `{"metadata":null}`, false, `null`},
+		{"full object replaces", `{"metadata":{"price":2}}`, false, `{"price":2}`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := newRelationScopeSvc()
+			h := NewAPIHandler(nil, nil, nil, svc)
+			c, _ := newRelationScopeContext(http.MethodPut, "campaign-A", "777", []byte(tt.body))
+			err := h.UpdateRelation(c)
+			if tt.wantErr {
+				var appErr *apperror.AppError
+				if !errors.As(err, &appErr) || appErr.Code != http.StatusBadRequest {
+					t.Fatalf("want 400, got %#v", err)
+				}
+			} else if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got := string(svc.rels[777].Metadata); got != tt.wantMeta {
+				t.Fatalf("metadata = %s, want %s", got, tt.wantMeta)
+			}
+		})
+	}
+}

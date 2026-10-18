@@ -51,6 +51,9 @@ type FrontMatter struct {
 	Era string `yaml:"era"`
 	// KnownAs is the page's name in that era. Only valid with Era.
 	KnownAs string `yaml:"known_as"`
+	// Reason is the AI's one-line why, shown beside the change at review.
+	// Never saved: it explains the request, it is not part of the page.
+	Reason string `yaml:"reason"`
 }
 
 // IsEra reports a block that writes an era's version of a page.

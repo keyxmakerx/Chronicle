@@ -2082,6 +2082,41 @@ func registerWhereItIsBlock(blockRegistry *entities.BlockRegistry, mapsService m
 	})
 }
 
+// registerLastSeenBlock registers the "Last seen" block: when the party last
+// met a page, and every game night they did. It has no settings and one per
+// page, because its list is a single sheet. What a viewer is told is decided
+// by the sightings service for that viewer (a player gets no suggestions,
+// dismissals or who-added-it, and nothing for a page they cannot open); the
+// block adds no rule of its own, except that a player whose page was never
+// seen gets no block at all.
+func registerLastSeenBlock(blockRegistry *entities.BlockRegistry, sightings sessions.SightingService) {
+	blockRegistry.Register(entities.BlockMeta{
+		Type: sessions.LastSeenBlockType, Label: "Last seen", Icon: "fa-eye",
+		Description: "When the party last met this page, and every game night they did",
+		Addon:       sessions.SessionsAddonSlug, Contexts: []string{"template"},
+		TileSizes: []string{"4x1", "2x1"},
+		Singleton: true,
+	}, func(rc entities.BlockRenderContext) templ.Component {
+		if rc.CC == nil || rc.CC.Campaign == nil || rc.Entity == nil {
+			return templ.NopComponent
+		}
+		role := rc.CC.VisibilityRole()
+		viewer := permissions.RequestViewer(role, rc.UserID)
+		seen, err := sightings.SightingsFor(context.Background(), rc.CC.Campaign.ID, rc.Entity.ID, viewer)
+		if err != nil {
+			slog.Error("last seen: cannot read the page's sightings",
+				slog.String("entity_id", rc.Entity.ID), slog.Any("error", err))
+			return templ.NopComponent
+		}
+		dm := permissions.CanSeeDmOnly(role)
+		view := sessions.BuildLastSeenView(seen, time.Now())
+		if !sessions.ShowLastSeen(view, dm) {
+			return templ.NopComponent
+		}
+		return sessions.BlockLastSeen(rc.CC.Campaign.ID, rc.Entity.ID, rc.Entity.Name, rc.UserID, view, dm)
+	})
+}
+
 // entityTypeListerForGraphAdapter wraps entities.EntityService to implement the
 // relations.EntityTypeListerForGraph interface for the graph filter dropdown.
 type entityTypeListerForGraphAdapter struct {
@@ -3793,8 +3828,18 @@ func (a *App) RegisterRoutes() {
 	sessions.ConfigureRecipientFilter(sessionsService, authService)
 	// Per-night sightings: the after-night check-in and a page's Last seen
 	// read and write the same rows.
-	sessionsHandler.SetSightingService(sessions.NewSightingService(sessions.NewSightingRepository(a.DB), sessionsRepo,
-		&entityCampaignCheckerAdapter{svc: entityService}, &entityVisibilityFilterAdapter{svc: entityService}))
+	sightingService := sessions.NewSightingService(sessions.NewSightingRepository(a.DB), sessionsRepo,
+		&entityCampaignCheckerAdapter{svc: entityService}, &entityVisibilityFilterAdapter{svc: entityService})
+	sessionsHandler.SetSightingService(sightingService)
+	// The Last seen block's script loads on sight (ADR-063); the block itself
+	// is registered with the other page blocks below.
+	a.registerPlugin(PluginRegistration{
+		Slug:     sessions.PluginSlug,
+		StaticFS: echo.MustSubFS(sessions.StaticAssetsFS, "static"),
+		Widgets: []PluginWidget{
+			{Name: "last-seen", Scripts: []string{"js/last_seen.js"}},
+		},
+	})
 	// Game-night links open the real-world calendar; with the calendar plugin
 	// down they keep going to the Sessions page.
 	if a.PluginHealth.IsHealthy(calendar.PluginSlug) {
@@ -4135,6 +4180,10 @@ func (a *App) RegisterRoutes() {
 		&nightJournalAdapter{svc: noteSvc}, notePages, sessions.NewSightingRepository(a.DB))
 	sessionsHandler.SetNightEntryService(nightEntries)
 	noteSvc.SetNightEntries(&journalNightsAdapter{svc: nightEntries, addons: addonService})
+	// The day before each night, and after it, the entries put items in the
+	// bell; a loop sends them.
+	nightEntries.SetBells(&nightBellCampaignsAdapter{campaigns: campaignService, addons: addonService}, sessionsService, sessionsService)
+	go sessions.StartNightBells(a.ShutdownCtx, nightEntries)
 	notes.RegisterRoutes(e, noteHandler, campaignService, authService)
 	// A player can allow the Foundry notebook to use their notes. Grants go
 	// only to an address that may already call Chronicle across sites.
@@ -4523,6 +4572,7 @@ func (a *App) RegisterRoutes() {
 	})
 
 	registerWhereItIsBlock(blockRegistry, mapsService)
+	registerLastSeenBlock(blockRegistry, sightingService)
 
 	// NPC gallery block — embeds a compact NPC grid on entity pages/dashboards.
 	blockRegistry.Register(entities.BlockMeta{
@@ -5836,6 +5886,41 @@ func (a *journalNightsAdapter) Nights(ctx context.Context, campaignID string, no
 	out := make(map[string]notes.NightTag, len(tags))
 	for id, t := range tags {
 		out[id] = notes.NightTag{SessionID: t.SessionID, Date: t.Date, Name: t.Name, Time: t.Time, Started: t.Started}
+	}
+	return out, nil
+}
+
+// nightBellCampaignsAdapter gives the game-night bells the campaign's
+// switch and members, with a co-DM's role raised to Owner as on a request.
+type nightBellCampaignsAdapter struct {
+	campaigns campaigns.CampaignService
+	addons    addons.AddonService
+}
+
+func (a *nightBellCampaignsAdapter) GameNightsOn(ctx context.Context, campaignID string) (bool, error) {
+	return a.addons.IsEnabledForCampaign(ctx, campaignID, sessions.SessionsAddonSlug)
+}
+
+func (a *nightBellCampaignsAdapter) BellMembers(ctx context.Context, campaignID string) ([]sessions.NightBellMember, error) {
+	c, err := a.campaigns.GetByID(ctx, campaignID)
+	if err != nil || c == nil {
+		return nil, err
+	}
+	granted := map[string]bool{}
+	for _, id := range c.ParseSettings().DmGrantIDs {
+		granted[id] = true
+	}
+	list, err := a.campaigns.ListMembers(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]sessions.NightBellMember, 0, len(list))
+	for _, m := range list {
+		role := int(m.Role)
+		if granted[m.UserID] {
+			role = int(campaigns.RoleOwner)
+		}
+		out = append(out, sessions.NightBellMember{UserID: m.UserID, Role: role})
 	}
 	return out, nil
 }

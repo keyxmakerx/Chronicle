@@ -1680,12 +1680,18 @@ func (s *entityService) ClaimEntity(ctx context.Context, entityID, userID string
 		return nil, apperror.NewBadRequest("only character entities can be claimed")
 	}
 
-	if err := s.entities.UpdateOwner(ctx, entityID, &userID); err != nil {
+	// The read above can be stale by now: another player may have claimed
+	// the same character in between, so the write itself checks the owner.
+	won, err := s.entities.ClaimOwner(ctx, entityID, userID)
+	if err != nil {
 		return nil, apperror.NewInternal(err)
+	}
+	if !won {
+		return nil, apperror.NewConflict("entity is already claimed by another player")
 	}
 
 	entity.OwnerUserID = &userID
-	entity.Playable = true // UpdateOwner marks it in the same statement.
+	entity.Playable = true // ClaimOwner marks it in the same statement.
 	s.events.PublishEntityEvent("updated", entity.CampaignID, entityID, entity)
 	slog.Info("entity claimed",
 		slog.String("entity_id", entityID),

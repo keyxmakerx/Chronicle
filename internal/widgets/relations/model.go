@@ -70,6 +70,8 @@ type CreateRelationRequest struct {
 }
 
 // UpdateRelationMetadataRequest holds the data for updating relation metadata.
+// The blob is replaced whole, so a body without the metadata key is refused
+// rather than read as "clear it"; an explicit null still clears.
 type UpdateRelationMetadataRequest struct {
 	Metadata json.RawMessage `json:"metadata"`
 }

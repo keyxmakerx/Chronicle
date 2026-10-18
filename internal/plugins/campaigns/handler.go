@@ -1013,6 +1013,17 @@ func (h *Handler) ResetOwnerDashboardLayout(c echo.Context) error {
 // viewAsPlayerCookie is the cookie name for the "view as player" display toggle.
 const viewAsPlayerCookie = "chronicle_view_as_player"
 
+// ViewingAsPlayer reports whether an owner has "view as player" on. Handlers
+// read it themselves because the layout context that also carries it is
+// only filled in when a page renders. Display only: never use it to grant.
+func ViewingAsPlayer(c echo.Context, cc *CampaignContext) bool {
+	if cc == nil || cc.MemberRole < RoleOwner {
+		return false
+	}
+	cookie, err := c.Cookie(viewAsPlayerCookie)
+	return err == nil && cookie.Value == "1"
+}
+
 // ToggleViewAsPlayer toggles the "view as player" cookie for campaign owners
 // (POST /campaigns/:id/toggle-view-mode). When active, templates render as
 // if the owner has the Player role -- hiding owner-only UI and private entities.

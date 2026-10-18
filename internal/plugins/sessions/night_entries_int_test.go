@@ -65,3 +65,59 @@ func TestDB_NightEntries(t *testing.T) {
 		t.Errorf("tagged = %+v, want only n-10 with its night", tagged)
 	}
 }
+
+// TestDB_NightBells proves the bells SQL: a claim succeeds once per night,
+// member and kind, and the night list spans campaigns, keeps planned and
+// completed nights and repeating series, and leaves out cancelled and
+// deleted ones.
+func TestDB_NightBells(t *testing.T) {
+	db := newScratchDB(t)
+	repo := NewNightEntryRepository(db)
+	ctx := context.Background()
+
+	campID, userID := seedCampaign(t, db)
+	otherCamp, otherUser := seedCampaign(t, db)
+	planned := seedSession(t, db, campID, userID, "Planned")
+	done := seedSession(t, db, otherCamp, otherUser, "Completed")
+	weekly := seedSession(t, db, campID, userID, "Weekly")
+	cancelled := seedSession(t, db, campID, userID, "Cancelled")
+	gone := seedSession(t, db, campID, userID, "Deleted")
+	far := seedSession(t, db, campID, userID, "Far off")
+	for _, q := range []struct {
+		sql string
+		id  string
+	}{
+		{`UPDATE sessions SET scheduled_date = '2026-10-10', status = 'planned' WHERE id = ?`, planned},
+		{`UPDATE sessions SET scheduled_date = '2026-10-09', status = 'completed' WHERE id = ?`, done},
+		{`UPDATE sessions SET scheduled_date = '2026-09-05', status = 'planned', is_recurring = 1, recurrence_type = 'weekly' WHERE id = ?`, weekly},
+		{`UPDATE sessions SET scheduled_date = '2026-10-10', status = 'cancelled' WHERE id = ?`, cancelled},
+		{`UPDATE sessions SET scheduled_date = '2026-10-10', status = 'planned', deleted_at = NOW() WHERE id = ?`, gone},
+		{`UPDATE sessions SET scheduled_date = '2026-12-01', status = 'planned' WHERE id = ?`, far},
+	} {
+		if _, err := db.Exec(q.sql, q.id); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	list, err := repo.ListBellNights(ctx, "2026-10-07", "2026-10-12")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, s := range list {
+		got[s.ID] = true
+	}
+	if len(list) != 3 || !got[planned] || !got[done] || !got[weekly] {
+		t.Errorf("nights = %v, want planned, completed and the weekly", got)
+	}
+
+	for i, want := range []bool{true, false} {
+		ok, err := repo.ClaimNightBell(ctx, planned, "2026-10-10", userID, "before")
+		if err != nil || ok != want {
+			t.Errorf("claim %d = %v, %v; want %v", i, ok, err, want)
+		}
+	}
+	if ok, err := repo.ClaimNightBell(ctx, planned, "2026-10-10", userID, "checkin"); err != nil || !ok {
+		t.Errorf("another kind: %v, %v", ok, err)
+	}
+}

@@ -1,0 +1,84 @@
+/* The AI import's review screen: one list of the AI's requests, each
+ * answered Yes or No, with the problems on top and one save bar. It is a
+ * workshop, so it sits on the theme tokens, never paper. A row's state is
+ * read from its own radios with :has(), so the look never depends on a
+ * script having run. */
+
+.air { padding: 0; overflow: clip; }
+.air-body { display: flex; flex-direction: column; gap: 14px; padding: 16px; }
+
+.air-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.air-head h3 { font-size: 1rem; font-weight: 600; color: var(--color-text-primary); }
+.air-tally { font-size: 0.78rem; color: var(--color-text-secondary); }
+
+.air-small { font-size: 0.82rem; color: var(--color-text-secondary); }
+
+/* A quiet word: accent text, no box, underline on hover. */
+.air-quiet { font: inherit; font-size: 0.86rem; background: none; border: 0; padding: 4px 2px; color: var(--color-accent); cursor: pointer; min-height: 32px; }
+.air-quiet:hover { text-decoration: underline; }
+.air-quiet:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; border-radius: 4px; }
+
+.air kbd { font-family: ui-monospace, Consolas, monospace; font-size: 0.74rem; padding: 1px 6px; border-radius: 4px; border: 1px solid var(--color-border); background: var(--color-bg-secondary); color: var(--color-text-primary); }
+
+.air-tools { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+.air-tools .air-fill { flex: 1; }
+
+/* Problems: blocks that can't be used. Accent, not red, because nothing
+ * is wrong with the campaign; the paste just needs another look. */
+.air-problems { border: 1px solid rgb(var(--color-accent-rgb) / 0.45); background: rgb(var(--color-accent-rgb) / 0.08); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.air-problems h4 { font-size: 0.9rem; font-weight: 600; color: var(--color-text-primary); }
+.air-problem { display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap; font-size: 0.86rem; color: var(--color-text-body); }
+.air-problem .air-where { color: var(--color-text-secondary); font-size: 0.8rem; min-width: 84px; }
+.air-problem .air-say { flex: 1 1 260px; min-width: 0; overflow-wrap: anywhere; }
+
+.air-defaults > summary { list-style: none; display: inline-block; }
+.air-defaults > summary::-webkit-details-marker { display: none; }
+.air-defaults[open] > summary { margin-bottom: 8px; }
+
+.air-group { display: flex; align-items: baseline; gap: 10px; padding: 14px 10px 6px; border-bottom: 1px solid var(--color-border); }
+.air-group h4 { font-size: 0.76rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-accent); }
+
+.air-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 4px 12px; align-items: start; padding: 12px 10px; border-top: 1px solid var(--color-border-light); border-radius: 8px; min-width: 0; }
+.air-group + .air-row { border-top: 0; }
+.air-row:hover { background: var(--color-bg-secondary); box-shadow: var(--elev-resting); }
+.air-row:focus { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+.air-row[data-dm-only] { box-shadow: inset 3px 0 0 rgb(var(--color-warn-rgb)); }
+.air-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.air-what { color: var(--color-text-primary); font-weight: 500; overflow-wrap: anywhere; }
+.air-what b { font-weight: 600; }
+.air-line { font-size: 0.84rem; color: var(--color-text-secondary); overflow-wrap: anywhere; }
+.air-line i { font-style: normal; color: var(--color-text-body); }
+.air-line.air-bad { color: rgb(var(--color-bad-rgb)); }
+.air-row:has(.air-n input:checked) .air-what { color: var(--color-text-secondary); text-decoration: line-through; }
+
+/* A removal's "for good" tick only shows once the row is answered Yes. */
+.air-row:not(:has(.air-y input:checked)) .air-confirm { display: none; }
+.air-confirm { margin-top: 4px; font-size: 0.84rem; color: rgb(var(--color-bad-rgb)); display: flex; gap: 6px; align-items: flex-start; }
+
+.air-pill { display: inline-flex; align-items: center; font-size: 0.72rem; font-weight: 600; padding: 2px 8px; border-radius: 999px; white-space: nowrap; background: var(--color-bg-tertiary); color: var(--color-text-secondary); margin-top: 1px; }
+.air-pill.is-add { background: rgb(var(--color-ok-rgb) / 0.12); color: rgb(var(--color-ok-rgb)); }
+.air-pill.is-change { background: rgb(var(--color-accent-rgb) / 0.12); color: var(--color-accent); }
+.air-pill.is-remove { background: rgb(var(--color-bad-rgb) / 0.10); color: rgb(var(--color-bad-rgb)); }
+
+/* Yes / No: a two-part segmented control built from the row's radios. */
+.air-yn { display: inline-flex; border: 1px solid var(--color-border); border-radius: 8px; overflow: hidden; background: var(--color-bg-secondary); box-shadow: var(--elev-resting); flex-shrink: 0; }
+.air-yn label { position: relative; font-size: 0.82rem; font-weight: 600; color: var(--color-text-secondary); padding: 6px 12px; cursor: pointer; min-height: 32px; min-width: 44px; display: inline-flex; align-items: center; justify-content: center; }
+.air-yn label + label { border-left: 1px solid var(--color-border); }
+.air-yn input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.air-yn label:has(input:focus-visible) { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+.air-y:has(input:checked) { background: rgb(var(--color-ok-rgb) / 0.12); color: rgb(var(--color-ok-rgb)); }
+.air-n:has(input:checked) { background: var(--color-bg-tertiary); color: var(--color-text-primary); }
+
+.air-more > summary { list-style: none; display: inline-block; font-size: 0.82rem; color: var(--color-accent); cursor: pointer; }
+.air-more > summary::-webkit-details-marker { display: none; }
+.air-more > summary:hover { text-decoration: underline; }
+.air-more[open] > summary { margin-bottom: 6px; }
+
+.air-savebar { position: sticky; bottom: 0; z-index: 10; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 12px 16px; border-top: 1px solid var(--color-border); background: var(--color-bg-secondary); box-shadow: 0 -6px 16px -8px rgb(0 0 0 / 0.12); }
+.air-count { flex: 1 1 200px; font-size: 0.88rem; color: var(--color-text-primary); min-width: 0; }
+.air-count .air-bad { color: rgb(var(--color-bad-rgb)); }
+
+@media (max-width: 560px) {
+  .air-row { grid-template-columns: auto minmax(0, 1fr); }
+  .air-row .air-yn { grid-column: 2; justify-self: start; }
+}
