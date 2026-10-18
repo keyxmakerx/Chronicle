@@ -91,6 +91,11 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.POST("/entities/bulk-visibility", h.BulkVisibilityAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.POST("/entities/bulk-delete", h.BulkDeleteAPI, campaigns.RequireRole(campaigns.RoleOwner))
 
+	// The Family tree block's Edit tab: Director only (owner or granted
+	// co-Director), not a Scribe. The handler's service checks again.
+	cg.GET("/entities/:eid/family/candidates", h.FamilyCandidatesAPI, RequireFamilyDirector())
+	cg.POST("/entities/:eid/family", h.FamilyEditAPI, RequireFamilyDirector())
+
 	// Saved filter presets (per-user tag filter combos, Player+).
 	cg.GET("/saved-filters", h.ListSavedFiltersAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.POST("/saved-filters", h.CreateSavedFilterAPI, campaigns.RequireRole(campaigns.RolePlayer))

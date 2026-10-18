@@ -108,6 +108,7 @@ type Handler struct {
 	characterPanel     *PagePanel          // Optional panel under character pages; see page_panel.go.
 	systemPanels       SystemPanelResolver // Optional game-system panels under the title; see system_panels.go.
 	service            EntityService
+	familyEdit         FamilyEditService
 	trashNotes         TrashNoteCounter // Optional: Player Notes count in the post-delete message.
 	auditSvc           audit.AuditService
 	tagFetcher         EntityTagFetcher
