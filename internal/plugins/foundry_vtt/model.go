@@ -36,7 +36,7 @@ type OwnerTabData struct {
 	CurrentVersion string
 
 	// CurrentPinMode is the campaign's saved pin_mode setting — one
-	// of PinModePreserve / PinModePromote / PinModePinned, or empty
+	// of the PinMode* constants in pin_mode.go, or empty
 	// for "not yet set". Not yet rendered by owner_tab.templ.
 	// TODO(keyxmakerx/Chronicle#680): wire into the owner-side UI.
 	CurrentPinMode string

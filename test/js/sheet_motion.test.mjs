@@ -217,3 +217,12 @@ test('a [data-sheet] root gets its style from html[data-cz-sheet], else modern',
   runOnPage({ roots: [plain] });
   assert.equal(plain.attrs['data-sheet-style'], 'modern');
 });
+
+test('a paper that cannot fit beside the sheet lies next to the part that was clicked', () => {
+  // Room beside the sheet: no overlap, whichever part was clicked.
+  assert.equal(S.sideOver(0, 920, 450), 0);
+  // A left-column part: the paper's left edge lands 8px past the part, not at the sheet's far edge.
+  assert.equal(S.sideOver(51, 920, 450), 462);
+  // A right-column part: never less overlap than the desk forces.
+  assert.equal(S.sideOver(51, 920, 900), 51);
+});

@@ -35,16 +35,16 @@ func TestCreate_StartsWithSiteLook(t *testing.T) {
 		name     string
 		source   SiteLookSource
 		wantLook string // Appearance.Look of the new campaign's settings; "" for none.
-		wantJSON string // Exact settings, when only the Material page look is stored.
+		wantJSON string // Exact settings, when only the new-campaign defaults are stored.
 	}{
-		{"no source wired", nil, "", `{"appearance":{"page_look":"annals"}}`},
-		{"never saved", fakeSiteLook{}, "", `{"appearance":{"page_look":"annals"}}`},
-		{"look left as it is", fakeSiteLook{look: sitelook.Settings{Configured: true}}, "", `{"appearance":{"page_look":"annals"}}`},
+		{"no source wired", nil, "", `{"appearance":{"page_look":"annals","timeline_popup":"corner"}}`},
+		{"never saved", fakeSiteLook{}, "", `{"appearance":{"page_look":"annals","timeline_popup":"corner"}}`},
+		{"look left as it is", fakeSiteLook{look: sitelook.Settings{Configured: true}}, "", `{"appearance":{"page_look":"annals","timeline_popup":"corner"}}`},
 		{"ember", fakeSiteLook{look: sitelook.Settings{Configured: true, Look: "ember"}}, "ember", ""},
 		{"parchment", fakeSiteLook{look: sitelook.Settings{Configured: true, Look: "parchment"}}, "parchment", ""},
-		{"classic is the default so only the accent defaults are stored", fakeSiteLook{look: sitelook.Settings{Configured: true, Look: "classic"}}, "", `{"appearance":{"page_look":"annals"}}`},
-		{"unknown stored look ignored", fakeSiteLook{look: sitelook.Settings{Look: "neon"}}, "", `{"appearance":{"page_look":"annals"}}`},
-		{"read failure does not block creation", fakeSiteLook{err: errors.New("db down")}, "", `{"appearance":{"page_look":"annals"}}`},
+		{"classic is the default so only the accent defaults are stored", fakeSiteLook{look: sitelook.Settings{Configured: true, Look: "classic"}}, "", `{"appearance":{"page_look":"annals","timeline_popup":"corner"}}`},
+		{"unknown stored look ignored", fakeSiteLook{look: sitelook.Settings{Look: "neon"}}, "", `{"appearance":{"page_look":"annals","timeline_popup":"corner"}}`},
+		{"read failure does not block creation", fakeSiteLook{err: errors.New("db down")}, "", `{"appearance":{"page_look":"annals","timeline_popup":"corner"}}`},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -74,6 +74,10 @@ func TestCreate_StartsWithSiteLook(t *testing.T) {
 			// Every new campaign starts in the Material page look.
 			if s.Appearance == nil || s.Appearance.PageLook != "annals" {
 				t.Errorf("page look = %+v, want annals", s.Appearance)
+			}
+			// and opens time line events in the fading corner.
+			if s.Appearance == nil || s.Appearance.TimelinePopup != "corner" {
+				t.Errorf("time line popup = %+v, want corner", s.Appearance)
 			}
 			if tc.wantLook == "ember" {
 				// The full look, so the campaign renders in it at once.

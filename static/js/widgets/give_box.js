@@ -551,7 +551,7 @@
         }
         list.forEach(function (c) { wrap.appendChild(row(c)); });
         var m = document.createElement('p');
-        m.setAttribute('data-coll-error', '1'); m.setAttribute('role', 'alert'); m.className = 'px-2 text-xs text-red-500';
+        m.setAttribute('data-coll-error', '1'); m.setAttribute('role', 'alert'); m.className = 'px-2 text-xs text-bad';
         wrap.appendChild(m);
         var f = wrap.querySelector('input'); if (f) f.focus({ preventScroll: true });
       })

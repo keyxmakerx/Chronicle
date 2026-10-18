@@ -174,3 +174,62 @@ test('a failed load leaves the block out rather than throwing', async () => {
   const el = await mount('read_aloud', { message: 'no' }, 404);
   assert.equal(el.children.length, 0);
 });
+
+// ---- Checklist ----
+
+const hearts = () => ({
+  title: 'Hearts', sideA: 'Party', sideB: 'The core', dmOnly: false,
+  items: [
+    { id: 'i1', name: 'Banner', holder: 'a', dm: false },
+    { id: 'i2', name: 'Chest', holder: 'b', dm: false },
+    { id: 'i3', name: 'Room', holder: '', dm: true }
+  ],
+  thresholds: [{ id: 't1', side: 'a', count: 2, note: 'Third ending' }]
+});
+
+test('checklist counts, orders the strip and finds what a move reaches', () => {
+  const { H } = load();
+  const d = H.normalise('page_checklist', hearts());
+  assert.deepEqual(plain(H.counts(d)), { a: 1, b: 1, none: 1 });
+  assert.deepEqual(plain(H.segments(d)), ['a', '', 'b'], 'side a from the left, side b from the right');
+  assert.equal(H.reached(d).length, 0);
+  const moved = H.setHolder(d, 'i3', 'a');
+  assert.deepEqual(plain(H.newlyReached(d, moved).map((t) => t.id)), ['t1']);
+  assert.equal(H.newlyReached(moved, moved).length, 0, 'a threshold already reached is not reached again');
+  assert.equal(d.items[2].holder, '', 'setHolder must not change its input');
+  assert.equal(H.setHolder(d, 'i1', 'x').items[0].holder, '', 'an unknown side means nobody');
+});
+
+test('checklist normalise survives junk and caps what the editor adds', () => {
+  const { H } = load();
+  assert.deepEqual(plain(H.normalise('page_checklist', null)),
+    { title: '', sideA: '', sideB: '', dmOnly: false, items: [], thresholds: [] });
+  const n = H.normalise('page_checklist', { items: [{ id: 'x', holder: 'z', name: 5 }], thresholds: [{ id: 't', side: 'q', count: -3 }] });
+  assert.deepEqual(plain(n.items[0]), { id: 'x', name: '', holder: '', dm: false });
+  assert.deepEqual(plain(n.thresholds[0]), { id: 't', side: 'a', count: 1, note: '' });
+  assert.equal(H.isEmpty('page_checklist', H.normalise('page_checklist', H.emptyData('page_checklist'))), true);
+  let d = H.normalise('page_checklist', {});
+  for (let i = 0; i < 70; i++) d = H.addItem(d);
+  assert.equal(d.items.length, H.LIM.items);
+  for (let i = 0; i < 20; i++) d = H.addThreshold(d);
+  assert.equal(d.thresholds.length, H.LIM.thresholds);
+  assert.match(H.uid('i'), /^[A-Za-z0-9_-]{1,64}$/);
+});
+
+test('a checklist reader gets the strip and no controls; an editor gets a side picker per item', async () => {
+  const evil = '<img src=x onerror=alert(1)>';
+  const d = hearts();
+  d.items[0].name = evil;
+  delete d.thresholds;
+  const reader = await mount('page_checklist', { kind: 'page_checklist', version: 1, canEdit: false, data: d });
+  assert.equal(reader.find((n) => n.className === 'pb-cl-seg pb-cl-a').length, 1);
+  assert.ok(reader.find((n) => n._text === evil).length === 1, 'item names are text');
+  assert.equal(reader.find((n) => n.tag === 'button' && n.className === 'pb-cl-opt').length, 0);
+
+  const editor = await mount('page_checklist', { kind: 'page_checklist', version: 1, canEdit: true, data: hearts() });
+  const opts = editor.find((n) => n.tag === 'button' && n.className === 'pb-cl-opt');
+  assert.equal(opts.length, 9, 'three choices for each of three items');
+  assert.equal(opts[0].attrs['aria-pressed'], 'true');
+  assert.equal(editor.find((n) => n.className === 'pb-cl-reached').length, 0);
+  assert.ok(editor.find((n) => n.tag === 'li' && 'data-dm-only' in n.attrs).length === 1, 'a DM item carries the Director mark');
+});
