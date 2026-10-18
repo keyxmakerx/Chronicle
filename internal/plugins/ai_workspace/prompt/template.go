@@ -206,6 +206,12 @@ under Parent) or a page earlier in this same paste, so list parents first. With
 ` + "`" + `action: update` + "`" + `, ` + "`" + `parent:` + "`" + ` moves the page, ` + "`" + `parent: none` + "`" + ` lifts it to the top
 level, and leaving the line out keeps it where it is. A page cannot be its own parent.
 
+To file a page in a sidebar folder of its category (a folder shows as "Name (in folder Gods)"
+in the index), add ` + "`" + `folder: Gods` + "`" + `. Make the folder first with a ` + "`" + `kind: folder` + "`" + ` block, or
+use one that already exists; ` + "`" + `folder: none` + "`" + ` takes the page out of its folder, and
+leaving the line out keeps it where it is. A page sits under a parent page or in a
+folder, not both.
+
 A page can read differently in each era of the main calendar. To write one era's
 version of a page, give a separate block the page's ` + "`" + `name:` + "`" + ` plus
 ` + "`" + `era: Name of the era` + "`" + ` (matched ignoring case). The body is that era's text; leave it

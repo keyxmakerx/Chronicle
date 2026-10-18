@@ -95,6 +95,9 @@ type Classifier struct {
 	// reported as unavailable.
 	eras   EraLookup
 	viewer Viewer
+	// folders checks `folder:` names; nil refuses any row that names one.
+	folders        FolderAccess
+	pendingFolders map[string]bool
 }
 
 // WithEras lets the classifier check `era:` blocks against the main
@@ -127,6 +130,7 @@ func (c *Classifier) ClassifyAll(ctx context.Context, pages []ParsedPage) ([]Cla
 		out[i] = cls
 	}
 	c.checkParents(ctx, pages, out)
+	c.checkFolders(ctx, pages, out)
 	c.checkEras(ctx, pages, out)
 	c.checkFields(pages, out)
 	return out, nil

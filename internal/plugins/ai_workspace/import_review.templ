@@ -473,7 +473,7 @@ func statusLabel(s importer.ParseStatus) string {
 	case importer.StatusActionMismatch:
 		return "Action target missing"
 	case importer.StatusParentProblem:
-		return "Parent problem"
+		return "Parent or folder problem"
 	case importer.StatusFieldProblem:
 		return "Sheet fields problem"
 	default:

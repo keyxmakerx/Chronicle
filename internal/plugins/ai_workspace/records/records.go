@@ -153,10 +153,16 @@ func (r *Registry) Plan(ctx context.Context, campaignID string, a Actor, rec Rec
 // another one the main calendar, lets the rows after it be checked against
 // that calendar, since commit applies them in the same order.
 func (r *Registry) PlanAll(ctx context.Context, campaignID string, a Actor, recs []Record) ([]Kind, []Plan) {
+	ctx = withPendingFolders(ctx)
 	kinds := make([]Kind, len(recs))
 	plans := make([]Plan, len(recs))
 	for i, rec := range recs {
 		kinds[i], plans[i] = r.Plan(ctx, campaignID, a, rec)
+		if fk, ok := kinds[i].(FolderKind); ok && rec.Action == ActionCreate && plans[i].Error == "" {
+			if t, err := fk.resolve(ctx, campaignID, rec); err == nil {
+				pendingFolders(ctx)[folderKey(t.cat.ID, rec.Name)] = true
+			}
+		}
 		if ck, ok := kinds[i].(CalendarKind); ok && (rec.Action == ActionCreate || rec.Has("main")) && plans[i].Error == "" {
 			if _, cal := ck.plan(ctx, campaignID, a, rec); cal != nil {
 				ctx = withPendingCalendar(ctx, cal)
@@ -181,6 +187,7 @@ var briefs = map[string]string{
 	"house-rule":   "house-rules chapters in the campaign's rulebook, written whole: pages with highlighted boxes, dice rolls, fold-out cards, flaps, worked examples, creatures and Director's notes",
 	"system-entry": "the campaign's own ancestries, kits, cultures, classes and other pick-list entries for its game system",
 	"encounter":    "fights planned on a page for Foundry to load: the heroes, each creature's count, initiative group and whether it starts seen, hidden or arrives later",
+	"folder":       "sidebar folders inside a category (such as Gods and Cosmology inside Lore); a page is filed in one with `folder:` on its own block",
 	"generator":    "run Chronicle's own generators (weather for a range of days, festivals and other events, sky events, names into a rolling table) instead of inventing the result",
 }
 

@@ -29,6 +29,8 @@ type Service struct {
 	Tags      TagLister
 	// EraVersions is optional: nil exports every page as its usual self.
 	EraVersions EraVersionSource
+	// Folders is optional: nil leaves out which folder a page sits in.
+	Folders FolderNamer
 }
 
 // NewService constructs a Service. Every dependency is required for
@@ -169,6 +171,15 @@ func (s *Service) renderCategory(
 					slog.String("campaign_id", campaignID), slog.Any("error", err))
 			} else {
 				opts.EraVersions = vs
+			}
+		}
+
+		if s.Folders != nil {
+			if names, err := s.Folders.FolderNames(ctx, campaignID); err != nil {
+				slog.Warn("aiexport: exporting pages without their folders",
+					slog.String("campaign_id", campaignID), slog.Any("error", err))
+			} else {
+				opts.FolderNames = names
 			}
 		}
 
