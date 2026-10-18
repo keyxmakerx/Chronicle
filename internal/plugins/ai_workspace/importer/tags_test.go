@@ -26,7 +26,7 @@ func (f *fakeTags) ListByCampaign(_ context.Context, _ string, _ bool) ([]tags.T
 }
 
 func (f *fakeTags) Create(_ context.Context, campaignID, name, _ string, dmOnly bool) (*tags.Tag, error) {
-	t := tags.Tag{ID: 100 + len(f.campaign), CampaignID: campaignID, Name: name, Slug: tagSlug(name), DmOnly: dmOnly}
+	t := tags.Tag{ID: 100 + len(f.campaign), CampaignID: campaignID, Name: name, Slug: TagSlug(name), DmOnly: dmOnly}
 	f.campaign = append(f.campaign, t)
 	f.created = append(f.created, name)
 	return &t, nil
@@ -172,7 +172,7 @@ func TestCommit_PageTagsFailureIsReported(t *testing.T) {
 	}
 }
 
-// tagSlug must agree with the tags service's own slug, or a name would make a
+// TagSlug must agree with the tags service's own slug, or a name would make a
 // second copy of a tag the campaign already has.
 func TestTagSlug(t *testing.T) {
 	for in, want := range map[string]string{
@@ -182,8 +182,8 @@ func TestTagSlug(t *testing.T) {
 		"--":            "tag",
 		"Élan":          "lan",
 	} {
-		if got := tagSlug(in); got != want {
-			t.Errorf("tagSlug(%q) = %q; want %q", in, got, want)
+		if got := TagSlug(in); got != want {
+			t.Errorf("TagSlug(%q) = %q; want %q", in, got, want)
 		}
 	}
 }

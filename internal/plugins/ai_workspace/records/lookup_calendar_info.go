@@ -216,11 +216,38 @@ func (run *lookupRun) calendarInfo() (LookupAnswer, error) {
 		for i, k := range cal.EventKinds {
 			names[i] = k.Name
 		}
-		fmt.Fprintf(&b, "\n### Event kinds\n\n%s\n", strings.Join(names, ", "))
+		fmt.Fprintf(&b, "\n### Event categories (the names `category:` takes on events)\n\n%s\n", strings.Join(names, ", "))
 	}
+	b.WriteString(run.importanceText())
 	b.WriteString(run.climateText(cal))
 	ans.Text = b.String()
 	return ans, nil
+}
+
+// importanceText lists the campaign's event importance levels, the names
+// `importance:` takes on events. Directors only, like the categories; ""
+// when the levels can't be read.
+func (run *lookupRun) importanceText() string {
+	if run.l.Tiers == nil || !run.director() {
+		return ""
+	}
+	defs, err := run.l.Tiers.GetEventTierDefinitions(run.ctx, run.campaignID)
+	if err != nil || len(defs) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("\n### Event importance levels (the names `importance:` takes on events)\n\n")
+	for _, d := range defs {
+		line := "- " + d.Name
+		if d.Slug != "" && !sameName(d.Slug, d.Name) {
+			line += " (`" + d.Slug + "`)"
+		}
+		if d.IsDefault {
+			line += ", the usual level"
+		}
+		b.WriteString(line + "\n")
+	}
+	return b.String()
 }
 
 // climateText is the calendar's weather settings, or "" when they can't be

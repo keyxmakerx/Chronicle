@@ -180,6 +180,7 @@ var briefs = map[string]string{
 	"note":         "my own notes only: my Journal notes and my jots on pages, never notes anyone else wrote",
 	"house-rule":   "house-rules chapters in the campaign's rulebook, written whole: pages with highlighted boxes, dice rolls, fold-out cards, flaps, worked examples, creatures and Director's notes",
 	"system-entry": "the campaign's own ancestries, kits, cultures, classes and other pick-list entries for its game system",
+	"tag":          "the campaign's tags: make, rename, recolour, hide from players or remove them (which pages carry a tag is set on the page block)",
 	"encounter":    "fights planned on a page for Foundry to load: the heroes, each creature's count, initiative group and whether it starts seen, hidden or arrives later",
 	"generator":    "run Chronicle's own generators (weather for a range of days, festivals and other events, sky events, names into a rolling table) instead of inventing the result",
 }
