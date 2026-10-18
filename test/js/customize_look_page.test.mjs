@@ -30,8 +30,28 @@ test('PAGE_LOOKS match the server allow-list, in order', () => {
 
 test('the page look has its own section and is part of Save, Discard and Reset', () => {
   assert.match(src, /\{ id:'page', name:'Pages'/, 'SECTIONS must list Pages');
-  assert.match(src, /page:\['page\.look'\]/, 'SEC_KEYS must list page.look');
+  assert.match(src, /page:\['page\.look'/, 'SEC_KEYS must list page.look');
   assert.match(src, /sheet:clone\(d\.sheet\), page:clone\(d\.page\)/, 'toInput must send page');
-  assert.match(src, /if \(!d\.page\) d\.page = \{ look:'' \}/, 'fromServer must keep an unset page look unset');
+  assert.match(src, /if \(!d\.page\) d\.page = \{ look:'',/, 'fromServer must keep an unset page look unset');
   assert.match(src, /opts\('pg-look', 'page\.look'/, 'a control must bind page.look');
+});
+
+const k = src.indexOf('var STYLE_KITS = [');
+const k2 = src.indexOf('];', k);
+assert.ok(k > 0 && k2 > k, 'STYLE_KITS marker not found');
+const kits = JSON.parse(vm.runInNewContext(src.slice(k, k2 + 2) + ';JSON.stringify(STYLE_KITS)'));
+
+test('STYLE_KITS match the server allow-list, in order, and each has a stylesheet palette', () => {
+  const m = go.match(/AppearanceStyleKits\s*=\s*\[\]string\{([^}]*)\}/);
+  assert.ok(m, 'AppearanceStyleKits not found in appearance.go');
+  const ids = [...m[1].matchAll(/"([^"]+)"/g)].map((x) => x[1]);
+  assert.deepEqual(kits.map((x) => x[0]), ids);
+  const css = readFileSync(join(root, 'static', 'css', 'style_kits.css'), 'utf8');
+  for (const id of ids.slice(1)) assert.ok(css.includes(`[data-cz-kit="${id}"] {`), `no palette for ${id}`);
+});
+
+test('the style kit is part of the Pages section and defaults to Material', () => {
+  assert.match(src, /page:\['page\.look', 'page\.kit'\]/, 'SEC_KEYS must list page.kit');
+  assert.match(src, /if \(!d\.page\.kit\) d\.page\.kit = 'material'/, 'fromServer must default the kit');
+  assert.match(src, /opts\('pg-kit', 'page\.kit'/, 'a control must bind page.kit');
 });

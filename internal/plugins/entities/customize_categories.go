@@ -15,9 +15,11 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
+	"unicode/utf8"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/patch"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
 // maxCustomizeCategoryItems bounds one Save so a hand-built request cannot
@@ -54,9 +56,17 @@ type CustomizeCategoryItem struct {
 	// Layout replaces an existing category's page layout. It is checked by
 	// the same ValidateLayout a direct layout save runs.
 	Layout *EntityTypeLayout `json:"layout,omitempty"`
+	// Home replaces an existing category's home (its landing page) layout,
+	// checked like a direct save of it.
+	Home *campaigns.DashboardLayout `json:"home,omitempty"`
+	// Description replaces an existing category's description; empty clears it.
+	Description *string `json:"description,omitempty"`
 	// Delete removes an existing category.
 	Delete bool `json:"delete,omitempty"`
 }
+
+// maxCategoryDescription is the longest description a category takes.
+const maxCategoryDescription = 2000
 
 // CustomizeCategoriesPatch is the whole "categories" section: items keyed by
 // an existing category id (decimal) or a "new-" key.
@@ -142,14 +152,25 @@ func (s *entityService) ApplyCustomizeCategories(ctx context.Context, campaignID
 	// Layouts are checked here too, so a bad one stops the Save before any
 	// category is written rather than halfway through.
 	for _, key := range plan.updates {
+		id, _ := strconv.Atoi(key)
 		if l := in.Items[key].Layout; l != nil {
-			id, _ := strconv.Atoi(key)
 			if err := ValidateLayout(*l, s.isValidBlockType, s.isSingletonBlockType, s.tileSizesFor(ctx, id, *l)); err != nil {
 				return res, err
 			}
 			if b, err := json.Marshal(l); err != nil || len(b) > maxLayoutSize {
 				return res, apperror.NewBadRequest("layout exceeds maximum size")
 			}
+		}
+		if h := in.Items[key].Home; h != nil {
+			if err := s.validateCategoryDashboardLayout(ctx, id, *h); err != nil {
+				return res, err
+			}
+			if b, err := json.Marshal(h); err != nil || len(b) > maxLayoutSize {
+				return res, apperror.NewBadRequest("the category home's layout is too big")
+			}
+		}
+		if d := in.Items[key].Description; d != nil && utf8.RuneCountInString(*d) > maxCategoryDescription {
+			return res, apperror.NewBadRequest("a category description can be 2000 characters at most")
 		}
 	}
 
@@ -238,6 +259,31 @@ func (s *entityService) ApplyCustomizeCategories(ctx context.Context, campaignID
 				return res, err
 			}
 		}
+		if item.Home != nil {
+			b, err := json.Marshal(item.Home)
+			if err != nil {
+				return res, apperror.NewInternal(fmt.Errorf("marshaling category home: %w", err))
+			}
+			homeJSON := string(b)
+			if err := s.types.UpdateDashboardLayout(ctx, id, &homeJSON); err != nil {
+				return res, err
+			}
+		}
+		if item.Description != nil {
+			// The description shares its write with the pinned pages, which
+			// stay as they are.
+			var desc *string
+			if *item.Description != "" {
+				desc = item.Description
+			}
+			pinned := byID[id].PinnedEntityIDs
+			if pinned == nil {
+				pinned = []string{}
+			}
+			if err := s.types.UpdateDashboard(ctx, id, desc, pinned); err != nil {
+				return res, err
+			}
+		}
 		res.Applied = append(res.Applied, key)
 	}
 
@@ -299,6 +345,9 @@ func planCustomizeCategories(items map[string]CustomizeCategoryItem, byID map[in
 			if it.Layout != nil {
 				return plan, apperror.NewBadRequest("a new category gets its page layout once it is saved")
 			}
+			if it.Home != nil || it.Description != nil {
+				return plan, apperror.NewBadRequest("a new category gets its home once it is saved")
+			}
 			if it.CopyFrom != 0 {
 				if _, ok := byID[it.CopyFrom]; !ok {
 					return plan, apperror.NewNotFound("the category to copy was not found")
@@ -316,13 +365,13 @@ func planCustomizeCategories(items map[string]CustomizeCategoryItem, byID map[in
 			if it.CopyFrom != 0 {
 				return plan, apperror.NewBadRequest("only a new category can copy another")
 			}
-			if it.Delete && it.Layout != nil {
-				return plan, apperror.NewBadRequest("a category being deleted cannot get a new page layout")
+			if it.Delete && (it.Layout != nil || it.Home != nil || it.Description != nil) {
+				return plan, apperror.NewBadRequest("a category being deleted cannot get a new page layout or home")
 			}
 			if it.Delete {
 				deleting[k] = true
 				plan.deletes = append(plan.deletes, k)
-			} else if customizeItemChangesType(it) || it.Menu != nil || it.Layout != nil {
+			} else if customizeItemChangesType(it) || it.Menu != nil || it.Layout != nil || it.Home != nil || it.Description != nil {
 				plan.updates = append(plan.updates, k)
 			}
 		default:

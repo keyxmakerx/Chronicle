@@ -571,8 +571,10 @@ owner picks one in the Customizer. There are six, and each one works in light
 and dark mode, takes the campaign's colour, and behaves differently as well
 as looking different. The signed mockup is the contract for each kit's
 character: https://claude.ai/artifact/YMuDg5AgHP7V6L6G5rSDnc. A screen may
-vary the details as long as it keeps that character. Building the kits is
-#1447.
+vary the details as long as it keeps that character. The owner picks the
+kit in Customize › Look › Pages; it puts `data-cz-kit` on the page
+(`static/css/style_kits.css`), and only pages in the Material page look wear
+it. Each kit's opening is still to be built (#1548).
 
 | Kit | Top bar | Dividers and rows | Boxes | Pointer | A card opens | Faces |
 |---|---|---|---|---|---|---|
@@ -615,7 +617,9 @@ vary the details as long as it keeps that character. Building the kits is
 - **The campaign's colour replaces each kit's accent** when the owner has
   picked one, and everything the kit derives from its accent follows it:
   Lumen's glow and line, Flowing's wash, Sketchbook's highlighter and tape.
-  With no colour picked, each kit keeps the colour it was designed with.
+  With no colour picked, each kit keeps the colour it was designed with. The
+  contrast step below is built; the picker's refusals and swatch are
+  TODO(#1549).
 - **Lifted for dark mode.** The light-mode accent is the colour darkened
   slightly (mixed 88% with black). The dark-mode accent is the colour mixed
   55% with white, so one choice reads on both.
@@ -642,15 +646,17 @@ in a template.
   red or green has its saturation lowered until the two are told apart.
   Amber is refused outright, as above.
 - **Expensive effects step down when they cost too much.** Sketchbook's
-  hand-drawn edge (an SVG displacement filter) and Lumen's glows draw on
-  what the page has a sensible number of. On a long list or table, rows use
-  a plain edge in the kit's line colour and glows rest without breathing.
+  hand-drawn edge (the outline drawn twice, a little apart) and Lumen's
+  breathing glow are only on boxes, which a page has few of. Rows in every
+  kit use a plain edge in the kit's line colour and a glow that doesn't
+  breathe.
   Printing uses plain edges and no glow.
 - **A block that a kit draws badly can ask to be drawn plain.** A block or
   package widget that has been tried in a kit and found to break (a chart,
   an embedded map, a dense table) marks itself `data-kit-plain`, and is drawn
   with the Material parts inside that kit. Every such case is listed here
-  with its kit, its reason and an issue to fix it.
+  with its kit, its reason and an issue to fix it. No block has needed it
+  yet, so the marker is built with the first one.
 
 | Block | Kit | Why it is plain | Issue |
 |---|---|---|---|

@@ -112,6 +112,16 @@ func (h *Handler) saveHomeLayout(ctx context.Context, campaignID, key string, la
 	return h.service.UpdateDashboardLayoutRaw(ctx, campaignID, full)
 }
 
+// homeBlockTypes are the widgets DashboardBlockSwitch draws, the only ones
+// the Home pages palette offers: the dashboard set also holds the category
+// home's own widgets, which draw nothing on a campaign home.
+var homeBlockTypes = []string{
+	"welcome_banner", "quick_actions", "category_grid", "recent_pages", "entity_list", "text_block",
+	"pinned_pages", "calendar_preview", "timeline_preview", "relations_graph", "calendar_full",
+	"timeline_full", "relations_graph_full", "map_full", "session_tracker", "coming_up",
+	"activity_feed", "sync_status",
+}
+
 // homeTab is one home the Customizer's Home pages area offers.
 type homeTab struct {
 	Key, Label, Icon, Hint string
@@ -199,6 +209,7 @@ func (h *Handler) homeEditorState(cc *CampaignContext, key string) string {
 		"key":        key,
 		"name":       tab.Label,
 		"layout":     layout,
+		"only":       homeBlockTypes,
 		"blockTypes": base + "/entity-types/block-types?context=dashboard",
 		"preview":    base + "/customize/home-preview",
 	})

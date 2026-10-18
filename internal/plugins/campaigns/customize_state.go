@@ -75,6 +75,7 @@ type customizeDraft struct {
 	} `json:"sheet"`
 	Page struct {
 		Look string `json:"look"`
+		Kit  string `json:"kit"`
 	} `json:"page"`
 }
 
@@ -235,6 +236,7 @@ func buildCustomizeState(ctx context.Context, cc *CampaignContext) customizeStat
 	// such a campaign draws.
 	d.Page.Look = a.PageLook
 	d.Hover.TimelinePopup = orDefault(a.TimelinePopup, AppearanceTimelinePopups)
+	d.Page.Kit = orDefault(a.StyleKit, AppearanceStyleKits)
 	return st
 }
 

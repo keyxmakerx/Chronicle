@@ -104,10 +104,11 @@ func TestAdventureLayout_UsesValidBlocksAndSizes(t *testing.T) {
 		"page_table":      {"2x2", "4x2"},
 		"page_steps":      {"1x2", "2x2", "4x2"},
 		"page_encounters": {"1x2", "2x2", "4x2"},
+		"page_map":        {"2x2", "4x2", "4x3"},
 	}
 	valid := func(typ string) bool {
 		switch typ {
-		case "title", "entry", "image", "attributes", "details", BlockSubPages, "read_aloud", "page_table", "page_steps", "page_encounters":
+		case "title", "entry", "image", "attributes", "details", BlockSubPages, "read_aloud", "page_table", "page_steps", "page_encounters", "page_map":
 			return true
 		}
 		return false
@@ -115,6 +116,17 @@ func TestAdventureLayout_UsesValidBlocksAndSizes(t *testing.T) {
 	tileSizes := func(typ string, _ map[string]any) []string { return sizes[typ] }
 	if err := ValidateLayout(AdventureLayout(), valid, nil, tileSizes); err != nil {
 		t.Fatalf("the Adventures layout does not validate: %v", err)
+	}
+}
+
+func TestAdventureLayout_MapFollowsTheStory(t *testing.T) {
+	var ids []string
+	for _, b := range AdventureLayout().Rows[0].Columns[0].Blocks {
+		ids = append(ids, b.ID+":"+b.Type)
+	}
+	want := "blk-title:title,blk-entry:entry,blk-adv-map:page_map,blk-trials:" + BlockSubPages
+	if got := strings.Join(ids, ","); got != want {
+		t.Errorf("story column = %s, want %s", got, want)
 	}
 }
 

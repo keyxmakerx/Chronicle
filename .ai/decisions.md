@@ -1116,3 +1116,20 @@ Also under this ADR: the partial-update contract test only recognised structs na
 - A new read path over entities must use `visibilityFilter` or the service gates; one that writes its own SQL against `entities` must add the clause. `internal/plugins/entities/adventures_integration_test.go` proves each existing path against a real schema.
 - Moving a page out of Adventures, or deleting the category after moving its pages, makes those pages visible to players under their own visibility; that is the owner's explicit act.
 - Players' stored favourites of a page that becomes hidden are filtered out on read rather than deleted.
+
+## ADR-069: The page map is a page block that stores its own document, not a map on the maps plugin
+
+**Status:** Accepted; design approved for #1347.
+
+**Context:** A DM wants a small sketch of a trial, a room or a siege on the page itself, edited in place and written by the AI as text. The maps plugin already holds full maps (image, grid, drawings, pins, fog, per-viewer rules), and AI Import's map record makes one of those from the same kind of text (#1351). Using it for a sketch on a page would mean a second map per page, its own permissions and a navigation away from the page.
+
+**Decision:**
+1. The page map is the fourth `pageblocks` kind, `page_map`, in the existing `page_block_content` table: one JSON document per (page, block), a fixed 40 by 26 grid, at most 200 shapes and 200 markers. `kind` is VARCHAR(24), so there is no migration. The maps plugin is not involved, and a page map is not listed with campaign maps.
+2. The line grammar lives in `internal/mapsketch`, shared with AI Import's map record, so there is one definition of the words `room`, `wall`, `pin` and so on. The page map adds `background`, `number`, `icon`, `page`, `dm` and `color`; the record's behaviour is unchanged.
+3. DM-only is a marker flag, enforced by the same rule as a Table's DM-only column: a viewer below Owner visibility never receives the marker, and may not save a map that holds one. A marker's link to a page is dropped for a viewer who cannot open the page (the marker stays, as its note), and such a viewer cannot save the map either, because their copy lacks the link. No merge is attempted.
+4. Amber is the Director's colour, so a custom colour in the UI standard's amber band is refused rather than left to look like a DM-only marker.
+5. The map's text form goes through `PageMapText` and `SavePageMapText`, which apply the same permission rules as the HTTP save; a text that draws nothing does not replace a map. These are the AI's way in (#1555).
+
+**Consequences:**
+- A sketch on a page cannot be shown on a campaign map, and a campaign map cannot be pulled onto a page; converting is a future feature, not a property of this design.
+- Every new field on a shape or marker needs the grammar, `Format`, the validator and the widget to change together; `mapsketch`'s round-trip test and the pageblocks validation tests are the guard.

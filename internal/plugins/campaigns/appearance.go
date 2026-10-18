@@ -42,6 +42,7 @@ type Appearance struct {
 	SheetStyle      string `json:"sheet_style,omitempty"`      // Character sheet style (AppearanceSheetStyles); "modern" is the default.
 	PageLook        string `json:"page_look,omitempty"`        // How pages draw their blocks (AppearancePageLooks); "standard" is the default.
 	TimelinePopup   string `json:"timeline_popup,omitempty"`   // What opens on a time line's event: "classic" (default) or "corner".
+	StyleKit        string `json:"style_kit,omitempty"`        // The pages' character under the Material page look (AppearanceStyleKits); "material" is the default.
 }
 
 // The allowed values of each Appearance choice. The first entry is the
@@ -75,6 +76,9 @@ var (
 	// AppearanceTimelinePopups are what opens over an event on a time line:
 	// the classic hover card, or the fading corner that grows out of the bead.
 	AppearanceTimelinePopups = []string{"classic", "corner"}
+	// AppearanceStyleKits are the signed style kits style_kits.css draws
+	// (ui-standard.md, "Style kits"); "material" is the base and adds nothing.
+	AppearanceStyleKits = []string{"material", "sharp", "ornate", "flowing", "lumen", "sketchbook"}
 )
 
 // Text limits the Customize page shows. Brand name and welcome keep their
@@ -125,6 +129,7 @@ type AppearanceInput struct {
 	} `json:"sheet"`
 	Page struct {
 		Look string `json:"look"`
+		Kit  string `json:"kit"`
 	} `json:"page"`
 }
 
@@ -233,6 +238,19 @@ func timelinePopupChoice(v string, prev *Appearance) (string, error) {
 		return "", nil
 	}
 	return oneOf("time line popup", v, AppearanceTimelinePopups)
+}
+
+// styleKitChoice is the style kit a save stores: Material as unset, like the
+// other defaults, but a save that sends no kit keeps the stored one, so an
+// editor that predates kits can't quietly drop the owner's choice.
+func styleKitChoice(v string, prev *Appearance) (string, error) {
+	if v == "" {
+		if prev != nil {
+			return prev.StyleKit, nil
+		}
+		return "", nil
+	}
+	return oneOf("style kit", v, AppearanceStyleKits)
 }
 
 // calmColour validates an optional #RRGGBB and tones it down the way the
@@ -441,6 +459,9 @@ func applyAppearance(s *CampaignSettings, in AppearanceInput) (*string, error) {
 		return fail(err)
 	}
 	if a.TimelinePopup, err = timelinePopupChoice(in.Hover.TimelinePopup, s.Appearance); err != nil {
+		return fail(err)
+	}
+	if a.StyleKit, err = styleKitChoice(in.Page.Kit, s.Appearance); err != nil {
 		return fail(err)
 	}
 	a.ReduceMotion = in.Motion.ReduceAll
