@@ -637,6 +637,11 @@
     border: 1px solid var(--color-input-border);
     color: var(--color-text-primary);
   }
+  /* The forms plugin draws a select's arrow inside its right padding; .input's
+     px-3 would otherwise put the arrow on top of the chosen value. */
+  select.input {
+    padding-right: 2.25rem;
+  }
   .input::placeholder {
     color: var(--color-text-muted);
   }

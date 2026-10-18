@@ -93,7 +93,7 @@ templ ImportResultPanel(campaignID, campaignName string, report *ImportReport) {
 				</p>
 				<ul class="mt-4 space-y-1 text-xs text-fg-body max-h-80 overflow-y-auto">
 					for _, f := range report.Failures() {
-						<li class="flex flex-wrap gap-x-2 border-b border-edge/50 pb-1">
+						<li class="flex flex-wrap gap-x-2 border-b border-edge-light pb-1">
 							if f.Count > 1 {
 								<span class="font-medium">{ fmt.Sprintf("%d %s", f.Count, pluralize(f.Kind, f.Count)) }</span>
 							} else {
