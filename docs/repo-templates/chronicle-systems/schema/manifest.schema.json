@@ -295,6 +295,10 @@
             "$ref": "#/$defs/FieldDef"
           },
           "description": "Schema for properties on items in this category."
+        },
+        "director": {
+          "type": "boolean",
+          "description": "Only the campaign's Directors may read this category: its pages, search, tooltips and raw data file."
         }
       },
       "additionalProperties": false
@@ -542,7 +546,7 @@
           "description": "A widgets[].slug in this manifest."
         },
         "applies_to": {
-          "const": "npc"
+          "enum": ["npc", "creature"]
         }
       },
       "additionalProperties": false

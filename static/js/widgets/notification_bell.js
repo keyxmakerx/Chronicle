@@ -29,6 +29,8 @@
 
   // A notification type with its own icon; the rest show only the unread dot.
   var TYPE_ICON = { item_given: 'fa-gift' };
+  // Types only a DM is sent carry the Director's amber edge.
+  var DM_TYPES = { game_night_checkin: true };
 
   function refreshBadge(el) {
     var badge = $('[data-notif-badge]', el);
@@ -54,6 +56,10 @@
       var item = document.createElement('a');
       item.href = n.link || '#';
       item.className = 'flex items-start gap-2 px-3 py-2 hover:bg-surface-alt transition-colors border-b border-edge last:border-0' + (n.read ? ' opacity-60' : '');
+      if (DM_TYPES[n.type]) {
+        item.setAttribute('data-dm-only', '');
+        item.style.boxShadow = 'inset 3px 0 0 rgb(var(--color-warn-rgb))';
+      }
       var dot = document.createElement('span');
       dot.className = 'mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 ' + (n.read ? 'bg-transparent' : 'bg-accent');
       item.appendChild(dot);

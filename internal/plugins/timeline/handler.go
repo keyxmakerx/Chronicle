@@ -160,6 +160,7 @@ func (h *Handler) Show(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	connections = VisibleConnections(connections, events)
 
 	data := TimelineViewData{
 		CampaignID:   cc.Campaign.ID,
@@ -566,6 +567,7 @@ func (h *Handler) TimelineDataAPI(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	connections = VisibleConnections(connections, events)
 
 	return c.JSON(http.StatusOK, map[string]any{
 		"timeline":    t,
@@ -1072,11 +1074,15 @@ func (h *Handler) ListConnectionsAPI(c echo.Context) error {
 		return err
 	}
 
+	events, err := h.svc.ListTimelineEvents(ctx, timelineID, cc.Campaign.ID, permissions.RequestViewer(effectiveRole(c, cc), auth.GetUserID(c)))
+	if err != nil {
+		return err
+	}
 	connections, err := h.svc.ListConnections(ctx, timelineID)
 	if err != nil {
 		return err
 	}
-	return c.JSON(http.StatusOK, connections)
+	return c.JSON(http.StatusOK, VisibleConnections(connections, events))
 }
 
 // parseIntParam extracts an integer path parameter, returning 400 on failure.

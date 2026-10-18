@@ -76,6 +76,7 @@ var contractGoverned = map[string]string{
 	"notes.UpdateNoteRequest":              "PUT .../notes/:noteId (web + syncapi) — pin, colour, filing, sharing and archive each send one key, and the public notes API and the import send only the text, so the text, share list and folder must survive; every field is a pointer or slice, nil means absent and an empty parentId files at the top level",
 	"armory.UpdateInstanceInput":           "PUT /campaigns/:id/armory/instances/:iid — Rename echoed back the description, icon and colour it loaded, so a concurrent change to them was reverted; a name-only push must keep the rest",
 	"posts.UpdatePostRequest":              "PUT .../entities/:eid/posts/:pid — a rename and the privacy toggle each send one key, so the post's content must survive; every field is a pointer or raw JSON, nil means absent",
+	"rumours.UpdateRumourInput":            "PUT .../entities/:eid/rumours/:rid — an edit that names only the sureness must keep the words, and one that names only the speaker must keep the rumour; all three fields are required columns, so an explicit null preserves rather than blanks (born governed, no incident)",
 	"auth.UpdateViewPrefsInput":            "PUT /account/view-prefs — each My view choice saves on its own as it is tapped, so a body naming one must not reset the other three (born governed, no incident)",
 }
 
@@ -120,7 +121,7 @@ var governedFieldExceptions = map[string]string{
 // The reason has to be a fact about the callers, and it has to stay true — a
 // new caller that sends a subset moves the struct to contractGoverned.
 var fullReplaceByDesign = map[string]string{
-	"relations.UpdateRelationMetadataRequest": "PUT .../relations/:rid/metadata — the endpoint exists to replace the relation's one opaque metadata blob, and its callers (the inventory widget, the Foundry item sync) send the complete object; the blob is replaced wholesale by design, not merged key by key",
+	"relations.UpdateRelationMetadataRequest": "PUT .../relations/:rid/metadata — the endpoint exists to replace the relation's one opaque metadata blob, and its callers (the inventory widget, the Foundry item sync) send the complete object; the blob is replaced wholesale by design, not merged key by key; a body with no metadata key is refused (400) so it cannot clear the blob",
 	"smtp.UpdateSMTPRequest":                  "PUT /admin/smtp is the admin settings page's hx-put form, which posts every field on each save (the unticked Enable checkbox is absent by HTML's design, so it cannot be presence-aware on a form bind; an empty password already keeps the stored secret). Nothing else calls it",
 	"campaigns.UpdateCampaignRequest":         "PUT /campaigns/:id is the settings page's hx-put form, which posts name, description and the is_public checkbox together; a checkbox is absent when unticked by HTML's own design, so is_public cannot be presence-aware on a form bind. No script or API client calls it",
 	"campaigns.UpdateCampaignInput":           "the service-side twin of campaigns.UpdateCampaignRequest: Update requires a name and states the whole record, and its only caller is the settings form handler",

@@ -331,3 +331,83 @@ func TestEventRepository_ListEventsForPage_Integration(t *testing.T) {
 		})
 	}
 }
+
+func TestNewPageTimeline_Death(t *testing.T) {
+	cal, _, _ := eraFixture() // today is 1022-8-9
+	cal.Months = eraMonths()
+	ev := func(id string, y int, kindSlug, kindName string) Event {
+		return Event{ID: id, Name: id, Year: y, Month: 1, Day: 1, Visibility: "everyone", KindSlug: kindSlug, KindName: kindName}
+	}
+	tests := []struct {
+		name      string
+		events    []Event
+		dead      bool
+		death     string
+		end       int
+		fill      float64
+		showToday bool
+	}{
+		{"no death: lit to today, today marked", []Event{ev("a", 1000, "", ""), ev("b", 1010, "battle", "Battle")},
+			false, "", day(1022, 8, 9), 100, true},
+		{"a Death event ends the line there, with no today", []Event{ev("a", 1000, "", ""), ev("d", 1010, "death", "Death")},
+			true, "d", day(1010, 1, 1), 100, false},
+		{"a kind named Died counts too", []Event{ev("a", 1000, "", ""), ev("d", 1010, "custom", " died ")},
+			true, "d", day(1010, 1, 1), 100, false},
+		{"an event after the death stretches the line but stays unlit", []Event{ev("a", 1000, "", ""), ev("d", 1010, "death", "Death"), ev("z", 1020, "", "")},
+			true, "d", day(1020, 1, 1), 50, false},
+		{"the latest death wins", []Event{ev("d1", 1000, "death", "Death"), ev("d2", 1010, "death", "Death")},
+			true, "d2", day(1010, 1, 1), 100, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := newPageTimeline(&cal, tt.events)
+			if got.Dead != tt.dead || got.End != tt.end {
+				t.Fatalf("dead %v end %d, want dead %v end %d", got.Dead, got.End, tt.dead, tt.end)
+			}
+			if f := got.FillPercent(); f != tt.fill {
+				t.Errorf("fill = %v, want %v", f, tt.fill)
+			}
+			if got.ShowsToday() != tt.showToday {
+				t.Errorf("ShowsToday = %v, want %v", got.ShowsToday(), tt.showToday)
+			}
+			for _, e := range got.Events {
+				if e.Death != (e.ID == tt.death) {
+					t.Errorf("event %s Death = %v", e.ID, e.Death)
+				}
+				if got.Dead && got.Later(e) {
+					t.Errorf("event %s is still to come on a dead subject's line", e.ID)
+				}
+			}
+		})
+	}
+}
+
+func TestPageTimelineBlock_LeanLine(t *testing.T) {
+	cal, _, _ := eraFixture()
+	cal.Months = eraMonths()
+	end := 1021
+	tl := newPageTimeline(&cal, []Event{
+		{ID: "reign", Name: "Reign", Year: 1020, Month: 1, Day: 1, EndYear: &end, EndMonth: intp(2), EndDay: intp(3), Visibility: "everyone"},
+		{ID: "soon", Name: "Coronation", Year: 1030, Month: 1, Day: 1, Visibility: "everyone"},
+	})
+	var b bytes.Buffer
+	if err := PageTimelineBlock("camp-1", tl, false).Render(context.Background(), &b); err != nil {
+		t.Fatal(err)
+	}
+	html := b.String()
+	for _, want := range []string{
+		`data-ptl-end="`,
+		` to `,
+		`ptl-ev--later`,
+		`--ptl-lit:`,
+		`class="ptl-now"`,
+		`href="/campaigns/` + cal.CampaignID + `/calendars/` + eraCalendarID + `/view">Open the calendar</a>`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("block lacks %q\n%s", want, html)
+		}
+	}
+	if strings.Contains(html, "cb-card") {
+		t.Error("the lean line has no box")
+	}
+}

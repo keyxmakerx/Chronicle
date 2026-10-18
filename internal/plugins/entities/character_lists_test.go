@@ -326,3 +326,63 @@ func TestCharacterListService_SeedsOnFirstRead(t *testing.T) {
 		}
 	}
 }
+
+type fakePanelPlacer struct{ calls [][]int }
+
+func (f *fakePanelPlacer) PlaceSystemPanels(_ context.Context, _ string, ids []int) (int, error) {
+	f.calls = append(f.calls, ids)
+	return len(ids), nil
+}
+
+// TestCharacterListService_PlacesPanelsOnNPCTypes: game-system panels show
+// only where a layout places their block, so a type that joins the NPC list,
+// by the owner's choice or by seeding, gets the block with its sub-types.
+// Joining the characters list, or adding a type already covered, does not.
+func TestCharacterListService_PlacesPanelsOnNPCTypes(t *testing.T) {
+	ctx := context.Background()
+	tests := []struct {
+		name string
+		do   func(*CharacterListService, *fakeListStore) error
+		want [][]int
+	}{
+		{"adding a type to NPCs places it with its sub-types", func(s *CharacterListService, _ *fakeListStore) error {
+			_, err := s.Add(ctx, "c1", CharacterListNPCs, 1)
+			return err
+		}, [][]int{{1, 2}}},
+		{"adding a creature type to NPCs", func(s *CharacterListService, _ *fakeListStore) error {
+			_, err := s.Add(ctx, "c1", CharacterListNPCs, 3)
+			return err
+		}, [][]int{{3}}},
+		{"adding a type to characters places nothing", func(s *CharacterListService, _ *fakeListStore) error {
+			_, err := s.Add(ctx, "c1", CharacterListCharacters, 1)
+			return err
+		}, nil},
+		{"adding a type already covered places nothing", func(s *CharacterListService, st *fakeListStore) error {
+			st.lists = CharacterLists{NPCTypeIDs: []int{1}}
+			_, err := s.Add(ctx, "c1", CharacterListNPCs, 2)
+			return err
+		}, nil},
+		{"seeding places the seeded NPC types", func(s *CharacterListService, st *fakeListStore) error {
+			st.ok = false
+			return s.Seed(ctx, "c1")
+		}, [][]int{{1, 2}}},
+		{"seeding on first read places them too", func(s *CharacterListService, st *fakeListStore) error {
+			st.ok = false
+			_, err := s.NPCTypeIDs(ctx, "c1")
+			return err
+		}, [][]int{{1, 2}}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, store, _ := listFixture()
+			placer := &fakePanelPlacer{}
+			svc.SetPanelPlacer(placer)
+			if err := tt.do(svc, store); err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(placer.calls, tt.want) {
+				t.Errorf("placed %v, want %v", placer.calls, tt.want)
+			}
+		})
+	}
+}

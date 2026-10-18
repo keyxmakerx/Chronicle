@@ -90,7 +90,7 @@ func (a *entityExportAdapter) ExportEntities(ctx context.Context, campaignID str
 			Layout:          layoutJSON,
 			SortOrder:       et.SortOrder,
 			IsDefault:       et.IsDefault,
-			Enabled:         et.Enabled,
+			Enabled:         &et.Enabled,
 			PresetCategory:  et.PresetCategory,
 			ParentTypeSlug:  parentSlug,
 			Claimable:       et.Claimable,
@@ -1215,6 +1215,14 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 
 		idMap.EntityTypeIDs[et.OriginalID] = newType.ID
 		typeSlugToNewID[et.Slug] = newType.ID
+
+		// Create and update both leave the position, default flag and on/off
+		// state as they were, so the file's values are written here.
+		enabled := et.Enabled == nil || *et.Enabled
+		if err := a.entitySvc.RestoreEntityTypePlacement(ctx, campaignID, newType.ID, et.SortOrder, et.IsDefault, enabled); err != nil {
+			slog.Warn("import: restore entity type order failed", slog.String("type", et.Slug), slog.Any("error", err))
+			report.Fail("entities", "entity type order", et.Name, apperror.SafeMessage(err))
+		}
 
 		// Apply layout if present.
 		if len(et.Layout) > 0 {

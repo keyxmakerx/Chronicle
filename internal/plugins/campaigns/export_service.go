@@ -521,6 +521,9 @@ func (s *ExportImportService) Import(ctx context.Context, userID string, data *C
 		}
 	}
 
+	// The character and NPC lists name categories by id too.
+	s.restoreCharacterLists(ctx, campaignID, data, idMap, report)
+
 	// Import campaign groups (before calendar, since group-based permission
 	// grants may reference group IDs).
 	if s.groupImp != nil && len(data.Groups) > 0 {
@@ -587,6 +590,79 @@ func (s *ExportImportService) Import(ctx context.Context, userID string, data *C
 	}
 
 	return campaign, report, nil
+}
+
+// restoreCharacterLists carries the owner's character and NPC lists across
+// with the categories' new ids. A file without lists leaves them unset, so the
+// campaign is seeded from its own categories on first read. When a listed
+// category did not come back, both lists are cleared the same way rather than
+// kept half-right.
+func (s *ExportImportService) restoreCharacterLists(ctx context.Context, campaignID string, data *CampaignExport, idMap *IDMap, report *ImportReport) {
+	exported := make(map[int]bool, len(data.EntityTypes))
+	for _, et := range data.EntityTypes {
+		exported[et.OriginalID] = true
+	}
+	chars, npcs, state := remapCharacterLists(data.Campaign.Settings, exported, idMap.EntityTypeIDs)
+	var err error
+	switch state {
+	case listsRemapped:
+		err = s.campaigns.UpdateCharacterLists(ctx, campaignID, chars, npcs)
+	case listsLost:
+		err = s.campaigns.ClearCharacterLists(ctx, campaignID)
+	}
+	if err != nil {
+		slog.Warn("import character lists failed", slog.Any("error", err))
+		report.Fail("campaign", "character and NPC lists", data.Campaign.Name, apperror.SafeMessage(err))
+	}
+}
+
+// listsState is what remapCharacterLists found.
+type listsState int
+
+const (
+	listsAbsent   listsState = iota // the file carries no lists
+	listsRemapped                   // every listed category has its new id
+	listsLost                       // a listed category was not restored
+)
+
+// remapCharacterLists reads the exported settings' character and NPC lists and
+// maps each category id to its new one. An id the file has no category for was
+// already stale in the source campaign and is dropped, as reading the lists
+// there would.
+func remapCharacterLists(settings json.RawMessage, exported map[int]bool, typeIDs map[int]int) (chars, npcs []int, state listsState) {
+	if len(settings) == 0 {
+		return nil, nil, listsAbsent
+	}
+	var st CampaignSettings
+	if err := json.Unmarshal(settings, &st); err != nil {
+		return nil, nil, listsAbsent
+	}
+	if st.CharacterTypeIDs == nil && st.NPCTypeIDs == nil {
+		return nil, nil, listsAbsent
+	}
+	remap := func(ids *[]int) ([]int, bool) {
+		out := []int{}
+		if ids == nil {
+			return out, true
+		}
+		for _, id := range *ids {
+			if !exported[id] {
+				continue
+			}
+			n, found := typeIDs[id]
+			if !found {
+				return nil, false
+			}
+			out = append(out, n)
+		}
+		return out, true
+	}
+	chars, okC := remap(st.CharacterTypeIDs)
+	npcs, okN := remap(st.NPCTypeIDs)
+	if !okC || !okN {
+		return nil, nil, listsLost
+	}
+	return chars, npcs, listsRemapped
 }
 
 // Validate checks a CampaignExport for structural integrity before import.

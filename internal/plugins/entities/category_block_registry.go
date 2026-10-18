@@ -1,6 +1,7 @@
 package entities
 
 import (
+	"sort"
 	"sync"
 
 	"github.com/a-h/templ"
@@ -49,4 +50,17 @@ func renderExtraCategoryBlock(cc *campaigns.CampaignContext, et *EntityType, blo
 		return templ.NopComponent
 	}
 	return r(cc, et)
+}
+
+// extraCategoryBlockTypes lists the types registered through
+// RegisterCategoryBlock, sorted.
+func extraCategoryBlockTypes() []string {
+	extraCategoryBlocks.RLock()
+	defer extraCategoryBlocks.RUnlock()
+	out := make([]string, 0, len(extraCategoryBlocks.byType))
+	for t := range extraCategoryBlocks.byType {
+		out = append(out, t)
+	}
+	sort.Strings(out)
+	return out
 }

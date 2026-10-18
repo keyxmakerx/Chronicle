@@ -24,7 +24,7 @@ type PostService interface {
 	// Delete removes a post.
 	Delete(ctx context.Context, id string) error
 	// Reorder updates the sort order for posts within an entity.
-	Reorder(ctx context.Context, entityID string, postIDs []string) error
+	Reorder(ctx context.Context, campaignID, entityID string, postIDs []string) error
 }
 
 type postService struct {
@@ -134,12 +134,12 @@ func (s *postService) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-func (s *postService) Reorder(ctx context.Context, entityID string, postIDs []string) error {
+func (s *postService) Reorder(ctx context.Context, campaignID, entityID string, postIDs []string) error {
 	if len(postIDs) == 0 {
 		return apperror.NewBadRequest("post IDs are required")
 	}
 
-	if err := s.repo.Reorder(ctx, entityID, postIDs); err != nil {
+	if err := s.repo.Reorder(ctx, campaignID, entityID, postIDs); err != nil {
 		return apperror.NewInternal(err)
 	}
 

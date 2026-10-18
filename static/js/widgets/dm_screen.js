@@ -3,9 +3,11 @@
  *
  * The top-bar button lives in app.templ; the panel is a server-rendered
  * fragment (GET /campaigns/:id/dm-screen) fetched fresh on every open. This
- * widget owns the overlay, the opening (a d20 rolls out of the button, lands
- * on a 20, the folded screen pushes up out of it, and the knocked-loose faces
- * fall, bounce and settle), closing, tabs and the condition filter.
+ * widget owns the overlay, the opening (a rune d20 from Chronicle.dice is
+ * thrown from the button and lands on a 20, then bursts: the folded screen
+ * pushes up out of it and the knocked-loose pieces fall, bounce and settle),
+ * the closing (the leaves fold shut and the screen collapses where it
+ * stands), tabs and the condition filter.
  *
  * Nothing loops, so there is nothing to ease to still. One click anywhere,
  * or Escape, skips the opening. Reduced motion gets a plain fade.
@@ -15,8 +17,9 @@
 (function () {
   'use strict';
 
-  // The die is ten flat facets: a hexagon outline split around the centre
-  // face, in percentages of the die box, so each facet can fall on its own.
+  // The burst: the thrown die is swapped for ten flat facets, a hexagon outline
+  // split around the centre face, in percentages of the die box, so each
+  // facet can fall on its own.
   var H = [[50, 3], [93, 27], [93, 73], [50, 97], [7, 73], [7, 27]];
   var T = [[50, 24], [77, 67], [23, 67]];
   var FACETS = [
@@ -27,9 +30,10 @@
     { p: [H[3], H[4], T[2]], shade: -20 }, { p: [H[4], H[5], T[2]], shade: -4 },
     { p: [H[5], T[0], T[2]], shade: 6 }
   ];
-  var DIE = 120;      // die size in px
-  var BREAK = 1560;   // ms: the screen pushes out and the die comes apart
+  var DIE = 90;       // burst size in px, about the thrown die's size
+  var BREAK = 1560;   // ms into the burst's clock when the pieces start to fall
   var FADE = BREAK + 1900;
+  var HOLD = 450;     // ms the landed 20 stays lit before it bursts
 
   // Note state per campaign and note label, kept for the page's life so a draft
   // that failed to save is still there when the screen is reopened.
@@ -81,11 +85,11 @@
           var hrow = e.target.closest('[data-dms-hrow]');
           if (hrow) toggleHero(hrow);
         });
-        // Once the opening is over the screen is a window: drag it by its head.
+        // Once the opening is over the screen is a window: drag it by its title bar.
         o.addEventListener('pointerdown', function (e) {
           if (!st.windowed || e.button > 0 || e.target.closest('button, a, input, textarea')) return;
-          var head = e.target.closest('.dms-head');
-          if (head) startDrag(e, head);
+          var bar = e.target.closest('.dms-titlebar');
+          if (bar) startDrag(e, bar);
         });
         o.addEventListener('scroll', function (e) {
           if (e.target.hasAttribute && e.target.hasAttribute('data-dms-party')) partyEdges(e.target);
@@ -417,6 +421,8 @@
       }
 
       function clearFx() {
+        if (st.thrown) { st.thrown = false; if (Chronicle.dice) Chronicle.dice.stop(); }
+        if (st.land) st.land(null);
         if (st.raf) { cancelAnimationFrame(st.raf); st.raf = 0; }
         st.fx.forEach(function (n) { n.remove(); });
         st.fx = [];
@@ -446,7 +452,7 @@
       }
 
       // The window: after the opening the dim fades away and stops catching
-      // clicks (the page behind is usable), the head bar drags the screen, and
+      // clicks (the page behind is usable), the title bar drags the screen, and
       // the spot is remembered per browser. Narrow screens stay as they are.
       // The offset is the CSS `translate` property, which composes with the
       // opening's `transform` animations instead of fighting them.
@@ -484,11 +490,11 @@
         r.style.translate = st.off.x + 'px ' + st.off.y + 'px';
       }
 
-      // Keeps the head bar whole inside the viewport. offsetLeft/Top ignore
+      // Keeps the title bar whole inside the viewport. offsetLeft/Top ignore
       // translate and transform, so the base spot is stable mid-move.
       function clampOffset(r, p) {
-        var head = r.querySelector('.dms-head');
-        var hh = head ? head.offsetHeight : 32;
+        var bar = r.querySelector('.dms-titlebar');
+        var hh = bar ? bar.offsetHeight : 32;
         var minX = -r.offsetLeft, maxX = Math.max(minX, window.innerWidth - r.offsetWidth - r.offsetLeft);
         var minY = -r.offsetTop, maxY = Math.max(minY, window.innerHeight - hh - r.offsetTop);
         return { x: Math.min(maxX, Math.max(minX, p.x)), y: Math.min(maxY, Math.max(minY, p.y)) };
@@ -501,26 +507,26 @@
         placeWindow(false);
       }
 
-      function startDrag(e, head) {
+      function startDrag(e, bar) {
         var r = root(); if (!r) return;
         var startX = e.clientX, startY = e.clientY, from = st.off || { x: 0, y: 0 };
         st.overlay.classList.add('dms-dragging');
         r.classList.remove('dms-settle');
-        try { head.setPointerCapture(e.pointerId); } catch (err) { /* older browsers: window listeners below still work */ }
+        try { bar.setPointerCapture(e.pointerId); } catch (err) { /* older browsers: window listeners below still work */ }
         function move(ev) {
           st.off = clampOffset(r, { x: from.x + ev.clientX - startX, y: from.y + ev.clientY - startY });
           placeWindow(false);
         }
         function up() {
-          head.removeEventListener('pointermove', move);
-          head.removeEventListener('pointerup', up);
-          head.removeEventListener('pointercancel', up);
+          bar.removeEventListener('pointermove', move);
+          bar.removeEventListener('pointerup', up);
+          bar.removeEventListener('pointercancel', up);
           if (st.overlay) st.overlay.classList.remove('dms-dragging');
           writePos(st.off);
         }
-        head.addEventListener('pointermove', move);
-        head.addEventListener('pointerup', up);
-        head.addEventListener('pointercancel', up);
+        bar.addEventListener('pointermove', move);
+        bar.addEventListener('pointerup', up);
+        bar.addEventListener('pointercancel', up);
         e.preventDefault();
       }
 
@@ -550,7 +556,6 @@
           p.className = 'dms-piece';
           p.style.clipPath = 'polygon(' + f.p.map(function (v) { return v[0] + '% ' + v[1] + '%'; }).join(',') + ')';
           p.style.filter = 'brightness(' + (100 + f.shade) + '%)';
-          if (f.face) p.innerHTML = '<b>20</b>';
           var cx = (f.p[0][0] + f.p[1][0] + f.p[2][0]) / 3, cy = (f.p[0][1] + f.p[1][1] + f.p[2][1]) / 3;
           p.style.transformOrigin = cx + '% ' + cy + '%';
           wrap.appendChild(p);
@@ -616,25 +621,69 @@
         if (M) anim(M, [{ transform: 'rotateX(-80deg)' }, { transform: 'rotateX(-80deg)', offset: 0.15 }, { transform: 'rotateX(6deg)', offset: 0.8 }, { transform: 'none' }], { duration: 800, delay: delay });
         if (L) anim(L, [{ transform: side + '(' + (narrow() ? '-' : '') + '178deg)' }, { transform: side + '(' + (narrow() ? '8' : '-8') + 'deg)', offset: 0.75 }, { transform: 'none' }], { duration: 620, delay: delay + 650, easing: 'cubic-bezier(.3,.7,.3,1)' });
         var lastAnim = R ? anim(R, [{ transform: side + '(' + (narrow() ? '' : '-') + '178deg)' }, { transform: side + '(' + (narrow() ? '-8' : '8') + 'deg)', offset: 0.75 }, { transform: 'none' }], { duration: 620, delay: delay + 730, easing: 'cubic-bezier(.3,.7,.3,1)' }) : null;
-        r.querySelectorAll('.dms-head, .dms-strip').forEach(function (n) {
+        r.querySelectorAll('.dms-titlebar').forEach(function (n) {
           anim(n, [{ opacity: 0 }, { opacity: 1 }], { duration: 250, delay: delay + 1150 });
         });
         if (lastAnim) lastAnim.onfinish = function () { setPlaying(false); };
+      }
+
+      // Throws a rune d20 from the button and resolves with where it rests,
+      // once the 20 has been lit for a beat. Anything that keeps the die from
+      // being drawn (motion Calm, no WebGL, the dice files late) resolves at
+      // once with no point, and the screen comes out of the middle instead.
+      function throwDie() {
+        return new Promise(function (resolve) {
+          var done = false;
+          st.land = function (p) {
+            if (done) return;
+            done = true; st.land = null;
+            resolve(p ? { x: p.x, y: p.y } : null);
+          };
+          var dice = Chronicle.dice;
+          if (!dice || !dice.roll) { st.land(null); return; }
+          st.thrown = true;
+          dice.roll([{ label: 'DM Screen', dice: [{ sides: 20, value: 20, crit: 'none' }] }], {
+            from: openBtn,
+            skippable: false,
+            // The opening is a show, not a roll: nothing to read out.
+            describe: function () { return ''; },
+            onSettle: function (points) {
+              var p = points && points[0];
+              if (!p) { st.land(null); return; }
+              setTimeout(function () { if (st.land) st.land(p); }, HOLD);
+            }
+          }).catch(function () { if (st.land) st.land(null); });
+        });
+      }
+
+      // A flash of light where the die stood, under the flying pieces.
+      function flash(x, y) {
+        var f = document.createElement('div');
+        f.className = 'dms-flash';
+        f.style.left = x + 'px';
+        f.style.top = y + 'px';
+        st.overlay.appendChild(f);
+        st.fx.push(f);
+        anim(f, [{ transform: 'translate(-50%,-50%) scale(.2)', opacity: 1 }, { transform: 'translate(-50%,-50%) scale(2.6)', opacity: 0 }],
+          { duration: 520, easing: 'cubic-bezier(.2,.8,.3,1)' });
       }
 
       function open() {
         var o = overlay();
         exitWindow();
         stopAll();
+        st.closing = false;
         st.willWindow = !narrow();
         o.hidden = false;
         document.addEventListener('keydown', onKey);
         var dim = o.querySelector('[data-dms-dim]');
         anim(dim, [{ opacity: 0 }, { opacity: 1 }], { duration: 300 });
         var loaded = load();
+        var me = st.seq = (st.seq || 0) + 1;
 
         if (reduce) {
           loaded.then(function (html) {
+            if (me !== st.seq) return;
             var r = mount(html);
             if (r) { anim(r, [{ opacity: 0 }, { opacity: 1 }], { duration: 200 }); focusClose(); if (st.willWindow) enterWindow(); }
           }).catch(failed);
@@ -642,31 +691,22 @@
         }
 
         setPlaying(true);
-        var b = openBtn.getBoundingClientRect();
-        var bx = b.left + b.width / 2, by = b.top + b.height / 2;
         var cx = window.innerWidth / 2, cy = Math.min(window.innerHeight * 0.42, 360);
-        var die = buildDie(cx, cy), sx = bx - cx, sy = by - cy;
-        anim(die.wrap, [
-          { transform: 'translate(' + sx + 'px,' + sy + 'px) rotate(-30deg) scale(.25)', opacity: 0 },
-          { transform: 'translate(' + sx * 0.55 + 'px,' + (sy * 0.55 - 70) + 'px) rotate(260deg) scale(.8)', opacity: 1, offset: 0.3 },
-          { transform: 'translate(0,0) rotate(520deg) scale(1)', offset: 0.58 },
-          { transform: 'translate(0,-34px) rotate(610deg) scale(1)', offset: 0.7 },
-          { transform: 'translate(0,0) rotate(700deg) scale(1)', offset: 0.82 },
-          { transform: 'translate(0,-8px) rotate(715deg) scale(1)', offset: 0.9 },
-          { transform: 'translate(0,0) rotate(720deg) scale(1)', opacity: 1 }
-        ], { duration: 1150, easing: 'cubic-bezier(.3,.6,.4,1)' });
-        // A beat so the 20 reads, then a small tremor as it gives way.
-        anim(die.wrap, [{ translate: '0 0' }, { translate: '-2px 0' }, { translate: '2px 1px' }, { translate: '-1px 0' }, { translate: '0 0' }],
-          { duration: 200, delay: 1340, easing: 'linear', composite: 'add' });
-
-        var start = performance.now();
-        shatter(die, start);
-        loaded.then(function (html) {
-          var r = mount(html);
+        Promise.all([loaded, throwDie()]).then(function (got) {
+          // Closed, or opened again, while the die was in the air.
+          if (me !== st.seq || o.hidden) return;
+          var r = mount(got[0]);
           if (!r) return;
-          var wait = Math.max(0, BREAK - (performance.now() - start));
-          if (!st.playing) { focusClose(); if (st.willWindow) enterWindow(); return; } // skipped while loading
-          unfold(r, cx, cy, wait);
+          if (!st.playing) { focusClose(); if (st.willWindow) enterWindow(); return; } // skipped
+          var p = got[1] || { x: cx, y: cy };
+          // The thrown die gives way to its flat pieces in the same spot, and
+          // they fly apart as the screen pushes up out of them.
+          st.thrown = false;
+          if (Chronicle.dice) Chronicle.dice.stop();
+          flash(p.x, p.y);
+          var now = performance.now();
+          shatter(buildDie(p.x, p.y), now - BREAK);
+          unfold(r, p.x, p.y, 0);
           focusClose();
         }).catch(failed);
       }
@@ -682,22 +722,46 @@
         if (Chronicle.notify) Chronicle.notify('The DM Screen could not load. Try again in a moment.', 'error');
       }
 
+      // Closing is the opening backwards, in place: the side leaves swing
+      // shut over the middle one, the middle folds down, and the folded screen
+      // collapses into a flash where it stands.
       function close() {
-        if (!st.overlay || st.overlay.hidden) return;
+        if (!st.overlay || st.overlay.hidden || st.closing) return;
         // saveNote captures the box's text into the note state before the box
         // is torn down below; a save already in flight queues this one behind it.
         saveNote();
         st.willWindow = false;
+        st.seq = (st.seq || 0) + 1;
         stopAll();
         document.removeEventListener('keydown', onKey);
         var r = root(), o = st.overlay;
         var done = function () { exitWindow(); o.hidden = true; o.querySelector('[data-dms-stage]').innerHTML = ''; openBtn.focus({ preventScroll: true }); };
         if (!r || reduce) { done(); return; }
-        var b = openBtn.getBoundingClientRect(), rect = r.getBoundingClientRect();
-        var dx = (b.left + b.width / 2) - (rect.left + rect.width / 2), dy = (b.top + b.height / 2) - (rect.top + rect.height / 2);
-        anim(o.querySelector('[data-dms-dim]'), [{ opacity: 1 }, { opacity: 0 }], { duration: 300 });
-        anim(r, [{ transform: 'none', opacity: 1 }, { transform: 'translate(' + dx + 'px,' + dy + 'px) scale(.1)', opacity: 0 }],
-          { duration: 380, easing: 'cubic-bezier(.5,0,.75,0)' }).onfinish = function () { stopAll(); done(); };
+        st.closing = true;
+        var side = narrow() ? 'rotateX' : 'rotateY';
+        var L = r.querySelector('[data-dms-leaf="l"]'), M = r.querySelector('[data-dms-leaf="m"]'), R = r.querySelector('[data-dms-leaf="r"]');
+        var shut = 'cubic-bezier(.5,0,.6,1)';
+        if (!o.classList.contains('dms-dimmed-off')) anim(o.querySelector('[data-dms-dim]'), [{ opacity: 1 }, { opacity: 0 }], { duration: 300, delay: 420 });
+        r.querySelectorAll('.dms-titlebar').forEach(function (n) { anim(n, [{ opacity: 1 }, { opacity: 0 }], { duration: 160 }); });
+        if (R) anim(R, [{ transform: 'none' }, { transform: side + '(' + (narrow() ? '' : '-') + '178deg)' }], { duration: 340, easing: shut });
+        if (L) anim(L, [{ transform: 'none' }, { transform: side + '(' + (narrow() ? '-' : '') + '178deg)' }], { duration: 340, delay: 70, easing: shut });
+        if (M) anim(M, [{ transform: 'none' }, { transform: 'rotateX(-80deg)' }], { duration: 260, delay: 330, easing: shut });
+        anim(r, [{ transform: 'none', opacity: 1 }, { transform: 'scale(.9)', opacity: 1, offset: 0.45 }, { transform: 'scale(.06)', opacity: 0 }],
+          { duration: 360, delay: 420, easing: 'cubic-bezier(.55,0,.8,.3)' }).onfinish = function () {
+          var rect = r.getBoundingClientRect();
+          stopAll();
+          st.closing = false;
+          done();
+          // The flash outlives the screen by a moment, on the page itself.
+          var f = document.createElement('div');
+          f.className = 'dms-flash dms-flash-page';
+          f.style.left = (rect.left + rect.width / 2) + 'px';
+          f.style.top = (rect.top + rect.height / 2) + 'px';
+          document.body.appendChild(f);
+          var a = f.animate([{ transform: 'translate(-50%,-50%) scale(.3)', opacity: .9 }, { transform: 'translate(-50%,-50%) scale(1.6)', opacity: 0 }],
+            { duration: 380, easing: 'cubic-bezier(.2,.8,.3,1)', fill: 'both' });
+          a.onfinish = function () { f.remove(); };
+        };
       }
 
       openBtn.addEventListener('click', function (e) {

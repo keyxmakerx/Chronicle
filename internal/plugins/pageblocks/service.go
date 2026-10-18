@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/keyxmakerx/chronicle/internal/mapsketch"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 )
 
@@ -15,6 +16,27 @@ type Service interface {
 	Get(ctx context.Context, campaignID, entityID, blockID, kindHint string, v Viewer) (*View, error)
 	// Put validates and saves a block, returning the saved view.
 	Put(ctx context.Context, campaignID, entityID, blockID string, v Viewer, in SaveInput) (*View, error)
+
+	// PageMapText is the page map as the line grammar (mapsketch.Grammar), as
+	// viewer v sees it: DM-only markers and links to pages v cannot open are
+	// left out. version is the one a save must carry. A block with no saved
+	// map reads as empty text at version 0.
+	PageMapText(ctx context.Context, campaignID, entityID, blockID string, v Viewer) (text string, version int, err error)
+	// EditorSketchText is PageMapText for the editor's "edit as text": it also
+	// requires that v may edit the page and may save everything on the map.
+	EditorSketchText(ctx context.Context, campaignID, entityID, blockID string, v Viewer) (text string, version int, err error)
+	// PreviewSketch parses text and resolves its page names for an editor,
+	// without saving. Warnings are the lines left out and the names that
+	// matched no page v can open.
+	PreviewSketch(ctx context.Context, campaignID, entityID, blockID string, v Viewer, text string) (*SketchPreview, error)
+	// SavePageMapText parses text, resolves its page names, validates, and
+	// replaces the whole map with the same permission rules as Put. A line
+	// that cannot be drawn is left out and reported in Result.Problems, as are
+	// page names that matched nothing (those lack the "Line N: " prefix).
+	SavePageMapText(ctx context.Context, campaignID, entityID, blockID string, v Viewer, text string) (mapsketch.Result, error)
+	// FirstPageMapBlock finds the first page_map block in the layout of the
+	// page's category.
+	FirstPageMapBlock(ctx context.Context, campaignID, entityID string) (blockID string, ok bool, err error)
 }
 
 type service struct {
@@ -69,18 +91,31 @@ func (s *service) load(ctx context.Context, campaignID, entityID, blockID, kindH
 // forViewer filters doc for v and decides canEdit.
 //
 // A viewer below Owner visibility who may edit the page still cannot edit a
-// table that has DM-only columns: they never receive the hidden columns, so
-// whatever they saved would erase them. Refusing the edit is simpler and
-// safer than merging.
-func forViewer(doc any, a PageAccess, v Viewer) (any, bool) {
+// table that has DM-only columns, or a page map that has DM-only markers:
+// they never receive the hidden parts, so whatever they saved would erase
+// them. Refusing the edit is simpler and safer than merging. A page map that
+// links to a page the viewer cannot open is refused for the same reason.
+func (s *service) forViewer(ctx context.Context, campaignID string, doc any, a PageAccess, v Viewer) (any, bool, error) {
 	canEdit := a.CanEdit
-	if t, ok := doc.(Table); ok && !seesDMOnly(v) {
-		if hasDMOnly(t) {
+	switch d := doc.(type) {
+	case Table:
+		if !seesDMOnly(v) {
+			if hasDMOnly(d) {
+				canEdit = false
+			}
+			doc = stripDMOnly(d)
+		}
+	case mapsketch.Doc:
+		out, hidden, err := s.pageMapForViewer(ctx, campaignID, d, v)
+		if err != nil {
+			return nil, false, err
+		}
+		if hidden {
 			canEdit = false
 		}
-		doc = stripDMOnly(t)
+		doc = out
 	}
-	return doc, canEdit
+	return doc, canEdit, nil
 }
 
 func (s *service) Get(ctx context.Context, campaignID, entityID, blockID, kindHint string, v Viewer) (*View, error) {
@@ -95,7 +130,10 @@ func (s *service) Get(ctx context.Context, campaignID, entityID, blockID, kindHi
 	if err != nil {
 		return nil, err
 	}
-	doc, canEdit := forViewer(doc, a, v)
+	doc, canEdit, err := s.forViewer(ctx, campaignID, doc, a, v)
+	if err != nil {
+		return nil, err
+	}
 	return &View{Kind: kind, Data: doc, Version: version, CanEdit: canEdit}, nil
 }
 
@@ -137,18 +175,32 @@ func (s *service) Put(ctx context.Context, campaignID, entityID, blockID string,
 	if err != nil {
 		return nil, err
 	}
-	if in.Kind == KindTable && !seesDMOnly(v) {
-		if found {
-			prev, err := validateTable(st.Data)
-			if err != nil {
-				return nil, apperrorInternal(err)
+	return s.commit(ctx, campaignID, entityID, blockID, v, a, st.Data, found, in.Kind, doc, version)
+}
+
+// commit applies the DM-only rules to a validated document, stores it as the
+// successor of expected, and returns the saved view. prev is the stored data
+// when found.
+func (s *service) commit(ctx context.Context, campaignID, entityID, blockID string, v Viewer, a PageAccess, prev []byte, found bool, kind string, doc any, expected int) (*View, error) {
+	switch kind {
+	case KindTable:
+		if !seesDMOnly(v) {
+			if found {
+				old, err := validateTable(prev)
+				if err != nil {
+					return nil, apperrorInternal(err)
+				}
+				if hasDMOnly(old) {
+					return nil, errForbidden("only the DM can edit a table with DM-only columns")
+				}
 			}
-			if hasDMOnly(prev) {
-				return nil, errForbidden("only the DM can edit a table with DM-only columns")
+			if hasDMOnly(doc.(Table)) {
+				return nil, errForbidden("only the DM can mark a column DM-only")
 			}
 		}
-		if hasDMOnly(doc.(Table)) {
-			return nil, errForbidden("only the DM can mark a column DM-only")
+	case KindPageMap:
+		if err := s.checkPageMapWrite(ctx, campaignID, v, prev, found, doc.(mapsketch.Doc)); err != nil {
+			return nil, err
 		}
 	}
 
@@ -156,13 +208,16 @@ func (s *service) Put(ctx context.Context, campaignID, entityID, blockID string,
 	if err != nil {
 		return nil, apperrorInternal(err)
 	}
-	saved, err := s.repo.Save(ctx, campaignID, entityID, blockID, in.Kind, raw, version, v.UserID)
+	saved, err := s.repo.Save(ctx, campaignID, entityID, blockID, kind, raw, expected, v.UserID)
 	if err != nil {
 		return nil, apperrorInternal(err)
 	}
 	if !saved {
 		return nil, errConflict()
 	}
-	out, canEdit := forViewer(doc, a, v)
-	return &View{Kind: in.Kind, Data: out, Version: version + 1, CanEdit: canEdit}, nil
+	out, canEdit, err := s.forViewer(ctx, campaignID, doc, a, v)
+	if err != nil {
+		return nil, err
+	}
+	return &View{Kind: kind, Data: out, Version: expected + 1, CanEdit: canEdit}, nil
 }

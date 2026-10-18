@@ -1398,3 +1398,22 @@ func (s *timelineService) DeleteConnection(ctx context.Context, timelineID strin
 func (s *timelineService) ListConnections(ctx context.Context, timelineID string) ([]EventConnection, error) {
 	return s.repo.ListConnections(ctx, timelineID)
 }
+
+// VisibleConnections keeps only the connections whose two ends are both in
+// events, the list already filtered for this viewer. A connection row carries
+// its ends' ids and a free-text label, so one touching a hidden event would
+// otherwise tell a player the hidden event exists and, through the label,
+// what it is.
+func VisibleConnections(conns []EventConnection, events []EventLink) []EventConnection {
+	seen := make(map[string]bool, len(events))
+	for _, e := range events {
+		seen[e.Source+":"+e.EventID] = true
+	}
+	out := make([]EventConnection, 0, len(conns))
+	for _, c := range conns {
+		if seen[c.SourceType+":"+c.SourceID] && seen[c.TargetType+":"+c.TargetID] {
+			out = append(out, c)
+		}
+	}
+	return out
+}

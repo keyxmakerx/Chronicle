@@ -138,6 +138,9 @@ func (h *SystemHandler) Index(c echo.Context) error {
 	var cats []categoryInfo
 	dp := mod.DataProvider()
 	for _, cat := range manifest.Categories {
+		if hiddenFromViewer(cc, manifest, cat.Slug) {
+			continue
+		}
 		count := 0
 		if dp != nil {
 			if items, err := dp.List(cat.Slug); err == nil {
@@ -173,6 +176,9 @@ func (h *SystemHandler) CategoryList(c echo.Context) error {
 	}
 
 	catSlug := c.Param("cat")
+	if hiddenFromViewer(cc, mod.Info(), catSlug) {
+		return apperror.NewNotFound("category not found")
+	}
 	dp := mod.DataProvider()
 	if dp == nil {
 		return apperror.NewNotFound("system has no data")
@@ -217,6 +223,9 @@ func (h *SystemHandler) ItemDetail(c echo.Context) error {
 
 	catSlug := c.Param("cat")
 	itemID := c.Param("item")
+	if hiddenFromViewer(cc, mod.Info(), catSlug) {
+		return apperror.NewNotFound("item not found")
+	}
 	dp := mod.DataProvider()
 	if dp == nil {
 		return apperror.NewNotFound("system has no data")
@@ -270,17 +279,20 @@ func (h *SystemHandler) SearchAPI(c echo.Context) error {
 		return err
 	}
 
-	items := make([]map[string]string, len(results))
+	items := make([]map[string]string, 0, len(results))
 	manifest := mod.Info()
-	for i, r := range results {
-		items[i] = map[string]string{
+	for _, r := range results {
+		if hiddenFromViewer(cc, manifest, r.Category) {
+			continue
+		}
+		items = append(items, map[string]string{
 			"id":        r.ID,
 			"name":      r.Name,
 			"category":  r.Category,
 			"summary":   r.Summary,
 			"system_id": manifest.ID,
 			"url":       "/campaigns/" + cc.Campaign.ID + "/systems/" + manifest.ID + "/" + r.Category + "/" + r.ID,
-		}
+		})
 	}
 
 	return c.JSON(http.StatusOK, map[string]any{
@@ -304,6 +316,9 @@ func (h *SystemHandler) TooltipAPI(c echo.Context) error {
 
 	catSlug := c.Param("cat")
 	itemID := c.Param("item")
+	if hiddenFromViewer(cc, mod.Info(), catSlug) {
+		return apperror.NewNotFound("item not found")
+	}
 	dp := mod.DataProvider()
 	if dp == nil {
 		return apperror.NewNotFound("this system has no reference data")
@@ -325,8 +340,8 @@ func (h *SystemHandler) TooltipAPI(c echo.Context) error {
 		}
 	}
 
-	// Short cache — system data is static.
-	c.Response().Header().Set("Cache-Control", "public, max-age=3600")
+	// Short cache; private, because what a viewer may read depends on their role.
+	c.Response().Header().Set("Cache-Control", "private, max-age=3600")
 
 	return c.JSON(http.StatusOK, map[string]any{
 		"name":         item.Name,
@@ -449,7 +464,8 @@ func (h *SystemHandler) RulesGlossaryAPI(c echo.Context) error {
 		return c.JSON(http.StatusOK, []any{})
 	}
 
-	c.Response().Header().Set("Cache-Control", "public, max-age=3600")
+	// Private: only signed-in members may read it, so no shared cache may keep it.
+	c.Response().Header().Set("Cache-Control", "private, max-age=3600")
 	return c.Blob(http.StatusOK, "application/json", data)
 }
 
@@ -476,6 +492,9 @@ func (h *SystemHandler) SystemDataAPI(c echo.Context) error {
 	if !systemDataFilePattern.MatchString(file) {
 		return apperror.NewBadRequest("invalid data file")
 	}
+	if hiddenFromViewer(campaigns.GetCampaignContext(c), mod.Info(), strings.TrimSuffix(file, ".json")) {
+		return apperror.NewNotFound("data file not found")
+	}
 
 	sysDir := h.systemDir(c, mod)
 	if sysDir == "" {
@@ -493,7 +512,8 @@ func (h *SystemHandler) SystemDataAPI(c echo.Context) error {
 		return apperror.NewNotFound("data file not found")
 	}
 
-	c.Response().Header().Set("Cache-Control", "public, max-age=3600")
+	// Private: the answer depends on the viewer's role and membership.
+	c.Response().Header().Set("Cache-Control", "private, max-age=3600")
 	return c.Blob(http.StatusOK, "application/json", data)
 }
 
@@ -666,6 +686,15 @@ func (h *SystemHandler) BookFindAPI(c echo.Context) error {
 // Director (dm_only) visibility. The same rule as every other dm_only surface.
 func bookViewerIsDirector(cc *campaigns.CampaignContext) bool {
 	return cc.VisibilityRole() >= int(campaigns.RoleOwner)
+}
+
+// hiddenFromViewer reports whether a category is Director-only and the viewer
+// is not a Director. With no campaign context nobody is a Director.
+func hiddenFromViewer(cc *campaigns.CampaignContext, manifest *SystemManifest, slug string) bool {
+	if !manifest.DirectorOnly(slug) {
+		return false
+	}
+	return cc == nil || !bookViewerIsDirector(cc)
 }
 
 // EnabledSystem returns the System enabled for a campaign, or nil. Other

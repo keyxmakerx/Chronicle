@@ -73,6 +73,8 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 	cg.GET("/customize", h.Customize, RequireRole(RoleOwner))
 	cg.GET("/customize/look", h.CustomizeLook, RequireRole(RoleOwner))
 	cg.GET("/customize/home", h.CustomizeHome, RequireRole(RoleOwner))
+	cg.GET("/customize/home/:who", h.CustomizeHome, RequireRole(RoleOwner))
+	cg.POST("/customize/home-preview", h.HomePreview, RequireRole(RoleOwner))
 	cg.GET("/customize/categories", h.CustomizeCategoriesPage, RequireRole(RoleOwner))
 	cg.GET("/customize/categories/:key", h.CustomizeCategory, RequireRole(RoleOwner))
 	cg.GET("/customize/categories/:key/:tab", h.CustomizeCategory, RequireRole(RoleOwner))

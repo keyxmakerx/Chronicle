@@ -15,3 +15,10 @@ func propString(props map[string]any, key string) string {
 	}
 	return fmt.Sprintf("%v", val)
 }
+
+// propText is propString for the reference browser, which shows plain text:
+// {@category term} markup becomes the term it names. The Rules book keeps
+// the markup because it turns it into term links.
+func propText(props map[string]any, key string) string {
+	return flattenRefMarkup(propString(props, key))
+}

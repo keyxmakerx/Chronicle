@@ -9,7 +9,10 @@ import (
 // TestWASMEntityAdapter tests the entity reader adapter.
 func TestWASMEntityAdapter(t *testing.T) {
 	adapter := NewWASMEntityAdapter(
-		func(ctx context.Context, id string) (json.RawMessage, error) {
+		func(ctx context.Context, campaignID, id string) (json.RawMessage, error) {
+			if campaignID != "camp-1" {
+				t.Errorf("getByID campaignID = %q, want camp-1", campaignID)
+			}
 			return json.RawMessage(`{"id":"` + id + `","name":"Gandalf"}`), nil
 		},
 		func(ctx context.Context, campaignID, query string, limit int) (json.RawMessage, error) {
@@ -182,7 +185,7 @@ func TestHostEnvironmentBuildWriteFunctions(t *testing.T) {
 
 	// Set write adapters with no-op closures.
 	env.SetEntityWriter(NewWASMEntityWriteAdapter(
-		func(ctx context.Context, entityID string, fieldsData json.RawMessage) error { return nil },
+		func(ctx context.Context, campaignID, entityID string, fieldsData json.RawMessage) error { return nil },
 	))
 	env.SetCalendarWriter(NewWASMCalendarWriteAdapter(
 		func(ctx context.Context, campaignID string, input json.RawMessage) (json.RawMessage, error) {
@@ -191,7 +194,7 @@ func TestHostEnvironmentBuildWriteFunctions(t *testing.T) {
 	))
 	env.SetTagWriter(NewWASMTagWriteAdapter(
 		func(ctx context.Context, entityID, campaignID string, tagIDs json.RawMessage) error { return nil },
-		func(ctx context.Context, entityID string) (json.RawMessage, error) {
+		func(ctx context.Context, campaignID, entityID string) (json.RawMessage, error) {
 			return json.RawMessage(`[]`), nil
 		},
 	))
@@ -259,14 +262,17 @@ func TestWASMEntityWriteAdapter(t *testing.T) {
 	var capturedID string
 	var capturedFields json.RawMessage
 	adapter := NewWASMEntityWriteAdapter(
-		func(ctx context.Context, entityID string, fieldsData json.RawMessage) error {
+		func(ctx context.Context, campaignID, entityID string, fieldsData json.RawMessage) error {
+			if campaignID != "camp-1" {
+				t.Errorf("updateFields campaignID = %q, want camp-1", campaignID)
+			}
 			capturedID = entityID
 			capturedFields = fieldsData
 			return nil
 		},
 	)
 
-	err := adapter.UpdateFieldsJSON(t.Context(), "ent-99", json.RawMessage(`{"hp":42}`))
+	err := adapter.UpdateFieldsJSON(t.Context(), "camp-1", "ent-99", json.RawMessage(`{"hp":42}`))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -301,7 +307,10 @@ func TestWASMTagWriteAdapter(t *testing.T) {
 		func(ctx context.Context, entityID, campaignID string, tagIDs json.RawMessage) error {
 			return nil
 		},
-		func(ctx context.Context, entityID string) (json.RawMessage, error) {
+		func(ctx context.Context, campaignID, entityID string) (json.RawMessage, error) {
+			if campaignID != "camp-1" {
+				t.Errorf("getTags campaignID = %q, want camp-1", campaignID)
+			}
 			return json.RawMessage(`[{"id":1,"name":"Magic"}]`), nil
 		},
 	)
@@ -314,7 +323,7 @@ func TestWASMTagWriteAdapter(t *testing.T) {
 	})
 
 	t.Run("GetEntityTagsJSON", func(t *testing.T) {
-		result, err := adapter.GetEntityTagsJSON(t.Context(), "ent-1")
+		result, err := adapter.GetEntityTagsJSON(t.Context(), "camp-1", "ent-1")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}

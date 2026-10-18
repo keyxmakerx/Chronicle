@@ -3,6 +3,7 @@ package tags
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -681,6 +682,67 @@ func TestGenerateSlug(t *testing.T) {
 			result := generateSlug(tt.input)
 			if result != tt.expected {
 				t.Errorf("generateSlug(%q) = %q, want %q", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+// A caller who cannot see dm_only tags must neither clear the ones already on
+// the entity nor be able to attach one by id.
+func TestSetEntityTagsVisible_DmOnly(t *testing.T) {
+	all := []Tag{{ID: 1}, {ID: 2, DmOnly: true}, {ID: 3}}
+	filter := func(include bool) []Tag {
+		var out []Tag
+		for _, tg := range all {
+			if include || !tg.DmOnly {
+				out = append(out, tg)
+			}
+		}
+		return out
+	}
+	tests := []struct {
+		name        string
+		includeDm   bool
+		current     []int
+		request     []int
+		wantRemoved []int
+		wantAdded   []int
+		wantErr     bool
+	}{
+		{"scribe keeps hidden tag", false, []int{1, 2}, []int{3}, []int{1}, []int{3}, false},
+		{"scribe clearing all keeps hidden tag", false, []int{1, 2}, []int{}, []int{1}, nil, false},
+		{"scribe cannot add hidden tag", false, []int{1}, []int{1, 2}, nil, nil, true},
+		{"owner replaces everything", true, []int{1, 2}, []int{3}, []int{1, 2}, []int{3}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var removed, added []int
+			repo := &mockTagRepo{
+				listByCampaignFn: func(_ context.Context, _ string, inc bool) ([]Tag, error) { return filter(inc), nil },
+				getEntityTagsFn: func(_ context.Context, _ string, inc bool) ([]Tag, error) {
+					var out []Tag
+					for _, tg := range filter(inc) {
+						for _, id := range tt.current {
+							if id == tg.ID {
+								out = append(out, tg)
+							}
+						}
+					}
+					return out, nil
+				},
+				removeTagFromEntityFn: func(_ context.Context, _ string, id int) error { removed = append(removed, id); return nil },
+				addTagToEntityFn:      func(_ context.Context, _ string, id int) error { added = append(added, id); return nil },
+			}
+			err := newTestService(repo).SetEntityTagsVisible(context.Background(), "e", "c", tt.request, tt.includeDm)
+			if tt.wantErr {
+				assertAppError(t, err, 400)
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(removed, tt.wantRemoved) || !reflect.DeepEqual(added, tt.wantAdded) {
+				t.Fatalf("removed %v added %v; want %v / %v", removed, added, tt.wantRemoved, tt.wantAdded)
 			}
 		})
 	}

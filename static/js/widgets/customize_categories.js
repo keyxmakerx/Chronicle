@@ -8,19 +8,22 @@
  * owner presses Save. Section shape, applied by the entities plugin:
  *
  *   { items: { "<id>" | "new-<slug>": { new, name, name_plural, icon, color,
- *       claimable, parent, clear_parent, copy_from, menu, delete, layout } },
+ *       claimable, parent, clear_parent, copy_from, menu, delete, layout,
+ *       home, description } },
  *     _changes: [{ label, href }] }
  *
  * An existing category's item holds only what differs from what is saved,
- * so a change put back by hand leaves the draft. The page editor
- * (customize_page_editor.js) owns `layout` and writes it through
- * Chronicle.customizeCategoryWrite, so the save bar's lines stay this
- * widget's to make.
+ * so a change put back by hand leaves the draft. The Customizer's page layout
+ * (customize_page_editor.js) owns `layout`, `home` and `description` and
+ * writes them through Chronicle.customizeCategoryWrite, so the save bar's
+ * lines stay this widget's to make.
  */
 (function () {
   'use strict';
 
   var SECTION = 'categories';
+  // The item keys the Category home tab writes.
+  var HOME_KEYS = { home: true, description: true };
   var COLORS = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#8b5cf6', '#64748b'];
   // Icons the picker offers, with the words a search matches beyond the name.
   var ICONS = [
@@ -77,7 +80,6 @@
     });
     var inMenu = state.inMenu || {};
     var claiming = !!state.claiming;
-    var ADVENTURES_URL = state.adventuresUrl || '';
     var KEY = state.key || '', TAB = state.tab || '';
     var alive = true, listeners = [];
     function on(t, type, fn, o) { t.addEventListener(type, fn, o); listeners.push([t, type, fn, o]); }
@@ -135,8 +137,9 @@
     function write(key, patch, opts) {
       var its = items(), it = its[key] || {};
       Object.keys(patch).forEach(function (k) { if (patch[k] === undefined) delete it[k]; else it[k] = patch[k]; });
-      // A category being deleted keeps no layout change; Save would refuse both.
-      if (it.delete) delete it.layout;
+      // A category being deleted keeps no layout or home change; Save would
+      // refuse them.
+      if (it.delete) { delete it.layout; delete it.home; delete it.description; }
       var s = savedById(key);
       if (s) {
         if (it.name === s.name) delete it.name;
@@ -156,8 +159,9 @@
       if (!Object.keys(its).length) { shellSet(null, opts); return; }
       shellSet({ items: its, _changes: changes(its) }, opts);
     }
-    // The keys of an item that the Settings tab shows.
-    function settingsKeys(it) { return Object.keys(it).filter(function (k) { return k !== 'layout'; }); }
+    // The keys of an item that the Settings tab shows; the page layout and
+    // the category home have tabs of their own.
+    function settingsKeys(it) { return Object.keys(it).filter(function (k) { return !HOME_KEYS[k] && k !== 'layout'; }); }
     // The save bar's lines for this section.
     function changes(its) {
       var out = [], byKey = {};
@@ -168,6 +172,7 @@
         else if (it.delete) out.push({ label: 'Delete ' + (s ? s.plural : nm), href: BASE + '/categories' });
         else {
           if (it.layout) out.push({ label: nm + ' page layout', href: BASE + '/categories/' + k + '/layout' });
+          if (it.home || it.description !== undefined) out.push({ label: nm + ' home', href: BASE + '/categories/' + k + '/home' });
           if (settingsKeys(it).length) out.push({ label: nm + ' settings', href: BASE + '/categories/' + k + '/settings' });
         }
       });
@@ -187,34 +192,8 @@
         '<button type="button" class="btn-primary" data-new><i class="fa-solid fa-plus mr-1.5" aria-hidden="true"></i>New category</button></div>' +
         '<div class="czs-cat-grid" hx-boost="true" hx-target="#main-content" hx-select="#main-content > *" hx-swap="innerHTML show:window:top">' +
         top.map(card).join('') +
-        '<button type="button" class="czs-cat-card czs-add" data-new><span class="czs-plus"><i class="fa-solid fa-plus" aria-hidden="true"></i></span>New category</button></div>' +
-        (hasAdventures() || !ADVENTURES_URL ? '' : adventuresPanel());
+        '<button type="button" class="czs-cat-card czs-add" data-new><span class="czs-plus"><i class="fa-solid fa-plus" aria-hidden="true"></i></span>New category</button></div>';
       if (window.htmx) window.htmx.process(el);
-    }
-    function hasAdventures() { return saved.some(function (c) { return c.dmOnly; }); }
-    // The one-click offer for a campaign made before Adventures existed. It
-    // acts at once, not through the draft: adding the category is idempotent
-    // and a draft that holds other edits is kept across the reload.
-    function adventuresPanel() {
-      return '<div class="czs-panel czs-row-set czs-adv-offer"><div><span class="czs-lab"><i class="fa-solid fa-dungeon" aria-hidden="true"></i> Adventures</span>' +
-        '<p class="czs-hint">A category for your prep that only the DM team sees: the owner, co-DMs and scribes. Players get no menu entry, search result or link to it. It starts with a page layout for running an adventure at the table.</p>' +
-        '<p class="czs-err" data-adv-err role="alert" hidden></p></div>' +
-        '<button type="button" class="btn-secondary" data-add-adv><i class="fa-solid fa-plus mr-1.5" aria-hidden="true"></i>Add Adventures</button></div>';
-    }
-    function addAdventures(btn) {
-      var err = $('[data-adv-err]');
-      btn.disabled = true;
-      if (err) err.hidden = true;
-      Chronicle.apiFetch(ADVENTURES_URL, { method: 'POST' }).then(function (r) {
-        if (!r.ok) throw new Error('refused');
-        return shellFlush();
-      }).then(function () {
-        if (alive) location.reload();
-      }).catch(function () {
-        if (!alive) return;
-        btn.disabled = false;
-        if (err) { err.textContent = 'Adventures could not be added. Try again in a moment.'; err.hidden = false; }
-      });
     }
     function card(c) {
       var kids = kidsOf(c.key), href = BASE + '/categories/' + c.key + '/' + (c.isNew ? 'settings' : 'layout');
@@ -482,15 +461,13 @@
     }
     on(el, 'click', function (e) {
       var b = e.target.closest('[data-new]');
-      if (b) { e.preventDefault(); newCategoryDialog(); return; }
-      var adv = e.target.closest('[data-add-adv]');
-      if (adv) { e.preventDefault(); addAdventures(adv); }
+      if (b) { e.preventDefault(); newCategoryDialog(); }
     });
     if (!KEY && location.hash === '#new') setTimeout(newCategoryDialog, 0);
 
     function draw() { if (KEY) drawWorkspace(); else drawGrid(); }
 
-    // The page editor's way into this section; see the header.
+    // The page layout's way into this section; see the header.
     var categoryWrite = function (key, patch, opts) {
       if (!alive) return false;
       write(key, patch, opts);

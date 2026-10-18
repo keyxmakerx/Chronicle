@@ -210,27 +210,34 @@ func (h *Handler) CustomizeLook(c echo.Context) error {
 		lookTab(cc, middleware.GetCSRFToken(c), string(stateJSON)))
 }
 
-// CustomizeHome holds the campaign home and the DM dashboard:
-// GET /campaigns/:id/customize/home.
+// CustomizeHome arranges one home, the campaign home for an audience or the
+// DM dashboard: GET /campaigns/:id/customize/home[/:who].
 func (h *Handler) CustomizeHome(c echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
-	return h.renderCustomize(c, cc, "home", "Home pages", []CustomizeCrumb{{Label: "Home pages"}}, nil,
-		customizeHomePages(cc, middleware.GetCSRFToken(c)))
+	key := c.Param("who")
+	if key == "" {
+		key = HomeDefault
+	}
+	if !validHomeKey(key) {
+		return apperror.NewNotFound("that home doesn't exist")
+	}
+	tab := homeTabFor(key)
+	crumbs := []CustomizeCrumb{{Label: "Home pages", Href: h.customizeBase(cc) + "/home"}, {Label: tab.Label}}
+	return h.renderCustomize(c, cc, "home", "Home pages - "+tab.Label, crumbs, nil,
+		customizeHomePages(cc, key, h.homeHint(cc, key), h.homeEditorState(cc, key)))
 }
 
 // customizeCategoriesData is what the Categories area's script draws from.
 type customizeCategoriesData struct {
-	Base string `json:"base"`
-	// AdventuresURL is where the Add Adventures button posts.
-	AdventuresURL string              `json:"adventuresUrl"`
-	Categories    []CustomizeCategory `json:"categories"`
-	InMenu        map[int]bool        `json:"inMenu"`
-	Claiming      bool                `json:"claiming"`
-	Key           string              `json:"key,omitempty"` // The open category: its id, or a new-… draft key.
-	Tab           string              `json:"tab,omitempty"`
+	Base       string              `json:"base"`
+	Categories []CustomizeCategory `json:"categories"`
+	InMenu     map[int]bool        `json:"inMenu"`
+	Claiming   bool                `json:"claiming"`
+	Key        string              `json:"key,omitempty"` // The open category: its id, or a new-… draft key.
+	Tab        string              `json:"tab,omitempty"`
 }
 
 func (h *Handler) categoriesData(ctx context.Context, cc *CampaignContext, cats []CustomizeCategory, key, tab string) string {
@@ -242,13 +249,12 @@ func (h *Handler) categoriesData(ctx context.Context, cc *CampaignContext, cats 
 		cats = []CustomizeCategory{}
 	}
 	b, err := json.Marshal(customizeCategoriesData{
-		Base:          h.customizeBase(cc),
-		AdventuresURL: fmt.Sprintf("/campaigns/%s/entity-types/adventures", cc.Campaign.ID),
-		Categories:    cats,
-		InMenu:        h.CategoryMenuVisible(cc),
-		Claiming:      claiming,
-		Key:           key,
-		Tab:           tab,
+		Base:       h.customizeBase(cc),
+		Categories: cats,
+		InMenu:     h.CategoryMenuVisible(cc),
+		Claiming:   claiming,
+		Key:        key,
+		Tab:        tab,
 	})
 	if err != nil {
 		return "{}"

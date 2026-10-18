@@ -15,6 +15,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/app"
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/database"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/foundry_vtt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/syncapi"
@@ -147,6 +148,14 @@ func TestIconReconcile_RealSchema(t *testing.T) {
 // Foundry module's import wizard sends, through the sync API handler and the
 // real entities service and repositories, and checks the stored icon is the
 // bare name.
+// ownerCampaignSvc answers the membership lookup the sync API makes for a
+// stored key: the key's creator is still the campaign owner.
+type ownerCampaignSvc struct{ campaigns.CampaignService }
+
+func (ownerCampaignSvc) GetMember(_ context.Context, campaignID, userID string) (*campaigns.CampaignMember, error) {
+	return &campaigns.CampaignMember{CampaignID: campaignID, UserID: userID, Role: campaigns.RoleOwner}, nil
+}
+
 func TestIconReconcile_SyncAPICreateEntityType(t *testing.T) {
 	if testing.Short() {
 		t.Skip("requires a database; skipped under -short")
@@ -170,7 +179,7 @@ func TestIconReconcile_SyncAPICreateEntityType(t *testing.T) {
 	}
 
 	svc := entities.NewEntityService(entities.NewEntityRepository(db), entities.NewEntityTypeRepository(db), nil)
-	h := syncapi.NewAPIHandler(nil, svc, nil, nil)
+	h := syncapi.NewAPIHandler(nil, svc, ownerCampaignSvc{}, nil)
 
 	tests := []struct {
 		name, body string
@@ -190,6 +199,9 @@ func TestIconReconcile_SyncAPICreateEntityType(t *testing.T) {
 			c := e.NewContext(req, rec)
 			c.SetParamNames("id")
 			c.SetParamValues(campaignID)
+			// Entity types are owner-only; "api_key" is where the key
+			// middleware leaves the authenticated stored key.
+			c.Set("api_key", &syncapi.APIKey{ID: 1, CampaignID: campaignID, UserID: userID, IsActive: true})
 
 			err := h.CreateEntityType(c)
 			if tt.wantStatus != http.StatusCreated {

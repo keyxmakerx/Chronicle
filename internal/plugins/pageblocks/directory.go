@@ -10,6 +10,23 @@ type EntityDirectory interface {
 	// rules as the page itself. A page that is missing or in another
 	// campaign comes back with Exists false.
 	Access(ctx context.Context, campaignID, entityID string, v Viewer) (PageAccess, error)
+
+	// FilterViewable returns the pages among ids that belong to campaignID and
+	// that v may see, keyed by id. A missing, foreign or hidden id is simply
+	// absent, so the two cases cannot be told apart.
+	FilterViewable(ctx context.Context, campaignID string, ids []string, v Viewer) (map[string]PageLink, error)
+	// Live returns which of ids are pages of campaignID that still exist (not
+	// deleted or in the Trash), whoever is asking. It is how a link to a page
+	// that is gone is told apart from one the viewer may not open; the answer
+	// never reaches a viewer.
+	Live(ctx context.Context, campaignID string, ids []string) (map[string]bool, error)
+	// FindByName finds a page by the name it is written with, among the pages
+	// v may see. ok is false for an unknown name and for a hidden page alike.
+	FindByName(ctx context.Context, campaignID, name string, v Viewer) (link PageLink, ok bool, err error)
+	// FirstPageMapBlock returns the id of the first page_map block in the
+	// layout of the page's category. ok is false when the page is missing, in
+	// another campaign, or its layout has none.
+	FirstPageMapBlock(ctx context.Context, campaignID, entityID string) (blockID string, ok bool, err error)
 }
 
 // PageAccess is one viewer's standing on one page.
@@ -19,4 +36,12 @@ type PageAccess struct {
 	// CanEdit is the page's own edit rule: a Scribe or above who may edit
 	// this page.
 	CanEdit bool
+}
+
+// PageLink is a page a viewer may open, as a marker links to it.
+type PageLink struct {
+	ID   string
+	Name string
+	// URL is the page's path, for the hover card and its link.
+	URL string
 }

@@ -546,7 +546,7 @@ func (s *bestiaryService) importOrFork(ctx context.Context, userID, publicationI
 	if isFork {
 		name += " (Fork)"
 	}
-	entityID, err := s.entities.CreateFromStatblock(ctx, campaignID, userID, name, pub.StatblockJSON)
+	entityID, err := s.entities.CreateFromStatblock(ctx, campaignID, userID, name, pub.SystemID, pub.StatblockJSON)
 	if err != nil {
 		return nil, fmt.Errorf("create entity from statblock: %w", err)
 	}

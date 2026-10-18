@@ -22,12 +22,14 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/dmscreen"
 	"github.com/keyxmakerx/chronicle/internal/plugins/encounters"
+	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/foundry_vtt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/maps"
 	"github.com/keyxmakerx/chronicle/internal/plugins/packages"
 	"github.com/keyxmakerx/chronicle/internal/plugins/pageblocks"
 	"github.com/keyxmakerx/chronicle/internal/plugins/quests"
 	"github.com/keyxmakerx/chronicle/internal/plugins/rolltables"
+	"github.com/keyxmakerx/chronicle/internal/plugins/rumours"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/syncapi"
 	"github.com/keyxmakerx/chronicle/internal/plugins/systemstate"
@@ -322,12 +324,21 @@ func registeredPlugins() []database.PluginSchema {
 		// pageblocks: one table of per-block page content; foreign keys point at
 		// core tables (entities, campaigns) only.
 		{Slug: pageblocks.PluginSlug, MigrationsFS: mustSub(pageblocks.MigrationsFS, database.PluginMigrationsSubdir)},
+		// rumours: the Rumours block's table, in a migrations directory and
+		// under a slug of its own so a failure here leaves only that block
+		// out. Foreign keys point at core tables (entities, campaigns) only.
+		{Slug: rumours.PluginSlug, MigrationsFS: mustSub(rumours.MigrationsFS, database.PluginMigrationsSubdir)},
 		// encounters: fights planned on a page; foreign keys point at core
 		// tables (entities, campaigns) only.
 		{Slug: encounters.PluginSlug, MigrationsFS: mustSub(encounters.MigrationsFS, database.PluginMigrationsSubdir)},
 		// dmscreen: the Adventures tab's pins and loose notes. Foreign keys
 		// point at core campaigns and entities only.
 		{Slug: dmscreen.PluginSlug, MigrationsFS: mustSub(dmscreen.MigrationsFS, database.PluginMigrationsSubdir)},
+		// entity_standing: the Standing block's tables (how a page feels about
+		// the party, and why). Foreign keys point at core campaigns and
+		// entities only; its slug is separate from "entities" so a failure
+		// here leaves only that block out.
+		{Slug: entities.StandingPluginSlug, MigrationsFS: mustSub(entities.MigrationsFS, database.PluginMigrationsSubdir)},
 		{Slug: "syncapi", MigrationsFS: mustSub(syncapi.MigrationsFS, database.PluginMigrationsSubdir)},
 		{Slug: "packages", MigrationsFS: mustSub(packages.MigrationsFS, database.PluginMigrationsSubdir)},
 		// foundry_vtt's migration 001 renames foundry_module_campaign_tokens
