@@ -266,7 +266,7 @@ func TestMergeGuest(t *testing.T) {
 	assertAppError(t, err, http.StatusBadRequest)
 
 	token, user, err := r.svc.MergeGuest(ctx, res.User.ID, MergeGuestInput{
-		Email: "mara@example.com", Password: "correct horse", Code: earlierCode(secret),
+		Email: "mara@example.com", Password: "correct horse", Code: unusedCode(secret),
 	}, "", "")
 	if err != nil || user.ID != "mara" {
 		t.Fatalf("MergeGuest: %+v, %v", user, err)

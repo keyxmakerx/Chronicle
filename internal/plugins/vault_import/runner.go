@@ -72,11 +72,11 @@ func (s *Service) run(job *Job, up *upload) {
 	}()
 	if err != nil {
 		r.fail(err)
-		return
 	}
-	s.audit(job, r, "campaign.vault_import.finished")
 }
 
+// audit records the outcome. It runs before the job shows finished, so anyone
+// who sees a finished job can also find its audit entry.
 func (s *Service) audit(job *Job, r *runner, action string) {
 	if s.d.Audit == nil {
 		return
@@ -127,6 +127,7 @@ func (r *runner) execute(ctx context.Context) error {
 		return err
 	}
 	r.finishRoot(ctx)
+	r.s.audit(r.job, r, "campaign.vault_import.finished")
 	r.job.set(func(j *Job) {
 		j.state = StateDone
 		j.done = j.total
@@ -474,6 +475,7 @@ func (r *runner) fail(cause error) {
 	} else {
 		msg += " Nothing was imported."
 	}
+	r.s.audit(r.job, r, "campaign.vault_import.failed")
 	r.job.set(func(j *Job) {
 		j.state = StateFailed
 		j.partial = partial
@@ -483,5 +485,4 @@ func (r *runner) fail(cause error) {
 		j.summary = &s
 		j.finished = r.s.d.Now()
 	})
-	r.s.audit(r.job, r, "campaign.vault_import.failed")
 }
