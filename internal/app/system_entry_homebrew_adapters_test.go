@@ -24,7 +24,7 @@ func TestAncestryPartChecks(t *testing.T) {
 	if err := registerAncestryParts(reg, entries); err != nil {
 		t.Fatal(err)
 	}
-	svc := homebrew.NewService(&memRecipes{stored: map[string]homebrew.Recipe{}}, reg)
+	svc := homebrew.NewService(&memRecipes{stored: map[string]homebrew.Recipe{}}, reg, nil)
 	tests := []struct {
 		name string
 		data string

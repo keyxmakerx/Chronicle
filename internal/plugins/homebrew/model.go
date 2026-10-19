@@ -96,10 +96,13 @@ type RecipeInput struct {
 
 // RecipeSummary is a recipe in a list: enough to show and open it.
 type RecipeSummary struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	Parts     int       `json:"parts"`
-	Rules     int       `json:"rules"`
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Parts int    `json:"parts"`
+	Rules int    `json:"rules"`
+	// PartKinds are the kinds of part the recipe has, sorted, so a caller
+	// can tell what a recipe can put on a page without loading it.
+	PartKinds []string  `json:"partKinds"`
 	Version   int       `json:"version"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }

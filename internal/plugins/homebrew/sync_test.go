@@ -48,7 +48,7 @@ func syncedService(t *testing.T) (Service, *fakeRepo, *syncLog) {
 		t.Fatal(err)
 	}
 	repo := newFakeRepo()
-	svc := NewService(repo, reg).(*service)
+	svc := NewService(repo, reg, nil).(*service)
 	svc.newID = func() string { return "rcp-1" }
 	return svc, repo, l
 }

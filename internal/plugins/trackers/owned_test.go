@@ -3,6 +3,8 @@ package trackers
 import (
 	"context"
 	"net/http"
+	"reflect"
+	"sort"
 	"testing"
 )
 
@@ -167,4 +169,83 @@ func TestManagedKindRefusesHandEdits(t *testing.T) {
 	if _, ok := r.repo.kinds["k"]; !ok {
 		t.Fatal("the managed kind was removed")
 	}
+}
+
+func TestOwnedPage(t *testing.T) {
+	ctx := context.Background()
+	const pre = "homebrew:r1:"
+	setup := func(t *testing.T) (*rig, Kind, Kind) {
+		r := newRig(t)
+		need := r.addKind(t, Kind{ID: "k-need", Name: "Need", Shape: ShapeCount, Owner: pre + "tracker:need"})
+		secret := r.addKind(t, Kind{ID: "k-doom", Name: "Doom", Shape: ShapeClock, Max: five(), Owner: pre + "clock:doom", Visibility: SeeDirectors})
+		r.addKind(t, Kind{ID: "k-other", Name: "Other", Shape: ShapeCount, Owner: "homebrew:r10:tracker:x"})
+		r.addKind(t, Kind{ID: "k-hand", Name: "Hand", Shape: ShapeCount, EveryTypeID: typeHero})
+		return r, need, secret
+	}
+	names := func(v *PageView) []string {
+		var out []string
+		for _, t := range v.Trackers {
+			out = append(out, t.Name)
+		}
+		sort.Strings(out)
+		return out
+	}
+
+	t.Run("shows only the prefix's kinds, unplaced ones as virtual", func(t *testing.T) {
+		r, _, _ := setup(t)
+		v, err := r.svc.OwnedPage(ctx, cmp, pageA, pre, dm)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := names(v); !reflect.DeepEqual(got, []string{"Doom", "Need"}) || v.Kinds != nil || !v.CanEdit {
+			t.Fatalf("view = %v kinds=%v", got, v.Kinds)
+		}
+		v, err = r.svc.OwnedPage(ctx, cmp, pageA, pre, player)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := names(v); !reflect.DeepEqual(got, []string{"Need"}) {
+			t.Fatalf("player sees %v", got)
+		}
+	})
+
+	t.Run("the plain view is unchanged", func(t *testing.T) {
+		r, _, _ := setup(t)
+		v, err := r.svc.Page(ctx, cmp, pageA, dm)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := names(v); !reflect.DeepEqual(got, []string{"Hand"}) || len(v.Kinds) != 4 {
+			t.Fatalf("view = %v kinds=%d", got, len(v.Kinds))
+		}
+	})
+
+	t.Run("a first change creates the row only under the prefix", func(t *testing.T) {
+		r, need, _ := setup(t)
+		tv, err := r.svc.Log(ctx, cmp, pageA, dm, LogInput{KindID: need.ID, Owner: pre, Op: OpAdd, Amount: 2})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if tv.ID == "" || tv.Value != 2 {
+			t.Fatalf("logged %+v", tv)
+		}
+		for _, in := range []LogInput{
+			{KindID: "k-other", Owner: pre, Op: OpAdd, Amount: 1},
+			{KindID: "k-other", Owner: "homebrew:r1", Op: OpAdd, Amount: 1},
+			{KindID: need.ID, Op: OpAdd, Amount: 1},
+		} {
+			if _, err := r.svc.Log(ctx, cmp, pageA, dm, in); code(err) != http.StatusNotFound {
+				t.Fatalf("%+v: err = %v", in, err)
+			}
+		}
+	})
+
+	t.Run("a bad prefix or a hidden page is not found", func(t *testing.T) {
+		r, _, _ := setup(t)
+		for _, c := range []struct{ page, prefix string }{{pageA, ""}, {pageA, "homebrew:r1"}, {pageHid, pre}} {
+			if _, err := r.svc.OwnedPage(ctx, cmp, c.page, c.prefix, player); code(err) != http.StatusNotFound {
+				t.Fatalf("%v: err = %v", c, err)
+			}
+		}
+	})
 }

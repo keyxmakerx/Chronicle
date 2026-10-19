@@ -788,6 +788,7 @@ POST	/campaigns/:id/homebrew/recipes	session	plugins/homebrew.(*Handler).Create	
 DELETE	/campaigns/:id/homebrew/recipes/:rid	session	plugins/homebrew.(*Handler).Delete	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/homebrew/recipes/:rid	session	plugins/homebrew.(*Handler).Get	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/homebrew/recipes/:rid	session	plugins/homebrew.(*Handler).Update	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/homebrew/recipes/:rid/placements	session	plugins/homebrew.(*Handler).Placements	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/homebrew/rules	session	plugins/fieldrules.(*Handler).ListRules	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
 POST	/campaigns/:id/homebrew/rules	session	plugins/fieldrules.(*Handler).SaveRule	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
 DELETE	/campaigns/:id/homebrew/rules/:rid	session	plugins/fieldrules.(*Handler).DeleteRule	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability

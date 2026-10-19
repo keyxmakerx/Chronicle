@@ -128,7 +128,7 @@ func (f *fakeRepo) Delete(_ context.Context, c, id string) (bool, error) {
 func newTestService(t *testing.T) (Service, *fakeRepo) {
 	t.Helper()
 	repo := newFakeRepo()
-	svc := NewService(repo, testRegistry(t)).(*service)
+	svc := NewService(repo, testRegistry(t), nil).(*service)
 	n := 0
 	svc.newID = func() string { n++; return fmt.Sprintf("rcp-%d", n) }
 	return svc, repo
@@ -155,6 +155,7 @@ func TestServiceDirectorOnly(t *testing.T) {
 		{"Create", func() error { _, err := svc.Create(ctx, camp, player, in("X")); return err }},
 		{"Update", func() error { _, err := svc.Update(ctx, camp, "rcp-1", player, in("X")); return err }},
 		{"Delete", func() error { return svc.Delete(ctx, camp, "rcp-1", player) }},
+		{"Placements", func() error { _, err := svc.Placements(ctx, camp, "rcp-1", player); return err }},
 		{"zero-value viewer", func() error { _, err := svc.List(ctx, camp, Viewer{}); return err }},
 	}
 	for _, tt := range tests {
@@ -210,7 +211,8 @@ func TestServiceList(t *testing.T) {
 	if len(got) != 2 || got[0].Name != "Alpha" || got[1].Name != "Beta" {
 		t.Fatalf("list = %+v", got)
 	}
-	if got[0].Parts != 1 || got[0].Rules != 1 || got[1].Rules != 2 || got[1].Version != 1 || got[1].ID == "" {
+	if got[0].Parts != 1 || got[0].Rules != 1 || got[1].Rules != 2 || got[1].Version != 1 || got[1].ID == "" ||
+		strings.Join(got[0].PartKinds, ",") != "widget" {
 		t.Errorf("summaries wrong: %+v", got)
 	}
 	t.Run("repo error", func(t *testing.T) {
@@ -445,5 +447,58 @@ func TestServiceDelete(t *testing.T) {
 				assertInternal(t, err)
 			}
 		})
+	}
+}
+
+// placesAt answers placements from a fixed map, recording what it was asked.
+type placesAt struct {
+	at    map[string][]Placement
+	err   error
+	asked []string
+}
+
+func (p *placesAt) Placements(_ context.Context, campaignID, recipeID string) ([]Placement, error) {
+	p.asked = append(p.asked, campaignID+"/"+recipeID)
+	return p.at[recipeID], p.err
+}
+
+func TestServicePlacements(t *testing.T) {
+	ctx := context.Background()
+	places := &placesAt{at: map[string][]Placement{"rcp-1": {{Where: "category", Name: "Heroes"}}}}
+	svc := NewService(newFakeRepo(), testRegistry(t), places).(*service)
+	n := 0
+	svc.newID = func() string { n++; return fmt.Sprintf("rcp-%d", n) }
+	for _, name := range []string{"Placed", "Not placed"} {
+		if _, err := svc.Create(ctx, camp, dm, in(name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := svc.Placements(ctx, camp, "rcp-1", dm)
+	if err != nil || len(got) != 1 || got[0].Name != "Heroes" {
+		t.Fatalf("placed = %v, %v", got, err)
+	}
+	got, err = svc.Placements(ctx, camp, "rcp-2", dm)
+	if err != nil || got == nil || len(got) != 0 {
+		t.Fatalf("not placed = %v, %v", got, err)
+	}
+	if _, err := svc.Placements(ctx, camp, "rcp-9", dm); codeOf(err) != 404 {
+		t.Fatalf("missing recipe: %v", err)
+	}
+	if _, err := svc.Placements(ctx, "other-camp", "rcp-1", dm); codeOf(err) != 404 {
+		t.Fatalf("other campaign: %v", err)
+	}
+	if strings.Join(places.asked, ",") != "camp-1/rcp-1,camp-1/rcp-2" {
+		t.Errorf("asked = %v", places.asked)
+	}
+	places.err = errDB
+	_, err = svc.Placements(ctx, camp, "rcp-1", dm)
+	assertInternal(t, err)
+
+	none, _ := newTestService(t)
+	if _, err := none.Create(ctx, camp, dm, in("Alone")); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := none.Placements(ctx, camp, "rcp-1", dm); err != nil || got == nil || len(got) != 0 {
+		t.Fatalf("no finder = %v, %v", got, err)
 	}
 }

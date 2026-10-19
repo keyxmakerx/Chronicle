@@ -75,7 +75,7 @@ func variantService(t *testing.T, system string, fail bool) homebrew.Service {
 	if err := registerVariantParts(reg, states, pages, func(context.Context, string) string { return system }); err != nil {
 		t.Fatal(err)
 	}
-	return homebrew.NewService(&memRecipes{stored: map[string]homebrew.Recipe{}}, reg)
+	return homebrew.NewService(&memRecipes{stored: map[string]homebrew.Recipe{}}, reg, nil)
 }
 
 func TestRegisterVariantParts(t *testing.T) {

@@ -19,6 +19,12 @@ type OwnedKind struct {
 // MaxOwnerChars bounds an owner key; the column holds this many.
 const MaxOwnerChars = 160
 
+// validPrefix says whether prefix can name a set of owned kinds. It must end
+// in ':' so one owner's prefix never matches another's longer key.
+func validPrefix(prefix string) bool {
+	return len(prefix) > 1 && len(prefix) <= MaxOwnerChars && strings.HasSuffix(prefix, ":")
+}
+
 // ownedPlan is what a sync would do: kinds to write, and kinds no longer
 // wanted, which are deleted when unused and otherwise let go of (they stay,
 // with their trackers and logs, as hand-made kinds).

@@ -94,6 +94,19 @@ func (h *Handler) Get(c echo.Context) error {
 	return c.JSON(http.StatusOK, out)
 }
 
+// Placements handles GET /campaigns/:id/homebrew/recipes/:rid/placements.
+func (h *Handler) Placements(c echo.Context) error {
+	cid, v, err := viewerFrom(c)
+	if err != nil {
+		return err
+	}
+	out, err := h.svc.Placements(c.Request().Context(), cid, c.Param("rid"), v)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
+}
+
 // Create handles POST /campaigns/:id/homebrew/recipes.
 func (h *Handler) Create(c echo.Context) error {
 	cid, v, err := viewerFrom(c)

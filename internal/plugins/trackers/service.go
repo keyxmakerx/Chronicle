@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sort"
+	"strings"
 
 	"github.com/google/uuid"
 )
@@ -15,6 +16,11 @@ type Service interface {
 	// Page is every tracker on a page as v may see it, with the kinds a
 	// Director can add.
 	Page(ctx context.Context, campaignID, entityID string, v Viewer) (*PageView, error)
+	// OwnedPage is the trackers on a page from the kinds owned under prefix
+	// (one recipe's), with a virtual tracker for each such kind not placed
+	// yet: the block that shows them is their placement. It offers no kinds
+	// to add.
+	OwnedPage(ctx context.Context, campaignID, entityID, prefix string, v Viewer) (*PageView, error)
 	Place(ctx context.Context, campaignID, entityID string, v Viewer, in PlaceInput) (*TrackerView, error)
 	Patch(ctx context.Context, campaignID, trackerID string, v Viewer, in TrackerPatch) (*TrackerView, error)
 	Remove(ctx context.Context, campaignID, trackerID string, v Viewer) error
@@ -113,6 +119,19 @@ func (s *service) kindMap(ctx context.Context, campaignID string) (map[string]Ki
 }
 
 func (s *service) Page(ctx context.Context, campaignID, entityID string, v Viewer) (*PageView, error) {
+	return s.pageView(ctx, campaignID, entityID, "", v)
+}
+
+func (s *service) OwnedPage(ctx context.Context, campaignID, entityID, prefix string, v Viewer) (*PageView, error) {
+	if !validPrefix(prefix) {
+		return nil, errNotFound("trackers")
+	}
+	return s.pageView(ctx, campaignID, entityID, prefix, v)
+}
+
+// pageView builds a page's trackers: every one when prefix is empty, else
+// only those of kinds owned under prefix.
+func (s *service) pageView(ctx context.Context, campaignID, entityID, prefix string, v Viewer) (*PageView, error) {
 	a, err := s.page(ctx, campaignID, entityID, v)
 	if err != nil {
 		return nil, err
@@ -129,14 +148,16 @@ func (s *service) Page(ctx context.Context, campaignID, entityID string, v Viewe
 	hasKind, hasName := map[string]bool{}, map[string]bool{}
 	for _, t := range placed {
 		hasKind[t.KindID], hasName[t.Name] = true, true
-		if _, ok := kinds[t.KindID]; ok && sees(v, t.Visibility) {
+		k, ok := kinds[t.KindID]
+		if ok && sees(v, t.Visibility) && (prefix == "" || ownedBy(k, prefix)) {
 			ts = append(ts, t)
 		}
 	}
-	// Kinds that go on every page of this category show here before anyone
-	// has changed them; the first change creates the row.
+	// Kinds that go on every page of this category, or that the block names,
+	// show here before anyone has changed them; the first change creates the
+	// row.
 	for _, k := range list {
-		if k.EveryTypeID == 0 || k.EveryTypeID != a.TypeID || hasKind[k.ID] || hasName[k.Name] {
+		if !virtualOn(k, a.TypeID, prefix) || hasKind[k.ID] || hasName[k.Name] {
 			continue
 		}
 		if sees(v, k.Visibility) {
@@ -157,13 +178,28 @@ func (s *service) Page(ctx context.Context, campaignID, entityID string, v Viewe
 	for _, t := range ts {
 		out.Trackers = append(out.Trackers, view(kinds[t.KindID], t, entries[t.ID], v))
 	}
-	if v.Director {
+	if v.Director && prefix == "" {
 		out.Kinds = []KindChoice{}
 		for _, k := range list {
 			out.Kinds = append(out.Kinds, KindChoice{ID: k.ID, Name: k.Name, Shape: k.Shape, Visibility: k.Visibility})
 		}
 	}
 	return out, nil
+}
+
+// ownedBy says whether k is one of the kinds owned under prefix.
+func ownedBy(k Kind, prefix string) bool {
+	return prefix != "" && strings.HasPrefix(k.Owner, prefix)
+}
+
+// virtualOn says whether k shows on a page of typeID before it is placed:
+// for the owned view, every kind owned under prefix; otherwise a kind set
+// to go on every page of that category.
+func virtualOn(k Kind, typeID int, prefix string) bool {
+	if prefix != "" {
+		return ownedBy(k, prefix)
+	}
+	return k.EveryTypeID != 0 && k.EveryTypeID == typeID
 }
 
 // one returns a single tracker's view after a change.
@@ -293,8 +329,8 @@ func (s *service) Remove(ctx context.Context, campaignID, trackerID string, v Vi
 }
 
 // ensure returns the tracker a change is for: a placed one by id, or the row
-// for a kind that goes on every page of this page's category, created on its
-// first change.
+// for a kind that goes on every page of this page's category or is owned
+// under the block's prefix, created on its first change.
 func (s *service) ensure(ctx context.Context, campaignID, entityID string, a PageAccess, v Viewer, in LogInput) (Tracker, error) {
 	if in.TrackerID != "" {
 		t, err := s.tracker(ctx, campaignID, in.TrackerID, v)
@@ -313,7 +349,9 @@ func (s *service) ensure(ctx context.Context, campaignID, entityID string, a Pag
 	if err != nil {
 		return Tracker{}, apperrorInternal(err)
 	}
-	if !ok || k.EveryTypeID == 0 || k.EveryTypeID != a.TypeID {
+	// A Director may place any kind on any page, so creating the row on a
+	// first change only needs a reason the kind shows here unplaced.
+	if !ok || !virtualOn(k, a.TypeID, "") && !(validPrefix(in.Owner) && ownedBy(k, in.Owner)) {
 		return Tracker{}, errNotFound("tracker")
 	}
 	if t, found, err := s.repo.TrackerForKind(ctx, campaignID, entityID, k.ID); err != nil {

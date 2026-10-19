@@ -16,3 +16,18 @@ templ BlockMount(campaignID, entityID, csrfToken string) {
 		data-csrf-token={ csrfToken }
 	></div>
 }
+
+// OwnedMount is the mount point of a block showing only the kinds owned under
+// prefix, such as one Homebrew Workshop recipe's trackers and clocks. Placing
+// the block is placing those kinds: each shows here before its first change.
+templ OwnedMount(campaignID, entityID, csrfToken, prefix string) {
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/plugins/trackers/css/trackers.css") }/>
+	<div
+		class="tk"
+		data-widget="trackers"
+		data-campaign-id={ campaignID }
+		data-endpoint={ "/campaigns/" + campaignID + "/trackers/page/" + entityID }
+		data-owner={ prefix }
+		data-csrf-token={ csrfToken }
+	></div>
+}

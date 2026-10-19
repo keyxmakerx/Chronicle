@@ -45,6 +45,16 @@ type BlockMeta struct {
 	// Empty means the type cannot be a tile. An extension widget declares
 	// them as "tile_sizes" on its manifest widget entry.
 	TileSizes []string `json:"tile_sizes,omitempty"`
+	// Preset is the config a palette entry places, for a type offered once
+	// per saved record (a Homebrew Workshop recipe): the editor tells the
+	// entries apart by type and preset. PresetOnly marks the bare type,
+	// registered for validation and rendering, which the palette never
+	// offers on its own.
+	Preset     map[string]string `json:"preset,omitempty"`
+	PresetOnly bool              `json:"preset_only,omitempty"`
+	// Group names the palette heading an entry goes under; empty lets the
+	// editor choose from the type.
+	Group string `json:"group,omitempty"`
 }
 
 // ConfigFieldMeta describes a single configurable field for a block type.

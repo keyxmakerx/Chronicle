@@ -137,7 +137,7 @@ func trackerKindSync(svc trackers.Service, kind string) *homebrew.PartSync {
 		return nil
 	}
 	want := func(recipeID string, parts []homebrew.Part) (string, []trackers.OwnedKind, error) {
-		prefix := "homebrew:" + recipeID + ":" + kind + ":"
+		prefix := recipeOwnerPrefix(recipeID) + kind + ":"
 		out := make([]trackers.OwnedKind, 0, len(parts))
 		for _, p := range parts {
 			var s trackers.Shape
