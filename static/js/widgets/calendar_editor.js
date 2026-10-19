@@ -37,6 +37,7 @@
   // Shared with calendar_view.js's eventColorStyle so a kind's colour goes
   // through one allowlist everywhere it lands in a style="" attribute.
   var sanitizeColor = Chronicle.calendarColor;
+  var iconHTML = Chronicle.calendarIcon;
 
   function $(sel, root) { return (root || document).querySelector(sel); }
   function $$(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
@@ -1198,7 +1199,7 @@
     var html = kinds.map(function (k) {
       var color = sanitizeColor(k.color);
       var style = color ? ('color:' + color + ';') : '';
-      return '<button type="button" data-kind="' + k.id + '" aria-pressed="' + (k.id === activeId) + '" style="' + style + '">' + esc(k.icon || '') + ' ' + esc(k.name) + '</button>';
+      return '<button type="button" data-kind="' + k.id + '" aria-pressed="' + (k.id === activeId) + '" style="' + style + '">' + iconHTML(k.icon) + ' ' + esc(k.name) + '</button>';
     }).join('');
     if (this.view.canAuthorDmOnly) html += '<button type="button" class="nkb" data-nkb><i class="fa-solid fa-plus"></i> New kind</button>';
     return html;
