@@ -25,6 +25,22 @@ type PartKind struct {
 	// Workshop's live preview can show the part as a number it can change.
 	Preview string
 	Check   CheckFunc
+	// Sync, when set, keeps records the owner holds for this kind's parts
+	// in step with the recipes that hold them.
+	Sync *PartSync
+}
+
+// PartSync keeps an owner's own records in step with a kind's parts: a
+// tracker part is saved as a tracker kind. Each call gets every part of the
+// kind in one recipe, none when the recipe is deleted, so a call is a whole
+// picture and a repeat changes nothing.
+type PartSync struct {
+	// Check says, without writing, whether Apply would refuse these parts.
+	// Its error is shown to the Director.
+	Check func(ctx context.Context, campaignID, recipeID string, parts []Part) error
+	// Apply makes the owner's records match. It runs after the recipe is
+	// stored.
+	Apply func(ctx context.Context, campaignID, recipeID string, parts []Part) error
 }
 
 // EventDef is something that can start a rule.
@@ -175,6 +191,9 @@ func (r *Registry) RegisterPart(k PartKind) error {
 	if k.ForceSee != "" && !validSee(k.ForceSee) {
 		return fmt.Errorf("homebrew: part kind %q forces an unknown audience %q", k.Name, k.ForceSee)
 	}
+	if k.Sync != nil && (k.Sync.Check == nil || k.Sync.Apply == nil) {
+		return fmt.Errorf("homebrew: part kind %q has a Sync without Check and Apply", k.Name)
+	}
 	if k.Preview != "" && k.Preview != PreviewShape {
 		return fmt.Errorf("homebrew: part kind %q has an unknown preview %q", k.Name, k.Preview)
 	}
@@ -235,6 +254,21 @@ func (r *Registry) part(name string) (PartKind, bool) {
 	defer r.mu.RUnlock()
 	k, ok := r.parts[name]
 	return k, ok
+}
+
+// synced lists the part kinds that keep records of their own, by name, so
+// they are always visited in the same order.
+func (r *Registry) synced() []PartKind {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := []PartKind{}
+	for _, k := range r.parts {
+		if k.Sync != nil {
+			out = append(out, k)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
 }
 
 func (r *Registry) event(name string) (EventDef, bool) {

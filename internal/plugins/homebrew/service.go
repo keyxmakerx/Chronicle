@@ -99,6 +99,39 @@ func (s *service) check(ctx context.Context, campaignID string, in RecipeInput) 
 	return name, doc, nil
 }
 
+// partsOf is a doc's parts of one kind.
+func partsOf(doc Doc, kind string) []Part {
+	out := []Part{}
+	for _, p := range doc.Parts {
+		if p.Kind == kind {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// syncCheck asks every owner that keeps records of its own whether it would
+// take this recipe's parts, before anything is stored.
+func (s *service) syncCheck(ctx context.Context, campaignID, id string, doc Doc) error {
+	for _, k := range s.reg.synced() {
+		if err := k.Sync.Check(ctx, campaignID, id, partsOf(doc, k.Name)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// syncApply brings those owners' records in step with the stored recipe. A
+// failure here leaves the recipe saved; saving it again repeats the sync.
+func (s *service) syncApply(ctx context.Context, campaignID, id string, doc Doc) error {
+	for _, k := range s.reg.synced() {
+		if err := k.Sync.Apply(ctx, campaignID, id, partsOf(doc, k.Name)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func dupName(err error, name string) error {
 	if errors.Is(err, errDuplicate) {
 		return errInvalid("this campaign already has a recipe called " + name)
@@ -122,8 +155,14 @@ func (s *service) Create(ctx context.Context, campaignID string, v Viewer, in Re
 		return nil, errInvalid(fmt.Sprintf("a campaign holds at most %d recipes", MaxRecipes))
 	}
 	r := Recipe{ID: s.newID(), CampaignID: campaignID, Name: name, Doc: doc, CreatedBy: v.UserID}
+	if err := s.syncCheck(ctx, campaignID, r.ID, doc); err != nil {
+		return nil, err
+	}
 	if err := s.repo.Create(ctx, r); err != nil {
 		return nil, dupName(err, name)
+	}
+	if err := s.syncApply(ctx, campaignID, r.ID, doc); err != nil {
+		return nil, err
 	}
 	return s.Get(ctx, campaignID, r.ID, v)
 }
@@ -143,6 +182,9 @@ func (s *service) Update(ctx context.Context, campaignID, id string, v Viewer, i
 	if err != nil {
 		return nil, err
 	}
+	if err := s.syncCheck(ctx, campaignID, id, doc); err != nil {
+		return nil, err
+	}
 	cur.Name, cur.Doc = name, doc
 	ok, err := s.repo.Update(ctx, cur, in.Version)
 	if err != nil {
@@ -150,6 +192,9 @@ func (s *service) Update(ctx context.Context, campaignID, id string, v Viewer, i
 	}
 	if !ok {
 		return nil, errConflict()
+	}
+	if err := s.syncApply(ctx, campaignID, id, doc); err != nil {
+		return nil, err
 	}
 	return s.Get(ctx, campaignID, id, v)
 }
@@ -168,5 +213,7 @@ func (s *service) Delete(ctx context.Context, campaignID, id string, v Viewer) e
 	if !ok {
 		return errNotFound("recipe")
 	}
-	return nil
+	// Owners let go of the deleted recipe's records; one still on a page
+	// stays as a hand-made record rather than vanishing.
+	return s.syncApply(ctx, campaignID, id, Doc{})
 }

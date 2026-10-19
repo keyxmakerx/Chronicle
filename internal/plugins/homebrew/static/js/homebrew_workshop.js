@@ -445,6 +445,7 @@
       S.busy = false; S.dirty = false;
       c.id = r.id; c.version = r.version; c.doc.layout = r.doc.layout || {};
       setStatus(S, 'Saved');
+      drawWhere(S);
       return api(S, '/recipes').then(function (l) { S.list = (l && l.data) || []; drawLibrary(S); });
     }).catch(function (e) {
       S.busy = false; S.saveBtn.disabled = false;
@@ -905,7 +906,10 @@
       h('p', 'hbw-muted', forced ? 'This kind is always ' + SEE.filter(function (s) { return s[0] === forced; })[0][1].toLowerCase() + '.'
         : 'Set once here, for every copy of this part.')
     ]);
-    if (p.kind === 'tracker' || p.kind === 'clock') shapeForm(S, box, p);
+    if (p.kind === 'tracker' || p.kind === 'clock') {
+      shapeForm(S, box, p);
+      box.appendChild(h('p', 'hbw-muted', 'Saving the recipe saves this as a tracker kind of the same name, kept in step with the recipe.'));
+    }
     else box.appendChild(h('p', 'hbw-muted', 'This kind of part is set up where it lives in the campaign.'));
     var uses = usesOf(S.cur.doc, p.key);
     append(box, [
@@ -1195,11 +1199,15 @@
     S.prevEl.scrollIntoView({ block: 'nearest' });
   }
 
-  // drawWhere lists the places the recipe shows up. Nothing places a recipe
-  // yet, so it says so rather than listing places it might go.
+  // drawWhere lists the places the recipe shows up. A saved recipe's
+  // trackers and clocks are tracker kinds, which a page's Trackers block can
+  // place; nothing else places a recipe yet.
   // TODO(#1619): list the pages and categories the Customizer placed it on.
   function drawWhere(S) {
+    var numbered = S.cur.doc.parts.some(function (p) { return p.kind === 'tracker' || p.kind === 'clock'; });
     S.whereEl.textContent = '';
-    S.whereEl.appendChild(h('p', 'hbw-muted', S.cur.id ? 'Not placed on any page yet.' : 'Save the recipe first. It is not on any page yet.'));
+    S.whereEl.appendChild(h('p', 'hbw-muted', !S.cur.id ? 'Save the recipe first. It is not on any page yet.'
+      : numbered ? 'Not placed on any page yet. Its trackers and clocks can be added to a page from that page\'s Trackers block.'
+        : 'Not placed on any page yet.'));
   }
 })();

@@ -75,6 +75,12 @@ type Kind struct {
 	// per-hero tracker needs no setting up per page. 0 is none.
 	EveryTypeID int `json:"everyTypeId"`
 	Version     int `json:"version"`
+	// Owner names the record another plugin keeps this kind in step with
+	// (a Homebrew Workshop recipe's part); "" for a kind made by hand. Such
+	// a kind is changed only through its owner.
+	Owner string `json:"-"`
+	// Managed tells the Director the kind is kept by its owner.
+	Managed bool `json:"managed"`
 	// InUse counts the trackers placed from this kind; filled for the
 	// kinds list only.
 	InUse int `json:"inUse"`
