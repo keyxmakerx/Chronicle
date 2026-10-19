@@ -31,7 +31,7 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 		Description: "Header image with upload",
 		Contexts:    []string{"template"},
 	}, func(ctx BlockRenderContext) templ.Component {
-		return blockImage(ctx.CC, ctx.Entity, ctx.CSRFToken)
+		return blockImage(ctx.CC, ctx.Entity, ctx.EntityType, ctx.CSRFToken)
 	})
 
 	r.Register(BlockMeta{

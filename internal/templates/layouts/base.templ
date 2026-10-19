@@ -172,6 +172,9 @@ templ Base(title string) {
 		<!-- Thrown 3D dice (Chronicle.dice.roll): boot.js fetches dice.js, and it
 		     the dice engine, three.js and cannon-es, only when dice are first thrown. -->
 		<template id="chronicle-dice-src" data-src={ AssetURL("/static/js/dice.js") } data-three-src={ AssetURL("/static/vendor/three-dice.min.js") } data-cannon-src={ AssetURL("/static/vendor/cannon-es.js") }></template>
+		<!-- The token maker (Chronicle.tokenMaker.open): boot.js fetches token_maker.js
+		     on the first open, and it the frames, its styles and the picker's previews. -->
+		<template id="chronicle-token-maker-src" data-src={ AssetURL("/static/js/token_maker.js") } data-engine={ AssetURL("/static/js/token_frames.js") } data-css={ AssetURL("/static/css/token_maker.css") } data-previews={ AssetURL("/static/img/token_frames.webp") }></template>
 
 		<!-- Image upload widget -->
 		<script src={ AssetURL("/static/js/widgets/image_upload.js") } defer></script>

@@ -5717,6 +5717,9 @@ html[data-motion="off"] .ask-slip-in, html[data-motion="off"] .ask-slip.is-on .a
 .fx-chip:disabled { opacity: .6; cursor: default; }
 /* On a wide header picture the chip sits in the corner, always in view. */
 .fx-chip.is-corner { left: auto; right: 12px; bottom: 12px; transform: none; }
+/* Two chips in the corner sit side by side ("Make token" and "Change"). */
+.fx-chips { position: absolute; right: 12px; bottom: 12px; display: flex; gap: 6px; }
+.fx-chips .fx-chip { position: static; transform: none; }
 @media (pointer: coarse) { .fx-chip { height: 32px; padding: 0 14px; font-size: 12.5px; } }
 @media (prefers-reduced-motion: reduce) {
   .fx-spin, .fx-ask { animation: none !important; }
