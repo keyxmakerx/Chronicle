@@ -1,0 +1,175 @@
+/*
+ * token_maker.css: the token maker (static/js/token_maker.js). Loaded by the
+ * maker on first open, never by a page, so a page that makes no token pays
+ * nothing for it.
+ *
+ * The maker is a pop-out editor (.ai/ui-standard.md, "Big editors pop out"):
+ * a sheet over the page that grows out of the control that opened it, from a
+ * clip-path inset the script sets (--ct, --cr, --cb, --cl). Calm fades it in
+ * place and Off shows it at once. Colours are the site's tokens; only the
+ * work surface is always dark, as a crop tool is, so the picture and the dim
+ * outside the frame read the same in either theme.
+ */
+
+html.tkm-lock { overflow: hidden; }
+
+.tkm { position: fixed; inset: 0; z-index: 92; display: flex; align-items: center; justify-content: center; padding: 16px; }
+.tkm-bg { position: absolute; inset: 0; background: rgb(10 10 20 / 0.55); opacity: 0; transition: opacity var(--dur-standard, 200ms) var(--ease-out, ease-out); }
+.tkm.is-open .tkm-bg { opacity: 1; }
+
+.tkm-p {
+  position: relative; display: flex; flex-direction: column; width: min(1180px, 100%); max-height: 100%; outline: none;
+  background: var(--color-card-bg, #fff); color: var(--color-text-primary, #111827);
+  border: 1px solid var(--color-border, #e5e7eb); border-radius: 14px;
+  box-shadow: 0 28px 64px -16px rgb(0 0 0 / 0.38), 0 10px 24px -10px rgb(0 0 0 / 0.22);
+  clip-path: inset(var(--ct, 45%) var(--cr, 45%) var(--cb, 45%) var(--cl, 45%) round 14px);
+  transition: clip-path var(--dur-standard, 200ms) var(--ease-out, ease-out);
+}
+.tkm.is-open .tkm-p { clip-path: inset(0 0 0 0 round 14px); }
+.tkm.is-calm .tkm-p { clip-path: none; opacity: 0; transition: opacity var(--dur-standard, 200ms) var(--ease-out, ease-out); }
+.tkm.is-calm.is-open .tkm-p { opacity: 1; }
+.tkm.is-still .tkm-bg, .tkm.is-still .tkm-p { transition: none; clip-path: none; opacity: 1; }
+
+.tkm-top { display: flex; align-items: center; gap: 12px; padding: 12px 14px 12px 20px; border-bottom: 1px solid var(--color-border, #e5e7eb); }
+.tkm-title { flex: 1; min-width: 0; margin: 0; font-size: 16px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tkm-x {
+  display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border: 0; border-radius: 8px;
+  background: none; color: var(--color-text-muted, #6b7280); font-size: 17px; cursor: pointer;
+  transition: background-color var(--dur-micro, 120ms) var(--ease-out, ease-out), color var(--dur-micro, 120ms) var(--ease-out, ease-out);
+}
+.tkm-x:hover { background: var(--color-bg-tertiary, #f1f5f9); color: var(--color-text-primary, #111827); }
+.tkm-x:active { box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.18); }
+
+.tkm-body { flex: 1 1 auto; min-height: 0; overflow: hidden; display: grid; grid-template-columns: minmax(0, 1fr) 330px; }
+/* The picture stays in view while the side column scrolls on its own. */
+.tkm-work { min-width: 0; min-height: 0; overflow: auto; padding: 18px 20px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.tkm-stage {
+  position: relative; width: min(100%, calc(100vh - 290px)); min-width: 260px; aspect-ratio: 1; border-radius: 10px; overflow: hidden;
+  background-color: #1b1d22;
+  background-image: conic-gradient(#24272e 25%, transparent 0 50%, #24272e 0 75%, transparent 0);
+  background-size: 28px 28px;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.06);
+}
+.tkm-surface { display: block; width: 100%; height: 100%; touch-action: none; outline: none; }
+.tkm-surface:focus-visible { box-shadow: inset 0 0 0 3px var(--color-accent, #6366f1); }
+.tkm-wait {
+  position: absolute; inset: 0; margin: 0; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 24px; text-align: center;
+  color: rgb(255 255 255 / 0.82); font-size: 14px; line-height: 1.45; background: rgb(20 22 27 / 0.6);
+}
+.tkm-wait[hidden] { display: none; }
+.tkm-hint { margin: 0; max-width: 560px; text-align: center; font-size: 12.5px; line-height: 1.45; color: var(--color-text-muted, #6b7280); }
+.tkm-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 10px; }
+.tkm-slide { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--color-text-secondary, #4b5563); }
+.tkm-slide input { width: 150px; accent-color: var(--color-accent, #6366f1); }
+.tkm-file { position: relative; overflow: hidden; cursor: pointer; }
+.tkm-file input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.tkm-file:has(input:disabled) { opacity: .55; cursor: default; }
+.tkm-file:has(input:disabled) input { cursor: default; }
+.tkm-file:focus-within { outline: 2px solid var(--color-accent, #6366f1); outline-offset: 2px; }
+
+.tkm-side { min-width: 0; min-height: 0; overflow: auto; border-left: 1px solid var(--color-border, #e5e7eb); background: var(--color-bg-secondary, #f8fafc); }
+.tkm-sec { padding: 14px 18px 16px; border-bottom: 1px solid var(--color-border, #e5e7eb); }
+.tkm-sec:last-child { border-bottom: 0; }
+.tkm-sec[hidden] { display: none; }
+.tkm-label { margin: 0 0 8px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--color-text-muted, #6b7280); }
+.tkm-note { margin: 8px 0 0; font-size: 12.5px; line-height: 1.45; color: var(--color-text-secondary, #4b5563); }
+
+.tkm-seg { display: inline-flex; padding: 2px; border: 1px solid var(--color-border, #e5e7eb); border-radius: 8px; background: var(--color-card-bg, #fff); }
+.tkm-seg button {
+  font: inherit; font-size: 13px; min-height: 32px; border: 0; background: none; color: var(--color-text-body, #374151); padding: 4px 14px; border-radius: 6px; cursor: pointer;
+  transition: background-color var(--dur-micro, 120ms) var(--ease-out, ease-out), color var(--dur-micro, 120ms) var(--ease-out, ease-out);
+}
+.tkm-seg button:hover { background: var(--color-bg-tertiary, #f1f5f9); }
+.tkm-seg button:active { box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.15); }
+.tkm-seg button[aria-pressed="true"] { background: rgb(var(--color-accent-rgb, 99 102 241) / 0.14); color: var(--color-text-primary, #111827); font-weight: 600; }
+
+.tkm-groups { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.tkm-chip {
+  font: inherit; font-size: 12.5px; min-height: 32px; padding: 0 12px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--color-border, #e5e7eb); background: var(--color-card-bg, #fff); color: var(--color-text-body, #374151);
+  transition: background-color var(--dur-micro, 120ms) var(--ease-out, ease-out), border-color var(--dur-micro, 120ms) var(--ease-out, ease-out), color var(--dur-micro, 120ms) var(--ease-out, ease-out);
+}
+.tkm-chip:hover { border-color: var(--color-accent, #6366f1); color: var(--color-accent, #6366f1); }
+.tkm-chip:active { box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.15); }
+.tkm-chip[aria-pressed="true"] { border-color: var(--color-accent, #6366f1); background: rgb(var(--color-accent-rgb, 99 102 241) / 0.12); color: var(--color-text-primary, #111827); font-weight: 600; }
+
+.tkm-frames { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; }
+.tkm-fr {
+  display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px 4px 7px; min-width: 0; cursor: pointer;
+  font: inherit; font-size: 11.5px; line-height: 1.25; text-align: center; color: var(--color-text-body, #374151);
+  border: 1px solid var(--color-border, #e5e7eb); border-radius: 10px; background: var(--color-card-bg, #fff); box-shadow: var(--elev-resting, none);
+  transition: box-shadow 200ms var(--ease-out, ease-out), border-color var(--dur-micro, 120ms) var(--ease-out, ease-out), transform 60ms var(--ease-out, ease-out);
+}
+.tkm-fr:hover { box-shadow: var(--elev-hover, none); border-color: var(--color-border, #d1d5db); }
+.tkm-fr:active { transform: scale(.96); box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.15); }
+.tkm-fr[aria-pressed="true"] { border-color: var(--color-accent, #6366f1); box-shadow: 0 0 0 1px var(--color-accent, #6366f1); }
+.tkm-pv { position: relative; width: 64px; height: 64px; flex: none; background-repeat: no-repeat; }
+.tkm-hot { position: absolute; inset: 0; width: 100%; height: 100%; }
+.tkm-fr-n { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; max-width: 100%; }
+.tkm-quiet {
+  display: inline-flex; align-items: center; min-height: 32px; margin-top: 4px; padding: 0 2px; border-radius: 6px; border: 0; background: none; font: inherit; font-size: 13px; cursor: pointer;
+  color: var(--color-accent-link, var(--color-accent, #6366f1));
+}
+.tkm-quiet:hover { text-decoration: underline; }
+.tkm-quiet:active { box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.15); }
+.tkm-quiet[hidden] { display: none; }
+
+.tkm-swatches { display: flex; flex-wrap: wrap; gap: 6px; }
+.tkm-sw {
+  position: relative; width: 32px; height: 32px; padding: 0; border-radius: 50%; cursor: pointer;
+  border: 1px solid rgb(0 0 0 / 0.18); background: var(--sw, transparent);
+  box-shadow: inset 0 0 0 2px var(--color-card-bg, #fff);
+  transition: box-shadow var(--dur-micro, 120ms) var(--ease-out, ease-out);
+}
+.dark .tkm-sw { border-color: rgb(255 255 255 / 0.28); }
+.tkm-sw.is-original { background: linear-gradient(135deg, #c9a46a 0 50%, #4a6fa5 50% 100%); }
+.tkm-sw.is-any { background: conic-gradient(#e53935, #fdd835, #43a047, #1e88e5, #8e24aa, #e53935); overflow: hidden; }
+.tkm-sw.is-any input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; border: 0; padding: 0; }
+.tkm-sw:hover { box-shadow: inset 0 0 0 2px var(--color-card-bg, #fff), 0 0 0 2px var(--color-border, #d1d5db); }
+.tkm-sw:active { box-shadow: inset 0 0 0 2px var(--color-card-bg, #fff), inset 0 2px 5px rgb(0 0 0 / 0.3); }
+.tkm-sw[aria-pressed="true"] { box-shadow: inset 0 0 0 2px var(--color-card-bg, #fff), 0 0 0 2px var(--color-accent, #6366f1); }
+.tkm-sw.is-any:focus-within { outline: 2px solid var(--color-accent, #6366f1); outline-offset: 2px; }
+
+.tkm-map {
+  display: flex; align-items: flex-end; gap: 14px; padding: 12px; border-radius: 10px; overflow-x: auto;
+  border: 1px solid var(--color-border, #e5e7eb);
+  background-color: #cfc6b2;
+  background-image: linear-gradient(rgb(0 0 0 / 0.14) 1px, transparent 1px), linear-gradient(90deg, rgb(0 0 0 / 0.14) 1px, transparent 1px);
+  background-size: 50px 50px;
+}
+.tkm-map canvas { flex: none; }
+
+.tkm-foot { display: flex; align-items: center; gap: 10px; padding: 12px 18px; border-top: 1px solid var(--color-border, #e5e7eb); }
+.tkm-msg { flex: 1; min-width: 0; margin: 0; font-size: 13px; line-height: 1.4; color: var(--color-text-secondary, #4b5563); }
+.tkm-msg.is-error { color: var(--color-danger, #b91c1c); }
+.tkm-foot .btn-primary .fa-spin { margin-right: 4px; }
+
+.tkm button:focus-visible, .tkm-file input:focus-visible { outline: 2px solid var(--color-accent, #6366f1); outline-offset: 2px; }
+
+/* Calm and Off: colour changes only, nothing moves or presses. */
+:is(html[data-motion], html[data-view-motion="calm"], .nav-rm) .tkm-fr:active { transform: none; }
+
+@media (max-width: 860px) {
+  .tkm { padding: 0; }
+  .tkm-p { width: 100%; height: 100%; border-radius: 0; border: 0; }
+  .tkm.is-open .tkm-p { clip-path: inset(0 0 0 0); }
+  .tkm-body { display: block; overflow: auto; }
+  .tkm-work, .tkm-side { overflow: visible; }
+  .tkm-work { padding: 12px 16px; }
+  .tkm-stage { width: min(100%, 62vh); min-width: 0; }
+  .tkm-side { border-left: 0; border-top: 1px solid var(--color-border, #e5e7eb); }
+  .tkm-sec { padding: 12px 16px 14px; }
+  /* A strip of frames that scrolls sideways, so the picture stays in view. */
+  .tkm-frames { display: flex; overflow-x: auto; padding-bottom: 4px; scroll-snap-type: x proximity; }
+  .tkm-fr { flex: 0 0 84px; scroll-snap-align: start; }
+  .tkm-groups { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; }
+  .tkm-chip { flex: none; }
+  .tkm-foot { padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px)); }
+}
+@media (pointer: coarse) {
+  .tkm-chip, .tkm-seg button, .tkm-quiet { min-height: 44px; }
+  .tkm-x, .tkm-sw { width: 44px; height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tkm-bg, .tkm-p { transition: none; clip-path: none; }
+}

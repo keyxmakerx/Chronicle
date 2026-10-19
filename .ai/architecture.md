@@ -220,6 +220,8 @@ chronicle/
 │   │   │                             #   theme.js, command_palette.js, and more)
 │   │   ├── dice/                     # The thrown dice's engine, one file per set and per crit
 │   │   │                             #   (see dice.ai.md)
+│   │   ├── token_maker.js            # The token maker and its frames (token_frames.js), loaded
+│   │   │                             #   on first open (see token_maker.ai.md)
 │   │   └── widgets/                  # One file per widget (editor.js, attributes.js,
 │   │                                 #   tag_picker.js, editor_mention.js, notes.js, etc.)
 │   ├── vendor/                       # Vendored CDN libs

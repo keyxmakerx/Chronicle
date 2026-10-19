@@ -86,6 +86,21 @@ Chronicle.register('attributes', {
     }
     reload();
 
+    // The token maker writes this page's token field by itself. Take the new
+    // value in, or this form's next save (which sends every field) would put
+    // the old one back.
+    function tokenSaved(e) {
+      var d = e.detail || {};
+      if (config.era || !d.field || !entityId || d.entityId !== entityId) return;
+      state.fieldsData[d.field] = d.mediaId;
+      if (state.draft) state.draft[d.field] = d.mediaId;
+      var input = el.querySelector('[data-field-key="' + d.field + '"]');
+      if (input) input.value = d.mediaId;
+      if (!state.isEditing && !state.isCustomizing) render();
+    }
+    document.addEventListener('chronicle:token-saved', tokenSaved);
+    el._attributesTokenSaved = tokenSaved;
+
     // --- Render ---
 
     function render() {
@@ -1089,7 +1104,9 @@ Chronicle.register('attributes', {
   },
 
   destroy: function (el) {
+    if (el._attributesTokenSaved) document.removeEventListener('chronicle:token-saved', el._attributesTokenSaved);
     el.innerHTML = '';
     delete el._attributesState;
+    delete el._attributesTokenSaved;
   }
 });

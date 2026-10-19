@@ -47,6 +47,7 @@ sidebar active link highlighting, and shared utilities.
 | `Chronicle.go(url)` | Navigates to a Chronicle address; in an embed frame `Chronicle.embed.go` decides (page in a new tab, Journal note in the app's notebook) |
 | `Chronicle.openJournalNote(id)` | Set by the Journal widget while mounted; opens a note in it and returns whether it did. The Journal loads on sight, so it fires `chronicle:journal-ready` (window) once mounted for callers holding a note |
 | `Chronicle.isReauthResponse(xhr)` | True for a 403 carrying `HX-Trigger: reauth-required` (the password re-confirm flow) |
+| `Chronicle.tokenMaker.open(o)` | A stub that loads the token maker (`token_maker.js`, from `#chronicle-token-maker-src`) on its first open; a click on any `[data-token-maker]` control opens it for that page. See `token_maker.ai.md` |
 
 ## DOM Events
 

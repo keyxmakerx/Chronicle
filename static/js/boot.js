@@ -149,6 +149,29 @@
   var diceStub = { roll: viaDice('roll'), catalogue: viaDice('catalogue'), stop: function () { diceStops++; } };
   if (!Chronicle.dice) Chronicle.dice = diceStub;
 
+  // --- The token maker on first use ---
+  // A stub until its first open loads token_maker.js (#chronicle-token-maker-src),
+  // which replaces it. A [data-token-maker] control opens it for its page.
+  var tmLoad = null, tmStub = { open: function (o) {
+    tmLoad = tmLoad || new Promise(function (resolve, reject) {
+      var src = document.getElementById('chronicle-token-maker-src'), url = (src && src.getAttribute('data-src')) || '', s = document.createElement('script');
+      function fail() { if (Chronicle.tokenMaker === tmStub) tmLoad = null; reject(); }
+      if (!WIDGET_SCRIPT_URL.test(url) || url.indexOf('..') !== -1) return fail();
+      s.src = url;
+      s.onload = function () { if (Chronicle.tokenMaker === tmStub) fail(); else resolve(); };
+      s.onerror = fail;
+      document.head.appendChild(s);
+    });
+    return tmLoad.then(function () { return Chronicle.tokenMaker.open(o); }, function () {
+      if (Chronicle.notify) Chronicle.notify('The token maker could not be loaded. Try again.', 'error');
+    });
+  } };
+  if (!Chronicle.tokenMaker) Chronicle.tokenMaker = tmStub;
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest && e.target.closest('[data-token-maker]'), d = b && b.dataset;
+    if (d) { e.preventDefault(); Chronicle.tokenMaker.open({ campaignId: d.campaignId, entityId: d.entityId, name: d.name, art: d.art, from: b, save: 'field' }); }
+  });
+
   /**
    * Report `data-widget` names that are mounted in the DOM but have no
    * registered implementation, once per name per page.

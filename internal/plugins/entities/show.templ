@@ -143,7 +143,7 @@ templ entityPageBody(cc *campaigns.CampaignContext, entity *Entity, entityType *
 							@blockEntry(cc, entity, csrfToken)
 						</div>
 						<div class="col-span-1 md:col-span-4 space-y-4">
-							@blockImage(cc, entity, csrfToken)
+							@blockImage(cc, entity, entityType, csrfToken)
 							if showAttributes {
 								@blockAttributes(cc, entity, entityType, csrfToken)
 							}
@@ -347,7 +347,7 @@ templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 // "Change" chip on the picture itself, in view on touch screens too, which
 // opens the file picker; image_upload.js adds the progress bar and the amber
 // error bar. Everyone else sees the picture alone.
-templ blockImage(cc *campaigns.CampaignContext, entity *Entity, csrfToken string) {
+templ blockImage(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, csrfToken string) {
 	<div class={ "card cb-card overflow-hidden p-0", templ.KV("era-settle", eraViewOf(ctx).Open()) }>
 		if entity.ImagePath != nil && *entity.ImagePath != "" {
 			if cc.MemberRole >= campaigns.RoleScribe {
@@ -363,7 +363,23 @@ templ blockImage(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 						alt={ entity.Name }
 						class="w-full h-56 object-cover"
 					/>
-					<button type="button" class="fx-chip is-corner" data-pick aria-label="Change image"><i class="fa-solid fa-camera"></i> Change</button>
+					if showsTokenMaker(entityType, entity) {
+						<div class="fx-chips">
+							<button
+								type="button"
+								class="fx-chip"
+								data-token-maker
+								data-campaign-id={ cc.Campaign.ID }
+								data-entity-id={ entity.ID }
+								data-name={ entity.Name }
+								data-art={ layouts.MediaURL(ctx, *entity.ImagePath) }
+								aria-label={ "Make token for " + entity.Name }
+							><i class="fa-solid fa-chess-pawn" aria-hidden="true"></i> Make token</button>
+							<button type="button" class="fx-chip" data-pick aria-label="Change image"><i class="fa-solid fa-camera"></i> Change</button>
+						</div>
+					} else {
+						<button type="button" class="fx-chip is-corner" data-pick aria-label="Change image"><i class="fa-solid fa-camera"></i> Change</button>
+					}
 					@eraPictureLabel()
 				</div>
 			} else {
