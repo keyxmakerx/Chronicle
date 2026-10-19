@@ -165,6 +165,15 @@ type QuestPatch struct {
 
 // --- Quest responses ---
 
+// QuestEntry is one saved sheet in a campaign's list, with its page's name.
+type QuestEntry struct {
+	EntityID string
+	Name     string
+	Notice   Notice
+	Status   string
+	Steps    []Step
+}
+
 // RewardView is a Reward with the linked page's name resolved.
 type RewardView struct {
 	Reward
@@ -302,7 +311,10 @@ type Board struct {
 	Home       Home
 	Name       string
 	Who        string
-	SortOrder  int
+	// Fill lists the quest statuses the board shows by itself; empty means
+	// every notice is pinned by hand.
+	Fill      []string
+	SortOrder int
 }
 
 // Item is a stored board item. Empty strings stand for NULL.
@@ -321,6 +333,9 @@ type Item struct {
 	RefID  string
 	FromID string
 	ToID   string
+	// Auto marks a notice the board placed itself because the quest's status
+	// is one the board fills with.
+	Auto bool
 }
 
 // ItemInput creates an item.
@@ -347,10 +362,12 @@ type ItemPatch struct {
 	Hidden patch.Field[bool]    `json:"hidden"`
 }
 
-// BoardPatch renames a board or changes who may pin to it.
+// BoardPatch renames a board, changes who may pin to it, or sets which quest
+// statuses it fills itself with (an empty list or null stops filling).
 type BoardPatch struct {
-	Name patch.Field[string] `json:"name"`
-	Who  patch.Field[string] `json:"who"`
+	Name patch.Field[string]   `json:"name"`
+	Who  patch.Field[string]   `json:"who"`
+	Fill patch.Field[[]string] `json:"fill"`
 }
 
 // LooksPatch changes a page's board and ledger themes.
@@ -373,6 +390,9 @@ type ItemView struct {
 	OwnerName    string  `json:"ownerName"`
 	OwnerInitial string  `json:"ownerInitial"`
 	Hidden       *bool   `json:"hidden,omitempty"` // DM only
+	// Auto is a notice the board placed itself; it leaves when the quest's
+	// status no longer matches.
+	Auto bool `json:"auto,omitempty"`
 
 	// notice
 	QuestID  string `json:"questId,omitempty"`
@@ -412,6 +432,8 @@ type BoardSummary struct {
 	Name      string `json:"name"`
 	Who       string `json:"who"`
 	CanChange bool   `json:"canChange"`
+	// Fill is the quest statuses the board shows by itself, never null.
+	Fill []string `json:"fill"`
 }
 
 // BoardView is a board with the items the viewer may see.

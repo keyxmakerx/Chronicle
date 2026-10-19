@@ -45,6 +45,12 @@ type BoardService interface {
 	CreateItem(ctx context.Context, campaignID string, h Home, boardID string, v Viewer, in ItemInput) (*ItemView, error)
 	PatchItem(ctx context.Context, campaignID string, h Home, boardID, itemID string, v Viewer, p ItemPatch) (*ItemView, error)
 	DeleteItem(ctx context.Context, campaignID string, h Home, boardID, itemID string, v Viewer) error
+
+	// FillQuest brings one quest's notice in line with every board that fills
+	// itself: pinned where its status matches, taken down where it no longer
+	// does. It runs after a quest is saved, so it takes no viewer, and returns
+	// the homes whose boards changed.
+	FillQuest(ctx context.Context, campaignID, questID string) ([]Home, error)
 }
 
 type boardService struct {
@@ -62,6 +68,7 @@ type boardService struct {
 // notice's title and reward.
 type questDocs interface {
 	GetMany(ctx context.Context, campaignID string, entityIDs []string) (map[string][]byte, error)
+	ListAll(ctx context.Context, campaignID string) (map[string][]byte, error)
 }
 
 // NewBoardService builds the service.
@@ -126,7 +133,11 @@ func cleanBoardName(s string) (string, error) {
 }
 
 func (s *boardService) summary(b *Board, v Viewer) BoardSummary {
-	return BoardSummary{ID: b.ID, Name: b.Name, Who: b.Who, CanChange: canChange(b, v)}
+	fill := b.Fill
+	if fill == nil {
+		fill = []string{}
+	}
+	return BoardSummary{ID: b.ID, Name: b.Name, Who: b.Who, CanChange: canChange(b, v), Fill: fill}
 }
 
 func (s *boardService) Homes(ctx context.Context, campaignID string, v Viewer) ([]HomeView, error) {
@@ -360,6 +371,7 @@ func (s *boardService) buildViews(ctx context.Context, campaignID string, v View
 				continue
 			}
 			iv = base(it)
+			iv.Auto = it.Auto
 			iv.QuestID, iv.Title, iv.Kicker = e.ID, q.Notice.Title, q.Notice.Kicker
 			iv.Blurb, iv.Status, iv.HasSheet = q.Notice.Blurb, q.Status, true
 			if q.DueDate != nil {
@@ -458,8 +470,20 @@ func (s *boardService) PatchBoard(ctx context.Context, campaignID string, h Home
 		}
 		b.Who = w
 	}
+	refill := p.Fill.Present()
+	if refill {
+		f, _ := p.Fill.Get()
+		if b.Fill, err = cleanFill(f); err != nil {
+			return nil, err
+		}
+	}
 	if err := s.repo.UpdateBoard(ctx, *b); err != nil {
 		return nil, apperrorInternal(err)
+	}
+	if refill {
+		if err := s.refillBoard(ctx, campaignID, *b); err != nil {
+			return nil, err
+		}
 	}
 	sum := s.summary(b, v)
 	return &sum, nil
@@ -763,6 +787,10 @@ func (s *boardService) DeleteItem(ctx context.Context, campaignID string, h Home
 	}
 	if err := authorize(b, it, v); err != nil {
 		return err
+	}
+	// It would only come back on the quest's next save.
+	if it.Auto && len(b.Fill) > 0 {
+		return errInvalid("this board fills itself with quests, so hide this notice instead, or change which quests the board fills with")
 	}
 	all, err := s.repo.ListItems(ctx, campaignID, []string{b.ID})
 	if err != nil {

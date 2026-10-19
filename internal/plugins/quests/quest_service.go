@@ -3,6 +3,8 @@ package quests
 import (
 	"context"
 	"encoding/json"
+	"sort"
+	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -15,6 +17,9 @@ type QuestService interface {
 	Get(ctx context.Context, campaignID, entityID string, v Viewer) (any, error)
 	// Put applies a partial update and returns the DM view. DM team only.
 	Put(ctx context.Context, campaignID, entityID string, v Viewer, p QuestPatch) (*DMQuestView, error)
+	// List returns every saved sheet in the campaign whose page v may open,
+	// by page name. DM team only: it is how the AI tool reads the quests.
+	List(ctx context.Context, campaignID string, v Viewer) ([]QuestEntry, error)
 	// SyncDueEvent re-derives the visibility of the page's due-date calendar
 	// event after the page's own visibility changed. It touches nothing when
 	// the page has no sheet or no due date.
@@ -258,6 +263,46 @@ func (s *questService) Put(ctx context.Context, campaignID, entityID string, v V
 	}
 	s.finishDue(ctx, campaignID, plan)
 	return s.dmView(ctx, campaignID, q, version+1)
+}
+
+func (s *questService) List(ctx context.Context, campaignID string, v Viewer) ([]QuestEntry, error) {
+	if !v.IsDM {
+		return nil, errForbidden("only the campaign owner or a member with DM access may do this")
+	}
+	docs, err := s.repo.ListAll(ctx, campaignID)
+	if err != nil {
+		return nil, apperrorInternal(err)
+	}
+	ids := make([]string, 0, len(docs))
+	for id := range docs {
+		ids = append(ids, id)
+	}
+	if len(ids) == 0 {
+		return []QuestEntry{}, nil
+	}
+	infos, ok, err := s.viewable(ctx, campaignID, v, ids)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]QuestEntry, 0, len(ids))
+	for _, id := range ids {
+		if !ok[id] {
+			continue
+		}
+		q := defaultQuest(infos[id].Name)
+		if err := json.Unmarshal(docs[id], &q); err != nil {
+			continue // a damaged sheet is left for its own page to report
+		}
+		fillDefaults(&q, infos[id].Name)
+		out = append(out, QuestEntry{EntityID: id, Name: infos[id].Name, Notice: q.Notice, Status: q.Status, Steps: q.Steps})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if a, b := strings.ToLower(out[i].Name), strings.ToLower(out[j].Name); a != b {
+			return a < b
+		}
+		return out[i].EntityID < out[j].EntityID
+	})
+	return out, nil
 }
 
 // merge applies the patch over the stored sheet and validates what changed.
