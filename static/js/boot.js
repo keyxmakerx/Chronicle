@@ -746,10 +746,13 @@
    */
   Chronicle.escapeHtml = Chronicle.escapeAttr;
 
-  // The campaign's word for its game master ("Director"): server-checked
-  // letters, safe in HTML, plural with a plain "s".
+  // The campaign's word for its game master ("Director"), plural with a plain
+  // "s". The server allows only letters, so escaping changes nothing; it keeps
+  // the term safe in the HTML strings widgets build even if that check slips.
   Chronicle.gmTerm = function () {
-    return document.documentElement.getAttribute('data-gm-term') || 'GM';
+    return String(document.documentElement.getAttribute('data-gm-term') || 'GM')
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   };
 
   /**
