@@ -3682,190 +3682,209 @@
   EXTRA.push({ id: 'stainedglass', name: 'Stained glass', blurb: 'Leaded cathedral glass lit from behind, jewel colours between dark lead came.',
     key: [40, 80, 170], luma: 0.2, spread: 1, spec: { mat: STAINEDGLASS_MAT, front: stainedglassFront } });
   /* ---------- Thunderstorm ----------
-     A bank of dark storm cloud seen from above, boiling round the token. Each layer is a stack of thin slices of
-     density cut from one billowy height field (the tops are small lobes, the base wide and smooth), looked down
-     through from the top. Light is gathered through the slices toward the sun at several distances, so lobes
-     shade each other: the creases go dark and the crests catch the light. A smooth dark mass turns behind the lit
-     billows, the other way. Both are worked out once per frame at a small fixed size and scaled into every canvas.
-     Lightning lights the cloud from inside, through the thickness between the channel and each part of the cloud,
-     and is drawn as stacked strokes over it. Rain is born under the cloud and falls clear of it. */
-  var STORM_SC = 0.88, STORM_LX = -0.62, STORM_LY = -0.78;
-  // taps toward the light: distance (as a fraction of the token) and how far up the stack the ray has climbed
-  var STORM_TAPS = [[0.005, 0.02], [0.012, 0.05], [0.026, 0.12], [0.055, 0.25], [0.1, 0.45], [0.16, 0.75]];
-  // The two layers: the billowing lit cloud in front and a deep, dark, smooth mass behind (worked out coarser: it is soft
-  // anyway), turning at their own rates. N grid size, gs coarse grid step for the slow fields, NZ slices, rot turn rate;
-  // rc, wob, hwk, asym, hf, hv, lo, loi, lf, ww, wk the ring's radius, wander, width and edge swells; he, hs, hb, base,
-  // ze, g, absorb the height field and its density; kabs, amb, sun, gam, ao, aok, bru, nt the light; wa, wf, f0, go, nb,
-  // oct, ctk, seed the warp and the billows; kf, flz, fg, fa, fs, fk, gk how
-  // flashes light the cloud; sharp the acutance.
-  var stormKF = { N: 216, gs: 4, NZ: 7, rot: 0.05, rc: 0.405, wob: 0.024, hwk: 0.09, asym: 0.95, hf: 0.75, hv: 0.7, he: 1.4, hs: 2.6, hb: 0.55, base: 0.14, ze: 0.9, g: 2, absorb: 1.2,
-    kabs: 40, amb: 0.17, sun: 1.2, gam: 1.7, wa: 0.14, wf: 3, f0: 9, go: 0.62, nb: 2, oct: 4, ao: 0.4, aok: 3, bru: 0.3, kf: 45, flz: 0.45, fg: 3, fa: 0.6, fs: 0.8, fk: 0.5, gk: 0.04, nt: 5, seed: 0, ctk: 2, sharp: 1.0, lo: 0.9, loi: 0.35, lf: 4.2, ww: 1.8, wk: 0.3 };
-  var stormKB = { N: 120, gs: 3, NZ: 6, rot: -0.022, rc: 0.405, wob: 0.03, hwk: 0.1, asym: 0.95, hf: 0.7, hv: 0.6, he: 1.0, hs: 2.6, hb: 0.5, base: 0.1, ze: 0.9, g: 1.2, absorb: 0.9,
-    kabs: 30, amb: 0.12, sun: 0.55, gam: 1.4, wa: 0.3, wf: 2.5, f0: 6, go: 0.55, nb: 0, oct: 4, ao: 0, aok: 3, bru: 0.2, kf: 30, flz: 0.45, fg: 3, fa: 0.6, fs: 0.8, fk: 0.5, gk: 0.04, nt: 4, seed: 7, ctk: 1, sharp: 0, lo: 0.3, loi: 0.2, lf: 2.4, ww: 1.6, wk: 0.25 };
-  var stormF = { q: -1, F: null, B: null };
-  // exp(-x) from a table: the slice loop needs it hundreds of thousands of times a frame
+     A bank of storm cloud seen from above, painted the way a cumulus tower is built: heads of cloud heaped round
+     the ring, each one a cluster of rounded billows lit from above with soft, wrapped light, so the tops stand
+     bright while the undersides and the gaps between heads fall into blue-grey shade. A head throws a soft shade on
+     the heads below it, and its edge frays into wisps, so nothing is outlined and nothing has a seam. Each head is
+     worked out once as a sprite (its shape and its light, grade-free) and recoloured per grade; the heads are laid
+     back to front, roll round the ring at slightly different speeds, and swell and subside as they go. Lightning
+     lights the heads near it from within, and bolts are drawn over everything as sharp strokes. The painting is
+     done once per frame and size, small enough to be cheap, and drawn scaled into every canvas of that size. */
+  var STORM_SC = 0.88, STORM_SP = 128, STORM_ROT = 0.05, STORM_NV = 12, STORM_RMIN = 0.322, STORM_RMAX = 0.49;
+  var STORM_EXPO = [0.4, 0.5, 0.62, 0.76, 0.92, 1.08, 1.25];       // the exposures a head can be drawn at
+  // The sun, from the upper left and fairly low, so every billow has a lit and a shaded side.
+  var STORM_SUN = (function () { var v = [-0.45, -0.75, 0.5], n = Math.hypot(v[0], v[1], v[2]); return [v[0] / n, v[1] / n, v[2] / n]; })();
+  var stormSprites = null, stormP = null, stormTex = {}, stormSets = {};
+  // exp(-x) from a table: the glow needs it for every head every frame
   var STORM_EXP = (function () { var a = new Float32Array(1025); for (var i = 0; i <= 1024; i++) a[i] = Math.exp(-i / 128); return a; })();
   function stormExp(x) { var i = (x * 128) | 0; return i > 1023 ? 0 : STORM_EXP[i]; }
-  function stormSB(v) { var d = 2 * v - 1; return Math.sqrt(0.015 + d * d); } // a rounded top with a sharp crease where the noise crosses a half
-  // A layer's working arrays. Pixels of the band are worked out once: padded index, position, angle round the ring (0..1),
-  // radius and the index in the unpadded picture. The level array carries a margin so every neighbour read stays inside.
-  function stormLayer(k) {
-    var N = k.N, pad = Math.ceil(0.17 * N) + 2, W = N + 2 * pad, list = [], y, x;
-    for (y = 0; y < N; y++) for (x = 0; x < N; x++) {
-      var X = (x + 0.5) / N - 0.5, Y = (y + 0.5) / N - 0.5, r = Math.hypot(X, Y);
-      if (r < 0.32 || r > 0.497) continue;
-      list.push((y + pad) * W + x + pad, X, Y, Math.atan2(Y, X) / TAU + 0.5, r, y * N + x);
+  function stormRand(seed) { var s = (seed * 2654435761 + 12345) >>> 0; return function () { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296; }; }
+
+  /* ---------- A head of cloud, as a sprite ---------- */
+  // Billows are spheres heaped into a height field with a soft maximum, so where two meet there is a rounded
+  // crease and not a seam; smaller billows sit on the edges of the bigger ones. Lit by a wrapped diffuse term
+  // (cloud scatters light into its shade), darkened in the creases and under the lee of a taller billow, and
+  // broken up by a soft cottony noise. The outline is feathered and frays into a halo of wisps.
+  function stormSprite(seed) {
+    var S = STORM_SP, n = S * S, R = stormRand(seed * 17 + 3), x, y, i, k, u, v;
+    var UU = new Float32Array(n), VV = new Float32Array(n), H = new Float32Array(n);
+    for (y = 0; y < S; y++) for (x = 0; x < S; x++) {
+      u = (x + 0.5) / S * 2 - 1; v = (y + 0.5) / S * 2 - 1; i = y * S + x;
+      UU[i] = u + (qfbm(u * 2.2 + seed * 3.1, v * 2.2 + 5, 3) - 0.5) * 0.16;
+      VV[i] = v + (qfbm(u * 2.2 + 9, v * 2.2 + seed * 2.3, 3) - 0.5) * 0.16;
     }
-    var px = new Float32Array(list), n = px.length / 6, L = { k: k, N: N, pad: pad, W: W, px: px, n: n, LV: new Float32Array(W * W).fill(-9), lum: new Float32Array(n), al: new Float32Array(n),
-      fl: new Float32Array(n), dk: new Float32Array(n), rk: new Float32Array(n), GN: Math.ceil(N / k.gs) + 2, grid: null, A: new Float32Array(N * N), LM: new Float32Array(N * N), off: [], wd: [], dz: [], ao: [] }, j, prev = 0;
-    L.grid = new Float32Array(L.GN * L.GN * 6);
-    for (j = 0; j < n; j++) { var rj = px[j * 6 + 4]; L.rk[j] = 2.2 * (1 - smooth(0.31, 0.375, rj)) + 2.4 * smooth(0.43, 0.497, rj); } // the bank fades out toward the canvas edge and the picture
-    for (j = 0; j < k.nt; j++) {
-      var tp = STORM_TAPS[(k.nt === 6 ? [0, 1, 2, 3, 4, 5] : k.nt === 5 ? [1, 2, 3, 4, 5] : [1, 3, 4, 5])[j]];
-      L.off.push(Math.round(STORM_LX * tp[0] * N) + W * Math.round(STORM_LY * tp[0] * N)); L.wd.push(tp[0] - prev); L.dz.push(tp[1]); prev = tp[0];
-    }
-    if (k.ao > 0) [0.012, 0.03].forEach(function (rr) { for (var d = 0; d < 6; d++) { var an = d / 6 * TAU + rr * 40; L.ao.push(Math.round(Math.cos(an) * rr * N) + W * Math.round(Math.sin(an) * rr * N)); } });
-    return L;
-  }
-  // The ring's own shape over the angle, as two tables: where the line wanders and how wide the bank is. Shifting the
-  // lookup turns the shape round with the cloud.
-  function stormShape(k) {
-    var n = 512, t = { mo: new Float32Array(n), wd: new Float32Array(n) }, seed = k.seed;
-    for (var i = 0; i < n; i++) {
-      var a = i / n * TAU, c = Math.cos(a), s = Math.sin(a);
-      t.mo[i] = k.wob * (qn(c * 1.5 + 3 + seed, s * 1.5 + 5) - 0.5);
-      t.wd[i] = k.hwk * (k.hf + k.hv * smooth(0.3, 0.7, qn(c * 2.4 + 11 + seed, s * 2.4 + 2)));
-    }
-    return t;
-  }
-  function stormTab(tab, u) { var v = (u - Math.floor(u)) * 512, i = v | 0, f = v - i; return tab[i] + (tab[(i + 1) & 511] - tab[i]) * f; }
-  // The slow fields (the domain warp, the two edge swells and the dark bruises) are worked out on a coarse grid and
-  // blended between its nodes; only the billow octaves are worked out per pixel.
-  function stormGrid(L, t, ca, sa) {
-    var k = L.k, N = L.N, gs = k.gs, GN = L.GN, G = L.grid, gi, gj, sd = k.seed, wf = k.wf, wa = k.wa, lf = k.lf;
-    for (gj = 0; gj < GN; gj++) for (gi = 0; gi < GN; gi++) {
-      var X = gi * gs / N - 0.5, Y = gj * gs / N - 0.5, o = (gj * GN + gi) * 6;
-      if (X * X + Y * Y > 0.36 || X * X + Y * Y < 0.05) continue;
-      var RX = X * ca - Y * sa, RY = X * sa + Y * ca;
-      G[o] = (qn(RX * wf + t * 0.07 + sd, RY * wf - t * 0.09) - 0.5) * wa; G[o + 1] = (qn(RX * wf + 5.2 - t * 0.06 + sd, RY * wf + 1.3 + t * 0.08) - 0.5) * wa;
-      G[o + 2] = smooth(0.3, 0.7, qn(RX * lf + 20 + sd + t * 0.04, RY * lf - 7 - t * 0.03)); G[o + 3] = smooth(0.3, 0.7, qn(RX * lf - 13 + sd, RY * lf + 4 + t * 0.03));
-      G[o + 4] = 1 - k.bru * (1 - smooth(0.3, 0.7, qn(RX * 2.2 + t * 0.03 + 9 + sd, RY * 2.2 - t * 0.025 + 4)));
-    }
-  }
-  // The level of cloud at each band pixel: the ring's envelope plus the billows (each octave turned a little so the noise
-  // lattice never lines up, and some turning against the rest); slice k has cloud where the level is above k's height.
-  var STORM_CT = [0, -1.5, 2, -2.5, 3], stormOcr = new Float32Array(10);
-  function stormLevel(L, t) {
-    var PX = L.px, K = L.n, k = L.k, LV = L.LV, sh = L.shape, nb = k.nb, go = k.go, f0 = k.f0, noct = k.oct, i, sd = k.seed, N = L.N, gs = k.gs, GN = L.GN, G = L.grid;
-    var ca = Math.cos(k.rot * t), sa = Math.sin(k.rot * t), turn = k.rot * t / TAU, ocr = stormOcr, oo;
-    for (oo = 0; oo < 5; oo++) { var an = oo * 0.83 + k.rot * t * STORM_CT[oo] * k.ctk; ocr[oo * 2] = Math.cos(an); ocr[oo * 2 + 1] = Math.sin(an); } // each octave turns at its own rate, some against the rest
-    stormGrid(L, t, ca, sa);
-    for (i = 0; i < K; i++) {
-      var o = i * 6, X = PX[o + 1], Y = PX[o + 2], ang = PX[o + 3], r = PX[o + 4];
-      var RX = X * ca - Y * sa, RY = X * sa + Y * ca, u = ang - turn;
-      var gx = (X + 0.5) * N / gs, gy = (Y + 0.5) * N / gs, gi = gx | 0, gj = gy | 0, fx = gx - gi, fy = gy - gj, g0 = (gj * GN + gi) * 6, g1 = g0 + GN * 6;
-      var w00 = (1 - fx) * (1 - fy), w10 = fx * (1 - fy), w01 = (1 - fx) * fy, w11 = fx * fy;
-      var dr = r - k.rc - stormTab(sh.mo, u), hw0 = stormTab(sh.wd, u) * (dr > 0 ? 1 : k.asym);
-      // the outer and inner edges each swell and pinch on their own, so the bank has bulges and thin necks
-      var lb = dr > 0 ? G[g0 + 2] * w00 + G[g0 + 8] * w10 + G[g1 + 2] * w01 + G[g1 + 8] * w11 : G[g0 + 3] * w00 + G[g0 + 9] * w10 + G[g1 + 3] * w01 + G[g1 + 9] * w11, hw = hw0 * (1 + (dr > 0 ? k.lo : k.loi) * (2 * lb - 1));
-      var e = 1 - smooth(0, 1, Math.abs(dr) / hw), ew = 1 - smooth(0, 1, Math.abs(dr) / (hw * k.ww));
-      if (ew * k.wk > e) e = ew * k.wk;
-      if (e < 0.005) { LV[PX[o]] = -9; continue; }                                  // beyond the bank's reach nothing can stand
-      var px = RX + G[g0] * w00 + G[g0 + 6] * w10 + G[g1] * w01 + G[g1 + 6] * w11, py = RY + G[g0 + 1] * w00 + G[g0 + 7] * w10 + G[g1 + 1] * w01 + G[g1 + 7] * w11;
-      var b = 0, a = 0.5, tot = 0, f = f0, oc;
-      for (oc = 0; oc < noct; oc++) {
-        var cp = ocr[oc * 2], sp = ocr[oc * 2 + 1];
-        var v = qn((px * cp - py * sp) * f + 3.1 * oc + sd, (px * sp + py * cp) * f - 1.7 * oc);
-        b += a * (oc < nb ? stormSB(v) : v); tot += a; a *= go; f *= 2.05;
+    var R0 = 0.5, L = [[0.05 * (R() - 0.5), 0.05 * (R() - 0.5), R0, 0]];
+    for (k = 0; k < 8; k++) { var an = (k + R() * 0.8) / 8 * TAU, dd = R0 * (0.55 + 0.5 * R()), rr = R0 * (0.42 + 0.35 * R()); L.push([Math.cos(an) * dd, Math.sin(an) * dd, rr, -0.25 * R0 * R()]); }
+    for (k = 0; k < 12; k++) { var b = L[Math.floor(R() * 9)], a2 = R() * TAU, d2 = b[2] * (0.6 + 0.4 * R()), r2 = R0 * (0.16 + 0.14 * R()); L.push([b[0] + Math.cos(a2) * d2, b[1] + Math.sin(a2) * d2, r2, b[3] + b[2] * 0.3 - r2 * 0.3]); }
+    var K = 0.05;
+    L.forEach(function (lb) {
+      var m = lb[2] + 0.12, xa = Math.max(0, Math.floor((lb[0] - m + 1) / 2 * S)), xb = Math.min(S - 1, Math.ceil((lb[0] + m + 1) / 2 * S));
+      var ya = Math.max(0, Math.floor((lb[1] - m + 1) / 2 * S)), yb = Math.min(S - 1, Math.ceil((lb[1] + m + 1) / 2 * S));
+      for (y = ya; y <= yb; y++) for (x = xa; x <= xb; x++) {
+        i = y * S + x;
+        var dx = UU[i] - lb[0], dy = VV[i] - lb[1], q2 = (dx * dx + dy * dy) / (lb[2] * lb[2]);
+        if (q2 >= 1) continue;
+        var cap = lb[3] + lb[2] * 0.9 * Math.sqrt(1 - q2), h = H[i], df = cap - h, ad = df < 0 ? -df : df;
+        H[i] = (cap > h ? cap : h) + (ad < K ? (K - ad) * (K - ad) / (4 * K) : 0);
       }
-      var lv = e * k.he + (b / tot - k.hb) * k.hs - k.base;
-      lv -= 3 * (1 - smooth(0, 0.04, e)) + L.rk[i];
-      LV[PX[o]] = lv;
-      L.dk[i] = G[g0 + 4] * w00 + G[g0 + 10] * w10 + G[g1 + 4] * w01 + G[g1 + 10] * w11;   // large dark bruises in the body
+    });
+    for (i = 0; i < n; i++) H[i] += 0.02 * (qfbm(UU[i] * 9 + seed * 5, VV[i] * 9 + 2, 3) - 0.5) * smooth(0.02, 0.15, H[i]);   // the cauliflower grain of a cloud's surface
+    H = boxBlur(H, S, S, 1);
+    var C = new Float32Array(n);
+    for (i = 0; i < n; i++) C[i] = smooth(0, 0.16, H[i]);
+    C = boxBlur(C, S, S, 2);
+    var Hb = boxBlur(H, S, S, 5), halo = boxBlur(C, S, S, 7), lum = new Float32Array(n), al = new Float32Array(n), lg = new Float32Array(n), ll = new Float32Array(n);
+    var sc = S / 2 * 1.0, W = 0.35, Lx = STORM_SUN[0], Ly = STORM_SUN[1], Lz = STORM_SUN[2], hy = Math.hypot(Lx, Ly), tap = [3, 6, 10, 15], tx = [], ty = [], tr = [];
+    for (k = 0; k < 4; k++) { tx.push(Math.round(Lx / hy * tap[k])); ty.push(Math.round(Ly / hy * tap[k])); tr.push(tap[k] / S * 2 * Lz / hy); }
+    for (y = 1; y < S - 1; y++) for (x = 1; x < S - 1; x++) {
+      i = y * S + x; u = (x + 0.5) / S * 2 - 1; v = (y + 0.5) / S * 2 - 1;
+      var gx = (H[i + 1] - H[i - 1]) * 0.5 * sc, gy = (H[i + S] - H[i - S]) * 0.5 * sc, nn = 1 / Math.sqrt(gx * gx + gy * gy + 1);
+      var diff = (-gx * nn * Lx - gy * nn * Ly + nn * Lz + W) / (1 + W); diff = diff < 0 ? 0 : diff > 1 ? 1 : diff;
+      var occ = (Hb[i] - H[i]) * 7, sh = 0; occ = occ < 0 ? 0 : occ > 1 ? 1 : occ;
+      for (k = 0; k < 4; k++) {
+        var xs = Math.min(S - 1, Math.max(0, x + tx[k])), ys = Math.min(S - 1, Math.max(0, y + ty[k])), ov = (H[ys * S + xs] - H[i] - tr[k]) * 8;
+        if (ov > sh) sh = ov;
+      }
+      if (sh > 1) sh = 1;
+      var ht = H[i] / R0; ht = ht > 1 ? 1 : ht;
+      var cot = (1 + 0.2 * (2 * qfbm(u * 9 + seed, v * 9 + 3, 3) - 1)) * (1 + 0.03 * (2 * qfbm(u * 40 + 1, v * 40 + seed, 2) - 1));
+      var lm = (0.12 * (1 - 0.7 * occ) + 0.92 * diff * (1 - 0.7 * sh) * (1 - 0.5 * occ) * (0.55 + 0.45 * Math.sqrt(ht))) * cot;
+      lum[i] = lm < 0 ? 0 : lm > 1 ? 1 : lm;
+      var fr = (halo[i] - 0.12) * 1.6; fr = (fr < 0 ? 0 : fr > 1 ? 1 : fr) * smooth(0.35, 0.65, qfbm(u * 9 + seed * 7, v * 9 + 1, 4)) * 0.65;
+      al[i] = Math.max(C[i], fr) * (1 - smooth(0.82, 1, Math.sqrt(u * u + v * v)));
     }
-  }
-  // Look down through the slices from the top: each slice's share of the light, gathered through the slices between it
-  // and the light, lights it; what is seen is the lit slices weighted by what they let through. Lightning lights each slice
-  // by what is left of it after the cloud between the slice and the source.
-  var stormNear = new Float32Array(40), stormLvj = new Float32Array(8);
-  function stormComposite(L, lights) {
-    var PX = L.px, K = L.n, k = L.k, LV = L.LV, W = L.W, N = L.N, pad = L.pad, NZ = k.NZ, nt = k.nt, off = L.off, wd = L.wd, dz = L.dz, ao = L.ao, j, i, kz;
-    var g = k.g, ze = k.ze, ab = k.absorb, kab = k.kabs, amb = k.amb, sun = k.sun, lvj = stormLvj, near = stormNear, nl = lights.length, kf = k.kf, flz = k.flz, fk = k.fk;
-    for (i = 0; i < K; i++) {
-      var o = i * 6, idx = PX[o], lv = LV[idx], T = 1, col = 0, nn = 0;
-      if (lv * g <= 0) { L.al[i] = 0; L.lum[i] = 0; L.fl[i] = 0; continue; }
-      for (j = 0; j < nl; j++) { var Lt = lights[j], ddx = Lt[0] - PX[o + 1], ddy = Lt[1] - PX[o + 2], dd = ddx * ddx + ddy * ddy; if (dd < 6.8 * Lt[2] * Lt[2] && nn < 40) { near[nn++] = j; near[nn++] = Math.sqrt(dd); } }
-      for (j = 0; j < nt; j++) lvj[j] = LV[idx + off[j]];
-      var top = Math.min(NZ - 1, Math.floor((lv / ze) * NZ - 0.5 + 1e-6));
-      for (kz = top; kz >= 0; kz--) {
-        var zk = (kz + 0.5) / NZ, v = (lv - zk * ze) * g;
-        if (v <= 0) continue;
-        if (v > 1.6) v = 1.6;
-        var tau = 0;
-        for (j = 0; j < nt; j++) {
-          var zz = zk + dz[j]; if (zz > 1) continue;
-          var vj = (lvj[j] - zz * ze) * g; if (vj > 0) tau += (vj > 1.6 ? 1.6 : vj) * wd[j];
-        }
-        var a = 1 - stormExp(v * ab), lit = stormExp(tau * kab);
-        col += T * a * (amb * (0.4 + 0.6 * (kz + 1) / NZ) + sun * lit);
-        T *= 1 - a;
-        if (T < 0.03) break;
-      }
-      var al = 1 - T, lm = al > 0.002 ? col / al : 0, fcol = 0;
-      for (j = 0; j < nn; j += 2) { // the flash reaches the cloud's body through what stands between it and the source (two taps at half the pixel's height, climbing to the source's)
-        var Lf = lights[near[j]], dist = near[j + 1], ft = 0, zh = 0.5 * lv / ze;
-        for (var m = 1; m <= 2; m++) {
-          var fr = m / 3, gx = ((PX[o + 1] + (Lf[0] - PX[o + 1]) * fr + 0.5) * N) | 0, gy = ((PX[o + 2] + (Lf[1] - PX[o + 2]) * fr + 0.5) * N) | 0;
-          var vf = (LV[(gy + pad) * W + gx + pad] - (zh + (flz - zh) * fr) * ze) * g; if (vf > 0) ft += vf > 1.6 ? 1.6 : vf;
-        }
-        fcol += Lf[3] * fk * stormExp(dist * dist / (2 * Lf[2] * Lf[2])) * stormExp(ft * dist / 2 * kf);
-      }
-      if (ao.length) { // creases and hollows: how much higher the ground round about is
-        var occ = 0;
-        for (j = 0; j < ao.length; j++) { var dv = (LV[idx + ao[j]] - lv) * k.aok; occ += dv > 0 ? (dv > 1 ? 1 : dv) : 0; }
-        lm *= 1 - k.ao * occ / ao.length;
-      }
-      L.al[i] = al; L.lum[i] = lm * L.dk[i]; L.fl[i] = fcol;
-    }
-  }
-  function stormField(t, lights) {
-    var q = Math.round(t * 30), S = stormF;
-    if (S.q === q) return S;
-    if (!S.F) { S.F = stormLayer(stormKF); S.F.shape = stormShape(stormKF); S.B = stormLayer(stormKB); S.B.shape = stormShape(stormKB); }
-    stormLevel(S.B, t); stormComposite(S.B, lights); stormLevel(S.F, t); stormComposite(S.F, lights); S.q = q; return S;
+    var sm = 0, sw = 0;                                            // how far from its centre the head reaches, as a fraction of its half-width
+    for (y = 0; y < S; y++) for (x = 0; x < S; x++) { var aw = al[y * S + x]; sm += aw * (Math.pow((x + 0.5) / S * 2 - 1, 2) + Math.pow((y + 0.5) / S * 2 - 1, 2)); sw += aw; }
+    var ext = 1.4 * Math.sqrt(sm / sw);
+    for (i = 0; i < n; i++) { lg[i] = Math.pow(lum[i], 1.4); ll[i] = Math.pow(lum[i], 1.3); }
+    return { lg: lg, ll: ll, al: al, sh: boxBlur(al, S, S, 3), ext: ext };
   }
 
-  /* Palette: the cloud ramp and the lightning's colours, under the grade in force. */
-  var STORM_RAMP = [[0, [15, 18, 31]], [0.15, [26, 32, 50]], [0.35, [44, 52, 74]], [0.6, [68, 79, 106]], [0.8, [108, 121, 152]], [1, [166, 178, 208]]];
+  /* ---------- The bank: where each head stands ---------- */
+  // Four sizes, from the broad dark heads that make the floor of the bank to the small ones that fray its edge.
+  // [count, size from, size to, exposure at the bottom, exposure on top]; a head's centre keeps its edge inside the ring. The floor goes first;
+  // the rest are laid by height, and the higher a head stands the more sun it takes.
+  var STORM_BANK = [[40, 0.05, 0.07, 0.5, 0.7, 0.34, 0.365], [44, 0.08, 0.108, 0.5, 0.75], [26, 0.07, 0.095, 0.55, 1.25], [28, 0.045, 0.062, 0.6, 1.1], [16, 0.028, 0.04, 0.65, 0.95]];
+  var STORM_SPEED = [0.8, 0.9, 1, 1.1, 1];
+  function stormBuild() {
+    var R = stormRand(11), out = [];
+    if (!stormSprites) { stormSprites = []; for (var v = 0; v < STORM_NV; v++) stormSprites.push(stormSprite(v + 1)); }
+    STORM_BANK.forEach(function (sp, c) {
+      for (var i = 0; i < sp[0]; i++) {
+        var z = R(), e = sp[3] + (sp[4] - sp[3]) * Math.pow(z, 1.6), lv = 0, k, s = sp[1] + (sp[2] - sp[1]) * R(), vv = Math.floor(R() * STORM_NV), ex = 0.8 * stormSprites[vv].ext * s;
+        var a = (i + (R() - 0.5)) / sp[0] * TAU, bw = smooth(0.25, 0.75, qn(Math.cos(a) * 1.3 + 4, Math.sin(a) * 1.3 + 6)), lo = STORM_RMIN + ex + 0.03 * (1 - bw), hi = STORM_RMAX - ex - 0.03 * (1 - bw);
+        if (sp[5]) { lo = sp[5]; hi = sp[6]; }
+        for (k = 1; k < STORM_EXPO.length; k++) if (Math.abs(STORM_EXPO[k] - e) < Math.abs(STORM_EXPO[lv] - e)) lv = k;
+        out.push({ c: c, z: c > 1 ? z : c - 2, a: a, r: lo + (hi - lo) * R(), s: s, v: vv, lv: lv, w: 0.35 + 0.45 * R(), p: R() * TAU, w2: 0.2 + 0.3 * R(), p2: R() * TAU });
+      }
+    });
+    out.sort(function (a, b) { return a.z - b.z; });
+    return out;
+  }
+
+  /* Palette: the cloud's ramp from the deep slate of the shaded creases to the pale grey of a lit top, the cold
+     light a flash throws on a head, and the lightning's colours, under the grade in force. */
+  var STORM_RAMP = [[0, [16, 20, 34]], [0.16, [38, 46, 70]], [0.34, [78, 90, 120]], [0.55, [132, 144, 170]], [0.75, [194, 202, 220]], [0.9, [234, 238, 246]], [1, [252, 252, 252]]];
+  var STORM_LIT = [[0, [56, 68, 128]], [0.3, [120, 140, 212]], [0.55, [196, 212, 252]], [0.8, [244, 247, 255]], [1, [255, 255, 255]]];
   var stormPals = {};
+  // A colour picker walks through many grades: keep the newest few of each cache.
+  function stormKeep(map, limit) { var ks = Object.keys(map); if (ks.length >= limit) delete map[ks[0]]; }
+  function stormLut(ramp) {
+    var g = ramp.map(function (e) { return [e[0], tc(e[1])]; }), r = new Uint8Array(256 * 3), i, c;
+    for (i = 0; i < 256; i++) { c = rampAt(g, i / 255); r[i * 3] = c[0]; r[i * 3 + 1] = c[1]; r[i * 3 + 2] = c[2]; }
+    return r;
+  }
   function stormPal() {
     var k = gradeId();
-    if (stormPals[k]) return stormPals[k];
-    var ramp = STORM_RAMP.map(function (e) { return [e[0], tc(e[1])]; }), R = new Float32Array(256), Gc = new Float32Array(256), B = new Float32Array(256);
-    for (var i = 0; i < 256; i++) { var c = rampAt(ramp, i / 255); R[i] = c[0]; Gc[i] = c[1]; B[i] = c[2]; }
-    return stormPals[k] = { R: R, G: Gc, B: B, flash: tc([176, 198, 255]), glow: tc([120, 112, 255]), core: tc([240, 246, 255]), rain: tc([150, 170, 205]) };
+    if (!stormPals[k]) stormKeep(stormPals, 16);
+    return stormPals[k] || (stormPals[k] = { cloud: stormLut(STORM_RAMP), lit: stormLut(STORM_LIT), shade: tc([8, 10, 20]), flash: tc([176, 198, 255]), glow: tc([120, 112, 255]), core: tc([240, 246, 255]) });
+  }
+  // The sprites of every head under the grade in force: each variant at each exposure, lit by a flash, and as a shade.
+  function stormSet() {
+    var k = gradeId(), st = stormSets[k];
+    if (st) return st;
+    stormKeep(stormSets, 4);
+    var pal = stormPal(), S = STORM_SP, n = S * S, cloud = pal.cloud, lit = pal.lit;
+    // one sprite canvas from a luminance (looked up in a palette), a scale on it and an alpha
+    function paint(lm, pl, e, al, aMul) {
+      var cv = document.createElement('canvas'), g, img, d, i, o, ix, v;
+      cv.width = cv.height = S; g = cv.getContext('2d'); img = g.createImageData(S, S); d = img.data;
+      for (i = 0; i < n; i++) {
+        if (al[i] <= 0) continue;
+        o = i * 4; v = lm ? lm[i] * e : 0; ix = (v <= 0 ? 0 : v >= 1 ? 255 : (v * 255) | 0) * 3;
+        d[o] = pl[ix]; d[o + 1] = pl[ix + 1]; d[o + 2] = pl[ix + 2]; d[o + 3] = al[i] * aMul;
+      }
+      g.putImageData(img, 0, 0); return mips(cv);
+    }
+    // each sprite also at half and quarter size, so a head drawn small is not sampled from far above its size
+    function mips(cv) {
+      var out = [cv], w = cv.width, c, m;
+      while (w > 32) { w >>= 1; c = document.createElement('canvas'); c.width = c.height = w; m = c.getContext('2d'); m.drawImage(out[out.length - 1], 0, 0, w, w); out.push(c); }
+      return out;
+    }
+    var shade = new Uint8Array(768); shade[0] = pal.shade[0]; shade[1] = pal.shade[1]; shade[2] = pal.shade[2];
+    st = stormSets[k] = { sp: [], lit: [], sh: [] };
+    stormSprites.forEach(function (spr) {
+      st.sp.push(STORM_EXPO.map(function (e) { return paint(spr.lg, cloud, e, spr.al, 255); }));
+      st.lit.push(paint(spr.ll, lit, 1, spr.al, 255));
+      st.sh.push(paint(null, shade, 0, spr.sh, 190));
+    });
+    return st;
+  }
+  // How much a flash lights a head: the light falls off with distance, and a head is wide, so it spreads with the head.
+  function stormGain(x, y, rad, lights) {
+    var g = 0, i;
+    for (i = 0; i < lights.length; i++) {
+      var L = lights[i], dx = L[0] - x, dy = L[1] - y, s2 = L[2] * L[2] + rad * rad * 0.12, d2 = dx * dx + dy * dy;
+      if (d2 > 30 * s2) continue;
+      g += L[3] * (stormExp(d2 / (2 * s2)) + 0.22 * stormExp(d2 / (2 * s2 * 3.24)));
+    }
+    g *= 0.7; return g > 0.92 ? 0.92 : g;
+  }
+  // The size the bank is painted at for a canvas this wide: the cost of a frame goes with its area.
+  function stormSize(w) { return Math.max(256, Math.min(640, Math.ceil(w * 1.2 / 32) * 32)); }
+  // The bank at time t, painted back to front into a square canvas the size of the token.
+  function stormTexture(t, lights, N) {
+    var tk = gradeId() + '|' + N, q = Math.round(t * 30), c = stormTex[tk];
+    if (c && c.q === q) return c;
+    if (!stormP) stormP = stormBuild();
+    if (!c) { stormKeep(stormTex, 8); c = stormTex[tk] = { cv: document.createElement('canvas') }; c.cv.width = c.cv.height = N; }
+    var set = stormSet(), g = c.cv.getContext('2d'), sx = -STORM_SUN[0], sy = -STORM_SUN[1], hy = Math.hypot(sx, sy);
+    g.clearRect(0, 0, N, N);
+    stormP.forEach(function (p) {
+      var a = p.a + STORM_ROT * STORM_SPEED[p.c] * t, r = p.r + 0.004 * Math.sin(p.w2 * t + p.p2), px = Math.cos(a) * r, py = Math.sin(a) * r;
+      var d = 2 * p.s * N * (1 + 0.09 * Math.sin(p.w * t + p.p)), x0 = N / 2 + px * N - d / 2, y0 = N / 2 + py * N - d / 2, gn = lights.length ? stormGain(px, py, p.s, lights) : 0, m = d > 100 ? 0 : d > 50 ? 1 : 2;
+      if (p.c > 1) { g.globalAlpha = 1; g.drawImage(set.sh[p.v][m], x0 + sx / hy * d * 0.16, y0 + sy / hy * d * 0.16, d, d); }
+      g.globalAlpha = 1; g.drawImage(set.sp[p.v][p.lv][m], x0, y0, d, d);
+      if (gn > 0.02) { g.globalAlpha = gn; g.drawImage(set.lit[p.v][m], x0, y0, d, d); }
+    });
+    g.globalAlpha = 1; c.q = q;
+    return c;
   }
 
   /* ---------- Lightning: when, where and what it looks like ---------- */
-  // Events come on a loose beat; the still frame (t = 2.5) lands on the return stroke of a strike.
+  // Most flashes happen inside the cloud and are seen only as the billows lighting up; now and then a bolt crawls
+  // across the top or strikes out over the map. The still frame (t = 2.5) lands on the return stroke of a strike.
   function stormEvent(j) {
-    var r1 = hash(j, 31), r2 = hash(j, 32), te = 0.5 + j * 2.0 + r1 * 0.9;
-    var kind = r2 < 0.16 ? 'sheet' : r2 < 0.36 ? 'crawl' : r2 < 0.68 ? 'arc' : 'fork', a = hash(j, 33) * TAU;
+    var r1 = hash(j, 31), r2 = hash(j, 32), te = 0.45 + j * 1.7 + r1 * 0.8;
+    var kind = r2 < 0.34 ? 'flash' : r2 < 0.46 ? 'sheet' : r2 < 0.66 ? 'crawl' : r2 < 0.8 ? 'arc' : 'fork', a = hash(j, 33) * TAU;
     if (j === 1) { te = 2.5; kind = 'arc'; a = -1.3; }
-    return { j: j, q0: Math.round(te * 30), kind: kind, a: a, nb: 2 + Math.floor(hash(j, 34) * 3.99), dec: 4 + 3 * hash(j, 35) };
+    return { j: j, q0: Math.round(te * 30), kind: kind, a: a, nb: 2 + Math.floor(hash(j, 34) * 3.99), dec: 3.5 + 3 * hash(j, 35) };
   }
   var STORM_STROKE = [1, 0.5, 0.92, 0.42, 0.7, 0.3];
+  function stormTri(f, c, w) { return Math.max(0, 1 - Math.abs(f - c) / w); }
   // How bright the cloud glow and the bolt are f frames after the return stroke.
   function stormFlash(ev, f) {
-    var glow = 0, bolt = 0, after = 0, reveal = 1;
-    if (f < -2 || f > 22) return null;
+    var glow = 0, bolt = 0, after = 0, reveal = 1, h = hash(ev.j * 7 + f, 41);
+    if (f < -2 || f > 24) return null;
     if (ev.kind === 'sheet') {
-      var pulse = Math.max(0, 1 - Math.abs(f - 1) / 2.5) + 0.65 * Math.max(0, 1 - Math.abs(f - 5) / 2) + 0.4 * Math.max(0, 1 - Math.abs(f - 9) / 3);
-      glow = pulse * (0.75 + 0.25 * hash(ev.j * 7 + f, 41)) * 0.8 + 0.12 * Math.exp(-Math.max(0, f) / 6);
+      glow = (stormTri(f, 1, 2.5) + 0.65 * stormTri(f, 5, 2) + 0.4 * stormTri(f, 9, 3)) * (0.75 + 0.25 * h) * 0.8 + 0.12 * Math.exp(-Math.max(0, f) / 6);
+    } else if (ev.kind === 'flash') {
+      glow = (stormTri(f, 0, 1.6) + 0.75 * stormTri(f, 3.5, 1.6) + 0.5 * stormTri(f, 7, 2) + 0.22 * stormTri(f, 11, 3)) * (0.8 + 0.2 * h);
     } else {
       if (f < 0) { glow = 0.25 + 0.15 * (f + 2); reveal = 0.35 + 0.3 * (f + 2); bolt = 0.25; }
       else {
-        glow = Math.exp(-f / ev.dec) * (0.72 + 0.28 * hash(ev.j * 5 + f, 42)) + 0.35 * Math.max(0, 1 - Math.abs(f - 3) / 2);
+        glow = Math.exp(-f / ev.dec) * (0.72 + 0.28 * hash(ev.j * 5 + f, 42)) + 0.35 * stormTri(f, 3, 2);
         if (f < ev.nb) bolt = STORM_STROKE[f] * (0.85 + 0.15 * hash(ev.j * 9 + f, 43));
         else if (f < ev.nb + 4) after = 0.22 * Math.pow(0.5, f - ev.nb);
       }
@@ -3873,8 +3892,8 @@
     return { glow: glow, bolt: bolt, after: after, reveal: reveal };
   }
   function stormActive(q) {
-    var out = [], j0 = Math.floor(q / 30 / 2.0);
-    for (var j = Math.max(0, j0 - 2); j <= j0 + 1; j++) {
+    var out = [], j0 = Math.floor((q / 30 - 0.45) / 1.7);
+    for (var j = Math.max(0, j0 - 2); j <= j0 + 2; j++) {
       var ev = stormEvent(j), lv = stormFlash(ev, q - ev.q0);
       if (lv) out.push({ ev: ev, f: q - ev.q0, lv: lv });
     }
@@ -3882,7 +3901,6 @@
   }
 
   /* ---------- Bolt geometry, in token units from the centre ---------- */
-  function stormRand(seed) { var s = (seed * 2654435761 + 12345) >>> 0; return function () { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296; }; }
   // A channel from a to b: split at irregular points and pushed sideways by an uneven amount, with now and then
   // a hard kink, so the runs between turns vary as they do in a real discharge.
   function stormChannel(R, a, b, depth, amp, out) {
@@ -3897,166 +3915,116 @@
     for (i = 1; i < pts.length; i++) { tot += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); cum.push(tot); }
     return { p: pts, s: cum.map(function (c) { return s0 + (s1 - s0) * (tot ? c / tot : 0); }), w: w, life: life, len: tot };
   }
-  function stormBranches(R, polys, parent, depth, count, spread, reach, down) {
+  function stormBranches(R, polys, parent, depth, count, spread, reach) {
     var pts = parent.p, n = pts.length, made = 0;
     for (var tries = 0; tries < count * 5 && made < count; tries++) {
       var j = 2 + Math.floor(R() * (n - 4)); if (j < 2 || j >= n - 2) continue;
       var dx = pts[j + 1][0] - pts[j - 1][0], dy = pts[j + 1][1] - pts[j - 1][1], dl = Math.hypot(dx, dy) || 1;
       var ang = (R() < 0.5 ? -1 : 1) * (0.3 + spread * R()), ca = Math.cos(ang), sa = Math.sin(ang);
       var ux = (dx * ca - dy * sa) / dl, uy = (dx * sa + dy * ca) / dl, len = reach * (0.35 + 0.65 * R()) * (depth ? 1 : 0.5);
-      if (down) { var bx = pts[j][0], by = pts[j][1], bl = Math.hypot(bx, by) || 1; if (ux * bx / bl + uy * by / bl < 0.05) continue; } // forks head away from the centre
       var out = [pts[j]]; stormChannel(R, pts[j], [pts[j][0] + ux * len, pts[j][1] + uy * len], depth ? 4 : 3, 0.3, out);
       var s0 = Math.min(0.9, parent.s[j] + 0.05), br = stormPoly(out, parent.w * (depth ? 0.55 : 0.5), s0, Math.min(1, s0 + 0.28), 1 + Math.floor(R() * 4.5));
       polys.push(br); made++;
-      if (depth) stormBranches(R, polys, br, 0, 1 + Math.floor(R() * 2), 0.9, len, down);
+      if (depth) stormBranches(R, polys, br, 0, 1 + Math.floor(R() * 2), 0.9, len);
     }
   }
   function stormPolar(a, r) { return [Math.cos(a) * r, Math.sin(a) * r]; }
   var stormBolts = {};
-  function stormBolt(ev) { // the channel of a strike or crawler, and the points that light the cloud
+  // The channel of a strike or crawler, and the points along it that light the cloud (x, y, spread, strength).
+  function stormBolt(ev) {
     if (stormBolts[ev.j]) return stormBolts[ev.j];
     var R = stormRand(ev.j * 13 + 5), polys = [], a = ev.a, src = [], main, k;
     if (ev.kind === 'fork') {
-      a = ev.a; var a1 = a + (R() < 0.5 ? 1 : -1) * (0.3 + 0.25 * R()), p0 = stormPolar(a, 0.345 + 0.02 * R()), pts = [p0];
+      var a1 = a + (R() < 0.5 ? 1 : -1) * (0.3 + 0.25 * R()), p0 = stormPolar(a, 0.345 + 0.02 * R()), pts = [p0];
       stormChannel(R, p0, stormPolar(a1, 0.482), 7, 0.22, pts);
       main = stormPoly(pts, 1, 0, 1, 99); polys.push(main);
-      stormBranches(R, polys, main, 1, 6 + Math.floor(R() * 3), 0.9, 0.11, false);
-      src.push([p0[0], p0[1], 0.07, 1], [pts[pts.length >> 1][0], pts[pts.length >> 1][1], 0.06, 0.7], [pts[pts.length - 3][0], pts[pts.length - 3][1], 0.04, 0.4]);
+      stormBranches(R, polys, main, 1, 6 + Math.floor(R() * 3), 0.9, 0.11);
+      for (k = 0; k < pts.length; k += 5) src.push([pts[k][0], pts[k][1], 0.05, 0.9 - 0.5 * k / pts.length]);
+    } else if (ev.kind === 'flash' || ev.kind === 'sheet') {
+      return stormBolts[ev.j] = { polys: [], src: [] };
     } else {
       var crawl = ev.kind === 'crawl', span = (crawl ? 1.0 + 0.7 * R() : 1.1 + 0.5 * R()) * (R() < 0.5 ? 1 : -1), nw = crawl ? 8 : 7, wp = [stormPolar(a, 0.4)], pts2 = [wp[0]];
       for (k = 1; k <= nw; k++) wp.push(stormPolar(a + span * k / nw, 0.405 + (R() - 0.4) * 0.07));
       for (k = 1; k < wp.length; k++) stormChannel(R, wp[k - 1], wp[k], crawl ? 3 : 4, 0.28, pts2);
       main = stormPoly(pts2, crawl ? 0.7 : 1, 0, 1, 99); polys.push(main);
-      stormBranches(R, polys, main, 1, crawl ? 8 : 7 + Math.floor(R() * 3), 1.0, crawl ? 0.05 : 0.09, false);
-      for (k = 0; k < wp.length; k += 2) src.push([wp[k][0], wp[k][1], 0.06, 0.8]);
+      stormBranches(R, polys, main, 1, crawl ? 8 : 7 + Math.floor(R() * 3), 1.0, crawl ? 0.05 : 0.09);
+      for (k = 0; k < pts2.length; k += 6) src.push([pts2[k][0], pts2[k][1], 0.05, 0.85]);
     }
     return stormBolts[ev.j] = { polys: polys, src: src };
   }
-  // The points that light the cloud this frame: x, y, spread, strength.
+  // The points that light the cloud this frame: x, y, spread, strength, height of the source above the cloud floor.
   function stormLights(act) {
     var out = [];
     act.forEach(function (e) {
       var s = e.lv.glow; if (s <= 0.01) return;
+      var a = e.ev.a, R = stormRand(e.ev.j * 29 + 3), q, rc = 0.405;
       if (e.ev.kind === 'sheet') {
-        var a = e.ev.a, rc = 0.4;
-        for (var q = 0; q < 3; q++) out.push([Math.cos(a + q * 0.8) * rc, Math.sin(a + q * 0.8) * rc, 0.2 - 0.02 * q, s * (2.3 - 0.5 * q)]);
-      } else stormBolt(e.ev).src.forEach(function (p) { out.push([p[0], p[1], p[2], s * p[3]]); });
+        for (q = 0; q < 3; q++) out.push([Math.cos(a + q * 0.55) * rc, Math.sin(a + q * 0.55) * rc, 0.1 - 0.012 * q, s * (1.7 - 0.4 * q), 0.04]);
+      } else if (e.ev.kind === 'flash') {
+        var ng = 1 + (R() < 0.5 ? 1 : 0);
+        for (q = 0; q < ng; q++) { var aa = a + q * (0.35 + 0.3 * R()), rr = rc + (R() - 0.5) * 0.05; out.push([Math.cos(aa) * rr, Math.sin(aa) * rr, 0.07 + 0.02 * R(), s * (2.4 - 0.7 * q), 0.035]); }
+      } else stormBolt(e.ev).src.forEach(function (p) { out.push([p[0], p[1], p[2], s * p[3] * 1.6, 0.04]); });
     });
     var gs = 0; out.forEach(function (l) { gs += l[3]; }); out.gsum = Math.min(1.2, gs);
     return out;
   }
 
-  /* ---------- The cloud's colours, once per frame ---------- */
-  var stormTex = {};
-  // One layer's colours into its own small canvas.
-  function stormPaint(L, c, pal, gsum) {
-    var d = c.img.data, PX = L.px, K = L.n, i, k = L.k, A = L.A, LM = L.LM, N = L.N, gl = gsum * k.gk, sh = k.sharp;
-    d.fill(0); A.fill(0);
-    for (i = 0; i < K; i++) { var o0 = PX[i * 6 + 5]; A[o0] = L.al[i]; LM[o0] = L.lum[i]; }
-    for (i = 0; i < K; i++) {
-      var al = L.al[i]; if (al <= 0.002) continue;
-      var o = PX[i * 6 + 5], p = o * 4, lm = LM[o];
-      if (sh > 0) { // a little acutance: the grid is coarser than the canvas, so lift each pixel off the mean of its neighbours that carry cloud
-        var sum = 0, cnt = 0;
-        if (A[o - 1] > 0.05) { sum += LM[o - 1]; cnt++; } if (A[o + 1] > 0.05) { sum += LM[o + 1]; cnt++; }
-        if (A[o - N] > 0.05) { sum += LM[o - N]; cnt++; } if (A[o + N] > 0.05) { sum += LM[o + N]; cnt++; }
-        if (cnt) lm += sh * (lm - sum / cnt);
-      }
-      var idx = (Math.pow(Math.max(0, Math.min(1, lm)), k.gam) * 255) | 0, fl = 1 - Math.exp(-k.fs * (L.fl[i] + gl)), gn = 1 + k.fg * fl, ad = k.fa * fl;
-      d[p] = pal.R[idx] * gn + pal.flash[0] * ad; d[p + 1] = pal.G[idx] * gn + pal.flash[1] * ad; d[p + 2] = pal.B[idx] * gn + pal.flash[2] * ad; d[p + 3] = Math.round(255 * al);
-    }
-    c.cv.getContext('2d').putImageData(c.img, 0, 0);
-  }
-  function stormTextures(t, lights) {
-    var S = stormField(t, lights), tk = gradeId(), c = stormTex[tk];
-    if (c && c.q === S.q) return c;
-    if (!c) {
-      c = stormTex[tk] = {};
-      ['F', 'B'].forEach(function (n) { var N = S[n].N, cv = document.createElement('canvas'); cv.width = cv.height = N; c[n] = { cv: cv, img: cv.getContext('2d').createImageData(N, N) }; });
-    }
-    var pal = stormPal(); stormPaint(S.F, c.F, pal, lights.gsum); stormPaint(S.B, c.B, pal, lights.gsum); c.q = S.q;
-    return c;
-  }
-
   /* ---------- Drawing ---------- */
   var stormHazeCv = document.createElement('canvas');
-  function stormHaze(tex) { // the cloud's shade on the map and the picture, a blur made by shrinking it
+  function stormHaze(tex) { // the cloud's shade on the map and the picture: a blur made by shrinking it
     var cv = stormHazeCv, g = cv.getContext('2d'); cv.width = cv.height = 40;
     g.imageSmoothingQuality = 'high'; g.drawImage(tex, 0, 0, 40, 40);
     g.globalCompositeOperation = 'source-in'; g.fillStyle = 'rgb(2,3,8)'; g.fillRect(0, 0, 40, 40);
     return cv;
   }
-  // Rain: fine streaks slanted by the wind. They are born under the cloud (where the front layer's alpha is high), so they
-  // show only once they have fallen clear of it, and flashes light them.
-  function stormRain(ctx, G, t, pal, boost, A) {
-    var W = G.outW, cx = W / 2, wx = 0.4, wy = 0.92, tiers = [[], [], []], i, tr, N = stormKF.N;
-    for (i = 0; i < 240; i++) {
-      var life = 0.34 + 0.34 * hash(i, 51), cyc = t / life + hash(i, 52), ph = fract(cyc), id = i * 37 + Math.floor(cyc) * 11;
-      var ang = hash(id, 53) * TAU, rr = 0.34 + 0.15 * Math.sqrt(hash(id, 54)), x0 = Math.cos(ang) * rr, y0 = Math.sin(ang) * rr;
-      var ix = Math.floor((x0 + 0.5) * N), iy = Math.floor((y0 + 0.5) * N), c = ix >= 0 && iy >= 0 && ix < N && iy < N ? A[iy * N + ix] : 0;
-      var w = 0.12 + 0.88 * smooth(0.25, 0.75, c), env = Math.sin(Math.PI * ph) * w * (1 - smooth(0.46, 0.49, rr)); if (env < 0.06) continue;
-      var x = x0 + wx * 0.14 * ph, y = y0 + wy * 0.14 * ph, len = 0.03 + 0.04 * hash(id, 55), room = 1 - smooth(0.4, 0.475, Math.max(Math.abs(x), Math.abs(y)));
-      if (room * env < 0.06) continue;
-      tiers[i % 3].push([cx + x * W, cx + y * W, wx * len * W, wy * len * W, env * room]);
-    }
-    ctx.save(); ctx.lineCap = 'round'; ctx.strokeStyle = rgba(pal.rain, 1);
-    for (tr = 0; tr < 3; tr++) {
-      ctx.lineWidth = Math.max(0.7, W * (0.0016 + 0.0007 * tr)); ctx.globalAlpha = Math.min(0.6, (0.17 + 0.07 * tr) * (1 + boost * 1.8));
-      ctx.beginPath(); tiers[tr].forEach(function (s) { ctx.moveTo(s[0] - s[2] * s[4], s[1] - s[3] * s[4]); ctx.lineTo(s[0], s[1]); }); ctx.stroke();
-    }
-    ctx.restore();
-  }
-  // One polyline of a bolt, as stacked strokes in chunks: a wide violet glow, a blue halo, a white-blue shell and a
-  // white-hot core, each chunk dimmer where the cloud is thick and fading out toward the canvas edge and the picture.
-  function stormStroke(ctx, poly, rev, lv, S, pal, A, taperEnd, f) {
-    var p = poly.p, n = p.length, last = n - 1, i, ch = 7, c0, nc = Math.ceil((n - 1) / ch), N = stormKF.N;
+  // One polyline of a bolt as stacked strokes in chunks: a faint wide glow, a blue halo, a white-blue shell and a
+  // white-hot core, each chunk fading toward the canvas edge and the picture.
+  function stormStroke(ctx, poly, rev, lv, S, pal, taperEnd, f) {
+    var p = poly.p, n = p.length, last = n - 1, i, ch = 7, c0, nc = Math.ceil((n - 1) / ch);
     while (last > 0 && poly.s[last] > rev) last--;
     for (c0 = 0; c0 < last; c0 += ch) {
       var c1 = Math.min(last, c0 + ch), ci = c0 / ch, mid = p[(c0 + c1) >> 1], taper = 1 - taperEnd * (ci / nc), rm = Math.hypot(mid[0], mid[1]);
       var edge = (1 - smooth(0.455, 0.492, rm)) * smooth(0.3, 0.345, rm); if (edge <= 0.01) continue;
-      var ix = Math.floor((mid[0] + 0.5) * N), iy = Math.floor((mid[1] + 0.5) * N), dens = ix >= 0 && iy >= 0 && ix < N && iy < N ? smooth(0.3, 0.95, A[iy * N + ix]) : 0;
       var w = poly.w * taper, a = lv * taper * edge * (0.82 + 0.18 * hash(ci + poly.len * 97, f));
       ctx.beginPath(); ctx.moveTo(p[c0][0] * S + S / 2, p[c0][1] * S + S / 2);
       for (i = c0 + 1; i <= c1; i++) ctx.lineTo(p[i][0] * S + S / 2, p[i][1] * S + S / 2);
-      ctx.globalAlpha = 0.1 * a; ctx.strokeStyle = rgba(pal.glow, 1); ctx.lineWidth = Math.max(5, w * S * 0.04 * (1 + 0.5 * dens)); ctx.stroke();
-      ctx.globalAlpha = 0.26 * a; ctx.strokeStyle = rgba(pal.flash, 1); ctx.lineWidth = Math.max(2.4, w * S * 0.014 * (1 + 0.4 * dens)); ctx.stroke();
-      ctx.globalAlpha = 0.6 * a * (1 - 0.3 * dens); ctx.strokeStyle = rgba(mix3(pal.flash, pal.core, 0.6), 1); ctx.lineWidth = Math.max(1.6, w * S * 0.0075); ctx.stroke();
-      ctx.globalAlpha = Math.min(1, a * 1.15) * (1 - 0.35 * dens); ctx.strokeStyle = rgba(pal.core, 1); ctx.lineWidth = Math.max(0.9, w * S * 0.003); ctx.stroke();
+      ctx.globalAlpha = 0.08 * a; ctx.strokeStyle = rgba(pal.glow, 1); ctx.lineWidth = Math.max(4, w * S * 0.022); ctx.stroke();
+      ctx.globalAlpha = 0.28 * a; ctx.strokeStyle = rgba(pal.flash, 1); ctx.lineWidth = Math.max(2, w * S * 0.0075); ctx.stroke();
+      ctx.globalAlpha = 0.7 * a; ctx.strokeStyle = rgba(mix3(pal.flash, pal.core, 0.6), 1); ctx.lineWidth = Math.max(1.3, w * S * 0.0036); ctx.stroke();
+      ctx.globalAlpha = Math.min(1, a * 1.15); ctx.strokeStyle = rgba(pal.core, 1); ctx.lineWidth = Math.max(0.8, w * S * 0.0017); ctx.stroke();
     }
   }
-  function stormBoltDraw(ctx, e, S, pal, F) {
+  function stormBoltDraw(ctx, e, S, pal) {
     var lv = e.lv, b = stormBolt(e.ev), lvl = lv.bolt || lv.after, f = e.f, strong = lv.bolt > 0;
-    if (lvl <= 0.01) return;
+    if (lvl <= 0.01 || !b.polys.length) return;
     ctx.save(); ctx.beginPath(); ctx.arc(S / 2, S / 2, S * 0.487, 0, TAU); ctx.clip(); // a branch's tip may run past the cloud: nothing reaches the canvas edge
     ctx.globalCompositeOperation = 'lighter'; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     b.polys.forEach(function (poly, pi) {
       if (f >= 0 && !(poly.life > f) && strong) return;                          // forks drop out as the discharge ebbs
       if (!strong && pi > 0 && poly.len < 0.05) return;
-      stormStroke(ctx, poly, lv.reveal, lvl, S, pal, F.A, pi ? 0.65 : 0.3, f);
+      stormStroke(ctx, poly, lv.reveal, lvl, S, pal, pi ? 0.65 : 0.3, f);
     });
     ctx.restore();
   }
   function stormFront(ctx, G, t) {
-    var W = G.outW, H = G.outH, q = Math.round(t * 30), pal = stormPal(), act = stormActive(q), lights = stormLights(act);
-    var tx = stormTextures(t, lights), tex = tx.F.cv, F = stormF.F, boost = 0, i;
-    for (i = 0; i < lights.length; i++) boost += lights[i][3];
-    boost = Math.min(1.2, boost);
+    var W = G.outW, H = G.outH, q = Math.round(t * 30), pal = stormPal(), act = stormActive(q), lights = stormLights(act), i;
+    var tex = stormTexture(t, lights, stormSize(W)).cv;
     ctx.save(); ctx.imageSmoothingQuality = 'high';
-    ctx.globalAlpha = 0.5; ctx.drawImage(stormHaze(tex), 0, 0, W, H); ctx.globalAlpha = 1;
-    stormRain(ctx, G, t, pal, boost, F.A);
-    ctx.drawImage(tx.B.cv, 0, 0, W, H); ctx.drawImage(tex, 0, 0, W, H);
-    ctx.globalCompositeOperation = 'lighter';                                   // the flash lights the picture's edge and the map
+    ctx.globalAlpha = 0.5; ctx.drawImage(stormHaze(tex), W * 0.006, H * 0.012, W, H);   // the shade it throws, away from the sun
+    ctx.globalAlpha = 1; ctx.drawImage(tex, 0, 0, W, H);
+    ctx.restore(); ctx.save(); ctx.globalCompositeOperation = 'lighter';           // the flash lights the picture's edge and the map
     for (i = 0; i < lights.length; i++) {
-      var L = lights[i], gx = W / 2 + L[0] * W, gy = H / 2 + L[1] * H, rad = Math.min(W * 0.3, W * 0.495 - Math.max(Math.abs(L[0]), Math.abs(L[1])) * W); // the glow stays inside the canvas
+      var L = lights[i], gx = W / 2 + L[0] * W, gy = H / 2 + L[1] * H, rad = Math.min(W * 0.26, W * 0.495 - Math.max(Math.abs(L[0]), Math.abs(L[1])) * W); // the glow stays inside the canvas
       if (rad < W * 0.04) continue;
       var gr = ctx.createRadialGradient(gx, gy, 0, gx, gy, rad);
-      gr.addColorStop(0, rgba(pal.flash, Math.min(0.26, 0.18 * L[3]))); gr.addColorStop(1, rgba(pal.flash, 0));
+      var ga = Math.min(0.16, 0.1 * L[3]); // eased by hand: a straight ramp to nothing shows as a disc
+      gr.addColorStop(0, rgba(pal.flash, ga)); gr.addColorStop(0.25, rgba(pal.flash, ga * 0.6)); gr.addColorStop(0.55, rgba(pal.flash, ga * 0.2)); gr.addColorStop(0.8, rgba(pal.flash, ga * 0.04)); gr.addColorStop(1, rgba(pal.flash, 0));
       ctx.fillStyle = gr; ctx.fillRect(gx - rad, gy - rad, rad * 2, rad * 2);
     }
     ctx.restore();
-    act.forEach(function (e) { stormBoltDraw(ctx, e, W, pal, F); });
+    act.forEach(function (e) { stormBoltDraw(ctx, e, W, pal); });
   }
-  EXTRA.push({ id: 'storm', name: 'Thunderstorm', blurb: 'A ring of heavy storm cloud rolling round the token, lit from within by lightning, with rain blowing across.',
+  EXTRA.push({ id: 'storm', name: 'Thunderstorm', blurb: 'A ring of towering storm cloud rolling slowly round the token, lit from inside by lightning, with the odd bolt striking out over the map.',
     key: [120, 150, 220], luma: 0.4, spread: 0.5,
     spec: { anim: true, roundOnly: true, scale: STORM_SC, rim: 0.1, feather: 0.035, front: stormFront } });
   /* ---------- Watercolour: a loose ring of ultramarine washed straight onto the map ----------
