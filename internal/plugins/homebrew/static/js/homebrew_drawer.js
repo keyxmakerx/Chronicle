@@ -208,9 +208,12 @@
   function runHeld(S, r) {
     S.busy = true; setStatus(S, 'Running…');
     api(S.cfg.endpoint + '/runs/' + encodeURIComponent(r.id) + '/run', 'POST', null, csrf(S)).then(function (done) {
-      return browserSteps(S, r).then(function (extra) {
+      // A rule stops at its first failing step, so a failed server step
+      // leaves the browser steps after it unrun too.
+      var failed = done && done.status === 'failed';
+      return (failed ? Promise.resolve([]) : browserSteps(S, r)).then(function (extra) {
         var lines = (done && done.lines || []).concat(extra);
-        S.status = lines.join(' ') || 'Done.'; S.statusErr = done && done.status === 'failed';
+        S.status = lines.join(' ') || 'Done.'; S.statusErr = failed;
       });
     }).catch(function (e) {
       S.status = e.message; S.statusErr = true;
