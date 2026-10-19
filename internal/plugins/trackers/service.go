@@ -380,7 +380,8 @@ func (s *service) ensure(ctx context.Context, campaignID, entityID string, a Pag
 	}
 	// A Director may place any kind on any page, so creating the row on a
 	// first change only needs a reason the kind shows here unplaced.
-	if !ok || !virtualOn(k, a.TypeID, "") && !(validPrefix(in.Owner) && ownedBy(k, in.Owner)) {
+	shows := virtualOn(k, a.TypeID, "") || (validPrefix(in.Owner) && ownedBy(k, in.Owner))
+	if !ok || !shows {
 		return Tracker{}, errNotFound("tracker")
 	}
 	return s.rowFor(ctx, campaignID, entityID, k)
