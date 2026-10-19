@@ -56,6 +56,7 @@ type APIHandler struct {
 	shopRoomAddon        string
 	shopBuyer            ShopBuyAPIService
 	dmScreen             DMScreenProvider
+	folders              FolderLister
 	systemState          SystemStateReader
 	systemStateWriter    SystemStateWriter
 	systemEntries        SystemEntryLister
