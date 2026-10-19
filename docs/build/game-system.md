@@ -88,6 +88,7 @@ Validation lives in `internal/systems/manifest.go` (`ValidateManifest`).
 | `widgets`, `text_renderers` | Browser JS; renderers load first | `internal/systems/handler.go` |
 | `renderers`, `entity_panels` | Widgets Chronicle mounts itself on entity pages | `internal/systems/handler.go` |
 | `dm_screen` | Party tracker and conditions on the DM Screen | `internal/systems/manifest_dm_screen.go` |
+| `terms.gm` | The game's name for the game master ("Director"), used across the campaign; default "GM" | `internal/systems/manifest.go` |
 | `foundry_system_id` | Matches Foundry's `game.system.id` for character sync | Foundry module |
 | `tooltip_template` | Go `text/template` for hover tooltips | `internal/systems/generic_tooltip.go` |
 | field `choices` | Names the data file a character field picks from | `internal/systems/character_choices.go` |

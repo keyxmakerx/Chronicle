@@ -5501,6 +5501,9 @@ func (a *App) RegisterRoutes() {
 				ctx = layouts.SetEnabledAddons(ctx, enabledSlugs)
 				if enabledSystem.Slug != "" {
 					ctx = layouts.SetEnabledSystem(ctx, enabledSystem)
+					if term := systems.Find(enabledSystem.Slug).GMTerm(); term != "" {
+						ctx = layouts.SetGMTerm(ctx, term)
+					}
 				}
 			}
 

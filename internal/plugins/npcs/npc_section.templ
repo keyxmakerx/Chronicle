@@ -6,6 +6,7 @@
 package npcs
 
 import (
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"fmt"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -37,7 +38,7 @@ templ NPCSectionComponent(cc *campaigns.CampaignContext, featured []NPCCard, lis
 			if cc.MemberRole >= campaigns.RoleScribe {
 				<p class="text-xs text-fg-secondary max-w-sm mx-auto">Create character entities and reveal them to your players; tag one <code>cast</code> to feature it above.</p>
 			} else {
-				<p class="text-xs text-fg-secondary max-w-sm mx-auto">Your GM hasn't revealed any NPCs yet.</p>
+				<p class="text-xs text-fg-secondary max-w-sm mx-auto">Your { layouts.GMTerm(ctx) } hasn't revealed any NPCs yet.</p>
 			}
 		</div>
 	} else {

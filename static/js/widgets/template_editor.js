@@ -137,7 +137,7 @@ Chronicle.register('template-editor', {
   /** Visibility options for block access control. */
   visibilityOptions: [
     { value: 'everyone', label: 'Everyone',  icon: 'fa-globe' },
-    { value: 'dm_only',  label: 'DM Only',   icon: 'fa-lock' },
+    { value: 'dm_only',  get label() { return (window.Chronicle && Chronicle.gmTerm ? Chronicle.gmTerm() : 'GM') + ' Only'; }, icon: 'fa-lock' },
   ],
 
   defaultLayout() {
@@ -559,7 +559,7 @@ Chronicle.register('template-editor', {
       <i class="fa-solid fa-grip-vertical text-fg-muted text-xs"></i>
       <i class="fa-solid ${Chronicle.escapeAttr(bt.icon)} w-4 text-fg-muted text-center text-sm"></i>
       <span class="text-sm font-medium text-fg flex-1">${Chronicle.escapeHtml(bt.label || '')}</span>
-      ${curVisibility === 'dm_only' ? '<i class="fa-solid fa-lock text-amber-500 text-[10px]" title="DM Only"></i>' : ''}
+      ${curVisibility === 'dm_only' ? '<i class="fa-solid fa-lock text-amber-500 text-[10px]" title="' + (window.Chronicle && Chronicle.gmTerm ? Chronicle.gmTerm() : 'GM') + ' Only"></i>' : ''}
       <select class="te-block-vis opacity-0 group-hover/block:opacity-100 text-[10px] bg-transparent text-fg-muted border border-edge rounded px-1 py-0.5 cursor-pointer hover:text-fg transition-all" title="Visibility">
         ${this.visibilityOptions.map(v => `<option value="${v.value}" ${v.value === curVisibility ? 'selected' : ''}>${v.label}</option>`).join('')}
       </select>

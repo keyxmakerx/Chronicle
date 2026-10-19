@@ -177,7 +177,7 @@ templ stashCard(v *StashesPageView, st StashView, csrfToken string) {
 		<p class="text-xs text-fg-secondary">
 			Seen by:
 			if st.Hidden() {
-				nobody (GM only)
+				nobody ({ layouts.GMTerm(ctx) } only)
 			} else {
 				for i, vw := range st.Viewers {
 					if i > 0 {
@@ -273,7 +273,7 @@ templ stashManage(v *StashesPageView, st StashView, csrfToken string) {
 							}
 						</div>
 					}
-					<p class="text-xs text-fg-muted mt-1">With nobody ticked, only the GM sees it.</p>
+					<p class="text-xs text-fg-muted mt-1">With nobody ticked, only the { layouts.GMTerm(ctx) } sees it.</p>
 				</fieldset>
 				<button type="submit" class="btn-secondary text-xs mt-2">Save who can see it</button>
 			</form>

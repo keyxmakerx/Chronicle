@@ -119,8 +119,8 @@ templ roleGuide() {
 				<p class="text-xs text-fg-secondary mt-0.5">Also writes and edits pages.</p>
 			</div>
 			<div class="rounded-md border border-edge bg-surface-alt/50 p-3">
-				<p class="text-sm font-semibold text-fg">Co-DM</p>
-				<p class="text-xs text-fg-secondary mt-0.5">A Scribe who also sees and writes DM-only content. Cannot delete the campaign, remove people or take it over.</p>
+				<p class="text-sm font-semibold text-fg">Co-{ layouts.GMTerm(ctx) }</p>
+				<p class="text-xs text-fg-secondary mt-0.5">A Scribe who also sees and writes { layouts.GMTerm(ctx) }-only content. Cannot delete the campaign, remove people or take it over.</p>
 			</div>
 		</div>
 	</section>
@@ -242,7 +242,7 @@ templ MemberRow(cc *CampaignContext, member *CampaignMember, csrfToken string) {
 							<select name="role" class="input text-xs py-1" aria-label={ "Role for " + member.DisplayName }>
 								<option value={ AccessPlayer } selected?={ MemberAccess(cc.Campaign, *member) == AccessPlayer }>Player</option>
 								<option value={ AccessScribe } selected?={ MemberAccess(cc.Campaign, *member) == AccessScribe }>Scribe</option>
-								<option value={ AccessCoDM } selected?={ MemberAccess(cc.Campaign, *member) == AccessCoDM }>Co-DM</option>
+								<option value={ AccessCoDM } selected?={ MemberAccess(cc.Campaign, *member) == AccessCoDM }>Co-{ layouts.GMTerm(ctx) }</option>
 							</select>
 							<button type="submit" class="text-xs text-accent hover:text-accent-hover">Save</button>
 						</form>

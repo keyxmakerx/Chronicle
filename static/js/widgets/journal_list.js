@@ -14,7 +14,10 @@
 
   var VIS_LABELS = {
     private: 'Private',
-    gm: 'GM only',
+    get gm() {
+      var C = root.Chronicle;
+      return (C && C.gmTerm ? C.gmTerm() : 'GM') + ' only';
+    },
     party: 'Shared with party',
     custom: 'Specific people'
   };

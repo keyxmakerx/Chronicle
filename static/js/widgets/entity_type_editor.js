@@ -276,7 +276,7 @@
       function dateSettings(field) {
         var box = document.createElement('div');
         box.className = 'ml-4 p-3 rounded border border-gray-200 dark:border-gray-700 space-y-2 text-xs';
-        box.appendChild(check('Only the Director sees this date', !!field.gm_only, function (v) { field.gm_only = v; }));
+        box.appendChild(check('Only the ' + Chronicle.gmTerm() + ' sees this date', !!field.gm_only, function (v) { field.gm_only = v; }));
         box.appendChild(check('Say how long ago it was', !!field.date_ago, function (v) { field.date_ago = v; }));
         var head = document.createElement('div');
         head.className = 'font-semibold text-gray-700 dark:text-gray-300 pt-1';
@@ -324,7 +324,7 @@
           more.textContent = 'Add another length';
           more.addEventListener('click', function () { cd.lengths.push({ name: '', days: cd.lengths[0].days || 3 }); renderFields(); });
           cdBox.appendChild(more);
-          cdBox.appendChild(check('Only the Director sees the countdown', !!cd.gm_only, function (v) { cd.gm_only = v; }));
+          cdBox.appendChild(check('Only the ' + Chronicle.gmTerm() + ' sees the countdown', !!cd.gm_only, function (v) { cd.gm_only = v; }));
           box.appendChild(cdBox);
         });
         var add = document.createElement('button');

@@ -6,7 +6,10 @@
 // Go so it still works after the fragment is swapped in.
 package armory
 
-import "fmt"
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
 
 // MoveDialog asks where a holding should go and how much of it. The line under
 // the choices says plainly whether the move happens now or waits for the GM,
@@ -100,7 +103,7 @@ templ MoveDialog(v *MoveDialogView, csrfToken string) {
 					if v.Immediate {
 						<span>Downtime is open, so this happens now.</span>
 					} else {
-						<span>Not in downtime. Your GM has to approve this; the item stays with you until then.</span>
+						<span>Not in downtime. Your { layouts.GMTerm(ctx) } has to approve this; the item stays with you until then.</span>
 					}
 				</div>
 				<div class="ag-foot">

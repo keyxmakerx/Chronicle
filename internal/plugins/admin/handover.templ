@@ -45,7 +45,7 @@ templ AdminHandoverPage(d HandoverPageData) {
 				<form
 					class="card p-6 space-y-5"
 					hx-post={ fmt.Sprintf("/admin/campaigns/%s/hand-over", d.Campaign.ID) }
-					hx-confirm={ fmt.Sprintf("Make the chosen member owner of %s? %s will stay on as Co-DM.", d.Campaign.Name, d.Status.OwnerName) }
+					hx-confirm={ fmt.Sprintf("Make the chosen member owner of %s? %s will stay on as Co-%s.", d.Campaign.Name, d.Status.OwnerName, layouts.GMTerm(ctx)) }
 				>
 					<input type="hidden" name="csrf_token" value={ d.CSRFToken }/>
 					<fieldset class="space-y-2">
@@ -59,7 +59,7 @@ templ AdminHandoverPage(d HandoverPageData) {
 						}
 					</fieldset>
 					<ul class="text-sm text-fg-secondary space-y-1 list-disc pl-5">
-						<li>{ d.Status.OwnerName } stays in the campaign as Co-DM and keeps everything they made.</li>
+						<li>{ d.Status.OwnerName } stays in the campaign as Co-{ layouts.GMTerm(ctx) } and keeps everything they made.</li>
 						<li>They get an email saying who the new owner is, if email is set up.</li>
 						<li>The hand-over is recorded in Admin › Activity.</li>
 					</ul>

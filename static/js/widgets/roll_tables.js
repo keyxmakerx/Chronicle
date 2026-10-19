@@ -356,7 +356,7 @@
         var ws = weightChoices(e.weight), sel = ws.indexOf(e.weight) >= 0 ? e.weight : Math.min(3, Math.max(1, Math.round(e.weight)));
         return '<div class="rt-ent" data-e="' + i + '"><select aria-label="How often" data-w>' + ws.map(function (w) {
           return '<option value="' + w + '"' + (w === sel ? ' selected' : '') + '>' + weightLabel(w) + '</option>';
-        }).join('') + '</select><div><input data-n maxlength="200" aria-label="Name" placeholder="What happens, in a few words" value="' + esc(e.name) + '"><textarea data-b maxlength="1000" rows="1" aria-label="More detail" placeholder="One line a DM can use as it stands">' + esc(e.brief) + '</textarea></div>' +
+        }).join('') + '</select><div><input data-n maxlength="200" aria-label="Name" placeholder="What happens, in a few words" value="' + esc(e.name) + '"><textarea data-b maxlength="1000" rows="1" aria-label="More detail" placeholder="One line a ' + (window.Chronicle && Chronicle.gmTerm ? Chronicle.gmTerm() : 'GM') + ' can use as it stands">' + esc(e.brief) + '</textarea></div>' +
           '<button type="button" class="rt-btn" data-del title="Remove this line" aria-label="Remove this line"><i class="fa-solid fa-trash-can"></i></button></div>';
       }).join('') + '</div>';
       h += '<div class="rt-foot">' + (mineT ? '<button type="button" class="rt-main" data-save' + (S.saving ? ' disabled' : '') + '><i class="fa-solid fa-check" aria-hidden="true"></i>' + (S.saving ? 'Saving…' : 'Save table') + '</button><button type="button" class="rt-sec" data-add><i class="fa-solid fa-plus" aria-hidden="true"></i>Add a line</button>' : '') +
@@ -420,7 +420,7 @@
         closeEditor();
       }).catch(function (e) {
         S.saving = false; drawEditor(true);
-        notify(/403|forbidden|DM access/i.test(e.message) ? 'Only the campaign owner or members with DM access can change tables.' : e.message, 'error');
+        notify(/403|forbidden|DM access/i.test(e.message) ? 'Only the campaign owner or members with ' + (window.Chronicle && Chronicle.gmTerm ? Chronicle.gmTerm() : 'GM') + ' access can change tables.' : e.message, 'error');
       });
     }
 

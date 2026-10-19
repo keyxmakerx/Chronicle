@@ -709,7 +709,10 @@
       // m.isCoDm carries the co-DM grant separately, since a co-DM's role
       // label alone doesn't say they have full per-member detail access.
       var role = m.role || '';
-      if (m.isCoDm) role = role ? role + ' · co-DM' : 'co-DM';
+      if (m.isCoDm) {
+        var coGm = 'co-' + (window.Chronicle && Chronicle.gmTerm ? Chronicle.gmTerm() : 'GM');
+        role = role ? role + ' · ' + coGm : coGm;
+      }
       var name = el('span'); name.textContent = m.name + (role ? ' (' + role + ')' : ''); b.appendChild(name);
       // "Not answered" is a DIFFERENT fact from "no hours painted", and the
       // chip is where the Director looks. Without this badge an empty lane

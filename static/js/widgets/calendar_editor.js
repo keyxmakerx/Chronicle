@@ -1123,7 +1123,7 @@
       (view.canAuthorDmOnly ? '<div id="cal5-nkf-mount"></div>' : '') +
       (view.canAuthorDmOnly ? '<div class="vis" role="group" aria-label="Visibility">' +
         '<button type="button" data-vis="everyone" aria-pressed="' + (!existing || existing.visibility !== 'dm_only') + '">Everyone</button>' +
-        '<button type="button" data-vis="dm_only" aria-pressed="' + (!!existing && existing.visibility === 'dm_only') + '">Director only</button></div>' : '') +
+        '<button type="button" data-vis="dm_only" aria-pressed="' + (!!existing && existing.visibility === 'dm_only') + '">' + Chronicle.gmTerm() + ' only</button></div>' : '') +
       '<div class="efoot"><button type="button" class="btn quiet" data-cancel>Cancel</button>' +
         '<span class="sp"></span><button type="submit" class="btn primary">' + (isNew ? 'Create' : 'Save') + '</button></div>';
 
@@ -1565,7 +1565,7 @@
       '</section>' +
       '<section class="esec"><h4>Players</h4>' +
         '<div class="swrow"><span>Hide from players until it begins<small>Until then players see the era before it carry on, and nothing dated inside it.</small></span>' + tog('hidden', era && era.hidden_until_begins, 'Hide from players until it begins') + '</div>' +
-        '<label class="fld">Director’s note<textarea name="dm_note" rows="2" placeholder="Only you and co-Directors ever see this">' + esc(era && era.dm_note ? era.dm_note : '') + '</textarea></label>' +
+        '<label class="fld">' + Chronicle.gmTerm() + '’s note<textarea name="dm_note" rows="2" placeholder="Only you and co-' + Chronicle.gmTerm() + 's ever see this">' + esc(era && era.dm_note ? era.dm_note : '') + '</textarea></label>' +
       '</section>' +
       '</form>';
   };

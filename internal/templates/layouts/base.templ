@@ -8,7 +8,7 @@ package layouts
 // The contents parameter receives the page-specific body content.
 templ Base(title string) {
 	<!DOCTYPE html>
-	<html lang="en" class="h-full" { AppearanceAttrs(ctx)... } data-view-as-player?={ IsViewingAsPlayer(ctx) }>
+	<html lang="en" class="h-full" { AppearanceAttrs(ctx)... } data-view-as-player?={ IsViewingAsPlayer(ctx) } data-gm-term={ GMTerm(ctx) }>
 	<head>
 		<meta charset="UTF-8"/>
 		<meta name="viewport" content="width=device-width, initial-scale=1.0"/>

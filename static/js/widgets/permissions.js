@@ -63,7 +63,7 @@ Chronicle.register('permissions', {
 
     function modeLabel(mode) {
       if (mode === 'everyone') return 'Everyone';
-      if (mode === 'dm_only') return 'DM Only';
+      if (mode === 'dm_only') return Chronicle.gmTerm() + ' Only';
       if (mode === 'custom') return 'Custom';
       return 'Permissions';
     }
@@ -208,7 +208,7 @@ Chronicle.register('permissions', {
         icon.style.color = mode === 'custom' ? 'var(--color-accent)' : 'var(--color-text-muted)';
       }
       var label = trigger.querySelector('[data-perm-corner-label]');
-      if (label) label.textContent = mode === 'everyone' ? 'Everyone' : mode === 'dm_only' ? 'DM team only' : 'Custom';
+      if (label) label.textContent = mode === 'everyone' ? 'Everyone' : mode === 'dm_only' ? Chronicle.gmTerm() + ' team only' : 'Custom';
       trigger.setAttribute('data-visibility-badge', mode);
       // Tags only widen a page that is otherwise hidden.
       var dot = trigger.querySelector('[data-perm-corner-dot]');
@@ -222,7 +222,7 @@ Chronicle.register('permissions', {
 
     function cornerTip(mode) {
       var base = mode === 'everyone' ? 'Visible to everyone in this campaign'
-        : mode === 'dm_only' ? 'Visible only to the owner and members given DM access'
+        : mode === 'dm_only' ? 'Visible only to the owner and members given ' + Chronicle.gmTerm() + ' access'
         : 'Custom permissions — specific people';
       if (mode !== 'everyone' && state.tagGrants && state.tagGrants.length > 0) {
         base += ' · Also visible via tags';
@@ -322,7 +322,7 @@ Chronicle.register('permissions', {
         var badge = document.createElement('div');
         badge.className = 'perm-readonly-badge';
         var icon = mode === 'everyone' ? 'fa-globe' : mode === 'dm_only' ? 'fa-lock' : 'fa-shield-halved';
-        var label = mode === 'everyone' ? 'Visible to everyone' : mode === 'dm_only' ? 'Private (GM only)' : 'Custom permissions';
+        var label = mode === 'everyone' ? 'Visible to everyone' : mode === 'dm_only' ? 'Private (' + Chronicle.gmTerm() + ' only)' : 'Custom permissions';
         badge.innerHTML = '<i class="fa-solid ' + Chronicle.escapeHtml(icon) + ' text-xs"></i> ' + Chronicle.escapeHtml(label);
         bodyEl.appendChild(badge);
         return;
@@ -334,7 +334,7 @@ Chronicle.register('permissions', {
 
       var modes = [
         { value: 'everyone', icon: 'fa-globe', label: 'Everyone', desc: 'All campaign members can view; Scribes can edit.' },
-        { value: 'dm_only', icon: 'fa-lock', label: 'DM Only', desc: 'Only Scribes and the campaign owner can see this page.' },
+        { value: 'dm_only', icon: 'fa-lock', label: Chronicle.gmTerm() + ' Only', desc: 'Only Scribes and the campaign owner can see this page.' },
         { value: 'custom', icon: 'fa-shield-halved', label: 'Custom', desc: 'Choose exactly who can view or edit this page.' }
       ];
 
@@ -470,7 +470,7 @@ Chronicle.register('permissions', {
       } else if (mode === 'custom' && draftMode) {
         var draftNote = document.createElement('div');
         draftNote.className = 'perm-draft-note';
-        draftNote.textContent = 'Custom permissions are configured after the page is created. The page will be created as DM Only and you can choose grants from its profile.';
+        draftNote.textContent = 'Custom permissions are configured after the page is created. The page will be created as ' + Chronicle.gmTerm() + ' Only and you can choose grants from its profile.';
         bodyEl.appendChild(draftNote);
         // Map custom-in-draft to dm_only so created entities don't go public.
         state.isPrivate = true;

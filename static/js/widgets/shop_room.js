@@ -1550,7 +1550,7 @@
         // Outside downtime a player asks; the GM approves it on the Stashes page.
         var closed = !buy.canBuyNow, label = why || (busy ? (closed ? 'Asking…' : 'Buying…') : closed ? 'Ask to buy' : 'Buy');
         h += '<button type="button" class="shr-buy" data-buy="1"' + (!sm.count || why || busy ? ' disabled' : '') + '>' + label + '</button>';
-        var n = note || (closed ? 'It’s not downtime, so the GM approves this on the Stashes page.' : '');
+        var n = note || (closed ? 'It’s not downtime, so the ' + (window.Chronicle && Chronicle.gmTerm ? Chronicle.gmTerm() : 'GM') + ' approves this on the Stashes page.' : '');
         if (n) h += '<span class="shr-note">' + esc(n) + '</span>';
         bk.innerHTML = h;
       }
@@ -1578,7 +1578,7 @@
             if (!r.ok) throw new Error((j && (j.message || j.error)) || 'That didn’t go through. Try again.');
             var who = buyer(), name = who ? who.name : 'They';
             var what = sm.count + (sm.count === 1 ? ' item' : ' items');
-            if (j.status === 'requested') note = 'Asked the GM for ' + what + '.';
+            if (j.status === 'requested') note = 'Asked the ' + (window.Chronicle && Chronicle.gmTerm ? Chronicle.gmTerm() : 'GM') + ' for ' + what + '.';
             else if (sm.kind === 'wealth') note = 'Bought ' + what + '. Wealth stays at ' + j.moneyLeft + '.';
             else {
               // A gp sheet is charged in gp whatever the shop's coin, so its balance reads in gp.

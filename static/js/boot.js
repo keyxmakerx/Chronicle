@@ -746,6 +746,12 @@
    */
   Chronicle.escapeHtml = Chronicle.escapeAttr;
 
+  // The campaign's word for its game master ("Director"): server-checked
+  // letters, safe in HTML, plural with a plain "s".
+  Chronicle.gmTerm = function () {
+    return document.documentElement.getAttribute('data-gm-term') || 'GM';
+  };
+
   /**
    * Read the CSRF token from the CSRF cookie.
    * Checks __Host-chronicle_csrf first (HTTPS), then chronicle_csrf (HTTP dev).

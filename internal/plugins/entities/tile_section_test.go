@@ -200,7 +200,7 @@ func TestEntityTileSection_Render(t *testing.T) {
 			name:  "a DM-only tile shows for the owner with its badge",
 			tiles: []tilegrid.Tile{{ID: "t1", Type: "probe", Size: "1x1", Config: map[string]any{"visibility": "dm_only"}}},
 			role:  campaigns.RoleOwner,
-			want:  []string{`data-tile-id="t1"`, "DM Only", `data-probe="t1"`},
+			want:  []string{`data-tile-id="t1"`, "GM Only", `data-probe="t1"`},
 		},
 		{
 			name: "an extension widget tile takes the size its manifest declares",

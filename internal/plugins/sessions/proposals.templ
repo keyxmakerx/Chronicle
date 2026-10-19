@@ -126,7 +126,7 @@ templ ProposalDetailFragment(cc *campaigns.CampaignContext, view *ProposalView, 
 			}
 		</div>
 		if view.IncludeDetail {
-			<p class="text-xs text-fg-muted mt-4"><i class="fa-solid fa-user-shield mr-1"></i>You can see who responded because you're the DM. Players see only the counts and their own choice.</p>
+			<p class="text-xs text-fg-muted mt-4"><i class="fa-solid fa-user-shield mr-1"></i>You can see who responded because you're the { layouts.GMTerm(ctx) }. Players see only the counts and their own choice.</p>
 		}
 	</div>
 }

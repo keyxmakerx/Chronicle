@@ -19,6 +19,8 @@
  */
 (function () {
   'use strict';
+  function gmTerm() { return (window.Chronicle && Chronicle.gmTerm) ? Chronicle.gmTerm() : 'GM'; }
+
 
   var COL_PRESETS = [[12], [8, 4], [4, 8], [6, 6], [4, 4, 4]];
   var PRESET_NAMES = { '12': 'One column', '8,4': 'Wide and narrow', '4,8': 'Narrow and wide', '6,6': 'Two even', '4,4,4': 'Three even' };
@@ -190,7 +192,7 @@
     text_block: function () { return '<p class="cpe-ex-p">Your own text goes here, the same on every page.</p>'; }
   };
   // The names the save bar gives each home, as the Home pages tabs do.
-  var HOME_NAMES = { default: 'Everyone', player: 'Players', scribe: 'Scribes', director: 'The Director', guest: 'Guests', dm: 'DM dashboard' };
+  var HOME_NAMES = { default: 'Everyone', player: 'Players', scribe: 'Scribes', get director() { return 'The ' + gmTerm(); }, guest: 'Guests', get dm() { return gmTerm() + ' dashboard'; } };
   // The examples that are fact panels, which keep their edge in Annals.
   var EX_FACTS = ['attributes', 'details'];
   // exampleNode builds the example for a widget at a tile's size (columns
@@ -613,7 +615,7 @@
     }
     function marks(item, m, extra) {
       var sel = UI.sel && UI.sel.id === item.id;
-      return (isDm(item) ? '<span class="cpe-dm">' + ic('fa-lock') + ' DM team only</span>' : '') +
+      return (isDm(item) ? '<span class="cpe-dm">' + ic('fa-lock') + ' ' + gmTerm() + ' team only</span>' : '') +
         '<span class="cpe-badge' + (sel ? ' on' : '') + '">' + esc(m.name) + (extra || '') + '</span>';
     }
     function blockHTML(b) {
@@ -645,7 +647,7 @@
         return '<div class="cpe-tile ghosted' + (sel ? ' sel' : '') + '" data-id="' + esc(t.id) + '" data-kind="tile" tabindex="0" style="grid-column:span ' + w + '">' + ic('fa-eye-slash') + ' ' + esc(m.name) + ': hidden</div>';
       }
       return '<div class="cpe-tile' + (sel ? ' sel' : '') + '" data-id="' + esc(t.id) + '" data-kind="tile" tabindex="0" aria-label="' + esc(m.name + ', ' + s.w + ' by ' + s.h) + '" style="grid-column:span ' + w + ';grid-row:span ' + s.h + '">' +
-        (isDm(t) ? '<span class="cpe-dm">' + ic('fa-lock') + ' DM team only</span>' : '') + tileBar(t, m, s) + (m.missing ? '<div class="cpe-ph-card is-old">' + ic(m.icon) + '<span><b>' + esc(m.name) + '</b><span>' + esc(m.desc) + '</span></span></div>' : live(t, m)) +
+        (isDm(t) ? '<span class="cpe-dm">' + ic('fa-lock') + ' ' + gmTerm() + ' team only</span>' : '') + tileBar(t, m, s) + (m.missing ? '<div class="cpe-ph-card is-old">' + ic(m.icon) + '<span><b>' + esc(m.name) + '</b><span>' + esc(m.desc) + '</span></span></div>' : live(t, m)) +
         (m.sizes.length > 1 ? '<span class="cpe-rsz" data-rsz="' + esc(t.id) + '" title="Drag to resize"></span>' : '') + '</div>';
     }
     // addTileHTML is the last tile of a section. It opens no picker of its
@@ -732,7 +734,7 @@
       var h = '<div class="cpe-pagehead">' + ic('fa-file-lines') + '<span>';
       if (PV.failed) h += 'The page couldn’t be drawn here, so widgets show their names.';
       else if (!PV.loaded) h += 'Loading a page to show the layout with…';
-      else if (HOME) h += 'Your ' + (KEY === 'dm' ? 'DM dashboard' : 'campaign home') + ' as it is drawn, with your own pages';
+      else if (HOME) h += 'Your ' + (KEY === 'dm' ? gmTerm() + ' dashboard' : 'campaign home') + ' as it is drawn, with your own pages';
       else if (CATHOME) h += 'The ' + esc(S.plural || 'category') + ' home as it is drawn, with your own pages';
       else if (!PV.entityId) h += 'No ' + esc((S.plural || 'pages').toLowerCase()) + ' yet, so widgets show example content. Your pages will fill them with their own.';
       else h += 'Shown with ' + esc(pageName()) + ', one of your ' + esc((S.plural || 'pages').toLowerCase());
@@ -824,8 +826,8 @@
       }
       h += '<div class="cpe-grp"><span class="cpe-lab">Who sees it</span><div class="cpe-seg">' +
         '<button type="button" data-act="vis" data-v="" aria-pressed="' + !isDm(it) + '">' + ic('fa-users') + ' Everyone</button>' +
-        '<button type="button" data-act="vis" data-v="dm_only" aria-pressed="' + isDm(it) + '">' + ic('fa-lock') + ' DM team only</button></div>' +
-        '<span class="cpe-hint">' + (ANYHOME ? 'This sets it on this home.' : 'This sets it for every page in ' + esc(S.plural || 'this category') + '.') + ' The DM team is you and the members you gave DM access.</span></div>';
+        '<button type="button" data-act="vis" data-v="dm_only" aria-pressed="' + isDm(it) + '">' + ic('fa-lock') + ' ' + gmTerm() + ' team only</button></div>' +
+        '<span class="cpe-hint">' + (ANYHOME ? 'This sets it on this home.' : 'This sets it for every page in ' + esc(S.plural || 'this category') + '.') + ' The ' + gmTerm() + ' team is you and the members you gave ' + gmTerm() + ' access.</span></div>';
       if (f.kind === 'tile') {
         h += '<div class="cpe-grp"><span class="cpe-lab">Size</span><div class="cpe-sizes">' + m.sizes.map(function (s) {
           return '<button type="button" data-act="size" data-v="' + esc(s) + '" aria-pressed="' + (it.size === s) + '">' + sizePic(s) + esc(s.replace('x', ' × ')) + '</button>';

@@ -1,6 +1,9 @@
 package entities
 
-import "fmt"
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
 
 // castPlayersBox is the staff's Players box: each player with the characters
 // they play, and the Free to pick strip a character-less player chooses from.
@@ -136,7 +139,7 @@ templ castPickBox(campaignID, csrf string, pickable []Entity) {
 		<div class="ag-box" hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrf) }>
 			<div class="ag-head"><h4>Pick your character</h4></div>
 			<div class="ag-body">
-				<p class="text-sm text-fg-secondary">These characters are free to play. Pick one to make it yours. Your GM can change it later.</p>
+				<p class="text-sm text-fg-secondary">These characters are free to play. Pick one to make it yours. Your { layouts.GMTerm(ctx) } can change it later.</p>
 				<div class="ag-list ag-owners">
 					for _, ch := range pickable {
 						<div class="ag-row ag-own">
@@ -154,7 +157,7 @@ templ castPickBox(campaignID, csrf string, pickable []Entity) {
 				</div>
 				for _, ch := range pickable {
 					<div class="ag-confirm-row" data-for={ ch.ID } hidden>
-						<span>Make { ch.Name } yours? Only your GM can undo this.</span>
+						<span>Make { ch.Name } yours? Only your { layouts.GMTerm(ctx) } can undo this.</span>
 						<span class="ag-sp"></span>
 						<button type="button" class="btn-secondary btn-sm" onclick={ castCancelClaimCall }>Cancel</button>
 						<button

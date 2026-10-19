@@ -186,7 +186,7 @@ Chronicle.register('relations', {
       if (rel.dmOnly && config.isDm) {
         var dmBadge = document.createElement('span');
         dmBadge.className = 'rel-dm-badge cb-dm';
-        dmBadge.innerHTML = '<i class="fa-solid fa-lock" style="font-size:8px"></i> DM';
+        dmBadge.innerHTML = '<i class="fa-solid fa-lock" style="font-size:8px"></i> ' + (window.Chronicle && Chronicle.gmTerm ? Chronicle.gmTerm() : 'GM');
         nameWrap.appendChild(dmBadge);
       }
       item.appendChild(nameWrap);
@@ -359,7 +359,7 @@ Chronicle.register('relations', {
         });
         dmToggle.appendChild(dmCheckbox);
         var dmLabel = document.createElement('span');
-        dmLabel.innerHTML = '<i class="fa-solid fa-lock" style="font-size:10px"></i> DM-only (hidden from players)';
+        dmLabel.innerHTML = '<i class="fa-solid fa-lock" style="font-size:10px"></i> ' + (window.Chronicle && Chronicle.gmTerm ? Chronicle.gmTerm() : 'GM') + '-only (hidden from players)';
         dmToggle.appendChild(dmLabel);
         modal.appendChild(dmToggle);
       }

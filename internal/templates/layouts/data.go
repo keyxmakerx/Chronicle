@@ -34,6 +34,7 @@ const (
 	keyEntityCounts        ctxKey = "layout_entity_counts"
 	keyEnabledAddons       ctxKey = "layout_enabled_addons"
 	keyEnabledSystem       ctxKey = "layout_enabled_system"
+	keyGMTerm              ctxKey = "layout_gm_term"
 	keyViewingAsPlayer     ctxKey = "layout_viewing_as_player"
 	keyIsOwner             ctxKey = "layout_is_owner"
 	keyIsDmGranted         ctxKey = "layout_is_dm_granted"
@@ -404,6 +405,25 @@ func SetEnabledSystem(ctx context.Context, sys EnabledSystem) context.Context {
 func GetEnabledSystem(ctx context.Context) (EnabledSystem, bool) {
 	sys, _ := ctx.Value(keyEnabledSystem).(EnabledSystem)
 	return sys, sys.Slug != ""
+}
+
+// DefaultGMTerm is the game master's name where the campaign's system gives
+// none.
+const DefaultGMTerm = "GM"
+
+// SetGMTerm stores the campaign system's name for the game master.
+func SetGMTerm(ctx context.Context, term string) context.Context {
+	return context.WithValue(ctx, keyGMTerm, term)
+}
+
+// GMTerm is what this campaign calls its game master ("Director" in Draw
+// Steel), so every page names the role in its game's word. It is a
+// capitalised noun that takes a plain "s" for plurals.
+func GMTerm(ctx context.Context) string {
+	if t, _ := ctx.Value(keyGMTerm).(string); t != "" {
+		return t
+	}
+	return DefaultGMTerm
 }
 
 // drillSearchURL builds the search endpoint URL for a drill panel.

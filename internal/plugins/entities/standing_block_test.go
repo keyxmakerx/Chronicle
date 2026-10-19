@@ -79,7 +79,7 @@ func TestBlockStanding_AmberEdgeAndDMTagOnlyWhenPlayersCannotSee(t *testing.T) {
 			if has := strings.Contains(row[1], "sg-dm"); has != tt.wantEdge {
 				t.Errorf("row class %q has sg-dm = %v, want %v", row[1], has, tt.wantEdge)
 			}
-			tag := regexp.MustCompile(`data-sg-dmtag([^>]*)>DM`).FindStringSubmatch(html)
+			tag := regexp.MustCompile(`data-sg-dmtag([^>]*)>GM`).FindStringSubmatch(html)
 			if tag == nil {
 				t.Fatal("no DM tag element")
 			}

@@ -308,7 +308,7 @@ templ RecentEntityCard(cc *CampaignContext, re *RecentEntity) {
 					{ re.Name }
 				</h3>
 				if re.IsPrivate && cc.MemberRole >= RoleScribe {
-					<span class="cb-dm text-fg-muted shrink-0" title="Private (DM only)">
+					<span class="cb-dm text-fg-muted shrink-0" title={ "Private (" + layouts.GMTerm(ctx) + " only)" }>
 						<i class="fa-solid fa-lock text-[9px]"></i>
 					</span>
 				}

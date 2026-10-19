@@ -8,6 +8,7 @@
 package ai_workspace
 
 import (
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"fmt"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/prompt"
@@ -291,14 +292,14 @@ templ promptBuilderBody(cc *campaigns.CampaignContext) {
 						<input type="radio" name="privacy" value="safe" x-model="privacy" class="mt-0.5 border-edge text-accent"/>
 						<span>
 							<strong>Safe</strong> (recommended)
-							<span class="block text-xs text-fg-muted">Excludes DM-only content, private entities, and GM-only session notes.</span>
+							<span class="block text-xs text-fg-muted">Excludes { layouts.GMTerm(ctx) }-only content, private entities, and { layouts.GMTerm(ctx) }-only session notes.</span>
 						</span>
 					</label>
 					<label class="flex items-start gap-2 cursor-pointer">
 						<input type="radio" name="privacy" value="permitted" x-model="privacy" class="mt-0.5 border-edge text-accent"/>
 						<span>
 							<strong>Permitted</strong>
-							<span class="block text-xs text-fg-muted">Includes everything you can see as Owner. GM-only content included if you opt in below.</span>
+							<span class="block text-xs text-fg-muted">Includes everything you can see as Owner. { layouts.GMTerm(ctx) }-only content included if you opt in below.</span>
 						</span>
 					</label>
 					<label class="flex items-start gap-2 cursor-pointer">
@@ -312,7 +313,7 @@ templ promptBuilderBody(cc *campaigns.CampaignContext) {
 				<label x-show="contentMode !== 'house-rules' && contentMode !== 'calendar'" class="flex items-center gap-2 cursor-pointer text-sm mt-3">
 					<input type="checkbox" name="gm_notes" value="on" x-model="gmNotes" class="rounded border-edge text-accent"/>
 					<span>
-						Include session GM notes
+						Include session { layouts.GMTerm(ctx) } notes
 						<span class="block text-xs text-fg-muted">Only applies in Permitted or Everything mode.</span>
 					</span>
 				</label>
@@ -409,14 +410,14 @@ templ aiExportBody(cc *campaigns.CampaignContext) {
 						<input type="radio" name="privacy" value="safe" checked class="mt-0.5 border-edge text-accent"/>
 						<span>
 							<strong>Safe</strong> (recommended)
-							<span class="block text-xs text-fg-muted">Excludes DM-only content, private entities, and GM-only session notes. Best for sharing with an AI you don't fully trust.</span>
+							<span class="block text-xs text-fg-muted">Excludes { layouts.GMTerm(ctx) }-only content, private entities, and { layouts.GMTerm(ctx) }-only session notes. Best for sharing with an AI you don't fully trust.</span>
 						</span>
 					</label>
 					<label class="flex items-start gap-2 cursor-pointer">
 						<input type="radio" name="privacy" value="permitted" class="mt-0.5 border-edge text-accent"/>
 						<span>
 							<strong>Permitted</strong>
-							<span class="block text-xs text-fg-muted">Includes everything you can see as Owner. GM-only content is included if you opt in below.</span>
+							<span class="block text-xs text-fg-muted">Includes everything you can see as Owner. { layouts.GMTerm(ctx) }-only content is included if you opt in below.</span>
 						</span>
 					</label>
 					<label class="flex items-start gap-2 cursor-pointer">
@@ -433,7 +434,7 @@ templ aiExportBody(cc *campaigns.CampaignContext) {
 				<label class="flex items-center gap-2 cursor-pointer text-sm">
 					<input type="checkbox" name="gm_notes" value="on" class="rounded border-edge text-accent"/>
 					<span>
-						Include session GM notes
+						Include session { layouts.GMTerm(ctx) } notes
 						<span class="block text-xs text-fg-muted">Only applies in Permitted or Everything mode. Session recaps are always included regardless.</span>
 					</span>
 				</label>

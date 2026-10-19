@@ -242,7 +242,7 @@ templ bulkDefaultsBar(d ImportReviewData) {
 				<select name="bulk_default_visibility" class="input text-xs w-full" aria-label="Default visibility for new entities">
 					<option value="" selected>Campaign default</option>
 					<option value="private">Private</option>
-					<option value="dm_only">DM-only</option>
+					<option value="dm_only">{ layouts.GMTerm(ctx) }-only</option>
 					<option value="public">Public</option>
 				</select>
 			</label>
@@ -415,7 +415,7 @@ templ reviewRowDeleteConfirm(idx int, name, era string) {
 // `required`: leaving it unticked is a valid choice (the row is skipped), and
 // the committer re-checks the tick against the live page either way.
 templ reviewRowGMOnlyConfirm(idx int, name string, gm importer.GMOnlyParts) {
-	<div class="air-line" role="group" aria-label={ fmt.Sprintf("GM-only parts of %s", name) }>
+	<div class="air-line" role="group" aria-label={ fmt.Sprintf("%s-only parts of %s", layouts.GMTerm(ctx), name) }>
 		<p>
 			<i class="fa-solid fa-eye-slash mr-1" aria-hidden="true"></i>
 			{ gm.Warning() }
@@ -430,7 +430,7 @@ templ reviewRowGMOnlyConfirm(idx int, name string, gm importer.GMOnlyParts) {
 			<span>Replace the text anyway</span>
 		</label>
 		<p class="mt-1">
-			Any GM-only words the AI copied into its text will be visible to players.
+			Any { layouts.GMTerm(ctx) }-only words the AI copied into its text will be visible to players.
 		</p>
 	</div>
 }
@@ -561,7 +561,7 @@ templ reviewRowFields(idx int, page importer.ParsedPage, cls importer.Classifica
 			>
 				@visibilityOption(idx, "", "Campaign default", page.FrontMatter.Visibility)
 				@visibilityOption(idx, "private", "Private", page.FrontMatter.Visibility)
-				@visibilityOption(idx, "dm_only", "DM-only", page.FrontMatter.Visibility)
+				@visibilityOption(idx, "dm_only", layouts.GMTerm(ctx) + "-only", page.FrontMatter.Visibility)
 				@visibilityOption(idx, "public", "Public", page.FrontMatter.Visibility)
 			</select>
 		</label>

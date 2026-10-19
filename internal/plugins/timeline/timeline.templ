@@ -70,7 +70,7 @@ templ timelinePreviewFragment(campaignID string, timelines []Timeline) {
 					</div>
 				</div>
 				if t.IsDMOnly() {
-					<span class="cb-dm text-xs text-warn" title="Only the Director sees this"><i class="fa-solid fa-eye-slash" aria-hidden="true"></i><span class="sr-only">Only the Director sees this</span></span>
+					<span class="cb-dm text-xs text-warn" title={ "Only the " + layouts.GMTerm(ctx) + " sees this" }><i class="fa-solid fa-eye-slash" aria-hidden="true"></i><span class="sr-only">Only the { layouts.GMTerm(ctx) } sees this</span></span>
 				}
 			</a>
 		}
@@ -168,7 +168,7 @@ templ timelineCard(campaignID string, t Timeline) {
 		<div class="flex items-center gap-3 mt-3 text-xs text-fg-muted">
 			<span><i class="fa-solid fa-calendar-days mr-1"></i>{ fmt.Sprintf("%d events", t.EventCount) }</span>
 			if t.IsDMOnly() {
-				<span class="cb-dm text-warn"><i class="fa-solid fa-eye-slash mr-1"></i>DM Only</span>
+				<span class="cb-dm text-warn"><i class="fa-solid fa-eye-slash mr-1"></i>{ layouts.GMTerm(ctx) } Only</span>
 			}
 		</div>
 	</a>
@@ -222,7 +222,7 @@ templ createTimelineModal(data TimelineListData) {
 						<label class="block text-xs font-medium text-fg-body mb-1">Visibility</label>
 						<select name="visibility" class="input w-full">
 							<option value="everyone">Everyone</option>
-							<option value="dm_only">DM Only</option>
+							<option value="dm_only">{ layouts.GMTerm(ctx) } Only</option>
 						</select>
 					</div>
 				</div>
@@ -349,7 +349,7 @@ templ timelineShowContent(cc *campaigns.CampaignContext, data TimelineViewData) 
 			if data.Timeline.IsDMOnly() {
 				<div class="cb-dm flex items-center gap-2 text-xs text-warn mt-3" data-dm-only>
 					<i class="fa-solid fa-eye-slash"></i>
-					<span>This timeline is only visible to the DM</span>
+					<span>This timeline is only visible to the { layouts.GMTerm(ctx) }</span>
 				</div>
 			}
 		</div>
@@ -471,7 +471,7 @@ templ visibilitySettingsInline(data TimelineViewData) {
 				<label class="block text-xs font-medium text-fg-body mb-1">Base Visibility</label>
 				<select class="input w-full text-sm" x-model="visibility" @change="saveTimeline()">
 					<option value="everyone">Everyone (all players can see)</option>
-					<option value="dm_only">DM Only (hidden from players)</option>
+					<option value="dm_only">{ layouts.GMTerm(ctx) } Only (hidden from players)</option>
 				</select>
 			</div>
 			<!-- Per-user restrictions -->
@@ -813,7 +813,7 @@ templ createStandaloneEventModal(data TimelineViewData) {
 						<label class="block text-xs font-medium text-fg-body mb-1">Visibility</label>
 						<select class="input w-full" x-model="visibility">
 							<option value="everyone">Everyone</option>
-							<option value="dm_only">DM Only</option>
+							<option value="dm_only">{ layouts.GMTerm(ctx) } Only</option>
 						</select>
 					</div>
 				</div>
@@ -1032,7 +1032,7 @@ templ editStandaloneEventModal(data TimelineViewData) {
 						<label class="block text-xs font-medium text-fg-body mb-1">Visibility</label>
 						<select class="input w-full" x-model="visibility">
 							<option value="everyone">Everyone</option>
-							<option value="dm_only">DM Only</option>
+							<option value="dm_only">{ layouts.GMTerm(ctx) } Only</option>
 						</select>
 					</div>
 				</div>
@@ -1163,7 +1163,7 @@ templ eventVisibilityModal(data TimelineViewData) {
 					<label class="block text-xs font-medium text-fg-body mb-1">Base Visibility</label>
 					<select class="input w-full text-sm" x-model="visibility">
 						<option value="everyone">Everyone</option>
-						<option value="dm_only">DM Only</option>
+						<option value="dm_only">{ layouts.GMTerm(ctx) } Only</option>
 					</select>
 				</div>
 				<div x-show="visibility === 'everyone'">
@@ -1425,7 +1425,7 @@ templ timelineEventCard(data TimelineViewData, el EventLink) {
 				}
 				if el.EffectiveVisibility() == "dm_only" {
 					<span class="cb-dm inline-flex items-center gap-1 text-xs text-warn">
-						<i class="fa-solid fa-eye-slash"></i> DM Only
+						<i class="fa-solid fa-eye-slash"></i> { layouts.GMTerm(ctx) } Only
 					</span>
 				}
 				if el.VisibilityRules != nil && *el.VisibilityRules != "" {

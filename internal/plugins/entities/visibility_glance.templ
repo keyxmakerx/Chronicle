@@ -4,6 +4,8 @@
 package entities
 
 import (
+	"context"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"fmt"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -61,12 +63,12 @@ templ visibilityGlance(cc *campaigns.CampaignContext, entity *Entity, ev *Effect
 
 // visibilityCornerLabel is the short word the page-corner control shows
 // beside its glyph.
-func visibilityCornerLabel(state string) string {
+func visibilityCornerLabel(ctx context.Context, state string) string {
 	switch state {
 	case VisStateCustom:
 		return "Custom"
 	case VisStateDMOnly:
-		return "DM team only"
+		return layouts.GMTerm(ctx) + " team only"
 	default:
 		return "Everyone"
 	}
@@ -141,7 +143,7 @@ templ visibilityChip(state string, canEdit, widened bool, describedBy string) {
 		if describedBy != "" {
 			aria-describedby={ describedBy }
 		} else {
-			aria-label={ "Who can see this page: " + visibilityCornerLabel(state) }
+			aria-label={ "Who can see this page: " + visibilityCornerLabel(ctx, state) }
 		}
 		if !canEdit {
 			aria-disabled="true"
@@ -156,7 +158,7 @@ templ visibilityChip(state string, canEdit, widened bool, describedBy string) {
 			}
 			data-perm-corner-icon
 		></i>
-		<span data-perm-corner-label>{ visibilityCornerLabel(state) }</span>
+		<span data-perm-corner-label>{ visibilityCornerLabel(ctx, state) }</span>
 		if canEdit {
 			<i class="fa-solid fa-chevron-down text-[9px] text-fg-muted" aria-hidden="true"></i>
 		}

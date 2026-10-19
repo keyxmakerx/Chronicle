@@ -118,6 +118,19 @@
         "$ref": "#/$defs/EntityPanelDef"
       },
       "description": "Extra panels one of this manifest's widgets adds to entity pages."
+    },
+    "terms": {
+      "type": "object",
+      "properties": {
+        "gm": {
+          "type": "string",
+          "maxLength": 24,
+          "pattern": "^\\p{L}[\\p{L} .-]*$",
+          "description": "What the game calls its game master, as a capitalised noun (\"Director\", \"DM\"). Chronicle names the role with it everywhere in the campaign and adds a plain \"s\" for plurals. Absent: \"GM\"."
+        }
+      },
+      "additionalProperties": false,
+      "description": "The game's words for Chronicle's roles."
     }
   },
   "additionalProperties": false,

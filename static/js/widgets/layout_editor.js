@@ -14,6 +14,8 @@
  */
 (function () {
   'use strict';
+  function gmTerm() { return (window.Chronicle && Chronicle.gmTerm) ? Chronicle.gmTerm() : 'GM'; }
+
 
   // ── Constants ──────────────────────────────────────────────────────
 
@@ -35,7 +37,7 @@
 
   var VISIBILITY_OPTIONS = [
     { value: 'everyone', label: 'Everyone', icon: 'fa-globe' },
-    { value: 'dm_only',  label: 'DM Only',  icon: 'fa-lock' },
+    { value: 'dm_only',  get label() { return gmTerm() + ' Only'; }, icon: 'fa-lock' },
   ];
 
   var TWO_COL_PRESETS = [
@@ -621,7 +623,7 @@
         var curVis = block.config.visibility || 'everyone';
         if (curVis === 'dm_only') {
           el.classList.add('border-amber-400', 'dark:border-amber-600');
-          html += '<i class="fa-solid fa-lock text-amber-500 text-[10px]" title="DM Only"></i>';
+          html += '<i class="fa-solid fa-lock text-amber-500 text-[10px]" title="' + gmTerm() + ' Only"></i>';
         }
         html += '<select class="le-block-vis opacity-0 group-hover/block:opacity-100 text-[10px] bg-transparent text-fg-muted border border-edge rounded px-1 py-0.5 cursor-pointer hover:text-fg transition-all" title="Visibility">';
         VISIBILITY_OPTIONS.forEach(function (v) {

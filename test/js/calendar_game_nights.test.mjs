@@ -31,6 +31,7 @@ function load(o = {}) {
     Intl: o.zone ? { DateTimeFormat: function (loc, opts) { return new RealDTF(loc, { timeZone: o.zone, ...(opts || {}) }); } } : Intl,
     window: { location: { search: o.search || '' } },
     Chronicle: {
+      gmTerm: () => 'GM',
       register(name, def) { defs[name] = def; },
       apiFetch(url, opts) {
         calls.push({ url, opts });

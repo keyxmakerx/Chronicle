@@ -1167,7 +1167,7 @@ Chronicle.register('notes', {
     function shareLabel(note) {
       switch (note.visibility) {
         case 'party': return 'Shared with party';
-        case 'gm': return 'Shared with the GM';
+        case 'gm': return 'Shared with the ' + Chronicle.gmTerm();
         case 'custom': return 'Shared with ' + (note.sharedWith || []).length + ' people';
         default: return 'Private';
       }
@@ -1202,7 +1202,7 @@ Chronicle.register('notes', {
         html += '<div class="note-share-opts">';
         html += '<label class="note-share-opt"><input type="radio" name="share-' + nid + '" value="private"' + (vis === 'private' ? ' checked' : '') + '> Private</label>';
         html += '<label class="note-share-opt"><input type="radio" name="share-' + nid + '" value="party"' + (vis === 'party' ? ' checked' : '') + '> Shared with party</label>';
-        html += '<label class="note-share-opt"><input type="radio" name="share-' + nid + '" value="gm"' + (vis === 'gm' ? ' checked' : '') + '> Shared with the GM</label>';
+        html += '<label class="note-share-opt"><input type="radio" name="share-' + nid + '" value="gm"' + (vis === 'gm' ? ' checked' : '') + '> Shared with the ' + Chronicle.gmTerm() + '</label>';
         html += '<label class="note-share-opt"><input type="radio" name="share-' + nid + '" value="specific"' + (vis === 'custom' ? ' checked' : '') + '> Specific people</label>';
         html += '</div>';
         html += '<div class="note-share-members' + (vis === 'custom' ? '' : ' note-share-hidden') + '" data-note-id="' + nid + '">';
