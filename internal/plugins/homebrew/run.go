@@ -91,6 +91,11 @@ type RunView struct {
 	// Steps are a held run's actions, so the drawer can say what Run will
 	// do and run the browser ones itself.
 	Steps []RunStep `json:"steps,omitempty"`
+	// RecipeID and Scope tell a held run's browser steps which recipe they
+	// belong to and the page the event happened on, so an owner's browser
+	// action can read its part and act on that page.
+	RecipeID string `json:"recipeId,omitempty"`
+	Scope    string `json:"scope,omitempty"`
 }
 
 // RunStep is one action of a held run.
@@ -342,6 +347,7 @@ func (s *service) view(r Run) RunView {
 	if r.Status != RunHeld {
 		return out
 	}
+	out.RecipeID, out.Scope = r.RecipeID, r.Scope
 	switch {
 	case r.Rule.When.Test != "":
 		out.Waits = "Only if: " + r.Rule.When.Test
