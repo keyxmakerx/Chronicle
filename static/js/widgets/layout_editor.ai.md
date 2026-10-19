@@ -69,7 +69,8 @@ layout_editor.js
 ├── Constants (COL_PRESETS, HEIGHT_PRESETS, VISIBILITY_OPTIONS, etc.)
 ├── Widget init (parse config, load block types, load layout)
 ├── Palette rendering (collapsible sections, addon badges)
-├── Canvas rendering (rows, columns, blocks)
+├── Canvas rendering (rows, columns, blocks; a `kind: "tiles"` row is a read-only
+│   note, kept untouched on save, with no column picker)
 ├── Block rendering (standard + container)
 ├── Container rendering (two_column, three_column, tabs, section)
 ├── Drag-and-drop engine (column drops + sub-zone drops)

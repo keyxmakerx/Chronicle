@@ -248,6 +248,10 @@ This repo is **not plain-`gofmt`-clean** (many committed files predate or differ
 | Foundry public rate-limit pin | `internal/wire/foundry_public_ratelimit_test.go` | FAIL | T-B1: two AST assertions pin the Foundry public manifest rate-limit wiring (`g.Use(rateLimit)` in `foundry_vtt.RegisterPublicRoutes`) and call site (`middleware.RateLimit(...)` in `app.RegisterRoutes`) |
 | Sanitize-on-write invariant | `internal/sanitize/invariant_test.go` + snapshot | FAIL (snapshot + invariant) | T-B1: every `internal/plugins/*/service.go` (+ widgets) declaring HTML-typed inputs must call `sanitize.HTML` |
 | CSS emissions | `tools/check-css-emissions.sh` + `tools/css-emissions.txt` | FAIL (CI and `make verify`) | Every selector listed in `css-emissions.txt` survives into the built stylesheet; Tailwind's purge drops rules it thinks are unused (JS-built class names) with no build error |
+| Page-script ratchet | `tools/check-page-scripts.sh` + `tools/page-script-allowlist.txt` | FAIL (whole tree) | A page templ's `<script src>` is stripped on hx-boosted nav; scripts go through `pluginBodyScripts` in `internal/app/routes.go`. The allowlist may only shrink |
+| Dead widget mount | `tools/check-widget-mounts.sh` + `tools/widget-mount-allowlist.txt` | FAIL (whole tree) | A widget JS file must be listed in a plugin's `Widgets` registration (or `base.templ`), or its `data-widget` div renders empty |
+| Customize discipline | `tools/check-customize-discipline.sh` | FAIL (fixed file list) | Customize > Appearance: no JS-built topbar controls, no `setTimeout` page reloads, no hand-built JSON strings in templ |
+| Templ packages | `tools/check-templ-packages.sh` | FAIL | Every directory of `.templ` files has a hand-written `.go` file (a `doc.go` is enough), so dependency updates on a checkout without generated code still resolve |
 | Decision-citations | `tools/check-decision-citations.sh` | WARN (exit 0, `continue-on-error`) | T-O3: warns about a `cordinator/decisions/*.md` that nothing references; with no Cordinator checkout it has nothing to check |
 
 ### Pre-merge rules that no guard checks

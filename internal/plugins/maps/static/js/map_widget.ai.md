@@ -34,7 +34,7 @@ All paths are relative to `/campaigns/:id`, via `Chronicle.apiFetch`:
   `data-show-*` flag is set; failures are swallowed.
 - `GET /maps` — only in the no-map-id case; the response body is discarded and
   the widget shows a link to the maps page.
-- Image from `/media/:image_id`. A map with no picture is a blank sheet (the full viewer's 1000-unit square) instead of the "No map image" message, so shapes drawn on it show; rooms, areas, water and walls are drawn read-only by `map_shapes.js`.
+- Image from `/media/:image_id`. A map with no picture is a blank sheet (the full viewer's 1000-unit square) instead of the "No map image" message, so shapes drawn on it show; rooms, areas, water, walls and danger zones are drawn read-only by `map_shapes.js`.
 
 All of these exist in `internal/wire/routes_snapshot.txt`.
 

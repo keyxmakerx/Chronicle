@@ -28,6 +28,7 @@
 | three.js | 0.160.0 | Draws the 3D dice (`static/js/dice.js`, `static/js/dice/`); three.js and the post-processing add-ons the dice use, bundled as one ES module `static/vendor/three-dice.min.js` from `static/vendor/three-dice.src.js`, loaded on the first throw; `make dice-vendor` |
 | cannon-es | 0.20.0 | Physics for the dice throw; vendored ES module `static/vendor/cannon-es.js`, loaded with three.js; `make dice-vendor` |
 | Leaflet.js | 1.9.x | Interactive maps (vendored in `static/vendor/`) |
+| D3 | 7.9 | Timeline, relation graph and database explorer (vendored `static/vendor/d3.min.js`) |
 | Font Awesome | 6 Free | UI icons (loaded from cdnjs in `base.templ`) |
 | Inter | latest | UI font (Google Fonts, loaded in `base.templ`) |
 
