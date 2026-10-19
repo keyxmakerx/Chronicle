@@ -128,7 +128,7 @@ func (f *fakeRepo) Delete(_ context.Context, c, id string) (bool, error) {
 func newTestService(t *testing.T) (Service, *fakeRepo) {
 	t.Helper()
 	repo := newFakeRepo()
-	svc := NewService(repo, testRegistry(t), nil).(*service)
+	svc := NewService(repo, testRegistry(t), nil, nil).(*service)
 	n := 0
 	svc.newID = func() string { n++; return fmt.Sprintf("rcp-%d", n) }
 	return svc, repo
@@ -465,7 +465,7 @@ func (p *placesAt) Placements(_ context.Context, campaignID, recipeID string) ([
 func TestServicePlacements(t *testing.T) {
 	ctx := context.Background()
 	places := &placesAt{at: map[string][]Placement{"rcp-1": {{Where: "category", Name: "Heroes"}}}}
-	svc := NewService(newFakeRepo(), testRegistry(t), places).(*service)
+	svc := NewService(newFakeRepo(), testRegistry(t), places, nil).(*service)
 	n := 0
 	svc.newID = func() string { n++; return fmt.Sprintf("rcp-%d", n) }
 	for _, name := range []string{"Placed", "Not placed"} {

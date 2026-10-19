@@ -34,6 +34,8 @@ type Repository interface {
 	DeleteKind(ctx context.Context, campaignID, id string) (inUse bool, err error)
 
 	ListTrackers(ctx context.Context, campaignID, entityID string) ([]Tracker, error)
+	// ListAllTrackers lists every placed tracker in the campaign, by page.
+	ListAllTrackers(ctx context.Context, campaignID string) ([]Tracker, error)
 	GetTracker(ctx context.Context, campaignID, id string) (Tracker, bool, error)
 	TrackerForKind(ctx context.Context, campaignID, entityID, kindID string) (Tracker, bool, error)
 	// CreateTracker returns errDuplicate when the page already has a
@@ -261,6 +263,25 @@ func (r *sqlRepository) ListTrackers(ctx context.Context, campaignID, entityID s
 		 ORDER BY sort_order, created_at, name`, campaignID, entityID)
 	if err != nil {
 		return nil, fmt.Errorf("list trackers: %w", err)
+	}
+	defer rows.Close()
+	out := []Tracker{}
+	for rows.Next() {
+		t, err := scanTracker(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan tracker: %w", err)
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
+func (r *sqlRepository) ListAllTrackers(ctx context.Context, campaignID string) ([]Tracker, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT `+trackerCols+` FROM trackers WHERE campaign_id = ?
+		 ORDER BY entity_id, sort_order, created_at, name`, campaignID)
+	if err != nil {
+		return nil, fmt.Errorf("list all trackers: %w", err)
 	}
 	defer rows.Close()
 	out := []Tracker{}

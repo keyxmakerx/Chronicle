@@ -127,6 +127,22 @@ func (f *fakeRepo) GetTracker(_ context.Context, c, id string) (Tracker, bool, e
 	return t, true, nil
 }
 
+func (f *fakeRepo) ListAllTrackers(_ context.Context, c string) ([]Tracker, error) {
+	out := []Tracker{}
+	for _, t := range f.trackers {
+		if t.CampaignID == c {
+			out = append(out, t)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].EntityID != out[j].EntityID {
+			return out[i].EntityID < out[j].EntityID
+		}
+		return out[i].ID < out[j].ID
+	})
+	return out, nil
+}
+
 func (f *fakeRepo) TrackerForKind(_ context.Context, c, entityID, kindID string) (Tracker, bool, error) {
 	for _, t := range f.trackers {
 		if t.CampaignID == c && t.EntityID == entityID && t.KindID == kindID {
@@ -225,6 +241,17 @@ func (d *fakeDir) Access(_ context.Context, _, entityID string, _ Viewer) (PageA
 }
 
 func (d *fakeDir) Types(context.Context, string) ([]TypeRef, error) { return d.types, nil }
+
+// Names names every page the directory knows, as "Page <id>".
+func (d *fakeDir) Names(_ context.Context, _ string, ids []string) (map[string]string, error) {
+	out := map[string]string{}
+	for _, id := range ids {
+		if _, ok := d.pages[id]; ok {
+			out[id] = "Page " + id
+		}
+	}
+	return out, nil
+}
 
 type fakeClock struct {
 	date *GameDate

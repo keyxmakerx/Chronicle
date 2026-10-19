@@ -30,6 +30,7 @@ const (
 // reserved for the rules, item use and AI Import that write the same lines.
 const (
 	SourceHand = "hand"
+	SourceRule = "rule"
 )
 
 // Viewer is who is asking, taken from the campaign context in the handler.

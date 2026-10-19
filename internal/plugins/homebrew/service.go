@@ -21,20 +21,32 @@ type Service interface {
 	Delete(ctx context.Context, campaignID, id string, v Viewer) error
 	// Placements lists where the Customizer has placed a recipe.
 	Placements(ctx context.Context, campaignID, id string, v Viewer) ([]Placement, error)
+
+	// Fire starts the saved rules an event meets (run.go). Owners call it
+	// once they know the change was a Director's.
+	Fire(ctx context.Context, campaignID string, v Viewer, f Fired) error
+	// Drawer is what the Homebrew drawer shows about rules.
+	Drawer(ctx context.Context, campaignID string, v Viewer) (*Drawer, error)
+	// Press fires an event the drawer offers as a button.
+	Press(ctx context.Context, campaignID, event string, v Viewer) (*Drawer, error)
+	// RunHeld runs a waiting rule now; Dismiss sets it aside.
+	RunHeld(ctx context.Context, campaignID, id string, v Viewer) (*RunView, error)
+	Dismiss(ctx context.Context, campaignID, id string, v Viewer) (*RunView, error)
 }
 
 type service struct {
 	repo   Repository
 	reg    *Registry
 	places PlacementFinder
+	runs   RunStore
 	newID  func() string
 }
 
 // NewService builds the service over a repository and the registry the app
 // filled at start. places may be nil when nothing can place a recipe; a
-// recipe is then on no page.
-func NewService(repo Repository, reg *Registry, places PlacementFinder) Service {
-	return &service{repo: repo, reg: reg, places: places, newID: uuid.NewString}
+// recipe is then on no page. runs may be nil, and rules then never run.
+func NewService(repo Repository, reg *Registry, places PlacementFinder, runs RunStore) Service {
+	return &service{repo: repo, reg: reg, places: places, runs: runs, newID: uuid.NewString}
 }
 
 func requireDirector(v Viewer) error {

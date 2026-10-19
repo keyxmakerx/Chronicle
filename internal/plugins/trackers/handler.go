@@ -66,6 +66,19 @@ func (h *Handler) Page(c echo.Context) error {
 	return c.JSON(http.StatusOK, out)
 }
 
+// Pages handles GET /campaigns/:id/trackers/pages.
+func (h *Handler) Pages(c echo.Context) error {
+	cid, v, err := viewerFrom(c)
+	if err != nil {
+		return err
+	}
+	out, err := h.svc.Pages(c.Request().Context(), cid, v)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
+}
+
 // Place handles POST /campaigns/:id/trackers/page/:eid.
 func (h *Handler) Place(c echo.Context) error {
 	cid, v, err := viewerFrom(c)

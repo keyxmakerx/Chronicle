@@ -87,6 +87,7 @@ func registerTrackerParts(reg *homebrew.Registry, svc trackers.Service) error {
 			return reg.RegisterEvent(homebrew.EventDef{Name: "tracker.reached", Label: "A tracker reaches", PartKinds: both,
 				Fields:  []homebrew.Field{{Name: "value", Label: "Reaches", Type: homebrew.FieldWhole}},
 				Preview: &homebrew.Preview{Op: homebrew.PreviewReach, Arg: "value"},
+				Match:   trackerReached,
 				Check: needInt("the value", func(raw json.RawMessage) (*int, error) {
 					var a valueArgs
 					return a.Value, strictJSON(raw, &a)
@@ -96,6 +97,7 @@ func registerTrackerParts(reg *homebrew.Registry, svc trackers.Service) error {
 			return reg.RegisterAction(homebrew.ActionDef{Name: "step", Label: "Step a tracker", PartKinds: both,
 				Fields:  []homebrew.Field{{Name: "by", Label: "By", Type: homebrew.FieldWhole}},
 				Preview: &homebrew.Preview{Op: homebrew.PreviewAdd, Arg: "by"},
+				Run:     trackerRun(svc, trackers.OpAdd, "by"),
 				Check: needInt("the step", func(raw json.RawMessage) (*int, error) {
 					var a byArgs
 					return a.By, strictJSON(raw, &a)
@@ -105,6 +107,7 @@ func registerTrackerParts(reg *homebrew.Registry, svc trackers.Service) error {
 			return reg.RegisterAction(homebrew.ActionDef{Name: "set", Label: "Set a tracker", PartKinds: both,
 				Fields:  []homebrew.Field{{Name: "to", Label: "To", Type: homebrew.FieldWhole}},
 				Preview: &homebrew.Preview{Op: homebrew.PreviewSet, Arg: "to"},
+				Run:     trackerRun(svc, trackers.OpSet, "to"),
 				Check: needInt("the value", func(raw json.RawMessage) (*int, error) {
 					var a toArgs
 					return a.To, strictJSON(raw, &a)
@@ -113,6 +116,7 @@ func registerTrackerParts(reg *homebrew.Registry, svc trackers.Service) error {
 		func() error {
 			return reg.RegisterAction(homebrew.ActionDef{Name: "tick", Label: "Tick a clock", PartKinds: []string{"clock"},
 				Preview: &homebrew.Preview{Op: homebrew.PreviewAdd},
+				Run:     trackerRun(svc, trackers.OpAdd, ""),
 				Check: func(_ context.Context, _ string, raw json.RawMessage) (json.RawMessage, error) {
 					var none struct{}
 					return json.RawMessage(`{}`), strictJSON(raw, &none)

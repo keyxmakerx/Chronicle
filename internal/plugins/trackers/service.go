@@ -3,6 +3,7 @@ package trackers
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"sort"
 	"strings"
 
@@ -40,12 +41,40 @@ type Service interface {
 	// SyncOwned makes the kinds owned under prefix match want. Its caller
 	// has already decided the change is the Director's to make.
 	SyncOwned(ctx context.Context, campaignID, prefix string, want []OwnedKind) error
+
+	// LogOwned writes one change, marked as a rule's, on the trackers of
+	// the kind owned as owner: on entityID's page, creating its row if
+	// needed, or with entityID "" on every page that already has one.
+	LogOwned(ctx context.Context, campaignID, entityID, owner string, v Viewer, op string, amount int, note string) ([]TrackerView, error)
+	// Pages lists the pages that have trackers, by name, for the DM
+	// Screen's Homebrew drawer.
+	Pages(ctx context.Context, campaignID string, v Viewer) ([]PageRef, error)
+}
+
+// Change is a tracker of an owned kind moving from one value to another.
+type Change struct {
+	Owner    string
+	EntityID string
+	From, To int
+}
+
+// ChangeListener hears that a tracker of an owned kind moved, after the
+// change is saved, so its owner can act on it (a recipe's rules run).
+type ChangeListener interface {
+	TrackerChanged(ctx context.Context, campaignID string, v Viewer, c Change) error
+}
+
+// PageRef is a page that has trackers.
+type PageRef struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
 
 type service struct {
 	repo     Repository
 	entities EntityDirectory
 	clock    GameClock
+	listener ChangeListener
 	newID    func() string
 }
 
@@ -354,6 +383,11 @@ func (s *service) ensure(ctx context.Context, campaignID, entityID string, a Pag
 	if !ok || !virtualOn(k, a.TypeID, "") && !(validPrefix(in.Owner) && ownedBy(k, in.Owner)) {
 		return Tracker{}, errNotFound("tracker")
 	}
+	return s.rowFor(ctx, campaignID, entityID, k)
+}
+
+// rowFor returns the page's tracker of kind k, creating it on first use.
+func (s *service) rowFor(ctx context.Context, campaignID, entityID string, k Kind) (Tracker, error) {
 	if t, found, err := s.repo.TrackerForKind(ctx, campaignID, entityID, k.ID); err != nil {
 		return Tracker{}, apperrorInternal(err)
 	} else if found {
@@ -393,6 +427,12 @@ func (s *service) Log(ctx context.Context, campaignID, entityID string, v Viewer
 	if err != nil {
 		return nil, err
 	}
+	return s.writeLine(ctx, campaignID, t, v, in, SourceHand)
+}
+
+// writeLine adds one log line to a tracker and tells the listener when the
+// value of an owned kind's tracker moved.
+func (s *service) writeLine(ctx context.Context, campaignID string, t Tracker, v Viewer, in LogInput, source string) (*TrackerView, error) {
 	n, err := s.repo.CountEntries(ctx, campaignID, t.ID)
 	if err != nil {
 		return nil, apperrorInternal(err)
@@ -400,7 +440,11 @@ func (s *service) Log(ctx context.Context, campaignID, entityID string, v Viewer
 	if n >= MaxEntries {
 		return nil, errInvalid("this tracker's log is full")
 	}
-	e := Entry{TrackerID: t.ID, Op: in.Op, Amount: in.Amount, Note: in.Note, Source: SourceHand, CreatedBy: v.UserID}
+	before, err := s.one(ctx, campaignID, t, v)
+	if err != nil {
+		return nil, err
+	}
+	e := Entry{TrackerID: t.ID, Op: in.Op, Amount: in.Amount, Note: in.Note, Source: source, CreatedBy: v.UserID}
 	if s.clock != nil {
 		// A calendar that can't be read leaves the line undated rather
 		// than losing the change.
@@ -411,7 +455,27 @@ func (s *service) Log(ctx context.Context, campaignID, entityID string, v Viewer
 	if err := s.repo.AddEntry(ctx, campaignID, e); err != nil {
 		return nil, apperrorInternal(err)
 	}
-	return s.one(ctx, campaignID, t, v)
+	after, err := s.one(ctx, campaignID, t, v)
+	if err != nil {
+		return nil, err
+	}
+	s.changed(ctx, campaignID, t, v, before.Value, after.Value)
+	return after, nil
+}
+
+// changed tells the listener a tracker of an owned kind moved. The change
+// is already saved, so a listener's failure is logged, not returned.
+func (s *service) changed(ctx context.Context, campaignID string, t Tracker, v Viewer, from, to int) {
+	if s.listener == nil || from == to {
+		return
+	}
+	k, ok, err := s.repo.GetKind(ctx, campaignID, t.KindID)
+	if err != nil || !ok || k.Owner == "" {
+		return
+	}
+	if err := s.listener.TrackerChanged(ctx, campaignID, v, Change{Owner: k.Owner, EntityID: t.EntityID, From: from, To: to}); err != nil {
+		slog.Warn("trackers: a change listener failed", slog.String("tracker", t.ID), slog.Any("error", err))
+	}
 }
 
 func (s *service) Strike(ctx context.Context, campaignID string, entryID int64, struck bool, v Viewer) (*TrackerView, error) {
@@ -429,10 +493,109 @@ func (s *service) Strike(ctx context.Context, campaignID string, entryID int64, 
 	if err != nil {
 		return nil, err
 	}
+	before, err := s.one(ctx, campaignID, t, v)
+	if err != nil {
+		return nil, err
+	}
 	if err := s.repo.StrikeEntry(ctx, campaignID, entryID, struck, v.UserID); err != nil {
 		return nil, apperrorInternal(err)
 	}
-	return s.one(ctx, campaignID, t, v)
+	after, err := s.one(ctx, campaignID, t, v)
+	if err != nil {
+		return nil, err
+	}
+	s.changed(ctx, campaignID, t, v, before.Value, after.Value)
+	return after, nil
+}
+
+// SetChangeListener sets who hears that an owned kind's tracker moved.
+// It is called once while the app starts.
+func (s *service) SetChangeListener(l ChangeListener) { s.listener = l }
+
+func (s *service) LogOwned(ctx context.Context, campaignID, entityID, owner string, v Viewer, op string, amount int, note string) ([]TrackerView, error) {
+	if err := requireDirector(v); err != nil {
+		return nil, err
+	}
+	in, err := validateLog(LogInput{Op: op, Amount: amount, Note: note})
+	if err != nil {
+		return nil, err
+	}
+	_, list, err := s.kindMap(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	var k Kind
+	for _, c := range list {
+		if owner != "" && c.Owner == owner {
+			k = c
+		}
+	}
+	if k.ID == "" {
+		return nil, errNotFound("tracker kind")
+	}
+	var ts []Tracker
+	if entityID == "" {
+		all, err := s.repo.ListAllTrackers(ctx, campaignID)
+		if err != nil {
+			return nil, apperrorInternal(err)
+		}
+		for _, t := range all {
+			if t.KindID == k.ID {
+				ts = append(ts, t)
+			}
+		}
+	} else {
+		if _, err := s.page(ctx, campaignID, entityID, v); err != nil {
+			return nil, err
+		}
+		t, err := s.rowFor(ctx, campaignID, entityID, k)
+		if err != nil {
+			return nil, err
+		}
+		ts = []Tracker{t}
+	}
+	out := []TrackerView{}
+	for _, t := range ts {
+		tv, err := s.writeLine(ctx, campaignID, t, v, in, SourceRule)
+		if err != nil {
+			return out, err
+		}
+		out = append(out, *tv)
+	}
+	return out, nil
+}
+
+func (s *service) Pages(ctx context.Context, campaignID string, v Viewer) ([]PageRef, error) {
+	if err := requireDirector(v); err != nil {
+		return nil, err
+	}
+	all, err := s.repo.ListAllTrackers(ctx, campaignID)
+	if err != nil {
+		return nil, apperrorInternal(err)
+	}
+	var ids []string
+	seen := map[string]bool{}
+	for _, t := range all {
+		if !seen[t.EntityID] {
+			seen[t.EntityID] = true
+			ids = append(ids, t.EntityID)
+		}
+	}
+	out := []PageRef{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	names, err := s.entities.Names(ctx, campaignID, ids)
+	if err != nil {
+		return nil, apperrorInternal(err)
+	}
+	for _, id := range ids {
+		if n, ok := names[id]; ok {
+			out = append(out, PageRef{ID: id, Name: n})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name) })
+	return out, nil
 }
 
 func (s *service) Kinds(ctx context.Context, campaignID string, v Viewer) ([]Kind, []TypeRef, error) {

@@ -10,6 +10,9 @@ type EntityDirectory interface {
 	Access(ctx context.Context, campaignID, entityID string, v Viewer) (PageAccess, error)
 	// Types lists the campaign's page categories, for "on every page of".
 	Types(ctx context.Context, campaignID string) ([]TypeRef, error)
+	// Names gives the names of the campaign's pages among ids; a page that
+	// is missing or trashed is left out.
+	Names(ctx context.Context, campaignID string, ids []string) (map[string]string, error)
 }
 
 // PageAccess is one viewer's standing on one page.

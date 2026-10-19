@@ -55,6 +55,14 @@ type EventDef struct {
 	// button the Director presses to say it happened.
 	Preview *Preview
 	Check   CheckFunc
+	// Press, when set, is the label of a drawer button the Director uses to
+	// say the event happened ("Log a respite"). Only an event from no part
+	// can have one.
+	Press string
+	// Match, when set, says whether a firing meets a rule's stored args,
+	// given what happened (the payload the owner fired it with). Nil
+	// matches every firing.
+	Match func(args, payload json.RawMessage) (bool, error)
 }
 
 // Field is one arg of an event or action, as the Workshop's inspector asks
@@ -86,6 +94,25 @@ type ActionDef struct {
 	// line saying what would happen.
 	Preview *Preview
 	Check   CheckFunc
+	// Run carries the action out on the server and says in one line what
+	// changed. Without it, and always for a ClientRun action, a rule that
+	// uses the action waits in the Homebrew drawer for the Director.
+	Run func(ctx context.Context, campaignID string, a Act) (string, error)
+}
+
+// Act is one action a rule is carrying out.
+type Act struct {
+	RecipeID string
+	// Part is the part the action is on; nil when it takes none.
+	Part *Part
+	Args json.RawMessage
+	// Scope is the page the event happened on; "" when it came from no page
+	// (a respite), which an owner may read as "everywhere it applies".
+	Scope string
+	// By is the Director whose change or press set the rule off.
+	By Viewer
+	// Note names the rule, for the line the owner writes in its own log.
+	Note string
 }
 
 // Preview says how the Workshop's live preview acts out an event or action
@@ -217,6 +244,9 @@ func (r *Registry) RegisterEvent(e EventDef) error {
 	if err := checkPreview("event", e.Name, e.Preview, e.Fields, e.PartKinds, PreviewReach); err != nil {
 		return err
 	}
+	if e.Press != "" && len(e.PartKinds) > 0 {
+		return fmt.Errorf("homebrew: event %q comes from a part, so it can't be a drawer button", e.Name)
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if _, dup := r.events[e.Name]; dup {
@@ -236,6 +266,9 @@ func (r *Registry) RegisterAction(a ActionDef) error {
 	}
 	if a.ClientRun && a.Preview != nil {
 		return fmt.Errorf("homebrew: action %q runs in the browser, so it can't preview", a.Name)
+	}
+	if a.ClientRun && a.Run != nil {
+		return fmt.Errorf("homebrew: action %q runs in the browser, so it can't run on the server", a.Name)
 	}
 	if err := checkPreview("action", a.Name, a.Preview, a.Fields, a.PartKinds, PreviewAdd, PreviewSet); err != nil {
 		return err
@@ -276,6 +309,20 @@ func (r *Registry) event(name string) (EventDef, bool) {
 	defer r.mu.RUnlock()
 	e, ok := r.events[name]
 	return e, ok
+}
+
+// presses lists the events the drawer offers as buttons, by name.
+func (r *Registry) presses() []EventDef {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := []EventDef{}
+	for _, e := range r.events {
+		if e.Press != "" {
+			out = append(out, e)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
 }
 
 func (r *Registry) action(name string) (ActionDef, bool) {

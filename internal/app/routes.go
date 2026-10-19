@@ -5959,12 +5959,17 @@ func (a *App) RegisterRoutes() {
 		},
 	})
 	if a.PluginHealth.IsHealthy(homebrew.PluginSlug) {
-		homebrewSvc := homebrew.NewService(homebrew.NewRepository(a.DB), homebrewReg, &recipePlacements{entities: entityService})
+		homebrewSvc := homebrew.NewService(homebrew.NewRepository(a.DB), homebrewReg, &recipePlacements{entities: entityService},
+			homebrew.NewRunStore(a.DB))
 		homebrew.RegisterRoutes(e, homebrew.NewHandler(homebrewSvc), campaignService, authService)
 		// A saved recipe is placed with the Customizer only while the
 		// block that shows it exists.
 		if trackersSvc != nil {
 			widgetLister.recipes = homebrewSvc
+			// A tracker a recipe keeps sets off that recipe's rules.
+			if l, ok := trackersSvc.(interface{ SetChangeListener(trackers.ChangeListener) }); ok {
+				l.SetChangeListener(&trackerRules{svc: homebrewSvc})
+			}
 		}
 	} else {
 		slog.Warn("homebrew plugin degraded — the Homebrew Workshop is not available")

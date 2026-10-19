@@ -24,6 +24,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 		auth.RequireAuth(authSvc),
 		campaigns.RequireCampaignAccess(campaignSvc),
 	)
+	cg.GET("/trackers/pages", h.Pages, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.POST("/trackers/page/:eid", h.Place, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.POST("/trackers/page/:eid/log", h.Log, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.POST("/trackers/entries/:entry/strike", h.Strike, campaigns.RequireRole(campaigns.RolePlayer))

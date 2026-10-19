@@ -23,6 +23,9 @@ const (
 type Viewer struct {
 	UserID   string
 	Director bool
+	// VisibilityRole is passed on to owners whose actions check page
+	// access as this person.
+	VisibilityRole int
 }
 
 // Recipe is one saved recipe. Doc is the part the Workshop edits.
