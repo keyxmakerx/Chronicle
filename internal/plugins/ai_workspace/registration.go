@@ -18,3 +18,8 @@ const PluginSlug = "ai-workspace"
 // database.PluginHealthRegistry uses. Underscored to match the Go
 // package directory name.
 const PluginHealthKey = "ai_workspace"
+
+// MemorySchemaSlug is the migrations slug for the tables of what AI Import
+// applied (answer parts, block fingerprints). Kept apart from PluginHealthKey
+// so a failed migration leaves only that memory out, never the whole AI tool.
+const MemorySchemaSlug = "ai_import_memory"

@@ -211,6 +211,10 @@ type ParsedPage struct {
 	// keys vary by kind). Nil when there was no front matter.
 	Fields map[string]any
 
+	// Raw is the block exactly as split from the paste, front matter and
+	// all, so a block can be set aside and pasted again later.
+	Raw string
+
 	// ParsedAt timestamps the parse for downstream audit /
 	// debugging. Not surfaced to the operator UI.
 	ParsedAt time.Time

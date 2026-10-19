@@ -4954,6 +4954,11 @@ func (a *App) RegisterRoutes() {
 	aiWorkspaceRenderer.EraVersions = aiExportEraAdapter{versions: aiEraVersions}
 	aiWorkspaceRenderer.Folders = aiFolderNames{folders: folderService}
 	aiWorkspaceHandler.SetImportCommitter(aiWorkspaceCommitter)
+	// Which parts of a split AI answer were applied; left out when its table
+	// did not migrate, so labels are still read but earlier pastes unknown.
+	if a.PluginHealth == nil || a.PluginHealth.IsHealthy(ai_workspace.MemorySchemaSlug) {
+		aiWorkspaceHandler.SetImportMemory(ai_workspace.NewImportMemoryRepository(a.DB))
+	}
 
 	campaignHandler.RegisterSettingsTab(aiWorkspaceHandler.SettingsTabFactory())
 

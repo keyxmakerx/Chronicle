@@ -159,6 +159,9 @@ func TestBuild_FrontMatterExample(t *testing.T) {
 		"`@[Page Name|words to show]`",
 		"`{gm{`",
 		"`}gm}`",
+		"## If your answer comes in parts",
+		"kind: part",
+		"needs: [1]",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("expected substring %q in output. Full:\n%s", want, got)
@@ -479,11 +482,11 @@ func TestBuild_Instructions(t *testing.T) {
 		exports   int
 	}{
 		{"standing instructions", InstructionsOnly,
-			[]string{"standing instructions", "## What you can do", "kind: table (Rolling table)", "## Format your output", "## How to answer my requests"},
+			[]string{"standing instructions", "## What you can do", "kind: table (Rolling table)", "## Format your output", "## If your answer comes in parts", "## How to answer my requests"},
 			[]string{"Ser Aldric", "WORLD EXPORT", "Five new NPCs.", "## What I want you to generate"}, 0},
 		{"short prompt", InstructionsSaved,
 			[]string{"Follow the Chronicle instructions", "Ser Aldric", "WORLD EXPORT", "Five new NPCs.", "from my Chronicle\ninstructions", "lookup blocks"},
-			[]string{"## What you can do", "kind: table (Rolling table)", "## Format your output"}, 1},
+			[]string{"## What you can do", "kind: table (Rolling table)", "## Format your output", "## If your answer comes in parts"}, 1},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

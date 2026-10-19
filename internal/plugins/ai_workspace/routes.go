@@ -16,11 +16,14 @@ import (
 // working. Each route's owner-gate is AST-pinned in internal/wire/
 // (ai_export_route_test.go, ai_workspace_prompt_route_test.go,
 // ai_workspace_import_parse_route_test.go,
-// ai_workspace_import_commit_route_test.go).
+// ai_workspace_import_commit_route_test.go,
+// ai_workspace_import_tray_route_test.go).
 func RegisterOwnerRoutes(cg *echo.Group, h *Handler, requireOwner echo.MiddlewareFunc) {
 	cg.GET("/ai-export/generate", h.GenerateAIExport, requireOwner)
 	cg.GET("/ai-workspace/prompt/generate", h.GeneratePrompt, requireOwner)
 	cg.GET("/ai-workspace/prompt/instructions", h.PromptInstructions, requireOwner)
 	cg.POST("/ai-workspace/import/parse", h.ParseImport, requireOwner)
 	cg.POST("/ai-workspace/import/commit", h.CommitImport, requireOwner)
+	cg.GET("/ai-workspace/import/tray", h.ImportTrayList, requireOwner)
+	cg.POST("/ai-workspace/import/tray/clear", h.ClearImportTray, requireOwner)
 }

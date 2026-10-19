@@ -73,6 +73,11 @@ type Handler struct {
 	// importFolders lets the review check a page's `folder:` name. Optional —
 	// nil refuses a page that names a folder.
 	importFolders importer.FolderAccess
+
+	// memory remembers what AI Import applied in each campaign: the labelled
+	// parts of a split answer, and a fingerprint of every block. Optional —
+	// nil reads labels but can't tell what came before.
+	memory ImportMemory
 }
 
 // AuditLogger is the narrow contract the plugin needs for audit
@@ -306,6 +311,12 @@ func (h *Handler) ParseImport(c echo.Context) error {
 	}
 
 	body, err := readImportBody(c)
+	// "Review what's here" in the tray reviews an answer's waiting parts
+	// before the rest arrive.
+	trayKey := strings.TrimSpace(c.FormValue("tray_review"))
+	if err == nil && trayKey != "" && strings.TrimSpace(body) == "" {
+		body, err = h.trayText(c.Request().Context(), cc.Campaign.ID, trayKey)
+	}
 	if err != nil {
 		// readImportBody already returns operator-friendly wording;
 		// pass it through verbatim.
@@ -318,7 +329,27 @@ func (h *Handler) ParseImport(c echo.Context) error {
 		return apperror.NewBadRequest("Nothing to import — paste markdown into the textarea or drop one or more .md files.")
 	}
 
-	parsed, lookups := splitLookups(importer.Parse(body))
+	all := importer.Parse(body)
+	// Several parts pasted together go in their own order, so a part
+	// always comes after the parts it needs. The commit re-parses this text.
+	if ordered, ok := importer.OrderParts(all); ok {
+		body, all = ordered, importer.Parse(ordered)
+	}
+	// A part of an answer that isn't all in yet waits in the tray; the last
+	// part brings the waiting ones with it.
+	if trayKey == "" {
+		var notice *trayNotice
+		body, all, notice, err = h.trayStep(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c), body, all)
+		if err != nil {
+			return err
+		}
+		if notice != nil {
+			return middleware.Render(c, http.StatusOK, TrayNotice(cc.Campaign.ID, *notice,
+				h.trayAnswers(c.Request().Context(), cc.Campaign.ID)))
+		}
+	}
+	lab := importer.TakeParts(all)
+	parsed, lookups := splitLookups(lab.Blocks)
 	if len(lookups) > 0 {
 		return h.answerLookups(c, cc, body, lookups, len(parsed))
 	}
@@ -345,8 +376,13 @@ func (h *Handler) ParseImport(c echo.Context) error {
 			pages[i].Warnings = append(pages[i].Warnings, importer.LinkWarnings(links, pages[i].Body, pasteSlugs)...)
 		}
 	}
+	notes := h.checkParts(c.Request().Context(), cc.Campaign.ID, lab)
+	repeats := h.repeatedBlocks(c.Request().Context(), cc.Campaign.ID, lab.Blocks)
+	for i := range recRows {
+		recRows[i].Repeat = repeats[recs[i].SourceIndex]
+	}
 
-	summary := ReviewSummary{Total: len(pages) + len(recRows)}
+	summary := ReviewSummary{Total: len(pages) + len(recRows), Repeats: len(repeats)}
 	for _, r := range recRows {
 		if r.Plan.Error == "" {
 			summary.Selectable++
@@ -383,6 +419,8 @@ func (h *Handler) ParseImport(c echo.Context) error {
 				"blocked_records": summary.Blocked,
 				"input_byte_size": len(body),
 				"records":         len(recRows),
+				"parts":           len(lab.Parts),
+				"repeats":         summary.Repeats,
 			})
 	}
 
@@ -394,6 +432,8 @@ func (h *Handler) ParseImport(c echo.Context) error {
 		MarkdownSource: body,
 		Records:        recRows,
 		EngineSrc:      layouts.AssetURL("/static/js/widgets/chronicle_gen.js"),
+		Parts:          notes,
+		Repeats:        repeats,
 	}))
 }
 
@@ -440,7 +480,8 @@ func (h *Handler) CommitImport(c echo.Context) error {
 	// templ rendered. The classifier-supplied dropdowns embedded
 	// the right values in the form, but the bodies need to come
 	// from the markdown source.
-	pages, recs := splitImport(importer.Parse(source))
+	lab := importer.TakeParts(importer.Parse(source))
+	pages, recs := splitImport(lab.Blocks)
 
 	bulkCategory := strings.TrimSpace(c.FormValue("bulk_default_category"))
 	// Empty means "no bulk override" — left for each row to resolve
@@ -529,7 +570,10 @@ func (h *Handler) CommitImport(c echo.Context) error {
 	// Records run after pages, so a record may name a page this same
 	// import just created. Folders are the exception: pages file themselves
 	// into folders, so folders are made and renamed first.
+	pageRows := len(result.Rows)
 	recCounts := h.commitRecords(c, cc, recs, &result, early)
+	done := h.rememberApplied(c.Request().Context(), cc.Campaign.ID, result, pageRows, pages, recs)
+	h.markApplied(c.Request().Context(), cc.Campaign.ID, userID, lab, done)
 
 	if h.audit != nil {
 		// Counts only — no names, no body content.

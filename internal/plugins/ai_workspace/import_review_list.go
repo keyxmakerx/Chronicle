@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/importer"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/records"
@@ -26,7 +27,7 @@ func reviewProblems(d ImportReviewData) []reviewProblem {
 		case p.Status == importer.StatusParseError:
 			out = append(out, reviewProblem{Block: p.SourceIndex + 1, Say: p.ParseError})
 		case d.Classes[i].Status == importer.StatusFieldProblem:
-			out = append(out, reviewProblem{Block: p.SourceIndex + 1, Say: p.Name + ": " + d.Classes[i].Reason})
+			out = append(out, reviewProblem{Block: p.SourceIndex + 1, Say: repeatSay(d, p.SourceIndex) + p.Name + ": " + d.Classes[i].Reason})
 		}
 	}
 	for _, r := range d.Records {
@@ -35,7 +36,7 @@ func reviewProblems(d ImportReviewData) []reviewProblem {
 			if r.title() != "" {
 				say = r.title() + ": " + say
 			}
-			out = append(out, reviewProblem{Block: r.Block, Say: say})
+			out = append(out, reviewProblem{Block: r.Block, Say: repeatSay(d, r.Block-1) + say})
 		}
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].Block < out[j].Block })
@@ -89,8 +90,9 @@ func pageStartsYes(page importer.ParsedPage, cls importer.Classification) bool {
 	return cls.Status != importer.StatusParentProblem && cls.Status != importer.StatusActionMismatch
 }
 
-// recordStartsYes is a record row's first answer: removals start on No.
-func recordStartsYes(r RecordRow) bool { return r.Action != records.ActionDelete }
+// recordStartsYes is a record row's first answer: removals, and blocks
+// applied before, start on No.
+func recordStartsYes(r RecordRow) bool { return r.Action != records.ActionDelete && r.Repeat == "" }
 
 // listedCount is how many rows the list offers.
 func listedCount(d ImportReviewData) int {
@@ -106,7 +108,7 @@ func listedCount(d ImportReviewData) int {
 func startingYesCount(d ImportReviewData) int {
 	n := 0
 	for _, i := range usablePages(d) {
-		if pageStartsYes(d.Pages[i], d.Classes[i]) && !d.Classes[i].GMOnly.Any() {
+		if pageStartsYes(d.Pages[i], d.Classes[i]) && !d.Classes[i].GMOnly.Any() && d.Repeats[d.Pages[i].SourceIndex] == "" {
 			n++
 		}
 	}
@@ -201,4 +203,35 @@ func capitalize(s string) string {
 		return s
 	}
 	return strings.ToUpper(s[:1]) + s[1:]
+}
+
+// repeatWarning is the heading for a paste applied before: all of it, or
+// how many of its blocks. "" when nothing in it was.
+func repeatWarning(d ImportReviewData) string {
+	n := len(d.Repeats)
+	// The latest date, compared as dates: "9 March" sorts after "10 May" as text.
+	when, latest := "", time.Time{}
+	for _, w := range d.Repeats {
+		if t, err := time.Parse("2 January 2006", w); err == nil && (when == "" || t.After(latest)) {
+			when, latest = w, t
+		}
+	}
+	switch {
+	case n == 0:
+		return ""
+	case n == len(d.Pages)+len(d.Records):
+		return "You already applied this paste, on " + when + "."
+	case n == 1:
+		return "1 block in this paste was already applied."
+	}
+	return fmt.Sprintf("%d blocks in this paste were already applied.", n)
+}
+
+// repeatSay leads a problem with when its block was applied before, which is
+// usually why it is refused now (the thing it makes already exists).
+func repeatSay(d ImportReviewData, src int) string {
+	if w := d.Repeats[src]; w != "" {
+		return "Already applied on " + w + ". "
+	}
+	return ""
 }

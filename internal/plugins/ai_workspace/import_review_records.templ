@@ -21,6 +21,7 @@ type RecordRow struct {
 	Plan   records.Plan
 	Block  int    // 1-based position in the paste, for the problems list
 	Reason string // the AI's `reason:` line, if it gave one
+	Repeat string // when this exact block was applied before; "" if never
 }
 
 // actionWord is the plain verb the chip shows.
@@ -54,6 +55,9 @@ templ reviewRecordRow(campaignID string, r RecordRow) {
 		data-air-verb={ r.actionWord() }
 		aria-label={ fmt.Sprintf("%s %s: %s", r.actionWord(), r.Label, r.title()) }
 		class="air-row"
+		if r.Repeat != "" {
+			data-air-hold
+		}
 		if r.Plan.Client != "" {
 			data-ai-gen={ r.Plan.Client }
 		}
@@ -62,6 +66,9 @@ templ reviewRecordRow(campaignID string, r RecordRow) {
 		<div class="air-main">
 			<span class="air-what"><b>{ r.title() }</b></span>
 			<span class="air-line">{ r.Plan.Summary }</span>
+			if r.Repeat != "" {
+				@repeatLine(r.Repeat)
+			}
 			if r.Reason != "" {
 				<span class="air-line">AI's reason: <i>{ r.Reason }</i></span>
 			}

@@ -1,0 +1,76 @@
+// import_tray.templ renders the tray under the paste box: the parts of a
+// split AI answer that wait for the rest before the whole answer is reviewed.
+
+package ai_workspace
+
+import (
+	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// ImportTray is the tray's list, one line per waiting answer, each with a
+// way to review what is there now and a way to empty it. Empty when nothing
+// waits, so the paste box shows no tray at all. oob marks it to replace the
+// tray from another response (a paste that went to the tray).
+templ ImportTray(campaignID string, answers []trayAnswer, oob bool) {
+	<div
+		id="ai-import-tray"
+		class="air-tray-host"
+		if oob {
+			hx-swap-oob="true"
+		}
+	>
+		if len(answers) > 0 {
+			<link rel="stylesheet" href={ layouts.AssetURL("/static/css/ai_review.css") }/>
+			<section class="air-tray" aria-labelledby="ai-import-tray-heading">
+				<h4 id="ai-import-tray-heading">In the tray</h4>
+				for _, a := range answers {
+					<div class="air-tray-row">
+						<i class="fa-solid fa-layer-group" aria-hidden="true"></i>
+						<span class="air-tray-what">
+							<b>{ a.Name }</b>
+							<span class="air-small">{ a.Summary() }</span>
+						</span>
+						<form
+							hx-post={ fmt.Sprintf("/campaigns/%s/ai-workspace/import/parse", campaignID) }
+							hx-target="#ai-import-review-host"
+							hx-swap="innerHTML"
+						>
+							<input type="hidden" name="tray_review" value={ a.Key }/>
+							<button type="submit" class="air-quiet" aria-label={ "Review the parts of " + a.Name + " in the tray now" }>Review what's here</button>
+						</form>
+						<form
+							hx-post={ fmt.Sprintf("/campaigns/%s/ai-workspace/import/tray/clear", campaignID) }
+							hx-target="#ai-import-tray"
+							hx-swap="outerHTML"
+							hx-confirm={ "Take every part of " + a.Name + " out of the tray? Nothing in your campaign changes." }
+						>
+							<input type="hidden" name="answer" value={ a.Key }/>
+							<button type="submit" class="air-quiet" aria-label={ "Empty the tray of " + a.Name }>Empty</button>
+						</form>
+					</div>
+				}
+			</section>
+		}
+	</div>
+}
+
+// TrayNotice answers a paste that went to the tray: which part it was, how
+// many are in, and what to paste next. The tray under the paste box is
+// refreshed in the same response.
+templ TrayNotice(campaignID string, n trayNotice, answers []trayAnswer) {
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/css/ai_review.css") }/>
+	<div class="air card mt-4" role="status">
+		<div class="air-body">
+			<div class="air-head">
+				<h3>
+					<i class="fa-solid fa-layer-group mr-1" aria-hidden="true"></i>
+					{ n.Heading() }
+				</h3>
+			</div>
+			<p class="air-small">{ n.Explain() }</p>
+		</div>
+	</div>
+	@ImportTray(campaignID, answers, true)
+}

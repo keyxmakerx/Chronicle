@@ -63,6 +63,7 @@ func Parse(input string) []ParsedPage {
 	for i, raw := range pages {
 		p := parseOnePage(raw)
 		p.SourceIndex = i
+		p.Raw = raw
 		p.ParsedAt = now
 		out = append(out, p)
 	}
