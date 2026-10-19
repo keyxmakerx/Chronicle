@@ -20,7 +20,7 @@ func fieldRuleService(t *testing.T) (homebrew.Service, *homebrew.Registry) {
 	if err := registerFieldRuleParts(reg, place); err != nil {
 		t.Fatal(err)
 	}
-	return homebrew.NewService(&memRecipes{stored: map[string]homebrew.Recipe{}}, reg), reg
+	return homebrew.NewService(&memRecipes{stored: map[string]homebrew.Recipe{}}, reg, nil, nil), reg
 }
 
 func TestRegisterFieldRuleParts(t *testing.T) {

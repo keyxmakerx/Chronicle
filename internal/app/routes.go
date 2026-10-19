@@ -2035,6 +2035,9 @@ func (a *registrationInviteCheckerAdapter) IsRegistrationInviteValid(ctx context
 type widgetBlockListerAdapter struct {
 	extHandler *extensions.Handler
 	sysHandler *systems.SystemHandler
+	// recipes adds one entry per saved Homebrew Workshop recipe; nil while
+	// the homebrew or trackers plugin is degraded.
+	recipes homebrew.Service
 }
 
 // GetWidgetBlockMetas returns widget blocks from both extensions and game systems.
@@ -2063,6 +2066,10 @@ func (a *widgetBlockListerAdapter) GetWidgetBlockMetas(ctx context.Context, camp
 	// System-provided widgets.
 	if a.sysHandler != nil {
 		metas = append(metas, a.sysHandler.GetSystemWidgetBlockMetas(ctx, campaignID)...)
+	}
+
+	if a.recipes != nil {
+		metas = append(metas, recipeBlockMetas(ctx, a.recipes, campaignID)...)
 	}
 
 	return metas
@@ -5242,7 +5249,8 @@ func (a *App) RegisterRoutes() {
 
 	// Wire system widgets into the template editor palette (deferred from
 	// block registry setup because systemHandler is created after entityHandler).
-	entityHandler.SetWidgetBlockLister(&widgetBlockListerAdapter{extHandler: extHandler, sysHandler: systemHandler})
+	widgetLister := &widgetBlockListerAdapter{extHandler: extHandler, sysHandler: systemHandler}
+	entityHandler.SetWidgetBlockLister(widgetLister)
 	campaignSystemHandler := systems.NewCampaignSystemHandler(campaignSystemMgr)
 	// Wire upload policy provider so campaign handler checks admin setting.
 	campaignSystemHandler.SetUploadPolicy(func(ctx context.Context) string {
@@ -5705,6 +5713,11 @@ func (a *App) RegisterRoutes() {
 		dmSources.Board = dmscreen.NewBoardRepository(a.DB)
 		dmSources.Adventures = &dmAdventuresAdapter{entities: entityService}
 	}
+	// The Homebrew drawer runs recipes' rules, so it needs the homebrew
+	// tables; its trackers section needs the trackers ones too.
+	if a.PluginHealth.IsHealthy(homebrew.PluginSlug) {
+		dmSources.Homebrew = &dmHomebrewAdapter{trackers: a.PluginHealth.IsHealthy(trackers.PluginSlug)}
+	}
 	dmScreenSvc := dmscreen.NewService(dmSources)
 	dmscreen.RegisterRoutes(e, dmscreen.NewHandler(dmScreenSvc), campaignService, authService)
 	// The sync API routes are already registered; they answer 404 until this
@@ -5903,6 +5916,7 @@ func (a *App) RegisterRoutes() {
 			&trackersClockAdapter{svc: calendarService})
 		trackers.RegisterRoutes(e, trackers.NewHandler(trackersSvc), campaignService, authService)
 		registerTrackersBlock(blockRegistry)
+		registerRecipeBlock(blockRegistry)
 	} else {
 		slog.Warn("trackers plugin degraded — the Trackers block is not available")
 	}
@@ -5947,11 +5961,22 @@ func (a *App) RegisterRoutes() {
 		StaticFS: echo.MustSubFS(homebrew.StaticAssetsFS, "static"),
 		Widgets: []PluginWidget{
 			{Name: "homebrew-workshop", Scripts: []string{"js/homebrew_workshop.js"}},
+			{Name: "homebrew-drawer", Scripts: []string{"js/homebrew_drawer.js"}},
 		},
 	})
 	if a.PluginHealth.IsHealthy(homebrew.PluginSlug) {
-		homebrewSvc := homebrew.NewService(homebrew.NewRepository(a.DB), homebrewReg)
+		homebrewSvc := homebrew.NewService(homebrew.NewRepository(a.DB), homebrewReg, &recipePlacements{entities: entityService},
+			homebrew.NewRunStore(a.DB))
 		homebrew.RegisterRoutes(e, homebrew.NewHandler(homebrewSvc), campaignService, authService)
+		// A saved recipe is placed with the Customizer only while the
+		// block that shows it exists.
+		if trackersSvc != nil {
+			widgetLister.recipes = homebrewSvc
+			// A tracker a recipe keeps sets off that recipe's rules.
+			if l, ok := trackersSvc.(interface{ SetChangeListener(trackers.ChangeListener) }); ok {
+				l.SetChangeListener(&trackerRules{svc: homebrewSvc})
+			}
+		}
 	} else {
 		slog.Warn("homebrew plugin degraded — the Homebrew Workshop is not available")
 	}

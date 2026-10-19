@@ -21,3 +21,7 @@ func errConflict() error {
 func errInternal(err error) error {
 	return apperror.NewInternal(fmt.Errorf("homebrew: %w", err))
 }
+
+// errConflictMsg is a conflict with its own wording, for a change another
+// Director already made.
+func errConflictMsg(msg string) error { return apperror.NewConflict(msg) }

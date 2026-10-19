@@ -4763,6 +4763,22 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
   }
   .dms-close:hover { color: var(--surface-text); background: var(--surface-alt); border-color: var(--surface-border); }
   .dms-close:focus-visible, .dms button:focus-visible, .dms a:focus-visible, .dms summary:focus-visible { outline: 2px solid var(--dms-acc); outline-offset: 2px; }
+  .dms-acts { display: flex; align-items: center; gap: .15rem; }
+  .dms-close[aria-expanded="true"], .dms-close[aria-pressed="true"] { color: var(--dms-acc); background: var(--surface-alt); }
+  /* The Homebrew drawer docks beside the leaves and widens the screen; on a
+     narrow window it drops below them. */
+  .dms-brew-open { width: min(1420px, 100%); display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 420px); column-gap: .75rem; align-items: start; }
+  .dms-brew-open > .dms-titlebar { grid-column: 1 / -1; }
+  @media (max-width: 900px) { .dms-brew-open { grid-template-columns: minmax(0, 1fr); row-gap: .75rem; } }
+  .dms-brew {
+    background: var(--surface-raised); color: var(--surface-text); border: 1px solid var(--surface-border);
+    border-radius: var(--dms-r); box-shadow: var(--elev-hover); max-height: calc(100vh - 7rem); overflow-y: auto;
+  }
+  .dms-brew-head { display: flex; align-items: center; gap: .5rem; padding: .6rem .5rem .6rem .9rem; border-bottom: 1px solid var(--surface-border); }
+  .dms-brew-head h3 { flex: 1; font-size: 1rem; font-weight: 700; letter-spacing: .04em; }
+  .dms-brew-mark { color: var(--dms-acc); }
+  .dms-brew-pvbar { display: none; gap: .4rem; align-items: center; margin: .75rem .9rem 0; padding: .45rem .6rem; border-radius: .5rem; background: var(--dms-acc); color: #fff; font-size: .8rem; }
+  .dms-brew[data-player-view] .dms-brew-pvbar { display: flex; }
   .dms-strip { display: flex; flex-wrap: wrap; gap: .2rem 1rem; align-items: center; color: var(--color-text-secondary); font-size: .85rem; }
   .dms-strip b { color: var(--surface-text); font-weight: 600; }
   /* The window state: nothing in the overlay catches clicks except the screen

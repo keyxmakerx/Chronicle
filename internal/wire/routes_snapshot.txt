@@ -783,15 +783,20 @@ DELETE	/campaigns/:id/guest-codes/:gcid	session	plugins/campaigns.(*GuestCodeHan
 PUT	/campaigns/:id/handover-setting	session	plugins/campaigns.(*Handler).UpdateHandoverSettingAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/homebrew	session	plugins/homebrew.(*Handler).Page	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/homebrew/catalog	session	plugins/homebrew.(*Handler).Catalog	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/homebrew/drawer	session	plugins/homebrew.(*Handler).Drawer	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/homebrew/press/:event	session	plugins/homebrew.(*Handler).Press	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/homebrew/recipes	session	plugins/homebrew.(*Handler).List	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/homebrew/recipes	session	plugins/homebrew.(*Handler).Create	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 DELETE	/campaigns/:id/homebrew/recipes/:rid	session	plugins/homebrew.(*Handler).Delete	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/homebrew/recipes/:rid	session	plugins/homebrew.(*Handler).Get	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/homebrew/recipes/:rid	session	plugins/homebrew.(*Handler).Update	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/homebrew/recipes/:rid/placements	session	plugins/homebrew.(*Handler).Placements	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/homebrew/rules	session	plugins/fieldrules.(*Handler).ListRules	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
 POST	/campaigns/:id/homebrew/rules	session	plugins/fieldrules.(*Handler).SaveRule	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
 DELETE	/campaigns/:id/homebrew/rules/:rid	session	plugins/fieldrules.(*Handler).DeleteRule	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
 PUT	/campaigns/:id/homebrew/rules/:rid	session	plugins/fieldrules.(*Handler).SaveRule	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
+POST	/campaigns/:id/homebrew/runs/:run/dismiss	session	plugins/homebrew.(*Handler).Dismiss	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/homebrew/runs/:run/run	session	plugins/homebrew.(*Handler).RunHeld	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/homebrew/words	session	plugins/fieldrules.(*Handler).ListWords	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
 POST	/campaigns/:id/homebrew/words	session	plugins/fieldrules.(*Handler).SaveWord	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
 DELETE	/campaigns/:id/homebrew/words/:wid	session	plugins/fieldrules.(*Handler).DeleteWord	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
@@ -1066,6 +1071,7 @@ POST	/campaigns/:id/trackers/entries/:entry/strike	session	plugins/trackers.(*Ha
 GET	/campaigns/:id/trackers/page/:eid	public-capable	plugins/trackers.(*Handler).Page	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/campaigns.RequireViewAccess
 POST	/campaigns/:id/trackers/page/:eid	session	plugins/trackers.(*Handler).Place	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/trackers/page/:eid/log	session	plugins/trackers.(*Handler).Log	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/trackers/pages	session	plugins/trackers.(*Handler).Pages	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/transfer	session	plugins/campaigns.(*Handler).TransferForm	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/transfer	session	plugins/campaigns.(*Handler).Transfer	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/trash	session	plugins/entities.(*PageSafetyHandler).Trash	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/entities.withActorMiddleware > plugins/campaigns.RequireRole

@@ -26,7 +26,7 @@ func viewerFrom(c echo.Context) (string, Viewer, error) {
 	if cc == nil {
 		return "", Viewer{}, apperror.NewMissingContext()
 	}
-	return cc.Campaign.ID, Viewer{UserID: auth.GetUserID(c), Director: cc.CanAuthorDmOnly()}, nil
+	return cc.Campaign.ID, Viewer{UserID: auth.GetUserID(c), Director: cc.CanAuthorDmOnly(), VisibilityRole: int(cc.VisibilityRole())}, nil
 }
 
 // bind reads a JSON body of at most MaxBodyBytes into dst.
@@ -88,6 +88,71 @@ func (h *Handler) Get(c echo.Context) error {
 		return err
 	}
 	out, err := h.svc.Get(c.Request().Context(), cid, c.Param("rid"), v)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
+}
+
+// Placements handles GET /campaigns/:id/homebrew/recipes/:rid/placements.
+func (h *Handler) Placements(c echo.Context) error {
+	cid, v, err := viewerFrom(c)
+	if err != nil {
+		return err
+	}
+	out, err := h.svc.Placements(c.Request().Context(), cid, c.Param("rid"), v)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
+}
+
+// Drawer handles GET /campaigns/:id/homebrew/drawer.
+func (h *Handler) Drawer(c echo.Context) error {
+	cid, v, err := viewerFrom(c)
+	if err != nil {
+		return err
+	}
+	out, err := h.svc.Drawer(c.Request().Context(), cid, v)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
+}
+
+// Press handles POST /campaigns/:id/homebrew/press/:event.
+func (h *Handler) Press(c echo.Context) error {
+	cid, v, err := viewerFrom(c)
+	if err != nil {
+		return err
+	}
+	out, err := h.svc.Press(c.Request().Context(), cid, c.Param("event"), v)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
+}
+
+// RunHeld handles POST /campaigns/:id/homebrew/runs/:run/run.
+func (h *Handler) RunHeld(c echo.Context) error {
+	cid, v, err := viewerFrom(c)
+	if err != nil {
+		return err
+	}
+	out, err := h.svc.RunHeld(c.Request().Context(), cid, c.Param("run"), v)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
+}
+
+// Dismiss handles POST /campaigns/:id/homebrew/runs/:run/dismiss.
+func (h *Handler) Dismiss(c echo.Context) error {
+	cid, v, err := viewerFrom(c)
+	if err != nil {
+		return err
+	}
+	out, err := h.svc.Dismiss(c.Request().Context(), cid, c.Param("run"), v)
 	if err != nil {
 		return err
 	}

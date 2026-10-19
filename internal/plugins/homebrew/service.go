@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 
 	"github.com/google/uuid"
 )
@@ -18,18 +19,34 @@ type Service interface {
 	Create(ctx context.Context, campaignID string, v Viewer, in RecipeInput) (*Recipe, error)
 	Update(ctx context.Context, campaignID, id string, v Viewer, in RecipeInput) (*Recipe, error)
 	Delete(ctx context.Context, campaignID, id string, v Viewer) error
+	// Placements lists where the Customizer has placed a recipe.
+	Placements(ctx context.Context, campaignID, id string, v Viewer) ([]Placement, error)
+
+	// Fire starts the saved rules an event meets (run.go). Owners call it
+	// once they know the change was a Director's.
+	Fire(ctx context.Context, campaignID string, v Viewer, f Fired) error
+	// Drawer is what the Homebrew drawer shows about rules.
+	Drawer(ctx context.Context, campaignID string, v Viewer) (*Drawer, error)
+	// Press fires an event the drawer offers as a button.
+	Press(ctx context.Context, campaignID, event string, v Viewer) (*Drawer, error)
+	// RunHeld runs a waiting rule now; Dismiss sets it aside.
+	RunHeld(ctx context.Context, campaignID, id string, v Viewer) (*RunView, error)
+	Dismiss(ctx context.Context, campaignID, id string, v Viewer) (*RunView, error)
 }
 
 type service struct {
-	repo  Repository
-	reg   *Registry
-	newID func() string
+	repo   Repository
+	reg    *Registry
+	places PlacementFinder
+	runs   RunStore
+	newID  func() string
 }
 
 // NewService builds the service over a repository and the registry the app
-// filled at start.
-func NewService(repo Repository, reg *Registry) Service {
-	return &service{repo: repo, reg: reg, newID: uuid.NewString}
+// filled at start. places may be nil when nothing can place a recipe; a
+// recipe is then on no page. runs may be nil, and rules then never run.
+func NewService(repo Repository, reg *Registry, places PlacementFinder, runs RunStore) Service {
+	return &service{repo: repo, reg: reg, places: places, runs: runs, newID: uuid.NewString}
 }
 
 func requireDirector(v Viewer) error {
@@ -56,7 +73,8 @@ func (s *service) List(ctx context.Context, campaignID string, v Viewer) ([]Reci
 	}
 	out := make([]RecipeSummary, 0, len(rs))
 	for _, r := range rs {
-		out = append(out, RecipeSummary{ID: r.ID, Name: r.Name, Parts: len(r.Doc.Parts), Rules: len(r.Doc.Rules), Version: r.Version, UpdatedAt: r.UpdatedAt})
+		out = append(out, RecipeSummary{ID: r.ID, Name: r.Name, Parts: len(r.Doc.Parts), Rules: len(r.Doc.Rules),
+			PartKinds: partKinds(r.Doc), Version: r.Version, UpdatedAt: r.UpdatedAt})
 	}
 	return out, nil
 }
@@ -97,6 +115,40 @@ func (s *service) check(ctx context.Context, campaignID string, in RecipeInput) 
 		return "", Doc{}, err
 	}
 	return name, doc, nil
+}
+
+// partKinds is the sorted kinds of part a doc has.
+func partKinds(doc Doc) []string {
+	seen := map[string]bool{}
+	out := []string{}
+	for _, p := range doc.Parts {
+		if !seen[p.Kind] {
+			seen[p.Kind] = true
+			out = append(out, p.Kind)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+func (s *service) Placements(ctx context.Context, campaignID, id string, v Viewer) ([]Placement, error) {
+	if err := requireDirector(v); err != nil {
+		return nil, err
+	}
+	if _, err := s.get(ctx, campaignID, id); err != nil {
+		return nil, err
+	}
+	if s.places == nil {
+		return []Placement{}, nil
+	}
+	out, err := s.places.Placements(ctx, campaignID, id)
+	if err != nil {
+		return nil, errInternal(err)
+	}
+	if out == nil {
+		out = []Placement{}
+	}
+	return out, nil
 }
 
 // partsOf is a doc's parts of one kind.

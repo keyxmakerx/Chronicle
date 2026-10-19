@@ -88,6 +88,14 @@
           if (e.target.closest('[data-dms-cancel]')) showConfirm(false);
           var hrow = e.target.closest('[data-dms-hrow]');
           if (hrow) toggleHero(hrow);
+          var b = st.brew || {};
+          if (e.target.closest('[data-dms-brew]')) {
+            brew(!b.open, b.pv);
+            // On a narrow window the drawer opens below the leaves.
+            var pane = st.brew && st.brew.open && root() && root().querySelector('[data-dms-brew-pane]');
+            if (pane) pane.scrollIntoView({ block: 'nearest', behavior: reduce() ? 'auto' : 'smooth' });
+          }
+          if (e.target.closest('[data-dms-brew-pv]')) brew(true, !b.pv);
         });
         // Once the opening is over the screen is a window: drag it by its title bar.
         o.addEventListener('pointerdown', function (e) {
@@ -379,9 +387,29 @@
           .catch(function () { noteStatus('Couldn\u2019t reach the note. Your text is kept here.'); });
       }
 
+      // brew opens or shuts the Homebrew drawer and sets its player view. The
+      // state lives on st, not the markup, so a refetch or a reopen of the
+      // screen finds the drawer as it was left. Its widgets mount on first
+      // open, since a mount here doesn't run boot.js's pass.
+      function brew(open, pv) {
+        var r = root(); if (!r) return;
+        var pane = r.querySelector('[data-dms-brew-pane]'); if (!pane) return;
+        st.brew = { open: !!open, pv: !!pv };
+        pane.hidden = !open;
+        r.classList.toggle('dms-brew-open', !!open);
+        var btn = r.querySelector('.dms-titlebar [data-dms-brew]');
+        if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        var pvb = pane.querySelector('[data-dms-brew-pv]');
+        if (pvb) pvb.setAttribute('aria-pressed', pv ? 'true' : 'false');
+        if (pv) pane.setAttribute('data-player-view', ''); else pane.removeAttribute('data-player-view');
+        if (open && window.Chronicle && Chronicle.mountWidgets) Chronicle.mountWidgets(pane);
+        if (st.windowed) placeWindow(false);
+      }
+
       function restoreKept() {
         var k = st.keep; st.keep = null;
         var r = root(); if (!r) return;
+        if (st.brew && st.brew.open) brew(true, st.brew.pv);
         if (k && k.tab) {
           var t = r.querySelector('[data-dms-tab="' + k.tab + '"]');
           if (t) selectTab(t);

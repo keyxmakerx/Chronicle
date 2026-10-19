@@ -37,7 +37,7 @@ func trackerService(t *testing.T) (homebrew.Service, *homebrew.Registry) {
 	if err := registerTrackerParts(reg, nil); err != nil {
 		t.Fatal(err)
 	}
-	return homebrew.NewService(&memRecipes{stored: map[string]homebrew.Recipe{}}, reg), reg
+	return homebrew.NewService(&memRecipes{stored: map[string]homebrew.Recipe{}}, reg, nil, nil), reg
 }
 
 var hbDirector = homebrew.Viewer{UserID: "dm", Director: true}
@@ -270,7 +270,7 @@ func TestTrackerPartsBecomeKinds(t *testing.T) {
 	if err := registerTrackerParts(reg, tk); err != nil {
 		t.Fatal(err)
 	}
-	svc := homebrew.NewService(&memRecipes{stored: map[string]homebrew.Recipe{}}, reg)
+	svc := homebrew.NewService(&memRecipes{stored: map[string]homebrew.Recipe{}}, reg, nil, nil)
 	r, err := saveDoc(t, svc, homebrew.Doc{Parts: []homebrew.Part{
 		{Key: "need", Kind: "tracker", Label: "Need", See: homebrew.SeeParty, Data: json.RawMessage(`{"max":5}`)},
 		{Key: "doom", Kind: "clock", Label: "Doom", See: homebrew.SeeName, Data: json.RawMessage(`{"max":6}`)},

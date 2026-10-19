@@ -1,0 +1,28 @@
+// drawer.templ: what fills the Homebrew drawer on the DM Screen. The screen
+// draws the frame; this is a mount point the homebrew-drawer widget fills from
+// this plugin's API, plus the stylesheets it and the trackers it shows need.
+
+package homebrew
+
+import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
+
+// DrawerMount is the drawer's content. trackersEndpoint is the campaign's
+// trackers API ("" when the trackers plugin is off, which leaves the pages
+// section out) and trackersCSS the stylesheet its widget needs.
+templ DrawerMount(campaignID, trackersEndpoint, trackersCSS string) {
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/plugins/homebrew/css/drawer.css") }/>
+	if trackersCSS != "" {
+		<link rel="stylesheet" href={ trackersCSS }/>
+	}
+	<div
+		class="hbd"
+		data-widget="homebrew-drawer"
+		data-campaign-id={ campaignID }
+		data-endpoint={ "/campaigns/" + campaignID + "/homebrew" }
+		if trackersEndpoint != "" {
+			data-trackers={ trackersEndpoint }
+		}
+	>
+		<p class="hbd-loading" role="status">Opening the drawer…</p>
+	</div>
+}

@@ -45,6 +45,19 @@ func (a *trackersEntityAdapter) Access(ctx context.Context, campaignID, entityID
 	return trackers.PageAccess{Exists: true, CanView: true, TypeID: e.EntityTypeID}, nil
 }
 
+// Names names the campaign's pages among ids.
+func (a *trackersEntityAdapter) Names(ctx context.Context, campaignID string, ids []string) (map[string]string, error) {
+	cards, err := a.cards.InCampaign(ctx, campaignID, ids)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]string, len(cards))
+	for id, c := range cards {
+		out[id] = c.Name
+	}
+	return out, nil
+}
+
 // Types lists the campaign's page categories.
 func (a *trackersEntityAdapter) Types(ctx context.Context, campaignID string) ([]trackers.TypeRef, error) {
 	list, err := a.svc.GetEntityTypes(ctx, campaignID)

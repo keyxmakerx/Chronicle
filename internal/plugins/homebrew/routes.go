@@ -24,4 +24,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.GET("/recipes/:rid", h.Get)
 	cg.PUT("/recipes/:rid", h.Update)
 	cg.DELETE("/recipes/:rid", h.Delete)
+	cg.GET("/recipes/:rid/placements", h.Placements)
+	cg.GET("/drawer", h.Drawer)
+	cg.POST("/press/:event", h.Press)
+	cg.POST("/runs/:run/run", h.RunHeld)
+	cg.POST("/runs/:run/dismiss", h.Dismiss)
 }

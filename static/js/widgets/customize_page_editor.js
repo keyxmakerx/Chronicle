@@ -40,7 +40,7 @@
   // rests before the gap moves, how long widgets take to glide, and how far
   // the pointer must go before the gap moves again.
   var SETTLE = 110, GLIDE = 340, NUDGE = 12;
-  var GROUPS = ['The page', 'Links and lists', 'Maps and time', 'Characters and play', 'From packages', 'More'];
+  var GROUPS = ['The page', 'Links and lists', 'Maps and time', 'Characters and play', 'Homebrew', 'From packages', 'More'];
   var BASICS = ['title', 'image', 'entry', 'attributes', 'details', 'tags', 'divider', 'text_block', 'heading', 'callout'];
   // Where an old container keeps its widgets, so they can be listed and unpacked.
   var CONTAINER_KEYS = { two_column: ['left', 'right'], three_column: ['columns'], tabs: ['tabs'], section: ['blocks'] };
@@ -417,7 +417,16 @@
     function hasType(type, lay) { return allItems(lay).some(function (b) { return b.type === type; }); }
 
     /* ---------- The palette ---------- */
-    function keyOf(type, cfg) { return type === 'ext_widget' && cfg && cfg.widget_slug ? 'ext_widget:' + cfg.widget_slug : type; }
+    // A type offered once per saved record (a homebrew recipe) has a palette
+    // entry per preset; PRESETS names each such type's preset keys.
+    var PRESETS = {};
+    function presetKey(type, cfg) {
+      return type + ':' + PRESETS[type].map(function (k) { return String((cfg && cfg[k]) || ''); }).join(':');
+    }
+    function keyOf(type, cfg) {
+      if (type === 'ext_widget' && cfg && cfg.widget_slug) return 'ext_widget:' + cfg.widget_slug;
+      return PRESETS[type] ? presetKey(type, cfg) : type;
+    }
     function meta(type, cfg) {
       var m = W[keyOf(type, cfg)];
       if (m) return m;
@@ -435,13 +444,17 @@
           if (!b || !b.type) return;
           if (b.type === 'ext_widget' && !b.widget_slug) return;
           if (ONLY && !ONLY[b.type]) return;
-          var k = b.widget_slug ? 'ext_widget:' + b.widget_slug : b.type;
+          var preset = b.preset && typeof b.preset === 'object' ? b.preset : null;
+          if (preset) PRESETS[b.type] = Object.keys(preset).sort();
+          if (b.preset_only) return;
+          var k = b.widget_slug ? 'ext_widget:' + b.widget_slug : preset ? presetKey(b.type, preset) : b.type;
           W[k] = {
             key: k, type: b.type, widgetSlug: b.widget_slug || '', name: b.label || humanize(b.type), icon: b.icon || 'fa-cube',
             desc: b.description || '', sizes: Array.isArray(b.tile_sizes) ? b.tile_sizes : [], container: !!b.container,
-            singleton: !!b.singleton, retired: !!b.retired, fields: Array.isArray(b.config_fields) ? b.config_fields : []
+            singleton: !!b.singleton, retired: !!b.retired, fields: Array.isArray(b.config_fields) ? b.config_fields : [],
+            preset: preset
           };
-          W[k].group = groupOf(W[k]);
+          W[k].group = b.group && GROUPS.indexOf(b.group) >= 0 ? b.group : groupOf(W[k]);
         });
         paletteState = 'ready';
         render();
@@ -452,7 +465,7 @@
       });
     }
     function newItem(m, asTile) {
-      var cfg = m.widgetSlug ? { widget_slug: m.widgetSlug } : {};
+      var cfg = m.widgetSlug ? { widget_slug: m.widgetSlug } : m.preset ? clone(m.preset) : {};
       return asTile ? { id: uid('t'), type: m.type, size: m.sizes[0], config: cfg } : { id: uid('b'), type: m.type, config: cfg };
     }
     // refuseSingleton says why a second copy of a one-per-page widget can't go in.

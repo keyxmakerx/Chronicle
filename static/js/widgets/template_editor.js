@@ -67,7 +67,9 @@ Chronicle.register('template-editor', {
       .then(function (types) {
         if (types && types.length > 0) {
           // Map API response to the format the editor expects.
-          self.blockTypes = types.map(function (t) {
+          // Per-record entries (a homebrew recipe) carry their config as a
+          // preset this editor cannot place; the Customizer places them.
+          self.blockTypes = types.filter(function (t) { return !t.preset && !t.preset_only; }).map(function (t) {
             var bt = { type: t.type, label: t.label, icon: t.icon, desc: t.description, container: !!t.container };
             if (t.addon) bt.addon = t.addon;
             if (t.widget_slug) bt.widget_slug = t.widget_slug;

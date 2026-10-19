@@ -30,6 +30,7 @@ const (
 // reserved for the rules, item use and AI Import that write the same lines.
 const (
 	SourceHand = "hand"
+	SourceRule = "rule"
 )
 
 // Viewer is who is asking, taken from the campaign context in the handler.
@@ -205,9 +206,12 @@ type TrackerPatch struct {
 type LogInput struct {
 	TrackerID string `json:"trackerId"`
 	KindID    string `json:"kindId"`
-	Op        string `json:"op"`
-	Amount    int    `json:"amount"`
-	Note      string `json:"note"`
+	// Owner is the prefix of the owned view the change came from, which
+	// lets a first change create the row of a kind owned under it.
+	Owner  string `json:"owner"`
+	Op     string `json:"op"`
+	Amount int    `json:"amount"`
+	Note   string `json:"note"`
 }
 
 // TypeRef is a page category, for the "on every page of" picker.

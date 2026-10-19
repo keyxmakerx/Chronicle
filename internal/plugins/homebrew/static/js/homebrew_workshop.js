@@ -429,7 +429,7 @@
       r.doc.parts = r.doc.parts || []; r.doc.rules = r.doc.rules || []; r.doc.layout = r.doc.layout || {};
       r.doc.parts.forEach(function (p) { p.data = p.data || {}; });
       r.doc.rules.forEach(function (rule) { rule.when.args = rule.when.args || {}; rule.then.forEach(function (d) { d.args = d.args || {}; }); });
-      S.cur = r; S.sel = null; S.dirty = false;
+      S.cur = r; S.sel = null; S.dirty = false; S.where = null;
       S.sim = simStart(r.doc, S.catalog);
       redraw(S, true);
       setStatus(S, '');
@@ -445,6 +445,7 @@
       S.busy = false; S.dirty = false;
       c.id = r.id; c.version = r.version; c.doc.layout = r.doc.layout || {};
       setStatus(S, 'Saved');
+      S.where = null;
       drawWhere(S);
       return api(S, '/recipes').then(function (l) { S.list = (l && l.data) || []; drawLibrary(S); });
     }).catch(function (e) {
@@ -1199,15 +1200,55 @@
     S.prevEl.scrollIntoView({ block: 'nearest' });
   }
 
-  // drawWhere lists the places the recipe shows up. A saved recipe's
-  // trackers and clocks are tracker kinds, which a page's Trackers block can
-  // place; nothing else places a recipe yet.
-  // TODO(#1619): list the pages and categories the Customizer placed it on.
+  // drawWhere lists the places the recipe shows up, from the page layouts
+  // the Customizer saved. The list is read when a recipe is opened or saved,
+  // not on every edit, since editing the recipe cannot move it.
   function drawWhere(S) {
-    var numbered = S.cur.doc.parts.some(function (p) { return p.kind === 'tracker' || p.kind === 'clock'; });
+    var c = S.cur, w = S.where;
+    var numbered = c.doc.parts.some(function (p) { return p.kind === 'tracker' || p.kind === 'clock'; });
     S.whereEl.textContent = '';
-    S.whereEl.appendChild(h('p', 'hbw-muted', !S.cur.id ? 'Save the recipe first. It is not on any page yet.'
-      : numbered ? 'Not placed on any page yet. Its trackers and clocks can be added to a page from that page\'s Trackers block.'
-        : 'Not placed on any page yet.'));
+    if (!c.id) {
+      S.whereEl.appendChild(h('p', 'hbw-muted', 'Save the recipe first. It is not on any page yet.'));
+      return;
+    }
+    if (!w || w.id !== c.id) { loadWhere(S); return; }
+    if (w.failed) {
+      S.whereEl.appendChild(h('p', 'hbw-muted', 'Could not check where it is placed. Reopen the recipe to try again.'));
+      return;
+    }
+    if (!w.list) {
+      S.whereEl.appendChild(h('p', 'hbw-muted', 'Checking where it is placed…'));
+      return;
+    }
+    var cats = w.list.filter(function (p) { return p.where === 'category'; }).map(function (p) { return p.name; });
+    if (cats.length) {
+      S.whereEl.appendChild(h('p', '', 'On every page of ' + joinNames(cats) + '.'));
+    } else {
+      S.whereEl.appendChild(h('p', 'hbw-muted', 'Not placed on any page yet.'));
+    }
+    S.whereEl.appendChild(h('p', 'hbw-muted', numbered
+      ? 'To place it, open a category\'s page layout in the Customizer and add it from the Homebrew group.'
+      : 'A recipe can be placed from the Customizer once it has a tracker or clock.'));
+  }
+
+  function loadWhere(S) {
+    var id = S.cur.id;
+    S.where = { id: id, list: null, failed: false };
+    api(S, '/recipes/' + encodeURIComponent(id) + '/placements').then(function (r) {
+      if (!S.where || S.where.id !== id) return;
+      S.where.list = Array.isArray(r) ? r : (r && r.data) || [];
+      drawWhere(S);
+    }).catch(function () {
+      if (!S.where || S.where.id !== id) return;
+      S.where.failed = true;
+      drawWhere(S);
+    });
+    drawWhere(S);
+  }
+
+  // joinNames lists names as plain English: "A", "A and B", "A, B and C".
+  function joinNames(names) {
+    if (names.length < 2) return names.join('');
+    return names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1];
   }
 })();

@@ -5,6 +5,8 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/a-h/templ"
 )
 
 func render(t *testing.T, v *View) string {
@@ -70,6 +72,17 @@ func TestPanel(t *testing.T) {
 			view:    View{CampaignID: "c1", Hidden: []HiddenView{{ID: "e9", Name: "Vosk"}}},
 			want:    []string{`/campaigns/c1/dm-screen/reveal/e9`, "Vosk"},
 			notWant: []string{"/campaigns/c1/characters"},
+		},
+		{
+			name:    "no homebrew leaves the drawer and its button out",
+			view:    View{CampaignID: "c1"},
+			notWant: []string{"data-dms-brew", "fa-beer-mug-empty"},
+		},
+		{
+			name: "homebrew adds the tankard button and a closed drawer around its content",
+			view: View{CampaignID: "c1", Homebrew: templ.Raw(`<div data-widget="homebrew-drawer"></div>`)},
+			want: []string{`data-dms-brew aria-controls="dms-brew" aria-expanded="false" aria-label="Homebrew"`, "fa-beer-mug-empty",
+				`id="dms-brew" data-dms-brew-pane`, `hidden`, "data-dms-brew-pv", `<div data-widget="homebrew-drawer"></div>`},
 		},
 		{
 			name: "more hidden than fit links to the Characters page",

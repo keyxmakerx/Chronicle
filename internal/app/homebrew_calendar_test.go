@@ -16,7 +16,7 @@ func calendarHomebrewService(t *testing.T) homebrew.Service {
 	if err := registerCalendarHomebrew(reg); err == nil {
 		t.Error("registering twice succeeded")
 	}
-	return homebrew.NewService(&memRecipes{stored: map[string]homebrew.Recipe{}}, reg)
+	return homebrew.NewService(&memRecipes{stored: map[string]homebrew.Recipe{}}, reg, nil, nil)
 }
 
 func TestCalendarHomebrewRules(t *testing.T) {

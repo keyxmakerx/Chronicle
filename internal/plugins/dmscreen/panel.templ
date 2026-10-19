@@ -23,7 +23,12 @@ templ Panel(v *View, csrf string) {
 		<div class="dms-titlebar">
 			<div class="dms-head">
 				<h2 id="dms-title"><i class="fa-solid fa-grip-vertical dms-grip" aria-hidden="true"></i>DM Screen</h2>
-				<button type="button" class="dms-close" data-dms-close aria-label="Close the DM Screen" title="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+				<span class="dms-acts">
+					if v.Homebrew != nil {
+						<button type="button" class="dms-close" data-dms-brew aria-controls="dms-brew" aria-expanded="false" aria-label="Homebrew" title="Homebrew"><i class="fa-solid fa-beer-mug-empty" aria-hidden="true"></i></button>
+					}
+					<button type="button" class="dms-close" data-dms-close aria-label="Close the DM Screen" title="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+				</span>
 			</div>
 			<div class="dms-strip">
 				if v.Night != nil {
@@ -226,7 +231,27 @@ templ Panel(v *View, csrf string) {
 				}
 			</section>
 		</div>
+		if v.Homebrew != nil {
+			@brewDrawer(v)
+		}
 	</div>
+}
+
+// brewDrawer is the Homebrew drawer beside the leaves: the frame is the
+// screen's, what fills it is homebrew's. "See it as a player" sets
+// data-player-view on the drawer, which the homebrew styles read to hide
+// what players don't get.
+templ brewDrawer(v *View) {
+	<aside class="dms-brew" id="dms-brew" data-dms-brew-pane aria-labelledby="dms-brew-title" hidden>
+		<div class="dms-brew-head">
+			<i class="fa-solid fa-beer-mug-empty dms-brew-mark" aria-hidden="true"></i>
+			<h3 id="dms-brew-title">Homebrew</h3>
+			<button type="button" class="dms-close" data-dms-brew-pv aria-pressed="false" aria-label="See it as a player" title="See it as a player"><i class="fa-solid fa-users" aria-hidden="true"></i></button>
+			<button type="button" class="dms-close" data-dms-brew aria-label="Close Homebrew" title="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+		</div>
+		<p class="dms-brew-pvbar"><i class="fa-solid fa-users" aria-hidden="true"></i>Player view: only what players see. Press the people button again to go back.</p>
+		@v.Homebrew
+	</aside>
 }
 
 // adventuresPane is the Adventures tab: pinned Adventures pages and loose notes

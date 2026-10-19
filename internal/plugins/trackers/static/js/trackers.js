@@ -184,7 +184,10 @@
   });
 
   function load(S) {
-    api(S.cfg.endpoint).then(function (v) {
+    // An owned view (a recipe's block) reads only the kinds owned under its
+    // prefix; its first change on a kind creates that kind's row here.
+    var url = S.cfg.owner ? S.cfg.endpoint + '?owner=' + encodeURIComponent(S.cfg.owner) : S.cfg.endpoint;
+    api(url).then(function (v) {
       S.view = v;
       draw(S);
     }).catch(function () {
@@ -214,13 +217,15 @@
       h('h3', 'tk-title cb-head', 'Trackers'),
       v.trackers.length ? h('span', 'tk-count cb-count', String(v.trackers.length)) : null,
       h('span', 'tk-sp'),
-      v.canEdit ? quiet(S.adding ? 'Close' : 'Add a tracker', function () { S.adding = !S.adding; draw(S); },
+      v.canEdit && !S.cfg.owner ? quiet(S.adding ? 'Close' : 'Add a tracker', function () { S.adding = !S.adding; draw(S); },
         { 'aria-expanded': S.adding ? 'true' : 'false' }) : null
     ]);
     el.appendChild(head);
     if (S.adding) el.appendChild(addPanel(S));
     if (!v.trackers.length) {
-      el.appendChild(h('p', 'tk-empty', 'No trackers on this page yet. Add one to count something, step through named stages, or run a clock.'));
+      el.appendChild(h('p', 'tk-empty', S.cfg.owner
+        ? 'This recipe has no trackers or clocks to show here. Change it in the Homebrew Workshop.'
+        : 'No trackers on this page yet. Add one to count something, step through named stages, or run a clock.'));
     }
     var list = h('div', 'tk-list');
     v.trackers.forEach(function (t) { list.appendChild(row(S, t)); });
@@ -401,6 +406,7 @@
   function log(S, t, change) {
     var body = { op: change.op, amount: change.amount, note: change.note || '' };
     if (t.id) body.trackerId = t.id; else body.kindId = t.kindId;
+    if (S.cfg.owner) body.owner = S.cfg.owner;
     var key = keyOf(t);
     return run(S, api(S.cfg.endpoint + '/log', 'POST', body, S.cfg.csrfToken), function (tv) {
       replace(S, key, tv);

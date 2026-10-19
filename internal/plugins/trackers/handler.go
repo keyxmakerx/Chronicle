@@ -47,13 +47,32 @@ func bind(c echo.Context, dst any) error {
 	return nil
 }
 
-// Page handles GET /campaigns/:id/trackers/page/:eid.
+// Page handles GET /campaigns/:id/trackers/page/:eid; ?owner= limits it to
+// the kinds owned under that prefix.
 func (h *Handler) Page(c echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
 	}
-	out, err := h.svc.Page(c.Request().Context(), cid, c.Param("eid"), v)
+	var out *PageView
+	if owner := c.QueryParam("owner"); owner != "" {
+		out, err = h.svc.OwnedPage(c.Request().Context(), cid, c.Param("eid"), owner, v)
+	} else {
+		out, err = h.svc.Page(c.Request().Context(), cid, c.Param("eid"), v)
+	}
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
+}
+
+// Pages handles GET /campaigns/:id/trackers/pages.
+func (h *Handler) Pages(c echo.Context) error {
+	cid, v, err := viewerFrom(c)
+	if err != nil {
+		return err
+	}
+	out, err := h.svc.Pages(c.Request().Context(), cid, v)
 	if err != nil {
 		return err
 	}
