@@ -5,6 +5,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/database"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
+	"github.com/keyxmakerx/chronicle/internal/plugins/fieldrules"
 	"github.com/keyxmakerx/chronicle/internal/plugins/homebrew"
 	"github.com/keyxmakerx/chronicle/internal/plugins/systemstate"
 	"github.com/keyxmakerx/chronicle/internal/plugins/trackers"
@@ -14,13 +15,16 @@ import (
 // workshopDeps is what a feature may need to plug parts, events or actions
 // into the Homebrew Workshop. A field is nil while its plugin is degraded.
 type workshopDeps struct {
-	Entities      entities.EntityService
-	FieldRules    *fieldRulesWorld
-	Health        *database.PluginHealthRegistry
-	SystemEntries systems.SystemEntryService
-	SystemState   systemstate.Service
-	Systems       *systems.SystemHandler
-	Trackers      trackers.Service
+	Entities   entities.EntityService
+	FieldRules *fieldRulesWorld
+	// FieldRuleStore saves the rules and words field parts describe; nil
+	// while the field rules are degraded.
+	FieldRuleStore fieldrules.Service
+	Health         *database.PluginHealthRegistry
+	SystemEntries  systems.SystemEntryService
+	SystemState    systemstate.Service
+	Systems        *systems.SystemHandler
+	Trackers       trackers.Service
 }
 
 // workshopSource is one feature's Workshop registration. Label names the

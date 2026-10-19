@@ -20,7 +20,7 @@ func init() {
 		if d.FieldRules == nil {
 			return nil
 		}
-		return registerFieldRuleParts(reg, d.FieldRules.PlaceName)
+		return registerFieldRuleParts(reg, d.FieldRules.PlaceName, fieldRuleSync{cats: d.Entities, rules: d.FieldRuleStore})
 	})
 }
 
@@ -92,14 +92,16 @@ type hbWordsPart struct {
 // registerFieldRuleParts plugs the field rules into the Homebrew Workshop: a
 // field part is one sheet field (with its worked-out rule when it has one),
 // an item part an item category's fields, and a words part one place's or
-// era's local words. placeName says whether a page belongs to the campaign.
-func registerFieldRuleParts(reg *homebrew.Registry, placeName func(ctx context.Context, campaignID, entityID string) (string, bool)) error {
+// era's local words. placeName says whether a page belongs to the campaign;
+// sync saves what the parts describe when a recipe is saved.
+func registerFieldRuleParts(reg *homebrew.Registry, placeName func(ctx context.Context, campaignID, entityID string) (string, bool), sync fieldRuleSync) error {
 	parts := []homebrew.PartKind{
-		{Name: "field", Label: "Field", Check: checkFieldPart},
-		{Name: "item", Label: "Item fields", Check: checkItemPart},
-		{Name: "words", Label: "Local words", Check: func(ctx context.Context, campaignID string, raw json.RawMessage) (json.RawMessage, error) {
-			return checkWordsPart(ctx, campaignID, raw, placeName)
-		}},
+		{Name: "field", Label: "Field", Check: checkFieldPart, Sync: sync.syncFor("field")},
+		{Name: "item", Label: "Item fields", Check: checkItemPart, Sync: sync.syncFor("item")},
+		{Name: "words", Label: "Local words", Sync: sync.syncFor("words"),
+			Check: func(ctx context.Context, campaignID string, raw json.RawMessage) (json.RawMessage, error) {
+				return checkWordsPart(ctx, campaignID, raw, placeName)
+			}},
 	}
 	for _, p := range parts {
 		if err := reg.RegisterPart(p); err != nil {
