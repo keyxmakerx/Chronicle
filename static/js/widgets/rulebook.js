@@ -20,6 +20,8 @@
  */
 (function () {
   'use strict';
+  function gmTerm() { return (window.Chronicle && Chronicle.gmTerm) ? Chronicle.gmTerm() : 'GM'; }
+
 
   var PLACE_KEY = 'chronicle.rulebook.place.';
   var NARROW_QUERY = '(max-width: 900px)';
@@ -612,7 +614,7 @@
     if (d.isDirector) {
       seg = '<div class="rb-seg" role="group" aria-label="Book view">' +
         '<button type="button" data-act="view" data-view="player" aria-pressed="false">Player view</button>' +
-        '<button type="button" data-act="view" data-view="director" aria-pressed="false">Director view</button></div>';
+        '<button type="button" data-act="view" data-view="director" aria-pressed="false">' + gmTerm() + ' view</button></div>';
     }
     var edit = d.canEdit && this.url
       ? '<button type="button" class="rb-btn" data-act="edit" data-href="' + esc(this.url.replace(/[?#].*$/, '').replace(/\/+$/, '') + '/edit') + '">Edit</button>'
@@ -978,7 +980,7 @@
     }
   };
 
-  Rulebook.prototype.dirTag = function () { return '<span class="rb-dir">Director</span>'; };
+  Rulebook.prototype.dirTag = function () { return '<span class="rb-dir">' + gmTerm() + '</span>'; };
 
   Rulebook.prototype.pageHTML = function (item) {
     var h, label;
@@ -991,7 +993,7 @@
       if (item.pages.length) {
         h += '<ul class="rb-toc">' + item.pages.map(function (p) {
           return '<li><button type="button" data-go="' + p.n + '"><span>' + esc(p.p.title) +
-            (p.p.director ? ' ' + '<span class="rb-dir">Director</span>' : '') + '</span><span class="rb-pn">' + (p.n + 1) + '</span></button></li>';
+            (p.p.director ? ' ' + '<span class="rb-dir">' + gmTerm() + '</span>' : '') + '</span><span class="rb-pn">' + (p.n + 1) + '</span></button></li>';
         }).join('') + '</ul>';
       }
     } else {
@@ -1594,12 +1596,12 @@
         }
         num++;
         h += '<li><button type="button" data-bm="' + it.n + '"' + (it.ch === curCh ? ' aria-current="true"' : '') + '><i>' + (bold ? roman(num) : num) + '</i><span>' +
-          esc(it.ch.title) + '</span>' + (it.ch.director && !it.part.director ? '<em>Director</em>' : '') + '</button>';
+          esc(it.ch.title) + '</span>' + (it.ch.director && !it.part.director ? '<em>' + gmTerm() + '</em>' : '') + '</button>';
         open = true;
         if (it.kind === 'open' && it.pages.length > 1) {
           h += '<ul class="rb-bm-sub">' + it.pages.map(function (p) {
             return '<li><button type="button" data-bm="' + p.n + '"' + (cur[p.n] ? ' aria-current="true"' : '') + '><span>' +
-              esc(p.p.title || 'Untitled page') + '</span>' + (p.p.director && !it.ch.director ? '<em>Director</em>' : '') + '</button></li>';
+              esc(p.p.title || 'Untitled page') + '</span>' + (p.p.director && !it.ch.director ? '<em>' + gmTerm() + '</em>' : '') + '</button></li>';
           }).join('') + '</ul>';
         }
       }

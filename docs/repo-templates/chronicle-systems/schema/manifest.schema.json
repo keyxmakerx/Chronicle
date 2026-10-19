@@ -126,6 +126,19 @@
         "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_-]*\\.json$"
       },
       "description": "Data files with no category that only the campaign's Directors may read from the raw data route."
+    },
+    "terms": {
+      "type": "object",
+      "properties": {
+        "gm": {
+          "type": "string",
+          "maxLength": 24,
+          "pattern": "^\\p{L}[\\p{L} .-]*$",
+          "description": "What the game calls its game master, as a capitalised noun (\"Director\", \"DM\"). Chronicle names the role with it everywhere in the campaign and adds a plain \"s\" for plurals. Absent: \"GM\"."
+        }
+      },
+      "additionalProperties": false,
+      "description": "The game's words for Chronicle's roles."
     }
   },
   "additionalProperties": false,

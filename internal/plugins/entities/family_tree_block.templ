@@ -90,13 +90,13 @@ templ BlockFamilyTree(campaignID, entityID, entityName string, t *FamilyTree, dm
 							<span class="fm-lg"><svg class="fm-k" viewBox="0 0 26 6" aria-hidden="true"><path d="M0 3H26" stroke="currentColor" stroke-width="1.5" stroke-dasharray="6 4" fill="none"></path></svg>adopted</span>
 							<span class="fm-lg"><svg class="fm-k" viewBox="0 0 26 6" aria-hidden="true"><path d="M0 3H26" stroke="currentColor" stroke-width="2.4" stroke-dasharray=".1 6" stroke-linecap="round" fill="none"></path></svg>guardian</span>
 							if dm && familyHasDMOnly(t) {
-								<span class="fm-lg" data-dm-only><span class="fm-dmtag cb-dm">DM</span>hidden from players</span>
+								<span class="fm-lg" data-dm-only><span class="fm-dmtag cb-dm">{ layouts.GMTerm(ctx) }</span>hidden from players</span>
 							}
 							<span class="fm-n" data-fm-shown></span>
 						</div>
 						if dm {
 							<div class="fm-ft fm-save" data-fm-savebar data-dm-only hidden>
-								<span class="fm-dmtag cb-dm">DM</span>
+								<span class="fm-dmtag cb-dm">{ layouts.GMTerm(ctx) }</span>
 								<span class="fm-savemsg" data-fm-savemsg role="status" aria-live="polite">No changes yet</span>
 								<span class="fm-sp"></span>
 								<button type="button" class="fm-q" data-fm-undo disabled onclick={ familyCall("undo") }>Undo</button>

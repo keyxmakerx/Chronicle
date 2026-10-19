@@ -31,7 +31,7 @@ templ BlockWhereItIs(cc *campaigns.CampaignContext, entityID, entityName string,
 		if dm {
 			@whereIsStyles()
 			<div class="wi wi-empty" data-dm-only>
-				<p class="wi-note"><span class="wi-dmtag cb-dm">DM</span>Not on any map yet. Pin it in Maps.</p>
+				<p class="wi-note"><span class="wi-dmtag cb-dm">{ layouts.GMTerm(ctx) }</span>Not on any map yet. Pin it in Maps.</p>
 			</div>
 		}
 	} else {
@@ -79,7 +79,7 @@ templ BlockWhereItIs(cc *campaigns.CampaignContext, entityID, entityName string,
 						<dl class="wi-pdl"></dl>
 						if dm {
 							<p class="wi-pdm" data-dm-only hidden>
-								<span class="wi-dmtag cb-dm">DM</span>
+								<span class="wi-dmtag cb-dm">{ layouts.GMTerm(ctx) }</span>
 								<span class="wi-pdm-t"></span>
 								<a class="wi-lnk wi-pdm-a" href="#">Change in Maps</a>
 							</p>
@@ -101,7 +101,7 @@ templ BlockWhereItIs(cc *campaigns.CampaignContext, entityID, entityName string,
 			</div>
 			<p class="wi-hint" aria-live="polite"></p>
 			if l.Truncated && dm {
-				<p class="wi-note" data-dm-only><span class="wi-dmtag cb-dm">DM</span>{ fmt.Sprintf("Showing the first %d maps; there are more than this page reads.", whereShownCount(l)) }</p>
+				<p class="wi-note" data-dm-only><span class="wi-dmtag cb-dm">{ layouts.GMTerm(ctx) }</span>{ fmt.Sprintf("Showing the first %d maps; there are more than this page reads.", whereShownCount(l)) }</p>
 			}
 			if dm {
 				@whereDMLines(cc.Campaign.ID, l)
@@ -117,7 +117,7 @@ templ BlockWhereItIs(cc *campaigns.CampaignContext, entityID, entityName string,
 						<a class="wi-lnk" href={ templ.SafeURL(mapPageURL(cc.Campaign.ID, a.Map.ID)) } data-dm-only?={ a.DMOnly }>
 							{ a.Map.Name }
 							if a.DMOnly {
-								<span class="wi-dmtag cb-dm">DM</span>
+								<span class="wi-dmtag cb-dm">{ layouts.GMTerm(ctx) }</span>
 							}
 						</a>
 					}
@@ -177,7 +177,7 @@ templ whereStepCard(campaignID string, steps []WhereStep, i int, s WhereStep) {
 						<span class="wi-hereword">You are here</span>
 					}
 					if s.DMOnly {
-						<span class="wi-dmtag cb-dm">DM</span>
+						<span class="wi-dmtag cb-dm">{ layouts.GMTerm(ctx) }</span>
 					}
 				</span>
 			</span>
@@ -190,14 +190,14 @@ templ whereStepCard(campaignID string, steps []WhereStep, i int, s WhereStep) {
 templ whereDMLines(campaignID string, l *WhereLadder) {
 	if len(l.Steps) > 1 {
 		<p class="wi-dmline" data-dm-only>
-			<span class="wi-dmtag cb-dm">DM</span>
+			<span class="wi-dmtag cb-dm">{ layouts.GMTerm(ctx) }</span>
 			<span>Set in Maps: this map sits under the { l.Steps[1].Map.Name } pin.</span>
 			<a class="wi-lnk" href={ templ.SafeURL(mapPageURL(campaignID, l.Steps[1].Map.ID)) }>Change in Maps</a>
 		</p>
 	}
 	if line := whereHiddenLine(l.Steps); line != "" {
 		<p class="wi-dmline" data-dm-only>
-			<span class="wi-dmtag cb-dm">DM</span>
+			<span class="wi-dmtag cb-dm">{ layouts.GMTerm(ctx) }</span>
 			<span>{ line }</span>
 		</p>
 	}

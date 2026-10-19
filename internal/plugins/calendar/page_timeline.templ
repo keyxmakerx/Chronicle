@@ -7,6 +7,7 @@
 package calendar
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
@@ -59,7 +60,7 @@ templ PageTimelineBlock(campaignID string, t *PageTimeline, canAuthor bool) {
 								<a
 									class={ "ptl-ev", templ.KV("ptl-ev--dm cb-dm", e.DMOnly), templ.KV("ptl-ev--later", t.Later(e)), templ.KV("ptl-ev--death", e.Death) }
 									href={ templ.SafeURL(pageTimelineEventURL(campaignID, t.CalendarID, e)) }
-									aria-label={ pageTimelineEventLabel(e) }
+									aria-label={ pageTimelineEventLabel(ctx, e) }
 									data-ptl-name={ e.Name }
 									data-ptl-date={ e.DateLabel }
 									data-ptl-kind={ e.KindName }
@@ -106,14 +107,14 @@ func pageTimelineEventURL(campaignID, calendarID string, e PageTimelineEvent) st
 }
 
 // pageTimelineEventLabel is what a screen reader hears for a bead.
-func pageTimelineEventLabel(e PageTimelineEvent) string {
+func pageTimelineEventLabel(ctx context.Context, e PageTimelineEvent) string {
 	s := e.DateLabel
 	if e.EndLabel != "" {
 		s += " to " + e.EndLabel
 	}
 	s += ": " + e.Name
 	if e.DMOnly {
-		s += " (Director only)"
+		s += " (" + layouts.GMTerm(ctx) + " only)"
 	}
 	return s
 }

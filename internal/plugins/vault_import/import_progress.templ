@@ -3,7 +3,10 @@
 
 package vault_import
 
-import "fmt"
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
 
 // ProgressPanel shows a job. While it runs the panel asks for itself again
 // every second; once it ends the same panel shows the result and stops asking.
@@ -45,7 +48,7 @@ templ importResult(campaignID string, j JobView) {
 			</span>
 			<div>
 				<h3 class="text-base font-semibold text-fg">Imported { fmt.Sprint(j.Summary.Pages) } { plural(j.Summary.Pages, "page", "pages") }</h3>
-				<p class="text-sm text-fg-secondary">They are in the folder <strong class="text-fg">{ j.RootName }</strong>, GM only until you share them.</p>
+				<p class="text-sm text-fg-secondary">They are in the folder <strong class="text-fg">{ j.RootName }</strong>, { layouts.GMTerm(ctx) } only until you share them.</p>
 			</div>
 		</div>
 		@summaryList(j.Summary)

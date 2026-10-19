@@ -243,7 +243,7 @@
     h += '<section class="esec"><h4>Details</h4><div class="fld">Kind<div class="chips" id="cal5-edKinds">' + this._kindChips() + '</div></div>' +
       '<label class="fld">Notes<textarea id="cal5-edD" placeholder="Optional. Shows on the event’s card and page.">' + esc(S.isNew ? '' : descriptionText(ev)) + '</textarea></label></section>';
     if (view.canAuthorDmOnly) {
-      h += '<section class="esec"><h4>Who</h4><div class="segs" role="group" aria-label="Who can see it">' + [['everyone', 'Everyone'], ['dm_only', 'Director only']].map(function (o) {
+      h += '<section class="esec"><h4>Who</h4><div class="segs" role="group" aria-label="Who can see it">' + [['everyone', 'Everyone'], ['dm_only', Chronicle.gmTerm() + ' only']].map(function (o) {
         return '<button type="button" data-vis="' + o[0] + '" aria-pressed="' + (S.vis === o[0]) + '">' + o[1] + '</button>';
       }).join('') + '</div>' +
       '<div class="fld eann">Players see it<div class="segs" role="group" aria-label="Players see it">' + [['', 'As its kind says'], ['ahead', 'Ahead of time'], ['on_day', 'On the day']].map(function (o) {

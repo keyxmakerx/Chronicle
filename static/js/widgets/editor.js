@@ -561,7 +561,7 @@
         { cmd: 'italic', icon: 'I', title: 'Italic (Ctrl+I)', style: 'font-style:italic' },
         { cmd: 'underline', icon: 'U', title: 'Underline (Ctrl+U)', style: 'text-decoration:underline' },
         { cmd: 'strike', icon: 'S', title: 'Strikethrough', style: 'text-decoration:line-through' },
-        { cmd: 'secret', icon: '<i class="fa-solid fa-eye-slash" style="font-size:11px"></i>', title: 'GM Secret (Ctrl+Shift+S)' },
+        { cmd: 'secret', icon: '<i class="fa-solid fa-eye-slash" style="font-size:11px"></i>', title: Chronicle.gmTerm() + ' Secret (Ctrl+Shift+S)' },
       ],
       // Block formatting
       [

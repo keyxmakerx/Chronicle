@@ -36,7 +36,7 @@
         kindIcon: 'fa-layer-group',
         title: group.length + ' events',
         facts: group.map(function (g) {
-          return [fact(g), (g.getAttribute('data-ptl-name') || '') + (g.hasAttribute('data-dm-only') ? ' (Director only)' : '')];
+          return [fact(g), (g.getAttribute('data-ptl-name') || '') + (g.hasAttribute('data-dm-only') ? ' (' + Chronicle.gmTerm() + ' only)' : '')];
         }),
         link: { href: dot.getAttribute('href') || '', label: 'Open on the calendar' }
       };
@@ -48,7 +48,7 @@
       kindIcon: (dot.getAttribute('data-ptl-icon') || 'fa-calendar-day').replace(/^fa-solid\s+/, ''),
       title: dot.getAttribute('data-ptl-name') || '',
       facts: facts,
-      foot: dot.hasAttribute('data-dm-only') ? 'Director only' : '',
+      foot: dot.hasAttribute('data-dm-only') ? Chronicle.gmTerm() + ' only' : '',
       link: { href: dot.getAttribute('href') || '', label: 'Open on the calendar' }
     };
   }

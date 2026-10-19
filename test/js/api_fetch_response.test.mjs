@@ -28,6 +28,7 @@ async function boot(file, slug, config, answer) {
     register: (name, i) => { if (name === slug) impl = i; },
     apiFetch: (url, opts) => { calls.push({ url, opts: opts || {} }); return Promise.resolve(answer(url, opts || {})); },
     escapeHtml: (s) => String(s == null ? '' : s),
+    gmTerm: () => 'GM',
     escapeAttr: (s) => String(s == null ? '' : s),
     notify() {},
   };

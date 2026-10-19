@@ -769,6 +769,15 @@
    */
   Chronicle.escapeHtml = Chronicle.escapeAttr;
 
+  // The campaign's word for its game master ("Director"), plural with a plain
+  // "s". The server allows only letters, so escaping changes nothing; it keeps
+  // the term safe in the HTML strings widgets build even if that check slips.
+  Chronicle.gmTerm = function () {
+    return String(document.documentElement.getAttribute('data-gm-term') || 'GM')
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  };
+
   /**
    * Read the CSRF token from the CSRF cookie.
    * Checks __Host-chronicle_csrf first (HTTPS), then chronicle_csrf (HTTP dev).

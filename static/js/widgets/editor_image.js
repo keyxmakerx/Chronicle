@@ -26,6 +26,8 @@
  */
 (function () {
   'use strict';
+  function gmTerm() { return (window.Chronicle && Chronicle.gmTerm) ? Chronicle.gmTerm() : 'GM'; }
+
 
   if (!window.TipTap || !TipTap.Node) return;
 
@@ -124,7 +126,7 @@
     capInput.maxLength = MAX_CAPTION;
     capInput.setAttribute('aria-label', 'Caption');
     tools.appendChild(capInput);
-    var gmBtn = button('GM only', null, 'Hide this picture from players');
+    var gmBtn = button(gmTerm() + ' only', null, 'Hide this picture from players');
     gmBtn.classList.add('ce-img__btn--gm');
     tools.appendChild(gmBtn);
     var delBtn = button('Remove', 'fa-trash', 'Remove picture');
@@ -142,7 +144,7 @@
 
     var gmBadge = document.createElement('span');
     gmBadge.className = 'ce-img__gm-badge';
-    gmBadge.textContent = 'GM only';
+    gmBadge.textContent = gmTerm() + ' only';
     fig.appendChild(gmBadge);
 
     function paint() {

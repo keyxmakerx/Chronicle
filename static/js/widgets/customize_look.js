@@ -942,7 +942,7 @@
     function toolsHTML(d){
       var w = d.header.widgets, h = '';
       if (w.indexOf('search') < 0) h += '<span class="s-tool">' + IC('i-search') + '</span>';
-      return h + '<span class="s-tool">' + IC('i-mask') + '</span><span class="s-tool">' + IC('i-bell') + '<span class="s-badge">2</span></span><span class="s-av">GM</span>';
+      return h + '<span class="s-tool">' + IC('i-mask') + '</span><span class="s-tool">' + IC('i-bell') + '<span class="s-badge">2</span></span><span class="s-av">' + (window.Chronicle && Chronicle.gmTerm ? Chronicle.gmTerm() : 'GM') + '</span>';
     }
     function renderPreview(theme){
       var d = draft, pv = $('#preview'), reduce = reduceAll();

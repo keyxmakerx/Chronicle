@@ -54,7 +54,7 @@ Chronicle.register('tag-picker', {
           chip.setAttribute('data-dm-only', '');
           var dmBadge = document.createElement('i');
           dmBadge.className = 'fa-solid fa-eye-slash tp-dm-badge cb-dm';
-          dmBadge.title = 'DM only';
+          dmBadge.title = (window.Chronicle && Chronicle.gmTerm ? Chronicle.gmTerm() : 'GM') + ' only';
           chip.appendChild(dmBadge);
         }
 
@@ -172,7 +172,7 @@ Chronicle.register('tag-picker', {
             if (tag.dmOnly) {
               var dmLabel = document.createElement('span');
               dmLabel.className = 'tp-option-dm';
-              dmLabel.innerHTML = '<i class="fa-solid fa-eye-slash"></i> DM';
+              dmLabel.innerHTML = '<i class="fa-solid fa-eye-slash"></i> ' + (window.Chronicle && Chronicle.gmTerm ? Chronicle.gmTerm() : 'GM');
               option.appendChild(dmLabel);
             }
 
@@ -198,7 +198,7 @@ Chronicle.register('tag-picker', {
                 state.createDmOnly = dmCheck.checked;
               });
               dmCheckLabel.appendChild(dmCheck);
-              dmCheckLabel.appendChild(document.createTextNode(' DM only'));
+              dmCheckLabel.appendChild(document.createTextNode(' ' + (window.Chronicle && Chronicle.gmTerm ? Chronicle.gmTerm() : 'GM') + ' only'));
               dmRow.appendChild(dmCheckLabel);
               listEl.appendChild(dmRow);
 

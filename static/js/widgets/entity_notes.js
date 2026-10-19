@@ -13,6 +13,8 @@
  */
 (function () {
   'use strict';
+  function gmTerm() { return (window.Chronicle && Chronicle.gmTerm) ? Chronicle.gmTerm() : 'GM'; }
+
 
   // A delete waits this long for Undo before it reaches the server.
   var UNDO_MS = 5000;
@@ -22,8 +24,8 @@
 
   var AUDIENCES = {
     'private':   { label: 'Only me',         icon: 'fa-lock',        tone: '' },
-    'dm_only':   { label: 'DM only',         icon: 'fa-eye-slash',   tone: 'dm' },
-    'dm_scribe': { label: 'DMs and scribes', icon: 'fa-user-shield', tone: 'dm' },
+    'dm_only':   { get label() { return gmTerm() + ' only'; }, icon: 'fa-eye-slash',   tone: 'dm' },
+    'dm_scribe': { get label() { return gmTerm() + 's and scribes'; }, icon: 'fa-user-shield', tone: 'dm' },
     'everyone':  { label: 'Everyone',        icon: 'fa-users',       tone: 'all' },
     'custom':    { label: 'Picked people',   icon: 'fa-user-plus',   tone: '' }
   };
@@ -158,7 +160,7 @@
           '</header>' +
           '<div class="en-filters" role="group" aria-label="Show">' +
             chip('all', 'All', true) + chip('mine', 'Mine', false) +
-            (seesDmNotes ? chip('dm', 'DM only', false) : chip('shared', 'Shared with me', false)) +
+            (seesDmNotes ? chip('dm', gmTerm() + ' only', false) : chip('shared', 'Shared with me', false)) +
           '</div>' +
           '<div data-en-comp></div>' +
           '<div class="en-list" data-en-list><div class="en-empty">Loading notes…</div></div>' +
@@ -255,7 +257,7 @@
       }
 
       function audienceLabel(n) {
-        if (n.audience === 'dm_only' && seesDmNotes) return 'DMs only';
+        if (n.audience === 'dm_only' && seesDmNotes) return gmTerm() + 's only';
         if (n.audience === 'custom') {
           var c = Array.isArray(n.sharedWith) ? n.sharedWith.length : 0;
           return c ? 'Picked people (' + c + ')' : 'Picked people';
@@ -559,9 +561,9 @@
       }
       function audienceHint(aud, mine) {
         switch (aud) {
-          case 'private': return mine === false ? 'Only its writer.' : 'Nobody else, the DM included.';
-          case 'dm_only': return seesDmNotes ? 'You and any co-DMs. Players never see it.' : 'You and the campaign’s DMs.';
-          case 'dm_scribe': return 'The DMs and every scribe.';
+          case 'private': return mine === false ? 'Only its writer.' : 'Nobody else, the ' + gmTerm() + ' included.';
+          case 'dm_only': return seesDmNotes ? 'You and any co-' + gmTerm() + 's. Players never see it.' : 'You and the campaign’s ' + gmTerm() + 's.';
+          case 'dm_scribe': return 'The ' + gmTerm() + 's and every scribe.';
           case 'everyone': return 'Everyone in the campaign.';
           case 'custom': return 'You and the people you pick.';
         }
@@ -605,7 +607,7 @@
         h += '<div class="en-reads"><span class="en-reads-label">Who can read it</span>';
         h += '<div class="en-seg" role="radiogroup" aria-label="Who can read it">';
         audienceOptions(comp.audience).forEach(function (a) {
-          var lab = a === 'dm_only' && seesDmNotes ? 'DMs only' : AUDIENCES[a].label;
+          var lab = a === 'dm_only' && seesDmNotes ? gmTerm() + 's only' : AUDIENCES[a].label;
           h += '<button type="button" role="radio" data-en-aud="' + a + '" aria-checked="false"><i class="fa-solid ' + AUDIENCES[a].icon + '" aria-hidden="true"></i>' + esc(lab) + '</button>';
         });
         h += '</div></div>';

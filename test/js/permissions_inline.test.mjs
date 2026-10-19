@@ -90,6 +90,7 @@ function boot(loadData) {
       _impls: {},
       register(name, impl) { this._impls[name] = impl; },
       escapeHtml: (s) => String(s == null ? '' : s),
+      gmTerm: () => 'GM',
       apiFetch: (url, opts) => {
         apiCalls.push({ url, opts });
         const data = loadData || { visibility: 'default', is_private: false, members: [], groups: [], permissions: [] };
@@ -268,7 +269,7 @@ test('corner layout in draft mode drives the Create form chip and hidden input',
   assert.ok(dmOnly, 'DM team only is offered');
   dmOnly.dispatch('change');
   assert.equal(hidden.value, 'true', 'DM team only writes is_private=true for the Create handler');
-  assert.equal(label.textContent, 'DM team only', 'the chip says the new choice');
+  assert.equal(label.textContent, 'GM team only', 'the chip says the new choice');
   assert.equal(chip.getAttribute('data-visibility-badge'), 'dm_only');
 
   const custom = findWhere(panel, (n) => n.tagName === 'INPUT' && n.value === 'custom');

@@ -48,7 +48,7 @@ templ BlockLastSeen(campaignID, entityID, entityName, userID string, v LastSeenV
 				if dm {
 					<span class="ls-rev" data-dm-only data-ls-rev>
 						if v.Review > 0 {
-							<span class="ls-dmtag">DM</span>
+							<span class="ls-dmtag">{ layouts.GMTerm(ctx) }</span>
 							{ fmt.Sprintf("%d to review", v.Review) }
 						}
 					</span>
@@ -84,11 +84,11 @@ templ BlockLastSeen(campaignID, entityID, entityName, userID string, v LastSeenV
 						if dm {
 							<div class="ls-dmbar" data-dm-only data-ls-dmbar>
 								<button type="button" class="ls-q" aria-expanded="false" data-ls-sugtog onclick={ lastSeenCall("suggestions") } hidden>
-									<span class="ls-dmtag">DM</span>
+									<span class="ls-dmtag">{ layouts.GMTerm(ctx) }</span>
 									<span data-ls-suglbl></span>
 									<i class="fa-solid fa-chevron-down ls-chev" aria-hidden="true"></i>
 								</button>
-								<span class="ls-none" data-ls-nosug hidden><span class="ls-dmtag">DM</span> No other nights mention this page</span>
+								<span class="ls-none" data-ls-nosug hidden><span class="ls-dmtag">{ layouts.GMTerm(ctx) }</span> No other nights mention this page</span>
 								<button type="button" class="ls-q ls-sp" aria-expanded="false" aria-haspopup="dialog" data-ls-addopen onclick={ lastSeenCall("addOpen") }>
 									<i class="fa-solid fa-plus" aria-hidden="true"></i>Add a sighting
 								</button>
@@ -109,7 +109,7 @@ templ BlockLastSeen(campaignID, entityID, entityName, userID string, v LastSeenV
 					<div class="ls-af-in">
 						<div class="ls-af-h">
 							<span class="ls-lab">Add a sighting</span>
-							<span class="ls-dmtag">DM</span>
+							<span class="ls-dmtag">{ layouts.GMTerm(ctx) }</span>
 							<button type="button" class="ls-btn ls-ghost" aria-label="Close the form" data-ls-addx onclick={ lastSeenCall("addClose") }>
 								<i class="fa-solid fa-xmark" aria-hidden="true"></i>
 							</button>

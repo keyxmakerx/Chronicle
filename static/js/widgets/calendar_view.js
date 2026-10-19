@@ -529,7 +529,7 @@
   // Who can read a note, in the words the Journal uses. A note for the
   // Director carries the Director's amber.
   function gnAudience(a, isGM) {
-    if (a === 'gm') return '<span class="gnaud dm">' + (isGM ? 'GM only' : 'Shared with GM') + '</span>';
+    if (a === 'gm') return '<span class="gnaud dm">' + (isGM ? Chronicle.gmTerm() + ' only' : 'Shared with ' + Chronicle.gmTerm()) + '</span>';
     return '<span class="gnaud">' + ({ party: 'Shared with party', custom: 'Specific people' }[a] || 'Private') + '</span>';
   }
   // "Oct 17", "Oct 17 and Oct 31", "Oct 3, Oct 17 and Oct 31".
@@ -2265,7 +2265,7 @@
       }).join('') + '</div>';
       return h + '<p class="gnrule">' + (this.canAuthorDmOnly
         ? 'Everyone in the campaign gets an entry in their Journal for each game night. You see the ones you can read; a player’s private entry stays private and is never read for the check-in.'
-        : 'Everyone in the campaign gets an entry in their Journal for each game night. Share yours with the GM if you want the people you met counted.') + '</p></section>';
+        : 'Everyone in the campaign gets an entry in their Journal for each game night. Share yours with the ' + Chronicle.gmTerm() + ' if you want the people you met counted.') + '</p></section>';
     },
 
     // The after-night check-in, for the Director only: the pages named in
@@ -2282,7 +2282,7 @@
         : listWords(names) + ' came up ' + (fromEntries ? 'in this night’s entries.' : 'on this night.');
       var h = '<section class="eps gnchk" data-dm-only aria-label="After-night check-in"><div class="gnchk-h"><p>' +
         (all.length ? esc(ask) + ' Did the players see them?' : 'Nobody was named in the entries you can read, so there is no one to ask about.') +
-        '</p><span class="dirnote"><i class="fa-solid fa-eye-slash"></i>Director only</span></div>';
+        '</p><span class="dirnote"><i class="fa-solid fa-eye-slash"></i>' + Chronicle.gmTerm() + ' only</span></div>';
       if (!all.length) return h + '</section>';
       if (!pend.length && !st.change) {
         var seen = all.filter(function (x) { return x.answer === 'seen'; }).map(function (x) { return x.name; });
@@ -3672,10 +3672,10 @@
       var self = this, mine = this.mine, h = '<section class="fvsec fvmine"><h4>Your hours</h4>';
       if (mine === undefined) h += '<p class="none">Loading your hours…</p>';
       else if (!mine || !mine.answered) {
-        h += '<p class="fvlead">You haven’t given your hours yet. The DM uses them to pick game nights.</p>' +
+        h += '<p class="fvlead">You haven’t given your hours yet. The ' + Chronicle.gmTerm() + ' uses them to pick game nights.</p>' +
           '<button type="button" class="btn fvgo" data-fv-planner="mine"><i class="fa-solid fa-user-pen"></i> Give my hours</button>';
       } else {
-        if (this._confirmDue()) h += '<p class="fvdue"><i class="fa-solid fa-clipboard-check"></i> The DM asked everyone to check their times are still right.</p>';
+        if (this._confirmDue()) h += '<p class="fvdue"><i class="fa-solid fa-clipboard-check"></i> The ' + Chronicle.gmTerm() + ' asked everyone to check their times are still right.</p>';
         h += this._mineWeekHTML(mine) + '<span class="fvmb">' +
           (this._confirmDue() ? '<button type="button" class="btn sm primary" data-confirm-mine><i class="fa-solid fa-check"></i> My times are still right</button>' : '') +
           '<button type="button" class="btn sm" data-fv-planner="mine"><i class="fa-solid fa-user-pen"></i> Change my hours</button></span>';
@@ -3960,7 +3960,7 @@
           // Everyone's lines include this viewer's, so the weeks are read again.
           self._freeWeeks = {};
           self.freeByDate = {};
-          self._plStatus = 'Saved. The DM sees your new hours.';
+          self._plStatus = 'Saved. The ' + Chronicle.gmTerm() + ' sees your new hours.';
           return Promise.all([self.fetchFreeWeek(self._plWeek), self.fetchFreeMonth(self.view.y, self.view.m)]);
         })
         .then(function () { self._paintMonth(); self.refreshPlanner(); self.say('Your hours are saved.'); })
@@ -4554,7 +4554,7 @@
       }).join('');
       var desc = e.description ? String(e.description).split(/\n{2,}/).map(function (p) { return '<p>' + esc(p).replace(/\n/g, '<br>') + '</p>'; }).join('') : '';
       var lore = lorePageLink(this.campaignId, e.lore_entity_id, e.lore_entity_name);
-      var note = e.dm_note ? '<div class="ep-note"><div class="nh"><i class="fa-solid fa-lock"></i>Director’s note, players never see this</div>' + esc(e.dm_note) + '</div>' : '';
+      var note = e.dm_note ? '<div class="ep-note"><div class="nh"><i class="fa-solid fa-lock"></i>' + Chronicle.gmTerm() + '’s note, players never see this</div>' + esc(e.dm_note) + '</div>' : '';
       var manage = this.canAuthorDmOnly && this.openEraManager ? '<button type="button" class="ep-manage" data-era-manage><i class="fa-solid fa-pencil"></i>Edit eras</button>' : '';
       return '<div class="ep-ribbon"><div class="rtrack" role="group" aria-label="Eras, oldest to newest">' + segs + '</div><div class="raxis" aria-hidden="true"></div><div class="rtip" role="tooltip" hidden></div></div>' +
         '<div class="ep-card">' +
@@ -5503,7 +5503,7 @@
         recur = '<div class="row"><i class="fa-solid fa-rotate"></i><span class="tt">' + esc(this.repeatText(ev)) + '</span></div>';
       }
       var entity = ev.entity_id ? '<div class="row"><i class="fa-solid fa-link"></i><a class="tt" href="/campaigns/' + esc(this.campaignId) + '/entities/' + esc(ev.entity_id) + '">' + esc(ev.entity_name || 'Linked page') + '</a></div>' : '';
-      var visBadge = (this.canAuthorDmOnly && ev.visibility === 'dm_only') ? '<span class="dirnote"><i class="fa-solid fa-eye-slash"></i>Director only</span>' : '';
+      var visBadge = (this.canAuthorDmOnly && ev.visibility === 'dm_only') ? '<span class="dirnote"><i class="fa-solid fa-eye-slash"></i>' + Chronicle.gmTerm() + ' only</span>' : '';
       var body = ev.description_html ? ev.description_html : (ev.description ? '<p>' + esc(ev.description) + '</p>' : '');
 
       return '<div class="grab" aria-hidden="true"></div>' +

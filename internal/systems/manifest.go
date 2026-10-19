@@ -105,6 +105,45 @@ type SystemManifest struct {
 	// page already uses. Unlike Renderers it adds to a page instead of
 	// replacing it, and it is not tied to an entity type of this manifest.
 	EntityPanels []EntityPanelDef `json:"entity_panels,omitempty"`
+
+	// Terms are the words the system uses for Chronicle's own roles, so a
+	// campaign reads in its game's language.
+	Terms *ManifestTerms `json:"terms,omitempty"`
+}
+
+// ManifestTerms are a system's names for Chronicle's roles. An empty field
+// means the host's default.
+type ManifestTerms struct {
+	// GM is what the game calls its game master, as a capitalised noun
+	// ("Director" in Draw Steel, "DM" in D&D). The host uses it as is, so it
+	// is also the badge on GM-only things and takes a plain "s" for plurals.
+	GM string `json:"gm,omitempty"`
+}
+
+// maxTermLen bounds a manifest term: it lands in badges and sentences.
+const maxTermLen = 24
+
+// termPattern is a word or two of letters, with spaces, hyphens or full stops
+// between: no markup or quotes, so a term is safe in any text the host builds.
+var termPattern = regexp.MustCompile(`^\pL[\pL .-]*$`)
+
+// validateTerms rejects a term the host could not drop into its text.
+func validateTerms(t *ManifestTerms) error {
+	if t == nil || t.GM == "" {
+		return nil
+	}
+	if strings.TrimSpace(t.GM) != t.GM || len([]rune(t.GM)) > maxTermLen || !termPattern.MatchString(t.GM) {
+		return fmt.Errorf("gm %q must be up to %d letters, spaces, hyphens or full stops, starting with a letter", t.GM, maxTermLen)
+	}
+	return nil
+}
+
+// GMTerm is the system's name for the game master, or "" for the default.
+func (m *SystemManifest) GMTerm() string {
+	if m == nil || m.Terms == nil {
+		return ""
+	}
+	return m.Terms.GM
 }
 
 // The audiences an entity panel can target.
@@ -987,6 +1026,10 @@ func ValidateManifest(m *SystemManifest) error {
 
 	if err := validateEntityPanels(m); err != nil {
 		return fmt.Errorf("entity_panels: %w", err)
+	}
+
+	if err := validateTerms(m.Terms); err != nil {
+		return fmt.Errorf("terms: %w", err)
 	}
 
 	// Sanitize text fields to prevent stored XSS.

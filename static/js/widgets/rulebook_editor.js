@@ -17,6 +17,8 @@
  */
 (function () {
   'use strict';
+  function gmTerm() { return (window.Chronicle && Chronicle.gmTerm) ? Chronicle.gmTerm() : 'GM'; }
+
 
   var SAVE_MS = 600;
   var instances = new WeakMap();
@@ -29,8 +31,8 @@
     cards: { name: 'Fold-out cards', hint: 'A row of cards that open for detail.' },
     flaps: { name: 'Flaps', hint: 'Headings that open to explain.' },
     example: { name: 'Worked example', hint: 'Stepped through one line at a time.' },
-    creature: { name: 'Creature', hint: 'What heroes see; numbers for Directors.' },
-    note: { name: 'Director\'s note', hint: 'Only Directors ever see this.' },
+    creature: { name: 'Creature', get hint() { return 'What heroes see; numbers for ' + gmTerm() + 's.'; } },
+    note: { get name() { return gmTerm() + '\'s note'; }, get hint() { return 'Only ' + gmTerm() + 's ever see this.'; } },
     links: { name: 'Chapter links', hint: 'Buttons that turn to other chapters.' },
     contents: { name: 'Contents', hint: 'Every chapter, numbered, with the page it starts on.' }
   };
@@ -429,7 +431,7 @@
       '<main class="rbe-pane rbe-form"><div class="rbe-banner-slot"></div><div class="rbe-fields"></div></main>' +
       '<section class="rbe-pane rbe-prev" aria-label="Live page"><div class="rbe-ph"><span>The page, as it will look</span><span class="rbe-sp"></span>' +
       '<span class="rbe-seg" role="group" aria-label="Preview as">' +
-      '<button type="button" data-act="as" data-as="dir" aria-pressed="true">Director</button>' +
+      '<button type="button" data-act="as" data-as="dir" aria-pressed="true">' + gmTerm() + '</button>' +
       '<button type="button" data-act="as" data-as="pl" aria-pressed="false">Player</button></span></div>' +
       '<div class="rb rbe-rb"><article class="rb-page rbe-pv"></article></div></section></div>';
   };
@@ -581,7 +583,7 @@
     return '<button type="button" class="rbe-pg" data-act="pick" data-id="' + n.uid + '" id="' + this.id('pg-' + n.uid) + '"' +
       (n === this.cur ? ' aria-current="true"' : '') + '><span class="rbe-dot ' + this.dotClass(n.state) + '" aria-hidden="true"></span>' +
       '<span class="rbe-pgt">' + esc(n.page.title || 'Untitled page') + '</span>' +
-      (n.page.director ? ' <span class="rbe-pill rbe-dir">Directors</span>' : '') +
+      (n.page.director ? ' <span class="rbe-pill rbe-dir">' + gmTerm() + 's</span>' : '') +
       '<span class="rbe-sr"> (' + esc(this.stateText(n.state)) + ')</span></button>';
   };
 
@@ -595,12 +597,12 @@
     // above the package's chapters rather than under all of them.
     h += '<button type="button" class="rbe-add rbe-add-ch" id="' + this.id('addch') + '" data-act="addchapter"><span class="rbe-plus" aria-hidden="true">+</span>New house rule</button>';
     this.parts.forEach(function (part) {
-      h += '<section class="rbe-part"><h3>' + esc(part.title) + (part.director ? ' <span class="rbe-pill rbe-dir">Directors</span>' : '') +
+      h += '<section class="rbe-part"><h3>' + esc(part.title) + (part.director ? ' <span class="rbe-pill rbe-dir">' + gmTerm() + 's</span>' : '') +
         (part.house ? ' <span class="rbe-pill rbe-mine">Yours</span>' : '') + '</h3>';
       part.chapters.forEach(function (ch) {
         var count = ch.problem || ch.generated ? '' : '<span class="rbe-cnt" aria-hidden="true">' + ch.pages.length + '</span>';
         h += '<div class="rbe-ch"><div class="rbe-chn"><span class="rbe-cht">' + esc(ch.title) + '</span>' +
-          (ch.director && !part.director ? ' <span class="rbe-pill rbe-dir">Directors</span>' : '') + count + '</div><div class="rbe-pgs">';
+          (ch.director && !part.director ? ' <span class="rbe-pill rbe-dir">' + gmTerm() + 's</span>' : '') + count + '</div><div class="rbe-pgs">';
         if (ch.problem) {
           h += '<p class="rbe-note-line">This chapter could not be loaded: ' + esc(ch.problem) + '</p>';
         } else if (ch.generated) {
@@ -640,7 +642,7 @@
   Editor.prototype.pill = function () {
     var s = document.createElement('span');
     s.className = 'rbe-pill rbe-dir';
-    s.textContent = 'Directors';
+    s.textContent = gmTerm() + 's';
     return s;
   };
 
@@ -757,7 +759,7 @@
     var self = this, t = TYPES[b.type] || WIDGET_TYPE, p = 'blocks.' + i + '.', f = this.field.bind(this);
     var h = '<section class="rbe-blk' + (b.director ? ' isdir' : '') + '" aria-label="' + esc(t.name) + '" data-i="' + i + '"><div class="rbe-bh"><span class="rbe-bname"><span class="rbe-ty">' + esc(t.name) + '</span><span class="rbe-hint">' + esc(t.hint) + '</span></span><span class="rbe-bctl">';
     if (b.type !== 'note' && b.type !== 'widget') {
-      h += '<label class="rbe-tog"><input type="checkbox" data-bdir="' + i + '"' + (b.director ? ' checked' : '') + '> Directors only</label>';
+      h += '<label class="rbe-tog"><input type="checkbox" data-bdir="' + i + '"' + (b.director ? ' checked' : '') + '> ' + gmTerm() + 's only</label>';
     }
     h += '<button type="button" class="rbe-ib" id="' + this.id('mv-' + i + '-up') + '" data-act="mv" data-i="' + i + '" data-d="-1" aria-label="Move up"' + (i === 0 ? ' disabled' : '') + '>↑</button>' +
       '<button type="button" class="rbe-ib" id="' + this.id('mv-' + i + '-down') + '" data-act="mv" data-i="' + i + '" data-d="1" aria-label="Move down"' + (i === count - 1 ? ' disabled' : '') + '>↓</button>' +
@@ -794,12 +796,12 @@
       case 'creature':
         h += f(p + 'name', 'Name', b.name) + f(p + 'tagline', 'Tagline', b.tagline) + this.area(p + 'look', 'What heroes see', b.look) +
           this.listForm(b, i, 'notice', 'What heroes notice', 'Line', 'Something a hero would spot') +
-          '<div class="rbe-field"><span class="rbe-lab">Numbers (Directors only)</span><div class="rbe-items">';
+          '<div class="rbe-field"><span class="rbe-lab">Numbers (' + gmTerm() + 's only)</span><div class="rbe-items">';
         b.stats.forEach(function (s, j) {
           var sp = p + 'stats.' + j + '.';
           h += '<div class="rbe-item rbe-line">' + self.plain(sp + 'label', 'Name of number ' + (j + 1), s.label, 'Stamina') + self.plain(sp + 'value', 'Value of number ' + (j + 1), s.value, '15') + self.rowTools(i, 'stats', j, 'number', 2) + '</div>';
         });
-        h += this.addRow(i, 'stats', '+ Add a number') + '</div></div>' + this.area(p + 'note', 'Note (Directors only)', b.note);
+        h += this.addRow(i, 'stats', '+ Add a number') + '</div></div>' + this.area(p + 'note', 'Note (' + gmTerm() + 's only)', b.note);
         break;
       case 'widget':
         h += '<p class="rbe-widget">This part of the page is the <b>' + esc(b.widget || 'unnamed') + '</b> widget from ' + esc(this.sys()) + '. It can be moved or removed here, but not edited.</p>';
@@ -835,7 +837,7 @@
     }
     h += '<section class="rbe-sec" aria-labelledby="' + this.id('sec-page') + '"><h2 class="rbe-sech" id="' + this.id('sec-page') + '">Page</h2>' +
       this.field('title', 'Title', m.title) +
-      '<div class="rbe-row rbe-row-tight"><label class="rbe-tog"><input type="checkbox" data-pdir> Only Directors see this page</label>' +
+      '<div class="rbe-row rbe-row-tight"><label class="rbe-tog"><input type="checkbox" data-pdir> Only ' + gmTerm() + 's see this page</label>' +
       '<label class="rbe-tog"><input type="checkbox" data-pwide> Spread across both pages</label></div></section>';
     var self = this, nb = m.blocks.length;
     // While the picker is open on a page that holds only its untouched
@@ -874,11 +876,11 @@
     var dir = asDirector || this.as === 'dir';
     if (!window.ChronicleRulebook) return '<p class="rbe-empty">The book renderer is not loaded, so the page cannot be shown.</p>';
     if (!dir && (model.director || n.ch.director || n.ch.part.director)) {
-      return '<p class="rb-kicker">Player view</p><h2>Players never see this page</h2><div class="rb-prose"><p>It is for Directors only, so it is left out of the book players get.</p></div>';
+      return '<p class="rb-kicker">Player view</p><h2>Players never see this page</h2><div class="rb-prose"><p>It is for ' + gmTerm() + 's only, so it is left out of the book players get.</p></div>';
     }
     var html = window.ChronicleRulebook.renderPage(wirePage(model), { terms: this.src.terms, parts: this.parts, director: dir, chapterTitle: n.ch.title, chapterId: n.ch.id });
     var seen = dir || model.blocks.some(function (b) { return !b.director && b.type !== 'note'; });
-    if (!seen && model.blocks.length) html += '<div class="rb-prose"><p class="rbe-empty">Every block on this page is for Directors, so players see an empty page.</p></div>';
+    if (!seen && model.blocks.length) html += '<div class="rb-prose"><p class="rbe-empty">Every block on this page is for ' + gmTerm() + 's, so players see an empty page.</p></div>';
     else if (!model.blocks.length) html += '<div class="rb-prose"><p class="rbe-empty">Add a block to start this page.</p></div>';
     return html;
   };

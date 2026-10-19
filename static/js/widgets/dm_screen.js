@@ -16,6 +16,8 @@
  */
 (function () {
   'use strict';
+  function gmTerm() { return (window.Chronicle && Chronicle.gmTerm) ? Chronicle.gmTerm() : 'GM'; }
+
 
   // The burst: the thrown die is swapped for ten flat facets, a hexagon outline
   // split around the centre face, in percentages of the die box, so each
@@ -203,7 +205,7 @@
         });
       }
 
-      var NOTE_OK = 'Saved \u00b7 only you and co-DMs can see this';
+      var NOTE_OK = 'Saved \u00b7 only you and co-' + gmTerm() + 's can see this';
 
       function noteBox() { var r = root(); return r && r.querySelector('[data-dms-note]'); }
 
@@ -674,7 +676,7 @@
           var dice = Chronicle.dice;
           if (!dice || !dice.roll) { st.land(null); return; }
           st.thrown = true;
-          dice.roll([{ label: 'DM Screen', dice: [{ sides: 20, value: 20, crit: 'none' }] }], {
+          dice.roll([{ label: gmTerm() + ' Screen', dice: [{ sides: 20, value: 20, crit: 'none' }] }], {
             from: openBtn,
             skippable: false,
             // The opening is a show, not a roll: nothing to read out.
@@ -751,7 +753,7 @@
       function failed() {
         stopAll();
         close();
-        if (Chronicle.notify) Chronicle.notify('The DM Screen could not load. Try again in a moment.', 'error');
+        if (Chronicle.notify) Chronicle.notify('The ' + gmTerm() + ' Screen could not load. Try again in a moment.', 'error');
       }
 
       // Closing is the opening backwards, in place: the side leaves swing

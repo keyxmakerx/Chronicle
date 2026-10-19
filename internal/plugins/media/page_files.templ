@@ -3,7 +3,10 @@
 // page, the controls to attach, remove and mark a file GM only.
 package media
 
-import "fmt"
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
 
 // pageFilesBase is the section's own address, which its handlers read to reach
 // the attach, remove and visibility routes.
@@ -69,7 +72,7 @@ templ PageFilesSection(campaignID, entityID string, listing *PageFileListing, fi
 						<label class="inline-flex items-center gap-1.5 text-xs text-fg-secondary cursor-pointer select-none">
 							<input type="checkbox" data-pf-gm class="rounded border-edge text-accent focus:ring-accent"/>
 							<i class="fa-solid fa-lock text-[10px]" aria-hidden="true"></i>
-							GM only
+							{ layouts.GMTerm(ctx) } only
 						</label>
 					}
 					<button type="button" class="btn-primary btn-sm" data-pf-attach onclick={ pfPickCall }>
@@ -106,7 +109,7 @@ templ pageFileRow(campaignID, entityID string, f PageFile, listing *PageFileList
 				if f.GMOnly {
 					<span class="inline-flex items-center gap-1 text-amber-700 dark:text-amber-400 font-medium">
 						<i class="fa-solid fa-lock text-[10px]" aria-hidden="true"></i>
-						GM only
+						{ layouts.GMTerm(ctx) } only
 					</span>
 				}
 			</p>
@@ -128,8 +131,8 @@ templ pageFileRow(campaignID, entityID string, f PageFile, listing *PageFileList
 						title="Show to everyone who can see this page"
 						aria-label="Show to everyone who can see this page"
 					} else {
-						title="Make GM only"
-						aria-label="Make GM only"
+						title={ "Make " + layouts.GMTerm(ctx) + " only" }
+						aria-label={ "Make " + layouts.GMTerm(ctx) + " only" }
 					}
 				>
 					if f.GMOnly {

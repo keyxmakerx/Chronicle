@@ -2882,7 +2882,7 @@ defineGenerator({
     windier: { label: 'Windier or calmer', type: 'range', default: 0, min: -1, max: 1, step: 0.1, more: true },
     variability: { label: 'Day-to-day swing', type: 'range', default: 1, min: 0.3, max: 2, step: 0.1, more: true },
     forecastDays: { label: 'Forecast days', type: 'count', default: 7, min: 1, max: 30, more: true },
-    forecastAccuracy: { label: 'Forecast accuracy', type: 'range', default: 0.7, min: 0, max: 1, step: 0.05, more: true, help: 'How far players can trust the forecast. The Director always sees the real weather.' },
+    forecastAccuracy: { label: 'Forecast accuracy', type: 'range', default: 0.7, min: 0, max: 1, step: 0.05, more: true, get help() { return 'How far players can trust the forecast. The ' + (typeof window !== 'undefined' && window.Chronicle && Chronicle.gmTerm ? Chronicle.gmTerm() : 'GM') + ' always sees the real weather.'; } },
     customClimate: { label: 'Your own climate', type: 'custom', default: null, more: true, check: function (v) { if (v == null) return null; var e = checkClimate(v); return e.length ? e.join(' ') : null; } }
   },
   builtIns: ownKeys(CLIMATES).map(function (k) { return { id: 'weather.' + k, name: CLIMATES[k].name + ' weather', description: CLIMATES[k].blurb, details: { climate: k } }; }),

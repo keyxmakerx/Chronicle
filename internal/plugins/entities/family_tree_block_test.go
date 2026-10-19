@@ -42,7 +42,7 @@ func TestFamilyBlockRendersOnlyWhatTheViewerMayHave(t *testing.T) {
 		},
 		{
 			name: "director", role: int(permissions.RoleOwner), dm: true,
-			contains: []string{`data-dm="1"`, "Corwin Mere", `"dm":true`, "data-dm-only", "hidden from players", "DM",
+			contains: []string{`data-dm="1"`, "Corwin Mere", `"dm":true`, "data-dm-only", "hidden from players", "GM",
 				"data-fm-edit", "data-fm-savebar", `data-edit-url="/campaigns/c1/entities/maud/family"`, `data-pick-url="/campaigns/c1/entities/maud/family/candidates"`},
 		},
 	}

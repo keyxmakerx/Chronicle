@@ -1,6 +1,7 @@
 package dmscreen
 
 import (
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"fmt"
 	"strings"
 )
@@ -22,12 +23,12 @@ templ Panel(v *View, csrf string) {
 	>
 		<div class="dms-titlebar">
 			<div class="dms-head">
-				<h2 id="dms-title"><i class="fa-solid fa-grip-vertical dms-grip" aria-hidden="true"></i>DM Screen</h2>
+				<h2 id="dms-title"><i class="fa-solid fa-grip-vertical dms-grip" aria-hidden="true"></i>{ layouts.GMTerm(ctx) } Screen</h2>
 				<span class="dms-acts">
 					if v.Homebrew != nil {
 						<button type="button" class="dms-close" data-dms-brew aria-controls="dms-brew" aria-expanded="false" aria-label="Homebrew" title="Homebrew"><i class="fa-solid fa-beer-mug-empty" aria-hidden="true"></i></button>
 					}
-					<button type="button" class="dms-close" data-dms-close aria-label="Close the DM Screen" title="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+					<button type="button" class="dms-close" data-dms-close aria-label={ "Close the " + layouts.GMTerm(ctx) + " Screen" } title="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
 				</span>
 			</div>
 			<div class="dms-strip">
@@ -218,7 +219,7 @@ templ Panel(v *View, csrf string) {
 							if v.Notes.ReadOnly {
 								This note has formatting, so edit it in Notes
 							} else {
-								Only you and co-DMs can see this
+								Only you and co-{ layouts.GMTerm(ctx) }s can see this
 							}
 						</span>
 						<a class="dms-link" data-dms-note-link href={ templ.SafeURL(v.Notes.Link) } hidden?={ v.Notes.Link == "" }>Open in Notes</a>
@@ -333,7 +334,7 @@ templ adventuresPane(campaignID string, a *AdventuresView) {
 	} else {
 		<p class="dms-small">The tab is full. Remove something to add more.</p>
 	}
-	<p class="dms-small">Only the DM team sees this tab.</p>
+	<p class="dms-small">Only the { layouts.GMTerm(ctx) } team sees this tab.</p>
 }
 
 // waitingBlock lists the oldest waiting requests with Allow and Refuse. The

@@ -35,7 +35,7 @@ func TestDmOnlyBlockShownToWhoCanWriteIt(t *testing.T) {
 			if err := entityBlock(block, tt.cc, entity, &EntityType{ID: 1}, false, "csrf").Render(context.Background(), &sb); err != nil {
 				t.Fatal(err)
 			}
-			if got := strings.Contains(sb.String(), "DM Only"); got != tt.want {
+			if got := strings.Contains(sb.String(), "GM Only"); got != tt.want {
 				t.Fatalf("DM-only block shown = %v, want %v", got, tt.want)
 			}
 		})

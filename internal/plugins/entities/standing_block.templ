@@ -79,7 +79,7 @@ templ BlockStanding(campaignID, entityID, entityName string, v *StandingView) {
 					<span class="sg-thumb" data-sg-thumb style={ standingThumbStyle(first) } hidden?={ !first.Set }></span>
 				</span>
 				if v.CanEdit {
-					<span class="sg-dmtag cb-dm" data-dm-only data-sg-dmtag hidden?={ !standingDMOnlyShown(v) }>DM</span>
+					<span class="sg-dmtag cb-dm" data-dm-only data-sg-dmtag hidden?={ !standingDMOnlyShown(v) }>{ layouts.GMTerm(ctx) }</span>
 				}
 			</div>
 			<div class="sg-wl">
@@ -170,7 +170,7 @@ templ standingDMTools(entityID string, first StandingSubjectView, v *StandingVie
 			</div>
 			<div class="sg-full">
 				<button type="button" class="sg-swr" role="switch" aria-checked="true" data-sg-vis onclick={ standingCall("vis") }><span class="sg-trk"></span>Players can see this reason</button>
-				<div class="sg-sm sg-swhint" data-sg-vishint hidden>Off: only the DM sees it, marked DM.</div>
+				<div class="sg-sm sg-swhint" data-sg-vishint hidden>Off: only the { layouts.GMTerm(ctx) } sees it, marked { layouts.GMTerm(ctx) }.</div>
 			</div>
 			<div class="sg-acts sg-full">
 				<button type="button" class="sg-quiet" onclick={ standingCall("addCancel") }>Cancel</button>

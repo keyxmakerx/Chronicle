@@ -931,7 +931,7 @@ templ Topbar() {
 				     widget fetches the panel and plays the opening; hidden
 				     under "view as player" because the role reads 1. -->
 				<div data-widget="dm-screen" data-url={ fmt.Sprintf("/campaigns/%s/dm-screen", GetCampaignID(ctx)) }>
-					<button type="button" class="btn-ghost btn-icon" data-dms-open title="DM Screen" aria-label="Open the DM Screen" aria-haspopup="dialog">
+					<button type="button" class="btn-ghost btn-icon" data-dms-open title={ GMTerm(ctx) + " Screen" } aria-label={ "Open the " + GMTerm(ctx) + " Screen" } aria-haspopup="dialog">
 						<svg class="w-5 h-5" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true">
 							<path d="M2 6l6-2v15l-6 2z"></path>
 							<path d="M8 4l8 2v15l-8-2z"></path>

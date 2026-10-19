@@ -17,6 +17,8 @@
  */
 (function () {
   'use strict';
+  function gmTerm() { return (window.Chronicle && Chronicle.gmTerm) ? Chronicle.gmTerm() : 'GM'; }
+
 
   var AUTOSAVE_DELAY = 1500; // ms; notes.js mirrors it (test/js/notes_autosave.test.mjs)
   var HEARTBEAT_MS = 120000; // the server drops an edit lock after 5 minutes without one
@@ -433,7 +435,7 @@
   };
 
   Journal.prototype.gmLabel = function () {
-    return this.isGM ? 'GM only' : 'Shared with GM';
+    return this.isGM ? gmTerm() + ' only' : 'Shared with ' + gmTerm();
   };
 
   Journal.prototype.visLabel = function (v) {
@@ -565,7 +567,7 @@
     var self = this;
     this.openPop(anchor,
       '<label class="pop-label" for="jnl-view-name">View name</label>' +
-      '<input type="text" id="jnl-view-name" maxlength="40" placeholder="e.g. GM prep" autocomplete="off">' +
+      '<input type="text" id="jnl-view-name" maxlength="40" placeholder="e.g. ' + gmTerm() + ' prep" autocomplete="off">' +
       '<div class="pop-foot"><button type="button" class="jnl-btn ghost" data-pop-cancel>Cancel</button><button type="button" class="jnl-btn" data-pop-ok>Save</button></div>',
       function (pop) {
         var input = pop.querySelector('input');
@@ -1889,22 +1891,22 @@
     var row = this.nightRow();
     if (!row) return null;
     var night = row.night, state = this.nightState(row), names = this.nightNames(), mine = row.userId === this.uid;
-    var by = this.isGM ? 'you confirm it' : 'the GM confirms it';
+    var by = this.isGM ? 'you confirm it' : 'the ' + gmTerm() + ' confirms it';
     var text;
     if (state === 'wait') {
       text = 'This entry is read once the night has started. The pages it links to, people and places, are offered ' +
-        (this.isGM ? 'to you' : 'to the GM') + ' in the night’s check-in. Nothing is added to anyone until ' + by + '.' +
-        (mine && !this.readByGM(row) ? ' A private entry is read only once you share it with the GM.' : '');
+        (this.isGM ? 'to you' : 'to the ' + gmTerm()) + ' in the night’s check-in. Nothing is added to anyone until ' + by + '.' +
+        (mine && !this.readByGM(row) ? ' A private entry is read only once you share it with the ' + gmTerm() + '.' : '');
     } else if (state === 'unread') {
       text = mine
-        ? 'The GM can’t read this entry, so it isn’t read for the check-in. Share it with the GM and the people you name are offered to them.'
-        : 'The GM can’t read this entry, so it isn’t read for the check-in.';
+        ? 'The ' + gmTerm() + ' can’t read this entry, so it isn’t read for the check-in. Share it with the ' + gmTerm() + ' and the people you name are offered to them.'
+        : 'The ' + gmTerm() + ' can’t read this entry, so it isn’t read for the check-in.';
     } else if (!names.length) {
       text = 'No names found yet. Type [[ to link a person or place, and they are offered in the night’s check-in.';
     } else {
       var shown = names.length > 4 ? names.slice(0, 3).concat([(names.length - 3) + ' more']) : names;
       text = 'Found ' + (shown.length < 2 ? shown[0] : shown.slice(0, -1).join(', ') + ' and ' + shown[shown.length - 1]) + '. ' +
-        (this.isGM ? 'They’re waiting in the night’s check-in. Nothing is added until you confirm it.' : 'The GM checks each one before it counts.');
+        (this.isGM ? 'They’re waiting in the night’s check-in. Nothing is added until you confirm it.' : 'The ' + gmTerm() + ' checks each one before it counts.');
     }
     var q = '?session=' + encodeURIComponent(night.sessionId) + '&date=' + encodeURIComponent(night.date);
     return {
@@ -2122,7 +2124,7 @@
   Journal.prototype.visHint = function (v) {
     if (v === 'private') return 'Only you';
     if (v === 'party') return 'Everyone in the campaign';
-    if (v === 'gm') return this.isGM ? 'You and the other GMs' : 'You and the GM';
+    if (v === 'gm') return this.isGM ? 'You and the other ' + gmTerm() + 's' : 'You and the ' + gmTerm();
     return 'The people you pick';
   };
 

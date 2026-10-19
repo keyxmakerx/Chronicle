@@ -140,7 +140,7 @@ templ rumourRow(r RumourView, v *View) {
 				if v.IsDM {
 					<span class="rm-pair" data-pair data-dm-only data-s={ pairState(r.Truth, r.Belief) } role="group" aria-label="What is true and what the party thinks">
 						<span class="rm-dmend">
-							<span class="rm-dmtag cb-dm">DM</span>
+							<span class="rm-dmtag cb-dm">{ layouts.GMTerm(ctx) }</span>
 							<button type="button" class="rm-word" data-truth data-v={ truthValue(r.Truth) } aria-haspopup="menu" aria-label={ truthLabel(r.Truth) } onclick={ call("truthMenu") }>{ truthWord(r.Truth) }</button>
 						</span>
 						<span class="rm-pj" aria-hidden="true">≠</span>

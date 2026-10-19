@@ -311,7 +311,7 @@ templ settingsGeneralTab(cc *CampaignContext, csrfToken string) {
 				<label class="flex items-center gap-3 p-2 rounded hover:bg-surface-alt cursor-pointer transition-colors">
 					<input type="radio" name="default_vis" value="dm_only" :checked="visibility === 'dm_only' || visibility === 'private'" @change="save('dm_only')" class="accent-accent"/>
 					<div>
-						<span class="text-sm font-medium text-fg">DM Only</span>
+						<span class="text-sm font-medium text-fg">{ layouts.GMTerm(ctx) } Only</span>
 						<p class="text-xs text-fg-secondary">New entities are hidden from players until explicitly revealed.</p>
 					</div>
 				</label>
@@ -734,7 +734,7 @@ templ handoverCard(cc *CampaignContext) {
 	>
 		<h2 class="text-lg font-semibold text-fg mb-1">If you're away</h2>
 		<p class="text-sm text-fg-secondary mb-4">
-			If you stop using Chronicle for this long (the site or Foundry sync), a site admin may make another member the owner, so the table can keep playing. You'd stay in the campaign as Co-DM and get an email.
+			If you stop using Chronicle for this long (the site or Foundry sync), a site admin may make another member the owner, so the table can keep playing. You'd stay in the campaign as Co-{ layouts.GMTerm(ctx) } and get an email.
 		</p>
 		<div class="inline-flex flex-wrap border border-edge rounded-lg overflow-hidden bg-surface" role="group" aria-label="If you're away">
 			for _, m := range HandoverChoices {

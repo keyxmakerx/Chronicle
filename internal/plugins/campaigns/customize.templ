@@ -5,15 +5,28 @@
 package campaigns
 
 import (
+	"context"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"fmt"
 	"strconv"
 )
 
-// customizeAreaBlurb says what each of Customize's own areas holds.
-var customizeAreaBlurb = map[string]string{
+// customizeAreaBlurbs says what each of Customize's own areas holds; the
+// home blurb carries a %s for the game master's word.
+var customizeAreaBlurbs = map[string]string{
 	"look":       "Colours, fonts, buttons, motion, the header and the sidebar. Eight whole looks to start from.",
 	"categories": "What kinds of pages you keep, and how each kind of page is set up.",
-	"home":       "The campaign home everyone lands on, and your own DM dashboard.",
+	"home":       "The campaign home everyone lands on, and your own %s dashboard.",
+}
+
+// customizeAreaBlurb returns the blurb for an area, with the game master's
+// word filled in.
+func customizeAreaBlurb(ctx context.Context, id string) (string, bool) {
+	b, ok := customizeAreaBlurbs[id]
+	if ok && id == "home" {
+		b = fmt.Sprintf(b, layouts.GMTerm(ctx))
+	}
+	return b, ok
 }
 
 // customizeOverview is Customize's front page: one card per area.
@@ -30,7 +43,7 @@ templ customizeOverview(areas []CustomizeArea) {
 							{ a.Label }
 							<span class="czs-dot" title="Unsaved changes" hidden></span>
 						</span>
-						if b, ok := customizeAreaBlurb[a.ID]; ok {
+						if b, ok := customizeAreaBlurb(ctx, a.ID); ok {
 							<p>{ b }</p>
 						} else {
 							<p>Settings this campaign's { a.Label } feature adds.</p>
@@ -129,7 +142,7 @@ templ customizeHomePages(cc *CampaignContext, key, hint, state string) {
 	<div class="czs-ws-head">
 		<div>
 			<h1 class="czs-h1">Home pages</h1>
-			<p class="czs-lede">The campaign home everyone lands on, a version of it for each kind of member, and your own DM dashboard.</p>
+			<p class="czs-lede">The campaign home everyone lands on, a version of it for each kind of member, and your own { layouts.GMTerm(ctx) } dashboard.</p>
 		</div>
 	</div>
 	<nav class="czs-tabs" aria-label="Which home">

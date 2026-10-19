@@ -20,6 +20,8 @@
  */
 (function () {
   'use strict';
+  function gmTerm() { return (window.Chronicle && Chronicle.gmTerm) ? Chronicle.gmTerm() : 'GM'; }
+
 
   var SECTION = 'categories';
   // The item keys the Category home tab writes.
@@ -201,7 +203,7 @@
       if (c.isNew) pills.push('<span class="czs-pill is-new">New</span>');
       if (c.deleted) pills.push('<span class="czs-pill is-warn">Deleted when you save</span>');
       else if (c.changed && !c.isNew) pills.push('<span class="czs-pill is-new">Changed</span>');
-      if (c.dmOnly) pills.push('<span class="czs-pill is-dm"><i class="fa-solid fa-lock" aria-hidden="true"></i> Only the DM team sees it</span>');
+      if (c.dmOnly) pills.push('<span class="czs-pill is-dm"><i class="fa-solid fa-lock" aria-hidden="true"></i> Only the ' + gmTerm() + ' team sees it</span>');
       else pills.push('<span class="czs-pill">' + (c.menu ? 'In the menu' : 'Hidden from players’ menu') + '</span>');
       if (claiming && c.claimable && !c.dmOnly) pills.push('<span class="czs-pill">Players can claim</span>');
       return '<a class="czs-cat-card' + (c.deleted ? ' is-gone' : '') + '" href="' + esc(href) + '">' +
@@ -227,7 +229,7 @@
         '<span><h1>' + esc(c.plural || c.name || 'New category') + '</h1><span class="czs-sub">' +
         (c.isNew ? 'New, saved with your other changes' : pagesText(c.pages)) +
         (parent ? ' · a kind of ' + esc(parent.plural || parent.name) : '') +
-        ' · ' + (c.dmOnly ? 'only the DM team sees it' : c.menu ? 'in the menu' : 'hidden from players’ menu') +
+        ' · ' + (c.dmOnly ? 'only the ' + gmTerm() + ' team sees it' : c.menu ? 'in the menu' : 'hidden from players’ menu') +
         (c.deleted ? ' · deleted when you save' : '') + '</span></span></a>';
       tabs.setAttribute('role', 'tablist');
       tabs.innerHTML = TABS.map(function (t) {
@@ -252,7 +254,7 @@
         '<div class="czs-colors" role="group" aria-labelledby="czc-ic-l">' + COLORS.map(function (col) {
           return '<button type="button" data-col="' + col + '" aria-label="Colour ' + col + '" aria-pressed="' + (col.toLowerCase() === String(c.color).toLowerCase()) + '" style="background:' + col + '"></button>';
         }).join('') + '<input type="color" id="czc-color" value="' + esc(/^#[0-9a-fA-F]{6}$/.test(c.color) ? c.color : '#6366f1') + '" aria-label="Your own colour"></div></div>' +
-        (c.dmOnly ? '<div class="czs-panel"><span class="czs-lab"><i class="fa-solid fa-lock" aria-hidden="true"></i> Only the DM team sees it</span><p class="czs-hint">Players get no menu entry, search result, link preview or relation for these pages, and cannot claim them. The owner, co-DMs and scribes see them as usual. Because of that it has no kinds of its own.</p></div>' : '') +
+        (c.dmOnly ? '<div class="czs-panel"><span class="czs-lab"><i class="fa-solid fa-lock" aria-hidden="true"></i> Only the ' + gmTerm() + ' team sees it</span><p class="czs-hint">Players get no menu entry, search result, link preview or relation for these pages, and cannot claim them. The owner, co-' + gmTerm() + 's and scribes see them as usual. Because of that it has no kinds of its own.</p></div>' : '') +
         (claiming && !c.dmOnly ? '<div class="czs-panel czs-row-set"><div><span class="czs-lab">Players can claim a page</span><p class="czs-hint">A player can make a page their own, like their character.</p></div>' +
           '<button type="button" class="toggle" role="switch" id="czc-claim" aria-checked="' + !!c.claimable + '" aria-label="Players can claim a page"><span class="toggle-knob"></span></button></div>' : '') +
         (c.dmOnly ? '' : '<div class="czs-panel czs-row-set"><div><span class="czs-lab">Shown in players’ menu</span><p class="czs-hint">A hidden category still works: players reach it through search and links, and you still see it in your menu.</p></div>' +

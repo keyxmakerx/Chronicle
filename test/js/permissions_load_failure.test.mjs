@@ -108,6 +108,7 @@ function boot(fetchResult) {
       _impls: {},
       register(name, impl) { this._impls[name] = impl; },
       escapeHtml: (s) => String(s == null ? '' : s),
+      gmTerm: () => 'GM',
       apiFetch: (url, opts) => {
         apiCalls.push({ url, opts });
         return Promise.resolve(result);
@@ -135,7 +136,7 @@ test('a 403 load never shows a mode word in the trigger (the Scribe defect)', as
   assert.ok(trigger, 'trigger still renders');
   const text = gatherText(trigger);
   assert.ok(!/Everyone/.test(text), 'trigger must not claim "Everyone" on a failed load: got ' + JSON.stringify(text));
-  assert.ok(!/DM Only/.test(text), 'trigger must not claim "DM Only" on a failed load either: got ' + JSON.stringify(text));
+  assert.ok(!/GM Only/.test(text), 'trigger must not claim "GM Only" on a failed load either: got ' + JSON.stringify(text));
   assert.ok(!/Custom/.test(text), 'trigger must not claim "Custom" on a failed load either: got ' + JSON.stringify(text));
 
   const modeBadge = findByClass(trigger, 'perm-trigger-mode');
@@ -219,7 +220,7 @@ test('DEFECT 1: a fetch that has not resolved yet shows no mode word (renderTrig
   assert.ok(trigger, 'trigger renders synchronously');
   const text = gatherText(trigger);
   assert.ok(!/Everyone/.test(text), 'no mode word while the load is still in flight: got ' + JSON.stringify(text));
-  assert.ok(!/DM Only/.test(text), 'no mode word while the load is still in flight: got ' + JSON.stringify(text));
+  assert.ok(!/GM Only/.test(text), 'no mode word while the load is still in flight: got ' + JSON.stringify(text));
   assert.ok(!/Custom/.test(text), 'no mode word while the load is still in flight: got ' + JSON.stringify(text));
   const modeBadge = findByClass(trigger, 'perm-trigger-mode');
   assert.equal(modeBadge, null, 'no perm-trigger-mode badge while the load is still in flight');
@@ -281,6 +282,6 @@ test('a successful load still shows the real mode (regression guard)', async () 
   await flush();
 
   const trigger = findByClass(el, 'perm-trigger');
-  assert.ok(/DM Only/.test(gatherText(trigger)), 'a successful load renders the real mode: got ' + JSON.stringify(gatherText(trigger)));
+  assert.ok(/GM Only/.test(gatherText(trigger)), 'a successful load renders the real mode: got ' + JSON.stringify(gatherText(trigger)));
   assert.equal(findByClass(body, 'perm-error'), null, 'no error banner on success');
 });

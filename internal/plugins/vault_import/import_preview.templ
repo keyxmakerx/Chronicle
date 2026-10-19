@@ -3,7 +3,10 @@
 
 package vault_import
 
-import "fmt"
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
 
 // PreviewPanel lists what the zip holds and what will become of it, then offers
 // the Import button. Nothing has been written when this is on screen.
@@ -84,7 +87,7 @@ templ PreviewPanel(campaignID string, p *Preview) {
 		}
 		<div class="flex items-start gap-3 rounded-lg bg-accent/5 border border-accent/20 px-4 py-3 text-sm text-fg">
 			<i class="fa-solid fa-lock text-accent mt-0.5" aria-hidden="true"></i>
-			<span>Every imported page starts GM only. Share them when you're ready.</span>
+			<span>Every imported page starts { layouts.GMTerm(ctx) } only. Share them when you're ready.</span>
 		</div>
 		<div class="flex flex-wrap items-center gap-3 pt-1">
 			<form
