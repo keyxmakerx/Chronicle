@@ -455,6 +455,7 @@ type calendarService struct {
 	publisher   CalendarEventPublisher
 	monthRemap  SessionMonthRemapper
 	rollRepo    EventRollRepository
+	markRepo    MoonMarkRepository
 	rollTables  RollTableSource
 }
 
@@ -592,10 +593,10 @@ func filterEventsByUser(events []Event, v permissions.Viewer) []Event {
 	return filtered
 }
 
-// filterMoonsForViewer strips moons HiddenFromPlayers for a viewer that does
-// not skip the per-user layer. GetMoons returns every moon regardless of
-// caller (see its doc comment); this is the one place that narrows it for
-// players.
+// filterMoonsForViewer strips moons HiddenFromPlayers, and the marks they
+// were not shown, for a viewer that does not skip the per-user layer.
+// GetMoons returns every moon regardless of caller (see its doc comment);
+// this is the one place that narrows it for players.
 func filterMoonsForViewer(moons []Moon, v permissions.Viewer) []Moon {
 	if v.SkipsPerUserRules() {
 		return moons
@@ -603,6 +604,8 @@ func filterMoonsForViewer(moons []Moon, v permissions.Viewer) []Moon {
 	filtered := moons[:0]
 	for _, m := range moons {
 		if !m.HiddenFromPlayers {
+			// A player's manual moon holds the last state they were shown.
+			m.Marks = shownMarksOnly(m.Marks)
 			filtered = append(filtered, m)
 		}
 	}
@@ -1000,7 +1003,7 @@ func (s *calendarService) loadSubresources(ctx context.Context, cal *Calendar) e
 	if cal.Weekdays, err = s.calRepo.GetWeekdays(ctx, cal.ID); err != nil {
 		return fmt.Errorf("load weekdays: %w", err)
 	}
-	if cal.Moons, err = s.calRepo.GetMoons(ctx, cal.ID); err != nil {
+	if err = s.loadMoons(ctx, cal); err != nil {
 		return fmt.Errorf("load moons: %w", err)
 	}
 	if cal.Seasons, err = s.calRepo.GetSeasons(ctx, cal.ID); err != nil {

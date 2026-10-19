@@ -344,7 +344,9 @@ func TestFamilyTreeBounds(t *testing.T) {
 	}
 }
 
-func familyHasCutNote(t *FamilyTree, word string) bool { return strings.Contains(familyCutNote(t), word) }
+func familyHasCutNote(t *FamilyTree, word string) bool {
+	return strings.Contains(familyCutNote(t), word)
+}
 
 func TestFamilyTreeUnreadEdgeAndMissingPages(t *testing.T) {
 	f := newFam()

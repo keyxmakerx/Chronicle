@@ -3793,6 +3793,12 @@ func (a *App) RegisterRoutes() {
 		rolls.SetEventRollRepository(calendar.NewEventRollRepository(a.DB))
 		rolls.SetRollTableSource(calendarRollTablesAdapter{svc: rolltables.NewService(rolltables.NewRepository(a.DB))})
 	}
+	// Moons the Director sets by hand: their marks' storage.
+	if marks, ok := calendarService.(interface {
+		SetMoonMarkRepository(calendar.MoonMarkRepository)
+	}); ok {
+		marks.SetMoonMarkRepository(calendar.NewMoonMarkRepository(a.DB))
+	}
 	calendarHandler := calendar.NewHandler(calendarService)
 	// Optional UX nicety: suggest the owner's own stored account timezone as
 	// the real-world calendar wizard step's starting default (see
@@ -5757,18 +5763,12 @@ func (a *App) RegisterRoutes() {
 	// Game-system widget panels under NPC page titles (manifest entity_panels).
 	entityHandler.SetSystemPanelResolver(newSystemPanelResolver(systemHandler, characterListService))
 
-	// The Homebrew Workshop's registry. Plugins below that plug kinds of part,
-	// events or actions into the Workshop register here, so it is made before
-	// any of them.
-	homebrewReg := homebrew.NewRegistry()
-	if err := registerAncestryParts(homebrewReg, systemEntrySvc); err != nil {
-		slog.Error("ancestries could not join the Homebrew Workshop", slog.Any("error", err))
-	}
-
 	// Per-page game-system state. system_state.updated is not a change-feed
-	// type, so the recording wrapper passes it straight to the hub.
+	// type, so the recording wrapper passes it straight to the hub. Kept for
+	// the Homebrew Workshop; nil while the plugin is degraded.
+	var systemStateSvc systemstate.Service
 	if a.PluginHealth.IsHealthy(systemstate.PluginSlug) {
-		systemStateSvc := systemstate.NewService(
+		systemStateSvc = systemstate.NewService(
 			systemstate.NewRepository(a.DB),
 			&systemStateEntityLookup{entities: entityService},
 			&systemStateSystemChecker{systems: systemHandler},
@@ -5780,16 +5780,6 @@ func (a *App) RegisterRoutes() {
 		systemStateSync := &systemStateSyncReader{svc: systemStateSvc}
 		syncAPIHandler.SetSystemStateReader(systemStateSync)
 		syncAPIHandler.SetSystemStateWriter(systemStateSync)
-		if err := registerVariantParts(homebrewReg, systemStateSvc,
-			&systemStateEntityLookup{entities: entityService},
-			func(ctx context.Context, campaignID string) string {
-				if sys := systemHandler.EnabledSystem(ctx, campaignID); sys != nil {
-					return sys.Info().ID
-				}
-				return ""
-			}); err != nil {
-			slog.Error("creature variants could not join the Homebrew Workshop", slog.Any("error", err))
-		}
 	} else {
 		slog.Warn("systemstate plugin degraded — routes not registered")
 	}
@@ -5800,6 +5790,13 @@ func (a *App) RegisterRoutes() {
 		rolltables.RegisterRoutes(e, rolltables.NewHandler(rollTablesSvc), campaignService, authService)
 	} else {
 		slog.Warn("rolltables plugin degraded — routes not registered")
+	}
+
+	// Pages' calendar date fields ("Died on") read the campaign calendar.
+	fieldDates := fieldDatesAdapter{svc: calendarService, addons: addonService}
+	entityHandler.SetFieldCalendar(fieldDates)
+	if fc, ok := entityService.(interface{ SetFieldCalendar(entities.FieldCalendar) }); ok {
+		fc.SetFieldCalendar(fieldDates)
 	}
 
 	// Quest sheets and notice boards. Cross-plugin lookups go through the
@@ -5876,13 +5873,11 @@ func (a *App) RegisterRoutes() {
 	// fields show only values typed by hand and nothing is renamed.
 	a.registerPlugin(PluginRegistration{Slug: fieldrules.PluginSlug})
 	var fieldRulesSvc fieldrules.Service
+	var frWorld *fieldRulesWorld
 	if a.PluginHealth.IsHealthy(fieldrules.PluginSlug) {
-		frWorld := fieldRulesWorld{pages: entityService, calendars: calendarService, eras: eraVersionService}
-		fieldRulesSvc = fieldrules.NewService(fieldrules.NewRepository(a.DB), frWorld)
+		frWorld = &fieldRulesWorld{pages: entityService, calendars: calendarService, eras: eraVersionService}
+		fieldRulesSvc = fieldrules.NewService(fieldrules.NewRepository(a.DB), *frWorld)
 		fieldrules.RegisterRoutes(e, fieldrules.NewHandler(fieldRulesSvc), campaignService, authService)
-		if err := registerFieldRuleParts(homebrewReg, frWorld.PlaceName); err != nil {
-			slog.Error("field rules could not join the Homebrew Workshop", slog.Any("error", err))
-		}
 		words := fieldWordsAdapter{svc: fieldRulesSvc}
 		entityHandler.SetFieldWords(words)
 		if fw, ok := entityService.(interface{ SetFieldWords(entities.FieldWords) }); ok {
@@ -5907,9 +5902,6 @@ func (a *App) RegisterRoutes() {
 			&trackersClockAdapter{svc: calendarService})
 		trackers.RegisterRoutes(e, trackers.NewHandler(trackersSvc), campaignService, authService)
 		registerTrackersBlock(blockRegistry)
-		if err := registerTrackerParts(homebrewReg); err != nil {
-			slog.Error("trackers could not join the Homebrew Workshop", slog.Any("error", err))
-		}
 	} else {
 		slog.Warn("trackers plugin degraded — the Trackers block is not available")
 	}
@@ -5936,7 +5928,18 @@ func (a *App) RegisterRoutes() {
 	}
 
 	// Homebrew Workshop: saved recipes of parts and When/Then rules. The
-	// store and its routes exist only while its table migrated.
+	// store and its routes exist only while its table migrated. Features add
+	// their parts from their own files (workshop_parts.go), so this block is
+	// not edited when one joins.
+	homebrewReg := homebrew.NewRegistry()
+	registerWorkshopParts(homebrewReg, workshopDeps{
+		Entities:      entityService,
+		FieldRules:    frWorld,
+		Health:        a.PluginHealth,
+		SystemEntries: systemEntrySvc,
+		SystemState:   systemStateSvc,
+		Systems:       systemHandler,
+	})
 	a.registerPlugin(PluginRegistration{
 		Slug:     homebrew.PluginSlug,
 		StaticFS: echo.MustSubFS(homebrew.StaticAssetsFS, "static"),
@@ -5967,91 +5970,34 @@ func (a *App) RegisterRoutes() {
 		slog.Warn("encounters plugin degraded — routes not registered")
 	}
 
-	// AI Import's record kinds: the features beyond pages it may write.
-	// Wired here, after the rulebook and rolling tables exist; a degraded
-	// plugin's kind is left out, so its blocks are refused at review.
-	// Event rolls are the calendar service's roll half; nil (a service
-	// without one) leaves `roll:`, the rolls generator and rolled nights out.
-	var aiRolls records.EventRollAPI
-	if rs, ok := calendarService.(calendar.EventRollService); ok {
-		aiRolls = rs
-	}
-	aiTables := records.TableKind{Svc: aiRollTablesAdapter{rollTablesSvc}}
-	aiKinds := []records.Kind{
-		records.CalendarKind{Svc: calendarService, Pages: entityService},
-		records.EventKind{Svc: calendarService, Tiers: campaignService, Pages: entityService, Rolls: aiRolls, Tables: aiTables.Svc},
-		records.WeatherKind{Svc: calendarService},
-	}
-	if aiRolls != nil {
-		aiKinds = append(aiKinds, records.RollNightKind{Cal: calendarService, Rolls: aiRolls})
-	}
-	aiHouseRules := records.HouseRuleKind{Book: systemHandler, SystemOf: func(ctx context.Context, campaignID string) string {
-		c, err := campaignService.GetByID(ctx, campaignID)
-		if err != nil {
-			return ""
-		}
-		return c.ParseSettings().SystemID
-	}}
-	if a.PluginHealth.IsHealthy(rolltables.PluginSlug) {
-		aiKinds = append(aiKinds, aiTables)
-	}
-	aiKinds = append(aiKinds,
-		records.ShopStockKind(entityService, relService),
-		records.CarriedItemKind(entityService, relService),
-		records.PinKind{Svc: aiMapsAdapter{mapsService}, Entities: entityService},
-		records.MapSketchKind{Svc: aiMapSketchAdapter{maps: mapsService, drawings: drawingService}, Pins: aiMapsAdapter{mapsService}},
-		records.NoteKind{Svc: noteSvc, Entities: entityService},
-		aiHouseRules,
-		records.SystemEntryKind{Svc: systemEntrySvc},
-	)
-	// A category field of type rule needs the rules; without them the kind
-	// still adds every other kind of field.
-	var aiHomebrew records.HomebrewAPI
-	if fieldRulesSvc != nil {
-		aiHomebrew = aiHomebrewAdapter{svc: fieldRulesSvc}
-		aiKinds = append(aiKinds,
-			records.FieldRuleKind{Svc: aiHomebrew},
-			records.LocalWordKind{Svc: aiHomebrew, Entities: entityService},
-		)
-	}
-	aiKinds = append(aiKinds, records.CategoryFieldKind{Types: entityService, Rules: aiHomebrew})
-	if encounterAPI.svc != nil {
-		aiKinds = append(aiKinds, records.EncounterKind{Svc: aiEncountersAdapter{svc: encounterAPI.svc}, Entities: entityService})
-	}
-	aiNights := aiGameNightsAdapter{svc: sessionsService, members: campaignService}
-	aiKinds = append(aiKinds,
-		records.FolderKind{Svc: aiFoldersAdapter{folders: folderService, types: entityService}},
-		records.GameNightKind{Svc: aiNights},
-		records.TagKind{Svc: tagService, Pages: entityService},
-	)
-	var aiPageMaps records.PageMapsAPI
-	if pageBlocksSvc != nil {
-		aiPageMaps = aiPageMapsAdapter{svc: pageBlocksSvc}
-		aiKinds = append(aiKinds, records.PageMapKind{Svc: aiPageMaps, Entities: entityService})
-	}
-	aiKinds = append(aiKinds,
-		records.GeneratorKind{Cal: calendarService, Tables: aiTables, Weather: calendarService, Rolls: aiRolls},
-	)
-	aiRegistry := records.NewRegistry(aiKinds...)
+	// AI Import's record kinds and lookups: the features beyond pages it may
+	// write and read. Wired here, after the rulebook and rolling tables exist.
+	// Kinds register from their own files (ai_kinds.go), so this block is not
+	// edited when one is added.
+	aiWiring := newAIDeps(aiDeps{
+		Calendar:        calendarService,
+		Campaigns:       campaignService,
+		CharacterChoice: characterChoiceSvc,
+		DMScreen:        dmScreenSvc,
+		Drawings:        drawingService,
+		Encounters:      encounterAPI.svc,
+		Entities:        entityService,
+		FieldRules:      fieldRulesSvc,
+		Folders:         folderService,
+		Health:          a.PluginHealth,
+		Maps:            mapsService,
+		Notes:           noteSvc,
+		PageBlocks:      pageBlocksSvc,
+		Relations:       relService,
+		RollTables:      rollTablesSvc,
+		Sessions:        sessionsService,
+		SystemEntries:   systemEntrySvc,
+		Systems:         systemHandler,
+		Tags:            tagService,
+	})
+	aiRegistry := records.NewRegistry(aiKinds(aiWiring)...)
 	aiWorkspaceHandler.SetRecords(aiRegistry)
-
-	// The read-only lookups an AI may ask for.
-	aiLookups := &records.Lookups{
-		Folders: aiFolderNames{folders: folderService},
-		Cal:     calendarService, Weather: calendarService, Rolls: aiRolls, Maps: aiMapsAdapter{mapsService}, Pages: entityService,
-		Rels: relService, Notes: noteSvc, Rules: &aiHouseRules,
-		Entries:  aiSystemEntriesAdapter{choices: characterChoiceSvc},
-		Party:    &aiPartyAdapter{screen: dmScreenSvc, nights: sessionsService, members: campaignService},
-		Tags:     tagService,
-		Tiers:    campaignService,
-		Nights:   aiNights,
-		Kinds:    aiRegistry,
-		PageMaps: aiPageMaps,
-	}
-	if a.PluginHealth.IsHealthy(rolltables.PluginSlug) {
-		aiLookups.Tables = aiTables.Svc
-	}
-	aiWorkspaceHandler.SetLookups(aiLookups)
+	aiWorkspaceHandler.SetLookups(aiLookups(aiWiring, aiRegistry))
 
 	// Late-bind the entity_notes notifier now that wsEventBus exists.
 	// The service was constructed earlier with a holder.Notify reference;
@@ -6143,6 +6089,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "bulk-actions", Scripts: []string{"/static/js/widgets/bulk_actions.js"}},
 	{Name: "ai-export", Scripts: []string{"/static/js/widgets/ai_export.js"}},
 	{Name: "impact_tree", Scripts: []string{"/static/js/widgets/impact_tree.js"}},
+	{Name: "attributes", Scripts: []string{"/static/js/widgets/attributes.js"}},
 	{Name: "entity-type-editor", Scripts: []string{"/static/js/widgets/entity_type_editor.js"}},
 	{Name: "template-editor", Scripts: []string{"/static/js/widgets/template_editor.js"}},
 	{Name: "layout-editor", Scripts: []string{"/static/js/widgets/layout_editor.js"}},

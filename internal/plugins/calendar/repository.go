@@ -8,6 +8,7 @@ package calendar
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -487,18 +488,46 @@ func deleteUnkept(ctx context.Context, ex dbExecutor, table, calendarID string, 
 // positionally; see calendarCols' doc comment for why appends are safe and
 // insertions are not.
 const moonCols = `id, calendar_id, name, cycle_days, phase_offset, color,
-        base_design, tint, phase_source, size, orbit_speed, hidden_from_players, lore_entity_id`
+        base_design, tint, phase_source, size, orbit_speed, hidden_from_players, lore_entity_id,
+        phase_mode, state_names`
 
 // moonColsQualified is moonCols under the alias `mo`, for GetMoons, whose
 // join to calendars and entities shares column names with it.
 const moonColsQualified = `mo.id, mo.calendar_id, mo.name, mo.cycle_days, mo.phase_offset, mo.color,
-        mo.base_design, mo.tint, mo.phase_source, mo.size, mo.orbit_speed, mo.hidden_from_players, mo.lore_entity_id`
+        mo.base_design, mo.tint, mo.phase_source, mo.size, mo.orbit_speed, mo.hidden_from_players, mo.lore_entity_id,
+        mo.phase_mode, mo.state_names`
 
 // moonDests is the Scan destination list for moonCols/moonColsQualified, so
 // scanMoon and GetMoons (which appends the lore page's name) cannot drift.
 func moonDests(m *Moon) []any {
 	return []any{&m.ID, &m.CalendarID, &m.Name, &m.CycleDays, &m.PhaseOffset, &m.Color,
-		&m.BaseDesign, &m.Tint, &m.PhaseSource, &m.Size, &m.OrbitSpeed, &m.HiddenFromPlayers, &m.LoreEntityID}
+		&m.BaseDesign, &m.Tint, &m.PhaseSource, &m.Size, &m.OrbitSpeed, &m.HiddenFromPlayers, &m.LoreEntityID,
+		&m.PhaseMode, (*moonStateNamesDest)(&m.StateNames)}
+}
+
+// moonStateNamesDest scans calendar_moons.state_names (JSON or NULL) into a
+// moon's StateNames. Words that do not decode read as the defaults rather
+// than failing the whole calendar.
+type moonStateNamesDest map[string]string
+
+func (d *moonStateNamesDest) Scan(src any) error {
+	*d = nil
+	var b []byte
+	switch v := src.(type) {
+	case nil:
+		return nil
+	case []byte:
+		b = v
+	case string:
+		b = []byte(v)
+	default:
+		return nil
+	}
+	var names map[string]string
+	if json.Unmarshal(b, &names) == nil && len(names) > 0 {
+		*d = names
+	}
+	return nil
 }
 
 func scanMoon(scanner interface{ Scan(...any) error }) (*Moon, error) {

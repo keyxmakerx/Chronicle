@@ -20,7 +20,7 @@ type CategoriesAPI interface {
 // fieldTypes are the sheet's field types, as the category editor offers them.
 var fieldTypes = map[string]bool{
 	"text": true, "number": true, "textarea": true, "url": true, "checkbox": true, "select": true,
-	entities.FieldTypeLink: true, entities.FieldTypeRule: true,
+	entities.FieldTypeLink: true, entities.FieldTypeRule: true, entities.FieldTypeCalendarDate: true,
 }
 
 // CategoryFieldKind adds, changes and removes one field on a category's
@@ -35,7 +35,7 @@ type CategoryFieldKind struct {
 func (CategoryFieldKind) Name() string  { return "category-field" }
 func (CategoryFieldKind) Label() string { return "Category field" }
 func (CategoryFieldKind) Doc() string {
-	return "A field on a category's sheet. `name` is the field's label and `category` the category's name; matched by both. `type` is one of text, number, textarea, url, checkbox, select (give `options`, a list), link (a page of another category: give `links_to`, that category's name; a page's sheet then takes the page's name) or rule (worked out by a `kind: field-rule`: give `rule`, its name; the rule must already exist or come earlier in the paste). Optional `key` (else made from the name), `section`, `director: true` (only Directors see its value). `action: update` changes only what it names, `rename_to` renames it; `action: delete` takes the field off the sheet.\n\n```\n---\nkind: category-field\ncategory: Items\nname: Source creature\ntype: link\nlinks_to: Creatures\nsection: Remnant\n---\n```\n\n```\n---\nkind: category-field\ncategory: Characters\nname: Guild rank\ntype: rule\nrule: Guild rank\n---\n```"
+	return "A field on a category's sheet. `name` is the field's label and `category` the category's name; matched by both. `type` is one of text, number, textarea, url, checkbox, select (give `options`, a list), link (a page of another category: give `links_to`, that category's name; a page's sheet then takes the page's name) rule (worked out by a `kind: field-rule`: give `rule`, its name; the rule must already exist or come earlier in the paste) or calendar_date (a day on the campaign's calendar; a page gives it as `year-month-day`, month by number, like 1043-3-22). A calendar_date field takes `ago: true` (say how long ago the date was) and `countdowns`, a list of `name`, `days`, optional `director: true` (only Directors see it) and `longer` (other lengths a page can pick, each `name` and `days`); naming `countdowns` replaces them all. Optional `key` (else made from the name), `section`, `director: true` (only Directors see its value). `action: update` changes only what it names, `rename_to` renames it; `action: delete` takes the field off the sheet.\n\n```\n---\nkind: category-field\ncategory: Items\nname: Source creature\ntype: link\nlinks_to: Creatures\nsection: Remnant\n---\n```\n\n```\n---\nkind: category-field\ncategory: Characters\nname: Guild rank\ntype: rule\nrule: Guild rank\n---\n```"
 }
 
 func (k CategoryFieldKind) Title(r Record) string {
@@ -132,7 +132,7 @@ func (k CategoryFieldKind) set(ctx context.Context, campaignID string, types []e
 	if r.Has("type") {
 		t := strings.ToLower(r.Str("type"))
 		if !fieldTypes[t] {
-			return badRequestf("type %s is not one of: text, number, textarea, url, checkbox, select, link, rule", quote(t))
+			return badRequestf("type %s is not one of: text, number, textarea, url, checkbox, select, link, rule, calendar_date", quote(t))
 		}
 		f.Type = t
 	}
@@ -172,6 +172,25 @@ func (k CategoryFieldKind) set(ctx context.Context, campaignID string, types []e
 			return badRequestf("there is no rule called %s (a rule this paste makes must come before the field)", quote(r.Str("rule")))
 		}
 		f.RuleID = rule.ID
+	}
+	if v, ok := r.Bool("ago"); ok {
+		f.DateAgo = v
+	}
+	if r.Has("countdowns") {
+		cds, err := readCountdowns(r)
+		if err != nil {
+			return err
+		}
+		f.Countdowns = cds
+	}
+	if f.Type == entities.FieldTypeCalendarDate {
+		if err := entities.CheckDateSettings(f); err != nil {
+			return err
+		}
+	} else if r.Has("ago") || r.Has("countdowns") {
+		return badRequestf("`ago` and `countdowns` belong to a calendar_date field")
+	} else {
+		f.DateAgo, f.Countdowns = false, nil
 	}
 	switch {
 	case f.Type == "select" && len(f.Options) == 0:
@@ -224,3 +243,34 @@ func (k CategoryFieldKind) Apply(ctx context.Context, campaignID string, a Actor
 
 // Export is empty: every category's fields are already in the prompt.
 func (CategoryFieldKind) Export(context.Context, string, Actor) (string, error) { return "", nil }
+
+// readCountdowns reads a calendar date field's `countdowns`: each a name and
+// its usual days, with `longer` lengths a page can pick instead.
+func readCountdowns(r Record) ([]entities.FieldCountdown, error) {
+	items, err := listItems(r, "countdowns", false)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]entities.FieldCountdown, 0, len(items))
+	for _, it := range items {
+		days, ok, err := it.Int("days")
+		if err != nil || !ok {
+			return nil, badRequestf("countdown %s needs `days`, a whole number", quote(it.Name))
+		}
+		cd := entities.FieldCountdown{Name: it.Name, Lengths: []entities.CountdownLength{{Days: days}}}
+		cd.GMOnly, _ = it.Bool("director")
+		longer, err := listItems(it, "longer", false)
+		if err != nil {
+			return nil, err
+		}
+		for _, l := range longer {
+			n, ok, err := l.Int("days")
+			if err != nil || !ok {
+				return nil, badRequestf("length %s of countdown %s needs `days`", quote(l.Name), quote(it.Name))
+			}
+			cd.Lengths = append(cd.Lengths, entities.CountdownLength{Name: l.Name, Days: n})
+		}
+		out = append(out, cd)
+	}
+	return out, nil
+}

@@ -10,8 +10,8 @@
 package entities
 
 import (
-	crand "crypto/rand"
 	"context"
+	crand "crypto/rand"
 	"database/sql"
 	"fmt"
 	"math/rand"
