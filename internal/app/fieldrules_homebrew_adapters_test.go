@@ -17,7 +17,7 @@ func fieldRuleService(t *testing.T) (homebrew.Service, *homebrew.Registry) {
 	place := func(_ context.Context, campaignID, id string) (string, bool) {
 		return "Saltreach", campaignID == "camp" && id == "saltreach"
 	}
-	if err := registerFieldRuleParts(reg, place); err != nil {
+	if err := registerFieldRuleParts(reg, place, fieldRuleSync{}); err != nil {
 		t.Fatal(err)
 	}
 	return homebrew.NewService(&memRecipes{stored: map[string]homebrew.Recipe{}}, reg, nil, nil), reg
@@ -32,7 +32,7 @@ func TestRegisterFieldRuleParts(t *testing.T) {
 	if strings.Join(got, ",") != "field,item,words" {
 		t.Errorf("parts = %v, want field,item,words", got)
 	}
-	if err := registerFieldRuleParts(reg, nil); err == nil {
+	if err := registerFieldRuleParts(reg, nil, fieldRuleSync{}); err == nil {
 		t.Error("registering twice succeeded")
 	}
 }
