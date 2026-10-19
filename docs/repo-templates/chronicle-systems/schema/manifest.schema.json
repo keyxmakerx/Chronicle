@@ -118,6 +118,14 @@
         "$ref": "#/$defs/EntityPanelDef"
       },
       "description": "Extra panels one of this manifest's widgets adds to entity pages."
+    },
+    "director_data": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_-]*\\.json$"
+      },
+      "description": "Data files with no category that only the campaign's Directors may read from the raw data route."
     }
   },
   "additionalProperties": false,

@@ -54,6 +54,11 @@ type SystemManifest struct {
 	// Categories lists the types of reference content this module provides.
 	Categories []CategoryDef `json:"categories"`
 
+	// DirectorData names data files with no category (read only by the
+	// package's widgets) that SystemDataAPI keeps to Directors, as a
+	// category's Director flag does for its own file.
+	DirectorData []string `json:"director_data,omitempty"`
+
 	// EntityPresets are entity type templates that campaigns can adopt when
 	// enabling this module (e.g., "D&D Character" with predefined fields).
 	EntityPresets []EntityPresetDef `json:"entity_presets,omitempty"`
@@ -228,11 +233,17 @@ type CategoryDef struct {
 	Director bool `json:"director,omitempty"`
 }
 
-// DirectorOnly reports whether the category slug is marked Director-only.
+// DirectorOnly reports whether the category slug is marked Director-only,
+// or data/<slug>.json is listed in DirectorData.
 func (m *SystemManifest) DirectorOnly(slug string) bool {
 	for i := range m.Categories {
-		if m.Categories[i].Slug == slug {
-			return m.Categories[i].Director
+		if m.Categories[i].Slug == slug && m.Categories[i].Director {
+			return true
+		}
+	}
+	for _, f := range m.DirectorData {
+		if f == slug+".json" {
+			return true
 		}
 	}
 	return false

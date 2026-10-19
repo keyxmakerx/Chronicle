@@ -15,7 +15,8 @@ import (
 )
 
 // newDirectorCategoryHarness serves the reference routes over a campaign
-// system with one Director-only category (monsters) and one open one (skills).
+// system with one Director-only category (monsters), one open one (skills),
+// and two widget-only data files, one listed in director_data.
 func newDirectorCategoryHarness(t *testing.T) *echo.Echo {
 	t.Helper()
 	base := t.TempDir()
@@ -26,6 +27,8 @@ func newDirectorCategoryHarness(t *testing.T) *echo.Echo {
 	for name, body := range map[string]string{
 		"monsters.json": `[{"slug":"goblin-sniper","name":"Goblin Sniper","source":"custom"}]`,
 		"skills.json":   `[{"slug":"goblin-lore","name":"Goblin Lore","source":"custom"}]`,
+		"roles.json":    `[{"slug":"artillery","name":"Artillery","source":"custom"}]`,
+		"layout.json":   `[{"slug":"front","name":"Front","source":"custom"}]`,
 	} {
 		if err := os.WriteFile(filepath.Join(dataDir, name), []byte(body), 0o644); err != nil {
 			t.Fatal(err)
@@ -34,7 +37,7 @@ func newDirectorCategoryHarness(t *testing.T) *echo.Echo {
 	m := &SystemManifest{ID: "customds", Name: "Draw Steel", Categories: []CategoryDef{
 		{Slug: "monsters", Name: "Monsters", Director: true},
 		{Slug: "skills", Name: "Skills"},
-	}}
+	}, DirectorData: []string{"roles.json"}}
 	sys, err := NewGenericSystem(m, dataDir)
 	if err != nil {
 		t.Fatal(err)
@@ -91,6 +94,7 @@ func TestDirectorCategory_HiddenFromPlayers(t *testing.T) {
 	e := newDirectorCategoryHarness(t)
 	paths := []struct{ path, open string }{
 		{"/data/monsters.json", "/data/skills.json"},
+		{"/data/roles.json", "/data/layout.json"},
 		{"/monsters", "/skills"},
 		{"/monsters/goblin-sniper", "/skills/goblin-lore"},
 		{"/monsters/goblin-sniper/tooltip", "/skills/goblin-lore/tooltip"},
