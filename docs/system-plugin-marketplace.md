@@ -51,6 +51,7 @@ See `docs/repo-templates/chronicle-systems/schema/manifest.schema.json` for the 
 | `renderers` | array | Binds one of this manifest's widgets to one of its entity presets (see `docs/system-package-rendering.md`) |
 | `dm_screen` | object | Which character fields the DM Screen shows for each hero |
 | `entity_panels` | array | Extra panels one of this manifest's widgets adds to NPC pages |
+| `director_data` | array | Data file names with no category (for example `"role-templates.json"`) that the raw data route keeps to the campaign's Directors |
 
 ### Category Fields
 
@@ -69,6 +70,8 @@ Each category defines fields that control tooltip rendering and reference page d
 ```
 
 Valid field types: `string`, `number`, `boolean`, `list`, `markdown`, `enum`, `url`.
+
+A category with `"director": true` is for the campaign's Directors only: its reference pages, search hits, tooltips and raw `data/<slug>.json` file answer 404 below Director. For content the system's book keeps in a Director-only chapter.
 
 ### Entity Preset Fields with Foundry Annotations
 
