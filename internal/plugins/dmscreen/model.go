@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/a-h/templ"
 )
 
 // Viewer is the person opening the screen.
@@ -69,6 +71,11 @@ type View struct {
 	// is not on the wire: the Foundry module has no use for it and the sync
 	// contract stays as it was.
 	Adventures *AdventuresView `json:"-"`
+
+	// Homebrew fills the Homebrew drawer; nil leaves the drawer and its
+	// button out. Only the owner and co-DMs get it, since a recipe's rules
+	// are theirs to run. Not on the wire, for the same reason as Adventures.
+	Homebrew templ.Component `json:"-"`
 }
 
 // DowntimeView is the downtime switch's state plus requests waiting on the GM.

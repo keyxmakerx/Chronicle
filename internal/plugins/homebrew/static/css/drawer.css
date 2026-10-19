@@ -1,0 +1,70 @@
+/* drawer.css: the Homebrew drawer on the DM Screen. It is a tool, so it
+ * takes the theme tokens and the accent a page look or style kit sets; the
+ * screen draws the frame around it. Sections only the Director gets carry
+ * the amber edge, and [data-player-view] on the frame hides them along with
+ * every control, leaving what players see of the trackers. */
+.hbd {
+  --hbd-ink: var(--surface-text, var(--color-text-primary)); --hbd-muted: var(--surface-text-muted, var(--color-text-muted));
+  --hbd-line: var(--surface-border, var(--color-border)); --hbd-tint: var(--surface-alt, var(--color-bg-tertiary));
+  --hbd-panel: var(--surface-raised, var(--color-bg-primary));
+  --hbd-acc: var(--annals-acc, var(--color-accent));
+  --hbd-dm: rgb(var(--color-warn-rgb, 217 119 6));
+  --hbd-bad: rgb(var(--color-danger-rgb, 220 38 38));
+  --hbd-ok: rgb(var(--color-ok-rgb, 22 163 74));
+  display: grid; gap: 14px; padding: 12px 14px 14px; font-size: 14px; color: var(--hbd-ink);
+}
+.hbd *, .hbd *::before, .hbd *::after { box-sizing: border-box; }
+.hbd :focus-visible { outline: 2px solid var(--hbd-acc); outline-offset: 2px; }
+.hbd-loading, .hbd-empty, .hbd-muted { color: var(--hbd-muted); font-size: 12.5px; margin: 0; }
+.hbd p { margin: 0; }
+.hbd-status { font-size: 12.5px; color: var(--hbd-muted); min-height: 0; }
+.hbd-status:empty { display: none; }
+.hbd-status.err { color: var(--hbd-bad); }
+
+.hbd-sec { display: grid; gap: 8px; padding: 10px 12px; border-radius: 8px; background: var(--hbd-tint); }
+.hbd-sec.hbd-dm { box-shadow: inset 3px 0 0 var(--hbd-dm); }
+.hbd-h { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: var(--hbd-acc); margin: 0; }
+.hbd-dm > .hbd-h { color: var(--hbd-dm); }
+.hbd-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.hbd-ch { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+.hbd-ch strong { flex: 1; min-width: 0; }
+.hbd-when { font-size: 12px; color: var(--hbd-muted); }
+
+.hbd-btn {
+  display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 8px; font-size: 13px; cursor: pointer;
+  border: 1px solid var(--hbd-line); background: var(--hbd-panel); color: var(--hbd-ink);
+  box-shadow: 0 1px 2px rgb(0 0 0 / .06);
+}
+.hbd-btn:hover:not(:disabled) { box-shadow: 0 4px 14px rgb(0 0 0 / .12); }
+.hbd-btn:disabled { opacity: .55; cursor: default; }
+.hbd-btn.primary { background: var(--hbd-acc); border-color: transparent; color: #fff; }
+.hbd-btn.quiet { border: 0; background: none; box-shadow: none; padding: 0; color: var(--hbd-acc); justify-self: start; }
+.hbd-btn.quiet:hover { text-decoration: underline; box-shadow: none; }
+
+.hbd-card { display: grid; gap: 6px; padding: 10px; border-radius: 8px; background: var(--hbd-panel); }
+.hbd-steps { margin: 0; padding-left: 18px; font-size: 13px; }
+.hbd-log { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.hbd-run { display: grid; gap: 2px; padding: 8px 10px; border-radius: 8px; background: var(--hbd-panel); font-size: 13px; }
+.hbd-pill { padding: 1px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 600; background: var(--hbd-tint); color: var(--hbd-muted); }
+.hbd-done .hbd-pill { color: var(--hbd-ok); }
+.hbd-failed .hbd-pill, .hbd-stopped .hbd-pill { color: var(--hbd-bad); }
+
+.hbd-page { display: grid; gap: 4px; padding-top: 8px; border-top: 1px solid var(--hbd-line); }
+.hbd-page:first-of-type { border-top: 0; padding-top: 0; }
+.hbd-page-name { font-weight: 600; color: var(--hbd-ink); text-decoration: none; }
+.hbd-page-name:hover { text-decoration: underline; }
+
+[data-player-view] .hbd-dm,
+[data-player-view] .hbd-status,
+[data-player-view] .hbd .tk-ic,
+[data-player-view] .hbd .tk-q,
+[data-player-view] .hbd .tk-who,
+[data-player-view] .hbd .tk-add,
+[data-player-view] .hbd .tk-menu,
+[data-player-view] .hbd .tk-head,
+[data-player-view] .hbd .tk-form,
+[data-player-view] .hbd .tk-btn,
+[data-player-view] .hbd .tk-log,
+[data-player-view] .hbd [data-dm-only] { display: none !important; }
+
+@media (prefers-reduced-motion: reduce) { .hbd * { transition: none !important; } }

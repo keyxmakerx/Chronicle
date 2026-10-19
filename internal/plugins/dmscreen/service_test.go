@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/a-h/templ"
+
 	"github.com/keyxmakerx/chronicle/internal/systems"
 )
 
@@ -111,6 +113,36 @@ func TestBuild_Roles(t *testing.T) {
 				t.Fatal("Reveal should refuse a player")
 			}
 		})
+	}
+}
+
+// drawerMount stands in for homebrew's drawer content.
+type drawerMount struct{ asked string }
+
+func (d *drawerMount) DrawerMount(campaignID string) templ.Component {
+	d.asked = campaignID
+	return templ.Raw("drawer")
+}
+
+func TestBuild_HomebrewOwnerOnly(t *testing.T) {
+	d := &drawerMount{}
+	svc := NewService(Sources{Homebrew: d})
+	scribe, err := svc.Build(context.Background(), "c1", Viewer{UserID: "u", Role: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if scribe.Homebrew != nil {
+		t.Error("a scribe should get no Homebrew drawer")
+	}
+	owner, err := svc.Build(context.Background(), "c1", Viewer{UserID: "u", Role: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if owner.Homebrew == nil || d.asked != "c1" {
+		t.Errorf("owner drawer = %v, asked for %q", owner.Homebrew, d.asked)
+	}
+	if none, _ := NewService(Sources{}).Build(context.Background(), "c1", Viewer{UserID: "u", Role: 3}); none.Homebrew != nil {
+		t.Error("no source should mean no drawer")
 	}
 }
 

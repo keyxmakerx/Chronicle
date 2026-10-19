@@ -4,6 +4,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/a-h/templ"
+
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/systems"
 )
@@ -133,6 +135,13 @@ type SystemSource interface {
 	EnabledSystem(ctx context.Context, campaignID string) systems.System
 }
 
+// HomebrewSource draws what fills the Homebrew drawer: its stylesheets and
+// the widget that reads the campaign's homebrew itself, so the screen holds
+// no homebrew data of its own.
+type HomebrewSource interface {
+	DrawerMount(campaignID string) templ.Component
+}
+
 // Sources groups the screen's inputs. Any of them may be nil, which leaves
 // that section out.
 type Sources struct {
@@ -146,6 +155,7 @@ type Sources struct {
 	Party    PartySource
 	Hidden   HiddenSource
 	System   SystemSource
+	Homebrew HomebrewSource
 
 	// Board and Adventures together feed the Adventures tab; with either
 	// missing (the table failed to migrate) the tab is left out.

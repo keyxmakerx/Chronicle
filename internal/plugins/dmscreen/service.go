@@ -179,6 +179,10 @@ func (s *service) Build(ctx context.Context, campaignID string, v Viewer) (*View
 		}
 	}
 
+	if s.src.Homebrew != nil && v.IsOwner() {
+		view.Homebrew = s.src.Homebrew.DrawerMount(campaignID)
+	}
+
 	if s.src.Board != nil && s.src.Adventures != nil {
 		adv, err := s.adventures(ctx, campaignID, v)
 		if err != nil {

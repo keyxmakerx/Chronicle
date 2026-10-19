@@ -5713,6 +5713,11 @@ func (a *App) RegisterRoutes() {
 		dmSources.Board = dmscreen.NewBoardRepository(a.DB)
 		dmSources.Adventures = &dmAdventuresAdapter{entities: entityService}
 	}
+	// The Homebrew drawer runs recipes' rules, so it needs the homebrew
+	// tables; its trackers section needs the trackers ones too.
+	if a.PluginHealth.IsHealthy(homebrew.PluginSlug) {
+		dmSources.Homebrew = &dmHomebrewAdapter{trackers: a.PluginHealth.IsHealthy(trackers.PluginSlug)}
+	}
 	dmScreenSvc := dmscreen.NewService(dmSources)
 	dmscreen.RegisterRoutes(e, dmscreen.NewHandler(dmScreenSvc), campaignService, authService)
 	// The sync API routes are already registered; they answer 404 until this
@@ -5956,6 +5961,7 @@ func (a *App) RegisterRoutes() {
 		StaticFS: echo.MustSubFS(homebrew.StaticAssetsFS, "static"),
 		Widgets: []PluginWidget{
 			{Name: "homebrew-workshop", Scripts: []string{"js/homebrew_workshop.js"}},
+			{Name: "homebrew-drawer", Scripts: []string{"js/homebrew_drawer.js"}},
 		},
 	})
 	if a.PluginHealth.IsHealthy(homebrew.PluginSlug) {

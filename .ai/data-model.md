@@ -390,6 +390,7 @@ Foundry module repo for the wire contract.
 | Table | Purpose |
 |-------|---------|
 | `homebrew_recipes` | Homebrew Workshop recipes: `name` (unique per campaign), `doc` (JSON: parts, When/Then rules and the canvas `layout`, validated by the service and by each part's owning plugin), `version` for edit conflicts, `created_by`; FK to `campaigns` cascades. At most 200 per campaign |
+| `homebrew_runs` | Each time a recipe's rule started: `recipe_id` and `recipe_name` as they were, `what` (a plain line, 200 characters), `rule_json` (the rule as it was), `scope` (the page it fired on, or NULL), `payload` (what fired it), `status` (`done`/`failed`/`stopped`/`held`/`running`/`dismissed`), `outcome` (JSON list of lines), `created_by`/`created_at`, `done_by`/`done_at`. Indexed by campaign, status and time; FK to `campaigns` cascades. The newest 200 finished runs per campaign are kept; held runs are never pruned |
 
 ### encounters (`internal/plugins/encounters/migrations/`)
 
