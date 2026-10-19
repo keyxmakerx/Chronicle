@@ -251,3 +251,40 @@ func (s *entityService) PlacePageExtras(ctx context.Context, campaignID string, 
 	}
 	return changed, nil
 }
+
+// PlaceSystemPanels adds the Game System Panels block under the title of each
+// listed type whose layout does not place it yet, and nothing else. It runs
+// when a type starts counting as an NPC type, so its pages show the game
+// system's panels without the owner placing the block by hand; a block the
+// owner later removes stays removed until the type joins the list again.
+// Returns the number of layouts changed.
+func (s *entityService) PlaceSystemPanels(ctx context.Context, campaignID string, typeIDs []int) (int, error) {
+	if len(typeIDs) == 0 {
+		return 0, nil
+	}
+	types, err := s.types.ListByCampaign(ctx, campaignID)
+	if err != nil {
+		return 0, fmt.Errorf("listing entity types: %w", err)
+	}
+	plans := make(map[int]PageExtrasPlan, len(typeIDs))
+	for _, id := range typeIDs {
+		plans[id] = PageExtrasPlan{SystemPanels: true}
+	}
+	changed := 0
+	for i := range types {
+		if !plans[types[i].ID].SystemPanels || layoutPlacesBlock(types[i].Layout, BlockSystemPanels) {
+			continue
+		}
+		layout := insertAfterTitle(types[i].Layout, TemplateBlock{ID: "blk-system-panels", Type: BlockSystemPanels})
+		// Written as is, for the same reason as PlacePageExtras.
+		raw, err := json.Marshal(layout)
+		if err == nil {
+			err = s.types.UpdateLayout(ctx, types[i].ID, string(raw))
+		}
+		if err != nil {
+			return changed, fmt.Errorf("placing system panels on entity type %d: %w", types[i].ID, err)
+		}
+		changed++
+	}
+	return changed, nil
+}

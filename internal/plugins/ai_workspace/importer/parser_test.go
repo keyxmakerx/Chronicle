@@ -355,3 +355,17 @@ Body.`
 		t.Errorf("pages[2] should flag the bad visibility value")
 	}
 }
+
+// TestParse_ReasonIsKnown pins that `reason:` reaches the review and is not
+// reported as an unknown key.
+func TestParse_ReasonIsKnown(t *testing.T) {
+	pages := Parse("---\nname: Vell\nreason: She commands the siege.\n---\n# Vell\n\nBody.")
+	if len(pages) != 1 || pages[0].FrontMatter.Reason != "She commands the siege." {
+		t.Fatalf("reason not parsed: %+v", pages)
+	}
+	for _, w := range pages[0].Warnings {
+		if strings.Contains(w, "reason") {
+			t.Errorf("reason reported as unknown: %q", w)
+		}
+	}
+}

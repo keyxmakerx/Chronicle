@@ -22,3 +22,37 @@ templ BlockMount(campaignID, entityID, blockID, kind, csrfToken string) {
 		data-csrf-token={ csrfToken }
 	></div>
 }
+
+// pageMapAssets loads the page map's stylesheet.
+templ pageMapAssets() {
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/css/page_map.css") }/>
+}
+
+// PageMapMount is the mount point of the Map block. Like the other blocks the
+// widget fetches its content itself, so what it shows is decided by the
+// service for whoever is looking.
+templ PageMapMount(campaignID, entityID, blockID, csrfToken string) {
+	@pageMapAssets()
+	<div
+		data-widget="page_map"
+		data-endpoint={ "/campaigns/" + campaignID + "/page-blocks/" + entityID + "/" + blockID }
+		data-kind={ KindPageMap }
+		data-csrf-token={ csrfToken }
+	></div>
+}
+
+// ChecklistMount is the mount point of the Checklist block. canDM only decides
+// whether the editor offers the DM's own controls (hiding the block or an
+// item, and thresholds); the service enforces the same rule on every save.
+templ ChecklistMount(campaignID, entityID, blockID, csrfToken string, canDM bool) {
+	@blockAssets()
+	<div
+		data-widget="page_blocks"
+		data-endpoint={ "/campaigns/" + campaignID + "/page-blocks/" + entityID + "/" + blockID }
+		data-kind={ KindChecklist }
+		data-csrf-token={ csrfToken }
+		if canDM {
+			data-can-dm="true"
+		}
+	></div>
+}

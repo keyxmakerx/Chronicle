@@ -330,8 +330,54 @@
   // (model.go) so the client's phase reads agree with the values the
   // server itself would compute for the same absolute day.
   // -----------------------------------------------------------------
+  // A moon set by hand (moon_marks.go) has no cycle: it holds the state of
+  // its latest mark. index() gives each moon's marks their day counters once
+  // the calendar is known; the reads below then work from (moon, day) alone.
+  var MOON_STATE_PHASE = { full: 0.5, half: 0.25, crescent: 0.125, dark: 0, vanished: 0 };
+  var MOON_STATE_WORD = { full: 'Full', half: 'Half', crescent: 'Crescent', dark: 'Dark', vanished: 'Vanished' };
   var MoonMath = {
+    index: function (cal) {
+      (cal.moons || []).forEach(function (mo) {
+        mo._marks = (mo.phase_mode === 'manual' ? mo.marks || [] : []).map(function (k) {
+          return { abs: CalDate.dayIndex(cal, k.year, k.month, k.day), k: k };
+        }).sort(function (a, b) { return a.abs - b.abs; });
+      });
+    },
+    manual: function (moon) { return moon.phase_mode === 'manual'; },
+    // markOn is the mark a day falls under, null before the first.
+    markOn: function (moon, absoluteDay) {
+      var list = moon._marks || [], lo = 0, hi = list.length;
+      while (lo < hi) { var mid = (lo + hi) >> 1; if (list[mid].abs <= absoluteDay) lo = mid + 1; else hi = mid; }
+      return lo ? list[lo - 1].k : null;
+    },
+    // state is a hand-set moon's state on a day, '' before its first mark.
+    state: function (moon, absoluteDay) { var k = MoonMath.markOn(moon, absoluteDay); return k ? k.state : ''; },
+    word: function (moon, state) {
+      var w = moon.state_names && moon.state_names[state];
+      return w && String(w).trim() ? String(w).trim() : MOON_STATE_WORD[state] || state;
+    },
+    // label names the moon's look on a day: a hand-set moon's word, or the
+    // cycle's phase name.
+    label: function (moon, absoluteDay) {
+      if (!MoonMath.manual(moon)) return MoonMath.name(MoonMath.phase(moon, absoluteDay));
+      var st = MoonMath.state(moon, absoluteDay);
+      return st ? MoonMath.word(moon, st) : 'Not set';
+    },
+    // describe adds how lit a cycling moon is; a hand-set moon's word is
+    // all there is to say.
+    describe: function (moon, absoluteDay) {
+      if (MoonMath.manual(moon)) return MoonMath.label(moon, absoluteDay);
+      var p = MoonMath.phase(moon, absoluteDay);
+      return MoonMath.name(p) + ' · ' + MoonMath.litPct(p) + '% lit';
+    },
+    // unseen: a hand-set moon that is gone, or not set yet, on that day.
+    unseen: function (moon, absoluteDay) {
+      if (!MoonMath.manual(moon)) return false;
+      var st = MoonMath.state(moon, absoluteDay);
+      return !st || st === 'vanished';
+    },
     phase: function (moon, absoluteDay) {
+      if (MoonMath.manual(moon)) return MOON_STATE_PHASE[MoonMath.state(moon, absoluteDay)] || 0;
       if (!moon.cycle_days || moon.cycle_days <= 0) return 0;
       var raw = (absoluteDay + (moon.phase_offset || 0)) / moon.cycle_days;
       var phase = raw - Math.floor(raw);
@@ -475,6 +521,16 @@
   function ampm(m) {
     var h = Math.floor(m / 60) % 24, mm = m % 60, suf = h < 12 ? 'am' : 'pm', h12 = h % 12 || 12;
     return h12 + (mm ? ':' + pad2(mm) : '') + suf;
+  }
+  // Two letters for a page's round mark: "Brother Ansel" is "BA".
+  function gnInitials(name) {
+    return String(name || '').split(/\s+/).filter(Boolean).slice(0, 2).map(function (w) { return w.charAt(0).toUpperCase(); }).join('');
+  }
+  // Who can read a note, in the words the Journal uses. A note for the
+  // Director carries the Director's amber.
+  function gnAudience(a, isGM) {
+    if (a === 'gm') return '<span class="gnaud dm">' + (isGM ? 'GM only' : 'Shared with GM') + '</span>';
+    return '<span class="gnaud">' + ({ party: 'Shared with party', custom: 'Specific people' }[a] || 'Private') + '</span>';
   }
   // "Oct 17", "Oct 17 and Oct 31", "Oct 3, Oct 17 and Oct 31".
   function listWords(a) {
@@ -1236,6 +1292,9 @@
   Chronicle.calendarEras = EraMath;
   Chronicle.calendarPanel = { growOpen: growOpen, growClose: growClose };
   Chronicle.calendarColor = sanitizeColor;
+  // Shared with calendar_editor.js so the Director's moon controls read a
+  // hand-set moon exactly as the grid draws it.
+  Chronicle.calendarMoon = MoonMath;
   Chronicle.calendarPageGlyph = PAGE_GLYPH;
   Chronicle.calendarWeatherIcon = weatherIcon;
   Chronicle.calendarWindWords = windWords;
@@ -1260,6 +1319,7 @@
 
       var cfgEl = $('#calendar-config', el);
       try { this.cal = JSON.parse(cfgEl.dataset.calendar || '{}'); } catch (e) { this.cal = {}; }
+      MoonMath.index(this.cal);
       var initialEvents;
       try { initialEvents = JSON.parse(cfgEl.dataset.events || '[]'); } catch (e2) { initialEvents = []; }
       if (!Array.isArray(initialEvents)) initialEvents = [];
@@ -1268,7 +1328,9 @@
       this.forecastByDay = {};
       this.weatherByYear = {}; // year -> {'m_d': reading}, filled by fetchWeatherYear
       this.nightsByMonth = {}; // 'y_m' -> game nights, filled by fetchNights
-      this._gnPages = {}; // session id -> its recap and linked pages
+      this.rollsByMonth = {}; // 'y_m' -> {events, byEvent}, filled by fetchRolls
+      this._gnPages = {}; // session id + "|" + date -> its recap, linked pages and entries
+      this._gnChk = {}; // session id + "|" + date -> the check-in's view state
       this._evPages = {}; // event id -> the pages tied to it
       this._gnReminded = {}; // night id + "|" + user id -> reminded this visit
       this._gnRemindedAll = {}; // night id -> "remind everyone" sent
@@ -1598,6 +1660,70 @@
           return list;
         })
         .catch(function () { return []; });
+    },
+
+    // fetchRolls loads a month's event roll results, by event id. They are
+    // kept with the events list they were read beside, so a refetch of the
+    // month's events (after a save) refetches them too. The server leaves
+    // out what this viewer may not see: a player gets only told nights that
+    // have arrived. Returns a Promise.
+    fetchRolls: function (y, m) {
+      var self = this, key = this.monthKey(y, m), evs = this.eventsByMonth[key], have = this.rollsByMonth[key];
+      if (have && have.events === evs) return Promise.resolve(have.byEvent);
+      return Chronicle.apiFetch(this.apiBase + '/rolls?year=' + y + '&month=' + m)
+        .then(function (resp) { return resp.ok ? resp.json() : {}; })
+        .then(function (byEvent) {
+          if (!byEvent || typeof byEvent !== 'object') byEvent = {};
+          self.rollsByMonth[key] = { events: self.eventsByMonth[key], byEvent: byEvent };
+          return byEvent;
+        })
+        .catch(function () { return {}; });
+    },
+
+    // rollOn returns an event's roll result on one night, or null.
+    rollOn: function (eventId, y, m, d) {
+      var have = this.rollsByMonth[this.monthKey(y, m)], list = have && have.byEvent[eventId];
+      if (!list) return null;
+      for (var i = 0; i < list.length; i++) if (list[i].day === d && list[i].month === m && list[i].year === y) return list[i];
+      return null;
+    },
+
+    // _rollArrived says the night is today or past, when told players have
+    // actually seen it.
+    _rollArrived: function (r) {
+      var cal = this.cal;
+      return CalDate.dayIndex(cal, r.year, r.month, r.day) <= CalDate.dayIndex(cal, cal.current_year, cal.current_month, cal.current_day);
+    },
+
+    _rollIsToday: function (r) {
+      var cal = this.cal;
+      return r.year === cal.current_year && r.month === cal.current_month && r.day === cal.current_day;
+    },
+
+    // _rollLineHTML is a night's result under its event: the Director sees
+    // the total and result with the amber edge (only they see it), a player
+    // the result they were told.
+    _rollLineHTML: function (r) {
+      if (!r) return '';
+      if (this.canAuthorDmOnly) {
+        return '<div class="evroll dm"><i class="fa-solid fa-dice-d20" aria-hidden="true"></i>' +
+          (r.total != null ? '<b>' + esc(String(r.total)) + '</b> · ' : '') + esc(r.result || 'Rolled') +
+          (r.told ? '<span class="told">' + (this._rollArrived(r) ? 'Players told' : 'Players told on the night') + '</span>' : '') + '</div>';
+      }
+      return '<div class="evroll"><b>' + esc(r.result || '') + '</b>' + (r.players && r.players !== r.result ? ' ' + esc(r.players) : '') + '</div>';
+    },
+
+    // _rollFactsHTML is the night's result on the event's full card.
+    _rollFactsHTML: function (r) {
+      if (!r) return '';
+      if (!this.canAuthorDmOnly) {
+        return '<div class="evrollc"><div class="lb">' + (this._rollIsToday(r) ? 'Tonight' : 'That night') + '</div><p><b>' + esc(r.result || '') + '.</b> ' + (r.players && r.players !== r.result ? esc(r.players) : '') + '</p></div>';
+      }
+      var faces = r.faces && r.faces.length ? ' (' + r.faces.join(' + ') + ')' : '';
+      return '<div class="evrollc dm" data-dm-only><div class="lb"><i class="fa-solid fa-eye-slash" aria-hidden="true"></i> Only you see this roll</div>' +
+        '<p><b>' + esc(r.result || 'Rolled') + '</b>' + (r.total != null ? ' · ' + esc(String(r.total)) + esc(faces) : '') + (r.locked ? ' · <i class="fa-solid fa-lock" aria-label="Locked"></i>' : '') + '</p>' +
+        (r.director ? '<p>' + esc(r.director) + '</p>' : '') +
+        '<p class="pl">' + (r.told ? (this._rollArrived(r) ? 'Players are told: ' : 'Players are told on the night: ') + esc(r.players || r.result || '') : 'Players aren’t told anything.') + '</p></div>';
     },
 
     // fetchWeatherYear loads (and caches) a year's day weather. The server
@@ -2058,38 +2184,45 @@
         '</div></div>';
     },
 
-    // A night's recap and linked pages sit below its answers. They are read
-    // when the page opens; until then the page says so.
+    // A night's recap, linked pages and Journal entries sit below its
+    // answers, with the Director's check-in first. They are read when the
+    // page opens; until then the page says so. A repeating night's entries
+    // are its own date's, so the page is kept per date.
     _gnPageExtraHTML: function (n) {
       var sid = n.sessionId;
-      if (!this._gnPages[sid]) this._gnLoadPage(sid);
-      return '<div data-gn-extra="' + esc(sid) + '">' + this._gnExtraHTML(sid) + '</div>';
+      if (!this._gnPages[sid + '|' + n.date]) this._gnLoadPage(sid, n.date);
+      return '<div data-gn-extra="' + esc(sid) + '" data-gn-date="' + esc(n.date) + '">' + this._gnExtraHTML(sid, n.date) + '</div>';
     },
 
-    _gnLoadPage: function (sid) {
-      var self = this;
-      return Chronicle.apiFetch('/campaigns/' + encodeURIComponent(this.campaignId) + '/sessions/' + encodeURIComponent(sid) + '/page')
+    _gnLoadPage: function (sid, date) {
+      var self = this, key = sid + '|' + date;
+      return Chronicle.apiFetch('/campaigns/' + encodeURIComponent(this.campaignId) + '/sessions/' + encodeURIComponent(sid) + '/page?date=' + encodeURIComponent(date))
         .then(function (resp) { return resp.ok ? resp.json() : Promise.reject(); })
         .then(function (p) {
-          self._gnPages[sid] = { recap: p.recap || '', recapHtml: p.recapHtml || '', links: Array.isArray(p.links) ? p.links : [] };
+          var night = p.night || {};
+          self._gnPages[key] = {
+            recap: p.recap || '', recapHtml: p.recapHtml || '', links: Array.isArray(p.links) ? p.links : [],
+            entries: Array.isArray(night.entries) ? night.entries : [],
+            checkIn: Array.isArray(night.checkIn) ? night.checkIn : null
+          };
         })
-        .catch(function () { self._gnPages[sid] = { failed: true, recap: '', recapHtml: '', links: [] }; })
+        .catch(function () { self._gnPages[key] = { failed: true, recap: '', recapHtml: '', links: [], entries: [], checkIn: null }; })
         .then(function () { self._gnRedrawExtra(sid); });
     },
 
     _gnRedrawExtra: function (sid, focusSel) {
       var box = this.evpEl.classList.contains('open') && this.evpEl.querySelector('[data-gn-extra="' + sid + '"]');
       if (!box) return;
-      box.innerHTML = this._gnExtraHTML(sid);
+      box.innerHTML = this._gnExtraHTML(sid, box.dataset.gnDate);
       var f = focusSel && box.querySelector(focusSel);
       if (f) f.focus({ preventScroll: true });
     },
 
-    _gnExtraHTML: function (sid) {
-      var p = this._gnPages[sid], scribe = this.role >= 2, cid = encodeURIComponent(this.campaignId);
+    _gnExtraHTML: function (sid, date) {
+      var p = this._gnPages[sid + '|' + date], scribe = this.role >= 2, cid = encodeURIComponent(this.campaignId);
       if (!p) return '<section class="eps"><h4>Recap</h4><div class="none">Loading…</div></section>';
-      if (p.failed) return '<section class="eps"><h4>Recap</h4><div class="none">The recap and linked pages could not be loaded.</div></section>';
-      var h = '<section class="eps gnrecap"><h4>Recap</h4>';
+      if (p.failed) return '<section class="eps"><h4>Recap</h4><div class="none">The recap, linked pages and entries could not be loaded.</div></section>';
+      var h = this._gnCheckInHTML(sid, date, p) + '<section class="eps gnrecap"><h4>Recap</h4>';
       // Editing here is plain text, so a recap with formatting is shown but
       // never edited here: saving it would drop the formatting.
       var rich = !!p.recapHtml && /<(?!\/?p\b|br\b)[a-z]/i.test(p.recapHtml);
@@ -2113,7 +2246,105 @@
           ? '<div class="gnfind"><input type="search" data-gn-link-q placeholder="Search pages to link" aria-label="Search pages to link" autocomplete="off"><ul class="lp-res" data-gn-link-res role="listbox" aria-label="Pages" hidden></ul></div>'
           : '<button type="button" class="lnk" data-gn-link-open><i class="fa-solid fa-plus"></i> Link a page</button>';
       }
-      return h + '</section>';
+      return h + '</section>' + this._gnEntriesHTML(p);
+    },
+
+    // "Entries for this night": the night's Journal entries the viewer can
+    // read, their own first. Each member's entry is made for them when the
+    // night is due.
+    _gnEntriesHTML: function (p) {
+      var self = this, cid = encodeURIComponent(this.campaignId), list = p.entries || [];
+      var h = '<section class="eps gnwrote"><h4>Entries for this night</h4>';
+      if (!list.length) h += '<div class="none">No Journal entries for this night yet.</div>';
+      else h += '<div class="gnnotes">' + list.map(function (x) {
+        var mine = x.authorId === self.userId;
+        return '<div class="gnnrow">' +
+          '<a href="/campaigns/' + cid + '/journal/' + encodeURIComponent(x.id) + '">' + esc(mine ? 'Your entry' : (x.title || 'Untitled note')) + '</a>' +
+          gnAudience(x.audience, self.canAuthorDmOnly) +
+          '<span class="who">' + esc(mine ? 'You' : (x.authorName || 'A member')) + '</span></div>';
+      }).join('') + '</div>';
+      return h + '<p class="gnrule">' + (this.canAuthorDmOnly
+        ? 'Everyone in the campaign gets an entry in their Journal for each game night. You see the ones you can read; a player’s private entry stays private and is never read for the check-in.'
+        : 'Everyone in the campaign gets an entry in their Journal for each game night. Share yours with the GM if you want the people you met counted.') + '</p></section>';
+    },
+
+    // The after-night check-in, for the Director only: the pages named in
+    // the night's entries, each answered Seen or Not seen. The server sends it
+    // only to someone who sees DM-only content, once the night has started.
+    _gnCheckInHTML: function (sid, date, p) {
+      if (!p.checkIn) return '';
+      var cid = encodeURIComponent(this.campaignId), st = this._gnChk[sid + '|' + date] || {};
+      var all = p.checkIn, pend = all.filter(function (x) { return !x.answer; });
+      var names = all.map(function (x) { return x.name; });
+      var fromEntries = all.every(function (x) { return x.noteId; });
+      var ask = all.length > 4
+        ? all.length + ' people came up ' + (fromEntries ? 'in this night’s entries.' : 'on this night.')
+        : listWords(names) + ' came up ' + (fromEntries ? 'in this night’s entries.' : 'on this night.');
+      var h = '<section class="eps gnchk" data-dm-only aria-label="After-night check-in"><div class="gnchk-h"><p>' +
+        (all.length ? esc(ask) + ' Did the players see them?' : 'Nobody was named in the entries you can read, so there is no one to ask about.') +
+        '</p><span class="dirnote"><i class="fa-solid fa-eye-slash"></i>Director only</span></div>';
+      if (!all.length) return h + '</section>';
+      if (!pend.length && !st.change) {
+        var seen = all.filter(function (x) { return x.answer === 'seen'; }).map(function (x) { return x.name; });
+        var no = all.filter(function (x) { return x.answer === 'not_seen'; }).map(function (x) { return x.name; });
+        h += '<p class="gndone"><i class="fa-solid fa-check"></i> Checked. ' +
+          esc(seen.length ? listWords(seen) + (seen.length > 1 ? ' are' : ' is') + ' in their Last seen for this night.' : 'Nobody was added to Last seen.') +
+          (no.length ? ' ' + esc(listWords(no)) + ' stayed unseen.' : '') + '</p>' +
+          '<div class="gnchk-f"><button type="button" class="lnk" data-gn-chk="change">Change answers</button></div>';
+        return h + '</section>';
+      }
+      var list = st.change ? all : pend, rows = (st.all || list.length <= 6) ? list : list.slice(0, 5);
+      h += '<div class="gnchk-l">' + rows.map(function (x) {
+        var open = st.open && st.open[x.entityId], src;
+        if (x.noteId) {
+          src = 'In <a href="/campaigns/' + cid + '/journal/' + encodeURIComponent(x.noteId) + '">' + esc(x.noteTitle || 'Untitled note') + '</a>' +
+            (x.moreNotes ? ', and ' + x.moreNotes + (x.moreNotes === 1 ? ' more entry' : ' more entries') : '') + '.';
+          if (x.line) src += ' <button type="button" class="lnk" data-gn-chk="line" data-gn-ent="' + esc(x.entityId) + '" aria-expanded="' + !!open + '">' + (open ? 'Hide the line' : 'Show the line') + '</button>';
+        } else {
+          src = x.answer ? 'Answered for this night.' : 'Linked to this game night as mentioned.';
+        }
+        return '<div class="gncrow"><span class="av" aria-hidden="true">' + esc(gnInitials(x.name)) + '</span>' +
+          '<a class="nm" href="/campaigns/' + cid + '/entities/' + encodeURIComponent(x.entityId) + '">' + esc(x.name) + '</a>' +
+          '<span class="seg3 gnpick" role="group" aria-label="' + esc('Did the players see ' + x.name + '?') + '">' +
+            '<button type="button" data-gn-seen="seen" data-gn-ent="' + esc(x.entityId) + '" aria-pressed="' + (x.answer === 'seen') + '"><i class="fa-solid fa-check"></i>Seen</button>' +
+            '<button type="button" data-gn-seen="not_seen" data-gn-ent="' + esc(x.entityId) + '" aria-pressed="' + (x.answer === 'not_seen') + '">Not seen</button></span>' +
+          '<span class="src">' + src + '</span>' +
+          (open && x.line ? '<q class="line">' + esc(x.line) + '</q>' : '') + '</div>';
+      }).join('') + '</div><div class="gnchk-f">';
+      if (rows.length < list.length) h += '<button type="button" class="lnk" data-gn-chk="all">Show all ' + list.length + '</button>';
+      if (pend.length > 1) h += '<button type="button" class="lnk" data-gn-chk="rest">Mark the rest not seen</button>';
+      if (st.change && !pend.length) h += '<button type="button" class="lnk" data-gn-chk="done">Done</button>';
+      return h + '<span class="gnrule">Seen adds this night to their Last seen. Not seen is kept as an answer and adds nothing.</span></div></section>';
+    },
+
+    // Saves check-in answers, shown at once and undone from the toast. An
+    // answer that was empty is undone by clearing it.
+    _gnAnswer: function (sid, date, ids, state, msg) {
+      var self = this, p = this._gnPages[sid + '|' + date];
+      if (!p || !p.checkIn) return;
+      var base = '/campaigns/' + encodeURIComponent(this.campaignId) + '/sessions/' + encodeURIComponent(sid) + '/sightings';
+      var people = p.checkIn.filter(function (x) { return ids.indexOf(x.entityId) >= 0; });
+      var before = people.map(function (x) { return x.answer || ''; });
+      var put = function (x, s) {
+        if (!s) return Chronicle.apiFetch(base + '?entity=' + encodeURIComponent(x.entityId) + '&date=' + encodeURIComponent(date), { method: 'DELETE' });
+        return Chronicle.apiFetch(base, { method: 'PUT', body: { entityId: x.entityId, date: date, state: s, source: 'checkin' } });
+      };
+      var apply = function (states) {
+        people.forEach(function (x, i) { x.answer = states[i]; });
+        // The pressed row may be gone; keep focus in the check-in.
+        self._gnRedrawExtra(sid, '[data-gn-seen], [data-gn-chk="change"]');
+        return Promise.all(people.map(function (x, i) { return put(x, states[i]); })).then(function (rs) {
+          if (rs.some(function (r) { return !r.ok; })) return Promise.reject();
+        });
+      };
+      apply(people.map(function () { return state; }))
+        .then(function () {
+          self.say(msg, { label: 'Undo', run: function () {
+            apply(before).then(function () { self._announce('Answer undone.'); })
+              .catch(function () { self.say('That couldn’t be undone. Try again.'); self._gnLoadPage(sid, date); });
+          } });
+        })
+        .catch(function () { self.say('That answer didn’t save. Try again.'); self._gnLoadPage(sid, date); });
     },
 
     _gnLinkSearch: function (input) {
@@ -2137,10 +2368,11 @@
     _gnExtraClick: function (e) {
       var self = this, box = e.target.closest('[data-gn-extra]');
       if (!box) return false;
-      var sid = box.dataset.gnExtra, base = '/campaigns/' + encodeURIComponent(this.campaignId) + '/sessions/' + encodeURIComponent(sid);
+      var sid = box.dataset.gnExtra, date = box.dataset.gnDate, base = '/campaigns/' + encodeURIComponent(this.campaignId) + '/sessions/' + encodeURIComponent(sid);
       var t = e.target.closest('button');
       if (!t) return true;
-      var reload = function (msg) { self.say(msg); return self._gnLoadPage(sid); };
+      var reload = function (msg) { self.say(msg); return self._gnLoadPage(sid, date); };
+      if (t.dataset.gnSeen || t.dataset.gnChk) return this._gnCheckInClick(t, sid, date), true;
       var fail = function (msg) {
         var err = box.querySelector('.gperr');
         if (err) { err.textContent = msg; err.hidden = false; } else self.say(msg);
@@ -2180,6 +2412,33 @@
           .catch(function () { fail('That page could not be unlinked. Try again.'); });
       }
       return true;
+    },
+
+    _gnCheckInClick: function (t, sid, date) {
+      var key = sid + '|' + date, st = this._gnChk[key] = this._gnChk[key] || {}, p = this._gnPages[key];
+      if (!p || !p.checkIn) return;
+      var id = t.dataset.gnEnt, act = t.dataset.gnChk;
+      var person = p.checkIn.filter(function (x) { return x.entityId === id; })[0];
+      if (t.dataset.gnSeen && person) {
+        var state = t.dataset.gnSeen;
+        this._gnAnswer(sid, date, [id], state, state === 'seen' ? person.name + ' added to Last seen for this night.' : person.name + ' marked not seen.');
+      } else if (act === 'line') {
+        st.open = st.open || {};
+        st.open[id] = !st.open[id];
+        this._gnRedrawExtra(sid, '[data-gn-chk="line"][data-gn-ent="' + id + '"]');
+      } else if (act === 'all') {
+        st.all = true;
+        this._gnRedrawExtra(sid);
+      } else if (act === 'rest') {
+        var rest = p.checkIn.filter(function (x) { return !x.answer; }).map(function (x) { return x.entityId; });
+        this._gnAnswer(sid, date, rest, 'not_seen', 'The rest marked not seen.');
+      } else if (act === 'change') {
+        st.change = true;
+        this._gnRedrawExtra(sid, '[data-gn-seen]');
+      } else if (act === 'done') {
+        st.change = false;
+        this._gnRedrawExtra(sid, '[data-gn-chk="change"]');
+      }
     },
 
     // Redraws every visible copy of a night's answer block (day card and
@@ -3955,7 +4214,8 @@
     renderMonth: function () {
       var self = this, cal = this.cal;
       this.renderHeader();
-      Promise.all([this.fetchMonth(this.view.y, this.view.m), this.fetchWeatherYear(this.view.y), this.fetchForecast(), this.fetchNights(this.view.y, this.view.m),
+      var vy = this.view.y, vm = this.view.m;
+      Promise.all([this.fetchMonth(vy, vm).then(function () { return self.fetchRolls(vy, vm); }), this.fetchWeatherYear(this.view.y), this.fetchForecast(), this.fetchNights(this.view.y, this.view.m),
         this._pollsLoaded(), this.showFree ? this.fetchFreeMonth(this.view.y, this.view.m) : null]).then(function () {
         self._paintMonth();
         self.refreshFreeView();
@@ -4040,10 +4300,14 @@
       var isPast = CalDate.dayIndex(cal, y, m, d) < CalDate.dayIndex(cal, cal.current_year, cal.current_month, cal.current_day);
       var moon = this.mainMoon();
       var moonHTML = '';
+      if (moon && !this.canAuthorDmOnly && MoonMath.manual(moon) && !MoonMath.state(moon, CalDate.dayIndex(cal, y, m, d))) moon = null;
       if (moon) {
         var abs = CalDate.dayIndex(cal, y, m, d);
-        var phase = MoonMath.phase(moon, abs);
-        moonHTML = '<span class="msil" data-moon-day="' + key + '" title="' + esc(moon.name + ', ' + MoonMath.name(phase)) + '">' + this._moonSilSVG(phase) + '</span>';
+        // The DM team sees a hand-set moon faded where players have not been
+        // told of the mark it stands under.
+        var mk = MoonMath.manual(moon) && this.canAuthorDmOnly ? MoonMath.markOn(moon, abs) : null;
+        var unshown = mk && !mk.shown;
+        moonHTML = '<span class="msil' + (unshown ? ' dim' : '') + '" data-moon-day="' + key + '" title="' + esc(moon.name + ', ' + MoonMath.label(moon, abs) + (unshown ? ' (players don’t see this)' : '')) + '">' + this._moonSilFor(moon, abs) + '</span>';
       }
       return '<button type="button" class="day' + (isToday ? ' today' : '') + (isPast ? ' past' : '') + '" data-key="' + key + '">' +
         moonHTML + weatherMarkHTML(this.weatherOnDay(y, m, d), !isPast && !isToday) + this.forecastMarkOn(y, m, d, !isPast && !isToday) +
@@ -4086,6 +4350,15 @@
       // moon_silhouette.templ).
       var path = MoonMath.litPath(phase, 6);
       return '<svg class="sil" width="14" height="14" viewBox="-7 -7 14 14" aria-hidden="true"><circle class="db" r="6"/>' + (path ? '<path class="dl" d="' + path + '"/>' : '') + '</svg>';
+    },
+
+    // _moonSilFor draws a moon on a day: its phase disc, or a dashed ring
+    // for a hand-set moon that is gone or not set yet.
+    _moonSilFor: function (moon, abs) {
+      if (MoonMath.unseen(moon, abs)) {
+        return '<svg class="sil gone" width="14" height="14" viewBox="-7 -7 14 14" aria-hidden="true"><circle class="dg" r="5.5"/></svg>';
+      }
+      return this._moonSilSVG(MoonMath.phase(moon, abs));
     },
 
     // --------------------------------------------------------------
@@ -4490,7 +4763,7 @@
         var msil = e.target.closest('.msil');
         var day = e.target.closest('.day');
         if (mk) { self.openWing(day.dataset.key, mk.dataset.ev); return; }
-        if (msil) { self.openMoonView(); return; }
+        if (msil) { self.mvDay = msil.dataset.moonDay; self.openMoonView(); return; }
         if (day && day.dataset.key) self.openWing(day.dataset.key);
       });
 
@@ -4555,7 +4828,7 @@
         if (self._gnHandleClick(e)) return;
         if (e.target.closest('[data-sky-day]')) { var sd = parseDayKey(self.wingFor); self.previewSky(sd.y, sd.m, sd.d); return; }
         var mr = e.target.closest('.mrow');
-        if (mr) { self.mvMoonId = mr.dataset.moon; self.openMoonView(); return; }
+        if (mr) { self.mvMoonId = mr.dataset.moon; self.mvDay = self.wingFor; self.openMoonView(); return; }
         var evd = e.target.closest('.evd');
         if (evd) self.openEventDetail(evd.dataset.ev);
       });
@@ -4608,6 +4881,8 @@
         if (e.target.closest('[data-close]')) self.closeMoonView();
         var strip = e.target.closest('.msi');
         if (strip) self.selectMoon(strip.dataset.moon);
+        var tick = e.target.closest('[data-mv-day]');
+        if (tick) { self.mvDay = tick.dataset.mvDay; self._refreshMv(); }
       });
       this.popEl.addEventListener('click', function (e) {
         if (e.target.closest('[data-close]')) self.closePop();
@@ -4929,7 +5204,7 @@
     },
 
     // _rollHolds keeps the day card open while it holds a roll not yet put
-    // on the day: the card shakes and says so instead of closing.
+    // on the day: the roller asks first, in its slip, instead of closing.
     _rollHolds: function () {
       if (this._roll && this._roll.isDirty()) { this._roll.nag(); return true; }
       return false;
@@ -4953,7 +5228,7 @@
         why: function (r) {
           var abs = CalDate.dayIndex(cal, d.y, d.m, d.d), w = '';
           var moon = (r.moon && (cal.moons || []).filter(function (mo) { return mo.name === r.moon; })[0]) || self.mainMoon();
-          if (moon) w += '<em><i class="fa-solid fa-moon"></i> ' + esc(moon.name) + ': ' + MoonMath.name(MoonMath.phase(moon, abs)) + '</em>';
+          if (moon) w += '<em><i class="fa-solid fa-moon"></i> ' + esc(moon.name) + ': ' + esc(MoonMath.label(moon, abs)) + '</em>';
           var season = self.seasonForDate(d.m, d.d);
           if (season) w += '<em><i class="fa-solid fa-leaf"></i> ' + esc(season.name) + '</em>';
           return w;
@@ -4990,9 +5265,12 @@
       var reading = this.weatherOnDay(d.y, d.m, d.d), fc = this.forecastOn(d.y, d.m, d.d);
       var isForecast = !this.canAuthorDmOnly && isFuture && !reading && !!fc;
       var weatherFact = isForecast ? forecastFactHTML(fc) : weatherFactHTML(reading, isFuture) + (this.canAuthorDmOnly && fc ? playersSeeHTML(fc) : '');
+      var dmMoons = this.canAuthorDmOnly;
       var moonRows = (cal.moons || []).map(function (mo) {
-        var abs = CalDate.dayIndex(cal, d.y, d.m, d.d), phase = MoonMath.phase(mo, abs);
-        return '<button type="button" class="mrow" data-moon="' + esc(mo.id) + '"><span class="mt"><b>' + esc(mo.name) + '</b><small>' + esc(MoonMath.name(phase)) + ' · ' + MoonMath.litPct(phase) + '% lit</small></span><i class="fa-solid fa-chevron-right chev"></i></button>';
+        var abs = CalDate.dayIndex(cal, d.y, d.m, d.d);
+        // A player learns of a hand-set moon only from a change shown to them.
+        if (!dmMoons && MoonMath.manual(mo) && !MoonMath.state(mo, abs)) return '';
+        return '<button type="button" class="mrow" data-moon="' + esc(mo.id) + '"><span class="mt"><b>' + esc(mo.name) + '</b><small>' + esc(MoonMath.describe(mo, abs)) + '</small></span><i class="fa-solid fa-chevron-right chev"></i></button>';
       }).join('');
 
       var evs = this.eventsOnDay(d.y, d.m, d.d);
@@ -5004,6 +5282,7 @@
         return '<div class="evd go' + hl + (occ.skipped ? ' skip' : '') + '" data-ev="' + esc(e.id) + '">' +
           '<div class="evh"><span class="ric" style="' + eventColorStyle(e) + '">' + esc(eventGlyph(e)) + '</span><span class="qt0">' + esc(e.name) + '</span></div>' +
           (time || note ? '<div class="evm">' + (time ? '<span>' + esc(time) + '</span>' : '') + (note ? '<span>' + esc(note) + '</span>' : '') + '</div>' : '') +
+          (occ.skipped ? '' : self._rollLineHTML(self.rollOn(e.id, d.y, d.m, d.d))) +
           '</div>';
       }).join('') : '<div class="none">Nothing on the calendar today.</div>';
       var self = this, nights = this.nightsOnDay(d.y, d.m, d.d);
@@ -5042,8 +5321,8 @@
         var moon = this.mainMoon();
         if (!moon) return;
         var d = parseDayKey(mk.dataset.moonDay);
-        var abs = CalDate.dayIndex(this.cal, d.y, d.m, d.d), phase = MoonMath.phase(moon, abs);
-        html = '<div class="gh"><b>' + esc(moon.name) + '</b></div><div class="gw">' + esc(MoonMath.name(phase)) + ' · ' + MoonMath.litPct(phase) + '% lit</div>';
+        var abs = CalDate.dayIndex(this.cal, d.y, d.m, d.d);
+        html = '<div class="gh"><b>' + esc(moon.name) + '</b></div><div class="gw">' + esc(MoonMath.describe(moon, abs)) + '</div>';
       } else if (mk.classList.contains('avl')) {
         html = this._freeGlanceHTML(mk.dataset.avl);
         if (!html) return;
@@ -5088,7 +5367,7 @@
     openEventDetail: function (id) {
       var self = this, night = String(id).indexOf('gn:') === 0 ? this._findNight(id) : null, ev = night ? null : this._findEvent(id);
       if (!ev && !night) return;
-      this.evpEl.innerHTML = night ? this._gnPageHTML(night) : this._evpHTML(ev);
+      this.evpEl.innerHTML = night ? this._gnPageHTML(night) : this._evpHTML(ev, this.wingFor ? parseDayKey(this.wingFor) : null);
       // The full-detail overlay covers the day card it grew out of (the
       // motion this UI ports, per #741's rules): its final box matches the
       // wing's own rect, not the smaller event row that was clicked.
@@ -5207,7 +5486,9 @@
       return true;
     },
 
-    _evpHTML: function (ev) {
+    // day is the day card the detail opened from, when there is one: a
+    // repeating event's roll result belongs to that night.
+    _evpHTML: function (ev, day) {
       var cal = this.cal;
       var mc = CalDate.monthCount(cal), m0 = ((ev.month - 1) % mc + mc) % mc, monthDef = (cal.months || [])[m0];
       var label = (monthDef ? monthDef.name : ev.month) + ' ' + ev.day + ', ' + ev.year;
@@ -5231,6 +5512,7 @@
           '<h3 class="ept">' + esc(ev.name) + (ev.kind_name ? ' <span class="dirnote">' + esc(ev.kind_name) + '</span>' : '') + '</h3>' +
           '<div class="espan">' + esc(label) + (time ? ' · ' + esc(time) : '') + ' ' + visBadge + '</div>' +
           (body ? '<div class="notes">' + body + '</div>' : '') +
+          (day ? this._rollFactsHTML(this.rollOn(ev.id, day.y, day.m, day.d)) : '') +
           recur + entity + this._evPagesBox(ev.id) +
         '<!--EVP_FOOT--></div></div>';
     },
@@ -5325,6 +5607,24 @@
 
     selectMoon: function (id) { this.mvMoonId = id; this._refreshMv(); },
 
+    // mvDayDate is the day the moon view reads: the one picked from the
+    // calendar or the panel, else today.
+    mvDayDate: function () {
+      var cal = this.cal;
+      return this.mvDay ? parseDayKey(this.mvDay) : { y: cal.current_year, m: cal.current_month, d: cal.current_day };
+    },
+
+    // setMoon puts the moon as the server now has it into the calendar and
+    // redraws everything that shows it.
+    setMoon: function (moon) {
+      var list = this.cal.moons || [];
+      for (var i = 0; i < list.length; i++) if (String(list[i].id) === String(moon.id)) list[i] = moon;
+      MoonMath.index(this.cal);
+      this._paintMonth();
+      if (this.wingFor) this.refreshWing();
+      if (this.mvEl.classList.contains('open')) this._refreshMv();
+    },
+
     _refreshMv: function () {
       var scrollLeft = this.mvEl.querySelector('.gframe') ? this.mvEl.querySelector('.gframe').scrollLeft : 0;
       this.mvEl.innerHTML = this._mvHTML();
@@ -5335,13 +5635,12 @@
 
     _mvHTML: function () {
       var cal = this.cal, moon = this.moonById(this.mvMoonId) || (cal.moons || [])[0];
-      var abs = CalDate.dayIndex(cal, cal.current_year, cal.current_month, cal.current_day);
+      var day = this.mvDayDate(), abs = CalDate.dayIndex(cal, day.y, day.m, day.d);
       var phase = moon ? MoonMath.phase(moon, abs) : 0;
 
       var strip = (cal.moons || []).map(function (mo) {
-        var p = MoonMath.phase(mo, abs);
         return '<button type="button" class="msi' + (mo.id === (moon && moon.id) ? ' on' : '') + '" data-moon="' + esc(mo.id) + '" aria-pressed="' + (mo.id === (moon && moon.id)) + '">' +
-          '<span class="msw">' + this._moonSilSVG(p) + '</span><span class="mst"><b>' + esc(mo.name) + '</b></span></button>';
+          '<span class="msw">' + this._moonSilFor(mo, abs) + '</span><span class="mst"><b>' + esc(mo.name) + '</b></span></button>';
       }.bind(this)).join('');
 
       var graph = this._mvGraphHTML(moon);
@@ -5352,7 +5651,8 @@
           '<div class="mvl">' +
             '<div class="mvbig"><div class="mvhead">' +
               '<h3 class="mvname">' + esc(moon ? moon.name : 'No moons') + '</h3>' +
-              (moon ? '<div class="mvlit"><b>' + MoonMath.litPct(phase) + '%</b> lit · ' + esc(MoonMath.name(phase)) + '</div>' : '') +
+              (moon ? '<div class="mvlit">' + (MoonMath.manual(moon) ? '<b>' + esc(MoonMath.label(moon, abs)) + '</b>' : '<b>' + MoonMath.litPct(phase) + '%</b> lit · ' + esc(MoonMath.name(phase))) +
+                (day.y !== cal.current_year || day.m !== cal.current_month || day.d !== cal.current_day ? ' · ' + esc(this._dateLabel(day.y, day.m, day.d)) : '') + '</div>' : '') +
             '</div></div>' +
             '<div class="mvstrip">' + strip + '</div>' +
             (moon ? lorePageLink(this.campaignId, moon.lore_entity_id, moon.lore_entity_name, 'mv-lore') : '') +
@@ -5360,6 +5660,7 @@
           '<div class="mvr">' +
             '<div class="phead"><h4 class="plabel">This month</h4></div>' +
             graph +
+            (moon && this._mvDirectorHTML ? this._mvDirectorHTML(moon, day) : '') +
           '</div>' +
         '</div>';
     },
@@ -5371,15 +5672,16 @@
     // .still class (calendar-view.css already guards .gframe.still).
     _mvGraphHTML: function (moon) {
       if (!moon) return '';
-      var cal = this.cal, y = this.cal.current_year, m = this.cal.current_month;
+      var sel = this.mvDayDate(), cal = this.cal, y = sel.y, m = sel.m;
       var mc = CalDate.monthCount(cal), m0 = ((m - 1) % mc + mc) % mc, days = CalDate.monthDays(cal, m0, y);
-      var todayD = cal.current_day;
+      var todayD = y === cal.current_year && m === cal.current_month ? cal.current_day : 0;
+      // The Director picks a day here to set a hand-set moon on it.
+      var pick = this.canAuthorDmOnly && MoonMath.manual(moon);
       var evs = this.eventsFor(y, m).filter(function (e) { return e.payload; });
       var self = this;
       var ticks = '';
       for (var d = 1; d <= days; d++) {
         var abs = CalDate.dayIndex(cal, y, m, d);
-        var phase = MoonMath.phase(moon, abs);
         var badge = '';
         evs.forEach(function (e) {
           if (!CalDate.withinSpan(cal, e, y, m, d) && !(e.year === y && e.month === m && e.day === d)) return;
@@ -5393,7 +5695,10 @@
         // to zero height (every child pulled out of flow, nothing left to
         // size the container). .gtick is this strip's own flow-layout
         // class instead, styled fresh further down calendar-view.css.
-        ticks += '<div class="gtick' + (d === todayD ? ' today' : '') + '"' + badge + ' title="' + esc(MoonMath.name(phase)) + '">' + this._moonSilSVG(phase) + '<span>' + d + '</span></div>';
+        var tag = pick ? 'button type="button" data-mv-day="' + dayKey(y, m, d) + '" aria-pressed="' + (d === sel.d) + '"' : 'div';
+        var marked = pick && MoonMath.markOn(moon, abs) && (moon._marks || []).some(function (x) { return x.abs === abs; });
+        ticks += '<' + tag + ' class="gtick' + (d === todayD ? ' today' : '') + (pick && d === sel.d ? ' sel' : '') + (marked ? ' mkd' : '') + '"' + badge +
+          ' title="' + esc(MoonMath.label(moon, abs)) + '">' + this._moonSilFor(moon, abs) + '<span>' + d + '</span></' + (pick ? 'button' : 'div') + '>';
       }
       return '<div class="gframe" tabindex="0">' + ticks + '</div>';
     },

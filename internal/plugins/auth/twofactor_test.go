@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -61,13 +62,23 @@ func (r *twoFactorRig) turnOn(t *testing.T, id string) (string, []string) {
 	if err != nil {
 		t.Fatalf("EnableTwoFactor: %v", err)
 	}
+	enabledWith.Store(secret, code)
 	return secret, codes
 }
 
-// earlierCode is a code from the previous time step: still accepted, and
-// different from the one turnOn just used.
-func earlierCode(secret string) string {
-	c, _ := totp.GenerateCode(secret, time.Now().Add(-30*time.Second))
+// enabledWith maps each secret to the code turnOn spent on it.
+var enabledWith sync.Map
+
+// unusedCode is a code the service accepts that turnOn has not spent: this
+// step's code, or the next step's when a step boundary has passed since
+// turnOn and this step's code is the spent one. Either stays accepted if
+// one more boundary passes before the service checks it.
+func unusedCode(secret string) string {
+	now := time.Now()
+	c, _ := totp.GenerateCode(secret, now)
+	if used, _ := enabledWith.Load(secret); used == c {
+		c, _ = totp.GenerateCode(secret, now.Add(30*time.Second))
+	}
 	return c
 }
 
@@ -143,10 +154,10 @@ func TestTwoFactorLogin(t *testing.T) {
 		t.Fatal("no challenge")
 	}
 
-	_, err = r.svc.CompleteTwoFactorLogin(ctx, TwoFactorLoginInput{Challenge: "made-up", Code: earlierCode(secret)})
+	_, err = r.svc.CompleteTwoFactorLogin(ctx, TwoFactorLoginInput{Challenge: "made-up", Code: unusedCode(secret)})
 	assertAppError(t, err, http.StatusUnauthorized)
 
-	code := earlierCode(secret)
+	code := unusedCode(secret)
 	res, err := r.svc.CompleteTwoFactorLogin(ctx, TwoFactorLoginInput{Challenge: need.Challenge, Code: code, Remember: true})
 	if err != nil {
 		t.Fatalf("CompleteTwoFactorLogin: %v", err)
@@ -177,13 +188,13 @@ func TestTwoFactorLogin(t *testing.T) {
 	// Changing the password forgets remembered devices and ends a
 	// half-finished sign-in.
 	pending := r.passwordStep(t, "mara", "")
-	if err := r.svc.ChangePassword(ctx, "mara", "correct horse", "correct horse"); err != nil {
+	if _, err := r.svc.ChangePassword(ctx, "mara", "correct horse", "correct horse", "", ""); err != nil {
 		t.Fatal(err)
 	}
 	r.passwordStep(t, "mara", res.TrustedDevice)
 	newHash, _ := hashPassword("correct horse")
 	r.hash = newHash
-	_, err = r.svc.CompleteTwoFactorLogin(ctx, TwoFactorLoginInput{Challenge: pending, Code: earlierCode(secret)})
+	_, err = r.svc.CompleteTwoFactorLogin(ctx, TwoFactorLoginInput{Challenge: pending, Code: unusedCode(secret)})
 	assertAppError(t, err, http.StatusUnauthorized)
 	if !strings.Contains(err.Error(), "start again") {
 		t.Fatalf("challenge from before the password change: %v", err)
@@ -248,7 +259,7 @@ func TestTwoFactorLockAfterFiveWrongCodes(t *testing.T) {
 
 	// Locked: a right code is refused too, and a fresh password step doesn't reset it.
 	ch = r.passwordStep(t, "mara", "")
-	_, err = r.svc.CompleteTwoFactorLogin(ctx, TwoFactorLoginInput{Challenge: ch, Code: earlierCode(secret)})
+	_, err = r.svc.CompleteTwoFactorLogin(ctx, TwoFactorLoginInput{Challenge: ch, Code: unusedCode(secret)})
 	assertAppError(t, err, http.StatusTooManyRequests)
 }
 
@@ -257,10 +268,10 @@ func TestTwoFactorTurnOff(t *testing.T) {
 	ctx := context.Background()
 	secret, _ := r.turnOn(t, "mara")
 
-	assertAppError(t, r.svc.DisableTwoFactor(ctx, "mara", "wrong", earlierCode(secret)), http.StatusBadRequest)
+	assertAppError(t, r.svc.DisableTwoFactor(ctx, "mara", "wrong", unusedCode(secret)), http.StatusBadRequest)
 	assertAppError(t, r.svc.DisableTwoFactor(ctx, "mara", "correct horse", ""), http.StatusBadRequest)
 	assertAppError(t, r.svc.DisableTwoFactor(ctx, "mara", "correct horse", "000000"), http.StatusUnauthorized)
-	if err := r.svc.DisableTwoFactor(ctx, "mara", "correct horse", earlierCode(secret)); err != nil {
+	if err := r.svc.DisableTwoFactor(ctx, "mara", "correct horse", unusedCode(secret)); err != nil {
 		t.Fatal(err)
 	}
 	if r.repo.totpEnabled["mara"] || r.repo.totpSecret["mara"] != nil {
@@ -353,5 +364,27 @@ func TestForgotPasswordPageWithoutEmail(t *testing.T) {
 	ConfigureMailSender(svc, &mockMailSender{isConfiguredFn: func(context.Context) bool { return false }}, "")
 	if svc.CanEmailResetLinks(context.Background()) {
 		t.Error("unconfigured email counts as sendable")
+	}
+}
+
+// Changing the password ends every session, so the caller must get a fresh
+// one back or the next click signs them out.
+func TestChangePasswordKeepsCallerSignedIn(t *testing.T) {
+	r := newTwoFactorRig(t)
+	ctx := context.Background()
+	old, _, err := r.svc.Login(ctx, LoginInput{Email: "mara@example.com", Password: "correct horse"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	token, err := r.svc.ChangePassword(ctx, "mara", "correct horse", "another horse", "1.2.3.4", "ua")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.svc.ValidateSession(ctx, old); err == nil {
+		t.Fatal("old session survived the password change")
+	}
+	sess, err := r.svc.ValidateSession(ctx, token)
+	if err != nil || sess.UserID != "mara" {
+		t.Fatalf("fresh session = %+v, %v", sess, err)
 	}
 }

@@ -93,3 +93,18 @@ func (a aiSystemEntriesAdapter) Entries(ctx context.Context, campaignID, field s
 	}
 	return l.SystemName, out, nil
 }
+
+// Fields lists the character fields that have entries, the keys a
+// system-entry block's `entry:` takes. It reads the hero creator's plan, so
+// the AI sees the same fields a player picks from.
+func (a aiSystemEntriesAdapter) Fields(ctx context.Context, campaignID string, director bool) (string, []records.SystemEntryField, error) {
+	plan, err := a.choices.CreatorPlan(systems.WithChoiceViewer(ctx, director), campaignID)
+	if err != nil {
+		return "", nil, err
+	}
+	out := make([]records.SystemEntryField, 0, len(plan.Steps))
+	for _, st := range plan.Steps {
+		out = append(out, records.SystemEntryField{Key: st.FieldKey, Label: st.Label, Count: len(st.Choices)})
+	}
+	return plan.SystemName, out, nil
+}

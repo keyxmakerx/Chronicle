@@ -73,6 +73,15 @@ type Service struct {
 	Entities EntityLister
 	Tags     TagLister // optional; unused for now
 	Exporter Exporter
+	// Notes adds the game system's word on a category's fields; optional.
+	Notes FieldNotes
+}
+
+// FieldNotes is what the campaign's game system says about a category's
+// sheet fields, by field key: how a list is written, or that Foundry keeps
+// the value. It reads the system's manifest, which this package can't.
+type FieldNotes interface {
+	FieldNotes(ctx context.Context, campaignID string, t entities.EntityType) map[string]string
 }
 
 // NewService constructs the prompt builder. Exporter is required;
@@ -183,7 +192,7 @@ func (s *Service) Build(
 			return "", fmt.Errorf("prompt: load entity types: %w", err)
 		}
 		if in.IncludeEntityTypes {
-			data.EntityTypes = mapEntityTypes(types)
+			data.EntityTypes = mapEntityTypes(types, s.notesFor(ctx, campaignID))
 		}
 		if in.IncludeCategoriesInUse {
 			cats, err := s.categoriesInUse(ctx, campaignID, types)
@@ -240,8 +249,12 @@ func (s *Service) Build(
 // mapEntityTypes adapts the entities.EntityType slice to the slim
 // template-shape (Name / Slug / PresetCategory string). Sort stable
 // by entity-type SortOrder + Name for deterministic prompt output.
-func mapEntityTypes(types []entities.EntityType) []entityTypeView {
+func mapEntityTypes(types []entities.EntityType, notes func(entities.EntityType) map[string]string) []entityTypeView {
 	out := make([]entityTypeView, 0, len(types))
+	names := make(map[int]string, len(types))
+	for _, t := range types {
+		names[t.ID] = t.Name
+	}
 	for _, t := range types {
 		if !t.Enabled {
 			continue
@@ -254,6 +267,7 @@ func mapEntityTypes(types []entities.EntityType) []entityTypeView {
 			Name:           t.Name,
 			Slug:           t.Slug,
 			PresetCategory: preset,
+			Fields:         fieldLines(t.Fields, names, notes(t)),
 		})
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].Name < out[j].Name })
@@ -310,4 +324,68 @@ func (s *Service) categoriesInUse(
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].TypeName < out[j].TypeName })
 	return out, nil
+}
+
+// notesFor is the system's notes per category, or none when unwired.
+func (s *Service) notesFor(ctx context.Context, campaignID string) func(entities.EntityType) map[string]string {
+	return func(t entities.EntityType) map[string]string {
+		if s.Notes == nil {
+			return nil
+		}
+		return s.Notes.FieldNotes(ctx, campaignID, t)
+	}
+}
+
+// fieldLines describes a category's sheet fields for the prompt: the key,
+// its label, and the value it takes, matching what the importer's
+// CheckFields accepts.
+func fieldLines(defs []entities.FieldDefinition, typeNames map[int]string, notes map[string]string) []string {
+	out := make([]string, 0, len(defs))
+	for _, d := range defs {
+		var takes string
+		switch d.Type {
+		case "number":
+			takes = "a number"
+		case "checkbox":
+			takes = "yes or no"
+		case "select":
+			takes = "one of: " + strings.Join(d.Options, ", ")
+			if len(d.Options) == 0 {
+				takes = "text"
+			}
+		case "url":
+			takes = "an http or https address"
+		case entities.FieldTypeLink:
+			takes = "the name of a page"
+			if n := typeNames[d.LinkTo]; n != "" {
+				takes = "the name of a " + n + " page"
+			}
+		case entities.FieldTypeRule:
+			takes = "worked out by its rule; leave it out unless setting it by hand"
+		case entities.FieldTypeCalendarDate:
+			takes = "a date on the campaign calendar as year-month-day, month by number (1043-3-22)"
+			var picks []string
+			for _, cd := range d.Countdowns {
+				if len(cd.Lengths) < 2 {
+					continue
+				}
+				var ls []string
+				for i, l := range cd.Lengths[1:] {
+					ls = append(ls, fmt.Sprintf("%d for %s", i+1, l.Name))
+				}
+				picks = append(picks, cd.Name+": "+strings.Join(ls, ", "))
+			}
+			if len(picks) > 0 {
+				takes += "; to pick a longer countdown length add |N, or |N,M for several countdowns in order (" + strings.Join(picks, "; ") + ")"
+			}
+		default:
+			takes = "text, or a list"
+		}
+		line := "`" + d.Key + "` (" + d.Label + "): " + takes
+		if n := notes[d.Key]; n != "" {
+			line += ". " + n
+		}
+		out = append(out, line)
+	}
+	return out
 }

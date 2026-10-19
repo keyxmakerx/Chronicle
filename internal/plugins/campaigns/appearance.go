@@ -41,6 +41,8 @@ type Appearance struct {
 	HoverCard       string `json:"hover_card,omitempty"`       // Hover card look: "paper" (default), "plain", "night" or "compact".
 	SheetStyle      string `json:"sheet_style,omitempty"`      // Character sheet style (AppearanceSheetStyles); "modern" is the default.
 	PageLook        string `json:"page_look,omitempty"`        // How pages draw their blocks (AppearancePageLooks); "standard" is the default.
+	TimelinePopup   string `json:"timeline_popup,omitempty"`   // What opens on a time line's event: "classic" (default) or "corner".
+	StyleKit        string `json:"style_kit,omitempty"`        // The pages' character under the Material page look (AppearanceStyleKits); "material" is the default.
 }
 
 // The allowed values of each Appearance choice. The first entry is the
@@ -71,6 +73,12 @@ var (
 	// AppearancePageLooks restyle every block on a page through the shared
 	// block parts without moving anything; page_look_annals.css draws Annals.
 	AppearancePageLooks = []string{"standard", "annals"}
+	// AppearanceTimelinePopups are what opens over an event on a time line:
+	// the classic hover card, or the fading corner that grows out of the bead.
+	AppearanceTimelinePopups = []string{"classic", "corner"}
+	// AppearanceStyleKits are the signed style kits style_kits.css draws
+	// (ui-standard.md, "Style kits"); "material" is the base and adds nothing.
+	AppearanceStyleKits = []string{"material", "sharp", "ornate", "flowing", "lumen", "sketchbook"}
 )
 
 // Text limits the Customize page shows. Brand name and welcome keep their
@@ -113,13 +121,15 @@ type AppearanceInput struct {
 	} `json:"motion"`
 	Sidebar AppearanceSidebarInput `json:"sidebar"`
 	Hover   struct {
-		Look string `json:"look"`
+		Look          string `json:"look"`
+		TimelinePopup string `json:"timelinePopup"`
 	} `json:"hover"`
 	Sheet struct {
 		Style string `json:"style"`
 	} `json:"sheet"`
 	Page struct {
 		Look string `json:"look"`
+		Kit  string `json:"kit"`
 	} `json:"page"`
 }
 
@@ -195,6 +205,52 @@ func oneOf(name, v string, allowed []string) (string, error) {
 		}
 	}
 	return "", apperror.NewBadRequest(fmt.Sprintf("invalid %s", name))
+}
+
+// pageLookChoice is the page look a save stores. Unlike the other choices,
+// Standard is stored by name: an unset page look means the owner never chose,
+// which the one-time move to Material relies on. An editor that does not send
+// a page look keeps the stored one rather than resetting it.
+func pageLookChoice(v string, prev *Appearance) (string, error) {
+	if v == "" {
+		if prev != nil {
+			return prev.PageLook, nil
+		}
+		return "", nil
+	}
+	for _, a := range AppearancePageLooks {
+		if v == a {
+			return v, nil
+		}
+	}
+	return "", apperror.NewBadRequest("invalid page look")
+}
+
+// timelinePopupChoice is the time line popup a save stores. New campaigns
+// start on the fading corner while older ones keep the classic card, so an
+// editor that does not send a popup keeps the stored one rather than
+// resetting it; Classic, the default, is stored as empty.
+func timelinePopupChoice(v string, prev *Appearance) (string, error) {
+	if v == "" {
+		if prev != nil {
+			return prev.TimelinePopup, nil
+		}
+		return "", nil
+	}
+	return oneOf("time line popup", v, AppearanceTimelinePopups)
+}
+
+// styleKitChoice is the style kit a save stores: Material as unset, like the
+// other defaults, but a save that sends no kit keeps the stored one, so an
+// editor that predates kits can't quietly drop the owner's choice.
+func styleKitChoice(v string, prev *Appearance) (string, error) {
+	if v == "" {
+		if prev != nil {
+			return prev.StyleKit, nil
+		}
+		return "", nil
+	}
+	return oneOf("style kit", v, AppearanceStyleKits)
 }
 
 // calmColour validates an optional #RRGGBB and tones it down the way the
@@ -393,12 +449,20 @@ func applyAppearance(s *CampaignSettings, in AppearanceInput) (*string, error) {
 		{&a.PeekGlow, "peek glow", in.Sidebar.Glow, AppearanceGlows},
 		{&a.HoverCard, "hover card look", in.Hover.Look, AppearanceHoverCards},
 		{&a.SheetStyle, "character sheet style", in.Sheet.Style, AppearanceSheetStyles},
-		{&a.PageLook, "page look", in.Page.Look, AppearancePageLooks},
 	}
 	for _, c := range checks {
 		if *c.dst, err = oneOf(c.name, c.v, c.allowed); err != nil {
 			return fail(err)
 		}
+	}
+	if a.PageLook, err = pageLookChoice(in.Page.Look, s.Appearance); err != nil {
+		return fail(err)
+	}
+	if a.TimelinePopup, err = timelinePopupChoice(in.Hover.TimelinePopup, s.Appearance); err != nil {
+		return fail(err)
+	}
+	if a.StyleKit, err = styleKitChoice(in.Page.Kit, s.Appearance); err != nil {
+		return fail(err)
 	}
 	a.ReduceMotion = in.Motion.ReduceAll
 	if err := applySidebar(&a, in.Sidebar); err != nil {
@@ -496,6 +560,32 @@ func (s *campaignService) SaveAppearance(ctx context.Context, campaignID string,
 		}
 	}
 	return s.repo.UpdateSettings(ctx, campaignID, string(settingsJSON))
+}
+
+// AdoptMaterialPageLook stores the Material page look for a campaign whose
+// page look is unset, meaning its owner never chose one; an owner who picked
+// Standard has it stored by name (pageLookChoice) and is left alone.
+func (s *campaignService) AdoptMaterialPageLook(ctx context.Context, campaignID string) (bool, error) {
+	campaign, err := s.repo.FindByID(ctx, campaignID)
+	if err != nil {
+		return false, err
+	}
+	settings := campaign.ParseSettings()
+	if settings.Appearance != nil && settings.Appearance.PageLook != "" {
+		return false, nil
+	}
+	if settings.Appearance == nil {
+		settings.Appearance = &Appearance{}
+	}
+	settings.Appearance.PageLook = "annals"
+	settingsJSON, err := json.Marshal(settings)
+	if err != nil {
+		return false, apperror.NewInternal(fmt.Errorf("marshaling settings: %w", err))
+	}
+	if err := s.repo.UpdateSettings(ctx, campaignID, string(settingsJSON)); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // samePath compares two optional paths, treating nil and "" alike.

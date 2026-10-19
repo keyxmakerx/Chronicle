@@ -9,7 +9,7 @@
 
 > The migrations are the source of truth: `db/migrations/*.up.sql` (core, runs
 > first) and each plugin's `internal/plugins/<name>/migrations/*.up.sql`
-> (plugin, runs after core, in the order `cmd/server/main.go` registers them).
+> (plugin, runs after core, in rank order, `cmd/server/plugin_schemas.go`).
 > This file is a derived summary — regenerate the parts that changed whenever
 > a migration is added.
 
@@ -180,7 +180,7 @@ numbered core migrations after it, tracked once each via `golang-migrate`'s
 
 | Table | Purpose | Notable columns |
 |---|---|---|
-| `campaign_system_entries` | A campaign's own pick-list entries (ancestry, kit, culture, class...) for its game system, kept apart from the package's data | `UNIQUE(campaign_id, system_id, field_key, slug)`; `visibility` enum(`everyone`,`directors`); `properties` JSON (flat scalars); `description` sanitized HTML; `created_by` carries no FK; FK to `campaigns` CASCADE |
+| `campaign_system_entries` | A campaign's own pick-list entries (ancestry, kit, culture, class...) for its game system, kept apart from the package's data | `UNIQUE(campaign_id, system_id, field_key, slug)`; `visibility` enum(`everyone`,`directors`,`character`); `for_entity_id` the character page a `character` entry is kept to (no FK: a deleted character leaves the entry with Directors); `properties` JSON (flat scalars); `description` sanitized HTML; `created_by` carries no FK; FK to `campaigns` CASCADE |
 
 ### Media, addons & extensions
 
@@ -199,8 +199,9 @@ numbered core migrations after it, tracked once each via `golang-migrate`'s
 
 ## Plugin schema
 
-Plugin migrations run after core, in the order `registeredPlugins()` lists
-them in `cmd/server/main.go`. A plugin's schema failing to migrate degrades that
+Plugin migrations run after core, in rank order: each plugin registers with
+`addPluginSchema(rank, slug, fs)` from an `init` in `cmd/server`
+(`plugin_schemas.go`). A plugin's schema failing to migrate degrades that
 plugin only (`internal/database/plugin_health.go`) — it never blocks boot.
 
 ### bestiary (`internal/plugins/bestiary/migrations/`)
@@ -350,11 +351,46 @@ Foundry module repo for the wire contract.
 |-------|---------|
 | `dm_screen_board_items` | The DM Screen's Adventures tab: `kind` = page/note; a pin has `entity_id` (unique per campaign; FK cascade to `entities` and `campaigns`), a note has `body` (500 characters); `created_by` carries no FK |
 
+### entities standing (`internal/plugins/entities/migrations/`, registry slug `entity_standing`)
+
+| Table | Purpose |
+|-------|---------|
+| `entity_standings` | How a page feels about the party or one character (the Standing block): one row per `(entity_id, subject_key)`; `subject_key` is `''` for the party, else the character's page id (no FK, so the party shares the unique key; reads join the live page, so a deleted or trashed character's row is never shown); `level` 0-4 (Hostile..Trusted), set by the Director; FK cascade to `entities` and `campaigns`; `updated_by` carries no FK |
+| `entity_standing_reasons` | The Director's explanations, newest first: `direction` (`up`/`down`/`none`, checked by the service), `reason` (90 characters), `when_label` (30), `dm_only`; FK cascade to `entity_standings`; at most 300 per standing; `created_by` carries no FK |
+| `entity_standing_settings` | Whether players see a page's standing at all: PK `entity_id`, `players_see` (a page with no row lets them); FK cascade to `entities` and `campaigns` |
+
 ### pageblocks (`internal/plugins/pageblocks/migrations/`)
 
 | Table | Purpose |
 |-------|---------|
-| `page_block_content` | One JSON document per (page, layout block): `PRIMARY KEY (entity_id, block_id)`, `kind` (`read_aloud`/`page_table`/`page_steps`), `version` for edit conflicts; FKs to `entities`, `campaigns` cascade |
+| `page_block_content` | One JSON document per (page, layout block): `PRIMARY KEY (entity_id, block_id)`, `kind` (`read_aloud`/`page_table`/`page_steps`/`page_checklist`/`page_map`), `version` for edit conflicts; FKs to `entities`, `campaigns` cascade |
+
+### rumours (`internal/plugins/rumours/migrations/`)
+
+| Table | Purpose |
+|-------|---------|
+| `page_rumours` | What the party has heard about a page: `quote`, `source` (who said it), `sure` 1 to 3, `truth` (`open`/`true`/`false`, the Director's alone and never selected for anyone else), `belief` (`''`/`true`/`false`/`unsure`, what the party thinks) with `belief_by` and `belief_by_dm`, `by_dm` and `created_by` for the byline; FKs to `entities` and `campaigns` cascade. Capped at 200 per page |
+
+### fieldrules (`internal/plugins/fieldrules/migrations/`)
+
+| Table | Purpose |
+|-------|---------|
+| `field_rules` | A campaign's worked-out rules: `name` (unique per campaign), `follows` (the field key it reads), `rows_json` (rows of `is` or `from`/`to` with `gives`, read and written whole); FK to `campaigns` cascades |
+| `local_words` | What one place or era calls a word: `word`, `local_word`, `place_id` (FK to `entities`, cascades) or `era_id` (no FK; eras are the calendar's), `scope_key` (`p:<page id>`/`e:<era id>`) for the one-per-place-or-era unique key, `dm_only`; FK to `campaigns` cascades |
+
+### trackers (`internal/plugins/trackers/migrations/`)
+
+| Table | Purpose |
+|-------|---------|
+| `tracker_kinds` | A campaign's saved kinds of tracker: `name` (unique per campaign), `shape` (`count`/`steps`/`clock`), `min_value`/`max_value` (a clock's segments are `max_value`), `steps` and `bands` as JSON text, default `visibility` (`directors`/`everyone`), optional `every_type_id` (the kind appears on every page of that category without being placed), `version` for edit conflicts, optional `owner` (unique per campaign: the record another plugin keeps the kind in step with, `homebrew:<recipe>:<kind>:<part key>` for a Homebrew Workshop part; NULL for a hand-made kind); FK to `campaigns` cascades. At most 200 per campaign |
+| `trackers` | A kind placed on one page: `name` (unique per page), `visibility`, `sort_order`; FKs to `entities`, `campaigns` and `tracker_kinds` cascade (the last so a campaign delete never depends on row order; the service refuses to delete a kind in use, in one statement). At most 40 per page |
+| `tracker_entries` | The ledger. One line per change: `op` (`add`/`set`), `amount`, `note` (Directors only), `source`, the in-game date it was logged on (`game_year`/`game_month`/`game_day`/`game_label`, null without a calendar), `struck_at`/`struck_by` (a struck line stays but no longer counts). A tracker's value is the fold of its unstruck lines, clamped per line. FK to `trackers` cascades. At most 10,000 per tracker |
+
+### homebrew (`internal/plugins/homebrew/migrations/`)
+
+| Table | Purpose |
+|-------|---------|
+| `homebrew_recipes` | Homebrew Workshop recipes: `name` (unique per campaign), `doc` (JSON: parts, When/Then rules and the canvas `layout`, validated by the service and by each part's owning plugin), `version` for edit conflicts, `created_by`; FK to `campaigns` cascades. At most 200 per campaign |
 
 ### encounters (`internal/plugins/encounters/migrations/`)
 

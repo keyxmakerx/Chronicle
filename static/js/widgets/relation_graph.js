@@ -14,6 +14,18 @@
 
   var D3_SRC = '/static/vendor/d3.min.js';
 
+  // Under Calm, Off or the device's reduce-motion setting the graph is drawn
+  // already settled and zooms jump, so nothing drifts on screen.
+  function reduced() {
+    return window.Chronicle && Chronicle.reducedMotion ? Chronicle.reducedMotion() :
+      !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  }
+  function settleNow(simulation) {
+    simulation.stop();
+    for (var i = 0; i < 300; i++) simulation.tick();
+    simulation.on('tick').call(simulation);
+  }
+
   Chronicle.register('relation-graph', {
     init: function (el, config) {
       var apiUrl = config.apiUrl || '';
@@ -254,9 +266,9 @@
           .attr('width', width)
           .attr('height', height)
           .attr('class', 'relation-graph-svg')
-          .style('background', 'var(--color-surface, white)')
+          .style('background', 'var(--color-card-bg, white)')
           .style('border-radius', '8px')
-          .style('border', '1px solid var(--color-edge, #e5e7eb)');
+          .style('border', '1px solid var(--color-border, #e5e7eb)');
 
         var g = svg.append('g');
 
@@ -279,7 +291,7 @@
           .attr('orient', 'auto')
           .append('path')
           .attr('d', 'M0,-5L10,0L0,5')
-          .attr('fill', 'var(--color-fg-muted, #9ca3af)');
+          .attr('fill', 'var(--color-text-muted, #9ca3af)');
 
         defs.append('marker')
           .attr('id', 'arrowhead-mention')
@@ -344,7 +356,7 @@
           .data(data.edges)
           .join('line')
           .attr('stroke', function (d) {
-            return d.kind === 'mention' ? 'var(--color-accent, #8b5cf6)' : 'var(--color-fg-muted, #9ca3af)';
+            return d.kind === 'mention' ? 'var(--color-accent, #8b5cf6)' : 'var(--color-text-muted, #9ca3af)';
           })
           .attr('stroke-opacity', function (d) {
             return d.kind === 'mention' ? 0.4 : 0.5;
@@ -367,7 +379,7 @@
           .text(function (d) { return d.type; })
           .attr('font-size', '9px')
           .attr('fill', function (d) {
-            return d.kind === 'mention' ? 'var(--color-accent, #8b5cf6)' : 'var(--color-fg-muted, #9ca3af)';
+            return d.kind === 'mention' ? 'var(--color-accent, #8b5cf6)' : 'var(--color-text-muted, #9ca3af)';
           })
           .attr('text-anchor', 'middle')
           .attr('dy', -4);
@@ -399,12 +411,12 @@
         nodes.append('circle')
           .attr('r', function (d) { return nodeRadius(d); })
           .attr('fill', function (d) {
-            if (d.orphan) return 'var(--color-surface-alt, #f3f4f6)';
+            if (d.orphan) return 'var(--color-bg-tertiary, #f3f4f6)';
             return d.color || '#6b7280';
           })
           .attr('stroke', function (d) {
-            if (d.orphan) return 'var(--color-fg-muted, #9ca3af)';
-            return 'var(--color-surface, white)';
+            if (d.orphan) return 'var(--color-text-muted, #9ca3af)';
+            return 'var(--color-card-bg, white)';
           })
           .attr('stroke-width', function (d) { return d.orphan ? 1.5 : 2; })
           .attr('stroke-dasharray', function (d) { return d.orphan ? '3,2' : 'none'; })
@@ -418,7 +430,7 @@
           .attr('font-size', function (d) { return (nodeRadius(d) * 0.7) + 'px'; })
           .attr('font-weight', 'bold')
           .attr('fill', function (d) {
-            return d.orphan ? 'var(--color-fg-muted, #9ca3af)' : 'white';
+            return d.orphan ? 'var(--color-text-muted, #9ca3af)' : 'white';
           })
           .attr('pointer-events', 'none');
 
@@ -428,7 +440,7 @@
           .attr('text-anchor', 'middle')
           .attr('dy', function (d) { return nodeRadius(d) + 14; })
           .attr('font-size', '11px')
-          .attr('fill', 'var(--color-fg-body, #374151)');
+          .attr('fill', 'var(--color-text-body, #374151)');
 
         // Click to navigate to entity.
         nodes.on('click', function (event, d) {
@@ -444,20 +456,20 @@
           .style('position', 'absolute')
           .style('display', 'none')
           .style('padding', '6px 10px')
-          .style('background', 'var(--color-surface-alt, #f3f4f6)')
-          .style('border', '1px solid var(--color-edge, #e5e7eb)')
+          .style('background', 'var(--color-bg-tertiary, #f3f4f6)')
+          .style('border', '1px solid var(--color-border, #e5e7eb)')
           .style('border-radius', '6px')
           .style('font-size', '12px')
-          .style('color', 'var(--color-fg-body, #374151)')
+          .style('color', 'var(--color-text-body, #374151)')
           .style('pointer-events', 'none')
           .style('z-index', '10');
 
         nodes.on('mouseenter', function (event, d) {
           var info = '<strong>' + Chronicle.escapeHtml(d.name || '(unknown)') + '</strong>';
-          if (d.type) info += '<br><span style="color:var(--color-fg-muted)">' + Chronicle.escapeHtml(d.type) + '</span>';
+          if (d.type) info += '<br><span style="color:var(--color-text-muted)">' + Chronicle.escapeHtml(d.type) + '</span>';
           if (d.orphan) info += '<br><span style="color:var(--color-warning, #f59e0b)">No connections</span>';
           var count = connectionCount[d.id] || 0;
-          if (count > 0) info += '<br><span style="color:var(--color-fg-muted)">' + count + ' connection' + (count !== 1 ? 's' : '') + '</span>';
+          if (count > 0) info += '<br><span style="color:var(--color-text-muted)">' + count + ' connection' + (count !== 1 ? 's' : '') + '</span>';
           tooltip.style('display', 'block').html(info);
         });
         nodes.on('mousemove', function (event) {
@@ -484,6 +496,7 @@
 
           nodes.attr('transform', function (d) { return 'translate(' + d.x + ',' + d.y + ')'; });
         });
+        if (reduced()) settleNow(simulation);
 
         // Controls bar (zoom buttons).
         var controls = document.createElement('div');
@@ -498,20 +511,20 @@
         zoomIn.className = 'btn-secondary text-xs';
         zoomIn.innerHTML = '<i class="fa-solid fa-plus"></i>';
         zoomIn.title = 'Zoom in';
-        zoomIn.addEventListener('click', function () { svg.transition().call(zoom.scaleBy, 1.5); });
+        zoomIn.addEventListener('click', function () { (reduced() ? svg : svg.transition()).call(zoom.scaleBy, 1.5); });
 
         var zoomOut = document.createElement('button');
         zoomOut.className = 'btn-secondary text-xs';
         zoomOut.innerHTML = '<i class="fa-solid fa-minus"></i>';
         zoomOut.title = 'Zoom out';
-        zoomOut.addEventListener('click', function () { svg.transition().call(zoom.scaleBy, 0.67); });
+        zoomOut.addEventListener('click', function () { (reduced() ? svg : svg.transition()).call(zoom.scaleBy, 0.67); });
 
         var resetBtn = document.createElement('button');
         resetBtn.className = 'btn-secondary text-xs';
         resetBtn.innerHTML = '<i class="fa-solid fa-expand"></i>';
         resetBtn.title = 'Reset view';
         resetBtn.addEventListener('click', function () {
-          svg.transition().call(zoom.transform, d3.zoomIdentity);
+          (reduced() ? svg : svg.transition()).call(zoom.transform, d3.zoomIdentity);
         });
 
         // Export PNG button.
@@ -584,7 +597,7 @@
           );
           legendItems.push(
             '<span style="display:flex;align-items:center;gap:4px;">' +
-            '<span style="width:16px;height:0;border-top:2px solid var(--color-fg-muted, #9ca3af);display:inline-block;"></span>' +
+            '<span style="width:16px;height:0;border-top:2px solid var(--color-text-muted, #9ca3af);display:inline-block;"></span>' +
             '<span>relation</span></span>'
           );
         }
@@ -594,14 +607,14 @@
         if (hasOrphans) {
           legendItems.push(
             '<span style="display:flex;align-items:center;gap:4px;">' +
-            '<span style="width:10px;height:10px;border-radius:50%;border:1.5px dashed var(--color-fg-muted, #9ca3af);display:inline-block;"></span>' +
+            '<span style="width:10px;height:10px;border-radius:50%;border:1.5px dashed var(--color-text-muted, #9ca3af);display:inline-block;"></span>' +
             '<span>orphan</span></span>'
           );
         }
 
         if (legendItems.length > 0) {
           var legend = document.createElement('div');
-          legend.style.cssText = 'position:absolute;bottom:8px;left:8px;display:flex;flex-wrap:wrap;gap:8px;font-size:11px;color:var(--color-fg-secondary,#6b7280);';
+          legend.style.cssText = 'position:absolute;bottom:8px;left:8px;display:flex;flex-wrap:wrap;gap:8px;font-size:11px;color:var(--color-text-secondary,#6b7280);';
           legend.innerHTML = legendItems.join('');
           el.appendChild(legend);
         }

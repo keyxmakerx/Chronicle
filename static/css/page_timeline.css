@@ -1,107 +1,138 @@
-/* The time line block (internal/plugins/calendar/page_timeline.templ): a
-   slim line from a page's first dated event to the campaign's today, a dot
-   for each event. The accent is the campaign's; a Director-only dot is
-   dashed and muted, and a dot still ahead of today is hollow and faint.
+/* The time line block (internal/plugins/calendar/page_timeline.templ): the
+   lean line. No box, no heading: one hairline meant to sit under a page's
+   title, a bead for each of the page's dated events.
+
+   The line fades in at the left. A living subject's line is the accent up to
+   today, softer after it, and runs a little past the last event before
+   fading off in the accent. A dead subject's line is the accent up to the
+   death, then a short grey tail fades off. --ptl-lit (0 to 1, set by the
+   server) is how far along the beads' stretch the accent runs; the beads sit
+   between the 18px fade-in and the --ptl-tail fade-off.
+
+   Beads: solid accent for the past, hollow for what is still to come, amber
+   for Director only, a hollow grey ring for the death. Beads closer than a
+   bead's width share one bead with a second ring (page_timeline.js).
+
+   A style kit draws its own line, beads and years through the --kit-tl-*
+   tokens it sets in style_kits.css (a thicker rule, a masked double line,
+   wave or pen stroke, square or hand-drawn beads, a ring, a glow); with no
+   kit each falls back to the values here. The lit colour is the kit's
+   accent, which is the campaign's colour when the owner picked one.
 
    Motion uses the signed moves. Under full motion the line draws across and
-   the dots pop in one after another; Calm fades them in place; Off and a
+   the beads pop in one after another; Calm fades them in place; Off and a
    device asking for reduced motion show the line drawn. */
 
 .ptl {
-  --ptl-acc: var(--color-accent);
-  --ptl-line: var(--color-border);
+  --ptl-acc: var(--kit-acc, var(--color-accent));
+  --ptl-bg: var(--color-bg-primary);
+  --ptl-grey: color-mix(in srgb, var(--color-text-muted) 45%, var(--color-border));
   --ptl-dm: rgb(var(--color-warn-rgb));
-  padding: 10px 16px 6px;
+  --ptl-tail: 64px;
+  /* Where the accent stops, in the rail's own width. */
+  --ptl-at: calc(18px + (100% - 18px - var(--ptl-tail)) * var(--ptl-lit, 1));
+  margin: 4px 0 0;
 }
-.ptl-rail {
-  position: relative;
-  height: 44px;
-  /* Room for half a dot and a year label at either end. */
-  margin: 0 14px;
-}
-.ptl-track,
-.ptl-fill {
-  position: absolute;
-  left: 0;
-  top: 15px;
-  height: 2px;
-  border-radius: 2px;
-}
-.ptl-track { right: 0; background: var(--ptl-line); }
-.ptl-fill { background: var(--ptl-acc); transform-origin: left; }
+@media (max-width: 520px) { .ptl { --ptl-tail: 40px; } }
 
-/* Today: a short upright tick in the accent. */
-.ptl-today {
-  position: absolute;
-  top: 8px;
-  width: 2px;
-  height: 16px;
-  margin-left: -1px;
-  border-radius: 1px;
-  background: var(--ptl-acc);
+.ptl-rail { position: relative; height: 40px; }
+.ptl-tr {
+  position: absolute; left: 0; right: 0;
+  top: var(--kit-tl-top, 12px); height: var(--kit-tl-h, 1px);
+  filter: var(--kit-tl-glow, none);
+  -webkit-mask: var(--kit-tl-shape, none);
+  mask: var(--kit-tl-shape, none);
+  background: linear-gradient(to right,
+    color-mix(in srgb, var(--ptl-acc) 0%, transparent) 0, var(--ptl-acc) 18px,
+    var(--ptl-acc) calc(var(--ptl-at) - 10px), color-mix(in srgb, var(--ptl-acc) 40%, transparent) calc(var(--ptl-at) + 10px),
+    color-mix(in srgb, var(--ptl-acc) 40%, transparent) calc(100% - var(--ptl-tail)), color-mix(in srgb, var(--ptl-acc) 0%, transparent) 100%);
 }
+/* Today is at or past the last event: lit all the way, then the fade. */
+.ptl--lit .ptl-tr {
+  background: linear-gradient(to right,
+    color-mix(in srgb, var(--ptl-acc) 0%, transparent) 0, var(--ptl-acc) 18px,
+    var(--ptl-acc) calc(100% - var(--ptl-tail)), color-mix(in srgb, var(--ptl-acc) 0%, transparent) 100%);
+}
+.ptl--dead .ptl-tr {
+  background: linear-gradient(to right,
+    color-mix(in srgb, var(--ptl-acc) 0%, transparent) 0, var(--ptl-acc) 18px,
+    var(--ptl-acc) calc(var(--ptl-at) - 2px), var(--ptl-grey) calc(var(--ptl-at) + 14px),
+    transparent 100%);
+}
+/* The wash: a soft fall of the accent under the lit stretch. */
+.ptl-wa {
+  position: absolute; left: 0; top: 13px; height: 12px; width: var(--ptl-at);
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--ptl-acc) 13%, transparent), color-mix(in srgb, var(--ptl-acc) 0%, transparent));
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 40px);
+  mask-image: linear-gradient(to right, transparent 0, #000 40px);
+  pointer-events: none;
+  display: var(--kit-tl-wash, block);
+}
+
+.ptl-in { position: absolute; top: 0; bottom: 0; left: 18px; right: var(--ptl-tail); }
+.ptl-now { position: absolute; top: 6px; width: 1px; height: 13px; background: var(--ptl-acc); opacity: .7; }
 
 .ptl-dots { list-style: none; margin: 0; padding: 0; }
-.ptl-dots > li { position: absolute; top: 9px; width: 0; }
+.ptl-dots > li { position: absolute; top: 12px; width: 0; }
+.ptl-dots > li[hidden] { display: none; }
 .ptl-ev {
-  position: absolute;
-  left: -7px;
-  top: 0;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  border: 2px solid var(--ptl-acc);
-  background: var(--color-card-bg);
-  transition: transform var(--dur-micro) var(--ease-out), box-shadow var(--dur-micro) var(--ease-out);
+  --ptl-b: var(--kit-tl-bead, 11px);
+  position: absolute; left: calc(var(--ptl-b) / -2); top: calc(var(--ptl-b) / -2);
+  width: var(--ptl-b); height: var(--ptl-b);
+  border-radius: var(--kit-tl-bead-r, 50%);
+  background: var(--ptl-acc);
+  box-shadow: 0 0 0 2px var(--ptl-bg), var(--kit-tl-ring, 0 0 #0000);
+  transition: transform var(--dur-micro) var(--ease-out);
 }
-.ptl-ev:hover { transform: scale(1.25); box-shadow: var(--elev-resting); }
+.ptl-ev--later { background: var(--ptl-bg); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ptl-acc) 60%, transparent), 0 0 0 2px var(--ptl-bg), var(--kit-tl-ring-soft, 0 0 #0000); }
+.ptl-ev--dm { background: var(--ptl-dm); }
+.ptl-ev--death { background: var(--ptl-bg); box-shadow: inset 0 0 0 1.5px var(--ptl-grey), 0 0 0 2px var(--ptl-bg), var(--kit-tl-ring-soft, 0 0 #0000); }
+/* Several events on one bead: a faint second ring. */
+.ptl-ev--multi { box-shadow: 0 0 0 2px var(--ptl-bg), 0 0 0 3.5px color-mix(in srgb, var(--ptl-acc) 55%, transparent); }
+.ptl-ev--multi.ptl-ev--dm { box-shadow: 0 0 0 2px var(--ptl-bg), 0 0 0 3.5px rgb(var(--color-warn-rgb) / .6); }
+.ptl-ev:hover, .ptl-ev:focus-visible { transform: scale(1.45); }
 .ptl-ev:focus-visible { outline: 2px solid var(--ptl-acc); outline-offset: 2px; }
-.ptl-ev--now { background: var(--ptl-acc); z-index: 1; }
-.ptl-ev--later { border-color: color-mix(in srgb, var(--ptl-acc) 45%, var(--ptl-line)); }
-.ptl-ev--dm {
-  border-style: dashed;
-  border-color: var(--ptl-dm);
-}
-/* A taller target for a finger than the dot itself, kept narrow so dots
+/* A taller target for a finger than the bead itself, kept narrow so beads
    close together still each take their own clicks. */
-.ptl-ev::before { content: ""; position: absolute; inset: -10px -2px; }
+.ptl-ev::before { content: ""; position: absolute; inset: -12px -3px; }
 .ptl-dots > li:is(:hover, :focus-within) { z-index: 2; }
 
 .ptl-yr {
-  position: absolute;
-  top: 16px;
-  left: 50%;
+  position: absolute; top: var(--kit-tl-yr-top, 12px); left: 50%;
   transform: translateX(-50%);
-  font-size: 11px;
-  line-height: 1;
+  font-size: 10.5px; line-height: 1;
   color: var(--color-text-muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   pointer-events: none;
 }
+/* The year keeps its size while its bead grows. */
+.ptl-ev:is(:hover, :focus-visible) .ptl-yr { transform: translateX(-50%) scale(.69); transform-origin: top center; }
 
 .ptl-none,
 .ptl-more {
   margin: 0;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   color: var(--color-text-muted);
 }
-.ptl-more { margin-top: 2px; }
+.ptl-more { text-align: right; }
 .ptl-none a,
 .ptl-more a { color: var(--color-accent-link, var(--ptl-acc)); }
 
-/* Full motion: the line draws across, then each dot pops in turn. */
-html:not([data-motion]):not([data-cz-reduce]) .ptl-fill {
+/* Full motion: the line draws across, then each bead pops in turn. */
+html:not([data-motion]):not([data-cz-reduce]) .ptl-tr {
   animation: ptl-draw 480ms var(--ease-out) both 120ms;
 }
 html:not([data-motion]):not([data-cz-reduce]) .ptl-ev {
   animation: ptl-pop var(--dur-standard) var(--ease-out) backwards;
   animation-delay: calc(220ms + min(var(--i, 0), 12) * 60ms);
 }
-@keyframes ptl-draw { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+/* Drawn by uncovering it, so a kit's wave or pen stroke is never squeezed;
+   the overhang keeps Lumen's glow. */
+@keyframes ptl-draw { from { clip-path: inset(-8px 100% -8px -8px); } to { clip-path: inset(-8px); } }
 @keyframes ptl-pop { from { transform: scale(0.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
-/* Calm: the line and its dots fade in where they are. */
+/* Calm: the line and its beads fade in where they are. */
 html[data-motion="calm"] :is(.ptl-rail, .ptl-ev) {
   transition: opacity var(--dur-large) var(--ease-out);
 }
@@ -110,8 +141,5 @@ html[data-motion="calm"] :is(.ptl-rail, .ptl-ev) {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ptl-fill, .ptl-ev { animation: none !important; }
+  .ptl-tr, .ptl-ev { animation: none !important; }
 }
-
-/* Annals: the line sits on the page like the title above it. */
-[data-cz-page="annals"] #main-content .ptl.cb-card { padding-left: 0; padding-right: 0; }

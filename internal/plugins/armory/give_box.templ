@@ -76,7 +76,6 @@ templ GiveBox(v *GiveDialogView) {
 			<div class="ag-hint" data-hint aria-live="polite"></div>
 			@giveFoot()
 		</div>
-		@giveWarn()
 	</div>
 }
 
@@ -156,7 +155,6 @@ templ GiveCardBox(v *GiveDialogView) {
 			<div class="ag-hint" data-hint aria-live="polite"></div>
 			@giveFoot()
 		</div>
-		@giveWarn()
 	</div>
 }
 
@@ -179,14 +177,5 @@ templ giveFoot() {
 		<span class="ag-sp"></span>
 		<button type="button" class="btn-secondary btn-sm" data-close onclick={ giveBoxCall("cancel") }>Cancel</button>
 		<button type="button" class="btn-primary btn-sm" data-give disabled onclick={ giveBoxCall("give") }>Give</button>
-	</div>
-}
-
-// giveWarn is the bar a click outside shows while a pick is unsent.
-templ giveWarn() {
-	<div class="ag-warn" role="alert">
-		<i class="fa-solid fa-triangle-exclamation"></i>
-		<span>Not given yet. Give it, or throw the choice away.</span>
-		<button type="button" data-discard onclick={ giveBoxCall("discard") }>Discard</button>
 	</div>
 }

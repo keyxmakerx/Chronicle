@@ -45,12 +45,24 @@ type FrontMatter struct {
 	// hierarchy alone; ParentNone lifts the page to the top level. Matched
 	// by slug like every other name in the importer.
 	Parent string `yaml:"parent"`
+	// Folder names the sidebar folder this page sits in, within the page's own
+	// category. "" (key absent) leaves it where it is; FolderNone takes the
+	// page out of its folder. A page sits in a folder or under a parent page,
+	// never both, so the two keys cannot be written together.
+	Folder string `yaml:"folder"`
 	// Era makes the block write one era's version of the page it names
 	// instead of the usual page. Matched to the main calendar's eras by
 	// name, ignoring case.
 	Era string `yaml:"era"`
 	// KnownAs is the page's name in that era. Only valid with Era.
 	KnownAs string `yaml:"known_as"`
+	// Reason is the AI's one-line why, shown beside the change at review.
+	// Never saved: it explains the request, it is not part of the page.
+	Reason string `yaml:"reason"`
+	// Fields sets values on the page's sheet, by field key. Checked
+	// against the category's own fields (CheckFields); on an update only
+	// the named fields change, and a null clears one.
+	Fields map[string]any `yaml:"fields"`
 }
 
 // IsEra reports a block that writes an era's version of a page.
@@ -81,6 +93,24 @@ func (f FrontMatter) ParentKey() (slug string, ok bool) {
 // LiftsParent reports an explicit `parent: none`.
 func (f FrontMatter) LiftsParent() bool {
 	return strings.EqualFold(strings.TrimSpace(f.Parent), ParentNone)
+}
+
+// FolderNone is the `folder:` value that takes a page out of its folder.
+const FolderNone = "none"
+
+// FolderName is the folder the key names, and whether it names one at all.
+// ok is false for an absent key and for "none".
+func (f FrontMatter) FolderName() (name string, ok bool) {
+	v := strings.TrimSpace(f.Folder)
+	if v == "" || strings.EqualFold(v, FolderNone) {
+		return "", false
+	}
+	return v, true
+}
+
+// LeavesFolder reports an explicit `folder: none`.
+func (f FrontMatter) LeavesFolder() bool {
+	return strings.EqualFold(strings.TrimSpace(f.Folder), FolderNone)
 }
 
 // Front-matter action values. The corresponding committer dispatch
@@ -120,9 +150,14 @@ const (
 	// action via per-row controls.
 	StatusActionMismatch ParseStatus = "action_mismatch"
 	// StatusParentProblem means the row's `parent:` names no usable page
-	// (missing, ambiguous, itself, later in the paste, or being deleted).
+	// (missing, ambiguous, itself, later in the paste, or being deleted), or
+	// its `folder:` names no usable folder.
 	// Default-EXCLUDE; the Reason says what to fix.
 	StatusParentProblem ParseStatus = "parent_problem"
+	// StatusFieldProblem means the row's `fields:` don't fit its
+	// category's sheet (an unknown field, a wrong type, or no category).
+	// Never imported as written; the Reason says what to fix.
+	StatusFieldProblem ParseStatus = "field_problem"
 )
 
 // ParsedPage is one page detected in the multi-page input. The

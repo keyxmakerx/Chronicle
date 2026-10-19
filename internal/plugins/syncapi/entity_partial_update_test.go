@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 
 	"github.com/labstack/echo/v4"
@@ -44,6 +45,7 @@ func (s *stubEntityServiceForPartialUpdate) GetByID(_ context.Context, id string
 		Name:       "Shadow Contact",
 		ParentID:   &parent,
 		IsPrivate:  true,
+		FieldsData: map[string]any{"hp": 10, "ac": 14},
 	}, nil
 }
 
@@ -213,4 +215,53 @@ func TestAPIUpdateEntityRequest_AbsentKeysStayAbsent(t *testing.T) {
 	if req.IsPrivate.Ptr(nil) != nil {
 		t.Error("an absent is_private must produce a nil *bool, which the service reads as preserve")
 	}
+}
+
+// fields_data on the update doors is a patch: a key replaces, a null clears,
+// an untouched key keeps its stored value.
+func TestUpdateEntity_FieldsDataMergesIntoStored(t *testing.T) {
+	want := map[string]any{"hp": float64(12), "ac": 14}
+	body := `{"fields_data":{"hp":12}}`
+
+	t.Run("single update", func(t *testing.T) {
+		svc := &stubEntityServiceForPartialUpdate{}
+		h := NewAPIHandler(nil, svc, stubCampaignSvcOwner{}, nil)
+		c, _ := newPartialUpdateContext(http.MethodPut, "/api/v1/campaigns/camp-1/entities/ent-1", body)
+		if err := h.UpdateEntity(c); err != nil {
+			t.Fatal(err)
+		}
+		if got := svc.updates[0].FieldsData; !reflect.DeepEqual(got, want) {
+			t.Fatalf("FieldsData = %v, want %v", got, want)
+		}
+	})
+	t.Run("batch update", func(t *testing.T) {
+		svc := &stubEntityServiceForPartialUpdate{}
+		h := NewAPIHandler(nil, svc, stubCampaignSvcOwner{}, nil)
+		c, _ := newPartialUpdateContext(http.MethodPost, "/api/v1/campaigns/camp-1/sync",
+			`{"changes":[{"action":"update","entity_id":"ent-1","fields_data":{"hp":12}}]}`)
+		if err := h.Sync(c); err != nil {
+			t.Fatal(err)
+		}
+		if got := svc.updates[0].FieldsData; !reflect.DeepEqual(got, want) {
+			t.Fatalf("FieldsData = %v, want %v", got, want)
+		}
+	})
+	t.Run("null clears one key and absent leaves the map alone", func(t *testing.T) {
+		svc := &stubEntityServiceForPartialUpdate{}
+		h := NewAPIHandler(nil, svc, stubCampaignSvcOwner{}, nil)
+		c, _ := newPartialUpdateContext(http.MethodPut, "/api/v1/campaigns/camp-1/entities/ent-1", `{"fields_data":{"ac":null}}`)
+		if err := h.UpdateEntity(c); err != nil {
+			t.Fatal(err)
+		}
+		if got := svc.updates[0].FieldsData; !reflect.DeepEqual(got, map[string]any{"hp": 10}) {
+			t.Fatalf("FieldsData = %v", got)
+		}
+		c, _ = newPartialUpdateContext(http.MethodPut, "/api/v1/campaigns/camp-1/entities/ent-1", `{"name":"x"}`)
+		if err := h.UpdateEntity(c); err != nil {
+			t.Fatal(err)
+		}
+		if svc.updates[1].FieldsData != nil {
+			t.Fatalf("absent fields_data became %v", svc.updates[1].FieldsData)
+		}
+	})
 }

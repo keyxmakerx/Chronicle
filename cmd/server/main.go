@@ -5,7 +5,6 @@ package main
 
 import (
 	"context"
-	"io/fs"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -17,22 +16,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/app"
 	"github.com/keyxmakerx/chronicle/internal/config"
 	"github.com/keyxmakerx/chronicle/internal/database"
-	"github.com/keyxmakerx/chronicle/internal/plugins/armory"
-	"github.com/keyxmakerx/chronicle/internal/plugins/bestiary"
-	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
-	"github.com/keyxmakerx/chronicle/internal/plugins/dmscreen"
-	"github.com/keyxmakerx/chronicle/internal/plugins/encounters"
 	"github.com/keyxmakerx/chronicle/internal/plugins/foundry_vtt"
-	"github.com/keyxmakerx/chronicle/internal/plugins/maps"
-	"github.com/keyxmakerx/chronicle/internal/plugins/packages"
-	"github.com/keyxmakerx/chronicle/internal/plugins/pageblocks"
-	"github.com/keyxmakerx/chronicle/internal/plugins/quests"
-	"github.com/keyxmakerx/chronicle/internal/plugins/rolltables"
-	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
-	"github.com/keyxmakerx/chronicle/internal/plugins/syncapi"
-	"github.com/keyxmakerx/chronicle/internal/plugins/systemstate"
-	"github.com/keyxmakerx/chronicle/internal/plugins/timeline"
-	"github.com/keyxmakerx/chronicle/internal/plugins/widgetbindings"
 	"github.com/keyxmakerx/chronicle/internal/systems"
 )
 
@@ -284,63 +268,4 @@ func fatalBoot(msg string, err error) {
 		time.Sleep(backoff)
 	}
 	os.Exit(1)
-}
-
-// registeredPlugins returns the built-in plugins with their embedded
-// migration filesystems (via Go's embed package, so they're available
-// regardless of working directory).
-func registeredPlugins() []database.PluginSchema {
-	mustSub := func(fsys fs.FS, dir string) fs.FS {
-		sub, err := fs.Sub(fsys, dir)
-		if err != nil {
-			panic("embedded migrations sub-dir: " + err.Error())
-		}
-		return sub
-	}
-	return []database.PluginSchema{
-		{Slug: "bestiary", MigrationsFS: mustSub(bestiary.MigrationsFS, database.PluginMigrationsSubdir)},
-		{Slug: "calendar", MigrationsFS: mustSub(calendar.MigrationsFS, database.PluginMigrationsSubdir)},
-		{Slug: "maps", MigrationsFS: mustSub(maps.MigrationsFS, database.PluginMigrationsSubdir)},
-		{Slug: "sessions", MigrationsFS: mustSub(sessions.MigrationsFS, database.PluginMigrationsSubdir)},
-		{Slug: "timeline", MigrationsFS: mustSub(timeline.MigrationsFS, database.PluginMigrationsSubdir)},
-		// widgetbindings: the generic host↔widget-type↔instance binding table.
-		// FK-free and polymorphic, so plugin order vs calendar/maps/timeline
-		// doesn't matter.
-		{Slug: "widgetbindings", MigrationsFS: mustSub(widgetbindings.MigrationsFS, database.PluginMigrationsSubdir)},
-		// systemstate: per-page game-system state. Its foreign keys point at
-		// core tables only, which have migrated before any plugin runs.
-		{Slug: systemstate.PluginSlug, MigrationsFS: mustSub(systemstate.MigrationsFS, database.PluginMigrationsSubdir)},
-		// rolltables: one per-campaign document; its only foreign key points at
-		// the core campaigns table.
-		{Slug: rolltables.PluginSlug, MigrationsFS: mustSub(rolltables.MigrationsFS, database.PluginMigrationsSubdir)},
-		// armory: its own tables beyond the core ones (item shares). Foreign
-		// keys point at core campaigns and entities only.
-		{Slug: armory.AddonSlug, MigrationsFS: mustSub(armory.MigrationsFS, database.PluginMigrationsSubdir)},
-		// quests: foreign keys point at core tables (entities, campaigns) and at
-		// its own boards table; no reference to any other plugin's tables.
-		{Slug: quests.PluginSlug, MigrationsFS: mustSub(quests.MigrationsFS, database.PluginMigrationsSubdir)},
-		// pageblocks: one table of per-block page content; foreign keys point at
-		// core tables (entities, campaigns) only.
-		{Slug: pageblocks.PluginSlug, MigrationsFS: mustSub(pageblocks.MigrationsFS, database.PluginMigrationsSubdir)},
-		// encounters: fights planned on a page; foreign keys point at core
-		// tables (entities, campaigns) only.
-		{Slug: encounters.PluginSlug, MigrationsFS: mustSub(encounters.MigrationsFS, database.PluginMigrationsSubdir)},
-		// dmscreen: the Adventures tab's pins and loose notes. Foreign keys
-		// point at core campaigns and entities only.
-		{Slug: dmscreen.PluginSlug, MigrationsFS: mustSub(dmscreen.MigrationsFS, database.PluginMigrationsSubdir)},
-		{Slug: "syncapi", MigrationsFS: mustSub(syncapi.MigrationsFS, database.PluginMigrationsSubdir)},
-		{Slug: "packages", MigrationsFS: mustSub(packages.MigrationsFS, database.PluginMigrationsSubdir)},
-		// foundry_vtt's migration 001 renames foundry_module_campaign_tokens
-		// to foundry_vtt_campaign_tokens and drops the orphaned
-		// foundry_module_versions table; foundry_vtt.PreMigrationCheck aborts
-		// startup first if foundry_module_versions has rows, to avoid
-		// destroying an in-flight manual upload.
-		//
-		// The Slug is taken from the plugin's own constant rather than a
-		// literal because foundry_vtt.ReconcileConsolidationState writes a
-		// plugin_schema_versions row under it: if the two ever drifted, the
-		// reconciler's row would be invisible to the runner and the
-		// fresh-install crash would come straight back.
-		{Slug: foundry_vtt.PluginHealthKey, MigrationsFS: mustSub(foundry_vtt.MigrationsFS, database.PluginMigrationsSubdir)},
-	}
 }

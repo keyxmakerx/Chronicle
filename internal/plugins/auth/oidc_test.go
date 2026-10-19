@@ -297,7 +297,7 @@ func TestOIDCLoginAsksForTwoFactorAndStateIsSingleUse(t *testing.T) {
 	if !errors.As(err, &need) || res.SessionToken != "" || res.Redirect != "/campaigns/x" {
 		t.Fatalf("provider sign-in with two-factor on: %+v, %v", res, err)
 	}
-	done, err := r.svc.CompleteTwoFactorLogin(ctx, TwoFactorLoginInput{Challenge: need.Challenge, Code: earlierCode(secret)})
+	done, err := r.svc.CompleteTwoFactorLogin(ctx, TwoFactorLoginInput{Challenge: need.Challenge, Code: unusedCode(secret)})
 	if err != nil || done.SessionToken == "" {
 		t.Fatalf("code step after provider: %+v, %v", done, err)
 	}

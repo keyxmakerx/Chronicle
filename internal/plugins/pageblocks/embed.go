@@ -1,5 +1,5 @@
-// Package pageblocks stores the content of the layout blocks a DM types in
-// place on a page: the Read-aloud box, the Table and the Steps list.
+// Package pageblocks stores the content of the layout blocks a DM makes in
+// place on a page: the Read-aloud box, the Table, the Steps list and the Map.
 //
 // Block config belongs to the page's category and is shared by every page of
 // it, so what a DM writes on one page cannot live there. Content is kept per

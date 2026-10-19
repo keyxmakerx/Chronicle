@@ -25,14 +25,23 @@ import (
 // this entity's own claimed owner apart from any other viewer (C-FIELDS-OWNER-FILTER).
 templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, ancestors []Entity, children []Entity, showAttributes bool, showCalendar bool, claimingEnabled bool, ownerName string, csrfToken string, userID string) {
 	@layouts.App(entity.Name + " - " + cc.Campaign.Name) {
-		@entityPageBody(cc, entity, entityType, ancestors, children, showAttributes, showCalendar, claimingEnabled, ownerName, csrfToken, userID)
+		@withFullPage(entityPageBody(cc, entity, entityType, ancestors, children, showAttributes, showCalendar, claimingEnabled, ownerName, csrfToken, userID))
 	}
 }
 
 // entityPageBody is the page without the site chrome. The DM Screen's sheet
-// draws the same body, so a page reads the same in both places.
+// draws the same body, so a page reads the same in both places; only the page
+// itself offers the page editor (page_editor.go).
 templ entityPageBody(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, ancestors []Entity, children []Entity, showAttributes bool, showCalendar bool, claimingEnabled bool, ownerName string, csrfToken string, userID string) {
-		<div class="max-w-7xl mx-auto" data-entity-type-slug={ entityType.Slug }>
+	{{ editor := pageEditorOn(ctx, cc, entity, entityType) }}
+	@withPageEditor(editor) {
+		<div
+			class="max-w-7xl mx-auto"
+			data-entity-type-slug={ entityType.Slug }
+			if editor {
+				data-pe-page
+			}
+		>
 			<!-- Breadcrumb with ancestor chain, and the page's visibility
 			     control standing on its own at the top-right. -->
 			<div class="flex items-start justify-between gap-3 mb-4">
@@ -61,7 +70,13 @@ templ entityPageBody(cc *campaigns.CampaignContext, entity *Entity, entityType *
 					<span class="mx-1">/</span>
 					<span class="text-fg" data-page-crumb>{ entity.Name }</span>
 				</nav>
-				@effectiveVisibilityBadge(cc, entity, GetEffectiveVisibility(ctx))
+				if editor {
+					@pageEditorBar(cc, entity) {
+						@effectiveVisibilityBadge(cc, entity, GetEffectiveVisibility(ctx))
+					}
+				} else {
+					@effectiveVisibilityBadge(cc, entity, GetEffectiveVisibility(ctx))
+				}
 			</div>
 			<!-- Player Character Claiming banner (PC-CLAIM-3, Parts 1 & 4):
 			     "Claimed by <player>" when owned, the actionable claim banner
@@ -159,6 +174,7 @@ templ entityPageBody(cc *campaigns.CampaignContext, entity *Entity, entityType *
 			// A per-entity calendar is opt-in via the `entity_calendar`
 			// page-template block, not rendered automatically here.
 		</div>
+	}
 }
 
 // derefStr safely dereferences a *string, returning "" if nil.
@@ -243,13 +259,23 @@ templ entityBlockInner(block TemplateBlock, cc *campaigns.CampaignContext, entit
 
 // blockTitle renders the entity name heading. Edit name opens the same fold the
 // system-page header uses; Scribes and up also get History, Clone and Delete.
+// In the page editor the header is a part instead: its pen opens the name where
+// it stands, and the rest drapes on a sheet below (pageHeaderDrape).
 templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string) {
 	{{
 		isScribe := cc.MemberRole >= campaigns.RoleScribe
 		canRename := CanEditIdentity(cc.MemberRole, entity, layouts.GetUserID(ctx))
+		editor := inPageEditor(ctx)
 	}}
-	<div>
-		<div class="flex items-start justify-between gap-3">
+	<div
+		if editor {
+			class="pe-part"
+			data-pe-part="header"
+		}
+	>
+		// The actions wrap under the name when both don't fit, so on a phone
+		// they never overlap the name or squeeze it to a word per line.
+		<div class="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
 			<div class="min-w-0">
 				<div class="flex items-center gap-2">
 					<h1 class="cb-title text-xl md:text-3xl font-bold text-fg" data-page-h1>{ entity.Name }</h1>
@@ -263,18 +289,22 @@ templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 							hx-swap="outerHTML"
 						></span>
 					}
+					if editor {
+						@pageEditorPen("header", "Edit the name and details")
+					}
 				</div>
 				@pageMoonChips(cc)
 				// Aliases ("aka") sit under the name they are alternatives to.
+				// In the page editor they are changed on the header's sheet.
 				<div
 					data-widget="aliases"
 					data-entity-id={ entity.ID }
 					data-campaign-id={ cc.Campaign.ID }
-					data-editable={ fmt.Sprintf("%t", isScribe) }
+					data-editable={ fmt.Sprintf("%t", isScribe && !editor) }
 				></div>
 			</div>
-			if canRename {
-				<div class="flex items-center gap-2" data-page-actions>
+			if canRename && !editor {
+				<div class="flex flex-wrap items-center gap-2 whitespace-nowrap" data-page-actions>
 					<button
 						type="button"
 						class="btn-ghost btn-sm"
@@ -287,45 +317,26 @@ templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 						<i class="fa-solid fa-pencil mr-1"></i> Edit name
 					</button>
 					if isScribe {
-						<form
-							method="POST"
-							action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s/clone", cc.Campaign.ID, entity.ID)) }
-							hx-post={ fmt.Sprintf("/campaigns/%s/entities/%s/clone", cc.Campaign.ID, entity.ID) }
-							class="inline"
-						>
-							<input type="hidden" name="csrf_token" value={ csrfToken }/>
-							<button type="submit" class="btn-ghost btn-sm" title="Create a copy of this page">
-								<i class="fa-regular fa-clone mr-1"></i> Clone
-							</button>
-						</form>
+						@pageCloneForm(cc, entity, csrfToken, "btn-ghost btn-sm")
 						@entityHistoryButton(cc, entity, "btn-ghost btn-sm")
 						@eraButton(cc, entity, "btn-ghost btn-sm")
 						if cc.MemberRole >= campaigns.RoleOwner {
-							<form
-								method="POST"
-								action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID)) }
-								hx-delete={ fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID) }
-								hx-confirm="Move this page and its sub-pages to the Trash? You can restore them from Manage > Trash."
-								class="inline"
-							>
-								<input type="hidden" name="_method" value="DELETE"/>
-								<input type="hidden" name="csrf_token" value={ csrfToken }/>
-								<button type="submit" class="btn-ghost btn-sm text-red-500 hover:text-red-700 dark:text-red-400">
-									<i class="fa-solid fa-trash mr-1"></i> Delete
-								</button>
-							</form>
+							@pageDeleteForm(cc, entity, csrfToken, "btn-ghost btn-sm text-red-500 hover:text-red-700 dark:text-red-400", "Delete")
 						}
 					}
 				</div>
 			}
 		</div>
+		if editor && isScribe {
+			@pageHeaderDrape(cc, entity, csrfToken)
+		}
 		@entityPlacesLine(cc, entity)
 		@eraPanel(cc, entity, csrfToken)
 		// The History panel loads here when History is clicked.
 		if isScribe {
 			<div id="page-history-slot"></div>
 		}
-		if canRename {
+		if canRename && !editor {
 			// The fold renames the usual page, whichever era is shown.
 			@pageNameFold(cc, usualEntity(ctx, entity), isScribe)
 		}
@@ -443,9 +454,8 @@ templ blockDetails(cc *campaigns.CampaignContext, entity *Entity) {
 				}
 				{ entity.TypeName }
 			</span>
-			if entity.TypeLabel != nil && *entity.TypeLabel != "" {
-				<span class="text-sm text-fg-secondary">{ *entity.TypeLabel }</span>
-			}
+			// Always drawn, so the page editor can show a descriptor it just saved.
+			<span class="text-sm text-fg-secondary" data-page-label hidden?={ derefStr(entity.TypeLabel) == "" }>{ derefStr(entity.TypeLabel) }</span>
 			@visibilityGlance(cc, entity, nil)
 		</div>
 		<!-- Metadata -->

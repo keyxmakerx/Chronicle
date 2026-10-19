@@ -44,6 +44,8 @@ type EntityCreator interface {
 	GetBySlug(ctx context.Context, campaignID, slug string) (*entities.Entity, error)
 	GetEntityTypeBySlug(ctx context.Context, campaignID, slug string) (*entities.EntityType, error)
 	GetEntityTypes(ctx context.Context, campaignID string) ([]entities.EntityType, error)
+	// MergeFields changes only the named sheet fields; a nil value clears one.
+	MergeFields(ctx context.Context, entityID string, patch map[string]any) error
 	// CheckEntityAccess lets @[Name] links skip pages the viewer cannot see.
 	CheckEntityAccess(ctx context.Context, entityID string, role int, userID string) (*entities.EffectivePermission, error)
 }
@@ -54,6 +56,10 @@ type Committer struct {
 	creator EntityCreator
 	// eras writes `era:` blocks; nil refuses them with a plain reason.
 	eras EraWriter
+	// tags sets a page's `tags:`; nil saves the page without them and says so.
+	tags TagWriter
+	// folders files pages into sidebar folders; nil refuses `folder:` rows.
+	folders FolderAccess
 }
 
 // SetEraWriter wires pages by era. Optional.
@@ -304,7 +310,7 @@ type relinkRow struct {
 // and version history follow.
 func (c *Committer) relinkPending(ctx context.Context, rows []relinkRow, links *PageLinks, result *CommitResult) {
 	for _, r := range rows {
-		bodyHTML, err := MarkdownToHTML(r.body, WithPageLinks(links))
+		bodyHTML, err := MarkdownToHTML(r.body, WithPageLinks(links), WithGMOnlyPassages())
 		if err == nil {
 			var bodyJSON string
 			if bodyJSON, err = htmlconv.Convert(bodyHTML); err == nil {
@@ -448,10 +454,10 @@ func (c *Committer) commitRow(
 	// SEC-6 mirror — every entity-creation path funnels through
 	// MarkdownToHTML first. Per-row errors are operator-friendly;
 	// the underlying library error stays in slog (handler-side).
-	bodyHTML, err := MarkdownToHTML(page.Body, WithPageLinks(links))
+	bodyHTML, err := MarkdownToHTML(page.Body, WithPageLinks(links), WithGMOnlyPassages())
 	if err != nil {
 		out.Status = StatusFailed
-		out.Reason = "Could not parse the page's markdown body — check the heading structure."
+		out.Reason = markdownFailReason(err)
 		return out
 	}
 	bodyJSON, err := htmlconv.Convert(bodyHTML)
@@ -495,13 +501,28 @@ func (c *Committer) commitRow(
 				out.Reason = reason
 				return out
 			}
-			return c.commitUpdate(ctx, existing, page, dec, typeID, bodyJSON, bodyHTML, isPrivate, parent, idx)
+			return c.commitUpdate(ctx, existing, page, dec, typeID, bodyJSON, bodyHTML, isPrivate, parent, idx, links)
 		default: // "rename" (default mode)
 			finalName = c.suffixUntilFree(ctx, campaignID, finalName)
 		}
 	}
 
+	// The sheet fields are checked before anything is written, against the
+	// category this row creates the page in; a skip or an update into an
+	// existing page never reaches here.
+	fields, reason := c.sheetFields(ctx, campaignID, typeID, page, links)
+	if reason != "" {
+		out.Status = StatusFailed
+		out.Reason = reason
+		return out
+	}
 	_, parentID, reason := c.resolveParent(ctx, campaignID, page, made)
+	if reason != "" {
+		out.Status = StatusFailed
+		out.Reason = reason
+		return out
+	}
+	folder, reason := c.resolveFolder(ctx, campaignID, typeID, page, true, false)
 	if reason != "" {
 		out.Status = StatusFailed
 		out.Reason = reason
@@ -517,7 +538,7 @@ func (c *Committer) commitRow(
 		TypeLabel:    dec.Subcategory,
 		IsPrivate:    isPrivate,
 		ParentID:     parentID,
-		FieldsData:   map[string]any{},
+		FieldsData:   withoutCleared(fields),
 	})
 	if err != nil {
 		out.Status = StatusFailed
@@ -537,6 +558,16 @@ func (c *Committer) commitRow(
 	out.EntityID = ent.ID
 	out.Slug = ent.Slug
 	out.Name = finalName
+	if reason := c.applyFolder(ctx, campaignID, ent.ID, folder); reason != "" {
+		out.Status = StatusFailed
+		out.Reason = reason
+		return out
+	}
+	if reason := c.applyTags(ctx, campaignID, ent.ID, page.FrontMatter.Tags, false); reason != "" {
+		out.Status = StatusFailed
+		out.Reason = reason
+		return out
+	}
 	if finalName != dec.Name && finalName != page.Name {
 		out.Status = StatusRenamed
 		out.Reason = "Original name conflicted; saved as " + strconv.Quote(finalName)
@@ -561,17 +592,34 @@ func (c *Committer) commitUpdate(
 	isPrivate bool,
 	parent patch.Field[string],
 	idx int,
+	links *PageLinks,
 ) RowOutcome {
 	out := RowOutcome{Index: idx, Name: existing.Name, Slug: existing.Slug, EntityID: existing.ID}
 
-	// The AI's copy of a page never carries its GM-only parts back, so a
-	// whole-text replace would delete them or publish the AI's copy of them.
+	// The AI's copy of a page carries its GM-only passages back only when
+	// its export wrote them, and never its pictures or diagrams, so a
+	// whole-text replace could delete them or publish the AI's copy.
 	// Measured here, from the entity as it is now, so both update paths and
 	// a stale review screen get the same answer. Checked before any write,
 	// including the settings update below.
-	if gm := GMOnlyPartsOf(existing); gm.Any() && !dec.ReplaceGMOnlyConfirmed {
+	if gm := GMOnlyPartsAfter(existing, bodyHTML); gm.Any() && !dec.ReplaceGMOnlyConfirmed {
 		out.Status = StatusSkipped
 		out.Reason = gm.SkipReason()
+		return out
+	}
+	// An update never changes the category, so its fields are checked
+	// against the page's own, before any write.
+	fields, reason := c.sheetFields(ctx, existing.CampaignID, existing.EntityTypeID, page, links)
+	if reason != "" {
+		out.Status = StatusFailed
+		out.Reason = reason
+		return out
+	}
+
+	folder, reason := c.resolveFolder(ctx, existing.CampaignID, existing.EntityTypeID, page, false, parent.Present() && !parent.IsNull())
+	if reason != "" {
+		out.Status = StatusFailed
+		out.Reason = reason
 		return out
 	}
 
@@ -606,8 +654,8 @@ func (c *Committer) commitUpdate(
 		// present parent (same campaign, no cycle).
 		ParentID: parent,
 		// FieldsData is ABSENT (nil), never an empty map: the service
-		// replaces all fields on any non-nil map, and the importer has
-		// no source of structured field data to replace them with.
+		// replaces all fields on any non-nil map. The named fields are
+		// merged below instead, so the others keep their values.
 	}); err != nil {
 		out.Status = StatusFailed
 		out.Reason = parentReason(err, "Could not update the existing page's settings. The original page is unchanged.")
@@ -616,6 +664,23 @@ func (c *Committer) commitUpdate(
 	if err := c.creator.UpdateEntry(ctx, existing.ID, bodyJSON, bodyHTML); err != nil {
 		out.Status = StatusFailed
 		out.Reason = "Updated the page's settings, but could not write the new body."
+		return out
+	}
+	if len(fields) > 0 {
+		if err := c.creator.MergeFields(ctx, existing.ID, fields); err != nil {
+			out.Status = StatusFailed
+			out.Reason = "Updated the page, but could not write its sheet fields. Open the page to set them."
+			return out
+		}
+	}
+	if reason := c.applyFolder(ctx, existing.CampaignID, existing.ID, folder); reason != "" {
+		out.Status = StatusFailed
+		out.Reason = reason
+		return out
+	}
+	if reason := c.applyTags(ctx, existing.CampaignID, existing.ID, page.FrontMatter.Tags, true); reason != "" {
+		out.Status = StatusFailed
+		out.Reason = reason
 		return out
 	}
 	out.Status = StatusUpdated
@@ -676,10 +741,10 @@ func (c *Committer) commitUpdateExplicit(
 	// SEC-6 funnel — sanitize body markdown BEFORE handing to
 	// commitUpdate. The pin verifies this funnel exists in every
 	// non-exempt function calling creator.Update / UpdateEntry.
-	bodyHTML, err := MarkdownToHTML(page.Body, WithPageLinks(links))
+	bodyHTML, err := MarkdownToHTML(page.Body, WithPageLinks(links), WithGMOnlyPassages())
 	if err != nil {
 		out.Status = StatusFailed
-		out.Reason = "Could not parse the page's markdown body — check the heading structure."
+		out.Reason = markdownFailReason(err)
 		return out
 	}
 	bodyJSON, err := htmlconv.Convert(bodyHTML)
@@ -696,7 +761,7 @@ func (c *Committer) commitUpdateExplicit(
 		return out
 	}
 	isPrivate := dec.Visibility == "private" || dec.Visibility == "dm_only"
-	return c.commitUpdate(ctx, existing, page, dec, typeID, bodyJSON, bodyHTML, isPrivate, parent, idx)
+	return c.commitUpdate(ctx, existing, page, dec, typeID, bodyJSON, bodyHTML, isPrivate, parent, idx, links)
 }
 
 // commitEra writes (or, for action=delete, removes) one era's version of the
@@ -768,9 +833,9 @@ func (c *Committer) commitEra(
 
 	write := EraVersionWrite{KnownAs: strings.TrimSpace(page.FrontMatter.KnownAs)}
 	if strings.TrimSpace(page.Body) != "" {
-		bodyHTML, err := MarkdownToHTML(page.Body, WithPageLinks(links))
+		bodyHTML, err := MarkdownToHTML(page.Body, WithPageLinks(links), WithGMOnlyPassages())
 		if err != nil {
-			return fail("Could not parse the page's markdown body — check the heading structure.")
+			return fail(markdownFailReason(err))
 		}
 		bodyJSON, err := htmlconv.Convert(bodyHTML)
 		if err != nil {
@@ -958,4 +1023,42 @@ func categoryNames(slug string) (name, plural string) {
 // the inner per-row loop — the outer commitRow does.
 func intToStr(n int) string {
 	return strconv.Itoa(n)
+}
+
+// sheetFields checks a page's `fields:` against the sheet of the category
+// with typeID. "" reason means they fit (or there are none).
+func (c *Committer) sheetFields(ctx context.Context, campaignID string, typeID int, page ParsedPage, links *PageLinks) (map[string]any, string) {
+	if len(page.FrontMatter.Fields) == 0 {
+		return nil, ""
+	}
+	types, err := c.creator.GetEntityTypes(ctx, campaignID)
+	if err != nil {
+		return nil, "Could not read this category's sheet fields. Nothing was saved; try again in a moment."
+	}
+	for _, t := range types {
+		if t.ID != typeID {
+			continue
+		}
+		checked, problems := CheckFields(t.Fields, page.FrontMatter.Fields)
+		if len(problems) == 0 {
+			problems = LinkFields(t.Fields, checked, links)
+		}
+		if len(problems) > 0 {
+			return nil, "Not saved. These sheet fields don't fit the " + t.Name + " category: " + strings.Join(problems, " ")
+		}
+		return checked, ""
+	}
+	return nil, "Not saved. This page's category has no sheet fields to set."
+}
+
+// withoutCleared drops the nulls a new page has no use for: there is
+// nothing to clear yet. Never nil, so a new page always gets a sheet.
+func withoutCleared(fields map[string]any) map[string]any {
+	out := make(map[string]any, len(fields))
+	for k, v := range fields {
+		if v != nil {
+			out[k] = v
+		}
+	}
+	return out
 }

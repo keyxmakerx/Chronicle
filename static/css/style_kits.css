@@ -1,0 +1,624 @@
+/* Style kits: a campaign's character, drawn over the Material page look
+   (page_look_annals.css) through the same shared block parts. A kit is on
+   when the campaign's page look is Material and its owner picked a kit other
+   than Material, which puts data-cz-kit on <html> (layouts.AppearanceAttrs).
+   ui-standard.md, "Style kits", says what each kit is; the signed mockup is
+   the contract for its character.
+
+   A kit reaches the header and the pages (#main-content holding a page's
+   title, .cb-title); workshops keep Material. Its palette is set as tokens
+   on the page, so everything on it follows. The campaign's colour replaces
+   the kit's accent through --kit-user-acc, which AppearanceCSS has already
+   checked for contrast against this kit's page and paper; with none picked
+   the kit keeps its own. Faces come from --kit-hf (headings), --kit-lf
+   (labels) and --kit-bf (text), set only where the owner picked no face.
+   Ambient and pointer movement runs only under full motion. One rule below
+   is Material's own, so it also holds with no kit: the Director's edge
+   keeps its distance from a row's words. */
+
+/* ---------- Palettes ---------- */
+[data-cz-kit="sharp"] {
+  --k-page: #fbfaf7; --k-paper: #fbfaf7; --k-ink: #111111; --k-mut: #55534f; --k-hair: #c9c5bc;
+  --kit-acc: var(--kit-user-acc, #b3261e);
+}
+.dark[data-cz-kit="sharp"] {
+  --k-page: #0e0e0e; --k-paper: #0e0e0e; --k-ink: #f2f0ea; --k-mut: #aaa69d; --k-hair: #3b3a37;
+  --kit-acc: var(--kit-user-acc, #ff6b5e);
+}
+/* Ornate's gilt is brass, well apart from the Director's amber, and stays
+   brass when the campaign's colour replaces the kit's accent. */
+[data-cz-kit="ornate"] {
+  --k-page: #f6efe2; --k-paper: #fbf5e8; --k-ink: #2b2118; --k-mut: #6e5e4c; --k-hair: color-mix(in srgb, #8a8350 45%, transparent);
+  --k-gilt: #8a8350; --k-band: #4a2a2a; --k-band-fg: #f3e6c8;
+  --kit-acc: var(--kit-user-acc, #7a3b2e);
+}
+.dark[data-cz-kit="ornate"] {
+  --k-page: #1b1510; --k-paper: #241c15; --k-ink: #efe2c8; --k-mut: #b8a687; --k-hair: color-mix(in srgb, #b8b07f 40%, transparent);
+  --k-gilt: #b8b07f; --k-band: #2c1616; --k-band-fg: #e9d6a8;
+  --kit-acc: var(--kit-user-acc, #d08a6f);
+}
+/* Flowing's wash is drawn from its accent, so a campaign colour tints it. */
+[data-cz-kit="flowing"] {
+  --k-page: #f1f6f4; --k-paper: #fbfdfc; --k-ink: #1d2b2a; --k-mut: #566a66; --k-hair: color-mix(in srgb, #23756f 14%, transparent);
+  --k-wash2: #e7e1f0; --k-shadow: color-mix(in srgb, var(--kit-acc) 40%, transparent);
+  --kit-acc: var(--kit-user-acc, #23756f);
+  --k-wash: color-mix(in srgb, var(--kit-acc) 14%, var(--k-page));
+}
+.dark[data-cz-kit="flowing"] {
+  --k-page: #101918; --k-paper: #162221; --k-ink: #e2eeeb; --k-mut: #9bb1ac; --k-hair: color-mix(in srgb, #6cc7bd 14%, transparent);
+  --k-wash2: #231f2e; --k-shadow: rgb(0 0 0 / 0.55);
+  --kit-acc: var(--kit-user-acc, #6cc7bd);
+  --k-wash: color-mix(in srgb, var(--kit-acc) 14%, var(--k-page));
+}
+/* Lumen's line and glow are drawn from its accent. */
+[data-cz-kit="lumen"] {
+  --k-page: #f4f4fa; --k-paper: #ffffff; --k-ink: #1e1d33; --k-mut: #625f7c;
+  --k-band: #171a35; --k-band-fg: #e6e9ff; --k-shine: #ffffff;
+  --kit-acc: var(--kit-user-acc, #2f63c9);
+  --k-glow: color-mix(in srgb, var(--kit-acc) 38%, transparent);
+  --k-hair: color-mix(in srgb, var(--kit-acc) 28%, transparent);
+}
+.dark[data-cz-kit="lumen"] {
+  --k-page: #0c0e1c; --k-paper: #141830; --k-ink: #e6e9fb; --k-mut: #9ba1c4;
+  --k-band: #070814; --k-band-fg: #dfe5ff;
+  --kit-acc: var(--kit-user-acc, #8fb6ff);
+  --k-glow: color-mix(in srgb, var(--kit-acc) 42%, transparent);
+  --k-hair: color-mix(in srgb, var(--kit-acc) 30%, transparent);
+}
+/* Sketchbook is cream paper in light mode and a chalkboard in dark. */
+[data-cz-kit="sketchbook"] {
+  --k-page: #f7f4ec; --k-paper: #fffdf6; --k-ink: #26231f; --k-mut: #6a645a; --k-line: #3a352e;
+  --k-hair: color-mix(in srgb, #3a352e 45%, transparent);
+  --kit-acc: var(--kit-user-acc, #2d5aa0);
+}
+.dark[data-cz-kit="sketchbook"] {
+  --k-page: #1d2220; --k-paper: #252b28; --k-ink: #ece8dc; --k-mut: #a8a497; --k-line: #d8d3c4;
+  --k-hair: color-mix(in srgb, #d8d3c4 40%, transparent);
+  --kit-acc: var(--kit-user-acc, #9cc0ff);
+}
+
+/* ---------- Every kit: the page takes the kit's palette and faces ---------- */
+[data-cz-page="annals"][data-cz-kit] #main-content:has(.cb-title) {
+  --color-bg-primary: var(--k-page);
+  --color-card-bg: var(--k-paper);
+  --color-bg-secondary: var(--k-paper);
+  --color-bg-tertiary: color-mix(in srgb, var(--k-ink) 6%, var(--k-page));
+  --color-text-primary: var(--k-ink);
+  --color-text-body: var(--k-ink);
+  --color-text-secondary: var(--k-mut);
+  --color-text-muted: var(--k-mut);
+  --color-border-light: var(--k-hair);
+  --color-border: var(--k-hair);
+  --color-accent-link: var(--kit-acc);
+  --annals-acc: var(--kit-acc);
+  --annals-link: var(--kit-acc);
+  --annals-line: var(--k-hair);
+  background: var(--k-page);
+  color: var(--k-ink);
+  font-family: var(--kit-bf, inherit);
+}
+[data-cz-page="annals"][data-cz-kit] :is(.cb-title, .cb-head, .cb-section-h) {
+  font-family: var(--kit-hf, var(--annals-head));
+  text-transform: none;
+  letter-spacing: var(--cz-hls, 0);
+}
+[data-cz-page="annals"][data-cz-kit] [data-topbar-name] { font-family: var(--kit-hf, inherit); }
+/* A leading mark never sits against its words: at least 10px between the
+   Director's amber edge and the row's text, in every kit. */
+[data-cz-page="annals"] #main-content :is(.cb-link, .en-note)[data-dm-only] { padding-left: 13px; }
+
+/* A dark band carries light words; menus that open from it keep the page's. */
+[data-cz-page="annals"]:is([data-cz-kit="ornate"], [data-cz-kit="lumen"]) #app-topbar:not(:has(#topbar-bg > *)) {
+  --color-text-primary: var(--k-band-fg);
+  --color-text-body: var(--k-band-fg);
+  --color-text-secondary: color-mix(in srgb, var(--k-band-fg) 75%, transparent);
+  --color-text-muted: color-mix(in srgb, var(--k-band-fg) 62%, transparent);
+  --color-bg-tertiary: rgb(255 255 255 / 0.10);
+  --color-border: rgb(255 255 255 / 0.13);
+  background: var(--k-band);
+  border-bottom-color: transparent;
+}
+[data-cz-page="annals"]:is([data-cz-kit="ornate"], [data-cz-kit="lumen"]) #app-topbar :is(.bg-surface, #topbar-tray) {
+  --color-text-primary: var(--cz-page-ink-1);
+  --color-text-body: var(--cz-page-ink-2);
+  --color-text-secondary: var(--cz-page-ink-3);
+  --color-text-muted: var(--cz-page-ink-4);
+  --color-bg-tertiary: var(--cz-page-fill);
+  --color-border: var(--cz-page-line);
+}
+
+/* ================= Sharp: a broadsheet ================= */
+/* The masthead: condensed capitals over a thick and a thin rule. */
+[data-cz-page="annals"][data-cz-kit="sharp"] #app-topbar:not(:has(#topbar-bg > *)) {
+  background: var(--k-page);
+  border-bottom: 3px solid var(--k-ink);
+}
+[data-cz-page="annals"][data-cz-kit="sharp"] #app-topbar:not(:has(#topbar-bg > *))::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: -7px; z-index: 1;
+  border-bottom: 1px solid var(--k-ink); pointer-events: none;
+}
+[data-cz-page="annals"][data-cz-kit="sharp"] [data-topbar-name] {
+  font-family: var(--kit-lf, var(--kit-hf, inherit));
+  text-transform: uppercase; letter-spacing: 0.08em;
+}
+[data-cz-page="annals"][data-cz-kit="sharp"] .cb-title { font-weight: 600; letter-spacing: -0.01em; }
+/* The title's rule is doubled, thick over thin, in ink. */
+[data-cz-page="annals"][data-cz-kit="sharp"] .cb-title::after {
+  height: 5px; border-radius: 0; background: none;
+  border-top: 2px solid var(--k-ink); border-bottom: 1px solid var(--k-ink);
+}
+/* A heavy rule over each section head; labels run into a rule. */
+[data-cz-page="annals"][data-cz-kit="sharp"] .cb-head {
+  font-family: var(--kit-lf, var(--kit-hf, inherit));
+  text-transform: uppercase; letter-spacing: 0.16em; font-size: 0.75rem; font-weight: 600;
+  border-bottom: 0; border-top: 2px solid var(--k-ink); padding: 8px 0 4px;
+}
+[data-cz-page="annals"][data-cz-kit="sharp"] :is(.cb-section-h, .cb-group) {
+  display: flex; align-items: center; gap: 8px;
+  font-family: var(--kit-lf, var(--kit-hf, inherit));
+  text-transform: uppercase; letter-spacing: 0.14em; font-size: 0.7rem; font-weight: 600;
+  color: var(--kit-acc);
+}
+[data-cz-page="annals"][data-cz-kit="sharp"] .cb-section-h::after { content: ""; flex: 1; border-top: 1px solid var(--k-hair); }
+[data-cz-page="annals"][data-cz-kit="sharp"] .cb-count {
+  border-radius: 0; background: none; border: 1px solid var(--k-hair);
+  font-family: var(--kit-lf, inherit);
+}
+/* A square ink frame with no fill or shadow; its heading is knocked out. */
+[data-cz-page="annals"][data-cz-kit="sharp"] #main-content .cb-card:is(.cb-facts, .en-block) {
+  border: 1.5px solid var(--k-ink); border-radius: 0;
+  background: transparent; box-shadow: none;
+}
+[data-cz-page="annals"][data-cz-kit="sharp"] #main-content .cb-facts .cb-head {
+  flex: 0 1 auto; border-top: 0; padding: 4px 8px 3px;
+  background: var(--k-ink); color: var(--k-page) !important;
+}
+[data-cz-page="annals"][data-cz-kit="sharp"] #main-content .cb-facts .cb-head > i { color: inherit; }
+[data-cz-page="annals"][data-cz-kit="sharp"] #main-content .cb-card:has(> img),
+[data-cz-page="annals"][data-cz-kit="sharp"] #main-content :is(.cb-link, .rel-icon) { border-radius: 0; }
+/* Rows are ruled; the pointer inverts them and nothing moves. */
+[data-cz-page="annals"][data-cz-kit="sharp"] #main-content :is(.cb-link, :is(.cb-contents, .cb-recent) .cb-row) {
+  border-radius: 0; box-shadow: none;
+  border-bottom: 1px solid var(--k-hair);
+}
+[data-cz-page="annals"][data-cz-kit="sharp"] #main-content :is(.cb-link, :is(.cb-contents, .cb-recent) .cb-row):hover {
+  --color-text-primary: var(--k-page); --color-text-body: var(--k-page);
+  --color-text-secondary: var(--k-page); --color-text-muted: var(--k-page);
+  --annals-link: var(--k-page);
+  background: var(--k-ink); color: var(--k-page); box-shadow: none;
+}
+
+/* ================= Ornate: a bound volume ================= */
+/* A deep band, the name in a book face, a double gilt line broken by an
+   ornament at its middle. */
+[data-cz-page="annals"][data-cz-kit="ornate"] #app-topbar:not(:has(#topbar-bg > *))::after {
+  content: ""; position: absolute; left: 10px; right: 10px; bottom: 4px; height: 3px; pointer-events: none;
+  border-top: 1px solid var(--k-gilt); border-bottom: 1px solid var(--k-gilt);
+}
+[data-cz-page="annals"][data-cz-kit="ornate"] #app-topbar:not(:has(#topbar-bg > *))::before {
+  content: ""; position: absolute; left: 50%; bottom: 1px; width: 9px; height: 9px; z-index: 1; pointer-events: none;
+  transform: translateX(-50%) rotate(45deg);
+  background: var(--k-gilt); box-shadow: 0 0 0 4px var(--k-band);
+}
+[data-cz-page="annals"][data-cz-kit="ornate"] [data-topbar-name] { font-weight: 600; letter-spacing: 0.06em; font-size: 1.05rem; }
+[data-cz-page="annals"][data-cz-kit="ornate"] #main-content:has(.cb-title) { font-size: 1.04em; }
+/* A centred title over a gilt flourish. */
+[data-cz-page="annals"][data-cz-kit="ornate"] .cb-title { text-align: center; font-weight: 600; padding-bottom: 16px; }
+[data-cz-page="annals"][data-cz-kit="ornate"] .cb-title::after {
+  height: 14px; border-radius: 0;
+  background: var(--k-gilt);
+  -webkit-mask: var(--k-flourish) center / auto 14px no-repeat;
+  mask: var(--k-flourish) center / auto 14px no-repeat;
+}
+[data-cz-page="annals"][data-cz-kit="ornate"] {
+  --k-flourish: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 320 18' width='320' height='18'%3E%3Cg fill='none' stroke='%23000' stroke-width='1.1' stroke-linecap='round'%3E%3Cpath d='M20 9h118M182 9h118'/%3E%3Cpath d='M160 3l6 6-6 6-6-6z' fill='%23000'/%3E%3Cpath d='M146 9c-4-5-10-5-12 0s6 6 7 2M174 9c4-5 10-5 12 0s-6 6-7 2'/%3E%3Cpath d='M20 9c-6 0-9-5-5-7s7 2 4 4M300 9c6 0 9-5 5-7s-7 2-4 4'/%3E%3C/g%3E%3C/svg%3E");
+  --k-curl-tl: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Cpath d='M1 17V7c0-4 2-6 6-6h10M4 14V8c0-2 1-4 4-4h6M8 8c2 0 3 1 3 3s-2 2-2 0' fill='none' stroke='%23000' stroke-width='1' stroke-linecap='round'/%3E%3C/svg%3E");
+  --k-curl-tr: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Cg transform='matrix(-1 0 0 1 18 0)'%3E%3Cpath d='M1 17V7c0-4 2-6 6-6h10M4 14V8c0-2 1-4 4-4h6M8 8c2 0 3 1 3 3s-2 2-2 0' fill='none' stroke='%23000' stroke-width='1' stroke-linecap='round'/%3E%3C/g%3E%3C/svg%3E");
+  --k-curl-bl: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Cg transform='matrix(1 0 0 -1 0 18)'%3E%3Cpath d='M1 17V7c0-4 2-6 6-6h10M4 14V8c0-2 1-4 4-4h6M8 8c2 0 3 1 3 3s-2 2-2 0' fill='none' stroke='%23000' stroke-width='1' stroke-linecap='round'/%3E%3C/g%3E%3C/svg%3E");
+  --k-curl-br: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Cg transform='matrix(-1 0 0 -1 18 18)'%3E%3Cpath d='M1 17V7c0-4 2-6 6-6h10M4 14V8c0-2 1-4 4-4h6M8 8c2 0 3 1 3 3s-2 2-2 0' fill='none' stroke='%23000' stroke-width='1' stroke-linecap='round'/%3E%3C/g%3E%3C/svg%3E");
+}
+/* Headings and group labels in italic, in the accent. */
+[data-cz-page="annals"][data-cz-kit="ornate"] .cb-head {
+  font-style: italic; font-weight: 500; font-size: 1.1rem;
+  color: var(--kit-acc) !important;
+  border-bottom: 1px solid var(--k-hair);
+}
+[data-cz-page="annals"][data-cz-kit="ornate"] .cb-head > i { color: var(--k-gilt); }
+[data-cz-page="annals"][data-cz-kit="ornate"] :is(.cb-section-h, .cb-group) {
+  font-family: var(--kit-hf, inherit);
+  font-style: italic; font-weight: 500; font-size: 1rem;
+  text-transform: none; letter-spacing: 0.02em;
+}
+[data-cz-page="annals"][data-cz-kit="ornate"] .cb-count { background: none; border: 1px solid var(--k-hair); font-style: normal; }
+/* A double gilt frame on warm paper, with curls in its corners. */
+[data-cz-page="annals"][data-cz-kit="ornate"] #main-content .cb-card:is(.cb-facts, .en-block) {
+  position: relative;
+  border: 1px solid var(--k-gilt); border-radius: 0;
+  outline: 1px solid var(--k-gilt); outline-offset: -6px;
+  background: var(--k-paper);
+  box-shadow: 0 10px 24px -14px rgb(40 20 10 / 0.35);
+}
+[data-cz-page="annals"][data-cz-kit="ornate"] #main-content .cb-card:is(.cb-facts, .en-block)::before {
+  content: ""; position: absolute; inset: 2px; pointer-events: none;
+  background: var(--k-gilt);
+  -webkit-mask: var(--k-curl-tl) left top / 18px no-repeat, var(--k-curl-tr) right top / 18px no-repeat, var(--k-curl-bl) left bottom / 18px no-repeat, var(--k-curl-br) right bottom / 18px no-repeat;
+  mask: var(--k-curl-tl) left top / 18px no-repeat, var(--k-curl-tr) right top / 18px no-repeat, var(--k-curl-bl) left bottom / 18px no-repeat, var(--k-curl-br) right bottom / 18px no-repeat;
+}
+[data-cz-page="annals"][data-cz-kit="ornate"] #main-content .cb-card:has(> img) { border-radius: 0; outline: 1px solid var(--k-gilt); outline-offset: -5px; }
+/* Dotted leaders across rows; the pointer fills a row with the band colour. */
+[data-cz-page="annals"][data-cz-kit="ornate"] .cb-section > .cb-fact.cb-fact { border-top-style: dotted; border-top-color: var(--k-gilt); }
+[data-cz-page="annals"][data-cz-kit="ornate"] .cb-fact-l { font-style: italic; }
+[data-cz-page="annals"][data-cz-kit="ornate"] #main-content :is(.cb-link, :is(.cb-contents, .cb-recent) .cb-row) {
+  border-radius: 0; border-bottom: 1px dotted var(--k-gilt);
+}
+.dark[data-cz-page="annals"][data-cz-kit="ornate"] #main-content :is(.cb-link, :is(.cb-contents, .cb-recent) .cb-row):hover {
+  --k-band: color-mix(in srgb, var(--k-gilt) 18%, #2c1616);
+}
+[data-cz-page="annals"][data-cz-kit="ornate"] #main-content :is(.cb-link, :is(.cb-contents, .cb-recent) .cb-row):hover {
+  --color-text-primary: var(--k-band-fg); --color-text-body: var(--k-band-fg);
+  --color-text-secondary: var(--k-band-fg); --color-text-muted: color-mix(in srgb, var(--k-band-fg) 75%, transparent);
+  --annals-link: var(--k-band-fg);
+  background: var(--k-band); box-shadow: none;
+}
+
+/* ================= Flowing: watercolour ================= */
+[data-cz-page="annals"][data-cz-kit="flowing"] {
+  --k-wave: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 320 18' preserveAspectRatio='none'%3E%3Cpath d='M0 10C40 2 80 2 120 9s80 9 120 2 60-6 80-2V18H0z'/%3E%3C/svg%3E");
+  --k-wave-line: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 92 8'%3E%3Cpath d='M0 4c11.5-4 11.5-4 23 0s11.5 4 23 0 11.5-4 23 0 11.5 4 23 0' fill='none' stroke='%23000' stroke-width='1.5'/%3E%3C/svg%3E");
+}
+/* A wash between two tints whose lower edge is a soft wave. */
+[data-cz-page="annals"][data-cz-kit="flowing"] #app-topbar:not(:has(#topbar-bg > *)) {
+  background: linear-gradient(115deg, var(--k-wash), var(--k-wash2));
+  border-bottom-color: transparent;
+}
+[data-cz-page="annals"][data-cz-kit="flowing"] #app-topbar:not(:has(#topbar-bg > *))::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 9px; pointer-events: none;
+  background: var(--k-page);
+  -webkit-mask: var(--k-wave) 0 0 / 100% 100% no-repeat;
+  mask: var(--k-wave) 0 0 / 100% 100% no-repeat;
+}
+[data-cz-page="annals"][data-cz-kit="flowing"] [data-topbar-name] { font-style: italic; font-weight: 600; }
+[data-cz-page="annals"][data-cz-kit="flowing"] .cb-title { font-weight: 600; letter-spacing: -0.01em; padding-bottom: 12px; }
+/* The title's rule is a drawn wave. */
+[data-cz-page="annals"][data-cz-kit="flowing"] .cb-title::after {
+  height: 8px; border-radius: 0; background: var(--kit-acc); opacity: 0.7;
+  -webkit-mask: var(--k-wave-line) 0 50% / 46px 8px repeat-x;
+  mask: var(--k-wave-line) 0 50% / 46px 8px repeat-x;
+}
+[data-cz-page="annals"][data-cz-kit="flowing"] .cb-head {
+  font-style: italic; font-weight: 500; font-size: 1.1rem;
+  color: var(--kit-acc) !important; border-bottom: 0;
+}
+[data-cz-page="annals"][data-cz-kit="flowing"] :is(.cb-section-h, .cb-group) {
+  font-family: var(--kit-hf, inherit);
+  font-style: italic; font-weight: 500; font-size: 1rem;
+  text-transform: none; letter-spacing: 0;
+}
+/* No edges: uneven rounded corners on a faint wash, with a low soft shadow. */
+[data-cz-page="annals"][data-cz-kit="flowing"] #main-content .cb-card:is(.cb-facts, .en-block) {
+  border-color: transparent;
+  border-radius: 30px 18px 34px 16px / 20px 30px 18px 28px;
+  background: linear-gradient(160deg, var(--k-paper), color-mix(in srgb, var(--k-wash) 60%, var(--k-paper)));
+  box-shadow: 0 14px 30px -20px var(--k-shadow);
+}
+[data-cz-page="annals"][data-cz-kit="flowing"] #main-content .cb-card:has(> img) { border-radius: 26px 16px 30px 18px / 18px 28px 16px 26px; }
+[data-cz-page="annals"][data-cz-kit="flowing"] .cb-section > .cb-fact.cb-fact { border-top-color: transparent; }
+/* Rows are separate soft pebbles whose outlines slowly change shape under
+   the pointer. */
+[data-cz-page="annals"][data-cz-kit="flowing"] #main-content :is(.cb-link, :is(.cb-contents, .cb-recent) .cb-row) {
+  background: color-mix(in srgb, var(--k-wash) 55%, transparent);
+  border-radius: 18px 22px 16px 24px / 16px 14px 18px 14px;
+  box-shadow: none;
+}
+[data-cz-page="annals"][data-cz-kit="flowing"] #main-content :is(.cb-link, :is(.cb-contents, .cb-recent) .cb-row):hover {
+  background: color-mix(in srgb, var(--kit-acc) 18%, var(--k-wash));
+  border-radius: 24px 16px 22px 18px / 14px 18px 14px 16px;
+  box-shadow: none;
+}
+[data-cz-page="annals"][data-cz-kit="flowing"]:not([data-motion]):not([data-cz-reduce]) #main-content :is(.cb-link, :is(.cb-contents, .cb-recent) .cb-row) {
+  transition: border-radius 0.5s var(--ease-out), background-color 0.3s var(--ease-out);
+}
+[data-cz-page="annals"][data-cz-kit="flowing"] #main-content :is(.cb-link, .en-note)[data-dm-only] { border-top-left-radius: 3px; border-bottom-left-radius: 3px; }
+[data-cz-page="annals"][data-cz-kit="flowing"] .cb-count { background: var(--k-wash); }
+
+/* ================= Lumen: soft light ================= */
+/* A night band with a fine line of light under it; a slow sheen crosses
+   the name. */
+[data-cz-page="annals"][data-cz-kit="lumen"] #app-topbar:not(:has(#topbar-bg > *))::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; pointer-events: none;
+  background: linear-gradient(90deg, transparent, var(--kit-acc) 30%, var(--k-shine) 50%, var(--kit-acc) 70%, transparent);
+  box-shadow: 0 0 10px 1px var(--k-glow);
+}
+[data-cz-page="annals"][data-cz-kit="lumen"] [data-topbar-name] { font-weight: 400; letter-spacing: 0.14em; text-transform: uppercase; }
+[data-cz-page="annals"][data-cz-kit="lumen"]:not([data-motion]):not([data-cz-reduce]) #app-topbar:not(:has(#topbar-bg > *)) [data-topbar-name] {
+  background: linear-gradient(100deg, var(--k-band-fg) 42%, var(--k-shine) 50%, var(--k-band-fg) 58%) 0% 0 / 260% 100% no-repeat;
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: kit-sheen 8s ease-in-out infinite;
+}
+@keyframes kit-sheen { 0%, 62% { background-position: 0% 0; } 88%, 100% { background-position: 100% 0; } }
+[data-cz-page="annals"][data-cz-kit="lumen"] .cb-title { font-weight: 400; letter-spacing: 0.01em; }
+/* The title's rule is a hairline of light, fading at both ends. */
+[data-cz-page="annals"][data-cz-kit="lumen"] .cb-title::after {
+  height: 1px; border-radius: 0;
+  background: linear-gradient(90deg, var(--kit-acc), var(--k-shine) 35%, var(--kit-acc) 60%, transparent);
+  box-shadow: 0 0 8px var(--k-glow);
+}
+[data-cz-page="annals"][data-cz-kit="lumen"] .cb-head {
+  font-family: var(--kit-bf, inherit);
+  font-weight: 500; font-size: 0.72rem; letter-spacing: 0.22em; text-transform: uppercase;
+  color: var(--kit-acc) !important;
+  border-bottom: 1px solid; border-image: linear-gradient(90deg, var(--k-hair), transparent) 1;
+}
+[data-cz-page="annals"][data-cz-kit="lumen"] :is(.cb-section-h, .cb-group) {
+  font-family: var(--kit-bf, inherit);
+  font-weight: 500; letter-spacing: 0.2em; text-transform: uppercase;
+}
+/* A fine edge with a soft glow that breathes slowly. */
+[data-cz-page="annals"][data-cz-kit="lumen"] #main-content .cb-card:is(.cb-facts, .en-block) {
+  position: relative;
+  border: 1px solid var(--k-hair); border-radius: 10px;
+  background: var(--k-paper);
+  box-shadow: 0 0 22px -6px var(--k-glow);
+}
+[data-cz-page="annals"][data-cz-kit="lumen"]:not([data-motion]):not([data-cz-reduce]) #main-content .cb-card:is(.cb-facts, .en-block)::after {
+  content: ""; position: absolute; inset: -1px; border-radius: inherit; pointer-events: none;
+  box-shadow: 0 0 22px -2px var(--k-glow); opacity: 0.3;
+  animation: kit-breathe 6s ease-in-out infinite alternate;
+}
+@keyframes kit-breathe { from { opacity: 0.3; } to { opacity: 0.8; } }
+[data-cz-page="annals"][data-cz-kit="lumen"] #main-content .cb-card:has(> img) { border-radius: 10px; box-shadow: 0 0 0 1px var(--k-hair), 0 0 18px -6px var(--k-glow); }
+/* Rows sit on a fading hairline; under the pointer their glow brightens. */
+[data-cz-page="annals"][data-cz-kit="lumen"] #main-content :is(.cb-link, :is(.cb-contents, .cb-recent) .cb-row) {
+  border-radius: 8px; box-shadow: none;
+}
+[data-cz-page="annals"][data-cz-kit="lumen"] #main-content :is(.cb-link, :is(.cb-contents, .cb-recent) .cb-row):hover {
+  background: var(--k-paper);
+  box-shadow: 0 0 0 1px var(--k-hair), 0 0 16px -4px var(--k-glow);
+}
+[data-cz-page="annals"][data-cz-kit="lumen"] .cb-count { background: none; box-shadow: 0 0 0 1px var(--k-hair); }
+
+/* ================= Sketchbook: pen on paper ================= */
+[data-cz-page="annals"][data-cz-kit="sketchbook"] {
+  --k-scrib: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 8' preserveAspectRatio='none'%3E%3Cpath d='M2 5C60 2 120 6 180 3s90 3 116 0' fill='none' stroke='%23000' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+/* No band: the name is handwritten over a pen stroke. */
+[data-cz-page="annals"][data-cz-kit="sketchbook"] #app-topbar:not(:has(#topbar-bg > *)) {
+  background: var(--k-page); border-bottom-color: transparent;
+}
+[data-cz-page="annals"][data-cz-kit="sketchbook"] #app-topbar:not(:has(#topbar-bg > *))::after {
+  content: ""; position: absolute; left: 10px; right: 10px; bottom: 2px; height: 6px; pointer-events: none;
+  background: var(--k-line);
+  -webkit-mask: var(--k-scrib) 0 0 / 100% 100% no-repeat;
+  mask: var(--k-scrib) 0 0 / 100% 100% no-repeat;
+}
+[data-cz-page="annals"][data-cz-kit="sketchbook"] [data-topbar-name] { font-weight: 700; font-size: 1.05rem; }
+[data-cz-page="annals"][data-cz-kit="sketchbook"] .cb-title { font-weight: 700; }
+/* The title's rule is a pen stroke in the accent. */
+[data-cz-page="annals"][data-cz-kit="sketchbook"] .cb-title::after {
+  height: 7px; border-radius: 0; background: var(--kit-acc);
+  -webkit-mask: var(--k-scrib) 0 0 / 100% 100% no-repeat;
+  mask: var(--k-scrib) 0 0 / 100% 100% no-repeat;
+}
+/* Section names are marked with a highlighter, as wide as the words. */
+[data-cz-page="annals"][data-cz-kit="sketchbook"] :is(.cb-head, .cb-section-h, .cb-group) {
+  font-family: var(--kit-hf, inherit);
+  text-transform: none; letter-spacing: 0;
+}
+[data-cz-page="annals"][data-cz-kit="sketchbook"] :is(.cb-head, .cb-section-h) {
+  flex: 0 1 auto; width: fit-content; padding: 0 4px; margin-left: -4px;
+  background: linear-gradient(transparent 55%, color-mix(in srgb, var(--kit-acc) 22%, transparent) 55%, color-mix(in srgb, var(--kit-acc) 22%, transparent) 92%, transparent 92%);
+}
+[data-cz-page="annals"][data-cz-kit="sketchbook"] .cb-head { font-weight: 700; font-size: 1.1rem; border-bottom: 0; }
+[data-cz-page="annals"][data-cz-kit="sketchbook"] :is(.cb-section-h, .cb-group) { font-weight: 700; font-size: 0.95rem; color: var(--k-ink); }
+/* A hand-inked outline on paper, drawn twice a little apart so it wobbles. */
+[data-cz-page="annals"][data-cz-kit="sketchbook"] #main-content .cb-card:is(.cb-facts, .en-block) {
+  position: relative;
+  border: 1.6px solid var(--k-line); border-radius: 6px 10px 5px 9px;
+  background: var(--k-paper); box-shadow: 3px 4px 0 color-mix(in srgb, var(--k-line) 14%, transparent);
+}
+[data-cz-page="annals"][data-cz-kit="sketchbook"] #main-content .cb-card:is(.cb-facts, .en-block)::after {
+  content: ""; position: absolute; inset: -3px -2px -2px -3px; pointer-events: none;
+  border: 1px solid color-mix(in srgb, var(--k-line) 45%, transparent);
+  border-radius: 9px 5px 10px 6px; transform: rotate(-0.4deg);
+}
+[data-cz-page="annals"][data-cz-kit="sketchbook"] #main-content .cb-card:has(> img) { border-radius: 4px 9px 6px 8px; outline: 1.6px solid var(--k-line); }
+/* Rows have dashed underlines and give a small wiggle under the pointer. */
+[data-cz-page="annals"][data-cz-kit="sketchbook"] .cb-section > .cb-fact.cb-fact { border-top: 1.5px dashed var(--k-hair); }
+[data-cz-page="annals"][data-cz-kit="sketchbook"] #main-content :is(.cb-link, :is(.cb-contents, .cb-recent) .cb-row) {
+  border-radius: 4px 8px 5px 7px; box-shadow: none;
+  border-bottom: 1.5px dashed var(--k-hair);
+}
+[data-cz-page="annals"][data-cz-kit="sketchbook"] #main-content :is(.cb-link, :is(.cb-contents, .cb-recent) .cb-row):hover {
+  background: var(--k-paper); box-shadow: none;
+}
+[data-cz-page="annals"][data-cz-kit="sketchbook"]:not([data-motion]):not([data-cz-reduce]) #main-content :is(.cb-link, :is(.cb-contents, .cb-recent) .cb-row):hover {
+  animation: kit-wiggle 0.32s ease-in-out;
+}
+@keyframes kit-wiggle { 25% { transform: rotate(-0.6deg); } 75% { transform: rotate(0.5deg); } }
+[data-cz-page="annals"][data-cz-kit="sketchbook"] .cb-count { background: none; border: 1.3px solid var(--k-hair); border-radius: 50% 46% 52% 44%; }
+
+/* ---------- Time lines ----------
+   The lean line under a page's title (page_timeline.css) and both of its
+   popups (the fading corner and the classic card, paper.css) are drawn from
+   these --kit-tl-* tokens: the line's weight and shape, the beads' size,
+   corners and ring, the corner popup's radius, edge, stem, fill and glow, and
+   the classic card's corners, edge, fill and shadow. The lit colour is the
+   kit's accent, so the campaign's colour when the owner picked one. The
+   popup (#chc) opens outside the page, so it takes the kit's palette and
+   faces here; the Customizer's sample popups stay in Material. */
+[data-cz-kit] #chc:is([data-look="corner"], [data-look="kit"]) {
+  --color-card-bg: var(--k-paper);
+  --color-text-primary: var(--k-ink);
+  --color-text-body: var(--k-ink);
+  --color-text-secondary: var(--k-mut);
+  --color-text-muted: var(--k-mut);
+  --color-border: var(--k-hair);
+  --color-accent: var(--kit-acc);
+  --color-accent-link: var(--kit-acc);
+  font-family: var(--kit-bf, inherit);
+}
+[data-cz-kit] #chc[data-look="corner"] .chc__title { font-family: var(--kit-hf, var(--annals-head)); }
+[data-cz-kit] #chc[data-look="kit"] .chc__title { font-family: var(--kit-hf, var(--annals-head)); }
+
+/* Sharp: a crisp two-pixel rule, square beads, an ink corner, a square ink
+   frame under a heavy top rule. */
+[data-cz-kit="sharp"] {
+  --kit-tl-h: 2px;
+  --kit-tl-top: 11px;
+  --kit-tl-wash: none;
+  --kit-tl-bead: 10px;
+  --kit-tl-bead-r: 0;
+}
+[data-cz-kit="sharp"] #chc {
+  --kit-tl-pop-r: 0px;
+  --kit-tl-pop-ew: 2px;
+  --kit-tl-pop-sw: 2px;
+  --kit-tl-pop-edge: var(--k-ink);
+  --kit-tl-card-r: 0;
+  --kit-tl-card-b: 1.5px solid var(--k-ink);
+  --kit-tl-card-sh: none;
+}
+[data-cz-kit="sharp"] .ptl-yr { font-family: var(--kit-lf, var(--kit-hf, inherit)); font-weight: 500; letter-spacing: 0.1em; }
+[data-cz-kit="sharp"] #chc[data-look="kit"] .chc__in { border-top-width: 4px; }
+[data-cz-kit="sharp"] #chc:is([data-look="corner"], [data-look="kit"]) .chc__title { font-size: 14px; }
+
+/* Ornate: a double gilt line, beads ringed in gilt, a double gilt corner
+   and frame; the popup's words in italic. */
+[data-cz-kit="ornate"] {
+  --kit-tl-h: 4px;
+  --kit-tl-top: 10px;
+  --kit-tl-wash: none;
+  --kit-tl-shape: linear-gradient(#000 0 1px, transparent 1px 3px, #000 3px);
+  --kit-tl-ring: 0 0 0 3px var(--k-gilt);
+  --kit-tl-ring-soft: 0 0 0 3px var(--k-gilt);
+  --kit-tl-yr-top: 13px;
+}
+[data-cz-kit="ornate"] #chc {
+  --kit-tl-pop-r: 0px;
+  --kit-tl-pop-ew: 3px;
+  --kit-tl-pop-es: double;
+  --kit-tl-pop-sw: 1px;
+  --kit-tl-pop-edge: var(--k-gilt);
+  --kit-tl-card-r: 0;
+  --kit-tl-card-b: 3px double var(--k-gilt);
+  --kit-tl-card-sh: 0 10px 24px -10px rgb(40 20 10 / 0.45);
+}
+.dark[data-cz-kit="ornate"] #chc { --kit-tl-card-sh: 0 12px 26px -10px rgb(0 0 0 / 0.7); }
+[data-cz-kit="ornate"] .ptl-yr { font-family: var(--kit-hf, inherit); font-style: italic; font-weight: 500; font-size: 13px; }
+[data-cz-kit="ornate"] #chc:is([data-look="corner"], [data-look="kit"]) .chc__in { font-style: italic; font-size: 13.5px; }
+[data-cz-kit="ornate"] #chc:is([data-look="corner"], [data-look="kit"]) .chc__title { font-style: normal; font-size: 17px; line-height: 1.15; }
+
+/* Flowing: a drawn wave over the wash, pebble beads, a soft corner with no
+   edge on the wash, an uneven rounded card with a low shadow. */
+[data-cz-kit="flowing"] {
+  --kit-tl-h: 8px;
+  --kit-tl-top: 8px;
+  --kit-tl-shape: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='8'%3E%3Cpath d='M0 4 Q12 0.6 24 4 T48 4' fill='none' stroke='black' stroke-width='1.6'/%3E%3C/svg%3E") 0 0 / 48px 8px repeat-x;
+  --kit-tl-bead-r: 58% 42% 55% 45% / 48% 56% 44% 52%;
+}
+[data-cz-kit="flowing"] #chc {
+  --kit-tl-pop-r: 22px;
+  --kit-tl-pop-ew: 0px;
+  --kit-tl-pop-bg: color-mix(in srgb, var(--k-wash) 55%, var(--k-paper));
+  --kit-tl-card-r: 22px 14px 24px 16px;
+  --kit-tl-card-b: 0 solid transparent;
+  --kit-tl-card-bg: linear-gradient(160deg, var(--k-paper), color-mix(in srgb, var(--k-wash) 60%, var(--k-paper)));
+  --kit-tl-card-sh: 0 14px 30px -16px var(--k-shadow);
+}
+[data-cz-kit="flowing"] .ptl-yr { font-family: var(--kit-hf, inherit); font-style: italic; font-weight: 500; font-size: 12.5px; }
+[data-cz-kit="flowing"] #chc:is([data-look="corner"], [data-look="kit"]) .chc__title { font-size: 15.5px; line-height: 1.25; }
+
+/* Lumen: a line of light with a passing glint, glowing beads, a fine
+   glowing corner and edge. */
+[data-cz-kit="lumen"] {
+  --kit-tl-glow: drop-shadow(0 0 3px color-mix(in srgb, var(--kit-acc) 70%, transparent));
+  --kit-tl-ring: 0 0 10px 1px color-mix(in srgb, var(--kit-acc) 60%, transparent);
+}
+[data-cz-kit="lumen"] #chc {
+  --kit-tl-pop-r: 10px;
+  --kit-tl-pop-ew: 1px;
+  --kit-tl-pop-sw: 1px;
+  --kit-tl-pop-glow: drop-shadow(0 0 4px color-mix(in srgb, var(--kit-acc) 80%, transparent));
+  --kit-tl-card-r: 10px;
+  --kit-tl-card-b: 1px solid var(--k-hair);
+  --kit-tl-card-sh: 0 0 0 1px color-mix(in srgb, var(--kit-acc) 18%, transparent), 0 0 26px -4px color-mix(in srgb, var(--kit-acc) 45%, transparent);
+}
+[data-cz-kit="lumen"] .ptl-yr { font-family: var(--kit-bf, inherit); font-size: 11px; letter-spacing: 0.12em; }
+[data-cz-kit="lumen"] #chc:is([data-look="corner"], [data-look="kit"]) .chc__title { font-weight: 400; font-size: 15.5px; line-height: 1.25; }
+/* The glint crosses the line now and then, under full motion only. */
+[data-cz-kit="lumen"]:not([data-motion]):not([data-cz-reduce]) .ptl-tr::after {
+  content: ""; position: absolute; inset: -1px 0; pointer-events: none;
+  background: linear-gradient(90deg, transparent, var(--k-shine), transparent) -70px 0 / 70px 100% no-repeat;
+  opacity: 0;
+  animation: kit-glint 9s ease-in-out 1s infinite;
+}
+@keyframes kit-glint {
+  0%, 50% { background-position: -70px 0; opacity: 0; }
+  55%, 85% { opacity: 0.9; }
+  95%, 100% { background-position: calc(100% + 70px) 0; opacity: 0; }
+}
+
+/* Sketchbook: a pen line, hand-drawn beads, a pen corner on paper, and a
+   taped note set slightly askew. */
+[data-cz-kit="sketchbook"] {
+  --kit-tl-h: 8px;
+  --kit-tl-top: 8px;
+  --kit-tl-wash: none;
+  --kit-tl-shape: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='150' height='8'%3E%3Cpath d='M0 4.4C20 3.2 38 5.2 60 3.9S104 4.9 126 3.6 146 4.3 150 4.4' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round'/%3E%3C/svg%3E") 0 0 / 150px 8px repeat-x;
+  --kit-tl-bead-r: 52% 46% 55% 44% / 47% 55% 45% 53%;
+}
+[data-cz-kit="sketchbook"] #chc {
+  --kit-tl-pop-r: 8px 12px;
+  --kit-tl-pop-ew: 1.7px;
+  --kit-tl-pop-sw: 1.7px;
+  --kit-tl-pop-edge: var(--k-line);
+  --kit-tl-pop-bg: var(--k-paper);
+  --kit-tl-pop-tilt: -1deg;
+  --kit-tl-card-r: 4px 9px 6px 8px;
+  --kit-tl-card-b: 1.6px solid var(--k-line);
+  --kit-tl-card-sh: 3px 4px 0 color-mix(in srgb, var(--k-line) 18%, transparent);
+}
+[data-cz-kit="sketchbook"] .ptl-yr { font-family: var(--kit-hf, inherit); font-size: 13px; }
+[data-cz-kit="sketchbook"] #chc:is([data-look="corner"], [data-look="kit"]) .chc__title { font-weight: 700; font-size: 16px; line-height: 1.15; }
+[data-cz-kit="sketchbook"] #chc[data-look="kit"] .chc__in::before {
+  content: ""; position: absolute; left: 50%; top: -9px; width: 46px; height: 15px; margin-left: -23px;
+  background: color-mix(in srgb, var(--kit-acc) 22%, transparent); rotate: 3deg; pointer-events: none;
+}
+
+/* ---------- The page's visibility chip ----------
+   The chip and the editor it unfolds take their shape from tokens
+   (input.css, .perm-chip), so each kit here is values only. */
+[data-cz-page="annals"][data-cz-kit="sharp"] #main-content {
+  --perm-chip-r: 0; --perm-chip-fill: transparent; --perm-chip-edge: 1px solid var(--k-ink); --perm-chip-lift: none;
+  --perm-panel-r: 0; --perm-panel-edge: 1.5px solid var(--k-ink);
+}
+[data-cz-page="annals"][data-cz-kit="sharp"] #main-content .perm-chip:not(.perm-chip-static):hover { background: var(--k-ink); color: var(--k-page); }
+[data-cz-page="annals"][data-cz-kit="ornate"] #main-content {
+  --perm-chip-r: 6px; --perm-chip-fill: var(--k-paper); --perm-chip-edge: 1px solid var(--k-gilt);
+  --perm-panel-r: 8px; --perm-panel-edge: 1px solid var(--k-gilt);
+}
+[data-cz-page="annals"][data-cz-kit="ornate"] #main-content .perm-chip:not(.perm-chip-static):hover { background: var(--k-band); color: var(--k-band-fg); }
+[data-cz-page="annals"][data-cz-kit="lumen"] #main-content {
+  --perm-chip-fill: var(--k-paper); --perm-chip-edge: 1px solid var(--k-hair); --perm-chip-lift: 0 0 0 3px var(--k-glow);
+  --perm-panel-edge: 1px solid var(--k-hair);
+}
+[data-cz-page="annals"][data-cz-kit="sketchbook"] #main-content {
+  --perm-chip-r: 255px 15px 225px 15px / 15px 225px 15px 255px; --perm-chip-fill: var(--k-paper); --perm-chip-edge: 1.5px solid var(--k-line); --perm-chip-lift: none;
+  --perm-panel-r: 4px; --perm-panel-edge: 1.5px solid var(--k-line);
+}
+
+/* ---------- The Director's mark is the same in every kit ----------
+   A kit may restyle a row's edge and shadow, never the amber edge on what
+   only the Director sees. */
+[data-cz-page="annals"][data-cz-kit] #main-content :is(.cb-link, .en-note)[data-dm-only],
+[data-cz-page="annals"][data-cz-kit] #main-content :is(.cb-link, .en-note)[data-dm-only]:hover {
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--annals-dm) 70%, transparent);
+}
+
+/* ---------- Calm, Off and print ----------
+   The rules above that move run only under full motion; a device set to
+   reduce motion is Off (base.templ). Printing draws plain edges and no glow. */
+@media print {
+  [data-cz-kit] #main-content .cb-card:is(.cb-facts, .en-block) { box-shadow: none !important; outline: 0 !important; }
+  [data-cz-kit] #main-content .cb-card::after { content: none !important; }
+}

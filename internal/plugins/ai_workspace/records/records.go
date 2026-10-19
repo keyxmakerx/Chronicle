@@ -44,6 +44,10 @@ type Record struct {
 	// Links resolves @[Page] in Body to page links. Nil leaves the text as
 	// written (e.g. when planning).
 	Links *importer.PageLinks
+	// Made holds the slugs of pages this paste creates or keeps, which
+	// exist by the time records commit (pages commit first). Set when
+	// planning, so a review doesn't warn about a page the paste makes.
+	Made map[string]bool
 }
 
 // Actor is the operator running the import.
@@ -131,6 +135,40 @@ func normKind(s string) string {
 	return strings.ReplaceAll(strings.ToLower(strings.TrimSpace(s)), "_", "-")
 }
 
+// RefuseGMMarkers rejects a record whose body, name or any front-matter text
+// carries a GM-only marker. Record texts (events, notes, summaries,
+// descriptions) reach players without the strip that page text gets, so
+// honouring or keeping a marker there would publish it. The error is a 400 so
+// the review and result screens show its wording.
+func RefuseGMMarkers(r Record) error {
+	if importer.HasSecretMarkerText(r.Body) || importer.HasSecretMarkerText(r.Name) || anyMarker(r.Fields) {
+		return apperror.NewBadRequest(importer.SecretNotInTextReason)
+	}
+	return nil
+}
+
+// anyMarker reports whether a front-matter value, at any depth, holds a
+// GM-only marker.
+func anyMarker(v any) bool {
+	switch t := v.(type) {
+	case string:
+		return importer.HasSecretMarkerText(t)
+	case map[string]any:
+		for _, x := range t {
+			if anyMarker(x) {
+				return true
+			}
+		}
+	case []any:
+		for _, x := range t {
+			if anyMarker(x) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // Plan validates a record, refusing unknown kinds and bad actions up front.
 func (r *Registry) Plan(ctx context.Context, campaignID string, a Actor, rec Record) (Kind, Plan) {
 	k, ok := r.Get(rec.Kind)
@@ -142,6 +180,9 @@ func (r *Registry) Plan(ctx context.Context, campaignID string, a Actor, rec Rec
 	default:
 		return k, Plan{Error: fmt.Sprintf("action: %q is not valid (must be create, update or delete)", rec.Action)}
 	}
+	if err := RefuseGMMarkers(rec); err != nil {
+		return k, Plan{Error: importer.SecretNotInTextReason}
+	}
 	return k, k.Plan(ctx, campaignID, a, rec)
 }
 
@@ -149,10 +190,16 @@ func (r *Registry) Plan(ctx context.Context, campaignID string, a Actor, rec Rec
 // another one the main calendar, lets the rows after it be checked against
 // that calendar, since commit applies them in the same order.
 func (r *Registry) PlanAll(ctx context.Context, campaignID string, a Actor, recs []Record) ([]Kind, []Plan) {
+	ctx = withPendingFolders(ctx)
 	kinds := make([]Kind, len(recs))
 	plans := make([]Plan, len(recs))
 	for i, rec := range recs {
 		kinds[i], plans[i] = r.Plan(ctx, campaignID, a, rec)
+		if fk, ok := kinds[i].(FolderKind); ok && rec.Action == ActionCreate && plans[i].Error == "" {
+			if t, err := fk.resolve(ctx, campaignID, rec); err == nil {
+				pendingFolders(ctx)[folderKey(t.cat.ID, rec.Name)] = true
+			}
+		}
 		if ck, ok := kinds[i].(CalendarKind); ok && (rec.Action == ActionCreate || rec.Has("main")) && plans[i].Error == "" {
 			if _, cal := ck.plan(ctx, campaignID, a, rec); cal != nil {
 				ctx = withPendingCalendar(ctx, cal)
@@ -165,19 +212,24 @@ func (r *Registry) PlanAll(ctx context.Context, campaignID string, a Actor, recs
 // briefs is one plain line per kind for the prompt's opening "what you
 // can do" list, which every prompt carries; Docs has the full formats.
 var briefs = map[string]string{
-	KindCalendar:   "make the campaign calendar, or change its months, weekdays, seasons, moons, year label, eras and current date",
-	"event":        "calendar events on the campaign calendar, one-off or repeating",
-	"weather":      "one day's weather on the calendar",
-	"table":        "rolling tables and their entries",
-	"shop-stock":   "what a shop sells, its price and how many",
-	"carried-item": "items a character carries",
-	"pin":          "pins on the campaign's maps",
-	"map":          "new maps drawn from a sketch on a grid of squares: rooms, areas, water, danger zones, walls, roads, paths, labels and pins",
-	"note":         "my own notes only: my Journal notes and my jots on pages, never notes anyone else wrote",
-	"house-rule":   "house-rules chapters in the campaign's rulebook, written whole: pages with highlighted boxes, dice rolls, fold-out cards, flaps, worked examples, creatures and Director's notes",
-	"system-entry": "the campaign's own ancestries, kits, cultures, classes and other pick-list entries for its game system",
-	"encounter":    "fights planned on a page for Foundry to load: the heroes, each creature's count, initiative group and whether it starts seen, hidden or arrives later",
-	"generator":    "run Chronicle's own generators (weather for a range of days, festivals and other events, sky events, names into a rolling table) instead of inventing the result",
+	KindCalendar:     "make the campaign calendar, or change its months, weekdays, seasons, moons, year label, eras and current date",
+	"event":          "calendar events on the campaign calendar, one-off or repeating",
+	"weather":        "one day's weather on the calendar",
+	"table":          "rolling tables and their entries",
+	"shop-stock":     "what a shop sells, its price and how many",
+	"carried-item":   "items a character carries",
+	"pin":            "pins on the campaign's maps",
+	"map":            "new maps drawn from a sketch on a grid of squares: rooms, areas, water, danger zones, walls, roads, paths, labels and pins",
+	"note":           "my own notes only: my Journal notes and my jots on pages, never notes anyone else wrote",
+	"house-rule":     "house-rules chapters in the campaign's rulebook, written whole: pages with highlighted boxes, dice rolls, fold-out cards, flaps, worked examples, creatures and Director's notes",
+	"system-entry":   "the campaign's own ancestries, kits, cultures, classes and other pick-list entries for its game system",
+	"encounter":      "fights planned on a page for Foundry to load: the heroes, each creature's count, initiative group and whether it starts seen, hidden or arrives later",
+	"field-rule":     "rules that work a sheet field out from another, such as a guild rank from a level",
+	"local-word":     "what a place or an era calls a word, such as a coin or a rank, shown in shops and on sheets",
+	"category-field": "the fields on a category's sheet, including links to another category's pages and fields worked out by a rule",
+	"tag":            "the campaign's tags: make, rename, recolour, hide from players or remove them (which pages carry a tag is set on the page block)",
+	"folder":         "sidebar folders inside a category (such as Gods and Cosmology inside Lore); a page is filed in one with `folder:` on its own block",
+	"generator":      "run Chronicle's own generators (weather for a range of days, festivals and other events, sky events, names into a rolling table) instead of inventing the result",
 }
 
 // Capabilities is the prompt's opening list of what a block can change,

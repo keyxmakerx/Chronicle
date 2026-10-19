@@ -23,9 +23,9 @@ Two more mounts in `plugins/entities/form.templ`:
 | Mount | Attributes | Behaviour |
 |---|---|---|
 | Edit form | `data-endpoint=/campaigns/:id/entities/:eid/permissions`, `data-layout="inline"`, `data-editable`, `data-csrf` | Loads and saves via the endpoint; inline panel expands in place |
-| Create form | `data-mode="draft"`, `data-draft-target="#is_private_draft"`, `data-editable="true"` | No endpoint; writes `true`/`false` into the hidden `is_private` input; Custom mode is disabled until the entity exists |
+| Create form | `data-layout="corner"`, `data-mode="draft"`, `data-draft-target="#is_private_draft"`, `data-editable="true"` | The page's own chip (`draftVisibilityControl`), unfolding the same editor; no endpoint, writes `true`/`false` into the hidden `is_private` input; Custom mode is disabled until the entity exists |
 
-Without `data-layout="inline"` the card is a right-edge slide-in with a
+With neither layout the card is a right-edge slide-in with a
 backdrop and body-scroll lock. `data-editable` must be `"true"` to save.
 
 ## Data it calls

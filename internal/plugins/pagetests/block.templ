@@ -1,0 +1,18 @@
+package pagetests
+
+import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
+
+// BlockMount is the mount point of the Tests block. The widget fetches the
+// page's tests itself and the service decides what each viewer is told, so
+// this markup carries no test data. The caller renders it only when the
+// viewer has something to see or may add a test, so a page with nothing to
+// show a player leaves no empty box.
+templ BlockMount(campaignID, entityID, csrfToken string) {
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/css/page_tests.css") }/>
+	<div
+		data-widget="page_tests"
+		data-campaign-id={ campaignID }
+		data-entity-id={ entityID }
+		data-csrf-token={ csrfToken }
+	></div>
+}

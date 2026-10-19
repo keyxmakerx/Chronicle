@@ -23,10 +23,10 @@ import (
 // deleted by a concurrent client) must NOT be smothered as Internal.
 func TestWrapPermissionError_PreservesTypedAppError(t *testing.T) {
 	cases := []struct {
-		name      string
-		cause     error
-		wantType  string
-		wantCode  int
+		name     string
+		cause    error
+		wantType string
+		wantCode int
 	}{
 		{"NotFound passes through", apperror.NewNotFound("entity not found"), "not_found", http.StatusNotFound},
 		{"BadRequest passes through", apperror.NewBadRequest("permission 0: invalid subject type \"x\""), "bad_request", http.StatusBadRequest},

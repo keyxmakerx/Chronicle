@@ -160,7 +160,7 @@ func buildNightRoster(members []NightMember, rows []nightRow) ([]NightAnswer, Ni
 }
 
 // occurrenceDates returns the session's nights inside [from, to] (inclusive,
-// YYYY-MM-DD). A repeating session steps with computeNextOccurrence from its
+// YYYY-MM-DD). A repeating session steps with occurrenceAt from its
 // scheduled date, stopping at its end date; the walk is capped like
 // nextUpcomingOccurrenceDate's.
 func occurrenceDates(s Session, from, to string) []string {
@@ -178,18 +178,16 @@ func occurrenceDates(s Session, from, to string) []string {
 	if s.RecurrenceEndDate != nil && *s.RecurrenceEndDate != "" && *s.RecurrenceEndDate < end {
 		end = *s.RecurrenceEndDate
 	}
-	probe := &Session{ScheduledDate: &cur, RecurrenceType: s.RecurrenceType, RecurrenceInterval: s.RecurrenceInterval}
 	var out []string
 	for i := 0; i < 520 && cur <= end; i++ {
 		if cur >= from {
 			out = append(out, cur)
 		}
-		next := computeNextOccurrence(probe)
+		next := occurrenceAt(&s, i+1)
 		if next == "" || next <= cur {
 			break
 		}
 		cur = next
-		probe.ScheduledDate = &cur
 	}
 	return out
 }

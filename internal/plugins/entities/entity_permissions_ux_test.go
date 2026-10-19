@@ -1,12 +1,13 @@
 // entity_permissions_ux_test.go — C-ENTITY-PERMISSIONS-UX. Pins the three
 // presentation changes:
-//   Part 1 — the entity card's single 3-state visibility badge (Everyone /
-//            DM-Only / Custom), Scribe+ gated (players never see it).
-//   Part 2 — the edit-form permissions mount opts into the inline layout
-//            (data-layout="inline"); the JS behavior is covered by
-//            test/js/permissions_inline.test.mjs.
-//   Part 3 — the read-only Category › Sub-category lineage in the edit form
-//            (with-parent and no-parent cases).
+//
+//	Part 1 — the entity card's single 3-state visibility badge (Everyone /
+//	         DM-Only / Custom), Scribe+ gated (players never see it).
+//	Part 2 — the edit-form permissions mount opts into the inline layout
+//	         (data-layout="inline"); the JS behavior is covered by
+//	         test/js/permissions_inline.test.mjs.
+//	Part 3 — the read-only Category › Sub-category lineage in the edit form
+//	         (with-parent and no-parent cases).
 package entities
 
 import (

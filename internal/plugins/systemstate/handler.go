@@ -116,6 +116,53 @@ func (h *Handler) Put(c echo.Context) error {
 	return c.JSON(http.StatusOK, NewStateResponse(systemID, key, st, true))
 }
 
+// ListItemResponse is one page in the campaign-wide listing.
+type ListItemResponse struct {
+	EntityID   string          `json:"entityId"`
+	EntityName string          `json:"entityName"`
+	Public     json.RawMessage `json:"public"`
+	GM         json.RawMessage `json:"gm"`
+	UpdatedAt  time.Time       `json:"updatedAt"`
+}
+
+// ListResponse is the wire shape of the campaign-wide listing.
+type ListResponse struct {
+	SystemID  string             `json:"systemId"`
+	Key       string             `json:"key"`
+	Items     []ListItemResponse `json:"items"`
+	Truncated bool               `json:"truncated"`
+}
+
+// List returns every page of the campaign carrying the key, both halves. The
+// route is gated to the DM team and the handler re-derives that from the
+// capability. Visibility needs no per-row check: the DM team reads with
+// Owner-level visibility (VisibilityRole), which sees every live page, and the
+// repository already scopes by campaign and drops trashed pages.
+//
+// GET /campaigns/:id/system-state/:system/:key
+func (h *Handler) List(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	if !cc.CanAuthorDmOnly() {
+		return apperror.NewForbidden("only the campaign owner or a member with DM access may do this")
+	}
+	systemID, key := c.Param("system"), c.Param("key")
+	rows, truncated, err := h.svc.ListByKey(c.Request().Context(), cc.Campaign.ID, systemID, key)
+	if err != nil {
+		return err
+	}
+	items := make([]ListItemResponse, 0, len(rows))
+	for _, r := range rows {
+		items = append(items, ListItemResponse{
+			EntityID: r.EntityID, EntityName: r.EntityName,
+			Public: r.Public, GM: r.GM, UpdatedAt: r.UpdatedAt,
+		})
+	}
+	return c.JSON(http.StatusOK, ListResponse{SystemID: systemID, Key: key, Items: items, Truncated: truncated})
+}
+
 // requireViewable applies the show-page gate: the entity must belong to this
 // campaign and be visible to the viewer. Both failures are a plain 404.
 func (h *Handler) requireViewable(c echo.Context, cc *campaigns.CampaignContext, entityID string) error {

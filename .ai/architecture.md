@@ -13,44 +13,67 @@ System or Widget (see root `CLAUDE.md` for what each tier is).
 
 ## Three-Tier Extension Architecture
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│                         CHRONICLE                             │
-│                                                               │
-│  ┌──────────────────────────────────────────────────────┐    │
-│  │  CORE (always present)                                │    │
-│  │  app/  config/  database/  middleware/  apperror/      │    │
-│  └──────────────────────────────────────────────────────┘    │
-│                                                               │
-│  ┌──────────────────────────────────────────────────────┐    │
-│  │  PLUGINS -- Feature Applications (31)                  │    │
-│  │  auth/  campaigns/  entities/  calendar/  maps/        │    │
-│  │  admin/  addons/  syncapi/  media/  audit/             │    │
-│  │  settings/  timeline/  sessions/  packages/            │    │
-│  │  smtp/  armory/  bestiary/  designlab/  npcs/          │    │
-│  │  ai_workspace/  backup/  foundry_vtt/  restore/        │    │
-│  │  widgetbindings/  dmscreen/  systemstate/              │    │
-│  │  quests/  rolltables/  vault_import/  pageblocks/      │    │
-│  │  encounters/                                           │    │
-│  └──────────────────────────────────────────────────────┘    │
-│                                                               │
-│  ┌──────────────────────────────────────────────────────┐    │
-│  │  SYSTEMS -- External packages via package manager       │    │
-│  │  (generic loader + GenericTooltipRenderer)              │    │
-│  └──────────────────────────────────────────────────────┘    │
-│                                                               │
-│  ┌──────────────────────────────────────────────────────┐    │
-│  │  WIDGETS -- Reusable UI Building Blocks                │    │
-│  │  editor/  title/  tags/  attributes/  mentions/        │    │
-│  │  notes/  relations/  posts/  entity_notes/  sky/        │    │
-│  └──────────────────────────────────────────────────────┘    │
-│                                                               │
-│  ┌──────────────────────────────────────────────────────┐    │
-│  │  TEMPLATES -- Shared Templ Layouts & Components        │    │
-│  │  layouts/  components/  pages/                         │    │
-│  └──────────────────────────────────────────────────────┘    │
-└──────────────────────────────────────────────────────────────┘
-```
+The lists below keep one name per line in alphabetical order, so a new
+plugin or widget adds its own line.
+
+**Core** (always present, under `internal/`):
+`app/`, `config/`, `database/`, `middleware/`, `apperror/`.
+
+**Plugins**, feature applications in `internal/plugins/`:
+- `addons/`
+- `admin/`
+- `ai_workspace/`
+- `armory/`
+- `audit/`
+- `auth/`
+- `backup/`
+- `bestiary/`
+- `calendar/`
+- `campaigns/`
+- `designlab/`
+- `dmscreen/`
+- `encounters/`
+- `entities/`
+- `fieldrules/`
+- `foundry_vtt/`
+- `homebrew/`
+- `maps/`
+- `media/`
+- `npcs/`
+- `packages/`
+- `pageblocks/`
+- `pagetests/`
+- `quests/`
+- `restore/`
+- `rolltables/`
+- `rumours/`
+- `sessions/`
+- `settings/`
+- `smtp/`
+- `syncapi/`
+- `systemstate/`
+- `timeline/`
+- `trackers/`
+- `vault_import/`
+- `widgetbindings/`
+
+**Systems**, external packages installed through the package manager, served
+by the generic loader and `GenericTooltipRenderer`.
+
+**Widgets**, reusable UI building blocks in `internal/widgets/`:
+- `attributes/`
+- `editor/`
+- `entity_notes/`
+- `mentions/`
+- `notes/`
+- `posts/`
+- `relations/`
+- `sky/`
+- `tags/`
+- `title/`
+
+**Templates**, shared Templ layouts and components in `internal/templates/`:
+`layouts/`, `components/`, `pages/`.
 
 ### Tier Definitions
 
@@ -195,6 +218,8 @@ chronicle/
 │   ├── js/                           # Global scripts (boot.js is the widget auto-mounter;
 │   │   │                             #   keyboard_shortcuts.js, search_modal.js, sidebar_drill.js,
 │   │   │                             #   theme.js, command_palette.js, and more)
+│   │   ├── dice/                     # The thrown dice's engine, one file per set and per crit
+│   │   │                             #   (see dice.ai.md)
 │   │   └── widgets/                  # One file per widget (editor.js, attributes.js,
 │   │                                 #   tag_picker.js, editor_mention.js, notes.js, etc.)
 │   ├── vendor/                       # Vendored CDN libs

@@ -1117,17 +1117,28 @@
   // it, else a box. Colours are only ever a material name or a #rrggbb value.
   function iconFor(name, ICONS) { var n = String(name || '').replace(/^fa[srb]?\s+/, '').replace(/^fa-/, ''); return ICONS[n] ? n : 'box'; }
   function safeHex(c) { return /^#[0-9a-f]{6}$/i.test(c || '') ? c : ''; }
-  function shopItems(rels, ov, MAT, ICONS) {
+  // words are the shop page's local words (Chronicle.localWords): a coin is
+  // shown by its local name, its usual name kept for the hover. Buying always
+  // sends and compares the usual name.
+  function shopItems(rels, ov, MAT, ICONS, words) {
     return rels.map(function (r) {
       var m = r.metadata || {}, o = ov[String(r.id)] || {}, q = m.quantity, price = Number(m.price) || 0, cur = m.currency || 'gp';
       var out = m.in_stock === false || (q !== null && q !== undefined && !m.unlimited && Number(q) <= 0);
+      var coin = localCoin(words, cur);
       return {
         id: r.id, n: r.targetEntityId ? (r.targetEntityName || 'Item') : (m.custom_name || 'Unnamed item'), k: r.targetEntityType || 'Goods',
         ic: o.icon && ICONS[o.icon] ? o.icon : iconFor(r.targetEntityIcon, ICONS), mat: o.color || '',
-        c: (o.color && MAT[o.color]) || safeHex(r.targetEntityColor) || MAT.steel, p: price, cur: cur, price: price + ' ' + cur,
+        c: (o.color && MAT[o.color]) || safeHex(r.targetEntityColor) || MAT.steel, p: price, cur: cur, price: price + ' ' + coin.text, priceUsual: coin.usual ? price + ' ' + cur : '',
         qty: q === null || q === undefined || m.unlimited ? null : Number(q), out: out, magic: false, entityId: r.targetEntityId || ''
       };
     });
+  }
+
+  // A coin's local name. Chronicle.localName is absent where this widget runs
+  // outside Chronicle, and then coins keep their usual names.
+  function localCoin(words, cur) {
+    var C = window.Chronicle;
+    return words && C && C.localName ? C.localName(words, cur) : { text: cur, usual: '' };
   }
 
   // 5e coin values in copper. The server rounds a price up to a whole copper
@@ -1439,6 +1450,7 @@
       var S = { roomType: 'general', pal: 'oak', mood: '', efx: null, setting: 'room', look: 'lit', fx: readFx(), size: 'm', full: 'normal', deco: 'some', keep: true,
         seeds: { room: 1, goods: 1, deco: 1 }, pieces: [], decor: [], ov: {}, portrait: null, lines: [], mode: 'shop', its: [],
         key: keyOf(eid), name: ds.shopName || 'Shop', dark: document.documentElement.classList.contains('dark') };
+      var campaignId = (campaignUrl.match(/\/campaigns\/([^/]+)/) || [])[1] || '', words = {};
       var room = createRoom(S), ICONS = room.ICONS, rels = [], relsOk = false, buy = null, basket = {}, payer = '', busy = false, note = '', tab = 'All', open = false, line = 0, dirty = false, busySave = false, savedLayout = null, partKeep = { room: false, goods: false, deco: false };
       el.hidden = true;
 
@@ -1467,7 +1479,7 @@
       var view = null;
       function draw() {
         S.dark = document.documentElement.classList.contains('dark');
-        S.its = shopItems(rels, S.ov, room.MAT, ICONS);
+        S.its = shopItems(rels, S.ov, room.MAT, ICONS, words);
         view = room.draw();
         svg.setAttribute('viewBox', view.viewBox.join(' '));
         svg.setAttribute('aria-label', S.name + ', the shop room');
@@ -1507,7 +1519,7 @@
         var rows = S.its.filter(function (it) { return tab === 'All' || it.k === tab; }).map(function (it) {
           var name = it.entityId ? '<a class="shr-nm" href="' + esc(campaignUrl + '/entities/' + it.entityId) + '" data-hx-boost="true">' + esc(it.n) + '</a>' : '<span class="shr-nm">' + esc(it.n) + '</span>';
           var stock = it.out ? 'Sold out' : it.qty === null ? '' : it.qty + ' left';
-          return '<div class="shr-row' + (it.out ? ' out' : '') + '" data-row="' + it.id + '"><span class="shr-ic" style="--c:' + it.c + '">' + iconSvg(it.ic, ICONS) + '</span><span>' + name + '<br><span class="shr-m">' + esc(it.k) + '</span></span><span class="shr-price">' + esc(it.price) + '</span><span class="shr-stock">' + stock + '</span>' + addBtn(it) + '</div>';
+          return '<div class="shr-row' + (it.out ? ' out' : '') + '" data-row="' + it.id + '"><span class="shr-ic" style="--c:' + it.c + '">' + iconSvg(it.ic, ICONS) + '</span><span>' + name + '<br><span class="shr-m">' + esc(it.k) + '</span></span><span class="shr-price"' + (it.priceUsual ? ' title="' + esc(it.priceUsual) + '"' : '') + '>' + esc(it.price) + '</span><span class="shr-stock">' + stock + '</span>' + addBtn(it) + '</div>';
         });
         root.querySelector('.shr-list').innerHTML = rows.join('') || '<p class="shr-empty">' + (canArrange ? 'Nothing for sale yet. Add goods in the shop inventory below.' : 'Nothing for sale right now.') + '</p>';
         root.querySelectorAll('.shr-fx button').forEach(function (b) { b.setAttribute('aria-pressed', b.dataset.fx === S.fx); });
@@ -1528,7 +1540,8 @@
         var bk = root.querySelector('.shr-bk');
         if (!buy || !buy.buyers.length) { bk.innerHTML = ''; return; }
         var who = buyer(), sm = basketSummary(basket, S.its, who), h = '';
-        h += sm.count ? '<span>' + sm.count + ' in basket · <span class="shr-price">' + esc(sm.total + ' ' + sm.currency) + '</span></span><button type="button" class="shr-add" data-empty="1">Empty</button>' : '<span>Basket is empty</span>';
+        var coin = localCoin(words, sm.currency);
+        h += sm.count ? '<span>' + sm.count + ' in basket · <span class="shr-price"' + (coin.usual ? ' title="' + esc(sm.total + ' ' + coin.usual) + '"' : '') + '>' + esc(sm.total + ' ' + coin.text) + '</span></span><button type="button" class="shr-add" data-empty="1">Empty</button>' : '<span>Basket is empty</span>';
         var money = sm.moneyText === null ? '' : ' · ' + esc(sm.moneyText);
         if (buy.buyers.length > 1) {
           h += '<label>Paying: <select data-payer="1">' + buy.buyers.map(function (b) { return '<option value="' + esc(b.id) + '"' + (b.id === payer ? ' selected' : '') + '>' + esc(b.name) + '</option>'; }).join('') + '</select>' + money + '</label>';
@@ -1570,7 +1583,7 @@
             else {
               // A gp sheet is charged in gp whatever the shop's coin, so its balance reads in gp.
               var left = j.purseLeft ? j.purseLeft : j.moneyLeft + ' ' + (who && who.moneyKey === 'gp' ? 'gp' : j.currency);
-              note = 'Bought ' + what + ' for ' + j.spent + ' ' + j.currency + '. ' + name + ' has ' + left + ' left.' + (j.change ? ' Change: ' + j.change + '.' : '');
+              note = 'Bought ' + what + ' for ' + j.spent + ' ' + localCoin(words, j.currency).text + '. ' + name + ' has ' + left + ' left.' + (j.change ? ' Change: ' + j.change + '.' : '');
             }
             basket = {};
             return Promise.all([loadGoods(), loadBuyers()]);
@@ -2145,7 +2158,8 @@
       Promise.all([
         Chronicle.apiFetch(ds.roomEndpoint).then(function (r) { if (!r.ok) throw new Error('room ' + r.status); return r.json(); }),
         loadGoods(),
-        loadBuyers()
+        loadBuyers(),
+        window.Chronicle && Chronicle.localWords ? Chronicle.localWords(campaignId, eid).then(function (w) { words = w || {}; }) : null
       ]).then(function (res) {
         if (fromLayout(S, res[0] && res[0].layout)) room.geometry(); else room.generate();
         savedLayout = toLayout(S);

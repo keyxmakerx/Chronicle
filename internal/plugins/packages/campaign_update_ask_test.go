@@ -122,6 +122,37 @@ func TestReconcileFreezesAutomaticCampaigns(t *testing.T) {
 	}
 }
 
+// An owner who chose "Update automatically" keeps it through every boot pass
+// and every install; only a campaign with no choice is moved onto ask-first.
+func TestChosenAutomaticSurvivesBootAndInstall(t *testing.T) {
+	e := newAskEnv(t, map[string]*CampaignPackageState{
+		"chose": {Mode: UpdateModeApproveFirst, Version: "2.0.0", Explicit: true},
+		"none":  {Mode: UpdateModeAutomatic},
+	})
+	if _, err := e.svc.SetMode(ctx(), SetUpdateModeInput{CampaignID: "chose", PackageID: "f1", Mode: string(UpdateModeAutomatic)}, ActorInfo{UserID: "owner"}); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ {
+		if _, err := e.svc.Reconcile(ctx()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	e.install(t, "2.0.0", "3.0.0")
+	if got := e.bind.states["chose"]; got.Mode != UpdateModeAutomatic || got.Version != "" {
+		t.Errorf("chosen automatic was undone: %+v", got)
+	}
+	st, err := e.svc.CampaignState(ctx(), "chose", "f1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.EffectiveVersion != "3.0.0" || st.HeldVersion != "" {
+		t.Errorf("chosen automatic must run the new version with nothing waiting: %+v", st)
+	}
+	if got := e.bind.states["none"]; got.Mode != UpdateModeApproveFirst {
+		t.Errorf("a campaign with no choice still asks first: %+v", got)
+	}
+}
+
 // Game systems keep today's behaviour: automatic follows the installed
 // version and a pinned system is not offered anything.
 func TestSystemsAreNotAskedByDefault(t *testing.T) {

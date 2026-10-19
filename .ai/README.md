@@ -34,9 +34,9 @@ business rules and footguns.
 
 - **Plugins** (`internal/plugins/<name>/`): addons, admin, ai_workspace (and
   ai_workspace/aiexport), armory, audit, auth, backup, bestiary, calendar,
-  campaigns, designlab, dmscreen, encounters, entities, foundry_vtt, maps, media, npcs,
-  packages, pageblocks, quests, restore, rolltables, sessions, settings, smtp, syncapi,
-  systemstate, timeline, vault_import, widgetbindings.
+  campaigns, designlab, dmscreen, encounters, entities, fieldrules, foundry_vtt, homebrew, maps, media, npcs,
+  packages, pageblocks, quests, restore, rolltables, rumours, sessions, settings, smtp, syncapi,
+  systemstate, timeline, trackers, vault_import, widgetbindings.
   calendar's V5 rebuild (#741) is landing in parts — its `.ai.md` says
   which parts have shipped and which are still open.
 - **Widgets** (`internal/widgets/<name>/`): attributes, editor, entity_notes,

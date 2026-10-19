@@ -9,7 +9,9 @@
  *   1. `data-endpoint` present (entity show/edit): loads/saves via
  *      GET/PUT /permissions. On the page itself, `data-layout="corner"`
  *      reuses the server-rendered control as the trigger and unfolds the
- *      editor from it.
+ *      editor from it. It closes only on purpose (its close button, Escape
+ *      or the control); while a change is unsaved it asks first, in the
+ *      shared slip (static/js/theme.js).
  *   2. `data-mode="draft"` + `data-draft-target` (create form): no
  *      endpoint yet, writes is_private into the target hidden input;
  *      Custom mode is disabled until the entity has an ID.
@@ -203,7 +205,7 @@ Chronicle.register('permissions', {
       var icon = trigger.querySelector('[data-perm-corner-icon]');
       if (icon) {
         icon.className = 'fa-solid ' + (mode === 'everyone' ? 'fa-globe' : mode === 'dm_only' ? 'fa-lock' : 'fa-shield-halved') + ' text-[11px]';
-        icon.style.color = mode === 'custom' ? 'var(--color-accent)' : 'var(--color-fg-muted)';
+        icon.style.color = mode === 'custom' ? 'var(--color-accent)' : 'var(--color-text-muted)';
       }
       var label = trigger.querySelector('[data-perm-corner-label]');
       if (label) label.textContent = mode === 'everyone' ? 'Everyone' : mode === 'dm_only' ? 'DM team only' : 'Custom';
@@ -451,7 +453,7 @@ Chronicle.register('permissions', {
 
             var accessLabel = document.createElement('span');
             accessLabel.style.fontSize = '12px';
-            accessLabel.style.color = 'var(--color-fg-muted, #9ca3af)';
+            accessLabel.style.color = 'var(--color-text-muted, #9ca3af)';
             accessLabel.textContent = 'Full access';
             row.appendChild(accessLabel);
 
@@ -513,7 +515,7 @@ Chronicle.register('permissions', {
     function showStatus(type, message) {
       if (!statusEl) return;
       statusEl.textContent = message || '';
-      statusEl.style.color = type === 'saved' ? '#16a34a' : (type === 'error' ? '#dc2626' : 'var(--color-fg-muted, #6b7280)');
+      statusEl.style.color = type === 'saved' ? '#16a34a' : (type === 'error' ? '#dc2626' : 'var(--color-text-muted, #6b7280)');
     }
 
     function save() {
@@ -564,6 +566,8 @@ Chronicle.register('permissions', {
           state.saved = true;
           state.error = null;
           state.errorCategory = null;
+          // The question no longer stands once the change is saved.
+          if (corner && card && Chronicle.askSlip) Chronicle.askSlip.close(card);
           showStatus('saved', 'Saved');
           setTimeout(function () {
             state.saved = false;
@@ -573,6 +577,8 @@ Chronicle.register('permissions', {
         .catch(function (err) {
           if (err.name === 'AbortError') return;
           state.saving = false;
+          // "Still on its way" no longer holds; asking again says it failed.
+          if (corner && card && Chronicle.askSlip) Chronicle.askSlip.close(card);
           state.error = err.message || 'Error saving permissions';
           state.errorCategory = err.category || 'internal';
           showStatus('error', '');
@@ -657,7 +663,6 @@ Chronicle.register('permissions', {
         el.classList.add('perm-corner-open');
         trigger.setAttribute('aria-expanded', 'true');
         document.addEventListener('keydown', onEscape);
-        document.addEventListener('pointerdown', onOutside, true);
         return;
       }
       // Inline layout: expand the in-flow panel via the grid-rows animation;
@@ -688,7 +693,6 @@ Chronicle.register('permissions', {
         el.classList.remove('perm-corner-open');
         trigger.setAttribute('aria-expanded', 'false');
         document.removeEventListener('keydown', onEscape);
-        document.removeEventListener('pointerdown', onOutside, true);
         hideUnsaved();
         return;
       }
@@ -706,7 +710,8 @@ Chronicle.register('permissions', {
     function onEscape(e) {
       if (e.key === 'Escape') {
         e.preventDefault();
-        closeCard();
+        if (corner) tryClose();
+        else closeCard();
       }
     }
 
@@ -715,31 +720,28 @@ Chronicle.register('permissions', {
       return state.saving || (!!state.error && !state.loadFailed);
     }
 
-    // tryClose closes the corner editor unless a change is unsaved; then it
-    // stays open and says so, with a small nudge so the warning is seen.
+    // tryClose closes the corner editor unless a change is unsaved; then the
+    // slip under its foot asks first, saying whether the change is still on
+    // its way or failed.
     function tryClose() {
-      if (!hasUnsaved()) {
+      if (!hasUnsaved() || !Chronicle.askSlip) {
         closeCard();
         return;
       }
-      unsavedEl.classList.remove('perm-unsaved-show');
-      void unsavedEl.offsetWidth;
-      unsavedEl.classList.add('perm-unsaved-show');
-      card.classList.remove('perm-nudge');
-      void card.offsetWidth;
-      card.classList.add('perm-nudge');
+      var failed = !state.saving;
+      Chronicle.askSlip(card, {
+        ask: failed ? 'Close without saving?' : 'Close before it’s saved?',
+        detail: failed ? 'Your last change to who can see this page didn’t save.'
+          : 'Your last change is still on its way. If it fails, you won’t see why.',
+        discard: 'Close anyway',
+        onDiscard: closeCard
+      });
     }
 
     function hideUnsaved() {
-      if (unsavedEl) unsavedEl.classList.remove('perm-unsaved-show');
+      if (card && Chronicle.askSlip) Chronicle.askSlip.close(card);
     }
 
-    function onOutside(e) {
-      if (!state.open || el.contains(e.target)) return;
-      tryClose();
-    }
-
-    var unsavedEl = null;
 
     if (corner) {
       trigger = el.querySelector('[data-perm-corner-trigger]');
@@ -758,9 +760,6 @@ Chronicle.register('permissions', {
       card.className = 'perm-corner-panel';
       card.setAttribute('role', 'dialog');
       card.setAttribute('aria-label', 'Who can see this page');
-      card.addEventListener('animationend', function () {
-        card.classList.remove('perm-nudge');
-      });
 
       var cHeader = document.createElement('div');
       cHeader.className = 'perm-card-header';
@@ -781,12 +780,6 @@ Chronicle.register('permissions', {
       bodyEl.className = 'perm-card-body';
       card.appendChild(bodyEl);
 
-      unsavedEl = document.createElement('div');
-      unsavedEl.className = 'perm-unsaved';
-      unsavedEl.setAttribute('role', 'status');
-      unsavedEl.textContent = 'Not saved yet. Wait a moment, or press Esc to leave without it.';
-      card.appendChild(unsavedEl);
-
       var cFooter = document.createElement('div');
       cFooter.className = 'perm-card-footer';
       statusEl = document.createElement('span');
@@ -799,7 +792,6 @@ Chronicle.register('permissions', {
       el._permCard = card;
       el._permBackdrop = null;
       el._permOnEscape = onEscape;
-      el._permOnOutside = onOutside;
 
       load();
       return;
@@ -918,9 +910,6 @@ Chronicle.register('permissions', {
     if (el._permOnEscape) {
       document.removeEventListener('keydown', el._permOnEscape);
     }
-    if (el._permOnOutside) {
-      document.removeEventListener('pointerdown', el._permOnOutside, true);
-    }
     if (el._permCard && el._permCard.parentNode) {
       el._permCard.parentNode.removeChild(el._permCard);
     }
@@ -932,7 +921,6 @@ Chronicle.register('permissions', {
     delete el._permCard;
     delete el._permBackdrop;
     delete el._permOnEscape;
-    delete el._permOnOutside;
     // The corner mount's control is server-rendered and outlives the widget.
     if (el.getAttribute('data-layout') !== 'corner') el.innerHTML = '';
   }

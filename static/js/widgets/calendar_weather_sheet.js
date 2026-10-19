@@ -240,7 +240,9 @@
   Panel.prototype._sky = function () {
     var view = this.view, cal = view.cal, S = this.state, CalDate = Chronicle.calendarDate, out = {};
     var keys = this._keys(), moon = view.mainMoon ? view.mainMoon() : null;
-    if (moon && moon.cycle_days > 0) {
+    // A moon set by hand has no turning points to find; its marks are what
+    // the Director chose to show.
+    if (moon && moon.cycle_days > 0 && moon.phase_mode !== 'manual') {
       var abs = keys.map(function (k) { var p = parseKey(k); return CalDate.dayIndex(cal, p.year, p.month, p.day); });
       var phaseAt = function (a) { var r = (a + (moon.phase_offset || 0)) / moon.cycle_days; return r - Math.floor(r); };
       var peaks = moonPeaks(phaseAt, abs, moon.cycle_days);

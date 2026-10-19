@@ -57,6 +57,8 @@ type APIHandler struct {
 	shopBuyer            ShopBuyAPIService
 	dmScreen             DMScreenProvider
 	systemState          SystemStateReader
+	systemStateWriter    SystemStateWriter
+	systemEntries        SystemEntryLister
 	history              *SyncHistoryHandler
 	quests               *QuestAPIHandler
 	encounters           *EncounterAPIHandler
@@ -666,6 +668,13 @@ func (h *APIHandler) UpdateEntity(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request body")
 	}
 
+	// Update replaces the whole fields map, so a present fields_data is merged
+	// into the stored one first; absent leaves it nil and the service skips it.
+	fieldsData := req.FieldsData
+	if fieldsData != nil {
+		fieldsData = entities.MergeFieldPatch(entity.FieldsData, fieldsData)
+	}
+
 	// is_private: absent (and an explicit null, which a NOT NULL column has
 	// no room for) yields a nil pointer, which the service reads as
 	// "preserve"; a present true/false is written.
@@ -676,7 +685,7 @@ func (h *APIHandler) UpdateEntity(c echo.Context) error {
 		IsPrivate:         req.IsPrivate.Ptr(nil),
 		Entry:             req.Entry,
 		PlayerNotes:       req.PlayerNotes,
-		FieldsData:        req.FieldsData,
+		FieldsData:        fieldsData,
 		ExpectedUpdatedAt: req.ExpectedUpdatedAt,
 	})
 	if err != nil {
@@ -1007,13 +1016,18 @@ func (h *APIHandler) Sync(c echo.Context) error {
 				// single-entity PUT: absent preserves, a present value
 				// writes. is_private absent yields a nil pointer, which the
 				// service preserves.
+				// Same merge as the single-entity PUT: Update replaces the map.
+				fieldsData := change.FieldsData
+				if fieldsData != nil {
+					fieldsData = entities.MergeFieldPatch(existing.FieldsData, fieldsData)
+				}
 				_, err := h.entitySvc.Update(entities.WithSyncActor(ctx, h.resolveUserID(c)), change.EntityID, entities.UpdateEntityInput{
 					Name:       change.Name,
 					TypeLabel:  change.TypeLabel,
 					ParentID:   change.ParentID,
 					IsPrivate:  change.IsPrivate.Ptr(nil),
 					Entry:      change.Entry,
-					FieldsData: change.FieldsData,
+					FieldsData: fieldsData,
 				})
 				if err != nil {
 					result.Status = "error"
@@ -1531,15 +1545,6 @@ func (h *APIHandler) CreateRelation(c echo.Context) error {
 	entityID := c.Param("entityID")
 	ctx := c.Request().Context()
 
-	// Verify source entity belongs to this campaign.
-	entity, err := h.entitySvc.GetByID(ctx, entityID)
-	if err != nil {
-		return apperror.NewNotFound("entity not found")
-	}
-	if entity.CampaignID != campaignID {
-		return apperror.NewNotFound("entity not found")
-	}
-
 	var req apiCreateRelationRequest
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request body")
@@ -1547,6 +1552,14 @@ func (h *APIHandler) CreateRelation(c echo.Context) error {
 
 	if req.TargetEntityID == "" {
 		return apperror.NewBadRequest("target_entity_id is required")
+	}
+
+	// Both ends must be in the key's campaign and viewable by the caller: the
+	// target id comes from the body, and a listed relation shows its name.
+	for _, id := range []string{entityID, req.TargetEntityID} {
+		if _, _, err := h.requireViewableEntity(c, id); err != nil {
+			return err
+		}
 	}
 	if req.RelationType == "" {
 		return apperror.NewBadRequest("relation_type is required")
@@ -1563,6 +1576,7 @@ func (h *APIHandler) CreateRelation(c echo.Context) error {
 }
 
 // apiUpdateRelationRequest is the JSON body for updating a relation's metadata.
+// As on the web route, a missing metadata key is refused, not a clear.
 type apiUpdateRelationRequest struct {
 	Metadata json.RawMessage `json:"metadata"`
 }
@@ -1591,6 +1605,9 @@ func (h *APIHandler) UpdateRelation(c echo.Context) error {
 	var req apiUpdateRelationRequest
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request body")
+	}
+	if len(req.Metadata) == 0 {
+		return apperror.NewBadRequest("metadata is required")
 	}
 
 	if err := h.relationSvc.UpdateMetadata(c.Request().Context(), relationID, req.Metadata); err != nil {
@@ -1642,6 +1659,11 @@ type apiCreateEntityTypeRequest struct {
 func (h *APIHandler) CreateEntityType(c echo.Context) error {
 	campaignID := c.Param("id")
 
+	// Same bar as the web route: entity types shape the whole campaign.
+	if h.resolveRole(c) < int(campaigns.RoleOwner) {
+		return apperror.NewForbidden("only campaign owners can manage entity types")
+	}
+
 	var req apiCreateEntityTypeRequest
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request body")
@@ -1675,6 +1697,11 @@ type apiUpdateEntityTypeRequest struct {
 // PUT /api/v1/campaigns/:id/entity-types/:typeID
 func (h *APIHandler) UpdateEntityType(c echo.Context) error {
 	campaignID := c.Param("id")
+
+	// Same bar as the web route: entity types shape the whole campaign.
+	if h.resolveRole(c) < int(campaigns.RoleOwner) {
+		return apperror.NewForbidden("only campaign owners can manage entity types")
+	}
 	typeID, err := strconv.Atoi(c.Param("typeID"))
 	if err != nil {
 		return apperror.NewBadRequest("invalid entity type ID")

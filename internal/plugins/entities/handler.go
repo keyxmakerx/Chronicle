@@ -40,7 +40,7 @@ import (
 type EntityTagFetcher interface {
 	GetEntityTagsBatch(ctx context.Context, entityIDs []string, includeDmOnly bool) (map[string][]EntityTagInfo, error)
 	GetEntityTags(ctx context.Context, entityID string, includeDmOnly bool) ([]EntityTagInfo, error)
-	SetEntityTags(ctx context.Context, entityID string, campaignID string, tagIDs []int) error
+	SetEntityTags(ctx context.Context, entityID string, campaignID string, tagIDs []int, includeDmOnly bool) error
 	GetEntityTagGrants(ctx context.Context, campaignID, entityID string) ([]EntityTagGrantInfo, error)
 }
 
@@ -81,7 +81,7 @@ type SessionSearcher interface {
 // SystemSearcher provides game system search results for the quick
 // search popup. Implemented by systems.SystemSearchAdapter.
 type SystemSearcher interface {
-	SearchSystemContent(ctx context.Context, campaignID, query string) ([]map[string]string, error)
+	SearchSystemContent(ctx context.Context, campaignID, query string, director bool) ([]map[string]string, error)
 }
 
 // MemberLister retrieves campaign members for the permissions UI.
@@ -108,6 +108,7 @@ type Handler struct {
 	characterPanel     *PagePanel          // Optional panel under character pages; see page_panel.go.
 	systemPanels       SystemPanelResolver // Optional game-system panels under the title; see system_panels.go.
 	service            EntityService
+	familyEdit         FamilyEditService
 	trashNotes         TrashNoteCounter // Optional: Player Notes count in the post-delete message.
 	auditSvc           audit.AuditService
 	tagFetcher         EntityTagFetcher
@@ -119,6 +120,8 @@ type Handler struct {
 	systemSearcher     SystemSearcher
 	memberLister       MemberLister
 	eraPages           EraPages
+	fieldWords         FieldWords    // Optional: homebrew rules and local words; see field_kinds.go.
+	fieldCalendar      FieldCalendar // Optional: the campaign calendar for date fields; see field_dates.go.
 	pageMoons          PageMoons
 	npcSection         NPCSectionProvider
 	charLists          CharacterListManager
@@ -127,6 +130,7 @@ type Handler struct {
 	widgetBlockLister  WidgetBlockLister
 	contentTemplateSvc ContentTemplateService
 	sidebarNodeRepo    SidebarNodeRepository
+	folders            FolderService
 	favoriteRepo       FavoriteRepository
 	savedFilterRepo    SavedFilterRepository
 	blockRegistry      *BlockRegistry
@@ -246,6 +250,10 @@ func (h *Handler) SetWidgetBlockLister(wbl WidgetBlockLister) {
 		h.blockRegistry.SetWidgetLister(wbl)
 	}
 }
+
+// SetFolderService wires the folder rules behind the sidebar's create,
+// rename and delete endpoints.
+func (h *Handler) SetFolderService(f FolderService) { h.folders = f }
 
 // SetSidebarNodeRepo sets the sidebar node repository for folder operations.
 func (h *Handler) SetSidebarNodeRepo(repo SidebarNodeRepository) {
@@ -403,7 +411,7 @@ func (h *Handler) Index(c echo.Context) error {
 		for i := range entities {
 			parentIDs[i] = entities[i].ID
 		}
-		if links := h.loadTreePlaces(c.Request().Context(), cc, parentIDs, userID, nil); len(links) > 0 {
+		if links := h.loadTreePlaces(c.Request().Context(), cc, parentIDs, int(cc.VisibilityRole()), userID, nil); len(links) > 0 {
 			c.SetRequest(c.Request().WithContext(withTreePlaces(c.Request().Context(), links)))
 		}
 		if middleware.IsHTMX(c) {
@@ -624,7 +632,7 @@ func (h *Handler) prepareShow(c echo.Context) (*showPage, error) {
 }
 
 // prepareShowFor is prepareShow for a page named by the caller rather than
-// the route, so Customize's page editor can draw blocks as that page shows them.
+// the route, so the Customizer's page layout can draw blocks as that page shows them.
 func (h *Handler) prepareShowFor(c echo.Context, entityID string) (*showPage, error) {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
@@ -701,10 +709,11 @@ func (h *Handler) prepareShowFor(c echo.Context, entityID string) (*showPage, er
 
 	// Player Character Claiming: gate the claim affordance on the
 	// addon, and resolve the current owner's display name for the "Claimed by"
-	// banner. The member lookup only runs when the entity is actually claimed.
+	// banner. The member lookup only runs when the entity is actually claimed,
+	// and only for members: a visitor sees the character, not who plays it.
 	claimingEnabled := h.isAddonEnabled(c.Request().Context(), cc.Campaign.ID, AddonPlayerCharacterClaiming)
 	ownerName := ""
-	if entity.OwnerUserID != nil && h.memberLister != nil {
+	if entity.OwnerUserID != nil && h.memberLister != nil && cc.MemberRole >= campaigns.RolePlayer {
 		if members, mErr := h.memberLister.ListMembers(c.Request().Context(), cc.Campaign.ID); mErr == nil {
 			ownerName = resolveOwnerName(entity.OwnerUserID, ownerDisplayNames(members))
 		} else {
@@ -977,6 +986,11 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 	isSidebar := c.QueryParam("sidebar") == "1"
 	if isSidebar {
 		opts.PerPage = 50
+		// An owner previewing as a player gets the player's tree, matching
+		// the category counts beside it.
+		if campaigns.ViewingAsPlayer(c, cc) {
+			role = int(campaigns.RolePlayer)
+		}
 	}
 
 	// Tag filtering: comma-separated tag slugs (AND logic).
@@ -1098,6 +1112,7 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 		if h.systemSearcher != nil && query != "" {
 			if modResults, err := h.systemSearcher.SearchSystemContent(
 				c.Request().Context(), cc.Campaign.ID, query,
+				cc.VisibilityRole() >= int(campaigns.RoleOwner),
 			); err == nil {
 				items = append(items, toAnyMaps(modResults)...)
 				total += len(modResults)
@@ -1116,7 +1131,7 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 		}
 
 		// Players don't see individually hidden entities at all.
-		if cc.MemberRole < campaigns.RoleScribe && len(hiddenIDs) > 0 {
+		if role < int(campaigns.RoleScribe) && len(hiddenIDs) > 0 {
 			filtered := results[:0]
 			for _, e := range results {
 				if !hiddenIDs[e.ID] {
@@ -1144,7 +1159,7 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 			for i := range results {
 				parentIDs[i] = results[i].ID
 			}
-			if links := h.loadTreePlaces(c.Request().Context(), cc, parentIDs, userID, hiddenIDs); len(links) > 0 {
+			if links := h.loadTreePlaces(c.Request().Context(), cc, parentIDs, role, userID, hiddenIDs); len(links) > 0 {
 				c.SetRequest(c.Request().WithContext(withTreePlaces(c.Request().Context(), links)))
 			}
 		}
@@ -1350,20 +1365,32 @@ func (h *Handler) BulkTagsAPI(c echo.Context) error {
 
 	ctx := c.Request().Context()
 	processed := 0
+	role, userID := int(cc.VisibilityRole()), auth.GetUserID(c)
+	// A caller who cannot see dm_only tags must not read, add or clear them.
+	seeDmOnly := cc.MemberRole >= campaigns.RoleOwner || cc.IsSiteAdmin || cc.IsDmGranted
 	for _, eid := range req.EntityIDs {
+		// Ids come from the body, so each must be a page in this campaign
+		// the caller can see; any other is skipped, as in BulkUpdateType.
+		entity, err := h.service.GetByID(ctx, eid)
+		if err != nil || entity.CampaignID != cc.Campaign.ID {
+			continue
+		}
+		if access, err := h.service.CheckEntityAccess(ctx, eid, role, userID); err != nil || !access.CanView {
+			continue
+		}
 		switch req.Action {
 		case "add":
-			existing, _ := h.tagFetcher.GetEntityTags(ctx, eid, true)
+			existing, _ := h.tagFetcher.GetEntityTags(ctx, eid, seeDmOnly)
 			existingIDs := make([]int, len(existing))
 			for i, t := range existing {
 				existingIDs[i] = t.ID
 			}
 			merged := mergeIntSets(existingIDs, req.TagIDs)
-			if err := h.tagFetcher.SetEntityTags(ctx, eid, cc.Campaign.ID, merged); err == nil {
+			if err := h.tagFetcher.SetEntityTags(ctx, eid, cc.Campaign.ID, merged, seeDmOnly); err == nil {
 				processed++
 			}
 		case "remove":
-			existing, _ := h.tagFetcher.GetEntityTags(ctx, eid, true)
+			existing, _ := h.tagFetcher.GetEntityTags(ctx, eid, seeDmOnly)
 			removeSet := make(map[int]bool)
 			for _, id := range req.TagIDs {
 				removeSet[id] = true
@@ -1374,11 +1401,11 @@ func (h *Handler) BulkTagsAPI(c echo.Context) error {
 					remaining = append(remaining, t.ID)
 				}
 			}
-			if err := h.tagFetcher.SetEntityTags(ctx, eid, cc.Campaign.ID, remaining); err == nil {
+			if err := h.tagFetcher.SetEntityTags(ctx, eid, cc.Campaign.ID, remaining, seeDmOnly); err == nil {
 				processed++
 			}
 		case "set":
-			if err := h.tagFetcher.SetEntityTags(ctx, eid, cc.Campaign.ID, req.TagIDs); err == nil {
+			if err := h.tagFetcher.SetEntityTags(ctx, eid, cc.Campaign.ID, req.TagIDs, seeDmOnly); err == nil {
 				processed++
 			}
 		}
@@ -1681,22 +1708,12 @@ func (h *Handler) CreateSidebarNodeAPI(c echo.Context) error {
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request")
 	}
-	if err := apperror.ValidateRequired("name", req.Name); err != nil {
+
+	node, err := h.folders.CreateFolder(c.Request().Context(), cc.Campaign.ID, CreateSidebarNodeInput{
+		Name: req.Name, EntityTypeID: req.EntityTypeID,
+	})
+	if err != nil {
 		return err
-	}
-
-	node := &SidebarNode{
-		ID:           generateNodeID(),
-		CampaignID:   cc.Campaign.ID,
-		EntityTypeID: req.EntityTypeID,
-		Name:         strings.TrimSpace(req.Name),
-		SortOrder:    0,
-		NodeType:     "folder",
-		CreatedAt:    time.Now().UTC(),
-	}
-
-	if err := h.sidebarNodeRepo.Create(c.Request().Context(), node); err != nil {
-		return apperror.NewInternal(fmt.Errorf("creating sidebar node: %w", err))
 	}
 
 	return c.JSON(http.StatusCreated, map[string]string{
@@ -1705,8 +1722,8 @@ func (h *Handler) CreateSidebarNodeAPI(c echo.Context) error {
 	})
 }
 
-// DeleteSidebarNodeAPI deletes a sidebar folder node. Children are
-// reparented to root.
+// DeleteSidebarNodeAPI deletes a sidebar folder node. Sub-folders move up
+// to its parent and its pages return to the top level of the category.
 // DELETE /campaigns/:id/sidebar-nodes/:nid
 func (h *Handler) DeleteSidebarNodeAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
@@ -1714,17 +1731,8 @@ func (h *Handler) DeleteSidebarNodeAPI(c echo.Context) error {
 		return apperror.NewMissingContext()
 	}
 
-	nodeID := c.Param("nid")
-	node, err := h.sidebarNodeRepo.FindByID(c.Request().Context(), nodeID)
-	if err != nil {
+	if err := h.folders.DeleteFolder(c.Request().Context(), cc.Campaign.ID, c.Param("nid")); err != nil {
 		return err
-	}
-	if node.CampaignID != cc.Campaign.ID {
-		return apperror.NewNotFound("sidebar node not found")
-	}
-
-	if err := h.sidebarNodeRepo.Delete(c.Request().Context(), nodeID); err != nil {
-		return apperror.NewInternal(fmt.Errorf("deleting sidebar node: %w", err))
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
@@ -1738,28 +1746,14 @@ func (h *Handler) RenameSidebarNodeAPI(c echo.Context) error {
 		return apperror.NewMissingContext()
 	}
 
-	nodeID := c.Param("nid")
-	node, err := h.sidebarNodeRepo.FindByID(c.Request().Context(), nodeID)
-	if err != nil {
-		return err
-	}
-	if node.CampaignID != cc.Campaign.ID {
-		return apperror.NewNotFound("sidebar node not found")
-	}
-
 	var req struct {
 		Name string `json:"name"`
 	}
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request")
 	}
-	if err := apperror.ValidateRequired("name", req.Name); err != nil {
+	if err := h.folders.RenameFolder(c.Request().Context(), cc.Campaign.ID, c.Param("nid"), req.Name); err != nil {
 		return err
-	}
-
-	node.Name = strings.TrimSpace(req.Name)
-	if err := h.sidebarNodeRepo.Update(c.Request().Context(), node); err != nil {
-		return apperror.NewInternal(fmt.Errorf("renaming sidebar node: %w", err))
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
@@ -2140,11 +2134,17 @@ func (h *Handler) GetFieldsAPI(c echo.Context) error {
 	// an owner-only value is also kept for the entity's own claimed owner.
 	canSeeGM := cc.MemberRole >= campaigns.RoleScribe
 	isOwner := entity.IsOwnedBy(userID)
+	visible := FilterRestrictedFields(entity.FieldsData, et.Fields, canSeeGM, isOwner)
 	response := map[string]any{
 		"fields":          effectiveFields,
-		"fields_data":     FilterRestrictedFields(entity.FieldsData, et.Fields, canSeeGM, isOwner),
+		"fields_data":     visible,
 		"field_overrides": overrides,
 		"type_fields":     et.Fields,
+		"shown": h.shownFields(c.Request().Context(), cc.Campaign.ID, entity, effectiveFields, visible,
+			restrictedKeys(canSeeGM, isOwner, et.Fields, effectiveFields), int(cc.VisibilityRole()), userID, canSeeGM),
+	}
+	if cal := h.dateFieldCalendar(c.Request().Context(), cc.Campaign.ID, effectiveFields); cal != nil {
+		response["dateBook"] = cal
 	}
 	return c.JSON(http.StatusOK, response)
 }
@@ -2212,8 +2212,18 @@ func (h *Handler) UpdateFieldsAPI(c echo.Context) error {
 			typeFields = append(typeFields, entity.FieldOverrides.Added...)
 		}
 	}
+	// A claimed owner's patch past the identity keys can only be hero builder
+	// picks, checked against the plan a player sees.
+	var picks builderPicks
+	if h.heroPlanner != nil && IsClaimedOwnerPlayer(cc.MemberRole, entity, auth.GetUserID(c)) && needsBuilderPicks(fieldsPatch) {
+		plan, err := h.heroPlanner.HeroPlan(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c), false)
+		if err != nil {
+			return err
+		}
+		picks = builderPicksFrom(plan)
+	}
 	if err := authorizeFieldsWrite(cc.MemberRole, entity, auth.GetUserID(c), cc.Campaign.ID,
-		body.FieldsPatch == nil, fieldsPatch, typeFields); err != nil {
+		body.FieldsPatch == nil, fieldsPatch, typeFields, picks); err != nil {
 		return err
 	}
 	if err := h.requirePlayerCanView(c, cc, entity); err != nil {
@@ -2895,34 +2905,6 @@ func (h *Handler) EntityTypesPage(c echo.Context) error {
 		EntityTypesManagePage(cc, entityTypes, counts, csrfToken, "", claimingEnabled))
 }
 
-// EnsureAdventuresAPI adds the Adventures category when the campaign has none
-// (POST /campaigns/:id/entity-types/adventures). It is idempotent: pressing it
-// twice, or on a campaign that already has the category, changes nothing and
-// answers 200 with created=false.
-func (h *Handler) EnsureAdventuresAPI(c echo.Context) error {
-	cc := campaigns.GetCampaignContext(c)
-	if cc == nil {
-		return apperror.NewMissingContext()
-	}
-	et, created, err := h.service.EnsureAdventures(c.Request().Context(), cc.Campaign.ID)
-	if err != nil {
-		return err
-	}
-	if created {
-		h.logAudit(c, cc.Campaign.ID, audit.ActionEntityTypeCreated, strconv.Itoa(et.ID), et.Name)
-	}
-	status := http.StatusOK
-	if created {
-		status = http.StatusCreated
-	}
-	return c.JSON(status, map[string]any{
-		"id":      et.ID,
-		"slug":    et.Slug,
-		"name":    et.NamePlural,
-		"created": created,
-	})
-}
-
 // CreateEntityType processes the entity type creation form.
 // POST /campaigns/:id/entity-types
 func (h *Handler) CreateEntityType(c echo.Context) error {
@@ -3593,6 +3575,21 @@ func (h *Handler) SetAliasesAPI(c echo.Context) error {
 	}
 
 	entityID := c.Param("eid")
+
+	// The page must be in this campaign and visible to the caller, as for
+	// GetAliasesAPI; the service writes by entity id alone.
+	entity, err := h.service.GetByID(c.Request().Context(), entityID)
+	if err != nil {
+		return err
+	}
+	if entity.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("entity not found")
+	}
+	access, err := h.service.CheckEntityAccess(c.Request().Context(), entity.ID, int(cc.VisibilityRole()), auth.GetUserID(c))
+	if err != nil || !access.CanView {
+		return apperror.NewNotFound("entity not found")
+	}
+
 	var input SetAliasesInput
 	if err := c.Bind(&input); err != nil {
 		return apperror.NewBadRequest("invalid request body")
@@ -3821,9 +3818,12 @@ func (h *Handler) buildCastView(c echo.Context, cc *campaigns.CampaignContext) (
 	view.IsMember = cc.MemberRole >= campaigns.RolePlayer
 	view.CSRFToken = middleware.GetCSRFToken(c)
 	isOwner := cc.MemberRole >= campaigns.RoleOwner
+	var heroType *EntityType
+	var heroAcc heroAccess
 	if h.heroPlanner != nil {
-		if _, access, err := h.heroTarget(c, cc); err == nil {
+		if t, access, err := h.heroTarget(c, cc); err == nil {
 			view.CanCreateHero = access.Allowed
+			heroType, heroAcc = t, access
 		}
 	}
 
@@ -3842,6 +3842,9 @@ func (h *Handler) buildCastView(c echo.Context, cc *campaigns.CampaignContext) (
 	}
 
 	view.Yours = h.buildYours(ctx, campaignID, userID)
+	if h.heroPlanner != nil && view.IsMember {
+		view.Builder = h.buildHeroBuilder(c, cc, view.Yours, charTypes, heroType, heroAcc)
+	}
 	if pcOn {
 		view.Party = filterCastByType(h.buildCastParty(ctx, cc, userID), charTypes)
 		h.fillCastRoster(ctx, cc, userID, charTypes, &view)
@@ -3878,6 +3881,33 @@ func (h *Handler) buildCastView(c echo.Context, cc *campaigns.CampaignContext) (
 		}
 	}
 	return view, nil
+}
+
+// buildHeroBuilder gathers the hero builder's mount: the viewer's own heroes
+// and, when they may make one, the new hero's page type. nil when there is
+// nothing to build. A failed type lookup leaves the builder out rather than
+// breaking the page.
+func (h *Handler) buildHeroBuilder(c echo.Context, cc *campaigns.CampaignContext, yours []CastMember, charTypes []int, target *EntityType, access heroAccess) *HeroBuilderView {
+	types, err := h.service.GetEntityTypes(c.Request().Context(), cc.Campaign.ID)
+	if err != nil {
+		slog.Warn("cast page: hero builder types failed", slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", err))
+		return nil
+	}
+	heroes := builderHeroes(yours, charTypes, types, cc.MemberRole >= campaigns.RoleScribe)
+	if len(heroes) == 0 && !access.Allowed {
+		return nil
+	}
+	b := &HeroBuilderView{
+		CampaignID: cc.Campaign.ID,
+		CSRFToken:  middleware.GetCSRFToken(c),
+		CanCreate:  access.Allowed,
+		ForSelf:    access.ForSelf,
+		Heroes:     heroes,
+	}
+	if target != nil {
+		b.TypeName = target.Name
+	}
+	return b
 }
 
 // fillCastRoster adds the Players box data: the full roster for staff who

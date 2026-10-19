@@ -50,14 +50,14 @@ templ SystemStatusContent(cc *campaigns.CampaignContext, diag *SystemDiagnostics
 						<h2 class="text-lg font-semibold text-fg">{ diag.Manifest.Name }</h2>
 						<div class="flex items-center gap-2 text-xs text-fg-muted">
 							<span>v{ diag.Manifest.Version }</span>
-							<span class="text-fg-muted/30">|</span>
+							<span class="text-edge">|</span>
 							<span>{ diag.Source }</span>
 							if diag.Manifest.Author != "" {
-								<span class="text-fg-muted/30">|</span>
+								<span class="text-edge">|</span>
 								<span>by { diag.Manifest.Author }</span>
 							}
 							if diag.Manifest.License != "" {
-								<span class="text-fg-muted/30">|</span>
+								<span class="text-edge">|</span>
 								<span>{ diag.Manifest.License }</span>
 							}
 						</div>

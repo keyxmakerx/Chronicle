@@ -189,6 +189,114 @@ html:is([data-motion="calm"], [data-motion="off"], [data-view-motion="calm"], [d
 .chc[data-look="compact"] .chc__text { -webkit-line-clamp: 2; }
 .chc[data-look="compact"] .chc__foot { padding-top: 2px; font-size: 11.5px; opacity: 0.85; }
 .chc[data-look="compact"] .chc__link { color: inherit; text-decoration: underline; }
+/* Fading corner (Customize › Hover cards › Popups on time lines): no box.
+   Its corner sits over the event on a short stem (hovercard.js places it);
+   an edge in the campaign colour runs up the side and along the bottom,
+   each fading away from the corner, over a background that is solid behind
+   the text and feathers out past it. Two masks intersected fade along both
+   edges at once. --chc-v and --chc-h point away from the corner, so the
+   flipped corners (chc--cr to the left of the event, chc--cd below it)
+   only swap directions, edges and the rounded corner. A style kit sets the
+   corner's radius, edge weight and style, edge colour, stem, fill and glow
+   through --kit-tl-pop-* (style_kits.css). */
+.chc[data-look="corner"] {
+  --chc-edge: var(--kit-tl-pop-edge, var(--color-accent));
+  --chc-r: var(--kit-tl-pop-r, 12px);
+  --chc-ew: var(--kit-tl-pop-ew, 1.5px);
+  --chc-v: to top;
+  --chc-h: to right;
+  width: max-content;
+  max-width: min(300px, calc(100vw - 24px));
+  transform: scale(0.94);
+  transform-origin: left bottom;
+}
+.chc[data-look="corner"].chc--show { transform: none; }
+.chc--cr[data-look="corner"] { --chc-h: to left; transform-origin: right bottom; }
+.chc--cd[data-look="corner"] { --chc-v: to bottom; transform-origin: left top; }
+.chc--cr.chc--cd[data-look="corner"] { transform-origin: right top; }
+.chc[data-look="corner"] .chc__in {
+  isolation: isolate;
+  gap: 3px;
+  padding: 9px 16px 9px 13px;
+  font-family: inherit;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--color-text-muted);
+  rotate: var(--kit-tl-pop-tilt, none);
+}
+/* Longhands, so a kit's radius may be elliptical (two lengths). */
+.chc[data-look="corner"]:not(.chc--cr):not(.chc--cd) .chc__in { border-bottom-left-radius: var(--chc-r); }
+.chc--cr[data-look="corner"] .chc__in { padding: 9px 13px 9px 16px; text-align: right; }
+.chc--cr[data-look="corner"]:not(.chc--cd) .chc__in { border-bottom-right-radius: var(--chc-r); }
+.chc--cd[data-look="corner"]:not(.chc--cr) .chc__in { border-top-left-radius: var(--chc-r); }
+.chc--cr.chc--cd[data-look="corner"] .chc__in { border-top-right-radius: var(--chc-r); }
+.chc[data-look="corner"] .chc__in::before,
+.chc[data-look="corner"] .chc__in::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -18px -44px 0 0;
+  border-radius: inherit;
+  pointer-events: none;
+  -webkit-mask-composite: source-in;
+  mask-composite: intersect;
+}
+.chc--cr[data-look="corner"] .chc__in::before,
+.chc--cr[data-look="corner"] .chc__in::after { inset: -18px 0 0 -44px; }
+.chc--cd[data-look="corner"] .chc__in::before,
+.chc--cd[data-look="corner"] .chc__in::after { inset: 0 -44px -18px 0; }
+.chc--cr.chc--cd[data-look="corner"] .chc__in::before,
+.chc--cr.chc--cd[data-look="corner"] .chc__in::after { inset: 0 0 -18px -44px; }
+.chc[data-look="corner"] .chc__in::before {
+  background: var(--kit-tl-pop-bg, var(--color-card-bg));
+  -webkit-mask-image: linear-gradient(var(--chc-v), #000 calc(100% - 30px), transparent), linear-gradient(var(--chc-h), #000 calc(100% - 56px), transparent);
+  mask-image: linear-gradient(var(--chc-v), #000 calc(100% - 30px), transparent), linear-gradient(var(--chc-h), #000 calc(100% - 56px), transparent);
+}
+.chc[data-look="corner"] .chc__in::after {
+  border: 0 var(--kit-tl-pop-es, solid) var(--chc-edge);
+  border-left-width: var(--chc-ew);
+  border-bottom-width: var(--chc-ew);
+  filter: var(--kit-tl-pop-glow, none);
+  -webkit-mask-image: linear-gradient(var(--chc-v), #000 25%, transparent), linear-gradient(var(--chc-h), #000 25%, transparent);
+  mask-image: linear-gradient(var(--chc-v), #000 25%, transparent), linear-gradient(var(--chc-h), #000 25%, transparent);
+}
+.chc--cr[data-look="corner"] .chc__in::after { border-left-width: 0; border-right-width: var(--chc-ew); }
+.chc--cd[data-look="corner"] .chc__in::after { border-bottom-width: 0; border-top-width: var(--chc-ew); }
+.chc__stem { display: none; }
+.chc[data-look="corner"] .chc__stem { display: block; position: absolute; left: 0; bottom: -7px; width: var(--kit-tl-pop-sw, 1.5px); height: 7px; background: var(--chc-edge); }
+.chc--cr[data-look="corner"] .chc__stem { left: auto; right: 0; }
+.chc--cd[data-look="corner"] .chc__stem { bottom: auto; top: -7px; }
+.chc[data-look="corner"] .chc__kind { font-size: 10px; font-weight: 600; color: var(--color-accent); }
+.chc[data-look="corner"] .chc__title { font-size: 13.5px; font-weight: 600; color: var(--color-text-primary); }
+.chc--cr[data-look="corner"] .chc__title { justify-content: flex-end; }
+.chc[data-look="corner"] .chc__facts { font-size: 12px; gap: 0 10px; text-align: left; }
+.chc[data-look="corner"] .chc__facts dd { font-weight: 500; color: var(--color-text-body); }
+.chc[data-look="corner"] .chc__foot { padding-top: 2px; font-family: inherit; font-size: 12px; }
+.chc[data-look="corner"] .chc__link { color: var(--color-accent-link, var(--color-accent)); }
+@media (prefers-reduced-motion: reduce) {
+  .chc[data-look="corner"] { transform: none; }
+}
+/* A time line's classic card on a page in a style kit (hovercard.js picks
+   this look only for a time line, and only while a kit is on). It is a
+   small box drawn in the kit: its corners, edge, fill and shadow come from
+   --kit-tl-card-*, its colours and faces from the kit's palette. */
+.chc[data-look="kit"] .chc__in {
+  background: var(--kit-tl-card-bg, var(--k-paper));
+  color: var(--k-ink);
+  border: var(--kit-tl-card-b, 1px solid var(--k-hair));
+  border-radius: var(--kit-tl-card-r, 12px);
+  box-shadow: var(--kit-tl-card-sh, var(--elev-hover));
+  rotate: var(--kit-tl-pop-tilt, none);
+  font-family: var(--kit-bf, inherit);
+  gap: 5px;
+  padding: 10px 13px 9px;
+  font-size: 13px;
+}
+.chc[data-look="kit"] .chc__kind { color: var(--kit-acc); font-weight: 600; font-size: 10px; }
+.chc[data-look="kit"] .chc__title { font-family: var(--kit-hf, inherit); font-size: 15px; font-weight: 600; color: var(--k-ink); }
+.chc[data-look="kit"] .chc__facts dd { font-weight: 500; }
+.chc[data-look="kit"] .chc__foot { border-top: 1px solid var(--k-hair); color: var(--k-mut); font-family: inherit; font-size: 12px; }
+.chc[data-look="kit"] .chc__link { color: var(--kit-acc); }
 
 @media (max-width: 640px) {
   .chc { width: calc(100vw - 16px); }

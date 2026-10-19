@@ -116,6 +116,16 @@ func navAccessFor(cc *campaigns.CampaignContext) campaigns.NavAccess {
 	}
 }
 
+// markEmptyApps flags each app in empty (by slug) as having nothing for this
+// viewer, so ViewNav leaves it out of a non-owner's sidebar.
+func markEmptyApps(apps []campaigns.NavApp, empty map[string]bool) {
+	for i := range apps {
+		if empty[apps[i].Slug] {
+			apps[i].Empty = true
+		}
+	}
+}
+
 // navSectionViews maps the viewer's sections onto the layout's view rows.
 func navSectionViews(secs []campaigns.NavSection) []layouts.NavSectionView {
 	out := make([]layouts.NavSectionView, 0, len(secs))

@@ -26,6 +26,8 @@ type mockMapRepo struct {
 	listMarkersFn  func(ctx context.Context, mapID string, role int) ([]Marker, error)
 	listedUserID   string // the viewer id the last ListMarkers call filtered for
 	linkSources    []string
+	pinningEntity  map[string][]string // entity id -> maps with a pin on it
+	linkingTo      map[string][]string // map id -> maps with a pin opening it
 
 	campaignFrame    string
 	getFrameErr      error
@@ -123,6 +125,14 @@ func (m *mockMapRepo) ListMarkers(ctx context.Context, mapID string, role int, u
 
 func (m *mockMapRepo) ListLinkSourceMaps(context.Context, string) ([]string, error) {
 	return m.linkSources, nil
+}
+
+func (m *mockMapRepo) ListMapsPinningEntity(_ context.Context, _, entityID string) ([]string, error) {
+	return m.pinningEntity[entityID], nil
+}
+
+func (m *mockMapRepo) ListMapsLinkingTo(_ context.Context, _, mapID string) ([]string, error) {
+	return m.linkingTo[mapID], nil
 }
 
 // --- Test Helpers ---

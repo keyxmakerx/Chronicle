@@ -623,6 +623,12 @@
       ? '<button type="button" class="rb-btn" data-act="edit" data-own-entries-link="true" data-href="/campaigns/' +
         encodeURIComponent(this.campaignId) + '/characters/entries">Your own entries</button>'
       : '';
+    // The Homebrew Workshop builds the campaign's house-rule recipes, so it
+    // opens from here too; it is the Directors' alone.
+    var workshop = d.isDirector && this.campaignId && !this.inline
+      ? '<button type="button" class="rb-btn" data-act="edit" data-workshop-link="true" data-href="/campaigns/' +
+        encodeURIComponent(this.campaignId) + '/homebrew">Homebrew workshop</button>'
+      : '';
     return '<div class="rb-bar">' +
       '<div class="rb-brand">' + (d.mark ? '<span class="rb-mark" aria-hidden="true">' + esc(d.mark) + '</span>' : '') +
       '<div class="rb-name"><span class="rb-title">' + esc(d.title) + '</span>' +
@@ -634,8 +640,8 @@
       '<input type="search" class="rb-search-in" data-search placeholder="Search the book" aria-label="Search the book" autocomplete="off" spellcheck="false"' +
       ' aria-controls="' + this.domId('results') + '" aria-expanded="false"><kbd aria-hidden="true">/</kbd>' +
       '<div class="rb-results" id="' + this.domId('results') + '" role="region" aria-label="Search results" hidden></div></div>') +
-      ((own || edit || seg) ? '<button type="button" class="rb-btn rb-more" data-act="more" aria-expanded="false" aria-controls="' + this.domId('tools') +
-        '" aria-label="More"><span aria-hidden="true">\u22EF</span></button><div class="rb-tools" id="' + this.domId('tools') + '">' + own + edit + seg + '</div>' : '') +
+      ((own || workshop || edit || seg) ? '<button type="button" class="rb-btn rb-more" data-act="more" aria-expanded="false" aria-controls="' + this.domId('tools') +
+        '" aria-label="More"><span aria-hidden="true">\u22EF</span></button><div class="rb-tools" id="' + this.domId('tools') + '">' + own + workshop + edit + seg + '</div>' : '') +
       (d.cover && !this.inline && !turnbar ? '<button type="button" class="rb-btn rb-shut" data-act="shut">Close the book</button>' : '') +
       this.ribbonHTML() + '</div>' + (turnbar ? '' : this.tabsHTML()) + this.bmHTML() +
       '<div class="rb-book">' +

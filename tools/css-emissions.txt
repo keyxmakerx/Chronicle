@@ -91,10 +91,7 @@
 .perm-corner-panel .perm-card-body
 .perm-corner-open [data-perm-corner-tip]
 .perm-corner-open [data-perm-corner-trigger]
-.perm-unsaved
-.dark .perm-unsaved
-.perm-unsaved.perm-unsaved-show
-.perm-corner-panel.perm-nudge
+.ask-slip.is-on .ask-slip-in
 .shop-inv
 .shop-inv-header
 .shop-inv-header h3

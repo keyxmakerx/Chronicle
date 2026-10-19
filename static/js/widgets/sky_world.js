@@ -154,13 +154,30 @@
     // continuous day+fraction (dayIndex + h24/24), used for its phase;
     // year/month/day/h24 place the sun that phase is measured against.
     function moon(mo, tContinuous, year, month, day, h24) {
-      var p = phaseAt(mo, tContinuous), s = sun(year, month, day, h24);
+      var p = mo.phase_mode === 'manual' ? HAND_PHASE[handState(cal, mo, Math.floor(tContinuous))] || 0 : phaseAt(mo, tContinuous), s = sun(year, month, day, h24);
       var lon = s.lon + TAU * p, incl = mo._incl != null ? mo._incl : (mo._incl = inclinationFor(mo));
       var dec = decOf(lon) + incl * D2R, H = s.H - TAU * p, a = altAz(H, dec);
       return { id: mo.id, mo: mo, p: p, lit: (1 - Math.cos(TAU * p)) / 2, alt: a.alt, az: a.az, dec: dec, H: H, v: vec(a.alt, a.az) };
     }
     return { LAT: LAT, sun: sun, moon: moon, altAz: altAz, vec: vec, dayOfYear: dayOfYear };
   }
+  // A moon set by hand (the calendar plugin's moon_marks.go) has no cycle:
+  // it holds its latest mark's state all day. handState is that state on
+  // the day abs, '' before the first mark this viewer was shown. It reads
+  // the marks itself, since the sky also draws on pages without the
+  // calendar view.
+  var HAND_PHASE = { full: 0.5, half: 0.25, crescent: 0.125, dark: 0, vanished: 0 };
+  function handState(cal, mo, abs) {
+    if (mo.phase_mode !== 'manual') return '';
+    if (!mo._skyMarks) {
+      mo._skyMarks = (mo.marks || []).map(function (k) { return { abs: dayIndex(cal, k.year, k.month, k.day), state: k.state }; })
+        .sort(function (a, b) { return a.abs - b.abs; });
+    }
+    var st = '';
+    mo._skyMarks.forEach(function (k) { if (k.abs <= abs) st = k.state; });
+    return st;
+  }
+
   // phaseAt(moon, t): the SAME formula Moon.MoonPhase uses server-side
   // (frac((day+offset)/cycle)), but with t a continuous day+fraction number
   // (not an integer day) so phase — and moon position — move through the
@@ -291,7 +308,7 @@
   window.SkyWorld = {
     D2R: D2R, TAU: TAU, clamp: clamp, mod: mod, smooth01: smooth01, dot3: dot3,
     absoluteDay: absoluteDay, dayIndex: dayIndex, yearLength: yearLength, isLeapYear: isLeapYear, monthDays: monthDays, hour24: hour24,
-    phaseAt: phaseAt, inclinationFor: inclinationFor,
+    phaseAt: phaseAt, handState: handState, inclinationFor: inclinationFor,
     makeSkym: makeSkym, PROJ: PROJ, moonTurn: moonTurn,
     PAL: PAL, paletteFor: paletteFor, tintPalette: tintPalette
   };

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/patch"
@@ -16,20 +17,23 @@ import (
 
 // mockEntityTypeRepo implements EntityTypeRepository for testing.
 type mockEntityTypeRepo struct {
-	findByIDFn             func(ctx context.Context, id int) (*EntityType, error)
-	findBySlugFn           func(ctx context.Context, campaignID, slug string) (*EntityType, error)
-	listByCampaignFn       func(ctx context.Context, campaignID string) ([]EntityType, error)
-	listAllFn              func(ctx context.Context) ([]EntityType, error)
-	updateLayoutFn         func(ctx context.Context, id int, layoutJSON string) error
-	updateFieldsSchemaFn   func(ctx context.Context, id int, fieldsJSON string) error
-	seedDefaultsFn         func(ctx context.Context, campaignID string) error
-	createFn               func(ctx context.Context, et *EntityType) error
-	updateFn               func(ctx context.Context, et *EntityType) error
-	deleteFn               func(ctx context.Context, id int) error
-	slugExistsFn           func(ctx context.Context, campaignID, slug string) (bool, error)
-	maxSortOrderFn         func(ctx context.Context, campaignID string) (int, error)
-	listChildTypesFn       func(ctx context.Context, parentID int) ([]EntityType, error)
-	resequenceChildTypesFn func(ctx context.Context, campaignID string, orderedIDs []int) error
+	findByIDFn              func(ctx context.Context, id int) (*EntityType, error)
+	findBySlugFn            func(ctx context.Context, campaignID, slug string) (*EntityType, error)
+	listByCampaignFn        func(ctx context.Context, campaignID string) ([]EntityType, error)
+	listAllFn               func(ctx context.Context) ([]EntityType, error)
+	updateLayoutFn          func(ctx context.Context, id int, layoutJSON string) error
+	updateDashboardFn       func(ctx context.Context, id int, description *string, pinnedIDs []string) error
+	updateDashboardLayoutFn func(ctx context.Context, id int, layoutJSON *string) error
+	updateFieldsSchemaFn    func(ctx context.Context, id int, fieldsJSON string) error
+	seedDefaultsFn          func(ctx context.Context, campaignID string) error
+	createFn                func(ctx context.Context, et *EntityType) error
+	updateFn                func(ctx context.Context, et *EntityType) error
+	deleteFn                func(ctx context.Context, id int) error
+	slugExistsFn            func(ctx context.Context, campaignID, slug string) (bool, error)
+	maxSortOrderFn          func(ctx context.Context, campaignID string) (int, error)
+	listChildTypesFn        func(ctx context.Context, parentID int) ([]EntityType, error)
+	resequenceChildTypesFn  func(ctx context.Context, campaignID string, orderedIDs []int) error
+	updatePlacementFn       func(ctx context.Context, id, sortOrder int, isDefault, enabled bool) error
 
 	listByPresetCategoryFn func(ctx context.Context, campaignID, category string) ([]EntityType, error)
 
@@ -81,6 +85,13 @@ func (m *mockEntityTypeRepo) ResequenceChildTypes(ctx context.Context, campaignI
 	return nil
 }
 
+func (m *mockEntityTypeRepo) UpdatePlacement(ctx context.Context, id, sortOrder int, isDefault, enabled bool) error {
+	if m.updatePlacementFn != nil {
+		return m.updatePlacementFn(ctx, id, sortOrder, isDefault, enabled)
+	}
+	return nil
+}
+
 func (m *mockEntityTypeRepo) ListAll(ctx context.Context) ([]EntityType, error) {
 	if m.listAllFn != nil {
 		return m.listAllFn(ctx)
@@ -128,10 +139,16 @@ func (m *mockEntityTypeRepo) MovePagesAndAdoptPresetCategory(ctx context.Context
 }
 
 func (m *mockEntityTypeRepo) UpdateDashboard(ctx context.Context, id int, description *string, pinnedIDs []string) error {
+	if m.updateDashboardFn != nil {
+		return m.updateDashboardFn(ctx, id, description, pinnedIDs)
+	}
 	return nil
 }
 
 func (m *mockEntityTypeRepo) UpdateDashboardLayout(ctx context.Context, id int, layoutJSON *string) error {
+	if m.updateDashboardLayoutFn != nil {
+		return m.updateDashboardLayoutFn(ctx, id, layoutJSON)
+	}
 	return nil
 }
 
@@ -190,6 +207,7 @@ type mockEntityRepo struct {
 	updateEntryFn      func(ctx context.Context, id, entryJSON, entryHTML string) error
 	updateImageFn      func(ctx context.Context, id, imagePath string) error
 	updateCoverImageFn func(ctx context.Context, id, coverImagePath string) error
+	updateFieldsFn     func(ctx context.Context, id string, fieldsData map[string]any, searchText string) error
 	deleteFn           func(ctx context.Context, id string) error
 	slugExistsFn       func(ctx context.Context, campaignID, slug string) (bool, error)
 	listByCampaignFn   func(ctx context.Context, campaignID string, typeIDs []int, role int, userID string, opts ListOptions) ([]Entity, int, error)
@@ -206,6 +224,7 @@ type mockEntityRepo struct {
 	listByOwnerFn      func(ctx context.Context, campaignID, ownerUserID string) ([]Entity, error)
 	listClaimedFn      func(ctx context.Context, campaignID string, role int, userID string) ([]Entity, error)
 	updateOwnerFn      func(ctx context.Context, entityID string, ownerUserID *string) error
+	claimOwnerFn       func(ctx context.Context, entityID, userID string) (bool, error)
 	setPlayableFn      func(ctx context.Context, entityID string, playable bool) error
 	listOnRosterFn     func(ctx context.Context, campaignID string, typeIDs []int, role int, userID string) ([]Entity, error)
 	searchRosterFn     func(ctx context.Context, campaignID string, typeIDs []int, f RosterSearch, role int, userID string) ([]Entity, error)
@@ -267,6 +286,9 @@ func (m *mockEntityRepo) UpdatePlayerNotes(ctx context.Context, id, notesJSON, n
 }
 
 func (m *mockEntityRepo) UpdateFields(ctx context.Context, id string, fieldsData map[string]any, searchText string) error {
+	if m.updateFieldsFn != nil {
+		return m.updateFieldsFn(ctx, id, fieldsData, searchText)
+	}
 	return nil
 }
 
@@ -440,6 +462,13 @@ func (m *mockEntityRepo) UpdateOwner(ctx context.Context, entityID string, owner
 		return m.updateOwnerFn(ctx, entityID, ownerUserID)
 	}
 	return nil
+}
+
+func (m *mockEntityRepo) ClaimOwner(ctx context.Context, entityID, userID string) (bool, error) {
+	if m.claimOwnerFn != nil {
+		return m.claimOwnerFn(ctx, entityID, userID)
+	}
+	return true, nil
 }
 
 func (m *mockEntityRepo) SetPlayable(ctx context.Context, entityID string, playable bool) error {
@@ -2080,6 +2109,67 @@ func TestUpdateFields_PublishesUpdatedEvent(t *testing.T) {
 	})
 }
 
+// TestUpdateFields_BroadcastCarriesNewUpdatedAt pins that the payload's
+// updated_at is the post-write value, not the pre-write row's.
+func TestUpdateFields_BroadcastCarriesNewUpdatedAt(t *testing.T) {
+	oldAt := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	newAt := oldAt.Add(time.Hour)
+	written := false
+	repo := &mockEntityRepo{
+		findByIDFn: func(_ context.Context, _ string) (*Entity, error) {
+			at := oldAt
+			if written {
+				at = newAt
+			}
+			return &Entity{ID: "ent-1", CampaignID: "camp-1", UpdatedAt: at}, nil
+		},
+		updateFieldsFn: func(_ context.Context, _ string, _ map[string]any, _ string) error {
+			written = true
+			return nil
+		},
+	}
+	pub := &capturingEntityEventPublisher{}
+	svc := NewEntityService(repo, &mockEntityTypeRepo{}, &mockPermissionRepo{})
+	svc.SetEventPublisher(pub)
+
+	if err := svc.UpdateFields(context.Background(), "ent-1", map[string]any{"hp": 1}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(pub.events) != 1 || !pub.events[0].entity.UpdatedAt.Equal(newAt) {
+		t.Fatalf("published updated_at = %v, want %v", pub.events, newAt)
+	}
+}
+
+// TestUpdateImages_PublishUpdatedEvent pins that a picture change reaches
+// sync clients as entity.updated carrying the reloaded entity.
+func TestUpdateImages_PublishUpdatedEvent(t *testing.T) {
+	cases := []struct {
+		name string
+		call func(svc EntityService) error
+	}{
+		{"image", func(svc EntityService) error { return svc.UpdateImage(context.Background(), "e1", "") }},
+		{"cover image", func(svc EntityService) error { return svc.UpdateCoverImage(context.Background(), "e1", "") }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := &mockEntityRepo{
+				findByIDFn:         func(_ context.Context, _ string) (*Entity, error) { return &Entity{ID: "e1", CampaignID: "campA"}, nil },
+				updateImageFn:      func(_ context.Context, _, _ string) error { return nil },
+				updateCoverImageFn: func(_ context.Context, _, _ string) error { return nil },
+			}
+			pub := &capturingEntityEventPublisher{}
+			svc := newTestService(repo, &mockEntityTypeRepo{})
+			svc.SetEventPublisher(pub)
+			if err := tc.call(svc); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(pub.events) != 1 || pub.events[0].eventType != "updated" || pub.events[0].campaignID != "campA" {
+				t.Fatalf("events = %+v, want one updated for campA", pub.events)
+			}
+		})
+	}
+}
+
 // strPtr returns a pointer to the given string.
 func strPtr(s string) *string {
 	return &s
@@ -2135,9 +2225,9 @@ func TestClaimEntity_Success(t *testing.T) {
 	var capturedOwner *string
 	repo := &mockEntityRepo{
 		findByIDFn: func(_ context.Context, id string) (*Entity, error) { return entity, nil },
-		updateOwnerFn: func(_ context.Context, _ string, owner *string) error {
-			capturedOwner = owner
-			return nil
+		claimOwnerFn: func(_ context.Context, _ string, owner string) (bool, error) {
+			capturedOwner = &owner
+			return true, nil
 		},
 	}
 	typeRepo := &mockEntityTypeRepo{
@@ -2165,9 +2255,9 @@ func TestClaimEntity_Idempotent(t *testing.T) {
 	called := false
 	repo := &mockEntityRepo{
 		findByIDFn: func(_ context.Context, _ string) (*Entity, error) { return entity, nil },
-		updateOwnerFn: func(_ context.Context, _ string, _ *string) error {
+		claimOwnerFn: func(_ context.Context, _ string, _ string) (bool, error) {
 			called = true
-			return nil
+			return true, nil
 		},
 	}
 	svc := newTestService(repo, &mockEntityTypeRepo{})
@@ -2176,7 +2266,7 @@ func TestClaimEntity_Idempotent(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if called {
-		t.Error("expected no UpdateOwner call on idempotent claim; got one")
+		t.Error("expected no ClaimOwner call on idempotent claim; got one")
 	}
 }
 
@@ -2193,6 +2283,25 @@ func TestClaimEntity_RejectsAlreadyClaimed(t *testing.T) {
 	assertAppError(t, err, 409)
 }
 
+// TestClaimEntity_LosesRace: the entity read as unowned, but another player's
+// claim landed before the write, so the guarded write changes nothing. The
+// caller gets 409 rather than a success that silently took the character.
+func TestClaimEntity_LosesRace(t *testing.T) {
+	entity := &Entity{ID: "e1", CampaignID: "c1", EntityTypeID: 7, OwnerUserID: nil}
+	repo := &mockEntityRepo{
+		findByIDFn:   func(_ context.Context, _ string) (*Entity, error) { return entity, nil },
+		claimOwnerFn: func(_ context.Context, _ string, _ string) (bool, error) { return false, nil },
+	}
+	typeRepo := &mockEntityTypeRepo{
+		findByIDFn: func(_ context.Context, _ int) (*EntityType, error) {
+			return &EntityType{ID: 7, Slug: "character"}, nil
+		},
+	}
+	svc := newTestService(repo, typeRepo)
+	_, err := svc.ClaimEntity(context.Background(), "e1", "player-1")
+	assertAppError(t, err, 409)
+}
+
 // TestClaimEntity_RejectsWhenAddonDisabled guards the API-side feature gate:
 // even though the route is Player+, an unclaimed claimable character must not
 // be claimable when the Player Character Claiming addon is off for the
@@ -2202,9 +2311,9 @@ func TestClaimEntity_RejectsWhenAddonDisabled(t *testing.T) {
 	entity := &Entity{ID: "e1", CampaignID: "camp-1", EntityTypeID: 7, OwnerUserID: nil}
 	repo := &mockEntityRepo{
 		findByIDFn: func(_ context.Context, _ string) (*Entity, error) { return entity, nil },
-		updateOwnerFn: func(_ context.Context, _ string, _ *string) error {
-			t.Fatal("UpdateOwner must not be called when the addon is disabled")
-			return nil
+		claimOwnerFn: func(_ context.Context, _ string, _ string) (bool, error) {
+			t.Fatal("ClaimOwner must not be called when the addon is disabled")
+			return false, nil
 		},
 	}
 	typeRepo := &mockEntityTypeRepo{
@@ -2226,9 +2335,9 @@ func TestClaimEntity_AllowedWhenAddonEnabled(t *testing.T) {
 	var capturedOwner *string
 	repo := &mockEntityRepo{
 		findByIDFn: func(_ context.Context, _ string) (*Entity, error) { return entity, nil },
-		updateOwnerFn: func(_ context.Context, _ string, owner *string) error {
-			capturedOwner = owner
-			return nil
+		claimOwnerFn: func(_ context.Context, _ string, owner string) (bool, error) {
+			capturedOwner = &owner
+			return true, nil
 		},
 	}
 	typeRepo := &mockEntityTypeRepo{

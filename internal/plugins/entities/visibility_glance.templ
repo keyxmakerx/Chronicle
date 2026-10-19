@@ -25,7 +25,7 @@ func visibilityGlanceVisible(cc *campaigns.CampaignContext) bool {
 
 // visibilityGlance is the one indicator: globe (everyone) / lock (dm_only) /
 // shield (custom). Colour comes from tokens (ADR-057): shield uses
-// var(--color-accent), globe and lock use var(--color-fg-muted).
+// var(--color-accent), globe and lock use var(--color-text-muted).
 //
 // ev carries the tag-widening safety contract: when a tag grant exposes an
 // otherwise-hidden entity, the amber corner dot and the tooltip naming the
@@ -48,9 +48,9 @@ templ visibilityGlance(cc *campaigns.CampaignContext, entity *Entity, ev *Effect
 			if state == VisStateCustom {
 				<i class="fa-solid fa-shield-halved text-[11px]" style="color: var(--color-accent);"></i>
 			} else if state == VisStateDMOnly {
-				<i class="fa-solid fa-lock text-[11px]" style="color: var(--color-fg-muted);"></i>
+				<i class="fa-solid fa-lock text-[11px]" style="color: var(--color-text-muted);"></i>
 			} else {
-				<i class="fa-solid fa-globe text-[11px]" style="color: var(--color-fg-muted);"></i>
+				<i class="fa-solid fa-globe text-[11px]" style="color: var(--color-text-muted);"></i>
 			}
 			if widened {
 				<span class="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-amber-400 ring-1 ring-surface" aria-hidden="true"></span>
@@ -109,38 +109,7 @@ templ effectiveVisibilityBadge(cc *campaigns.CampaignContext, entity *Entity, ev
 				data-editable="true"
 			}
 		>
-			<button
-				type="button"
-				class={ "relative inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full border border-edge bg-surface text-xs text-fg-body transition-colors",
-					templ.KV("hover:border-accent cursor-pointer", canEdit),
-					templ.KV("cursor-default", !canEdit) }
-				data-perm-corner-trigger
-				data-visibility-badge={ state }
-				if widened {
-					data-tag-widened="true"
-				}
-				aria-describedby={ "entity-access-tip-" + entity.ID }
-				if !canEdit {
-					aria-disabled="true"
-				}
-			>
-				<i
-					class={ "fa-solid", visibilityCornerIcon(state), "text-[11px]" }
-					if state == VisStateCustom {
-						style="color: var(--color-accent);"
-					} else {
-						style="color: var(--color-fg-muted);"
-					}
-					data-perm-corner-icon
-				></i>
-				<span data-perm-corner-label>{ visibilityCornerLabel(state) }</span>
-				if canEdit {
-					<i class="fa-solid fa-chevron-down text-[9px] text-fg-muted" aria-hidden="true"></i>
-				}
-				if widened {
-					<span class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-amber-400 ring-1 ring-surface" aria-hidden="true" data-perm-corner-dot></span>
-				}
-			</button>
+			@visibilityChip(state, canEdit, widened, "entity-access-tip-"+entity.ID)
 			<span
 				id={ "entity-access-tip-" + entity.ID }
 				role="tooltip"
@@ -154,4 +123,63 @@ templ effectiveVisibilityBadge(cc *campaigns.CampaignContext, entity *Entity, ev
 			</span>
 		</div>
 	}
+}
+
+// visibilityChip is the control's face, shared by a page and the Create Page
+// form so a page's visibility looks the same before and after it exists. Its
+// shape comes from the .perm-chip tokens, which a style kit may override.
+// describedBy names a tooltip, or is empty when there is none.
+templ visibilityChip(state string, canEdit, widened bool, describedBy string) {
+	<button
+		type="button"
+		class={ "perm-chip", templ.KV("perm-chip-static", !canEdit) }
+		data-perm-corner-trigger
+		data-visibility-badge={ state }
+		if widened {
+			data-tag-widened="true"
+		}
+		if describedBy != "" {
+			aria-describedby={ describedBy }
+		} else {
+			aria-label={ "Who can see this page: " + visibilityCornerLabel(state) }
+		}
+		if !canEdit {
+			aria-disabled="true"
+		}
+	>
+		<i
+			class={ "fa-solid", visibilityCornerIcon(state), "text-[11px]" }
+			if state == VisStateCustom {
+				style="color: var(--color-accent);"
+			} else {
+				style="color: var(--color-text-muted);"
+			}
+			data-perm-corner-icon
+		></i>
+		<span data-perm-corner-label>{ visibilityCornerLabel(state) }</span>
+		if canEdit {
+			<i class="fa-solid fa-chevron-down text-[9px] text-fg-muted" aria-hidden="true"></i>
+		}
+		if widened {
+			<span class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-amber-400 ring-1 ring-surface" aria-hidden="true" data-perm-corner-dot></span>
+		}
+	</button>
+}
+
+// draftVisibilityControl is the Create Page form's visibility control: the
+// page's own chip, unfolding the same editor, in draft mode. With no page to
+// save to yet, the widget writes the choice into the hidden is_private input
+// the Create handler reads; Custom waits until the page exists.
+templ draftVisibilityControl() {
+	<input type="hidden" name="is_private" value="false" id="is_private_draft"/>
+	<div
+		class="relative shrink-0"
+		data-widget="permissions"
+		data-layout="corner"
+		data-mode="draft"
+		data-draft-target="#is_private_draft"
+		data-editable="true"
+	>
+		@visibilityChip(VisStateEveryone, true, false, "")
+	</div>
 }

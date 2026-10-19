@@ -47,6 +47,51 @@ func nextDay(cal *calendar.Calendar, d calDate) calDate {
 	return calDate{d.Y + 1, 1, 1}
 }
 
+// handMoonLine describes a moon set by hand: its state today and its marks,
+// as many as the Actor may see (a player's copy holds only shown ones).
+func handMoonLine(cal *calendar.Calendar, m *calendar.Moon, today calDate) string {
+	line := m.Name + ": set by hand, no cycle"
+	if st := cal.HandStateOn(m, today.Y, today.M, today.D); st != "" {
+		line += "; today " + m.StateWord(st)
+	} else {
+		line += "; not set as of today"
+	}
+	if len(m.StateNames) > 0 {
+		var words []string
+		for _, st := range calendar.MoonStates {
+			if w, ok := m.StateNames[st]; ok {
+				words = append(words, st+" reads "+quote(w))
+			}
+		}
+		line += "; " + strings.Join(words, ", ")
+	}
+	if len(m.Marks) > 0 {
+		// The latest marks are the ones a story picks up from; the moon
+		// block's export lists every one.
+		shown, earlier := m.Marks, 0
+		if len(shown) > maxHandMarksListed {
+			earlier = len(shown) - maxHandMarksListed
+			shown = shown[earlier:]
+		}
+		marks := make([]string, 0, len(shown))
+		for _, mk := range shown {
+			s := dateText(cal, calDate{mk.Year, mk.Month, mk.Day}) + " " + m.StateWord(mk.State)
+			if !mk.Shown {
+				s += " (players not told)"
+			}
+			marks = append(marks, s)
+		}
+		line += "; marks: " + strings.Join(marks, ", ")
+		if earlier > 0 {
+			line += fmt.Sprintf(" (%d earlier marks not listed)", earlier)
+		}
+	}
+	return line
+}
+
+// maxHandMarksListed keeps a long-played moon's line readable.
+const maxHandMarksListed = 40
+
 // nextPhases finds a moon's next new and full moon from today: the day in
 // the coming cycle whose phase is nearest each turning point.
 func nextPhases(cal *calendar.Calendar, m calendar.Moon, today calDate) (newMoon, fullMoon calDate) {
@@ -151,7 +196,9 @@ func (run *lookupRun) calendarInfo() (LookupAnswer, error) {
 		b.WriteString("\n### Moons\n\n")
 		for _, m := range cal.Moons {
 			line := fmt.Sprintf("- %s: a %s-day cycle, phase offset %s, colour %s", m.Name, num(m.CycleDays), num(m.PhaseOffset), m.Color)
-			if len(cal.Months) > 0 {
+			if m.Manual() {
+				line = handMoonLine(cal, &m, today)
+			} else if len(cal.Months) > 0 {
 				nm, fm := nextPhases(cal, m, today)
 				line += fmt.Sprintf("; today %s; next new moon %s, next full moon %s",
 					strings.ToLower(m.MoonPhaseName(cal.AbsoluteDay(today.Y, today.M, today.D))), dateText(cal, nm), dateText(cal, fm))
@@ -216,11 +263,38 @@ func (run *lookupRun) calendarInfo() (LookupAnswer, error) {
 		for i, k := range cal.EventKinds {
 			names[i] = k.Name
 		}
-		fmt.Fprintf(&b, "\n### Event kinds\n\n%s\n", strings.Join(names, ", "))
+		fmt.Fprintf(&b, "\n### Event categories (the names `category:` takes on events)\n\n%s\n", strings.Join(names, ", "))
 	}
+	b.WriteString(run.importanceText())
 	b.WriteString(run.climateText(cal))
 	ans.Text = b.String()
 	return ans, nil
+}
+
+// importanceText lists the campaign's event importance levels, the names
+// `importance:` takes on events. Directors only, like the categories; ""
+// when the levels can't be read.
+func (run *lookupRun) importanceText() string {
+	if run.l.Tiers == nil || !run.director() {
+		return ""
+	}
+	defs, err := run.l.Tiers.GetEventTierDefinitions(run.ctx, run.campaignID)
+	if err != nil || len(defs) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("\n### Event importance levels (the names `importance:` takes on events)\n\n")
+	for _, d := range defs {
+		line := "- " + d.Name
+		if d.Slug != "" && !sameName(d.Slug, d.Name) {
+			line += " (`" + d.Slug + "`)"
+		}
+		if d.IsDefault {
+			line += ", the usual level"
+		}
+		b.WriteString(line + "\n")
+	}
+	return b.String()
 }
 
 // climateText is the calendar's weather settings, or "" when they can't be

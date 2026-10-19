@@ -102,7 +102,7 @@ templ SessionListFragment(cc *campaigns.CampaignContext, sessions []Session, csr
 								</span>
 							}
 							if s.IsRecurring {
-								<span class="inline-flex items-center px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400">
+								<span class="inline-flex items-center px-1.5 py-0.5 rounded bg-surface-alt text-fg-secondary border border-edge">
 									<i class="fa-solid fa-repeat text-[10px] mr-0.5"></i>
 									{ s.RecurrenceLabel() }
 								</span>
@@ -262,7 +262,7 @@ templ SessionDetailPage(cc *campaigns.CampaignContext, session *Session, csrfTok
 							</span>
 						}
 						if session.IsRecurring {
-							<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400">
+							<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-surface-alt text-fg-secondary border border-edge">
 								<i class="fa-solid fa-repeat text-[10px] mr-0.5"></i>
 								{ session.RecurrenceLabel() }
 							</span>
@@ -320,8 +320,9 @@ templ SessionDetailPage(cc *campaigns.CampaignContext, session *Session, csrfTok
 					<p class="text-sm text-fg-body whitespace-pre-wrap">{ *session.Summary }</p>
 				</div>
 			}
-			<!-- Session Recap (visible to all members, editable by Scribes+) -->
-			if session.Status == StatusCompleted {
+			<!-- Session Recap (members only, editable by Scribes+): a recap has no
+			     visibility of its own, so a public campaign's visitors never see it. -->
+			if session.Status == StatusCompleted && cc.IsMember {
 				<div class="card p-4 mb-6">
 					<div class="flex items-center justify-between mb-2">
 						<h2 class="text-sm font-semibold text-fg">

@@ -858,10 +858,16 @@
     // Scroll into view so virtual keyboard doesn't cover the input.
     setTimeout(function () { input.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, 100);
 
+    // Removing the input fires blur, which would run save() again; the
+    // first Enter, Escape or blur settles the rename and the rest do nothing.
+    var settled = false;
+
     function save() {
+      if (settled) return;
+      settled = true;
       var newName = input.value.trim();
       if (!newName || newName === oldName) {
-        cancel();
+        restore();
         return;
       }
       Chronicle.apiFetch('/campaigns/' + campaignId + '/sidebar-nodes/' + nodeId, {
@@ -882,6 +888,12 @@
     }
 
     function cancel() {
+      if (settled) return;
+      settled = true;
+      restore();
+    }
+
+    function restore() {
       nameSpan.textContent = oldName;
       nameSpan._renaming = false;
     }
@@ -1312,10 +1324,10 @@
     '  position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);',
     '  z-index: 9999; display: flex; gap: 8px; align-items: center;',
     '  padding: 8px 16px; border-radius: 10px;',
-    '  background: var(--color-surface-raised, #1e1e2e);',
+    '  background: var(--color-bg-secondary, #1e1e2e);',
     '  border: 1px solid var(--color-border, #333);',
     '  box-shadow: 0 8px 32px rgba(0,0,0,0.4);',
-    '  font-size: 12px; color: var(--color-fg, #e0e0e0);',
+    '  font-size: 12px; color: var(--color-text-primary, #e0e0e0);',
     '}'
   ].join('\n');
   document.head.appendChild(style);
@@ -1552,7 +1564,8 @@
       countPages: countPages,
       placeRequest: placeRequest,
       placeTargetId: placeTargetId,
-      addPlace: addPlace
+      addPlace: addPlace,
+      startInlineRename: startInlineRename
     };
   }
 })();

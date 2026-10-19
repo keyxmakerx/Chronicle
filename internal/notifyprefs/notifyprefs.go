@@ -28,6 +28,7 @@ const (
 	GameNightChanges = "gameNightChanges"
 	GameNightAnswers = "gameNightAnswers"
 	AvailabilityAsks = "availabilityAsks"
+	GameNightEntries = "gameNightEntries"
 	ItemsGiven       = "itemsGiven"
 	ModuleUpdates    = "moduleUpdates"
 )
@@ -57,6 +58,9 @@ var Catalog = []Category{
 		Channels: []Channel{Bell}, Defaults: map[Channel]bool{Bell: true}},
 	{Key: AvailabilityAsks, Group: "Game nights", Label: "The owner asks me to fill in or confirm my free times",
 		Channels: []Channel{Bell, Email}, Defaults: map[Channel]bool{Bell: true, Email: false}},
+	{Key: GameNightEntries, Group: "Game nights", Label: "My Journal entry for a game night is ready, or the night is over",
+		Detail:   "For the DM, a check-in when the entries named anyone",
+		Channels: []Channel{Bell}, Defaults: map[Channel]bool{Bell: true}},
 	{Key: ItemsGiven, Group: "Items and campaigns", Label: "Someone gives my character an item",
 		Channels: []Channel{Bell}, Defaults: map[Channel]bool{Bell: true}},
 	{Key: ModuleUpdates, Group: "Items and campaigns", Label: "A new Foundry module version is out",
@@ -78,6 +82,9 @@ var bellTypes = map[string]string{
 	"session_reschedule_suggested": GameNightAnswers,
 	"availability_nudge":           AvailabilityAsks,
 	"availability_confirm":         AvailabilityAsks,
+	"game_night_entry_ready":       GameNightEntries,
+	"game_night_checkin":           GameNightEntries,
+	"game_night_share_entry":       GameNightEntries,
 	"item_given":                   ItemsGiven,
 }
 

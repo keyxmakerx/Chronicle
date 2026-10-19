@@ -2015,6 +2015,41 @@
 .cal-v5 .gnfind input:focus{outline:1.5px solid var(--ink);outline-offset:0}
 .cal-v5 .gnfind .lp-res[hidden]{display:none}
 .cal-v5 .gnrecap .lnk, .cal-v5 .gnlinks .lnk{display:inline-flex;align-items:center;gap:6px;padding:0;font:550 12px/1.3 var(--sans);color:var(--ink2)}
+/* Entries for this night: one row per Journal entry. */
+.cal-v5 .gnnotes{display:grid}
+.cal-v5 .gnnrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:baseline;padding:8px 0;border-bottom:1px solid var(--hair2)}
+.cal-v5 .gnnrow:last-child{border-bottom:0}
+.cal-v5 .gnnrow a{min-width:0;font:600 13px/1.3 var(--sans);color:var(--ink);text-decoration:none;overflow-wrap:anywhere}
+.cal-v5 .gnnrow a:hover{text-decoration:underline}
+.cal-v5 .gnnrow .who{grid-column:1/-1;font:500 12px/1.3 var(--sans);color:var(--mut)}
+.cal-v5 .gnaud{padding:1px 6px;border-radius:5px;box-shadow:inset 0 0 0 1px var(--edge);font:500 11px/1.3 var(--sans);color:var(--mut);white-space:nowrap}
+.cal-v5 .gnaud.dm{color:rgb(var(--color-warn-rgb));box-shadow:inset 0 0 0 1px rgb(var(--color-warn-rgb) / .45)}
+.cal-v5 .gnrule{margin:8px 0 0;font:500 11.5px/1.5 var(--sans);color:var(--mut)}
+/* The after-night check-in: Director only, so it carries the amber edge. */
+.cal-v5 .gnchk{border-left:3px solid rgb(var(--color-warn-rgb));padding-left:12px}
+.cal-v5 .gnchk-h{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px}
+.cal-v5 .gnchk-h p{margin:0;flex:1 1 220px;font:600 13.5px/1.4 var(--sans);color:var(--ink)}
+.cal-v5 .gnchk-h .dirnote{color:rgb(var(--color-warn-rgb))}
+.cal-v5 .gnchk-l{display:grid;margin-top:6px}
+.cal-v5 .gncrow{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:2px 10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--hair2)}
+.cal-v5 .gncrow:last-child{border-bottom:0}
+.cal-v5 .gncrow .av{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--hair2);font:600 11px/1 var(--sans);color:var(--ink2)}
+.cal-v5 .gncrow .nm{min-width:0;font:600 13px/1.3 var(--sans);color:var(--ink);text-decoration:none;overflow-wrap:anywhere}
+.cal-v5 .gncrow .nm:hover{text-decoration:underline}
+.cal-v5 .gncrow .gnpick{grid-column:3;grid-row:1/span 2;margin:0}
+.cal-v5 .gncrow .gnpick button{flex:none;display:inline-flex;align-items:center;gap:5px;padding:0 10px;min-height:32px}
+.cal-v5 .gncrow .gnpick button[data-gn-seen="seen"][aria-pressed="true"]{background:rgb(var(--color-ok-rgb) / .14);color:rgb(var(--color-ok-rgb));border-color:rgb(var(--color-ok-rgb) / .4)}
+.cal-v5 .gncrow .gnpick button[data-gn-seen="not_seen"][aria-pressed="true"]{background:var(--hair2);color:var(--mut);border-color:var(--edge)}
+.cal-v5 .gncrow .src{grid-column:2;min-width:0;font:500 12px/1.45 var(--sans);color:var(--mut)}
+.cal-v5 .gncrow .src a{color:var(--ink2)}
+.cal-v5 .gncrow .src .lnk{padding:0;font:inherit;color:var(--ink2);text-decoration:underline;text-underline-offset:2px}
+.cal-v5 .gncrow .line{grid-column:2/-1;margin-top:4px;padding:2px 0 2px 10px;border-left:2px solid var(--edge);font:500 12.5px/1.45 var(--sans);color:var(--ink2);quotes:"\201C" "\201D"}
+.cal-v5 .gnchk-f{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;margin-top:8px}
+.cal-v5 .gnchk-f .lnk{padding:0;font:550 12px/1.3 var(--sans);color:var(--ink2)}
+.cal-v5 .gnchk-f .gnrule{margin:0}
+.cal-v5 .gndone{margin:6px 0 0;font:500 13px/1.45 var(--sans);color:var(--ink)}
+.cal-v5 .gndone i{color:rgb(var(--color-ok-rgb))}
+@media (max-width:520px){.cal-v5 .gncrow{grid-template-columns:28px minmax(0,1fr)}.cal-v5 .gncrow .gnpick{grid-column:2;grid-row:auto;margin-top:6px}}
 /* "This day" in a day's card: the viewer's own hours, and the one-day change. */
 .cal-v5 .myday{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:4px 10px;margin:4px 0 6px;font:500 12px/1.4 var(--sans);color:var(--ink2)}
 .cal-v5 .myday b{color:var(--ink);font-weight:600}
@@ -2086,3 +2121,110 @@
 .cal-v5 .cal.picking .day:not(.past){cursor:copy}
 .cal-v5 .day.ppick::before{opacity:1;background:var(--freeBand);box-shadow:inset 0 0 0 1.5px var(--free)}
 .cal-v5 .fvpoll{margin-top:10px}
+
+/* Event rolls. The editor's Roll section and the night results are the
+   Director's, so they carry the amber edge; a player's told result is plain. */
+.cal-v5 .rlsec{border-left:3px solid rgb(var(--color-warn-rgb));padding-left:12px;margin-left:-15px}
+.cal-v5 .rlsec h4{display:flex;align-items:center;gap:8px}
+.cal-v5 .rldm{margin-left:auto;display:inline-flex;align-items:center;gap:5px;font:550 10.5px/1 var(--sans);letter-spacing:0;text-transform:none;color:rgb(var(--color-warn-rgb))}
+.cal-v5 .rlrow{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
+.cal-v5 .rldice input{width:7.5em;font-variant-numeric:tabular-nums;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+.cal-v5 .rltable{flex:1 1 180px}
+.cal-v5 .rlhint{margin:0;font:500 11.5px/1.45 var(--sans);color:var(--mut)}
+.cal-v5 .rlsub{display:flex;align-items:center;gap:8px;margin-top:4px;font:650 9.5px/1 var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--mut)}
+.cal-v5 .rlsub>span:not(.rlyear){letter-spacing:0;text-transform:none;font-weight:500;font-size:11px}
+.cal-v5 .rlyear{margin-left:auto;display:inline-flex;align-items:center;gap:2px;letter-spacing:0;text-transform:none;font:600 12.5px/1 var(--sans);color:var(--ink2)}
+.cal-v5 .rlq{align-self:flex-start;min-height:32px;padding:0;border:0;background:none;font:550 12.5px/1.3 var(--sans);color:var(--ink);text-decoration:underline;text-decoration-color:var(--edge);text-underline-offset:3px}
+.cal-v5 .rlq:hover{text-decoration-color:var(--ink)}
+.cal-v5 .rlq[disabled]{opacity:.5}
+.cal-v5 .rlrm{color:var(--mut)}
+.cal-v5 .rlic{width:32px;height:32px;flex:none;display:grid;place-items:center;border:0;border-radius:8px;background:none;color:var(--mut)}
+.cal-v5 .rlic:hover:not([disabled]){background:var(--hair2);color:var(--ink)}
+.cal-v5 .rlic[aria-pressed="true"]{color:var(--ink)}
+.cal-v5 .rlic[disabled]{opacity:.35}
+.cal-v5 .rltell{display:flex;align-items:center;gap:7px;min-height:28px;font:500 12px/1.3 var(--sans);color:var(--ink2);cursor:pointer}
+.cal-v5 .rltell input{accent-color:var(--ink);width:15px;height:15px}
+.cal-v5 .rlbands{display:flex;flex-direction:column}
+.cal-v5 .rlband{display:grid;grid-template-columns:62px minmax(0,1fr) 32px;gap:4px 10px;padding:10px 0;border-top:1px solid var(--hair2);align-items:start}
+.cal-v5 .rlband:first-child{border-top:0}
+.cal-v5 .rlband .rng{display:flex;flex-direction:column;gap:2px;padding-top:7px;font:600 12px/1.3 var(--sans);color:var(--ink2);font-variant-numeric:tabular-nums}
+.cal-v5 .rlband .rng span{font-weight:500;color:var(--mut)}
+.cal-v5 .rlband .rng .lo{font-weight:600;color:var(--ink2)}
+.cal-v5 .rlband .rng input{width:3.2em;height:28px;padding:0 4px;border:0;border-bottom:1px solid var(--edge);border-radius:0;background:none;font:inherit;color:var(--ink);text-align:center}
+.cal-v5 .rlband .rng input:focus{outline:none;border-bottom-color:var(--ink)}
+.cal-v5 .rlband .bt{display:flex;flex-direction:column;gap:5px;min-width:0}
+.cal-v5 .rlband .nm{height:32px;padding:0 8px;border-radius:8px;border:1px solid var(--edge);background:var(--paper2);font:600 14px/1.2 var(--serif);color:var(--ink);min-width:0}
+.cal-v5 .rlband .lbl{display:flex;align-items:center;gap:5px;margin-top:2px;font:650 9.5px/1 var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--mut)}
+.cal-v5 .rlband .lbl.dm{color:rgb(var(--color-warn-rgb))}
+.cal-v5 .rlband textarea{width:100%;min-height:30px;padding:5px 8px;border:0;border-left:2px solid var(--edge);border-radius:0 8px 8px 0;background:var(--paper2);font:500 12.5px/1.4 var(--sans);color:var(--ink);resize:vertical;overflow:hidden}
+.cal-v5 .rlband textarea.gm{border-left:3px solid rgb(var(--color-warn-rgb));background:rgb(var(--color-warn-rgb) / .07)}
+.cal-v5 .rlband .nm:focus, .cal-v5 .rlband textarea:focus, .cal-v5 .rldice input:focus{outline:1.5px solid var(--ink);outline-offset:0}
+.cal-v5 .rlacts{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px}
+.cal-v5 .rlerr{margin:0;font:550 12px/1.4 var(--sans);color:var(--off)}
+.cal-v5 .rlnights{display:flex;flex-direction:column}
+.cal-v5 .rlnight{display:grid;grid-template-columns:minmax(80px,1fr) 30px minmax(0,1.4fr) auto;gap:8px;align-items:center;min-height:38px;border-top:1px solid var(--hair2);font:500 12.5px/1.3 var(--sans)}
+.cal-v5 .rlnights>.rlq + .rlnight, .cal-v5 .rlnight:first-child{border-top:0}
+.cal-v5 .rlnight .d{color:var(--ink2);font-variant-numeric:tabular-nums}
+.cal-v5 .rlnight.past .d{color:var(--mut)}
+.cal-v5 .rlnight .tot{text-align:right;font:700 14px/1 var(--sans);font-variant-numeric:tabular-nums;color:var(--ink)}
+.cal-v5 .rlnight .bn{display:flex;align-items:center;gap:6px;min-width:0}
+.cal-v5 .rlnight .bn b{font:600 12.5px/1.2 var(--serif);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cal-v5 .rlnight .bn.wait{font-style:italic;color:var(--mut)}
+.cal-v5 .rlnight .acts{display:flex}
+.cal-v5 .rlnight .tick{width:8px;height:8px;flex:none;border-radius:50%;background:var(--mut)}
+.cal-v5 .rlnight .tick.t1{background:var(--bldT)}
+.cal-v5 .rlnight .tick.t2{background:var(--bldL)}
+.cal-v5 .rlsec .told, .cal-v5 .evroll .told{flex:none;padding:2px 6px;border:1px solid var(--edge);border-radius:99px;font:600 10px/1 var(--sans);letter-spacing:.03em;color:var(--mut);white-space:nowrap}
+.cal-v5 .rlcode{margin:0;padding:10px 12px;overflow-x:auto;border:1px solid var(--hair);border-radius:8px;background:var(--paper2);font:12px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;color:var(--ink2);white-space:pre}
+.cal-v5 .evroll{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:5px;font:500 12px/1.35 var(--sans);color:var(--ink2)}
+.cal-v5 .evroll b{font-weight:650;color:var(--ink)}
+.cal-v5 .evroll.dm{color:rgb(var(--color-warn-rgb))}
+.cal-v5 .evroll.dm b{color:inherit}
+.cal-v5 .evrollc{margin:12px 0 4px;padding:8px 0 8px 12px;border-left:2px solid var(--edge)}
+.cal-v5 .evrollc.dm{border-left:3px solid rgb(var(--color-warn-rgb))}
+.cal-v5 .evrollc .lb{display:flex;align-items:center;gap:5px;font:650 9.5px/1 var(--sans);letter-spacing:.12em;text-transform:uppercase;color:var(--mut)}
+.cal-v5 .evrollc.dm .lb{color:rgb(var(--color-warn-rgb))}
+.cal-v5 .evrollc p{margin:6px 0 0;font:500 13px/1.45 var(--sans);color:var(--ink)}
+.cal-v5 .evrollc p.pl{font-size:12px;color:var(--mut)}
+@media (max-width:560px){
+  .cal-v5 .rlband{grid-template-columns:52px minmax(0,1fr) 32px}
+  .cal-v5 .rlnight{grid-template-columns:minmax(72px,1fr) 26px minmax(0,1fr) auto}
+}
+
+/* A hand-set moon that is gone, or not set yet, draws as a dashed ring. */
+.cal-v5 .sil.gone .dg{fill:none;stroke:var(--ss,var(--silS));stroke-width:1;stroke-dasharray:2 1.6}
+/* The Director picks a day in the moon strip to set a hand-set moon on it. */
+.cal-v5 button.gtick{border:0;background:none;padding:3px 0 4px;border-radius:7px;cursor:pointer}
+.cal-v5 button.gtick:hover{background:color-mix(in oklch,var(--gsel) 10%,transparent)}
+.cal-v5 button.gtick:focus-visible{outline:1.5px solid var(--gtx);outline-offset:1px}
+.cal-v5 .gtick.sel{background:color-mix(in oklch,var(--gsel) 14%,transparent);box-shadow:inset 0 0 0 1.5px var(--gsel);color:var(--gsel)}
+.cal-v5 .gtick.mkd::after{content:"";position:absolute;bottom:-2px;left:50%;width:4px;height:4px;margin-left:-2px;border-radius:50%;background:var(--gtx2)}
+/* The Director's controls for a hand-set moon, under the strip. */
+.cal-v5 .mvdm{margin-top:14px;padding-top:12px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:8px}
+.cal-v5 .mvrow{display:flex;align-items:center;flex-wrap:wrap;gap:6px 12px}
+.cal-v5 .mvlab{font:600 11px/1 var(--sans);color:var(--mut)}
+.cal-v5 .mvhint{margin:0;font:500 11.5px/1.45 var(--sans);color:var(--mut)}
+.cal-v5 .mvsec{margin-top:6px}
+.cal-v5 .mvsec .plabel b{font-weight:650;color:var(--ink);letter-spacing:0;text-transform:none;font-size:11px}
+.cal-v5 .mvcount{font:600 11px/1 var(--sans);color:var(--mut);font-variant-numeric:tabular-nums}
+.cal-v5 .mvpick{display:grid;grid-template-columns:repeat(auto-fit,minmax(58px,1fr));gap:6px}
+.cal-v5 .mvpick button{display:flex;flex-direction:column;align-items:center;gap:6px;min-height:58px;padding:9px 4px 8px;border:1px solid var(--edge);border-radius:10px;background:var(--paper);font:550 12px/1.15 var(--sans);color:var(--ink2);text-align:center;min-width:0}
+.cal-v5 .mvpick button span{max-width:100%;overflow-wrap:anywhere}
+.cal-v5 .mvpick button:hover{background:var(--paper2)}
+.cal-v5 .mvpick button[aria-pressed="true"]{border-color:var(--ink);color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+.cal-v5 .mvpick .sil{width:20px;height:20px}
+.cal-v5 .mvmarks{display:flex;flex-direction:column;max-height:220px;overflow-y:auto}
+.cal-v5 .mvmark{display:grid;grid-template-columns:18px minmax(0,1fr) auto auto;gap:6px;align-items:center;min-height:38px;border-top:1px solid var(--hair2);font:500 12.5px/1.3 var(--sans);color:var(--mut)}
+.cal-v5 .mvmark:first-child{border-top:0}
+.cal-v5 .mvmark .sil{width:16px;height:16px}
+.cal-v5 .mvmark.hid{border-left:3px solid rgb(var(--color-warn-rgb));padding-left:8px}
+.cal-v5 .mvmd{border:0;background:none;padding:6px 0;text-align:left;color:inherit;font:inherit;min-width:0;cursor:pointer}
+.cal-v5 .mvmd b{font-weight:550;color:var(--ink);font-variant-numeric:tabular-nums}
+.cal-v5 .mvmd:hover b{text-decoration:underline}
+.cal-v5 .mvact{width:32px;height:32px;border:0;background:none;border-radius:8px;color:var(--mut);display:grid;place-items:center}
+.cal-v5 .mvact:hover{background:var(--hair2);color:var(--ink)}
+.cal-v5 .mvwords summary{cursor:pointer;font:600 12px/1.3 var(--sans);color:var(--ink2);padding:4px 0}
+.cal-v5 .mvwords[open] summary{margin-bottom:6px}
+.cal-v5 .mvwgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;margin:8px 0}
+.cal-v5 .msil.dim{opacity:.45}
+.cal-v5 .gframe .sil.gone .dg{stroke:var(--gtx2)}

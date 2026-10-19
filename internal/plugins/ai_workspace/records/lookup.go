@@ -8,8 +8,12 @@ import (
 	"unicode/utf8"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/aiexport"
+	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/importer"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/widgets/relations"
+	"github.com/keyxmakerx/chronicle/internal/widgets/tags"
+
+	"gopkg.in/yaml.v3"
 )
 
 // KindLookup is the front-matter kind of a read-only question an AI asks
@@ -43,6 +47,15 @@ type SystemEntry struct{ Name, Slug, Source, Summary string }
 // from players.
 type SystemEntriesAPI interface {
 	Entries(ctx context.Context, campaignID, field string, director bool) (system string, list []SystemEntry, err error)
+	// Fields lists the character fields that have entries to pick from, which
+	// are the keys `entry:` and `field:` take.
+	Fields(ctx context.Context, campaignID string, director bool) (system string, fields []SystemEntryField, err error)
+}
+
+// SystemEntryField is one character field with pick-list entries.
+type SystemEntryField struct {
+	Key, Label string
+	Count      int
 }
 
 // PartyAPI is the party as the DM Screen shows it, plus the next game night.
@@ -81,6 +94,8 @@ type PartyNight struct {
 type Lookups struct {
 	Cal     CalendarAPI
 	Weather WeatherSettingsAPI
+	// Rolls adds each rolled night to the `events` answer; nil leaves them out.
+	Rolls   EventRollAPI
 	Tables  RollTablesAPI
 	Maps    MapsAPI
 	Pages   PagesAPI
@@ -89,8 +104,21 @@ type Lookups struct {
 	Rules   *HouseRuleKind
 	Entries SystemEntriesAPI
 	Party   PartyAPI
+	// Tags answers the tag lookups and shows each page's tags; nil leaves
+	// them out.
+	Tags TagsAPI
+	// Tiers adds the event importance levels to the calendar answer.
+	Tiers TierLister
+	// Nights answers `what: game-nights`.
+	Nights GameNightsAPI
+	// PageMaps adds a page's map lines to the `page` answer; nil leaves
+	// them out.
+	PageMaps PageMapsAPI
 	// Kinds answers `what: format` with a kind's own doc.
 	Kinds *Registry
+	// Folders names the sidebar folders so pages show which one holds them;
+	// nil leaves folders out.
+	Folders aiexport.FolderNamer
 }
 
 // LookupAnswer is one lookup's result: the chip shown on screen and the
@@ -104,7 +132,8 @@ type LookupAnswer struct {
 // lookupWhats is every `what:` a lookup may ask, in the prompt's order, with
 // its keys for the prompt's description.
 var lookupWhats = []struct{ what, keys, brief string }{
-	{"pages", "optional `type` (e.g. Character)", "page names, by type"},
+	{"pages", "optional `type` (e.g. Character) and `tag` (a tag's name)", "page names with their tags, by type or tag"},
+	{"tags", "none", "every tag with how many pages carry it, colour and whether it is Directors only"},
 	{"page", "`name`", "one page: its text, tags and links"},
 	{lookupWhatCalendar, "none", "the calendar itself: months, weekdays, seasons, moons with today's phase and the next new and full moon, eras, festivals, today's date, and its climate"},
 	{"weather-kinds", "none", "every climate, built-in weather label and sky effect the calendar can animate, and the owner's own kinds of weather"},
@@ -116,7 +145,8 @@ var lookupWhats = []struct{ what, keys, brief string }{
 	{"inventory", "`character`", "what a character carries"},
 	{"notes", "none", "the titles of my own notes"},
 	{"house-rules", "none", "the house-rules chapters"},
-	{"system-entries", "`field` (e.g. ancestry, kit, race)", "the game system's entries for a character field"},
+	{"system-entries", "optional `field` (e.g. ancestry, kit, race)", "the game system's entries for a character field; without `field`, the fields that have entries"},
+	{"game-nights", "none", "the campaign's game nights: name, date, time, status and summary (owner and co-DM only)"},
 	{"players", "none", "each player's character right now: level and class, meters, conditions, what they carry, and whether they are coming to the next game night"},
 	{lookupWhatFormat, "`block`, the kind to explain (e.g. `block: calendar`)", "how to write one kind of block: every key, the rules and an example"},
 }
@@ -193,7 +223,7 @@ func (run *lookupRun) one(what string, r Record) LookupAnswer {
 	var err error
 	switch what {
 	case "pages":
-		ans, err = run.pagesIndex(r.Str("type"))
+		ans, err = run.pagesIndex(r.Str("type"), r.Str("tag"))
 	case "page":
 		ans, err = run.page(firstNonEmpty(r.Name, r.Str("page")))
 	case lookupWhatCalendar:
@@ -218,6 +248,10 @@ func (run *lookupRun) one(what string, r Record) LookupAnswer {
 		ans, err = run.houseRules()
 	case "system-entries", "entries":
 		ans, err = run.systemEntries(firstNonEmpty(r.Str("field"), r.Str("category")))
+	case "tags":
+		ans, err = run.tagsLookup()
+	case "game-nights", "game-night":
+		ans, err = run.gameNights()
 	case "players", "party":
 		ans, err = run.players()
 	case lookupWhatFormat, "formats", "how-to":
@@ -309,11 +343,29 @@ func (run *lookupRun) parentNames() map[string]string {
 	return names
 }
 
-// withParent labels a page "Name (in Parent)" when its parent is visible.
-func withParent(p entities.Entity, names map[string]string) string {
+// folderNames maps folder ids to names; empty when folders are not wired.
+func (run *lookupRun) folderNames() map[string]string {
+	if run.l.Folders == nil {
+		return nil
+	}
+	names, err := run.l.Folders.FolderNames(run.ctx, run.campaignID)
+	if err != nil {
+		return nil
+	}
+	return names
+}
+
+// withParent labels a page "Name (in Parent)" when its parent is visible, or
+// "Name (in folder Gods)" when it is filed in a folder.
+func withParent(p entities.Entity, names, folders map[string]string) string {
 	if p.ParentID != nil {
 		if parent := names[*p.ParentID]; parent != "" {
 			return p.Name + " (in " + parent + ")"
+		}
+	}
+	if p.ParentNodeID != nil {
+		if f := folders[*p.ParentNodeID]; f != "" {
+			return p.Name + " (in folder " + f + ")"
 		}
 	}
 	return p.Name
@@ -355,33 +407,63 @@ func (run *lookupRun) relationsOf(e *entities.Entity) ([]relations.Relation, err
 
 // ---- pages ----
 
-func (run *lookupRun) pagesIndex(typeName string) (LookupAnswer, error) {
+func (run *lookupRun) pagesIndex(typeName, tagName string) (LookupAnswer, error) {
 	pages, err := run.visiblePages()
 	if err != nil {
 		return LookupAnswer{Chip: "Pages"}, err
 	}
+	// Tags are read as the Actor sees them, so a player never learns a
+	// Directors-only tag exists, not even through a filter.
+	var byPage map[string][]tags.Tag
+	if run.l.Tags != nil {
+		if by, err := pageTags(run.ctx, run.l.Tags, pages, run.director()); err == nil {
+			byPage = by
+		}
+	}
+	tagSlug := importer.TagSlug(tagName)
+	if tagName != "" && run.l.Tags == nil {
+		return LookupAnswer{Chip: "Pages"}, badRequestf("tags can't be looked up on this server")
+	}
 	groups, order := map[string][]string{}, []string{}
-	parents := run.parentNames()
+	parents, folders := run.parentNames(), run.folderNames()
 	for _, p := range pages {
 		label := firstNonEmpty(p.TypeNamePlural, p.TypeName, "Pages")
 		if typeName != "" && !sameName(p.TypeName, typeName) && !sameName(p.TypeNamePlural, typeName) && !sameName(p.TypeSlug, typeName) {
 			continue
 		}
+		if tagName != "" && !hasTag(byPage[p.ID], tagSlug) {
+			continue
+		}
 		if _, ok := groups[label]; !ok {
 			order = append(order, label)
 		}
-		groups[label] = append(groups[label], withParent(p, parents))
+		line := withParent(p, parents, folders)
+		if names := pageTagNames(byPage[p.ID]); len(names) > 0 {
+			line += " [" + strings.Join(names, ", ") + "]"
+		}
+		groups[label] = append(groups[label], line)
 	}
 	n := 0
 	for _, g := range groups {
 		n += len(g)
 	}
 	chip := "Pages · " + strconv.Itoa(n)
-	if typeName != "" {
+	switch {
+	case typeName != "" && tagName != "":
+		chip = typeName + " tagged " + tagName + " · " + strconv.Itoa(n)
+	case typeName != "":
 		chip = typeName + " · " + strconv.Itoa(n)
-		if n == 0 {
-			return LookupAnswer{Chip: chip}, badRequestf("no pages of type %s", quote(typeName))
+	case tagName != "":
+		chip = "Tagged " + tagName + " · " + strconv.Itoa(n)
+	}
+	if n == 0 && (typeName != "" || tagName != "") {
+		switch {
+		case typeName != "" && tagName != "":
+			return LookupAnswer{Chip: chip}, badRequestf("no pages of type %s tagged %s", quote(typeName), quote(tagName))
+		case tagName != "":
+			return LookupAnswer{Chip: chip}, badRequestf("no pages tagged %s", quote(tagName))
 		}
+		return LookupAnswer{Chip: chip}, badRequestf("no pages of type %s", quote(typeName))
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "## Pages (%d)\n\n", n)
@@ -398,15 +480,25 @@ func (run *lookupRun) pagesIndex(typeName string) (LookupAnswer, error) {
 		b.WriteString("\n")
 	}
 	if lines < n {
-		fmt.Fprintf(&b, "…and %d more; ask with `type:` for one type.\n", n-lines)
+		fmt.Fprintf(&b, "…and %d more; ask with `type:` or `tag:` to narrow it.\n", n-lines)
 	}
 	return LookupAnswer{Chip: chip, Text: b.String()}, nil
+}
+
+// hasTag reports whether any of ts has the slug.
+func hasTag(ts []tags.Tag, slug string) bool {
+	for _, t := range ts {
+		if t.Slug == slug {
+			return true
+		}
+	}
+	return false
 }
 
 // PageIndex is the prompt's compact list of page names per type, capped,
 // so the AI knows what it can ask about without the whole world. A
 // sub-page reads "Name (in Parent)" so the AI can place new pages with
-// `parent:`; a parent the reader cannot see is not named.
+// `parent:` or `folder:`; a parent the reader cannot see is not named.
 func (l *Lookups) PageIndex(ctx context.Context, campaignID string, a Actor) string {
 	if l == nil || l.Pages == nil {
 		return ""
@@ -418,13 +510,13 @@ func (l *Lookups) PageIndex(ctx context.Context, campaignID string, a Actor) str
 	}
 	const perType = 40
 	groups, order := map[string][]string{}, []string{}
-	parents := run.parentNames()
+	parents, folders := run.parentNames(), run.folderNames()
 	for _, p := range pages {
 		label := firstNonEmpty(p.TypeNamePlural, p.TypeName, "Pages")
 		if _, ok := groups[label]; !ok {
 			order = append(order, label)
 		}
-		groups[label] = append(groups[label], withParent(p, parents))
+		groups[label] = append(groups[label], withParent(p, parents, folders))
 	}
 	var b strings.Builder
 	for _, label := range order {
@@ -461,7 +553,12 @@ func (run *lookupRun) page(name string) (LookupAnswer, error) {
 		opts.Privacy = aiexport.PrivacyModePermitted
 	}
 	opts.ParentNames = run.parentNames()
-	md, err := aiexport.RenderEntities(run.ctx, []entities.Entity{*e}, types, nil, map[string][]relations.Relation{e.ID: rels}, opts)
+	var pageTagMap map[string][]tags.Tag
+	if run.l.Tags != nil {
+		pageTagMap, _ = run.l.Tags.GetEntityTagsBatch(run.ctx, []string{e.ID}, run.director())
+	}
+	opts.FolderNames = run.folderNames()
+	md, err := aiexport.RenderEntities(run.ctx, []entities.Entity{*e}, types, pageTagMap, map[string][]relations.Relation{e.ID: rels}, opts)
 	if err != nil {
 		return ans, err
 	}
@@ -473,9 +570,43 @@ func (run *lookupRun) page(name string) (LookupAnswer, error) {
 	md = strings.Replace(md, "### ", "## Page: ", 1)
 	md = strings.Replace(md, " {#"+anchorOf(md)+"}", "", 1)
 	md = strings.TrimSuffix(strings.TrimSpace(md), "---")
+	md += sheetFieldsText(e, types, run.director(), e.OwnerUserID != nil && *e.OwnerUserID == run.a.UserID)
+	md += pageMapText(run.ctx, run.l.PageMaps, run.campaignID, e, run.a)
 	ans.Chip = "Page · " + e.Name
 	ans.Text = md
 	return ans, nil
+}
+
+// sheetFieldsText is the page's sheet as a `fields:` block the AI can edit
+// and send back, in the category's own field order. GM-only and owner-only
+// values are left out exactly as the page's API leaves them out for this
+// reader.
+func sheetFieldsText(e *entities.Entity, types []entities.EntityType, canSeeGM, isOwner bool) string {
+	var defs []entities.FieldDefinition
+	for _, t := range types {
+		if t.ID == e.EntityTypeID {
+			defs = t.Fields
+		}
+	}
+	vals := entities.FilterRestrictedFields(e.FieldsData, defs, canSeeGM, isOwner)
+	var b strings.Builder
+	for _, d := range defs {
+		v, ok := vals[d.Key]
+		if !ok || v == nil || v == "" {
+			continue
+		}
+		line, err := yaml.Marshal(map[string]any{d.Key: v})
+		if err != nil {
+			continue
+		}
+		b.WriteString("  ")
+		b.WriteString(strings.TrimRight(string(line), "\n"))
+		b.WriteString("\n")
+	}
+	if b.Len() == 0 {
+		return ""
+	}
+	return "\n\n### Sheet\n\n```yaml\nfields:\n" + b.String() + "```\n"
 }
 
 // anchorOf is the {#slug} anchor on the rendered page's heading, if any.
@@ -711,7 +842,7 @@ func (run *lookupRun) pins(mapName string) (LookupAnswer, error) {
 func (run *lookupRun) systemEntries(field string) (LookupAnswer, error) {
 	ans := LookupAnswer{Chip: "Game-system entries"}
 	if field == "" {
-		return ans, badRequestf("it needs `field:`, a character field such as ancestry, kit or race")
+		return run.systemEntryFields()
 	}
 	ans.Chip = strings.ToUpper(field[:1]) + field[1:]
 	if run.l.Entries == nil {
@@ -738,6 +869,84 @@ func (run *lookupRun) systemEntries(field string) (LookupAnswer, error) {
 	}
 	if len(lines) == 0 {
 		b.WriteString("None listed.\n")
+	}
+	writeLines(&b, lines)
+	ans.Text = b.String()
+	return ans, nil
+}
+
+// systemEntryFields is `what: system-entries` with no `field`: the keys it
+// and `kind: system-entry`'s `entry:` take, so the AI need not guess them.
+func (run *lookupRun) systemEntryFields() (LookupAnswer, error) {
+	ans := LookupAnswer{Chip: "Game-system entry fields"}
+	if run.l.Entries == nil {
+		return ans, badRequestf("game-system entries can't be looked up on this server yet")
+	}
+	system, fields, err := run.l.Entries.Fields(run.ctx, run.campaignID, run.director())
+	if err != nil {
+		return ans, err
+	}
+	ans.Chip = fmt.Sprintf("%s · %d", ans.Chip, len(fields))
+	var b strings.Builder
+	head := "Character fields with entries"
+	if system != "" {
+		head += " (" + system + ")"
+	}
+	fmt.Fprintf(&b, "## %s\n\nUse the key as `field:` here and as `entry:` on `kind: system-entry`.\n\n", head)
+	var lines []string
+	for _, f := range fields {
+		line := fmt.Sprintf("- %s", f.Key)
+		if f.Label != "" && !sameName(f.Label, f.Key) {
+			line += " (" + f.Label + ")"
+		}
+		lines = append(lines, line+fmt.Sprintf(", %d entries", f.Count))
+	}
+	if len(lines) == 0 {
+		b.WriteString("None listed. A campaign can still add entries for any character field key.\n")
+	}
+	writeLines(&b, lines)
+	ans.Text = b.String()
+	return ans, nil
+}
+
+// gameNights answers `what: game-nights`. Game nights are Director
+// content, as the kind is, so players get a refusal.
+func (run *lookupRun) gameNights() (LookupAnswer, error) {
+	ans := LookupAnswer{Chip: "Game nights"}
+	if run.l.Nights == nil {
+		return ans, badRequestf("game nights can't be looked up on this server")
+	}
+	if !run.director() {
+		return ans, badRequestf("game nights are only listed for the owner or a co-DM")
+	}
+	list, err := run.l.Nights.List(run.ctx, run.campaignID)
+	if err != nil {
+		return ans, err
+	}
+	ans.Chip = fmt.Sprintf("Game nights · %d", len(list))
+	var b strings.Builder
+	fmt.Fprintf(&b, "## Game nights (%d)\n\n", len(list))
+	var lines []string
+	for _, n := range list {
+		line := "- " + n.Name
+		var parts []string
+		when := strings.TrimSpace(n.Date + " " + n.Time)
+		if when != "" {
+			parts = append(parts, when)
+		}
+		if w := nightWords[n.Status]; w != "" {
+			parts = append(parts, w)
+		}
+		if len(parts) > 0 {
+			line += ": " + strings.Join(parts, ", ")
+		}
+		if s := strings.TrimSpace(n.Summary); s != "" {
+			line += ". " + oneLine(s, 140)
+		}
+		lines = append(lines, line)
+	}
+	if len(lines) == 0 {
+		b.WriteString("None yet.\n")
 	}
 	writeLines(&b, lines)
 	ans.Text = b.String()

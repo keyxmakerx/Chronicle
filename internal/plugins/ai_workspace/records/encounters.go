@@ -62,7 +62,7 @@ type EncounterKind struct {
 func (EncounterKind) Name() string  { return "encounter" }
 func (EncounterKind) Label() string { return "Encounter" }
 func (EncounterKind) Doc() string {
-	return "A fight planned on a page, matched by `name` within its `page` (the page's name; an Adventures trial or any page). Keys: `heroes` (hero page names the fight is built for), `ready` (true puts it at the top of Foundry's list for game night), `rename_to`. `creatures` is a list, one line per kind of creature: an optional count, the creature's page name, then `group A` to `group H` (its initiative group) and how it starts: `starts seen` (the default), `starts hidden` (placed hidden; only the DM reveals it) or `arrives later` (left off the scene until the DM places it). A creature with no page yet goes in by name. On update, a key you leave out keeps what is there; `creatures` and `heroes` replace the whole list.\n\n```\n---\nkind: encounter\npage: The Siege of Harrowmere\nname: Ramparts fight\nheroes: [Ash, Bryn, Corvin, Dela]\nready: true\ncreatures:\n  - Goblin War Chief, group A, starts hidden\n  - 2 Hobgoblin Soldier, group B\n  - 4 Skeleton Archer, group C, arrives later\n---\n```"
+	return "A fight planned on a page, matched by `name` within its `page` (the page's name; an Adventures trial or any page). Keys: `heroes` (names of the pages for the heroes the fight is built for; any page works, so a Character page linked to a player is fine, not only a Hero page), `ready` (true puts it at the top of Foundry's list for game night), `rename_to`. `creatures` is a list, one line per kind of creature: an optional count, the creature's page name, then `group A` to `group H` (its initiative group) and how it starts: `starts seen` (the default), `starts hidden` (placed hidden; only the DM reveals it) or `arrives later` (left off the scene until the DM places it). A creature with no page yet goes in by name. On update, a key you leave out keeps what is there; `creatures` and `heroes` replace the whole list.\n\n```\n---\nkind: encounter\npage: The Siege of Harrowmere\nname: Ramparts fight\nheroes: [Ash, Bryn, Corvin, Dela]\nready: true\ncreatures:\n  - Goblin War Chief, group A, starts hidden\n  - 2 Hobgoblin Soldier, group B\n  - 4 Skeleton Archer, group C, arrives later\n---\n```"
 }
 
 // Title names the row on the review screen: "Ramparts fight on The Siege of
@@ -190,8 +190,8 @@ func (k EncounterKind) read(ctx context.Context, campaignID string, a Actor, r R
 		}
 		if p := k.page(ctx, campaignID, c.Name); p != nil {
 			c.EntityID, c.Name = p.ID, p.Name
-		} else {
-			d.warnings = append(d.warnings, quote(c.Name)+" is not a page yet; it goes in by name, and Foundry looks its actor up by name")
+		} else if !r.Made[entities.Slugify(c.Name)] {
+			d.warnings = append(d.warnings, quote(c.Name)+" is not a page yet; it goes in by name with no stat block, and Foundry looks its actor up by name")
 		}
 		d.creatures = append(d.creatures, c)
 	}
@@ -242,13 +242,17 @@ func (k EncounterKind) Plan(ctx context.Context, campaignID string, a Actor, r R
 		if r.Action != ActionCreate {
 			return Plan{Error: "no page called " + quote(r.Str("page"))}
 		}
-		p.Warnings = append(p.Warnings, "No page called "+quote(r.Str("page"))+" yet; it must be created in this import")
+		if !r.Made[entities.Slugify(r.Str("page"))] {
+			p.Warnings = append(p.Warnings, "No page called "+quote(r.Str("page"))+" yet; it must be created in this import")
+		}
 	}
 	for _, h := range d.missing {
 		if r.Action == ActionDelete {
 			break
 		}
-		p.Warnings = append(p.Warnings, "No hero page called "+quote(h)+" yet; it must be created in this import")
+		if !r.Made[entities.Slugify(h)] {
+			p.Warnings = append(p.Warnings, "No hero page called "+quote(h)+" yet; it must be created in this import")
+		}
 	}
 	switch r.Action {
 	case ActionCreate:

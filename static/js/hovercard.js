@@ -9,6 +9,10 @@
  *     contentFn(trigger) returns a content object, a Promise of one, or null.
  *     opts.pinOnClick: clicking the trigger pins the card instead of
  *     following it (rule words). Links leave it off so a click still navigates.
+ *     opts.corner: draw the card as the fading corner (time lines), its corner
+ *     on a short stem over the trigger, in place of the campaign's look.
+ *     opts.kit: while the page wears a style kit, draw the card in the kit
+ *     (look "kit") in place of the campaign's look (time lines).
  *   Chronicle.hovercard.open(trigger, content, {pin}) / .close() / .update(content)
  *   Chronicle.hovercard.html(content) -> markup, for previews (Customize).
  *   Chronicle.hovercard.look() -> the campaign's look.
@@ -22,6 +26,8 @@
  * 250ms; stays open while the pointer is on the card; click or tap pins it
  * with a close button; keyboard focus opens it and Escape closes it; one
  * card at a time; kept inside the window, flipping above near the bottom.
+ * The fading corner sits above its trigger and flips below near the top of
+ * the window, and to the trigger's left near the right edge.
  */
 (function () {
   'use strict';
@@ -33,10 +39,15 @@
   var CLOSE_DELAY = 180;
   var LONG_PRESS = 500;
   var LOOKS = { paper: 1, plain: 1, night: 1, compact: 1 };
+  // The fading corner's stem, and the room it leaves for a time line bead
+  // grown on hover, from the trigger's centre to the corner.
+  var STEM = 7;
+  var CORNER_OFF = 8 + STEM;
 
   var card = null, inner = null;
   var current = null;   // trigger the card belongs to
   var pinned = false;
+  var corner = false;   // the card is drawn as the fading corner
   var restoringFocus = false; // set while Escape hands focus back to the trigger
   var openTimer = 0, closeTimer = 0;
   var token = 0;        // guards against a slow contentFn answering for an old trigger
@@ -99,6 +110,10 @@
     card.id = 'chc';
     card.setAttribute('role', 'dialog');
     card.hidden = true;
+    var stem = document.createElement('i');
+    stem.className = 'chc__stem';
+    stem.setAttribute('aria-hidden', 'true');
+    card.appendChild(stem);
     inner = document.createElement('div');
     inner.className = 'chc__in';
     card.appendChild(inner);
@@ -123,12 +138,30 @@
     if (!card || !current || !current.isConnected) return;
     var r = current.getBoundingClientRect();
     var w = card.offsetWidth, h = card.offsetHeight, vw = window.innerWidth, vh = window.innerHeight, gap = 8;
+    if (corner) { placeCorner(r, w, h, vw); return; }
     var left = Math.min(Math.max(8, r.left), Math.max(8, vw - w - 8));
     var top = r.bottom + gap, up = false;
     if (top + h > vh - 8 && r.top - gap - h > 8) { top = r.top - gap - h; up = true; }
     card.style.left = Math.round(left) + 'px';
     card.style.top = Math.round(top) + 'px';
     card.classList.toggle('chc--up', up);
+  }
+
+  // The corner's edge is centred on the trigger, so the stem meets the bead
+  // in its middle; its 1.5px edge is why the offset is .75. When neither side
+  // has room (a phone), the card narrows to the roomier side and wraps.
+  function placeCorner(r, w, h, vw) {
+    var cx = r.left + r.width / 2, cy = r.top + r.height / 2, roomR = vw - 8 - cx, roomL = cx - 8;
+    if (w > roomR && w > roomL) {
+      card.style.maxWidth = Math.max(roomR, roomL) + 'px';
+      w = card.offsetWidth; h = card.offsetHeight;
+    }
+    var right = w > roomR, down = cy - CORNER_OFF - h < 8;
+    card.style.left = (right ? cx + 0.75 - w : cx - 0.75).toFixed(2) + 'px';
+    card.style.top = Math.round(down ? cy + CORNER_OFF : cy - CORNER_OFF - h) + 'px';
+    card.classList.toggle('chc--cr', right);
+    card.classList.toggle('chc--cd', down);
+    card.classList.toggle('chc--up', !down);
   }
 
   function render(c) {
@@ -144,7 +177,11 @@
     if (current && current !== trigger) detachTrigger(current);
     current = trigger;
     pinned = !!(opts && opts.pin);
-    card.dataset.look = look();
+    corner = !!(opts && opts.corner);
+    card.dataset.look = corner ? 'corner'
+      : opts && opts.kit && document.documentElement.hasAttribute('data-cz-kit') ? 'kit' : look();
+    card.style.maxWidth = '';
+    if (!corner) card.classList.remove('chc--cr', 'chc--cd');
     card.classList.toggle('chc--pinned', pinned);
     trigger.setAttribute('aria-expanded', 'true');
     trigger.setAttribute('aria-controls', 'chc');
@@ -184,18 +221,18 @@
 
   // Resolve the caller's content (value or Promise) and show it, with a
   // loading line while a fetch is in flight. A null answer closes the card.
-  function show(trigger, contentFn, pin) {
+  function show(trigger, contentFn, pin, bopts) {
     var my = ++token;
-    var res;
+    var res, o = { pin: pin, corner: !!bopts.corner, kit: !!bopts.kit };
     try { res = contentFn(trigger); } catch (e) { res = null; }
     if (res && typeof res.then === 'function') {
-      open(trigger, { title: trigger.textContent.trim(), loading: true }, { pin: pin });
+      open(trigger, { title: trigger.textContent.trim(), loading: true }, o);
       res.then(function (c) {
         if (my !== token) return;
         if (c) update(c); else close();
       }, function () { if (my === token) close(); });
     } else if (res) {
-      open(trigger, res, { pin: pin });
+      open(trigger, res, o);
     }
   }
 
@@ -212,7 +249,7 @@
       if (!within(t) || (pinned && current)) return;
       if (t === current) { clearTimeout(closeTimer); return; }
       clearTimeout(openTimer);
-      openTimer = setTimeout(function () { show(t, contentFn, false); }, OPEN_DELAY);
+      openTimer = setTimeout(function () { show(t, contentFn, false, opts); }, OPEN_DELAY);
     }
     function onOut(e) {
       if (e.pointerType === 'touch') return;
@@ -225,7 +262,7 @@
     function onFocusIn(e) {
       if (restoringFocus) return;
       var t = find(e);
-      if (within(t) && !(pinned && current) && t !== current) show(t, contentFn, false);
+      if (within(t) && !(pinned && current) && t !== current) show(t, contentFn, false, opts);
     }
     function onFocusOut(e) {
       var t = find(e);
@@ -241,14 +278,14 @@
       e.preventDefault();
       e.stopPropagation();
       if (t === current && pinned) { close(); return; }
-      show(t, contentFn, true);
+      show(t, contentFn, true, opts);
     }
     function onKey(e) {
       if (!opts.pinOnClick || (e.key !== 'Enter' && e.key !== ' ')) return;
       var t = find(e);
       if (!within(t) || t.tagName === 'A' || t.tagName === 'BUTTON') return;
       e.preventDefault();
-      if (t === current && pinned) close(); else show(t, contentFn, true);
+      if (t === current && pinned) close(); else show(t, contentFn, true, opts);
     }
     // On touch, links open pinned on a long press so a tap still follows them.
     function onTouchStart(e) {
@@ -256,7 +293,7 @@
       if (!within(t) || opts.pinOnClick) return;
       clearTimeout(pressTimer);
       pressed = false;
-      pressTimer = setTimeout(function () { pressed = true; show(t, contentFn, true); }, LONG_PRESS);
+      pressTimer = setTimeout(function () { pressed = true; show(t, contentFn, true, opts); }, LONG_PRESS);
     }
     function cancelPress() { clearTimeout(pressTimer); }
 

@@ -139,6 +139,40 @@ func aiEncounterSave(in records.EncounterInput) encounters.SaveInput {
 	return out
 }
 
+// keepRowIDs gives each new row the id of an old row for the same page, in
+// order, so stages that name the old row still find it. Other rows get an
+// id no old row had.
+func keepRowIDs(rows, old []encounters.Creature) {
+	taken := map[string]bool{}
+	for _, o := range old {
+		taken[o.ID] = true
+	}
+	kept := map[string]bool{}
+	matched := make([]bool, len(rows))
+	for i := range rows {
+		for _, o := range old {
+			if !kept[o.ID] && o.EntityID != "" && o.EntityID == rows[i].EntityID {
+				kept[o.ID], matched[i] = true, true
+				rows[i].ID = o.ID
+				break
+			}
+		}
+	}
+	n := 0
+	for i := range rows {
+		if matched[i] {
+			continue
+		}
+		for {
+			n++
+			if id := "ai" + strconv.Itoa(n); !taken[id] {
+				rows[i].ID, taken[id] = id, true
+				break
+			}
+		}
+	}
+}
+
 func (a aiEncountersAdapter) ListForPage(ctx context.Context, campaignID, pageID string, act records.Actor) ([]records.EncounterRef, error) {
 	list, err := a.svc.ListForPage(ctx, campaignID, pageID, aiEncounterViewer(act))
 	if err != nil {
@@ -159,7 +193,21 @@ func (a aiEncountersAdapter) Create(ctx context.Context, campaignID, pageID stri
 func (a aiEncountersAdapter) Update(ctx context.Context, campaignID, id string, act records.Actor, in records.EncounterInput, version int) error {
 	body := aiEncounterSave(in)
 	body.Version = &version
-	_, err := a.svc.Update(ctx, campaignID, id, aiEncounterViewer(act), body)
+	// An AI block knows nothing of stages or versions, so the ones the DM
+	// planned are kept: a row for the same page keeps its old id, and what
+	// the stages and versions still point at survives.
+	cur, err := a.svc.Get(ctx, campaignID, id, aiEncounterViewer(act))
+	if err != nil {
+		return err
+	}
+	keepRowIDs(body.Creatures, cur.Creatures)
+	body.Versions = encounters.CarryVersions(cur.Versions, body.Creatures)
+	rows := append([]encounters.Creature{}, body.Creatures...)
+	for _, ver := range body.Versions {
+		rows = append(rows, ver.Add...)
+	}
+	body.Stages = encounters.CarryStages(cur.Stages, rows)
+	_, err = a.svc.Update(ctx, campaignID, id, aiEncounterViewer(act), body)
 	return err
 }
 

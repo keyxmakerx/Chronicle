@@ -20,13 +20,13 @@ import (
 type BlockMeta struct {
 	Type         string            `json:"type"`
 	Label        string            `json:"label"`
-	Icon         string            `json:"icon"`                      // FontAwesome class (e.g., "fa-heading").
+	Icon         string            `json:"icon"` // FontAwesome class (e.g., "fa-heading").
 	Description  string            `json:"description"`
-	Addon        string            `json:"addon,omitempty"`           // Required addon slug; empty = always available.
-	Container    bool              `json:"container,omitempty"`       // True for layout containers (two_column, tabs, etc.).
-	WidgetSlug   string            `json:"widget_slug,omitempty"`     // For ext_widget blocks: the extension widget slug.
-	Contexts     []string          `json:"contexts,omitempty"`        // Editor contexts: "dashboard", "template", "category". Empty = all.
-	ConfigFields []ConfigFieldMeta `json:"config_fields,omitempty"`   // Declarative config schema for the editor dialog.
+	Addon        string            `json:"addon,omitempty"`         // Required addon slug; empty = always available.
+	Container    bool              `json:"container,omitempty"`     // True for layout containers (two_column, tabs, etc.).
+	WidgetSlug   string            `json:"widget_slug,omitempty"`   // For ext_widget blocks: the extension widget slug.
+	Contexts     []string          `json:"contexts,omitempty"`      // Editor contexts: "dashboard", "template", "category". Empty = all.
+	ConfigFields []ConfigFieldMeta `json:"config_fields,omitempty"` // Declarative config schema for the editor dialog.
 	// Singleton blocks may only appear once per layout. Used by blocks
 	// whose render path binds fixed DOM IDs (e.g., map_editor's
 	// #map-container, #marker-modal) and would silently misbehave with
@@ -52,11 +52,11 @@ type BlockMeta struct {
 type ConfigFieldMeta struct {
 	Key     string   `json:"key"`
 	Label   string   `json:"label"`
-	Type    string   `json:"type"`              // "number", "text", "textarea", "select", "entity_type", "map"
-	Min     *int     `json:"min,omitempty"`      // For "number" type.
-	Max     *int     `json:"max,omitempty"`      // For "number" type.
+	Type    string   `json:"type"`          // "number", "text", "textarea", "select", "entity_type", "map"
+	Min     *int     `json:"min,omitempty"` // For "number" type.
+	Max     *int     `json:"max,omitempty"` // For "number" type.
 	Default any      `json:"default,omitempty"`
-	Options []Option `json:"options,omitempty"`  // For "select" type.
+	Options []Option `json:"options,omitempty"` // For "select" type.
 }
 
 // Option is a label+value pair for select-type config fields.

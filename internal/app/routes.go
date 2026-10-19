@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -43,21 +44,26 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/dmscreen"
 	"github.com/keyxmakerx/chronicle/internal/plugins/encounters"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
+	"github.com/keyxmakerx/chronicle/internal/plugins/fieldrules"
 	"github.com/keyxmakerx/chronicle/internal/plugins/foundry_vtt"
+	"github.com/keyxmakerx/chronicle/internal/plugins/homebrew"
 	"github.com/keyxmakerx/chronicle/internal/plugins/maps"
 	"github.com/keyxmakerx/chronicle/internal/plugins/media"
 	"github.com/keyxmakerx/chronicle/internal/plugins/npcs"
 	"github.com/keyxmakerx/chronicle/internal/plugins/packages"
 	"github.com/keyxmakerx/chronicle/internal/plugins/pageblocks"
+	"github.com/keyxmakerx/chronicle/internal/plugins/pagetests"
 	"github.com/keyxmakerx/chronicle/internal/plugins/quests"
 	"github.com/keyxmakerx/chronicle/internal/plugins/restore"
 	"github.com/keyxmakerx/chronicle/internal/plugins/rolltables"
+	"github.com/keyxmakerx/chronicle/internal/plugins/rumours"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/settings"
 	"github.com/keyxmakerx/chronicle/internal/plugins/smtp"
 	"github.com/keyxmakerx/chronicle/internal/plugins/syncapi"
 	"github.com/keyxmakerx/chronicle/internal/plugins/systemstate"
 	"github.com/keyxmakerx/chronicle/internal/plugins/timeline"
+	"github.com/keyxmakerx/chronicle/internal/plugins/trackers"
 	"github.com/keyxmakerx/chronicle/internal/plugins/vault_import"
 	"github.com/keyxmakerx/chronicle/internal/plugins/widgetbindings"
 	"github.com/keyxmakerx/chronicle/internal/systems"
@@ -111,24 +117,116 @@ type bestiaryEntityCreatorAdapter struct {
 	campaignSvc campaigns.CampaignService
 }
 
-// CreateFromStatblock creates a new entity in a campaign from a bestiary statblock.
-// Uses entity type ID 0 (default) since the real type depends on system configuration.
+// CreateFromStatblock creates a creature page in a campaign from a bestiary
+// statblock, on the campaign's creature type with the type's fields filled
+// from the statblock (see creatureFields). A campaign with no creature type
+// is refused with a message saying so: the page needs a type to exist at all.
 //
 // Visibility comes from the campaign's DefaultVisibility setting: the
 // bestiary's EntityCreator interface has no is_private parameter and the
 // import UI has no per-import visibility control, so the campaign default is
 // the only input there is.
-func (a *bestiaryEntityCreatorAdapter) CreateFromStatblock(ctx context.Context, campaignID, userID, name string, statblock json.RawMessage) (string, error) {
+func (a *bestiaryEntityCreatorAdapter) CreateFromStatblock(ctx context.Context, campaignID, userID, name, systemID string, statblock json.RawMessage) (string, error) {
+	et, err := a.creatureType(ctx, campaignID, systemID)
+	if err != nil {
+		return "", err
+	}
 	input := entities.CreateEntityInput{
-		Name:       name,
-		FieldsData: map[string]any{"statblock_json": string(statblock)},
-		IsPrivate:  a.defaultPrivate(ctx, campaignID),
+		Name:         name,
+		EntityTypeID: et.ID,
+		FieldsData:   creatureFields(et.Fields, statblock),
+		IsPrivate:    a.defaultPrivate(ctx, campaignID),
 	}
 	ent, err := a.svc.Create(ctx, campaignID, userID, input)
 	if err != nil {
 		return "", err
 	}
 	return ent.ID, nil
+}
+
+// creatureType picks the campaign's switched-on creature type, preferring the
+// publication's system's own ("<system>-creature") when there are several.
+func (a *bestiaryEntityCreatorAdapter) creatureType(ctx context.Context, campaignID, systemID string) (*entities.EntityType, error) {
+	types, err := a.svc.GetEntityTypesByPresetCategory(ctx, campaignID, "creature")
+	if err != nil {
+		return nil, err
+	}
+	var pick *entities.EntityType
+	for i := range types {
+		if !types[i].Enabled {
+			continue
+		}
+		if systemID != "" && types[i].Slug == systemID+"-creature" {
+			return &types[i], nil
+		}
+		if pick == nil {
+			pick = &types[i]
+		}
+	}
+	if pick == nil {
+		return nil, apperror.NewBadRequest("this campaign has no creature page type to add the creature to; enable its game system, or add a category for creatures, and try again")
+	}
+	return pick, nil
+}
+
+// creatureFields fills a creature type's fields from a published statblock,
+// in the shapes game systems keep them: a statblock value fills the type's
+// field of the same key. A list or object goes to the "<key>_json" field as
+// JSON text when the type declares one, else to the key itself: a list of
+// plain values (keywords) as comma text, anything else as JSON text. Keys the
+// type does not declare are left out; the whole statblock is kept under
+// statblock_json, as before, so nothing in it is lost.
+func creatureFields(defs []entities.FieldDefinition, statblock json.RawMessage) map[string]any {
+	out := map[string]any{"statblock_json": string(statblock)}
+	var sb map[string]any
+	if json.Unmarshal(statblock, &sb) != nil {
+		return out
+	}
+	declared := make(map[string]bool, len(defs))
+	for _, d := range defs {
+		declared[d.Key] = true
+	}
+	for k, v := range sb {
+		switch v := v.(type) {
+		case nil:
+		case map[string]any, []any:
+			key := k
+			if declared[k+"_json"] {
+				key = k + "_json"
+			} else if !declared[k] {
+				continue
+			}
+			if text, ok := plainList(v); ok && !strings.HasSuffix(key, "_json") {
+				out[key] = text
+			} else if raw, err := json.Marshal(v); err == nil {
+				out[key] = string(raw)
+			}
+		default:
+			if declared[k] {
+				out[k] = v
+			}
+		}
+	}
+	return out
+}
+
+// plainList joins a list of plain values with commas; ok is false for
+// anything else.
+func plainList(v any) (string, bool) {
+	list, ok := v.([]any)
+	if !ok {
+		return "", false
+	}
+	parts := make([]string, 0, len(list))
+	for _, item := range list {
+		switch item.(type) {
+		case string, float64, bool:
+			parts = append(parts, fmt.Sprint(item))
+		default:
+			return "", false
+		}
+	}
+	return strings.Join(parts, ", "), true
 }
 
 // defaultPrivate reports whether this campaign's DefaultVisibility setting
@@ -642,8 +740,8 @@ func (a *entityTagFetcherAdapter) GetEntityTags(ctx context.Context, entityID st
 }
 
 // SetEntityTags sets the tags for a single entity.
-func (a *entityTagFetcherAdapter) SetEntityTags(ctx context.Context, entityID string, campaignID string, tagIDs []int) error {
-	return a.svc.SetEntityTags(ctx, entityID, campaignID, tagIDs)
+func (a *entityTagFetcherAdapter) SetEntityTags(ctx context.Context, entityID string, campaignID string, tagIDs []int, includeDmOnly bool) error {
+	return a.svc.SetEntityTagsVisible(ctx, entityID, campaignID, tagIDs, includeDmOnly)
 }
 
 // GetEntityTagGrants resolves the tag-derived visibility grants on one entity
@@ -2001,8 +2099,8 @@ func (a *mentionLinkAdapter) GetMentionLinksForGraph(ctx context.Context, campai
 	return result, nil
 }
 
-// registerPageTextBlocks registers Read-aloud, Table and Steps: text a DM types
-// in place, stored per page and block. They are always available (no addon) and
+// registerPageTextBlocks registers Read-aloud, Table, Steps, Checklist and the Page map:
+// content a DM types or draws in place, stored per page and block. They are always available (no addon) and
 // usable several times on a page; the widget fetches its own content, so these
 // only emit the mount point. A layout that places them (Adventures does) fails
 // to save without them, so every registry that validates layouts needs them.
@@ -2026,11 +2124,29 @@ func registerPageTextBlocks(blockRegistry *entities.BlockRegistry) {
 			Contexts:    []string{"template"},
 			TileSizes:   []string{"1x2", "2x2", "4x2"},
 		},
+		{
+			Type: pageblocks.KindChecklist, Label: "Checklist", Icon: "fa-circle-half-stroke",
+			Description: "Named things each held by one of two sides you name, with notes for you when a side reaches a count",
+			Contexts:    []string{"template"},
+			TileSizes:   []string{"2x1", "2x2", "4x2"},
+		},
+		{
+			Type: pageblocks.KindPageMap, Label: "Page map", Icon: "fa-map-location-dot",
+			Description: "A map drawn in place from rooms, walls and markers, with hover cards for linked pages",
+			Contexts:    []string{"template"},
+			TileSizes:   []string{"2x2", "4x2", "4x3"},
+		},
 	} {
 		kind := b.Type
 		blockRegistry.Register(b, func(rc entities.BlockRenderContext) templ.Component {
 			if rc.CC == nil || rc.Entity == nil || rc.Block.ID == "" {
 				return templ.NopComponent
+			}
+			if kind == pageblocks.KindPageMap {
+				return pageblocks.PageMapMount(rc.CC.Campaign.ID, rc.Entity.ID, rc.Block.ID, rc.CSRFToken)
+			}
+			if kind == pageblocks.KindChecklist {
+				return pageblocks.ChecklistMount(rc.CC.Campaign.ID, rc.Entity.ID, rc.Block.ID, rc.CSRFToken, rc.CC.CanAuthorDmOnly())
 			}
 			return pageblocks.BlockMount(rc.CC.Campaign.ID, rc.Entity.ID, rc.Block.ID, kind, rc.CSRFToken)
 		})
@@ -2052,6 +2168,126 @@ func registerEncountersBlock(blockRegistry *entities.BlockRegistry) {
 			return templ.NopComponent
 		}
 		return encounters.BlockMount(rc.CC.Campaign.ID, rc.Entity.ID, rc.CSRFToken)
+	})
+}
+
+// registerWhereItIsBlock registers the "Where it is" block: the maps a page is
+// pinned on, closest first, read from Maps. It has no settings, because the
+// ladder is whatever the Director set in Maps, and one per page, because its
+// enlarged map is a single sheet. What a viewer is shown is decided by the
+// maps service from the pins they can see; the block adds no rule of its own.
+func registerWhereItIsBlock(blockRegistry *entities.BlockRegistry, mapsService maps.MapService) {
+	blockRegistry.Register(entities.BlockMeta{
+		Type: maps.WhereItIsBlockType, Label: "Where it is", Icon: "fa-map-location-dot",
+		Description: "The maps this page is pinned on, closest first, zooming out",
+		Addon:       "maps", Contexts: []string{"template"},
+		TileSizes: []string{"4x2", "2x2"},
+		Singleton: true,
+	}, func(rc entities.BlockRenderContext) templ.Component {
+		if rc.CC == nil || rc.CC.Campaign == nil || rc.Entity == nil {
+			return templ.NopComponent
+		}
+		role := rc.CC.VisibilityRole()
+		ladder, err := mapsService.WhereIs(context.Background(), rc.CC.Campaign.ID, rc.Entity.ID, role, rc.UserID)
+		if err != nil {
+			slog.Error("where it is: cannot read the page's place in the maps",
+				slog.String("entity_id", rc.Entity.ID), slog.Any("error", err))
+			return templ.NopComponent
+		}
+		return maps.BlockWhereItIs(rc.CC, rc.Entity.ID, rc.Entity.Name, ladder, permissions.CanSeeDmOnly(role))
+	})
+}
+
+// registerLastSeenBlock registers the "Last seen" block: when the party last
+// met a page, and every game night they did. It has no settings and one per
+// page, because its list is a single sheet. What a viewer is told is decided
+// by the sightings service for that viewer (a player gets no suggestions,
+// dismissals or who-added-it, and nothing for a page they cannot open); the
+// block adds no rule of its own, except that a player whose page was never
+// seen gets no block at all.
+func registerLastSeenBlock(blockRegistry *entities.BlockRegistry, sightings sessions.SightingService) {
+	blockRegistry.Register(entities.BlockMeta{
+		Type: sessions.LastSeenBlockType, Label: "Last seen", Icon: "fa-eye",
+		Description: "When the party last met this page, and every game night they did",
+		Addon:       sessions.SessionsAddonSlug, Contexts: []string{"template"},
+		TileSizes: []string{"4x1", "2x1"},
+		Singleton: true,
+	}, func(rc entities.BlockRenderContext) templ.Component {
+		if rc.CC == nil || rc.CC.Campaign == nil || rc.Entity == nil {
+			return templ.NopComponent
+		}
+		role := rc.CC.VisibilityRole()
+		viewer := permissions.RequestViewer(role, rc.UserID)
+		seen, err := sightings.SightingsFor(context.Background(), rc.CC.Campaign.ID, rc.Entity.ID, viewer)
+		if err != nil {
+			slog.Error("last seen: cannot read the page's sightings",
+				slog.String("entity_id", rc.Entity.ID), slog.Any("error", err))
+			return templ.NopComponent
+		}
+		dm := permissions.CanSeeDmOnly(role)
+		view := sessions.BuildLastSeenView(seen, time.Now())
+		if !sessions.ShowLastSeen(view, dm) {
+			return templ.NopComponent
+		}
+		return sessions.BlockLastSeen(rc.CC.Campaign.ID, rc.Entity.ID, rc.Entity.Name, rc.UserID, view, dm)
+	})
+}
+
+// registerStandingBlock registers the "Standing" block: how a page feels about
+// the party or one character, with the Director's reasons. It has no settings
+// in the layout (the page's "players can see this" switch is stored with the
+// standing), and one per page, because its reasons are a single sheet. What a
+// viewer is told is decided by the standing service for that viewer; the block
+// adds no rule of its own, and a block the service hides for the viewer draws
+// nothing.
+func registerStandingBlock(blockRegistry *entities.BlockRegistry, standing entities.StandingService) {
+	blockRegistry.Register(entities.BlockMeta{
+		Type: entities.StandingBlockType, Label: "Standing", Icon: "fa-scale-balanced",
+		Description: "How this page feels about the party, and why",
+		Contexts:    []string{"template"},
+		TileSizes:   []string{"4x1", "2x1"},
+		Singleton:   true,
+	}, func(rc entities.BlockRenderContext) templ.Component {
+		if rc.CC == nil || rc.CC.Campaign == nil || rc.Entity == nil {
+			return templ.NopComponent
+		}
+		view, err := standing.View(context.Background(), rc.CC.Campaign.ID, rc.Entity.ID, rc.CC.VisibilityRole(), rc.UserID)
+		if err != nil {
+			slog.Error("standing: cannot read the page's standing",
+				slog.String("entity_id", rc.Entity.ID), slog.Any("error", err))
+			return templ.NopComponent
+		}
+		if view.Hidden {
+			return templ.NopComponent
+		}
+		return entities.BlockStanding(rc.CC.Campaign.ID, rc.Entity.ID, rc.Entity.Name, view)
+	})
+}
+
+// registerFamilyTreeBlock registers the "Family tree" block: a page's parents,
+// children and partners, read from its entity relations. It has no settings
+// (the family is whatever the Relations block holds) and is one per page,
+// because its tree is a single sheet. What a viewer is shown is decided by the
+// family tree service for that viewer; the block adds no rule of its own.
+func registerFamilyTreeBlock(blockRegistry *entities.BlockRegistry, family entities.FamilyTreeService) {
+	blockRegistry.Register(entities.BlockMeta{
+		Type: entities.FamilyTreeBlockType, Label: "Family tree", Icon: "fa-sitemap",
+		Description: "Parents, children and partners drawn from this page's relations",
+		Contexts:    []string{"template"},
+		TileSizes:   []string{"4x1", "2x1"},
+		Singleton:   true,
+	}, func(rc entities.BlockRenderContext) templ.Component {
+		if rc.CC == nil || rc.CC.Campaign == nil || rc.Entity == nil {
+			return templ.NopComponent
+		}
+		role := rc.CC.VisibilityRole()
+		tree, err := family.Tree(context.Background(), rc.CC.Campaign.ID, rc.Entity.ID, role, rc.UserID)
+		if err != nil {
+			slog.Error("family tree: cannot read the page's family",
+				slog.String("entity_id", rc.Entity.ID), slog.Any("error", err))
+			return templ.NopComponent
+		}
+		return entities.BlockFamilyTree(rc.CC.Campaign.ID, rc.Entity.ID, rc.Entity.Name, tree, permissions.CanSeeDmOnly(role))
 	})
 }
 
@@ -2693,16 +2929,26 @@ func (a *App) RegisterRoutes() {
 	favoriteRepo := entities.NewFavoriteRepository(a.DB)
 	entityHandler := entities.NewHandler(entityService)
 	entityHandler.SetSidebarNodeRepo(sidebarNodeRepo)
+	folderService := entities.NewFolderService(sidebarNodeRepo, entityRepo, entityTypeRepo)
+	entityHandler.SetFolderService(folderService)
 	entityHandler.SetFavoriteRepo(favoriteRepo)
 	entityHandler.SetSavedFilterRepo(entities.NewSavedFilterRepository(a.DB))
 	entities.RegisterRoutes(e, entityHandler, campaignService, authService)
 
 	// Expose the entities plugin's embedded static assets at
-	// /static/plugins/entities/ (currently js/characters.js, the Characters
-	// page's mini→full launch enhancement).
+	// /static/plugins/entities/ (js/characters.js, the Characters page's
+	// mini→full launch enhancement, and the scripts below, each loaded on
+	// sight: the Contents block's, Standing's, the Family tree's and the
+	// Characters page's hero builder).
 	a.registerPlugin(PluginRegistration{
 		Slug:     entities.PluginSlug,
 		StaticFS: echo.MustSubFS(entities.StaticAssetsFS, "static"),
+		Widgets: []PluginWidget{
+			{Name: entities.ContentsWidgetName, Scripts: []string{"js/page_contents.js"}},
+			{Name: "standing", Scripts: []string{"js/standing.js"}},
+			{Name: entities.FamilyTreeWidgetName, Scripts: []string{"js/family_tree.js"}},
+			{Name: "hero-builder", Scripts: []string{"js/hero_builder.js"}},
+		},
 	})
 
 	// Content template routes (entity content blueprints).
@@ -2732,6 +2978,7 @@ func (a *App) RegisterRoutes() {
 	// types its defaults provide.
 	characterListService := entities.NewCharacterListService(entityService, &characterListStore{camps: campaignService})
 	campaignService.SetCharacterListSeeder(characterListService)
+	characterListService.SetPanelPlacer(entityService)
 	entityHandler.SetCharacterLists(characterListService)
 
 	// Media plugin: file upload, storage, thumbnailing, serving.
@@ -3537,6 +3784,21 @@ func (a *App) RegisterRoutes() {
 	}); ok {
 		gated.SetEntityVisibilityGate(&entityVisibilityFilterAdapter{svc: entityService})
 	}
+	// Event rolls: their storage, and the rolling tables a table roll draws
+	// from, read through the rolltables service (never its storage).
+	if rolls, ok := calendarService.(interface {
+		SetEventRollRepository(calendar.EventRollRepository)
+		SetRollTableSource(calendar.RollTableSource)
+	}); ok {
+		rolls.SetEventRollRepository(calendar.NewEventRollRepository(a.DB))
+		rolls.SetRollTableSource(calendarRollTablesAdapter{svc: rolltables.NewService(rolltables.NewRepository(a.DB))})
+	}
+	// Moons the Director sets by hand: their marks' storage.
+	if marks, ok := calendarService.(interface {
+		SetMoonMarkRepository(calendar.MoonMarkRepository)
+	}); ok {
+		marks.SetMoonMarkRepository(calendar.NewMoonMarkRepository(a.DB))
+	}
 	calendarHandler := calendar.NewHandler(calendarService)
 	// Optional UX nicety: suggest the owner's own stored account timezone as
 	// the real-world calendar wizard step's starting default (see
@@ -3582,7 +3844,8 @@ func (a *App) RegisterRoutes() {
 	// mount's data-can-edit="true" and opens calendar_event_drawer.js's full
 	// event editor and calendar_weather_sheet.js's weather calendar (both
 	// loaded first so they exist when the editor binds; the drawer's
-	// repeat-by-rule logic is calendar_rule.js, loaded before it), and
+	// repeat-by-rule logic is calendar_rule.js, loaded before it; its Roll
+	// section is the on-sight widget calendar_event_roll), and
 	// calendar_open.js peeks and opens the Calendars page's cards. rulebook.js
 	// mounts on the Rules page's data-widget="rulebook" when a system ships a
 	// book, and rulebook_editor.js on the editor page's
@@ -3701,6 +3964,7 @@ func (a *App) RegisterRoutes() {
 			{Name: "entity-map", Scripts: []string{"js/map_viewer.js", "js/map_focus.js", "js/entity_map.js"}},
 			{Name: "map-widget", Scripts: []string{"js/map_annotations.js", "js/map_shapes.js", "js/map_widget.js"}},
 			{Name: "map-block-picker", Scripts: []string{"js/map_block_picker.js"}},
+			{Name: "where-it-is", Scripts: []string{"js/where_it_is.js"}},
 		},
 	})
 	if a.PluginHealth.IsHealthy(maps.PluginSlug) {
@@ -3763,6 +4027,20 @@ func (a *App) RegisterRoutes() {
 	// the game-night emails.
 	sessionsHandler.SetRecipientFilter(authService)
 	sessions.ConfigureRecipientFilter(sessionsService, authService)
+	// Per-night sightings: the after-night check-in and a page's Last seen
+	// read and write the same rows.
+	sightingService := sessions.NewSightingService(sessions.NewSightingRepository(a.DB), sessionsRepo,
+		&entityCampaignCheckerAdapter{svc: entityService}, &entityVisibilityFilterAdapter{svc: entityService})
+	sessionsHandler.SetSightingService(sightingService)
+	// The Last seen block's script loads on sight (ADR-063); the block itself
+	// is registered with the other page blocks below.
+	a.registerPlugin(PluginRegistration{
+		Slug:     sessions.PluginSlug,
+		StaticFS: echo.MustSubFS(sessions.StaticAssetsFS, "static"),
+		Widgets: []PluginWidget{
+			{Name: "last-seen", Scripts: []string{"js/last_seen.js"}},
+		},
+	})
 	// Game-night links open the real-world calendar; with the calendar plugin
 	// down they keep going to the Sessions page.
 	if a.PluginHealth.IsHealthy(calendar.PluginSlug) {
@@ -3885,6 +4163,7 @@ func (a *App) RegisterRoutes() {
 	entityNotesNotifier := &entityNotesNotifierHolder{}
 	entityNotesService := entity_notes.NewService(entityNotesRepo, entityNotesNotifier.Notify)
 	entityNotesHandler := entity_notes.NewHandler(entityNotesService)
+	entityNotesHandler.SetEntityGate(&entityAccessAdapter{svc: entityService})
 	entity_notes.RegisterRoutes(e, entityNotesHandler, campaignService, authService, addonService)
 
 	// Tags widget: campaign-scoped entity tagging (CRUD + entity associations).
@@ -4096,6 +4375,16 @@ func (a *App) RegisterRoutes() {
 	notePages := &notesPagesAdapter{svc: entityService}
 	noteHandler.SetPageNamer(notePages)
 	noteHandler.SetPageLinker(notePages)
+	// Each game night gives every member a Journal entry; the night's page
+	// reads the ones the DM can read for the check-in.
+	nightEntries := sessions.NewNightEntryService(sessionsRepo, sessions.NewNightEntryRepository(a.DB),
+		&nightJournalAdapter{svc: noteSvc}, notePages, sessions.NewSightingRepository(a.DB))
+	sessionsHandler.SetNightEntryService(nightEntries)
+	noteSvc.SetNightEntries(&journalNightsAdapter{svc: nightEntries, addons: addonService})
+	// The day before each night, and after it, the entries put items in the
+	// bell; a loop sends them.
+	nightEntries.SetBells(&nightBellCampaignsAdapter{campaigns: campaignService, addons: addonService}, sessionsService, sessionsService)
+	go sessions.StartNightBells(a.ShutdownCtx, nightEntries)
 	notes.RegisterRoutes(e, noteHandler, campaignService, authService)
 	// A player can allow the Foundry notebook to use their notes. Grants go
 	// only to an address that may already call Chronicle across sites.
@@ -4250,6 +4539,15 @@ func (a *App) RegisterRoutes() {
 	// This drives validation, rendering, and the template editor palette.
 	blockRegistry := entities.NewBlockRegistry()
 	entities.RegisterCoreBlocks(blockRegistry)
+	// The Standing block and its routes exist only while its tables migrated
+	// (its script loads on sight from the entities plugin's assets).
+	if a.PluginHealth.IsHealthy(entities.StandingPluginSlug) {
+		standingService := entities.NewStandingService(entities.NewStandingRepository(a.DB), entityService)
+		entities.RegisterStandingRoutes(e, entities.NewStandingHandler(standingService, entityService), campaignService, authService)
+		registerStandingBlock(blockRegistry, standingService)
+	} else {
+		slog.Warn("standing tables degraded — the Standing block is not available")
+	}
 	blockRegistry.Register(entities.BlockMeta{
 		Type: entities.BlockCharacterItems, Label: "Items & Money", Icon: "fa-sack-dollar",
 		Description: "What a character carries, their money and recent moves",
@@ -4393,8 +4691,8 @@ func (a *App) RegisterRoutes() {
 		return renderSkyboxBlock(context.Background(), calendarService, rc)
 	})
 
-	// page_timeline — the page's dated events on the campaign calendar, a
-	// slim line from the first to today. The calendar service filters every
+	// page_timeline — the page's dated events on the campaign calendar, the
+	// lean line from the first to today (or the subject's death). The calendar service filters every
 	// event for the viewer, so a player's line holds only what their
 	// calendar shows. show_dm "hide" leaves Director-only events off for
 	// everyone.
@@ -4407,7 +4705,7 @@ func (a *App) RegisterRoutes() {
 				Options: []entities.Option{{Label: "Show to the Director", Value: "show"}, {Label: "Hide", Value: "hide"}}},
 		},
 	}, func(rc entities.BlockRenderContext) templ.Component {
-		return renderPageTimelineBlock(context.Background(), calendarService, rc)
+		return renderPageTimelineBlock(context.Background(), calendarService, &pageTimelineLinker{timelines: timelineSvc, addons: addonService}, rc)
 	})
 
 	// Quest board and Notice boards: cork-board blocks for quest pages and
@@ -4441,6 +4739,11 @@ func (a *App) RegisterRoutes() {
 
 	registerPageTextBlocks(blockRegistry)
 	registerEncountersBlock(blockRegistry)
+	familyTree := entities.NewFamilyTreeService(
+		&familyLinksAdapter{svc: relService}, entities.NewPageCards(a.DB), entityService)
+	registerFamilyTreeBlock(blockRegistry, familyTree)
+	entityHandler.SetFamilyEdit(entities.NewFamilyEditService(
+		newFamilyWriterAdapter(relService), entityService, entityService, familyTree))
 
 	// Timeline plugin blocks (requires "timeline" addon).
 	blockRegistry.Register(entities.BlockMeta{
@@ -4482,6 +4785,9 @@ func (a *App) RegisterRoutes() {
 		}
 		return renderBoundBlock(maps.WidgetTypeMap, rc, legacyID)
 	})
+
+	registerWhereItIsBlock(blockRegistry, mapsService)
+	registerLastSeenBlock(blockRegistry, sightingService)
 
 	// NPC gallery block — embeds a compact NPC grid on entity pages/dashboards.
 	blockRegistry.Register(entities.BlockMeta{
@@ -4564,6 +4870,20 @@ func (a *App) RegisterRoutes() {
 	} else if n > 0 {
 		slog.Info("placed page extras into layouts", slog.Int("layouts", n))
 	}
+	if n, err := placeCreaturePanelsOnce(context.Background(), settingsRepo, campaignService, entityService); err != nil {
+		slog.Error("placing creature panels failed", slog.String("error", err.Error()))
+	} else if n > 0 {
+		slog.Info("placed game-system panels on creature types", slog.Int("layouts", n))
+	}
+
+	// One-time: existing campaigns move to the Material page look
+	// (material_page_look.go). Only a failure to read the marker or list
+	// campaigns runs it again on the next boot.
+	if n, err := materialPageLookOnce(context.Background(), settingsRepo, campaignService); err != nil {
+		slog.Error("moving campaigns to the Material page look failed", slog.String("error", err.Error()))
+	} else if n > 0 {
+		slog.Info("moved campaigns to the Material page look", slog.Int("campaigns", n))
+	}
 
 	// One-time: Notes became Journal plus Jot notes, so campaigns that had
 	// Notes on keep both (see jot_notes_split.go). Retried on the next boot.
@@ -4620,8 +4940,12 @@ func (a *App) RegisterRoutes() {
 	// its repository.
 	aiEraVersions := calendar.NewEraVersionService(calendar.NewEraVersionRepository(a.DB), calendarService)
 	aiWorkspaceCommitter.SetEraWriter(aiImportEraAdapter{versions: aiEraVersions})
+	aiWorkspaceCommitter.SetTagWriter(tagService)
+	aiWorkspaceCommitter.SetFolders(folderService)
+	aiWorkspaceHandler.SetImportFolders(folderService)
 	aiWorkspaceHandler.SetImportEras(aiImportEraAdapter{versions: aiEraVersions})
 	aiWorkspaceRenderer.EraVersions = aiExportEraAdapter{versions: aiEraVersions}
+	aiWorkspaceRenderer.Folders = aiFolderNames{folders: folderService}
 	aiWorkspaceHandler.SetImportCommitter(aiWorkspaceCommitter)
 
 	campaignHandler.RegisterSettingsTab(aiWorkspaceHandler.SettingsTabFactory())
@@ -4708,10 +5032,13 @@ func (a *App) RegisterRoutes() {
 	// --- WASM Runtime (Layer 3 Logic Extensions) ---
 	// Wire the WASM plugin manager with read-only host functions that let
 	// sandboxed WASM plugins query entities, calendar, and tags.
+	wasmEntityInCampaign := func(ctx context.Context, campaignID, entityID string) (*entities.Entity, error) {
+		return entityInCampaign(ctx, entityService, campaignID, entityID)
+	}
 	wasmEntityReader := extensions.NewWASMEntityAdapter(
 		// get_entity: returns entity JSON by ID.
-		func(ctx context.Context, id string) (json.RawMessage, error) {
-			ent, err := entityService.GetByID(ctx, id)
+		func(ctx context.Context, campaignID, id string) (json.RawMessage, error) {
+			ent, err := wasmEntityInCampaign(ctx, campaignID, id)
 			if err != nil {
 				return nil, err
 			}
@@ -4767,7 +5094,10 @@ func (a *App) RegisterRoutes() {
 	// Wire write adapters for WASM host functions.
 	wasmHostEnv.SetEntityWriter(extensions.NewWASMEntityWriteAdapter(
 		// update_entity_fields: unmarshal JSON fields and delegate to entity service.
-		func(ctx context.Context, entityID string, fieldsData json.RawMessage) error {
+		func(ctx context.Context, campaignID, entityID string, fieldsData json.RawMessage) error {
+			if _, err := wasmEntityInCampaign(ctx, campaignID, entityID); err != nil {
+				return err
+			}
 			var fields map[string]any
 			if err := json.Unmarshal(fieldsData, &fields); err != nil {
 				return fmt.Errorf("invalid fields JSON: %w", err)
@@ -4793,10 +5123,16 @@ func (a *App) RegisterRoutes() {
 			if err := json.Unmarshal(tagIDsJSON, &tagIDs); err != nil {
 				return fmt.Errorf("invalid tag_ids JSON: %w", err)
 			}
+			if _, err := wasmEntityInCampaign(ctx, campaignID, entityID); err != nil {
+				return err
+			}
 			return tagService.SetEntityTags(ctx, entityID, campaignID, tagIDs)
 		},
 		// get_entity_tags: return tags as JSON (include DM-only for WASM plugins).
-		func(ctx context.Context, entityID string) (json.RawMessage, error) {
+		func(ctx context.Context, campaignID, entityID string) (json.RawMessage, error) {
+			if _, err := wasmEntityInCampaign(ctx, campaignID, entityID); err != nil {
+				return nil, err
+			}
 			entityTags, err := tagService.GetEntityTags(ctx, entityID, true)
 			if err != nil {
 				return nil, err
@@ -4819,6 +5155,11 @@ func (a *App) RegisterRoutes() {
 			}
 			if err := json.Unmarshal(input, &req); err != nil {
 				return nil, fmt.Errorf("invalid relation input: %w", err)
+			}
+			for _, id := range []string{req.SourceEntityID, req.TargetEntityID} {
+				if _, err := wasmEntityInCampaign(ctx, campaignID, id); err != nil {
+					return nil, err
+				}
 			}
 			rel, err := relService.Create(ctx, campaignID, req.SourceEntityID, req.TargetEntityID,
 				req.RelationType, req.ReverseRelationType, req.CreatedBy, req.Metadata, req.DmOnly)
@@ -4860,20 +5201,31 @@ func (a *App) RegisterRoutes() {
 	systems.RegisterRoutes(e, systemHandler, addonService, authService, campaignService)
 	// The campaign's own pick-list entries, merged into the pick lists below.
 	// The manifest is the campaign's custom upload, else its chosen built-in.
-	systemEntrySvc := systems.NewSystemEntryService(
-		systems.NewSystemEntryRepository(a.DB),
-		func(ctx context.Context, campaignID string) *systems.SystemManifest {
-			if m := campaignSystemMgr.GetManifest(campaignID); m != nil {
-				return m
-			}
-			c, err := campaignService.GetByID(ctx, campaignID)
-			if err != nil {
-				return nil
-			}
-			return systems.Find(c.ParseSettings().SystemID)
-		})
+	manifestFor := campaignManifest(func(ctx context.Context, campaignID string) *systems.SystemManifest {
+		if m := campaignSystemMgr.GetManifest(campaignID); m != nil {
+			return m
+		}
+		c, err := campaignService.GetByID(ctx, campaignID)
+		if err != nil {
+			return nil
+		}
+		return systems.Find(c.ParseSettings().SystemID)
+	})
+	systemEntrySvc := systems.NewSystemEntryService(systems.NewSystemEntryRepository(a.DB), systems.EntryManifestResolver(manifestFor),
+		systems.WithEntryCharacters(entryCharactersAdapter{entities: entityService, lists: characterListService}))
+	// AI Import's brief carries the system's notes on sheet fields, and the
+	// categories the system's sheets live on get its fields once
+	// (system_sheet_fields.go).
+	aiWorkspacePrompt.Notes = aiFieldNotes{manifest: manifestFor, lists: characterListService, types: entityService}
+	if n, err := addSystemSheetFieldsOnce(context.Background(), settingsRepo, campaignService, manifestFor, entityService, characterListService); err != nil {
+		slog.Error("adding system sheet fields failed", slog.String("error", err.Error()))
+	} else if n > 0 {
+		slog.Info("added game-system sheet fields to existing categories", slog.Int("fields", n))
+	}
 	systems.RegisterSystemEntryChoices(systemEntrySvc)
 	systems.RegisterSystemEntryRoutes(e, systems.NewSystemEntryHandler(systemEntrySvc), authService, campaignService)
+	// Foundry fills the items it makes for these entries from the player view.
+	syncAPIHandler.SetSystemEntryLister(systemEntrySvc)
 	// Pick lists (Ancestry, Kit, Race, Class…) for the character attributes editor.
 	characterChoiceSvc := systems.NewCharacterChoiceService(addonService, campaignSystemMgr)
 	systems.RegisterCharacterChoiceRoutes(e, systems.NewCharacterChoiceHandler(characterChoiceSvc), authService, campaignService)
@@ -5048,8 +5400,10 @@ func (a *App) RegisterRoutes() {
 					PeekGlow: ap.PeekGlow, PeekGlowColour: ap.PeekGlowColour,
 					HoverCard: ap.HoverCard,
 
-					SheetStyle: ap.SheetStyle,
-					PageLook:   ap.PageLook,
+					SheetStyle:    ap.SheetStyle,
+					PageLook:      ap.PageLook,
+					StyleKit:      ap.StyleKit,
+					TimelinePopup: ap.TimelinePopup,
 				}
 				ctx = layouts.SetAppearance(ctx, ad)
 			}
@@ -5149,6 +5503,19 @@ func (a *App) RegisterRoutes() {
 			if typesErr == nil {
 				in := navInputsFor(cc, sidebarTypes, counts, enabledSlugs, enabledSystem)
 				navOwner := effectiveRole >= int(campaigns.RoleOwner)
+				// Calendar is left out for anyone who can see no calendar in
+				// it; its page would only say there is none. The owner keeps
+				// it, so they can set one up.
+				if !navOwner && enabledSlugs[calendar.PluginSlug] &&
+					(a.PluginHealth == nil || a.PluginHealth.IsHealthy(calendar.PluginSlug)) {
+					cals, err := calendarService.ListCalendars(reqCtx, cc.Campaign.ID,
+						permissions.RequestViewer(sidebarRole, layoutUserID))
+					if err == nil && len(cals) == 0 {
+						markEmptyApps(in.apps, map[string]bool{calendar.PluginSlug: true})
+					} else if err != nil {
+						slog.Warn("sidebar: listing calendars for the viewer", slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", err))
+					}
+				}
 				// A member who is not the owner has pins of their own; they
 				// are read for this user only.
 				var pins []string
@@ -5397,9 +5764,11 @@ func (a *App) RegisterRoutes() {
 	entityHandler.SetSystemPanelResolver(newSystemPanelResolver(systemHandler, characterListService))
 
 	// Per-page game-system state. system_state.updated is not a change-feed
-	// type, so the recording wrapper passes it straight to the hub.
+	// type, so the recording wrapper passes it straight to the hub. Kept for
+	// the Homebrew Workshop; nil while the plugin is degraded.
+	var systemStateSvc systemstate.Service
 	if a.PluginHealth.IsHealthy(systemstate.PluginSlug) {
-		systemStateSvc := systemstate.NewService(
+		systemStateSvc = systemstate.NewService(
 			systemstate.NewRepository(a.DB),
 			&systemStateEntityLookup{entities: entityService},
 			&systemStateSystemChecker{systems: systemHandler},
@@ -5408,7 +5777,9 @@ func (a *App) RegisterRoutes() {
 		systemstate.RegisterRoutes(e,
 			systemstate.NewHandler(systemStateSvc, &entityAccessAdapter{svc: entityService}),
 			campaignService, authService)
-		syncAPIHandler.SetSystemStateReader(&systemStateSyncReader{svc: systemStateSvc})
+		systemStateSync := &systemStateSyncReader{svc: systemStateSvc}
+		syncAPIHandler.SetSystemStateReader(systemStateSync)
+		syncAPIHandler.SetSystemStateWriter(systemStateSync)
 	} else {
 		slog.Warn("systemstate plugin degraded — routes not registered")
 	}
@@ -5419,6 +5790,13 @@ func (a *App) RegisterRoutes() {
 		rolltables.RegisterRoutes(e, rolltables.NewHandler(rollTablesSvc), campaignService, authService)
 	} else {
 		slog.Warn("rolltables plugin degraded — routes not registered")
+	}
+
+	// Pages' calendar date fields ("Died on") read the campaign calendar.
+	fieldDates := fieldDatesAdapter{svc: calendarService, addons: addonService}
+	entityHandler.SetFieldCalendar(fieldDates)
+	if fc, ok := entityService.(interface{ SetFieldCalendar(entities.FieldCalendar) }); ok {
+		fc.SetFieldCalendar(fieldDates)
 	}
 
 	// Quest sheets and notice boards. Cross-plugin lookups go through the
@@ -5459,14 +5837,123 @@ func (a *App) RegisterRoutes() {
 		StaticFS: echo.MustSubFS(pageblocks.StaticAssetsFS, "static"),
 		Widgets: []PluginWidget{
 			{Name: "page_blocks", Scripts: []string{"js/page_blocks.js"}},
+			{Name: "page_map", Scripts: []string{"js/page_map.js"}},
 		},
 	})
+	// Kept for the AI page's page-map kind; nil while the plugin is degraded.
+	var pageBlocksSvc pageblocks.Service
 	if a.PluginHealth.IsHealthy(pageblocks.PluginSlug) {
-		pageBlocksSvc := pageblocks.NewService(pageblocks.NewRepository(a.DB),
+		pageBlocksSvc = pageblocks.NewService(pageblocks.NewRepository(a.DB),
 			&pageBlocksEntityAdapter{svc: entityService, cards: entities.NewPageCards(a.DB)})
 		pageblocks.RegisterRoutes(e, pageblocks.NewHandler(pageBlocksSvc), campaignService, authService)
 	} else {
 		slog.Warn("pageblocks plugin degraded — routes not registered")
+	}
+
+	// Rumours: what the party has heard about a page. The block and its routes
+	// exist only while its table migrated, so a failed migration leaves out
+	// this block alone.
+	a.registerPlugin(PluginRegistration{
+		Slug:     rumours.PluginSlug,
+		StaticFS: echo.MustSubFS(rumours.StaticAssetsFS, "static"),
+		Widgets: []PluginWidget{
+			{Name: "rumours", Scripts: []string{"js/rumours.js"}},
+		},
+	})
+	if a.PluginHealth.IsHealthy(rumours.PluginSlug) {
+		rumoursSvc := rumours.NewService(rumours.NewRepository(a.DB))
+		rumours.RegisterRoutes(e, rumours.NewHandler(rumoursSvc, &rumoursPagesAdapter{svc: entityService}), campaignService, authService)
+		registerRumoursBlock(blockRegistry, rumoursSvc)
+	} else {
+		slog.Warn("rumours plugin degraded — the Rumours block is not available")
+	}
+
+	// Homebrew rules and local words: a field worked out from another, and what
+	// a place or era calls a word. Pages read them; without the tables, rule
+	// fields show only values typed by hand and nothing is renamed.
+	a.registerPlugin(PluginRegistration{Slug: fieldrules.PluginSlug})
+	var fieldRulesSvc fieldrules.Service
+	var frWorld *fieldRulesWorld
+	if a.PluginHealth.IsHealthy(fieldrules.PluginSlug) {
+		frWorld = &fieldRulesWorld{pages: entityService, calendars: calendarService, eras: eraVersionService}
+		fieldRulesSvc = fieldrules.NewService(fieldrules.NewRepository(a.DB), *frWorld)
+		fieldrules.RegisterRoutes(e, fieldrules.NewHandler(fieldRulesSvc), campaignService, authService)
+		words := fieldWordsAdapter{svc: fieldRulesSvc}
+		entityHandler.SetFieldWords(words)
+		if fw, ok := entityService.(interface{ SetFieldWords(entities.FieldWords) }); ok {
+			fw.SetFieldWords(words)
+		}
+	} else {
+		slog.Warn("fieldrules plugin degraded — homebrew rules and local words are not available")
+	}
+
+	// Trackers: counters, named steps and clocks on pages, each with a dated
+	// log. The block and its routes exist only while its tables migrated.
+	a.registerPlugin(PluginRegistration{
+		Slug:     trackers.PluginSlug,
+		StaticFS: echo.MustSubFS(trackers.StaticAssetsFS, "static"),
+		Widgets: []PluginWidget{
+			{Name: "trackers", Scripts: []string{"js/trackers.js"}},
+		},
+	})
+	var trackersSvc trackers.Service
+	if a.PluginHealth.IsHealthy(trackers.PluginSlug) {
+		trackersSvc = trackers.NewService(trackers.NewRepository(a.DB),
+			&trackersEntityAdapter{svc: entityService, cards: entities.NewPageCards(a.DB)},
+			&trackersClockAdapter{svc: calendarService})
+		trackers.RegisterRoutes(e, trackers.NewHandler(trackersSvc), campaignService, authService)
+		registerTrackersBlock(blockRegistry)
+	} else {
+		slog.Warn("trackers plugin degraded — the Trackers block is not available")
+	}
+
+	// Tests: montages and other long tests on a page, and how they ended.
+	// Built before encounters, whose versions are picked by a test's result.
+	encounterPages := &encountersPageAdapter{svc: entityService, cards: entities.NewPageCards(a.DB)}
+	var encounterResults encounters.ResultDirectory
+	a.registerPlugin(PluginRegistration{
+		Slug:     pagetests.PluginSlug,
+		StaticFS: echo.MustSubFS(pagetests.StaticAssetsFS, "static"),
+		Widgets: []PluginWidget{
+			{Name: "page_tests", Scripts: []string{"js/page_tests.js"}},
+		},
+	})
+	if a.PluginHealth.IsHealthy(pagetests.PluginSlug) {
+		testsSvc := pagetests.NewService(pagetests.NewRepository(a.DB), &pageTestsPageAdapter{pages: encounterPages},
+			pageTestsCalendar{cal: &questCalendarAdapter{svc: calendarService, addons: addonService}})
+		pagetests.RegisterRoutes(e, pagetests.NewHandler(testsSvc), campaignService, authService)
+		registerPageTestsBlock(blockRegistry, testsSvc)
+		encounterResults = encounterResultsAdapter{svc: testsSvc}
+	} else {
+		slog.Warn("page tests plugin degraded — the Tests block is not available")
+	}
+
+	// Homebrew Workshop: saved recipes of parts and When/Then rules. The
+	// store and its routes exist only while its table migrated. Features add
+	// their parts from their own files (workshop_parts.go), so this block is
+	// not edited when one joins.
+	homebrewReg := homebrew.NewRegistry()
+	registerWorkshopParts(homebrewReg, workshopDeps{
+		Entities:      entityService,
+		FieldRules:    frWorld,
+		Health:        a.PluginHealth,
+		SystemEntries: systemEntrySvc,
+		SystemState:   systemStateSvc,
+		Systems:       systemHandler,
+		Trackers:      trackersSvc,
+	})
+	a.registerPlugin(PluginRegistration{
+		Slug:     homebrew.PluginSlug,
+		StaticFS: echo.MustSubFS(homebrew.StaticAssetsFS, "static"),
+		Widgets: []PluginWidget{
+			{Name: "homebrew-workshop", Scripts: []string{"js/homebrew_workshop.js"}},
+		},
+	})
+	if a.PluginHealth.IsHealthy(homebrew.PluginSlug) {
+		homebrewSvc := homebrew.NewService(homebrew.NewRepository(a.DB), homebrewReg)
+		homebrew.RegisterRoutes(e, homebrew.NewHandler(homebrewSvc), campaignService, authService)
+	} else {
+		slog.Warn("homebrew plugin degraded — the Homebrew Workshop is not available")
 	}
 
 	// Encounters: fights planned on a page, loaded in Foundry.
@@ -5478,63 +5965,41 @@ func (a *App) RegisterRoutes() {
 		},
 	})
 	if a.PluginHealth.IsHealthy(encounters.PluginSlug) {
-		encounterSvc := encounters.NewService(encounters.NewRepository(a.DB),
-			&encountersPageAdapter{svc: entityService, cards: entities.NewPageCards(a.DB)})
+		encounterSvc := encounters.NewService(encounters.NewRepository(a.DB), encounterPages, encounterResults)
 		encounterAPI.attach(encounterSvc)
 		encounters.RegisterRoutes(e, encounters.NewHandler(encounterSvc), campaignService, authService)
 	} else {
 		slog.Warn("encounters plugin degraded — routes not registered")
 	}
 
-	// AI Import's record kinds: the features beyond pages it may write.
-	// Wired here, after the rulebook and rolling tables exist; a degraded
-	// plugin's kind is left out, so its blocks are refused at review.
-	aiKinds := []records.Kind{
-		records.CalendarKind{Svc: calendarService, Pages: entityService},
-		records.EventKind{Svc: calendarService},
-		records.WeatherKind{Svc: calendarService},
-	}
-	aiTables := records.TableKind{Svc: aiRollTablesAdapter{rollTablesSvc}}
-	aiHouseRules := records.HouseRuleKind{Book: systemHandler, SystemOf: func(ctx context.Context, campaignID string) string {
-		c, err := campaignService.GetByID(ctx, campaignID)
-		if err != nil {
-			return ""
-		}
-		return c.ParseSettings().SystemID
-	}}
-	if a.PluginHealth.IsHealthy(rolltables.PluginSlug) {
-		aiKinds = append(aiKinds, aiTables)
-	}
-	aiKinds = append(aiKinds,
-		records.ShopStockKind(entityService, relService),
-		records.CarriedItemKind(entityService, relService),
-		records.PinKind{Svc: aiMapsAdapter{mapsService}, Entities: entityService},
-		records.MapSketchKind{Svc: aiMapSketchAdapter{maps: mapsService, drawings: drawingService}, Pins: aiMapsAdapter{mapsService}},
-		records.NoteKind{Svc: noteSvc, Entities: entityService},
-		aiHouseRules,
-		records.SystemEntryKind{Svc: systemEntrySvc},
-	)
-	if encounterAPI.svc != nil {
-		aiKinds = append(aiKinds, records.EncounterKind{Svc: aiEncountersAdapter{svc: encounterAPI.svc}, Entities: entityService})
-	}
-	aiKinds = append(aiKinds,
-		records.GeneratorKind{Cal: calendarService, Tables: aiTables, Weather: calendarService},
-	)
-	aiRegistry := records.NewRegistry(aiKinds...)
+	// AI Import's record kinds and lookups: the features beyond pages it may
+	// write and read. Wired here, after the rulebook and rolling tables exist.
+	// Kinds register from their own files (ai_kinds.go), so this block is not
+	// edited when one is added.
+	aiWiring := newAIDeps(aiDeps{
+		Calendar:        calendarService,
+		Campaigns:       campaignService,
+		CharacterChoice: characterChoiceSvc,
+		DMScreen:        dmScreenSvc,
+		Drawings:        drawingService,
+		Encounters:      encounterAPI.svc,
+		Entities:        entityService,
+		FieldRules:      fieldRulesSvc,
+		Folders:         folderService,
+		Health:          a.PluginHealth,
+		Maps:            mapsService,
+		Notes:           noteSvc,
+		PageBlocks:      pageBlocksSvc,
+		Relations:       relService,
+		RollTables:      rollTablesSvc,
+		Sessions:        sessionsService,
+		SystemEntries:   systemEntrySvc,
+		Systems:         systemHandler,
+		Tags:            tagService,
+	})
+	aiRegistry := records.NewRegistry(aiKinds(aiWiring)...)
 	aiWorkspaceHandler.SetRecords(aiRegistry)
-
-	// The read-only lookups an AI may ask for.
-	aiLookups := &records.Lookups{
-		Cal: calendarService, Weather: calendarService, Maps: aiMapsAdapter{mapsService}, Pages: entityService,
-		Rels: relService, Notes: noteSvc, Rules: &aiHouseRules,
-		Entries: aiSystemEntriesAdapter{choices: characterChoiceSvc},
-		Party:   &aiPartyAdapter{screen: dmScreenSvc, nights: sessionsService, members: campaignService},
-		Kinds:   aiRegistry,
-	}
-	if a.PluginHealth.IsHealthy(rolltables.PluginSlug) {
-		aiLookups.Tables = aiTables.Svc
-	}
-	aiWorkspaceHandler.SetLookups(aiLookups)
+	aiWorkspaceHandler.SetLookups(aiLookups(aiWiring, aiRegistry))
 
 	// Late-bind the entity_notes notifier now that wsEventBus exists.
 	// The service was constructed earlier with a holder.Notify reference;
@@ -5614,6 +6079,7 @@ func (a *App) RegisterRoutes() {
 // /static/js/widgets/ rather than in a plugin: each loads on the first page
 // that mounts it (ADR-063). Helpers come first, the registering script last.
 var coreWidgets = []PluginWidget{
+	{Name: "calendar_event_roll", Scripts: []string{"/static/js/widgets/calendar_event_roll.js"}},
 	{Name: "journal", Scripts: []string{"/static/js/widgets/journal_list.js", "/static/js/widgets/journal.js"}},
 	{Name: "permissions", Scripts: []string{"/static/js/widgets/permissions.js"}},
 	{Name: "groups", Scripts: []string{"/static/js/widgets/groups.js"}},
@@ -5625,6 +6091,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "bulk-actions", Scripts: []string{"/static/js/widgets/bulk_actions.js"}},
 	{Name: "ai-export", Scripts: []string{"/static/js/widgets/ai_export.js"}},
 	{Name: "impact_tree", Scripts: []string{"/static/js/widgets/impact_tree.js"}},
+	{Name: "attributes", Scripts: []string{"/static/js/widgets/attributes.js"}},
 	{Name: "entity-type-editor", Scripts: []string{"/static/js/widgets/entity_type_editor.js"}},
 	{Name: "template-editor", Scripts: []string{"/static/js/widgets/template_editor.js"}},
 	{Name: "layout-editor", Scripts: []string{"/static/js/widgets/layout_editor.js"}},
@@ -5634,10 +6101,12 @@ var coreWidgets = []PluginWidget{
 	{Name: "customize-page-editor", Scripts: []string{"/static/js/widgets/customize_page_editor.js"}},
 	{Name: "site-look", Scripts: []string{"/static/js/widgets/site_look.js"}},
 	{Name: "player-view", Scripts: []string{"/static/js/widgets/player_view.js"}},
+	{Name: "page-editor", Scripts: []string{"/static/js/widgets/page_editor.js"}},
 	{Name: "page-tabs", Scripts: []string{"/static/js/widgets/page_tabs.js"}},
 	{Name: "era-pages", Scripts: []string{"/static/js/widgets/era_pages.js"}},
 	{Name: "dm-screen", Scripts: []string{"/static/js/widgets/dm_sheet.js", "/static/js/widgets/dm_screen.js"}},
 	{Name: "tile", Scripts: []string{"/static/js/widgets/tile.js"}},
+	{Name: "shop_inventory", Scripts: []string{"/static/js/widgets/shop_inventory.js"}},
 }
 
 // journalCharacterAdapter adapts EntityService to notes.CharacterLister: the
@@ -5658,6 +6127,158 @@ func (a *journalCharacterAdapter) ClaimedCharacters(ctx context.Context, campaig
 	out := make([]notes.ClaimedCharacter, 0, len(owned))
 	for _, e := range owned {
 		out = append(out, notes.ClaimedCharacter{ID: e.ID, Name: e.Name, TypeName: e.TypeName})
+	}
+	return out, nil
+}
+
+// nightJournalAdapter adapts the notes widget to sessions.NightJournal. A
+// member's game-night entries go in a "Game nights" folder of their own,
+// made with the first entry; its id is fixed per member, so a renamed or
+// moved folder keeps receiving them.
+type nightJournalAdapter struct {
+	svc notes.NoteService
+}
+
+// nightFolderNamespace seeds each member's Game nights folder id.
+var nightFolderNamespace = uuid.MustParse("5e0c1f4a-2b7d-4c39-9a61-3f8e2d7b4c10")
+
+// nightFolderTitle is the folder's name when it is made.
+const nightFolderTitle = "Game nights"
+
+func (a *nightJournalAdapter) CreateEntry(ctx context.Context, campaignID string, v permissions.Viewer, id, title string) error {
+	if done, err := a.exists(ctx, id); done || err != nil {
+		return err
+	}
+	folder, err := a.folder(ctx, campaignID, v)
+	if err != nil {
+		return err
+	}
+	if _, err := a.svc.Create(ctx, campaignID, v, notes.CreateNoteRequest{ID: id, Title: title, ParentID: &folder}); err != nil {
+		// Another load made it a moment ago (duplicate key).
+		if done, _ := a.exists(ctx, id); done {
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
+// folder returns the member's Game nights folder, making it when missing.
+func (a *nightJournalAdapter) folder(ctx context.Context, campaignID string, v permissions.Viewer) (string, error) {
+	id := uuid.NewSHA1(nightFolderNamespace, []byte(campaignID+"\x00"+v.UserID())).String()
+	if done, err := a.exists(ctx, id); done || err != nil {
+		return id, err
+	}
+	if _, err := a.svc.Create(ctx, campaignID, v, notes.CreateNoteRequest{ID: id, Title: nightFolderTitle, IsFolder: true}); err != nil {
+		if done, _ := a.exists(ctx, id); done {
+			return id, nil
+		}
+		return "", err
+	}
+	return id, nil
+}
+
+func (a *nightJournalAdapter) exists(ctx context.Context, id string) (bool, error) {
+	n, err := a.svc.GetByID(ctx, id)
+	if err != nil {
+		if isNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return n != nil, nil
+}
+
+func (a *nightJournalAdapter) ReadableEntries(ctx context.Context, campaignID string, v permissions.Viewer, ids []string) ([]sessions.NightNote, error) {
+	out := make([]sessions.NightNote, 0, len(ids))
+	for _, id := range ids {
+		n, err := a.svc.GetByID(ctx, id)
+		if err != nil {
+			if isNotFound(err) {
+				continue // deleted by its writer
+			}
+			return nil, err
+		}
+		// The same predicate the notes routes apply before showing a note.
+		if n == nil || n.IsFolder || n.EntityID != nil || !n.CanView(v, campaignID) {
+			continue
+		}
+		body := ""
+		if n.EntryHTML != nil {
+			body = *n.EntryHTML
+		}
+		nn := sessions.NightNote{ID: n.ID, Title: n.Title, AuthorID: n.UserID, UpdatedAt: n.UpdatedAt, Audience: string(n.Visibility)}
+		for _, l := range notes.ParseLinks(body) {
+			if l.Kind == notes.LinkPage {
+				nn.PageIDs = append(nn.PageIDs, l.ID)
+			}
+		}
+		if len(nn.PageIDs) > 0 {
+			nn.Lines = notes.MentionLines(body)
+		}
+		out = append(out, nn)
+	}
+	return out, nil
+}
+
+// journalNightsAdapter adapts the sessions plugin to notes.NightEntries.
+// Entries are made only in campaigns with Game nights turned on.
+type journalNightsAdapter struct {
+	svc    sessions.NightEntryService
+	addons addons.AddonService
+}
+
+func (a *journalNightsAdapter) EnsureEntries(ctx context.Context, campaignID string, v permissions.Viewer) error {
+	on, err := a.addons.IsEnabledForCampaign(ctx, campaignID, sessions.SessionsAddonSlug)
+	if err != nil || !on {
+		return err
+	}
+	return a.svc.EnsureEntries(ctx, campaignID, v, time.Now())
+}
+
+func (a *journalNightsAdapter) Nights(ctx context.Context, campaignID string, noteIDs []string) (map[string]notes.NightTag, error) {
+	tags, err := a.svc.Tags(ctx, campaignID, noteIDs, time.Now())
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]notes.NightTag, len(tags))
+	for id, t := range tags {
+		out[id] = notes.NightTag{SessionID: t.SessionID, Date: t.Date, Name: t.Name, Time: t.Time, Started: t.Started}
+	}
+	return out, nil
+}
+
+// nightBellCampaignsAdapter gives the game-night bells the campaign's
+// switch and members, with a co-DM's role raised to Owner as on a request.
+type nightBellCampaignsAdapter struct {
+	campaigns campaigns.CampaignService
+	addons    addons.AddonService
+}
+
+func (a *nightBellCampaignsAdapter) GameNightsOn(ctx context.Context, campaignID string) (bool, error) {
+	return a.addons.IsEnabledForCampaign(ctx, campaignID, sessions.SessionsAddonSlug)
+}
+
+func (a *nightBellCampaignsAdapter) BellMembers(ctx context.Context, campaignID string) ([]sessions.NightBellMember, error) {
+	c, err := a.campaigns.GetByID(ctx, campaignID)
+	if err != nil || c == nil {
+		return nil, err
+	}
+	granted := map[string]bool{}
+	for _, id := range c.ParseSettings().DmGrantIDs {
+		granted[id] = true
+	}
+	list, err := a.campaigns.ListMembers(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]sessions.NightBellMember, 0, len(list))
+	for _, m := range list {
+		role := int(m.Role)
+		if granted[m.UserID] {
+			role = int(campaigns.RoleOwner)
+		}
+		out = append(out, sessions.NightBellMember{UserID: m.UserID, Role: role})
 	}
 	return out, nil
 }
@@ -5751,11 +6372,62 @@ type pageTimelineCalendarService interface {
 	PageTimeline(ctx context.Context, campaignID, entityID string, hideDMOnly bool, v permissions.Viewer) (*calendar.PageTimeline, error)
 }
 
+// pageTimelineFullLink finds the full time line a page's line links to.
+type pageTimelineFullLink interface {
+	FullTimeline(ctx context.Context, campaignID, calendarID string, v permissions.Viewer) (string, bool)
+}
+
+// pageTimelineLinker answers with the first time line, visible to the
+// viewer, that follows the campaign calendar, when the time line add-on is
+// on. It lives here because the calendar plugin may not read time lines.
+type pageTimelineLinker struct {
+	timelines interface {
+		ListTimelinesForCalendar(ctx context.Context, calendarID string, v permissions.Viewer) ([]timeline.Timeline, error)
+	}
+	addons interface {
+		IsEnabledForCampaign(ctx context.Context, campaignID, slug string) (bool, error)
+	}
+}
+
+// FullTimeline returns that time line's ID.
+func (l *pageTimelineLinker) FullTimeline(ctx context.Context, campaignID, calendarID string, v permissions.Viewer) (string, bool) {
+	if on, err := l.addons.IsEnabledForCampaign(ctx, campaignID, "timeline"); err != nil || !on {
+		return "", false
+	}
+	tls, err := l.timelines.ListTimelinesForCalendar(ctx, calendarID, v)
+	if err != nil {
+		slog.Warn("time line block: list time lines for calendar",
+			slog.String("campaign_id", campaignID), slog.Any("error", err))
+		return "", false
+	}
+	for _, tl := range tls {
+		if tl.CampaignID == campaignID {
+			return tl.ID, true
+		}
+	}
+	return "", false
+}
+
+// pageTimelineFocus is the event the full time line opens at: the page's
+// latest event up to today, or its first when all lie ahead.
+func pageTimelineFocus(t *calendar.PageTimeline) string {
+	focus := t.Events[0].ID
+	for _, e := range t.Events {
+		if t.Later(e) {
+			break
+		}
+		focus = e.ID
+	}
+	return focus
+}
+
 // renderPageTimelineBlock draws the time line block for the page being
 // shown. A campaign with no calendar the viewer may open draws the empty
 // state (the Director's note, nothing for a player); any other failure
-// leaves the block out rather than failing the page.
-func renderPageTimelineBlock(ctx context.Context, svc pageTimelineCalendarService, rc entities.BlockRenderContext) templ.Component {
+// leaves the block out rather than failing the page. The link under the line
+// goes to a full time line that follows the calendar when there is one, at
+// the page's latest event, and to the calendar otherwise.
+func renderPageTimelineBlock(ctx context.Context, svc pageTimelineCalendarService, links pageTimelineFullLink, rc entities.BlockRenderContext) templ.Component {
 	if rc.CC == nil || rc.CC.Campaign == nil || rc.Entity == nil {
 		return templ.NopComponent
 	}
@@ -5774,6 +6446,12 @@ func renderPageTimelineBlock(ctx context.Context, svc pageTimelineCalendarServic
 		slog.Error("time line block: page timeline",
 			slog.String("campaign_id", campaignID), slog.Any("error", err))
 		return templ.NopComponent
+	}
+	if links != nil && len(t.Events) > 0 {
+		if tid, ok := links.FullTimeline(ctx, campaignID, t.CalendarID, viewer); ok {
+			t.OpenURL = fmt.Sprintf("/campaigns/%s/timelines/%s?event=%s", campaignID, tid, url.QueryEscape("calendar:"+pageTimelineFocus(t)))
+			t.OpenLabel = "Open the full time line"
+		}
 	}
 	return calendar.PageTimelineBlock(campaignID, t, canAuthor)
 }
@@ -5947,12 +6625,83 @@ func (m aiMapSketchAdapter) Draw(ctx context.Context, mapID string, a records.Ac
 	if err != nil {
 		return err
 	}
+	var layerID *string
+	if d.LayerID != "" {
+		layerID = &d.LayerID
+	}
 	_, err = m.drawings.CreateDrawing(ctx, maps.CreateDrawingInput{
-		MapID: mapID, DrawingType: d.Type, Points: pts, StrokeColor: d.StrokeColor, StrokeWidth: d.StrokeWidth,
+		MapID: mapID, LayerID: layerID, DrawingType: d.Type, Points: pts, StrokeColor: d.StrokeColor, StrokeWidth: d.StrokeWidth,
 		TextContent: d.Text, FontSize: d.FontSize, Visibility: d.Visibility, CreatedBy: a.UserID,
 		CallerRole: a.Role, CallerIsDM: a.CanAuthorDmOnly(),
 	})
 	return err
+}
+
+// sketchLayerOf finds the map's sketch layer without making one.
+func (m aiMapSketchAdapter) sketchLayerOf(ctx context.Context, mapID string) (string, error) {
+	layers, err := m.drawings.ListLayers(ctx, mapID)
+	if err != nil {
+		return "", err
+	}
+	for _, l := range layers {
+		if l.LayerType == "drawing" && l.Name == records.SketchLayerName {
+			return l.ID, nil
+		}
+	}
+	return "", nil
+}
+
+func (m aiMapSketchAdapter) Inspect(ctx context.Context, mapID string, a records.Actor) (records.SketchTarget, error) {
+	mp, err := m.maps.GetMap(ctx, mapID)
+	if err != nil {
+		return records.SketchTarget{}, err
+	}
+	t := records.SketchTarget{Width: mp.ImageWidth, Height: mp.ImageHeight}
+	layer, err := m.sketchLayerOf(ctx, mapID)
+	if err != nil || layer == "" {
+		return t, err
+	}
+	ds, err := m.drawings.ListDrawings(ctx, mapID, a.Role, a.UserID)
+	if err != nil {
+		return t, err
+	}
+	for _, d := range ds {
+		if d.LayerID != nil && *d.LayerID == layer {
+			t.Sketched++
+		}
+	}
+	return t, nil
+}
+
+func (m aiMapSketchAdapter) SketchLayer(ctx context.Context, mapID string) (string, error) {
+	if id, err := m.sketchLayerOf(ctx, mapID); err != nil || id != "" {
+		return id, err
+	}
+	l, err := m.drawings.CreateLayer(ctx, maps.CreateLayerInput{
+		MapID: mapID, Name: records.SketchLayerName, LayerType: "drawing", IsVisible: true, Opacity: 1,
+	})
+	if err != nil {
+		return "", err
+	}
+	return l.ID, nil
+}
+
+func (m aiMapSketchAdapter) ClearSketch(ctx context.Context, mapID, layerID string, a records.Actor) (int, error) {
+	ds, err := m.drawings.ListDrawings(ctx, mapID, a.Role, a.UserID)
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	for _, d := range ds {
+		if d.LayerID == nil || *d.LayerID != layerID {
+			continue
+		}
+		if err := m.drawings.DeleteDrawing(ctx, d.ID, mapID, nil, a.UserID, a.Role, a.CanAuthorDmOnly()); err != nil {
+			return n, err
+		}
+		n++
+	}
+	return n, nil
 }
 
 // aiRollTablesAdapter is the rolltables service as AI Import's TableDoc,

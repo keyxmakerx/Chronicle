@@ -291,7 +291,15 @@ func renderEntity(
 		stripped := sanitize.StripSecretsHTML(*entry)
 		entry = &stripped
 	}
-	body, err := htmlToMarkdown(entry)
+	// The director's modes write GM-only passages as markers so a round-trip
+	// keeps them; safe mode already stripped them above.
+	var body string
+	var err error
+	if opts.Privacy == PrivacyModeSafe {
+		body, err = htmlToMarkdown(entry)
+	} else {
+		body, err = htmlToMarkdownWithSecrets(entry)
+	}
 	body = bodyOrSkip("entity body", e.Name, body, err)
 	if body != "" {
 		b.WriteString(body)
@@ -331,6 +339,14 @@ func renderEntity(
 	if e.ParentID != nil {
 		if name := opts.ParentNames[*e.ParentID]; name != "" {
 			fmt.Fprintf(b, "**Parent:** %s\n\n", wikilink(name))
+		}
+	}
+
+	// Folder — the sidebar folder the page is filed in, so a round trip keeps
+	// it (the AI writes it back as `folder:`).
+	if e.ParentNodeID != nil {
+		if name := opts.FolderNames[*e.ParentNodeID]; name != "" {
+			fmt.Fprintf(b, "**Folder:** %s\n\n", name)
 		}
 	}
 
@@ -641,6 +657,21 @@ func renderCalendarEvent(b *strings.Builder, e *calendar.Event, opts Options) er
 	}
 	if e.Visibility == "dm_only" {
 		meta = append(meta, "_GM-only_")
+	}
+	// Importance, category and linked page are what an event block sends
+	// back. Safe mode is the player's view, which carries none of them: the
+	// export reads as the owner, so a linked page here may be one players
+	// can't open, and categories are calendar structure.
+	if opts.Privacy != PrivacyModeSafe {
+		if e.Tier != nil && *e.Tier != "" {
+			meta = append(meta, "Importance: "+*e.Tier)
+		}
+		if e.KindName != "" {
+			meta = append(meta, "Category: "+e.KindName)
+		}
+		if e.EntityName != "" {
+			meta = append(meta, "Page: "+e.EntityName)
+		}
 	}
 	if len(meta) > 0 {
 		b.WriteString(strings.Join(meta, " · "))

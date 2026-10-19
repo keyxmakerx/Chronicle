@@ -17,8 +17,13 @@ var (
 )
 
 func newTestService() (Service, *memRepo, *fakePages) {
-	repo, pages := newMemRepo(), newFakePages()
-	return NewService(repo, pages), repo, pages
+	svc, repo, pages, _ := newVersionService()
+	return svc, repo, pages
+}
+
+func newVersionService() (Service, *memRepo, *fakePages, *fakeResults) {
+	repo, pages, results := newMemRepo(), newFakePages(), newFakeResults()
+	return NewService(repo, pages, results), repo, pages, results
 }
 
 func intp(n int) *int { return &n }
@@ -294,4 +299,220 @@ func TestSearchReadyFirstAndHiddenPages(t *testing.T) {
 	if _, _, err := svc.Search(ctx, "c1", "a\x00", 0, dm); statusOf(err) != 422 {
 		t.Errorf("bad search text: %v", err)
 	}
+}
+
+// queenStage is the maintainer's example: at half Stamina the Chief takes a
+// form and the later row arrives.
+func queenStage() Stage {
+	return Stage{
+		ID:     "s1",
+		When:   StageWhen{Kind: WhenStamina, Row: "r1", Percent: 50},
+		Forms:  []StageForm{{Row: "r1", Form: "unmasked", FormName: "Unmasked"}},
+		Arrive: []string{"r3"},
+	}
+}
+
+func withStages(st ...Stage) SaveInput {
+	in := ramparts()
+	in.Stages = st
+	return in
+}
+
+func TestStageValidation(t *testing.T) {
+	svc, _, _ := newTestService()
+	ctx := context.Background()
+	tests := []struct {
+		name   string
+		mutate func(*Stage)
+		extra  func(*SaveInput)
+	}{
+		{"unknown kind", func(s *Stage) { s.When.Kind = "daily" }, nil},
+		{"empty kind", func(s *Stage) { s.When.Kind = "" }, nil},
+		{"stamina row missing", func(s *Stage) { s.When.Row = "nope" }, nil},
+		{"stamina row empty", func(s *Stage) { s.When.Row = "" }, nil},
+		{"stamina percent 0", func(s *Stage) { s.When.Percent = 0 }, nil},
+		{"stamina percent 100", func(s *Stage) { s.When.Percent = 100 }, nil},
+		{"round 1", func(s *Stage) { s.When = StageWhen{Kind: WhenRound, Round: 1} }, nil},
+		{"round 100", func(s *Stage) { s.When = StageWhen{Kind: WhenRound, Round: 100} }, nil},
+		{"bad stage id", func(s *Stage) { s.ID = "<b>" }, nil},
+		{"form row missing", func(s *Stage) { s.Forms[0].Row = "nope" }, nil},
+		{"form row has no page", func(s *Stage) { s.Forms[0].Row = "r3" }, nil},
+		{"form id upper case", func(s *Stage) { s.Forms[0].Form = "Unmasked" }, nil},
+		{"form id too long", func(s *Stage) { s.Forms[0].Form = strings.Repeat("a", 25) }, nil},
+		{"form id with markup", func(s *Stage) { s.Forms[0].Form = "a<b" }, nil},
+		{"form name too long", func(s *Stage) { s.Forms[0].FormName = strings.Repeat("x", MaxFormNameChars+1) }, nil},
+		{"form name control char", func(s *Stage) { s.Forms[0].FormName = "a\x00" }, nil},
+		{"too many forms", func(s *Stage) {
+			s.Forms = nil
+			for i := 0; i <= MaxStageForms; i++ {
+				s.Forms = append(s.Forms, StageForm{Row: "r1", Form: "a"})
+			}
+		}, nil},
+		{"arrive row missing", func(s *Stage) { s.Arrive = []string{"nope"} }, nil},
+		{"arrive duplicate", func(s *Stage) { s.Arrive = []string{"r3", "r3"} }, nil},
+		{"too many arrivals", func(s *Stage) {
+			s.Arrive = nil
+			for i := 0; i <= MaxStageArrive; i++ {
+				s.Arrive = append(s.Arrive, "r3")
+			}
+		}, nil},
+		{"bad how", func(s *Stage) { s.How = "loudly" }, nil},
+		{"note too long", func(s *Stage) { s.Note = strings.Repeat("x", MaxNoteChars+1) }, nil},
+		{"note control char", func(s *Stage) { s.Note = "a\x07b" }, nil},
+		{"does nothing", func(s *Stage) { s.Forms, s.Arrive = nil, nil }, nil},
+		{"duplicate stage id", nil, func(in *SaveInput) { in.Stages = append(in.Stages, in.Stages[0]) }},
+		{"too many stages", nil, func(in *SaveInput) {
+			in.Stages = nil
+			for i := 0; i <= MaxStages; i++ {
+				st := queenStage()
+				st.ID = "s" + strings.Repeat("x", i+1)
+				in.Stages = append(in.Stages, st)
+			}
+		}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			st := queenStage()
+			if tc.mutate != nil {
+				tc.mutate(&st)
+			}
+			in := withStages(st)
+			if tc.extra != nil {
+				tc.extra(&in)
+			}
+			if _, err := svc.Create(ctx, "c1", "page1", dm, in); statusOf(err) != 422 {
+				t.Fatalf("want 422, got %v", err)
+			}
+		})
+	}
+}
+
+func TestStagesSaveAndClean(t *testing.T) {
+	svc, _, _ := newTestService()
+	ctx := context.Background()
+	tests := []struct {
+		name  string
+		stage Stage
+		check func(*testing.T, Stage)
+	}{
+		{"how defaults to reveal", queenStage(), func(t *testing.T, s Stage) {
+			if s.How != HowReveal {
+				t.Errorf("how: %q", s.How)
+			}
+		}},
+		{"quiet is kept", func() Stage { s := queenStage(); s.How = HowQuiet; return s }(), func(t *testing.T, s Stage) {
+			if s.How != HowQuiet {
+				t.Errorf("how: %q", s.How)
+			}
+		}},
+		{"first form is the empty id", func() Stage {
+			s := queenStage()
+			s.Forms = []StageForm{{Row: "r1", Form: "", FormName: "Its first form"}}
+			return s
+		}(), func(t *testing.T, s Stage) {
+			if s.Forms[0].Form != "" {
+				t.Errorf("forms: %+v", s.Forms)
+			}
+		}},
+		{"manual drops stray fields", func() Stage {
+			s := queenStage()
+			s.When = StageWhen{Kind: WhenManual, Row: "r1", Percent: 50, Round: 3}
+			return s
+		}(), func(t *testing.T, s Stage) {
+			if s.When != (StageWhen{Kind: WhenManual}) {
+				t.Errorf("when: %+v", s.When)
+			}
+		}},
+		{"round", func() Stage {
+			s := queenStage()
+			s.When = StageWhen{Kind: WhenRound, Round: 3, Row: "r1", Percent: 10}
+			return s
+		}(), func(t *testing.T, s Stage) {
+			if s.When != (StageWhen{Kind: WhenRound, Round: 3}) {
+				t.Errorf("when: %+v", s.When)
+			}
+		}},
+		{"note is trimmed, arrival only is enough", func() Stage {
+			s := queenStage()
+			s.Forms, s.Note = nil, "  Bring the lights down  "
+			return s
+		}(), func(t *testing.T, s Stage) {
+			if s.Note != "Bring the lights down" || len(s.Forms) != 0 {
+				t.Errorf("stage: %+v", s)
+			}
+		}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			e, err := svc.Create(ctx, "c1", "page1", dm, withStages(tc.stage))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(e.Stages) != 1 {
+				t.Fatalf("stages: %+v", e.Stages)
+			}
+			tc.check(t, e.Stages[0])
+		})
+	}
+}
+
+// An encounter saved before stages existed has no "stages" member and reads
+// as having none, as a list rather than null.
+func TestOldDocumentReadsWithNoStages(t *testing.T) {
+	svc, repo, _ := newTestService()
+	ctx := context.Background()
+	repo.rows["old"] = Row{ID: "old", CampaignID: "c1", EntityID: "page1", Name: "Old", Version: 1,
+		Data: []byte(`{"heroes":[],"creatures":[{"id":"r1","entityId":"","name":"Rat","count":1,"group":"A","start":"seen"}]}`)}
+	got, err := svc.Get(ctx, "c1", "old", dm)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Stages == nil || len(got.Stages) != 0 {
+		t.Fatalf("stages: %#v", got.Stages)
+	}
+}
+
+func TestStagesOnReadDropGoneReferences(t *testing.T) {
+	svc, repo, pages := newTestService()
+	ctx := context.Background()
+	st := queenStage()
+	st.Forms = append(st.Forms, StageForm{Row: "r2", Form: "", FormName: "Its first form"})
+	e, err := svc.Create(ctx, "c1", "page1", dm, withStages(st))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("an unlinked row loses its form change, keeps its arrival", func(t *testing.T) {
+		delete(pages.names, "hob")
+		got, err := svc.Get(ctx, "c1", e.ID, dm)
+		if err != nil {
+			t.Fatal(err)
+		}
+		s := got.Stages[0]
+		if len(s.Forms) != 1 || s.Forms[0].Row != "r1" || len(s.Arrive) != 1 {
+			t.Errorf("stage: %+v", s)
+		}
+		pages.names["hob"] = "Hobgoblin Soldier"
+	})
+
+	// Rows that vanish from the stored document stand in for any way a row
+	// can be gone by the time the stage is read.
+	t.Run("a missing row is dropped and a Stamina trigger on it becomes manual", func(t *testing.T) {
+		row := repo.rows[e.ID]
+		row.Data = []byte(`{"heroes":[],"creatures":[{"id":"r2","entityId":"hob","name":"Hob","count":1,"group":"A","start":"seen"}],` +
+			`"stages":[{"id":"s1","when":{"kind":"stamina","row":"r1","percent":50},` +
+			`"forms":[{"row":"r1","form":"x","formName":"X"}],"arrive":["r1","r2"],"how":"reveal","note":"n"}]}`)
+		repo.rows[e.ID] = row
+		got, err := svc.Get(ctx, "c1", e.ID, dm)
+		if err != nil {
+			t.Fatal(err)
+		}
+		s := got.Stages[0]
+		if s.When.Kind != WhenManual || s.When.Row != "" || s.When.Percent != 0 {
+			t.Errorf("when: %+v", s.When)
+		}
+		if len(s.Forms) != 0 || len(s.Arrive) != 1 || s.Arrive[0] != "r2" || s.Note != "n" {
+			t.Errorf("stage: %+v", s)
+		}
+	})
 }

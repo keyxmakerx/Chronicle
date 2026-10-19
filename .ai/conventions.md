@@ -182,7 +182,7 @@ Avoid: restating the code (`// Set name to the request name`), unexplained comme
 
 ### Two-Tier Schema System (ADR-028)
 
-**Core** (`db/migrations/`): all core tables, runs via golang-migrate on startup; failure is fatal. **Plugin** (`internal/plugins/<name>/migrations/`): each built-in plugin's numbered migrations are **embedded in the binary** via `embed.FS` (ADR-030) in an `embed.go`, run via `RunPluginMigrations()` after core; failure disables that plugin, the app keeps serving. `RegisteredPlugins()` lives in `cmd/server/main.go`, not the database package, to avoid import cycles.
+**Core** (`db/migrations/`): all core tables, runs via golang-migrate on startup; failure is fatal. **Plugin** (`internal/plugins/<name>/migrations/`): each built-in plugin's numbered migrations are **embedded in the binary** via `embed.FS` (ADR-030) in an `embed.go`, run via `RunPluginMigrations()` after core; failure disables that plugin, the app keeps serving. `registeredPlugins()` lives in `cmd/server/plugin_schemas.go`, not the database package, to avoid import cycles.
 
 ### Migration Safety Rules
 
@@ -191,7 +191,7 @@ Avoid: restating the code (`// Set name to the request name`), unexplained comme
 3. **Down migrations**: if the up migration UPDATEs a row, the down migration reverts it to its original values, not DELETE; only DELETE rows the same migration INSERTed.
 4. **ENUM in down migrations**: revert all rows using an added ENUM value before removing that value from the ENUM.
 5. `internal/database/migrate_test.go` validates ENUM values in migration SQL — update its valid sets when adding new ones.
-6. **Plugin tables**: belong in `internal/plugins/<name>/migrations/`, not `db/migrations/`; failures degrade gracefully (ADR-028). A new plugin with migrations needs an `embed.go` and a registration in `registeredPlugins()` in `cmd/server/main.go`.
+6. **Plugin tables**: belong in `internal/plugins/<name>/migrations/`, not `db/migrations/`; failures degrade gracefully (ADR-028). A new plugin with migrations needs an `embed.go` and its own file in `cmd/server` whose `init` calls `addPluginSchema(rank, slug, fs)`; the rank sets run order, so a plugin whose tables point at another plugin's ranks after it.
 7. **Migration layering**: core migrations reference ONLY core schema; plugin migrations own their tables and any backfills touching them. Core runs before plugins, so a core migration referencing a plugin-owned table (`api_keys`, `maps`, `calendars`, etc.) crashes on a fresh DB — split a cross-layer fix: core part in `db/migrations/`, plugin part in that plugin's `migrations/`.
 8. **Idempotent DDL (enforced)**: `ADD COLUMN`/`CREATE TABLE` use `IF NOT EXISTS`; `DROP COLUMN`/`DROP TABLE`/`DROP INDEX` use `IF EXISTS` — bare DDL fails if a partially-applied migration re-runs. `TestMigrations_IdempotentDDL` enforces this on new migrations (historical files are grandfathered, per #9).
 9. **Append-only / immutability**: NEVER delete, edit, or renumber a migration any live database may have applied — golang-migrate needs a file for every version up to the DB's recorded one; removing one crash-loops boot (ADR-044/045). `tools/check-migration-immutability.sh` (CI) fails a PR that deletes or edits an existing migration file.

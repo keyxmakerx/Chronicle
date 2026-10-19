@@ -29,6 +29,8 @@ func TestUpdateModeFromLegacy(t *testing.T) {
 		{"stored pinned with no pin", "", PinModePinned, packages.UpdateModeAutomatic, ""},
 		{"ask first with a pin", "0.1.5", PinModeApproveFirst, packages.UpdateModeApproveFirst, "0.1.5"},
 		{"ask first with no pin", "", PinModeApproveFirst, packages.UpdateModeApproveFirst, ""},
+		{"chosen automatic", "", PinModeAutomatic, packages.UpdateModeAutomatic, ""},
+		{"a pin wins over chosen automatic", "0.1.5", PinModeAutomatic, packages.UpdateModePinned, "0.1.5"},
 		{"unknown mode, no pin", "", "weird", packages.UpdateModeAutomatic, ""},
 	}
 	for _, tc := range cases {
@@ -44,7 +46,7 @@ func TestUpdateModeFromLegacy(t *testing.T) {
 // pinned serve, and only approve_first adds anything new.
 func TestUpdateModeFromLegacyNeverChangesWhatIsServed(t *testing.T) {
 	for _, pin := range []string{"", "0.1.5"} {
-		for _, mode := range []string{"", PinModePreserve, PinModePromote, PinModePinned} {
+		for _, mode := range []string{"", PinModePreserve, PinModePromote, PinModePinned, PinModeAutomatic} {
 			_, version := UpdateModeFromLegacy(pin, mode)
 			if version != pin {
 				t.Errorf("pin %q mode %q: reported version %q, serving uses %q", pin, mode, version, pin)
@@ -56,6 +58,9 @@ func TestUpdateModeFromLegacyNeverChangesWhatIsServed(t *testing.T) {
 func TestIsValidPinModeAcceptsApproveFirst(t *testing.T) {
 	if !IsValidPinMode(PinModeApproveFirst) {
 		t.Error("approve_first must be a valid stored mode")
+	}
+	if !IsValidPinMode(PinModeAutomatic) {
+		t.Error("automatic must be a valid stored mode")
 	}
 }
 
@@ -158,7 +163,7 @@ func TestCampaignBindingApply(t *testing.T) {
 		wantStateVer string
 	}{
 		{"automatic clears the pin", "0.1.0", PinModePinned, packages.UpdateModeAutomatic, "", false,
-			"", PinModePromote, false, packages.UpdateModeAutomatic, ""},
+			"", PinModeAutomatic, false, packages.UpdateModeAutomatic, ""},
 		{"pinned stores pin and mode", "", "", packages.UpdateModePinned, "0.1.0", false,
 			"0.1.0", PinModePinned, false, packages.UpdateModePinned, "0.1.0"},
 		{"ask first stores pin and mode", "", "", packages.UpdateModeApproveFirst, "0.1.0", false,
@@ -218,5 +223,23 @@ func TestCampaignBindingFreezeLeavesPinModeAlone(t *testing.T) {
 	ask, _, _ := newBinding("0.1.0", PinModeApproveFirst)
 	if s, _ := ask.State(context.Background(), "x", &packages.Package{}); !s.Explicit {
 		t.Error("approve_first is explicit")
+	}
+}
+
+// Choosing "Update automatically" must read back as a choice, or the boot
+// pass treats it as no choice and moves the campaign onto ask-first.
+func TestCampaignBindingAutomaticIsExplicit(t *testing.T) {
+	b, _, _ := newBinding("0.1.0", PinModeApproveFirst)
+	if err := b.Apply(context.Background(), "x", &packages.Package{}, packages.UpdateModeAutomatic, "", packages.ActorInfo{}); err != nil {
+		t.Fatal(err)
+	}
+	if s, _ := b.State(context.Background(), "x", &packages.Package{}); s.Mode != packages.UpdateModeAutomatic || !s.Explicit {
+		t.Errorf("after choosing automatic: %+v, want explicit automatic", s)
+	}
+	for _, legacy := range []string{"", PinModePromote} {
+		old, _, _ := newBinding("", legacy)
+		if s, _ := old.State(context.Background(), "x", &packages.Package{}); s.Explicit {
+			t.Errorf("pin mode %q is no choice, not explicit", legacy)
+		}
 	}
 }

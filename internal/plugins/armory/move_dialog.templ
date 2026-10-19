@@ -118,11 +118,6 @@ templ MoveDialog(v *MoveDialogView, csrfToken string) {
 				</div>
 			}
 		</div>
-		<div class="ag-warn" role="alert">
-			<i class="fa-solid fa-triangle-exclamation"></i>
-			<span>Not moved yet. Move it, or throw the choice away.</span>
-			<button type="button" data-discard onclick={ giveBoxCall("discard") }>Discard</button>
-		</div>
 		<div class="ag-warn" role="alert" data-err>
 			<i class="fa-solid fa-triangle-exclamation"></i>
 			<span></span>

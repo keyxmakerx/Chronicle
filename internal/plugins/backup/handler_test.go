@@ -164,3 +164,50 @@ func TestService_ESRCHToleranceCompiles(t *testing.T) {
 		t.Errorf("unexpected ErrorString on last run: %q", last.ErrorString)
 	}
 }
+
+type recordingActivity struct{ actions []string }
+
+func (r *recordingActivity) RecordAdminChange(_ echo.Context, action, _, _, _ string) {
+	r.actions = append(r.actions, action)
+}
+
+// TestRun_DetachedContextAndActivity pins that the backup runs on a context
+// an aborted request cannot cancel, and that only a successful run is logged.
+func TestRun_DetachedContextAndActivity(t *testing.T) {
+	tests := []struct {
+		name   string
+		result *RunResult
+		want   int
+	}{
+		{"success is logged", &RunResult{}, 1},
+		{"failed script is not logged", &RunResult{ExitCode: 2}, 0},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			reqCtx, cancel := context.WithCancel(context.Background())
+			cancel()
+			var got context.Context
+			svc := &stubService{runFn: func(ctx context.Context) (*RunResult, error) {
+				got = ctx
+				return tc.result, nil
+			}}
+			rec := &recordingActivity{}
+			h := newTestHandler(svc)
+			h.SetActivityRecorder(rec)
+
+			req := httptest.NewRequest(http.MethodPost, "/admin/backup/run", nil).WithContext(reqCtx)
+			c := echo.New().NewContext(req, httptest.NewRecorder())
+			_ = h.Run(c)
+
+			if got == nil {
+				t.Fatal("service was not called")
+			}
+			if got.Err() != nil {
+				t.Errorf("run context cancelled with the request: %v", got.Err())
+			}
+			if len(rec.actions) != tc.want {
+				t.Errorf("recorded %v, want %d entries", rec.actions, tc.want)
+			}
+		})
+	}
+}

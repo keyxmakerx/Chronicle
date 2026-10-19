@@ -123,10 +123,18 @@
     return { state: null, effects: ['close'] };
   }
 
+  // How far a paper beside the sheet lies over it. need is the overlap the desk forces (0 when the paper fits beside the
+  // sheet); rel is the sheet's right edge and partRight the clicked part's, both from the folio's left. A paper that has to
+  // lie over the sheet anyway lies next to the part that was clicked, not at the sheet's far edge.
+  function sideOver(need, rel, partRight) {
+    if (!(need > 0)) return 0;
+    return Math.max(Math.round(need), Math.round(rel - partRight - 8));
+  }
+
   var api = {
     STYLES: STYLES, FONTS: FONTS, BAKED: BAKED, FX_KINDS: FX_KINDS,
     fontHref: fontHref, styleFor: styleFor, modeOf: modeOf, durFor: durFor, msOf: msOf,
-    longestTransition: longestTransition, fxPlan: fxPlan, foldPlan: foldPlan, panelStep: panelStep
+    longestTransition: longestTransition, fxPlan: fxPlan, foldPlan: foldPlan, panelStep: panelStep, sideOver: sideOver
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (typeof document === 'undefined') return;
@@ -575,15 +583,16 @@
     function sidePaper(part, id, title, kind, body) {
       var fr = folio.getBoundingClientRect(), sheet = sheetEl(), sr = sheet.getBoundingClientRect(), pr = part.getBoundingClientRect(), cr = desk().getBoundingClientRect();
       var cur = new DOMMatrixReadOnly(getComputedStyle(folio).transform).m41 || 0;
-      // Shift the sheet left as far as the desk allows; whatever still doesn't fit is overlap on the sheet's right column.
+      // Shift the sheet left as far as the desk allows; a paper that still doesn't fit lies over the sheet, next to the part.
       var left0 = sr.left - cur, cap = Math.max(0, left0 - (cr.left + 12)), need = left0 + sr.width + WD - (cr.right - 12);
-      var shift = Math.min(cap, Math.max(need, WD / 2)), over = Math.max(0, Math.round(need - shift));
+      var shift = Math.min(cap, Math.max(need, WD / 2)), fit = Math.max(0, need - shift);
       var move = role(root, 'panel');
       var p = drawer(id, title, kind, body, false), w = makeWell(folio, 'right', p, move);
       p.style.width = WD + 'px';
       // A panel is as tall as what it holds, up to the window: past a short sheet it lies over the page below rather than cutting off.
       p.style.maxHeight = Math.max(320, innerHeight - 120) + 'px';
       var ph = p.offsetHeight, rel = sr.right - fr.left, T = pr.top - fr.top - 18;
+      var over = sideOver(fit, rel, pr.right - fr.left);
       // Beside the part that was clicked, lifted only as far as it takes to stay in the window, and never above the sheet.
       T = Math.min(T, innerHeight - 24 - fr.top - 14 - ph);
       T = Math.max(T, sr.top - fr.top - 14);
@@ -597,7 +606,8 @@
         w._over = over;
         w.style.setProperty('--clip', (14 + over) + 'px');
         w.style.left = (rel - over - 14) + 'px';
-        w.style.width = (WD + 36) + 'px';
+        // The well still reaches the desk's edge, so the first beat shows the paper coming out beside the sheet before the pull.
+        w.style.width = (WD + 36 + over - Math.round(fit)) + 'px';
       } else {
         w.style.left = rel + 'px';
         w.style.width = (WD + 22) + 'px';

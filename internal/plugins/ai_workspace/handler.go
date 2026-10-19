@@ -69,6 +69,10 @@ type Handler struct {
 	// importEras lets the review check an `era:` block's era and page before
 	// anything is written. Optional — nil marks such blocks unavailable.
 	importEras importer.EraLookup
+
+	// importFolders lets the review check a page's `folder:` name. Optional —
+	// nil refuses a page that names a folder.
+	importFolders importer.FolderAccess
 }
 
 // AuditLogger is the narrow contract the plugin needs for audit
@@ -120,6 +124,12 @@ func (h *Handler) SetImportCommitter(c *importer.Committer) {
 // committer gets its writer separately (Committer.SetEraWriter).
 func (h *Handler) SetImportEras(l importer.EraLookup) {
 	h.importEras = l
+}
+
+// SetImportFolders wires the folder lookup the review uses for `folder:` on
+// pages. The committer gets its own through Committer.SetFolders.
+func (h *Handler) SetImportFolders(f importer.FolderAccess) {
+	h.importFolders = f
 }
 
 // SetRecords wires the record kinds.
@@ -238,7 +248,11 @@ func (h *Handler) planRecords(c echo.Context, cc *campaigns.CampaignContext, rec
 	all := make([]records.Record, len(recs))
 	for i, p := range recs {
 		all[i] = toRecord(i, p, nil)
-		rows[i] = RecordRow{Index: i, Label: all[i].Kind, Action: all[i].Action, Name: all[i].Name}
+		all[i].Made = pasteSlugs
+		rows[i] = RecordRow{
+			Index: i, Label: all[i].Kind, Action: all[i].Action, Name: all[i].Name,
+			Block: p.SourceIndex + 1, Reason: all[i].Str("reason"),
+		}
 	}
 	if h.records == nil {
 		for i := range rows {
@@ -316,6 +330,7 @@ func (h *Handler) ParseImport(c echo.Context) error {
 	if h.importEras != nil {
 		classifier.WithEras(h.importEras, viewerFor(c, cc))
 	}
+	classifier.WithFolders(h.importFolders, pendingFolderNames(recs))
 	cls, err := classifier.ClassifyAll(c.Request().Context(), pages)
 	if err != nil {
 		slog.Error("ai-workspace: classify failed",
@@ -351,6 +366,8 @@ func (h *Handler) ParseImport(c echo.Context) error {
 			summary.NewCategories++
 		case importer.StatusParseError, importer.StatusParentProblem:
 			summary.ParseErrors++
+		case importer.StatusFieldProblem:
+			summary.Blocked++
 		}
 	}
 
@@ -489,6 +506,8 @@ func (h *Handler) CommitImport(c echo.Context) error {
 		}
 	}
 
+	early := h.commitEarlyFolders(c, cc, recs)
+
 	userID := auth.GetUserID(c)
 	var result importer.CommitResult
 	var err error
@@ -508,8 +527,9 @@ func (h *Handler) CommitImport(c echo.Context) error {
 		return apperror.NewInternal(err)
 	}
 	// Records run after pages, so a record may name a page this same
-	// import just created.
-	recCounts := h.commitRecords(c, cc, recs, &result)
+	// import just created. Folders are the exception: pages file themselves
+	// into folders, so folders are made and renamed first.
+	recCounts := h.commitRecords(c, cc, recs, &result, early)
 
 	if h.audit != nil {
 		// Counts only — no names, no body content.
@@ -541,9 +561,8 @@ type recordCounts struct{ applied, failed int }
 // the result. A delete needs its own confirmation tick, checked here again
 // whatever the browser sent; every record is re-planned inside Apply, so
 // nothing the review screen showed is trusted at commit.
-func (h *Handler) commitRecords(c echo.Context, cc *campaigns.CampaignContext, recs []importer.ParsedPage, result *importer.CommitResult) recordCounts {
+func (h *Handler) commitRecords(c echo.Context, cc *campaigns.CampaignContext, recs []importer.ParsedPage, result *importer.CommitResult, early map[int]importer.RowOutcome) recordCounts {
 	var n recordCounts
-	a := actorFor(c, cc)
 	// Pages are saved by now, so a record's @[Name] resolves against the
 	// campaign alone.
 	var links *importer.PageLinks
@@ -552,38 +571,11 @@ func (h *Handler) commitRecords(c echo.Context, cc *campaigns.CampaignContext, r
 	}
 	base := len(result.Rows)
 	for i, p := range recs {
-		prefix := "rec_" + strconv.Itoa(i) + "_"
-		rec := toRecord(i, p, links)
-		out := importer.RowOutcome{Index: base + i, Name: rec.Name}
-		k, ok := h.records.Get(rec.Kind)
-		if ok {
-			out.Name = k.Label() + ": " + rec.Name
+		out, done := early[i]
+		if !done {
+			out = h.commitRecord(c, cc, i, p, links)
 		}
-		switch {
-		case c.FormValue(prefix+"include") != "on":
-			out.Status, out.Reason = importer.StatusSkipped, "Excluded by operator"
-		case h.records == nil || !ok:
-			out.Status, out.Reason = importer.StatusFailed, "This server cannot import "+rec.Kind
-		case rec.Action == records.ActionDelete && c.FormValue(prefix+"delete_confirmed") != "on":
-			out.Status, out.Reason = importer.StatusFailed, "Removal was not confirmed"
-		default:
-			rec.Generated = c.FormValue(prefix + "generated")
-			if err := k.Apply(c.Request().Context(), cc.Campaign.ID, a, rec); err != nil {
-				slog.Warn("ai-workspace: record failed",
-					slog.String("campaign_id", cc.Campaign.ID),
-					slog.String("kind", rec.Kind), slog.Any("error", err))
-				out.Status, out.Reason = importer.StatusFailed, recordError(err)
-				break
-			}
-			switch rec.Action {
-			case records.ActionDelete:
-				out.Status = importer.StatusDeleted
-			case records.ActionUpdate:
-				out.Status = importer.StatusUpdated
-			default:
-				out.Status = importer.StatusCreated
-			}
-		}
+		out.Index = base + i
 		switch out.Status {
 		case importer.StatusFailed:
 			result.Failed++
@@ -605,9 +597,91 @@ func (h *Handler) commitRecords(c echo.Context, cc *campaigns.CampaignContext, r
 	return n
 }
 
+// commitRecord applies one record, or says why it was not.
+func (h *Handler) commitRecord(c echo.Context, cc *campaigns.CampaignContext, i int, p importer.ParsedPage, links *importer.PageLinks) importer.RowOutcome {
+	prefix := "rec_" + strconv.Itoa(i) + "_"
+	rec := toRecord(i, p, links)
+	out := importer.RowOutcome{Name: rec.Name}
+	k, ok := h.records.Get(rec.Kind)
+	if ok {
+		out.Name = k.Label() + ": " + rec.Name
+	}
+	switch {
+	case c.FormValue(prefix+"include") != "on":
+		out.Status, out.Reason = importer.StatusSkipped, "Excluded by operator"
+	case h.records == nil || !ok:
+		out.Status, out.Reason = importer.StatusFailed, "This server cannot import "+rec.Kind
+	case rec.Action == records.ActionDelete && c.FormValue(prefix+"delete_confirmed") != "on":
+		out.Status, out.Reason = importer.StatusFailed, "Removal was not confirmed"
+	case records.RefuseGMMarkers(rec) != nil:
+		out.Status, out.Reason = importer.StatusFailed, importer.SecretNotInTextReason
+	default:
+		rec.Generated = c.FormValue(prefix + "generated")
+		if err := k.Apply(c.Request().Context(), cc.Campaign.ID, actorFor(c, cc), rec); err != nil {
+			slog.Warn("ai-workspace: record failed",
+				slog.String("campaign_id", cc.Campaign.ID),
+				slog.String("kind", rec.Kind), slog.Any("error", err))
+			out.Status, out.Reason = importer.StatusFailed, recordError(err)
+			break
+		}
+		switch rec.Action {
+		case records.ActionDelete:
+			out.Status = importer.StatusDeleted
+		case records.ActionUpdate:
+			out.Status = importer.StatusUpdated
+		default:
+			out.Status = importer.StatusCreated
+		}
+	}
+	return out
+}
+
+// isEarlyFolder is a folder block that makes or changes a folder, which
+// must be done before the pages that name it.
+func isEarlyFolder(p importer.ParsedPage) bool {
+	return strings.EqualFold(strings.TrimSpace(p.FrontMatter.Kind), "folder") && p.FrontMatter.Action != records.ActionDelete
+}
+
+// commitEarlyFolders applies the folder blocks that pages may depend on, in
+// paste order, and keeps their outcomes for the result list.
+func (h *Handler) commitEarlyFolders(c echo.Context, cc *campaigns.CampaignContext, recs []importer.ParsedPage) map[int]importer.RowOutcome {
+	early := map[int]importer.RowOutcome{}
+	if h.records == nil {
+		return early
+	}
+	for i, p := range recs {
+		if isEarlyFolder(p) {
+			early[i] = h.commitRecord(c, cc, i, p, nil)
+		}
+	}
+	return early
+}
+
+// pendingFolderNames are the category-and-name keys of folders this paste makes
+// or renames to, so the review accepts a page that files itself in one of its
+// own category only.
+func pendingFolderNames(recs []importer.ParsedPage) map[string]bool {
+	out := map[string]bool{}
+	for _, p := range recs {
+		if !isEarlyFolder(p) {
+			continue
+		}
+		r := toRecord(0, p, nil)
+		for _, n := range []string{r.Name, r.Str("rename_to")} {
+			if n != "" {
+				out[importer.PendingFolderKey(r.Str("category"), n)] = true
+			}
+		}
+	}
+	return out
+}
+
 // recordError shows a refusal's own wording (the kinds and services word
 // them for people) and hides anything else, such as a database error.
 func recordError(err error) string {
+	if errors.Is(err, importer.ErrSecretNotInText) {
+		return importer.SecretNotInTextReason
+	}
 	var ae *apperror.AppError
 	if errors.As(err, &ae) && ae.Code < 500 {
 		return ae.Message

@@ -2,7 +2,9 @@ package sessions
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/labstack/echo/v4"
 
@@ -53,6 +55,9 @@ type nightPage struct {
 	Recap     string          `json:"recap"`
 	RecapHTML string          `json:"recapHtml"`
 	Links     []nightPageLink `json:"links"`
+	// Night is the night's Journal entries and the DM's check-in, sent
+	// when the page asks for one night by date.
+	Night *NightNotes `json:"night,omitempty"`
 }
 
 // nightPageLink is one linked page, already filtered to what the viewer may
@@ -68,7 +73,9 @@ type nightPageLink struct {
 // the calendar. Linked pages go through the same visibility filter as the
 // Sessions page (ADR-055 rule 3): a page the viewer can't open is absent,
 // not named.
-// GET /campaigns/:id/sessions/:sid/page
+// With ?date= (one of the session's nights) it adds the night's Journal
+// entries the viewer can read and, for the DM, the check-in.
+// GET /campaigns/:id/sessions/:sid/page[?date=YYYY-MM-DD]
 func (h *Handler) NightPageAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	session, err := h.requireSessionInCampaign(c, c.Param("sid"), cc.Campaign.ID)
@@ -83,5 +90,40 @@ func (h *Handler) NightPageAPI(c echo.Context) error {
 	for _, e := range visible {
 		out.Links = append(out.Links, nightPageLink{EntityID: e.EntityID, Name: e.EntityName, Slug: e.EntitySlug, Role: e.Role})
 	}
+	if date := c.QueryParam("date"); date != "" && h.nightEntries != nil {
+		night, err := h.nightEntries.ForNight(c.Request().Context(), session, date, sightingViewer(c), time.Now())
+		if err != nil {
+			return err
+		}
+		h.nameAuthors(c, night.Entries)
+		out.Night = night
+	}
 	return c.JSON(http.StatusOK, out)
+}
+
+// SetNightEntryService wires the night's Journal entries and the check-in.
+// Without it a night's page shows neither.
+func (h *Handler) SetNightEntryService(s NightEntryService) {
+	h.nightEntries = s
+}
+
+// nameAuthors fills each entry's writer name from the member list. A name
+// that can't be read leaves the row unnamed rather than failing the page.
+func (h *Handler) nameAuthors(c echo.Context, rows []NightEntryView) {
+	if len(rows) == 0 || h.memberLister == nil {
+		return
+	}
+	cc := campaigns.GetCampaignContext(c)
+	list, err := h.memberLister.ListMembers(c.Request().Context(), cc.Campaign.ID)
+	if err != nil {
+		slog.Warn("naming night entry writers", slog.Any("error", err))
+		return
+	}
+	names := make(map[string]string, len(list))
+	for _, m := range list {
+		names[m.UserID] = m.DisplayName
+	}
+	for i := range rows {
+		rows[i].AuthorName = names[rows[i].AuthorID]
+	}
 }

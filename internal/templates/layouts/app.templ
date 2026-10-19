@@ -671,14 +671,16 @@ templ Topbar() {
 				}
 			}
 		</div>
-		<!-- Left: Hamburger + Campaign selector -->
-		<div class="flex items-center gap-2 shrink-0">
+		<!-- Left: Hamburger + Campaign selector. It is the part that gives way on
+		     a narrow phone (the campaign name truncates) so the right-hand
+		     buttons, the account menu last, always stay on screen. -->
+		<div class="flex items-center gap-2 min-w-0">
 			<!-- Mobile hamburger -->
 			<button
 				id="nav-toggle"
 				type="button"
 				@click="sidebarOpen = !sidebarOpen"
-				class="btn-ghost btn-icon -ml-1 md:hidden"
+				class="btn-ghost btn-icon -ml-1 shrink-0 md:hidden"
 				title="Toggle menu"
 				aria-label="Open navigation"
 				aria-controls="sidebar"
@@ -689,11 +691,11 @@ templ Topbar() {
 			if IsAuthenticated(ctx) {
 				if InCampaign(ctx) {
 					<!-- In-campaign: current name + picker dropdown for switching -->
-					<div x-data="{ open: false }" class="relative">
+					<div x-data="{ open: false }" class="relative min-w-0">
 						<button
 							@click="open = !open"
 							@click.outside="open = false"
-							class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-semibold text-fg hover:bg-surface-alt transition-colors"
+							class="flex items-center gap-1.5 max-w-full px-2.5 py-1.5 rounded-lg text-sm font-semibold text-fg hover:bg-surface-alt transition-colors"
 						>
 							<span class="truncate max-w-[110px] md:max-w-[160px]" data-topbar-name>{ GetDisplayName(ctx) }</span>
 							<svg class="w-3.5 h-3.5 text-fg-muted shrink-0" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">

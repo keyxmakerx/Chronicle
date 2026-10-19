@@ -7,6 +7,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/keyxmakerx/chronicle/internal/mapsketch"
 )
 
 // Limits. They bound the stored document (and so a request body) and keep the
@@ -31,7 +33,7 @@ const (
 // validKind reports whether kind is one this plugin stores.
 func validKind(kind string) bool {
 	switch kind {
-	case KindReadAloud, KindTable, KindSteps:
+	case KindReadAloud, KindTable, KindSteps, KindPageMap, KindChecklist:
 		return true
 	}
 	return false
@@ -105,6 +107,10 @@ func emptyDoc(kind string) any {
 		return Table{Columns: []Column{}, Rows: []Row{}}
 	case KindSteps:
 		return Steps{Steps: []Step{}}
+	case KindPageMap:
+		return mapsketch.NewDoc()
+	case KindChecklist:
+		return emptyChecklist()
 	}
 	return nil
 }
@@ -126,6 +132,10 @@ func validateDoc(kind string, raw json.RawMessage) (any, error) {
 		return validateTable(raw)
 	case KindSteps:
 		return validateSteps(raw)
+	case KindPageMap:
+		return validatePageMap(raw)
+	case KindChecklist:
+		return validateChecklist(raw)
 	}
 	return nil, errInvalid("unknown block kind")
 }

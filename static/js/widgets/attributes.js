@@ -36,6 +36,7 @@ Chronicle.register('attributes', {
     // Campaign and entity ids for the pick-from-the-system control.
     var idMatch = config.endpoint.match(/\/campaigns\/([^/]+)\/entities\/([^/]+)\/fields$/);
     var campaignId = idMatch ? idMatch[1] : String(config.campaignId || '');
+    var entityId = idMatch ? idMatch[2] : '';
 
     // Fields people commonly expect a system list for; when the system has
     // none we say so instead of leaving a bare text box unexplained.
@@ -73,6 +74,8 @@ Chronicle.register('attributes', {
           state.fieldsData = data.fields_data || {};
           state.fieldOverrides = data.field_overrides || null;
           state.eraChanged = data.era_changed || null;
+          state.shown = data.shown || {};
+          state.calendar = data.dateBook || null;
           render();
         })
         .catch(function (err) {
@@ -142,6 +145,7 @@ Chronicle.register('attributes', {
             editBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin" style="font-size:11px"></i> Loading';
             loadChoiceLists().then(function () {
               state.loadingChoices = false;
+              state.draft = null;
               state.isEditing = true;
               state.isCustomizing = false;
               render();
@@ -198,7 +202,10 @@ Chronicle.register('attributes', {
       state.fields.forEach(function (field) {
         var val = state.fieldsData[field.key];
         var marked = isMarked(field.key);
-        var blank = val === undefined || val === null || val === '';
+        // shown is how a field reads when that isn't its stored value: a
+        // link's page name, a rule's result, a local word.
+        var sh = shownOf(field.key);
+        var blank = sh ? !sh.text : (val === undefined || val === null || val === '');
         if (blank && !marked) return;
 
         hasValues = true;
@@ -222,6 +229,11 @@ Chronicle.register('attributes', {
         value.className = 'cb-fact-v text-sm mt-0.5';
         value.style.color = 'var(--color-text-primary)';
 
+        if (field.type === 'calendar_date' && sh && !blank && !marked) {
+          renderDate(group, row, value, sh);
+          return;
+        }
+
         // Format value based on field type.
         if (field.type === 'checkbox') {
           value.textContent = val === true || val === 'true' || val === 'on' ? 'Yes' : 'No';
@@ -236,8 +248,27 @@ Chronicle.register('attributes', {
         } else if (blank) {
           value.textContent = 'Cleared in this era';
           value.style.color = 'var(--color-text-muted)';
+        } else if (sh && sh.href) {
+          var page = document.createElement('a');
+          page.href = sh.href;
+          page.textContent = sh.text;
+          page.className = 'text-accent hover:underline';
+          page.setAttribute('hx-boost', 'true');
+          value.appendChild(page);
+        } else if (sh) {
+          value.textContent = sh.text;
+          if (sh.usual) value.title = 'Usually called ' + sh.usual;
         } else {
           value.textContent = String(val);
+        }
+        if (sh && sh.byHand && sh.ruleGives) {
+          row.appendChild(value);
+          var hand = document.createElement('div');
+          hand.className = 'era-was';
+          hand.textContent = 'Set by hand. The rule gives ' + sh.ruleGives + '.';
+          row.appendChild(hand);
+          group.appendChild(row);
+          return;
         }
 
         if (marked) {
@@ -266,6 +297,82 @@ Chronicle.register('attributes', {
           : 'No attributes set.';
         container.appendChild(empty);
       }
+    }
+
+    // renderDate shows a calendar date field: its date, how long ago it was,
+    // and a row per countdown as of the calendar's today. The server has
+    // already left out what this viewer may not see.
+    function renderDate(group, row, value, sh) {
+      value.textContent = sh.text;
+      var d = sh.date || {};
+      if (d.ago) value.appendChild(whenSpan(d.ago));
+      row.appendChild(value);
+      group.appendChild(row);
+      (d.countdowns || []).forEach(function (cd) {
+        var r = document.createElement('div');
+        r.className = 'cb-fact';
+        var l = document.createElement('dt');
+        l.className = 'cb-fact-l text-xs font-medium uppercase tracking-wider';
+        l.style.color = 'var(--color-text-secondary)';
+        l.textContent = cd.name;
+        if (cd.directorOnly) {
+          var dm = document.createElement('i');
+          dm.className = 'fa-solid fa-eye-slash cd-dm';
+          dm.title = 'Only you see this countdown';
+          dm.setAttribute('aria-label', 'Only you see this countdown');
+          l.appendChild(dm);
+        }
+        r.appendChild(l);
+        var v = document.createElement('dd');
+        v.className = 'cb-fact-v text-sm mt-0.5';
+        v.style.color = 'var(--color-text-primary)';
+        var len = cd.days + (cd.days === 1 ? ' day' : ' days') + (cd.length ? ', ' + cd.length : '');
+        if (cd.state === 'before') {
+          v.textContent = len + ' from the date';
+        } else if (cd.state === 'ended') {
+          var e = document.createElement('b');
+          e.textContent = 'Ended';
+          v.appendChild(e);
+          v.appendChild(whenSpan('on ' + cd.last));
+        } else {
+          var left = document.createElement('span');
+          left.className = 'cd-left';
+          var b = document.createElement('b');
+          b.textContent = cd.state === 'last' ? 'Last day today' : cd.left + (cd.left === 1 ? ' day left' : ' days left');
+          left.appendChild(b);
+          left.appendChild(ticks(cd));
+          v.appendChild(left);
+          if (cd.state === 'running') v.appendChild(whenSpan('Last day ' + cd.last));
+        }
+        if (cd.length && cd.state !== 'before') v.appendChild(whenSpan(len));
+        r.appendChild(v);
+        group.appendChild(r);
+      });
+    }
+
+    function whenSpan(text) {
+      var w = document.createElement('span');
+      w.className = 'cd-when';
+      w.textContent = text;
+      return w;
+    }
+
+    // ticks draws a short countdown's days, lit while still to come.
+    function ticks(cd) {
+      var t = document.createElement('span');
+      t.className = 'cd-ticks';
+      t.setAttribute('aria-hidden', 'true');
+      if (cd.days > 12) return t;
+      for (var i = 1; i <= cd.days; i++) {
+        var tick = document.createElement('i');
+        if (i > cd.done) tick.className = 'on';
+        t.appendChild(tick);
+      }
+      return t;
+    }
+
+    function shownOf(key) {
+      return state.shown && Object.prototype.hasOwnProperty.call(state.shown, key) ? state.shown[key] : null;
     }
 
     // isMarked reports whether a field is one the shown era version changes
@@ -319,7 +426,8 @@ Chronicle.register('attributes', {
           label.htmlFor = 'attr-' + field.key;
           row.appendChild(label);
 
-          var currentVal = state.fieldsData[field.key];
+          // A refused save keeps what was typed (state.draft) so it can be fixed.
+          var currentVal = (state.draft || state.fieldsData)[field.key];
           if (currentVal === undefined || currentVal === null) currentVal = '';
 
           var input;
@@ -346,6 +454,31 @@ Chronicle.register('attributes', {
                 if (String(currentVal) === opt) option.selected = true;
                 input.appendChild(option);
               });
+              break;
+
+            case 'link':
+              row.appendChild(buildPagePicker(field, String(currentVal)));
+              container.appendChild(row);
+              return;
+
+            case 'calendar_date':
+              row.appendChild(buildDatePicker(field, String(currentVal)));
+              container.appendChild(row);
+              return;
+
+            case 'rule':
+              // Empty follows the rule; anything typed wins over it.
+              var sh = shownOf(field.key);
+              var gives = sh ? (sh.byHand ? sh.ruleGives || '' : sh.text) : '';
+              input = document.createElement('input');
+              input.type = 'text';
+              input.className = 'input';
+              input.value = String(currentVal);
+              input.placeholder = gives ? gives + ' (worked out)' : 'Worked out by its rule';
+              var ruleNote = document.createElement('p');
+              ruleNote.className = 'ag-note';
+              ruleNote.textContent = 'Leave empty to follow the rule, or type a value to set it by hand.';
+              row.appendChild(ruleNote);
               break;
 
             case 'checkbox':
@@ -401,6 +534,181 @@ Chronicle.register('attributes', {
         b.remove();
       });
       return b;
+    }
+
+    // --- Pick a date for a calendar date field ---
+
+    // The hidden input holds "year-month-day|picks", the stored form
+    // (field_dates.go); the visible year, month and day boxes and each
+    // countdown's length choice write it. Without the campaign calendar the
+    // month is a number.
+    function buildDatePicker(field, currentVal) {
+      var wrap = document.createElement('div');
+      wrap.className = 'cd-pick';
+      var hidden = document.createElement('input');
+      hidden.type = 'hidden';
+      hidden.setAttribute('data-field-key', field.key);
+      hidden.value = currentVal;
+      var m = /^(-?\d+)-(\d+)-(\d+)(?:\|([\d,]+))?$/.exec(currentVal.trim());
+      var today = state.calendar ? state.calendar.today : null;
+      var cur = m ? { y: m[1], m: m[2], d: m[3] } : { y: '', m: '', d: '' };
+      var picks = m && m[4] ? m[4].split(',').map(Number) : [];
+
+      var row = document.createElement('div');
+      row.className = 'flex flex-wrap items-center gap-2';
+      var day = numBox('Day', cur.d, 'w-16');
+      var month;
+      if (state.calendar && state.calendar.months && state.calendar.months.length) {
+        month = document.createElement('select');
+        month.className = 'input w-auto';
+        month.setAttribute('aria-label', 'Month');
+        var none = document.createElement('option');
+        none.value = '';
+        none.textContent = 'Month';
+        month.appendChild(none);
+        state.calendar.months.forEach(function (mo, i) {
+          var o = document.createElement('option');
+          o.value = String(i + 1);
+          o.textContent = mo.name;
+          if (String(i + 1) === cur.m) o.selected = true;
+          month.appendChild(o);
+        });
+      } else {
+        month = numBox('Month', cur.m, 'w-16');
+      }
+      var year = numBox('Year', cur.y, 'w-24');
+      row.appendChild(day);
+      row.appendChild(month);
+      row.appendChild(year);
+      if (today) {
+        var t = document.createElement('button');
+        t.type = 'button';
+        t.className = 'btn-secondary text-xs';
+        t.textContent = 'Today';
+        t.addEventListener('click', function () {
+          day.value = today.day; month.value = String(today.month); year.value = today.year;
+          write();
+        });
+        row.appendChild(t);
+      }
+      var clear = document.createElement('button');
+      clear.type = 'button';
+      clear.className = 'btn-secondary text-xs';
+      clear.textContent = 'Clear';
+      clear.addEventListener('click', function () {
+        day.value = ''; month.value = ''; year.value = '';
+        write();
+      });
+      row.appendChild(clear);
+      wrap.appendChild(row);
+
+      // A countdown with more than one length lets this page pick one.
+      var lens = [];
+      (field.countdowns || []).forEach(function (cd, i) {
+        if (!cd.lengths || cd.lengths.length < 2) { lens.push(null); return; }
+        var lab = document.createElement('label');
+        lab.className = 'flex flex-wrap items-center gap-2 text-xs mt-2';
+        lab.style.color = 'var(--color-text-secondary)';
+        lab.appendChild(document.createTextNode(cd.name));
+        var sel = document.createElement('select');
+        sel.className = 'input w-auto text-xs';
+        cd.lengths.forEach(function (l, li) {
+          var o = document.createElement('option');
+          o.value = String(li);
+          o.textContent = (li === 0 ? 'Usually' : l.name) + ', ' + l.days + (l.days === 1 ? ' day' : ' days');
+          if ((picks[i] || 0) === li) o.selected = true;
+          sel.appendChild(o);
+        });
+        sel.addEventListener('change', write);
+        lab.appendChild(sel);
+        wrap.appendChild(lab);
+        lens.push(sel);
+      });
+
+      [day, month, year].forEach(function (b) { b.addEventListener('input', write); b.addEventListener('change', write); });
+
+      function write() {
+        if (!day.value || !month.value || !year.value) { hidden.value = ''; return; }
+        var v = parseInt(year.value, 10) + '-' + parseInt(month.value, 10) + '-' + parseInt(day.value, 10);
+        var p = lens.map(function (s) { return s ? parseInt(s.value, 10) : 0; });
+        while (p.length && !p[p.length - 1]) p.pop();
+        hidden.value = p.length ? v + '|' + p.join(',') : v;
+      }
+
+      function numBox(label, value, cls) {
+        var i = document.createElement('input');
+        i.type = 'number';
+        i.className = 'input ' + cls;
+        i.placeholder = label;
+        i.setAttribute('aria-label', label);
+        i.value = value;
+        return i;
+      }
+
+      wrap.appendChild(hidden);
+      return wrap;
+    }
+
+    // --- Pick a page for a link field ---
+
+    // The hidden input holds the page id the save step reads; the visible box
+    // searches the field's category by name. Pages the viewer can't open
+    // never come back from the search, so none can be picked.
+    function buildPagePicker(field, currentVal) {
+      var wrap = document.createElement('div');
+      var hidden = document.createElement('input');
+      hidden.type = 'hidden';
+      hidden.value = currentVal;
+      hidden.setAttribute('data-field-key', field.key);
+      wrap.appendChild(hidden);
+
+      var listId = 'attr-' + field.key + '-pages';
+      var box = document.createElement('input');
+      box.type = 'search';
+      box.className = 'input';
+      box.id = 'attr-' + field.key;
+      box.setAttribute('list', listId);
+      box.placeholder = 'Type a page name';
+      var sh = shownOf(field.key);
+      box.value = sh && sh.text ? sh.text : '';
+      var list = document.createElement('datalist');
+      list.id = listId;
+      wrap.appendChild(box);
+      wrap.appendChild(list);
+
+      var found = {}, timer = null, seq = 0;
+      function search() {
+        var q = box.value.trim(), mine = ++seq;
+        var url = '/campaigns/' + encodeURIComponent(campaignId) + '/entities/search?q=' + encodeURIComponent(q) +
+          (field.link_to ? '&type=' + encodeURIComponent(field.link_to) : '');
+        Chronicle.apiFetch(url).then(function (r) { return r.ok ? r.json() : { results: [] }; }).then(function (d) {
+          if (mine !== seq) return;
+          list.innerHTML = '';
+          found = {};
+          (d.results || []).forEach(function (p) {
+            if (p.id === entityId) return;
+            found[p.name.toLowerCase()] = p.id;
+            var o = document.createElement('option');
+            o.value = p.name;
+            list.appendChild(o);
+          });
+          pick();
+        }).catch(function () {});
+      }
+      // An exact name sets the link; an emptied box clears it; anything else
+      // keeps the page already linked until a name matches.
+      function pick() {
+        var name = box.value.trim().toLowerCase();
+        if (!name) hidden.value = '';
+        else if (found[name]) hidden.value = found[name];
+      }
+      box.addEventListener('input', function () {
+        pick();
+        clearTimeout(timer);
+        timer = setTimeout(search, 200);
+      });
+      search();
+      return wrap;
     }
 
     // --- Pick from the system's list ---
@@ -751,18 +1059,29 @@ Chronicle.register('attributes', {
         body: { fields_data: newData }
       })
         .then(function (r) {
-          if (!r.ok) throw new Error('Failed to save fields');
+          if (!r.ok) {
+            return r.json().catch(function () { return {}; }).then(function (b) {
+              var e = new Error('Failed to save fields');
+              e.said = b && b.message;
+              throw e;
+            });
+          }
           state.fieldsData = newData;
+          state.draft = null;
           state.isEditing = false;
           state.isSaving = false;
           render();
           // An era version keeps only what differs from the usual page, so
           // read back which fields it now changes.
-          if (config.era) reload();
+          // Links, rules and local words are worked out by the server, so
+          // they are read back too.
+          if (config.era || Object.keys(state.shown || {}).length ||
+            state.fields.some(function (f) { return f.type === 'link' || f.type === 'rule' || f.type === 'calendar_date'; })) reload();
         })
         .catch(function (err) {
           console.error('[attributes] Save failed:', err);
-          state.error = 'Failed to save. Please try again.';
+          state.draft = newData;
+          state.error = err.said || 'Failed to save. Please try again.';
           state.isSaving = false;
           render();
         });

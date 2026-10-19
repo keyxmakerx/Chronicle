@@ -254,6 +254,17 @@ func parseOnePage(raw string) ParsedPage {
 		return p
 	}
 
+	// A page sits in a folder or under a parent page, never both.
+	// ("none" on either side is fine: it only takes the page out of one.)
+	_, hasParent := p.FrontMatter.ParentKey()
+	_, hasFolder := p.FrontMatter.FolderName()
+	if hasParent && hasFolder {
+		p.Status = StatusParseError
+		p.ParseError = "parent: and folder: can't be used together (a page sits under a parent page or in a folder, not both). " +
+			"Keep one of them."
+		return p
+	}
+
 	// Validate visibility enum BEFORE checking name — a bad
 	// visibility value is the noisier failure mode and the operator
 	// notices it first. An era block never changes the usual page's
@@ -400,6 +411,9 @@ func eraIgnoredWarnings(f FrontMatter) []string {
 	if f.Parent != "" {
 		ignored = append(ignored, "parent")
 	}
+	if f.Folder != "" {
+		ignored = append(ignored, "folder")
+	}
 	if len(f.Tags) > 0 {
 		ignored = append(ignored, "tags")
 	}
@@ -418,7 +432,8 @@ func unknownYAMLKeys(rawYAML string) []string {
 		"name": true, "type": true, "subcategory": true,
 		"visibility": true, "tags": true, "description": true,
 		"action": true, "kind": true, "parent": true,
-		"era": true, "known_as": true,
+		"era": true, "known_as": true, "reason": true, "fields": true,
+		"folder": true,
 	}
 	var unknown []string
 	for _, line := range strings.Split(rawYAML, "\n") {

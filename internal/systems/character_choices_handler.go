@@ -32,7 +32,8 @@ func (h *CharacterChoiceHandler) ChoicesAPI(c echo.Context) error {
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
-	list, err := h.svc.CharacterChoiceList(WithChoiceViewer(c.Request().Context(), cc.CanAuthorDmOnly()), cc.Campaign.ID, c.Param("fieldKey"))
+	ctx := WithChoiceViewerUser(WithChoiceViewer(c.Request().Context(), cc.CanAuthorDmOnly()), auth.GetUserID(c))
+	list, err := h.svc.CharacterChoiceList(ctx, cc.Campaign.ID, c.Param("fieldKey"))
 	if err != nil {
 		return err
 	}

@@ -46,6 +46,8 @@ templ Base(title string) {
 		<link rel="stylesheet" href={ AssetURL("/static/css/sheet_motion.css") }/>
 		<!-- The Annals page look (Customize > page look). Scoped to [data-cz-page="annals"], inert elsewhere. -->
 		<link rel="stylesheet" href={ AssetURL("/static/css/page_look_annals.css") }/>
+		<!-- Style kits over that page look (Customize > Pages). Scoped to [data-cz-kit], apart from one Material spacing rule. -->
+		<link rel="stylesheet" href={ AssetURL("/static/css/style_kits.css") }/>
 
 		<!-- Fonts -->
 		<link rel="preconnect" href="https://fonts.googleapis.com"/>
@@ -167,6 +169,9 @@ templ Base(title string) {
 		     only when a diagram is first drawn. -->
 		<script src={ AssetURL("/static/js/widgets/editor_diagram.js") } data-mermaid-src={ AssetURL("/static/vendor/mermaid.min.js") } defer></script>
 		<script src={ AssetURL("/static/js/widgets/editor.js") } defer></script>
+		<!-- Thrown 3D dice (Chronicle.dice.roll): boot.js fetches dice.js, and it
+		     the dice engine, three.js and cannon-es, only when dice are first thrown. -->
+		<template id="chronicle-dice-src" data-src={ AssetURL("/static/js/dice.js") } data-three-src={ AssetURL("/static/vendor/three-dice.min.js") } data-cannon-src={ AssetURL("/static/vendor/cannon-es.js") }></template>
 
 		<!-- Image upload widget -->
 		<script src={ AssetURL("/static/js/widgets/image_upload.js") } defer></script>
@@ -194,9 +199,6 @@ templ Base(title string) {
 		<!-- Annals: following a connection pulls the new page out from under it -->
 		<script src={ AssetURL("/static/js/annals_pull.js") } defer></script>
 
-		<!-- Shop inventory widget (item list with price/quantity/stock) -->
-		<script src={ AssetURL("/static/js/widgets/shop_inventory.js") } defer></script>
-
 		<!-- Shop room widget (isometric room above the inventory); icons list first. -->
 		<script src={ AssetURL("/static/js/widgets/shop_room_icons.js") } defer></script>
 		<script src={ AssetURL("/static/js/widgets/shop_room_paper.js") } defer></script>
@@ -204,7 +206,7 @@ templ Base(title string) {
 
 
 		<!-- Character inventory widget ("Has Item" relations with qty/equipped/attuned).
-		     Sibling of shop_inventory above; its mount is the `inventory` entity
+		     Sibling of shop_inventory (loaded on sight); its mount is the `inventory` entity
 		     block (entities/show.templ blockInventory). -->
 		<script src={ AssetURL("/static/js/widgets/inventory.js") } defer></script>
 
@@ -238,10 +240,9 @@ templ Base(title string) {
 		     and system widgets (loads first so both can call it) -->
 		<script src={ AssetURL("/static/js/widgets/choice_picker.js") } defer></script>
 
-		<!-- Attributes widget (inline edit for entity custom fields) -->
-		<script src={ AssetURL("/static/js/widgets/attributes.js") } defer></script>
-
-		<!-- Notes widget (floating personal notes panel) -->
+		<!-- Notes widget (floating personal notes panel); jot_place.js holds
+		     its placement rules and loads first -->
+		<script src={ AssetURL("/static/js/widgets/jot_place.js") } defer></script>
 		<script src={ AssetURL("/static/js/widgets/notes.js") } defer></script>
 
 		<!-- Notification bell (C-SCHED-P2): topbar dropdown; badge polled via HTMX. -->
