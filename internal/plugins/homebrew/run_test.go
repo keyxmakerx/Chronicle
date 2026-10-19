@@ -202,7 +202,7 @@ func TestFire(t *testing.T) {
 			rest(TimingNow, "only if the hero is winded", Do{Action: "add", Part: "a"}),
 			rest(TimingNow, "", Do{Action: "add", Part: "a"}, Do{Action: "hand"}),
 			rest(TimingNow, "", Do{Action: "browser"}))
-		if err := rg.svc.Fire(ctx, camp, dm, Fired{Event: "rest"}); err != nil {
+		if err := rg.svc.Fire(ctx, camp, dm, Fired{Event: "rest", Scope: "page1"}); err != nil {
 			t.Fatal(err)
 		}
 		if got := strings.Join(rg.statuses(), ","); got != "held,held,held,held,held" || rg.values["a"] != 0 {
@@ -225,6 +225,9 @@ func TestFire(t *testing.T) {
 		w := d.Waiting[0]
 		if len(w.Steps) != 1 || !w.Steps[0].Browser || w.Steps[0].Label != "Run in the browser" {
 			t.Errorf("newest waiting = %+v", w)
+		}
+		if w.RecipeID == "" || w.Scope != "page1" {
+			t.Errorf("waiting run names recipe %q and page %q, want both", w.RecipeID, w.Scope)
 		}
 		if len(d.Presses) != 1 || d.Presses[0].Label != "Log a rest" || d.Presses[0].Rules != 5 {
 			t.Errorf("presses = %+v", d.Presses)

@@ -5951,13 +5951,14 @@ func (a *App) RegisterRoutes() {
 	// not edited when one joins.
 	homebrewReg := homebrew.NewRegistry()
 	registerWorkshopParts(homebrewReg, workshopDeps{
-		Entities:      entityService,
-		FieldRules:    frWorld,
-		Health:        a.PluginHealth,
-		SystemEntries: systemEntrySvc,
-		SystemState:   systemStateSvc,
-		Systems:       systemHandler,
-		Trackers:      trackersSvc,
+		Entities:       entityService,
+		FieldRules:     frWorld,
+		FieldRuleStore: fieldRulesSvc,
+		Health:         a.PluginHealth,
+		SystemEntries:  systemEntrySvc,
+		SystemState:    systemStateSvc,
+		Systems:        systemHandler,
+		Trackers:       trackersSvc,
 	})
 	a.registerPlugin(PluginRegistration{
 		Slug:     homebrew.PluginSlug,
