@@ -25,3 +25,8 @@ func errConflict() error {
 func apperrorInternal(err error) error {
 	return apperror.NewInternal(fmt.Errorf("trackers: %w", err))
 }
+
+// errManaged refuses a hand edit of a kind another plugin keeps in step.
+func errManaged() error {
+	return apperror.NewValidation("this tracker kind comes from a homebrew recipe; change it in the Homebrew workshop")
+}

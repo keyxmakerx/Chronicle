@@ -7,6 +7,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/homebrew"
 	"github.com/keyxmakerx/chronicle/internal/plugins/systemstate"
+	"github.com/keyxmakerx/chronicle/internal/plugins/trackers"
 	"github.com/keyxmakerx/chronicle/internal/systems"
 )
 
@@ -19,6 +20,7 @@ type workshopDeps struct {
 	SystemEntries systems.SystemEntryService
 	SystemState   systemstate.Service
 	Systems       *systems.SystemHandler
+	Trackers      trackers.Service
 }
 
 // workshopSource is one feature's Workshop registration. Label names the

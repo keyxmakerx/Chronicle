@@ -16,7 +16,7 @@ func init() {
 		if !d.Health.IsHealthy(trackers.PluginSlug) {
 			return nil
 		}
-		return registerTrackerParts(reg)
+		return registerTrackerParts(reg, d.Trackers)
 	})
 }
 
@@ -24,8 +24,10 @@ func init() {
 // part carries a kind's shape, a clock part is that shape fixed to a clock,
 // and rules can react to a tracker reaching a value and step, set or tick
 // one. The shapes are checked by the trackers plugin's own rules, so a
-// recipe never holds one the Trackers block would refuse.
-func registerTrackerParts(reg *homebrew.Registry) error {
+// recipe never holds one the Trackers block would refuse. With svc, each
+// tracker or clock part is also saved as a tracker kind the recipe keeps in
+// step, so it can be placed on pages and keeps a log like any other.
+func registerTrackerParts(reg *homebrew.Registry, svc trackers.Service) error {
 	shapeCheck := func(clock bool) homebrew.CheckFunc {
 		return func(_ context.Context, _ string, raw json.RawMessage) (json.RawMessage, error) {
 			var s trackers.Shape
@@ -74,10 +76,12 @@ func registerTrackerParts(reg *homebrew.Registry) error {
 	both := []string{"tracker", "clock"}
 	regs := []func() error{
 		func() error {
-			return reg.RegisterPart(homebrew.PartKind{Name: "tracker", Label: "Tracker", Preview: homebrew.PreviewShape, Check: shapeCheck(false)})
+			return reg.RegisterPart(homebrew.PartKind{Name: "tracker", Label: "Tracker", Preview: homebrew.PreviewShape, Check: shapeCheck(false),
+				Sync: trackerKindSync(svc, "tracker")})
 		},
 		func() error {
-			return reg.RegisterPart(homebrew.PartKind{Name: "clock", Label: "Clock", Preview: homebrew.PreviewShape, Check: shapeCheck(true)})
+			return reg.RegisterPart(homebrew.PartKind{Name: "clock", Label: "Clock", Preview: homebrew.PreviewShape, Check: shapeCheck(true),
+				Sync: trackerKindSync(svc, "clock")})
 		},
 		func() error {
 			return reg.RegisterEvent(homebrew.EventDef{Name: "tracker.reached", Label: "A tracker reaches", PartKinds: both,
@@ -121,6 +125,49 @@ func registerTrackerParts(reg *homebrew.Registry) error {
 		}
 	}
 	return nil
+}
+
+// trackerKindSync saves one kind of part as tracker kinds owned by the
+// recipe, keyed "homebrew:<recipe>:<kind>:<part key>" so tracker and clock
+// parts of one recipe never sync over each other. Name-only parts become
+// Director-only kinds: the Trackers block has no name-only view, and
+// showing less is the safe side.
+func trackerKindSync(svc trackers.Service, kind string) *homebrew.PartSync {
+	if svc == nil {
+		return nil
+	}
+	want := func(recipeID string, parts []homebrew.Part) (string, []trackers.OwnedKind, error) {
+		prefix := "homebrew:" + recipeID + ":" + kind + ":"
+		out := make([]trackers.OwnedKind, 0, len(parts))
+		for _, p := range parts {
+			var s trackers.Shape
+			if err := json.Unmarshal(p.Data, &s); err != nil {
+				return "", nil, fmt.Errorf("tracker part %s: %w", p.Key, err)
+			}
+			see := trackers.SeeDirectors
+			if p.See == homebrew.SeeParty {
+				see = trackers.SeeEveryone
+			}
+			out = append(out, trackers.OwnedKind{Owner: prefix + p.Key, Name: p.Label, Shape: s, Visibility: see})
+		}
+		return prefix, out, nil
+	}
+	return &homebrew.PartSync{
+		Check: func(ctx context.Context, campaignID, recipeID string, parts []homebrew.Part) error {
+			prefix, w, err := want(recipeID, parts)
+			if err != nil {
+				return err
+			}
+			return svc.CheckOwned(ctx, campaignID, prefix, w)
+		},
+		Apply: func(ctx context.Context, campaignID, recipeID string, parts []homebrew.Part) error {
+			prefix, w, err := want(recipeID, parts)
+			if err != nil {
+				return err
+			}
+			return svc.SyncOwned(ctx, campaignID, prefix, w)
+		},
+	}
 }
 
 // strictJSON decodes an owner's JSON, refusing fields the owner doesn't know,

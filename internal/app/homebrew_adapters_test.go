@@ -10,6 +10,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/homebrew"
+	"github.com/keyxmakerx/chronicle/internal/plugins/trackers"
 )
 
 // memRecipes is the smallest homebrew.Repository that lets a recipe go
@@ -33,7 +34,7 @@ func (m *memRecipes) Delete(context.Context, string, string) (bool, error)      
 func trackerService(t *testing.T) (homebrew.Service, *homebrew.Registry) {
 	t.Helper()
 	reg := homebrew.NewRegistry()
-	if err := registerTrackerParts(reg); err != nil {
+	if err := registerTrackerParts(reg, nil); err != nil {
 		t.Fatal(err)
 	}
 	return homebrew.NewService(&memRecipes{stored: map[string]homebrew.Recipe{}}, reg), reg
@@ -57,7 +58,7 @@ func hbCode(err error) int {
 
 func TestRegisterTrackerParts(t *testing.T) {
 	reg := homebrew.NewRegistry()
-	if err := registerTrackerParts(reg); err != nil {
+	if err := registerTrackerParts(reg, nil); err != nil {
 		t.Fatal(err)
 	}
 	cat := reg.Catalog()
@@ -120,7 +121,7 @@ func TestRegisterTrackerParts(t *testing.T) {
 	}
 
 	t.Run("a second call fails as a duplicate", func(t *testing.T) {
-		if err := registerTrackerParts(reg); err == nil {
+		if err := registerTrackerParts(reg, nil); err == nil {
 			t.Error("registering twice succeeded")
 		}
 	})
@@ -244,4 +245,56 @@ func TestTrackerRuleChecks(t *testing.T) {
 			}
 		})
 	}
+}
+
+// ownedTrackers is a trackers.Service that records owned-kind syncs; every
+// other method is the nil embedded interface and would panic if called.
+type ownedTrackers struct {
+	trackers.Service
+	synced map[string][]trackers.OwnedKind
+	refuse error
+}
+
+func (o *ownedTrackers) CheckOwned(_ context.Context, _ string, _ string, _ []trackers.OwnedKind) error {
+	return o.refuse
+}
+
+func (o *ownedTrackers) SyncOwned(_ context.Context, _ string, prefix string, want []trackers.OwnedKind) error {
+	o.synced[prefix] = want
+	return nil
+}
+
+func TestTrackerPartsBecomeKinds(t *testing.T) {
+	reg := homebrew.NewRegistry()
+	tk := &ownedTrackers{synced: map[string][]trackers.OwnedKind{}}
+	if err := registerTrackerParts(reg, tk); err != nil {
+		t.Fatal(err)
+	}
+	svc := homebrew.NewService(&memRecipes{stored: map[string]homebrew.Recipe{}}, reg)
+	r, err := saveDoc(t, svc, homebrew.Doc{Parts: []homebrew.Part{
+		{Key: "need", Kind: "tracker", Label: "Need", See: homebrew.SeeParty, Data: json.RawMessage(`{"max":5}`)},
+		{Key: "doom", Kind: "clock", Label: "Doom", See: homebrew.SeeName, Data: json.RawMessage(`{"max":6}`)},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tp, cp := "homebrew:"+r.ID+":tracker:", "homebrew:"+r.ID+":clock:"
+	got := fmt.Sprint(tk.synced[tp], tk.synced[cp])
+	five, six := 5, 6
+	want := fmt.Sprint(
+		[]trackers.OwnedKind{{Owner: tp + "need", Name: "Need", Shape: trackers.Shape{Shape: "count", Max: &five}, Visibility: trackers.SeeEveryone}},
+		[]trackers.OwnedKind{{Owner: cp + "doom", Name: "Doom", Shape: trackers.Shape{Shape: "clock", Max: &six}, Visibility: trackers.SeeDirectors}})
+	// Pointers print as addresses, so compare the parts that matter.
+	if len(tk.synced) != 2 || tk.synced[tp][0].Owner != tp+"need" || tk.synced[tp][0].Visibility != trackers.SeeEveryone ||
+		*tk.synced[tp][0].Shape.Max != 5 || tk.synced[cp][0].Shape.Shape != "clock" || tk.synced[cp][0].Visibility != trackers.SeeDirectors {
+		t.Fatalf("synced %s, want %s", got, want)
+	}
+
+	t.Run("the trackers plugin's refusal reaches the Director", func(t *testing.T) {
+		tk.refuse = apperror.NewValidation("there is already a tracker kind called Need; rename the part")
+		_, err := saveDoc(t, svc, homebrew.Doc{Parts: []homebrew.Part{{Key: "n", Kind: "tracker", Label: "Need", See: homebrew.SeeParty}}})
+		if hbCode(err) != 422 || !strings.Contains(err.Error(), "rename the part") {
+			t.Fatalf("err = %v", err)
+		}
+	})
 }

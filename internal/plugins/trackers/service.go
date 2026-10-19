@@ -28,6 +28,12 @@ type Service interface {
 	CreateKind(ctx context.Context, campaignID string, v Viewer, in KindInput) (*Kind, error)
 	UpdateKind(ctx context.Context, campaignID, kindID string, v Viewer, in KindInput) (*Kind, error)
 	DeleteKind(ctx context.Context, campaignID, kindID string, v Viewer) error
+
+	// CheckOwned says, without writing, whether SyncOwned would refuse want.
+	CheckOwned(ctx context.Context, campaignID, prefix string, want []OwnedKind) error
+	// SyncOwned makes the kinds owned under prefix match want. Its caller
+	// has already decided the change is the Director's to make.
+	SyncOwned(ctx context.Context, campaignID, prefix string, want []OwnedKind) error
 }
 
 type service struct {
@@ -473,6 +479,9 @@ func (s *service) UpdateKind(ctx context.Context, campaignID, kindID string, v V
 	if in.Version != old.Version {
 		return nil, errConflict()
 	}
+	if old.Owner != "" {
+		return nil, errManaged()
+	}
 	k, err := validateKind(in)
 	if err != nil {
 		return nil, err
@@ -512,10 +521,12 @@ func (s *service) DeleteKind(ctx context.Context, campaignID, kindID string, v V
 	if !validToken(kindID) {
 		return errNotFound("tracker kind")
 	}
-	if _, ok, err := s.repo.GetKind(ctx, campaignID, kindID); err != nil {
+	if k, ok, err := s.repo.GetKind(ctx, campaignID, kindID); err != nil {
 		return apperrorInternal(err)
 	} else if !ok {
 		return errNotFound("tracker kind")
+	} else if k.Owner != "" {
+		return errManaged()
 	}
 	inUse, err := s.repo.DeleteKind(ctx, campaignID, kindID)
 	if err != nil {

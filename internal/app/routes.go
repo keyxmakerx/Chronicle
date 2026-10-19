@@ -5896,8 +5896,9 @@ func (a *App) RegisterRoutes() {
 			{Name: "trackers", Scripts: []string{"js/trackers.js"}},
 		},
 	})
+	var trackersSvc trackers.Service
 	if a.PluginHealth.IsHealthy(trackers.PluginSlug) {
-		trackersSvc := trackers.NewService(trackers.NewRepository(a.DB),
+		trackersSvc = trackers.NewService(trackers.NewRepository(a.DB),
 			&trackersEntityAdapter{svc: entityService, cards: entities.NewPageCards(a.DB)},
 			&trackersClockAdapter{svc: calendarService})
 		trackers.RegisterRoutes(e, trackers.NewHandler(trackersSvc), campaignService, authService)
@@ -5939,6 +5940,7 @@ func (a *App) RegisterRoutes() {
 		SystemEntries: systemEntrySvc,
 		SystemState:   systemStateSvc,
 		Systems:       systemHandler,
+		Trackers:      trackersSvc,
 	})
 	a.registerPlugin(PluginRegistration{
 		Slug:     homebrew.PluginSlug,

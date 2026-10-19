@@ -84,15 +84,17 @@ func intPtr(n sql.NullInt64) *int {
 	return &v
 }
 
-const kindCols = `id, campaign_id, name, shape, min_value, max_value, steps, bands, visibility, every_type_id, version`
+const kindCols = `id, campaign_id, name, shape, min_value, max_value, steps, bands, visibility, every_type_id, version, owner`
 
 func scanKind(sc interface{ Scan(...any) error }) (Kind, error) {
 	var k Kind
 	var lo, hi, every sql.NullInt64
+	var owner sql.NullString
 	var steps, bands string
-	if err := sc.Scan(&k.ID, &k.CampaignID, &k.Name, &k.Shape, &lo, &hi, &steps, &bands, &k.Visibility, &every, &k.Version); err != nil {
+	if err := sc.Scan(&k.ID, &k.CampaignID, &k.Name, &k.Shape, &lo, &hi, &steps, &bands, &k.Visibility, &every, &k.Version, &owner); err != nil {
 		return k, err
 	}
+	k.Owner, k.Managed = owner.String, owner.String != ""
 	k.Min, k.Max = intPtr(lo), intPtr(hi)
 	if every.Valid {
 		k.EveryTypeID = int(every.Int64)
@@ -120,10 +122,12 @@ func (r *sqlRepository) ListKinds(ctx context.Context, campaignID string) ([]Kin
 	for rows.Next() {
 		var k Kind
 		var lo, hi, every sql.NullInt64
+		var owner sql.NullString
 		var steps, bands string
-		if err := rows.Scan(&k.ID, &k.CampaignID, &k.Name, &k.Shape, &lo, &hi, &steps, &bands, &k.Visibility, &every, &k.Version, &k.InUse); err != nil {
+		if err := rows.Scan(&k.ID, &k.CampaignID, &k.Name, &k.Shape, &lo, &hi, &steps, &bands, &k.Visibility, &every, &k.Version, &owner, &k.InUse); err != nil {
 			return nil, fmt.Errorf("scan tracker kind: %w", err)
 		}
+		k.Owner, k.Managed = owner.String, owner.String != ""
 		k.Min, k.Max = intPtr(lo), intPtr(hi)
 		if every.Valid {
 			k.EveryTypeID = int(every.Int64)
@@ -186,9 +190,9 @@ func (r *sqlRepository) CreateKind(ctx context.Context, k Kind) error {
 		return fmt.Errorf("encode tracker kind: %w", err)
 	}
 	_, err = r.db.ExecContext(ctx,
-		`INSERT INTO tracker_kinds (id, campaign_id, name, shape, min_value, max_value, steps, bands, visibility, every_type_id, version)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
-		k.ID, k.CampaignID, k.Name, k.Shape, nullInt(k.Min), nullInt(k.Max), steps, bands, k.Visibility, everyType(k))
+		`INSERT INTO tracker_kinds (id, campaign_id, name, shape, min_value, max_value, steps, bands, visibility, every_type_id, version, owner)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+		k.ID, k.CampaignID, k.Name, k.Shape, nullInt(k.Min), nullInt(k.Max), steps, bands, k.Visibility, everyType(k), nullString(k.Owner))
 	if isDuplicate(err) {
 		return errDuplicate
 	}
@@ -205,9 +209,9 @@ func (r *sqlRepository) UpdateKind(ctx context.Context, k Kind, expected int) (b
 	}
 	res, err := r.db.ExecContext(ctx,
 		`UPDATE tracker_kinds SET name = ?, shape = ?, min_value = ?, max_value = ?, steps = ?, bands = ?,
-		        visibility = ?, every_type_id = ?, version = version + 1
+		        visibility = ?, every_type_id = ?, owner = ?, version = version + 1
 		 WHERE id = ? AND campaign_id = ? AND version = ?`,
-		k.Name, k.Shape, nullInt(k.Min), nullInt(k.Max), steps, bands, k.Visibility, everyType(k),
+		k.Name, k.Shape, nullInt(k.Min), nullInt(k.Max), steps, bands, k.Visibility, everyType(k), nullString(k.Owner),
 		k.ID, k.CampaignID, expected)
 	if isDuplicate(err) {
 		return false, errDuplicate
