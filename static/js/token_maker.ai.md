@@ -32,8 +32,9 @@ is one 128 px cell of the previews sprite, in the engine's design order, eight
 to a row. Only the frame being edited is drawn live, plus a moving frame the
 pointer rests on (250 ms), which plays in its tile with this picture and colour.
 After adding, removing, reordering or restyling a design, run
-`node tools/token_frames_previews.mjs`; `test/js/token_maker_browser.test.mjs`
-fails when the sprite no longer matches the engine.
+`node tools/token_frames_previews.mjs`. `test/js/token_maker_browser.test.mjs`
+fails when the sprite's size or tile order no longer matches the engine; it
+compares each tile with a fresh drawing, so a small restyle can slip past it.
 
 **Saving.** Save draws the token 512 px square as a PNG and uploads it
 (`POST /media/upload`, `usage_type=entity_image`): the media sanitiser keeps a
@@ -42,8 +43,10 @@ moving frame is saved as its still picture. With `save: 'field'` it then writes
 `fields_patch: { token_image: <id> }` to the page, which the hover card shows on
 the picture's corner and the Foundry module uses as the creature's token. The
 page picture itself is never changed. It fires `chronicle:token-saved`
-(`{ entityId, mediaId, url }`) on the control that opened it, and remembers the
-frame, colour and shape in `localStorage` for the next token.
+(`{ entityId, mediaId, url, field }`, `field` empty for a caller's own `save`)
+on the control that opened it; the page's Attributes form takes the new value
+in from it, since that form saves every field at once. It remembers the frame,
+colour and shape in `localStorage` for the next token.
 
 **The frames.** `token_frames.js` draws one token into a canvas it is handed
 (`ChronicleTokenFrames.render(ctx, w, h, o)`) and touches nothing else. It is
@@ -56,6 +59,9 @@ a moment.
 the hovered tile at 15), drawing at most half the time, and rest with
 `MotionRest`. Calm fades the maker in and holds frames still; Off and a device
 asking for less motion show it at once, still.
+
+**Waiting.** Until the frames load, only closing works; the picture tools
+(size, Fill, Flip) wait for a picture as well.
 
 **Closing.** Close, Cancel or Escape. Unsaved work asks in place first
 (`Chronicle.askSlip`); a second Escape goes back to the work. The page behind is

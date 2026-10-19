@@ -5,7 +5,9 @@
 // previews from the sprite and plays only a moving frame the pointer rests on;
 // Save uploads a PNG and writes the page's token field; closing with unsaved
 // work asks first; Calm and Off open it without growing and hold frames still;
-// and the sprite is still one tile per design, in the engine's order.
+// the page's Attributes form keeps the new token; nothing breaks while the
+// frames are still loading; and the sprite is still one tile per design, in
+// the engine's order.
 //
 // Needs playwright-core and a Chromium (see _browser_env.mjs); skips locally,
 // and fails under CI, when either is missing.
@@ -47,9 +49,10 @@ async function page(t, motion, viewport = { width: 1280, height: 860 }) {
   const errors = [];
   p.on('pageerror', (e) => errors.push(e.message));
   t.after(() => assert.deepEqual(errors, []));
-  p.fetched = []; p.uploads = []; p.puts = [];
+  p.fetched = []; p.uploads = []; p.puts = []; p.gate = null;
   await p.route('**/*', async (route) => {
     const req = route.request(), u = new URL(req.url());
+    if (u.pathname === '/static/js/token_frames.js' && p.gate) await p.gate;
     if (u.pathname === '/') return route.fulfill({ contentType: 'text/html', body: HTML(motion) });
     if (u.pathname === '/media/pic.svg') return route.fulfill({ contentType: 'image/svg+xml', body: PIC });
     if (u.pathname === '/media/upload' && req.method() === 'POST') {
@@ -59,6 +62,10 @@ async function page(t, motion, viewport = { width: 1280, height: 860 }) {
     if (u.pathname === '/campaigns/c1/entities/e1/fields' && req.method() === 'PUT') {
       p.puts.push(JSON.parse(req.postData()));
       return route.fulfill({ contentType: 'application/json', body: '{}' });
+    }
+    if (u.pathname === '/campaigns/c1/entities/e1/fields') {
+      const fields = [{ key: 'size', label: 'Size', type: 'text' }, { key: 'token_image', label: 'Token picture', type: 'text' }];
+      return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ fields, type_fields: fields, fields_data: { size: '1M', token_image: '' } }) });
     }
     const file = join(root, u.pathname);
     if (!u.pathname.startsWith('/static/') || !existsSync(file)) return route.fulfill({ status: 404, body: '' });
@@ -140,7 +147,7 @@ test('save uploads a 512 pixel PNG and puts it in the page\'s token field', { sk
   assert.equal(png[25], 6, 'the PNG keeps its transparency (RGBA)');
   assert.deepEqual(p.puts, [{ fields_patch: { token_image: MEDIA_ID } }]);
   const after = await p.evaluate(() => ({ saved: window.__saved, focus: document.activeElement && document.activeElement.id, dirty: Chronicle.isDirty(), kept: localStorage.getItem('chronicle.tokenMaker') }));
-  assert.deepEqual(after.saved, { entityId: 'e1', mediaId: MEDIA_ID, url: '/media/' + MEDIA_ID });
+  assert.deepEqual(after.saved, { entityId: 'e1', mediaId: MEDIA_ID, url: '/media/' + MEDIA_ID, field: 'token_image' });
   assert.equal(after.focus, 'chip', 'focus goes back to what opened it');
   assert.equal(after.dirty, false);
   assert.deepEqual(JSON.parse(after.kept), { frame: 'arcane', colour: '#2f5fc8', shape: 'round' });
@@ -181,6 +188,54 @@ test('closing with unsaved work asks first; a second Escape goes back to it', { 
   await p.waitForFunction(() => !document.querySelector('.tkm'));
   assert.equal(await p.evaluate(() => document.activeElement.id), 'chip');
   assert.equal(p.uploads.length, 0);
+});
+
+test('after the slip is answered with Escape, Tab still goes round inside the maker', { skip }, async (t) => {
+  const p = await page(t, 'off');
+  await openMaker(p);
+  await p.click('[data-tkm-shape] [data-v="square"]');
+  await p.keyboard.press('Escape');
+  await p.waitForSelector('.tkm .ask-slip.is-on');
+  await p.keyboard.press('Escape');
+  await p.waitForFunction(() => !document.querySelector('.tkm .ask-slip.is-on'));
+  await p.focus('[data-tkm-save]');
+  await p.keyboard.press('Tab');
+  assert.equal(await p.evaluate(() => document.activeElement.matches('.tkm-x')), true, 'Tab from Save wraps to the close button');
+  await p.keyboard.press('Shift+Tab');
+  assert.equal(await p.evaluate(() => document.activeElement.matches('[data-tkm-save]')), true, 'Shift+Tab from it wraps back to Save');
+});
+
+test('the page\'s Attributes form takes in the new token, so saving it later keeps it', { skip }, async (t) => {
+  const p = await page(t, 'off');
+  await p.evaluate(() => document.body.insertAdjacentHTML('beforeend',
+    '<div id="attrs" data-widget="attributes" data-endpoint="/campaigns/c1/entities/e1/fields" data-editable="true"></div>'));
+  await p.addScriptTag({ url: '/static/js/widgets/attributes.js' });
+  await p.waitForSelector('#attrs .chronicle-editor__edit-btn');
+  await openMaker(p);
+  await p.click('[data-tkm-save]');
+  await p.waitForFunction(() => !document.querySelector('.tkm'), null, { timeout: 30000 });
+  await p.click('#attrs .chronicle-editor__edit-btn:not([title])');
+  await p.waitForSelector('#attrs [data-field-key="size"]');
+  assert.equal(await p.inputValue('#attrs [data-field-key="token_image"]'), MEDIA_ID);
+  await p.fill('#attrs [data-field-key="size"]', '2');
+  await p.click('#attrs .chronicle-editor__edit-btn--done');
+  await p.waitForFunction(() => !document.querySelector('#attrs [data-field-key]'));
+  assert.deepEqual(p.puts, [{ fields_patch: { token_image: MEDIA_ID } }, { fields_data: { size: '2', token_image: MEDIA_ID } }]);
+});
+
+test('while the frames are still loading, only closing works and nothing breaks', { skip }, async (t) => {
+  const p = await page(t, 'off');
+  let release;
+  p.gate = new Promise((r) => { release = r; });
+  await p.click('#chip');
+  await p.waitForSelector('.tkm.is-open [data-tkm-wait]:not([hidden])');
+  await p.click('[data-tkm-shape] [data-v="square"]');
+  const off = await p.evaluate(() => ['[data-tkm-file]', '[data-tkm-fill]', '[data-tkm-flip]', '[data-tkm-zoom]', '[data-tkm-save]'].map((s) => document.querySelector(s).disabled));
+  assert.deepEqual(off, [true, true, true, true, true]);
+  release();
+  await p.waitForSelector('.tkm.is-open [data-tkm-save]:not([disabled])', { timeout: 60000 });
+  const on = await p.evaluate(() => ['[data-tkm-file]', '[data-tkm-fill]', '[data-tkm-flip]', '[data-tkm-zoom]'].map((s) => document.querySelector(s).disabled));
+  assert.deepEqual(on, [false, false, false, false]);
 });
 
 test('Calm and Off open it in place and hold moving frames still', { skip }, async (t) => {

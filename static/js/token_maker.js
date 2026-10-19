@@ -139,10 +139,10 @@
             '</div>' +
             '<p class="tkm-hint">Inside the frame: move it. Frame corners: resize it. Outside: move the picture. Picture corners or the wheel: resize the picture.</p>' +
             '<div class="tkm-tools">' +
-              '<label class="tkm-slide">Picture <input type="range" min="10" max="400" step="1" value="100" data-tkm-zoom></label>' +
-              '<button type="button" class="btn-secondary btn-sm" data-tkm-fill>Fill the frame</button>' +
-              '<button type="button" class="btn-secondary btn-sm" data-tkm-flip aria-pressed="false">Flip</button>' +
-              '<label class="btn-secondary btn-sm tkm-file"><span data-tkm-filel>Another picture</span><input type="file" accept="image/png,image/jpeg,image/webp" data-tkm-file></label>' +
+              '<label class="tkm-slide">Picture <input type="range" min="10" max="400" step="1" value="100" data-tkm-zoom data-tkm-pic disabled></label>' +
+              '<button type="button" class="btn-secondary btn-sm" data-tkm-fill data-tkm-pic disabled>Fill the frame</button>' +
+              '<button type="button" class="btn-secondary btn-sm" data-tkm-flip data-tkm-pic aria-pressed="false" disabled>Flip</button>' +
+              '<label class="btn-secondary btn-sm tkm-file"><span data-tkm-filel>Another picture</span><input type="file" accept="image/png,image/jpeg,image/webp" data-tkm-file disabled></label>' +
             '</div>' +
           '</div>' +
           '<div class="tkm-side">' +
@@ -459,6 +459,7 @@
       var t = e.target, b;
       if (t.closest('[data-tkm-close]')) { close(); return; }
       if (t.closest('[data-tkm-save]')) { save(); return; }
+      if (!st.ready) return;
       if ((b = t.closest('[data-tkm-groups] button'))) {
         showGroup(st, b.getAttribute('data-g'));
         var first = el.querySelector('[data-tkm-frames] .tkm-fr');
@@ -476,7 +477,7 @@
       }
     });
     el.querySelector('[data-tkm-any]').addEventListener('input', function (e) {
-      if (/^#[0-9a-f]{6}$/i.test(e.target.value)) { setColour(st, e.target.value, ''); changed(st); }
+      if (st.ready && /^#[0-9a-f]{6}$/i.test(e.target.value)) { setColour(st, e.target.value, ''); changed(st); }
     });
     el.querySelector('[data-tkm-zoom]').addEventListener('input', function (e) {
       if (!st.img) return;
@@ -506,7 +507,7 @@
     frames.addEventListener('focusout', function (e) { if (!frames.contains(e.relatedTarget)) unhot(st); });
     el.addEventListener('keydown', function (e) {
       if (e.key !== 'Tab') return;
-      var f = Array.prototype.filter.call(el.querySelectorAll(FOCUSABLE), function (n) { return !n.closest('[hidden]') && n.getClientRects().length; });
+      var f = Array.prototype.filter.call(el.querySelectorAll(FOCUSABLE), function (n) { return !n.closest('[hidden]') && n.getClientRects().length && getComputedStyle(n).visibility !== 'hidden'; });
       if (!f.length) { e.preventDefault(); st.panel.focus(); return; }
       var first = f[0], last = f[f.length - 1], a = document.activeElement;
       if (e.shiftKey && (a === first || a === st.panel)) { e.preventDefault(); last.focus(); }
@@ -521,6 +522,7 @@
     st.place = F.place(img);
     keepFrameIn(st);
     st.el.querySelector('[data-tkm-filel]').textContent = 'Another picture';
+    Array.prototype.forEach.call(st.el.querySelectorAll('[data-tkm-pic]'), function (n) { n.disabled = false; });
     setTimeout(function () {
       if (cur !== st || st.img !== img) return;
       draw(st);
@@ -574,7 +576,7 @@
       var st = cur = {
         o: o, el: el, panel: panel, from: from, surface: el.querySelector('.tkm-surface'), tmp: document.createElement('canvas'), hotCanvas: hc,
         img: null, place: null, url: '', group: '', hot: null, hotTimer: 0, frame: 'none', colour: '', shape: 'round', flip: false, name: o.name || '',
-        playing: motionOK(), dirty: false, saving: false, closing: false, raf: 0, ticks: 0, nextTick: 0, inert: []
+        playing: motionOK(), ready: false, dirty: false, saving: false, closing: false, raf: 0, ticks: 0, nextTick: 0, inert: []
       };
       document.body.appendChild(el);
       // The page underneath keeps its place but leaves the tab order and the reader's tree.
@@ -599,6 +601,8 @@
       var art = sameOrigin(o.art) ? o.art : '';
       Promise.all([loadEngine(), loadPicture(art).catch(function () { return null; })]).then(function (r) {
         if (cur !== st) return;
+        st.ready = true;
+        st.el.querySelector('[data-tkm-file]').disabled = false;
         F.motion(st.playing);
         buildGroups(st);
         bindSurface(st);
@@ -612,7 +616,6 @@
       }).catch(function () {
         if (cur !== st) return;
         noPicture(st, 'The frames could not be loaded. Close this and try again.');
-        st.el.querySelector('[data-tkm-file]').disabled = true;
       });
     });
   }
@@ -701,7 +704,7 @@
     }).then(function (m) {
       remember(st);
       st.dirty = false;
-      var ev = new CustomEvent('chronicle:token-saved', { bubbles: true, detail: { entityId: o.entityId || '', mediaId: m.id, url: m.url || '' } });
+      var ev = new CustomEvent('chronicle:token-saved', { bubbles: true, detail: { entityId: o.entityId || '', mediaId: m.id, url: m.url || '', field: toField ? TOKEN_FIELD : '' } });
       (st.from && st.from.isConnected ? st.from : document).dispatchEvent(ev);
       st.saving = false;
       close(true);
@@ -711,7 +714,7 @@
       if (cur !== st) return;
       btn.disabled = false;
       btn.textContent = label;
-      msg((e && e.message) || 'The token was not saved. Try again.', 'error');
+      msg(e instanceof TypeError || !(e && e.message) ? 'The token was not saved. Check your connection and try again.' : e.message, 'error');
     });
   }
 

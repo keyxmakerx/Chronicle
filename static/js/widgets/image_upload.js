@@ -79,7 +79,8 @@ Chronicle.register('image-upload', {
         bar.style.width = (pct || 0) + '%';
         warn.classList.remove('is-on');
       }
-      var chips = el.querySelectorAll('[data-pick]');
+      // Making a token while the picture is replaced would frame the old one.
+      var chips = el.querySelectorAll('[data-pick], [data-token-maker]');
       for (var i = 0; i < chips.length; i++) chips[i].disabled = on;
       el.setAttribute('aria-busy', on ? 'true' : 'false');
     }

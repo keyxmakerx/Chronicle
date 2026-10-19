@@ -38,6 +38,7 @@ html.tkm-lock { overflow: hidden; }
   transition: background-color var(--dur-micro, 120ms) var(--ease-out, ease-out), color var(--dur-micro, 120ms) var(--ease-out, ease-out);
 }
 .tkm-x:hover { background: var(--color-bg-tertiary, #f1f5f9); color: var(--color-text-primary, #111827); }
+.tkm-x:active { box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.18); }
 
 .tkm-body { flex: 1 1 auto; min-height: 0; overflow: hidden; display: grid; grid-template-columns: minmax(0, 1fr) 330px; }
 /* The picture stays in view while the side column scrolls on its own. */
@@ -62,6 +63,8 @@ html.tkm-lock { overflow: hidden; }
 .tkm-slide input { width: 150px; accent-color: var(--color-accent, #6366f1); }
 .tkm-file { position: relative; overflow: hidden; cursor: pointer; }
 .tkm-file input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.tkm-file:has(input:disabled) { opacity: .55; cursor: default; }
+.tkm-file:has(input:disabled) input { cursor: default; }
 .tkm-file:focus-within { outline: 2px solid var(--color-accent, #6366f1); outline-offset: 2px; }
 
 .tkm-side { min-width: 0; min-height: 0; overflow: auto; border-left: 1px solid var(--color-border, #e5e7eb); background: var(--color-bg-secondary, #f8fafc); }
@@ -77,6 +80,7 @@ html.tkm-lock { overflow: hidden; }
   transition: background-color var(--dur-micro, 120ms) var(--ease-out, ease-out), color var(--dur-micro, 120ms) var(--ease-out, ease-out);
 }
 .tkm-seg button:hover { background: var(--color-bg-tertiary, #f1f5f9); }
+.tkm-seg button:active { box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.15); }
 .tkm-seg button[aria-pressed="true"] { background: rgb(var(--color-accent-rgb, 99 102 241) / 0.14); color: var(--color-text-primary, #111827); font-weight: 600; }
 
 .tkm-groups { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
@@ -86,6 +90,7 @@ html.tkm-lock { overflow: hidden; }
   transition: background-color var(--dur-micro, 120ms) var(--ease-out, ease-out), border-color var(--dur-micro, 120ms) var(--ease-out, ease-out), color var(--dur-micro, 120ms) var(--ease-out, ease-out);
 }
 .tkm-chip:hover { border-color: var(--color-accent, #6366f1); color: var(--color-accent, #6366f1); }
+.tkm-chip:active { box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.15); }
 .tkm-chip[aria-pressed="true"] { border-color: var(--color-accent, #6366f1); background: rgb(var(--color-accent-rgb, 99 102 241) / 0.12); color: var(--color-text-primary, #111827); font-weight: 600; }
 
 .tkm-frames { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; }
@@ -102,10 +107,11 @@ html.tkm-lock { overflow: hidden; }
 .tkm-hot { position: absolute; inset: 0; width: 100%; height: 100%; }
 .tkm-fr-n { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; max-width: 100%; }
 .tkm-quiet {
-  margin-top: 8px; padding: 6px 0; border: 0; background: none; font: inherit; font-size: 13px; cursor: pointer;
+  display: inline-flex; align-items: center; min-height: 32px; margin-top: 4px; padding: 0 2px; border-radius: 6px; border: 0; background: none; font: inherit; font-size: 13px; cursor: pointer;
   color: var(--color-accent-link, var(--color-accent, #6366f1));
 }
 .tkm-quiet:hover { text-decoration: underline; }
+.tkm-quiet:active { box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.15); }
 .tkm-quiet[hidden] { display: none; }
 
 .tkm-swatches { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -120,6 +126,7 @@ html.tkm-lock { overflow: hidden; }
 .tkm-sw.is-any { background: conic-gradient(#e53935, #fdd835, #43a047, #1e88e5, #8e24aa, #e53935); overflow: hidden; }
 .tkm-sw.is-any input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; border: 0; padding: 0; }
 .tkm-sw:hover { box-shadow: inset 0 0 0 2px var(--color-card-bg, #fff), 0 0 0 2px var(--color-border, #d1d5db); }
+.tkm-sw:active { box-shadow: inset 0 0 0 2px var(--color-card-bg, #fff), inset 0 2px 5px rgb(0 0 0 / 0.3); }
 .tkm-sw[aria-pressed="true"] { box-shadow: inset 0 0 0 2px var(--color-card-bg, #fff), 0 0 0 2px var(--color-accent, #6366f1); }
 .tkm-sw.is-any:focus-within { outline: 2px solid var(--color-accent, #6366f1); outline-offset: 2px; }
 
@@ -160,8 +167,8 @@ html.tkm-lock { overflow: hidden; }
   .tkm-foot { padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px)); }
 }
 @media (pointer: coarse) {
-  .tkm-chip, .tkm-seg button { min-height: 44px; }
-  .tkm-sw { width: 40px; height: 40px; }
+  .tkm-chip, .tkm-seg button, .tkm-quiet { min-height: 44px; }
+  .tkm-x, .tkm-sw { width: 44px; height: 44px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .tkm-bg, .tkm-p { transition: none; clip-path: none; }
