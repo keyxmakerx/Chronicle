@@ -351,7 +351,7 @@ func (k NoticeBoardKind) Export(ctx context.Context, campaignID string, a Actor)
 		}
 		b.WriteString("---\n")
 		if players > 0 {
-			b.WriteString(fmt.Sprintf("<!-- players pinned %d things here; they are theirs and stay as they are -->\n", players))
+			fmt.Fprintf(&b, "<!-- players pinned %d things here; they are theirs and stay as they are -->\n", players)
 		}
 		b.WriteString("\n")
 	}
