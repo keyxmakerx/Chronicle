@@ -18,17 +18,6 @@
   var activeTags = [];
   var tagCache = null;
   var savedFiltersCache = null;
-  // The chips are folded away by default: a campaign's tag list can fill
-  // the panel. Opening them is remembered for this browser.
-  var OPEN_KEY = 'chronicle.sidebarTagsOpen';
-
-  function readOpen() {
-    try { return localStorage.getItem(OPEN_KEY) === '1'; } catch (e) { return false; }
-  }
-
-  function writeOpen(open) {
-    try { localStorage.setItem(OPEN_KEY, open ? '1' : '0'); } catch (e) { /* storage blocked */ }
-  }
 
   function getCampaignID() {
     var parts = window.location.pathname.split('/');
@@ -68,9 +57,9 @@
       var wrapper = document.createElement('div');
       wrapper.className = 'sidebar-tag-filter';
 
-      // An icon at the search box's right end, so the folded filter costs
-      // no line of its own. It carries the active count so a hidden filter
-      // is never a silent one.
+      // An icon at the search box's right end opens a drop-down over the
+      // list, so the filter costs no line of its own. The icon carries the
+      // active count so a closed filter is never a silent one.
       var toggle = document.createElement('button');
       toggle.type = 'button';
       toggle.className = 'nav-drill-tags-toggle';
@@ -78,13 +67,15 @@
       toggle.setAttribute('aria-controls', 'sidebar-tags-body');
       var body = document.createElement('div');
       body.id = 'sidebar-tags-body';
-      body.className = 'nav-drill-tags-body';
-      setOpen(toggle, body, readOpen());
+      body.className = 'nav-drill-tags-menu';
+      setOpen(toggle, body, false);
       toggle.addEventListener('click', function () {
-        var open = toggle.getAttribute('aria-expanded') !== 'true';
-        setOpen(toggle, body, open);
-        writeOpen(open);
+        setOpen(toggle, body, toggle.getAttribute('aria-expanded') !== 'true');
       });
+      // The list scrolls; Save and Clear stay pinned under it.
+      var list = document.createElement('div');
+      list.className = 'nav-drill-tags-list';
+      body.appendChild(list);
       wrapper.appendChild(toggle);
       wrapper.appendChild(body);
       searchDiv.classList.add('has-tags');
@@ -92,12 +83,13 @@
       // Saved filter presets row.
       if (savedFilters && savedFilters.length > 0) {
         var presetsRow = document.createElement('div');
-        presetsRow.className = 'flex flex-wrap gap-1 mb-1';
+        presetsRow.innerHTML = '<div class="nav-drill-tags-label">Saved filters</div>';
         savedFilters.forEach(function (filter) {
           var btn = document.createElement('button');
           btn.type = 'button';
-          btn.className = 'text-[11px] px-2 py-1 min-h-[32px] rounded-md bg-accent/10 text-accent border border-accent/30 hover:bg-accent/20 transition-colors flex items-center gap-1';
-          btn.innerHTML = '<i class="fa-solid fa-bookmark text-[8px]"></i> ' + Chronicle.escapeHtml(filter.name);
+          btn.className = 'nav-drill-tag-row';
+          btn.title = 'Right-click to delete';
+          btn.innerHTML = '<i class="fa-solid fa-bookmark" aria-hidden="true"></i><span>' + Chronicle.escapeHtml(filter.name) + '</span>';
           btn.addEventListener('click', function () {
             applyPreset(filter.tag_slugs, tags);
           });
@@ -114,17 +106,19 @@
           });
           presetsRow.appendChild(btn);
         });
-        body.appendChild(presetsRow);
+        list.appendChild(presetsRow);
       }
 
       // Tag chips row.
       if (tags && tags.length > 0) {
         var chipsRow = document.createElement('div');
-        chipsRow.className = 'flex flex-wrap gap-1 items-center';
+        chipsRow.innerHTML = '<div class="nav-drill-tags-label">Tags</div>';
         tags.forEach(function (tag) {
           var chip = document.createElement('button');
           chip.type = 'button';
-          chip.textContent = tag.name || tag.slug;
+          chip.className = 'nav-drill-tag-row';
+          chip.innerHTML = '<i class="fa-solid fa-check" aria-hidden="true"></i><span></span>';
+          chip.lastChild.textContent = tag.name || tag.slug;
           chip.dataset.tagSlug = tag.slug;
           updateChipStyle(chip, false);
           chip.addEventListener('click', function () {
@@ -142,12 +136,20 @@
           chipsRow.appendChild(chip);
         });
 
-        // Save button (appears when tags are active).
+        // Save and Clear are quiet words, shown while tags are active.
+        var foot = document.createElement('div');
+        foot.id = 'sidebar-save-filter';
+        foot.className = 'nav-drill-tags-foot';
+        foot.hidden = true;
         var saveBtn = document.createElement('button');
         saveBtn.type = 'button';
-        saveBtn.id = 'sidebar-save-filter';
-        saveBtn.className = 'text-[11px] px-2 py-1 min-h-[32px] rounded-md text-accent hover:bg-accent/10 transition-colors hidden';
-        saveBtn.innerHTML = '<i class="fa-solid fa-floppy-disk text-[8px] mr-0.5"></i> Save';
+        saveBtn.textContent = 'Save as filter';
+        var clearBtn = document.createElement('button');
+        clearBtn.type = 'button';
+        clearBtn.textContent = 'Clear';
+        clearBtn.addEventListener('click', function () { applyPreset([]); });
+        foot.appendChild(saveBtn);
+        foot.appendChild(clearBtn);
         saveBtn.addEventListener('click', function () {
           var name = prompt('Filter name:');
           if (!name || !name.trim()) return;
@@ -164,8 +166,8 @@
             }
           });
         });
-        chipsRow.appendChild(saveBtn);
-        body.appendChild(chipsRow);
+        list.appendChild(chipsRow);
+        body.appendChild(foot);
       }
 
       searchDiv.appendChild(wrapper);
@@ -189,14 +191,8 @@
       ? 'Tag filters, ' + activeTags.length + ' active' : 'Tag filters');
   }
 
-  // Touch-friendly chip sizes: min-h-[32px] ensures adequate tap target
-  // on mobile while staying compact on desktop.
   function updateChipStyle(chip, active) {
-    if (active) {
-      chip.className = 'text-[11px] px-2 py-1 min-h-[32px] rounded-full border border-accent bg-accent/20 text-accent transition-colors';
-    } else {
-      chip.className = 'text-[11px] px-2 py-1 min-h-[32px] rounded-full border border-gray-700 text-gray-500 hover:border-gray-500 transition-colors';
-    }
+    chip.setAttribute('aria-pressed', active ? 'true' : 'false');
   }
 
   /** Show/hide save button based on active tag count. */
@@ -204,11 +200,7 @@
     updateToggleLabel();
     var btn = document.getElementById('sidebar-save-filter');
     if (!btn) return;
-    if (activeTags.length > 0) {
-      btn.classList.remove('hidden');
-    } else {
-      btn.classList.add('hidden');
-    }
+    btn.hidden = activeTags.length === 0;
   }
 
   /** Apply a saved preset — activate its tags and trigger filter. */
@@ -260,6 +252,24 @@
     )) {
       injectTagFilter();
     }
+  });
+
+  // The drop-down closes on a click outside it or on Escape, like a menu.
+  document.addEventListener('click', function (e) {
+    var toggle = document.getElementById('sidebar-tags-toggle');
+    var menu = document.getElementById('sidebar-tags-body');
+    if (!toggle || !menu || menu.hidden) return;
+    if (toggle.contains(e.target) || menu.contains(e.target)) return;
+    setOpen(toggle, menu, false);
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    var toggle = document.getElementById('sidebar-tags-toggle');
+    var menu = document.getElementById('sidebar-tags-body');
+    if (!toggle || !menu || menu.hidden) return;
+    setOpen(toggle, menu, false);
+    toggle.focus();
   });
 
   window.addEventListener('chronicle:navigated', reset);
