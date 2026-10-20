@@ -5831,6 +5831,9 @@ func (a *App) RegisterRoutes() {
 			{Name: "notice_boards", Scripts: []string{"js/quest_board_kit.js", "js/notice_boards.js"}},
 		},
 	})
+	// Kept for AI Import's quest and notice-board kinds, wired below.
+	var aiQuests quests.QuestService
+	var aiBoards quests.BoardService
 	if a.PluginHealth.IsHealthy(quests.PluginSlug) {
 		questEntities := &questEntityAdapter{svc: entityService, cards: entities.NewPageCards(a.DB)}
 		questMaps := &questMapAdapter{svc: mapsService, addons: addonService}
@@ -5841,6 +5844,10 @@ func (a *App) RegisterRoutes() {
 			quests.NewQuestService(questRepo, questEntities, questMaps, questCal),
 			quests.NewBoardService(quests.NewBoardRepository(a.DB), questRepo, questEntities, questTypes, questMaps, &questMemberNamesAdapter{svc: campaignService}, questCal),
 			questEntities, questTypes, &questAnnouncerAdapter{bus: wsEventBus})
+		// After the announcer, so a board that fills itself redraws when a
+		// quest's status moves it on or off.
+		questSvc = quests.WithBoardFill(questSvc, boardSvc)
+		aiQuests, aiBoards = questSvc, boardSvc
 		questEntityEvts.attach(questSvc)
 		questPicker := quests.NewPickerService(questEntities, questMaps, &questCharacterAdapter{
 			dir:   stashDirectory,
@@ -6024,6 +6031,8 @@ func (a *App) RegisterRoutes() {
 		Maps:            mapsService,
 		Notes:           noteSvc,
 		PageBlocks:      pageBlocksSvc,
+		Quests:          aiQuests,
+		Boards:          aiBoards,
 		Relations:       relService,
 		RollTables:      rollTablesSvc,
 		Sessions:        sessionsService,

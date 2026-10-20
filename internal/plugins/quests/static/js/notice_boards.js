@@ -22,6 +22,10 @@
 
   var WHO_TEXT = { dm: 'Only the DM changes this board', scribe: 'Scribes and the DM change this board', all: '' };
   var WHO_SET = { dm: 'Only me', scribe: 'Scribes and me', all: 'Everyone' };
+  // What a board can fill itself with, as the server's status lists.
+  var FILLS = [['', 'Nothing, I pin notices myself'], ['not_started,active', 'Open and taken quests'], ['not_started', 'Open quests'],
+    ['active', 'Taken quests'], ['not_started,active,done', 'Open, taken and done quests'], ['not_started,active,done,failed', 'Every quest']];
+  var STATUS_WORD = { not_started: 'open', active: 'taken', done: 'done', failed: 'failed' };
   var PEOPLE = ['#0ea5e9', '#a855f7', '#ef4444', '#f59e0b', '#10b981', '#ec4899', '#14b8a6', '#6366f1'];
 
   Chronicle.register('notice_boards', {
@@ -52,7 +56,7 @@
     d.boards = d.boards || [];
     d.looks = d.looks || { board: 'lit', ledger: 'lit' };
     d.me = d.me || {};
-    d.boards.forEach(function (b) { b.items = b.items || []; });
+    d.boards.forEach(function (b) { b.items = b.items || []; b.fill = b.fill || []; });
     return d;
   }
   function isDm(S) { return !!(S.data.canManage || S.data.me.isDm); }
@@ -166,7 +170,9 @@
       if ((it.kind === 'notice' || it.kind === 'page' || it.kind === 'map') && !it.concealed) acts.push(['open', I.out, it.kind === 'map' ? 'Open the map' : 'Open the page']);
       // A board locked to "Only me" leaves owners nothing to change.
       var own = it.mine && b && b.canChange;
-      if (man || own) acts.push(['down', I.down, 'Take it down']);
+      // The board would only pin it again; hiding it is the way to keep it off.
+      var placed = it.auto && b && b.fill.length;
+      if ((man || own) && !placed) acts.push(['down', I.down, 'Take it down']);
       if (acts.length && (man || own || dm)) K.dmTab(el, acts);
     });
   }
@@ -183,6 +189,8 @@
         return K.api(qurl, 'PUT', { version: q.version, status: want }, S.cfg.csrfToken);
       }).then(function () {
         it.status = want; drawFace(S);
+        // A board that fills itself may now take the notice down or keep it.
+        if (b.fill.length) reload(S);
         K.toast(want === 'done' ? 'Stamped done. Players see it right away.' : 'Stamp lifted.');
       }).catch(function (err) { K.toast(err.message); });
     } else if (a === 'open') {
@@ -280,8 +288,9 @@
     } });
     var notices = b ? b.items.filter(function (it) { return it.kind === 'notice'; }).map(function (it) {
       return lrow('<span class="ico">' + I.note + '</span><a class="lk grow" href="' + S.campaignUrl + '/entities/' + encodeURIComponent(it.questId) + '">' + esc(it.title) + '</a>' +
-        '<span class="sub">' + esc(it.status === 'done' ? 'done' : it.status === 'active' ? 'taken' : it.status === 'failed' ? 'failed' : 'open') + (it.hidden ? ', hidden' : '') + '</span>');
+        '<span class="sub">' + esc(it.status === 'done' ? 'done' : it.status === 'active' ? 'taken' : it.status === 'failed' ? 'failed' : 'open') + (it.hidden ? ', hidden' : '') + (it.auto ? ', pinned by the board' : '') + '</span>');
     }).join('') : '';
+    var fill = b ? fillRow(b) : '';
     var theirs = b ? b.items.filter(function (it) { return !it.byDm && it.kind !== 'notice'; }).length : 0;
     var fixed = lrow('<span class="ico">' + I.note + '</span><span class="grow">' + (b ? 'Showing “' + esc(b.name) + '”' : 'No boards yet') + '</span><span class="sub">' +
       (b ? (S.cur + 1) + ' of ' + boards.length : '') + '</span>');
@@ -289,11 +298,22 @@
       tabs: [['boards', 'Boards'], ['quests', 'Quests'], ['players', 'Players'], ['look', I.gear, 'Looks']],
       panels: {
         boards: list,
-        quests: notices || lrow('<span class="sub grow">No quest notices on this board.</span>'),
+        quests: fill + (notices || lrow('<span class="sub grow">' + (b && b.fill.length ? 'No quests match yet. New ones appear here as you write them.' : 'No quest notices on this board.') + '</span>')),
         players: lrow('<span class="grow">' + theirs + (theirs === 1 ? ' note or pin' : ' notes and pins') + ' from players</span>' +
           (theirs ? '<button type="button" class="lbtn" data-clear>Clear…</button>' : '')),
         look: K.lookPanel(S.data.looks)
       } }).replace('<section class="ledger fold"', '<section class="ledger fold" data-ledger="boards"');
+  }
+  // The board's fill choice. A list set elsewhere (the AI, the API) that is
+  // not one of the usual choices still shows, named by its statuses.
+  function fillRow(b) {
+    var cur = b.fill.join(','), opts = FILLS.slice();
+    if (!opts.some(function (o) { return o[0] === cur; })) {
+      opts.push([cur, b.fill.map(function (st) { return STATUS_WORD[st] || st; }).join(', ') + ' quests']);
+    }
+    return lrow('<span class="grow">Fills itself with</span><select class="wsel" data-bfill="' + esc(b.id) + '" aria-label="What “' + esc(b.name) + '” fills itself with">' +
+      opts.map(function (o) { return '<option value="' + esc(o[0]) + '"' + (o[0] === cur ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('') + '</select>') +
+      (b.full ? lrow('<span class="sub grow">This board is full, so some matching quests are not on it. Take a few things down, or fill it with fewer statuses.</span>') : '');
   }
   function redrawLedger(S) {
     var old = S.el.querySelector('.ledger'); if (!old) return;
@@ -406,6 +426,13 @@
         bd.who = t.value; drawFace(S);
         K.toast({ dm: '“' + bd.name + '”: only you can change it.', scribe: '“' + bd.name + '”: scribes can change it too.', all: '“' + bd.name + '”: everyone can add. Players move only their own things.' }[t.value]);
         send(S, 'PATCH', base(S) + '/boards/' + encodeURIComponent(bd.id), { who: t.value }).catch(function () {});
+        return;
+      }
+      if (t.matches('[data-bfill]')) {
+        var fb = S.data.boards.filter(function (x) { return x.id === t.dataset.bfill; })[0]; if (!fb) return;
+        fb.fill = t.value ? t.value.split(',') : [];
+        K.toast(fb.fill.length ? '“' + fb.name + '” now fills itself. New and changed quests come and go on their own.' : '“' + fb.name + '” is back to what you pin. Notices it placed itself came down.');
+        send(S, 'PATCH', base(S) + '/boards/' + encodeURIComponent(fb.id), { fill: fb.fill }).then(function () { return reload(S); }).catch(function () {});
         return;
       }
       if (t.matches('select[data-lookfor]')) {

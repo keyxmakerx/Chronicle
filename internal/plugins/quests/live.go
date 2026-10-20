@@ -120,3 +120,11 @@ func (s *liveBoards) PatchItem(ctx context.Context, campaignID string, h Home, b
 func (s *liveBoards) DeleteItem(ctx context.Context, campaignID string, h Home, boardID, itemID string, v Viewer) error {
 	return s.done(ctx, campaignID, h, s.BoardService.DeleteItem(ctx, campaignID, h, boardID, itemID, v))
 }
+
+func (s *liveBoards) FillQuest(ctx context.Context, campaignID, questID string) ([]Home, error) {
+	homes, err := s.BoardService.FillQuest(ctx, campaignID, questID)
+	for _, h := range homes {
+		s.a.BoardsChanged(campaignID, h, s.aud.homeDMOnly(ctx, campaignID, h))
+	}
+	return homes, err
+}

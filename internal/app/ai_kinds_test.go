@@ -10,6 +10,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/encounters"
 	"github.com/keyxmakerx/chronicle/internal/plugins/fieldrules"
 	"github.com/keyxmakerx/chronicle/internal/plugins/pageblocks"
+	"github.com/keyxmakerx/chronicle/internal/plugins/quests"
 	"github.com/keyxmakerx/chronicle/internal/plugins/rolltables"
 )
 
@@ -24,6 +25,8 @@ type fullCalendar struct {
 type stubFieldRules struct{ fieldrules.Service }
 type stubPageBlocks struct{ pageblocks.Service }
 type stubEncounters struct{ encounters.Service }
+type stubQuestSvc struct{ quests.QuestService }
+type stubBoardSvc struct{ quests.BoardService }
 
 func aiKindNames(d aiDeps) string {
 	var names []string
@@ -49,8 +52,8 @@ func TestAIKindsPromptOrder(t *testing.T) {
 		{
 			name: "everything wired",
 			deps: aiDeps{Calendar: fullCalendar{}, Health: healthy, FieldRules: stubFieldRules{},
-				PageBlocks: stubPageBlocks{}, Encounters: stubEncounters{}},
-			want: "calendar event weather roll_night moon table shop-stock carried-item pin map note house-rule system-entry field-rule local-word category-field encounter folder game-night tag page-map generator",
+				PageBlocks: stubPageBlocks{}, Encounters: stubEncounters{}, Quests: stubQuestSvc{}, Boards: stubBoardSvc{}},
+			want: "calendar event weather roll_night moon table shop-stock carried-item pin map note house-rule system-entry quest notice-board field-rule local-word category-field encounter folder game-night tag page-map generator",
 		},
 		{
 			name: "optional plugins degraded",
