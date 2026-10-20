@@ -4705,8 +4705,8 @@ func (a *App) RegisterRoutes() {
 	// calendar shows. show_dm "hide" leaves Director-only events off for
 	// everyone.
 	blockRegistry.Register(entities.BlockMeta{
-		Type: "page_timeline", Label: "Time line", Icon: "fa-timeline",
-		Description: "This page's dated events on the campaign calendar, up to today",
+		Type: "page_timeline", Label: "Page events", Icon: "fa-timeline",
+		Description: "A line of this page's own dated events on the campaign calendar, up to today",
 		Addon:       "calendar", Contexts: []string{"template"}, Singleton: true,
 		ConfigFields: []entities.ConfigFieldMeta{
 			{Key: "show_dm", Label: "Director-only events", Type: "select", Default: "show",
@@ -4755,8 +4755,8 @@ func (a *App) RegisterRoutes() {
 
 	// Timeline plugin blocks (requires "timeline" addon).
 	blockRegistry.Register(entities.BlockMeta{
-		Type: "timeline", Label: "Timeline", Icon: "fa-timeline",
-		Description: "Timeline preview with events", Addon: "timeline",
+		Type: "timeline", Label: "Campaign timeline", Icon: "fa-timeline",
+		Description: "One of the campaign's timelines, or a list of them", Addon: "timeline",
 		Contexts: []string{"template"},
 	}, func(rc entities.BlockRenderContext) templ.Component {
 		// Unbound (no default) renders BlockTimeline's campaign preview list;
