@@ -19,8 +19,8 @@ type SystemPanel struct {
 
 // SystemPanelResolver returns the panels that apply to a page of this type in
 // this campaign: the enabled system's declared panels, filtered by page type.
-// claimed says a player has claimed the page as their character, which rules
-// out NPC panels whatever the type. It must answer quickly and return nil when
+// claimed says the page is a player's character (claimed, or marked playable),
+// which rules out NPC panels whatever the type. It must answer quickly and return nil when
 // nothing applies; it runs on every page view.
 type SystemPanelResolver func(ctx context.Context, campaignID string, entityType *EntityType, claimed bool) []SystemPanel
 

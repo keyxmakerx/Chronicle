@@ -118,3 +118,24 @@ func TestIsNPCPage(t *testing.T) {
 		})
 	}
 }
+
+func TestIsPlayersCharacter(t *testing.T) {
+	owner := "user-1"
+	tests := []struct {
+		name   string
+		entity *Entity
+		want   bool
+	}{
+		{"claimed", &Entity{OwnerUserID: &owner}, true},
+		{"playable, unclaimed", &Entity{Playable: true}, true},
+		{"neither", &Entity{}, false},
+		{"no page", nil, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isPlayersCharacter(tt.entity); got != tt.want {
+				t.Errorf("isPlayersCharacter = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

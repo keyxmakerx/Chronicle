@@ -781,7 +781,7 @@ func (h *Handler) prepareShowFor(c echo.Context, entityID string) (*showPage, er
 	// Widget panels the enabled game system mounts under the title. The
 	// resolver owns the system and page-type rules; this only carries the result.
 	if r := h.systemPanels; r != nil {
-		if panels := r(c.Request().Context(), cc.Campaign.ID, entityType, entity.OwnerUserID != nil); len(panels) > 0 {
+		if panels := r(c.Request().Context(), cc.Campaign.ID, entityType, isPlayersCharacter(entity)); len(panels) > 0 {
 			ctx = withSystemPanels(ctx, panels)
 		}
 	}
@@ -3278,11 +3278,16 @@ func (h *Handler) typeOnNPCList(ctx context.Context, campaignID string, typeID i
 	return slices.Contains(ids, typeID)
 }
 
-// isNPCPage reports whether a page is an NPC's: unclaimed, not marked
-// playable, of a type on the NPC list. A claimed or playable page is a
-// player's character, whatever its type.
+// isPlayersCharacter reports whether a page is a player's character, whatever
+// its type: claimed, or marked playable (a hero nobody has claimed yet).
+func isPlayersCharacter(entity *Entity) bool {
+	return entity != nil && (entity.OwnerUserID != nil || entity.Playable)
+}
+
+// isNPCPage reports whether a page is an NPC's: not a player's character, and
+// of a type on the NPC list.
 func (h *Handler) isNPCPage(ctx context.Context, campaignID string, entity *Entity, et *EntityType) bool {
-	if entity == nil || et == nil || entity.OwnerUserID != nil || entity.Playable {
+	if entity == nil || et == nil || isPlayersCharacter(entity) {
 		return false
 	}
 	return h.typeOnNPCList(ctx, campaignID, et.ID)
