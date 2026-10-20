@@ -102,10 +102,19 @@
   }
 
   /** A same-site path, or "" for anything that is not one. It is rebuilt
-   *  behind a fixed "/", so no scheme or second host can ride along. */
+   *  segment by segment behind a fixed "/", each segment encoded, so no
+   *  scheme, second host or markup can ride along. */
   function sitePath(p) {
     if (typeof p !== 'string' || p.charAt(0) !== '/') return '';
-    return '/' + p.replace(/^[\/\\]+/, '');
+    var segs = p.split('/'), out = [];
+    for (var i = 0; i < segs.length; i++) {
+      if (segs[i]) out.push(encodeURIComponent(decodeSeg(segs[i])));
+    }
+    return out.length ? '/' + out.join('/') : '';
+  }
+
+  function decodeSeg(s) {
+    try { return decodeURIComponent(s); } catch (e) { return s; }
   }
 
   function infoFor(row) {
