@@ -6151,6 +6151,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "dm-screen", Scripts: []string{"/static/js/widgets/dm_sheet.js", "/static/js/widgets/dm_screen.js"}},
 	{Name: "tile", Scripts: []string{"/static/js/widgets/tile.js"}},
 	{Name: "shop_inventory", Scripts: []string{"/static/js/widgets/shop_inventory.js"}},
+	{Name: "shop_room", Scripts: []string{"/static/js/widgets/shop_room_icons.js", "/static/js/widgets/shop_room_paper.js", "/static/js/widgets/shop_room.js"}},
 }
 
 // journalCharacterAdapter adapts EntityService to notes.CharacterLister: the
