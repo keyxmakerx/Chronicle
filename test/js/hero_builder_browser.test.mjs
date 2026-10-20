@@ -89,7 +89,7 @@ async function open(t, { viewport = { width: 1280, height: 900 }, heroes = HEROE
     return route.fulfill({ status: 404, body: '' });
   });
   await p.goto('http://chronicle.test/');
-  await p.waitForSelector('.hb-sentence');
+  await p.waitForSelector('[data-hb-ready]', { state: 'attached' });
   return { p, sent };
 }
 
@@ -166,6 +166,26 @@ test('a new hero is made from its own sentence', { skip }, async (t) => {
   await p.click('[data-make]');
   await nav;
   assert.deepEqual(sent, [{ method: 'POST', path: '/campaigns/c1/characters/new', csrf: 'tok', body: { name: 'Bram', picks: { ancestry: { name: 'Gull-kin' } } } }]);
+});
+
+test('the new-hero sentence stays folded until Create hero, and Not now folds it back', { skip }, async (t) => {
+  const { p } = await open(t, { canCreate: true });
+  await p.waitForSelector('[data-hero-card="e1"]');
+  assert.equal(await p.locator('[data-hero-card="new"]').count(), 0, 'no open sentence for a hero nobody asked for');
+  await p.click('[data-create-hero]');
+  assert.equal(await p.locator('[data-hero-card="new"]').count(), 1);
+  await p.fill('[data-hb-name]', 'Bram');
+  await p.click('[data-act="fold"]');
+  assert.equal(await p.locator('[data-hero-card="new"]').count(), 0);
+  await p.click('[data-create-hero]');
+  assert.equal(await p.inputValue('[data-hb-name]'), 'Bram', 'the draft comes back with it');
+});
+
+test('with no heroes and nothing asked for, the builder takes no room', { skip }, async (t) => {
+  const { p } = await open(t, { heroes: [], canCreate: true });
+  await p.waitForFunction(() => document.querySelector('[data-widget="hero-builder"]').hidden);
+  await p.click('[data-create-hero]');
+  assert.equal(await p.evaluate(() => document.querySelector('[data-widget="hero-builder"]').hidden), false);
 });
 
 test('on a phone the panel opens under the hero and the page does not widen', { skip }, async (t) => {

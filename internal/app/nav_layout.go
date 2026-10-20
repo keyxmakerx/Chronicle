@@ -264,11 +264,16 @@ func buildNavEdit(in navInputs) *layouts.NavEditView {
 	return out
 }
 
-// sidebarTypesFrom maps a campaign's entity types to the layout's.
+// sidebarTypesFrom maps a campaign's entity types to the layout's, leaving
+// out disabled ones: a type is disabled when its pages and sheet moved into
+// Characters, and an empty leftover row would read as a live category.
 func sidebarTypesFrom(etypes []entities.EntityType) []layouts.SidebarEntityType {
-	out := make([]layouts.SidebarEntityType, len(etypes))
-	for i, et := range etypes {
-		out[i] = layouts.SidebarEntityType{
+	out := make([]layouts.SidebarEntityType, 0, len(etypes))
+	for _, et := range etypes {
+		if !et.Enabled {
+			continue
+		}
+		out = append(out, layouts.SidebarEntityType{
 			ID:           et.ID,
 			Slug:         et.Slug,
 			Name:         et.Name,
@@ -277,7 +282,7 @@ func sidebarTypesFrom(etypes []entities.EntityType) []layouts.SidebarEntityType 
 			Color:        et.Color,
 			SortOrder:    et.SortOrder,
 			ParentTypeID: et.ParentTypeID,
-		}
+		})
 	}
 	return out
 }

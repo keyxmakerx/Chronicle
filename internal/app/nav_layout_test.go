@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"reflect"
 	"regexp"
 	"strings"
 	"testing"
@@ -417,7 +418,7 @@ func TestNavSectionsSource_OffersOnlyWhatThePlayerSees(t *testing.T) {
 	var etypes []entities.EntityType
 	for _, st := range navTestTypes() {
 		etypes = append(etypes, entities.EntityType{ID: st.ID, Slug: st.Slug, Name: st.Name, NamePlural: st.NamePlural,
-			Icon: st.Icon, Color: st.Color, SortOrder: st.SortOrder, ParentTypeID: st.ParentTypeID})
+			Icon: st.Icon, Color: st.Color, SortOrder: st.SortOrder, ParentTypeID: st.ParentTypeID, Enabled: true})
 	}
 	var list []addons.CampaignAddon
 	for slug := range navTestEnabled() {
@@ -523,5 +524,36 @@ func TestMarkEmptyApps(t *testing.T) {
 	markEmptyApps(apps, map[string]bool{calendar.PluginSlug: true})
 	if !apps[0].Empty || apps[1].Empty {
 		t.Errorf("Empty = %v, %v; want true, false", apps[0].Empty, apps[1].Empty)
+	}
+}
+
+// TestSidebarTypesFrom_LeavesOutDisabledTypes pins that a disabled category,
+// such as a system's Heroes left empty after its pages moved into
+// Characters, gets no sidebar row while every enabled one keeps its own.
+func TestSidebarTypesFrom_LeavesOutDisabledTypes(t *testing.T) {
+	chars := 1
+	tests := []struct {
+		name  string
+		types []entities.EntityType
+		want  []int
+	}{
+		{"disabled sub-category dropped", []entities.EntityType{
+			{ID: 1, Name: "Character", Enabled: true},
+			{ID: 2, Name: "Hero", Enabled: false, ParentTypeID: &chars},
+			{ID: 3, Name: "Location", Enabled: true},
+		}, []int{1, 3}},
+		{"all enabled", []entities.EntityType{{ID: 1, Enabled: true}, {ID: 2, Enabled: true, ParentTypeID: &chars}}, []int{1, 2}},
+		{"none", nil, []int{}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := []int{}
+			for _, st := range sidebarTypesFrom(tc.types) {
+				got = append(got, st.ID)
+			}
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("got %v, want %v", got, tc.want)
+			}
+		})
 	}
 }
