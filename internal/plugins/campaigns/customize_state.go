@@ -77,6 +77,10 @@ type customizeDraft struct {
 		Look string `json:"look"`
 		Kit  string `json:"kit"`
 	} `json:"page"`
+	Access struct {
+		Sheet    string `json:"sheet"`    // "owner", "codm" or "everyone".
+		DmScreen string `json:"dmscreen"` // "owner" or "codm".
+	} `json:"access"`
 }
 
 // customizeState is everything the Customize page starts from.
@@ -237,6 +241,10 @@ func buildCustomizeState(ctx context.Context, cc *CampaignContext) customizeStat
 	d.Page.Look = a.PageLook
 	d.Hover.TimelinePopup = orDefault(a.TimelinePopup, AppearanceTimelinePopups)
 	d.Page.Kit = orDefault(a.StyleKit, AppearanceStyleKits)
+	sheetPart, _ := LookPartByKey(LookPartSheet)
+	dmPart, _ := LookPartByKey(LookPartDmScreen)
+	d.Access.Sheet = sheetPart.Access(&a)
+	d.Access.DmScreen = dmPart.Access(&a)
 	return st
 }
 

@@ -43,6 +43,11 @@ type Appearance struct {
 	PageLook        string `json:"page_look,omitempty"`        // How pages draw their blocks (AppearancePageLooks); "standard" is the default.
 	TimelinePopup   string `json:"timeline_popup,omitempty"`   // What opens on a time line's event: "classic" (default) or "corner".
 	StyleKit        string `json:"style_kit,omitempty"`        // The pages' character under the Material page look (AppearanceStyleKits); "material" is the default.
+
+	// Who may pick their own version of a part (look_access.go); empty is the
+	// part's default.
+	AccessSheet    string `json:"access_sheet,omitempty"`
+	AccessDmScreen string `json:"access_dmscreen,omitempty"`
 }
 
 // The allowed values of each Appearance choice. The first entry is the
@@ -131,6 +136,9 @@ type AppearanceInput struct {
 		Look string `json:"look"`
 		Kit  string `json:"kit"`
 	} `json:"page"`
+	// Access is who may change each part for themselves. Nil keeps what the
+	// campaign has stored.
+	Access *LookAccessInput `json:"access,omitempty"`
 }
 
 // AppearanceSidebarInput is the Sidebar section. Colour is the menu colour
@@ -465,6 +473,9 @@ func applyAppearance(s *CampaignSettings, in AppearanceInput) (*string, error) {
 		return fail(err)
 	}
 	a.ReduceMotion = in.Motion.ReduceAll
+	if err := applyLookAccess(&a, in.Access, s.Appearance); err != nil {
+		return fail(err)
+	}
 	if err := applySidebar(&a, in.Sidebar); err != nil {
 		return fail(err)
 	}

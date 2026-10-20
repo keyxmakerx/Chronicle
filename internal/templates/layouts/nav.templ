@@ -435,6 +435,10 @@ templ campaignNavFooter() {
 		<a href="/campaigns" hx-boost="false">Campaigns</a>
 		<span aria-hidden="true">·</span>
 		<a href="/" hx-boost="false">Discover</a>
+		if HasYourLook(ctx) && !IsOwner(ctx) {
+			<span aria-hidden="true">·</span>
+			<a href={ templ.SafeURL("/campaigns/" + GetCampaignID(ctx) + "/my-look") }>Your look</a>
+		}
 		<span class="nav-foot-gap"></span>
 		if NavCanEdit(ctx) {
 			<button

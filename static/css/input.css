@@ -4806,23 +4806,34 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
   }
   /* A kit's palette is set on <html> but only wears on Material pages; the
      overlay sits on <body>, outside #main-content, so it takes it here. */
-  [data-cz-page="annals"][data-cz-kit] .dms-overlay {
+  [data-cz-page="annals"][data-cz-kit]:not([data-dms-kit]) .dms-overlay,
+  [data-dms-kit]:not([data-dms-kit="material"]) .dms-overlay {
     --surface-raised: var(--k-paper); --surface-alt: color-mix(in srgb, var(--k-ink) 6%, var(--k-paper));
     --surface-text: var(--k-ink); --surface-text-muted: var(--k-mut); --surface-border: var(--k-hair);
     --color-text-secondary: var(--k-mut); --color-accent: var(--kit-acc);
     font-family: var(--kit-bf, inherit);
   }
-  [data-cz-page="annals"][data-cz-kit] .dms-overlay :is(.dms-head h2, .dms-leaf h3) { font-family: var(--kit-hf, inherit); letter-spacing: var(--cz-hls, .02em); }
-  [data-cz-page="annals"][data-cz-kit] .dms-overlay .dms-lbl { font-family: var(--kit-lf, inherit); }
+  [data-cz-page="annals"][data-cz-kit]:not([data-dms-kit]) .dms-overlay :is(.dms-head h2, .dms-leaf h3),
+  [data-dms-kit]:not([data-dms-kit="material"]) .dms-overlay :is(.dms-head h2, .dms-leaf h3) { font-family: var(--kit-hf, inherit); letter-spacing: var(--cz-hls, .02em); }
+  [data-cz-page="annals"][data-cz-kit]:not([data-dms-kit]) .dms-overlay .dms-lbl,
+  [data-dms-kit]:not([data-dms-kit="material"]) .dms-overlay .dms-lbl { font-family: var(--kit-lf, inherit); }
   /* Each kit's boxes, from its row under ui-standard.md "Style kits". */
-  [data-cz-page="annals"][data-cz-kit="sharp"] .dms-overlay { --dms-r: 0; --dms-shadow: none; --dms-leaf-edge: var(--k-ink); --dms-hinge: var(--k-ink); }
-  [data-cz-page="annals"][data-cz-kit="ornate"] .dms-overlay { --dms-leaf-edge: var(--k-gilt); --dms-hinge: var(--k-gilt); --dms-r: .2rem; }
-  [data-cz-page="annals"][data-cz-kit="ornate"] .dms-overlay .dms-leaf { outline: 1px solid var(--k-gilt); outline-offset: -5px; }
-  [data-cz-page="annals"][data-cz-kit="flowing"] .dms-overlay { --dms-r: 1.6rem; --dms-leaf-edge: transparent; --dms-hinge: var(--k-hair); --dms-shadow: 0 14px 34px var(--k-shadow); }
-  [data-cz-page="annals"][data-cz-kit="flowing"] .dms-overlay .dms-leaf { background: linear-gradient(180deg, var(--k-wash), var(--k-paper) 9rem); }
-  [data-cz-page="annals"][data-cz-kit="lumen"] .dms-overlay { --dms-hinge: var(--k-hair); --dms-shadow: 0 0 0 1px var(--k-hair), 0 0 22px var(--k-glow), var(--elev-dragged); }
-  [data-cz-page="annals"][data-cz-kit="sketchbook"] .dms-overlay { --dms-leaf-edge: var(--k-line); --dms-hinge: var(--k-line); --dms-r: 1.1rem .4rem; --dms-shadow: 2px 3px 0 var(--k-hair); }
-  [data-cz-page="annals"][data-cz-kit="sketchbook"] .dms-overlay .dms-leaf { border-width: 1.5px; }
+  [data-cz-page="annals"][data-cz-kit="sharp"]:not([data-dms-kit]) .dms-overlay,
+  [data-dms-kit="sharp"] .dms-overlay { --dms-r: 0; --dms-shadow: none; --dms-leaf-edge: var(--k-ink); --dms-hinge: var(--k-ink); }
+  [data-cz-page="annals"][data-cz-kit="ornate"]:not([data-dms-kit]) .dms-overlay,
+  [data-dms-kit="ornate"] .dms-overlay { --dms-leaf-edge: var(--k-gilt); --dms-hinge: var(--k-gilt); --dms-r: .2rem; }
+  [data-cz-page="annals"][data-cz-kit="ornate"]:not([data-dms-kit]) .dms-overlay .dms-leaf,
+  [data-dms-kit="ornate"] .dms-overlay .dms-leaf { outline: 1px solid var(--k-gilt); outline-offset: -5px; }
+  [data-cz-page="annals"][data-cz-kit="flowing"]:not([data-dms-kit]) .dms-overlay,
+  [data-dms-kit="flowing"] .dms-overlay { --dms-r: 1.6rem; --dms-leaf-edge: transparent; --dms-hinge: var(--k-hair); --dms-shadow: 0 14px 34px var(--k-shadow); }
+  [data-cz-page="annals"][data-cz-kit="flowing"]:not([data-dms-kit]) .dms-overlay .dms-leaf,
+  [data-dms-kit="flowing"] .dms-overlay .dms-leaf { background: linear-gradient(180deg, var(--k-wash), var(--k-paper) 9rem); }
+  [data-cz-page="annals"][data-cz-kit="lumen"]:not([data-dms-kit]) .dms-overlay,
+  [data-dms-kit="lumen"] .dms-overlay { --dms-hinge: var(--k-hair); --dms-shadow: 0 0 0 1px var(--k-hair), 0 0 22px var(--k-glow), var(--elev-dragged); }
+  [data-cz-page="annals"][data-cz-kit="sketchbook"]:not([data-dms-kit]) .dms-overlay,
+  [data-dms-kit="sketchbook"] .dms-overlay { --dms-leaf-edge: var(--k-line); --dms-hinge: var(--k-line); --dms-r: 1.1rem .4rem; --dms-shadow: 2px 3px 0 var(--k-hair); }
+  [data-cz-page="annals"][data-cz-kit="sketchbook"]:not([data-dms-kit]) .dms-overlay .dms-leaf,
+  [data-dms-kit="sketchbook"] .dms-overlay .dms-leaf { border-width: 1.5px; }
   .dms-dim { position: absolute; inset: 0; background: rgba(10,10,20,.5); }
   .dms-stage {
     position: absolute; inset: 0; display: flex; justify-content: center; align-items: flex-start;

@@ -170,6 +170,12 @@ func (m *mockCampaignRepoForInvites) UpdateMemberCharacter(context.Context, stri
 func (m *mockCampaignRepoForInvites) GetMemberNavPins(context.Context, string, string) ([]string, error) {
 	return nil, nil
 }
+func (m *mockCampaignRepoForInvites) GetMemberLookPicks(context.Context, string, string) (map[string]string, error) {
+	return nil, nil
+}
+func (m *mockCampaignRepoForInvites) SetMemberLookPick(context.Context, string, string, string, string) error {
+	return nil
+}
 func (m *mockCampaignRepoForInvites) SetMemberNavPins(context.Context, string, string, []string) error {
 	return nil
 }

@@ -79,6 +79,7 @@ var lookSections = []struct{ ID, Name, Words string }{
 	{"motion", "Motion and depth", "animation calm shadows elevation speed"},
 	{"hover", "Hover cards", "peek preview tooltip popup time line"},
 	{"sheet", "Character sheets", "sheet style"},
+	{"access", "Who can change", "members players co-dm permission pick own look sheet dm screen"},
 	{"book", "Rulebook", "rules book"},
 }
 

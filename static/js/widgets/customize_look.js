@@ -358,8 +358,13 @@
       { id:'motion', name:'Motion and depth', icon:'i-depth', desc:'How far cards lift, how quickly things move, and a calmer option for everyone.' },
       { id:'page', name:'Pages', icon:'i-scroll', desc:'How every page in the campaign draws its sections. Workshops like this one keep their own look.' },
       { id:'hover', name:'Hover cards', icon:'i-note', desc:'The card that opens when someone points at a linked page, a rule word or an event on a time line. One look for the whole campaign.' },
-      { id:'sheet', name:'Character sheets', icon:'i-journal', desc:'How character sheets look for everyone in this campaign.' }
+      { id:'sheet', name:'Character sheets', icon:'i-journal', desc:'How character sheets look for everyone in this campaign.' },
+      { id:'access', name:'Who can change', icon:'i-mask', desc:'Who may pick their own look for a part of the campaign. The campaign’s look above stays the starting point for everyone.' }
     ];
+    // Same ids as the server's LookParts: who may change each part for themselves.
+    // The DM Screen never offers Everyone; the server refuses it too.
+    var ACCESS_LEVELS = [['owner', 'Only me'], ['codm', 'Me and co-DMs'], ['everyone', 'Everyone']];
+    var ACCESS_PARTS = [['sheet', 'Character sheet', ['owner', 'codm', 'everyone']], ['dmscreen', 'DM Screen', ['owner', 'codm']]];
     // Same ids as the server's AppearanceSheetStyles, in that order.
     var SHEET_STYLES = [['modern', 'Modern'], ['parchment', 'Parchment'], ['ledger', 'Ledger'], ['journal', 'Field journal'], ['vellum', 'Vellum'], ['night', 'Night'],
       ['deck', 'Card deck'], ['pencil', 'Pencil'], ['starship', 'Starship'], ['neon', 'Neon terminal'], ['runes', 'Rune slate'], ['brass', 'Brass gauges']];
@@ -379,7 +384,8 @@
       motion:['motion.elevation', 'motion.speed', 'motion.reduceAll'],
       page:['page.look', 'page.kit'],
       hover:['hover.look', 'hover.timelinePopup'],
-      sheet:['sheet.style']
+      sheet:['sheet.style'],
+      access:['access.sheet', 'access.dmscreen']
     };
 
     /* ---------- Sample pictures, painted once so the page needs no files ---------- */
@@ -438,6 +444,7 @@
       if (!d.sidebar.banner) d.sidebar.banner = 'none';
       if (!d.hover) d.hover = { look:'paper' };
       if (!d.sheet) d.sheet = { style:'modern' };
+      if (!d.access) d.access = { sheet:'everyone', dmscreen:'codm' };
       if (!d.page) d.page = { look:'', kit:'material' };
       if (!d.page.kit) d.page.kit = 'material';
       if (!d.hover.timelinePopup) d.hover.timelinePopup = 'classic';
@@ -796,6 +803,11 @@
       if (id === 'sheet') return (
         fld('sh-style', 'Style', 'Every character sheet in the campaign', opts('sh-style', 'sheet.style', 'sh-style-l', SHEET_STYLES) +
           '<p class="hint">How character sheets look for everyone in this campaign. Modern matches the rest of Chronicle; the others are optional paper and screen styles.</p>'));
+      if (id === 'access') return (
+        ACCESS_PARTS.map(function(p){
+          return fld('ac-' + p[0], p[1], null, opts('ac-' + p[0], 'access.' + p[0], 'ac-' + p[0] + '-l', ACCESS_LEVELS.filter(function(l){ return p[2].indexOf(l[0]) >= 0; })));
+        }).join('') +
+        '<p class="hint">People change these for themselves only. Nobody else sees their choice.</p>');
       return '';
     }
     function buildUI(){
@@ -1569,7 +1581,7 @@
           dir:drift ? 'to-' + h.dir : '', image:bg === 'image' ? pic(h.image) : '', scrim:h.scrim,
           widgets:h.widgets.slice(), links:h.links.filter(function(l){ return l.label.trim() || l.url.trim(); }), text:h.text },
         colours:{ accent:d.colours.accent, s1:d.colours.s1 || '', s2:d.colours.s2 || '', page:d.colours.page, contrast:d.colours.contrast },
-        nav:clone(d.nav), type:clone(d.type), buttons:clone(d.buttons), motion:clone(d.motion), hover:clone(d.hover), sheet:clone(d.sheet), page:clone(d.page),
+        nav:clone(d.nav), type:clone(d.type), buttons:clone(d.buttons), motion:clone(d.motion), hover:clone(d.hover), sheet:clone(d.sheet), page:clone(d.page), access:clone(d.access),
         // The companion of each choice is sent only while that choice is
         // selected, so nothing stale is stored.
         sidebar:{ colour:d.colours.sidebar, own:d.colours.sidebar === 'own' ? sb.own : '', corner:sb.corner,

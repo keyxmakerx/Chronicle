@@ -38,6 +38,7 @@ const (
 	keyViewingAsPlayer     ctxKey = "layout_viewing_as_player"
 	keyIsOwner             ctxKey = "layout_is_owner"
 	keyIsDmGranted         ctxKey = "layout_is_dm_granted"
+	keyHasYourLook         ctxKey = "layout_has_your_look"
 	keyMediaURLFunc        ctxKey = "layout_media_url_func"
 	keyMediaThumbFunc      ctxKey = "layout_media_thumb_func"
 	keyExtWidgetScripts    ctxKey = "layout_ext_widget_scripts"
@@ -486,6 +487,18 @@ func SetIsDmGranted(ctx context.Context, granted bool) context.Context {
 func IsDmGranted(ctx context.Context) bool {
 	granted, _ := ctx.Value(keyIsDmGranted).(bool)
 	return granted
+}
+
+// SetHasYourLook stores whether the viewer may change any part of the look for
+// themselves, which is when the menu offers them the "Your look" page.
+func SetHasYourLook(ctx context.Context, has bool) context.Context {
+	return context.WithValue(ctx, keyHasYourLook, has)
+}
+
+// HasYourLook reports whether to offer the viewer the "Your look" page.
+func HasYourLook(ctx context.Context) bool {
+	has, _ := ctx.Value(keyHasYourLook).(bool)
+	return has
 }
 
 // --- Signed Media URLs ---

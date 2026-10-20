@@ -63,6 +63,11 @@ type AppearanceData struct {
 	// StyleKit is the pages' character under Annals; "" and "material" add
 	// no attribute, and the others set data-cz-kit for style_kits.css.
 	StyleKit string
+
+	// DmScreenKit is the style kit this viewer's DM Screen wears when they
+	// picked their own; "" leaves the screen with the page. It is separate
+	// from StyleKit so one person's pick never restyles the page.
+	DmScreenKit string
 }
 
 const keyAppearance ctxKey = "layout_appearance"
@@ -124,6 +129,9 @@ func AppearanceAttrs(ctx context.Context) templ.Attributes {
 		if _, ok := czKits[a.StyleKit]; ok {
 			attrs["data-cz-kit"] = a.StyleKit
 		}
+	}
+	if _, ok := czKits[a.DmScreenKit]; ok || a.DmScreenKit == "material" {
+		attrs["data-dms-kit"] = a.DmScreenKit
 	}
 	if a.TimelinePopup == "corner" {
 		attrs["data-cz-tlpop"] = "corner"
@@ -451,8 +459,21 @@ func AppearanceCSS(ctx context.Context) string {
 		}
 	}
 
+	// The DM Screen's own kit: the same tokens and faces, scoped to the
+	// overlay so the page keeps the campaign's kit.
+	var dmRoot, dmDark strings.Builder
+	if k, ok := czKits[a.DmScreenKit]; ok {
+		kitCSS(&dmRoot, &dmDark, &extra, a, k, accent)
+	}
+
 	var out strings.Builder
 	out.WriteString(extra.String())
+	if dmRoot.Len() > 0 {
+		out.WriteString("[data-dms-kit] .dms-overlay{" + dmRoot.String() + "}")
+	}
+	if dmDark.Len() > 0 {
+		out.WriteString(".dark[data-dms-kit] .dms-overlay{" + dmDark.String() + "}")
+	}
 	if root.Len() > 0 {
 		out.WriteString(":root{" + root.String() + "}")
 	}

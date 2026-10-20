@@ -5421,6 +5421,33 @@ func (a *App) RegisterRoutes() {
 				}
 				ctx = layouts.SetAppearance(ctx, ad)
 			}
+			// This viewer's own look picks, for the parts the owner let them
+			// change. They are laid over a copy of the campaign's look for this
+			// request only, so nobody else ever sees them; a pick the owner has
+			// since narrowed away is skipped by the service, not deleted. The
+			// picks only reach <html> attributes and the head's CSS, so an HTMX
+			// fragment skips the read, as the view prefs above do.
+			if sess := auth.GetSession(c); sess != nil && cc.IsMember && !middleware.IsHTMX(c) {
+				ap := campaignSettings.Appearance
+				ctx = layouts.SetHasYourLook(ctx, len(campaigns.PickableParts(ap, cc)) > 0)
+				picks, err := campaignService.MemberLookPicks(c.Request().Context(), cc, sess.UserID)
+				if err != nil {
+					slog.Warn("reading member look picks", slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", err))
+				}
+				if len(picks) > 0 {
+					own := layouts.AppearanceData{}
+					if base := layouts.GetAppearance(ctx); base != nil {
+						own = *base
+					}
+					if v, ok := picks[campaigns.LookPartSheet]; ok {
+						own.SheetStyle = v
+					}
+					if v, ok := picks[campaigns.LookPartDmScreen]; ok {
+						own.DmScreenKit = v
+					}
+					ctx = layouts.SetAppearance(ctx, &own)
+				}
+			}
 			if campaignSettings.TopbarStyle != nil {
 				ctx = layouts.SetTopbarStyle(ctx, &layouts.TopbarStyleData{
 					Mode:         campaignSettings.TopbarStyle.Mode,

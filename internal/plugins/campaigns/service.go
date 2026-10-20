@@ -138,6 +138,15 @@ type CampaignService interface {
 	// the sidebar editor), and so is any row the member's sidebar does not show.
 	UpdateNavPins(ctx context.Context, cc *CampaignContext, userID string, pins []string) ([]string, error)
 
+	// MemberLookPicks returns the viewer's own look picks that still count
+	// under the campaign's current "who can change" settings, keyed by part.
+	// It reads nothing for a viewer who may pick nothing.
+	MemberLookPicks(ctx context.Context, cc *CampaignContext, userID string) (map[string]string, error)
+	// SetMemberLookPick stores (or, with an empty value, clears) the calling
+	// member's own pick for one part, after checking they may pick it now and
+	// the value is one of its choices.
+	SetMemberLookPick(ctx context.Context, cc *CampaignContext, userID, part, value string) error
+
 	// Dashboard layout
 	UpdateDashboardLayout(ctx context.Context, campaignID string, layout *DashboardLayout) error
 	UpdateDashboardLayoutRaw(ctx context.Context, campaignID string, layoutJSON *string) error
@@ -454,6 +463,39 @@ func (s *campaignService) UpdateNavPins(ctx context.Context, cc *CampaignContext
 		return nil, apperror.NewInternal(err)
 	}
 	return clean, nil
+}
+
+// MemberLookPicks returns the viewer's stored picks that still count.
+func (s *campaignService) MemberLookPicks(ctx context.Context, cc *CampaignContext, userID string) (map[string]string, error) {
+	if cc == nil || cc.Campaign == nil || userID == "" {
+		return nil, nil
+	}
+	ap := cc.Campaign.ParseSettings().Appearance
+	// Most viewers (the owner, or anyone while access is narrowed) can pick
+	// nothing, and every page render asks, so skip the read for them.
+	if len(PickableParts(ap, cc)) == 0 {
+		return nil, nil
+	}
+	stored, err := s.repo.GetMemberLookPicks(ctx, cc.Campaign.ID, userID)
+	if err != nil {
+		return nil, apperror.NewInternal(err)
+	}
+	return AppliedLookPicks(ap, cc, stored), nil
+}
+
+// SetMemberLookPick stores the calling member's own pick for one part. The
+// row written is addressed by the caller's own user id, never one from input.
+func (s *campaignService) SetMemberLookPick(ctx context.Context, cc *CampaignContext, userID, part, value string) error {
+	if cc == nil || cc.Campaign == nil || userID == "" {
+		return apperror.NewForbidden("only members of this campaign can pick a look")
+	}
+	if _, err := ValidateLookPick(cc.Campaign.ParseSettings().Appearance, cc, part, value); err != nil {
+		return err
+	}
+	if err := s.repo.SetMemberLookPick(ctx, cc.Campaign.ID, userID, part, value); err != nil {
+		return apperror.NewInternal(err)
+	}
+	return nil
 }
 
 // SetConnectionRevoker injects the WebSocket hub's revocation surface.

@@ -54,6 +54,13 @@ type CampaignRepository interface {
 	// empty list clears them. It never touches another member's row.
 	SetMemberNavPins(ctx context.Context, campaignID, userID string, pins []string) error
 
+	// GetMemberLookPicks returns a member's own look picks in one campaign,
+	// keyed by part. Whether a pick still counts is decided by the caller.
+	GetMemberLookPicks(ctx context.Context, campaignID, userID string) (map[string]string, error)
+	// SetMemberLookPick stores one pick; an empty value clears it. It only
+	// ever touches the row of the campaign and user given.
+	SetMemberLookPick(ctx context.Context, campaignID, userID, part, value string) error
+
 	// Ownership transfer
 	CreateTransfer(ctx context.Context, transfer *OwnershipTransfer) error
 	FindTransferByToken(ctx context.Context, token string) (*OwnershipTransfer, error)
@@ -656,6 +663,53 @@ func (r *campaignRepository) SetMemberNavPins(ctx context.Context, campaignID, u
 		value, campaignID, userID,
 	); err != nil {
 		return fmt.Errorf("updating member nav pins: %w", err)
+	}
+	return nil
+}
+
+// GetMemberLookPicks returns a member's own look picks, keyed by part.
+func (r *campaignRepository) GetMemberLookPicks(ctx context.Context, campaignID, userID string) (map[string]string, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT part, value FROM campaign_member_look_picks WHERE campaign_id = ? AND user_id = ?`,
+		campaignID, userID)
+	if err != nil {
+		return nil, fmt.Errorf("reading member look picks: %w", err)
+	}
+	defer rows.Close()
+	var out map[string]string
+	for rows.Next() {
+		var part, value string
+		if err := rows.Scan(&part, &value); err != nil {
+			return nil, fmt.Errorf("scanning member look pick: %w", err)
+		}
+		if out == nil {
+			out = map[string]string{}
+		}
+		out[part] = value
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("reading member look picks: %w", err)
+	}
+	return out, nil
+}
+
+// SetMemberLookPick stores or clears one of a member's look picks. The key is
+// campaign, user and part together, so the write can only be the caller's own.
+func (r *campaignRepository) SetMemberLookPick(ctx context.Context, campaignID, userID, part, value string) error {
+	if value == "" {
+		if _, err := r.db.ExecContext(ctx,
+			`DELETE FROM campaign_member_look_picks WHERE campaign_id = ? AND user_id = ? AND part = ?`,
+			campaignID, userID, part); err != nil {
+			return fmt.Errorf("clearing member look pick: %w", err)
+		}
+		return nil
+	}
+	if _, err := r.db.ExecContext(ctx,
+		`INSERT INTO campaign_member_look_picks (campaign_id, user_id, part, value)
+		 VALUES (?, ?, ?, ?)
+		 ON DUPLICATE KEY UPDATE value = VALUES(value)`,
+		campaignID, userID, part, value); err != nil {
+		return fmt.Errorf("storing member look pick: %w", err)
 	}
 	return nil
 }
