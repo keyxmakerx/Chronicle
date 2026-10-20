@@ -5,8 +5,8 @@
  * moon, eclipses and the other moon nights). The Director chooses days by
  * dragging across them or with All, then clicks a weather or drags one onto
  * a day, pins days, or rolls new weather that follows each day's season and
- * the climate. Opened from the edit strip's and the bulk bar's Weather
- * buttons (calendar_editor.js).
+ * the climate. Opened from the Weather buttons in the deck's drawer and the
+ * chosen days' row (calendar_editor.js).
  *
  * Nothing is written until Save: the panel keeps a draft, and a close with
  * unsaved changes shakes the panel and says so (Discard leaves). Days painted

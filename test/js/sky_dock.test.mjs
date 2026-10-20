@@ -269,7 +269,7 @@ test('the calendar docks the sky at the top of its card, and the chip leads the 
   const acts = shell.slice(shell.indexOf('<div class="h-acts">'));
   assert.ok(acts.indexOf('id="cal5-skybtn"') > -1 && acts.indexOf('id="cal5-skybtn"') < acts.indexOf('id="cal5-moonbtn"'));
   const editor = readFileSync(join(widgets, 'calendar_editor.js'), 'utf8');
-  assert.match(editor, /acts\.insertBefore\(btn, sky \? sky\.nextSibling : acts\.firstChild\)/, 'Edit goes after the Sky chip');
+  assert.doesNotMatch(editor, /\.h-acts/, 'Edit lives on the deck at the bottom, so the Sky chip still leads the header');
 });
 
 // The day's own weather reading wins over the calendar's current weather.

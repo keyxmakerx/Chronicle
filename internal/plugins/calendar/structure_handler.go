@@ -22,7 +22,7 @@ import (
 // GET /campaigns/:id/calendars/:calid/structure
 func (h *Handler) StructureEditPage(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
-	cal, err := h.svc.GetCalendarForViewer(c.Request().Context(), c.Param("calid"), cc.Campaign.ID, viewerFrom(c, cc))
+	cal, err := h.svc.GetCalendarForViewer(c.Request().Context(), c.Param("calid"), cc.Campaign.ID, ownViewer(c, cc))
 	if err != nil {
 		return err
 	}
@@ -34,7 +34,7 @@ func (h *Handler) StructureEditPage(c echo.Context) error {
 		RealTime:     cal.UsesRealTime(),
 		Climates:     WeatherClimates,
 	}
-	ws, err := h.svc.GetWeatherSettings(c.Request().Context(), cal.ID, cc.Campaign.ID, viewerFrom(c, cc))
+	ws, err := h.svc.GetWeatherSettings(c.Request().Context(), cal.ID, cc.Campaign.ID, ownViewer(c, cc))
 	if err != nil {
 		return err
 	}

@@ -44,7 +44,23 @@ func NewHandler(svc CalendarService) *Handler {
 // empty for an anonymous public-campaign visitor. Every read handler below
 // builds its viewer this exact way so a viewer can never be constructed by
 // hand with an accidentally-empty-means-trusted user id.
+//
+// A read asking `?audience=players` gets what any player at the table may
+// see, as the sync API's player audience does: an anonymous Player. The
+// calendar's "See it as players do" uses it. It only ever narrows, so a
+// viewer below Player keeps their own view, and writes ignore it. A page
+// that feeds a save (the structure editor) uses ownViewer instead, so a
+// narrowed read can never be written back over what was hidden.
 func viewerFrom(c echo.Context, cc *campaigns.CampaignContext) permissions.Viewer {
+	role := cc.VisibilityRole()
+	if c.Request().Method == http.MethodGet && c.QueryParam("audience") == "players" && role > int(campaigns.RolePlayer) {
+		return permissions.RequestViewer(int(campaigns.RolePlayer), "")
+	}
+	return permissions.RequestViewer(role, auth.GetUserID(c))
+}
+
+// ownViewer is viewerFrom without the players' audience.
+func ownViewer(c echo.Context, cc *campaigns.CampaignContext) permissions.Viewer {
 	return permissions.RequestViewer(cc.VisibilityRole(), auth.GetUserID(c))
 }
 

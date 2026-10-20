@@ -882,13 +882,17 @@
     }
     return { cell: cell, side: side, final: { x: x, y: y, w: W, h: H, room: Math.max(H, B.vbot - y) } };
   }
-  // The era's card drops out of the era label's bottom edge.
+  // The era's card drops out of its button's bottom edge, or rises from
+  // its top when the button sits low on the card (the deck's drawer).
   function eraGeometry(card, btn, calEl) {
     var B = visBand(calEl), cr = B.cr, cell = relRect(btn, calEl), W = Math.min(392, cr.width - 16), y = cell.y + cell.h;
-    var maxH = Math.max(160, Math.min(560, B.bot - y));
+    var up = B.bot - y < cell.y - B.top;
+    var maxH = Math.max(160, Math.min(560, up ? cell.y - B.top : B.bot - y));
     card.style.width = W + 'px';
     var H = Math.min(maxH, card.offsetHeight);
     card.style.width = '';
+    var x = Math.max(8, Math.min(cell.x + cell.w - W, cr.width - W - 8));
+    if (up) return { cell: cell, side: 'up', final: { x: x, y: cell.y - H, w: W, h: H, room: maxH } };
     return { cell: cell, side: 'down', final: { x: Math.max(8, Math.min(cell.x, cr.width - W - 8)), y: y, w: W, h: H, room: Math.max(H, B.vbot - y) } };
   }
   // A card opens at its own height, inside the calendar; a form opened
@@ -1340,6 +1344,10 @@
       if (!Array.isArray(initialEvents)) initialEvents = [];
 
       this.eventsByMonth = {};
+      this._players = false; // "See it as players do" is on
+      this._pvPending = null; // its read, while one is in flight
+      this._dmFlags = null; // what this viewer had before it went on
+      this._audGen = 0; // bumped when it flips, so a read begun before is not cached
       this.forecastByDay = {};
       this.weatherByYear = {}; // year -> {'m_d': reading}, filled by fetchWeatherYear
       this.nightsByMonth = {}; // 'y_m' -> game nights, filled by fetchNights
@@ -1432,7 +1440,7 @@
       this.el.innerHTML =
         '<section class="cal" id="cal5-cal" aria-label="Calendar"' + canEditAttr + '>' +
           '<div class="skywrap" id="cal5-skywrap" hidden><div class="sky" role="img" aria-label="The sky"><canvas></canvas></div>' +
-            (this.canAuthorDmOnly ? '<div class="skyprev" id="cal5-skyprev" title="Only you see this. Players still see today’s sky." hidden><span class="spd"></span><input type="range" class="spt" aria-label="Time of day"><span class="sph"></span><button type="button" class="spx" data-sky-now>Back to now</button></div>' : '') +
+            (this.canAuthorDmOnly ? this._timeBarHTML() : '') +
           '</div>' +
           (this.role >= ROLE_OWNER ? '<div class="skyrail" id="cal5-skyrail" hidden></div>' : '') +
           '<header class="head">' +
@@ -1552,16 +1560,8 @@
       // with no day drawn, whatever the last calendar showed.
       this._skySig = null;
       this._skyPrev = null;
-      var bar = $('#cal5-skyprev', this.el);
-      if (bar) {
-        bar.addEventListener('click', function (e) { if (e.target.closest('[data-sky-now]')) self.endSkyPreview(); });
-        $('.spt', bar).addEventListener('input', function () {
-          var p = self._skyPrev, mph = self.cal.minutes_per_hour || 60, v = parseInt(this.value, 10) || 0;
-          if (!p) return;
-          p.h = Math.floor(v / mph); p.min = v % mph;
-          self._skyDay();
-        });
-      }
+      this._timeUp = false;
+      this._bindTimeBar();
       this._skyDay();
       this._mountSkyRail();
     },
@@ -1591,7 +1591,7 @@
       if (p) c = Object.assign({}, c, { current_year: p.y, current_month: p.m, current_day: p.d, current_hour: p.h, current_minute: p.min, weather: null });
       // The owner's "See it as a player": the same sky without the hidden moons.
       if (this._skyAsPlayer) c = Object.assign({}, c, { moons: (c.moons || []).filter(function (mo) { return !mo.hidden_from_players; }) });
-      this._skyPrevBar();
+      this._paintTimeBar();
       if (!this.skyDock || !this.eventsByMonth[this.monthKey(c.current_year, c.current_month)]) return;
       var evs = this.eventsOnDay(c.current_year, c.current_month, c.current_day);
       var sig = [this.calendarId, this._skyAsPlayer ? 'player' : 'own', c.current_year, c.current_month, c.current_day, c.current_hour, c.current_minute].join('/') + '|' +
@@ -1608,6 +1608,7 @@
       var self = this, c = this.cal, p = this._skyPrev;
       this._skyPrev = { y: y, m: m, d: d, h: p ? p.h : c.current_hour || 0, min: p ? p.min : c.current_minute || 0 };
       if (!this.skyDock.S.layout) this.skyDock.fold(true);
+      this._timeUp = true;
       this.fetchMonth(y, m).then(function () { if (self._skyPrev && self._skyPrev.d === d) self._skyDay(); });
       this._skyDay();
       this._announce('Showing the sky on ' + this._dateLabel(y, m, d) + '. Only you see this.');
@@ -1618,17 +1619,202 @@
       this._skyDay();
       this._announce('Showing the sky now.');
     },
-    // The strip's own line while a preview shows: which day, its time, and the way back.
-    _skyPrevBar: function () {
-      var bar = $('#cal5-skyprev', this.el), p = this._skyPrev, c = this.cal;
+    // --------------------------------------------------------------
+    // The time bar rises from the sky's bottom edge for viewers with DM
+    // access. Everything on it is a private look (the sky, and the day it
+    // shows) until Set time writes the world's today; players never see a
+    // look. A real-time calendar follows the clock, so it only looks.
+    // --------------------------------------------------------------
+    _timeBarHTML: function () {
+      var set = this._canSetToday(), hpd = this._hoursPerDay();
+      return '<button type="button" class="timetab" id="cal5-timetab" aria-expanded="false" aria-controls="cal5-timebar" hidden><i class="fa-solid fa-clock" aria-hidden="true"></i>Time</button>' +
+        '<div class="timebar" id="cal5-timebar" role="group" aria-label="Time" hidden>' +
+          '<div class="tbr"><span class="tbl"></span><span class="tbw"></span><span class="tbd"></span><span class="tbsp"></span>' +
+            (set ? '<button type="button" class="tbq" data-tb-date aria-haspopup="dialog">Pick a date</button>' : '') +
+            '<button type="button" class="tbq" data-tb-now hidden>Back to now</button>' +
+            (set ? '<button type="button" class="tbgo" data-tb-set disabled>Set time</button>' : '') +
+            '<button type="button" class="tbx" data-tb-close aria-label="Put the time bar away" title="Put the time bar away"><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></button></div>' +
+          '<div class="tbr"><div class="tbtr" role="slider" tabindex="0" aria-label="Time of day"><span class="tbbd"></span><span class="tbnw"></span><span class="tbkb"></span></div>' +
+            '<button type="button" class="tbq" data-tb-step="60">+1 hour</button>' +
+            '<button type="button" class="tbq" data-tb-step="480">Long rest</button>' +
+            '<button type="button" class="tbq" data-tb-step="day">+1 day</button>' +
+            '<button type="button" class="tbq" data-tb-roll title="Roll a d' + hpd + ' for the hour"><i class="fa-solid fa-dice-d20" aria-hidden="true"></i>Roll the hour</button></div>' +
+        '</div>';
+    },
+
+    _bindTimeBar: function () {
+      var self = this, bar = $('#cal5-timebar', this.el), tab = $('#cal5-timetab', this.el);
+      if (!bar || this._timeBound === bar) return;
+      this._timeBound = bar;
+      tab.addEventListener('click', function () { self.openTimeBar(); });
+      bar.addEventListener('click', function (e) {
+        var t = e.target;
+        if (t.closest('[data-tb-close]')) { self.closeTimeBar(); return; }
+        if (t.closest('[data-tb-now]')) { self.endSkyPreview(); return; }
+        if (t.closest('[data-tb-set]')) { self._setLookedTime(t.closest('[data-tb-set]')); return; }
+        if (t.closest('[data-tb-date]')) { self.showSetToday(t.closest('[data-tb-date]')); return; }
+        if (t.closest('[data-tb-roll]')) { self._rollHour(); return; }
+        var st = t.closest('[data-tb-step]');
+        if (st) self._lookStep(st.dataset.tbStep === 'day' ? self._hoursPerDay() * self._minutesPerHour() : parseInt(st.dataset.tbStep, 10));
+      });
+      bar.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') { e.stopPropagation(); self.closeTimeBar(); tab.focus({ preventScroll: true }); }
+      });
+      var tr = $('.tbtr', bar);
+      var fromX = function (e) {
+        var r = tr.getBoundingClientRect(), day = self._hoursPerDay() * self._minutesPerHour();
+        var step = Math.max(1, Math.round(self._minutesPerHour() / 6));
+        var v = Math.round(Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * day / step) * step;
+        self._lookMinute(Math.min(day - 1, v));
+      };
+      tr.addEventListener('pointerdown', function (e) {
+        if (e.button) return;
+        tr.setPointerCapture(e.pointerId);
+        tr.classList.add('drag');
+        fromX(e);
+      });
+      tr.addEventListener('pointermove', function (e) { if (tr.classList.contains('drag')) fromX(e); });
+      var up = function () { tr.classList.remove('drag'); };
+      tr.addEventListener('pointerup', up);
+      tr.addEventListener('pointercancel', up);
+      tr.addEventListener('keydown', function (e) {
+        var hm = self._minutesPerHour(), fine = Math.max(1, Math.round(hm / 6));
+        var delta = { ArrowRight: e.shiftKey ? fine : hm, ArrowUp: e.shiftKey ? fine : hm, ArrowLeft: -(e.shiftKey ? fine : hm), ArrowDown: -(e.shiftKey ? fine : hm),
+          PageUp: self._hoursPerDay() * hm, PageDown: -self._hoursPerDay() * hm }[e.key];
+        if (e.key === 'Home') self._lookMinute(0);
+        else if (e.key === 'End') self._lookMinute(self._hoursPerDay() * hm - 1);
+        else if (delta) self._lookStep(delta);
+        else return;
+        e.preventDefault();
+      });
+    },
+
+    // openTimeBar opens the sky if it is folded and raises the bar. Without
+    // a sky there is nothing to look at, so the date form stands in.
+    openTimeBar: function (from) {
+      var bar = $('#cal5-timebar', this.el);
+      if (!bar || !this.skyDock) { if (this._canSetToday()) this.showSetToday(from || $('#cal5-todaypill .tdset', this.el)); return; }
+      if (!this.skyDock.S.layout) this.skyDock.fold(true);
+      this._timeUp = true;
+      this._paintTimeBar();
+      setTimeout(function () { var t = bar.querySelector('.tbtr'); if (t) t.focus({ preventScroll: true }); }, reducedMotion() ? 20 : 320);
+    },
+
+    // The bar is only there while the sky is open: folding the sky hides it
+    // without forgetting it, and it is back when the sky opens.
+    _timeShowing: function () {
+      return !!this._timeUp && !!this.skyDock && !!this.skyDock.S.layout;
+    },
+
+    // Putting the bar away ends the look: what shows is today again.
+    closeTimeBar: function () {
+      if (!this._timeUp) return;
+      this._timeUp = false;
+      if (this._skyPrev) this.endSkyPreview();
+      else this._paintTimeBar();
+    },
+
+    _lookAt: function () {
+      var c = this.cal;
+      return this._skyPrev || { y: c.current_year, m: c.current_month, d: c.current_day, h: c.current_hour || 0, min: c.current_minute || 0 };
+    },
+
+    // _lookTo shows a moment privately; the world's own now ends the look.
+    _lookTo: function (p) {
+      var c = this.cal, self = this;
+      if (p.y === c.current_year && p.m === c.current_month && p.d === c.current_day && p.h === (c.current_hour || 0) && p.min === (c.current_minute || 0)) {
+        this._skyPrev = null;
+      } else {
+        var was = this._skyPrev;
+        this._skyPrev = p;
+        if (!was || was.y !== p.y || was.m !== p.m) this.fetchMonth(p.y, p.m).then(function () { if (self._skyPrev === p) self._skyDay(); });
+      }
+      this._skyDay();
+    },
+
+    // The look's time of day, as minutes since midnight, on the same day.
+    _lookMinute: function (v) {
+      var p = this._lookAt(), mph = this._minutesPerHour();
+      this._lookTo({ y: p.y, m: p.m, d: p.d, h: Math.floor(v / mph), min: v % mph });
+    },
+
+    // Moves the look by a number of minutes, carrying across days.
+    _lookStep: function (minutes) {
+      var p = this._lookAt(), mph = this._minutesPerHour(), day = this._hoursPerDay() * mph;
+      var t = p.h * mph + p.min + minutes, carry = Math.floor(t / day);
+      t -= carry * day;
+      var d = carry ? CalDate.addDays(this.cal, { y: p.y, m: p.m, d: p.d }, carry) : p;
+      this._lookTo({ y: d.y, m: d.m, d: d.d, h: Math.floor(t / mph), min: t % mph });
+    },
+
+    // A die as big as the day: a d24 on a 24-hour day, its top face midnight.
+    _rollHour: function () {
+      var hpd = this._hoursPerDay(), roll = 1 + Math.floor(Math.random() * hpd), p = this._lookAt();
+      this._lookTo({ y: p.y, m: p.m, d: p.d, h: roll % hpd, min: 0 });
+      this._announce('The d' + hpd + ' rolled ' + roll + ': ' + this._clockWords(roll % hpd, 0) + '.');
+    },
+
+    _setLookedTime: function (btn) {
+      var self = this, p = this._skyPrev;
+      if (!p || btn.disabled) return;
+      btn.disabled = true;
+      this._saveToday({ y: p.y, m: p.m, d: p.d, h: p.h, mi: p.min }).then(function (err) {
+        if (err) { btn.disabled = false; self._toast(err); return; }
+        self._skyPrev = null;
+        self._skyDay();
+      });
+    },
+
+    // "3:05pm" on a 24-hour day, "Hour 13:05" on any other.
+    _clockWords: function (h, mm) {
+      return this._hoursPerDay() === 24 && this._minutesPerHour() === 60 ? ampm(h * 60 + mm) : 'Hour ' + h + ':' + pad2(mm);
+    },
+
+    // "2 days 3 hours ahead", measured from the world's now.
+    _lookGapWords: function (p) {
+      var c = this.cal, mph = this._minutesPerHour(), day = this._hoursPerDay() * mph;
+      var at = function (y, m, d, h, mi) { return CalDate.dayIndex(c, y, m, d) * day + h * mph + mi; };
+      var gap = at(p.y, p.m, p.d, p.h, p.min) - at(c.current_year, c.current_month, c.current_day, c.current_hour || 0, c.current_minute || 0);
+      var a = Math.abs(gap), dd = Math.floor(a / day), hh = Math.floor((a % day) / mph), mi = a % mph, out = [];
+      if (dd) out.push(dd + (dd === 1 ? ' day' : ' days'));
+      if (hh) out.push(hh + (hh === 1 ? ' hour' : ' hours'));
+      if (mi && !dd) out.push(mi + ' min');
+      return out.join(' ') + (gap > 0 ? ' ahead' : ' back');
+    },
+
+    // Draws the bar for the moment being looked at, and marks that day on
+    // the grid. Called on every sky redraw.
+    _paintTimeBar: function () {
+      var bar = $('#cal5-timebar', this.el), tab = $('#cal5-timetab', this.el);
+      var stage = this.stageEl, old = stage && stage.querySelectorAll ? stage.querySelectorAll('.day.tblook') : [];
+      for (var i = 0; i < old.length; i++) old[i].classList.remove('tblook');
       if (!bar) return;
-      bar.hidden = !p;
-      if (!p) return;
-      var mph = c.minutes_per_hour || 60, hpd = c.hours_per_day || 24, r = $('.spt', bar);
-      $('.spd', bar).textContent = this._dateLabel(p.y, p.m, p.d);
-      $('.sph', bar).textContent = pad2(p.h) + ':' + pad2(p.min);
-      r.min = 0; r.max = hpd * mph - 1; r.step = Math.max(1, Math.round(mph / 6));
-      r.value = p.h * mph + p.min;
+      var up = !!this._timeUp && !!this.skyDock;
+      bar.hidden = !up;
+      tab.hidden = up || !this.skyDock || !!this._players;
+      tab.setAttribute('aria-expanded', String(up));
+      if (!up) return;
+      var c = this.cal, p = this._lookAt(), away = !!this._skyPrev, mph = this._minutesPerHour(), day = this._hoursPerDay() * mph;
+      $('.tbl', bar).textContent = away ? 'Looking at' : 'Now';
+      $('.tbw', bar).textContent = this._dateLabel(p.y, p.m, p.d) + ' · ' + this._clockWords(p.h, p.min);
+      $('.tbd', bar).textContent = away ? this._lookGapWords(p) + ' · only you see this' : '';
+      $('[data-tb-now]', bar).hidden = !away;
+      var go = $('[data-tb-set]', bar);
+      if (go) go.disabled = !away;
+      var at = p.h * mph + p.min, tr = $('.tbtr', bar);
+      $('.tbkb', tr).style.left = ((at + 0.5) / day * 100) + '%';
+      var today = p.y === c.current_year && p.m === c.current_month && p.d === c.current_day;
+      var nw = $('.tbnw', tr);
+      nw.hidden = !today || !away;
+      nw.style.left = (((c.current_hour || 0) * mph + (c.current_minute || 0) + 0.5) / day * 100) + '%';
+      tr.setAttribute('aria-valuemin', '0');
+      tr.setAttribute('aria-valuemax', String(day - 1));
+      tr.setAttribute('aria-valuenow', String(at));
+      tr.setAttribute('aria-valuetext', this._clockWords(p.h, p.min) + ', ' + this._dateLabel(p.y, p.m, p.d));
+      if (away && stage) {
+        var cell = stage.querySelector('.day[data-key="' + p.y + '_' + p.m + '_' + p.d + '"]');
+        if (cell) cell.classList.add('tblook');
+      }
     },
 
     // A transform on the card would carry its phone bars and sheets
@@ -1691,11 +1877,12 @@
     fetchMonth: function (y, m) {
       var self = this, key = this.monthKey(y, m);
       if (this.eventsByMonth[key]) return Promise.resolve(this.eventsByMonth[key]);
-      return Chronicle.apiFetch(this.apiBase + '/events?year=' + y + '&month=' + m)
+      var gen = this._audGen;
+      return Chronicle.apiFetch(this._aud(this.apiBase + '/events?year=' + y + '&month=' + m))
         .then(function (resp) { return resp.ok ? resp.json() : []; })
         .then(function (list) {
           if (!Array.isArray(list)) list = [];
-          self.eventsByMonth[key] = list;
+          if (gen === self._audGen) self.eventsByMonth[key] = list;
           return list;
         })
         .catch(function () { return []; });
@@ -1709,11 +1896,12 @@
     fetchRolls: function (y, m) {
       var self = this, key = this.monthKey(y, m), evs = this.eventsByMonth[key], have = this.rollsByMonth[key];
       if (have && have.events === evs) return Promise.resolve(have.byEvent);
-      return Chronicle.apiFetch(this.apiBase + '/rolls?year=' + y + '&month=' + m)
+      var gen = this._audGen;
+      return Chronicle.apiFetch(this._aud(this.apiBase + '/rolls?year=' + y + '&month=' + m))
         .then(function (resp) { return resp.ok ? resp.json() : {}; })
         .then(function (byEvent) {
           if (!byEvent || typeof byEvent !== 'object') byEvent = {};
-          self.rollsByMonth[key] = { events: self.eventsByMonth[key], byEvent: byEvent };
+          if (gen === self._audGen) self.rollsByMonth[key] = { events: self.eventsByMonth[key], byEvent: byEvent };
           return byEvent;
         })
         .catch(function () { return {}; });
@@ -1770,12 +1958,13 @@
     fetchWeatherYear: function (y) {
       var self = this;
       if (this.weatherByYear[y]) return Promise.resolve(this.weatherByYear[y]);
-      return Chronicle.apiFetch(this.apiBase + '/weather/days?year=' + y)
+      var gen = this._audGen;
+      return Chronicle.apiFetch(this._aud(this.apiBase + '/weather/days?year=' + y))
         .then(function (resp) { return resp.ok ? resp.json() : []; })
         .then(function (list) {
           var byDay = {};
           (Array.isArray(list) ? list : []).forEach(function (w) { byDay[w.month + '_' + w.day] = w; });
-          self.weatherByYear[y] = byDay;
+          if (gen === self._audGen) self.weatherByYear[y] = byDay;
           return byDay;
         })
         .catch(function () { return {}; });
@@ -1788,7 +1977,7 @@
     fetchForecast: function (force) {
       var self = this;
       if (this._forecastP && !force) return this._forecastP;
-      this._forecastP = Chronicle.apiFetch(this.apiBase + '/weather/forecast')
+      this._forecastP = Chronicle.apiFetch(this._aud(this.apiBase + '/weather/forecast'))
         .then(function (resp) { return resp.ok ? resp.json() : []; })
         .then(function (list) {
           var by = {};
@@ -4152,32 +4341,30 @@
         el.innerHTML = '<span class="tl">Today</span><span class="td">' + esc(label) + '</span>';
         return;
       }
-      // The DM moves the world's today here: a day back or on with the
-      // arrows, or any date and time from the date itself.
+      // The DM moves the world's time from the date itself: it raises the
+      // time bar in the sky, or opens the date form where there is no sky.
       var t = this._todayTimeWords();
       el.classList.add('step');
       el.innerHTML = '<span class="tl">Today</span>' +
-        '<button type="button" class="sb" data-today-step="-1" aria-label="Move today back a day"><i class="fa-solid fa-chevron-left"></i></button>' +
-        '<button type="button" class="td tdset' + (bump ? ' bump' : '') + '" data-today-set aria-haspopup="dialog" title="Set the world’s date and time">' + esc(label) + (t ? '<span class="tt">' + esc(t) + '</span>' : '') + '</button>' +
-        '<button type="button" class="sb" data-today-step="1" aria-label="Move today on a day"><i class="fa-solid fa-chevron-right"></i></button>';
+        '<button type="button" class="td tdset' + (bump ? ' bump' : '') + '" data-today-set aria-controls="cal5-timebar" title="Change the world’s time">' + esc(label) + (t ? '<span class="tt">' + esc(t) + '</span>' : '') + '</button>';
     },
 
     // --------------------------------------------------------------
     // Set today: the owner moves a world calendar's current date and time.
     // A real-world calendar follows the clock, so it has nothing to set.
     // --------------------------------------------------------------
+    // Players never set the time, so the players' view does not either.
     _canSetToday: function () {
-      return this.role >= 3 && !!this.apiBase && !CalDate.usesRealTime(this.cal);
+      return this.role >= 3 && !!this.apiBase && !CalDate.usesRealTime(this.cal) && !this._players;
     },
 
     _hoursPerDay: function () { return this.cal.hours_per_day > 0 ? this.cal.hours_per_day : 24; },
     _minutesPerHour: function () { return this.cal.minutes_per_hour > 0 ? this.cal.minutes_per_hour : 60; },
 
-    // "3:05pm" on a 24-hour day, "Hour 13:05" on any other.
     _todayTimeWords: function () {
       var c = this.cal, h = c.current_hour || 0, mm = c.current_minute || 0;
       if (c.current_hour == null) return '';
-      return this._hoursPerDay() === 24 && this._minutesPerHour() === 60 ? ampm(h * 60 + mm) : 'Hour ' + h + ':' + pad2(mm);
+      return this._clockWords(h, mm);
     },
 
     showSetToday: function (btn) {
@@ -4226,20 +4413,10 @@
           self.nightsByMonth = {};
           self.renderToday(true);
           self.goToday();
-          self.say('Today is now ' + $('#cal5-todaypill .tdset', self.el).textContent + '.');
+          self.say('Today is now ' + self._dateLabel(d.y, d.m, d.d) + ', ' + self._clockWords(d.h, d.mi) + '.');
           return '';
         })
         .catch(function () { return 'Could not reach Chronicle. Try again.'; });
-    },
-
-    _stepToday: function (delta) {
-      if (this._todayBusy) return;
-      var self = this, c = this.cal, next = CalDate.addDays(c, { y: c.current_year, m: c.current_month, d: c.current_day }, delta);
-      this._todayBusy = true;
-      this._saveToday({ y: next.y, m: next.m, d: next.d, h: c.current_hour || 0, mi: c.current_minute || 0 }).then(function (err) {
-        self._todayBusy = false;
-        if (err) self._toast(err);
-      });
     },
 
     renderLegend: function () {
@@ -4337,17 +4514,7 @@
       var cal = this.cal, key = dayKey(y, m, d);
       var isToday = y === cal.current_year && m === cal.current_month && d === cal.current_day;
       var isPast = CalDate.dayIndex(cal, y, m, d) < CalDate.dayIndex(cal, cal.current_year, cal.current_month, cal.current_day);
-      var moon = this.mainMoon();
-      var moonHTML = '';
-      if (moon && !this.canAuthorDmOnly && MoonMath.manual(moon) && !MoonMath.state(moon, CalDate.dayIndex(cal, y, m, d))) moon = null;
-      if (moon) {
-        var abs = CalDate.dayIndex(cal, y, m, d);
-        // The DM team sees a hand-set moon faded where players have not been
-        // told of the mark it stands under.
-        var mk = MoonMath.manual(moon) && this.canAuthorDmOnly ? MoonMath.markOn(moon, abs) : null;
-        var unshown = mk && !mk.shown;
-        moonHTML = '<span class="msil' + (unshown ? ' dim' : '') + '" data-moon-day="' + key + '" title="' + esc(moon.name + ', ' + MoonMath.label(moon, abs) + (unshown ? ' (players don’t see this)' : '')) + '">' + this._moonSilFor(moon, abs) + '</span>';
-      }
+      var moonHTML = this._dayMoonsHTML(key, CalDate.dayIndex(cal, y, m, d));
       return '<button type="button" class="day' + (isToday ? ' today' : '') + (isPast ? ' past' : '') + '" data-key="' + key + '">' +
         moonHTML + weatherMarkHTML(this.weatherOnDay(y, m, d), !isPast && !isToday) + this.forecastMarkOn(y, m, d, !isPast && !isToday) +
         (this.canAuthorDmOnly ? this._paintMarkHTML(y, m, d, !isPast && !isToday) : '') +
@@ -4377,6 +4544,44 @@
       if (extra > 0) html += '<span class="more">+' + extra + '</span>';
       html += '</div>';
       return html;
+    },
+
+    // The moons a day's corner shows: those this viewer may see, at most
+    // three (the glance names them all). A hand-set moon that players have
+    // no mark for yet stays off their calendar.
+    _gridMoons: function (abs) {
+      var dm = this.canAuthorDmOnly;
+      return (this.cal.moons || []).filter(function (mo) {
+        return dm || !(MoonMath.manual(mo) && !MoonMath.state(mo, abs));
+      });
+    },
+
+    // A day's moons: one moon is its phase silhouette; two or more are
+    // nested rings, outermost first, each filled as far as that moon is lit
+    // and tinted faintly toward its own colour.
+    _dayMoonsHTML: function (key, abs) {
+      var moons = this._gridMoons(abs), dm = this.canAuthorDmOnly;
+      if (!moons.length) return '';
+      var unshown = function (mo) { var k = dm && MoonMath.manual(mo) ? MoonMath.markOn(mo, abs) : null; return !!(k && !k.shown); };
+      var title = moons.map(function (mo) {
+        return mo.name + ', ' + MoonMath.label(mo, abs) + (unshown(mo) ? ' (players don’t see this)' : '');
+      }).join('; ');
+      var dim = moons.length === 1 && unshown(moons[0]);
+      var body = moons.length === 1 ? this._moonSilFor(moons[0], abs) : this._moonRingsSVG(moons.slice(0, 3), abs, unshown);
+      return '<span class="msil' + (moons.length > 1 ? ' rings' : '') + (dim ? ' dim' : '') + '" data-moon-day="' + key + '" title="' + esc(title) + '">' + body + '</span>';
+    },
+
+    _moonRingsSVG: function (moons, abs, unshown) {
+      var radii = moons.length === 2 ? [8, 4.8] : [8.2, 5.6, 3];
+      return '<svg class="rng" width="20" height="20" viewBox="-10 -10 20 20" aria-hidden="true">' + moons.map(function (mo, i) {
+        var r = radii[i], c = 2 * Math.PI * r, tint = sanitizeColor(mo.color);
+        var style = tint ? ' style="--mc:' + tint + '"' : '';
+        var cls = 'rg' + (unshown(mo) ? ' dim' : '');
+        if (MoonMath.unseen(mo, abs)) return '<circle class="' + cls + ' gone" r="' + r + '"' + style + '/>';
+        var lit = MoonMath.litPct(MoonMath.phase(mo, abs)) / 100;
+        return '<g class="' + cls + '"' + style + '><circle class="rt" r="' + r + '"/>' +
+          (lit > 0.01 ? '<circle class="rl" r="' + r + '" stroke-dasharray="' + (c * lit).toFixed(2) + ' ' + c.toFixed(2) + '" transform="rotate(-90)"/>' : '') + '</g>';
+      }).join('') + '</svg>';
     },
 
     _moonSilSVG: function (phase) {
@@ -4657,7 +4862,7 @@
     _loadEraEvents: function (r) {
       var self = this, id = r.era.id;
       this._eraEvents = null;
-      Chronicle.apiFetch(this.apiBase + '/eras/' + encodeURIComponent(id) + '/events')
+      Chronicle.apiFetch(this._aud(this.apiBase + '/eras/' + encodeURIComponent(id) + '/events'))
         .then(function (resp) { return resp.ok ? resp.json() : null; })
         .then(function (body) {
           if (String(self._eraOpen) !== String(id)) return;
@@ -4922,6 +5127,8 @@
         if (strip) self.selectMoon(strip.dataset.moon);
         var tick = e.target.closest('[data-mv-day]');
         if (tick) { self.mvDay = tick.dataset.mvDay; self._refreshMv(); }
+        var rm = e.target.closest('[data-mv-remove]');
+        if (rm) self._removePhaseEvent(rm.dataset.mvRemove, rm);
       });
       this.popEl.addEventListener('click', function (e) {
         if (e.target.closest('[data-close]')) self.closePop();
@@ -4940,13 +5147,24 @@
         });
       });
       $('#cal5-todaypill', this.el).addEventListener('click', function (e) {
-        var step = e.target.closest('[data-today-step]');
-        if (step) { self._stepToday(parseInt(step.dataset.todayStep, 10)); return; }
         var set = e.target.closest('[data-today-set]');
         if (!set) return;
         if (self.popEl.classList.contains('open')) { self.closePop(); return; }
-        self.showSetToday(set);
+        if (self._timeShowing()) { self.closeTimeBar(); return; }
+        self.openTimeBar(set);
       });
+      // While the time bar is up, a click on a day looks at that day, at the
+      // same time of day, instead of opening its card. Editing picks days,
+      // so there the editor keeps the click.
+      this.stageEl.addEventListener('click', function (e) {
+        if (!self._timeShowing() || (self._editor && self._editor.editing)) return;
+        var day = e.target.closest('.day[data-key]');
+        if (!day) return;
+        e.stopPropagation();
+        e.preventDefault();
+        var k = parseDayKey(day.dataset.key), p = self._lookAt();
+        self._lookTo({ y: k.y, m: k.m, d: k.d, h: p.h, min: p.min });
+      }, true);
 
       // Keyboard: arrows move the roving day, T jumps to today, Page
       // Up/Down change month, Enter/Space open the focused day.
@@ -4993,6 +5211,7 @@
         if (self._roll) { if (!self._rollHolds()) self._roll.close(); return; }
         if (self.wingFor) { self.closeWing(); return; }
         if (self._eraOpen != null) { self.closeEraPanel({ refocus: true }); return; }
+        if (self._timeShowing()) self.closeTimeBar();
       };
       document.addEventListener('keydown', this._escHandler);
 
@@ -5188,15 +5407,70 @@
     // new event shows up the next time. Resolves true when the list was
     // read; on failure ruleEnv keeps using the months loaded so far.
     loadEventIndex: function () {
-      var self = this;
-      return Chronicle.apiFetch(this.apiBase + '/events/index')
+      var self = this, gen = this._audGen;
+      return Chronicle.apiFetch(this._aud(this.apiBase + '/events/index'))
         .then(function (resp) { return resp.ok ? resp.json() : null; })
         .then(function (body) {
-          if (!body || !Array.isArray(body.data)) return false;
+          if (!body || !Array.isArray(body.data) || gen !== self._audGen) return false;
           self._eventIndex = body.data;
           return true;
         })
         .catch(function () { return false; });
+    },
+
+    // A calendar read made while the DM looks as the players do asks for
+    // the players' audience, so the server leaves out what they may not see.
+    _aud: function (url) {
+      return this._players ? url + (url.indexOf('?') < 0 ? '?' : '&') + 'audience=players' : url;
+    },
+
+    // setPlayersView reloads the calendar as any player sees it, or back as
+    // this viewer sees it. Everything cached was read for the other audience,
+    // so it is dropped and the open cards close. Resolves false if the
+    // calendar could not be read, leaving the view as it was.
+    setPlayersView: function (on) {
+      on = !!on;
+      if (on === this._players) return Promise.resolve(true);
+      // Never under the editor: a form built from the players' calendar
+      // would save over what they may not see.
+      if (on && this._editor && this._editor.editing) return Promise.resolve(false);
+      if (this._pvPending) return this._pvPending;
+      var self = this;
+      if (on) this._dmFlags = { canAuthorDmOnly: this.canAuthorDmOnly, freeDirector: this.freeDirector, showFree: this.showFree };
+      var url = this.apiBase + (on ? '?audience=players' : '');
+      this._pvPending = Chronicle.apiFetch(url, { headers: { Accept: 'application/json' } })
+        .then(function (resp) { return resp.ok ? resp.json() : null; })
+        .catch(function () { return null; })
+        .then(function (cal) {
+          self._pvPending = null;
+          if (!cal || !cal.id) { self.say(on ? 'Could not load what players see.' : 'Could not load the calendar.'); return false; }
+          self.closeAllPanels({ instant: true });
+          if (self._timeUp) self.closeTimeBar();
+          self._players = on;
+          self._audGen++;
+          var dm = self._dmFlags;
+          self.canAuthorDmOnly = on ? false : dm.canAuthorDmOnly;
+          self.freeDirector = on ? false : dm.freeDirector;
+          self.showFree = on ? false : dm.showFree;
+          MoonMath.index(cal);
+          self.cal = cal;
+          self.eventsByMonth = {};
+          self.rollsByMonth = {};
+          self.weatherByYear = {};
+          self.forecastByDay = {};
+          self._forecastP = null;
+          self._eventIndex = null;
+          self._evPages = {};
+          self._skySig = null;
+          self.calEl.classList.toggle('pv', on);
+          self.renderMonth();
+          self.renderToday();
+          self.renderLegend();
+          self.fetchMonth(self.cal.current_year, self.cal.current_month).then(function () { self._skyDay(); });
+          self.say(on ? 'Showing the calendar as players see it.' : 'Showing everything again.');
+          return true;
+        });
+      return this._pvPending;
     },
 
     // What the rule editor and sentences may name on this calendar: its
@@ -5357,11 +5631,14 @@
       var self = this;
       var html;
       if (mk.classList.contains('msil')) {
-        var moon = this.mainMoon();
-        if (!moon) return;
         var d = parseDayKey(mk.dataset.moonDay);
         var abs = CalDate.dayIndex(this.cal, d.y, d.m, d.d);
-        html = '<div class="gh"><b>' + esc(moon.name) + '</b></div><div class="gw">' + esc(MoonMath.describe(moon, abs)) + '</div>';
+        var moons = this._gridMoons(abs);
+        if (!moons.length) return;
+        html = moons.map(function (mo) {
+          var c = sanitizeColor(mo.color);
+          return '<div class="gm"><span class="gmd"' + (c ? ' style="background:' + c + '"' : '') + '></span><b>' + esc(mo.name) + '</b> ' + esc(MoonMath.describe(mo, abs)) + '</div>';
+        }).join('');
       } else if (mk.classList.contains('avl')) {
         html = this._freeGlanceHTML(mk.dataset.avl);
         if (!html) return;
@@ -5439,12 +5716,12 @@
     },
 
     _evPagesLoad: function (eid) {
-      var self = this;
+      var self = this, gen = this._audGen, keep = function (v) { if (gen === self._audGen) self._evPages[eid] = v; };
       this._evPages[eid] = { loading: true, links: [] };
-      return Chronicle.apiFetch(this._evPagesBase(eid), { headers: { Accept: 'application/json' } })
+      return Chronicle.apiFetch(this._aud(this._evPagesBase(eid)), { headers: { Accept: 'application/json' } })
         .then(function (resp) { return resp.ok ? resp.json() : Promise.reject(); })
-        .then(function (list) { self._evPages[eid] = { links: Array.isArray(list) ? list : [] }; })
-        .catch(function () { self._evPages[eid] = { failed: true, links: [] }; })
+        .then(function (list) { keep({ links: Array.isArray(list) ? list : [] }); })
+        .catch(function () { keep({ failed: true, links: [] }); })
         .then(function () { self._evPagesRedraw(eid); });
     },
 
@@ -5559,7 +5836,7 @@
     // --------------------------------------------------------------
     // The era manager's card. Everyone reads eras through the era panel
     // above; calendar_editor.js gives an Owner or co-Director an "Eras"
-    // button in the edit strip (#cal5-erabtn) whose card manages them,
+    // button in the deck's drawer (#cal5-erabtn) whose card manages them,
     // replacing showFlap below.
     // --------------------------------------------------------------
     toggleEra: function () {
@@ -5630,9 +5907,49 @@
       var btn = $('#cal5-moonbtn', this.el);
       this.mvEl.innerHTML = this._mvHTML();
       growOpen(this.mvEl, btn, this.calEl, { center: true });
+      this._loadPhaseEvents();
       btn.setAttribute('aria-expanded', 'true');
       this._observeMvGraph();
       this._updateScrim();
+    },
+
+    // The month draws every moon's phase, so an event that only names one
+    // ("Full moon of Selune") repeats it. The server flags those; an owner
+    // sees them listed here to remove.
+    _loadPhaseEvents: function () {
+      var self = this;
+      if (!this.canEdit) return;
+      this.loadEventIndex().then(function (ok) {
+        if (!ok) return;
+        self._phaseEvents = (self._eventIndex || []).filter(function (e) { return e.phaseOnly; });
+        if (self.mvEl.classList.contains('open')) self._refreshMv();
+      });
+    },
+
+    _mvPhaseEventsHTML: function () {
+      var list = this.canEdit && this._phaseEvents;
+      if (!list || !list.length) return '';
+      var self = this;
+      return '<div class="mvclean"><div class="phead"><h4 class="plabel">Events that only mark a phase</h4></div>' +
+        '<p class="mvcnote">The month already shows every moon’s phase, so these repeat it. Remove the ones you don’t need.</p>' +
+        '<ul class="mvclist">' + list.map(function (e) {
+          return '<li><span class="mvcn">' + esc(e.name) + '</span><span class="mvcd">' + esc(self._dateLabel(e.year, e.month, e.day)) + '</span>' +
+            '<button type="button" class="mvcx" data-mv-remove="' + esc(e.id) + '" aria-label="Remove ' + esc(e.name) + '" title="Remove"><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button></li>';
+        }).join('') + '</ul></div>';
+    },
+
+    _removePhaseEvent: function (id, btn) {
+      var self = this, ev = (this._phaseEvents || []).filter(function (e) { return e.id === id; })[0];
+      if (!ev || !window.confirm('Remove “' + ev.name + '”? This cannot be undone.')) return;
+      btn.disabled = true;
+      Chronicle.apiFetch(this.apiBase + '/events/' + encodeURIComponent(id), { method: 'DELETE' }).then(function (resp) {
+        if (!resp.ok) { btn.disabled = false; self.say('Could not remove the event.'); return; }
+        self._phaseEvents = self._phaseEvents.filter(function (e) { return e.id !== id; });
+        self.eventsByMonth = {};
+        self.renderMonth();
+        self._refreshMv();
+        self.say('Removed ' + ev.name + '.');
+      }).catch(function () { btn.disabled = false; self.say('Could not remove the event.'); });
     },
 
     closeMoonView: function () {
@@ -5700,6 +6017,7 @@
             '<div class="phead"><h4 class="plabel">This month</h4></div>' +
             graph +
             (moon && this._mvDirectorHTML ? this._mvDirectorHTML(moon, day) : '') +
+            this._mvPhaseEventsHTML() +
           '</div>' +
         '</div>';
     },
