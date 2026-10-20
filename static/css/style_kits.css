@@ -14,36 +14,46 @@
    (labels) and --kit-bf (text), set only where the owner picked no face.
    Ambient and pointer movement runs only under full motion. One rule below
    is Material's own, so it also holds with no kit: the Director's edge
-   keeps its distance from a row's words. */
+   keeps its distance from a row's words.
+
+   The DM Screen can wear a kit of its own (a member's pick, layouts
+   AppearanceAttrs data-dms-kit): the palettes below also apply to the
+   overlay under that attribute, so the page keeps the campaign's kit. */
 
 /* ---------- Palettes ---------- */
+[data-dms-kit="sharp"] .dms-overlay,
 [data-cz-kit="sharp"] {
   --k-page: #fbfaf7; --k-paper: #fbfaf7; --k-ink: #111111; --k-mut: #55534f; --k-hair: #c9c5bc;
   --kit-acc: var(--kit-user-acc, #b3261e);
 }
+.dark[data-dms-kit="sharp"] .dms-overlay,
 .dark[data-cz-kit="sharp"] {
   --k-page: #0e0e0e; --k-paper: #0e0e0e; --k-ink: #f2f0ea; --k-mut: #aaa69d; --k-hair: #3b3a37;
   --kit-acc: var(--kit-user-acc, #ff6b5e);
 }
 /* Ornate's gilt is brass, well apart from the Director's amber, and stays
    brass when the campaign's colour replaces the kit's accent. */
+[data-dms-kit="ornate"] .dms-overlay,
 [data-cz-kit="ornate"] {
   --k-page: #f6efe2; --k-paper: #fbf5e8; --k-ink: #2b2118; --k-mut: #6e5e4c; --k-hair: color-mix(in srgb, #8a8350 45%, transparent);
   --k-gilt: #8a8350; --k-band: #4a2a2a; --k-band-fg: #f3e6c8;
   --kit-acc: var(--kit-user-acc, #7a3b2e);
 }
+.dark[data-dms-kit="ornate"] .dms-overlay,
 .dark[data-cz-kit="ornate"] {
   --k-page: #1b1510; --k-paper: #241c15; --k-ink: #efe2c8; --k-mut: #b8a687; --k-hair: color-mix(in srgb, #b8b07f 40%, transparent);
   --k-gilt: #b8b07f; --k-band: #2c1616; --k-band-fg: #e9d6a8;
   --kit-acc: var(--kit-user-acc, #d08a6f);
 }
 /* Flowing's wash is drawn from its accent, so a campaign colour tints it. */
+[data-dms-kit="flowing"] .dms-overlay,
 [data-cz-kit="flowing"] {
   --k-page: #f1f6f4; --k-paper: #fbfdfc; --k-ink: #1d2b2a; --k-mut: #566a66; --k-hair: color-mix(in srgb, #23756f 14%, transparent);
   --k-wash2: #e7e1f0; --k-shadow: color-mix(in srgb, var(--kit-acc) 40%, transparent);
   --kit-acc: var(--kit-user-acc, #23756f);
   --k-wash: color-mix(in srgb, var(--kit-acc) 14%, var(--k-page));
 }
+.dark[data-dms-kit="flowing"] .dms-overlay,
 .dark[data-cz-kit="flowing"] {
   --k-page: #101918; --k-paper: #162221; --k-ink: #e2eeeb; --k-mut: #9bb1ac; --k-hair: color-mix(in srgb, #6cc7bd 14%, transparent);
   --k-wash2: #231f2e; --k-shadow: rgb(0 0 0 / 0.55);
@@ -51,6 +61,7 @@
   --k-wash: color-mix(in srgb, var(--kit-acc) 14%, var(--k-page));
 }
 /* Lumen's line and glow are drawn from its accent. */
+[data-dms-kit="lumen"] .dms-overlay,
 [data-cz-kit="lumen"] {
   --k-page: #f4f4fa; --k-paper: #ffffff; --k-ink: #1e1d33; --k-mut: #625f7c;
   --k-band: #171a35; --k-band-fg: #e6e9ff; --k-shine: #ffffff;
@@ -58,6 +69,7 @@
   --k-glow: color-mix(in srgb, var(--kit-acc) 38%, transparent);
   --k-hair: color-mix(in srgb, var(--kit-acc) 28%, transparent);
 }
+.dark[data-dms-kit="lumen"] .dms-overlay,
 .dark[data-cz-kit="lumen"] {
   --k-page: #0c0e1c; --k-paper: #141830; --k-ink: #e6e9fb; --k-mut: #9ba1c4;
   --k-band: #070814; --k-band-fg: #dfe5ff;
@@ -66,11 +78,13 @@
   --k-hair: color-mix(in srgb, var(--kit-acc) 30%, transparent);
 }
 /* Sketchbook is cream paper in light mode and a chalkboard in dark. */
+[data-dms-kit="sketchbook"] .dms-overlay,
 [data-cz-kit="sketchbook"] {
   --k-page: #f7f4ec; --k-paper: #fffdf6; --k-ink: #26231f; --k-mut: #6a645a; --k-line: #3a352e;
   --k-hair: color-mix(in srgb, #3a352e 45%, transparent);
   --kit-acc: var(--kit-user-acc, #2d5aa0);
 }
+.dark[data-dms-kit="sketchbook"] .dms-overlay,
 .dark[data-cz-kit="sketchbook"] {
   --k-page: #1d2220; --k-paper: #252b28; --k-ink: #ece8dc; --k-mut: #a8a497; --k-line: #d8d3c4;
   --k-hair: color-mix(in srgb, #d8d3c4 40%, transparent);

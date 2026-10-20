@@ -108,6 +108,11 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 	// A member's own pinned rows; the service refuses the owner, who pins
 	// for everyone through sidebar-config.
 	cg.PUT("/nav-pins", h.UpdateNavPins, RequireRole(RolePlayer))
+	// A member's own look picks, for the parts the owner let them change. The
+	// owner's routes under /customize stay owner-only; these check the
+	// campaign's "who can change" setting in the service.
+	cg.GET("/my-look", h.YourLook, RequireRole(RolePlayer))
+	cg.PUT("/my-look/:part", h.PutLookPick, RequireRole(RolePlayer))
 
 	// Dashboard layout API (Owner only).
 	cg.GET("/dashboard-layout", h.GetDashboardLayout, RequireRole(RoleOwner))

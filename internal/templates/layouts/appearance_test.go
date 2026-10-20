@@ -820,3 +820,32 @@ func TestAppearanceCSSAnnalsHeadings(t *testing.T) {
 		})
 	}
 }
+
+// A member's own DM Screen kit rides on its own attribute and its own scoped
+// tokens, so the page keeps the campaign's kit.
+func TestDmScreenKitIsScopedToTheOverlay(t *testing.T) {
+	withTestFonts(t)
+	ctx := SetAppearance(context.Background(), &AppearanceData{PageLook: "annals", StyleKit: "sharp", DmScreenKit: "ornate"})
+	attrs := AppearanceAttrs(ctx)
+	if attrs["data-dms-kit"] != "ornate" {
+		t.Errorf("data-dms-kit = %v, want ornate", attrs["data-dms-kit"])
+	}
+	if attrs["data-cz-kit"] != "sharp" {
+		t.Errorf("the page keeps the campaign's kit, got %v", attrs["data-cz-kit"])
+	}
+	if css := AppearanceCSS(ctx); !strings.Contains(css, "[data-dms-kit] .dms-overlay{") {
+		t.Errorf("the overlay needs its own kit tokens, got %q", css)
+	}
+
+	for _, kit := range []string{"", "bogus"} {
+		ctx := SetAppearance(context.Background(), &AppearanceData{DmScreenKit: kit})
+		if _, ok := AppearanceAttrs(ctx)["data-dms-kit"]; ok {
+			t.Errorf("kit %q must add no attribute", kit)
+		}
+	}
+	// Material is a real pick: the screen drops the page's kit.
+	ctx = SetAppearance(context.Background(), &AppearanceData{DmScreenKit: "material"})
+	if AppearanceAttrs(ctx)["data-dms-kit"] != "material" {
+		t.Error("material must be kept as an explicit pick")
+	}
+}

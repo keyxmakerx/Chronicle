@@ -1,0 +1,56 @@
+package campaigns
+
+import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
+
+// YourLookPage lists the parts of the look this member may change for
+// themselves. A choice here is seen by this person only.
+templ YourLookPage(cc *CampaignContext, parts []yourLookPart) {
+	@layouts.App(cc.Campaign.Name + " - Your look") {
+		<div class="max-w-2xl mx-auto">
+			<header class="mb-6">
+				<h1 class="text-2xl font-bold text-fg">Your look</h1>
+				<p class="text-sm text-fg-secondary mt-1">What you pick here changes only what you see. Nobody else sees your choice.</p>
+			</header>
+			if len(parts) == 0 {
+				<p class="text-fg-secondary">The owner has not let you change any part of the look in this campaign.</p>
+			}
+			for _, p := range parts {
+				<section class="card p-4 mb-4" data-look-part={ p.Part.Key } aria-labelledby={ "look-" + p.Part.Key }>
+					<h2 id={ "look-" + p.Part.Key } class="text-sm font-semibold text-fg mb-3">{ p.Part.Label }</h2>
+					<div class="flex flex-wrap gap-2" role="group" aria-labelledby={ "look-" + p.Part.Key }>
+						for _, ch := range p.Part.Choices {
+							<button
+								type="button"
+								class="btn-secondary"
+								aria-pressed={ boolStr(p.Current == ch) }
+								data-url={ p.URL }
+								data-value={ ch }
+								onclick={ yourLookOnClick() }
+							>{ LookChoiceLabel(ch) }</button>
+						}
+					</div>
+					<div class="mt-3 flex flex-wrap items-center gap-3">
+						<button
+							type="button"
+							class="btn-secondary"
+							aria-pressed={ boolStr(p.Current == "") }
+							data-url={ p.URL }
+							data-value=""
+							onclick={ yourLookOnClick() }
+						>Use the campaign's look</button>
+						if p.Current == "" {
+							<span class="text-xs text-fg-muted">Now following the campaign: { LookChoiceLabel(p.Campaign) }.</span>
+						}
+					</div>
+				</section>
+			}
+		</div>
+	}
+}
+
+func boolStr(b bool) string {
+	if b {
+		return "true"
+	}
+	return "false"
+}

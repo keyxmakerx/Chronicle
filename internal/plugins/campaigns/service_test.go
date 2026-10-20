@@ -54,6 +54,8 @@ type mockCampaignRepo struct {
 	updateSettingsFn        func(ctx context.Context, campaignID, settingsJSON string) error
 	// navPins holds members' own pins, keyed "campaignID/userID".
 	navPins map[string][]string
+	// lookPicks holds members' own look picks, keyed "campaignID/userID" then part.
+	lookPicks map[string]map[string]string
 }
 
 func (m *mockCampaignRepo) Create(ctx context.Context, campaign *Campaign) error {
@@ -211,6 +213,26 @@ func (m *mockCampaignRepo) UpdateMemberCharacter(ctx context.Context, campaignID
 
 func (m *mockCampaignRepo) GetMemberNavPins(_ context.Context, campaignID, userID string) ([]string, error) {
 	return m.navPins[campaignID+"/"+userID], nil
+}
+
+func (m *mockCampaignRepo) GetMemberLookPicks(_ context.Context, campaignID, userID string) (map[string]string, error) {
+	return m.lookPicks[campaignID+"/"+userID], nil
+}
+
+func (m *mockCampaignRepo) SetMemberLookPick(_ context.Context, campaignID, userID, part, value string) error {
+	if m.lookPicks == nil {
+		m.lookPicks = map[string]map[string]string{}
+	}
+	k := campaignID + "/" + userID
+	if m.lookPicks[k] == nil {
+		m.lookPicks[k] = map[string]string{}
+	}
+	if value == "" {
+		delete(m.lookPicks[k], part)
+	} else {
+		m.lookPicks[k][part] = value
+	}
+	return nil
 }
 
 func (m *mockCampaignRepo) SetMemberNavPins(_ context.Context, campaignID, userID string, pins []string) error {
