@@ -215,6 +215,9 @@ func (f *fakeCalendarSvc) SaveSunLook(context.Context, string, string, SunLook) 
 func (f *fakeCalendarSvc) SetMoonLook(context.Context, int, string, string, string, *float64) error {
 	return nil
 }
+func (f *fakeCalendarSvc) SetMoonPhase(context.Context, int, string, string, float64, string) error {
+	return nil
+}
 
 func (f *fakeCalendarSvc) SetMonths(context.Context, string, string, []MonthInput) error { return nil }
 func (f *fakeCalendarSvc) SetWeekdays(context.Context, string, string, []WeekdayInput) error {

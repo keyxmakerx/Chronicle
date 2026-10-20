@@ -110,7 +110,7 @@ type EventKind struct {
 func (EventKind) Name() string  { return "event" }
 func (EventKind) Label() string { return "Calendar event" }
 func (EventKind) Doc() string {
-	return "A calendar event, matched by `name`. Keys: `year`, `month` (number or month name), `day`; optional `end_year`/`end_month`/`end_day`, `hour`, `minute` (whole numbers), `all_day` (true/false), `visibility` (`everyone` or `dm_only`), `color` (#hex), `icon` (Font Awesome name), `rename_to`, `importance` (one of the campaign's importance levels, such as major; major events are an era's key events), `category` (one of the calendar's event categories, by name), `page` (the name of a page the event belongs to), `calendar` (the calendar's name; leave it out for the main calendar). On update, `importance: none`, `category: none` and `page: none` clear them, and leaving a key out keeps it. The body is the description; `@[Page Name]` or `@[Page Name|words]` in it links a page. When two events share a name, give the date too. On `action: update`, `year`/`month`/`day` say which event to change; to move it to another date add `move_to_year`/`move_to_month`/`move_to_day` (all three).\n\n" +
+	return "A calendar event, matched by `name`. Keys: `year`, `month` (number or month name), `day`; optional `end_year`/`end_month`/`end_day`, `hour`, `minute` (whole numbers), `all_day` (true/false), `visibility` (`everyone` or `dm_only`), `color` (#hex), `icon` (a Font Awesome icon name, like `sun` or `fa-sun`), `rename_to`, `importance` (one of the campaign's importance levels, such as major; major events are an era's key events), `category` (one of the calendar's event categories, by name), `page` (the name of a page the event belongs to; it may be made earlier in the same paste), `calendar` (the calendar's name; leave it out for the main calendar). On update, `importance: none`, `category: none` and `page: none` clear them, and leaving a key out keeps it. The body is the description; `@[Page Name]` or `@[Page Name|words]` in it links a page. When two events share a name, give the date too. On `action: update`, `year`/`month`/`day` say which event to change; to move it to another date add `move_to_year`/`move_to_month`/`move_to_day` (all three).\n\n" +
 		"To repeat, add `repeat:` (" + repeatTypes() + "; `none` on update stops it). The date is the first time. `yearly` repeats on the same month and day; `repeat_every` is the step (years for yearly, months for monthly, weeks for custom, where it is required, every Nth matching day for rule; not for weekly or biweekly). Optional end: `repeat_until_year`/`repeat_until_month`/`repeat_until_day` or `repeat_times`. `repeat: rule` takes `repeat_on`, a list of conditions a day must all meet, each one of: `moon` + `phase` (new, first_quarter, full, last_quarter); `weekday`, optionally with `nth` (1 to 5 or last) in its month; `weekdays` (a list); `day` (of the month, or last); `month`; `months` (a list); `season` (any day in it); `season_start` (a season's first day, or any); `event` (an event already on the calendar), optionally with `days` after it (negative for before). `repeat_offset_days` moves every match. Names are the calendar's own; ask `what: calendar` for them. Naming a repeat on update replaces the event's whole repeat. The calendar already shows every moon's phase on every day, so never add an event that only marks a phase (\"Full moon of Selune\"); a moon rule is for something that happens then, such as a festival.\n\n" + rollDoc + "\n\n" +
 		"```\n---\nkind: event\nname: Midwinter Feast\nyear: 1492\nmonth: Hammer\nday: 21\nvisibility: everyone\nrepeat: yearly\n---\nThe lords of the city open their halls.\n```\n\n```\n---\nkind: event\nname: Night of Wolves\nyear: 1492\nmonth: 1\nday: 1\nrepeat: rule\nrepeat_on:\n  - moon: Selune\n    phase: full\n  - season: Winter\n---\n```"
 }
@@ -313,8 +313,8 @@ func (k EventKind) Apply(ctx context.Context, campaignID string, a Actor, r Reco
 		if s := r.Str("color"); s != "" {
 			in.Color = &s
 		}
-		if s := r.Str("icon"); s != "" {
-			in.Icon = &s
+		if x.icon != "" {
+			in.Icon = &x.icon
 		}
 		rep.toCreate(&in)
 		x.toCreate(&in)
@@ -361,8 +361,8 @@ func (k EventKind) Apply(ctx context.Context, campaignID string, a Actor, r Reco
 	if s := r.Str("color"); s != "" {
 		in.Color = patch.Of(s)
 	}
-	if s := r.Str("icon"); s != "" {
-		in.Icon = patch.Of(s)
+	if x.icon != "" {
+		in.Icon = patch.Of(x.icon)
 	}
 	if v, ok := r.Bool("all_day"); ok {
 		in.AllDay = patch.Of(v)

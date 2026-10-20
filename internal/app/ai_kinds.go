@@ -133,6 +133,9 @@ func aiLookups(d *aiDeps, reg *records.Registry) *records.Lookups {
 	if d.Health.IsHealthy(rolltables.PluginSlug) {
 		l.Tables = d.Tables.Svc
 	}
+	if d.Quests != nil && d.Boards != nil {
+		l.Quests = aiQuestsAdapter{quests: d.Quests, boards: d.Boards, types: d.Entities}
+	}
 	return l
 }
 

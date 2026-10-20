@@ -42,6 +42,7 @@ type fakeCalendarRepo struct {
 	saveSunLookFn      func(ctx context.Context, calendarID string, look SunLook) error
 	setMoonTintFn      func(ctx context.Context, calendarID string, moonID int, tint *string) error
 	setMoonLookFn      func(ctx context.Context, calendarID string, moonID int, color string, tint *string) error
+	setMoonPhaseFn     func(ctx context.Context, calendarID string, moonID int, offset float64, color string) error
 	setCyclesFn        func(ctx context.Context, calendarID string, cycles []CycleInput) error
 	getCyclesFn        func(ctx context.Context, calendarID string) ([]Cycle, error)
 	setFestivalsFn     func(ctx context.Context, calendarID string, festivals []FestivalInput) error
@@ -204,6 +205,12 @@ func (m *fakeCalendarRepo) SetMoonTint(ctx context.Context, calendarID string, m
 func (m *fakeCalendarRepo) SetMoonLook(ctx context.Context, calendarID string, moonID int, color string, tint *string) error {
 	if m.setMoonLookFn != nil {
 		return m.setMoonLookFn(ctx, calendarID, moonID, color, tint)
+	}
+	return nil
+}
+func (m *fakeCalendarRepo) SetMoonPhase(ctx context.Context, calendarID string, moonID int, offset float64, color string) error {
+	if m.setMoonPhaseFn != nil {
+		return m.setMoonPhaseFn(ctx, calendarID, moonID, offset, color)
 	}
 	return nil
 }

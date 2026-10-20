@@ -29,6 +29,13 @@ type fakeStructure struct {
 	// strengths and hides are keyed by moon id.
 	strengths map[int]*float64
 	hides     map[int]bool
+	// phases is each moon's written phase offset and colour, by moon id.
+	phases map[int]moonPhase
+}
+
+type moonPhase struct {
+	offset float64
+	color  string
 }
 
 func (f *fakeStructure) GetDefaultCalendarForViewer(context.Context, string, permissions.Viewer) (*calendar.Calendar, error) {
@@ -102,6 +109,13 @@ func (f *fakeStructure) SetMoonStrength(_ context.Context, id int, _, _ string, 
 		f.strengths = map[int]*float64{}
 	}
 	f.strengths[id] = v
+	return nil
+}
+func (f *fakeStructure) SetMoonPhase(_ context.Context, id int, _, _ string, offset float64, color string) error {
+	if f.phases == nil {
+		f.phases = map[int]moonPhase{}
+	}
+	f.phases[id] = moonPhase{offset, color}
 	return nil
 }
 func (f *fakeStructure) SetMoonHidden(_ context.Context, id int, _, _ string, hidden bool) error {

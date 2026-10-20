@@ -52,6 +52,9 @@ type CalendarRepository interface {
 	// SetMoonLook writes one moon's colour and colour strength together,
 	// scoped like SetMoonHidden.
 	SetMoonLook(ctx context.Context, calendarID string, moonID int, color string, tint *string) error
+	// SetMoonPhase writes one moon's phase offset and colour, scoped like
+	// SetMoonHidden.
+	SetMoonPhase(ctx context.Context, calendarID string, moonID int, offset float64, color string) error
 
 	// Seasons.
 	SetSeasons(ctx context.Context, calendarID string, seasons []Season) error
@@ -762,6 +765,31 @@ func (r *calendarRepo) SetMoonLook(ctx context.Context, calendarID string, moonI
 	res, err := r.db.ExecContext(ctx,
 		`UPDATE calendar_moons SET color = ?, tint = ? WHERE id = ? AND calendar_id = ?`,
 		color, tint, moonID, calendarID)
+	if err != nil {
+		return err
+	}
+	if n, err := res.RowsAffected(); err != nil || n > 0 {
+		return err
+	}
+	var exists bool
+	if err := r.db.QueryRowContext(ctx,
+		`SELECT EXISTS(SELECT 1 FROM calendar_moons WHERE id = ? AND calendar_id = ?)`,
+		moonID, calendarID).Scan(&exists); err != nil {
+		return err
+	}
+	if !exists {
+		return apperror.NewNotFound("moon not found in calendar")
+	}
+	return nil
+}
+
+// SetMoonPhase writes one moon's phase offset and colour, scoped to
+// calendarID. Zero changed rows is a not-found only when the moon is
+// missing, for the same reason as in SetMoonHidden.
+func (r *calendarRepo) SetMoonPhase(ctx context.Context, calendarID string, moonID int, offset float64, color string) error {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE calendar_moons SET phase_offset = ?, color = ? WHERE id = ? AND calendar_id = ?`,
+		offset, color, moonID, calendarID)
 	if err != nil {
 		return err
 	}

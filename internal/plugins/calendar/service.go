@@ -343,6 +343,10 @@ type CalendarService interface {
 	// the sky's hand controls save them. Owner only at the route, like the
 	// sun's look.
 	SetMoonLook(ctx context.Context, moonID int, calendarID, campaignID, color string, strength *float64) error
+	// SetMoonPhase sets an existing moon's phase offset and colour, the two
+	// a structure save leaves as stored. A real-time calendar's moons follow
+	// the real sky, so they are refused.
+	SetMoonPhase(ctx context.Context, moonID int, calendarID, campaignID string, offset float64, color string) error
 	// MoonsForEntity lists the moons whose lore page is entityID, in every
 	// calendar v may open and, for anyone who does not skip the per-user
 	// layer, without hidden moons, each with tonight's phase name on its
@@ -2822,6 +2826,25 @@ func (s *calendarService) SetMoonLook(ctx context.Context, moonID int, calendarI
 		tint = &t
 	}
 	if err := s.calRepo.SetMoonLook(ctx, calendarID, moonID, color, tint); err != nil {
+		return err
+	}
+	s.publish(PubStructureUpdated, campaignID, calendarID, nil)
+	return nil
+}
+
+// SetMoonPhase sets an existing moon's phase offset and colour.
+func (s *calendarService) SetMoonPhase(ctx context.Context, moonID int, calendarID, campaignID string, offset float64, color string) error {
+	cal, err := s.calendarInCampaign(ctx, calendarID, campaignID)
+	if err != nil {
+		return err
+	}
+	if err := refuseRealTime(cal); err != nil {
+		return err
+	}
+	if math.IsNaN(offset) || math.IsInf(offset, 0) {
+		return apperror.NewBadRequest("a moon's phase offset must be a number of days")
+	}
+	if err := s.calRepo.SetMoonPhase(ctx, calendarID, moonID, offset, normalizeColor(color)); err != nil {
 		return err
 	}
 	s.publish(PubStructureUpdated, campaignID, calendarID, nil)
