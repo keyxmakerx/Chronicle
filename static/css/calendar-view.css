@@ -2293,25 +2293,29 @@
 .cal-v5 .mvwgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;margin:8px 0}
 .cal-v5 .msil.dim{opacity:.45}
 .cal-v5 .gframe .sil.gone .dg{stroke:var(--gtx2)}
-/* ── The horizon rail: the owner's hand controls for the sky's look, under the docked sky. A tray lifts over the calendar from the chosen body. ── */
-.cal-v5 .skyrail{position:relative;z-index:2;display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--hair);background:var(--paper2)}
-.cal-v5 .skyrail[hidden], .cal-v5 .skywrap:not(.open) + .skyrail{display:none}
+/* ── The sky's menu: the owner's hand controls for the sky's look. It slides down out of the sky's lower edge (or the card's top when the sky is folded) and floats over the calendar; a tray lifts from the chosen body. ── */
+.cal-v5 .skyrail{position:absolute;left:0;right:0;top:0;z-index:46;overflow:hidden;padding:0 10px 18px;pointer-events:none}
+.cal-v5 .skyrail[hidden]{display:none}
+.cal-v5 .srin{display:flex;align-items:center;gap:10px;padding:8px 8px 8px 10px;background:var(--paper);border:1px solid var(--edge);border-radius:14px;box-shadow:var(--shadow-l);transform:translateY(-110%);visibility:hidden;transition:transform .26s var(--ease),visibility 0s linear .26s}
+.cal-v5 .skyrail.open .srin{transform:none;visibility:visible;pointer-events:auto;transition:transform .3s var(--ease),visibility 0s}
+.cal-v5 .skyrail.instant .srin, .rm .cal-v5 .skyrail .srin{transition:none}
+@media (prefers-reduced-motion:reduce){.cal-v5 .skyrail .srin{transition:none}}
 .cal-v5 .srl{display:flex;gap:6px;flex:1;min-width:0;overflow-x:auto;scrollbar-width:thin;padding:2px}
-.cal-v5 .src{display:inline-flex;align-items:center;gap:7px;flex:none;height:36px;padding:0 12px 0 5px;border-radius:99px;font:600 12.5px/1 var(--sans);color:var(--ink2);white-space:nowrap;background:var(--paper);box-shadow:0 0 0 1px var(--hair)}
-.cal-v5 .src:hover{color:var(--ink);box-shadow:0 0 0 1px var(--edge)}
+.cal-v5 .src{position:relative;display:inline-flex;align-items:center;gap:9px;flex:none;height:44px;padding:0 14px 0 8px;border-radius:10px;color:var(--ink2);white-space:nowrap;background:var(--paper);box-shadow:inset 0 0 0 1px var(--hair);overflow:hidden}
+.cal-v5 .src:hover{color:var(--ink);box-shadow:inset 0 0 0 1px var(--edge)}
 .cal-v5 .src:focus-visible{outline:1.5px solid var(--ink);outline-offset:2px}
-.cal-v5 .src[aria-selected="true"]{color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--ink)}
-.cal-v5 .src[data-dm-only]{box-shadow:inset 3px 0 0 rgb(var(--color-warn-rgb)),0 0 0 1px var(--hair)}
-.cal-v5 .src[data-dm-only][aria-selected="true"]{box-shadow:inset 3px 0 0 rgb(var(--color-warn-rgb)),inset 0 0 0 1.5px var(--ink)}
-.cal-v5 .src small{font:500 11px/1 var(--sans);color:var(--mut)}
-.cal-v5 .skyrail.asplayer .src{cursor:default;opacity:.6}
+.cal-v5 .src[aria-selected="true"]{color:var(--ink);background:var(--paper2);box-shadow:inset 0 0 0 1.5px var(--ink)}
+.cal-v5 .src[data-dm-only]::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:rgb(var(--color-warn-rgb))}
+.cal-v5 .srt{display:flex;flex-direction:column;align-items:flex-start;gap:3px;text-align:left}
+.cal-v5 .srn{font:600 12.5px/1.1 var(--sans)}
+.cal-v5 .src small{font:500 10.5px/1 var(--sans);color:var(--mut)}
 /* A body's ring: its colour, filled round as far as the sky shows it. */
 .cal-v5 .srr{position:relative;flex:none;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:conic-gradient(var(--c) calc(var(--p) * 1%),var(--hair) 0)}
 .cal-v5 .srr i{width:18px;height:18px;border-radius:50%;background:var(--c);box-shadow:0 0 0 2px var(--paper)}
-.cal-v5 .srp{display:inline-flex;align-items:center;gap:7px;flex:none;height:32px;padding:0 11px;border-radius:9px;font:550 12.5px/1 var(--sans);color:var(--ink2);white-space:nowrap}
-.cal-v5 .srp:hover{background:var(--lift);color:var(--ink);box-shadow:0 0 0 1px var(--hair)}
+.cal-v5 .src[aria-selected="true"] .srr i{box-shadow:0 0 0 2px var(--paper2)}
+.cal-v5 .srp{display:inline-flex;align-items:center;gap:7px;flex:none;height:36px;padding:0 12px;font:550 12.5px/1 var(--sans);color:var(--ink2);white-space:nowrap;border-left:1px solid var(--hair);border-radius:0 9px 9px 0}
+.cal-v5 .srp:hover{background:var(--lift);color:var(--ink)}
 .cal-v5 .srp:focus-visible{outline:1.5px solid var(--ink);outline-offset:2px}
-.cal-v5 .srp[aria-pressed="true"]{background:var(--paper);color:var(--ink);box-shadow:inset 3px 0 0 rgb(var(--color-warn-rgb)),0 0 0 1px var(--edge)}
 .cal-v5 .skytray{position:absolute;left:0;top:0;z-index:47;width:min(560px,calc(100% - 16px));display:flex;flex-direction:column;min-height:0;background:var(--paper);border:1px solid var(--edge);border-radius:16px;box-shadow:var(--shadow-l);color:var(--ink);visibility:hidden;pointer-events:none;overflow:hidden}
 .cal-v5 .skytray.live{visibility:visible}
 .cal-v5 .skytray.open{pointer-events:auto}
@@ -2322,7 +2326,7 @@
 .cal-v5 .sts{display:inline-flex;align-items:center;gap:5px;font:600 12px/1 var(--sans);color:var(--free)}
 .cal-v5 .stb{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px 24px;padding:14px 16px 18px}
 .cal-v5 .stf{display:flex;flex-direction:column;gap:8px;min-width:0}
-.cal-v5 .stf:first-child:nth-last-child(3){grid-column:1 / -1}
+.cal-v5 .stf:first-child:nth-last-child(3), .cal-v5 .stf:first-child:nth-last-child(3) ~ .stf{grid-column:1 / -1}
 .cal-v5 .stl{font:650 10.5px/1 var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--mut)}
 .cal-v5 .stcs{display:flex;flex-wrap:wrap;gap:6px}
 .cal-v5 .stc{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 11px 0 7px;border-radius:9px;font:550 12.5px/1 var(--sans);color:var(--ink2);box-shadow:0 0 0 1px var(--hair)}
@@ -2351,7 +2355,8 @@
 .cal-v5 .stsw[aria-checked="true"] .sttrack{background:var(--ink)}
 .cal-v5 .stsw[aria-checked="true"] .sttrack::after{transform:translateX(16px)}
 .rm .cal-v5 .sttrack, .rm .cal-v5 .sttrack::after{transition:none}
-@media (max-width:600px){.cal-v5 .skyrail{padding:6px 8px}
+@media (max-width:600px){
+.cal-v5 .skyrail{padding:0 6px 14px}
 .cal-v5 .srp span{display:none}
 .cal-v5 .skytray{position:fixed;left:0!important;right:0;top:auto!important;bottom:0;width:auto!important;max-height:80vh!important;border-radius:18px 18px 0 0;border-left:0;border-right:0;border-bottom:0}
 }

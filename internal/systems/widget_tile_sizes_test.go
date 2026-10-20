@@ -15,7 +15,7 @@ func TestWidgetTileSizes_PassThrough(t *testing.T) {
 	if err := json.Unmarshal([]byte(raw), &m); err != nil {
 		t.Fatal(err)
 	}
-	metas := placeableWidgetMetas(&m)
+	metas := placeableWidgetMetas(&m, nil)
 	if len(metas) != 2 {
 		t.Fatalf("metas = %+v", metas)
 	}

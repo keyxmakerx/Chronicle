@@ -1,11 +1,12 @@
-// calendar_sky_rail_browser.test.mjs — the horizon rail under the calendar's sky.
+// calendar_sky_rail_browser.test.mjs — the owner's sky menu on the calendar.
 //
 // Runs calendar_view.js and the sky in a real Chromium as the campaign owner.
-// The rail lists the sun and each moon, a hidden moon carrying the amber edge;
-// pressing a body lifts a tray over the month; each pick saves at once to its
-// route; Escape puts the tray away; "See it as a player" leaves the hidden
-// moon out; a refused save puts the old value back. A player gets no rail and
-// never downloads its script.
+// The Moons button slides a menu of the sun and each moon over the calendar,
+// a hidden moon carrying the amber edge, and the menu follows the sky as it
+// folds; pressing a body lifts a tray over the month; each pick saves at once
+// to its route; Escape puts the tray away, then the menu; the menu's last
+// entry opens the moon phases; a refused save puts the old value back. A
+// player's Moons button opens the phases, and they never download the menu.
 //
 // Needs playwright-core and a Chromium (see _browser_env.mjs); skips locally,
 // and fails under CI, when either is missing.
@@ -82,29 +83,51 @@ async function page(t, { role = 3, fail = null } = {}) {
   return { p, puts, loaded };
 }
 
+const menu = async (p) => { await p.click('#cal5-moonbtn'); await p.waitForSelector('#cal5-skyrail.open .src'); };
 const settle = (p) => p.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running'));
 // The nth write the page sent, once it has gone out.
 const lastPut = async (p, puts, n) => { for (let i = 0; i < 100 && puts.length < n; i++) await p.waitForTimeout(20); return puts[n - 1]; };
 
-test('the owner gets a rail of the sun and each moon, the hidden moon marked', { skip }, async (t) => {
+test('the Moons button slides out a menu of the sun and each moon, the hidden moon marked', { skip }, async (t) => {
   const { p } = await page(t);
-  await p.waitForSelector('#cal5-skyrail .src');
+  await p.waitForSelector('#cal5-skyrail .src', { state: 'attached' });
+  assert.equal(await p.isVisible('#cal5-skyrail .src'), false, 'the menu starts put away');
+  const headTop = await p.$eval('#cal5-cal > .head', (h) => h.getBoundingClientRect().top);
+  await menu(p);
+  assert.equal(await p.$eval('#cal5-moonbtn', (b) => b.getAttribute('aria-expanded')), 'true');
   const chips = await p.$$eval('#cal5-skyrail .src', (cs) => cs.map((c) => ({ id: c.dataset.sr, name: c.querySelector('.srn').textContent, dm: c.hasAttribute('data-dm-only') })));
   assert.deepEqual(chips, [
     { id: 'sun', name: 'The sun', dm: false },
     { id: '1', name: 'Selune', dm: false },
     { id: '2', name: "Sanguin'mor", dm: true },
   ]);
-  const order = await p.evaluate(() => {
-    const sky = document.querySelector('#cal5-skywrap').getBoundingClientRect(), rail = document.querySelector('#cal5-skyrail').getBoundingClientRect();
-    const head = document.querySelector('#cal5-cal > .head').getBoundingClientRect();
-    return { underSky: rail.top >= sky.bottom - 1, aboveHead: rail.bottom <= head.top + 1 };
+  await settle(p);
+  const at = await p.evaluate(() => {
+    const btn = document.querySelector('#cal5-moonbtn').getBoundingClientRect(), bar = document.querySelector('#cal5-skyrail .srin').getBoundingClientRect();
+    return { belowButton: bar.top >= btn.bottom, head: document.querySelector('#cal5-cal > .head').getBoundingClientRect().top };
   });
-  assert.deepEqual(order, { underSky: true, aboveHead: true });
+  assert.deepEqual(at, { belowButton: true, head: headTop }, 'the menu floats under the button without moving the calendar');
+  assert.equal(await p.$('#cal5-skyrail [data-sr-player]'), null, 'seeing it as a player is the deck’s job');
+});
+
+test('folding the sky carries the menu up with it', { skip }, async (t) => {
+  const { p } = await page(t);
+  await menu(p);
+  await settle(p);
+  const before = await p.$eval('#cal5-skyrail .srin', (e) => e.getBoundingClientRect().top);
+  await p.click('#cal5-skybtn');
+  await settle(p);
+  await p.waitForTimeout(100);
+  const after = await p.$eval('#cal5-skyrail .srin', (e) => e.getBoundingClientRect().top);
+  const btn = await p.$eval('#cal5-moonbtn', (b) => b.getBoundingClientRect().bottom);
+  assert.ok(after < before - 40, `the menu rose with the sky (${before} -> ${after})`);
+  assert.ok(after >= btn, 'and still hangs under the button');
+  assert.equal(await p.$eval('#cal5-skyrail', (r) => r.classList.contains('open')), true);
 });
 
 test('a moon opens a tray over the month and its strength saves when let go', { skip }, async (t) => {
   const { p, puts } = await page(t);
+  await menu(p);
   await p.click('#cal5-sr-2');
   await p.waitForSelector('#cal5-skytray.open [data-sr-strength]');
   await settle(p);
@@ -122,6 +145,7 @@ test('a moon opens a tray over the month and its strength saves when let go', { 
 
 test('the sun saves its kind at once, and Escape or a press elsewhere puts the tray away', { skip }, async (t) => {
   const { p, puts } = await page(t);
+  await menu(p);
   await p.click('#cal5-sr-sun');
   await p.waitForSelector('#cal5-skytray.open [data-sr-kind="red"]');
   await p.click('[data-sr-kind="red"]');
@@ -137,23 +161,31 @@ test('the sun saves its kind at once, and Escape or a press elsewhere puts the t
   await settle(p);
   await p.click('#cal5-stage .day >> nth=20');
   await p.waitForSelector('#cal5-skytray:not(.live)', { state: 'attached' });
+  assert.equal(await p.$eval('#cal5-skyrail', (r) => r.classList.contains('open')), false, 'a press elsewhere puts the menu away too');
+  await menu(p);
+  await p.focus('#cal5-sr-sun');
+  await p.keyboard.press('Escape');
+  assert.equal(await p.$eval('#cal5-skyrail', (r) => r.classList.contains('open')), false);
+  assert.equal(await p.evaluate(() => document.activeElement && document.activeElement.id), 'cal5-moonbtn');
 });
 
-test('hiding a moon saves, and the player view leaves hidden moons out', { skip }, async (t) => {
+test('hiding a moon saves and marks it, and the menu leads on to the moon phases', { skip }, async (t) => {
   const { p, puts } = await page(t);
+  await menu(p);
   await p.click('#cal5-sr-1');
   await p.click('#cal5-skytray [data-sr-hidden]');
   const put = await lastPut(p, puts, 1);
   assert.deepEqual(put, { tail: '/moons/1/hidden', body: { hidden: true } });
   await p.waitForSelector('#cal5-sr-1[data-dm-only]');
-  await p.click('#cal5-skyrail [data-sr-player]');
-  const shown = await p.$$eval('#cal5-skyrail .src', (cs) => cs.map((c) => c.dataset.sr));
-  assert.deepEqual(shown, ['sun'], 'both moons are hidden now, so players see only the sun');
+  await p.click('#cal5-skyrail [data-sr-phases]');
+  await p.waitForSelector('#cal5-mv.open');
+  assert.equal(await p.$eval('#cal5-skyrail', (r) => r.classList.contains('open')), false);
   assert.equal(await p.$eval('#cal5-skytray', (t) => t.classList.contains('open')), false);
 });
 
 test('a refused save puts the old colour strength back and says why', { skip }, async (t) => {
   const { p, puts } = await page(t, { fail: '/moons/2/look' });
+  await menu(p);
   await p.click('#cal5-sr-2');
   await p.waitForSelector('#cal5-skytray.open [data-sr-strength]');
   await p.$eval('[data-sr-strength]', (r) => { r.value = '0.2'; r.dispatchEvent(new Event('input', { bubbles: true })); r.dispatchEvent(new Event('change', { bubbles: true })); });
@@ -162,10 +194,12 @@ test('a refused save puts the old colour strength back and says why', { skip }, 
   await p.waitForFunction(() => document.body.textContent.includes('The server said no.'));
 });
 
-test('a player gets no rail and never loads its script', { skip }, async (t) => {
+test('a player’s Moons button opens the phases, and they never load the menu', { skip }, async (t) => {
   const { p, loaded } = await page(t, { role: 1 });
   await p.waitForTimeout(300);
   assert.equal(await p.$('#cal5-skyrail'), null);
   assert.equal(await p.$('#cal5-skytray'), null);
+  await p.click('#cal5-moonbtn');
+  await p.waitForSelector('#cal5-mv.open');
   assert.ok(!loaded.includes('/static/js/widgets/calendar_sky_rail.js'));
 });
