@@ -147,3 +147,50 @@ func TestSetMoonLook(t *testing.T) {
 		})
 	}
 }
+
+func TestSetMoonPhase(t *testing.T) {
+	type write struct {
+		offset float64
+		color  string
+	}
+	tests := []struct {
+		name     string
+		campaign string
+		cal      Calendar
+		offset   float64
+		color    string
+		wantErr  bool
+		want     write
+	}{
+		{name: "offset and colour", campaign: testCampaignA, offset: 12, color: "aa2222", want: write{12, "#aa2222"}},
+		{name: "offset to zero", campaign: testCampaignA, offset: 0, color: "#c0d0ff", want: write{0, "#c0d0ff"}},
+		{name: "real-time calendar", campaign: testCampaignA, cal: Calendar{Mode: ModeRealLife, TracksRealTime: true}, offset: 3, color: "#abc", wantErr: true},
+		{name: "another campaign's calendar", campaign: "other-campaign", offset: 3, color: "#abc", wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &fakeCalendarRepo{}
+			var got *write
+			repo.setMoonPhaseFn = func(_ context.Context, _ string, _ int, offset float64, c string) error {
+				got = &write{offset, c}
+				return nil
+			}
+			repo.getByIDFn = func(_ context.Context, id string) (*Calendar, error) {
+				c := tt.cal
+				c.ID, c.CampaignID = id, testCampaignA
+				return &c, nil
+			}
+			svc := newTestCalendarService(repo, nil, nil, nil)
+			err := svc.SetMoonPhase(context.Background(), 3, "cal-1", tt.campaign, tt.offset, tt.color)
+			if tt.wantErr {
+				if err == nil || got != nil {
+					t.Fatalf("want a refusal and no write, got err %v write %+v", err, got)
+				}
+				return
+			}
+			if err != nil || got == nil || *got != tt.want {
+				t.Fatalf("err %v write %+v, want %+v", err, got, tt.want)
+			}
+		})
+	}
+}

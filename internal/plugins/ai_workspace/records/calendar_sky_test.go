@@ -104,6 +104,78 @@ func TestCalendarKind_SunAndMoonLooks(t *testing.T) {
 	}
 }
 
+// A structure save keeps a kept moon's offset and colour as stored, so the
+// block writes them after it; moons whose offset and colour stay are left.
+func TestCalendarKind_MoonPhaseOffsets(t *testing.T) {
+	cal := func() *calendar.Calendar {
+		return &calendar.Calendar{
+			ID: "cal", Name: "Harptos",
+			Months:   []calendar.Month{{Name: "Hammer", Days: 30}},
+			Weekdays: []calendar.Weekday{{Name: "First"}},
+			Moons: []calendar.Moon{
+				{ID: 7, Name: "Lacrimosa", CycleDays: 24, PhaseOffset: 1, Color: "#c0d0ff"},
+				{ID: 8, Name: "Sanguin'mor", CycleDays: 24, PhaseOffset: 13, Color: "#aa2222"},
+				{ID: 9, Name: "Quiet", CycleDays: 30, PhaseOffset: 4, Color: "#eeeeee"},
+			},
+		}
+	}
+	tests := []struct {
+		name    string
+		moons   []any
+		summary string
+		want    map[int]moonPhase
+	}{
+		{
+			name: "offsets to zero and twelve, with a strength",
+			moons: []any{
+				map[string]any{"name": "Lacrimosa", "phase_offset": 0},
+				map[string]any{"name": "Sanguin'mor", "phase_offset": 12, "strength": 0.8},
+				map[string]any{"name": "Quiet"},
+			},
+			summary: "changes the phase offset or colour of 2 moons",
+			want:    map[int]moonPhase{7: {0, "#c0d0ff"}, 8: {12, "#aa2222"}},
+		},
+		{
+			name:    "a colour keeps the offset",
+			moons:   []any{map[string]any{"name": "Quiet", "color": "#123456"}},
+			summary: "changes the phase offset or colour of 1 moon",
+			want:    map[int]moonPhase{9: {4, "#123456"}},
+		},
+		{
+			name:  "the same offset and colour write nothing",
+			moons: []any{map[string]any{"name": "Quiet", "phase_offset": 4, "color": "#EEEEEE"}},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := &fakeStructure{cal: cal()}
+			k := CalendarKind{Svc: f}
+			r := rec(KindCalendar, ActionUpdate, "", map[string]any{"moons": tt.moons}, "")
+			p := k.Plan(context.Background(), camp, owner, r)
+			if p.Error != "" {
+				t.Fatalf("plan: %+v", p)
+			}
+			if tt.summary != "" && !strings.Contains(p.Summary, tt.summary) {
+				t.Errorf("summary %q lacks %q", p.Summary, tt.summary)
+			}
+			if tt.summary == "" && strings.Contains(p.Summary, "phase offset") {
+				t.Errorf("summary %q claims a phase change", p.Summary)
+			}
+			if err := k.Apply(context.Background(), camp, owner, r); err != nil {
+				t.Fatal(err)
+			}
+			if len(f.phases) != len(tt.want) {
+				t.Fatalf("phases = %+v, want %+v", f.phases, tt.want)
+			}
+			for id, w := range tt.want {
+				if f.phases[id] != w {
+					t.Errorf("moon %d = %+v, want %+v", id, f.phases[id], w)
+				}
+			}
+		})
+	}
+}
+
 func TestCalendarKind_CreateSun(t *testing.T) {
 	f := &fakeStructure{}
 	k := CalendarKind{Svc: f}

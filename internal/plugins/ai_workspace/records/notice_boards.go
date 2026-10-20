@@ -314,46 +314,53 @@ func (k NoticeBoardKind) Export(ctx context.Context, campaignID string, a Actor)
 	}
 	var b strings.Builder
 	for _, bd := range boards {
-		where := "page"
-		if bd.Home.CategoryID != 0 {
-			where = "category"
-		}
-		b.WriteString("---\nkind: notice-board\naction: update\n" + where + ": " + yamlStr(bd.HomeName) + "\nname: " + yamlStr(bd.Name) + "\nwho: " + whoWord[bd.Who] + "\n")
-		if len(bd.Fill) > 0 {
-			var w []string
-			for _, st := range bd.Fill {
-				w = append(w, questWord[st])
-			}
-			b.WriteString("fills_with: [" + strings.Join(w, ", ") + "]\n")
-		}
-		var quests, notes []string
-		players := 0
-		for _, it := range bd.Items {
-			switch {
-			case it.Kind == "notice" && !it.Auto:
-				quests = append(quests, it.QuestName)
-			case it.Kind == "note" && it.ByDM:
-				notes = append(notes, it.Text)
-			case !it.ByDM:
-				players++
-			}
-		}
-		for _, l := range []struct {
-			key  string
-			vals []string
-		}{{"quests", quests}, {"notes", notes}} {
-			if len(l.vals) > 0 {
-				b.WriteString(l.key + ":\n")
-				for _, v := range l.vals {
-					b.WriteString("  - " + yamlStr(v) + "\n")
-				}
-			}
-		}
-		b.WriteString("---\n")
-		if players > 0 {
-			fmt.Fprintf(&b, "<!-- players pinned %d things here; they are theirs and stay as they are -->\n", players)
-		}
-		b.WriteString("\n")
+		b.WriteString(boardBlock(bd) + "\n")
 	}
 	return b.String(), nil
+}
+
+// boardBlock is one board as a block an AI can change and send back. What
+// players pinned is only counted: the kind never writes it.
+func boardBlock(bd BoardRef) string {
+	var b strings.Builder
+	where := "page"
+	if bd.Home.CategoryID != 0 {
+		where = "category"
+	}
+	b.WriteString("---\nkind: notice-board\naction: update\n" + where + ": " + yamlStr(bd.HomeName) + "\nname: " + yamlStr(bd.Name) + "\nwho: " + whoWord[bd.Who] + "\n")
+	if len(bd.Fill) > 0 {
+		var w []string
+		for _, st := range bd.Fill {
+			w = append(w, questWord[st])
+		}
+		b.WriteString("fills_with: [" + strings.Join(w, ", ") + "]\n")
+	}
+	var quests, notes []string
+	players := 0
+	for _, it := range bd.Items {
+		switch {
+		case it.Kind == "notice" && !it.Auto:
+			quests = append(quests, it.QuestName)
+		case it.Kind == "note" && it.ByDM:
+			notes = append(notes, it.Text)
+		case !it.ByDM:
+			players++
+		}
+	}
+	for _, l := range []struct {
+		key  string
+		vals []string
+	}{{"quests", quests}, {"notes", notes}} {
+		if len(l.vals) > 0 {
+			b.WriteString(l.key + ":\n")
+			for _, v := range l.vals {
+				b.WriteString("  - " + yamlStr(v) + "\n")
+			}
+		}
+	}
+	b.WriteString("---\n")
+	if players > 0 {
+		fmt.Fprintf(&b, "<!-- players pinned %d things here; they are theirs and stay as they are -->\n", players)
+	}
+	return b.String()
 }

@@ -16,7 +16,7 @@ import (
 // CalendarStructureAPI is the slice of calendar.CalendarService the
 // calendar kind uses: making the campaign's calendar, and changing its
 // structure, name, year label, current date, eras, sun and each moon's
-// colour strength and hidden flag.
+// phase offset, colour, colour strength and hidden flag.
 type CalendarStructureAPI interface {
 	GetDefaultCalendarForViewer(ctx context.Context, campaignID string, v permissions.Viewer) (*calendar.Calendar, error)
 	ListCalendars(ctx context.Context, campaignID string, v permissions.Viewer) ([]calendar.Calendar, error)
@@ -32,6 +32,7 @@ type CalendarStructureAPI interface {
 	SaveSunLook(ctx context.Context, calendarID, campaignID string, look calendar.SunLook) error
 	SetMoonStrength(ctx context.Context, moonID int, calendarID, campaignID string, strength *float64) error
 	SetMoonHidden(ctx context.Context, moonID int, calendarID, campaignID string, hidden bool) error
+	SetMoonPhase(ctx context.Context, moonID int, calendarID, campaignID string, offset float64, color string) error
 }
 
 // PageResolver finds a campaign page by name and says which of them an
@@ -982,6 +983,9 @@ func (k CalendarKind) planUpdate(ctx context.Context, campaignID string, a Actor
 	}
 	if n := s.pageChanges(); n > 0 {
 		did = append(did, "changes "+plural(n, "lore page", "lore pages"))
+	}
+	if n := s.moonPhaseChanges(cal); n > 0 {
+		did = append(did, "changes the phase offset or colour of "+plural(n, "moon", "moons"))
 	}
 	if strength, hide, show := s.moonLookChanges(cal); strength+hide+show > 0 {
 		if strength > 0 {

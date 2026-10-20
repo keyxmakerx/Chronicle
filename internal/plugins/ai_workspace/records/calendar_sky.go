@@ -155,13 +155,40 @@ func (s *calSpec) moonLookChanges(cal *calendar.Calendar) (strength, hide, show 
 	return
 }
 
-// setMoonLooks writes the strength and hidden flag of the moons the
-// calendar already had; a new moon took both when it was inserted.
+// moonPhaseChanges counts the existing moons whose phase offset or colour
+// the block changes. A structure save keeps both as stored, so they are
+// written after it (see setMoonLooks).
+func (s *calSpec) moonPhaseChanges(cal *calendar.Calendar) int {
+	n := 0
+	for _, m := range s.moons {
+		if old := baseMoon(cal, m.Name); old != nil && moonPhaseChanged(*old, m) {
+			n++
+		}
+	}
+	return n
+}
+
+func moonPhaseChanged(old calendar.Moon, m calendar.MoonInput) bool {
+	return old.PhaseOffset != m.PhaseOffset ||
+		!strings.EqualFold(strings.TrimPrefix(strings.TrimSpace(old.Color), "#"), strings.TrimPrefix(strings.TrimSpace(m.Color), "#"))
+}
+
+// setMoonLooks writes the phase offset, colour, strength and hidden flag of
+// the moons the calendar already had; a new moon took them when it was
+// inserted.
 func (k CalendarKind) setMoonLooks(ctx context.Context, campaignID string, s *calSpec, cal *calendar.Calendar) error {
 	for i, m := range s.moons {
 		l := s.moonLooks[i]
 		old := baseMoon(cal, m.Name)
-		if old == nil || !l.any() {
+		if old == nil {
+			continue
+		}
+		if moonPhaseChanged(*old, m) {
+			if err := k.Svc.SetMoonPhase(ctx, old.ID, cal.ID, campaignID, m.PhaseOffset, m.Color); err != nil {
+				return err
+			}
+		}
+		if !l.any() {
 			continue
 		}
 		if l.strengthSet {

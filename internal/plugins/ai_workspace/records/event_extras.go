@@ -2,12 +2,14 @@ package records
 
 import (
 	"context"
+	"regexp"
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 )
 
 // TierLister reads the campaign's event importance levels (its tier
@@ -63,13 +65,47 @@ func (k EventKind) eventCalendar(ctx context.Context, campaignID string, a Actor
 type eventExtras struct {
 	tier, page patch.Field[string]
 	kindID     patch.Field[int]
+	icon       string   // a Font Awesome class, "" when the block gave none
 	labels     []string // for the review summary
+}
+
+// faIconRe is the calendar's own rule for an event icon: one Font Awesome
+// class name.
+var faIconRe = regexp.MustCompile(`^fa-[a-z0-9-]+$`)
+
+// faStyles are the style classes an icon may be written with ("fa-solid
+// fa-sun"); the calendar stores only the icon's own class.
+var faStyles = map[string]bool{"fa": true, "fas": true, "far": true, "fab": true, "fa-solid": true, "fa-regular": true, "fa-brands": true}
+
+// eventIcon turns a Font Awesome icon as an AI writes it (`sun`, `fa-sun`,
+// `fa-solid fa-sun`) into the class the calendar stores.
+func eventIcon(v string) (string, error) {
+	icon := ""
+	for _, w := range strings.Fields(strings.ToLower(v)) {
+		if !faStyles[w] {
+			icon = w
+		}
+	}
+	if icon != "" && !strings.HasPrefix(icon, "fa-") {
+		icon = "fa-" + icon
+	}
+	if !faIconRe.MatchString(icon) {
+		return "", badRequestf("icon: %s isn't a Font Awesome icon name; write it like sun or fa-sun", quote(v))
+	}
+	return icon, nil
 }
 
 // readEventExtras checks the keys against the campaign's importance levels,
 // the calendar's event categories and the pages the operator may open.
 func (k EventKind) readEventExtras(ctx context.Context, campaignID string, a Actor, cal *calendar.Calendar, r Record) (eventExtras, error) {
 	var x eventExtras
+	if v := r.Str("icon"); v != "" {
+		icon, err := eventIcon(v)
+		if err != nil {
+			return x, err
+		}
+		x.icon = icon
+	}
 	clears := func(key string) (bool, error) {
 		if !strings.EqualFold(r.Str(key), pageNone) {
 			return false, nil
@@ -154,10 +190,15 @@ func (k EventKind) readEventExtras(ctx context.Context, campaignID string, a Act
 			x.page = patch.Null[string]()
 			x.labels = append(x.labels, "no linked page")
 		} else {
+			// A page this paste makes exists only by commit, when the
+			// event is planned again and links it.
 			if err := resolvePageRef(ctx, k.Pages, campaignID, a, &ref, "page"); err != nil {
-				return x, err
+				if !r.Made[entities.Slugify(ref.name)] {
+					return x, err
+				}
+			} else {
+				x.page = patch.Of(ref.id)
 			}
-			x.page = patch.Of(ref.id)
 			x.labels = append(x.labels, "linked to "+ref.name)
 		}
 	}

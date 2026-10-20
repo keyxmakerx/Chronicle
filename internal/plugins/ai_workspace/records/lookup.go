@@ -119,6 +119,9 @@ type Lookups struct {
 	// Folders names the sidebar folders so pages show which one holds them;
 	// nil leaves folders out.
 	Folders aiexport.FolderNamer
+	// Quests adds a page's quest notice and notice boards to the `page`
+	// answer for a Director; nil leaves them out.
+	Quests QuestsAPI
 }
 
 // LookupAnswer is one lookup's result: the chip shown on screen and the
@@ -134,7 +137,7 @@ type LookupAnswer struct {
 var lookupWhats = []struct{ what, keys, brief string }{
 	{"pages", "optional `type` (e.g. Character) and `tag` (a tag's name)", "page names with their tags, by type or tag"},
 	{"tags", "none", "every tag with how many pages carry it, colour and whether it is Directors only"},
-	{"page", "`name`", "one page: its text, tags and links"},
+	{"page", "`name`", "one page: its text, tags and links, and for a Director its quest notice and notice boards"},
 	{lookupWhatCalendar, "none", "the calendar itself: months, weekdays, seasons, moons with today's phase and the next new and full moon, eras, festivals, today's date, and its climate"},
 	{"weather-kinds", "none", "every climate, built-in weather label and sky effect the calendar can animate, and the owner's own kinds of weather"},
 	{"events", "`from` and `to` (e.g. `Deepwinter 1 1492`), or `year` and optional `month`", "calendar events in a date range"},
@@ -572,9 +575,40 @@ func (run *lookupRun) page(name string) (LookupAnswer, error) {
 	md = strings.TrimSuffix(strings.TrimSpace(md), "---")
 	md += sheetFieldsText(e, types, run.director(), e.OwnerUserID != nil && *e.OwnerUserID == run.a.UserID)
 	md += pageMapText(run.ctx, run.l.PageMaps, run.campaignID, e, run.a)
+	md += run.pageQuestText(e)
 	ans.Chip = "Page · " + e.Name
 	ans.Text = md
 	return ans, nil
+}
+
+// pageQuestText is the page's quest notice and the notice boards hanging on
+// it, as the blocks that change them. Only a Director reads them: both carry
+// steps and notes players never see, and the kinds only export to Directors.
+func (run *lookupRun) pageQuestText(e *entities.Entity) string {
+	if run.l.Quests == nil || !run.director() {
+		return ""
+	}
+	var b strings.Builder
+	if list, err := run.l.Quests.Quests(run.ctx, run.campaignID, run.a); err == nil {
+		for _, q := range list {
+			if q.PageID == e.ID {
+				b.WriteString("\n\n### Quest notice\n\nSend this back as it is, changed, to update the notice.\n\n```\n" + questBlock(q) + "```\n")
+				break
+			}
+		}
+	}
+	if boards, err := run.l.Quests.Boards(run.ctx, run.campaignID, run.a); err == nil {
+		var blocks []string
+		for _, bd := range boards {
+			if bd.Home.CategoryID == 0 && bd.Home.PageID == e.ID {
+				blocks = append(blocks, boardBlock(bd))
+			}
+		}
+		if len(blocks) > 0 {
+			b.WriteString("\n\n### Notice boards\n\nSend a board back, changed, to update it.\n\n```\n" + strings.Join(blocks, "\n") + "```\n")
+		}
+	}
+	return b.String()
 }
 
 // sheetFieldsText is the page's sheet as a `fields:` block the AI can edit

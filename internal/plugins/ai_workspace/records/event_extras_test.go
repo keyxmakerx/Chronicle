@@ -9,6 +9,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 )
 
 type fakeTiers []campaigns.TierDefinition
@@ -89,6 +90,10 @@ func TestEventKind_ExtrasOnCreate(t *testing.T) {
 		{name: "unknown category lists them", extra: map[string]any{"category": "wedding"}, wantErr: "Festival, Battle"},
 		{name: "hidden page reads as missing", extra: map[string]any{"page": "Secret"}, wantErr: "no page called"},
 		{name: "none on create", extra: map[string]any{"category": "none"}, wantErr: "only applies to action: update"},
+		{name: "icon by its plain name", extra: map[string]any{"icon": "Sun"}, check: wantIcon("fa-sun")},
+		{name: "icon as a class", extra: map[string]any{"icon": "fa-moon"}, check: wantIcon("fa-moon")},
+		{name: "icon with its style", extra: map[string]any{"icon": "fa-solid fa-skull"}, check: wantIcon("fa-skull")},
+		{name: "icon that is no name", extra: map[string]any{"icon": "<b>sun</b>"}, wantErr: "isn't a Font Awesome icon name"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -110,6 +115,39 @@ func TestEventKind_ExtrasOnCreate(t *testing.T) {
 			}
 			tt.check(t, c.events[0])
 		})
+	}
+}
+
+func wantIcon(icon string) func(t *testing.T, in calendar.CreateEventInput) {
+	return func(t *testing.T, in calendar.CreateEventInput) {
+		if in.Icon == nil || *in.Icon != icon {
+			t.Fatalf("icon %v, want %s", in.Icon, icon)
+		}
+	}
+}
+
+// A page made earlier in the same paste exists only by commit: the review
+// passes it, and the commit, planned again once pages are saved, links it.
+func TestEventKind_PageFromSamePaste(t *testing.T) {
+	c := extrasCal()
+	pages := pageWorld()
+	k := EventKind{Svc: c, Tiers: defaultTiers(), Pages: pages}
+	r := rec("event", ActionCreate, "Signing", eventFields(map[string]any{"page": "The Lastwell Contract"}), "")
+	if p := k.Plan(context.Background(), camp, owner, r); !strings.Contains(p.Error, "no page called") {
+		t.Fatalf("a page nobody makes must be refused, got %+v", p)
+	}
+	r.Made = map[string]bool{"the-lastwell-contract": true}
+	if p := k.Plan(context.Background(), camp, owner, r); p.Error != "" || !strings.Contains(p.Summary, "linked to The Lastwell Contract") {
+		t.Fatalf("review of a page this paste makes: %+v", p)
+	}
+	// At commit the page is saved and Made is not set.
+	pages.pages["the-lastwell-contract"] = &entities.Entity{ID: "p-lastwell", Name: "The Lastwell Contract"}
+	r.Made = nil
+	if err := k.Apply(context.Background(), camp, owner, r); err != nil {
+		t.Fatal(err)
+	}
+	if in := c.events[0]; in.EntityID == nil || *in.EntityID != "p-lastwell" {
+		t.Fatalf("entity %v, want p-lastwell", in.EntityID)
 	}
 }
 

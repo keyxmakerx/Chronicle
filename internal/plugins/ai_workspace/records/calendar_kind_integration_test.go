@@ -132,7 +132,7 @@ func TestCalendarKind_Integration(t *testing.T) {
 			map[string]any{"name": "Midwinter", "days": 1, "intercalary": true},
 			map[string]any{"name": "Ches", "days": 30},
 		},
-		"moons":         []any{map[string]any{"name": "Selune", "cycle": 30}},
+		"moons":         []any{map[string]any{"name": "Selune", "cycle": 30, "phase_offset": 7.5, "color": "#123456"}},
 		"eras":          []any{map[string]any{"name": "Age of Humanity", "start_year": -2000, "end_year": 0}},
 		"current_month": "Ches", "current_year": 1492, "current_day": 10,
 	}, "")
@@ -146,6 +146,11 @@ func TestCalendarKind_Integration(t *testing.T) {
 	cal, _ = svc.GetDefaultCalendarForViewer(ctx, campaign, a.Viewer())
 	if len(cal.Months) != 4 || cal.Moons[0].ID != moonID || len(cal.Eras) != 2 || cal.CurrentMonth != 4 || cal.CurrentDay != 10 {
 		t.Fatalf("after update: %d months, moon %d (was %d), %d eras, today %d/%d", len(cal.Months), cal.Moons[0].ID, moonID, len(cal.Eras), cal.CurrentMonth, cal.CurrentDay)
+	}
+	// A structure save keeps a moon's offset and colour, so the block writes
+	// them after it.
+	if m := cal.Moons[0]; m.PhaseOffset != 7.5 || m.Color != "#123456" {
+		t.Fatalf("moon after update: offset %v colour %s, want 7.5 and #123456", m.PhaseOffset, m.Color)
 	}
 	evs, _ = svc.ListEventsForCalendar(ctx, campaign, cal.ID, 3)
 	if len(evs) != 1 || evs[0].Month != 4 {

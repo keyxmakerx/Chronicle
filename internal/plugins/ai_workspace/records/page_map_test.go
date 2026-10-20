@@ -126,3 +126,50 @@ func TestLookups_PageMap(t *testing.T) {
 		t.Errorf("a page with no map shows a Map section:\n%s", ans[0].Text)
 	}
 }
+
+// The page lookup shows a Director the page's quest notice and the boards
+// hanging on it, as blocks to send back; a player reading it gets neither.
+func TestLookups_PageQuestAndBoards(t *testing.T) {
+	contract := page("lw", "The Lastwell Contract", "Quest", false)
+	salt := page("salt", "Saltreach", "Place", false)
+	l := world()
+	l.Pages = &fakePages{all: []entities.Entity{contract, salt}}
+	l.Quests = &fakeQuests{
+		quests: []QuestRef{{PageID: "lw", PageName: "The Lastwell Contract", Status: "not_started", Kicker: "Bounty", Reward: "200 gp", Body: []string{"Clear the well."}}},
+		boards: []BoardRef{
+			{ID: "b1", Name: "Guild contract board", Who: "dm", HomeName: "Saltreach", Home: BoardHome{PageID: "salt"},
+				Items: []BoardItemRef{{Kind: "notice", QuestName: "The Lastwell Contract", ByDM: true}}},
+			{ID: "b2", Name: "Tavern board", Who: "all", HomeName: "Elsewhere", Home: BoardHome{PageID: "other"}},
+		},
+	}
+	tests := []struct {
+		name        string
+		page        string
+		a           Actor
+		want, avoid []string
+	}{
+		{"a quest page shows its notice", "The Lastwell Contract", owner,
+			[]string{"### Quest notice", "kind: quest", "status: open", "kicker: Bounty", "reward: 200 gp", "Clear the well."}, []string{"### Notice boards"}},
+		{"a place shows its boards only", "Saltreach", owner,
+			[]string{"### Notice boards", "kind: notice-board", "name: Guild contract board", "  - The Lastwell Contract"}, []string{"Tavern board", "### Quest notice"}},
+		{"a player sees neither", "Saltreach", player, nil, []string{"### Notice boards", "Guild contract board"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ans := l.Answer(context.Background(), camp, tt.a, []Record{lookup("page", map[string]any{"name": tt.page})})
+			if ans[0].Error != "" {
+				t.Fatal(ans[0].Error)
+			}
+			for _, w := range tt.want {
+				if !strings.Contains(ans[0].Text, w) {
+					t.Errorf("answer lacks %q:\n%s", w, ans[0].Text)
+				}
+			}
+			for _, w := range tt.avoid {
+				if strings.Contains(ans[0].Text, w) {
+					t.Errorf("answer has %q:\n%s", w, ans[0].Text)
+				}
+			}
+		})
+	}
+}

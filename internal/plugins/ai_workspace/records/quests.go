@@ -273,35 +273,41 @@ func (k QuestKind) Export(ctx context.Context, campaignID string, a Actor) (stri
 	}
 	var b strings.Builder
 	for _, q := range list {
-		b.WriteString("---\nkind: quest\naction: update\nname: " + yamlStr(q.PageName) + "\nstatus: " + questWord[q.Status] + "\n")
-		if q.Title != "" && q.Title != q.PageName {
-			b.WriteString("title: " + yamlStr(q.Title) + "\n")
-		}
-		for _, f := range [][2]string{{"kicker", q.Kicker}, {"blurb", q.Blurb}, {"reward", q.Reward}, {"due", q.Due}} {
-			if f[1] != "" {
-				b.WriteString(f[0] + ": " + yamlStr(f[1]) + "\n")
-			}
-		}
-		if len(q.Steps) > 0 {
-			b.WriteString("steps:\n")
-			for _, s := range q.Steps {
-				line := s.Text
-				if s.Done {
-					line = "[x] " + line
-				}
-				if s.Shown {
-					line += " (shown)"
-				}
-				b.WriteString("  - " + yamlStr(line) + "\n")
-			}
-		}
-		b.WriteString("---\n")
-		if len(q.Body) > 0 {
-			b.WriteString(strings.Join(q.Body, "\n\n") + "\n")
-		}
-		b.WriteString("\n")
+		b.WriteString(questBlock(q) + "\n")
 	}
 	return b.String(), nil
+}
+
+// questBlock is one quest sheet as a block an AI can change and send back.
+func questBlock(q QuestRef) string {
+	var b strings.Builder
+	b.WriteString("---\nkind: quest\naction: update\nname: " + yamlStr(q.PageName) + "\nstatus: " + questWord[q.Status] + "\n")
+	if q.Title != "" && q.Title != q.PageName {
+		b.WriteString("title: " + yamlStr(q.Title) + "\n")
+	}
+	for _, f := range [][2]string{{"kicker", q.Kicker}, {"blurb", q.Blurb}, {"reward", q.Reward}, {"due", q.Due}} {
+		if f[1] != "" {
+			b.WriteString(f[0] + ": " + yamlStr(f[1]) + "\n")
+		}
+	}
+	if len(q.Steps) > 0 {
+		b.WriteString("steps:\n")
+		for _, s := range q.Steps {
+			line := s.Text
+			if s.Done {
+				line = "[x] " + line
+			}
+			if s.Shown {
+				line += " (shown)"
+			}
+			b.WriteString("  - " + yamlStr(line) + "\n")
+		}
+	}
+	b.WriteString("---\n")
+	if len(q.Body) > 0 {
+		b.WriteString(strings.Join(q.Body, "\n\n") + "\n")
+	}
+	return b.String()
 }
 
 // yamlStr quotes a value only when YAML would misread it bare.
