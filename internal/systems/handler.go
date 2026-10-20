@@ -743,7 +743,7 @@ func (h *SystemHandler) GetSystemWidgetBlockMetas(ctx context.Context, campaignI
 		return nil
 	}
 
-	return placeableWidgetMetas(sys.Info())
+	return placeableWidgetMetas(sys.Info(), bookWidgetSlugs(Dir(sys.Info().ID)))
 }
 
 // placeableWidgetMetas lists the manifest widgets a layout may place. A widget
@@ -752,7 +752,11 @@ func (h *SystemHandler) GetSystemWidgetBlockMetas(ctx context.Context, campaignI
 // owns a whole page and would mount without its page context, and a panel is
 // already mounted by the host with its own context, so a hand-placed copy would
 // duplicate it.
-func placeableWidgetMetas(manifest *SystemManifest) []entities.BlockMeta {
+//
+// A widget the package book places (bookWidgets) is a book pop-up, so it is
+// listed as Retired: a page that already holds one still draws it under its
+// own name, but the Customizer no longer offers it.
+func placeableWidgetMetas(manifest *SystemManifest, bookWidgets map[string]bool) []entities.BlockMeta {
 	if len(manifest.Widgets) == 0 {
 		return nil
 	}
@@ -780,6 +784,7 @@ func placeableWidgetMetas(manifest *SystemManifest) []entities.BlockMeta {
 			Description: w.Description,
 			WidgetSlug:  w.Slug,
 			TileSizes:   w.TileSizes,
+			Retired:     bookWidgets[w.Slug],
 		})
 	}
 	return metas
