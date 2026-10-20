@@ -177,7 +177,7 @@
 
   function setOpen(toggle, body, open) {
     toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
-    body.hidden = !open;
+    body.classList.toggle('is-open', open);
   }
 
   /** The tag icon, plus the count while tags filter the list. */
@@ -258,7 +258,7 @@
   document.addEventListener('click', function (e) {
     var toggle = document.getElementById('sidebar-tags-toggle');
     var menu = document.getElementById('sidebar-tags-body');
-    if (!toggle || !menu || menu.hidden) return;
+    if (!toggle || !menu || toggle.getAttribute('aria-expanded') !== 'true') return;
     if (toggle.contains(e.target) || menu.contains(e.target)) return;
     setOpen(toggle, menu, false);
   });
@@ -267,7 +267,7 @@
     if (e.key !== 'Escape') return;
     var toggle = document.getElementById('sidebar-tags-toggle');
     var menu = document.getElementById('sidebar-tags-body');
-    if (!toggle || !menu || menu.hidden) return;
+    if (!toggle || !menu || toggle.getAttribute('aria-expanded') !== 'true') return;
     setOpen(toggle, menu, false);
     toggle.focus();
   });
