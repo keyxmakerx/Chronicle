@@ -593,13 +593,24 @@
   }
   function reducedMotion() { return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
 
-  // Event category icon: an event's own icon (FontAwesome-style token from
-  // the mockup's monochrome symbol set) falls back to its kind's icon, then
-  // a generic dot. Chronicle's EventKind.Icon is authored as a short glyph
-  // (emoji or FA class per DefaultEventKinds) — render it as text, which
-  // degrades gracefully for both.
+  // Event category icon: an event's own icon falls back to its kind's icon,
+  // then a generic dot.
   function eventGlyph(e) {
     return e.icon || e.kind_icon || '●';
+  }
+
+  // An icon is stored either as a short glyph (an emoji, as the default
+  // kinds use) or as a Font Awesome class name, which imports and the AI
+  // page write. A class name printed as text shows as "fa-scroll", so it
+  // becomes an <i>; anything else stays escaped text. The plain dot is drawn,
+  // not typed: a "●" sits wherever the font puts it, off the centre of its
+  // ring.
+  var FA_TOKEN = /^(?:fa-(?:solid|regular|brands)\s+|fa[srb]?\s+)?(fa-[a-z0-9-]+)$/;
+  function iconHTML(icon) {
+    var s = String(icon || '').trim();
+    if (s === '●') return '<span class="edot" aria-hidden="true"></span>';
+    var m = FA_TOKEN.exec(s);
+    return m ? '<i class="fa-solid ' + m[1] + '" aria-hidden="true"></i>' : esc(s);
   }
 
   // Allowlist for a color value read from server data (event/kind colors)
@@ -1292,6 +1303,7 @@
   Chronicle.calendarEras = EraMath;
   Chronicle.calendarPanel = { growOpen: growOpen, growClose: growClose };
   Chronicle.calendarColor = sanitizeColor;
+  Chronicle.calendarIcon = iconHTML;
   // Shared with calendar_editor.js so the Director's moon controls read a
   // hand-set moon exactly as the grid draws it.
   Chronicle.calendarMoon = MoonMath;
@@ -4207,7 +4219,7 @@
       var kinds = this.cal.event_kinds || [];
       $('#cal5-legend', this.el).innerHTML = kinds.slice(0, 8).map(function (k) {
         var color = sanitizeColor(k.color);
-        return '<li><span class="mk" style="' + (color ? 'color:' + color + ';' : '') + '">' + esc(k.icon || '●') + '</span>' + esc(k.name) + '</li>';
+        return '<li><span class="mk" style="' + (color ? 'color:' + color + ';' : '') + '">' + iconHTML(k.icon || '●') + '</span>' + esc(k.name) + '</li>';
       }).join('');
     },
 
@@ -4333,7 +4345,7 @@
       var html = '<div class="marks">' + gn.join('') + shown.map(function (e) {
         var dirRing = self.canAuthorDmOnly && e.visibility === 'dm_only' ? ' dir' : '';
         var occ = CalDate.occurrenceOn(e, y, m, d), skipped = occ && occ.skipped;
-        return '<span class="mk' + dirRing + (skipped ? ' skip' : '') + '" data-ev="' + esc(e.id) + '" style="' + eventColorStyle(e) + '" title="' + esc(e.name + (skipped ? ' (skipped)' : '')) + '">' + esc(eventGlyph(e)) + '</span>';
+        return '<span class="mk' + dirRing + (skipped ? ' skip' : '') + '" data-ev="' + esc(e.id) + '" style="' + eventColorStyle(e) + '" title="' + esc(e.name + (skipped ? ' (skipped)' : '')) + '">' + iconHTML(eventGlyph(e)) + '</span>';
       }).join('');
       if (extra > 0) html += '<span class="more">+' + extra + '</span>';
       html += '</div>';
@@ -5280,7 +5292,7 @@
         var occ = CalDate.occurrenceOn(e, d.y, d.m, d.d) || {};
         var note = occ.skipped ? 'Skipped. Players don’t see it.' : (occ.moved_from ? 'Moved from ' + self._dateLabel(occ.moved_from.year, occ.moved_from.month, occ.moved_from.day) : '');
         return '<div class="evd go' + hl + (occ.skipped ? ' skip' : '') + '" data-ev="' + esc(e.id) + '">' +
-          '<div class="evh"><span class="ric" style="' + eventColorStyle(e) + '">' + esc(eventGlyph(e)) + '</span><span class="qt0">' + esc(e.name) + '</span></div>' +
+          '<div class="evh"><span class="ric" style="' + eventColorStyle(e) + '">' + iconHTML(eventGlyph(e)) + '</span><span class="qt0">' + esc(e.name) + '</span></div>' +
           (time || note ? '<div class="evm">' + (time ? '<span>' + esc(time) + '</span>' : '') + (note ? '<span>' + esc(note) + '</span>' : '') + '</div>' : '') +
           (occ.skipped ? '' : self._rollLineHTML(self.rollOn(e.id, d.y, d.m, d.d))) +
           '</div>';

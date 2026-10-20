@@ -221,7 +221,7 @@
     return '<button type="button" data-kind="" aria-pressed="' + (cur == null) + '">None</button>' +
       (this.cal.event_kinds || []).map(function (k) {
         var color = sanitize(k.color);
-        return '<button type="button" data-kind="' + k.id + '" aria-pressed="' + (k.id === cur) + '"' + (color ? ' style="color:' + color + '"' : '') + '>' + esc(k.icon || '') + ' ' + esc(k.name) + '</button>';
+        return '<button type="button" data-kind="' + k.id + '" aria-pressed="' + (k.id === cur) + '"' + (color ? ' style="color:' + color + '"' : '') + '>' + Chronicle.calendarIcon(k.icon) + ' ' + esc(k.name) + '</button>';
       }).join('');
   };
   Drawer.prototype._html = function (ev, s, e) {
