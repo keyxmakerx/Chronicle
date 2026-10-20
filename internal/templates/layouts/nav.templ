@@ -282,6 +282,7 @@ templ navRow(row NavRowView) {
 			data-nav-tr={ navRowTrail(row) }
 			data-drill-open={ navDrillURL(ctx, row.TypeID) }
 			data-nav-home={ row.URL }
+			data-nav-peek={ navPeekURL(ctx, row.TypeID) }
 			aria-haspopup="true"
 			if NavIsCurrent(ctx, row.Key) {
 				aria-current="page"

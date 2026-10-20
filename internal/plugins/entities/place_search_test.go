@@ -65,6 +65,33 @@ func TestSearchAPI_PagesOnlyForThePicker(t *testing.T) {
 	}
 }
 
+// TestSearchAPI_PeekIsTheNewestFive: the sidebar's hover peek gets a
+// category's five most recently changed pages, and nothing else.
+func TestSearchAPI_PeekIsTheNewestFive(t *testing.T) {
+	var got ListOptions
+	var gotTypes []int
+	repo := &mockEntityRepo{
+		listByCampaignFn: func(_ context.Context, _ string, typeIDs []int, _ int, _ string, opts ListOptions) ([]Entity, int, error) {
+			got, gotTypes = opts, typeIDs
+			return []Entity{{ID: "e1", Name: "Aria Vell", CampaignID: "camp-1"}}, 13, nil
+		},
+	}
+	tl := &stubTimelineSearcher{}
+	h := NewHandler(NewEntityService(repo, &mockEntityTypeRepo{}, &mockPermissionRepo{}))
+	h.SetTimelineSearcher(tl)
+
+	out, _ := searchJSON(t, h, "type=3&pages=1&peek=1")
+	if got.PerPage != 5 || got.Sort != "updated" {
+		t.Errorf("peek asked for %d sorted by %q, want 5 by \"updated\"", got.PerPage, got.Sort)
+	}
+	if len(gotTypes) == 0 || gotTypes[0] != 3 {
+		t.Errorf("peek must stay inside the category, got types %v", gotTypes)
+	}
+	if tl.called || len(out["results"].([]any)) != 1 {
+		t.Errorf("peek returns that category's pages only: %v", out["results"])
+	}
+}
+
 // TestRemovePlaceAPI_ParentMustBeVisible: removing a place answers "not found"
 // when the viewer can't see the parent, exactly like adding one.
 func TestRemovePlaceAPI_ParentMustBeVisible(t *testing.T) {

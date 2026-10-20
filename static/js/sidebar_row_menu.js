@@ -352,5 +352,5 @@
   document.addEventListener('htmx:beforeSwap', function () { close(false); });
 
   window.Chronicle = window.Chronicle || {};
-  window.Chronicle.navRowMenu = { itemsFor: itemsFor };
+  window.Chronicle.navRowMenu = { itemsFor: itemsFor, sitePath: sitePath };
 })();

@@ -993,6 +993,16 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 		}
 	}
 
+	// The sidebar's hover peek asks for a category's five most recently
+	// changed pages, seen as the sidebar sees them.
+	if c.QueryParam("peek") == "1" {
+		opts.PerPage = 5
+		opts.Sort = "updated"
+		if campaigns.ViewingAsPlayer(c, cc) {
+			role = int(campaigns.RolePlayer)
+		}
+	}
+
 	// Tag filtering: comma-separated tag slugs (AND logic).
 	if tags := c.QueryParam("tags"); tags != "" {
 		opts.TagSlugs = strings.Split(tags, ",")

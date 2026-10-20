@@ -108,3 +108,17 @@ test('working out Move does not change the arrangement', () => {
   menu.itemsFor({ key: 'cat:1', href: '', model: m, pin: null, editor });
   assert.equal(JSON.stringify(m), before);
 });
+
+test('a page path is only ever a path on this site', () => {
+  const { menu } = load();
+  const cases = [
+    ['/campaigns/c1/locations', '/campaigns/c1/locations'],
+    ['//evil.example', '/evil.example'],
+    ['/\\evil.example', '/%5Cevil.example'],
+    ['javascript:alert(1)', ''],
+    ['https://evil.example/x', ''],
+    ['/', ''],
+    [null, ''],
+  ];
+  for (const [give, want] of cases) assert.equal(menu.sitePath(give), want, String(give));
+});
