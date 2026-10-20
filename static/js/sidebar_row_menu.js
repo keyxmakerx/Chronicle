@@ -101,9 +101,11 @@
     return row || null;
   }
 
-  /** A same-site path, or "" for anything that could leave the site. */
+  /** A same-site path, or "" for anything that is not one. It is rebuilt
+   *  behind a fixed "/", so no scheme or second host can ride along. */
   function sitePath(p) {
-    return typeof p === 'string' && /^\/(?![\/\\])/.test(p) ? p : '';
+    if (typeof p !== 'string' || p.charAt(0) !== '/') return '';
+    return '/' + p.replace(/^[\/\\]+/, '');
   }
 
   function infoFor(row) {
