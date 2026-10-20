@@ -282,12 +282,17 @@
     s += '<g class="srp-arm">' + card('M78 78l14-22c3-4 8-1 6 3l-12 24z', dk(acc, .25), 1.6) + card('M90 52c2-6 10-6 10 0s-6 8-10 4z', '#e0b48c', 1.4) + '</g>';
     return s + card('M14 84l-6 22c-1 4 4 6 6 2l8-20z', dk(acc, .25), 1.6) + '</g>';
   }
-  // The shop's name on a hanging cloth sign.
+  // The shop's name on a hanging cloth sign, one line deeper per extra line.
+  // Returns the drawing and the sign's height.
   function signArt(name, acc) {
+    var L = window.ShopRoom.signLines(name), x = (L.length - 1) * 16, fs = L.length > 1 ? 12 : 13;
     var s = '<g class="srp-sway"><path d="M30 0v14M130 0v14" stroke="' + INK + '" stroke-width="1.6"/>';
-    s += card('M4 14h152v34l-8 8-8-8h-120l-8 8-8-8z', dk(acc, .35));
-    s += '<path d="M10 20h140v24h-140z" fill="none" stroke="#e8c47c" stroke-width="1.2" stroke-dasharray="3 2"/>';
-    return s + '<text x="80" y="37" text-anchor="middle" font-family="Georgia,serif" font-weight="700" font-size="13"' + (String(name).length > 16 ? ' textLength="132" lengthAdjust="spacingAndGlyphs"' : '') + ' fill="#e8c47c">' + esc(name) + '</text></g>';
+    s += card('M4 14h152v' + (34 + x) + 'l-8 8-8-8h-120l-8 8-8-8z', dk(acc, .35));
+    s += '<path d="M10 20h140v' + (24 + x) + 'h-140z" fill="none" stroke="#e8c47c" stroke-width="1.2" stroke-dasharray="3 2"/>';
+    L.forEach(function (t, i) {
+      s += '<text x="80" y="' + (37 + i * 16 - (L.length - 1) * 2) + '" text-anchor="middle" font-family="Georgia,serif" font-weight="700" font-size="' + fs + '"' + (t.length * fs * .56 > 132 ? ' textLength="132" lengthAdjust="spacingAndGlyphs"' : '') + ' fill="#e8c47c">' + esc(t) + '</text>';
+    });
+    return { h: 56 + x, body: s + '</g>' };
   }
   // A wall stretch: the room's wall finish drawn in ink on paper, with a
   // skirting board and a cap along the top.
@@ -437,7 +442,9 @@
       var gx = (lo + hi) / 2, gw = 0, e0 = lo;
       cuts.forEach(function (c) { if (c[0] - e0 > gw) { gw = c[0] - e0; gx = (c[0] + e0) / 2; } e0 = Math.max(e0, c[1]); });
       var sm = [-signE.d[1], signE.d[0]], sx = Math.max(lo + 1.4, Math.min(hi - 1.4, gx)), sy = (signE.a[1] + signE.b[1]) / 2 + sm[1] * .08;
-      s += at(sx, sy, (WH - .15) * Z - 60, n1(Math.atan2(signE.d[1], signE.d[0]) * 180 / Math.PI), 'srp-sign', up(150, 56, .5, 1, signArt(o.name || 'Shop', C.acc), lf(sx, sy, M)));
+      // A taller sign hangs lower, from the same hooks.
+      var sg = signArt(o.name || 'Shop', C.acc);
+      s += at(sx, sy, (WH - .15) * Z - 4 - sg.h, n1(Math.atan2(signE.d[1], signE.d[0]) * 180 / Math.PI), 'srp-sign', up(150, sg.h, .5, 1, sg.body, lf(sx, sy, M)));
     }
     // Furniture, goods and decorations, back to front so they pop up in that order.
     var bases = [];

@@ -108,3 +108,20 @@ test('the look round-trips, and a room saved before paper reads as the lit room'
   SR.fromLayout(S2, L);
   assert.equal(S2.look, 'lit');
 });
+
+test('a long shop name goes onto two readable lines on both signs', () => {
+  assert.deepEqual([...SR.signLines('The Forge')], ['The Forge']);
+  assert.deepEqual([...SR.signLines('The Gilded Griffin Emporium')], ['The Gilded', 'Griffin Emporium']);
+  const long = SR.signLines('Madame Ysolde Thornwhistle’s Remarkable Curiosities and Sundries');
+  assert.equal(long.length, 2);
+  for (const l of long) assert.ok(l.length <= 30, l);
+  assert.ok(long[1].endsWith('…'));
+  const S = state({ name: 'The Gilded Griffin Emporium', its: goods(3) });
+  const room = SR.createRoom(S); room.generate();
+  const h = Paper.html({ view: room.draw(), its: S.its, name: S.name, icons: room.ICONS, fx: 'full' }).html;
+  assert.match(h, />The Gilded<\/text>/);
+  assert.match(h, />Griffin Emporium<\/text>/);
+  S.look = 'lit';
+  const lit = room.draw().svg;
+  assert.match(lit, /<tspan x="0" y="-5">The Gilded<\/tspan><tspan x="0" y="5">Griffin Emporium<\/tspan>/);
+});
