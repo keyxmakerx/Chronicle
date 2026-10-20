@@ -17,7 +17,7 @@ func TestRegisteredPluginsOrder(t *testing.T) {
 		seen[p.Slug] = true
 		slugs = append(slugs, p.Slug)
 	}
-	want := "bestiary calendar maps sessions timeline widgetbindings systemstate rolltables armory quests pageblocks rumours fieldrules trackers homebrew encounters page_tests dmscreen entity_standing syncapi packages foundry_vtt"
+	want := "bestiary calendar maps sessions timeline widgetbindings systemstate rolltables armory quests pageblocks rumours fieldrules trackers homebrew encounters page_tests dmscreen entity_standing syncapi packages foundry_vtt ai_import_memory"
 	if got := strings.Join(slugs, " "); got != want {
 		t.Errorf("run order =\n%s\nwant\n%s", got, want)
 	}

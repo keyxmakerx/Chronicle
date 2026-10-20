@@ -250,6 +250,31 @@ removal.
 
 {{ .RecordDocs }}
 {{ end }}
+{{ if or .IncludeFrontMatterExample .RecordDocs }}
+## If your answer comes in parts
+
+Keep your answer in one reply when you can. If it is too long and you split it
+over several replies, start each one with a part block, and put what a later
+part relies on (a page, an event, a calendar change) in an earlier part:
+
+` + "```" + `
+---
+kind: part
+name: Lastwell contract
+part: 2
+of: 3
+needs: [1]
+---
+` + "```" + `
+
+` + "`" + `name` + "`" + ` is the same on every part of one answer, ` + "`" + `part` + "`" + ` counts from 1, ` + "`" + `of` + "`" + ` is how
+many parts there are, and ` + "`" + `needs` + "`" + ` lists the earlier parts this one relies on (leave
+it out when it relies on none). A part can only need earlier parts. Chronicle keeps
+each part I paste in a tray until every part is in, then puts them in order and
+reviews the whole answer at once, so the order I paste them in doesn't matter. Never
+repeat a block from another part. A fix you send after a part failed is a new part
+with the next number, and its ` + "`" + `of` + "`" + ` counts it too.
+{{ end }}
 
 {{ if .IncludeSampleEntity }}
 ## Sample entity (one per type, for shape reference)

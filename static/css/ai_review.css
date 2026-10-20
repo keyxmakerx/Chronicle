@@ -30,6 +30,18 @@
 .air-problem { display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap; font-size: 0.86rem; color: var(--color-text-body); }
 .air-problem .air-where { color: var(--color-text-secondary); font-size: 0.8rem; min-width: 84px; }
 .air-problem .air-say { flex: 1 1 260px; min-width: 0; overflow-wrap: anywhere; }
+/* Waiting: blocks kept until an earlier part of the AI's answer is applied.
+ * Dashed, because nothing is wrong with them; they are only early. */
+.air-waiting { border-style: dashed; background: transparent; }
+.air-part { display: flex; align-items: baseline; gap: 2px; }
+
+/* The tray under the paste box: parts of an answer waiting for the rest. */
+.air-tray { border: 1px dashed var(--color-border); border-radius: 12px; padding: 10px 14px; display: flex; flex-direction: column; gap: 4px; margin-top: 12px; }
+.air-tray h4 { font-size: 0.76rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-accent); }
+.air-tray-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; font-size: 0.88rem; color: var(--color-text-body); }
+.air-tray-row > i { color: var(--color-text-secondary); }
+.air-tray-what { flex: 1 1 220px; min-width: 0; display: flex; flex-direction: column; overflow-wrap: anywhere; }
+.air-tray-what b { color: var(--color-text-primary); font-weight: 600; }
 
 .air-defaults > summary { list-style: none; display: inline-block; }
 .air-defaults > summary::-webkit-details-marker { display: none; }

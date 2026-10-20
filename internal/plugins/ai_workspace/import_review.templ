@@ -32,6 +32,13 @@ type ImportReviewData struct {
 	Records []RecordRow
 	// EngineSrc is the generator engine's URL, for generator rows.
 	EngineSrc string
+	// Parts are the paste's `kind: part` labels, checked against the parts
+	// already applied in the campaign.
+	Parts []partNote
+	// Repeats are the blocks (by SourceIndex) already applied in the
+	// campaign, with the date; they start on No so a second paste of the
+	// same answer makes no duplicates.
+	Repeats map[int]string
 }
 
 // ReviewSummary is the per-status tally rendered above the table.
@@ -45,6 +52,8 @@ type ReviewSummary struct {
 	// key, sheet fields that don't fit), kept apart from blocks whose
 	// markdown would not parse.
 	Blocked int
+	// Repeats counts blocks already applied in the campaign.
+	Repeats int
 }
 
 // ImportReview renders the review: the AI's requests as one list, each
@@ -99,9 +108,14 @@ templ ImportReview(d ImportReviewData) {
 					if d.SummaryCounts.Blocked > 0 {
 						· { fmt.Sprintf("%d can't be imported", d.SummaryCounts.Blocked) }
 					}
+					if d.SummaryCounts.Repeats > 0 {
+						· { fmt.Sprintf("%d already applied", d.SummaryCounts.Repeats) }
+					}
 				</span>
 			</div>
 
+			@reviewRepeatBox(d)
+			@reviewPartsBox(d)
 			@reviewProblemsBox(d)
 
 			if listed > 0 {
@@ -175,6 +189,49 @@ templ ImportReview(d ImportReviewData) {
 			</button>
 		</div>
 	</form>
+}
+
+// repeatLine marks a row whose exact block was applied before.
+templ repeatLine(when string) {
+	<span class="air-line">
+		<i class="fa-solid fa-clone mr-1" aria-hidden="true"></i>
+		{ "Already applied on " + when + ". It starts on No; answer Yes only to apply it again." }
+	</span>
+}
+
+// reviewRepeatBox warns when the paste, or most of it, was applied before:
+// the usual cause is pasting the same answer twice.
+templ reviewRepeatBox(d ImportReviewData) {
+	if msg := repeatWarning(d); msg != "" {
+		<div class="air-problems air-waiting" role="alert">
+			<h4>
+				<i class="fa-solid fa-clone mr-1" aria-hidden="true"></i>
+				{ msg }
+			</h4>
+			<p class="air-small">Those rows start on No, so nothing is made twice unless you answer Yes.</p>
+		</div>
+	}
+}
+
+// reviewPartsBox names the parts of an AI's answer under review, one quiet
+// line each, and warns when one is reviewed without a part it needs (the
+// operator chose to review the tray before the answer was complete).
+templ reviewPartsBox(d ImportReviewData) {
+	for _, n := range d.Parts {
+		if len(n.Missing) > 0 {
+			<div class="air-problems air-waiting" role="note">
+				<h4>
+					<i class="fa-solid fa-layer-group mr-1" aria-hidden="true"></i>
+					{ n.Heading() }
+				</h4>
+			</div>
+		} else {
+			<p class="air-small air-part">
+				<i class="fa-solid fa-layer-group mr-1" aria-hidden="true"></i>
+				{ n.Line() }
+			</p>
+		}
+	}
 }
 
 // reviewProblemsBox lists the blocks that can't be used, above the list.
@@ -290,12 +347,13 @@ templ bulkDefaultsBar(d ImportReviewData) {
 templ reviewRow(campaignID string, idx int, page importer.ParsedPage, cls importer.Classification, data ImportReviewData) {
 	{{ verb := pageVerb(page.FrontMatter.Action) }}
 	{{ problem := cls.Status == importer.StatusActionMismatch || cls.Status == importer.StatusParentProblem }}
+	{{ repeat := data.Repeats[page.SourceIndex] }}
 	<div
 		role="listitem"
 		tabindex="-1"
 		data-air-row
 		data-air-verb={ verb }
-		if problem {
+		if problem || repeat != "" {
 			data-air-hold
 		}
 		if cls.GMOnly.Any() && page.FrontMatter.Action != importer.ActionDelete {
@@ -312,6 +370,9 @@ templ reviewRow(campaignID string, idx int, page importer.ParsedPage, cls import
 			<span class="air-what">{ pageWhatLead(page) } <b>{ page.Name }</b></span>
 			if line := pageDetail(page, cls); line != "" {
 				<span class="air-line">{ line }</span>
+			}
+			if repeat != "" {
+				@repeatLine(repeat)
 			}
 			if page.FrontMatter.KnownAs != "" {
 				<span class="air-line">{ "Known as " + page.FrontMatter.KnownAs + " in that era" }</span>
@@ -364,7 +425,7 @@ templ reviewRow(campaignID string, idx int, page importer.ParsedPage, cls import
 				}
 			</details>
 		</div>
-		@yesNo(fmt.Sprintf("page_%d_include", idx), pageStartsYes(page, cls), fmt.Sprintf("%s %s", pageWhatLead(page), page.Name))
+		@yesNo(fmt.Sprintf("page_%d_include", idx), pageStartsYes(page, cls) && repeat == "", fmt.Sprintf("%s %s", pageWhatLead(page), page.Name))
 	</div>
 }
 
@@ -770,6 +831,14 @@ templ importBody(cc *campaigns.CampaignContext) {
 			</div>
 		</form>
 
+		// The tray: parts of a split answer waiting for the rest. Loaded
+		// after the page so the settings tab needs no campaign data.
+		<div
+			id="ai-import-tray"
+			hx-get={ fmt.Sprintf("/campaigns/%s/ai-workspace/import/tray", cc.Campaign.ID) }
+			hx-trigger="load"
+			hx-swap="outerHTML"
+		></div>
 		<div id="ai-import-review-host"></div>
 	</div>
 	@importReviewScript()
