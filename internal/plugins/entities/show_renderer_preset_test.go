@@ -102,6 +102,7 @@ func TestIsNPCPage(t *testing.T) {
 	}{
 		{"unclaimed, listed type", &fakeCastLists{npcs: []int{3}}, &Entity{}, listed, true},
 		{"claimed, listed type", &fakeCastLists{npcs: []int{3}}, &Entity{OwnerUserID: &owner}, listed, false},
+		{"made by the hero creator, unclaimed", &fakeCastLists{npcs: []int{3}}, &Entity{Playable: true}, listed, false},
 		{"unlisted type", &fakeCastLists{npcs: []int{3}}, &Entity{}, other, false},
 		{"no lists", nil, &Entity{}, listed, false},
 	}

@@ -3278,10 +3278,11 @@ func (h *Handler) typeOnNPCList(ctx context.Context, campaignID string, typeID i
 	return slices.Contains(ids, typeID)
 }
 
-// isNPCPage reports whether a page is an NPC's: unclaimed, of a type on the
-// NPC list. A claimed page is a player's character, whatever its type.
+// isNPCPage reports whether a page is an NPC's: unclaimed, not marked
+// playable, of a type on the NPC list. A claimed or playable page is a
+// player's character, whatever its type.
 func (h *Handler) isNPCPage(ctx context.Context, campaignID string, entity *Entity, et *EntityType) bool {
-	if entity == nil || et == nil || entity.OwnerUserID != nil {
+	if entity == nil || et == nil || entity.OwnerUserID != nil || entity.Playable {
 		return false
 	}
 	return h.typeOnNPCList(ctx, campaignID, et.ID)

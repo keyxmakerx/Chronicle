@@ -342,7 +342,8 @@ system-agnostic seam that lets a package fill a category Chronicle core owns
 
 A `preset_category` binding draws a hero's sheet, so it skips NPC pages: an
 unclaimed page whose type is on the campaign's NPC list keeps its layout. A
-claimed page is a player's character and gets the renderer whatever its type.
+claimed page, or one marked playable (every hero the hero creator makes), is a
+player's character and gets the renderer whatever its type.
 A `slug` binding is the package's own type and applies to every page of it.
 
 ### Player-character sheet
