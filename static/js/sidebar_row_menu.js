@@ -10,8 +10,9 @@
  *   Each saves at once through sidebar_editor.js's quickChange, the same
  *   PUT /sidebar-config the editor's Save sends.
  * - A player or scribe: pin it for themselves (or unpin), the row's own pin.
- * - Any row that is a link: open it in a new tab. A row with nothing else
- *   offers the owner Edit sidebar.
+ * - Any row that is a link: open it in a new tab. A category, whose click
+ *   only peeks into the drill panel, also offers its own page. A row with
+ *   nothing else offers the owner Edit sidebar.
  *
  * Rows in a category's page panel keep their own folder menu
  * (sidebar_tree.js); the editor's rows have their own buttons, so the menu
@@ -27,7 +28,8 @@
 
   /**
    * The menu's entries for one row. info: key (the row's nav key), href
-   * (where the row goes, "" for a category), model (the owner's arrangement,
+   * (where the row goes, "" for a category), page (a category's own page,
+   * else ""), model (the owner's arrangement,
    * or null for anyone else), pin (null when the viewer has no pin of their
    * own on the row, else whether it is pinned), editor (Chronicle.navEditor).
    * Returns a list of {id, label, icon, disabled} and {sep: true}.
@@ -36,7 +38,8 @@
     var out = [];
     // Right-click replaces the browser's own menu, so its two link actions
     // come along.
-    if (info.href) {
+    if (info.page) out.push({ id: 'open-page', label: 'Open category page', icon: 'fa-arrow-right' });
+    if (info.href || info.page) {
       out.push({ id: 'open-tab', label: 'Open in new tab', icon: 'fa-arrow-up-right-from-square' });
       out.push({ id: 'copy-link', label: 'Copy link', icon: 'fa-link' });
     }
@@ -107,6 +110,7 @@
     return {
       key: row.getAttribute('data-nav-key'),
       href: href === '#' ? '' : href,
+      page: row.getAttribute('data-nav-home') || '',
       model: ed && navEl ? ed.readModel(navEl) : null,
       pin: pinBtn ? pinBtn.getAttribute('aria-pressed') === 'true' : null,
       pinBtn: pinBtn,
@@ -191,12 +195,15 @@
     var ed = info.editor;
     var nm = info.name;
     switch (id) {
+      case 'open-page':
+        window.location.assign(info.page);
+        break;
       case 'open-tab':
-        window.open(info.href, '_blank', 'noopener');
+        window.open(info.href || info.page, '_blank', 'noopener');
         break;
       case 'copy-link':
         if (navigator.clipboard) {
-          navigator.clipboard.writeText(new URL(info.href, window.location.href).href).then(function () {
+          navigator.clipboard.writeText(new URL(info.href || info.page, window.location.href).href).then(function () {
             if (Chronicle.notify) Chronicle.notify('Link copied.', 'success');
           }, function () {
             if (Chronicle.notify) Chronicle.notify('The link could not be copied.', 'error');
