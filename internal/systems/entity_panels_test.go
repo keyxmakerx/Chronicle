@@ -81,7 +81,7 @@ func TestPlaceableWidgetMetas_ExcludesHostMounted(t *testing.T) {
 		Renderers:    []RendererDef{{Slug: "x", Widget: "page"}},
 		EntityPanels: []EntityPanelDef{{Widget: "panel", AppliesTo: EntityPanelAppliesNPC}},
 	}
-	got := placeableWidgetMetas(m)
+	got := placeableWidgetMetas(m, nil)
 	if len(got) != 1 || got[0].WidgetSlug != "free" {
 		t.Fatalf("placeable = %+v, want only the free widget", got)
 	}
