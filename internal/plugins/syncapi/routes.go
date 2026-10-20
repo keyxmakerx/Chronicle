@@ -142,6 +142,7 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 	cg.GET("/system-entries", api.ListSystemEntries, RequirePermission(PermRead))
 	cg.GET("/entity-types", api.ListEntityTypes, RequirePermission(PermRead))
 	cg.GET("/entity-types/:typeID", api.GetEntityType, RequirePermission(PermRead))
+	cg.GET("/folders", api.ListFolders, RequirePermission(PermRead))
 	cg.GET("/entities", api.ListEntities, RequirePermission(PermRead))
 	cg.GET("/entities/:entityID", api.GetEntity, RequirePermission(PermRead))
 	cg.GET("/entities/:entityID/relations", api.ListEntityRelations, RequirePermission(PermRead))

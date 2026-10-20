@@ -4251,6 +4251,7 @@ func (a *App) RegisterRoutes() {
 	// Authenticates via API keys, not browser sessions.
 	syncAPIHandler := syncapi.NewAPIHandler(syncService, entityService, campaignService, relService)
 	syncAPIHandler.SetAddonLister(&addonListerAPIAdapter{svc: addonService})
+	syncAPIHandler.SetFolderLister(folderService)
 	if urlSigner != nil {
 		syncAPIHandler.SetURLSigner(urlSigner)
 	}

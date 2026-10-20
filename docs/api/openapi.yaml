@@ -105,6 +105,52 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /campaigns/{campaignId}/folders:
+    get:
+      tags: [Entities]
+      summary: List sidebar folders
+      description: >-
+        Every sidebar folder in a category the key may see. A folder's
+        parent_id is another folder or a page; absent means the top of its
+        category. An older Chronicle answers 404.
+      operationId: listFolders
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+      responses:
+        "200":
+          description: The campaign's folders
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, entity_type_id, name, sort_order]
+                      properties:
+                        id:
+                          type: string
+                        entity_type_id:
+                          type: integer
+                        name:
+                          type: string
+                        parent_id:
+                          type: string
+                        sort_order:
+                          type: integer
+                  total:
+                    type: integer
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /campaigns/{campaignId}/entity-types/{typeId}:
     get:
       tags: [Entities]
