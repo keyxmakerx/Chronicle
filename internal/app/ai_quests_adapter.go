@@ -136,6 +136,16 @@ func (q aiQuestsAdapter) Boards(ctx context.Context, campaignID string, a record
 	if err != nil {
 		return nil, err
 	}
+	// A notice's title can differ from its page's name, and the kind names
+	// quests by page, so the names come from the sheets.
+	sheets, err := q.Quests(ctx, campaignID, a)
+	if err != nil {
+		return nil, err
+	}
+	pageName := map[string]string{}
+	for _, s := range sheets {
+		pageName[s.PageID] = s.PageName
+	}
 	catName := map[int]string{}
 	for _, c := range cats {
 		catName[c.ID] = c.Name
@@ -160,8 +170,12 @@ func (q aiQuestsAdapter) Boards(ctx context.Context, campaignID string, a record
 		for _, b := range view.Boards {
 			ref := records.BoardRef{ID: b.ID, Name: b.Name, Who: b.Who, Fill: b.Fill, Home: h, HomeName: name}
 			for _, it := range b.Items {
+				qn := pageName[it.QuestID]
+				if qn == "" {
+					qn = it.Title // no saved sheet: the title is still the page name
+				}
 				ref.Items = append(ref.Items, records.BoardItemRef{ID: it.ID, Kind: it.Kind, QuestID: it.QuestID,
-					QuestName: it.Title, Text: it.Text, ByDM: it.ByDM, Auto: it.Auto})
+					QuestName: qn, Text: it.Text, ByDM: it.ByDM, Auto: it.Auto})
 			}
 			out = append(out, ref)
 		}

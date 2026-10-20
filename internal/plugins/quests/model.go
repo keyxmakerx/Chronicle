@@ -434,6 +434,9 @@ type BoardSummary struct {
 	CanChange bool   `json:"canChange"`
 	// Fill is the quest statuses the board shows by itself, never null.
 	Fill []string `json:"fill"`
+	// Full says a board that fills itself has reached the item cap, so a
+	// matching quest may be missing from it. Absent otherwise.
+	Full bool `json:"full,omitempty"`
 }
 
 // BoardView is a board with the items the viewer may see.

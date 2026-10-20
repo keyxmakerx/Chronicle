@@ -216,6 +216,10 @@ func (s *boardService) View(ctx context.Context, campaignID string, h Home, v Vi
 	if err != nil {
 		return nil, err
 	}
+	stored := map[string]int{}
+	for _, it := range items {
+		stored[it.BoardID]++
+	}
 	mapsOn, err := s.maps.Enabled(ctx, campaignID)
 	if err != nil {
 		return nil, apperrorInternal(err)
@@ -229,6 +233,7 @@ func (s *boardService) View(ctx context.Context, campaignID string, h Home, v Vi
 	}
 	for i := range boards {
 		bv := BoardView{BoardSummary: s.summary(&boards[i], v), Items: views[boards[i].ID]}
+		bv.Full = len(boards[i].Fill) > 0 && stored[boards[i].ID] >= MaxItemsPerBoard
 		if bv.Items == nil {
 			bv.Items = []ItemView{}
 		}
@@ -638,6 +643,11 @@ func (s *boardService) CreateItem(ctx context.Context, campaignID string, h Home
 		}
 		if err := s.requireTarget(ctx, campaignID, v, in.RefID); err != nil {
 			return nil, err
+		}
+		for _, e := range existing {
+			if e.Kind == KindNotice && e.RefID == in.RefID {
+				return nil, errInvalid("that quest is already on this board")
+			}
 		}
 		it.RefID = in.RefID
 	case KindPage:

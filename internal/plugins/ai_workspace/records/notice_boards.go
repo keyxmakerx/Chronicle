@@ -234,6 +234,17 @@ func (k NoticeBoardKind) Apply(ctx context.Context, campaignID string, a Actor, 
 		if err := k.Svc.UpdateBoard(ctx, campaignID, p.home, id, a, p.in); err != nil {
 			return err
 		}
+		// A new fill list pins notices of its own; read them before
+		// pinning by hand, so a quest never shows twice.
+		boards, err := k.Svc.Boards(ctx, campaignID, a)
+		if err != nil {
+			return err
+		}
+		for _, b := range boards {
+			if b.ID == id {
+				have = b.Items
+			}
+		}
 	}
 	if p.questsOn {
 		want := map[string]bool{}

@@ -173,6 +173,9 @@ func TestFillValidationAndRemoval(t *testing.T) {
 	if err := e.svc.DeleteItem(ctx, camp, pageHome, bid, autoID, dm); err == nil {
 		t.Fatal("removing a notice the board placed itself should be refused while it fills")
 	}
+	if _, err := e.svc.CreateItem(ctx, camp, pageHome, bid, dm, ItemInput{Kind: KindNotice, RefID: "q1"}); err == nil {
+		t.Fatal("pinning a quest the board already shows should be refused")
+	}
 	if _, err := e.svc.PatchItem(ctx, camp, pageHome, bid, autoID, dm, parseItemPatch(t, `{"hidden":true}`)); err != nil {
 		t.Fatalf("hiding it instead: %v", err)
 	}
@@ -191,6 +194,10 @@ func TestFillRespectsTheBoardCap(t *testing.T) {
 	e.fillWith(t, bid, `{"fill":["active"]}`)
 	if n := len(e.repo.items); n != MaxItemsPerBoard {
 		t.Fatalf("a full board grew to %d items", n)
+	}
+	view, err := e.svc.View(context.Background(), camp, pageHome, dm)
+	if err != nil || len(view.Boards) != 1 || !view.Boards[0].Full {
+		t.Fatalf("a full filling board must say so: %+v err=%v", view, err)
 	}
 }
 

@@ -16,6 +16,8 @@ type fakeQuests struct {
 	removed []string
 	deleted []string
 	created []string
+	// fillPins is the quest a new fill list pins.
+	fillPins string
 }
 
 func (f *fakeQuests) Quests(context.Context, string, Actor) ([]QuestRef, error) { return f.quests, nil }
@@ -34,8 +36,12 @@ func (f *fakeQuests) CreateBoard(_ context.Context, _ string, _ BoardHome, _ Act
 	f.created = append(f.created, name+"/"+who)
 	return "new-board", nil
 }
-func (f *fakeQuests) UpdateBoard(_ context.Context, _ string, _ BoardHome, _ string, _ Actor, in BoardInput) error {
+func (f *fakeQuests) UpdateBoard(_ context.Context, _ string, h BoardHome, id string, _ Actor, in BoardInput) error {
 	f.updated = append(f.updated, in)
+	// Like the service, a fill list pins the matching quest by itself.
+	if in.Fill != nil && f.fillPins != "" {
+		f.boards = append(f.boards, BoardRef{ID: id, Home: h, Items: []BoardItemRef{{ID: "auto", Kind: "notice", QuestID: f.fillPins, ByDM: true, Auto: true}}})
+	}
 	return nil
 }
 func (f *fakeQuests) DeleteBoard(_ context.Context, _ string, _ BoardHome, id string, _ Actor) error {
@@ -196,6 +202,15 @@ func TestNoticeBoardKind(t *testing.T) {
 			},
 		},
 		{
+			name: "a quest the new fill list shows is not pinned again by hand",
+			r:    Record{Action: ActionCreate, Name: "Open work", Fields: map[string]any{"category": "Quests", "fills_with": []any{"open"}, "quests": []any{"The Missing Goat", "Wolves"}}},
+			check: func(t *testing.T, f *fakeQuests) {
+				if len(f.added) != 1 || f.added[0].QuestID != "wolves" {
+					t.Fatalf("added %+v; the goat is already on the board by itself", f.added)
+				}
+			},
+		},
+		{
 			name: "stop filling",
 			r:    Record{Action: ActionUpdate, Name: "Back wall", Fields: map[string]any{"page": "The Rusty Anchor", "fills_with": "nothing"}},
 			check: func(t *testing.T, f *fakeQuests) {
@@ -217,6 +232,7 @@ func TestNoticeBoardKind(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			f := boardFixture()
+			f.fillPins = "goat"
 			k := NoticeBoardKind{Svc: f, Entities: questPages()}
 			err := k.Apply(context.Background(), camp, owner, tt.r)
 			if tt.wantErr != "" {

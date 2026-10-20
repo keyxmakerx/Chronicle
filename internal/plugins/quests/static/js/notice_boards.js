@@ -312,7 +312,8 @@
       opts.push([cur, b.fill.map(function (st) { return STATUS_WORD[st] || st; }).join(', ') + ' quests']);
     }
     return lrow('<span class="grow">Fills itself with</span><select class="wsel" data-bfill="' + esc(b.id) + '" aria-label="What “' + esc(b.name) + '” fills itself with">' +
-      opts.map(function (o) { return '<option value="' + esc(o[0]) + '"' + (o[0] === cur ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('') + '</select>');
+      opts.map(function (o) { return '<option value="' + esc(o[0]) + '"' + (o[0] === cur ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('') + '</select>') +
+      (b.full ? lrow('<span class="sub grow">This board is full, so some matching quests are not on it. Take a few things down, or fill it with fewer statuses.</span>') : '');
   }
   function redrawLedger(S) {
     var old = S.el.querySelector('.ledger'); if (!old) return;
