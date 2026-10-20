@@ -6,14 +6,17 @@
    Breakpoints are container queries on the editor, since Chronicle's menu
    takes part of the window. Only transform and opacity animate. */
 .czp{
-  --bg:#f9fafb; --surface:#ffffff; --surface-2:#f3f4f6; --surface-3:#e5e7eb;
-  --line:#e5e7eb; --line-2:#eef0f3; --line-strong:#d1d5db;
-  --text:#111827; --body:#374151; --muted:#6b7280; --faint:#9ca3af;
+  --bg:var(--color-bg-primary); --surface:var(--color-bg-secondary); --surface-2:var(--color-bg-tertiary); --surface-3:var(--color-border);
+  --line:var(--color-border); --line-2:#eef0f3; --line-strong:var(--color-input-border);
+  --text:var(--color-text-primary); --body:var(--color-text-body); --muted:var(--color-text-secondary); --faint:var(--color-text-muted);
+  /* The editor's own accent stays Chronicle's indigo, not the campaign's
+     colour, so its buttons keep white text readable whatever colour the
+     owner is trying out. */
   --accent:#6366f1; --accent-strong:#4f46e5; --accent-deep:#4338ca; --accent-ink:#4f46e5;
   --accent-wash:#eef2ff; --focus:#4f46e5;
-  --dirty:#d97706; --clean:#059669;
+  --dirty:rgb(var(--color-warn-rgb)); --clean:#059669;
   --wb:#e9ebf1; --wb-2:#f4f5f8; --wb-ink:#1b1f2a; --wb-ink-2:#535a6a; --wb-line:#d2d5de; --wb-chip:#ffffff;
-  --toast-bg:#111827; --toast-fg:#f9fafb; --toast-link:#a5b4fc;
+  --toast-bg:var(--color-text-primary); --toast-fg:var(--color-bg-primary); --toast-link:#a5b4fc;
   --hc-bg:#111827; --hc-fg:#f3f4f6; --hc-muted:#aab2c0;
   --sw-ring:rgb(0 0 0 / .14);
   --shadow-1:0 1px 2px rgb(16 24 40 / .06);
@@ -24,14 +27,14 @@
   color-scheme:light;
 }
 
+/* Dark mode comes from the theme tokens above; these are the roles the
+   theme has no token for. */
 .dark .czp{
-  --bg:#111827; --surface:#1f2937; --surface-2:#273244; --surface-3:#374151;
-  --line:#374151; --line-2:#2b3545; --line-strong:#4b5563;
-  --text:#f9fafb; --body:#d1d5db; --muted:#9ca3af; --faint:#6b7280;
+  --surface-2:#273244; --line-2:#2b3545;
   --accent-ink:#a5b4fc; --accent-wash:rgb(99 102 241 / .20); --focus:#a5b4fc;
-  --dirty:#fbbf24; --clean:#34d399;
+  --clean:#34d399;
   --wb:#0b0d12; --wb-2:#12151c; --wb-ink:#e7e9ef; --wb-ink-2:#a3a9b7; --wb-line:#262b36; --wb-chip:#1f2430;
-  --toast-bg:#f9fafb; --toast-fg:#111827; --toast-link:#4f46e5;
+  --toast-link:#4f46e5;
   --hc-bg:#f9fafb; --hc-fg:#111827; --hc-muted:#4b5563;
   --sw-ring:rgb(255 255 255 / .22);
   --shadow-1:0 1px 2px rgb(0 0 0 / .3);
@@ -110,27 +113,30 @@
 
 /* ---------- Main grid ---------- */
 .czp .cz-grid{
-  display:grid; grid-template-columns:168px minmax(0, 440px) minmax(0, 1fr);
-  grid-template-areas:"tabs panels preview"; gap:18px; align-items:start;
+  display:grid; grid-template-columns:minmax(0, 440px) minmax(0, 1fr);
+  grid-template-areas:"tabs tabs" "panels preview"; gap:14px 18px; align-items:start;
 }
-.czp .cz-tabs{ grid-area:tabs; position:sticky; top:12px; z-index:4; }
+.czp .cz-tabs{ grid-area:tabs; display:flex; align-items:flex-end; gap:12px; border-bottom:1px solid var(--line); }
 .czp .cz-panels{ grid-area:panels; min-width:0; }
 .czp .cz-preview{ grid-area:preview; position:sticky; top:12px; z-index:3; min-width:0; }
 
-/* Section tabs */
-.czp .tl{ display:flex; flex-direction:column; gap:2px; }
+/* Section tabs: one row across the top, the open one underlined. The row
+   scrolls inside itself when it runs out of room. */
+.czp .tl{ display:flex; flex:1; min-width:0; gap:2px; overflow-x:auto; scrollbar-width:none; }
+.czp .tl::-webkit-scrollbar{ display:none; }
 .czp .tab{
-  position:relative; display:flex; align-items:center; gap:10px; width:100%; padding:8px 10px; border-radius:8px;
+  position:relative; flex:none; display:flex; align-items:center; gap:7px; padding:9px 11px 10px; margin-bottom:-1px;
+  border-bottom:2px solid transparent; border-radius:8px 8px 0 0;
   font-size:13.5px; font-weight:550; color:var(--body); white-space:nowrap; transition:transform var(--dur-micro) var(--ease);
 }
 .czp .tab .i{ color:var(--muted); }
 .czp .tab:hover{ background:var(--surface-2); color:var(--text); }
 .czp .tab:active{ transform:scale(.98); }
-.czp .tab[aria-selected="true"]{ background:var(--accent-wash); color:var(--accent-ink); font-weight:650; }
+.czp .tab[aria-selected="true"]{ border-bottom-color:var(--accent-strong); color:var(--accent-ink); font-weight:650; }
 .czp .tab[aria-selected="true"] .i{ color:var(--accent-ink); }
-.czp .tab .chg{ margin-left:auto; width:7px; height:7px; flex:none; border-radius:50%; background:var(--dirty); opacity:0; transform:scale(.4); transition:opacity var(--dur) ease, transform var(--dur) var(--ease-out); }
+.czp .tab .chg{ margin-left:2px; width:7px; height:7px; flex:none; border-radius:50%; background:var(--dirty); opacity:0; transform:scale(.4); transition:opacity var(--dur) ease, transform var(--dur) var(--ease-out); }
 .czp .tab.changed .chg{ opacity:1; transform:none; }
-.czp .tabs-foot{ margin:12px 10px 0; font-size:11.5px; line-height:1.45; color:var(--muted); }
+.czp .tabs-foot{ flex:none; margin:0 0 10px; font-size:11.5px; line-height:1.45; color:var(--muted); }
 .czp .tabs-foot .chg-k{ display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--dirty); margin-right:5px; vertical-align:1px; }
 
 /* Section panels */
@@ -407,13 +413,10 @@
 .czp .toast button{ font-weight:650; color:var(--toast-link); padding:3px 6px; border-radius:6px; transition:transform var(--dur-micro) var(--ease); }
 .czp .toast button:active{ transform:scale(.95); }
 
-/* ---------- Mid widths: tabs across the top, two columns ---------- */
+/* ---------- Mid widths: two even columns ---------- */
 @container cz (max-width: 1099px){
-  .czp .cz-grid{ grid-template-columns:minmax(0, 1fr) minmax(0, 1fr); grid-template-areas:"tabs tabs" "panels preview"; }
-  .czp .cz-tabs{ position:static; }
-  .czp .tl{ flex-direction:row; flex-wrap:wrap; gap:6px; }
-  .czp .tab{ width:auto; padding:6px 11px; border:1px solid var(--line); border-radius:99px; font-size:12.5px; }
-  .czp .tab .chg{ margin-left:2px; }
+  .czp .cz-grid{ grid-template-columns:minmax(0, 1fr) minmax(0, 1fr); }
+  .czp .tab{ padding:8px 9px 9px; font-size:12.5px; }
   .czp .tabs-foot{ display:none; }
 }
 /* ---------- Phone: sticky preview strip, sections as a scroller ---------- */
@@ -432,9 +435,6 @@
   .czp .pv-frame{ height:188px; }
   .czp .zp{ overflow-y:auto; overflow-x:hidden; }
   .czp .cz-tabs{ position:sticky; top:var(--strip-h, 0px); z-index:14; margin-inline:-16px; padding:6px 16px; background:var(--bg); border-bottom:1px solid var(--line); }
-  .czp .tl{ flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none; }
-  .czp .tl::-webkit-scrollbar{ display:none; }
-  .czp .tab{ flex:none; }
   .czp .fld{ grid-template-columns:minmax(0, 1fr); }
   .czp .fld > .lab{ padding-top:0; }
   .czp .sec-h{ flex-wrap:wrap; gap:6px 12px; }
