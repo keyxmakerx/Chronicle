@@ -55,17 +55,32 @@
       if ((!tags || tags.length === 0) && (!savedFilters || savedFilters.length === 0)) return;
 
       var wrapper = document.createElement('div');
-      wrapper.className = 'sidebar-tag-filter pt-1';
+      wrapper.className = 'sidebar-tag-filter';
+
+      // An icon in the search box opens a drop-down over the list, so the
+      // filter costs no line; its count keeps a closed filter from being silent.
+      wrapper.innerHTML = '<button type="button" class="nav-drill-tags-toggle" id="sidebar-tags-toggle" title="Filter by tag" aria-label="Tag filters"' +
+        ' aria-controls="sidebar-tags-body" aria-expanded="false"><i class="fa-solid fa-tags" aria-hidden="true"></i>' +
+        '<span class="nav-drill-tags-n"></span></button><div class="nav-drill-tags-menu" id="sidebar-tags-body">' +
+        '<div class="nav-drill-tags-list"></div><div class="nav-drill-tags-foot" id="sidebar-save-filter" hidden>' +
+        '<button type="button">Save as filter</button><button type="button">Clear</button></div></div>';
+      var toggle = wrapper.firstChild;
+      var list = wrapper.querySelector('.nav-drill-tags-list');
+      var foot = list.nextSibling;
+      toggle.addEventListener('click', function () {
+        setOpen(toggle.getAttribute('aria-expanded') !== 'true');
+      });
 
       // Saved filter presets row.
       if (savedFilters && savedFilters.length > 0) {
         var presetsRow = document.createElement('div');
-        presetsRow.className = 'flex flex-wrap gap-1 mb-1';
+        presetsRow.innerHTML = '<div class="nav-drill-tags-label">Saved filters</div>';
         savedFilters.forEach(function (filter) {
           var btn = document.createElement('button');
           btn.type = 'button';
-          btn.className = 'text-[11px] px-2 py-1 min-h-[32px] rounded-md bg-accent/10 text-accent border border-accent/30 hover:bg-accent/20 transition-colors flex items-center gap-1';
-          btn.innerHTML = '<i class="fa-solid fa-bookmark text-[8px]"></i> ' + Chronicle.escapeHtml(filter.name);
+          btn.className = 'nav-drill-tag-row';
+          btn.title = 'Right-click to delete';
+          btn.innerHTML = '<i class="fa-solid fa-bookmark" aria-hidden="true"></i><span>' + Chronicle.escapeHtml(filter.name) + '</span>';
           btn.addEventListener('click', function () {
             applyPreset(filter.tag_slugs, tags);
           });
@@ -82,17 +97,19 @@
           });
           presetsRow.appendChild(btn);
         });
-        wrapper.appendChild(presetsRow);
+        list.appendChild(presetsRow);
       }
 
       // Tag chips row.
       if (tags && tags.length > 0) {
         var chipsRow = document.createElement('div');
-        chipsRow.className = 'flex flex-wrap gap-1 items-center';
+        chipsRow.innerHTML = '<div class="nav-drill-tags-label">Tags</div>';
         tags.forEach(function (tag) {
           var chip = document.createElement('button');
           chip.type = 'button';
-          chip.textContent = tag.name || tag.slug;
+          chip.className = 'nav-drill-tag-row';
+          chip.innerHTML = '<i class="fa-solid fa-check" aria-hidden="true"></i><span></span>';
+          chip.lastChild.textContent = tag.name || tag.slug;
           chip.dataset.tagSlug = tag.slug;
           updateChipStyle(chip, false);
           chip.addEventListener('click', function () {
@@ -110,13 +127,8 @@
           chipsRow.appendChild(chip);
         });
 
-        // Save button (appears when tags are active).
-        var saveBtn = document.createElement('button');
-        saveBtn.type = 'button';
-        saveBtn.id = 'sidebar-save-filter';
-        saveBtn.className = 'text-[11px] px-2 py-1 min-h-[32px] rounded-md text-accent hover:bg-accent/10 transition-colors hidden';
-        saveBtn.innerHTML = '<i class="fa-solid fa-floppy-disk text-[8px] mr-0.5"></i> Save';
-        saveBtn.addEventListener('click', function () {
+        foot.lastChild.addEventListener('click', function () { applyPreset([]); });
+        foot.firstChild.addEventListener('click', function () {
           var name = prompt('Filter name:');
           if (!name || !name.trim()) return;
           Chronicle.apiFetch('/campaigns/' + campaignId + '/saved-filters', {
@@ -132,33 +144,38 @@
             }
           });
         });
-        chipsRow.appendChild(saveBtn);
-        wrapper.appendChild(chipsRow);
+        list.appendChild(chipsRow);
       }
 
       searchDiv.appendChild(wrapper);
     });
   }
 
-  // Touch-friendly chip sizes: min-h-[32px] ensures adequate tap target
-  // on mobile while staying compact on desktop.
+  function setOpen(open) {
+    var toggle = document.getElementById('sidebar-tags-toggle');
+    if (!toggle) return;
+    toggle.setAttribute('aria-expanded', open);
+    toggle.nextSibling.classList.toggle('is-open', open);
+  }
+
+  function updateToggleLabel() {
+    var toggle = document.getElementById('sidebar-tags-toggle');
+    if (!toggle) return;
+    var n = activeTags.length;
+    toggle.lastChild.textContent = n || '';
+    toggle.setAttribute('aria-label', 'Tag filters' + (n ? ', ' + n + ' active' : ''));
+  }
+
   function updateChipStyle(chip, active) {
-    if (active) {
-      chip.className = 'text-[11px] px-2 py-1 min-h-[32px] rounded-full border border-accent bg-accent/20 text-accent transition-colors';
-    } else {
-      chip.className = 'text-[11px] px-2 py-1 min-h-[32px] rounded-full border border-gray-700 text-gray-500 hover:border-gray-500 transition-colors';
-    }
+    chip.setAttribute('aria-pressed', active ? 'true' : 'false');
   }
 
   /** Show/hide save button based on active tag count. */
   function updateSaveButton() {
+    updateToggleLabel();
     var btn = document.getElementById('sidebar-save-filter');
     if (!btn) return;
-    if (activeTags.length > 0) {
-      btn.classList.remove('hidden');
-    } else {
-      btn.classList.add('hidden');
-    }
+    btn.hidden = activeTags.length === 0;
   }
 
   /** Apply a saved preset — activate its tags and trigger filter. */
@@ -211,6 +228,17 @@
       injectTagFilter();
     }
   });
+
+  // Like a menu, the drop-down closes on a click outside it or on Escape.
+  function closeOn(e) {
+    var toggle = document.getElementById('sidebar-tags-toggle');
+    if (!toggle || toggle.getAttribute('aria-expanded') !== 'true') return;
+    if (e.type === 'click' ? toggle.parentNode.contains(e.target) : e.key !== 'Escape') return;
+    setOpen(false);
+    if (e.type !== 'click') toggle.focus();
+  }
+  document.addEventListener('click', closeOn);
+  document.addEventListener('keydown', closeOn);
 
   window.addEventListener('chronicle:navigated', reset);
 })();
