@@ -1589,12 +1589,10 @@
       var c = this.cal, p = this._skyPrev;
       // A preview shows only that day's own weather, never today's.
       if (p) c = Object.assign({}, c, { current_year: p.y, current_month: p.m, current_day: p.d, current_hour: p.h, current_minute: p.min, weather: null });
-      // The owner's "See it as a player": the same sky without the hidden moons.
-      if (this._skyAsPlayer) c = Object.assign({}, c, { moons: (c.moons || []).filter(function (mo) { return !mo.hidden_from_players; }) });
       this._paintTimeBar();
       if (!this.skyDock || !this.eventsByMonth[this.monthKey(c.current_year, c.current_month)]) return;
       var evs = this.eventsOnDay(c.current_year, c.current_month, c.current_day);
-      var sig = [this.calendarId, this._skyAsPlayer ? 'player' : 'own', c.current_year, c.current_month, c.current_day, c.current_hour, c.current_minute].join('/') + '|' +
+      var sig = [this.calendarId, c.current_year, c.current_month, c.current_day, c.current_hour, c.current_minute].join('/') + '|' +
         evs.map(function (e) { return e.id + ':' + (e.updated_at || ''); }).join(',');
       if (sig === this._skySig) return;
       this._skySig = sig;
@@ -4952,7 +4950,10 @@
       $('#cal5-todaybtn', this.el).addEventListener('click', function () { self.goToday(); });
       $('#cal5-hub', this.el).addEventListener('click', function () { self.toggleHub(); });
       this._bindEras();
-      $('#cal5-moonbtn', this.el).addEventListener('click', function () { self.openMoonView(); });
+      // The owner's Moons button opens the sky's menu, which leads on to the phases.
+      $('#cal5-moonbtn', this.el).addEventListener('click', function (e) {
+        if (self.skyRail && !self._players) self.skyRail.toggle(e.detail === 0); else self.openMoonView();
+      });
       var waitBtn = $('#cal5-waitbtn', this.el);
       if (waitBtn) {
         waitBtn.addEventListener('click', function () {
@@ -5446,6 +5447,7 @@
           if (!cal || !cal.id) { self.say(on ? 'Could not load what players see.' : 'Could not load the calendar.'); return false; }
           self.closeAllPanels({ instant: true });
           if (self._timeUp) self.closeTimeBar();
+          if (self.skyRail) self.skyRail.hide(true);
           self._players = on;
           self._audGen++;
           var dm = self._dmFlags;
