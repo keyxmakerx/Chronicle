@@ -3472,6 +3472,12 @@
     background: rgb(255 255 255 / 0.05); color: var(--nav-hi); font-size: 12px;
   }
   .nav-drill-search input::placeholder { color: var(--nav-text-3); }
+  .nav-drill-tags-toggle {
+    margin-top: 4px; padding: 2px 0; border: 0; background: none; color: var(--nav-accent-soft);
+    font-size: 11px; cursor: pointer;
+  }
+  .nav-drill-tags-toggle:hover { text-decoration: underline; }
+  .nav-drill-tags-body { padding-top: 4px; }
   /* Pinned to the 28px input, not the box: the tag filter appends its chip
      rows inside this box, so 50% of the box lands among the chips, and a
      plain descendant selector would also pin the chips' own icons. */

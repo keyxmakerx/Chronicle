@@ -18,6 +18,17 @@
   var activeTags = [];
   var tagCache = null;
   var savedFiltersCache = null;
+  // The chips are folded away by default: a campaign's tag list can fill
+  // the panel. Opening them is remembered for this browser.
+  var OPEN_KEY = 'chronicle.sidebarTagsOpen';
+
+  function readOpen() {
+    try { return localStorage.getItem(OPEN_KEY) === '1'; } catch (e) { return false; }
+  }
+
+  function writeOpen(open) {
+    try { localStorage.setItem(OPEN_KEY, open ? '1' : '0'); } catch (e) { /* storage blocked */ }
+  }
 
   function getCampaignID() {
     var parts = window.location.pathname.split('/');
@@ -55,7 +66,26 @@
       if ((!tags || tags.length === 0) && (!savedFilters || savedFilters.length === 0)) return;
 
       var wrapper = document.createElement('div');
-      wrapper.className = 'sidebar-tag-filter pt-1';
+      wrapper.className = 'sidebar-tag-filter';
+
+      // A quiet word, not a button: it only reveals the chips. It carries
+      // the active count so a hidden filter is never a silent one.
+      var toggle = document.createElement('button');
+      toggle.type = 'button';
+      toggle.className = 'nav-drill-tags-toggle';
+      toggle.id = 'sidebar-tags-toggle';
+      toggle.setAttribute('aria-controls', 'sidebar-tags-body');
+      var body = document.createElement('div');
+      body.id = 'sidebar-tags-body';
+      body.className = 'nav-drill-tags-body';
+      setOpen(toggle, body, readOpen());
+      toggle.addEventListener('click', function () {
+        var open = toggle.getAttribute('aria-expanded') !== 'true';
+        setOpen(toggle, body, open);
+        writeOpen(open);
+      });
+      wrapper.appendChild(toggle);
+      wrapper.appendChild(body);
 
       // Saved filter presets row.
       if (savedFilters && savedFilters.length > 0) {
@@ -82,7 +112,7 @@
           });
           presetsRow.appendChild(btn);
         });
-        wrapper.appendChild(presetsRow);
+        body.appendChild(presetsRow);
       }
 
       // Tag chips row.
@@ -133,11 +163,26 @@
           });
         });
         chipsRow.appendChild(saveBtn);
-        wrapper.appendChild(chipsRow);
+        body.appendChild(chipsRow);
       }
 
       searchDiv.appendChild(wrapper);
+      updateToggleLabel();
     });
+  }
+
+  function setOpen(toggle, body, open) {
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    body.hidden = !open;
+  }
+
+  /** "Tags", or "Tags · 2" while two tags filter the list. */
+  function updateToggleLabel() {
+    var toggle = document.getElementById('sidebar-tags-toggle');
+    if (!toggle) return;
+    toggle.textContent = activeTags.length > 0 ? 'Tags \u00b7 ' + activeTags.length : 'Tags';
+    toggle.setAttribute('aria-label', activeTags.length > 0
+      ? 'Tag filters, ' + activeTags.length + ' active' : 'Tag filters');
   }
 
   // Touch-friendly chip sizes: min-h-[32px] ensures adequate tap target
@@ -152,6 +197,7 @@
 
   /** Show/hide save button based on active tag count. */
   function updateSaveButton() {
+    updateToggleLabel();
     var btn = document.getElementById('sidebar-save-filter');
     if (!btn) return;
     if (activeTags.length > 0) {
