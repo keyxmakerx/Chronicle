@@ -57,28 +57,19 @@
       var wrapper = document.createElement('div');
       wrapper.className = 'sidebar-tag-filter';
 
-      // An icon at the search box's right end opens a drop-down over the
-      // list, so the filter costs no line of its own. The icon carries the
-      // active count so a closed filter is never a silent one.
-      var toggle = document.createElement('button');
-      toggle.type = 'button';
-      toggle.className = 'nav-drill-tags-toggle';
-      toggle.id = 'sidebar-tags-toggle';
-      toggle.setAttribute('aria-controls', 'sidebar-tags-body');
-      var body = document.createElement('div');
-      body.id = 'sidebar-tags-body';
-      body.className = 'nav-drill-tags-menu';
-      setOpen(toggle, body, false);
+      // An icon in the search box opens a drop-down over the list, so the
+      // filter costs no line; its count keeps a closed filter from being silent.
+      wrapper.innerHTML = '<button type="button" class="nav-drill-tags-toggle" id="sidebar-tags-toggle" title="Filter by tag" aria-label="Tag filters"' +
+        ' aria-controls="sidebar-tags-body" aria-expanded="false"><i class="fa-solid fa-tags" aria-hidden="true"></i>' +
+        '<span class="nav-drill-tags-n"></span></button><div class="nav-drill-tags-menu" id="sidebar-tags-body">' +
+        '<div class="nav-drill-tags-list"></div><div class="nav-drill-tags-foot" id="sidebar-save-filter" hidden>' +
+        '<button type="button">Save as filter</button><button type="button">Clear</button></div></div>';
+      var toggle = wrapper.firstChild;
+      var list = wrapper.querySelector('.nav-drill-tags-list');
+      var foot = list.nextSibling;
       toggle.addEventListener('click', function () {
-        setOpen(toggle, body, toggle.getAttribute('aria-expanded') !== 'true');
+        setOpen(toggle.getAttribute('aria-expanded') !== 'true');
       });
-      // The list scrolls; Save and Clear stay pinned under it.
-      var list = document.createElement('div');
-      list.className = 'nav-drill-tags-list';
-      body.appendChild(list);
-      wrapper.appendChild(toggle);
-      wrapper.appendChild(body);
-      searchDiv.classList.add('has-tags');
 
       // Saved filter presets row.
       if (savedFilters && savedFilters.length > 0) {
@@ -136,21 +127,8 @@
           chipsRow.appendChild(chip);
         });
 
-        // Save and Clear are quiet words, shown while tags are active.
-        var foot = document.createElement('div');
-        foot.id = 'sidebar-save-filter';
-        foot.className = 'nav-drill-tags-foot';
-        foot.hidden = true;
-        var saveBtn = document.createElement('button');
-        saveBtn.type = 'button';
-        saveBtn.textContent = 'Save as filter';
-        var clearBtn = document.createElement('button');
-        clearBtn.type = 'button';
-        clearBtn.textContent = 'Clear';
-        clearBtn.addEventListener('click', function () { applyPreset([]); });
-        foot.appendChild(saveBtn);
-        foot.appendChild(clearBtn);
-        saveBtn.addEventListener('click', function () {
+        foot.lastChild.addEventListener('click', function () { applyPreset([]); });
+        foot.firstChild.addEventListener('click', function () {
           var name = prompt('Filter name:');
           if (!name || !name.trim()) return;
           Chronicle.apiFetch('/campaigns/' + campaignId + '/saved-filters', {
@@ -167,28 +145,25 @@
           });
         });
         list.appendChild(chipsRow);
-        body.appendChild(foot);
       }
 
       searchDiv.appendChild(wrapper);
-      updateToggleLabel();
     });
   }
 
-  function setOpen(toggle, body, open) {
-    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
-    body.classList.toggle('is-open', open);
+  function setOpen(open) {
+    var toggle = document.getElementById('sidebar-tags-toggle');
+    if (!toggle) return;
+    toggle.setAttribute('aria-expanded', open);
+    toggle.nextSibling.classList.toggle('is-open', open);
   }
 
-  /** The tag icon, plus the count while tags filter the list. */
   function updateToggleLabel() {
     var toggle = document.getElementById('sidebar-tags-toggle');
     if (!toggle) return;
-    toggle.innerHTML = '<i class="fa-solid fa-tags" aria-hidden="true"></i>' +
-      (activeTags.length > 0 ? '<span class="nav-drill-tags-n">' + activeTags.length + '</span>' : '');
-    toggle.title = 'Filter by tag';
-    toggle.setAttribute('aria-label', activeTags.length > 0
-      ? 'Tag filters, ' + activeTags.length + ' active' : 'Tag filters');
+    var n = activeTags.length;
+    toggle.lastChild.textContent = n || '';
+    toggle.setAttribute('aria-label', 'Tag filters' + (n ? ', ' + n + ' active' : ''));
   }
 
   function updateChipStyle(chip, active) {
@@ -254,23 +229,16 @@
     }
   });
 
-  // The drop-down closes on a click outside it or on Escape, like a menu.
-  document.addEventListener('click', function (e) {
+  // Like a menu, the drop-down closes on a click outside it or on Escape.
+  function closeOn(e) {
     var toggle = document.getElementById('sidebar-tags-toggle');
-    var menu = document.getElementById('sidebar-tags-body');
-    if (!toggle || !menu || toggle.getAttribute('aria-expanded') !== 'true') return;
-    if (toggle.contains(e.target) || menu.contains(e.target)) return;
-    setOpen(toggle, menu, false);
-  });
-
-  document.addEventListener('keydown', function (e) {
-    if (e.key !== 'Escape') return;
-    var toggle = document.getElementById('sidebar-tags-toggle');
-    var menu = document.getElementById('sidebar-tags-body');
-    if (!toggle || !menu || toggle.getAttribute('aria-expanded') !== 'true') return;
-    setOpen(toggle, menu, false);
-    toggle.focus();
-  });
+    if (!toggle || toggle.getAttribute('aria-expanded') !== 'true') return;
+    if (e.type === 'click' ? toggle.parentNode.contains(e.target) : e.key !== 'Escape') return;
+    setOpen(false);
+    if (e.type !== 'click') toggle.focus();
+  }
+  document.addEventListener('click', closeOn);
+  document.addEventListener('keydown', closeOn);
 
   window.addEventListener('chronicle:navigated', reset);
 })();

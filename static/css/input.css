@@ -3478,7 +3478,7 @@
      (ui-standard "Motion"); Calm keeps only the fade, Off shows the end.
      Colours are the menu's own tokens, so a campaign's menu colour reaches
      it, and its shadow is the Depth choice's level-2 lift. */
-  .nav-drill-search.has-tags input { padding-right: 36px; }
+  .nav-drill-search:has(.nav-drill-tags-toggle) input { padding-right: 36px; }
   .nav-drill-tags-toggle {
     position: absolute; right: 18px; top: 14px; transform: translateY(-50%); height: 22px; min-width: 22px; padding: 0 5px;
     display: inline-flex; align-items: center; justify-content: center; gap: 4px; border: 0; border-radius: 6px;
