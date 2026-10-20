@@ -133,6 +133,19 @@
     if (!rowOpener || rowOpener !== lastOpener) closeDrill();
   });
 
+  // The hover peek (sidebar_cat_peek.js) loads the first time a mouse reaches a
+  // category, so it costs nothing on pages where nobody points at one.
+  var peekLoading = false;
+  document.addEventListener('pointerover', function (e) {
+    if (peekLoading || e.pointerType !== 'mouse' || !e.target.closest || !e.target.closest('#sidebar-nav-list [data-nav-peek]')) return;
+    peekLoading = true;
+    var src = document.getElementById('chronicle-nav-peek-src'), url = (src && src.getAttribute('data-src')) || '';
+    if (!/^\/static\/js\/sidebar_cat_peek\.js(\?v=[A-Za-z0-9._-]+)?$/.test(url)) return;
+    var sc = document.createElement('script');
+    sc.src = url;
+    document.head.appendChild(sc);
+  });
+
   function init() {
     var p = panel();
     if (!p) return;

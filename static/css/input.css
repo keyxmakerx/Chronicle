@@ -3204,6 +3204,9 @@
     color: var(--nav-text-3); font-variant-numeric: tabular-nums;
   }
   .nav-tr:empty { display: none; }
+  /* Every list row keeps the twisty's slot free on the right, twisty or
+     not, so counts and captions all end in one column. */
+  .nav-list .nav-row { padding-right: 36px; }
   .nav-hid { flex: none; display: grid; place-items: center; font-size: 11px; color: #fbbf24; opacity: 0.85; }
   .nav-ext { flex: none; font-size: 9px; color: var(--nav-text-3); }
   .nav-dot { display: block; width: 6px; height: 6px; border-radius: 50%; }
@@ -3235,7 +3238,6 @@
 
   /* A category's sub-categories: their own rows under a twisty. */
   .nav-rw { position: relative; }
-  .nav-rw > .nav-row { padding-right: 40px; }
   .nav-row.nav-sub { padding-left: 44px; font-size: 12.5px; color: var(--nav-text-2); }
   .nav-row.nav-sub .nav-ic { width: 10px; }
   .nav-subs { position: relative; }
@@ -3295,6 +3297,22 @@
     .nav-rw.has-more > .nav-more { opacity: 1; }
     .nav-rw.has-more > .nav-row .nav-tr { opacity: 1; }
   }
+
+  /* A category's hover peek (sidebar_cat_peek.js): a lifted card that starts at
+     the pointer, on the page's own surface so it follows light and dark. */
+  .nav-peek {
+    position: fixed; z-index: 1000; width: 220px; padding: 6px 0; border-radius: 12px;
+    background: var(--surface-raised); color: var(--surface-text-body); border: 1px solid var(--surface-border);
+    box-shadow: var(--surface-elev); font-size: 13px; animation: nav-peek-in 180ms var(--ease-out) both;
+  }
+  @keyframes nav-peek-in { from { opacity: 0; transform: translateX(-6px); } }
+  .nav-peek-h { padding: 4px 12px; font-size: 10.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--surface-text-muted); }
+  .nav-peek-i { display: block; padding: 5px 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit; }
+  .nav-peek-i:hover, .nav-peek-i:focus-visible { background: var(--surface-alt); color: var(--surface-text); }
+  .nav-peek-open { display: block; margin-top: 4px; padding: 7px 12px 3px; border-top: 1px solid var(--surface-border); color: var(--surface-accent); font-weight: 600; }
+  .nav-peek-open:hover { text-decoration: underline; }
+  .nav-rm .nav-peek { animation: none; }
+  @media (prefers-reduced-motion: reduce) { .nav-peek { animation: none; } }
 
   /* The row menu itself: fixed to the window, drawn on the menu's own dark
      surface whatever the page's theme, scrolling inside if it runs long. */
@@ -3451,11 +3469,9 @@
   .nav-drill-back:hover { color: var(--nav-hi); background: var(--nav-hover); }
   .nav-drill-back i { font-size: 11px; }
   .nav-drill-head { position: relative; flex: none; display: flex; align-items: center; gap: 10px; padding: 10px 14px 8px; }
-  .nav-drill-head-link { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; color: var(--nav-hi); }
-  .nav-drill-head-link:hover .nav-drill-name { text-decoration: underline; }
   .nav-drill-ic { width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center; flex: none; background: rgb(255 255 255 / 0.06); }
   .nav-drill-ic i { font-size: 12px; }
-  .nav-drill-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 13.5px; font-weight: 700; }
+  .nav-drill-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 13.5px; font-weight: 700; color: var(--nav-hi); }
   .nav-drill-count {
     flex: none; padding: 1px 7px; border-radius: 99px; background: rgb(255 255 255 / 0.07); color: var(--nav-text-2);
     font-size: 10.5px; font-weight: 650; font-variant-numeric: tabular-nums;
@@ -3466,6 +3482,18 @@
   }
   .nav-drill-new:hover { color: var(--nav-hi); background: var(--nav-hover); }
   .nav-drill-new:active { transform: scale(0.88); }
+  /* The category's own page, first in the panel: a framed row, since the
+     category's click only peeks and this is the way to the full page. */
+  .nav-drill-home {
+    flex: none; display: grid; grid-template-columns: 1fr auto; align-items: center; column-gap: 8px;
+    margin: 0 14px 10px; padding: 7px 10px; border: 1px solid var(--nav-line); border-radius: 8px;
+    color: var(--nav-hi); transition: border-color 120ms ease, background-color 120ms ease;
+  }
+  .nav-drill-home:hover, .nav-drill-home:focus-visible { border-color: rgb(var(--nav-accent) / 0.6); background: var(--nav-hover); }
+  .nav-drill-home[aria-current="page"] { border-color: rgb(var(--nav-accent) / 0.6); background: rgb(var(--nav-accent) / 0.14); }
+  .nav-drill-home-t { font-size: 12.5px; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .nav-drill-home-s { grid-column: 1; font-size: 11px; color: var(--nav-text-3); }
+  .nav-drill-home i { grid-column: 2; grid-row: 1 / span 2; font-size: 10px; color: var(--nav-text-3); }
   .nav-drill-search { flex: none; padding: 0 14px 8px; position: relative; }
   .nav-drill-search input {
     width: 100%; height: 28px; padding: 0 10px 0 28px; border-radius: 7px; border: 1px solid rgb(255 255 255 / 0.1);

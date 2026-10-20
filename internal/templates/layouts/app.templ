@@ -491,29 +491,25 @@ func SidebarEntitySubTypes(ctx context.Context, parentID int) []SidebarEntityTyp
 }
 
 // SidebarDrillPanel renders the slide-over panel's content for a category:
-// a back row to the categories list, a header (name, count, New) that
-// doubles as navigation to the category's own page, search, its
-// sub-categories as their own rows, the folder tree and Recent.
+// a back row to the categories list, a header (name, count, New), the
+// category's own page as the panel's first row, search, its sub-categories
+// as their own rows, the folder tree and Recent. The category row's click
+// only peeks, so the way to the full page leads the panel where mouse,
+// touch and keyboard all reach it first.
 templ SidebarDrillPanel(campaignID string, et SidebarEntityType, count int) {
 	<button type="button" class="nav-drill-back" data-drill-back>
 		<i class="fa-solid fa-chevron-left" aria-hidden="true"></i>
 		Categories
 	</button>
 	<div class="nav-drill-head">
-		<a
-			href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/%s", campaignID, et.Slug)) }
-			class="nav-drill-head-link"
-			title={ fmt.Sprintf("Open %s page", et.NamePlural) }
-		>
-			<span class="nav-drill-ic" style={ fmt.Sprintf("color: %s", et.Color) }>
-				if et.Icon != "" {
-					<i class={ "fa-solid " + et.Icon } aria-hidden="true"></i>
-				} else {
-					<span class="nav-dot" style={ fmt.Sprintf("background-color: %s", et.Color) }></span>
-				}
-			</span>
-			<span class="nav-drill-name">{ et.NamePlural }</span>
-		</a>
+		<span class="nav-drill-ic" style={ fmt.Sprintf("color: %s", et.Color) }>
+			if et.Icon != "" {
+				<i class={ "fa-solid " + et.Icon } aria-hidden="true"></i>
+			} else {
+				<span class="nav-dot" style={ fmt.Sprintf("background-color: %s", et.Color) }></span>
+			}
+		</span>
+		<span class="nav-drill-name">{ et.NamePlural }</span>
 		<span class="nav-drill-count">{ strconv.Itoa(count) }</span>
 		// Creating a page needs Scribe; a Player would get a 403.
 		if GetCampaignRole(ctx) >= 2 {
@@ -528,6 +524,17 @@ templ SidebarDrillPanel(campaignID string, et SidebarEntityType, count int) {
 			</a>
 		}
 	</div>
+	<a
+		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/%s", campaignID, et.Slug)) }
+		class="nav-drill-home"
+		if NavIsCurrent(ctx, fmt.Sprintf("cat:%d", et.ID)) {
+			aria-current="page"
+		}
+	>
+		<span class="nav-drill-home-t">{ fmt.Sprintf("%s page", et.NamePlural) }</span>
+		<span class="nav-drill-home-s">Overview, filters and every page</span>
+		<i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+	</a>
 	<div class="nav-drill-search">
 		<i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
 		<input

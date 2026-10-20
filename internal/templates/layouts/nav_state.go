@@ -320,6 +320,12 @@ func NavActiveDrillSlug(ctx context.Context) string {
 	return ""
 }
 
+// navPeekURL is where a category row's hover peek reads its five most
+// recently changed pages (sidebar_cat_peek.js).
+func navPeekURL(ctx context.Context, typeID int) string {
+	return "/campaigns/" + GetCampaignID(ctx) + "/entities/search?type=" + strconv.Itoa(typeID) + "&pages=1&peek=1"
+}
+
 // navDrillURL is a category row's drill-panel endpoint. Empty when the type
 // has gone missing (a row surviving from before its type was deleted), so the
 // row still shows but nothing opens for it.

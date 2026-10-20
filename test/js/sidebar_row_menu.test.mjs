@@ -1,6 +1,6 @@
 // sidebar_row_menu.test.mjs — what a sidebar row's menu offers: the owner's
 // pin, hide, move and Edit sidebar on their own rows, a member's own pin, and
-// Open in new tab on rows that go somewhere. Moves stay inside the row's own
+// Open in new tab on rows that go somewhere, and a category's own page. Moves stay inside the row's own
 // section, so Move up never quietly pins a row.
 
 import { test } from 'node:test';
@@ -88,6 +88,14 @@ test('a member gets their own pin and never the owner\'s actions', () => {
   assert.deepEqual(labels(menu.itemsFor({ key: 'cat:1', href: '', model: null, pin: true, editor })), ['Unpin']);
 });
 
+test('a category offers its own page, which its click only peeks into', () => {
+  const { editor, menu } = load();
+  assert.deepEqual(ids(menu.itemsFor({ key: 'cat:1', href: '', page: '/campaigns/c/locations', model: null, pin: null, editor })),
+    ['open-page', 'open-tab', 'copy-link']);
+  assert.deepEqual(ids(menu.itemsFor({ key: 'cat:2', href: '', page: '/campaigns/c/factions', model: model(), pin: null, editor })),
+    ['open-page', 'open-tab', 'copy-link', 'pin-all', 'hide', '|', 'up', 'down(off)', '|', 'edit']);
+});
+
 test('a row with nothing to offer opens no menu', () => {
   const { editor, menu } = load();
   assert.equal(menu.itemsFor({ key: 'cat:1', href: '', model: null, pin: null, editor }).length, 0);
@@ -99,4 +107,18 @@ test('working out Move does not change the arrangement', () => {
   const before = JSON.stringify(m);
   menu.itemsFor({ key: 'cat:1', href: '', model: m, pin: null, editor });
   assert.equal(JSON.stringify(m), before);
+});
+
+test('a page path is only ever a path on this site', () => {
+  const { menu } = load();
+  const cases = [
+    ['/campaigns/c1/locations', '/campaigns/c1/locations'],
+    ['//evil.example', '/evil.example'],
+    ['/\\evil.example', '/%5Cevil.example'],
+    ['javascript:alert(1)', ''],
+    ['https://evil.example/x', ''],
+    ['/', ''],
+    [null, ''],
+  ];
+  for (const [give, want] of cases) assert.equal(menu.sitePath(give), want, String(give));
 });
