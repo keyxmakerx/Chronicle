@@ -172,6 +172,7 @@ func (h *Handler) CreateHero(c echo.Context) error {
 		EntityTypeID: target.ID,
 		IsPrivate:    cc.Campaign.ParseSettings().ResolveNewEntityPrivacy(patch.Absent[bool]()),
 		FieldsData:   fields,
+		Playable:     true,
 	}
 	if access.ForSelf {
 		input.OwnerUserID = &userID

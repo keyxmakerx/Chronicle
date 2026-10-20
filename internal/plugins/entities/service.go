@@ -573,6 +573,7 @@ func (s *entityService) Create(ctx context.Context, campaignID, userID string, i
 		FieldsData:   fieldsData,
 		CreatedBy:    userID,
 		OwnerUserID:  ownerUserIDPtr,
+		Playable:     input.Playable,
 		CreatedAt:    now,
 		UpdatedAt:    now,
 	}

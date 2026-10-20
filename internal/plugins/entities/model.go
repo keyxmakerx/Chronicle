@@ -522,6 +522,9 @@ type CreateEntityInput struct {
 	// Foundry sync uses this to auto-claim character entities to the
 	// chronicle user mapped from the Foundry actor's owner.
 	OwnerUserID *string
+	// Playable marks the new page as a character a player may play before
+	// anyone claims it; the hero creator sets it for heroes a Director makes.
+	Playable bool
 }
 
 // UpdateEntityInput is the validated input for updating an entity: a

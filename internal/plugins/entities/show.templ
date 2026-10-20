@@ -82,7 +82,7 @@ templ entityPageBody(cc *campaigns.CampaignContext, entity *Entity, entityType *
 			     "Claimed by <player>" when owned, the actionable claim banner
 			     when unclaimed + claimable + the addon is enabled, nothing
 			     otherwise. ClaimEntity enforces the same rules server-side. -->
-			if hasEntityShowRenderer(entityType) {
+			if hasEntityShowRenderer(ctx, entityType) {
 				// A system-rendered page has no title block, so the header
 				// (name, claim marker, actions) is drawn here instead.
 				@systemPageHeader(cc, entity, entityType, claimingEnabled, ownerName, csrfToken, userID)
@@ -106,6 +106,7 @@ templ entityPageBody(cc *campaigns.CampaignContext, entity *Entity, entityType *
 				CSRFToken:      csrfToken,
 				UserID:         userID,
 				OwnerName:      ownerName,
+				NPCPage:        isNPCPageCtx(ctx),
 			}); comp != nil {
 				// A page renderer replaces the layout, and with it the title
 				// block that normally carries the panels, so mount them here.

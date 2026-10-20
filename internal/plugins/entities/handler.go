@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -727,10 +728,11 @@ func (h *Handler) prepareShowFor(c echo.Context, entityID string) (*showPage, er
 	// which the category's row shows while it is open.
 	// The page is shown as its version for the era the main calendar is in,
 	// when it has one; the DM can pick another era in the Eras panel.
-	entity, eraV := h.applyEraView(c.Request().Context(), cc, entity, entityType, userID, c.QueryParam("era"), c.QueryParam("hl"))
+	reqCtx := withNPCPage(c.Request().Context(), h.isNPCPage(c.Request().Context(), cc.Campaign.ID, entity, entityType))
+	entity, eraV := h.applyEraView(reqCtx, cc, entity, entityType, userID, c.QueryParam("era"), c.QueryParam("hl"))
 
 	categoryPath := fmt.Sprintf("/campaigns/%s/%s", cc.Campaign.ID, entityType.Slug)
-	ctx := layouts.SetActivePath(c.Request().Context(), categoryPath)
+	ctx := layouts.SetActivePath(reqCtx, categoryPath)
 	ctx = withEraView(ctx, eraV)
 	ctx = withPageMoons(ctx, h.loadPageMoons(c.Request().Context(), cc, entity.ID, userID))
 	ctx = layouts.WithNavHint(ctx, layouts.NavHint{TypeID: entityType.ID, PageName: entity.Name})
@@ -766,7 +768,7 @@ func (h *Handler) prepareShowFor(c echo.Context, entityID string) (*showPage, er
 	// it in). The addon switch is only checked when one of those applies.
 	if p := h.characterPanel; p != nil && p.URL != nil {
 		auto := autoCharacterPanel(entityType) ||
-			(hasEntityShowRenderer(entityType) && mayHoldCharacterPanel(entityType))
+			(hasEntityShowRenderer(ctx, entityType) && mayHoldCharacterPanel(entityType))
 		placed := layoutPlacesBlock(entityType.Layout, BlockCharacterItems)
 		if (auto || placed) && h.isAddonEnabled(c.Request().Context(), cc.Campaign.ID, p.Addon) {
 			ctx = withPagePanelURL(ctx, p.URL(cc.Campaign.ID, entity.ID))
@@ -779,7 +781,7 @@ func (h *Handler) prepareShowFor(c echo.Context, entityID string) (*showPage, er
 	// Widget panels the enabled game system mounts under the title. The
 	// resolver owns the system and page-type rules; this only carries the result.
 	if r := h.systemPanels; r != nil {
-		if panels := r(c.Request().Context(), cc.Campaign.ID, entityType, entity.OwnerUserID != nil); len(panels) > 0 {
+		if panels := r(c.Request().Context(), cc.Campaign.ID, entityType, isPlayersCharacter(entity)); len(panels) > 0 {
 			ctx = withSystemPanels(ctx, panels)
 		}
 	}
@@ -3253,7 +3255,42 @@ func (h *Handler) EntityTypeCustomizeTab(c echo.Context) error {
 	if et.CampaignID != cc.Campaign.ID {
 		return apperror.NewNotFound("entity type not found")
 	}
+	// An NPC type's unclaimed pages keep their layout under a hero-sheet
+	// renderer, so its layout tab must not say the layout goes unused.
+	ctx := withNPCPage(c.Request().Context(), h.typeOnNPCList(c.Request().Context(), cc.Campaign.ID, et.ID))
+	c.SetRequest(c.Request().WithContext(ctx))
 	return middleware.Render(c, http.StatusOK, EntityTypeCustomizeTabTmpl(cc, et, tab, middleware.GetCSRFToken(c)))
+}
+
+// typeOnNPCList reports whether the type, or a parent, is on the campaign's
+// NPC list. A lookup failure reads as not listed, which keeps a game
+// system's sheet where it was.
+func (h *Handler) typeOnNPCList(ctx context.Context, campaignID string, typeID int) bool {
+	if h.charLists == nil {
+		return false
+	}
+	ids, err := h.charLists.NPCTypeIDs(ctx, campaignID)
+	if err != nil {
+		slog.Warn("npc page check: NPC list unavailable",
+			slog.String("campaign_id", campaignID), slog.Any("error", err))
+		return false
+	}
+	return slices.Contains(ids, typeID)
+}
+
+// isPlayersCharacter reports whether a page is a player's character, whatever
+// its type: claimed, or marked playable (a hero nobody has claimed yet).
+func isPlayersCharacter(entity *Entity) bool {
+	return entity != nil && (entity.OwnerUserID != nil || entity.Playable)
+}
+
+// isNPCPage reports whether a page is an NPC's: not a player's character, and
+// of a type on the NPC list.
+func (h *Handler) isNPCPage(ctx context.Context, campaignID string, entity *Entity, et *EntityType) bool {
+	if entity == nil || et == nil || isPlayersCharacter(entity) {
+		return false
+	}
+	return h.typeOnNPCList(ctx, campaignID, et.ID)
 }
 
 // --- Layout API ---

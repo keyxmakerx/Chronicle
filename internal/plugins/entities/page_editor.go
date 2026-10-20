@@ -40,7 +40,7 @@ func pageEditorOn(ctx context.Context, cc *campaigns.CampaignContext, entity *En
 	if cc == nil || entity == nil || !isFullPage(ctx) || !layouts.PageLookAnnals(ctx) {
 		return false
 	}
-	if hasEntityShowRenderer(entityType) || eraViewOf(ctx).Shown() {
+	if hasEntityShowRenderer(ctx, entityType) || eraViewOf(ctx).Shown() {
 		return false
 	}
 	return CanEditIdentity(cc.MemberRole, entity, layouts.GetUserID(ctx))

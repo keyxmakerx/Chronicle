@@ -1,6 +1,7 @@
 package entities
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -60,7 +61,7 @@ func TestPageEditorState_DropsRemovedBlocks(t *testing.T) {
 	cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1"}, MemberRole: campaigns.RoleOwner}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			raw := pageEditorState(cc, &EntityType{ID: 7, Layout: tt.layout})
+			raw := pageEditorState(context.Background(), cc, &EntityType{ID: 7, Layout: tt.layout})
 			if strings.Contains(raw, `"permissions"`) {
 				t.Fatalf("Customizer state still carries a permissions block: %s", raw)
 			}

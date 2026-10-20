@@ -40,6 +40,10 @@ type EntityShowRenderContext struct {
 	UserID string
 	// OwnerName is the claimant's display name, empty when unclaimed or unresolved.
 	OwnerName string
+	// NPCPage is an unclaimed page of a type on the NPC list. A renderer bound
+	// to the character preset draws a hero's sheet, so it skips these pages
+	// and they keep their layout.
+	NPCPage bool
 }
 
 // EntityShowRenderer renders the inner contents of an entity show page
@@ -248,7 +252,7 @@ func lookupEntityShowRenderer(ctx EntityShowRenderContext) templ.Component {
 	// to a preset_category binding (the system-agnostic seam) so a system's
 	// widget can render the addon's Player Characters category.
 	rend, ok := reg.Lookup(ctx.EntityType.Slug)
-	if !ok && ctx.EntityType.PresetCategory != nil {
+	if !ok && ctx.EntityType.PresetCategory != nil && !ctx.NPCPage {
 		rend, ok = reg.LookupByPresetCategory(*ctx.EntityType.PresetCategory)
 	}
 	if !ok {
@@ -257,10 +261,24 @@ func lookupEntityShowRenderer(ctx EntityShowRenderContext) templ.Component {
 	return rend(ctx)
 }
 
+type npcPageKey struct{}
+
+// withNPCPage records whether the page being drawn is an NPC's (see
+// EntityShowRenderContext.NPCPage), so every check of who draws it agrees.
+func withNPCPage(ctx context.Context, npc bool) context.Context {
+	return context.WithValue(ctx, npcPageKey{}, npc)
+}
+
+// isNPCPageCtx reports what withNPCPage recorded; false when nothing did.
+func isNPCPageCtx(ctx context.Context) bool {
+	npc, _ := ctx.Value(npcPageKey{}).(bool)
+	return npc
+}
+
 // hasEntityShowRenderer reports whether a game-system renderer owns this
-// type's pages in place of the layout, by the same slug-then-category lookup
-// lookupEntityShowRenderer uses.
-func hasEntityShowRenderer(et *EntityType) bool {
+// page in place of the layout, by the same slug-then-category lookup
+// lookupEntityShowRenderer uses, NPC pages included.
+func hasEntityShowRenderer(ctx context.Context, et *EntityType) bool {
 	if et == nil {
 		return false
 	}
@@ -271,7 +289,7 @@ func hasEntityShowRenderer(et *EntityType) bool {
 	if _, ok := reg.Lookup(et.Slug); ok {
 		return true
 	}
-	if et.PresetCategory != nil {
+	if et.PresetCategory != nil && !isNPCPageCtx(ctx) {
 		_, ok := reg.LookupByPresetCategory(*et.PresetCategory)
 		return ok
 	}

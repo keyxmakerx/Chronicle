@@ -687,6 +687,33 @@ func TestCreate_OwnerUserID(t *testing.T) {
 	}
 }
 
+// TestCreate_Playable guards that a page made playable at create (the hero
+// creator's heroes) is stored that way, so it keeps the hero sheet before
+// anyone claims it.
+func TestCreate_Playable(t *testing.T) {
+	typeRepo := &mockEntityTypeRepo{
+		findByIDFn: func(_ context.Context, id int) (*EntityType, error) {
+			return &EntityType{ID: 1, CampaignID: "camp-1", Slug: "character"}, nil
+		},
+	}
+	for _, want := range []bool{true, false} {
+		var captured *Entity
+		entityRepo := &mockEntityRepo{
+			slugExistsFn: func(_ context.Context, _, _ string) (bool, error) { return false, nil },
+			createFn:     func(_ context.Context, e *Entity) error { captured = e; return nil },
+		}
+		svc := newTestService(entityRepo, typeRepo)
+		if _, err := svc.Create(context.Background(), "camp-1", "user-1", CreateEntityInput{
+			Name: "Vex", EntityTypeID: 1, Playable: want,
+		}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if captured == nil || captured.Playable != want {
+			t.Errorf("Playable = %v, want %v", captured != nil && captured.Playable, want)
+		}
+	}
+}
+
 func TestCreate_EmptyName(t *testing.T) {
 	svc := newTestService(&mockEntityRepo{}, &mockEntityTypeRepo{})
 	_, err := svc.Create(context.Background(), "camp-1", "user-1", CreateEntityInput{

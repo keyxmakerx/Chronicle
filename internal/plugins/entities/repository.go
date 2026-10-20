@@ -960,8 +960,8 @@ func (r *entityRepository) Create(ctx context.Context, entity *Entity) error {
 	query := `INSERT INTO entities (id, campaign_id, entity_type_id, name, slug, entry, entry_html, search_text,
 	          player_notes, player_notes_html,
 	          image_path, parent_id, parent_node_id, sort_order, type_label, is_private, is_template, fields_data,
-	          created_by, owner_user_id, map_id, created_at, updated_at)
-	          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	          created_by, owner_user_id, playable, map_id, created_at, updated_at)
+	          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	_, err = r.db.ExecContext(ctx, query,
 		entity.ID, entity.CampaignID, entity.EntityTypeID,
@@ -969,7 +969,7 @@ func (r *entityRepository) Create(ctx context.Context, entity *Entity) error {
 		entity.PlayerNotes, entity.PlayerNotesHTML,
 		entity.ImagePath, entity.ParentID, entity.ParentNodeID, entity.SortOrder, entity.TypeLabel,
 		entity.IsPrivate, entity.IsTemplate, fieldsJSON,
-		entity.CreatedBy, entity.OwnerUserID, entity.MapID, entity.CreatedAt, entity.UpdatedAt,
+		entity.CreatedBy, entity.OwnerUserID, entity.Playable, entity.MapID, entity.CreatedAt, entity.UpdatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("inserting entity: %w", err)

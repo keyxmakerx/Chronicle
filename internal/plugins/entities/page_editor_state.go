@@ -1,6 +1,7 @@
 package entities
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 
@@ -11,7 +12,7 @@ import (
 // (customize_page_editor.js) starts from: the category's layout as its pages
 // show it, whether nothing is saved yet (the page then draws a built-in
 // arrangement), and the addresses it reads.
-func pageEditorState(cc *campaigns.CampaignContext, et *EntityType) string {
+func pageEditorState(ctx context.Context, cc *campaigns.CampaignContext, et *EntityType) string {
 	base := fmt.Sprintf("/campaigns/%s", cc.Campaign.ID)
 	layout, unsaved := withoutRemovedBlocks(et.Layout), len(et.Layout.Rows) == 0
 	if unsaved {
@@ -25,7 +26,7 @@ func pageEditorState(cc *campaigns.CampaignContext, et *EntityType) string {
 		"plural":      et.NamePlural,
 		"layout":      layout,
 		"fields":      len(et.Fields),
-		"systemDrawn": hasEntityShowRenderer(et),
+		"systemDrawn": hasEntityShowRenderer(ctx, et),
 		"blockTypes":  fmt.Sprintf("%s/entity-types/block-types?context=template", base),
 		"preview":     fmt.Sprintf("%s/entity-types/%d/layout-preview", base, et.ID),
 		"presets":     fmt.Sprintf("%s/layout-presets", base),
