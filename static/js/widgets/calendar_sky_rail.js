@@ -1,14 +1,16 @@
 /**
  * calendar_sky_rail.js: the sky's hand controls on the calendar's own page.
  *
- * A rail of the sun and each moon sits under the docked sky (SkyPane.Dock in
- * sky_pane.js). Pressing a body on the rail, or the body itself in the sky,
- * lifts a tray over the calendar with that body's look: the sun's kind of
- * star and colour; a moon's colour, how strongly the sky shows it, and
- * whether players see it. Each pick saves at once through
- * PUT .../sun, .../moons/:id/look and .../moons/:id/hidden, and the sky
- * redraws from the saved values. "See it as a player" redraws the sky
- * without the hidden moons.
+ * For the owner the header's Moons button opens a menu of the sun and each
+ * moon that slides down from under the header's button row and floats over
+ * the calendar, riding up and down with the docked sky (SkyPane.Dock in
+ * sky_pane.js) as it folds and opens. Pressing a body in the menu, or the body itself in
+ * the sky, lifts a tray with that body's look: the sun's kind of star and
+ * colour; a moon's colour, how strongly the sky shows it, and whether
+ * players see it. Each pick saves at once through PUT .../sun,
+ * .../moons/:id/look and .../moons/:id/hidden, and the sky redraws from the
+ * saved values. The menu's last entry opens the moon phases the button
+ * opens for everyone else. Seeing it as a player is the editor deck's job.
  *
  * calendar_view.js loads this file on demand for the campaign owner only
  * (the look routes are Owner only), so other viewers never download it.
@@ -53,20 +55,31 @@
     this.view = view;
     this.rail = view.el.querySelector('#cal5-skyrail');
     this.tray = view.el.querySelector('#cal5-skytray');
+    this.btn = view.el.querySelector('#cal5-moonbtn');
+    this.sky = view.el.querySelector('#cal5-skywrap');
     this.sel = null;
-    this.asPlayer = false;
+    this.shown = false;
     this.flashT = 0;
-    if (!this.rail || !this.tray || !view.skyDock) throw new Error('sky rail: no sky to edit');
+    if (!this.rail || !this.tray || !this.btn || !view.skyDock) throw new Error('sky rail: no sky to edit');
     this._click = function (e) { self.onClick(e); };
     this._input = function (e) { self.onInput(e); };
     this._change = function (e) { self.onChange(e); };
     this._key = function (e) { self.onKey(e); };
     this._sky = function (e) { self.onSky(e); };
     this._hover = function (e) { self.onHover(e); };
-    // Pressing anywhere else on the page puts the tray away, as the calendar's own panels do.
+    // Pressing anywhere else on the page puts the menu away, as the calendar's
+    // own panels do; folding or opening the sky carries it along instead.
     this._outside = function (e) {
-      if (self.sel && !self.tray.contains(e.target) && !self.rail.contains(e.target) && e.target !== self.canvas) self.close();
+      var t = e.target;
+      if (!self.shown || self.tray.contains(t) || self.rail.contains(t) || self.btn.contains(t) || t === self.canvas || (t.closest && t.closest('#cal5-skybtn'))) return;
+      self.hide();
     };
+    // The menu drops from under the Moons button, whose row sits on the sky's
+    // lower edge, so it rides up and down as the sky folds and opens.
+    this._place = function () {
+      self.rail.style.top = Math.round(self.btn.getBoundingClientRect().bottom - view.calEl.getBoundingClientRect().top + 6) + 'px';
+    };
+    if (window.ResizeObserver && this.sky) { this._ro = new ResizeObserver(this._place); this._ro.observe(this.sky); }
     document.addEventListener('pointerdown', this._outside, true);
     [this.rail, this.tray].forEach(function (el) {
       el.addEventListener('click', self._click);
@@ -77,7 +90,12 @@
     this.canvas = view.skyDock.canvas;
     this.canvas.addEventListener('click', this._sky);
     this.canvas.addEventListener('mousemove', this._hover);
+    this.rail.innerHTML = '<div class="srin"></div>';
+    this.inner = this.rail.firstChild;
+    this.btn.setAttribute('aria-controls', 'cal5-skyrail');
+    this.btn.setAttribute('aria-haspopup', 'true');
     this.rail.hidden = false;
+    this._place();
     this.render();
   }
 
@@ -85,8 +103,7 @@
     return (this.view.cal.moons || []).filter(function (m) { return String(m.id) === String(id); })[0] || null;
   };
   Rail.prototype.bodies = function () {
-    var as = this.asPlayer;
-    return ['sun'].concat((this.view.cal.moons || []).filter(function (m) { return !(as && m.hidden_from_players); }).map(function (m) { return String(m.id); }));
+    return ['sun'].concat((this.view.cal.moons || []).map(function (m) { return String(m.id); }));
   };
   Rail.prototype.nameOf = function (b) { return b === 'sun' ? 'The sun' : (this.moon(b) || {}).name || 'Moon'; };
   Rail.prototype.colorOf = function (b) {
@@ -94,7 +111,7 @@
     return hex6((this.moon(b) || {}).color);
   };
 
-  // The rail: one chip per body, its ring filled as far as the moon's colour
+  // The menu: one chip per body, its ring filled as far as the moon's colour
   // strength, an amber edge on a moon players can't see.
   Rail.prototype.render = function () {
     var self = this, up = this.view.skyDock.bodiesUp(), list = this.bodies();
@@ -103,15 +120,13 @@
       var p = m ? Math.round(strengthOf(m) * 100) : 100;
       var tab = self.sel ? on : i === 0;
       return '<button type="button" class="src" role="option" id="cal5-sr-' + esc(b) + '" data-sr="' + esc(b) + '" aria-selected="' + on + '" tabindex="' + (tab ? 0 : -1) + '"' +
-        (m && m.hidden_from_players ? ' data-dm-only' : '') + (self.asPlayer ? ' aria-disabled="true"' : '') + '>' +
+        (m && m.hidden_from_players ? ' data-dm-only' : '') + '>' +
         '<span class="srr" style="--c:' + self.colorOf(b) + ';--p:' + p + '" aria-hidden="true"><i></i></span>' +
-        '<span class="srn">' + esc(self.nameOf(b)) + '</span>' +
-        (up[b === 'sun' ? 'sun' : m.id] ? '' : '<small>below the horizon</small>') + '</button>';
+        '<span class="srt"><span class="srn">' + esc(self.nameOf(b)) + '</span>' +
+        '<small>' + (up[b === 'sun' ? 'sun' : m.id] ? 'In the sky' : 'Below the horizon') + '</small></span></button>';
     }).join('');
-    this.rail.classList.toggle('asplayer', this.asPlayer);
-    this.rail.innerHTML = '<div class="srl" role="listbox" aria-orientation="horizontal" aria-label="The sun and moons">' + chips + '</div>' +
-      '<button type="button" class="srp" data-sr-player aria-pressed="' + this.asPlayer + '">' +
-      '<i class="fa-solid ' + (this.asPlayer ? 'fa-eye' : 'fa-user') + '"></i><span>' + (this.asPlayer ? 'Back to your view' : 'See it as a player') + '</span></button>';
+    this.inner.innerHTML = '<div class="srl" role="listbox" aria-orientation="horizontal" aria-label="The sun and moons">' + chips + '</div>' +
+      '<button type="button" class="srp" data-sr-phases><i class="fa-solid fa-moon" aria-hidden="true"></i><span>Moon phases</span></button>';
   };
 
   Rail.prototype.sunFields = function () {
@@ -154,7 +169,8 @@
     return true;
   };
   Rail.prototype.select = function (b, focusChip) {
-    if (this.asPlayer) return;
+    if (this.view._players) return;
+    if (!this.shown) this.show(false);
     var was = this.sel;
     this.sel = b;
     this.render();
@@ -174,6 +190,31 @@
     Chronicle.calendarPanel.growClose(this.tray, this.chip(b));
   };
   Rail.prototype.chip = function (b) { return b ? this.rail.querySelector('[data-sr="' + b + '"]') : null; };
+
+  // The menu slides down out of the sky's edge; focusChip moves the keyboard
+  // into it when the button was pressed from the keyboard.
+  Rail.prototype.show = function (focusChip) {
+    if (this.shown || this.view._players) return;
+    this.view.closeMoonView();
+    this.shown = true;
+    this._place();
+    this.render();
+    this.rail.classList.remove('instant');
+    this.rail.classList.add('open');
+    this.btn.setAttribute('aria-expanded', 'true');
+    if (focusChip) { var c = this.rail.querySelector('.src[tabindex="0"]'); if (c) c.focus({ preventScroll: true }); }
+  };
+  // instant drops it without the slide (the page is changing under it).
+  Rail.prototype.hide = function (instant, focusBtn) {
+    if (!this.shown) return;
+    this.close(true);
+    this.shown = false;
+    this.rail.classList.toggle('instant', !!instant);
+    this.rail.classList.remove('open');
+    this.btn.setAttribute('aria-expanded', 'false');
+    if (focusBtn) this.btn.focus({ preventScroll: true });
+  };
+  Rail.prototype.toggle = function (focusChip) { if (this.shown) this.hide(false, focusChip); else this.show(focusChip); };
 
   // The sky redraws from the calendar as it now stands; the rail's rings follow.
   Rail.prototype.redrawSky = function () {
@@ -228,19 +269,8 @@
 
   Rail.prototype.onClick = function (e) {
     var t, v = this.view;
-    if ((t = e.target.closest('[data-sr-player]'))) {
-      this.asPlayer = !this.asPlayer;
-      if (this.asPlayer) this.close(true);
-      v._skyAsPlayer = this.asPlayer;
-      this.render();
-      this.redrawSky();
-      var again = this.rail.querySelector('[data-sr-player]');
-      if (again) again.focus({ preventScroll: true });
-      v._announce(this.asPlayer ? 'Showing the sky as players see it. Hidden moons are left out.' : 'Showing the sky as you see it.');
-      return;
-    }
+    if (e.target.closest('[data-sr-phases]')) { this.hide(true); v.openMoonView(); return; }
     if ((t = e.target.closest('[data-sr]'))) {
-      if (this.asPlayer) return;
       if (this.sel === t.dataset.sr) this.close(); else this.select(t.dataset.sr, true);
       return;
     }
@@ -298,8 +328,9 @@
   };
   Rail.prototype.onKey = function (e) {
     if (e.key === 'Escape' && this.sel) { e.stopPropagation(); var b = this.sel; this.close(); var c = this.chip(b); if (c) c.focus({ preventScroll: true }); return; }
+    if (e.key === 'Escape' && this.shown) { e.stopPropagation(); this.hide(false, true); return; }
     var chip = e.target.closest && e.target.closest('.src');
-    if (!chip || this.asPlayer || ['ArrowRight', 'ArrowLeft', 'Home', 'End'].indexOf(e.key) < 0) return;
+    if (!chip || ['ArrowRight', 'ArrowLeft', 'Home', 'End'].indexOf(e.key) < 0) return;
     e.preventDefault();
     var list = this.bodies(), i = list.indexOf(chip.dataset.sr);
     i = e.key === 'Home' ? 0 : e.key === 'End' ? list.length - 1 : (i + (e.key === 'ArrowRight' ? 1 : -1) + list.length) % list.length;
@@ -313,14 +344,14 @@
     return this.view.skyDock.bodyAt(e.clientX - r.left, e.clientY - r.top);
   };
   Rail.prototype.onSky = function (e) {
-    if (this.asPlayer) return;
+    if (this.view._players) return;
     var b = this.at(e);
     if (b == null) return;
     b = String(b);
     if (this.sel === b) this.close(); else this.select(b, true);
   };
   Rail.prototype.onHover = function (e) {
-    this.canvas.style.cursor = !this.asPlayer && this.at(e) != null ? 'pointer' : '';
+    this.canvas.style.cursor = !this.view._players && this.at(e) != null ? 'pointer' : '';
   };
   // A ring round the chosen body, drawn over each frame of the sky.
   Rail.prototype.overlay = function (ctx, st, d, y) {
@@ -336,7 +367,7 @@
     ctx.lineWidth = 1.75; ctx.strokeStyle = 'rgba(255,255,255,.92)'; ctx.stroke();
     ctx.restore();
   };
-  // The sky folding away puts the tray away with it.
+  // The sky folding or opening puts the tray away; the menu rides with the sky's edge.
   Rail.prototype.folding = function () { this.close(true); };
   Rail.prototype.destroy = function () {
     var self = this;
@@ -350,7 +381,7 @@
     this.canvas.removeEventListener('click', this._sky);
     this.canvas.removeEventListener('mousemove', this._hover);
     document.removeEventListener('pointerdown', this._outside, true);
-    this.view._skyAsPlayer = false;
+    if (this._ro) this._ro.disconnect();
   };
 
   window.Chronicle = window.Chronicle || {};
