@@ -1665,6 +1665,12 @@
       setTimeout(function () { var t = bar.querySelector('.tbtr'); if (t) t.focus({ preventScroll: true }); }, reducedMotion() ? 20 : 320);
     },
 
+    // The bar is only there while the sky is open: folding the sky hides it
+    // without forgetting it, and it is back when the sky opens.
+    _timeShowing: function () {
+      return !!this._timeUp && !!this.skyDock && !!this.skyDock.S.layout;
+    },
+
     // Putting the bar away ends the look: what shows is today again.
     closeTimeBar: function () {
       if (!this._timeUp) return;
@@ -5105,14 +5111,14 @@
         var set = e.target.closest('[data-today-set]');
         if (!set) return;
         if (self.popEl.classList.contains('open')) { self.closePop(); return; }
-        if (self._timeUp) { self.closeTimeBar(); return; }
+        if (self._timeShowing()) { self.closeTimeBar(); return; }
         self.openTimeBar(set);
       });
       // While the time bar is up, a click on a day looks at that day, at the
       // same time of day, instead of opening its card. Editing picks days,
       // so there the editor keeps the click.
       this.stageEl.addEventListener('click', function (e) {
-        if (!self._timeUp || !self.skyDock || (self._editor && self._editor.editing)) return;
+        if (!self._timeShowing() || (self._editor && self._editor.editing)) return;
         var day = e.target.closest('.day[data-key]');
         if (!day) return;
         e.stopPropagation();
@@ -5166,6 +5172,7 @@
         if (self._roll) { if (!self._rollHolds()) self._roll.close(); return; }
         if (self.wingFor) { self.closeWing(); return; }
         if (self._eraOpen != null) { self.closeEraPanel({ refocus: true }); return; }
+        if (self._timeShowing()) self.closeTimeBar();
       };
       document.addEventListener('keydown', this._escHandler);
 

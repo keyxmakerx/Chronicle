@@ -240,7 +240,7 @@
 .cal-v5 .todaypill .td{color:var(--ink);font-weight:600;padding:0 3px}
 .cal-v5 .todaypill .tw{color:var(--mut);margin-left:7px;overflow:hidden;text-overflow:ellipsis}
 .cal-v5 .todaypill.step{box-shadow:0 0 0 1px var(--hair);background:var(--lift);padding:0 3px}
-/* Inside the pill the label needs the same room from the rounded end as the arrow has from the other. */
+/* Inside the pill the label needs room from the rounded end. */
 .cal-v5 .todaypill.step .tl{margin-left:10px}
 .cal-v5 .todaypill .td.bump{animation:cal5-bump .45s var(--spring)}
 .cal-v5 .todaypill .tdset{height:26px;padding:0 8px;border-radius:8px;font:600 12.5px/1 var(--sans);color:var(--ink)}
@@ -2022,8 +2022,8 @@
 .cal-v5 .tbq{flex:none;display:inline-flex;align-items:center;gap:5px;padding:5px 6px;border-radius:6px;opacity:.9;white-space:nowrap}
 .cal-v5 .tbq:hover{opacity:1;text-decoration:underline;text-underline-offset:3px}
 .cal-v5 .tbq[hidden]{display:none}
-.cal-v5 .tbgo{flex:none;padding:7px 13px;border-radius:99px;background:#fff;color:#111827!important;font-weight:650!important;box-shadow:0 1px 3px rgba(0,0,0,.35)}
-.cal-v5 .tbgo:disabled{opacity:.35;cursor:default;box-shadow:none}
+.cal-v5 .timebar .tbgo{flex:none;padding:7px 13px;border-radius:99px;background:#fff;color:#111827;font-weight:650;box-shadow:0 1px 3px rgba(0,0,0,.35)}
+.cal-v5 .timebar .tbgo:disabled{opacity:.35;cursor:default;box-shadow:none}
 .cal-v5 .tbx{flex:none;display:grid;place-items:center;width:26px;height:26px;border-radius:50%;opacity:.8}
 .cal-v5 .tbx:hover{opacity:1;background:oklch(1 0 0 / .14)}
 .cal-v5 .timebar button:focus-visible, .cal-v5 .tbtr:focus-visible{outline:1.5px solid #fff;outline-offset:2px}
