@@ -947,6 +947,45 @@ func (h *Handler) SetMoonHiddenAPI(c echo.Context) error {
 	return c.NoContent(http.StatusOK)
 }
 
+// SetMoonLookAPI sets one moon's colour and colour strength, from the sky's
+// hand controls. Owner only, like the sun's look; a null strength returns
+// the moon to the sky's default.
+// PUT /campaigns/:id/calendars/:calid/moons/:moonID/look
+func (h *Handler) SetMoonLookAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	moonID, err := strconv.Atoi(c.Param("moonID"))
+	if err != nil {
+		return apperror.NewBadRequest("invalid moon id")
+	}
+	var req struct {
+		Color    string   `json:"color"`
+		Strength *float64 `json:"strength"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request")
+	}
+	if err := h.svc.SetMoonLook(c.Request().Context(), moonID, c.Param("calid"), cc.Campaign.ID, req.Color, req.Strength); err != nil {
+		return err
+	}
+	return c.NoContent(http.StatusOK)
+}
+
+// SaveSunLookAPI sets the calendar's sun: its kind of star and an optional
+// exact colour (null keeps the kind's own). Owner only, like the rest of
+// the calendar settings.
+// PUT /campaigns/:id/calendars/:calid/sun
+func (h *Handler) SaveSunLookAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	var look SunLook
+	if err := c.Bind(&look); err != nil {
+		return apperror.NewBadRequest("invalid request")
+	}
+	if err := h.svc.SaveSunLook(c.Request().Context(), c.Param("calid"), cc.Campaign.ID, look); err != nil {
+		return err
+	}
+	return c.NoContent(http.StatusOK)
+}
+
 // --- Day weather ---
 
 // ListDayWeatherAPI returns a year's day readings, or one month's when

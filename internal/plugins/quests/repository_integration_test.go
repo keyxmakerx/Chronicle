@@ -725,3 +725,89 @@ func TestBoardRepositoryIntegration_TypeHomes(t *testing.T) {
 		}
 	})
 }
+
+func TestBoardRepositoryIntegration_Fill(t *testing.T) {
+	fx := newQuestsFixture(t)
+	ctx := context.Background()
+	repo := NewBoardRepository(fx.db)
+	qrepo := NewQuestRepository(fx.db)
+	for _, b := range []Board{
+		{ID: "b-fill", CampaignID: fx.campaign, Home: PageHome(fx.page), Name: "Open", Who: WhoAll, Fill: []string{StatusNotStarted, StatusActive}},
+		{ID: "b-hand", CampaignID: fx.campaign, Home: PageHome(fx.page), Name: "Hand", Who: WhoAll},
+		{ID: "b-type", CampaignID: fx.campaign, Home: TypeHome(fx.typ), Name: "Quests", Who: WhoDM, Fill: []string{StatusDone}},
+		{ID: "b-other", CampaignID: fx.other, Home: PageHome(fx.otherPage), Name: "Theirs", Who: WhoAll, Fill: []string{StatusActive}},
+	} {
+		if err := repo.InsertBoard(ctx, b); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	t.Run("fill round trips and lists only this campaign's filling boards", func(t *testing.T) {
+		got, err := repo.ListFillBoards(ctx, fx.campaign)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids := map[string][]string{}
+		for _, b := range got {
+			ids[b.ID] = b.Fill
+		}
+		if len(ids) != 2 || !reflect.DeepEqual(ids["b-fill"], []string{StatusNotStarted, StatusActive}) || !reflect.DeepEqual(ids["b-type"], []string{StatusDone}) {
+			t.Fatalf("got %v", ids)
+		}
+		b, _ := repo.GetBoard(ctx, fx.campaign, PageHome(fx.page), "b-hand")
+		if b.Fill != nil {
+			t.Fatalf("a hand-pinned board reads fill %v, want none", b.Fill)
+		}
+		b.Fill = []string{StatusFailed}
+		if err := repo.UpdateBoard(ctx, *b); err != nil {
+			t.Fatal(err)
+		}
+		b, _ = repo.GetBoard(ctx, fx.campaign, PageHome(fx.page), "b-hand")
+		if !reflect.DeepEqual(b.Fill, []string{StatusFailed}) {
+			t.Fatalf("update kept fill %v", b.Fill)
+		}
+	})
+
+	t.Run("an auto notice is pinned once per board and reads back as auto", func(t *testing.T) {
+		for _, id := range []string{"a-1", "a-2"} {
+			if err := repo.InsertAutoItem(ctx, Item{ID: id, BoardID: "b-fill", CampaignID: fx.campaign, X: 3, Y: 5, W: 20, RefID: fx.page2}); err != nil {
+				t.Fatalf("%s: %v", id, err)
+			}
+		}
+		if err := repo.InsertItem(ctx, Item{ID: "h-1", BoardID: "b-fill", CampaignID: fx.campaign, Kind: KindNotice, ByDM: true, RefID: fx.page2}); err != nil {
+			t.Fatalf("a hand-pinned notice of the same quest: %v", err)
+		}
+		items, err := repo.ListItems(ctx, fx.campaign, []string{"b-fill"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		auto := 0
+		for _, it := range items {
+			if it.Auto {
+				auto++
+				if it.Kind != KindNotice || !it.ByDM || it.RefID != fx.page2 {
+					t.Errorf("auto item stored as %+v", it)
+				}
+			}
+		}
+		if len(items) != 2 || auto != 1 {
+			t.Fatalf("got %d items, %d auto; want 2 and 1", len(items), auto)
+		}
+	})
+
+	t.Run("ListAll returns only this campaign's sheets", func(t *testing.T) {
+		if ok, err := qrepo.Save(ctx, fx.campaign, fx.page2, []byte(`{"status":"active"}`), 0, fx.user); err != nil || !ok {
+			t.Fatal(ok, err)
+		}
+		if ok, err := qrepo.Save(ctx, fx.other, fx.otherPage, []byte(`{"status":"active"}`), 0, fx.user); err != nil || !ok {
+			t.Fatal(ok, err)
+		}
+		got, err := qrepo.ListAll(ctx, fx.campaign)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != 1 || questStatus(got[fx.page2]) != StatusActive {
+			t.Fatalf("got %v", got)
+		}
+	})
+}

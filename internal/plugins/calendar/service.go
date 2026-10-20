@@ -339,6 +339,10 @@ type CalendarService interface {
 	// SetMoonStrength sets how strongly the sky shows a moon's colour, 0 to
 	// 1; nil returns it to the sky's default.
 	SetMoonStrength(ctx context.Context, moonID int, calendarID, campaignID string, strength *float64) error
+	// SetMoonLook sets a moon's colour and how strongly the sky shows it, as
+	// the sky's hand controls save them. Owner only at the route, like the
+	// sun's look.
+	SetMoonLook(ctx context.Context, moonID int, calendarID, campaignID, color string, strength *float64) error
 	// MoonsForEntity lists the moons whose lore page is entityID, in every
 	// calendar v may open and, for anyone who does not skip the per-user
 	// layer, without hidden moons, each with tonight's phase name on its
@@ -2794,6 +2798,30 @@ func (s *calendarService) SetMoonStrength(ctx context.Context, moonID int, calen
 		tint = &t
 	}
 	if err := s.calRepo.SetMoonTint(ctx, calendarID, moonID, tint); err != nil {
+		return err
+	}
+	s.publish(PubStructureUpdated, campaignID, calendarID, nil)
+	return nil
+}
+
+// SetMoonLook sets a moon's colour and colour strength together.
+func (s *calendarService) SetMoonLook(ctx context.Context, moonID int, calendarID, campaignID, color string, strength *float64) error {
+	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
+		return err
+	}
+	color = strings.TrimSpace(color)
+	if !hexColorPattern.MatchString(color) {
+		return apperror.NewBadRequest("color must be a hex color (#rgb or #rrggbb)")
+	}
+	var tint *string
+	if strength != nil {
+		t, err := MoonStrengthTint(*strength)
+		if err != nil {
+			return err
+		}
+		tint = &t
+	}
+	if err := s.calRepo.SetMoonLook(ctx, calendarID, moonID, color, tint); err != nil {
 		return err
 	}
 	s.publish(PubStructureUpdated, campaignID, calendarID, nil)

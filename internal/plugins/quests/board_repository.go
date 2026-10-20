@@ -12,6 +12,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/go-sql-driver/mysql"
 )
 
 // BoardRepository is the persistence boundary for boards and their items.
@@ -20,6 +22,9 @@ type BoardRepository interface {
 	SetLooks(ctx context.Context, campaignID string, h Home, l Looks) error
 
 	ListBoards(ctx context.Context, campaignID string, h Home) ([]Board, error)
+	// ListFillBoards returns every board in the campaign that fills itself
+	// with quests, whatever its home.
+	ListFillBoards(ctx context.Context, campaignID string) ([]Board, error)
 	// ListHomes returns every home in the campaign with at least one board.
 	ListHomes(ctx context.Context, campaignID string) ([]Home, error)
 	// GetBoard returns NotFound unless the board belongs to the home and campaign.
@@ -35,6 +40,9 @@ type BoardRepository interface {
 	GetItem(ctx context.Context, campaignID, boardID, itemID string) (*Item, error)
 	CountItems(ctx context.Context, campaignID, boardID string) (int, error)
 	InsertItem(ctx context.Context, it Item) error
+	// InsertAutoItem pins a notice the board placed itself; a second one for
+	// the same quest on the same board is silently skipped.
+	InsertAutoItem(ctx context.Context, it Item) error
 	UpdateItem(ctx context.Context, it Item) error
 	DeleteItems(ctx context.Context, campaignID, boardID string, ids []string) error
 }
@@ -91,17 +99,46 @@ func (r *sqlBoardRepository) SetLooks(ctx context.Context, campaignID string, h 
 	return nil
 }
 
-const boardColumns = `id, campaign_id, entity_id, entity_type_id, name, who, sort_order`
+const boardColumns = `id, campaign_id, entity_id, entity_type_id, name, who, fill, sort_order`
 
 func scanBoard(sc interface{ Scan(...any) error }) (Board, error) {
 	var b Board
 	var ent sql.NullString
 	var typ sql.NullInt64
-	if err := sc.Scan(&b.ID, &b.CampaignID, &ent, &typ, &b.Name, &b.Who, &b.SortOrder); err != nil {
+	var fill string
+	if err := sc.Scan(&b.ID, &b.CampaignID, &ent, &typ, &b.Name, &b.Who, &fill, &b.SortOrder); err != nil {
 		return Board{}, err
 	}
 	b.Home = Home{EntityID: ent.String, TypeID: int(typ.Int64)}
+	b.Fill = splitFill(fill)
 	return b, nil
+}
+
+// splitFill reads the stored comma list; the service validated it on write.
+func splitFill(s string) []string {
+	if s == "" {
+		return nil
+	}
+	return strings.Split(s, ",")
+}
+
+func (r *sqlBoardRepository) ListFillBoards(ctx context.Context, campaignID string) ([]Board, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT `+boardColumns+` FROM quest_boards
+		 WHERE campaign_id = ? AND fill <> '' ORDER BY sort_order, created_at, id`, campaignID)
+	if err != nil {
+		return nil, fmt.Errorf("list fill boards: %w", err)
+	}
+	defer rows.Close()
+	var out []Board
+	for rows.Next() {
+		b, err := scanBoard(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan board: %w", err)
+		}
+		out = append(out, b)
+	}
+	return out, rows.Err()
 }
 
 func (r *sqlBoardRepository) ListBoards(ctx context.Context, campaignID string, h Home) ([]Board, error) {
@@ -172,8 +209,8 @@ func (r *sqlBoardRepository) InsertBoard(ctx context.Context, b Board) error {
 		typeID = b.Home.TypeID
 	}
 	_, err := r.db.ExecContext(ctx,
-		`INSERT INTO quest_boards (id, campaign_id, entity_id, entity_type_id, name, who, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		b.ID, b.CampaignID, nullable(b.Home.EntityID), typeID, b.Name, b.Who, b.SortOrder)
+		`INSERT INTO quest_boards (id, campaign_id, entity_id, entity_type_id, name, who, fill, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		b.ID, b.CampaignID, nullable(b.Home.EntityID), typeID, b.Name, b.Who, strings.Join(b.Fill, ","), b.SortOrder)
 	if err != nil {
 		return fmt.Errorf("insert board: %w", err)
 	}
@@ -186,8 +223,8 @@ func (r *sqlBoardRepository) UpdateBoard(ctx context.Context, b Board) error {
 		return fmt.Errorf("update board: %w", err)
 	}
 	if _, err := r.db.ExecContext(ctx,
-		`UPDATE quest_boards SET name = ?, who = ? WHERE id = ? AND `+where+` AND campaign_id = ?`,
-		b.Name, b.Who, b.ID, arg, b.CampaignID); err != nil {
+		`UPDATE quest_boards SET name = ?, who = ?, fill = ? WHERE id = ? AND `+where+` AND campaign_id = ?`,
+		b.Name, b.Who, strings.Join(b.Fill, ","), b.ID, arg, b.CampaignID); err != nil {
 		return fmt.Errorf("update board: %w", err)
 	}
 	return nil
@@ -225,16 +262,17 @@ func (r *sqlBoardRepository) SetOrder(ctx context.Context, campaignID string, h 
 	return tx.Commit()
 }
 
-const itemColumns = `id, board_id, campaign_id, kind, x, y, w, r, owner_user_id, by_dm, hidden, text, ref_id, from_item_id, to_item_id`
+const itemColumns = `id, board_id, campaign_id, kind, x, y, w, r, owner_user_id, by_dm, hidden, text, ref_id, from_item_id, to_item_id, auto_ref`
 
 func scanItem(sc interface{ Scan(...any) error }) (Item, error) {
 	var it Item
-	var owner, txt, ref, from, to sql.NullString
+	var owner, txt, ref, from, to, auto sql.NullString
 	if err := sc.Scan(&it.ID, &it.BoardID, &it.CampaignID, &it.Kind, &it.X, &it.Y, &it.W, &it.R,
-		&owner, &it.ByDM, &it.Hidden, &txt, &ref, &from, &to); err != nil {
+		&owner, &it.ByDM, &it.Hidden, &txt, &ref, &from, &to, &auto); err != nil {
 		return Item{}, err
 	}
 	it.OwnerUserID, it.Text, it.RefID, it.FromID, it.ToID = owner.String, txt.String, ref.String, from.String, to.String
+	it.Auto = auto.Valid
 	return it, nil
 }
 
@@ -296,11 +334,25 @@ func (r *sqlBoardRepository) CountItems(ctx context.Context, campaignID, boardID
 
 func (r *sqlBoardRepository) InsertItem(ctx context.Context, it Item) error {
 	_, err := r.db.ExecContext(ctx,
-		`INSERT INTO quest_board_items (`+itemColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO quest_board_items (`+itemColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
 		it.ID, it.BoardID, it.CampaignID, it.Kind, it.X, it.Y, it.W, it.R,
 		nullable(it.OwnerUserID), it.ByDM, it.Hidden, nullable(it.Text), nullable(it.RefID), nullable(it.FromID), nullable(it.ToID))
 	if err != nil {
 		return fmt.Errorf("insert item: %w", err)
+	}
+	return nil
+}
+
+func (r *sqlBoardRepository) InsertAutoItem(ctx context.Context, it Item) error {
+	_, err := r.db.ExecContext(ctx,
+		`INSERT INTO quest_board_items (`+itemColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, 1, 0, NULL, ?, NULL, NULL, ?)`,
+		it.ID, it.BoardID, it.CampaignID, KindNotice, it.X, it.Y, it.W, it.R, it.RefID, it.RefID)
+	var me *mysql.MySQLError
+	if errors.As(err, &me) && me.Number == 1062 {
+		return nil // another save pinned this quest here first
+	}
+	if err != nil {
+		return fmt.Errorf("insert auto item: %w", err)
 	}
 	return nil
 }

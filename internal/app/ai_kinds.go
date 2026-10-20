@@ -14,6 +14,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/fieldrules"
 	"github.com/keyxmakerx/chronicle/internal/plugins/maps"
 	"github.com/keyxmakerx/chronicle/internal/plugins/pageblocks"
+	"github.com/keyxmakerx/chronicle/internal/plugins/quests"
 	"github.com/keyxmakerx/chronicle/internal/plugins/rolltables"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
 	"github.com/keyxmakerx/chronicle/internal/systems"
@@ -39,6 +40,8 @@ type aiDeps struct {
 	Maps            maps.MapService
 	Notes           notes.NoteService
 	PageBlocks      pageblocks.Service
+	Quests          quests.QuestService // nil while the quests plugin is degraded
+	Boards          quests.BoardService
 	Relations       relations.RelationService
 	RollTables      rolltables.Service
 	Sessions        sessions.SessionService

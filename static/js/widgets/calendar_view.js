@@ -836,6 +836,8 @@
   // and opacity move, and a leaf only shows while its face is towards
   // us, so every frame shows each leaf whole or not at all.
   // ---------------------------------------------------------------
+  // campaigns.RoleOwner: the sky's look (the horizon rail) is Owner only.
+  var ROLE_OWNER = 3;
   var FOLD = { d: 1100, lead: [30, 330], trail: [100, 390], rest: 490, fade: 80, cut: 76, shut: 450, back: 0.86, pressBack: 250, shade: 0.3, leafMin: 170, leafRatio: 1.5, letDown: 300, takeUp: 180, eye: 2.4 };
   // How long the held part of a long card takes to let down (or take up):
   // the base time for an ordinary card, more for a longer drop, so the
@@ -1332,6 +1334,7 @@
       this.gameNights = config.gameNights === true;
       this.apiBase = config.apiBase;
       this.engineSrc = config.engineSrc; // chronicle_gen.js, loaded only when an editor paints weather
+      this.skyRailSrc = config.skyRailSrc; // calendar_sky_rail.js, loaded only for the owner's sky controls
 
       var cfgEl = $('#calendar-config', el);
       try { this.cal = JSON.parse(cfgEl.dataset.calendar || '{}'); } catch (e) { this.cal = {}; }
@@ -1417,6 +1420,7 @@
       this._eraScene = null;
       this._eraOpen = null;
       this._eraOpener = null;
+      if (this.skyRail) { this.skyRail.destroy(); this.skyRail = null; }
       if (this.skyDock) this.skyDock.destroy();
       if (this._eventDrawer) this._eventDrawer.destroy();
       if (window.Chronicle && Chronicle.calendarGameNight) Chronicle.calendarGameNight.destroy(this);
@@ -1438,6 +1442,7 @@
           '<div class="skywrap" id="cal5-skywrap" hidden><div class="sky" role="img" aria-label="The sky"><canvas></canvas></div>' +
             (this.canAuthorDmOnly ? this._timeBarHTML() : '') +
           '</div>' +
+          (this.role >= ROLE_OWNER ? '<div class="skyrail" id="cal5-skyrail" hidden></div>' : '') +
           '<header class="head">' +
             '<div class="h-row h-top">' +
               '<button type="button" class="hub" id="cal5-hub" aria-haspopup="dialog" aria-expanded="false"><span>' + esc(this.cal.name || 'Calendar') + '</span><i class="fa-solid fa-chevron-down"></i></button>' +
@@ -1474,6 +1479,7 @@
           '<div class="wing" id="cal5-wing" role="dialog" aria-label="Day" tabindex="-1"></div>' +
           '<div class="evp" id="cal5-evp" role="dialog" aria-label="Event" tabindex="-1"></div>' +
           '<div class="mv" id="cal5-mv" role="dialog" aria-label="Moons" tabindex="-1"></div>' +
+          (this.role >= ROLE_OWNER ? '<div class="skytray" id="cal5-skytray" role="dialog" aria-label="The sky’s look" tabindex="-1"></div>' : '') +
           '<div class="mv fv" id="cal5-fv" role="dialog" aria-label="Who’s free" tabindex="-1"></div>' +
           '<div class="flap" id="cal5-flap" role="dialog" aria-label="Era" tabindex="-1"></div>' +
           '<div class="pop" id="cal5-pop" role="dialog" aria-label="Calendars you can see" tabindex="-1"></div>' +
@@ -1539,7 +1545,8 @@
             return out;
           },
           // The chip is outside every card, so pressing it puts them away.
-          before: function () { self.closeAllPanels({ instant: true }); },
+          before: function () { self.closeAllPanels({ instant: true }); if (self.skyRail) self.skyRail.folding(); },
+          overlay: function (ctx, st, dpr, y) { if (self.skyRail) self.skyRail.overlay(ctx, st, dpr, y); },
           travel: function () { return !self._fixedShowing(); },
           say: function (msg) { self._announce(msg); }
         });
@@ -1556,6 +1563,24 @@
       this._timeUp = false;
       this._bindTimeBar();
       this._skyDay();
+      this._mountSkyRail();
+    },
+
+    // The owner's hand controls for the sky's look (the horizon rail),
+    // loaded on first use so no one else downloads them.
+    _mountSkyRail: function () {
+      var self = this;
+      if (this.role < ROLE_OWNER || !this.skyDock || !$('#cal5-skyrail', this.el)) return;
+      var mount = function () {
+        if (!self.skyDock || self.skyRail || !Chronicle.calendarSkyRail) return;
+        try { self.skyRail = Chronicle.calendarSkyRail.mount(self); } catch (e) { self.skyRail = null; }
+      };
+      if (Chronicle.calendarSkyRail) { mount(); return; }
+      if (!this.skyRailSrc) return;
+      var s = document.createElement('script');
+      s.src = this.skyRailSrc;
+      s.onload = mount;
+      document.head.appendChild(s);
     },
 
     // Today's sky, redrawn only when the moment or today's events change.
@@ -1564,10 +1589,12 @@
       var c = this.cal, p = this._skyPrev;
       // A preview shows only that day's own weather, never today's.
       if (p) c = Object.assign({}, c, { current_year: p.y, current_month: p.m, current_day: p.d, current_hour: p.h, current_minute: p.min, weather: null });
+      // The owner's "See it as a player": the same sky without the hidden moons.
+      if (this._skyAsPlayer) c = Object.assign({}, c, { moons: (c.moons || []).filter(function (mo) { return !mo.hidden_from_players; }) });
       this._paintTimeBar();
       if (!this.skyDock || !this.eventsByMonth[this.monthKey(c.current_year, c.current_month)]) return;
       var evs = this.eventsOnDay(c.current_year, c.current_month, c.current_day);
-      var sig = [this.calendarId, c.current_year, c.current_month, c.current_day, c.current_hour, c.current_minute].join('/') + '|' +
+      var sig = [this.calendarId, this._skyAsPlayer ? 'player' : 'own', c.current_year, c.current_month, c.current_day, c.current_hour, c.current_minute].join('/') + '|' +
         evs.map(function (e) { return e.id + ':' + (e.updated_at || ''); }).join(',');
       if (sig === this._skySig) return;
       this._skySig = sig;

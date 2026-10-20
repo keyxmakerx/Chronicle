@@ -51,6 +51,11 @@ which also links `static/css/quest_board.css` and the period fonts.
   and days left and keeps a calendar event in step); without one it is the free
   text `notice.due`. Notices show `daysLeft` on the board and in the reading
   sheet, and an unfinished one turns late when it is negative.
+- The Board Ledger's Quests tab has "Fills itself with" (a board's `fill`):
+  nothing, open and taken, open, taken, open/taken/done, or every quest; a
+  list set elsewhere shows by its statuses. The board pins and takes down its
+  own notices; those offer Hide but not Take it down, and stamping one done
+  reloads the board so it can leave.
 - Ledgers open by clicking the bookmark and fold away on a click outside or
   Escape, unless pinned. While the hand-out panel is open a fold-away asks
   first if something was picked.

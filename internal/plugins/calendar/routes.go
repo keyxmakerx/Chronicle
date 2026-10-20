@@ -216,6 +216,12 @@ func registerCalendarJSONRoutes(g *echo.Group, h *Handler) {
 		campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
 			"only the campaign owner or a granted co-DM may change a moon's visibility"))
 
+	// The sky's look, set by hand from the rail under the calendar's sky:
+	// the sun and each moon's colour and strength. Owner only, like the era
+	// look and the rest of the calendar settings.
+	g.PUT("/calendars/:calid/sun", h.SaveSunLookAPI, campaigns.RequireRole(campaigns.RoleOwner))
+	g.PUT("/calendars/:calid/moons/:moonID/look", h.SetMoonLookAPI, campaigns.RequireRole(campaigns.RoleOwner))
+
 	// A moon set by hand: its mode and state words, and each day's mark.
 	// Gated like the hidden flag; players read marks only through the
 	// calendar, cut to the ones they were shown.

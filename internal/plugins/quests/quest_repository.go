@@ -21,6 +21,8 @@ type QuestRepository interface {
 	Get(ctx context.Context, campaignID, entityID string) (data []byte, version int, found bool, err error)
 	// GetMany returns the stored documents of the given pages, keyed by id.
 	GetMany(ctx context.Context, campaignID string, entityIDs []string) (map[string][]byte, error)
+	// ListAll returns every stored sheet in the campaign, keyed by page id.
+	ListAll(ctx context.Context, campaignID string) (map[string][]byte, error)
 	// Save writes the document if the stored version is still expectedVersion
 	// (0 means "no row yet") and bumps it. ok is false on a lost race.
 	Save(ctx context.Context, campaignID, entityID string, data []byte, expectedVersion int, userID string) (ok bool, err error)
@@ -62,6 +64,23 @@ func (r *sqlQuestRepository) GetMany(ctx context.Context, campaignID string, ids
 		return nil, fmt.Errorf("get quests: %w", err)
 	}
 	defer rows.Close()
+	for rows.Next() {
+		var id, data string
+		if err := rows.Scan(&id, &data); err != nil {
+			return nil, fmt.Errorf("scan quest: %w", err)
+		}
+		out[id] = []byte(data)
+	}
+	return out, rows.Err()
+}
+
+func (r *sqlQuestRepository) ListAll(ctx context.Context, campaignID string) (map[string][]byte, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT entity_id, data FROM quests WHERE campaign_id = ?`, campaignID)
+	if err != nil {
+		return nil, fmt.Errorf("list quests: %w", err)
+	}
+	defer rows.Close()
+	out := map[string][]byte{}
 	for rows.Next() {
 		var id, data string
 		if err := rows.Scan(&id, &data); err != nil {

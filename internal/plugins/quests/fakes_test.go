@@ -136,6 +136,16 @@ func (f *fakeQuestRepo) GetMany(_ context.Context, campaignID string, ids []stri
 	return out, nil
 }
 
+func (f *fakeQuestRepo) ListAll(_ context.Context, campaignID string) (map[string][]byte, error) {
+	out := map[string][]byte{}
+	for id, d := range f.docs {
+		if f.camp[id] == campaignID {
+			out[id] = d
+		}
+	}
+	return out, nil
+}
+
 func (f *fakeQuestRepo) Save(_ context.Context, campaignID, id string, data []byte, expected int, _ string) (bool, error) {
 	if f.versions[id] != expected {
 		return false, nil
@@ -171,6 +181,15 @@ func (f *fakeBoardRepo) ListBoards(_ context.Context, cid string, eid Home) ([]B
 		}
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].SortOrder < out[j].SortOrder })
+	return out, nil
+}
+func (f *fakeBoardRepo) ListFillBoards(_ context.Context, cid string) ([]Board, error) {
+	var out []Board
+	for _, b := range f.boards {
+		if b.CampaignID == cid && len(b.Fill) > 0 {
+			out = append(out, b)
+		}
+	}
 	return out, nil
 }
 func (f *fakeBoardRepo) ListHomes(_ context.Context, cid string) ([]Home, error) {
@@ -255,6 +274,16 @@ func (f *fakeBoardRepo) CountItems(_ context.Context, _, bid string) (int, error
 	return n, nil
 }
 func (f *fakeBoardRepo) InsertItem(_ context.Context, it Item) error {
+	f.items = append(f.items, it)
+	return nil
+}
+func (f *fakeBoardRepo) InsertAutoItem(_ context.Context, it Item) error {
+	for _, o := range f.items {
+		if o.BoardID == it.BoardID && o.Auto && o.RefID == it.RefID {
+			return nil
+		}
+	}
+	it.Kind, it.Auto, it.ByDM = KindNotice, true, true
 	f.items = append(f.items, it)
 	return nil
 }
