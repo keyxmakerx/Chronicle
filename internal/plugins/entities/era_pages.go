@@ -342,7 +342,7 @@ func eraViewOf(ctx context.Context) *eraView {
 // version over the entity. Pages a game system draws keep their usual self:
 // their sheets read and write the usual fields directly.
 func (h *Handler) applyEraView(ctx context.Context, cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, userID, eraParam, hlParam string) (*Entity, *eraView) {
-	if hasEntityShowRenderer(entityType) {
+	if hasEntityShowRenderer(ctx, entityType) {
 		return entity, nil
 	}
 	v := h.resolveEraView(ctx, cc, entity, userID, eraParam, hlParam)
@@ -454,7 +454,7 @@ func eraPageLink(campaignID, entityID, era string, extra string) templ.SafeURL {
 // the main calendar's era laid over, when it has one. Hover cards and peeks
 // use it so they match the page.
 func (h *Handler) currentEraEntity(ctx context.Context, cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, userID string) *Entity {
-	if h.eraPages == nil || hasEntityShowRenderer(entityType) {
+	if h.eraPages == nil || hasEntityShowRenderer(ctx, entityType) {
 		return entity
 	}
 	set, err := h.eraPages.PageEras(ctx, cc.Campaign.ID, permissions.RequestViewer(int(cc.VisibilityRole()), userID))

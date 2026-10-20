@@ -13,7 +13,7 @@ templ EntityTypeCustomizeTabTmpl(cc *campaigns.CampaignContext, et *EntityType, 
 		case "layout":
 			<div
 				data-widget="customize-page-editor"
-				data-state={ pageEditorState(cc, et) }
+				data-state={ pageEditorState(ctx, cc, et) }
 			></div>
 		case "home":
 			<div
