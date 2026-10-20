@@ -3472,12 +3472,22 @@
     background: rgb(255 255 255 / 0.05); color: var(--nav-hi); font-size: 12px;
   }
   .nav-drill-search input::placeholder { color: var(--nav-text-3); }
+  /* The tag filter folds into an icon at the search box's right end; open,
+     its presets and chips share one row that scrolls sideways. */
+  .nav-drill-search.has-tags input { padding-right: 36px; }
   .nav-drill-tags-toggle {
-    margin-top: 4px; padding: 2px 0; border: 0; background: none; color: var(--nav-accent-soft);
-    font-size: 11px; cursor: pointer;
+    position: absolute; right: 18px; top: 14px; transform: translateY(-50%); height: 22px; min-width: 22px; padding: 0 5px;
+    display: inline-flex; align-items: center; justify-content: center; gap: 4px; border: 0; border-radius: 5px;
+    background: none; color: var(--nav-text-3); font-size: 11px; cursor: pointer;
   }
-  .nav-drill-tags-toggle:hover { text-decoration: underline; }
-  .nav-drill-tags-body { padding-top: 4px; }
+  .nav-drill-tags-toggle:hover { color: var(--nav-hi); background: var(--nav-hover); }
+  .nav-drill-tags-toggle[aria-expanded="true"] { color: var(--nav-text); }
+  .nav-drill-tags-n { color: var(--nav-accent-soft); font-weight: 650; font-variant-numeric: tabular-nums; }
+  .nav-drill-tags-body:not([hidden]) {
+    display: flex; gap: 4px; padding-top: 6px; overflow-x: auto; scrollbar-width: thin;
+  }
+  .nav-drill-tags-body > div { display: contents; }
+  .nav-drill-tags-body button { flex: none; white-space: nowrap; }
   /* Pinned to the 28px input, not the box: the tag filter appends its chip
      rows inside this box, so 50% of the box lands among the chips, and a
      plain descendant selector would also pin the chips' own icons. */

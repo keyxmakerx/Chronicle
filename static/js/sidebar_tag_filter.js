@@ -68,8 +68,9 @@
       var wrapper = document.createElement('div');
       wrapper.className = 'sidebar-tag-filter';
 
-      // A quiet word, not a button: it only reveals the chips. It carries
-      // the active count so a hidden filter is never a silent one.
+      // An icon at the search box's right end, so the folded filter costs
+      // no line of its own. It carries the active count so a hidden filter
+      // is never a silent one.
       var toggle = document.createElement('button');
       toggle.type = 'button';
       toggle.className = 'nav-drill-tags-toggle';
@@ -86,6 +87,7 @@
       });
       wrapper.appendChild(toggle);
       wrapper.appendChild(body);
+      searchDiv.classList.add('has-tags');
 
       // Saved filter presets row.
       if (savedFilters && savedFilters.length > 0) {
@@ -176,11 +178,13 @@
     body.hidden = !open;
   }
 
-  /** "Tags", or "Tags · 2" while two tags filter the list. */
+  /** The tag icon, plus the count while tags filter the list. */
   function updateToggleLabel() {
     var toggle = document.getElementById('sidebar-tags-toggle');
     if (!toggle) return;
-    toggle.textContent = activeTags.length > 0 ? 'Tags \u00b7 ' + activeTags.length : 'Tags';
+    toggle.innerHTML = '<i class="fa-solid fa-tags" aria-hidden="true"></i>' +
+      (activeTags.length > 0 ? '<span class="nav-drill-tags-n">' + activeTags.length + '</span>' : '');
+    toggle.title = 'Filter by tag';
     toggle.setAttribute('aria-label', activeTags.length > 0
       ? 'Tag filters, ' + activeTags.length + ' active' : 'Tag filters');
   }
