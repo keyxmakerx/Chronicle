@@ -59,3 +59,17 @@ func TestBookWidgets_RetiredFromPalette(t *testing.T) {
 		t.Errorf("a system with no book places no widgets, got %v", s)
 	}
 }
+
+// TestHostMountedWidget_RetiredFromPalette pins that a widget the manifest
+// marks host_mounted is listed but not offered.
+func TestHostMountedWidget_RetiredFromPalette(t *testing.T) {
+	var m SystemManifest
+	raw := `{"widgets":[{"slug":"budget","name":"Budget","script_file":"w/b.js","host_mounted":true},{"slug":"stat-block","name":"Stat block","script_file":"w/s.js"}]}`
+	if err := json.Unmarshal([]byte(raw), &m); err != nil {
+		t.Fatal(err)
+	}
+	metas := placeableWidgetMetas(&m, nil)
+	if len(metas) != 2 || !metas[0].Retired || metas[1].Retired {
+		t.Fatalf("metas = %+v, want budget retired and stat-block offered", metas)
+	}
+}

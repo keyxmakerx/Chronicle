@@ -227,6 +227,11 @@ type WidgetDef struct {
 	// a 4-column grid; the first is its default. Empty means it cannot be a
 	// tile. The widget is told its current size by data-tile-w / data-tile-h.
 	TileSizes []string `json:"tile_sizes,omitempty"`
+
+	// HostMounted marks a widget Chronicle mounts itself somewhere other
+	// than an entity page (the encounter builder's budget panel), so the
+	// Customizer never offers it as a block.
+	HostMounted bool `json:"host_mounted,omitempty"`
 }
 
 // TextRendererDef describes a JS text renderer provided by a game system.
