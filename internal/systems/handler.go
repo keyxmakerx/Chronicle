@@ -753,9 +753,10 @@ func (h *SystemHandler) GetSystemWidgetBlockMetas(ctx context.Context, campaignI
 // already mounted by the host with its own context, so a hand-placed copy would
 // duplicate it.
 //
-// A widget the package book places (bookWidgets) is a book pop-up, so it is
-// listed as Retired: a page that already holds one still draws it under its
-// own name, but the Customizer no longer offers it.
+// A widget the package book places (bookWidgets) is a book pop-up, and one
+// marked host_mounted is mounted by Chronicle elsewhere, so each is listed
+// as Retired: a page that already holds one still draws it under its own
+// name, but the Customizer no longer offers it.
 func placeableWidgetMetas(manifest *SystemManifest, bookWidgets map[string]bool) []entities.BlockMeta {
 	if len(manifest.Widgets) == 0 {
 		return nil
@@ -784,7 +785,7 @@ func placeableWidgetMetas(manifest *SystemManifest, bookWidgets map[string]bool)
 			Description: w.Description,
 			WidgetSlug:  w.Slug,
 			TileSizes:   w.TileSizes,
-			Retired:     bookWidgets[w.Slug],
+			Retired:     bookWidgets[w.Slug] || w.HostMounted,
 		})
 	}
 	return metas
