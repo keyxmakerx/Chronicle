@@ -3204,6 +3204,9 @@
     color: var(--nav-text-3); font-variant-numeric: tabular-nums;
   }
   .nav-tr:empty { display: none; }
+  /* Every list row keeps the twisty's slot free on the right, twisty or
+     not, so counts and captions all end in one column. */
+  .nav-list .nav-row { padding-right: 36px; }
   .nav-hid { flex: none; display: grid; place-items: center; font-size: 11px; color: #fbbf24; opacity: 0.85; }
   .nav-ext { flex: none; font-size: 9px; color: var(--nav-text-3); }
   .nav-dot { display: block; width: 6px; height: 6px; border-radius: 50%; }
@@ -3235,7 +3238,6 @@
 
   /* A category's sub-categories: their own rows under a twisty. */
   .nav-rw { position: relative; }
-  .nav-rw > .nav-row { padding-right: 40px; }
   .nav-row.nav-sub { padding-left: 44px; font-size: 12.5px; color: var(--nav-text-2); }
   .nav-row.nav-sub .nav-ic { width: 10px; }
   .nav-subs { position: relative; }

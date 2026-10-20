@@ -2,8 +2,8 @@
  * sidebar_row_menu.js -- the campaign sidebar's row menu
  *
  * One menu of a row's actions, opened four ways: right-click, a long press
- * on a touch screen, the row's dots button, or Shift+F10 / the Menu key on a
- * focused row. What it offers depends on who is looking:
+ * on a touch screen, the row's dots button (apps and links; category rows
+ * have none), or Shift+F10 / the Menu key on a focused row. What it offers depends on who is looking:
  *
  * - The owner, on an app, category or link: pin it for everyone (or unpin),
  *   hide it from players (or show it), move it up or down, and Edit sidebar.

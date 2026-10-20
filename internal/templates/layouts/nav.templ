@@ -192,8 +192,10 @@ templ navFoldHead(id string, label string, count int, cur string) {
 // navItem is a row, plus its sub-category rows under a twisty when it has
 // any, the viewer's own pin when they can pin it, and the dots button that
 // opens the row menu (sidebar_row_menu.js) when it has actions for them.
+// Category rows have no dots: right-click, a long press or Shift+F10 opens
+// their menu, which keeps their trailing slot free for the twisty.
 templ navItem(row NavRowView, pinnable bool) {
-	if more := pinnable || NavCanEdit(ctx); len(row.Subs) > 0 || more {
+	if more := row.Kind != "category" && (pinnable || NavCanEdit(ctx)); len(row.Subs) > 0 || pinnable || more {
 		<div class={ "nav-rw", templ.KV("can-pin", pinnable), templ.KV("is-mine", row.Personal), templ.KV("has-subs", len(row.Subs) > 0), templ.KV("has-more", more) }>
 			@navRow(row)
 			if more {
