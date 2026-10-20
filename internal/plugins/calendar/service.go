@@ -329,10 +329,16 @@ type CalendarService interface {
 	// styles and feels at once (the Era look part of the calendar settings).
 	// Owner only at the route, like the rest of the calendar settings.
 	SaveEraLook(ctx context.Context, calendarID, campaignID string, look EraLook, eras []EraLookEra) error
+	// SaveSunLook writes the calendar's sun: its kind of star and an
+	// optional exact colour. Owner only, like the rest of the settings.
+	SaveSunLook(ctx context.Context, calendarID, campaignID string, look SunLook) error
 
 	// Moon. Calendar structure; the hidden flag is gated CanAuthorDmOnly
 	// (Owner or a granted co-Director) at the route (routes.go).
 	SetMoonHidden(ctx context.Context, moonID int, calendarID, campaignID string, hidden bool) error
+	// SetMoonStrength sets how strongly the sky shows a moon's colour, 0 to
+	// 1; nil returns it to the sky's default.
+	SetMoonStrength(ctx context.Context, moonID int, calendarID, campaignID string, strength *float64) error
 	// MoonsForEntity lists the moons whose lore page is entityID, in every
 	// calendar v may open and, for anyone who does not skip the per-user
 	// layer, without hidden moons, each with tonight's phase name on its
@@ -2752,6 +2758,38 @@ func (s *calendarService) SetMoonHidden(ctx context.Context, moonID int, calenda
 	}
 	s.publish(PubStructureUpdated, campaignID, calendarID, nil)
 	return nil
+}
+
+// SetMoonStrength sets how strongly the sky shows one moon's colour.
+func (s *calendarService) SetMoonStrength(ctx context.Context, moonID int, calendarID, campaignID string, strength *float64) error {
+	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
+		return err
+	}
+	var tint *string
+	if strength != nil {
+		t, err := MoonStrengthTint(*strength)
+		if err != nil {
+			return err
+		}
+		tint = &t
+	}
+	if err := s.calRepo.SetMoonTint(ctx, calendarID, moonID, tint); err != nil {
+		return err
+	}
+	s.publish(PubStructureUpdated, campaignID, calendarID, nil)
+	return nil
+}
+
+// SaveSunLook validates and writes the calendar's sun.
+func (s *calendarService) SaveSunLook(ctx context.Context, calendarID, campaignID string, look SunLook) error {
+	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
+		return err
+	}
+	look, err := normalizeSunLook(look)
+	if err != nil {
+		return err
+	}
+	return s.publishAfter(s.calRepo.SaveSunLook(ctx, calendarID, look), PubStructureUpdated, campaignID, calendarID)
 }
 
 // --- Real-date anchor (preview only — the real anchor WRITE this previews

@@ -241,11 +241,17 @@
     // The funnel keeps its full strength while it moves; only the fade of step 2 is replaced.
     if (fun.v > 0 || (look && look.funnel)) look = Object.assign({}, look || goal, { funnel: fun.v > 0 && fun.spec ? fun.spec : null });
     var P = SW.paletteFor(altDeg, eve, look, wx, dark, false);
+    // The sun's colour tints daylight, lightly overhead so blue stays blue.
+    var sunHue = SW.sunHue(cal.sun);
+    if (sunHue) {
+      SW.tintPalette(P, sunHue.hex, sunHue.k * (1 - dark), ['hor', 'anti', 'clit', 'glow']);
+      SW.tintPalette(P, sunHue.hex, sunHue.k * .3 * (1 - dark), ['zen', 'mid']);
+    }
     if (overlay.magic) SW.tintPalette(P, '#8a5fe0', .3 * opened('magic'), ['zen', 'mid', 'hor', 'anti', 'clit', 'cshade', 'h0', 'h1', 'h2', 'h3']);
 
     var st = {
       P: P, L: L, W: model.width, H: model.height, wx: wx, t: tSeconds, look: look, rm: !!model.reduced, almanac: false,
-      sun: sun, sp: sp, alt: sun.alt, altEff: altDeg, dark: dark, R: R,
+      sun: sun, sp: sp, alt: sun.alt, altEff: altDeg, dark: dark, R: R, sunHue: sunHue,
       moons: moons, cam: cam, sidereal: SW.mod((sun.H + sun.lon) / SW.D2R, 360),
       landSeed: model.landSeed, overlay: overlay, fxItems: [],
       weatherLabel: weatherSpec.label || 'Clear skies',

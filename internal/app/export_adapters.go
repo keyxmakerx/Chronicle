@@ -465,6 +465,7 @@ func (a *calendarExportAdapter) exportOne(ctx context.Context, cal *calendar.Cal
 		ColorsOn: cal.EraLook.ColorsOn, Feel: cal.EraLook.Feel,
 		Intensity: cal.EraLook.Intensity, Speed: cal.EraLook.Speed,
 	}
+	data.Sun = &campaigns.ExportCalendarSun{Kind: cal.Sun.Kind, Color: cal.Sun.Color}
 	for _, e := range cal.Eras {
 		var loreSlug *string
 		if e.LoreEntityID != nil {
@@ -1848,6 +1849,12 @@ func (a *calendarImportAdapter) importOne(ctx context.Context, campaignID string
 			ColorsOn: l.ColorsOn, Feel: l.Feel, Intensity: l.Intensity, Speed: l.Speed,
 		}, nil); err != nil {
 			slog.Warn("import: set era look failed", slog.Any("error", err))
+			report.Fail(campaigns.SectionCalendar, campaigns.KindCalendar, data.Name, apperror.SafeMessage(err))
+		}
+	}
+	if l := data.Sun; l != nil {
+		if err := a.svc.SaveSunLook(ctx, cal.ID, campaignID, calendar.SunLook{Kind: l.Kind, Color: l.Color}); err != nil {
+			slog.Warn("import: set sun failed", slog.Any("error", err))
 			report.Fail(campaigns.SectionCalendar, campaigns.KindCalendar, data.Name, apperror.SafeMessage(err))
 		}
 	}

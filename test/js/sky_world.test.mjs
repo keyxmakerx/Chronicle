@@ -219,3 +219,26 @@ test('real-time calendars use the Gregorian leap rule; manual reallife keeps its
   assert.equal(SW.isLeapYear(manual, 2100), true);
   assert.equal(SW.monthDays(manual, 1, 2100), 29);
 });
+
+// sunHue mirrors calendar.SunLook: yellow (and no sun at all) leaves the sky
+// as it always was; any other kind or an exact colour tints it, at the same
+// brightness as the ordinary sun.
+test('sunHue: the ordinary sun changes nothing', () => {
+  assert.equal(SW.sunHue(null), null);
+  assert.equal(SW.sunHue({ kind: 'yellow' }), null);
+  assert.equal(SW.sunHue({ kind: 'nonsense' }), null);
+});
+
+test('sunHue: a red sun is redder but no dimmer', () => {
+  const h = SW.sunHue({ kind: 'red' });
+  assert.ok(h.mul[0] > 1 && h.mul[2] < 1, 'red leans red');
+  const Y = 0.2126 * h.mul[0] + 0.7152 * h.mul[1] + 0.0722 * h.mul[2];
+  assert.ok(Math.abs(Y - 1) < 0.05, `brightness ${Y} stays near 1`);
+  assert.ok(h.k > 0 && h.k < 1);
+});
+
+test('sunHue: an exact colour wins over the kind, a broken one does not', () => {
+  assert.equal(SW.sunHue({ kind: 'red', color: '#00ff88' }).hex, '#00ff88');
+  assert.equal(SW.sunHue({ kind: 'red', color: 'red;x:y' }).hex, SW.sunHue({ kind: 'red' }).hex);
+  assert.equal(SW.sunHue({ kind: 'yellow', color: '#3366ff' }).hex, '#3366ff');
+});

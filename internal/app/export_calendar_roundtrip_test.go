@@ -42,6 +42,7 @@ type fakeCalendarService struct {
 	seasons       []calendar.Season
 	eras          []calendar.EraInput
 	eraLook       *calendar.EraLook
+	sun           *calendar.SunLook
 	cycles        []calendar.CycleInput
 	festivals     []calendar.FestivalInput
 	weather       *calendar.WeatherInput
@@ -194,6 +195,11 @@ func (f *fakeCalendarService) SetWeather(_ context.Context, _ string, _ string, 
 	return nil
 }
 
+func (f *fakeCalendarService) SaveSunLook(_ context.Context, _, _ string, look calendar.SunLook) error {
+	f.sun = &look
+	return nil
+}
+
 func (f *fakeCalendarService) SaveEraLook(_ context.Context, _, _ string, look calendar.EraLook, _ []calendar.EraLookEra) error {
 	f.eraLook = &look
 	return nil
@@ -240,6 +246,7 @@ func TestCampaignExportImport_CalendarRoundTrip(t *testing.T) {
 	epoch := "Age of Sail"
 	entityID := "entity-77"
 	eraColor2, eraFeel, eraNote := "#d6893a", calendar.EraFeelStill, "Only the Director knows"
+	sunColor := "#ff6a3a"
 	startHour, startMinute := 9, 30
 	visRules := `{"denied_users":["player-1"]}`
 	hemisphere := calendar.HemisphereSouth
@@ -283,6 +290,7 @@ func TestCampaignExportImport_CalendarRoundTrip(t *testing.T) {
 					DMNote: &eraNote, HiddenUntilBegins: true},
 			},
 			EraLook: calendar.EraLook{ColorsOn: false, Feel: calendar.EraFeelCustom, Intensity: 2.5, Speed: 0.3},
+			Sun:     calendar.SunLook{Kind: calendar.SunKindRed, Color: &sunColor},
 			EventKinds: []calendar.EventKind{
 				{ID: 1, Slug: "festival", Name: "Festival", Icon: "fa-star", Color: "#10b981", DefaultAnnounced: calendar.AnnouncedAhead},
 			},
@@ -444,6 +452,9 @@ func TestCampaignExportImport_CalendarRoundTrip(t *testing.T) {
 		e.Feel == nil || *e.Feel != eraFeel || e.DMNote == nil || *e.DMNote != eraNote || !e.HiddenUntilBegins ||
 		e.LoreEntityID == nil || *e.LoreEntityID != "new-entity-77" {
 		t.Errorf("imported era lost its look, note, hidden flag or lore page: %+v", e)
+	}
+	if l := dst.sun; l == nil || l.Kind != calendar.SunKindRed || l.Color == nil || *l.Color != sunColor {
+		t.Errorf("imported calendar lost its sun: %+v", dst.sun)
 	}
 	if l := dst.eraLook; l == nil || l.ColorsOn || l.Feel != calendar.EraFeelCustom || l.Intensity != 2.5 || l.Speed != 0.3 {
 		t.Errorf("imported calendar lost its era look: %+v", dst.eraLook)

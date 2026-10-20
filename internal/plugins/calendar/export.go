@@ -47,7 +47,9 @@ type ExportCalendar struct {
 	MonthStartsNewWeek bool    `json:"month_starts_new_week"`
 	// EraLook is nil in a file written before era looks existed; the import
 	// then keeps the defaults.
-	EraLook   *EraLook         `json:"era_look,omitempty"`
+	EraLook *EraLook `json:"era_look,omitempty"`
+	// Sun is nil in a file written before suns had a kind.
+	Sun       *SunLook         `json:"sun,omitempty"`
 	Months    []ExportMonth    `json:"months"`
 	Weekdays  []ExportWeekday  `json:"weekdays"`
 	Moons     []ExportMoon     `json:"moons,omitempty"`
@@ -83,6 +85,9 @@ type ExportMoon struct {
 	PhaseOffset       float64 `json:"phase_offset"`
 	Color             string  `json:"color"`
 	HiddenFromPlayers bool    `json:"hidden_from_players,omitempty"`
+	// Strength is how strongly the sky shows the moon's colour, 0 to 1;
+	// absent when the moon uses the sky's default.
+	Strength *float64 `json:"strength,omitempty"`
 	// Ref is the moon's id in the exporting calendar, so a repeat rule that
 	// names it can be pointed at the re-created moon on import.
 	Ref int `json:"ref,omitempty"`
@@ -201,7 +206,7 @@ type ExportEvent struct {
 // BuildExport creates a ChronicleExport from a fully-loaded Calendar and
 // optional events. The calendar must have sub-resources eager-loaded.
 func BuildExport(cal *Calendar, events []Event, includeEvents bool) *ChronicleExport {
-	look := cal.EraLook
+	look, sun := cal.EraLook, cal.Sun
 	export := &ChronicleExport{
 		Format:  "chronicle-calendar-v1",
 		Version: 2,
@@ -226,6 +231,7 @@ func BuildExport(cal *Calendar, events []Event, includeEvents bool) *ChronicleEx
 			ForecastsEnabled:   cal.ForecastsEnabled,
 			MonthStartsNewWeek: cal.MonthStartsNewWeek,
 			EraLook:            &look,
+			Sun:                &sun,
 		},
 	}
 
@@ -257,6 +263,7 @@ func BuildExport(cal *Calendar, events []Event, includeEvents bool) *ChronicleEx
 			PhaseOffset:       m.PhaseOffset,
 			Color:             m.Color,
 			HiddenFromPlayers: m.HiddenFromPlayers,
+			Strength:          moonStrengthPtr(m.Tint),
 			Ref:               m.ID,
 		})
 	}

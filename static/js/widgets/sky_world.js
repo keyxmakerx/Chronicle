@@ -289,6 +289,15 @@
       P[nm] = PAL.labLin([c[0] + (to[0] - c[0]) * kk, c[1] + (to[1] - c[1]) * kk, c[2] + (to[2] - c[2]) * kk]);
     });
   }
+  // The calendar's sun: a kind's colour and how far daylight leans to it (k);
+  // yellow is the old sun. mul is the colour at brightness 1.
+  var SUN_KINDS = { red: ['#ff7442', .34], orange: ['#ffb066', .2], white: ['#f1f4ff', .12], blue: ['#a9c3ff', .26] };
+  function sunHue(sun) {
+    var kd = sun && SUN_KINDS[sun.kind], hex = sun && /^#[0-9a-fA-F]{6}$/.test(sun.color || '') ? sun.color : kd && kd[0];
+    if (!hex) return null;
+    var c = PAL.hexLin(hex), Y = .2126 * c[0] + .7152 * c[1] + .0722 * c[2] || 1e-3;
+    return { hex: hex, k: kd ? kd[1] : .3, mul: c.map(function (v) { return clamp(v / Y, 0, 3); }) };
+  }
   var PALETTE_NAMES = ['zen', 'mid', 'hor', 'anti', 'clit', 'cshade', 'fog', 'h0', 'h1', 'h2', 'h3'];
   // paletteFor(altEff, eve, look, wx, dark, almanac): the painted palette for
   // one moment. `look` is a resolved SkyLooks recipe (or null for "no
@@ -310,6 +319,6 @@
     absoluteDay: absoluteDay, dayIndex: dayIndex, yearLength: yearLength, isLeapYear: isLeapYear, monthDays: monthDays, hour24: hour24,
     phaseAt: phaseAt, handState: handState, inclinationFor: inclinationFor,
     makeSkym: makeSkym, PROJ: PROJ, moonTurn: moonTurn,
-    PAL: PAL, paletteFor: paletteFor, tintPalette: tintPalette
+    PAL: PAL, paletteFor: paletteFor, tintPalette: tintPalette, sunHue: sunHue
   };
 })();

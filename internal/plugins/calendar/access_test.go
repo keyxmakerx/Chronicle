@@ -208,6 +208,10 @@ func (f *fakeCalendarSvc) SaveEraLook(context.Context, string, string, EraLook, 
 }
 
 func (f *fakeCalendarSvc) SetMoonHidden(context.Context, int, string, string, bool) error { return nil }
+func (f *fakeCalendarSvc) SetMoonStrength(context.Context, int, string, string, *float64) error {
+	return nil
+}
+func (f *fakeCalendarSvc) SaveSunLook(context.Context, string, string, SunLook) error { return nil }
 
 func (f *fakeCalendarSvc) SetMonths(context.Context, string, string, []MonthInput) error { return nil }
 func (f *fakeCalendarSvc) SetWeekdays(context.Context, string, string, []WeekdayInput) error {

@@ -39,6 +39,8 @@ type fakeCalendarRepo struct {
 	getEraByIDFn       func(ctx context.Context, eraID int) (*Era, error)
 	getErasFn          func(ctx context.Context, calendarID string) ([]Era, error)
 	saveEraLookFn      func(ctx context.Context, calendarID string, look EraLook, eras []EraLookWrite) error
+	saveSunLookFn      func(ctx context.Context, calendarID string, look SunLook) error
+	setMoonTintFn      func(ctx context.Context, calendarID string, moonID int, tint *string) error
 	setCyclesFn        func(ctx context.Context, calendarID string, cycles []CycleInput) error
 	getCyclesFn        func(ctx context.Context, calendarID string) ([]Cycle, error)
 	setFestivalsFn     func(ctx context.Context, calendarID string, festivals []FestivalInput) error
@@ -185,6 +187,18 @@ func (m *fakeCalendarRepo) GetEras(ctx context.Context, calendarID string) ([]Er
 		return m.getErasFn(ctx, calendarID)
 	}
 	return nil, nil
+}
+func (m *fakeCalendarRepo) SaveSunLook(ctx context.Context, calendarID string, look SunLook) error {
+	if m.saveSunLookFn != nil {
+		return m.saveSunLookFn(ctx, calendarID, look)
+	}
+	return nil
+}
+func (m *fakeCalendarRepo) SetMoonTint(ctx context.Context, calendarID string, moonID int, tint *string) error {
+	if m.setMoonTintFn != nil {
+		return m.setMoonTintFn(ctx, calendarID, moonID, tint)
+	}
+	return nil
 }
 func (m *fakeCalendarRepo) SaveEraLook(ctx context.Context, calendarID string, look EraLook, eras []EraLookWrite) error {
 	if m.saveEraLookFn != nil {

@@ -450,6 +450,8 @@
     U.uCam = [(st.cam || 0) * D2R, 0, 0, 0];
     U.uSun = [st.sp.x, st.sp.y, st.R * .95, alt];
     U.uSunCol = sunColour(alt);
+    U.uStar = st.sunHue ? st.sunHue.mul : [1, 1, 1];
+    if (st.sunHue) U.uSunCol = U.uSunCol.map(function(v, i){ return v * st.sunHue.mul[i]; });
     var sunVis = (1 - wx.cloud * .82) * (1 - wx.fog * .5) * (1 - wx.dark * .5) * (1 - clamp(wx.rain, 0, 1) * .85) * (1 - (lk ? lk.sun.dim : 0));
     U.uSunK = [sunVis * smooth01(-4, .5, alt), 0, 0, lk ? lk.sun['void'] : 0];
     U.uSunT = lk && lk.sun.tint ? PAL.hexLin(lk.sun.tint).concat([.6]) : [1, 1, 1, 0];

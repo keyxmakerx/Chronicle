@@ -15,7 +15,8 @@ import (
 
 // CalendarStructureAPI is the slice of calendar.CalendarService the
 // calendar kind uses: making the campaign's calendar, and changing its
-// structure, name, year label, current date and eras.
+// structure, name, year label, current date, eras, sun and each moon's
+// colour strength and hidden flag.
 type CalendarStructureAPI interface {
 	GetDefaultCalendarForViewer(ctx context.Context, campaignID string, v permissions.Viewer) (*calendar.Calendar, error)
 	ListCalendars(ctx context.Context, campaignID string, v permissions.Viewer) ([]calendar.Calendar, error)
@@ -28,6 +29,9 @@ type CalendarStructureAPI interface {
 	ApplyStructureEdit(ctx context.Context, calendarID, campaignID, fingerprint string, edit calendar.StructureEdit) (*calendar.StructurePreview, error)
 	CreateEra(ctx context.Context, calendarID, campaignID string, input calendar.EraInput) (*calendar.Era, error)
 	UpdateEra(ctx context.Context, eraID int, calendarID, campaignID string, input calendar.UpdateEraInput) error
+	SaveSunLook(ctx context.Context, calendarID, campaignID string, look calendar.SunLook) error
+	SetMoonStrength(ctx context.Context, moonID int, calendarID, campaignID string, strength *float64) error
+	SetMoonHidden(ctx context.Context, moonID int, calendarID, campaignID string, hidden bool) error
 }
 
 // PageResolver finds a campaign page by name and says which of them an
@@ -224,11 +228,12 @@ func (CalendarKind) Doc() string {
 		"- `months`: a list of `name`, `days`, optional `season`, `intercalary` (true for festival days outside the weeks), `leap_days`. Needed on create.\n" +
 		"- `weekdays`: a list of names, or of `name` with `rest_day: true`. Needed on create.\n" +
 		"- `seasons`: a list of `name`, `start_month`, `start_day`, `end_month`, `end_day`, `color`. Without it, seasons are made from the months' `season`.\n" +
-		"- `moons`: a list of `name`, `cycle` (days from new moon to new moon), `phase_offset` (days), `color`, and optionally `page` (the name of a page that tells of the moon; `none` clears it, leaving it out keeps it).\n" +
+		"- `moons`: a list of `name`, `cycle` (days from new moon to new moon), `phase_offset` (days), `color`, optionally `strength` (how strongly the sky shows the colour, 0 to 1; `default` for the sky's own), `hidden` (true hides the moon from players, false shows it) and `page` (the name of a page that tells of the moon; `none` clears it, leaving it out keeps it).\n" +
+		"- `sun`: the kind of star the sun is, `red` (a red ember), `orange`, `yellow` (the usual sun), `white` or `blue` (blue-white); its daylight and sky follow. Or a map of `kind` and `color` (an exact colour that overrides the kind's; `none` clears it).\n" +
 		"- `eras`: a list of `name`, `start_year` (optional `start_month`, `start_day`), optional `end_year`/`end_month`/`end_day`, `color`, `description`, and optionally `page` (the name of a page that tells of the era; `none` clears it, leaving it out keeps it).\n" +
 		"- `leap_year_every`: years between leap years (0 for none).\n" +
 		"The body is the calendar's description. On update, a `months`, `weekdays`, `seasons` or `moons` list replaces the whole list (events follow a month that keeps its name), and a key left out keeps what is there. Moons and eras are matched by name, and a key left out keeps what is there; a moon hidden from players is never removed here. Eras not listed are kept. An end with only `end_year` runs to the end of that year.\n\n" +
-		"```\n---\nkind: calendar\nname: Calendar of Harptos\nyear_label: DR\ncurrent_year: 1492\ncurrent_month: Hammer\ncurrent_day: 1\nmonths:\n  - {name: Hammer, days: 30, season: Winter}\n  - {name: Midwinter, days: 1, intercalary: true, season: Winter}\n  - {name: Alturiak, days: 30, season: Winter}\nweekdays: [First-day, Second-day, Third-day]\nmoons:\n  - {name: Selune, cycle: 30.4375, phase_offset: 0, color: \"#e8e8f0\"}\neras:\n  - {name: Dalereckoning, start_year: 1, page: The Dalereckoning}\n---\n```"
+		"```\n---\nkind: calendar\nname: Calendar of Harptos\nyear_label: DR\ncurrent_year: 1492\ncurrent_month: Hammer\ncurrent_day: 1\nmonths:\n  - {name: Hammer, days: 30, season: Winter}\n  - {name: Midwinter, days: 1, intercalary: true, season: Winter}\n  - {name: Alturiak, days: 30, season: Winter}\nweekdays: [First-day, Second-day, Third-day]\nmoons:\n  - {name: Selune, cycle: 30.4375, phase_offset: 0, color: \"#e8e8f0\", strength: 0.6}\nsun: yellow\neras:\n  - {name: Dalereckoning, start_year: 1, page: The Dalereckoning}\n---\n```"
 }
 
 // calSpec is a calendar block read and checked against the months it will
@@ -238,7 +243,9 @@ type calSpec struct {
 	weekdays  []calendar.WeekdayInput
 	seasons   []calendar.Season
 	moons     []calendar.MoonInput
-	moonPages []pageRef // one per moon, what its `page:` said
+	moonPages []pageRef  // one per moon, what its `page:` said
+	moonLooks []moonLook // one per moon, its strength and hidden keys
+	sun       *sunSpec   // nil when the block has no `sun`
 	eras      []eraSpec
 	leapEvery *int
 	yearLabel *string
@@ -433,6 +440,7 @@ func readCalSpec(r Record, base *calendar.Calendar) (*calSpec, error) {
 		}
 		s.moons = make([]calendar.MoonInput, len(items))
 		s.moonPages = make([]pageRef, len(items))
+		s.moonLooks = make([]moonLook, len(items))
 		for i, it := range items {
 			cycle, ok, err := firstNum(it, "cycle", "cycle_days", "cycle_length")
 			if err != nil {
@@ -459,6 +467,12 @@ func readCalSpec(r Record, base *calendar.Calendar) (*calSpec, error) {
 				}
 			}
 			s.moons[i] = calendar.MoonInput{Name: it.Name, CycleDays: cycle, PhaseOffset: offset, Color: color}
+			if s.moonLooks[i], err = readMoonLook(it); err != nil {
+				return nil, err
+			}
+			// A new moon takes its look on insert; a kept one is changed
+			// after the structure is saved (see setMoonLooks).
+			s.moonLooks[i].apply(&s.moons[i])
 			if s.moonPages[i], err = readPageRef(it, "moon "+quote(it.Name)); err != nil {
 				return nil, err
 			}
@@ -493,6 +507,14 @@ func readCalSpec(r Record, base *calendar.Calendar) (*calSpec, error) {
 			}
 			s.eras = append(s.eras, e)
 		}
+	}
+
+	if r.Has("sun") {
+		sun, err := readSun(r.Fields["sun"])
+		if err != nil {
+			return nil, err
+		}
+		s.sun = sun
 	}
 
 	y, m, d, dated, err := readDate(next, r, "current_")
@@ -624,6 +646,10 @@ func (s *calSpec) importResult(r Record) *calendar.ImportResult {
 	}
 	if s.leapEvery != nil {
 		ir.Settings.LeapYearEvery = *s.leapEvery
+	}
+	if s.sun != nil {
+		l := s.sun.look(calendar.DefaultSunLook())
+		ir.Settings.Sun = &l
 	}
 	if s.today != nil {
 		m, d := s.today.M, s.today.D
@@ -786,6 +812,9 @@ func createSummary(s *calSpec, ir *calendar.ImportResult) string {
 	}
 	if n := len(ir.Eras); n > 0 {
 		parts = append(parts, plural(n, "era", "eras"))
+	}
+	if s.sun != nil {
+		parts = append(parts, s.sun.look(calendar.DefaultSunLook()).SunDescription())
 	}
 	today := dateLabel(s.next, s.today.Y, s.today.M, s.today.D)
 	if s.yearLabel != nil && *s.yearLabel != "" {
@@ -954,6 +983,20 @@ func (k CalendarKind) planUpdate(ctx context.Context, campaignID string, a Actor
 	if n := s.pageChanges(); n > 0 {
 		did = append(did, "changes "+plural(n, "lore page", "lore pages"))
 	}
+	if strength, hide, show := s.moonLookChanges(cal); strength+hide+show > 0 {
+		if strength > 0 {
+			did = append(did, "sets the colour strength of "+plural(strength, "moon", "moons"))
+		}
+		if hide > 0 {
+			did = append(did, "hides "+plural(hide, "moon", "moons")+" from players")
+		}
+		if show > 0 {
+			did = append(did, "shows "+plural(show, "hidden moon", "hidden moons")+" to players")
+		}
+	}
+	if s.sun != nil {
+		did = append(did, s.sun.summary(cal.Sun))
+	}
 	if s.today != nil {
 		if cal.UsesRealTime() {
 			return Plan{Error: "this calendar follows the real-world date, so its current date can't be set"}
@@ -1088,6 +1131,14 @@ func (k CalendarKind) applyUpdate(ctx context.Context, campaignID string, a Acto
 			return err
 		}
 	}
+	if err := k.setMoonLooks(ctx, campaignID, s, cal); err != nil {
+		return err
+	}
+	if s.sun != nil {
+		if err := k.Svc.SaveSunLook(ctx, cal.ID, campaignID, s.sun.look(cal.Sun)); err != nil {
+			return err
+		}
+	}
 	in := calendar.UpdateCalendarInput{Name: cal.Name}
 	changed := false
 	if to := r.Str("rename_to"); to != "" {
@@ -1198,10 +1249,11 @@ func (k CalendarKind) Export(ctx context.Context, campaignID string, a Actor) (s
 			fmt.Fprintf(&b, "  - {name: %s, start_month: %d, start_day: %d, end_month: %d, end_day: %d, color: %s}\n", quote(s.Name), s.StartMonth, s.StartDay, s.EndMonth, s.EndDay, quote(s.Color))
 		}
 	}
+	b.WriteString(sunLine(cal.Sun))
 	if len(cal.Moons) > 0 {
 		b.WriteString("moons:\n")
 		for _, m := range cal.Moons {
-			fmt.Fprintf(&b, "  - {name: %s, cycle: %v, phase_offset: %v, color: %s%s}\n", quote(m.Name), m.CycleDays, m.PhaseOffset, quote(m.Color), pageKey(m.LoreEntityName))
+			fmt.Fprintf(&b, "  - {name: %s, cycle: %v, phase_offset: %v, color: %s%s%s}\n", quote(m.Name), m.CycleDays, m.PhaseOffset, quote(m.Color), moonLookKeys(m), pageKey(m.LoreEntityName))
 		}
 	}
 	// Eras are calendar structure only the Director sees; the service has

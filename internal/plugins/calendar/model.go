@@ -192,6 +192,9 @@ type Calendar struct {
 	// EraLook is how the eras look behind the month (migration 024).
 	EraLook EraLook `json:"era_look"`
 
+	// Sun is the kind of star the sky draws (migration 030).
+	Sun SunLook `json:"sun"`
+
 	// Eager-loaded sub-resources (populated by service, not by every query).
 	Months   []Month   `json:"months,omitempty"`
 	Weekdays []Weekday `json:"weekdays,omitempty"`

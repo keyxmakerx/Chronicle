@@ -143,6 +143,8 @@ type ImportedSettings struct {
 	MonthStartsNewWeek bool    `json:"month_starts_new_week,omitempty"`
 	// EraLook is Chronicle-native only too; nil keeps the defaults.
 	EraLook *EraLook `json:"era_look,omitempty"`
+	// Sun is Chronicle-native only too; nil keeps the yellow sun.
+	Sun *SunLook `json:"sun,omitempty"`
 }
 
 // DetectAndParse auto-detects the format of raw JSON bytes and parses into
@@ -249,6 +251,7 @@ func parseChronicle(data []byte) (*ImportResult, error) {
 			ForecastsEnabled:   export.Calendar.ForecastsEnabled,
 			MonthStartsNewWeek: export.Calendar.MonthStartsNewWeek,
 			EraLook:            normalizeEraLook(export.Calendar.EraLook),
+			Sun:                export.Calendar.Sun,
 		},
 		// export.Events is already the top-level "events" array (ExportEvent's
 		// own json tag lives on ChronicleExport, not nested under "calendar") —
@@ -287,6 +290,7 @@ func parseChronicle(data []byte) (*ImportResult, error) {
 			// mode instead of merely looking wrong.
 			Color:             normalizeColor(m.Color),
 			HiddenFromPlayers: m.HiddenFromPlayers,
+			Tint:              importedMoonTint(m.Strength),
 		})
 		result.MoonRefs = append(result.MoonRefs, m.Ref)
 	}
@@ -1904,6 +1908,16 @@ func clampCalendarStructure(result *ImportResult) error {
 		e.LoreEntityID = nil
 	}
 	result.Settings.EraLook = normalizeEraLook(result.Settings.EraLook)
+	if l := result.Settings.Sun; l != nil {
+		// A sun the file can't describe is dropped rather than failing the
+		// whole import; the calendar keeps the yellow sun.
+		if n, err := normalizeSunLook(*l); err != nil {
+			result.Settings.Sun = nil
+			result.Warnings = append(result.Warnings, "The sun's kind or colour wasn't readable, so the calendar keeps the ordinary yellow sun")
+		} else {
+			result.Settings.Sun = &n
+		}
+	}
 
 	for i := range result.Cycles {
 		c := &result.Cycles[i]
