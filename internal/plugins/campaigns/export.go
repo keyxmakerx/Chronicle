@@ -190,7 +190,10 @@ type ExportCalendarData struct {
 	RealTimeZone       *string `json:"real_time_zone,omitempty"`
 	// EraLook is the calendar's era colours setting; nil in a backup from
 	// before it existed, which keeps the defaults on restore.
-	EraLook  *ExportCalendarEraLook  `json:"era_look,omitempty"`
+	EraLook *ExportCalendarEraLook `json:"era_look,omitempty"`
+	// Sun is the calendar's kind of star; nil in a backup from before suns
+	// had a kind, which keeps the yellow sun on restore.
+	Sun      *ExportCalendarSun      `json:"sun,omitempty"`
 	Months   []ExportCalendarMonth   `json:"months"`
 	Weekdays []ExportCalendarWeekday `json:"weekdays"`
 	Moons    []ExportCalendarMoon    `json:"moons,omitempty"`
@@ -331,6 +334,12 @@ type ExportCalendarEraLook struct {
 	Feel      string  `json:"feel"`
 	Intensity float64 `json:"intensity"`
 	Speed     float64 `json:"speed"`
+}
+
+// ExportCalendarSun is a calendar's sun for export.
+type ExportCalendarSun struct {
+	Kind  string  `json:"kind"`
+	Color *string `json:"color,omitempty"`
 }
 
 // ExportCalendarCycle is a repeating named cycle (a zodiac of years, say)

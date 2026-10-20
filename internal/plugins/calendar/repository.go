@@ -46,6 +46,9 @@ type CalendarRepository interface {
 	// change). Scoped to calendarID so a moon id from another calendar can't
 	// be toggled; returns apperror.NewNotFound when no row matches both ids.
 	SetMoonHidden(ctx context.Context, calendarID string, moonID int, hidden bool) error
+	// SetMoonTint writes one moon's colour strength (nil for the sky's
+	// default), scoped like SetMoonHidden.
+	SetMoonTint(ctx context.Context, calendarID string, moonID int, tint *string) error
 
 	// Seasons.
 	SetSeasons(ctx context.Context, calendarID string, seasons []Season) error
@@ -63,6 +66,8 @@ type CalendarRepository interface {
 	// SaveEraLook writes the calendar's era look and the listed eras' look
 	// fields together; see its doc comment.
 	SaveEraLook(ctx context.Context, calendarID string, look EraLook, eras []EraLookWrite) error
+	// SaveSunLook writes the calendar's sun.
+	SaveSunLook(ctx context.Context, calendarID string, look SunLook) error
 
 	// Cycles (with their entries).
 	SetCycles(ctx context.Context, calendarID string, cycles []CycleInput) error
@@ -123,7 +128,8 @@ const calendarCols = `id, campaign_id, mode, name, description, epoch_name, curr
         visibility, visibility_rules,
         tracks_real_time, real_time_zone,
         anchor_year, anchor_month, anchor_day, anchor_real_date,
-        era_colors_on, era_feel, era_intensity, era_speed`
+        era_colors_on, era_feel, era_intensity, era_speed,
+        sun_kind, sun_color`
 
 // scanCalendar reads a row into a Calendar struct. Returns (nil, nil) when
 // the row doesn't exist, so callers that treat "no default calendar yet" as
@@ -144,7 +150,8 @@ func scanCalendar(scanner interface{ Scan(...any) error }) (*Calendar, error) {
 		&cal.Visibility, &cal.VisibilityRules,
 		&cal.TracksRealTime, &cal.RealTimeZone,
 		&cal.AnchorYear, &cal.AnchorMonth, &cal.AnchorDay, &cal.AnchorRealDate,
-		&cal.EraLook.ColorsOn, &cal.EraLook.Feel, &cal.EraLook.Intensity, &cal.EraLook.Speed)
+		&cal.EraLook.ColorsOn, &cal.EraLook.Feel, &cal.EraLook.Intensity, &cal.EraLook.Speed,
+		&cal.Sun.Kind, &cal.Sun.Color)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -720,6 +727,31 @@ func (r *calendarRepo) SetMoonHidden(ctx context.Context, calendarID string, moo
 	return nil
 }
 
+// SetMoonTint writes one moon's colour strength, scoped to calendarID.
+// Zero changed rows is a not-found only when the moon is missing, for the
+// same reason as in SetMoonHidden.
+func (r *calendarRepo) SetMoonTint(ctx context.Context, calendarID string, moonID int, tint *string) error {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE calendar_moons SET tint = ? WHERE id = ? AND calendar_id = ?`,
+		tint, moonID, calendarID)
+	if err != nil {
+		return err
+	}
+	if n, err := res.RowsAffected(); err != nil || n > 0 {
+		return err
+	}
+	var exists bool
+	if err := r.db.QueryRowContext(ctx,
+		`SELECT EXISTS(SELECT 1 FROM calendar_moons WHERE id = ? AND calendar_id = ?)`,
+		moonID, calendarID).Scan(&exists); err != nil {
+		return err
+	}
+	if !exists {
+		return apperror.NewNotFound("moon not found in calendar")
+	}
+	return nil
+}
+
 // --- Seasons ---
 
 // seasonCols is the column list for season queries; scanSeason reads it
@@ -1024,6 +1056,13 @@ func (r *calendarRepo) GetEras(ctx context.Context, calendarID string) ([]Era, e
 	return eras, rows.Err()
 }
 
+// SaveSunLook writes the calendar's sun.
+func (r *calendarRepo) SaveSunLook(ctx context.Context, calendarID string, look SunLook) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE calendars SET sun_kind = ?, sun_color = ? WHERE id = ?`,
+		look.Kind, look.Color, calendarID)
+	return err
+}
+
 // SaveEraLook writes the calendar's era look and each listed era's look
 // fields in one transaction, so Save in the settings either keeps all of
 // it or none. Every era update is scoped to calendarID, so an id from
@@ -1277,6 +1316,13 @@ func (r *calendarRepo) ApplyImport(ctx context.Context, cal *Calendar, result *I
 			`UPDATE calendars SET era_colors_on = ?, era_feel = ?, era_intensity = ?, era_speed = ? WHERE id = ?`,
 			l.ColorsOn, l.Feel, l.Intensity, l.Speed, cal.ID); err != nil {
 			return fmt.Errorf("update era look: %w", err)
+		}
+	}
+	if l := result.Settings.Sun; l != nil {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE calendars SET sun_kind = ?, sun_color = ? WHERE id = ?`,
+			l.Kind, l.Color, cal.ID); err != nil {
+			return fmt.Errorf("update sun: %w", err)
 		}
 	}
 

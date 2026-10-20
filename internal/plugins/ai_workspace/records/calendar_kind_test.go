@@ -25,6 +25,10 @@ type fakeStructure struct {
 	eras    []calendar.EraInput
 	eraUps  []calendar.UpdateEraInput
 	preview calendar.StructurePreview
+	sun     *calendar.SunLook
+	// strengths and hides are keyed by moon id.
+	strengths map[int]*float64
+	hides     map[int]bool
 }
 
 func (f *fakeStructure) GetDefaultCalendarForViewer(context.Context, string, permissions.Viewer) (*calendar.Calendar, error) {
@@ -86,6 +90,25 @@ func (f *fakeStructure) CreateEra(_ context.Context, _, _ string, in calendar.Er
 }
 func (f *fakeStructure) UpdateEra(_ context.Context, _ int, _, _ string, in calendar.UpdateEraInput) error {
 	f.eraUps = append(f.eraUps, in)
+	return nil
+}
+
+func (f *fakeStructure) SaveSunLook(_ context.Context, _, _ string, l calendar.SunLook) error {
+	f.sun = &l
+	return nil
+}
+func (f *fakeStructure) SetMoonStrength(_ context.Context, id int, _, _ string, v *float64) error {
+	if f.strengths == nil {
+		f.strengths = map[int]*float64{}
+	}
+	f.strengths[id] = v
+	return nil
+}
+func (f *fakeStructure) SetMoonHidden(_ context.Context, id int, _, _ string, hidden bool) error {
+	if f.hides == nil {
+		f.hides = map[int]bool{}
+	}
+	f.hides[id] = hidden
 	return nil
 }
 

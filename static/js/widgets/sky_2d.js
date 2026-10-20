@@ -121,7 +121,7 @@
         ctx.fillStyle = 'rgba(236,240,255,' + (sv * (.25 + .75 * m)).toFixed(3) + ')'; ctx.fillRect(x, y, .6 + m * 1.2, .6 + m * 1.2);
       }
     }
-    if (st.alt > -1 * W.D2R) { var sr = st.R * .95, sk = (1 - wx.cloud * .82); ctx.fillStyle = 'rgba(255,246,222,' + sk.toFixed(3) + ')'; ctx.beginPath(); ctx.arc(st.sp.x, st.sp.y, sr, 0, TAU); ctx.fill(); }
+    if (st.alt > -1 * W.D2R) { var sr = st.R * .95, sk = (1 - wx.cloud * .82); ctx.fillStyle = st.sunHue ? css(W.PAL.mixLin(W.PAL.hexLin('#fff6de'), W.PAL.hexLin(st.sunHue.hex), .7), sk) : 'rgba(255,246,222,' + sk.toFixed(3) + ')'; ctx.beginPath(); ctx.arc(st.sp.x, st.sp.y, sr, 0, TAU); ctx.fill(); }
     var through = clamp((1 - wx.cloud * .9) * (1 - wx.fog * .75), .04, 1);
     st.moons.forEach(function (M) {
       if (!M.up) return;

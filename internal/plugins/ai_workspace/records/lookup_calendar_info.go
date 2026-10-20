@@ -192,10 +192,14 @@ func (run *lookupRun) calendarInfo() (LookupAnswer, error) {
 			fmt.Fprintf(&b, "- %s: %s %d to %s %d\n", s.Name, cal.MonthName(s.StartMonth), s.StartDay, cal.MonthName(s.EndMonth), s.EndDay)
 		}
 	}
+	fmt.Fprintf(&b, "\n### Sun\n\nThe calendar has %s.\n", cal.Sun.SunDescription())
 	if len(cal.Moons) > 0 {
 		b.WriteString("\n### Moons\n\n")
 		for _, m := range cal.Moons {
 			line := fmt.Sprintf("- %s: a %s-day cycle, phase offset %s, colour %s", m.Name, num(m.CycleDays), num(m.PhaseOffset), m.Color)
+			if v, ok := calendar.MoonStrength(m.Tint); ok {
+				line += " at strength " + num(v)
+			}
 			if m.Manual() {
 				line = handMoonLine(cal, &m, today)
 			} else if len(cal.Months) > 0 {
