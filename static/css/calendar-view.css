@@ -2021,7 +2021,7 @@
 .cal-v5 .timetab[hidden], .cal-v5 .timebar[hidden]{display:none}
 .cal-v5 .timetab:hover{background:oklch(.13 .02 260 / .7)}
 .cal-v5 .timetab:focus-visible{outline:1.5px solid #fff;outline-offset:2px}
-.cal-v5 .timebar{position:absolute;left:0;right:0;bottom:0;z-index:3;display:flex;flex-direction:column;gap:6px;padding:9px 16px 9px;background:linear-gradient(to top,oklch(.13 .02 260 / .88),oklch(.13 .02 260 / .64));backdrop-filter:blur(8px);color:#eef2f8;font:550 12px/1.2 var(--sans);visibility:hidden}
+.cal-v5 .timebar{position:absolute;left:0;right:0;bottom:0;z-index:3;display:flex;flex-direction:column;gap:6px;padding:9px 16px 9px;isolation:isolate;color:#eef2f8;font:550 12px/1.2 var(--sans);visibility:hidden}
 .cal-v5 .skywrap.open .timebar:not([hidden]){visibility:visible}
 @media (prefers-reduced-motion: no-preference){.cal-v5 .timebar:not([hidden]){animation:timebar-up .32s cubic-bezier(.2,.8,.2,1)}}
 @keyframes timebar-up{from{transform:translateY(100%)}to{transform:none}}
@@ -2039,13 +2039,28 @@
 .cal-v5 .tbx{flex:none;display:grid;place-items:center;width:26px;height:26px;border-radius:50%;opacity:.8}
 .cal-v5 .tbx:hover{opacity:1;background:oklch(1 0 0 / .14)}
 .cal-v5 .timebar button:focus-visible, .cal-v5 .tbtr:focus-visible{outline:1.5px solid #fff;outline-offset:2px}
-.cal-v5 .tbtr{position:relative;flex:1;min-width:120px;height:22px;cursor:pointer;touch-action:none;border-radius:4px}
-.cal-v5 .tbbd{position:absolute;left:0;right:0;top:9px;height:4px;border-radius:2px;background:linear-gradient(90deg,#33406e 0%,#33406e 21%,#f59e0b 26%,#9bdcff 34%,#9bdcff 70%,#fb7185 77%,#33406e 83%,#33406e 100%)}
-.cal-v5 .tbnw{position:absolute;top:4px;width:2px;height:14px;margin-left:-1px;border-radius:1px;background:#fff;opacity:.8}
+/* The slider: the day as a band of sky colour, night to dawn to day to dusk, with an hour tick each hour and the quarters named underneath. */
+.cal-v5 .tbtr{position:relative;flex:1;min-width:120px;height:34px;cursor:pointer;touch-action:none;border-radius:4px}
+.cal-v5 .tbbd{position:absolute;left:0;right:0;top:8px;height:7px;border-radius:4px;background:linear-gradient(90deg,#1e2750 0%,#2a3566 18%,#7c5aa6 23%,#f59e0b 26.5%,#fcd9a0 30%,#9bdcff 36%,#c6ecff 50%,#9bdcff 66%,#fcb07e 72%,#fb7185 76%,#6a4a8c 80%,#2a3566 84%,#1e2750 100%);box-shadow:inset 0 0 0 1px oklch(1 0 0 / .16),inset 0 1px 2px oklch(0 0 0 / .35),0 1px 0 oklch(1 0 0 / .06)}
+.cal-v5 .tbtk{position:absolute;left:0;right:0;top:17px;bottom:0;pointer-events:none}
+.cal-v5 .tbtk i{position:absolute;top:0;width:1px;height:3px;margin-left:-.5px;background:oklch(1 0 0 / .32)}
+.cal-v5 .tbtk i.mj{height:5px;background:oklch(1 0 0 / .6)}
+.cal-v5 .tbtk b{position:absolute;top:7px;transform:translateX(-50%);font:600 9px/1 var(--sans);letter-spacing:.04em;color:oklch(1 0 0 / .62);white-space:nowrap}
+.cal-v5 .tbnw{position:absolute;top:4px;width:2px;height:15px;margin-left:-1px;border-radius:1px;background:#fff;opacity:.85;box-shadow:0 0 0 1px oklch(0 0 0 / .25)}
 .cal-v5 .tbnw[hidden]{display:none}
-.cal-v5 .tbkb{position:absolute;top:3px;width:16px;height:16px;margin-left:-8px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.5);transition:left .25s cubic-bezier(.2,.8,.2,1)}
-.cal-v5 .tbtr.drag .tbkb{transition:none}
-@media (prefers-reduced-motion: reduce){.cal-v5 .tbkb{transition:none}}
+.cal-v5 .tbkb{position:absolute;top:2px;width:19px;height:19px;margin-left:-9.5px;border-radius:50%;background:radial-gradient(circle at 50% 38%,#fff 0 34%,#e8edf6 35% 100%);box-shadow:0 0 0 1.5px oklch(1 0 0 / .9),0 0 0 4px oklch(.13 .02 260 / .45),0 2px 6px rgba(0,0,0,.55);transition:left .25s cubic-bezier(.2,.8,.2,1),transform .15s var(--ease)}
+.cal-v5 .tbtr:hover .tbkb, .cal-v5 .tbtr.drag .tbkb{transform:scale(1.12)}
+.cal-v5 .tbtr.drag .tbkb{transition:transform .15s var(--ease)}
+.cal-v5 .tbbub{position:absolute;left:50%;bottom:calc(100% + 9px);transform:translate(-50%,4px);padding:5px 8px;border-radius:7px;background:oklch(.16 .02 260 / .92);box-shadow:0 0 0 1px oklch(1 0 0 / .14),0 4px 12px rgba(0,0,0,.4);font:650 11.5px/1 var(--sans);font-variant-numeric:tabular-nums;color:#fff;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .15s var(--ease),transform .15s var(--ease)}
+.cal-v5 .tbtr.drag .tbbub{opacity:1;transform:translate(-50%,0)}
+/* Dragging, only the slider stays: the rest of the bar and its shade step aside so the sky behind shows the moment. */
+.cal-v5 .timebar::before{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(to top,oklch(.13 .02 260 / .88),oklch(.13 .02 260 / .64));backdrop-filter:blur(8px);transition:opacity .18s var(--ease)}
+.cal-v5 .timebar > .tbr:not(.tbslide), .cal-v5 .tbslide > :not(.tbtr){transition:opacity .18s var(--ease),visibility 0s linear 0s}
+.cal-v5 .timebar.dragging::before{opacity:0}
+.cal-v5 .timebar.dragging > .tbr:not(.tbslide), .cal-v5 .timebar.dragging .tbslide > :not(.tbtr){opacity:0;visibility:hidden;transition:opacity .18s var(--ease),visibility 0s linear .18s}
+.cal-v5 .timebar.dragging .tbtk b{color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.8)}
+.cal-v5 .timebar.dragging .tbtk i{background:oklch(1 0 0 / .8);box-shadow:0 0 2px rgba(0,0,0,.6)}
+@media (prefers-reduced-motion: reduce){.cal-v5 .tbkb, .cal-v5 .tbbub, .cal-v5 .timebar::before, .cal-v5 .timebar > .tbr, .cal-v5 .tbslide > *{transition:none!important}}
 .cal-v5 .day.tblook{box-shadow:inset 0 0 0 2px var(--ink2)}
 @media (max-width: 640px){
   .cal-v5 .timebar{gap:4px;padding:7px 10px}
