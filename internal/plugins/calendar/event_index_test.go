@@ -120,3 +120,32 @@ func TestListEventIndexForViewer_Anchorable(t *testing.T) {
 		t.Errorf("got %d entries, want 2", len(got))
 	}
 }
+
+// An event that only names a moon phase is flagged for the Moons panel's
+// clean-up list; one that says something more, or names no phase, is not.
+func TestPhaseOnly(t *testing.T) {
+	note := "The wolves gather."
+	empty := "  "
+	tests := []struct {
+		name string
+		ev   Event
+		want bool
+	}{
+		{"full moon of", Event{Name: "Full moon of Selune"}, true},
+		{"bare new moon", Event{Name: "New Moon"}, true},
+		{"quarter", Event{Name: "Selune: First Quarter"}, true},
+		{"blank description", Event{Name: "Full Moon", Description: &empty}, true},
+		{"described", Event{Name: "Full Moon", Description: &note}, false},
+		{"described html", Event{Name: "Full Moon", DescriptionHTML: &note}, false},
+		{"festival", Event{Name: "Night of Wolves"}, false},
+		{"moon in a word", Event{Name: "Moonday market"}, false},
+		{"honeymoon", Event{Name: "Honeymoon"}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := phaseOnly(tt.ev); got != tt.want {
+				t.Errorf("phaseOnly(%q) = %v, want %v", tt.ev.Name, got, tt.want)
+			}
+		})
+	}
+}

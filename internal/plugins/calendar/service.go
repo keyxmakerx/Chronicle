@@ -1931,6 +1931,25 @@ type EventIndexEntry struct {
 	// another event: the rule check refuses it as an anchor, so a picker
 	// must not offer it.
 	Anchorable bool `json:"anchorable"`
+	// PhaseOnly marks an event that only names a moon phase ("Full moon of
+	// Selune") and says nothing more: the month already shows every moon's
+	// phase, so the Moons panel offers these to an owner for removal.
+	PhaseOnly bool `json:"phaseOnly,omitempty"`
+}
+
+// phaseOnlyName matches an event name that is just a moon phase.
+var phaseOnlyName = regexp.MustCompile(`(?i)\b(full|new|half|crescent|gibbous)\s+moons?\b|\b(first|last|third)\s+quarter\b`)
+
+// phaseOnly reports whether e only marks a moon phase: its name is a phase
+// and it carries no description of its own.
+func phaseOnly(e Event) bool {
+	if e.Description != nil && strings.TrimSpace(*e.Description) != "" {
+		return false
+	}
+	if e.DescriptionHTML != nil && strings.TrimSpace(*e.DescriptionHTML) != "" {
+		return false
+	}
+	return phaseOnlyName.MatchString(e.Name)
 }
 
 // ListEventIndexForViewer: see the interface doc comment. The visibility
@@ -1965,6 +1984,7 @@ func (s *calendarService) ListEventIndexForViewer(ctx context.Context, calendarI
 		entries = append(entries, EventIndexEntry{
 			ID: e.ID, Name: e.Name, Year: e.Year, Month: e.Month, Day: e.Day,
 			Anchorable: e.RecurrenceType == nil || *e.RecurrenceType != RecurrenceByRule || e.RecurrenceRule == nil || !e.RecurrenceRule.hasAfterEvent(),
+			PhaseOnly:  phaseOnly(e),
 		})
 	}
 	return entries, truncated, nil

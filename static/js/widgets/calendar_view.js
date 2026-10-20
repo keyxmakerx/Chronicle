@@ -4310,17 +4310,7 @@
       var cal = this.cal, key = dayKey(y, m, d);
       var isToday = y === cal.current_year && m === cal.current_month && d === cal.current_day;
       var isPast = CalDate.dayIndex(cal, y, m, d) < CalDate.dayIndex(cal, cal.current_year, cal.current_month, cal.current_day);
-      var moon = this.mainMoon();
-      var moonHTML = '';
-      if (moon && !this.canAuthorDmOnly && MoonMath.manual(moon) && !MoonMath.state(moon, CalDate.dayIndex(cal, y, m, d))) moon = null;
-      if (moon) {
-        var abs = CalDate.dayIndex(cal, y, m, d);
-        // The DM team sees a hand-set moon faded where players have not been
-        // told of the mark it stands under.
-        var mk = MoonMath.manual(moon) && this.canAuthorDmOnly ? MoonMath.markOn(moon, abs) : null;
-        var unshown = mk && !mk.shown;
-        moonHTML = '<span class="msil' + (unshown ? ' dim' : '') + '" data-moon-day="' + key + '" title="' + esc(moon.name + ', ' + MoonMath.label(moon, abs) + (unshown ? ' (players don’t see this)' : '')) + '">' + this._moonSilFor(moon, abs) + '</span>';
-      }
+      var moonHTML = this._dayMoonsHTML(key, CalDate.dayIndex(cal, y, m, d));
       return '<button type="button" class="day' + (isToday ? ' today' : '') + (isPast ? ' past' : '') + '" data-key="' + key + '">' +
         moonHTML + weatherMarkHTML(this.weatherOnDay(y, m, d), !isPast && !isToday) + this.forecastMarkOn(y, m, d, !isPast && !isToday) +
         (this.canAuthorDmOnly ? this._paintMarkHTML(y, m, d, !isPast && !isToday) : '') +
@@ -4350,6 +4340,44 @@
       if (extra > 0) html += '<span class="more">+' + extra + '</span>';
       html += '</div>';
       return html;
+    },
+
+    // The moons a day's corner shows: those this viewer may see, at most
+    // three (the glance names them all). A hand-set moon that players have
+    // no mark for yet stays off their calendar.
+    _gridMoons: function (abs) {
+      var dm = this.canAuthorDmOnly;
+      return (this.cal.moons || []).filter(function (mo) {
+        return dm || !(MoonMath.manual(mo) && !MoonMath.state(mo, abs));
+      });
+    },
+
+    // A day's moons: one moon is its phase silhouette; two or more are
+    // nested rings, outermost first, each filled as far as that moon is lit
+    // and tinted faintly toward its own colour.
+    _dayMoonsHTML: function (key, abs) {
+      var moons = this._gridMoons(abs), dm = this.canAuthorDmOnly;
+      if (!moons.length) return '';
+      var unshown = function (mo) { var k = dm && MoonMath.manual(mo) ? MoonMath.markOn(mo, abs) : null; return !!(k && !k.shown); };
+      var title = moons.map(function (mo) {
+        return mo.name + ', ' + MoonMath.label(mo, abs) + (unshown(mo) ? ' (players don’t see this)' : '');
+      }).join('; ');
+      var dim = moons.length === 1 && unshown(moons[0]);
+      var body = moons.length === 1 ? this._moonSilFor(moons[0], abs) : this._moonRingsSVG(moons.slice(0, 3), abs, unshown);
+      return '<span class="msil' + (moons.length > 1 ? ' rings' : '') + (dim ? ' dim' : '') + '" data-moon-day="' + key + '" title="' + esc(title) + '">' + body + '</span>';
+    },
+
+    _moonRingsSVG: function (moons, abs, unshown) {
+      var radii = moons.length === 2 ? [8, 4.8] : [8.2, 5.6, 3];
+      return '<svg class="rng" width="20" height="20" viewBox="-10 -10 20 20" aria-hidden="true">' + moons.map(function (mo, i) {
+        var r = radii[i], c = 2 * Math.PI * r, tint = sanitizeColor(mo.color);
+        var style = tint ? ' style="--mc:' + tint + '"' : '';
+        var cls = 'rg' + (unshown(mo) ? ' dim' : '');
+        if (MoonMath.unseen(mo, abs)) return '<circle class="' + cls + ' gone" r="' + r + '"' + style + '/>';
+        var lit = MoonMath.litPct(MoonMath.phase(mo, abs)) / 100;
+        return '<g class="' + cls + '"' + style + '><circle class="rt" r="' + r + '"/>' +
+          (lit > 0.01 ? '<circle class="rl" r="' + r + '" stroke-dasharray="' + (c * lit).toFixed(2) + ' ' + c.toFixed(2) + '" transform="rotate(-90)"/>' : '') + '</g>';
+      }).join('') + '</svg>';
     },
 
     _moonSilSVG: function (phase) {
@@ -4895,6 +4923,8 @@
         if (strip) self.selectMoon(strip.dataset.moon);
         var tick = e.target.closest('[data-mv-day]');
         if (tick) { self.mvDay = tick.dataset.mvDay; self._refreshMv(); }
+        var rm = e.target.closest('[data-mv-remove]');
+        if (rm) self._removePhaseEvent(rm.dataset.mvRemove, rm);
       });
       this.popEl.addEventListener('click', function (e) {
         if (e.target.closest('[data-close]')) self.closePop();
@@ -5330,11 +5360,14 @@
       var self = this;
       var html;
       if (mk.classList.contains('msil')) {
-        var moon = this.mainMoon();
-        if (!moon) return;
         var d = parseDayKey(mk.dataset.moonDay);
         var abs = CalDate.dayIndex(this.cal, d.y, d.m, d.d);
-        html = '<div class="gh"><b>' + esc(moon.name) + '</b></div><div class="gw">' + esc(MoonMath.describe(moon, abs)) + '</div>';
+        var moons = this._gridMoons(abs);
+        if (!moons.length) return;
+        html = moons.map(function (mo) {
+          var c = sanitizeColor(mo.color);
+          return '<div class="gm"><span class="gmd"' + (c ? ' style="background:' + c + '"' : '') + '></span><b>' + esc(mo.name) + '</b> ' + esc(MoonMath.describe(mo, abs)) + '</div>';
+        }).join('');
       } else if (mk.classList.contains('avl')) {
         html = this._freeGlanceHTML(mk.dataset.avl);
         if (!html) return;
@@ -5603,9 +5636,49 @@
       var btn = $('#cal5-moonbtn', this.el);
       this.mvEl.innerHTML = this._mvHTML();
       growOpen(this.mvEl, btn, this.calEl, { center: true });
+      this._loadPhaseEvents();
       btn.setAttribute('aria-expanded', 'true');
       this._observeMvGraph();
       this._updateScrim();
+    },
+
+    // The month draws every moon's phase, so an event that only names one
+    // ("Full moon of Selune") repeats it. The server flags those; an owner
+    // sees them listed here to remove.
+    _loadPhaseEvents: function () {
+      var self = this;
+      if (!this.canEdit) return;
+      this.loadEventIndex().then(function (ok) {
+        if (!ok) return;
+        self._phaseEvents = (self._eventIndex || []).filter(function (e) { return e.phaseOnly; });
+        if (self.mvEl.classList.contains('open')) self._refreshMv();
+      });
+    },
+
+    _mvPhaseEventsHTML: function () {
+      var list = this.canEdit && this._phaseEvents;
+      if (!list || !list.length) return '';
+      var self = this;
+      return '<div class="mvclean"><div class="phead"><h4 class="plabel">Events that only mark a phase</h4></div>' +
+        '<p class="mvcnote">The month already shows every moon’s phase, so these repeat it. Remove the ones you don’t need.</p>' +
+        '<ul class="mvclist">' + list.map(function (e) {
+          return '<li><span class="mvcn">' + esc(e.name) + '</span><span class="mvcd">' + esc(self._dateLabel(e.year, e.month, e.day)) + '</span>' +
+            '<button type="button" class="mvcx" data-mv-remove="' + esc(e.id) + '" aria-label="Remove ' + esc(e.name) + '" title="Remove"><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button></li>';
+        }).join('') + '</ul></div>';
+    },
+
+    _removePhaseEvent: function (id, btn) {
+      var self = this, ev = (this._phaseEvents || []).filter(function (e) { return e.id === id; })[0];
+      if (!ev || !window.confirm('Remove “' + ev.name + '”? This cannot be undone.')) return;
+      btn.disabled = true;
+      Chronicle.apiFetch(this.apiBase + '/events/' + encodeURIComponent(id), { method: 'DELETE' }).then(function (resp) {
+        if (!resp.ok) { btn.disabled = false; self.say('Could not remove the event.'); return; }
+        self._phaseEvents = self._phaseEvents.filter(function (e) { return e.id !== id; });
+        self.eventsByMonth = {};
+        self.renderMonth();
+        self._refreshMv();
+        self.say('Removed ' + ev.name + '.');
+      }).catch(function () { btn.disabled = false; self.say('Could not remove the event.'); });
     },
 
     closeMoonView: function () {
@@ -5673,6 +5746,7 @@
             '<div class="phead"><h4 class="plabel">This month</h4></div>' +
             graph +
             (moon && this._mvDirectorHTML ? this._mvDirectorHTML(moon, day) : '') +
+            this._mvPhaseEventsHTML() +
           '</div>' +
         '</div>';
     },

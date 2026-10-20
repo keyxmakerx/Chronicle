@@ -898,6 +898,17 @@
 /* Director only: a dashed ring on a red moon players can't see yet. */
 .cal-v5 .msil.blood.dir::after{content:"";position:absolute;inset:1.5px;border-radius:50%;border:1px dashed var(--bldS);pointer-events:none}
 .cal-v5 .band .msil{position:relative;top:auto;right:auto;margin-left:4px;flex:none}
+/* Two or more moons: nested rings, each lit as far as its moon, tinted a third of the way toward the moon's own colour. */
+.cal-v5 .msil .rng{display:block;overflow:visible}
+.cal-v5 .msil .rng circle{fill:none;stroke-width:1.9}
+.cal-v5 .msil .rng .rt{stroke:var(--silB)}
+.cal-v5 .msil .rng .rl{stroke:color-mix(in oklch, var(--silL) 68%, var(--mc, var(--silL)));stroke-linecap:round}
+.cal-v5 .msil .rng .gone{stroke:var(--silS);stroke-dasharray:1.6 1.6}
+.cal-v5 .msil .rng .dim{opacity:.45}
+.cal-v5 .hc .gm{display:flex;align-items:center;gap:6px;white-space:nowrap;font:500 12px/1.35 var(--sans);color:var(--mut)}
+.cal-v5 .hc .gm b{font-weight:600;color:var(--ink)}
+.cal-v5 .hc .gm + .gm{margin-top:4px}
+.cal-v5 .hc .gmd{width:7px;height:7px;border-radius:50%;background:var(--silL);flex:none}
 .cal-v5 .day.packed .msil, .cal-v5 .msil.away{visibility:hidden}
 /* A silhouette in flight into the day's card turns into the realistic moon it lands as. */
 .cal-v5 .flyer.mflyer{--sb:var(--silB);--ss:var(--silS);--sl:var(--silL)}
@@ -956,6 +967,15 @@
 .cal-v5 .mvbody{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;display:grid;grid-template-columns:268px minmax(0,1fr)}
 .cal-v5 .mvl{padding:14px 18px 18px;border-right:1px solid var(--hair);min-width:0}
 .cal-v5 .mvr{padding:12px 18px 18px;min-width:0}
+.cal-v5 .mvclean{margin-top:16px;padding-top:12px;border-top:1px solid var(--hair)}
+.cal-v5 .mvcnote{margin:4px 0 8px;font:500 12px/1.45 var(--sans);color:var(--mut)}
+.cal-v5 .mvclist{list-style:none;margin:0;padding:0}
+.cal-v5 .mvclist li{display:flex;align-items:center;gap:10px;min-height:32px;border-bottom:1px solid var(--hair)}
+.cal-v5 .mvcn{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:500 13px/1.3 var(--sans);color:var(--ink)}
+.cal-v5 .mvcd{font:500 12px/1.3 var(--sans);color:var(--mut);white-space:nowrap}
+.cal-v5 .mvcx{display:grid;place-items:center;width:28px;height:28px;border:0;border-radius:8px;background:none;color:var(--mut);cursor:pointer}
+.cal-v5 .mvcx:hover, .cal-v5 .mvcx:focus-visible{background:var(--hair);color:var(--ink)}
+.cal-v5 .mvcx:disabled{opacity:.4;cursor:default}
 .cal-v5 .mvbig{position:relative;display:grid;place-items:center;padding:0 0 10px}
 /* A magic night's aura and sigils sit round the big moon; the words stay above them. */
 .cal-v5 .bigaura{position:absolute;left:50%;top:calc(50% - 5px);transform:translate(-50%,-50%);pointer-events:none}
@@ -1164,6 +1184,7 @@
 .cal-v5 .msil{top:31px;right:auto;left:50%;width:16px;height:16px;margin-left:-8px}
 .cal-v5 .msil::before{display:none}
 .cal-v5 .msil .sil{width:11px;height:11px}
+.cal-v5 .msil .rng{width:15px;height:15px}
 .cal-v5 .dc .marks{margin-top:13px}
 .cal-v5 .band .msil{top:auto;left:auto;margin-left:6px}
 .cal-v5 .band .dc .marks{margin-top:0}
