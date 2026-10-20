@@ -3472,7 +3472,10 @@
     background: rgb(255 255 255 / 0.05); color: var(--nav-hi); font-size: 12px;
   }
   .nav-drill-search input::placeholder { color: var(--nav-text-3); }
-  .nav-drill-search i { position: absolute; left: 23px; top: 50%; transform: translateY(-50%); font-size: 11px; color: var(--nav-text-3); pointer-events: none; }
+  /* Pinned to the 28px input, not the box: the tag filter appends its chip
+     rows inside this box, so 50% of the box lands among the chips, and a
+     plain descendant selector would also pin the chips' own icons. */
+  .nav-drill-search > i { position: absolute; left: 23px; top: 14px; transform: translateY(-50%); font-size: 11px; color: var(--nav-text-3); pointer-events: none; }
   /* Sub-categories are their own rows (same row grammar as the folder tree
      below them: full-width, icon + label + count) rather than a filter chip
      bar — they navigate to that sub-category's own page. */
