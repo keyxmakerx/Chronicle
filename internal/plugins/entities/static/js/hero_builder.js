@@ -98,6 +98,9 @@
     try { this.heroes = JSON.parse(el.getAttribute('data-heroes') || '[]') || []; } catch (e) { this.heroes = []; }
     this.heroes.forEach(function (h) { h.values = h.values || {}; h.hidden = h.hidden || []; });
     this.fresh = { id: 'new', name: '', values: {}, hidden: [], isNew: true };
+    // The new-hero sentence stays folded until the page's Create hero is
+    // clicked, or a draft left open on this device brings it back.
+    this.freshOpen = false;
     this.panel = null;
     this.busy = false;
   }
@@ -130,10 +133,11 @@
         var st = self.stepByKey(k), c = st && self.choiceByName(st, d.values[k]);
         if (c) self.fresh.values[k] = c.name;
       });
+      this.freshOpen = d.open !== false && !!(this.fresh.name.trim() || Object.keys(this.fresh.values).length);
     } catch (e) { /* no storage: start fresh */ }
   };
   Builder.prototype.saveDraft = function () {
-    try { window.localStorage.setItem(this.draftKey, JSON.stringify({ name: this.fresh.name, values: this.fresh.values })); } catch (e) { /* ignore */ }
+    try { window.localStorage.setItem(this.draftKey, JSON.stringify({ name: this.fresh.name, values: this.fresh.values, open: this.freshOpen })); } catch (e) { /* ignore */ }
   };
   Builder.prototype.clearDraft = function () {
     try { window.localStorage.removeItem(this.draftKey); } catch (e) { /* ignore */ }
@@ -164,10 +168,14 @@
   // --- The sentences ---
   Builder.prototype.render = function () {
     var self = this;
-    if (!this.plan.steps.length && !this.canCreate) { this.el.innerHTML = ''; this.el.hidden = true; return; }
+    var showFresh = this.canCreate && this.freshOpen;
+    // Nothing to fill in yet: the mount stays, empty, so Create hero can open it.
+    this.el.hidden = !this.heroes.length && !showFresh;
+    this.el.setAttribute('data-hb-ready', '');
+    if (!this.plan.steps.length && !this.canCreate) { this.el.innerHTML = ''; return; }
     var html = '<div class="hb-wrap' + (this.panel ? ' is-open' : '') + '"><div class="hb-main">';
     html += this.heroes.map(function (h) { return self.heroHtml(h); }).join('');
-    if (this.canCreate) html += this.freshHtml();
+    if (showFresh) html += this.freshHtml();
     html += '</div><aside class="hb-panel" aria-label="Choices"' + (this.panel ? '' : ' hidden') + '>' + this.panelHtml() + '</aside></div>' +
       '<div class="hb-toast" role="status" aria-live="polite" hidden></div>';
     this.el.innerHTML = html;
@@ -220,7 +228,8 @@
       ' choices for heroes yet, so a new hero only needs a name.</p>';
     return '<article class="hb-hero hb-fresh" data-hero-card="new">' +
       '<header class="hb-head"><div class="hb-names"><span class="hb-kicker">' + (this.heroes.length ? 'Another hero' : 'A new hero') + '</span></div>' +
-      (left ? '<div class="hb-tools"><button type="button" class="hb-btn" data-rollall="new">Roll everything left</button></div>' : '') +
+      '<div class="hb-tools">' + (left ? '<button type="button" class="hb-btn" data-rollall="new">Roll everything left</button>' : '') +
+      '<button type="button" class="hb-link" data-act="fold">Not now</button></div>' +
       '</header>' + none + (this.plan.steps.length ? this.sentenceHtml(h, who) : '<p class="hb-sentence">' + who.replace('’s', '') + '</p>') +
       this.progressHtml(h) +
       '<div class="hb-make"><button type="button" class="hb-btn hb-go" data-make>Make this hero</button><span class="hb-note">' + whose + ' Anything left blank can be chosen later.</span></div>' +
@@ -538,6 +547,8 @@
         if (u) u();
       } else if (t.getAttribute('data-act') === 'close') {
         self.closePanel();
+      } else if (t.getAttribute('data-act') === 'fold') {
+        self.foldFresh();
       }
     };
     this.onInput = function (e) {
@@ -570,9 +581,7 @@
       var a = e.target.closest && e.target.closest('[data-create-hero]');
       if (!a || !self.canCreate || !self.plan || !document.body.contains(el)) return;
       e.preventDefault();
-      var card = el.querySelector('[data-hero-card="new"]'), name = el.querySelector('[data-hb-name]');
-      if (card) card.scrollIntoView({ block: 'center' });
-      if (name) name.focus({ preventScroll: true });
+      self.openFresh();
     };
     this.onResize = function () { self.placePanel(); };
     el.addEventListener('click', this.onClick);
@@ -580,6 +589,30 @@
     el.addEventListener('keydown', this.onKey);
     document.addEventListener('click', this.onCreate, true);
     window.addEventListener('resize', this.onResize);
+  };
+
+  // Create hero unfolds the sentence for a new hero; Not now folds it away
+  // again, keeping the draft on this device for the next time.
+  Builder.prototype.openFresh = function () {
+    var grow = !this.freshOpen;
+    if (grow) {
+      this.freshOpen = true;
+      this.saveDraft();
+      this.render();
+    }
+    var card = this.el.querySelector('[data-hero-card="new"]'), name = this.el.querySelector('[data-hb-name]');
+    if (!card) return;
+    if (grow) card.classList.add('is-growing');
+    card.scrollIntoView({ block: 'nearest' });
+    if (name) name.focus({ preventScroll: true });
+  };
+  Builder.prototype.foldFresh = function () {
+    this.freshOpen = false;
+    this.saveDraft();
+    if (this.panel && this.panel.hero === 'new') this.panel = null;
+    this.render();
+    var go = document.querySelector('[data-create-hero]');
+    if (go) go.focus({ preventScroll: true });
   };
 
   Builder.prototype.unwire = function () {

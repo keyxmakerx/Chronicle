@@ -24,6 +24,10 @@
 /* One hero: a heading with the accent rule, the sentence, its progress. */
 .hb-hero { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .hb-hero + .hb-hero { padding-top: 24px; border-top: 1px solid var(--color-border); }
+/* Create hero unfolds the new-hero sentence down from the top, like a Grow
+   from the header it was asked for in. */
+.hb-fresh.is-growing { transform-origin: top; animation: hb-grow var(--dur-standard) var(--ease-out) both; }
+@keyframes hb-grow { from { opacity: 0; transform: scaleY(0.96) translateY(-4px); } to { opacity: 1; transform: none; } }
 .hb-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; }
 .hb-names { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .hb-kicker { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-text-secondary); }
