@@ -319,6 +319,6 @@
     absoluteDay: absoluteDay, dayIndex: dayIndex, yearLength: yearLength, isLeapYear: isLeapYear, monthDays: monthDays, hour24: hour24,
     phaseAt: phaseAt, handState: handState, inclinationFor: inclinationFor,
     makeSkym: makeSkym, PROJ: PROJ, moonTurn: moonTurn,
-    PAL: PAL, paletteFor: paletteFor, tintPalette: tintPalette, sunHue: sunHue
+    PAL: PAL, paletteFor: paletteFor, tintPalette: tintPalette, sunHue: sunHue, SUN_KINDS: SUN_KINDS
   };
 })();

@@ -608,7 +608,8 @@
   //     seed, name, campaignId + calendarId (to read the day's own weather;
   //     without them the calendar's current weather shows), followers() → elements below the card that ride with it,
   //     before() → called as a fold starts, travel() → false to fold without
-  //     moving the card, say(text)}. Throws when there is nothing to draw with.
+  //     moving the card, say(text), overlay(ctx, state, dpr, y) → draws over
+  //     each frame, such as the hand controls' ring on the chosen body}. Throws when there is nothing to draw with.
   function Dock(o) {
     var self = this;
     this.o = o;
@@ -709,6 +710,27 @@
     var st = buildState(this.model, this.rm ? 0 : t, dt);
     paintSky(this.ctx, this, st, d, y0, !!this.looping);
     this.pace = paceOf(st);
+    this.lastSt = st; this.lastY = y0;
+    if (this.o.overlay) this.o.overlay(this.ctx, st, d, y0);
+  };
+  // The body drawn under a point of the pane (CSS pixels from its top-left):
+  // 'sun', a moon's id, or null. Read from the last frame, so it matches
+  // what the viewer clicked; nothing while the pane is folded or folding.
+  Dock.prototype.bodyAt = function (x, y) {
+    var st = this.lastSt, hit = null;
+    if (!st || !this.S.layout || this.S.on) return null;
+    y -= this.lastY || 0;
+    st.moons.forEach(function (M) { if (M.up && Math.hypot(M.x - x, M.y - y) <= Math.max(16, M.r * 1.4)) hit = M.mo.id; });
+    if (hit == null && st.alt > -.02 && Math.hypot(st.sp.x - x, st.sp.y - y) <= Math.max(18, st.R * 1.7)) hit = 'sun';
+    return hit;
+  };
+  // Which bodies are above the horizon in the last frame: 'sun' and moon ids.
+  Dock.prototype.bodiesUp = function () {
+    var st = this.lastSt, up = {};
+    if (!st) return up;
+    st.moons.forEach(function (M) { if (M.up) up[M.mo.id] = true; });
+    if (st.alt > -.02) up.sun = true;
+    return up;
   };
   Dock.prototype.fold = function (open) {
     var S = this.S, target = open ? 1 : 0;
