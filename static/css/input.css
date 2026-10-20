@@ -6238,6 +6238,16 @@ mark.era-w { background: var(--era-hl-strong); color: inherit; border-radius: 3p
 .perm-chip.perm-chip-static { cursor: default; }
 .perm-chip.perm-chip-static:hover { background: var(--perm-chip-fill, var(--color-bg-tertiary, #f3f4f6)); box-shadow: none; }
 .perm-corner-open [data-perm-corner-trigger] { background: var(--color-card-bg, #fff); box-shadow: var(--perm-chip-lift, var(--elev-hover)); }
+/* On a page the chip is just its icon until the page is in edit mode, to save
+   room beside Edit page: no frame until hover, like every icon control. The
+   word stays for screen readers and the hover tip names the state. The Create
+   Page form is all editing, so it keeps the word. */
+[data-entity-access] .perm-chip { --perm-chip-fill: transparent; --perm-chip-edge: 0 solid transparent; width: 32px; height: 32px; padding: 0; justify-content: center; }
+[data-entity-access] .perm-chip [data-perm-corner-label] { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+[data-entity-access] .perm-chip .fa-chevron-down { display: none; }
+[data-editing] [data-entity-access] .perm-chip { --perm-chip-fill: inherit; --perm-chip-edge: inherit; width: auto; height: 28px; padding: 0 10px; }
+[data-editing] [data-entity-access] .perm-chip [data-perm-corner-label] { position: static; width: auto; height: auto; overflow: visible; clip: auto; }
+[data-editing] [data-entity-access] .perm-chip .fa-chevron-down { display: inline-block; }
 @media (prefers-reduced-motion: reduce) { .perm-corner-panel { transition: none; } }
 
 /* ---- shop_inventory.js ---- */
