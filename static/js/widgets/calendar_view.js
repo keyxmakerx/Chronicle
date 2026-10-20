@@ -1632,7 +1632,7 @@
             '<button type="button" class="tbq" data-tb-now hidden>Back to now</button>' +
             (set ? '<button type="button" class="tbgo" data-tb-set disabled>Set time</button>' : '') +
             '<button type="button" class="tbx" data-tb-close aria-label="Put the time bar away" title="Put the time bar away"><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></button></div>' +
-          '<div class="tbr"><div class="tbtr" role="slider" tabindex="0" aria-label="Time of day"><span class="tbbd"></span><span class="tbnw"></span><span class="tbkb"></span></div>' +
+          '<div class="tbr tbslide"><div class="tbtr" role="slider" tabindex="0" aria-label="Time of day"><span class="tbbd"></span><span class="tbtk" aria-hidden="true"></span><span class="tbnw"></span><span class="tbkb"><span class="tbbub" aria-hidden="true"></span></span></div>' +
             '<button type="button" class="tbq" data-tb-step="60">+1 hour</button>' +
             '<button type="button" class="tbq" data-tb-step="480">Long rest</button>' +
             '<button type="button" class="tbq" data-tb-step="day">+1 day</button>' +
@@ -1665,14 +1665,17 @@
         var v = Math.round(Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * day / step) * step;
         self._lookMinute(Math.min(day - 1, v));
       };
+      // While the knob is held the rest of the bar steps aside, so the
+      // sky behind it shows the moment being dragged to.
       tr.addEventListener('pointerdown', function (e) {
         if (e.button) return;
         tr.setPointerCapture(e.pointerId);
         tr.classList.add('drag');
+        bar.classList.add('dragging');
         fromX(e);
       });
       tr.addEventListener('pointermove', function (e) { if (tr.classList.contains('drag')) fromX(e); });
-      var up = function () { tr.classList.remove('drag'); };
+      var up = function () { tr.classList.remove('drag'); bar.classList.remove('dragging'); };
       tr.addEventListener('pointerup', up);
       tr.addEventListener('pointercancel', up);
       tr.addEventListener('keydown', function (e) {
@@ -1780,6 +1783,24 @@
       return out.join(' ') + (gap > 0 ? ' ahead' : ' back');
     },
 
+    // An hour tick under the band for each hour of the calendar's day,
+    // taller at the quarters, which are named. Drawn again only when the
+    // day's length changes.
+    _timeTicks: function (tr) {
+      var hpd = this._hoursPerDay(), box = $('.tbtk', tr);
+      if (!box || box.dataset.hpd === String(hpd)) return;
+      box.dataset.hpd = String(hpd);
+      var h = '', q = hpd % 4 === 0 ? hpd / 4 : 0, every = hpd > 48 ? Math.ceil(hpd / 48) : 1;
+      for (var i = 1; i < hpd; i++) {
+        var major = q && i % q === 0;
+        if (!major && i % every) continue;
+        var left = (i / hpd * 100) + '%';
+        h += '<i class="' + (major ? 'mj' : '') + '" style="left:' + left + '"></i>';
+        if (major) h += '<b style="left:' + left + '">' + esc(this._hoursPerDay() === 24 ? (i === 12 ? 'noon' : ampm(i * 60)) : 'Hour ' + i) + '</b>';
+      }
+      box.innerHTML = h;
+    },
+
     // Draws the bar for the moment being looked at, and marks that day on
     // the grid. Called on every sky redraw.
     _paintTimeBar: function () {
@@ -1800,7 +1821,9 @@
       var go = $('[data-tb-set]', bar);
       if (go) go.disabled = !away;
       var at = p.h * mph + p.min, tr = $('.tbtr', bar);
+      this._timeTicks(tr);
       $('.tbkb', tr).style.left = ((at + 0.5) / day * 100) + '%';
+      $('.tbbub', tr).textContent = this._clockWords(p.h, p.min);
       var today = p.y === c.current_year && p.m === c.current_month && p.d === c.current_day;
       var nw = $('.tbnw', tr);
       nw.hidden = !today || !away;
