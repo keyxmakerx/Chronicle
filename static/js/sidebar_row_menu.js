@@ -101,6 +101,11 @@
     return row || null;
   }
 
+  /** A same-site path, or "" for anything that could leave the site. */
+  function sitePath(p) {
+    return typeof p === 'string' && /^\/(?![\/\\])/.test(p) ? p : '';
+  }
+
   function infoFor(row) {
     var wrap = row.parentElement && row.parentElement.classList.contains('nav-rw') ? row.parentElement : null;
     var pinBtn = wrap && wrap.querySelector(':scope > [data-nav-pin]');
@@ -110,7 +115,7 @@
     return {
       key: row.getAttribute('data-nav-key'),
       href: href === '#' ? '' : href,
-      page: row.getAttribute('data-nav-home') || '',
+      page: sitePath(row.getAttribute('data-nav-home')),
       model: ed && navEl ? ed.readModel(navEl) : null,
       pin: pinBtn ? pinBtn.getAttribute('aria-pressed') === 'true' : null,
       pinBtn: pinBtn,
