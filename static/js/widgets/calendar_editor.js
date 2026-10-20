@@ -105,8 +105,7 @@
 
   CalendarEditor.prototype.install = function () {
     this.view._editor = this;
-    this._injectEditToggle();
-    this._injectHEditStrip();
+    this._injectDeck();
     this._wrapEvpRendering();
     this._wrapMvRendering();
     this._wrapFlapRendering();
@@ -119,36 +118,16 @@
   };
 
   // ------------------------------------------------------------------
-  // Edit-mode toggle + the header's edit strip (h-edit swaps in for
-  // h-sub, at the same height, so the grid never moves — calendar-view.css
-  // already carries the .cal.editing show/hide transition for this).
+  // The deck along the calendar's bottom edge: Look or Edit. Looking,
+  // nothing on the page writes; a Director can also see the calendar as
+  // the players do. Edit raises a drawer with the editing tools and the
+  // chosen days' actions, and turns on choosing days on the grid.
   // ------------------------------------------------------------------
-  CalendarEditor.prototype._injectEditToggle = function () {
-    var acts = $('.h-acts', this.view.el);
-    if (!acts) return;
-    var btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'tbtn';
-    btn.id = 'cal5-editbtn';
-    btn.setAttribute('aria-pressed', 'false');
-    btn.innerHTML = '<i class="fa-solid fa-sliders"></i><span>Edit</span>';
-    // After the Sky chip, which leads the actions, as signed.
-    var sky = $('#cal5-skybtn', acts);
-    acts.insertBefore(btn, sky ? sky.nextSibling : acts.firstChild);
-    var self = this;
-    btn.addEventListener('click', function () { self.setEditing(!self.editing); });
-    this.editBtn = btn;
-  };
-
-  CalendarEditor.prototype._injectHEditStrip = function () {
-    var subw = $('.h-subw', this.view.el);
-    if (!subw) return;
-    var strip = document.createElement('div');
-    strip.className = 'h-edit';
+  CalendarEditor.prototype._injectDeck = function () {
+    var view = this.view, self = this;
     // The structure editor is Owner only (routes.go), so only an Owner
     // gets the gear that leads to it. Weather here works without choosing
     // days: it opens on the shown month.
-    var view = this.view;
     var gear = view.role >= ROLE_OWNER && view.campaignId && view.calendarId
       ? '<a class="btn sm quiet" id="cal5-settings" href="/campaigns/' + encodeURIComponent(view.campaignId) + '/calendars/' + encodeURIComponent(view.calendarId) + '/structure" title="Calendar settings: months, weekdays, leap years, moons and seasons"><i class="fa-solid fa-gear"></i><span>Calendar settings</span></a>'
       : '';
@@ -156,30 +135,97 @@
     // Era authors (Owner or co-Director) manage eras from here; the card
     // folds out of this button.
     var eras = view.canAuthorDmOnly
-      ? '<button type="button" class="btn sm quiet" id="cal5-erabtn" aria-haspopup="dialog" aria-expanded="false"><i class="fa-solid fa-timeline"></i><span class="btxt"> Eras</span></button>'
+      ? '<button type="button" class="btn sm quiet" id="cal5-erabtn" aria-haspopup="dialog" aria-expanded="false"><i class="fa-solid fa-timeline"></i><span class="btxt">Eras</span></button>'
       : '';
-    strip.innerHTML = '<span class="etag">Editing</span><span class="ehint">Click or drag across days. Shift extends, Ctrl/Cmd adds. Touch: tap, or hold then drag.</span><span class="sp"></span>' +
-      (gen ? '<button type="button" class="btn sm quiet" id="edGen" aria-haspopup="dialog" aria-label="Weather"><i class="fa-solid fa-cloud-sun"></i><span class="btxt"> Weather</span></button>' : '') +
-      eras + gear + '<button type="button" class="btn sm quiet" id="cal5-editdone">Done</button>';
-    subw.appendChild(strip);
-    $('#cal5-editdone', strip).addEventListener('click', this.setEditing.bind(this, false));
-    var self = this;
-    if (eras) $('#cal5-erabtn', strip).addEventListener('click', function () { view.toggleEra(); });
-    if (gen) $('#edGen', strip).addEventListener('click', function () { self._openWeather(); });
+    // Seeing the players' view reads the calendar as an anonymous player,
+    // which only the DM team has a reason to compare against.
+    var pv = view.canAuthorDmOnly
+      ? '<div class="sw dkpv"><span>See it as players do</span><button type="button" class="tog" role="switch" aria-checked="false" aria-label="See it as players do" data-deck-pv></button></div><span class="dkpvnote">Players’ view</span>'
+      : '';
+    var deck = document.createElement('div');
+    deck.className = 'deck';
+    deck.setAttribute('role', 'region');
+    deck.setAttribute('aria-label', 'Look or edit');
+    deck.innerHTML =
+      '<div class="dkdrawer" id="cal5-dkdrawer" aria-hidden="true" inert>' +
+        '<div class="dkr"><span class="dkhint">Click or drag across days to choose them. Shift extends, Ctrl/Cmd adds. Touch: tap, or hold then drag.</span>' +
+          '<button type="button" class="btn sm quiet" data-deck-add><i class="fa-solid fa-plus"></i><span>Add an event</span></button>' +
+          (gen ? '<button type="button" class="btn sm quiet" id="edGen" aria-haspopup="dialog"><i class="fa-solid fa-cloud-sun"></i><span class="btxt">Weather</span></button>' : '') +
+          eras + gear + '</div>' +
+      '</div>' +
+      '<div class="dkstrip" role="group" aria-label="Look or edit">' +
+        '<button type="button" class="dktab" id="cal5-looktab" aria-pressed="true" data-deck-mode="look"><i class="fa-solid fa-eye" aria-hidden="true"></i>Look</button>' +
+        '<button type="button" class="dktab" id="cal5-edittab" aria-pressed="false" aria-controls="cal5-dkdrawer" data-deck-mode="edit"><i class="fa-solid fa-sliders" aria-hidden="true"></i>Edit</button>' +
+        '<span class="dksay" aria-hidden="true"></span>' + pv +
+      '</div>';
+    view.calEl.appendChild(deck);
+    view.calEl.classList.add('decked');
+    this.deck = deck;
+    this.drawer = $('.dkdrawer', deck);
+    deck.addEventListener('click', function (e) {
+      var t = e.target.closest('[data-deck-mode]');
+      if (t) { self.setEditing(t.dataset.deckMode === 'edit'); return; }
+      if (e.target.closest('[data-deck-pv]')) { self._togglePlayersView(); return; }
+      if (e.target.closest('[data-deck-add]')) self._addEventFromDeck();
+    });
+    if (eras) $('#cal5-erabtn', deck).addEventListener('click', function () { view.toggleEra(); });
+    if (gen) $('#edGen', deck).addEventListener('click', function () { self._openWeather(); });
+    // The grid's foot, the shift tray and toasts keep clear of the drawer.
+    var measure = function () { view.calEl.style.setProperty('--deckH', self.drawer.offsetHeight + 'px'); };
+    if (window.ResizeObserver) new ResizeObserver(measure).observe(this.drawer);
+    measure();
+    this._paintDeck();
   };
 
+  CalendarEditor.prototype._paintDeck = function () {
+    var on = this.editing, deck = this.deck, pv = this.view._players;
+    $$('.dktab', deck).forEach(function (t) { t.setAttribute('aria-pressed', String((t.dataset.deckMode === 'edit') === on)); });
+    deck.classList.toggle('up', on);
+    this.drawer.setAttribute('aria-hidden', String(!on));
+    this.drawer.inert = !on;
+    $('.dksay', deck).textContent = on ? 'Editing. Choose days, or add an event.'
+      : pv ? 'Looking as a player would. Their hidden things are left out.' : 'Looking. Events, moons and eras stay as they are.';
+    var tog = $('[data-deck-pv]', deck);
+    if (tog) tog.setAttribute('aria-checked', String(!!pv));
+  };
+
+  CalendarEditor.prototype._togglePlayersView = function () {
+    var self = this, tog = $('[data-deck-pv]', this.deck);
+    if (!tog || tog.disabled || this.editing) return;
+    tog.disabled = true;
+    this.view.setPlayersView(!this.view._players).then(function () {
+      tog.disabled = false;
+      self._paintDeck();
+    });
+  };
+
+  // A new event goes on the one chosen day, else on the world's today.
+  CalendarEditor.prototype._addEventFromDeck = function () {
+    var view = this.view, d = this._firstChosen() || [view.cal.current_year, view.cal.current_month, view.cal.current_day];
+    if (Chronicle.calendarEventDrawer) Chronicle.calendarEventDrawer.open(view, null, { y: d[0], m: d[1], d: d[2] });
+    else view.openWing(d[0] + '_' + d[1] + '_' + d[2]);
+  };
+
+  // Editing always shows everything: the players' view is for looking.
   CalendarEditor.prototype.setEditing = function (on) {
+    var self = this, view = this.view;
+    // A switch of audience still loading would land under the editor.
+    if (view._pvPending) return;
+    if (on && view._players) {
+      view.setPlayersView(false).then(function (ok) { self._paintDeck(); if (ok) self.setEditing(true); });
+      return;
+    }
     this.editing = on;
-    this.view.calEl.classList.toggle('editing', on);
+    view.calEl.classList.toggle('editing', on);
     // Edit mode shows each day's stored weather (.cwx) to whoever may paint it.
-    this.view.calEl.classList.toggle('wxon', on && this.view.canAuthorDmOnly);
-    this.editBtn.setAttribute('aria-pressed', String(on));
+    view.calEl.classList.toggle('wxon', on && view.canAuthorDmOnly);
     this._endDrag();
     // The view owns the weekday header; re-render it so the buttons go
     // back to plain labels, then decorate again only while editing.
-    this.view.renderHeader();
-    if (!on) { this.selection = {}; this._syncPicks(); this._renderBar(); }
-    this.view.say(on ? 'Editing on. Click or drag across days to choose them.' : 'Editing off.');
+    view.renderHeader();
+    if (!on) { this.selection = {}; this._syncPicks(); this._renderBar(); if (view._pf.state !== 'closed') view.closeFlap({ quiet: true }); }
+    this._paintDeck();
+    view.say(on ? 'Editing on. Click or drag across days to choose them.' : 'Editing off.');
   };
 
   // ------------------------------------------------------------------
@@ -509,6 +555,13 @@
     });
   };
 
+  // The earliest chosen day as [y, m, d], or null.
+  CalendarEditor.prototype._firstChosen = function () {
+    var days = this._selectedKeys().map(function (k) { return k.split('_').map(Number); });
+    days.sort(function (a, b) { return a[0] - b[0] || a[1] - b[1] || a[2] - b[2]; });
+    return days[0] || null;
+  };
+
   CalendarEditor.prototype._selectedKeys = function () {
     var self = this;
     return Object.keys(this.selection).filter(function (k) { return self.selection[k]; });
@@ -527,8 +580,8 @@
   };
 
   // ------------------------------------------------------------------
-  // The bulk bar: rises from the grid's bottom edge as soon as a day is
-  // selected. Only the bulk actions this API can actually perform
+  // The chosen days' actions: a row in the deck's drawer as soon as a day
+  // is selected. Only the bulk actions this API can actually perform
   // ship: bulk visibility (Hide/Reveal, gated CanAuthorDmOnly, the same
   // gate the single-event visibility route already uses) and Shift events
   // (moves every event touching the selection by N days), plus Weather,
@@ -551,7 +604,8 @@
     var wrap = document.createElement('div');
     wrap.className = 'bbw';
     wrap.innerHTML = '<div class="bbar" id="cal5-bbar" hidden></div>';
-    this.view.calEl.appendChild(wrap);
+    // The chosen days' actions live in the deck's drawer, under its tools.
+    this.drawer.appendChild(wrap);
     this.bbar = $('#cal5-bbar', wrap);
     var self = this;
     this.bbar.addEventListener('click', function (e) {
@@ -559,6 +613,7 @@
       if (!t) return;
       var a = t.dataset.bb;
       if (a === 'none') { self.selection = {}; self._syncPicks(); self._renderBar(); }
+      else if (a === 'open') { var d = self._firstChosen(); if (d) self.view.openWing(d[0] + '_' + d[1] + '_' + d[2]); }
       else if (a === 'hide' || a === 'reveal') self._bulkVisibility(a === 'hide' ? 'dm_only' : 'everyone');
       else if (a === 'shift') self._toggleShiftTray();
       else if (a === 'wx') self._openWeather();
@@ -568,17 +623,13 @@
 
   CalendarEditor.prototype._renderBar = function () {
     var n = this._selectedKeys().length;
-    // .bar-up tells calendar-view.css's toast rule to lift a toast clear of
-    // the bar (they're both bottom-centered a few px apart) — set on .cal,
-    // not .bbar itself, so a plain CSS sibling/descendant selector can react
-    // to it without needing :has().
-    this.view.calEl.classList.toggle('bar-up', !!n);
     if (!n) { this.bbar.hidden = true; this.bbar.innerHTML = ''; this._closeShiftTray(); return; }
     var canVis = this.view.canAuthorDmOnly, self = this;
     this.bbar.hidden = false;
     this.bbar.innerHTML =
       '<div class="bbl"><b>' + (n === 1 ? '1 day' : n + ' days') + ' chosen</b><span>' + this._eventsInSelection().length + ' events touched</span></div>' +
       '<div class="bba">' +
+        (n === 1 ? '<button type="button" class="bbb" data-bb="open"><i class="fa-solid fa-up-right-from-square"></i><span>Open day</span></button>' : '') +
         (canVis ? '<button type="button" class="bbb" data-bb="hide"><i class="fa-solid fa-eye-slash"></i><span>Hide</span></button><button type="button" class="bbb" data-bb="reveal"><i class="fa-solid fa-eye"></i><span>Reveal</span></button>' : '') +
         '<button type="button" class="bbb" data-bb="shift" aria-expanded="' + !!this._shiftTray + '"><i class="fa-solid fa-arrows-left-right"></i><span>Shift events</span></button>' +
         (canVis ? (Chronicle.calendarWeatherSheet ? '<button type="button" class="bbb" data-bb="wx" aria-haspopup="dialog"><i class="fa-solid fa-cloud-sun"></i><span>Weather</span></button>' : '') +
@@ -691,7 +742,7 @@
   };
 
   // ------------------------------------------------------------------
-  // Weather: the edit strip's and the bulk bar's Weather buttons open the
+  // Weather: the deck drawer's and the chosen days' Weather buttons open the
   // weather calendar (calendar_weather_sheet.js) on a month, with any chosen
   // days of that month still chosen. It keeps a draft; Save hands it here as
   // writes, and Undo puts back exactly what the days held before.
@@ -957,7 +1008,9 @@
     view._evpHTML = function (ev, day) {
       var html = original(ev, day);
       var canDelete = view.role >= ROLE_OWNER;
-      var foot = self._occurrenceHTML(ev) + '<div class="efoot"><button type="button" class="btn quiet" data-edit-event="' + esc(ev.id) + '"><i class="fa-solid fa-pencil"></i> Edit</button><span class="sp"></span>' +
+      // Looking, the footer gives way to one quiet way into Edit for this event.
+      var foot = '<button type="button" class="echange" data-change-event="' + esc(ev.id) + '"><i class="fa-solid fa-pencil" aria-hidden="true"></i>Change this event</button>' +
+        self._occurrenceHTML(ev) + '<div class="efoot"><button type="button" class="btn quiet" data-edit-event="' + esc(ev.id) + '"><i class="fa-solid fa-pencil"></i> Edit</button><span class="sp"></span>' +
         (canDelete ? '<button type="button" class="btn danger" data-delete-event="' + esc(ev.id) + '"><i class="fa-solid fa-trash"></i> Delete</button>' : '') + '</div>';
       return html.replace('<!--EVP_FOOT-->', foot);
     };
@@ -1066,11 +1119,12 @@
     view.evpEl.addEventListener('click', function (e) {
       var oc = e.target.closest('[data-occ]');
       if (oc) { e.stopPropagation(); self._occurrenceAction(oc); return; }
-      var ed = e.target.closest('[data-edit-event]');
+      var ed = e.target.closest('[data-edit-event]') || e.target.closest('[data-change-event]');
       var del = e.target.closest('[data-delete-event]');
       if (ed) {
         e.stopPropagation();
-        var ev = view._findEvent(ed.dataset.editEvent);
+        if (ed.dataset.changeEvent) self.setEditing(true);
+        var ev = view._findEvent(ed.dataset.changeEvent || ed.dataset.editEvent);
         // The full drawer edits every field; the compact form stays as the
         // fallback if its script did not load.
         if (Chronicle.calendarEventDrawer) Chronicle.calendarEventDrawer.open(view, ev, null);
@@ -1272,7 +1326,7 @@
       if (!view.canAuthorDmOnly) return html;
       var moon = view.moonById(view.mvMoonId) || (view.cal.moons || [])[0];
       if (!moon) return html;
-      var toggle = '<div class="sw" style="margin-top:10px"><span>Shown to players<small>Hide a moon while it is still a secret.</small></span>' +
+      var toggle = '<div class="sw mvshow" style="margin-top:10px"><span>Shown to players<small>Hide a moon while it is still a secret.</small></span>' +
         '<button type="button" class="tog" role="switch" aria-checked="' + !moon.hidden_from_players + '" data-toggle-moon="' + moon.id + '"></button></div>';
       return html.replace('<div class="mvstrip">', toggle + '<div class="mvstrip">');
     };
@@ -1443,8 +1497,12 @@
     // not fit scrolls inside, under the fixed Save/Cancel bar.
     if (!window.matchMedia('(max-width:600px)').matches && flap.style.top) {
       var top = parseFloat(flap.style.top) || 0, lim = view.calEl.clientHeight - top - 8;
-      var room = view._pf && view._pf.g ? view._pf.g.final.room : lim;
-      flap.style.maxHeight = Math.max(220, Math.min(room, lim)) + 'px';
+      var g = view._pf && view._pf.g, room = g ? g.final.room : lim;
+      if (g && g.side === 'up') {
+        // Risen from the deck, it keeps its foot on the button and grows upwards.
+        flap.style.maxHeight = room + 'px';
+        flap.style.top = Math.max(8, g.cell.y - Math.min(room, flap.offsetHeight)) + 'px';
+      } else flap.style.maxHeight = Math.max(220, Math.min(room, lim)) + 'px';
     }
     // The open era's tab is brought into the row's view.
     var tab = flap.querySelector('.eratab[aria-pressed="true"]');

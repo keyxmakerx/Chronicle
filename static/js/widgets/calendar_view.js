@@ -880,13 +880,17 @@
     }
     return { cell: cell, side: side, final: { x: x, y: y, w: W, h: H, room: Math.max(H, B.vbot - y) } };
   }
-  // The era's card drops out of the era label's bottom edge.
+  // The era's card drops out of its button's bottom edge, or rises from
+  // its top when the button sits low on the card (the deck's drawer).
   function eraGeometry(card, btn, calEl) {
     var B = visBand(calEl), cr = B.cr, cell = relRect(btn, calEl), W = Math.min(392, cr.width - 16), y = cell.y + cell.h;
-    var maxH = Math.max(160, Math.min(560, B.bot - y));
+    var up = B.bot - y < cell.y - B.top;
+    var maxH = Math.max(160, Math.min(560, up ? cell.y - B.top : B.bot - y));
     card.style.width = W + 'px';
     var H = Math.min(maxH, card.offsetHeight);
     card.style.width = '';
+    var x = Math.max(8, Math.min(cell.x + cell.w - W, cr.width - W - 8));
+    if (up) return { cell: cell, side: 'up', final: { x: x, y: cell.y - H, w: W, h: H, room: maxH } };
     return { cell: cell, side: 'down', final: { x: Math.max(8, Math.min(cell.x, cr.width - W - 8)), y: y, w: W, h: H, room: Math.max(H, B.vbot - y) } };
   }
   // A card opens at its own height, inside the calendar; a form opened
@@ -1337,6 +1341,10 @@
       if (!Array.isArray(initialEvents)) initialEvents = [];
 
       this.eventsByMonth = {};
+      this._players = false; // "See it as players do" is on
+      this._pvPending = null; // its read, while one is in flight
+      this._dmFlags = null; // what this viewer had before it went on
+      this._audGen = 0; // bumped when it flips, so a read begun before is not cached
       this.forecastByDay = {};
       this.weatherByYear = {}; // year -> {'m_d': reading}, filled by fetchWeatherYear
       this.nightsByMonth = {}; // 'y_m' -> game nights, filled by fetchNights
@@ -1756,7 +1764,7 @@
       if (!bar) return;
       var up = !!this._timeUp && !!this.skyDock;
       bar.hidden = !up;
-      tab.hidden = up || !this.skyDock;
+      tab.hidden = up || !this.skyDock || !!this._players;
       tab.setAttribute('aria-expanded', String(up));
       if (!up) return;
       var c = this.cal, p = this._lookAt(), away = !!this._skyPrev, mph = this._minutesPerHour(), day = this._hoursPerDay() * mph;
@@ -1842,11 +1850,12 @@
     fetchMonth: function (y, m) {
       var self = this, key = this.monthKey(y, m);
       if (this.eventsByMonth[key]) return Promise.resolve(this.eventsByMonth[key]);
-      return Chronicle.apiFetch(this.apiBase + '/events?year=' + y + '&month=' + m)
+      var gen = this._audGen;
+      return Chronicle.apiFetch(this._aud(this.apiBase + '/events?year=' + y + '&month=' + m))
         .then(function (resp) { return resp.ok ? resp.json() : []; })
         .then(function (list) {
           if (!Array.isArray(list)) list = [];
-          self.eventsByMonth[key] = list;
+          if (gen === self._audGen) self.eventsByMonth[key] = list;
           return list;
         })
         .catch(function () { return []; });
@@ -1860,11 +1869,12 @@
     fetchRolls: function (y, m) {
       var self = this, key = this.monthKey(y, m), evs = this.eventsByMonth[key], have = this.rollsByMonth[key];
       if (have && have.events === evs) return Promise.resolve(have.byEvent);
-      return Chronicle.apiFetch(this.apiBase + '/rolls?year=' + y + '&month=' + m)
+      var gen = this._audGen;
+      return Chronicle.apiFetch(this._aud(this.apiBase + '/rolls?year=' + y + '&month=' + m))
         .then(function (resp) { return resp.ok ? resp.json() : {}; })
         .then(function (byEvent) {
           if (!byEvent || typeof byEvent !== 'object') byEvent = {};
-          self.rollsByMonth[key] = { events: self.eventsByMonth[key], byEvent: byEvent };
+          if (gen === self._audGen) self.rollsByMonth[key] = { events: self.eventsByMonth[key], byEvent: byEvent };
           return byEvent;
         })
         .catch(function () { return {}; });
@@ -1921,12 +1931,13 @@
     fetchWeatherYear: function (y) {
       var self = this;
       if (this.weatherByYear[y]) return Promise.resolve(this.weatherByYear[y]);
-      return Chronicle.apiFetch(this.apiBase + '/weather/days?year=' + y)
+      var gen = this._audGen;
+      return Chronicle.apiFetch(this._aud(this.apiBase + '/weather/days?year=' + y))
         .then(function (resp) { return resp.ok ? resp.json() : []; })
         .then(function (list) {
           var byDay = {};
           (Array.isArray(list) ? list : []).forEach(function (w) { byDay[w.month + '_' + w.day] = w; });
-          self.weatherByYear[y] = byDay;
+          if (gen === self._audGen) self.weatherByYear[y] = byDay;
           return byDay;
         })
         .catch(function () { return {}; });
@@ -1939,7 +1950,7 @@
     fetchForecast: function (force) {
       var self = this;
       if (this._forecastP && !force) return this._forecastP;
-      this._forecastP = Chronicle.apiFetch(this.apiBase + '/weather/forecast')
+      this._forecastP = Chronicle.apiFetch(this._aud(this.apiBase + '/weather/forecast'))
         .then(function (resp) { return resp.ok ? resp.json() : []; })
         .then(function (list) {
           var by = {};
@@ -4315,8 +4326,9 @@
     // Set today: the owner moves a world calendar's current date and time.
     // A real-world calendar follows the clock, so it has nothing to set.
     // --------------------------------------------------------------
+    // Players never set the time, so the players' view does not either.
     _canSetToday: function () {
-      return this.role >= 3 && !!this.apiBase && !CalDate.usesRealTime(this.cal);
+      return this.role >= 3 && !!this.apiBase && !CalDate.usesRealTime(this.cal) && !this._players;
     },
 
     _hoursPerDay: function () { return this.cal.hours_per_day > 0 ? this.cal.hours_per_day : 24; },
@@ -4823,7 +4835,7 @@
     _loadEraEvents: function (r) {
       var self = this, id = r.era.id;
       this._eraEvents = null;
-      Chronicle.apiFetch(this.apiBase + '/eras/' + encodeURIComponent(id) + '/events')
+      Chronicle.apiFetch(this._aud(this.apiBase + '/eras/' + encodeURIComponent(id) + '/events'))
         .then(function (resp) { return resp.ok ? resp.json() : null; })
         .then(function (body) {
           if (String(self._eraOpen) !== String(id)) return;
@@ -5368,15 +5380,70 @@
     // new event shows up the next time. Resolves true when the list was
     // read; on failure ruleEnv keeps using the months loaded so far.
     loadEventIndex: function () {
-      var self = this;
-      return Chronicle.apiFetch(this.apiBase + '/events/index')
+      var self = this, gen = this._audGen;
+      return Chronicle.apiFetch(this._aud(this.apiBase + '/events/index'))
         .then(function (resp) { return resp.ok ? resp.json() : null; })
         .then(function (body) {
-          if (!body || !Array.isArray(body.data)) return false;
+          if (!body || !Array.isArray(body.data) || gen !== self._audGen) return false;
           self._eventIndex = body.data;
           return true;
         })
         .catch(function () { return false; });
+    },
+
+    // A calendar read made while the DM looks as the players do asks for
+    // the players' audience, so the server leaves out what they may not see.
+    _aud: function (url) {
+      return this._players ? url + (url.indexOf('?') < 0 ? '?' : '&') + 'audience=players' : url;
+    },
+
+    // setPlayersView reloads the calendar as any player sees it, or back as
+    // this viewer sees it. Everything cached was read for the other audience,
+    // so it is dropped and the open cards close. Resolves false if the
+    // calendar could not be read, leaving the view as it was.
+    setPlayersView: function (on) {
+      on = !!on;
+      if (on === this._players) return Promise.resolve(true);
+      // Never under the editor: a form built from the players' calendar
+      // would save over what they may not see.
+      if (on && this._editor && this._editor.editing) return Promise.resolve(false);
+      if (this._pvPending) return this._pvPending;
+      var self = this;
+      if (on) this._dmFlags = { canAuthorDmOnly: this.canAuthorDmOnly, freeDirector: this.freeDirector, showFree: this.showFree };
+      var url = this.apiBase + (on ? '?audience=players' : '');
+      this._pvPending = Chronicle.apiFetch(url, { headers: { Accept: 'application/json' } })
+        .then(function (resp) { return resp.ok ? resp.json() : null; })
+        .catch(function () { return null; })
+        .then(function (cal) {
+          self._pvPending = null;
+          if (!cal || !cal.id) { self.say(on ? 'Could not load what players see.' : 'Could not load the calendar.'); return false; }
+          self.closeAllPanels({ instant: true });
+          if (self._timeUp) self.closeTimeBar();
+          self._players = on;
+          self._audGen++;
+          var dm = self._dmFlags;
+          self.canAuthorDmOnly = on ? false : dm.canAuthorDmOnly;
+          self.freeDirector = on ? false : dm.freeDirector;
+          self.showFree = on ? false : dm.showFree;
+          MoonMath.index(cal);
+          self.cal = cal;
+          self.eventsByMonth = {};
+          self.rollsByMonth = {};
+          self.weatherByYear = {};
+          self.forecastByDay = {};
+          self._forecastP = null;
+          self._eventIndex = null;
+          self._evPages = {};
+          self._skySig = null;
+          self.calEl.classList.toggle('pv', on);
+          self.renderMonth();
+          self.renderToday();
+          self.renderLegend();
+          self.fetchMonth(self.cal.current_year, self.cal.current_month).then(function () { self._skyDay(); });
+          self.say(on ? 'Showing the calendar as players see it.' : 'Showing everything again.');
+          return true;
+        });
+      return this._pvPending;
     },
 
     // What the rule editor and sentences may name on this calendar: its
@@ -5622,12 +5689,12 @@
     },
 
     _evPagesLoad: function (eid) {
-      var self = this;
+      var self = this, gen = this._audGen, keep = function (v) { if (gen === self._audGen) self._evPages[eid] = v; };
       this._evPages[eid] = { loading: true, links: [] };
-      return Chronicle.apiFetch(this._evPagesBase(eid), { headers: { Accept: 'application/json' } })
+      return Chronicle.apiFetch(this._aud(this._evPagesBase(eid)), { headers: { Accept: 'application/json' } })
         .then(function (resp) { return resp.ok ? resp.json() : Promise.reject(); })
-        .then(function (list) { self._evPages[eid] = { links: Array.isArray(list) ? list : [] }; })
-        .catch(function () { self._evPages[eid] = { failed: true, links: [] }; })
+        .then(function (list) { keep({ links: Array.isArray(list) ? list : [] }); })
+        .catch(function () { keep({ failed: true, links: [] }); })
         .then(function () { self._evPagesRedraw(eid); });
     },
 
@@ -5742,7 +5809,7 @@
     // --------------------------------------------------------------
     // The era manager's card. Everyone reads eras through the era panel
     // above; calendar_editor.js gives an Owner or co-Director an "Eras"
-    // button in the edit strip (#cal5-erabtn) whose card manages them,
+    // button in the deck's drawer (#cal5-erabtn) whose card manages them,
     // replacing showFlap below.
     // --------------------------------------------------------------
     toggleEra: function () {

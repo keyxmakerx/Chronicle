@@ -585,15 +585,13 @@
 .cal-v5 .toast span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cal-v5 .toast button{flex:none;font:650 12px/1 var(--sans);color:var(--paper);padding:7px 10px;border-radius:8px;box-shadow:inset 0 0 0 1px oklch(1 0 0 / .28)}
 .cal-v5 .toast button:hover{background:oklch(1 0 0 / .1)}
-/* A toast and the bulk-selection bar are both bottom-centered a few px apart
-   (.toast at 16px, .bbar at 14px); .bar-up (toggled on .cal by
-   calendar_editor.js's _renderBar alongside .bbar's own hidden state) lifts
-   the toast clear of it, reusing the bar-height custom property that .btray
-   already stacks on above the bar. Scoped to the width the two actually share
-   this corner at: below it the toast moves to the top of the screen (the
-   max-width:600px block further down), where it never meets the bar. */
+/* An editor's calendar has the deck along its bottom edge, and while editing
+   its drawer above that (--deckH, measured by calendar_editor.js), so a toast
+   rises clear of both. Below 600px the toast moves to the top of the screen
+   (the max-width:600px block further down), where it never meets them. */
 @media (min-width:601px){
-  .cal-v5 .cal.bar-up .toast{bottom:calc(22px + var(--barH,48px))}
+  .cal-v5 .cal.decked .toast{bottom:58px}
+  .cal-v5 .cal.decked.editing .toast{bottom:calc(var(--deckH,64px) + 58px)}
 }
 /* Era card: drops out of the era label's bottom edge. */
 .cal-v5 .flap{width:392px;border-radius:4px 14px 14px 14px;--hg:linear-gradient(180deg,var(--crease),transparent 14px)}
@@ -1215,18 +1213,33 @@
 :root[data-theme="dark"]{--pickBg:oklch(.72 .08 250 / .16);--pickRing:oklch(.8 .08 250 / .6);--ghost:oklch(.82 .04 265 / .9);
   --wxClear:oklch(.6 .08 85 / .3);--wxCloud:oklch(.5 .01 265 / .45);--wxRain:oklch(.5 .07 240 / .4);--wxSnow:oklch(.72 .03 230 / .3);--wxStorm:oklch(.45 .07 290 / .45);--wxFog:oklch(.55 .02 180 / .35);
   --keep:oklch(.82 .1 85);--keepBg:oklch(.7 .1 85 / .16)}
-/* The Edit toggle is pressed ink while it is on. */
-.cal-v5 .tbtn[aria-pressed="true"], .cal-v5 .tbtn[aria-pressed="true"]:hover{background:var(--ink);color:var(--paper);box-shadow:none}
-/* The edit strip takes the era line's place, at the same height, so the grid never moves. */
-.cal-v5 .h-subw{position:relative}
-.cal-v5 .h-sub{transition:opacity .2s var(--ease)}
-.cal-v5 .h-edit{position:absolute;left:0;right:0;top:0;bottom:0;margin-top:7px;display:flex;align-items:center;gap:8px;min-width:0;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .2s var(--ease),visibility 0s linear .2s}
-.cal-v5 .cal.editing .h-edit{opacity:1;visibility:visible;pointer-events:auto;transition:opacity .2s var(--ease),visibility 0s}
-.cal-v5 .cal.editing .h-sub{opacity:0;visibility:hidden;transition:opacity .15s var(--ease),visibility 0s linear .15s}
-.cal-v5 .etag{font:650 9.5px/1 var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--paper);background:var(--ink);padding:5px 7px;border-radius:6px;white-space:nowrap;flex:none}
-.cal-v5 .ehint{font:500 12px/1.3 var(--sans);color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-.cal-v5 .h-edit .sp{flex:1 1 0}
-.cal-v5 .h-edit .btn{flex:none}
+/* The deck: Look or Edit along the card's bottom edge. Edit raises a drawer over the grid's foot with the tools and the chosen days' actions. */
+.cal-v5 .deck{position:sticky;bottom:0;z-index:35;border-top:1px solid var(--hair);background:var(--pageField);border-radius:0 0 23px 23px}
+.cal-v5 .dkstrip{display:flex;align-items:center;gap:4px;min-height:44px;padding:0 18px}
+.cal-v5 .dktab{position:relative;display:inline-flex;align-items:center;gap:7px;height:44px;padding:0 10px;font:650 10.5px/1 var(--sans);letter-spacing:.15em;text-transform:uppercase;color:var(--mut)}
+.cal-v5 .dktab:hover, .cal-v5 .dktab[aria-pressed="true"]{color:var(--ink)}
+.cal-v5 .dktab[aria-pressed="true"]::before{content:"";position:absolute;left:0;right:0;top:-1px;height:2px;background:var(--ink);border-radius:0 0 2px 2px}
+.cal-v5 .dktab:focus-visible{outline:1.5px solid var(--ink);outline-offset:-4px;border-radius:8px}
+.cal-v5 .dksay{flex:1;min-width:0;font:500 12px/1.3 var(--sans);color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-left:6px}
+.cal-v5 .dkpv{padding:0;gap:9px;flex:none}
+.cal-v5 .dkpv span{flex:none}
+.cal-v5 .deck.up .dkpv{display:none}
+.cal-v5 .dkpvnote{display:none;font:600 11px/1 var(--sans);color:var(--ink);background:var(--hair);padding:5px 8px;border-radius:99px;margin-left:8px;white-space:nowrap}
+.cal-v5 .cal.pv .dkpvnote{display:inline-block}
+.cal-v5 .cal.pv .deck.up .dkpvnote{display:none}
+.cal-v5 .dkdrawer{position:absolute;left:0;right:0;bottom:100%;background:var(--paper);border-top:1px solid var(--edge);box-shadow:0 -10px 24px -8px oklch(0 0 0 / .18);padding:12px 18px;transform:translateY(12px);opacity:0;visibility:hidden;transition:transform .28s cubic-bezier(.2,.8,.2,1),opacity .2s var(--ease),visibility 0s linear .28s}
+.cal-v5 .deck.up .dkdrawer{transform:none;opacity:1;visibility:visible;transition:transform .28s cubic-bezier(.2,.8,.2,1),opacity .2s var(--ease),visibility 0s}
+.cal-v5 .dkr{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.cal-v5 .dkhint{flex:1;min-width:220px;font:500 12.5px/1.35 var(--sans);color:var(--ink2)}
+.cal-v5 .dkr .btn{flex:none}
+.cal-v5 .cal.editing .stage{padding-bottom:calc(var(--deckH,64px) + 18px)}
+/* Looking writes nothing: the event's own edit controls, adding and linking, and the moons' director controls wait for Edit. */
+.cal-v5 .cal.decked:not(.editing) [data-add-event], .cal-v5 .cal.decked:not(.editing) [data-roll-one], .cal-v5 .cal.decked:not(.editing) .evp .efoot,
+.cal-v5 .cal.decked:not(.editing) .evp .occ, .cal-v5 .cal.decked:not(.editing) [data-evp-link-open], .cal-v5 .cal.decked:not(.editing) [data-evp-unlink],
+.cal-v5 .cal.decked:not(.editing) .mvdm, .cal-v5 .cal.decked:not(.editing) .mvshow, .cal-v5 .cal.decked:not(.editing) .mvclean{display:none}
+.cal-v5 .echange{display:none;align-items:center;gap:7px;margin:4px 18px 16px;font:600 12.5px/1 var(--sans);color:var(--ink2)}
+.cal-v5 .echange:hover{color:var(--ink);text-decoration:underline;text-underline-offset:3px}
+.cal-v5 .cal.decked:not(.editing):not(.pv) .echange{display:inline-flex}
 /* Edit mode: the cells step back to their dates, so every day is an easy target. */
 .cal-v5 .day .mk, .cal-v5 .day .span, .cal-v5 .day .msil{transition:opacity .25s var(--ease)}
 .cal-v5 .cal.editing .day .mk:not(.ghost), .cal-v5 .cal.editing .day .more, .cal-v5 .cal.editing .day .span:not(.ghost), .cal-v5 .cal.editing .day .msil{opacity:.14}
@@ -1234,7 +1247,6 @@
 .cal-v5 .cal.editing .day{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;cursor:pointer}
 .cal-v5 .cal.editing.painting .day{cursor:crosshair}
 .cal-v5 .cal.editing .day.pick::before{inset:2px;border-radius:9px;background:var(--pickBg);box-shadow:inset 0 0 0 1.5px var(--pickRing);opacity:1}
-.cal-v5 .cal.editing .stage{padding-bottom:84px}
 /* A day's weather reading, always shown in the cell's corner. Future days only reach the Director, drawn faint.
    Edit mode hides it: the cells step back to their dates, and painting draws its own mark (.cwx). */
 .cal-v5 .wxm{position:absolute;right:6px;bottom:5px;z-index:2;font-size:11px;line-height:1;color:var(--mut);pointer-events:none;transition:opacity .25s var(--ease)}
@@ -1310,9 +1322,9 @@
 .cal-v5 .mk.moving{opacity:.3}
 .cal-v5 .span.ghost{background:none;border-top:1.5px dashed oklch(var(--mkL) var(--mkC) var(--h,260));height:0}
 .cal-v5 .span.ghost.in{animation:cal5-ghostIn .3s var(--ease) both}
-/* ── The bulk bar: it rises from the grid's bottom edge whenever days are selected. ── */
-.cal-v5 .bbw{position:sticky;bottom:0;height:0;z-index:35;pointer-events:none}
-.cal-v5 .bbar{position:absolute;left:0;right:0;bottom:14px;margin:0 auto;width:-moz-fit-content;width:fit-content;max-width:calc(100% - 24px);display:flex;align-items:center;gap:4px;padding:6px 6px 6px 14px;border-radius:14px;background:var(--paper);border:1px solid var(--edge);box-shadow:var(--shadow-l);pointer-events:auto}
+/* ── The chosen days' actions: a row in the deck's drawer whenever days are selected. ── */
+.cal-v5 .bbw{position:static}
+.cal-v5 .bbar{display:flex;align-items:center;gap:4px;margin-top:10px;padding:10px 0 0;border-top:1px solid var(--hair)}
 .cal-v5 .bbl{display:flex;flex-direction:column;gap:2px;min-width:0;margin-right:6px}
 .cal-v5 .bbl b{font:650 12.5px/1.2 var(--sans);color:var(--ink);white-space:nowrap}
 .cal-v5 .bbl span{font:500 11px/1.2 var(--sans);color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px}
@@ -1323,8 +1335,8 @@
 .cal-v5 .bbb:focus-visible, .cal-v5 .bbar .x:focus-visible{outline:1.5px solid var(--ink);outline-offset:1px}
 .cal-v5 .bbb .i{width:15px;height:15px}
 .cal-v5 .bbar .x{margin-left:2px}
-/* The tray: a paint palette, a shift or a clear, floating just above the bar. */
-.cal-v5 .btray{position:absolute;z-index:4;left:0;right:0;bottom:calc(22px + var(--barH,48px));margin:0 auto;width:-moz-fit-content;width:fit-content;max-width:min(560px,calc(100% - 24px));padding:12px 14px 12px;border-radius:14px;background:var(--paper);border:1px solid var(--edge);box-shadow:var(--shadow-l);pointer-events:auto}
+/* The tray: a shift, floating just above the deck's drawer. */
+.cal-v5 .btray{position:absolute;z-index:4;left:0;right:0;bottom:calc(var(--deckH,64px) + 54px);margin:0 auto;width:-moz-fit-content;width:fit-content;max-width:min(560px,calc(100% - 24px));padding:12px 14px 12px;border-radius:14px;background:var(--paper);border:1px solid var(--edge);box-shadow:var(--shadow-l);pointer-events:auto}
 .cal-v5 .trh{font:600 12.5px/1.35 var(--sans);color:var(--ink)}
 .cal-v5 .trh small{display:block;font-weight:500;font-size:11.5px;color:var(--mut);margin-top:2px}
 .cal-v5 .btray.slim{max-width:calc(100% - 24px);padding:7px 8px}
@@ -1537,12 +1549,13 @@
 @media (max-width:900px){.cal-v5 .gsheet, .cal-v5 .gset{width:420px}
 }
 @media (max-width:600px){.cal-v5 #cal5-settings span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
-.cal-v5 .h-edit{margin-top:4px}
-/* On a phone the hint may take two lines (holding to choose a range is not guessable); Weather keeps only its icon. */
-.cal-v5 .h-subw{min-height:34px}
-.cal-v5 .ehint{white-space:normal;font-size:11px;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
-.cal-v5 #edGen{padding:0 9px}
-.cal-v5 #edGen .btxt{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.cal-v5 .deck{border-radius:0}
+.cal-v5 .dkstrip{padding:0 10px;flex-wrap:wrap}
+.cal-v5 .dksay{display:none}
+.cal-v5 .dkpv{margin-left:auto}
+.cal-v5 .dkpvnote{margin-left:0}
+.cal-v5 .dkdrawer{padding:10px 12px}
+.cal-v5 .dkhint{min-width:0;flex-basis:100%;font-size:11.5px}
 .cal-v5 .cal.editing{--gx:16px}
 .cal-v5 .cal.editing .stage{padding-bottom:150px}
 .cal-v5 .wkh{width:14px;left:-15px}
@@ -1553,13 +1566,12 @@
 .cal-v5 .cwx{right:1px;bottom:2px;width:15px;height:15px}
 .cal-v5 .cwx .i{width:11px;height:11px}
 .cal-v5 .dow .dwb{padding:0 0 8px;text-align:center;border-radius:5px 5px 0 0}
-.cal-v5 .bbw{position:static;height:0}
-.cal-v5 .bbar{position:fixed;left:0;right:0;bottom:0;z-index:55;width:auto;max-width:none;margin:0;flex-wrap:wrap;gap:6px;padding:10px 10px calc(12px + env(safe-area-inset-bottom,0px));border-radius:18px 18px 0 0;border-left:0;border-right:0;border-bottom:0}
+.cal-v5 .bbar{flex-wrap:wrap;gap:6px}
 .cal-v5 .bbl{flex:1;flex-direction:row;align-items:baseline;gap:8px;margin:0 0 0 4px}
 .cal-v5 .bbl span{max-width:none}
 .cal-v5 .bba{order:3;width:100%;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px}
 .cal-v5 .bbb{flex-direction:column;justify-content:center;gap:3px;height:48px;padding:0 2px;font-size:10.5px;box-shadow:inset 0 0 0 1px var(--hair)}
-.cal-v5 .btray{position:fixed;left:0;right:0;z-index:56;bottom:var(--barH,110px);width:auto;max-width:none;margin:0;border-radius:16px 16px 0 0;border-left:0;border-right:0;box-shadow:0 -8px 24px -12px oklch(0 0 0 / .3)}
+.cal-v5 .btray{position:fixed;left:0;right:0;z-index:56;bottom:calc(var(--deckH,110px) + 44px);width:auto;max-width:none;margin:0;border-radius:16px 16px 0 0;border-left:0;border-right:0;box-shadow:0 -8px 24px -12px oklch(0 0 0 / .3)}
 .cal-v5 .gsheet{max-height:calc(64vh + 28px)}
 .cal-v5 .gsheet.wxcal{max-height:calc(86vh + 28px)}
 .cal-v5 .wxc-d{height:42px}
@@ -1579,7 +1591,7 @@
 .cal-v5 .rm .mk.ghost.in, .cal-v5 .rm .span.ghost.in, .cal-v5 .rm .cwx.in, .cal-v5 .rm .cpt.in{animation:cal5-fadeIn .15s ease both!important}
 .cal-v5 .rm .mk.solid-in, .cal-v5 .rm .cwx.solid-in, .cal-v5 .rm .cpt.solid-in{animation:cal5-fadeIn .18s ease both!important}
 .cal-v5 .rm .rc.pulse::after{animation:none!important}
-.cal-v5 .rm .day .mk, .cal-v5 .rm .day .span, .cal-v5 .rm .day .msil, .cal-v5 .rm .h-edit, .cal-v5 .rm .h-sub{transition-duration:.12s!important}
+.cal-v5 .rm .day .mk, .cal-v5 .rm .day .span, .cal-v5 .rm .day .msil, .cal-v5 .rm .dkdrawer{transition-duration:.12s!important}
 /* v6: your weather and your kinds of event. The six swatches paint days in the same soft register as the weather tints. */
 :root{--wk-violet:oklch(.78 .09 290 / .55);--wk-teal:oklch(.8 .07 185 / .55);--wk-rose:oklch(.8 .08 355 / .5);--wk-amber:oklch(.84 .1 75 / .55);--wk-moss:oklch(.82 .08 125 / .55);--wk-slate:oklch(.76 .03 255 / .55)}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--wk-violet:oklch(.5 .1 290 / .45);--wk-teal:oklch(.52 .07 185 / .42);--wk-rose:oklch(.52 .09 355 / .42);--wk-amber:oklch(.58 .09 75 / .36);--wk-moss:oklch(.55 .08 125 / .38);--wk-slate:oklch(.5 .03 255 / .45)}
