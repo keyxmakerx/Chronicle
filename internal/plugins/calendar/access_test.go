@@ -212,6 +212,9 @@ func (f *fakeCalendarSvc) SetMoonStrength(context.Context, int, string, string, 
 	return nil
 }
 func (f *fakeCalendarSvc) SaveSunLook(context.Context, string, string, SunLook) error { return nil }
+func (f *fakeCalendarSvc) SetMoonLook(context.Context, int, string, string, string, *float64) error {
+	return nil
+}
 
 func (f *fakeCalendarSvc) SetMonths(context.Context, string, string, []MonthInput) error { return nil }
 func (f *fakeCalendarSvc) SetWeekdays(context.Context, string, string, []WeekdayInput) error {
@@ -428,6 +431,8 @@ func TestRouteGates_PlayerBlockedFromOwnerAndScribeRoutes(t *testing.T) {
 		{"create event kind (CanAuthorDmOnly)", http.MethodPost, "/campaigns/camp-1/calendars/event-kinds"},
 		{"create era (CanAuthorDmOnly)", http.MethodPost, "/campaigns/camp-1/calendars/cal-1/eras"},
 		{"set moon hidden (CanAuthorDmOnly)", http.MethodPut, "/campaigns/camp-1/calendars/cal-1/moons/1/hidden"},
+		{"set the sun's look (Owner only)", http.MethodPut, "/campaigns/camp-1/calendars/cal-1/sun"},
+		{"set a moon's look (Owner only)", http.MethodPut, "/campaigns/camp-1/calendars/cal-1/moons/1/look"},
 		{"list calendar presets (Owner only)", http.MethodGet, "/campaigns/camp-1/calendars/presets"},
 		{"preview calendar preset (Owner only)", http.MethodGet, "/campaigns/camp-1/calendars/presets/blank"},
 		{"create calendar from preset (Owner only)", http.MethodPost, "/campaigns/camp-1/calendars/presets/blank"},
@@ -493,6 +498,8 @@ func TestRouteGates_OwnerReachesEveryRoute(t *testing.T) {
 		{http.MethodPost, "/campaigns/camp-1/calendars/event-kinds", http.StatusCreated},
 		{http.MethodPost, "/campaigns/camp-1/calendars/cal-1/eras", http.StatusCreated},
 		{http.MethodPut, "/campaigns/camp-1/calendars/cal-1/moons/1/hidden", http.StatusOK},
+		{http.MethodPut, "/campaigns/camp-1/calendars/cal-1/sun", http.StatusOK},
+		{http.MethodPut, "/campaigns/camp-1/calendars/cal-1/moons/1/look", http.StatusOK},
 		{http.MethodPut, "/campaigns/camp-1/calendars/cal-1/events/evt-1/visibility", http.StatusOK},
 		{http.MethodGet, "/campaigns/camp-1/calendars/presets", http.StatusOK},
 		{http.MethodGet, "/campaigns/camp-1/calendars/presets/blank", http.StatusOK},

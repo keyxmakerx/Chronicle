@@ -100,3 +100,50 @@ func TestSaveSunLookAndMoonStrength(t *testing.T) {
 		t.Error("a strength above 1 was saved")
 	}
 }
+
+func TestSetMoonLook(t *testing.T) {
+	type write struct {
+		color string
+		tint  *string
+	}
+	half, bad := 0.5, 1.5
+	tests := []struct {
+		name     string
+		campaign string
+		color    string
+		strength *float64
+		wantErr  bool
+		want     write
+	}{
+		{name: "colour and strength", campaign: testCampaignA, color: " #c0242a ", strength: &half, want: write{"#c0242a", strPtr("0.5")}},
+		{name: "default strength", campaign: testCampaignA, color: "#abc", want: write{"#abc", nil}},
+		{name: "not a colour", campaign: testCampaignA, color: "red", wantErr: true},
+		{name: "strength above 1", campaign: testCampaignA, color: "#abc", strength: &bad, wantErr: true},
+		{name: "another campaign's calendar", campaign: "other-campaign", color: "#abc", wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &fakeCalendarRepo{}
+			var got *write
+			repo.setMoonLookFn = func(_ context.Context, _ string, _ int, c string, tint *string) error {
+				got = &write{c, tint}
+				return nil
+			}
+			repo.getByIDFn = func(_ context.Context, id string) (*Calendar, error) {
+				return &Calendar{ID: id, CampaignID: testCampaignA}, nil
+			}
+			svc := newTestCalendarService(repo, nil, nil, nil)
+			err := svc.SetMoonLook(context.Background(), 3, "cal-1", tt.campaign, tt.color, tt.strength)
+			if tt.wantErr {
+				if err == nil || got != nil {
+					t.Fatalf("want a refusal and no write, got err %v write %+v", err, got)
+				}
+				return
+			}
+			if err != nil || got == nil || got.color != tt.want.color || (got.tint == nil) != (tt.want.tint == nil) ||
+				(got.tint != nil && *got.tint != *tt.want.tint) {
+				t.Fatalf("err %v write %+v, want %+v", err, got, tt.want)
+			}
+		})
+	}
+}
