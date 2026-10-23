@@ -463,6 +463,18 @@ jobs:
         # Blocking: a known vulnerability in code Chronicle calls fails CI.
         run: govulncheck ./...
 
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: '20'
+
+      - name: Run npm audit
+        # Every npm package is build-time, but some are bundled into what the
+        # browser loads (Mermaid, Tiptap, three.js), so a high or critical
+        # advisory fails CI. The audit reads the lockfile only; it does not
+        # see static/vendor/, which is copied from node_modules by hand.
+        run: npm audit --audit-level=high
+
   # --- Full compose stack boot ---
   # Builds the image from source, starts app + MariaDB + Redis exactly as
   # docker-compose.yml defines them, and waits for /healthz. Catches Dockerfile,
