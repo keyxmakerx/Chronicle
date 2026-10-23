@@ -22,7 +22,7 @@ import (
 // claimingEnabled reports whether the Player Character Claiming addon is on (gates the
 // claim affordance); ownerName is the resolved display name of the current owner, if any.
 // userID is the viewing user's id, threaded to system-package renderers so they can tell
-// this entity's own claimed owner apart from any other viewer (C-FIELDS-OWNER-FILTER).
+// this entity's own claimed owner apart from any other viewer.
 templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, ancestors []Entity, children []Entity, showAttributes bool, showCalendar bool, claimingEnabled bool, ownerName string, csrfToken string, userID string) {
 	@layouts.App(entity.Name + " - " + cc.Campaign.Name) {
 		@withFullPage(entityPageBody(cc, entity, entityType, ancestors, children, showAttributes, showCalendar, claimingEnabled, ownerName, csrfToken, userID))

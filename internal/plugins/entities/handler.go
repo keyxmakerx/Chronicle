@@ -3796,8 +3796,8 @@ func (h *Handler) MyCharacters(c echo.Context) error {
 }
 
 // CastTagSlug is the conventional tag a GM applies to an NPC to feature it in
-// the portrait row of the Characters page's NPC section — zero-migration
-// curation (see the Cordinator 2026-06-22 characters-cast-page design plan §5.2).
+// the portrait row of the Characters page's NPC section, so curation needs no
+// new column.
 const CastTagSlug = "cast"
 
 // AddonNPCs is the addon slug that gates the NPCs/Monsters section.

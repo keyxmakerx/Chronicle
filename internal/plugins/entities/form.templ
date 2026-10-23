@@ -296,8 +296,8 @@ templ EntityEditFormComponent(cc *campaigns.CampaignContext, entity *Entity, ent
 	</div>
 }
 
-// entityTypeLineage renders the read-only Category › Sub-category lineage
-// (C-ENTITY-PERMISSIONS-UX Part 3): "‹ParentTypeName› › ‹TypeName›" when the
+// entityTypeLineage renders the read-only Category › Sub-category lineage:
+// "‹ParentTypeName› › ‹TypeName›" when the
 // type has a parent, else just "‹TypeName›". View-only — no editing. Renders
 // nothing when the type is unknown.
 templ entityTypeLineage(entityType *EntityType) {
