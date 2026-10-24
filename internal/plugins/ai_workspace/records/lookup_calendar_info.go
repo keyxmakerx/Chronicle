@@ -11,9 +11,11 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 )
 
-// lookupWhatCalendar is the `what:` of the calendar lookup.
+// lookupWhatCalendar is the `what:` of the calendar lookup; LookupWhatCalendar
+// lets the AI connector name it without spelling out a plugin's slug.
 const (
 	lookupWhatCalendar = "calendar"
+	LookupWhatCalendar = lookupWhatCalendar
 )
 
 // CalendarLookups are the lookups the prompt's Calendar content choice

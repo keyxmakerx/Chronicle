@@ -49,7 +49,7 @@ var tools = []tool{
 		Args: []arg{{Key: "name", Desc: "The page's name", Required: true}}},
 	{Name: "list_tags", Title: "Tags", Did: "Listed the tags", What: "tags",
 		Desc: "Every tag, with how many pages carry it."},
-	{Name: "calendar", Title: "The calendar", Did: "Read the calendar", What: "calendar",
+	{Name: "calendar_overview", Title: "The calendar", Did: "Read the calendar", What: records.LookupWhatCalendar,
 		Desc: "The main calendar: months, weekdays, seasons, moons and their phases, eras, festivals, today's date and the climate."},
 	{Name: "weather_kinds", Title: "Kinds of weather", Did: "Read the kinds of weather", What: "weather-kinds",
 		Desc: "Every climate and kind of weather the calendar knows."},

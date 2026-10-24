@@ -102,7 +102,11 @@ func TestAuthenticate(t *testing.T) {
 			return "", "camp-1"
 		}, ErrBadKey},
 		{"a wrong key", func(_ *Service, _ *memRepo, _ owners, _ *time.Time, raw string) (string, string) {
-			return raw[:len(raw)-1] + "A", "camp-1"
+			last := "A"
+			if strings.HasSuffix(raw, "A") {
+				last = "B"
+			}
+			return raw[:len(raw)-1] + last, "camp-1"
 		}, ErrBadKey},
 		{"a sync API key", func(_ *Service, _ *memRepo, _ owners, _ *time.Time, raw string) (string, string) {
 			return "chron_" + raw[5:], "camp-1"
