@@ -42,6 +42,39 @@
   // Store editor instances for cleanup.
   var editors = new WeakMap();
 
+  // Template prompts: a hint carried on an empty line (data-prompt), shown
+  // greyed while editing and dropped for good once the line has text. The
+  // HTML sanitizer drops the attribute and players' copies lose it, so a
+  // prompt is never page content.
+  var TemplatePrompt = TipTap.Extension && TipTap.Extension.create({
+    name: 'templatePrompt',
+    addGlobalAttributes: function () {
+      return [{
+        types: ['paragraph', 'heading'],
+        attributes: {
+          prompt: {
+            default: null,
+            parseHTML: function (node) { return node.getAttribute('data-prompt'); },
+            renderHTML: function (attrs) { return attrs.prompt ? { 'data-prompt': attrs.prompt } : {}; },
+          },
+        },
+      }];
+    },
+    onUpdate: function () { clearWrittenPrompts(this.editor); },
+  });
+
+  /** Drops the prompt from every line that now has text, outside undo. */
+  function clearWrittenPrompts(editor) {
+    var tr = null;
+    editor.state.doc.descendants(function (node, pos) {
+      if (node.attrs && node.attrs.prompt && node.content.size > 0) {
+        tr = tr || editor.state.tr;
+        tr.setNodeMarkup(pos, undefined, Object.assign({}, node.attrs, { prompt: null }));
+      }
+    });
+    if (tr) editor.view.dispatch(tr.setMeta('addToHistory', false));
+  }
+
   Chronicle.register('editor', {
     /**
      * Initialize the editor widget on a DOM element.
@@ -111,8 +144,12 @@
           underline: false,
           codeBlock: false, // Replaced by CodeBlockLowlight for syntax highlighting.
         }),
+        // Every empty line is checked so a template's prompts show at once,
+        // list items included; CSS shows the general hint only on an empty page.
         Placeholder.configure({
-          placeholder: placeholder,
+          showOnlyCurrent: false,
+          includeChildren: true,
+          placeholder: function (p) { return (p.node.attrs && p.node.attrs.prompt) || placeholder; },
         }),
         Link.configure({
           openOnClick: true, // always clickable in view mode, reconfigured in edit mode
@@ -120,6 +157,7 @@
         }),
         Underline,
       ];
+      if (TemplatePrompt) extensions.push(TemplatePrompt);
 
       // Add table extensions if available in the bundle.
       if (Table) {

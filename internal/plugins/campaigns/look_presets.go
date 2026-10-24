@@ -24,7 +24,7 @@ type lookPreset struct {
 // lookPresets are the eight looks, in AppearanceLooks order.
 var lookPresets = []lookPreset{
 	{ID: "classic", HeaderBg: "solid", HeaderSolid: "page", HeaderFrom: "#0f172a", HeaderTo: "#1e2a5a", HeaderDir: "r",
-		NavStyle: "ring", NavStrength: "calm", Accent: "#6366f1", Sidebar: "charcoal", Page: "cool", Contrast: "standard",
+		NavStyle: "rail", NavStrength: "calm", Accent: "#6366f1", Sidebar: "charcoal", Page: "cool", Contrast: "standard",
 		Body: "inter", Heading: "same", Scale: "standard", Button: "lift", Elevation: "standard", Speed: "standard"},
 	{ID: "parchment", HeaderBg: "solid", HeaderSolid: "#3b2a1c", HeaderFrom: "#3b2a1c", HeaderTo: "#4a1512", HeaderDir: "r",
 		NavStyle: "tab", NavStrength: "calm", Accent: "#9a4a26", S1: "#8f2d2d", S2: "#8a6a1f", Sidebar: "tinted", Page: "paper", Contrast: "standard",

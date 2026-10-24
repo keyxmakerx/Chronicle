@@ -69,7 +69,7 @@ templ campaignNavTop() {
 		hx-swap="innerHTML show:window:top"
 	>
 		<div class="nav-list" id="sidebar-nav-top-list">
-			@navFixedRow("dashboard", "Dashboard", "fa-house", fmt.Sprintf("/campaigns/%s", GetCampaignID(ctx)), "")
+			@navFixedRow("dashboard", "Home", "fa-house", fmt.Sprintf("/campaigns/%s", GetCampaignID(ctx)), "")
 			for _, sec := range GetNavSections(ctx) {
 				if sec.Kind == "pinned" || sec.Kind == "apps" {
 					@navSection(sec)

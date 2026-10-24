@@ -65,7 +65,7 @@ func TestApplyAppearance_EmptyInputResetsEverything(t *testing.T) {
 func TestApplyAppearance_DefaultsStoredAsEmpty(t *testing.T) {
 	var in AppearanceInput
 	in.Look = "classic"
-	in.Nav.Style, in.Nav.Strength, in.Nav.PageName = "ring", "calm", "row"
+	in.Nav.Style, in.Nav.Strength, in.Nav.PageName = "rail", "calm", "row"
 	in.Colours.Page, in.Colours.Contrast = "cool", "standard"
 	in.Type.Body, in.Type.Heading, in.Type.Scale = "inter", "same", "standard"
 	in.Buttons.Style = "lift"
@@ -149,6 +149,49 @@ func TestApplyAppearance_Choices(t *testing.T) {
 	})
 }
 
+// A blank nav style means the look's own highlight: Classic's still rail and
+// every other look's living ring, which campaigns saved before Classic went
+// still stored as blank.
+func TestApplyAppearance_NavStyleBlankFollowsLook(t *testing.T) {
+	cases := []struct {
+		look, style, stored, shown string
+	}{
+		{"classic", "rail", "", "rail"},
+		{"classic", "ring", "ring", "ring"},
+		{"", "comet", "comet", "comet"},
+		{"midnight", "ring", "", "ring"},
+		{"midnight", "rail", "rail", "rail"},
+		{"ember", "ring", "", "ring"},
+		{"starship", "rail", "rail", "rail"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.look+"/"+tc.style, func(t *testing.T) {
+			var in AppearanceInput
+			in.Look, in.Nav.Style = tc.look, tc.style
+			var s CampaignSettings
+			if _, err := applyAppearance(&s, in); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			var a Appearance
+			if s.Appearance != nil {
+				a = *s.Appearance
+			}
+			if a.NavStyle != tc.stored {
+				t.Errorf("stored %q, want %q", a.NavStyle, tc.stored)
+			}
+			if got := a.EffectiveNavStyle(); got != tc.shown {
+				t.Errorf("shows %q, want %q", got, tc.shown)
+			}
+		})
+	}
+	if got := (Appearance{}).EffectiveNavStyle(); got != "rail" {
+		t.Errorf("a never-customised campaign shows %q, want Classic's rail", got)
+	}
+	if got := (Appearance{Look: "parchment"}).EffectiveNavStyle(); got != "ring" {
+		t.Errorf("a blank highlight saved on Parchment shows %q, want the living ring it showed before", got)
+	}
+}
+
 func TestApplyAppearance_EveryListedValueAccepted(t *testing.T) {
 	lists := map[string][]string{
 		"look": AppearanceLooks, "nav style": AppearanceNavStyles, "nav strength": AppearanceNavStrengths,
@@ -173,8 +216,10 @@ func TestApplyAppearance_EveryListedValueAccepted(t *testing.T) {
 				}
 				want := v
 				// The first value is the default and stored as unset, except
-				// the page look, which stores Standard by name.
-				if v == lists[fc.name][0] && fc.name != "page look" {
+				// the page look, which stores Standard by name, and the nav
+				// style, whose blank is Classic's rail (no look sent is Classic).
+				if v == lists[fc.name][0] && fc.name != "page look" && fc.name != "nav style" ||
+					fc.name == "nav style" && v == "rail" {
 					want = ""
 				}
 				if got != want {
