@@ -402,7 +402,7 @@ templ SessionDetailPage(cc *campaigns.CampaignContext, session *Session, csrfTok
 						<i class="fa-solid fa-users mr-1 text-accent"></i> Attendees
 					</h2>
 					<div id="attendee-list">
-						@AttendeeList(cc, session.ID, session.Attendees, csrfToken, userID)
+						@AttendeeList(cc, session.ID, session.Attendees, csrfToken, userID, session.AcceptsRSVP())
 					</div>
 				</div>
 				<!-- Linked Entities -->
@@ -580,8 +580,9 @@ templ editSessionModal(cc *campaigns.CampaignContext, session *Session, csrfToke
 	</dialog>
 }
 
-// AttendeeList renders the RSVP attendee list with action buttons.
-templ AttendeeList(cc *campaigns.CampaignContext, sessionID string, attendees []Attendee, csrfToken string, currentUserID string) {
+// AttendeeList renders the RSVP attendee list with action buttons. open is
+// Session.AcceptsRSVP: a night that is over lists who came and asks nothing.
+templ AttendeeList(cc *campaigns.CampaignContext, sessionID string, attendees []Attendee, csrfToken string, currentUserID string, open bool) {
 	if len(attendees) == 0 {
 		<p class="text-sm text-fg-muted">No attendees invited yet.</p>
 	} else {
@@ -619,7 +620,7 @@ templ AttendeeList(cc *campaigns.CampaignContext, sessionID string, attendees []
 	     `len(attendees) == 0` else-branch, so a session with no attendees at all
 	     showed nobody any controls. The RSVP endpoint upserts, so a member with
 	     no row is a first-class responder. -->
-	if cc.IsMember && currentUserID != "" {
+	if cc.IsMember && currentUserID != "" && open {
 		@rsvpControls(cc, sessionID, csrfToken, myRSVPStatus(attendees, currentUserID))
 	}
 }

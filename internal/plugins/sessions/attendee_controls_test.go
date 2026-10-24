@@ -22,7 +22,7 @@ func renderAttendeeList(t *testing.T, attendees []Attendee, userID string, isMem
 		IsMember: isMember,
 	}
 	var sb strings.Builder
-	if err := AttendeeList(cc, "s1", attendees, "csrf", userID).Render(context.Background(), &sb); err != nil {
+	if err := AttendeeList(cc, "s1", attendees, "csrf", userID, true).Render(context.Background(), &sb); err != nil {
 		t.Fatalf("render: %v", err)
 	}
 	return sb.String()
@@ -105,5 +105,23 @@ func TestMyRSVPStatus(t *testing.T) {
 	}
 	if got := myRSVPStatus(attendees, ""); got != "" {
 		t.Errorf("anonymous = %q, want \"\"", got)
+	}
+}
+
+// TestAttendeeList_FinishedNightAsksNothing pins that a night that is over
+// lists who came and offers no RSVP buttons, even to a member with no answer.
+func TestAttendeeList_FinishedNightAsksNothing(t *testing.T) {
+	cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1"}, IsMember: true}
+	attendees := []Attendee{{UserID: "owner", DisplayName: "Ana", Status: RSVPAccepted}}
+	var sb strings.Builder
+	if err := AttendeeList(cc, "s1", attendees, "csrf", "late-joiner", false).Render(context.Background(), &sb); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	html := sb.String()
+	if hasRSVPButtons(html) {
+		t.Error("a finished night must not offer RSVP buttons")
+	}
+	if !strings.Contains(html, "Ana") {
+		t.Error("a finished night still lists who came")
 	}
 }
