@@ -20,8 +20,8 @@ type Viewer struct {
 	Role int
 }
 
-// IsOwner reports whether the viewer may change owner-only game state such
-// as the downtime switch.
+// IsOwner reports whether the viewer is the owner or a Co-DM, who alone may
+// open the screen and change game state such as the downtime switch.
 func (v Viewer) IsOwner() bool { return v.Role >= 3 }
 
 // View is everything the panel template draws. The Foundry module gets the
@@ -76,6 +76,11 @@ type View struct {
 	// button out. Only the owner and co-DMs get it, since a recipe's rules
 	// are theirs to run. Not on the wire, for the same reason as Adventures.
 	Homebrew templ.Component `json:"-"`
+
+	// Fight fills the Fight tab; nil leaves the tab out. Only the owner and
+	// co-DMs get it, since the encounters behind it are theirs. Not on the
+	// wire, for the same reason as Adventures.
+	Fight templ.Component `json:"-"`
 }
 
 // DowntimeView is the downtime switch's state plus requests waiting on the GM.
@@ -212,6 +217,8 @@ type HiddenView struct {
 	Name     string `json:"name"`
 	TypeName string `json:"type_name"`
 	Revealed bool   `json:"revealed"`
+	// CanUndo offers the revealed row's Undo, which is for the DM team only.
+	CanUndo bool `json:"-"`
 }
 
 // ConditionView is one condition and its rule text, markup flattened.

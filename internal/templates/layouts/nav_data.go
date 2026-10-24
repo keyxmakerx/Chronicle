@@ -98,7 +98,7 @@ func NavCommandsJSON(ctx context.Context) string {
 		out = append(out, navCommand{Label: label, Href: href, Icon: SafeNavIcon(icon, "")})
 	}
 	base := "/campaigns/" + GetCampaignID(ctx)
-	add("Dashboard", base, "fa-house")
+	add("Home", base, "fa-house")
 	for _, sec := range GetNavSections(ctx) {
 		for _, row := range sec.Rows {
 			add(row.Label, row.URL, row.Icon)

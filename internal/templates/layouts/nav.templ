@@ -69,7 +69,7 @@ templ campaignNavTop() {
 		hx-swap="innerHTML show:window:top"
 	>
 		<div class="nav-list" id="sidebar-nav-top-list">
-			@navFixedRow("dashboard", "Dashboard", "fa-house", fmt.Sprintf("/campaigns/%s", GetCampaignID(ctx)), "")
+			@navFixedRow("dashboard", "Home", "fa-house", fmt.Sprintf("/campaigns/%s", GetCampaignID(ctx)), "")
 			for _, sec := range GetNavSections(ctx) {
 				if sec.Kind == "pinned" || sec.Kind == "apps" {
 					@navSection(sec)
@@ -133,6 +133,9 @@ templ navSection(sec NavSectionView) {
 			<div class="nav-sec" data-nav-section={ sec.ID }>
 				<div class="nav-gh nav-gh-static">
 					<span class="nav-gh-l"><i class="fa-solid fa-thumbtack" aria-hidden="true"></i>{ sec.Label }</span>
+					if NavToolsWordSection(ctx) == sec.ID {
+						@navToolsWord()
+					}
 				</div>
 				<div class="nav-gb" id="nav-b-pinned">
 					for _, row := range sec.Rows {
@@ -143,8 +146,11 @@ templ navSection(sec NavSectionView) {
 		}
 	} else if len(sec.Rows) > 0 || sec.Kind == "categories" {
 		<div class="nav-sec" data-nav-section={ sec.ID }>
-			<div class="nav-gh-wrap">
+			<div class={ "nav-gh-wrap", templ.KV("has-tools-word", NavToolsWordSection(ctx) == sec.ID) }>
 				@navFoldHead(sec.ID, sec.Label, len(sec.Rows), NavSectionCurrent(ctx, sec.Rows))
+				if NavToolsWordSection(ctx) == sec.ID {
+					@navToolsWord()
+				}
 				if sec.Kind == "categories" && GetCampaignRole(ctx) >= 3 {
 					<button
 						type="button"
@@ -170,6 +176,17 @@ templ navSection(sec NavSectionView) {
 			</div>
 		</div>
 	}
+}
+
+// navToolsWord is the Edit word a touch screen shows on one section heading
+// (NavToolsWordSection). Pressed, every row shows its pin and dots until
+// Done; sidebar_nav.js keeps the word and aria-pressed in step. Both words
+// are drawn and CSS shows the one that fits, so a sidebar refreshed after a
+// pin reads right at once. A wide screen with a pointer never shows it.
+templ navToolsWord() {
+	<button type="button" class="nav-tools-word" data-nav-tools-toggle aria-pressed="false" title="Show pins and menus on each row">
+		<span class="nav-tools-edit">Edit</span><span class="nav-tools-done">Done</span>
+	</button>
 }
 
 // navFoldHead is a folding section's heading: the whole heading is the
@@ -333,7 +350,9 @@ templ navRowInner(row NavRowView) {
 			<i class="fa-solid fa-link" aria-hidden="true"></i>
 		}
 	</span>
-	<span class="nav-lb">{ row.Label }</span>
+	// A caption ("Party & NPCs") gives way before the label does; a count
+	// is short and keeps its place.
+	<span class={ "nav-lb", templ.KV("nav-lb-keep", row.Kind != "category" && row.Caption != "") }>{ row.Label }</span>
 	@navTrail(row.Key, navRowTrail(row))
 	if row.External {
 		<i class="fa-solid fa-arrow-up-right-from-square nav-ext" aria-hidden="true"></i>
@@ -429,14 +448,20 @@ templ navManage() {
 // campaignNavFooter keeps the ways out of the campaign (every campaign, and
 // the public Discover page), the owner's labelled Edit button (moved here
 // from the brand row) and the buttons that fold the sidebar to icons or hide
-// it.
+// it. A guest is fenced to this one campaign, so the ways out are left off:
+// for them Campaigns would bounce straight back and Discover would show the
+// signed-out front page.
 templ campaignNavFooter() {
 	<div class="nav-foot">
-		<a href="/campaigns" hx-boost="false">Campaigns</a>
-		<span aria-hidden="true">·</span>
-		<a href="/" hx-boost="false">Discover</a>
-		if HasYourLook(ctx) && !IsOwner(ctx) {
+		if !IsGuest(ctx) {
+			<a href="/campaigns" hx-boost="false">Campaigns</a>
 			<span aria-hidden="true">·</span>
+			<a href="/" hx-boost="false">Discover</a>
+		}
+		if HasYourLook(ctx) && !IsOwner(ctx) {
+			if !IsGuest(ctx) {
+				<span aria-hidden="true">·</span>
+			}
 			<a href={ templ.SafeURL("/campaigns/" + GetCampaignID(ctx) + "/my-look") }>Your look</a>
 		}
 		<span class="nav-foot-gap"></span>

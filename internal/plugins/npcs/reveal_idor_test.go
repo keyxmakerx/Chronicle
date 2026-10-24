@@ -42,6 +42,13 @@ func (f *fakeToggler) TogglePrivate(_ context.Context, entityID, campaignID stri
 
 func serveToggleReveal(t *testing.T, tog VisibilityToggler, campaignID, eid string) (*httptest.ResponseRecorder, error) {
 	t.Helper()
+	return serveToggleRevealAs(t, tog, campaignID, eid, true)
+}
+
+// serveToggleRevealAs calls the handler as a Scribe, with or without DM
+// access (a Co-DM).
+func serveToggleRevealAs(t *testing.T, tog VisibilityToggler, campaignID, eid string, coDM bool) (*httptest.ResponseRecorder, error) {
+	t.Helper()
 	h := NewHandler(stubNPCSvc{})
 	h.SetVisibilityToggler(tog)
 
@@ -52,10 +59,25 @@ func serveToggleReveal(t *testing.T, tog VisibilityToggler, campaignID, eid stri
 	c.SetParamNames("id", "eid")
 	c.SetParamValues(campaignID, eid)
 	c.Set("campaign_context", &campaigns.CampaignContext{
-		Campaign:   &campaigns.Campaign{ID: campaignID},
-		MemberRole: campaigns.RoleScribe,
+		Campaign:    &campaigns.Campaign{ID: campaignID},
+		MemberRole:  campaigns.RoleScribe,
+		IsDmGranted: coDM,
 	})
 	return rec, h.ToggleReveal(c)
+}
+
+// A Scribe sees what players see, so a hidden NPC is not theirs to reveal,
+// and showing one would hide nothing they could undo.
+func TestToggleReveal_ScribeRefused(t *testing.T) {
+	tog := &fakeToggler{homeCampaign: "camp-1"}
+	_, err := serveToggleRevealAs(t, tog, "camp-1", "ent-1", false)
+	var appErr *apperror.AppError
+	if !errors.As(err, &appErr) || appErr.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 AppError, got %v", err)
+	}
+	if tog.called {
+		t.Fatal("a refused reveal must not reach the toggler")
+	}
 }
 
 // TestToggleReveal_ForwardsCampaignScope: the handler passes cc.Campaign.ID to

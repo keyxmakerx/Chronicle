@@ -1,0 +1,22 @@
+package layouts
+
+// HaveACodeLink points someone a game master sent here with a guest code at
+// the join page. Without it the only ways in from the front pages make a
+// full account, and nothing says codes exist. onDark is for the front page's
+// dark welcome band.
+templ HaveACodeLink(onDark bool) {
+	<p
+		class={ "text-sm text-center",
+			templ.KV("text-gray-400", onDark),
+			templ.KV("text-fg-secondary", !onDark) }
+		data-have-a-code
+	>
+		Have a code from your game master?
+		<a
+			href="/join"
+			class={ "font-medium",
+				templ.KV("text-white underline underline-offset-2 hover:text-gray-200", onDark),
+				templ.KV("text-accent hover:text-accent-hover", !onDark) }
+		>Join with a code</a>
+	</p>
+}

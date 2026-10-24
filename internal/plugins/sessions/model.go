@@ -121,6 +121,13 @@ func (s *Session) IsPlanned() bool {
 	return s.Status == StatusPlanned
 }
 
+// AcceptsRSVP reports whether members may still answer this session. A
+// completed or cancelled night is a record of who came, not a question, so
+// answering it would count a player at a game they never played.
+func (s *Session) AcceptsRSVP() bool {
+	return s.Status != StatusCompleted && s.Status != StatusCancelled
+}
+
 // WorldDate is an in-world calendar date as stored on a session. It carries
 // no calendar id: a session's date is a bare year/month/day triple.
 type WorldDate struct {
@@ -337,6 +344,36 @@ func (s *Session) FormatScheduledWhen() string {
 	return out
 }
 
+// FormatScheduledFor is how a page shows a game night's date and time to one
+// viewer. With the viewer's zone and the organizer's both known, the moment
+// is converted to the viewer's clock and labelled ("Tue, Oct 27, 2026 ·
+// 6:00 PM CDT"); otherwise it is the organizer's clock with the organizer's
+// zone (FormatScheduledWhen), so a page never shows a bare time that a reader
+// in another zone could take for their own.
+func (s *Session) FormatScheduledFor(viewerTZ string) string {
+	if viewerTZ == "" || s.ScheduledTZ == nil || s.ScheduledTime == nil || s.ScheduledDate == nil {
+		return s.FormatScheduledWhen()
+	}
+	from, err := time.LoadLocation(*s.ScheduledTZ)
+	if err != nil {
+		return s.FormatScheduledWhen()
+	}
+	to, err := time.LoadLocation(viewerTZ)
+	if err != nil {
+		return s.FormatScheduledWhen()
+	}
+	at, err := time.ParseInLocation("2006-01-02 15:04", *s.ScheduledDate+" "+*s.ScheduledTime, from)
+	if err != nil {
+		return s.FormatScheduledWhen()
+	}
+	local := at.In(to)
+	out := local.Format("Mon, Jan 2, 2006 · 3:04 PM")
+	if abbr := timeutil.ZoneAbbrevOrEmpty(viewerTZ, local); abbr != "" {
+		out += " " + abbr
+	}
+	return out
+}
+
 // FormatScheduledTime renders the "HH:MM" (24-hour) scheduled_time as a friendly
 // 12-hour clock ("7:00 PM"), or "" if unset/unparseable. Zone-less, matching the
 // zone-less scheduled_date (the confirmed slot's wall-clock for the group).
@@ -384,4 +421,14 @@ type RSVPToken struct {
 	UsedAt    *time.Time `json:"used_at,omitempty"`
 	ExpiresAt time.Time  `json:"expires_at"`
 	CreatedAt time.Time  `json:"created_at"`
+}
+
+// RecapView says how a night's page shows its recap.
+type RecapView struct {
+	// Open shows the recap card (members only; see recapOpen).
+	Open bool
+	// StartWriting opens the recap editor ready to type.
+	StartWriting bool
+	// Played marks a planned night already behind the viewer (isPlayed).
+	Played bool
 }

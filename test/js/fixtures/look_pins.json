@@ -5,7 +5,7 @@
     "header.from": "#0f172a",
     "header.to": "#1e2a5a",
     "header.dir": "r",
-    "nav.style": "ring",
+    "nav.style": "rail",
     "nav.strength": "calm",
     "colours.accent": "#6366f1",
     "colours.s1": null,

@@ -159,8 +159,8 @@ templ dashQuickActions(cc *CampaignContext) {
 						<i class="fa-solid fa-users text-blue-600 dark:text-blue-400"></i>
 					</div>
 					<div>
-						<h3 class="font-semibold text-fg group-hover:text-accent transition-colors">Members</h3>
-						<p class="cb-sub text-xs text-fg-secondary">View campaign members</p>
+						<h3 class="font-semibold text-fg group-hover:text-accent transition-colors">People</h3>
+						<p class="cb-sub text-xs text-fg-secondary">Members, roles and invites</p>
 					</div>
 				</div>
 			</a>
@@ -207,13 +207,21 @@ templ dashCategoryGrid(cc *CampaignContext, config map[string]any) {
 							<span class="cb-row-name text-sm font-medium text-fg truncate group-hover:text-accent transition-colors">{ et.NamePlural }</span>
 						</div>
 						<div class="cb-row-meta pl-[2.375rem] text-xs text-fg-muted">
-							{ strconv.Itoa(layouts.GetEntityCount(ctx, et.ID)) } pages
+							{ pageCountLabel(layouts.GetEntityCount(ctx, et.ID)) }
 						</div>
 					</a>
 				}
 			</div>
 		</div>
 	}
+}
+
+// pageCountLabel is a category's page count in words: "1 page", "3 pages".
+func pageCountLabel(n int) string {
+	if n == 1 {
+		return "1 page"
+	}
+	return strconv.Itoa(n) + " pages"
 }
 
 // dashVisibleCategories is the category grid's list: every category for the
@@ -275,8 +283,8 @@ templ dashEntityList(cc *CampaignContext, config map[string]any) {
 // Config: content (string). Content is sanitized to prevent stored XSS.
 templ dashTextBlock(config map[string]any) {
 	<div class="cb-card card p-4 prose prose-sm dark:prose-invert max-w-none">
-		if content, ok := config["content"].(string); ok && content != "" {
-			@templ.Raw(sanitize.HTML(content))
+		if content, ok := config["content"].(string); ok && sanitize.TextBlock(content) != "" {
+			@templ.Raw(sanitize.TextBlock(content))
 		} else {
 			<p class="text-fg-muted text-sm italic">Empty text block</p>
 		}

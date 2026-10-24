@@ -9,7 +9,9 @@ import (
 // UserListData is what the people list renders: one page of users plus the
 // search/chip/pager state.
 type UserListData struct {
-	Users     []auth.User
+	Users []auth.User
+	// SelfID is the signed-in admin, whose own row offers no admin change.
+	SelfID    string
 	View      listView
 	CSRFToken string
 }
@@ -64,7 +66,7 @@ templ AdminUsersList(data UserListData) {
 									{ user.CreatedAt.Format("Jan 2, 2006") }
 								</td>
 								<td class="px-4 py-3 text-right space-x-2">
-									for _, a := range userRowActions(user) {
+									for _, a := range userRowActions(user, data.SelfID) {
 										@adminInlineAction(a, csrfToken)
 									}
 								</td>
@@ -79,7 +81,7 @@ templ AdminUsersList(data UserListData) {
 		<div class="card p-0 divide-y divide-edge md:hidden" data-testid="users-cards">
 			if len(users) > 0 {
 				for _, user := range users {
-					@adminCardRow(avatarInitial(user.DisplayName), user.DisplayName, "", userRoleLabel(user), userRoleChipClass(user), user.Email+twoFactorNote(user)+" · joined "+user.CreatedAt.Format("Jan 2, 2006"), csrfToken, userCardActions(user))
+					@adminCardRow(avatarInitial(user.DisplayName), user.DisplayName, "", userRoleLabel(user), userRoleChipClass(user), user.Email+twoFactorNote(user)+" · joined "+user.CreatedAt.Format("Jan 2, 2006"), csrfToken, userCardActions(user, data.SelfID))
 				}
 			} else {
 				@adminListEmptyCard(data.View)

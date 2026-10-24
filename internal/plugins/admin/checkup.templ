@@ -1,0 +1,133 @@
+package admin
+
+import "strconv"
+
+// CheckupShield is the inside of the top bar's check-up host: the shield, the
+// sheet it opens, and the reminder strip swapped in out of band. The hover,
+// pin, peek and phone sheet behaviour is the checkup widget
+// (static/js/widgets/checkup.js).
+templ CheckupShield(v CheckupView) {
+	<button
+		type="button"
+		class={ "checkup-chip", "is-" + string(v.Worst()) }
+		data-checkup-chip
+		aria-expanded="false"
+		aria-controls="checkup-sheet"
+		aria-label={ checkupChipLabel(v) }
+		title="Site check-up"
+	>
+		<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+			<path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z"></path>
+			if v.Worst() == CheckOK {
+				<path d="M9 12l2 2 4-4"></path>
+			}
+		</svg>
+		if n := len(v.Open()); n > 0 {
+			<span class="checkup-count">{ strconv.Itoa(n) }</span>
+		}
+	</button>
+	<div
+		id="checkup-sheet"
+		class="checkup-sheet"
+		role="dialog"
+		aria-label="Site check-up"
+		data-checkup-sheet
+		if v.Peek {
+			data-checkup-peek
+		}
+	>
+		<div>
+			<h4 class="checkup-title">{ v.Title() }</h4>
+			<div class="checkup-sub">{ v.Subtitle() }</div>
+		</div>
+		<div class="checkup-rows">
+			for _, it := range v.Items {
+				@checkupRow(it)
+			}
+		</div>
+		<div class="checkup-foot">
+			if v.Worst() != CheckOK {
+				<button type="button" class="checkup-quiet" hx-post="/admin/checkup/snooze" hx-target="#checkup-host" hx-swap="innerHTML">Remind me tomorrow</button>
+			}
+			if v.Running {
+				<span class="checkup-quiet is-busy"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> Checking…</span>
+			} else {
+				<button type="button" class="checkup-quiet" hx-post="/admin/checkup/run" hx-target="#checkup-host" hx-swap="innerHTML" hx-disabled-elt="this">Check now</button>
+			}
+			<span class="checkup-peeknote" data-checkup-peeknote></span>
+		</div>
+	</div>
+	if v.Running {
+		<span hidden hx-get="/admin/checkup" hx-trigger="load delay:4s" hx-target="#checkup-host" hx-swap="innerHTML"></span>
+	}
+	<div id="checkup-strip" hx-swap-oob="true">
+		if v.Strip {
+			<div class={ "checkup-strip", "is-" + string(v.Worst()) } role="status">
+				<span class="checkup-strip-text">{ v.StripText() }</span>
+				<button type="button" class="btn-primary btn-sm" data-checkup-open>Fix now</button>
+				<button type="button" class="checkup-quiet" hx-post="/admin/checkup/snooze" hx-target="#checkup-host" hx-swap="innerHTML">Remind me tomorrow</button>
+			</div>
+		}
+	</div>
+}
+
+// checkupRow is one sheet row: its mark, what it checks, and its one fix.
+templ checkupRow(it CheckItem) {
+	<div class="checkup-row" data-checkup-item={ it.Key }>
+		<span class={ "checkup-dot", "is-" + string(it.State) } aria-hidden="true">
+			if it.State == CheckOK {
+				✓
+			} else {
+				!
+			}
+		</span>
+		<div class="checkup-text">
+			<b><span class="sr-only">{ checkupStateWord(it.State) }: </span>{ it.Title }</b>
+			<small>{ it.Detail }</small>
+		</div>
+		if it.FixLabel != "" {
+			if it.FixPost != "" {
+				<button type="button" class={ checkupFixClass(it) } hx-post={ it.FixPost } hx-vals={ it.FixVals } hx-disabled-elt="this" data-checkup-fix>{ it.FixLabel }</button>
+			} else if it.FixExternal {
+				<a href={ templ.SafeURL(it.FixHref) } class={ checkupFixClass(it) } target="_blank" rel="noopener noreferrer" data-checkup-fix>{ it.FixLabel }</a>
+			} else {
+				<a
+					href={ templ.SafeURL(it.FixHref) }
+					class={ checkupFixClass(it) }
+					hx-boost="true"
+					hx-target="#main-content"
+					hx-select="#main-content > *"
+					hx-swap="innerHTML show:window:top"
+					data-checkup-fix
+				>{ it.FixLabel }</a>
+			}
+		}
+	</div>
+}
+
+// checkupChipLabel names the shield for screen readers, count included.
+func checkupChipLabel(v CheckupView) string {
+	if n := len(v.Open()); n > 0 {
+		return "Site check-up: " + v.Title()
+	}
+	return "Site check-up: all good"
+}
+
+// checkupStateWord is a row's verdict in words, for screen readers.
+func checkupStateWord(s CheckState) string {
+	switch s {
+	case CheckOK:
+		return "OK"
+	case CheckBad:
+		return "Failed"
+	}
+	return "Needs you"
+}
+
+// checkupFixClass makes the fix for a failed row the strong button.
+func checkupFixClass(it CheckItem) string {
+	if it.State == CheckBad {
+		return "btn-primary btn-sm checkup-fix"
+	}
+	return "btn-secondary btn-sm checkup-fix"
+}

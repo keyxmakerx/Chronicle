@@ -61,8 +61,12 @@ func TestBacklinks_NotesAndPages(t *testing.T) {
 	if err := h.Backlinks(c); err != nil {
 		t.Fatal(err)
 	}
-	if len(linker.seesSecrets) != 2 || linker.seesSecrets[0] || !linker.seesSecrets[1] {
-		t.Errorf("a player does not read secrets, a scribe does: %v", linker.seesSecrets)
+	c, _ = ctxFor(http.MethodGet, "/", "u-owner", campaigns.RoleOwner, map[string]string{"noteId": "party"}, nil)
+	if err := h.Backlinks(c); err != nil {
+		t.Fatal(err)
+	}
+	if len(linker.seesSecrets) != 3 || linker.seesSecrets[0] || linker.seesSecrets[1] || !linker.seesSecrets[2] {
+		t.Errorf("a player and a scribe do not read secrets, the owner does: %v", linker.seesSecrets)
 	}
 }
 

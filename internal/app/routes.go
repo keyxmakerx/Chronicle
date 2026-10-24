@@ -70,6 +70,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/systems"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"github.com/keyxmakerx/chronicle/internal/templates/pages"
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
 	ws "github.com/keyxmakerx/chronicle/internal/websocket"
 	"github.com/keyxmakerx/chronicle/internal/widgets/entity_notes"
 	"github.com/keyxmakerx/chronicle/internal/widgets/notes"
@@ -2961,6 +2962,15 @@ func (a *App) RegisterRoutes() {
 
 	// Content template routes (entity content blueprints).
 	contentTemplateRepo := entities.NewContentTemplateRepository(a.DB)
+	// One-time, idempotent: built-in templates still as first seeded get
+	// prompts that vanish when written over. Best-effort, never blocks startup.
+	if store, ok := contentTemplateRepo.(entities.TemplatePromptStore); ok {
+		if n, err := entities.ReconcileTemplatePrompts(context.Background(), store); err != nil {
+			slog.Error("entities: template prompt reconcile failed", slog.Any("error", err))
+		} else if n > 0 {
+			slog.Info("entities: template prompt reconcile updated templates", slog.Int64("templates", n))
+		}
+	}
 	contentTemplateService := entities.NewContentTemplateService(contentTemplateRepo, entityTypeRepo)
 	contentTemplateHandler := entities.NewContentTemplateHandler(contentTemplateService)
 	entities.RegisterContentTemplateRoutes(e, contentTemplateHandler, campaignService, authService)
@@ -3551,7 +3561,26 @@ func (a *App) RegisterRoutes() {
 	// surface the existing backup/restore artifacts — adapters so admin imports
 	// neither the boot config nor the backup/restore plugins.
 	adminHandler.SetHealthChecker(&adminHealthChecker{db: a.DB, cfg: a.Config})
-	adminHandler.SetBackupLister(&adminBackupLister{backups: backupSvc, restores: restoreSvc, backupDir: a.Config.BackupDir})
+	adminBackups := &adminBackupLister{backups: backupSvc, restores: restoreSvc, settings: settingsRepo, backupDir: a.Config.BackupDir}
+	adminHandler.SetBackupLister(adminBackups)
+
+	// The site check-up behind the admin top bar's shield: a weekly backup
+	// read-back, sign-up, password reset and updates. Admin reaches the
+	// backup plugin and GitHub only through these adapters.
+	checkupDeps := admin.CheckupDeps{
+		Store:        settingsRepo,
+		Backup:       checkupBackup{svc: backupSvc, store: settingsRepo},
+		Chronicle:    newChronicleVersionChecker(),
+		Backups:      adminBackups,
+		Registration: settingsService.GetRegistrationMode,
+		EmailReady:   smtpService.IsConfigured,
+	}
+	if a.pkgService != nil {
+		checkupDeps.Packages = a.pkgService
+	}
+	checkupService := admin.NewCheckupService(checkupDeps)
+	adminHandler.SetCheckupService(checkupService, a.ShutdownCtx)
+	go checkupService.RunScheduler(a.ShutdownCtx)
 
 	// Wire security event logging into the auth handler so logins, logouts,
 	// failed attempts, and password resets are recorded automatically.
@@ -3772,6 +3801,15 @@ func (a *App) RegisterRoutes() {
 			slog.Info("calendar: harptos season reconcile repaired calendars", slog.Int("calendars", n))
 		}
 	}
+	// One-time, idempotent: give campaigns that have calendars but none
+	// marked default their first one. Best-effort, never blocks startup.
+	if store, ok := calendarRepo.(calendar.DefaultCalendarStore); ok {
+		if n, err := calendar.ReconcileDefaultCalendars(context.Background(), store); err != nil {
+			slog.Error("calendar: default calendar reconcile failed", slog.Any("error", err))
+		} else if n > 0 {
+			slog.Info("calendar: default calendar reconcile marked defaults", slog.Int("campaigns", n))
+		}
+	}
 	calendarEventRepo := calendar.NewEventRepository(a.DB)
 	calendarKindRepo := calendar.NewEventKindRepository(a.DB)
 	calendarWeatherRepo := calendar.NewWeatherRepository(a.DB)
@@ -3874,6 +3912,9 @@ func (a *App) RegisterRoutes() {
 		"/static/js/calendar_open.js",
 		"/static/js/widgets/rulebook.js",
 		"/static/js/widgets/rulebook_editor.js",
+		// Mounts on the availability page's data-availability-root; it needs
+		// Chronicle.apiFetch, so it has to run after boot.js.
+		"/static/js/availability.js",
 		// After boot.js, so Chronicle exists before a token can arrive. It
 		// does nothing on pages without #notes-embed.
 		"/static/js/notes_embed.js",
@@ -4040,13 +4081,15 @@ func (a *App) RegisterRoutes() {
 	sightingService := sessions.NewSightingService(sessions.NewSightingRepository(a.DB), sessionsRepo,
 		&entityCampaignCheckerAdapter{svc: entityService}, &entityVisibilityFilterAdapter{svc: entityService})
 	sessionsHandler.SetSightingService(sightingService)
-	// The Last seen block's script loads on sight (ADR-063); the block itself
-	// is registered with the other page blocks below.
+	// The Last seen block's and the Game nights list's scripts load on sight
+	// (ADR-063); the block itself is registered with the other page blocks
+	// below.
 	a.registerPlugin(PluginRegistration{
 		Slug:     sessions.PluginSlug,
 		StaticFS: echo.MustSubFS(sessions.StaticAssetsFS, "static"),
 		Widgets: []PluginWidget{
 			{Name: "last-seen", Scripts: []string{"js/last_seen.js"}},
+			{Name: "game-nights", Scripts: []string{"js/game_nights.js"}},
 		},
 	})
 	// Game-night links open the real-world calendar; with the calendar plugin
@@ -4074,6 +4117,22 @@ func (a *App) RegisterRoutes() {
 		addons:  addonService,
 		healthy: func(slug string) bool { return a.PluginHealth == nil || a.PluginHealth.IsHealthy(slug) },
 		now:     time.Now,
+	}, campaignService, authService)
+
+	// The home page's "Last night: write it up" card, wired here for the same
+	// reason: the campaign home may not import the sessions plugin.
+	registerLastNightRoutes(e, &lastNightHandler{
+		nights:  sessionsService,
+		addons:  addonService,
+		healthy: func(slug string) bool { return a.PluginHealth == nil || a.PluginHealth.IsHealthy(slug) },
+		now:     time.Now,
+		zone: func(ctx context.Context, userID string) *time.Location {
+			u, err := authService.GetUser(ctx, userID)
+			if err != nil || u == nil || u.Timezone == nil {
+				return nil
+			}
+			return timeutil.LoadLocation(*u.Timezone)
+		},
 	}, campaignService, authService)
 
 	// Timeline plugin: interactive visual timelines with zoom levels and entity grouping.
@@ -4379,6 +4438,7 @@ func (a *App) RegisterRoutes() {
 	// Who may open a picture in a note is decided by who can read the notes
 	// holding it, asked of the notes service rather than its tables.
 	mediaHandler.SetNoteMediaAccess(&noteMediaAccessAdapter{svc: noteSvc})
+	mediaHandler.SetOwnPageChecker(&ownPageCheckerAdapter{svc: entityService})
 	noteHandler.SetMemberLister(campaignService)
 	noteHandler.SetCharacterLister(&journalCharacterAdapter{svc: entityService})
 	notePages := &notesPagesAdapter{svc: entityService}
@@ -4884,6 +4944,11 @@ func (a *App) RegisterRoutes() {
 	} else if n > 0 {
 		slog.Info("placed game-system panels on creature types", slog.Int("layouts", n))
 	}
+	if n, err := placeCreaturePanelsOnNewCampaigns(context.Background(), settingsRepo, campaignService, entityService); err != nil {
+		slog.Error("placing creature panels on newer campaigns failed", slog.String("error", err.Error()))
+	} else if n > 0 {
+		slog.Info("placed game-system panels on newer campaigns' creature types", slog.Int("layouts", n))
+	}
 
 	// One-time: existing campaigns move to the Material page look
 	// (material_page_look.go). Only a failure to read the marker or list
@@ -4902,8 +4967,17 @@ func (a *App) RegisterRoutes() {
 		slog.Info("turned jot notes on where the journal was on", slog.Int("campaigns", n))
 	}
 
+	// One-time: Scribes now see what players see, so owners are told which
+	// of their Scribes that changes.
+	if n, err := noteScribeAccessOnce(context.Background(), settingsRepo, campaignService, sessionsService); err != nil {
+		slog.Error("sending the scribe access note failed", slog.String("error", err.Error()))
+	} else if n > 0 {
+		slog.Info("told owners their scribes now see what players see", slog.Int("campaigns", n))
+	}
+
 	campaignHandler.SetAuditLogger(&campaignAuditAdapter{svc: auditService})
 	campaignHandler.SetAddonLister(&addonListerAdapter{svc: addonService})
+	campaignHandler.SetSheetChecker(campaignSheetChecker{addons: addonService})
 	campaignHandler.SetSystemAddonEnabler(addonService)
 	campaignHandler.SetMediaUploader(&backdropUploaderAdapter{svc: mediaService})
 	campaignHandler.SetSMTPChecker(smtpService)
@@ -5413,7 +5487,7 @@ func (a *App) RegisterRoutes() {
 			}
 			if ap := campaignSettings.Appearance; ap != nil {
 				ad := &layouts.AppearanceData{
-					NavStyle: ap.NavStyle, NavStrength: ap.NavStrength, NavPageName: ap.NavPageName,
+					NavStyle: ap.EffectiveNavStyle(), NavStrength: ap.NavStrength, NavPageName: ap.NavPageName,
 					PageTone: ap.PageTone, Contrast: ap.Contrast,
 					BodyFont: ap.BodyFont, HeadingFont: ap.HeadingFont, TypeScale: ap.TypeScale,
 					ButtonStyle: ap.ButtonStyle, Elevation: ap.Elevation, MotionSpeed: ap.MotionSpeed,
@@ -5439,7 +5513,11 @@ func (a *App) RegisterRoutes() {
 			// fragment skips the read, as the view prefs above do.
 			if sess := auth.GetSession(c); sess != nil && cc.IsMember && !middleware.IsHTMX(c) {
 				ap := campaignSettings.Appearance
-				ctx = layouts.SetHasYourLook(ctx, len(campaigns.PickableParts(ap, cc)) > 0)
+				sheets := campaignSheetChecker{addons: addonService}
+				shown := campaigns.ShownLookParts(campaigns.PickableParts(ap, cc), func() bool {
+					return sheets.CampaignHasSheet(c.Request().Context(), cc.Campaign.ID)
+				})
+				ctx = layouts.SetHasYourLook(ctx, len(shown) > 0)
 				picks, err := campaignService.MemberLookPicks(c.Request().Context(), cc, sess.UserID)
 				if err != nil {
 					slog.Warn("reading member look picks", slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", err))
@@ -5451,6 +5529,12 @@ func (a *App) RegisterRoutes() {
 					}
 					if v, ok := picks[campaigns.LookPartSheet]; ok {
 						own.SheetStyle = v
+					}
+					if v, ok := picks[campaigns.LookPartPage]; ok {
+						own.StyleKit = v
+					}
+					if v, ok := picks[campaigns.LookPartHover]; ok {
+						own.HoverCard = v
 					}
 					if v, ok := picks[campaigns.LookPartDmScreen]; ok {
 						own.DmScreenKit = v
@@ -5485,18 +5569,17 @@ func (a *App) RegisterRoutes() {
 				ctx = layouts.SetTopbarContent(ctx, tc)
 			}
 
-			// "View as player" override: when an owner has the toggle active,
-			// templates see RolePlayer instead of RoleOwner. Access control
-			// (RequireRole middleware) still uses the actual cc.MemberRole.
+			// "View as player" override: when the owner or a co-DM has the
+			// toggle active, templates see RolePlayer and no DM grant. Access
+			// control (route middleware) still uses the real CampaignContext.
 			effectiveRole := int(cc.MemberRole)
 			isOwner := cc.MemberRole >= campaigns.RoleOwner
+			viewingAsPlayer := campaigns.ViewingAsPlayer(c, cc)
 			ctx = layouts.SetIsOwner(ctx, isOwner)
-			ctx = layouts.SetIsDmGranted(ctx, cc.IsDmGranted)
-			if isOwner {
-				if cookie, err := c.Cookie("chronicle_view_as_player"); err == nil && cookie.Value == "1" {
-					effectiveRole = int(campaigns.RolePlayer)
-					ctx = layouts.SetViewingAsPlayer(ctx, true)
-				}
+			ctx = layouts.SetIsDmGranted(ctx, cc.IsDmGranted && !viewingAsPlayer)
+			if viewingAsPlayer {
+				effectiveRole = int(campaigns.RolePlayer)
+				ctx = layouts.SetViewingAsPlayer(ctx, true)
 			}
 			ctx = layouts.SetCampaignRole(ctx, effectiveRole)
 			ctx = layouts.SetCampaignArchived(ctx, cc.Campaign.IsArchived())
@@ -5512,7 +5595,7 @@ func (a *App) RegisterRoutes() {
 			// their membership role, so the DM-only Adventures category is
 			// theirs to see; an owner viewing as a player is not.
 			sidebarRole := effectiveRole
-			if cc.IsDmGranted && sidebarRole < int(campaigns.RoleScribe) {
+			if cc.IsDmGranted && !viewingAsPlayer && sidebarRole < int(campaigns.RoleOwner) {
 				sidebarRole = int(campaigns.RoleOwner)
 			}
 			if typesErr == nil {
@@ -5764,6 +5847,10 @@ func (a *App) RegisterRoutes() {
 	if a.PluginHealth.IsHealthy(homebrew.PluginSlug) {
 		dmSources.Homebrew = &dmHomebrewAdapter{trackers: a.PluginHealth.IsHealthy(trackers.PluginSlug)}
 	}
+	// The Fight tab runs encounters, so it needs their tables.
+	if a.PluginHealth.IsHealthy(encounters.PluginSlug) {
+		dmSources.Fight = dmFightAdapter{}
+	}
 	dmScreenSvc := dmscreen.NewService(dmSources)
 	dmscreen.RegisterRoutes(e, dmscreen.NewHandler(dmScreenSvc), campaignService, authService)
 	// The sync API routes are already registered; they answer 404 until this
@@ -5976,7 +6063,7 @@ func (a *App) RegisterRoutes() {
 
 	// Tests: montages and other long tests on a page, and how they ended.
 	// Built before encounters, whose versions are picked by a test's result.
-	encounterPages := &encountersPageAdapter{svc: entityService, cards: entities.NewPageCards(a.DB)}
+	encounterPages := &encountersPageAdapter{svc: entityService, cards: entities.NewPageCards(a.DB), lists: characterListService, sys: systemHandler}
 	var encounterResults encounters.ResultDirectory
 	a.registerPlugin(PluginRegistration{
 		Slug:     pagetests.PluginSlug,
@@ -6035,18 +6122,22 @@ func (a *App) RegisterRoutes() {
 		slog.Warn("homebrew plugin degraded — the Homebrew Workshop is not available")
 	}
 
-	// Encounters: fights planned on a page, loaded in Foundry.
+	// Encounters: fights planned on a page, loaded in Foundry or run on the
+	// DM Screen's Fight tab.
 	a.registerPlugin(PluginRegistration{
 		Slug:     encounters.PluginSlug,
 		StaticFS: echo.MustSubFS(encounters.StaticAssetsFS, "static"),
 		Widgets: []PluginWidget{
-			{Name: "encounters", Scripts: []string{"js/encounters.js"}},
+			{Name: "encounters", Scripts: []string{"js/creature_fold.js", "js/encounters.js"}},
+			{Name: "encounter-run", Scripts: []string{"js/creature_fold.js", "js/encounter_run.js"}},
 		},
 	})
 	if a.PluginHealth.IsHealthy(encounters.PluginSlug) {
 		encounterSvc := encounters.NewService(encounters.NewRepository(a.DB), encounterPages, encounterResults)
 		encounterAPI.attach(encounterSvc)
 		encounters.RegisterRoutes(e, encounters.NewHandler(encounterSvc), campaignService, authService)
+		runSvc := encounters.NewRunService(encounters.NewRunRepository(a.DB), encounterSvc, encounterPages)
+		encounters.RegisterRunRoutes(e, encounters.NewRunHandler(runSvc), campaignService, authService)
 	} else {
 		slog.Warn("encounters plugin degraded — routes not registered")
 	}
@@ -6082,6 +6173,7 @@ func (a *App) RegisterRoutes() {
 	aiWorkspaceHandler.SetRecords(aiRegistry)
 	aiWorkspaceLookups := aiLookups(aiWiring, aiRegistry)
 	aiWorkspaceHandler.SetLookups(aiWorkspaceLookups)
+	aiWorkspaceHandler.SetFeatureGate(aiFeatureGate(addonService))
 	if aiConnectorEndpoint != nil {
 		aiConnectorEndpoint.SetLookups(aiWorkspaceLookups)
 	}
@@ -6175,6 +6267,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "entity_manager", Scripts: []string{"/static/js/widgets/entity_manager.js"}},
 	{Name: "bulk-actions", Scripts: []string{"/static/js/widgets/bulk_actions.js"}},
 	{Name: "ai-export", Scripts: []string{"/static/js/widgets/ai_export.js"}},
+	{Name: "import-sheet-check", Scripts: []string{"/static/js/widgets/import_sheet_check.js"}},
 	{Name: "impact_tree", Scripts: []string{"/static/js/widgets/impact_tree.js"}},
 	{Name: "attributes", Scripts: []string{"/static/js/widgets/attributes.js"}},
 	{Name: "entity-type-editor", Scripts: []string{"/static/js/widgets/entity_type_editor.js"}},
@@ -6185,6 +6278,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "customize-categories", Scripts: []string{"/static/js/widgets/customize_categories.js"}},
 	{Name: "customize-page-editor", Scripts: []string{"/static/js/widgets/customize_page_editor.js"}},
 	{Name: "site-look", Scripts: []string{"/static/js/widgets/site_look.js"}},
+	{Name: "checkup", Scripts: []string{"/static/js/widgets/checkup.js"}},
 	{Name: "player-view", Scripts: []string{"/static/js/widgets/player_view.js"}},
 	{Name: "page-editor", Scripts: []string{"/static/js/widgets/page_editor.js"}},
 	{Name: "page-tabs", Scripts: []string{"/static/js/widgets/page_tabs.js"}},
@@ -6579,6 +6673,17 @@ func (a *mediaUploadAdapter) UploadPicture(ctx context.Context, campaignID, user
 		return "", err
 	}
 	return file.ID, nil
+}
+
+// ownPageCheckerAdapter answers the media plugin's hero-picture question over
+// the entities service: the page is in that campaign and the user claimed it.
+type ownPageCheckerAdapter struct {
+	svc entities.EntityService
+}
+
+func (a *ownPageCheckerAdapter) OwnsPage(ctx context.Context, campaignID, entityID, userID string) bool {
+	e, err := a.svc.GetByID(ctx, entityID)
+	return err == nil && e != nil && e.CampaignID == campaignID && userID != "" && e.IsOwnedBy(userID)
 }
 
 // noteMediaAccessAdapter answers the media plugin's note-picture question

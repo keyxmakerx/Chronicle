@@ -192,7 +192,7 @@
     text_block: function () { return '<p class="cpe-ex-p">Your own text goes here, the same on every page.</p>'; }
   };
   // The names the save bar gives each home, as the Home pages tabs do.
-  var HOME_NAMES = { default: 'Everyone', player: 'Players', scribe: 'Scribes', get director() { return 'The ' + gmTerm(); }, guest: 'Guests', get dm() { return gmTerm() + ' dashboard'; } };
+  var HOME_NAMES = { default: 'Everyone', player: 'Players', scribe: 'Scribes', get director() { return gmTerm() + ' team'; }, guest: 'Guests', dm: 'Overview' };
   // The examples that are fact panels, which keep their edge in Annals.
   var EX_FACTS = ['attributes', 'details'];
   // exampleNode builds the example for a widget at a tile's size (columns
@@ -882,7 +882,8 @@
         } else {
           inp = '<input class="cpe-inp" type="text" id="' + id + '" data-cfg="' + esc(key) + '" value="' + esc(v) + '">';
         }
-        return '<div class="cpe-grp"><label class="cpe-lab" for="' + id + '">' + esc(fd.label || humanize(key)) + '</label>' + inp + '</div>';
+        var hint = fd.hint ? '<span class="cpe-hint">' + esc(fd.hint) + '</span>' : '';
+        return '<div class="cpe-grp"><label class="cpe-lab" for="' + id + '">' + esc(fd.label || humanize(key)) + '</label>' + inp + hint + '</div>';
       }).join('');
     }
     function needOptions(type) {

@@ -10,6 +10,9 @@
  *   panel (sidebar_drill.js) is open, the ring marks the panel's header.
  * - The phone drawer: out of the tab order while shut, focus kept inside
  *   while open. (Escape and the menu button live in app.templ's Alpine.)
+ * - The touch-screen Edit word (navToolsWord): it shows a member's pins and
+ *   row menus on every row until Done. The state is #sidebar's
+ *   data-nav-tools, which CSS reads; this keeps aria-pressed in step.
  *
  * Motion moves only transform and opacity. Content is laid out at its final
  * size first and never revealed by a moving clip; the ring is one element
@@ -212,6 +215,30 @@
     } else {
       fold(body);
     }
+  }
+
+  // --- The touch-screen Edit word ------------------------------------------
+
+  function toolsOn() {
+    var sb = document.getElementById('sidebar');
+    return !!sb && sb.getAttribute('data-nav-tools') === 'on';
+  }
+
+  // Also run after sidebar_editor.js swaps the lists in, since the fresh
+  // word arrives saying "not pressed".
+  function syncTools() {
+    var on = String(toolsOn());
+    Array.prototype.forEach.call(document.querySelectorAll('#sidebar [data-nav-tools-toggle]'), function (b) {
+      b.setAttribute('aria-pressed', on);
+    });
+  }
+
+  function toggleTools() {
+    var sb = document.getElementById('sidebar');
+    if (!sb) return;
+    if (toolsOn()) sb.removeAttribute('data-nav-tools');
+    else sb.setAttribute('data-nav-tools', 'on');
+    syncTools();
   }
 
   // --- Where the viewer is -------------------------------------------------
@@ -453,6 +480,11 @@
   document.addEventListener('click', function (e) {
     var t = e.target;
     if (!t || !t.closest || !list()) return;
+    if (t.closest('#sidebar [data-nav-tools-toggle]')) {
+      e.preventDefault();
+      toggleTools();
+      return;
+    }
     // Apps' own fold heading lives in campaignNavTop, Manage's and a
     // category's twisty in the categories area — both under #sidebar.
     var fold = t.closest('#sidebar [data-nav-fold]');
@@ -503,6 +535,7 @@
   window.Chronicle = window.Chronicle || {};
   window.Chronicle.nav = {
     setCurrent: setCurrent,
+    syncTools: syncTools,
     parseFolds: parseFolds,
     serializeFolds: serializeFolds
   };

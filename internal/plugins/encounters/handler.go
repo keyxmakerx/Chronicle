@@ -4,8 +4,6 @@
 package encounters
 
 import (
-	"encoding/json"
-	"io"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -30,14 +28,9 @@ func viewerFrom(c echo.Context) (campaignID string, v Viewer, err error) {
 }
 
 func bindSave(c echo.Context) (SaveInput, error) {
-	// One byte past the cap so an oversize body is refused, not truncated.
-	raw, err := io.ReadAll(io.LimitReader(c.Request().Body, MaxBodyBytes+1))
-	if err != nil || len(raw) == 0 || len(raw) > MaxBodyBytes {
-		return SaveInput{}, apperror.NewBadRequest("request body is missing or too large")
-	}
 	var in SaveInput
-	if err := json.Unmarshal(raw, &in); err != nil {
-		return SaveInput{}, apperror.NewBadRequest("request body is not valid JSON")
+	if err := bindJSON(c, MaxBodyBytes, &in); err != nil {
+		return SaveInput{}, err
 	}
 	return in, nil
 }

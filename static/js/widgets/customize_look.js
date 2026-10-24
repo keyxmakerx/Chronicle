@@ -245,6 +245,8 @@
       ['icon', 'Solid icon', 'still', 'The icon fills in and the words turn white. Nothing else changes.']
     ];
     var STILL_OF = { ring:'rail', comet:'edge', breathe:'rail', tide:'rail' };
+    // Classic's highlight, and what a campaign that saved no highlight shows.
+    var DEFAULT_NAV = 'rail';
     function navName(id){ return NAV_STYLES.filter(function(s){ return s[0] === id; })[0][1]; }
     var BTN_STYLES = [
       ['lift', 'Lift', 'Rises to meet the pointer and settles when pressed. Rounded corners.'],
@@ -280,7 +282,7 @@
     // brand, the header's widgets or the reduce-motion switch.
     var LOOKS = [
       { id:'classic', name:'Classic', blurb:'Chronicle as it ships',
-        header:{ bg:'solid', solid:'page', from:'#0f172a', to:'#1e2a5a', dir:'r' }, nav:{ style:'ring', strength:'calm' },
+        header:{ bg:'solid', solid:'page', from:'#0f172a', to:'#1e2a5a', dir:'r' }, nav:{ style:'rail', strength:'calm' },
         colours:{ accent:'#6366f1', s1:null, s2:null, sidebar:'charcoal', page:'cool', contrast:'standard' },
         type:{ body:'inter', heading:'same', scale:'standard' }, buttons:{ style:'lift' }, motion:{ elevation:'standard', speed:'standard' } },
       { id:'parchment', name:'Parchment', blurb:'Sepia ink on old paper',
@@ -358,13 +360,48 @@
       { id:'motion', name:'Motion and depth', icon:'i-depth', desc:'How far cards lift, how quickly things move, and a calmer option for everyone.' },
       { id:'page', name:'Pages', icon:'i-scroll', desc:'How every page in the campaign draws its sections. Workshops like this one keep their own look.' },
       { id:'hover', name:'Hover cards', icon:'i-note', desc:'The card that opens when someone points at a linked page, a rule word or an event on a time line. One look for the whole campaign.' },
-      { id:'sheet', name:'Character sheets', icon:'i-journal', desc:'How character sheets look for everyone in this campaign.' },
-      { id:'access', name:'Who can change', icon:'i-mask', desc:'Who may pick their own look for a part of the campaign. The campaign’s look above stays the starting point for everyone.' }
+      { id:'sheet', name:'Character sheets', icon:'i-journal', desc:'How character sheets look for everyone in this campaign.' }
     ];
+    // The rooms group the sections; the tabs are rooms. A room opens on its
+    // first section and shows the example page that fits it. People has no
+    // section of its own: it lists the parts others may pick.
+    var ROOMS = [
+      ['frame', 'Site frame', 'i-sidebar', ['brand', 'header', 'sidebar', 'nav'], 'dash', 'The parts around every page.'],
+      ['style', 'Colours and type', 'i-palette', ['colours', 'type', 'buttons', 'motion'], 'dash', 'Colour, fonts, buttons and depth. Click a part, or pick one below.'],
+      ['pages', 'Pages and sheets', 'i-scroll', ['page', 'hover', 'sheet'], 'city', 'A page, a hover card and a character sheet.'],
+      ['people', 'People', 'i-users', [], 'city', 'Everything others may change for themselves, in one list.']
+    ];
+    // The parts a person can pick for themselves, with the section that holds each.
+    var SHARE_SECS = ['sheet', 'page', 'hover'];
+    var ROOM_OF = {};
+    ROOMS.forEach(function(r){ r[3].forEach(function(s){ ROOM_OF[s] = r[0]; }); });
+    // A section or room name in the address opens that room and section. The old
+    // "access" section now lives in People.
+    function hashTarget(h){
+      h = String(h || '').replace(/^#/, '');
+      if (h === 'access') return { room:'people', sec:null };
+      if (ROOM_OF[h]) return { room:ROOM_OF[h], sec:h };
+      for (var i = 0; i < ROOMS.length; i++) if (ROOMS[i][0] === h) return { room:h, sec:null };
+      return null;
+    }
     // Same ids as the server's LookParts: who may change each part for themselves.
     // The DM Screen never offers Everyone; the server refuses it too.
     var ACCESS_LEVELS = [['owner', 'Only me'], ['codm', 'Me and co-DMs'], ['everyone', 'Everyone']];
-    var ACCESS_PARTS = [['sheet', 'Character sheet', ['owner', 'codm', 'everyone']], ['dmscreen', 'DM Screen', ['owner', 'codm']]];
+    var ACCESS_PARTS = [['sheet', 'Character sheet', ['owner', 'codm', 'everyone']], ['page', 'Pages', ['owner', 'codm', 'everyone']], ['hover', 'Hover cards', ['owner', 'codm', 'everyone']], ['dmscreen', 'DM Screen', ['owner', 'codm']]];
+    // The defaults the server uses while the owner has set nothing.
+    var ACCESS_DEFAULT = { sheet:'everyone', page:'owner', hover:'owner', dmscreen:'codm' };
+    // One tap sets every row; each part is then still adjustable on its own.
+    var QUICK = [
+      ['locked', 'Locked', 'Only you change anything.', { sheet:'owner', page:'owner', hover:'owner', dmscreen:'owner' }],
+      ['table', 'Table', 'Players pick their sheet. Co-DMs also pick pages and the DM Screen.', { sheet:'everyone', page:'codm', hover:'owner', dmscreen:'codm' }],
+      ['open', 'Open', 'Everyone picks sheets, pages and hover cards. Co-DMs pick the DM Screen.', { sheet:'everyone', page:'everyone', hover:'everyone', dmscreen:'codm' }]
+    ];
+    var VIEW_AS = [['owner', 'Owner'], ['scribe', 'Scribe'], ['player', 'Player']];
+    // Same rule as the server: co-DM is a scribe or above (or a member given DM access).
+    function mayPickAs(role, setting){
+      if (role === 'owner') return false;
+      return setting === 'everyone' || (setting === 'codm' && role === 'scribe');
+    }
     // Same ids as the server's AppearanceSheetStyles, in that order.
     var SHEET_STYLES = [['modern', 'Modern'], ['parchment', 'Parchment'], ['ledger', 'Ledger'], ['journal', 'Field journal'], ['vellum', 'Vellum'], ['night', 'Night'],
       ['deck', 'Card deck'], ['pencil', 'Pencil'], ['starship', 'Starship'], ['neon', 'Neon terminal'], ['runes', 'Rune slate'], ['brass', 'Brass gauges']];
@@ -382,10 +419,9 @@
       type:['type.body', 'type.heading', 'type.scale'],
       buttons:['buttons.style'],
       motion:['motion.elevation', 'motion.speed', 'motion.reduceAll'],
-      page:['page.look', 'page.kit'],
-      hover:['hover.look', 'hover.timelinePopup'],
-      sheet:['sheet.style'],
-      access:['access.sheet', 'access.dmscreen']
+      page:['page.look', 'page.kit', 'access.page', 'access.dmscreen'],
+      hover:['hover.look', 'hover.timelinePopup', 'access.hover'],
+      sheet:['sheet.style', 'access.sheet']
     };
 
     /* ---------- Sample pictures, painted once so the page needs no files ---------- */
@@ -436,7 +472,8 @@
     // dropped on save.
     var LINK_ROWS = 4;
     // The page asks for a short welcome; one saved longer before keeps its room.
-    function welcomeMax(){ return Math.max(160, (STATE.draft.brand.welcome || '').length); }
+    // Matches the server's limit for the one stored welcome message.
+    function welcomeMax(){ return 500; }
     function fromServer(d){
       d = clone(d);
       ['logo', 'backdrop'].forEach(function(k){ if (!d.brand[k]) d.brand[k] = 'none'; });
@@ -444,7 +481,7 @@
       if (!d.sidebar.banner) d.sidebar.banner = 'none';
       if (!d.hover) d.hover = { look:'paper' };
       if (!d.sheet) d.sheet = { style:'modern' };
-      if (!d.access) d.access = { sheet:'everyone', dmscreen:'codm' };
+      d.access = Object.assign({}, ACCESS_DEFAULT, d.access || {});
       if (!d.page) d.page = { look:'', kit:'material' };
       if (!d.page.kit) d.page.kit = 'material';
       if (!d.hover.timelinePopup) d.hover.timelinePopup = 'classic';
@@ -476,7 +513,7 @@
     var memo = {};          // custom colours picked during this visit, per swatch group
     var undoDraft = null;   // what Discard threw away, for its Undo
     var uploaded = {};      // picture names stored during this visit, not yet known to be in use
-    var ui = { section:'brand', zoom:'site', page:'dash', ptheme:null, strip:true, pageAuto:true };
+    var ui = { room:'frame', section:'brand', last:{}, viewAs:'owner', zoom:'site', page:'dash', ptheme:null, strip:true, pageAuto:true };
 
     function matchesLook(d, id){ var L = look(id); return LOOK_KEYS.every(function(k){ return same(getP(d, k), getP(L, k)); }); }
     function currentLook(d){
@@ -637,7 +674,7 @@
       return NAV_STYLES.filter(function(s){ return s[2] === kind; }).map(function(s){
         return '<label class="tile nav-tile" data-hc="nav:' + s[0] + '"><input type="radio" name="t-nav" value="' + s[0] + '" data-k="nav.style"><span class="tb">' +
           '<span class="nt-s pv" data-nav="' + s[0] + '" data-own="' + s[0] + '" aria-hidden="true"><span class="s-row on" style="--c:#f87171"><span class="ic">' + IC('i-mappin') + '</span><span class="lb">Cities</span><span class="pn">Emberfall</span>' + HL + '</span></span>' +
-          '<span class="tn">' + esc(s[1]) + '<span class="tck">' + IC('i-check') + '</span></span>' + (s[0] === 'ring' ? '<span class="tbadge">Signed default</span>' : '') + '</span></label>';
+          '<span class="tn">' + esc(s[1]) + '<span class="tck">' + IC('i-check') + '</span></span>' + (s[0] === DEFAULT_NAV ? '<span class="tbadge">Signed default</span>' : '') + '</span></label>';
       }).join('');
     }
     function tilesBody(){
@@ -721,9 +758,9 @@
           '<input class="inp" id="b-name" type="text" maxlength="40" data-k="brand.name" placeholder="' + esc(CAMPAIGN) + '" aria-labelledby="b-name-l" aria-describedby="b-name-h">' +
           '<div class="row-h"><span class="hint" id="b-name-h">Shown at the top of the menu. Leave it empty to use the campaign’s name.</span><span class="cnt" id="b-name-c"></span></div>') +
         fld('brand-logo', 'Logo', 'Square works best', imgSlot('brand.logo', 'sq', 'Upload', 'Up to 1 MB. Without a logo, the menu shows your first letter on your chrome accent.')) +
-        fld('b-welcome', 'Welcome message', 'Up to 160 characters',
+        fld('b-welcome', 'Welcome message', 'Up to 500 characters',
           '<textarea class="inp" id="b-welcome" rows="3" maxlength="' + welcomeMax() + '" data-k="brand.welcome" aria-labelledby="b-welcome-l" aria-describedby="b-welcome-h"></textarea>' +
-          '<div class="row-h"><span class="hint" id="b-welcome-h">Shown over the backdrop at the top of the dashboard.</span><span class="cnt" id="b-welcome-c"></span></div>') +
+          '<div class="row-h"><span class="hint" id="b-welcome-h">Shown over the backdrop at the top of the campaign home.</span><span class="cnt" id="b-welcome-c"></span></div>') +
         fld('brand-backdrop', 'Backdrop', 'Behind the welcome', imgSlot('brand.backdrop', '', 'Upload', 'A soft shade keeps the welcome message readable over any picture. Up to 4 MB.')));
       if (id === 'header') return (
         fld('h-bg', 'Background', null,
@@ -803,12 +840,22 @@
       if (id === 'sheet') return (
         fld('sh-style', 'Style', 'Every character sheet in the campaign', opts('sh-style', 'sheet.style', 'sh-style-l', SHEET_STYLES) +
           '<p class="hint">How character sheets look for everyone in this campaign. Modern matches the rest of Chronicle; the others are optional paper and screen styles.</p>'));
-      if (id === 'access') return (
-        ACCESS_PARTS.map(function(p){
-          return fld('ac-' + p[0], p[1], null, opts('ac-' + p[0], 'access.' + p[0], 'ac-' + p[0] + '-l', ACCESS_LEVELS.filter(function(l){ return p[2].indexOf(l[0]) >= 0; })));
-        }).join('') +
-        '<p class="hint">People change these for themselves only. Nobody else sees their choice.</p>');
       return '';
+    }
+    // "Who else may pick their own?" for one part, written to the draft's
+    // access object like every other setting.
+    function accessFld(key, sub, label, hint){
+      var p = ACCESS_PARTS.filter(function(x){ return x[0] === key; })[0];
+      return fld('ac-' + key, label || 'Who else may pick their own?', sub, opts('ac-' + key, 'access.' + key, 'ac-' + key + '-l',
+        ACCESS_LEVELS.filter(function(l){ return p[2].indexOf(l[0]) >= 0; })) +
+        '<p class="hint">' + (hint || 'Their pick changes only what they see. The campaign’s look above stays the starting point.') + '</p>');
+    }
+    function withAccess(id, html){
+      if (id === 'sheet') return html + accessFld('sheet', 'Character sheet style');
+      if (id === 'page') return html + accessFld('page', 'Style kit') +
+        accessFld('dmscreen', 'DM Screen style kit', 'Who may pick the DM Screen’s kit?', 'The kit shows only on the DM Screen, which stays with the DM team, so Everyone is not offered.');
+      if (id === 'hover') return html + accessFld('hover', 'Hover card look');
+      return html;
     }
     function buildUI(){
       $('#lk-row').innerHTML = LOOKS.map(function(L){
@@ -818,18 +865,39 @@
       }).join('') +
       '<div class="lk lk-custom" id="lk-custom"><span class="lk-b"><span class="lk-scene" aria-hidden="true">' + IC('i-spark') + '</span><span class="lk-n">Custom</span>' +
         '<span class="lk-d" id="lk-custom-d">Change anything below and the look becomes your own.</span><span class="lk-ck">' + IC('i-check') + '</span></span></div>';
-      $('#tl').innerHTML = SECTIONS.map(function(s, i){
-        return '<button type="button" role="tab" class="tab" id="tab-' + s.id + '" aria-controls="panel-' + s.id + '" aria-selected="' + (i === 0) + '" tabindex="' + (i === 0 ? 0 : -1) + '">' +
-          IC(s.icon) + '<span>' + esc(s.name) + '</span><span class="chg" aria-hidden="true"></span><span class="sr chg-t"></span></button>';
+      $('#tl').innerHTML = ROOMS.map(function(r, i){
+        return '<button type="button" role="tab" class="tab" id="tab-' + r[0] + '" aria-controls="room-' + r[0] + '" aria-selected="' + (i === 0) + '" tabindex="' + (i === 0 ? 0 : -1) + '">' +
+          IC(r[2]) + '<span>' + esc(r[1]) + '</span><span class="chg" aria-hidden="true"></span><span class="sr chg-t"></span></button>';
       }).join('');
-      $('#panels').innerHTML = SECTIONS.map(function(s, i){
-        return '<section class="sec" role="tabpanel" id="panel-' + s.id + '" aria-labelledby="tab-' + s.id + '"' + (i === 0 ? '' : ' hidden') + '>' +
-          '<header class="sec-h"><div class="sec-t"><h2>' + esc(s.name) + '</h2><p>' + esc(s.desc) + '</p></div>' +
-          '<div class="sec-r"><button type="button" class="reset" data-reset="' + s.id + '" aria-describedby="reset-c-' + s.id + '">' + IC('i-undo') + 'Reset this section</button><span class="reset-c" id="reset-c-' + s.id + '"></span></div></header>' +
-          '<div class="sec-b">' + panelBody(s.id) + '</div></section>';
+      $('#panels').innerHTML = ROOMS.map(function(r, i){
+        var chips = r[3].length ? '<div class="parts" role="group" aria-label="Parts in ' + esc(r[1]) + '">' + r[3].map(function(id){
+          return '<button type="button" class="part" data-sec="' + id + '" aria-pressed="' + (id === ui.section) + '">' + esc(sectionName(id)) + '<span class="chg" aria-hidden="true"></span><span class="sr chg-t"></span></button>';
+        }).join('') + '</div>' : '';
+        var body = r[3].length ? r[3].map(function(id){
+          var s = SECTIONS.filter(function(x){ return x.id === id; })[0];
+          return '<section class="sec" id="panel-' + id + '" aria-labelledby="sec-h-' + id + '"' + (id === ui.section ? '' : ' hidden') + '>' +
+            '<header class="sec-h"><div class="sec-t"><h2 id="sec-h-' + id + '">' + esc(s.name) + '</h2><p>' + esc(s.desc) + '</p></div>' +
+            '<div class="sec-r"><button type="button" class="reset" data-reset="' + id + '" aria-describedby="reset-c-' + id + '">' + IC('i-undo') + 'Reset this section</button><span class="reset-c" id="reset-c-' + id + '"></span></div></header>' +
+            '<div class="sec-b">' + withAccess(id, panelBody(id)) + '</div></section>';
+        }).join('') : peopleHTML();
+        return '<section class="room" role="tabpanel" id="room-' + r[0] + '" aria-labelledby="tab-' + r[0] + '"' + (i === 0 ? '' : ' hidden') + '>' +
+          '<p class="room-h">' + esc(r[5]) + '</p>' + chips + body + '</section>';
       }).join('');
     }
-
+    // The People room's frame; the rows are filled by syncPeople.
+    function peopleHTML(){
+      return '<section class="sec" id="panel-people" aria-labelledby="sec-h-people"><header class="sec-h"><div class="sec-t"><h2 id="sec-h-people">Who can change</h2>' +
+        '<p>People change these for themselves only. Nobody else sees their choice, and the campaign’s look stays the starting point.</p></div></header>' +
+        '<div class="sec-b">' +
+        fld('pp-quick', 'Quick setups', 'One tap sets every row', '<div class="parts" role="group" aria-labelledby="pp-quick-l">' + QUICK.map(function(q){
+          return '<button type="button" class="part" data-quick="' + q[0] + '" aria-pressed="false" title="' + esc(q[2]) + '">' + esc(q[1]) + '</button>';
+        }).join('') + '</div><p class="hint" id="pp-quick-d"></p>') +
+        fld('pp-as', 'Viewing as', 'Who is looking', '<div class="parts" role="group" aria-labelledby="pp-as-l">' + VIEW_AS.map(function(v){
+          return '<button type="button" class="part" data-viewas="' + v[0] + '" aria-pressed="' + (v[0] === ui.viewAs) + '">' + esc(v[1]) + '</button>';
+        }).join('') + '</div><p class="hint" id="pp-as-d" aria-live="polite"></p>') +
+        '<div class="pp-rows" id="pp-rows"></div>' +
+        '<p class="hint">A co-DM is a scribe, the owner, or a member given DM access. The owner’s own choice is the campaign’s look.</p></div></section>';
+    }
     /* ---------- Building the preview ----------
        Real chrome at a small size: the navigation (pinned rows and folding
        sections), the header, a dashboard, a city page and a character
@@ -846,7 +914,7 @@
     }
     function siteHTML(){
       var sb = '<div class="s-sb"><div class="s-brand"><span class="s-bnr" id="d-bnr"></span><span class="s-logo" id="d-logo"></span><span class="s-btext"><span class="s-bname" id="d-bname"></span><span class="s-bsub" id="d-bsub"></span></span><span class="s-bchev">' + IC('i-chev') + '</span><span class="s-pen" id="d-pen">' + IC('i-pencil') + '</span></div><div class="s-list">' +
-        srow('dash', 'i-home', 'Dashboard', null, null, true) +
+        srow('dash', 'i-home', 'Home', null, null, true) +
         '<div class="s-gh">' + IC('i-tack') + 'Pinned</div>' +
         srow('journal', 'i-journal', 'Journal') + srow('calendar', 'i-cal', 'Calendar') + srow('sessions', 'i-d20', 'Sessions') + srow('maps', 'i-map', 'Maps') +
         '<div class="s-gh folded">Apps <span class="n">6</span>' + IC('i-chev', 'chev') + '</div>' +
@@ -875,8 +943,16 @@
           '<p>Margravine Ysolde Vane rules from <span class="p-link">Cinder Keep</span>. Her treaty with the <span class="p-link">Ashwright Guild</span> keeps the forges lit.</p>' +
           '<div class="d-act">' + pbtn('pri', 'Edit page') + pbtn('sec', 'Share with players') + '</div></div>' +
           '<div class="pcard lifts e-info"><p class="c-h">At a glance</p><dl><dt>Population</dt><dd>18,400</dd><dt>Ruler</dt><dd>Ysolde Vane</dd><dt>Founded</dt><dd>212 AF</dd></dl>' +
-          '<div class="tags"><span class="tag">#cinder-reach</span><span class="tag">#capital</span></div></div></div></div>';
+          '<div class="tags"><span class="tag">#cinder-reach</span><span class="tag">#capital</span></div></div></div>' + hoverSampleHTML() + '</div>';
       return '<div class="site" aria-hidden="true">' + sb + '<div class="s-main">' + hdr + dash + city + sheetHTML() + '</div></div>';
+    }
+    // A hover card held open over the city page, drawn by the real hover card
+    // so the Hover cards section has a part to click.
+    function hoverSampleHTML(){
+      var hc = window.Chronicle && Chronicle.hovercard;
+      if (!hc) return '';
+      var sample = hc.html({ kind:'City', title:'Cinder Keep', text:'The Margravine’s seat, a basalt fortress above the forges of Emberfall.', foot:CAMPAIGN });
+      return '<div class="e-hc"><span class="chc chc--show" data-look="paper"><span class="chc__in">' + sample + '</span></span></div>';
     }
     // A sample hero on a real sheet root built from the pieces a system's sheet
     // uses (paper.css), so sheet_styles.css draws it in the draft's style exactly
@@ -985,7 +1061,7 @@
       setText($('#d-bsub'), d.sidebar.corner === 'subtitle' ? d.sidebar.subtitle.trim() : '');
       setBg($('#d-himg'), imgURL(d.header.image));
       setHTML($('#d-path'), {
-        dash:'<b>Dashboard</b>',
+        dash:'<b>Home</b>',
         city:'<span>Locations</span>' + IC('i-chev-r') + '<span>Cities</span>' + IC('i-chev-r') + '<b>Emberfall</b>',
         sheet:'<span>Characters</span>' + IC('i-chev-r') + '<b>Sera Windrose</b>'
       }[ui.page]);
@@ -1021,7 +1097,7 @@
         if (inp.checked !== on) inp.checked = on;
       });
       $('#m-reduce').checked = !!d.motion.reduceAll;
-      $$('.tlp-classic .chc').forEach(function(c){ if (c.dataset.look !== d.hover.look) c.dataset.look = d.hover.look; });
+      $$('.tlp-classic .chc, .e-hc .chc').forEach(function(c){ if (c.dataset.look !== d.hover.look) c.dataset.look = d.hover.look; });
       syncText('#b-name', d.brand.name); syncText('#b-welcome', d.brand.welcome);
       setText($('#b-name-c'), d.brand.name.length + ' / 40');
       setText($('#b-welcome-c'), d.brand.welcome.length + ' / ' + welcomeMax());
@@ -1106,10 +1182,14 @@
       setText($('#lk-custom-d'), cur ? 'Change anything below and the look becomes your own.' : 'Started from ' + look(draft.look).name + ', ' + n + ' change' + (n === 1 ? '' : 's'));
       var ch = changedSections();
       SECTIONS.forEach(function(s){
-        var t = $('#tab-' + s.id), on = ch.indexOf(s.id) >= 0;
+        var t = $('[data-sec="' + s.id + '"]'), on = ch.indexOf(s.id) >= 0;
         t.classList.toggle('changed', on); setText($('.chg-t', t), on ? ', changed' : '');
         var b = $('[data-reset="' + s.id + '"]'); b.disabled = sectionAtTarget(s.id);
         setText($('#reset-c-' + s.id), resetCaption(s.id));
+      });
+      ROOMS.forEach(function(r){
+        var t = $('#tab-' + r[0]), on = r[0] === 'people' ? ['sheet', 'page', 'hover'].some(function(x){ return ch.indexOf(x) >= 0; }) : r[3].some(function(x){ return ch.indexOf(x) >= 0; });
+        t.classList.toggle('changed', on); setText($('.chg-t', t), on ? ', changed' : '');
       });
       var dirty = ch.length > 0;
       if (dirty) ui.saved = false;
@@ -1128,6 +1208,7 @@
       $$('.pv').forEach(function(el){ setVars(el, vars); });
       renderPreview(theme);
       syncControls(theme);
+      syncPeople();
       syncLookTiles(theme);
       syncStatus();
       if (SHELL) toShell();
@@ -1487,27 +1568,55 @@
       runMotion();
     }
     function clearErrors(){ $$('.err').forEach(function(e){ e.hidden = true; }); }
-    function selectSection(id, focus){
-      var tab = $('#tab-' + id);
-      if (ui.section !== id) clearErrors();
-      if (ui.section !== id){
-        ui.section = id;
-        SECTIONS.forEach(function(s){
-          var t = $('#tab-' + s.id), on = s.id === id, p = $('#panel-' + s.id);
+    // The example page that suits a section; the others leave the page alone.
+    var PAGE_OF = { nav:'city', brand:'dash', sheet:'sheet', page:'city', hover:'city' };
+    function selectRoom(id, focus){
+      var R = ROOMS.filter(function(r){ return r[0] === id; })[0];
+      if (!R) return;
+      if (ui.room !== id){
+        clearErrors();
+        ui.room = id;
+        ROOMS.forEach(function(r){
+          var on = r[0] === id, t = $('#tab-' + r[0]);
           t.setAttribute('aria-selected', String(on)); t.tabIndex = on ? 0 : -1;
-          p.hidden = !on;
+          var p = $('#room-' + r[0]); p.hidden = !on;
           if (on){ p.classList.remove('enter'); void p.offsetWidth; p.classList.add('enter'); }
         });
         if (pick) closePicker(false);
         if (openW) closeWset(false);
-        if (id === 'nav' && ui.page !== 'city') setPage('city');
-        else if (id === 'brand' && ui.page !== 'dash') setPage('dash');
-        else if (id === 'sheet' && ui.page !== 'sheet') setPage('sheet');
-        else update();
-        var tl = $('#tl');
+        if (ui.zoom !== 'site') setZoom('site');
+        var tl = $('#tl'), tab = $('#tab-' + id);
         if (tl.scrollWidth > tl.clientWidth + 1) tl.scrollLeft = tab.offsetLeft - tl.offsetLeft - (tl.clientWidth - tab.offsetWidth) / 2;
+        var sec = R[3].length ? (ui.last[id] || R[3][0]) : null;
+        if (sec) showSection(sec);
+        var pg = (sec && PAGE_OF[sec]) || R[4];
+        if (ui.page !== pg) setPage(pg); else update();
+        fzQueue();
       }
-      if (focus) tab.focus();
+      if (focus) $('#tab-' + id).focus();
+    }
+    function showSection(id){
+      ui.section = id; ui.last[ROOM_OF[id]] = id;
+      SECTIONS.forEach(function(s){
+        var on = s.id === id, p = $('#panel-' + s.id), c = $('[data-sec="' + s.id + '"]');
+        if (p.hidden === on){ p.hidden = !on; if (on){ p.classList.remove('enter'); void p.offsetWidth; p.classList.add('enter'); } }
+        c.setAttribute('aria-pressed', String(on));
+      });
+    }
+    function selectSection(id, focus){
+      var room = ROOM_OF[id];
+      if (!room) return;
+      if (ui.room !== room){ ui.last[room] = id; selectRoom(room); }
+      if (ui.section !== id){
+        clearErrors();
+        showSection(id);
+        if (pick) closePicker(false);
+        if (openW) closeWset(false);
+        if (PAGE_OF[id] && ui.page !== PAGE_OF[id]) setPage(PAGE_OF[id]);
+        else update();
+        fzQueue();
+      }
+      if (focus) $('#tab-' + room).focus();
       fzSection(id);
     }
     function chooseLook(id){
@@ -1518,7 +1627,7 @@
       var t = resetTarget(sec);
       Object.keys(t).forEach(function(k){ setP(draft, k, clone(t[k])); });
       update(); settle(); tidyPictures();
-      $('#tab-' + sec).focus();
+      $('#tab-' + ROOM_OF[sec]).focus();
       toast(sectionName(sec) + (sec === 'brand' ? ' is back to what is saved.' : ' is back to the ' + look(draft.look).name + ' look.'));
     }
 
@@ -1557,8 +1666,9 @@
       update(); settle();
     }
     function sectionFromHash(){
-      var id = (location.hash || '').slice(1);
-      if (SECTIONS.some(function(s){ return s.id === id; })) selectSection(id, true);
+      var t = hashTarget(location.hash);
+      if (!t) return;
+      if (t.sec) selectSection(t.sec, true); else selectRoom(t.room, true);
     }
 
     /* ---------- Save, Discard, Undo ---------- */
@@ -1652,7 +1762,7 @@
     // its pictures are only tidied once that window has closed.
     var discardT = 0;
     function doDiscard(){
-      clearErrors(); undoDraft = clone(draft); draft = clone(saved); if (pick) closePicker(false); update(); settle(); toast('Changes thrown away.', true); $('#tab-' + ui.section).focus();
+      clearErrors(); undoDraft = clone(draft); draft = clone(saved); if (pick) closePicker(false); update(); settle(); toast('Changes thrown away.', true); $('#tab-' + ui.room).focus();
       var mine = undoDraft; clearTimeout(discardT);
       discardT = setTimeout(function(){ if (undoDraft === mine){ undoDraft = null; tidyPictures(); } }, 7000);
     }
@@ -1723,7 +1833,11 @@
     on(ROOT, 'click', function(e){
       var t = e.target.closest ? e.target.closest('button') : null;
       if (!t) return;
-      if (t.getAttribute('role') === 'tab'){ selectSection(t.id.slice(4)); return; }
+      if (t.getAttribute('role') === 'tab'){ selectRoom(t.id.slice(4)); return; }
+      if (t.dataset.sec){ selectSection(t.dataset.sec); return; }
+      if (t.dataset.quick){ quickSetup(t.dataset.quick); return; }
+      if (t.dataset.viewas){ ui.viewAs = t.dataset.viewas; update(); return; }
+      if (t.dataset.open){ selectSection(t.dataset.open, true); return; }
       if (t.dataset.reset){ resetSection(t.dataset.reset); return; }
       if (t.dataset.pick){ if (pick && pick.btn === t) closePicker(true); else { if (pick) closePicker(false); openPicker(t); } return; }
       if (t.dataset.up){ upKey = t.dataset.up; $('#file').value = ''; $('#file').click(); return; }
@@ -1737,7 +1851,7 @@
         case 'pop-done': closePicker(true); break;
         case 'pop-use': useHex(); break;
         case 'pv-hide': toggleStrip(); break;
-        case 'fz-all': fzSet(null); $('#tab-' + ui.section).focus(); break;
+        case 'fz-all': fzSet(null); $('#tab-' + ui.room).focus(); break;
       }
     });
     on(ROOT, 'keydown', function(e){
@@ -1750,12 +1864,12 @@
       }
       if (e.target.id === 'pop-hex' && e.key === 'Enter'){ e.preventDefault(); useHex(); return; }
       if (e.target.getAttribute && e.target.getAttribute('role') === 'tab'){
-        var ids = SECTIONS.map(function(s){ return s.id; }), i = ids.indexOf(e.target.id.slice(4)), n = null;
+        var ids = ROOMS.map(function(r){ return r[0]; }), i = ids.indexOf(e.target.id.slice(4)), n = null;
         if (e.key === 'ArrowDown' || e.key === 'ArrowRight') n = (i + 1) % ids.length;
         else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') n = (i - 1 + ids.length) % ids.length;
         else if (e.key === 'Home') n = 0;
         else if (e.key === 'End') n = ids.length - 1;
-        if (n != null){ e.preventDefault(); selectSection(ids[n], true); }
+        if (n != null){ e.preventDefault(); selectRoom(ids[n], true); }
       }
     });
     on(document, 'pointerdown', function(e){
@@ -1778,7 +1892,7 @@
     function measure(){
       var wrap = $('#site-wrap');
       if (wrap && wrap.clientWidth) wrap.style.setProperty('--k', (wrap.clientWidth / 880).toFixed(4));
-      if (ui.focus) fzQueue();
+      fzQueue();
       if (!phone() && !ui.strip) toggleStrip();
       ROOT.style.setProperty('--strip-h', phone() ? $('#pv-col').offsetHeight + 'px' : '0px');
     }
@@ -1796,13 +1910,15 @@
       type:   { dash:['.d-title .h1', '.c-h'], city:['.e-head', '.e-body p'], tip:'Headings and text' },
       buttons:{ all:['.pbtn'], tip:'Every button' },
       motion: { all:['.pcard'], tip:'Cards and how they lift' },
-      sheet:  { all:['#d-sheet'], tip:'Every character sheet' }
+      sheet:  { all:['#d-sheet'], tip:'Every character sheet' },
+      page:   { all:['.e-body', '.d-grid'], tip:'How pages draw their sections' },
+      hover:  { all:['.e-hc'], tip:'The card that opens when you point at a link' }
     };
     // Most specific first: a button inside a card is a button.
-    var FZ_HIT = [['.pbtn', 'buttons'], ['.p-link, .tag, .chipe, .czbadge, .band, .tev.now, .av', 'colours'],
+    var FZ_HIT = [['.pbtn', 'buttons'], ['.e-hc', 'hover'], ['.p-link, .tag, .chipe, .czbadge, .band, .tev.now, .av', 'colours'],
       ['.h1, .c-h, .e-head, .e-body p', 'type'], ['.s-bnr, .s-bsub', 'sidebar'], ['.s-brand, #d-banner', 'brand'], ['.s-hdr', 'header'], ['.s-list', 'nav'], ['.s-sb', 'sidebar'],
-      ['.pcard', 'motion'], ['[data-sheet]', 'sheet'], ['.s-page', 'colours']];
-    var FZ_OF = { brand:'brand', header:'header', sidebar:'sidebar', nav:'nav', colours:'colours', type:'type', buttons:'buttons', motion:'motion', sheet:'sheet' };
+      ['.pcard', 'motion'], ['[data-sheet]', 'sheet'], ['.e-body, .d-grid', 'page'], ['.s-page', 'colours']];
+    var FZ_OF = { brand:'brand', header:'header', sidebar:'sidebar', nav:'nav', colours:'colours', type:'type', buttons:'buttons', motion:'motion', sheet:'sheet', page:'page', hover:'hover' };
     var fzLock = false, fzLastFlash = {}, fzRaf = 0, fzHovSec = null;
     function fzSite(){ return $('#site-wrap .site'); }
     function fzRects(sec){
@@ -1865,7 +1981,7 @@
       $('#fz-bar').classList.add('on');
       fzZoom(rs);
     }
-    function fzQueue(){ cancelAnimationFrame(fzRaf); fzRaf = requestAnimationFrame(function(){ fzDraw(); if (fzHovSec) fzHover(fzHovSec, true); }); }
+    function fzQueue(){ cancelAnimationFrame(fzRaf); fzRaf = requestAnimationFrame(function(){ fzDraw(); roomDraw(); if (fzHovSec) fzHover(fzHovSec, true); }); }
     function fzSet(sec){
       ui.focus = sec;
       if (sec && ui.section !== sec){ fzLock = true; selectSection(sec); fzLock = false; }
@@ -1905,10 +2021,85 @@
       g.innerHTML = fzRectsSVG(fzMeasure(sec), 4, 6);
       tip.classList.add('on');
     }
+    /* ---------- Rooms: brush the room's parts, soften the rest ----------
+       The parts a room owns stay sharp; a blurred, slightly dimmed layer
+       covers the rest of the example site. The layer is clipped with holes at
+       the room's parts, so nothing selected is ever blurred. */
+    function roomSecs(){ var r = ROOMS.filter(function(x){ return x[0] === ui.room; })[0]; return r[3].length ? r[3] : SHARE_SECS; }
+    // The site minus the parts: cut along every part edge and keep the cells no
+    // part covers. The cells never overlap, so one filled path draws them all.
+    function roomClip(rs){
+      var pad = 4, R = rs.map(function(r){ return [Math.max(0, r.x - pad), Math.max(0, r.y - pad), Math.min(880, r.x + r.w + pad), Math.min(520, r.y + r.h + pad)]; });
+      function edges(i, max){ var e = [0, max]; R.forEach(function(r){ e.push(r[i], r[i + 2]); }); return e.sort(function(a, b){ return a - b; }).filter(function(v, n, all){ return !n || v !== all[n - 1]; }); }
+      var xs = edges(0, 880), ys = edges(1, 520), d = '';
+      for (var j = 0; j < ys.length - 1; j++){
+        var run = null, cy = (ys[j] + ys[j + 1]) / 2;
+        for (var i = 0; i <= xs.length - 1; i++){
+          var out = false;
+          if (i < xs.length - 1){
+            var cx = (xs[i] + xs[i + 1]) / 2;
+            out = !R.some(function(r){ return cx > r[0] && cx < r[2] && cy > r[1] && cy < r[3]; });
+          }
+          if (out){ if (run === null) run = xs[i]; }
+          else if (run !== null){
+            d += 'M' + run.toFixed(1) + ' ' + ys[j].toFixed(1) + 'H' + xs[i].toFixed(1) + 'V' + ys[j + 1].toFixed(1) + 'H' + run.toFixed(1) + 'Z';
+            run = null;
+          }
+        }
+      }
+      return d;
+    }
+    // The part's name for the access mark: only shareable parts carry one.
+    function sectionOpen(sec){ return SHARE_SECS.indexOf(sec) >= 0 && draft.access[sec] !== 'owner'; }
+    function roomDraw(){
+      var blur = $('#rm-blur'), brush = $('#rm-brush');
+      if (!blur || !brush) return;
+      var all = [], marks = '', k = fzK(), ww = $('#site-wrap').clientWidth;
+      if (ui.zoom === 'site' && !ui.focus){
+        roomSecs().forEach(function(sec){
+          var rs = fzMeasure(sec);
+          if (!rs.length) return;
+          all = all.concat(rs);
+          var r = rs[0], open = sectionOpen(sec);
+          marks += '<span class="rb' + (open ? ' open' : '') + '" style="left:' + clamp((r.x + r.w) * k - 3, 26, ww - 2).toFixed(0) + 'px;top:' + clamp(r.y * k + 3, 2, 520 * k - 22).toFixed(0) + 'px">' +
+            IC('i-pencil') + (open ? IC('i-users') : '') + '</span>';
+        });
+      }
+      if (all.length){ blur.style.clipPath = 'path("' + roomClip(all) + '")'; blur.classList.add('on'); }
+      else blur.classList.remove('on');
+      setHTML(brush, marks);
+    }
+    function syncPeople(){
+      var rows = $('#pp-rows');
+      if (!rows) return;
+      var a = draft.access, role = ui.viewAs, cur = null;
+      $$('[data-viewas]').forEach(function(b){ b.setAttribute('aria-pressed', String(b.dataset.viewas === role)); });
+      QUICK.forEach(function(q){
+        var m = ACCESS_PARTS.every(function(p){ return a[p[0]] === q[3][p[0]]; });
+        $('[data-quick="' + q[0] + '"]').setAttribute('aria-pressed', String(m));
+        if (m) cur = q;
+      });
+      setText($('#pp-quick-d'), cur ? cur[2] : 'Custom: the rows were set one by one.');
+      var list = ACCESS_PARTS.filter(function(p){ return role === 'owner' || mayPickAs(role, a[p[0]]); });
+      setText($('#pp-as-d'), role === 'owner' ? 'The owner sets these. Each row shows who else may pick their own.' :
+        (role === 'scribe' ? 'A scribe' : 'A player') + ' can pick these for themselves:');
+      setHTML(rows, list.length ? list.map(function(p){
+        var lv = ACCESS_LEVELS.filter(function(l){ return l[0] === a[p[0]]; })[0][1];
+        return '<button type="button" class="pp-row" data-open="' + (p[0] === 'dmscreen' ? 'page' : p[0]) + '"><span>' + esc(p[1]) + '</span><span class="pp-tag">' +
+          (role === 'owner' ? esc(lv) : IC('i-pencil') + 'Theirs to pick') + '</span></button>';
+      }).join('') : '<p class="hint">Nothing yet. Open a part to others in its own panel or with a quick setup.</p>');
+    }
+    function quickSetup(id){
+      var q = QUICK.filter(function(x){ return x[0] === id; })[0];
+      if (!q) return;
+      ACCESS_PARTS.forEach(function(p){ setP(draft, 'access.' + p[0], q[3][p[0]]); });
+      update();
+      announce(q[1] + ' set. ' + q[2]);
+    }
     function fzInit(){
       var site = fzSite(), wrap = $('#site-wrap');
-      site.insertAdjacentHTML('beforeend', '<svg class="fz" id="fz" viewBox="0 0 880 520" aria-hidden="true"><path class="fz-dim" fill-rule="evenodd" d="M0 0H880V520H0Z"/><g class="fz-ring"></g><g class="fz-hov"></g><g class="fz-flash"></g></svg>');
-      wrap.insertAdjacentHTML('beforeend', '<div class="fz-tip" id="fz-tip"></div>');
+      site.insertAdjacentHTML('beforeend', '<div class="rm-blur" id="rm-blur" aria-hidden="true"></div><svg class="fz" id="fz" viewBox="0 0 880 520" aria-hidden="true"><path class="fz-dim" fill-rule="evenodd" d="M0 0H880V520H0Z"/><g class="fz-ring"></g><g class="fz-hov"></g><g class="fz-flash"></g></svg>');
+      wrap.insertAdjacentHTML('beforeend', '<div class="fz-tip" id="fz-tip"></div><div class="rm-brush" id="rm-brush" aria-hidden="true"></div>');
       wrap.classList.add('fz-ok');
       $('[data-z="site"]').insertAdjacentHTML('beforeend', '<div class="fz-bar" id="fz-bar"><span>Showing <b id="fz-name"></b></span><button type="button" class="czb czb-s czb-sm" id="fz-all">Whole site</button></div>');
       on(wrap, 'pointermove', function(e){
@@ -1925,7 +2116,7 @@
         if (!sec) return;
         e.preventDefault();
         fzHover(null);
-        fzSet(sec);
+        selectSection(sec);
       });
     }
 

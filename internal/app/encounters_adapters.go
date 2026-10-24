@@ -6,6 +6,7 @@ package app
 
 import (
 	"context"
+	"slices"
 	"strconv"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -14,12 +15,17 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/encounters"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/syncapi"
+	"github.com/keyxmakerx/chronicle/internal/systems"
 )
 
 // encountersPageAdapter implements encounters.PageDirectory.
 type encountersPageAdapter struct {
 	svc   entities.EntityService
 	cards entities.PageCards
+	lists entities.CharacterListReader
+	// sys is the campaign's game system, for its stat block widgets; nil
+	// leaves the fold-out to a page's own fields.
+	sys enabledSystemResolver
 }
 
 // Access applies the rules the page itself uses: a page of another campaign
@@ -70,6 +76,75 @@ func (a *encountersPageAdapter) Names(ctx context.Context, campaignID string, id
 		}
 	}
 	return out, nil
+}
+
+// PickerTypes offers heroes from the characters list (The Party's), and
+// creatures from the creature types plus the NPC list, so a named villain
+// can join a fight as a page and not only by name.
+func (a *encountersPageAdapter) PickerTypes(ctx context.Context, campaignID string) (encounters.PickerTypes, error) {
+	heroes, err := a.lists.CharacterTypeIDs(ctx, campaignID)
+	if err != nil {
+		return encounters.PickerTypes{}, err
+	}
+	npcs, err := a.lists.NPCTypeIDs(ctx, campaignID)
+	if err != nil {
+		return encounters.PickerTypes{}, err
+	}
+	types, err := a.svc.GetEntityTypes(ctx, campaignID)
+	if err != nil {
+		return encounters.PickerTypes{}, err
+	}
+	creatures := entities.CreatureTypeIDs(types)
+	return encounters.PickerTypes{
+		Heroes:     heroes,
+		Creatures:  unionIDs(creatures, npcs),
+		StatBlocks: a.statBlocks(ctx, campaignID, creatures, npcs),
+	}, nil
+}
+
+// statBlocks lists the game system's stat block widgets with the page types
+// each draws for. A stat block is a panel the system aims at creature pages;
+// where the same widget is also aimed at NPC pages it draws for those too,
+// the same pages the page itself would show it on (newSystemPanelResolver).
+// Other NPC panels (Draw Steel's negotiation tracker) are not stat blocks.
+func (a *encountersPageAdapter) statBlocks(ctx context.Context, campaignID string, creatures, npcs []int) []encounters.StatBlock {
+	if a.sys == nil {
+		return nil
+	}
+	active := a.sys.EnabledSystem(ctx, campaignID)
+	if active == nil || active.Info() == nil {
+		return nil
+	}
+	m := active.Info()
+	var out []encounters.StatBlock
+	for _, p := range m.EntityPanels {
+		if p.AppliesTo != systems.EntityPanelAppliesCreature || slices.ContainsFunc(out, func(b encounters.StatBlock) bool { return b.Widget == p.Widget }) {
+			continue
+		}
+		ids := creatures
+		for _, q := range m.EntityPanels {
+			if q.Widget == p.Widget && q.AppliesTo == systems.EntityPanelAppliesNPC {
+				ids = unionIDs(creatures, npcs)
+			}
+		}
+		out = append(out, encounters.StatBlock{Widget: p.Widget, SystemID: m.ID, TypeIDs: unionIDs(ids)})
+	}
+	return out
+}
+
+// unionIDs joins id lists in order, dropping repeats.
+func unionIDs(lists ...[]int) []int {
+	seen := map[int]bool{}
+	out := []int{}
+	for _, l := range lists {
+		for _, id := range l {
+			if !seen[id] {
+				seen[id] = true
+				out = append(out, id)
+			}
+		}
+	}
+	return out
 }
 
 // syncEncounterAPIAdapter implements syncapi.EncounterAPIService. The sync

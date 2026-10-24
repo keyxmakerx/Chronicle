@@ -217,3 +217,35 @@ func init() {
 		return []records.Kind{records.GeneratorKind{Cal: d.Calendar, Tables: d.Tables, Weather: d.Calendar, Rolls: d.Rolls}}
 	})
 }
+
+// aiAddonChecker is the add-on switch AI Import's feature gate reads.
+type aiAddonChecker interface {
+	IsEnabledForCampaign(ctx context.Context, campaignID, addonSlug string) (bool, error)
+}
+
+// aiFeatureGate names, by kind, the features a campaign has switched off,
+// using the same add-ons their pages are gated on: the calendar and what is
+// written onto it, game nights (which need the calendar too), and maps. A
+// failed check counts the feature as on, so a lookup error never blocks an
+// import; the feature's own routes still gate it.
+func aiFeatureGate(addons aiAddonChecker) func(ctx context.Context, campaignID string) records.OffFeatures {
+	return func(ctx context.Context, campaignID string) records.OffFeatures {
+		off := func(slug string) bool {
+			on, err := addons.IsEnabledForCampaign(ctx, campaignID, slug)
+			return err == nil && !on
+		}
+		out := records.OffFeatures{}
+		if off(calendar.PluginSlug) {
+			for _, k := range []string{records.KindCalendar, "event", "weather", "roll-night", "moon", "game-night"} {
+				out[k] = "Calendar"
+			}
+		}
+		if off(sessions.SessionsAddonSlug) {
+			out["game-night"] = "Game nights"
+		}
+		if off("maps") {
+			out["map"], out["pin"] = "Maps", "Maps"
+		}
+		return out
+	}
+}

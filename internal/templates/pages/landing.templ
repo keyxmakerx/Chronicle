@@ -97,6 +97,9 @@ templ DiscoverPublicPage(publicCampaigns []campaigns.Campaign) {
 			<a href="/register" class="btn-primary text-sm px-6 py-2 shadow-lg shadow-accent/20">
 				Get Started Free
 			</a>
+			<div class="mt-4">
+				@layouts.HaveACodeLink(true)
+			</div>
 		</div>
 
 		<!-- Campaign browse grid -->

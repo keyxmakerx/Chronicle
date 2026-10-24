@@ -7,7 +7,6 @@ package campaigns
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"time"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
@@ -53,6 +52,18 @@ templ CampaignShowPage(cc *CampaignContext, transfer *OwnershipTransfer, recentE
 				@welcomeMessageBanner(cc.Campaign.ID, msg)
 			}
 
+			// "Last night: write it up", for those who write recaps. It joins
+			// game nights, which this plugin may not import, so internal/app
+			// serves it; an empty answer removes the slot.
+			if cc.IsMember && cc.MemberRole >= RoleScribe {
+				<div
+					data-block="last-night"
+					hx-get={ fmt.Sprintf("/campaigns/%s/last-night", cc.Campaign.ID) }
+					hx-trigger="load"
+					hx-swap="outerHTML"
+				></div>
+			}
+
 			// The viewer's own home (Director, guest or their role), with the
 			// same fallbacks the Customizer shows, so both draw one layout.
 			{{ layout, _ := cc.Campaign.HomeLayout(cc.HomeAudience()) }}
@@ -62,7 +73,7 @@ templ CampaignShowPage(cc *CampaignContext, transfer *OwnershipTransfer, recentE
 			<div class="flex items-center gap-3 text-xs text-fg-muted mt-8">
 				<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-alt text-fg-secondary font-medium">
 					<i class="fa-solid fa-user-shield text-[10px]"></i>
-					{ cc.MemberRole.DisplayName() }
+					{ ViewerAccessLabel(cc) }
 				</span>
 				<span>Created { cc.Campaign.CreatedAt.Format("Jan 2, 2006") }</span>
 			</div>
@@ -166,7 +177,7 @@ templ OwnerDashboardPage(cc *CampaignContext, recentEntities []RecentEntity, nee
 			<div class="flex items-center gap-3 text-xs text-fg-muted mt-8">
 				<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-alt text-fg-secondary font-medium">
 					<i class="fa-solid fa-user-shield text-[10px]"></i>
-					{ cc.MemberRole.DisplayName() }
+					{ ViewerAccessLabel(cc) }
 				</span>
 				<span>Created { cc.Campaign.CreatedAt.Format("Jan 2, 2006") }</span>
 			</div>
@@ -206,7 +217,7 @@ templ defaultOwnerDashboard(cc *CampaignContext, recentEntities []RecentEntity, 
 					<i class="fa-solid fa-users text-blue-600 dark:text-blue-400 text-sm"></i>
 				</div>
 				<div>
-					<h3 class="text-sm font-semibold text-fg group-hover:text-accent transition-colors">Members</h3>
+					<h3 class="text-sm font-semibold text-fg group-hover:text-accent transition-colors">People</h3>
 					<p class="text-[11px] text-fg-muted">Roles & access</p>
 				</div>
 			</div>
@@ -249,7 +260,7 @@ templ defaultOwnerDashboard(cc *CampaignContext, recentEntities []RecentEntity, 
 							<span class="text-sm font-medium text-fg truncate group-hover:text-accent transition-colors">{ et.NamePlural }</span>
 						</div>
 						<div class="pl-[2.375rem] text-xs text-fg-muted">
-							{ strconv.Itoa(layouts.GetEntityCount(ctx, et.ID)) } pages
+							{ pageCountLabel(layouts.GetEntityCount(ctx, et.ID)) }
 						</div>
 					</a>
 				}

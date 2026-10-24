@@ -198,7 +198,7 @@ func TestIsPlainProse(t *testing.T) {
 	}
 }
 
-// Scribes may open the screen but never see or write the DM note.
+// A Scribe sees what players see: no screen, so no DM note either.
 func TestScribeHasNoNotes(t *testing.T) {
 	fn := &fakeNotes{notes: map[string]*ScreenNote{"": {ID: "n"}}}
 	svc := NewService(Sources{Notes: fn})
@@ -212,8 +212,7 @@ func TestScribeHasNoNotes(t *testing.T) {
 	if fn.savedKey != "" || fn.savedVer != "" {
 		t.Error("a scribe's save reached the source")
 	}
-	v, err := svc.Build(context.Background(), "c1", scribe)
-	if err != nil || v.Notes != nil {
-		t.Errorf("Build: notes = %+v err %v, want no notes section", v.Notes, err)
+	if _, err := svc.Build(context.Background(), "c1", scribe); appErrCode(err) != http.StatusForbidden {
+		t.Errorf("Build: %v, want 403", err)
 	}
 }

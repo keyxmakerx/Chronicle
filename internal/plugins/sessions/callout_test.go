@@ -121,8 +121,9 @@ func TestCallout_AsksForTheZoneWhenItIsUnsetAndNothingIsPending(t *testing.T) {
 		t.Fatalf("Kind = %q, want %q", got.Kind, CalloutTimezone)
 	}
 	// The sentence must state the CONSEQUENCE. "Set your timezone" is a chore;
-	// "you are being shown UTC" is the reason anyone would act.
-	if !strings.Contains(got.Message, "UTC") {
+	// "times are not in yours" is the reason anyone would act. It must not
+	// claim UTC: game nights show in the organizer's zone.
+	if !strings.Contains(got.Message, "not shown in your local time") || strings.Contains(got.Message, "UTC") {
 		t.Errorf("Message = %q — it must say what is happening now, not just ask for a setting", got.Message)
 	}
 }
@@ -189,6 +190,18 @@ func TestRenderCallout_TheTimezoneAcceptShipsHidden(t *testing.T) {
 	if !strings.Contains(got, `href="/account"`) {
 		t.Error("no fallback to /account — a browser that will not report a zone would " +
 			"leave the player with a banner and no way to act on it")
+	}
+}
+
+// A guest cannot open /account, so their banner must not offer a link that
+// only bounces them back to the campaign; the accept button is their offer.
+func TestRenderCallout_GuestTimezoneHasNoAccountLink(t *testing.T) {
+	got := renderCallout(Callout{Kind: CalloutTimezone, Message: "m", NoAccountPage: true})
+	if strings.Contains(got, `href="/account"`) {
+		t.Errorf("a guest's banner links to /account, which they cannot open:\n%s", got)
+	}
+	if !strings.Contains(got, "data-cta-tz-accept") || !strings.Contains(got, "data-cta-dismiss") {
+		t.Errorf("a guest's banner lost its accept or dismiss control:\n%s", got)
 	}
 }
 

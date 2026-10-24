@@ -47,19 +47,24 @@ func TestAdminUsersList_TableAndCardsShareActions(t *testing.T) {
 	tests := []struct {
 		name         string
 		user         auth.User
+		selfID       string
 		wantConfirms []string
 	}{
-		{"member", auth.User{ID: "u1", DisplayName: `Jane "J" D.`, Email: "j@x.test", CreatedAt: now},
+		{"member", auth.User{ID: "u1", DisplayName: `Jane "J" D.`, Email: "j@x.test", CreatedAt: now}, "",
 			[]string{"Grant admin privileges to this user?", "Disable this user account? They will be immediately logged out.", "Force logout all sessions for this user?"}},
-		{"admin", auth.User{ID: "u2", DisplayName: "Key", Email: "k@x.test", IsAdmin: true, CreatedAt: now},
+		{"admin", auth.User{ID: "u2", DisplayName: "Key", Email: "k@x.test", IsAdmin: true, CreatedAt: now}, "",
 			[]string{"Remove admin privileges from this user?", "Force logout all sessions for this user?"}},
-		{"disabled", auth.User{ID: "u3", DisplayName: "Zed", Email: "z@x.test", IsDisabled: true, CreatedAt: now},
+		// The server refuses a change to your own admin rights, so it isn't offered.
+		{"yourself", auth.User{ID: "u4", DisplayName: "Sam", Email: "s@x.test", IsAdmin: true, CreatedAt: now}, "u4",
+			[]string{"Force logout all sessions for this user?"}},
+		{"disabled", auth.User{ID: "u3", DisplayName: "Zed", Email: "z@x.test", IsDisabled: true, CreatedAt: now}, "",
 			[]string{"Grant admin privileges to this user?", "Re-enable this user account?", "Force logout all sessions for this user?"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			data := UserListData{
 				Users:     []auth.User{tt.user},
+				SelfID:    tt.selfID,
 				View:      userListView(listQuery{}, auth.UserFilterAll, auth.UserFilterCounts{All: 1}, 1),
 				CSRFToken: "tok123",
 			}
@@ -72,10 +77,17 @@ func TestAdminUsersList_TableAndCardsShareActions(t *testing.T) {
 			if got := confirmsIn(cards); strings.Join(got, "|") != strings.Join(tt.wantConfirms, "|") {
 				t.Errorf("card menu confirms = %v, want %v", got, tt.wantConfirms)
 			}
+			adminURL := `/admin/users/` + tt.user.ID + `/admin`
+			if tt.selfID == tt.user.ID {
+				if strings.Contains(html, adminURL) {
+					t.Errorf("own row must not offer an admin change")
+				}
+				adminURL = `/admin/security/users/` + tt.user.ID + `/force-logout`
+			}
 			for _, want := range []string{
 				`aria-label="Actions for ` + templEscapedName(tt.user.DisplayName) + `"`,
 				`aria-haspopup="menu"`, `aria-expanded="false"`, `role="menu"`, `role="menuitem"`,
-				`/admin/users/` + tt.user.ID + `/admin`,
+				adminURL,
 			} {
 				if !strings.Contains(cards, want) {
 					t.Errorf("card missing %s", want)
@@ -109,6 +121,7 @@ func TestAdminCampaignsList_TableAndCardsShareActions(t *testing.T) {
 	c := campaigns.Campaign{ID: "c1", Name: "Shattered Coast", Slug: "coast", CreatedAt: time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)}
 	data := CampaignListData{
 		Campaigns: []campaigns.Campaign{c},
+		CanLeave:  map[string]bool{"c1": true},
 		View:      campaignListView(listQuery{}, "", nil, 1),
 		CSRFToken: "tok123",
 	}
@@ -144,6 +157,24 @@ func TestAdminCampaignsList_TableAndCardsShareActions(t *testing.T) {
 	}
 	if !strings.Contains(html, `{&#34;csrf_token&#34;:&#34;tok123&#34;,&#34;role&#34;:&#34;owner&#34;}`) {
 		t.Errorf("join role must be sent with the CSRF field; got %s", cards)
+	}
+}
+
+// Leave is offered only on campaigns the admin belongs to without owning;
+// anywhere else the server could only refuse it.
+func TestAdminCampaignsList_LeaveOnlyWhereItWorks(t *testing.T) {
+	c := campaigns.Campaign{ID: "c1", Name: "Iron Vale", Slug: "vale", CreatedAt: time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)}
+	for _, canLeave := range []bool{false, true} {
+		data := CampaignListData{
+			Campaigns: []campaigns.Campaign{c},
+			CanLeave:  map[string]bool{"c1": canLeave},
+			View:      campaignListView(listQuery{}, "", nil, 1),
+			CSRFToken: "tok",
+		}
+		html := renderToString(t, AdminCampaignsList(data))
+		if got := strings.Contains(html, "/admin/campaigns/c1/leave"); got != canLeave {
+			t.Errorf("canLeave=%v: leave action shown = %v", canLeave, got)
+		}
 	}
 }
 

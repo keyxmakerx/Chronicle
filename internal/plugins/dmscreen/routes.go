@@ -7,11 +7,11 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
-// CanOpen reports who may open the DM Screen: scribes and the owner, and any
-// member the owner has given DM access, since that access is for running the
-// game. The top-bar button uses the same rule.
+// CanOpen reports who may open the DM Screen: the owner and any member the
+// owner has given DM access (a Co-DM), since that access is for running the
+// game. A Scribe sees what players see. The top-bar button uses the same rule.
 func CanOpen(cc *campaigns.CampaignContext) bool {
-	return cc.MemberRole >= campaigns.RoleScribe || cc.IsDmGranted
+	return cc.CanAuthorDmOnly()
 }
 
 // RegisterRoutes mounts the DM Screen routes behind CanOpen; the service
@@ -26,6 +26,10 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.GET("/dm-screen/notes", h.ShowNote, campaigns.RequireCapability(CanOpen, "the DM Screen is for the people running this campaign"))
 	cg.PUT("/dm-screen/notes", h.SaveNote, campaigns.RequireCapability(CanOpen, "the DM Screen is for the people running this campaign"))
 	cg.POST("/dm-screen/reveal/:eid", h.Reveal, campaigns.RequireCapability(CanOpen, "the DM Screen is for the people running this campaign"))
+	// Reveal's Undo hides a page again, so it is for the DM team only.
+	cg.POST("/dm-screen/hide/:eid", h.UndoReveal, campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool {
+		return cc.CanAuthorDmOnly()
+	}, "only the campaign owner or a member with DM access may do this"))
 	// The Adventures tab: DM team only, like the screen itself.
 	cg.GET("/dm-screen/adventures/pages", h.PickPages, campaigns.RequireCapability(CanOpen, "the DM Screen is for the people running this campaign"))
 	cg.POST("/dm-screen/adventures/pins", h.PinPage, campaigns.RequireCapability(CanOpen, "the DM Screen is for the people running this campaign"))

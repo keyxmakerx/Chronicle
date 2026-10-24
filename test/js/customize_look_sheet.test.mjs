@@ -29,7 +29,7 @@ test('SHEET_STYLES match the server allow-list, in order', () => {
 });
 
 test('the sheet style is part of Save, Discard and Reset', () => {
-  assert.match(src, /sheet:\['sheet\.style'\]/, 'SEC_KEYS must list sheet.style');
+  assert.match(src, /sheet:\['sheet\.style'/, 'SEC_KEYS must list sheet.style');
   assert.match(src, /hover:clone\(d\.hover\), sheet:clone\(d\.sheet\)/, 'toInput must send sheet');
   assert.match(src, /if \(!d\.sheet\) d\.sheet = \{ style:'modern' \}/, 'fromServer must default to modern');
   assert.match(src, /data-k="sheet\.style"|'sheet\.style', 'sh-style-l'/, 'a control must bind sheet.style');
@@ -40,7 +40,7 @@ test('the preview has a character sheet page drawn in the draft style', () => {
   assert.match(templ, /name="dpage" value="sheet" id="dp-sheet"/, 'the page picker must offer the sheet');
   assert.match(src, /data-page="sheet" hidden><div class="pv-sheet" id="d-sheet" data-sheet data-sheet-preview/, 'the sample must be a preview sheet root');
   assert.match(src, /sh\.setAttribute\('data-sheet-style', d\.sheet\.style\)/, 'the sample must wear the draft style');
-  assert.match(src, /id === 'sheet' && ui\.page !== 'sheet'\) setPage\('sheet'\)/, 'opening Character sheets must show the sheet');
+  assert.match(src, /PAGE_OF = \{[^}]*sheet:'sheet'/, 'opening Character sheets must show the sheet');
 });
 
 // The engine's applyStyle, run against a stub page: the saved pick on <html>

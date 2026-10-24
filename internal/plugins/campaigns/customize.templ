@@ -142,7 +142,7 @@ templ customizeHomePages(cc *CampaignContext, key, hint, state string) {
 	<div class="czs-ws-head">
 		<div>
 			<h1 class="czs-h1">Home pages</h1>
-			<p class="czs-lede">The campaign home everyone lands on, a version of it for each kind of member, and your own { layouts.GMTerm(ctx) } dashboard.</p>
+			<p class="czs-lede">The campaign home everyone lands on, a version of it for each kind of member, and the Overview you and your co-{ layouts.GMTerm(ctx) }s see under Manage.</p>
 		</div>
 	</div>
 	<nav class="czs-tabs" aria-label="Which home">
@@ -154,7 +154,7 @@ templ customizeHomePages(cc *CampaignContext, key, hint, state string) {
 				}
 			>
 				<i class={ "fa-solid " + t.Icon } aria-hidden="true"></i>
-				{ t.Label }
+				{ t.label(ctx) }
 			</a>
 		}
 	</nav>

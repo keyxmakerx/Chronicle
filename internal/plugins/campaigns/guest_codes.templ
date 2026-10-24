@@ -4,6 +4,7 @@ package campaigns
 
 import (
 	"fmt"
+	"net/url"
 	"time"
 )
 
@@ -23,18 +24,22 @@ templ GuestCodesCard(campaignID string, codes []GuestCode, fresh *NewGuestCode, 
 		if fresh != nil {
 			<div
 				class="step-settle rounded-lg border border-accent/40 bg-accent/5 p-4 mb-4"
-				x-data={ fmt.Sprintf(`{ copy() { navigator.clipboard.writeText(%q).then(() => Chronicle.notify('Code copied', 'success')); } }`, fresh.Code) }
+				x-data={ guestCodeCopyData(fresh.Code, guestInviteLink(joinURL, fresh.Code)) }
 			>
 				<div class="flex flex-wrap items-center gap-3">
 					<span class="font-mono text-2xl font-semibold tracking-widest text-fg" aria-label={ "Code " + fresh.Code }>{ fresh.Code }</span>
-					<button type="button" class="btn-secondary text-sm" @click="copy()">
+					<button type="button" class="btn-secondary text-sm" @click="copy(code, 'Code copied')">
 						<i class="fa-solid fa-copy mr-1" aria-hidden="true"></i>Copy
+					</button>
+					<button type="button" class="btn-secondary text-sm" @click="copy(link, 'Invite link copied')">
+						<i class="fa-solid fa-link mr-1" aria-hidden="true"></i>Copy invite link
 					</button>
 				</div>
 				<p class="text-xs text-fg-secondary mt-2">
 					if fresh.Note != "" {
 						For { fresh.Note }.
 					}
+					The invite link fills the code in, so they only type a name.
 					Write it down or copy it now: Chronicle keeps only a fingerprint, so it can't show this code again.
 				</p>
 			</div>
@@ -95,4 +100,16 @@ templ GuestCodesCard(campaignID string, codes []GuestCode, fresh *NewGuestCode, 
 			</ul>
 		}
 	</section>
+}
+
+// guestInviteLink is the join page with the code filled in, so the person
+// it is sent to taps one link and types only a name.
+func guestInviteLink(joinURL, code string) string {
+	return joinURL + "?code=" + url.QueryEscape(code)
+}
+
+// guestCodeCopyData is the Alpine state for the fresh code's copy buttons.
+// The values go through %q so they are JavaScript string literals.
+func guestCodeCopyData(code, link string) string {
+	return fmt.Sprintf(`{ code: %q, link: %q, copy(text, done) { navigator.clipboard.writeText(text).then(() => Chronicle.notify(done, 'success')); } }`, code, link)
 }

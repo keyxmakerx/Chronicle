@@ -18,14 +18,6 @@
  * side effect elsewhere). Every @keyframes name is prefixed cal5- (and every
  * animation/animation-name reference updated to match) so a future sheet
  * using a common name like fadeIn can never shadow this one's.
- *
- * Left out of the mockups' own CSS deliberately (documented in the plugin's
- * .ai.md "Honest gaps" section): the weather click-and-drag painting UI and
- * the recipe-sheet generator UI ship no client, since neither has a
- * server-side generate/write endpoint yet (issue #765 and the missing
- * generators.js respectively) — their classes are still included since they
- * are inert without matching markup, so a later PR can wire them up without
- * re-porting this file.
  */
 /* Tokens: ink and paper do the work; the only colour is the era/season field. */
 :root{

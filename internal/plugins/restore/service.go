@@ -27,7 +27,7 @@ type Service interface {
 	// if a restore is in progress.
 	RunRestore(ctx context.Context, manifestName string) (*RunResult, error)
 
-	// ListManifests returns all chronicle_manifest_*.txt files in
+	// ListManifests returns every backup and pre-update manifest in
 	// BACKUP_DIR, newest first, parsed for display.
 	ListManifests() ([]ManifestSummary, error)
 

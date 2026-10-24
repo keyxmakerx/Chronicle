@@ -1,0 +1,40 @@
+package layouts
+
+// guestLogOut is the avatar menu's Log out for a guest. A guest has no email
+// or password, so logging out is final: their code is spent and only a new
+// one from the GM gets them back in, as a second guest. The menu says so in
+// place before it happens, with keeping the account as the main way on.
+templ guestLogOut() {
+	<div x-data="{ sure: false }">
+		<button
+			type="button"
+			class="dropdown-item dropdown-item-danger w-full text-left"
+			x-show="!sure"
+			@click.stop="sure = true"
+		>
+			<i class="fa-solid fa-arrow-right-from-bracket text-xs w-4"></i> Log out
+		</button>
+		<div x-show="sure" x-cloak class="px-3 py-2" data-guest-logout-confirm>
+			<p class="text-sm text-fg mb-1 font-medium">You can't get back in after this.</p>
+			<p class="text-xs text-fg-secondary mb-3">
+				You're a guest, so there's no password to sign in with. Keep your account first to come back from any browser.
+			</p>
+			<div class="flex flex-wrap items-center justify-end gap-2">
+				<form method="POST" action="/logout">
+					<input type="hidden" name="csrf_token" value={ GetCSRFToken(ctx) }/>
+					<button type="submit" class="btn-secondary btn-sm text-red-600">Log out anyway</button>
+				</form>
+				<button
+					type="button"
+					class="btn-primary btn-sm"
+					hx-get="/account/guest"
+					hx-target="#guest-panel"
+					hx-swap="innerHTML"
+					@click="sure = false; open = false"
+				>
+					Keep my account
+				</button>
+			</div>
+		</div>
+	</div>
+}

@@ -218,7 +218,8 @@ func CountSecrets(html string) (passages, pictures, diagrams int) {
 }
 
 // StripSecretsJSON removes nodes marked with the "secret" mark, GM-only
-// pictures, GM-only diagrams and rolling-table rollers from ProseMirror JSON content. Returns the modified JSON string. If the input
+// pictures, GM-only diagrams and rolling-table rollers from ProseMirror JSON content,
+// and template prompts from the lines that carry them. Returns the modified JSON string. If the input
 // is not valid ProseMirror JSON, it is returned unchanged.
 func StripSecretsJSON(jsonStr string) string {
 	if jsonStr == "" {
@@ -260,6 +261,10 @@ func stripSecretNodes(node map[string]interface{}) {
 			continue // strip this node
 		}
 
+		// A template's writing prompt is an editing hint, never page content.
+		if attrs, ok := childMap["attrs"].(map[string]interface{}); ok {
+			delete(attrs, "prompt")
+		}
 		// Recurse into child nodes.
 		stripSecretNodes(childMap)
 		filtered = append(filtered, childMap)
@@ -299,6 +304,43 @@ func hasSecretMark(node map[string]interface{}) bool {
 			continue
 		}
 		if markMap["type"] == "secret" {
+			return true
+		}
+	}
+	return false
+}
+
+// HasSecrets reports whether stored editor content holds anything
+// StripSecretsHTML or StripSecretsJSON would remove: secret passages, GM-only
+// pictures and diagrams, and rollers. A writer who is served the stripped
+// copy must not save over such content, or the GM-only parts are lost.
+func HasSecrets(jsonStr, htmlStr string) bool {
+	if htmlStr != "" && StripSecretsHTML(htmlStr) != htmlStr {
+		return true
+	}
+	if jsonStr == "" {
+		return false
+	}
+	var doc map[string]interface{}
+	if err := json.Unmarshal([]byte(jsonStr), &doc); err != nil {
+		return false
+	}
+	return hasSecretNodes(doc)
+}
+
+// hasSecretNodes reports whether any node under node is one stripSecretNodes
+// removes.
+func hasSecretNodes(node map[string]interface{}) bool {
+	content, _ := node["content"].([]interface{})
+	for _, child := range content {
+		childMap, ok := child.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if hasSecretMark(childMap) || isGMPicture(childMap) || isGMDiagram(childMap) || childMap["type"] == "rollTable" {
+			return true
+		}
+		if hasSecretNodes(childMap) {
 			return true
 		}
 	}

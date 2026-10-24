@@ -100,3 +100,31 @@ func TestImportReview_SheetFields(t *testing.T) {
 		t.Errorf("a page whose fields don't fit must not be offered as a row")
 	}
 }
+
+// TestImportReview_SheetCheck pins the mount a game system's check draws
+// into and the hidden input the commit reads its formula numbers from; a row
+// with nothing to check, and a removal, carry neither.
+func TestImportReview_SheetCheck(t *testing.T) {
+	d := representativeReviewData()
+	d.Classes[0].SheetKind = "creature"
+	d.Classes[0].SheetFields = map[string]any{"level": 1, "stamina": 20}
+	d.Classes[0].SheetWritten = []string{"stamina"}
+	d.Classes[1].SheetKind = "creature"
+	d.Pages[1].FrontMatter.Action = importer.ActionDelete
+	out := renderReview(t, d)
+	for _, want := range []string{
+		`data-widget="import-sheet-check"`,
+		`data-sheet-kind="creature"`,
+		`data-fields="{&#34;level&#34;:1,&#34;stamina&#34;:20}"`,
+		`data-written="[&#34;stamina&#34;]"`,
+		`data-input="page_0_sheet_formula"`,
+		`<input type="hidden" name="page_0_sheet_formula" value="">`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("review is missing %q", want)
+		}
+	}
+	if strings.Count(out, `data-widget="import-sheet-check"`) != 1 || strings.Contains(out, "page_1_sheet_formula") {
+		t.Errorf("only the checkable, non-removal row gets a sheet check")
+	}
+}

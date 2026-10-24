@@ -10,8 +10,11 @@
  * navigation (.admin-vt); input.css moves the page. The opt-in comes off
  * again once the transition ends, so other navigation is untouched.
  *
- * Without cross-document view transitions, "in" is the admin page itself
- * rising (input.css) and "out" plays nothing. Motion off plays nothing.
+ * Without cross-document view transitions this page plays the move itself
+ * (input.css): "in" is the admin page rising; "out" is a sheet in the control
+ * room's colour that covers this page at first paint and falls away, so what
+ * is uncovered is the page itself, never a blank colour. Motion off plays
+ * nothing.
  */
 (function () {
   'use strict';
@@ -25,8 +28,7 @@
     var p = String(path || '').split(/[?#]/)[0];
     var admin = p === '/admin' || p.indexOf('/admin/') === 0;
     if ((dir === 'in') !== admin || motion === 'off') return '';
-    if (hasVT) return 'vt';
-    return dir === 'in' ? 'self' : '';
+    return hasVT ? 'vt' : 'self';
   }
 
   window.Chronicle = window.Chronicle || {};
@@ -50,11 +52,16 @@
   }
 
   if (what === 'self') {
-    document.addEventListener('animationend', function end(e) {
-      if (e.target !== document.body || e.animationName !== 'admin-rise') return;
+    // The rise plays on body; the fall on html::after, whose events reach html.
+    var name = dir === 'in' ? 'admin-rise' : 'admin-fall';
+    var end = function (e) {
+      if (e && (e.target !== (dir === 'in' ? document.body : h) || e.animationName !== name)) return;
       document.removeEventListener('animationend', end);
       done();
-    });
+    };
+    document.addEventListener('animationend', end);
+    // A move that never ends (a hidden tab) must not leave the page covered.
+    setTimeout(end, 3000);
     return;
   }
 

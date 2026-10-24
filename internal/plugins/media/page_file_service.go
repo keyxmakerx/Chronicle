@@ -35,10 +35,10 @@ type PageFileViewer struct {
 	Role   int
 }
 
-// SeesGMOnly is true for the GM tier, the people who may see and mark GM-only
-// files.
+// SeesGMOnly is true for the owner and Co-DMs, the people who may see and
+// mark GM-only files. A Scribe sees what players see.
 func (v PageFileViewer) SeesGMOnly() bool {
-	return v.Role >= int(campaigns.RoleScribe)
+	return v.Role >= int(campaigns.RoleOwner)
 }
 
 // PageFileListing is a page's files as one viewer may see them.

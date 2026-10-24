@@ -39,16 +39,18 @@ function rsvpBar({ count = 1, link = '/campaigns/c1/proposals/p1' } = {}) {
   return el('div', { class: 'cta-bar', 'data-cta': 'rsvp', role: 'status' }, kids);
 }
 
-function timezoneBar() {
-  return el('div', { class: 'cta-bar', 'data-cta': 'timezone', role: 'status' }, [
+// guest drops the "Choose" link, as renderCallout does for NoAccountPage.
+function timezoneBar({ guest = false } = {}) {
+  const kids = [
     el('i', { class: 'fa-solid fa-clock cta-ico' }),
     el('span', { class: 'cta-msg' }, [], 'Chronicle does not know your timezone…'),
     el('button', { type: 'button', class: 'cta-go', 'data-cta-tz-accept': '', hidden: true }, [
       el('span', { 'data-cta-zone': '' }, [], 'my timezone'),
     ]),
-    el('a', { class: 'cta-alt', href: '/account' }, [], 'Choose'),
-    el('button', { type: 'button', class: 'cta-x', 'data-cta-dismiss': '' }),
-  ]);
+  ];
+  if (!guest) kids.push(el('a', { class: 'cta-alt', href: '/account' }, [], 'Choose'));
+  kids.push(el('button', { type: 'button', class: 'cta-x', 'data-cta-dismiss': '' }));
+  return el('div', { class: 'cta-bar', 'data-cta': 'timezone', role: 'status' }, kids);
 }
 
 // boot runs the widget IIFE in a vm with a host containing `bar`, and returns
@@ -144,10 +146,12 @@ test('a browser with no Intl at all degrades instead of throwing', () => {
   assert.ok(bar.querySelector('[data-cta-dismiss]'), 'the banner is still dismissible');
 });
 
-test('the browser zone is filled in and the button revealed', () => {
+test('the browser zone is filled in as a place name and the button revealed', () => {
   const bar = timezoneBar();
-  boot(bar, { zone: 'America/Chicago' });
-  assert.equal(bar.querySelector('[data-cta-zone]').textContent, 'America/Chicago');
+  boot(bar, { zone: 'America/New_York' });
+  assert.equal(bar.querySelector('[data-cta-zone]').textContent, 'New York time');
+  assert.equal(bar.querySelector('[data-cta-tz-accept]').title, 'America/New_York',
+    'the full zone stays available for telling two cities apart');
   assert.equal(bar.querySelector('[data-cta-tz-accept]').hidden, false);
 });
 
@@ -182,6 +186,18 @@ test('a refused save gives the button back and says so', async () => {
     'a control that disables itself and then says nothing has told the player it worked');
   assert.ok(notices.some((n) => n.kind === 'error'));
   assert.equal(host.children.length, 1, 'nothing was saved, so the banner must stay');
+});
+
+test('a refused save only points at Choose when the banner has it', async () => {
+  const withLink = boot(timezoneBar(), { zone: 'Asia/Tokyo', fetchOk: false });
+  click(withLink.bar.querySelector('[data-cta-tz-accept]'));
+  const guest = boot(timezoneBar({ guest: true }), { zone: 'Asia/Tokyo', fetchOk: false });
+  click(guest.bar.querySelector('[data-cta-tz-accept]'));
+  await Promise.resolve(); await Promise.resolve();
+
+  assert.match(withLink.notices[0].msg, /Choose/);
+  assert.doesNotMatch(guest.notices[0].msg, /Choose/,
+    'a guest has no Choose link, so the toast must not send them looking for one');
 });
 
 test('a network failure is handled the same way as a refusal', async () => {

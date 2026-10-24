@@ -213,6 +213,31 @@ func insertAfterTitle(layout EntityTypeLayout, b TemplateBlock) EntityTypeLayout
 	return layout
 }
 
+// withCreaturePanels gives a creature type the Game System Panels block under
+// its title, so a game system's stat block shows on its pages from the start.
+// Every way a category is made goes through it (by hand, a new campaign's
+// starting categories, a genre preset), so none of them misses the block. A
+// layout that already places the block, or a type that isn't a creature type,
+// is returned as it is. The rows are copied first because seeded layouts can
+// share their slices with package-level defaults.
+func withCreaturePanels(et EntityType, layout EntityTypeLayout) EntityTypeLayout {
+	if !isCreatureType(et) || layoutPlacesBlock(layout, BlockSystemPanels) {
+		return layout
+	}
+	if len(layout.Rows) == 0 {
+		layout = DefaultLayout()
+	}
+	rows := make([]TemplateRow, len(layout.Rows))
+	for r, row := range layout.Rows {
+		cols := make([]TemplateColumn, len(row.Columns))
+		copy(cols, row.Columns)
+		row.Columns = cols
+		rows[r] = row
+	}
+	layout.Rows = rows
+	return insertAfterTitle(layout, TemplateBlock{ID: "blk-system-panels", Type: BlockSystemPanels})
+}
+
 // fullWidthRow builds a one-column row holding the given blocks.
 func fullWidthRow(id string, blocks ...TemplateBlock) TemplateRow {
 	return TemplateRow{ID: id, Columns: []TemplateColumn{{ID: id + "-col", Width: 12, Blocks: blocks}}}

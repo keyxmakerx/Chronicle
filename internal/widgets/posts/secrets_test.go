@@ -14,7 +14,7 @@ import (
 )
 
 // TestListPosts_GMOnlyContent pins that a visible post's GM-only parts reach
-// Scribes and owners but never players.
+// the owner and Co-DMs but never players or Scribes.
 func TestListPosts_GMOnlyContent(t *testing.T) {
 	html := `<p>Public lore. <span data-secret="true">The duke is a vampire.</span></p>`
 	entry := json.RawMessage(`{"type":"doc","content":[{"type":"paragraph","content":[` +
@@ -27,7 +27,7 @@ func TestListPosts_GMOnlyContent(t *testing.T) {
 		wantSecret bool
 	}{
 		{"player", campaigns.RolePlayer, false},
-		{"scribe", campaigns.RoleScribe, true},
+		{"scribe sees what players see", campaigns.RoleScribe, false},
 		{"owner", campaigns.RoleOwner, true},
 	}
 	for _, tt := range tests {
@@ -60,6 +60,44 @@ func TestListPosts_GMOnlyContent(t *testing.T) {
 			if got := strings.Count(body, "vampire"); got != want {
 				t.Errorf("GM-only text appears %d times, want %d; body=%s", got, want, body)
 			}
+		})
+	}
+}
+
+// TestRequirePostWrite pins that a Scribe writes only what they are served: a
+// GM-only post reads as missing, and text with GM-only parts is not theirs to
+// change, since their copy of it left those parts out.
+func TestRequirePostWrite(t *testing.T) {
+	secret := `<p>Lore. <span data-secret="true">The duke is a vampire.</span></p>`
+	plain := `<p>Lore.</p>`
+	scribe := &campaigns.CampaignContext{MemberRole: campaigns.RoleScribe}
+	coDM := &campaigns.CampaignContext{MemberRole: campaigns.RoleScribe, IsDmGranted: true}
+
+	tests := []struct {
+		name        string
+		cc          *campaigns.CampaignContext
+		post        Post
+		changesText bool
+		want        int // 0 = allowed
+	}{
+		{"scribe edits plain text", scribe, Post{EntryHTML: &plain}, true, 0},
+		{"scribe edits text with a secret", scribe, Post{EntryHTML: &secret}, true, http.StatusForbidden},
+		{"scribe renames a post with a secret", scribe, Post{EntryHTML: &secret}, false, 0},
+		{"scribe touches a GM-only post", scribe, Post{IsPrivate: true, EntryHTML: &plain}, false, http.StatusNotFound},
+		{"co-dm edits text with a secret", coDM, Post{EntryHTML: &secret}, true, 0},
+		{"co-dm touches a GM-only post", coDM, Post{IsPrivate: true}, true, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := tt.post
+			err := requirePostWrite(tt.cc, &p, tt.changesText)
+			if tt.want == 0 {
+				if err != nil {
+					t.Fatalf("refused: %v", err)
+				}
+				return
+			}
+			assertAppError(t, err, tt.want)
 		})
 	}
 }

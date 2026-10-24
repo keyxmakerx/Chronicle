@@ -82,8 +82,9 @@ func (h *Handler) ListPosts(c echo.Context) error {
 		return err
 	}
 
-	// Scribes and above see DM-only posts; DM-granted users also see them.
-	includeDMOnly := cc.MemberRole >= campaigns.RoleScribe || cc.IsDmGranted
+	// The owner and Co-DMs see DM-only posts and their secrets; Scribes see
+	// what players see.
+	includeDMOnly := cc.CanAuthorDmOnly()
 
 	posts, err := h.service.ListByEntity(c.Request().Context(), cc.Campaign.ID, entityID, includeDMOnly)
 	if err != nil {
@@ -93,7 +94,7 @@ func (h *Handler) ListPosts(c echo.Context) error {
 	if posts == nil {
 		posts = []Post{}
 	}
-	if cc.MemberRole < campaigns.RoleScribe {
+	if !cc.CanAuthorDmOnly() {
 		stripPostSecrets(posts)
 	}
 
@@ -120,6 +121,9 @@ func (h *Handler) CreatePost(c echo.Context) error {
 	var req CreatePostRequest
 	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
 		return apperror.NewBadRequest("invalid JSON body")
+	}
+	if req.IsPrivate && !cc.CanAuthorDmOnly() {
+		return apperror.NewForbidden(hideRefusal)
 	}
 
 	userID := auth.GetUserID(c)
@@ -162,6 +166,13 @@ func (h *Handler) UpdatePost(c echo.Context) error {
 	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
 		return apperror.NewBadRequest("invalid JSON body")
 	}
+	textChange := req.Entry != nil || req.EntryHTML != nil
+	if err := requirePostWrite(cc, existing, textChange); err != nil {
+		return err
+	}
+	if req.IsPrivate != nil && *req.IsPrivate && !cc.CanAuthorDmOnly() {
+		return apperror.NewForbidden(hideRefusal)
+	}
 
 	post, err := h.service.Update(c.Request().Context(), postID, req)
 	if err != nil {
@@ -195,6 +206,9 @@ func (h *Handler) DeletePost(c echo.Context) error {
 	}
 	if existing.CampaignID != cc.Campaign.ID || existing.EntityID != entityID {
 		return apperror.NewNotFound("post not found")
+	}
+	if err := requirePostWrite(cc, existing, true); err != nil {
+		return err
 	}
 
 	if err := h.service.Delete(c.Request().Context(), postID); err != nil {

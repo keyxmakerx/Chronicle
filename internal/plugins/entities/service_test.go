@@ -1803,13 +1803,23 @@ func TestCheckEntityAccess_DefaultVisibility_PrivateEntity(t *testing.T) {
 		t.Error("player should NOT have access to private entity")
 	}
 
-	// Scribe (role 2) can see private entities.
+	// A Scribe (role 2) sees what players see: a private page is the owner's
+	// and Co-DMs'.
 	perm, err = svc.CheckEntityAccess(context.Background(), "ent-1", 2, "scribe-1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	if perm.CanView || perm.CanEdit {
+		t.Errorf("scribe should NOT have access to private entity, got view=%v edit=%v", perm.CanView, perm.CanEdit)
+	}
+
+	// The owner and a Co-DM (promoted to role 3) have full access.
+	perm, err = svc.CheckEntityAccess(context.Background(), "ent-1", 3, "codm-1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if !perm.CanView || !perm.CanEdit {
-		t.Errorf("scribe should have full access to private entity, got view=%v edit=%v", perm.CanView, perm.CanEdit)
+		t.Errorf("owner or Co-DM should have full access to private entity, got view=%v edit=%v", perm.CanView, perm.CanEdit)
 	}
 }
 

@@ -113,7 +113,7 @@ func TestSyncAPI_EntityTypesHideAdventuresFromPlayers(t *testing.T) {
 		wantAdv bool
 	}{
 		{"player", campaigns.RolePlayer, false, false},
-		{"scribe", campaigns.RoleScribe, false, true},
+		{"scribe", campaigns.RoleScribe, false, false},
 		{"owner", campaigns.RoleOwner, false, true},
 		{"player with DM access", campaigns.RolePlayer, true, true},
 	}

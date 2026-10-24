@@ -3,7 +3,6 @@ package systems
 import (
 	"encoding/json"
 	"fmt"
-	"html"
 	"log/slog"
 	"os"
 	"regexp"
@@ -555,6 +554,27 @@ func (m *SystemManifest) HasWidget(slug string) bool {
 	return false
 }
 
+// HasCharacterSheet reports whether the system draws character pages itself:
+// a renderer bound to the "character" category, or to the slug of one of its
+// character presets. Only such a page carries a sheet for the sheet styles to
+// dress, so without one a sheet style picks nothing a player can see.
+func (m *SystemManifest) HasCharacterSheet() bool {
+	if m == nil {
+		return false
+	}
+	for _, r := range m.Renderers {
+		if r.PresetCategory == "character" {
+			return true
+		}
+		for i := range m.EntityPresets {
+			if r.Slug != "" && r.Slug == m.EntityPresets[i].Slug && m.EntityPresets[i].Category == "character" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // ItemPreset returns the first entity preset with category "item", or nil
 // if no item preset is defined. Used by the Armory plugin and item sync.
 func (m *SystemManifest) ItemPreset() *EntityPresetDef {
@@ -1037,9 +1057,9 @@ func ValidateManifest(m *SystemManifest) error {
 		return fmt.Errorf("terms: %w", err)
 	}
 
-	// Sanitize text fields to prevent stored XSS.
-	sanitizeManifestStrings(m)
-
+	// Text stays as written. Every place it is shown escapes it on output
+	// (templ, escapeHtml, textContent); escaping here as well showed players
+	// "D&amp;D", and a system's own widgets are trusted script anyway.
 	return nil
 }
 
@@ -1087,46 +1107,6 @@ func validateFieldDef(f FieldDef, context string) error {
 		return fmt.Errorf("%s (%s): unknown field type %q (valid: string, number, boolean, list, markdown, enum, url)", context, f.Key, f.Type)
 	}
 	return nil
-}
-
-// sanitizeManifestStrings escapes HTML in all user-facing text fields
-// to prevent stored XSS when manifest content is rendered in templates.
-func sanitizeManifestStrings(m *SystemManifest) {
-	m.Name = html.EscapeString(m.Name)
-	m.Description = html.EscapeString(m.Description)
-	m.Author = html.EscapeString(m.Author)
-
-	for i := range m.Categories {
-		m.Categories[i].Name = html.EscapeString(m.Categories[i].Name)
-	}
-
-	for i := range m.EntityPresets {
-		m.EntityPresets[i].Name = html.EscapeString(m.EntityPresets[i].Name)
-		m.EntityPresets[i].NamePlural = html.EscapeString(m.EntityPresets[i].NamePlural)
-		for j := range m.EntityPresets[i].Fields {
-			m.EntityPresets[i].Fields[j].Label = html.EscapeString(m.EntityPresets[i].Fields[j].Label)
-			if play := m.EntityPresets[i].Fields[j].Play; play != nil {
-				for k := range play.Options {
-					play.Options[k] = html.EscapeString(play.Options[k])
-				}
-			}
-		}
-	}
-
-	for i := range m.RelationPresets {
-		m.RelationPresets[i].Name = html.EscapeString(m.RelationPresets[i].Name)
-		m.RelationPresets[i].ReverseName = html.EscapeString(m.RelationPresets[i].ReverseName)
-	}
-
-	for i := range m.Widgets {
-		m.Widgets[i].Name = html.EscapeString(m.Widgets[i].Name)
-		m.Widgets[i].Description = html.EscapeString(m.Widgets[i].Description)
-	}
-
-	for i := range m.TextRenderers {
-		m.TextRenderers[i].Name = html.EscapeString(m.TextRenderers[i].Name)
-		m.TextRenderers[i].Description = html.EscapeString(m.TextRenderers[i].Description)
-	}
 }
 
 // sanitizePlayBlocks validates every preset field's play block and drops the

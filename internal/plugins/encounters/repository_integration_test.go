@@ -193,3 +193,49 @@ func TestRepositoryIntegration_Search(t *testing.T) {
 		t.Fatal("encounters must go with their page")
 	}
 }
+
+func TestRunRepositoryIntegration(t *testing.T) {
+	fx := newEncFixture(t)
+	repo := NewRunRepository(fx.db)
+	ctx := context.Background()
+	if _, found, err := repo.GetRun(ctx, fx.campaign); err != nil || found {
+		t.Fatalf("no fight yet: found=%v err=%v", found, err)
+	}
+	if ok, err := repo.CreateRun(ctx, fx.campaign, []byte(`{"round":1}`), fx.user); err != nil || !ok {
+		t.Fatalf("create: ok=%v err=%v", ok, err)
+	}
+	if ok, err := repo.CreateRun(ctx, fx.campaign, []byte(`{"round":9}`), fx.user); err != nil || ok {
+		t.Fatalf("a second start must not replace the fight: ok=%v err=%v", ok, err)
+	}
+	if _, found, _ := repo.GetRun(ctx, fx.other); found {
+		t.Fatal("another campaign must not read the fight")
+	}
+	if ok, err := repo.UpdateRun(ctx, fx.campaign, []byte(`{"round":2}`), 1, fx.user); err != nil || !ok {
+		t.Fatalf("update: ok=%v err=%v", ok, err)
+	}
+	if ok, _ := repo.UpdateRun(ctx, fx.campaign, []byte(`{"round":3}`), 1, fx.user); ok {
+		t.Fatal("a stale version must not update")
+	}
+	if ok, _ := repo.UpdateRun(ctx, fx.other, []byte(`{"round":3}`), 2, fx.user); ok {
+		t.Fatal("another campaign must not update the fight")
+	}
+	r, found, err := repo.GetRun(ctx, fx.campaign)
+	if err != nil || !found || r.Version != 2 || string(r.Data) != `{"round":2}` {
+		t.Fatalf("after update: %+v found=%v err=%v", r, found, err)
+	}
+	if err := repo.DeleteRun(ctx, fx.other); err != nil {
+		t.Fatal(err)
+	}
+	if _, found, _ := repo.GetRun(ctx, fx.campaign); !found {
+		t.Fatal("ending another campaign's fight ended this one")
+	}
+	if err := repo.DeleteRun(ctx, fx.campaign); err != nil {
+		t.Fatal(err)
+	}
+	if _, found, _ := repo.GetRun(ctx, fx.campaign); found {
+		t.Fatal("the fight is still on after the end")
+	}
+	if err := repo.DeleteRun(ctx, fx.campaign); err != nil {
+		t.Fatalf("ending no fight: %v", err)
+	}
+}

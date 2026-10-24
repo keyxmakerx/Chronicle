@@ -73,7 +73,7 @@ templ App(title string) {
 					<div class="bg-amber-500/15 border-b border-amber-500/30 px-4 py-1.5 text-center text-sm text-amber-300" data-pv-banner>
 						<i class="fa-solid fa-eye-slash mr-1"></i>
 						Viewing as player
-						<span class="text-amber-400/70 ml-1">— owner-only content is hidden</span>
+						<span class="text-amber-400/70 ml-1">— { GMTerm(ctx) }-only content is hidden</span>
 					</div>
 				}
 
@@ -84,7 +84,7 @@ templ App(title string) {
 					@GuestBanner()
 				}
 
-				<!-- Player call-to-action (C-RSVP-P10).
+				<!-- Player call-to-action.
 				     One banner for the one thing a player is expected to ACT on:
 				     an unanswered RSVP, or the timezone we would otherwise guess
 				     at. Server-rendered and POLLED on the same 60s cadence as the
@@ -101,6 +101,12 @@ templ App(title string) {
 				     <script>: boot.js sets htmx.config.allowScriptTags = false,
 				     which REMOVES script tags from swapped fragments rather than
 				     declining to run them. -->
+				if InSiteAdmin(ctx) {
+					<!-- The site check-up's reminder strip, filled out of band by the
+					     shield in the top bar. Outside #main-content so it stays put
+					     across admin pages. -->
+					<div id="checkup-strip"></div>
+				}
 				if IsAuthenticated(ctx) {
 					<div
 						class="cta-host"
@@ -168,7 +174,7 @@ templ Sidebar() {
 		@mouseleave="hovered = false"
 		@chronicle:nav-editing.window="editing = $event.detail"
 		class={ "nav-sb fixed inset-y-0 left-0 z-40 w-64 bg-sidebar-bg text-sidebar-text flex flex-col -translate-x-full md:translate-x-0 transition-[width,transform] duration-300 ease-in-out md:static md:z-auto md:shrink-0",
-			templ.KV("nav-admin-mode", InSiteAdmin(ctx)) }
+			templ.KV("nav-admin-mode", InSiteAdmin(ctx)), templ.KV("nav-tools-gated", NavToolsWordSection(ctx) != "") }
 		:class="[
 			sidebarOpen ? 'sidebar-mobile-open shadow-2xl' : '',
 			(!pinned && !hovered && !editing && !sidebarHidden) ? 'sidebar-collapsed' : '',
@@ -368,6 +374,14 @@ templ adminNavRow(it AdminNavItem, makeRoom bool) {
 
 // DefaultSidebarNav renders generic navigation when not inside a campaign.
 templ DefaultSidebarNav() {
+	// A guest is fenced to one campaign, so none of these lead anywhere for
+	// them; their way around is the campaign's own sidebar.
+	if !IsGuest(ctx) {
+		@defaultSidebarLinks()
+	}
+}
+
+templ defaultSidebarLinks() {
 	<div class="px-4 mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
 		Navigation
 	</div>
@@ -680,8 +694,10 @@ templ Topbar() {
 		</div>
 		<!-- Left: Hamburger + Campaign selector. It is the part that gives way on
 		     a narrow phone (the campaign name truncates) so the right-hand
-		     buttons, the account menu last, always stay on screen. -->
-		<div class="flex items-center gap-2 min-w-0">
+		     buttons, the account menu last, always stay on screen. While the
+		     search is open on a phone it steps aside (all but the hamburger),
+		     so the search box has room to show what is typed. -->
+		<div class="tb-left flex items-center gap-2 min-w-0">
 			<!-- Mobile hamburger -->
 			<button
 				id="nav-toggle"
@@ -850,6 +866,16 @@ templ Topbar() {
 					<span class="hidden sm:inline">Leave Site admin</span>
 					<span class="sm:hidden">Leave</span>
 				</a>
+				<!-- The site check-up's shield. It loads itself and refreshes after
+				     each admin page; the checkup widget opens its sheet. -->
+				<div
+					id="checkup-host"
+					class="checkup-host"
+					data-widget="checkup"
+					hx-get="/admin/checkup"
+					hx-trigger="load, every 300s, htmx:afterSettle from:#main-content"
+					hx-swap="innerHTML"
+				></div>
 			}
 			if InCampaign(ctx) {
 				<!-- Search trigger (magnifying glass) -->
@@ -882,8 +908,9 @@ templ Topbar() {
 				</button>
 			}
 
-			<!-- View as player toggle (campaign owners only) -->
-			if InCampaign(ctx) && IsOwner(ctx) {
+			<!-- View as player toggle, for the owner and co-DMs. While it is on a
+			     co-DM reads as having no DM grant, hence IsViewingAsPlayer. -->
+			if InCampaign(ctx) && (IsOwner(ctx) || IsDmGranted(ctx) || IsViewingAsPlayer(ctx)) {
 				<button
 					hx-post={ "/campaigns/" + GetCampaignID(ctx) + "/toggle-view-mode" }
 					data-pv-toggle
@@ -893,17 +920,16 @@ templ Topbar() {
 						"btn-ghost btn-icon",
 						templ.KV("!bg-amber-500/20 !text-amber-400 hover:!bg-amber-500/30", IsViewingAsPlayer(ctx)),
 					}
-					title={ func() string { if IsViewingAsPlayer(ctx) { return "Viewing as player — click to return to owner view" }; return "View as player" }() }
+					title={ func() string { if IsViewingAsPlayer(ctx) { return "Viewing as player — click to go back to your own view" }; return "View as player" }() }
 				>
 					<i class={ "fa-solid text-xs", templ.KV("fa-eye-slash", IsViewingAsPlayer(ctx)), templ.KV("fa-eye", !IsViewingAsPlayer(ctx)) }></i>
 				</button>
 			}
 
 			if IsAuthenticated(ctx) {
-				<!-- Notification bell (C-SCHED-P2). Server-rendered button + badge;
+				<!-- Notification bell. Server-rendered button + badge;
 				     the badge count refreshes via an HTMX poll, the dropdown is
-				     driven by the notification-bell widget. Scheduler-scoped this
-				     slice. -->
+				     driven by the notification-bell widget. -->
 				<div class="relative" data-widget="notification-bell" data-csrf={ GetCSRFToken(ctx) }>
 					<button
 						type="button"
@@ -932,17 +958,18 @@ templ Topbar() {
 					</div>
 				</div>
 			}
-			if InCampaign(ctx) && (GetCampaignRole(ctx) >= 2 || IsDmGranted(ctx)) {
-				<!-- DM Screen: the control panel for the owner, scribes and
-				     members with DM access (dmscreen.CanOpen). The dm-screen
+			if InCampaign(ctx) && (GetCampaignRole(ctx) >= 3 || IsDmGranted(ctx)) {
+				<!-- DM Screen: the control panel for the owner and members
+				     with DM access (dmscreen.CanOpen). The dm-screen
 				     widget fetches the panel and plays the opening; hidden
 				     under "view as player" because the role reads 1. -->
 				<div data-widget="dm-screen" data-url={ fmt.Sprintf("/campaigns/%s/dm-screen", GetCampaignID(ctx)) }>
 					<button type="button" class="btn-ghost btn-icon" data-dms-open title={ GMTerm(ctx) + " Screen" } aria-label={ "Open the " + GMTerm(ctx) + " Screen" } aria-haspopup="dialog">
 						<svg class="w-5 h-5" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true">
-							<path d="M2 6l6-2v15l-6 2z"></path>
-							<path d="M8 4l8 2v15l-8-2z"></path>
-							<path d="M16 6l6-2v15l-6 2z"></path>
+							<!-- A standing GM screen: upright side panels and a flat front, so it reads apart from the slanted Maps fold. -->
+							<path d="M3 5l5 2v13l-5-2z"></path>
+							<path d="M8 7h8v13H8z"></path>
+							<path d="M16 7l5-2v13l-5 2z"></path>
 						</svg>
 					</button>
 				</div>
@@ -991,12 +1018,16 @@ templ Topbar() {
 								<i class="fa-solid fa-gear text-xs w-4"></i> Account Settings
 							</a>
 						}
-						<form method="POST" action="/logout">
-							<input type="hidden" name="csrf_token" value={ GetCSRFToken(ctx) }/>
-							<button type="submit" class="dropdown-item dropdown-item-danger w-full text-left">
-								<i class="fa-solid fa-arrow-right-from-bracket text-xs w-4"></i> Log out
-							</button>
-						</form>
+						if IsGuest(ctx) {
+							@guestLogOut()
+						} else {
+							<form method="POST" action="/logout">
+								<input type="hidden" name="csrf_token" value={ GetCSRFToken(ctx) }/>
+								<button type="submit" class="dropdown-item dropdown-item-danger w-full text-left">
+									<i class="fa-solid fa-arrow-right-from-bracket text-xs w-4"></i> Log out
+								</button>
+							</form>
+						}
 					</div>
 				</div>
 			} else {

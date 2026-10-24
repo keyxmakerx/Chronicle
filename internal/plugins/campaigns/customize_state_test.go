@@ -32,7 +32,7 @@ func TestBuildCustomizeState(t *testing.T) {
 			if d.Colours.S1 != nil || d.Colours.S2 != nil {
 				t.Error("surface colours must follow the chrome accent (null) when unset")
 			}
-			if d.Type.Body != "inter" || d.Type.Heading != "same" || d.Nav.Style != "ring" || d.Buttons.Style != "lift" || d.Motion.Speed != "standard" {
+			if d.Type.Body != "inter" || d.Type.Heading != "same" || d.Nav.Style != "rail" || d.Buttons.Style != "lift" || d.Motion.Speed != "standard" {
 				t.Errorf("unset choices must be Classic's, got %+v %+v", d.Type, d.Nav)
 			}
 			if d.Header.Widgets == nil || d.Header.Links == nil {

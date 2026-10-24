@@ -601,3 +601,43 @@ func TestRenderCalendarEvents_ExtrasOutsideSafeOnly(t *testing.T) {
 		}
 	}
 }
+
+// A page's sheet goes into the export in its category's order, so a
+// creature's stat block numbers come with it; Safe mode leaves out the
+// Director's fields, links are named rather than shown, and long values are
+// left to a page lookup.
+func TestRenderEntities_SheetFields(t *testing.T) {
+	types := []entities.EntityType{{ID: 1, Name: "Creature", Fields: []entities.FieldDefinition{
+		{Key: "level", Type: "number"},
+		{Key: "ev", Type: "number"},
+		{Key: "lair", Type: entities.FieldTypeLink},
+		{Key: "abilities_json", Type: "textarea"},
+		{Key: "director_notes", Type: "text", GMOnly: true},
+	}}}
+	ents := []entities.Entity{{ID: "e1", Name: "Goblin War Chief", EntityTypeID: 1, FieldsData: map[string]any{
+		"level": float64(3), "ev": float64(12), "lair": "ent-9", "abilities_json": strings.Repeat("x", 300),
+		"director_notes": "flees at half stamina", "undeclared": "junk",
+	}}}
+	for _, tt := range []struct {
+		mode     PrivacyMode
+		gmShows  bool
+		wantLine string
+	}{
+		{PrivacyModeSafe, false, "**Sheet fields** (change them with `fields:`): `level`: 3 · `ev`: 12 · `lair`: (a link; a `what: page` lookup shows it) · `abilities_json`: (long; a `what: page` lookup shows it)"},
+		{PrivacyModeEverything, true, "`director_notes`: flees at half stamina"},
+	} {
+		got, err := RenderEntities(context.Background(), ents, types, nil, nil, Options{Privacy: tt.mode})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(got, tt.wantLine) {
+			t.Errorf("%v: missing %q:\n%s", tt.mode, tt.wantLine, got)
+		}
+		if strings.Contains(got, "flees at half") != tt.gmShows {
+			t.Errorf("%v: GM-only field shown = %v", tt.mode, !tt.gmShows)
+		}
+		if strings.Contains(got, "junk") || strings.Contains(got, "ent-9") {
+			t.Errorf("%v: undeclared field or link id leaked:\n%s", tt.mode, got)
+		}
+	}
+}

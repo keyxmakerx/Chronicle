@@ -169,6 +169,12 @@ type Summary struct {
 type PageList struct {
 	Encounters []Encounter `json:"encounters"`
 	CanEdit    bool        `json:"canEdit"`
+	// The page types the hero and creature pickers list, so the widget
+	// uses the campaign's own choice instead of guessing from presets.
+	HeroTypeIDs     []int `json:"heroTypeIds"`
+	CreatureTypeIDs []int `json:"creatureTypeIds"`
+	// The game system's stat block widgets, for the creature fold-out.
+	StatBlocks []StatBlock `json:"statBlocks"`
 }
 
 // SaveInput is a create or update body. The builder always sends the whole

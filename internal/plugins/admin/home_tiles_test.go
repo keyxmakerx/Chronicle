@@ -63,6 +63,8 @@ func TestBuildHomeGroups_Tiles(t *testing.T) {
 		{"health degraded", homeInput{DegradedParts: 2, RegisteredSystems: 3}, "Health & diagnostics", "2 need a look", "database and 3 game systems", true},
 		{"health ok", homeInput{RegisteredSystems: 3}, "Health & diagnostics", "Healthy", "database and 3 game systems", false},
 		{"backup age", homeInput{Now: now, BackupsKnown: true, BackupsEnabled: true, LastBackup: now.Add(-72 * time.Hour)}, "Backups & restore", "3 days", "since the last backup", false},
+		{"backup failed", homeInput{Now: now, BackupsKnown: true, BackupsEnabled: true, LastBackup: now.Add(-72 * time.Hour), LastBackupFailed: true}, "Backups & restore", "Failed", "the last backup did not finish", true},
+		{"backup before an update", homeInput{Now: now, BackupsKnown: true, BackupsEnabled: true, LastBackup: now.Add(-3 * time.Hour), LastBackupPreUpdate: true}, "Backups & restore", "3 hours", "since the automatic backup before an update", false},
 		{"backup none", homeInput{Now: now, BackupsKnown: true, BackupsEnabled: true}, "Backups & restore", "None yet", "no backup files found", true},
 		{"backup off", homeInput{Now: now, BackupsKnown: true}, "Backups & restore", "Not set up", "no backup folder is configured", false},
 		{"backup unknown", homeInput{Now: now}, "Backups & restore", "—", "status unavailable", false},

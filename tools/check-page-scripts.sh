@@ -264,5 +264,5 @@ echo "the registry mounts on every page."
 echo
 echo "If you are FIXING a survivor rather than adding one, lower or delete its"
 echo "line in ${ALLOWLIST} — that is the ratchet turning, and it is welcome."
-echo "The remaining survivors are tracked in issue #616 (C-HTMX-SCRIPT-SWEEP)."
+echo "The remaining survivors are tracked in issue #616."
 exit 1

@@ -13,6 +13,8 @@ templ AdminStatusFigures(f StatusFigures) {
 		if f.BackupKnown {
 			if !f.BackupEnabled {
 				<span class="admin-strip-warn">Backups are off</span>
+			} else if f.BackupFailed {
+				<span class="admin-strip-warn">Last backup failed</span>
 			} else if f.BackupAge == "" {
 				<span class="admin-strip-warn">No backup yet</span>
 			} else {

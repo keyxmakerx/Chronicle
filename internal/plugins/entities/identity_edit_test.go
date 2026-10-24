@@ -2,6 +2,7 @@ package entities
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -24,8 +25,10 @@ type identityStubSvc struct {
 	hidden     bool // the caller can no longer view the page
 }
 
-func (s *identityStubSvc) CheckEntityAccess(_ context.Context, _ string, _ int, _ string) (*EffectivePermission, error) {
-	return &EffectivePermission{CanView: !s.hidden}, nil
+// A visible page is editable from Scribe up, as CheckEntityAccess says for a
+// page in default visibility.
+func (s *identityStubSvc) CheckEntityAccess(_ context.Context, _ string, role int, _ string) (*EffectivePermission, error) {
+	return &EffectivePermission{CanView: !s.hidden, CanEdit: !s.hidden && role >= int(campaigns.RoleScribe)}, nil
 }
 
 func (s *identityStubSvc) GetByID(_ context.Context, _ string) (*Entity, error) {
@@ -108,7 +111,7 @@ func TestUpdateFieldsAPI_ClaimedOwnerIdentityOnly(t *testing.T) {
 		{"owner denied a number", campaigns.RolePlayer, owner, "c1", `{"fields_patch":{"kit":5}}`, 400, false},
 		{"owner denied an overlong value", campaigns.RolePlayer, owner, "c1", `{"fields_patch":{"kit":"` + strings.Repeat("x", 201) + `"}}`, 400, false},
 		{"owner denied a key a page override marks GM-only", campaigns.RolePlayer, owner, "c1", `{"fields_patch":{"heritage":"x"}}`, 403, false},
-		{"scribe may set a GM-only key", campaigns.RoleScribe, "user-scribe", "c1", `{"fields_patch":{"background":"x"}}`, 200, true},
+		{"scribe's GM-only key is left out of the save", campaigns.RoleScribe, "user-scribe", "c1", `{"fields_patch":{"background":"x"}}`, 200, true},
 		{"owner may clear an allowlisted key", campaigns.RolePlayer, owner, "c1", `{"fields_patch":{"kit":null}}`, 200, true},
 		{"owner denied a non-allowlisted key", campaigns.RolePlayer, owner, "c1", `{"fields_patch":{"might":5}}`, 403, false},
 		{"owner denied when one key is outside the list", campaigns.RolePlayer, owner, "c1", `{"fields_patch":{"ancestry":"Elf","stamina":99}}`, 403, false},
@@ -311,4 +314,143 @@ func TestUpdateFieldsAPI_NoPlannerKeepsIdentityOnly(t *testing.T) {
 func runIdentityCallWith(t *testing.T, svc *identityStubSvc, pl HeroPlanner, handler func(*Handler, echo.Context) error, role campaigns.Role, userID, campaignID, body string) error {
 	t.Helper()
 	return runIdentityCallOn(t, &Handler{service: svc, heroPlanner: pl}, handler, role, userID, campaignID, body)
+}
+
+// ownPageStubSvc records description and picture saves for the claimed-owner
+// door, on top of identityStubSvc's page and access answers.
+type ownPageStubSvc struct {
+	identityStubSvc
+	savedEntry, savedHTML string
+	imageSet              string
+	canEdit               bool // what an edit-permission check says, as for a Scribe
+}
+
+func (s *ownPageStubSvc) CheckEntityAccess(_ context.Context, _ string, _ int, _ string) (*EffectivePermission, error) {
+	return &EffectivePermission{CanView: true, CanEdit: s.canEdit}, nil
+}
+
+func (s *ownPageStubSvc) SaveEntry(_ context.Context, _ string, entryJSON, entryHTML string, _ *int) (int, *EntryConflict, error) {
+	s.savedEntry, s.savedHTML = entryJSON, entryHTML
+	s.writeCount++
+	return 2, nil, nil
+}
+
+func (s *ownPageStubSvc) UpdateImage(_ context.Context, _ string, path string) error {
+	s.imageSet = path
+	s.writeCount++
+	return nil
+}
+
+const secretEntryHTML = `<p>Wren sails at dawn.</p><p><span data-secret="true">She is the lost heir.</span></p>`
+const secretEntryJSON = `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Wren"},{"type":"text","text":"heir","marks":[{"type":"secret"}]}]}]}`
+
+// The player who claimed a hero writes its description and sets its picture;
+// nobody else below Scribe does, and a description holding the Director's
+// parts stays the Director's.
+func TestOwnPageWrites(t *testing.T) {
+	owner := "user-owner"
+	plain := `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"A sailor."}]}]}`
+	entryBody := `{"entry":` + strconvQuote(plain) + `,"entry_html":"<p>A sailor.</p>"}`
+	cases := []struct {
+		name       string
+		handler    func(*Handler, echo.Context) error
+		role       campaigns.Role
+		userID     string
+		storedHTML string
+		body       string
+		wantStatus int
+	}{
+		{"owner writes the description", (*Handler).UpdateEntryAPI, campaigns.RolePlayer, owner, "<p>old</p>", entryBody, 200},
+		{"other player may not", (*Handler).UpdateEntryAPI, campaigns.RolePlayer, "user-other", "<p>old</p>", entryBody, 403},
+		{"owner may not overwrite the Director's secrets", (*Handler).UpdateEntryAPI, campaigns.RolePlayer, owner, secretEntryHTML, entryBody, 403},
+		{"scribe writes plain text", (*Handler).UpdateEntryAPI, campaigns.RoleScribe, "user-scribe", "<p>old</p>", entryBody, 200},
+		{"scribe may not overwrite secrets either", (*Handler).UpdateEntryAPI, campaigns.RoleScribe, "user-scribe", secretEntryHTML, entryBody, 403},
+		{"owner sets the picture", (*Handler).UpdateImageAPI, campaigns.RolePlayer, owner, "", `{"image_path":"pic-1"}`, 200},
+		{"other player may not set it", (*Handler).UpdateImageAPI, campaigns.RolePlayer, "user-other", "", `{"image_path":"pic-1"}`, 403},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			html := tc.storedHTML
+			svc := &ownPageStubSvc{identityStubSvc: identityStubSvc{entity: &Entity{ID: "e1", CampaignID: "c1", Name: "Wren", OwnerUserID: &owner, EntryHTML: &html}},
+				canEdit: tc.role >= campaigns.RoleScribe}
+			err := runIdentityCallOn(t, &Handler{service: svc}, tc.handler, tc.role, tc.userID, "c1", tc.body)
+			wantStatus(t, err, tc.wantStatus)
+			if (svc.writeCount > 0) != (tc.wantStatus == 200) {
+				t.Fatalf("write reached = %v, want %v", svc.writeCount > 0, tc.wantStatus == 200)
+			}
+		})
+	}
+}
+
+// What the owner sends is stripped of Director-only marks: they could never
+// read such text back.
+func TestOwnPageWrites_OwnerSecretsStripped(t *testing.T) {
+	owner := "user-owner"
+	svc := &ownPageStubSvc{identityStubSvc: identityStubSvc{entity: &Entity{ID: "e1", CampaignID: "c1", OwnerUserID: &owner}}}
+	body := `{"entry":` + strconvQuote(secretEntryJSON) + `,"entry_html":` + strconvQuote(secretEntryHTML) + `}`
+	err := runIdentityCallOn(t, &Handler{service: svc}, (*Handler).UpdateEntryAPI, campaigns.RolePlayer, owner, "c1", body)
+	wantStatus(t, err, 200)
+	if strings.Contains(svc.savedHTML, "lost heir") || strings.Contains(svc.savedEntry, "secret") {
+		t.Errorf("owner's save kept Director-only text: %q / %q", svc.savedHTML, svc.savedEntry)
+	}
+	if !strings.Contains(svc.savedHTML, "sails at dawn") {
+		t.Errorf("owner's own text was lost: %q", svc.savedHTML)
+	}
+}
+
+func TestEntryHasDirectorParts(t *testing.T) {
+	plain := `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"A sailor."}]}]}`
+	tests := []struct {
+		name       string
+		json, html string
+		want       bool
+	}{
+		{"plain text", plain, "<p>A sailor.</p>", false},
+		{"empty", "", "", false},
+		{"secret in the HTML", "", secretEntryHTML, true},
+		{"secret mark in the JSON only", secretEntryJSON, "", true},
+	}
+	for _, tc := range tests {
+		if got := entryHasDirectorParts(tc.json, tc.html); got != tc.want {
+			t.Errorf("%s: entryHasDirectorParts = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+func strconvQuote(s string) string { b, _ := json.Marshal(s); return string(b) }
+
+// The description and picture routes open to players, but a Scribe on them
+// still meets requirePageWrite; a player is left to the handler's own-page
+// rule.
+func TestRequireOwnPageOrPageWrite(t *testing.T) {
+	player := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "c1"}, MemberRole: campaigns.RolePlayer, IsMember: true}
+	tests := []struct {
+		name   string
+		cc     *campaigns.CampaignContext
+		access EffectivePermission
+		want   int // 0 = passed through
+	}{
+		{"player goes on to the handler", player, EffectivePermission{}, 0},
+		{"scribe on a page they edit", scribeCC(false), EffectivePermission{CanView: true, CanEdit: true}, 0},
+		{"scribe on a page they only read", scribeCC(false), EffectivePermission{CanView: true}, http.StatusForbidden},
+		{"scribe on a hidden page: not found", scribeCC(false), EffectivePermission{}, http.StatusNotFound},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := &Handler{service: &hiddenPartsSvc{entity: &Entity{ID: "e1", CampaignID: "c1"}, access: tt.access}}
+			reached := false
+			c, _ := hiddenPartsCtx(tt.cc, http.MethodPut, "")
+			err := h.requireOwnPageOrPageWrite(func(echo.Context) error { reached = true; return nil })(c)
+			if tt.want == 0 {
+				if err != nil || !reached {
+					t.Fatalf("err = %v, reached = %v; want passed through", err, reached)
+				}
+				return
+			}
+			assertAppError(t, err, tt.want)
+			if reached {
+				t.Fatal("a refused write reached the handler")
+			}
+		})
+	}
 }

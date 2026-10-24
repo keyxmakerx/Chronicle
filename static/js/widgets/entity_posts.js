@@ -10,6 +10,7 @@
  *   data-campaign-id   - Campaign ID
  *   data-endpoint      - Posts API endpoint (GET/POST /campaigns/:id/entities/:eid/posts)
  *   data-editable      - "true" if user can create/edit/delete posts
+ *   data-can-hide      - "true" for the owner and Co-DMs, who alone make posts GM-only
  *   data-csrf          - CSRF token for mutations
  */
 (function () {
@@ -21,6 +22,7 @@
       var campaignId = config.campaignId || '';
       var entityId = config.entityId || '';
       var editable = config.editable === true;
+      var canHide = config.canHide === true;
       var csrf = config.csrf || '';
 
       // apiFetch resolves to the raw Response: unwrap it, and turn an error
@@ -211,7 +213,9 @@
           h += '<button class="text-fg-muted hover:text-fg text-xs p-1" data-action="post-menu" data-post-id="' + esc(post.id) + '" title="More actions"><i class="fa-solid fa-ellipsis-vertical"></i></button>';
           h += '<div class="hidden absolute right-0 top-full mt-1 bg-surface border border-edge rounded-lg shadow-lg py-1 z-20 min-w-[140px]" data-menu="' + esc(post.id) + '">';
           h += '<button class="w-full text-left px-3 py-1.5 text-xs hover:bg-surface-alt" data-action="rename-post" data-post-id="' + esc(post.id) + '"><i class="fa-solid fa-pen mr-2"></i>Rename</button>';
-          h += '<button class="w-full text-left px-3 py-1.5 text-xs hover:bg-surface-alt" data-action="toggle-private" data-post-id="' + esc(post.id) + '"><i class="fa-solid fa-' + (post.isPrivate ? 'unlock' : 'lock') + ' mr-2"></i>' + (post.isPrivate ? 'Make Public' : 'Make ' + Chronicle.gmTerm() + ' Only') + '</button>';
+          if (canHide) {
+            h += '<button class="w-full text-left px-3 py-1.5 text-xs hover:bg-surface-alt" data-action="toggle-private" data-post-id="' + esc(post.id) + '"><i class="fa-solid fa-' + (post.isPrivate ? 'unlock' : 'lock') + ' mr-2"></i>' + (post.isPrivate ? 'Make Public' : 'Make ' + Chronicle.gmTerm() + ' Only') + '</button>';
+          }
           h += '<button class="w-full text-left px-3 py-1.5 text-xs text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20" data-action="delete-post" data-post-id="' + esc(post.id) + '"><i class="fa-solid fa-trash mr-2"></i>Delete</button>';
           h += '</div></div>';
         }

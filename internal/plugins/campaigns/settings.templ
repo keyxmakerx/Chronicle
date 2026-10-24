@@ -10,16 +10,6 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
-// welcomeMessageJS returns a JS-safe quoted string for the welcome message.
-func welcomeMessageJS(cc *CampaignContext) string {
-	msg := cc.Campaign.ParseSettings().WelcomeMessage
-	b, err := json.Marshal(msg)
-	if err != nil {
-		return "''"
-	}
-	return string(b)
-}
-
 // jsEsc escapes a string for safe embedding inside a single-quoted
 // JavaScript string literal in an Alpine.js attribute expression. It
 // mirrors the entities plugin's helper of the same name and is
@@ -234,42 +224,17 @@ templ settingsGeneralTab(cc *CampaignContext, csrfToken string) {
 				</form>
 			</div>
 
-			// Welcome message.
+			// Welcome message: edited only in Customize → Brand, beside the backdrop
+			// it sits on, so Settings shows it and links there.
 			<div class="card p-4">
 				<h2 class="text-sm font-semibold text-fg mb-1">Welcome Message</h2>
-				<p class="text-xs text-fg-secondary mb-3">Banner shown on the campaign dashboard.</p>
-			<div
-				x-data={ fmt.Sprintf(`{
-					message: %s,
-					saving: false,
-					saved: false,
-					async save() {
-						this.saving = true;
-						this.saved = false;
-						const res = await Chronicle.apiFetch('/campaigns/%s/welcome-message', {
-							method: 'PUT',
-							body: { message: this.message }
-						});
-						this.saving = false;
-						if (res.ok) {
-							this.saved = true;
-							setTimeout(() => { this.saved = false; }, 3000);
-						}
-					}
-				}`, welcomeMessageJS(cc), cc.Campaign.ID) }
-			>
-				<textarea x-model="message" class="input w-full h-20 text-sm mb-3" placeholder="Welcome to the campaign! Here's what's new..." maxlength="500"></textarea>
-				<div class="flex items-center justify-between">
-					<span class="text-xs text-fg-muted" x-text="message.length + '/500'"></span>
-					<div class="flex items-center gap-2">
-						<span x-show="saved" x-transition class="text-xs text-green-600">Saved</span>
-						<button type="button" class="btn-primary text-sm" :disabled="saving" @click="save()">
-							<span x-show="!saving">Save Message</span>
-							<span x-show="saving"><i class="fa-solid fa-spinner fa-spin text-xs mr-1"></i> Saving...</span>
-						</button>
-					</div>
-				</div>
-			</div>
+				<p class="text-xs text-fg-secondary mb-3">Banner shown on the campaign home, over your backdrop.</p>
+				if msg := cc.Campaign.ParseSettings().WelcomeMessage; msg != "" {
+					<p class="text-sm text-fg-body whitespace-pre-line mb-3 line-clamp-4">{ msg }</p>
+				} else {
+					<p class="text-sm text-fg-muted mb-3">No welcome message yet.</p>
+				}
+				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/customize/look", cc.Campaign.ID)) } class="btn-secondary text-sm">Edit in Customize → Brand</a>
 			</div>
 		</div>
 

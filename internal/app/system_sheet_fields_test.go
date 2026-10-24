@@ -94,3 +94,27 @@ func TestAIFieldNotes(t *testing.T) {
 		t.Errorf("monster notes = %v", monster)
 	}
 }
+
+// A field the category carries from another game is named as not the
+// system's, so the AI leaves race or challenge_rating alone in a Draw Steel
+// campaign; a category the system has no sheet for gets no such note.
+func TestAIFieldNotes_MarksOtherSystemsFields(t *testing.T) {
+	m := sheetManifest()
+	m.Name = "Draw Steel"
+	creature := entities.EntityType{ID: 2, Slug: "creature", Enabled: true, Fields: []entities.FieldDefinition{
+		{Key: "level", Type: "number"}, {Key: "challenge_rating", Type: "text"},
+	}}
+	location := entities.EntityType{ID: 3, Slug: "location", Enabled: true, Fields: []entities.FieldDefinition{{Key: "population", Type: "number"}}}
+	n := aiFieldNotes{
+		manifest: func(context.Context, string) *systems.SystemManifest { return m },
+		lists:    fakePCLists{},
+		types:    &fakeSheetTypes{types: map[string][]entities.EntityType{"c1": {creature, location}}},
+	}
+	notes := n.FieldNotes(context.Background(), "c1", creature)
+	if !strings.Contains(notes["challenge_rating"], "Not a Draw Steel field") || notes["level"] != "" {
+		t.Errorf("creature notes = %v", notes)
+	}
+	if notes := n.FieldNotes(context.Background(), "c1", location); len(notes) != 0 {
+		t.Errorf("location notes = %v", notes)
+	}
+}

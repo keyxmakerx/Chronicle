@@ -82,7 +82,7 @@ Chronicle.register('notes', {
     var fab = document.createElement('button');
     fab.type = 'button';
     fab.className = 'jot-tab';
-    fab.innerHTML = '<i class="fa-solid fa-note-sticky" aria-hidden="true"></i><span>Jot notes</span><span class="jot-tab-count" hidden></span>';
+    fab.innerHTML = '<i class="fa-solid fa-note-sticky" aria-hidden="true"></i><span class="jot-tab-label">Jot notes</span><span class="jot-tab-count" hidden></span>';
     fab.setAttribute('aria-label', 'Open jot notes');
     fab.setAttribute('aria-expanded', 'false');
 
@@ -794,9 +794,25 @@ Chronicle.register('notes', {
         .catch(function () { /* the box keeps its last count */ });
     }
 
-    /** Loads this page's jot count for the tab while the panel is closed. */
+    /**
+     * Loads this page's jot count for the tab while the panel is closed.
+     * Away from a page a jot can't be written, so there the tab only shows
+     * once the viewer has jots of their own to read; until then it would
+     * invite a note it can't take.
+     */
     function loadCount() {
-      if (!entityId) return;
+      if (!entityId) {
+        if (embedded) return;
+        fab.hidden = true;
+        Chronicle.apiFetch(apiUrl('?scope=jots'))
+          .then(function (r) { return r.ok ? r.json() : []; })
+          .then(function (list) {
+            var mine = jotsOnly(list).filter(function (n) { return n.userId === currentUserId; });
+            fab.hidden = mine.length === 0;
+          })
+          .catch(function () { /* no list, no tab: nothing to read here */ });
+        return;
+      }
       Chronicle.apiFetch(apiUrl('?scope=entity&entity_id=' + encodeURIComponent(entityId)))
         .then(function (r) { return r.ok ? r.json() : []; })
         .then(function (list) {
@@ -823,7 +839,11 @@ Chronicle.register('notes', {
       if (state.lockedNoteId && state.lockedNoteId !== nextId) releaseLock(state.lockedNoteId);
     }
 
-    /** A new, empty jot on this page, opened for writing with its title focused. */
+    /**
+     * A new, empty jot on this page, opened for writing with the cursor in
+     * its body: a jot starts as a thought, and typed into the one-line title
+     * a sentence scrolled out of sight. The title stays a click away.
+     */
     function createNote() {
       if (!entityId) return;
       leaveEditing(null);
@@ -837,8 +857,13 @@ Chronicle.register('notes', {
         addNoteToState(note);
         state.editingId = note.id;
         renderNotes();
-        var titleInput = notesList.querySelector('.note-card[data-id="' + note.id + '"] .note-title-input');
-        if (titleInput) titleInput.focus();
+        var body = miniEditors[note.id];
+        if (body && body.commands) {
+          body.commands.focus('end');
+        } else {
+          var titleInput = notesList.querySelector('.note-card[data-id="' + note.id + '"] .note-title-input');
+          if (titleInput) titleInput.focus();
+        }
       }).catch(function () {
         Chronicle.notify('Failed to save note', 'error');
       });

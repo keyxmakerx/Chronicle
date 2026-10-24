@@ -128,6 +128,11 @@ Chronicle.register('image-upload', {
       if (campMatch) {
         formData.append('campaign_id', campMatch[1]);
       }
+      // The page, so a player who claimed it may upload its picture.
+      var pageMatch = (config.endpoint || '').match(/\/entities\/([^/]+)\/image$/);
+      if (pageMatch) {
+        formData.append('entity_id', pageMatch[1]);
+      }
 
       upload(formData)
         .then(function (data) {

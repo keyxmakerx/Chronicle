@@ -79,6 +79,9 @@ type SessionService interface {
 	// symmetrical re-notify.
 	RestoreSession(ctx context.Context, id string) (*Session, []string, error)
 	UpdateSessionRecap(ctx context.Context, id string, recap, recapHTML *string) error
+	// LastNightToWriteUp is the latest one-off night of the past week that
+	// has no recap, for home's "Last night: write it up"; nil when none.
+	LastNightToWriteUp(ctx context.Context, campaignID, today string) (*Session, error)
 	SearchSessions(ctx context.Context, campaignID, query string) ([]map[string]string, error)
 
 	// Attendees / RSVP.
@@ -96,6 +99,15 @@ type SessionService interface {
 	// it" (absent) at this boundary. UpdateRSVP itself is unchanged and keeps
 	// its exact prior behavior — this is an addition, not a replacement.
 	UpdateRSVPDetailed(ctx context.Context, sessionID, userID, status string, occurrenceDate *string, note patch.Field[string]) error
+	// RespondRSVP is a member answering a session they can see: it refuses a
+	// session that no longer AcceptsRSVP, then records the answer through
+	// UpdateRSVPDetailed when a note or night is given, else UpdateRSVP. The
+	// two underlying calls stay unguarded because an import restores the
+	// attendance of nights that are already over.
+	RespondRSVP(ctx context.Context, session *Session, userID, status string, occurrenceDate *string, note patch.Field[string]) error
+	// NotifySessionScheduled tells every member but the scheduler that a new
+	// night is on the calendar and asks if they're coming.
+	NotifySessionScheduled(ctx context.Context, session *Session, schedulerID, schedulerName string, memberIDs []string) error
 	// SetExcludedFromCount is the Director's own "leave myself out of the
 	// tally" switch (operator answer #3). Only the session's organizer or the
 	// campaign owner may call it, and only ever on their OWN userID —
@@ -148,8 +160,8 @@ type SessionService interface {
 	UnlinkEntity(ctx context.Context, sessionID, entityID string) error
 	ListSessionEntities(ctx context.Context, sessionID string) ([]SessionEntity, error)
 	// FilterEntitiesForViewer removes session-linked entities a given viewer
-	// may not see. Owners and Scribes (role >= 2) see the list unchanged; a
-	// Player or anonymous viewer (role < 2) is narrowed via
+	// may not see. The owner and Co-DMs (role >= 3) see the list unchanged; a
+	// Scribe, Player or anonymous viewer is narrowed via
 	// EntityVisibilityFilter. Hidden content is ABSENT from the returned
 	// slice, never a placeholder or a count (ADR-055 rule 3). Fails CLOSED
 	// (returns nothing) if no filter is wired, rather than risk showing a
@@ -505,13 +517,60 @@ func (s *sessionService) DeleteSession(ctx context.Context, id string) ([]string
 }
 
 // UpdateSessionRecap saves the post-session recap (visible to all members).
-// Sanitizes HTML before storage to prevent stored XSS.
+// Sanitizes HTML before storage to prevent stored XSS. Every member reads
+// the recap as stored, so GM-only text, pictures and rollers are dropped
+// here rather than per reader: the recap editor offers none, and one pasted
+// or sent through the API must not reach players.
 func (s *sessionService) UpdateSessionRecap(ctx context.Context, id string, recap, recapHTML *string) error {
 	if recapHTML != nil && *recapHTML != "" {
-		sanitized := sanitize.HTML(*recapHTML)
-		recapHTML = &sanitized
+		clean := sanitize.StripSecretsHTML(sanitize.HTML(*recapHTML))
+		recapHTML = &clean
+	}
+	if recap != nil && isEditorDoc(*recap) {
+		clean := sanitize.StripSecretsJSON(*recap)
+		recap = &clean
 	}
 	return s.repo.UpdateRecap(ctx, id, recap, recapHTML)
+}
+
+// lastNightLookback is how far back home still offers to write up a night.
+const lastNightLookback = 7
+
+// LastNightToWriteUp is the latest one-off night dated in the week before
+// today, when it has no recap yet; nil otherwise. Only the latest counts:
+// an older night nobody wrote up is not "last night". Repeating series
+// share one recap across their nights, so they are left out.
+func (s *sessionService) LastNightToWriteUp(ctx context.Context, campaignID, today string) (*Session, error) {
+	t, err := time.Parse("2006-01-02", today)
+	if err != nil {
+		return nil, apperror.NewBadRequest("today must be YYYY-MM-DD")
+	}
+	from := t.AddDate(0, 0, -lastNightLookback).Format("2006-01-02")
+	list, err := s.repo.ListByCampaign(ctx, campaignID)
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("listing sessions for last night: %w", err))
+	}
+	var latest *Session
+	for i := range list {
+		n := &list[i]
+		if n.IsRecurring || n.Status == StatusCancelled || n.ScheduledDate == nil {
+			continue
+		}
+		if d := *n.ScheduledDate; d >= from && d < today && (latest == nil || d > *latest.ScheduledDate) {
+			latest = n
+		}
+	}
+	if latest == nil {
+		return nil, nil
+	}
+	full, err := s.repo.FindByID(ctx, latest.ID)
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("reading last night: %w", err))
+	}
+	if hasRecap(full) {
+		return nil, nil
+	}
+	return full, nil
 }
 
 // --- Attendees / RSVP ---
@@ -536,6 +595,23 @@ func (s *sessionService) UpdateRSVP(ctx context.Context, sessionID, userID, stat
 	}
 
 	return s.repo.UpdateAttendeeStatus(ctx, sessionID, userID, status)
+}
+
+// RespondRSVP records a member's own answer to a session still taking them.
+func (s *sessionService) RespondRSVP(ctx context.Context, session *Session, userID, status string, occurrenceDate *string, note patch.Field[string]) error {
+	if !session.AcceptsRSVP() {
+		return apperror.NewConflict("this game night is over, so it no longer takes answers")
+	}
+	var err error
+	if note.Present() || occurrenceDate != nil {
+		err = s.UpdateRSVPDetailed(ctx, session.ID, userID, status, occurrenceDate, note)
+	} else {
+		err = s.UpdateRSVP(ctx, session.ID, userID, status)
+	}
+	if err == nil {
+		s.clearScheduledAsk(ctx, userID, session.CampaignID, session.ID)
+	}
+	return err
 }
 
 // ListAttendees returns attendees for a session.
@@ -584,13 +660,13 @@ func (s *sessionService) ListSessionEntities(ctx context.Context, sessionID stri
 // predicate of its own — see ListSessionEntities — so this is the one place
 // that gate is enforced before the list reaches a template.
 //
-// Owners and Scribes (role >= permissions.RoleScribe) get the list back
-// unchanged. A Player or anonymous viewer (role < RoleScribe) is checked
+// The owner and Co-DMs (role >= permissions.RoleOwner) get the list back
+// unchanged. A Scribe, Player or anonymous viewer is checked
 // against the SAME per-entity visibility policy the entities plugin itself
 // applies, via EntityVisibilityFilter — never a cheaper approximation, so a
 // session page can't disagree with the entity page about what is hidden.
 func (s *sessionService) FilterEntitiesForViewer(ctx context.Context, campaignID string, ents []SessionEntity, role int, userID string) ([]SessionEntity, error) {
-	if role >= permissions.RoleScribe || len(ents) == 0 {
+	if role >= permissions.RoleOwner || len(ents) == 0 {
 		return ents, nil
 	}
 
@@ -714,6 +790,10 @@ func (s *sessionService) ValidateRSVPToken(ctx context.Context, tokenStr string)
 	if time.Now().UTC().After(token.ExpiresAt) {
 		return nil, apperror.NewBadRequest("this RSVP link has expired")
 	}
+	// A link mailed before the night finished must not count anyone at it.
+	if sess, err := s.repo.FindByID(ctx, token.SessionID); err == nil && sess != nil && !sess.AcceptsRSVP() {
+		return nil, apperror.NewBadRequest("this game night is over, so this RSVP link no longer works")
+	}
 	return token, nil
 }
 
@@ -740,6 +820,9 @@ func (s *sessionService) ApplyRSVPToken(ctx context.Context, tokenStr string) (*
 	}
 	if err := s.repo.UpdateAttendeeStatus(ctx, token.SessionID, token.UserID, token.Action); err != nil {
 		return nil, err
+	}
+	if sess, err := s.repo.FindByID(ctx, token.SessionID); err == nil && sess != nil {
+		s.clearScheduledAsk(ctx, token.UserID, sess.CampaignID, sess.ID)
 	}
 	return token, nil
 }

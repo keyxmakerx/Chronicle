@@ -535,6 +535,11 @@
   .dropdown-item-danger:hover {
     @apply bg-red-50 dark:bg-red-900/20;
   }
+  /* On a phone the open top-bar search takes the campaign name's room
+   * (topbar_search.js sets the flag); the hamburger stays. */
+  @media (max-width: 767px) {
+    [data-tb-searching] .tb-left > :not(#nav-toggle) { display: none; }
+  }
   .dropdown-divider {
     @apply border-t border-edge my-1;
   }
@@ -709,6 +714,8 @@
     @apply badge bg-blue-100 text-blue-700
            dark:bg-blue-900/30 dark:text-blue-400;
   }
+  /* The page name's DM-only label waits hidden until the page is set to DM-only. */
+  [data-dm-only-label][hidden] { display: none; }
 
   /* ---- Alerts ---- */
   .alert {
@@ -837,6 +844,10 @@
   .chronicle-editor__edit-btn--done {
     @apply text-accent hover:text-accent-hover hover:bg-accent/10;
   }
+  /* Shown in place of Edit when the text has parts this writer isn't served */
+  .chronicle-editor__locked {
+    @apply inline-flex items-center gap-1.5 text-xs text-fg-muted text-right;
+  }
 
   /* Editing mode visual cue — subtle left accent border */
   .chronicle-editor--editing {
@@ -851,6 +862,17 @@
   .chronicle-editor__content .tiptap p.is-editor-empty:first-child::before {
     @apply text-fg-muted float-left h-0 pointer-events-none;
     content: attr(data-placeholder);
+  }
+  /* A template's prompt on an empty line, only while editing. */
+  .chronicle-editor__content .tiptap [data-prompt].is-empty::before {
+    @apply text-fg-muted italic float-left h-0 pointer-events-none;
+    content: attr(data-placeholder);
+  }
+  /* Reading, a prompt line nobody wrote on takes no room, and neither does an
+     empty bullet (players' copies carry no prompt, only the empty line). */
+  .chronicle-editor__content .tiptap[contenteditable="false"] :is(p, h1, h2, h3)[data-prompt]:has(> br.ProseMirror-trailingBreak:only-child),
+  .chronicle-editor__content .tiptap[contenteditable="false"] li:has(> p:only-child > br.ProseMirror-trailingBreak:only-child) {
+    display: none;
   }
 
   .chronicle-editor__status {
@@ -1033,6 +1055,13 @@
     font-weight: 900;
     font-size: 11px;
     @apply text-accent/70 mr-2;
+  }
+  /* The typography plugin wraps a blockquote's text in quotation marks; a
+   * callout is not a quotation, and a quote that already has its own marks
+   * would show them twice. */
+  .prose blockquote p:first-of-type::before,
+  .prose blockquote p:last-of-type::after {
+    content: none;
   }
 
   .chronicle-editor__content .tiptap code {
@@ -1257,9 +1286,10 @@
      smaller: the one bounce in Chronicle, signed as an exception
      (.ai/ui-standard.md "Motion"). Coming out, the admin page falls away
      down the screen and the page you came from is underneath. Both are
-     cross-document view transitions (.admin-vt); without them the new admin
-     page itself rises over the page colour, and on the way out site_admin.js
-     lets the admin page fall before it leaves.
+     cross-document view transitions (.admin-vt). Without them the new page
+     plays the move itself: the admin page rises over the page colour, and on
+     the way out a sheet in the control room's colour covers the page you
+     return to and falls away, so that page, never a blank, is underneath.
      Calm fades instead; Off plays nothing (the script never names it). */
   html.admin-vt::view-transition-old(root),
   html.admin-vt::view-transition-new(root) { mix-blend-mode: normal; animation: none; }
@@ -1276,6 +1306,13 @@
   :is(html[data-cz-reduce], html[data-view-motion="calm"]).admin-vt[data-admin-vt="out"]::view-transition-old(root) { animation: admin-fade var(--dur-standard) linear reverse both; box-shadow: none; }
   html[data-admin-vt="in"]:not(.admin-vt) { overflow: hidden; }
   html[data-admin-vt="in"]:not(.admin-vt) body { animation: admin-rise var(--dur-arrive, 820ms) linear both; }
+  html[data-admin-vt="out"]:not(.admin-vt)::after {
+    content: ""; position: fixed; inset: 0; z-index: 2147483647; pointer-events: none;
+    background: #0b0e14; /* the control room's page colour, as base.templ paints it */
+    box-shadow: 0 -14px 32px -12px rgb(0 0 0 / 0.35);
+    animation: admin-fall var(--dur-leave, 460ms) cubic-bezier(0.5, 0, 0.75, 0) both;
+  }
+  :is(html[data-cz-reduce], html[data-view-motion="calm"])[data-admin-vt="out"]:not(.admin-vt)::after { animation: admin-fade var(--dur-standard) linear reverse both; box-shadow: none; }
   html[data-admin-vt="in"] .admin-band::after { animation: admin-rule 300ms var(--ease-slide) calc(var(--dur-arrive, 820ms) - 320ms) both; }
   /* Each keyframe sets the easing of the stretch after it: easing in on the
      way up and into each fall, easing out off each bounce. */
@@ -1701,10 +1738,27 @@
   /* On the Journal the tab rises clear of the editor's footer (History,
      Audio) and the list's note count, which sit along the bottom edge. */
   body:has(.jnl) .jot-tab { bottom: calc(1.5rem + 2.25rem); }
+  /* Bars pinned to the bottom edge keep their right-hand buttons clear of
+     the tab: the Customizer's unsaved-changes bar (48px tall, about 34px up) and the
+     calendar's Look/Edit deck (45px, at the edge). */
+  body:has([data-czs-savebar]:not([hidden])) .jot-tab { bottom: 6rem; }
+  body:has(.cal-v5 .deck) .jot-tab { bottom: calc(45px + .75rem); }
+  /* A page's Files section is its last block, and Attach a file sits at its
+     right edge: leave room to scroll it above the tab. */
+  body:has(.jot-tab:not(.jot-tab-hidden)) .pf-section { margin-bottom: 4rem; }
   .jot-tab-hidden { opacity: 0; transform: translateY(8px) scale(.96); pointer-events: none; visibility: hidden; }
+  /* The open navigation drawer sits over the page; the tab must not sit on it. */
+  body:has(.sidebar-mobile-open) .jot-tab { opacity: 0; visibility: hidden; pointer-events: none; }
+  .jot-tab[hidden] { display: none; }
+  /* On a phone the tab is just its icon (and count), and the page gets room
+     at the bottom so the tab never covers the end of the last rows. */
   @media (max-width: 639px) {
-    .jot-tab { right: 1rem; bottom: 1rem; }
+    .jot-tab { right: 1rem; bottom: 1rem; padding: 12px; }
+    .jot-tab > .jot-tab-label { display: none; }
     body:has(.jnl) .jot-tab { bottom: calc(1rem + 2.25rem); }
+    body:has(.jot-tab:not([hidden])) #main-content { padding-bottom: 4.5rem; }
+    body:has([data-czs-savebar]:not([hidden])) .jot-tab { bottom: 6rem; }
+    body:has(.cal-v5 .deck) .jot-tab { bottom: calc(45px + .75rem); }
   }
 
   /* Panel: rises from the tab's corner. Users can resize it by the drag
@@ -3204,6 +3258,9 @@
     color: var(--nav-text-3); font-variant-numeric: tabular-nums;
   }
   .nav-tr:empty { display: none; }
+  /* A row with a caption keeps its whole label and lets the caption truncate. */
+  .nav-lb-keep { flex: 1 0 auto; max-width: 100%; }
+  .nav-lb-keep ~ .nav-tr { flex: 0 1 auto; min-width: 0; max-width: none; }
   /* Every list row keeps the twisty's slot free on the right, twisty or
      not, so counts and captions all end in one column. */
   .nav-list .nav-row { padding-right: 36px; }
@@ -3252,9 +3309,10 @@
   .nav-tw[aria-expanded="false"] i, .nav-gh[aria-expanded="false"] .nav-chev { transform: rotate(-90deg); }
 
   /* A member's own pin (players and scribes; the owner pins for everyone in
-     the editor). It shows on hover or focus, always on a row they pinned, and
-     always on touch screens, which have no hover. On hover the row's
-     trailing text fades out under it rather than moving aside. */
+     the editor). It shows on hover or focus and always on a row they pinned.
+     A touch screen has no hover: there a member's pins wait behind the Edit
+     word (nav-tools-gated, below), and the owner's always show. On hover the
+     row's trailing text fades out under it rather than moving aside. */
   .nav-tr { transition: opacity 120ms ease; }
   .nav-mypin {
     position: absolute; top: 4px; right: 8px; z-index: 3; width: 24px; height: 24px; border-radius: 6px;
@@ -3271,15 +3329,16 @@
   .nav-rw.is-mine > .nav-row { padding-right: 36px; }
   .nav-rw.is-mine.has-subs > .nav-row { padding-right: 62px; }
   @media (hover: none) {
-    .nav-rw.can-pin > .nav-mypin { opacity: 1; }
-    .nav-rw.can-pin > .nav-row { padding-right: 36px; }
-    .nav-rw.can-pin.has-subs > .nav-row { padding-right: 62px; }
-    .nav-rw.can-pin > .nav-row .nav-tr { opacity: 1; }
+    :is(#sidebar:not(.nav-tools-gated), #sidebar[data-nav-tools="on"]) .nav-rw.can-pin > .nav-mypin { opacity: 1; }
+    :is(#sidebar:not(.nav-tools-gated), #sidebar[data-nav-tools="on"]) .nav-rw.can-pin > .nav-row { padding-right: 36px; }
+    :is(#sidebar:not(.nav-tools-gated), #sidebar[data-nav-tools="on"]) .nav-rw.can-pin.has-subs > .nav-row { padding-right: 62px; }
+    :is(#sidebar:not(.nav-tools-gated), #sidebar[data-nav-tools="on"]) .nav-rw.can-pin > .nav-row .nav-tr { opacity: 1; }
   }
 
   /* The row menu's dots button (sidebar_row_menu.js). It takes the
-     right-most slot and shows on hover or focus, always on touch screens;
-     the twisty and the member's pin step one slot left to make room. */
+     right-most slot and shows on hover or focus; on a touch screen it shows
+     like the member's pin above. The twisty and the pin step one slot left
+     to make room. */
   .nav-more {
     position: absolute; top: 4px; right: 8px; z-index: 4; width: 24px; height: 24px; border-radius: 6px;
     display: grid; place-items: center; font-size: 12px; color: var(--nav-text-3); opacity: 0;
@@ -3294,8 +3353,33 @@
   .nav-rw.has-more.has-subs > .nav-row, .nav-rw.has-more.can-pin > .nav-row { padding-right: 66px; }
   .nav-rw.has-more.can-pin.has-subs > .nav-row { padding-right: 92px; }
   @media (hover: none) {
-    .nav-rw.has-more > .nav-more { opacity: 1; }
-    .nav-rw.has-more > .nav-row .nav-tr { opacity: 1; }
+    :is(#sidebar:not(.nav-tools-gated), #sidebar[data-nav-tools="on"]) .nav-rw.has-more > .nav-more { opacity: 1; }
+    :is(#sidebar:not(.nav-tools-gated), #sidebar[data-nav-tools="on"]) .nav-rw.has-more > .nav-row .nav-tr { opacity: 1; }
+  }
+
+  /* The touch-screen Edit word (navToolsWord). Until it is pressed a
+     member's rows keep only their labels and counts: the waiting pins and
+     dots are out of reach as well as out of sight, so a tap near a row's
+     end opens the row. A pin they set stays, since it says the row is
+     theirs. The word sits left of the heading's chevron, with a 44px hit
+     area centred on the 30px heading. */
+  .nav-tools-word { display: none; }
+  @media (hover: none) {
+    #sidebar.nav-tools-gated:not([data-nav-tools="on"]) .nav-rw:not(.is-mine) > .nav-mypin,
+    #sidebar.nav-tools-gated:not([data-nav-tools="on"]) .nav-rw > .nav-more:not([aria-expanded="true"]) { visibility: hidden; }
+    .nav-tools-word {
+      position: absolute; top: -7px; right: 26px; z-index: 2; min-width: 44px; height: 44px; padding: 0 8px;
+      display: inline-flex; align-items: center; justify-content: center; border-radius: 8px;
+      font-size: 12px; font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--nav-accent-soft);
+    }
+    .nav-gh-static > .nav-tools-word { right: 4px; }
+    .nav-tools-word:active { background: var(--nav-hover); }
+    .nav-tools-done, #sidebar[data-nav-tools="on"] .nav-tools-edit { display: none; }
+    #sidebar[data-nav-tools="on"] .nav-tools-done { display: inline; }
+    .nav-gh-wrap.has-tools-word .nav-gh-cur { margin-right: 48px; }
+    /* As under a desktop hover, a row's caption fades under its pin and
+       dots rather than running beneath them. */
+    #sidebar.nav-tools-gated[data-nav-tools="on"] .nav-rw.has-more > .nav-row .nav-tr { opacity: 0; }
   }
 
   /* A category's hover peek (sidebar_cat_peek.js): a lifted card that starts at
@@ -3373,9 +3457,10 @@
      rows on the sidebar's colour, like a drawer closing over them. */
   .nav-cover { position: relative; z-index: 2; background: var(--nav-bg); }
 
-  /* The living ring, at Calm. Rest shows nothing; the current row gets two
-     traces circling its box, drifting in length and pace on uneven 14s and
-     19s cycles. It sits on the rows' own box, square corners, like the glow. */
+  /* The current row's highlight layers. Drawn here as the living ring, at
+     Calm: two traces circling the row's box, drifting in length and pace on
+     uneven 14s and 19s cycles, square corners like the glow. Each other
+     style (data-cz-nav, below) shows some of these layers. */
   .nav-ring { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
   .nav-ring-tint {
     position: absolute; inset: 0;
@@ -3606,6 +3691,8 @@
   .tree-row.tree-match .tree-lb mark { background: rgb(var(--nav-accent) / 0.55); color: #fff; border-radius: 2px; padding: 0 1px; }
   .tree-n { flex: none; font-size: 10.5px; color: var(--nav-text-3); font-variant-numeric: tabular-nums; }
   .tree-hid { flex: none; font-size: 10px; color: #fbbf24; opacity: 0.85; }
+  /* A page set to DM-only: the same lock the page's visibility control uses. */
+  .tree-lock { flex: none; font-size: 9.5px; color: var(--nav-text-3); }
   /* An extra listing: the same page shown under a second parent. A small link
      icon and a muted "also here" label say so without a second weight of text. */
   .tree-row.is-place > .tree-lb { color: var(--nav-text-2); }
@@ -4471,6 +4558,76 @@ html.dark[data-site-admin] {
 .admin-strip-log:hover { color: var(--color-accent-link); }
 @media (max-width: 639px) { .admin-strip-figures > :nth-child(n+2) { display: none; } }
 
+/* The site check-up: a shield in the admin top bar that Grows its sheet out
+   of itself (.ai/ui-standard.md "Motion"), and a strip under the top bar
+   when something has waited a week or a backup failed. State colours only
+   ever mean state. On a phone the sheet rises from the bottom edge. */
+.checkup-host { position: relative; display: flex; align-items: center; margin-right: 2px; }
+.checkup-chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: 999px;
+  border: 1px solid transparent; background: none; color: var(--color-text-secondary);
+  font-size: 0.8rem; font-weight: 600; cursor: pointer;
+  transition: background-color var(--dur-micro) var(--ease-out), border-color var(--dur-micro) var(--ease-out);
+}
+.checkup-chip:hover, .checkup-chip[aria-expanded="true"] { border-color: var(--color-border); background: var(--color-bg-tertiary); }
+.checkup-chip:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.checkup-chip.is-ok { color: rgb(var(--color-ok-rgb)); }
+.checkup-chip.is-warn { color: rgb(var(--color-warn-rgb)); }
+.checkup-chip.is-bad { color: rgb(var(--color-bad-rgb)); }
+.checkup-count {
+  min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; display: inline-grid; place-items: center;
+  font-size: 0.7rem; color: #fff;
+}
+.checkup-chip.is-warn .checkup-count { background: rgb(var(--color-warn-rgb)); color: #1f1300; }
+.checkup-chip.is-bad .checkup-count { background: rgb(var(--color-bad-rgb)); }
+.checkup-sheet {
+  position: absolute; top: calc(100% + 8px); right: 0; width: 340px; max-width: calc(100vw - 48px);
+  background: var(--color-bg-secondary); border: 1px solid var(--color-border); border-radius: 12px;
+  box-shadow: var(--elev-dragged); padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; z-index: 50;
+  transform-origin: top right; transform: scale(0.6); opacity: 0; pointer-events: none; visibility: hidden;
+  transition: transform var(--dur-standard) var(--ease-out), opacity var(--dur-standard) var(--ease-out), visibility 0s linear var(--dur-standard);
+}
+.checkup-sheet.is-open { transform: scale(1); opacity: 1; pointer-events: auto; visibility: visible; transition-delay: 0s; }
+.checkup-title { font-size: 0.98rem; font-weight: 600; color: var(--color-text-primary); }
+.checkup-sub { font-size: 0.8rem; color: var(--color-text-secondary); }
+.checkup-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px solid var(--color-border); }
+.checkup-row:first-child { border-top: 0; }
+.checkup-text { flex: 1; min-width: 0; font-size: 0.86rem; }
+.checkup-text b { display: block; color: var(--color-text-primary); font-weight: 600; }
+.checkup-text small { color: var(--color-text-secondary); font-size: 0.78rem; }
+.checkup-dot {
+  width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0; display: grid; place-items: center;
+  font-size: 0.68rem; font-weight: 700;
+}
+.checkup-dot.is-ok { background: rgb(var(--color-ok-rgb) / 0.16); color: rgb(var(--color-ok-rgb)); }
+.checkup-dot.is-warn { background: rgb(var(--color-warn-rgb) / 0.16); color: rgb(var(--color-warn-rgb)); }
+.checkup-dot.is-bad { background: rgb(var(--color-bad-rgb) / 0.16); color: rgb(var(--color-bad-rgb)); }
+.checkup-fix { white-space: nowrap; flex-shrink: 0; }
+.checkup-foot { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.checkup-quiet {
+  font-size: 0.8rem; color: var(--color-text-secondary); background: none; border: 0; padding: 0; cursor: pointer;
+  text-decoration: underline; text-underline-offset: 3px;
+}
+.checkup-quiet:hover { color: var(--color-text-primary); }
+.checkup-quiet:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.checkup-quiet.is-busy { text-decoration: none; cursor: default; }
+.checkup-quiet:disabled { opacity: 0.5; cursor: default; }
+.checkup-peeknote { margin-left: auto; font-size: 0.78rem; color: var(--color-text-secondary); font-style: italic; }
+.checkup-strip {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 18px; font-size: 0.86rem;
+  border-bottom: 1px solid var(--color-border); color: var(--color-text-primary);
+}
+.checkup-strip.is-warn { background: rgb(var(--color-warn-rgb) / 0.14); }
+.checkup-strip.is-bad { background: rgb(var(--color-bad-rgb) / 0.16); }
+.checkup-strip-text { flex: 1; min-width: 12rem; }
+@media (max-width: 639px) {
+  .checkup-sheet {
+    position: fixed; left: 12px; right: 12px; top: auto; bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    width: auto; max-width: none; transform: translateY(110%);
+  }
+  .checkup-sheet.is-open { transform: translateY(0); }
+}
+
 /* Text size: rem-based sizes scale with the root. */
 html[data-cz-scale="compact"] { font-size: 93.75%; }
 html[data-cz-scale="roomy"] { font-size: 110%; }
@@ -4640,8 +4797,8 @@ html[data-motion] [data-cz-btn="keystone"] .btn:active { transform: none; }
   background-image: radial-gradient(90% 60% at 80% -10%, rgb(var(--color-accent-rgb, 99 102 241) / 0.08), transparent 60%);
 }
 
-/* Menu highlight on the page you are on. The living ring (the default)
-   is drawn by .nav-ring itself; each other style shows some of its layers
+/* Menu highlight on the page you are on. The living ring is drawn by
+   .nav-ring itself; each other style shows some of its layers
    or styles the row. Strength: Lively is brighter and quicker. */
 [data-cz-strength="lively"] .nav-ring-tint { background: linear-gradient(to left, rgb(var(--nav-accent) / 0.28), rgb(var(--nav-accent) / 0.09)); }
 [data-cz-strength="lively"] .nav-ring-t1 { animation-duration: 9.5s; }
@@ -4677,9 +4834,10 @@ html[data-motion] [data-cz-btn="keystone"] .btn:active { transform: none; }
 [data-cz-nav="tide"][data-cz-strength="lively"] .nav-ring::after { animation-duration: 6s; }
 @keyframes cz-tide { 0% { transform: translateX(-110%); } 62%, 100% { transform: translateX(270%); } }
 
-/* Rail and tint: still, and the clearest at a glance. */
-[data-cz-nav="rail"] .nav-ring-svg { display: none; }
-[data-cz-nav="rail"] .nav-ring-j { display: block; width: 2px; }
+/* Rail and tint: still, and the clearest at a glance. Classic's highlight,
+   so a page with no saved look (no data-cz-nav) shows it too. */
+:is([data-cz-nav="rail"], html:not([data-cz-nav])) .nav-ring-svg { display: none; }
+:is([data-cz-nav="rail"], html:not([data-cz-nav])) .nav-ring-j { display: block; width: 2px; }
 [data-cz-nav="rail"][data-cz-strength="lively"] .nav-ring-j { width: 3px; }
 
 /* Edge-lit: two hairlines, bright at the left and fading to the right. */
@@ -4894,7 +5052,7 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
   .dms-dot-after { margin: 0 0 0 .3rem; vertical-align: middle; background: var(--dms-ok); border-color: var(--dms-ok); }
   .dms-leaves { display: flex; perspective: 1400px; transform-style: preserve-3d; }
   .dms-leaf {
-    flex: 1 1 0; min-width: 0; display: grid; gap: .65rem; align-content: start; padding: .9rem;
+    flex: 1 1 0; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: .65rem; align-content: start; padding: .9rem;
     background: var(--dms-leaf); border: 1px solid var(--dms-leaf-edge); min-height: 24rem;
     box-shadow: var(--dms-shadow); backface-visibility: hidden;
   }
@@ -4947,7 +5105,9 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
   .dms-bar > span { display: block; height: 100%; background: var(--dms-ok); }
   .dms-bar > span.dms-low { background: var(--dms-warn); }
   .dms-num { font-variant-numeric: tabular-nums; color: var(--dms-ink); }
-  .dms-tabs { display: flex; gap: .25rem; border-bottom: 1px solid var(--dms-leaf-edge); }
+  /* The tabs wrap rather than push the leaf wider when they don't fit on
+     one line (five of them on a narrow leaf). */
+  .dms-tabs { display: flex; flex-wrap: wrap; gap: 0 .25rem; border-bottom: 1px solid var(--dms-leaf-edge); }
   .dms-tabs button { padding: .25rem .55rem; font-size: .85rem; color: var(--dms-ink-muted); border-bottom: 2px solid transparent; }
   .dms-tabs button[aria-selected="true"] { color: var(--dms-ink); border-bottom-color: var(--dms-acc); font-weight: 700; }
   .dms-search { width: 100%; font-size: .85rem; border: 1px solid var(--dms-leaf-edge); border-radius: .4rem; background: transparent; color: var(--dms-ink); padding: .3rem .5rem; }
@@ -4965,6 +5125,7 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
   .dms-req-btns { display: flex; gap: .3rem; flex-shrink: 0; }
   .dms-row .dms-req-yes { background: var(--dms-ok-soft); font-weight: 700; }
   .dms-done { font-size: .78rem; color: var(--dms-ok); }
+  .dms-done-wrap { display: inline-flex; align-items: center; gap: .5rem; }
   .dms-overlay [hidden], .dms-overlay[hidden] { display: none; }
   .dms-skip { position: absolute; right: .75rem; bottom: .75rem; font-size: .85rem; color: #fff; background: rgba(0,0,0,.5); border-radius: .4rem; padding: .15rem .5rem; }
   /* The burst's pieces are shards of light, not a second die: the thrown

@@ -213,6 +213,7 @@ func AddonInfos() []AddonInfo {
 		if m.Status != StatusAvailable {
 			continue
 		}
+		// Manifest text is plain, as written; every renderer escapes it.
 		infos = append(infos, AddonInfo{
 			Slug:        m.ID,
 			Name:        m.Name,

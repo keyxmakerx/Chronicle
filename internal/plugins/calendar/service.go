@@ -771,6 +771,15 @@ func (s *calendarService) CreateCalendar(ctx context.Context, campaignID string,
 		Visibility:       visibility,
 		VisibilityRules:  input.VisibilityRules,
 	}
+	// A campaign's first calendar is its default: the readers that follow
+	// "the campaign's calendar" (header clock, Coming up, skybox) find
+	// nothing until one is marked, and a new owner has no reason to look
+	// for the "Make default" button.
+	existing, err := s.calRepo.GetDefaultByCampaignID(ctx, campaignID)
+	if err != nil {
+		return nil, fmt.Errorf("create calendar: find default: %w", err)
+	}
+	cal.IsDefault = existing == nil
 	if err := s.calRepo.Create(ctx, cal); err != nil {
 		return nil, fmt.Errorf("create calendar: %w", err)
 	}
@@ -1234,11 +1243,20 @@ func (s *calendarService) seedHemisphereSeasonsIfEmpty(ctx context.Context, cale
 // DeleteCalendar removes a calendar and its structural sub-resources
 // (cascaded by FK, see CalendarRepository.Delete's doc comment).
 func (s *calendarService) DeleteCalendar(ctx context.Context, calendarID, campaignID string) error {
-	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
+	cal, err := s.calendarInCampaign(ctx, calendarID, campaignID)
+	if err != nil {
 		return err
 	}
 	if err := s.calRepo.Delete(ctx, calendarID); err != nil {
 		return fmt.Errorf("delete calendar: %w", err)
+	}
+	// Deleting the default hands the mark to the next calendar, so the
+	// campaign keeps one while it has any.
+	if cal.IsDefault {
+		if err := ensureDefaultCalendar(ctx, s.calRepo, campaignID); err != nil {
+			slog.Warn("calendar: could not mark a new default after delete",
+				slog.String("campaign_id", campaignID), slog.Any("error", err))
+		}
 	}
 	return nil
 }
@@ -3480,8 +3498,9 @@ func (s *calendarService) ListAllEventsForCalendar(ctx context.Context, calendar
 // per-user visibility filtered), so a dm_only or otherwise-hidden
 // calendar's events are never even searched; within a visible calendar,
 // EventRepository.SearchEvents applies the same SQL dm_only filter
-// ListEventsForMonth's own read does, and the per-user layer runs after it
-// as it does for the pages. The searcher is told only a role, not who is
+// ListEventsForMonth's own read does, and the per-user layer and the
+// not-yet-knowable filters (hideFromPlayer) run after it as they do for the
+// pages. The searcher is told only a role, not who is
 // asking, so an event with its own allow or deny list stays out of a
 // non-GM search; the calendar page, which knows the viewer, still shows it
 // to whoever may see it. Capped at 10 events per calendar by that same
@@ -3501,7 +3520,7 @@ func (s *calendarService) SearchCalendarEvents(ctx context.Context, campaignID, 
 		}
 		events = filterEventsByUser(events, v)
 		if !v.SkipsPerUserRules() {
-			if events, err = s.dropSecretEraEvents(ctx, &cal, events); err != nil {
+			if events, err = s.hideFromPlayer(ctx, &cal, campaignID, events); err != nil {
 				return nil, fmt.Errorf("search calendar events: %w", err)
 			}
 		}

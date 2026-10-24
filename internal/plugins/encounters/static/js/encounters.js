@@ -456,17 +456,22 @@
     };
   }
 
-  // pickTypes chooses the page categories the builder offers: heroes from
-  // character categories, creatures from creature ones.
-  function pickTypes(types, category) {
-    return (types || []).filter(function (t) { return t && t.preset_category === category; })
-      .map(function (t) { return t.id; });
+  // pickTypes reads the page categories the server says a picker lists (the
+  // campaign's character list for heroes; creature categories and NPCs for
+  // creatures), keeping only whole positive ids.
+  function pickTypes(ids) {
+    return (Array.isArray(ids) ? ids : []).filter(function (id) {
+      return typeof id === 'number' && id > 0 && Math.floor(id) === id;
+    });
   }
+
+  // MIN_SEARCH is the shortest search the server answers.
+  var MIN_SEARCH = 2;
 
   window.EncountersHelpers = {
     LIM: LIM, normalise: normalise, addCreature: addCreature, setCount: setCount, setRow: setRow,
     removeRow: removeRow, toggleHero: toggleHero, totalCreatures: totalCreatures,
-    countByStart: countByStart, summary: summary, toSave: toSave, pickTypes: pickTypes,
+    countByStart: countByStart, summary: summary, toSave: toSave, pickTypes: pickTypes, MIN_SEARCH: MIN_SEARCH,
     FIRST_FORM: FIRST_FORM, addStage: addStage, removeStage: removeStage, setWhen: setWhen,
     setStageField: setStageField, addForm: addForm, setForm: setForm, removeForm: removeForm,
     toggleArrive: toggleArrive, arriveOrder: arriveOrder, stageReady: stageReady, pagedRows: pagedRows,
@@ -524,7 +529,8 @@
       var S = {
         el: el, cfg: cfg, id: 'enc' + (++mounted), list: [], canEdit: false,
         open: null, draft: null, saving: Promise.resolve(), timer: null, status: '', statusErr: false,
-        heroes: null, creatureTypes: null, drawer: null, opener: null, formsMap: null, formsKey: ''
+        heroes: null, heroTypes: [], creatureTypes: null, drawer: null, opener: null, formsMap: null, formsKey: '',
+        statBlocks: [], folds: {}
       };
       el.classList.add('enc');
       el._enc = S;
@@ -544,6 +550,9 @@
     return api(S, 'GET', base(S) + '/pages/' + encodeURIComponent(S.cfg.entityId) + '/encounters').then(function (v) {
       S.list = ((v && v.encounters) || []).map(normalise);
       S.canEdit = !!(v && v.canEdit);
+      S.heroTypes = pickTypes(v && v.heroTypeIds);
+      S.creatureTypes = pickTypes(v && v.creatureTypeIds);
+      S.statBlocks = Array.isArray(v && v.statBlocks) ? v.statBlocks : [];
       S.loaded = true;
       drawBlock(S);
     }).catch(function () {
@@ -574,13 +583,26 @@
       var card = h('button', 'enc-card', '', { type: 'button', 'aria-haspopup': 'dialog', 'data-enc': e.id }, {
         click: function () { openDrawer(S, e.id, card); }
       });
-      var top = h('span', 'enc-card-top');
-      append(top, [h('span', 'enc-card-name', e.name || 'Untitled encounter'), e.ready ? h('span', 'enc-ready', 'Ready') : null]);
-      append(card, [top, h('span', 'enc-card-sub', summary(e))]);
+      fillCard(card, e);
       li.appendChild(card);
       ul.appendChild(li);
     });
     el.appendChild(ul);
+  }
+
+  function fillCard(card, e) {
+    card.textContent = '';
+    var top = h('span', 'enc-card-top');
+    append(top, [h('span', 'enc-card-name', e.name || 'Untitled encounter'), e.ready ? h('span', 'enc-ready', 'Ready') : null]);
+    append(card, [top, h('span', 'enc-card-sub', summary(e))]);
+  }
+
+  // refreshCard updates one card in place, so it matches what was saved
+  // while the builder is still open without replacing the button focus
+  // returns to.
+  function refreshCard(S, e) {
+    var card = S.el.querySelector('[data-enc="' + e.id + '"]');
+    if (card) fillCard(card, e);
   }
 
   function create(S) {
@@ -615,11 +637,18 @@
     S.status = ''; S.statusErr = false;
     var scrim = h('div', 'enc-scrim', '', null, { click: function () { closeDrawer(S); } });
     var aside = h('aside', 'enc-drawer', '', { role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Encounter builder' }, {
-      keydown: function (ev) { if (ev.key === 'Escape') { ev.stopPropagation(); closeDrawer(S); } }
+      keydown: function (ev) {
+        if (ev.key === 'Escape') { ev.stopPropagation(); closeDrawer(S); }
+        else if (ev.key === 'Tab') { ev.stopPropagation(); trapTab(aside, ev); }
+      }
     });
     var root = h('div', 'enc enc-layer');
     append(root, [scrim, aside]);
-    document.body.appendChild(root);
+    // Inside a dialog already open (a page opened over the DM Screen) the
+    // builder joins that dialog, so it draws above it and the dialog's focus
+    // rules count it as inside.
+    var host = (S.el.closest && S.el.closest('[aria-modal="true"]')) || document.body;
+    host.appendChild(root);
     S.drawer = { root: root, aside: aside };
     drawDrawer(S);
     var name = aside.querySelector('.enc-name');
@@ -656,11 +685,23 @@
     } catch (err) { /* no system, or it failed: first forms only */ }
   }
 
+  // trapTab keeps Tab inside the builder, which is modal.
+  function trapTab(aside, ev) {
+    var f = Array.prototype.filter.call(aside.querySelectorAll(
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    ), function (n) { return n.offsetWidth || n.offsetHeight || n.getClientRects().length; });
+    if (!f.length) { ev.preventDefault(); return; }
+    var first = f[0], last = f[f.length - 1], a = document.activeElement;
+    if (ev.shiftKey && (a === first || !aside.contains(a))) { ev.preventDefault(); last.focus(); }
+    else if (!ev.shiftKey && (a === last || !aside.contains(a))) { ev.preventDefault(); first.focus(); }
+  }
+
   function closeDrawer(S, quiet) {
     if (!S.drawer) return;
     flush(S);
     var root = S.drawer.root, id = S.open;
     S.drawer = null; S.open = null; S.draft = null;
+    dropFolds(S);
     if (quiet) { root.remove(); return; }
     root.classList.remove('open');
     setTimeout(function () { root.remove(); }, 300);
@@ -714,7 +755,7 @@
         if (S.open === id && S.draft) S.draft.version = v.version;
         if (Chronicle.markClean) Chronicle.markClean(S.id);
         setStatus(S, 'Saved');
-        if (!S.drawer) drawBlock(S);
+        if (S.drawer) refreshCard(S, v); else drawBlock(S);
       }).catch(function (err) {
         if (err.status === 409) {
           setStatus(S, 'Someone else changed this. Showing their version.', true);
@@ -755,23 +796,23 @@
     } catch (err) { /* a system panel failing never breaks the builder */ }
   }
 
-  // loadPickers fetches the hero pages once per block, and which categories
-  // hold creatures. A failure leaves the pickers empty; typing a creature's
-  // name still works.
+  // loadPickers fetches the hero pages once per block, from the categories
+  // the page list named. A failure leaves the hero picker empty; typing a
+  // creature's name still works.
   function loadPickers(S) {
-    if (S.heroes && S.creatureTypes) return;
-    api(S, 'GET', apiBase(S) + '/entity-types').then(function (env) {
-      var types = (env && env.data) || env || [];
-      S.creatureTypes = pickTypes(types, 'creature');
-      var heroTypes = pickTypes(types, 'character');
-      return Promise.all(heroTypes.map(function (tid) {
-        return api(S, 'GET', apiBase(S) + '/entities?type_id=' + tid + '&per_page=100');
-      }));
-    }).then(function (pages) {
-      var all = [];
-      (pages || []).forEach(function (env) { all = all.concat((env && env.data) || []); });
-      S.heroes = all.map(function (p) { return { id: p.id, name: p.name }; })
-        .sort(function (a, b) { return a.name.localeCompare(b.name); });
+    if (S.heroes) return;
+    Promise.all((S.heroTypes || []).map(function (tid) {
+      return api(S, 'GET', apiBase(S) + '/entities?type_id=' + tid + '&per_page=100');
+    })).then(function (pages) {
+      // A category's list can include its sub-categories' pages, which the
+      // server also names, so a page may arrive twice.
+      var all = [], seen = {};
+      (pages || []).forEach(function (env) {
+        ((env && env.data) || []).forEach(function (p) {
+          if (!seen[p.id]) { seen[p.id] = true; all.push({ id: p.id, name: p.name }); }
+        });
+      });
+      S.heroes = all.sort(function (a, b) { return a.name.localeCompare(b.name); });
       if (S.drawer) drawDrawer(S);
     }).catch(function () {
       S.heroes = S.heroes || []; S.creatureTypes = S.creatureTypes || [];
@@ -781,14 +822,23 @@
 
   function searchCreatures(S, q) {
     var types = S.creatureTypes || [];
-    if (!q || !types.length) return Promise.resolve([]);
+    if (!q || q.length < MIN_SEARCH || !types.length) return Promise.resolve([]);
     return Promise.all(types.map(function (tid) {
       return api(S, 'GET', apiBase(S) + '/entities?type_id=' + tid + '&per_page=8&q=' + encodeURIComponent(q))
         .catch(function () { return null; });
     })).then(function (pages) {
-      var out = [];
+      // A category's search also covers its sub-categories, which can hold
+      // heroes (Player Characters under Characters), so only pages of a
+      // category the server named are offered.
+      var out = [], seen = {}, ok = {};
+      types.forEach(function (tid) { ok[tid] = true; });
       pages.forEach(function (env) {
-        ((env && env.data) || []).forEach(function (p) { out.push({ entityId: p.id, name: p.name }); });
+        ((env && env.data) || []).forEach(function (p) {
+          if (!seen[p.id] && (p.entity_type_id === undefined || ok[p.entity_type_id])) {
+            seen[p.id] = true;
+            out.push({ entityId: p.id, name: p.name });
+          }
+        });
       });
       return out.slice(0, 8);
     });
@@ -865,7 +915,12 @@
     d.creatures.forEach(function (c) {
       var row = h('div', 'enc-row');
       var who = h('div', 'enc-who');
-      append(who, [h('b', '', c.name), c.entityId ? null : h('span', 'enc-muted', 'No page yet')]);
+      var fold = S.folds[c.id];
+      var name = c.entityId && Chronicle.CreatureFold
+        ? Chronicle.CreatureFold.nameButton(c.name, !!fold, fold && fold.id, function () { toggleFold(S, c, row, name); })
+        : h('b', '', c.name);
+      if (c.entityId) name.setAttribute('data-k', 'f-' + c.id);
+      append(who, [name, c.entityId ? null : h('span', 'enc-muted', 'No page yet')]);
       var grp = h('select', 'enc-sel', '', { 'aria-label': 'Initiative group for ' + c.name, 'data-k': 'g-' + c.id, disabled: !edit }, {
         change: function () { change(S, setRow(S.draft, c.id, 'group', grp.value), 'g-' + c.id); }
       });
@@ -885,9 +940,10 @@
         })
       ]);
       append(row, [who, grp, st, step, edit ? h('button', 'enc-x enc-rm', '×', { type: 'button', 'aria-label': 'Remove ' + c.name }, {
-        click: function () { change(S, removeRow(S.draft, c.id), 'add'); }
+        click: function () { dropFold(S, c.id); change(S, removeRow(S.draft, c.id), 'add'); }
       }) : null]);
       rows.appendChild(row);
+      if (fold) rows.appendChild(fold);
     });
     sec.appendChild(rows);
     if (edit) {
@@ -897,6 +953,29 @@
     }
     return sec;
   }
+
+  // A creature's numbers fold out under its row. The folds are kept across
+  // the builder's redraws, so a change elsewhere doesn't fetch them again.
+  function toggleFold(S, c, row, button) {
+    if (S.folds[c.id]) {
+      dropFold(S, c.id);
+      button.setAttribute('aria-expanded', 'false');
+      button.title = 'Show the numbers';
+      return;
+    }
+    var box = Chronicle.CreatureFold.build({ campaignId: S.cfg.campaignId, entityId: c.entityId, name: c.name, statBlocks: S.statBlocks });
+    S.folds[c.id] = box;
+    row.parentNode.insertBefore(box, row.nextSibling);
+    button.setAttribute('aria-controls', box.id);
+    button.setAttribute('aria-expanded', 'true');
+    button.title = 'Hide the numbers';
+  }
+  function dropFold(S, rowId) {
+    if (!S.folds[rowId]) return;
+    Chronicle.CreatureFold.dispose(S.folds[rowId]);
+    delete S.folds[rowId];
+  }
+  function dropFolds(S) { Object.keys(S.folds).forEach(function (id) { dropFold(S, id); }); }
 
   // addBox searches the creature pages as the DM types. Enter, or the last
   // choice, adds a creature by name when no page fits.

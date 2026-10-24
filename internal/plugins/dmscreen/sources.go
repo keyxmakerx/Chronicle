@@ -124,10 +124,12 @@ type Hidden struct {
 // HiddenCharacters returns at most limit of the newest and reports whether
 // more exist beyond them, so the panel can point at the full list.
 // Reveal must only ever make an entity visible, never hide it, and must refuse an entity
-// outside campaignID.
+// outside campaignID. Hide is Reveal's undo: it only ever hides, and only the
+// entities Reveal could show.
 type HiddenSource interface {
 	HiddenCharacters(ctx context.Context, campaignID string, v Viewer, limit int) (hidden []Hidden, more bool, err error)
 	Reveal(ctx context.Context, entityID, campaignID string) (name string, err error)
+	Hide(ctx context.Context, entityID, campaignID string) (name string, err error)
 }
 
 // SystemSource returns the game system enabled for the campaign, or nil.
@@ -140,6 +142,14 @@ type SystemSource interface {
 // no homebrew data of its own.
 type HomebrewSource interface {
 	DrawerMount(campaignID string) templ.Component
+}
+
+// FightSource draws the Fight tab: the encounter tracker's own widget, which
+// reads and saves the fight itself, so the screen holds no fight data.
+// conditions are the game system's condition names, offered when the DM
+// marks a creature.
+type FightSource interface {
+	FightMount(campaignID string, conditions []string) templ.Component
 }
 
 // Sources groups the screen's inputs. Any of them may be nil, which leaves
@@ -156,6 +166,7 @@ type Sources struct {
 	Hidden   HiddenSource
 	System   SystemSource
 	Homebrew HomebrewSource
+	Fight    FightSource
 
 	// Board and Adventures together feed the Adventures tab; with either
 	// missing (the table failed to migrate) the tab is left out.

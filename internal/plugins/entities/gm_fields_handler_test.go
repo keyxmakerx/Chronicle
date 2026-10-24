@@ -60,7 +60,7 @@ func TestGetFieldsAPI_StripsGMFieldsForNonGM(t *testing.T) {
 		wantGM bool
 	}{
 		{"player strips gm_notes", campaigns.RolePlayer, false},
-		{"scribe keeps gm_notes", campaigns.RoleScribe, true},
+		{"scribe strips gm_notes, as a player does", campaigns.RoleScribe, false},
 		{"owner keeps gm_notes", campaigns.RoleOwner, true},
 	}
 	for _, tc := range cases {
@@ -120,7 +120,7 @@ func TestGetFieldsAPI_StripsOwnerOnlyFieldsForNonOwner(t *testing.T) {
 	}{
 		{"another player strips backstory", campaigns.RolePlayer, "player-2", false},
 		{"claiming owner keeps backstory", campaigns.RolePlayer, owner, true},
-		{"scribe keeps backstory regardless of ownership", campaigns.RoleScribe, "player-2", true},
+		{"scribe strips another player's backstory", campaigns.RoleScribe, "player-2", false},
 		{"owner role keeps backstory regardless of ownership", campaigns.RoleOwner, "player-2", true},
 	}
 	for _, tc := range cases {

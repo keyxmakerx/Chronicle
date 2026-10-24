@@ -262,6 +262,18 @@ type CampaignContext struct {
 	IsAnonymous bool
 }
 
+// PlayerPreview is a copy of cc that draws a page as a player sees it, for an
+// owner with "view as player" on: edit controls, owner menus and Director
+// grants fall away. Display only: pass it to templates, never to a write or
+// an access check.
+func (cc *CampaignContext) PlayerPreview() *CampaignContext {
+	out := *cc
+	out.MemberRole = RolePlayer
+	out.IsDmGranted = false
+	out.IsSiteAdmin = false
+	return &out
+}
+
 // EffectiveRole returns the permission level to use for route-level authorization.
 // Site admins who are not members still get RoleNone here -- they should use
 // /admin routes instead for admin operations.
@@ -784,6 +796,17 @@ func (s CampaignSettings) ResolveNewEntityPrivacy(requested patch.Field[bool]) b
 		return v
 	}
 	return s.DefaultsToPrivate()
+}
+
+// NewPagePrivacy is ResolveNewEntityPrivacy for a page this member is making.
+// A Scribe's new page is always open to players: hidden pages are the
+// owner's and Co-DMs', and a Scribe sees what players see, so a page they
+// made hidden would vanish from their own list the moment they saved it.
+func (cc *CampaignContext) NewPagePrivacy(requested patch.Field[bool]) bool {
+	if cc.MemberRole == RoleScribe && !cc.CanAuthorDmOnly() {
+		return false
+	}
+	return cc.Campaign.ParseSettings().ResolveNewEntityPrivacy(requested)
 }
 
 // TierDefinition is a single entry in the per-campaign event tier

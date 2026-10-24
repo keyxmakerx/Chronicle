@@ -354,8 +354,9 @@ place, and Off shows the end state.
   for only by those two clicks (`static/js/site_admin.js`) and by the next
   page before it paints (`static/js/site_admin_reveal.js`,
   `html[data-admin-vt]`); a browser without them shows the admin page rising
-  by itself on the way in, and on the way out the admin page falls by itself
-  over the everyday page colour before the next page loads. The row presses
+  by itself on the way in, and on the way out the page you return to opens
+  under a sheet in the control room's colour that falls away, so the page
+  is underneath and never a blank colour. The row presses
   deeper and lets go slower than other menu rows. Moving between admin
   pages plays nothing; Calm fades, and Off plays nothing.
 - **Annals: following a connection pulls the page out from under it.**

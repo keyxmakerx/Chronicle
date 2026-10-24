@@ -41,6 +41,14 @@
     } catch (e) { return ''; }
   }
 
+  // zoneLabel turns an IANA zone into words a player recognises:
+  // "America/New_York" reads "New York time". The full zone stays in the
+  // button's title for anyone who needs to tell two cities apart.
+  function zoneLabel(zone) {
+    var city = zone.split('/').pop().replace(/_/g, ' ');
+    return city + ' time';
+  }
+
   function wire(host) {
     var bar = host.querySelector('[data-cta]');
     if (!bar) return;
@@ -70,8 +78,15 @@
     // string would clear the field it claims to set.
     if (!accept || !zone) return;
 
-    if (slot) slot.textContent = zone;
+    var label = zoneLabel(zone);
+    if (slot) slot.textContent = label;
+    accept.title = zone;
     accept.hidden = false;
+    // Guests get no "Choose" link (they cannot open /account), so the failure
+    // toast only points at it when it is on screen.
+    var failMsg = bar.querySelector('.cta-alt')
+      ? 'That could not be saved. Try Choose instead.'
+      : 'That could not be saved. Please try again.';
 
     accept.addEventListener('click', function () {
       accept.disabled = true;
@@ -83,17 +98,17 @@
           // THE BUTTON COMES BACK. A control that disables itself and then
           // says nothing has told the player it worked.
           accept.disabled = false;
-          if (Chronicle.notify) Chronicle.notify('That could not be saved. Try Choose instead.', 'error');
+          if (Chronicle.notify) Chronicle.notify(failMsg, 'error');
           return;
         }
-        if (Chronicle.notify) Chronicle.notify('Times will now show in ' + zone + '.', 'success');
+        if (Chronicle.notify) Chronicle.notify('Times will now show in ' + label + '.', 'success');
         // Not dismissed — SATISFIED. The next poll will find the zone set and
         // send nothing, so the banner goes on its own; removing it here just
         // avoids the up-to-60-second wait.
         if (bar.parentNode) bar.parentNode.removeChild(bar);
       }).catch(function () {
         accept.disabled = false;
-        if (Chronicle.notify) Chronicle.notify('That could not be saved. Try Choose instead.', 'error');
+        if (Chronicle.notify) Chronicle.notify(failMsg, 'error');
       });
     });
   }

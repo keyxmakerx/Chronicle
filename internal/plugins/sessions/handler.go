@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/labstack/echo/v4"
 
@@ -105,12 +106,25 @@ func (h *Handler) ListSessions(c echo.Context) error {
 		plan = sessionPlanFrom(c.QueryParam("plan_date"), c.QueryParam("plan_time"), c.QueryParam("plan_tz"))
 	}
 
+	// Past nights are judged by the viewer's own date, so tonight's game
+	// stays upcoming until their midnight.
+	today := time.Now().In(timeutil.LoadLocation(h.resolveViewerTZ(c, userID))).Format("2006-01-02")
+	groups := groupSessions(sessionList, today)
+	viewerTZ := h.storedTZ(c.Request().Context(), userID)
+
+	// "Add to your calendar" is a member's, and only while the owner's feed
+	// switch is on. A failed read hides it rather than failing the list.
+	feed := false
+	if cc.IsMember && userID != "" {
+		feed, _ = h.svc.IsCalendarFeedEnabled(ctx, cc.Campaign.ID)
+	}
+
 	if middleware.IsHTMX(c) {
 		return middleware.Render(c, http.StatusOK,
-			SessionListFragment(cc, sessionList, csrfToken, isOwner, isScribe, userID, plan))
+			SessionListFragment(cc, groups, csrfToken, isOwner, isScribe, userID, plan, viewerTZ, feed))
 	}
 	return middleware.Render(c, http.StatusOK,
-		SessionListPage(cc, sessionList, csrfToken, isOwner, isScribe, userID, plan))
+		SessionListPage(cc, groups, csrfToken, isOwner, isScribe, userID, plan, viewerTZ, feed))
 }
 
 // ShowSession renders a session detail page.
@@ -142,8 +156,17 @@ func (h *Handler) ShowSession(c echo.Context) error {
 	}
 	session.Entities = visibleEntities
 
+	today := time.Now().In(timeutil.LoadLocation(h.resolveViewerTZ(c, userID))).Format("2006-01-02")
+	recap := RecapView{
+		Open: cc.IsMember && recapOpen(session, today),
+		// Home's "Write it up" lands here with ?write=1 and the editor
+		// opens ready to type.
+		StartWriting: isScribe && c.QueryParam("write") == "1",
+		Played:       isPlayed(*session, today),
+	}
+
 	return middleware.Render(c, http.StatusOK,
-		SessionDetailPage(cc, session, csrfToken, isOwner, isScribe, userID))
+		SessionDetailPage(cc, session, csrfToken, isOwner, isScribe, userID, recap, h.storedTZ(c.Request().Context(), userID)))
 }
 
 // CreateSession creates a new session.
@@ -247,6 +270,12 @@ func (h *Handler) CreateSession(c echo.Context) error {
 				userIDs = append(userIDs, m.UserID)
 			}
 			_ = h.svc.InviteAll(c.Request().Context(), session.ID, userIDs)
+
+			// The bell and banner tell players even where no email is set up.
+			name := h.resolveDisplayName(c.Request().Context(), userID)
+			if nErr := h.svc.NotifySessionScheduled(c.Request().Context(), session, userID, name, userIDs); nErr != nil {
+				slog.Error("notifying members of a scheduled session", slog.String("error", nErr.Error()))
+			}
 
 			// Send RSVP emails if SMTP is configured.
 			if h.mailer != nil && h.mailer.IsConfigured(c.Request().Context()) {
@@ -436,7 +465,20 @@ func (h *Handler) RestoreSessionAPI(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
+// GetRecapAPI returns the recap in the page editor's load contract.
+// GET /campaigns/:id/sessions/:sid/recap
+func (h *Handler) GetRecapAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	session, err := h.requireSessionInCampaign(c, c.Param("sid"), cc.Campaign.ID)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, recapEditorBody(session))
+}
+
 // UpdateRecapAPI saves the session recap (post-session write-up visible to all members).
+// The page editor sends entry/entry_html; the calendar's plain box sends
+// recap/recap_html. A body with both uses the editor's.
 // PUT /campaigns/:id/sessions/:sid/recap
 func (h *Handler) UpdateRecapAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
@@ -449,9 +491,14 @@ func (h *Handler) UpdateRecapAPI(c echo.Context) error {
 	var req struct {
 		Recap     *string `json:"recap"`
 		RecapHTML *string `json:"recap_html"`
+		Entry     *string `json:"entry"`
+		EntryHTML *string `json:"entry_html"`
 	}
 	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request"})
+	}
+	if req.Entry != nil || req.EntryHTML != nil {
+		req.Recap, req.RecapHTML = req.Entry, req.EntryHTML
 	}
 
 	if err := h.svc.UpdateSessionRecap(c.Request().Context(), sessionID, req.Recap, req.RecapHTML); err != nil {
@@ -469,7 +516,8 @@ func (h *Handler) RSVPSession(c echo.Context) error {
 	sessionID := c.Param("sid")
 	userID := auth.GetUserID(c)
 
-	if _, err := h.requireSessionInCampaign(c, sessionID, cc.Campaign.ID); err != nil {
+	session, err := h.requireSessionInCampaign(c, sessionID, cc.Campaign.ID)
+	if err != nil {
 		return err
 	}
 
@@ -494,13 +542,7 @@ func (h *Handler) RSVPSession(c echo.Context) error {
 		}
 	}
 
-	var err error
-	if note.Present() || occurrenceDate != nil {
-		err = h.svc.UpdateRSVPDetailed(c.Request().Context(), sessionID, userID, status, occurrenceDate, note)
-	} else {
-		err = h.svc.UpdateRSVP(c.Request().Context(), sessionID, userID, status)
-	}
-	if err != nil {
+	if err := h.svc.RespondRSVP(c.Request().Context(), session, userID, status, occurrenceDate, note); err != nil {
 		return c.JSON(apperror.SafeCode(err), map[string]string{"error": apperror.SafeMessage(err)})
 	}
 
@@ -512,7 +554,7 @@ func (h *Handler) RSVPSession(c echo.Context) error {
 		attendees, _ := h.svc.ListAttendees(c.Request().Context(), sessionID)
 		csrfToken := middleware.GetCSRFToken(c)
 		return middleware.Render(c, http.StatusOK,
-			AttendeeList(cc, sessionID, attendees, csrfToken, userID))
+			AttendeeList(cc, sessionID, attendees, csrfToken, userID, session.AcceptsRSVP()))
 	}
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
@@ -1044,7 +1086,7 @@ func (h *Handler) EmbedSessions(c echo.Context) error {
 	}
 
 	return middleware.Render(c, http.StatusOK,
-		SessionsEmbedFragment(cc.Campaign.ID, planned, userID, gameNightsToday()))
+		SessionsEmbedFragment(cc.Campaign.ID, planned, userID, gameNightsToday(), h.storedTZ(ctx, userID)))
 }
 
 // --- Helpers ---

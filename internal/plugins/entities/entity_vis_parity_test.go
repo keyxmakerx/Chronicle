@@ -53,8 +53,9 @@ func (s visFakeEntitySvc) GetByID(_ context.Context, id string) (*Entity, error)
 	return &Entity{ID: id, CampaignID: camp, Visibility: VisibilityCustom, IsPrivate: false}, nil
 }
 
-func (s visFakeEntitySvc) CheckEntityAccess(_ context.Context, entityID string, _ int, _ string) (*EffectivePermission, error) {
-	return &EffectivePermission{CanView: s.canView[entityID]}, nil
+// A page the viewer sees is editable from Scribe up, as in default visibility.
+func (s visFakeEntitySvc) CheckEntityAccess(_ context.Context, entityID string, role int, _ string) (*EffectivePermission, error) {
+	return &EffectivePermission{CanView: s.canView[entityID], CanEdit: s.canView[entityID] && role >= int(campaigns.RoleScribe)}, nil
 }
 
 func (visFakeEntitySvc) GetEntityTypeByID(_ context.Context, _ int) (*EntityType, error) {

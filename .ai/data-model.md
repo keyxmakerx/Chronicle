@@ -399,6 +399,7 @@ Foundry module repo for the wire contract.
 | Table | Purpose |
 |-------|---------|
 | `encounters` | Fights a DM plans on a page: `entity_id` is the page, `name` and `ready` are columns for Foundry's sorted, searchable list, `data` is the JSON of hero page ids and creature rows (`entityId`, `name`, `count`, `group` A to H, `start` seen/hidden/later), `version` for edit conflicts; FKs to `entities`, `campaigns` cascade |
+| `encounter_runs` | The fight running on the DM Screen's Fight tab, one per campaign (`campaign_id` is the key): `data` is the JSON copy of the encounter's lines with initiative, hit point boxes and conditions, `version` for edit conflicts; no key to `encounters` (a fight in progress outlives its encounter); FK to `campaigns` cascades |
 
 ### armory (`internal/plugins/armory/migrations/`)
 

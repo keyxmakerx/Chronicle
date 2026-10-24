@@ -68,6 +68,7 @@ func (f fakeFoundry) FoundryPresence(string) (*time.Time, bool) { return f.last,
 type fakeHidden struct {
 	more     bool
 	revealed string
+	hidden   string
 }
 
 func (f *fakeHidden) HiddenCharacters(context.Context, string, Viewer, int) ([]Hidden, bool, error) {
@@ -75,6 +76,10 @@ func (f *fakeHidden) HiddenCharacters(context.Context, string, Viewer, int) ([]H
 }
 func (f *fakeHidden) Reveal(_ context.Context, id, _ string) (string, error) {
 	f.revealed = id
+	return "Captain Vosk", nil
+}
+func (f *fakeHidden) Hide(_ context.Context, id, _ string) (string, error) {
+	f.hidden = id
 	return "Captain Vosk", nil
 }
 
@@ -100,7 +105,7 @@ func TestBuild_Roles(t *testing.T) {
 		wantErr bool
 	}{
 		{"player refused", 1, true},
-		{"scribe allowed", 2, false},
+		{"scribe refused", 2, true},
 		{"owner allowed", 3, false},
 	}
 	for _, tt := range tests {
@@ -110,7 +115,7 @@ func TestBuild_Roles(t *testing.T) {
 				t.Fatalf("err = %v, wantErr %v", err, tt.wantErr)
 			}
 			if _, err := svc.Reveal(context.Background(), "e1", "c1", Viewer{Role: tt.role}); tt.wantErr && err == nil {
-				t.Fatal("Reveal should refuse a player")
+				t.Fatal("Reveal should refuse anyone but the owner and Co-DMs")
 			}
 		})
 	}
@@ -127,13 +132,6 @@ func (d *drawerMount) DrawerMount(campaignID string) templ.Component {
 func TestBuild_HomebrewOwnerOnly(t *testing.T) {
 	d := &drawerMount{}
 	svc := NewService(Sources{Homebrew: d})
-	scribe, err := svc.Build(context.Background(), "c1", Viewer{UserID: "u", Role: 2})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if scribe.Homebrew != nil {
-		t.Error("a scribe should get no Homebrew drawer")
-	}
 	owner, err := svc.Build(context.Background(), "c1", Viewer{UserID: "u", Role: 3})
 	if err != nil {
 		t.Fatal(err)
@@ -146,6 +144,36 @@ func TestBuild_HomebrewOwnerOnly(t *testing.T) {
 	}
 }
 
+// fightMount stands in for the encounter tracker.
+type fightMount struct {
+	asked      string
+	conditions []string
+}
+
+func (f *fightMount) FightMount(campaignID string, conditions []string) templ.Component {
+	f.asked, f.conditions = campaignID, conditions
+	return templ.Raw("fight")
+}
+
+func TestBuild_FightWithConditionNames(t *testing.T) {
+	f := &fightMount{}
+	items := []systems.ReferenceItem{
+		{Name: "Slowed", Properties: map[string]any{"category": "condition"}},
+		{Name: "Bleeding", Properties: map[string]any{"category": "condition"}},
+	}
+	svc := NewService(Sources{Fight: f, System: fakeSystemSource{sys: fakeSystem{m: drawSteel, items: items}}})
+	owner, err := svc.Build(context.Background(), "c1", Viewer{UserID: "u", Role: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if owner.Fight == nil || f.asked != "c1" || strings.Join(f.conditions, ",") != "Bleeding,Slowed" {
+		t.Errorf("owner fight = %v, asked for %q with %v", owner.Fight, f.asked, f.conditions)
+	}
+	if none, _ := NewService(Sources{}).Build(context.Background(), "c1", Viewer{UserID: "u", Role: 3}); none.Fight != nil {
+		t.Error("no source should mean no Fight tab")
+	}
+}
+
 func TestBuild_DowntimeOwnerOnlyToggle(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -155,7 +183,6 @@ func TestBuild_DowntimeOwnerOnlyToggle(t *testing.T) {
 		wantToggle bool
 	}{
 		{"owner can toggle", 3, fakeDowntime{open: true, ok: true, pending: 2}, false, true},
-		{"scribe sees but can't toggle", 2, fakeDowntime{ok: true}, false, false},
 		{"no armory hides it", 3, fakeDowntime{ok: false}, true, false},
 		{"error hides it", 3, fakeDowntime{ok: true, err: errors.New("db down")}, true, false},
 	}
@@ -278,7 +305,7 @@ func TestBuild_FoundryAndFailures(t *testing.T) {
 		Party:   fakeParty{err: errors.New("boom")},
 		Hidden:  &fakeHidden{},
 	}
-	v, err := NewService(src).Build(context.Background(), "c1", Viewer{Role: 2})
+	v, err := NewService(src).Build(context.Background(), "c1", Viewer{Role: 3})
 	if err != nil {
 		t.Fatalf("a failing source must not fail the screen: %v", err)
 	}
@@ -292,12 +319,43 @@ func TestBuild_FoundryAndFailures(t *testing.T) {
 
 func TestReveal(t *testing.T) {
 	h := &fakeHidden{}
-	name, err := NewService(Sources{Hidden: h}).Reveal(context.Background(), "e1", "c1", Viewer{Role: 2})
+	name, err := NewService(Sources{Hidden: h}).Reveal(context.Background(), "e1", "c1", Viewer{Role: 3})
 	if err != nil || name != "Captain Vosk" || h.revealed != "e1" {
 		t.Fatalf("name %q err %v revealed %q", name, err, h.revealed)
 	}
-	if _, err := NewService(Sources{Hidden: h}).Reveal(context.Background(), "", "c1", Viewer{Role: 2}); err == nil {
+	if _, err := NewService(Sources{Hidden: h}).Reveal(context.Background(), "", "c1", Viewer{Role: 3}); err == nil {
 		t.Fatal("empty id should fail")
+	}
+}
+
+// Undo is the DM team's: a scribe who can open the screen can't hide a page
+// again, and nothing is hidden for a refused or empty request.
+func TestUndoReveal(t *testing.T) {
+	tests := []struct {
+		name    string
+		id      string
+		role    int
+		wantErr bool
+	}{
+		{"owner or co-DM hides again", "e1", 3, false},
+		{"scribe is refused", "e1", 2, true},
+		{"player is refused", "e1", 1, true},
+		{"empty id is refused", "", 3, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := &fakeHidden{}
+			name, err := NewService(Sources{Hidden: h}).UndoReveal(context.Background(), tt.id, "c1", Viewer{Role: tt.role})
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("err = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr && h.hidden != "" {
+				t.Fatalf("a refused undo hid %q", h.hidden)
+			}
+			if !tt.wantErr && (name != "Captain Vosk" || h.hidden != "e1") {
+				t.Fatalf("name %q hidden %q", name, h.hidden)
+			}
+		})
 	}
 }
 
@@ -359,7 +417,7 @@ func TestSetDowntime(t *testing.T) {
 
 func TestBuild_HiddenMore(t *testing.T) {
 	for _, more := range []bool{false, true} {
-		v, err := NewService(Sources{Hidden: &fakeHidden{more: more}}).Build(context.Background(), "c1", Viewer{Role: 2})
+		v, err := NewService(Sources{Hidden: &fakeHidden{more: more}}).Build(context.Background(), "c1", Viewer{Role: 3})
 		if err != nil {
 			t.Fatal(err)
 		}

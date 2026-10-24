@@ -32,7 +32,8 @@ func TestLookAccessAllows(t *testing.T) {
 		{"owner only: player", RolePlayer, false, true, LookAccessOwner, false},
 		{"owner only: dm-granted player", RolePlayer, true, true, LookAccessOwner, false},
 		{"co-dm: owner", RoleOwner, false, true, LookAccessCoDM, true},
-		{"co-dm: scribe", RoleScribe, false, true, LookAccessCoDM, true},
+		{"co-dm: scribe (sees what players see)", RoleScribe, false, true, LookAccessCoDM, false},
+		{"co-dm: dm-granted scribe", RoleScribe, true, true, LookAccessCoDM, true},
 		{"co-dm: dm-granted player", RolePlayer, true, true, LookAccessCoDM, true},
 		{"co-dm: plain player", RolePlayer, false, true, LookAccessCoDM, false},
 		{"everyone: owner", RoleOwner, false, true, LookAccessEveryone, true},
@@ -53,6 +54,8 @@ func TestLookAccessAllows(t *testing.T) {
 
 func TestLookPartAccessDefaultsAndClamps(t *testing.T) {
 	sheet, _ := LookPartByKey(LookPartSheet)
+	page, _ := LookPartByKey(LookPartPage)
+	hover, _ := LookPartByKey(LookPartHover)
 	dm, _ := LookPartByKey(LookPartDmScreen)
 	cases := []struct {
 		name string
@@ -62,6 +65,11 @@ func TestLookPartAccessDefaultsAndClamps(t *testing.T) {
 	}{
 		{"sheet default", sheet, nil, LookAccessEveryone},
 		{"dmscreen default", dm, nil, LookAccessCoDM},
+		{"page default is owner", page, nil, LookAccessOwner},
+		{"hover default is owner", hover, nil, LookAccessOwner},
+		{"page stored everyone", page, &Appearance{AccessPage: LookAccessEveryone}, LookAccessEveryone},
+		{"hover stored codm", hover, &Appearance{AccessHover: LookAccessCoDM}, LookAccessCoDM},
+		{"hover garbage falls back", hover, &Appearance{AccessHover: "x"}, LookAccessOwner},
 		{"sheet stored", sheet, &Appearance{AccessSheet: LookAccessOwner}, LookAccessOwner},
 		{"dmscreen stored owner", dm, &Appearance{AccessDmScreen: LookAccessOwner}, LookAccessOwner},
 		// A hand-edited value must never widen the DM Screen.
@@ -87,7 +95,8 @@ func TestMayPickByRoleAndSetting(t *testing.T) {
 		dm      bool
 	}{
 		{"player, defaults", RolePlayer, false, nil, true, false},
-		{"scribe, defaults", RoleScribe, false, nil, true, true},
+		{"scribe, defaults", RoleScribe, false, nil, true, false},
+		{"co-dm, defaults", RoleScribe, true, nil, true, true},
 		{"dm-granted player, defaults", RolePlayer, true, nil, true, true},
 		// The owner's pick is the campaign look itself.
 		{"owner, defaults", RoleOwner, false, nil, false, false},
@@ -114,6 +123,8 @@ func TestMayPickByRoleAndSetting(t *testing.T) {
 
 func TestAccessChoiceValidation(t *testing.T) {
 	sheet, _ := LookPartByKey(LookPartSheet)
+	page, _ := LookPartByKey(LookPartPage)
+	hover, _ := LookPartByKey(LookPartHover)
 	dm, _ := LookPartByKey(LookPartDmScreen)
 	cases := []struct {
 		name    string
@@ -130,6 +141,10 @@ func TestAccessChoiceValidation(t *testing.T) {
 		{"dmscreen owner", dm, LookAccessOwner, LookAccessOwner, false},
 		{"dmscreen everyone refused", dm, LookAccessEveryone, "", true},
 		{"unknown refused", sheet, "anyone", "", true},
+		{"page default stored as empty", page, LookAccessOwner, "", false},
+		{"page everyone", page, LookAccessEveryone, LookAccessEveryone, false},
+		{"hover codm", hover, LookAccessCoDM, LookAccessCoDM, false},
+		{"hover unknown refused", hover, "anyone", "", true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -142,19 +157,20 @@ func TestAccessChoiceValidation(t *testing.T) {
 }
 
 func TestApplyLookAccessKeepsWhenAbsent(t *testing.T) {
-	prev := &Appearance{AccessSheet: LookAccessOwner, AccessDmScreen: LookAccessOwner}
+	prev := &Appearance{AccessSheet: LookAccessOwner, AccessPage: LookAccessEveryone, AccessHover: LookAccessCoDM, AccessDmScreen: LookAccessOwner}
 	var a Appearance
 	if err := applyLookAccess(&a, nil, prev); err != nil {
 		t.Fatal(err)
 	}
-	if a.AccessSheet != LookAccessOwner || a.AccessDmScreen != LookAccessOwner {
+	if a.AccessSheet != LookAccessOwner || a.AccessDmScreen != LookAccessOwner ||
+		a.AccessPage != LookAccessEveryone || a.AccessHover != LookAccessCoDM {
 		t.Errorf("absent access should keep the stored setting, got %+v", a)
 	}
 	// Sent explicitly, it replaces; an empty part resets to its default.
 	if err := applyLookAccess(&a, &LookAccessInput{Sheet: LookAccessCoDM}, prev); err != nil {
 		t.Fatal(err)
 	}
-	if a.AccessSheet != LookAccessCoDM || a.AccessDmScreen != "" {
+	if a.AccessSheet != LookAccessCoDM || a.AccessDmScreen != "" || a.AccessPage != "" || a.AccessHover != "" {
 		t.Errorf("explicit access should replace, got %+v", a)
 	}
 	if err := applyLookAccess(&a, &LookAccessInput{DmScreen: LookAccessEveryone}, prev); err == nil {
@@ -164,12 +180,15 @@ func TestApplyLookAccessKeepsWhenAbsent(t *testing.T) {
 
 func TestApplyAppearanceStoresAccess(t *testing.T) {
 	var s CampaignSettings
-	in := AppearanceInput{Access: &LookAccessInput{Sheet: LookAccessOwner, DmScreen: LookAccessOwner}}
+	in := AppearanceInput{Access: &LookAccessInput{Sheet: LookAccessOwner, Page: LookAccessEveryone, Hover: LookAccessCoDM, DmScreen: LookAccessOwner}}
 	if _, err := applyAppearance(&s, in); err != nil {
 		t.Fatal(err)
 	}
 	if s.Appearance == nil || s.Appearance.AccessSheet != LookAccessOwner || s.Appearance.AccessDmScreen != LookAccessOwner {
 		t.Fatalf("access not stored: %+v", s.Appearance)
+	}
+	if s.Appearance.AccessPage != LookAccessEveryone || s.Appearance.AccessHover != LookAccessCoDM {
+		t.Fatalf("page and hover access not stored: %+v", s.Appearance)
 	}
 	// A later save that does not send access (a look preset) keeps it.
 	if _, err := applyAppearance(&s, AppearanceInput{Look: "parchment"}); err != nil {
@@ -196,11 +215,20 @@ func TestValidateLookPick(t *testing.T) {
 		{"bad sheet value", RolePlayer, false, nil, "sheet", "gothic", true},
 		{"unknown part", RolePlayer, false, nil, "colours", "x", true},
 		{"player cannot pick dmscreen", RolePlayer, false, nil, "dmscreen", "sharp", true},
-		{"scribe picks dmscreen", RoleScribe, false, nil, "dmscreen", "sharp", false},
+		{"scribe cannot pick dmscreen", RoleScribe, false, nil, "dmscreen", "sharp", true},
+		{"co-dm picks dmscreen", RoleScribe, true, nil, "dmscreen", "sharp", false},
 		{"dm-granted player picks dmscreen", RolePlayer, true, nil, "dmscreen", "ornate", false},
-		{"bad kit value", RoleScribe, false, nil, "dmscreen", "parchment", true},
+		{"bad kit value", RoleScribe, true, nil, "dmscreen", "parchment", true},
 		{"narrowed sheet refuses player", RolePlayer, false, &Appearance{AccessSheet: LookAccessOwner}, "sheet", "night", true},
 		{"narrowed sheet still lets reset be refused too", RolePlayer, false, &Appearance{AccessSheet: LookAccessCoDM}, "sheet", "", true},
+		{"page closed by default", RolePlayer, false, nil, "page", "sharp", true},
+		{"player picks page when open", RolePlayer, false, &Appearance{AccessPage: LookAccessEveryone}, "page", "sharp", false},
+		{"bad page kit", RolePlayer, false, &Appearance{AccessPage: LookAccessEveryone}, "page", "paper", true},
+		{"player refused page at co-dm", RolePlayer, false, &Appearance{AccessPage: LookAccessCoDM}, "page", "sharp", true},
+		{"scribe picks page at co-dm", RoleScribe, false, &Appearance{AccessPage: LookAccessCoDM}, "page", "sharp", false},
+		{"hover closed by default", RoleScribe, false, nil, "hover", "night", true},
+		{"player picks hover when open", RolePlayer, false, &Appearance{AccessHover: LookAccessEveryone}, "hover", "compact", false},
+		{"bad hover value", RolePlayer, false, &Appearance{AccessHover: LookAccessEveryone}, "hover", "ornate", true},
 		{"owner uses Customize", RoleOwner, false, nil, "sheet", "night", true},
 		{"non-member", RoleNone, false, nil, "sheet", "night", true},
 	}
@@ -218,18 +246,22 @@ func TestValidateLookPick(t *testing.T) {
 // A pick the owner has since narrowed away is ignored, not deleted, and comes
 // back if access is widened again.
 func TestAppliedLookPicksIgnoresNarrowedAccess(t *testing.T) {
-	stored := map[string]string{"sheet": "night", "dmscreen": "sharp"}
+	stored := map[string]string{"sheet": "night", "dmscreen": "sharp", "page": "ornate", "hover": "plain"}
 	cases := []struct {
 		name string
 		role Role
 		ap   *Appearance
 		want map[string]string
 	}{
-		{"scribe, defaults: both count", RoleScribe, nil, map[string]string{"sheet": "night", "dmscreen": "sharp"}},
+		{"scribe, defaults: only sheet", RoleScribe, nil, map[string]string{"sheet": "night"}},
 		{"player, defaults: only sheet", RolePlayer, nil, map[string]string{"sheet": "night"}},
-		{"scribe, sheet narrowed to owner", RoleScribe, &Appearance{AccessSheet: LookAccessOwner}, map[string]string{"dmscreen": "sharp"}},
+		{"scribe, sheet narrowed to owner", RoleScribe, &Appearance{AccessSheet: LookAccessOwner}, nil},
 		{"scribe, both narrowed", RoleScribe, &Appearance{AccessSheet: LookAccessOwner, AccessDmScreen: LookAccessOwner}, nil},
 		{"owner never uses a pick", RoleOwner, nil, nil},
+		{"page and hover open to everyone", RolePlayer, &Appearance{AccessPage: LookAccessEveryone, AccessHover: LookAccessEveryone},
+			map[string]string{"sheet": "night", "page": "ornate", "hover": "plain"}},
+		{"page co-dm: scribe yes", RoleScribe, &Appearance{AccessPage: LookAccessCoDM},
+			map[string]string{"sheet": "night", "page": "ornate", "dmscreen": "sharp"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

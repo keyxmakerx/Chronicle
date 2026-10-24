@@ -12,8 +12,8 @@ import (
 )
 
 // The Adventures tab runs against the real entities visibility rules and the
-// real table. Each step is a way a player, or a page that is no longer an
-// Adventure, could end up named on the tab; none may.
+// real table. Each step is a way a player or a Scribe, or a page that is no
+// longer an Adventure, could end up named on the tab; none may.
 func TestDMScreenAdventures_Integration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test requires a database; skipped under -short")
@@ -68,6 +68,7 @@ func TestDMScreenAdventures_Integration(t *testing.T) {
 	adapter := &dmAdventuresAdapter{entities: h.entities}
 	svc := dmscreen.NewService(dmscreen.Sources{Board: board, Adventures: adapter})
 	dm := dmscreen.Viewer{UserID: owner, Role: 3}
+	coDM := dmscreen.Viewer{UserID: "codm", Role: 3}
 	scribe := dmscreen.Viewer{UserID: "scribe", Role: 2}
 	player := dmscreen.Viewer{UserID: "player", Role: 1}
 
@@ -112,17 +113,20 @@ func TestDMScreenAdventures_Integration(t *testing.T) {
 	}
 
 	want := "Lastwell|Adventure|Sessions 3 to 6 · Running"
-	for name, v := range map[string]dmscreen.Viewer{"owner": dm, "scribe": scribe} {
+	for name, v := range map[string]dmscreen.Viewer{"owner": dm, "co-dm": coDM} {
 		got := tabTitles(v)
 		if len(got) != 1 || got[0] != want {
 			t.Errorf("%s sees %v, want [%s]", name, got, want)
 		}
 	}
 
-	// A player is refused outright, and the source returns nothing for a
-	// player even when asked for the pinned id directly.
+	// A player or a Scribe is refused outright, and the source returns
+	// nothing for a player even when asked for the pinned id directly.
 	if _, err := svc.Build(ctx, camp.ID, player); err == nil {
 		t.Error("Build answered a player")
+	}
+	if _, err := svc.Build(ctx, camp.ID, scribe); err == nil {
+		t.Error("Build answered a scribe")
 	}
 	if _, err := svc.PickPages(ctx, camp.ID, player, ""); err == nil {
 		t.Error("the picker answered a player")
@@ -162,7 +166,7 @@ func TestDMScreenAdventures_Integration(t *testing.T) {
 	mustGalleryExec(t, h.db, `UPDATE entities SET entity_type_id = ? WHERE id = ?`, advTypes[0].ID, lastwell.ID)
 
 	// A note belongs to its campaign alone.
-	if err := svc.AddNote(ctx, camp.ID, scribe, "Ask about the bell"); err != nil {
+	if err := svc.AddNote(ctx, camp.ID, coDM, "Ask about the bell"); err != nil {
 		t.Fatal(err)
 	}
 	items, err := board.List(ctx, "some-other-campaign")

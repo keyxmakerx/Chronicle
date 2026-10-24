@@ -107,3 +107,29 @@ func TestCampaignSettings_ResolveNewEntityPrivacy(t *testing.T) {
 		})
 	}
 }
+
+// TestNewPagePrivacy pins that a Scribe's new page is always open to players,
+// whatever they asked for or the campaign defaults to, while the owner and
+// Co-DMs keep the shared resolution.
+func TestNewPagePrivacy(t *testing.T) {
+	hiddenByDefault := &Campaign{Settings: `{"default_visibility":"dm_only"}`}
+	cases := []struct {
+		name      string
+		cc        *CampaignContext
+		requested patch.Field[bool]
+		want      bool
+	}{
+		{"scribe asking for hidden", &CampaignContext{Campaign: hiddenByDefault, MemberRole: RoleScribe}, patch.Of(true), false},
+		{"scribe under a hidden default", &CampaignContext{Campaign: hiddenByDefault, MemberRole: RoleScribe}, patch.Absent[bool](), false},
+		{"co-dm asking for hidden", &CampaignContext{Campaign: hiddenByDefault, MemberRole: RoleScribe, IsDmGranted: true}, patch.Of(true), true},
+		{"owner under a hidden default", &CampaignContext{Campaign: hiddenByDefault, MemberRole: RoleOwner}, patch.Absent[bool](), true},
+		{"owner asking for open", &CampaignContext{Campaign: hiddenByDefault, MemberRole: RoleOwner}, patch.Of(false), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.cc.NewPagePrivacy(tc.requested); got != tc.want {
+				t.Errorf("NewPagePrivacy() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}

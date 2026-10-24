@@ -77,9 +77,10 @@ var lookSections = []struct{ ID, Name, Words string }{
 	{"type", "Type", "font fonts text headings size"},
 	{"buttons", "Buttons", "button shape press"},
 	{"motion", "Motion and depth", "animation calm shadows elevation speed"},
+	{"page", "Pages", "page look style kit material sharp ornate"},
 	{"hover", "Hover cards", "peek preview tooltip popup time line"},
 	{"sheet", "Character sheets", "sheet style"},
-	{"access", "Who can change", "members players co-dm permission pick own look sheet dm screen"},
+	{"people", "Who can change", "access members players co-dm permission pick own look sheet dm screen quick setups locked table open"},
 	{"book", "Rulebook", "rules book"},
 }
 
@@ -225,10 +226,11 @@ func (h *Handler) CustomizeHome(c echo.Context) error {
 	if !validHomeKey(key) {
 		return apperror.NewNotFound("that home doesn't exist")
 	}
-	tab := homeTabFor(key)
-	crumbs := []CustomizeCrumb{{Label: "Home pages", Href: h.customizeBase(cc) + "/home"}, {Label: tab.Label}}
-	return h.renderCustomize(c, cc, "home", "Home pages - "+tab.Label, crumbs, nil,
-		customizeHomePages(cc, key, h.homeHint(cc, key), h.homeEditorState(cc, key)))
+	ctx := c.Request().Context()
+	name := homeTabFor(key).label(ctx)
+	crumbs := []CustomizeCrumb{{Label: "Home pages", Href: h.customizeBase(cc) + "/home"}, {Label: name}}
+	return h.renderCustomize(c, cc, "home", "Home pages - "+name, crumbs, nil,
+		customizeHomePages(cc, key, h.homeHint(ctx, cc, key), h.homeEditorState(ctx, cc, key)))
 }
 
 // customizeCategoriesData is what the Categories area's script draws from.

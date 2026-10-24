@@ -99,3 +99,35 @@ type ContentPacksCardRenderer interface {
 func (h *Handler) SetContentPacksCardRenderer(r ContentPacksCardRenderer) {
 	h.contentPacksRenderer = r
 }
+
+// addonCategorySystem is the addons store's category for game systems,
+// spelled out here because campaigns does not import the addons package.
+const addonCategorySystem = "system"
+
+// featureAddons drops game systems from the Features grid. The game system
+// card is the only control for them: a second toggle there could switch a
+// system on without the campaign's settings knowing.
+func featureAddons(addons []PluginHubAddon) []PluginHubAddon {
+	out := make([]PluginHubAddon, 0, len(addons))
+	for _, a := range addons {
+		if a.Category != addonCategorySystem {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+// currentSystemID is the system the picker shows as chosen: the campaign's
+// setting, or else the system switched on in the addons store, which is what
+// campaigns set up before the picker saved its choice still have.
+func currentSystemID(settingID string, addons []PluginHubAddon) string {
+	if settingID != "" {
+		return settingID
+	}
+	for _, a := range addons {
+		if a.Category == addonCategorySystem && a.Enabled {
+			return a.Slug
+		}
+	}
+	return ""
+}

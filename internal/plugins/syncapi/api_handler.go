@@ -371,7 +371,8 @@ func (h *APIHandler) GetEntityType(c echo.Context) error {
 // GET /api/v1/campaigns/:id/entities?type_id=N&page=1&per_page=20&q=search
 func (h *APIHandler) ListEntities(c echo.Context) error {
 	campaignID := c.Param("id")
-	role := h.resolveRole(c)
+	// The visibility role, as the web uses: a Co-DM reads as Owner.
+	role := h.visibilityRoleFor(c.Request().Context(), campaignID, h.resolveUserID(c), h.resolveRole(c))
 
 	typeID, _ := strconv.Atoi(c.QueryParam("type_id"))
 	page, _ := strconv.Atoi(c.QueryParam("page"))
@@ -399,6 +400,11 @@ func (h *APIHandler) ListEntities(c echo.Context) error {
 		items, total, err = h.entitySvc.List(c.Request().Context(), campaignID, typeID, role, userID, opts)
 	}
 	if err != nil {
+		// A caller mistake (a one-letter search) is the caller's to fix, so
+		// it keeps its 4xx instead of reading as a server fault.
+		if appErr, ok := err.(*apperror.AppError); ok && appErr.Code < http.StatusInternalServerError {
+			return appErr
+		}
 		slog.Error("api: failed to list entities", slog.Any("error", err))
 		return apperror.NewInternal(fmt.Errorf("failed to list entities"))
 	}
@@ -411,14 +417,14 @@ func (h *APIHandler) ListEntities(c echo.Context) error {
 	sanitizeEntitiesHTMLForEgress(items)
 
 	// Redact inline GM secrets for callers below the secret-visibility
-	// bar (Player), mirroring the web path and GetEntity's same check at
-	// list scope. Owner/Scribe responses are unchanged.
+	// bar (anyone but the owner and Co-DMs), mirroring the web path and
+	// GetEntity's same check at list scope.
 	stripEntitiesSecretsForEgress(items, role)
 
 	// Strip GM-only and owner-only field VALUES at list scope. Load the
 	// campaign's entity types ONCE (not per-entity) to resolve the markers.
 	// Fail closed on a load error rather than leak.
-	if role < int(campaigns.RoleScribe) && len(items) > 0 {
+	if role < int(campaigns.RoleOwner) && len(items) > 0 {
 		types, terr := h.entitySvc.GetEntityTypes(c.Request().Context(), campaignID)
 		if terr != nil {
 			slog.Error("api: field strip could not load entity types", slog.Any("error", terr))
@@ -463,10 +469,11 @@ func (h *APIHandler) GetEntity(c echo.Context) error {
 	// (ADR-057), mirroring campaigns.CampaignContext.VisibilityRole() on the
 	// web path so a Co-DM can read a dm_only entity here too. This handler is
 	// API-key authenticated (no CampaignContext), so the promotion is resolved
-	// directly via campaignSvc.IsUserDmGranted. `role` stays unpromoted for
-	// everything below this call (GM-field / secret stripping).
+	// directly via campaignSvc.IsUserDmGranted. The GM-field and secret
+	// stripping below uses the same promoted role, as the web does.
 	userID := h.resolveUserID(c)
-	access, accessErr := h.entitySvc.CheckEntityAccess(ctx, entity.ID, h.visibilityRoleFor(ctx, entity.CampaignID, userID, role), userID)
+	role = h.visibilityRoleFor(ctx, entity.CampaignID, userID, role)
+	access, accessErr := h.entitySvc.CheckEntityAccess(ctx, entity.ID, role, userID)
 	if accessErr != nil || !access.CanView {
 		return apperror.NewNotFound("entity not found")
 	}
@@ -475,19 +482,19 @@ func (h *APIHandler) GetEntity(c echo.Context) error {
 	sanitizeEntityHTMLForEgress(entity)
 
 	// Redact inline GM secrets for callers below the secret-visibility bar
-	// (Player), mirroring the web GetEntry path. The whole-entity CanView
-	// gate above lets a player read this entity, but the secret PROSE inside
-	// it must not ship. Owner/Scribe (>= RoleScribe) responses are unchanged.
+	// (anyone but the owner and Co-DMs), mirroring the web GetEntry path. The
+	// whole-entity CanView gate above lets a player read this entity, but the
+	// secret PROSE inside it must not ship.
 	stripEntitySecretsForEgress(entity, role)
 
 	// Strip GM-only and owner-only field VALUES from fields_data for callers
 	// who can't see them. The CanView gate above lets a player read this
 	// entity, but gm_only fields (e.g. Draw Steel's gm_notes) and owner_only
 	// fields (e.g. backstory, for a non-owner viewer) must not ship.
-	// Bearer/Owner/Scribe keep full data. Fail closed: if the type can't
+	// Bearer, owner and Co-DM callers keep full data. Fail closed: if the type can't
 	// load we cannot know which fields are restricted, so error rather than
 	// leak (mirrors the entities-plugin GetFieldsAPI).
-	if role < int(campaigns.RoleScribe) {
+	if role < int(campaigns.RoleOwner) {
 		et, terr := h.entitySvc.GetEntityTypeByID(ctx, entity.EntityTypeID)
 		if terr != nil || et == nil {
 			slog.Error("api: field strip could not load entity type",
@@ -612,6 +619,10 @@ func (h *APIHandler) CreateEntity(c echo.Context) error {
 
 	// An absent is_private falls back to the campaign's DefaultVisibility;
 	// an explicit value from the client wins. See entityPrivacyResolver.
+	if err := h.checkFields(c.Request().Context(), c.Param("id"), req.EntityTypeID, nil, req.FieldsData); err != nil {
+		return err
+	}
+
 	isPrivate := h.newEntityPrivacyResolver(c.Param("id")).
 		resolve(c.Request().Context(), req.IsPrivate)
 
@@ -673,6 +684,9 @@ func (h *APIHandler) UpdateEntity(c echo.Context) error {
 	// into the stored one first; absent leaves it nil and the service skips it.
 	fieldsData := req.FieldsData
 	if fieldsData != nil {
+		if err := h.checkFields(ctx, entity.CampaignID, entity.EntityTypeID, entity.FieldsData, fieldsData); err != nil {
+			return err
+		}
 		fieldsData = entities.MergeFieldPatch(entity.FieldsData, fieldsData)
 	}
 
@@ -720,6 +734,10 @@ func (h *APIHandler) UpdateEntityFields(c echo.Context) error {
 	var req apiUpdateFieldsRequest
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request body")
+	}
+
+	if err := h.checkFields(ctx, entity.CampaignID, entity.EntityTypeID, entity.FieldsData, req.FieldsData); err != nil {
+		return err
 	}
 
 	// Partial update, like every other sync API write: fields the client
@@ -991,6 +1009,10 @@ func (h *APIHandler) Sync(c echo.Context) error {
 			// is_private is the exception: absent means "the client has no
 			// opinion", and must fall through to the campaign's default
 			// visibility rather than defaulting to false (public).
+			if err := h.checkFields(ctx, campaignID, change.EntityTypeID, nil, change.FieldsData); err != nil {
+				result.Status, result.Error = "error", apperror.SafeMessage(err)
+				break
+			}
 			entity, err := h.entitySvc.Create(ctx, campaignID, key.UserID, entities.CreateEntityInput{
 				Name:         change.Name.Val(""),
 				EntityTypeID: change.EntityTypeID,
@@ -1020,6 +1042,10 @@ func (h *APIHandler) Sync(c echo.Context) error {
 				// Same merge as the single-entity PUT: Update replaces the map.
 				fieldsData := change.FieldsData
 				if fieldsData != nil {
+					if err := h.checkFields(ctx, campaignID, existing.EntityTypeID, existing.FieldsData, fieldsData); err != nil {
+						result.Status, result.Error = "error", apperror.SafeMessage(err)
+						break
+					}
 					fieldsData = entities.MergeFieldPatch(existing.FieldsData, fieldsData)
 				}
 				_, err := h.entitySvc.Update(entities.WithSyncActor(ctx, h.resolveUserID(c)), change.EntityID, entities.UpdateEntityInput{

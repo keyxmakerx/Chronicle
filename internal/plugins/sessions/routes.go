@@ -52,6 +52,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler,
 	// by every route this build widens the same way.
 	cg.PUT("/sessions/:sid", h.UpdateSessionAPI, scribeOrCoDirector())
 	cg.DELETE("/sessions/:sid", h.DeleteSessionAPI, ownerOrCoDirector())
+	cg.GET("/sessions/:sid/recap", h.GetRecapAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.PUT("/sessions/:sid/recap", h.UpdateRecapAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.POST("/sessions/:sid/rsvp", h.RSVPSession, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.POST("/sessions/:sid/entities", h.LinkEntityAPI, campaigns.RequireRole(campaigns.RoleScribe))

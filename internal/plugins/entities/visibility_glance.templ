@@ -61,6 +61,33 @@ templ visibilityGlance(cc *campaigns.CampaignContext, entity *Entity, ev *Effect
 	}
 }
 
+// dmOnlyTitleLabel sits beside the page name so the DM team can tell at a
+// glance that players can't see the page. It renders hidden on other pages so
+// the corner control can show it after a change without a reload; players get
+// no element at all (ADR-055 rule 3).
+templ dmOnlyTitleLabel(cc *campaigns.CampaignContext, entity *Entity) {
+	if visibilityGlanceVisible(cc) {
+		<span
+			class="badge-amber gap-1 shrink-0 whitespace-nowrap"
+			data-dm-only-label
+			title="Players can't see this page"
+			if baseVisibilityState(entity) != VisStateDMOnly {
+				hidden
+			}
+		>
+			<i class="fa-solid fa-lock text-[10px]" aria-hidden="true"></i>
+			{ visibilityCornerLabel(ctx, VisStateDMOnly) }
+		</span>
+	}
+}
+
+// sidebarDMOnly reports whether a sidebar row gets the lock: the page itself
+// is set to DM-only. A DM-only category's rows carry none, since the category
+// row already says so and a lock on every row would say nothing.
+func sidebarDMOnly(cc *campaigns.CampaignContext, e *Entity) bool {
+	return visibilityGlanceVisible(cc) && e.Visibility != VisibilityCustom && e.IsPrivate && !e.TypeDMOnly
+}
+
 // visibilityCornerLabel is the short word the page-corner control shows
 // beside its glyph.
 func visibilityCornerLabel(ctx context.Context, state string) string {
@@ -89,15 +116,15 @@ func visibilityCornerIcon(state string) string {
 
 // effectiveVisibilityBadge is the page's one visibility control, standing at
 // the top-right of the page so every page type has it, including pages whose
-// layout has no title block. The DM team sees who can view the page on hover;
-// the Owner clicks it to open the permissions editor, which unfolds from the
-// control itself. Players get nothing, since a badge would hint that something
+// layout has no title block. The DM team (the owner and co-DMs) sees who can
+// view the page on hover, and clicks it to open the permissions editor, which
+// unfolds from the control itself. Players get nothing, since a badge would hint that something
 // is hidden from them (ADR-055 rule 3).
 templ effectiveVisibilityBadge(cc *campaigns.CampaignContext, entity *Entity, ev *EffectiveVisibility) {
 	if visibilityGlanceVisible(cc) {
 		{{ state := baseVisibilityState(entity) }}
 		{{ widened := ev != nil && ev.WidenedByTags }}
-		{{ canEdit := cc.MemberRole >= campaigns.RoleOwner }}
+		{{ canEdit := cc.CanAuthorDmOnly() }}
 		<div
 			class="group relative shrink-0"
 			data-entity-access

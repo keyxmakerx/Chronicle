@@ -10,6 +10,7 @@ package importer
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
@@ -79,6 +80,16 @@ type Classification struct {
 	// FieldsSummary is the review line for the row's `fields:`, checked
 	// against the category the row will have; "" when it sets none.
 	FieldsSummary string
+
+	// SheetKind names the sheet a game system can check the row's numbers
+	// against ("creature", or the category's preset category); "" when
+	// there is nothing to check. SheetFields is the sheet as the row leaves
+	// it (the page's own fields under the AI's, on an update) and
+	// SheetWritten the keys the AI wrote, the only ones a check may offer
+	// to replace.
+	SheetKind    string
+	SheetFields  map[string]any
+	SheetWritten []string
 }
 
 // Classifier holds the lookup + a per-classify-call type cache.
@@ -175,7 +186,47 @@ func (c *Classifier) checkFields(pages []ParsedPage, cls []Classification) {
 			continue
 		}
 		cls[i].FieldsSummary = "Sheet: " + FieldsSummary(et.Fields, checked)
+		if kind := c.sheetKind(et); kind != "" {
+			var stored map[string]any
+			if p.FrontMatter.Action == ActionUpdate && cls[i].ConflictEntity != nil {
+				stored = cls[i].ConflictEntity.FieldsData
+			}
+			cls[i].SheetKind = kind
+			cls[i].SheetFields, cls[i].SheetWritten = sheetForCheck(stored, checked)
+		}
 	}
+}
+
+// sheetKind is what a game system's review check knows the category as:
+// "creature" for a creature type or one of its sub-types, otherwise the
+// category's preset category; "" for a category no system made.
+func (c *Classifier) sheetKind(et *entities.EntityType) string {
+	for _, id := range entities.CreatureTypeIDs(c.cachedTypes) {
+		if id == et.ID {
+			return "creature"
+		}
+	}
+	if et.PresetCategory != nil {
+		return *et.PresetCategory
+	}
+	return ""
+}
+
+// sheetForCheck lays the AI's checked values over the page's stored ones,
+// so a check of an update sees the level and organization the page already
+// has, and lists the keys the AI wrote.
+func sheetForCheck(stored, checked map[string]any) (map[string]any, []string) {
+	out := make(map[string]any)
+	for k, v := range stored {
+		out[k] = v
+	}
+	written := make([]string, 0, len(checked))
+	for k, v := range checked {
+		out[k] = v
+		written = append(written, k)
+	}
+	sort.Strings(written)
+	return out, written
 }
 
 // typeByID finds a cached category by id; nil when it is not there.

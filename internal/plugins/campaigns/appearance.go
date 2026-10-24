@@ -47,6 +47,8 @@ type Appearance struct {
 	// Who may pick their own version of a part (look_access.go); empty is the
 	// part's default.
 	AccessSheet    string `json:"access_sheet,omitempty"`
+	AccessPage     string `json:"access_page,omitempty"`
+	AccessHover    string `json:"access_hover,omitempty"`
 	AccessDmScreen string `json:"access_dmscreen,omitempty"`
 }
 
@@ -199,6 +201,24 @@ func (in *AppearanceInput) AppearancePictures() []string {
 		}
 	}
 	return out
+}
+
+// navStyleBlank is the menu highlight an unset nav style means for a look:
+// Classic's is the still rail and tint, every other look's the living ring
+// (the blank value every campaign saved before Classic changed).
+func navStyleBlank(look string) string {
+	if look == "" || look == "classic" {
+		return "rail"
+	}
+	return "ring"
+}
+
+// EffectiveNavStyle is the menu highlight this appearance shows.
+func (a Appearance) EffectiveNavStyle() string {
+	if a.NavStyle != "" {
+		return a.NavStyle
+	}
+	return navStyleBlank(a.Look)
 }
 
 // oneOf normalises a choice: empty or the default becomes "", anything in
@@ -462,6 +482,13 @@ func applyAppearance(s *CampaignSettings, in AppearanceInput) (*string, error) {
 		if *c.dst, err = oneOf(c.name, c.v, c.allowed); err != nil {
 			return fail(err)
 		}
+	}
+	// A highlight is stored only where it differs from what blank means for
+	// the chosen look, so campaigns saved before Classic went still keep theirs.
+	if in.Nav.Style != "" && in.Nav.Style == navStyleBlank(a.Look) {
+		a.NavStyle = ""
+	} else if in.Nav.Style != "" {
+		a.NavStyle = in.Nav.Style
 	}
 	if a.PageLook, err = pageLookChoice(in.Page.Look, s.Appearance); err != nil {
 		return fail(err)

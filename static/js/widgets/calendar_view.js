@@ -2,12 +2,8 @@
  * calendar_view.js — the calendar's own page. Renders the month grid, the
  * day-card and era-card fold-outs, event icons/glance/full-detail, moons
  * (silhouette + moon view), and the calendar-switcher hub popover —
- * everything the read-only (Player) surface needs. Ported from the two
- * operator-signed mockups' CSS/markup contract
- * (internal/plugins/calendar/.ai.md documents the port and its honest gaps);
- * the JS itself is a fresh implementation against Chronicle's real API
- * (the mockups' own JS runs against synthetic sample data with a different
- * field vocabulary, so it is not something to copy statement-for-statement).
+ * everything the read-only (Player) surface needs. Follows the signed
+ * mockups' CSS and markup; see internal/plugins/calendar/.ai.md.
  *
  * Mount: data-widget="calendar_view"
  * Config (see view.templ's mount div):
@@ -2472,9 +2468,10 @@
       if (!p) return '<section class="eps"><h4>Recap</h4><div class="none">Loading…</div></section>';
       if (p.failed) return '<section class="eps"><h4>Recap</h4><div class="none">The recap, linked pages and entries could not be loaded.</div></section>';
       var h = this._gnCheckInHTML(sid, date, p) + '<section class="eps gnrecap"><h4>Recap</h4>';
-      // Editing here is plain text, so a recap with formatting is shown but
-      // never edited here: saving it would drop the formatting.
-      var rich = !!p.recapHtml && /<(?!\/?p\b|br\b)[a-z]/i.test(p.recapHtml);
+      // Editing here is plain text, so a recap with formatting, or any recap
+      // written in the page editor (stored as its JSON), is shown but never
+      // edited here: saving it would drop the formatting.
+      var rich = !!p.recapHtml && (/<(?!\/?p\b|br\b)[a-z]/i.test(p.recapHtml) || /^\s*\{/.test(p.recap || ''));
       if (this._gnRecapFor === sid && !rich) {
         h += '<label class="fld"><span class="sr">Recap</span><textarea data-gn-recap-input rows="6" placeholder="What happened this game night?">' + esc(p.recap) + '</textarea></label>' +
           '<p class="gperr" role="alert" hidden></p>' +
@@ -5921,8 +5918,8 @@
     },
 
     // --------------------------------------------------------------
-    // Moon view (a simplified but functional stand-in for the mockups'
-    // full ambient canvas graph — see .ai.md "Honest gaps").
+    // Moon view: a day-tick strip standing in for the signed ambient
+    // canvas graph, TODO(#794).
     // --------------------------------------------------------------
     openMoonView: function () {
       var moons = this.cal.moons || [];

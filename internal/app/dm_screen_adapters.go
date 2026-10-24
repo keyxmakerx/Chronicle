@@ -276,14 +276,16 @@ func legacyNoteText(blocks []notes.Block) string {
 	return strings.Join(lines, "\n")
 }
 
-// dmWorldAdapter reads the default calendar's date and today's weather.
+// dmWorldAdapter reads the campaign's primary calendar (the default, else the
+// first) for its date and today's weather, so a campaign whose only calendar
+// was never marked default still shows it.
 type dmWorldAdapter struct {
 	svc calendar.CalendarService
 }
 
 func (a *dmWorldAdapter) World(ctx context.Context, campaignID string, v dmscreen.Viewer) (*dmscreen.WorldView, error) {
 	pv := permissions.RequestViewer(v.Role, v.UserID)
-	cal, err := a.svc.GetDefaultCalendarForViewer(ctx, campaignID, pv)
+	cal, err := a.svc.GetPrimaryCalendarForViewer(ctx, campaignID, pv)
 	if err != nil {
 		if isNotFound(err) {
 			return nil, nil
@@ -304,10 +306,10 @@ func (a *dmWorldAdapter) World(ctx context.Context, campaignID string, v dmscree
 	return w, nil
 }
 
-// Advance steps the default calendar forward; the calendar service refuses a
+// Advance steps the same calendar World shows forward; the calendar service refuses a
 // real-time calendar and checks the new date against the calendar's months.
 func (a *dmWorldAdapter) Advance(ctx context.Context, campaignID string, v dmscreen.Viewer, hours, days int) error {
-	cal, err := a.svc.GetDefaultCalendarForViewer(ctx, campaignID, permissions.RequestViewer(v.Role, v.UserID))
+	cal, err := a.svc.GetPrimaryCalendarForViewer(ctx, campaignID, permissions.RequestViewer(v.Role, v.UserID))
 	if err != nil {
 		return err
 	}
@@ -431,7 +433,7 @@ type dmHiddenAdapter struct {
 // more than limit per type: that spare row is how it knows the panel cannot
 // show them all, without counting every hidden entity in the campaign.
 func (a *dmHiddenAdapter) HiddenCharacters(ctx context.Context, campaignID string, v dmscreen.Viewer, limit int) ([]dmscreen.Hidden, bool, error) {
-	npcTypes, err := a.lists.NPCTypeIDs(ctx, campaignID)
+	npcTypes, err := a.revealTypes(ctx, campaignID)
 	if err != nil {
 		return nil, false, err
 	}
@@ -463,6 +465,20 @@ func (a *dmHiddenAdapter) HiddenCharacters(ctx context.Context, campaignID strin
 	return out, more, nil
 }
 
+// revealTypes is the NPC list plus the creature types (a hidden monster is
+// revealed mid-fight as often as an NPC), sub-types included.
+func (a *dmHiddenAdapter) revealTypes(ctx context.Context, campaignID string) ([]int, error) {
+	npcs, err := a.lists.NPCTypeIDs(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	types, err := a.entities.GetEntityTypes(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	return unionIDs(npcs, entities.CreatureTypeIDs(types)), nil
+}
+
 // Reveal only ever un-hides, and only the NPC and creature types the panel
 // lists: setting the flag (never toggling it) keeps a double-click from
 // hiding the entity again.
@@ -474,7 +490,7 @@ func (a *dmHiddenAdapter) Reveal(ctx context.Context, entityID, campaignID strin
 	if e.CampaignID != campaignID {
 		return "", apperror.NewNotFound("entity not found")
 	}
-	npcTypes, err := a.lists.NPCTypeIDs(ctx, campaignID)
+	npcTypes, err := a.revealTypes(ctx, campaignID)
 	if err != nil {
 		return "", err
 	}
@@ -485,6 +501,32 @@ func (a *dmHiddenAdapter) Reveal(ctx context.Context, entityID, campaignID strin
 		return e.Name, nil
 	}
 	if err := a.entities.SetPrivateInCampaign(ctx, entityID, campaignID, false); err != nil {
+		return "", err
+	}
+	return e.Name, nil
+}
+
+// Hide is Reveal's undo: it only ever hides, and only the types Reveal
+// covers, in this campaign.
+func (a *dmHiddenAdapter) Hide(ctx context.Context, entityID, campaignID string) (string, error) {
+	e, err := a.entities.GetByID(ctx, entityID)
+	if err != nil {
+		return "", err
+	}
+	if e.CampaignID != campaignID {
+		return "", apperror.NewNotFound("entity not found")
+	}
+	types, err := a.revealTypes(ctx, campaignID)
+	if err != nil {
+		return "", err
+	}
+	if !slices.Contains(types, e.EntityTypeID) {
+		return "", apperror.NewNotFound("entity not found")
+	}
+	if e.IsPrivate {
+		return e.Name, nil
+	}
+	if err := a.entities.SetPrivateInCampaign(ctx, entityID, campaignID, true); err != nil {
 		return "", err
 	}
 	return e.Name, nil
@@ -649,10 +691,11 @@ func (a *dmPresenceAdapter) Players(ctx context.Context, campaignID string) ([]d
 
 	var out []dmscreen.PlayerPresence
 	for _, m := range members {
-		if m.Role != campaigns.RolePlayer {
+		// A Scribe plays a character like any player; the owner runs the game.
+		if m.Role == campaigns.RoleOwner {
 			continue
 		}
-		// A DM grant makes a Player-role member a co-DM, who runs the game.
+		// A DM grant makes a member a co-DM, who runs the game.
 		if granted, err := a.members.IsUserDmGranted(ctx, campaignID, m.UserID); err == nil && granted {
 			continue
 		}

@@ -40,6 +40,10 @@ type Callout struct {
 	Link string
 	// Count is how many unanswered requests there are, for CalloutRSVP.
 	Count int
+	// NoAccountPage drops the timezone banner's "Choose" link, for a guest
+	// whose session is fenced away from /account: the link would only bounce
+	// them back to their campaign.
+	NoAccountPage bool
 }
 
 // calloutNotifTypes are the notification types that represent something a
@@ -49,7 +53,8 @@ type Callout struct {
 // banner for every notification type would train players to dismiss it
 // unread, burying the one that actually needs an answer.
 var calloutNotifTypes = map[string]bool{
-	NotifProposalCreated: true,
+	NotifProposalCreated:  true,
+	NotifSessionScheduled: true,
 }
 
 // BuildCallout decides what one player should be shown, from their unread
@@ -94,9 +99,10 @@ func BuildCallout(unread []Notification, zoneSet bool, now time.Time) Callout {
 		return Callout{
 			Kind: CalloutTimezone,
 			// The sentence states the CONSEQUENCE, not the chore. "Set your
-			// timezone" is a task; "your times are being shown in UTC" is the
-			// reason anyone would do it.
-			Message: "Chronicle does not know your timezone, so it is showing you times in UTC",
+			// timezone" is a task; "times are not in yours" is the reason
+			// anyone would do it. It does not say UTC: game nights show in
+			// the organizer's zone, so that claim would be false there.
+			Message: "Chronicle does not know your timezone, so times are not shown in your local time",
 		}
 	}
 

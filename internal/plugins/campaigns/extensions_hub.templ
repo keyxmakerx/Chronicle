@@ -37,7 +37,7 @@ templ ExtensionsHubPage(cc *CampaignContext, addons []PluginHubAddon, csrfToken,
 			@layouts.ManageHeader("Game & features")
 			<div class="manage-split">
 				<div class="mb-6">
-					@gameSystemCard(cc, systemOptionsJSON)
+					@gameSystemCard(cc, systemOptionsJSON, currentSystemID(cc.Campaign.ParseSettings().SystemID, addons))
 				</div>
 				// The feature list is the main column on a big monitor; the game
 				// system, content packs and Foundry row stack beside it.
@@ -166,8 +166,9 @@ templ foundryConnectRow(cc *CampaignContext, foundry FoundryRowData, csrfToken s
 // the HTMX swap target after toggles + as the body of the full page.
 // Enabled and disabled cards both render in the same grid (no
 // Enabled/Available split) so expansion targets stay stable across
-// toggles.
+// toggles. Game systems are left out; the game system card owns them.
 templ ExtensionsHubFragment(cc *CampaignContext, addons []PluginHubAddon, csrfToken string) {
+	{{ addons = featureAddons(addons) }}
 	if len(addons) == 0 {
 		<div class="card p-8 text-center">
 			<p class="text-fg-muted">No extensions available yet.</p>

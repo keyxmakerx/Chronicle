@@ -1,0 +1,31 @@
+package encounters
+
+import (
+	"encoding/json"
+
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// RunMount is the mount point of the DM Screen's Fight tab. The widget
+// fetches the fight itself and the service refuses anyone but the DM, so
+// the markup carries only the game system's condition names, which the
+// screen's Rules tab already shows.
+templ RunMount(campaignID string, conditions []string) {
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/css/encounters.css") }/>
+	<div
+		data-widget="encounter-run"
+		data-campaign-id={ campaignID }
+		data-conditions={ conditionsJSON(conditions) }
+	></div>
+}
+
+func conditionsJSON(names []string) string {
+	if names == nil {
+		names = []string{}
+	}
+	raw, err := json.Marshal(names)
+	if err != nil {
+		return "[]"
+	}
+	return string(raw)
+}

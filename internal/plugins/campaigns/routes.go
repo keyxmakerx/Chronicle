@@ -141,9 +141,12 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 	cg.GET("/dm-grants", h.GetDmGrantsAPI, RequireRole(RoleOwner))
 	cg.PUT("/dm-grants", h.UpdateDmGrantsAPI, RequireRole(RoleOwner))
 
-	// "View as player" display toggle (Owner only). It only flips a display
-	// cookie, so it stays usable on an archived campaign.
-	cgArchived.POST("/toggle-view-mode", h.ToggleViewAsPlayer, RequireRole(RoleOwner))
+	// "View as player" display toggle, for the DM team (the owner and
+	// co-DMs). It only flips a display cookie, so it stays usable on an
+	// archived campaign.
+	cgArchived.POST("/toggle-view-mode", h.ToggleViewAsPlayer, RequireCapability(func(cc *CampaignContext) bool {
+		return cc.CanAuthorDmOnly()
+	}, "only the campaign owner or a member with DM access may do this"))
 
 	// Member management (Owner only).
 	cg.POST("/members", h.AddMember, RequireRole(RoleOwner))
