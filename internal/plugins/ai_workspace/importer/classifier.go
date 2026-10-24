@@ -216,7 +216,7 @@ func (c *Classifier) sheetKind(et *entities.EntityType) string {
 // so a check of an update sees the level and organization the page already
 // has, and lists the keys the AI wrote.
 func sheetForCheck(stored, checked map[string]any) (map[string]any, []string) {
-	out := make(map[string]any, len(stored)+len(checked))
+	out := make(map[string]any)
 	for k, v := range stored {
 		out[k] = v
 	}
