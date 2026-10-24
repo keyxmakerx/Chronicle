@@ -107,6 +107,13 @@
 .pm-blank { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 12px; font-size: 0.86rem; color: var(--pm-muted); pointer-events: none; }
 .pm-blank b { display: block; color: var(--pm-text); font-weight: 600; margin-bottom: 2px; }
 .pm-blank .pm-quiet { pointer-events: auto; }
+/* An empty map folded to one line until someone draws on it. */
+.pm.pm-folded { padding: 0; box-shadow: none; background: none; border: 0; }
+.pm-fold {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  padding: 10px 16px; border-radius: var(--pm-r-sheet); border: 1.5px dashed var(--pm-rule); color: var(--pm-muted);
+}
+.pm-fold .pm-btn i { font-size: 0.75em; margin-right: 4px; }
 .pm-cap { display: block; font-size: 12.5px; line-height: 1.35; color: var(--pm-muted); margin: 6px 0 0; min-height: 2.7em; }
 
 /* Background patterns */

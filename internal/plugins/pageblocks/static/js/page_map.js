@@ -531,6 +531,18 @@
     el.hidden = false;
     var keep = focusKey(el);
     var blank = isBlank(S.doc);
+    // An empty map an editor isn't drawing folds to one line, so it doesn't
+    // push the page's read-aloud and encounters a screen down.
+    var folded = blank && !t.editing && !t.big;
+    el.classList.toggle('pm-folded', folded);
+    if (folded) {
+      el.classList.remove('pm-editing');
+      el.innerHTML = '<div class="pm-fold"><span class="pm-fold-text">No map for this page yet.</span>' +
+        '<button type="button" class="pm-btn" data-act="pen"><i class="fa-solid fa-plus" aria-hidden="true"></i> Add a map</button></div>';
+      t.svg = t.layer = null;
+      restoreFocus(el, keep);
+      return;
+    }
     var bm = blank ? '<div class="pm-blank"><div><b>No map yet</b>' + (t.editing ? 'Pick a shape and drag on the grid, or ' : 'Draw one here, or ') +
       '<button type="button" class="pm-quiet" data-act="' + (t.editing ? 'text' : 'pen') + '">' + (t.editing ? 'paste one from the AI' : 'start drawing') + '</button>.</div></div>' : '';
     el.classList.toggle('pm-editing', t.editing);
