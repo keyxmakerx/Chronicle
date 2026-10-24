@@ -98,9 +98,10 @@ func BuildCallout(unread []Notification, zoneSet bool, now time.Time) Callout {
 		return Callout{
 			Kind: CalloutTimezone,
 			// The sentence states the CONSEQUENCE, not the chore. "Set your
-			// timezone" is a task; "your times are being shown in UTC" is the
-			// reason anyone would do it.
-			Message: "Chronicle does not know your timezone, so it is showing you times in UTC",
+			// timezone" is a task; "times are not in yours" is the reason
+			// anyone would do it. It does not say UTC: game nights show in
+			// the organizer's zone, so that claim would be false there.
+			Message: "Chronicle does not know your timezone, so times are not shown in your local time",
 		}
 	}
 
