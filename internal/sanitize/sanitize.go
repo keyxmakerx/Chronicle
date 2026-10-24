@@ -218,7 +218,8 @@ func CountSecrets(html string) (passages, pictures, diagrams int) {
 }
 
 // StripSecretsJSON removes nodes marked with the "secret" mark, GM-only
-// pictures, GM-only diagrams and rolling-table rollers from ProseMirror JSON content. Returns the modified JSON string. If the input
+// pictures, GM-only diagrams and rolling-table rollers from ProseMirror JSON content,
+// and template prompts from the lines that carry them. Returns the modified JSON string. If the input
 // is not valid ProseMirror JSON, it is returned unchanged.
 func StripSecretsJSON(jsonStr string) string {
 	if jsonStr == "" {
@@ -260,6 +261,10 @@ func stripSecretNodes(node map[string]interface{}) {
 			continue // strip this node
 		}
 
+		// A template's writing prompt is an editing hint, never page content.
+		if attrs, ok := childMap["attrs"].(map[string]interface{}); ok {
+			delete(attrs, "prompt")
+		}
 		// Recurse into child nodes.
 		stripSecretNodes(childMap)
 		filtered = append(filtered, childMap)

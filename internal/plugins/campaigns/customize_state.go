@@ -190,7 +190,7 @@ func buildCustomizeState(ctx context.Context, cc *CampaignContext) customizeStat
 		h.Text = tc.Quote
 	}
 
-	d.Nav.Style = orDefault(a.NavStyle, AppearanceNavStyles)
+	d.Nav.Style = orDefault(a.EffectiveNavStyle(), AppearanceNavStyles)
 	d.Nav.Strength = orDefault(a.NavStrength, AppearanceNavStrengths)
 	d.Nav.PageName = orDefault(a.NavPageName, AppearanceNavPageNames)
 

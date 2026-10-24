@@ -2960,6 +2960,15 @@ func (a *App) RegisterRoutes() {
 
 	// Content template routes (entity content blueprints).
 	contentTemplateRepo := entities.NewContentTemplateRepository(a.DB)
+	// One-time, idempotent: built-in templates still as first seeded get
+	// prompts that vanish when written over. Best-effort, never blocks startup.
+	if store, ok := contentTemplateRepo.(entities.TemplatePromptStore); ok {
+		if n, err := entities.ReconcileTemplatePrompts(context.Background(), store); err != nil {
+			slog.Error("entities: template prompt reconcile failed", slog.Any("error", err))
+		} else if n > 0 {
+			slog.Info("entities: template prompt reconcile updated templates", slog.Int64("templates", n))
+		}
+	}
 	contentTemplateService := entities.NewContentTemplateService(contentTemplateRepo, entityTypeRepo)
 	contentTemplateHandler := entities.NewContentTemplateHandler(contentTemplateService)
 	entities.RegisterContentTemplateRoutes(e, contentTemplateHandler, campaignService, authService)
@@ -5421,7 +5430,7 @@ func (a *App) RegisterRoutes() {
 			}
 			if ap := campaignSettings.Appearance; ap != nil {
 				ad := &layouts.AppearanceData{
-					NavStyle: ap.NavStyle, NavStrength: ap.NavStrength, NavPageName: ap.NavPageName,
+					NavStyle: ap.EffectiveNavStyle(), NavStrength: ap.NavStrength, NavPageName: ap.NavPageName,
 					PageTone: ap.PageTone, Contrast: ap.Contrast,
 					BodyFont: ap.BodyFont, HeadingFont: ap.HeadingFont, TypeScale: ap.TypeScale,
 					ButtonStyle: ap.ButtonStyle, Elevation: ap.Elevation, MotionSpeed: ap.MotionSpeed,

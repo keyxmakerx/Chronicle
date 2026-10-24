@@ -852,6 +852,17 @@
     @apply text-fg-muted float-left h-0 pointer-events-none;
     content: attr(data-placeholder);
   }
+  /* A template's prompt on an empty line, only while editing. */
+  .chronicle-editor__content .tiptap [data-prompt].is-empty::before {
+    @apply text-fg-muted italic float-left h-0 pointer-events-none;
+    content: attr(data-placeholder);
+  }
+  /* Reading, a prompt line nobody wrote on takes no room, and neither does an
+     empty bullet (players' copies carry no prompt, only the empty line). */
+  .chronicle-editor__content .tiptap[contenteditable="false"] :is(p, h1, h2, h3)[data-prompt]:has(> br.ProseMirror-trailingBreak:only-child),
+  .chronicle-editor__content .tiptap[contenteditable="false"] li:has(> p:only-child > br.ProseMirror-trailingBreak:only-child) {
+    display: none;
+  }
 
   .chronicle-editor__status {
     @apply px-3 py-1.5 text-xs border-t border-edge-light;
@@ -3391,9 +3402,10 @@
      rows on the sidebar's colour, like a drawer closing over them. */
   .nav-cover { position: relative; z-index: 2; background: var(--nav-bg); }
 
-  /* The living ring, at Calm. Rest shows nothing; the current row gets two
-     traces circling its box, drifting in length and pace on uneven 14s and
-     19s cycles. It sits on the rows' own box, square corners, like the glow. */
+  /* The current row's highlight layers. Drawn here as the living ring, at
+     Calm: two traces circling the row's box, drifting in length and pace on
+     uneven 14s and 19s cycles, square corners like the glow. Each other
+     style (data-cz-nav, below) shows some of these layers. */
   .nav-ring { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
   .nav-ring-tint {
     position: absolute; inset: 0;
@@ -4658,8 +4670,8 @@ html[data-motion] [data-cz-btn="keystone"] .btn:active { transform: none; }
   background-image: radial-gradient(90% 60% at 80% -10%, rgb(var(--color-accent-rgb, 99 102 241) / 0.08), transparent 60%);
 }
 
-/* Menu highlight on the page you are on. The living ring (the default)
-   is drawn by .nav-ring itself; each other style shows some of its layers
+/* Menu highlight on the page you are on. The living ring is drawn by
+   .nav-ring itself; each other style shows some of its layers
    or styles the row. Strength: Lively is brighter and quicker. */
 [data-cz-strength="lively"] .nav-ring-tint { background: linear-gradient(to left, rgb(var(--nav-accent) / 0.28), rgb(var(--nav-accent) / 0.09)); }
 [data-cz-strength="lively"] .nav-ring-t1 { animation-duration: 9.5s; }
@@ -4695,9 +4707,10 @@ html[data-motion] [data-cz-btn="keystone"] .btn:active { transform: none; }
 [data-cz-nav="tide"][data-cz-strength="lively"] .nav-ring::after { animation-duration: 6s; }
 @keyframes cz-tide { 0% { transform: translateX(-110%); } 62%, 100% { transform: translateX(270%); } }
 
-/* Rail and tint: still, and the clearest at a glance. */
-[data-cz-nav="rail"] .nav-ring-svg { display: none; }
-[data-cz-nav="rail"] .nav-ring-j { display: block; width: 2px; }
+/* Rail and tint: still, and the clearest at a glance. Classic's highlight,
+   so a page with no saved look (no data-cz-nav) shows it too. */
+:is([data-cz-nav="rail"], html:not([data-cz-nav])) .nav-ring-svg { display: none; }
+:is([data-cz-nav="rail"], html:not([data-cz-nav])) .nav-ring-j { display: block; width: 2px; }
 [data-cz-nav="rail"][data-cz-strength="lively"] .nav-ring-j { width: 3px; }
 
 /* Edge-lit: two hairlines, bright at the left and fading to the right. */

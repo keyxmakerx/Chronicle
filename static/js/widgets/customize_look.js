@@ -245,6 +245,8 @@
       ['icon', 'Solid icon', 'still', 'The icon fills in and the words turn white. Nothing else changes.']
     ];
     var STILL_OF = { ring:'rail', comet:'edge', breathe:'rail', tide:'rail' };
+    // Classic's highlight, and what a campaign that saved no highlight shows.
+    var DEFAULT_NAV = 'rail';
     function navName(id){ return NAV_STYLES.filter(function(s){ return s[0] === id; })[0][1]; }
     var BTN_STYLES = [
       ['lift', 'Lift', 'Rises to meet the pointer and settles when pressed. Rounded corners.'],
@@ -280,7 +282,7 @@
     // brand, the header's widgets or the reduce-motion switch.
     var LOOKS = [
       { id:'classic', name:'Classic', blurb:'Chronicle as it ships',
-        header:{ bg:'solid', solid:'page', from:'#0f172a', to:'#1e2a5a', dir:'r' }, nav:{ style:'ring', strength:'calm' },
+        header:{ bg:'solid', solid:'page', from:'#0f172a', to:'#1e2a5a', dir:'r' }, nav:{ style:'rail', strength:'calm' },
         colours:{ accent:'#6366f1', s1:null, s2:null, sidebar:'charcoal', page:'cool', contrast:'standard' },
         type:{ body:'inter', heading:'same', scale:'standard' }, buttons:{ style:'lift' }, motion:{ elevation:'standard', speed:'standard' } },
       { id:'parchment', name:'Parchment', blurb:'Sepia ink on old paper',
@@ -436,7 +438,8 @@
     // dropped on save.
     var LINK_ROWS = 4;
     // The page asks for a short welcome; one saved longer before keeps its room.
-    function welcomeMax(){ return Math.max(160, (STATE.draft.brand.welcome || '').length); }
+    // Matches the server's limit for the one stored welcome message.
+    function welcomeMax(){ return 500; }
     function fromServer(d){
       d = clone(d);
       ['logo', 'backdrop'].forEach(function(k){ if (!d.brand[k]) d.brand[k] = 'none'; });
@@ -637,7 +640,7 @@
       return NAV_STYLES.filter(function(s){ return s[2] === kind; }).map(function(s){
         return '<label class="tile nav-tile" data-hc="nav:' + s[0] + '"><input type="radio" name="t-nav" value="' + s[0] + '" data-k="nav.style"><span class="tb">' +
           '<span class="nt-s pv" data-nav="' + s[0] + '" data-own="' + s[0] + '" aria-hidden="true"><span class="s-row on" style="--c:#f87171"><span class="ic">' + IC('i-mappin') + '</span><span class="lb">Cities</span><span class="pn">Emberfall</span>' + HL + '</span></span>' +
-          '<span class="tn">' + esc(s[1]) + '<span class="tck">' + IC('i-check') + '</span></span>' + (s[0] === 'ring' ? '<span class="tbadge">Signed default</span>' : '') + '</span></label>';
+          '<span class="tn">' + esc(s[1]) + '<span class="tck">' + IC('i-check') + '</span></span>' + (s[0] === DEFAULT_NAV ? '<span class="tbadge">Signed default</span>' : '') + '</span></label>';
       }).join('');
     }
     function tilesBody(){
@@ -721,9 +724,9 @@
           '<input class="inp" id="b-name" type="text" maxlength="40" data-k="brand.name" placeholder="' + esc(CAMPAIGN) + '" aria-labelledby="b-name-l" aria-describedby="b-name-h">' +
           '<div class="row-h"><span class="hint" id="b-name-h">Shown at the top of the menu. Leave it empty to use the campaign’s name.</span><span class="cnt" id="b-name-c"></span></div>') +
         fld('brand-logo', 'Logo', 'Square works best', imgSlot('brand.logo', 'sq', 'Upload', 'Up to 1 MB. Without a logo, the menu shows your first letter on your chrome accent.')) +
-        fld('b-welcome', 'Welcome message', 'Up to 160 characters',
+        fld('b-welcome', 'Welcome message', 'Up to 500 characters',
           '<textarea class="inp" id="b-welcome" rows="3" maxlength="' + welcomeMax() + '" data-k="brand.welcome" aria-labelledby="b-welcome-l" aria-describedby="b-welcome-h"></textarea>' +
-          '<div class="row-h"><span class="hint" id="b-welcome-h">Shown over the backdrop at the top of the dashboard.</span><span class="cnt" id="b-welcome-c"></span></div>') +
+          '<div class="row-h"><span class="hint" id="b-welcome-h">Shown over the backdrop at the top of the campaign home.</span><span class="cnt" id="b-welcome-c"></span></div>') +
         fld('brand-backdrop', 'Backdrop', 'Behind the welcome', imgSlot('brand.backdrop', '', 'Upload', 'A soft shade keeps the welcome message readable over any picture. Up to 4 MB.')));
       if (id === 'header') return (
         fld('h-bg', 'Background', null,
@@ -846,7 +849,7 @@
     }
     function siteHTML(){
       var sb = '<div class="s-sb"><div class="s-brand"><span class="s-bnr" id="d-bnr"></span><span class="s-logo" id="d-logo"></span><span class="s-btext"><span class="s-bname" id="d-bname"></span><span class="s-bsub" id="d-bsub"></span></span><span class="s-bchev">' + IC('i-chev') + '</span><span class="s-pen" id="d-pen">' + IC('i-pencil') + '</span></div><div class="s-list">' +
-        srow('dash', 'i-home', 'Dashboard', null, null, true) +
+        srow('dash', 'i-home', 'Home', null, null, true) +
         '<div class="s-gh">' + IC('i-tack') + 'Pinned</div>' +
         srow('journal', 'i-journal', 'Journal') + srow('calendar', 'i-cal', 'Calendar') + srow('sessions', 'i-d20', 'Sessions') + srow('maps', 'i-map', 'Maps') +
         '<div class="s-gh folded">Apps <span class="n">6</span>' + IC('i-chev', 'chev') + '</div>' +
@@ -985,7 +988,7 @@
       setText($('#d-bsub'), d.sidebar.corner === 'subtitle' ? d.sidebar.subtitle.trim() : '');
       setBg($('#d-himg'), imgURL(d.header.image));
       setHTML($('#d-path'), {
-        dash:'<b>Dashboard</b>',
+        dash:'<b>Home</b>',
         city:'<span>Locations</span>' + IC('i-chev-r') + '<span>Cities</span>' + IC('i-chev-r') + '<b>Emberfall</b>',
         sheet:'<span>Characters</span>' + IC('i-chev-r') + '<b>Sera Windrose</b>'
       }[ui.page]);
