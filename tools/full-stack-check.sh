@@ -78,5 +78,11 @@ case "$backup_out" in
   *BACKUP=ok*) ;;
   *) echo "error: backup.sh did not report BACKUP=ok" >&2; exit 1 ;;
 esac
+# Old backups are pruned with the image's BusyBox date, which other systems'
+# date commands don't stand in for.
+case "$backup_out" in
+  *retention=ok*) ;;
+  *) echo "error: backup.sh could not prune old backups in the image" >&2; exit 1 ;;
+esac
 
 echo "==> full-stack-check: OK"

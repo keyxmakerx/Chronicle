@@ -234,9 +234,18 @@ printf 'artifact=manifest file=%s\n' "$MANIFEST"
 # against the cutoff. Glob across all four operator-script artifact
 # families; never touches chronicle_pre_migrate_* (managed by the Go
 # in-process rotator).
-CUTOFF="$(date -u -d "${BACKUP_RETENTION_DAYS} days ago" +%Y%m%d 2>/dev/null \
-    || date -u -v-"${BACKUP_RETENTION_DAYS}d" +%Y%m%d 2>/dev/null \
-    || echo "")"
+# The cutoff is worked out in epoch seconds because the image's BusyBox date
+# rejects "N days ago"; "@SECONDS" works in BusyBox and GNU date, -r in BSD.
+CUTOFF=""
+case "$BACKUP_RETENTION_DAYS" in
+    ''|*[!0-9]*) ;;
+    *)
+        CUTOFF_EPOCH=$(( $(date -u +%s) - BACKUP_RETENTION_DAYS * 86400 ))
+        CUTOFF="$(date -u -d "@$CUTOFF_EPOCH" +%Y%m%d 2>/dev/null \
+            || date -u -r "$CUTOFF_EPOCH" +%Y%m%d 2>/dev/null \
+            || echo "")"
+        ;;
+esac
 if [ -n "$CUTOFF" ]; then
     REMOVED=0
     for f in "$BACKUP_DIR"/chronicle_db_*.sql.gz \
