@@ -368,6 +368,14 @@ templ adminNavRow(it AdminNavItem, makeRoom bool) {
 
 // DefaultSidebarNav renders generic navigation when not inside a campaign.
 templ DefaultSidebarNav() {
+	// A guest is fenced to one campaign, so none of these lead anywhere for
+	// them; their way around is the campaign's own sidebar.
+	if !IsGuest(ctx) {
+		@defaultSidebarLinks()
+	}
+}
+
+templ defaultSidebarLinks() {
 	<div class="px-4 mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
 		Navigation
 	</div>
@@ -991,12 +999,16 @@ templ Topbar() {
 								<i class="fa-solid fa-gear text-xs w-4"></i> Account Settings
 							</a>
 						}
-						<form method="POST" action="/logout">
-							<input type="hidden" name="csrf_token" value={ GetCSRFToken(ctx) }/>
-							<button type="submit" class="dropdown-item dropdown-item-danger w-full text-left">
-								<i class="fa-solid fa-arrow-right-from-bracket text-xs w-4"></i> Log out
-							</button>
-						</form>
+						if IsGuest(ctx) {
+							@guestLogOut()
+						} else {
+							<form method="POST" action="/logout">
+								<input type="hidden" name="csrf_token" value={ GetCSRFToken(ctx) }/>
+								<button type="submit" class="dropdown-item dropdown-item-danger w-full text-left">
+									<i class="fa-solid fa-arrow-right-from-bracket text-xs w-4"></i> Log out
+								</button>
+							</form>
+						}
 					</div>
 				</div>
 			} else {

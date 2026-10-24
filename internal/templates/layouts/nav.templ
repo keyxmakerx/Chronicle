@@ -429,14 +429,20 @@ templ navManage() {
 // campaignNavFooter keeps the ways out of the campaign (every campaign, and
 // the public Discover page), the owner's labelled Edit button (moved here
 // from the brand row) and the buttons that fold the sidebar to icons or hide
-// it.
+// it. A guest is fenced to this one campaign, so the ways out are left off:
+// for them Campaigns would bounce straight back and Discover would show the
+// signed-out front page.
 templ campaignNavFooter() {
 	<div class="nav-foot">
-		<a href="/campaigns" hx-boost="false">Campaigns</a>
-		<span aria-hidden="true">·</span>
-		<a href="/" hx-boost="false">Discover</a>
-		if HasYourLook(ctx) && !IsOwner(ctx) {
+		if !IsGuest(ctx) {
+			<a href="/campaigns" hx-boost="false">Campaigns</a>
 			<span aria-hidden="true">·</span>
+			<a href="/" hx-boost="false">Discover</a>
+		}
+		if HasYourLook(ctx) && !IsOwner(ctx) {
+			if !IsGuest(ctx) {
+				<span aria-hidden="true">·</span>
+			}
 			<a href={ templ.SafeURL("/campaigns/" + GetCampaignID(ctx) + "/my-look") }>Your look</a>
 		}
 		<span class="nav-foot-gap"></span>
