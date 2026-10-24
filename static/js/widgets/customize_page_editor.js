@@ -882,7 +882,8 @@
         } else {
           inp = '<input class="cpe-inp" type="text" id="' + id + '" data-cfg="' + esc(key) + '" value="' + esc(v) + '">';
         }
-        return '<div class="cpe-grp"><label class="cpe-lab" for="' + id + '">' + esc(fd.label || humanize(key)) + '</label>' + inp + '</div>';
+        var hint = fd.hint ? '<span class="cpe-hint">' + esc(fd.hint) + '</span>' : '';
+        return '<div class="cpe-grp"><label class="cpe-lab" for="' + id + '">' + esc(fd.label || humanize(key)) + '</label>' + inp + hint + '</div>';
       }).join('');
     }
     function needOptions(type) {

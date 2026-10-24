@@ -1243,11 +1243,20 @@ func (s *calendarService) seedHemisphereSeasonsIfEmpty(ctx context.Context, cale
 // DeleteCalendar removes a calendar and its structural sub-resources
 // (cascaded by FK, see CalendarRepository.Delete's doc comment).
 func (s *calendarService) DeleteCalendar(ctx context.Context, calendarID, campaignID string) error {
-	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
+	cal, err := s.calendarInCampaign(ctx, calendarID, campaignID)
+	if err != nil {
 		return err
 	}
 	if err := s.calRepo.Delete(ctx, calendarID); err != nil {
 		return fmt.Errorf("delete calendar: %w", err)
+	}
+	// Deleting the default hands the mark to the next calendar, so the
+	// campaign keeps one while it has any.
+	if cal.IsDefault {
+		if err := ensureDefaultCalendar(ctx, s.calRepo, campaignID); err != nil {
+			slog.Warn("calendar: could not mark a new default after delete",
+				slog.String("campaign_id", campaignID), slog.Any("error", err))
+		}
 	}
 	return nil
 }

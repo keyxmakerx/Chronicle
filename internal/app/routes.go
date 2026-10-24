@@ -3771,6 +3771,15 @@ func (a *App) RegisterRoutes() {
 			slog.Info("calendar: harptos season reconcile repaired calendars", slog.Int("calendars", n))
 		}
 	}
+	// One-time, idempotent: give campaigns that have calendars but none
+	// marked default their first one. Best-effort, never blocks startup.
+	if store, ok := calendarRepo.(calendar.DefaultCalendarStore); ok {
+		if n, err := calendar.ReconcileDefaultCalendars(context.Background(), store); err != nil {
+			slog.Error("calendar: default calendar reconcile failed", slog.Any("error", err))
+		} else if n > 0 {
+			slog.Info("calendar: default calendar reconcile marked defaults", slog.Int("campaigns", n))
+		}
+	}
 	calendarEventRepo := calendar.NewEventRepository(a.DB)
 	calendarKindRepo := calendar.NewEventKindRepository(a.DB)
 	calendarWeatherRepo := calendar.NewWeatherRepository(a.DB)

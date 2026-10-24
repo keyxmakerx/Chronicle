@@ -275,8 +275,8 @@ templ dashEntityList(cc *CampaignContext, config map[string]any) {
 // Config: content (string). Content is sanitized to prevent stored XSS.
 templ dashTextBlock(config map[string]any) {
 	<div class="cb-card card p-4 prose prose-sm dark:prose-invert max-w-none">
-		if content, ok := config["content"].(string); ok && content != "" {
-			@templ.Raw(sanitize.HTML(content))
+		if content, ok := config["content"].(string); ok && sanitize.TextBlock(content) != "" {
+			@templ.Raw(sanitize.TextBlock(content))
 		} else {
 			<p class="text-fg-muted text-sm italic">Empty text block</p>
 		}
