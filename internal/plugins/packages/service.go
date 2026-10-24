@@ -71,6 +71,10 @@ type PackageService interface {
 	// CountPendingSubmissions returns the number of packages awaiting approval.
 	CountPendingSubmissions(ctx context.Context) (int, error)
 
+	// CountUpdatesReady returns how many packages the Updates tab offers an
+	// update for: installed, not pinned, not failing, with a newer release.
+	CountUpdatesReady(ctx context.Context) (int, error)
+
 	// ReviewPackage approves or rejects a pending package submission.
 	ReviewPackage(ctx context.Context, packageID, adminUserID string, input ReviewPackageInput) error
 
@@ -1141,6 +1145,29 @@ func (s *packageService) ListPendingSubmissions(ctx context.Context) ([]Package,
 // CountPendingSubmissions returns the number of packages awaiting approval.
 func (s *packageService) CountPendingSubmissions(ctx context.Context) (int, error) {
 	return s.repo.CountPendingSubmissions(ctx)
+}
+
+// CountUpdatesReady counts with the same rule as the page's pills, so the
+// site check-up and the Updates tab never disagree.
+func (s *packageService) CountUpdatesReady(ctx context.Context) (int, error) {
+	pkgs, err := s.repo.ListPackages(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("listing packages: %w", err)
+	}
+	n := 0
+	for _, pkg := range pkgs {
+		if pkg.InstalledVersion == "" {
+			continue
+		}
+		versions, err := s.repo.ListVersions(ctx, pkg.ID)
+		if err != nil {
+			return 0, fmt.Errorf("listing versions of %s: %w", pkg.Slug, err)
+		}
+		if derivePackageStatus(pkg, newerVersion(pkg, versions)) == statusUpdateReady {
+			n++
+		}
+	}
+	return n, nil
 }
 
 // ReviewPackage approves or rejects a pending package submission.

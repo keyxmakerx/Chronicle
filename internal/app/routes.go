@@ -3550,7 +3550,26 @@ func (a *App) RegisterRoutes() {
 	// surface the existing backup/restore artifacts — adapters so admin imports
 	// neither the boot config nor the backup/restore plugins.
 	adminHandler.SetHealthChecker(&adminHealthChecker{db: a.DB, cfg: a.Config})
-	adminHandler.SetBackupLister(&adminBackupLister{backups: backupSvc, restores: restoreSvc, settings: settingsRepo, backupDir: a.Config.BackupDir})
+	adminBackups := &adminBackupLister{backups: backupSvc, restores: restoreSvc, settings: settingsRepo, backupDir: a.Config.BackupDir}
+	adminHandler.SetBackupLister(adminBackups)
+
+	// The site check-up behind the admin top bar's shield: a weekly backup
+	// read-back, sign-up, password reset and updates. Admin reaches the
+	// backup plugin and GitHub only through these adapters.
+	checkupDeps := admin.CheckupDeps{
+		Store:        settingsRepo,
+		Backup:       checkupBackup{svc: backupSvc, store: settingsRepo},
+		Chronicle:    newChronicleVersionChecker(),
+		Backups:      adminBackups,
+		Registration: settingsService.GetRegistrationMode,
+		EmailReady:   smtpService.IsConfigured,
+	}
+	if a.pkgService != nil {
+		checkupDeps.Packages = a.pkgService
+	}
+	checkupService := admin.NewCheckupService(checkupDeps)
+	adminHandler.SetCheckupService(checkupService, a.ShutdownCtx)
+	go checkupService.RunScheduler(a.ShutdownCtx)
 
 	// Wire security event logging into the auth handler so logins, logouts,
 	// failed attempts, and password resets are recorded automatically.
@@ -6194,6 +6213,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "customize-categories", Scripts: []string{"/static/js/widgets/customize_categories.js"}},
 	{Name: "customize-page-editor", Scripts: []string{"/static/js/widgets/customize_page_editor.js"}},
 	{Name: "site-look", Scripts: []string{"/static/js/widgets/site_look.js"}},
+	{Name: "checkup", Scripts: []string{"/static/js/widgets/checkup.js"}},
 	{Name: "player-view", Scripts: []string{"/static/js/widgets/player_view.js"}},
 	{Name: "page-editor", Scripts: []string{"/static/js/widgets/page_editor.js"}},
 	{Name: "page-tabs", Scripts: []string{"/static/js/widgets/page_tabs.js"}},

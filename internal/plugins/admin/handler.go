@@ -76,6 +76,9 @@ type Handler struct {
 	siteLook SiteLookService
 	// trash is the site Trash; nil until wired.
 	trash TrashService
+	// checkup is the site check-up behind the top bar's shield; nil until wired.
+	checkup       *CheckupService
+	checkupRunCtx context.Context
 }
 
 // StoragePageData holds all data needed for the combined storage management page.
