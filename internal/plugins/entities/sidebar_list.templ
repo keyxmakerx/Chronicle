@@ -78,6 +78,9 @@ templ SidebarEntityList(results []Entity, nodes []SidebarNode, total int, typeID
 					draggable="true"
 				>
 					<span class="tree-lb">{ entity.Name }</span>
+					if sidebarDMOnly(cc, &entity) {
+						<i class="fa-solid fa-lock tree-lock" role="img" aria-label={ visibilityCornerLabel(ctx, VisStateDMOnly) } title={ visibilityCornerLabel(ctx, VisStateDMOnly) }></i>
+					}
 					if hiddenIDs[entity.ID] {
 						<i class="fa-solid fa-eye-slash tree-hid" title="Hidden from players"></i>
 					}

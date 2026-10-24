@@ -61,6 +61,33 @@ templ visibilityGlance(cc *campaigns.CampaignContext, entity *Entity, ev *Effect
 	}
 }
 
+// dmOnlyTitleLabel sits beside the page name so the DM team can tell at a
+// glance that players can't see the page. It renders hidden on other pages so
+// the corner control can show it after a change without a reload; players get
+// no element at all (ADR-055 rule 3).
+templ dmOnlyTitleLabel(cc *campaigns.CampaignContext, entity *Entity) {
+	if visibilityGlanceVisible(cc) {
+		<span
+			class="badge-amber gap-1 shrink-0 whitespace-nowrap"
+			data-dm-only-label
+			title="Players can't see this page"
+			if baseVisibilityState(entity) != VisStateDMOnly {
+				hidden
+			}
+		>
+			<i class="fa-solid fa-lock text-[10px]" aria-hidden="true"></i>
+			{ visibilityCornerLabel(ctx, VisStateDMOnly) }
+		</span>
+	}
+}
+
+// sidebarDMOnly reports whether a sidebar row gets the lock: the page itself
+// is set to DM-only. A DM-only category's rows carry none, since the category
+// row already says so and a lock on every row would say nothing.
+func sidebarDMOnly(cc *campaigns.CampaignContext, e *Entity) bool {
+	return visibilityGlanceVisible(cc) && e.Visibility != VisibilityCustom && e.IsPrivate && !e.TypeDMOnly
+}
+
 // visibilityCornerLabel is the short word the page-corner control shows
 // beside its glyph.
 func visibilityCornerLabel(ctx context.Context, state string) string {
