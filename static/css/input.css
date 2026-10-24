@@ -3274,9 +3274,10 @@
   .nav-tw[aria-expanded="false"] i, .nav-gh[aria-expanded="false"] .nav-chev { transform: rotate(-90deg); }
 
   /* A member's own pin (players and scribes; the owner pins for everyone in
-     the editor). It shows on hover or focus, always on a row they pinned, and
-     always on touch screens, which have no hover. On hover the row's
-     trailing text fades out under it rather than moving aside. */
+     the editor). It shows on hover or focus and always on a row they pinned.
+     A touch screen has no hover: there a member's pins wait behind the Edit
+     word (nav-tools-gated, below), and the owner's always show. On hover the
+     row's trailing text fades out under it rather than moving aside. */
   .nav-tr { transition: opacity 120ms ease; }
   .nav-mypin {
     position: absolute; top: 4px; right: 8px; z-index: 3; width: 24px; height: 24px; border-radius: 6px;
@@ -3293,15 +3294,16 @@
   .nav-rw.is-mine > .nav-row { padding-right: 36px; }
   .nav-rw.is-mine.has-subs > .nav-row { padding-right: 62px; }
   @media (hover: none) {
-    .nav-rw.can-pin > .nav-mypin { opacity: 1; }
-    .nav-rw.can-pin > .nav-row { padding-right: 36px; }
-    .nav-rw.can-pin.has-subs > .nav-row { padding-right: 62px; }
-    .nav-rw.can-pin > .nav-row .nav-tr { opacity: 1; }
+    :is(#sidebar:not(.nav-tools-gated), #sidebar[data-nav-tools="on"]) .nav-rw.can-pin > .nav-mypin { opacity: 1; }
+    :is(#sidebar:not(.nav-tools-gated), #sidebar[data-nav-tools="on"]) .nav-rw.can-pin > .nav-row { padding-right: 36px; }
+    :is(#sidebar:not(.nav-tools-gated), #sidebar[data-nav-tools="on"]) .nav-rw.can-pin.has-subs > .nav-row { padding-right: 62px; }
+    :is(#sidebar:not(.nav-tools-gated), #sidebar[data-nav-tools="on"]) .nav-rw.can-pin > .nav-row .nav-tr { opacity: 1; }
   }
 
   /* The row menu's dots button (sidebar_row_menu.js). It takes the
-     right-most slot and shows on hover or focus, always on touch screens;
-     the twisty and the member's pin step one slot left to make room. */
+     right-most slot and shows on hover or focus; on a touch screen it shows
+     like the member's pin above. The twisty and the pin step one slot left
+     to make room. */
   .nav-more {
     position: absolute; top: 4px; right: 8px; z-index: 4; width: 24px; height: 24px; border-radius: 6px;
     display: grid; place-items: center; font-size: 12px; color: var(--nav-text-3); opacity: 0;
@@ -3316,8 +3318,33 @@
   .nav-rw.has-more.has-subs > .nav-row, .nav-rw.has-more.can-pin > .nav-row { padding-right: 66px; }
   .nav-rw.has-more.can-pin.has-subs > .nav-row { padding-right: 92px; }
   @media (hover: none) {
-    .nav-rw.has-more > .nav-more { opacity: 1; }
-    .nav-rw.has-more > .nav-row .nav-tr { opacity: 1; }
+    :is(#sidebar:not(.nav-tools-gated), #sidebar[data-nav-tools="on"]) .nav-rw.has-more > .nav-more { opacity: 1; }
+    :is(#sidebar:not(.nav-tools-gated), #sidebar[data-nav-tools="on"]) .nav-rw.has-more > .nav-row .nav-tr { opacity: 1; }
+  }
+
+  /* The touch-screen Edit word (navToolsWord). Until it is pressed a
+     member's rows keep only their labels and counts: the waiting pins and
+     dots are out of reach as well as out of sight, so a tap near a row's
+     end opens the row. A pin they set stays, since it says the row is
+     theirs. The word sits left of the heading's chevron, with a 44px hit
+     area centred on the 30px heading. */
+  .nav-tools-word { display: none; }
+  @media (hover: none) {
+    #sidebar.nav-tools-gated:not([data-nav-tools="on"]) .nav-rw:not(.is-mine) > .nav-mypin,
+    #sidebar.nav-tools-gated:not([data-nav-tools="on"]) .nav-rw > .nav-more:not([aria-expanded="true"]) { visibility: hidden; }
+    .nav-tools-word {
+      position: absolute; top: -7px; right: 26px; z-index: 2; min-width: 44px; height: 44px; padding: 0 8px;
+      display: inline-flex; align-items: center; justify-content: center; border-radius: 8px;
+      font-size: 12px; font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--nav-accent-soft);
+    }
+    .nav-gh-static > .nav-tools-word { right: 4px; }
+    .nav-tools-word:active { background: var(--nav-hover); }
+    .nav-tools-done, #sidebar[data-nav-tools="on"] .nav-tools-edit { display: none; }
+    #sidebar[data-nav-tools="on"] .nav-tools-done { display: inline; }
+    .nav-gh-wrap.has-tools-word .nav-gh-cur { margin-right: 48px; }
+    /* As under a desktop hover, a row's caption fades under its pin and
+       dots rather than running beneath them. */
+    #sidebar.nav-tools-gated[data-nav-tools="on"] .nav-rw.has-more > .nav-row .nav-tr { opacity: 0; }
   }
 
   /* A category's hover peek (sidebar_cat_peek.js): a lifted card that starts at

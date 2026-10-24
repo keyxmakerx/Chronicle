@@ -133,6 +133,9 @@ templ navSection(sec NavSectionView) {
 			<div class="nav-sec" data-nav-section={ sec.ID }>
 				<div class="nav-gh nav-gh-static">
 					<span class="nav-gh-l"><i class="fa-solid fa-thumbtack" aria-hidden="true"></i>{ sec.Label }</span>
+					if NavToolsWordSection(ctx) == sec.ID {
+						@navToolsWord()
+					}
 				</div>
 				<div class="nav-gb" id="nav-b-pinned">
 					for _, row := range sec.Rows {
@@ -143,8 +146,11 @@ templ navSection(sec NavSectionView) {
 		}
 	} else if len(sec.Rows) > 0 || sec.Kind == "categories" {
 		<div class="nav-sec" data-nav-section={ sec.ID }>
-			<div class="nav-gh-wrap">
+			<div class={ "nav-gh-wrap", templ.KV("has-tools-word", NavToolsWordSection(ctx) == sec.ID) }>
 				@navFoldHead(sec.ID, sec.Label, len(sec.Rows), NavSectionCurrent(ctx, sec.Rows))
+				if NavToolsWordSection(ctx) == sec.ID {
+					@navToolsWord()
+				}
 				if sec.Kind == "categories" && GetCampaignRole(ctx) >= 3 {
 					<button
 						type="button"
@@ -170,6 +176,17 @@ templ navSection(sec NavSectionView) {
 			</div>
 		</div>
 	}
+}
+
+// navToolsWord is the Edit word a touch screen shows on one section heading
+// (NavToolsWordSection). Pressed, every row shows its pin and dots until
+// Done; sidebar_nav.js keeps the word and aria-pressed in step. Both words
+// are drawn and CSS shows the one that fits, so a sidebar refreshed after a
+// pin reads right at once. A wide screen with a pointer never shows it.
+templ navToolsWord() {
+	<button type="button" class="nav-tools-word" data-nav-tools-toggle aria-pressed="false" title="Show pins and menus on each row">
+		<span class="nav-tools-edit">Edit</span><span class="nav-tools-done">Done</span>
+	</button>
 }
 
 // navFoldHead is a folding section's heading: the whole heading is the

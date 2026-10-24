@@ -234,6 +234,35 @@ func navPinnable(ctx context.Context, sec NavSectionView, row NavRowView) bool {
 	return NavCanPin(ctx) && (sec.Kind != "pinned" || row.Personal)
 }
 
+// NavToolsWordSection is the section whose heading carries the touch-screen
+// Edit word: the first, in the order the sidebar draws them, holding a row
+// whose pin or dots wait behind it. A touch screen has no hover to reveal
+// them, and shown on every row they crowd the labels and catch the thumb.
+// "" when the viewer pins nothing; the owner arranges the sidebar in its
+// editor instead, so never gets the word.
+func NavToolsWordSection(ctx context.Context) string {
+	if !NavCanPin(ctx) {
+		return ""
+	}
+	secs := GetNavSections(ctx)
+	top := func(k string) bool { return k == "pinned" || k == "apps" }
+	for _, inTop := range []bool{true, false} {
+		for _, sec := range secs {
+			if top(sec.Kind) != inTop {
+				continue
+			}
+			for _, row := range sec.Rows {
+				// A row the viewer pinned keeps its pin in sight; its dots
+				// still wait, and a category row has none.
+				if navPinnable(ctx, sec, row) && (!row.Personal || row.Kind != "category") {
+					return sec.ID
+				}
+			}
+		}
+	}
+	return ""
+}
+
 // navSubFold is the fold id of a category's sub-category rows.
 func navSubFold(typeID int) string { return "sub-" + strconv.Itoa(typeID) }
 

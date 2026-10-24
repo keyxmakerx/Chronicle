@@ -12,14 +12,14 @@ import (
 )
 
 // SessionListPage renders the full sessions page.
-templ SessionListPage(cc *campaigns.CampaignContext, groups []SessionGroup, csrfToken string, isOwner, isScribe bool, userID string, plan SessionPlan) {
+templ SessionListPage(cc *campaigns.CampaignContext, groups []SessionGroup, csrfToken string, isOwner, isScribe bool, userID string, plan SessionPlan, feed bool) {
 	@layouts.App(cc.Campaign.Name + " - Game nights") {
 		<div class="max-w-4xl mx-auto">
 			@components.Breadcrumbs([]components.BreadcrumbItem{
 				{Label: cc.Campaign.Name, Href: fmt.Sprintf("/campaigns/%s", cc.Campaign.ID), Icon: "fa-dice-d20"},
 				{Label: "Game nights"},
 			})
-			@SessionListFragment(cc, groups, csrfToken, isOwner, isScribe, userID, plan)
+			@SessionListFragment(cc, groups, csrfToken, isOwner, isScribe, userID, plan, feed)
 		</div>
 	}
 }
@@ -27,113 +27,261 @@ templ SessionListPage(cc *campaigns.CampaignContext, groups []SessionGroup, csrf
 // SessionListFragment renders just the session list content (for HTMX).
 // On a phone the buttons drop under the title and wrap, so New Session is
 // never clipped off the right edge.
-templ SessionListFragment(cc *campaigns.CampaignContext, groups []SessionGroup, csrfToken string, isOwner, isScribe bool, userID string, plan SessionPlan) {
-	<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
-		<div>
-			<h1 class="text-2xl font-bold text-fg">Game nights</h1>
-			<p class="text-sm text-fg-secondary mt-1">Game session schedule and history.</p>
+// feed says the member gets "Add to your calendar": the owner's calendar
+// feed switch is on and the viewer is a member. A member answers a planned
+// night from its row (gameNightAnswer); game_nights.js runs both.
+templ SessionListFragment(cc *campaigns.CampaignContext, groups []SessionGroup, csrfToken string, isOwner, isScribe bool, userID string, plan SessionPlan, feed bool) {
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/css/game_nights.css") }/>
+	<div class="gn" data-widget="game-nights" data-gn-base={ fmt.Sprintf("/campaigns/%s", cc.Campaign.ID) }>
+		<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+			<div>
+				<h1 class="text-2xl font-bold text-fg">Game nights</h1>
+				<p class="text-sm text-fg-secondary mt-1">Game session schedule and history.</p>
+				if feed {
+					<button type="button" class="gn-quiet mt-1" data-gn-feed-toggle aria-expanded="false" aria-controls="gn-feed">
+						<i class="fa-regular fa-calendar-plus" aria-hidden="true"></i> Add to your calendar
+					</button>
+				}
+			</div>
+			<div class="flex flex-wrap items-center gap-2">
+				if cc.IsMember {
+					<!-- Availability is member-only data; its target route rides the
+					     authed member group. Gate the link on membership so anonymous
+					     viewers on a public sessions list aren't shown a dead end. -->
+					<a
+						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/availability", cc.Campaign.ID)) }
+						class="btn-secondary text-sm"
+						title="Record your weekly availability and see the group heatmap"
+					>
+						<i class="fa-solid fa-calendar-check mr-1"></i> Availability
+					</a>
+					<a
+						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/proposals", cc.Campaign.ID)) }
+						class="btn-secondary text-sm"
+						title="Answer date polls on the Game nights calendar"
+					>
+						<i class="fa-solid fa-calendar-day mr-1"></i> Date polls
+					</a>
+				}
+				if isScribe {
+					<button
+						type="button"
+						class="btn-primary text-sm"
+						onclick="document.getElementById('create-session-modal').showModal()"
+					>
+						<i class="fa-solid fa-plus mr-1"></i> New game night
+					</button>
+				}
+			</div>
 		</div>
-		<div class="flex flex-wrap items-center gap-2">
-			if cc.IsMember {
-				<!-- Availability is member-only data; its target route rides the
-				     authed member group. Gate the link on membership so anonymous
-				     viewers on a public sessions list aren't shown a dead end. -->
-				<a
-					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/availability", cc.Campaign.ID)) }
-					class="btn-secondary text-sm"
-					title="Record your weekly availability and see the group heatmap"
-				>
-					<i class="fa-solid fa-calendar-check mr-1"></i> Availability
-				</a>
-				<a
-					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/proposals", cc.Campaign.ID)) }
-					class="btn-secondary text-sm"
-					title="Answer date polls on the Game nights calendar"
-				>
-					<i class="fa-solid fa-calendar-day mr-1"></i> Date polls
-				</a>
-			}
-			if isScribe {
-				<button
-					type="button"
-					class="btn-primary text-sm"
-					onclick="document.getElementById('create-session-modal').showModal()"
-				>
-					<i class="fa-solid fa-plus mr-1"></i> New game night
-				</button>
-			}
-		</div>
-	</div>
-	if len(groups) == 0 {
-		<div class="card p-12 text-center">
-			<i class="fa-solid fa-dice-d20 text-4xl text-fg-muted mb-3"></i>
-			<p class="text-fg-secondary mb-1">No game nights yet.</p>
-			if isScribe {
-				<p class="text-sm text-fg-muted">Create your first session to start tracking your campaign's game nights.</p>
-			}
-		</div>
-	} else {
-		for _, g := range groups {
-			<h2 class="text-xs font-semibold text-fg-muted uppercase tracking-wider mt-6 mb-2">{ g.Label }</h2>
-			for _, s := range g.Sessions {
-				<a
-					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/sessions/%s", cc.Campaign.ID, s.ID)) }
-					class="card p-4 mb-2 block hover:border-accent/50 transition-colors"
-				>
-					<div class="flex items-start justify-between">
-						<div class="flex-1 min-w-0">
-							<div class="flex items-center gap-2">
-								if g.Key == "played" {
-									@playedBadge()
-								} else {
-									@sessionStatusBadge(s.Status)
-								}
-								<h3 class="font-semibold text-fg truncate">{ s.Name }</h3>
-							</div>
-							<div class="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-xs text-fg-secondary">
-								if s.ScheduledDate != nil {
-									<span>
-										<i class="fa-regular fa-calendar mr-0.5"></i>
-										{ s.FormatScheduledDate() }
-									</span>
-								}
-								if s.IsRecurring {
-									<span class="inline-flex items-center px-1.5 py-0.5 rounded bg-surface-alt text-fg-secondary border border-edge">
-										<i class="fa-solid fa-repeat text-[10px] mr-0.5"></i>
-										{ s.RecurrenceLabel() }
-									</span>
-								}
-								if len(s.Attendees) > 0 {
-									<span>
-										<i class="fa-solid fa-users mr-0.5"></i>
-										{ fmt.Sprintf("%d", countAccepted(s.Attendees)) }/{ fmt.Sprintf("%d", len(s.Attendees)) } attending
-									</span>
-								}
-								if s.CreatorName != "" {
-									<span>
-										<i class="fa-solid fa-user mr-0.5"></i>
-										{ s.CreatorName }
-									</span>
-								}
-							</div>
-							if s.Summary != nil && *s.Summary != "" {
-								<p class="text-sm text-fg-secondary mt-1 line-clamp-2">{ *s.Summary }</p>
-							}
-						</div>
-						<div class="flex items-center gap-2 ml-2 shrink-0">
-							if g.Key == "upcoming" {
-								@userRSVPBadge(s.Attendees, userID)
-							}
-							<i class="fa-solid fa-chevron-right text-fg-muted text-xs"></i>
-						</div>
-					</div>
-				</a>
+		if feed {
+			@gameNightFeedPanel()
+		}
+		if len(groups) == 0 {
+			<div class="card p-12 text-center">
+				<i class="fa-solid fa-dice-d20 text-4xl text-fg-muted mb-3"></i>
+				<p class="text-fg-secondary mb-1">No game nights yet.</p>
+				if isScribe {
+					<p class="text-sm text-fg-muted">Create your first session to start tracking your campaign's game nights.</p>
+				}
+			</div>
+		} else {
+			for _, g := range groups {
+				<h2 class="text-xs font-semibold text-fg-muted uppercase tracking-wider mt-6 mb-2">{ g.Label }</h2>
+				for _, s := range g.Sessions {
+					@gameNightRow(cc, s, g.Key, userID)
+				}
 			}
 		}
-	}
+	</div>
 	if isScribe {
 		@createSessionModal(cc, csrfToken, plan)
 	}
+}
+
+// gameNightFeedPanel is the member's private calendar link, draped under the
+// heading. The link is fetched the first time it opens (game_nights.js), so
+// the field starts empty.
+templ gameNightFeedPanel() {
+	<div class="gn-drape gn-drape-feed" id="gn-feed" data-gn-feed>
+		<div>
+			<div>
+				<div class="gn-feed" role="region" aria-label="Your game nights in your calendar">
+					<div class="gn-feed-h">
+						<b>Your game nights in your calendar</b>
+						<button type="button" class="gn-x" data-gn-feed-close aria-label="Close" title="Close">
+							<i class="fa-solid fa-xmark" aria-hidden="true"></i>
+						</button>
+					</div>
+					<p>Add this link to your phone or computer calendar. New nights appear on their own, and a moved or cancelled night updates too.</p>
+					<div class="gn-linkrow">
+						<input type="text" readonly data-gn-feed-url aria-label="Your private calendar link"/>
+						<button type="button" class="btn-primary text-sm" data-gn-copy>Copy</button>
+					</div>
+					<div class="gn-fine">
+						<span><i class="fa-solid fa-lock" aria-hidden="true"></i> Only you have this link. Anyone with it can see this campaign's game night dates.</span>
+						<button type="button" class="gn-quiet" data-gn-replace>Replace link</button>
+					</div>
+					<div class="gn-confirm" data-gn-confirm hidden>
+						<span>Replacing stops the old link at once, so any calendar using it stops updating until you add the new one.</span>
+						<div>
+							<button type="button" class="btn-secondary text-sm gn-danger" data-gn-replace-yes>Replace it</button>
+							<button type="button" class="btn-secondary text-sm" data-gn-replace-no>Keep this link</button>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+}
+
+// gameNightRow is one night on the list. The title's link covers the whole
+// card, so the row still opens the night anywhere it is pressed, while the
+// member's answer sits above that link as its own button: a button cannot
+// live inside a link. Only an upcoming night asks; one whose date has passed
+// (group "played") has happened.
+templ gameNightRow(cc *campaigns.CampaignContext, s Session, group string, userID string) {
+	{{ answering := group == "upcoming" && s.AcceptsRSVP() && cc.IsMember && userID != "" }}
+	{{ mine := myRSVPStatus(s.Attendees, userID) }}
+	<div
+		class="gn-row card p-4 mb-2 hover:border-accent/50 transition-colors"
+		if answering {
+			data-gn-row
+			data-gn-url={ fmt.Sprintf("/campaigns/%s/sessions/%s/rsvp", cc.Campaign.ID, s.ID) }
+			data-gn-mine={ mine }
+			data-gn-name={ s.Name }
+		}
+	>
+		<div class="flex items-start justify-between">
+			<div class="flex-1 min-w-0">
+				<div class="flex items-center gap-2">
+					if group == "played" {
+						@playedBadge()
+					} else {
+						@sessionStatusBadge(s.Status)
+					}
+					<h3 class="font-semibold text-fg truncate">
+						<a class="gn-link" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/sessions/%s", cc.Campaign.ID, s.ID)) }>{ s.Name }</a>
+					</h3>
+				</div>
+				<div class="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-xs text-fg-secondary">
+					if s.ScheduledDate != nil {
+						<span>
+							<i class="fa-regular fa-calendar mr-0.5"></i>
+							{ s.FormatScheduledDate() }
+						</span>
+					}
+					if s.IsRecurring {
+						<span class="inline-flex items-center px-1.5 py-0.5 rounded bg-surface-alt text-fg-secondary border border-edge">
+							<i class="fa-solid fa-repeat text-[10px] mr-0.5"></i>
+							{ s.RecurrenceLabel() }
+						</span>
+					}
+					if len(s.Attendees) > 0 {
+						<span>
+							<i class="fa-solid fa-users mr-0.5"></i>
+							<span
+								data-gn-count
+								data-accepted={ fmt.Sprintf("%d", countAccepted(s.Attendees)) }
+								data-total={ fmt.Sprintf("%d", len(s.Attendees)) }
+							>{ fmt.Sprintf(" %d/%d attending", countAccepted(s.Attendees), len(s.Attendees)) }</span>
+						</span>
+					}
+					if s.CreatorName != "" {
+						<span>
+							<i class="fa-solid fa-user mr-0.5"></i>
+							{ s.CreatorName }
+						</span>
+					}
+				</div>
+				if s.Summary != nil && *s.Summary != "" {
+					<p class="text-sm text-fg-secondary mt-1 line-clamp-2">{ *s.Summary }</p>
+				}
+			</div>
+			<div class="flex items-center gap-2 ml-2 shrink-0">
+				if answering {
+					<span class="gn-above" data-gn-chip>
+						@gameNightAnswer(s, mine)
+					</span>
+				}
+				<i class="fa-solid fa-chevron-right text-fg-muted text-xs" aria-hidden="true"></i>
+			</div>
+		</div>
+		if answering {
+			<div class="gn-drape gn-above" id={ "gn-a-" + s.ID } data-gn-drape>
+				<div>
+					<div class="gn-bar" role="group" aria-label={ "Your answer for " + s.Name }>
+						<span class="gn-bar-l">Are you coming?</span>
+						@gameNightPick(RSVPAccepted, "fa-check", "Going", mine)
+						@gameNightPick(RSVPTentative, "fa-question", "Maybe", mine)
+						@gameNightPick(RSVPDeclined, "fa-xmark", "Can't", mine)
+					</div>
+				</div>
+			</div>
+		}
+	</div>
+}
+
+// gameNightAnswer is the row's answer chip: an Answer button until the member
+// answers, then their answer, which is itself the button to change it. Both
+// open the row's Going / Maybe / Can't.
+templ gameNightAnswer(s Session, mine string) {
+	if word := answerWord(mine); word != "" {
+		<button
+			type="button"
+			class={ "gn-mine", "gn-mine-" + mine }
+			data-gn-answer
+			aria-expanded="false"
+			aria-controls={ "gn-a-" + s.ID }
+			aria-label={ "Your answer for " + s.Name + ": " + word + ". Change it" }
+			title="Change your answer"
+		>
+			<i class={ "fa-solid", answerIcon(mine) } aria-hidden="true"></i> { word }
+		</button>
+	} else {
+		<button
+			type="button"
+			class="gn-answer"
+			data-gn-answer
+			aria-expanded="false"
+			aria-controls={ "gn-a-" + s.ID }
+			aria-label={ "Answer for " + s.Name }
+		>
+			Answer <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
+		</button>
+	}
+}
+
+// gameNightPick is one of Going, Maybe and Can't in a row's drape.
+templ gameNightPick(status, icon, word, mine string) {
+	<button type="button" class="gn-rb" data-gn-rsvp={ status } aria-pressed={ fmt.Sprintf("%t", mine == status) }>
+		<i class={ "fa-solid", icon } aria-hidden="true"></i> { word }
+	</button>
+}
+
+// answerWord is the list's word for a member's stored answer, or "" while
+// they have none (no row yet, or still invited).
+func answerWord(status string) string {
+	switch status {
+	case RSVPAccepted:
+		return "Going"
+	case RSVPTentative:
+		return "Maybe"
+	case RSVPDeclined:
+		return "Can't"
+	}
+	return ""
+}
+
+// answerIcon is the icon beside answerWord.
+func answerIcon(status string) string {
+	switch status {
+	case RSVPAccepted:
+		return "fa-check"
+	case RSVPTentative:
+		return "fa-question"
+	}
+	return "fa-xmark"
 }
 
 // sessionStatusBadge renders a colored status badge.
@@ -654,32 +802,6 @@ templ rsvpBadge(status string) {
 		<span class="text-[10px] px-1.5 py-0.5 rounded bg-bad/10 text-bad">Can't</span>
 	} else {
 		<span class="text-[10px] px-1.5 py-0.5 rounded bg-surface-alt text-fg-muted">Invited</span>
-	}
-}
-
-// userRSVPBadge shows the current user's RSVP status on the session list card.
-// Highlights "needs response" when still in the invited state.
-templ userRSVPBadge(attendees []Attendee, userID string) {
-	for _, a := range attendees {
-		if a.UserID == userID {
-			if a.Status == RSVPAccepted {
-				<span class="text-[10px] px-1.5 py-0.5 rounded bg-ok/10 text-ok whitespace-nowrap">
-					<i class="fa-solid fa-check mr-0.5"></i> Going
-				</span>
-			} else if a.Status == RSVPTentative {
-				<span class="text-[10px] px-1.5 py-0.5 rounded bg-warn/10 text-warn whitespace-nowrap">
-					<i class="fa-solid fa-question mr-0.5"></i> Maybe
-				</span>
-			} else if a.Status == RSVPDeclined {
-				<span class="text-[10px] px-1.5 py-0.5 rounded bg-bad/10 text-bad whitespace-nowrap">
-					<i class="fa-solid fa-xmark mr-0.5"></i> Can't
-				</span>
-			} else {
-				<span class="text-[10px] px-1.5 py-0.5 rounded bg-accent/10 text-accent font-medium whitespace-nowrap animate-pulse">
-					<i class="fa-solid fa-envelope mr-0.5"></i> RSVP
-				</span>
-			}
-		}
 	}
 }
 

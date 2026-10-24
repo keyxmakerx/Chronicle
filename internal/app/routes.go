@@ -4052,13 +4052,15 @@ func (a *App) RegisterRoutes() {
 	sightingService := sessions.NewSightingService(sessions.NewSightingRepository(a.DB), sessionsRepo,
 		&entityCampaignCheckerAdapter{svc: entityService}, &entityVisibilityFilterAdapter{svc: entityService})
 	sessionsHandler.SetSightingService(sightingService)
-	// The Last seen block's script loads on sight (ADR-063); the block itself
-	// is registered with the other page blocks below.
+	// The Last seen block's and the Game nights list's scripts load on sight
+	// (ADR-063); the block itself is registered with the other page blocks
+	// below.
 	a.registerPlugin(PluginRegistration{
 		Slug:     sessions.PluginSlug,
 		StaticFS: echo.MustSubFS(sessions.StaticAssetsFS, "static"),
 		Widgets: []PluginWidget{
 			{Name: "last-seen", Scripts: []string{"js/last_seen.js"}},
+			{Name: "game-nights", Scripts: []string{"js/game_nights.js"}},
 		},
 	})
 	// Game-night links open the real-world calendar; with the calendar plugin
