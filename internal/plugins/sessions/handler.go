@@ -248,6 +248,12 @@ func (h *Handler) CreateSession(c echo.Context) error {
 			}
 			_ = h.svc.InviteAll(c.Request().Context(), session.ID, userIDs)
 
+			// The bell and banner tell players even where no email is set up.
+			name := h.resolveDisplayName(c.Request().Context(), userID)
+			if nErr := h.svc.NotifySessionScheduled(c.Request().Context(), session, userID, name, userIDs); nErr != nil {
+				slog.Error("notifying members of a scheduled session", slog.String("error", nErr.Error()))
+			}
+
 			// Send RSVP emails if SMTP is configured.
 			if h.mailer != nil && h.mailer.IsConfigured(c.Request().Context()) {
 				go h.sendRSVPEmails(context.Background(), session, cc.Campaign.Name, members)

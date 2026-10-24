@@ -160,6 +160,9 @@ type SessionRepository interface {
 	CountUnreadNotifications(ctx context.Context, userID string) (int, error)
 	MarkNotificationRead(ctx context.Context, userID, notificationID string) error
 	MarkAllNotificationsRead(ctx context.Context, userID string) error
+	// MarkNotificationsReadForLink marks the user's unread notifications of
+	// one type that point at link read.
+	MarkNotificationsReadForLink(ctx context.Context, userID, ntype, link string) error
 }
 
 // sessionRepository implements SessionRepository with MariaDB queries.
