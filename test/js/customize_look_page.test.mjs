@@ -51,7 +51,7 @@ test('STYLE_KITS match the server allow-list, in order, and each has a styleshee
 });
 
 test('the style kit is part of the Pages section and defaults to Material', () => {
-  assert.match(src, /page:\['page\.look', 'page\.kit'\]/, 'SEC_KEYS must list page.kit');
+  assert.match(src, /page:\['page\.look', 'page\.kit'/, 'SEC_KEYS must list page.kit');
   assert.match(src, /if \(!d\.page\.kit\) d\.page\.kit = 'material'/, 'fromServer must default the kit');
   assert.match(src, /opts\('pg-kit', 'page\.kit'/, 'a control must bind page.kit');
 });
