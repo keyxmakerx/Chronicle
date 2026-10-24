@@ -7,7 +7,6 @@ package campaigns
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"time"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
@@ -261,7 +260,7 @@ templ defaultOwnerDashboard(cc *CampaignContext, recentEntities []RecentEntity, 
 							<span class="text-sm font-medium text-fg truncate group-hover:text-accent transition-colors">{ et.NamePlural }</span>
 						</div>
 						<div class="pl-[2.375rem] text-xs text-fg-muted">
-							{ strconv.Itoa(layouts.GetEntityCount(ctx, et.ID)) } pages
+							{ pageCountLabel(layouts.GetEntityCount(ctx, et.ID)) }
 						</div>
 					</a>
 				}

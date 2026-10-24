@@ -72,3 +72,35 @@ func inPageEditor(ctx context.Context) bool {
 func pageEditorEndpoint(cc *campaigns.CampaignContext, entity *Entity, leaf string) string {
 	return fmt.Sprintf("/campaigns/%s/entities/%s/%s", cc.Campaign.ID, entity.ID, leaf)
 }
+
+// canChangeOwnPage reports whether the description and picture blocks offer
+// editing: Scribes always, and the claiming player on the usual page. An
+// era's version saves to Scribe-only routes, so there the player only reads.
+func canChangeOwnPage(ctx context.Context, cc *campaigns.CampaignContext, entity *Entity) bool {
+	if cc == nil || entity == nil {
+		return false
+	}
+	if cc.MemberRole >= campaigns.RoleScribe {
+		return true
+	}
+	return !eraViewOf(ctx).Shown() && CanEditOwnPage(cc.MemberRole, entity, layouts.GetUserID(ctx))
+}
+
+// surfacePictureEndpoint is where the hero sheet's portrait saves a new
+// picture, or "" when the viewer may not change it.
+func surfacePictureEndpoint(ctx context.Context, cc *campaigns.CampaignContext, entity *Entity) string {
+	if !canChangeOwnPage(ctx, cc, entity) {
+		return ""
+	}
+	return widgetEndpoint(ctx, cc.Campaign.ID, entity.ID, "image")
+}
+
+// canWriteDescription is canChangeOwnPage for the description: a player is
+// not offered a text holding parts they cannot see, which only the Director
+// may change (ownerEntryWrite refuses that save).
+func canWriteDescription(ctx context.Context, cc *campaigns.CampaignContext, entity *Entity) bool {
+	if !canChangeOwnPage(ctx, cc, entity) {
+		return false
+	}
+	return cc.MemberRole >= campaigns.RoleScribe || !entryHasDirectorParts(derefStr(entity.Entry), derefStr(entity.EntryHTML))
+}

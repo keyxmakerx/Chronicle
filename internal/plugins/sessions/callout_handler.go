@@ -50,6 +50,9 @@ func (h *Handler) CalloutAPI(c echo.Context) error {
 	if out.Kind == CalloutNone {
 		return c.HTML(http.StatusOK, "")
 	}
+	if sess := auth.GetSession(c); sess != nil && sess.GuestCampaignID != "" {
+		out.NoAccountPage = true
+	}
 	return c.HTML(http.StatusOK, renderCallout(out))
 }
 
@@ -79,16 +82,19 @@ func renderCallout(o Callout) string {
 	case CalloutTimezone:
 		// The browser-reported zone is filled in by the widget, which replaces
 		// [data-cta-zone] once it has read it; the server does not know it.
+		choose := `<a class="cta-alt" href="/account">Choose</a>`
+		if o.NoAccountPage {
+			choose = ""
+		}
 		return fmt.Sprintf(
 			`<div class="cta-bar" data-cta="timezone" role="status">`+
 				`<i class="fa-solid fa-clock cta-ico" aria-hidden="true"></i>`+
 				`<span class="cta-msg">%s</span>`+
 				`<button type="button" class="cta-go" data-cta-tz-accept hidden>`+
-				`Use <span data-cta-zone>my timezone</span></button>`+
-				`<a class="cta-alt" href="/account">Choose</a>`+
+				`Use <span data-cta-zone>my timezone</span></button>%s`+
 				`<button type="button" class="cta-x" data-cta-dismiss aria-label="Dismiss">`+
 				`<i class="fa-solid fa-xmark" aria-hidden="true"></i></button></div>`,
-			html.EscapeString(o.Message))
+			html.EscapeString(o.Message), choose)
 	}
 	return ""
 }

@@ -4407,6 +4407,7 @@ func (a *App) RegisterRoutes() {
 	// Who may open a picture in a note is decided by who can read the notes
 	// holding it, asked of the notes service rather than its tables.
 	mediaHandler.SetNoteMediaAccess(&noteMediaAccessAdapter{svc: noteSvc})
+	mediaHandler.SetOwnPageChecker(&ownPageCheckerAdapter{svc: entityService})
 	noteHandler.SetMemberLister(campaignService)
 	noteHandler.SetCharacterLister(&journalCharacterAdapter{svc: entityService})
 	notePages := &notesPagesAdapter{svc: entityService}
@@ -6613,6 +6614,17 @@ func (a *mediaUploadAdapter) UploadPicture(ctx context.Context, campaignID, user
 		return "", err
 	}
 	return file.ID, nil
+}
+
+// ownPageCheckerAdapter answers the media plugin's hero-picture question over
+// the entities service: the page is in that campaign and the user claimed it.
+type ownPageCheckerAdapter struct {
+	svc entities.EntityService
+}
+
+func (a *ownPageCheckerAdapter) OwnsPage(ctx context.Context, campaignID, entityID, userID string) bool {
+	e, err := a.svc.GetByID(ctx, entityID)
+	return err == nil && e != nil && e.CampaignID == campaignID && userID != "" && e.IsOwnedBy(userID)
 }
 
 // noteMediaAccessAdapter answers the media plugin's note-picture question

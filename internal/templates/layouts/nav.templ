@@ -333,7 +333,9 @@ templ navRowInner(row NavRowView) {
 			<i class="fa-solid fa-link" aria-hidden="true"></i>
 		}
 	</span>
-	<span class="nav-lb">{ row.Label }</span>
+	// A caption ("Party & NPCs") gives way before the label does; a count
+	// is short and keeps its place.
+	<span class={ "nav-lb", templ.KV("nav-lb-keep", row.Kind != "category" && row.Caption != "") }>{ row.Label }</span>
 	@navTrail(row.Key, navRowTrail(row))
 	if row.External {
 		<i class="fa-solid fa-arrow-up-right-from-square nav-ext" aria-hidden="true"></i>
@@ -429,14 +431,20 @@ templ navManage() {
 // campaignNavFooter keeps the ways out of the campaign (every campaign, and
 // the public Discover page), the owner's labelled Edit button (moved here
 // from the brand row) and the buttons that fold the sidebar to icons or hide
-// it.
+// it. A guest is fenced to this one campaign, so the ways out are left off:
+// for them Campaigns would bounce straight back and Discover would show the
+// signed-out front page.
 templ campaignNavFooter() {
 	<div class="nav-foot">
-		<a href="/campaigns" hx-boost="false">Campaigns</a>
-		<span aria-hidden="true">·</span>
-		<a href="/" hx-boost="false">Discover</a>
-		if HasYourLook(ctx) && !IsOwner(ctx) {
+		if !IsGuest(ctx) {
+			<a href="/campaigns" hx-boost="false">Campaigns</a>
 			<span aria-hidden="true">·</span>
+			<a href="/" hx-boost="false">Discover</a>
+		}
+		if HasYourLook(ctx) && !IsOwner(ctx) {
+			if !IsGuest(ctx) {
+				<span aria-hidden="true">·</span>
+			}
 			<a href={ templ.SafeURL("/campaigns/" + GetCampaignID(ctx) + "/my-look") }>Your look</a>
 		}
 		<span class="nav-foot-gap"></span>

@@ -733,7 +733,10 @@ func (h *Handler) prepareShowFor(c echo.Context, entityID string) (*showPage, er
 	// addon, and resolve the current owner's display name for the "Claimed by"
 	// banner. The member lookup only runs when the entity is actually claimed,
 	// and only for members: a visitor sees the character, not who plays it.
-	claimingEnabled := h.isAddonEnabled(c.Request().Context(), cc.Campaign.ID, AddonPlayerCharacterClaiming)
+	// An NPC's page never offers a claim: the Characters page lists it under
+	// NPCs, and the owner's Playable mark is what moves it to the party.
+	npcPage := h.isNPCPage(c.Request().Context(), cc.Campaign.ID, entity, entityType)
+	claimingEnabled := !npcPage && h.isAddonEnabled(c.Request().Context(), cc.Campaign.ID, AddonPlayerCharacterClaiming)
 	ownerName := ""
 	if entity.OwnerUserID != nil && h.memberLister != nil && cc.MemberRole >= campaigns.RolePlayer {
 		if members, mErr := h.memberLister.ListMembers(c.Request().Context(), cc.Campaign.ID); mErr == nil {
@@ -749,7 +752,7 @@ func (h *Handler) prepareShowFor(c echo.Context, entityID string) (*showPage, er
 	// which the category's row shows while it is open.
 	// The page is shown as its version for the era the main calendar is in,
 	// when it has one; the DM can pick another era in the Eras panel.
-	reqCtx := withNPCPage(c.Request().Context(), h.isNPCPage(c.Request().Context(), cc.Campaign.ID, entity, entityType))
+	reqCtx := withNPCPage(c.Request().Context(), npcPage)
 	entity, eraV := h.applyEraView(reqCtx, cc, entity, entityType, userID, c.QueryParam("era"), c.QueryParam("hl"))
 
 	categoryPath := fmt.Sprintf("/campaigns/%s/%s", cc.Campaign.ID, entityType.Slug)
@@ -2030,13 +2033,18 @@ func (h *Handler) UpdateEntryAPI(c echo.Context) error {
 	if entity.CampaignID != cc.Campaign.ID {
 		return apperror.NewNotFound("entity not found")
 	}
+	userID := auth.GetUserID(c)
+	if err := authorizeOwnPageWrite(cc.MemberRole, entity, userID, cc.Campaign.ID); err != nil {
+		return err
+	}
+	owner := IsClaimedOwnerPlayer(cc.MemberRole, entity, userID)
 	// A clash answer carries the stored text, so the caller must be allowed
 	// to see and edit this page, as on the page itself.
-	access, err := h.service.CheckEntityAccess(c.Request().Context(), entity.ID, int(cc.VisibilityRole()), auth.GetUserID(c))
+	access, err := h.service.CheckEntityAccess(c.Request().Context(), entity.ID, int(cc.VisibilityRole()), userID)
 	if err != nil || !access.CanView {
 		return apperror.NewNotFound("entity not found")
 	}
-	if !access.CanEdit {
+	if !access.CanEdit && !owner {
 		return apperror.NewForbidden("you can't edit this page")
 	}
 	if textLocked(cc, entity.Entry, entity.EntryHTML) {
@@ -2052,6 +2060,11 @@ func (h *Handler) UpdateEntryAPI(c echo.Context) error {
 	}
 	if err := json.NewDecoder(c.Request().Body).Decode(&body); err != nil {
 		return apperror.NewBadRequest("invalid JSON body")
+	}
+	if owner {
+		if body.Entry, body.EntryHTML, err = ownerEntryWrite(entity, body.Entry, body.EntryHTML); err != nil {
+			return err
+		}
 	}
 
 	rev, conflict, err := h.service.SaveEntry(c.Request().Context(), entityID, body.Entry, body.EntryHTML, body.BaseRev)
@@ -2425,6 +2438,10 @@ func (h *Handler) UpdateImageAPI(c echo.Context) error {
 	}
 	if entity.CampaignID != cc.Campaign.ID {
 		return apperror.NewNotFound("entity not found")
+	}
+
+	if err := authorizeOwnPageWrite(cc.MemberRole, entity, auth.GetUserID(c), cc.Campaign.ID); err != nil {
+		return err
 	}
 
 	var body struct {
@@ -4504,6 +4521,10 @@ func (h *Handler) ClaimEntity(c echo.Context) error {
 	}
 	if !access.CanView {
 		return apperror.NewNotFound("entity not found")
+	}
+	// The page offers no claim on an NPC; a hand-rolled POST gets the same.
+	if et, err := h.service.GetEntityTypeByID(c.Request().Context(), entity.EntityTypeID); err == nil && h.isNPCPage(c.Request().Context(), cc.Campaign.ID, entity, et) {
+		return apperror.NewBadRequest("this character is an NPC; the game master can mark it playable on the Characters page")
 	}
 
 	updated, err := h.service.ClaimEntity(c.Request().Context(), entityID, userID)

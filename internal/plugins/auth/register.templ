@@ -63,6 +63,7 @@ templ registrationGatedPanel(mode, redirect string) {
 				Sign in
 			</a>
 		</p>
+		@layouts.HaveACodeLink(false)
 	</div>
 }
 
@@ -174,6 +175,7 @@ templ RegisterFormComponent(csrfToken string, req *RegisterRequest, errMsg, redi
 					Sign in
 				</a>
 			</p>
+			@layouts.HaveACodeLink(false)
 		</form>
 	</div>
 }
