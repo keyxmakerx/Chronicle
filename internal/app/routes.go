@@ -5442,6 +5442,12 @@ func (a *App) RegisterRoutes() {
 					if v, ok := picks[campaigns.LookPartSheet]; ok {
 						own.SheetStyle = v
 					}
+					if v, ok := picks[campaigns.LookPartPage]; ok {
+						own.StyleKit = v
+					}
+					if v, ok := picks[campaigns.LookPartHover]; ok {
+						own.HoverCard = v
+					}
 					if v, ok := picks[campaigns.LookPartDmScreen]; ok {
 						own.DmScreenKit = v
 					}

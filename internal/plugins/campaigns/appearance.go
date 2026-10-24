@@ -47,6 +47,8 @@ type Appearance struct {
 	// Who may pick their own version of a part (look_access.go); empty is the
 	// part's default.
 	AccessSheet    string `json:"access_sheet,omitempty"`
+	AccessPage     string `json:"access_page,omitempty"`
+	AccessHover    string `json:"access_hover,omitempty"`
 	AccessDmScreen string `json:"access_dmscreen,omitempty"`
 }
 

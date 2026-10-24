@@ -79,6 +79,8 @@ type customizeDraft struct {
 	} `json:"page"`
 	Access struct {
 		Sheet    string `json:"sheet"`    // "owner", "codm" or "everyone".
+		Page     string `json:"page"`     // "owner", "codm" or "everyone".
+		Hover    string `json:"hover"`    // "owner", "codm" or "everyone".
 		DmScreen string `json:"dmscreen"` // "owner" or "codm".
 	} `json:"access"`
 }
@@ -245,6 +247,10 @@ func buildCustomizeState(ctx context.Context, cc *CampaignContext) customizeStat
 	dmPart, _ := LookPartByKey(LookPartDmScreen)
 	d.Access.Sheet = sheetPart.Access(&a)
 	d.Access.DmScreen = dmPart.Access(&a)
+	pagePart, _ := LookPartByKey(LookPartPage)
+	hoverPart, _ := LookPartByKey(LookPartHover)
+	d.Access.Page = pagePart.Access(&a)
+	d.Access.Hover = hoverPart.Access(&a)
 	return st
 }
 

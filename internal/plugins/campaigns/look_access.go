@@ -19,6 +19,8 @@ const (
 // The parts of the look a member can pick for themselves.
 const (
 	LookPartSheet    = "sheet"    // The character sheet style.
+	LookPartPage     = "page"     // The pages' style kit.
+	LookPartHover    = "hover"    // The hover card look.
 	LookPartDmScreen = "dmscreen" // The DM Screen's style kit.
 )
 
@@ -34,10 +36,15 @@ type LookPart struct {
 
 // LookParts lists the parts in the order the pages show them. The DM Screen
 // never allows everyone: it shows hidden material, so it stays with the DM
-// team and so does its look.
+// team and so does its look. Pages and hover cards start with the owner so a
+// campaign that never opens them looks the same to everyone.
 var LookParts = []LookPart{
 	{Key: LookPartSheet, Label: "Character sheet", Choices: AppearanceSheetStyles,
 		Settings: []string{LookAccessOwner, LookAccessCoDM, LookAccessEveryone}, Default: LookAccessEveryone},
+	{Key: LookPartPage, Label: "Pages", Choices: AppearanceStyleKits,
+		Settings: []string{LookAccessOwner, LookAccessCoDM, LookAccessEveryone}, Default: LookAccessOwner},
+	{Key: LookPartHover, Label: "Hover cards", Choices: AppearanceHoverCards,
+		Settings: []string{LookAccessOwner, LookAccessCoDM, LookAccessEveryone}, Default: LookAccessOwner},
 	{Key: LookPartDmScreen, Label: "DM Screen", Choices: AppearanceStyleKits,
 		Settings: []string{LookAccessOwner, LookAccessCoDM}, Default: LookAccessCoDM},
 }
@@ -60,6 +67,10 @@ func (p LookPart) stored(ap *Appearance) string {
 	switch p.Key {
 	case LookPartSheet:
 		return ap.AccessSheet
+	case LookPartPage:
+		return ap.AccessPage
+	case LookPartHover:
+		return ap.AccessHover
 	case LookPartDmScreen:
 		return ap.AccessDmScreen
 	}
@@ -147,6 +158,8 @@ func AppliedLookPicks(ap *Appearance, cc *CampaignContext, stored map[string]str
 // page. Empty means the part's default.
 type LookAccessInput struct {
 	Sheet    string `json:"sheet"`
+	Page     string `json:"page"`
+	Hover    string `json:"hover"`
 	DmScreen string `json:"dmscreen"`
 }
 
@@ -168,13 +181,22 @@ func accessChoice(p LookPart, v string) (string, error) {
 func applyLookAccess(a *Appearance, in *LookAccessInput, prev *Appearance) error {
 	if in == nil {
 		if prev != nil {
-			a.AccessSheet, a.AccessDmScreen = prev.AccessSheet, prev.AccessDmScreen
+			a.AccessSheet, a.AccessPage = prev.AccessSheet, prev.AccessPage
+			a.AccessHover, a.AccessDmScreen = prev.AccessHover, prev.AccessDmScreen
 		}
 		return nil
 	}
 	var err error
 	sheet, _ := LookPartByKey(LookPartSheet)
 	if a.AccessSheet, err = accessChoice(sheet, in.Sheet); err != nil {
+		return err
+	}
+	page, _ := LookPartByKey(LookPartPage)
+	if a.AccessPage, err = accessChoice(page, in.Page); err != nil {
+		return err
+	}
+	hover, _ := LookPartByKey(LookPartHover)
+	if a.AccessHover, err = accessChoice(hover, in.Hover); err != nil {
 		return err
 	}
 	dm, _ := LookPartByKey(LookPartDmScreen)
@@ -215,6 +237,7 @@ var lookChoiceLabels = map[string]string{
 	"starship": "Starship", "neon": "Neon terminal", "runes": "Rune slate", "brass": "Brass gauges",
 	"material": "Material", "sharp": "Sharp", "ornate": "Ornate", "flowing": "Flowing",
 	"lumen": "Lumen", "sketchbook": "Sketchbook",
+	"paper": "Paper", "plain": "Plain", "compact": "Compact",
 }
 
 // LookChoiceLabel is the display name of one choice.
@@ -233,6 +256,10 @@ func (p LookPart) campaignChoice(ap *Appearance) string {
 		switch p.Key {
 		case LookPartSheet:
 			v = ap.SheetStyle
+		case LookPartPage:
+			v = ap.StyleKit
+		case LookPartHover:
+			v = ap.HoverCard
 		case LookPartDmScreen:
 			v = ap.StyleKit
 		}

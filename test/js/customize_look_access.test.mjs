@@ -28,19 +28,57 @@ test('access levels use the ids and wording the server and the brief name', () =
   for (const [id] of levels) assert.match(go, new RegExp('"' + id + '"'), id + ' must exist on the server');
 });
 
-test('the DM Screen row never offers Everyone, and both parts match the server', () => {
+test('every shareable part matches the server, and the DM Screen never offers Everyone', () => {
   const parts = grab('ACCESS_PARTS');
   const byKey = Object.fromEntries(parts.map((p) => [p[0], p[2]]));
-  assert.deepEqual(byKey.sheet, ['owner', 'codm', 'everyone']);
+  for (const k of ['sheet', 'page', 'hover']) assert.deepEqual(byKey[k], ['owner', 'codm', 'everyone'], k);
   assert.deepEqual(byKey.dmscreen, ['owner', 'codm']);
-  assert.match(go, /LookPartSheet\s*=\s*"sheet"/);
-  assert.match(go, /LookPartDmScreen\s*=\s*"dmscreen"/);
+  for (const [k, c] of [['Sheet', 'sheet'], ['Page', 'page'], ['Hover', 'hover'], ['DmScreen', 'dmscreen']]) {
+    assert.match(go, new RegExp('LookPart' + k + '\\s*=\\s*"' + c + '"'), c + ' must exist on the server');
+  }
+});
+
+test('page and hover start with the owner, like the server, so nothing changes for old campaigns', () => {
+  const a0 = src.indexOf('var ACCESS_DEFAULT = ');
+  const def = vm.runInNewContext('JSON.stringify(' + src.slice(a0 + 'var ACCESS_DEFAULT = '.length, src.indexOf(';', a0)) + ')');
+  assert.deepEqual(JSON.parse(def), { sheet: 'everyone', page: 'owner', hover: 'owner', dmscreen: 'codm' });
 });
 
 test('access is part of Save, Discard and Reset and is sent with the look', () => {
-  assert.match(src, /access:\['access\.sheet', 'access\.dmscreen'\]/, 'SEC_KEYS must list the access keys');
+  assert.match(src, /page:\['page\.look', 'page\.kit', 'access\.page', 'access\.dmscreen'\]/);
+  assert.match(src, /hover:\['hover\.look', 'hover\.timelinePopup', 'access\.hover'\]/);
+  assert.match(src, /sheet:\['sheet\.style', 'access\.sheet'\]/);
   assert.match(src, /page:clone\(d\.page\), access:clone\(d\.access\)/, 'toInput must send access');
-  assert.match(src, /if \(!d\.access\) d\.access = \{ sheet:'everyone', dmscreen:'codm' \}/, 'fromServer must default to the server defaults');
-  assert.match(src, /'access\.' \+ p\[0\]/, 'each row must bind its access key');
-  assert.match(src, /People change these for themselves only\. Nobody else sees their choice\./);
+  assert.match(src, /d\.access = Object\.assign\(\{\}, ACCESS_DEFAULT, d\.access \|\| \{\}\)/, 'fromServer must fill the server defaults');
+  assert.match(src, /'access\.' \+ key/, 'each row must bind its access key');
+  assert.match(src, /Who else may pick their own\?/);
+  assert.doesNotMatch(src, /id:'access'/, 'the standalone access section is gone');
+});
+
+test('the access panels sit at the end of the sheet, page and hover sections', () => {
+  for (const [id, call] of [['sheet', "accessFld('sheet'"], ['page', "accessFld('page'"], ['hover', "accessFld('hover'"]]) {
+    assert.match(src, new RegExp("id === '" + id + "'\\) return html \\+ " + call.replace(/[()']/g, (c) => '\\' + c)), id);
+  }
+  assert.match(src, /accessFld\('dmscreen'/, 'the DM Screen kit control sits with the page kit');
+});
+
+test('quick setups set every row the way the brief names them', () => {
+  const quick = grab('QUICK').map((q) => [q[0], q[3]]);
+  assert.deepEqual(Object.fromEntries(quick), {
+    locked: { sheet: 'owner', page: 'owner', hover: 'owner', dmscreen: 'owner' },
+    table: { sheet: 'everyone', page: 'codm', hover: 'owner', dmscreen: 'codm' },
+    open: { sheet: 'everyone', page: 'everyone', hover: 'everyone', dmscreen: 'codm' },
+  });
+  for (const [, m] of quick) assert.notEqual(m.dmscreen, 'everyone');
+});
+
+test('viewing as follows the server rule: co-DM is a scribe or above', () => {
+  const a = src.indexOf('function mayPickAs(');
+  const b = src.indexOf('\n    }', a) + 6;
+  const mayPickAs = vm.runInNewContext('(' + src.slice(a, b).replace('function mayPickAs', 'function') + ')');
+  const cases = [
+    ['owner', 'everyone', false], ['scribe', 'owner', false], ['scribe', 'codm', true], ['scribe', 'everyone', true],
+    ['player', 'owner', false], ['player', 'codm', false], ['player', 'everyone', true],
+  ];
+  for (const [role, setting, want] of cases) assert.equal(mayPickAs(role, setting), want, role + ' ' + setting);
 });
