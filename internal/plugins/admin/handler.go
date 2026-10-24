@@ -6,6 +6,7 @@ package admin
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -557,6 +558,7 @@ func (h *Handler) Users(c echo.Context) error {
 
 	data := UserListData{
 		Users:     users,
+		SelfID:    auth.GetUserID(c),
 		View:      userListView(lq, filter, counts, page),
 		CSRFToken: middleware.GetCSRFToken(c),
 	}
@@ -573,7 +575,7 @@ func (h *Handler) ToggleAdmin(c echo.Context) error {
 	// Prevent admins from removing their own admin status.
 	currentUserID := auth.GetUserID(c)
 	if targetID == currentUserID {
-		return apperror.NewBadRequest("cannot change your own admin status")
+		return apperror.NewBadRequest("You can't change your own admin rights. Ask another admin to do it.")
 	}
 
 	// Get current state to toggle.
@@ -591,7 +593,7 @@ func (h *Handler) ToggleAdmin(c echo.Context) error {
 			return err
 		}
 		if adminCount <= 1 {
-			return apperror.NewBadRequest("cannot remove the last admin")
+			return apperror.NewBadRequest("This is the only admin, so their admin rights can't be removed. Make someone else an admin first.")
 		}
 	}
 
@@ -670,6 +672,7 @@ func (h *Handler) Campaigns(c echo.Context) error {
 	data := CampaignListData{
 		Campaigns: list,
 		Handover:  handover,
+		CanLeave:  h.leavableCampaigns(ctx, list, auth.GetUserID(c)),
 		Now:       time.Now().UTC(),
 		View:      view,
 		CSRFToken: middleware.GetCSRFToken(c),
@@ -678,6 +681,26 @@ func (h *Handler) Campaigns(c echo.Context) error {
 		return middleware.Render(c, http.StatusOK, AdminCampaignsList(data))
 	}
 	return middleware.Render(c, http.StatusOK, AdminCampaignsPage(data))
+}
+
+// leavableCampaigns marks the listed campaigns the admin is a non-owner
+// member of. A lookup that fails keeps Leave on that row: the server still
+// refuses a leave that can't happen, so the old behaviour is the safe default.
+func (h *Handler) leavableCampaigns(ctx context.Context, list []campaigns.Campaign, userID string) map[string]bool {
+	out := make(map[string]bool, len(list))
+	for _, cm := range list {
+		m, err := h.campaignService.GetMember(ctx, cm.ID, userID)
+		var ae *apperror.AppError
+		switch {
+		case errors.As(err, &ae) && ae.Code == http.StatusNotFound:
+		case err != nil:
+			slog.Warn("admin campaigns: membership lookup failed", slog.String("campaign_id", cm.ID), slog.Any("error", err))
+			out[cm.ID] = true
+		default:
+			out[cm.ID] = m.Role != campaigns.RoleOwner
+		}
+	}
+	return out
 }
 
 // DeleteCampaign moves a campaign to the Trash (DELETE /admin/campaigns/:id).
@@ -734,6 +757,10 @@ func (h *Handler) LeaveCampaign(c echo.Context) error {
 	userID := auth.GetUserID(c)
 
 	if err := h.campaignService.RemoveMember(c.Request().Context(), campaignID, userID); err != nil {
+		var ae *apperror.AppError
+		if errors.As(err, &ae) && ae.Code == http.StatusNotFound {
+			return apperror.NewBadRequest("You aren't a member of this campaign, so there is nothing to leave.")
+		}
 		return err
 	}
 
