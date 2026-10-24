@@ -232,10 +232,10 @@ func (s *mediaService) Upload(ctx context.Context, input UploadInput) (*MediaFil
 	if len(input.FileBytes) > 0 {
 		sum := sha256.Sum256(input.FileBytes)
 		contentHash = hex.EncodeToString(sum[:])
-		// Note pictures and page files are never merged: each upload is its own
-		// file, so who may open it never depends on who else uploaded the same
-		// bytes.
-		if input.CampaignID != "" && input.UsageType != UsageNoteImage && input.UsageType != UsagePageFile {
+		// Note pictures, page files and a player's hero picture (NoMerge) are
+		// never merged: each upload is its own file, so who may open it never
+		// depends on who else uploaded the same bytes.
+		if input.CampaignID != "" && !input.NoMerge && input.UsageType != UsageNoteImage && input.UsageType != UsagePageFile {
 			if existing, err := s.repo.FindByContentHash(ctx, input.CampaignID, contentHash); err != nil {
 				// Non-fatal — continue with a fresh upload rather than
 				// blocking the user on a transient DB hiccup.

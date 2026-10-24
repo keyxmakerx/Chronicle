@@ -345,6 +345,9 @@ func (s *rosterSvc) CountByType(context.Context, string, int, string) (map[int]i
 func (s *rosterSvc) CheckEntityAccess(context.Context, string, int, string) (*EffectivePermission, error) {
 	return &EffectivePermission{CanView: true}, nil
 }
+func (s *rosterSvc) GetEntityTypeByID(_ context.Context, id int) (*EntityType, error) {
+	return &EntityType{ID: id, CampaignID: "camp-1"}, nil
+}
 func (s *rosterSvc) ClaimEntity(_ context.Context, id, _ string) (*Entity, error) {
 	s.claimed = id
 	return &s.ent, nil
@@ -408,6 +411,48 @@ func TestClaimFromPickBox(t *testing.T) {
 			}
 			if got := rec.Header().Get("HX-Redirect"); got != tc.wantHXRedir {
 				t.Errorf("HX-Redirect = %q, want %q", got, tc.wantHXRedir)
+			}
+		})
+	}
+}
+
+// An NPC's page offers no claim, so a hand-rolled claim of one is refused;
+// once the owner marks it Playable it is a player's character and may be
+// claimed.
+func TestClaimEntity_RefusesNPCs(t *testing.T) {
+	tests := []struct {
+		name      string
+		playable  bool
+		wantClaim bool
+	}{
+		{"unclaimed NPC", false, false},
+		{"NPC the owner marked playable", true, true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := &rosterSvc{ent: Entity{ID: "e1", CampaignID: "camp-1", Name: "Ysolde", EntityTypeID: 5, Playable: tc.playable}}
+			h := NewHandler(svc)
+			h.SetCharacterLists(&fakeCastLists{npcs: []int{5}})
+			h.SetMemberLister(rosterMembers{})
+			h.SetAddonChecker(&mockAddonChecker{enabled: map[string]bool{AddonPlayerCharacterClaiming: true}})
+			req := httptest.NewRequest(http.MethodPost, "/campaigns/camp-1/entities/e1/claim", nil)
+			rec := httptest.NewRecorder()
+			c := echo.New().NewContext(req, rec)
+			c.SetParamNames("id", "eid")
+			c.SetParamValues("camp-1", "e1")
+			c.Set("campaign_context", &campaigns.CampaignContext{
+				Campaign: &campaigns.Campaign{ID: "camp-1", Name: "Test"}, MemberRole: campaigns.RolePlayer, IsMember: true,
+			})
+			c.Set("auth_user_id", "u1")
+			err := h.ClaimEntity(c)
+			if tc.wantClaim {
+				if err != nil || svc.claimed != "e1" {
+					t.Fatalf("err = %v, claimed = %q; want the claim to go through", err, svc.claimed)
+				}
+				return
+			}
+			if err == nil || svc.claimed != "" {
+				t.Fatalf("err = %v, claimed = %q; want an NPC claim refused", err, svc.claimed)
 			}
 		})
 	}

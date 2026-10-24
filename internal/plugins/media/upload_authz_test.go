@@ -80,7 +80,7 @@ func (f *fakeUploadService) ValidateMediaPath() error { return nil }
 // newUploadTestContext builds a real multipart POST /media/upload request
 // (file + optional campaign_id field) and an Echo context carrying an
 // authenticated session for userID (or none, if userID == "").
-func newUploadTestContext(t *testing.T, userID, campaignID string) (echo.Context, *httptest.ResponseRecorder) {
+func newUploadTestContext(t *testing.T, userID, campaignID string, extra ...[2]string) (echo.Context, *httptest.ResponseRecorder) {
 	t.Helper()
 	var body bytes.Buffer
 	mw := multipart.NewWriter(&body)
@@ -94,6 +94,11 @@ func newUploadTestContext(t *testing.T, userID, campaignID string) (echo.Context
 	if campaignID != "" {
 		if err := mw.WriteField("campaign_id", campaignID); err != nil {
 			t.Fatalf("write campaign_id field: %v", err)
+		}
+	}
+	for _, kv := range extra {
+		if err := mw.WriteField(kv[0], kv[1]); err != nil {
+			t.Fatalf("write %s field: %v", kv[0], err)
 		}
 	}
 	if err := mw.Close(); err != nil {
@@ -219,5 +224,58 @@ func TestUpload_DedupHitNeverReachedByNonMember(t *testing.T) {
 	assertForbidden(t, err)
 	if svc.uploadCalled {
 		t.Errorf("the dedup-capable Upload path must never be reached for a non-member — this is finding 1(b)'s credential oracle. Response body: %s", rec.Body.String())
+	}
+}
+
+// stubOwnPages says which (campaign, page, user) claims exist.
+type stubOwnPages map[string]bool
+
+func (s stubOwnPages) OwnsPage(_ context.Context, campaignID, entityID, userID string) bool {
+	return s[campaignID+"/"+entityID+"/"+userID]
+}
+
+// A player may upload into a campaign only for the picture of the page they
+// claimed there, and that upload never merges with an existing file.
+func TestUpload_PlayerOwnHeroPicture(t *testing.T) {
+	tests := []struct {
+		name     string
+		usage    string
+		entityID string
+		want     bool
+	}{
+		{"their own hero's picture", UsageEntityImage, "hero-1", true},
+		{"someone else's page", UsageEntityImage, "npc-1", false},
+		{"no page named", UsageEntityImage, "", false},
+		{"not a page picture", UsageAttachment, "hero-1", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var got UploadInput
+			svc := &fakeUploadService{uploadFn: func(_ context.Context, in UploadInput) (*MediaFile, error) {
+				got = in
+				return &MediaFile{ID: "new-file", ThumbnailPaths: map[string]string{}}, nil
+			}}
+			h := &Handler{
+				service:       svc,
+				memberChecker: &stubMemberChecker{roles: map[string]map[string]int{"camp-1": {"player-user": 1}}},
+				ownPages:      stubOwnPages{"camp-1/hero-1/player-user": true},
+			}
+			c, _ := newUploadTestContext(t, "player-user", "camp-1",
+				[2]string{"usage_type", tc.usage}, [2]string{"entity_id", tc.entityID})
+			err := h.Upload(c)
+			if !tc.want {
+				assertForbidden(t, err)
+				if svc.uploadCalled {
+					t.Error("a refused player upload reached the service")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("expected the owner's picture upload to succeed, got %v", err)
+			}
+			if !got.NoMerge {
+				t.Error("a player's picture upload must never merge with an existing file")
+			}
+		})
 	}
 }

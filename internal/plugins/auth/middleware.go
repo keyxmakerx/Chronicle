@@ -155,8 +155,10 @@ func guestMayReach(p, campaignID string) bool {
 		"/static",
 	}
 	// Only the join page itself: /join/:code would add a guest to another
-	// campaign.
-	if p == "/join" {
+	// campaign. Saving a timezone writes only the caller's own row, and
+	// without it a guest's game-night times stay in UTC; the rest of
+	// /account stays closed.
+	if p == "/join" || p == "/account/timezone" {
 		return true
 	}
 	for _, prefix := range own {

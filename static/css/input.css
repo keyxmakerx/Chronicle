@@ -535,6 +535,11 @@
   .dropdown-item-danger:hover {
     @apply bg-red-50 dark:bg-red-900/20;
   }
+  /* On a phone the open top-bar search takes the campaign name's room
+   * (topbar_search.js sets the flag); the hamburger stays. */
+  @media (max-width: 767px) {
+    [data-tb-searching] .tb-left > :not(#nav-toggle) { display: none; }
+  }
   .dropdown-divider {
     @apply border-t border-edge my-1;
   }
@@ -1033,6 +1038,13 @@
     font-weight: 900;
     font-size: 11px;
     @apply text-accent/70 mr-2;
+  }
+  /* The typography plugin wraps a blockquote's text in quotation marks; a
+   * callout is not a quotation, and a quote that already has its own marks
+   * would show them twice. */
+  .prose blockquote p:first-of-type::before,
+  .prose blockquote p:last-of-type::after {
+    content: none;
   }
 
   .chronicle-editor__content .tiptap code {
@@ -1718,9 +1730,16 @@
      right edge: leave room to scroll it above the tab. */
   body:has(.jot-tab:not(.jot-tab-hidden)) .pf-section { margin-bottom: 4rem; }
   .jot-tab-hidden { opacity: 0; transform: translateY(8px) scale(.96); pointer-events: none; visibility: hidden; }
+  /* The open navigation drawer sits over the page; the tab must not sit on it. */
+  body:has(.sidebar-mobile-open) .jot-tab { opacity: 0; visibility: hidden; pointer-events: none; }
+  .jot-tab[hidden] { display: none; }
+  /* On a phone the tab is just its icon (and count), and the page gets room
+     at the bottom so the tab never covers the end of the last rows. */
   @media (max-width: 639px) {
-    .jot-tab { right: 1rem; bottom: 1rem; }
+    .jot-tab { right: 1rem; bottom: 1rem; padding: 12px; }
+    .jot-tab > .jot-tab-label { display: none; }
     body:has(.jnl) .jot-tab { bottom: calc(1rem + 2.25rem); }
+    body:has(.jot-tab:not([hidden])) #main-content { padding-bottom: 4.5rem; }
     body:has([data-czs-savebar]:not([hidden])) .jot-tab { bottom: 6rem; }
     body:has(.cal-v5 .deck) .jot-tab { bottom: calc(45px + .75rem); }
   }
@@ -3222,6 +3241,9 @@
     color: var(--nav-text-3); font-variant-numeric: tabular-nums;
   }
   .nav-tr:empty { display: none; }
+  /* A row with a caption keeps its whole label and lets the caption truncate. */
+  .nav-lb-keep { flex: 1 0 auto; max-width: 100%; }
+  .nav-lb-keep ~ .nav-tr { flex: 0 1 auto; min-width: 0; max-width: none; }
   /* Every list row keeps the twisty's slot free on the right, twisty or
      not, so counts and captions all end in one column. */
   .nav-list .nav-row { padding-right: 36px; }

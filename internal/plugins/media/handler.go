@@ -77,6 +77,15 @@ type MapImageGuard interface {
 	IsMapPicture(ctx context.Context, campaignID, mediaID string) (bool, error)
 }
 
+// OwnPageChecker answers the one question that lets a player upload into a
+// campaign: is this the page they claimed there? A claiming player may
+// change their own hero's picture (entities' authorizeOwnPageWrite), and the
+// picture has to be uploaded first. Implemented over the entities service in
+// app/routes.go; nil keeps campaign uploads at Scribe and above.
+type OwnPageChecker interface {
+	OwnsPage(ctx context.Context, campaignID, entityID, userID string) bool
+}
+
 // SecurityEventLogger records security events for the admin security dashboard.
 // Implemented by the admin security service; wired after both are initialized.
 type SecurityEventLogger interface {
@@ -95,6 +104,8 @@ type Handler struct {
 	mapImages MapImageGuard
 	// noteMedia decides note pictures; see NoteMediaAccess.
 	noteMedia NoteMediaAccess
+	// ownPages lets a claiming player upload their hero's picture.
+	ownPages OwnPageChecker
 	// cache is optional (nil in tests and any deploy without Redis wired).
 	// A miss or error falls through to computing the decision fresh — the
 	// cache can only make ADR-058's access check slower, never laxer.
@@ -130,6 +141,11 @@ func (h *Handler) SetEntityVisibilityFilter(f EntityVisibilityFilter) {
 // app/routes.go.
 func (h *Handler) SetMapImageGuard(g MapImageGuard) {
 	h.mapImages = g
+}
+
+// SetOwnPageChecker wires the claimed-page rule for hero pictures.
+func (h *Handler) SetOwnPageChecker(o OwnPageChecker) {
+	h.ownPages = o
 }
 
 // SetNoteMediaAccess wires the note-reader rule for note pictures.
@@ -184,13 +200,26 @@ func (h *Handler) Upload(c echo.Context) error {
 	// URL for that campaign on a byte match). Scribe+ matches every other
 	// campaign-scoped media write route. A blank campaign_id (avatars,
 	// backdrops — routed through other endpoints) stays unscoped.
+	// A Player gets in for one thing only: the picture of the page they
+	// claimed, named by entity_id. Such an upload never merges with an
+	// existing file (see UploadInput.NoMerge).
+	ownPicture := false
 	if campaignID := c.FormValue("campaign_id"); campaignID != "" {
-		if h.memberChecker == nil || h.memberChecker.MemberRole(campaignID, userID) < int(campaigns.RoleScribe) {
-			slog.Warn("media upload: rejected, insufficient campaign role",
-				slog.String("user_id", userID),
-				slog.String("campaign_id", campaignID),
-			)
-			return apperror.NewForbidden("insufficient permissions to upload media to this campaign")
+		role := int(campaigns.RoleNone)
+		if h.memberChecker != nil {
+			role = h.memberChecker.MemberRole(campaignID, userID)
+		}
+		if role < int(campaigns.RoleScribe) {
+			ownPicture = role >= int(campaigns.RolePlayer) && h.ownPages != nil &&
+				c.FormValue("usage_type") == UsageEntityImage && c.FormValue("entity_id") != "" &&
+				h.ownPages.OwnsPage(c.Request().Context(), campaignID, c.FormValue("entity_id"), userID)
+			if !ownPicture {
+				slog.Warn("media upload: rejected, insufficient campaign role",
+					slog.String("user_id", userID),
+					slog.String("campaign_id", campaignID),
+				)
+				return apperror.NewForbidden("insufficient permissions to upload media to this campaign")
+			}
 		}
 	}
 
@@ -240,6 +269,7 @@ func (h *Handler) Upload(c echo.Context) error {
 		FileSize:     int64(len(fileBytes)),
 		UsageType:    c.FormValue("usage_type"),
 		FileBytes:    fileBytes,
+		NoMerge:      ownPicture,
 	}
 
 	if input.UsageType == "" {

@@ -344,6 +344,36 @@ func (s *Session) FormatScheduledWhen() string {
 	return out
 }
 
+// FormatScheduledFor is how a page shows a game night's date and time to one
+// viewer. With the viewer's zone and the organizer's both known, the moment
+// is converted to the viewer's clock and labelled ("Tue, Oct 27, 2026 ·
+// 6:00 PM CDT"); otherwise it is the organizer's clock with the organizer's
+// zone (FormatScheduledWhen), so a page never shows a bare time that a reader
+// in another zone could take for their own.
+func (s *Session) FormatScheduledFor(viewerTZ string) string {
+	if viewerTZ == "" || s.ScheduledTZ == nil || s.ScheduledTime == nil || s.ScheduledDate == nil {
+		return s.FormatScheduledWhen()
+	}
+	from, err := time.LoadLocation(*s.ScheduledTZ)
+	if err != nil {
+		return s.FormatScheduledWhen()
+	}
+	to, err := time.LoadLocation(viewerTZ)
+	if err != nil {
+		return s.FormatScheduledWhen()
+	}
+	at, err := time.ParseInLocation("2006-01-02 15:04", *s.ScheduledDate+" "+*s.ScheduledTime, from)
+	if err != nil {
+		return s.FormatScheduledWhen()
+	}
+	local := at.In(to)
+	out := local.Format("Mon, Jan 2, 2006 · 3:04 PM")
+	if abbr := timeutil.ZoneAbbrevOrEmpty(viewerTZ, local); abbr != "" {
+		out += " " + abbr
+	}
+	return out
+}
+
 // FormatScheduledTime renders the "HH:MM" (24-hour) scheduled_time as a friendly
 // 12-hour clock ("7:00 PM"), or "" if unset/unparseable. Zone-less, matching the
 // zone-less scheduled_date (the confirmed slot's wall-clock for the group).

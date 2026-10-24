@@ -9,13 +9,15 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/sanitize"
 )
 
 // identity_edit.go is the one narrow door that lets a Player-role member edit
-// a page the fields and metadata routes otherwise reserve for Scribes: their
-// own claimed character's identity, and the picks the hero builder offers
-// them. Everything outside this file still needs Scribe, so widening the door
-// means editing this file, nowhere else.
+// a page the fields, metadata, entry and image routes otherwise reserve for
+// Scribes: their own claimed character's identity, the picks the hero builder
+// offers them, and the hero's description and picture. Everything outside
+// this file still needs Scribe, so widening the door means editing this file,
+// nowhere else.
 
 // maxOwnerIdentityValue bounds an identity value a player writes: a name such
 // as "Dragon Knight", never a document.
@@ -157,4 +159,60 @@ func authorizeMetadataWrite(role campaigns.Role, entity *Entity, userID, campaig
 		return apperror.NewForbidden("you can only rename your character")
 	}
 	return nil
+}
+
+// CanEditOwnPage reports whether the viewer may write the page's description
+// and change its picture: any Scribe or above, or the player who claimed it.
+// The player shapes their own hero; the Director keeps the numbers, the
+// GM-only parts and who can see the page.
+func CanEditOwnPage(role campaigns.Role, entity *Entity, userID string) bool {
+	return CanEditIdentity(role, entity, userID)
+}
+
+// authorizeOwnPageWrite decides whether a description or picture write may
+// proceed: Scribes pass; below that only the claimed owner, on a page of
+// this campaign. An edit grant on someone else's page is not enough, so the
+// route opening to players does not widen what those grants reach.
+func authorizeOwnPageWrite(role campaigns.Role, entity *Entity, userID, campaignID string) error {
+	if role >= campaigns.RoleScribe {
+		return nil
+	}
+	if entity.CampaignID != campaignID || !IsClaimedOwnerPlayer(role, entity, userID) {
+		return apperror.NewForbidden("insufficient permissions")
+	}
+	return nil
+}
+
+// ownerEntryWrite shapes a claimed owner's description save. The player's
+// editor loads the text with the Director's parts taken out (secrets, GM-only
+// pictures and diagrams, table rollers), so saving it over a text that has
+// them would erase them: such a text stays the Director's to change. What the
+// player sends is stripped of those parts too, since they could never read
+// back text marked for the Director.
+func ownerEntryWrite(stored *Entity, entryJSON, entryHTML string) (string, string, error) {
+	if entryHasDirectorParts(derefStr(stored.Entry), derefStr(stored.EntryHTML)) {
+		return "", "", apperror.NewForbidden("this description has parts only the game master can see, so only they can change it")
+	}
+	return sanitize.StripSecretsJSON(entryJSON), sanitize.StripSecretsHTML(entryHTML), nil
+}
+
+// entryHasDirectorParts reports whether a stored text holds anything a player
+// is not shown. The HTML strip only removes, so any change means a part was
+// there; the JSON strip re-encodes, so it is compared with a plain re-encode.
+func entryHasDirectorParts(entryJSON, entryHTML string) bool {
+	if entryHTML != "" && sanitize.StripSecretsHTML(entryHTML) != entryHTML {
+		return true
+	}
+	if entryJSON == "" {
+		return false
+	}
+	var doc map[string]any
+	if err := json.Unmarshal([]byte(entryJSON), &doc); err != nil {
+		return false
+	}
+	plain, err := json.Marshal(doc)
+	if err != nil {
+		return false
+	}
+	return sanitize.StripSecretsJSON(entryJSON) != string(plain)
 }

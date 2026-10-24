@@ -40,10 +40,20 @@ type characterSurfaceEditor struct {
 	CanEdit    bool   `json:"canEdit"`
 }
 
+// characterSurfacePicture carries the wiring the client needs to mount the
+// shared `image-upload` widget on the portrait. Absent when the viewer may
+// not change the picture.
+type characterSurfacePicture struct {
+	Endpoint  string `json:"endpoint"`
+	UploadURL string `json:"uploadUrl"`
+	CSRF      string `json:"csrf"`
+}
+
 // characterSurfaceSeed is the entity payload the client box renderers read.
 type characterSurfaceSeed struct {
 	Name      string                    `json:"name"`
 	Image     string                    `json:"image,omitempty"`
+	Picture   *characterSurfacePicture  `json:"picture,omitempty"`
 	TypeName  string                    `json:"typeName,omitempty"`
 	TypeLabel string                    `json:"typeLabel,omitempty"`
 	Sections  []characterSurfaceSection `json:"sections"`
@@ -62,7 +72,10 @@ type characterSurfaceSeed struct {
 // the same way for fields the system marks owner_only (e.g. backstory) —
 // visible to canSeeGM callers and the entity's own claimed owner, omitted
 // for every other viewer. Server is the authority.
-func CharacterSurfaceSchemaJSON(entity *Entity, entityType *EntityType, campaignID, csrfToken string, canEdit, canSeeGM, isOwner bool) string {
+//
+// pictureEndpoint is the image API the portrait saves to, or "" when the
+// viewer may not change the picture.
+func CharacterSurfaceSchemaJSON(entity *Entity, entityType *EntityType, campaignID, csrfToken string, canEdit, canSeeGM, isOwner bool, pictureEndpoint string) string {
 	if entity == nil {
 		return "{}"
 	}
@@ -82,6 +95,9 @@ func CharacterSurfaceSchemaJSON(entity *Entity, entityType *EntityType, campaign
 		// MediaURL reduces a stored "2026/03/<id>.jpg" path to the file id the
 		// /media/:id route expects. No signer here: members load it unsigned.
 		seed.Image = layouts.MediaURL(context.Background(), *entity.ImagePath)
+	}
+	if pictureEndpoint != "" {
+		seed.Picture = &characterSurfacePicture{Endpoint: pictureEndpoint, UploadURL: "/media/upload", CSRF: csrfToken}
 	}
 	if entity.TypeLabel != nil {
 		seed.TypeLabel = *entity.TypeLabel

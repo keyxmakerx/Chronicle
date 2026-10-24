@@ -2,6 +2,7 @@ package entities
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -312,3 +313,105 @@ func runIdentityCallWith(t *testing.T, svc *identityStubSvc, pl HeroPlanner, han
 	t.Helper()
 	return runIdentityCallOn(t, &Handler{service: svc, heroPlanner: pl}, handler, role, userID, campaignID, body)
 }
+
+// ownPageStubSvc records description and picture saves for the claimed-owner
+// door, on top of identityStubSvc's page and access answers.
+type ownPageStubSvc struct {
+	identityStubSvc
+	savedEntry, savedHTML string
+	imageSet              string
+	canEdit               bool // what an edit-permission check says, as for a Scribe
+}
+
+func (s *ownPageStubSvc) CheckEntityAccess(_ context.Context, _ string, _ int, _ string) (*EffectivePermission, error) {
+	return &EffectivePermission{CanView: true, CanEdit: s.canEdit}, nil
+}
+
+func (s *ownPageStubSvc) SaveEntry(_ context.Context, _ string, entryJSON, entryHTML string, _ *int) (int, *EntryConflict, error) {
+	s.savedEntry, s.savedHTML = entryJSON, entryHTML
+	s.writeCount++
+	return 2, nil, nil
+}
+
+func (s *ownPageStubSvc) UpdateImage(_ context.Context, _ string, path string) error {
+	s.imageSet = path
+	s.writeCount++
+	return nil
+}
+
+const secretEntryHTML = `<p>Wren sails at dawn.</p><p><span data-secret="true">She is the lost heir.</span></p>`
+const secretEntryJSON = `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Wren"},{"type":"text","text":"heir","marks":[{"type":"secret"}]}]}]}`
+
+// The player who claimed a hero writes its description and sets its picture;
+// nobody else below Scribe does, and a description holding the Director's
+// parts stays the Director's.
+func TestOwnPageWrites(t *testing.T) {
+	owner := "user-owner"
+	plain := `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"A sailor."}]}]}`
+	entryBody := `{"entry":` + strconvQuote(plain) + `,"entry_html":"<p>A sailor.</p>"}`
+	cases := []struct {
+		name       string
+		handler    func(*Handler, echo.Context) error
+		role       campaigns.Role
+		userID     string
+		storedHTML string
+		body       string
+		wantStatus int
+	}{
+		{"owner writes the description", (*Handler).UpdateEntryAPI, campaigns.RolePlayer, owner, "<p>old</p>", entryBody, 200},
+		{"other player may not", (*Handler).UpdateEntryAPI, campaigns.RolePlayer, "user-other", "<p>old</p>", entryBody, 403},
+		{"owner may not overwrite the Director's secrets", (*Handler).UpdateEntryAPI, campaigns.RolePlayer, owner, secretEntryHTML, entryBody, 403},
+		{"scribe may, secrets or not", (*Handler).UpdateEntryAPI, campaigns.RoleScribe, "user-scribe", secretEntryHTML, entryBody, 200},
+		{"owner sets the picture", (*Handler).UpdateImageAPI, campaigns.RolePlayer, owner, "", `{"image_path":"pic-1"}`, 200},
+		{"other player may not set it", (*Handler).UpdateImageAPI, campaigns.RolePlayer, "user-other", "", `{"image_path":"pic-1"}`, 403},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			html := tc.storedHTML
+			svc := &ownPageStubSvc{identityStubSvc: identityStubSvc{entity: &Entity{ID: "e1", CampaignID: "c1", Name: "Wren", OwnerUserID: &owner, EntryHTML: &html}},
+				canEdit: tc.role >= campaigns.RoleScribe}
+			err := runIdentityCallOn(t, &Handler{service: svc}, tc.handler, tc.role, tc.userID, "c1", tc.body)
+			wantStatus(t, err, tc.wantStatus)
+			if (svc.writeCount > 0) != (tc.wantStatus == 200) {
+				t.Fatalf("write reached = %v, want %v", svc.writeCount > 0, tc.wantStatus == 200)
+			}
+		})
+	}
+}
+
+// What the owner sends is stripped of Director-only marks: they could never
+// read such text back.
+func TestOwnPageWrites_OwnerSecretsStripped(t *testing.T) {
+	owner := "user-owner"
+	svc := &ownPageStubSvc{identityStubSvc: identityStubSvc{entity: &Entity{ID: "e1", CampaignID: "c1", OwnerUserID: &owner}}}
+	body := `{"entry":` + strconvQuote(secretEntryJSON) + `,"entry_html":` + strconvQuote(secretEntryHTML) + `}`
+	err := runIdentityCallOn(t, &Handler{service: svc}, (*Handler).UpdateEntryAPI, campaigns.RolePlayer, owner, "c1", body)
+	wantStatus(t, err, 200)
+	if strings.Contains(svc.savedHTML, "lost heir") || strings.Contains(svc.savedEntry, "secret") {
+		t.Errorf("owner's save kept Director-only text: %q / %q", svc.savedHTML, svc.savedEntry)
+	}
+	if !strings.Contains(svc.savedHTML, "sails at dawn") {
+		t.Errorf("owner's own text was lost: %q", svc.savedHTML)
+	}
+}
+
+func TestEntryHasDirectorParts(t *testing.T) {
+	plain := `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"A sailor."}]}]}`
+	tests := []struct {
+		name       string
+		json, html string
+		want       bool
+	}{
+		{"plain text", plain, "<p>A sailor.</p>", false},
+		{"empty", "", "", false},
+		{"secret in the HTML", "", secretEntryHTML, true},
+		{"secret mark in the JSON only", secretEntryJSON, "", true},
+	}
+	for _, tc := range tests {
+		if got := entryHasDirectorParts(tc.json, tc.html); got != tc.want {
+			t.Errorf("%s: entryHasDirectorParts = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+func strconvQuote(s string) string { b, _ := json.Marshal(s); return string(b) }
