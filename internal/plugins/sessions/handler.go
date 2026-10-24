@@ -154,6 +154,7 @@ func (h *Handler) ShowSession(c echo.Context) error {
 		// Home's "Write it up" lands here with ?write=1 and the editor
 		// opens ready to type.
 		StartWriting: isScribe && c.QueryParam("write") == "1",
+		Played:       isPlayed(*session, today),
 	}
 
 	return middleware.Render(c, http.StatusOK,

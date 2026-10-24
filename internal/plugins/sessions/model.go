@@ -392,4 +392,6 @@ type RecapView struct {
 	Open bool
 	// StartWriting opens the recap editor ready to type.
 	StartWriting bool
+	// Played marks a planned night already behind the viewer (isPlayed).
+	Played bool
 }

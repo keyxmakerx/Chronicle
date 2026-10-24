@@ -84,9 +84,7 @@ templ SessionListFragment(cc *campaigns.CampaignContext, groups []SessionGroup, 
 						<div class="flex-1 min-w-0">
 							<div class="flex items-center gap-2">
 								if g.Key == "played" {
-									<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-surface-alt text-fg-secondary">
-										<i class="fa-solid fa-flag-checkered text-[10px] mr-0.5"></i> Played
-									</span>
+									@playedBadge()
 								} else {
 									@sessionStatusBadge(s.Status)
 								}
@@ -139,6 +137,14 @@ templ SessionListFragment(cc *campaigns.CampaignContext, groups []SessionGroup, 
 }
 
 // sessionStatusBadge renders a colored status badge.
+// playedBadge marks a planned night whose date has passed: it happened,
+// but nobody has marked it complete.
+templ playedBadge() {
+	<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-surface-alt text-fg-secondary">
+		<i class="fa-solid fa-flag-checkered text-[10px] mr-0.5"></i> Played
+	</span>
+}
+
 templ sessionStatusBadge(status string) {
 	if status == StatusPlanned {
 		<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-accent/10 text-accent">
@@ -250,7 +256,11 @@ templ SessionDetailPage(cc *campaigns.CampaignContext, session *Session, csrfTok
 			<div class="flex items-start justify-between mb-6">
 				<div>
 					<div class="flex items-center gap-2 mb-1">
-						@sessionStatusBadge(session.Status)
+						if recap.Played {
+							@playedBadge()
+						} else {
+							@sessionStatusBadge(session.Status)
+						}
 						<h1 class="text-2xl font-bold text-fg">{ session.Name }</h1>
 					</div>
 					<div class="flex items-center gap-3 text-sm text-fg-secondary">
@@ -324,7 +334,7 @@ templ SessionDetailPage(cc *campaigns.CampaignContext, session *Session, csrfTok
 			     Writers get the page editor (formatting, @links, pictures,
 			     autosave); everyone else reads the saved HTML. -->
 			if recap.Open && cc.IsMember {
-				<div class="card p-4 mb-6" id="session-recap">
+				<div class={ "mb-6", templ.KV("card p-4", !isScribe) } id="session-recap">
 					if isScribe {
 						<div
 							data-widget="editor"
