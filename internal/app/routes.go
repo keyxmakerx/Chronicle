@@ -5485,18 +5485,17 @@ func (a *App) RegisterRoutes() {
 				ctx = layouts.SetTopbarContent(ctx, tc)
 			}
 
-			// "View as player" override: when an owner has the toggle active,
-			// templates see RolePlayer instead of RoleOwner. Access control
-			// (RequireRole middleware) still uses the actual cc.MemberRole.
+			// "View as player" override: when the owner or a co-DM has the
+			// toggle active, templates see RolePlayer and no DM grant. Access
+			// control (route middleware) still uses the real CampaignContext.
 			effectiveRole := int(cc.MemberRole)
 			isOwner := cc.MemberRole >= campaigns.RoleOwner
+			viewingAsPlayer := campaigns.ViewingAsPlayer(c, cc)
 			ctx = layouts.SetIsOwner(ctx, isOwner)
-			ctx = layouts.SetIsDmGranted(ctx, cc.IsDmGranted)
-			if isOwner {
-				if cookie, err := c.Cookie("chronicle_view_as_player"); err == nil && cookie.Value == "1" {
-					effectiveRole = int(campaigns.RolePlayer)
-					ctx = layouts.SetViewingAsPlayer(ctx, true)
-				}
+			ctx = layouts.SetIsDmGranted(ctx, cc.IsDmGranted && !viewingAsPlayer)
+			if viewingAsPlayer {
+				effectiveRole = int(campaigns.RolePlayer)
+				ctx = layouts.SetViewingAsPlayer(ctx, true)
 			}
 			ctx = layouts.SetCampaignRole(ctx, effectiveRole)
 			ctx = layouts.SetCampaignArchived(ctx, cc.Campaign.IsArchived())
@@ -5512,7 +5511,7 @@ func (a *App) RegisterRoutes() {
 			// their membership role, so the DM-only Adventures category is
 			// theirs to see; an owner viewing as a player is not.
 			sidebarRole := effectiveRole
-			if cc.IsDmGranted && sidebarRole < int(campaigns.RoleScribe) {
+			if cc.IsDmGranted && !viewingAsPlayer && sidebarRole < int(campaigns.RoleScribe) {
 				sidebarRole = int(campaigns.RoleOwner)
 			}
 			if typesErr == nil {
@@ -5976,7 +5975,7 @@ func (a *App) RegisterRoutes() {
 
 	// Tests: montages and other long tests on a page, and how they ended.
 	// Built before encounters, whose versions are picked by a test's result.
-	encounterPages := &encountersPageAdapter{svc: entityService, cards: entities.NewPageCards(a.DB)}
+	encounterPages := &encountersPageAdapter{svc: entityService, cards: entities.NewPageCards(a.DB), lists: characterListService}
 	var encounterResults encounters.ResultDirectory
 	a.registerPlugin(PluginRegistration{
 		Slug:     pagetests.PluginSlug,

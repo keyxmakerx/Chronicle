@@ -107,12 +107,17 @@ test('the save body is the whole encounter in the server\'s shape', () => {
   });
 });
 
-test('pickers take heroes from character categories and creatures from creature ones', () => {
+test('pickers list the categories the server names, and nothing else', () => {
   const { H } = load();
-  const types = [{ id: 1, preset_category: 'character' }, { id: 2, preset_category: 'creature' }, { id: 3 }, { id: 4, preset_category: 'creature' }];
-  assert.deepEqual(plain(H.pickTypes(types, 'creature')), [2, 4]);
-  assert.deepEqual(plain(H.pickTypes(types, 'character')), [1]);
-  assert.deepEqual(plain(H.pickTypes(null, 'creature')), []);
+  assert.deepEqual(plain(H.pickTypes([1, 13, 5])), [1, 13, 5]);
+  assert.deepEqual(plain(H.pickTypes([1, '2', 0, -3, 1.5, null])), [1]);
+  assert.deepEqual(plain(H.pickTypes(null)), []);
+  assert.deepEqual(plain(H.pickTypes({ id: 1 })), []);
+});
+
+test('creature search waits for the shortest query the server answers', () => {
+  const { H } = load();
+  assert.equal(H.MIN_SEARCH, 2);
 });
 
 // ---- Stages ----

@@ -20,6 +20,7 @@ import (
 type encountersPageAdapter struct {
 	svc   entities.EntityService
 	cards entities.PageCards
+	lists entities.CharacterListReader
 }
 
 // Access applies the rules the page itself uses: a page of another campaign
@@ -70,6 +71,40 @@ func (a *encountersPageAdapter) Names(ctx context.Context, campaignID string, id
 		}
 	}
 	return out, nil
+}
+
+// PickerTypes offers heroes from the characters list (The Party's), and
+// creatures from the creature types plus the NPC list, so a named villain
+// can join a fight as a page and not only by name.
+func (a *encountersPageAdapter) PickerTypes(ctx context.Context, campaignID string) (encounters.PickerTypes, error) {
+	heroes, err := a.lists.CharacterTypeIDs(ctx, campaignID)
+	if err != nil {
+		return encounters.PickerTypes{}, err
+	}
+	npcs, err := a.lists.NPCTypeIDs(ctx, campaignID)
+	if err != nil {
+		return encounters.PickerTypes{}, err
+	}
+	types, err := a.svc.GetEntityTypes(ctx, campaignID)
+	if err != nil {
+		return encounters.PickerTypes{}, err
+	}
+	return encounters.PickerTypes{Heroes: heroes, Creatures: unionIDs(entities.CreatureTypeIDs(types), npcs)}, nil
+}
+
+// unionIDs joins id lists in order, dropping repeats.
+func unionIDs(lists ...[]int) []int {
+	seen := map[int]bool{}
+	out := []int{}
+	for _, l := range lists {
+		for _, id := range l {
+			if !seen[id] {
+				seen[id] = true
+				out = append(out, id)
+			}
+		}
+	}
+	return out
 }
 
 // syncEncounterAPIAdapter implements syncapi.EncounterAPIService. The sync

@@ -431,7 +431,7 @@ type dmHiddenAdapter struct {
 // more than limit per type: that spare row is how it knows the panel cannot
 // show them all, without counting every hidden entity in the campaign.
 func (a *dmHiddenAdapter) HiddenCharacters(ctx context.Context, campaignID string, v dmscreen.Viewer, limit int) ([]dmscreen.Hidden, bool, error) {
-	npcTypes, err := a.lists.NPCTypeIDs(ctx, campaignID)
+	npcTypes, err := a.revealTypes(ctx, campaignID)
 	if err != nil {
 		return nil, false, err
 	}
@@ -463,6 +463,20 @@ func (a *dmHiddenAdapter) HiddenCharacters(ctx context.Context, campaignID strin
 	return out, more, nil
 }
 
+// revealTypes is the NPC list plus the creature types (a hidden monster is
+// revealed mid-fight as often as an NPC), sub-types included.
+func (a *dmHiddenAdapter) revealTypes(ctx context.Context, campaignID string) ([]int, error) {
+	npcs, err := a.lists.NPCTypeIDs(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	types, err := a.entities.GetEntityTypes(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	return unionIDs(npcs, entities.CreatureTypeIDs(types)), nil
+}
+
 // Reveal only ever un-hides, and only the NPC and creature types the panel
 // lists: setting the flag (never toggling it) keeps a double-click from
 // hiding the entity again.
@@ -474,7 +488,7 @@ func (a *dmHiddenAdapter) Reveal(ctx context.Context, entityID, campaignID strin
 	if e.CampaignID != campaignID {
 		return "", apperror.NewNotFound("entity not found")
 	}
-	npcTypes, err := a.lists.NPCTypeIDs(ctx, campaignID)
+	npcTypes, err := a.revealTypes(ctx, campaignID)
 	if err != nil {
 		return "", err
 	}
@@ -485,6 +499,32 @@ func (a *dmHiddenAdapter) Reveal(ctx context.Context, entityID, campaignID strin
 		return e.Name, nil
 	}
 	if err := a.entities.SetPrivateInCampaign(ctx, entityID, campaignID, false); err != nil {
+		return "", err
+	}
+	return e.Name, nil
+}
+
+// Hide is Reveal's undo: it only ever hides, and only the types Reveal
+// covers, in this campaign.
+func (a *dmHiddenAdapter) Hide(ctx context.Context, entityID, campaignID string) (string, error) {
+	e, err := a.entities.GetByID(ctx, entityID)
+	if err != nil {
+		return "", err
+	}
+	if e.CampaignID != campaignID {
+		return "", apperror.NewNotFound("entity not found")
+	}
+	types, err := a.revealTypes(ctx, campaignID)
+	if err != nil {
+		return "", err
+	}
+	if !slices.Contains(types, e.EntityTypeID) {
+		return "", apperror.NewNotFound("entity not found")
+	}
+	if e.IsPrivate {
+		return e.Name, nil
+	}
+	if err := a.entities.SetPrivateInCampaign(ctx, entityID, campaignID, true); err != nil {
 		return "", err
 	}
 	return e.Name, nil

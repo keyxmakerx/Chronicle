@@ -47,6 +47,21 @@ func MemberAccessLabel(c *Campaign, m CampaignMember) string {
 	}
 }
 
+// ViewerAccessLabel is the viewer's own role in the People page's words, so
+// a Co-DM reads "Co-DM" on the campaign home, not "Scribe".
+func ViewerAccessLabel(cc *CampaignContext) string {
+	switch {
+	case cc.MemberRole >= RoleOwner:
+		return "Owner"
+	case cc.MemberRole == RoleScribe && cc.IsDmGranted:
+		return "Co-DM"
+	case cc.MemberRole == RolePlayer && cc.IsDmGranted:
+		return "Player with DM access"
+	default:
+		return cc.MemberRole.DisplayName()
+	}
+}
+
 // MemberAccessNote explains the one setup the menu cannot show: a Player who
 // can also read DM-only content. It keeps that until their role is changed.
 func MemberAccessNote(c *Campaign, m CampaignMember) string {
