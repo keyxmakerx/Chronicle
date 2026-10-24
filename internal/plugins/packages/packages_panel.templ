@@ -52,7 +52,7 @@ templ packagePanel(data PackagesPageData) {
 						@CampaignsPanel(&r.Package, r.Usage, r.UsageKnown)
 					}
 				case PanelTabSettings:
-					@panelSettings(r, data.Retention, data.CSRFToken)
+					@panelSettings(r, data.Retention, data.Now, data.CSRFToken)
 				default:
 					@panelOverview(r, data)
 			}

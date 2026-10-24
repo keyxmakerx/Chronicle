@@ -2,9 +2,11 @@
 // gets new versions, where it comes from, and retiring or removing it.
 package packages
 
+import "time"
+
 // panelSettings groups the per-package controls. Each one is an existing
 // endpoint; the page reloads to the same panel after a change.
-templ panelSettings(r PackageRow, site RetentionSettings, csrfToken string) {
+templ panelSettings(r PackageRow, site RetentionSettings, now time.Time, csrfToken string) {
 	<div class="space-y-6">
 		<section class="space-y-2" aria-labelledby="pkg-get-new">
 			<h3 id="pkg-get-new" class="text-xs font-bold uppercase tracking-wide text-fg-secondary">Get new versions</h3>
@@ -35,6 +37,7 @@ templ panelSettings(r PackageRow, site RetentionSettings, csrfToken string) {
 				<i class="fa-solid fa-rotate mr-1"></i>
 				Check now
 			</button>
+			<p class="text-xs text-fg-muted">{ checkResultText(now, r.LastCheckedAt, len(r.Versions)) }</p>
 		</section>
 		<section class="space-y-2" aria-labelledby="pkg-old">
 			<h3 id="pkg-old" class="text-xs font-bold uppercase tracking-wide text-fg-secondary">Old versions</h3>

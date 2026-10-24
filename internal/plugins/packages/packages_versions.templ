@@ -2,7 +2,10 @@
 // fragment: both render the same list.
 package packages
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 // VersionList renders a package's versions, newest first, with Install /
 // switch, Pin and release-notes controls. It is the panel's Versions tab and
@@ -16,7 +19,7 @@ templ VersionList(pkg *Package, versions []PackageVersion, ruleText, csrfToken s
 			<p class="text-xs text-fg-muted">{ ruleText }</p>
 		}
 		if len(versions) == 0 {
-			<p class="text-sm text-fg-secondary">No versions found. Press Check now on the Settings tab.</p>
+			<p class="text-sm text-fg-secondary">{ noVersionsText(time.Now(), pkg.LastCheckedAt) }</p>
 		} else {
 			<div class="rounded-lg border border-edge divide-y divide-edge overflow-hidden">
 				for _, v := range versions {
