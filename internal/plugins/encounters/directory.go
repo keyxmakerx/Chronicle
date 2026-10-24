@@ -18,10 +18,21 @@ type PageDirectory interface {
 	PickerTypes(ctx context.Context, campaignID string) (PickerTypes, error)
 }
 
-// PickerTypes is which page types the builder's pickers search.
+// PickerTypes is which page types the builder's pickers search, and the
+// game system's stat blocks for creature pages.
 type PickerTypes struct {
-	Heroes    []int
-	Creatures []int
+	Heroes     []int
+	Creatures  []int
+	StatBlocks []StatBlock
+}
+
+// StatBlock is a game-system widget that draws a creature's stat block, and
+// the page types it draws for. A creature row folds it out in place; a page
+// of no listed type folds out its own fields instead.
+type StatBlock struct {
+	Widget   string `json:"widget"`
+	SystemID string `json:"systemId"`
+	TypeIDs  []int  `json:"typeIds"`
 }
 
 // PageAccess is one viewer's standing on one page.

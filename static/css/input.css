@@ -714,6 +714,8 @@
     @apply badge bg-blue-100 text-blue-700
            dark:bg-blue-900/30 dark:text-blue-400;
   }
+  /* The page name's DM-only label waits hidden until the page is set to DM-only. */
+  [data-dm-only-label][hidden] { display: none; }
 
   /* ---- Alerts ---- */
   .alert {
@@ -3650,6 +3652,8 @@
   .tree-row.tree-match .tree-lb mark { background: rgb(var(--nav-accent) / 0.55); color: #fff; border-radius: 2px; padding: 0 1px; }
   .tree-n { flex: none; font-size: 10.5px; color: var(--nav-text-3); font-variant-numeric: tabular-nums; }
   .tree-hid { flex: none; font-size: 10px; color: #fbbf24; opacity: 0.85; }
+  /* A page set to DM-only: the same lock the page's visibility control uses. */
+  .tree-lock { flex: none; font-size: 9.5px; color: var(--nav-text-3); }
   /* An extra listing: the same page shown under a second parent. A small link
      icon and a muted "also here" label say so without a second weight of text. */
   .tree-row.is-place > .tree-lb { color: var(--nav-text-2); }
@@ -5008,7 +5012,7 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
   .dms-dot-after { margin: 0 0 0 .3rem; vertical-align: middle; background: var(--dms-ok); border-color: var(--dms-ok); }
   .dms-leaves { display: flex; perspective: 1400px; transform-style: preserve-3d; }
   .dms-leaf {
-    flex: 1 1 0; min-width: 0; display: grid; gap: .65rem; align-content: start; padding: .9rem;
+    flex: 1 1 0; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: .65rem; align-content: start; padding: .9rem;
     background: var(--dms-leaf); border: 1px solid var(--dms-leaf-edge); min-height: 24rem;
     box-shadow: var(--dms-shadow); backface-visibility: hidden;
   }
@@ -5061,7 +5065,9 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
   .dms-bar > span { display: block; height: 100%; background: var(--dms-ok); }
   .dms-bar > span.dms-low { background: var(--dms-warn); }
   .dms-num { font-variant-numeric: tabular-nums; color: var(--dms-ink); }
-  .dms-tabs { display: flex; gap: .25rem; border-bottom: 1px solid var(--dms-leaf-edge); }
+  /* The tabs wrap rather than push the leaf wider when they don't fit on
+     one line (five of them on a narrow leaf). */
+  .dms-tabs { display: flex; flex-wrap: wrap; gap: 0 .25rem; border-bottom: 1px solid var(--dms-leaf-edge); }
   .dms-tabs button { padding: .25rem .55rem; font-size: .85rem; color: var(--dms-ink-muted); border-bottom: 2px solid transparent; }
   .dms-tabs button[aria-selected="true"] { color: var(--dms-ink); border-bottom-color: var(--dms-acc); font-weight: 700; }
   .dms-search { width: 100%; font-size: .85rem; border: 1px solid var(--dms-leaf-edge); border-radius: .4rem; background: transparent; color: var(--dms-ink); padding: .3rem .5rem; }

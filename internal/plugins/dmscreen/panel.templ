@@ -177,6 +177,9 @@ templ Panel(v *View, csrf string) {
 					if v.Adventures != nil {
 						<button type="button" role="tab" aria-selected="false" data-dms-tab="adventures">Adventures</button>
 					}
+					if v.Fight != nil {
+						<button type="button" role="tab" aria-selected="false" data-dms-tab="fight">Fight</button>
+					}
 				</div>
 				if len(v.Conditions) > 0 {
 					<div class="dms-blk" data-dms-pane="rules">
@@ -228,6 +231,11 @@ templ Panel(v *View, csrf string) {
 				if v.Adventures != nil {
 					<div class="dms-blk" data-dms-pane="adventures" hidden>
 						@adventuresPane(v.CampaignID, v.Adventures)
+					</div>
+				}
+				if v.Fight != nil {
+					<div class="dms-blk" data-dms-pane="fight" hidden>
+						@v.Fight
 					</div>
 				}
 			</section>

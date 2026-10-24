@@ -5820,6 +5820,10 @@ func (a *App) RegisterRoutes() {
 	if a.PluginHealth.IsHealthy(homebrew.PluginSlug) {
 		dmSources.Homebrew = &dmHomebrewAdapter{trackers: a.PluginHealth.IsHealthy(trackers.PluginSlug)}
 	}
+	// The Fight tab runs encounters, so it needs their tables.
+	if a.PluginHealth.IsHealthy(encounters.PluginSlug) {
+		dmSources.Fight = dmFightAdapter{}
+	}
 	dmScreenSvc := dmscreen.NewService(dmSources)
 	dmscreen.RegisterRoutes(e, dmscreen.NewHandler(dmScreenSvc), campaignService, authService)
 	// The sync API routes are already registered; they answer 404 until this
@@ -6032,7 +6036,7 @@ func (a *App) RegisterRoutes() {
 
 	// Tests: montages and other long tests on a page, and how they ended.
 	// Built before encounters, whose versions are picked by a test's result.
-	encounterPages := &encountersPageAdapter{svc: entityService, cards: entities.NewPageCards(a.DB), lists: characterListService}
+	encounterPages := &encountersPageAdapter{svc: entityService, cards: entities.NewPageCards(a.DB), lists: characterListService, sys: systemHandler}
 	var encounterResults encounters.ResultDirectory
 	a.registerPlugin(PluginRegistration{
 		Slug:     pagetests.PluginSlug,
@@ -6091,18 +6095,22 @@ func (a *App) RegisterRoutes() {
 		slog.Warn("homebrew plugin degraded — the Homebrew Workshop is not available")
 	}
 
-	// Encounters: fights planned on a page, loaded in Foundry.
+	// Encounters: fights planned on a page, loaded in Foundry or run on the
+	// DM Screen's Fight tab.
 	a.registerPlugin(PluginRegistration{
 		Slug:     encounters.PluginSlug,
 		StaticFS: echo.MustSubFS(encounters.StaticAssetsFS, "static"),
 		Widgets: []PluginWidget{
-			{Name: "encounters", Scripts: []string{"js/encounters.js"}},
+			{Name: "encounters", Scripts: []string{"js/creature_fold.js", "js/encounters.js"}},
+			{Name: "encounter-run", Scripts: []string{"js/creature_fold.js", "js/encounter_run.js"}},
 		},
 	})
 	if a.PluginHealth.IsHealthy(encounters.PluginSlug) {
 		encounterSvc := encounters.NewService(encounters.NewRepository(a.DB), encounterPages, encounterResults)
 		encounterAPI.attach(encounterSvc)
 		encounters.RegisterRoutes(e, encounters.NewHandler(encounterSvc), campaignService, authService)
+		runSvc := encounters.NewRunService(encounters.NewRunRepository(a.DB), encounterSvc, encounterPages)
+		encounters.RegisterRunRoutes(e, encounters.NewRunHandler(runSvc), campaignService, authService)
 	} else {
 		slog.Warn("encounters plugin degraded — routes not registered")
 	}

@@ -10,7 +10,8 @@
  * stands), tabs and the condition filter.
  *
  * Nothing loops, so there is nothing to ease to still. One click anywhere,
- * or Escape, skips the opening. Reduced motion gets a plain fade.
+ * or Escape, skips the opening. Reduced motion, and every open after the
+ * first in a browser tab, gets a plain fade.
  *
  * Registered via Chronicle.register; boot.js mounts it on [data-widget="dm-screen"].
  */
@@ -80,6 +81,16 @@
   }
 
   function narrow() { return window.matchMedia('(max-width: 700px)').matches; }
+
+  // The die opens the first DM Screen of a browser tab; later opens in that
+  // tab use the plain fade, so a screen opened often at the table is quick.
+  var ROLLED_KEY = 'chronicle.dmScreen.rolled';
+  function rolledInTab() {
+    try { return sessionStorage.getItem(ROLLED_KEY) === '1'; } catch (e) { return false; }
+  }
+  function markRolled() {
+    try { sessionStorage.setItem(ROLLED_KEY, '1'); } catch (e) { /* rolls again next time */ }
+  }
 
   Chronicle.register('dm-screen', {
     init: function (el) {
@@ -220,6 +231,9 @@
         });
         r.querySelectorAll('[data-dms-pane]').forEach(function (p) {
           p.hidden = p.getAttribute('data-dms-pane') !== name;
+          // A tab's widgets (the Fight tab's tracker) mount when it is first
+          // shown, since a mount here doesn't run boot.js's pass.
+          if (!p.hidden && window.Chronicle && Chronicle.mountWidgets) Chronicle.mountWidgets(p);
         });
       }
 
@@ -590,8 +604,16 @@
           });
       }
 
+      // clearStage tears the panel down, letting its widgets finish first
+      // (the Fight tab saves what was typed last).
+      function clearStage(stage) {
+        if (window.Chronicle && Chronicle.destroyWidget) stage.querySelectorAll('[data-widget]').forEach(Chronicle.destroyWidget);
+        stage.innerHTML = '';
+      }
+
       function mount(html) {
         var stage = st.overlay.querySelector('[data-dms-stage]');
+        clearStage(stage);
         stage.innerHTML = html;
         if (window.htmx) window.htmx.process(stage);
         restoreKept();
@@ -733,7 +755,7 @@
         var loaded = load();
         var me = st.seq = (st.seq || 0) + 1;
 
-        if (reduce()) {
+        if (reduce() || rolledInTab()) {
           loaded.then(function (html) {
             if (me !== st.seq) return;
             var r = mount(html);
@@ -742,6 +764,7 @@
           return;
         }
 
+        markRolled();
         setPlaying(true);
         var cx = window.innerWidth / 2, cy = Math.min(window.innerHeight * 0.42, 360);
         Promise.all([loaded, throwDie()]).then(function (got) {
@@ -787,7 +810,7 @@
         stopAll();
         document.removeEventListener('keydown', onKey);
         var r = root(), o = st.overlay;
-        var done = function () { exitWindow(); o.hidden = true; o.querySelector('[data-dms-stage]').innerHTML = ''; openBtn.focus({ preventScroll: true }); };
+        var done = function () { exitWindow(); o.hidden = true; clearStage(o.querySelector('[data-dms-stage]')); openBtn.focus({ preventScroll: true }); };
         if (!r || reduce()) { done(); return; }
         st.closing = true;
         var side = narrow() ? 'rotateX' : 'rotateY';

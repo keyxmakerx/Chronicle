@@ -415,7 +415,7 @@ func (s *service) ListForPage(ctx context.Context, campaignID, entityID string, 
 	if err != nil {
 		return nil, err
 	}
-	out := &PageList{Encounters: list, CanEdit: a.CanEdit, HeroTypeIDs: []int{}, CreatureTypeIDs: []int{}}
+	out := &PageList{Encounters: list, CanEdit: a.CanEdit, HeroTypeIDs: []int{}, CreatureTypeIDs: []int{}, StatBlocks: []StatBlock{}}
 	// Best effort: without the types the pickers are empty, and a creature
 	// can still be added by name.
 	if pt, err := s.pages.PickerTypes(ctx, campaignID); err != nil {
@@ -426,6 +426,9 @@ func (s *service) ListForPage(ctx context.Context, campaignID, entityID string, 
 		}
 		if pt.Creatures != nil {
 			out.CreatureTypeIDs = pt.Creatures
+		}
+		if pt.StatBlocks != nil {
+			out.StatBlocks = pt.StatBlocks
 		}
 	}
 	return out, nil

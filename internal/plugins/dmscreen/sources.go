@@ -144,6 +144,14 @@ type HomebrewSource interface {
 	DrawerMount(campaignID string) templ.Component
 }
 
+// FightSource draws the Fight tab: the encounter tracker's own widget, which
+// reads and saves the fight itself, so the screen holds no fight data.
+// conditions are the game system's condition names, offered when the DM
+// marks a creature.
+type FightSource interface {
+	FightMount(campaignID string, conditions []string) templ.Component
+}
+
 // Sources groups the screen's inputs. Any of them may be nil, which leaves
 // that section out.
 type Sources struct {
@@ -158,6 +166,7 @@ type Sources struct {
 	Hidden   HiddenSource
 	System   SystemSource
 	Homebrew HomebrewSource
+	Fight    FightSource
 
 	// Board and Adventures together feed the Adventures tab; with either
 	// missing (the table failed to migrate) the tab is left out.

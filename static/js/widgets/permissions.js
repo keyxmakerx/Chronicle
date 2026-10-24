@@ -218,6 +218,10 @@ Chronicle.register('permissions', {
         tip.textContent = cornerTip(mode);
       }
       if (tip) tip.setAttribute('data-perm-mode', mode);
+      // The label by the page name follows the page's own control.
+      if (!draftMode) {
+        document.querySelectorAll('[data-dm-only-label]').forEach(function (n) { n.hidden = mode !== 'dm_only'; });
+      }
     }
 
     function cornerTip(mode) {

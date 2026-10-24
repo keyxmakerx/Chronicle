@@ -1,10 +1,12 @@
 /*
  * encounters.css: the Encounters block and its slide-out builder
- * (internal/plugins/encounters/static/js/encounters.js).
+ * (internal/plugins/encounters/static/js/encounters.js), and the DM Screen's
+ * Fight tab (encounter_run.js), scoped under .erun at the end.
  *
- * Everything is scoped under .enc. Colours come from the theme tokens, so the
+ * The builder is scoped under .enc. Colours come from the theme tokens, so the
  * block follows light and dark with the rest of the page; the accent marks
- * what can be acted on, and amber only ever means "starts hidden". The
+ * what can be acted on, and in the builder amber only ever means "starts
+ * hidden" (in the Fight tab it marks a condition). The
  * builder is a drawer: it slides in from the right edge in 280ms, or fades
  * when the viewer asks for less motion.
  */
@@ -190,3 +192,114 @@
   .enc-version { animation: enc-settle 280ms var(--ease-out, ease-out); }
 }
 @keyframes enc-settle { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* A creature's numbers, folded out under its row (creature_fold.js): the
+   game system's stat block, or the page's filled-in fields. */
+.cf-name {
+  all: unset; box-sizing: border-box; display: inline-flex; align-items: baseline; gap: 6px; cursor: pointer;
+  color: var(--color-text-primary, #111827); border-radius: 4px; overflow-wrap: anywhere;
+}
+.cf-name:hover b { text-decoration: underline; text-underline-offset: 2px; }
+.cf-name:focus-visible { outline: 2px solid var(--color-accent, #6366f1); outline-offset: 2px; }
+.cf-chev { font-size: 10px; color: var(--color-text-muted, #6b7280); transition: transform 160ms var(--ease-out, ease-out); }
+.cf-name[aria-expanded="true"] .cf-chev { transform: rotate(90deg); }
+.cf-fold {
+  display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; margin-top: -4px;
+  border-radius: 8px; background: var(--color-bg-tertiary, #f3f4f6); font-size: 13px;
+}
+.cf-note { margin: 0; color: var(--color-text-muted, #6b7280); font-size: 12.5px; }
+.cf-fields { margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(8.5em, 1fr)); gap: 6px 12px; }
+.cf-field { min-width: 0; }
+.cf-field dt { font-size: 11px; color: var(--color-text-muted, #6b7280); letter-spacing: .02em; }
+.cf-field dd { margin: 0; color: var(--color-text-primary, #111827); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.cf-open { align-self: flex-start; font-size: 12.5px; color: var(--color-accent, #6366f1); }
+.cf-open:hover { text-decoration: underline; }
+@media (prefers-reduced-motion: reduce) { .cf-chev { transition: none; } }
+
+/* The DM Screen's Fight tab (encounter_run.js): the turn order as rows on a
+   hairline, the line whose turn it is marked by the accent edge, a field per
+   hit point box, and conditions as amber chips. It sits in the screen's
+   right leaf, so it takes the screen's ink and falls back to the theme. */
+.erun { --erun-ink: var(--dms-ink, var(--color-text-primary, #111827)); --erun-muted: var(--dms-ink-muted, var(--color-text-muted, #6b7280));
+  --erun-edge: var(--dms-leaf-edge, var(--color-border, #e5e7eb)); --erun-acc: var(--dms-acc, var(--color-accent, #6366f1));
+  display: flex; flex-direction: column; gap: 8px; font-size: 14px; color: var(--erun-ink); min-width: 0; }
+.erun *, .erun *::before, .erun *::after { box-sizing: border-box; }
+.erun-lbl { margin: 0; font-size: .7rem; text-transform: uppercase; letter-spacing: .08em; font-weight: 700; color: var(--erun-muted); }
+.erun-note { margin: 0; font-size: 12.5px; color: var(--erun-muted); }
+.erun-sub { display: block; font-size: 12.5px; color: var(--erun-muted); overflow-wrap: anywhere; }
+.erun-btn {
+  font: inherit; font-size: 12.5px; min-height: 32px; padding: 4px 12px; border-radius: 8px; cursor: pointer; white-space: nowrap;
+  background: transparent; color: var(--erun-ink); border: 1px solid var(--erun-edge);
+  transition: background-color 120ms var(--ease-out, ease-out);
+}
+.erun-btn:hover:not(:disabled) { background: color-mix(in srgb, var(--erun-ink) 6%, transparent); }
+.erun-btn:active:not(:disabled) { transform: scale(.96); }
+.erun-btn:disabled { opacity: .5; cursor: not-allowed; }
+.erun-go { color: var(--erun-acc); border-color: var(--erun-acc); font-weight: 600; }
+.erun-end { color: rgb(var(--color-bad-rgb, 192 57 43)); }
+.erun-armed { background: rgb(var(--color-bad-rgb, 192 57 43)); border-color: transparent; color: #fff; }
+.erun-armed:hover:not(:disabled) { background: rgb(var(--color-bad-rgb, 192 57 43) / .88); }
+.erun button:focus-visible, .erun input:focus-visible { outline: 2px solid var(--erun-acc); outline-offset: 2px; }
+
+.erun-ready, .erun-waiting { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.erun-pick { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid var(--erun-edge); }
+.erun-pick:first-child { border-top: 0; }
+.erun-pick-txt { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+
+.erun-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.erun-name { font-weight: 700; min-width: 0; overflow-wrap: anywhere; }
+.erun-round { font-size: 12.5px; color: var(--erun-muted); font-variant-numeric: tabular-nums; }
+.erun-bar .erun-go { margin-left: auto; }
+
+.erun-order { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.erun-line { border-top: 1px solid var(--erun-edge); padding: 2px 0; }
+.erun-line:first-child { border-top: 0; }
+.erun-line.erun-now { background: color-mix(in srgb, var(--erun-acc) 10%, transparent); box-shadow: inset 2px 0 0 var(--erun-acc); border-radius: 6px; }
+.erun-row { display: grid; grid-template-columns: 2.6em minmax(0, 1fr) 32px; align-items: center; gap: 6px; padding: 2px 4px; }
+.erun-init, .erun-box, .erun-max, .erun-condin {
+  font: inherit; font-size: 12.5px; min-height: 32px; border: 1px solid var(--erun-edge); border-radius: 6px;
+  background: transparent; color: var(--erun-ink); font-variant-numeric: tabular-nums;
+}
+.erun-init { width: 100%; padding: 2px 4px; text-align: center; color: var(--erun-muted); }
+.erun-now .erun-init { color: var(--erun-ink); font-weight: 700; }
+.erun-main { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; }
+.erun-who { flex: 1 1 9em; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-width: 0; }
+.erun-nm { font-weight: 600; overflow-wrap: anywhere; }
+.erun-x { font-size: 12.5px; color: var(--erun-muted); }
+.erun-cond {
+  all: unset; box-sizing: border-box; cursor: pointer; position: relative; display: inline-flex; align-items: center; gap: 4px; min-height: 24px;
+  font-size: 11px; padding: 0 8px; border-radius: 999px;
+  background: rgb(var(--color-warn-rgb, 217 119 6) / .16); color: rgb(var(--color-warn-rgb, 217 119 6));
+}
+/* The chip is drawn small; its hit area reaches the 32px the standard asks. */
+.erun-cond::before { content: ""; position: absolute; inset: -4px 0; }
+.erun-cond::after { content: "\00d7"; opacity: .7; }
+.erun-cond:hover::after { opacity: 1; }
+.erun-hp { flex: 0 1 auto; margin-left: auto; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 4px; }
+.erun-box { width: 3em; padding: 2px; text-align: center; }
+.erun-box::placeholder { color: var(--erun-muted); opacity: .8; }
+.erun-box.erun-down { color: var(--erun-muted); text-decoration: line-through; border-style: dashed; }
+.erun-of { font-size: 12.5px; color: var(--erun-muted); font-variant-numeric: tabular-nums; }
+.erun-more {
+  all: unset; box-sizing: border-box; width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 6px; cursor: pointer; color: var(--erun-muted);
+}
+.erun-more:hover, .erun-more[aria-expanded="true"] { color: var(--erun-ink); background: color-mix(in srgb, var(--erun-ink) 6%, transparent); }
+.erun-detail { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 4px 4px 6px calc(2.6em + 10px); }
+.erun-field { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--erun-muted); }
+.erun-max { width: 4.5em; padding: 2px 4px; text-align: center; }
+.erun-condadd { display: flex; gap: 6px; flex: 1 1 12em; min-width: 0; }
+.erun-condin { flex: 1 1 auto; min-width: 0; padding: 2px 8px; }
+.erun-line .cf-fold { margin: 2px 4px 6px; }
+
+.erun-endbox { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding-top: 4px; }
+.erun-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.erun-confirm p { flex-basis: 100%; margin: 0; font-size: 12.5px; }
+.erun-status { font-size: 12.5px; color: var(--erun-muted); min-height: 1em; }
+.erun [hidden] { display: none !important; }
+@media (pointer: coarse) {
+  .erun-btn, .erun-init, .erun-box, .erun-max, .erun-condin { min-height: 44px; }
+  .erun-more { width: 44px; height: 44px; }
+  .erun-row { grid-template-columns: 2.6em minmax(0, 1fr) 44px; }
+}
+@media (prefers-reduced-motion: reduce) { .erun-btn { transition: none; } .erun-btn:active:not(:disabled) { transform: none; } }

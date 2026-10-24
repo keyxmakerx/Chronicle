@@ -623,6 +623,10 @@ PUT	/campaigns/:id/dm-screen/notes	session	plugins/dmscreen.(*Handler).SaveNote	
 POST	/campaigns/:id/dm-screen/reveal/:eid	session	plugins/dmscreen.(*Handler).Reveal	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
 POST	/campaigns/:id/dm-screen/time	session	plugins/dmscreen.(*Handler).StepTime	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
 GET	/campaigns/:id/edit	session	plugins/campaigns.(*Handler).EditForm	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+DELETE	/campaigns/:id/encounter-run	session	plugins/encounters.(*RunHandler).End	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
+GET	/campaigns/:id/encounter-run	session	plugins/encounters.(*RunHandler).Current	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
+POST	/campaigns/:id/encounter-run	session	plugins/encounters.(*RunHandler).Start	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
+PUT	/campaigns/:id/encounter-run	session	plugins/encounters.(*RunHandler).Save	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
 DELETE	/campaigns/:id/encounters/:encid	session	plugins/encounters.(*Handler).Delete	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
 GET	/campaigns/:id/encounters/:encid	session	plugins/encounters.(*Handler).Get	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
 PUT	/campaigns/:id/encounters/:encid	session	plugins/encounters.(*Handler).Update	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess

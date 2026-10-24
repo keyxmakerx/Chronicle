@@ -144,6 +144,36 @@ func TestBuild_HomebrewOwnerOnly(t *testing.T) {
 	}
 }
 
+// fightMount stands in for the encounter tracker.
+type fightMount struct {
+	asked      string
+	conditions []string
+}
+
+func (f *fightMount) FightMount(campaignID string, conditions []string) templ.Component {
+	f.asked, f.conditions = campaignID, conditions
+	return templ.Raw("fight")
+}
+
+func TestBuild_FightWithConditionNames(t *testing.T) {
+	f := &fightMount{}
+	items := []systems.ReferenceItem{
+		{Name: "Slowed", Properties: map[string]any{"category": "condition"}},
+		{Name: "Bleeding", Properties: map[string]any{"category": "condition"}},
+	}
+	svc := NewService(Sources{Fight: f, System: fakeSystemSource{sys: fakeSystem{m: drawSteel, items: items}}})
+	owner, err := svc.Build(context.Background(), "c1", Viewer{UserID: "u", Role: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if owner.Fight == nil || f.asked != "c1" || strings.Join(f.conditions, ",") != "Bleeding,Slowed" {
+		t.Errorf("owner fight = %v, asked for %q with %v", owner.Fight, f.asked, f.conditions)
+	}
+	if none, _ := NewService(Sources{}).Build(context.Background(), "c1", Viewer{UserID: "u", Role: 3}); none.Fight != nil {
+		t.Error("no source should mean no Fight tab")
+	}
+}
+
 func TestBuild_DowntimeOwnerOnlyToggle(t *testing.T) {
 	tests := []struct {
 		name       string

@@ -529,7 +529,8 @@
       var S = {
         el: el, cfg: cfg, id: 'enc' + (++mounted), list: [], canEdit: false,
         open: null, draft: null, saving: Promise.resolve(), timer: null, status: '', statusErr: false,
-        heroes: null, heroTypes: [], creatureTypes: null, drawer: null, opener: null, formsMap: null, formsKey: ''
+        heroes: null, heroTypes: [], creatureTypes: null, drawer: null, opener: null, formsMap: null, formsKey: '',
+        statBlocks: [], folds: {}
       };
       el.classList.add('enc');
       el._enc = S;
@@ -551,6 +552,7 @@
       S.canEdit = !!(v && v.canEdit);
       S.heroTypes = pickTypes(v && v.heroTypeIds);
       S.creatureTypes = pickTypes(v && v.creatureTypeIds);
+      S.statBlocks = Array.isArray(v && v.statBlocks) ? v.statBlocks : [];
       S.loaded = true;
       drawBlock(S);
     }).catch(function () {
@@ -699,6 +701,7 @@
     flush(S);
     var root = S.drawer.root, id = S.open;
     S.drawer = null; S.open = null; S.draft = null;
+    dropFolds(S);
     if (quiet) { root.remove(); return; }
     root.classList.remove('open');
     setTimeout(function () { root.remove(); }, 300);
@@ -912,7 +915,12 @@
     d.creatures.forEach(function (c) {
       var row = h('div', 'enc-row');
       var who = h('div', 'enc-who');
-      append(who, [h('b', '', c.name), c.entityId ? null : h('span', 'enc-muted', 'No page yet')]);
+      var fold = S.folds[c.id];
+      var name = c.entityId && Chronicle.CreatureFold
+        ? Chronicle.CreatureFold.nameButton(c.name, !!fold, fold && fold.id, function () { toggleFold(S, c, row, name); })
+        : h('b', '', c.name);
+      if (c.entityId) name.setAttribute('data-k', 'f-' + c.id);
+      append(who, [name, c.entityId ? null : h('span', 'enc-muted', 'No page yet')]);
       var grp = h('select', 'enc-sel', '', { 'aria-label': 'Initiative group for ' + c.name, 'data-k': 'g-' + c.id, disabled: !edit }, {
         change: function () { change(S, setRow(S.draft, c.id, 'group', grp.value), 'g-' + c.id); }
       });
@@ -932,9 +940,10 @@
         })
       ]);
       append(row, [who, grp, st, step, edit ? h('button', 'enc-x enc-rm', '×', { type: 'button', 'aria-label': 'Remove ' + c.name }, {
-        click: function () { change(S, removeRow(S.draft, c.id), 'add'); }
+        click: function () { dropFold(S, c.id); change(S, removeRow(S.draft, c.id), 'add'); }
       }) : null]);
       rows.appendChild(row);
+      if (fold) rows.appendChild(fold);
     });
     sec.appendChild(rows);
     if (edit) {
@@ -944,6 +953,29 @@
     }
     return sec;
   }
+
+  // A creature's numbers fold out under its row. The folds are kept across
+  // the builder's redraws, so a change elsewhere doesn't fetch them again.
+  function toggleFold(S, c, row, button) {
+    if (S.folds[c.id]) {
+      dropFold(S, c.id);
+      button.setAttribute('aria-expanded', 'false');
+      button.title = 'Show the numbers';
+      return;
+    }
+    var box = Chronicle.CreatureFold.build({ campaignId: S.cfg.campaignId, entityId: c.entityId, name: c.name, statBlocks: S.statBlocks });
+    S.folds[c.id] = box;
+    row.parentNode.insertBefore(box, row.nextSibling);
+    button.setAttribute('aria-controls', box.id);
+    button.setAttribute('aria-expanded', 'true');
+    button.title = 'Hide the numbers';
+  }
+  function dropFold(S, rowId) {
+    if (!S.folds[rowId]) return;
+    Chronicle.CreatureFold.dispose(S.folds[rowId]);
+    delete S.folds[rowId];
+  }
+  function dropFolds(S) { Object.keys(S.folds).forEach(function (id) { dropFold(S, id); }); }
 
   // addBox searches the creature pages as the DM types. Enter, or the last
   // choice, adds a creature by name when no page fits.
