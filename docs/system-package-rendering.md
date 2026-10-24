@@ -477,6 +477,47 @@ Bought items are saved beside it as a JSON array of names in
 sheet can read them; declare that key as a `string` field if the sheet should
 show or edit it.
 
+### Checking the AI's numbers (`Chronicle.sheetChecks`)
+
+When the campaign's AI writes a page with sheet fields, the AI Import review
+row can set each number it wrote beside what your published formulas give,
+and let the director take the formula's number instead. Chronicle does no
+arithmetic of its own: your package adds the check, keyed by the sheet's
+kind, from any script Chronicle loads for the campaign (a text renderer or a
+widget):
+
+```js
+(Chronicle.sheetChecks = Chronicle.sheetChecks || {}).creature = {
+  check: function (fields, env) {
+    // fields: the sheet as the row would save it (on an update, the page's
+    //   own fields with the AI's laid over them), keyed by field key.
+    // env.campaignId: for fetching your data files.
+    // env.written: the field keys the AI wrote.
+    return Promise.resolve({
+      note: 'Level 1 Platoon Harrier',            // optional line above the tiles
+      items: [
+        { id: 'stamina', label: 'Stamina', ai: '20', formula: '30', matches: false }
+      ],
+      patch: function (ids) { return { stamina: 30 }; }
+    });
+  }
+};
+```
+
+- The kind is `creature` for a creature category or one of its sub-types,
+  otherwise the category's preset `category` (`character`, …).
+- Report only numbers the AI wrote (`env.written`) that a published formula
+  covers. A number with no formula is left off, not shown as a guess. Return
+  nothing, or no items, to leave the row as it is.
+- `ai` and `formula` are display text and are never read as HTML. An item
+  that differs needs a `formula`.
+- `patch(ids)` gets the ids the director took the formula for and returns
+  the field values to save, keyed by field key. Chronicle replaces only keys
+  the AI wrote, then checks the result against the category's fields like any
+  other `fields:`, so a patch can never add a field.
+- A check that throws or rejects leaves the row without tiles; the import
+  goes on.
+
 ### Server-side rendering
 
 A renderer that needs server-side work (loading sibling entities,

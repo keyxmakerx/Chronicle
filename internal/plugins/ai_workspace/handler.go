@@ -556,6 +556,8 @@ func (h *Handler) CommitImport(c echo.Context) error {
 		// Per-row delete confirmation; the committer re-checks this
 		// independently against any client-side bypass.
 		deleteConfirmed := c.FormValue(prefix+"delete_confirmed") == "on"
+		// Numbers the director took from the game system's formulas.
+		pages[i].FrontMatter.Fields = importer.UseSheetFormula(pages[i].FrontMatter.Fields, c.FormValue(prefix+"sheet_formula"))
 
 		decisions[i] = importer.RowDecision{
 			Include:         c.FormValue(prefix+"include") == "on",

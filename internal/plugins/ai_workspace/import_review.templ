@@ -381,6 +381,9 @@ templ reviewRow(campaignID string, idx int, page importer.ParsedPage, cls import
 			if cls.FieldsSummary != "" {
 				<span class="air-line">{ cls.FieldsSummary }</span>
 			}
+			if cls.SheetKind != "" && page.FrontMatter.Action != importer.ActionDelete {
+				@reviewRowSheetCheck(campaignID, idx, cls)
+			}
 			if cls.ConflictEntity != nil && renamesOnConflict(page) {
 				<span class="air-line">
 					<i class="fa-solid fa-triangle-exclamation mr-1" aria-hidden="true"></i>
@@ -427,6 +430,24 @@ templ reviewRow(campaignID string, idx int, page importer.ParsedPage, cls import
 		</div>
 		@yesNo(fmt.Sprintf("page_%d_include", idx), pageStartsYes(page, cls) && repeat == "", fmt.Sprintf("%s %s", pageWhatLead(page), page.Name))
 	</div>
+}
+
+// reviewRowSheetCheck is where the campaign's game system sets the numbers
+// the AI wrote beside what its published formulas give (the
+// import-sheet-check widget, empty when the system has no such check).
+// The hidden input carries the numbers the director takes from the
+// formulas; the commit puts them over the AI's.
+templ reviewRowSheetCheck(campaignID string, idx int, cls importer.Classification) {
+	<div
+		data-widget="import-sheet-check"
+		data-campaign-id={ campaignID }
+		data-sheet-kind={ cls.SheetKind }
+		data-fields={ sheetCheckJSON(cls.SheetFields) }
+		data-written={ sheetCheckJSON(cls.SheetWritten) }
+		data-input={ fmt.Sprintf("page_%d_sheet_formula", idx) }
+		class="air-sheet"
+	></div>
+	<input type="hidden" name={ fmt.Sprintf("page_%d_sheet_formula", idx) } value=""/>
 }
 
 // yesNo is a row's answer, a two-part segmented control over one radio

@@ -1,6 +1,7 @@
 package ai_workspace
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -241,4 +242,14 @@ func repeatSay(d ImportReviewData, src int) string {
 		return "Already applied on " + w + ". "
 	}
 	return ""
+}
+
+// sheetCheckJSON is a sheet check's data attribute; "{}" for anything that
+// can't be written as JSON, so the widget reads an empty sheet.
+func sheetCheckJSON(v any) string {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return "{}"
+	}
+	return string(b)
 }
