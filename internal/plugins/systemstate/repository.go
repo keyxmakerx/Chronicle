@@ -23,16 +23,22 @@ type Repository interface {
 	// ListByKey returns up to limit rows for the key in one campaign, ordered
 	// by entity name. Trashed pages are excluded.
 	ListByKey(ctx context.Context, campaignID, systemID, key string, limit int) ([]ListItem, error)
+	// GetCampaign returns the campaign-wide row, or nil when there is none.
+	GetCampaign(ctx context.Context, campaignID, systemID, key string) (*State, error)
+	// UpsertCampaign writes the campaign-wide row with Upsert's partial
+	// rule. w.EntityID is ignored.
+	UpsertCampaign(ctx context.Context, w Write) error
 }
 
 // Write is one upsert. GM and Public are nil to keep the stored half.
 type Write struct {
 	CampaignID string
-	EntityID   string
-	SystemID   string
-	Key        string
-	GM         []byte
-	Public     []byte
+	// EntityID is empty for a campaign-wide document.
+	EntityID string
+	SystemID string
+	Key      string
+	GM       []byte
+	Public   []byte
 	// UpdatedBy is empty when there is no acting user.
 	UpdatedBy string
 }
@@ -130,4 +136,53 @@ func (r *sqlRepository) ListByKey(ctx context.Context, campaignID, systemID, key
 		return nil, fmt.Errorf("list system state: %w", err)
 	}
 	return out, nil
+}
+
+func (r *sqlRepository) GetCampaign(ctx context.Context, campaignID, systemID, key string) (*State, error) {
+	var gm, pub []byte
+	var updated time.Time
+	err := r.db.QueryRowContext(ctx,
+		`SELECT gm_data, public_data, updated_at
+		   FROM campaign_system_state
+		  WHERE campaign_id = ? AND system_id = ? AND state_key = ?`,
+		campaignID, systemID, key).Scan(&gm, &pub, &updated)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get campaign system state: %w", err)
+	}
+	return &State{GM: gm, Public: pub, UpdatedAt: &updated}, nil
+}
+
+func (r *sqlRepository) UpsertCampaign(ctx context.Context, w Write) error {
+	// The same one-statement keep-or-replace as Upsert, so the two halves of
+	// a campaign document are as independent as a page's.
+	gm, pub := []byte(`{}`), []byte(`{}`)
+	setGM, setPub := w.GM != nil, w.Public != nil
+	if setGM {
+		gm = w.GM
+	}
+	if setPub {
+		pub = w.Public
+	}
+	var by any
+	if w.UpdatedBy != "" {
+		by = w.UpdatedBy
+	}
+	_, err := r.db.ExecContext(ctx,
+		`INSERT INTO campaign_system_state
+		     (campaign_id, system_id, state_key, gm_data, public_data, updated_by, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, NOW())
+		 ON DUPLICATE KEY UPDATE
+		     gm_data     = IF(?, VALUES(gm_data), gm_data),
+		     public_data = IF(?, VALUES(public_data), public_data),
+		     updated_by  = VALUES(updated_by),
+		     updated_at  = NOW()`,
+		w.CampaignID, w.SystemID, w.Key, string(gm), string(pub), by,
+		setGM, setPub)
+	if err != nil {
+		return fmt.Errorf("upsert campaign system state: %w", err)
+	}
+	return nil
 }

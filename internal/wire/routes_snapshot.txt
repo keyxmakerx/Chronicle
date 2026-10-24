@@ -564,6 +564,8 @@ POST	/campaigns/:id/calendars/wizard/import/preview	session	plugins/calendar.(*H
 GET	/campaigns/:id/calendars/wizard/presets	session	plugins/calendar.(*Handler).WizardPresets	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
 GET	/campaigns/:id/calendars/wizard/presets/:name	session	plugins/calendar.(*Handler).WizardPresetReview	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
 GET	/campaigns/:id/calendars/wizard/reallife	session	plugins/calendar.(*Handler).WizardRealWorldReview	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
+GET	/campaigns/:id/campaign-system-state/:system/:key	session	plugins/systemstate.(*Handler).GetCampaign	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
+PUT	/campaigns/:id/campaign-system-state/:system/:key	session	plugins/systemstate.(*Handler).PutCampaign	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability
 POST	/campaigns/:id/cancel-transfer	session	plugins/campaigns.(*Handler).CancelTransfer	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/category-boards/:tid	public-capable	plugins/quests.(*Handler).GetBoards	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/campaigns.RequireViewAccess
 POST	/campaigns/:id/category-boards/:tid/boards	session	plugins/quests.(*Handler).CreateBoard	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireCapability

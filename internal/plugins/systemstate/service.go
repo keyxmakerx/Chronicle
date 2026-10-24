@@ -57,6 +57,12 @@ type Service interface {
 	// by entity name, at most MaxListItems; truncated reports that more exist.
 	// Both halves are returned unfiltered; the caller decides the audience.
 	ListByKey(ctx context.Context, campaignID, systemID, key string) (items []ListItem, truncated bool, err error)
+	// GetCampaign returns the campaign-wide document for the key; a key with
+	// no row reads as two empty objects. The caller decides the audience.
+	GetCampaign(ctx context.Context, campaignID, systemID, key string) (State, error)
+	// PutCampaign stores the campaign-wide document with Put's partial-update
+	// contract and returns it as stored.
+	PutCampaign(ctx context.Context, campaignID, systemID, key string, gm, public *json.RawMessage, userID string) (State, error)
 }
 
 type service struct {
@@ -140,6 +146,54 @@ func (s *service) ListByKey(ctx context.Context, campaignID, systemID, key strin
 		return rows[:MaxListItems], true, nil
 	}
 	return rows, false, nil
+}
+
+func (s *service) GetCampaign(ctx context.Context, campaignID, systemID, key string) (State, error) {
+	if err := validateIDs(systemID, key); err != nil {
+		return State{}, err
+	}
+	row, err := s.repo.GetCampaign(ctx, campaignID, systemID, key)
+	if err != nil {
+		return State{}, apperrorInternal(err)
+	}
+	if row == nil {
+		return emptyState(), nil
+	}
+	return *row, nil
+}
+
+// PutCampaign has no live notification: system_state.updated names a page,
+// and no client follows campaign-wide documents yet.
+func (s *service) PutCampaign(ctx context.Context, campaignID, systemID, key string, gm, public *json.RawMessage, userID string) (State, error) {
+	if err := validateIDs(systemID, key); err != nil {
+		return State{}, err
+	}
+	gmBytes, err := validateHalf("gm", gm)
+	if err != nil {
+		return State{}, err
+	}
+	pubBytes, err := validateHalf("public", public)
+	if err != nil {
+		return State{}, err
+	}
+	enabled, err := s.systems.IsSystemEnabled(ctx, campaignID, systemID)
+	if err != nil {
+		return State{}, apperrorInternal(err)
+	}
+	if !enabled {
+		return State{}, errSystemNotEnabled()
+	}
+	if err := s.repo.UpsertCampaign(ctx, Write{
+		CampaignID: campaignID,
+		SystemID:   systemID,
+		Key:        key,
+		GM:         gmBytes,
+		Public:     pubBytes,
+		UpdatedBy:  userID,
+	}); err != nil {
+		return State{}, apperrorInternal(err)
+	}
+	return s.GetCampaign(ctx, campaignID, systemID, key)
 }
 
 // checkEntity enforces that the entity exists in the stated campaign. A

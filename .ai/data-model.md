@@ -335,6 +335,7 @@ Foundry module repo for the wire contract.
 | Table | Purpose | Notable columns |
 |---|---|---|
 | `entity_system_state` | Per-page JSON documents a game-system package's widget keeps (e.g. a negotiation tracker) | `PRIMARY KEY (entity_id, system_id, state_key)`; FKs to `entities`, `campaigns` (both `ON DELETE CASCADE`) and `users` (`updated_by`, `ON DELETE SET NULL`); `public_data` (any viewer of the page) and `gm_data` (DM team only) are separate JSON columns so a partial write replaces one half |
+| `campaign_system_state` | The campaign-wide twin: one document per campaign, system and key (e.g. the XP a D&D party handles) | `PRIMARY KEY (campaign_id, system_id, state_key)`; FKs to `campaigns` (`ON DELETE CASCADE`) and `users` (`updated_by`, `ON DELETE SET NULL`); the same two halves |
 
 ### quests (`internal/plugins/quests/migrations/`)
 

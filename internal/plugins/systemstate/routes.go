@@ -9,8 +9,9 @@ import (
 )
 
 // RegisterRoutes mounts the browser routes under the campaign group. Reads are
-// open to every member who can view the page (the handler withholds the gm
-// half unless the caller may author DM-only content); writes are DM-team only.
+// open to every member who can view the page, or to every member for a
+// campaign-wide document (the handler withholds the gm half unless the caller
+// may author DM-only content); writes are DM-team only.
 // CSRF is enforced by the global middleware.
 func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignService, authSvc auth.AuthService) {
 	cg := e.Group("/campaigns/:id",
@@ -24,4 +25,6 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.GET("/system-state/:system/:key", h.List, dmTeam)
 	cg.GET("/entities/:eid/system-state/:system/:key", h.Get)
 	cg.PUT("/entities/:eid/system-state/:system/:key", h.Put, dmTeam)
+	cg.GET("/campaign-system-state/:system/:key", h.GetCampaign)
+	cg.PUT("/campaign-system-state/:system/:key", h.PutCampaign, dmTeam)
 }

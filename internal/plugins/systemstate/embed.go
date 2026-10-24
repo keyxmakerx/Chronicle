@@ -2,7 +2,8 @@
 // system package's widget reads and writes for one entity (for example a
 // negotiation tracker on an NPC page). Chronicle stores and gates the
 // documents; it never interprets them, so any system can use the table
-// without a Chronicle release.
+// without a Chronicle release. A campaign-wide twin holds documents that
+// belong to the whole campaign rather than one page.
 //
 // Each document has two halves. The public half is visible to everyone who can
 // view the page; the gm half is only ever returned to the campaign owner and
