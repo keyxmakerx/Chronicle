@@ -39,6 +39,19 @@ type needsInput struct {
 	// SMTPKnown is false when the SMTP service isn't wired, so a missing
 	// service is not reported as "email is not set up".
 	SMTPKnown bool
+	// BackupFailed: the last backup run, by button or schedule, didn't finish.
+	BackupFailed bool
+	// DailyBackupOff: a backup folder is set but the daily backup is off.
+	DailyBackupOff bool
+}
+
+// withBackupNeeds adds the backup state to the list input. Daily backups being
+// off is only reported when the schedule could be read and a backup folder is
+// configured, since without a folder there is nothing to switch on.
+func withBackupNeeds(in needsInput, bi BackupInfo) needsInput {
+	in.BackupFailed = bi.Enabled && bi.LastRunFailed
+	in.DailyBackupOff = bi.Enabled && bi.ScheduleKnown && !bi.ScheduleOn
+	return in
 }
 
 // buildNeedsYou returns the actionable items, most urgent first: things that
@@ -52,6 +65,15 @@ func buildNeedsYou(in needsInput) []NeedsItem {
 			Count:  in.UnhealthyPlugins,
 			Href:   "/admin/systems",
 			Button: "See what failed",
+			rank:   1,
+		})
+	}
+	if in.BackupFailed {
+		items = append(items, NeedsItem{
+			Text:   "The last backup failed, so your newest changes are not saved anywhere else",
+			Count:  1,
+			Href:   "/admin/backup",
+			Button: "See why",
 			rank:   1,
 		})
 	}
@@ -88,6 +110,15 @@ func buildNeedsYou(in needsInput) []NeedsItem {
 			Count:  1,
 			Href:   "/admin/smtp",
 			Button: "Set up email",
+			rank:   5,
+		})
+	}
+	if in.DailyBackupOff {
+		items = append(items, NeedsItem{
+			Text:   "Daily backups are off, so the site is only backed up when someone remembers",
+			Count:  1,
+			Href:   "/admin/backup",
+			Button: "Turn on daily backups",
 			rank:   5,
 		})
 	}

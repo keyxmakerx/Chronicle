@@ -38,14 +38,24 @@ type RestoreManifest struct {
 	MigrationVersion string
 	ModTime          time.Time
 	ParseError       string
+	// PreUpdate marks the automatic capture taken before an update changed
+	// the database, rather than a backup someone or the schedule ran.
+	PreUpdate bool
 }
 
 // BackupInfo aggregates everything the Backups tab needs.
 type BackupInfo struct {
-	Enabled        bool             // BackupDir configured
-	Artifacts      []BackupArtifact // recent files, newest-first
+	Enabled        bool              // BackupDir configured
+	Artifacts      []BackupArtifact  // recent files, newest-first
 	Manifests      []RestoreManifest // restorable snapshots, newest-first
 	LastPreMigrate *BackupArtifact   // most recent automatic pre-migration backup
+	// LastRunFailed is whether the most recent backup run, by the button or
+	// the daily schedule, did not finish. A failed run leaves no manifest, so
+	// the files alone can't say this.
+	LastRunFailed bool
+	// ScheduleKnown is false when the daily schedule could not be read;
+	// ScheduleOn is whether the daily backup is switched on.
+	ScheduleKnown, ScheduleOn bool
 }
 
 // BackupLister provides the Backups tab its data.

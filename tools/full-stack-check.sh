@@ -3,8 +3,8 @@
 # MariaDB, Redis) and wait until the app answers /healthz, then tear it down.
 #
 # This is the only check that runs the real image: Dockerfile, entrypoint,
-# migrations on an empty database and the health route together. `go test`
-# covers none of that.
+# migrations on an empty database, the health route and the backup script
+# together. `go test` covers none of that.
 #
 # The secrets below are throwaway values for a stack that lives for a minute
 # and is deleted with its volumes. Anything already exported wins.
@@ -62,6 +62,27 @@ echo "$body"
 case "$body" in
   *'"status":"ok"'*) ;;
   *) echo "error: /healthz did not report ok" >&2; exit 1 ;;
+esac
+
+echo "==> scripts/backup.sh inside the app container"
+# The Run backup button and the daily backup both run this script with the
+# image's MariaDB client, which no unit test has on PATH. Run it as the app
+# user, as the server does, and require the script's own success line.
+backup_out=$("${COMPOSE[@]}" exec -T -u chronicle chronicle /app/scripts/backup.sh --no-media 2>&1) || {
+  echo "$backup_out" >&2
+  echo "error: backup.sh failed inside the image" >&2
+  exit 1
+}
+echo "$backup_out"
+case "$backup_out" in
+  *BACKUP=ok*) ;;
+  *) echo "error: backup.sh did not report BACKUP=ok" >&2; exit 1 ;;
+esac
+# Old backups are pruned with the image's BusyBox date, which other systems'
+# date commands don't stand in for.
+case "$backup_out" in
+  *retention=ok*) ;;
+  *) echo "error: backup.sh could not prune old backups in the image" >&2; exit 1 ;;
 esac
 
 echo "==> full-stack-check: OK"

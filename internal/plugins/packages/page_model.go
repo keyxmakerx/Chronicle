@@ -497,6 +497,30 @@ func agoLabel(now time.Time, t *time.Time) string {
 	}
 }
 
+// noVersionsText explains an empty version list. Before the first check it
+// points at the button; after one, it says plainly that the repository has
+// published nothing, which is the usual reason and otherwise reads as Check
+// now having done nothing.
+func noVersionsText(now time.Time, lastChecked *time.Time) string {
+	if lastChecked == nil || lastChecked.IsZero() {
+		return "No versions found yet. Press Check now on this package's Settings tab."
+	}
+	return "Checked GitHub " + agoLabel(now, lastChecked) + ": this repository hasn't published a release yet, so there's nothing to install. Ask its author to publish one."
+}
+
+// checkResultText is the line under Check now: when GitHub was last asked and
+// how many versions Chronicle knows, so a press visibly does something.
+func checkResultText(now time.Time, lastChecked *time.Time, versions int) string {
+	if lastChecked == nil || lastChecked.IsZero() {
+		return "Not checked yet."
+	}
+	found := plural(versions, "version") + " found"
+	if versions == 0 {
+		found = "no releases published yet"
+	}
+	return "Last checked " + agoLabel(now, lastChecked) + ": " + found + "."
+}
+
 // dateLabel renders a calendar date, or "unknown" for nil.
 func dateLabel(t *time.Time) string {
 	if t == nil || t.IsZero() {

@@ -32,10 +32,11 @@ func (h *adminHealthChecker) RunChecks() *database.HealthCheckResult {
 type adminBackupLister struct {
 	backups   backup.Service
 	restores  restore.Service
+	settings  backup.SettingsStore
 	backupDir string
 }
 
-func (a *adminBackupLister) BackupInfo(_ context.Context) (admin.BackupInfo, error) {
+func (a *adminBackupLister) BackupInfo(ctx context.Context) (admin.BackupInfo, error) {
 	info := admin.BackupInfo{Enabled: a.backupDir != ""}
 	if !info.Enabled {
 		return info, nil
@@ -74,7 +75,33 @@ func (a *adminBackupLister) BackupInfo(_ context.Context) (admin.BackupInfo, err
 			MigrationVersion: m.MigrationVersion,
 			ModTime:          m.ModTime,
 			ParseError:       m.ParseError,
+			PreUpdate:        m.PreUpdate,
 		})
 	}
+
+	info.LastRunFailed = lastRunFailed(a.backups.LastRun(), nil)
+	if a.settings != nil {
+		sched, sErr := backup.LoadSchedule(ctx, a.settings)
+		last, lErr := backup.LoadLastScheduledRun(ctx, a.settings)
+		if sErr == nil && lErr == nil {
+			info.ScheduleKnown, info.ScheduleOn = true, sched.Enabled
+			info.LastRunFailed = lastRunFailed(a.backups.LastRun(), last)
+		}
+	}
 	return info, nil
+}
+
+// lastRunFailed reports whether the newer of the last button run (held in
+// memory since boot) and the last scheduled run (stored) failed.
+func lastRunFailed(manual *backup.RunResult, scheduled *backup.ScheduledRun) bool {
+	switch {
+	case manual == nil && scheduled == nil:
+		return false
+	case scheduled == nil:
+		return !manual.Succeeded()
+	case manual == nil || scheduled.At.After(manual.FinishedAt):
+		return !scheduled.OK
+	default:
+		return !manual.Succeeded()
+	}
 }
