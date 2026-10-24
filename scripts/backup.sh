@@ -141,10 +141,11 @@ DB_SQL_TMP="$BACKUP_DIR/chronicle_db_${TS}.sql.partial"
 # Without the actual mysqldump error (privilege denied, server has gone
 # away, version mismatch, etc.), an operator has no way to diagnose the
 # generic "exited non-zero" message below.
+# Only flags MariaDB's dump client knows: the image ships mariadb-client,
+# which rejects MySQL-only options such as --set-gtid-purged outright.
 if ! MYSQL_PWD="$DB_PASSWORD" mysqldump \
         -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" \
         --single-transaction --routines --triggers \
-        --set-gtid-purged=OFF \
         "$DB_NAME" > "$DB_SQL_TMP"; then
     rm -f "$DB_SQL_TMP"
     fail_tool mysqldump_failed "mysqldump exited non-zero (see stderr above for the real reason)"
