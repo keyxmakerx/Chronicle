@@ -370,14 +370,15 @@ func (h *Handler) Dashboard(c echo.Context) error {
 		apiAlerts, _ = h.apiAlertCounter.CountUnresolvedAPIAlerts(ctx)
 	}
 
-	needs := buildNeedsYou(needsInput{
+	needsIn := needsInput{
 		UnhealthyPlugins:   unhealthyPlugins,
 		PendingMigrations:  pendingMigrations,
 		APIAlerts:          apiAlerts,
 		PendingSubmissions: pendingSubmissions,
 		SMTPConfigured:     smtpConfigured,
 		SMTPKnown:          h.smtpService != nil,
-	})
+	}
+	needs := buildNeedsYou(needsIn)
 
 	var recent []ActivityEntry
 	changesThisWeek := -1
@@ -435,7 +436,9 @@ func (h *Handler) Dashboard(c echo.Context) error {
 			slog.Warn("admin dashboard: backup info failed", slog.Any("error", err))
 		} else {
 			in.BackupsKnown, in.BackupsEnabled = true, bi.Enabled
-			in.LastBackup = latestBackupTime(bi)
+			in.LastBackup, in.LastBackupPreUpdate = lastGoodBackup(bi)
+			in.LastBackupFailed = bi.LastRunFailed
+			needs = buildNeedsYou(withBackupNeeds(needsIn, bi))
 		}
 	}
 
@@ -447,6 +450,7 @@ func (h *Handler) Dashboard(c echo.Context) error {
 type StatusFigures struct {
 	Sessions                   int
 	BackupKnown, BackupEnabled bool
+	BackupFailed               bool   // the last backup run did not finish
 	BackupAge                  string // "" when there is no backup yet
 }
 
@@ -467,7 +471,8 @@ func (h *Handler) Status(c echo.Context) error {
 			slog.Warn("admin status: backup info failed", slog.Any("error", err))
 		} else {
 			f.BackupKnown, f.BackupEnabled = true, bi.Enabled
-			if last := latestBackupTime(bi); !last.IsZero() {
+			f.BackupFailed = bi.LastRunFailed
+			if last, _ := lastGoodBackup(bi); !last.IsZero() {
 				f.BackupAge = strings.ToLower(backupAge(time.Since(last)))
 			}
 		}
@@ -483,19 +488,23 @@ func sessionsWord(n int) string {
 	return "sessions"
 }
 
-// latestBackupTime is the newest backup file's time, ignoring manifests, which
-// describe a backup rather than being one. Zero when there is none.
-func latestBackupTime(bi BackupInfo) time.Time {
+// lastGoodBackup is the time of the newest backup that finished, and whether
+// it was the automatic one taken before an update. A run writes its manifest
+// last, so only manifests count: a failed run's stray files and the capture
+// of the empty database before first setup are not backups worth a "you're
+// covered". Zero when there is none.
+func lastGoodBackup(bi BackupInfo) (time.Time, bool) {
 	var newest time.Time
-	for _, a := range bi.Artifacts {
-		if a.Kind == "manifest" {
+	var preUpdate bool
+	for _, m := range bi.Manifests {
+		if m.ParseError != "" || (m.PreUpdate && m.MigrationVersion == "0") {
 			continue
 		}
-		if a.ModTime.After(newest) {
-			newest = a.ModTime
+		if m.ModTime.After(newest) {
+			newest, preUpdate = m.ModTime, m.PreUpdate
 		}
 	}
-	return newest
+	return newest, preUpdate
 }
 
 // Activity renders the filterable admin change log (GET /admin/activity).
@@ -1487,7 +1496,7 @@ type SecurityPageData struct {
 	// Tab is the open tab, already whitelisted (see normalizeSecurityTab).
 	Tab string
 	// WatchItems feeds the overview's "Worth a look" list.
-	WatchItems []WatchItem
+	WatchItems  []WatchItem
 	Stats       *SecurityStats
 	Events      []SecurityEvent
 	TotalEvents int

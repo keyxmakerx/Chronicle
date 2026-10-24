@@ -3550,7 +3550,7 @@ func (a *App) RegisterRoutes() {
 	// surface the existing backup/restore artifacts — adapters so admin imports
 	// neither the boot config nor the backup/restore plugins.
 	adminHandler.SetHealthChecker(&adminHealthChecker{db: a.DB, cfg: a.Config})
-	adminHandler.SetBackupLister(&adminBackupLister{backups: backupSvc, restores: restoreSvc, backupDir: a.Config.BackupDir})
+	adminHandler.SetBackupLister(&adminBackupLister{backups: backupSvc, restores: restoreSvc, settings: settingsRepo, backupDir: a.Config.BackupDir})
 
 	// Wire security event logging into the auth handler so logins, logouts,
 	// failed attempts, and password resets are recorded automatically.
