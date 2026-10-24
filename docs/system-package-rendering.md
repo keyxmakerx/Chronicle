@@ -310,6 +310,10 @@ anyone who can view the page reads the public half):
   and `key` match `^[a-z0-9][a-z0-9_-]{0,63}$`.
 - Writes publish `system_state.updated` (`{systemId, key}`, no content) to the
   GM side only, so a DM's other tabs and the Foundry module can re-read.
+- For a document that belongs to the whole campaign rather than one page,
+  `GET|PUT /campaigns/:id/campaign-system-state/:system/:key` takes and returns
+  the same shapes under the same rules, except that any campaign member may
+  read the public half and a write publishes nothing.
 
 ### Lifecycle and overrides
 

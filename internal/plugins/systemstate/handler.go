@@ -163,6 +163,47 @@ func (h *Handler) List(c echo.Context) error {
 	return c.JSON(http.StatusOK, ListResponse{SystemID: systemID, Key: key, Items: items, Truncated: truncated})
 }
 
+// GetCampaign returns the campaign-wide document for the key to any member;
+// the gm half only to the DM team, as on a page.
+//
+// GET /campaigns/:id/campaign-system-state/:system/:key
+func (h *Handler) GetCampaign(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	systemID, key := c.Param("system"), c.Param("key")
+	st, err := h.svc.GetCampaign(c.Request().Context(), cc.Campaign.ID, systemID, key)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, NewStateResponse(systemID, key, st, cc.CanAuthorDmOnly()))
+}
+
+// PutCampaign replaces the halves present in the body of the campaign-wide
+// document. Gated to the DM team on the route and again here.
+//
+// PUT /campaigns/:id/campaign-system-state/:system/:key
+func (h *Handler) PutCampaign(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	if !cc.CanAuthorDmOnly() {
+		return apperror.NewForbidden("only the campaign owner or a member with DM access may do this")
+	}
+	systemID, key := c.Param("system"), c.Param("key")
+	gm, public, err := bindPutBody(c)
+	if err != nil {
+		return err
+	}
+	st, err := h.svc.PutCampaign(c.Request().Context(), cc.Campaign.ID, systemID, key, gm, public, auth.GetUserID(c))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, NewStateResponse(systemID, key, st, true))
+}
+
 // requireViewable applies the show-page gate: the entity must belong to this
 // campaign and be visible to the viewer. Both failures are a plain 404.
 func (h *Handler) requireViewable(c echo.Context, cc *campaigns.CampaignContext, entityID string) error {

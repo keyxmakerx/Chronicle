@@ -212,6 +212,8 @@ func TestSystemStateRoutes_WriteIsDMTeamOnly(t *testing.T) {
 		`cg.GET("/system-state/:system/:key", h.List, dmTeam)`,
 		`cg.GET("/entities/:eid/system-state/:system/:key", h.Get)`,
 		`cg.PUT("/entities/:eid/system-state/:system/:key", h.Put, dmTeam)`,
+		`cg.GET("/campaign-system-state/:system/:key", h.GetCampaign)`,
+		`cg.PUT("/campaign-system-state/:system/:key", h.PutCampaign, dmTeam)`,
 		`return cc.CanAuthorDmOnly()`,
 	} {
 		if !strings.Contains(s, want) {
@@ -302,5 +304,66 @@ func TestHandler_List(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func callCampaign(h *Handler, method string, cc *campaigns.CampaignContext, body string) (*httptest.ResponseRecorder, error) {
+	e := echo.New()
+	req := httptest.NewRequest(method, "/campaigns/camp-1/campaign-system-state/drawsteel/party", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id", "system", "key")
+	c.SetParamValues("camp-1", "drawsteel", "party")
+	c.Set("campaign_context", cc)
+	if method == http.MethodPut {
+		return rec, h.PutCampaign(c)
+	}
+	return rec, h.GetCampaign(c)
+}
+
+// The campaign-wide document has the page's audience split: the gm half
+// reaches the DM team only, and only the DM team may write.
+func TestHandler_CampaignState(t *testing.T) {
+	h := newTestHandler()
+	if _, err := callCampaign(h, http.MethodPut, ctxFor(campaigns.RoleOwner, false),
+		`{"gm":{"handles":1200},"public":{"shown":1}}`); err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name     string
+		cc       *campaigns.CampaignContext
+		wantGM   bool
+		canWrite bool
+	}{
+		{"player", ctxFor(campaigns.RolePlayer, false), false, false},
+		{"scribe without dm access", ctxFor(campaigns.RoleScribe, false), false, false},
+		{"scribe with dm access", ctxFor(campaigns.RoleScribe, true), true, true},
+		{"owner", ctxFor(campaigns.RoleOwner, false), true, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec, err := callCampaign(h, http.MethodGet, tt.cc, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, hasGM := decode(t, rec)["gm"]
+			if hasGM != tt.wantGM || (!tt.wantGM && strings.Contains(rec.Body.String(), "handles")) {
+				t.Errorf("gm present = %v, want %v (body %s)", hasGM, tt.wantGM, rec.Body.String())
+			}
+			_, err = callCampaign(h, http.MethodPut, tt.cc, `{"gm":{"handles":900}}`)
+			if tt.canWrite != (err == nil) {
+				t.Errorf("write err = %v, want allowed %v", err, tt.canWrite)
+			}
+			if !tt.canWrite && errCode(err) != http.StatusForbidden {
+				t.Errorf("refused write code = %d, want 403", errCode(err))
+			}
+		})
+	}
+	if _, err := callCampaign(h, http.MethodPut, ctxFor(campaigns.RoleOwner, false), `{"gm":null}`); errCode(err) != http.StatusUnprocessableEntity {
+		t.Errorf("null half code = %d, want 422", errCode(err))
+	}
+	if _, err := callCampaign(h, http.MethodPut, ctxFor(campaigns.RoleOwner, false), `{"secret":{}}`); errCode(err) != http.StatusUnprocessableEntity {
+		t.Errorf("unknown member code = %d, want 422", errCode(err))
 	}
 }

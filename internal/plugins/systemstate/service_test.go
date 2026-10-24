@@ -81,6 +81,17 @@ func (f *fakeRepo) ListByKey(_ context.Context, campaignID, systemID, key string
 	return out, nil
 }
 
+// The campaign-wide document shares the row map under an empty entity id,
+// which no page id can be.
+func (f *fakeRepo) GetCampaign(ctx context.Context, campaignID, systemID, key string) (*State, error) {
+	return f.Get(ctx, campaignID, "", systemID, key)
+}
+
+func (f *fakeRepo) UpsertCampaign(ctx context.Context, w Write) error {
+	w.EntityID = ""
+	return f.Upsert(ctx, w)
+}
+
 type fakeEntities map[string]string // entity id -> campaign id
 
 func (f fakeEntities) EntityCampaignID(_ context.Context, id string) (string, error) {
@@ -291,5 +302,59 @@ func TestService_ListByKeyOrdersByName(t *testing.T) {
 	}
 	if len(items) != 2 || items[0].EntityName != "Alma" || items[1].EntityName != "Zed" {
 		t.Errorf("order = %+v", items)
+	}
+}
+
+func TestService_CampaignState(t *testing.T) {
+	svc, repo, pub := newTestService()
+	ctx := context.Background()
+
+	st, err := svc.GetCampaign(ctx, "camp-1", "drawsteel", "party")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(st.GM) != `{}` || string(st.Public) != `{}` || st.UpdatedAt != nil {
+		t.Errorf("empty read = %+v", st)
+	}
+
+	if _, err := svc.PutCampaign(ctx, "camp-1", "drawsteel", "party", raw(`{"handles": 1200}`), nil, "u"); err != nil {
+		t.Fatal(err)
+	}
+	st, err = svc.PutCampaign(ctx, "camp-1", "drawsteel", "party", nil, raw(`{"shown": 1}`), "u")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(st.GM) != `{"handles":1200}` || string(st.Public) != `{"shown":1}` {
+		t.Errorf("partial put: gm %s public %s", st.GM, st.Public)
+	}
+	// Another campaign reads its own, empty document.
+	if other, _ := svc.GetCampaign(ctx, "camp-2", "drawsteel", "party"); string(other.GM) != `{}` {
+		t.Errorf("campaign document leaked across campaigns: %s", other.GM)
+	}
+	// A page's document under the same key is a different document.
+	if page, _ := svc.Get(ctx, "camp-1", "npc-1", "drawsteel", "party"); string(page.GM) != `{}` {
+		t.Errorf("campaign document read as a page's: %s", page.GM)
+	}
+	if len(pub.sent) != 0 {
+		t.Errorf("campaign writes notified %v", pub.sent)
+	}
+
+	before := repo.upserts
+	for _, bad := range []struct {
+		name, system, key string
+		gm                *json.RawMessage
+		want              int
+	}{
+		{"system not enabled", "dnd5e", "party", raw(`{}`), http.StatusUnprocessableEntity},
+		{"bad key", "drawsteel", "Party", raw(`{}`), http.StatusUnprocessableEntity},
+		{"gm is null", "drawsteel", "party", raw(`null`), http.StatusUnprocessableEntity},
+		{"gm is array", "drawsteel", "party", raw(`[]`), http.StatusUnprocessableEntity},
+	} {
+		if _, err := svc.PutCampaign(ctx, "camp-1", bad.system, bad.key, bad.gm, nil, "u"); errCode(err) != bad.want {
+			t.Errorf("%s: code = %d (err %v), want %d", bad.name, errCode(err), err, bad.want)
+		}
+	}
+	if repo.upserts != before {
+		t.Error("a rejected campaign write reached the repository")
 	}
 }
