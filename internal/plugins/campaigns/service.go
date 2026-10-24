@@ -417,6 +417,9 @@ func (s *campaignService) newCampaignSettings(ctx context.Context) string {
 	}
 	settings.Appearance.PageLook = "annals"
 	settings.Appearance.TimelinePopup = "corner"
+	// New pages start hidden from players: a spoiler can't be taken back,
+	// and a hidden page is one click to show.
+	settings.DefaultVisibility = DefaultVisibilityDMOnly
 	b, err := json.Marshal(settings)
 	if err != nil {
 		return "{}"
@@ -542,6 +545,12 @@ func (s *campaignService) Create(ctx context.Context, userID string, input Creat
 		CreatedBy:     userID,
 		CreatedAt:     now,
 		UpdatedAt:     now,
+	}
+	// The DM team's home starts with the setup steps (first_run_home.go).
+	if home, err := campaign.SetRoleDashboardJSON(HomeDirector, starterDirectorHome(campaign.ID)); err == nil {
+		campaign.DashboardLayout = home
+	} else {
+		slog.Warn("new campaign: setup steps not added", slog.Any("error", err))
 	}
 
 	if err := s.repo.Create(ctx, campaign); err != nil {

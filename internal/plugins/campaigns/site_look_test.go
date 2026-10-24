@@ -37,14 +37,14 @@ func TestCreate_StartsWithSiteLook(t *testing.T) {
 		wantLook string // Appearance.Look of the new campaign's settings; "" for none.
 		wantJSON string // Exact settings, when only the new-campaign defaults are stored.
 	}{
-		{"no source wired", nil, "", `{"appearance":{"page_look":"annals","timeline_popup":"corner"}}`},
-		{"never saved", fakeSiteLook{}, "", `{"appearance":{"page_look":"annals","timeline_popup":"corner"}}`},
-		{"look left as it is", fakeSiteLook{look: sitelook.Settings{Configured: true}}, "", `{"appearance":{"page_look":"annals","timeline_popup":"corner"}}`},
+		{"no source wired", nil, "", `{"appearance":{"page_look":"annals","timeline_popup":"corner"},"default_visibility":"dm_only"}`},
+		{"never saved", fakeSiteLook{}, "", `{"appearance":{"page_look":"annals","timeline_popup":"corner"},"default_visibility":"dm_only"}`},
+		{"look left as it is", fakeSiteLook{look: sitelook.Settings{Configured: true}}, "", `{"appearance":{"page_look":"annals","timeline_popup":"corner"},"default_visibility":"dm_only"}`},
 		{"ember", fakeSiteLook{look: sitelook.Settings{Configured: true, Look: "ember"}}, "ember", ""},
 		{"parchment", fakeSiteLook{look: sitelook.Settings{Configured: true, Look: "parchment"}}, "parchment", ""},
-		{"classic is the default so only the accent defaults are stored", fakeSiteLook{look: sitelook.Settings{Configured: true, Look: "classic"}}, "", `{"appearance":{"page_look":"annals","timeline_popup":"corner"}}`},
-		{"unknown stored look ignored", fakeSiteLook{look: sitelook.Settings{Look: "neon"}}, "", `{"appearance":{"page_look":"annals","timeline_popup":"corner"}}`},
-		{"read failure does not block creation", fakeSiteLook{err: errors.New("db down")}, "", `{"appearance":{"page_look":"annals","timeline_popup":"corner"}}`},
+		{"classic is the default so only the accent defaults are stored", fakeSiteLook{look: sitelook.Settings{Configured: true, Look: "classic"}}, "", `{"appearance":{"page_look":"annals","timeline_popup":"corner"},"default_visibility":"dm_only"}`},
+		{"unknown stored look ignored", fakeSiteLook{look: sitelook.Settings{Look: "neon"}}, "", `{"appearance":{"page_look":"annals","timeline_popup":"corner"},"default_visibility":"dm_only"}`},
+		{"read failure does not block creation", fakeSiteLook{err: errors.New("db down")}, "", `{"appearance":{"page_look":"annals","timeline_popup":"corner"},"default_visibility":"dm_only"}`},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
