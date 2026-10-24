@@ -32,8 +32,10 @@ templ NPCCardComponent(cc *campaigns.CampaignContext, card *NPCCard, csrfToken s
 					/>
 				</div>
 			} else {
-				<div class="aspect-[3/4] flex items-center justify-center bg-surface-alt">
-					<i class="fa-solid fa-user text-3xl text-fg-muted opacity-30"></i>
+				// No portrait: a short band, not a tall empty frame, so a
+				// gallery of new NPCs shows their names without scrolling.
+				<div class="h-14 flex items-center justify-center bg-surface-alt" data-npc-no-portrait>
+					<i class="fa-solid fa-user text-xl text-fg-muted opacity-30" aria-hidden="true"></i>
 				</div>
 			}
 

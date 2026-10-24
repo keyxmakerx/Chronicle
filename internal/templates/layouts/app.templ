@@ -688,8 +688,10 @@ templ Topbar() {
 		</div>
 		<!-- Left: Hamburger + Campaign selector. It is the part that gives way on
 		     a narrow phone (the campaign name truncates) so the right-hand
-		     buttons, the account menu last, always stay on screen. -->
-		<div class="flex items-center gap-2 min-w-0">
+		     buttons, the account menu last, always stay on screen. While the
+		     search is open on a phone it steps aside (all but the hamburger),
+		     so the search box has room to show what is typed. -->
+		<div class="tb-left flex items-center gap-2 min-w-0">
 			<!-- Mobile hamburger -->
 			<button
 				id="nav-toggle"

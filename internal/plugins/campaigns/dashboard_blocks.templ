@@ -207,13 +207,21 @@ templ dashCategoryGrid(cc *CampaignContext, config map[string]any) {
 							<span class="cb-row-name text-sm font-medium text-fg truncate group-hover:text-accent transition-colors">{ et.NamePlural }</span>
 						</div>
 						<div class="cb-row-meta pl-[2.375rem] text-xs text-fg-muted">
-							{ strconv.Itoa(layouts.GetEntityCount(ctx, et.ID)) } pages
+							{ pageCountLabel(layouts.GetEntityCount(ctx, et.ID)) }
 						</div>
 					</a>
 				}
 			</div>
 		</div>
 	}
+}
+
+// pageCountLabel is a category's page count in words: "1 page", "3 pages".
+func pageCountLabel(n int) string {
+	if n == 1 {
+		return "1 page"
+	}
+	return strconv.Itoa(n) + " pages"
 }
 
 // dashVisibleCategories is the category grid's list: every category for the

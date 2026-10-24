@@ -55,6 +55,7 @@
     content.classList.add('hidden');
     search.classList.remove('hidden');
     search.classList.add('flex');
+    search.parentElement.setAttribute('data-tb-searching', '');
     if (trigger) trigger.classList.add('hidden');
     input.value = '';
     results = [];
@@ -69,6 +70,7 @@
     isActive = false;
     search.classList.add('hidden');
     search.classList.remove('flex');
+    search.parentElement.removeAttribute('data-tb-searching');
     content.classList.remove('hidden');
     if (trigger) trigger.classList.remove('hidden');
     input.value = '';
