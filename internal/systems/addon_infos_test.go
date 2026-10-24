@@ -2,11 +2,10 @@ package systems
 
 import "testing"
 
-// AddonInfos hands plain text to the addon rows: the loader's escaping must
-// not reach them, or every renderer escapes it a second time.
-func TestAddonInfos_UnescapesLoaderText(t *testing.T) {
+// AddonInfos hands the manifest's text to the addon rows as written, since
+// every renderer escapes it on output.
+func TestAddonInfos_TextAsWritten(t *testing.T) {
 	m := &SystemManifest{ID: "dnd5e", Name: "D&D 5th Edition", Description: "Rules & <tables>", Author: "Tom & Jo", Status: StatusAvailable}
-	sanitizeManifestStrings(m)
 	withLoadedSystems(t, map[string]*loadedSystem{"dnd5e": {manifest: m}}, func() {
 		infos := AddonInfos()
 		if len(infos) != 1 {
