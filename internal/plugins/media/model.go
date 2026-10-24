@@ -71,6 +71,10 @@ type UploadInput struct {
 	FileSize     int64
 	UsageType    string
 	FileBytes    []byte
+	// NoMerge keeps the upload its own file even when the same bytes are
+	// already in the campaign. A player's hero picture is uploaded this way,
+	// so the upload can never hand them an existing file of the Director's.
+	NoMerge bool
 }
 
 // UploadResponse is the JSON response returned after a successful upload.

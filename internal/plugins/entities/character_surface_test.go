@@ -25,7 +25,7 @@ func TestCharacterSurfaceSchemaJSON(t *testing.T) {
 		FieldsData: map[string]any{"might": 2, "agility": 1, "bond": "The company", "blank": ""},
 	}
 
-	out := CharacterSurfaceSchemaJSON(ent, et, "c1", "csrf-tok", true, true, true)
+	out := CharacterSurfaceSchemaJSON(ent, et, "c1", "csrf-tok", true, true, true, "")
 
 	var schema map[string]any
 	if err := json.Unmarshal([]byte(out), &schema); err != nil {
@@ -70,7 +70,7 @@ func TestCharacterSurfaceSchemaJSON(t *testing.T) {
 // a <script> tag — json.Marshal escapes '<', so no literal </script> survives.
 func TestCharacterSurfaceSchemaJSON_ScriptSafe(t *testing.T) {
 	ent := &Entity{ID: "e1", Name: "</script><script>alert(1)</script>", FieldsData: map[string]any{}}
-	out := CharacterSurfaceSchemaJSON(ent, &EntityType{}, "c1", "", false, false, false)
+	out := CharacterSurfaceSchemaJSON(ent, &EntityType{}, "c1", "", false, false, false, "")
 	if strings.Contains(out, "</script>") {
 		t.Fatalf("schema must not contain a literal </script>; got: %s", out)
 	}
@@ -89,7 +89,7 @@ func TestCharacterSurfaceSchemaJSON_StripsGMFieldsForNonGM(t *testing.T) {
 	}}
 
 	// Player (canSeeGM=false): the gm_only field and its value must be absent.
-	player := CharacterSurfaceSchemaJSON(ent, et, "c1", "", false, false, false)
+	player := CharacterSurfaceSchemaJSON(ent, et, "c1", "", false, false, false, "")
 	if strings.Contains(player, "the-villain-is-his-father") || strings.Contains(player, "GM Notes") {
 		t.Errorf("player seed must omit the gm_only field + value; got %s", player)
 	}
@@ -98,7 +98,7 @@ func TestCharacterSurfaceSchemaJSON_StripsGMFieldsForNonGM(t *testing.T) {
 	}
 
 	// GM (canSeeGM=true): the gm_only value is present.
-	gm := CharacterSurfaceSchemaJSON(ent, et, "c1", "", true, true, false)
+	gm := CharacterSurfaceSchemaJSON(ent, et, "c1", "", true, true, false, "")
 	if !strings.Contains(gm, "the-villain-is-his-father") {
 		t.Errorf("GM seed must include the gm_only value; got %s", gm)
 	}
@@ -118,7 +118,7 @@ func TestCharacterSurfaceSchemaJSON_StripsOwnerOnlyFieldsForNonOwner(t *testing.
 	}}
 
 	// Another player (canSeeGM=false, isOwner=false): backstory must be absent.
-	other := CharacterSurfaceSchemaJSON(ent, et, "c1", "", false, false, false)
+	other := CharacterSurfaceSchemaJSON(ent, et, "c1", "", false, false, false, "")
 	if strings.Contains(other, "raised by wolves") || strings.Contains(other, "Backstory") {
 		t.Errorf("non-owner seed must omit the owner_only field + value; got %s", other)
 	}
@@ -127,13 +127,13 @@ func TestCharacterSurfaceSchemaJSON_StripsOwnerOnlyFieldsForNonOwner(t *testing.
 	}
 
 	// The claiming owner (canSeeGM=false, isOwner=true): backstory is present.
-	owner := CharacterSurfaceSchemaJSON(ent, et, "c1", "", false, false, true)
+	owner := CharacterSurfaceSchemaJSON(ent, et, "c1", "", false, false, true, "")
 	if !strings.Contains(owner, "raised by wolves") {
 		t.Errorf("owner seed must include the owner_only value; got %s", owner)
 	}
 
 	// GM (canSeeGM=true, isOwner=false): backstory is present regardless.
-	gm := CharacterSurfaceSchemaJSON(ent, et, "c1", "", true, true, false)
+	gm := CharacterSurfaceSchemaJSON(ent, et, "c1", "", true, true, false, "")
 	if !strings.Contains(gm, "raised by wolves") {
 		t.Errorf("GM seed must include the owner_only value; got %s", gm)
 	}
@@ -141,7 +141,39 @@ func TestCharacterSurfaceSchemaJSON_StripsOwnerOnlyFieldsForNonOwner(t *testing.
 
 // TestCharacterSurfaceSchemaJSON_NilEntity degrades to an empty object.
 func TestCharacterSurfaceSchemaJSON_NilEntity(t *testing.T) {
-	if got := CharacterSurfaceSchemaJSON(nil, nil, "c1", "", false, false, false); got != "{}" {
+	if got := CharacterSurfaceSchemaJSON(nil, nil, "c1", "", false, false, false, ""); got != "{}" {
 		t.Errorf("nil entity = %q, want {}", got)
+	}
+}
+
+// TestCharacterSurfaceSchemaJSON_PictureOnlyWhenChangeable pins that the
+// portrait carries upload wiring only for a viewer given an image endpoint,
+// so the sheet never offers a picture change the server would refuse.
+func TestCharacterSurfaceSchemaJSON_PictureOnlyWhenChangeable(t *testing.T) {
+	ent := &Entity{ID: "e1", Name: "Wren", FieldsData: map[string]any{}}
+	tests := []struct {
+		name     string
+		endpoint string
+		want     bool
+	}{
+		{"viewer who may change it", "/campaigns/c1/entities/e1/image", true},
+		{"viewer who may not", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var got map[string]any
+			out := CharacterSurfaceSchemaJSON(ent, &EntityType{}, "c1", "tok", false, false, false, tt.endpoint)
+			if err := json.Unmarshal([]byte(out), &got); err != nil {
+				t.Fatal(err)
+			}
+			seed := got["provider"].(map[string]any)["seed"].(map[string]any)
+			pic, ok := seed["picture"].(map[string]any)
+			if ok != tt.want {
+				t.Fatalf("picture present = %v, want %v (%s)", ok, tt.want, out)
+			}
+			if ok && (pic["endpoint"] != tt.endpoint || pic["uploadUrl"] != "/media/upload" || pic["csrf"] != "tok") {
+				t.Errorf("picture = %+v", pic)
+			}
+		})
 	}
 }

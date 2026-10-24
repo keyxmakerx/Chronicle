@@ -21,7 +21,7 @@ func renderGameNights(t *testing.T, member bool, userID string, feed bool, list 
 	t.Helper()
 	cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1", Name: "Saltmarsh"}, IsMember: member}
 	var sb strings.Builder
-	if err := SessionListFragment(cc, groupSessions(list, "2026-10-24"), "csrf", false, false, userID, SessionPlan{}, feed).Render(context.Background(), &sb); err != nil {
+	if err := SessionListFragment(cc, groupSessions(list, "2026-10-24"), "csrf", false, false, userID, SessionPlan{}, "", feed).Render(context.Background(), &sb); err != nil {
 		t.Fatalf("render: %v", err)
 	}
 	return sb.String()

@@ -110,6 +110,7 @@ func (h *Handler) ListSessions(c echo.Context) error {
 	// stays upcoming until their midnight.
 	today := time.Now().In(timeutil.LoadLocation(h.resolveViewerTZ(c, userID))).Format("2006-01-02")
 	groups := groupSessions(sessionList, today)
+	viewerTZ := h.storedTZ(c.Request().Context(), userID)
 
 	// "Add to your calendar" is a member's, and only while the owner's feed
 	// switch is on. A failed read hides it rather than failing the list.
@@ -120,10 +121,10 @@ func (h *Handler) ListSessions(c echo.Context) error {
 
 	if middleware.IsHTMX(c) {
 		return middleware.Render(c, http.StatusOK,
-			SessionListFragment(cc, groups, csrfToken, isOwner, isScribe, userID, plan, feed))
+			SessionListFragment(cc, groups, csrfToken, isOwner, isScribe, userID, plan, viewerTZ, feed))
 	}
 	return middleware.Render(c, http.StatusOK,
-		SessionListPage(cc, groups, csrfToken, isOwner, isScribe, userID, plan, feed))
+		SessionListPage(cc, groups, csrfToken, isOwner, isScribe, userID, plan, viewerTZ, feed))
 }
 
 // ShowSession renders a session detail page.
@@ -165,7 +166,7 @@ func (h *Handler) ShowSession(c echo.Context) error {
 	}
 
 	return middleware.Render(c, http.StatusOK,
-		SessionDetailPage(cc, session, csrfToken, isOwner, isScribe, userID, recap))
+		SessionDetailPage(cc, session, csrfToken, isOwner, isScribe, userID, recap, h.storedTZ(c.Request().Context(), userID)))
 }
 
 // CreateSession creates a new session.
@@ -1085,7 +1086,7 @@ func (h *Handler) EmbedSessions(c echo.Context) error {
 	}
 
 	return middleware.Render(c, http.StatusOK,
-		SessionsEmbedFragment(cc.Campaign.ID, planned, userID, gameNightsToday()))
+		SessionsEmbedFragment(cc.Campaign.ID, planned, userID, gameNightsToday(), h.storedTZ(ctx, userID)))
 }
 
 // --- Helpers ---

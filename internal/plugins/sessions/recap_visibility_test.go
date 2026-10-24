@@ -33,7 +33,7 @@ func TestSessionDetailPage_RecapIsMembersOnly(t *testing.T) {
 			}
 			s := &Session{ID: "s1", CampaignID: "camp-1", Name: "Night one", Status: StatusCompleted, RecapHTML: &recap}
 			var sb strings.Builder
-			if err := SessionDetailPage(cc, s, "csrf", false, false, "u1", RecapView{Open: true}).Render(context.Background(), &sb); err != nil {
+			if err := SessionDetailPage(cc, s, "csrf", false, false, "u1", RecapView{Open: true}, "").Render(context.Background(), &sb); err != nil {
 				t.Fatalf("render: %v", err)
 			}
 			got := strings.Contains(sb.String(), "The vault door was a mimic")

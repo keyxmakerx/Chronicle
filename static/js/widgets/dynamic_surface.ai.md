@@ -16,7 +16,7 @@ a mini→full launch, and a schema-driven mount. Vanilla browser JS, loaded afte
 | `box(el)` | Enhance a `[data-box-toggle]`+`[data-box-body]` element into an expand/collapse box. (Also auto-mounted as `data-widget="surface-box"`.) |
 | `provider(key, fetcher, opts)` | Shared, memoized fetch keyed by `key`: one `fetcher()` fans to all subscribers. `.subscribe(fn)`, `.push(data)` (live update), `.current()`, `.refresh()`, `.onError(fn)`. `opts.seed` adopts a server payload (zero network). Self-destroys when the last subscriber leaves. |
 | `mount(container, schema)` | Build a sheet from a schema (below). Returns the provider. |
-| `registerBox(name, fn)` | A **System** supplies a box-body renderer: `fn(boxDef, providerData) → html|element`. The frame mounts; the system renders. |
+| `registerBox(name, fn)` | A **System** supplies a box-body renderer: `fn(boxDef, providerData) → html|element`. The frame mounts; the system renders. A box built before its renderer registered is painted when it does (deferred scripts run after the page's surfaces mount). |
 | `reducedMotion()` / `cssVar(name, fb)` | Helpers. Every preset collapses to a quick fade under `prefers-reduced-motion`. |
 
 ## Motion preset menu (pick per card type)

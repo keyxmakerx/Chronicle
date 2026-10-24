@@ -113,6 +113,8 @@ func TestGuestMayReach(t *testing.T) {
 		{"/account/password", false},
 		{"/account/guest", true},
 		{"/account/guest/keep", true},
+		{"/account/timezone", true},
+		{"/account/timezone/x", false},
 		{"/join", true},
 		{"/join/ABC123", false},
 		{"/media/abc", true},

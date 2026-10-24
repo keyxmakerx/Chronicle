@@ -198,3 +198,63 @@ func TestSearchCalendarEvents_PerPersonRulesStayOutOfNonGMSearch(t *testing.T) {
 		})
 	}
 }
+
+// A player's search must not find what the month grid hides from them: a
+// future event announced only on its day, or one in a secret era.
+func TestSearchCalendarEvents_HidesNotYetKnowableEventsFromPlayers(t *testing.T) {
+	cal := Calendar{
+		ID: "cal-1", CampaignID: testCampaignA, Mode: ModeFantasy, Visibility: "everyone",
+		CurrentYear: 1000, CurrentMonth: 1, CurrentDay: 10,
+		HoursPerDay: 24, MinutesPerHour: 60, SecondsPerMinute: 60,
+	}
+	ahead := AnnouncedAhead
+	events := []Event{
+		{ID: "evt-secret", CalendarID: "cal-1", Name: "Feast of Knives", Year: 1000, Month: 1, Day: 20, Visibility: "everyone", KindID: intPtr(1)},
+		{ID: "evt-today", CalendarID: "cal-1", Name: "Feast Today", Year: 1000, Month: 1, Day: 10, Visibility: "everyone", KindID: intPtr(1)},
+		{ID: "evt-ahead", CalendarID: "cal-1", Name: "Feast Announced", Year: 1000, Month: 1, Day: 25, Visibility: "everyone", Announced: &ahead},
+	}
+	calRepo := &fakeCalendarRepo{
+		listByCampaignFn: func(context.Context, string) ([]Calendar, error) { return []Calendar{cal}, nil },
+		getMonthsFn: func(context.Context, string) ([]Month, error) {
+			return []Month{{Name: "First", Days: 30, SortOrder: 0}}, nil
+		},
+		getErasFn: func(context.Context, string) ([]Era, error) { return nil, nil },
+	}
+	eventRepo := &fakeEventRepo{
+		searchFn: func(context.Context, string, string, int) ([]Event, error) {
+			return append([]Event(nil), events...), nil
+		},
+	}
+	kindRepo := &fakeEventKindRepo{
+		listFn: func(context.Context, string) ([]EventKind, error) {
+			return []EventKind{{ID: 1, Slug: "battle", Name: "Battle", DefaultAnnounced: AnnouncedOnDay}}, nil
+		},
+	}
+	svc := newTestCalendarService(calRepo, eventRepo, kindRepo, nil)
+
+	for _, tc := range []struct {
+		role int
+		want []string
+	}{
+		{int(permissions.RolePlayer), []string{"Feast Today", "Feast Announced"}},
+		{int(permissions.RoleOwner), []string{"Feast of Knives", "Feast Today", "Feast Announced"}},
+	} {
+		results, err := svc.SearchCalendarEvents(context.Background(), testCampaignA, "feast", tc.role)
+		if err != nil {
+			t.Fatalf("role %d: SearchCalendarEvents: %v", tc.role, err)
+		}
+		var got []string
+		for _, r := range results {
+			got = append(got, r["name"])
+		}
+		if len(got) != len(tc.want) {
+			t.Fatalf("role %d: got %v, want %v", tc.role, got, tc.want)
+		}
+		for i := range got {
+			if got[i] != tc.want[i] {
+				t.Errorf("role %d: got %v, want %v", tc.role, got, tc.want)
+				break
+			}
+		}
+	}
+}

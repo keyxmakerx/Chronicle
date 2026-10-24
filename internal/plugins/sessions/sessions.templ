@@ -12,14 +12,14 @@ import (
 )
 
 // SessionListPage renders the full sessions page.
-templ SessionListPage(cc *campaigns.CampaignContext, groups []SessionGroup, csrfToken string, isOwner, isScribe bool, userID string, plan SessionPlan, feed bool) {
+templ SessionListPage(cc *campaigns.CampaignContext, groups []SessionGroup, csrfToken string, isOwner, isScribe bool, userID string, plan SessionPlan, viewerTZ string, feed bool) {
 	@layouts.App(cc.Campaign.Name + " - Game nights") {
 		<div class="max-w-4xl mx-auto">
 			@components.Breadcrumbs([]components.BreadcrumbItem{
 				{Label: cc.Campaign.Name, Href: fmt.Sprintf("/campaigns/%s", cc.Campaign.ID), Icon: "fa-dice-d20"},
 				{Label: "Game nights"},
 			})
-			@SessionListFragment(cc, groups, csrfToken, isOwner, isScribe, userID, plan, feed)
+			@SessionListFragment(cc, groups, csrfToken, isOwner, isScribe, userID, plan, viewerTZ, feed)
 		</div>
 	}
 }
@@ -30,7 +30,7 @@ templ SessionListPage(cc *campaigns.CampaignContext, groups []SessionGroup, csrf
 // feed says the member gets "Add to your calendar": the owner's calendar
 // feed switch is on and the viewer is a member. A member answers a planned
 // night from its row (gameNightAnswer); game_nights.js runs both.
-templ SessionListFragment(cc *campaigns.CampaignContext, groups []SessionGroup, csrfToken string, isOwner, isScribe bool, userID string, plan SessionPlan, feed bool) {
+templ SessionListFragment(cc *campaigns.CampaignContext, groups []SessionGroup, csrfToken string, isOwner, isScribe bool, userID string, plan SessionPlan, viewerTZ string, feed bool) {
 	<link rel="stylesheet" href={ layouts.AssetURL("/static/css/game_nights.css") }/>
 	<div class="gn" data-widget="game-nights" data-gn-base={ fmt.Sprintf("/campaigns/%s", cc.Campaign.ID) }>
 		<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
@@ -89,7 +89,7 @@ templ SessionListFragment(cc *campaigns.CampaignContext, groups []SessionGroup, 
 			for _, g := range groups {
 				<h2 class="text-xs font-semibold text-fg-muted uppercase tracking-wider mt-6 mb-2">{ g.Label }</h2>
 				for _, s := range g.Sessions {
-					@gameNightRow(cc, s, g.Key, userID)
+					@gameNightRow(cc, s, g.Key, userID, viewerTZ)
 				}
 			}
 		}
@@ -140,7 +140,7 @@ templ gameNightFeedPanel() {
 // member's answer sits above that link as its own button: a button cannot
 // live inside a link. Only an upcoming night asks; one whose date has passed
 // (group "played") has happened.
-templ gameNightRow(cc *campaigns.CampaignContext, s Session, group string, userID string) {
+templ gameNightRow(cc *campaigns.CampaignContext, s Session, group string, userID string, viewerTZ string) {
 	{{ answering := group == "upcoming" && s.AcceptsRSVP() && cc.IsMember && userID != "" }}
 	{{ mine := myRSVPStatus(s.Attendees, userID) }}
 	<div
@@ -168,7 +168,7 @@ templ gameNightRow(cc *campaigns.CampaignContext, s Session, group string, userI
 					if s.ScheduledDate != nil {
 						<span>
 							<i class="fa-regular fa-calendar mr-0.5"></i>
-							{ s.FormatScheduledDate() }
+							{ s.FormatScheduledFor(viewerTZ) }
 						</span>
 					}
 					if s.IsRecurring {
@@ -392,7 +392,7 @@ templ createSessionModal(cc *campaigns.CampaignContext, csrfToken string, plan S
 }
 
 // SessionDetailPage renders the full session detail view.
-templ SessionDetailPage(cc *campaigns.CampaignContext, session *Session, csrfToken string, isOwner, isScribe bool, userID string, recap RecapView) {
+templ SessionDetailPage(cc *campaigns.CampaignContext, session *Session, csrfToken string, isOwner, isScribe bool, userID string, recap RecapView, viewerTZ string) {
 	@layouts.App(session.Name + " - " + cc.Campaign.Name) {
 		<div class="max-w-4xl mx-auto">
 			@components.Breadcrumbs([]components.BreadcrumbItem{
@@ -415,7 +415,7 @@ templ SessionDetailPage(cc *campaigns.CampaignContext, session *Session, csrfTok
 						if session.ScheduledDate != nil {
 							<span>
 								<i class="fa-regular fa-calendar mr-0.5"></i>
-								{ session.FormatScheduledDate() }
+								{ session.FormatScheduledFor(viewerTZ) }
 							</span>
 						}
 						if session.IsRecurring {
@@ -869,7 +869,7 @@ func jsEsc(s string) string {
 // SessionsEmbedFragment renders a compact list of planned sessions for dashboard embedding.
 // Shows session name, date, and RSVP counts. Empty state if no planned sessions.
 // Each opens its night in the calendar (through GameNightsLink).
-templ SessionsEmbedFragment(campaignID string, sessions []Session, userID string, today string) {
+templ SessionsEmbedFragment(campaignID string, sessions []Session, userID string, today string, viewerTZ string) {
 	if len(sessions) == 0 {
 		<div class="px-4 py-6 text-center">
 			<i class="fa-solid fa-dice-d20 text-xl text-fg-muted mb-2"></i>
@@ -887,7 +887,7 @@ templ SessionsEmbedFragment(campaignID string, sessions []Session, userID string
 				<div class="flex-1 min-w-0">
 					<div class="text-sm font-medium text-fg truncate group-hover:text-accent transition-colors">{ s.Name }</div>
 					if s.ScheduledDate != nil && *s.ScheduledDate != "" {
-						<div class="text-xs text-fg-muted">{ s.FormatScheduledDate() }</div>
+						<div class="text-xs text-fg-muted">{ s.FormatScheduledFor(viewerTZ) }</div>
 					}
 				</div>
 				<div class="shrink-0 text-xs text-fg-muted">

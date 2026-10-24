@@ -36,3 +36,13 @@ test('a failed load is not shown as "no jots"', () => {
   assert.match(branch, /data-jot-retry/, 'a failed load offers Try again');
   assert.match(branch, /addEventListener\('click', function \(\) \{ loadNotes\(\); \}\)/, 'Try again reloads');
 });
+
+test('away from a page the tab waits for the viewer to have jots of their own', () => {
+  const i = src.indexOf('function loadCount() {');
+  assert.ok(i >= 0, 'loadCount must exist');
+  const body = src.slice(i, src.indexOf('\n    }\n', i));
+  assert.match(body, /if \(!entityId\) \{[\s\S]*fab\.hidden = true;/,
+    'off a page the tab starts hidden: a jot cannot be written there');
+  assert.match(body, /fab\.hidden = mine\.length === 0;/,
+    'it shows once the viewer has jots to read');
+});

@@ -531,7 +531,38 @@
   //              endpoint?, actions?:[ {label,on:'overlay'|'api',endpoint?,target?,html?} ] }
 
   var boxRenderers = {};
-  function registerBox(name, fn) { if (name && typeof fn === 'function') boxRenderers[name] = fn; }
+  // Boxes whose renderer was not registered yet when they were built. Deferred
+  // scripts run once the page is parsed, and Chronicle.register mounts a
+  // widget the moment it registers, so a surface on the page is built before
+  // a later script (character_surface.js) registers its box bodies. Those
+  // boxes are painted when their renderer arrives, not left empty.
+  var pendingBoxes = {};
+
+  function registerBox(name, fn) {
+    if (!name || typeof fn !== 'function') return;
+    boxRenderers[name] = fn;
+    var waiting = pendingBoxes[name] || [];
+    delete pendingBoxes[name];
+    waiting.forEach(function (w) {
+      if (w.body.isConnected) wireBody(w.def, w.body, w.prov, w.cleanups);
+    });
+  }
+
+  // wireBody paints a box body from its renderer and keeps it painted as the
+  // provider's data changes.
+  function wireBody(def, body, prov, cleanups) {
+    var renderFn = boxRenderers[def.block];
+    var paint = function (data) {
+      var out;
+      try { out = renderFn(def, data); } catch (e) { return; }
+      if (out == null) return;
+      if (typeof out === 'string') body.innerHTML = out;
+      else { body.innerHTML = ''; body.appendChild(out); }
+      if (Chronicle.mountWidgets) Chronicle.mountWidgets(body);
+    };
+    if (prov) { var unsub = prov.subscribe(paint); if (cleanups) cleanups.push(unsub); }
+    else paint(null);
+  }
 
   function buildAction(a, prov) {
     var btn = document.createElement('button');
@@ -591,17 +622,9 @@
     box.appendChild(body);
 
     if (def.block && boxRenderers[def.block]) {
-      var renderFn = boxRenderers[def.block];
-      var paint = function (data) {
-        var out;
-        try { out = renderFn(def, data); } catch (e) { return; }
-        if (out == null) return;
-        if (typeof out === 'string') body.innerHTML = out;
-        else { body.innerHTML = ''; body.appendChild(out); }
-        if (Chronicle.mountWidgets) Chronicle.mountWidgets(body);
-      };
-      if (prov) { var unsub = prov.subscribe(paint); if (cleanups) cleanups.push(unsub); }
-      else paint(null);
+      wireBody(def, body, prov, cleanups);
+    } else if (def.block && !(def.lazy && def.endpoint)) {
+      (pendingBoxes[def.block] = pendingBoxes[def.block] || []).push({ def: def, body: body, prov: prov, cleanups: cleanups });
     } else if (def.lazy && def.endpoint) {
       box.setAttribute('data-box-lazy', '');
       box.setAttribute('data-box-endpoint', def.endpoint);

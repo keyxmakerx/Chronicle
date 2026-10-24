@@ -522,6 +522,37 @@ func TestFormatScheduledWhen(t *testing.T) {
 	}
 }
 
+// A page shows a game night in the viewer's own clock when it knows their
+// zone, and in the organizer's clock with its zone label when it does not;
+// never a bare time a reader could mistake for their own.
+func TestFormatScheduledFor(t *testing.T) {
+	str := func(v string) *string { return &v }
+	ny := Session{ScheduledDate: str("2026-10-27"), ScheduledTime: str("19:00"), ScheduledTZ: str("America/New_York")}
+	late := Session{ScheduledDate: str("2026-10-27"), ScheduledTime: str("22:30"), ScheduledTZ: str("America/New_York")}
+	tests := []struct {
+		name   string
+		s      Session
+		viewer string
+		want   string
+	}{
+		{"viewer in another zone", ny, "America/Chicago", "Tue, Oct 27, 2026 · 6:00 PM CDT"},
+		{"viewer in the same zone", ny, "America/New_York", "Tue, Oct 27, 2026 · 7:00 PM EDT"},
+		{"conversion crosses midnight", late, "Europe/London", "Wed, Oct 28, 2026 · 2:30 AM GMT"},
+		{"viewer zone unknown", ny, "", "Tue, Oct 27, 2026 · 7:00 PM EDT"},
+		{"bad viewer zone", ny, "Not/AZone", "Tue, Oct 27, 2026 · 7:00 PM EDT"},
+		{"no organizer zone", Session{ScheduledDate: str("2026-10-27"), ScheduledTime: str("19:00")}, "America/Chicago", "Tue, Oct 27, 2026 · 7:00 PM"},
+		{"date only", Session{ScheduledDate: str("2026-10-27"), ScheduledTZ: str("America/New_York")}, "America/Chicago", "Tue, Oct 27, 2026"},
+		{"no date", Session{}, "America/Chicago", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.s.FormatScheduledFor(tt.viewer); got != tt.want {
+				t.Errorf("FormatScheduledFor(%q) = %q, want %q", tt.viewer, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestRSVPEmail_LabelsTheZone(t *testing.T) {
 	mailer := &captureMailer{}
 	repo := &mockSessionRepo{createRSVPTokenFn: func(_ context.Context, _ *RSVPToken) error { return nil }}
