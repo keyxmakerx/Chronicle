@@ -717,7 +717,7 @@ func (r *entityTypeRepository) SeedFromTypes(ctx context.Context, campaignID str
 		if len(layout.Rows) == 0 {
 			layout = DefaultLayout()
 		}
-		layoutJSON, err := json.Marshal(layout)
+		layoutJSON, err := json.Marshal(withCreaturePanels(et, layout))
 		if err != nil {
 			return fmt.Errorf("marshaling layout for %s: %w", et.Slug, err)
 		}
@@ -752,7 +752,7 @@ func (r *entityTypeRepository) SeedDefaults(ctx context.Context, campaignID stri
 		if err != nil {
 			return fmt.Errorf("marshaling default fields for %s: %w", et.Slug, err)
 		}
-		layoutJSON, err := json.Marshal(et.Layout)
+		layoutJSON, err := json.Marshal(withCreaturePanels(et, et.Layout))
 		if err != nil {
 			return fmt.Errorf("marshaling default layout for %s: %w", et.Slug, err)
 		}

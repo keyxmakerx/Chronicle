@@ -130,3 +130,61 @@ func TestShow_LayoutPageDrawsOnlyPlacedPieces(t *testing.T) {
 		}
 	}
 }
+
+func TestWithCreaturePanels(t *testing.T) {
+	creaturePreset := "creature"
+	shared := DefaultLayout()
+	tests := []struct {
+		name   string
+		et     EntityType
+		layout EntityTypeLayout
+		want   []string
+	}{
+		{
+			name:   "a seeded creature type with no layout starts from the default, panels under the title",
+			et:     EntityType{Slug: "creature"},
+			layout: EntityTypeLayout{},
+			want:   []string{"title", "system_panels", "entry", "image", "attributes", "details"},
+		},
+		{
+			name:   "a creature preset under another slug gets them too",
+			et:     EntityType{Slug: "beasts", PresetCategory: &creaturePreset},
+			layout: DefaultLayout(),
+			want:   []string{"title", "system_panels", "entry", "image", "attributes", "details"},
+		},
+		{
+			name:   "a -monster slug counts as a creature type",
+			et:     EntityType{Slug: "sea-monster"},
+			layout: DefaultLayout(),
+			want:   []string{"title", "system_panels", "entry", "image", "attributes", "details"},
+		},
+		{
+			name:   "other types are left alone, empty layout included",
+			et:     EntityType{Slug: "location"},
+			layout: EntityTypeLayout{},
+			want:   nil,
+		},
+		{
+			name:   "a layout that already places the panels is unchanged",
+			et:     EntityType{Slug: "creature"},
+			layout: EntityTypeLayout{Rows: []TemplateRow{fullWidthRow("r", TemplateBlock{ID: "p", Type: "system_panels"}, TemplateBlock{ID: "t", Type: "title"})}},
+			want:   []string{"system_panels", "title"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := withCreaturePanels(tt.et, tt.layout)
+			if order := blockTypeOrder(got); !reflect.DeepEqual(order, tt.want) {
+				t.Errorf("order = %v, want %v", order, tt.want)
+			}
+		})
+	}
+
+	// Seeded layouts can share slices with package-level defaults; adding the
+	// block must never change the layout it was handed.
+	before := blockTypeOrder(shared)
+	withCreaturePanels(EntityType{Slug: "creature"}, shared)
+	if after := blockTypeOrder(shared); !reflect.DeepEqual(before, after) {
+		t.Errorf("input layout changed: %v -> %v", before, after)
+	}
+}

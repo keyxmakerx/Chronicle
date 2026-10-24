@@ -4,7 +4,9 @@ import (
 	"context"
 	"slices"
 	"testing"
+	"time"
 
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 )
 
@@ -55,5 +57,42 @@ func TestPlaceCreaturePanelsOnce(t *testing.T) {
 	ents.placed = map[string][]int{}
 	if n, err := placeCreaturePanelsOnce(context.Background(), st, fakeExtrasCampaigns{ids: []string{"c1"}}, ents); err != nil || n != 0 || len(ents.placed) != 0 {
 		t.Fatalf("second run = %d, %v, %v; want nothing", n, err, ents.placed)
+	}
+}
+
+type datedCampaigns struct{ list []campaigns.Campaign }
+
+func (f datedCampaigns) ListAll(_ context.Context, _ campaigns.ListOptions) ([]campaigns.Campaign, int, error) {
+	return f.list, len(f.list), nil
+}
+
+func TestPlaceCreaturePanelsOnNewCampaigns(t *testing.T) {
+	creature := []entities.EntityType{{ID: 5, Slug: "creature", Enabled: true}}
+	st := &fakeExtrasSettings{vals: map[string]string{creaturePanelsPlacedKey: "1"}}
+	ents := &fakeCreaturePanelEntities{
+		types:  map[string][]entities.EntityType{"old": creature, "new": creature},
+		placed: map[string][]int{},
+	}
+	camps := datedCampaigns{list: []campaigns.Campaign{
+		{ID: "old", CreatedAt: creaturePanelsSince.Add(-time.Hour)},
+		{ID: "new", CreatedAt: creaturePanelsSince.Add(72 * time.Hour)},
+	}}
+
+	n, err := placeCreaturePanelsOnNewCampaigns(context.Background(), st, camps, ents)
+	if err != nil {
+		t.Fatalf("placeCreaturePanelsOnNewCampaigns: %v", err)
+	}
+	if n != 1 || !slices.Equal(ents.placed["new"], []int{5}) {
+		t.Fatalf("placed %d, new = %v; want the newer campaign's creature type", n, ents.placed["new"])
+	}
+	if _, ok := ents.placed["old"]; ok {
+		t.Error("a campaign the first sweep covered was touched again")
+	}
+	if st.vals[creaturePanelsNewCampaignsKey] != "1" {
+		t.Error("run was not recorded")
+	}
+	ents.placed = map[string][]int{}
+	if n, _ := placeCreaturePanelsOnNewCampaigns(context.Background(), st, camps, ents); n != 0 || len(ents.placed) != 0 {
+		t.Fatalf("second run placed %d; want nothing", n)
 	}
 }
