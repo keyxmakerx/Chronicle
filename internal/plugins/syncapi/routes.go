@@ -4,6 +4,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
+	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
@@ -182,7 +183,7 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 	cg.POST("/entities/bulk-update", api.BulkUpdateEntityType, RequirePermission(PermWrite))
 
 	// Calendar read endpoints (require "read" permission + calendar addon).
-	calGroup := addonRoutes{cg, RequireAddonAPI(addonChecker, "calendar")}
+	calGroup := addonRoutes{cg, RequireAddonAPI(addonChecker, calendar.PluginSlug)}
 	calGroup.GET("/calendars", calAPI.ListCalendars, RequirePermission(PermRead))
 	calGroup.GET("/calendar", calAPI.GetCalendar, RequirePermission(PermRead))
 	calGroup.GET("/calendar/date", calAPI.GetCurrentDate, RequirePermission(PermRead))
