@@ -79,7 +79,7 @@ func (v *chronicleVersionChecker) CheckChronicle(ctx context.Context) admin.Vers
 	if err != nil {
 		return admin.VersionCheckResult{Problem: "GitHub couldn't be reached."}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	return parseCompare(resp.StatusCode, io.LimitReader(resp.Body, 1<<20), v.revision)
 }
 
