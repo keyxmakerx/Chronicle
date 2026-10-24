@@ -7,8 +7,8 @@
  *
  * The frame builds the boxes and mounts the seeded schema (emitted by the Go
  * `character_surface` block); these renderers just paint each box body from the
- * seed. Loaded globally after dynamic_surface.js, so the renderers are
- * registered before boot.js auto-mounts the `dynamic-surface` widget.
+ * seed. Loaded globally after dynamic_surface.js; a surface the page already
+ * mounted paints these boxes as each renderer registers.
  *
  * The description box does NOT inline entry HTML — it mounts the shared `editor`
  * widget (same as the standard entry block), so role-aware secrets and edit
