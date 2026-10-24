@@ -49,7 +49,8 @@ type Callout struct {
 // banner for every notification type would train players to dismiss it
 // unread, burying the one that actually needs an answer.
 var calloutNotifTypes = map[string]bool{
-	NotifProposalCreated: true,
+	NotifProposalCreated:  true,
+	NotifSessionScheduled: true,
 }
 
 // BuildCallout decides what one player should be shown, from their unread

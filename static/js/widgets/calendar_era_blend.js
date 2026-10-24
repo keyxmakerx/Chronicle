@@ -203,7 +203,10 @@
   }
 
   // surfaceRGB resolves any CSS colour (oklch included) to RGB by painting
-  // it, since the surface the tint mixes into is a theme token.
+  // it, since the surface the tint mixes into is a theme token. It paints
+  // over the page's own background first: a surface whose stylesheet has not
+  // arrived yet reads as transparent, and transparent over nothing reads as
+  // black, which drew the whole month dark until the next repaint.
   var probe = null;
   function surfaceRGB(css) {
     try {
@@ -211,6 +214,14 @@
       var c = probe.getContext('2d', { willReadFrequently: true });
       c.clearRect(0, 0, 1, 1);
       c.fillStyle = '#fff';
+      c.fillRect(0, 0, 1, 1);
+      [document.documentElement, document.body].forEach(function (el) {
+        if (!el) return;
+        c.fillStyle = '#fff';
+        c.fillStyle = getComputedStyle(el).backgroundColor;
+        c.fillRect(0, 0, 1, 1);
+      });
+      c.fillStyle = 'rgba(0,0,0,0)';
       c.fillStyle = css;
       c.fillRect(0, 0, 1, 1);
       var d = c.getImageData(0, 0, 1, 1).data;

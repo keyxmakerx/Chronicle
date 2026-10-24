@@ -41,7 +41,7 @@ templ panelOverview(r PackageRow, data PackagesPageData) {
 						@installButton(r.ID, latest.Version, data.CSRFToken, "Install "+latest.Version, "btn-primary btn-sm", installConfirmText(r.Type, latest.Version))
 					</div>
 				} else {
-					<p class="mt-1 text-fg-secondary">No versions found yet. Press Check now on the Settings tab.</p>
+					<p class="mt-1 text-fg-secondary">{ noVersionsText(data.Now, r.LastCheckedAt) }</p>
 				}
 			</div>
 		case statusPinned:

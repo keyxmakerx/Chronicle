@@ -22,6 +22,8 @@ func TestAdminStatusFigures(t *testing.T) {
 		{"sessions unread", StatusFigures{Sessions: -1, BackupKnown: true, BackupEnabled: true, BackupAge: "2 days"},
 			[]string{"Last backup"}, []string{"signed in"}},
 		{"backups off", StatusFigures{Sessions: 0, BackupKnown: true}, []string{"Backups are off"}, []string{"Last backup"}},
+		{"last backup failed", StatusFigures{Sessions: 0, BackupKnown: true, BackupEnabled: true, BackupFailed: true, BackupAge: "2 days"},
+			[]string{"Last backup failed"}, []string{"Last backup <b>"}},
 		{"no backup yet", StatusFigures{Sessions: 0, BackupKnown: true, BackupEnabled: true}, []string{"No backup yet"}, nil},
 	}
 	for _, tc := range cases {

@@ -36,6 +36,24 @@
   var BREAK = 1560;   // ms into the burst's clock when the pieces start to fall
   var FADE = BREAK + 1900;
   var HOLD = 450;     // ms the landed 20 stays lit before it bursts
+  var UNDO_FOR = 10000; // ms a revealed row keeps its Undo
+
+  // A revealed row's Undo lasts a few seconds, long enough to catch a
+  // misclick at the table. Focus on it moves to the row's confirmation.
+  document.addEventListener('htmx:load', function (e) {
+    var root = e.detail && e.detail.elt;
+    if (!root || !root.querySelectorAll) return;
+    var undos = root.matches && root.matches('[data-dms-undo]') ? [root] : root.querySelectorAll('[data-dms-undo]');
+    Array.prototype.forEach.call(undos, function (btn) {
+      setTimeout(function () {
+        if (!btn.isConnected) return;
+        var done = btn.parentNode && btn.parentNode.querySelector('[data-dms-done]');
+        var had = document.activeElement === btn;
+        btn.remove();
+        if (had && done) done.focus();
+      }, UNDO_FOR);
+    });
+  });
 
   // Note state per campaign and note label, kept for the page's life so a draft
   // that failed to save is still there when the screen is reopened.
@@ -683,7 +701,7 @@
             describe: function () { return ''; },
             onSettle: function (points) {
               var p = points && points[0];
-              if (!p) { st.land(null); return; }
+              if (!p) { if (st.land) st.land(null); return; }
               setTimeout(function () { if (st.land) st.land(p); }, HOLD);
             }
           }).catch(function () { if (st.land) st.land(null); });

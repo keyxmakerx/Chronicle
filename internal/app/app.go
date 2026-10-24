@@ -131,6 +131,7 @@ func New(cfg *config.Config, db *sql.DB, rdb *redis.Client, pluginHealth *databa
 	// plugin embed mount registered later in mountPluginStatic; it is a no-op
 	// for non-/static paths.
 	e.Use(middleware.StaticCache(layouts.StaticURLPrefix))
+	e.Use(middleware.StaticGzip(layouts.StaticURLPrefix))
 	e.Static("/static", "static")
 
 	return app, nil

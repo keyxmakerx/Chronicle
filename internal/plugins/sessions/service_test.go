@@ -33,6 +33,7 @@ type mockSessionRepo struct {
 	deleteFn                   func(ctx context.Context, id string) error
 	addAttendeeFn              func(ctx context.Context, sessionID, userID, status string) error
 	updateAttendeeStatusFn     func(ctx context.Context, sessionID, userID, status string) error
+	markReadForLinkFn          func(ctx context.Context, userID, ntype, link string) error
 	removeAttendeeFn           func(ctx context.Context, sessionID, userID string) error
 	listAttendeesFn            func(ctx context.Context, sessionID string) ([]Attendee, error)
 	linkEntityFn               func(ctx context.Context, sessionID, entityID, role string) error
@@ -596,6 +597,13 @@ func (m *mockSessionRepo) CountUnreadNotifications(ctx context.Context, userID s
 func (m *mockSessionRepo) MarkNotificationRead(ctx context.Context, userID, notificationID string) error {
 	if m.markNotificationReadFn != nil {
 		return m.markNotificationReadFn(ctx, userID, notificationID)
+	}
+	return nil
+}
+
+func (m *mockSessionRepo) MarkNotificationsReadForLink(ctx context.Context, userID, ntype, link string) error {
+	if m.markReadForLinkFn != nil {
+		return m.markReadForLinkFn(ctx, userID, ntype, link)
 	}
 	return nil
 }

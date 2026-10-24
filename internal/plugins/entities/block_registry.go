@@ -67,6 +67,8 @@ type ConfigFieldMeta struct {
 	Max     *int     `json:"max,omitempty"` // For "number" type.
 	Default any      `json:"default,omitempty"`
 	Options []Option `json:"options,omitempty"` // For "select" type.
+	// Hint is one plain line shown under the field.
+	Hint string `json:"hint,omitempty"`
 }
 
 // Option is a label+value pair for select-type config fields.

@@ -415,7 +415,20 @@ func (s *service) ListForPage(ctx context.Context, campaignID, entityID string, 
 	if err != nil {
 		return nil, err
 	}
-	return &PageList{Encounters: list, CanEdit: a.CanEdit}, nil
+	out := &PageList{Encounters: list, CanEdit: a.CanEdit, HeroTypeIDs: []int{}, CreatureTypeIDs: []int{}}
+	// Best effort: without the types the pickers are empty, and a creature
+	// can still be added by name.
+	if pt, err := s.pages.PickerTypes(ctx, campaignID); err != nil {
+		slog.Warn("encounters: picker types unavailable", slog.String("campaign_id", campaignID), slog.Any("error", err))
+	} else {
+		if pt.Heroes != nil {
+			out.HeroTypeIDs = pt.Heroes
+		}
+		if pt.Creatures != nil {
+			out.CreatureTypeIDs = pt.Creatures
+		}
+	}
+	return out, nil
 }
 
 // load reads an encounter the viewer may see: DM, and its page viewable.

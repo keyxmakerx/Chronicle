@@ -236,6 +236,60 @@ func TestListManifests_ParsesAndSorts(t *testing.T) {
 	}
 }
 
+// TestListManifests_IncludesPreUpdate pins that the automatic capture taken
+// before an update is listed, flagged, and restorable alongside the
+// operator's own backups, while its data files stay out of the list.
+func TestListManifests_IncludesPreUpdate(t *testing.T) {
+	backupDir := t.TempDir()
+	files := map[string]string{
+		"chronicle_manifest_20260101T100000.txt": "chronicle_manifest_version=1\n" +
+			"db_file=chronicle_db_20260101T100000.sql.gz sha256=abc size=100\n",
+		"chronicle_pre_migrate_manifest_20260102T100000.txt": "chronicle_manifest_version=1\n" +
+			"chronicle_pre_migrate=1\n" +
+			"migration_version=40\n" +
+			"db_file=chronicle_pre_migrate_db_20260102T100000.sql.gz sha256=abc size=100\n",
+		"chronicle_pre_migrate_db_20260102T100000.sql.gz": "x",
+	}
+	for name, body := range files {
+		if err := os.WriteFile(filepath.Join(backupDir, name), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	svc := &service{cfg: Config{ScriptPath: "/dev/null", BackupDir: backupDir}}
+	got, err := svc.ListManifests()
+	if err != nil {
+		t.Fatalf("ListManifests: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("expected 2 manifests, got %d: %+v", len(got), got)
+	}
+	preUpdate := map[string]bool{}
+	for _, m := range got {
+		preUpdate[m.Name] = m.PreUpdate
+	}
+	tests := []struct {
+		name string
+		want bool
+	}{
+		{"chronicle_manifest_20260101T100000.txt", false},
+		{"chronicle_pre_migrate_manifest_20260102T100000.txt", true},
+	}
+	for _, tt := range tests {
+		flag, ok := preUpdate[tt.name]
+		if !ok {
+			t.Errorf("%s not listed", tt.name)
+			continue
+		}
+		if flag != tt.want {
+			t.Errorf("%s PreUpdate = %v, want %v", tt.name, flag, tt.want)
+		}
+		if _, err := ResolveManifestPath(backupDir, tt.name); err != nil {
+			t.Errorf("ResolveManifestPath(%s): %v", tt.name, err)
+		}
+	}
+}
+
 // TestResolveManifestPath_RejectsTraversal pins the security guard for
 // the manifest selector. Any of these inputs would let a confused or
 // malicious admin point restore.sh at an arbitrary file.
@@ -245,8 +299,10 @@ func TestResolveManifestPath_RejectsTraversal(t *testing.T) {
 		"../etc/passwd",
 		"chronicle_manifest_../whatever.txt",
 		"sub/chronicle_manifest_x.txt",
-		"chronicle_manifest_x", // missing .txt
-		"manifest.txt",         // missing prefix
+		"chronicle_manifest_x",                    // missing .txt
+		"manifest.txt",                            // missing prefix
+		"chronicle_pre_migrate_db_x.sql.gz",       // pre-update data file, not its manifest
+		"chronicle_pre_migrate_manifest_../x.txt", // traversal behind the pre-update prefix
 		"",
 	} {
 		if _, err := ResolveManifestPath(backupDir, bad); err == nil {

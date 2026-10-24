@@ -222,7 +222,7 @@ func TestSettingsTabOldVersionsCard(t *testing.T) {
 func TestPanelOldVersionsGroup(t *testing.T) {
 	site := RetentionSettings{Mode: RetentionKeepNewest, KeepNewest: 2, UnusedDays: 30}
 	sys := PackageRow{Package: Package{ID: "p1", Name: "X", Type: PackageTypeSystem}}
-	out := renderToString(t, panelSettings(sys, site, "tok"))
+	out := renderToString(t, panelSettings(sys, site, time.Now(), "tok"))
 	for _, want := range []string{`hx-put="/admin/packages/p1/retention"`, `name="mode" value="site" checked`, "Use the site rule", "Its own rule"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("panel missing %q", want)
@@ -231,13 +231,13 @@ func TestPanelOldVersionsGroup(t *testing.T) {
 
 	own := sys
 	own.RetentionKeepNewest = intp(5)
-	out = renderToString(t, panelSettings(own, site, "tok"))
+	out = renderToString(t, panelSettings(own, site, time.Now(), "tok"))
 	if !strings.Contains(out, `name="mode" value="own" checked`) || !strings.Contains(out, `name="keep_newest" value="5"`) {
 		t.Error("an override must pre-select its own rule with its number")
 	}
 
 	fm := PackageRow{Package: Package{ID: "f1", Name: "F", Type: PackageTypeFoundryModule}}
-	out = renderToString(t, panelSettings(fm, site, "tok"))
+	out = renderToString(t, panelSettings(fm, site, time.Now(), "tok"))
 	if strings.Contains(out, "/retention") || !strings.Contains(out, "never removed") {
 		t.Error("foundry module must show the never-removed note and no override form")
 	}

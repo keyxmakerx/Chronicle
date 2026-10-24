@@ -614,6 +614,12 @@ func (h *Handler) Show(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	// An owner viewing as a player gets the page drawn for a player, without
+	// Edit page, the pens or the empty-picture upload. Access was decided
+	// above on the real role.
+	if campaigns.ViewingAsPlayer(c, p.cc) {
+		p.cc = p.cc.PlayerPreview()
+	}
 	return middleware.Render(c, http.StatusOK, EntityShowPage(p.cc, p.entity, p.entityType, p.ancestors, p.children, p.showAttributes, p.showCalendar, p.claimingEnabled, p.ownerName, p.csrfToken, p.userID))
 }
 
@@ -774,7 +780,7 @@ func (h *Handler) prepareShowFor(c echo.Context, entityID string) (*showPage, er
 	ctx = withPageChildren(ctx, children)
 	ctx = withPlayerHidden(ctx, playerHidden)
 	ctx = withPagePlaces(ctx, h.loadPagePlaces(c.Request().Context(), cc, entity,
-		cc.MemberRole >= campaigns.RoleScribe && access.CanEdit, userID))
+		cc.MemberRole >= campaigns.RoleScribe && access.CanEdit && !campaigns.ViewingAsPlayer(c, cc), userID))
 	ctx = withPageParent(ctx, parentOfEntity(entity, ancestors))
 
 	// The items-and-money panel another plugin serves: drawn where the layout
@@ -2741,7 +2747,8 @@ type setPermissionsRequest struct {
 }
 
 // GetPermissionsAPI returns the entity's current visibility mode, campaign
-// members, and permission grants. Owner only.
+// members, and permission grants, for the DM team. Member emails go to the
+// owner only; a co-DM picks members by name.
 // GET /campaigns/:id/entities/:eid/permissions
 func (h *Handler) GetPermissionsAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
@@ -2782,8 +2789,10 @@ func (h *Handler) GetPermissionsAPI(c echo.Context) error {
 				pm := permissionsMember{
 					UserID:      m.UserID,
 					DisplayName: m.DisplayName,
-					Email:       m.Email,
 					Role:        int(m.Role),
+				}
+				if cc.MemberRole >= campaigns.RoleOwner {
+					pm.Email = m.Email
 				}
 				if m.AvatarPath != nil {
 					pm.AvatarPath = layouts.AvatarURL(mediaCtx, *m.AvatarPath)
@@ -2840,8 +2849,8 @@ func (h *Handler) GetPermissionsAPI(c echo.Context) error {
 	})
 }
 
-// SetPermissionsAPI updates an entity's visibility mode and permission grants.
-// Owner only.
+// SetPermissionsAPI updates an entity's visibility mode and permission grants,
+// for the DM team.
 // PUT /campaigns/:id/entities/:eid/permissions
 func (h *Handler) SetPermissionsAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
@@ -2872,8 +2881,8 @@ func (h *Handler) SetPermissionsAPI(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
-// GetMembersAPI returns campaign members as JSON for the permission user picker.
-// Owner only.
+// GetMembersAPI returns campaign members as JSON for the permission user picker,
+// for the DM team.
 // GET /campaigns/:id/entities/members
 func (h *Handler) GetMembersAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
@@ -3980,7 +3989,8 @@ func (h *Handler) buildCastView(c echo.Context, cc *campaigns.CampaignContext) (
 		// Only a member with no party yet needs a pointer to where claiming happens.
 		if view.IsMember && len(view.Party) == 0 {
 			if types, err := h.service.GetEntityTypes(ctx, campaignID); err == nil {
-				view.ClaimTypeID = claimTypeID(types)
+				counts, _ := h.service.CountByType(ctx, campaignID, int(cc.VisibilityRole()), userID)
+				view.ClaimTypeID = claimTypeID(types, counts)
 			}
 		}
 	}
@@ -4022,7 +4032,7 @@ func (h *Handler) buildHeroBuilder(c echo.Context, cc *campaigns.CampaignContext
 		slog.Warn("cast page: hero builder types failed", slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", err))
 		return nil
 	}
-	heroes := builderHeroes(yours, charTypes, types, cc.CanAuthorDmOnly())
+	heroes := builderHeroes(c.Request().Context(), yours, charTypes, types, cc.CanAuthorDmOnly())
 	if len(heroes) == 0 && !access.Allowed {
 		return nil
 	}
@@ -4393,22 +4403,33 @@ func (h *Handler) buildCastParty(ctx context.Context, cc *campaigns.CampaignCont
 
 // claimTypeID picks the entity type to send a party-less player to: the Player
 // Character sub-type when there is one, else the first claimable type, else 0
-// (no link). Pure so the choice is unit-testable.
-func claimTypeID(types []EntityType) int {
-	first := 0
-	for i := range types {
-		t := &types[i]
-		if !isClaimableType(t) {
-			continue
+// (no link). With counts (pages per type the viewer can see), a type with
+// pages wins over an empty one, so the link never lands on an empty list
+// while the characters to claim sit in another type. Pure so the choice is
+// unit-testable.
+func claimTypeID(types []EntityType, counts map[int]int) int {
+	pick := func(nonEmpty bool) int {
+		first := 0
+		for i := range types {
+			t := &types[i]
+			if !isClaimableType(t) || (nonEmpty && counts[t.ID] == 0) {
+				continue
+			}
+			if t.Slug == SlugPlayerCharacter || (t.PresetCategory != nil && *t.PresetCategory == PresetCategoryPlayerCharacter) {
+				return t.ID
+			}
+			if first == 0 {
+				first = t.ID
+			}
 		}
-		if t.Slug == SlugPlayerCharacter || (t.PresetCategory != nil && *t.PresetCategory == PresetCategoryPlayerCharacter) {
-			return t.ID
-		}
-		if first == 0 {
-			first = t.ID
+		return first
+	}
+	if counts != nil {
+		if id := pick(true); id != 0 {
+			return id
 		}
 	}
-	return first
+	return pick(false)
 }
 
 // assembleCastParty is the pure assembly step (no IO), split out so the

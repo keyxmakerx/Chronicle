@@ -124,10 +124,12 @@ type Hidden struct {
 // HiddenCharacters returns at most limit of the newest and reports whether
 // more exist beyond them, so the panel can point at the full list.
 // Reveal must only ever make an entity visible, never hide it, and must refuse an entity
-// outside campaignID.
+// outside campaignID. Hide is Reveal's undo: it only ever hides, and only the
+// entities Reveal could show.
 type HiddenSource interface {
 	HiddenCharacters(ctx context.Context, campaignID string, v Viewer, limit int) (hidden []Hidden, more bool, err error)
 	Reveal(ctx context.Context, entityID, campaignID string) (name string, err error)
+	Hide(ctx context.Context, entityID, campaignID string) (name string, err error)
 }
 
 // SystemSource returns the game system enabled for the campaign, or nil.

@@ -57,6 +57,37 @@ func CheckFields(defs []entities.FieldDefinition, in map[string]any) (map[string
 	return out, nil
 }
 
+// maxSheetFormula caps the review screen's formula values; a creature's
+// whole sheet is far smaller.
+const maxSheetFormula = 64 << 10
+
+// UseSheetFormula replaces fields the AI wrote with the values the review
+// screen's game-system check worked out, for the numbers the director chose
+// "Use the formula" on. raw is that screen's JSON object of key → value. Only
+// a key the AI wrote is replaced (matched ignoring case, kept under the AI's
+// spelling), so the screen can never add a field; the committer then checks
+// the result like any other `fields:`. Unreadable input changes nothing.
+func UseSheetFormula(fields map[string]any, raw string) map[string]any {
+	raw = strings.TrimSpace(raw)
+	if len(fields) == 0 || raw == "" || len(raw) > maxSheetFormula {
+		return fields
+	}
+	var formula map[string]any
+	if err := json.Unmarshal([]byte(raw), &formula); err != nil {
+		return fields
+	}
+	byKey := make(map[string]string, len(fields))
+	for k := range fields {
+		byKey[strings.ToLower(strings.TrimSpace(k))] = k
+	}
+	for k, v := range formula {
+		if orig, ok := byKey[strings.ToLower(strings.TrimSpace(k))]; ok {
+			fields[orig] = v
+		}
+	}
+	return fields
+}
+
 // fieldValue checks one value against its field's type, returning what to
 // store. The types are the sheet form's input types.
 func fieldValue(def entities.FieldDefinition, v any) (any, string) {

@@ -1,6 +1,7 @@
 package entities
 
 import (
+	"context"
 	"encoding/json"
 	"slices"
 )
@@ -34,13 +35,16 @@ type BuilderHero struct {
 	// change (fields marked GM-only); their values are left out.
 	Values map[string]string `json:"values"`
 	Hidden []string          `json:"hidden"`
+	// Sheet is true when the game system draws this hero's page as its
+	// sheet, so the link can promise one; otherwise it opens the plain page.
+	Sheet bool `json:"sheet"`
 }
 
 // builderHeroes picks the viewer's heroes the builder can fill in: their own
 // pages of a type the owner lists as characters. For anyone but the owner and
 // Co-DMs, GM-only fields are left out of Values and listed in Hidden, since
 // the fields door keeps them out of a save and the viewer may not read them.
-func builderHeroes(mine []CastMember, charTypeIDs []int, types []EntityType, canSeeGM bool) []BuilderHero {
+func builderHeroes(ctx context.Context, mine []CastMember, charTypeIDs []int, types []EntityType, canSeeGM bool) []BuilderHero {
 	byType := make(map[int]*EntityType, len(types))
 	for i := range types {
 		byType[types[i].ID] = &types[i]
@@ -63,7 +67,7 @@ func builderHeroes(mine []CastMember, charTypeIDs []int, types []EntityType, can
 				}
 			}
 		}
-		h := BuilderHero{ID: e.ID, Name: e.Name, Values: map[string]string{}, Hidden: []string{}}
+		h := BuilderHero{ID: e.ID, Name: e.Name, Values: map[string]string{}, Hidden: []string{}, Sheet: hasEntityShowRenderer(ctx, byType[e.EntityTypeID])}
 		for k, v := range e.FieldsData {
 			if hidden[k] {
 				continue

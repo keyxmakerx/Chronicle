@@ -15,6 +15,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
 // customizeSectionHomes is the draft key for the campaign's home pages: the
@@ -122,9 +123,21 @@ var homeBlockTypes = []string{
 	"activity_feed", "sync_status",
 }
 
-// homeTab is one home the Customizer's Home pages area offers.
+// homeTab is one home the Customizer's Home pages area offers. Label and
+// Hint may hold "{gm}", which label and hint fill with the campaign's word
+// for its game master.
 type homeTab struct {
 	Key, Label, Icon, Hint string
+}
+
+// label is the tab's name in this campaign's words.
+func (t homeTab) label(ctx context.Context) string {
+	return strings.ReplaceAll(t.Label, "{gm}", layouts.GMTerm(ctx))
+}
+
+// hint says who sees the home, in this campaign's words.
+func (t homeTab) hint(ctx context.Context) string {
+	return strings.ReplaceAll(t.Hint, "{gm}", layouts.GMTerm(ctx))
 }
 
 // homeTabs are the Home pages area's tabs, in the order it offers them.
@@ -132,9 +145,9 @@ var homeTabs = []homeTab{
 	{HomeDefault, "Everyone", "fa-users", "Every member sees this home unless their role has one of its own."},
 	{HomePlayer, "Players", "fa-user", "Players see this instead of the Everyone home."},
 	{HomeScribe, "Scribes", "fa-feather", "Scribes see this instead of the Everyone home."},
-	{HomeDirector, "The Director", "fa-crown", "You and your co-DMs land here instead of the Everyone home."},
+	{HomeDirector, "{gm} team", "fa-crown", "You and your co-{gm}s land here instead of the Everyone home."},
 	{HomeGuest, "Guests", "fa-door-open", "Visitors who aren't members see this. It never falls back to a members' home."},
-	{HomeDM, "DM dashboard", "fa-user-shield", "Your Overview under Manage, seen only by you and your co-DMs."},
+	{HomeDM, "Overview", "fa-user-shield", "The Overview under Manage, seen only by you and your co-{gm}s."},
 }
 
 // homeTabFor returns the tab for key, or the Everyone tab.
@@ -149,8 +162,8 @@ func homeTabFor(key string) homeTab {
 
 // homeHint says who sees a home and, while it has no layout of its own, what
 // they see instead, so the owner knows a borrowed home is not yet its own.
-func (h *Handler) homeHint(cc *CampaignContext, key string) string {
-	hint := homeTabFor(key).Hint
+func (h *Handler) homeHint(ctx context.Context, cc *CampaignContext, key string) string {
+	hint := homeTabFor(key).hint(ctx)
 	switch {
 	case key == HomeDM:
 		if cc.Campaign.ParseOwnerDashboardLayout() == nil {
@@ -185,7 +198,7 @@ func defaultDMDashboardLayout() *DashboardLayout {
 // homeEditorState is what the page editor draws a home from: the layout the
 // audience sees now and whether it is that home's own (unsaved means the
 // editor starts from what it borrows, and Save stores it as its own).
-func (h *Handler) homeEditorState(cc *CampaignContext, key string) string {
+func (h *Handler) homeEditorState(ctx context.Context, cc *CampaignContext, key string) string {
 	base := fmt.Sprintf("/campaigns/%s", cc.Campaign.ID)
 	var layout *DashboardLayout
 	saved := false
@@ -207,7 +220,7 @@ func (h *Handler) homeEditorState(cc *CampaignContext, key string) string {
 		"unsaved":    !saved,
 		"campaignId": cc.Campaign.ID,
 		"key":        key,
-		"name":       tab.Label,
+		"name":       tab.label(ctx),
 		"layout":     layout,
 		"only":       homeBlockTypes,
 		"blockTypes": base + "/entity-types/block-types?context=dashboard",

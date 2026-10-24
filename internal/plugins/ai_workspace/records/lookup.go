@@ -951,7 +951,7 @@ func (run *lookupRun) gameNights() (LookupAnswer, error) {
 		return ans, badRequestf("game nights can't be looked up on this server")
 	}
 	if !run.director() {
-		return ans, badRequestf("game nights are only listed for the owner or a co-DM")
+		return ans, badRequestf("game nights are left out in Safe privacy; choose Permitted to include them")
 	}
 	list, err := run.l.Nights.List(run.ctx, run.campaignID)
 	if err != nil {

@@ -169,7 +169,10 @@ type CampaignService interface {
 	// Shareable invite link
 	GenerateJoinCode(ctx context.Context, campaignID string) (string, error)
 	RevokeJoinCode(ctx context.Context, campaignID string) error
-	JoinByCode(ctx context.Context, code, userID string) error
+	// JoinByCode makes the user a player of the campaign the code opens and
+	// returns that campaign. joined is false when they were already a member,
+	// so following the link twice lands them in the campaign, not on an error.
+	JoinByCode(ctx context.Context, code, userID string) (campaign *Campaign, joined bool, err error)
 
 	// Game system
 	UpdateSystemID(ctx context.Context, campaignID, systemID string) error
@@ -417,6 +420,9 @@ func (s *campaignService) newCampaignSettings(ctx context.Context) string {
 	}
 	settings.Appearance.PageLook = "annals"
 	settings.Appearance.TimelinePopup = "corner"
+	// New pages start hidden from players: a spoiler can't be taken back,
+	// and a hidden page is one click to show.
+	settings.DefaultVisibility = DefaultVisibilityDMOnly
 	b, err := json.Marshal(settings)
 	if err != nil {
 		return "{}"
@@ -542,6 +548,12 @@ func (s *campaignService) Create(ctx context.Context, userID string, input Creat
 		CreatedBy:     userID,
 		CreatedAt:     now,
 		UpdatedAt:     now,
+	}
+	// The DM team's home starts with the setup steps (first_run_home.go).
+	if home, err := campaign.SetRoleDashboardJSON(HomeDirector, starterDirectorHome(campaign.ID)); err == nil {
+		campaign.DashboardLayout = home
+	} else {
+		slog.Warn("new campaign: setup steps not added", slog.Any("error", err))
 	}
 
 	if err := s.repo.Create(ctx, campaign); err != nil {
@@ -2046,20 +2058,20 @@ func (s *campaignService) RevokeJoinCode(ctx context.Context, campaignID string)
 }
 
 // JoinByCode joins a user to a campaign via its shareable invite code.
-func (s *campaignService) JoinByCode(ctx context.Context, code, userID string) error {
+func (s *campaignService) JoinByCode(ctx context.Context, code, userID string) (*Campaign, bool, error) {
 	campaign, err := s.repo.FindByJoinCode(ctx, code)
 	if err != nil {
-		return err
+		return nil, false, err
+	}
+
+	// A member following the link again is sent into the campaign, archived
+	// or not: it is already theirs to read.
+	if _, err := s.repo.FindMember(ctx, campaign.ID, userID); err == nil {
+		return campaign, false, nil
 	}
 
 	if campaign.IsArchived() {
-		return apperror.NewBadRequest("campaign is archived and not accepting new members")
-	}
-
-	// Check if already a member.
-	_, err = s.repo.FindMember(ctx, campaign.ID, userID)
-	if err == nil {
-		return apperror.NewConflict("you are already a member of this campaign")
+		return nil, false, apperror.NewBadRequest("campaign is archived and not accepting new members")
 	}
 
 	member := &CampaignMember{
@@ -2070,14 +2082,14 @@ func (s *campaignService) JoinByCode(ctx context.Context, code, userID string) e
 	}
 
 	if err := s.repo.AddMember(ctx, member); err != nil {
-		return apperror.NewInternal(fmt.Errorf("joining campaign: %w", err))
+		return nil, false, apperror.NewInternal(fmt.Errorf("joining campaign: %w", err))
 	}
 
 	slog.Info("user joined campaign via invite code",
 		slog.String("campaign_id", campaign.ID),
 		slog.String("user_id", userID),
 	)
-	return nil
+	return campaign, true, nil
 }
 
 // UpdateSystemID sets the game system for a campaign. Stores in the

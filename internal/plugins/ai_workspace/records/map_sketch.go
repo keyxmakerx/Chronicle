@@ -242,7 +242,7 @@ func (k MapSketchKind) plan(a Actor, r Record) (sketchPlan, string) {
 	if err != nil {
 		return sketchPlan{}, planError(err)
 	}
-	vis := r.Str("visibility")
+	vis := r.Visibility()
 	if vis != "" && vis != "everyone" && vis != "dm_only" {
 		return sketchPlan{}, "visibility must be everyone or dm_only"
 	}
@@ -353,7 +353,7 @@ func (k MapSketchKind) Plan(ctx context.Context, campaignID string, a Actor, r R
 		} else {
 			out.Summary += "; nothing is replaced, as no earlier sketch is on it"
 		}
-		if r.Str("visibility") == "dm_only" {
+		if r.Visibility() == "dm_only" {
 			out.Summary += "; the new shapes and pins are hidden from players"
 		}
 		if w := stretchWarning(p.W, p.H, t.info); w != "" {
@@ -366,7 +366,7 @@ func (k MapSketchKind) Plan(ctx context.Context, campaignID string, a Actor, r R
 	}
 	out := Plan{Summary: fmt.Sprintf("makes a map with %s and %s on a %d by %d grid",
 		plural(shapes, "shape", "shapes"), plural(pins, "pin", "pins"), p.W, p.H), Warnings: p.Errs}
-	if r.Str("visibility") == "dm_only" {
+	if r.Visibility() == "dm_only" {
 		out.Summary += "; its shapes and pins are hidden from players"
 	}
 	if ms, err := k.Pins.ListMaps(ctx, campaignID); err == nil {
@@ -430,7 +430,7 @@ func (k MapSketchKind) Apply(ctx context.Context, campaignID string, a Actor, r 
 			}
 		}
 	}
-	vis := r.Str("visibility")
+	vis := r.Visibility()
 	var failed []string
 	for _, s := range p.Shapes {
 		if s.Shape == "pin" {

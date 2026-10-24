@@ -10,7 +10,10 @@ import (
 	"time"
 )
 
-// ManifestSummary is the parsed view of one chronicle_manifest_*.txt file.
+// ManifestSummary is the parsed view of one backup manifest: either a
+// chronicle_manifest_*.txt from scripts/backup.sh or a
+// chronicle_pre_migrate_manifest_*.txt written automatically before an
+// update applied migrations.
 // We surface enough information that an operator can confirm which
 // backup they're about to restore — chronicle version, migration
 // version, the artifacts the restore will touch, and the file size for
@@ -37,6 +40,10 @@ type ManifestSummary struct {
 	MediaFile string
 	RedisFile string
 
+	// PreUpdate marks the automatic capture taken just before an update
+	// changed the database, so the list can say why it exists.
+	PreUpdate bool
+
 	// SizeBytes is the manifest file size itself. Ancillary; the bundled
 	// artifact sizes appear in the manifest body but we don't surface
 	// them in the list view to keep the UI scannable.
@@ -52,7 +59,20 @@ type ManifestSummary struct {
 // manifests. Mirrors the pattern in scripts/backup.sh.
 const manifestPrefix = "chronicle_manifest_"
 
-// ListManifests scans BACKUP_DIR for chronicle_manifest_*.txt files,
+// preUpdateManifestPrefix names the manifest the server writes before
+// migrations run. Same format as backup.sh's, so restore.sh takes either;
+// leaving it out hid the one backup an admin most needs after a bad update.
+const preUpdateManifestPrefix = "chronicle_pre_migrate_manifest_"
+
+// isManifestName reports whether name is a restorable manifest basename.
+func isManifestName(name string) bool {
+	if !strings.HasSuffix(name, ".txt") {
+		return false
+	}
+	return strings.HasPrefix(name, manifestPrefix) || strings.HasPrefix(name, preUpdateManifestPrefix)
+}
+
+// ListManifests scans BACKUP_DIR for backup and pre-update manifests,
 // parses each, and returns them newest-first. Files that exist but
 // can't be parsed are still returned, with ParseError set, so the UI
 // can warn rather than silently hide them.
@@ -74,7 +94,7 @@ func (s *service) ListManifests() ([]ManifestSummary, error) {
 			continue
 		}
 		name := entry.Name()
-		if !strings.HasPrefix(name, manifestPrefix) || !strings.HasSuffix(name, ".txt") {
+		if !isManifestName(name) {
 			continue
 		}
 		info, err := entry.Info()
@@ -85,6 +105,7 @@ func (s *service) ListManifests() ([]ManifestSummary, error) {
 			Name:      name,
 			ModTime:   info.ModTime(),
 			SizeBytes: info.Size(),
+			PreUpdate: strings.HasPrefix(name, preUpdateManifestPrefix),
 		}
 		if err := parseManifestInto(&summary, filepath.Join(dir, name)); err != nil {
 			summary.ParseError = err.Error()
@@ -113,6 +134,8 @@ func parseManifestInto(s *ManifestSummary, path string) error {
 	for scanner.Scan() {
 		line := scanner.Text()
 		switch {
+		case line == "chronicle_pre_migrate=1":
+			s.PreUpdate = true
 		case strings.HasPrefix(line, "chronicle_version="):
 			s.ChronicleVersion = strings.TrimPrefix(line, "chronicle_version=")
 		case strings.HasPrefix(line, "migration_version="):
@@ -145,7 +168,7 @@ func firstToken(line, prefix string) string {
 // ResolveManifestPath validates a manifest basename against BACKUP_DIR,
 // rejects path-traversal attempts, and returns the absolute path. Same
 // shape as backup.ResolveArtifactPath but additionally enforces that
-// the file is a chronicle_manifest_*.txt — restore.sh would refuse
+// the file is a backup or pre-update manifest — restore.sh would refuse
 // other inputs anyway, but failing fast at the HTTP boundary surfaces
 // the wrong-file error to the operator rather than burying it in a
 // shell exit code.
@@ -159,7 +182,7 @@ func ResolveManifestPath(backupDir, name string) (string, error) {
 	if name != filepath.Base(name) || strings.ContainsRune(name, os.PathSeparator) || strings.Contains(name, "..") {
 		return "", fmt.Errorf("invalid manifest filename")
 	}
-	if !strings.HasPrefix(name, manifestPrefix) || !strings.HasSuffix(name, ".txt") {
+	if !isManifestName(name) {
 		return "", fmt.Errorf("not a chronicle backup manifest")
 	}
 	full := filepath.Clean(filepath.Join(backupDir, name))

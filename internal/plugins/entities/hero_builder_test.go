@@ -45,7 +45,7 @@ func TestBuilderHeroes(t *testing.T) {
 			for _, e := range tc.mine {
 				mine = append(mine, CastMember{Entity: e, IsViewer: true})
 			}
-			got := builderHeroes(mine, []int{1}, types, tc.canSeeGM)
+			got := builderHeroes(context.Background(), mine, []int{1}, types, tc.canSeeGM)
 			if !reflect.DeepEqual(got, tc.want) {
 				t.Fatalf("got %+v, want %+v", got, tc.want)
 			}
@@ -54,11 +54,11 @@ func TestBuilderHeroes(t *testing.T) {
 }
 
 // TestHeroBuilderView_HeroesJSON pins the mount's wire shape, which
-// hero_builder.js reads as id, name, values and hidden.
+// hero_builder.js reads as id, name, values, hidden and sheet.
 func TestHeroBuilderView_HeroesJSON(t *testing.T) {
-	v := &HeroBuilderView{Heroes: []BuilderHero{{ID: "e1", Name: "Tess", Values: map[string]string{"class": "Fury"}, Hidden: []string{}}}}
+	v := &HeroBuilderView{Heroes: []BuilderHero{{ID: "e1", Name: "Tess", Values: map[string]string{"class": "Fury"}, Hidden: []string{}, Sheet: true}}}
 	got := v.HeroesJSON()
-	want := `[{"id":"e1","name":"Tess","values":{"class":"Fury"},"hidden":[]}]`
+	want := `[{"id":"e1","name":"Tess","values":{"class":"Fury"},"hidden":[],"sheet":true}]`
 	if got != want {
 		t.Fatalf("got %s, want %s", got, want)
 	}

@@ -121,6 +121,13 @@ func (s *Session) IsPlanned() bool {
 	return s.Status == StatusPlanned
 }
 
+// AcceptsRSVP reports whether members may still answer this session. A
+// completed or cancelled night is a record of who came, not a question, so
+// answering it would count a player at a game they never played.
+func (s *Session) AcceptsRSVP() bool {
+	return s.Status != StatusCompleted && s.Status != StatusCancelled
+}
+
 // WorldDate is an in-world calendar date as stored on a session. It carries
 // no calendar id: a session's date is a bare year/month/day triple.
 type WorldDate struct {

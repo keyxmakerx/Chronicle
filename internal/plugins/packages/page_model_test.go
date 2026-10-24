@@ -450,3 +450,29 @@ func TestBuildPackagesPage(t *testing.T) {
 		t.Error("an unknown package id must open nothing")
 	}
 }
+
+// An empty version list after a check must say the repository has nothing
+// published; before one it points at the button.
+func TestCheckWording(t *testing.T) {
+	now := time.Date(2026, 10, 3, 12, 0, 0, 0, time.UTC)
+	checked := now.Add(-10 * time.Second)
+	tests := []struct {
+		name     string
+		got      string
+		contains string
+	}{
+		{"never checked, empty", noVersionsText(now, nil), "Press Check now on this package's Settings tab"},
+		{"checked, empty", noVersionsText(now, &checked), "Checked GitHub just now: this repository hasn't published a release yet"},
+		{"never checked, result line", checkResultText(now, nil, 0), "Not checked yet."},
+		{"checked, no releases", checkResultText(now, &checked, 0), "Last checked just now: no releases published yet."},
+		{"checked, one", checkResultText(now, &checked, 1), "Last checked just now: 1 version found."},
+		{"checked, several", checkResultText(now, &checked, 4), "Last checked just now: 4 versions found."},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if !strings.Contains(tt.got, tt.contains) {
+				t.Errorf("got %q, want it to contain %q", tt.got, tt.contains)
+			}
+		})
+	}
+}

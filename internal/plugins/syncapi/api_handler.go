@@ -400,6 +400,11 @@ func (h *APIHandler) ListEntities(c echo.Context) error {
 		items, total, err = h.entitySvc.List(c.Request().Context(), campaignID, typeID, role, userID, opts)
 	}
 	if err != nil {
+		// A caller mistake (a one-letter search) is the caller's to fix, so
+		// it keeps its 4xx instead of reading as a server fault.
+		if appErr, ok := err.(*apperror.AppError); ok && appErr.Code < http.StatusInternalServerError {
+			return appErr
+		}
 		slog.Error("api: failed to list entities", slog.Any("error", err))
 		return apperror.NewInternal(fmt.Errorf("failed to list entities"))
 	}
@@ -614,6 +619,10 @@ func (h *APIHandler) CreateEntity(c echo.Context) error {
 
 	// An absent is_private falls back to the campaign's DefaultVisibility;
 	// an explicit value from the client wins. See entityPrivacyResolver.
+	if err := h.checkFields(c.Request().Context(), c.Param("id"), req.EntityTypeID, nil, req.FieldsData); err != nil {
+		return err
+	}
+
 	isPrivate := h.newEntityPrivacyResolver(c.Param("id")).
 		resolve(c.Request().Context(), req.IsPrivate)
 
@@ -675,6 +684,9 @@ func (h *APIHandler) UpdateEntity(c echo.Context) error {
 	// into the stored one first; absent leaves it nil and the service skips it.
 	fieldsData := req.FieldsData
 	if fieldsData != nil {
+		if err := h.checkFields(ctx, entity.CampaignID, entity.EntityTypeID, entity.FieldsData, fieldsData); err != nil {
+			return err
+		}
 		fieldsData = entities.MergeFieldPatch(entity.FieldsData, fieldsData)
 	}
 
@@ -722,6 +734,10 @@ func (h *APIHandler) UpdateEntityFields(c echo.Context) error {
 	var req apiUpdateFieldsRequest
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request body")
+	}
+
+	if err := h.checkFields(ctx, entity.CampaignID, entity.EntityTypeID, entity.FieldsData, req.FieldsData); err != nil {
+		return err
 	}
 
 	// Partial update, like every other sync API write: fields the client
@@ -993,6 +1009,10 @@ func (h *APIHandler) Sync(c echo.Context) error {
 			// is_private is the exception: absent means "the client has no
 			// opinion", and must fall through to the campaign's default
 			// visibility rather than defaulting to false (public).
+			if err := h.checkFields(ctx, campaignID, change.EntityTypeID, nil, change.FieldsData); err != nil {
+				result.Status, result.Error = "error", apperror.SafeMessage(err)
+				break
+			}
 			entity, err := h.entitySvc.Create(ctx, campaignID, key.UserID, entities.CreateEntityInput{
 				Name:         change.Name.Val(""),
 				EntityTypeID: change.EntityTypeID,
@@ -1022,6 +1042,10 @@ func (h *APIHandler) Sync(c echo.Context) error {
 				// Same merge as the single-entity PUT: Update replaces the map.
 				fieldsData := change.FieldsData
 				if fieldsData != nil {
+					if err := h.checkFields(ctx, campaignID, existing.EntityTypeID, existing.FieldsData, fieldsData); err != nil {
+						result.Status, result.Error = "error", apperror.SafeMessage(err)
+						break
+					}
 					fieldsData = entities.MergeFieldPatch(existing.FieldsData, fieldsData)
 				}
 				_, err := h.entitySvc.Update(entities.WithSyncActor(ctx, h.resolveUserID(c)), change.EntityID, entities.UpdateEntityInput{

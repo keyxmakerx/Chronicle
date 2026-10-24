@@ -1,6 +1,7 @@
 package ai_workspace
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -161,6 +162,13 @@ func pageWhatLead(page importer.ParsedPage) string {
 	return "Add the page"
 }
 
+// renamesOnConflict reports whether a row that names an existing page makes
+// a second page beside it. Only an add does; a change or a removal works on
+// the existing page, and an era row writes a version of it.
+func renamesOnConflict(page importer.ParsedPage) bool {
+	return !page.FrontMatter.IsEra() && page.FrontMatter.Action == importer.ActionCreate
+}
+
 // pageDetail is the plain line under a page row: where it goes and who sees it.
 func pageDetail(page importer.ParsedPage, cls importer.Classification) string {
 	if page.FrontMatter.IsEra() || page.FrontMatter.Action == importer.ActionDelete {
@@ -234,4 +242,14 @@ func repeatSay(d ImportReviewData, src int) string {
 		return "Already applied on " + w + ". "
 	}
 	return ""
+}
+
+// sheetCheckJSON is a sheet check's data attribute; "{}" for anything that
+// can't be written as JSON, so the widget reads an empty sheet.
+func sheetCheckJSON(v any) string {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return "{}"
+	}
+	return string(b)
 }

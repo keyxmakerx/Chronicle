@@ -118,6 +118,18 @@ func (r *sessionRepository) MarkNotificationRead(ctx context.Context, userID, no
 	return nil
 }
 
+// MarkNotificationsReadForLink marks the user's unread notifications of one
+// type pointing at link read, scoped to their owner like MarkNotificationRead.
+func (r *sessionRepository) MarkNotificationsReadForLink(ctx context.Context, userID, ntype, link string) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE notifications SET read_at = ? WHERE user_id = ? AND type = ? AND link = ? AND read_at IS NULL`,
+		time.Now().UTC(), userID, ntype, link)
+	if err != nil {
+		return fmt.Errorf("marking notifications read for a link: %w", err)
+	}
+	return nil
+}
+
 // MarkAllNotificationsRead marks every unread notification for a user read.
 func (r *sessionRepository) MarkAllNotificationsRead(ctx context.Context, userID string) error {
 	_, err := r.db.ExecContext(ctx,

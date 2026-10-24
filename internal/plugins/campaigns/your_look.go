@@ -1,9 +1,11 @@
 package campaigns
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
 
 	"github.com/a-h/templ"
 	"github.com/labstack/echo/v4"
@@ -17,6 +19,33 @@ import (
 // empty value clears the member's pick, so they follow the campaign again.
 type lookPickRequest struct {
 	Value *string `json:"value"`
+}
+
+// SheetChecker reports whether a campaign's game system draws a character
+// sheet. Avoids importing the systems package.
+type SheetChecker interface {
+	CampaignHasSheet(ctx context.Context, campaignID string) bool
+}
+
+// SetSheetChecker wires the sheet check "Your look" uses to leave out the
+// character sheet styles when there is no sheet for them to dress.
+func (h *Handler) SetSheetChecker(c SheetChecker) {
+	h.sheetChecker = c
+}
+
+// ShownLookParts drops the character sheet part when hasSheet says the
+// campaign has no sheet: its styles would save and change nothing the member
+// can find. hasSheet is asked only when the sheet part is there, and a nil
+// check keeps every part.
+func ShownLookParts(parts []LookPart, hasSheet func() bool) []LookPart {
+	if hasSheet == nil {
+		return parts
+	}
+	i := slices.IndexFunc(parts, func(p LookPart) bool { return p.Key == LookPartSheet })
+	if i < 0 || hasSheet() {
+		return parts
+	}
+	return slices.Delete(slices.Clone(parts), i, i+1)
 }
 
 // YourLook is the page where a member sets the parts of the look the owner let
@@ -37,8 +66,12 @@ func (h *Handler) YourLook(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	var hasSheet func() bool
+	if h.sheetChecker != nil {
+		hasSheet = func() bool { return h.sheetChecker.CampaignHasSheet(ctx, cc.Campaign.ID) }
+	}
 	var parts []yourLookPart
-	for _, p := range PickableParts(ap, cc) {
+	for _, p := range ShownLookParts(PickableParts(ap, cc), hasSheet) {
 		parts = append(parts, yourLookPart{
 			Part:     p,
 			URL:      fmt.Sprintf("/campaigns/%s/my-look/%s", cc.Campaign.ID, p.Key),

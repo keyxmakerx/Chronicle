@@ -73,7 +73,7 @@ templ App(title string) {
 					<div class="bg-amber-500/15 border-b border-amber-500/30 px-4 py-1.5 text-center text-sm text-amber-300" data-pv-banner>
 						<i class="fa-solid fa-eye-slash mr-1"></i>
 						Viewing as player
-						<span class="text-amber-400/70 ml-1">— owner-only content is hidden</span>
+						<span class="text-amber-400/70 ml-1">— { GMTerm(ctx) }-only content is hidden</span>
 					</div>
 				}
 
@@ -882,8 +882,9 @@ templ Topbar() {
 				</button>
 			}
 
-			<!-- View as player toggle (campaign owners only) -->
-			if InCampaign(ctx) && IsOwner(ctx) {
+			<!-- View as player toggle, for the owner and co-DMs. While it is on a
+			     co-DM reads as having no DM grant, hence IsViewingAsPlayer. -->
+			if InCampaign(ctx) && (IsOwner(ctx) || IsDmGranted(ctx) || IsViewingAsPlayer(ctx)) {
 				<button
 					hx-post={ "/campaigns/" + GetCampaignID(ctx) + "/toggle-view-mode" }
 					data-pv-toggle
@@ -893,7 +894,7 @@ templ Topbar() {
 						"btn-ghost btn-icon",
 						templ.KV("!bg-amber-500/20 !text-amber-400 hover:!bg-amber-500/30", IsViewingAsPlayer(ctx)),
 					}
-					title={ func() string { if IsViewingAsPlayer(ctx) { return "Viewing as player — click to return to owner view" }; return "View as player" }() }
+					title={ func() string { if IsViewingAsPlayer(ctx) { return "Viewing as player — click to go back to your own view" }; return "View as player" }() }
 				>
 					<i class={ "fa-solid text-xs", templ.KV("fa-eye-slash", IsViewingAsPlayer(ctx)), templ.KV("fa-eye", !IsViewingAsPlayer(ctx)) }></i>
 				</button>

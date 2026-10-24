@@ -195,8 +195,11 @@
   // must not also run, or one press would close both layers.
   function onEscape(e) {
     if (e.key !== 'Escape' || !cur) return;
-    // A dialog or menu inside the page (an editor popup) gets its own Escape.
+    // A dialog or menu inside the page (an editor popup, the encounter
+    // builder) gets its own Escape.
     if (e.defaultPrevented) return;
+    var inner = e.target && e.target.closest && e.target.closest('[aria-modal="true"]');
+    if (inner && inner !== cur.el) return;
     e.preventDefault();
     e.stopImmediatePropagation();
     close();

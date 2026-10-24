@@ -2202,9 +2202,9 @@ func (s *entityService) CreateEntityType(ctx context.Context, campaignID string,
 	}
 	// A creature type shows the game system's creature panels (a stat block)
 	// from the start, and a sub-type shows the panels where its parent does.
-	creature := isCreatureType(EntityType{Slug: slug, PresetCategory: presetCategory})
+	layout = withCreaturePanels(EntityType{Slug: slug, PresetCategory: presetCategory}, layout)
 	inherits := parent != nil && !pcType && layoutPlacesBlock(parent.Layout, BlockSystemPanels)
-	if (creature || inherits) && !layoutPlacesBlock(layout, BlockSystemPanels) {
+	if inherits && !layoutPlacesBlock(layout, BlockSystemPanels) {
 		layout = insertAfterTitle(layout, TemplateBlock{ID: "blk-system-panels", Type: BlockSystemPanels})
 	}
 

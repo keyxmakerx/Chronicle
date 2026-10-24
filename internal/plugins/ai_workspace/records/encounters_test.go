@@ -103,6 +103,7 @@ func TestEncounterKind_Plan(t *testing.T) {
 		action   string
 		fields   map[string]any
 		existing bool
+		made     []string // slugs of pages this paste makes
 		wantErr  string
 		wantSum  string
 		wantWarn string
@@ -112,13 +113,15 @@ func TestEncounterKind_Plan(t *testing.T) {
 		{name: "create", action: ActionCreate, fields: map[string]any{"creatures": creatures, "heroes": []any{"Ash", "Bryn"}},
 			wantSum: "7 creatures, 1 start hidden, 4 arrive later, for 2 heroes", wantWarn: `"Skeleton Archer" is not a page yet`},
 		{name: "create twice", action: ActionCreate, existing: true, wantErr: "use action: update"},
-		{name: "page made in this paste", action: ActionCreate, fields: map[string]any{"page": "New Trial"}, wantWarn: "must be created in this import"},
+		{name: "page made in this paste", action: ActionCreate, fields: map[string]any{"page": "New Trial"}, made: []string{"new-trial"}, wantSum: "0 creatures"},
+		{name: "page nowhere", action: ActionCreate, fields: map[string]any{"page": "New Trial"}, wantErr: `no page called "New Trial"; add it to this paste`},
 		{name: "update keeps creatures", action: ActionUpdate, existing: true, fields: map[string]any{"ready": true}, wantSum: "1 creature, 1 start hidden, for 1 hero"},
 		{name: "update missing", action: ActionUpdate, wantErr: "no encounter called"},
 		{name: "update on a missing page", action: ActionUpdate, fields: map[string]any{"page": "Nowhere"}, wantErr: "no page called"},
 		{name: "delete", action: ActionDelete, existing: true, wantSum: "removes the encounter"},
 		{name: "bad line", action: ActionCreate, fields: map[string]any{"creatures": []any{"Rat, group Q"}}, wantErr: "not a group"},
-		{name: "missing hero", action: ActionCreate, fields: map[string]any{"heroes": []any{"Zed"}}, wantWarn: `No hero page called "Zed"`},
+		{name: "missing hero", action: ActionCreate, fields: map[string]any{"heroes": []any{"Zed"}}, wantErr: `no hero page called "Zed"`},
+		{name: "hero made in this paste", action: ActionCreate, fields: map[string]any{"heroes": []any{"Zed"}}, made: []string{"zed"}, wantSum: "0 creatures, for 1 hero"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -131,7 +134,12 @@ func TestEncounterKind_Plan(t *testing.T) {
 				a = owner
 			}
 			k := EncounterKind{Svc: svc, Entities: encounterPages()}
-			p := k.Plan(context.Background(), camp, a, encounterRecord(tc.action, tc.fields))
+			r := encounterRecord(tc.action, tc.fields)
+			r.Made = map[string]bool{}
+			for _, s := range tc.made {
+				r.Made[s] = true
+			}
+			p := k.Plan(context.Background(), camp, a, r)
 			if tc.wantErr != "" {
 				if !strings.Contains(p.Error, tc.wantErr) {
 					t.Fatalf("want error %q, got %+v", tc.wantErr, p)
