@@ -713,10 +713,7 @@ func entityBlockTextContent(config map[string]any) string {
 		return ""
 	}
 	s, _ := v.(string)
-	if s == "" {
-		return ""
-	}
-	return sanitize.HTML(s)
+	return sanitize.TextBlock(s)
 }
 
 // blockChildren renders a sub-pages section showing direct children of this entity,

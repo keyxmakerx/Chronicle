@@ -16,7 +16,7 @@ func renderGameSystemCard(t *testing.T, settings string) string {
 	t.Helper()
 	cc := &CampaignContext{Campaign: &Campaign{ID: "camp-1", Name: "Test", Settings: settings}}
 	var buf bytes.Buffer
-	if err := gameSystemCard(cc, "[]").Render(context.Background(), &buf); err != nil {
+	if err := gameSystemCard(cc, "[]", currentSystemID(cc.Campaign.ParseSettings().SystemID, nil)).Render(context.Background(), &buf); err != nil {
 		t.Fatalf("render failed: %v", err)
 	}
 	return buf.String()
@@ -55,5 +55,21 @@ func TestSettingsGeneralTab_NoLongerHoldsPicker(t *testing.T) {
 	}
 	if !strings.Contains(html, "/campaigns/camp-1/extensions") {
 		t.Error("General tab should link to the Game & features page")
+	}
+}
+
+// The save posts to the campaign read in init(). Reading $el.dataset inside
+// the @change handler gets the select's dataset, which has no campaign id,
+// and the save went to /campaigns/undefined/system.
+func TestGameSystemCard_SaveUsesCampaignReadInInit(t *testing.T) {
+	html := renderGameSystemCard(t, `{"system_id":"dnd5e"}`)
+	if !strings.Contains(html, `data-campaign-id="camp-1"`) {
+		t.Errorf("campaign id attribute missing\nrendered: %s", html)
+	}
+	if got := strings.Count(html, "$el.dataset"); got != 1 {
+		t.Errorf("$el.dataset read %d times, want once (in init)\nrendered: %s", got, html)
+	}
+	if !strings.Contains(html, "this.campaignId + ") {
+		t.Errorf("save does not build its URL from the stored campaign id\nrendered: %s", html)
 	}
 }

@@ -58,7 +58,12 @@ func (h *PageFileHandler) Section(c echo.Context) error {
 		return c.NoContent(http.StatusNoContent)
 	}
 	entityID := c.Param("eid")
-	listing, err := h.svc.List(c.Request().Context(), cc.Campaign.ID, entityID, pageFileViewer(c, cc))
+	// An owner viewing as a player gets the player's list and no Attach.
+	viewer := cc
+	if campaigns.ViewingAsPlayer(c, cc) {
+		viewer = cc.PlayerPreview()
+	}
+	listing, err := h.svc.List(c.Request().Context(), cc.Campaign.ID, entityID, pageFileViewer(c, viewer))
 	if err != nil {
 		if apperror.SafeCode(err) >= http.StatusInternalServerError {
 			slog.Error("page files: listing failed", slog.String("entity_id", entityID), slog.Any("error", err))

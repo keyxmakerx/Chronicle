@@ -599,6 +599,12 @@ func (h *Handler) Show(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	// An owner viewing as a player gets the page drawn for a player, without
+	// Edit page, the pens or the empty-picture upload. Access was decided
+	// above on the real role.
+	if campaigns.ViewingAsPlayer(c, p.cc) {
+		p.cc = p.cc.PlayerPreview()
+	}
 	return middleware.Render(c, http.StatusOK, EntityShowPage(p.cc, p.entity, p.entityType, p.ancestors, p.children, p.showAttributes, p.showCalendar, p.claimingEnabled, p.ownerName, p.csrfToken, p.userID))
 }
 
@@ -759,7 +765,7 @@ func (h *Handler) prepareShowFor(c echo.Context, entityID string) (*showPage, er
 	ctx = withPageChildren(ctx, children)
 	ctx = withPlayerHidden(ctx, playerHidden)
 	ctx = withPagePlaces(ctx, h.loadPagePlaces(c.Request().Context(), cc, entity,
-		cc.MemberRole >= campaigns.RoleScribe && access.CanEdit, userID))
+		cc.MemberRole >= campaigns.RoleScribe && access.CanEdit && !campaigns.ViewingAsPlayer(c, cc), userID))
 	ctx = withPageParent(ctx, parentOfEntity(entity, ancestors))
 
 	// The items-and-money panel another plugin serves: drawn where the layout

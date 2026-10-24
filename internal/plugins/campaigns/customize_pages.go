@@ -225,10 +225,11 @@ func (h *Handler) CustomizeHome(c echo.Context) error {
 	if !validHomeKey(key) {
 		return apperror.NewNotFound("that home doesn't exist")
 	}
-	tab := homeTabFor(key)
-	crumbs := []CustomizeCrumb{{Label: "Home pages", Href: h.customizeBase(cc) + "/home"}, {Label: tab.Label}}
-	return h.renderCustomize(c, cc, "home", "Home pages - "+tab.Label, crumbs, nil,
-		customizeHomePages(cc, key, h.homeHint(cc, key), h.homeEditorState(cc, key)))
+	ctx := c.Request().Context()
+	name := homeTabFor(key).label(ctx)
+	crumbs := []CustomizeCrumb{{Label: "Home pages", Href: h.customizeBase(cc) + "/home"}, {Label: name}}
+	return h.renderCustomize(c, cc, "home", "Home pages - "+name, crumbs, nil,
+		customizeHomePages(cc, key, h.homeHint(ctx, cc, key), h.homeEditorState(ctx, cc, key)))
 }
 
 // customizeCategoriesData is what the Categories area's script draws from.

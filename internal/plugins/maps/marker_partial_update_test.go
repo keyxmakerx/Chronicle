@@ -148,7 +148,7 @@ func TestMarkerClients_SendOnlyWhatTheyMean(t *testing.T) {
 	}
 	for _, want := range []string{
 		"body.description = fd.get('description') || null;",
-		"entityInput.dataset.original = entityInput.value;",
+		"entityInput.dataset.original = mk.entity_id || '';",
 		"if (!markerID || entityVal !== entityOriginal) {",
 		"body.entity_id = entityVal || null;",
 	} {
