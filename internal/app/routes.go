@@ -3882,6 +3882,9 @@ func (a *App) RegisterRoutes() {
 		"/static/js/calendar_open.js",
 		"/static/js/widgets/rulebook.js",
 		"/static/js/widgets/rulebook_editor.js",
+		// Mounts on the availability page's data-availability-root; it needs
+		// Chronicle.apiFetch, so it has to run after boot.js.
+		"/static/js/availability.js",
 		// After boot.js, so Chronicle exists before a token can arrive. It
 		// does nothing on pages without #notes-embed.
 		"/static/js/notes_embed.js",
