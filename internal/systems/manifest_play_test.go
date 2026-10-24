@@ -154,13 +154,28 @@ func TestPlayWarningsSurviveRevalidate(t *testing.T) {
 	}
 }
 
-func TestPlayOptionsAreEscaped(t *testing.T) {
-	m := playManifest(t, `{"key":"c","label":"C","type":"string","play":{"edit":"owner","kind":"conditions","options":["<b>dazed</b>"]}}`)
-	if err := ValidateManifest(m); err != nil {
-		t.Fatalf("validate: %v", err)
+// TestManifestTextStoredAsWritten pins that loading a manifest keeps its text
+// as written: output escapes it, so escaping on load as well showed "D&amp;D".
+// Validating twice must not change it either.
+func TestManifestTextStoredAsWritten(t *testing.T) {
+	m := playManifest(t, `{"key":"c","label":"Mage's <b>C</b>","type":"string","play":{"edit":"owner","kind":"conditions","options":["Mage's Apprentice","R&D"]}}`)
+	m.Name, m.Description = "D&D 5th Edition (2024)", "Dungeons & Dragons"
+	for i := 0; i < 2; i++ {
+		if err := ValidateManifest(m); err != nil {
+			t.Fatalf("validate: %v", err)
+		}
 	}
-	fields := m.EntityPresets[0].Fields
-	if got := fields[len(fields)-1].Play.Options[0]; got != "&lt;b&gt;dazed&lt;/b&gt;" {
-		t.Errorf("option = %q, want it HTML-escaped", got)
+	f := m.EntityPresets[0].Fields[len(m.EntityPresets[0].Fields)-1]
+	checks := []struct{ got, want string }{
+		{m.Name, "D&D 5th Edition (2024)"},
+		{m.Description, "Dungeons & Dragons"},
+		{f.Label, "Mage's <b>C</b>"},
+		{f.Play.Options[0], "Mage's Apprentice"},
+		{f.Play.Options[1], "R&D"},
+	}
+	for _, c := range checks {
+		if c.got != c.want {
+			t.Errorf("got %q, want %q", c.got, c.want)
+		}
 	}
 }

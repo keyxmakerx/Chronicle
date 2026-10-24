@@ -26,7 +26,7 @@ templ ProposalListPage(cc *campaigns.CampaignContext, summaries []ProposalSummar
 		<div class="max-w-4xl mx-auto">
 			@components.Breadcrumbs([]components.BreadcrumbItem{
 				{Label: cc.Campaign.Name, Href: fmt.Sprintf("/campaigns/%s", cc.Campaign.ID), Icon: "fa-dice-d20"},
-				{Label: "Sessions", Href: fmt.Sprintf("/campaigns/%s/sessions", cc.Campaign.ID)},
+				{Label: "Game nights", Href: fmt.Sprintf("/campaigns/%s/sessions", cc.Campaign.ID)},
 				{Label: "Proposals"},
 			})
 			@ProposalListFragment(cc, summaries, viewerTZ, canManage)

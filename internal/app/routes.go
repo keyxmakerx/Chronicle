@@ -4903,6 +4903,7 @@ func (a *App) RegisterRoutes() {
 
 	campaignHandler.SetAuditLogger(&campaignAuditAdapter{svc: auditService})
 	campaignHandler.SetAddonLister(&addonListerAdapter{svc: addonService})
+	campaignHandler.SetSheetChecker(campaignSheetChecker{addons: addonService})
 	campaignHandler.SetSystemAddonEnabler(addonService)
 	campaignHandler.SetMediaUploader(&backdropUploaderAdapter{svc: mediaService})
 	campaignHandler.SetSMTPChecker(smtpService)
@@ -5429,7 +5430,11 @@ func (a *App) RegisterRoutes() {
 			// fragment skips the read, as the view prefs above do.
 			if sess := auth.GetSession(c); sess != nil && cc.IsMember && !middleware.IsHTMX(c) {
 				ap := campaignSettings.Appearance
-				ctx = layouts.SetHasYourLook(ctx, len(campaigns.PickableParts(ap, cc)) > 0)
+				sheets := campaignSheetChecker{addons: addonService}
+				shown := campaigns.ShownLookParts(campaigns.PickableParts(ap, cc), func() bool {
+					return sheets.CampaignHasSheet(c.Request().Context(), cc.Campaign.ID)
+				})
+				ctx = layouts.SetHasYourLook(ctx, len(shown) > 0)
 				picks, err := campaignService.MemberLookPicks(c.Request().Context(), cc, sess.UserID)
 				if err != nil {
 					slog.Warn("reading member look picks", slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", err))

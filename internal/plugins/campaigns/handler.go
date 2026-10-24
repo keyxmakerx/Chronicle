@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -169,6 +170,7 @@ type Handler struct {
 	// placeholders when either is unwired.
 	extensionDashboardFactories []func(*CampaignContext) ExtensionDashboard
 	extensionEnableChecker      ExtensionEnableChecker
+	sheetChecker                SheetChecker
 }
 
 // NewHandler creates a new campaign handler.
@@ -377,6 +379,12 @@ func (h *Handler) Show(c echo.Context) error {
 	}
 
 	csrfToken := middleware.GetCSRFToken(c)
+
+	// JoinByCode sends a new player here with ?joined=1. Only a member is told
+	// they joined, so a copied link says nothing to anyone else.
+	if c.QueryParam("joined") == "1" && cc.MemberRole >= RolePlayer {
+		c.SetRequest(c.Request().WithContext(layouts.SetFlashSuccess(c.Request().Context(), "You joined "+cc.Campaign.Name+". Welcome to the table.")))
+	}
 
 	// VTT update-available banner is lazy-loaded from foundry_vtt's
 	// /foundry-vtt/show-banner-fragment route; the fragment endpoint
@@ -1664,6 +1672,8 @@ func (h *Handler) RevokeJoinCode(c echo.Context) error {
 }
 
 // JoinByCode handles a user joining a campaign via invite code (GET /join/:code).
+// It lands them inside the campaign, with a welcome line when they have just
+// joined, rather than on the campaign list where the new one is easy to miss.
 func (h *Handler) JoinByCode(c echo.Context) error {
 	code := c.Param("code")
 	if code == "" {
@@ -1672,16 +1682,21 @@ func (h *Handler) JoinByCode(c echo.Context) error {
 
 	userID := auth.GetUserID(c)
 	if userID == "" {
-		// Redirect to login, preserving the join URL.
-		return c.Redirect(http.StatusFound, fmt.Sprintf("/login?next=/join/%s", code))
+		// RequireAuth answers first on this route; this is the same hand-off
+		// in case it ever doesn't. Login reads "redirect".
+		return c.Redirect(http.StatusFound, "/login?redirect="+url.QueryEscape("/join/"+code))
 	}
 
-	if err := h.service.JoinByCode(c.Request().Context(), code, userID); err != nil {
+	campaign, joined, err := h.service.JoinByCode(c.Request().Context(), code, userID)
+	if err != nil {
 		return err
 	}
 
-	// Redirect to the campaigns list; the user is now a member.
-	return c.Redirect(http.StatusFound, "/campaigns")
+	dest := "/campaigns/" + campaign.ID
+	if joined {
+		dest += "?joined=1"
+	}
+	return c.Redirect(http.StatusFound, dest)
 }
 
 // UpdateSystemID sets the game system for a campaign (PUT /campaigns/:id/system).
