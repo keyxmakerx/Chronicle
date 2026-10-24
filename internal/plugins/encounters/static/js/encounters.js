@@ -824,10 +824,17 @@
       return api(S, 'GET', apiBase(S) + '/entities?type_id=' + tid + '&per_page=8&q=' + encodeURIComponent(q))
         .catch(function () { return null; });
     })).then(function (pages) {
-      var out = [], seen = {};
+      // A category's search also covers its sub-categories, which can hold
+      // heroes (Player Characters under Characters), so only pages of a
+      // category the server named are offered.
+      var out = [], seen = {}, ok = {};
+      types.forEach(function (tid) { ok[tid] = true; });
       pages.forEach(function (env) {
         ((env && env.data) || []).forEach(function (p) {
-          if (!seen[p.id]) { seen[p.id] = true; out.push({ entityId: p.id, name: p.name }); }
+          if (!seen[p.id] && (p.entity_type_id === undefined || ok[p.entity_type_id])) {
+            seen[p.id] = true;
+            out.push({ entityId: p.id, name: p.name });
+          }
         });
       });
       return out.slice(0, 8);

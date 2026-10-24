@@ -19,8 +19,10 @@ func (p *pickerTypesEntities) GetEntityTypes(context.Context, string) ([]entitie
 
 type pickerTypesLists struct{ chars, npcs []int }
 
-func (p pickerTypesLists) CharacterTypeIDs(context.Context, string) ([]int, error) { return p.chars, nil }
-func (p pickerTypesLists) NPCTypeIDs(context.Context, string) ([]int, error)       { return p.npcs, nil }
+func (p pickerTypesLists) CharacterTypeIDs(context.Context, string) ([]int, error) {
+	return p.chars, nil
+}
+func (p pickerTypesLists) NPCTypeIDs(context.Context, string) ([]int, error) { return p.npcs, nil }
 
 // The builder's pickers follow the campaign's own lists: a default campaign's
 // Character and Creature types carry no preset, so a preset match finds none.
