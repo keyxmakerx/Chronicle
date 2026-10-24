@@ -86,6 +86,15 @@ func canChangeOwnPage(ctx context.Context, cc *campaigns.CampaignContext, entity
 	return !eraViewOf(ctx).Shown() && CanEditOwnPage(cc.MemberRole, entity, layouts.GetUserID(ctx))
 }
 
+// surfacePictureEndpoint is where the hero sheet's portrait saves a new
+// picture, or "" when the viewer may not change it.
+func surfacePictureEndpoint(ctx context.Context, cc *campaigns.CampaignContext, entity *Entity) string {
+	if !canChangeOwnPage(ctx, cc, entity) {
+		return ""
+	}
+	return widgetEndpoint(ctx, cc.Campaign.ID, entity.ID, "image")
+}
+
 // canWriteDescription is canChangeOwnPage for the description: a player is
 // not offered a text holding parts they cannot see, which only the Director
 // may change (ownerEntryWrite refuses that save).

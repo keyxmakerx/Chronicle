@@ -28,16 +28,37 @@
   }
 
   // Identity: portrait + type. The entity name rides the box title bar, so the
-  // body shows the portrait and type only (no duplicate name).
+  // body shows the portrait and type only (no duplicate name). When the viewer
+  // may change the picture (the seed carries `picture`), the portrait is the
+  // shared image-upload widget's picker, and the whole row hosts its progress
+  // and error bars, which need more room than the portrait.
   surface.registerBox('char-header', function (def, d) {
     d = d || {};
-    var portrait = d.image
-      ? '<img class="cs-ch__portrait" src="' + esc(d.image) + '" alt="">'
-      : '<div class="cs-ch__portrait cs-ch__portrait--empty"><i class="fa-solid fa-user"></i></div>';
+    var p = d.picture;
+    var img = d.image ? '<img class="cs-ch__portrait" src="' + esc(d.image) + '" alt="">' : '';
+    var portrait;
+    if (p && p.endpoint) {
+      portrait = d.image
+        ? '<button type="button" class="cs-ch__pick" data-pick aria-label="Change picture">' + img +
+          '<span class="fx-chip"><i class="fa-solid fa-camera"></i> Change</span></button>'
+        : '<button type="button" class="cs-ch__pick cs-ch__portrait cs-ch__portrait--empty cs-ch__portrait--add" data-pick>' +
+          '<i class="fa-solid fa-camera"></i><span>Add a picture</span></button>';
+    } else {
+      portrait = img || '<div class="cs-ch__portrait cs-ch__portrait--empty"><i class="fa-solid fa-user"></i></div>';
+    }
     var sub = esc(d.typeName || '');
     if (d.typeLabel) sub += ' · ' + esc(d.typeLabel);
-    return '<div class="cs-ch__head">' + portrait +
-      '<div class="cs-ch__id">' + (sub ? '<div class="cs-ch__sub">' + sub + '</div>' : '') + '</div></div>';
+    var inner = portrait +
+      '<div class="cs-ch__id">' + (sub ? '<div class="cs-ch__sub">' + sub + '</div>' : '') + '</div>';
+    if (!(p && p.endpoint)) return '<div class="cs-ch__head">' + inner + '</div>';
+    var head = document.createElement('div');
+    head.className = 'cs-ch__head cs-ch__head--pick';
+    head.setAttribute('data-widget', 'image-upload');
+    head.setAttribute('data-endpoint', p.endpoint);
+    head.setAttribute('data-upload-url', p.uploadUrl || '/media/upload');
+    head.setAttribute('data-csrf-token', p.csrf || '');
+    head.innerHTML = inner;
+    return head;
   });
 
   // Details: the entity's custom fields, grouped by section.
@@ -82,6 +103,15 @@
         'background:var(--surface-alt,#f3f4f6);}',
       '.cs-ch__portrait--empty{display:flex;align-items:center;justify-content:center;' +
         'color:var(--surface-text-muted,#9ca3af);font-size:30px;}',
+      '.cs-ch__head--pick{position:relative;min-height:96px;}',
+      '.cs-ch__pick{position:relative;flex:none;padding:0;border:0;background:none;border-radius:14px;cursor:pointer;font:inherit;}',
+      // The chip only labels the picker; the whole portrait is the touch target.
+      '.cs-ch__pick .fx-chip{bottom:6px;height:22px;padding:0 8px;font-size:11px;pointer-events:none;}',
+      '.cs-ch__pick:focus-visible{outline:2px solid var(--color-accent,#6366f1);outline-offset:2px;}',
+      '.cs-ch__portrait--add{flex-direction:column;gap:4px;font-size:20px;border:1px dashed var(--surface-border,#d1d5db);' +
+        'transition:border-color var(--dur-micro,120ms),color var(--dur-micro,120ms);}',
+      '.cs-ch__portrait--add span{font-size:11px;font-weight:600;}',
+      '.cs-ch__portrait--add:hover{border-color:var(--color-accent,#6366f1);color:var(--color-accent,#6366f1);}',
       '.cs-ch__name{font-size:20px;font-weight:700;color:var(--surface-text,#111827);line-height:1.2;}',
       '.cs-ch__sub{margin-top:3px;font-size:13px;color:var(--surface-text-muted,#6b7280);}',
       '.cs-ch__sec{margin:10px 0 6px;font-size:11px;font-weight:600;text-transform:uppercase;' +
