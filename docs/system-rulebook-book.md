@@ -261,8 +261,8 @@ package files are never touched, so updating the package does not overwrite
 anything a campaign wrote; a page a campaign edited that the package has since
 changed is flagged so the Director can choose which text to keep.
 
-The campaign owner can also have an AI write house rules: Settings, Data & AI,
-then the AI tool's prompt with **House rules** as its content. The AI answers
+The campaign owner can also have an AI write house rules: on the campaign's
+Your AI page, ask your AI for something with **House rules** as its content. The AI answers
 with `kind: house-rule` blocks whose front matter is a chapter file like the
 one above (`intro`, `director`, `pages`), and the owner reads the pages, drawn
 in the Handbook's own look, before anything is saved.

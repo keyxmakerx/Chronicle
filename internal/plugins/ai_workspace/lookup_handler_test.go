@@ -40,14 +40,14 @@ func postLookup(t *testing.T, h *Handler, form url.Values) string {
 }
 
 // A paste with lookups is answered, never reviewed or written; the answer
-// follows the privacy picked on the panel, Safe by default.
+// follows the page's copy-and-paste privacy choice, Safe by default.
 func TestImport_LookupsAreAnswered(t *testing.T) {
 	m := &memTables{doc: records.TableDoc{Tables: []records.Table{{ID: "loot", Name: "Loot", Entries: []records.Entry{{Name: "Gem", Weight: 1}}}}}}
 	h := recordsHandler(m)
 	h.SetLookups(&records.Lookups{Tables: m})
 
 	safe := postLookup(t, h, url.Values{"markdown_paste": {lookupFixture}})
-	for _, want := range []string{"Answer for your AI", "1 lookup.", "1 other block was left out", "left out in Safe privacy", `<option value="safe" selected>`} {
+	for _, want := range []string{"Answer for your AI", "1 lookup.", "1 other block was left out", "left out while your AI sees what players see", "Answered with what players see"} {
 		if !strings.Contains(safe, want) {
 			t.Errorf("safe answer missing %q", want)
 		}
@@ -57,7 +57,7 @@ func TestImport_LookupsAreAnswered(t *testing.T) {
 	}
 
 	permitted := postLookup(t, h, url.Values{"markdown_paste": {lookupFixture}, "lookup_privacy": {"permitted"}})
-	if !strings.Contains(permitted, "- Gem") || !strings.Contains(permitted, `<option value="permitted" selected>`) {
+	if !strings.Contains(permitted, "- Gem") || !strings.Contains(permitted, "Answered with what you see") {
 		t.Errorf("permitted answer lacks the table:\n%s", permitted)
 	}
 	if len(m.doc.Tables) != 1 {
@@ -65,15 +65,16 @@ func TestImport_LookupsAreAnswered(t *testing.T) {
 	}
 }
 
-// The AI tool is one box: copy a prompt, paste (open), export.
-func TestSettingsTab_OneAIToolBox(t *testing.T) {
+// The copy-and-paste tool is one box: the one privacy choice, then ask,
+// paste (open), give the whole campaign.
+func TestAIPage_OneCopyPasteBox(t *testing.T) {
 	cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1", Name: "Ashfall"}, MemberRole: campaigns.RoleOwner}
 	var buf bytes.Buffer
-	if err := aiToolSection(cc).Render(context.Background(), &buf); err != nil {
+	if err := aiCopyPasteSection(cc).Render(context.Background(), &buf); err != nil {
 		t.Fatal(err)
 	}
 	html := buf.String()
-	order := []string{"AI tool", "Copy a prompt for your AI", "Paste what your AI gives you", "Export the whole campaign for AI"}
+	order := []string{"When you copy, what may your AI see?", "Ask your AI for something", "Paste what your AI gives you", "Give your AI the whole campaign"}
 	at := -1
 	for _, s := range order {
 		i := strings.Index(html, s)
@@ -82,7 +83,7 @@ func TestSettingsTab_OneAIToolBox(t *testing.T) {
 		}
 		at = i
 	}
-	for _, id := range []string{`id="ai-prompt-modal-host"`, `id="ai-import-review-host"`, `id="ai-export-modal-host"`, `x-data="{ open: 'paste' }"`} {
+	for _, id := range []string{`id="ai-prompt-modal-host"`, `id="ai-import-review-host"`, `id="ai-export-modal-host"`, `ai-sees-camp-1`} {
 		if !strings.Contains(html, id) {
 			t.Errorf("box missing %s", id)
 		}

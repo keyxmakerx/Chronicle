@@ -1,0 +1,281 @@
+// ai_page.templ is the campaign's Your AI page: connect an AI app (it can
+// only look things up for now), see what it did, or use copy and paste.
+
+package ai_workspace
+
+import (
+	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/connector"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// AIPageView is the whole page.
+templ AIPageView(cc *campaigns.CampaignContext, v ConnectView) {
+	@layouts.App(cc.Campaign.Name + " - Your AI") {
+		<link rel="stylesheet" href={ layouts.AssetURL("/static/css/ai_page.css") }/>
+		<div class="max-w-5xl mx-auto px-4 py-6" data-ai-page>
+			@layouts.ManageHeader("Your AI")
+			<p class="-mt-4 mb-6 text-sm text-fg-secondary max-w-prose">
+				Connect your AI app once and it can look things up in this campaign for you, with no copying back and forth. For now it can only read: nothing it does can change your campaign.
+			</p>
+			@aiConnectSection(v)
+			@aiCopyPasteSection(cc)
+		</div>
+	}
+}
+
+// aiConnectSection is the part the connect, new-key and disconnect requests
+// swap: the connection's state and what it did.
+templ aiConnectSection(v ConnectView) {
+	<div id="ai-connect" class="space-y-8">
+		if !v.Available {
+			<section class="aic-panel">
+				<p class="text-sm text-fg-secondary">Connecting an AI app isn't available on this Chronicle site. Copy and paste, below, works with every AI.</p>
+			</section>
+		} else if v.NewKey != "" {
+			@aiNewKey(v)
+		} else if connStatus(v) == "waiting" || connStatus(v) == "connected" {
+			@aiStatus(v)
+		} else {
+			@aiConnectForm(v, false)
+		}
+		if v.Available {
+			@aiActivityList(v)
+		}
+	</div>
+}
+
+// aiConnectForm is the choice of what the AI may see and how connecting
+// works, ending in Make a key. replacing says a key exists and will stop.
+templ aiConnectForm(v ConnectView, replacing bool) {
+	<form
+		hx-post={ fmt.Sprintf("/campaigns/%s/ai/connection", v.CampaignID) }
+		hx-target="#ai-connect"
+		hx-swap="outerHTML"
+		hx-disabled-elt="find button[type=submit]"
+		class="grid gap-5 md:grid-cols-2 items-start"
+		aria-label="Connect your AI app"
+	>
+		<section class="aic-panel space-y-3" aria-labelledby="ai-sees-heading">
+			<h2 id="ai-sees-heading" class="aic-h">What may your AI see?</h2>
+			<label class="aic-choice">
+				<input type="radio" name="sees" value="players" checked/>
+				<span>
+					<b>What players see</b>
+					<span class="block aic-hint">Safest. No secrets, and nothing you keep from players.</span>
+				</span>
+			</label>
+			<label class="aic-choice">
+				<input type="radio" name="sees" value="owner"/>
+				<span>
+					<b>What you see</b>
+					<span class="block aic-hint">Adds your { layouts.GMTerm(ctx) }-only pages and secrets. Only for an AI you trust, since text your players wrote could try to talk it into sharing them.</span>
+				</span>
+			</label>
+			<p class="aic-hint flex gap-2 items-start border-t border-edge pt-3">
+				<i class="fa-solid fa-lock mt-0.5" aria-hidden="true"></i>
+				<span>It can only look things up. It can't add, change or remove anything, even if your AI app is set to allow everything.</span>
+			</p>
+		</section>
+		<section aria-labelledby="ai-how-heading">
+			<h2 id="ai-how-heading" class="aic-h pb-2">Connect it</h2>
+			<div class="aic-step">
+				<span class="aic-num">1</span>
+				<span><b class="text-fg">Make a key</b><span class="block aic-hint">Chronicle gives you an address and a key for your AI app.</span></span>
+			</div>
+			<div class="aic-step">
+				<span class="aic-num">2</span>
+				<span><b class="text-fg">In your AI app, add a connector</b><span class="block aic-hint">Claude calls it a custom connector. Other apps may call it an MCP server.</span></span>
+			</div>
+			<div class="aic-step">
+				<span class="aic-num">3</span>
+				<span><b class="text-fg">Paste the address and the key</b><span class="block aic-hint">You see the key once. It runs out after 90 days, and you can disconnect it here any time.</span></span>
+			</div>
+			<div class="flex flex-wrap items-center gap-3 pt-4">
+				<button type="submit" class="btn-primary">
+					<span class="aic-idle"><i class="fa-solid fa-key mr-1.5" aria-hidden="true"></i>Make a key</span>
+					<span class="aic-busy"><i class="fa-solid fa-spinner fa-spin mr-1.5" aria-hidden="true"></i>Making…</span>
+				</button>
+				if replacing {
+					<span class="aic-hint">Your AI's current key stops working.</span>
+				} else if connStatus(v) == "ended" {
+					<span class="aic-hint">Your AI's last key ran out. Make a new one to connect again.</span>
+				}
+			</div>
+		</section>
+	</form>
+}
+
+// aiNewKey shows the address and the new key, once, with how to add them in
+// each kind of app.
+templ aiNewKey(v ConnectView) {
+	<section
+		class="aic-panel aic-key space-y-4"
+		aria-labelledby="ai-key-heading"
+		x-data="{ app: 'claude', copied: '' }"
+	>
+		<div>
+			<h2 id="ai-key-heading" class="aic-h">Your key is ready</h2>
+			<p class="aic-hint">Copy it now: Chronicle shows it only this once. If you lose it, make a new one. Your AI { seesLabel(v.Conn.Privacy) }.</p>
+		</div>
+		<div class="grid gap-3 md:grid-cols-2">
+			@aiCopyField("addr", "Address", v.Endpoint)
+			@aiCopyField("key", "Key", v.NewKey)
+		</div>
+		<div>
+			<div class="aic-tabs" role="tablist" aria-label="How to add it">
+				@aiAppTab("claude", "In Claude")
+				@aiAppTab("code", "In Claude Code")
+				@aiAppTab("other", "Other apps")
+			</div>
+			<div class="aic-drawer" role="tabpanel" x-show="app === 'claude'">
+				<ol>
+					<li>Open Customize, then Connectors, then Add custom connector.</li>
+					<li>Name it Chronicle and paste the address above as the server URL.</li>
+					<li>For sign-in, pick No sign-in. Under Request headers, pick <code>authorization</code> and paste this as its value:
+						@aiCopyField("bearer", "", claudeHeaderValue(v.NewKey))
+					</li>
+					<li>Press Add, then turn Chronicle on in a chat from the + menu.</li>
+				</ol>
+				<p class="aic-hint mt-3">Request headers are new in Claude and not on every account yet. If you don't see them, use Claude Code or another app, or copy and paste below.</p>
+			</div>
+			<div class="aic-drawer" role="tabpanel" x-show="app === 'code'" x-cloak>
+				<p class="text-sm text-fg">Run this once in a terminal:</p>
+				@aiCopyField("cmd", "", claudeCodeCommand(v))
+			</div>
+			<div class="aic-drawer" role="tabpanel" x-show="app === 'other'" x-cloak>
+				<p class="text-sm text-fg">Open WebUI, LM Studio, Claude Desktop and most other AI apps can add an MCP server. Give it the address above, pick Streamable HTTP if it asks, and add the header <code>Authorization</code> with the value <code>Bearer</code> followed by a space and the key.</p>
+			</div>
+		</div>
+		<div class="flex items-center gap-3 pt-1">
+			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/ai", v.CampaignID)) } class="btn-secondary">Done</a>
+			<span class="aic-hint">The key disappears from this page when you leave it.</span>
+		</div>
+		<span class="sr-only" aria-live="polite" x-text="copied ? 'Copied' : ''"></span>
+	</section>
+}
+
+templ aiAppTab(key, label string) {
+	<button
+		type="button"
+		role="tab"
+		class="aic-tab"
+		@click={ fmt.Sprintf("app = '%s'", key) }
+		:aria-selected={ fmt.Sprintf("app === '%s'", key) }
+		if key == "claude" {
+			aria-selected="true"
+		} else {
+			aria-selected="false"
+		}
+	>{ label }</button>
+}
+
+// aiCopyField is a value in a well with a copy icon. It reads its value
+// from its own data attribute, so nothing is built into a script.
+templ aiCopyField(id, label, value string) {
+	<div>
+		if label != "" {
+			<span class="aic-label">{ label }</span>
+		}
+		<div class="aic-copy">
+			<code>{ value }</code>
+			<button
+				type="button"
+				class="aic-icon"
+				data-copy={ value }
+				@click={ fmt.Sprintf("navigator.clipboard.writeText($el.dataset.copy).then(() => { copied = '%s'; setTimeout(() => { if (copied === '%s') copied = '' }, 2000) })", id, id) }
+				if label != "" {
+					aria-label={ "Copy the " + label }
+				} else {
+					aria-label="Copy"
+				}
+			>
+				<i class="fa-regular fa-copy" aria-hidden="true" x-show={ fmt.Sprintf("copied !== '%s'", id) }></i>
+				<i class="fa-solid fa-check" aria-hidden="true" x-show={ fmt.Sprintf("copied === '%s'", id) } x-cloak></i>
+			</button>
+		</div>
+	</div>
+}
+
+// aiStatus is the connection: who, what it sees, when it was used, and the
+// ways to make a new key or disconnect (which asks first).
+templ aiStatus(v ConnectView) {
+	<section class="aic-panel" aria-labelledby="ai-status-heading" x-data="{ asking: false, renew: false }">
+		<div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+			<span class="aic-dot" data-state={ connStatus(v) } aria-hidden="true"></span>
+			<div class="flex-1 min-w-[14rem]">
+				<h2 id="ai-status-heading" class="aic-h">
+					if connStatus(v) == "connected" {
+						{ appName(v.Conn) } is connected
+					} else {
+						Waiting for your AI to connect
+					}
+				</h2>
+				<p class="aic-hint">
+					{ statusLine(v) }
+				</p>
+			</div>
+			<button type="button" class="quiet-word" @click="renew = !renew; asking = false" :aria-expanded="renew">Make a new key</button>
+			<button type="button" class="btn-secondary text-bad" @click="asking = !asking; renew = false" :aria-expanded="asking">Disconnect</button>
+		</div>
+		<div class="aic-ask" x-show="asking" x-cloak x-collapse.duration.200ms>
+			<p>Disconnect { appName(v.Conn) }? Its key stops working at once. You can connect again with a new key.</p>
+			<button type="button" class="btn-secondary" @click="asking = false">Keep it</button>
+			<button
+				type="button"
+				class="btn-danger"
+				hx-post={ fmt.Sprintf("/campaigns/%s/ai/connection/disconnect", v.CampaignID) }
+				hx-target="#ai-connect"
+				hx-swap="outerHTML"
+				hx-disabled-elt="this"
+			>
+				<span class="aic-idle">Disconnect</span>
+				<span class="aic-busy"><i class="fa-solid fa-spinner fa-spin mr-1.5" aria-hidden="true"></i>Disconnecting…</span>
+			</button>
+		</div>
+		<div class="mt-4" x-show="renew" x-cloak x-collapse.duration.200ms>
+			@aiConnectForm(v, true)
+		</div>
+	</section>
+}
+
+// aiActivityList is "What it did", newest first, refreshed while the page
+// is open.
+templ aiActivityList(v ConnectView) {
+	<section
+		id="ai-activity"
+		aria-labelledby="ai-activity-heading"
+		hx-get={ fmt.Sprintf("/campaigns/%s/ai/activity", v.CampaignID) }
+		hx-trigger="every 30s"
+		hx-swap="outerHTML"
+	>
+		<h2 id="ai-activity-heading" class="aic-h pb-2 border-b border-edge">What it did</h2>
+		if len(v.Calls) == 0 {
+			<p class="aic-hint py-3">Nothing yet. Each time your AI looks something up, it shows here.</p>
+		} else {
+			<div class="aic-log">
+				for _, call := range v.Calls {
+					@aiLogRow(v, call)
+				}
+			</div>
+			if len(v.Calls) >= connector.CallsShown {
+				<p class="aic-hint pt-2">{ fmt.Sprintf("The newest %d.", connector.CallsShown) }</p>
+			}
+		}
+	</section>
+}
+
+templ aiLogRow(v ConnectView, call connector.Call) {
+	<div class="aic-log-row">
+		<time class="aic-log-when" datetime={ call.At.UTC().Format("2006-01-02T15:04:05Z") } title={ call.At.UTC().Format("2 January 2006, 15:04 UTC") }>{ agoText(v.Now, call.At) }</time>
+		<span class="aic-log-what">{ call.Summary }</span>
+		<span class="aic-log-note">
+			if !call.OK {
+				<i class="fa-solid fa-circle-info mr-1" aria-hidden="true"></i>not answered:
+			}
+			{ call.Note }
+		</span>
+	</div>
+}

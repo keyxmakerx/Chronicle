@@ -144,7 +144,9 @@ func NavManageRows(ctx context.Context) []NavRowView {
 	if IsAddonEnabled(ctx, "sync-api") {
 		rows = append(rows, NavRowView{Key: "manage:foundry", Label: "Foundry", Icon: "fa-dice-d20", URL: base + "/foundry"})
 	}
+	// Your AI: connecting an AI app, what it did, and copy and paste.
 	return append(rows,
+		NavRowView{Key: "manage:ai", Label: "Your AI", Icon: "fa-wand-magic-sparkles", URL: base + "/ai"},
 		NavRowView{Key: "manage:trash", Label: "Trash", Icon: "fa-trash-can", URL: base + "/trash"},
 		NavRowView{Key: "manage:settings", Label: "Settings", Icon: "fa-gear", URL: base + "/settings"},
 	)

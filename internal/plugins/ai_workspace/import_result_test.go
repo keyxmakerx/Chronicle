@@ -103,7 +103,7 @@ func TestImportResult_BackButton_LinksToAIWorkspaceTab(t *testing.T) {
 	}
 	out := sb.String()
 
-	wantBackHref := `href="/campaigns/camp-9/settings?tab=ai-workspace"`
+	wantBackHref := `href="/campaigns/camp-9/ai"`
 	if !strings.Contains(out, wantBackHref) {
 		t.Errorf("result fragment is missing the 'Back to AI Workspace' link %q (V1-F Bug 2 fix)",
 			wantBackHref)

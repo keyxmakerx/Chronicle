@@ -412,6 +412,13 @@ Foundry module repo for the wire contract.
 |---|---|---|
 | `campaign_roll_tables` | One JSON document per campaign holding all its rolling tables, replaced as a unit | `campaign_id` PK, FK→`campaigns` CASCADE; `data` LONGTEXT; `updated_by` |
 
+### ai_connector (`internal/plugins/ai_workspace/connector/migrations/`)
+
+| Table | Purpose | Notable columns |
+|---|---|---|
+| `ai_connections` | One key an owner made so an AI app can read the campaign | `key_hash` CHAR(64) UNIQUE (SHA-256; the key itself is never stored); `key_hint` (last 4); `privacy` (`safe` or `permitted`, fixed); `expires_at`, `revoked_at`, `last_used_at`; `client_name`; FK→`campaigns` CASCADE |
+| `ai_connection_calls` | "What it did": one row per tool call, never the answer | `(campaign_id, id)` index; `tool`, `summary`, `note`, `ok`; FK→`ai_connections` CASCADE; 500 kept per campaign |
+
 ## MariaDB-specific notes
 
 - **JSON columns:** MariaDB validates JSON on write. Prefer loading full JSON

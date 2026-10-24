@@ -151,6 +151,9 @@ DELETE	/admin/users/:id/storage	site-admin	plugins/settings.(*Handler).DeleteUse
 PUT	/admin/users/:id/storage	site-admin	plugins/settings.(*Handler).SetUserStorageLimit	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
 DELETE	/admin/users/:id/storage/bypass	site-admin	plugins/settings.(*Handler).ClearUserBypass	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
 PUT	/admin/users/:id/storage/bypass	site-admin	plugins/settings.(*Handler).SetUserBypass	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
+DELETE	/api/ai/campaigns/:id/mcp	none	plugins/ai_workspace/connector.(*Endpoint).NoStream	-
+GET	/api/ai/campaigns/:id/mcp	none	plugins/ai_workspace/connector.(*Endpoint).NoStream	-
+POST	/api/ai/campaigns/:id/mcp	none	plugins/ai_workspace/connector.(*Endpoint).Serve	-
 GET	/api/notes-app/campaigns/:id/calendars/:calid	none	plugins/calendar.(*Handler).GetCalendarAPI	middleware.RateLimit > widgets/notes.RequireAppGrant > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
 PUT	/api/notes-app/campaigns/:id/calendars/:calid/era-look	none	plugins/calendar.(*Handler).SaveEraLookAPI	middleware.RateLimit > widgets/notes.RequireAppGrant > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireRole
 POST	/api/notes-app/campaigns/:id/calendars/:calid/eras	none	plugins/calendar.(*Handler).CreateEraAPI	middleware.RateLimit > widgets/notes.RequireAppGrant > plugins/campaigns.RequireCampaignAccess > plugins/addons.RequireAddon > plugins/campaigns.RequireCapability
@@ -406,6 +409,7 @@ GET	/campaigns/:id/activity/fragment	session	plugins/audit.(*Handler).ActivityFr
 GET	/campaigns/:id/addons	session	plugins/addons.(*Handler).CampaignAddonsAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 PUT	/campaigns/:id/addons/:addonID/toggle	session	plugins/addons.(*Handler).ToggleCampaignAddon	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/addons/fragment	session	plugins/addons.(*Handler).CampaignAddonsFragment	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/ai	session	plugins/ai_workspace.(*Handler).AIPage	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/ai-export/generate	session	plugins/ai_workspace.(*Handler).GenerateAIExport	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/ai-workspace/import/commit	session	plugins/ai_workspace.(*Handler).CommitImport	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/ai-workspace/import/parse	session	plugins/ai_workspace.(*Handler).ParseImport	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
@@ -413,6 +417,9 @@ GET	/campaigns/:id/ai-workspace/import/tray	session	plugins/ai_workspace.(*Handl
 POST	/campaigns/:id/ai-workspace/import/tray/clear	session	plugins/ai_workspace.(*Handler).ClearImportTray	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/ai-workspace/prompt/generate	session	plugins/ai_workspace.(*Handler).GeneratePrompt	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/ai-workspace/prompt/instructions	session	plugins/ai_workspace.(*Handler).PromptInstructions	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/ai/activity	session	plugins/ai_workspace.(*Handler).AIActivity	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/ai/connection	session	plugins/ai_workspace.(*Handler).ConnectAI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/ai/connection/disconnect	session	plugins/ai_workspace.(*Handler).DisconnectAI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/api-keys	session	plugins/syncapi.(*Handler).KeysPage	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/api-keys	session	plugins/syncapi.(*Handler).CreateKey	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 DELETE	/campaigns/:id/api-keys/:keyID	session	plugins/syncapi.(*Handler).RevokeKey	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
