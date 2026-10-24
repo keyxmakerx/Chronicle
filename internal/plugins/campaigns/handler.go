@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -169,6 +170,7 @@ type Handler struct {
 	// placeholders when either is unwired.
 	extensionDashboardFactories []func(*CampaignContext) ExtensionDashboard
 	extensionEnableChecker      ExtensionEnableChecker
+	sheetChecker                SheetChecker
 }
 
 // NewHandler creates a new campaign handler.
@@ -377,6 +379,12 @@ func (h *Handler) Show(c echo.Context) error {
 	}
 
 	csrfToken := middleware.GetCSRFToken(c)
+
+	// JoinByCode sends a new player here with ?joined=1. Only a member is told
+	// they joined, so a copied link says nothing to anyone else.
+	if c.QueryParam("joined") == "1" && cc.MemberRole >= RolePlayer {
+		c.SetRequest(c.Request().WithContext(layouts.SetFlashSuccess(c.Request().Context(), "You joined "+cc.Campaign.Name+". Welcome to the table.")))
+	}
 
 	// VTT update-available banner is lazy-loaded from foundry_vtt's
 	// /foundry-vtt/show-banner-fragment route; the fragment endpoint
@@ -1014,21 +1022,22 @@ func (h *Handler) ResetOwnerDashboardLayout(c echo.Context) error {
 // viewAsPlayerCookie is the cookie name for the "view as player" display toggle.
 const viewAsPlayerCookie = "chronicle_view_as_player"
 
-// ViewingAsPlayer reports whether an owner has "view as player" on. Handlers
-// read it themselves because the layout context that also carries it is
-// only filled in when a page renders. Display only: never use it to grant.
+// ViewingAsPlayer reports whether the owner or a co-DM has "view as player"
+// on. Handlers read it themselves because the layout context that also
+// carries it is only filled in when a page renders. Display only: never use
+// it to grant.
 func ViewingAsPlayer(c echo.Context, cc *CampaignContext) bool {
-	if cc == nil || cc.MemberRole < RoleOwner {
+	if cc == nil || !cc.CanAuthorDmOnly() {
 		return false
 	}
 	cookie, err := c.Cookie(viewAsPlayerCookie)
 	return err == nil && cookie.Value == "1"
 }
 
-// ToggleViewAsPlayer toggles the "view as player" cookie for campaign owners
-// (POST /campaigns/:id/toggle-view-mode). When active, templates render as
-// if the owner has the Player role -- hiding owner-only UI and private entities.
-// This is a display-only toggle; the owner retains actual ownership for access control.
+// ToggleViewAsPlayer toggles the "view as player" cookie for the owner and
+// co-DMs (POST /campaigns/:id/toggle-view-mode). When active, templates
+// render as if they had the Player role, hiding DM-only UI and private
+// entities. Display only: access control still uses their real role.
 func (h *Handler) ToggleViewAsPlayer(c echo.Context) error {
 	// Read current cookie state and toggle.
 	viewing := false
@@ -1059,7 +1068,9 @@ func (h *Handler) ToggleViewAsPlayer(c echo.Context) error {
 			HttpOnly: false, // JS reads this for toggle state indicator.
 			Secure:   secure,
 			SameSite: http.SameSiteLaxMode,
-			MaxAge:   30 * 24 * 60 * 60, // 30 days.
+			// A session cookie: closing the browser ends the preview, so an
+			// owner never comes back days later to a campaign that looks
+			// like it lost its edit buttons.
 		})
 	}
 
@@ -1664,6 +1675,8 @@ func (h *Handler) RevokeJoinCode(c echo.Context) error {
 }
 
 // JoinByCode handles a user joining a campaign via invite code (GET /join/:code).
+// It lands them inside the campaign, with a welcome line when they have just
+// joined, rather than on the campaign list where the new one is easy to miss.
 func (h *Handler) JoinByCode(c echo.Context) error {
 	code := c.Param("code")
 	if code == "" {
@@ -1672,16 +1685,21 @@ func (h *Handler) JoinByCode(c echo.Context) error {
 
 	userID := auth.GetUserID(c)
 	if userID == "" {
-		// Redirect to login, preserving the join URL.
-		return c.Redirect(http.StatusFound, fmt.Sprintf("/login?next=/join/%s", code))
+		// RequireAuth answers first on this route; this is the same hand-off
+		// in case it ever doesn't. Login reads "redirect".
+		return c.Redirect(http.StatusFound, "/login?redirect="+url.QueryEscape("/join/"+code))
 	}
 
-	if err := h.service.JoinByCode(c.Request().Context(), code, userID); err != nil {
+	campaign, joined, err := h.service.JoinByCode(c.Request().Context(), code, userID)
+	if err != nil {
 		return err
 	}
 
-	// Redirect to the campaigns list; the user is now a member.
-	return c.Redirect(http.StatusFound, "/campaigns")
+	dest := "/campaigns/" + campaign.ID
+	if joined {
+		dest += "?joined=1"
+	}
+	return c.Redirect(http.StatusFound, dest)
 }
 
 // UpdateSystemID sets the game system for a campaign (PUT /campaigns/:id/system).

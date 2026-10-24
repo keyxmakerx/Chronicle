@@ -294,3 +294,50 @@ func TestExtensionsHubPage_GameAndFeaturesOnly(t *testing.T) {
 		})
 	}
 }
+
+// Game systems have their own picker card, so the Features grid never lists
+// them, installed or not.
+func TestExtensionsHubFragment_LeavesOutGameSystems(t *testing.T) {
+	cc := &CampaignContext{Campaign: &Campaign{ID: "camp-1", Name: "Test"}}
+	addons := []PluginHubAddon{
+		{AddonID: 1, Slug: "maps", Name: "Maps", Category: "plugin", Installed: true},
+		{AddonID: 2, Slug: "dnd5e", Name: "D&D 5e", Category: "system", Installed: true, Enabled: true},
+		{AddonID: 3, Slug: "pathfinder", Name: "Pathfinder", Category: "system"},
+	}
+	var buf bytes.Buffer
+	if err := ExtensionsHubFragment(cc, addons, "csrf").Render(context.Background(), &buf); err != nil {
+		t.Fatalf("render fragment: %v", err)
+	}
+	html := buf.String()
+	if !strings.Contains(html, `data-extension-slug="maps"`) {
+		t.Errorf("maps card missing; got:\n%s", html)
+	}
+	for _, slug := range []string{"dnd5e", "pathfinder"} {
+		if strings.Contains(html, `data-extension-slug="`+slug+`"`) {
+			t.Errorf("game system %q should not be in the Features grid", slug)
+		}
+	}
+}
+
+func TestCurrentSystemID(t *testing.T) {
+	addons := []PluginHubAddon{
+		{Slug: "maps", Category: "plugin", Enabled: true},
+		{Slug: "pathfinder", Category: "system"},
+		{Slug: "dnd5e", Category: "system", Enabled: true},
+	}
+	cases := []struct {
+		name, setting string
+		addons        []PluginHubAddon
+		want          string
+	}{
+		{"setting wins", "drawsteel", addons, "drawsteel"},
+		{"falls back to the enabled system", "", addons, "dnd5e"},
+		{"no system anywhere", "", addons[:2], ""},
+		{"no addons", "", nil, ""},
+	}
+	for _, c := range cases {
+		if got := currentSystemID(c.setting, c.addons); got != c.want {
+			t.Errorf("%s: currentSystemID = %q, want %q", c.name, got, c.want)
+		}
+	}
+}

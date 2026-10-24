@@ -212,6 +212,8 @@ type HiddenView struct {
 	Name     string `json:"name"`
 	TypeName string `json:"type_name"`
 	Revealed bool   `json:"revealed"`
+	// CanUndo offers the revealed row's Undo, which is for the DM team only.
+	CanUndo bool `json:"-"`
 }
 
 // ConditionView is one condition and its rule text, markup flattened.

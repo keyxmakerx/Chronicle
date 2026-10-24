@@ -212,9 +212,11 @@
   Builder.prototype.heroHtml = function (h) {
     var left = this.left(h).length;
     var sheet = this.fieldsBase.replace(/\/$/, '') + '/' + encodeURIComponent(h.id);
+    // Only a page the game system draws is a sheet; any other opens as a plain page.
+    var open = h.sheet ? 'Open the sheet' : 'Open the page';
     return '<article class="hb-hero" data-hero-card="' + esc(h.id) + '">' +
       '<header class="hb-head"><div class="hb-names"><span class="hb-kicker">Your hero</span><h2 class="hb-title">' + esc(h.name) + '</h2></div>' +
-      '<div class="hb-tools"><a class="hb-link" href="' + esc(sheet) + '">Open the sheet</a>' +
+      '<div class="hb-tools"><a class="hb-link" href="' + esc(sheet) + '">' + open + '</a>' +
       (left ? '<button type="button" class="hb-btn" data-rollall="' + esc(h.id) + '">Roll everything left</button>' : '') +
       '</div></header>' + this.sentenceHtml(h, esc(possessive(h.name))) + this.progressHtml(h) + '</article>';
   };

@@ -103,7 +103,22 @@ func (h *Handler) Reveal(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return middleware.Render(c, http.StatusOK, HiddenRow(cc.Campaign.ID, HiddenView{ID: entityID, Name: name, Revealed: true}, ""))
+	return middleware.Render(c, http.StatusOK, HiddenRow(cc.Campaign.ID, HiddenView{ID: entityID, Name: name, Revealed: true, CanUndo: cc.CanAuthorDmOnly()}, middleware.GetCSRFToken(c)))
+}
+
+// UndoReveal handles POST /campaigns/:id/dm-screen/hide/:eid and returns the
+// row redrawn hidden, with its Reveal button back.
+func (h *Handler) UndoReveal(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	entityID := c.Param("eid")
+	name, err := h.svc.UndoReveal(c.Request().Context(), entityID, cc.Campaign.ID, viewerOf(c, cc))
+	if err != nil {
+		return err
+	}
+	return middleware.Render(c, http.StatusOK, HiddenRow(cc.Campaign.ID, HiddenView{ID: entityID, Name: name}, middleware.GetCSRFToken(c)))
 }
 
 // pinRequest is the POST body that pins a page.

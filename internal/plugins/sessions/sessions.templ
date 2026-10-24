@@ -13,11 +13,11 @@ import (
 
 // SessionListPage renders the full sessions page.
 templ SessionListPage(cc *campaigns.CampaignContext, sessions []Session, csrfToken string, isOwner, isScribe bool, userID string, plan SessionPlan, viewerTZ string) {
-	@layouts.App(cc.Campaign.Name + " - Sessions") {
+	@layouts.App(cc.Campaign.Name + " - Game nights") {
 		<div class="max-w-4xl mx-auto">
 			@components.Breadcrumbs([]components.BreadcrumbItem{
 				{Label: cc.Campaign.Name, Href: fmt.Sprintf("/campaigns/%s", cc.Campaign.ID), Icon: "fa-dice-d20"},
-				{Label: "Sessions"},
+				{Label: "Game nights"},
 			})
 			@SessionListFragment(cc, sessions, csrfToken, isOwner, isScribe, userID, plan, viewerTZ)
 		</div>
@@ -28,7 +28,7 @@ templ SessionListPage(cc *campaigns.CampaignContext, sessions []Session, csrfTok
 templ SessionListFragment(cc *campaigns.CampaignContext, sessions []Session, csrfToken string, isOwner, isScribe bool, userID string, plan SessionPlan, viewerTZ string) {
 	<div class="flex items-center justify-between mb-6">
 		<div>
-			<h1 class="text-2xl font-bold text-fg">Sessions</h1>
+			<h1 class="text-2xl font-bold text-fg">Game nights</h1>
 			<p class="text-sm text-fg-secondary mt-1">Game session schedule and history.</p>
 		</div>
 		<div class="flex items-center gap-2">
@@ -57,7 +57,7 @@ templ SessionListFragment(cc *campaigns.CampaignContext, sessions []Session, csr
 					class="btn-primary text-sm"
 					onclick="document.getElementById('create-session-modal').showModal()"
 				>
-					<i class="fa-solid fa-plus mr-1"></i> New Session
+					<i class="fa-solid fa-plus mr-1"></i> New game night
 				</button>
 			}
 		</div>
@@ -65,7 +65,7 @@ templ SessionListFragment(cc *campaigns.CampaignContext, sessions []Session, csr
 	if len(sessions) == 0 {
 		<div class="card p-12 text-center">
 			<i class="fa-solid fa-dice-d20 text-4xl text-fg-muted mb-3"></i>
-			<p class="text-fg-secondary mb-1">No sessions yet.</p>
+			<p class="text-fg-secondary mb-1">No game nights yet.</p>
 			if isScribe {
 				<p class="text-sm text-fg-muted">Create your first session to start tracking your campaign's game nights.</p>
 			}
@@ -244,7 +244,7 @@ templ SessionDetailPage(cc *campaigns.CampaignContext, session *Session, csrfTok
 		<div class="max-w-4xl mx-auto">
 			@components.Breadcrumbs([]components.BreadcrumbItem{
 				{Label: cc.Campaign.Name, Href: fmt.Sprintf("/campaigns/%s", cc.Campaign.ID), Icon: "fa-dice-d20"},
-				{Label: "Sessions", Href: fmt.Sprintf("/campaigns/%s/sessions", cc.Campaign.ID)},
+				{Label: "Game nights", Href: fmt.Sprintf("/campaigns/%s/sessions", cc.Campaign.ID)},
 				{Label: session.Name},
 			})
 			<!-- Header -->
@@ -402,7 +402,7 @@ templ SessionDetailPage(cc *campaigns.CampaignContext, session *Session, csrfTok
 						<i class="fa-solid fa-users mr-1 text-accent"></i> Attendees
 					</h2>
 					<div id="attendee-list">
-						@AttendeeList(cc, session.ID, session.Attendees, csrfToken, userID)
+						@AttendeeList(cc, session.ID, session.Attendees, csrfToken, userID, session.AcceptsRSVP())
 					</div>
 				</div>
 				<!-- Linked Entities -->
@@ -580,8 +580,9 @@ templ editSessionModal(cc *campaigns.CampaignContext, session *Session, csrfToke
 	</dialog>
 }
 
-// AttendeeList renders the RSVP attendee list with action buttons.
-templ AttendeeList(cc *campaigns.CampaignContext, sessionID string, attendees []Attendee, csrfToken string, currentUserID string) {
+// AttendeeList renders the RSVP attendee list with action buttons. open is
+// Session.AcceptsRSVP: a night that is over lists who came and asks nothing.
+templ AttendeeList(cc *campaigns.CampaignContext, sessionID string, attendees []Attendee, csrfToken string, currentUserID string, open bool) {
 	if len(attendees) == 0 {
 		<p class="text-sm text-fg-muted">No attendees invited yet.</p>
 	} else {
@@ -619,7 +620,7 @@ templ AttendeeList(cc *campaigns.CampaignContext, sessionID string, attendees []
 	     `len(attendees) == 0` else-branch, so a session with no attendees at all
 	     showed nobody any controls. The RSVP endpoint upserts, so a member with
 	     no row is a first-class responder. -->
-	if cc.IsMember && currentUserID != "" {
+	if cc.IsMember && currentUserID != "" && open {
 		@rsvpControls(cc, sessionID, csrfToken, myRSVPStatus(attendees, currentUserID))
 	}
 }

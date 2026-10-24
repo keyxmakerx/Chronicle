@@ -36,6 +36,7 @@ type mockCampaignRepo struct {
 	addMemberFn             func(ctx context.Context, member *CampaignMember) error
 	removeMemberFn          func(ctx context.Context, campaignID, userID string) error
 	findMemberFn            func(ctx context.Context, campaignID, userID string) (*CampaignMember, error)
+	findByJoinCodeFn        func(ctx context.Context, code string) (*Campaign, error)
 	listMembersFn           func(ctx context.Context, campaignID string) ([]CampaignMember, error)
 	updateMemberRoleFn      func(ctx context.Context, campaignID, userID string, role Role) error
 	findOwnerMemberFn       func(ctx context.Context, campaignID string) (*CampaignMember, error)
@@ -335,7 +336,10 @@ func (m *mockCampaignRepo) ArchiveCampaign(context.Context, string) error   { re
 func (m *mockCampaignRepo) UnarchiveCampaign(context.Context, string) error { return nil }
 func (m *mockCampaignRepo) SetJoinCode(context.Context, string, string) error { return nil }
 func (m *mockCampaignRepo) ClearJoinCode(context.Context, string) error       { return nil }
-func (m *mockCampaignRepo) FindByJoinCode(context.Context, string) (*Campaign, error) {
+func (m *mockCampaignRepo) FindByJoinCode(ctx context.Context, code string) (*Campaign, error) {
+	if m.findByJoinCodeFn != nil {
+		return m.findByJoinCodeFn(ctx, code)
+	}
 	return nil, fmt.Errorf("not found")
 }
 func (m *mockCampaignRepo) CreateGroup(context.Context, string, string, *string) (*CampaignGroup, error) {

@@ -250,6 +250,12 @@ func (h *Handler) CreateSession(c echo.Context) error {
 			}
 			_ = h.svc.InviteAll(c.Request().Context(), session.ID, userIDs)
 
+			// The bell and banner tell players even where no email is set up.
+			name := h.resolveDisplayName(c.Request().Context(), userID)
+			if nErr := h.svc.NotifySessionScheduled(c.Request().Context(), session, userID, name, userIDs); nErr != nil {
+				slog.Error("notifying members of a scheduled session", slog.String("error", nErr.Error()))
+			}
+
 			// Send RSVP emails if SMTP is configured.
 			if h.mailer != nil && h.mailer.IsConfigured(c.Request().Context()) {
 				go h.sendRSVPEmails(context.Background(), session, cc.Campaign.Name, members)
@@ -471,7 +477,8 @@ func (h *Handler) RSVPSession(c echo.Context) error {
 	sessionID := c.Param("sid")
 	userID := auth.GetUserID(c)
 
-	if _, err := h.requireSessionInCampaign(c, sessionID, cc.Campaign.ID); err != nil {
+	session, err := h.requireSessionInCampaign(c, sessionID, cc.Campaign.ID)
+	if err != nil {
 		return err
 	}
 
@@ -496,13 +503,7 @@ func (h *Handler) RSVPSession(c echo.Context) error {
 		}
 	}
 
-	var err error
-	if note.Present() || occurrenceDate != nil {
-		err = h.svc.UpdateRSVPDetailed(c.Request().Context(), sessionID, userID, status, occurrenceDate, note)
-	} else {
-		err = h.svc.UpdateRSVP(c.Request().Context(), sessionID, userID, status)
-	}
-	if err != nil {
+	if err := h.svc.RespondRSVP(c.Request().Context(), session, userID, status, occurrenceDate, note); err != nil {
 		return c.JSON(apperror.SafeCode(err), map[string]string{"error": apperror.SafeMessage(err)})
 	}
 
@@ -514,7 +515,7 @@ func (h *Handler) RSVPSession(c echo.Context) error {
 		attendees, _ := h.svc.ListAttendees(c.Request().Context(), sessionID)
 		csrfToken := middleware.GetCSRFToken(c)
 		return middleware.Render(c, http.StatusOK,
-			AttendeeList(cc, sessionID, attendees, csrfToken, userID))
+			AttendeeList(cc, sessionID, attendees, csrfToken, userID, session.AcceptsRSVP()))
 	}
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }

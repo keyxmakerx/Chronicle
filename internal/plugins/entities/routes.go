@@ -42,10 +42,14 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.PUT("/entities/:eid/field-overrides", h.UpdateFieldOverridesAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.DELETE("/entities/:eid/field-overrides", h.ResetFieldOverridesAPI, campaigns.RequireRole(campaigns.RoleScribe))
 
-	// Per-entity permissions API (Owner only — permissions are a privileged operation).
-	cg.GET("/entities/:eid/permissions", h.GetPermissionsAPI, campaigns.RequireRole(campaigns.RoleOwner))
-	cg.PUT("/entities/:eid/permissions", h.SetPermissionsAPI, campaigns.RequireRole(campaigns.RoleOwner))
-	cg.GET("/entities/members", h.GetMembersAPI, campaigns.RequireRole(campaigns.RoleOwner))
+	// Per-entity permissions API, for the DM team: the owner and co-DMs, who
+	// already see every page and so decide who else may.
+	dmTeam := campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool {
+		return cc.CanAuthorDmOnly()
+	}, "only the campaign owner or a member with DM access may do this")
+	cg.GET("/entities/:eid/permissions", h.GetPermissionsAPI, dmTeam)
+	cg.PUT("/entities/:eid/permissions", h.SetPermissionsAPI, dmTeam)
+	cg.GET("/entities/members", h.GetMembersAPI, dmTeam)
 
 	// Image API. The picture, like the description, is also the claiming
 	// player's to change; the cover stays with Scribes.

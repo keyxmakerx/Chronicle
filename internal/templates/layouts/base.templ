@@ -34,7 +34,7 @@ templ Base(title string) {
 		<!-- Site admin's way in and out: the new page asks for its transition before the first paint. -->
 		<script src={ AssetURL("/static/js/site_admin_reveal.js") }></script>
 
-		<!-- Hide Alpine.js elements until initialized; hide body until all CSS loads (FOUC prevention). -->
+		<!-- Hide Alpine.js elements until initialized; hide body until its HTML and CSS are in (FOUC prevention). -->
 		<style>[x-cloak]{display:none!important}body{opacity:0}</style>
 
 		<!-- Tailwind CSS (generated) -->
@@ -70,12 +70,19 @@ templ Base(title string) {
 		if css := AppearanceCSS(ctx); css != "" {
 			@campaignStyleBlock(css)
 		}
-
-		<!-- Reveal body after all render-blocking CSS has loaded (FOUC guard). -->
-		<script>document.addEventListener('DOMContentLoaded',function(){document.body.style.opacity='1'})</script>
 	</head>
 	<body class="h-full font-sans antialiased">
 		{ children... }
+
+		<!-- Reveal the page once its HTML is parsed. An inline script waits for the
+		     stylesheets above it, so the page shows styled, but it runs before the
+		     deferred scripts below: they enhance a visible page instead of holding
+		     the whole screen white until every one has downloaded and run.
+		     The sidebar's folded or hidden state is Alpine's, which arrives later, so
+		     it is put on here first, without its slide, and handed back as Alpine
+		     starts, in the same task, so the sidebar neither shows open nor slides
+		     shut on arrival. -->
+		<script>(function(){try{var s=document.getElementById('sidebar');var c=localStorage.getItem('chronicle-sidebar-hidden')==='true'?'sidebar-fully-hidden':(localStorage.getItem('chronicle-sidebar-pinned')==='false'?'sidebar-collapsed':'');if(s&&c){var k=[s].concat([].slice.call(s.children));k.forEach(function(e){e.style.transition='none'});s.classList.add(c);void s.offsetWidth;k.forEach(function(e){e.style.transition=''});document.addEventListener('alpine:init',function(){s.classList.remove(c)},{once:true})}}catch(e){}document.body.style.opacity='1'})()</script>
 
 		<!-- Re-authentication modal for sensitive admin operations -->
 		@ReauthModal()
@@ -246,10 +253,10 @@ templ Base(title string) {
 		<script src={ AssetURL("/static/js/widgets/jot_place.js") } defer></script>
 		<script src={ AssetURL("/static/js/widgets/notes.js") } defer></script>
 
-		<!-- Notification bell (C-SCHED-P2): topbar dropdown; badge polled via HTMX. -->
+		<!-- Notification bell: topbar dropdown; badge polled via HTMX. -->
 		<script src={ AssetURL("/static/js/widgets/notification_bell.js") } defer></script>
 
-		<!-- Player call-to-action (C-RSVP-P10): the banner above the page for the
+		<!-- Player call-to-action: the banner above the page for the
 		     one thing a player must ACT on. Server-rendered and polled; this
 		     widget owns only the browser timezone and the dismissal. -->
 		<script src={ AssetURL("/static/js/widgets/callout.js") } defer></script>

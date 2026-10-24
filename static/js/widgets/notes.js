@@ -839,7 +839,11 @@ Chronicle.register('notes', {
       if (state.lockedNoteId && state.lockedNoteId !== nextId) releaseLock(state.lockedNoteId);
     }
 
-    /** A new, empty jot on this page, opened for writing with its title focused. */
+    /**
+     * A new, empty jot on this page, opened for writing with the cursor in
+     * its body: a jot starts as a thought, and typed into the one-line title
+     * a sentence scrolled out of sight. The title stays a click away.
+     */
     function createNote() {
       if (!entityId) return;
       leaveEditing(null);
@@ -853,8 +857,13 @@ Chronicle.register('notes', {
         addNoteToState(note);
         state.editingId = note.id;
         renderNotes();
-        var titleInput = notesList.querySelector('.note-card[data-id="' + note.id + '"] .note-title-input');
-        if (titleInput) titleInput.focus();
+        var body = miniEditors[note.id];
+        if (body && body.commands) {
+          body.commands.focus('end');
+        } else {
+          var titleInput = notesList.querySelector('.note-card[data-id="' + note.id + '"] .note-title-input');
+          if (titleInput) titleInput.focus();
+        }
       }).catch(function () {
         Chronicle.notify('Failed to save note', 'error');
       });

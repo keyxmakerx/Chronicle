@@ -70,3 +70,85 @@ func TestSplitPages_LeadingDividerBeforeProseIsNotAPage(t *testing.T) {
 		t.Errorf("name = %q; want Solo Page", pages[0].Name)
 	}
 }
+
+// One `---` between a block with no body and the next block both closes the
+// first and opens the second; the second must never become the first one's
+// body, where nothing reads it.
+func TestSplitPages_SharedFenceBetweenBodilessBlocks(t *testing.T) {
+	tests := []struct {
+		name   string
+		input  string
+		names  []string
+		bodies []string
+	}{
+		{
+			name:   "encounter then map, one fence between",
+			input:  "---\nkind: encounter\nname: Ambush\ncreatures:\n  - 4 Raider, group A\n---\nkind: map\nname: Docks\ngrid: 40 x 26\n---\nwater \"Harbour\" 0,0 to 40,8\n",
+			names:  []string{"Ambush", "Docks"},
+			bodies: []string{"", "water \"Harbour\" 0,0 to 40,8"},
+		},
+		{
+			name:   "three body-less blocks chained on single fences",
+			input:  "---\nkind: tag\nname: A\n---\nkind: tag\nname: B\n---\nkind: tag\nname: C\n---\n",
+			names:  []string{"A", "B", "C"},
+			bodies: []string{"", "", ""},
+		},
+		{
+			name:   "the usual two fences still split as before",
+			input:  "---\nkind: tag\nname: A\n---\n---\nkind: tag\nname: B\n---\nBody B.\n",
+			names:  []string{"A", "B"},
+			bodies: []string{"", "Body B."},
+		},
+		{
+			name:   "a body line like Weather: grim is still body text",
+			input:  "---\nname: Port\n---\nWeather: grim\n\n---\n\nMore prose.\n",
+			names:  []string{"Port"},
+			bodies: []string{"Weather: grim\n\n---\n\nMore prose."},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pages := Parse(tt.input)
+			if len(pages) != len(tt.names) {
+				t.Fatalf("got %d blocks, want %d", len(pages), len(tt.names))
+			}
+			for i, p := range pages {
+				if p.Status == StatusParseError {
+					t.Errorf("block %d: parse error %q", i, p.ParseError)
+				}
+				if p.Name != tt.names[i] {
+					t.Errorf("block %d name = %q, want %q", i, p.Name, tt.names[i])
+				}
+				if strings.TrimSpace(p.Body) != tt.bodies[i] {
+					t.Errorf("block %d body = %q, want %q", i, p.Body, tt.bodies[i])
+				}
+			}
+		})
+	}
+}
+
+func TestParse_DropsHeadingThatRepeatsTheName(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		body  string
+	}{
+		{"front matter name and the same heading", "---\nname: Odo Vance\ntype: character\n---\n# Odo Vance\n\nThe harbourmaster.", "The harbourmaster."},
+		{"heading in other capitals", "---\nname: Odo Vance\n---\n#  odo vance \nText.", "Text."},
+		{"a different heading stays", "---\nname: Odo Vance\n---\n# Early life\nText.", "# Early life\nText."},
+		{"a later heading with the name stays", "---\nname: Odo\n---\nIntro.\n\n# Odo\nMore.", "Intro.\n\n# Odo\nMore."},
+		{"no front matter: the heading names the page and is not repeated", "# Brinehold\n\nA port.", "A port."},
+		{"a record's body too", "---\nkind: game-night\nname: Session 1\n---\n# Session 1\nRecap.", "Recap."},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pages := Parse(tt.input)
+			if len(pages) != 1 {
+				t.Fatalf("got %d blocks", len(pages))
+			}
+			if pages[0].Body != tt.body {
+				t.Errorf("body = %q, want %q", pages[0].Body, tt.body)
+			}
+		})
+	}
+}

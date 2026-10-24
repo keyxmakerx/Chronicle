@@ -73,7 +73,7 @@ func TestLookups_GameNights(t *testing.T) {
 			t.Errorf("answer lacks %q:\n%s", want, ans.Text)
 		}
 	}
-	if got := l.Answer(context.Background(), camp, player, []Record{lookup("game-nights", nil)})[0]; !strings.Contains(got.Error, "owner or a co-DM") || got.Text != "" {
+	if got := l.Answer(context.Background(), camp, player, []Record{lookup("game-nights", nil)})[0]; !strings.Contains(got.Error, "choose Permitted") || got.Text != "" {
 		t.Errorf("a player got %+v", got)
 	}
 	if got := (&Lookups{}).Answer(context.Background(), camp, owner, []Record{lookup("game-nights", nil)})[0]; !strings.Contains(got.Error, "can't be looked up") {

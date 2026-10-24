@@ -93,6 +93,8 @@ type fakePages struct {
 	names    map[string]string
 	hidden   map[string]bool
 	readOnly map[string]bool
+	// pickerErr makes PickerTypes fail.
+	pickerErr error
 }
 
 func newFakePages() *fakePages {
@@ -127,6 +129,13 @@ func (f *fakePages) Names(_ context.Context, campaignID string, ids []string, _ 
 		}
 	}
 	return out, nil
+}
+
+func (f *fakePages) PickerTypes(_ context.Context, _ string) (PickerTypes, error) {
+	if f.pickerErr != nil {
+		return PickerTypes{}, f.pickerErr
+	}
+	return PickerTypes{Heroes: []int{1, 13}, Creatures: []int{5, 10}}, nil
 }
 
 // fakeResults is a ResultDirectory over a fixed set of tests in campaign c1.

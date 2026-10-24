@@ -187,7 +187,7 @@ func RenderEntities(
 		fmt.Fprintf(&b, "## %s\n\n", heading)
 
 		for _, e := range section {
-			if err := renderEntity(&b, &e, tagsByEntity[e.ID], relByEntity[e.ID], opts); err != nil {
+			if err := renderEntity(&b, &e, t.Fields, tagsByEntity[e.ID], relByEntity[e.ID], opts); err != nil {
 				return "", err
 			}
 			// Other modes also carry each era's version, as blocks AI Import
@@ -257,6 +257,7 @@ func visibleParentNames(ents []entities.Entity, extra map[string]string) map[str
 func renderEntity(
 	b *strings.Builder,
 	e *entities.Entity,
+	defs []entities.FieldDefinition,
 	entTags []tags.Tag,
 	rels []relations.Relation,
 	opts Options,
@@ -304,6 +305,10 @@ func renderEntity(
 	if body != "" {
 		b.WriteString(body)
 		b.WriteString("\n\n")
+	}
+
+	if line := sheetLine(e, defs, opts); line != "" {
+		b.WriteString(line + "\n\n")
 	}
 
 	// Player notes — only render in Permitted/Everything (Safe drops
@@ -372,6 +377,56 @@ func renderEntity(
 
 	b.WriteString("---\n\n")
 	return nil
+}
+
+// sheetMaxValue is the longest sheet value written out whole; a longer one
+// (a stat block's abilities, say) is named and left to a page lookup, so
+// the export stays small.
+const sheetMaxValue = 200
+
+// sheetLine is the page's sheet fields in its category's order, so an AI
+// reading a creature sees its stat block numbers, not only its text. Safe
+// mode leaves out GM-only and owner-only fields as a player's view does; a
+// link holds a page id, so it is named, not shown.
+func sheetLine(e *entities.Entity, defs []entities.FieldDefinition, opts Options) string {
+	if len(e.FieldsData) == 0 || len(defs) == 0 {
+		return ""
+	}
+	fields := entities.FilterRestrictedFields(e.FieldsData, defs, opts.Privacy != PrivacyModeSafe, false)
+	var parts []string
+	for _, d := range defs {
+		v, ok := fields[d.Key]
+		if !ok || v == nil {
+			continue
+		}
+		var text string
+		switch t := v.(type) {
+		case string:
+			text = strings.TrimSpace(t)
+		case bool:
+			text = "no"
+			if t {
+				text = "yes"
+			}
+		case float64, int, int64:
+			text = fmt.Sprint(t)
+		default:
+			text = "(a list; a `what: page` lookup shows it)"
+		}
+		switch {
+		case text == "":
+			continue
+		case d.Type == entities.FieldTypeLink:
+			text = "(a link; a `what: page` lookup shows it)"
+		case len(text) > sheetMaxValue:
+			text = "(long; a `what: page` lookup shows it)"
+		}
+		parts = append(parts, "`"+d.Key+"`: "+text)
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return "**Sheet fields** (change them with `fields:`): " + strings.Join(parts, " · ")
 }
 
 // ----------------------------------------------------------------------------

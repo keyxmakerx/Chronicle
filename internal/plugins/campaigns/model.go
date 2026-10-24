@@ -262,6 +262,18 @@ type CampaignContext struct {
 	IsAnonymous bool
 }
 
+// PlayerPreview is a copy of cc that draws a page as a player sees it, for an
+// owner with "view as player" on: edit controls, owner menus and Director
+// grants fall away. Display only: pass it to templates, never to a write or
+// an access check.
+func (cc *CampaignContext) PlayerPreview() *CampaignContext {
+	out := *cc
+	out.MemberRole = RolePlayer
+	out.IsDmGranted = false
+	out.IsSiteAdmin = false
+	return &out
+}
+
 // EffectiveRole returns the permission level to use for route-level authorization.
 // Site admins who are not members still get RoleNone here -- they should use
 // /admin routes instead for admin operations.

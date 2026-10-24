@@ -22,7 +22,7 @@ import (
 // claimingEnabled reports whether the Player Character Claiming addon is on (gates the
 // claim affordance); ownerName is the resolved display name of the current owner, if any.
 // userID is the viewing user's id, threaded to system-package renderers so they can tell
-// this entity's own claimed owner apart from any other viewer (C-FIELDS-OWNER-FILTER).
+// this entity's own claimed owner apart from any other viewer.
 templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, ancestors []Entity, children []Entity, showAttributes bool, showCalendar bool, claimingEnabled bool, ownerName string, csrfToken string, userID string) {
 	@layouts.App(entity.Name + " - " + cc.Campaign.Name) {
 		@withFullPage(entityPageBody(cc, entity, entityType, ancestors, children, showAttributes, showCalendar, claimingEnabled, ownerName, csrfToken, userID))
@@ -171,7 +171,6 @@ templ entityPageBody(cc *campaigns.CampaignContext, entity *Entity, entityType *
 					@pageFilesMount(cc, entity)
 				}
 			}
-
 			// A per-entity calendar is opt-in via the `entity_calendar`
 			// page-template block, not rendered automatically here.
 		</div>
@@ -350,71 +349,69 @@ templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 // progress bar and the amber error bar. Everyone else sees the picture alone.
 // The token maker stays with Scribes.
 templ blockImage(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, csrfToken string) {
+	// A viewer who can't add a picture gets no empty frame: on a phone it pushed
+	// the stats they came for a screen further down.
 	{{ canChange := canChangeOwnPage(ctx, cc, entity) }}
-	<div class={ "card cb-card overflow-hidden p-0", templ.KV("era-settle", eraViewOf(ctx).Open()) }>
-		if entity.ImagePath != nil && *entity.ImagePath != "" {
-			if canChange {
-				<div
-					class="relative"
-					data-widget="image-upload"
-					data-endpoint={ widgetEndpoint(ctx, cc.Campaign.ID, entity.ID, "image") }
-					data-upload-url="/media/upload"
-					data-csrf-token={ csrfToken }
-				>
+	if (entity.ImagePath != nil && *entity.ImagePath != "") || canChange {
+		<div class={ "card cb-card overflow-hidden p-0", templ.KV("era-settle", eraViewOf(ctx).Open()) }>
+			if entity.ImagePath != nil && *entity.ImagePath != "" {
+				if canChange {
+					<div
+						class="relative"
+						data-widget="image-upload"
+						data-endpoint={ widgetEndpoint(ctx, cc.Campaign.ID, entity.ID, "image") }
+						data-upload-url="/media/upload"
+						data-csrf-token={ csrfToken }
+					>
+						<img
+							src={ layouts.MediaURL(ctx, *entity.ImagePath) }
+							alt={ entity.Name }
+							class="w-full h-56 object-cover"
+						/>
+						if cc.MemberRole >= campaigns.RoleScribe && showsTokenMaker(entityType, entity) {
+							<div class="fx-chips">
+								<button
+									type="button"
+									class="fx-chip"
+									data-token-maker
+									data-campaign-id={ cc.Campaign.ID }
+									data-entity-id={ entity.ID }
+									data-name={ entity.Name }
+									data-art={ layouts.MediaURL(ctx, *entity.ImagePath) }
+									aria-label={ "Make token for " + entity.Name }
+								><i class="fa-solid fa-chess-pawn" aria-hidden="true"></i> Make token</button>
+								<button type="button" class="fx-chip" data-pick aria-label="Change image"><i class="fa-solid fa-camera"></i> Change</button>
+							</div>
+						} else {
+							<button type="button" class="fx-chip is-corner" data-pick aria-label="Change image"><i class="fa-solid fa-camera"></i> Change</button>
+						}
+						@eraPictureLabel()
+					</div>
+				} else {
 					<img
 						src={ layouts.MediaURL(ctx, *entity.ImagePath) }
 						alt={ entity.Name }
 						class="w-full h-56 object-cover"
 					/>
-					if cc.MemberRole >= campaigns.RoleScribe && showsTokenMaker(entityType, entity) {
-						<div class="fx-chips">
-							<button
-								type="button"
-								class="fx-chip"
-								data-token-maker
-								data-campaign-id={ cc.Campaign.ID }
-								data-entity-id={ entity.ID }
-								data-name={ entity.Name }
-								data-art={ layouts.MediaURL(ctx, *entity.ImagePath) }
-								aria-label={ "Make token for " + entity.Name }
-							><i class="fa-solid fa-chess-pawn" aria-hidden="true"></i> Make token</button>
-							<button type="button" class="fx-chip" data-pick aria-label="Change image"><i class="fa-solid fa-camera"></i> Change</button>
-						</div>
-					} else {
-						<button type="button" class="fx-chip is-corner" data-pick aria-label="Change image"><i class="fa-solid fa-camera"></i> Change</button>
-					}
-					@eraPictureLabel()
-				</div>
+				}
 			} else {
-				<img
-					src={ layouts.MediaURL(ctx, *entity.ImagePath) }
-					alt={ entity.Name }
-					class="w-full h-56 object-cover"
-				/>
+				if canChange {
+					<div
+						class="relative w-full h-40 bg-surface-alt flex flex-col items-center justify-center cursor-pointer hover:bg-surface transition-colors"
+						data-widget="image-upload"
+						data-endpoint={ widgetEndpoint(ctx, cc.Campaign.ID, entity.ID, "image") }
+						data-upload-url="/media/upload"
+						data-csrf-token={ csrfToken }
+					>
+						<svg class="w-8 h-8 text-fg-faint mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+						</svg>
+						<span class="text-xs text-fg-muted">Add Image</span>
+					</div>
+				}
 			}
-		} else {
-			if canChange {
-				<div
-					class="relative w-full h-40 bg-surface-alt flex flex-col items-center justify-center cursor-pointer hover:bg-surface transition-colors"
-					data-widget="image-upload"
-					data-endpoint={ widgetEndpoint(ctx, cc.Campaign.ID, entity.ID, "image") }
-					data-upload-url="/media/upload"
-					data-csrf-token={ csrfToken }
-				>
-					<svg class="w-8 h-8 text-fg-faint mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-					</svg>
-					<span class="text-xs text-fg-muted">Add Image</span>
-				</div>
-			} else {
-				<div class="w-full h-40 bg-surface-alt flex items-center justify-center">
-					<svg class="w-12 h-12 text-fg-faint" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-					</svg>
-				</div>
-			}
-		}
-	</div>
+		</div>
+	}
 }
 
 // blockEntry renders the TipTap rich text editor for the entity's main content.
@@ -718,10 +715,7 @@ func entityBlockTextContent(config map[string]any) string {
 		return ""
 	}
 	s, _ := v.(string)
-	if s == "" {
-		return ""
-	}
-	return sanitize.HTML(s)
+	return sanitize.TextBlock(s)
 }
 
 // blockChildren renders a sub-pages section showing direct children of this entity,

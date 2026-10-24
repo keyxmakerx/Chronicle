@@ -215,3 +215,22 @@ func TestApplyPresets_ReconcileNeverAdopts(t *testing.T) {
 		t.Errorf("reconcile adopted=%d created=%d, want none", fake.adopted, len(fake.created))
 	}
 }
+
+// TestApplyPresets_FindsTypesNamedWhileEscaped pins that a type created while
+// manifest text was still HTML-escaped on load ("R&amp;D Labs") is found by
+// its preset "R&D Labs", not duplicated beside it.
+func TestApplyPresets_FindsTypesNamedWhileEscaped(t *testing.T) {
+	fake := &fakePresetEntities{types: []entities.EntityType{{ID: 7, Name: "R&amp;D Labs"}}}
+	manifest := &systems.SystemManifest{ID: "sys", EntityPresets: []systems.EntityPresetDef{
+		{Slug: "lab", Name: "R&D Labs", NamePlural: "R&D Labs", Fields: []systems.FieldDef{{Key: "x", Label: "X", Type: "number"}}},
+	}}
+	if _, err := newPresetApplier(fake).applyManifestPresets(context.Background(), "c1", "sys", manifest, true, nil); err != nil {
+		t.Fatal(err)
+	}
+	if len(fake.created) != 0 {
+		t.Errorf("created %d types, want the escaped-name type reused", len(fake.created))
+	}
+	if len(fake.reconciled) == 0 {
+		t.Error("the existing type should take the preset")
+	}
+}

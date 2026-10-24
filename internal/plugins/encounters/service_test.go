@@ -516,3 +516,33 @@ func TestStagesOnReadDropGoneReferences(t *testing.T) {
 		}
 	})
 }
+
+// The page list carries the campaign's picker types; when they can't be read
+// the list still loads, with empty pickers rather than an error.
+func TestListForPagePickerTypes(t *testing.T) {
+	cases := []struct {
+		name          string
+		pickerErr     error
+		wantHeroes    int
+		wantCreatures int
+	}{
+		{"types offered", nil, 2, 2},
+		{"types unavailable", errors.New("types down"), 0, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			svc, _, pages := newTestService()
+			pages.pickerErr = tc.pickerErr
+			list, err := svc.ListForPage(context.Background(), "c1", "page1", dm)
+			if err != nil {
+				t.Fatalf("list: %v", err)
+			}
+			if len(list.HeroTypeIDs) != tc.wantHeroes || len(list.CreatureTypeIDs) != tc.wantCreatures {
+				t.Errorf("got heroes %v creatures %v", list.HeroTypeIDs, list.CreatureTypeIDs)
+			}
+			if list.HeroTypeIDs == nil || list.CreatureTypeIDs == nil {
+				t.Errorf("lists must encode as [], not null")
+			}
+		})
+	}
+}

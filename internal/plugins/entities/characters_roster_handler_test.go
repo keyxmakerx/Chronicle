@@ -338,6 +338,10 @@ func TestFillCastRoster(t *testing.T) {
 
 func (s *rosterSvc) GetEntityTypes(context.Context, string) ([]EntityType, error) { return nil, nil }
 
+func (s *rosterSvc) CountByType(context.Context, string, int, string) (map[int]int, error) {
+	return nil, nil
+}
+
 func (s *rosterSvc) CheckEntityAccess(context.Context, string, int, string) (*EffectivePermission, error) {
 	return &EffectivePermission{CanView: true}, nil
 }

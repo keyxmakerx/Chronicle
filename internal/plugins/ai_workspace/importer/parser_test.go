@@ -130,6 +130,14 @@ visibility: PUBLIC
 	}
 }
 
+// A page takes the records' word for everyone too.
+func TestParse_VisibilityEveryoneIsPublic(t *testing.T) {
+	p := Parse("---\nname: Bone Citadel\ntype: location\nvisibility: everyone\n---\nText.")[0]
+	if p.Status == StatusParseError || p.FrontMatter.Visibility != "public" {
+		t.Errorf("status %q, visibility %q, error %q", p.Status, p.FrontMatter.Visibility, p.ParseError)
+	}
+}
+
 // TestParse_MalformedFrontMatter_ParseError catches bad YAML.
 func TestParse_MalformedFrontMatter_ParseError(t *testing.T) {
 	input := `---

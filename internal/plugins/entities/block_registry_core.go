@@ -197,10 +197,10 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 	r.Register(BlockMeta{
 		Type: "text_block", Label: "Text Block", Icon: "fa-align-left",
 		TileSizes: []string{"1x1", "2x1", "2x2", "4x2"},
-		Description: "Custom static HTML content",
+		Description: "Your own words: notes, links or instructions",
 		Contexts:    []string{"dashboard", "template"},
 		ConfigFields: []ConfigFieldMeta{
-			{Key: "content", Label: "HTML Content", Type: "textarea"},
+			{Key: "content", Label: "Text", Type: "textarea", Hint: "Type plain text. A blank line starts a new paragraph."},
 		},
 	}, func(ctx BlockRenderContext) templ.Component {
 		return blockTextBlock(ctx.Block.Config)

@@ -82,13 +82,17 @@ func rowMenuToneClass(tone string) string {
 }
 
 // userRowActions lists the actions of a People row. An admin cannot be
-// disabled from here, matching the table's existing rule.
-func userRowActions(u auth.User) []rowAction {
+// disabled from here, matching the table's existing rule, and nobody is
+// offered a change to their own admin rights, which the server refuses.
+func userRowActions(u auth.User, selfID string) []rowAction {
 	var acts []rowAction
-	if u.IsAdmin {
+	switch {
+	case u.ID == selfID:
+		// No admin change on your own row.
+	case u.IsAdmin:
 		acts = append(acts, rowAction{Label: "Remove Admin", MenuLabel: "Remove admin…", Method: "put",
 			URL: fmt.Sprintf("/admin/users/%s/admin", u.ID), Confirm: "Remove admin privileges from this user?", Tone: "danger"})
-	} else {
+	default:
 		acts = append(acts, rowAction{Label: "Make Admin", MenuLabel: "Make admin…", Method: "put",
 			URL: fmt.Sprintf("/admin/users/%s/admin", u.ID), Confirm: "Grant admin privileges to this user?", Tone: "accent"})
 	}
@@ -127,29 +131,32 @@ func campaignJoinActions(c campaigns.Campaign, csrf string) []rowAction {
 	}
 }
 
-// campaignRowActions are the non-join actions of a Campaigns row.
-func campaignRowActions(c campaigns.Campaign) []rowAction {
-	return []rowAction{
-		{Label: "Leave", MenuLabel: "Leave campaign…", Method: "delete", URL: fmt.Sprintf("/admin/campaigns/%s/leave", c.ID),
-			Confirm: "Leave this campaign? You will lose the access you gave yourself."},
-		{Label: "Move to trash", MenuLabel: "Move to trash…", Method: "delete", URL: fmt.Sprintf("/admin/campaigns/%s", c.ID),
-			Confirm: "Move this campaign to the trash? It disappears for everyone right away. You can bring it back from Trash until it empties.", Tone: "danger"},
+// campaignRowActions are the non-join actions of a Campaigns row. Leave is
+// offered only where the admin can leave: they are a member and not the
+// owner (an owner has to hand the campaign over first).
+func campaignRowActions(c campaigns.Campaign, canLeave bool) []rowAction {
+	var acts []rowAction
+	if canLeave {
+		acts = append(acts, rowAction{Label: "Leave", MenuLabel: "Leave campaign…", Method: "delete", URL: fmt.Sprintf("/admin/campaigns/%s/leave", c.ID),
+			Confirm: "Leave this campaign? You will lose the access you gave yourself."})
 	}
+	return append(acts, rowAction{Label: "Move to trash", MenuLabel: "Move to trash…", Method: "delete", URL: fmt.Sprintf("/admin/campaigns/%s", c.ID),
+		Confirm: "Move this campaign to the trash? It disappears for everyone right away. You can bring it back from Trash until it empties.", Tone: "danger"})
 }
 
 // campaignCardActions is the phone menu: join choices first, then the rest,
 // with the destructive tail set apart.
-func campaignCardActions(c campaigns.Campaign, st campaigns.HandoverStatus, csrf string) []rowAction {
+func campaignCardActions(c campaigns.Campaign, st campaigns.HandoverStatus, canLeave bool, csrf string) []rowAction {
 	acts := append(campaignJoinActions(c, csrf), handoverAction(c, st)...)
-	acts = append(acts, campaignRowActions(c)...)
+	acts = append(acts, campaignRowActions(c, canLeave)...)
 	acts[len(acts)-1].DividerBefore = true
 	return acts
 }
 
 // userCardActions is the phone menu: the destructive account actions (disable,
 // force logout) sit after a divider.
-func userCardActions(u auth.User) []rowAction {
-	acts := userRowActions(u)
+func userCardActions(u auth.User, selfID string) []rowAction {
+	acts := userRowActions(u, selfID)
 	if len(acts) > 1 {
 		acts[1].DividerBefore = true
 	}

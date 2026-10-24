@@ -3,7 +3,8 @@ package dmscreen
 import "fmt"
 
 // HiddenRow is one hidden character with its Reveal button; after a reveal
-// the handler redraws it with the button replaced by a confirmation.
+// the handler redraws it with a confirmation and an Undo, which dm_screen.js
+// takes away after a few seconds, so a misclick at the table can be taken back.
 templ HiddenRow(campaignID string, h HiddenView, csrf string) {
 	<div class="dms-row">
 		<span>
@@ -13,7 +14,22 @@ templ HiddenRow(campaignID string, h HiddenView, csrf string) {
 			}
 		</span>
 		if h.Revealed {
-			<span class="dms-done">Shown to players</span>
+			<span class="dms-done-wrap">
+				<span class="dms-done" tabindex="-1" data-dms-done>Shown to players</span>
+				if h.CanUndo {
+					<button
+						type="button"
+						data-dms-undo
+						hx-post={ fmt.Sprintf("/campaigns/%s/dm-screen/hide/%s", campaignID, h.ID) }
+						hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrf) }
+						hx-target="closest .dms-row"
+						hx-swap="outerHTML"
+						hx-sync="this:drop"
+						hx-disabled-elt="this"
+						aria-label={ "Undo: hide " + h.Name + " again" }
+					>Undo</button>
+				}
+			</span>
 		} else {
 			<button
 				type="button"

@@ -40,9 +40,12 @@ type homeInput struct {
 	SMTPConfigured, SMTPKnown bool
 	// Backup state: BackupsKnown is false when the lister isn't wired;
 	// BackupsEnabled is whether a backup folder is configured; LastBackup is
-	// the newest backup file's time, zero when there is none.
+	// the newest finished backup's time, zero when there is none, and
+	// LastBackupPreUpdate says it was the automatic one before an update.
 	BackupsKnown, BackupsEnabled bool
 	LastBackup                   time.Time
+	LastBackupPreUpdate          bool
+	LastBackupFailed             bool
 	Now                          time.Time
 }
 
@@ -132,8 +135,8 @@ func siteLookTile(in homeInput) HomeTile {
 	return t
 }
 
-// backupTile reports the age of the newest backup file. The dot appears only
-// when backups are configured yet no file exists: any age threshold would be a
+// backupTile reports the age of the newest finished backup. The dot appears
+// when the last run failed or no backup exists: any age threshold would be a
 // guess about how often this site backs up.
 func backupTile(in homeInput) HomeTile {
 	t := HomeTile{Label: "Backups & restore", Href: "/admin/backup"}
@@ -142,8 +145,12 @@ func backupTile(in homeInput) HomeTile {
 		t.Big, t.Line = "—", "status unavailable"
 	case !in.BackupsEnabled:
 		t.Big, t.Line = "Not set up", "no backup folder is configured"
+	case in.LastBackupFailed:
+		t.Big, t.Line, t.Attention = "Failed", "the last backup did not finish", true
 	case in.LastBackup.IsZero():
 		t.Big, t.Line, t.Attention = "None yet", "no backup files found", true
+	case in.LastBackupPreUpdate:
+		t.Big, t.Line = backupAge(in.Now.Sub(in.LastBackup)), "since the automatic backup before an update"
 	default:
 		t.Big, t.Line = backupAge(in.Now.Sub(in.LastBackup)), "since the last backup"
 	}

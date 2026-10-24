@@ -25,6 +25,9 @@ const hiddenLimit = 8
 type Service interface {
 	Build(ctx context.Context, campaignID string, v Viewer) (*View, error)
 	Reveal(ctx context.Context, entityID, campaignID string, v Viewer) (string, error)
+	// UndoReveal hides again a character Reveal showed, for the owner and
+	// co-DMs, who can hide any page from its visibility control anyway.
+	UndoReveal(ctx context.Context, entityID, campaignID string, v Viewer) (string, error)
 	SetDowntime(ctx context.Context, campaignID string, v Viewer, open bool) (DowntimeResult, error)
 
 	// StepTime moves the world's date forward by one of the TimeSteps.
@@ -218,6 +221,19 @@ func (s *service) Reveal(ctx context.Context, entityID, campaignID string, v Vie
 		return "", apperror.NewBadRequest("entity ID is required")
 	}
 	return s.src.Hidden.Reveal(ctx, entityID, campaignID)
+}
+
+func (s *service) UndoReveal(ctx context.Context, entityID, campaignID string, v Viewer) (string, error) {
+	if !v.IsOwner() {
+		return "", apperror.NewForbidden("only the campaign owner or a co-DM can hide a character again")
+	}
+	if s.src.Hidden == nil {
+		return "", apperror.NewNotFound("revealing is not available")
+	}
+	if entityID == "" {
+		return "", apperror.NewBadRequest("entity ID is required")
+	}
+	return s.src.Hidden.Hide(ctx, entityID, campaignID)
 }
 
 // SetDowntime switches downtime from the screen. Only the owner (or a

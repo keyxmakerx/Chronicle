@@ -188,25 +188,26 @@ func TestStoredRowPermRendersWithoutPermissionsBlock(t *testing.T) {
 	}
 }
 
-// TestPageCorner_OnlyOwnerGetsEditor pins who can open the permissions
-// editor from the page corner: the Owner gets the corner widget mount, while
-// a member the owner has given DM access sees the control but no editor (the
-// permissions routes are Owner-only). The title block no longer carries a
-// second visibility icon.
-func TestPageCorner_OnlyOwnerGetsEditor(t *testing.T) {
+// TestPageCorner_DMTeamGetsEditor pins who can open the permissions editor
+// from the page corner: the DM team (the Owner and a member the owner has
+// given DM access) gets the corner widget mount, matching the permissions
+// routes' gate. The title block no longer carries a second visibility icon.
+func TestPageCorner_DMTeamGetsEditor(t *testing.T) {
 	entity := &Entity{ID: "e1", CampaignID: "c1", Name: "The Gilded Anvil", Visibility: VisibilityDefault}
 	viewers := glanceViewers()
 
-	owner := renderComponent(t, effectiveVisibilityBadge(viewers["owner"], entity, nil))
-	for _, want := range []string{`data-widget="permissions"`, `data-layout="corner"`, `/campaigns/c1/entities/e1/permissions`, "data-perm-corner-trigger"} {
-		if !strings.Contains(owner, want) {
-			t.Errorf("owner corner missing %q\ngot: %s", want, owner)
+	for _, who := range []string{"owner", "co-dm"} {
+		got := renderComponent(t, effectiveVisibilityBadge(viewers[who], entity, nil))
+		for _, want := range []string{`data-widget="permissions"`, `data-layout="corner"`, `/campaigns/c1/entities/e1/permissions`, "data-perm-corner-trigger"} {
+			if !strings.Contains(got, want) {
+				t.Errorf("%s corner missing %q\ngot: %s", who, want, got)
+			}
 		}
 	}
 
-	coDM := renderComponent(t, effectiveVisibilityBadge(viewers["co-dm"], entity, nil))
-	if strings.Contains(coDM, "data-widget") {
-		t.Errorf("a member with DM access must not get the editor mount:\n%s", coDM)
+	scribe := &campaigns.CampaignContext{Campaign: viewers["owner"].Campaign, MemberRole: campaigns.RoleScribe, IsMember: true}
+	if got := renderComponent(t, effectiveVisibilityBadge(scribe, entity, nil)); strings.Contains(got, `data-widget="permissions"`) {
+		t.Errorf("a scribe without DM access must not get the editor mount:\n%s", got)
 	}
 
 	title := renderComponent(t, blockTitle(viewers["owner"], entity, "csrf"))

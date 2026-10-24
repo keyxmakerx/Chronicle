@@ -107,7 +107,34 @@ func TestClaimTypeID(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := claimTypeID(tt.types); got != tt.want {
+			if got := claimTypeID(tt.types, nil); got != tt.want {
+				t.Errorf("claimTypeID = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestClaimTypeID_SkipsEmptyTypes pins that the "Find a character to claim"
+// link goes where the characters are: an empty Player Characters sub-type
+// loses to the generic type that holds them.
+func TestClaimTypeID_SkipsEmptyTypes(t *testing.T) {
+	yes := true
+	types := []EntityType{
+		{ID: 5, Slug: "character"},
+		{ID: 6, Slug: "player-character", Claimable: &yes},
+	}
+	tests := []struct {
+		name   string
+		counts map[int]int
+		want   int
+	}{
+		{"PC sub-type empty, characters elsewhere", map[int]int{5: 4}, 5},
+		{"PC sub-type has pages", map[int]int{5: 4, 6: 1}, 6},
+		{"every type empty keeps the usual choice", map[int]int{}, 6},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := claimTypeID(types, tt.counts); got != tt.want {
 				t.Errorf("claimTypeID = %d, want %d", got, tt.want)
 			}
 		})

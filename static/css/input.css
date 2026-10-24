@@ -1269,9 +1269,10 @@
      smaller: the one bounce in Chronicle, signed as an exception
      (.ai/ui-standard.md "Motion"). Coming out, the admin page falls away
      down the screen and the page you came from is underneath. Both are
-     cross-document view transitions (.admin-vt); without them the new admin
-     page itself rises over the page colour, and on the way out site_admin.js
-     lets the admin page fall before it leaves.
+     cross-document view transitions (.admin-vt). Without them the new page
+     plays the move itself: the admin page rises over the page colour, and on
+     the way out a sheet in the control room's colour covers the page you
+     return to and falls away, so that page, never a blank, is underneath.
      Calm fades instead; Off plays nothing (the script never names it). */
   html.admin-vt::view-transition-old(root),
   html.admin-vt::view-transition-new(root) { mix-blend-mode: normal; animation: none; }
@@ -1288,6 +1289,13 @@
   :is(html[data-cz-reduce], html[data-view-motion="calm"]).admin-vt[data-admin-vt="out"]::view-transition-old(root) { animation: admin-fade var(--dur-standard) linear reverse both; box-shadow: none; }
   html[data-admin-vt="in"]:not(.admin-vt) { overflow: hidden; }
   html[data-admin-vt="in"]:not(.admin-vt) body { animation: admin-rise var(--dur-arrive, 820ms) linear both; }
+  html[data-admin-vt="out"]:not(.admin-vt)::after {
+    content: ""; position: fixed; inset: 0; z-index: 2147483647; pointer-events: none;
+    background: #0b0e14; /* the control room's page colour, as base.templ paints it */
+    box-shadow: 0 -14px 32px -12px rgb(0 0 0 / 0.35);
+    animation: admin-fall var(--dur-leave, 460ms) cubic-bezier(0.5, 0, 0.75, 0) both;
+  }
+  :is(html[data-cz-reduce], html[data-view-motion="calm"])[data-admin-vt="out"]:not(.admin-vt)::after { animation: admin-fade var(--dur-standard) linear reverse both; box-shadow: none; }
   html[data-admin-vt="in"] .admin-band::after { animation: admin-rule 300ms var(--ease-slide) calc(var(--dur-arrive, 820ms) - 320ms) both; }
   /* Each keyframe sets the easing of the stretch after it: easing in on the
      way up and into each fall, easing out off each bounce. */
@@ -1713,6 +1721,14 @@
   /* On the Journal the tab rises clear of the editor's footer (History,
      Audio) and the list's note count, which sit along the bottom edge. */
   body:has(.jnl) .jot-tab { bottom: calc(1.5rem + 2.25rem); }
+  /* Bars pinned to the bottom edge keep their right-hand buttons clear of
+     the tab: the Customizer's unsaved-changes bar (48px tall, about 34px up) and the
+     calendar's Look/Edit deck (45px, at the edge). */
+  body:has([data-czs-savebar]:not([hidden])) .jot-tab { bottom: 6rem; }
+  body:has(.cal-v5 .deck) .jot-tab { bottom: calc(45px + .75rem); }
+  /* A page's Files section is its last block, and Attach a file sits at its
+     right edge: leave room to scroll it above the tab. */
+  body:has(.jot-tab:not(.jot-tab-hidden)) .pf-section { margin-bottom: 4rem; }
   .jot-tab-hidden { opacity: 0; transform: translateY(8px) scale(.96); pointer-events: none; visibility: hidden; }
   /* The open navigation drawer sits over the page; the tab must not sit on it. */
   body:has(.sidebar-mobile-open) .jot-tab { opacity: 0; visibility: hidden; pointer-events: none; }
@@ -1724,6 +1740,8 @@
     .jot-tab > .jot-tab-label { display: none; }
     body:has(.jnl) .jot-tab { bottom: calc(1rem + 2.25rem); }
     body:has(.jot-tab:not([hidden])) #main-content { padding-bottom: 4.5rem; }
+    body:has([data-czs-savebar]:not([hidden])) .jot-tab { bottom: 6rem; }
+    body:has(.cal-v5 .deck) .jot-tab { bottom: calc(45px + .75rem); }
   }
 
   /* Panel: rises from the tab's corner. Users can resize it by the drag
@@ -4987,6 +5005,7 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
   .dms-req-btns { display: flex; gap: .3rem; flex-shrink: 0; }
   .dms-row .dms-req-yes { background: var(--dms-ok-soft); font-weight: 700; }
   .dms-done { font-size: .78rem; color: var(--dms-ok); }
+  .dms-done-wrap { display: inline-flex; align-items: center; gap: .5rem; }
   .dms-overlay [hidden], .dms-overlay[hidden] { display: none; }
   .dms-skip { position: absolute; right: .75rem; bottom: .75rem; font-size: .85rem; color: #fff; background: rgba(0,0,0,.5); border-radius: .4rem; padding: .15rem .5rem; }
   /* The burst's pieces are shards of light, not a second die: the thrown

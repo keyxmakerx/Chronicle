@@ -96,6 +96,15 @@ type SessionService interface {
 	// it" (absent) at this boundary. UpdateRSVP itself is unchanged and keeps
 	// its exact prior behavior — this is an addition, not a replacement.
 	UpdateRSVPDetailed(ctx context.Context, sessionID, userID, status string, occurrenceDate *string, note patch.Field[string]) error
+	// RespondRSVP is a member answering a session they can see: it refuses a
+	// session that no longer AcceptsRSVP, then records the answer through
+	// UpdateRSVPDetailed when a note or night is given, else UpdateRSVP. The
+	// two underlying calls stay unguarded because an import restores the
+	// attendance of nights that are already over.
+	RespondRSVP(ctx context.Context, session *Session, userID, status string, occurrenceDate *string, note patch.Field[string]) error
+	// NotifySessionScheduled tells every member but the scheduler that a new
+	// night is on the calendar and asks if they're coming.
+	NotifySessionScheduled(ctx context.Context, session *Session, schedulerID, schedulerName string, memberIDs []string) error
 	// SetExcludedFromCount is the Director's own "leave myself out of the
 	// tally" switch (operator answer #3). Only the session's organizer or the
 	// campaign owner may call it, and only ever on their OWN userID —
@@ -538,6 +547,23 @@ func (s *sessionService) UpdateRSVP(ctx context.Context, sessionID, userID, stat
 	return s.repo.UpdateAttendeeStatus(ctx, sessionID, userID, status)
 }
 
+// RespondRSVP records a member's own answer to a session still taking them.
+func (s *sessionService) RespondRSVP(ctx context.Context, session *Session, userID, status string, occurrenceDate *string, note patch.Field[string]) error {
+	if !session.AcceptsRSVP() {
+		return apperror.NewConflict("this game night is over, so it no longer takes answers")
+	}
+	var err error
+	if note.Present() || occurrenceDate != nil {
+		err = s.UpdateRSVPDetailed(ctx, session.ID, userID, status, occurrenceDate, note)
+	} else {
+		err = s.UpdateRSVP(ctx, session.ID, userID, status)
+	}
+	if err == nil {
+		s.clearScheduledAsk(ctx, userID, session.CampaignID, session.ID)
+	}
+	return err
+}
+
 // ListAttendees returns attendees for a session.
 func (s *sessionService) ListAttendees(ctx context.Context, sessionID string) ([]Attendee, error) {
 	return s.repo.ListAttendees(ctx, sessionID)
@@ -714,6 +740,10 @@ func (s *sessionService) ValidateRSVPToken(ctx context.Context, tokenStr string)
 	if time.Now().UTC().After(token.ExpiresAt) {
 		return nil, apperror.NewBadRequest("this RSVP link has expired")
 	}
+	// A link mailed before the night finished must not count anyone at it.
+	if sess, err := s.repo.FindByID(ctx, token.SessionID); err == nil && sess != nil && !sess.AcceptsRSVP() {
+		return nil, apperror.NewBadRequest("this game night is over, so this RSVP link no longer works")
+	}
 	return token, nil
 }
 
@@ -740,6 +770,9 @@ func (s *sessionService) ApplyRSVPToken(ctx context.Context, tokenStr string) (*
 	}
 	if err := s.repo.UpdateAttendeeStatus(ctx, token.SessionID, token.UserID, token.Action); err != nil {
 		return nil, err
+	}
+	if sess, err := s.repo.FindByID(ctx, token.SessionID); err == nil && sess != nil {
+		s.clearScheduledAsk(ctx, token.UserID, sess.CampaignID, sess.ID)
 	}
 	return token, nil
 }

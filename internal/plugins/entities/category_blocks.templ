@@ -149,7 +149,7 @@ templ catEntityGrid(cc *campaigns.CampaignContext, et *EntityType, entities []En
 templ catTextBlock(config map[string]any) {
 	if content, ok := config["content"].(string); ok && content != "" {
 		<div class="prose prose-sm max-w-none text-fg-body">
-			@templ.Raw(sanitize.HTML(content))
+			@templ.Raw(sanitize.TextBlock(content))
 		</div>
 	}
 }

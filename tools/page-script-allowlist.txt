@@ -29,4 +29,3 @@
 # assumed here — this guard stops the bleeding, the sweep does the diagnosis.
 
 1 internal/plugins/designlab/design_lab.templ
-1 internal/plugins/sessions/availability.templ

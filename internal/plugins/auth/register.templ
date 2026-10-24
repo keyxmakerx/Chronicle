@@ -18,7 +18,11 @@ templ RegisterPage(csrfToken string, req *RegisterRequest, errMsg, redirect stri
 				<div class="text-center mb-8">
 					@layouts.SiteAuthMark()
 					<h1 class="text-3xl font-bold text-fg">Get started</h1>
-					<p class="text-fg-secondary mt-2">Create your { layouts.SiteName(ctx) } account</p>
+					if joiningCampaign(redirect) {
+						<p class="text-fg-secondary mt-2">Create your { layouts.SiteName(ctx) } account, then you&apos;ll join the campaign you were invited to.</p>
+					} else {
+						<p class="text-fg-secondary mt-2">Create your { layouts.SiteName(ctx) } account</p>
+					}
 				</div>
 				if gated {
 					@registrationGatedPanel(mode, redirect)
@@ -53,11 +57,7 @@ templ registrationGatedPanel(mode, redirect string) {
 		<p class="text-center text-sm text-fg-secondary">
 			Already have an account?
 			<a
-				if redirect != "" {
-					href={ templ.SafeURL("/login?redirect=" + redirect) }
-				} else {
-					href="/login"
-				}
+				href={ templ.SafeURL(loginHref(redirect)) }
 				class="text-accent hover:text-accent-hover font-medium"
 			>
 				Sign in
@@ -169,11 +169,7 @@ templ RegisterFormComponent(csrfToken string, req *RegisterRequest, errMsg, redi
 			<p class="text-center text-sm text-fg-secondary">
 				Already have an account?
 				<a
-					if redirect != "" {
-						href={ templ.SafeURL("/login?redirect=" + redirect) }
-					} else {
-						href="/login"
-					}
+					href={ templ.SafeURL(loginHref(redirect)) }
 					class="text-accent hover:text-accent-hover font-medium"
 				>
 					Sign in

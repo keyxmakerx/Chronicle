@@ -19,7 +19,8 @@
   /** Get campaign ID from the URL. */
   function getCampaignID() {
     var parts = window.location.pathname.split('/');
-    if (parts.length >= 3 && parts[1] === 'campaigns') {
+    if (parts.length >= 3 && parts[1] === 'campaigns' && parts[2] !== '' &&
+        parts[2] !== 'new' && parts[2] !== 'picker' && parts[2] !== 'import') {
       return parts[2];
     }
     return null;

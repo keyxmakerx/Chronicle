@@ -4,18 +4,20 @@
 // Server values (saved system id, option list, campaign id) reach Alpine
 // through data-* attributes and the x-data object is a constant string, so
 // an owner-supplied "custom:<url>" system id can never become script text.
+// They are read once in init(): inside a method run from the select's
+// @change, $el is the select, not the element carrying the data.
 
 package campaigns
 
-// gameSystemCard renders the picker. Saving reuses the existing
-// PUT /campaigns/:id/system endpoint; nothing about how the choice is stored
-// changes, only where the control lives.
-templ gameSystemCard(cc *CampaignContext, systemOptionsJSON string) {
+// gameSystemCard renders the picker, the campaign's only game system control.
+// Saving reuses the existing PUT /campaigns/:id/system endpoint. current is
+// the system the campaign uses now (see currentSystemID).
+templ gameSystemCard(cc *CampaignContext, systemOptionsJSON, current string) {
 	<section class="card p-4" aria-labelledby="game-system-heading" data-game-system-card>
 		<h2 id="game-system-heading" class="text-sm font-semibold text-fg mb-1">Game system</h2>
 		<p class="text-xs text-fg-secondary mb-3">Rules, tooltips and reference data your campaign uses.</p>
 		<div
-			data-saved-system={ cc.Campaign.ParseSettings().SystemID }
+			data-saved-system={ current }
 			data-systems={ systemOptionsJSON }
 			data-campaign-id={ cc.Campaign.ID }
 			x-data="{
@@ -26,8 +28,10 @@ templ gameSystemCard(cc *CampaignContext, systemOptionsJSON string) {
 				saved: false,
 				failed: false,
 				systems: [],
+				campaignId: '',
 				init() {
 					var d = this.$el.dataset;
+					this.campaignId = d.campaignId || '';
 					var saved = d.savedSystem || '';
 					try { this.systems = JSON.parse(d.systems || '[]'); } catch (e) { this.systems = []; }
 					if (saved.indexOf('custom:') === 0) {
@@ -54,7 +58,7 @@ templ gameSystemCard(cc *CampaignContext, systemOptionsJSON string) {
 					if (id === 'custom' && this.customUrl.trim()) {
 						id = 'custom:' + this.customUrl.trim();
 					}
-					var res = await Chronicle.apiFetch('/campaigns/' + this.$el.dataset.campaignId + '/system', {
+					var res = await Chronicle.apiFetch('/campaigns/' + this.campaignId + '/system', {
 						method: 'PUT',
 						body: { system_id: id }
 					});
@@ -96,6 +100,7 @@ templ gameSystemCard(cc *CampaignContext, systemOptionsJSON string) {
 				<span x-show="saved" x-cloak x-transition class="text-xs text-green-600">Saved</span>
 				<span x-show="failed" x-cloak class="text-xs text-red-600">Could not save. Try again.</span>
 			</div>
+			<p class="text-xs text-fg-muted mt-1">Don't see your game? Your site admin can install more game systems.</p>
 		</div>
 	</section>
 }

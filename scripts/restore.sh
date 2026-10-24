@@ -1,8 +1,8 @@
 #!/bin/sh
 # scripts/restore.sh -- Restore a Chronicle deployment from a scripts/backup.sh
-# snapshot set (distinct from recovering the automatic
-# chronicle_pre_migrate_*.sql.gz pre-migration backup — see
-# docs/deployment.md §7 Scenario A).
+# snapshot set, or from the automatic pre-update capture
+# (chronicle_pre_migrate_manifest_*.txt), which uses the same manifest format
+# — see docs/deployment.md §7 Scenario A.
 #
 # A single gated command, not a sequence of scripts, because that's what an
 # operator types at 2 AM under stress: safety comes from confirmation flags

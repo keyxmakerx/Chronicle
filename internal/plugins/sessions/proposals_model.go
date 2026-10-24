@@ -98,8 +98,8 @@ type SlotProposalToken struct {
 	CreatedAt time.Time
 }
 
-// Notification is one in-app notification row. Generic + removable (T-B2); the
-// scheduler feature is its only writer this slice.
+// Notification is one in-app notification row. Generic and removable (T-B2);
+// the scheduler is its only writer.
 type Notification struct {
 	ID         string
 	UserID     string

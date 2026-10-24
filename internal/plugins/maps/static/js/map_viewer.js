@@ -1822,6 +1822,26 @@
 		$id('mp-sheet-x').addEventListener('click', function() { closeSheet(true); });
 		$id('ms-cancel').addEventListener('click', function() { closeSheet(true); });
 		syncSheet();
+
+		// The no-picture card: Add opens the sheet at its Picture field.
+		var nopic = $id('mp-nopic');
+		if (nopic) {
+			var nopicKey = 'chronicle.mapnopic.' + mapID;
+			var keptBlank = false;
+			try { keptBlank = localStorage.getItem(nopicKey) === '1'; } catch (e) { /* storage blocked: show it */ }
+			nopic.hidden = keptBlank;
+			$id('mp-nopic-add').addEventListener('click', function() {
+				nopic.hidden = true;
+				openSheet();
+				var file = $id('ms-image-file');
+				file.scrollIntoView({ block: 'nearest' });
+				file.focus();
+			});
+			$id('mp-nopic-x').addEventListener('click', function() {
+				nopic.hidden = true;
+				try { localStorage.setItem(nopicKey, '1'); } catch (e) { /* storage blocked: it comes back next visit */ }
+			});
+		}
 	}
 
 	// ---- Search ----
@@ -1995,12 +2015,12 @@
 		kindSel.value = KINDS.some(function(k) { return k.id === mk.pin_category; }) ? mk.pin_category : '';
 		kindSel.dataset.original = kindSel.value;
 		var entityInput = document.getElementById('mk-entity-id');
-		entityInput.value = mk.entity_id || '';
-		entityInput.dataset.original = entityInput.value;
+		entityInput.dataset.original = mk.entity_id || '';
+		setPagePick(mk.entity_id || '', mk.entity_name || '');
 
-		document.getElementById('mk-modal-title').textContent = 'Edit Marker';
+		document.getElementById('mk-modal-title').textContent = 'Edit pin';
 		document.getElementById('mk-submit-icon').className = 'fa-solid fa-check mr-1';
-		document.getElementById('mk-submit-text').textContent = 'Save Changes';
+		document.getElementById('mk-submit-text').textContent = 'Save changes';
 		// Same rule as the pin card's Remove: owners any marker, a scribe
 		// only their own; the server enforces it either way.
 		var canRemove = isOwner || (isScribe && userID && mk.created_by === userID);
@@ -2020,11 +2040,110 @@
 		document.getElementById('mk-icon').value = 'fa-map-pin';
 		document.getElementById('mk-color').value = '#3b82f6';
 		document.getElementById('mk-kind').dataset.original = '';
-		document.getElementById('mk-modal-title').textContent = 'New Marker';
+		document.getElementById('mk-entity-id').dataset.original = '';
+		setPagePick('', '');
+		document.getElementById('mk-modal-title').textContent = 'New pin';
 		document.getElementById('mk-submit-icon').className = 'fa-solid fa-plus mr-1';
-		document.getElementById('mk-submit-text').textContent = 'Create Marker';
+		document.getElementById('mk-submit-text').textContent = 'Create pin';
 		document.getElementById('mk-delete-zone').classList.add('hidden');
 		hideMarkerDeleteConfirm();
+	}
+
+	// ---- The full editor's linked-page picker. ----
+	// It shows the linked page by name, or a search box over the campaign's
+	// pages. The id the form submits is the hidden #mk-entity-id. A link to a
+	// page this viewer can't see arrives with an id and no name; it shows as
+	// "Linked page" and stays linked unless the person changes it.
+	function setPagePick(id, name) {
+		var idInput = document.getElementById('mk-entity-id');
+		if (!idInput) return;
+		idInput.value = id;
+		document.getElementById('mk-entity-name').textContent = name || 'Linked page';
+		document.getElementById('mk-entity-cur').hidden = !id;
+		document.getElementById('mk-entity-search').hidden = !!id;
+		var q = document.getElementById('mk-entity-q');
+		q.value = '';
+		showPageResults(null);
+	}
+
+	function showPageResults(pages) {
+		var res = document.getElementById('mk-entity-res');
+		var q = document.getElementById('mk-entity-q');
+		res.textContent = '';
+		if (!pages) {
+			res.hidden = true;
+			q.setAttribute('aria-expanded', 'false');
+			return;
+		}
+		if (!pages.length) {
+			res.appendChild(document.getElementById('mk-entity-none').content.cloneNode(true));
+		}
+		var tpl = document.getElementById('mk-entity-opt');
+		pages.forEach(function(r) {
+			var li = tpl.content.cloneNode(true);
+			li.querySelector('[data-name]').textContent = r.name;
+			li.querySelector('[data-type]').textContent = r.type_name || '';
+			li.querySelector('button').addEventListener('click', function() { setPagePick(r.id, r.name); });
+			res.appendChild(li);
+		});
+		res.hidden = false;
+		q.setAttribute('aria-expanded', 'true');
+	}
+
+	var pageSearchSeq = 0, pageSearchTimer = null;
+	function searchPages(text) {
+		var seq = ++pageSearchSeq;
+		if (text.length < 2) { showPageResults(null); return; }
+		Chronicle.apiFetch('/campaigns/' + encodeURIComponent(campaignID) + '/entities/search?q=' + encodeURIComponent(text))
+			.then(function(resp) { return resp.ok ? resp.json() : { results: [] }; })
+			.then(function(body) {
+				if (seq !== pageSearchSeq) return;
+				// Only pages: the search also returns other kinds of result.
+				showPageResults((body.results || []).filter(function(r) {
+					return r.id && /\/entities\//.test(r.url || '');
+				}).slice(0, 8));
+			})
+			.catch(function() { if (seq === pageSearchSeq) showPageResults([]); });
+	}
+
+	var pageQ = document.getElementById('mk-entity-q');
+	if (pageQ) {
+		pageQ.addEventListener('input', function() {
+			var text = pageQ.value.trim();
+			clearTimeout(pageSearchTimer);
+			pageSearchTimer = setTimeout(function() { searchPages(text); }, 200);
+		});
+		pageQ.addEventListener('keydown', function(e) {
+			// Enter would submit the whole form; Escape closes only the list.
+			if (e.key === 'Enter') {
+				e.preventDefault();
+				var first = document.querySelector('#mk-entity-res button');
+				if (first) first.click();
+			} else if (e.key === 'Escape' && !document.getElementById('mk-entity-res').hidden) {
+				e.stopPropagation();
+				showPageResults(null);
+			} else if (e.key === 'ArrowDown') {
+				var opt = document.querySelector('#mk-entity-res button');
+				if (opt) { e.preventDefault(); opt.focus(); }
+			}
+		});
+		// Up and down walk the results; up from the first goes back to the box.
+		document.getElementById('mk-entity-res').addEventListener('keydown', function(e) {
+			if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+			var opts = Array.prototype.slice.call(this.querySelectorAll('button'));
+			var i = opts.indexOf(document.activeElement);
+			if (i < 0) return;
+			e.preventDefault();
+			if (e.key === 'ArrowDown') { if (opts[i + 1]) opts[i + 1].focus(); }
+			else if (i === 0) pageQ.focus();
+			else opts[i - 1].focus();
+		});
+		['mk-entity-change', 'mk-entity-clear'].forEach(function(id) {
+			document.getElementById(id).addEventListener('click', function() {
+				setPagePick('', '');
+				pageQ.focus();
+			});
+		});
 	}
 
 	// Choosing a kind for a NEW pin in the full editor sets its colour too.
@@ -2092,7 +2211,7 @@
 				reloadView();
 			} else {
 				var data = await resp.json().catch(function() { return {}; });
-				Chronicle.notify(data.message || 'Failed to save marker', 'error');
+				Chronicle.notify(data.message || 'Failed to save the pin', 'error');
 			}
 		} catch (err) {
 			Chronicle.notify('Network error: ' + err.message, 'error');

@@ -7,6 +7,7 @@ package auth
 import (
 	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
@@ -17,6 +18,30 @@ func providerLoginHref(redirect string) string {
 		return "/login/oidc"
 	}
 	return "/login/oidc?redirect=" + url.QueryEscape(redirect)
+}
+
+// registerHref is the "create an account" link, carrying the page to return
+// to so a new player who arrived from an invite still lands in the campaign.
+func registerHref(redirect string) string {
+	if redirect == "" {
+		return "/register"
+	}
+	return "/register?redirect=" + url.QueryEscape(redirect)
+}
+
+// loginHref is the "sign in instead" link from the register page.
+func loginHref(redirect string) string {
+	if redirect == "" {
+		return "/login"
+	}
+	return "/login?redirect=" + url.QueryEscape(redirect)
+}
+
+// joiningCampaign reports whether the visitor came from a campaign's share
+// link, so the page can say what signing in is for. It names no campaign: a
+// signed-out visitor is never told whether a code is real.
+func joiningCampaign(redirect string) bool {
+	return strings.HasPrefix(redirect, "/join/")
 }
 
 // LoginPage renders the full login page wrapped in the base layout.
@@ -30,8 +55,13 @@ templ LoginPage(csrfToken, email, errMsg, successMsg, redirect string, opts Logi
 			<div class="w-full max-w-md">
 				<div class="text-center mb-8">
 					@layouts.SiteAuthMark()
-					<h1 class="text-3xl font-bold text-fg">Welcome back</h1>
-					<p class="text-fg-secondary mt-2">Sign in to your { layouts.SiteName(ctx) } account</p>
+					if joiningCampaign(redirect) {
+						<h1 class="text-3xl font-bold text-fg">You&apos;re invited</h1>
+						<p class="text-fg-secondary mt-2">Sign in to join the campaign, or create an account if you&apos;re new to { layouts.SiteName(ctx) }.</p>
+					} else {
+						<h1 class="text-3xl font-bold text-fg">Welcome back</h1>
+						<p class="text-fg-secondary mt-2">Sign in to your { layouts.SiteName(ctx) } account</p>
+					}
 					@layouts.SiteWelcomeLine()
 				</div>
 				if successMsg != "" {
@@ -137,7 +167,7 @@ templ LoginForm_(csrfToken, email, errMsg, redirect string) {
 
 			<p class="text-center text-sm text-fg-secondary">
 				Don&apos;t have an account?
-				<a href="/register" class="text-accent hover:text-accent-hover font-medium">
+				<a href={ templ.SafeURL(registerHref(redirect)) } class="text-accent hover:text-accent-hover font-medium" data-testid="create-account">
 					Create one
 				</a>
 			</p>

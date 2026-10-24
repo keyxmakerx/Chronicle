@@ -63,6 +63,23 @@
 .air-line.air-bad { color: rgb(var(--color-bad-rgb)); }
 .air-row:has(.air-n input:checked) .air-what { color: var(--color-text-secondary); text-decoration: line-through; }
 
+/* A game system's check of the AI's numbers: a tile per number, marked
+ * where it differs from the published formula. A differing tile is a button
+ * that takes the formula's number; the director decides. The small text is
+ * mixed toward the text colour so it stays readable on the tinted tile. */
+.air-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; margin-top: 4px; }
+.air-stat { font: inherit; text-align: left; border: 1px solid var(--color-border); border-radius: 8px; padding: 6px 10px; font-size: 0.84rem; display: flex; flex-direction: column; gap: 2px; background: var(--color-card-bg); color: var(--color-text-body); min-width: 0; }
+.air-stat b { color: var(--color-text-primary); font-weight: 600; font-variant-numeric: tabular-nums; font-size: 0.96rem; overflow-wrap: anywhere; }
+.air-stat small { font-size: 0.76rem; color: var(--color-text-secondary); }
+.air-stat.is-ok small, .air-stat.is-used small { color: color-mix(in srgb, rgb(var(--color-ok-rgb)) 70%, var(--color-text-primary)); }
+.air-stat.is-off { border-color: rgb(var(--color-warn-rgb) / 0.55); background: rgb(var(--color-warn-rgb) / 0.10); }
+.air-stat.is-off small { color: color-mix(in srgb, rgb(var(--color-warn-rgb)) 70%, var(--color-text-primary)); }
+.air-stat.is-used { border-color: rgb(var(--color-ok-rgb) / 0.45); }
+button.air-stat { cursor: pointer; }
+button.air-stat:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.air-stats-all { align-self: flex-start; }
+@media (prefers-reduced-motion: no-preference) { .air-stat { transition: background-color 0.2s, border-color 0.2s; } }
+
 /* A removal's "for good" tick only shows once the row is answered Yes. */
 .air-row:not(:has(.air-y input:checked)) .air-confirm { display: none; }
 .air-confirm { margin-top: 4px; font-size: 0.84rem; color: rgb(var(--color-bad-rgb)); display: flex; gap: 6px; align-items: flex-start; }

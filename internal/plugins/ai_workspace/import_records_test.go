@@ -155,3 +155,39 @@ func TestExportActor_FollowsPrivacy(t *testing.T) {
 		t.Errorf("everything export dropped the rolling table:\n%s", out)
 	}
 }
+
+// A block for a switched-off feature is refused at review and again at
+// commit, so nothing lands where the owner can't open it.
+func TestImport_RecordsRefusedForSwitchedOffFeature(t *testing.T) {
+	m := &memTables{}
+	h := recordsHandler(m)
+	h.SetFeatureGate(func(context.Context, string) records.OffFeatures {
+		return records.OffFeatures{"table": "Rolling tables"}
+	})
+	const md = "---\nkind: table\nname: Tavern names\n---\n- The Rusty Anchor\n"
+
+	body, ct := multipartBody(t, "markdown_paste", md)
+	req := httptest.NewRequest(http.MethodPost, "/campaigns/camp-1/ai-workspace/import/parse", body)
+	req.Header.Set(echo.HeaderContentType, ct)
+	rec := httptest.NewRecorder()
+	c := echo.New().NewContext(req, rec)
+	ownerCtx(c)
+	if err := h.ParseImport(c); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(rec.Body.String(), "Rolling tables is switched off in this campaign") {
+		t.Errorf("review does not say the feature is off:\n%s", rec.Body.String())
+	}
+
+	form := url.Values{"markdown_source": {md}, "rec_0_include": {"on"}}
+	req = httptest.NewRequest(http.MethodPost, "/campaigns/camp-1/ai-workspace/import/commit", strings.NewReader(form.Encode()))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
+	c = echo.New().NewContext(req, httptest.NewRecorder())
+	ownerCtx(c)
+	if err := h.CommitImport(c); err != nil {
+		t.Fatal(err)
+	}
+	if len(m.doc.Tables) != 0 {
+		t.Errorf("table made in a switched-off feature: %+v", m.doc.Tables)
+	}
+}

@@ -14,7 +14,10 @@ type CampaignListData struct {
 	Campaigns []campaigns.Campaign
 	// Handover is each listed campaign's owner, when they were last seen
 	// and whether an admin may hand it over yet.
-	Handover  map[string]campaigns.HandoverStatus
+	Handover map[string]campaigns.HandoverStatus
+	// CanLeave is true for each listed campaign the signed-in admin belongs
+	// to without owning it, the only ones Leave works on.
+	CanLeave  map[string]bool
 	Now       time.Time
 	View      listView
 	CSRFToken string
@@ -83,7 +86,7 @@ templ AdminCampaignsList(data CampaignListData) {
 										for _, a := range handoverAction(c, data.Handover[c.ID]) {
 											@adminInlineAction(a, csrfToken)
 										}
-										for _, a := range campaignRowActions(c) {
+										for _, a := range campaignRowActions(c, data.CanLeave[c.ID]) {
 											@adminInlineAction(a, csrfToken)
 										}
 									</div>
@@ -99,7 +102,7 @@ templ AdminCampaignsList(data CampaignListData) {
 		<div class="card p-0 divide-y divide-edge md:hidden" data-testid="campaigns-cards">
 			if len(allCampaigns) > 0 {
 				for _, c := range allCampaigns {
-					@adminCardRow(avatarInitial(c.Name), c.Name, fmt.Sprintf("/campaigns/%s", c.ID), campaignVisibilityLabel(c), "bg-surface-alt text-fg-secondary", c.Slug+" · created "+c.CreatedAt.Format("Jan 2, 2006"), csrfToken, campaignCardActions(c, data.Handover[c.ID], csrfToken))
+					@adminCardRow(avatarInitial(c.Name), c.Name, fmt.Sprintf("/campaigns/%s", c.ID), campaignVisibilityLabel(c), "bg-surface-alt text-fg-secondary", c.Slug+" · created "+c.CreatedAt.Format("Jan 2, 2006"), csrfToken, campaignCardActions(c, data.Handover[c.ID], data.CanLeave[c.ID], csrfToken))
 				}
 			} else {
 				@adminListEmptyCard(data.View)

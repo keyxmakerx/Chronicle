@@ -3550,7 +3550,7 @@ func (a *App) RegisterRoutes() {
 	// surface the existing backup/restore artifacts — adapters so admin imports
 	// neither the boot config nor the backup/restore plugins.
 	adminHandler.SetHealthChecker(&adminHealthChecker{db: a.DB, cfg: a.Config})
-	adminHandler.SetBackupLister(&adminBackupLister{backups: backupSvc, restores: restoreSvc, backupDir: a.Config.BackupDir})
+	adminHandler.SetBackupLister(&adminBackupLister{backups: backupSvc, restores: restoreSvc, settings: settingsRepo, backupDir: a.Config.BackupDir})
 
 	// Wire security event logging into the auth handler so logins, logouts,
 	// failed attempts, and password resets are recorded automatically.
@@ -3771,6 +3771,15 @@ func (a *App) RegisterRoutes() {
 			slog.Info("calendar: harptos season reconcile repaired calendars", slog.Int("calendars", n))
 		}
 	}
+	// One-time, idempotent: give campaigns that have calendars but none
+	// marked default their first one. Best-effort, never blocks startup.
+	if store, ok := calendarRepo.(calendar.DefaultCalendarStore); ok {
+		if n, err := calendar.ReconcileDefaultCalendars(context.Background(), store); err != nil {
+			slog.Error("calendar: default calendar reconcile failed", slog.Any("error", err))
+		} else if n > 0 {
+			slog.Info("calendar: default calendar reconcile marked defaults", slog.Int("campaigns", n))
+		}
+	}
 	calendarEventRepo := calendar.NewEventRepository(a.DB)
 	calendarKindRepo := calendar.NewEventKindRepository(a.DB)
 	calendarWeatherRepo := calendar.NewWeatherRepository(a.DB)
@@ -3873,6 +3882,9 @@ func (a *App) RegisterRoutes() {
 		"/static/js/calendar_open.js",
 		"/static/js/widgets/rulebook.js",
 		"/static/js/widgets/rulebook_editor.js",
+		// Mounts on the availability page's data-availability-root; it needs
+		// Chronicle.apiFetch, so it has to run after boot.js.
+		"/static/js/availability.js",
 		// After boot.js, so Chronicle exists before a token can arrive. It
 		// does nothing on pages without #notes-embed.
 		"/static/js/notes_embed.js",
@@ -4884,6 +4896,11 @@ func (a *App) RegisterRoutes() {
 	} else if n > 0 {
 		slog.Info("placed game-system panels on creature types", slog.Int("layouts", n))
 	}
+	if n, err := placeCreaturePanelsOnNewCampaigns(context.Background(), settingsRepo, campaignService, entityService); err != nil {
+		slog.Error("placing creature panels on newer campaigns failed", slog.String("error", err.Error()))
+	} else if n > 0 {
+		slog.Info("placed game-system panels on newer campaigns' creature types", slog.Int("layouts", n))
+	}
 
 	// One-time: existing campaigns move to the Material page look
 	// (material_page_look.go). Only a failure to read the marker or list
@@ -4904,6 +4921,7 @@ func (a *App) RegisterRoutes() {
 
 	campaignHandler.SetAuditLogger(&campaignAuditAdapter{svc: auditService})
 	campaignHandler.SetAddonLister(&addonListerAdapter{svc: addonService})
+	campaignHandler.SetSheetChecker(campaignSheetChecker{addons: addonService})
 	campaignHandler.SetSystemAddonEnabler(addonService)
 	campaignHandler.SetMediaUploader(&backdropUploaderAdapter{svc: mediaService})
 	campaignHandler.SetSMTPChecker(smtpService)
@@ -5430,7 +5448,11 @@ func (a *App) RegisterRoutes() {
 			// fragment skips the read, as the view prefs above do.
 			if sess := auth.GetSession(c); sess != nil && cc.IsMember && !middleware.IsHTMX(c) {
 				ap := campaignSettings.Appearance
-				ctx = layouts.SetHasYourLook(ctx, len(campaigns.PickableParts(ap, cc)) > 0)
+				sheets := campaignSheetChecker{addons: addonService}
+				shown := campaigns.ShownLookParts(campaigns.PickableParts(ap, cc), func() bool {
+					return sheets.CampaignHasSheet(c.Request().Context(), cc.Campaign.ID)
+				})
+				ctx = layouts.SetHasYourLook(ctx, len(shown) > 0)
 				picks, err := campaignService.MemberLookPicks(c.Request().Context(), cc, sess.UserID)
 				if err != nil {
 					slog.Warn("reading member look picks", slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", err))
@@ -5476,18 +5498,17 @@ func (a *App) RegisterRoutes() {
 				ctx = layouts.SetTopbarContent(ctx, tc)
 			}
 
-			// "View as player" override: when an owner has the toggle active,
-			// templates see RolePlayer instead of RoleOwner. Access control
-			// (RequireRole middleware) still uses the actual cc.MemberRole.
+			// "View as player" override: when the owner or a co-DM has the
+			// toggle active, templates see RolePlayer and no DM grant. Access
+			// control (route middleware) still uses the real CampaignContext.
 			effectiveRole := int(cc.MemberRole)
 			isOwner := cc.MemberRole >= campaigns.RoleOwner
+			viewingAsPlayer := campaigns.ViewingAsPlayer(c, cc)
 			ctx = layouts.SetIsOwner(ctx, isOwner)
-			ctx = layouts.SetIsDmGranted(ctx, cc.IsDmGranted)
-			if isOwner {
-				if cookie, err := c.Cookie("chronicle_view_as_player"); err == nil && cookie.Value == "1" {
-					effectiveRole = int(campaigns.RolePlayer)
-					ctx = layouts.SetViewingAsPlayer(ctx, true)
-				}
+			ctx = layouts.SetIsDmGranted(ctx, cc.IsDmGranted && !viewingAsPlayer)
+			if viewingAsPlayer {
+				effectiveRole = int(campaigns.RolePlayer)
+				ctx = layouts.SetViewingAsPlayer(ctx, true)
 			}
 			ctx = layouts.SetCampaignRole(ctx, effectiveRole)
 			ctx = layouts.SetCampaignArchived(ctx, cc.Campaign.IsArchived())
@@ -5503,7 +5524,7 @@ func (a *App) RegisterRoutes() {
 			// their membership role, so the DM-only Adventures category is
 			// theirs to see; an owner viewing as a player is not.
 			sidebarRole := effectiveRole
-			if cc.IsDmGranted && sidebarRole < int(campaigns.RoleScribe) {
+			if cc.IsDmGranted && !viewingAsPlayer && sidebarRole < int(campaigns.RoleScribe) {
 				sidebarRole = int(campaigns.RoleOwner)
 			}
 			if typesErr == nil {
@@ -5967,7 +5988,7 @@ func (a *App) RegisterRoutes() {
 
 	// Tests: montages and other long tests on a page, and how they ended.
 	// Built before encounters, whose versions are picked by a test's result.
-	encounterPages := &encountersPageAdapter{svc: entityService, cards: entities.NewPageCards(a.DB)}
+	encounterPages := &encountersPageAdapter{svc: entityService, cards: entities.NewPageCards(a.DB), lists: characterListService}
 	var encounterResults encounters.ResultDirectory
 	a.registerPlugin(PluginRegistration{
 		Slug:     pagetests.PluginSlug,
@@ -6072,6 +6093,7 @@ func (a *App) RegisterRoutes() {
 	aiRegistry := records.NewRegistry(aiKinds(aiWiring)...)
 	aiWorkspaceHandler.SetRecords(aiRegistry)
 	aiWorkspaceHandler.SetLookups(aiLookups(aiWiring, aiRegistry))
+	aiWorkspaceHandler.SetFeatureGate(aiFeatureGate(addonService))
 
 	// Late-bind the entity_notes notifier now that wsEventBus exists.
 	// The service was constructed earlier with a holder.Notify reference;
@@ -6162,6 +6184,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "entity_manager", Scripts: []string{"/static/js/widgets/entity_manager.js"}},
 	{Name: "bulk-actions", Scripts: []string{"/static/js/widgets/bulk_actions.js"}},
 	{Name: "ai-export", Scripts: []string{"/static/js/widgets/ai_export.js"}},
+	{Name: "import-sheet-check", Scripts: []string{"/static/js/widgets/import_sheet_check.js"}},
 	{Name: "impact_tree", Scripts: []string{"/static/js/widgets/impact_tree.js"}},
 	{Name: "attributes", Scripts: []string{"/static/js/widgets/attributes.js"}},
 	{Name: "entity-type-editor", Scripts: []string{"/static/js/widgets/entity_type_editor.js"}},
