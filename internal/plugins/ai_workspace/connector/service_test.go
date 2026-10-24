@@ -194,7 +194,7 @@ func TestCleanClientName(t *testing.T) {
 		"  ChatGPT\n\tconnector  ":  "ChatGPTconnector",
 		strings.Repeat("a", 100):    strings.Repeat("a", clientNameMax),
 		"Open WebUI (v0.6)":         "Open WebUI (v0.6)",
-		"‮evil​":                    "evil",
+		"\u202eevil\u200b":          "evil",
 	} {
 		if got := cleanClientName(in); got != want {
 			t.Errorf("cleanClientName(%q) = %q, want %q", in, got, want)
