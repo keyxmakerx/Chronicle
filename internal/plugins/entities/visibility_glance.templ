@@ -89,15 +89,15 @@ func visibilityCornerIcon(state string) string {
 
 // effectiveVisibilityBadge is the page's one visibility control, standing at
 // the top-right of the page so every page type has it, including pages whose
-// layout has no title block. The DM team sees who can view the page on hover;
-// the Owner clicks it to open the permissions editor, which unfolds from the
-// control itself. Players get nothing, since a badge would hint that something
+// layout has no title block. The DM team (the owner and co-DMs) sees who can
+// view the page on hover, and clicks it to open the permissions editor, which
+// unfolds from the control itself. Players get nothing, since a badge would hint that something
 // is hidden from them (ADR-055 rule 3).
 templ effectiveVisibilityBadge(cc *campaigns.CampaignContext, entity *Entity, ev *EffectiveVisibility) {
 	if visibilityGlanceVisible(cc) {
 		{{ state := baseVisibilityState(entity) }}
 		{{ widened := ev != nil && ev.WidenedByTags }}
-		{{ canEdit := cc.MemberRole >= campaigns.RoleOwner }}
+		{{ canEdit := cc.CanAuthorDmOnly() }}
 		<div
 			class="group relative shrink-0"
 			data-entity-access

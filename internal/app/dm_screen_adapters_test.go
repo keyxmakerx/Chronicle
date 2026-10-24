@@ -153,3 +153,37 @@ func TestDMHiddenAdapter_HiddenCharacters(t *testing.T) {
 		})
 	}
 }
+
+func TestDMHiddenAdapter_HideOnlyHides(t *testing.T) {
+	tests := []struct {
+		name      string
+		ent       entities.Entity
+		campaign  string
+		wantErr   bool
+		wantHides int
+	}{
+		{"a revealed NPC is hidden again", entities.Entity{ID: "e1", CampaignID: "c1", Name: "Vosk", EntityTypeID: 1}, "c1", false, 1},
+		{"a revealed monster is hidden again", entities.Entity{ID: "e1", CampaignID: "c1", Name: "Vosk", EntityTypeID: 3}, "c1", false, 1},
+		{"already hidden is left alone", entities.Entity{ID: "e1", CampaignID: "c1", Name: "Vosk", EntityTypeID: 1, IsPrivate: true}, "c1", false, 0},
+		{"another campaign's entity is refused", entities.Entity{ID: "e1", CampaignID: "c2", Name: "Vosk", EntityTypeID: 1}, "c1", true, 0},
+		{"a location is refused", entities.Entity{ID: "e1", CampaignID: "c1", Name: "Vosk", EntityTypeID: 2}, "c1", true, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := &revealEntitySvc{ent: &tt.ent}
+			name, err := (&dmHiddenAdapter{entities: svc, lists: fixedTypeLists{npc: []int{1}}}).Hide(context.Background(), "e1", tt.campaign)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("err = %v, wantErr %v", err, tt.wantErr)
+			}
+			if svc.hides != svc.toggles {
+				t.Fatalf("Hide revealed the entity")
+			}
+			if svc.hides != tt.wantHides {
+				t.Fatalf("hides = %d, want %d", svc.hides, tt.wantHides)
+			}
+			if !tt.wantErr && name != "Vosk" {
+				t.Fatalf("name = %q", name)
+			}
+		})
+	}
+}

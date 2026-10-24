@@ -2660,7 +2660,8 @@ type setPermissionsRequest struct {
 }
 
 // GetPermissionsAPI returns the entity's current visibility mode, campaign
-// members, and permission grants. Owner only.
+// members, and permission grants, for the DM team. Member emails go to the
+// owner only; a co-DM picks members by name.
 // GET /campaigns/:id/entities/:eid/permissions
 func (h *Handler) GetPermissionsAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
@@ -2701,8 +2702,10 @@ func (h *Handler) GetPermissionsAPI(c echo.Context) error {
 				pm := permissionsMember{
 					UserID:      m.UserID,
 					DisplayName: m.DisplayName,
-					Email:       m.Email,
 					Role:        int(m.Role),
+				}
+				if cc.MemberRole >= campaigns.RoleOwner {
+					pm.Email = m.Email
 				}
 				if m.AvatarPath != nil {
 					pm.AvatarPath = layouts.AvatarURL(mediaCtx, *m.AvatarPath)
@@ -2759,8 +2762,8 @@ func (h *Handler) GetPermissionsAPI(c echo.Context) error {
 	})
 }
 
-// SetPermissionsAPI updates an entity's visibility mode and permission grants.
-// Owner only.
+// SetPermissionsAPI updates an entity's visibility mode and permission grants,
+// for the DM team.
 // PUT /campaigns/:id/entities/:eid/permissions
 func (h *Handler) SetPermissionsAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
@@ -2791,8 +2794,8 @@ func (h *Handler) SetPermissionsAPI(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
-// GetMembersAPI returns campaign members as JSON for the permission user picker.
-// Owner only.
+// GetMembersAPI returns campaign members as JSON for the permission user picker,
+// for the DM team.
 // GET /campaigns/:id/entities/members
 func (h *Handler) GetMembersAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)

@@ -504,6 +504,32 @@ func (a *dmHiddenAdapter) Reveal(ctx context.Context, entityID, campaignID strin
 	return e.Name, nil
 }
 
+// Hide is Reveal's undo: it only ever hides, and only the types Reveal
+// covers, in this campaign.
+func (a *dmHiddenAdapter) Hide(ctx context.Context, entityID, campaignID string) (string, error) {
+	e, err := a.entities.GetByID(ctx, entityID)
+	if err != nil {
+		return "", err
+	}
+	if e.CampaignID != campaignID {
+		return "", apperror.NewNotFound("entity not found")
+	}
+	types, err := a.revealTypes(ctx, campaignID)
+	if err != nil {
+		return "", err
+	}
+	if !slices.Contains(types, e.EntityTypeID) {
+		return "", apperror.NewNotFound("entity not found")
+	}
+	if e.IsPrivate {
+		return e.Name, nil
+	}
+	if err := a.entities.SetPrivateInCampaign(ctx, entityID, campaignID, true); err != nil {
+		return "", err
+	}
+	return e.Name, nil
+}
+
 // dmAdventuresAdapter reads Adventures pages for the DM Screen's tab. Every
 // page goes through the entities plugin's own viewer filter first, so the tab
 // can never name a page the viewer could not open; the category check on top

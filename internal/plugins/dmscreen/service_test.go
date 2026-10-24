@@ -68,6 +68,7 @@ func (f fakeFoundry) FoundryPresence(string) (*time.Time, bool) { return f.last,
 type fakeHidden struct {
 	more     bool
 	revealed string
+	hidden   string
 }
 
 func (f *fakeHidden) HiddenCharacters(context.Context, string, Viewer, int) ([]Hidden, bool, error) {
@@ -75,6 +76,10 @@ func (f *fakeHidden) HiddenCharacters(context.Context, string, Viewer, int) ([]H
 }
 func (f *fakeHidden) Reveal(_ context.Context, id, _ string) (string, error) {
 	f.revealed = id
+	return "Captain Vosk", nil
+}
+func (f *fakeHidden) Hide(_ context.Context, id, _ string) (string, error) {
+	f.hidden = id
 	return "Captain Vosk", nil
 }
 
@@ -298,6 +303,37 @@ func TestReveal(t *testing.T) {
 	}
 	if _, err := NewService(Sources{Hidden: h}).Reveal(context.Background(), "", "c1", Viewer{Role: 2}); err == nil {
 		t.Fatal("empty id should fail")
+	}
+}
+
+// Undo is the DM team's: a scribe who can open the screen can't hide a page
+// again, and nothing is hidden for a refused or empty request.
+func TestUndoReveal(t *testing.T) {
+	tests := []struct {
+		name    string
+		id      string
+		role    int
+		wantErr bool
+	}{
+		{"owner or co-DM hides again", "e1", 3, false},
+		{"scribe is refused", "e1", 2, true},
+		{"player is refused", "e1", 1, true},
+		{"empty id is refused", "", 3, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := &fakeHidden{}
+			name, err := NewService(Sources{Hidden: h}).UndoReveal(context.Background(), tt.id, "c1", Viewer{Role: tt.role})
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("err = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr && h.hidden != "" {
+				t.Fatalf("a refused undo hid %q", h.hidden)
+			}
+			if !tt.wantErr && (name != "Captain Vosk" || h.hidden != "e1") {
+				t.Fatalf("name %q hidden %q", name, h.hidden)
+			}
+		})
 	}
 }
 

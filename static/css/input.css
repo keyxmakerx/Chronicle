@@ -4965,6 +4965,7 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
   .dms-req-btns { display: flex; gap: .3rem; flex-shrink: 0; }
   .dms-row .dms-req-yes { background: var(--dms-ok-soft); font-weight: 700; }
   .dms-done { font-size: .78rem; color: var(--dms-ok); }
+  .dms-done-wrap { display: inline-flex; align-items: center; gap: .5rem; }
   .dms-overlay [hidden], .dms-overlay[hidden] { display: none; }
   .dms-skip { position: absolute; right: .75rem; bottom: .75rem; font-size: .85rem; color: #fff; background: rgba(0,0,0,.5); border-radius: .4rem; padding: .15rem .5rem; }
   /* The burst's pieces are shards of light, not a second die: the thrown
