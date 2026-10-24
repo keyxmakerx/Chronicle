@@ -1059,7 +1059,9 @@ func (h *Handler) ToggleViewAsPlayer(c echo.Context) error {
 			HttpOnly: false, // JS reads this for toggle state indicator.
 			Secure:   secure,
 			SameSite: http.SameSiteLaxMode,
-			MaxAge:   30 * 24 * 60 * 60, // 30 days.
+			// A session cookie: closing the browser ends the preview, so an
+			// owner never comes back days later to a campaign that looks
+			// like it lost its edit buttons.
 		})
 	}
 

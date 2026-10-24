@@ -112,7 +112,7 @@ func TestHomeEditorState(t *testing.T) {
 				Layout  DashboardLayout `json:"layout"`
 				Preview string          `json:"preview"`
 			}
-			if err := json.Unmarshal([]byte(h.homeEditorState(cc, tt.key)), &st); err != nil {
+			if err := json.Unmarshal([]byte(h.homeEditorState(context.Background(), cc, tt.key)), &st); err != nil {
 				t.Fatal(err)
 			}
 			if st.Scope != "home" || st.Key != tt.key || st.Unsaved != tt.wantUnsaved || st.Preview != "/campaigns/c1/customize/home-preview" {

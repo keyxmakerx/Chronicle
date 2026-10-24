@@ -599,6 +599,12 @@ func (h *Handler) Show(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	// An owner viewing as a player gets the page drawn for a player, without
+	// Edit page, the pens or the empty-picture upload. Access was decided
+	// above on the real role.
+	if campaigns.ViewingAsPlayer(c, p.cc) {
+		p.cc = p.cc.PlayerPreview()
+	}
 	return middleware.Render(c, http.StatusOK, EntityShowPage(p.cc, p.entity, p.entityType, p.ancestors, p.children, p.showAttributes, p.showCalendar, p.claimingEnabled, p.ownerName, p.csrfToken, p.userID))
 }
 
