@@ -23,6 +23,12 @@ func RegisterRoutes(e *echo.Echo, h *Handler, authService auth.AuthService, smtp
 	// The status strip's live figures, loaded by every admin page.
 	admin.GET("/status", h.Status)
 
+	// The site check-up behind the top bar's shield. Check now makes a backup
+	// when there is none from today; it runs one at a time.
+	admin.GET("/checkup", h.CheckupShield)
+	admin.POST("/checkup/run", h.RunCheckup)
+	admin.POST("/checkup/snooze", h.SnoozeCheckup)
+
 	// Reauth middleware for sensitive operations: requires a password
 	// re-confirmation within the last 5 minutes, so a hijacked admin session
 	// alone cannot grant admin, lock people out or destroy data.
