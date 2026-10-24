@@ -10,8 +10,8 @@ import (
 )
 
 // TestBuilderHeroes pins which of the viewer's pages the hero builder fills
-// in and what it shows of each: only character types, and for a player no
-// GM-only value, from the type or from the page's own added fields.
+// in and what it shows of each: only character types, and for a player or a
+// Scribe no GM-only value, from the type or from the page's own added fields.
 func TestBuilderHeroes(t *testing.T) {
 	types := []EntityType{
 		{ID: 1, Name: "Hero", Fields: []FieldDefinition{{Key: "class"}, {Key: "secret", GMOnly: true}}},
@@ -25,14 +25,14 @@ func TestBuilderHeroes(t *testing.T) {
 	place := Entity{ID: "e2", Name: "The Ford", EntityTypeID: 2, FieldsData: map[string]any{"class": "x"}}
 
 	tests := []struct {
-		name  string
-		mine  []Entity
-		staff bool
-		want  []BuilderHero
+		name     string
+		mine     []Entity
+		canSeeGM bool
+		want     []BuilderHero
 	}{
-		{"player: GM-only left out", []Entity{hero}, false,
+		{"player or scribe: GM-only left out", []Entity{hero}, false,
 			[]BuilderHero{{ID: "e1", Name: "Tess", Values: map[string]string{"class": "Fury"}, Hidden: []string{"secret"}}}},
-		{"staff: everything shown", []Entity{hero}, true,
+		{"owner or co-dm: everything shown", []Entity{hero}, true,
 			[]BuilderHero{{ID: "e1", Name: "Tess", Values: map[string]string{"class": "Fury", "secret": "Owes the Board"}, Hidden: []string{}}}},
 		{"page's own GM-only field", []Entity{withAdded}, false,
 			[]BuilderHero{{ID: "e1", Name: "Tess", Values: map[string]string{}, Hidden: []string{"class", "secret"}}}},
@@ -45,7 +45,7 @@ func TestBuilderHeroes(t *testing.T) {
 			for _, e := range tc.mine {
 				mine = append(mine, CastMember{Entity: e, IsViewer: true})
 			}
-			got := builderHeroes(mine, []int{1}, types, tc.staff)
+			got := builderHeroes(mine, []int{1}, types, tc.canSeeGM)
 			if !reflect.DeepEqual(got, tc.want) {
 				t.Fatalf("got %+v, want %+v", got, tc.want)
 			}

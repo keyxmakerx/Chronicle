@@ -457,6 +457,18 @@
     label.textContent = headerEl.dataset.label || 'Entry';
     headerEl.appendChild(label);
 
+    // Text with parts hidden from players reaches a Scribe without them, so
+    // their save would erase those parts; the server refuses it, and the
+    // header says why instead of offering Edit.
+    if (headerEl.dataset.locked === 'true') {
+      var note = document.createElement('span');
+      note.className = 'chronicle-editor__locked';
+      note.innerHTML = '<i class="fa-solid fa-lock" aria-hidden="true"></i>';
+      note.appendChild(document.createTextNode('Parts are hidden from players. Only the ' + Chronicle.gmTerm() + ' can edit this text.'));
+      headerEl.appendChild(note);
+      return;
+    }
+
     var btn = document.createElement('button');
     btn.type = 'button';
 
@@ -490,6 +502,7 @@
    * Enter edit mode: show toolbar, enable editing, start autosave.
    */
   function enterEditMode(state) {
+    if (state.locked) return;
     state.isEditing = true;
     // TipTap emits an update when editability changes; that is not an edit,
     // and letting it through marked an untouched page "Unsaved changes".
@@ -911,6 +924,12 @@
           state.editor.commands.setContent(data.entry_html);
         }
         if (typeof data.rev === 'number') state.rev = data.rev;
+        if (data.locked === true && state.headerEl) {
+          state.locked = true;
+          state.startEditing = false;
+          state.headerEl.dataset.locked = 'true';
+          renderHeader(state.headerEl, false);
+        }
         state.dirty = false;
         if (state.editor.isEditable) {
           setStatus(state.statusEl, 'saved');

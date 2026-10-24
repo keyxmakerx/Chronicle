@@ -46,7 +46,7 @@ func TestListFolders(t *testing.T) {
 		want   []string
 	}{
 		{"player session skips DM-only category folders", campaigns.RolePlayer, false, []string{"n1", "n2"}},
-		{"scribe session sees every folder", campaigns.RoleScribe, false, []string{"n1", "n2", "n3"}},
+		{"scribe session skips DM-only category folders, as players do", campaigns.RoleScribe, false, []string{"n1", "n2"}},
 		{"foundry bearer sees every folder", campaigns.RoleOwner, true, []string{"n1", "n2", "n3"}},
 	}
 	for _, tc := range cases {

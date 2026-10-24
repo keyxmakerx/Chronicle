@@ -649,10 +649,11 @@ func (a *dmPresenceAdapter) Players(ctx context.Context, campaignID string) ([]d
 
 	var out []dmscreen.PlayerPresence
 	for _, m := range members {
-		if m.Role != campaigns.RolePlayer {
+		// A Scribe plays a character like any player; the owner runs the game.
+		if m.Role == campaigns.RoleOwner {
 			continue
 		}
-		// A DM grant makes a Player-role member a co-DM, who runs the game.
+		// A DM grant makes a member a co-DM, who runs the game.
 		if granted, err := a.members.IsUserDmGranted(ctx, campaignID, m.UserID); err == nil && granted {
 			continue
 		}

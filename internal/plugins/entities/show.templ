@@ -658,6 +658,9 @@ templ blockPosts(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 		if cc.MemberRole >= campaigns.RoleScribe {
 			data-editable="true"
 		}
+		if cc.CanAuthorDmOnly() {
+			data-can-hide="true"
+		}
 		data-csrf={ csrfToken }
 	></div>
 }

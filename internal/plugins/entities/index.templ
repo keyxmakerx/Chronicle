@@ -51,6 +51,9 @@ templ EntityListContent(cc *campaigns.CampaignContext, entities []Entity, entity
 		data-campaign-id={ cc.Campaign.ID }
 		data-csrf-token={ csrfToken }
 		data-role={ strconv.Itoa(int(cc.MemberRole)) }
+		if cc.CanAuthorDmOnly() {
+			data-can-hide="true"
+		}
 		data-entity-types={ entityTypesJSONForBulk(entityTypes) }
 		data-tags={ tagsJSONForBulk(cc) }
 	>

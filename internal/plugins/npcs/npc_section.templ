@@ -35,7 +35,7 @@ templ NPCSectionComponent(cc *campaigns.CampaignContext, featured []NPCCard, lis
 				<i class="fa-solid fa-masks-theater"></i>
 			</div>
 			<h3 class="text-sm font-semibold text-fg mb-1">No NPCs yet</h3>
-			if cc.MemberRole >= campaigns.RoleScribe {
+			if cc.CanAuthorDmOnly() {
 				<p class="text-xs text-fg-secondary max-w-sm mx-auto">Create character entities and reveal them to your players; tag one <code>cast</code> to feature it above.</p>
 			} else {
 				<p class="text-xs text-fg-secondary max-w-sm mx-auto">Your { layouts.GMTerm(ctx) } hasn't revealed any NPCs yet.</p>

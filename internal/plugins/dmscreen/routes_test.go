@@ -13,7 +13,8 @@ func TestCanOpen(t *testing.T) {
 		want bool
 	}{
 		{"owner", campaigns.CampaignContext{MemberRole: campaigns.RoleOwner, IsMember: true}, true},
-		{"scribe", campaigns.CampaignContext{MemberRole: campaigns.RoleScribe, IsMember: true}, true},
+		{"scribe (sees what players see)", campaigns.CampaignContext{MemberRole: campaigns.RoleScribe, IsMember: true}, false},
+		{"co-dm (scribe with DM access)", campaigns.CampaignContext{MemberRole: campaigns.RoleScribe, IsMember: true, IsDmGranted: true}, true},
 		{"player", campaigns.CampaignContext{MemberRole: campaigns.RolePlayer, IsMember: true}, false},
 		{"player with DM access", campaigns.CampaignContext{MemberRole: campaigns.RolePlayer, IsMember: true, IsDmGranted: true}, true},
 		{"non-member", campaigns.CampaignContext{MemberRole: campaigns.RoleNone}, false},

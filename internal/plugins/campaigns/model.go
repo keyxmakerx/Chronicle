@@ -786,6 +786,17 @@ func (s CampaignSettings) ResolveNewEntityPrivacy(requested patch.Field[bool]) b
 	return s.DefaultsToPrivate()
 }
 
+// NewPagePrivacy is ResolveNewEntityPrivacy for a page this member is making.
+// A Scribe's new page is always open to players: hidden pages are the
+// owner's and Co-DMs', and a Scribe sees what players see, so a page they
+// made hidden would vanish from their own list the moment they saved it.
+func (cc *CampaignContext) NewPagePrivacy(requested patch.Field[bool]) bool {
+	if cc.MemberRole == RoleScribe && !cc.CanAuthorDmOnly() {
+		return false
+	}
+	return cc.Campaign.ParseSettings().ResolveNewEntityPrivacy(requested)
+}
+
 // TierDefinition is a single entry in the per-campaign event tier
 // vocabulary. Slugs are stored on Event.Tier as foreign-key-like
 // references; TierDefinition supplies the rendering hints (color,

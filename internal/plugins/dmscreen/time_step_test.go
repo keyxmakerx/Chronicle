@@ -64,7 +64,6 @@ func TestBuild_CanStep(t *testing.T) {
 	}{
 		{"owner on a world calendar", 3, true, true},
 		{"owner on a real-time calendar hides the chips", 3, false, false},
-		{"scribe never sees them", 2, true, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

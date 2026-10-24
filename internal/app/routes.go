@@ -4918,6 +4918,14 @@ func (a *App) RegisterRoutes() {
 		slog.Info("turned jot notes on where the journal was on", slog.Int("campaigns", n))
 	}
 
+	// One-time: Scribes now see what players see, so owners are told which
+	// of their Scribes that changes.
+	if n, err := noteScribeAccessOnce(context.Background(), settingsRepo, campaignService, sessionsService); err != nil {
+		slog.Error("sending the scribe access note failed", slog.String("error", err.Error()))
+	} else if n > 0 {
+		slog.Info("told owners their scribes now see what players see", slog.Int("campaigns", n))
+	}
+
 	campaignHandler.SetAuditLogger(&campaignAuditAdapter{svc: auditService})
 	campaignHandler.SetAddonLister(&addonListerAdapter{svc: addonService})
 	campaignHandler.SetSystemAddonEnabler(addonService)
@@ -5519,7 +5527,7 @@ func (a *App) RegisterRoutes() {
 			// their membership role, so the DM-only Adventures category is
 			// theirs to see; an owner viewing as a player is not.
 			sidebarRole := effectiveRole
-			if cc.IsDmGranted && sidebarRole < int(campaigns.RoleScribe) {
+			if cc.IsDmGranted && sidebarRole < int(campaigns.RoleOwner) {
 				sidebarRole = int(campaigns.RoleOwner)
 			}
 			if typesErr == nil {

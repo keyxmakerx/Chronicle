@@ -151,8 +151,8 @@ type SessionService interface {
 	UnlinkEntity(ctx context.Context, sessionID, entityID string) error
 	ListSessionEntities(ctx context.Context, sessionID string) ([]SessionEntity, error)
 	// FilterEntitiesForViewer removes session-linked entities a given viewer
-	// may not see. Owners and Scribes (role >= 2) see the list unchanged; a
-	// Player or anonymous viewer (role < 2) is narrowed via
+	// may not see. The owner and Co-DMs (role >= 3) see the list unchanged; a
+	// Scribe, Player or anonymous viewer is narrowed via
 	// EntityVisibilityFilter. Hidden content is ABSENT from the returned
 	// slice, never a placeholder or a count (ADR-055 rule 3). Fails CLOSED
 	// (returns nothing) if no filter is wired, rather than risk showing a
@@ -634,13 +634,13 @@ func (s *sessionService) ListSessionEntities(ctx context.Context, sessionID stri
 // predicate of its own — see ListSessionEntities — so this is the one place
 // that gate is enforced before the list reaches a template.
 //
-// Owners and Scribes (role >= permissions.RoleScribe) get the list back
-// unchanged. A Player or anonymous viewer (role < RoleScribe) is checked
+// The owner and Co-DMs (role >= permissions.RoleOwner) get the list back
+// unchanged. A Scribe, Player or anonymous viewer is checked
 // against the SAME per-entity visibility policy the entities plugin itself
 // applies, via EntityVisibilityFilter — never a cheaper approximation, so a
 // session page can't disagree with the entity page about what is hidden.
 func (s *sessionService) FilterEntitiesForViewer(ctx context.Context, campaignID string, ents []SessionEntity, role int, userID string) ([]SessionEntity, error) {
-	if role >= permissions.RoleScribe || len(ents) == 0 {
+	if role >= permissions.RoleOwner || len(ents) == 0 {
 		return ents, nil
 	}
 

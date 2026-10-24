@@ -82,7 +82,7 @@ func (h *Handler) Peek(c echo.Context) error {
 	}
 	entity = h.currentEraEntity(ctx, cc, entity, entityType, userID)
 
-	canSeeGM := cc.MemberRole >= campaigns.RoleScribe
+	canSeeGM := cc.CanAuthorDmOnly()
 
 	view := PeekView{
 		Name:     entity.Name,

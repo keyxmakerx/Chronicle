@@ -24,8 +24,10 @@ type identityStubSvc struct {
 	hidden     bool // the caller can no longer view the page
 }
 
-func (s *identityStubSvc) CheckEntityAccess(_ context.Context, _ string, _ int, _ string) (*EffectivePermission, error) {
-	return &EffectivePermission{CanView: !s.hidden}, nil
+// A visible page is editable from Scribe up, as CheckEntityAccess says for a
+// page in default visibility.
+func (s *identityStubSvc) CheckEntityAccess(_ context.Context, _ string, role int, _ string) (*EffectivePermission, error) {
+	return &EffectivePermission{CanView: !s.hidden, CanEdit: !s.hidden && role >= int(campaigns.RoleScribe)}, nil
 }
 
 func (s *identityStubSvc) GetByID(_ context.Context, _ string) (*Entity, error) {
@@ -108,7 +110,7 @@ func TestUpdateFieldsAPI_ClaimedOwnerIdentityOnly(t *testing.T) {
 		{"owner denied a number", campaigns.RolePlayer, owner, "c1", `{"fields_patch":{"kit":5}}`, 400, false},
 		{"owner denied an overlong value", campaigns.RolePlayer, owner, "c1", `{"fields_patch":{"kit":"` + strings.Repeat("x", 201) + `"}}`, 400, false},
 		{"owner denied a key a page override marks GM-only", campaigns.RolePlayer, owner, "c1", `{"fields_patch":{"heritage":"x"}}`, 403, false},
-		{"scribe may set a GM-only key", campaigns.RoleScribe, "user-scribe", "c1", `{"fields_patch":{"background":"x"}}`, 200, true},
+		{"scribe's GM-only key is left out of the save", campaigns.RoleScribe, "user-scribe", "c1", `{"fields_patch":{"background":"x"}}`, 200, true},
 		{"owner may clear an allowlisted key", campaigns.RolePlayer, owner, "c1", `{"fields_patch":{"kit":null}}`, 200, true},
 		{"owner denied a non-allowlisted key", campaigns.RolePlayer, owner, "c1", `{"fields_patch":{"might":5}}`, 403, false},
 		{"owner denied when one key is outside the list", campaigns.RolePlayer, owner, "c1", `{"fields_patch":{"ancestry":"Elf","stamina":99}}`, 403, false},

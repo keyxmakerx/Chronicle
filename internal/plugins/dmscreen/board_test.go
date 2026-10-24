@@ -146,7 +146,7 @@ func TestPinPage(t *testing.T) {
 		wantItems int
 	}{
 		{"owner pins an adventures page", dmViewer, "p1", 0, 0, 1},
-		{"scribe pins an adventures page", scribeViewer, "p1", 0, 0, 1},
+		{"scribe is refused: the screen is the owner's and Co-DMs'", scribeViewer, "p1", 0, 403, 0},
 		{"a page outside Adventures or hidden is not found", dmViewer, "other", 0, 404, 0},
 		{"a blank page id is a bad request", dmViewer, "  ", 0, 400, 0},
 		{"a full tab is a conflict", dmViewer, "p1", maxBoardItems, 409, maxBoardItems},
@@ -208,13 +208,13 @@ func TestAddNote(t *testing.T) {
 			for i := 0; i < tt.preFill; i++ {
 				b.items = append(b.items, BoardItem{ID: uuid.NewString(), CampaignID: "c1", Kind: BoardKindNote, Body: "x"})
 			}
-			err := newBoardSvc(&fakeAdventures{}, b).AddNote(context.Background(), "c1", scribeViewer, tt.text)
+			err := newBoardSvc(&fakeAdventures{}, b).AddNote(context.Background(), "c1", dmViewer, tt.text)
 			if got := codeOf(err); got != tt.wantCode {
 				t.Fatalf("code = %d (%v), want %d", got, err, tt.wantCode)
 			}
 			if tt.wantCode == 0 {
 				last := b.items[len(b.items)-1]
-				if last.Kind != BoardKindNote || last.Body != tt.wantBody || last.CreatedBy != "sc" {
+				if last.Kind != BoardKindNote || last.Body != tt.wantBody || last.CreatedBy != "dm" {
 					t.Fatalf("stored %+v", last)
 				}
 			}

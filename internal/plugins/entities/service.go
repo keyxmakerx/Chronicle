@@ -3103,34 +3103,24 @@ func (s *entityService) CheckEntityAccess(ctx context.Context, entityID string, 
 		return nil, err
 	}
 
-	// A page of a DM-only category (Adventures) is closed below Scribe whatever
+	// A page of a DM-only category (Adventures) is closed below Owner whatever
 	// its own visibility or grants say. Checked before either mode, and a type
 	// that cannot be read fails closed: the page is then unknown, not shown.
-	if role < permissions.RoleScribe {
-		et, terr := s.types.FindByID(ctx, entity.EntityTypeID)
-		if terr != nil || et.DMOnly() {
-			return &EffectivePermission{}, nil
-		}
+	et, terr := s.types.FindByID(ctx, entity.EntityTypeID)
+	if terr != nil || et.DMOnly() {
+		return &EffectivePermission{}, nil
 	}
 
 	if entity.Visibility == VisibilityCustom {
 		return s.permissions.GetEffectivePermission(ctx, entityID, role, userID)
 	}
 
-	// Legacy default mode.
+	// Default mode. A private page is the owner's and Co-DMs' alone, who
+	// returned above; a Scribe sees what players see and edits only that.
 	ep := &EffectivePermission{}
-	if entity.IsPrivate {
-		// Only Scribe+ can see private entities in default mode.
-		if role >= 2 {
-			ep.CanView = true
-			ep.CanEdit = true
-		}
-	} else {
-		// Public entity: everyone can view, Scribe+ can edit.
+	if !entity.IsPrivate {
 		ep.CanView = true
-		if role >= 2 {
-			ep.CanEdit = true
-		}
+		ep.CanEdit = role >= permissions.RoleScribe
 	}
 	return ep, nil
 }

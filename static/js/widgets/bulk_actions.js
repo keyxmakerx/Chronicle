@@ -10,6 +10,7 @@
  *   data-campaign-id  - Campaign UUID
  *   data-csrf-token   - CSRF token
  *   data-role         - User's campaign role (int)
+ *   data-can-hide     - "true" for the owner and Co-DMs, who alone hide pages
  *   data-entity-types - JSON array of entity types [{id, name, icon, color}]
  *   data-tags         - JSON array of tags [{id, name, color}]
  */
@@ -21,6 +22,7 @@
       var campaignId = el.dataset.campaignId;
       var csrfToken = el.dataset.csrfToken || '';
       var role = parseInt(el.dataset.role, 10) || 0;
+      var canHide = el.dataset.canHide === 'true';
       var entityTypes = [];
       var tags = [];
 
@@ -157,8 +159,10 @@
           '<i class="fa-solid fa-tag mr-1"></i>Change Type</button>' +
           '<button type="button" class="px-3 py-1.5 rounded-md text-xs font-medium bg-surface-alt text-fg hover:bg-accent/10 hover:text-accent transition-colors" data-bulk-action="add-tags">' +
           '<i class="fa-solid fa-tags mr-1"></i>Add Tags</button>' +
-          '<button type="button" class="px-3 py-1.5 rounded-md text-xs font-medium bg-surface-alt text-fg hover:bg-accent/10 hover:text-accent transition-colors" data-bulk-action="visibility">' +
-          '<i class="fa-solid fa-eye mr-1"></i>Visibility</button>' +
+          (canHide
+            ? '<button type="button" class="px-3 py-1.5 rounded-md text-xs font-medium bg-surface-alt text-fg hover:bg-accent/10 hover:text-accent transition-colors" data-bulk-action="visibility">' +
+              '<i class="fa-solid fa-eye mr-1"></i>Visibility</button>'
+            : '') +
           (isOwner
             ? '<button type="button" class="px-3 py-1.5 rounded-md text-xs font-medium bg-surface-alt text-fg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" data-bulk-action="delete">' +
               '<i class="fa-solid fa-trash mr-1"></i>Delete</button>'
@@ -170,7 +174,9 @@
         // Bind action handlers.
         actionBar.querySelector('[data-bulk-action="type"]').addEventListener('click', showTypeMenu);
         actionBar.querySelector('[data-bulk-action="add-tags"]').addEventListener('click', showTagMenu);
-        actionBar.querySelector('[data-bulk-action="visibility"]').addEventListener('click', toggleVisibility);
+        if (actionBar.querySelector('[data-bulk-action="visibility"]')) {
+          actionBar.querySelector('[data-bulk-action="visibility"]').addEventListener('click', toggleVisibility);
+        }
         if (actionBar.querySelector('[data-bulk-action="delete"]')) {
           actionBar.querySelector('[data-bulk-action="delete"]').addEventListener('click', confirmDelete);
         }

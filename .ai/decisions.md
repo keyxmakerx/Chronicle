@@ -236,7 +236,7 @@ An admin who has not joined a campaign has `MemberRole=RoleNone` (no content acc
 
 ## ADR-016: Inline Secrets via TipTap Mark Extension
 
-**Status:** Accepted
+**Status:** Accepted; amended by ADR-070
 
 **Context:** GMs need inline secret text within entity entries, visible only to Owner/Scribe. It must be stripped server-side, not just hidden with CSS — CSS-only hiding still ships the HTML to the client, visible in devtools.
 
@@ -1101,7 +1101,7 @@ Also under this ADR: the partial-update contract test only recognised structs na
 
 ## ADR-068: Adventures is a category only the DM team sees, closed in the one visibility predicate
 
-**Status:** Accepted; operator sign-off on the trial-page mockup, 2026-10-12 (#1344, #1348).
+**Status:** Accepted; operator sign-off on the trial-page mockup, 2026-10-12 (#1344, #1348); amended by ADR-070.
 
 **Context:** A DM's prep (an adventure, its trials, the read-aloud text) must live beside the world it uses, with the same links, search and relations, yet never reach a player. Page visibility is per page, so relying on each page being set to DM-only would leak the first time one was not. The rule has to be a property of the category that every read path obeys without remembering to.
 
@@ -1133,3 +1133,21 @@ Also under this ADR: the partial-update contract test only recognised structs na
 **Consequences:**
 - A sketch on a page cannot be shown on a campaign map, and a campaign map cannot be pulled onto a page; converting is a future feature, not a property of this design.
 - Every new field on a shape or marker needs the grammar, `Format`, the validator and the widget to change together; `mapsketch`'s round-trip test and the pageblocks validation tests are the guard.
+
+---
+
+## ADR-070: A Scribe sees what players see; hidden content is the owner's and Co-DMs'
+
+**Status:** Accepted; operator sign-off on Sign-offs option A (#1716).
+
+**Context:** A Scribe is a trusted player whose extra job is taking the party's notes. Until now Scribe was also the threshold for seeing hidden pages, secrets, GM-only fields, Adventures (ADR-016, ADR-068) and for opening the GM Screen, so the note taker read the DM's prep. A Co-DM (a Scribe with the DM grant) already exists for someone who should.
+
+**Decision:**
+1. "Sees hidden content" means the owner or a Co-DM: `CampaignContext.CanAuthorDmOnly()`, or a visibility role of Owner where a role is passed (`VisibilityRole()` promotes the DM grant). That replaces the Scribe threshold in `visibilityFilter` and its calendar mirror, `CheckEntityAccess`, the Adventures rule, secret and GM-only field stripping, the GM Screen, NPC Reveal and the sync API.
+2. A Scribe keeps write access, limited to what they are served. Every Scribe write route on a page checks that they can see it (404) and edit it (403). Text whose stored copy holds secrets is read-only to them, because their copy left the secrets out and a save would erase them. A fields save keeps the stored hidden values. Their new pages are always open to players, and they cannot put pages into Adventures, hide or show pages in bulk, or make a post GM-only.
+3. Explicit audiences stay: a journal note shared with "DM and Scribes" still reaches Scribes, because its author chose that audience. The Members page role guide is unchanged.
+4. Owners are told once which of their Scribes this changes, by a bell note from a one-time boot reconciler (`noteScribeAccessOnce`), so an owner who wants a Scribe to keep access can make them a Co-DM.
+
+**Consequences:**
+- A new read path decides "can see hidden" with `CanAuthorDmOnly()` or an Owner visibility role, never `MemberRole >= RoleScribe`; that comparison now means "may write".
+- A new Scribe write route on a page needs `requirePageWrite`, and a new write of text or fields must keep what the Scribe was not served (`hidden_parts.go`).

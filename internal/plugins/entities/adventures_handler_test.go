@@ -198,7 +198,7 @@ func TestEntityTypesAPI_HidesAdventuresFromPlayers(t *testing.T) {
 		wantTotal int
 	}{
 		{"player", campaigns.RolePlayer, false, false, 1},
-		{"scribe", campaigns.RoleScribe, false, true, 2},
+		{"scribe", campaigns.RoleScribe, false, false, 1},
 		{"owner", campaigns.RoleOwner, false, true, 2},
 		{"player with a DM grant", campaigns.RolePlayer, true, true, 2},
 	}
