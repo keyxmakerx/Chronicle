@@ -192,6 +192,18 @@ func TestRenderCallout_TheTimezoneAcceptShipsHidden(t *testing.T) {
 	}
 }
 
+// A guest cannot open /account, so their banner must not offer a link that
+// only bounces them back to the campaign; the accept button is their offer.
+func TestRenderCallout_GuestTimezoneHasNoAccountLink(t *testing.T) {
+	got := renderCallout(Callout{Kind: CalloutTimezone, Message: "m", NoAccountPage: true})
+	if strings.Contains(got, `href="/account"`) {
+		t.Errorf("a guest's banner links to /account, which they cannot open:\n%s", got)
+	}
+	if !strings.Contains(got, "data-cta-tz-accept") || !strings.Contains(got, "data-cta-dismiss") {
+		t.Errorf("a guest's banner lost its accept or dismiss control:\n%s", got)
+	}
+}
+
 // Both banners must be dismissible. A shell-level strip with no way to close it
 // is a shell-level strip people work around by ignoring the whole region.
 func TestRenderCallout_BothKindsCanBeDismissed(t *testing.T) {

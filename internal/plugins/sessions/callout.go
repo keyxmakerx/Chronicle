@@ -40,6 +40,10 @@ type Callout struct {
 	Link string
 	// Count is how many unanswered requests there are, for CalloutRSVP.
 	Count int
+	// NoAccountPage drops the timezone banner's "Choose" link, for a guest
+	// whose session is fenced away from /account: the link would only bounce
+	// them back to their campaign.
+	NoAccountPage bool
 }
 
 // calloutNotifTypes are the notification types that represent something a
