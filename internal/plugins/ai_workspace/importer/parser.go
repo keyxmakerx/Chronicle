@@ -20,12 +20,16 @@ import (
 )
 
 // validVisibilities enumerates the allowed `visibility:` values.
-// Anything else (e.g. "PUBLIC", "everyone") is a parse error per-row.
+// Anything else (e.g. "PUBLIC") is a parse error per-row.
 var validVisibilities = map[string]bool{
 	"private": true,
 	"dm_only": true,
 	"public":  true,
 }
+
+// visibilityAliases are the words records take for who can see, read the
+// same on a page, so an AI need not keep two vocabularies.
+var visibilityAliases = map[string]string{"everyone": "public"}
 
 // h1Re matches a Markdown H1 heading at the start of a line. Used
 // for both the per-page name resolution + the fallback split when
@@ -302,6 +306,9 @@ func parseOnePage(raw string) ParsedPage {
 	// notices it first. An era block never changes the usual page's
 	// settings, so its visibility is ignored (with a warning) unchecked.
 	if v := strings.TrimSpace(p.FrontMatter.Visibility); v != "" && !p.FrontMatter.IsEra() {
+		if a, ok := visibilityAliases[v]; ok {
+			v, p.FrontMatter.Visibility = a, a
+		}
 		if !validVisibilities[v] {
 			p.Status = StatusParseError
 			p.ParseError = fmt.Sprintf(

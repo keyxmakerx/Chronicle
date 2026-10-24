@@ -234,6 +234,12 @@ var briefs = map[string]string{
 	"category-field": "the fields on a category's sheet, including links to another category's pages and fields worked out by a rule",
 	"tag":            "the campaign's tags: make, rename, recolour, hide from players or remove them (which pages carry a tag is set on the page block)",
 	"folder":         "sidebar folders inside a category (such as Gods and Cosmology inside Lore); a page is filed in one with `folder:` on its own block",
+	"quest":          "a quest page's notice: its status, title, blurb, reward, due date and steps, and which steps players see",
+	"notice-board":   "notice boards on a place or category page: who may pin to them, which quests fill them by themselves, and the quests and notes pinned by hand",
+	"game-night":     "game nights (play sessions): the real-world date and time, a one-line summary, played or cancelled, and the recap every member reads",
+	"page-map":       "the small map drawn on a page, written as one marker or shape per line",
+	"roll_night":     "one night of an event's yearly roll: roll it again, lock it, or choose whether players are told",
+	"moon":           "a moon the Director moves by hand: the day it turns full, dark or vanished, and what players see",
 	"generator":      "run Chronicle's own generators (weather for a range of days, festivals and other events, sky events, names into a rolling table) instead of inventing the result",
 }
 
@@ -300,6 +306,20 @@ func (r *Registry) ExportAll(ctx context.Context, campaignID string, a Actor) st
 }
 
 // ---- field helpers: front matter arrives as loosely typed YAML ----
+
+// Visibility is the record's `visibility:` in the words records use
+// (everyone or dm_only), also reading a page's words: public for everyone,
+// private for Directors only.
+func (r Record) Visibility() string {
+	switch v := r.Str("visibility"); v {
+	case "public":
+		return "everyone"
+	case "private":
+		return "dm_only"
+	default:
+		return v
+	}
+}
 
 // Str returns a string field ("" when absent).
 func (r Record) Str(key string) string {

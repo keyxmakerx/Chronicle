@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/labstack/echo/v4"
 
@@ -844,14 +845,18 @@ func (h *Handler) GeneratePrompt(c echo.Context) error {
 	if in.ContentMode == "" {
 		in.ContentMode = "none"
 	}
+	// A switched-off feature's kinds are left out, and named, so the AI
+	// doesn't write what the owner couldn't open.
+	off := h.offFeatures(c.Request().Context(), cc.Campaign.ID)
+	in.Today = time.Now().Format("Monday 2 January 2006")
 	if h.lookups != nil {
 		in.Lookups = records.LookupDoc()
 		in.PageIndex = h.lookups.PageIndex(c.Request().Context(), cc.Campaign.ID, exportActor(c, cc, in.Privacy))
+		if off[records.KindCalendar] == "" {
+			in.WorldToday = h.lookups.WorldToday(c.Request().Context(), cc.Campaign.ID, exportActor(c, cc, in.Privacy))
+		}
 	}
 	if h.records != nil {
-		// A switched-off feature's kinds are left out, and named, so the AI
-		// doesn't write what the owner couldn't open.
-		off := h.offFeatures(c.Request().Context(), cc.Campaign.ID)
 		reg := h.records.Without(off)
 		in.Capabilities = reg.Capabilities()
 		if note := off.Note(); note != "" {

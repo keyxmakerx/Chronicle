@@ -141,6 +141,10 @@ type Input struct {
 	// RecordContext lists today's records (records.Registry.ExportAll),
 	// added to the world context when content is included.
 	RecordContext string
+	// Today is the real-world date ("Saturday 24 October 2026") and
+	// WorldToday the main calendar's (records.Lookups.WorldToday), so a
+	// request like "next Friday" needs no guess; "" leaves either out.
+	Today, WorldToday string
 }
 
 // Build assembles the prompt markdown by combining the schema fetch
@@ -167,6 +171,8 @@ func (s *Service) Build(
 		Capabilities:              strings.TrimSpace(in.Capabilities),
 		Lookups:                   strings.TrimSpace(in.Lookups),
 		PageIndex:                 strings.TrimSpace(in.PageIndex),
+		Today:                     strings.TrimSpace(in.Today),
+		WorldToday:                strings.TrimSpace(in.WorldToday),
 	}
 
 	switch in.Instructions {
@@ -174,6 +180,7 @@ func (s *Service) Build(
 		// Nothing about the campaign's current content: the AI keeps this.
 		data.InstructionsOnly = true
 		data.PageIndex, data.OperatorInstruction, data.ContentMode = "", "", "none"
+		data.Today, data.WorldToday = "", ""
 		data.IncludeCategoriesInUse, in.IncludeCategoriesInUse = false, false
 		in.ContentMode = "none"
 	case InstructionsSaved:

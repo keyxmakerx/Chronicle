@@ -69,3 +69,18 @@ func TestAIKindsPromptOrder(t *testing.T) {
 		})
 	}
 }
+
+// Every kind says in the prompt's opening list what it does, not only its
+// label, so the AI can tell what a block is for before reading its format.
+func TestAIKindsEachHaveABrief(t *testing.T) {
+	healthy := database.NewPluginHealthRegistry()
+	healthy.Register(rolltables.PluginSlug, true, nil, 1, 1)
+	reg := records.NewRegistry(aiKinds(newAIDeps(aiDeps{Calendar: fullCalendar{}, Health: healthy, FieldRules: stubFieldRules{},
+		PageBlocks: stubPageBlocks{}, Encounters: stubEncounters{}, Quests: stubQuestSvc{}, Boards: stubBoardSvc{}}))...)
+	caps := reg.Capabilities()
+	for _, k := range reg.Kinds() {
+		if strings.Contains(caps, "`kind: "+k.Name()+"`: "+k.Label()+"\n") {
+			t.Errorf("kind %s has only its label in the prompt", k.Name())
+		}
+	}
+}

@@ -117,7 +117,7 @@ func (k PinKind) Plan(ctx context.Context, campaignID string, a Actor, r Record)
 			return Plan{Error: "a new pin needs x and y"}
 		}
 	}
-	vis := r.Str("visibility")
+	vis := r.Visibility()
 	if vis != "" && vis != "everyone" && vis != "dm_only" {
 		return Plan{Error: "visibility must be everyone or dm_only"}
 	}
@@ -184,7 +184,7 @@ func (k PinKind) Apply(ctx context.Context, campaignID string, a Actor, r Record
 		return err
 	}
 	in := PinInput{Name: r.Str("rename_to"), Icon: r.Str("icon"), Color: r.Str("color"),
-		Category: r.Str("category"), Visibility: r.Str("visibility"), EntityID: page}
+		Category: r.Str("category"), Visibility: r.Visibility(), EntityID: page}
 	if desc := strings.TrimSpace(r.Body); desc != "" {
 		in.Description = &desc
 	}

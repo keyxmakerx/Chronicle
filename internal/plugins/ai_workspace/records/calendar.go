@@ -153,7 +153,7 @@ func (k EventKind) Plan(ctx context.Context, campaignID string, a Actor, r Recor
 	if err != nil {
 		return Plan{Error: planError(err)}
 	}
-	vis := r.Str("visibility")
+	vis := r.Visibility()
 	if vis != "" && vis != "everyone" && vis != "dm_only" {
 		return Plan{Error: "visibility must be everyone or dm_only"}
 	}
@@ -296,7 +296,7 @@ func (k EventKind) Apply(ctx context.Context, campaignID string, a Actor, r Reco
 	if r.Action == ActionCreate {
 		in := calendar.CreateEventInput{
 			Name: r.Name, Year: y, Month: m, Day: d,
-			DescriptionHTML: desc, Visibility: r.Str("visibility"),
+			DescriptionHTML: desc, Visibility: r.Visibility(),
 			CreatedBy: a.UserID, CanAuthorDmOnly: a.CanAuthorDmOnly(), Author: a.Viewer(),
 		}
 		if ended {
@@ -355,7 +355,7 @@ func (k EventKind) Apply(ctx context.Context, campaignID string, a Actor, r Reco
 	if mi, ok, _ := r.Int("minute"); ok {
 		in.StartMinute = patch.Of(mi)
 	}
-	if s := r.Str("visibility"); s != "" {
+	if s := r.Visibility(); s != "" {
 		in.Visibility = patch.Of(s)
 	}
 	if s := r.Str("color"); s != "" {

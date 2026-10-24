@@ -127,26 +127,12 @@ func (run *lookupRun) calendarInfo() (LookupAnswer, error) {
 	ans.Chip = "Calendar · " + cal.Name
 	var b strings.Builder
 	fmt.Fprintf(&b, "## Calendar: %s\n\n", cal.Name)
-	label := ""
 	if cal.EpochName != nil && *cal.EpochName != "" {
-		label = " " + *cal.EpochName
 		fmt.Fprintf(&b, "Year label: %s\n", *cal.EpochName)
 	}
 	today := calDate{cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay}
 	if len(cal.Months) > 0 {
-		line := "Today: " + dateText(cal, today) + label
-		if n := len(cal.Weekdays); n > 0 {
-			if i := cal.WeekdayIndex(today.Y, today.M, today.D); i >= 0 && i < n {
-				line += " (" + cal.Weekdays[i].Name + ")"
-			}
-		}
-		if s := cal.SeasonForDate(today.M, today.D); s != nil {
-			line += ", " + s.Name
-		}
-		if e := cal.EraForDate(today.Y, today.M, today.D); e != nil {
-			line += ", in the era " + e.Name
-		}
-		b.WriteString(line + "\n")
+		b.WriteString("Today: " + todayText(cal) + "\n")
 	}
 	fmt.Fprintf(&b, "A day has %d hours.", cal.HoursPerDay)
 	if cal.LeapYearEvery > 0 {
@@ -383,4 +369,39 @@ func (run *lookupRun) weatherKinds() (LookupAnswer, error) {
 	}
 	ans.Text = b.String()
 	return ans, nil
+}
+
+// todayText is the calendar's current date with its year label, weekday,
+// season and era, as the calendar lookup writes it.
+func todayText(cal *calendar.Calendar) string {
+	today := calDate{cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay}
+	line := dateText(cal, today)
+	if cal.EpochName != nil && *cal.EpochName != "" {
+		line += " " + *cal.EpochName
+	}
+	if n := len(cal.Weekdays); n > 0 {
+		if i := cal.WeekdayIndex(today.Y, today.M, today.D); i >= 0 && i < n {
+			line += " (" + cal.Weekdays[i].Name + ")"
+		}
+	}
+	if s := cal.SeasonForDate(today.M, today.D); s != nil {
+		line += ", " + s.Name
+	}
+	if e := cal.EraForDate(today.Y, today.M, today.D); e != nil {
+		line += ", in the era " + e.Name
+	}
+	return line
+}
+
+// WorldToday is the main calendar's current date for the prompt's opening,
+// as the Actor may see the calendar; "" without one.
+func (l *Lookups) WorldToday(ctx context.Context, campaignID string, a Actor) string {
+	if l == nil || l.Cal == nil {
+		return ""
+	}
+	cal, err := l.Cal.GetDefaultCalendarForViewer(ctx, campaignID, a.Viewer())
+	if err != nil || cal == nil || len(cal.Months) == 0 {
+		return ""
+	}
+	return todayText(cal)
 }

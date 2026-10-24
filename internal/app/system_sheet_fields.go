@@ -163,6 +163,22 @@ func (n aiFieldNotes) FieldNotes(ctx context.Context, campaignID string, t entit
 			if id != t.ID {
 				continue
 			}
+			// A category the system's sheet lives on can still carry the
+			// starting set's fields from another game (race, alignment), so
+			// those are named as not the system's own.
+			own := map[string]bool{}
+			for _, f := range p.Fields {
+				own[f.Key] = true
+			}
+			system := m.Name
+			if system == "" {
+				system = "game system"
+			}
+			for _, d := range t.Fields {
+				if !own[d.Key] {
+					out[d.Key] = "Not a " + system + " field; fill it only when I ask for it"
+				}
+			}
 			for _, f := range p.Fields {
 				note := f.Format
 				if p.Category == presetCategoryCharacter && foundryKeeps(f) {

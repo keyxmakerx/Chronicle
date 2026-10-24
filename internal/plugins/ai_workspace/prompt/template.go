@@ -46,6 +46,8 @@ type templateData struct {
 	Lookups string
 	// PageIndex is the compact list of page names per type.
 	PageIndex string
+	// Today and WorldToday are the real-world and in-world dates.
+	Today, WorldToday string
 
 	// InstructionsOnly renders only the standing part (formats, lookups,
 	// rules) for an AI to keep; InstructionsSaved renders only the request,
@@ -97,7 +99,9 @@ and it will be accepted with minimal review.
 These are standing instructions: keep them for the whole chat or project. Each
 time, I will send a short request (what I want, and sometimes what my campaign
 has now); answer it in the formats below.
-{{ end }}{{ end }}{{ if .Capabilities }}
+{{ end }}{{ end }}{{ if .Today }}
+Today is {{ .Today }} in the real world{{ if .WorldToday }}, and {{ .WorldToday }} on my campaign's main calendar{{ end }}.
+{{ end }}{{ if .Capabilities }}
 ## What you can do
 
 Each block you write adds, changes or removes one thing in my campaign. I
@@ -162,7 +166,7 @@ abilities, say) takes a YAML list. To build a monster, give its page the creatur
 and every stat block field, then name that page in an encounter's creatures.
 {{ end }}
 
-{{ if .IncludeCategoriesInUse }}
+{{ if and .IncludeCategoriesInUse .CategoriesInUse }}
 ## Categories currently in use
 
 {{ range .CategoriesInUse }}
@@ -191,8 +195,10 @@ reason: The players asked where the caravan was headed.
 The body of the page in markdown.
 ` + "```" + `
 
-Valid ` + "`" + `type` + "`" + ` values are the slugs listed above. ` + "`" + `visibility` + "`" + ` must be one of
-` + "`" + `private` + "`" + `, ` + "`" + `dm_only` + "`" + `, or ` + "`" + `public` + "`" + `. ` + "`" + `tags` + "`" + ` is optional; use the campaign's
+Valid ` + "`" + `type` + "`" + ` values are the slugs listed above. ` + "`" + `visibility` + "`" + ` is ` + "`" + `public` + "`" + ` (everyone
+sees it) or ` + "`" + `private` + "`" + ` (hidden from players; ` + "`" + `dm_only` + "`" + ` means the same). Events, pins and map
+sketches take the same words, and also ` + "`" + `everyone` + "`" + `; a note says who it is shared with in
+` + "`" + `share:` + "`" + ` instead (` + "`" + `private` + "`" + `, ` + "`" + `gm` + "`" + ` or ` + "`" + `party` + "`" + `). ` + "`" + `tags` + "`" + ` is optional; use the campaign's
 existing tag vocabulary where possible; a tag that doesn't exist yet is made. On
 ` + "`" + `action: update` + "`" + `, ` + "`" + `tags` + "`" + ` replaces the page's tags, ` + "`" + `tags: []` + "`" + ` clears them, and leaving
 the line out keeps them. A page's GM-only tags always stay.
