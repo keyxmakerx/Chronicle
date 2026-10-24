@@ -344,14 +344,16 @@ templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 	</div>
 }
 
-// blockImage renders the entity header image. A Scribe or above sees a
-// "Change" chip on the picture itself, in view on touch screens too, which
-// opens the file picker; image_upload.js adds the progress bar and the amber
-// error bar. Everyone else sees the picture alone.
+// blockImage renders the entity header image. A Scribe or above, or the player
+// who claimed the page, sees a "Change" chip on the picture itself, in view on
+// touch screens too, which opens the file picker; image_upload.js adds the
+// progress bar and the amber error bar. Everyone else sees the picture alone.
+// The token maker stays with Scribes.
 templ blockImage(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, csrfToken string) {
+	{{ canChange := canChangeOwnPage(ctx, cc, entity) }}
 	<div class={ "card cb-card overflow-hidden p-0", templ.KV("era-settle", eraViewOf(ctx).Open()) }>
 		if entity.ImagePath != nil && *entity.ImagePath != "" {
-			if cc.MemberRole >= campaigns.RoleScribe {
+			if canChange {
 				<div
 					class="relative"
 					data-widget="image-upload"
@@ -364,7 +366,7 @@ templ blockImage(cc *campaigns.CampaignContext, entity *Entity, entityType *Enti
 						alt={ entity.Name }
 						class="w-full h-56 object-cover"
 					/>
-					if showsTokenMaker(entityType, entity) {
+					if cc.MemberRole >= campaigns.RoleScribe && showsTokenMaker(entityType, entity) {
 						<div class="fx-chips">
 							<button
 								type="button"
@@ -391,7 +393,7 @@ templ blockImage(cc *campaigns.CampaignContext, entity *Entity, entityType *Enti
 				/>
 			}
 		} else {
-			if cc.MemberRole >= campaigns.RoleScribe {
+			if canChange {
 				<div
 					class="relative w-full h-40 bg-surface-alt flex flex-col items-center justify-center cursor-pointer hover:bg-surface transition-colors"
 					data-widget="image-upload"
@@ -432,7 +434,7 @@ templ blockEntryEditor(cc *campaigns.CampaignContext, entity *Entity, csrfToken 
 		data-endpoint={ widgetEndpoint(ctx, cc.Campaign.ID, entity.ID, "entry") }
 		class={ templ.KV("era-settle", eraViewOf(ctx).Open()) }
 		data-campaign-id={ cc.Campaign.ID }
-		if cc.MemberRole >= campaigns.RoleScribe {
+		if canWriteDescription(ctx, cc, entity) {
 			data-editable="true"
 		}
 		data-autosave="30"

@@ -25,9 +25,10 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// answers 404 (not 403) to everyone else so the route confirms nothing.
 	cg.GET("/entities/:eid/sheet", h.Sheet)
 
-	// Entry API (JSON endpoints for editor widget).
+	// Entry API (JSON endpoints for editor widget). Below Scribe the save
+	// admits only the player who claimed the page (authorizeOwnPageWrite).
 	cg.GET("/entities/:eid/entry", h.GetEntry, campaigns.RequireRole(campaigns.RolePlayer))
-	cg.PUT("/entities/:eid/entry", h.UpdateEntryAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.PUT("/entities/:eid/entry", h.UpdateEntryAPI, campaigns.RequireRole(campaigns.RolePlayer))
 
 	// Player notes API (player-facing content, synced as a separate Foundry page).
 	cg.GET("/entities/:eid/player-notes", h.GetPlayerNotes, campaigns.RequireRole(campaigns.RolePlayer))
@@ -46,8 +47,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.PUT("/entities/:eid/permissions", h.SetPermissionsAPI, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.GET("/entities/members", h.GetMembersAPI, campaigns.RequireRole(campaigns.RoleOwner))
 
-	// Image API.
-	cg.PUT("/entities/:eid/image", h.UpdateImageAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	// Image API. The picture, like the description, is also the claiming
+	// player's to change; the cover stays with Scribes.
+	cg.PUT("/entities/:eid/image", h.UpdateImageAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.PUT("/entities/:eid/cover-image", h.UpdateCoverImageAPI, campaigns.RequireRole(campaigns.RoleScribe))
 
 	// A page's version for one era: making, removing and other eras are the

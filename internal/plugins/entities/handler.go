@@ -1969,13 +1969,18 @@ func (h *Handler) UpdateEntryAPI(c echo.Context) error {
 	if entity.CampaignID != cc.Campaign.ID {
 		return apperror.NewNotFound("entity not found")
 	}
+	userID := auth.GetUserID(c)
+	if err := authorizeOwnPageWrite(cc.MemberRole, entity, userID, cc.Campaign.ID); err != nil {
+		return err
+	}
+	owner := IsClaimedOwnerPlayer(cc.MemberRole, entity, userID)
 	// A clash answer carries the stored text, so the caller must be allowed
 	// to see and edit this page, as on the page itself.
-	access, err := h.service.CheckEntityAccess(c.Request().Context(), entity.ID, int(cc.VisibilityRole()), auth.GetUserID(c))
+	access, err := h.service.CheckEntityAccess(c.Request().Context(), entity.ID, int(cc.VisibilityRole()), userID)
 	if err != nil || !access.CanView {
 		return apperror.NewNotFound("entity not found")
 	}
-	if !access.CanEdit {
+	if !access.CanEdit && !owner {
 		return apperror.NewForbidden("you can't edit this page")
 	}
 
@@ -1988,6 +1993,11 @@ func (h *Handler) UpdateEntryAPI(c echo.Context) error {
 	}
 	if err := json.NewDecoder(c.Request().Body).Decode(&body); err != nil {
 		return apperror.NewBadRequest("invalid JSON body")
+	}
+	if owner {
+		if body.Entry, body.EntryHTML, err = ownerEntryWrite(entity, body.Entry, body.EntryHTML); err != nil {
+			return err
+		}
 	}
 
 	rev, conflict, err := h.service.SaveEntry(c.Request().Context(), entityID, body.Entry, body.EntryHTML, body.BaseRev)
@@ -2341,6 +2351,10 @@ func (h *Handler) UpdateImageAPI(c echo.Context) error {
 	}
 	if entity.CampaignID != cc.Campaign.ID {
 		return apperror.NewNotFound("entity not found")
+	}
+
+	if err := authorizeOwnPageWrite(cc.MemberRole, entity, auth.GetUserID(c), cc.Campaign.ID); err != nil {
+		return err
 	}
 
 	var body struct {
