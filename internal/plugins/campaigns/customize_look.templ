@@ -2,7 +2,7 @@ package campaigns
 
 import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
 
-// lookTab is the Customize page's look editor: whole looks, seven sections
+// lookTab is the Customize page's look editor: whole looks, four rooms
 // of settings, a live example site and one Save for everything. The
 // controls and the example site are built by customize_look.js from
 // data-state; this markup is the frame they fill. Inside Customize's frame
@@ -27,7 +27,7 @@ templ lookTab(cc *CampaignContext, csrfToken, state string) {
 				<div class="lk-row" id="lk-row" role="radiogroup" aria-labelledby="looks-h"></div>
 			</section>
 			<div class="cz-grid">
-				<nav class="cz-tabs" aria-label="Customize sections">
+				<nav class="cz-tabs" aria-label="Customize rooms">
 					<div class="tl" id="tl" role="tablist" aria-orientation="horizontal"></div>
 					<p class="tabs-foot"><span class="chg-k"></span>Changed since your last save.</p>
 				</nav>

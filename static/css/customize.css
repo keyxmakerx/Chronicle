@@ -920,3 +920,65 @@
 }
 .czp .fz-bar.on{ opacity:1; transform:none; pointer-events:auto; }
 .czp .fz-bar b{ color:var(--text); font-weight:650; }
+
+/* ---------- Rooms ----------
+   The tabs are rooms. A room lists its parts as chips, then shows the open
+   part's panel. In the example site the room's parts stay sharp and the rest
+   sits under a soft blur. */
+.czp .room{ display:grid; gap:10px; min-width:0; }
+.czp .room.enter{ animation:czk-sec-in 240ms var(--ease-out) both; }
+.czp.rm .room.enter{ animation-name:czk-fade-in; }
+.czp .room-h{ margin:0; font-size:12.5px; line-height:1.45; color:var(--muted); }
+.czp .parts{ display:flex; flex-wrap:wrap; gap:6px; }
+.czp .part{
+  position:relative; display:inline-flex; align-items:center; gap:6px; min-height:36px; padding:6px 12px; border-radius:999px;
+  border:1px solid var(--line); background:var(--surface); color:var(--body); font-size:13px; font-weight:550;
+  transition:transform var(--dur-micro) var(--ease), background var(--dur-micro) var(--ease);
+}
+.czp .part:hover{ background:var(--surface-2); color:var(--text); }
+.czp .part:active{ transform:scale(.97); }
+.czp .part:focus-visible{ outline:2px solid var(--focus); outline-offset:2px; }
+.czp .part[aria-pressed="true"]{ background:var(--accent-wash); border-color:var(--accent); color:var(--accent-ink); font-weight:650; }
+.czp .part .chg{ width:7px; height:7px; flex:none; border-radius:50%; background:var(--dirty); opacity:0; transition:opacity var(--dur) ease; }
+.czp .part.changed .chg{ opacity:1; }
+.czp.rm .part{ transition:none; }
+.czp.rm .part:active{ transform:none; }
+.czp .pp-rows{ display:grid; }
+.czp .pp-row{
+  display:flex; justify-content:space-between; align-items:center; gap:10px; min-height:44px; padding:10px 4px; text-align:left;
+  border-bottom:1px solid var(--line-2); color:var(--text); font-size:13.5px;
+}
+.czp .pp-row:hover{ background:var(--surface-2); }
+.czp .pp-row:focus-visible{ outline:2px solid var(--focus); outline-offset:-2px; }
+.czp .pp-tag{ display:inline-flex; align-items:center; gap:5px; color:var(--muted); font-size:12.5px; }
+.czp .pp-tag .i{ width:13px; height:13px; }
+
+/* Blur layer: clipped with holes at the room's parts, set in JS. */
+.czp .rm-blur{
+  position:absolute; left:0; top:0; width:880px; height:520px; z-index:25; pointer-events:none; opacity:0;
+  background:color-mix(in srgb, var(--p-bg) 28%, transparent); backdrop-filter:blur(2px); -webkit-backdrop-filter:blur(2px);
+  transition:opacity 220ms ease;
+}
+.czp .rm-blur.on{ opacity:1; }
+.czp.rm .rm-blur{ transition:none; }
+@media (prefers-reduced-transparency:reduce){
+  .czp .rm-blur{ backdrop-filter:none; -webkit-backdrop-filter:none; background:color-mix(in srgb, var(--p-bg) 60%, transparent); }
+}
+.czp .rm-brush{ position:absolute; inset:0; z-index:35; pointer-events:none; overflow:hidden; }
+.czp .rb{
+  position:absolute; display:inline-flex; align-items:center; gap:3px; padding:2px 6px; border-radius:999px; transform:translateX(-100%);
+  background:var(--accent-strong); color:#fff; box-shadow:0 0 0 2px var(--surface);
+}
+.czp .rb .i{ width:11px; height:11px; }
+.czp .rb.open{ padding-right:7px; }
+
+/* A hover card held open on the city page. */
+.czp .e-hc{ position:absolute; right:16px; bottom:14px; width:236px; z-index:3; pointer-events:none; }
+.czp .e-hc .chc{ position:relative; isolation:isolate; width:100%; opacity:1; transform:none; pointer-events:none; transition:none; }
+.czp .e-hc .chc__in{ font-size:12px; }
+.czp .e-hc .chc__text{ -webkit-line-clamp:3; }
+@container cz (max-width: 760px){
+  .czp .rb{ padding:1px 4px; gap:2px; }
+  .czp .rb .i{ width:9px; height:9px; }
+  .czp .e-hc{ width:200px; }
+}
