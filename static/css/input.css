@@ -1702,9 +1702,9 @@
      Audio) and the list's note count, which sit along the bottom edge. */
   body:has(.jnl) .jot-tab { bottom: calc(1.5rem + 2.25rem); }
   /* Bars pinned to the bottom edge keep their right-hand buttons clear of
-     the tab: the Customizer's unsaved-changes bar (48px, 18px up) and the
+     the tab: the Customizer's unsaved-changes bar (48px tall, about 34px up) and the
      calendar's Look/Edit deck (45px, at the edge). */
-  body:has([data-czs-savebar]:not([hidden])) .jot-tab { bottom: calc(18px + 48px + .75rem); }
+  body:has([data-czs-savebar]:not([hidden])) .jot-tab { bottom: 6rem; }
   body:has(.cal-v5 .deck) .jot-tab { bottom: calc(45px + .75rem); }
   /* A page's Files section is its last block, and Attach a file sits at its
      right edge: leave room to scroll it above the tab. */
@@ -1713,7 +1713,7 @@
   @media (max-width: 639px) {
     .jot-tab { right: 1rem; bottom: 1rem; }
     body:has(.jnl) .jot-tab { bottom: calc(1rem + 2.25rem); }
-    body:has([data-czs-savebar]:not([hidden])) .jot-tab { bottom: calc(18px + 48px + .75rem); }
+    body:has([data-czs-savebar]:not([hidden])) .jot-tab { bottom: 6rem; }
     body:has(.cal-v5 .deck) .jot-tab { bottom: calc(45px + .75rem); }
   }
 

@@ -765,7 +765,7 @@ func (h *Handler) prepareShowFor(c echo.Context, entityID string) (*showPage, er
 	ctx = withPageChildren(ctx, children)
 	ctx = withPlayerHidden(ctx, playerHidden)
 	ctx = withPagePlaces(ctx, h.loadPagePlaces(c.Request().Context(), cc, entity,
-		cc.MemberRole >= campaigns.RoleScribe && access.CanEdit, userID))
+		cc.MemberRole >= campaigns.RoleScribe && access.CanEdit && !campaigns.ViewingAsPlayer(c, cc), userID))
 	ctx = withPageParent(ctx, parentOfEntity(entity, ancestors))
 
 	// The items-and-money panel another plugin serves: drawn where the layout
