@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/labstack/echo/v4"
 
@@ -105,12 +106,17 @@ func (h *Handler) ListSessions(c echo.Context) error {
 		plan = sessionPlanFrom(c.QueryParam("plan_date"), c.QueryParam("plan_time"), c.QueryParam("plan_tz"))
 	}
 
+	// Past nights are judged by the viewer's own date, so tonight's game
+	// stays upcoming until their midnight.
+	today := time.Now().In(timeutil.LoadLocation(h.resolveViewerTZ(c, userID))).Format("2006-01-02")
+	groups := groupSessions(sessionList, today)
+
 	if middleware.IsHTMX(c) {
 		return middleware.Render(c, http.StatusOK,
-			SessionListFragment(cc, sessionList, csrfToken, isOwner, isScribe, userID, plan))
+			SessionListFragment(cc, groups, csrfToken, isOwner, isScribe, userID, plan))
 	}
 	return middleware.Render(c, http.StatusOK,
-		SessionListPage(cc, sessionList, csrfToken, isOwner, isScribe, userID, plan))
+		SessionListPage(cc, groups, csrfToken, isOwner, isScribe, userID, plan))
 }
 
 // ShowSession renders a session detail page.
