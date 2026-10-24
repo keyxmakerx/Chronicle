@@ -182,7 +182,7 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 	cg.POST("/entities/bulk-update", api.BulkUpdateEntityType, RequirePermission(PermWrite))
 
 	// Calendar read endpoints (require "read" permission + calendar addon).
-	calGroup := cg.Group("", RequireAddonAPI(addonChecker, "calendar"))
+	calGroup := addonRoutes{cg, RequireAddonAPI(addonChecker, "calendar")}
 	calGroup.GET("/calendars", calAPI.ListCalendars, RequirePermission(PermRead))
 	calGroup.GET("/calendar", calAPI.GetCalendar, RequirePermission(PermRead))
 	calGroup.GET("/calendar/date", calAPI.GetCurrentDate, RequirePermission(PermRead))
@@ -251,7 +251,7 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 	cg.DELETE("/media/:mediaID", mediaAPI.DeleteMedia, RequirePermission(PermWrite))
 
 	// Map read endpoints (require "read" permission + maps addon).
-	mapGroup := cg.Group("", RequireAddonAPI(addonChecker, "maps"))
+	mapGroup := addonRoutes{cg, RequireAddonAPI(addonChecker, "maps")}
 	mapGroup.GET("/maps", mapAPI.ListMaps, RequirePermission(PermRead))
 	mapGroup.GET("/maps/look", mapAPI.GetMapLook, RequirePermission(PermRead))
 	mapGroup.GET("/maps/:mapID", mapAPI.GetMap, RequirePermission(PermRead))
@@ -284,7 +284,7 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 	// Shop room read endpoint (require "read" permission + the shop room's
 	// addon, named by the app wiring): the Foundry module shows the room to
 	// its players.
-	shopGroup := cg.Group("", RequireAddonAPI(addonChecker, api.shopRoomAddon))
+	shopGroup := addonRoutes{cg, RequireAddonAPI(addonChecker, api.shopRoomAddon)}
 	shopGroup.GET("/armory/shops/:eid/room", api.GetShopRoom, RequirePermission(PermRead))
 	// Buying acts as the member the call names (actingUserId); see
 	// ShopBuyAPIService for why that can only narrow the key's power.
@@ -331,7 +331,7 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 		cg.GET("/quests/party", q.Party, RequirePermission(PermRead))
 		cg.GET("/quests/:entityID", q.GetQuest, RequirePermission(PermRead))
 		cg.PUT("/quests/:entityID", q.PutQuest, RequirePermission(PermWrite))
-		rewards := cg.Group("", RequireAddonAPI(addonChecker, q.rewardAddon))
+		rewards := addonRoutes{cg, RequireAddonAPI(addonChecker, q.rewardAddon)}
 		rewards.POST("/quests/pay", q.Pay, RequirePermission(PermWrite))
 		rewards.POST("/quests/give", q.Give, RequirePermission(PermWrite))
 	}
@@ -347,7 +347,7 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 	// gated by the stash feature's addon (slug supplied by the wiring), and the
 	// acting member's own rules apply to each call — see StashAPIService.
 	if stashAPI != nil {
-		stashGroup := cg.Group("", RequireAddonAPI(addonChecker, stashAPI.addonSlug))
+		stashGroup := addonRoutes{cg, RequireAddonAPI(addonChecker, stashAPI.addonSlug)}
 		stashGroup.GET("/stashes/view", stashAPI.View, RequirePermission(PermRead))
 		stashGroup.GET("/stashes/history", stashAPI.History, RequirePermission(PermRead))
 		stashGroup.GET("/stashes/requests", stashAPI.Requests, RequirePermission(PermRead))
@@ -357,4 +357,38 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 		stashGroup.POST("/stashes/requests/:moveId/decline", stashAPI.Decline, RequirePermission(PermWrite))
 		stashGroup.PUT("/stashes/downtime", stashAPI.SetDowntime, RequirePermission(PermWrite))
 	}
+}
+
+// addonRoutes registers routes that need an add-on, with its check on each
+// route rather than on a group. An Echo group with middleware also claims
+// every unknown path under its prefix to run that middleware, so a gated
+// group under the campaign prefix made a path that doesn't exist answer the
+// add-on's 403 instead of a 404.
+type addonRoutes struct {
+	g     *echo.Group
+	addon echo.MiddlewareFunc
+}
+
+func (a addonRoutes) with(m []echo.MiddlewareFunc) []echo.MiddlewareFunc {
+	return append([]echo.MiddlewareFunc{a.addon}, m...)
+}
+
+func (a addonRoutes) GET(path string, h echo.HandlerFunc, m ...echo.MiddlewareFunc) *echo.Route {
+	return a.g.GET(path, h, a.with(m)...)
+}
+
+func (a addonRoutes) POST(path string, h echo.HandlerFunc, m ...echo.MiddlewareFunc) *echo.Route {
+	return a.g.POST(path, h, a.with(m)...)
+}
+
+func (a addonRoutes) PUT(path string, h echo.HandlerFunc, m ...echo.MiddlewareFunc) *echo.Route {
+	return a.g.PUT(path, h, a.with(m)...)
+}
+
+func (a addonRoutes) PATCH(path string, h echo.HandlerFunc, m ...echo.MiddlewareFunc) *echo.Route {
+	return a.g.PATCH(path, h, a.with(m)...)
+}
+
+func (a addonRoutes) DELETE(path string, h echo.HandlerFunc, m ...echo.MiddlewareFunc) *echo.Route {
+	return a.g.DELETE(path, h, a.with(m)...)
 }
