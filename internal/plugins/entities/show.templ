@@ -280,6 +280,7 @@ templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 				<div class="flex items-center gap-2">
 					<h1 class="cb-title text-xl md:text-3xl font-bold text-fg" data-page-h1>{ entity.Name }</h1>
 					@entityFavoriteButton(entity)
+					@dmOnlyTitleLabel(cc, entity)
 					// "Show in Foundry" for NPC pages. foundry_vtt owns it and
 					// answers empty for anything else, so this stays VTT-agnostic.
 					if cc.CanAuthorDmOnly() {
