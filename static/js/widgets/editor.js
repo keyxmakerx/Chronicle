@@ -59,6 +59,12 @@
       var campaignId = config.campaignId || '';
       var canEdit = config.editable === true; // user has permission to edit
       var autosaveInterval = config.autosave || 30;
+      // A mount may name its own header and empty-state text, and may say
+      // that it holds no GM-only text (a game night's recap, which every
+      // member reads), which drops the Secret button and GM-only pictures.
+      var label = config.label || 'Entry';
+      var placeholder = config.placeholder || 'Begin writing your entry...';
+      var allowSecrets = config.secrets !== false;
       // Create editor container structure.
       el.innerHTML = '';
       el.classList.add('chronicle-editor');
@@ -68,6 +74,7 @@
       if (canEdit) {
         headerEl = document.createElement('div');
         headerEl.className = 'chronicle-editor__header';
+        headerEl.dataset.label = label;
         el.appendChild(headerEl);
         renderHeader(headerEl, false);
       }
@@ -82,7 +89,7 @@
 
       // Toolbar is created but hidden until edit mode is activated.
       if (canEdit) {
-        toolbar = createToolbar();
+        toolbar = createToolbar(allowSecrets);
         toolbar.style.display = 'none'; // hidden in view mode
         el.appendChild(toolbar);
       }
@@ -102,7 +109,7 @@
           codeBlock: false, // Replaced by CodeBlockLowlight for syntax highlighting.
         }),
         Placeholder.configure({
-          placeholder: 'Begin writing your entry...',
+          placeholder: placeholder,
         }),
         Link.configure({
           openOnClick: true, // always clickable in view mode, reconfigured in edit mode
@@ -132,7 +139,7 @@
       }
 
       // Add inline secrets mark if extension is loaded.
-      if (Chronicle.SecretMark) {
+      if (Chronicle.SecretMark && allowSecrets) {
         extensions.push(Chronicle.SecretMark);
       }
 
@@ -234,6 +241,7 @@
       editorRef.current = editor;
       // Read by the slash menu's Picture command.
       editor.chronicleCampaignId = campaignId;
+      if (!allowSecrets) editor.chronicleNoGmOnly = true;
 
       // --- @Mention Extension ---
       // Initialize mention support if the extension module is loaded and we
@@ -317,6 +325,7 @@
         contentEl: contentEl,
         rev: null, // text revision this editor is based on (see saveContent)
         conflict: null, // set while someone else's save is waiting on a choice
+        startEditing: canEdit && config.startEditing === true,
       };
 
       editors.set(el, state);
@@ -441,7 +450,7 @@
 
     var label = document.createElement('span');
     label.className = 'chronicle-editor__header-label';
-    label.textContent = 'Entry';
+    label.textContent = headerEl.dataset.label || 'Entry';
     headerEl.appendChild(label);
 
     var btn = document.createElement('button');
@@ -552,7 +561,7 @@
    * Create the editor toolbar with formatting buttons.
    * @returns {HTMLElement}
    */
-  function createToolbar() {
+  function createToolbar(allowSecrets) {
     var toolbar = document.createElement('div');
     toolbar.className = 'chronicle-editor__toolbar';
 
@@ -564,7 +573,7 @@
         { cmd: 'underline', icon: 'U', title: 'Underline (Ctrl+U)', style: 'text-decoration:underline' },
         { cmd: 'strike', icon: 'S', title: 'Strikethrough', style: 'text-decoration:line-through' },
         { cmd: 'secret', icon: '<i class="fa-solid fa-eye-slash" style="font-size:11px"></i>', title: Chronicle.gmTerm() + ' Secret (Ctrl+Shift+S)' },
-      ],
+      ].filter(function (b) { return allowSecrets || b.cmd !== 'secret'; }),
       // Block formatting
       [
         { cmd: 'heading1', icon: 'H1', title: 'Heading 1' },
@@ -901,6 +910,11 @@
         state.dirty = false;
         if (state.editor.isEditable) {
           setStatus(state.statusEl, 'saved');
+        }
+        // A link that means "write this now" opens straight into editing.
+        if (state.startEditing) {
+          state.startEditing = false;
+          enterEditMode(state);
         }
       })
       .catch(function (err) {

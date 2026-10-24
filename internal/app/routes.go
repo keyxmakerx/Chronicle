@@ -69,6 +69,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/systems"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"github.com/keyxmakerx/chronicle/internal/templates/pages"
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
 	ws "github.com/keyxmakerx/chronicle/internal/websocket"
 	"github.com/keyxmakerx/chronicle/internal/widgets/entity_notes"
 	"github.com/keyxmakerx/chronicle/internal/widgets/notes"
@@ -4073,6 +4074,22 @@ func (a *App) RegisterRoutes() {
 		addons:  addonService,
 		healthy: func(slug string) bool { return a.PluginHealth == nil || a.PluginHealth.IsHealthy(slug) },
 		now:     time.Now,
+	}, campaignService, authService)
+
+	// The home page's "Last night: write it up" card, wired here for the same
+	// reason: the campaign home may not import the sessions plugin.
+	registerLastNightRoutes(e, &lastNightHandler{
+		nights:  sessionsService,
+		addons:  addonService,
+		healthy: func(slug string) bool { return a.PluginHealth == nil || a.PluginHealth.IsHealthy(slug) },
+		now:     time.Now,
+		zone: func(ctx context.Context, userID string) *time.Location {
+			u, err := authService.GetUser(ctx, userID)
+			if err != nil || u == nil || u.Timezone == nil {
+				return nil
+			}
+			return timeutil.LoadLocation(*u.Timezone)
+		},
 	}, campaignService, authService)
 
 	// Timeline plugin: interactive visual timelines with zoom levels and entity grouping.
