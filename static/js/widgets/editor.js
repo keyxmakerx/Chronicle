@@ -478,7 +478,9 @@
    */
   function enterEditMode(state) {
     state.isEditing = true;
-    state.editor.setEditable(true);
+    // TipTap emits an update when editability changes; that is not an edit,
+    // and letting it through marked an untouched page "Unsaved changes".
+    state.editor.setEditable(true, false);
 
     // Show toolbar and status bar.
     if (state.toolbar) {
@@ -519,7 +521,7 @@
     }
 
     state.isEditing = false;
-    state.editor.setEditable(false);
+    state.editor.setEditable(false, false);
 
     // Hide toolbar and status bar.
     if (state.toolbar) {
