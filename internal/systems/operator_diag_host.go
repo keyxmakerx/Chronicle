@@ -219,7 +219,7 @@ func renderBuildProcess(out *strings.Builder, proc hostProcess, now time.Time) {
 
 // renderBuildTrustNote is the payload of this whole diagnostic: the next reader
 // will have a `docker inspect` window open, and without this note will reach
-// the same wrong conclusion the 2026-08-11 investigation did.
+// the wrong conclusion that the image's own timestamps invite.
 func renderBuildTrustNote(out *strings.Builder) {
 	out.WriteString("### Which of these to trust\n\n")
 	out.WriteString("- **Statements this process makes about itself — trustworthy.** Executable path/size/mtime, Go version, GOOS/GOARCH, pid, hostname, start time and uptime. They are read from inside the running process; nothing can have relabelled them.\n")

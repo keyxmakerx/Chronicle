@@ -84,7 +84,7 @@ templ App(title string) {
 					@GuestBanner()
 				}
 
-				<!-- Player call-to-action (C-RSVP-P10).
+				<!-- Player call-to-action.
 				     One banner for the one thing a player is expected to ACT on:
 				     an unanswered RSVP, or the timezone we would otherwise guess
 				     at. Server-rendered and POLLED on the same 60s cadence as the
@@ -901,10 +901,9 @@ templ Topbar() {
 			}
 
 			if IsAuthenticated(ctx) {
-				<!-- Notification bell (C-SCHED-P2). Server-rendered button + badge;
+				<!-- Notification bell. Server-rendered button + badge;
 				     the badge count refreshes via an HTMX poll, the dropdown is
-				     driven by the notification-bell widget. Scheduler-scoped this
-				     slice. -->
+				     driven by the notification-bell widget. -->
 				<div class="relative" data-widget="notification-bell" data-csrf={ GetCSRFToken(ctx) }>
 					<button
 						type="button"

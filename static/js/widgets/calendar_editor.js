@@ -1463,15 +1463,10 @@
   };
 
   // ------------------------------------------------------------------
-  // Era manager: the one piece of the mockup's "structure editor" (months,
-  // weekdays, leap rule, moons, eras) whose write API actually exists today
-  // (routes.go: POST/PUT/DELETE .../eras[/:eraID], gated CanAuthorDmOnly).
-  // Months, weekdays, the leap-year rule and a moon's own name/cycle/color
-  // have NO write route at all — see the plugin's .ai.md "Honest gaps";
-  // building a UI for those would write into nothing. So the flap becomes a
-  // real list-manage-add editor for canAuthorDmOnly (Owner or a granted
-  // co-Director); everyone else keeps calendar_view.js's read-only
-  // current-era flap.
+  // Era manager: for canAuthorDmOnly (Owner or a granted co-Director), the
+  // flap becomes a list-manage-add editor over .../eras (gated the same);
+  // everyone else keeps calendar_view.js's read-only current-era flap.
+  // Months, weekdays, leap rule and moons are edited on Edit structure.
   // ------------------------------------------------------------------
   CalendarEditor.prototype._wrapFlapRendering = function () {
     var self = this, view = this.view;

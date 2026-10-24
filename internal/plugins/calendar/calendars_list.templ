@@ -18,8 +18,7 @@ templ CalendarsListPage(data CalendarsListData) {
 }
 
 // CalendarsListFragment is the HTMX-fragment body, also embedded by the full
-// page above — see internal/plugins/campaigns/handler.go:283-286 for the
-// IsHTMX-branch convention this mirrors.
+// page above (the usual IsHTMX fragment-or-page split).
 templ CalendarsListFragment(data CalendarsListData) {
 	<link rel="stylesheet" href={ layouts.AssetURL("/static/css/calendar_v5.css") }/>
 	<!-- A card opens in place into its calendar's own page, styled by that
