@@ -12,6 +12,16 @@ type PageDirectory interface {
 	// Names returns the names of the pages among ids that are live pages of
 	// campaignID the viewer may see, keyed by id. Every other id is absent.
 	Names(ctx context.Context, campaignID string, ids []string, v Viewer) (map[string]string, error)
+	// PickerTypes returns the page types the builder offers: heroes from
+	// the campaign's character list, creatures from its creature types and
+	// NPC list. Sub-types are included.
+	PickerTypes(ctx context.Context, campaignID string) (PickerTypes, error)
+}
+
+// PickerTypes is which page types the builder's pickers search.
+type PickerTypes struct {
+	Heroes    []int
+	Creatures []int
 }
 
 // PageAccess is one viewer's standing on one page.

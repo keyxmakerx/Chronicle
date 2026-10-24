@@ -683,7 +683,7 @@
             describe: function () { return ''; },
             onSettle: function (points) {
               var p = points && points[0];
-              if (!p) { st.land(null); return; }
+              if (!p) { if (st.land) st.land(null); return; }
               setTimeout(function () { if (st.land) st.land(p); }, HOLD);
             }
           }).catch(function () { if (st.land) st.land(null); });

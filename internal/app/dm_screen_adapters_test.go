@@ -25,6 +25,21 @@ func (s *revealEntitySvc) GetByID(context.Context, string) (*entities.Entity, er
 	return s.ent, nil
 }
 
+// revealTestTypes has an NPC type (1), a location (2) and a monster type
+// (3) that no list names: creature types are revealable by what they are.
+func revealTestTypes() []entities.EntityType {
+	creature := "creature"
+	return []entities.EntityType{
+		{ID: 1, Slug: "character", Enabled: true},
+		{ID: 2, Slug: "location", Enabled: true},
+		{ID: 3, Slug: "monster", PresetCategory: &creature, Enabled: true},
+	}
+}
+
+func (s *revealEntitySvc) GetEntityTypes(context.Context, string) ([]entities.EntityType, error) {
+	return revealTestTypes(), nil
+}
+
 func (s *revealEntitySvc) SetPrivateInCampaign(_ context.Context, _, _ string, private bool) error {
 	if private {
 		s.hides++
@@ -45,6 +60,7 @@ func TestDMHiddenAdapter_RevealOnlyReveals(t *testing.T) {
 		{"already visible is left alone", entities.Entity{ID: "e1", CampaignID: "c1", Name: "Vosk", EntityTypeID: 1}, "c1", false, 0},
 		{"another campaign's entity is refused", entities.Entity{ID: "e1", CampaignID: "c2", Name: "Vosk", IsPrivate: true}, "c1", true, 0},
 		{"a hidden location is refused", entities.Entity{ID: "e1", CampaignID: "c1", Name: "Vosk", EntityTypeID: 2, IsPrivate: true}, "c1", true, 0},
+		{"a hidden monster is revealed", entities.Entity{ID: "e1", CampaignID: "c1", Name: "Vosk", EntityTypeID: 3, IsPrivate: true}, "c1", false, 1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -83,6 +99,10 @@ type hiddenListSvc struct {
 	opts   []entities.ListOptions
 }
 
+func (s *hiddenListSvc) GetEntityTypes(context.Context, string) ([]entities.EntityType, error) {
+	return revealTestTypes(), nil
+}
+
 func (s *hiddenListSvc) List(_ context.Context, _ string, typeID, _ int, _ string, o entities.ListOptions) ([]entities.Entity, int, error) {
 	s.opts = append(s.opts, o)
 	l := s.byType[typeID]
@@ -108,6 +128,7 @@ func TestDMHiddenAdapter_HiddenCharacters(t *testing.T) {
 		{"one past the limit reports more", map[int][]entities.Entity{1: {mk("a", 1), mk("b", 2), mk("c", 3)}}, 2, []string{"a", "b"}, true},
 		{"newest across types wins", map[int][]entities.Entity{1: {mk("old", 50)}, 2: {mk("new", 1), mk("mid", 9)}}, 2, []string{"new", "mid"}, true},
 		{"an entity listed under two types counts once", map[int][]entities.Entity{1: {mk("a", 1)}, 2: {mk("a", 1)}}, 2, []string{"a"}, false},
+		{"hidden monsters are listed", map[int][]entities.Entity{1: {mk("npc", 5)}, 3: {mk("acolyte", 1)}}, 3, []string{"acolyte", "npc"}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

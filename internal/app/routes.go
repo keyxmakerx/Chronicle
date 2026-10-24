@@ -5966,7 +5966,7 @@ func (a *App) RegisterRoutes() {
 
 	// Tests: montages and other long tests on a page, and how they ended.
 	// Built before encounters, whose versions are picked by a test's result.
-	encounterPages := &encountersPageAdapter{svc: entityService, cards: entities.NewPageCards(a.DB)}
+	encounterPages := &encountersPageAdapter{svc: entityService, cards: entities.NewPageCards(a.DB), lists: characterListService}
 	var encounterResults encounters.ResultDirectory
 	a.registerPlugin(PluginRegistration{
 		Slug:     pagetests.PluginSlug,

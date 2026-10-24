@@ -399,6 +399,11 @@ func (h *APIHandler) ListEntities(c echo.Context) error {
 		items, total, err = h.entitySvc.List(c.Request().Context(), campaignID, typeID, role, userID, opts)
 	}
 	if err != nil {
+		// A caller mistake (a one-letter search) is the caller's to fix, so
+		// it keeps its 4xx instead of reading as a server fault.
+		if appErr, ok := err.(*apperror.AppError); ok && appErr.Code < http.StatusInternalServerError {
+			return appErr
+		}
 		slog.Error("api: failed to list entities", slog.Any("error", err))
 		return apperror.NewInternal(fmt.Errorf("failed to list entities"))
 	}
