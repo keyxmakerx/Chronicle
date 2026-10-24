@@ -1,5 +1,6 @@
 // routes.go registers NPC gallery endpoints on the Echo router.
-// The gallery page is readable by Players; the reveal toggle requires Scribe+.
+// The gallery page is readable by Players; the reveal toggle is the owner's
+// and Co-DMs'.
 package npcs
 
 import (
@@ -15,13 +16,13 @@ import (
 // show NPCs to unauthenticated visitors. All routes are gated behind the
 // "npcs" addon — campaign owners can enable/disable via the Plugin Hub.
 func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignService, authSvc auth.AuthService, addonSvc addons.AddonService) {
-	// Authenticated routes: reveal toggle (Scribe+).
+	// Authenticated routes: reveal toggle (owner and Co-DMs).
 	cg := e.Group("/campaigns/:id",
 		auth.RequireAuth(authSvc),
 		campaigns.RequireCampaignAccess(campaignSvc),
 		addons.RequireAddon(addonSvc, "npcs"),
 	)
-	cg.POST("/npcs/:eid/reveal", h.ToggleReveal, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.POST("/npcs/:eid/reveal", h.ToggleReveal, campaigns.RequireCapability((*campaigns.CampaignContext).CanAuthorDmOnly, "only the owner or a Co-DM can reveal or hide characters"))
 
 	// Public-capable routes: gallery view (Player+).
 	pub := e.Group("/campaigns/:id",

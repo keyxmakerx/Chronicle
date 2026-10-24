@@ -25,7 +25,7 @@ func TestViewerSeesType(t *testing.T) {
 	}{
 		{"anonymous visitor, Adventures", adv, permissions.RoleNone, false},
 		{"player, Adventures", adv, permissions.RolePlayer, false},
-		{"scribe, Adventures", adv, permissions.RoleScribe, true},
+		{"scribe, Adventures (a Scribe sees what players see)", adv, permissions.RoleScribe, false},
 		{"owner, Adventures", adv, permissions.RoleOwner, true},
 		{"player, ordinary category", plain, permissions.RolePlayer, true},
 		{"anonymous, ordinary category", plain, permissions.RoleNone, true},
@@ -41,7 +41,7 @@ func TestViewerSeesType(t *testing.T) {
 	}
 }
 
-func TestTypesForViewer_DropsAdventuresBelowScribe(t *testing.T) {
+func TestTypesForViewer_DropsAdventuresBelowOwner(t *testing.T) {
 	types := []EntityType{{ID: 1, Slug: "npc"}, {ID: 2, Slug: "adventures", PresetCategory: advPreset()}, {ID: 3, Slug: "place"}}
 
 	tests := []struct {
@@ -51,7 +51,7 @@ func TestTypesForViewer_DropsAdventuresBelowScribe(t *testing.T) {
 	}{
 		{"anonymous", permissions.RoleNone, []int{1, 3}},
 		{"player", permissions.RolePlayer, []int{1, 3}},
-		{"scribe", permissions.RoleScribe, []int{1, 2, 3}},
+		{"scribe", permissions.RoleScribe, []int{1, 3}},
 		{"owner", permissions.RoleOwner, []int{1, 2, 3}},
 	}
 	for _, tt := range tests {
@@ -142,7 +142,7 @@ func TestCheckEntityAccess_DMOnlyCategory(t *testing.T) {
 		{"player, public page", permissions.RolePlayer, VisibilityDefault, false, false, false},
 		{"anonymous, public page", permissions.RoleNone, VisibilityDefault, false, false, false},
 		{"player, custom-visibility page", permissions.RolePlayer, VisibilityCustom, false, false, false},
-		{"scribe, public page", permissions.RoleScribe, VisibilityDefault, false, false, true},
+		{"scribe, public page", permissions.RoleScribe, VisibilityDefault, false, false, false},
 		{"owner", permissions.RoleOwner, VisibilityDefault, false, false, true},
 		{"player, type lookup fails (fail closed)", permissions.RolePlayer, VisibilityDefault, false, true, false},
 	}

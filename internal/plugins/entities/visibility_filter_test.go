@@ -50,20 +50,21 @@ func TestVisibilityFilter(t *testing.T) {
 				"tag_permissions",
 				"ep.subject_type = 'public'",
 				"tp.subject_type = 'public'",
-				// A page of the DM-only category is closed below Scribe whatever
+				// A page of the DM-only category is closed below Owner whatever
 				// its own visibility or grants say.
-				"? >= 2 OR NOT EXISTS",
+				" AND NOT EXISTS (",
 				"dmt.id = e.entity_type_id AND dmt.preset_category = 'adventures'",
 			} {
 				if !strings.Contains(frag, want) {
 					t.Errorf("filter missing %q (drift from policy / calendar mirror?)\nfrag=%s", want, frag)
 				}
 			}
-			// DM-only category clause: role.
-			// default-mode is_private + entity_permissions branch: role, role, userID, userID.
+			// Below Owner the DM-only category clause and a private page's
+			// default mode take no role, so neither adds an arg.
+			// entity_permissions branch: role, userID, userID.
 			// tag_permissions branch: role, userID, userID.
 			// The 'public' subject matches unconditionally, so it adds NO arg.
-			wantArgs := []any{role, role, role, "user-9", "user-9", role, "user-9", "user-9"}
+			wantArgs := []any{role, "user-9", "user-9", role, "user-9", "user-9"}
 			if len(args) != len(wantArgs) {
 				t.Fatalf("arg count = %d, want %d (%v)", len(args), len(wantArgs), args)
 			}

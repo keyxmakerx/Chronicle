@@ -48,16 +48,29 @@ func (h *TagAPIHandler) resolveRole(c echo.Context) int {
 	return int(member.Role)
 }
 
+// seesDmOnly reports whether the caller may read and keep dm_only tags: the
+// owner and Co-DMs, as on the web. A Scribe sees what players see.
+func (h *TagAPIHandler) seesDmOnly(c echo.Context, campaignID string) bool {
+	if h.resolveRole(c) >= int(campaigns.RoleOwner) {
+		return true
+	}
+	key := GetAPIKey(c)
+	if key == nil {
+		return false
+	}
+	granted, err := h.campaignSvc.IsUserDmGranted(c.Request().Context(), campaignID, key.UserID)
+	return err == nil && granted
+}
+
 // --- Tag CRUD ---
 
 // ListTags returns all tags for a campaign with DM-only filtering based on role.
 // GET /api/v1/campaigns/:id/tags
 func (h *TagAPIHandler) ListTags(c echo.Context) error {
 	campaignID := c.Param("id")
-	role := h.resolveRole(c)
 
-	// Scribes and Owners can see DM-only tags; Players cannot.
-	includeDmOnly := role >= int(campaigns.RoleScribe)
+	// The owner and Co-DMs can see DM-only tags; Scribes and Players cannot.
+	includeDmOnly := h.seesDmOnly(c, campaignID)
 
 	tagList, err := h.tagSvc.ListByCampaign(c.Request().Context(), campaignID, includeDmOnly)
 	if err != nil {
@@ -206,7 +219,7 @@ func (h *TagAPIHandler) SetEntityTags(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request body")
 	}
 
-	includeDmOnly := h.resolveRole(c) >= int(campaigns.RoleScribe)
+	includeDmOnly := h.seesDmOnly(c, campaignID)
 	if err := h.tagSvc.SetEntityTagsVisible(ctx, entityID, campaignID, req.TagIDs, includeDmOnly); err != nil {
 		return err
 	}
@@ -253,8 +266,7 @@ func (h *TagAPIHandler) BulkAssignTags(c echo.Context) error {
 		return apperror.NewBadRequest("action must be 'add', 'remove', or 'set'")
 	}
 
-	role := h.resolveRole(c)
-	includeDmOnly := role >= int(campaigns.RoleScribe)
+	includeDmOnly := h.seesDmOnly(c, campaignID)
 
 	var results []bulkTagResult
 	processed := 0

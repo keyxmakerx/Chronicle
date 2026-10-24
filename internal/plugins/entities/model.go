@@ -563,6 +563,11 @@ type ListOptions struct {
 	// wants the hidden ones (the DM Screen's reveal list) is not limited to
 	// whatever happens to sit in the newest page of a mixed listing.
 	PrivateOnly bool
+
+	// Query is the All Pages search box's text. List ignores it; the index
+	// handler sends a query of two or more characters to Search instead and
+	// echoes it back so the box and the page links keep it.
+	Query string
 }
 
 // DefaultListOptions returns sensible defaults for pagination.

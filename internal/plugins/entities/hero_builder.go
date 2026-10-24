@@ -41,10 +41,10 @@ type BuilderHero struct {
 }
 
 // builderHeroes picks the viewer's heroes the builder can fill in: their own
-// pages of a type the owner lists as characters. For a viewer below Scribe,
-// GM-only fields are left out of Values and listed in Hidden, since the
-// fields door refuses them and the owner may not read them.
-func builderHeroes(ctx context.Context, mine []CastMember, charTypeIDs []int, types []EntityType, staff bool) []BuilderHero {
+// pages of a type the owner lists as characters. For anyone but the owner and
+// Co-DMs, GM-only fields are left out of Values and listed in Hidden, since
+// the fields door keeps them out of a save and the viewer may not read them.
+func builderHeroes(ctx context.Context, mine []CastMember, charTypeIDs []int, types []EntityType, canSeeGM bool) []BuilderHero {
 	byType := make(map[int]*EntityType, len(types))
 	for i := range types {
 		byType[types[i].ID] = &types[i]
@@ -56,7 +56,7 @@ func builderHeroes(ctx context.Context, mine []CastMember, charTypeIDs []int, ty
 			continue
 		}
 		hidden := map[string]bool{}
-		if !staff {
+		if !canSeeGM {
 			var typeFields []FieldDefinition
 			if t := byType[e.EntityTypeID]; t != nil {
 				typeFields = t.Fields

@@ -113,7 +113,7 @@ var gmViewerCases = []struct {
 	wantGM bool // gm_notes value present in fields_data?
 }{
 	{"player session strips gm_notes", campaigns.RolePlayer, false, false},
-	{"scribe session keeps gm_notes", campaigns.RoleScribe, false, true},
+	{"scribe session strips gm_notes, as players do", campaigns.RoleScribe, false, false},
 	{"owner session keeps gm_notes", campaigns.RoleOwner, false, true},
 	{"foundry bearer keeps gm_notes", campaigns.RoleOwner, true, true},
 }
@@ -215,7 +215,7 @@ var ownerViewerCases = []struct {
 }{
 	{"another player strips backstory", campaigns.RolePlayer, "player-2", false},
 	{"claiming owner keeps backstory", campaigns.RolePlayer, "owner-1", true},
-	{"scribe keeps backstory regardless of ownership", campaigns.RoleScribe, "player-2", true},
+	{"scribe strips another player's backstory", campaigns.RoleScribe, "player-2", false},
 	{"owner role keeps backstory regardless of ownership", campaigns.RoleOwner, "player-2", true},
 }
 

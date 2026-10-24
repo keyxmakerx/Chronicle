@@ -135,11 +135,15 @@ func (h *Handler) SectionFragment(c echo.Context) error {
 }
 
 // ToggleReveal handles POST /campaigns/:id/npcs/:eid/reveal.
-// Toggles an NPC's is_private flag. Only Scribe+ can reveal/hide NPCs.
+// Toggles an NPC's is_private flag. Only the owner and Co-DMs reveal or hide
+// NPCs: a Scribe sees what players see, so a hidden NPC is not theirs to know.
 func (h *Handler) ToggleReveal(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
+	}
+	if !cc.CanAuthorDmOnly() {
+		return apperror.NewForbidden("only the owner or a Co-DM can reveal or hide characters")
 	}
 
 	entityID := c.Param("eid")

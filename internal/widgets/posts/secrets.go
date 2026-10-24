@@ -3,6 +3,8 @@ package posts
 import (
 	"encoding/json"
 
+	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/sanitize"
 )
 
@@ -19,4 +21,28 @@ func stripPostSecrets(posts []Post) {
 			posts[i].EntryHTML = &stripped
 		}
 	}
+}
+
+// hideRefusal answers a Scribe who tries to make a post GM-only.
+const hideRefusal = "only the owner or a Co-DM can make a post GM-only"
+
+// requirePostWrite keeps a Scribe's writes to what they are served. A
+// GM-only post is not theirs to see, so it reads as missing; and a post whose
+// text has GM-only parts is served to them without those parts, so changing
+// or deleting its text would lose them.
+func requirePostWrite(cc *campaigns.CampaignContext, p *Post, changesText bool) error {
+	if cc.CanAuthorDmOnly() {
+		return nil
+	}
+	if p.IsPrivate {
+		return apperror.NewNotFound("post not found")
+	}
+	html := ""
+	if p.EntryHTML != nil {
+		html = *p.EntryHTML
+	}
+	if changesText && sanitize.HasSecrets(string(p.Entry), html) {
+		return apperror.NewForbidden("parts of this post are hidden from players, so only the owner or a Co-DM can change it")
+	}
+	return nil
 }

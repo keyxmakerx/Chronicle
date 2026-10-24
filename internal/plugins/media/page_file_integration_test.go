@@ -166,7 +166,7 @@ func TestDB_PageFileAccess(t *testing.T) {
 		{"a stranger with no seat in the campaign / visible file", p.stranger, pub, p.open, p.camp, false},
 		// A GM-only file: the GM tier only.
 		{"owner / GM-only file", p.owner, gm, p.open, p.camp, true},
-		{"scribe / GM-only file", p.scribe, gm, p.open, p.camp, true},
+		{"scribe / GM-only file", p.scribe, gm, p.open, p.camp, false}, // sees what players see
 		{"co-DM / GM-only file", p.coDM, gm, p.open, p.camp, true},
 		{"editor-player / GM-only file", p.editor, gm, p.open, p.camp, false},
 		{"view-only player / GM-only file", p.viewer, gm, p.open, p.camp, false},
@@ -176,7 +176,7 @@ func TestDB_PageFileAccess(t *testing.T) {
 		{"co-DM without a grant on the page / file on a shared page", p.coDM, onShared, p.shared, p.camp, true}, // promoted to owner
 		// A private page.
 		{"owner / file on a private page", p.owner, onPrivate, p.private, p.camp, true},
-		{"scribe / file on a private page", p.scribe, onPrivate, p.private, p.camp, true},
+		{"scribe / file on a private page", p.scribe, onPrivate, p.private, p.camp, false},
 		{"editor-player / file on a private page", p.editor, onPrivate, p.private, p.camp, false},
 		{"view-only player / file on a private page", p.viewer, onPrivate, p.private, p.camp, false},
 		// A trashed page hides its files from everyone, the owner included.
@@ -231,8 +231,11 @@ func TestDB_PageFileAccess(t *testing.T) {
 		if n, l, err := names(p.viewer, p.open); err != nil || len(n) != 1 || n[0] != "handout.txt" || l.CanAttach {
 			t.Errorf("view-only player: %v %+v %v, want only handout.txt and no attach", n, l, err)
 		}
-		if n, l, err := names(p.scribe, p.open); err != nil || len(n) != 2 || !l.CanAttach || !l.CanMarkGMOnly {
-			t.Errorf("scribe: %v %+v %v, want both files and full controls", n, l, err)
+		if n, l, err := names(p.scribe, p.open); err != nil || len(n) != 1 || n[0] != "handout.txt" || !l.CanAttach || l.CanMarkGMOnly {
+			t.Errorf("scribe: %v %+v %v, want only handout.txt, attach and no GM mark", n, l, err)
+		}
+		if n, l, err := names(p.coDM, p.open); err != nil || len(n) != 2 || !l.CanAttach || !l.CanMarkGMOnly {
+			t.Errorf("co-DM: %v %+v %v, want both files and full controls", n, l, err)
 		}
 		if _, l, err := names(p.editor, p.shared); err != nil || !l.CanAttach || l.CanMarkGMOnly {
 			t.Errorf("editor-player on the shared page: %+v %v, want attach but no GM mark", l, err)
@@ -262,7 +265,7 @@ func TestDB_PageFileAccess(t *testing.T) {
 			{"view-only player on the shared page", p.viewer, p.shared, http.StatusForbidden},
 			{"scribe on the shared page (role grant)", p.scribe, p.shared, 0},
 			{"editor-player on a private page", p.editor, p.private, http.StatusNotFound},
-			{"scribe on a private page", p.scribe, p.private, 0},
+			{"scribe on a private page", p.scribe, p.private, http.StatusNotFound},
 			{"owner on a trashed page", p.owner, p.trashed, http.StatusNotFound},
 			{"owner on another campaign's page", p.owner, p.otherPage, http.StatusNotFound},
 		}
@@ -285,7 +288,10 @@ func TestDB_PageFileAccess(t *testing.T) {
 		if _, err := p.svc.SetGMOnly(ctx, p.camp, p.shared, f.ID, p.who(p.editor), true); apperror.SafeCode(err) != http.StatusForbidden {
 			t.Fatalf("an editor-player marking GM only: %v, want 403", err)
 		}
-		if _, err := p.svc.SetGMOnly(ctx, p.camp, p.shared, f.ID, p.who(p.scribe), true); err != nil {
+		if _, err := p.svc.SetGMOnly(ctx, p.camp, p.shared, f.ID, p.who(p.scribe), true); apperror.SafeCode(err) != http.StatusForbidden {
+			t.Fatalf("a scribe marking GM only: %v, want 403", err)
+		}
+		if _, err := p.svc.SetGMOnly(ctx, p.camp, p.shared, f.ID, p.who(p.coDM), true); err != nil {
 			t.Fatal(err)
 		}
 		for _, who := range []string{p.viewer, p.editor} {

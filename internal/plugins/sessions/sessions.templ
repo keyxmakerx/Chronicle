@@ -12,26 +12,28 @@ import (
 )
 
 // SessionListPage renders the full sessions page.
-templ SessionListPage(cc *campaigns.CampaignContext, sessions []Session, csrfToken string, isOwner, isScribe bool, userID string, plan SessionPlan) {
+templ SessionListPage(cc *campaigns.CampaignContext, groups []SessionGroup, csrfToken string, isOwner, isScribe bool, userID string, plan SessionPlan) {
 	@layouts.App(cc.Campaign.Name + " - Game nights") {
 		<div class="max-w-4xl mx-auto">
 			@components.Breadcrumbs([]components.BreadcrumbItem{
 				{Label: cc.Campaign.Name, Href: fmt.Sprintf("/campaigns/%s", cc.Campaign.ID), Icon: "fa-dice-d20"},
 				{Label: "Game nights"},
 			})
-			@SessionListFragment(cc, sessions, csrfToken, isOwner, isScribe, userID, plan)
+			@SessionListFragment(cc, groups, csrfToken, isOwner, isScribe, userID, plan)
 		</div>
 	}
 }
 
 // SessionListFragment renders just the session list content (for HTMX).
-templ SessionListFragment(cc *campaigns.CampaignContext, sessions []Session, csrfToken string, isOwner, isScribe bool, userID string, plan SessionPlan) {
-	<div class="flex items-center justify-between mb-6">
+// On a phone the buttons drop under the title and wrap, so New Session is
+// never clipped off the right edge.
+templ SessionListFragment(cc *campaigns.CampaignContext, groups []SessionGroup, csrfToken string, isOwner, isScribe bool, userID string, plan SessionPlan) {
+	<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
 		<div>
 			<h1 class="text-2xl font-bold text-fg">Game nights</h1>
 			<p class="text-sm text-fg-secondary mt-1">Game session schedule and history.</p>
 		</div>
-		<div class="flex items-center gap-2">
+		<div class="flex flex-wrap items-center gap-2">
 			if cc.IsMember {
 				<!-- Availability is member-only data; its target route rides the
 				     authed member group. Gate the link on membership so anonymous
@@ -62,7 +64,7 @@ templ SessionListFragment(cc *campaigns.CampaignContext, sessions []Session, csr
 			}
 		</div>
 	</div>
-	if len(sessions) == 0 {
+	if len(groups) == 0 {
 		<div class="card p-12 text-center">
 			<i class="fa-solid fa-dice-d20 text-4xl text-fg-muted mb-3"></i>
 			<p class="text-fg-secondary mb-1">No game nights yet.</p>
@@ -71,67 +73,62 @@ templ SessionListFragment(cc *campaigns.CampaignContext, sessions []Session, csr
 			}
 		</div>
 	} else {
-		<!-- Planned sessions -->
-		for i, s := range sessions {
-			if i == 0 || (i > 0 && sessions[i-1].Status != s.Status) {
-				<h2 class="text-xs font-semibold text-fg-muted uppercase tracking-wider mt-6 mb-2">
-					if s.Status == StatusPlanned {
-						Upcoming
-					} else if s.Status == StatusCompleted {
-						Completed
-					} else {
-						Cancelled
-					}
-				</h2>
+		for _, g := range groups {
+			<h2 class="text-xs font-semibold text-fg-muted uppercase tracking-wider mt-6 mb-2">{ g.Label }</h2>
+			for _, s := range g.Sessions {
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/sessions/%s", cc.Campaign.ID, s.ID)) }
+					class="card p-4 mb-2 block hover:border-accent/50 transition-colors"
+				>
+					<div class="flex items-start justify-between">
+						<div class="flex-1 min-w-0">
+							<div class="flex items-center gap-2">
+								if g.Key == "played" {
+									@playedBadge()
+								} else {
+									@sessionStatusBadge(s.Status)
+								}
+								<h3 class="font-semibold text-fg truncate">{ s.Name }</h3>
+							</div>
+							<div class="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-xs text-fg-secondary">
+								if s.ScheduledDate != nil {
+									<span>
+										<i class="fa-regular fa-calendar mr-0.5"></i>
+										{ s.FormatScheduledDate() }
+									</span>
+								}
+								if s.IsRecurring {
+									<span class="inline-flex items-center px-1.5 py-0.5 rounded bg-surface-alt text-fg-secondary border border-edge">
+										<i class="fa-solid fa-repeat text-[10px] mr-0.5"></i>
+										{ s.RecurrenceLabel() }
+									</span>
+								}
+								if len(s.Attendees) > 0 {
+									<span>
+										<i class="fa-solid fa-users mr-0.5"></i>
+										{ fmt.Sprintf("%d", countAccepted(s.Attendees)) }/{ fmt.Sprintf("%d", len(s.Attendees)) } attending
+									</span>
+								}
+								if s.CreatorName != "" {
+									<span>
+										<i class="fa-solid fa-user mr-0.5"></i>
+										{ s.CreatorName }
+									</span>
+								}
+							</div>
+							if s.Summary != nil && *s.Summary != "" {
+								<p class="text-sm text-fg-secondary mt-1 line-clamp-2">{ *s.Summary }</p>
+							}
+						</div>
+						<div class="flex items-center gap-2 ml-2 shrink-0">
+							if g.Key == "upcoming" {
+								@userRSVPBadge(s.Attendees, userID)
+							}
+							<i class="fa-solid fa-chevron-right text-fg-muted text-xs"></i>
+						</div>
+					</div>
+				</a>
 			}
-			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/sessions/%s", cc.Campaign.ID, s.ID)) }
-				class="card p-4 mb-2 block hover:border-accent/50 transition-colors"
-			>
-				<div class="flex items-start justify-between">
-					<div class="flex-1 min-w-0">
-						<div class="flex items-center gap-2">
-							@sessionStatusBadge(s.Status)
-							<h3 class="font-semibold text-fg truncate">{ s.Name }</h3>
-						</div>
-						<div class="flex items-center gap-3 mt-1.5 text-xs text-fg-secondary">
-							if s.ScheduledDate != nil {
-								<span>
-									<i class="fa-regular fa-calendar mr-0.5"></i>
-									{ s.FormatScheduledDate() }
-								</span>
-							}
-							if s.IsRecurring {
-								<span class="inline-flex items-center px-1.5 py-0.5 rounded bg-surface-alt text-fg-secondary border border-edge">
-									<i class="fa-solid fa-repeat text-[10px] mr-0.5"></i>
-									{ s.RecurrenceLabel() }
-								</span>
-							}
-							if len(s.Attendees) > 0 {
-								<span>
-									<i class="fa-solid fa-users mr-0.5"></i>
-									{ fmt.Sprintf("%d", countAccepted(s.Attendees)) }/{ fmt.Sprintf("%d", len(s.Attendees)) } attending
-								</span>
-							}
-							if s.CreatorName != "" {
-								<span>
-									<i class="fa-solid fa-user mr-0.5"></i>
-									{ s.CreatorName }
-								</span>
-							}
-						</div>
-						if s.Summary != nil && *s.Summary != "" {
-							<p class="text-sm text-fg-secondary mt-1 line-clamp-2">{ *s.Summary }</p>
-						}
-					</div>
-					<div class="flex items-center gap-2 ml-2 shrink-0">
-						if s.Status == StatusPlanned {
-							@userRSVPBadge(s.Attendees, userID)
-						}
-						<i class="fa-solid fa-chevron-right text-fg-muted text-xs"></i>
-					</div>
-				</div>
-			</a>
 		}
 	}
 	if isScribe {
@@ -140,6 +137,14 @@ templ SessionListFragment(cc *campaigns.CampaignContext, sessions []Session, csr
 }
 
 // sessionStatusBadge renders a colored status badge.
+// playedBadge marks a planned night whose date has passed: it happened,
+// but nobody has marked it complete.
+templ playedBadge() {
+	<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-surface-alt text-fg-secondary">
+		<i class="fa-solid fa-flag-checkered text-[10px] mr-0.5"></i> Played
+	</span>
+}
+
 templ sessionStatusBadge(status string) {
 	if status == StatusPlanned {
 		<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-accent/10 text-accent">
@@ -239,7 +244,7 @@ templ createSessionModal(cc *campaigns.CampaignContext, csrfToken string, plan S
 }
 
 // SessionDetailPage renders the full session detail view.
-templ SessionDetailPage(cc *campaigns.CampaignContext, session *Session, csrfToken string, isOwner, isScribe bool, userID string) {
+templ SessionDetailPage(cc *campaigns.CampaignContext, session *Session, csrfToken string, isOwner, isScribe bool, userID string, recap RecapView) {
 	@layouts.App(session.Name + " - " + cc.Campaign.Name) {
 		<div class="max-w-4xl mx-auto">
 			@components.Breadcrumbs([]components.BreadcrumbItem{
@@ -251,7 +256,11 @@ templ SessionDetailPage(cc *campaigns.CampaignContext, session *Session, csrfTok
 			<div class="flex items-start justify-between mb-6">
 				<div>
 					<div class="flex items-center gap-2 mb-1">
-						@sessionStatusBadge(session.Status)
+						if recap.Played {
+							@playedBadge()
+						} else {
+							@sessionStatusBadge(session.Status)
+						}
 						<h1 class="text-2xl font-bold text-fg">{ session.Name }</h1>
 					</div>
 					<div class="flex items-center gap-3 text-sm text-fg-secondary">
@@ -320,26 +329,32 @@ templ SessionDetailPage(cc *campaigns.CampaignContext, session *Session, csrfTok
 					<p class="text-sm text-fg-body whitespace-pre-wrap">{ *session.Summary }</p>
 				</div>
 			}
-			<!-- Session Recap (members only, editable by Scribes+): a recap has no
-			     visibility of its own, so a public campaign's visitors never see it. -->
-			if session.Status == StatusCompleted && cc.IsMember {
-				<div class="card p-4 mb-6">
-					<div class="flex items-center justify-between mb-2">
-						<h2 class="text-sm font-semibold text-fg">
-							<i class="fa-solid fa-scroll mr-1 text-accent"></i> Session Recap
+			<!-- Session Recap (members only, written by Scribes+): a recap has no
+			     visibility of its own, so a public campaign's visitors never see it.
+			     Writers get the page editor (formatting, @links, pictures,
+			     autosave); everyone else reads the saved HTML. -->
+			if recap.Open && cc.IsMember {
+				<div class={ "mb-6", templ.KV("card p-4", !isScribe) } id="session-recap">
+					if isScribe {
+						<div
+							data-widget="editor"
+							data-endpoint={ fmt.Sprintf("/campaigns/%s/sessions/%s/recap", cc.Campaign.ID, session.ID) }
+							data-campaign-id={ cc.Campaign.ID }
+							data-editable="true"
+							data-autosave="5"
+							data-label="Recap"
+							data-placeholder="What happened? Type @ to link a page."
+							data-secrets="false"
+							data-open-to-players="true"
+							if recap.StartWriting {
+								data-start-editing="true"
+							}
+							data-csrf-token={ csrfToken }
+						></div>
+					} else {
+						<h2 class="text-sm font-semibold text-fg mb-2">
+							<i class="fa-solid fa-scroll mr-1 text-accent"></i> Recap
 						</h2>
-						if isScribe {
-							<button
-								type="button"
-								class="text-xs text-accent hover:text-accent-hover"
-								id="recap-edit-btn"
-								onclick="toggleRecapEdit()"
-							>
-								<i class="fa-solid fa-pen mr-0.5"></i> Edit
-							</button>
-						}
-					</div>
-					<div id="recap-display">
 						if session.RecapHTML != nil && *session.RecapHTML != "" {
 							<div class="prose prose-sm text-fg-body">
 								@templ.Raw(*session.RecapHTML)
@@ -347,51 +362,6 @@ templ SessionDetailPage(cc *campaigns.CampaignContext, session *Session, csrfTok
 						} else {
 							<p class="text-sm text-fg-muted italic">No recap written yet.</p>
 						}
-					</div>
-					if isScribe {
-						<div
-							id="recap-editor"
-							class="hidden"
-							data-campaign-id={ cc.Campaign.ID }
-							data-session-id={ session.ID }
-							data-csrf={ csrfToken }
-						>
-							<textarea
-								id="recap-textarea"
-								class="input w-full min-h-[120px] text-sm font-mono"
-								placeholder="Write a recap of what happened this session..."
-							>{ derefStr(session.Recap) }</textarea>
-							<div class="flex justify-end gap-2 mt-2">
-								<button type="button" class="btn-ghost text-xs" onclick="toggleRecapEdit()">Cancel</button>
-								<button type="button" class="btn-primary text-xs" onclick="saveRecap()">Save Recap</button>
-							</div>
-						</div>
-						<script>
-							function toggleRecapEdit() {
-								var display = document.getElementById('recap-display');
-								var editor = document.getElementById('recap-editor');
-								display.classList.toggle('hidden');
-								editor.classList.toggle('hidden');
-							}
-							function saveRecap() {
-								var el = document.getElementById('recap-editor');
-								var campaignId = el.dataset.campaignId;
-								var sessionId = el.dataset.sessionId;
-								var csrf = el.dataset.csrf;
-								var textarea = document.getElementById('recap-textarea');
-								var text = textarea.value;
-								var html = text.split('\n').filter(function(l) { return l.trim(); })
-									.map(function(l) { return '<p>' + l.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</p>'; })
-									.join('');
-								Chronicle.apiFetch('/campaigns/' + campaignId + '/sessions/' + sessionId + '/recap', {
-									method: 'PUT',
-									body: {recap: text, recap_html: html}
-								}).then(function(r) {
-									if (r.ok) { location.reload(); }
-									else { Chronicle.notify('Failed to save recap', 'error'); }
-								});
-							}
-						</script>
 					}
 				</div>
 			}

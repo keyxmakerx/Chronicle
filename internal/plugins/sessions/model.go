@@ -392,3 +392,13 @@ type RSVPToken struct {
 	ExpiresAt time.Time  `json:"expires_at"`
 	CreatedAt time.Time  `json:"created_at"`
 }
+
+// RecapView says how a night's page shows its recap.
+type RecapView struct {
+	// Open shows the recap card (members only; see recapOpen).
+	Open bool
+	// StartWriting opens the recap editor ready to type.
+	StartWriting bool
+	// Played marks a planned night already behind the viewer (isPlayed).
+	Played bool
+}

@@ -31,7 +31,7 @@ func TestGraphTypeLister_HidesAdventuresFromPlayers(t *testing.T) {
 	}{
 		{"anonymous", int(campaigns.RoleNone), 1},
 		{"player", int(campaigns.RolePlayer), 1},
-		{"scribe", int(campaigns.RoleScribe), 2},
+		{"scribe", int(campaigns.RoleScribe), 1},
 		{"owner", int(campaigns.RoleOwner), 2},
 	}
 	for _, tt := range tests {
@@ -69,7 +69,8 @@ func TestNavSectionsSource_HidesAdventuresFromPlayers(t *testing.T) {
 		want    bool
 	}{
 		{"player", campaigns.RolePlayer, false, false},
-		{"scribe", campaigns.RoleScribe, false, true},
+		{"scribe", campaigns.RoleScribe, false, false},
+		{"co-dm", campaigns.RoleScribe, true, true},
 		{"player with DM access", campaigns.RolePlayer, true, true},
 	}
 	for _, tt := range tests {

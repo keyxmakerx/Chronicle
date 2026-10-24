@@ -10,6 +10,7 @@ import (
 // RegisterRoutes sets up all entity-related routes on the given Echo instance.
 // Entity routes are scoped to a campaign and require campaign membership.
 // CRUD permissions: Player can view, Scribe can create/edit, Owner can delete.
+// A Scribe edits only the pages they can see and edit (requirePageWrite).
 // View routes use AllowPublicCampaignAccess so public campaigns are browseable
 // without authentication.
 func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignService, authSvc auth.AuthService) {
@@ -27,19 +28,19 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 
 	// Entry API (JSON endpoints for editor widget).
 	cg.GET("/entities/:eid/entry", h.GetEntry, campaigns.RequireRole(campaigns.RolePlayer))
-	cg.PUT("/entities/:eid/entry", h.UpdateEntryAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.PUT("/entities/:eid/entry", h.UpdateEntryAPI, campaigns.RequireRole(campaigns.RoleScribe), h.requirePageWrite)
 
 	// Player notes API (player-facing content, synced as a separate Foundry page).
 	cg.GET("/entities/:eid/player-notes", h.GetPlayerNotes, campaigns.RequireRole(campaigns.RolePlayer))
-	cg.PUT("/entities/:eid/player-notes", h.UpdatePlayerNotesAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.PUT("/entities/:eid/player-notes", h.UpdatePlayerNotesAPI, campaigns.RequireRole(campaigns.RoleScribe), h.requirePageWrite)
 
 	// Fields API (JSON endpoints for attributes widget).
 	cg.GET("/entities/:eid/fields", h.GetFieldsAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	// Player-admitted on purpose: the handler lets only a claimed owner through,
 	// and only for the identity allowlist (identity_edit.go).
 	cg.PUT("/entities/:eid/fields", h.UpdateFieldsAPI, campaigns.RequireRole(campaigns.RolePlayer))
-	cg.PUT("/entities/:eid/field-overrides", h.UpdateFieldOverridesAPI, campaigns.RequireRole(campaigns.RoleScribe))
-	cg.DELETE("/entities/:eid/field-overrides", h.ResetFieldOverridesAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.PUT("/entities/:eid/field-overrides", h.UpdateFieldOverridesAPI, campaigns.RequireRole(campaigns.RoleScribe), h.requirePageWrite)
+	cg.DELETE("/entities/:eid/field-overrides", h.ResetFieldOverridesAPI, campaigns.RequireRole(campaigns.RoleScribe), h.requirePageWrite)
 
 	// Per-entity permissions API, for the DM team: the owner and co-DMs, who
 	// already see every page and so decide who else may.
@@ -51,31 +52,31 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.GET("/entities/members", h.GetMembersAPI, dmTeam)
 
 	// Image API.
-	cg.PUT("/entities/:eid/image", h.UpdateImageAPI, campaigns.RequireRole(campaigns.RoleScribe))
-	cg.PUT("/entities/:eid/cover-image", h.UpdateCoverImageAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.PUT("/entities/:eid/image", h.UpdateImageAPI, campaigns.RequireRole(campaigns.RoleScribe), h.requirePageWrite)
+	cg.PUT("/entities/:eid/cover-image", h.UpdateCoverImageAPI, campaigns.RequireRole(campaigns.RoleScribe), h.requirePageWrite)
 
 	// A page's version for one era: making, removing and other eras are the
 	// GM's. Its reads sit with the public widget reads below.
-	cg.POST("/entities/:eid/eras/:eraID", h.CreateEraVersionAPI, campaigns.RequireRole(campaigns.RoleScribe))
-	cg.PATCH("/entities/:eid/eras/:eraID", h.UpdateEraIdentityAPI, campaigns.RequireRole(campaigns.RoleScribe))
-	cg.DELETE("/entities/:eid/eras/:eraID", h.DeleteEraVersionAPI, campaigns.RequireRole(campaigns.RoleScribe))
-	cg.PUT("/entities/:eid/eras/:eraID/image", h.UpdateEraImageAPI, campaigns.RequireRole(campaigns.RoleScribe))
-	cg.PUT("/entities/:eid/eras/:eraID/entry", h.UpdateEraEntryAPI, campaigns.RequireRole(campaigns.RoleScribe))
-	cg.PUT("/entities/:eid/eras/:eraID/fields", h.UpdateEraFieldsAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.POST("/entities/:eid/eras/:eraID", h.CreateEraVersionAPI, campaigns.RequireRole(campaigns.RoleScribe), h.requirePageWrite)
+	cg.PATCH("/entities/:eid/eras/:eraID", h.UpdateEraIdentityAPI, campaigns.RequireRole(campaigns.RoleScribe), h.requirePageWrite)
+	cg.DELETE("/entities/:eid/eras/:eraID", h.DeleteEraVersionAPI, campaigns.RequireRole(campaigns.RoleScribe), h.requirePageWrite)
+	cg.PUT("/entities/:eid/eras/:eraID/image", h.UpdateEraImageAPI, campaigns.RequireRole(campaigns.RoleScribe), h.requirePageWrite)
+	cg.PUT("/entities/:eid/eras/:eraID/entry", h.UpdateEraEntryAPI, campaigns.RequireRole(campaigns.RoleScribe), h.requirePageWrite)
+	cg.PUT("/entities/:eid/eras/:eraID/fields", h.UpdateEraFieldsAPI, campaigns.RequireRole(campaigns.RoleScribe), h.requirePageWrite)
 
 	// Inline metadata API (Scribe+): name, descriptor, parent, privacy.
 	// Player-admitted like /fields: a claimed owner may send {name} only.
 	cg.PUT("/entities/:eid/metadata", h.UpdateMetadataAPI, campaigns.RequireRole(campaigns.RolePlayer))
 
 	// Popup preview config API (Scribe+).
-	cg.PUT("/entities/:eid/popup-config", h.UpdatePopupConfigAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.PUT("/entities/:eid/popup-config", h.UpdatePopupConfigAPI, campaigns.RequireRole(campaigns.RoleScribe), h.requirePageWrite)
 
 	// Auto-linking API (Scribe+, used by editor widget).
 	cg.GET("/entity-names", h.EntityNamesAPI, campaigns.RequireRole(campaigns.RoleScribe))
 
 	// Entity aliases API (Scribe+ for write, Player+ for read).
 	cg.GET("/entities/:eid/aliases", h.GetAliasesAPI, campaigns.RequireRole(campaigns.RolePlayer))
-	cg.PUT("/entities/:eid/aliases", h.SetAliasesAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.PUT("/entities/:eid/aliases", h.SetAliasesAPI, campaigns.RequireRole(campaigns.RoleScribe), h.requirePageWrite)
 
 	// Scribe routes (create/edit).
 	cg.GET("/entities/new", h.NewForm, campaigns.RequireRole(campaigns.RoleScribe))
@@ -83,12 +84,12 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.POST("/entities/quick-create", h.QuickCreateAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.GET("/entities/types", h.EntityTypesAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/entities/:eid/edit", h.EditForm, campaigns.RequireRole(campaigns.RoleScribe))
-	cg.POST("/entities/:eid/clone", h.Clone, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.POST("/entities/:eid/clone", h.Clone, campaigns.RequireRole(campaigns.RoleScribe), h.requirePageWrite)
 	// Extra places a page is listed in the page tree (Scribe, and the page's own edit check).
-	cg.POST("/entities/:eid/places", h.AddPlaceAPI, campaigns.RequireRole(campaigns.RoleScribe))
-	cg.DELETE("/entities/:eid/places/:pid", h.RemovePlaceAPI, campaigns.RequireRole(campaigns.RoleScribe))
-	cg.PUT("/entities/:eid", h.Update, campaigns.RequireRole(campaigns.RoleScribe))
-	cg.PUT("/entities/:eid/reorder", h.ReorderAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.POST("/entities/:eid/places", h.AddPlaceAPI, campaigns.RequireRole(campaigns.RoleScribe), h.requirePageWrite)
+	cg.DELETE("/entities/:eid/places/:pid", h.RemovePlaceAPI, campaigns.RequireRole(campaigns.RoleScribe), h.requirePageWrite)
+	cg.PUT("/entities/:eid", h.Update, campaigns.RequireRole(campaigns.RoleScribe), h.requirePageWrite)
+	cg.PUT("/entities/:eid/reorder", h.ReorderAPI, campaigns.RequireRole(campaigns.RoleScribe), h.requirePageWrite)
 	cg.POST("/entities/bulk-move", h.BulkMoveAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.POST("/entities/bulk-type", h.BulkChangeTypeAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.POST("/entities/bulk-tags", h.BulkTagsAPI, campaigns.RequireRole(campaigns.RoleScribe))
@@ -132,10 +133,10 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.POST("/characters/new", h.CreateHero, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/characters/entries", h.OwnEntries, campaigns.RequireRole(campaigns.RolePlayer))
 	// Owner reassignment: Scribe+ only. Pass owner_user_id=null to clear.
-	cg.PUT("/entities/:eid/owner", h.AssignOwner, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.PUT("/entities/:eid/owner", h.AssignOwner, campaigns.RequireRole(campaigns.RoleScribe), h.requirePageWrite)
 	// Map assignment for the per-entity Map Editor block: Scribe+ only.
 	// Pass map_id=null (or empty string) to unassign.
-	cg.PUT("/entities/:eid/map", h.AssignMap, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.PUT("/entities/:eid/map", h.AssignMap, campaigns.RequireRole(campaigns.RoleScribe), h.requirePageWrite)
 
 	// Sidebar node (pure folder) routes (Scribe+ for create/reorder, Owner for delete).
 	cg.POST("/sidebar-nodes", h.CreateSidebarNodeAPI, campaigns.RequireRole(campaigns.RoleScribe))

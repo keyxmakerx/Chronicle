@@ -2468,9 +2468,10 @@
       if (!p) return '<section class="eps"><h4>Recap</h4><div class="none">Loading…</div></section>';
       if (p.failed) return '<section class="eps"><h4>Recap</h4><div class="none">The recap, linked pages and entries could not be loaded.</div></section>';
       var h = this._gnCheckInHTML(sid, date, p) + '<section class="eps gnrecap"><h4>Recap</h4>';
-      // Editing here is plain text, so a recap with formatting is shown but
-      // never edited here: saving it would drop the formatting.
-      var rich = !!p.recapHtml && /<(?!\/?p\b|br\b)[a-z]/i.test(p.recapHtml);
+      // Editing here is plain text, so a recap with formatting, or any recap
+      // written in the page editor (stored as its JSON), is shown but never
+      // edited here: saving it would drop the formatting.
+      var rich = !!p.recapHtml && (/<(?!\/?p\b|br\b)[a-z]/i.test(p.recapHtml) || /^\s*\{/.test(p.recap || ''));
       if (this._gnRecapFor === sid && !rich) {
         h += '<label class="fld"><span class="sr">Recap</span><textarea data-gn-recap-input rows="6" placeholder="What happened this game night?">' + esc(p.recap) + '</textarea></label>' +
           '<p class="gperr" role="alert" hidden></p>' +

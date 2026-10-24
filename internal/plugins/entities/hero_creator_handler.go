@@ -170,7 +170,7 @@ func (h *Handler) CreateHero(c echo.Context) error {
 	input := CreateEntityInput{
 		Name:         req.Name,
 		EntityTypeID: target.ID,
-		IsPrivate:    cc.Campaign.ParseSettings().ResolveNewEntityPrivacy(patch.Absent[bool]()),
+		IsPrivate:    cc.NewPagePrivacy(patch.Absent[bool]()),
 		FieldsData:   fields,
 		Playable:     true,
 	}

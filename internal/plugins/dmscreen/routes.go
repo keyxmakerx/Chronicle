@@ -7,11 +7,11 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
-// CanOpen reports who may open the DM Screen: scribes and the owner, and any
-// member the owner has given DM access, since that access is for running the
-// game. The top-bar button uses the same rule.
+// CanOpen reports who may open the DM Screen: the owner and any member the
+// owner has given DM access (a Co-DM), since that access is for running the
+// game. A Scribe sees what players see. The top-bar button uses the same rule.
 func CanOpen(cc *campaigns.CampaignContext) bool {
-	return cc.MemberRole >= campaigns.RoleScribe || cc.IsDmGranted
+	return cc.CanAuthorDmOnly()
 }
 
 // RegisterRoutes mounts the DM Screen routes behind CanOpen; the service

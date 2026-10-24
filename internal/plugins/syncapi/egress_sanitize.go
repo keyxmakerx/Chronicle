@@ -80,19 +80,21 @@ func sanitizeCalendarEventsHTMLForEgress(es []calendar.Event) {
 // HTML and a "secret"-marked text node in the ProseMirror JSON. They must
 // be stripped server-side so players never receive the secret content; the
 // web enforces this in entities/handler.go (GetEntry / GetPlayerNotes) for
-// MemberRole < RoleScribe, and the /api/v1/* read path must mirror it or a
-// player-role caller reads raw GM prose off entry_html / entry /
+// everyone but the owner and Co-DMs, and the /api/v1/* read path must mirror
+// it or a player-role caller reads raw GM prose off entry_html / entry /
 // player_notes.
 //
 // This is a ROLE-AWARE transform, distinct from the role-agnostic XSS
-// sanitize above: Owners and Scribes see secrets, so only the caller below
-// RoleScribe gets stripped. The threshold mirrors the web verbatim so the
-// two paths can't drift on who sees secrets.
+// sanitize above: the owner and Co-DMs see secrets, so a caller whose
+// visibility role (visibilityRoleFor, which promotes a Co-DM to Owner) is
+// below RoleOwner gets stripped. A Scribe sees what players see. The
+// threshold mirrors the web so the two paths can't drift on who sees
+// secrets.
 
 // stripEntitySecretsForEgress removes inline GM secrets from an entity
 // response copy when the caller's role is below the secret-visibility
-// bar (mirrors entities/handler.go GetEntry: MemberRole < RoleScribe).
-// Owner/Scribe responses are left untouched. Safe on a nil pointer.
+// bar (mirrors entities/handler.go GetEntry: not the owner or a Co-DM).
+// Owner and Co-DM responses are left untouched. Safe on a nil pointer.
 //
 // Both representations are scrubbed: the rendered HTML fields via
 // StripSecretsHTML (drops the whole <span data-secret> element) and the
@@ -104,7 +106,7 @@ func sanitizeCalendarEventsHTMLForEgress(es []calendar.Event) {
 // copy (sanitize.* return new strings), so the source-of-truth model the
 // caller scanned from the DB is not mutated in place.
 func stripEntitySecretsForEgress(e *entities.Entity, role int) {
-	if e == nil || role >= int(campaigns.RoleScribe) {
+	if e == nil || role >= int(campaigns.RoleOwner) {
 		return
 	}
 	e.Entry = stripSecretsJSONPtr(e.Entry)
@@ -116,7 +118,7 @@ func stripEntitySecretsForEgress(e *entities.Entity, role int) {
 // stripEntitiesSecretsForEgress applies stripEntitySecretsForEgress to
 // every element of a fresh slice (e.g. ListEntities / sync-pull output).
 func stripEntitiesSecretsForEgress(es []entities.Entity, role int) {
-	if role >= int(campaigns.RoleScribe) {
+	if role >= int(campaigns.RoleOwner) {
 		return
 	}
 	for i := range es {
@@ -131,10 +133,10 @@ func stripEntitiesSecretsForEgress(es []entities.Entity, role int) {
 // where a system marks fields gm_only (e.g. Draw Steel's director gm_notes)
 // or owner_only (e.g. Draw Steel's backstory). resolveFields returns the
 // entity type's declared field defs — the source of both markers. No-op for
-// GM/owner/Bearer callers (role >= Scribe). FilterRestrictedFields never
+// owner, Co-DM and Bearer callers (role >= Owner). FilterRestrictedFields never
 // mutates the input map (nil-safe).
 func stripEntityFieldsForEgress(e *entities.Entity, role int, userID string, resolveFields func(typeID int) []entities.FieldDefinition) {
-	if e == nil || role >= int(campaigns.RoleScribe) {
+	if e == nil || role >= int(campaigns.RoleOwner) {
 		return
 	}
 	e.FieldsData = entities.FilterRestrictedFields(e.FieldsData, resolveFields(e.EntityTypeID), false, e.IsOwnedBy(userID))
@@ -145,7 +147,7 @@ func stripEntityFieldsForEgress(e *entities.Entity, role int, userID string, res
 // a single batched type load (map[typeID][]FieldDefinition) so this is not
 // an N+1 query.
 func stripEntitiesFieldsForEgress(es []entities.Entity, role int, userID string, resolveFields func(typeID int) []entities.FieldDefinition) {
-	if role >= int(campaigns.RoleScribe) {
+	if role >= int(campaigns.RoleOwner) {
 		return
 	}
 	for i := range es {

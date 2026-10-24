@@ -164,7 +164,7 @@
       if (document.activeElement !== capInput) capInput.value = a.caption || '';
       ALIGNS.forEach(function (al) { alignBtns[al].classList.toggle('is-on', a.align === al); });
       // Read per paint: the notes editors flag themselves after they are built.
-      gmBtn.style.display = editor.chronicleNotePictures ? 'none' : '';
+      gmBtn.style.display = editor.chronicleNotePictures || editor.chronicleNoGmOnly ? 'none' : '';
       gmBtn.classList.toggle('is-on', !!a.gmOnly);
       gmBtn.setAttribute('aria-pressed', a.gmOnly ? 'true' : 'false');
       handle.setAttribute('aria-valuenow', String(clampWidth(a.width)));
@@ -250,7 +250,7 @@
         paint();
         return true;
       },
-      selectNode: function () { gmBtn.style.display = editor.chronicleNotePictures ? 'none' : ''; fig.classList.add('is-selected'); },
+      selectNode: function () { gmBtn.style.display = editor.chronicleNotePictures || editor.chronicleNoGmOnly ? 'none' : ''; fig.classList.add('is-selected'); },
       deselectNode: function () { fig.classList.remove('is-selected'); commitCaption(); },
       // Clicks and typing in the tools stay out of ProseMirror.
       stopEvent: function (e) {
