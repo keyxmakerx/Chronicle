@@ -554,6 +554,27 @@ func (m *SystemManifest) HasWidget(slug string) bool {
 	return false
 }
 
+// HasCharacterSheet reports whether the system draws character pages itself:
+// a renderer bound to the "character" category, or to the slug of one of its
+// character presets. Only such a page carries a sheet for the sheet styles to
+// dress, so without one a sheet style picks nothing a player can see.
+func (m *SystemManifest) HasCharacterSheet() bool {
+	if m == nil {
+		return false
+	}
+	for _, r := range m.Renderers {
+		if r.PresetCategory == "character" {
+			return true
+		}
+		for i := range m.EntityPresets {
+			if r.Slug != "" && r.Slug == m.EntityPresets[i].Slug && m.EntityPresets[i].Category == "character" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // ItemPreset returns the first entity preset with category "item", or nil
 // if no item preset is defined. Used by the Armory plugin and item sync.
 func (m *SystemManifest) ItemPreset() *EntityPresetDef {

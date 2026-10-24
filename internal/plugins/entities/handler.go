@@ -3941,7 +3941,7 @@ func (h *Handler) buildHeroBuilder(c echo.Context, cc *campaigns.CampaignContext
 		slog.Warn("cast page: hero builder types failed", slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", err))
 		return nil
 	}
-	heroes := builderHeroes(yours, charTypes, types, cc.MemberRole >= campaigns.RoleScribe)
+	heroes := builderHeroes(c.Request().Context(), yours, charTypes, types, cc.MemberRole >= campaigns.RoleScribe)
 	if len(heroes) == 0 && !access.Allowed {
 		return nil
 	}

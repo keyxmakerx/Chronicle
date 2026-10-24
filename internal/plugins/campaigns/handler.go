@@ -170,6 +170,7 @@ type Handler struct {
 	// placeholders when either is unwired.
 	extensionDashboardFactories []func(*CampaignContext) ExtensionDashboard
 	extensionEnableChecker      ExtensionEnableChecker
+	sheetChecker                SheetChecker
 }
 
 // NewHandler creates a new campaign handler.
