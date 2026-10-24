@@ -190,3 +190,26 @@
   .enc-version { animation: enc-settle 280ms var(--ease-out, ease-out); }
 }
 @keyframes enc-settle { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* A creature's numbers, folded out under its row (creature_fold.js): the
+   game system's stat block, or the page's filled-in fields. */
+.cf-name {
+  all: unset; box-sizing: border-box; display: inline-flex; align-items: baseline; gap: 6px; cursor: pointer;
+  color: var(--color-text-primary, #111827); border-radius: 4px; overflow-wrap: anywhere;
+}
+.cf-name:hover b { text-decoration: underline; text-underline-offset: 2px; }
+.cf-name:focus-visible { outline: 2px solid var(--color-accent, #6366f1); outline-offset: 2px; }
+.cf-chev { font-size: 10px; color: var(--color-text-muted, #6b7280); transition: transform 160ms var(--ease-out, ease-out); }
+.cf-name[aria-expanded="true"] .cf-chev { transform: rotate(90deg); }
+.cf-fold {
+  display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; margin-top: -4px;
+  border-radius: 8px; background: var(--color-bg-tertiary, #f3f4f6); font-size: 13px;
+}
+.cf-note { margin: 0; color: var(--color-text-muted, #6b7280); font-size: 12.5px; }
+.cf-fields { margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(8.5em, 1fr)); gap: 6px 12px; }
+.cf-field { min-width: 0; }
+.cf-field dt { font-size: 11px; color: var(--color-text-muted, #6b7280); letter-spacing: .02em; }
+.cf-field dd { margin: 0; color: var(--color-text-primary, #111827); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.cf-open { align-self: flex-start; font-size: 12.5px; color: var(--color-accent, #6366f1); }
+.cf-open:hover { text-decoration: underline; }
+@media (prefers-reduced-motion: reduce) { .cf-chev { transition: none; } }

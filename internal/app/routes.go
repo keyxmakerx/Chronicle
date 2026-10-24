@@ -6012,7 +6012,7 @@ func (a *App) RegisterRoutes() {
 
 	// Tests: montages and other long tests on a page, and how they ended.
 	// Built before encounters, whose versions are picked by a test's result.
-	encounterPages := &encountersPageAdapter{svc: entityService, cards: entities.NewPageCards(a.DB), lists: characterListService}
+	encounterPages := &encountersPageAdapter{svc: entityService, cards: entities.NewPageCards(a.DB), lists: characterListService, sys: systemHandler}
 	var encounterResults encounters.ResultDirectory
 	a.registerPlugin(PluginRegistration{
 		Slug:     pagetests.PluginSlug,
@@ -6076,7 +6076,7 @@ func (a *App) RegisterRoutes() {
 		Slug:     encounters.PluginSlug,
 		StaticFS: echo.MustSubFS(encounters.StaticAssetsFS, "static"),
 		Widgets: []PluginWidget{
-			{Name: "encounters", Scripts: []string{"js/encounters.js"}},
+			{Name: "encounters", Scripts: []string{"js/creature_fold.js", "js/encounters.js"}},
 		},
 	})
 	if a.PluginHealth.IsHealthy(encounters.PluginSlug) {
