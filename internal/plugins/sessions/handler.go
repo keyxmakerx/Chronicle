@@ -112,12 +112,19 @@ func (h *Handler) ListSessions(c echo.Context) error {
 	groups := groupSessions(sessionList, today)
 	viewerTZ := h.storedTZ(c.Request().Context(), userID)
 
+	// "Add to your calendar" is a member's, and only while the owner's feed
+	// switch is on. A failed read hides it rather than failing the list.
+	feed := false
+	if cc.IsMember && userID != "" {
+		feed, _ = h.svc.IsCalendarFeedEnabled(ctx, cc.Campaign.ID)
+	}
+
 	if middleware.IsHTMX(c) {
 		return middleware.Render(c, http.StatusOK,
-			SessionListFragment(cc, groups, csrfToken, isOwner, isScribe, userID, plan, viewerTZ))
+			SessionListFragment(cc, groups, csrfToken, isOwner, isScribe, userID, plan, viewerTZ, feed))
 	}
 	return middleware.Render(c, http.StatusOK,
-		SessionListPage(cc, groups, csrfToken, isOwner, isScribe, userID, plan, viewerTZ))
+		SessionListPage(cc, groups, csrfToken, isOwner, isScribe, userID, plan, viewerTZ, feed))
 }
 
 // ShowSession renders a session detail page.

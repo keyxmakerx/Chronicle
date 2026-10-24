@@ -757,6 +757,7 @@
           top.parentNode.replaceChild(topNode, top);
           if (window.htmx && htmx.process) htmx.process(topNode);
         }
+        if (window.Chronicle && Chronicle.nav && Chronicle.nav.syncTools) Chronicle.nav.syncTools();
         var freshNav = doc.getElementById('sidebar-nav'), n = nav();
         if (n) {
           var edit = freshNav && freshNav.getAttribute('data-nav-edit');
