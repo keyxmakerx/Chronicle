@@ -1257,9 +1257,10 @@
      smaller: the one bounce in Chronicle, signed as an exception
      (.ai/ui-standard.md "Motion"). Coming out, the admin page falls away
      down the screen and the page you came from is underneath. Both are
-     cross-document view transitions (.admin-vt); without them the new admin
-     page itself rises over the page colour, and on the way out site_admin.js
-     lets the admin page fall before it leaves.
+     cross-document view transitions (.admin-vt). Without them the new page
+     plays the move itself: the admin page rises over the page colour, and on
+     the way out a sheet in the control room's colour covers the page you
+     return to and falls away, so that page, never a blank, is underneath.
      Calm fades instead; Off plays nothing (the script never names it). */
   html.admin-vt::view-transition-old(root),
   html.admin-vt::view-transition-new(root) { mix-blend-mode: normal; animation: none; }
@@ -1276,6 +1277,13 @@
   :is(html[data-cz-reduce], html[data-view-motion="calm"]).admin-vt[data-admin-vt="out"]::view-transition-old(root) { animation: admin-fade var(--dur-standard) linear reverse both; box-shadow: none; }
   html[data-admin-vt="in"]:not(.admin-vt) { overflow: hidden; }
   html[data-admin-vt="in"]:not(.admin-vt) body { animation: admin-rise var(--dur-arrive, 820ms) linear both; }
+  html[data-admin-vt="out"]:not(.admin-vt)::after {
+    content: ""; position: fixed; inset: 0; z-index: 2147483647; pointer-events: none;
+    background: #0b0e14; /* the control room's page colour, as base.templ paints it */
+    box-shadow: 0 -14px 32px -12px rgb(0 0 0 / 0.35);
+    animation: admin-fall var(--dur-leave, 460ms) cubic-bezier(0.5, 0, 0.75, 0) both;
+  }
+  :is(html[data-cz-reduce], html[data-view-motion="calm"])[data-admin-vt="out"]:not(.admin-vt)::after { animation: admin-fade var(--dur-standard) linear reverse both; box-shadow: none; }
   html[data-admin-vt="in"] .admin-band::after { animation: admin-rule 300ms var(--ease-slide) calc(var(--dur-arrive, 820ms) - 320ms) both; }
   /* Each keyframe sets the easing of the stretch after it: easing in on the
      way up and into each fall, easing out off each bounce. */

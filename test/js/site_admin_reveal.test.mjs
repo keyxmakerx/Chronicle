@@ -1,7 +1,7 @@
 // site_admin_reveal.test.mjs — pins site_admin_reveal.js's plan: the way in
 // plays only on an admin page and the way out only outside one, Off plays
-// nothing, and without cross-document view transitions only the way in plays
-// (the page rising by itself).
+// nothing, and without cross-document view transitions the page plays both
+// ways itself.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -13,7 +13,7 @@ import vm from 'node:vm';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const src = readFileSync(path.join(here, '..', '..', 'static', 'js', 'site_admin_reveal.js'), 'utf8');
 
-function load(stored, pathname, motion, hasVT) {
+function load(stored, pathname, motion, hasVT, timers = []) {
   const mem = new Map(stored ? [['chronicle-admin-vt', stored]] : []);
   const attrs = new Map(motion ? [['data-motion', motion]] : []);
   const classes = new Set();
@@ -44,6 +44,7 @@ function load(stored, pathname, motion, hasVT) {
       body: {},
     },
   };
+  ctx.setTimeout = (fn) => { timers.push(fn); };
   vm.runInNewContext(src, ctx);
   return { mem, attrs, classes, head, listeners, ctx, plan: win.Chronicle._siteAdminRevealPlan };
 }
@@ -55,7 +56,7 @@ test('plan matches the mark to the page', () => {
     ['in', '/admin/users?x=1', 'calm', true, 'vt'],
     ['in', '/admin', null, false, 'self'],
     ['out', '/campaigns/abc', null, true, 'vt'],
-    ['out', '/campaigns/abc', null, false, ''],
+    ['out', '/campaigns/abc', null, false, 'self'],
     ['in', '/campaigns', null, true, ''],
     ['out', '/admin', null, true, ''],
     ['in', '/administrators', null, true, ''],
@@ -100,4 +101,25 @@ test('a stale mark or motion off plays nothing and is cleared', () => {
     assert.equal(r.head.length, 0);
     assert.equal(r.mem.size, 0);
   }
+});
+
+test('without view transitions the way out uncovers the page you return to', () => {
+  const r = load('out', '/campaigns/abc', null, false);
+  assert.equal(r.attrs.get('data-admin-vt'), 'out', 'input.css hangs the falling sheet off this');
+  assert.equal(r.classes.has('admin-vt'), false);
+  assert.equal(r.head.length, 0);
+  r.listeners['doc:animationend']({ target: r.ctx.document.body, animationName: 'admin-fall' });
+  assert.equal(r.attrs.get('data-admin-vt'), 'out', 'only the fall on html ends it');
+  r.listeners['doc:animationend']({ target: r.ctx.document.documentElement, animationName: 'admin-fall' });
+  assert.equal(r.attrs.has('data-admin-vt'), false);
+  assert.equal(r.mem.size, 0);
+});
+
+test('a move that never ends still uncovers the page', () => {
+  const timers = [];
+  const r = load('out', '/campaigns/abc', null, false, timers);
+  assert.equal(timers.length, 1);
+  timers[0]();
+  assert.equal(r.attrs.has('data-admin-vt'), false);
+  assert.equal(r.mem.size, 0);
 });

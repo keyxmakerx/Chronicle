@@ -129,69 +129,20 @@ test('every way out on the page, the top bar\'s too, points at the remembered pa
   assert.equal(leave.href, '/campaigns/abc');
 });
 
-// leaveWithoutVT clicks "Back to Chronicle" from an admin page in a browser
-// without cross-document view transitions, with the given motion setting.
-function leaveWithoutVT(motion) {
-  const played = [];
-  const assigned = [];
-  let prevented = false;
+test('no view transitions: the way out is marked and the link goes at once', () => {
   const rule = globalThis.CSSViewTransitionRule;
   delete globalThis.CSSViewTransitionRule;
-  const h = globalThis.document.documentElement;
-  h.style = {};
-  h.hasAttribute = () => false;
-  h.getAttribute = (n) => (n === 'data-motion' ? motion : null);
-  globalThis.document.body = {
-    style: {},
-    animate(frames, opts) { const a = { frames, opts, cancel() {} }; played.push(a); return a; },
-  };
-  globalThis.getComputedStyle = () => ({ getPropertyValue: () => '460ms' });
-  globalThis.matchMedia = () => ({ matches: false });
-  globalThis.localStorage = { getItem: () => null };
-  globalThis.innerHeight = 800;
-  globalThis.addEventListener = () => {};
-  globalThis.removeEventListener = () => {};
-  const savedLoc = globalThis.location;
-  globalThis.location = { pathname: '/admin/users', search: '', assign: (u) => assigned.push(u) };
-  const link = { href: '/campaigns/abc', getAttribute: () => '/campaigns/abc' };
-  mem.clear();
-  const timers = [];
-  const realTimeout = globalThis.setTimeout;
-  globalThis.setTimeout = (fn, ms) => { timers.push({ fn, ms }); return 0; };
+  const savedPath = globalThis.location.pathname;
+  globalThis.location.pathname = '/admin/users';
+  mem.clear(); head.length = 0;
+  let prevented = false;
   try {
-    clickHandler({ target: { closest: (q) => (q === '[data-admin-back]' ? link : null) }, button: 0, preventDefault() { prevented = true; } });
-  } finally { globalThis.setTimeout = realTimeout; }
-  const finish = () => { if (played[0] && played[0].onfinish) played[0].onfinish(); };
-  const restore = () => {
+    clickHandler({ target: { closest: (q) => (q === '[data-admin-back]' ? {} : null) }, button: 0, preventDefault() { prevented = true; } });
+  } finally {
     globalThis.CSSViewTransitionRule = rule;
-    globalThis.location = savedLoc;
-    h.getAttribute = () => null;
-    delete globalThis.document.body;
-  };
-  return { played, assigned, timers, prevented: () => prevented, finish, restore, h };
-}
-
-test('no view transitions: the admin page falls away itself, then leaves', () => {
-  const r = leaveWithoutVT(null);
-  try {
-    assert.equal(r.prevented(), true, 'the link waits for the fall');
-    assert.equal(r.played.length, 1);
-    assert.deepEqual(r.played[0].frames[1], { transform: 'translateY(800px)' });
-    assert.equal(r.played[0].opts.duration, 460);
-    assert.equal(r.h.style.backgroundColor, '#f9fafb', 'the everyday page colour is underneath');
-    assert.equal(mem.size, 0, 'no mark: the next page has nothing to play');
-    assert.deepEqual(r.assigned, []);
-    r.finish();
-    assert.deepEqual(r.assigned, ['/campaigns/abc'], 'it leaves once the fall ends');
-    r.timers.forEach((t) => t.fn());
-    assert.equal(r.assigned.length, 1, 'the backstop timer never leaves twice');
-  } finally { r.restore(); }
-});
-
-test('no view transitions and motion off: the link simply goes', () => {
-  const r = leaveWithoutVT('off');
-  try {
-    assert.equal(r.prevented(), false);
-    assert.equal(r.played.length, 0);
-  } finally { r.restore(); }
+    globalThis.location.pathname = savedPath;
+  }
+  assert.equal(prevented, false, 'nothing holds the link');
+  assert.equal(mem.get('chronicle-admin-vt'), 'out', 'the next page plays the fall over itself');
+  assert.equal(head.length, 0);
 });
