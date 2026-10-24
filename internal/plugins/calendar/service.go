@@ -771,6 +771,15 @@ func (s *calendarService) CreateCalendar(ctx context.Context, campaignID string,
 		Visibility:       visibility,
 		VisibilityRules:  input.VisibilityRules,
 	}
+	// A campaign's first calendar is its default: the readers that follow
+	// "the campaign's calendar" (header clock, Coming up, skybox) find
+	// nothing until one is marked, and a new owner has no reason to look
+	// for the "Make default" button.
+	existing, err := s.calRepo.GetDefaultByCampaignID(ctx, campaignID)
+	if err != nil {
+		return nil, fmt.Errorf("create calendar: find default: %w", err)
+	}
+	cal.IsDefault = existing == nil
 	if err := s.calRepo.Create(ctx, cal); err != nil {
 		return nil, fmt.Errorf("create calendar: %w", err)
 	}

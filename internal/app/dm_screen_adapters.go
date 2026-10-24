@@ -276,14 +276,16 @@ func legacyNoteText(blocks []notes.Block) string {
 	return strings.Join(lines, "\n")
 }
 
-// dmWorldAdapter reads the default calendar's date and today's weather.
+// dmWorldAdapter reads the campaign's primary calendar (the default, else the
+// first) for its date and today's weather, so a campaign whose only calendar
+// was never marked default still shows it.
 type dmWorldAdapter struct {
 	svc calendar.CalendarService
 }
 
 func (a *dmWorldAdapter) World(ctx context.Context, campaignID string, v dmscreen.Viewer) (*dmscreen.WorldView, error) {
 	pv := permissions.RequestViewer(v.Role, v.UserID)
-	cal, err := a.svc.GetDefaultCalendarForViewer(ctx, campaignID, pv)
+	cal, err := a.svc.GetPrimaryCalendarForViewer(ctx, campaignID, pv)
 	if err != nil {
 		if isNotFound(err) {
 			return nil, nil
@@ -304,10 +306,10 @@ func (a *dmWorldAdapter) World(ctx context.Context, campaignID string, v dmscree
 	return w, nil
 }
 
-// Advance steps the default calendar forward; the calendar service refuses a
+// Advance steps the same calendar World shows forward; the calendar service refuses a
 // real-time calendar and checks the new date against the calendar's months.
 func (a *dmWorldAdapter) Advance(ctx context.Context, campaignID string, v dmscreen.Viewer, hours, days int) error {
-	cal, err := a.svc.GetDefaultCalendarForViewer(ctx, campaignID, permissions.RequestViewer(v.Role, v.UserID))
+	cal, err := a.svc.GetPrimaryCalendarForViewer(ctx, campaignID, permissions.RequestViewer(v.Role, v.UserID))
 	if err != nil {
 		return err
 	}
