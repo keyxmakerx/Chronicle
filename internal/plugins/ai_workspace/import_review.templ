@@ -381,7 +381,7 @@ templ reviewRow(campaignID string, idx int, page importer.ParsedPage, cls import
 			if cls.FieldsSummary != "" {
 				<span class="air-line">{ cls.FieldsSummary }</span>
 			}
-			if cls.ConflictEntity != nil {
+			if cls.ConflictEntity != nil && renamesOnConflict(page) {
 				<span class="air-line">
 					<i class="fa-solid fa-triangle-exclamation mr-1" aria-hidden="true"></i>
 					A page called { cls.ConflictEntity.Name } already exists. This one gets a new name unless you pick otherwise in the details.

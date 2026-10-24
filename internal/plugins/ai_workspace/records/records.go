@@ -109,7 +109,8 @@ func NewRegistry(kinds ...Kind) *Registry {
 			continue
 		}
 		r.kinds = append(r.kinds, k)
-		r.byKey[k.Name()] = k
+		// Keyed as Get looks it up, so a name spelled with "_" is found.
+		r.byKey[normKind(k.Name())] = k
 	}
 	return r
 }
@@ -188,9 +189,10 @@ func (r *Registry) Plan(ctx context.Context, campaignID string, a Actor, rec Rec
 
 // PlanAll plans records in order. A row that makes the calendar, or makes
 // another one the main calendar, lets the rows after it be checked against
-// that calendar, since commit applies them in the same order.
+// that calendar, since commit applies them in the same order; a row that
+// makes a folder or a map does the same for that folder or map.
 func (r *Registry) PlanAll(ctx context.Context, campaignID string, a Actor, recs []Record) ([]Kind, []Plan) {
-	ctx = withPendingFolders(ctx)
+	ctx = withPendingMaps(withPendingFolders(ctx))
 	kinds := make([]Kind, len(recs))
 	plans := make([]Plan, len(recs))
 	for i, rec := range recs {
@@ -199,6 +201,9 @@ func (r *Registry) PlanAll(ctx context.Context, campaignID string, a Actor, recs
 			if t, err := fk.resolve(ctx, campaignID, rec); err == nil {
 				pendingFolders(ctx)[folderKey(t.cat.ID, rec.Name)] = true
 			}
+		}
+		if _, ok := kinds[i].(MapSketchKind); ok && rec.Action == ActionCreate && plans[i].Error == "" {
+			pendingMaps(ctx)[mapKey(sketchName(rec))] = true
 		}
 		if ck, ok := kinds[i].(CalendarKind); ok && (rec.Action == ActionCreate || rec.Has("main")) && plans[i].Error == "" {
 			if _, cal := ck.plan(ctx, campaignID, a, rec); cal != nil {

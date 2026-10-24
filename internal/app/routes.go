@@ -6076,6 +6076,7 @@ func (a *App) RegisterRoutes() {
 	aiRegistry := records.NewRegistry(aiKinds(aiWiring)...)
 	aiWorkspaceHandler.SetRecords(aiRegistry)
 	aiWorkspaceHandler.SetLookups(aiLookups(aiWiring, aiRegistry))
+	aiWorkspaceHandler.SetFeatureGate(aiFeatureGate(addonService))
 
 	// Late-bind the entity_notes notifier now that wsEventBus exists.
 	// The service was constructed earlier with a holder.Notify reference;

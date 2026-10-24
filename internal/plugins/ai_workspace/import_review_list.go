@@ -161,6 +161,13 @@ func pageWhatLead(page importer.ParsedPage) string {
 	return "Add the page"
 }
 
+// renamesOnConflict reports whether a row that names an existing page makes
+// a second page beside it. Only an add does; a change or a removal works on
+// the existing page, and an era row writes a version of it.
+func renamesOnConflict(page importer.ParsedPage) bool {
+	return !page.FrontMatter.IsEra() && page.FrontMatter.Action == importer.ActionCreate
+}
+
 // pageDetail is the plain line under a page row: where it goes and who sees it.
 func pageDetail(page importer.ParsedPage, cls importer.Classification) string {
 	if page.FrontMatter.IsEra() || page.FrontMatter.Action == importer.ActionDelete {

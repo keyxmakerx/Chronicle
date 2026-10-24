@@ -51,6 +51,22 @@ func (PinKind) Doc() string {
 	return "A pin on a map, matched by `map` (the map's name) and `name`. Keys: `x` and `y` (0 to 100, percent across and down the map), optional `icon`, `color`, `category` (location, danger, treasure, quest, note), `page` (a page name to link), `visibility` (`everyone` or `dm_only`), `rename_to`. The body is the pin's description.\n\n```\n---\nkind: pin\nmap: Grimvale\nname: Old Mill\nx: 42.5\ny: 61\ncategory: location\n---\nAbandoned since the flood.\n```"
 }
 
+type pendingMapsKey struct{}
+
+// withPendingMaps lets a pin be checked against a map a row before it makes,
+// as pages and folders made earlier in a paste can be named later in it.
+// Review only: at commit the map row has already run.
+func withPendingMaps(ctx context.Context) context.Context {
+	return context.WithValue(ctx, pendingMapsKey{}, map[string]bool{})
+}
+
+func pendingMaps(ctx context.Context) map[string]bool {
+	m, _ := ctx.Value(pendingMapsKey{}).(map[string]bool)
+	return m
+}
+
+func mapKey(name string) string { return strings.ToLower(strings.TrimSpace(name)) }
+
 func (k PinKind) findMap(ctx context.Context, campaignID, name string) (*MapRef, error) {
 	ms, err := k.Svc.ListMaps(ctx, campaignID)
 	if err != nil {
@@ -107,6 +123,11 @@ func (k PinKind) Plan(ctx context.Context, campaignID string, a Actor, r Record)
 	}
 	if vis == "dm_only" && !a.CanAuthorDmOnly() {
 		return Plan{Error: "only the owner or a co-DM can add hidden pins"}
+	}
+	if r.Action == ActionCreate && pendingMaps(ctx)[mapKey(r.Str("map"))] {
+		if _, err := k.findMap(ctx, campaignID, r.Str("map")); err != nil {
+			return Plan{Summary: "on the " + r.Str("map") + " map, made earlier in this paste"}
+		}
 	}
 	m, pin, err := k.find(ctx, campaignID, a, r)
 	if err != nil {

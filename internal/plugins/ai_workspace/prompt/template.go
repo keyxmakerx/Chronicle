@@ -173,8 +173,11 @@ and every stat block field, then name that page in an encounter's creatures.
 {{ if .IncludeFrontMatterExample }}
 ## Format your output as markdown with YAML front-matter
 
-Each page is one section starting with a ` + "`" + `#` + "`" + ` heading. Include YAML
-front-matter above each heading like this:
+Each page is one block: YAML front-matter between two ` + "`" + `---` + "`" + ` lines, then the
+page's text in markdown. The page's name comes from ` + "`" + `name:` + "`" + `, and Chronicle shows it as
+the title, so don't repeat it as a heading. Every block starts with its own ` + "`" + `---` + "`" + `
+line, so after a block with no text write ` + "`" + `---` + "`" + ` twice: once to close it, once to
+open the next. For example:
 
 ` + "```" + `
 ---
@@ -185,9 +188,6 @@ visibility: private
 tags: [trade-hub, coastal]
 reason: The players asked where the caravan was headed.
 ---
-
-# Example Page Name
-
 The body of the page in markdown.
 ` + "```" + `
 

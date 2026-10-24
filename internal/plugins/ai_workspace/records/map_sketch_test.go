@@ -427,3 +427,25 @@ func TestMapSketchKind_UpdateApply(t *testing.T) {
 		}
 	})
 }
+
+// A pin may name a map an earlier row of the same paste makes; a pin naming
+// a map nothing makes is still refused.
+func TestPlanAll_PinOnMapMadeInPaste(t *testing.T) {
+	pins := &fakeMaps{}
+	r := NewRegistry(MapSketchKind{Svc: &fakeSketchMaps{}, Pins: pins}, PinKind{Svc: pins, Entities: fakeEntities{}})
+	recs := []Record{
+		rec("map", ActionCreate, "The Keep", map[string]any{"grid": "10 x 10"}, "room \"Hall\" 1,1 to 4,4"),
+		rec("pin", ActionCreate, "Gate", map[string]any{"map": "the keep", "x": 10, "y": 20}, ""),
+		rec("pin", ActionCreate, "Ford", map[string]any{"map": "Nowhere", "x": 10, "y": 20}, ""),
+	}
+	_, plans := r.PlanAll(context.Background(), camp, owner, recs)
+	if plans[0].Error != "" {
+		t.Fatalf("map refused: %s", plans[0].Error)
+	}
+	if plans[1].Error != "" || !strings.Contains(plans[1].Summary, "made earlier in this paste") {
+		t.Errorf("pin on the new map: %+v", plans[1])
+	}
+	if !strings.Contains(plans[2].Error, "no map called") {
+		t.Errorf("pin on a map nothing makes: %+v", plans[2])
+	}
+}

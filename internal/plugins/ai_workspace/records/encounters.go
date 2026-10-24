@@ -242,8 +242,10 @@ func (k EncounterKind) Plan(ctx context.Context, campaignID string, a Actor, r R
 		if r.Action != ActionCreate {
 			return Plan{Error: "no page called " + quote(r.Str("page"))}
 		}
+		// A page neither found nor made by this paste is sure to fail at
+		// commit, so the row is refused now rather than starting on Yes.
 		if !r.Made[entities.Slugify(r.Str("page"))] {
-			p.Warnings = append(p.Warnings, "No page called "+quote(r.Str("page"))+" yet; it must be created in this import")
+			return Plan{Error: "no page called " + quote(r.Str("page")) + "; add it to this paste, or name a page that exists"}
 		}
 	}
 	for _, h := range d.missing {
@@ -251,7 +253,7 @@ func (k EncounterKind) Plan(ctx context.Context, campaignID string, a Actor, r R
 			break
 		}
 		if !r.Made[entities.Slugify(h)] {
-			p.Warnings = append(p.Warnings, "No hero page called "+quote(h)+" yet; it must be created in this import")
+			return Plan{Error: "no hero page called " + quote(h) + "; add it to this paste, or take it out of `heroes`"}
 		}
 	}
 	switch r.Action {
