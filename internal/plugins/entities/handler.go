@@ -379,7 +379,16 @@ func (h *Handler) Index(c echo.Context) error {
 		slog.Warn("failed to load entity counts for list page", slog.Any("error", err))
 	}
 
-	entities, total, err := h.service.List(c.Request().Context(), campaignID, typeID, role, userID, opts)
+	// The search box filters this same page in place; one character is
+	// treated as no query, matching Search's two-character floor.
+	var entities []Entity
+	var total int
+	if q := strings.TrimSpace(c.QueryParam("q")); len(q) >= 2 {
+		opts.Query = q
+		entities, total, err = h.service.Search(c.Request().Context(), campaignID, q, typeID, role, userID, opts)
+	} else {
+		entities, total, err = h.service.List(c.Request().Context(), campaignID, typeID, role, userID, opts)
+	}
 	if err != nil {
 		return err
 	}
