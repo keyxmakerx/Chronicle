@@ -3480,8 +3480,9 @@ func (s *calendarService) ListAllEventsForCalendar(ctx context.Context, calendar
 // per-user visibility filtered), so a dm_only or otherwise-hidden
 // calendar's events are never even searched; within a visible calendar,
 // EventRepository.SearchEvents applies the same SQL dm_only filter
-// ListEventsForMonth's own read does, and the per-user layer runs after it
-// as it does for the pages. The searcher is told only a role, not who is
+// ListEventsForMonth's own read does, and the per-user layer and the
+// not-yet-knowable filters (hideFromPlayer) run after it as they do for the
+// pages. The searcher is told only a role, not who is
 // asking, so an event with its own allow or deny list stays out of a
 // non-GM search; the calendar page, which knows the viewer, still shows it
 // to whoever may see it. Capped at 10 events per calendar by that same
@@ -3501,7 +3502,7 @@ func (s *calendarService) SearchCalendarEvents(ctx context.Context, campaignID, 
 		}
 		events = filterEventsByUser(events, v)
 		if !v.SkipsPerUserRules() {
-			if events, err = s.dropSecretEraEvents(ctx, &cal, events); err != nil {
+			if events, err = s.hideFromPlayer(ctx, &cal, campaignID, events); err != nil {
 				return nil, fmt.Errorf("search calendar events: %w", err)
 			}
 		}

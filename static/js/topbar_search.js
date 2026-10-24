@@ -153,7 +153,7 @@
             type: e.type_name || '',
             icon: e.type_icon || 'fa-file',
             color: e.type_color || '#6b7280',
-            url: '/campaigns/' + campaignId + '/entities/' + e.id,
+            url: resultUrl(e, campaignId),
           };
         });
         activeIndex = results.length > 0 ? 0 : -1;
@@ -164,6 +164,15 @@
           showHint('Search failed.');
         }
       });
+  }
+
+  // resultUrl is where a result opens. Search returns pages, calendar events,
+  // timelines, maps, sessions and system content, and each carries its own
+  // url; only a same-site path is followed, falling back to the page route.
+  function resultUrl(e, campaignId) {
+    var u = typeof e.url === 'string' ? e.url : '';
+    if (u.charAt(0) === '/' && u.charAt(1) !== '/' && u.charAt(1) !== '\\') return u;
+    return '/campaigns/' + encodeURIComponent(campaignId) + '/entities/' + encodeURIComponent(e.id);
   }
 
   function renderResults() {
