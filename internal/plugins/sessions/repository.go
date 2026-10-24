@@ -271,8 +271,10 @@ func (r *sessionRepository) FindByIDIncludingDeleted(ctx context.Context, id str
 	return s, nil
 }
 
-// ListByCampaign returns all sessions for a campaign, ordered by scheduled date
-// descending (most recent first), then by sort_order.
+// ListByCampaign returns all sessions for a campaign: upcoming first, soonest
+// first; then completed and cancelled, newest first, so last week's recap is
+// at the top of its group rather than at the bottom of the page. Undated
+// sessions end each group.
 func (r *sessionRepository) ListByCampaign(ctx context.Context, campaignID string) ([]Session, error) {
 	query := `SELECT s.id, s.campaign_id, s.name, s.summary,
 	                 s.scheduled_date, s.scheduled_time, s.scheduled_tz, s.calendar_year, s.calendar_month, s.calendar_day,
@@ -288,7 +290,9 @@ func (r *sessionRepository) ListByCampaign(ctx context.Context, campaignID strin
 	              WHEN 'completed' THEN 1
 	              WHEN 'cancelled' THEN 2
 	          END,
-	          s.scheduled_date IS NULL, s.scheduled_date ASC,
+	          s.scheduled_date IS NULL,
+	          CASE WHEN s.status = 'planned' THEN s.scheduled_date END ASC,
+	          s.scheduled_date DESC,
 	          s.sort_order ASC, s.created_at DESC`
 
 	rows, err := r.db.QueryContext(ctx, query, campaignID)

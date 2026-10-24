@@ -41,7 +41,11 @@ templ mapListContent(cc *campaigns.CampaignContext, data MapListData) {
 					if len(data.Maps) == 0 {
 						No maps yet. Create one to get started.
 					} else {
-						{ fmt.Sprintf("%d map(s)", len(data.Maps)) }
+						if len(data.Maps) == 1 {
+							1 map
+						} else {
+							{ fmt.Sprintf("%d maps", len(data.Maps)) }
+						}
 					}
 				</p>
 			</div>

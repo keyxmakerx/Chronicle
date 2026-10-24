@@ -3898,7 +3898,8 @@ func (h *Handler) buildCastView(c echo.Context, cc *campaigns.CampaignContext) (
 		// Only a member with no party yet needs a pointer to where claiming happens.
 		if view.IsMember && len(view.Party) == 0 {
 			if types, err := h.service.GetEntityTypes(ctx, campaignID); err == nil {
-				view.ClaimTypeID = claimTypeID(types)
+				counts, _ := h.service.CountByType(ctx, campaignID, int(cc.VisibilityRole()), userID)
+				view.ClaimTypeID = claimTypeID(types, counts)
 			}
 		}
 	}
@@ -4311,22 +4312,33 @@ func (h *Handler) buildCastParty(ctx context.Context, cc *campaigns.CampaignCont
 
 // claimTypeID picks the entity type to send a party-less player to: the Player
 // Character sub-type when there is one, else the first claimable type, else 0
-// (no link). Pure so the choice is unit-testable.
-func claimTypeID(types []EntityType) int {
-	first := 0
-	for i := range types {
-		t := &types[i]
-		if !isClaimableType(t) {
-			continue
+// (no link). With counts (pages per type the viewer can see), a type with
+// pages wins over an empty one, so the link never lands on an empty list
+// while the characters to claim sit in another type. Pure so the choice is
+// unit-testable.
+func claimTypeID(types []EntityType, counts map[int]int) int {
+	pick := func(nonEmpty bool) int {
+		first := 0
+		for i := range types {
+			t := &types[i]
+			if !isClaimableType(t) || (nonEmpty && counts[t.ID] == 0) {
+				continue
+			}
+			if t.Slug == SlugPlayerCharacter || (t.PresetCategory != nil && *t.PresetCategory == PresetCategoryPlayerCharacter) {
+				return t.ID
+			}
+			if first == 0 {
+				first = t.ID
+			}
 		}
-		if t.Slug == SlugPlayerCharacter || (t.PresetCategory != nil && *t.PresetCategory == PresetCategoryPlayerCharacter) {
-			return t.ID
-		}
-		if first == 0 {
-			first = t.ID
+		return first
+	}
+	if counts != nil {
+		if id := pick(true); id != 0 {
+			return id
 		}
 	}
-	return first
+	return pick(false)
 }
 
 // assembleCastParty is the pure assembly step (no IO), split out so the
