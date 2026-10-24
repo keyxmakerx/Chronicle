@@ -437,6 +437,9 @@ templ blockEntryEditor(cc *campaigns.CampaignContext, entity *Entity, csrfToken 
 		}
 		data-autosave="30"
 		data-outline="true"
+		if baseVisibilityState(entity) == VisStateEveryone {
+			data-open-to-players="true"
+		}
 		data-csrf-token={ csrfToken }
 	></div>
 }

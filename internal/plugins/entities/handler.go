@@ -1086,6 +1086,13 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 			if e.ParentID != nil {
 				item["parent_id"] = *e.ParentID
 			}
+			// Link pickers mark a page not everyone can read, so an author
+			// knows a link to it would show its name to players who can't
+			// open it. Only pages this viewer can already see are listed,
+			// and its page shows the same state.
+			if state := baseVisibilityState(&results[i]); state != VisStateEveryone {
+				item["restricted"] = state
+			}
 			items[i] = item
 		}
 		// Append cross-plugin search results from registered searchers.

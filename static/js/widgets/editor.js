@@ -65,6 +65,9 @@
       var label = config.label || 'Entry';
       var placeholder = config.placeholder || 'Begin writing your entry...';
       var allowSecrets = config.secrets !== false;
+      // Players read this text (an open page, a recap), so the link pickers
+      // ask before linking a page they can't read.
+      var hostOpen = config.openToPlayers === true;
       // Create editor container structure.
       el.innerHTML = '';
       el.classList.add('chronicle-editor');
@@ -249,7 +252,7 @@
       // editor events to detect the @ trigger and manage the popup lifecycle.
       var mentionExt = null;
       if (canEdit && campaignId && Chronicle.MentionExtension) {
-        mentionExt = Chronicle.MentionExtension({ campaignId: campaignId });
+        mentionExt = Chronicle.MentionExtension({ campaignId: campaignId, hostOpen: hostOpen });
         mentionExt.onCreate(editor);
         // Set the ref so the editorProps.handleKeyDown closure can access it.
         mentionExtRef.current = mentionExt;
@@ -275,6 +278,7 @@
         };
         wikiExt = Chronicle.WikiLinkExtension({
           campaignId: campaignId,
+          hostOpen: hostOpen,
           notes: function (query) {
             loadLinkNotes();
             var q = (query || '').trim().toLowerCase();
