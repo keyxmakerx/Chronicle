@@ -10,7 +10,8 @@
  * stands), tabs and the condition filter.
  *
  * Nothing loops, so there is nothing to ease to still. One click anywhere,
- * or Escape, skips the opening. Reduced motion gets a plain fade.
+ * or Escape, skips the opening. Reduced motion, and every open after the
+ * first in a browser tab, gets a plain fade.
  *
  * Registered via Chronicle.register; boot.js mounts it on [data-widget="dm-screen"].
  */
@@ -80,6 +81,16 @@
   }
 
   function narrow() { return window.matchMedia('(max-width: 700px)').matches; }
+
+  // The die opens the first DM Screen of a browser tab; later opens in that
+  // tab use the plain fade, so a screen opened often at the table is quick.
+  var ROLLED_KEY = 'chronicle.dmScreen.rolled';
+  function rolledInTab() {
+    try { return sessionStorage.getItem(ROLLED_KEY) === '1'; } catch (e) { return false; }
+  }
+  function markRolled() {
+    try { sessionStorage.setItem(ROLLED_KEY, '1'); } catch (e) { /* rolls again next time */ }
+  }
 
   Chronicle.register('dm-screen', {
     init: function (el) {
@@ -733,7 +744,7 @@
         var loaded = load();
         var me = st.seq = (st.seq || 0) + 1;
 
-        if (reduce()) {
+        if (reduce() || rolledInTab()) {
           loaded.then(function (html) {
             if (me !== st.seq) return;
             var r = mount(html);
@@ -742,6 +753,7 @@
           return;
         }
 
+        markRolled();
         setPlaying(true);
         var cx = window.innerWidth / 2, cy = Math.min(window.innerHeight * 0.42, 360);
         Promise.all([loaded, throwDie()]).then(function (got) {
