@@ -49,6 +49,14 @@ func (s *stubEntityServiceForPartialUpdate) GetByID(_ context.Context, id string
 	}, nil
 }
 
+// GetEntityTypeByID is the stored entity's category, declaring its fields,
+// for the API's field check.
+func (s *stubEntityServiceForPartialUpdate) GetEntityTypeByID(_ context.Context, id int) (*entities.EntityType, error) {
+	return &entities.EntityType{ID: id, CampaignID: "camp-1", Fields: []entities.FieldDefinition{
+		{Key: "hp", Type: "number"}, {Key: "ac", Type: "number"},
+	}}, nil
+}
+
 func (s *stubEntityServiceForPartialUpdate) Update(_ context.Context, id string, input entities.UpdateEntityInput) (*entities.Entity, error) {
 	s.updates = append(s.updates, input)
 	return &entities.Entity{ID: id, CampaignID: "camp-1"}, nil

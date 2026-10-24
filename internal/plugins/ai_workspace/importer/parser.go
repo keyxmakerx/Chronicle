@@ -20,12 +20,16 @@ import (
 )
 
 // validVisibilities enumerates the allowed `visibility:` values.
-// Anything else (e.g. "PUBLIC", "everyone") is a parse error per-row.
+// Anything else (e.g. "PUBLIC") is a parse error per-row.
 var validVisibilities = map[string]bool{
 	"private": true,
 	"dm_only": true,
 	"public":  true,
 }
+
+// visibilityAliases are the words records take for who can see, read the
+// same on a page, so an AI need not keep two vocabularies.
+var visibilityAliases = map[string]string{"everyone": "public"}
 
 // h1Re matches a Markdown H1 heading at the start of a line. Used
 // for both the per-page name resolution + the fallback split when
@@ -102,35 +106,64 @@ func splitPages(input string) []string {
 	// error stays contained to that one page (parseOnePage reports
 	// it precisely). A fence followed by prose is a horizontal rule
 	// and is ignored.
-	openerStarts := make([]int, 0, len(fmIdx)/2+1)
+	// A block runs from its opener to where the next one begins; prevEnd is
+	// where the block before it ends, which is past the shared fence when one
+	// fence closes a block and opens the next.
+	type bound struct{ start, prevEnd int }
+	bounds := make([]bound, 0, len(fmIdx)/2+1)
 	for i := 0; i < len(fmIdx); i++ {
 		after := input[fmIdx[i][1]:]
 		if !yamlKeyLineRe.MatchString(firstNonBlankLine(after)) {
 			continue // horizontal rule / stray fence — not a page boundary
 		}
-		openerStarts = append(openerStarts, fmIdx[i][0])
+		bounds = append(bounds, bound{start: fmIdx[i][0], prevEnd: fmIdx[i][0]})
 		// Consume the matching closer when the span between reads as
 		// front-matter, so the closer can't be misread as an opener.
-		if i+1 < len(fmIdx) && plausibleFrontMatter(input[fmIdx[i][1]:fmIdx[i+1][0]]) {
+		for i+1 < len(fmIdx) && plausibleFrontMatter(input[fmIdx[i][1]:fmIdx[i+1][0]]) {
 			i++
+			// A closer followed straight away by another block's front
+			// matter and its own closer opens that block too. An AI that
+			// writes one `---` between a block with no body and the next
+			// block would otherwise hide the next block in the first one's
+			// body, where nothing reads it.
+			if i+1 < len(fmIdx) && startsBlock(input[fmIdx[i][1]:fmIdx[i+1][0]]) {
+				bounds = append(bounds, bound{start: fmIdx[i][0], prevEnd: fmIdx[i][1]})
+				continue
+			}
+			break
 		}
 	}
-	if len(openerStarts) == 0 {
+	if len(bounds) == 0 {
 		return splitByH1(input)
 	}
 
-	out := make([]string, 0, len(openerStarts))
-	for i, start := range openerStarts {
+	out := make([]string, 0, len(bounds))
+	for i, b := range bounds {
 		end := len(input)
-		if i+1 < len(openerStarts) {
-			end = openerStarts[i+1]
+		if i+1 < len(bounds) {
+			end = bounds[i+1].prevEnd
 		}
-		page := strings.TrimSpace(input[start:end])
+		page := strings.TrimSpace(input[b.start:end])
 		if page != "" {
 			out = append(out, page)
 		}
 	}
 	return out
+}
+
+// blockKeyRe matches the keys that name a block: every block has a `kind:` or
+// a `name:`.
+var blockKeyRe = regexp.MustCompile(`(?m)^(kind|name)\s*:`)
+
+// startsBlock reports whether span, the text between a closing fence and the
+// next fence, is a whole front-matter block of its own rather than the start
+// of a body: it reads as front matter and carries a `kind:` or `name:` key.
+// Body prose that happens to look like `Word: text` lines rarely names a key
+// this way, and when it does the extra block shows on the review screen
+// rather than vanishing.
+func startsBlock(span string) bool {
+	return yamlKeyLineRe.MatchString(firstNonBlankLine(span)) &&
+		plausibleFrontMatter(span) && blockKeyRe.MatchString(span)
 }
 
 // firstNonBlankLine returns the first line of s that contains a
@@ -231,6 +264,8 @@ func parseOnePage(raw string) ParsedPage {
 		}
 	}
 
+	p.Body = dropTitleHeading(p.Body, p.Name)
+
 	// A record's keys, name and body are checked by its kind, not here.
 	if p.IsRecord() {
 		switch p.FrontMatter.Action {
@@ -271,6 +306,9 @@ func parseOnePage(raw string) ParsedPage {
 	// notices it first. An era block never changes the usual page's
 	// settings, so its visibility is ignored (with a warning) unchecked.
 	if v := strings.TrimSpace(p.FrontMatter.Visibility); v != "" && !p.FrontMatter.IsEra() {
+		if a, ok := visibilityAliases[v]; ok {
+			v, p.FrontMatter.Visibility = a, a
+		}
 		if !validVisibilities[v] {
 			p.Status = StatusParseError
 			p.ParseError = fmt.Sprintf(
@@ -460,4 +498,21 @@ func unknownYAMLKeys(rawYAML string) []string {
 		}
 	}
 	return unknown
+}
+
+// dropTitleHeading takes off a body's opening `# Name` line when it repeats
+// the block's name. The page already shows its name as its title, so a kept
+// heading shows the name twice, and the export would hand it back to the AI
+// as part of the text.
+func dropTitleHeading(body, name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return body
+	}
+	first, rest, _ := strings.Cut(strings.TrimLeft(body, " \t\r\n"), "\n")
+	m := h1Re.FindStringSubmatch(first)
+	if len(m) < 2 || !strings.EqualFold(strings.TrimSpace(m[1]), name) {
+		return body
+	}
+	return strings.TrimSpace(rest)
 }

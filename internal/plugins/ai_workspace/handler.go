@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/labstack/echo/v4"
 
@@ -65,6 +66,11 @@ type Handler struct {
 	// lookups answers an AI's read-only `kind: lookup` blocks. Optional —
 	// nil answers each one with "can't be looked up on this server".
 	lookups *records.Lookups
+
+	// featureGate names the campaign features switched off in Game &
+	// features, by the kinds that write into them. Optional — nil treats
+	// every feature as on.
+	featureGate func(ctx context.Context, campaignID string) records.OffFeatures
 
 	// importEras lets the review check an `era:` block's era and page before
 	// anything is written. Optional — nil marks such blocks unavailable.
@@ -145,6 +151,20 @@ func (h *Handler) SetRecords(r *records.Registry) {
 // SetLookups wires the read-only lookups.
 func (h *Handler) SetLookups(l *records.Lookups) {
 	h.lookups = l
+}
+
+// SetFeatureGate wires the switched-off feature check the prompt and the
+// review use.
+func (h *Handler) SetFeatureGate(g func(ctx context.Context, campaignID string) records.OffFeatures) {
+	h.featureGate = g
+}
+
+// offFeatures is what the campaign has switched off, or nil.
+func (h *Handler) offFeatures(ctx context.Context, campaignID string) records.OffFeatures {
+	if h.featureGate == nil {
+		return nil
+	}
+	return h.featureGate(ctx, campaignID)
 }
 
 // actorFor is the operator as the record kinds see them.
@@ -266,6 +286,7 @@ func (h *Handler) planRecords(c echo.Context, cc *campaigns.CampaignContext, rec
 		return rows
 	}
 	kinds, plans := h.records.PlanAll(c.Request().Context(), cc.Campaign.ID, actorFor(c, cc), all)
+	off := h.offFeatures(c.Request().Context(), cc.Campaign.ID)
 	for i, k := range kinds {
 		if k != nil {
 			rows[i].Label = k.Label()
@@ -274,6 +295,9 @@ func (h *Handler) planRecords(c echo.Context, cc *campaigns.CampaignContext, rec
 			}
 		}
 		rows[i].Plan = plans[i]
+		if f := off.For(all[i]); f != "" && rows[i].Plan.Error == "" {
+			rows[i].Plan = records.Plan{Error: records.OffFeatureReason(f)}
+		}
 		if links != nil && rows[i].Plan.Error == "" {
 			rows[i].Plan.Warnings = append(rows[i].Plan.Warnings, importer.LinkWarnings(links, recs[i].Body, pasteSlugs)...)
 		}
@@ -532,6 +556,8 @@ func (h *Handler) CommitImport(c echo.Context) error {
 		// Per-row delete confirmation; the committer re-checks this
 		// independently against any client-side bypass.
 		deleteConfirmed := c.FormValue(prefix+"delete_confirmed") == "on"
+		// Numbers the director took from the game system's formulas.
+		pages[i].FrontMatter.Fields = importer.UseSheetFormula(pages[i].FrontMatter.Fields, c.FormValue(prefix+"sheet_formula"))
 
 		decisions[i] = importer.RowDecision{
 			Include:         c.FormValue(prefix+"include") == "on",
@@ -613,11 +639,12 @@ func (h *Handler) commitRecords(c echo.Context, cc *campaigns.CampaignContext, r
 	if h.importLookup != nil {
 		links = importer.NewPageLinks(c.Request().Context(), h.importLookup, cc.Campaign.ID, viewerFor(c, cc))
 	}
+	off := h.offFeatures(c.Request().Context(), cc.Campaign.ID)
 	base := len(result.Rows)
 	for i, p := range recs {
 		out, done := early[i]
 		if !done {
-			out = h.commitRecord(c, cc, i, p, links)
+			out = h.commitRecord(c, cc, i, p, links, off)
 		}
 		out.Index = base + i
 		switch out.Status {
@@ -642,7 +669,9 @@ func (h *Handler) commitRecords(c echo.Context, cc *campaigns.CampaignContext, r
 }
 
 // commitRecord applies one record, or says why it was not.
-func (h *Handler) commitRecord(c echo.Context, cc *campaigns.CampaignContext, i int, p importer.ParsedPage, links *importer.PageLinks) importer.RowOutcome {
+// A record for a feature in off is refused again here, since the feature
+// may have been switched off after the review.
+func (h *Handler) commitRecord(c echo.Context, cc *campaigns.CampaignContext, i int, p importer.ParsedPage, links *importer.PageLinks, off records.OffFeatures) importer.RowOutcome {
 	prefix := "rec_" + strconv.Itoa(i) + "_"
 	rec := toRecord(i, p, links)
 	out := importer.RowOutcome{Name: rec.Name}
@@ -659,6 +688,8 @@ func (h *Handler) commitRecord(c echo.Context, cc *campaigns.CampaignContext, i 
 		out.Status, out.Reason = importer.StatusFailed, "Removal was not confirmed"
 	case records.RefuseGMMarkers(rec) != nil:
 		out.Status, out.Reason = importer.StatusFailed, importer.SecretNotInTextReason
+	case off.For(rec) != "":
+		out.Status, out.Reason = importer.StatusFailed, records.OffFeatureReason(off.For(rec))
 	default:
 		rec.Generated = c.FormValue(prefix + "generated")
 		if err := k.Apply(c.Request().Context(), cc.Campaign.ID, actorFor(c, cc), rec); err != nil {
@@ -695,7 +726,7 @@ func (h *Handler) commitEarlyFolders(c echo.Context, cc *campaigns.CampaignConte
 	}
 	for i, p := range recs {
 		if isEarlyFolder(p) {
-			early[i] = h.commitRecord(c, cc, i, p, nil)
+			early[i] = h.commitRecord(c, cc, i, p, nil, nil)
 		}
 	}
 	return early
@@ -816,21 +847,32 @@ func (h *Handler) GeneratePrompt(c echo.Context) error {
 	if in.ContentMode == "" {
 		in.ContentMode = "none"
 	}
+	// A switched-off feature's kinds are left out, and named, so the AI
+	// doesn't write what the owner couldn't open.
+	off := h.offFeatures(c.Request().Context(), cc.Campaign.ID)
+	in.Today = time.Now().Format("Monday 2 January 2006")
 	if h.lookups != nil {
 		in.Lookups = records.LookupDoc()
 		in.PageIndex = h.lookups.PageIndex(c.Request().Context(), cc.Campaign.ID, exportActor(c, cc, in.Privacy))
+		if off[records.KindCalendar] == "" {
+			in.WorldToday = h.lookups.WorldToday(c.Request().Context(), cc.Campaign.ID, exportActor(c, cc, in.Privacy))
+		}
 	}
 	if h.records != nil {
-		in.Capabilities = h.records.Capabilities()
+		reg := h.records.Without(off)
+		in.Capabilities = reg.Capabilities()
+		if note := off.Note(); note != "" {
+			in.Capabilities += "\n" + note + "\n"
+		}
 		if in.IncludeFrontMatterExample {
-			in.RecordDocs = h.records.Docs()
+			in.RecordDocs = reg.Docs()
 		}
 		if in.ContentMode == prompt.ContentHouseRules {
 			in.RecordDocs, in.RecordContext = h.houseRulesContext(c, cc, in.Privacy)
 		} else if in.ContentMode == prompt.ContentCalendar {
-			in.RecordDocs, in.RecordContext = h.calendarContext(c, cc, in.Privacy)
+			in.RecordDocs, in.RecordContext = h.calendarContext(c, cc, in.Privacy, reg)
 		} else if in.ContentMode == "all" || hasCategory(in.ContentMode, recordsCategory) {
-			in.RecordContext = h.records.ExportAll(c.Request().Context(), cc.Campaign.ID, exportActor(c, cc, in.Privacy))
+			in.RecordContext = reg.ExportAll(c.Request().Context(), cc.Campaign.ID, exportActor(c, cc, in.Privacy))
 		}
 	}
 
@@ -907,8 +949,8 @@ func (h *Handler) PromptInstructions(c echo.Context) error {
 // the calendar kinds (always, since the AI must write those formats) and the
 // calendar and weather-kinds lookups in the chosen privacy, which say how to
 // set up a main calendar when there is none.
-func (h *Handler) calendarContext(c echo.Context, cc *campaigns.CampaignContext, privacy aiexport.PrivacyMode) (doc, answers string) {
-	doc = h.records.DocsFor(records.CalendarKinds...)
+func (h *Handler) calendarContext(c echo.Context, cc *campaigns.CampaignContext, privacy aiexport.PrivacyMode, reg *records.Registry) (doc, answers string) {
+	doc = reg.DocsFor(records.CalendarKinds...)
 	if h.lookups == nil {
 		return doc, ""
 	}

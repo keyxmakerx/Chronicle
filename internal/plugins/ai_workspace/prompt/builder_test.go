@@ -149,8 +149,9 @@ func TestBuild_FrontMatterExample(t *testing.T) {
 		"type: location",
 		"visibility: private",
 		"tags: [trade-hub, coastal]",
-		"# Example Page Name",
-		"`private`, `dm_only`, or `public`",
+		"don't repeat it as a heading",
+		"write `---` twice",
+		"`public` (everyone\nsees it) or `private`", "a note says who it is shared with",
 		"`parent: Name of the parent page`",
 		"`parent: none`",
 		"`era: Name of the era`",
@@ -560,5 +561,51 @@ func TestBuild_FieldNotes(t *testing.T) {
 	}
 	if !strings.Contains(got, "`class` (Class): text, or a list. Foundry keeps this one: leave it out") || !strings.Contains(got, "`level` (Level): a number\n") {
 		t.Errorf("field lines wrong:\n%s", got)
+	}
+}
+
+// A new campaign has no pages, so the "Categories currently in use" heading
+// is left out rather than printed with nothing under it.
+func TestBuild_CategoriesInUse_EmptyLeftOut(t *testing.T) {
+	svc := NewService(&stubEntityLister{types: defaultEntityTypes()}, stubTagLister{}, &stubExporter{})
+	got, err := svc.Build(context.Background(), "Ashfall", "owner-1", "camp-1", Input{
+		IncludeCategoriesInUse: true, ContentMode: "none",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(got, "## Categories currently in use") {
+		t.Errorf("empty heading printed:\n%s", got)
+	}
+}
+
+// The dates go into the prompt and the short request, not into the
+// standing instructions an AI keeps for later.
+func TestBuild_Today(t *testing.T) {
+	svc := NewService(nil, nil, &stubExporter{})
+	cases := []struct {
+		name, instructions, want string
+	}{
+		{"whole prompt", "", "Today is Saturday 24 October 2026 in the real world, and Ashfall 3, 1043 AR on my campaign's main calendar."},
+		{"request only", InstructionsSaved, "Today is Saturday 24 October 2026 in the real world"},
+		{"instructions only", InstructionsOnly, ""},
+	}
+	for _, c := range cases {
+		got, err := svc.Build(context.Background(), "Ashfall", "owner-1", "camp-1", Input{
+			ContentMode: "none", OperatorInstruction: "x", Instructions: c.instructions,
+			Today: "Saturday 24 October 2026", WorldToday: "Ashfall 3, 1043 AR",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if c.want == "" {
+			if strings.Contains(got, "Today is") {
+				t.Errorf("%s: carries a date:\n%s", c.name, got)
+			}
+			continue
+		}
+		if !strings.Contains(got, c.want) {
+			t.Errorf("%s: missing %q:\n%s", c.name, c.want, got)
+		}
 	}
 }

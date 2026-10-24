@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -21,6 +22,16 @@ import (
 // creaturePanelsPlacedKey is the site setting that records the reconciler ran.
 const creaturePanelsPlacedKey = "reconcile.creature_panels_placed"
 
+// creaturePanelsNewCampaignsKey records the second sweep: campaigns made after
+// the first one ran were seeded without the block, because a new campaign's
+// starting categories did not go through the path that adds it.
+const creaturePanelsNewCampaignsKey = "reconcile.creature_panels_new_campaigns"
+
+// creaturePanelsSince is the day the first sweep shipped. Campaigns made
+// before it were covered by that sweep, and an owner there may have removed
+// the block since, so the second sweep leaves them alone.
+var creaturePanelsSince = time.Date(2026, time.October, 17, 0, 0, 0, 0, time.UTC)
+
 // creaturePanelsEntities is the slice of the entity service it needs.
 type creaturePanelsEntities interface {
 	GetEntityTypes(ctx context.Context, campaignID string) ([]entities.EntityType, error)
@@ -32,12 +43,24 @@ type creaturePanelsEntities interface {
 // after every campaign was attempted, so a crash part-way repeats the sweep,
 // which is harmless: a layout that has the block is left alone.
 func placeCreaturePanelsOnce(ctx context.Context, st pageExtrasSettings, camps pageExtrasCampaigns, ents creaturePanelsEntities) (int, error) {
-	if v, err := st.Get(ctx, creaturePanelsPlacedKey); err == nil && v == "1" {
+	return placeCreaturePanels(ctx, st, camps, ents, creaturePanelsPlacedKey, time.Time{})
+}
+
+// placeCreaturePanelsOnNewCampaigns is the same sweep over campaigns made
+// since creaturePanelsSince, once.
+func placeCreaturePanelsOnNewCampaigns(ctx context.Context, st pageExtrasSettings, camps pageExtrasCampaigns, ents creaturePanelsEntities) (int, error) {
+	return placeCreaturePanels(ctx, st, camps, ents, creaturePanelsNewCampaignsKey, creaturePanelsSince)
+}
+
+// placeCreaturePanels runs one sweep recorded under key, over the campaigns
+// made at or after since (every campaign when since is zero).
+func placeCreaturePanels(ctx context.Context, st pageExtrasSettings, camps pageExtrasCampaigns, ents creaturePanelsEntities, key string, since time.Time) (int, error) {
+	if v, err := st.Get(ctx, key); err == nil && v == "1" {
 		return 0, nil
 	} else if err != nil {
 		var ae *apperror.AppError
 		if !errors.As(err, &ae) || ae.Code != 404 {
-			return 0, fmt.Errorf("reading %s: %w", creaturePanelsPlacedKey, err)
+			return 0, fmt.Errorf("reading %s: %w", key, err)
 		}
 	}
 
@@ -48,6 +71,9 @@ func placeCreaturePanelsOnce(ctx context.Context, st pageExtrasSettings, camps p
 			return changed, fmt.Errorf("listing campaigns: %w", err)
 		}
 		for _, c := range list {
+			if !since.IsZero() && c.CreatedAt.Before(since) {
+				continue
+			}
 			types, err := ents.GetEntityTypes(ctx, c.ID)
 			if err != nil {
 				slog.Warn("creature panels: entity types unavailable",
@@ -70,8 +96,8 @@ func placeCreaturePanelsOnce(ctx context.Context, st pageExtrasSettings, camps p
 			break
 		}
 	}
-	if err := st.Set(ctx, creaturePanelsPlacedKey, "1"); err != nil {
-		return changed, fmt.Errorf("recording %s: %w", creaturePanelsPlacedKey, err)
+	if err := st.Set(ctx, key, "1"); err != nil {
+		return changed, fmt.Errorf("recording %s: %w", key, err)
 	}
 	return changed, nil
 }
