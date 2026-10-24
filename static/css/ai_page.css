@@ -1,0 +1,64 @@
+/* The campaign's Your AI page: connecting an AI app, what it did, and the
+ * copy-and-paste tool. A workshop, so it sits on the theme tokens, never
+ * paper; panels are sheets with a hairline edge and a resting shadow. */
+
+.aic-panel { background: var(--color-bg-secondary); border: 1px solid var(--color-border); border-radius: 12px; box-shadow: var(--elev-resting); padding: 16px 20px; }
+.aic-label { font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-accent); }
+.aic-h { font-size: 1rem; font-weight: 600; color: var(--color-text-primary); }
+.aic-hint { font-size: 0.8125rem; color: var(--color-text-secondary); }
+
+/* A choice row: the radio, its name and a line under it. */
+.aic-choice { display: flex; gap: 10px; align-items: flex-start; padding: 6px 0; cursor: pointer; }
+.aic-choice input { margin-top: 3px; accent-color: var(--color-accent); }
+.aic-choice b { color: var(--color-text-primary); font-weight: 600; }
+
+/* Numbered steps, separated by hairlines. */
+.aic-step { display: flex; gap: 12px; padding: 12px 0; border-top: 1px solid var(--color-border-light); }
+.aic-step:last-of-type { border-bottom: 1px solid var(--color-border-light); }
+.aic-num { width: 24px; height: 24px; flex: none; border-radius: 9999px; display: inline-flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700; color: var(--color-accent); background: rgb(var(--color-accent-rgb) / 0.12); }
+
+/* A value to copy: the text in a field-like well, and a copy icon. */
+.aic-copy { display: flex; gap: 6px; align-items: center; min-width: 0; margin-top: 6px; }
+.aic-copy code { flex: 1 1 auto; min-width: 0; overflow-x: auto; white-space: nowrap; font-family: ui-monospace, Consolas, monospace; font-size: 0.78rem; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--color-border); background: var(--color-bg-primary); color: var(--color-text-primary); }
+.aic-icon { flex: none; width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; border: 1px solid transparent; background: none; color: var(--color-text-secondary); cursor: pointer; transition: border-color var(--dur-micro, 120ms) var(--ease-standard, ease), color var(--dur-micro, 120ms) var(--ease-standard, ease); }
+.aic-icon:hover { border-color: var(--color-border); color: var(--color-text-primary); }
+.aic-icon:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+
+/* Tabs: small capitals with a hairline under them and up one side; the
+ * open one's hairline is the accent, and its drawer hangs below. */
+.aic-tabs { display: flex; flex-wrap: wrap; gap: 0 18px; border-bottom: 1px solid var(--color-border-light); }
+.aic-tab { font: inherit; font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-text-secondary); background: none; border: 0; border-left: 1px solid var(--color-border-light); padding: 10px 0 8px 8px; margin-bottom: -1px; border-bottom: 1px solid transparent; cursor: pointer; min-height: 32px; }
+.aic-tab:hover { color: var(--color-text-primary); }
+.aic-tab[aria-selected="true"] { color: var(--color-accent); border-bottom-color: var(--color-accent); border-left-color: var(--color-accent); }
+.aic-tab:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.aic-drawer { border-left: 1px solid var(--color-border-light); padding: 12px 0 4px 14px; }
+.aic-drawer ol { list-style: decimal; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 8px; font-size: 0.875rem; color: var(--color-text-body); }
+
+/* Connection status: a state dot (state colours only mean state). */
+.aic-dot { width: 10px; height: 10px; flex: none; border-radius: 9999px; background: var(--color-text-muted); }
+.aic-dot[data-state="connected"] { background: rgb(var(--color-ok-rgb)); }
+.aic-dot[data-state="ended"] { background: rgb(var(--color-bad-rgb)); }
+
+/* The ask-first slip under Disconnect. */
+.aic-ask { border-top: 1px solid var(--color-border-light); margin-top: 14px; padding-top: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.aic-ask p { flex: 1 1 260px; font-size: 0.875rem; color: var(--color-text-body); }
+
+/* What it did: rows on the page, hairlines between, newest first. */
+.aic-log { display: flex; flex-direction: column; }
+.aic-log-row { display: grid; grid-template-columns: 7.5rem minmax(0, 1fr) auto; gap: 4px 12px; align-items: baseline; padding: 9px 8px; border-bottom: 1px solid var(--color-border-light); border-radius: 8px; font-size: 0.875rem; }
+.aic-log-row:hover { background: var(--color-bg-secondary); }
+.aic-log-when { color: var(--color-text-secondary); font-size: 0.78rem; font-variant-numeric: tabular-nums; }
+.aic-log-what { color: var(--color-text-primary); overflow-wrap: anywhere; }
+.aic-log-note { color: var(--color-text-secondary); font-size: 0.78rem; text-align: right; overflow-wrap: anywhere; max-width: 18rem; }
+@media (max-width: 640px) {
+  .aic-log-row { grid-template-columns: minmax(0, 1fr); }
+  .aic-log-note { text-align: left; max-width: none; }
+}
+
+/* The key, shown once: a sheet lifted above the page. */
+.aic-key { box-shadow: var(--elev-hover); }
+
+/* A button's working state: a spinner and "…ing" while its request runs. */
+.aic-busy { display: none; }
+.htmx-request .aic-busy { display: inline-flex; align-items: center; }
+.htmx-request .aic-idle { display: none; }

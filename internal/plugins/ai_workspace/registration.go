@@ -11,7 +11,7 @@ package ai_workspace
 // PluginSlug is the canonical EXTERNAL identifier for the ai_workspace
 // plugin in the App's PluginRegistration registry. Hyphen form matches
 // the CSS sub-layer naming convention (`@layer plugins.ai-workspace`)
-// + the URL / settings-tab id (`?tab=ai-workspace`).
+// + the URL prefix (`/ai-workspace/…`).
 const PluginSlug = "ai-workspace"
 
 // PluginHealthKey is the INTERNAL identifier the

@@ -1,55 +1,101 @@
-// tab.templ renders the "Data & AI" tab content in
-// /campaigns/:id/settings, registered with the campaigns plugin via
-// campaigns.Handler.RegisterSettingsTab(...). The CampaignContext
-// parameter is bound per-request inside campaigns.visibleSettingsTabs
-// (via the factory function the plugin registered), so cc.Campaign.ID
-// is available for form URLs.
+// tab.templ renders the copy-and-paste half of the Your AI page: one
+// remembered "When you copy, what may your AI see?" choice, then three
+// folding rows in the order an owner uses them (ask, paste back, give it
+// the whole campaign).
 
 package ai_workspace
 
 import (
-	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/prompt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
-// SettingsTabBody renders the Data & AI settings tab: the campaign's own
-// export and import first, then the one AI tool box.
-templ SettingsTabBody(cc *campaigns.CampaignContext) {
-	<div class="space-y-6">
-		@campaigns.SettingsDataSection(cc)
-		@onboardingHint(cc)
+// aiCopyPasteSection wraps the AI tool with its one privacy choice. The
+// choice is remembered per campaign in this browser and every form below
+// sends it, so the owner answers it once. A paste anywhere on the page,
+// outside a field, goes into the paste box and is read at once (never while
+// a review is open, whose answers it would throw away).
+templ aiCopyPasteSection(cc *campaigns.CampaignContext) {
+	<section
+		class="mt-10 space-y-4"
+		aria-labelledby="ai-copy-heading"
+		x-data={ fmt.Sprintf(`{
+			open: 'paste',
+			sees: 'safe',
+			storeKey: 'ai-sees-%s',
+			init() {
+				try {
+					const v = localStorage.getItem(this.storeKey);
+					if (v === 'safe' || v === 'permitted' || v === 'everything') this.sees = v;
+				} catch (e) {}
+				this.$watch('sees', (v) => { try { localStorage.setItem(this.storeKey, v); } catch (e) {} });
+			},
+			pasteAnywhere(e) {
+				const t = e.target;
+				if (t && (t.closest('input, textarea, select') || t.isContentEditable)) return;
+				const host = document.getElementById('ai-import-review-host');
+				if (host && host.querySelector('form')) return;
+				const text = e.clipboardData && e.clipboardData.getData('text/plain');
+				const area = document.getElementById('ai-import-paste-area');
+				if (!text || !text.trim() || !area) return;
+				e.preventDefault();
+				this.open = 'paste';
+				area.value = text;
+				area.dispatchEvent(new Event('input', { bubbles: true }));
+				area.form.requestSubmit();
+			},
+		}`, cc.Campaign.ID) }
+		@paste.window="pasteAnywhere($event)"
+	>
+		<div>
+			<h2 id="ai-copy-heading" class="text-base font-semibold text-fg">Copy and paste instead</h2>
+			<p class="text-sm text-fg-secondary mt-0.5 max-w-prose">
+				For any AI, and for asking it to make or change things: copy a request here, paste it into your AI, then paste its answer back. Nothing changes until you say yes to each change. You can paste anywhere on this page with Ctrl+V.
+			</p>
+		</div>
+		<fieldset class="aic-panel">
+			<legend class="sr-only">When you copy, what may your AI see?</legend>
+			<p class="aic-h mb-1" aria-hidden="true">When you copy, what may your AI see?</p>
+			<p class="aic-hint mb-2">Used for everything below, and remembered for this campaign.</p>
+			<div class="grid gap-x-6 sm:grid-cols-3">
+				@seesChoice("safe", "What players see", "Safest. No secrets, and nothing you keep from players.")
+				@seesChoice("permitted", "What you see", fmt.Sprintf("Adds your %s-only pages and secrets.", layouts.GMTerm(ctx)))
+				@seesChoice("everything", "Everything", "Nothing held back. Only for an AI you fully trust.")
+			</div>
+		</fieldset>
 		@aiToolSection(cc)
-	</div>
+	</section>
+}
+
+templ seesChoice(value, title, sub string) {
+	<label class="aic-choice">
+		<input type="radio" name="ai_sees" value={ value } x-model="sees"/>
+		<span>
+			<b>{ title }</b>
+			<span class="block aic-hint">{ sub }</span>
+		</span>
+	</label>
 }
 
 // aiToolSection is the AI tool: three folding rows in the order an owner
-// uses them (copy a prompt, paste back what the AI gives, or export the
-// whole campaign). Pasting is open by default, since it is the step people
-// come back for; each row grows open inside the box.
+// uses them (ask, paste back what the AI gives, or give it the whole
+// campaign). Pasting is open by default, since it is the step people come
+// back for; each row grows open inside the box. Its open row and the
+// privacy choice live on aiCopyPasteSection.
 templ aiToolSection(cc *campaigns.CampaignContext) {
-	<div class="card p-6" x-data="{ open: 'paste' }">
-		<div class="flex items-start gap-4 mb-4">
-			<span class="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
-				<i class="fa-solid fa-wand-magic-sparkles text-accent text-lg" aria-hidden="true"></i>
-			</span>
-			<div>
-				<h2 class="text-lg font-semibold text-fg">AI tool</h2>
-				<p class="text-sm text-fg-secondary mt-0.5 leading-relaxed">
-					Work with Claude, ChatGPT or another AI. It reads what you copy to it and can ask Chronicle for more; everything it sends back is reviewed here first.
-				</p>
-			</div>
-		</div>
-		<div class="divide-y divide-edge border border-edge rounded-lg">
-			@aiToolRow("prompt", "1", "", "Copy a prompt for your AI", "What your campaign looks like and what you want made") {
+	<div class="card p-0 overflow-hidden" data-ai-tool>
+		<div class="divide-y divide-edge">
+			@aiToolRow("prompt", "1", "", "Ask your AI for something", "Copy a request that tells it about your campaign and what you want made") {
 				@promptBuilderBody(cc)
 			}
-			@aiToolRow("paste", "2", "", "Paste what your AI gives you", "Changes to review, or a lookup for Chronicle to answer") {
+			@aiToolRow("paste", "2", "", "Paste what your AI gives you", "Changes for you to review, or questions Chronicle answers for it") {
 				@importBody(cc)
 			}
-			@aiToolRow("export", "", "fa-solid fa-file-export", "Export the whole campaign for AI", "One markdown file for NotebookLM and similar tools") {
+			@aiToolRow("export", "", "fa-solid fa-file-export", "Give your AI the whole campaign", "One file to upload to NotebookLM and similar tools") {
 				@aiExportBody(cc)
 			}
 		</div>
@@ -99,60 +145,22 @@ templ aiToolRow(key, num, icon, title, sub string) {
 	</div>
 }
 
-// onboardingHint renders a one-shot inline callout (not a popup or
-// overlay) pointing at the AI tool's first row. It is dismissed
-// via a per-campaign localStorage key
-// (`ai-workspace-onboarded-<campaignID>`); clearing the key re-shows
-// it.
-templ onboardingHint(cc *campaigns.CampaignContext) {
-	<div
-		x-data={ fmt.Sprintf(`{
-			storageKey: 'ai-workspace-onboarded-%s',
-			dismissed: false,
-			init() {
-				try {
-					this.dismissed = !!localStorage.getItem(this.storageKey);
-				} catch (e) {
-					// Private mode / disabled storage → never dismiss.
-					this.dismissed = false;
-				}
-			},
-			dismiss() {
-				this.dismissed = true;
-				try { localStorage.setItem(this.storageKey, '1'); } catch (e) {}
-			},
-		}`, cc.Campaign.ID) }
-		x-show="!dismissed"
-		x-cloak
-		x-transition.opacity
-		role="status"
-		aria-live="polite"
-		class="card p-4 bg-accent/5 border border-accent/30"
-	>
-		<div class="flex items-start gap-3">
-			<i class="fa-solid fa-lightbulb text-accent text-base mt-0.5" aria-hidden="true"></i>
-			<div class="flex-1 text-sm text-fg">
-				<strong class="font-medium">New here?</strong>
-				Copy a prompt for your AI, then paste back whatever it gives you: changes to review, or a lookup Chronicle answers for it. Owner-only; nothing changes until you confirm.
-			</div>
-			<button
-				type="button"
-				@click="dismiss()"
-				class="text-fg-muted hover:text-fg text-sm shrink-0"
-				aria-label="Dismiss the onboarding hint for this campaign"
-			>
-				<i class="fa-solid fa-xmark" aria-hidden="true"></i>
-			</button>
-		</div>
-	</div>
+// gmNotesChoice is the tick for the Director's notes on game nights, shown
+// only when the AI may see more than players do.
+templ gmNotesChoice(show string) {
+	<label x-show={ show } x-cloak class="flex items-start gap-2 cursor-pointer text-sm">
+		<input type="checkbox" name="gm_notes" value="on" class="mt-0.5 rounded border-edge text-accent"/>
+		<span>
+			Include your { layouts.GMTerm(ctx) } notes on game nights
+			<span class="block text-xs text-fg-muted">The recaps every player reads are always included.</span>
+		</span>
+	</label>
 }
 
-// promptBuilderBody is the picker UI: operator selects which
-// schema bits to include, whether to embed content (and at what
-// privacy mode), and types a custom instruction; Generate renders
-// the assembled markdown in a modal with a Copy button. The token
-// estimate here is a rough client-side Alpine computation; the
-// authoritative count is server-rendered in the modal's footer.
+// promptBuilderBody builds a request for the AI: what to tell it about the
+// campaign, what to include, and what to make; the request then opens in a
+// modal with a Copy button. The size line is a rough guess made here; the
+// modal shows the real request.
 templ promptBuilderBody(cc *campaigns.CampaignContext) {
 	<div
 		x-data="{
@@ -160,8 +168,6 @@ templ promptBuilderBody(cc *campaigns.CampaignContext) {
 			schemaCategories: true,
 			schemaFrontMatter: true,
 			contentMode: 'none',
-			privacy: 'safe',
-			gmNotes: false,
 			instruction: '',
 			saved: false,
 			copyState: '',
@@ -196,6 +202,11 @@ templ promptBuilderBody(cc *campaigns.CampaignContext) {
 				else if (this.contentMode !== 'none') chars += 30000; // content dominates
 				chars += this.instruction.length;
 				return Math.ceil(chars / 4);
+			},
+			get sizeLine() {
+				if (this.estimate < 8000) return 'Short, fits any AI';
+				if (this.estimate < 32000) return 'Medium, fits most AIs';
+				return 'Long, needs an AI that takes long messages';
 			}
 		}"
 	>
@@ -206,10 +217,11 @@ templ promptBuilderBody(cc *campaigns.CampaignContext) {
 			hx-indicator="#ai-prompt-generating"
 			class="space-y-5"
 		>
+			<input type="hidden" name="privacy" :value="sees" value="safe"/>
 			<div class="flex flex-wrap items-start gap-3 rounded-lg border border-edge p-3">
 				<div class="flex-1 min-w-[14rem] text-sm">
 					<strong class="font-medium text-fg">Save the instructions in your AI once</strong>
-					<span class="block text-xs text-fg-muted">Copies every block format, the lookups and the rules, without your campaign's content. Paste it into your AI's saved or project instructions, then tick "My AI already has the instructions" below so each prompt is only your request.</span>
+					<span class="block text-xs text-fg-muted">Copies how Chronicle wants answers written and what your AI can ask it, without your campaign's content. Paste it into your AI's saved or project instructions, then tick "My AI already has the instructions" below, so each request is only what you want.</span>
 				</div>
 				<button
 					type="button"
@@ -219,53 +231,47 @@ templ promptBuilderBody(cc *campaigns.CampaignContext) {
 					:disabled="copyState === 'busy'"
 				>
 					<i class="fa-regular fa-copy mr-1.5" aria-hidden="true"></i>
-					<span x-text="copyState === 'copied' ? 'Copied' : (copyState === 'busy' ? 'Copying…' : 'Copy AI instructions')">Copy AI instructions</span>
+					<span x-text="copyState === 'copied' ? 'Copied' : (copyState === 'busy' ? 'Copying…' : 'Copy the instructions')">Copy the instructions</span>
 				</button>
 				<p x-show="copyState === 'failed'" x-cloak role="alert" class="basis-full text-xs text-bad">
-					Couldn't copy. Your browser may have blocked the clipboard; try again, or use Generate below.
+					Couldn't copy. Your browser may have blocked the clipboard; try again, or use Make the request below.
 				</p>
 				<span class="sr-only" aria-live="polite" x-text="copyState === 'copied' ? 'Instructions copied' : ''"></span>
 			</div>
 
 			<div>
-				<h3 class="text-sm font-medium text-fg mb-2">Schema bits</h3>
-				<p class="text-xs text-fg-muted mb-3">
-					What context to give the AI about your world's structure.
-				</p>
+				<h3 class="text-sm font-medium text-fg mb-2">What to tell your AI about your campaign</h3>
 				<div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
 					<label class="flex items-center gap-2 cursor-pointer">
 						<input type="checkbox" name="schema_types" value="on" x-model="schemaTypes" class="rounded border-edge text-accent"/>
-						<span>Entity types (Character, Location, ...)</span>
+						<span>Your kinds of pages (Character, Place...)</span>
 					</label>
 					<label class="flex items-center gap-2 cursor-pointer">
 						<input type="checkbox" name="schema_categories" value="on" x-model="schemaCategories" class="rounded border-edge text-accent"/>
-						<span>Categories currently in use (with counts)</span>
+						<span>How many pages of each kind you have</span>
 					</label>
 					<label class="flex items-center gap-2 cursor-pointer">
 						<input type="checkbox" name="schema_front_matter" value="on" x-model="schemaFrontMatter" class="rounded border-edge text-accent"/>
-						<span>Front-matter format example</span>
+						<span>An example of how to write a page</span>
 					</label>
 				</div>
 			</div>
 
 			<div>
-				<h3 class="text-sm font-medium text-fg mb-2">Content</h3>
-				<p class="text-xs text-fg-muted mb-3">
-					How much of your existing campaign content to include for the AI to reference.
-				</p>
+				<h3 class="text-sm font-medium text-fg mb-2">What to include</h3>
 				<div class="space-y-2 text-sm">
 					<label class="flex items-start gap-2 cursor-pointer">
 						<input type="radio" name="content_mode" value="none" x-model="contentMode" class="mt-0.5 border-edge text-accent"/>
 						<span>
-							<strong>None</strong> (default)
-							<span class="block text-xs text-fg-muted">Schema only. Smallest prompt; AI generates new content based on your structure but won't reference existing pages.</span>
+							<strong>Nothing else</strong>
+							<span class="block text-xs text-fg-muted">The shortest request. Your AI makes things that fit your campaign, but doesn't know your pages.</span>
 						</span>
 					</label>
 					<label class="flex items-start gap-2 cursor-pointer">
 						<input type="radio" name="content_mode" value="all" x-model="contentMode" class="mt-0.5 border-edge text-accent"/>
 						<span>
-							<strong>All visible</strong>
-							<span class="block text-xs text-fg-muted">Everything the privacy filter below allows. AI can reference existing entities by name.</span>
+							<strong>Your pages</strong>
+							<span class="block text-xs text-fg-muted">Everything your AI may see, so it can refer to your pages by name.</span>
 						</span>
 					</label>
 					<label class="flex items-start gap-2 cursor-pointer">
@@ -285,48 +291,16 @@ templ promptBuilderBody(cc *campaigns.CampaignContext) {
 				</div>
 			</div>
 
-			<div x-show="contentMode !== 'none'" x-cloak>
-				<h3 class="text-sm font-medium text-fg mb-2">Privacy</h3>
-				<div class="space-y-2 text-sm">
-					<label class="flex items-start gap-2 cursor-pointer">
-						<input type="radio" name="privacy" value="safe" x-model="privacy" class="mt-0.5 border-edge text-accent"/>
-						<span>
-							<strong>Safe</strong> (recommended)
-							<span class="block text-xs text-fg-muted">Excludes { layouts.GMTerm(ctx) }-only content, private entities, and { layouts.GMTerm(ctx) }-only session notes.</span>
-						</span>
-					</label>
-					<label class="flex items-start gap-2 cursor-pointer">
-						<input type="radio" name="privacy" value="permitted" x-model="privacy" class="mt-0.5 border-edge text-accent"/>
-						<span>
-							<strong>Permitted</strong>
-							<span class="block text-xs text-fg-muted">Includes everything you can see as Owner. { layouts.GMTerm(ctx) }-only content included if you opt in below.</span>
-						</span>
-					</label>
-					<label class="flex items-start gap-2 cursor-pointer">
-						<input type="radio" name="privacy" value="everything" x-model="privacy" class="mt-0.5 border-edge text-accent"/>
-						<span>
-							<strong>Everything</strong>
-							<span class="block text-xs text-fg-muted">No visibility filtering. Use only with AI tools you fully trust.</span>
-						</span>
-					</label>
-				</div>
-				<label x-show="contentMode !== 'house-rules' && contentMode !== 'calendar'" class="flex items-center gap-2 cursor-pointer text-sm mt-3">
-					<input type="checkbox" name="gm_notes" value="on" x-model="gmNotes" class="rounded border-edge text-accent"/>
-					<span>
-						Include session { layouts.GMTerm(ctx) } notes
-						<span class="block text-xs text-fg-muted">Only applies in Permitted or Everything mode.</span>
-					</span>
-				</label>
-			</div>
+			@gmNotesChoice("sees !== 'safe' && contentMode !== 'none' && contentMode !== 'house-rules' && contentMode !== 'calendar'")
 
 			<div>
-				<h3 class="text-sm font-medium text-fg mb-2">What do you want the AI to generate?</h3>
+				<h3 class="text-sm font-medium text-fg mb-2">What would you like your AI to make?</h3>
 				<textarea
 					name="instruction"
 					x-model="instruction"
 					rows="4"
 					placeholder="Five new NPCs for the Drowned Reach. Mix of allies and rivals. Each should have a one-paragraph backstory tying them to the Coral Court fall."
-					class="input w-full text-sm font-mono"
+					class="input w-full text-sm"
 				></textarea>
 			</div>
 
@@ -334,20 +308,18 @@ templ promptBuilderBody(cc *campaigns.CampaignContext) {
 				<input type="checkbox" name="instructions_saved" value="on" x-model="saved" class="mt-0.5 rounded border-edge text-accent"/>
 				<span>
 					My AI already has the instructions
-					<span class="block text-xs text-fg-muted">Leaves out the block formats and rules, so the prompt is just your request and the content you picked.</span>
+					<span class="block text-xs text-fg-muted">Leaves them out, so the request is only what you want and what you chose to include.</span>
 				</span>
 			</label>
 
-			<div class="flex items-center gap-3 pt-2">
+			<div class="flex flex-wrap items-center gap-3 pt-2">
 				<button type="submit" class="btn-primary">
-					<i class="fa-solid fa-wand-magic-sparkles mr-1.5"></i> Generate
+					<i class="fa-solid fa-wand-magic-sparkles mr-1.5" aria-hidden="true"></i> Make the request
 				</button>
 				<span id="ai-prompt-generating" class="htmx-indicator text-xs text-fg-muted">
-					<i class="fa-solid fa-spinner fa-spin mr-1"></i> Building prompt...
+					<i class="fa-solid fa-spinner fa-spin mr-1" aria-hidden="true"></i> Making it…
 				</span>
-				<span class="text-xs text-fg-muted ml-auto">
-					Estimated: ~<span x-text="estimate.toLocaleString()"></span> tokens
-				</span>
+				<span class="text-xs text-fg-muted ml-auto" x-text="sizeLine">Short, fits any AI</span>
 			</div>
 		</form>
 
@@ -356,10 +328,10 @@ templ promptBuilderBody(cc *campaigns.CampaignContext) {
 	</div>
 }
 
-// aiExportBody is the form + Generate button. Sends an HTMX hx-get
+// aiExportBody is the form + Make the file button. Sends an HTMX hx-get
 // to /ai-export/generate; the response replaces #ai-export-modal-host
 // with the rendered modal (modal.templ). The export is lossy on purpose;
-// the campaign export above stays the backup.
+// the campaign backup in Settings › Data stays the backup.
 templ aiExportBody(cc *campaigns.CampaignContext) {
 	<div>
 		<form
@@ -369,20 +341,20 @@ templ aiExportBody(cc *campaigns.CampaignContext) {
 			hx-indicator="#ai-export-generating"
 			class="space-y-5"
 		>
+			<input type="hidden" name="privacy" :value="sees" value="safe"/>
 			<div>
-				<h3 class="text-sm font-medium text-fg mb-2">Categories</h3>
+				<h3 class="text-sm font-medium text-fg mb-2">What goes in</h3>
 				<p class="text-xs text-fg-muted mb-3">
-					All on by default. Uncheck any you don't want in the export.
-					Map images and other media are not included.
+					All of it to start with; untick what you'd rather leave out. Maps' pictures and other files are never included. For a backup of the campaign, use Settings › Data.
 				</p>
 				<div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
 					<label class="flex items-center gap-2 cursor-pointer">
 						<input type="checkbox" name="categories" value="entities" checked class="rounded border-edge text-accent"/>
-						<span>Entities (pages)</span>
+						<span>Pages</span>
 					</label>
 					<label class="flex items-center gap-2 cursor-pointer">
 						<input type="checkbox" name="categories" value="notes" checked class="rounded border-edge text-accent"/>
-						<span>Notes (yours only)</span>
+						<span>Your own notes</span>
 					</label>
 					<label class="flex items-center gap-2 cursor-pointer">
 						<input type="checkbox" name="categories" value="calendar_events" checked class="rounded border-edge text-accent"/>
@@ -390,7 +362,7 @@ templ aiExportBody(cc *campaigns.CampaignContext) {
 					</label>
 					<label class="flex items-center gap-2 cursor-pointer">
 						<input type="checkbox" name="categories" value="sessions" checked class="rounded border-edge text-accent"/>
-						<span>Sessions</span>
+						<span>Game nights</span>
 					</label>
 					<label class="flex items-center gap-2 cursor-pointer">
 						<input type="checkbox" name="categories" value="timelines" checked class="rounded border-edge text-accent"/>
@@ -403,49 +375,14 @@ templ aiExportBody(cc *campaigns.CampaignContext) {
 				</div>
 			</div>
 
-			<div>
-				<h3 class="text-sm font-medium text-fg mb-2">Privacy</h3>
-				<div class="space-y-2 text-sm">
-					<label class="flex items-start gap-2 cursor-pointer">
-						<input type="radio" name="privacy" value="safe" checked class="mt-0.5 border-edge text-accent"/>
-						<span>
-							<strong>Safe</strong> (recommended)
-							<span class="block text-xs text-fg-muted">Excludes { layouts.GMTerm(ctx) }-only content, private entities, and { layouts.GMTerm(ctx) }-only session notes. Best for sharing with an AI you don't fully trust.</span>
-						</span>
-					</label>
-					<label class="flex items-start gap-2 cursor-pointer">
-						<input type="radio" name="privacy" value="permitted" class="mt-0.5 border-edge text-accent"/>
-						<span>
-							<strong>Permitted</strong>
-							<span class="block text-xs text-fg-muted">Includes everything you can see as Owner. { layouts.GMTerm(ctx) }-only content is included if you opt in below.</span>
-						</span>
-					</label>
-					<label class="flex items-start gap-2 cursor-pointer">
-						<input type="radio" name="privacy" value="everything" class="mt-0.5 border-edge text-accent"/>
-						<span>
-							<strong>Everything</strong>
-							<span class="block text-xs text-fg-muted">No visibility filtering. Includes content even players never see. Use only with AI tools you fully trust.</span>
-						</span>
-					</label>
-				</div>
-			</div>
-
-			<div>
-				<label class="flex items-center gap-2 cursor-pointer text-sm">
-					<input type="checkbox" name="gm_notes" value="on" class="rounded border-edge text-accent"/>
-					<span>
-						Include session { layouts.GMTerm(ctx) } notes
-						<span class="block text-xs text-fg-muted">Only applies in Permitted or Everything mode. Session recaps are always included regardless.</span>
-					</span>
-				</label>
-			</div>
+			@gmNotesChoice("sees !== 'safe'")
 
 			<div class="flex items-center gap-3 pt-2">
 				<button type="submit" class="btn-primary">
-					<i class="fa-solid fa-wand-magic-sparkles mr-1.5"></i> Generate
+					<i class="fa-solid fa-file-export mr-1.5" aria-hidden="true"></i> Make the file
 				</button>
 				<span id="ai-export-generating" class="htmx-indicator text-xs text-fg-muted">
-					<i class="fa-solid fa-spinner fa-spin mr-1"></i> Building markdown...
+					<i class="fa-solid fa-spinner fa-spin mr-1" aria-hidden="true"></i> Making it…
 				</span>
 			</div>
 		</form>

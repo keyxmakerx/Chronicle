@@ -17,8 +17,14 @@ import (
 // (ai_export_route_test.go, ai_workspace_prompt_route_test.go,
 // ai_workspace_import_parse_route_test.go,
 // ai_workspace_import_commit_route_test.go,
-// ai_workspace_import_tray_route_test.go).
+// ai_workspace_import_tray_route_test.go, ai_page_route_test.go).
 func RegisterOwnerRoutes(cg *echo.Group, h *Handler, requireOwner echo.MiddlewareFunc) {
+	// The Your AI page: connect an AI app, what it did, copy and paste.
+	cg.GET("/ai", h.AIPage, requireOwner)
+	cg.GET("/ai/activity", h.AIActivity, requireOwner)
+	cg.POST("/ai/connection", h.ConnectAI, requireOwner)
+	cg.POST("/ai/connection/disconnect", h.DisconnectAI, requireOwner)
+
 	cg.GET("/ai-export/generate", h.GenerateAIExport, requireOwner)
 	cg.GET("/ai-workspace/prompt/generate", h.GeneratePrompt, requireOwner)
 	cg.GET("/ai-workspace/prompt/instructions", h.PromptInstructions, requireOwner)

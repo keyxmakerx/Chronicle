@@ -111,15 +111,15 @@ func TestSettingsTabs_FeaturesTabRetired(t *testing.T) {
 
 // TestRegisterSettingsTab_MergesAndSorts confirms plugin-contributed
 // tabs land in the right position by SortOrder — a tab registered at
-// 55 lands between API keys (40) and activity (60) — and that the AI
-// plugin's Data & AI tab stands in for the built-in Data tab.
+// 55 lands between Data (50) and activity (60) — and that the built-in
+// Data tab always shows, since the AI tools moved to a page of their own.
 func TestRegisterSettingsTab_MergesAndSorts(t *testing.T) {
 	h := &Handler{}
 	h.RegisterSettingsTab(func(*CampaignContext) SettingsTab {
 		return SettingsTab{
-			ID:        "ai-workspace",
-			Label:     "AI Workspace",
-			Icon:      "fa-solid fa-brain",
+			ID:        "import",
+			Label:     "Import",
+			Icon:      "fa-solid fa-file-import",
 			MinRole:   RoleOwner,
 			SortOrder: 55,
 		}
@@ -128,7 +128,7 @@ func TestRegisterSettingsTab_MergesAndSorts(t *testing.T) {
 	cc := ctxWithRole(RoleOwner)
 	got := h.visibleSettingsTabs(cc, nil, nil, "csrf", nil, false)
 	gotIDs := tabIDs(got)
-	want := []string{"general", "api-keys", "ai-workspace", "activity"}
+	want := []string{"general", "api-keys", "data", "import", "activity"}
 	if len(gotIDs) != len(want) {
 		t.Fatalf("merged tabs len=%d, want %d: got %v want %v", len(gotIDs), len(want), gotIDs, want)
 	}
@@ -206,12 +206,13 @@ func tabIDs(tabs []SettingsTab) []string {
 	return out
 }
 
-// Old Settings tabs that became pages of their own redirect there; the Data
-// tab and the AI plugin's Data & AI tab answer each other's ID.
-func TestSettingsTabRedirectsAndDataAlias(t *testing.T) {
+// Old Settings tabs that became pages of their own redirect there, the AI
+// plugin's old "Data & AI" tab among them; the Data tab is a tab again.
+func TestSettingsTabRedirects(t *testing.T) {
 	for tab, want := range map[string]string{
 		"people":       "/campaigns/c1/members",
 		"integrations": "/campaigns/c1/foundry",
+		"ai-workspace": "/campaigns/c1/ai",
 		"general":      "",
 		"data":         "",
 		"":             "",
@@ -220,20 +221,10 @@ func TestSettingsTabRedirectsAndDataAlias(t *testing.T) {
 			t.Errorf("settingsTabRedirect(%q) = %q, want %q", tab, got, want)
 		}
 	}
-	plain := []SettingsTab{{ID: "general"}, {ID: "data"}}
-	withAI := []SettingsTab{{ID: "general"}, {ID: "ai-workspace"}}
-	for _, tc := range []struct {
-		tabs []SettingsTab
-		in   string
-		want string
-	}{
-		{plain, "data", "data"},
-		{plain, "ai-workspace", "data"},
-		{withAI, "data", "ai-workspace"},
-		{withAI, "ai-workspace", "ai-workspace"},
-	} {
-		if got := sanitizeSettingsTab(tc.in, tc.tabs); got != tc.want {
-			t.Errorf("sanitizeSettingsTab(%q, %v) = %q, want %q", tc.in, tabIDs(tc.tabs), got, tc.want)
+	tabs := []SettingsTab{{ID: "general"}, {ID: "data"}}
+	for in, want := range map[string]string{"data": "data", "ai-workspace": "general", "nope": "general"} {
+		if got := sanitizeSettingsTab(in, tabs); got != want {
+			t.Errorf("sanitizeSettingsTab(%q) = %q, want %q", in, got, want)
 		}
 	}
 }

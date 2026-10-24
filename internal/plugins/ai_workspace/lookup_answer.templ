@@ -1,6 +1,6 @@
 // lookup_answer.templ renders the answer to an AI's lookups: a read-only
-// panel under the paste box with one chip per lookup, a privacy choice that
-// re-asks, and the markdown to copy back to the AI.
+// panel under the paste box with one chip per lookup, what it was read as,
+// and the markdown to copy back to the AI.
 
 package ai_workspace
 
@@ -17,8 +17,6 @@ type LookupView struct {
 	Markdown   string
 	// Privacy is the mode the answer was read in: safe, permitted or everything.
 	Privacy string
-	// Source is the pasted text, posted again when the privacy changes.
-	Source string
 	// Skipped counts pasted blocks that were not lookups; they are left out.
 	Skipped int
 }
@@ -46,7 +44,7 @@ templ LookupAnswer(d LookupView) {
 			<h3 id="ai-lookup-heading" class="text-base font-semibold text-fg">Answer for your AI</h3>
 			<div class="flex items-center gap-3">
 				<a
-					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings?tab=ai-workspace", d.CampaignID)) }
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/ai", d.CampaignID)) }
 					class="text-xs text-fg-muted hover:text-fg"
 					title="Close the answer and start over"
 				>
@@ -82,23 +80,7 @@ templ LookupAnswer(d LookupView) {
 					</span>
 				}
 			}
-			<form
-				hx-post={ fmt.Sprintf("/campaigns/%s/ai-workspace/import/parse", d.CampaignID) }
-				hx-target="#ai-import-review-host"
-				hx-swap="innerHTML"
-				hx-trigger="change"
-				class="ml-auto"
-			>
-				<textarea name="markdown_paste" hidden aria-hidden="true">{ d.Source }</textarea>
-				<label class="flex items-center gap-2 text-fg-muted">
-					Privacy
-					<select name="lookup_privacy" class="input text-xs py-1">
-						@privacyOption("safe", "Safe", d.Privacy)
-						@privacyOption("permitted", "Permitted", d.Privacy)
-						@privacyOption("everything", "Everything", d.Privacy)
-					</select>
-				</label>
-			</form>
+			<span class="ml-auto text-fg-muted">{ "Answered with " + privacyLabel(d.Privacy) }</span>
 		</div>
 		<pre
 			data-ai-export-body
@@ -107,10 +89,14 @@ templ LookupAnswer(d LookupView) {
 	</div>
 }
 
-templ privacyOption(value, label, current string) {
-	if value == current {
-		<option value={ value } selected>{ label }</option>
-	} else {
-		<option value={ value }>{ label }</option>
+// privacyLabel names a privacy mode as the page's copy-and-paste privacy
+// choice does.
+func privacyLabel(mode string) string {
+	switch mode {
+	case "permitted":
+		return "what you see"
+	case "everything":
+		return "everything"
 	}
+	return "what players see"
 }

@@ -148,7 +148,7 @@ func TestImportReview_A11y_TagAndSubcategoryChips(t *testing.T) {
 // hx-push-url, so browser Back from the result has a destination.
 func TestImportReview_A11y_HxPushUrl(t *testing.T) {
 	out := renderReview(t, representativeReviewData())
-	if !strings.Contains(out, `hx-push-url="/campaigns/camp-1/settings?tab=ai-workspace"`) {
+	if !strings.Contains(out, `hx-push-url="/campaigns/camp-1/ai"`) {
 		t.Errorf("review form is missing hx-push-url (V1-F Bug 2 fix)")
 	}
 }

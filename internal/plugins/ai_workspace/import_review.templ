@@ -73,7 +73,7 @@ templ ImportReview(d ImportReviewData) {
 		hx-target="#ai-import-review-host"
 		hx-swap="innerHTML"
 		hx-indicator="#ai-import-committing"
-		hx-push-url={ fmt.Sprintf("/campaigns/%s/settings?tab=ai-workspace", d.CampaignID) }
+		hx-push-url={ fmt.Sprintf("/campaigns/%s/ai", d.CampaignID) }
 		x-data={ fmt.Sprintf("aiImportReview(%d)", startYes) }
 		@change="onChange($event)"
 		@keydown.window="onKey($event)"
@@ -170,7 +170,7 @@ templ ImportReview(d ImportReviewData) {
 			// renders a full page (no fragment branch), so
 			// fragment-targeting it would nest the app inside itself.
 			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings?tab=ai-workspace", d.CampaignID)) }
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/ai", d.CampaignID)) }
 				class="btn-secondary"
 				aria-label="Discard the paste and return to the import form"
 			>
@@ -756,13 +756,16 @@ templ importBody(cc *campaigns.CampaignContext) {
 			class="space-y-3"
 			x-data="{ pasted: '', maxChars: 5242880 /* 5 MB in bytes; matches handler.go importBodyCap */ }"
 		>
+			// Lookups in the paste are answered as the page's one privacy
+			// choice allows (Safe when the page has none).
+			<input type="hidden" name="lookup_privacy" :value="typeof sees === 'string' ? sees : 'safe'" value="safe"/>
 			<div
 				data-widget="markdown-importer"
 				data-textarea-name="markdown_paste"
 				data-file-input-name="markdown_files"
 				class="space-y-3"
 			>
-				<label for="ai-import-paste-area" class="sr-only">Paste AI-generated markdown here</label>
+				<label for="ai-import-paste-area" class="sr-only">Paste what your AI gave you</label>
 				<textarea
 					id="ai-import-paste-area"
 					name="markdown_paste"
@@ -774,23 +777,19 @@ templ importBody(cc *campaigns.CampaignContext) {
 					aria-describedby="ai-import-char-counter"
 				></textarea>
 
-				// 5 MB cap mirrors handler.go's importBodyCap; counter
-				// turns rose within 10% of the limit so the operator
-				// notices before the server rejects.
-				<div
+				// The 5 MB cap mirrors handler.go's importBodyCap. Only a paste
+				// close to it says so; a shorter one needs no counter.
+				<p
 					id="ai-import-char-counter"
-					class="text-[11px] text-right"
-					:class="pasted.length > maxChars * 0.9 ? 'text-rose-600 dark:text-rose-400' : 'text-fg-muted'"
+					class="text-xs text-bad"
+					x-show="pasted.length > maxChars * 0.9"
+					x-cloak
 					role="status"
 					aria-live="polite"
 				>
-					<span x-text="pasted.length.toLocaleString()"></span>
-					<span class="text-fg-muted">/ 5,242,880 characters</span>
-					<span x-show="pasted.length > maxChars * 0.9" x-cloak class="ml-1">
-						<i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
-						Approaching limit
-					</span>
-				</div>
+					<i class="fa-solid fa-triangle-exclamation mr-1" aria-hidden="true"></i>
+					This is nearly as long as one paste can be. Paste the rest separately.
+				</p>
 
 				<div
 					data-importer-dropzone
@@ -823,10 +822,10 @@ templ importBody(cc *campaigns.CampaignContext) {
 
 			<div class="flex items-center gap-3">
 				<button type="submit" class="btn-primary">
-					<i class="fa-solid fa-file-import mr-1.5" aria-hidden="true"></i> Parse + review
+					<i class="fa-solid fa-file-import mr-1.5" aria-hidden="true"></i> Review
 				</button>
 				<span id="ai-import-parsing" class="htmx-indicator text-xs text-fg-muted" role="status" aria-live="polite">
-					<i class="fa-solid fa-spinner fa-spin mr-1" aria-hidden="true"></i> Parsing...
+					<i class="fa-solid fa-spinner fa-spin mr-1" aria-hidden="true"></i> Reading it…
 				</span>
 			</div>
 		</form>
