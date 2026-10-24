@@ -53,9 +53,10 @@ func TestBacklinksFragment_CanSeeGMWiring(t *testing.T) {
 			wantCanSeeGM: true,
 		},
 		{
+			// A Scribe sees what players see.
 			name:         "scribe",
 			cc:           &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "c1"}, MemberRole: campaigns.RoleScribe, IsMember: true},
-			wantCanSeeGM: true,
+			wantCanSeeGM: false,
 		},
 		{
 			name:         "player",
@@ -68,13 +69,11 @@ func TestBacklinksFragment_CanSeeGMWiring(t *testing.T) {
 			wantCanSeeGM: false,
 		},
 		{
-			// A Co-DM sees dm_only CONTENT (VisibilityRole promotes them to
-			// Owner for that), but is still a Player for GM-secret purposes —
-			// matching GetEntry/GetFieldsAPI, which also gate on raw
-			// MemberRole, not VisibilityRole/IsDmGranted.
-			name:         "co-dm (DM-granted player) does not see secrets, matching GetEntry/GetFieldsAPI",
-			cc:           &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "c1"}, MemberRole: campaigns.RolePlayer, IsDmGranted: true, IsMember: true},
-			wantCanSeeGM: false,
+			// A Co-DM sees what the owner sees, secrets included, matching
+			// GetEntry and GetFieldsAPI.
+			name:         "co-dm (DM-granted member) sees secrets, matching GetEntry/GetFieldsAPI",
+			cc:           &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "c1"}, MemberRole: campaigns.RoleScribe, IsDmGranted: true, IsMember: true},
+			wantCanSeeGM: true,
 		},
 	}
 

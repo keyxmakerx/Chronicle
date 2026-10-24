@@ -69,8 +69,8 @@ templ NPCCardComponent(cc *campaigns.CampaignContext, card *NPCCard, csrfToken s
 			</div>
 		</a>
 
-		<!-- Reveal chip (Scribe+ only); anonymous and player viewers have MemberRole < Scribe -->
-		if cc.MemberRole >= campaigns.RoleScribe {
+		<!-- Reveal chip: the owner and Co-DMs only, who alone see hidden NPCs -->
+		if cc.CanAuthorDmOnly() {
 			<div class="absolute top-2 left-2 z-10" id={ fmt.Sprintf("reveal-%s", card.ID) }>
 				@RevealBadge(card.ID, cc.Campaign.ID, card.IsPrivate, csrfToken)
 			</div>

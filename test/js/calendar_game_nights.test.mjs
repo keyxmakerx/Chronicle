@@ -641,6 +641,7 @@ test('a recap with formatting is never edited as plain text in the calendar', ()
   v._gnPages = {
     'plain|2026-10-08': { recap: 'The vault opened.', recapHtml: '<p>The vault opened.</p>', links: [] },
     'rich|2026-10-08': { recap: 'The vault opened.', recapHtml: '<p>The <strong>vault</strong> opened.</p><ul><li>Loot</li></ul>', links: [] },
+    'doc|2026-10-08': { recap: '{"type":"doc","content":[]}', recapHtml: '<p>The vault opened.</p>', links: [] },
   };
   assert.match(v._gnExtraHTML('plain', '2026-10-08'), /data-gn-recap="edit"><i class="fa-solid fa-pen"><\/i> Edit the recap/);
   const rich = v._gnExtraHTML('rich', '2026-10-08');
@@ -648,6 +649,9 @@ test('a recap with formatting is never edited as plain text in the calendar', ()
   assert.match(rich, /<a class="lnk" href="\/campaigns\/c1\/sessions\/rich">.*Edit on the page/);
   v._gnRecapFor = 'rich';
   assert.doesNotMatch(v._gnExtraHTML('rich', '2026-10-08'), /data-gn-recap-input/, 'even when asked, the textarea never opens on it');
+  const doc = v._gnExtraHTML('doc', '2026-10-08');
+  assert.doesNotMatch(doc, /data-gn-recap="edit"/, 'a recap from the page editor is its JSON, never put in the textarea');
+  assert.match(doc, /Edit on the page/);
   v.role = 1;
   assert.doesNotMatch(v._gnExtraHTML('plain', '2026-10-08'), /data-gn-recap="edit"/, 'players read the recap only');
 });

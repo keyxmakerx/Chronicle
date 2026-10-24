@@ -258,7 +258,7 @@ func TestStripEntitySecretsForEgress_ByRole(t *testing.T) {
 	}{
 		{"none/anonymous below player", int(campaigns.RoleNone), true},
 		{"player", int(campaigns.RolePlayer), true},
-		{"scribe", int(campaigns.RoleScribe), false},
+		{"scribe sees what players see", int(campaigns.RoleScribe), true},
 		{"owner", int(campaigns.RoleOwner), false},
 	}
 	for _, tc := range cases {

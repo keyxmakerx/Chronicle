@@ -252,6 +252,8 @@
    *     without archived notes and without the note being edited.
    *   pages: false to offer notes only (default true: pages come from the
    *     entity search, like @mentions).
+   *   hostOpen: true when players read the text, so linking a page they
+   *     can't read takes a second pick, after a warning (as @mentions do).
    */
   Chronicle.WikiLinkExtension = function (options) {
     var editor = null;
@@ -291,7 +293,7 @@
       }
       box.innerHTML = items.map(function (it, i) {
         return '<div class="nl-ac-item' + (i === index ? ' is-active' : '') + '" role="option" data-i="' + i + '">' +
-          '<i class="fa-solid ' + (it.kind === 'page' ? 'fa-book-open nl-ac-page' : 'fa-file-lines') + '" aria-hidden="true"></i>' +
+          '<i class="fa-solid ' + (it.kind === 'page' ? (it.restricted ? 'fa-lock nl-ac-page' : 'fa-book-open nl-ac-page') : 'fa-file-lines') + '" aria-hidden="true"></i>' +
           '<span class="nl-ac-text"><span class="nl-ac-ttl">' + Chronicle.escapeHtml(it.title) + '</span>' +
           '<span class="nl-ac-sub">' + Chronicle.escapeHtml(it.sub || '') + '</span></span></div>';
       }).join('');
@@ -330,7 +332,8 @@
           .then(function (data) {
             if (!active || q !== query) return;
             pageItems = (data.results || []).map(function (e) {
-              return { kind: 'page', id: e.id, title: e.name, sub: e.type_name || 'Page', url: e.url };
+              var note = Chronicle.linkRestrictionLabel ? Chronicle.linkRestrictionLabel(e) : '';
+              return { kind: 'page', id: e.id, title: e.name, sub: (e.type_name || 'Page') + (note ? ' · ' + note : ''), url: e.url, restricted: !!note };
             });
             collect();
             render();
@@ -359,6 +362,13 @@
     function accept(i) {
       var it = items[i];
       if (!it || !editor || startPos === null) { close(); return; }
+      if (it.restricted && options.hostOpen && !it.warned) {
+        it.warned = true;
+        it.sub = 'Players read this text and will see this name. Choose it again to link.';
+        index = i;
+        render();
+        return;
+      }
       var from = startPos;
       var to = editor.state.selection.from;
       var chain = editor.chain().focus().deleteRange({ from: from, to: to });

@@ -7,9 +7,10 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 )
 
-// The Adventures category is closed to anyone below Scribe in every read the
-// repository serves, whatever a page's own visibility or grants say. Each
-// subtest runs the same read for a player and for the DM team against a real
+// The Adventures category is closed to anyone but the owner and Co-DMs (an
+// Owner visibility role) in every read the repository serves, whatever a
+// page's own visibility or grants say; a Scribe sees what players see. Each
+// subtest runs the same read for players and for the DM team against a real
 // schema, because the guard is one SQL predicate and only the database proves it.
 func TestAdventuresVisibility_Integration(t *testing.T) {
 	if testing.Short() {
@@ -70,7 +71,7 @@ func TestAdventuresVisibility_Integration(t *testing.T) {
 	}{
 		{"anonymous", permissions.RoleNone, false},
 		{"player", permissions.RolePlayer, false},
-		{"scribe", permissions.RoleScribe, true},
+		{"scribe", permissions.RoleScribe, false},
 		{"owner", permissions.RoleOwner, true},
 	}
 	for _, r := range roles {

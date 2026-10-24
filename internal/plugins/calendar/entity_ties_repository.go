@@ -107,14 +107,14 @@ func entityVisibilityFilter(role int, userID string) (string, []any) {
 		return "", nil
 	}
 
-	// A page of the DM-only Adventures category is invisible below Scribe
+	// A page of the DM-only Adventures category is invisible below Owner
 	// whatever its own visibility says; this is the entities filter's
 	// dmOnlyTypeClause, which has no grant that can widen past it.
-	filter := ` AND (? >= 2 OR NOT EXISTS (
+	filter := ` AND NOT EXISTS (
 		SELECT 1 FROM entity_types dmt
 		WHERE dmt.id = e.entity_type_id AND dmt.preset_category = 'adventures'
-	)) AND (
-		(e.visibility = 'default' AND (? >= 2 OR e.is_private = false))
+	) AND (
+		(e.visibility = 'default' AND e.is_private = false)
 		OR (e.visibility = 'custom' AND EXISTS (
 			SELECT 1 FROM entity_permissions ep
 			WHERE ep.entity_id = e.id
@@ -145,7 +145,7 @@ func entityVisibilityFilter(role int, userID string) (string, []any) {
 			)
 		)
 	)`
-	return filter, []any{role, role, role, userID, userID, role, userID, userID}
+	return filter, []any{role, userID, userID, role, userID, userID}
 }
 
 // entityTieCols is the column list for an entity-tie display projection with

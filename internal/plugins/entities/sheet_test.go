@@ -26,7 +26,8 @@ func TestSheet_Access(t *testing.T) {
 		{"non-member, adventures page", campaigns.RoleNone, false, "adv-page", http.StatusNotFound, ""},
 		{"scribe, ordinary page", campaigns.RoleScribe, false, "npc-page", http.StatusNotFound, ""},
 		{"owner, ordinary page", campaigns.RoleOwner, false, "npc-page", http.StatusNotFound, ""},
-		{"scribe, adventures page", campaigns.RoleScribe, false, "adv-page", http.StatusOK, "data-dms-sheet-page"},
+		{"scribe, adventures page", campaigns.RoleScribe, false, "adv-page", http.StatusNotFound, ""},
+		{"co-dm, adventures page", campaigns.RoleScribe, true, "adv-page", http.StatusOK, "data-dms-sheet-page"},
 		{"player with DM access, adventures page", campaigns.RolePlayer, true, "adv-page", http.StatusOK, "data-dms-sheet-page"},
 		{"owner, page of another campaign", campaigns.RoleOwner, false, "other-campaign-page", http.StatusNotFound, ""},
 	}

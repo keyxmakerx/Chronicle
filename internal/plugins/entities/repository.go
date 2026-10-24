@@ -1291,8 +1291,9 @@ func tagFilterClause(tagSlugs []string) (string, []any) {
 //   - tag grants (additive, OR'd in): an otherwise-hidden entity becomes
 //     visible if a tag it bears carries a matching tag_permissions grant.
 //
-// A page of a DM-only category (Adventures) is never visible below Scribe,
-// whatever its own visibility or tag grants say: dmOnlyTypeClause sits in
+// Below Owner, a private page and a page of a DM-only category (Adventures)
+// are never visible, whatever tag grants say: hidden pages are for the owner
+// and Co-DMs, and a Scribe sees what players see. dmOnlyTypeClause sits in
 // front of the modes above and no grant can widen past it.
 //
 // Role-tier matching uses subject_id <= role, so a grant to RolePlayer (1)
@@ -1318,7 +1319,7 @@ func visibilityFilter(role int, userID string) (string, []any) {
 	}
 
 	filter := liveOnly + dmOnlyTypeClause + ` AND (
-		(e.visibility = 'default' AND (? >= 2 OR e.is_private = false))
+		(e.visibility = 'default' AND e.is_private = false)
 		OR (e.visibility = 'custom' AND EXISTS (
 			SELECT 1 FROM entity_permissions ep
 			WHERE ep.entity_id = e.id
@@ -1349,7 +1350,7 @@ func visibilityFilter(role int, userID string) (string, []any) {
 			)
 		)
 	)`
-	return filter, []any{role, role, role, userID, userID, role, userID, userID}
+	return filter, []any{role, userID, userID, role, userID, userID}
 }
 
 // liveOnly keeps trashed pages out of a read. visibilityFilter carries it for

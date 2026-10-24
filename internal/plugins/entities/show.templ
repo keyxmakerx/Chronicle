@@ -434,6 +434,9 @@ templ blockEntryEditor(cc *campaigns.CampaignContext, entity *Entity, csrfToken 
 		}
 		data-autosave="30"
 		data-outline="true"
+		if baseVisibilityState(entity) == VisStateEveryone {
+			data-open-to-players="true"
+		}
 		data-csrf-token={ csrfToken }
 	></div>
 }
@@ -651,6 +654,9 @@ templ blockPosts(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 		data-endpoint={ fmt.Sprintf("/campaigns/%s/entities/%s/posts", cc.Campaign.ID, entity.ID) }
 		if cc.MemberRole >= campaigns.RoleScribe {
 			data-editable="true"
+		}
+		if cc.CanAuthorDmOnly() {
+			data-can-hide="true"
 		}
 		data-csrf={ csrfToken }
 	></div>

@@ -118,7 +118,7 @@ type PickResult struct {
 }
 
 func requireTeam(v Viewer) error {
-	if v.Role < 2 {
+	if !v.IsOwner() {
 		return apperror.NewForbidden("the DM Screen is for the people running this campaign")
 	}
 	return nil

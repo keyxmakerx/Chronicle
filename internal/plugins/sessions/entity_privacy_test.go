@@ -88,18 +88,26 @@ func TestShowSession_PlayerDoesNotSeeHiddenEntityName(t *testing.T) {
 	}
 }
 
-// TestShowSession_ScribeAndOwnerSeeEverything pins ADR-055's "keep the
-// Owner/Scribe view unchanged": the fix must not narrow what those roles
-// already saw.
-func TestShowSession_ScribeAndOwnerSeeEverything(t *testing.T) {
-	for _, role := range []campaigns.Role{campaigns.RoleScribe, campaigns.RoleOwner} {
-		html := showSessionHTML(t, role)
-		if !strings.Contains(html, "Secret Villain") {
-			t.Errorf("role %v lost visibility into a linked entity it could already see", role)
-		}
-		if !strings.Contains(html, "Town Square") {
-			t.Errorf("role %v lost visibility into a visible linked entity", role)
-		}
+// TestShowSession_OwnerSeesEverything pins ADR-055's "keep the Owner view
+// unchanged": the fix must not narrow what the owner already saw.
+func TestShowSession_OwnerSeesEverything(t *testing.T) {
+	html := showSessionHTML(t, campaigns.RoleOwner)
+	if !strings.Contains(html, "Secret Villain") {
+		t.Error("the owner lost visibility into a linked entity it could already see")
+	}
+	if !strings.Contains(html, "Town Square") {
+		t.Error("the owner lost visibility into a visible linked entity")
+	}
+}
+
+// A Scribe sees what players see, so a hidden linked page stays hidden.
+func TestShowSession_ScribeSeesWhatPlayersSee(t *testing.T) {
+	html := showSessionHTML(t, campaigns.RoleScribe)
+	if strings.Contains(html, "Secret Villain") {
+		t.Errorf("Scribe session page showed a hidden entity's name\n%s", html)
+	}
+	if !strings.Contains(html, "Town Square") {
+		t.Errorf("Scribe session page hid a visible entity it should still show\n%s", html)
 	}
 }
 
@@ -125,21 +133,29 @@ func TestFilterEntitiesForViewer_NilFilterFailsClosed(t *testing.T) {
 	}
 }
 
-// TestFilterEntitiesForViewer_NilFilterStillUnchangedForScribe confirms the
-// nil-filter fail-closed branch only applies below RoleScribe: a Scribe/Owner
-// viewer must still see everything even when no filter is wired, since
-// role >= RoleScribe returns before the nil check.
-func TestFilterEntitiesForViewer_NilFilterStillUnchangedForScribe(t *testing.T) {
+// TestFilterEntitiesForViewer_NilFilterStillUnchangedForOwner confirms the
+// nil-filter fail-closed branch only applies below RoleOwner: the owner or a
+// Co-DM (promoted to Owner) still sees everything when no filter is wired,
+// since role >= RoleOwner returns before the nil check, and a Scribe fails
+// closed like a player.
+func TestFilterEntitiesForViewer_NilFilterStillUnchangedForOwner(t *testing.T) {
 	svc := NewSessionService(&mockSessionRepo{}, nil, nil)
 	ents := []SessionEntity{
 		{EntityID: "ent-secret", EntityName: "Secret Villain"},
 	}
 
-	got, err := svc.FilterEntitiesForViewer(context.Background(), "camp-1", ents, int(campaigns.RoleScribe), "user-1")
+	got, err := svc.FilterEntitiesForViewer(context.Background(), "camp-1", ents, int(campaigns.RoleOwner), "user-1")
 	if err != nil {
 		t.Fatalf("FilterEntitiesForViewer returned error: %v", err)
 	}
 	if len(got) != 1 {
-		t.Errorf("FilterEntitiesForViewer for a Scribe with a nil filter returned %d entities, want 1 (unchanged)", len(got))
+		t.Errorf("FilterEntitiesForViewer for the owner with a nil filter returned %d entities, want 1 (unchanged)", len(got))
+	}
+	got, err = svc.FilterEntitiesForViewer(context.Background(), "camp-1", ents, int(campaigns.RoleScribe), "user-1")
+	if err != nil {
+		t.Fatalf("FilterEntitiesForViewer returned error: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("FilterEntitiesForViewer for a Scribe with a nil filter returned %d entities, want 0 (fail closed)", len(got))
 	}
 }

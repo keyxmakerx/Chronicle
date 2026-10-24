@@ -8,8 +8,9 @@ import (
 )
 
 // The calendar mirrors the entities visibility predicate, so it must also keep
-// pages of the DM-only Adventures category away from anyone below Scribe, with
-// the role bound first as the entities filter does.
+// pages of the DM-only Adventures category away from anyone below Owner (a
+// Scribe sees what players see), with the role first among the arguments as
+// the entities filter does.
 func TestEntityVisibilityFilter_DMOnlyCategory(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -24,13 +25,13 @@ func TestEntityVisibilityFilter_DMOnlyCategory(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			frag, args := entityVisibilityFilter(tt.role, "u1")
-			has := strings.Contains(frag, "dmt.preset_category = 'adventures'") && strings.Contains(frag, "? >= 2 OR NOT EXISTS")
+			has := strings.Contains(frag, "dmt.preset_category = 'adventures'") && strings.Contains(frag, " AND NOT EXISTS (")
 			if has != tt.wantClause {
 				t.Fatalf("DM-only clause present = %v, want %v\n%s", has, tt.wantClause, frag)
 			}
 			if tt.wantClause {
 				if len(args) == 0 || args[0] != tt.role {
-					t.Errorf("first arg must be the viewer's role for the DM-only clause, got %v", args)
+					t.Errorf("first arg must be the viewer's role, got %v", args)
 				}
 				if strings.Count(frag, "?") != len(args) {
 					t.Errorf("placeholder count %d != arg count %d", strings.Count(frag, "?"), len(args))

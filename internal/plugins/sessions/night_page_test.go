@@ -56,7 +56,8 @@ func TestNightPageAPI(t *testing.T) {
 		links []string
 	}{
 		{"a player sees only pages they can open", campaigns.RolePlayer, []string{"town-square"}},
-		{"a scribe sees every linked page", campaigns.RoleScribe, []string{"secret-villain", "town-square"}},
+		{"a scribe sees what players see", campaigns.RoleScribe, []string{"town-square"}},
+		{"the owner sees every linked page", campaigns.RoleOwner, []string{"secret-villain", "town-square"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
