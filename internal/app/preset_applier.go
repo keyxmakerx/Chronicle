@@ -7,6 +7,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"html"
 	"log/slog"
 	"reflect"
 	"strings"
@@ -113,6 +114,10 @@ func (p *presetApplier) applyManifestPresets(ctx context.Context, campaignID, sy
 			existingByCategory[*et.PresetCategory] = et
 		}
 		existingByName[strings.ToLower(et.Name)] = et
+		// Types made before manifest text stopped being HTML-escaped on load
+		// were named "R&amp;D"; index them by the name as written too, so
+		// the preset "R&D" finds them rather than making a second type.
+		existingByName[strings.ToLower(html.UnescapeString(et.Name))] = et
 	}
 
 	fieldsAdded := 0
