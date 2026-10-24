@@ -57,6 +57,9 @@ DELETE	/admin/campaigns/:id/storage	site-admin	plugins/settings.(*Handler).Delet
 PUT	/admin/campaigns/:id/storage	site-admin	plugins/settings.(*Handler).SetCampaignStorageLimit	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
 DELETE	/admin/campaigns/:id/storage/bypass	site-admin	plugins/settings.(*Handler).ClearCampaignBypass	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
 PUT	/admin/campaigns/:id/storage/bypass	site-admin	plugins/settings.(*Handler).SetCampaignBypass	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
+GET	/admin/checkup	site-admin	plugins/admin.(*Handler).CheckupShield	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
+POST	/admin/checkup/run	site-admin	plugins/admin.(*Handler).RunCheckup	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
+POST	/admin/checkup/snooze	site-admin	plugins/admin.(*Handler).SnoozeCheckup	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
 GET	/admin/data-hygiene	site-admin	plugins/admin.(*Handler).DataHygiene	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin
 DELETE	/admin/data-hygiene/orphaned-api-keys	site-admin	plugins/admin.(*Handler).PurgeOrphanedAPIKeysAPI	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin > plugins/auth.RequireReauth
 DELETE	/admin/data-hygiene/orphaned-media	site-admin	plugins/admin.(*Handler).PurgeOrphanedMediaAPI	plugins/auth.RequireAuth > plugins/auth.RequireSiteAdmin > plugins/auth.RequireReauth

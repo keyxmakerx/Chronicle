@@ -101,6 +101,12 @@ templ App(title string) {
 				     <script>: boot.js sets htmx.config.allowScriptTags = false,
 				     which REMOVES script tags from swapped fragments rather than
 				     declining to run them. -->
+				if InSiteAdmin(ctx) {
+					<!-- The site check-up's reminder strip, filled out of band by the
+					     shield in the top bar. Outside #main-content so it stays put
+					     across admin pages. -->
+					<div id="checkup-strip"></div>
+				}
 				if IsAuthenticated(ctx) {
 					<div
 						class="cta-host"
@@ -860,6 +866,16 @@ templ Topbar() {
 					<span class="hidden sm:inline">Leave Site admin</span>
 					<span class="sm:hidden">Leave</span>
 				</a>
+				<!-- The site check-up's shield. It loads itself and refreshes after
+				     each admin page; the checkup widget opens its sheet. -->
+				<div
+					id="checkup-host"
+					class="checkup-host"
+					data-widget="checkup"
+					hx-get="/admin/checkup"
+					hx-trigger="load, every 300s, htmx:afterSettle from:#main-content"
+					hx-swap="innerHTML"
+				></div>
 			}
 			if InCampaign(ctx) {
 				<!-- Search trigger (magnifying glass) -->
