@@ -231,6 +231,9 @@
         });
         r.querySelectorAll('[data-dms-pane]').forEach(function (p) {
           p.hidden = p.getAttribute('data-dms-pane') !== name;
+          // A tab's widgets (the Fight tab's tracker) mount when it is first
+          // shown, since a mount here doesn't run boot.js's pass.
+          if (!p.hidden && window.Chronicle && Chronicle.mountWidgets) Chronicle.mountWidgets(p);
         });
       }
 
@@ -601,8 +604,16 @@
           });
       }
 
+      // clearStage tears the panel down, letting its widgets finish first
+      // (the Fight tab saves what was typed last).
+      function clearStage(stage) {
+        if (window.Chronicle && Chronicle.destroyWidget) stage.querySelectorAll('[data-widget]').forEach(Chronicle.destroyWidget);
+        stage.innerHTML = '';
+      }
+
       function mount(html) {
         var stage = st.overlay.querySelector('[data-dms-stage]');
+        clearStage(stage);
         stage.innerHTML = html;
         if (window.htmx) window.htmx.process(stage);
         restoreKept();
@@ -799,7 +810,7 @@
         stopAll();
         document.removeEventListener('keydown', onKey);
         var r = root(), o = st.overlay;
-        var done = function () { exitWindow(); o.hidden = true; o.querySelector('[data-dms-stage]').innerHTML = ''; openBtn.focus({ preventScroll: true }); };
+        var done = function () { exitWindow(); o.hidden = true; clearStage(o.querySelector('[data-dms-stage]')); openBtn.focus({ preventScroll: true }); };
         if (!r || reduce()) { done(); return; }
         st.closing = true;
         var side = narrow() ? 'rotateX' : 'rotateY';

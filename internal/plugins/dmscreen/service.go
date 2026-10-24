@@ -206,6 +206,13 @@ func (s *service) Build(ctx context.Context, campaignID string, v Viewer) (*View
 			view.Conditions = pickConditions(items, def.Conditions)
 		}
 	}
+	if s.src.Fight != nil && v.IsOwner() {
+		names := make([]string, 0, len(view.Conditions))
+		for _, c := range view.Conditions {
+			names = append(names, c.Name)
+		}
+		view.Fight = s.src.Fight.FightMount(campaignID, names)
+	}
 	return view, nil
 }
 

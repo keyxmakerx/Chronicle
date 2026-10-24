@@ -85,6 +85,16 @@ func TestPanel(t *testing.T) {
 				`id="dms-brew" data-dms-brew-pane`, `hidden`, "data-dms-brew-pv", `<div data-widget="homebrew-drawer"></div>`},
 		},
 		{
+			name:    "no fight source leaves the Fight tab out",
+			view:    View{CampaignID: "c1"},
+			notWant: []string{`data-dms-tab="fight"`, `data-dms-pane="fight"`},
+		},
+		{
+			name: "a fight source adds the Fight tab and a hidden pane around its content",
+			view: View{CampaignID: "c1", Fight: templ.Raw(`<div data-widget="encounter-run"></div>`)},
+			want: []string{`data-dms-tab="fight">Fight</button>`, `data-dms-pane="fight" hidden`, `<div data-widget="encounter-run"></div>`},
+		},
+		{
 			name: "more hidden than fit links to the Characters page",
 			view: View{CampaignID: "c1", Hidden: []HiddenView{{ID: "e9", Name: "Vosk"}}, HiddenMore: true},
 			want: []string{`href="/campaigns/c1/characters"`},

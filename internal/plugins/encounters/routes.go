@@ -23,3 +23,16 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.PUT("/encounters/:encid", h.Update)
 	cg.DELETE("/encounters/:encid", h.Delete)
 }
+
+// RegisterRunRoutes mounts the Fight tab's routes, with the same gates as
+// RegisterRoutes; the run service refuses anyone below Owner visibility.
+func RegisterRunRoutes(e *echo.Echo, h *RunHandler, campaignSvc campaigns.CampaignService, authSvc auth.AuthService) {
+	cg := e.Group("/campaigns/:id",
+		auth.RequireAuth(authSvc),
+		campaigns.RequireCampaignAccess(campaignSvc),
+	)
+	cg.GET("/encounter-run", h.Current)
+	cg.POST("/encounter-run", h.Start)
+	cg.PUT("/encounter-run", h.Save)
+	cg.DELETE("/encounter-run", h.End)
+}

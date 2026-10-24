@@ -76,6 +76,11 @@ type View struct {
 	// button out. Only the owner and co-DMs get it, since a recipe's rules
 	// are theirs to run. Not on the wire, for the same reason as Adventures.
 	Homebrew templ.Component `json:"-"`
+
+	// Fight fills the Fight tab; nil leaves the tab out. Only the owner and
+	// co-DMs get it, since the encounters behind it are theirs. Not on the
+	// wire, for the same reason as Adventures.
+	Fight templ.Component `json:"-"`
 }
 
 // DowntimeView is the downtime switch's state plus requests waiting on the GM.
