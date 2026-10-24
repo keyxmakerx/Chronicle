@@ -204,8 +204,8 @@ func (h *Handler) Backlinks(c echo.Context) error {
 		out.Notes = []NoteRef{}
 	}
 	if h.pageLinker != nil {
-		// Inline secrets are for scribes and owners, as on the entry route.
-		pages, err := h.pageLinker.PagesLinkingNote(ctx, cc.Campaign.ID, viewer, cc.MemberRole >= campaigns.RoleScribe, noteID)
+		// Inline secrets are for the owner and Co-DMs, as on the entry route.
+		pages, err := h.pageLinker.PagesLinkingNote(ctx, cc.Campaign.ID, viewer, cc.CanAuthorDmOnly(), noteID)
 		if err != nil {
 			return err
 		}

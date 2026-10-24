@@ -7,6 +7,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/labstack/echo/v4"
+
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/sanitize"
@@ -181,6 +183,20 @@ func authorizeOwnPageWrite(role campaigns.Role, entity *Entity, userID, campaign
 		return apperror.NewForbidden("insufficient permissions")
 	}
 	return nil
+}
+
+// requireOwnPageOrPageWrite guards the description and picture routes, which
+// open to players. Below Scribe it passes the request on, and the handler's
+// authorizeOwnPageWrite admits only the claimed owner; a Scribe or above
+// meets requirePageWrite, as on every other page write.
+func (h *Handler) requireOwnPageOrPageWrite(next echo.HandlerFunc) echo.HandlerFunc {
+	guarded := h.requirePageWrite(next)
+	return func(c echo.Context) error {
+		if cc := campaigns.GetCampaignContext(c); cc != nil && cc.MemberRole < campaigns.RoleScribe {
+			return next(c)
+		}
+		return guarded(c)
+	}
 }
 
 // ownerEntryWrite shapes a claimed owner's description save. The player's

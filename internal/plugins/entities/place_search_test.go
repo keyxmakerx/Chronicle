@@ -138,3 +138,28 @@ func asAppErr(err error, out **apperror.AppError) bool {
 	}
 	return ok
 }
+
+// TestSearchAPI_MarksRestrictedPages: link pickers mark a page not everyone
+// can read, so an author sees that linking it puts its name in front of
+// players who can't open it.
+func TestSearchAPI_MarksRestrictedPages(t *testing.T) {
+	repo := &mockEntityRepo{
+		searchFn: func(context.Context, string, string, []int, int, string, ListOptions) ([]Entity, int, error) {
+			return []Entity{
+				{ID: "open", Name: "Port Saltmere", CampaignID: "camp-1"},
+				{ID: "hidden", Name: "Captain Varo", CampaignID: "camp-1", IsPrivate: true},
+				{ID: "some", Name: "Kestrel's diary", CampaignID: "camp-1", Visibility: VisibilityCustom},
+				{ID: "gmcat", Name: "Plot", CampaignID: "camp-1", TypeDMOnly: true},
+			}, 4, nil
+		},
+	}
+	h := NewHandler(NewEntityService(repo, &mockEntityTypeRepo{}, &mockPermissionRepo{}))
+	out, _ := searchJSON(t, h, "q=va&pages=1")
+	want := map[string]any{"open": nil, "hidden": "dm_only", "some": "custom", "gmcat": "dm_only"}
+	for _, r := range out["results"].([]any) {
+		item := r.(map[string]any)
+		if got := item["restricted"]; got != want[item["id"].(string)] {
+			t.Errorf("%s restricted = %v, want %v", item["id"], got, want[item["id"].(string)])
+		}
+	}
+}

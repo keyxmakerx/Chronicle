@@ -101,10 +101,12 @@ const (
 )
 
 // The people. Roles are the promoted campaign role (player 1, scribe 2,
-// owner 3). editor is a player the owner gave edit on the page; viewer is a
-// player who can only read it.
+// owner 3, and a Co-DM is promoted to 3). editor is a player the owner gave
+// edit on the page; viewer is a player who can only read it. A Scribe sees
+// what players see.
 var (
 	owner  = PageFileViewer{UserID: "owner", Role: 3}
+	codm   = PageFileViewer{UserID: "codm", Role: 3}
 	scribe = PageFileViewer{UserID: "scribe", Role: 2}
 	editor = PageFileViewer{UserID: "editor", Role: 1}
 	viewer = PageFileViewer{UserID: "viewer", Role: 1}
@@ -136,13 +138,14 @@ func newPageFileFixture(t *testing.T) *pageFileFixture {
 	table := map[string]PageAccess{}
 	for _, p := range []string{pgOpen} {
 		table[accessKey(campA, p, "owner")] = PageAccess{CanView: true, CanEdit: true}
+		table[accessKey(campA, p, "codm")] = PageAccess{CanView: true, CanEdit: true}
 		table[accessKey(campA, p, "scribe")] = PageAccess{CanView: true, CanEdit: true}
 		table[accessKey(campA, p, "editor")] = PageAccess{CanView: true, CanEdit: true}
 		table[accessKey(campA, p, "viewer")] = PageAccess{CanView: true}
 	}
-	// A private page: only the GM tier sees it.
+	// A private page: only the owner and Co-DMs see it.
 	table[accessKey(campA, pgPriv, "owner")] = PageAccess{CanView: true, CanEdit: true}
-	table[accessKey(campA, pgPriv, "scribe")] = PageAccess{CanView: true, CanEdit: true}
+	table[accessKey(campA, pgPriv, "codm")] = PageAccess{CanView: true, CanEdit: true}
 	// A trashed page is seen by no one, the owner included (pgGone has no rows).
 	access := &fakeAccess{table: table}
 	binds := newMemPageFiles()
@@ -191,7 +194,8 @@ func TestPageFileService_Attach(t *testing.T) {
 		{"nobody attaches to a trashed page", owner, campA, pgGone, "map.pdf", pdf, false, http.StatusNotFound},
 		{"another campaign's page", owner, campB, pgOpen, "map.pdf", pdf, false, http.StatusNotFound},
 		{"owner marks GM only", owner, campA, pgOpen, "secret.pdf", pdf, true, 0},
-		{"scribe marks GM only", scribe, campA, pgOpen, "secret.pdf", pdf, true, 0},
+		{"co-dm marks GM only", codm, campA, pgOpen, "secret.pdf", pdf, true, 0},
+		{"scribe cannot mark GM only", scribe, campA, pgOpen, "secret.pdf", pdf, true, http.StatusForbidden},
 		{"editor-player cannot mark GM only", editor, campA, pgOpen, "secret.pdf", pdf, true, http.StatusForbidden},
 		{"html is refused", owner, campA, pgOpen, "page.html", []byte("<html><script>alert(1)</script>"), false, http.StatusBadRequest},
 		{"svg is refused", owner, campA, pgOpen, "logo.svg", []byte(`<svg onload="alert(1)"/>`), false, http.StatusBadRequest},
@@ -265,11 +269,13 @@ func TestPageFileService_List(t *testing.T) {
 		wantStatus int
 	}{
 		{"owner sees all and manages", owner, pgOpen, []string{open.ID, secret.ID}, true, true, 0},
-		{"scribe sees all and manages", scribe, pgOpen, []string{open.ID, secret.ID}, true, true, 0},
+		{"co-dm sees all and manages", codm, pgOpen, []string{open.ID, secret.ID}, true, true, 0},
+		{"scribe sees only visible files and may attach", scribe, pgOpen, []string{open.ID}, true, false, 0},
 		{"editor-player sees only visible files but may attach", editor, pgOpen, []string{open.ID}, true, false, 0},
 		{"view-only player sees only visible files", viewer, pgOpen, []string{open.ID}, false, false, 0},
 		{"private page: a player gets not-found", editor, pgPriv, nil, false, false, http.StatusNotFound},
-		{"private page: scribe sees its file", scribe, pgPriv, []string{other.ID}, true, true, 0},
+		{"private page: co-dm sees its file", codm, pgPriv, []string{other.ID}, true, true, 0},
+		{"private page: a scribe gets not-found", scribe, pgPriv, nil, false, false, http.StatusNotFound},
 		{"trashed page: no one, owner included", owner, pgGone, nil, false, false, http.StatusNotFound},
 	}
 	for _, tt := range tests {
@@ -322,11 +328,13 @@ func TestPageFileService_Open(t *testing.T) {
 		{"editor-player opens a visible file", editor, campA, pgOpen, open, 0},
 		{"view-only player opens a visible file", viewer, campA, pgOpen, open, 0},
 		{"owner opens a GM-only file", owner, campA, pgOpen, secret, 0},
-		{"scribe opens a GM-only file", scribe, campA, pgOpen, secret, 0},
+		{"co-dm opens a GM-only file", codm, campA, pgOpen, secret, 0},
+		{"scribe gets not-found for a GM-only file", scribe, campA, pgOpen, secret, http.StatusNotFound},
 		{"editor-player gets not-found for a GM-only file", editor, campA, pgOpen, secret, http.StatusNotFound},
 		{"view-only player gets not-found for a GM-only file", viewer, campA, pgOpen, secret, http.StatusNotFound},
 		{"player gets not-found for a file on a private page", editor, campA, pgPriv, onPrivate, http.StatusNotFound},
-		{"scribe opens a file on a private page", scribe, campA, pgPriv, onPrivate, 0},
+		{"co-dm opens a file on a private page", codm, campA, pgPriv, onPrivate, 0},
+		{"scribe gets not-found for a file on a private page", scribe, campA, pgPriv, onPrivate, http.StatusNotFound},
 		{"a file asked for through a different page is not found", owner, campA, pgPriv, open, http.StatusNotFound},
 		{"a file asked for through another campaign is not found", owner, campB, pgOpen, open, http.StatusNotFound},
 		{"an unknown file is not found", owner, campA, pgOpen, &PageFile{ID: "nope"}, http.StatusNotFound},
@@ -412,7 +420,8 @@ func TestPageFileService_SetGMOnly(t *testing.T) {
 		want int
 	}{
 		{"owner marks", owner, 0},
-		{"scribe marks", scribe, 0},
+		{"co-dm marks", codm, 0},
+		{"scribe cannot", scribe, http.StatusForbidden},
 		{"editor-player cannot", editor, http.StatusForbidden},
 		{"view-only player cannot", viewer, http.StatusForbidden},
 	}

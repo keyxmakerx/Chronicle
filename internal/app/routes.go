@@ -69,6 +69,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/systems"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"github.com/keyxmakerx/chronicle/internal/templates/pages"
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
 	ws "github.com/keyxmakerx/chronicle/internal/websocket"
 	"github.com/keyxmakerx/chronicle/internal/widgets/entity_notes"
 	"github.com/keyxmakerx/chronicle/internal/widgets/notes"
@@ -4087,6 +4088,22 @@ func (a *App) RegisterRoutes() {
 		now:     time.Now,
 	}, campaignService, authService)
 
+	// The home page's "Last night: write it up" card, wired here for the same
+	// reason: the campaign home may not import the sessions plugin.
+	registerLastNightRoutes(e, &lastNightHandler{
+		nights:  sessionsService,
+		addons:  addonService,
+		healthy: func(slug string) bool { return a.PluginHealth == nil || a.PluginHealth.IsHealthy(slug) },
+		now:     time.Now,
+		zone: func(ctx context.Context, userID string) *time.Location {
+			u, err := authService.GetUser(ctx, userID)
+			if err != nil || u == nil || u.Timezone == nil {
+				return nil
+			}
+			return timeutil.LoadLocation(*u.Timezone)
+		},
+	}, campaignService, authService)
+
 	// Timeline plugin: interactive visual timelines with zoom levels and entity grouping.
 	timelineRepo := timeline.NewTimelineRepository(a.DB)
 	// Wires the calendar selector dropdown, event picker and era
@@ -4919,6 +4936,14 @@ func (a *App) RegisterRoutes() {
 		slog.Info("turned jot notes on where the journal was on", slog.Int("campaigns", n))
 	}
 
+	// One-time: Scribes now see what players see, so owners are told which
+	// of their Scribes that changes.
+	if n, err := noteScribeAccessOnce(context.Background(), settingsRepo, campaignService, sessionsService); err != nil {
+		slog.Error("sending the scribe access note failed", slog.String("error", err.Error()))
+	} else if n > 0 {
+		slog.Info("told owners their scribes now see what players see", slog.Int("campaigns", n))
+	}
+
 	campaignHandler.SetAuditLogger(&campaignAuditAdapter{svc: auditService})
 	campaignHandler.SetAddonLister(&addonListerAdapter{svc: addonService})
 	campaignHandler.SetSheetChecker(campaignSheetChecker{addons: addonService})
@@ -5524,7 +5549,7 @@ func (a *App) RegisterRoutes() {
 			// their membership role, so the DM-only Adventures category is
 			// theirs to see; an owner viewing as a player is not.
 			sidebarRole := effectiveRole
-			if cc.IsDmGranted && !viewingAsPlayer && sidebarRole < int(campaigns.RoleScribe) {
+			if cc.IsDmGranted && !viewingAsPlayer && sidebarRole < int(campaigns.RoleOwner) {
 				sidebarRole = int(campaigns.RoleOwner)
 			}
 			if typesErr == nil {

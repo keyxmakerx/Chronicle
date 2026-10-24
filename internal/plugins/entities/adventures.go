@@ -39,16 +39,18 @@ func (et *EntityType) DMOnly() bool {
 
 // ViewerSeesType reports whether a viewer with the given visibility role may
 // know the category exists: every category except a DM-only one is open to
-// everyone who can view the campaign, and a DM-only one needs Scribe or above
-// (an owner and a member with DM access arrive here as Owner).
+// everyone who can view the campaign, and a DM-only one is for the owner and
+// Co-DMs (a member with DM access arrives here as Owner). A Scribe sees what
+// players see.
 func ViewerSeesType(et *EntityType, role int) bool {
-	return !et.DMOnly() || role >= permissions.RoleScribe
+	return !et.DMOnly() || role >= permissions.RoleOwner
 }
 
-// TypesForViewer drops the categories the viewer may not know exist. The DM
-// team gets the input slice back as is; anyone else gets a new slice.
+// TypesForViewer drops the categories the viewer may not know exist. The
+// owner and Co-DMs get the input slice back as is; anyone else gets a new
+// slice.
 func TypesForViewer(types []EntityType, role int) []EntityType {
-	if role >= permissions.RoleScribe {
+	if role >= permissions.RoleOwner {
 		return types
 	}
 	out := make([]EntityType, 0, len(types))
@@ -61,15 +63,16 @@ func TypesForViewer(types []EntityType, role int) []EntityType {
 }
 
 // dmOnlyTypeClause is the SQL fragment that keeps pages of a DM-only category
-// away from a viewer below Scribe. It sits in visibilityFilter, the one
+// away from a viewer below Owner. It sits in visibilityFilter, the one
 // predicate every list, search, count, mention, relation and ancestor read
 // shares, so a page of the category cannot leak past a read that remembers to
-// apply the page's own visibility but not the category's. It takes one
-// argument, the viewer's role, and expects the entities table aliased as e.
-const dmOnlyTypeClause = ` AND (? >= 2 OR NOT EXISTS (
+// apply the page's own visibility but not the category's. visibilityFilter
+// returns before it for owners and Co-DMs, so it takes no arguments, and it
+// expects the entities table aliased as e.
+const dmOnlyTypeClause = ` AND NOT EXISTS (
 		SELECT 1 FROM entity_types dmt
 		WHERE dmt.id = e.entity_type_id AND dmt.preset_category = '` + PresetCategoryAdventures + `'
-	))`
+	)`
 
 // withAdventures appends the Adventures category after the last type of a
 // seed list, so every genre and the standard set start with it.

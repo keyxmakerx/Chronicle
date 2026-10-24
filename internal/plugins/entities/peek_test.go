@@ -74,7 +74,7 @@ func TestPeek_Access(t *testing.T) {
 		attrsOff     bool
 	}{
 		{"owner sees GM-only text and fields", campaigns.RoleOwner, true, "c1", false, true, false},
-		{"scribe sees GM-only text and fields", campaigns.RoleScribe, true, "c1", false, true, false},
+		{"scribe sees the page without GM-only content, as players do", campaigns.RoleScribe, true, "c1", false, false, false},
 		{"player allowed sees page without GM-only content", campaigns.RolePlayer, true, "c1", false, false, false},
 		{"player denied on private page gets not found", campaigns.RolePlayer, false, "c1", true, false, false},
 		{"page from another campaign gets not found", campaigns.RoleOwner, true, "other", true, false, false},

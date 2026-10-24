@@ -20,8 +20,8 @@ type Viewer struct {
 	Role int
 }
 
-// IsOwner reports whether the viewer may change owner-only game state such
-// as the downtime switch.
+// IsOwner reports whether the viewer is the owner or a Co-DM, who alone may
+// open the screen and change game state such as the downtime switch.
 func (v Viewer) IsOwner() bool { return v.Role >= 3 }
 
 // View is everything the panel template draws. The Foundry module gets the

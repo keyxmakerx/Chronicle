@@ -334,7 +334,7 @@ Chronicle.register('permissions', {
 
       var modes = [
         { value: 'everyone', icon: 'fa-globe', label: 'Everyone', desc: 'All campaign members can view; Scribes can edit.' },
-        { value: 'dm_only', icon: 'fa-lock', label: Chronicle.gmTerm() + ' Only', desc: 'Only Scribes and the campaign owner can see this page.' },
+        { value: 'dm_only', icon: 'fa-lock', label: Chronicle.gmTerm() + ' Only', desc: 'Only the campaign owner and Co-' + Chronicle.gmTerm() + 's can see this page.' },
         { value: 'custom', icon: 'fa-shield-halved', label: 'Custom', desc: 'Choose exactly who can view or edit this page.' }
       ];
 

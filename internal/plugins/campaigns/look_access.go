@@ -76,10 +76,10 @@ func (p LookPart) Access(ap *Appearance) string {
 	return p.Default
 }
 
-// isCoDM is the DM team: scribes and the owner, plus any member the owner
-// gave DM access. It matches who may open the DM Screen.
+// isCoDM is the DM team: the owner and any member the owner gave DM access.
+// It matches who may open the DM Screen; a Scribe sees what players see.
 func isCoDM(cc *CampaignContext) bool {
-	return cc.MemberRole >= RoleScribe || cc.IsDmGranted
+	return cc.CanAuthorDmOnly()
 }
 
 // LookAccessAllows reports whether a viewer falls inside an access setting.

@@ -379,7 +379,16 @@ func (h *Handler) Index(c echo.Context) error {
 		slog.Warn("failed to load entity counts for list page", slog.Any("error", err))
 	}
 
-	entities, total, err := h.service.List(c.Request().Context(), campaignID, typeID, role, userID, opts)
+	// The search box filters this same page in place; one character is
+	// treated as no query, matching Search's two-character floor.
+	var entities []Entity
+	var total int
+	if q := strings.TrimSpace(c.QueryParam("q")); len(q) >= 2 {
+		opts.Query = q
+		entities, total, err = h.service.Search(c.Request().Context(), campaignID, q, typeID, role, userID, opts)
+	} else {
+		entities, total, err = h.service.List(c.Request().Context(), campaignID, typeID, role, userID, opts)
+	}
 	if err != nil {
 		return err
 	}
@@ -390,9 +399,10 @@ func (h *Handler) Index(c echo.Context) error {
 		for i := range entities {
 			entityIDs[i] = entities[i].ID
 		}
-		// Scribes+ see all tags including dm_only; Players see only public tags.
+		// The owner and Co-DMs see dm_only tags; Scribes and Players see only
+		// public tags.
 		cc := campaigns.GetCampaignContext(c)
-		includeDmOnly := cc != nil && (cc.MemberRole >= campaigns.RoleScribe || cc.IsDmGranted)
+		includeDmOnly := cc != nil && cc.CanAuthorDmOnly()
 		if tagsMap, err := h.tagFetcher.GetEntityTagsBatch(c.Request().Context(), entityIDs, includeDmOnly); err == nil {
 			for i := range entities {
 				if t, ok := tagsMap[entities[i].ID]; ok {
@@ -445,6 +455,7 @@ func (h *Handler) NewForm(c echo.Context) error {
 	}
 
 	entityTypes, _ := h.service.GetEntityTypes(c.Request().Context(), cc.Campaign.ID)
+	entityTypes = TypesForViewer(entityTypes, cc.VisibilityRole())
 	csrfToken := middleware.GetCSRFToken(c)
 	preselect, _ := strconv.Atoi(c.QueryParam("type"))
 
@@ -530,7 +541,10 @@ func (h *Handler) Create(c echo.Context) error {
 	if req.IsPrivate {
 		requestedPrivacy = patch.Of(true)
 	}
-	isPrivate := cc.Campaign.ParseSettings().ResolveNewEntityPrivacy(requestedPrivacy)
+	isPrivate := cc.NewPagePrivacy(requestedPrivacy)
+	if err := h.requireCreatableType(c, cc, req.EntityTypeID); err != nil {
+		return err
+	}
 
 	input := CreateEntityInput{
 		Name:         req.Name,
@@ -544,6 +558,7 @@ func (h *Handler) Create(c echo.Context) error {
 	entity, err := h.service.Create(c.Request().Context(), cc.Campaign.ID, userID, input)
 	if err != nil {
 		entityTypes, _ := h.service.GetEntityTypes(c.Request().Context(), cc.Campaign.ID)
+		entityTypes = TypesForViewer(entityTypes, cc.VisibilityRole())
 		csrfToken := middleware.GetCSRFToken(c)
 		errMsg := apperror.UserMessage(err, "failed to create entity")
 		// Preserve the same variant-aware picker across error re-render so a
@@ -618,7 +633,7 @@ func (h *Handler) Sheet(c echo.Context) error {
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
-	if cc.MemberRole < campaigns.RoleScribe && !cc.IsDmGranted {
+	if !cc.CanAuthorDmOnly() {
 		return apperror.NewNotFound("entity not found")
 	}
 	p, err := h.prepareShow(c)
@@ -881,11 +896,24 @@ func (h *Handler) Update(c echo.Context) error {
 		FieldsData:        fieldsData,
 		ExpectedUpdatedAt: req.ExpectedUpdatedAt,
 	}
+	// A writer served the player copy keeps the hidden parts as stored: text
+	// with hidden parts is left alone, and hidden fields keep their values.
+	userID := auth.GetUserID(c)
+	if !cc.CanAuthorDmOnly() {
+		if textLocked(cc, entity.Entry, entity.EntryHTML) {
+			input.Entry = patch.Absent[string]()
+		}
+		if et, err := h.service.GetEntityTypeByID(c.Request().Context(), entity.EntityTypeID); err == nil {
+			input.FieldsData = keepRestrictedFields(entity.FieldsData, fieldsData, restrictedFieldKeys(entity, et, false, entity.IsOwnedBy(userID)))
+		}
+	}
 
 	_, err = h.service.Update(webWriteContext(c), entityID, input)
 	if err != nil {
 		entityTypes, _ := h.service.GetEntityTypes(c.Request().Context(), cc.Campaign.ID)
+		entityTypes = TypesForViewer(entityTypes, cc.VisibilityRole())
 		entityType, _ := h.service.GetEntityTypeByID(c.Request().Context(), entity.EntityTypeID)
+		entity = servedCopy(cc, entity, entityType, userID)
 		csrfToken := middleware.GetCSRFToken(c)
 		errMsg := apperror.UserMessage(err, "failed to update entity")
 		// Fetch parent for re-rendering form.
@@ -1063,7 +1091,7 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 			for i, e := range results {
 				ids[i] = e.ID
 			}
-			includeDM := role >= int(campaigns.RoleScribe)
+			includeDM := role >= int(campaigns.RoleOwner)
 			tagMap, _ = h.tagFetcher.GetEntityTagsBatch(c.Request().Context(), ids, includeDM)
 		}
 
@@ -1085,6 +1113,13 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 			}
 			if e.ParentID != nil {
 				item["parent_id"] = *e.ParentID
+			}
+			// Link pickers mark a page not everyone can read, so an author
+			// knows a link to it would show its name to players who can't
+			// open it. Only pages this viewer can already see are listed,
+			// and its page shows the same state.
+			if state := baseVisibilityState(&results[i]); state != VisStateEveryone {
+				item["restricted"] = state
 			}
 			items[i] = item
 		}
@@ -1151,8 +1186,8 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 			hiddenIDs[id] = true
 		}
 
-		// Players don't see individually hidden entities at all.
-		if role < int(campaigns.RoleScribe) && len(hiddenIDs) > 0 {
+		// Players and Scribes don't see individually hidden entities at all.
+		if role < int(campaigns.RoleOwner) && len(hiddenIDs) > 0 {
 			filtered := results[:0]
 			for _, e := range results {
 				if !hiddenIDs[e.ID] {
@@ -1263,11 +1298,15 @@ func (h *Handler) QuickCreateAPI(c echo.Context) error {
 		req.EntityTypeID = types[0].ID
 	}
 
+	if err := h.requireCreatableType(c, cc, req.EntityTypeID); err != nil {
+		return err
+	}
+
 	userID := auth.GetUserID(c)
 	input := CreateEntityInput{
 		Name:         req.Name,
 		EntityTypeID: req.EntityTypeID,
-		IsPrivate:    cc.Campaign.ParseSettings().ResolveNewEntityPrivacy(req.IsPrivate),
+		IsPrivate:    cc.NewPagePrivacy(req.IsPrivate),
 	}
 
 	entity, err := h.service.Create(c.Request().Context(), cc.Campaign.ID, userID, input)
@@ -1309,6 +1348,7 @@ func (h *Handler) BulkMoveAPI(c echo.Context) error {
 	}
 
 	ctx := c.Request().Context()
+	req.EntityIDs = h.editablePageIDs(c, cc, req.EntityIDs)
 	for i, eid := range req.EntityIDs {
 		if err := h.service.ReorderEntity(ctx, cc.Campaign.ID, eid, req.ParentID, req.ParentNodeID, i); err != nil {
 			slog.Warn("bulk move: entity failed",
@@ -1346,6 +1386,14 @@ func (h *Handler) BulkChangeTypeAPI(c echo.Context) error {
 		return apperror.NewBadRequest("maximum 200 entities per request")
 	}
 
+	// A Scribe changes only pages they can edit, and cannot move pages into
+	// the DM-only category, where they would no longer see them.
+	if !cc.CanAuthorDmOnly() {
+		if et, err := h.service.GetEntityTypeByID(c.Request().Context(), req.EntityTypeID); err == nil && et.DMOnly() {
+			return apperror.NewForbidden("only the owner or a Co-DM can move pages into this category")
+		}
+		req.EntityIDs = h.editablePageIDs(c, cc, req.EntityIDs)
+	}
 	updated, err := h.service.BulkUpdateType(c.Request().Context(), cc.Campaign.ID, req.EntityIDs, req.EntityTypeID)
 	if err != nil {
 		return err
@@ -1396,7 +1444,7 @@ func (h *Handler) BulkTagsAPI(c echo.Context) error {
 		if err != nil || entity.CampaignID != cc.Campaign.ID {
 			continue
 		}
-		if access, err := h.service.CheckEntityAccess(ctx, eid, role, userID); err != nil || !access.CanView {
+		if access, err := h.service.CheckEntityAccess(ctx, eid, role, userID); err != nil || !access.CanEdit {
 			continue
 		}
 		switch req.Action {
@@ -1452,6 +1500,11 @@ func (h *Handler) BulkVisibilityAPI(c echo.Context) error {
 	}
 	if len(req.EntityIDs) == 0 {
 		return apperror.NewBadRequest("no entities selected")
+	}
+	// Hiding and showing pages is the owner's and Co-DMs'; a Scribe sees what
+	// players see.
+	if !cc.CanAuthorDmOnly() {
+		return apperror.NewForbidden("only the owner or a Co-DM can hide or show pages")
 	}
 
 	ctx := c.Request().Context()
@@ -1928,11 +1981,12 @@ func (h *Handler) GetEntry(c echo.Context) error {
 		return apperror.NewNotFound("entity not found")
 	}
 
-	// Strip inline secrets for non-scribe users so players never receive
-	// GM-only text. Owners and scribes see secrets with a visual indicator.
+	// Strip inline secrets for everyone but the owner and Co-DMs, so players
+	// and Scribes never receive GM-only text. The owner and Co-DMs see
+	// secrets with a visual indicator.
 	entry := entity.Entry
 	entryHTML := entity.EntryHTML
-	if cc.MemberRole < campaigns.RoleScribe {
+	if !cc.CanAuthorDmOnly() {
 		if entry != nil {
 			stripped := sanitize.StripSecretsJSON(*entry)
 			entry = &stripped
@@ -1948,10 +2002,14 @@ func (h *Handler) GetEntry(c echo.Context) error {
 		"entry_html": entryHTML,
 	}
 	// rev is what the editor saves against, so a save on top of someone
-	// else's newer text is caught. Only editors save.
+	// else's newer text is caught. Only editors save. locked tells an editor
+	// served the player copy that the text is not theirs to change.
 	if cc.MemberRole >= campaigns.RoleScribe {
 		if rev, err := h.service.EntryRev(c.Request().Context(), entity.ID); err == nil {
 			response["rev"] = rev
+		}
+		if textLocked(cc, entity.Entry, entity.EntryHTML) {
+			response["locked"] = true
 		}
 	}
 	return c.JSON(http.StatusOK, response)
@@ -1988,6 +2046,9 @@ func (h *Handler) UpdateEntryAPI(c echo.Context) error {
 	}
 	if !access.CanEdit && !owner {
 		return apperror.NewForbidden("you can't edit this page")
+	}
+	if textLocked(cc, entity.Entry, entity.EntryHTML) {
+		return apperror.NewForbidden(entryLockedMessage)
 	}
 
 	var body struct {
@@ -2058,7 +2119,7 @@ func (h *Handler) GetPlayerNotes(c echo.Context) error {
 	}
 
 	notes, notesHTML := entity.PlayerNotes, entity.PlayerNotesHTML
-	if cc.MemberRole < campaigns.RoleScribe {
+	if !cc.CanAuthorDmOnly() {
 		// Player notes are meant for players, but the API accepts any editor
 		// content, so GM-only parts are removed the same way as for the entry.
 		if notes != nil {
@@ -2071,10 +2132,14 @@ func (h *Handler) GetPlayerNotes(c echo.Context) error {
 		}
 	}
 
-	return c.JSON(http.StatusOK, map[string]any{
+	resp := map[string]any{
 		"player_notes":      notes,
 		"player_notes_html": notesHTML,
-	})
+	}
+	if cc.MemberRole >= campaigns.RoleScribe && textLocked(cc, entity.PlayerNotes, entity.PlayerNotesHTML) {
+		resp["locked"] = true
+	}
+	return c.JSON(http.StatusOK, resp)
 }
 
 // UpdatePlayerNotesAPI updates only the entity's player-facing notes.
@@ -2092,6 +2157,9 @@ func (h *Handler) UpdatePlayerNotesAPI(c echo.Context) error {
 	}
 	if entity.CampaignID != cc.Campaign.ID {
 		return apperror.NewNotFound("entity not found")
+	}
+	if textLocked(cc, entity.PlayerNotes, entity.PlayerNotesHTML) {
+		return apperror.NewForbidden(entryLockedMessage)
 	}
 
 	var body struct {
@@ -2160,10 +2228,10 @@ func (h *Handler) GetFieldsAPI(c echo.Context) error {
 	// its schema (and hide the box); only the restricted values are
 	// withheld. Gate on the full type schema
 	// (et.Fields), not effectiveFields, so a per-entity "hidden" override
-	// can't leave a restricted value un-stripped. Scribe+ (co-GM) and
+	// can't leave a restricted value un-stripped. The owner, Co-DMs and
 	// Foundry Bearer callers keep full data — same bar as inline secrets;
 	// an owner-only value is also kept for the entity's own claimed owner.
-	canSeeGM := cc.MemberRole >= campaigns.RoleScribe
+	canSeeGM := cc.CanAuthorDmOnly()
 	isOwner := entity.IsOwnedBy(userID)
 	visible := FilterRestrictedFields(entity.FieldsData, et.Fields, canSeeGM, isOwner)
 	response := map[string]any{
@@ -2261,12 +2329,25 @@ func (h *Handler) UpdateFieldsAPI(c echo.Context) error {
 		return err
 	}
 
+	// A Scribe is not served the hidden fields, so their save neither changes
+	// nor clears them.
+	fieldsData := body.FieldsData
+	if cc.MemberRole >= campaigns.RoleScribe && !cc.CanAuthorDmOnly() {
+		et, err := h.service.GetEntityTypeByID(c.Request().Context(), entity.EntityTypeID)
+		if err != nil {
+			return err
+		}
+		hidden := restrictedFieldKeys(entity, et, false, entity.IsOwnedBy(auth.GetUserID(c)))
+		fieldsPatch = dropRestrictedFields(fieldsPatch, hidden)
+		fieldsData = keepRestrictedFields(entity.FieldsData, fieldsData, hidden)
+	}
+
 	var saveErr error
 	if body.FieldsPatch != nil {
 		patch := fieldsPatch
 		saveErr = h.service.MergeFields(webWriteContext(c), entityID, patch)
 	} else {
-		saveErr = h.service.UpdateFields(webWriteContext(c), entityID, body.FieldsData)
+		saveErr = h.service.UpdateFields(webWriteContext(c), entityID, fieldsData)
 	}
 	if saveErr != nil {
 		return saveErr
@@ -2454,7 +2535,7 @@ func (h *Handler) PreviewAPI(c echo.Context) error {
 
 	var entryExcerpt string
 	if cfg.ShowEntry && entity.EntryHTML != nil {
-		entryExcerpt = previewExcerpt(*entity.EntryHTML, cc.MemberRole >= campaigns.RoleScribe)
+		entryExcerpt = previewExcerpt(*entity.EntryHTML, cc.CanAuthorDmOnly())
 	}
 
 	// Resolve image path when popup config allows it.
@@ -2470,7 +2551,7 @@ func (h *Handler) PreviewAPI(c echo.Context) error {
 	// campaign route.
 	var fieldsData map[string]any
 	if entityType != nil {
-		fieldsData = FilterRestrictedFields(entity.FieldsData, entityType.Fields, cc.MemberRole >= campaigns.RoleScribe, entity.IsOwnedBy(userID))
+		fieldsData = FilterRestrictedFields(entity.FieldsData, entityType.Fields, cc.CanAuthorDmOnly(), entity.IsOwnedBy(userID))
 	}
 
 	var tokenPath string
@@ -3700,8 +3781,9 @@ func (h *Handler) BacklinksFragment(c echo.Context) error {
 	role := cc.VisibilityRole()
 	userID := auth.GetUserID(c)
 	// Same bar as inline secrets (GetEntry) and GM field values (GetFieldsAPI):
-	// Scribe+ sees secret text in snippets, everyone else gets it stripped.
-	canSeeGM := cc.MemberRole >= campaigns.RoleScribe
+	// the owner and Co-DMs see secret text in snippets, everyone else gets it
+	// stripped.
+	canSeeGM := cc.CanAuthorDmOnly()
 
 	entity, err := h.service.GetByID(ctx, entityID)
 	if err != nil {
@@ -3967,7 +4049,7 @@ func (h *Handler) buildHeroBuilder(c echo.Context, cc *campaigns.CampaignContext
 		slog.Warn("cast page: hero builder types failed", slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", err))
 		return nil
 	}
-	heroes := builderHeroes(c.Request().Context(), yours, charTypes, types, cc.MemberRole >= campaigns.RoleScribe)
+	heroes := builderHeroes(c.Request().Context(), yours, charTypes, types, cc.CanAuthorDmOnly())
 	if len(heroes) == 0 && !access.Allowed {
 		return nil
 	}
@@ -4600,16 +4682,20 @@ func (h *Handler) AssignMap(c echo.Context) error {
 	return c.JSON(http.StatusOK, updated)
 }
 
-// requirePlayerCanView keeps a claimed owner's identity write to pages they
-// can still open: a GM can hide a claimed character from its player, and the
-// claim alone must not outlive that.
+// requirePlayerCanView keeps a write to pages the writer can still open: a
+// GM can hide a claimed character from its player, and the claim alone must
+// not outlive that. A Scribe sees what players see, so the same holds for
+// them, and they must also be allowed to edit the page.
 func (h *Handler) requirePlayerCanView(c echo.Context, cc *campaigns.CampaignContext, entity *Entity) error {
-	if cc.MemberRole >= campaigns.RoleScribe {
+	if cc.CanAuthorDmOnly() {
 		return nil
 	}
 	access, err := h.service.CheckEntityAccess(c.Request().Context(), entity.ID, int(cc.VisibilityRole()), auth.GetUserID(c))
 	if err != nil || !access.CanView {
 		return apperror.NewNotFound("entity not found")
+	}
+	if cc.MemberRole >= campaigns.RoleScribe && !access.CanEdit {
+		return apperror.NewForbidden("you can't edit this page")
 	}
 	return nil
 }

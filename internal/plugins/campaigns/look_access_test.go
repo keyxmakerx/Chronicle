@@ -32,7 +32,8 @@ func TestLookAccessAllows(t *testing.T) {
 		{"owner only: player", RolePlayer, false, true, LookAccessOwner, false},
 		{"owner only: dm-granted player", RolePlayer, true, true, LookAccessOwner, false},
 		{"co-dm: owner", RoleOwner, false, true, LookAccessCoDM, true},
-		{"co-dm: scribe", RoleScribe, false, true, LookAccessCoDM, true},
+		{"co-dm: scribe (sees what players see)", RoleScribe, false, true, LookAccessCoDM, false},
+		{"co-dm: dm-granted scribe", RoleScribe, true, true, LookAccessCoDM, true},
 		{"co-dm: dm-granted player", RolePlayer, true, true, LookAccessCoDM, true},
 		{"co-dm: plain player", RolePlayer, false, true, LookAccessCoDM, false},
 		{"everyone: owner", RoleOwner, false, true, LookAccessEveryone, true},
@@ -87,7 +88,8 @@ func TestMayPickByRoleAndSetting(t *testing.T) {
 		dm      bool
 	}{
 		{"player, defaults", RolePlayer, false, nil, true, false},
-		{"scribe, defaults", RoleScribe, false, nil, true, true},
+		{"scribe, defaults", RoleScribe, false, nil, true, false},
+		{"co-dm, defaults", RoleScribe, true, nil, true, true},
 		{"dm-granted player, defaults", RolePlayer, true, nil, true, true},
 		// The owner's pick is the campaign look itself.
 		{"owner, defaults", RoleOwner, false, nil, false, false},
@@ -196,9 +198,10 @@ func TestValidateLookPick(t *testing.T) {
 		{"bad sheet value", RolePlayer, false, nil, "sheet", "gothic", true},
 		{"unknown part", RolePlayer, false, nil, "colours", "x", true},
 		{"player cannot pick dmscreen", RolePlayer, false, nil, "dmscreen", "sharp", true},
-		{"scribe picks dmscreen", RoleScribe, false, nil, "dmscreen", "sharp", false},
+		{"scribe cannot pick dmscreen", RoleScribe, false, nil, "dmscreen", "sharp", true},
+		{"co-dm picks dmscreen", RoleScribe, true, nil, "dmscreen", "sharp", false},
 		{"dm-granted player picks dmscreen", RolePlayer, true, nil, "dmscreen", "ornate", false},
-		{"bad kit value", RoleScribe, false, nil, "dmscreen", "parchment", true},
+		{"bad kit value", RoleScribe, true, nil, "dmscreen", "parchment", true},
 		{"narrowed sheet refuses player", RolePlayer, false, &Appearance{AccessSheet: LookAccessOwner}, "sheet", "night", true},
 		{"narrowed sheet still lets reset be refused too", RolePlayer, false, &Appearance{AccessSheet: LookAccessCoDM}, "sheet", "", true},
 		{"owner uses Customize", RoleOwner, false, nil, "sheet", "night", true},
@@ -225,9 +228,9 @@ func TestAppliedLookPicksIgnoresNarrowedAccess(t *testing.T) {
 		ap   *Appearance
 		want map[string]string
 	}{
-		{"scribe, defaults: both count", RoleScribe, nil, map[string]string{"sheet": "night", "dmscreen": "sharp"}},
+		{"scribe, defaults: only sheet", RoleScribe, nil, map[string]string{"sheet": "night"}},
 		{"player, defaults: only sheet", RolePlayer, nil, map[string]string{"sheet": "night"}},
-		{"scribe, sheet narrowed to owner", RoleScribe, &Appearance{AccessSheet: LookAccessOwner}, map[string]string{"dmscreen": "sharp"}},
+		{"scribe, sheet narrowed to owner", RoleScribe, &Appearance{AccessSheet: LookAccessOwner}, nil},
 		{"scribe, both narrowed", RoleScribe, &Appearance{AccessSheet: LookAccessOwner, AccessDmScreen: LookAccessOwner}, nil},
 		{"owner never uses a pick", RoleOwner, nil, nil},
 	}

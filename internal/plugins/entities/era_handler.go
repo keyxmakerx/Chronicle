@@ -237,14 +237,17 @@ func (h *Handler) GetEraEntryAPI(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	entry, entryHTML := t.entity.Entry, t.entity.EntryHTML
+	stored, storedHTML := t.entity.Entry, t.entity.EntryHTML
 	if v.Entry != nil {
-		entry, entryHTML = v.Entry, v.EntryHTML
+		stored, storedHTML = v.Entry, v.EntryHTML
 	}
-	entry, entryHTML = stripEntryFor(t.cc, entry, entryHTML)
+	entry, entryHTML := stripEntryFor(t.cc, stored, storedHTML)
 	resp := map[string]any{"entry": entry, "entry_html": entryHTML}
 	if t.cc.MemberRole >= campaigns.RoleScribe {
 		resp["rev"] = v.EntryRev
+		if textLocked(t.cc, stored, storedHTML) {
+			resp["locked"] = true
+		}
 	}
 	return c.JSON(http.StatusOK, resp)
 }
@@ -259,6 +262,19 @@ func (h *Handler) UpdateEraEntryAPI(c echo.Context) error {
 	}
 	if err := t.requireWrite(); err != nil {
 		return err
+	}
+	// The version's text, or the usual text it starts from, may have hidden
+	// parts a Scribe's copy left out.
+	v, err := h.eraVersionOf(c, t)
+	if err != nil {
+		return err
+	}
+	stored, storedHTML := t.entity.Entry, t.entity.EntryHTML
+	if v.Entry != nil {
+		stored, storedHTML = v.Entry, v.EntryHTML
+	}
+	if textLocked(t.cc, stored, storedHTML) {
+		return apperror.NewForbidden(entryLockedMessage)
 	}
 	var body struct {
 		Entry     string `json:"entry"`
@@ -307,7 +323,7 @@ func (h *Handler) GetEraFieldsAPI(c echo.Context) error {
 	if overrides == nil {
 		overrides = &FieldOverrides{}
 	}
-	canSeeGM := t.cc.MemberRole >= campaigns.RoleScribe
+	canSeeGM := t.cc.CanAuthorDmOnly()
 	isOwner := t.entity.IsOwnedBy(t.userID)
 	merged := mergeEraFields(t.entity.FieldsData, v.FieldsData)
 	effective := MergeFields(et.Fields, t.entity.FieldOverrides)
@@ -367,6 +383,15 @@ func (h *Handler) UpdateEraFieldsAPI(c echo.Context) error {
 			return apperror.NewBadRequest("fields_patch must be an object")
 		}
 	}
+	// A Scribe is not served the hidden fields, so their save neither changes
+	// nor clears them.
+	if !t.cc.CanAuthorDmOnly() {
+		et, err := h.service.GetEntityTypeByID(c.Request().Context(), t.entity.EntityTypeID)
+		if err != nil {
+			return err
+		}
+		changes = dropRestrictedFields(changes, restrictedFieldKeys(t.entity, et, false, t.entity.IsOwnedBy(t.userID)))
+	}
 	full := mergeEraFields(usual, v.FieldsData)
 	before := mergeEraFields(usual, v.FieldsData)
 	for k, val := range changes {
@@ -388,10 +413,10 @@ func (h *Handler) UpdateEraFieldsAPI(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
-// stripEntryFor removes GM-only text for members below Scribe, as the usual
-// entry route does.
+// stripEntryFor removes GM-only text for everyone but the owner and Co-DMs,
+// as the usual entry route does.
 func stripEntryFor(cc *campaigns.CampaignContext, entry, entryHTML *string) (*string, *string) {
-	if cc.MemberRole >= campaigns.RoleScribe {
+	if cc.CanAuthorDmOnly() {
 		return entry, entryHTML
 	}
 	if entry != nil {

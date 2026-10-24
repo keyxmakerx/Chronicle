@@ -1,0 +1,18 @@
+// last_night.templ draws the home page's "Last night: write it up" card.
+// The home page's placeholder (campaigns.CampaignShowPage) loads it.
+package app
+
+templ lastNightCard(v lastNightView) {
+	<div class="card mb-6 px-4 py-3 flex flex-wrap items-center gap-3" data-block="last-night">
+		<span class="shrink-0 w-10 h-10 rounded-lg bg-accent/10 text-accent flex items-center justify-center" aria-hidden="true">
+			<i class="fa-solid fa-scroll"></i>
+		</span>
+		<div class="flex-1 min-w-0">
+			<p class="text-sm font-medium text-fg truncate">{ v.Lead }: { v.Name }</p>
+			<p class="text-xs text-fg-muted">No write-up yet</p>
+		</div>
+		<a href={ templ.SafeURL(v.Href) } class="btn-primary text-sm">
+			<i class="fa-solid fa-pen mr-1"></i> Write it up
+		</a>
+	</div>
+}

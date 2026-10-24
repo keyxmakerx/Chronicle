@@ -52,6 +52,18 @@ templ CampaignShowPage(cc *CampaignContext, transfer *OwnershipTransfer, recentE
 				@welcomeMessageBanner(cc.Campaign.ID, msg)
 			}
 
+			// "Last night: write it up", for those who write recaps. It joins
+			// game nights, which this plugin may not import, so internal/app
+			// serves it; an empty answer removes the slot.
+			if cc.IsMember && cc.MemberRole >= RoleScribe {
+				<div
+					data-block="last-night"
+					hx-get={ fmt.Sprintf("/campaigns/%s/last-night", cc.Campaign.ID) }
+					hx-trigger="load"
+					hx-swap="outerHTML"
+				></div>
+			}
+
 			// The viewer's own home (Director, guest or their role), with the
 			// same fallbacks the Customizer shows, so both draw one layout.
 			{{ layout, _ := cc.Campaign.HomeLayout(cc.HomeAudience()) }}

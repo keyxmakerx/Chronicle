@@ -51,6 +51,9 @@ templ EntityListContent(cc *campaigns.CampaignContext, entities []Entity, entity
 		data-campaign-id={ cc.Campaign.ID }
 		data-csrf-token={ csrfToken }
 		data-role={ strconv.Itoa(int(cc.MemberRole)) }
+		if cc.CanAuthorDmOnly() {
+			data-can-hide="true"
+		}
 		data-entity-types={ entityTypesJSONForBulk(entityTypes) }
 		data-tags={ tagsJSONForBulk(cc) }
 	>
@@ -69,20 +72,37 @@ templ EntityListContent(cc *campaigns.CampaignContext, entities []Entity, entity
 					}
 				</h1>
 				<p class="text-sm text-fg-secondary mt-0.5">
-					{ fmt.Sprintf("%d", total) } total across { fmt.Sprintf("%d", len(entityTypes)) } categories
+					if opts.Query != "" {
+						{ searchMatchSummary(total, opts.Query) }
+					} else {
+						{ fmt.Sprintf("%d", total) } total across { fmt.Sprintf("%d", len(entityTypes)) } categories
+					}
 				</p>
 			</div>
 			<div class="flex items-center gap-3">
 				<!-- Quick search -->
+				<!-- Filters this list in place. The input keeps its id so htmx
+				     hands focus and the caret back after each swap; without
+				     JavaScript the form still lands on a full page. -->
 				<form
-					action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/search", cc.Campaign.ID)) }
+					action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) }
 					method="GET"
 					class="relative"
+					role="search"
+					hx-get={ fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID) }
+					hx-trigger="submit, input delay:300ms"
+					hx-target="#entity-list"
+					hx-swap="outerHTML"
+					hx-push-url="true"
 				>
 					<input
-						type="text"
+						id="entity-list-search"
+						type="search"
 						name="q"
+						value={ opts.Query }
 						placeholder="Search pages..."
+						aria-label="Search pages"
+						autocomplete="off"
 						class="input pl-9 pr-3 py-2 w-56"
 					/>
 					<i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-fg-muted text-xs"></i>
@@ -166,13 +186,15 @@ templ EntityListContent(cc *campaigns.CampaignContext, entities []Entity, entity
 					</div>
 					<div class="empty-state__title">No pages found</div>
 					<div class="empty-state__description mb-4">
-						if activeTypeSlug != "" {
+						if opts.Query != "" {
+							Nothing matches that search. Try fewer or different words.
+						} else if activeTypeSlug != "" {
 							No pages in this category yet. Create one to get started.
 						} else {
 							Start building your world by creating characters, locations, and more.
 						}
 					</div>
-					if cc.MemberRole >= campaigns.RoleScribe {
+					if cc.MemberRole >= campaigns.RoleScribe && opts.Query == "" {
 						<a
 							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/new", cc.Campaign.ID)) }
 							class="btn-primary"
@@ -220,7 +242,7 @@ templ EntityListContent(cc *campaigns.CampaignContext, entities []Entity, entity
 					PerPage:     opts.PerPage,
 					Total:       total,
 					BaseURL:     fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID),
-					ExtraParams: fmt.Sprintf("type=%d", activeTypeID),
+					ExtraParams: entityListParams(activeTypeID, opts.Query),
 					HTMXTarget:  "#entity-list",
 				})
 			}

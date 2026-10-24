@@ -98,6 +98,20 @@
    * @param {Function} options.onSelect - Callback when an entity is selected.
    * @param {Function} options.onClose - Callback when the popup is dismissed.
    */
+  /**
+   * The picker's note for a page not everyone can read (the search marks it
+   * "restricted"), or '' for an open page. Shared with the [[ picker.
+   */
+  Chronicle.linkRestrictionLabel = function (item) {
+    if (!item || !item.restricted) return '';
+    return item.restricted === 'custom' ? 'Only some players can see it' : 'Hidden from players';
+  };
+
+  // A link shows the page's name to everyone who reads the text, even a
+  // player who can't open the page. Picking a restricted page for text that
+  // players read therefore takes a second pick, after a warning.
+  var LINK_WARNING = 'Players read this text and will see this name. Choose it again to link.';
+
   function MentionPopup(options) {
     this.campaignId = options.campaignId;
     this.onSelect = options.onSelect;
@@ -351,6 +365,13 @@
 
     for (var i = 0; i < items.length; i++) {
       var item = items[i];
+      var note = Chronicle.linkRestrictionLabel(item);
+      var sub = Chronicle.escapeHtml(item.type_name || '');
+      if (item._warned) {
+        sub = '<span style="color:#b45309;opacity:1">' + Chronicle.escapeHtml(LINK_WARNING) + '</span>';
+      } else if (note) {
+        sub += (sub ? ' · ' : '') + '<i class="fa-solid fa-lock" aria-hidden="true" style="font-size:10px"></i> ' + Chronicle.escapeHtml(note);
+      }
       var selectedClass = i === this.selectedIndex ? ' mention-popup__item--selected' : '';
       var bgSelected = i === this.selectedIndex
         ? (isDark ? 'background-color:#374151;' : 'background-color:#f3f4f6;')
@@ -367,8 +388,8 @@
         '<div style="min-width:0;flex:1">' +
         '<div style="font-weight:500;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' +
         Chronicle.escapeHtml(item.name) + '</div>' +
-        '<div style="font-size:12px;opacity:0.6">' +
-        Chronicle.escapeHtml(item.type_name || '') + '</div>' +
+        '<div style="font-size:12px;' + (item._warned ? 'white-space:normal' : 'opacity:0.6') + '">' +
+        sub + '</div>' +
         '</div>' +
         '</div>';
     }
@@ -455,6 +476,11 @@
      */
     function insertMention(entity) {
       if (!editorInstance || mentionStartPos === null) return;
+      if (entity.restricted && options.hostOpen && !entity._warned) {
+        entity._warned = true;
+        popup._renderItems(popup.items);
+        return;
+      }
 
       var editor = editorInstance;
       var from = mentionStartPos;
@@ -718,6 +744,8 @@
    *
    * @param {Object} options
    * @param {string} options.campaignId - Campaign ID for entity search.
+   * @param {boolean} [options.hostOpen] - the text is read by players, so
+   *   linking a restricted page asks first.
    * @returns {Object} Extension config with lifecycle hooks.
    */
   Chronicle.MentionExtension = createMentionExtensionConfig;

@@ -9,7 +9,6 @@ package systems
 
 import (
 	"fmt"
-	"html"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -214,16 +213,14 @@ func AddonInfos() []AddonInfo {
 		if m.Status != StatusAvailable {
 			continue
 		}
-		// The loader HTML-escapes manifest text; addon rows are plain text
-		// that every renderer escapes again, so "D&D" would show as
-		// "D&amp;D". Unescape exactly what the loader escaped.
+		// Manifest text is plain, as written; every renderer escapes it.
 		infos = append(infos, AddonInfo{
 			Slug:        m.ID,
-			Name:        html.UnescapeString(m.Name),
-			Description: html.UnescapeString(m.Description),
+			Name:        m.Name,
+			Description: m.Description,
 			Version:     m.Version,
 			Icon:        m.Icon,
-			Author:      html.UnescapeString(m.Author),
+			Author:      m.Author,
 		})
 	}
 	slog.Info("system addon infos generated",

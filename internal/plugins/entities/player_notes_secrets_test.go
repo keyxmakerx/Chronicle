@@ -37,7 +37,7 @@ func TestGetPlayerNotes_GMOnlyContent(t *testing.T) {
 		wantSecret bool
 	}{
 		{"player", campaigns.RolePlayer, false},
-		{"scribe", campaigns.RoleScribe, true},
+		{"scribe sees what players see", campaigns.RoleScribe, false},
 		{"owner", campaigns.RoleOwner, true},
 	}
 	for _, tt := range tests {

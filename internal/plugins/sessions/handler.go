@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/labstack/echo/v4"
 
@@ -105,14 +106,18 @@ func (h *Handler) ListSessions(c echo.Context) error {
 		plan = sessionPlanFrom(c.QueryParam("plan_date"), c.QueryParam("plan_time"), c.QueryParam("plan_tz"))
 	}
 
+	// Past nights are judged by the viewer's own date, so tonight's game
+	// stays upcoming until their midnight.
+	today := time.Now().In(timeutil.LoadLocation(h.resolveViewerTZ(c, userID))).Format("2006-01-02")
+	groups := groupSessions(sessionList, today)
 	viewerTZ := h.storedTZ(c.Request().Context(), userID)
 
 	if middleware.IsHTMX(c) {
 		return middleware.Render(c, http.StatusOK,
-			SessionListFragment(cc, sessionList, csrfToken, isOwner, isScribe, userID, plan, viewerTZ))
+			SessionListFragment(cc, groups, csrfToken, isOwner, isScribe, userID, plan, viewerTZ))
 	}
 	return middleware.Render(c, http.StatusOK,
-		SessionListPage(cc, sessionList, csrfToken, isOwner, isScribe, userID, plan, viewerTZ))
+		SessionListPage(cc, groups, csrfToken, isOwner, isScribe, userID, plan, viewerTZ))
 }
 
 // ShowSession renders a session detail page.
@@ -144,8 +149,17 @@ func (h *Handler) ShowSession(c echo.Context) error {
 	}
 	session.Entities = visibleEntities
 
+	today := time.Now().In(timeutil.LoadLocation(h.resolveViewerTZ(c, userID))).Format("2006-01-02")
+	recap := RecapView{
+		Open: cc.IsMember && recapOpen(session, today),
+		// Home's "Write it up" lands here with ?write=1 and the editor
+		// opens ready to type.
+		StartWriting: isScribe && c.QueryParam("write") == "1",
+		Played:       isPlayed(*session, today),
+	}
+
 	return middleware.Render(c, http.StatusOK,
-		SessionDetailPage(cc, session, csrfToken, isOwner, isScribe, userID, h.storedTZ(ctx, userID)))
+		SessionDetailPage(cc, session, csrfToken, isOwner, isScribe, userID, recap, h.storedTZ(c.Request().Context(), userID)))
 }
 
 // CreateSession creates a new session.
@@ -444,7 +458,20 @@ func (h *Handler) RestoreSessionAPI(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
+// GetRecapAPI returns the recap in the page editor's load contract.
+// GET /campaigns/:id/sessions/:sid/recap
+func (h *Handler) GetRecapAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	session, err := h.requireSessionInCampaign(c, c.Param("sid"), cc.Campaign.ID)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, recapEditorBody(session))
+}
+
 // UpdateRecapAPI saves the session recap (post-session write-up visible to all members).
+// The page editor sends entry/entry_html; the calendar's plain box sends
+// recap/recap_html. A body with both uses the editor's.
 // PUT /campaigns/:id/sessions/:sid/recap
 func (h *Handler) UpdateRecapAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
@@ -457,9 +484,14 @@ func (h *Handler) UpdateRecapAPI(c echo.Context) error {
 	var req struct {
 		Recap     *string `json:"recap"`
 		RecapHTML *string `json:"recap_html"`
+		Entry     *string `json:"entry"`
+		EntryHTML *string `json:"entry_html"`
 	}
 	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request"})
+	}
+	if req.Entry != nil || req.EntryHTML != nil {
+		req.Recap, req.RecapHTML = req.Entry, req.EntryHTML
 	}
 
 	if err := h.svc.UpdateSessionRecap(c.Request().Context(), sessionID, req.Recap, req.RecapHTML); err != nil {

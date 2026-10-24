@@ -2,6 +2,8 @@
 package entities
 
 import (
+	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 )
@@ -30,4 +32,25 @@ func contrastTextColor(hexColor string) string {
 		return "#1f2937" // dark text for light backgrounds
 	}
 	return "#ffffff"
+}
+
+// entityListParams is the All Pages query string the page links carry, so
+// paging through search results keeps the search.
+func entityListParams(typeID int, query string) string {
+	v := url.Values{}
+	v.Set("type", strconv.Itoa(typeID))
+	if query != "" {
+		v.Set("q", query)
+	}
+	return v.Encode()
+}
+
+// searchMatchSummary is the line under the All Pages title while a search
+// filters the list.
+func searchMatchSummary(total int, query string) string {
+	noun := "pages match"
+	if total == 1 {
+		noun = "page matches"
+	}
+	return fmt.Sprintf("%d %s “%s”", total, noun, query)
 }
