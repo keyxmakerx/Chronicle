@@ -127,6 +127,9 @@ type CampaignService interface {
 	// SetCategoryMenuVisibility shows or hides one category in the players'
 	// sidebar menu, leaving the rest of the sidebar config as stored.
 	SetCategoryMenuVisibility(ctx context.Context, campaignID string, typeID int, visible bool) error
+	// OrderNavCategories puts the sidebar's categories in a new order, each
+	// within its own section; see the function of the same name.
+	OrderNavCategories(ctx context.Context, campaignID string, apps []NavApp, cats []NavCategory, order []int) error
 	// EnsureSidebarItems is the one-time, idempotent boot reconciler that
 	// converts campaigns still on the legacy sidebar model onto the unified
 	// items model. Returns the number of campaigns converted.

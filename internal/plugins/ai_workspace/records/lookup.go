@@ -122,6 +122,9 @@ type Lookups struct {
 	// Quests adds a page's quest notice and notice boards to the `page`
 	// answer for a Director; nil leaves them out.
 	Quests QuestsAPI
+	// Menu gives the owner's AI the sidebar menu's category order; nil
+	// leaves it out.
+	Menu MenuAPI
 }
 
 // LookupAnswer is one lookup's result: the chip shown on screen and the
@@ -535,6 +538,23 @@ func (l *Lookups) PageIndex(ctx context.Context, campaignID string, a Actor) str
 		b.WriteString("\n")
 	}
 	return capText(b.String(), 8*1024)
+}
+
+// MenuOrder is the sidebar menu's categories in order, for the owner only
+// (see MenuOrderKind.isOwner); "" otherwise or when it can't be read.
+func (l *Lookups) MenuOrder(ctx context.Context, campaignID string, a Actor) string {
+	if l == nil || l.Menu == nil {
+		return ""
+	}
+	k := MenuOrderKind{Svc: l.Menu}
+	if owner, err := k.isOwner(ctx, campaignID, a); err != nil || !owner {
+		return ""
+	}
+	menu, err := l.Menu.MenuCategories(ctx, campaignID)
+	if err != nil {
+		return ""
+	}
+	return menuNames(menu)
 }
 
 func (run *lookupRun) page(name string) (LookupAnswer, error) {
