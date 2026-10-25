@@ -2088,44 +2088,25 @@
       return iso ? this.nightsFor(y, m).filter(function (n) { return n.date === iso; }) : [];
     },
 
-    // A game-night link (the sidebar's "Game nights", the RSVP card) lands
-    // here with ?night=<session>&date=<day>, or ?night=next, and opens that
-    // night's day with its box picked out. Only a real-world calendar is
-    // linked to, so the date is the grid's own.
+    // A game-night link (the RSVP card, the dashboard's list) lands here
+    // with ?night=<session>&date=<day> and opens that night's day with its
+    // box picked out. Without a night and day the calendar opens as usual,
+    // on this month with no day open. Only a real-world calendar is linked
+    // to, so the date is the grid's own.
     _linkTarget: function () {
       if (!this.showNights || !CalDate.usesRealTime(this.cal)) return null;
       var q;
       try { q = new URLSearchParams(window.location.search); } catch (e) { return null; }
       var night = q.get('night'), date = q.get('date') || '', poll = q.get('poll');
       if (poll) return { poll: poll, date: /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : '' };
-      if (!night) return null;
-      if (night === 'next') return { next: true };
-      return /^\d{4}-\d{2}-\d{2}$/.test(date) ? { sessionId: night, date: date } : { next: true };
-    },
-
-    // _nextNight finds the first game night not yet played, from this month
-    // through the two after it. Resolves to the night or null.
-    _nextNight: function () {
-      var self = this, y = this.cal.current_year, m = this.cal.current_month, months = [];
-      for (var i = 0; i < 3; i++) {
-        months.push({ y: y, m: m });
-        m++;
-        if (m > 12) { m = 1; y++; }
-      }
-      return Promise.all(months.map(function (o) { return self.fetchNights(o.y, o.m); })).then(function (lists) {
-        var all = [].concat.apply([], lists).filter(function (n) { return !n.past; });
-        all.sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
-        return all[0] || null;
-      });
+      return night && /^\d{4}-\d{2}-\d{2}$/.test(date) ? { sessionId: night, date: date } : null;
     },
 
     _openFromLink: function () {
       var self = this, t = this._linkTarget();
       if (!t) { this._openEventLink(); return; }
       if (t.poll) { this._openPollLink(t).catch(function () { /* the calendar still shows; only the jump is lost */ }); return; }
-      (t.next ? this._nextNight() : Promise.resolve(t)).then(function (n) {
-        return n ? self._openNight(n) : null;
-      }).catch(function () { /* the calendar still shows; only the jump is lost */ });
+      this._openNight(t);
     },
 
     // A page's time line links here with ?event=<id>&date=<year>-<month>-<day>
@@ -4637,7 +4618,7 @@
     _gnDiceHTML: function (y, m, d) {
       var self = this, nights = this.nightsOnDay(y, m, d);
       if (!nights.length) return '';
-      return '<div class="gnd">' + nights.slice(0, 2).map(function (n) {
+      return '<div class="gndie">' + nights.slice(0, 2).map(function (n) {
         return '<span class="mk gnm" data-ev="' + esc(self._gnId(n)) + '" title="' + esc(n.name) + '"><span class="gnart" aria-hidden="true"></span></span>';
       }).join('') + '</div>';
     },

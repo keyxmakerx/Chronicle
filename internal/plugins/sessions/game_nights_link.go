@@ -30,7 +30,7 @@ func (h *Handler) SetCalendarFinder(f RealWorldCalendarFinder) {
 
 // gameNightsTarget is where a game-night link lands. With a calendar it is
 // that calendar's page, opened on the session's night (or, with no session
-// named, on the next night); without one it is the Sessions page, or the
+// named, on this month as usual); without one it is the Sessions page, or the
 // session's own page, so a campaign with no real-world calendar loses
 // nothing.
 func gameNightsTarget(campaignID, calendarID, sessionID, date string) string {
@@ -44,14 +44,14 @@ func gameNightsTarget(campaignID, calendarID, sessionID, date string) string {
 	if calendarID == "" {
 		return base + "/sessions"
 	}
-	q := url.Values{}
-	if sessionID != "" {
-		q.Set("date", date)
-		q.Set("night", sessionID)
-	} else {
-		q.Set("night", "next")
+	view := base + "/calendars/" + url.PathEscape(calendarID) + "/view"
+	if sessionID == "" {
+		return view
 	}
-	return base + "/calendars/" + url.PathEscape(calendarID) + "/view?" + q.Encode()
+	q := url.Values{}
+	q.Set("date", date)
+	q.Set("night", sessionID)
+	return view + "?" + q.Encode()
 }
 
 // GameNightsLink sends the sidebar's "Game nights" link, the RSVP card's
