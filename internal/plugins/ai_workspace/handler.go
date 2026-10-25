@@ -81,6 +81,8 @@ type Handler struct {
 	// importFolders lets the review check a page's `folder:` name. Optional —
 	// nil refuses a page that names a folder.
 	importFolders importer.FolderAccess
+	// zone is the owner's time zone, for the Your AI page's times.
+	zone func(ctx context.Context, userID string) *time.Location
 
 	// memory remembers what AI Import applied in each campaign: the labelled
 	// parts of a split answer, and a fingerprint of every block. Optional —

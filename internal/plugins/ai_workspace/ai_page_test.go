@@ -39,14 +39,26 @@ func TestAIPage_ConnectSection(t *testing.T) {
 		{"not available", func() ConnectView { return ConnectView{CampaignID: "camp-1", Now: now} },
 			nil, []string{"Make a key", key}},
 		{"nothing yet", func() ConnectView { return base },
-			[]string{"Make a key", `value="players"`, `value="owner"`, "/campaigns/camp-1/ai/connection", "What it did"},
-			[]string{key, "Disconnect"}},
+			[]string{"Make a key", `value="players"`, `value="owner"`, "/campaigns/camp-1/ai/connection", `href="#copy-and-paste"`},
+			[]string{key, "Disconnect", "What it did", "Pause"}},
 		{"the key just made", func() ConnectView { v := base; v.Conn = conn; v.NewKey = key; return v },
 			[]string{key, "Bearer " + key, "claude mcp add --transport http chronicle", base.Endpoint, "only this once"},
 			[]string{"Make a key"}},
 		{"connected", func() ConnectView { v := base; v.Conn = conn; return v },
-			[]string{"Claude is connected", "sees what you see", "only looks", "key ends in WXYZ", "last used 5 minutes ago", "Disconnect", "/ai/connection/disconnect"},
-			[]string{key}},
+			[]string{"Claude is connected", "sees what you see", "only looks", "key ends in WXYZ", "last used 5 minutes ago", "Disconnect", "/ai/connection/disconnect",
+				"/ai/connection/pause", `{&#34;connection&#34;:&#34;1&#34;}`, "/ai/connection/access", `name="connection" value="1"`, "Change what it may do",
+				`sees: &#39;owner&#39;`, `change: &#39;look&#39;`, "wasOwner: true", "What it did", `href="#copy-and-paste"`},
+			[]string{key, "Resume", "is paused"}},
+		{"paused", func() ConnectView {
+			v := base
+			c := *conn
+			p := now.Add(-2 * time.Minute)
+			c.PausedAt = &p
+			v.Conn = &c
+			return v
+		},
+			[]string{"Claude is paused", "Paused by you 2 minutes ago", "nothing it asked for is lost", "/ai/connection/resume", "Resume"},
+			[]string{"/ai/connection/pause", "is connected"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -94,10 +106,66 @@ func TestConnStatus(t *testing.T) {
 		{&connector.Connection{ExpiresAt: now.Add(time.Hour)}, "waiting"},
 		{&connector.Connection{ExpiresAt: now.Add(time.Hour), LastUsedAt: &used}, "connected"},
 		{&connector.Connection{ExpiresAt: now, LastUsedAt: &used}, "ended"},
+		{&connector.Connection{ExpiresAt: now.Add(time.Hour), LastUsedAt: &used, PausedAt: &used}, "paused"},
+		{&connector.Connection{ExpiresAt: now, PausedAt: &used}, "ended"},
 	}
 	for _, tc := range cases {
 		if got := connStatus(ConnectView{Conn: tc.conn, Now: now}); got != tc.want {
 			t.Errorf("got %q, want %q", got, tc.want)
 		}
+	}
+}
+
+// A sitting reads as one line: when it started in the owner's zone, what
+// the AI did, and whether anything it asked for still waits.
+func TestSittingLines(t *testing.T) {
+	ny, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Skip("no time zone data")
+	}
+	now := time.Date(2026, 10, 25, 3, 0, 0, 0, time.UTC) // 11 pm on the 24th in New York
+	v := ConnectView{Now: now, Loc: ny}
+	for _, tc := range []struct {
+		at   time.Time
+		want string
+	}{
+		{time.Date(2026, 10, 24, 18, 44, 0, 0, time.UTC), "Today, 2:44 pm"},
+		{time.Date(2026, 10, 24, 3, 30, 0, 0, time.UTC), "Yesterday, 11:30 pm"},
+		{time.Date(2026, 10, 20, 23, 15, 0, 0, time.UTC), "Tuesday, 7:15 pm"},
+		{time.Date(2026, 9, 1, 16, 0, 0, 0, time.UTC), "Tuesday 1 September, 12:00 pm"},
+		{time.Date(2025, 12, 31, 17, 0, 0, 0, time.UTC), "31 December 2025, 12:00 pm"},
+	} {
+		if got := sittingWhen(v, tc.at); got != tc.want {
+			t.Errorf("sittingWhen(%v) = %q, want %q", tc.at, got, tc.want)
+		}
+	}
+
+	for _, tc := range []struct {
+		s    connector.Sitting
+		want string
+	}{
+		{connector.Sitting{Reads: 3, Lookups: 1, Asks: 1}, "Read 3 pages, looked up 1 thing, asked for changes once"},
+		{connector.Sitting{Lookups: 41}, "Looked up 41 things"},
+		{connector.Sitting{Asks: 2, Refused: 1}, "Asked for changes twice, 1 not answered"},
+		{connector.Sitting{Reads: 1, Asks: 4}, "Read 1 page, asked for changes 4 times"},
+		{connector.Sitting{}, "Connected"},
+	} {
+		if got := sittingSummary(tc.s); got != tc.want {
+			t.Errorf("sittingSummary(%+v) = %q, want %q", tc.s, got, tc.want)
+		}
+	}
+
+	start := time.Date(2026, 10, 24, 18, 0, 0, 0, time.UTC)
+	s := connector.Sitting{Start: start, End: start.Add(10 * time.Minute), Asks: 1}
+	v.Requests = []connector.Request{{CreatedAt: start.Add(10 * time.Minute)}, {CreatedAt: start.Add(time.Hour)}}
+	if got := sittingTag(v, s); got != "1 waiting for you" {
+		t.Errorf("tag with a waiting request = %q", got)
+	}
+	v.Requests = nil
+	if got := sittingTag(v, s); got != "" {
+		t.Errorf("tag after it was answered = %q", got)
+	}
+	if got := sittingTag(v, connector.Sitting{Lookups: 2}); got != "only looked" {
+		t.Errorf("tag of a sitting that only looked = %q", got)
 	}
 }

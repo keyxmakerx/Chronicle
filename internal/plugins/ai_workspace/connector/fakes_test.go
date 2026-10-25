@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/aiexport"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/records"
 )
 
@@ -40,6 +41,28 @@ func (r *memRepo) RevokeAll(_ context.Context, campaignID string, at time.Time) 
 		if c.CampaignID == campaignID && c.RevokedAt == nil {
 			t := at
 			c.RevokedAt = &t
+		}
+	}
+	return nil
+}
+
+func (r *memRepo) SetPaused(_ context.Context, campaignID string, id int64, at *time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, c := range r.conns {
+		if c.CampaignID == campaignID && c.ID == id && c.RevokedAt == nil {
+			c.PausedAt = at
+		}
+	}
+	return nil
+}
+
+func (r *memRepo) SetAccess(_ context.Context, campaignID string, id int64, privacy aiexport.PrivacyMode, canAsk bool) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, c := range r.conns {
+		if c.CampaignID == campaignID && c.ID == id && c.RevokedAt == nil {
+			c.Privacy, c.CanAsk = privacy, canAsk
 		}
 	}
 	return nil
