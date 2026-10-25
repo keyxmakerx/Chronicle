@@ -195,3 +195,48 @@ func TestReportScenes_Stores(t *testing.T) {
 		})
 	}
 }
+
+func callScenesJSON(h *SyncHistoryHandler, cc *campaigns.CampaignContext) (*httptest.ResponseRecorder, error) {
+	rec := httptest.NewRecorder()
+	c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/", nil), rec)
+	c.Set("campaign_context", cc)
+	return rec, h.ScenesJSON(c)
+}
+
+func TestScenesJSON(t *testing.T) {
+	camp := &campaigns.Campaign{ID: "c1"}
+	stored := &fakeSceneRepo{replaced: true, stored: FoundrySceneReport{ReportedAt: playersNow, Scenes: []FoundryScene{
+		{SceneID: "s2", Name: "Sunken Crypt", Folder: "Act 2"},
+		{SceneID: "s1", Name: "Dragon's Lair"},
+	}}}
+	cases := []struct {
+		name     string
+		cc       *campaigns.CampaignContext
+		repo     FoundrySceneRepository
+		wantCode int
+		want     string
+	}{
+		{"owner gets scenes in Foundry's order", &campaigns.CampaignContext{Campaign: camp, MemberRole: campaigns.RoleOwner}, stored, http.StatusOK,
+			`"reported":true,"reportedAt":"2026-10-03T12:00:00Z","scenes":[{"id":"s2","name":"Sunken Crypt","folder":"Act 2"},{"id":"s1","name":"Dragon's Lair","folder":""}],"truncated":false`},
+		{"player with DM access gets them", &campaigns.CampaignContext{Campaign: camp, MemberRole: campaigns.RolePlayer, IsDmGranted: true}, stored, http.StatusOK, `"reported":true`},
+		{"never reported", &campaigns.CampaignContext{Campaign: camp, MemberRole: campaigns.RoleOwner}, &fakeSceneRepo{}, http.StatusOK, `"reported":false,"scenes":[],"truncated":false`},
+		{"player is refused", &campaigns.CampaignContext{Campaign: camp, MemberRole: campaigns.RolePlayer}, stored, http.StatusForbidden, ""},
+		{"scribe is refused", &campaigns.CampaignContext{Campaign: camp, MemberRole: campaigns.RoleScribe}, stored, http.StatusForbidden, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newScenesHandler(&stubCampaignSvcForPlayers{}, tc.repo)
+			rec, err := callScenesJSON(h, tc.cc)
+			code := rec.Code
+			if err != nil {
+				code = apperror.SafeCode(err)
+			}
+			if code != tc.wantCode {
+				t.Fatalf("status %d, want %d (%v)", code, tc.wantCode, err)
+			}
+			if tc.want != "" && !strings.Contains(rec.Body.String(), tc.want) {
+				t.Fatalf("body %s lacks %s", rec.Body.String(), tc.want)
+			}
+		})
+	}
+}

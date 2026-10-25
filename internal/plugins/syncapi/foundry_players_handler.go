@@ -139,15 +139,19 @@ func (h *SyncHistoryHandler) ProblemsFragment(c echo.Context) error {
 	return middleware.Render(c, http.StatusOK, FoundryProblemsFragment(cc.Campaign.ID, events, h.now()))
 }
 
-// RegisterFoundryPageRoutes mounts the owner's Foundry page fragments. Owner
-// only: the page is, and what Foundry reports about people is the owner's
-// diagnostic, never shown to players.
+// RegisterFoundryPageRoutes mounts the owner's Foundry page fragments and the
+// scene list pages read. The fragments are owner only: the page is, and what
+// Foundry reports about people is the owner's diagnostic, never shown to
+// players.
 func RegisterFoundryPageRoutes(e *echo.Echo, h *SyncHistoryHandler, campaignSvc campaigns.CampaignService, authSvc auth.AuthService) {
 	cg := e.Group("/campaigns/:id", auth.RequireAuth(authSvc), campaigns.RequireCampaignAccess(campaignSvc))
 	owner := campaigns.RequireRole(campaigns.RoleOwner)
 	cg.GET("/foundry/players", h.PlayersFragment, owner)
 	cg.GET("/foundry/member-status", h.MemberStatusFragment, owner)
 	cg.GET("/foundry/problems", h.ProblemsFragment, owner)
+	// Scenes are for anyone who may see DM-only material (checked in the
+	// handler), not only the owner: a co-DM writes pages too.
+	cg.GET("/foundry/scenes", h.ScenesJSON)
 }
 
 // prunePlayers drops lists Foundry has not refreshed in a while.
