@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	gohtml "html"
 	"log/slog"
 	"net/http"
 	"reflect"
@@ -3323,49 +3324,64 @@ func (s *entityService) GetMentionLinks(ctx context.Context, campaignID string, 
 	return links, nil
 }
 
-// extractMentionSnippet extracts a plain-text snippet around a mention link
-// in HTML content. Returns ~120 chars of context surrounding the mention.
+// extractMentionSnippet returns ~120 characters of plain text around the
+// first mention of entityID. Tags are stripped from the whole document before
+// any window is cut: cutting raw HTML first can split a long mention anchor,
+// whose unterminated tag the tag stripper cannot see and so shows as markup.
 func extractMentionSnippet(html *string, entityID string) string {
 	if html == nil || *html == "" {
 		return ""
 	}
-
-	// Find the mention anchor in the HTML.
-	needle := `data-mention-id="` + entityID + `"`
-	idx := strings.Index(*html, needle)
+	idx := strings.Index(*html, `data-mention-id="`+entityID+`"`)
 	if idx < 0 {
 		return ""
 	}
-
-	// Expand to surrounding context: take a window around the mention.
-	const windowSize = 200
-	start := idx - windowSize
-	if start < 0 {
-		start = 0
+	tagStart := strings.LastIndex((*html)[:idx], "<")
+	if tagStart < 0 {
+		tagStart = idx
 	}
-	end := idx + windowSize
-	if end > len(*html) {
-		end = len(*html)
+	before := []rune(htmlToPlain((*html)[:tagStart]))
+	after := []rune(htmlToPlain((*html)[tagStart:]))
+
+	const lead, total = 60, 120
+	clipped := false
+	if len(before) > lead {
+		before = before[len(before)-lead:]
+		// Start on a word, not half way through one.
+		if sp := strings.IndexRune(string(before), ' '); sp >= 0 {
+			before = []rune(string(before)[sp+1:])
+		}
+		clipped = true
 	}
-	window := (*html)[start:end]
-
-	// Strip HTML tags to get plain text.
-	plain := stripHTMLTags(window)
-
-	// Trim to ~120 chars at word boundaries.
+	plain := string(before)
+	if len(before) > 0 {
+		plain += " "
+	}
+	plain += string(after)
 	plain = strings.TrimSpace(plain)
-	if len(plain) > 120 {
-		// Find last space before limit.
-		cut := strings.LastIndex(plain[:120], " ")
+	if r := []rune(plain); len(r) > total {
+		cut := strings.LastIndex(string(r[:total]), " ")
 		if cut < 40 {
-			cut = 120
+			cut = len(string(r[:total]))
 		}
 		plain = plain[:cut] + "…"
 	}
-	if start > 0 {
+	if clipped {
 		plain = "…" + plain
 	}
 	return plain
+}
+
+// blockTagRegex matches tags that separate words visually, so the text on
+// either side keeps a space between it once tags are gone.
+var blockTagRegex = regexp.MustCompile(`(?i)</?(p|div|br|li|ul|ol|h[1-6]|tr|td|th|blockquote|section)\b[^>]*>`)
+
+// htmlToPlain turns an HTML fragment into one line of readable text: tags
+// gone, entities decoded, whitespace collapsed.
+func htmlToPlain(s string) string {
+	s = blockTagRegex.ReplaceAllString(s, " ")
+	s = gohtml.UnescapeString(stripHTMLTags(s))
+	return strings.Join(strings.Fields(s), " ")
 }
 
 // stripHTMLTags removes HTML tags from a string, leaving only text content.
