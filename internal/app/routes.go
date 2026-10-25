@@ -30,6 +30,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/admin"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/aiexport"
+	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/connector"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/importer"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/prompt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/records"
@@ -5035,7 +5036,16 @@ func (a *App) RegisterRoutes() {
 		aiWorkspaceHandler.SetImportMemory(ai_workspace.NewImportMemoryRepository(a.DB))
 	}
 
-	campaignHandler.RegisterSettingsTab(aiWorkspaceHandler.SettingsTabFactory())
+	// Connecting an AI app straight to a campaign (read-only tools over the
+	// Model Context Protocol), left out when its tables did not migrate. The
+	// endpoint checks its own key and never reads a session cookie.
+	var aiConnectorEndpoint *connector.Endpoint
+	if a.PluginHealth == nil || a.PluginHealth.IsHealthy(connector.SchemaSlug) {
+		aiConnectorSvc := connector.NewService(connector.NewRepository(a.DB), aiConnectorOwners{campaigns: campaignService})
+		aiWorkspaceHandler.SetConnector(aiConnectorSvc, a.Config.BaseURL)
+		aiConnectorEndpoint = connector.NewEndpoint(aiConnectorSvc, a.Config.BaseURL)
+		connector.RegisterRoutes(e, aiConnectorEndpoint)
+	}
 
 	aiWorkspaceCampaignAuthed := e.Group("/campaigns/:id",
 		auth.RequireAuth(authService),
@@ -6161,8 +6171,12 @@ func (a *App) RegisterRoutes() {
 	})
 	aiRegistry := records.NewRegistry(aiKinds(aiWiring)...)
 	aiWorkspaceHandler.SetRecords(aiRegistry)
-	aiWorkspaceHandler.SetLookups(aiLookups(aiWiring, aiRegistry))
+	aiWorkspaceLookups := aiLookups(aiWiring, aiRegistry)
+	aiWorkspaceHandler.SetLookups(aiWorkspaceLookups)
 	aiWorkspaceHandler.SetFeatureGate(aiFeatureGate(addonService))
+	if aiConnectorEndpoint != nil {
+		aiConnectorEndpoint.SetLookups(aiWorkspaceLookups)
+	}
 
 	// Late-bind the entity_notes notifier now that wsEventBus exists.
 	// The service was constructed earlier with a holder.Notify reference;

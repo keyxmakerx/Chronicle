@@ -58,10 +58,9 @@ func (h *Handler) RegisterSettingsTab(factory func(*CampaignContext) SettingsTab
 // Constructed per-request because each tab's content closure captures
 // request-scoped state (csrf token, the operator's role, etc).
 //
-// People and Foundry are Manage pages of their own, not Settings tabs;
-// old ?tab=people and ?tab=integrations links are redirected by the
-// Settings handler. The Data tab is replaced by the AI plugin's "Data &
-// AI" tab when that plugin is wired (see visibleSettingsTabs).
+// People, Foundry and Your AI are Manage pages of their own, not Settings
+// tabs; old ?tab=people, ?tab=integrations and ?tab=ai-workspace links are
+// redirected by the Settings handler.
 func (h *Handler) builtInSettingsTabs(
 	cc *CampaignContext,
 	transfer *OwnershipTransfer,
@@ -110,9 +109,6 @@ func (h *Handler) builtInSettingsTabs(
 const (
 	settingsTabAPIKeys = "api-keys"
 	settingsTabData    = "data"
-	// settingsTabAI is the AI plugin's "Data & AI" tab, which stands in for
-	// the built-in Data tab when it is registered.
-	settingsTabAI = "ai-workspace"
 )
 
 // visibleSettingsTabs returns the merged + role-filtered + sorted tab
@@ -133,11 +129,8 @@ func (h *Handler) visibleSettingsTabs(
 	built := h.builtInSettingsTabs(cc, transfer, members, csrfToken, systemOptions, smtpConfigured)
 	all := make([]SettingsTab, 0, len(built)+len(h.extraSettingsTabs))
 	all = append(all, built...)
-	hasAI := false
 	for _, factory := range h.extraSettingsTabs {
-		t := factory(cc)
-		hasAI = hasAI || t.ID == settingsTabAI
-		all = append(all, t)
+		all = append(all, factory(cc))
 	}
 	sort.SliceStable(all, func(i, j int) bool {
 		return all[i].SortOrder < all[j].SortOrder
@@ -146,7 +139,7 @@ func (h *Handler) visibleSettingsTabs(
 	role := cc.MemberRole
 	out := all[:0]
 	for _, t := range all {
-		if role < t.MinRole || (hasAI && t.ID == settingsTabData) {
+		if role < t.MinRole {
 			continue
 		}
 		out = append(out, t)
@@ -168,19 +161,6 @@ func (h *Handler) visibleSettingsTabs(
 // stops a viewer selecting a tab their role hides. "general" is always
 // present (RolePlayer-visible, Settings is owner-gated).
 func sanitizeSettingsTab(requested string, tabs []SettingsTab) string {
-	// The Data tab and the AI plugin's Data & AI tab are one place under
-	// two IDs; whichever is shown answers both.
-	switch requested {
-	case settingsTabData:
-		requested = settingsTabAI
-		if hasSettingsTabID(tabs, settingsTabData) {
-			requested = settingsTabData
-		}
-	case settingsTabAI:
-		if !hasSettingsTabID(tabs, settingsTabAI) {
-			requested = settingsTabData
-		}
-	}
 	for _, t := range tabs {
 		if t.ID == requested {
 			// Return the registry's constant, never the raw request
@@ -192,24 +172,17 @@ func sanitizeSettingsTab(requested string, tabs []SettingsTab) string {
 	return "general"
 }
 
-// hasSettingsTabID reports whether tabs includes one with the given ID.
-func hasSettingsTabID(tabs []SettingsTab, id string) bool {
-	for _, t := range tabs {
-		if t.ID == id {
-			return true
-		}
-	}
-	return false
-}
-
 // settingsTabRedirect is where an old Settings tab now lives, or "" when the
-// tab is still on the Settings page. People and Foundry became Manage pages.
+// tab is still on the Settings page. People, Foundry and the AI tools
+// (once the "Data & AI" tab) became Manage pages.
 func settingsTabRedirect(campaignID, tab string) string {
 	switch tab {
 	case "people":
 		return "/campaigns/" + campaignID + "/members"
 	case "integrations":
 		return "/campaigns/" + campaignID + "/foundry"
+	case "ai-workspace":
+		return "/campaigns/" + campaignID + "/ai"
 	}
 	return ""
 }

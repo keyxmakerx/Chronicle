@@ -733,6 +733,11 @@ func (run *lookupRun) notes() (LookupAnswer, error) {
 	if run.l.Notes == nil {
 		return ans, badRequestf("notes can't be looked up on this server")
 	}
+	// The owner's own notes are kept from players, so a player's view
+	// (Safe) never lists them, not even their titles.
+	if !run.director() {
+		return ans, badRequestf("your notes are left out while your AI sees what players see; choose \"What you see\" to include them")
+	}
 	own, err := NoteKind{Svc: run.l.Notes}.ownNotes(run.ctx, run.campaignID, run.a)
 	if err != nil {
 		return ans, err
@@ -768,7 +773,7 @@ func (run *lookupRun) houseRules() (LookupAnswer, error) {
 		return ans, badRequestf("the rulebook can't be looked up on this server")
 	}
 	if !run.director() {
-		return ans, badRequestf("house rules are left out in Safe privacy; choose Permitted to include them")
+		return ans, badRequestf("house rules are left out while your AI sees what players see; choose \"What you see\" to include them")
 	}
 	s, err := run.l.Rules.Export(run.ctx, run.campaignID, run.a)
 	if err != nil {
@@ -786,7 +791,7 @@ func (run *lookupRun) table(name string) (LookupAnswer, error) {
 		return ans, badRequestf("rolling tables can't be looked up on this server")
 	}
 	if !run.director() {
-		return ans, badRequestf("rolling tables are left out in Safe privacy; choose Permitted to include them")
+		return ans, badRequestf("rolling tables are left out while your AI sees what players see; choose \"What you see\" to include them")
 	}
 	doc, err := run.l.Tables.Get(run.ctx, run.campaignID)
 	if err != nil {
@@ -1010,8 +1015,13 @@ func (run *lookupRun) players() (LookupAnswer, error) {
 		if h.Subtitle != "" {
 			parts = append(parts, h.Subtitle)
 		}
+		// Meters and conditions come from the DM Screen, which reads every
+		// sheet field, GM-only ones too; a player's view leaves them out.
 		var meters []string
 		for _, m := range h.Meters {
+			if !run.director() {
+				break
+			}
 			if m.Max != "" {
 				meters = append(meters, fmt.Sprintf("%s %s of %s", m.Label, m.Current, m.Max))
 			} else {
@@ -1021,7 +1031,7 @@ func (run *lookupRun) players() (LookupAnswer, error) {
 		if len(meters) > 0 {
 			parts = append(parts, strings.Join(meters, ", "))
 		}
-		if len(h.Conditions) > 0 {
+		if len(h.Conditions) > 0 && run.director() {
 			parts = append(parts, "Conditions: "+strings.Join(h.Conditions, ", "))
 		}
 		if carried := run.carried(h.ID); carried != "" {

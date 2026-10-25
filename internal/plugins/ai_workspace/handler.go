@@ -22,6 +22,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/aiexport"
+	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/connector"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/importer"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/prompt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/records"
@@ -84,6 +85,12 @@ type Handler struct {
 	// parts of a split answer, and a fingerprint of every block. Optional —
 	// nil reads labels but can't tell what came before.
 	memory ImportMemory
+
+	// connector makes and revokes the keys an AI app connects with.
+	// Optional — nil leaves the Your AI page with copy and paste only.
+	connector *connector.Service
+	// baseURL is the site's public address, for the connector's address.
+	baseURL string
 }
 
 // AuditLogger is the narrow contract the plugin needs for audit
@@ -217,7 +224,7 @@ func splitLookups(all []importer.ParsedPage) (rest, lookups []importer.ParsedPag
 // answerLookups reads what the AI asked for, as the chosen privacy mode
 // allows (Safe by default), and renders the answer panel. Nothing is
 // written; the other pasted blocks are left out and counted.
-func (h *Handler) answerLookups(c echo.Context, cc *campaigns.CampaignContext, source string, blocks []importer.ParsedPage, skipped int) error {
+func (h *Handler) answerLookups(c echo.Context, cc *campaigns.CampaignContext, blocks []importer.ParsedPage, skipped int) error {
 	privacy := parsePrivacy(c.FormValue("lookup_privacy"))
 	recs := make([]records.Record, len(blocks))
 	for i, p := range blocks {
@@ -250,7 +257,6 @@ func (h *Handler) answerLookups(c echo.Context, cc *campaigns.CampaignContext, s
 		Answers:    answers,
 		Markdown:   md,
 		Privacy:    privacy.String(),
-		Source:     source,
 		Skipped:    skipped,
 	}))
 }
@@ -375,7 +381,7 @@ func (h *Handler) ParseImport(c echo.Context) error {
 	lab := importer.TakeParts(all)
 	parsed, lookups := splitLookups(lab.Blocks)
 	if len(lookups) > 0 {
-		return h.answerLookups(c, cc, body, lookups, len(parsed))
+		return h.answerLookups(c, cc, lookups, len(parsed))
 	}
 	pages, recs := splitImport(parsed)
 	links := importer.NewPageLinks(c.Request().Context(), h.importLookup, cc.Campaign.ID, viewerFor(c, cc))
@@ -1039,28 +1045,6 @@ func (h *Handler) GenerateAIExport(c echo.Context) error {
 	}
 
 	return middleware.Render(c, http.StatusOK, AIExportModal(markdown, ""))
-}
-
-// SettingsTabFactory returns the factory that the plugin registers
-// with the campaigns settings tab registry. campaigns invokes the
-// factory per-request with the live CampaignContext, so the tab's
-// content closure can bind cc.Campaign.ID into the form URLs etc.
-//
-// The tab is Settings' "Data & AI": the campaign's own export and import
-// first, then the AI tools. It takes the place of the built-in Data tab,
-// which campaigns shows only when this plugin is not wired. Slot 50 sits
-// between API keys (40) and Activity (60).
-func (h *Handler) SettingsTabFactory() func(*campaigns.CampaignContext) campaigns.SettingsTab {
-	return func(cc *campaigns.CampaignContext) campaigns.SettingsTab {
-		return campaigns.SettingsTab{
-			ID:        "ai-workspace",
-			Label:     "Data & AI",
-			Icon:      "fa-solid fa-database",
-			MinRole:   campaigns.RoleOwner,
-			SortOrder: 50,
-			Content:   SettingsTabBody(cc),
-		}
-	}
 }
 
 // recordsCategory is the export and prompt checkbox for everything the

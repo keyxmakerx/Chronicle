@@ -46,7 +46,7 @@ func (h *Handler) Page(c echo.Context) error {
 const SettingsTabID = "import"
 
 // SettingsTabFactory returns the Settings > Import tab for the campaigns
-// plugin's tab registry. It sits right after Data & AI, is owner-only like
+// plugin's tab registry. It sits right after Data, is owner-only like
 // every import route, and resumes the progress bar of a running import.
 func (h *Handler) SettingsTabFactory() func(*campaigns.CampaignContext) campaigns.SettingsTab {
 	return func(cc *campaigns.CampaignContext) campaigns.SettingsTab {

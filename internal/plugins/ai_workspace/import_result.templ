@@ -34,7 +34,7 @@ templ ImportResult(d ImportResultData) {
 			// renders a full page (no fragment branch), so
 			// fragment-targeting it would nest the app inside itself.
 			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings?tab=ai-workspace", d.CampaignID)) }
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/ai", d.CampaignID)) }
 				class="btn-secondary text-xs"
 				aria-label="Clear the import result and return to the paste form"
 				title="Clear the result + return to the import form"
@@ -86,7 +86,7 @@ templ ImportResult(d ImportResultData) {
 		// land).
 		<div class="flex items-center gap-3 mt-5 pt-4 border-t border-edge">
 			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings?tab=ai-workspace", d.CampaignID)) }
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/ai", d.CampaignID)) }
 				class="btn-secondary text-xs"
 				aria-label="Reload the AI Workspace tab as a fresh page"
 			>

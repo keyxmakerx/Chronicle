@@ -496,9 +496,8 @@ templ settingsAPIKeysTab(cc *CampaignContext, baseURL string) {
 	</div>
 }
 
-// SettingsDataSection is the campaign's export. It is the built-in Data tab,
-// and the AI plugin's Data & AI tab opens with it. Importing lives on the
-// Import tab.
+// SettingsDataSection is the campaign's export: the built-in Data tab.
+// Importing lives on the Import tab.
 templ SettingsDataSection(cc *CampaignContext) {
 	<div class="card p-4">
 		<h2 class="text-sm font-semibold text-fg mb-3">Data Export</h2>
