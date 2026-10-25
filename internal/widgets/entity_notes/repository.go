@@ -30,6 +30,10 @@ type Repository interface {
 	// newest first. Pinned notes float to the top.
 	ListByEntity(ctx context.Context, entityID string, viewer ViewerContext) ([]Note, error)
 
+	// ListByCampaign returns every note in the viewer's campaign that the
+	// viewer can see, on any page, newest first.
+	ListByCampaign(ctx context.Context, viewer ViewerContext) ([]Note, error)
+
 	// Update overwrites a note's mutable fields. The service must have
 	// verified author ownership before calling this.
 	Update(ctx context.Context, note *Note) error
@@ -236,6 +240,33 @@ func (r *repository) ListByEntity(ctx context.Context, entityID string, viewer V
 		ORDER BY pinned DESC, updated_at DESC`
 	rows, err := r.db.QueryContext(ctx, query,
 		entityID,
+		viewer.CampaignID,
+		viewer.UserID,
+		viewer.UserID,
+		viewer.CanSeeDMScribe(),
+		viewer.CanSeeDMOnly(),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	out := make([]Note, 0)
+	for rows.Next() {
+		n, err := scanRows(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *n)
+	}
+	return out, rows.Err()
+}
+
+func (r *repository) ListByCampaign(ctx context.Context, viewer ViewerContext) ([]Note, error) {
+	query := `SELECT ` + noteColumns + ` FROM entity_notes
+		WHERE campaign_id = ? AND ` + noteACLFilter + `
+		ORDER BY updated_at DESC`
+	rows, err := r.db.QueryContext(ctx, query,
 		viewer.CampaignID,
 		viewer.UserID,
 		viewer.UserID,

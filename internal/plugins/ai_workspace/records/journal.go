@@ -12,23 +12,28 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/widgets/notes"
 )
 
-// JournalAPI is the Journal as the AI reads it, adapted in app wiring over
-// the notes widget so the notes' own visibility rule decides every row: the
-// viewer's own notes, and the ones other members shared with them. A note
-// someone keeps private is never listed, whoever asks.
+// JournalAPI is the Journal, Jot notes and Player Notes as the AI reads
+// them, adapted in app wiring over the two notes widgets so each one's own
+// visibility rule decides every row: the viewer's own notes, and the ones
+// other members shared with them. A note someone keeps private is never
+// listed, whoever asks.
 type JournalAPI interface {
 	JournalNotes(ctx context.Context, campaignID string, v permissions.Viewer) ([]JournalNote, error)
 }
 
-// JournalNote is one Journal note or page jot the viewer can read.
+// JournalNote is one Journal note, jot or Player Note the viewer can read.
 type JournalNote struct {
 	ID       string
 	Title    string
 	AuthorID string
 	Author   string // the writer's display name
-	PageID   string // set on a jot: the page it sits on
+	PageID   string // set on a jot or a Player Note: the page it sits on
 	Folder   string // the folder path in the writer's Journal, "" at the top
-	// Audience is who the writer shared it with: private, gm, party or custom.
+	// PlayerNote marks a note from the Player Notes on a page, which only
+	// its writer can change.
+	PlayerNote bool
+	// Audience is who the writer shared it with: private, gm, party or
+	// custom, or for a Player Note dm_only, dm_scribe or everyone.
 	Audience string
 	// Night names the game night this is an entry for, "" when it is not one.
 	Night    string
@@ -42,6 +47,9 @@ var audienceWords = map[string]string{
 	string(notes.VisibilityGM):      "shared with the DM",
 	string(notes.VisibilityParty):   "shared with everyone",
 	string(notes.VisibilityCustom):  "shared with some people",
+	"dm_only":                       "shared with the DM",
+	"dm_scribe":                     "shared with the DM and Scribes",
+	"everyone":                      "shared with everyone",
 }
 
 // journal reads the Actor's Journal once per paste. Notes are the Actor's
@@ -79,6 +87,8 @@ func (run *lookupRun) noteDetails(n JournalNote, mine bool) string {
 		parts = append(parts, "by "+firstNonEmpty(n.Author, "another member"))
 	}
 	switch {
+	case n.PlayerNote:
+		parts = append(parts, "a Player Note on "+firstNonEmpty(run.pageName(n.PageID), "a page"))
 	case n.PageID != "":
 		parts = append(parts, "a jot on "+firstNonEmpty(run.pageName(n.PageID), "a page"))
 	case n.Folder != "":
@@ -102,12 +112,14 @@ func (run *lookupRun) notes() (LookupAnswer, error) {
 	if err != nil {
 		return ans, err
 	}
-	var own, jots, shared []string
+	var own, jots, player, shared []string
 	for _, n := range all {
 		line := fmt.Sprintf("- %s (%s)", firstNonEmpty(n.Title, "Untitled"), run.noteDetails(n, n.AuthorID == run.a.UserID))
 		switch {
 		case n.AuthorID != run.a.UserID:
 			shared = append(shared, line)
+		case n.PlayerNote:
+			player = append(player, line)
 		case n.PageID != "":
 			jots = append(jots, line)
 		default:
@@ -127,8 +139,9 @@ func (run *lookupRun) notes() (LookupAnswer, error) {
 	}
 	section("My Journal", own)
 	section("My jots on pages", jots)
+	section("My Player Notes on pages", player)
 	section("Shared with me by other members", shared)
-	b.WriteString("Read one with `what: note` and its `name`. Notes other members wrote can be read, never changed.\n")
+	b.WriteString("Read one with `what: note` and its `name`. Notes other members wrote can be read, never changed. My Journal notes and jots are changed with a `note` block, my Player Notes with a `player-note` block.\n")
 	ans.Text = b.String()
 	return ans, nil
 }
@@ -182,8 +195,11 @@ func (run *lookupRun) note(r Record) (LookupAnswer, error) {
 		fmt.Fprintf(&b, "; updated %s", n.Updated.UTC().Format("2006-01-02"))
 	}
 	b.WriteString("*\n\n")
-	if !mine {
-		b.WriteString("Written by another member and shared with me: read it, but a `note` block can't change it.\n\n")
+	switch {
+	case !mine:
+		b.WriteString("Written by another member and shared with me: read it, but no block can change it.\n\n")
+	case n.PlayerNote:
+		b.WriteString("My Player Note: change it with a `player-note` block naming its page.\n\n")
 	}
 	if len(hits) > 1 {
 		fmt.Fprintf(&b, "(%d notes have this title; this is the first. Add `page` or `by` to pick another.)\n\n", len(hits))

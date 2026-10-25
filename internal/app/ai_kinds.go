@@ -18,6 +18,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/rolltables"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
 	"github.com/keyxmakerx/chronicle/internal/systems"
+	"github.com/keyxmakerx/chronicle/internal/widgets/entity_notes"
 	"github.com/keyxmakerx/chronicle/internal/widgets/notes"
 	"github.com/keyxmakerx/chronicle/internal/widgets/relations"
 	"github.com/keyxmakerx/chronicle/internal/widgets/tags"
@@ -39,6 +40,8 @@ type aiDeps struct {
 	Health          *database.PluginHealthRegistry
 	Maps            maps.MapService
 	Notes           notes.NoteService
+	PlayerNotes     entity_notes.Service
+	Addons          aiAddonChecker // which add-ons a campaign has on
 	PageBlocks      pageblocks.Service
 	Quests          quests.QuestService // nil while the quests plugin is degraded
 	Boards          quests.BoardService
@@ -137,7 +140,7 @@ func aiLookups(d *aiDeps, reg *records.Registry) *records.Lookups {
 		l.Tables = d.Tables.Svc
 	}
 	if d.Notes != nil {
-		l.Journal = aiJournalAdapter{notes: d.Notes, members: d.Campaigns}
+		l.Journal = aiJournalAdapter{notes: d.Notes, members: d.Campaigns, players: d.PlayerNotes, addons: d.Addons}
 	}
 	if d.PageLayouts != nil {
 		l.Layouts = d.PageLayouts
@@ -182,15 +185,17 @@ func init() {
 		return []records.Kind{d.Tables}
 	})
 	addAIKinds(70, func(d *aiDeps) []records.Kind {
-		return []records.Kind{
+		kinds := []records.Kind{
 			records.ShopStockKind(d.Entities, d.Relations),
 			records.CarriedItemKind(d.Entities, d.Relations),
 			records.PinKind{Svc: aiMapsAdapter{d.Maps}, Entities: d.Entities},
 			records.MapSketchKind{Svc: aiMapSketchAdapter{maps: d.Maps, drawings: d.Drawings}, Pins: aiMapsAdapter{d.Maps}},
 			records.NoteKind{Svc: d.Notes, Entities: d.Entities},
-			*d.HouseRules,
-			records.SystemEntryKind{Svc: d.SystemEntries},
 		}
+		if d.PlayerNotes != nil {
+			kinds = append(kinds, records.PlayerNoteKind{Svc: d.PlayerNotes, Entities: d.Entities})
+		}
+		return append(kinds, *d.HouseRules, records.SystemEntryKind{Svc: d.SystemEntries})
 	})
 	addAIKinds(140, func(d *aiDeps) []records.Kind {
 		if d.Homebrew == nil {
@@ -257,6 +262,9 @@ func aiFeatureGate(addons aiAddonChecker) func(ctx context.Context, campaignID s
 		}
 		if off("maps") {
 			out["map"], out["pin"] = "Maps", "Maps"
+		}
+		if off(entity_notes.AddonSlug) {
+			out[records.KindPlayerNote] = "Player Notes"
 		}
 		return out
 	}

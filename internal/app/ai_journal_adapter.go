@@ -7,15 +7,21 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/records"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/widgets/entity_notes"
 	"github.com/keyxmakerx/chronicle/internal/widgets/notes"
 )
 
-// aiJournalAdapter answers the AI's note lookups from the notes widget. Every
-// row comes from ListVisible, the notes' own visibility rule, so a note its
+// aiJournalAdapter answers the AI's note lookups from the Journal and Jot
+// notes (the notes widget) and the Player Notes on pages (entity_notes).
+// Every row comes from that widget's own visibility rule, so a note its
 // writer keeps private never reaches another member's AI.
 type aiJournalAdapter struct {
 	notes   notes.NoteService
 	members campaigns.CampaignService
+	// players is nil when Player Notes aren't wired; addons says whether the
+	// campaign has them on, since switched off means off for every caller.
+	players entity_notes.Service
+	addons  aiAddonChecker
 }
 
 func (j aiJournalAdapter) JournalNotes(ctx context.Context, campaignID string, v permissions.Viewer) ([]records.JournalNote, error) {
@@ -67,6 +73,36 @@ func (j aiJournalAdapter) JournalNotes(ctx context.Context, campaignID string, v
 			jn.Night = strings.TrimSpace(t.Name + ", " + t.Date)
 		}
 		out = append(out, jn)
+	}
+	players, err := j.playerNotes(ctx, campaignID, v, names)
+	if err != nil {
+		return nil, err
+	}
+	return append(out, players...), nil
+}
+
+// playerNotes is the Player Notes v can read, none while the campaign has
+// them switched off.
+func (j aiJournalAdapter) playerNotes(ctx context.Context, campaignID string, v permissions.Viewer, names map[string]string) ([]records.JournalNote, error) {
+	if j.players == nil || j.addons == nil {
+		return nil, nil
+	}
+	if on, err := j.addons.IsEnabledForCampaign(ctx, campaignID, entity_notes.AddonSlug); err != nil || !on {
+		return nil, err
+	}
+	all, err := j.players.ListInCampaign(ctx, entity_notes.ViewerFor(campaignID, v))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]records.JournalNote, 0, len(all))
+	for i := range all {
+		n := &all[i]
+		body := n.BodyHTML
+		out = append(out, records.JournalNote{
+			ID: n.ID, Title: n.Title, AuthorID: n.AuthorUserID, Author: names[n.AuthorUserID],
+			PageID: n.EntityID, PlayerNote: true, Audience: string(n.Audience),
+			Updated: n.UpdatedAt, Body: &body,
+		})
 	}
 	return out, nil
 }
