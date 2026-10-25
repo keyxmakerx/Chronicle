@@ -53,6 +53,7 @@ type aiDeps struct {
 	PageLayouts     entities.PageLayoutService       // nil while its tables are degraded
 	PageTests       pagetests.Service                // nil while the Tests block is degraded
 	FoundryMonsters syncapi.FoundryMonsterRepository // nil while syncapi's tables are degraded
+	FoundryMatcher  *syncapi.FoundryMatcher          // with FoundryMonsters; nil leaves matches out
 
 	// Derived once and shared by several kinds and the lookups.
 	Rolls      records.EventRollAPI // the calendar's roll half; nil without one
@@ -90,7 +91,7 @@ func newAIDeps(d aiDeps) *aiDeps {
 		d.Tests = aiTestsAdapter{svc: d.PageTests}
 	}
 	if d.FoundryMonsters != nil {
-		d.Monsters = aiFoundryMonstersAdapter{repo: d.FoundryMonsters}
+		d.Monsters = aiFoundryMonstersAdapter{repo: d.FoundryMonsters, matcher: d.FoundryMatcher}
 	}
 	return &d
 }

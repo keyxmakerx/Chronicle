@@ -35,8 +35,10 @@ type FoundryMonster struct {
 	Role         string `json:"role,omitempty"`
 	Organization string `json:"organization,omitempty"`
 	EV           string `json:"ev,omitempty"`
-	// Linked marks an actor creature sync made from a Chronicle page.
-	Linked bool `json:"linked,omitempty"`
+	// Linked marks an actor creature sync made from a Chronicle page, and
+	// Page is that page's id.
+	Linked bool   `json:"linked,omitempty"`
+	Page   string `json:"page,omitempty"`
 }
 
 // FoundryMonsterList is a campaign's last report.
@@ -53,6 +55,7 @@ const (
 	foundryMonsterNameMax  = 120
 	foundryMonsterPackMax  = 120
 	foundryMonsterShortMax = 40
+	foundryMonsterIDMax    = 36
 	// foundryMonstersRetention matches the players list's.
 	foundryMonstersRetention = foundryPlayersRetention
 )
@@ -136,6 +139,9 @@ func cleanMonsters(in reportMonstersRequest, now time.Time) (FoundryMonsterList,
 			Organization: field(m.Organization, foundryMonsterShortMax),
 			EV:           field(m.EV, foundryMonsterShortMax),
 			Linked:       m.Linked,
+		}
+		if c.Linked {
+			c.Page = field(m.Page, foundryMonsterIDMax)
 		}
 		if c.Name == "" {
 			continue

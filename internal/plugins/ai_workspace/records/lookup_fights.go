@@ -173,6 +173,7 @@ func (run *lookupRun) foundryMonsters(r Record) (LookupAnswer, error) {
 	level := strings.TrimSpace(r.Str("level"))
 	role := strings.ToLower(strings.TrimSpace(r.Str("role")))
 	var lines []string
+	shown := map[string]bool{}
 	for _, m := range rep.Monsters {
 		if name != "" && !strings.Contains(strings.ToLower(m.Name), name) {
 			continue
@@ -183,7 +184,12 @@ func (run *lookupRun) foundryMonsters(r Record) (LookupAnswer, error) {
 		if role != "" && !strings.EqualFold(m.Role, role) && !strings.EqualFold(m.Organization, role) {
 			continue
 		}
-		lines = append(lines, "- "+m.line())
+		shown[strings.ToLower(m.Name)+"\x00"+m.Pack] = true
+		line := "- " + m.line()
+		if c := rep.MatchFor(m); c != nil {
+			line += "; it is your page " + c.PageName
+		}
+		lines = append(lines, line)
 	}
 	ans.Chip = fmt.Sprintf("Foundry monsters · %d", len(lines))
 	var b strings.Builder
@@ -195,6 +201,16 @@ func (run *lookupRun) foundryMonsters(r Record) (LookupAnswer, error) {
 		b.WriteString("None match.\n")
 	}
 	writeLines(&b, lines)
+	var matches []string
+	for _, c := range rep.Matches {
+		if shown[strings.ToLower(c.MonsterName)+"\x00"+c.MonsterPack] {
+			matches = append(matches, c.line())
+		}
+	}
+	if len(matches) > 0 {
+		fmt.Fprintf(&b, "\n## Creature pages matched to these (%d)\n\nA page matched to Foundry's monster is that monster: never write it a second stat block. The DM chooses on the page whose numbers play.\n\n", len(matches))
+		writeLines(&b, matches)
+	}
 	ans.Text = b.String()
 	return ans, nil
 }

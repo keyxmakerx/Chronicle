@@ -13,6 +13,9 @@ func TestFightLookups(t *testing.T) {
 		{Name: "Stalker", Pack: "Monsters", Level: "3", Role: "Harrier", Organization: "Horde", EV: "5"},
 		{Name: "Goblin Sniper", Pack: "Monsters", Level: "1", Role: "Artillery", Organization: "Horde", EV: "3"},
 		{Name: "Captain Vex", Level: "4", Role: "Brute", Organization: "Leader"},
+	}, Matches: []CreatureMatch{
+		{PageName: "Stalker", MonsterName: "Stalker", MonsterPack: "Monsters", FoundryNumbers: true},
+		{PageName: "Vex the Captain", MonsterName: "Captain Vex", Suggested: true},
 	}}}
 	road := EncounterRef{Name: "Road fight", PageName: "Lastwell",
 		Creatures: []EncounterCreature{{Name: "Stalker", Count: 3, Group: "A", Start: "seen"}},
@@ -44,7 +47,10 @@ func TestFightLookups(t *testing.T) {
 		{name: "tests", rec: lookup("tests", nil), actor: owner, want: []string{"- Road to Lastwell (on Lastwell): results Success, Failure; recorded: Failure"}},
 		{name: "tests are the DM's", rec: lookup("tests", nil), actor: player, wantErr: "Safe privacy"},
 		{name: "all monsters", rec: lookup("foundry-monsters", nil), actor: owner, want: []string{
-			"## Foundry's monsters (3)", "3 hours ago", "- Stalker · level 3 · Horde · Harrier · EV 5 (in the Monsters compendium)", "- Captain Vex · level 4 · Leader · Brute (an actor in the world)"}},
+			"## Foundry's monsters (3)", "3 hours ago", "- Stalker · level 3 · Horde · Harrier · EV 5 (in the Monsters compendium); it is your page Stalker", "- Captain Vex · level 4 · Leader · Brute (an actor in the world)\n",
+				"## Creature pages matched to these (2)", "never write it a second stat block",
+				"- Stalker is Foundry's Stalker (in the Monsters compendium) and plays with Foundry's numbers: keep the page to lore",
+				"- Vex the Captain looks like Foundry's Captain Vex (an actor in the world); the DM hasn't said yet"}},
 		{name: "by part of a name", rec: lookup("foundry-monsters", map[string]any{"name": "stalk"}), actor: owner,
 			want: []string{"(1)", "Stalker"}, notWant: []string{"Goblin"}},
 		{name: "by level and role", rec: lookup("foundry-monsters", map[string]any{"level": "1", "role": "horde"}), actor: owner,

@@ -4378,6 +4378,9 @@ func (a *App) RegisterRoutes() {
 	// The monsters each campaign's Foundry world can place, for the AI.
 	foundryMonsterRepo := syncapi.NewFoundryMonsterRepository(a.DB)
 	syncHistoryHandler.SetFoundryMonsters(foundryMonsterRepo)
+	// Which of those monsters each creature page is, and whose numbers play.
+	foundryMatcher := syncapi.NewFoundryMatcher(foundryMonsterRepo, syncapi.NewFoundryMatchRepository(a.DB), foundryCreaturePages{entities: entityService})
+	syncHistoryHandler.SetFoundryMatcher(foundryMatcher)
 
 	if a.PluginHealth.IsHealthy("syncapi") {
 		syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, noteAPIHandler, tagAPIHandler, syncMappingHandler, syncChangesHandler, stashAPIHandler, syncService, addonService, authService, campaignService, syncapi.WithSyncHistory(syncHistoryHandler), syncapi.WithQuests(syncapi.NewQuestAPIHandler(questAPI, campaignService, "armory")), syncapi.WithEncounters(syncapi.NewEncounterAPIHandler(encounterAPI, campaignService)))
@@ -6197,8 +6200,9 @@ func (a *App) RegisterRoutes() {
 	// The monster list lives in syncapi's table, so the AI reads it only
 	// while that plugin's migrations are healthy.
 	var aiFoundryMonsters syncapi.FoundryMonsterRepository
+	var aiFoundryMatcher *syncapi.FoundryMatcher
 	if a.PluginHealth.IsHealthy("syncapi") {
-		aiFoundryMonsters = foundryMonsterRepo
+		aiFoundryMonsters, aiFoundryMatcher = foundryMonsterRepo, foundryMatcher
 	}
 	aiWiring := newAIDeps(aiDeps{
 		Calendar:        calendarService,
@@ -6225,6 +6229,7 @@ func (a *App) RegisterRoutes() {
 		PageLayouts:     pageLayoutService,
 		PageTests:       pageTests,
 		FoundryMonsters: aiFoundryMonsters,
+		FoundryMatcher:  aiFoundryMatcher,
 	})
 	aiRegistry := records.NewRegistry(aiKinds(aiWiring)...)
 	aiWorkspaceHandler.SetRecords(aiRegistry)

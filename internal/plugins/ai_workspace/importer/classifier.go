@@ -170,10 +170,10 @@ func (c *Classifier) ClassifyAll(ctx context.Context, pages []ParsedPage) ([]Cla
 	return out, nil
 }
 
-// checkFoundryDoubles warns on a new creature page whose name Foundry
-// already has. It is a warning, not a refusal: a house-ruled copy may be
-// what the DM wants, but a page with a stat block makes creature sync add
-// a second actor of that name.
+// checkFoundryDoubles tells the DM when a new creature page has the name of
+// a monster Foundry already has. The page is matched to that monster and
+// plays with Foundry's numbers, so a stat block on it goes unused unless the
+// DM switches the page to its own numbers; it is a note, not a refusal.
 func (c *Classifier) checkFoundryDoubles(pages []ParsedPage, cls []Classification) {
 	if c.foundryHas == nil {
 		return
@@ -184,7 +184,7 @@ func (c *Classifier) checkFoundryDoubles(pages []ParsedPage, cls []Classificatio
 			continue
 		}
 		if where := c.foundryHas(p.Name); where != "" {
-			pages[i].Warnings = append(pages[i].Warnings, "Foundry already has a monster called "+p.Name+" ("+where+"). A fight can use it by name with no page; a page with a stat block puts a second one in Foundry.")
+			pages[i].Warnings = append(pages[i].Warnings, "Foundry already has a monster called "+p.Name+" ("+where+"). This page will be matched to it and play with Foundry's numbers, so it only needs lore; switch it to its own numbers on the page to play a house-ruled copy.")
 		}
 	}
 }

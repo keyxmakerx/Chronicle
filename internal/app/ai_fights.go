@@ -53,6 +53,9 @@ func (a aiTestsAdapter) Tests(ctx context.Context, campaignID string, act record
 // actor gets an empty report, as if Foundry never sent one.
 type aiFoundryMonstersAdapter struct {
 	repo syncapi.FoundryMonsterRepository
+	// matcher adds which creature pages are which monsters; nil leaves
+	// matches out.
+	matcher *syncapi.FoundryMatcher
 }
 
 var _ records.FoundryMonstersAPI = aiFoundryMonstersAdapter{}
@@ -70,6 +73,22 @@ func (a aiFoundryMonstersAdapter) Monsters(ctx context.Context, campaignID strin
 	for _, m := range list.Monsters {
 		out.Monsters = append(out.Monsters, records.FoundryMonster{
 			Name: m.Name, Pack: m.Pack, Level: m.Level, Role: m.Role, Organization: m.Organization, EV: m.EV, Linked: m.Linked,
+		})
+	}
+	if a.matcher == nil {
+		return out, nil
+	}
+	all, err := a.matcher.All(ctx, campaignID)
+	if err != nil {
+		return out, err
+	}
+	for _, c := range all.Matches {
+		if c.Monster == nil || (c.State != syncapi.MatchMatched && c.State != syncapi.MatchSuggested) {
+			continue
+		}
+		out.Matches = append(out.Matches, records.CreatureMatch{
+			PageName: c.EntityName, MonsterName: c.Monster.Name, MonsterPack: c.Monster.Pack,
+			Suggested: c.State == syncapi.MatchSuggested, FoundryNumbers: c.Use == syncapi.MatchUseFoundry,
 		})
 	}
 	return out, nil

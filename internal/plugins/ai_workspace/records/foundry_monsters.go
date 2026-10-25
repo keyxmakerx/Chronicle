@@ -2,6 +2,7 @@ package records
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 )
@@ -21,6 +22,45 @@ type FoundryMonsterReport struct {
 	ReportedAt *time.Time
 	// Truncated is true when Foundry had more than it could send.
 	Truncated bool
+	// Matches are the creature pages matched to one of these monsters, or
+	// that look like one and wait for the DM.
+	Matches []CreatureMatch
+}
+
+// CreatureMatch is a creature page and the monster in Foundry it is (or
+// looks like, while Suggested). FoundryNumbers says Foundry's numbers play,
+// so the page holds the lore and its stat block is not used in play.
+type CreatureMatch struct {
+	PageName                 string
+	MonsterName, MonsterPack string
+	Suggested                bool
+	FoundryNumbers           bool
+}
+
+// MatchFor is the page matched to a monster, or nil.
+func (r FoundryMonsterReport) MatchFor(m FoundryMonster) *CreatureMatch {
+	for i := range r.Matches {
+		c := &r.Matches[i]
+		if !c.Suggested && sameName(c.MonsterName, m.Name) && c.MonsterPack == m.Pack {
+			return c
+		}
+	}
+	return nil
+}
+
+// line is the match as one answer line.
+func (c CreatureMatch) line() string {
+	where := "an actor in the world"
+	if c.MonsterPack != "" {
+		where = "in the " + c.MonsterPack + " compendium"
+	}
+	switch {
+	case c.Suggested:
+		return fmt.Sprintf("- %s looks like Foundry's %s (%s); the DM hasn't said yet whether they are the same", c.PageName, c.MonsterName, where)
+	case c.FoundryNumbers:
+		return fmt.Sprintf("- %s is Foundry's %s (%s) and plays with Foundry's numbers: keep the page to lore, its stat block is not used", c.PageName, c.MonsterName, where)
+	}
+	return fmt.Sprintf("- %s is Foundry's %s (%s) but plays with the page's own numbers", c.PageName, c.MonsterName, where)
 }
 
 // FoundryMonster is one actor Foundry can place: a world actor, or an entry

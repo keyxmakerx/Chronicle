@@ -324,6 +324,11 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 		// The monsters the Foundry world can place, from the GM's client, for
 		// the AI connection's fight planning. Owner or DM access only.
 		cg.POST("/sync/monsters", api.history.ReportMonsters, RequirePermission(PermSync))
+		// Which of those each creature page is, and whose numbers play.
+		cg.GET("/foundry-matches", api.history.ListFoundryMatches, RequirePermission(PermRead))
+		cg.GET("/foundry-monsters", api.history.SearchFoundryMonsters, RequirePermission(PermRead))
+		cg.GET("/entities/:entityID/foundry-match", api.history.GetFoundryMatch, RequirePermission(PermRead))
+		cg.PUT("/entities/:entityID/foundry-match", api.history.PutFoundryMatch, RequirePermission(PermWrite))
 	}
 
 	// Quests: boards, sheets and rewards for the Foundry module. Owner or

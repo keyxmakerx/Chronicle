@@ -29,7 +29,7 @@ func TestClassify_FoundryDoubles(t *testing.T) {
 	if _, err := NewClassifier(lookup, "camp-1").WithFoundryMonsters(has).ClassifyAll(context.Background(), pages); err != nil {
 		t.Fatal(err)
 	}
-	want := "Foundry already has a monster called Stalker (in the Monsters compendium)"
+	want := "Foundry already has a monster called Stalker (in the Monsters compendium). This page will be matched to it and play with Foundry's numbers"
 	if w := strings.Join(pages[0].Warnings, "|"); !strings.Contains(w, want) {
 		t.Errorf("new creature page: warnings %q", pages[0].Warnings)
 	}

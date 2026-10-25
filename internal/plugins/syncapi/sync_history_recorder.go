@@ -102,6 +102,7 @@ var historyRoutes = map[string]historyRoute{
 	"DELETE /sync/mappings/:mappingID":        {kind: "link", action: "unlinked"},
 	"POST /stashes/moves":                     {kind: "stash", action: "item moved"},
 	"POST /armory/shops/:eid/buy":             {kind: "shop", action: "bought"},
+	"PUT /entities/:entityID/foundry-match":   {kind: "page", action: "Foundry match changed"},
 	// A token drag sends a position on every step; one drag would bury the
 	// rest of the history.
 	"PATCH /maps/:mapID/tokens/:tokenID/position": {skip: true},

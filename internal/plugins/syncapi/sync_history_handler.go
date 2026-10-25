@@ -39,6 +39,7 @@ type SyncHistoryHandler struct {
 	namer       EntityNamer
 	players     FoundryPlayerRepository
 	monsters    FoundryMonsterRepository
+	matcher     *FoundryMatcher
 	worldOpen   func(campaignID string) bool
 	now         func() time.Time
 }
