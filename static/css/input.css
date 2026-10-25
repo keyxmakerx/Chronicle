@@ -947,6 +947,31 @@
     .chronicle-outline__list { @apply block mt-0; }
   }
 
+  /* With room beside the page, editor_outline.js moves the column out into
+     the right-hand margin, past the page frame's edge, and the text takes the
+     column's width back. The margin box spans the editor's height, so the
+     list sticks only while the text is in view. */
+  [data-page-frame] { position: relative; }
+  .chronicle-outline-margin { position: absolute; left: calc(100% + 1.5rem); width: 12rem; }
+  .chronicle-editor--outlined.chronicle-editor--outline-out .chronicle-editor__content {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .chronicle-outline-margin .chronicle-outline {
+    @apply h-full px-3 py-4 border-l border-edge-light;
+  }
+  .chronicle-outline-margin .chronicle-outline__inner { position: sticky; top: 0.5rem; }
+  .chronicle-outline-margin .chronicle-outline__toggle { @apply hidden; }
+  .chronicle-outline-margin .chronicle-outline__label {
+    @apply block mb-1 text-xs font-semibold uppercase tracking-wider text-fg-muted;
+  }
+  .chronicle-outline-margin .chronicle-outline__list { @apply block mt-0; }
+
+  /* Side columns that follow the reader (page_sides.js). A column taller than
+     the view gets a negative top, so it scrolls until its bottom shows. */
+  @media (min-width: 768px) {
+    .page-col-stick { position: sticky; top: var(--page-stick-top, 1rem); align-self: start; }
+  }
+
   /* ---- Find/Replace Bar ---- */
   .chronicle-find-bar {
     @apply flex flex-col gap-1 px-3 py-2 border-b border-edge-light;

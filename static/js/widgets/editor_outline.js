@@ -10,7 +10,10 @@
  * It shows only when the page has MIN_HEADINGS or more non-empty headings;
  * shorter pages look exactly as before. Wide editors get a sticky column on
  * the right, narrow ones a folded "On this page" button above the text
- * (CSS container query on .chronicle-editor--outlined).
+ * (CSS container query on .chronicle-editor--outlined). On a page with room
+ * to spare beside it ([data-page-frame] inside #main-content), the column
+ * moves out into that right-hand margin, past the page's own edge, so the
+ * text and the side widgets keep their full width.
  */
 (function () {
   'use strict';
@@ -18,6 +21,9 @@
   var MIN_HEADINGS = 3;
   // How far below the scroll area's top a heading counts as "being read".
   var READ_LINE_PX = 96;
+  // The margin column: its width and its gap from the page's edge.
+  var MARGIN_W_PX = 192;
+  var MARGIN_GAP_PX = 24;
 
   // collect turns heading-like items ({level, text}) into outline entries,
   // dropping empty ones. Pure so the rule is testable without a DOM.
@@ -33,6 +39,11 @@
 
   function shouldShow(entries) {
     return entries.length >= MIN_HEADINGS;
+  }
+
+  // fitsInMargin says whether the room right of the page holds the column.
+  function fitsInMargin(roomPx) {
+    return roomPx >= MARGIN_W_PX + MARGIN_GAP_PX;
   }
 
   function prefersReducedMotion() {
@@ -138,6 +149,7 @@
       links = [];
       current = -1;
       list.innerHTML = '';
+      schedulePlace();
       if (!show) return;
 
       // Indent relative to the page's top heading level, so a page that
@@ -159,6 +171,50 @@
       });
       highlight();
     }
+
+    // The margin box spans the editor's height beside the page frame, and the
+    // list sticks inside it, so it follows the reader only as far as the text.
+    var frame = rootEl.closest('[data-page-frame]');
+    var main = document.getElementById('main-content');
+    if (!frame || !main || !main.contains(frame)) frame = null;
+    var margin = null;
+
+    function room() {
+      var cs = window.getComputedStyle(main);
+      var mainRight = main.getBoundingClientRect().left + main.clientWidth - parseFloat(cs.paddingRight || '0');
+      return mainRight - frame.getBoundingClientRect().right;
+    }
+
+    function place() {
+      if (!frame) return;
+      var out = !nav.hidden && fitsInMargin(room());
+      rootEl.classList.toggle('chronicle-editor--outline-out', out);
+      if (!out) {
+        if (nav.parentNode !== contentEl) contentEl.appendChild(nav);
+        if (margin) margin.hidden = true;
+        return;
+      }
+      if (!margin) {
+        margin = document.createElement('div');
+        margin.className = 'chronicle-outline-margin';
+        frame.appendChild(margin);
+      }
+      margin.hidden = false;
+      var f = frame.getBoundingClientRect(), r = rootEl.getBoundingClientRect();
+      margin.style.top = (r.top - f.top) + 'px';
+      margin.style.height = r.height + 'px';
+      if (nav.parentNode !== margin) margin.appendChild(nav);
+    }
+
+    var placing = false;
+    function schedulePlace() {
+      if (placing) return;
+      placing = true;
+      window.requestAnimationFrame(function () { placing = false; place(); });
+    }
+    var sizer = frame && window.ResizeObserver ? new ResizeObserver(schedulePlace) : null;
+    if (sizer) { sizer.observe(rootEl); sizer.observe(main); sizer.observe(frame); }
+    if (frame) window.addEventListener('resize', schedulePlace);
 
     var pending = null;
     function schedule() {
@@ -184,6 +240,10 @@
       destroy: function () {
         observer.disconnect();
         root.removeEventListener('scroll', onScroll);
+        if (sizer) sizer.disconnect();
+        if (frame) window.removeEventListener('resize', schedulePlace);
+        if (margin && margin.parentNode) margin.parentNode.removeChild(margin);
+        rootEl.classList.remove('chronicle-editor--outline-out');
         if (pending) clearTimeout(pending);
         if (lockTimer) clearTimeout(lockTimer);
         rootEl.classList.remove('chronicle-editor--outlined');
@@ -197,6 +257,7 @@
     attach: attach,
     collect: collect,
     shouldShow: shouldShow,
+    fitsInMargin: fitsInMargin,
     MIN_HEADINGS: MIN_HEADINGS,
   };
 })();

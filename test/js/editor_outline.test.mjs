@@ -54,3 +54,13 @@ test('editor.js only attaches the outline when the mount asks for it', () => {
   const show = readFileSync(join(root, 'internal/plugins/entities/show.templ'), 'utf8');
   assert.match(show, /data-outline="true"/);
 });
+
+// The column leaves the editor for the right-hand margin only when that
+// margin holds it whole (192px column and a 24px gap); otherwise it stays
+// beside the text as before.
+test('moves to the margin only when the margin holds the column', () => {
+  const O = load();
+  for (const [room, out] of [[0, false], [172, false], [215, false], [216, true], [900, true]]) {
+    assert.equal(O.fitsInMargin(room), out, `room ${room}px`);
+  }
+});

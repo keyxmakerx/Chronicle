@@ -37,6 +37,7 @@ templ entityPageBody(cc *campaigns.CampaignContext, entity *Entity, entityType *
 	@withPageEditor(editor) {
 		<div
 			class="max-w-7xl mx-auto"
+			data-page-frame
 			data-entity-type-slug={ entityType.Slug }
 			if editor {
 				data-pe-page
@@ -123,9 +124,9 @@ templ entityPageBody(cc *campaigns.CampaignContext, entity *Entity, entityType *
 						if row.Kind == "tiles" {
 							@entityTileSection(row, cc, entity, entityType, showAttributes, csrfToken)
 						} else {
-							<div class="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-6 mb-4 md:mb-6">
+							<div class="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-6 mb-4 md:mb-6" data-page-row>
 								for _, col := range row.Columns {
-									<div class={ entityColSpan(col.Width) }>
+									<div class={ entityColSpan(col.Width) } data-page-col>
 										for _, block := range col.Blocks {
 											@entityBlock(block, cc, entity, entityType, showAttributes, csrfToken)
 										}
@@ -136,14 +137,14 @@ templ entityPageBody(cc *campaigns.CampaignContext, entity *Entity, entityType *
 					}
 				} else {
 					<!-- Fallback: default two-column layout if no layout defined -->
-					<div class="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-6">
-						<div class="col-span-1 md:col-span-8 space-y-4">
+					<div class="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-6" data-page-row>
+						<div class="col-span-1 md:col-span-8 space-y-4" data-page-col>
 							@blockTitle(cc, entity, csrfToken)
 							@blockTags(cc, entity, csrfToken)
 							@blockRelations(cc, entity, csrfToken)
 							@blockEntry(cc, entity, csrfToken)
 						</div>
-						<div class="col-span-1 md:col-span-4 space-y-4">
+						<div class="col-span-1 md:col-span-4 space-y-4" data-page-col>
 							@blockImage(cc, entity, entityType, csrfToken)
 							if showAttributes {
 								@blockAttributes(cc, entity, entityType, csrfToken)
