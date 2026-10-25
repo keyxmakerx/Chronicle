@@ -52,7 +52,7 @@
   --eclT:oklch(.46 .07 50); --eclS:oklch(.5 .07 50 / .5); --hvtT:oklch(.52 .12 75); --hvtS:oklch(.66 .13 78 / .6);
   --gold:oklch(.50 .10 75); --goldBg:oklch(.86 .085 85 / .4); --goldRing:oklch(.62 .10 80 / .5);
   /* Who's free: a player's free hours, the hours they marked as their best, and the band where everyone is free. */
-  --free:oklch(.56 .11 152); --freeTrack:oklch(.5 .01 265 / .14); --freeBand:oklch(.62 .11 152 / .18); --best:oklch(.68 .15 70); --off:oklch(.58 .17 25);
+  --free:oklch(.56 .11 152); --freeTrack:oklch(.5 .01 265 / .14); --freeBand:oklch(.62 .11 152 / .18); --best:oklch(.68 .15 70); --off:oklch(.58 .17 25); --gnL:.6; --gnC:.2;
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;
     --page:oklch(.16 .008 265); --ink:oklch(.94 .006 265); --ink2:oklch(.82 .008 265); --mut:oklch(.68 .01 265);
@@ -70,7 +70,7 @@
     --arcT:oklch(.8 .12 295); --arcS:oklch(.7 .13 295 / .5); --tsB:.34; --tsS:.8; --tsL:.93; --mring:oklch(.94 .01 265 / .12);
     --eclT:oklch(.76 .07 52); --eclS:oklch(.68 .07 52 / .5); --hvtT:oklch(.84 .12 80); --hvtS:oklch(.76 .12 80 / .5);
     --gold:oklch(.84 .10 85); --goldBg:oklch(.70 .10 85 / .15); --goldRing:oklch(.78 .10 85 / .38);
-    --free:oklch(.74 .12 152); --freeTrack:oklch(.94 .01 265 / .1); --freeBand:oklch(.74 .12 152 / .16); --best:oklch(.82 .13 78); --off:oklch(.72 .15 25);}
+    --free:oklch(.74 .12 152); --freeTrack:oklch(.94 .01 265 / .1); --freeBand:oklch(.74 .12 152 / .16); --best:oklch(.82 .13 78); --off:oklch(.72 .15 25); --gnL:.8; --gnC:.15;}
 
 }
 :root[data-theme="dark"]{color-scheme:dark;
@@ -89,7 +89,7 @@
   --arcT:oklch(.8 .12 295); --arcS:oklch(.7 .13 295 / .5); --tsB:.34; --tsS:.8; --tsL:.93; --mring:oklch(.94 .01 265 / .12);
   --eclT:oklch(.76 .07 52); --eclS:oklch(.68 .07 52 / .5); --hvtT:oklch(.84 .12 80); --hvtS:oklch(.76 .12 80 / .5);
   --gold:oklch(.84 .10 85); --goldBg:oklch(.70 .10 85 / .15); --goldRing:oklch(.78 .10 85 / .38);
-    --free:oklch(.74 .12 152); --freeTrack:oklch(.94 .01 265 / .1); --freeBand:oklch(.74 .12 152 / .16); --best:oklch(.82 .13 78); --off:oklch(.72 .15 25);}
+    --free:oklch(.74 .12 152); --freeTrack:oklch(.94 .01 265 / .1); --freeBand:oklch(.74 .12 152 / .16); --best:oklch(.82 .13 78); --off:oklch(.72 .15 25); --gnL:.8; --gnC:.15;}
 .cal-v5 *, .cal-v5 *::before, .cal-v5 *::after{box-sizing:border-box}
 .cal-v5 html, .cal-v5 body{margin:0}
 .cal-v5 body{background:var(--page);color:var(--ink);font:14px/1.45 var(--sans);-webkit-font-smoothing:antialiased;overflow-x:hidden}
@@ -123,6 +123,11 @@
 /* Above the calendar: "Back to calendars" (shown only on a calendar opened
    from its card, by calendar_open.js) beside the breadcrumbs. Unscoped, as it
    sits outside the widget's mount; cal5- keeps the names its own. */
+/* The calendar's page grows with the screen: a wide monitor gets a wider,
+   taller month instead of a 1024px column with empty sides. */
+.cal5-page{max-width:64rem}
+@media (min-width:1440px){.cal5-page{max-width:78rem}}
+@media (min-width:1800px){.cal5-page{max-width:94rem}}
 .cal5-crumbs{display:flex;align-items:center;flex-wrap:wrap;gap:6px 12px;margin-bottom:1rem;min-width:0}
 .cal5-crumbs>nav{margin-bottom:0}
 .cal5-back{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px 0 10px;border-radius:9px;border:1px solid var(--edge);background:var(--paper);color:var(--ink);font:600 12.5px/1 var(--sans);text-decoration:none;white-space:nowrap;flex:none}
@@ -145,6 +150,17 @@
 .cal-v5 .cal[data-struct="greg"]{--cellH:92px}
 .cal-v5 .cal[data-struct="harptos"]{--cellH:106px}
 .cal-v5 .cal[data-struct="custom"]{--cellH:86px}
+/* Taller days on wide screens, to match the wider page (.cal5-page). */
+@media (min-width:1440px){.cal-v5 .cal{--cellH:118px}
+.cal-v5 .cal[data-struct="greg"]{--cellH:112px}
+.cal-v5 .cal[data-struct="harptos"]{--cellH:124px}
+.cal-v5 .cal[data-struct="custom"]{--cellH:104px}
+}
+@media (min-width:1800px){.cal-v5 .cal{--cellH:134px}
+.cal-v5 .cal[data-struct="greg"]{--cellH:128px}
+.cal-v5 .cal[data-struct="harptos"]{--cellH:140px}
+.cal-v5 .cal[data-struct="custom"]{--cellH:118px}
+}
 /* Backdrop: one soft field per era+season. A change inside the month bleeds along a slow blurred wave. */
 .cal-v5 .fieldwrap{position:absolute;inset:0;border-radius:inherit;overflow:hidden;z-index:0;pointer-events:none}
 .cal-v5 .field{position:absolute;inset:0}
@@ -473,8 +489,30 @@
 .cal-v5 .gnnoteed input:focus{outline:1.5px solid var(--ink);outline-offset:0}
 .cal-v5 .btn.sm{height:26px;padding:0 9px;font-size:11.5px}
 .cal-v5 .rsvp .sw{margin-top:8px;padding-bottom:0}
-/* Game nights have no event kind, so their dice mark takes the ink. */
+/* Game nights are a d20 drawn in lines. In the grid it sits in the middle of
+   its day, below the date, and its lines carry a rainbow that turns slowly
+   (calendar_view.js sets --gnA from the rest clock, so it stops when the
+   viewer steps away and never moves under reduced motion). The rainbow is
+   the one decorative colour here, kept to the lines so the day stays quiet. */
+.cal-v5{--gnMask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.35' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M12 2.3 20.4 7.15V16.85L12 21.7 3.6 16.85V7.15ZM12 7.4 16.6 15.4H7.4ZM3.6 7.15 12 7.4 20.4 7.15M3.6 7.15 7.4 15.4 12 21.7 16.6 15.4 20.4 7.15'/%3E%3C/svg%3E");
+  --gnMaskB:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.1' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M12 2.3 20.4 7.15V16.85L12 21.7 3.6 16.85V7.15ZM12 7.4 16.6 15.4H7.4ZM3.6 7.15 12 7.4 20.4 7.15M3.6 7.15 7.4 15.4 12 21.7 16.6 15.4 20.4 7.15'/%3E%3C/svg%3E");--gnS:38px}
+.cal-v5 .gnart, .cal-v5 .gnico{display:block;flex:none;-webkit-mask:var(--gnMask) center/contain no-repeat;mask:var(--gnMask) center/contain no-repeat}
+.cal-v5 .gnart{width:100%;height:100%;
+  background:conic-gradient(from var(--gnA,200deg),oklch(var(--gnL) var(--gnC) 25),oklch(var(--gnL) var(--gnC) 70),oklch(var(--gnL) var(--gnC) 130),oklch(var(--gnL) var(--gnC) 195),oklch(var(--gnL) var(--gnC) 260),oklch(var(--gnL) var(--gnC) 320),oklch(var(--gnL) var(--gnC) 25))}
+.cal-v5 .gnico{width:15px;height:15px;background:currentColor;-webkit-mask-image:var(--gnMaskB);mask-image:var(--gnMaskB)}
+.cal-v5 .gnd{flex:1;display:flex;align-items:center;justify-content:center;gap:4px;min-height:0;padding:2px 0 8px;pointer-events:none}
+.cal-v5 .gnd .mk.gnm{width:var(--gnS);height:var(--gnS);padding:3px;pointer-events:auto}
+.cal-v5 .gnd .mk.gnm+.mk.gnm{--gnS:26px}
+.cal-v5 .day.past .gnd .gnart{filter:saturate(.35);opacity:.75}
 .cal-v5 .mk.gnm, .cal-v5 .gnb .ric{color:var(--ink2);font-size:12px}
+.cal-v5 .gnb .ric .gnart{width:18px;height:18px}
+.cal-v5 .flyer .gnart{width:100%;height:100%}
+@media (min-width:1440px){.cal-v5{--gnS:48px}}
+@media (max-width:600px){.cal-v5{--gnS:24px}
+.cal-v5 .gnd{padding:0 0 4px}
+.cal-v5 .gnd .mk.gnm{padding:1px}
+.cal-v5 .gnd .mk.gnm+.mk.gnm{--gnS:18px}
+}
 /* Game-night times: the real date on an anchored world calendar, and the
    one-press switch between the calendar's time and the viewer's own. */
 .cal-v5 .gnreal{margin:3px 0 0 30px;font:600 11.5px/1.4 var(--sans);color:var(--ink2)}
@@ -2159,6 +2197,18 @@
 .cal-v5 .wt{font:600 13px/1.3 var(--sans);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cal-v5 .ws{font:500 11.5px/1.35 var(--sans);color:var(--mut)}
 .cal-v5 .wact{flex:none;height:26px;display:inline-flex;align-items:center;padding:0 10px;border-radius:8px;background:var(--ink);color:var(--paper);font:550 11.5px/1 var(--sans)}
+/* The real-world calendar's "Game nights" list, in the same short list
+   under its button. A row's answer is a quiet word in the answer's colour. */
+/* An open list lifts the header above the grid, which shares its layer. */
+.cal-v5 .head:has(.waitpop:not([hidden])){z-index:3}
+.cal-v5 .gnhead{padding:8px 8px 4px;font:650 10.5px/1 var(--sans);letter-spacing:.12em;text-transform:uppercase;color:var(--mut)}
+.cal-v5 .gnempty{margin:0;padding:6px 8px 10px;font:500 12.5px/1.4 var(--sans);color:var(--mut)}
+.cal-v5 .gnans{flex:none;font:550 11.5px/1 var(--sans);color:var(--mut)}
+.cal-v5 .gnans.y{color:var(--free)}
+.cal-v5 .gnans.m{color:var(--best)}
+.cal-v5 .gnans.n{color:var(--off)}
+.cal-v5 .gnfoot{display:flex;justify-content:flex-end;padding:6px 4px 2px;border-top:1px solid var(--hair);margin-top:4px}
+.cal-v5 .marks .gnm .gnart{width:17px;height:17px}
 @keyframes calWaitIn{from{opacity:0;transform:scale(.97) translateY(-4px)}to{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){.cal-v5 .waitpop{animation:none}}
 /* The person running a night can remind a player to answer, from that player's row on the night's page. */
