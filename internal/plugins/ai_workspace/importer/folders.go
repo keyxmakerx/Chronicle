@@ -123,7 +123,50 @@ func (c *Classifier) folderProblem(ctx context.Context, p ParsedPage, cls Classi
 			return ""
 		}
 	}
-	return "No folder called " + quoted + " exists in the " + et.Name + " category or is made in this paste."
+	msg := "No folder called " + quoted + " exists in the " + et.Name + " category or is made in this paste."
+	if others := c.foldersElsewhere(ctx, name, et.ID); len(others) > 0 {
+		msg += " There is one in " + joinOr(others) + ": under Change the details, pick that category, then answer Yes."
+	}
+	return msg
+}
+
+// foldersElsewhere names the other categories that have a folder of this name,
+// or make one in this paste. Folders belong to one category, so an AI that
+// names the right folder under the wrong category is a common slip; naming
+// where the folder is lets the owner fix the row instead of guessing.
+func (c *Classifier) foldersElsewhere(ctx context.Context, name string, skipTypeID int) []string {
+	var out []string
+	for i := range c.cachedTypes {
+		et := &c.cachedTypes[i]
+		if et.ID == skipTypeID {
+			continue
+		}
+		found := false
+		for _, cat := range []string{et.Name, et.NamePlural, et.Slug} {
+			if cat != "" && c.pendingFolders[PendingFolderKey(cat, name)] {
+				found = true
+			}
+		}
+		if !found {
+			// An ambiguous name is still a folder there; any other error
+			// only loses the hint.
+			node, err := c.folders.FindFolder(ctx, c.campaignID, et.ID, name)
+			var ae *apperror.AppError
+			found = node != nil || (errors.As(err, &ae) && ae.Code == 400)
+		}
+		if found {
+			out = append(out, et.Name)
+		}
+	}
+	return out
+}
+
+// joinOr lists names as "A", "A or B", or "A, B or C".
+func joinOr(names []string) string {
+	if len(names) <= 1 {
+		return strings.Join(names, "")
+	}
+	return strings.Join(names[:len(names)-1], ", ") + " or " + names[len(names)-1]
 }
 
 // PendingFolderKey keys a folder this paste makes by category and name, both

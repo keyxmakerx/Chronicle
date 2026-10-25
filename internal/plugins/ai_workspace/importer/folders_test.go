@@ -303,3 +303,44 @@ func TestCommit_ParentUpdateLeavesFolder(t *testing.T) {
 		t.Errorf("sets = %v, want a take-out", fa.sets)
 	}
 }
+
+// A folder named under the wrong category says where the folder is, since
+// folders belong to one category and the owner can pick that one instead.
+func TestClassify_FolderInAnotherCategory(t *testing.T) {
+	lookup := &stubLookup{types: []entities.EntityType{
+		{ID: 1, Slug: "lore", Name: "Lore"}, {ID: 2, Slug: "places", Name: "Places"}, {ID: 3, Slug: "races", Name: "Races"},
+	}}
+	inRaces := func(folder string) ParsedPage {
+		p := page("The Khepri", "races", "# The Khepri\nBody.")
+		p.FrontMatter.Folder = folder
+		return p
+	}
+	tests := []struct {
+		name    string
+		folder  string
+		pending map[string]bool
+		want    string
+		notWant string
+	}{
+		{"folder in another category", "Gods", nil, `No folder called "Gods" exists in the Races category or is made in this paste. There is one in Lore: under Change the details, pick that category, then answer Yes.`, ""},
+		{"made in this paste elsewhere", "Titans", map[string]bool{"places|titans": true}, "There is one in Places:", ""},
+		{"in two other categories", "Gods", map[string]bool{"places|gods": true}, "There is one in Lore or Places:", ""},
+		{"nowhere", "Nowhere", nil, "No folder called", "There is one"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := NewClassifier(lookup, "camp-1").WithFolders(newFolders(), tt.pending)
+			cls, err := c.ClassifyAll(context.Background(), []ParsedPage{inRaces(tt.folder)})
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := cls[0]
+			if got.Status != StatusParentProblem || !strings.Contains(got.Reason, tt.want) {
+				t.Fatalf("status %q reason %q, want %q", got.Status, got.Reason, tt.want)
+			}
+			if tt.notWant != "" && strings.Contains(got.Reason, tt.notWant) {
+				t.Errorf("reason %q should not say %q", got.Reason, tt.notWant)
+			}
+		})
+	}
+}

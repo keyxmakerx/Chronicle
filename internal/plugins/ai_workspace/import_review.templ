@@ -622,11 +622,13 @@ templ reviewRowHeader(idx int, page importer.ParsedPage) {
 	</div>
 }
 
-// reviewRowActionChip is the row's action as a picker.
+// reviewRowActionChip is the row's action as a picker. It keeps its own
+// width: .input is full width, which would squeeze the name box beside it
+// to nothing.
 templ reviewRowActionChip(idx int, action string) {
 	<select
 		name={ fmt.Sprintf("page_%d_action", idx) }
-		class="input text-xs"
+		class="input text-xs w-auto shrink-0"
 		aria-label={ fmt.Sprintf("Action verb for page %d", idx+1) }
 	>
 		@actionOption(importer.ActionCreate, "Add", action)
