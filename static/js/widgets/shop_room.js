@@ -1215,7 +1215,7 @@
   // The shop's door in black-and-white line art: the dark doorway behind, and
   // the leaf that swings open. ZZ becomes a per-widget id prefix.
   var DOOR_WAY = '<svg viewBox="0 0 64 96" aria-hidden="true"><path d="M6 94V34A26 26 0 0 1 58 34V94Z" fill="#000"/><path d="M2 95V34A30 30 0 0 1 62 34V95" fill="none" stroke="currentColor" stroke-width="3"/><path d="M0 95H64" stroke="currentColor" stroke-width="3"/></svg>';
-  var DOOR_LEAF = '<svg viewBox="0 0 64 96" aria-hidden="true"><defs><clipPath id="ZZc"><path d="M6 94V34A26 26 0 0 1 58 34V94Z"/></clipPath></defs><path d="M6 94V34A26 26 0 0 1 58 34V94Z" fill="var(--color-card-bg,#fff)" stroke="currentColor" stroke-width="2.5"/><g clip-path="url(#ZZc)" stroke="currentColor" stroke-width="1.4"><path d="M19 4V94M32 4V94M45 4V94"/></g><g fill="currentColor"><rect x="6" y="40" width="34" height="4.5" rx="1"/><rect x="6" y="74" width="34" height="4.5" rx="1"/><circle cx="12" cy="42.2" r="1.3" fill="var(--color-card-bg,#fff)"/><circle cx="12" cy="76.2" r="1.3" fill="var(--color-card-bg,#fff)"/></g><circle cx="49" cy="62" r="4.2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="49" cy="57" r="1.6" fill="currentColor"/></svg>';
+  var DOOR_LEAF = '<svg viewBox="0 0 64 96" aria-hidden="true"><defs><clipPath id="ZZc"><path d="M6 94V34A26 26 0 0 1 58 34V94Z"/></clipPath></defs><path d="M6 94V34A26 26 0 0 1 58 34V94Z" fill="var(--color-bg-primary,#2b2219)" stroke="currentColor" stroke-width="2.5"/><g clip-path="url(#ZZc)" stroke="currentColor" stroke-width="1.4"><path d="M19 4V94M32 4V94M45 4V94"/></g><g fill="currentColor"><rect x="6" y="40" width="34" height="4.5" rx="1"/><rect x="6" y="74" width="34" height="4.5" rx="1"/><circle cx="12" cy="42.2" r="1.3" fill="var(--color-bg-primary,#2b2219)"/><circle cx="12" cy="76.2" r="1.3" fill="var(--color-bg-primary,#2b2219)"/></g><circle cx="49" cy="62" r="4.2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="49" cy="57" r="1.6" fill="currentColor"/></svg>';
   var doorSeq = 0;
   var KIND_LABEL = { shelf: 'Shelf', rack: 'Rack', cabinet: 'Cabinet', bookcase: 'Bookcase', forge: 'Forge', window: 'Window', herbs: 'Hanging herbs', counter: 'Counter', table: 'Table',
     barrel: 'Barrel', crate: 'Crate', anvil: 'Anvil', glass: 'Glass case', stall: 'Market stall', rug: 'Rug', pedestal: 'Pedestal', lamp: 'Lamp', sack: 'Sack',
@@ -1227,17 +1227,35 @@
   var CSS = [
     '.shr{display:grid;gap:12px;margin-bottom:16px}',
     '.shr.arr .shr-scene{min-height:540px}',
-    '.shr-card{border:1px solid var(--color-border,#e5e7eb);border-radius:10px;overflow:hidden;background:var(--color-card-bg,#fff)}',
-    '.shr-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 12px;border-bottom:1px solid var(--color-border,#e5e7eb)}',
-    '.shr-top b{color:var(--color-text-primary,#111827)}',
-    '.shr-sub{color:var(--color-text-secondary,#6b7280);font-size:.8rem}',
+    // Inside, the room fills the window: a modal dialog sits above everything,
+    // including a Foundry window that holds the widget.
+    '.shr-dlg{position:fixed;inset:0;width:100vw;height:100vh;height:100dvh;max-width:none;max-height:none;margin:0;padding:0;border:0;background:#0b0a09;color:#f3e9d8;overflow:hidden;transform-origin:50% 50%}',
+    '.shr-dlg::backdrop{background:#000}',
+    '.shr-dlg.leaving{transform:scale(.06);opacity:0;transition:transform .42s cubic-bezier(.4,0,.6,1),opacity .3s ease .12s}',
+    '.shr-card{position:relative;display:flex;flex-direction:column;width:100%;height:100%}',
+    '.shr-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 16px;background:#000;color:#f3e9d8;position:relative;z-index:30}',
+    '.shr-top b{font-family:var(--font-heading,Georgia,serif);font-size:1.05rem;color:#f3e9d8}',
+    '.shr-sub{color:#bfb3a0;font-size:.8rem}',
+    '.shr-stage{flex:1;min-height:0;display:grid;place-items:center;overflow:hidden}',
     '.shr-mode{margin-left:auto;display:inline-flex;border:1px solid var(--color-border,#e5e7eb);border-radius:8px;overflow:hidden}',
     '.shr-mode button{border:0;background:transparent;color:var(--color-text-secondary,#6b7280);padding:5px 12px;cursor:pointer;font-size:.85rem}',
     '.shr-mode button[aria-pressed="true"]{background:var(--shr-acc);color:#fff;font-weight:600}',
     // Leaving is the only way out: presses elsewhere on the page keep the shop open.
-    '.shr-out{margin-left:auto;width:30px;height:30px;border:0;border-radius:8px;display:inline-grid;place-items:center;background:transparent;color:var(--color-text-secondary,#6b7280);cursor:pointer;transition:background .15s,color .15s}',
-    '.shr-out:hover{background:var(--color-bg-tertiary,#f3f4f6);color:var(--color-text-primary,#111827)}.shr-mode+.shr-out{margin-left:0}.shr.arr .shr-out{display:none}',
-    '.shr-scene{position:relative;touch-action:none;background:radial-gradient(ellipse at 50% 40%,color-mix(in srgb,var(--color-text-primary,#111827) 6%,var(--color-bg-primary,#f9fafb)),color-mix(in srgb,var(--color-text-primary,#111827) 14%,var(--color-bg-primary,#f9fafb)))}',
+    '.shr-out,.shr-cart{width:36px;height:36px;border:1px solid transparent;border-radius:8px;display:inline-grid;place-items:center;background:transparent;color:#f3e9d8;cursor:pointer;position:relative;padding:0;transition:border-color .12s,background .12s}',
+    '.shr-out:hover,.shr-cart:hover,.shr-cart[aria-expanded="true"]{border-color:rgb(243 233 216/.4);background:rgb(255 255 255/.06)}.shr.arr .shr-out,.shr.arr .shr-cart{display:none}',
+    '.shr-cnt{position:absolute;top:-5px;right:-7px;min-width:18px;height:18px;padding:0 5px;box-sizing:border-box;border-radius:9px;background:#f59e0b;color:#1a120c;font-size:.68rem;font-weight:700;line-height:18px;text-align:center}.shr-cnt:empty{display:none}',
+    // The basket: hovering it peeks at what's in it; pressing it drapes the
+    // wares and the basket down from it, over the room, until it is closed.
+    '.shr-peek{position:absolute;top:58px;right:60px;z-index:31;width:250px;padding:10px 12px;border-radius:8px;background:var(--color-card-bg,#1f2937);color:var(--color-text-body,#d1d5db);border:1px solid var(--color-border,#374151);box-shadow:0 10px 26px -6px rgb(0 0 0/.5);font-size:.82rem;pointer-events:none;opacity:0;transform:translateY(4px);transition:opacity var(--dur-micro,120ms),transform var(--dur-micro,120ms)}',
+    '.shr-peek.on{opacity:1;transform:none}.shr-peek b{color:var(--color-text-primary,#f9fafb)}.shr-peek p{margin:0;display:flex;justify-content:space-between;gap:10px;padding:2px 0}',
+    '.shr-menu{position:absolute;top:58px;right:60px;z-index:32;width:min(420px,calc(100vw - 16px));max-height:calc(100% - 70px);display:flex;flex-direction:column;border-radius:10px;background:var(--color-card-bg,#1f2937);color:var(--color-text-body,#d1d5db);border:1px solid var(--color-border,#374151);box-shadow:0 18px 40px -10px rgb(0 0 0/.6);transform-origin:calc(100% - 20px) 0;animation:shr-drape var(--dur-standard,200ms) var(--ease-out,ease-out)}',
+    '.shr-menu[hidden]{display:none}',
+    '@keyframes shr-drape{from{opacity:0;transform:scaleY(.6)}}',
+    '.shr-mh{display:flex;align-items:center;gap:8px;padding:10px 12px 8px;border-bottom:1px solid var(--color-border,#374151)}',
+    '.shr-mh h3{flex:1;margin:0;font-size:.7rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--color-text-primary,#f9fafb)}.shr-mh h3 span{font-weight:500;color:var(--color-text-secondary,#9ca3af);letter-spacing:0;margin-left:4px}',
+    '.shr-menu .shr-tabs{padding:8px 10px 0}.shr-menu .shr-list{flex:1;min-height:0;max-height:none;padding:4px 6px}',
+    '@media (max-width:640px){.shr-menu,.shr-peek{right:8px}}',
+    '.shr-scene{position:relative;flex:none;touch-action:none;background:radial-gradient(ellipse at 50% 40%,color-mix(in srgb,var(--color-text-primary,#111827) 6%,var(--color-bg-primary,#f9fafb)),color-mix(in srgb,var(--color-text-primary,#111827) 14%,var(--color-bg-primary,#f9fafb)))}',
     '.shr.arr .shr-scene{background-image:radial-gradient(circle,color-mix(in srgb,var(--shr-acc) 35%,transparent) 1px,transparent 1.5px);background-size:16px 16px}',
     '.shr-iso{display:block;width:100%;height:auto;user-select:none}',
     // The paper look sits over the scene on a dark desk; the drawing beneath keeps the size.
@@ -1260,27 +1278,19 @@
     '@keyframes shr-bob{to{transform:translateY(-4px)}}',
     '.shr-plate{position:absolute;transform:translate(-50%,0);width:max-content;max-width:min(16rem,calc(100% - 16px));text-align:center;overflow-wrap:anywhere;font:600 .78rem/1.25 Georgia,serif;color:#2a2115;background:linear-gradient(#e9cf7c,#b8913a);border-radius:3px;padding:2px 10px;box-shadow:0 1px 2px rgb(0 0 0/.5);z-index:3;pointer-events:none}',
     '@media (max-width:640px){.shr-keeper{width:52px;height:52px;margin:-26px 0 0 -26px}}',
-    '.shr-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 12px;border-top:3px solid var(--shr-acc)}',
-    '.shr-wbtn{display:flex;align-items:center;gap:8px;border:0;background:none;color:var(--color-text-primary,#111827);cursor:pointer;padding:4px 2px;font-weight:600}',
-    '.shr-wbtn span{color:var(--color-text-secondary,#6b7280);font-weight:400}',
-    '.shr-chev{display:inline-block;transition:transform .25s}',
-    '.shr.open .shr-chev{transform:rotate(180deg)}',
-    '.shr-bk{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:.84rem;color:var(--color-text-secondary,#6b7280)}',
+    '.shr-bk{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 12px;border-top:1px solid var(--color-border,#374151);font-size:.84rem;color:var(--color-text-secondary,#9ca3af)}',
+    '.shr-bk>.shr-buy{margin-left:auto}',
     '.shr-bk:empty{display:none}',
     '.shr-bk select{font:inherit;font-size:.82rem;padding:3px 6px;border:1px solid var(--color-border,#e5e7eb);border-radius:6px;background:var(--color-bg-primary,#fff);color:var(--color-text-primary,#111827)}',
-    '.shr-bk .shr-note{flex-basis:100%;text-align:right;font-size:.78rem}',
+    '.shr-bk .shr-note{flex-basis:100%;font-size:.78rem}',
     '.shr-add,.shr-buy{border:1px solid var(--color-border,#e5e7eb);background:transparent;color:var(--color-text-primary,#111827);border-radius:6px;padding:4px 10px;cursor:pointer;font-size:.8rem;white-space:nowrap}',
     '.shr-buy{background:var(--shr-acc);border-color:var(--shr-acc);color:#fff;font-weight:600}',
     '.shr-add:disabled,.shr-buy:disabled{opacity:.5;cursor:default}',
     '.shr.arr .shr-add,.shr.arr .shr-bk{display:none}',
-    '.shr-fx{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:.78rem;color:var(--color-text-secondary,#6b7280)}',
+    '.shr-fx{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:.78rem;color:#bfb3a0}.shr-top .shr-seg{border-color:rgb(243 233 216/.3)}.shr-top .shr-seg button{color:#bfb3a0}.shr-top .shr-seg button[aria-pressed="true"]{background:#f3e9d8;color:#1a120c}',
     '.shr-seg{display:inline-grid;grid-auto-flow:column;grid-auto-columns:1fr;border:1px solid var(--color-border,#e5e7eb);border-radius:6px;overflow:hidden}',
     '.shr-seg button{border:0;background:transparent;color:var(--color-text-secondary,#6b7280);padding:4px 8px;cursor:pointer;font-size:.8rem}',
     '.shr-seg button[aria-pressed="true"]{background:var(--color-text-primary,#111827);color:var(--color-bg-primary,#fff);font-weight:600}',
-    '.shr-wares{display:grid;grid-template-rows:0fr;transition:grid-template-rows .3s}',
-    '.shr.open .shr-wares{grid-template-rows:1fr}',
-    '.shr-wares>div{overflow:hidden;min-height:0}',
-    '.shr-wp{border-top:1px solid var(--color-border,#e5e7eb);padding:10px 12px 12px;display:grid;gap:8px}',
     '.shr-tabs{display:flex;gap:4px;flex-wrap:wrap}',
     '.shr-tab{border:0;background:transparent;color:var(--color-text-secondary,#6b7280);padding:5px 10px;border-radius:6px;cursor:pointer}',
     '.shr-tab[aria-pressed="true"]{color:var(--shr-acc);background:color-mix(in srgb,var(--shr-acc) 12%,transparent);font-weight:600}',
@@ -1379,26 +1389,25 @@
     '.shr-pick .c .rs{margin-left:auto;border:1px solid var(--color-border,#e5e7eb);background:transparent;color:var(--color-text-body,#374151);border-radius:6px;padding:2px 8px;cursor:pointer;font-size:.78rem}',
     '.shr-pick p{margin:0;font-size:.74rem;color:var(--color-text-secondary,#6b7280)}',
     '.shr button:focus-visible,.shr-pick button:focus-visible{outline:2px solid var(--color-accent,#6366f1);outline-offset:2px}',
-    // Closed, the shop is a shopfront with a drawn door. Pressing the door
-    // swings it open where it stands, then the room grows out of the
-    // doorway as you walk through it.
+    // Closed, the shop is a door standing in the middle of the page with its
+    // name under it. Pressing it swings the door open, then the dark doorway
+    // grows until it fills the window and the room is there.
     '.shr{position:relative}',
-    '.shr-front{display:none;align-items:center;gap:14px;width:100%;text-align:left;border:1px solid var(--color-border,#e5e7eb);border-radius:10px;background:var(--color-card-bg,#fff);color:var(--color-text-primary,#111827);padding:14px 16px;cursor:pointer;font:inherit}',
-    // Pointing at the door is stepping up to it: the door grows and the wall around it dims.
-    '.shr-front:hover{background:radial-gradient(circle at 46px 50%,var(--color-card-bg,#fff) 0,color-mix(in srgb,var(--color-card-bg,#fff) 88%,#78350f) 45%,color-mix(in srgb,var(--color-card-bg,#fff) 80%,#78350f) 100%)}',
-    '.shr-front .nm{transition:transform .5s,opacity .5s}.shr-front:hover .nm{transform:translateX(6px);opacity:.8}',
-    '.shr-front:hover .shr-dr{transform:scale(1.08)}',
-    '.shr-front .nm{flex:1;min-width:0}.shr-front .nm b{display:block}.shr-front .nm span{font-size:.8rem;color:var(--color-text-secondary,#6b7280)}',
-    '.shr-dr{position:relative;flex:none;width:64px;height:96px;perspective:420px;transform-origin:50% 55%;transition:transform .5s cubic-bezier(.3,.7,.3,1)}.shr-dr>span{position:absolute;inset:0}.shr-dr svg{display:block;width:100%;height:100%}',
-    '.shr-dr .lf{transform-origin:6px 50%;transition:transform .7s cubic-bezier(.45,.05,.3,1)}.shr-front.opening .lf{transform:rotateY(-110deg)}',
-    '.shr.closed .shr-front{display:flex}.shr.closed .shr-card{display:none}',
-    // Walking in: the dark doorway grows until the widget is black, the room
-    // swaps in behind the dark (so its taller height never shows as a jump),
-    // then the dark lifts. Only transform and opacity animate, which phones keep smooth.
-    '.shr.walking{overflow:hidden;border-radius:10px}',
-    '.shr-hole{position:absolute;z-index:8;display:none;background:#000;border-radius:999px 999px 0 0;pointer-events:none;will-change:transform}',
-    '.shr-hole.cover{transition:transform .6s cubic-bezier(.55,0,.4,1)}',
-    '.shr-dark{position:absolute;inset:0;z-index:8;background:#000;border-radius:10px;opacity:0;visibility:hidden;pointer-events:none}',
+    '.shr .shr-front{display:none;flex-direction:column;align-items:center;gap:8px;width:auto;height:auto;min-height:0;margin:0 auto;padding:14px 28px 10px;border:0;border-radius:10px;background:none;box-shadow:none;color:var(--color-text-primary,#e7e3dc);font:inherit;line-height:1.3;text-align:center;cursor:pointer;position:relative}',
+    '.shr .shr-front:focus-visible{outline:2px solid var(--color-accent,#6366f1);outline-offset:2px}',
+    // Stepping up to the door: it grows a little and warm light spills under it.
+    '.shr-front::before{content:"";position:absolute;left:50%;top:118px;width:240px;height:90px;transform:translateX(-50%);background:radial-gradient(closest-side,rgb(245 158 11/.18),transparent);opacity:0;transition:opacity .4s;pointer-events:none}',
+    '.shr-front:hover::before,.shr-front.opening::before{opacity:1}',
+    '.shr-front:hover .shr-dr{transform:scale(1.05)}',
+    '.shr-front .nm{font-family:var(--font-heading,Georgia,serif);font-size:1.15rem;font-weight:600;max-width:28rem;overflow-wrap:anywhere}',
+    '.shr-front .hint{font-size:.68rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--color-text-secondary,#a49c8e)}',
+    '.shr-dr{position:relative;flex:none;width:96px;height:144px;perspective:520px;transform-origin:50% 55%;transition:transform .5s cubic-bezier(.3,.7,.3,1)}.shr-dr>span{position:absolute;inset:0}.shr-dr svg{display:block;width:100%;height:100%}',
+    '.shr-dr .lf{transform-origin:7% 50%;transition:transform .65s cubic-bezier(.45,.05,.3,1)}.shr-front.opening .lf{transform:rotateY(-110deg)}',
+    '.shr.closed .shr-front,.shr.inside .shr-front{display:flex}',
+    // Walking in: the doorway, drawn over the whole page, grows past the window's
+    // edges; the room opens behind the dark, then the dark lifts.
+    '.shr-hole{position:fixed;z-index:2147483000;background:#000;border-radius:999px 999px 0 0;pointer-events:none;will-change:transform;transition:transform .6s cubic-bezier(.55,0,.4,1)}',
+    '.shr-dark{position:absolute;inset:0;z-index:40;background:#000;opacity:0;visibility:hidden;pointer-events:none}',
     '.shr-dark.on{opacity:1;visibility:visible}.shr-dark.fade{visibility:visible;transition:opacity .8s ease}',
     // The lit room: glows flicker, flames lick, embers rise, dust drifts and the
     // anvil throws sparks. Lights warm up after you walk in (.cold), the room
@@ -1474,21 +1483,29 @@
       // ---- Skeleton ----
       var uid = ++doorSeq;
       el.innerHTML = '<div class="shr closed' + (S.fx === 'light' ? ' fxlight' : '') + '">' +
-        '<button type="button" class="shr-front" data-enter="1" aria-expanded="false"><span class="shr-dr"><span class="w">' + DOOR_WAY.replace(/ZZ/g, 'shr-d' + uid) + '</span><span class="lf">' + DOOR_LEAF.replace(/ZZ/g, 'shr-d' + uid) + '</span></span><span class="nm"><b></b><span>Press the door to step inside</span></span></button><div class="shr-hole" aria-hidden="true"></div><div class="shr-dark" aria-hidden="true"></div>' +
-        '<div class="shr-card">' +
-        '<div class="shr-top"><b></b><span class="shr-sub">Shop</span>' + (canArrange ? '<span class="shr-mode" role="group" aria-label="Mode"><button type="button" data-mode="shop" aria-pressed="true">Shop</button><button type="button" data-mode="arr" aria-pressed="false">Arrange</button></span>' : '') + '<button type="button" class="shr-out" data-out="1" aria-label="Leave the shop" title="Leave the shop"><i class="fa-solid fa-door-open" aria-hidden="true"></i></button></div>' +
-        '<div class="shr-scene"><svg class="shr-iso" role="img"></svg><div class="shr-paper"></div><div class="shr-grain"><svg width="100%" height="100%" aria-hidden="true"><filter id="shr-grn"><feTurbulence type="fractalNoise" baseFrequency=".85" numOctaves="2" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/></filter><rect width="100%" height="100%" filter="url(#shr-grn)"/></svg></div>' +
-        '<button type="button" class="shr-keeper"></button><div class="shr-plate"></div></div>' +
-        '<div class="shr-bar"><button type="button" class="shr-wbtn" aria-expanded="false">Wares <span></span><i class="shr-chev" aria-hidden="true">▾</i></button><div class="shr-bk" aria-live="polite"></div>' +
-        '<span class="shr-fx">Shadows <span class="shr-seg" role="group" aria-label="Shadows and light"><button type="button" data-fx="full">Full</button><button type="button" data-fx="light">Light</button></span></span></div>' +
-        '<div class="shr-wares"><div><div class="shr-wp"><div class="shr-tabs"></div><div class="shr-list"></div></div></div></div></div></div>';
+        '<button type="button" class="shr-front" data-enter="1" aria-haspopup="dialog" aria-expanded="false"><span class="shr-dr" aria-hidden="true"><span class="w">' + DOOR_WAY.replace(/ZZ/g, 'shr-d' + uid) + '</span><span class="lf">' + DOOR_LEAF.replace(/ZZ/g, 'shr-d' + uid) + '</span></span><span class="nm"></span><span class="hint">Step inside</span></button>' +
+        '<dialog class="shr-dlg"><div class="shr-card">' +
+        '<div class="shr-top"><b></b><span class="shr-sub">Shop</span>' + (canArrange ? '<span class="shr-mode" role="group" aria-label="Mode"><button type="button" data-mode="shop" aria-pressed="true">Shop</button><button type="button" data-mode="arr" aria-pressed="false">Arrange</button></span>' : '') +
+        '<span class="shr-fx">Shadows <span class="shr-seg" role="group" aria-label="Shadows and light"><button type="button" data-fx="full">Full</button><button type="button" data-fx="light">Light</button></span></span>' +
+        '<button type="button" class="shr-cart" data-cart="1" aria-expanded="false" aria-label="Basket and wares" title="Basket and wares"><i class="fa-solid fa-basket-shopping" aria-hidden="true"></i><span class="shr-cnt"></span></button>' +
+        '<button type="button" class="shr-out" data-out="1" aria-label="Leave the shop" title="Leave the shop"><i class="fa-solid fa-door-open" aria-hidden="true"></i></button></div>' +
+        '<div class="shr-stage"><div class="shr-scene"><svg class="shr-iso" role="img"></svg><div class="shr-paper"></div><div class="shr-grain"><svg width="100%" height="100%" aria-hidden="true"><filter id="shr-grn"><feTurbulence type="fractalNoise" baseFrequency=".85" numOctaves="2" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/></filter><rect width="100%" height="100%" filter="url(#shr-grn)"/></svg></div>' +
+        '<button type="button" class="shr-keeper"></button><div class="shr-plate"></div></div></div>' +
+        '<div class="shr-peek" role="status" aria-live="polite"></div>' +
+        '<div class="shr-menu" role="region" aria-label="Wares and basket" hidden><div class="shr-mh"><h3>Wares<span></span></h3><button type="button" class="shr-x" data-cart="1" aria-label="Close the basket">✕</button></div>' +
+        '<div class="shr-tabs"></div><div class="shr-list"></div><div class="shr-bk" aria-live="polite"></div></div>' +
+        '<div class="shr-dark" aria-hidden="true"></div></div></dialog></div>';
       var root = el.firstChild, svg = root.querySelector('.shr-iso'), pel = root.querySelector('.shr-paper'), scene = root.querySelector('.shr-scene'), keeper = root.querySelector('.shr-keeper'), plate = root.querySelector('.shr-plate');
       var tip = document.createElement('div'), say = document.createElement('div'), pick = document.createElement('div'), panel = null;
       tip.className = 'shr-tip'; tip.setAttribute('role', 'tooltip'); say.className = 'shr-say'; say.setAttribute('aria-live', 'polite');
       pick.className = 'shr-pick'; pick.hidden = true; pick.setAttribute('role', 'dialog'); pick.setAttribute('aria-label', 'Change item look');
-      document.body.appendChild(tip); document.body.appendChild(say); document.body.appendChild(pick);
+      var dlg = root.querySelector('.shr-dlg'), stage = root.querySelector('.shr-stage'), menu = root.querySelector('.shr-menu'), peekEl = root.querySelector('.shr-peek'), cartBtn = root.querySelector('.shr-cart');
+      // The tooltip, speech bubble and picker live in the dialog: it sits in the
+      // top layer, and anything left on the page would be drawn under it.
+      dlg.appendChild(tip); dlg.appendChild(say); dlg.appendChild(pick);
+      dlg.setAttribute('aria-label', S.name);
       root.querySelector('.shr-top b').textContent = S.name;
-      root.querySelector('.shr-front b').textContent = S.name;
+      root.querySelector('.shr-front .nm').textContent = S.name;
       keeper.setAttribute('aria-label', 'Talk to the shopkeeper');
       if (ds.shopImage) { var im = document.createElement('img'); im.src = ds.shopImage; im.alt = ''; keeper.appendChild(im); }
 
@@ -1499,6 +1516,7 @@
         S.its = shopItems(rels, S.ov, room.MAT, ICONS, words);
         view = room.draw();
         svg.setAttribute('viewBox', view.viewBox.join(' '));
+        fitScene();
         svg.setAttribute('aria-label', S.name + ', the shop room');
         svg.innerHTML = view.svg;
         svg.setAttribute('class', 'shr-iso' + (view.cls || ''));
@@ -1515,6 +1533,15 @@
         markGhost();
       }
       function paperOn() { return S.look === 'paper' && !!window.ShopRoomPaper; }
+      // The scene keeps the drawing's shape and grows to the biggest size the
+      // window leaves it, so the portrait and paper stay on their spots.
+      function fitScene() {
+        if (!view) return;
+        var VB = view.viewBox, w = stage.clientWidth, h = stage.clientHeight;
+        if (!w || !h) return;
+        var sw = Math.min(w, h * VB[2] / VB[3]);
+        scene.style.width = sw + 'px'; scene.style.height = (sw * VB[3] / VB[2]) + 'px';
+      }
       function placeKeeper() {
         var l = 18, t = 40, VB = view.viewBox;
         if (S.portrait) { l = S.portrait[0]; t = S.portrait[1]; }
@@ -1534,7 +1561,7 @@
         var cats = ['All'];
         S.its.forEach(function (it) { if (cats.indexOf(it.k) < 0) cats.push(it.k); });
         if (cats.indexOf(tab) < 0) tab = 'All';
-        root.querySelector('.shr-wbtn span').textContent = S.its.length + (S.its.length === 1 ? ' item' : ' items');
+        root.querySelector('.shr-mh h3 span').textContent = S.its.length;
         root.querySelector('.shr-tabs').innerHTML = cats.length > 2 ? cats.map(function (c) { return '<button type="button" class="shr-tab" data-tab="' + esc(c) + '" aria-pressed="' + (c === tab) + '">' + esc(c) + '</button>'; }).join('') : '';
         var rows = S.its.filter(function (it) { return tab === 'All' || it.k === tab; }).map(function (it) {
           var name = it.entityId ? '<a class="shr-nm" href="' + esc(campaignUrl + '/entities/' + it.entityId) + '" data-hx-boost="true">' + esc(it.n) + '</a>' : '<span class="shr-nm">' + esc(it.n) + '</span>';
@@ -1558,6 +1585,7 @@
       // The basket line in the bar: what's in it, who pays, and Buy.
       function renderBasket() {
         var bk = root.querySelector('.shr-bk');
+        renderPeek();
         if (!buy || !buy.buyers.length) { bk.innerHTML = ''; return; }
         var who = buyer(), sm = basketSummary(basket, S.its, who), h = '';
         var coin = localCoin(words, sm.currency);
@@ -1610,7 +1638,23 @@
           });
         }).catch(function (e) { note = e.message; }).then(function () { busy = false; draw(); renderList(); });
       }
-      function setOpen(v) { open = v; root.classList.toggle('open', v); root.querySelector('.shr-wbtn').setAttribute('aria-expanded', v); }
+      // The basket's count, and its peek: what's in it and the total, or how to start.
+      function renderPeek() {
+        var sm = basketSummary(basket, S.its, buyer()), coin = localCoin(words, sm.currency), h = '';
+        root.querySelector('.shr-cnt').textContent = sm.count ? sm.count : '';
+        cartBtn.setAttribute('aria-label', sm.count ? 'Basket and wares, ' + sm.count + ' in your basket' : 'Basket and wares');
+        if (sm.count) {
+          h = '<b>In your basket</b>' + S.its.filter(function (it) { return basket[String(it.id)] && !it.out; }).map(function (it) {
+            return '<p><span>' + basket[String(it.id)] + ' × ' + esc(it.n) + '</span></p>';
+          }).join('') + '<p><b>Total</b><b>' + esc(sm.total + ' ' + coin.text) + '</b></p>';
+        } else h = '<b>' + (buy && buy.buyers.length ? 'Your basket is empty.' : S.its.length + (S.its.length === 1 ? ' thing' : ' things') + ' for sale.') + '</b><p>Press to see the wares.</p>';
+        peekEl.innerHTML = h;
+      }
+      function peek(on) { peekEl.classList.toggle('on', on && !open); }
+      function setOpen(v) {
+        open = v; root.classList.toggle('open', v); menu.hidden = !v; cartBtn.setAttribute('aria-expanded', v);
+        if (v) peek(false);
+      }
 
       // ---- Tooltip and the keeper's lines ----
       function showTip(g) {
@@ -1877,7 +1921,17 @@
         var g = (paperOn() ? pel : svg).querySelector('.it[data-i="' + picking + '"]'); if (g) openPicker(picking, g);
       }
       function onDocDown(e) { if (picking !== null && !pick.contains(e.target) && !e.target.closest('.it')) closePicker(); }
-      function onDocKey(e) { if (e.key === 'Escape') { if (picking !== null) { closePicker(); return; } say.classList.remove('on'); tryLeave(); } }
+      function onDocKey(e) {
+        if (e.key !== 'Escape' || !dlg.open) return;
+        // The room has the Escape; a host page (Foundry closes its top window
+        // on Escape) listening further up never sees it.
+        e.stopPropagation();
+        if (picking !== null) { closePicker(); return; }
+        say.classList.remove('on');
+        if (S.mode === 'arr') { tryLeave(); return; }
+        if (open) { setOpen(false); cartBtn.focus({ preventScroll: true }); return; }
+        root.querySelector('.shr-out').click();
+      }
       function onScroll() { tip.classList.remove('on'); say.classList.remove('on'); }
 
       function onKeeperDown(e) {
@@ -1994,6 +2048,7 @@
         if (b.dataset.mode) { if (b.dataset.mode === 'shop') tryLeave(); else if (S.mode !== 'arr') { S.mode = 'arr'; setMode(); } return; }
         if (b.dataset.leave) { tryLeave(); return; }
         if (b.dataset.out) { leave(); front.focus({ preventScroll: true }); return; }
+        if (b.dataset.cart) { setOpen(!open); if (open) { var f = menu.querySelector('.shr-tab,[data-add],.shr-x'); if (f) f.focus({ preventScroll: true }); } else cartBtn.focus({ preventScroll: true }); return; }
         if (b.dataset.discard) { discard(); return; }
         if (b.dataset.saveroom) { saveRoom(); return; }
         if (b.dataset.fx) { S.fx = b.dataset.fx; saveFx(S.fx); root.classList.toggle('fxlight', S.fx !== 'full'); draw(); renderList(); return; }
@@ -2001,7 +2056,6 @@
         if (b.dataset.add) { basket[b.dataset.add] = (basket[b.dataset.add] || 0) + 1; note = ''; renderList(); return; }
         if (b.dataset.empty) { basket = {}; note = ''; renderList(); return; }
         if (b.dataset.buy) { doBuy(); return; }
-        if (b.classList.contains('shr-wbtn')) { setOpen(!open); return; }
         if (b === keeper) { onKeeperClick(); return; }
         if (!canArrange) return;
         var k = b.dataset.k;
@@ -2046,34 +2100,39 @@
         closePicker(); draw();
       }
       // ---- Opening and closing ----
-      var front = root.querySelector('.shr-front');
-      var hole = root.querySelector('.shr-hole'), dark = root.querySelector('.shr-dark');
-      var walkT = 0;
-      // Opening: the door swings open in place, then the room is revealed
-      // as its dark doorway grows to fill the widget.
+      var front = root.querySelector('.shr-front'), dark = root.querySelector('.shr-dark');
+      var walkT = 0, hole = null;
+      // Calm, Off and a device asking for less motion skip the walk; the room is simply there.
+      function still() { return matchMedia('(prefers-reduced-motion: reduce)').matches || /^(calm|off)$/.test(document.documentElement.getAttribute('data-motion') || ''); }
+      function showRoom() {
+        root.classList.remove('closed'); root.classList.add('inside');
+        if (!dlg.open) dlg.showModal();
+        draw(); alive(true);
+      }
+      // Opening: the door swings open in place, then its dark doorway grows
+      // past the edges of the window and the room is behind it.
       function enter() {
         if (!root.classList.contains('closed') || front.classList.contains('opening')) return;
         front.setAttribute('aria-expanded', 'true');
-        if (matchMedia('(prefers-reduced-motion: reduce)').matches) { root.classList.remove('closed'); draw(); alive(true); return; }
+        if (still()) { showRoom(); return; }
         front.classList.add('opening');
-        walkT = setTimeout(walkIn, 700);
+        walkT = setTimeout(walkIn, 650);
       }
       function walkIn() {
-        var dr = front.querySelector('.shr-dr').getBoundingClientRect(), r0 = root.getBoundingClientRect();
+        var dr = front.querySelector('.shr-dr').getBoundingClientRect();
         // The doorway's opening inside the door drawing's 64 by 96 box.
         var w = dr.width * 52 / 64, h = dr.height * 86 / 96;
-        hole.style.left = (dr.left - r0.left + dr.width * 6 / 64) + 'px';
-        hole.style.top = (dr.top - r0.top + dr.height * 8 / 96) + 'px';
-        hole.style.width = w + 'px'; hole.style.height = h + 'px';
-        hole.style.transformOrigin = '50% 60%'; hole.style.transform = 'scale(1)'; hole.style.display = 'block';
-        root.classList.add('walking');
-        var k = 2.2 * Math.hypot(r0.width, r0.height) / Math.min(w, h);
+        hole = document.createElement('div'); hole.className = 'shr-hole';
+        hole.style.left = (dr.left + dr.width * 6 / 64) + 'px'; hole.style.top = (dr.top + dr.height * 8 / 96) + 'px';
+        hole.style.width = w + 'px'; hole.style.height = h + 'px'; hole.style.transformOrigin = '50% 60%';
+        document.body.appendChild(hole);
+        var k = 2.2 * Math.hypot(innerWidth, innerHeight) / Math.min(w, h);
         void hole.offsetWidth;
-        hole.classList.add('cover'); hole.style.transform = 'scale(' + k + ')';
+        hole.style.transform = 'scale(' + k + ')';
         walkT = setTimeout(function () {
-          dark.classList.add('on');
-          root.classList.add('cold'); root.classList.remove('closed'); draw(); alive(true);
-          hole.classList.remove('cover'); hole.style.display = 'none';
+          dark.classList.add('on'); root.classList.add('cold');
+          showRoom();
+          dropHole();
           requestAnimationFrame(function () { requestAnimationFrame(function () {
             dark.classList.add('fade'); dark.classList.remove('on'); root.classList.remove('cold');
             var book = pel.querySelector('.srp'); if (book) book.classList.remove('shut');
@@ -2081,11 +2140,29 @@
           }); });
         }, 620);
       }
+      function dropHole() { if (hole) { hole.remove(); hole = null; } }
       function settle() {
-        root.classList.remove('walking', 'cold'); front.classList.remove('opening');
-        hole.classList.remove('cover'); hole.style.display = 'none'; dark.className = 'shr-dark';
+        root.classList.remove('cold'); dropHole(); dark.className = 'shr-dark';
         placeKeeper();
       }
+      // Leaving shrinks the room back into the doorway it came out of, and the door swings shut.
+      function leave() {
+        clearTimeout(walkT); settle(); alive(false); tilt(0, 0); setOpen(false); peek(false);
+        var shut = function () {
+          if (dlg.open) dlg.close();
+          dlg.classList.remove('leaving'); dlg.style.transformOrigin = '';
+          root.classList.remove('inside'); root.classList.add('closed');
+          front.classList.remove('opening'); front.setAttribute('aria-expanded', 'false');
+        };
+        if (still()) { shut(); return; }
+        var r = front.querySelector('.shr-dr').getBoundingClientRect();
+        dlg.style.transformOrigin = (r.left + r.width / 2) + 'px ' + (r.top + r.height * .6) + 'px';
+        dlg.classList.add('leaving');
+        walkT = setTimeout(shut, 420);
+      }
+      // Escape in the room closes what is open in it first; with nothing open it
+      // presses Leave, so leaving still goes through the one Leave control.
+      function onCancel(e) { e.preventDefault(); }
       // Looping details follow MotionRest: they slow with it and pause once it is still.
       var aliveT = 0;
       function alive(on) {
@@ -2113,11 +2190,6 @@
       }
       scene.addEventListener('pointermove', onTilt);
       scene.addEventListener('pointerleave', function () { tilt(0, 0); });
-      function leave() {
-        clearTimeout(walkT); settle(); alive(false); tilt(0, 0);
-        root.classList.add('closed'); front.setAttribute('aria-expanded', 'false');
-        setOpen(false);
-      }
       // A press outside the whole room while arranging counts as leaving it;
       // the room itself (dragging furniture) and the item picker do not.
       function onOutsideDown(e) {
@@ -2137,6 +2209,9 @@
       keeper.addEventListener('pointerup', onKeeperUp); keeper.addEventListener('pointercancel', onKeeperUp);
       root.addEventListener('click', onRootClick); root.addEventListener('change', onRootChange); root.addEventListener('input', onRootInput);
       pick.addEventListener('click', onPickClick);
+      dlg.addEventListener('cancel', onCancel);
+      cartBtn.addEventListener('pointerenter', function () { peek(true); }); cartBtn.addEventListener('pointerleave', function () { peek(false); });
+      cartBtn.addEventListener('focus', function () { peek(true); }); cartBtn.addEventListener('blur', function () { peek(false); });
       document.addEventListener('pointerdown', onDocDown);
       document.addEventListener('pointerdown', onOutsideDown);
       document.addEventListener('pointermove', onAddMove); document.addEventListener('pointerup', onAddUp);
@@ -2144,8 +2219,11 @@
       pel.addEventListener('pointerdown', onPaperDown); pel.addEventListener('pointermove', onPaperMove);
       pel.addEventListener('pointerup', onSvgUp); pel.addEventListener('pointercancel', onSvgUp);
       pel.addEventListener('click', onPaperClick); pel.addEventListener('keydown', onPaperKey);
-      var resizeObs = window.ResizeObserver ? new ResizeObserver(function () { if (paperOn()) window.ShopRoomPaper.fit(pel); else if (view && !root.classList.contains('closed')) placeKeeper(); }) : null;
-      if (resizeObs) resizeObs.observe(scene);
+      var resizeObs = window.ResizeObserver ? new ResizeObserver(function (en) {
+        if (en.some(function (x) { return x.target === stage; })) fitScene();
+        if (paperOn()) window.ShopRoomPaper.fit(pel); else if (view && !root.classList.contains('closed')) placeKeeper();
+      }) : null;
+      if (resizeObs) { resizeObs.observe(scene); resizeObs.observe(stage); }
       document.addEventListener('keydown', onDocKey);
       window.addEventListener('scroll', onScroll, { passive: true });
 
@@ -2153,6 +2231,7 @@
         onDocDown: onDocDown, onDocKey: onDocKey,
         cleanup: function () {
           clearInterval(typeT); clearInterval(aliveT); clearTimeout(sayT); clearTimeout(walkT); if (raf) cancelAnimationFrame(raf);
+          dropHole(); if (dlg.open) dlg.close();
           themeObs.disconnect(); if (resizeObs) resizeObs.disconnect();
           window.removeEventListener('scroll', onScroll);
           document.removeEventListener('pointerdown', onDocDown); document.removeEventListener('pointerdown', onOutsideDown); document.removeEventListener('pointermove', onAddMove); document.removeEventListener('pointerup', onAddUp); if (adding) adding.ghost.remove(); document.removeEventListener('keydown', onDocKey);

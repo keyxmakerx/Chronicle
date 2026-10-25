@@ -48,6 +48,8 @@ type aiDeps struct {
 	SystemEntries   systems.SystemEntryService
 	Systems         *systems.SystemHandler
 	Tags            tags.TagService
+	PageLayouts     entities.PageLayoutService // nil while its tables are degraded
+	FoundryScenes   records.FoundryScenesAPI   // nil while the sync API is degraded
 
 	// Derived once and shared by several kinds and the lookups.
 	Rolls      records.EventRollAPI // the calendar's roll half; nil without one
@@ -136,6 +138,12 @@ func aiLookups(d *aiDeps, reg *records.Registry) *records.Lookups {
 	}
 	if d.Notes != nil {
 		l.Journal = aiJournalAdapter{notes: d.Notes, members: d.Campaigns}
+	}
+	if d.PageLayouts != nil {
+		l.Layouts = d.PageLayouts
+	}
+	if d.FoundryScenes != nil {
+		l.Scenes = d.FoundryScenes
 	}
 	if d.Quests != nil && d.Boards != nil {
 		l.Quests = aiQuestsAdapter{quests: d.Quests, boards: d.Boards, types: d.Entities}

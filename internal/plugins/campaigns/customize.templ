@@ -145,19 +145,6 @@ templ customizeHomePages(cc *CampaignContext, key, hint, state string) {
 			<p class="czs-lede">The campaign home everyone lands on, a version of it for each kind of member, and the Overview you and your co-{ layouts.GMTerm(ctx) }s see under Manage.</p>
 		</div>
 	</div>
-	<nav class="czs-tabs" aria-label="Which home">
-		for _, t := range homeTabs {
-			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/customize/home/%s", cc.Campaign.ID, t.Key)) }
-				if t.Key == key {
-					aria-current="page"
-				}
-			>
-				<i class={ "fa-solid " + t.Icon } aria-hidden="true"></i>
-				{ t.label(ctx) }
-			</a>
-		}
-	</nav>
 	<p class="czs-home-hint">{ hint }</p>
 	<div class="czs-ped-host">
 		<div data-widget="customize-page-editor" data-state={ state }></div>

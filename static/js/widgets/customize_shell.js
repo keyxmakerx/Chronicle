@@ -452,6 +452,93 @@
       else if (b.hasAttribute('data-czs-what')) openChanges(b);
     });
     on($('[data-czs-find]'), 'click', openFind);
+
+    /* ---------- Index tabs and their drawers ----------
+     * A tab opens its area; its chevron, or the open area's own tab, drapes
+     * the drawer of the area's parts down from the tab's side line. Escape,
+     * the drawer's Close and a click outside put it away. */
+    var topBar = $('[data-czs-top]'), openDr = null;
+    // On a narrow screen the tabs scroll; start with the open area's in view.
+    (function () {
+      var strip = topBar && topBar.querySelector('.czs-tabs-top'), cur = strip && strip.querySelector('.czs-tab[aria-current]');
+      if (!cur || strip.scrollWidth <= strip.clientWidth) return;
+      var w = cur.closest('.czs-tabw') || cur;
+      strip.scrollLeft = Math.max(0, w.offsetLeft - strip.offsetLeft - 12);
+    })();
+    function drawerFor(id) { return $('[data-czs-drawer-for="' + id + '"]'); }
+    function chevFor(id) { return $('[data-czs-drawer="' + id + '"]'); }
+    function placeDrawer(id) {
+      var d = drawerFor(id), w = chevFor(id) && chevFor(id).closest('.czs-tabw');
+      if (!d || !w) return;
+      var left = w.getBoundingClientRect().left - topBar.getBoundingClientRect().left;
+      d.style.left = Math.max(8, Math.min(left, topBar.clientWidth - d.offsetWidth - 8)) + 'px';
+    }
+    function closeDrawer(focus) {
+      if (!openDr) return;
+      var id = openDr;
+      openDr = null;
+      var d = drawerFor(id), c = chevFor(id);
+      if (d) d.hidden = true;
+      if (c) { c.setAttribute('aria-expanded', 'false'); if (focus) c.focus(); }
+    }
+    function openDrawer(id) {
+      if (openDr === id) { closeDrawer(true); return; }
+      closeDrawer(false);
+      var d = drawerFor(id), c = chevFor(id);
+      if (!d || !c) return;
+      closePop();
+      openDr = id;
+      d.hidden = false;
+      c.setAttribute('aria-expanded', 'true');
+      placeDrawer(id);
+      var first = d.querySelector('a[aria-current="page"]') || d.querySelector('a');
+      if (first) first.focus();
+    }
+    if (topBar) {
+      // Capture, so the open area's own tab opens its drawer before htmx
+      // would follow the link.
+      on(topBar, 'click', function (e) {
+        var c = e.target.closest('[data-czs-drawer]');
+        if (c) { e.preventDefault(); openDrawer(c.getAttribute('data-czs-drawer')); return; }
+        if (e.target.closest('[data-czs-drawer-close]')) { e.preventDefault(); closeDrawer(true); return; }
+        var t = e.target.closest('.czs-tab[aria-current="page"]');
+        var id = t && t.getAttribute('data-czs-area');
+        if (id && drawerFor(id)) { e.preventDefault(); e.stopPropagation(); openDrawer(id); return; }
+        // A part on this same page (a Look room) changes the address's #
+        // only, which the area follows.
+        var a = e.target.closest('.czs-drawer a');
+        if (a && a.hash && a.pathname === location.pathname) {
+          e.preventDefault(); e.stopPropagation();
+          closeDrawer(false);
+          if (location.hash === a.hash) window.dispatchEvent(new HashChangeEvent('hashchange'));
+          else location.hash = a.hash;
+          return;
+        }
+        if (a) closeDrawer(false);
+      }, true);
+      on(document, 'pointerdown', function (e) {
+        if (openDr && !e.target.closest('.czs-drawer, [data-czs-drawer], .czs-tab[aria-current="page"]')) closeDrawer(false);
+      }, true);
+      on(document, 'keydown', function (e) {
+        if (e.key === 'Escape' && openDr) { e.preventDefault(); closeDrawer(true); }
+      });
+      on(window, 'resize', function () { if (openDr) placeDrawer(openDr); });
+      // An area that keeps its open part in the page (the Look's rooms)
+      // names it, and which of its parts hold unsaved changes.
+      on(document, 'chronicle:customize-part', function (e) {
+        var dt = (e && e.detail) || {};
+        var tab = $('.czs-tab[data-czs-area="' + dt.area + '"]'), d = drawerFor(dt.area);
+        var part = tab && tab.querySelector('[data-czs-part]');
+        if (part && typeof dt.label === 'string') part.textContent = dt.label;
+        if (!d) return;
+        Array.prototype.forEach.call(d.querySelectorAll('a[data-czs-room]'), function (a) {
+          var k = a.getAttribute('data-czs-room');
+          if (k === dt.key) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+          var dot = a.querySelector('.czs-dot');
+          if (dot) dot.hidden = !(dt.changed && dt.changed.indexOf(k) >= 0);
+        });
+      });
+    }
     on(document, 'keydown', function (e) {
       if (e.defaultPrevented || palette) return;
       var mod = e.ctrlKey || e.metaKey;

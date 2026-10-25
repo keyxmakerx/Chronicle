@@ -271,6 +271,12 @@ func renderEntity(
 	if subLine == "" {
 		subLine = strings.TrimSpace(e.TypeName)
 	}
+	if lay := opts.LayoutNames[e.ID]; lay != "" {
+		if subLine != "" {
+			subLine += " · "
+		}
+		subLine += lay + " layout"
+	}
 	if e.IsPrivate {
 		if subLine != "" {
 			subLine += " · "

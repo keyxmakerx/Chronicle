@@ -111,6 +111,13 @@ When you navigate to an entity show page, dispatch goes:
    layout-block dispatch. The page renders using whatever
    `entityType.Layout.Rows` defines.
 
+One exception comes before step 2: a page wearing one of its category's
+named layouts (a "Hero" layout beside an "NPC" one, say) is drawn from that
+layout, and `EntityShowRenderContext.NamedLayout` is true. Your renderer is
+then not asked for the page; the owner places your sheet with the Game
+System Sheet block (`game_system_sheet`), which calls your renderer with
+`NamedLayout` false.
+
 That is the full failure-mode table. There is no "renderer crashes,
 generic fallback runs" scenario — a panic inside your renderer
 propagates through templ's normal error handling and produces a

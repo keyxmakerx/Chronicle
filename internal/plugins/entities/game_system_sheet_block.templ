@@ -1,0 +1,29 @@
+package entities
+
+import "github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+
+// BlockGameSystemSheet places the sheet a game system draws for a page (a
+// Draw Steel hero's) inside a layout. A page on its category's main layout
+// gets that sheet as the whole page; a page wearing a named layout gets it
+// only where the layout puts this block.
+const BlockGameSystemSheet = "game_system_sheet"
+
+// blockGameSystemSheet draws the game system's sheet for the page, or a note
+// for the Director team when the system draws none for it.
+templ blockGameSystemSheet(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, csrfToken, userID string) {
+	if comp := lookupEntityShowRenderer(EntityShowRenderContext{
+		CC:             cc,
+		Entity:         entity,
+		EntityType:     entityType,
+		ShowAttributes: true,
+		CSRFToken:      csrfToken,
+		UserID:         userID,
+		NPCPage:        isNPCPageCtx(ctx),
+	}); comp != nil {
+		<div data-block-game-system-sheet>
+			@comp
+		</div>
+	} else if canPickPageLayout(cc) {
+		<p class="text-sm text-fg-muted" data-block-game-system-sheet-empty>The game system has no sheet for this page.</p>
+	}
+}

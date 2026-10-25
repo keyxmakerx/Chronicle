@@ -108,6 +108,7 @@ type WidgetBlockLister interface {
 type Handler struct {
 	characterPanel     *PagePanel          // Optional panel under character pages; see page_panel.go.
 	systemPanels       SystemPanelResolver // Optional game-system panels under the title; see system_panels.go.
+	pageLayouts        PageLayoutService   // Optional: a category's named layouts; see page_layouts_handler.go.
 	service            EntityService
 	familyEdit         FamilyEditService
 	trashNotes         TrashNoteCounter // Optional: Player Notes count in the post-delete message.
@@ -685,6 +686,10 @@ func (h *Handler) prepareShowFor(c echo.Context, entityID string) (*showPage, er
 	if err != nil {
 		return nil, apperror.NewInternal(fmt.Errorf("get entity type %d: %w", entity.EntityTypeID, err))
 	}
+	// The page is drawn with the layout it wears, which may be one of its
+	// category's named layouts rather than the main one.
+	entityType, layoutCtx := h.wornLayout(c.Request().Context(), cc, entity, entityType)
+	c.SetRequest(c.Request().WithContext(layoutCtx))
 
 	// Fetch ancestor chain for breadcrumbs and children for sub-page listing.
 	// Backlinks load asynchronously via HTMX to keep page load fast.
@@ -3375,6 +3380,9 @@ func (h *Handler) EntityTypeCustomizeTab(c echo.Context) error {
 	// An NPC type's unclaimed pages keep their layout under a hero-sheet
 	// renderer, so its layout tab must not say the layout goes unused.
 	ctx := withNPCPage(c.Request().Context(), h.typeOnNPCList(c.Request().Context(), cc.Campaign.ID, et.ID))
+	if h.pageLayouts != nil && tab == "layout" {
+		ctx = withTypeLayouts(ctx, h.pageLayouts.ForType(ctx, et))
+	}
 	c.SetRequest(c.Request().WithContext(ctx))
 	return middleware.Render(c, http.StatusOK, EntityTypeCustomizeTabTmpl(cc, et, tab, middleware.GetCSRFToken(c)))
 }

@@ -84,6 +84,8 @@ type ExportEntityType struct {
 	PresetCategory *string `json:"preset_category,omitempty"`
 	ParentTypeSlug *string `json:"parent_type_slug,omitempty"`
 	Claimable      *bool   `json:"claimable,omitempty"`
+	// PageLayouts is the category's named layouts besides Layout (additive).
+	PageLayouts json.RawMessage `json:"page_layouts,omitempty"`
 }
 
 // --- Entities ---
@@ -110,6 +112,9 @@ type ExportEntity struct {
 	FieldsData      json.RawMessage          `json:"fields_data,omitempty"`
 	FieldOverrides  json.RawMessage          `json:"field_overrides,omitempty"`
 	PopupConfig     json.RawMessage          `json:"popup_config,omitempty"`
+	// Layout is the key of the category layout the page chose (additive);
+	// empty means it follows its category.
+	Layout string `json:"layout,omitempty"`
 }
 
 // --- Tags ---

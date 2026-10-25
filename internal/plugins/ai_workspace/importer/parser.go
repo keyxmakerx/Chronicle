@@ -456,6 +456,9 @@ func eraIgnoredWarnings(f FrontMatter) []string {
 	if len(f.Tags) > 0 {
 		ignored = append(ignored, "tags")
 	}
+	if f.Layout != "" {
+		ignored = append(ignored, "layout")
+	}
 	if len(ignored) == 0 {
 		return nil
 	}
@@ -472,7 +475,7 @@ func unknownYAMLKeys(rawYAML string) []string {
 		"visibility": true, "tags": true, "description": true,
 		"action": true, "kind": true, "parent": true,
 		"era": true, "known_as": true, "reason": true, "fields": true,
-		"folder": true,
+		"folder": true, "layout": true,
 	}
 	var unknown []string
 	for _, line := range strings.Split(rawYAML, "\n") {

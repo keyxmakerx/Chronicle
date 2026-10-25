@@ -61,6 +61,9 @@ type CustomizeCategoryItem struct {
 	Home *campaigns.DashboardLayout `json:"home,omitempty"`
 	// Description replaces an existing category's description; empty clears it.
 	Description *string `json:"description,omitempty"`
+	// PageLayouts replaces an existing category's named layouts (the ones
+	// besides its main layout); each one's blocks are checked like Layout.
+	PageLayouts *PageLayouts `json:"page_layouts,omitempty"`
 	// Delete removes an existing category.
 	Delete bool `json:"delete,omitempty"`
 }
@@ -172,6 +175,11 @@ func (s *entityService) ApplyCustomizeCategories(ctx context.Context, campaignID
 		if d := in.Items[key].Description; d != nil && utf8.RuneCountInString(*d) > maxCategoryDescription {
 			return res, apperror.NewBadRequest("a category description can be 2000 characters at most")
 		}
+		if pl := in.Items[key].PageLayouts; pl != nil {
+			if err := s.checkPageLayouts(ctx, id, *pl); err != nil {
+				return res, err
+			}
+		}
 	}
 
 	// resolve turns a parent key into an id: an existing id as is, a new key
@@ -269,6 +277,11 @@ func (s *entityService) ApplyCustomizeCategories(ctx context.Context, campaignID
 				return res, err
 			}
 		}
+		if item.PageLayouts != nil {
+			if err := s.pageLayouts.SaveTypeLayouts(ctx, campaignID, id, *item.PageLayouts); err != nil {
+				return res, err
+			}
+		}
 		if item.Description != nil {
 			// The description shares its write with the pinned pages, which
 			// stay as they are.
@@ -348,6 +361,9 @@ func planCustomizeCategories(items map[string]CustomizeCategoryItem, byID map[in
 			if it.Home != nil || it.Description != nil {
 				return plan, apperror.NewBadRequest("a new category gets its home once it is saved")
 			}
+			if it.PageLayouts != nil {
+				return plan, apperror.NewBadRequest("a new category gets more layouts once it is saved")
+			}
 			if it.CopyFrom != 0 {
 				if _, ok := byID[it.CopyFrom]; !ok {
 					return plan, apperror.NewNotFound("the category to copy was not found")
@@ -365,13 +381,13 @@ func planCustomizeCategories(items map[string]CustomizeCategoryItem, byID map[in
 			if it.CopyFrom != 0 {
 				return plan, apperror.NewBadRequest("only a new category can copy another")
 			}
-			if it.Delete && (it.Layout != nil || it.Home != nil || it.Description != nil) {
+			if it.Delete && (it.Layout != nil || it.Home != nil || it.Description != nil || it.PageLayouts != nil) {
 				return plan, apperror.NewBadRequest("a category being deleted cannot get a new page layout or home")
 			}
 			if it.Delete {
 				deleting[k] = true
 				plan.deletes = append(plan.deletes, k)
-			} else if customizeItemChangesType(it) || it.Menu != nil || it.Layout != nil || it.Home != nil || it.Description != nil {
+			} else if customizeItemChangesType(it) || it.Menu != nil || it.Layout != nil || it.Home != nil || it.Description != nil || it.PageLayouts != nil {
 				plan.updates = append(plan.updates, k)
 			}
 		default:
@@ -453,6 +469,27 @@ func checkCustomizeParentKey(parent string, items map[string]CustomizeCategoryIt
 		}
 	default:
 		return apperror.NewBadRequest("invalid parent category")
+	}
+	return nil
+}
+
+// checkPageLayouts checks a category's named layouts before the Save writes
+// anything: the names and keys, then each layout's blocks as a main layout's
+// are checked.
+func (s *entityService) checkPageLayouts(ctx context.Context, typeID int, p PageLayouts) error {
+	if s.pageLayouts == nil {
+		return apperror.NewBadRequest("this campaign's categories have one layout each for now")
+	}
+	if err := p.Check(); err != nil {
+		return err
+	}
+	for _, l := range p.Extra {
+		if err := ValidateLayout(l.Layout, s.isValidBlockType, s.isSingletonBlockType, s.tileSizesFor(ctx, typeID, l.Layout)); err != nil {
+			return err
+		}
+	}
+	if b, err := json.Marshal(p); err != nil || len(b) > maxLayoutSize*(MaxPageLayouts+1) {
+		return apperror.NewBadRequest("this category's layouts are too big")
 	}
 	return nil
 }

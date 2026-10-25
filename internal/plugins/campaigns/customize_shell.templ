@@ -2,13 +2,14 @@ package campaigns
 
 import (
 	"encoding/json"
+	"regexp"
 	"strconv"
 
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
-// CustomizeShell is Customize's frame: the rail of areas, the area header
-// with its trail and Find, the area itself, and the one save bar. The draft
+// CustomizeShell is Customize's frame: the index tabs of areas, each with
+// a drawer of its parts, Find, the area itself, and the one save bar. The draft
 // rides on data-draft; customize_shell.js keeps it, saves it as the owner
 // edits, and draws the save bar.
 templ CustomizeShell(d customizeShellData, body templ.Component) {
@@ -26,37 +27,41 @@ templ CustomizeShell(d customizeShellData, body templ.Component) {
 			data-find={ d.Find }
 			data-areas={ customizeAreasJSON(d.Areas) }
 		>
-			<nav class="czs-rail" aria-label="Customize" hx-boost="true" hx-target="#main-content" hx-select="#main-content > *" hx-swap="innerHTML show:window:top">
-				<h2>Customize</h2>
-				for i, a := range d.Areas {
-					if i == 4 {
-						<div class="czs-hr" role="presentation"></div>
-					}
-					<a
-						href={ templ.SafeURL(a.Href) }
-						data-czs-area={ a.ID }
-						if a.ID == d.Area {
-							aria-current="page"
-						}
-					>
-						<span class="czs-ic"><i class={ "fa-solid " + a.Icon } aria-hidden="true"></i></span>
-						<span class="czs-lbl">{ a.Label }</span>
-						<span class="czs-dot" title="Unsaved changes" hidden></span>
-					</a>
-				}
-			</nav>
 			<div class="czs-stage">
-				<div class="czs-top">
-					<nav class="czs-crumbs" aria-label="You are here" hx-boost="true" hx-target="#main-content" hx-select="#main-content > *" hx-swap="innerHTML show:window:top">
-						for i, cr := range d.Crumbs {
-							if i > 0 {
-								<span class="czs-sep" aria-hidden="true">/</span>
+				<div class="czs-top" data-czs-top>
+					<nav class="czs-tabs-top" aria-label="Customize" hx-boost="true" hx-target="#main-content" hx-select="#main-content > *" hx-swap="innerHTML show:window:top">
+						for i, a := range d.Areas {
+							if i == 4 {
+								<span class="czs-tsep" role="presentation"></span>
 							}
-							if cr.Href != "" && i < len(d.Crumbs)-1 {
-								<a href={ templ.SafeURL(cr.Href) }>{ cr.Label }</a>
-							} else {
-								<b aria-current="page">{ cr.Label }</b>
-							}
+							<span class={ "czs-tabw", templ.KV("has-parts", len(a.Parts) > 0) }>
+								<a
+									class="czs-tab"
+									href={ templ.SafeURL(a.Href) }
+									data-czs-area={ a.ID }
+									if a.ID == d.Area {
+										aria-current="page"
+									}
+								>
+									<span class="czs-lbl">{ a.Label }</span>
+									if a.ID == d.Area && len(a.Parts) > 0 {
+										<span class="czs-part" data-czs-part>{ a.Part }</span>
+									}
+									<span class="czs-dot" title="Unsaved changes" hidden></span>
+								</a>
+								if len(a.Parts) > 0 {
+									<button
+										type="button"
+										class="czs-chev"
+										data-czs-drawer={ a.ID }
+										aria-expanded="false"
+										aria-controls={ "czs-dr-" + a.ID }
+										aria-label={ "Parts of " + a.Label }
+									>
+										<i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
+									</button>
+								}
+							</span>
 						}
 					</nav>
 					<button type="button" class="czs-find" data-czs-find aria-haspopup="dialog" aria-keyshortcuts="/">
@@ -64,6 +69,11 @@ templ CustomizeShell(d customizeShellData, body templ.Component) {
 						<span>Find a setting</span>
 						<kbd>/</kbd>
 					</button>
+					for _, a := range d.Areas {
+						if len(a.Parts) > 0 {
+							@customizeDrawer(a)
+						}
+					}
 				</div>
 				<div class="czs-body">
 					@body
@@ -85,6 +95,57 @@ templ CustomizeShell(d customizeShellData, body templ.Component) {
 		</div>
 	}
 }
+
+// customizeDrawer lists an area's parts. It hangs from its tab's side line;
+// customize_shell.js opens it under the tab and closes it.
+templ customizeDrawer(a CustomizeArea) {
+	<div class="czs-drawer" id={ "czs-dr-" + a.ID } data-czs-drawer-for={ a.ID } role="dialog" aria-label={ a.Label + " parts" } hidden>
+		<div class="czs-drawer-h">
+			<span>{ a.Label }</span>
+			<button type="button" class="czs-drawer-x" data-czs-drawer-close aria-label="Close">
+				<i class="fa-solid fa-xmark" aria-hidden="true"></i>
+			</button>
+		</div>
+		<ul hx-boost="true" hx-target="#main-content" hx-select="#main-content > *" hx-swap="innerHTML show:window:top">
+			for _, p := range a.Parts {
+				<li>
+					<a
+						href={ templ.SafeURL(p.Href) }
+						class={ "czs-pt", templ.KV("is-kind", p.Kind), templ.KV("is-quiet", p.Quiet) }
+						if p.Key != "" {
+							data-czs-room={ p.Key }
+						}
+						if p.Current {
+							aria-current="page"
+						}
+					>
+						if sw := partSwatch(p.Color); sw != "" {
+							<span class="czs-sw" style={ "background:" + sw } aria-hidden="true"></span>
+						}
+						<span class="czs-pl">{ p.Label }</span>
+						if p.Key != "" {
+							<span class="czs-dot" title="Unsaved changes" hidden></span>
+						}
+						if p.Color != "" {
+							<span class="czs-cnt">{ strconv.Itoa(p.Pages) }</span>
+						}
+					</a>
+				</li>
+			}
+		</ul>
+	</div>
+}
+
+// partSwatch is a category's colour when it is a plain hex colour, the only
+// kind a category stores; anything else draws no swatch.
+func partSwatch(c string) string {
+	if !hexColour.MatchString(c) {
+		return ""
+	}
+	return c
+}
+
+var hexColour = regexp.MustCompile(`^#[0-9a-fA-F]{3,8}$`)
 
 func customizeAreasJSON(areas []CustomizeArea) string {
 	b, err := json.Marshal(areas)

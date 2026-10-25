@@ -1,0 +1,43 @@
+package entities
+
+import (
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// pageLayoutChip names the layout a page wears, beside the page's
+// visibility, for the Director team; its pull-down lists the category's
+// other layouts. A page whose category has only its main layout shows none.
+templ pageLayoutChip(cc *campaigns.CampaignContext, entity *Entity) {
+	if v, ok := wornLayoutFrom(ctx); ok && canPickPageLayout(cc) && !layouts.IsViewingAsPlayer(ctx) {
+		<details class="page-layout-chip shrink-0" data-widget="page-layout-chip">
+			<summary class="perm-chip" aria-label={ "Page layout: " + v.Info.Name + ". Change it" }>
+				<i class="fa-solid fa-table-columns text-[11px]" style="color: var(--color-text-muted);" aria-hidden="true"></i>
+				<span>{ v.Info.Name } layout</span>
+				<i class="fa-solid fa-chevron-down text-[9px] text-fg-muted" aria-hidden="true"></i>
+			</summary>
+			<div class="page-layout-menu" role="menu" aria-label="Page layout">
+				<p class="page-layout-menu-h">This page wears</p>
+				for _, ch := range v.Info.Choices {
+					<button
+						type="button"
+						role="menuitemradio"
+						aria-checked={ boolAttr(ch.Key == v.Info.Key) }
+						hx-put={ pageLayoutURL(cc, entity) }
+						hx-vals={ `{"layout":"` + ch.Key + `"}` }
+						hx-swap="none"
+					>
+						<span>{ ch.Name }</span>
+						if ch.Key == v.Info.Key {
+							<i class="fa-solid fa-check text-[11px]" aria-hidden="true"></i>
+						}
+					</button>
+				}
+				<div class="page-layout-menu-f">
+					<span>Arrange each layout in Customize, under this category's Page layout.</span>
+					<button type="button" class="page-layout-close" data-page-layout-close>Close</button>
+				</div>
+			</div>
+		</details>
+	}
+}

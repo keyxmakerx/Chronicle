@@ -1528,6 +1528,33 @@ func TestExtractMentionSnippet(t *testing.T) {
 	}
 }
 
+// TestExtractMentionSnippet_PlainText pins that the snippet never shows
+// markup or entities: a long mention anchor used to be cut mid-tag by the raw
+// HTML window, and its unterminated tag survived the tag stripper.
+func TestExtractMentionSnippet_PlainText(t *testing.T) {
+	long := `<a data-mention-id="shop-1" data-mention-name="Hessa Ord&#39;s Workshop" class="mention mention-link" href="/campaigns/c-1/entities/shop-1" data-mention-type="shop" data-mention-color="#f59e0b" data-mention-icon="fa-store">Hessa Ord&#39;s Workshop</a>`
+	cases := []struct {
+		name, html, want string
+	}{
+		{"long anchor", `<h2>Hessa Ord</h2><p>The alchemist who runs ` + long + ` in Saltreach &amp; the docks.</p>`,
+			"Hessa Ord The alchemist who runs Hessa Ord's Workshop in Saltreach & the docks."},
+		{"long lead is clipped at a word", `<p>` + strings.Repeat("word ", 30) + `then ` + long + `.</p>`,
+			"…word word word word word word word word word word word then Hessa Ord's Workshop."},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h := tc.html
+			got := extractMentionSnippet(&h, "shop-1")
+			if got != tc.want {
+				t.Errorf("got %q, want %q", got, tc.want)
+			}
+			if strings.ContainsAny(got, "<>") || strings.Contains(got, "&#") {
+				t.Errorf("snippet carries markup: %q", got)
+			}
+		})
+	}
+}
+
 func TestExtractMentionSnippet_Nil(t *testing.T) {
 	snippet := extractMentionSnippet(nil, "entity-123")
 	if snippet != "" {
