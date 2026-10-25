@@ -181,3 +181,65 @@ func (c *Classifier) WithFolders(f FolderAccess, pending map[string]bool) *Class
 	c.folders, c.pendingFolders = f, pending
 	return c
 }
+
+// FolderSlip is a new page whose `folder:` its category can't give it.
+type FolderSlip struct {
+	Block    int    // the page's block, counted from 1
+	Page     string // the page's name
+	Folder   string
+	Category string // the category as written
+	// NewCategory: the category doesn't exist yet, so it has no folders.
+	NewCategory bool
+	// Elsewhere names the categories that have a folder of this name.
+	Elsewhere []string
+}
+
+// NewPageFolderSlips finds the new pages whose folder isn't in their category
+// and isn't made in this paste, so a connected AI hears it when it asks and
+// can fix its own request. It looks up categories and folders only, never
+// pages: folders carry no visibility, while a page lookup would tell an AI
+// that sees what players see whether a hidden page exists. Updates are left
+// to the review, which knows the page's category.
+func (c *Classifier) NewPageFolderSlips(ctx context.Context, pages []ParsedPage) ([]FolderSlip, error) {
+	if c.folders == nil {
+		return nil, nil
+	}
+	if err := c.ensureTypes(ctx); err != nil {
+		return nil, err
+	}
+	var out []FolderSlip
+	for _, p := range pages {
+		fm := p.FrontMatter
+		name, ok := fm.FolderName()
+		if !ok || p.Status == StatusParseError || fm.IsEra() || (fm.Action != "" && fm.Action != ActionCreate) {
+			continue
+		}
+		cat := strings.TrimSpace(fm.Type)
+		if cat == "" {
+			continue // the owner picks the category at review
+		}
+		slip := FolderSlip{Block: p.SourceIndex + 1, Page: p.Name, Folder: name, Category: cat}
+		et, known := c.typesBySlug[strings.ToLower(cat)]
+		if known {
+			// An error is an ambiguous name, which the review explains, or a
+			// failed lookup, which the review repeats.
+			if node, err := c.folders.FindFolder(ctx, c.campaignID, et.ID, name); node != nil || err != nil {
+				continue
+			}
+			pending := false
+			for _, n := range []string{et.Name, et.NamePlural, et.Slug} {
+				pending = pending || (n != "" && c.pendingFolders[PendingFolderKey(n, name)])
+			}
+			if pending {
+				continue
+			}
+			slip.Category = et.Name
+			slip.Elsewhere = c.foldersElsewhere(ctx, name, et.ID)
+		} else {
+			slip.NewCategory = true
+			slip.Elsewhere = c.foldersElsewhere(ctx, name, 0)
+		}
+		out = append(out, slip)
+	}
+	return out, nil
+}

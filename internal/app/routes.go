@@ -5044,6 +5044,7 @@ func (a *App) RegisterRoutes() {
 	if a.PluginHealth == nil || a.PluginHealth.IsHealthy(connector.SchemaSlug) {
 		aiConnectorSvc := connector.NewService(connector.NewRepository(a.DB), aiConnectorOwners{campaigns: campaignService})
 		aiWorkspaceHandler.SetConnector(aiConnectorSvc, a.Config.BaseURL)
+		aiConnectorSvc.SetCheck(aiWorkspaceHandler.ConnectorCheck)
 		aiConnectorEndpoint = connector.NewEndpoint(aiConnectorSvc, a.Config.BaseURL)
 		aiConnectorEndpoint.SetInstructions(aiWorkspaceHandler.ConnectorInstructions)
 		connector.RegisterRoutes(e, aiConnectorEndpoint)

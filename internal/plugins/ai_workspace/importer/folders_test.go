@@ -5,6 +5,7 @@ package importer
 
 import (
 	"context"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -340,6 +341,64 @@ func TestClassify_FolderInAnotherCategory(t *testing.T) {
 			}
 			if tt.notWant != "" && strings.Contains(got.Reason, tt.notWant) {
 				t.Errorf("reason %q should not say %q", got.Reason, tt.notWant)
+			}
+		})
+	}
+}
+
+// pageBlindLookup fails the test on any page lookup: the slips a connected AI
+// hears must not tell it whether a page exists.
+type pageBlindLookup struct {
+	*stubLookup
+	t *testing.T
+}
+
+func (l pageBlindLookup) GetBySlug(context.Context, string, string) (*entities.Entity, error) {
+	l.t.Fatal("NewPageFolderSlips looked up a page")
+	return nil, nil
+}
+
+// The slips name only new pages whose folder their category can't give them,
+// and say where a folder of that name is.
+func TestNewPageFolderSlips(t *testing.T) {
+	lookup := pageBlindLookup{&stubLookup{types: []entities.EntityType{
+		{ID: 1, Slug: "lore", Name: "Lore"}, {ID: 2, Slug: "places", Name: "Places"}, {ID: 3, Slug: "races", Name: "Races", NamePlural: "Races"},
+	}}, t}
+	in := func(cat, folder, action string) ParsedPage {
+		p := page("The Khepri", cat, "# The Khepri\nBody.")
+		p.FrontMatter.Folder, p.FrontMatter.Action = folder, action
+		p.SourceIndex = 2
+		return p
+	}
+	tests := []struct {
+		name    string
+		page    ParsedPage
+		pending map[string]bool
+		want    []FolderSlip
+	}{
+		{"folder in another category", in("races", "Gods", ""), nil,
+			[]FolderSlip{{Block: 3, Page: "The Khepri", Folder: "Gods", Category: "Races", Elsewhere: []string{"Lore"}}}},
+		{"folder nowhere", in("races", "Nowhere", ActionCreate), nil,
+			[]FolderSlip{{Block: 3, Page: "The Khepri", Folder: "Nowhere", Category: "Races"}}},
+		{"new category", in("gods", "Gods", ""), nil,
+			[]FolderSlip{{Block: 3, Page: "The Khepri", Folder: "Gods", Category: "gods", NewCategory: true, Elsewhere: []string{"Lore"}}}},
+		{"folder in its category", in("lore", "Gods", ""), nil, nil},
+		{"made in this paste", in("races", "Titans", ""), map[string]bool{"races|titans": true}, nil},
+		{"ambiguous is left to the review", in("lore", "Twin", ""), nil, nil},
+		{"update is left to the review", in("races", "Gods", ActionUpdate), nil, nil},
+		{"no folder", in("races", "", ""), nil, nil},
+		{"folder none", in("races", "none", ""), nil, nil},
+		{"no category", in("", "Gods", ""), nil, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := NewClassifier(lookup, "camp-1").WithFolders(newFolders(), tt.pending)
+			got, err := c.NewPageFolderSlips(context.Background(), []ParsedPage{tt.page})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("got %+v, want %+v", got, tt.want)
 			}
 		})
 	}
