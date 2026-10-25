@@ -45,13 +45,15 @@ again; CI runs the same command.
 
 ## Running tests
 
-- `make verify` runs the same sequence as the CI "Build & Test" job: templ,
+- `make verify` runs what the CI "Build & Test" and "JS tests" jobs run: templ,
   build, vet, the repository guards, `go test ./... -short`, and the JS tests.
-  Run it before you push.
+  Run it before you push. CI splits the JS tests into groups on separate
+  runners (`tools/js-test-files.sh`); locally they run as one suite.
 - `make test-e2e` runs the Playwright specs in `test/e2e/` against Chromium.
 - `make test-int-local` runs the database-backed tests against the local test
   MariaDB. Those tests skip when no database answers, so a plain `go test`
-  can pass without running them.
+  can pass without running them. The CI "Database tests" job runs them over
+  the whole module, so a new package's database tests run with no list to edit.
 - `make lint` runs golangci-lint; it is its own CI job and not part of `verify`.
 - `make test-freshdb` replays every migration against an empty schema.
 - Tests are table-driven, with interfaces at every service and repository

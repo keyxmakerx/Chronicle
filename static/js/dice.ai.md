@@ -88,4 +88,6 @@ again. The face-image cache keeps the 24 most recent.
 **Changing the libraries:** `make dice-vendor` (versions pinned in `package.json`).
 Tests: `test/js/dice.test.mjs` covers values, crit rules, numbering, symmetry and
 landing. `test/js/dice_browser.test.mjs` runs Chromium: loading, throw, skip,
-catalogue, and every set and crit playing.
+catalogue, and every set playing; `dice_crits_succ_browser.test.mjs` and
+`dice_crits_fail_browser.test.mjs` play every crit (their own files so CI runs
+them on runners of their own; they play in real time).
