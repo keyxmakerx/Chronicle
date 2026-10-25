@@ -6181,6 +6181,9 @@ func (a *App) RegisterRoutes() {
 	})
 	aiRegistry := records.NewRegistry(aiKinds(aiWiring)...)
 	aiWorkspaceHandler.SetRecords(aiRegistry)
+	if a.PluginHealth.IsHealthy(rolltables.PluginSlug) {
+		aiWorkspaceRenderer.RollTables = aiRollTableNames{tables: aiRollTablesAdapter{rollTablesSvc}}
+	}
 	aiWorkspaceLookups := aiLookups(aiWiring, aiRegistry)
 	aiWorkspaceHandler.SetLookups(aiWorkspaceLookups)
 	aiWorkspaceHandler.SetFeatureGate(aiFeatureGate(addonService))
@@ -6929,6 +6932,17 @@ func (r aiRollTablesAdapter) Put(ctx context.Context, campaignID string, doc rec
 	}
 	_, err = r.svc.Put(ctx, campaignID, b, userID)
 	return err
+}
+
+// aiRollTableNames names the campaign's rolling tables for AI Export.
+type aiRollTableNames struct{ tables records.RollTablesAPI }
+
+func (n aiRollTableNames) RollTableNames(ctx context.Context, campaignID string) (map[string]string, error) {
+	doc, err := n.tables.Get(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	return records.TableNames(doc), nil
 }
 
 // aiWorkspaceAuditAdapter bridges audit.AuditService to the narrow

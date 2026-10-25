@@ -187,6 +187,24 @@ func viewerFor(c echo.Context, cc *campaigns.CampaignContext) importer.Viewer {
 	return importer.Viewer{Role: cc.VisibilityRole(), UserID: auth.GetUserID(c)}
 }
 
+// rollTables is what a page's {roll{Name}} line can name: the campaign's
+// rolling tables and those the paste's ticked table blocks make (include
+// nil means all of them, for the review). Only the owner or a co-DM gets
+// any, since the roller is a DM tool; for anyone else every such line stays
+// text, with a warning.
+func (h *Handler) rollTables(c echo.Context, cc *campaigns.CampaignContext, recs []importer.ParsedPage, include func(int) bool) map[string]string {
+	if h.records == nil || !actorFor(c, cc).CanAuthorDmOnly() {
+		return nil
+	}
+	var made []records.Record
+	for i, p := range recs {
+		if include == nil || include(i) {
+			made = append(made, toRecord(i, p, nil))
+		}
+	}
+	return h.records.Without(h.offFeatures(c.Request().Context(), cc.Campaign.ID)).RollTableIDs(c.Request().Context(), cc.Campaign.ID, made)
+}
+
 // exportActor is who the export lists records as. Safe mode, the default,
 // lists them as a player sees them, so hidden events and pins, rolling
 // tables and Director-only rules stay out, as for every other category.
@@ -403,6 +421,8 @@ func (h *Handler) ParseImport(c echo.Context) error {
 	}
 	pages, recs := splitImport(parsed)
 	links := importer.NewPageLinks(c.Request().Context(), h.importLookup, cc.Campaign.ID, viewerFor(c, cc))
+	rollTables := h.rollTables(c, cc, recs, nil)
+	links.SetRollTables(rollTables)
 	pasteSlugs := importer.PasteSlugs(pages)
 	recRows := h.planRecords(c, cc, recs, links, pasteSlugs)
 	classifier := importer.NewClassifier(h.importLookup, cc.Campaign.ID)
@@ -410,6 +430,7 @@ func (h *Handler) ParseImport(c echo.Context) error {
 		classifier.WithEras(h.importEras, viewerFor(c, cc))
 	}
 	classifier.WithFolders(h.importFolders, pendingFolderNames(recs))
+	classifier.WithRollTables(rollTables)
 	cls, err := classifier.ClassifyAll(c.Request().Context(), pages)
 	if err != nil {
 		slog.Error("ai-workspace: classify failed",
@@ -422,6 +443,7 @@ func (h *Handler) ParseImport(c echo.Context) error {
 	for i := range pages {
 		if pages[i].Status != importer.StatusParseError && pages[i].FrontMatter.Action != importer.ActionDelete {
 			pages[i].Warnings = append(pages[i].Warnings, importer.LinkWarnings(links, pages[i].Body, pasteSlugs)...)
+			pages[i].Warnings = append(pages[i].Warnings, importer.RollWarnings(links, pages[i].Body, cls[i].ConflictEntity)...)
 		}
 	}
 	notes := h.checkParts(c.Request().Context(), cc.Campaign.ID, lab)
@@ -615,6 +637,9 @@ func (h *Handler) CommitImport(c echo.Context) error {
 			Decisions:              decisions,
 			CampaignDefaultPrivate: cc.Campaign.ParseSettings().DefaultsToPrivate(),
 			Viewer:                 viewerFor(c, cc),
+			RollTables: h.rollTables(c, cc, recs, func(i int) bool {
+				return c.FormValue("rec_"+strconv.Itoa(i)+"_include") == "on"
+			}),
 		})
 	}
 	if err != nil {

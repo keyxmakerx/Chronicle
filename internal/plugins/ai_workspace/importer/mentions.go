@@ -47,6 +47,7 @@ type PageLinks struct {
 	saved      map[string]PageLink // slug → page saved by this paste
 	cache      map[string]*PageLink
 	missed     map[string]string // slug → name as written, for names that did not resolve
+	rollTables map[string]string // table name (lower-cased) or id → id; see SetRollTables
 }
 
 // NewPageLinks builds a resolver for one request.
@@ -111,7 +112,11 @@ type renderOpts struct {
 	markers bool
 	// passages turns markers into GM-only spans for a viewer who may write
 	// them; set only for page bodies, whose readers get passages stripped.
+	// It also lets {roll{…}} lines become table rollers, which are stripped
+	// for players the same way.
 	passages bool
+	// keptRollers is the table ids of the replaced page's own rollers.
+	keptRollers map[string]bool
 }
 
 // WithGMOnlyPassages lets MarkdownToHTML accept {gm{…}gm}. Only page bodies

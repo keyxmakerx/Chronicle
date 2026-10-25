@@ -111,12 +111,22 @@ type Classifier struct {
 	pendingFolders map[string]bool
 	// folderSeen keeps hasFolder's answers by type and lower-cased name.
 	folderSeen map[string]bool
+	// rollTables resolves {roll{Name}} lines, so an update that keeps a
+	// page's table rollers is not counted as losing them.
+	rollTables map[string]string
 }
 
 // WithEras lets the classifier check `era:` blocks against the main
 // calendar's eras as the importing viewer sees them.
 func (c *Classifier) WithEras(l EraLookup, v Viewer) *Classifier {
 	c.eras, c.viewer = l, v
+	return c
+}
+
+// WithRollTables gives the classifier the tables {roll{Name}} lines can
+// name, as PageLinks.SetRollTables takes them.
+func (c *Classifier) WithRollTables(ids map[string]string) *Classifier {
+	c.rollTables = ids
 	return c
 }
 
@@ -366,7 +376,7 @@ func (c *Classifier) classifyOne(ctx context.Context, p ParsedPage) (Classificat
 	existing, _ := c.lookup.GetBySlug(ctx, c.campaignID, cls.ResolvedSlug)
 	if existing != nil {
 		cls.ConflictEntity = existing
-		cls.GMOnly = GMOnlyPartsForMarkdown(existing, p.Body)
+		cls.GMOnly = GMOnlyPartsForMarkdown(existing, p.Body, c.rollTables)
 	}
 
 	switch p.FrontMatter.Action {

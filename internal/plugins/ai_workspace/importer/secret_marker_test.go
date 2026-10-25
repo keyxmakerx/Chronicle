@@ -131,7 +131,7 @@ func TestGMOnlyPartsAfter(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := GMOnlyPartsForMarkdown(tt.existing, tt.md); got != tt.want {
+			if got := GMOnlyPartsForMarkdown(tt.existing, tt.md, nil); got != tt.want {
 				t.Errorf("got %+v, want %+v", got, tt.want)
 			}
 		})
@@ -145,7 +145,7 @@ func TestSecretRoundTrip_Import(t *testing.T) {
 		SecretOpen + "Second." + SecretClose
 	html := convertMarkers(t, md)
 	ent := &entities.Entity{EntryHTML: strp(html)}
-	if got := GMOnlyPartsForMarkdown(ent, md); got.Any() {
+	if got := GMOnlyPartsForMarkdown(ent, md, nil); got.Any() {
 		t.Errorf("re-import of its own export warns: %+v", got)
 	}
 	json, err := htmlconv.Convert(html)

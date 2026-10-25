@@ -581,6 +581,11 @@ func (run *lookupRun) page(name string) (LookupAnswer, error) {
 		pageTagMap, _ = run.l.Tags.GetEntityTagsBatch(run.ctx, []string{e.ID}, run.director())
 	}
 	opts.FolderNames = run.folderNames()
+	if run.director() && run.l.Tables != nil {
+		if doc, err := run.l.Tables.Get(run.ctx, run.campaignID); err == nil {
+			opts.RollTableNames = TableNames(doc)
+		}
+	}
 	md, err := aiexport.RenderEntities(run.ctx, []entities.Entity{*e}, types, pageTagMap, map[string][]relations.Relation{e.ID: rels}, opts)
 	if err != nil {
 		return ans, err

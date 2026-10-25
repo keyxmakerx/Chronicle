@@ -9,7 +9,8 @@
 // orderedList, listItem, codeBlock (no language attribute), blockquote,
 // horizontalRule, hardBreak, table/tableRow/tableHeader/tableCell,
 // marks bold/italic/strike/code/link/underline, and the editor's own
-// picture (chronicleImage, from a figure.ce-img or an img with a /media/<id> src).
+// picture (chronicleImage, from a figure.ce-img or an img with a /media/<id> src)
+// and table roller (rollTable, from a div.ce-roll).
 //
 // Unrecognised tags fall back to a paragraph containing the
 // concatenated text content of the element's descendants — better to
@@ -197,6 +198,11 @@ func convertElement(s *goquery.Selection) ([]Node, bool) {
 		return []Node{{Type: "hardBreak"}}, true
 	case "table":
 		return []Node{convertTable(s)}, false
+	case "div":
+		// The editor's table roller; any other div is just text.
+		if n, ok := rollerNode(s); ok {
+			return []Node{n}, false
+		}
 	case "strong", "b", "em", "i", "u", "s", "del", "code", "a":
 		// Inline marks — wrap each text descendant with the mark.
 		return convertInlineWithMark(s, tag), true
@@ -206,6 +212,30 @@ func convertElement(s *goquery.Selection) ([]Node, bool) {
 		return []Node{{Type: "text", Text: t}}, true
 	}
 	return nil, true
+}
+
+// rollerTableRe and rollerCountRe read the editor's roller classes.
+var (
+	rollerTableRe = regexp.MustCompile(`(?:^|\s)ce-roll--t-([a-z][a-z0-9-]{0,63})(?:\s|$)`)
+	rollerCountRe = regexp.MustCompile(`(?:^|\s)ce-roll--n-([135])(?:\s|$)`)
+)
+
+// rollerNode builds the editor's rollTable node from <div class="ce-roll
+// ce-roll--t-<table> ce-roll--n-<count>">. ok is false for any other div.
+func rollerNode(s *goquery.Selection) (Node, bool) {
+	if !s.HasClass("ce-roll") {
+		return Node{}, false
+	}
+	class, _ := s.Attr("class")
+	m := rollerTableRe.FindStringSubmatch(class)
+	if m == nil {
+		return Node{}, false
+	}
+	count := 3
+	if c := rollerCountRe.FindStringSubmatch(class); c != nil {
+		count, _ = strconv.Atoi(c[1])
+	}
+	return Node{Type: "rollTable", Attrs: map[string]any{"table": m[1], "count": count}}, true
 }
 
 // mediaSrcRe matches only this site's own media path; a picture from another

@@ -299,7 +299,7 @@ func renderEntity(
 	if opts.Privacy == PrivacyModeSafe {
 		body, err = htmlToMarkdown(entry)
 	} else {
-		body, err = htmlToMarkdownWithSecrets(entry)
+		body, err = htmlToMarkdownWithSecrets(entry, opts.RollTableNames)
 	}
 	body = bodyOrSkip("entity body", e.Name, body, err)
 	if body != "" {

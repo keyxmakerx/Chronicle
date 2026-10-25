@@ -48,7 +48,7 @@ func TestHtmlToMarkdown_Tables(t *testing.T) {
 // keeps its rows.
 func TestHtmlToMarkdown_TableSecretsAndReadBack(t *testing.T) {
 	in := `<table><tr><th>d4</th><th>Find</th></tr><tr><td>1</td><td>A key <span data-secret="true">to the vault</span></td></tr></table>`
-	got, err := htmlToMarkdownWithSecrets(&in)
+	got, err := htmlToMarkdownWithSecrets(&in, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
