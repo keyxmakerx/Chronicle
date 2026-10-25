@@ -4471,12 +4471,14 @@
 
     // _saveToday writes the world's new today and, once it is stored,
     // redraws everything that hangs off it. Resolves to an error message or ''.
+    // The settings save keeps the name required, so it is resent unchanged.
+    // A failure shows the server's sentence, never its machine-readable code.
     _saveToday: function (d) {
       var self = this;
-      var body = { current_year: d.y, current_month: d.m, current_day: d.d, current_hour: d.h, current_minute: d.mi };
+      var body = { name: this.cal.name, current_year: d.y, current_month: d.m, current_day: d.d, current_hour: d.h, current_minute: d.mi };
       return Chronicle.apiFetch(this.apiBase, { method: 'PUT', body: body })
         .then(function (resp) {
-          if (!resp.ok) return resp.json().then(function (j) { return (j && (j.error || j.message)) || 'Could not set today.'; }, function () { return 'Could not set today.'; });
+          if (!resp.ok) return resp.json().then(function (j) { return (j && j.message) || 'Could not set today.'; }, function () { return 'Could not set today.'; });
           Object.assign(self.cal, body);
           self._anchor = realAnchor(self.cal);
           self.nightsByMonth = {};
