@@ -114,6 +114,16 @@ type Classifier struct {
 	// rollTables resolves {roll{Name}} lines, so an update that keeps a
 	// page's table rollers is not counted as losing them.
 	rollTables map[string]string
+	// foundryHas says where the campaign's Foundry world keeps a monster of
+	// that name, or "" when it reported none; nil skips the check.
+	foundryHas func(name string) string
+}
+
+// WithFoundryMonsters lets the classifier warn when a new creature page
+// names a monster Foundry already has, which would put it in Foundry twice.
+func (c *Classifier) WithFoundryMonsters(has func(name string) string) *Classifier {
+	c.foundryHas = has
+	return c
 }
 
 // WithEras lets the classifier check `era:` blocks against the main
@@ -156,7 +166,27 @@ func (c *Classifier) ClassifyAll(ctx context.Context, pages []ParsedPage) ([]Cla
 	c.checkFolders(ctx, pages, out)
 	c.checkEras(ctx, pages, out)
 	c.checkFields(pages, out)
+	c.checkFoundryDoubles(pages, out)
 	return out, nil
+}
+
+// checkFoundryDoubles warns on a new creature page whose name Foundry
+// already has. It is a warning, not a refusal: a house-ruled copy may be
+// what the DM wants, but a page with a stat block makes creature sync add
+// a second actor of that name.
+func (c *Classifier) checkFoundryDoubles(pages []ParsedPage, cls []Classification) {
+	if c.foundryHas == nil {
+		return
+	}
+	for i, p := range pages {
+		if cls[i].Status != StatusNew || cls[i].ConflictEntity != nil || p.FrontMatter.Action == ActionDelete ||
+			cls[i].ExistingType == nil || c.sheetKind(cls[i].ExistingType) != "creature" {
+			continue
+		}
+		if where := c.foundryHas(p.Name); where != "" {
+			pages[i].Warnings = append(pages[i].Warnings, "Foundry already has a monster called "+p.Name+" ("+where+"). A fight can use it by name with no page; a page with a stat block puts a second one in Foundry.")
+		}
+	}
 }
 
 // checkFields checks each row's `fields:` against the sheet of the

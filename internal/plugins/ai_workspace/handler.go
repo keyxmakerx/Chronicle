@@ -431,6 +431,9 @@ func (h *Handler) ParseImport(c echo.Context) error {
 	}
 	classifier.WithFolders(h.importFolders, pendingFolderNames(recs))
 	classifier.WithRollTables(rollTables)
+	if has := h.foundryHas(c.Request().Context(), cc.Campaign.ID, actorFor(c, cc)); has != nil {
+		classifier.WithFoundryMonsters(has)
+	}
 	cls, err := classifier.ClassifyAll(c.Request().Context(), pages)
 	if err != nil {
 		slog.Error("ai-workspace: classify failed",
@@ -1217,5 +1220,24 @@ func parsePrivacy(s string) aiexport.PrivacyMode {
 		return aiexport.PrivacyModeEverything
 	default:
 		return aiexport.PrivacyModeSafe
+	}
+}
+
+// foundryHas is the review's check for a new creature page Foundry already
+// has: where Foundry keeps a monster of that name, or "". Nil when there is
+// no list to check, or the operator may not see it.
+func (h *Handler) foundryHas(ctx context.Context, campaignID string, a records.Actor) func(string) string {
+	if h.lookups == nil || h.lookups.Monsters == nil || !a.CanAuthorDmOnly() {
+		return nil
+	}
+	rep, err := h.lookups.Monsters.Monsters(ctx, campaignID, a)
+	if err != nil || rep.ReportedAt == nil {
+		return nil
+	}
+	return func(name string) string {
+		if m := rep.Find(name); m != nil && !m.Linked {
+			return m.Where()
+		}
+		return ""
 	}
 }
