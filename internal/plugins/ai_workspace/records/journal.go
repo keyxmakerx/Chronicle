@@ -68,6 +68,36 @@ func (run *lookupRun) journal() ([]JournalNote, error) {
 	return run.journalNotes, run.journalErr
 }
 
+// canChange reports whether a note another member wrote may be changed by a
+// `note` block (title and text), with its writer. Player Notes never may.
+func (run *lookupRun) canChange(n JournalNote) (NoteWriter, bool) {
+	if n.PlayerNote || n.AuthorID == run.a.UserID || run.l.NoteAccess == nil {
+		return NoteWriter{}, false
+	}
+	if run.access == nil {
+		a, err := run.l.NoteAccess.NoteAccess(run.ctx, run.campaignID)
+		if err != nil {
+			return NoteWriter{}, false
+		}
+		run.access = &a
+	}
+	if !run.access.CoDMs && !run.access.Scribes {
+		return NoteWriter{}, false
+	}
+	if run.editable == nil {
+		run.editable = map[string]NoteWriter{}
+	}
+	w, ok := run.editable[n.AuthorID]
+	if !ok {
+		var err error
+		if w, err = run.l.NoteAccess.NoteWriter(run.ctx, run.campaignID, n.AuthorID); err != nil {
+			return NoteWriter{}, false
+		}
+		run.editable[n.AuthorID] = w
+	}
+	return w, run.access.Allows(w.Kind)
+}
+
 // pageName is a jot's page as the Actor sees it.
 func (run *lookupRun) pageName(id string) string {
 	if pages, err := run.visiblePages(); err == nil {
@@ -102,6 +132,11 @@ func (run *lookupRun) noteDetails(n JournalNote, mine bool) string {
 	}
 	if n.Archived {
 		parts = append(parts, "archived")
+	}
+	if !mine {
+		if _, ok := run.canChange(n); ok {
+			parts = append(parts, "I can change its title and text")
+		}
 	}
 	return strings.Join(parts, "; ")
 }
@@ -141,7 +176,7 @@ func (run *lookupRun) notes() (LookupAnswer, error) {
 	section("My jots on pages", jots)
 	section("My Player Notes on pages", player)
 	section("Shared with me by other members", shared)
-	b.WriteString("Read one with `what: note` and its `name`. Notes other members wrote can be read, never changed. My Journal notes and jots are changed with a `note` block, my Player Notes with a `player-note` block.\n")
+	b.WriteString("Read one with `what: note` and its `name`. Notes other members wrote can be read, and changed only where marked \"I can change its title and text\". My Journal notes and jots are changed with a `note` block, my Player Notes with a `player-note` block.\n")
 	ans.Text = b.String()
 	return ans, nil
 }
@@ -195,7 +230,10 @@ func (run *lookupRun) note(r Record) (LookupAnswer, error) {
 		fmt.Fprintf(&b, "; updated %s", n.Updated.UTC().Format("2006-01-02"))
 	}
 	b.WriteString("*\n\n")
+	w, editable := run.canChange(n)
 	switch {
+	case !mine && editable:
+		fmt.Fprintf(&b, "Written by %s (%s) and shared with me. A `note` block with `action: update` and `by: %s` can change its title and text, never who sees it.\n\n", firstNonEmpty(w.Name, "another member"), w.Kind, firstNonEmpty(w.Name, n.Author))
 	case !mine:
 		b.WriteString("Written by another member and shared with me: read it, but no block can change it.\n\n")
 	case n.PlayerNote:

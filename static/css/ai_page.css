@@ -162,3 +162,16 @@
   .aic-req-review > form, .aic-req-review .air-row, .aic-req-review.aic-folding > form, .aic-done { animation-duration: 1ms; animation-delay: 0ms; }
   .aic-req-review .air-peek { transition: none; }
 }
+
+/* The notes panel: a small table of what the AI reads and changes in each
+ * kind of note, and the owner's switches under it. */
+.aic-notes-body { display: flex; flex-direction: column; gap: 12px; }
+.aic-notes-shut .aic-kinds { opacity: 0.55; }
+.aic-kinds { width: 100%; border-collapse: collapse; font-size: 0.8125rem; }
+.aic-kinds th, .aic-kinds td { text-align: left; vertical-align: top; padding: 8px 8px 8px 0; border-top: 1px solid var(--color-border-light); color: var(--color-text-secondary); }
+.aic-kinds thead th { border-top: 0; padding-top: 0; font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+.aic-kinds tbody th { width: 34%; font-weight: 600; color: var(--color-text-primary); }
+.aic-kinds tbody th span { display: block; font-weight: 400; color: var(--color-text-secondary); }
+.aic-plus { color: var(--color-accent); }
+.aic-notes-form { display: flex; flex-direction: column; gap: 2px; border-top: 1px solid var(--color-border-light); padding-top: 12px; }
+.aic-saved { color: rgb(var(--color-ok-rgb)); }

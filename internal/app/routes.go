@@ -5066,8 +5066,14 @@ func (a *App) RegisterRoutes() {
 	aiWorkspaceHandler.SetImportCommitter(aiWorkspaceCommitter)
 	// Which parts of a split AI answer were applied; left out when its table
 	// did not migrate, so labels are still read but earlier pastes unknown.
+	// So are the owner's switches for which shared notes the AI may change;
+	// without them it changes only the owner's own.
+	var aiNoteAccessAPI records.NoteAccessAPI
 	if a.PluginHealth == nil || a.PluginHealth.IsHealthy(ai_workspace.MemorySchemaSlug) {
 		aiWorkspaceHandler.SetImportMemory(ai_workspace.NewImportMemoryRepository(a.DB))
+		noteAccess := ai_workspace.NewNoteAccessRepository(a.DB)
+		aiWorkspaceHandler.SetNoteAccess(noteAccess)
+		aiNoteAccessAPI = aiNoteAccess{store: noteAccess, campaigns: campaignService}
 	}
 
 	// Connecting an AI app straight to a campaign (lookups and requests for
@@ -6211,6 +6217,7 @@ func (a *App) RegisterRoutes() {
 		Maps:            mapsService,
 		Notes:           noteSvc,
 		PlayerNotes:     entityNotesService,
+		NoteAccess:      aiNoteAccessAPI,
 		Addons:          addonService,
 		PageBlocks:      pageBlocksSvc,
 		Quests:          aiQuests,
