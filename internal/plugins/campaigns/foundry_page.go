@@ -68,7 +68,7 @@ func FoundryHealthChecks(now time.Time, c FoundryConnection) []FoundryCheck {
 			out = append(out, FoundryCheck{FoundryCheckOK, "Foundry runs the version Chronicle serves", "Both are " + c.ServedVersion + "."})
 		} else {
 			out = append(out, FoundryCheck{FoundryCheckWarn,
-				"Foundry last ran " + c.ModuleVersion + ", but Chronicle serves " + c.ServedVersion,
+				"In Foundry " + c.ModuleVersion + ", but Chronicle serves " + c.ServedVersion,
 				"Restart your Foundry world so it loads " + c.ServedVersion + "."})
 		}
 	}
