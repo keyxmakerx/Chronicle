@@ -14,6 +14,21 @@
 .cpe-banner { display: flex; gap: 10px; align-items: flex-start; margin: 0 24px 12px; padding: 10px 14px; border-radius: 10px; background: rgb(var(--color-warn-rgb) / 0.12); color: var(--color-text-primary); font-size: 13px; }
 .cpe-banner i { color: var(--cpe-warn); margin-top: 2px; }
 
+/* ---------- Layouts: the category's main layout and its named ones ---------- */
+.cpe-layouts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 24px 12px; }
+.cpe-layouts-lab { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-text-secondary); }
+.cpe-lays { display: inline-flex; flex-wrap: wrap; padding: 2px; gap: 2px; border-radius: 9px; background: var(--color-bg-tertiary); max-width: 100%; }
+.cpe-lay { display: inline-flex; align-items: center; gap: 6px; border: 0; background: none; color: var(--color-text-secondary); font-size: 12.5px; font-weight: 500; padding: 5px 12px; border-radius: 7px; cursor: pointer; white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis; transition: background var(--dur-micro), color var(--dur-micro); }
+.cpe-lay:hover:not(:disabled) { color: var(--color-text-primary); }
+.cpe-lay[aria-pressed="true"] { background: var(--color-bg-secondary); color: var(--color-text-primary); box-shadow: var(--elev-resting); }
+.cpe-lay.add { color: var(--cpe-accent); }
+.cpe-lay:disabled { opacity: 0.45; cursor: default; }
+.cpe-lay-acts { display: inline-flex; gap: 6px; }
+.cpe-lay-acts .btn-sm i { margin-right: 6px; }
+.cpe-lay-claim { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; font-size: 12.5px; color: var(--color-text-secondary); }
+.cpe-lay-claim select.cpe-inp { width: auto; max-width: 200px; padding: 4px 8px; font-size: 12.5px; }
+.cpe-lay-hint { flex-basis: 100%; }
+
 /* ---------- Frame: canvas and panel ---------- */
 .cpe-editor { display: grid; grid-template-columns: minmax(0, 1fr) 340px; min-height: 520px; border-top: 1px solid var(--color-border); position: relative; overflow: hidden; }
 .cpe-main { display: grid; grid-template-rows: auto minmax(0, 1fr); min-width: 0; min-height: 0; }
@@ -310,6 +325,8 @@ body.cpe-dragging .cpe-tile { animation: none !important; }
   .cpe-hide-sm { display: none; }
   .cpe-frame.phone { background: none; box-shadow: none; padding: 0; border-radius: 0; }
   .cpe-banner { margin: 0 12px 12px; }
+  .cpe-layouts { margin: 0 12px 12px; }
+  .cpe-lay-claim { margin-left: 0; flex-wrap: wrap; }
 }
 @media (pointer: coarse) {
   .cpe-blk, .cpe-tile, .cpe-gw { touch-action: pan-y; }

@@ -75,6 +75,14 @@ type Service struct {
 	Exporter Exporter
 	// Notes adds the game system's word on a category's fields; optional.
 	Notes FieldNotes
+	// Layouts names each category's page layouts; optional.
+	Layouts LayoutLister
+}
+
+// LayoutLister is a campaign's named page layouts by category id
+// (entities.PageLayoutService).
+type LayoutLister interface {
+	ForCampaign(ctx context.Context, campaignID string) map[int]entities.PageLayouts
 }
 
 // FieldNotes is what the campaign's game system says about a category's
@@ -200,6 +208,9 @@ func (s *Service) Build(
 		}
 		if in.IncludeEntityTypes {
 			data.EntityTypes = mapEntityTypes(types, s.notesFor(ctx, campaignID))
+			if s.Layouts != nil {
+				data.AnyLayouts = addLayouts(data.EntityTypes, types, s.Layouts.ForCampaign(ctx, campaignID))
+			}
 		}
 		if in.IncludeCategoriesInUse {
 			cats, err := s.categoriesInUse(ctx, campaignID, types)
@@ -279,6 +290,33 @@ func mapEntityTypes(types []entities.EntityType, notes func(entities.EntityType)
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
+}
+
+// addLayouts names each category's layouts on its row, main one first, and
+// reports whether any category has more than one.
+func addLayouts(views []entityTypeView, types []entities.EntityType, byType map[int]entities.PageLayouts) bool {
+	bySlug := make(map[string]*entities.EntityType, len(types))
+	for i := range types {
+		bySlug[types[i].Slug] = &types[i]
+	}
+	any := false
+	for i := range views {
+		t := bySlug[views[i].Slug]
+		if t == nil {
+			continue
+		}
+		pl, ok := byType[t.ID]
+		if !ok || len(pl.Extra) == 0 {
+			continue
+		}
+		names := []string{pl.MainLabel(t)}
+		for _, l := range pl.Extra {
+			names = append(names, l.Name)
+		}
+		views[i].Layouts = names
+		any = true
+	}
+	return any
 }
 
 // categoriesInUse builds the "Categories currently in use" rows: per

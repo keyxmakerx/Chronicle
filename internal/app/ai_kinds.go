@@ -48,6 +48,7 @@ type aiDeps struct {
 	SystemEntries   systems.SystemEntryService
 	Systems         *systems.SystemHandler
 	Tags            tags.TagService
+	PageLayouts     entities.PageLayoutService // nil while its tables are degraded
 
 	// Derived once and shared by several kinds and the lookups.
 	Rolls      records.EventRollAPI // the calendar's roll half; nil without one
@@ -133,6 +134,9 @@ func aiLookups(d *aiDeps, reg *records.Registry) *records.Lookups {
 	}
 	if d.Health.IsHealthy(rolltables.PluginSlug) {
 		l.Tables = d.Tables.Svc
+	}
+	if d.PageLayouts != nil {
+		l.Layouts = d.PageLayouts
 	}
 	if d.Quests != nil && d.Boards != nil {
 		l.Quests = aiQuestsAdapter{quests: d.Quests, boards: d.Boards, types: d.Entities}

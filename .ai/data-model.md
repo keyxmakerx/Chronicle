@@ -361,6 +361,13 @@ Foundry module repo for the wire contract.
 | `entity_standing_reasons` | The Director's explanations, newest first: `direction` (`up`/`down`/`none`, checked by the service), `reason` (90 characters), `when_label` (30), `dm_only`; FK cascade to `entity_standings`; at most 300 per standing; `created_by` carries no FK |
 | `entity_standing_settings` | Whether players see a page's standing at all: PK `entity_id`, `players_see` (a page with no row lets them); FK cascade to `entities` and `campaigns` |
 
+### page layouts (`internal/plugins/entities/layoutschema/migrations/`, registry slug `page_layouts`)
+
+| Table | Notes |
+|---|---|
+| `entity_type_page_layouts` | A category's named layouts besides its main one: PK `entity_type_id`, `doc` is the JSON `PageLayouts` (`mainName`, `claimed`, `extra` of `{key, name, layout}`), checked by `PageLayouts.Check` and `ValidateLayout`; FK cascade to `entity_types` and `campaigns` |
+| `entity_page_layouts` | The layout a page chose: PK `entity_id`, `layout_key` (a named layout's key or `main`); no row means it follows its category; FK cascade to `entities` and `campaigns` |
+
 ### pageblocks (`internal/plugins/pageblocks/migrations/`)
 
 | Table | Purpose |

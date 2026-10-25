@@ -45,6 +45,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/dmscreen"
 	"github.com/keyxmakerx/chronicle/internal/plugins/encounters"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
+	"github.com/keyxmakerx/chronicle/internal/plugins/entities/layoutschema"
 	"github.com/keyxmakerx/chronicle/internal/plugins/fieldrules"
 	"github.com/keyxmakerx/chronicle/internal/plugins/foundry_vtt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/homebrew"
@@ -2948,7 +2949,7 @@ func (a *App) RegisterRoutes() {
 	// /static/plugins/entities/ (js/characters.js, the Characters page's
 	// mini→full launch enhancement, and the scripts below, each loaded on
 	// sight: the Contents block's, Standing's, the Family tree's and the
-	// Characters page's hero builder).
+	// Characters page's hero builder, and the chip naming a page's layout).
 	a.registerPlugin(PluginRegistration{
 		Slug:     entities.PluginSlug,
 		StaticFS: echo.MustSubFS(entities.StaticAssetsFS, "static"),
@@ -2957,6 +2958,7 @@ func (a *App) RegisterRoutes() {
 			{Name: "standing", Scripts: []string{"js/standing.js"}},
 			{Name: entities.FamilyTreeWidgetName, Scripts: []string{"js/family_tree.js"}},
 			{Name: "hero-builder", Scripts: []string{"js/hero_builder.js"}},
+			{Name: "page-layout-chip", Scripts: []string{"js/page_layout_chip.js"}},
 		},
 	})
 
@@ -4612,6 +4614,21 @@ func (a *App) RegisterRoutes() {
 		g.SetPlaceGuard(placeService)
 	}
 
+	// A category's named layouts exist only while their tables migrated;
+	// without them every category keeps its one main layout.
+	var pageLayoutService entities.PageLayoutService
+	if a.PluginHealth.IsHealthy(layoutschema.PluginSlug) {
+		pageLayoutService = entities.NewPageLayoutService(entities.NewPageLayoutRepository(a.DB))
+		entityHandler.SetPageLayouts(pageLayoutService)
+		if s, ok := entityService.(interface {
+			SetPageLayoutStore(entities.PageLayoutService)
+		}); ok {
+			s.SetPageLayoutStore(pageLayoutService)
+		}
+	} else {
+		slog.Warn("page layout tables degraded — each category has only its main layout")
+	}
+
 	// --- Entity Block Registry ---
 	// Create the block registry and let each plugin register its block types.
 	// This drives validation, rendering, and the template editor palette.
@@ -5020,6 +5037,9 @@ func (a *App) RegisterRoutes() {
 		tagService,
 		aiWorkspaceRenderer,
 	)
+	if pageLayoutService != nil {
+		aiWorkspacePrompt.Layouts = pageLayoutService
+	}
 	aiWorkspaceHandler.SetPromptBuilder(aiWorkspacePrompt)
 
 	// The entities service implements importer.CampaignLookup and
@@ -5034,6 +5054,9 @@ func (a *App) RegisterRoutes() {
 	aiWorkspaceCommitter.SetEraWriter(aiImportEraAdapter{versions: aiEraVersions})
 	aiWorkspaceCommitter.SetTagWriter(tagService)
 	aiWorkspaceCommitter.SetFolders(folderService)
+	if pageLayoutService != nil {
+		aiWorkspaceCommitter.SetLayouts(pageLayoutService)
+	}
 	aiWorkspaceHandler.SetImportFolders(folderService)
 	aiWorkspaceHandler.SetImportEras(aiImportEraAdapter{versions: aiEraVersions})
 	aiWorkspaceRenderer.EraVersions = aiExportEraAdapter{versions: aiEraVersions}
@@ -5091,7 +5114,7 @@ func (a *App) RegisterRoutes() {
 
 	// --- Campaign Export/Import ---
 	exportSvc := campaigns.NewExportImportService(campaignService)
-	exportSvc.SetEntityExporter(&entityExportAdapter{entitySvc: entityService, tagSvc: tagService, relationSvc: relService, placeSvc: placeService})
+	exportSvc.SetEntityExporter(&entityExportAdapter{entitySvc: entityService, tagSvc: tagService, relationSvc: relService, placeSvc: placeService, layouts: pageLayoutService})
 	exportSvc.SetCalendarExporter(&calendarExportAdapter{svc: calendarService, versions: eraVersionService})
 	exportSvc.SetTimelineExporter(&timelineExportAdapter{svc: timelineSvc})
 	exportSvc.SetSessionExporter(&sessionExportAdapter{svc: sessionsService})
@@ -5100,7 +5123,7 @@ func (a *App) RegisterRoutes() {
 	exportSvc.SetAddonExporter(&addonExportAdapter{svc: addonService})
 	exportSvc.SetMediaExporter(&mediaExportAdapter{svc: mediaService})
 	exportSvc.SetMediaBundler(&mediaBundleAdapter{svc: mediaService})
-	exportSvc.SetEntityImporter(&entityImportAdapter{entitySvc: entityService, tagSvc: tagService, relationSvc: relService, placeSvc: placeService})
+	exportSvc.SetEntityImporter(&entityImportAdapter{entitySvc: entityService, tagSvc: tagService, relationSvc: relService, placeSvc: placeService, layouts: pageLayoutService})
 	exportSvc.SetCalendarImporter(&calendarImportAdapter{svc: calendarService, versions: eraVersionService})
 	exportSvc.SetTimelineImporter(&timelineImportAdapter{svc: timelineSvc})
 	exportSvc.SetSessionImporter(&sessionImportAdapter{svc: sessionsService})
@@ -6188,6 +6211,7 @@ func (a *App) RegisterRoutes() {
 		SystemEntries:   systemEntrySvc,
 		Systems:         systemHandler,
 		Tags:            tagService,
+		PageLayouts:     pageLayoutService,
 	})
 	aiRegistry := records.NewRegistry(aiKinds(aiWiring)...)
 	aiWorkspaceHandler.SetRecords(aiRegistry)

@@ -65,8 +65,9 @@ Every screen is one of two kinds, and is designed in that kind's register.
 - **Workshops** are where the owner arranges and configures: the
   Customizer, the calendar, map and book editors, settings, Site admin.
   They are framed tools on the theme tokens (`customize_shell.css` is the
-  model: a rail on the left, the work in the middle, an inspector on the
-  right, one save bar). A workshop shows the page it changes as the real
+  model: index tabs across the top, each area's parts in a drawer hanging
+  from its tab, the work in the middle, an inspector on the right, one save
+  bar). A workshop shows the page it changes as the real
   page, never an abstract grid or a form describing it.
 - **Paper is an optional extra, mostly for players.** Every surface already
   behaves like a sheet (The material rules); paper is only the optional

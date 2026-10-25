@@ -39,6 +39,13 @@ type PagesAPI interface {
 	GetEntityTypes(ctx context.Context, campaignID string) ([]entities.EntityType, error)
 }
 
+// PageLayoutsAPI is a campaign's named page layouts and the layout each page
+// chose (entities.PageLayoutService).
+type PageLayoutsAPI interface {
+	ForCampaign(ctx context.Context, campaignID string) map[int]entities.PageLayouts
+	PageKeys(ctx context.Context, campaignID string) map[string]string
+}
+
 // SystemEntry is one game-system pick-list entry (an ancestry, a kit…).
 type SystemEntry struct{ Name, Slug, Source, Summary string }
 
@@ -122,6 +129,9 @@ type Lookups struct {
 	// Quests adds a page's quest notice and notice boards to the `page`
 	// answer for a Director; nil leaves them out.
 	Quests QuestsAPI
+	// Layouts names the layout each page wears, for a Director, where its
+	// category has more than one; nil leaves layouts out.
+	Layouts PageLayoutsAPI
 	// Menu gives the owner's AI the sidebar menu's category order; nil
 	// leaves it out.
 	Menu MenuAPI
@@ -178,6 +188,9 @@ type lookupRun struct {
 	// pagesCut is true when the walk stopped at maxPagesWalk with pages
 	// left; answers that read pages then say so.
 	pagesCut bool
+	// layouts caches layoutNames.
+	layouts     map[string]string
+	layoutsRead bool
 }
 
 // Answer answers each lookup in order. A failing lookup gets an Error and
@@ -377,6 +390,44 @@ func withParent(p entities.Entity, names, folders map[string]string) string {
 	return p.Name
 }
 
+// layoutNames maps each visible page whose category has named layouts to
+// the name of the one it wears. Only a Director gets them: layout names are
+// the Director's own words, and players never see which layout a page wears.
+func (run *lookupRun) layoutNames() map[string]string {
+	if run.layoutsRead {
+		return run.layouts
+	}
+	run.layoutsRead = true
+	if run.l.Layouts == nil || run.l.Pages == nil || !run.director() {
+		return nil
+	}
+	byType := run.l.Layouts.ForCampaign(run.ctx, run.campaignID)
+	if len(byType) == 0 {
+		return nil
+	}
+	types, err := run.l.Pages.GetEntityTypes(run.ctx, run.campaignID)
+	if err != nil {
+		return nil
+	}
+	typeByID := make(map[int]*entities.EntityType, len(types))
+	for i := range types {
+		typeByID[types[i].ID] = &types[i]
+	}
+	chosen := run.l.Layouts.PageKeys(run.ctx, run.campaignID)
+	pages, _ := run.visiblePages()
+	out := map[string]string{}
+	for i := range pages {
+		p := &pages[i]
+		pl, ok := byType[p.EntityTypeID]
+		if !ok || len(pl.Extra) == 0 {
+			continue
+		}
+		out[p.ID] = pl.Label(typeByID[p.EntityTypeID], pl.WornKey(p, chosen[p.ID]))
+	}
+	run.layouts = out
+	return out
+}
+
 // visibleIDs is the set of page ids the Actor can see.
 func (run *lookupRun) visibleIDs() map[string]bool {
 	pages, _ := run.visiblePages()
@@ -516,26 +567,52 @@ func (l *Lookups) PageIndex(ctx context.Context, campaignID string, a Actor) str
 	}
 	const perType = 40
 	groups, order := map[string][]string{}, []string{}
+	// A category with named layouts lists its pages by the layout they
+	// wear, so the AI can tell a hero from an NPC in one Characters list.
+	worn := run.layoutNames()
+	byLayout, layoutOrder := map[string]map[string][]string{}, map[string][]string{}
 	parents, folders := run.parentNames(), run.folderNames()
 	for _, p := range pages {
 		label := firstNonEmpty(p.TypeNamePlural, p.TypeName, "Pages")
 		if _, ok := groups[label]; !ok {
 			order = append(order, label)
 		}
-		groups[label] = append(groups[label], withParent(p, parents, folders))
+		name := withParent(p, parents, folders)
+		groups[label] = append(groups[label], name)
+		if lay, ok := worn[p.ID]; ok {
+			if byLayout[label] == nil {
+				byLayout[label] = map[string][]string{}
+			}
+			if _, seen := byLayout[label][lay]; !seen {
+				layoutOrder[label] = append(layoutOrder[label], lay)
+			}
+			byLayout[label][lay] = append(byLayout[label][lay], name)
+		}
 	}
-	var b strings.Builder
-	for _, label := range order {
-		names := groups[label]
+	list := func(names []string) string {
 		line := names
 		if len(line) > perType {
 			line = line[:perType]
 		}
-		fmt.Fprintf(&b, "- **%s** (%d): %s", label, len(names), strings.Join(line, ", "))
+		out := strings.Join(line, ", ")
 		if len(names) > perType {
-			fmt.Fprintf(&b, ", and %d more", len(names)-perType)
+			out += fmt.Sprintf(", and %d more", len(names)-perType)
 		}
-		b.WriteString("\n")
+		return out
+	}
+	var b strings.Builder
+	for _, label := range order {
+		names := groups[label]
+		if lays := layoutOrder[label]; len(lays) > 0 && len(byLayout[label]) > 0 {
+			fmt.Fprintf(&b, "- **%s** (%d), by layout:", label, len(names))
+			for _, lay := range lays {
+				in := byLayout[label][lay]
+				fmt.Fprintf(&b, " %s layout (%d): %s;", lay, len(in), list(in))
+			}
+			b.WriteString("\n")
+			continue
+		}
+		fmt.Fprintf(&b, "- **%s** (%d): %s\n", label, len(names), list(names))
 	}
 	return capText(b.String(), 8*1024)
 }
@@ -581,6 +658,7 @@ func (run *lookupRun) page(name string) (LookupAnswer, error) {
 		pageTagMap, _ = run.l.Tags.GetEntityTagsBatch(run.ctx, []string{e.ID}, run.director())
 	}
 	opts.FolderNames = run.folderNames()
+	opts.LayoutNames = run.layoutNames()
 	if run.director() && run.l.Tables != nil {
 		if doc, err := run.l.Tables.Get(run.ctx, run.campaignID); err == nil {
 			opts.RollTableNames = TableNames(doc)

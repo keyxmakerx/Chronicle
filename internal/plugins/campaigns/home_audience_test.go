@@ -140,7 +140,7 @@ func TestHomeAudienceParam(t *testing.T) {
 	}
 }
 
-func TestCustomizeHomePages_TabsAndBorrowedHints(t *testing.T) {
+func TestCustomizeHomePages_BorrowedHints(t *testing.T) {
 	h := &Handler{}
 	render := func(column *string, key string) string {
 		cc := &CampaignContext{Campaign: &Campaign{ID: "c1", DashboardLayout: column}, MemberRole: RoleOwner, IsMember: true}
@@ -151,7 +151,7 @@ func TestCustomizeHomePages_TabsAndBorrowedHints(t *testing.T) {
 		return buf.String()
 	}
 	fresh := render(nil, HomeDirector)
-	for _, want := range []string{"/customize/home/director", "/customize/home/guest", "/customize/home/dm", "GM team", "Guests", "Overview", "co-GMs", "same as the Everyone home until you change it", `data-widget="customize-page-editor"`, `&#34;scope&#34;:&#34;home&#34;`} {
+	for _, want := range []string{"Overview", "co-GMs", "same as the Everyone home until you change it", `data-widget="customize-page-editor"`, `&#34;scope&#34;:&#34;home&#34;`} {
 		if !strings.Contains(fresh, want) {
 			t.Errorf("fresh campaign: missing %q", want)
 		}

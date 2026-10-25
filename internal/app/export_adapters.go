@@ -43,6 +43,15 @@ type entityExportAdapter struct {
 	relationSvc relations.RelationService
 	// placeSvc carries a page's extra places in the tree; nil leaves them out.
 	placeSvc entities.PlaceService
+	// layouts carries each category's named layouts and the one each page
+	// chose; nil leaves them out.
+	layouts entities.PageLayoutService
+}
+
+// categoryLayoutSaver checks and stores a category's named layouts
+// (entities' service, which checks their blocks as the Customizer does).
+type categoryLayoutSaver interface {
+	SaveCategoryPageLayouts(ctx context.Context, campaignID string, typeID int, p entities.PageLayouts) error
 }
 
 // ExportEntities gathers all entity-related data for a campaign export.
@@ -58,6 +67,12 @@ func (a *entityExportAdapter) ExportEntities(ctx context.Context, campaignID str
 	typeIDToSlug := make(map[int]string, len(etypes))
 	for _, et := range etypes {
 		typeIDToSlug[et.ID] = et.Slug
+	}
+	var typeLayouts map[int]entities.PageLayouts
+	var pageKeys map[string]string
+	if a.layouts != nil {
+		typeLayouts = a.layouts.ForCampaign(ctx, campaignID)
+		pageKeys = a.layouts.PageKeys(ctx, campaignID)
 	}
 	for _, et := range etypes {
 		var parentSlug *string
@@ -94,6 +109,7 @@ func (a *entityExportAdapter) ExportEntities(ctx context.Context, campaignID str
 			PresetCategory:  et.PresetCategory,
 			ParentTypeSlug:  parentSlug,
 			Claimable:       et.Claimable,
+			PageLayouts:     pageLayoutsJSON(typeLayouts[et.ID]),
 		})
 	}
 
@@ -150,6 +166,7 @@ func (a *entityExportAdapter) ExportEntities(ctx context.Context, campaignID str
 				FieldsData:     fieldsData,
 				FieldOverrides: fieldOverrides,
 				PopupConfig:    popupConfig,
+				Layout:         pageKeys[e.ID],
 			}
 
 			// Export per-entity permissions when visibility is custom.
@@ -1136,6 +1153,9 @@ type entityImportAdapter struct {
 	relationSvc relations.RelationService
 	// placeSvc restores a page's extra places in the tree; nil skips them.
 	placeSvc entities.PlaceService
+	// layouts restores each category's named layouts and the one each page
+	// chose; nil reports them as left out.
+	layouts entities.PageLayoutService
 }
 
 // ImportEntities creates entity types, entities, tags, and relations from
@@ -1235,6 +1255,7 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 				}
 			}
 		}
+		a.restoreCategoryLayouts(ctx, campaignID, newType.ID, et, report)
 	}
 
 	// 2. Create entities (first pass: without parent references).
@@ -1278,6 +1299,7 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 		}
 		missingPictures += a.restoreEntityPicture(ctx, newEntity.ID, e.Name, e.ImagePath, idMap, a.entitySvc.UpdateImage, report)
 		missingPictures += a.restoreEntityPicture(ctx, newEntity.ID, e.Name, e.CoverImagePath, idMap, a.entitySvc.UpdateCoverImage, report)
+		a.restorePageLayout(ctx, newEntity, e.Layout, e.Name, report)
 
 		// Apply field overrides.
 		if len(e.FieldOverrides) > 0 {
@@ -2984,4 +3006,54 @@ func (a *aiExportCalendarListerAdapter) GetCalendar(ctx context.Context, campaig
 func (a *aiExportCalendarListerAdapter) ListAllEventsForCalendar(ctx context.Context, campaignID, calendarID string) ([]calendar.Event, error) {
 	const ownerRole = 3
 	return a.svc.ListAllEventsForCalendar(ctx, calendarID, campaignID, permissions.SystemViewer(ownerRole))
+}
+
+// pageLayoutsJSON is a category's named layouts for the file; nil when it has
+// none, so the key stays out.
+func pageLayoutsJSON(p entities.PageLayouts) json.RawMessage {
+	if p.Empty() {
+		return nil
+	}
+	b, err := json.Marshal(p)
+	if err != nil {
+		return nil
+	}
+	return b
+}
+
+// restoreCategoryLayouts puts a category's named layouts back, checked like a
+// Customize Save. A file from before named layouts has none to restore.
+func (a *entityImportAdapter) restoreCategoryLayouts(ctx context.Context, campaignID string, typeID int, et campaigns.ExportEntityType, report *campaigns.ImportReport) {
+	if len(et.PageLayouts) == 0 {
+		return
+	}
+	saver, ok := a.entitySvc.(categoryLayoutSaver)
+	if a.layouts == nil || !ok {
+		report.Fail("entities", "category layouts", et.Name, "this server keeps one layout per category, so the others were left out")
+		return
+	}
+	var p entities.PageLayouts
+	if err := json.Unmarshal(et.PageLayouts, &p); err != nil {
+		report.Fail("entities", "category layouts", et.Name, "the file's layouts for this category could not be read")
+		return
+	}
+	if err := saver.SaveCategoryPageLayouts(ctx, campaignID, typeID, p); err != nil {
+		slog.Warn("import: restore category layouts failed", slog.String("type", et.Slug), slog.Any("error", err))
+		report.Fail("entities", "category layouts", et.Name, apperror.SafeMessage(err))
+	}
+}
+
+// restorePageLayout puts back the layout a page chose.
+func (a *entityImportAdapter) restorePageLayout(ctx context.Context, e *entities.Entity, key, name string, report *campaigns.ImportReport) {
+	if key == "" || a.layouts == nil {
+		return
+	}
+	et, err := a.entitySvc.GetEntityTypeByID(ctx, e.EntityTypeID)
+	if err == nil {
+		err = a.layouts.RestorePageKey(ctx, e, et, key)
+	}
+	if err != nil {
+		slog.Warn("import: restore page layout failed", slog.String("entity", name), slog.Any("error", err))
+		report.Fail("entities", "page layout", name, apperror.SafeMessage(err))
+	}
 }

@@ -1,4 +1,4 @@
-/* Customize's frame: the area rail, the area header, the one save bar, the
+/* Customize's frame: the index tabs and their drawers, the one save bar, the
    Find palette, and the Categories area. Tool chrome, so it takes the theme
    tokens only (ui-standard: the tools are never paper) and follows .dark by
    way of those tokens. The Look area keeps its own sheet, customize.css. */
@@ -9,8 +9,8 @@
   --czs-bad: rgb(var(--color-bad-rgb));
   --czs-ok: rgb(var(--color-ok-rgb));
   --czs-canvas: var(--color-bg-tertiary);
-  display: grid;
-  grid-template-columns: 216px minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   min-height: calc(100% + 2rem);
   margin: -0.75rem;
   color: var(--color-text-body);
@@ -19,63 +19,98 @@
   .czs { margin: -1rem -1.25rem; }
 }
 
-/* ---------- Rail ---------- */
-.czs-rail {
-  border-right: 1px solid var(--color-border);
-  background: var(--color-bg-secondary);
-  padding: 16px 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+/* ---------- Index tabs ----------
+   ui-standard's tab weight: small capitals, no fill or box; the open area's
+   tab has a hairline under it and up its left side, like an index label,
+   and its drawer hangs from that same side line. */
+.czs-stage { min-width: 0; display: flex; flex-direction: column; position: relative; flex: 1; }
+.czs-top {
   position: sticky;
   top: 0;
-  align-self: start;
-  max-height: 100vh;
-  overflow-y: auto;
-}
-.czs-rail h2 {
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--color-text-secondary);
-  font-weight: 600;
-  padding: 0 10px 8px;
-  margin: 0;
-}
-.czs-rail a {
+  z-index: 30;
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  color: var(--color-text-body);
-  text-decoration: none;
-  transition: background var(--dur-micro);
-}
-.czs-rail a .czs-ic { width: 18px; text-align: center; color: var(--color-text-secondary); }
-.czs-rail a:hover { background: var(--color-bg-tertiary); }
-.czs-rail a[aria-current="page"] { background: var(--czs-accent-soft); color: var(--color-accent); font-weight: 600; }
-.czs-rail a[aria-current="page"] .czs-ic { color: var(--color-accent); }
-.czs-rail .czs-lbl { flex: 1; }
-.czs-rail .czs-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--czs-warn); }
-.czs-rail .czs-hr { height: 1px; background: var(--color-border); margin: 10px 6px; }
-
-/* ---------- Stage and area header ---------- */
-.czs-stage { min-width: 0; display: flex; flex-direction: column; position: relative; }
-.czs-top {
-  display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 12px;
-  padding: 10px 24px;
+  padding: 0 24px;
   border-bottom: 1px solid var(--color-border);
   background: var(--color-bg-secondary);
   min-width: 0;
 }
-.czs-crumbs { display: flex; align-items: center; gap: 8px; color: var(--color-text-secondary); font-size: 13px; min-width: 0; white-space: nowrap; overflow: hidden; }
-.czs-crumbs a { color: var(--color-text-secondary); text-decoration: none; }
-.czs-crumbs a:hover { color: var(--color-accent); }
-.czs-crumbs b { color: var(--color-text-primary); font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
-.czs-crumbs .czs-sep { color: var(--color-text-muted); }
+.czs-tabs-top { display: flex; align-items: flex-end; gap: 6px; min-width: 0; overflow-x: auto; scrollbar-width: none; scroll-padding-inline: 12px; }
+.czs-tabs-top::-webkit-scrollbar { display: none; }
+.czs-tabw { position: relative; display: inline-flex; align-items: center; flex: none; }
+.czs-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 44px;
+  padding: 13px 10px 10px 12px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color var(--dur-micro);
+}
+.czs-tab:hover { color: var(--color-text-primary); }
+.czs-tab[aria-current="page"] { color: var(--color-text-primary); }
+.czs-tabw:has(.czs-tab[aria-current="page"])::before { content: ""; position: absolute; left: 0; top: 9px; bottom: -1px; width: 1px; background: var(--color-text-primary); opacity: 0.55; }
+.czs-tabw:has(.czs-tab[aria-current="page"])::after { content: ""; position: absolute; left: 0; right: 4px; bottom: -1px; height: 1px; background: var(--color-text-primary); opacity: 0.55; }
+.czs-part { text-transform: none; letter-spacing: 0; font-weight: 500; font-size: 12.5px; color: var(--color-accent); max-width: 18ch; overflow: hidden; text-overflow: ellipsis; }
+.czs-part:empty { display: none; }
+.czs-tab .czs-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--czs-warn); }
+.czs-chev { display: inline-grid; place-items: center; width: 24px; height: 28px; margin: 8px 2px 0 -6px; border: 0; border-radius: 6px; background: none; color: var(--color-text-secondary); cursor: pointer; font-size: 10px; transition: color var(--dur-micro), background var(--dur-micro); }
+.czs-chev:hover { color: var(--color-text-primary); background: var(--color-bg-tertiary); }
+.czs-chev i { transition: transform var(--dur-standard) var(--ease-out); }
+.czs-chev[aria-expanded="true"] i { transform: rotate(180deg); }
+.czs-tsep { flex: none; width: 1px; height: 16px; align-self: center; margin: 8px 6px 0; background: var(--color-border); }
+.czs-top .czs-find { align-self: center; margin-block: 7px; width: 220px; flex: none; }
+
+/* A drawer drapes down from its tab's side line over the area; nothing
+   below moves. */
+.czs-drawer {
+  position: absolute;
+  top: 100%;
+  left: 24px;
+  z-index: 31;
+  width: 260px;
+  max-width: calc(100vw - 32px);
+  max-height: min(70vh, 520px);
+  overflow: auto;
+  padding: 4px 6px 8px;
+  border: 1px solid var(--color-border);
+  border-top: 0;
+  border-radius: 0 0 12px 12px;
+  background: var(--color-bg-secondary);
+  box-shadow: var(--elev-dragged);
+  clip-path: inset(0 -40px -40px -40px);
+  animation: czs-drape var(--dur-standard) var(--ease-out);
+}
+.czs-drawer::before { content: ""; position: absolute; left: -1px; top: 0; bottom: 12px; width: 1px; background: var(--color-text-primary); opacity: 0.55; }
+.czs-drawer[hidden] { display: none; }
+.czs-drawer-h { display: flex; align-items: center; justify-content: space-between; padding: 6px 4px 4px 8px; font-size: 10.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-text-secondary); }
+.czs-drawer-x { width: 28px; height: 28px; display: inline-grid; place-items: center; border: 0; border-radius: 6px; background: none; color: var(--color-text-secondary); cursor: pointer; }
+.czs-drawer-x:hover { background: var(--color-bg-tertiary); color: var(--color-text-primary); }
+.czs-drawer ul { list-style: none; margin: 0; padding: 0; }
+.czs-drawer a { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 8px; color: var(--color-text-body); text-decoration: none; font-size: 13.5px; }
+.czs-drawer a:hover, .czs-drawer a:focus-visible { background: var(--color-bg-tertiary); outline: none; }
+.czs-drawer a[aria-current="page"] { color: var(--color-text-primary); font-weight: 600; box-shadow: inset 2px 0 0 var(--color-accent); border-radius: 0 8px 8px 0; }
+.czs-drawer a.is-kind { padding-left: 30px; font-size: 12.5px; }
+.czs-drawer a.is-quiet { color: var(--color-text-secondary); font-size: 12.5px; }
+.czs-drawer .czs-pl { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.czs-drawer .czs-sw { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.czs-drawer .czs-cnt { margin-left: auto; color: var(--color-text-secondary); font-size: 12px; font-variant-numeric: tabular-nums; }
+.czs-drawer .czs-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--czs-warn); }
+@keyframes czs-drape { from { clip-path: inset(0 -40px 100% -40px); } }
+[data-motion="off"] .czs-drawer, [data-motion="off"] .czs-chev i { animation: none; transition: none; }
+@media (prefers-reduced-motion: reduce) { .czs-drawer { animation: none; } .czs-chev i { transition: none; } }
+
+/* Inside this frame the Look's rooms are the Look tab's drawer. */
+.czs .czp .cz-tabs { display: none; }
+
 .czs-find {
   margin-left: auto;
   display: flex;
@@ -328,12 +363,9 @@
 .czs .czp .cz-save { display: none; }
 
 @media (max-width: 900px) {
-  .czs { grid-template-columns: minmax(0, 1fr); }
-  .czs-rail { position: static; max-height: none; flex-direction: row; border-right: 0; border-bottom: 1px solid var(--color-border); overflow-x: auto; padding: 6px 8px; gap: 4px; }
-  .czs-rail h2, .czs-rail .czs-hr { display: none; }
-  .czs-rail a { flex: none; padding: 8px 12px; }
-  .czs-top { padding: 8px 16px; }
-  .czs-find { width: auto; flex: none; }
+  .czs-top { padding: 0 16px; gap: 8px; }
+  .czs-drawer { left: 16px; }
+  .czs-find, .czs-top .czs-find { width: auto; flex: none; }
   .czs-find span, .czs-find kbd { display: none; }
   .czs-pad { padding: 20px 16px 120px; }
   .czs-ws-head, .czs-tabs, .czs-home-hint { padding-left: 16px; padding-right: 16px; }

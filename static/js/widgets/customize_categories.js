@@ -141,7 +141,7 @@
       Object.keys(patch).forEach(function (k) { if (patch[k] === undefined) delete it[k]; else it[k] = patch[k]; });
       // A category being deleted keeps no layout or home change; Save would
       // refuse them.
-      if (it.delete) { delete it.layout; delete it.home; delete it.description; }
+      if (it.delete) { delete it.layout; delete it.page_layouts; delete it.home; delete it.description; }
       var s = savedById(key);
       if (s) {
         if (it.name === s.name) delete it.name;
@@ -163,7 +163,7 @@
     }
     // The keys of an item that the Settings tab shows; the page layout and
     // the category home have tabs of their own.
-    function settingsKeys(it) { return Object.keys(it).filter(function (k) { return !HOME_KEYS[k] && k !== 'layout'; }); }
+    function settingsKeys(it) { return Object.keys(it).filter(function (k) { return !HOME_KEYS[k] && k !== 'layout' && k !== 'page_layouts'; }); }
     // The save bar's lines for this section.
     function changes(its) {
       var out = [], byKey = {};
@@ -173,7 +173,7 @@
         if (it.new) out.push({ label: 'New category ' + nm, href: BASE + '/categories/' + k + '/settings' });
         else if (it.delete) out.push({ label: 'Delete ' + (s ? s.plural : nm), href: BASE + '/categories' });
         else {
-          if (it.layout) out.push({ label: nm + ' page layout', href: BASE + '/categories/' + k + '/layout' });
+          if (it.layout || it.page_layouts) out.push({ label: nm + ' page layout', href: BASE + '/categories/' + k + '/layout' });
           if (it.home || it.description !== undefined) out.push({ label: nm + ' home', href: BASE + '/categories/' + k + '/home' });
           if (settingsKeys(it).length) out.push({ label: nm + ' settings', href: BASE + '/categories/' + k + '/settings' });
         }
