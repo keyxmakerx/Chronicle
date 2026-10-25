@@ -7,11 +7,22 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/widgets/notes"
 	"github.com/keyxmakerx/chronicle/internal/widgets/relations"
 )
+
+// fakeJournal is what the viewer can open in the Journal; the real adapter
+// gets it from the notes' own visibility rule.
+type fakeJournal []JournalNote
+
+func (f fakeJournal) JournalNotes(context.Context, string, permissions.Viewer) ([]JournalNote, error) {
+	return f, nil
+}
+
+func strp(s string) *string { return &s }
 
 // fakePages hides private pages from anyone below a co-DM, as the real
 // role filter does.
@@ -105,6 +116,12 @@ func world() *Lookups {
 			{ID: "n1", CampaignID: camp, UserID: "owner", Title: "Who poisoned the duke?"},
 			{ID: "n2", CampaignID: camp, UserID: "someone-else", Title: "Their plans", IsShared: true},
 		}},
+		Journal: fakeJournal{
+			{ID: "n1", Title: "Who poisoned the duke?", AuthorID: "owner", Author: "Key", Audience: "private", Body: strp("<p>The <strong>cook</strong> had the means.</p>")},
+			{ID: "n3", Title: "Session 12, 2026-10-09", AuthorID: "owner", Author: "Key", Folder: "Game nights", Night: "Session 12, 2026-10-09", Audience: "private", Body: strp("<p>Mine.</p>")},
+			{ID: "n4", Title: "Session 12, 2026-10-09", AuthorID: "mira", Author: "Mira", Folder: "Game nights", Night: "Session 12, 2026-10-09", Audience: "gm", Body: strp("<p>We met @Ser Aldric.</p>")},
+			{ID: "n5", Title: "Rope knots", AuthorID: "owner", PageID: "rope", Audience: "private"},
+		},
 		Party: &fakeParty{p: Party{
 			Heroes: []PartyHero{
 				{ID: "aldric", Name: "Ser Aldric", Player: "Mira", Subtitle: "Level 3 Fury", Meters: []PartyMeter{{Label: "Stamina", Current: "31", Max: "42"}}},
@@ -142,7 +159,19 @@ func TestLookups_Answers(t *testing.T) {
 		{"shop stock", lookup("stock", map[string]any{"shop": "The Rusty Anchor"}), player, []string{"Rope: 1 gp, 5 in stock"}, []string{"Treasure Map"}, ""},
 		{"inventory hides Director-only links in Safe", lookup("inventory", map[string]any{"character": "Ser Aldric"}), player, []string{"Rope x2"}, []string{"Rusty Anchor"}, ""},
 		{"inventory shows them to a Director", lookup("inventory", map[string]any{"character": "Ser Aldric"}), owner, []string{"Rope x2", "The Rusty Anchor"}, nil, ""},
-		{"only my notes", lookup("notes", nil), owner, []string{"Who poisoned the duke? (Journal)"}, []string{"Their plans"}, ""},
+		{"notes", lookup("notes", nil), owner, []string{
+			"## My Journal (2)", "- Who poisoned the duke? (private)",
+			"- Session 12, 2026-10-09 (in the folder Game nights; game night entry for Session 12, 2026-10-09; private)",
+			"## My jots on pages (1)", "- Rope knots (a jot on Rope; private)",
+			"## Shared with me by other members (1)", "- Session 12, 2026-10-09 (by Mira; in the folder Game nights; game night entry for Session 12, 2026-10-09; shared with the DM)",
+		}, nil, ""},
+		{"a note's text", lookup("note", map[string]any{"name": "who poisoned the duke?"}), owner, []string{"## Note: Who poisoned the duke?", "*private*", "The **cook** had the means."}, []string{"can't change it"}, ""},
+		{"my entry before a shared one", lookup("note", map[string]any{"name": "Session 12, 2026-10-09"}), owner, []string{"Mine.", "2 notes have this title"}, []string{"Mira"}, ""},
+		{"a shared entry by its writer", lookup("note", map[string]any{"name": "Session 12, 2026-10-09", "by": "mira"}), owner, []string{"by Mira", "We met @Ser Aldric.", "a `note` block can't change it"}, []string{"Mine."}, ""},
+		{"a jot by its page", lookup("note", map[string]any{"name": "Rope knots", "page": "Rope"}), owner, []string{"a jot on Rope", "_(empty)_"}, nil, ""},
+		{"a jot on another page is not found", lookup("note", map[string]any{"name": "Rope knots", "page": "Ser Aldric"}), owner, nil, nil, "no note called"},
+		{"a note needs a name", lookup("note", nil), owner, nil, nil, "give the note's `name`"},
+		{"a note stays out in Safe", lookup("note", map[string]any{"name": "Who poisoned the duke?"}), player, nil, nil, "your notes are left out"},
 		{"notes stay out in Safe", lookup("notes", nil), player, nil, nil, "your notes are left out"},
 		{"players, live", lookup("players", nil), owner, []string{"Ser Aldric (Mira): Level 3 Fury. Stamina 31 of 42. Carries Rope x2, The Rusty Anchor. Coming to the next game night.", "The Ghost (Sam)", "Next game night: Session 12"}, nil, ""},
 		{"players in Safe leave out the DM Screen's figures", lookup("players", nil), player, []string{"Ser Aldric (Mira): Level 3 Fury. Carries Rope x2. Coming to the next game night."}, []string{"The Ghost", "Stamina"}, ""},

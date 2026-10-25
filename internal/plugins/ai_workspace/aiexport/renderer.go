@@ -548,6 +548,13 @@ func renderNoteTree(
 	return nil
 }
 
+// RenderNoteText is one note's body as markdown, for the AI's note lookup,
+// which writes its own heading and details around it.
+func RenderNoteText(n notes.Note) (string, error) {
+	body, err := htmlToMarkdown(n.EntryHTML)
+	return bodyOrSkip("note body", n.Title, body, err), nil
+}
+
 // ----------------------------------------------------------------------------
 // Calendar events
 // ----------------------------------------------------------------------------

@@ -204,8 +204,9 @@ func (s *Service) renderCategory(
 		if err != nil {
 			return "", err
 		}
-		// Only the operator's own notes go to an AI tool: a note someone
-		// shared with them is still that person's writing.
+		// The export carries only the operator's own notes. Notes others
+		// shared with them are read one at a time through the note lookups,
+		// each marked with its writer.
 		own := list[:0:0]
 		for _, n := range list {
 			if n.UserID == ownerID {
