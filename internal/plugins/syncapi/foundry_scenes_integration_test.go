@@ -39,8 +39,9 @@ func TestFoundryScenesIntegration_Replace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got.Scenes) != 2 || got.Scenes[0].Name != "Dragon's Lair" || !got.Scenes[0].Active || !got.Scenes[0].InNavigation ||
-		got.Scenes[1].Folder != "Act 2" || got.Truncated {
+	// Foundry's order is kept, not sorted by name.
+	if len(got.Scenes) != 2 || got.Scenes[0].Name != "Sunken Crypt" || got.Scenes[0].Folder != "Act 2" ||
+		got.Scenes[1].Name != "Dragon's Lair" || !got.Scenes[1].Active || !got.Scenes[1].InNavigation || got.Truncated {
 		t.Fatalf("first report: %+v", got)
 	}
 	if err := repo.Replace(ctx, cid, FoundrySceneReport{ReportedAt: now, Truncated: true, Scenes: []FoundryScene{}}); err != nil {

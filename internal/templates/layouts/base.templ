@@ -161,6 +161,8 @@ templ Base(title string) {
 		<script src={ AssetURL("/static/js/widgets/editor_mention.js") } defer></script>
 		<!-- [[links]] to notes (Chronicle.NoteLink, the [[ picker, per-viewer link labels) -->
 		<script src={ AssetURL("/static/js/widgets/editor_notelink.js") } defer></script>
+		<!-- Foundry scene mentions (Chronicle.SceneMention, "map present / needed"; before editor.js) -->
+		<script src={ AssetURL("/static/js/widgets/editor_scene.js") } defer></script>
 		<!-- Inline secrets mark (GM-only text, must load before editor.js) -->
 		<script src={ AssetURL("/static/js/widgets/editor_secret.js") } defer></script>
 		<!-- Auto-link entities (must load before editor.js so Chronicle.autoLinkEntities is available) -->

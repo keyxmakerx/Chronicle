@@ -57,8 +57,8 @@ const (
 type FoundrySceneRepository interface {
 	// Replace makes the report the campaign's whole list.
 	Replace(ctx context.Context, campaignID string, report FoundrySceneReport) error
-	// Get returns the campaign's last report, scenes by name; nil when
-	// Foundry has never reported.
+	// Get returns the campaign's last report, scenes in Foundry's sidebar
+	// order; nil when Foundry has never reported.
 	Get(ctx context.Context, campaignID string) (*FoundrySceneReport, error)
 }
 
@@ -80,11 +80,11 @@ func (r *foundrySceneRepo) Replace(ctx context.Context, campaignID string, repor
 	if _, err := tx.ExecContext(ctx, `DELETE FROM foundry_scenes WHERE campaign_id = ?`, campaignID); err != nil {
 		return apperror.NewInternal(fmt.Errorf("clear foundry scenes: %w", err))
 	}
-	for _, s := range report.Scenes {
+	for i, s := range report.Scenes {
 		if _, err := tx.ExecContext(ctx, `INSERT INTO foundry_scenes
-			(campaign_id, scene_id, name, folder, is_active, in_navigation)
-			VALUES (?, ?, ?, ?, ?, ?)`,
-			campaignID, s.SceneID, s.Name, s.Folder, s.Active, s.InNavigation); err != nil {
+			(campaign_id, scene_id, name, folder, is_active, in_navigation, position)
+			VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			campaignID, s.SceneID, s.Name, s.Folder, s.Active, s.InNavigation, i); err != nil {
 			return apperror.NewInternal(fmt.Errorf("insert foundry scene: %w", err))
 		}
 	}
@@ -112,7 +112,7 @@ func (r *foundrySceneRepo) Get(ctx context.Context, campaignID string) (*Foundry
 		return nil, apperror.NewInternal(fmt.Errorf("read foundry scene report: %w", err))
 	}
 	rows, err := r.db.QueryContext(ctx, `SELECT scene_id, name, folder, is_active, in_navigation
-		FROM foundry_scenes WHERE campaign_id = ? ORDER BY name, scene_id`, campaignID)
+		FROM foundry_scenes WHERE campaign_id = ? ORDER BY position, scene_id`, campaignID)
 	if err != nil {
 		return nil, apperror.NewInternal(fmt.Errorf("list foundry scenes: %w", err))
 	}
@@ -144,9 +144,10 @@ type reportScenesRequest struct {
 	Truncated bool            `json:"truncated"`
 }
 
-// cleanScenes validates and clamps a report. A duplicate scene id keeps its
-// first entry; a scene with no name is stored as "Unnamed scene" so it still
-// counts.
+// cleanScenes validates and clamps a report, keeping the order it came in
+// (Foundry's sidebar order, which the owner arranged). A duplicate scene id
+// keeps its first entry; a scene with no name is stored as "Unnamed scene" so
+// it still counts.
 func cleanScenes(req reportScenesRequest, now time.Time) (FoundrySceneReport, error) {
 	if len(req.Scenes) > foundryScenesMax {
 		return FoundrySceneReport{}, apperror.NewBadRequest(fmt.Sprintf("too many scenes in one report (at most %d)", foundryScenesMax))

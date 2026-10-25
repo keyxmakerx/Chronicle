@@ -17,6 +17,10 @@ import (
 // noteIDPattern is the shape a note link's data-note-id must have.
 var noteIDPattern = regexp.MustCompile(`^[0-9a-fA-F-]{8,64}$`)
 
+// sceneIDPattern is the shape a Foundry scene mention's data-scene-id must
+// have: Foundry document ids are letters and digits.
+var sceneIDPattern = regexp.MustCompile(`^[A-Za-z0-9]{1,64}$`)
+
 // The rich editor's checklist markup: which list is a checklist, and whether
 // an item is ticked. Only these exact values pass; the checkbox <input> the
 // editor draws is not kept, since readers style ticked items from the
@@ -67,6 +71,10 @@ func getPolicy() *bluemonday.Policy {
 		policy.AllowAttrs("data-type").OnElements("div", "span")
 		policy.AllowAttrs("data-type").Matching(taskTypePattern).OnElements("ul", "li")
 		policy.AllowAttrs("data-checked").Matching(taskCheckedPattern).OnElements("li")
+
+		// A mention of a Foundry scene keeps the scene's Foundry id, so the
+		// mention stays tied to that scene; only an id-shaped value survives.
+		policy.AllowAttrs("data-scene-id").Matching(sceneIDPattern).OnElements("span")
 
 		// Allow inline secrets (GM-only text wrapped in <span data-secret>).
 		policy.AllowAttrs("data-secret").OnElements("span")

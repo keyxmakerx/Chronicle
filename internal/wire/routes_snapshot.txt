@@ -799,6 +799,7 @@ POST	/campaigns/:id/foundry-vtt/update/switch	session	plugins/foundry_vtt.(*Hand
 GET	/campaigns/:id/foundry/member-status	session	plugins/syncapi.(*SyncHistoryHandler).MemberStatusFragment	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/foundry/players	session	plugins/syncapi.(*SyncHistoryHandler).PlayersFragment	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/foundry/problems	session	plugins/syncapi.(*SyncHistoryHandler).ProblemsFragment	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+GET	/campaigns/:id/foundry/scenes	session	plugins/syncapi.(*SyncHistoryHandler).ScenesJSON	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess
 GET	/campaigns/:id/game-nights	public-capable	plugins/sessions.(*Handler).GameNightsLink	plugins/auth.OptionalAuth > plugins/campaigns.AllowPublicCampaignAccess > plugins/addons.RequireAddon > plugins/addons.RequireAddon > plugins/campaigns.RequireViewAccess
 GET	/campaigns/:id/groups	session	plugins/campaigns.(*Handler).ListGroupsAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/groups	session	plugins/campaigns.(*Handler).CreateGroupAPI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
