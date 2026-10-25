@@ -23,6 +23,13 @@ permissions:
   contents: read
   packages: write
 
+# A new push to a pull request cancels that PR's run still in progress, so a
+# burst of fixes does not queue behind runs nobody will read. Runs on main are
+# never cancelled: each one publishes that commit's image.
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && github.head_ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
@@ -166,34 +173,6 @@ jobs:
         # grandfathered baseline.
         run: go test ./... -v -short
 
-      - name: Restore-drill self-test
-        # Runs tools/restore-drill.sh's real verify logic (migration
-        # plausibility, row counts, FK spot check) against tiny fixtures in
-        # testdata/restore-drill/, proving both the PASS path and every FAIL
-        # path still fire. Spins real, disposable MariaDB containers;
-        # ubuntu-latest ships Docker, no setup needed.
-        run: ./tools/test-restore-drill.sh
-
-      - name: Set up Node
-        uses: actions/setup-node@v7
-        with:
-          node-version: '20'
-
-      - name: Install Playwright and Chromium
-        # editor_diagram_browser.test.mjs draws real Mermaid in Chromium to
-        # guard the SVG allow-list; it fails rather than skips when CI is set.
-        # Global install, found through NODE_PATH like the e2e job.
-        run: |
-          npm install -g playwright-core@1.56.1
-          npx playwright-core install --with-deps chromium
-
-      - name: JS tests
-        # Gates the node --test JS suite (sidebar tree/reorder, boosted-nav
-        # highlight, calendar/world-state widgets, diagram sanitizer in a real
-        # browser, …) so red JS tests cannot linger on main unnoticed. Uses
-        # Node's built-in test runner.
-        run: NODE_PATH="$(npm root -g)" make test-js
-
       - name: Decision-citations lint (WARN-only)
         # Surfaces orphan cordinator/decisions/*.md docs. WARN-only: always
         # exits 0. In Chronicle CI the Cordinator repo isn't checked out, so
@@ -201,6 +180,42 @@ jobs:
         # effective only when run alongside that repo.
         continue-on-error: true
         run: ./tools/check-decision-citations.sh
+
+  # --- JS tests ---
+  # The node --test suite, split into groups on runners of their own
+  # (tools/js-test-files.sh says which file goes where). The browser tests draw
+  # on a software GPU and are CPU-bound, so the dice and their crit animations,
+  # several minutes of real-time play, each get a runner rather than queueing
+  # behind one another. Every file lands in some group by its name.
+  js:
+    name: JS tests (${{ matrix.group }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [general, dice, crits-succ, crits-fail]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: '20'
+
+      - name: Every JS test file is in one group
+        if: matrix.group == 'general'
+        run: ./tools/js-test-files.sh --check
+
+      - name: Install Playwright and Chromium
+        # The browser tests (sidebar, calendar, diagram sanitizer, dice, …)
+        # fail rather than skip when CI is set. Global install, found through
+        # NODE_PATH like the e2e job.
+        run: |
+          npm install -g playwright-core@1.56.1
+          npx playwright-core install --with-deps chromium
+
+      - name: JS tests
+        run: NODE_PATH="$(npm root -g)" node --test $(./tools/js-test-files.sh ${{ matrix.group }})
 
   # --- Fresh-database migration replay ---
   # Every other integration test assumes `make migrate-up` already ran, so
@@ -251,6 +266,9 @@ jobs:
         # job cannot report success having tested nothing.
         env:
           CHRONICLE_TEST_DB_DSN: root:chronicle@tcp(127.0.0.1:3306)/
+        # Explicit bash for pipefail: without it tee's exit code hides a
+        # failing test the PASS-line list below does not name.
+        shell: bash
         run: |
           go test ./cmd/server/ -v -run 'TestFreshDatabase_|TestUpgradeDatabase_|TestIconReconcile_' \
             2>&1 | tee replay.log
@@ -273,11 +291,48 @@ jobs:
             }
           done
 
+  # --- Database-backed tests ---
+  # Every Go test with a real database behind it: the whole module, not -short,
+  # so a package's database tests cannot be left out by a hand-kept list. Its
+  # own job and server, beside the replay rather than after it.
+  dbtests:
+    name: Database tests
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        # Same server as the replay job; see there.
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: chronicle
+          MARIADB_DATABASE: chronicle
+          MARIADB_USER: chronicle
+          MARIADB_PASSWORD: chronicle
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.27'
+
+      - name: Install templ
+        run: go install github.com/a-h/templ/cmd/templ@v0.3.1070
+
+      - name: Generate templ files
+        run: templ generate
+
       - name: Database-backed tests
         # These tests SKIP without CHRONICLE_TEST_DB_DSN, so a plain `go test`
         # passes having run none of them. Each creates and drops its own
-        # scratch schema, so sharing the replay's server is safe, and the
-        # PASS-line check fails the job if one is skipped.
+        # scratch schema, so packages run side by side on one server. The
+        # replay job's tests are skipped here, not run twice. The PASS-line
+        # check below fails the job if a named guard is skipped.
         env:
           CHRONICLE_TEST_DB_DSN: root:chronicle@tcp(127.0.0.1:3306)/
         # Explicit bash runs with -e and pipefail, so a failing go test piped
@@ -285,15 +340,9 @@ jobs:
         # tee's.
         shell: bash
         run: |
-          go test ./internal/plugins/sessions/... ./internal/plugins/entities/... ./internal/plugins/timeline/... ./internal/plugins/calendar/... \
-            -v -count=1 2>&1 | tee dbtests.log
-          go test ./internal/app/ -v -count=1 -run 'CustomVisibilityLeak|PrivateEntityVisibilityLeak|CalendarCampaignExportImport|CampaignExportImport_PlacesInTree|SiteTrash|VaultImport_DB|PreviewAnchorMove_ListsRealSessions' 2>&1 | tee -a dbtests.log
-          go test ./internal/plugins/campaigns/ -v -count=1 -run TestNavPins_Integration 2>&1 | tee -a dbtests.log
-          go test ./internal/plugins/auth/ -v -count=1 -run 'TestUserRepository_.*_Integration' 2>&1 | tee -a dbtests.log
-          go test ./internal/plugins/quests/ -v -count=1 -run 'Integration' 2>&1 | tee -a dbtests.log
-          go test ./internal/plugins/media/ ./internal/widgets/notes/ -v -count=1 -run 'TestDB_|TestADR058Integration_' 2>&1 | tee -a dbtests.log
-          go test ./internal/plugins/maps/... -v -count=1 -run 'Integration' 2>&1 | tee -a dbtests.log
-          go test ./internal/plugins/syncapi/ -v -count=1 -run 'Integration' 2>&1 | tee -a dbtests.log
+          go test ./... -v -count=1 \
+            -skip 'TestFreshDatabase_|TestUpgradeDatabase_|TestIconReconcile_|TestPluginMigration_|TestReconcileIconColumns_' \
+            2>&1 | tee dbtests.log
           for want in TestDB_SessionRSVPTokenCannotBeSpentTwiceConcurrently \
                       TestDB_RemapMonthPositions \
                       TestDB_WorldDateCalendarScoping \
@@ -491,11 +540,21 @@ jobs:
         # Throwaway secrets are set inside the script, not in repo settings.
         run: make full-stack-check
 
+      - name: Restore-drill self-test
+        # Runs tools/restore-drill.sh's real verify logic (migration
+        # plausibility, row counts, FK spot check) against tiny fixtures in
+        # testdata/restore-drill/, proving both the PASS path and every FAIL
+        # path still fire. Spins real, disposable MariaDB containers,
+        # which is why it sits with the other Docker job; ubuntu-latest ships
+        # Docker, no setup needed.
+        run: ./tools/test-restore-drill.sh
+
+
   # --- Docker Build & Push to GHCR ---
   docker:
     name: Docker Image
     runs-on: ubuntu-latest
-    needs: [test, lint, security]
+    needs: [test, js, lint, security]
     # Only push images on main branch pushes, tags, or manual dispatch — not PRs.
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     steps:

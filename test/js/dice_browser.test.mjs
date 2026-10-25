@@ -4,58 +4,15 @@
 // set or crit file is fetched only when a roll needs it. A throw draws over
 // the page and resolves with the decided values once the dice land; a press
 // skips to the result and a second press clears it; Calm and Off resolve at
-// once; and every set and every crit plays without an error.
+// once; and every set throws without an error. The crits play in
+// dice_crits_succ_browser.test.mjs and dice_crits_fail_browser.test.mjs.
 //
 // Needs playwright-core and a Chromium (see _browser_env.mjs); skips locally,
 // and fails under CI, when either is missing.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, existsSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
-import { pw, chromePath, skip } from './_browser_env.mjs';
-
-const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
-
-const HTML = (motion) => `<!doctype html><html${motion ? ` data-motion="${motion}"` : ''}><head><meta charset="utf-8">
-<style>html,body{margin:0;height:100%}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}</style></head><body>
-<header id="app-topbar" style="height:56px"></header><button id="roll" style="position:absolute;left:40px;bottom:40px">Roll</button>
-<template id="chronicle-dice-src" data-src="/static/js/dice.js" data-three-src="/static/vendor/three-dice.min.js" data-cannon-src="/static/vendor/cannon-es.js"></template>
-<script src="/static/vendor/htmx.min.js" defer></script><script src="/static/js/boot.js" defer></script>
-</body></html>`;
-
-// Software rendering draws slowly, so the pages are small: the crits' timelines run on frame time.
-const SIZE = { width: 800, height: 500 };
-
-async function page(t, motion, viewport = SIZE, browser = null) {
-  if (!browser) {
-    browser = await pw.chromium.launch({ executablePath: chromePath, args: ['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
-    t.after(() => browser.close());
-  }
-  const p = await browser.newPage({ viewport });
-  p.browser = browser;
-  const errors = [];
-  p.on('pageerror', (e) => errors.push(e.message));
-  // three.js reports a shader that fails to compile on the console, not as a page error.
-  p.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
-  t.after(() => assert.deepEqual(errors, []));
-  p.fetched = [];
-  // A test sets p.delay[path] = ms to make that file arrive late.
-  p.delay = {};
-  await p.route('**/*', async (route) => {
-    const u = new URL(route.request().url());
-    if (p.delay[u.pathname]) await new Promise((r) => setTimeout(r, p.delay[u.pathname]));
-    if (u.pathname === '/') return route.fulfill({ contentType: 'text/html', body: HTML(motion) });
-    const file = join(root, u.pathname);
-    if (!u.pathname.startsWith('/static/') || !existsSync(file)) return route.fulfill({ status: 404, body: '' });
-    p.fetched.push(u.pathname);
-    return route.fulfill({ contentType: 'application/javascript', body: readFileSync(file) });
-  });
-  await p.goto('http://chronicle.test/');
-  await p.waitForFunction(() => window.Chronicle && window.Chronicle.dice);
-  return p;
-}
+import { skip, SIZE, page, enginePage } from './_dice_page.mjs';
 
 test('dice.js is fetched on the first roll, not with the page', { skip }, async (t) => {
   const p = await page(t, 'off');
@@ -200,17 +157,6 @@ test('the catalogue lists every set, colour and crit with the defaults', { skip 
   assert.deepEqual(c.defaults, { set: 'jewelled', colour: 'onyx', succ: 'phoenix', fail: 'grasp', quality: 'auto' });
 });
 
-// The engine straight from its module, with every set and crit loaded, on a small page.
-async function enginePage(t, browser) {
-  const p = await page(t, null, { width: 480, height: 320 }, browser);
-  await p.evaluate(async () => {
-    window.E = await import('/static/js/dice/engine.js');
-    E.configure({ three: '/static/vendor/three-dice.min.js', cannon: '/static/vendor/cannon-es.js' });
-    await Promise.all([E.loadSets(E.SET_KEYS), E.loadCrits(E.CRIT_KEYS.succ.concat(E.CRIT_KEYS.fail))]);
-  });
-  return p;
-}
-
 test('every set throws and lights its number, on every shape of die', { skip, timeout: 300000 }, async (t) => {
   const p = await enginePage(t);
   const res = await p.evaluate(() => {
@@ -222,37 +168,6 @@ test('every set throws and lights its number, on every shape of die', { skip, ti
   });
   assert.equal(res.drawn, true);
   assert.equal(res.values.length, 12);
-});
-
-test('every crit plays its grand and its echo, without an error', { skip, timeout: 600000 }, async (t) => {
-  // Two browsers, so each draws on its own software GPU, share the twelve crits.
-  const first = await enginePage(t);
-  const second = await pw.chromium.launch({ executablePath: chromePath, args: ['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
-  t.after(() => second.close());
-  const pages = [first, await enginePage(t, second)];
-  const parts = await Promise.all(pages.map((p, part) => p.evaluate(async (part) => {
-    const all = E.CRIT_KEYS.succ.concat(E.CRIT_KEYS.fail), ran = [];
-    for (let i = part; i < all.length; i += 2) {
-      const key = all[i], kind = E.CRIT_KEYS.succ.includes(key) ? 'succ' : 'fail', other = kind === 'succ' ? 'fail' : 'succ';
-      const v = (k) => (k === 'succ' ? 20 : 1);
-      // The grand on the die that counts and a same-kind echo. One success and one failure also have a
-      // die of the other kind, which plays the table's echo after the grand's peak.
-      const dice = [
-        { sides: 20, kind: E.SET_KEYS[i], value: v(kind), crit: kind, counts: true },
-        { sides: 20, kind: E.SET_KEYS[(i + 6) % 12], value: v(kind), crit: kind }
-      ];
-      if (i === 0 || i === 7) dice.push({ sides: 20, kind: E.SET_KEYS[(i + 3) % 12], value: v(other), crit: other });
-      const res = await E.roll({ dice, succFx: kind === 'succ' ? key : 'phoenix', failFx: kind === 'fail' ? key : 'grasp', quality: { mode: 'basic' }, hold: 0 });
-      ran.push({ key, grand: res.grand, echoes: res.echoes.length, want: dice.length - 1 });
-    }
-    return ran;
-  }, part)));
-  const out = parts.flat();
-  for (const r of out) {
-    assert.equal(r.grand, 0, `${r.key}: the die that counts takes the grand`);
-    assert.equal(r.echoes, r.want, `${r.key}: every other crit die echoes`);
-  }
-  assert.deepEqual(out.map((r) => r.key).sort(), ['abyss', 'bloom', 'crows', 'dawn', 'frost', 'grasp', 'hex', 'hoard', 'phoenix', 'shatter', 'starfall', 'storm']);
 });
 
 for (const motion of ['calm', 'off']) {
