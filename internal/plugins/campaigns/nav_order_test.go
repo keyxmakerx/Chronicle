@@ -6,7 +6,7 @@ import (
 )
 
 func TestOrderNavCategories(t *testing.T) {
-	apps := []NavApp{{Slug: "maps", DefaultPinned: true, Enabled: true}, {Slug: "calendar", Enabled: true}}
+	apps := []NavApp{{Slug: "pinned-app", DefaultPinned: true, Enabled: true}, {Slug: "other-app", Enabled: true}}
 	cats := []NavCategory{{TypeID: 1}, {TypeID: 2}, {TypeID: 3}, {TypeID: 4}}
 	cat := func(id int, section string) SidebarItem {
 		return SidebarItem{Type: SidebarTypeCategory, TypeID: id, Visible: true, Section: section}
