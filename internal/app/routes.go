@@ -5503,6 +5503,7 @@ func (a *App) RegisterRoutes() {
 					SheetStyle:    ap.SheetStyle,
 					PageLook:      ap.PageLook,
 					StyleKit:      ap.StyleKit,
+					DmScreenKit:   ap.DmScreenKit,
 					TimelinePopup: ap.TimelinePopup,
 				}
 				ctx = layouts.SetAppearance(ctx, ad)
