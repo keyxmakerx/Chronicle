@@ -11,6 +11,8 @@ package entity_notes
 import (
 	"encoding/json"
 	"time"
+
+	"github.com/keyxmakerx/chronicle/internal/permissions"
 )
 
 // Audience enumerates the visibility tiers a note can have.
@@ -43,15 +45,15 @@ func (a Audience) Valid() bool {
 
 // Note is a single per-user, per-entity note.
 type Note struct {
-	ID           string          `json:"id"`
-	EntityID     string          `json:"entityId"`
-	CampaignID   string          `json:"campaignId"`
-	AuthorUserID string          `json:"authorUserId"`
-	Audience     Audience        `json:"audience"`
+	ID           string   `json:"id"`
+	EntityID     string   `json:"entityId"`
+	CampaignID   string   `json:"campaignId"`
+	AuthorUserID string   `json:"authorUserId"`
+	Audience     Audience `json:"audience"`
 	// SharedWith is meaningful only when Audience == AudienceCustom.
 	// Always emitted as an empty array (never null) for stable client UI.
-	SharedWith []string        `json:"sharedWith"`
-	Title      string          `json:"title,omitempty"`
+	SharedWith []string `json:"sharedWith"`
+	Title      string   `json:"title,omitempty"`
 	// Body is the TipTap ProseMirror JSON. Clients render it through
 	// the same editor used for entity entry / posts entry.
 	Body json.RawMessage `json:"body,omitempty"`
@@ -78,10 +80,23 @@ type CreateNoteRequest struct {
 // optional pointers so the service can distinguish "not set" from
 // "explicitly cleared." Only the author may update a note.
 type UpdateNoteRequest struct {
-	Audience   *Audience        `json:"audience,omitempty"`
-	SharedWith []string         `json:"sharedWith,omitempty"`
-	Title      *string          `json:"title,omitempty"`
-	Body       json.RawMessage  `json:"body,omitempty"`
-	BodyHTML   *string          `json:"bodyHtml,omitempty"`
-	Pinned     *bool            `json:"pinned,omitempty"`
+	Audience   *Audience       `json:"audience,omitempty"`
+	SharedWith []string        `json:"sharedWith,omitempty"`
+	Title      *string         `json:"title,omitempty"`
+	Body       json.RawMessage `json:"body,omitempty"`
+	BodyHTML   *string         `json:"bodyHtml,omitempty"`
+	Pinned     *bool           `json:"pinned,omitempty"`
+}
+
+// ViewerFor is the audience facts for v, a request-scoped viewer whose role
+// is the visibility role: the Owner and a co-DM both sit at RoleOwner there
+// and read the same notes, so either counts as DM-granted here.
+func ViewerFor(campaignID string, v permissions.Viewer) ViewerContext {
+	role := v.Role()
+	return ViewerContext{
+		UserID:      v.UserID(),
+		CampaignID:  campaignID,
+		IsScribe:    role == permissions.RoleScribe,
+		IsDMGranted: role >= permissions.RoleOwner,
+	}
 }

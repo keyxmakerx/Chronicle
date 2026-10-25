@@ -12,6 +12,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/pageblocks"
 	"github.com/keyxmakerx/chronicle/internal/plugins/quests"
 	"github.com/keyxmakerx/chronicle/internal/plugins/rolltables"
+	"github.com/keyxmakerx/chronicle/internal/widgets/entity_notes"
 )
 
 // fullCalendar stands in for the calendar service with its roll and moon
@@ -27,6 +28,7 @@ type stubPageBlocks struct{ pageblocks.Service }
 type stubEncounters struct{ encounters.Service }
 type stubQuestSvc struct{ quests.QuestService }
 type stubBoardSvc struct{ quests.BoardService }
+type stubPlayerNotes struct{ entity_notes.Service }
 
 func aiKindNames(d aiDeps) string {
 	var names []string
@@ -52,8 +54,8 @@ func TestAIKindsPromptOrder(t *testing.T) {
 		{
 			name: "everything wired",
 			deps: aiDeps{Calendar: fullCalendar{}, Health: healthy, FieldRules: stubFieldRules{},
-				PageBlocks: stubPageBlocks{}, Encounters: stubEncounters{}, Quests: stubQuestSvc{}, Boards: stubBoardSvc{}},
-			want: "calendar event weather roll_night moon table shop-stock carried-item pin map note house-rule system-entry quest notice-board field-rule local-word category-field encounter folder game-night tag menu-order page-map generator",
+				PageBlocks: stubPageBlocks{}, Encounters: stubEncounters{}, Quests: stubQuestSvc{}, Boards: stubBoardSvc{}, PlayerNotes: stubPlayerNotes{}},
+			want: "calendar event weather roll_night moon table shop-stock carried-item pin map note player-note house-rule system-entry quest notice-board field-rule local-word category-field encounter folder game-night tag menu-order page-map generator",
 		},
 		{
 			name: "optional plugins degraded",

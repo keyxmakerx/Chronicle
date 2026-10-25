@@ -96,8 +96,8 @@ type PartyNight struct {
 // Lookups answers `kind: lookup` blocks. Every answer is read as the Actor
 // sees it, so the caller picks the privacy: Safe passes a player-role Actor
 // (as the export does), which drops hidden pages, events, pins, tables and
-// Director-only entries. Notes are only ever the Actor's own. Any service
-// may be nil; its lookups then say so.
+// Director-only entries. Notes are what the Actor can open in the Journal,
+// and never in Safe. Any service may be nil; its lookups then say so.
 type Lookups struct {
 	Cal     CalendarAPI
 	Weather WeatherSettingsAPI
@@ -108,6 +108,7 @@ type Lookups struct {
 	Pages   PagesAPI
 	Rels    RelationsAPI
 	Notes   NotesAPI
+	Journal JournalAPI
 	Rules   *HouseRuleKind
 	Entries SystemEntriesAPI
 	Party   PartyAPI
@@ -168,7 +169,8 @@ var lookupWhats = []struct{ what, keys, brief string }{
 	{"scenes", "optional `name` (part of a scene's name or folder)", "the scenes in the campaign's Foundry world, as Foundry last reported them, which says which maps already exist there (owner and co-DM only)"},
 	{"stock", "`shop`", "what a shop sells"},
 	{"inventory", "`character`", "what a character carries"},
-	{"notes", "none", "the titles of my own notes"},
+	{"notes", "none", "my Journal notes, my jots on pages and the notes other members shared with me (game night entries among them): titles, folders, nights and who they are shared with"},
+	{"note", "`name` (its title); optional `page` (for a jot) and `by` (the writer)", "one note's full text"},
 	{"house-rules", "none", "the house-rules chapters"},
 	{"system-entries", "optional `field` (e.g. ancestry, kit, race)", "the game system's entries for a character field; without `field`, the fields that have entries"},
 	{"game-nights", "none", "the campaign's game nights: name, date, time, status and summary (owner and co-DM only)"},
@@ -200,6 +202,10 @@ type lookupRun struct {
 	// pagesCut is true when the walk stopped at maxPagesWalk with pages
 	// left; answers that read pages then say so.
 	pagesCut bool
+	// The Journal, read once per paste (journal.go).
+	journalNotes []JournalNote
+	journalErr   error
+	journalRead  bool
 	// layouts caches layoutNames.
 	layouts     map[string]string
 	layoutsRead bool
@@ -280,6 +286,8 @@ func (run *lookupRun) one(what string, r Record) LookupAnswer {
 		ans, err = run.links(firstNonEmpty(r.Str("character"), r.Name), "Has Item", "Inventory")
 	case "notes":
 		ans, err = run.notes()
+	case "note":
+		ans, err = run.note(r)
 	case "house-rules", "house-rule":
 		ans, err = run.houseRules()
 	case "system-entries", "entries":
@@ -853,45 +861,6 @@ func linkMeta(raw []byte, shop bool) string {
 }
 
 // ---- notes, house rules, rolling tables, pins ----
-
-func (run *lookupRun) notes() (LookupAnswer, error) {
-	ans := LookupAnswer{Chip: "My notes"}
-	if run.l.Notes == nil {
-		return ans, badRequestf("notes can't be looked up on this server")
-	}
-	// The owner's own notes are kept from players, so a player's view
-	// (Safe) never lists them, not even their titles.
-	if !run.director() {
-		return ans, badRequestf("your notes are left out while your AI sees what players see; choose \"What you see\" to include them")
-	}
-	own, err := NoteKind{Svc: run.l.Notes}.ownNotes(run.ctx, run.campaignID, run.a)
-	if err != nil {
-		return ans, err
-	}
-	names := map[string]string{}
-	if pages, err := run.visiblePages(); err == nil {
-		for _, p := range pages {
-			names[p.ID] = p.Name
-		}
-	}
-	var lines []string
-	for _, n := range own {
-		where := "Journal"
-		if n.EntityID != nil {
-			where = "a jot on a page"
-			if name, ok := names[*n.EntityID]; ok {
-				where = "a jot on " + name
-			}
-		}
-		lines = append(lines, fmt.Sprintf("- %s (%s)", firstNonEmpty(n.Title, "Untitled"), where))
-	}
-	ans.Chip = fmt.Sprintf("My notes · %d", len(lines))
-	var b strings.Builder
-	fmt.Fprintf(&b, "## My notes (%d)\n\n", len(lines))
-	writeLines(&b, lines)
-	ans.Text = b.String()
-	return ans, nil
-}
 
 func (run *lookupRun) houseRules() (LookupAnswer, error) {
 	ans := LookupAnswer{Chip: "House rules"}

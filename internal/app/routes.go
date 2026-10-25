@@ -6225,6 +6225,8 @@ func (a *App) RegisterRoutes() {
 		Health:          a.PluginHealth,
 		Maps:            mapsService,
 		Notes:           noteSvc,
+		PlayerNotes:     entityNotesService,
+		Addons:          addonService,
 		PageBlocks:      pageBlocksSvc,
 		Quests:          aiQuests,
 		Boards:          aiBoards,

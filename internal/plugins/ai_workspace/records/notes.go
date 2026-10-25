@@ -33,7 +33,7 @@ type NoteKind struct {
 func (NoteKind) Name() string  { return "note" }
 func (NoteKind) Label() string { return "Note" }
 func (NoteKind) Doc() string {
-	return "One of my own notes, matched by `name` (its title). Without `page` it is a Journal note; with `page: <page name>` it is my jot on that page. Optional `share`: `private` (default), `gm` or `party`; `rename_to`. The body is the note; write `@[Page Name]` or `@[Page Name|words]` in it to link a page.\n\n```\n---\nkind: note\nname: Who poisoned the duke?\npage: Duke Varrin\n---\nThe cook had the means. Check the cellar key.\n```"
+	return "One of my own notes, matched by `name` (its title). Without `page` it is a Journal note, my game night entries among them; with `page: <page name>` it is my jot on that page. Notes other members shared with me can be read with a lookup but never changed. Optional `share`: `private` (default), `gm` or `party`; `rename_to`. The body is the note; write `@[Page Name]` or `@[Page Name|words]` in it to link a page.\n\n```\n---\nkind: note\nname: Who poisoned the duke?\npage: Duke Varrin\n---\nThe cook had the means. Check the cellar key.\n```"
 }
 
 // ownNotes is the operator's own, non-folder notes. Shared-with-me notes

@@ -70,6 +70,7 @@ func TestRenderers_FunnelThroughHtmlToMarkdown(t *testing.T) {
 		"renderEntity",
 		"renderEraVersion",
 		"renderNoteTree",
+		"RenderNoteText",
 		"renderCalendarEvent",
 		"renderSession",
 		"renderTimeline",

@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/permissions"
 )
 
 // isStatus returns true when err is (or wraps) an apperror.AppError
@@ -33,9 +34,9 @@ func isStatus(err error, code int) bool {
 type stubRepo struct {
 	created []Note
 
-	listNotes   []Note
-	listErr     error
-	listViewer  ViewerContext
+	listNotes  []Note
+	listErr    error
+	listViewer ViewerContext
 
 	findByIDNote   *Note
 	findByIDViewer ViewerContext
@@ -69,6 +70,11 @@ func (s *stubRepo) FindByIDForAuthor(_ context.Context, id, _ string) (*Note, er
 }
 
 func (s *stubRepo) ListByEntity(_ context.Context, _ string, viewer ViewerContext) ([]Note, error) {
+	s.listViewer = viewer
+	return s.listNotes, s.listErr
+}
+
+func (s *stubRepo) ListByCampaign(_ context.Context, viewer ViewerContext) ([]Note, error) {
 	s.listViewer = viewer
 	return s.listNotes, s.listErr
 }
@@ -107,8 +113,8 @@ func dmGrantedPlayerViewer() ViewerContext {
 
 func TestViewerContext_CanSee(t *testing.T) {
 	cases := []struct {
-		name    string
-		viewer  ViewerContext
+		name             string
+		viewer           ViewerContext
 		dmScribe, dmOnly bool
 	}{
 		{"owner sees both", ownerViewer(), true, true},
@@ -377,6 +383,36 @@ func TestService_List_ForwardsViewerToRepo(t *testing.T) {
 	}
 	if repo.listViewer.UserID != v.UserID {
 		t.Errorf("UserID not forwarded: got %q want %q", repo.listViewer.UserID, v.UserID)
+	}
+}
+
+func TestService_ListInCampaign(t *testing.T) {
+	tests := []struct {
+		name    string
+		viewer  ViewerContext
+		wantErr bool
+	}{
+		{"forwards the viewer", dmGrantedPlayerViewer(), false},
+		{"no campaign", ViewerContext{UserID: "u1"}, true},
+		{"anonymous", ViewerContext{CampaignID: "c1"}, true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := &stubRepo{listNotes: []Note{{ID: "n1"}}}
+			got, err := NewService(repo, nil).ListInCampaign(context.Background(), tc.viewer)
+			if tc.wantErr {
+				if !isStatus(err, 400) {
+					t.Fatalf("err = %v, want a bad request", err)
+				}
+				return
+			}
+			if err != nil || len(got) != 1 {
+				t.Fatalf("got %v, %v", got, err)
+			}
+			if repo.listViewer != tc.viewer {
+				t.Errorf("repo got viewer %#v, want %#v", repo.listViewer, tc.viewer)
+			}
+		})
 	}
 }
 
@@ -780,6 +816,26 @@ func TestService_CountByEntities(t *testing.T) {
 			}
 			if queried := repo.countCampaign != ""; queried != c.wantQuery {
 				t.Errorf("queried = %v, want %v", queried, c.wantQuery)
+			}
+		})
+	}
+}
+
+func TestViewerFor(t *testing.T) {
+	tests := []struct {
+		name              string
+		role              int
+		scribe, dmGranted bool
+	}{
+		{"owner or co-DM", permissions.RoleOwner, false, true},
+		{"scribe", permissions.RoleScribe, true, false},
+		{"player", permissions.RolePlayer, false, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			v := ViewerFor("c1", permissions.RequestViewer(tc.role, "u1"))
+			if v.UserID != "u1" || v.CampaignID != "c1" || v.IsOwner || v.IsScribe != tc.scribe || v.IsDMGranted != tc.dmGranted {
+				t.Errorf("got %#v", v)
 			}
 		})
 	}
