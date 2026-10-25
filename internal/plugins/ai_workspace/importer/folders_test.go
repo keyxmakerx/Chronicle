@@ -6,6 +6,7 @@ package importer
 import (
 	"context"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -401,5 +402,41 @@ func TestNewPageFolderSlips(t *testing.T) {
 				t.Errorf("got %+v, want %+v", got, tt.want)
 			}
 		})
+	}
+}
+
+// countingFolders counts lookups, to show each folder is looked up once.
+type countingFolders struct {
+	*fakeFolderAccess
+	n int
+}
+
+func (f *countingFolders) FindFolder(ctx context.Context, campaignID string, typeID int, name string) (*entities.SidebarNode, error) {
+	f.n++
+	return f.fakeFolderAccess.FindFolder(ctx, campaignID, typeID, name)
+}
+
+// Many pages naming the same missing folder look it up once per category,
+// and the search stops once the AI has more slips than it is shown.
+func TestNewPageFolderSlips_LooksUpOnce(t *testing.T) {
+	lookup := pageBlindLookup{&stubLookup{types: []entities.EntityType{
+		{ID: 1, Slug: "lore", Name: "Lore"}, {ID: 2, Slug: "places", Name: "Places"}, {ID: 3, Slug: "races", Name: "Races"},
+	}}, t}
+	var pages []ParsedPage
+	for i := 0; i < 50; i++ {
+		p := page("P"+strconv.Itoa(i), "races", "# P\nBody.")
+		p.FrontMatter.Folder = "Gods"
+		pages = append(pages, p)
+	}
+	f := &countingFolders{fakeFolderAccess: newFolders()}
+	slips, err := NewClassifier(lookup, "camp-1").WithFolders(f, nil).NewPageFolderSlips(context.Background(), pages)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(slips) != maxFolderSlips+1 {
+		t.Errorf("got %d slips, want %d", len(slips), maxFolderSlips+1)
+	}
+	if f.n != 3 {
+		t.Errorf("looked up %d times, want 3 (Races, then Lore and Places once each)", f.n)
 	}
 }

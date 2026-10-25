@@ -8,8 +8,10 @@
 // A connection is a key the campaign's owner makes on the "Your AI" page. The
 // key is shown once, sent by the AI app as a request header, kept only as its
 // SHA-256, expires on its own and can be revoked. It is scoped to one owner,
-// one campaign, and the privacy mode and Change setting chosen when it was
-// made, and dies as soon as its maker is no longer the campaign's owner.
+// one campaign. What it may see and its Change setting are kept with it and
+// read on every call, so the owner can change them, or pause the key, without
+// making a new one. It dies as soon as its maker is no longer the campaign's
+// owner.
 // Every tool call is logged for the owner as "What it did".
 package connector
 
@@ -29,10 +31,10 @@ type Connection struct {
 	KeyHash string
 	// KeyHint is the key's last four characters, to tell keys apart.
 	KeyHint string
-	// Privacy is what the AI may see, fixed when the key was made.
+	// Privacy is what the AI may see. The owner may change it later.
 	Privacy aiexport.PrivacyMode
-	// CanAsk is the Change setting, fixed when the key was made: true lets
-	// the AI ask for changes, false ("Only look") only lets it read.
+	// CanAsk is the Change setting: true lets the AI ask for changes, false
+	// ("Only look") only lets it read. The owner may change it later.
 	CanAsk bool
 	// ClientName is what the AI app called itself when it connected
 	// (untrusted, cleaned and cut to clientNameMax).
@@ -41,6 +43,9 @@ type Connection struct {
 	ExpiresAt  time.Time
 	LastUsedAt *time.Time
 	RevokedAt  *time.Time
+	// PausedAt is set while the owner has paused the key; it is refused
+	// until they resume it.
+	PausedAt *time.Time
 }
 
 // Expired reports whether the key has run out at now.
@@ -98,19 +103,19 @@ const (
 	// callsPerMinute and callsPerDay cap one connection's tool calls.
 	callsPerMinute = 30
 	callsPerDay    = 2000
-	// callsKept is how many calls per campaign "What it did" keeps.
-	callsKept = 500
-	// CallsShown is how many calls the page lists.
-	CallsShown = 50
+	// CallsKept is how many calls per campaign "What it did" keeps.
+	CallsKept = 500
 	// clientNameMax caps the name an AI app gives itself.
 	clientNameMax = 64
 	// summaryMax and noteMax match the call log's columns.
 	summaryMax = 200
 	noteMax    = 120
-	// changesMax caps one request's blocks; requestsWaiting caps how many
+	// changesMax caps one request's size and blocksMax its blocks, which
+	// keeps what checking it costs small; requestsWaiting caps how many
 	// wait for the owner at once, so an AI can't bury them; requestsKept
 	// is how many answered ones are kept for the page.
 	changesMax      = 256 * 1024
+	blocksMax       = 200
 	requestsWaiting = 20
 	requestsKept    = 100
 )

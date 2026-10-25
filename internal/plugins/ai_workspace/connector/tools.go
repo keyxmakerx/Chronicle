@@ -44,6 +44,9 @@ type tool struct {
 	Asks bool
 }
 
+// toolConnect logs an AI app connecting; it is no tool the AI calls.
+const toolConnect = "connect"
+
 // The tools an "Ask for changes" connection adds.
 const (
 	toolHowTo = "how_to_write_changes"

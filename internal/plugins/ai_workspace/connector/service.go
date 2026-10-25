@@ -44,6 +44,8 @@ var (
 	ErrKeyEnded = errors.New("this key was disconnected or has run out")
 	// ErrOwnerGone: whoever made the key no longer owns the campaign.
 	ErrOwnerGone = errors.New("whoever made this key no longer owns the campaign")
+	// ErrKeyPaused: the owner paused the key; resuming it brings it back.
+	ErrKeyPaused = errors.New("this key is paused")
 	// ErrNotOwner: Check found the user is not the campaign's owner.
 	ErrNotOwner = errors.New("not the campaign's owner")
 )
@@ -140,8 +142,9 @@ func (s *Service) Disconnect(ctx context.Context, campaignID string) error {
 }
 
 // Authenticate checks a key against the campaign in the address. It returns
-// the connection and the campaign's name, or ErrBadKey, ErrKeyEnded or
-// ErrOwnerGone.
+// the connection and the campaign's name, or ErrBadKey, ErrKeyEnded,
+// ErrOwnerGone or ErrKeyPaused. It reads the connection on every call, so a
+// pause or a change of what the key may do applies from the next call.
 func (s *Service) Authenticate(ctx context.Context, campaignID, raw string) (*Connection, string, error) {
 	raw = strings.TrimSpace(raw)
 	if len(raw) != keyLen || !strings.HasPrefix(raw, keyPrefix) || campaignID == "" {
@@ -165,7 +168,65 @@ func (s *Service) Authenticate(ctx context.Context, campaignID, raw string) (*Co
 		}
 		return nil, "", ErrOwnerGone
 	}
+	if c.PausedAt != nil {
+		return nil, "", ErrKeyPaused
+	}
 	return c, name, nil
+}
+
+// Pause stops the campaign's connection id at once, keeping its key and what
+// it asked for; Resume brings it back.
+func (s *Service) Pause(ctx context.Context, campaignID, userID string, id int64) error {
+	if _, err := s.ownCurrent(ctx, campaignID, userID, id); err != nil {
+		return err
+	}
+	at := s.now().UTC().Truncate(time.Second)
+	return s.repo.SetPaused(ctx, campaignID, id, &at)
+}
+
+// Resume lets a paused connection work again.
+func (s *Service) Resume(ctx context.Context, campaignID, userID string, id int64) error {
+	if _, err := s.ownCurrent(ctx, campaignID, userID, id); err != nil {
+		return err
+	}
+	return s.repo.SetPaused(ctx, campaignID, id, nil)
+}
+
+// ChangeAccess changes what the connection id may see and whether it may
+// ask, on the same key, from its next call. It returns the connection as it
+// was, so the change can be logged from and to.
+func (s *Service) ChangeAccess(ctx context.Context, campaignID, userID string, id int64, privacy aiexport.PrivacyMode, canAsk bool) (*Connection, error) {
+	if privacy != aiexport.PrivacyModeSafe && privacy != aiexport.PrivacyModePermitted {
+		return nil, apperror.NewBadRequest("pick what your AI may see")
+	}
+	c, err := s.ownCurrent(ctx, campaignID, userID, id)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.repo.SetAccess(ctx, campaignID, id, privacy, canAsk); err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+// ownCurrent is the campaign's live connection id, for its owner. The page
+// names the key it shows, so a change never lands on a newer key made
+// elsewhere since.
+func (s *Service) ownCurrent(ctx context.Context, campaignID, userID string, id int64) (*Connection, error) {
+	if _, err := s.owners.Check(ctx, campaignID, userID); err != nil {
+		return nil, apperror.NewForbidden("only the campaign's owner can change its AI connection")
+	}
+	c, err := s.repo.Current(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	if c == nil || c.ID != id {
+		return nil, apperror.NewNotFound("that key isn't this campaign's key any more; reload the page")
+	}
+	if !c.Live(s.now()) {
+		return nil, apperror.NewBadRequest("that key was disconnected or has run out")
+	}
+	return c, nil
 }
 
 // Allow spends one call of the connection's budget, or says how long to wait.
@@ -193,15 +254,16 @@ func (s *Service) Record(ctx context.Context, c *Connection, tool, summary, note
 		return
 	}
 	if s.calls.Add(1)%50 == 0 {
-		if err := s.repo.PruneCalls(ctx, c.CampaignID, callsKept); err != nil {
+		if err := s.repo.PruneCalls(ctx, c.CampaignID, CallsKept); err != nil {
 			slog.Warn("ai connector: pruning calls", slog.Any("error", err))
 		}
 	}
 }
 
-// Activity is the campaign's newest calls, for the page.
+// Activity is every call the campaign keeps, newest first, for the page's
+// sittings.
 func (s *Service) Activity(ctx context.Context, campaignID string) ([]Call, error) {
-	return s.repo.RecentCalls(ctx, campaignID, CallsShown)
+	return s.repo.RecentCalls(ctx, campaignID, CallsKept)
 }
 
 // ErrCannotAsk: the connection's Change setting is Only look.
@@ -298,7 +360,11 @@ func checkChanges(changes string) (counts string, blocks int, err error) {
 	}
 	var add, change, remove int
 	var problems []string
-	for _, p := range importer.Parse(changes) {
+	parsed := importer.Parse(changes)
+	if len(parsed) > blocksMax {
+		return "", 0, fmt.Errorf("changes has %d blocks; send at most %d in one request", len(parsed), blocksMax)
+	}
+	for _, p := range parsed {
 		n := p.SourceIndex + 1
 		kind := strings.ToLower(strings.TrimSpace(p.FrontMatter.Kind))
 		switch {

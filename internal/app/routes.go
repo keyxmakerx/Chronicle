@@ -5045,6 +5045,13 @@ func (a *App) RegisterRoutes() {
 		aiConnectorSvc := connector.NewService(connector.NewRepository(a.DB), aiConnectorOwners{campaigns: campaignService})
 		aiWorkspaceHandler.SetConnector(aiConnectorSvc, a.Config.BaseURL)
 		aiConnectorSvc.SetCheck(aiWorkspaceHandler.ConnectorCheck)
+		aiWorkspaceHandler.SetZone(func(ctx context.Context, userID string) *time.Location {
+			u, err := authService.GetUser(ctx, userID)
+			if err != nil || u == nil || u.Timezone == nil {
+				return nil
+			}
+			return timeutil.LoadLocation(*u.Timezone)
+		})
 		aiConnectorEndpoint = connector.NewEndpoint(aiConnectorSvc, a.Config.BaseURL)
 		aiConnectorEndpoint.SetInstructions(aiWorkspaceHandler.ConnectorInstructions)
 		connector.RegisterRoutes(e, aiConnectorEndpoint)
