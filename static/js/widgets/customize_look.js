@@ -419,7 +419,7 @@
       type:['type.body', 'type.heading', 'type.scale'],
       buttons:['buttons.style'],
       motion:['motion.elevation', 'motion.speed', 'motion.reduceAll'],
-      page:['page.look', 'page.kit', 'access.page', 'access.dmscreen'],
+      page:['page.look', 'page.kit', 'page.dmKit', 'access.page', 'access.dmscreen'],
       hover:['hover.look', 'hover.timelinePopup', 'access.hover'],
       sheet:['sheet.style', 'access.sheet']
     };
@@ -484,6 +484,7 @@
       d.access = Object.assign({}, ACCESS_DEFAULT, d.access || {});
       if (!d.page) d.page = { look:'', kit:'material' };
       if (!d.page.kit) d.page.kit = 'material';
+      if (!d.page.dmKit) d.page.dmKit = 'same';
       if (!d.hover.timelinePopup) d.hover.timelinePopup = 'classic';
       d.header.links = (d.header.links || []).map(function(l){ return { label:l.label || '', url:l.url || '', icon:l.icon || '' }; });
       while (d.header.links.length < LINK_ROWS) d.header.links.push({ label:'', url:'', icon:'' });
@@ -831,7 +832,9 @@
         fld('pg-look', 'Page look', 'Every page in the campaign', opts('pg-look', 'page.look', 'pg-look-l', PAGE_LOOKS) +
           '<p class="hint">Material draws sections without boxes or borders: headings over a rule, rows on hairlines, and an edge only on fact panels and tools. Standard puts a bordered card around each section. Nothing moves on the page either way.</p>') +
         fld('pg-kit', 'Style kit', 'The character of pages drawn in Material', opts('pg-kit', 'page.kit', 'pg-kit-l', STYLE_KITS) +
-          '<p class="hint">A kit changes the header, dividers, boxes, faces and how rows answer the pointer, in light and dark mode. Sharp is a broadsheet, Ornate a bound volume, Flowing watercolour, Lumen soft light and Sketchbook pen on paper. Your campaign colour and any fonts you picked still win. Kits only dress pages in the Material look; save and open any page to see yours.</p>'));
+          '<p class="hint">A kit changes the header, dividers, boxes, faces and how rows answer the pointer, in light and dark mode. Sharp is a broadsheet, Ornate a bound volume, Flowing watercolour, Lumen soft light and Sketchbook pen on paper. Your campaign colour and any fonts you picked still win. Kits only dress pages in the Material look; save and open any page to see yours.</p>') +
+        fld('pg-dmkit', 'DM Screen look', 'What the DM Screen wears for you and your co-DMs', opts('pg-dmkit', 'page.dmKit', 'pg-dmkit-l', [['same', 'Same as pages']].concat(STYLE_KITS)) +
+          '<p class="hint">Give the DM Screen its own kit so it stands apart from the pages at the table. Players never see the DM Screen.</p>'));
       if (id === 'hover') return (
         fld('h-look', 'Look', 'Every hover card in the campaign', '<div class="tiles two" role="radiogroup" aria-labelledby="h-look-l">' + tilesHover() + '</div>' +
           '<p class="hint">Point at a linked page or a rule word anywhere in the campaign to see it. What a card shows comes from each page’s own settings.</p>') +

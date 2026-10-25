@@ -90,8 +90,12 @@ func MarkdownToHTML(input string, opts ...RenderOption) (string, error) {
 		}
 	}
 	if o.links != nil {
-		// Before sanitize, so the anchors are vetted like any other markup.
+		// Before sanitize, so the anchors and rollers are vetted like any
+		// other markup.
 		out = linkMentions(out, o.links)
+		if o.passages {
+			out = linkRollers(out, o.links, o.keptRollers)
+		}
 	}
 	return sanitize.HTML(out), nil
 }

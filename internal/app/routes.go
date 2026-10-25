@@ -3747,6 +3747,15 @@ func (a *App) RegisterRoutes() {
 	} else if n > 0 {
 		slog.Info("sync-api addon enablement backfill complete", slog.Int("campaigns", n))
 	}
+	// Keys still on the old 60-a-minute default move to the current one.
+	if raiser, ok := syncRepo.(syncapi.LegacyRateLimitRaiser); ok {
+		if n, err := syncapi.ReconcileLegacyRateLimits(context.Background(), raiser); err != nil {
+			slog.Error("sync-api rate limit backfill failed; older keys keep 60 requests a minute",
+				slog.String("error", err.Error()))
+		} else if n > 0 {
+			slog.Info("sync-api rate limit backfill complete", slog.Int64("keys", n))
+		}
+	}
 	syncHandler := syncapi.NewHandler(syncService)
 	// Inject sync mapping service early so the owner dashboard can show sync status.
 	syncMappingRepoEarly := syncapi.NewSyncMappingRepository(a.DB)
@@ -5067,6 +5076,14 @@ func (a *App) RegisterRoutes() {
 	if a.PluginHealth == nil || a.PluginHealth.IsHealthy(connector.SchemaSlug) {
 		aiConnectorSvc := connector.NewService(connector.NewRepository(a.DB), aiConnectorOwners{campaigns: campaignService})
 		aiWorkspaceHandler.SetConnector(aiConnectorSvc, a.Config.BaseURL)
+		aiConnectorSvc.SetCheck(aiWorkspaceHandler.ConnectorCheck)
+		aiWorkspaceHandler.SetZone(func(ctx context.Context, userID string) *time.Location {
+			u, err := authService.GetUser(ctx, userID)
+			if err != nil || u == nil || u.Timezone == nil {
+				return nil
+			}
+			return timeutil.LoadLocation(*u.Timezone)
+		})
 		aiConnectorEndpoint = connector.NewEndpoint(aiConnectorSvc, a.Config.BaseURL)
 		aiConnectorEndpoint.SetInstructions(aiWorkspaceHandler.ConnectorInstructions)
 		connector.RegisterRoutes(e, aiConnectorEndpoint)
@@ -5526,6 +5543,7 @@ func (a *App) RegisterRoutes() {
 					SheetStyle:    ap.SheetStyle,
 					PageLook:      ap.PageLook,
 					StyleKit:      ap.StyleKit,
+					DmScreenKit:   ap.DmScreenKit,
 					TimelinePopup: ap.TimelinePopup,
 				}
 				ctx = layouts.SetAppearance(ctx, ad)
@@ -6197,6 +6215,9 @@ func (a *App) RegisterRoutes() {
 	})
 	aiRegistry := records.NewRegistry(aiKinds(aiWiring)...)
 	aiWorkspaceHandler.SetRecords(aiRegistry)
+	if a.PluginHealth.IsHealthy(rolltables.PluginSlug) {
+		aiWorkspaceRenderer.RollTables = aiRollTableNames{tables: aiRollTablesAdapter{rollTablesSvc}}
+	}
 	aiWorkspaceLookups := aiLookups(aiWiring, aiRegistry)
 	aiWorkspaceHandler.SetLookups(aiWorkspaceLookups)
 	aiWorkspaceHandler.SetFeatureGate(aiFeatureGate(addonService))
@@ -6945,6 +6966,17 @@ func (r aiRollTablesAdapter) Put(ctx context.Context, campaignID string, doc rec
 	}
 	_, err = r.svc.Put(ctx, campaignID, b, userID)
 	return err
+}
+
+// aiRollTableNames names the campaign's rolling tables for AI Export.
+type aiRollTableNames struct{ tables records.RollTablesAPI }
+
+func (n aiRollTableNames) RollTableNames(ctx context.Context, campaignID string) (map[string]string, error) {
+	doc, err := n.tables.Get(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	return records.TableNames(doc), nil
 }
 
 // aiWorkspaceAuditAdapter bridges audit.AuditService to the narrow

@@ -68,6 +68,13 @@ type FolderNamer interface {
 	FolderNames(ctx context.Context, campaignID string) (map[string]string, error)
 }
 
+// RollTableNamer names the campaign's rolling tables by id, for the table
+// rollers in page text. Only the director's modes ask, since the roller and
+// the tables are a DM tool.
+type RollTableNamer interface {
+	RollTableNames(ctx context.Context, campaignID string) (map[string]string, error)
+}
+
 // SessionLister loads sessions + their nested joins. Attendees +
 // SessionEntity slices are fetched per-session; the N+1 pattern is accepted
 // because session counts are modest (10-50 per campaign).

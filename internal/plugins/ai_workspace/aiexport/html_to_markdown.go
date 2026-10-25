@@ -2,6 +2,7 @@ package aiexport
 
 import (
 	"log/slog"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -26,7 +27,7 @@ var (
 func getConverter() *md.Converter {
 	converterOnce.Do(func() {
 		converter = md.NewConverter("", true, nil)
-		converter.AddRules(mentionRule(), secretRule())
+		converter.AddRules(mentionRule(), secretRule(), tableRule(), rollerRule())
 	})
 	return converter
 }
@@ -46,14 +47,16 @@ func getConverter() *md.Converter {
 // to the owner's AI use htmlToMarkdownWithSecrets, and a player-safe export
 // strips them from the HTML before this runs.
 func htmlToMarkdown(p *string) (string, error) {
-	return convertToMarkdown(p, false)
+	return convertToMarkdown(p, false, nil)
 }
 
 // htmlToMarkdownWithSecrets is htmlToMarkdown, but writes each GM-only
 // passage between the {gm{ and }gm} markers AI Import reads back, so a
-// round-trip keeps it GM-only. Only for the director's privacy modes.
-func htmlToMarkdownWithSecrets(p *string) (string, error) {
-	return convertToMarkdown(p, true)
+// round-trip keeps it GM-only, and each table roller as the {roll{…}} line
+// import reads back, naming its table from rollNames (id → name) when it is
+// one of the campaign's. Only for the director's privacy modes.
+func htmlToMarkdownWithSecrets(p *string, rollNames map[string]string) (string, error) {
+	return convertToMarkdown(p, true, rollNames)
 }
 
 // Private-use code points stand in for the markers while the converter runs:
@@ -64,9 +67,15 @@ const (
 	secretCloseMark = "\uE001"
 	secretOpenText  = "{gm{"
 	secretCloseText = "}gm}"
+	rollerOpenMark  = "\uE002"
+	rollerCloseMark = "\uE003"
+	rollerOpenText  = "{roll{"
 )
 
-func convertToMarkdown(p *string, keepSecrets bool) (string, error) {
+// rollerMarkRe finds a roller's stand-in: its table id and count.
+var rollerMarkRe = regexp.MustCompile(rollerOpenMark + `([a-z][a-z0-9-]{0,63})\|([135])` + rollerCloseMark)
+
+func convertToMarkdown(p *string, keepSecrets bool, rollNames map[string]string) (string, error) {
 	if p == nil || *p == "" {
 		return "", nil
 	}
@@ -74,7 +83,7 @@ func convertToMarkdown(p *string, keepSecrets bool) (string, error) {
 	if clean == nil || *clean == "" {
 		return "", nil
 	}
-	in := strings.NewReplacer(secretOpenMark, "", secretCloseMark, "").Replace(*clean)
+	in := strings.NewReplacer(secretOpenMark, "", secretCloseMark, "", rollerOpenMark, "", rollerCloseMark, "").Replace(*clean)
 	got, err := getConverter().ConvertString(in)
 	if err != nil {
 		return "", err
@@ -85,11 +94,64 @@ func convertToMarkdown(p *string, keepSecrets bool) (string, error) {
 	got = strings.NewReplacer(
 		secretOpenText, "{\u200bgm{",
 		secretCloseText, "}\u200bgm}",
+		rollerOpenText, "{\u200broll{",
 	).Replace(got)
-	if keepSecrets {
-		return strings.NewReplacer(secretOpenMark, secretOpenText, secretCloseMark, secretCloseText).Replace(got), nil
+	if !keepSecrets {
+		// A dropped roller takes its blank lines with it.
+		got = strings.TrimSpace(droppedRollerRe.ReplaceAllString(got, "\n\n"))
+		return strings.NewReplacer(secretOpenMark, "", secretCloseMark, "").Replace(got), nil
 	}
-	return strings.NewReplacer(secretOpenMark, "", secretCloseMark, "").Replace(got), nil
+	got = rollerMarkRe.ReplaceAllStringFunc(got, func(m string) string {
+		sub := rollerMarkRe.FindStringSubmatch(m)
+		return rollerOpenText + rollerLabel(sub[1], rollNames) + "|" + sub[2] + "}}"
+	})
+	return strings.NewReplacer(secretOpenMark, secretOpenText, secretCloseMark, secretCloseText).Replace(got), nil
+}
+
+var droppedRollerRe = regexp.MustCompile(`\n*` + rollerMarkRe.String() + `\n*`)
+
+// rollerRule writes the editor's table roller as a stand-in paragraph of its
+// own, which convertToMarkdown turns into a {roll{…}} line or drops.
+func rollerRule() md.Rule {
+	return md.Rule{
+		Filter: []string{"div"},
+		Replacement: func(_ string, sel *goquery.Selection, _ *md.Options) *string {
+			if !sel.HasClass("ce-roll") {
+				return nil
+			}
+			class, _ := sel.Attr("class")
+			id, count := "", "3"
+			for _, c := range strings.Fields(class) {
+				if v, ok := strings.CutPrefix(c, "ce-roll--t-"); ok {
+					id = v
+				} else if v, ok := strings.CutPrefix(c, "ce-roll--n-"); ok && (v == "1" || v == "5") {
+					count = v
+				}
+			}
+			if id == "" {
+				return md.String("")
+			}
+			return md.String("\n\n" + rollerOpenMark + id + "|" + count + rollerCloseMark + "\n\n")
+		},
+	}
+}
+
+// rollerLabel is how a roller names its table: the campaign table's name when
+// import will read it back as that table, else the id, which import accepts
+// on the page that already has the roller (the built-in tables live in the
+// browser, so they have no name here).
+func rollerLabel(id string, names map[string]string) string {
+	name, ok := names[id]
+	if !ok || strings.TrimSpace(name) == "" || strings.ContainsAny(name, "{}|<>\n") {
+		return id
+	}
+	key := strings.ToLower(strings.TrimSpace(name))
+	for otherID, other := range names {
+		if otherID != id && (otherID == key || strings.ToLower(strings.TrimSpace(other)) == key) {
+			return id
+		}
+	}
+	return strings.TrimSpace(name)
 }
 
 // secretRule brackets the editor's GM-only span with the stand-in code

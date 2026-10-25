@@ -361,17 +361,33 @@ templ settingsGeneralTab(cc *CampaignContext, csrfToken string) {
 // member list (add, role change including Co-DM, remove), the invite link,
 // email invitations and ownership transfer. The People page is its
 // only home; Settings links to it instead of repeating it.
+//
+// On a big monitor the people themselves (members, roles, pending
+// invitations) take the wide column and the ways in and out of the
+// campaign (guest codes, invite link, transfer) sit beside them, so the two
+// columns carry similar weight.
 templ peopleSections(cc *CampaignContext, members []CampaignMember, transfer *OwnershipTransfer, csrfToken, errMsg string, smtpConfigured bool) {
+	if !smtpConfigured {
+		<div class="alert-warning mb-6">
+			<i class="fa-solid fa-triangle-exclamation mr-2"></i>
+			Email is not configured. Invitations and transfer notifications will not be sent by email.
+		</div>
+	}
 	<div class="manage-split">
-		// SMTP warning.
-		if !smtpConfigured {
-			<div class="alert-warning">
-				<i class="fa-solid fa-triangle-exclamation mr-2"></i>
-				Email is not configured. Invitations and transfer notifications will not be sent by email.
-			</div>
-		}
+		<div class="manage-split-main space-y-6">
+			@MemberListComponent(cc, members, csrfToken, errMsg)
 
-		@MemberListComponent(cc, members, csrfToken, errMsg)
+			// Invitations (HTMX lazy load).
+			<div class="card p-6">
+				<h2 class="text-lg font-semibold text-fg mb-4">
+					<i class="fa-solid fa-envelope mr-2 text-accent"></i> Invitations
+				</h2>
+				<p class="text-sm text-fg-secondary mb-4">Invite players and scribes by email. Invitations expire after 7 days.</p>
+				<div hx-get={ fmt.Sprintf("/campaigns/%s/invites/page", cc.Campaign.ID) } hx-trigger="load" hx-swap="innerHTML">
+					<div class="text-center py-4 text-fg-muted text-sm">Loading invitations...</div>
+				</div>
+			</div>
+		</div>
 
 		if cc.MemberRole >= RoleOwner {
 			<div id="guest-codes" hx-get={ fmt.Sprintf("/campaigns/%s/guest-codes", cc.Campaign.ID) } hx-trigger="load" hx-swap="outerHTML"></div>
@@ -415,17 +431,6 @@ templ peopleSections(cc *CampaignContext, members []CampaignMember, transfer *Ow
 					<span x-show="!generating"><i class="fa-solid fa-link mr-1.5"></i> Generate Invite Link</span>
 					<span x-show="generating"><i class="fa-solid fa-spinner fa-spin mr-1"></i> Generating...</span>
 				</button>
-			</div>
-		</div>
-
-		// Invitations (HTMX lazy load).
-		<div class="card p-6">
-			<h2 class="text-lg font-semibold text-fg mb-4">
-				<i class="fa-solid fa-envelope mr-2 text-accent"></i> Invitations
-			</h2>
-			<p class="text-sm text-fg-secondary mb-4">Invite players and scribes by email. Invitations expire after 7 days.</p>
-			<div hx-get={ fmt.Sprintf("/campaigns/%s/invites/page", cc.Campaign.ID) } hx-trigger="load" hx-swap="innerHTML">
-				<div class="text-center py-4 text-fg-muted text-sm">Loading invitations...</div>
 			</div>
 		</div>
 

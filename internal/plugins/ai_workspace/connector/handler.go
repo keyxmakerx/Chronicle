@@ -111,6 +111,10 @@ func (e *Endpoint) Serve(c echo.Context) error {
 	}
 	campaignID := c.Param("id")
 	conn, name, err := e.svc.Authenticate(req.Context(), campaignID, keyFrom(req))
+	if errors.Is(err, ErrKeyPaused) {
+		// The key is right, so this is no failed guess to count.
+		return refuse(c, http.StatusForbidden, "This key is paused. The campaign's owner can resume it on the Your AI page.")
+	}
 	if err != nil {
 		ip := c.RealIP()
 		n := e.failures.add(ip, time.Now())
@@ -153,7 +157,7 @@ func (e *Endpoint) Serve(c echo.Context) error {
 	case out.Initialized:
 		e.svc.Seen(req.Context(), conn, out.ClientName)
 		if conn.LastUsedAt == nil {
-			e.svc.Record(req.Context(), conn, "connect", "Connected", cleanClientName(out.ClientName), true)
+			e.svc.Record(req.Context(), conn, toolConnect, "Connected", cleanClientName(out.ClientName), true)
 		}
 	case out.Called != nil:
 		e.svc.Seen(req.Context(), conn, "")

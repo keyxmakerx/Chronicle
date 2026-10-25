@@ -132,6 +132,9 @@ type Lookups struct {
 	// Layouts names the layout each page wears, for a Director, where its
 	// category has more than one; nil leaves layouts out.
 	Layouts PageLayoutsAPI
+	// Menu gives the owner's AI the sidebar menu's category order; nil
+	// leaves it out.
+	Menu MenuAPI
 }
 
 // LookupAnswer is one lookup's result: the chip shown on screen and the
@@ -614,6 +617,23 @@ func (l *Lookups) PageIndex(ctx context.Context, campaignID string, a Actor) str
 	return capText(b.String(), 8*1024)
 }
 
+// MenuOrder is the sidebar menu's categories in order, for the owner only
+// (see MenuOrderKind.isOwner); "" otherwise or when it can't be read.
+func (l *Lookups) MenuOrder(ctx context.Context, campaignID string, a Actor) string {
+	if l == nil || l.Menu == nil {
+		return ""
+	}
+	k := MenuOrderKind{Svc: l.Menu}
+	if owner, err := k.isOwner(ctx, campaignID, a); err != nil || !owner {
+		return ""
+	}
+	menu, err := l.Menu.MenuCategories(ctx, campaignID)
+	if err != nil {
+		return ""
+	}
+	return menuNames(menu)
+}
+
 func (run *lookupRun) page(name string) (LookupAnswer, error) {
 	ans := LookupAnswer{Chip: "Page · " + name}
 	e, err := run.findPage(name)
@@ -639,6 +659,11 @@ func (run *lookupRun) page(name string) (LookupAnswer, error) {
 	}
 	opts.FolderNames = run.folderNames()
 	opts.LayoutNames = run.layoutNames()
+	if run.director() && run.l.Tables != nil {
+		if doc, err := run.l.Tables.Get(run.ctx, run.campaignID); err == nil {
+			opts.RollTableNames = TableNames(doc)
+		}
+	}
 	md, err := aiexport.RenderEntities(run.ctx, []entities.Entity{*e}, types, pageTagMap, map[string][]relations.Relation{e.ID: rels}, opts)
 	if err != nil {
 		return ans, err

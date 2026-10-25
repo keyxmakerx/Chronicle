@@ -217,6 +217,12 @@ func CountSecrets(html string) (passages, pictures, diagrams int) {
 	return passages, pictures, diagrams
 }
 
+// CountRollers reports how many rolling-table rollers a page's HTML holds,
+// for an import that would replace the text around them.
+func CountRollers(html string) int {
+	return len(rollerRe.FindAllStringIndex(html, -1))
+}
+
 // StripSecretsJSON removes nodes marked with the "secret" mark, GM-only
 // pictures, GM-only diagrams and rolling-table rollers from ProseMirror JSON content,
 // and template prompts from the lines that carry them. Returns the modified JSON string. If the input

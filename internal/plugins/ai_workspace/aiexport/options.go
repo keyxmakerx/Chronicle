@@ -112,6 +112,11 @@ type Options struct {
 	// may see (oldest era first), with the calendar's current era marked.
 	// Filled by Service.Generate; nil leaves every page as its usual self.
 	EraVersions map[string][]EraVersion
+
+	// RollTableNames maps a rolling table's id to its name, so a table
+	// roller in a page's text is written with the name of its table. Only
+	// the director's modes write rollers; nil writes each by its id.
+	RollTableNames map[string]string
 }
 
 // EnabledCategories returns the canonical render order, filtered to

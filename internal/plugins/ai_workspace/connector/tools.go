@@ -44,6 +44,9 @@ type tool struct {
 	Asks bool
 }
 
+// toolConnect logs an AI app connecting; it is no tool the AI calls.
+const toolConnect = "connect"
+
 // The tools an "Ask for changes" connection adds.
 const (
 	toolHowTo = "how_to_write_changes"
@@ -271,5 +274,9 @@ func outline(ctx context.Context, l *records.Lookups, campaignID, campaignName s
 	b.WriteString("## Pages by kind\n\n")
 	b.WriteString(index)
 	b.WriteString("\nUse read_page for one page's text, and list_pages for the rest of a long list.\n")
+	if menu := l.MenuOrder(ctx, campaignID, a); menu != "" {
+		b.WriteString("\n## Sidebar menu\n\nThe categories in the order the menu shows them: " + menu +
+			". A `menu-order` change can reorder them.\n")
+	}
 	return b.String(), "categories and names", true
 }

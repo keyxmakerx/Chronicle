@@ -123,7 +123,7 @@ func (h *Handler) CreateKey(c echo.Context) error {
 		}
 	}
 
-	rateLimit := 60
+	rateLimit := DefaultKeyRateLimit
 	if rl := c.FormValue("rate_limit"); rl != "" {
 		if v, err := strconv.Atoi(rl); err == nil && v >= 1 && v <= 10000 {
 			rateLimit = v

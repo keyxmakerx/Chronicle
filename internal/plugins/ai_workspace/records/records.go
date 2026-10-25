@@ -234,6 +234,7 @@ var briefs = map[string]string{
 	"category-field": "the fields on a category's sheet, including links to another category's pages and fields worked out by a rule",
 	"tag":            "the campaign's tags: make, rename, recolour, hide from players or remove them (which pages carry a tag is set on the page block)",
 	"folder":         "sidebar folders inside a category (such as Gods and Cosmology inside Lore); a page is filed in one with `folder:` on its own block",
+	"menu-order":     "the order of the categories in the sidebar menu (owner only)",
 	"quest":          "a quest page's notice: its status, title, blurb, reward, due date and steps, and which steps players see",
 	"notice-board":   "notice boards on a place or category page: who may pin to them, which quests fill them by themselves, and the quests and notes pinned by hand",
 	"game-night":     "game nights (play sessions): the real-world date and time, a one-line summary, played or cancelled, and the recap every member reads",

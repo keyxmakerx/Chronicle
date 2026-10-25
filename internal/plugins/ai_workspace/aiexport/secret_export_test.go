@@ -20,7 +20,7 @@ func TestHtmlToMarkdownWithSecrets(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			in := tc.in
-			got, err := htmlToMarkdownWithSecrets(&in)
+			got, err := htmlToMarkdownWithSecrets(&in, nil)
 			if err != nil {
 				t.Fatal(err)
 			}

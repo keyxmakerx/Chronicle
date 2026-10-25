@@ -55,12 +55,19 @@ func reviewHost(d ImportReviewData) string {
 	return pasteReviewHost
 }
 
-// The review hosts: under the paste box, and under the requests a connected
-// AI made. One review is open at a time; opening one empties the other.
+// The review hosts: under the paste box, and inside each request a connected
+// AI made, with what a request's Apply made shown above the requests. One
+// review is open at a time; opening one empties the others.
 const (
 	pasteReviewHost   = "ai-import-review-host"
-	requestReviewHost = "ai-request-review-host"
+	requestResultHost = "ai-request-result"
 )
+
+// notNowFold folds a request's review back into its card, then empties it.
+const notNowFold = `const h = $el.closest('.aic-req-review'); if (!h) return; h.classList.add('aic-folding'); setTimeout(() => { h.innerHTML = ''; h.classList.remove('aic-folding'); h.closest('.aic-request').querySelector('.aic-req-actions button')?.focus() }, matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 240)`
+
+// requestHost is the host inside request id's card.
+func requestHost(id int64) string { return fmt.Sprintf("ai-request-%d-review", id) }
 
 // ReviewSummary is the per-status tally rendered above the table.
 type ReviewSummary struct {
@@ -193,15 +200,17 @@ templ ImportReview(d ImportReviewData) {
 			// the settings route into the review host: that route
 			// renders a full page (no fragment branch), so
 			// fragment-targeting it would nest the app inside itself.
-			// A request closes without an answer: it keeps waiting.
+			// A request folds back into its card without an answer: it keeps
+			// waiting.
 			if d.RequestID > 0 {
-				<a
-					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/ai", d.CampaignID)) }
+				<button
+					type="button"
 					class="btn-secondary"
 					aria-label="Close the review; the request keeps waiting for you"
+					@click={ notNowFold }
 				>
 					Not now
-				</a>
+				</button>
 			} else {
 				<a
 					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/ai", d.CampaignID)) }
@@ -441,6 +450,13 @@ templ reviewRow(campaignID string, idx int, page importer.ParsedPage, cls import
 					<summary>Read what it writes</summary>
 					<pre class="air-text">{ page.Body }</pre>
 				</details>
+				// A peek at the same text beside the row, for a pointer or
+				// focus on a wide screen; the fold above is for everyone.
+				<div class="air-peek" aria-hidden="true">
+					<span class="air-peek-head">What it writes</span>
+					<b>{ page.Name }</b>
+					<span class="air-peek-text">{ peekText(page.Body) }</span>
+				</div>
 			}
 			// A page with GM-only parts: any row that ends up replacing its
 			// text needs the tick (the details can turn a row into an
@@ -622,11 +638,13 @@ templ reviewRowHeader(idx int, page importer.ParsedPage) {
 	</div>
 }
 
-// reviewRowActionChip is the row's action as a picker.
+// reviewRowActionChip is the row's action as a picker. It keeps its own
+// width: .input is full width, which would squeeze the name box beside it
+// to nothing.
 templ reviewRowActionChip(idx int, action string) {
 	<select
 		name={ fmt.Sprintf("page_%d_action", idx) }
-		class="input text-xs"
+		class="input text-xs w-auto shrink-0"
 		aria-label={ fmt.Sprintf("Action verb for page %d", idx+1) }
 	>
 		@actionOption(importer.ActionCreate, "Add", action)

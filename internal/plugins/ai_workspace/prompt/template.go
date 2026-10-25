@@ -256,6 +256,16 @@ only the rest of its paragraph. When you edit a page my export shows with these
 markers, keep them around the same words; text I exported without them is not
 GM-only, and a page update that leaves out one of its existing GM-only passages needs
 my extra confirmation. Do not use the markers for anything else.
+
+A rolling-table roller (the dice box I put in a page with /roll; players never see it)
+is a line of its own, with a blank line before and after: ` + "`" + `{roll{Tavern names|3}}` + "`" + `
+rolls 3 entries of the table "Tavern names" (1, 3 or 5; 3 when left out). The table is
+one of my rolling tables, or one a ` + "`" + `kind: table` + "`" + ` block in this paste makes. My export
+writes a page's rollers this way; keep each line where the roller should stay, since a
+page update that leaves one out needs my extra confirmation. A roller on a built-in
+table is written with the table's id, like ` + "`" + `{roll{rumours|3}}` + "`" + `: it can stay on its page
+or move within it, but not go on another page. A name that matches no table stays
+as plain text.
 {{ end }}
 
 {{ if .RecordDocs }}

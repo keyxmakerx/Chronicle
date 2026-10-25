@@ -130,6 +130,7 @@ func aiLookups(d *aiDeps, reg *records.Registry) *records.Lookups {
 		Nights:   d.Nights,
 		Kinds:    reg,
 		PageMaps: d.PageMaps,
+		Menu:     aiMenuAdapter{campaigns: d.Campaigns, types: d.Entities},
 	}
 	if d.Health.IsHealthy(rolltables.PluginSlug) {
 		l.Tables = d.Tables.Svc

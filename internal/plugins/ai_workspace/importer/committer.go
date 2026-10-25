@@ -154,6 +154,10 @@ type CommitInput struct {
 	// Viewer is who the page links are resolved for: a name never becomes
 	// a link to a page this viewer cannot see.
 	Viewer Viewer
+
+	// RollTables is what a page's {roll{Name}} line can name (see
+	// PageLinks.SetRollTables); nil leaves every such line as text.
+	RollTables map[string]string
 }
 
 // RowOutcome is the per-row commit outcome. The result summary
@@ -231,6 +235,7 @@ func (c *Committer) Commit(ctx context.Context, campaignID string, in CommitInpu
 	// renamed slug.
 	made := map[string]string{}
 	links := NewPageLinks(ctx, c.creator, campaignID, in.Viewer)
+	links.SetRollTables(in.RollTables)
 	pasteSlugs := pasteSlugsOf(in)
 	var relink []relinkRow
 	for i, page := range in.Pages {
@@ -503,6 +508,18 @@ func (c *Committer) commitRow(
 				out.Reason = reason
 				return out
 			}
+			// The body was converted before the page was found; the page's
+			// own rollers may be kept by id only now.
+			if keptRollers(existing) != nil {
+				if bodyHTML, err = MarkdownToHTML(page.Body, WithPageLinks(links), WithGMOnlyPassages(), WithKeptRollers(existing)); err == nil {
+					bodyJSON, err = htmlconv.Convert(bodyHTML)
+				}
+				if err != nil {
+					out.Status = StatusFailed
+					out.Reason = "Could not convert the page's body to the editor format. Try simpler markdown."
+					return out
+				}
+			}
 			return c.commitUpdate(ctx, existing, page, dec, typeID, bodyJSON, bodyHTML, isPrivate, parent, idx, links)
 		default: // "rename" (default mode)
 			finalName = c.suffixUntilFree(ctx, campaignID, finalName)
@@ -765,7 +782,7 @@ func (c *Committer) commitUpdateExplicit(
 	// SEC-6 funnel — sanitize body markdown BEFORE handing to
 	// commitUpdate. The pin verifies this funnel exists in every
 	// non-exempt function calling creator.Update / UpdateEntry.
-	bodyHTML, err := MarkdownToHTML(page.Body, WithPageLinks(links), WithGMOnlyPassages())
+	bodyHTML, err := MarkdownToHTML(page.Body, WithPageLinks(links), WithGMOnlyPassages(), WithKeptRollers(existing))
 	if err != nil {
 		out.Status = StatusFailed
 		out.Reason = markdownFailReason(err)

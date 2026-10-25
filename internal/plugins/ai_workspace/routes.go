@@ -25,6 +25,9 @@ func RegisterOwnerRoutes(cg *echo.Group, h *Handler, requireOwner echo.Middlewar
 	cg.GET("/ai/activity", h.AIActivity, requireOwner)
 	cg.POST("/ai/connection", h.ConnectAI, requireOwner)
 	cg.POST("/ai/connection/disconnect", h.DisconnectAI, requireOwner)
+	cg.POST("/ai/connection/pause", h.PauseAI, requireOwner)
+	cg.POST("/ai/connection/resume", h.ResumeAI, requireOwner)
+	cg.POST("/ai/connection/access", h.ChangeAIAccess, requireOwner)
 	cg.GET("/ai/requests", h.AIRequests, requireOwner)
 	cg.POST("/ai/requests/:rid/turn-down", h.TurnDownRequest, requireOwner)
 

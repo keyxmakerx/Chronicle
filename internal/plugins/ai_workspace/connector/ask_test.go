@@ -229,3 +229,63 @@ func TestService_RequestAnswers(t *testing.T) {
 		t.Errorf("still waiting: %+v", w)
 	}
 }
+
+// The campaign check's problems go back to the AI, so it can fix its own
+// request, and nothing waits for the owner. A check that fails only skips
+// itself, since the owner's review checks everything again.
+func TestAsk_CampaignCheck(t *testing.T) {
+	tests := []struct {
+		name     string
+		problems []string
+		err      error
+		wantText string
+		wantKept int
+	}{
+		{"problems refuse the request", []string{`block 1 (Coral Court): the Places category has no folder "Docks"`},
+			nil, `Not sent: the owner couldn't use it: block 1 (Coral Court): the Places category has no folder "Docks".`, 0},
+		{"many problems are cut short", []string{"a", "b", "c", "d", "e", "f", "g"}, nil, "a; b; c; d; e; and 2 more.", 0},
+		{"no problems", nil, nil, "Sent to the owner for review", 1},
+		{"a failed check is skipped", nil, errors.New("db down"), "Sent to the owner for review", 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s, sess, repo := askRig(t)
+			var gotCampaign, gotChanges string
+			s.Asks.(*Service).SetCheck(func(_ context.Context, campaignID, changes string) ([]string, error) {
+				gotCampaign, gotChanges = campaignID, changes
+				return tt.problems, tt.err
+			})
+			out := s.Handle(context.Background(), sess, callBody(toolAsk, map[string]any{"summary": "Coral Court", "changes": goodBlocks}))
+			tr := toolText(t, out)
+			if len(tr.Content) == 0 || !strings.Contains(tr.Content[0].Text, tt.wantText) {
+				t.Fatalf("reply %+v, want %q", tr, tt.wantText)
+			}
+			if tr.IsError != (tt.wantKept == 0) {
+				t.Errorf("isError = %v", tr.IsError)
+			}
+			if len(repo.reqs) != tt.wantKept {
+				t.Errorf("kept %d requests, want %d", len(repo.reqs), tt.wantKept)
+			}
+			if gotCampaign != "camp-1" || gotChanges != goodBlocks {
+				t.Errorf("check saw campaign %q changes %q", gotCampaign, gotChanges)
+			}
+		})
+	}
+}
+
+// A request of more blocks than one review should hold is refused before
+// anything is checked against the campaign.
+func TestAsk_TooManyBlocks(t *testing.T) {
+	s, sess, repo := askRig(t)
+	checked := false
+	s.Asks.(*Service).SetCheck(func(context.Context, string, string) ([]string, error) { checked = true; return nil, nil })
+	block := "---\nname: P%d\n---\n\nx\n\n"
+	var b strings.Builder
+	for i := 0; i <= blocksMax; i++ {
+		fmt.Fprintf(&b, block, i)
+	}
+	tr := toolText(t, s.Handle(context.Background(), sess, callBody(toolAsk, map[string]any{"summary": "many", "changes": b.String()})))
+	if !tr.IsError || !strings.Contains(tr.Content[0].Text, fmt.Sprintf("send at most %d", blocksMax)) || checked || len(repo.reqs) != 0 {
+		t.Errorf("reply %+v, checked %v, kept %d", tr, checked, len(repo.reqs))
+	}
+}
