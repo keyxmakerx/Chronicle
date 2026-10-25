@@ -468,6 +468,23 @@
     scheduleUnmatchedWidgetScan(document.body);
   });
 
+  // After a deploy, an open tab still runs the scripts it first loaded,
+  // while a boosted link swaps in the new build's markup and CSS. When a
+  // boosted page comes from a different build than this page's meta names,
+  // load it in full instead, so its scripts match. Registered before the
+  // widget teardown below, which then leaves the page alone.
+  var pageBuild = (document.querySelector('meta[name="chronicle-build"]') || {}).content || '';
+  document.addEventListener('htmx:beforeSwap', function (event) {
+    var d = event.detail || {}, xhr = d.xhr, cfg = d.requestConfig || {};
+    if (!pageBuild || !xhr || !(d.boosted || cfg.boosted) || (cfg.verb && cfg.verb !== 'get')) return;
+    var build = xhr.getResponseHeader('X-Chronicle-Build');
+    if (!build || build === pageBuild || xhr.status >= 400) return;
+    var url = (d.pathInfo && (d.pathInfo.responsePath || d.pathInfo.finalRequestPath || d.pathInfo.requestPath)) || xhr.responseURL;
+    if (!url) return;
+    d.shouldSwap = false;
+    window.location.assign(url);
+  });
+
   // Destroy widgets before HTMX removes content.
   // htmx:beforeSwap fires before old content is removed.
   // htmx fires beforeSwap for error and empty responses too, then leaves the

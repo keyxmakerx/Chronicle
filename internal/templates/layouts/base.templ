@@ -12,6 +12,9 @@ templ Base(title string) {
 	<head>
 		<meta charset="UTF-8"/>
 		<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+		<!-- The build this page's scripts came from; boot.js reloads a boosted
+		     page whose response names a newer one. -->
+		<meta name="chronicle-build" content={ BuildToken() }/>
 		<title>{ SiteTitle(ctx, title) }</title>
 
 		<!-- Favicon -->

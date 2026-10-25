@@ -261,11 +261,11 @@ test('a night that falls on another day in your zone says which', () => {
   assert.match(v._gnTime(night({ tz: 'America/Chicago' })), /^Fri 2am /);
 });
 
-test('a game-night link names the night, or asks for the next one', () => {
+test('a game-night link opens its night; without a night and day, the calendar stays as it is', () => {
   const cases = [
     ['?night=s1&date=2026-10-08', { sessionId: 's1', date: '2026-10-08' }],
-    ['?night=next', { next: true }],
-    ['?night=s1&date=soon', { next: true }],
+    ['?night=next', null],
+    ['?night=s1&date=soon', null],
     ['', null],
   ];
   for (const [search, want] of cases) {
@@ -273,22 +273,10 @@ test('a game-night link names the night, or asks for the next one', () => {
     const v = view(def, []);
     assert.deepEqual(v._linkTarget() && { ...v._linkTarget() }, want, search);
   }
-  const { def } = load({ search: '?night=next' });
+  const { def } = load({ search: '?night=s1&date=2026-10-08' });
   const v = view(def, []);
   v.showNights = false;
   assert.equal(v._linkTarget(), null, 'a viewer shown no nights is not jumped anywhere');
-});
-
-test('the next night is the first not yet played, across months', async () => {
-  const { def } = load({
-    nights: (url) => url.includes('from=2026-10-01') ? [night({ date: '2026-10-02', past: true })]
-      : url.includes('from=2026-11-01') ? [night({ sessionId: 's2', date: '2026-11-20' }), night({ sessionId: 's3', date: '2026-11-06' })] : [],
-  });
-  const v = view(def, []);
-  v.cal = { mode: 'reallife', tracks_real_time: true, current_year: 2026, current_month: 10, months: Array.from({ length: 12 }, () => ({ days: 31 })) };
-  v.nightsByMonth = {};
-  const n = await v._nextNight();
-  assert.equal(n.sessionId, 's3');
 });
 
 // Who's free: a week as the availability overlay sends it, for the

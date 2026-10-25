@@ -68,7 +68,7 @@ async function page(t, width) {
   });
   await p.clock.setFixedTime(new Date('2026-10-25T15:00:00Z'));
   await p.goto('http://chronicle.test/');
-  await p.waitForSelector('.day[data-key="2026_10_29"] .gnd .mk.gnm .gnart', { state: 'attached' });
+  await p.waitForSelector('.day[data-key="2026_10_29"] .gndie .mk.gnm .gnart', { state: 'attached' });
   return p;
 }
 
@@ -76,10 +76,19 @@ test('a game night is a drawn d20 in the middle of its day, not one of the marks
   const p = await page(t, 1280);
   assert.equal(await p.$('.day[data-key="2026_10_29"] .marks .gnm'), null);
   const off = await p.$eval('.day[data-key="2026_10_29"]', (day) => {
-    const d = day.getBoundingClientRect(), m = day.querySelector('.gnd .mk').getBoundingClientRect();
-    return Math.abs((m.left + m.width / 2) - (d.left + d.width / 2));
+    const d = day.getBoundingClientRect(), m = day.querySelector('.gndie .mk').getBoundingClientRect();
+    return [Math.abs((m.left + m.width / 2) - (d.left + d.width / 2)), Math.abs((m.top + m.height / 2) - (d.top + d.height / 2))];
   });
-  assert.ok(off < 2, 'the die is centred across its day (off by ' + off + 'px)');
+  assert.ok(off[0] < 1 && off[1] < 1, 'the die is in the middle of its day (off by ' + off.join(', ') + 'px)');
+  // The game night editor's drawer is also class "gnd"; the die's rules must not reach it.
+  const drawer = await p.evaluate(() => {
+    const d = document.createElement('div');
+    d.className = 'drawer ded gnd';
+    document.querySelector('.cal-v5').appendChild(d);
+    const cs = getComputedStyle(d);
+    return [cs.pointerEvents, cs.position];
+  });
+  assert.notEqual(drawer[0], 'none', 'the game night editor still takes clicks');
   assert.notEqual(await p.$eval('.gnart', (a) => getComputedStyle(a).backgroundImage), 'none', 'its lines carry the rainbow');
 });
 

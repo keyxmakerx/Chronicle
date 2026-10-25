@@ -21,7 +21,7 @@ func TestGameNightsTarget(t *testing.T) {
 		{"no calendar, the list", "", "", "", "/campaigns/c1/sessions"},
 		{"no calendar, the session's own page", "", "s1", "2026-10-08", "/campaigns/c1/sessions/s1"},
 		{"a night opens its day", "k1", "s1", "2026-10-08", "/campaigns/c1/calendars/k1/view?date=2026-10-08&night=s1"},
-		{"no night named opens the next one", "k1", "", "", "/campaigns/c1/calendars/k1/view?night=next"},
+		{"no night named opens the calendar as it is", "k1", "", "", "/campaigns/c1/calendars/k1/view"},
 		{"a session with no date opens its own page", "k1", "s1", "", "/campaigns/c1/sessions/s1"},
 		{"a bad date opens the session's own page", "k1", "s1", "Thursday", "/campaigns/c1/sessions/s1"},
 		{"ids are escaped", "k/1", "s&x", "2026-10-08", "/campaigns/c1/calendars/k%2F1/view?date=2026-10-08&night=s%26x"},
@@ -93,7 +93,7 @@ func TestGameNightsLink_NoRealWorldCalendar(t *testing.T) {
 		{"the owner is offered a real-world calendar", "", "", campaigns.RoleOwner, "/campaigns/c1/calendars?wizard=reallife"},
 		{"a player keeps the Sessions page", "", "", campaigns.RolePlayer, "/campaigns/c1/sessions"},
 		{"a named session still opens its own page", "", "?session=s1&date=2026-10-08", campaigns.RoleOwner, "/campaigns/c1/sessions/s1"},
-		{"with a calendar, the calendar", "k1", "", campaigns.RoleOwner, "/campaigns/c1/calendars/k1/view?night=next"},
+		{"with a calendar, the calendar", "k1", "", campaigns.RoleOwner, "/campaigns/c1/calendars/k1/view"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -127,7 +127,7 @@ func TestDatePollPagesOpenOnTheCalendar(t *testing.T) {
 		want              string
 	}{
 		{"a poll opens on its next date", "k1", "/campaigns/c1/proposals/p1?tz=America/Chicago", "/campaigns/c1/calendars/k1/view?date=2099-10-16&poll=p1"},
-		{"the list opens the calendar", "k1", "/campaigns/c1/proposals", "/campaigns/c1/calendars/k1/view?night=next"},
+		{"the list opens the calendar", "k1", "/campaigns/c1/proposals", "/campaigns/c1/calendars/k1/view"},
 		{"without a calendar a poll keeps its page", "", "/campaigns/c1/proposals/p1", ""},
 		{"without a calendar the list keeps its page", "", "/campaigns/c1/proposals", ""},
 	}
