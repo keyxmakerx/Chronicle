@@ -53,9 +53,11 @@
   animation: annals-draw var(--dur-large, 300ms) var(--ease-out) both 120ms;
 }
 /* On a phone the tall title takes its own line and the page's actions wrap
-   under it, rather than squeezing the name. */
+   under it, rather than squeezing the name. The match stops at the title row:
+   the app shell also has a .min-w-0 child with the title deep inside, and a
+   wrapping shell grows to the page's full height, so nothing can scroll. */
 @media (max-width: 640px) {
-  [data-cz-page="annals"] .flex:has(> .min-w-0 .cb-title) { flex-wrap: wrap; }
+  [data-cz-page="annals"] .flex:has(> .min-w-0 > .cb-title, > .min-w-0 > .flex > .cb-title) { flex-wrap: wrap; }
 }
 @keyframes annals-draw { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 
