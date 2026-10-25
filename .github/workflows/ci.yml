@@ -215,7 +215,12 @@ jobs:
           npx playwright-core install --with-deps chromium
 
       - name: JS tests
-        run: NODE_PATH="$(npm root -g)" node --test $(./tools/js-test-files.sh ${{ matrix.group }})
+        env:
+          GROUP: ${{ matrix.group }}
+        run: |
+          mapfile -t files < <(./tools/js-test-files.sh "$GROUP")
+          [ "${#files[@]}" -gt 0 ] || { echo "::error::no JS test files in group $GROUP"; exit 1; }
+          NODE_PATH="$(npm root -g)" node --test "${files[@]}"
 
   # --- Fresh-database migration replay ---
   # Every other integration test assumes `make migrate-up` already ran, so
