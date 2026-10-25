@@ -1,9 +1,11 @@
 package importer
 
 import (
+	"context"
 	"strconv"
 	"strings"
 
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/sanitize"
 )
@@ -15,11 +17,13 @@ import (
 // AI may have dropped or unmarked it. So a passage counts as kept only if the
 // incoming text carries a marked passage with the same words. The review
 // screen and the committer both measure it from the live entity so the two
-// cannot disagree.
+// cannot disagree. Table rollers are DM-only too; one counts as kept when the
+// incoming text has a roller for it, whichever table it rolls.
 type GMOnlyParts struct {
 	Passages int
 	Pictures int
 	Diagrams int
+	Rollers  int
 }
 
 // GMOnlyPartsOf measures an existing page against a replacement that carries
@@ -48,15 +52,19 @@ func GMOnlyPartsAfter(e *entities.Entity, incomingHTML string) GMOnlyParts {
 		}
 		missing++
 	}
+	rollers := sanitize.CountRollers(*e.EntryHTML) - sanitize.CountRollers(incomingHTML)
 	// A passage with no words has nothing to lose, so it never blocks an
 	// update.
-	return GMOnlyParts{Passages: missing, Pictures: pic, Diagrams: d}
+	return GMOnlyParts{Passages: missing, Pictures: pic, Diagrams: d, Rollers: max(rollers, 0)}
 }
 
 // GMOnlyPartsForMarkdown is GMOnlyPartsAfter for the AI's raw page body, used
-// where the review screen has no converted HTML yet.
-func GMOnlyPartsForMarkdown(e *entities.Entity, body string) GMOnlyParts {
-	html, err := MarkdownToHTML(body, func(o *renderOpts) { o.markers = true })
+// where the review screen has no converted HTML yet. rollTables resolves the
+// body's {roll{Name}} lines as the commit will.
+func GMOnlyPartsForMarkdown(e *entities.Entity, body string, rollTables map[string]string) GMOnlyParts {
+	links := NewPageLinks(context.Background(), noPages{}, "-", Viewer{Role: int(campaigns.RoleOwner)})
+	links.SetRollTables(rollTables)
+	html, err := MarkdownToHTML(body, WithPageLinks(links), WithKeptRollers(e), func(o *renderOpts) { o.markers, o.passages = true, true })
 	if err != nil {
 		html = ""
 	}
@@ -64,7 +72,7 @@ func GMOnlyPartsForMarkdown(e *entities.Entity, body string) GMOnlyParts {
 }
 
 // Any reports whether the page has GM-only parts a text replace would lose.
-func (g GMOnlyParts) Any() bool { return g.Passages+g.Pictures+g.Diagrams > 0 }
+func (g GMOnlyParts) Any() bool { return g.Passages+g.Pictures+g.Diagrams+g.Rollers > 0 }
 
 // Phrase is the counts in plain words, e.g. "2 GM-only passages and 1
 // GM-only picture". Empty when there are none.
@@ -81,6 +89,7 @@ func (g GMOnlyParts) Phrase() string {
 	add(g.Passages, "passage", "passages")
 	add(g.Pictures, "picture", "pictures")
 	add(g.Diagrams, "diagram", "diagrams")
+	add(g.Rollers, "table roller", "table rollers")
 	switch len(parts) {
 	case 0:
 		return ""

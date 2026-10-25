@@ -231,3 +231,65 @@ func (k TableKind) Export(ctx context.Context, campaignID string, a Actor) (stri
 	}
 	return b.String(), nil
 }
+
+// RollTableIDs maps each rolling table a page's {roll{Name}} line may name to
+// its id: the campaign's tables by lower-cased name and by id, then the
+// tables the paste makes or renames, with the ids Apply will give them. Nil
+// when rolling tables aren't wired or can't be read, so every roller line
+// stays text with a warning.
+func (r *Registry) RollTableIDs(ctx context.Context, campaignID string, recs []Record) map[string]string {
+	k, ok := r.Get("table")
+	tk, isTable := k.(TableKind)
+	if !ok || !isTable || tk.Svc == nil {
+		return nil
+	}
+	doc, err := tk.Svc.Get(ctx, campaignID)
+	if err != nil {
+		return nil
+	}
+	out := map[string]string{}
+	taken := map[string]bool{}
+	for _, t := range doc.Tables {
+		taken[t.ID] = true
+		out[t.ID] = t.ID
+	}
+	for _, t := range doc.Tables {
+		if _, dup := out[strings.ToLower(t.Name)]; !dup {
+			out[strings.ToLower(t.Name)] = t.ID
+		}
+	}
+	for _, rec := range recs {
+		if normKind(rec.Kind) != "table" || rec.Name == "" {
+			continue
+		}
+		name := strings.ToLower(strings.TrimSpace(rec.Name))
+		switch rec.Action {
+		case ActionCreate:
+			if findTable(doc, rec.Name) >= 0 {
+				continue
+			}
+			id := tableID(rec.Name, taken)
+			taken[id] = true
+			if _, dup := out[name]; !dup {
+				out[name] = id
+			}
+		case ActionUpdate:
+			if to := strings.ToLower(strings.TrimSpace(rec.Str("rename_to"))); to != "" {
+				if id, ok := out[name]; ok {
+					out[to] = id
+				}
+			}
+		}
+	}
+	return out
+}
+
+// TableNames maps each table's id to its name, for writing a page's table
+// rollers with the names of their tables.
+func TableNames(doc TableDoc) map[string]string {
+	out := make(map[string]string, len(doc.Tables))
+	for _, t := range doc.Tables {
+		out[t.ID] = t.Name
+	}
+	return out
+}

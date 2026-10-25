@@ -58,3 +58,16 @@ func TestStripSecretsJSON_DropsRoller(t *testing.T) {
 		t.Errorf("ordinary text lost: %s", got)
 	}
 }
+
+func TestCountRollers(t *testing.T) {
+	for in, want := range map[string]int{
+		"":         0,
+		`<p>x</p>`: 0,
+		`<div class="ce-roll ce-roll--t-a ce-roll--n-3"></div><p>x</p><div class="ce-roll ce-roll--t-b"></div>`: 2,
+		`<div class="ce-rollish"></div>`: 0,
+	} {
+		if got := CountRollers(in); got != want {
+			t.Errorf("CountRollers(%q) = %d, want %d", in, got, want)
+		}
+	}
+}

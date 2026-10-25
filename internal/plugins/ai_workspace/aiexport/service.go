@@ -31,6 +31,8 @@ type Service struct {
 	EraVersions EraVersionSource
 	// Folders is optional: nil leaves out which folder a page sits in.
 	Folders FolderNamer
+	// RollTables is optional: nil writes each table roller by its table's id.
+	RollTables RollTableNamer
 }
 
 // NewService constructs a Service. Every dependency is required for
@@ -180,6 +182,15 @@ func (s *Service) renderCategory(
 					slog.String("campaign_id", campaignID), slog.Any("error", err))
 			} else {
 				opts.FolderNames = names
+			}
+		}
+
+		if s.RollTables != nil && opts.Privacy != PrivacyModeSafe {
+			if names, err := s.RollTables.RollTableNames(ctx, campaignID); err != nil {
+				slog.Warn("aiexport: exporting table rollers by their table ids",
+					slog.String("campaign_id", campaignID), slog.Any("error", err))
+			} else {
+				opts.RollTableNames = names
 			}
 		}
 
