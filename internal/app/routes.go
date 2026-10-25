@@ -3745,6 +3745,15 @@ func (a *App) RegisterRoutes() {
 	} else if n > 0 {
 		slog.Info("sync-api addon enablement backfill complete", slog.Int("campaigns", n))
 	}
+	// Keys still on the old 60-a-minute default move to the current one.
+	if raiser, ok := syncRepo.(syncapi.LegacyRateLimitRaiser); ok {
+		if n, err := syncapi.ReconcileLegacyRateLimits(context.Background(), raiser); err != nil {
+			slog.Error("sync-api rate limit backfill failed; older keys keep 60 requests a minute",
+				slog.String("error", err.Error()))
+		} else if n > 0 {
+			slog.Info("sync-api rate limit backfill complete", slog.Int64("keys", n))
+		}
+	}
 	syncHandler := syncapi.NewHandler(syncService)
 	// Inject sync mapping service early so the owner dashboard can show sync status.
 	syncMappingRepoEarly := syncapi.NewSyncMappingRepository(a.DB)

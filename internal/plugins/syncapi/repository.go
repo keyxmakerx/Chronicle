@@ -197,6 +197,18 @@ func (r *syncAPIRepository) UpdateKeyActive(ctx context.Context, id int, active 
 	return nil
 }
 
+// RaiseKeyRateLimits sets every key on rate limit `from`, created before
+// createdBefore, to `to`. Backs ReconcileLegacyRateLimits.
+func (r *syncAPIRepository) RaiseKeyRateLimits(ctx context.Context, from, to int, createdBefore time.Time) (int64, error) {
+	result, err := r.db.ExecContext(ctx,
+		`UPDATE api_keys SET rate_limit = ? WHERE rate_limit = ? AND created_at < ?`, to, from, createdBefore)
+	if err != nil {
+		return 0, fmt.Errorf("raising key rate limits: %w", err)
+	}
+	n, _ := result.RowsAffected()
+	return n, nil
+}
+
 // UpdateKeyLastUsed records the last usage time and IP. An empty
 // moduleVersion leaves the stored version untouched (COALESCE over NULL), so a
 // request without the header never wipes what an earlier one reported.
