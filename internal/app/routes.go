@@ -5411,6 +5411,7 @@ func (a *App) RegisterRoutes() {
 		// core base.templ layout.
 		ctx = layouts.SetPluginBodyScripts(ctx, pluginBodyScripts)
 		ctx = layouts.SetWidgetScripts(ctx, widgetScripts)
+		ctx = layouts.SetIsPane(ctx, middleware.IsSameOriginFrame(c))
 
 		// Site look (name, logo, tab icon, and for pages outside a campaign the
 		// borrowed look). A failed read leaves the shipped look rather than

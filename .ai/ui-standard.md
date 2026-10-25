@@ -310,6 +310,28 @@ leaving the list for another page.
   beside a link, so two pages can be read together. A list's row peek, the
   AI helper and a docked editor work the same way: beside the page, closed by
   their close button or Escape.
+- **Pages open beside on demand, when there is room.** Alt-click (Option on
+  a Mac), Alt+Enter on a focused link, or the beside icon on a row that lists
+  pages opens that campaign page, in full and editable, beside the one it
+  came from (`static/js/beside.js`, signed in
+  https://claude.ai/artifact/X6xdSywKG7Ma8xwD4S1FvE). Ctrl-click stays the
+  browser's new tab. Every page on screen gets an equal share of at least
+  740px, up to four; with no room for a second, Alt-click opens the page in
+  place and the beside icon is hidden. Opening from a page replaces the
+  panes after it; a full screen folds the oldest behind an Earlier link.
+  Holding Alt a moment over a link outlines where it will open, with its
+  name inside, fainter while the pointer is over the outline (signed in
+  https://claude.ai/artifact/UPXfATkmFE6f9PTbRskcLy, option C).
+  A pane is the page itself in a frame the server draws without the sidebar
+  and header (`layouts.IsPane`); only Chronicle's own pages may frame it
+  (`middleware.SecurityHeaders`).
+- **Chronicle never scales itself; the browser's zoom does.** Pop-ups, hover
+  cards, menus and drags place themselves by screen position, which a page
+  that zooms itself breaks. On a 4K-class screen at normal zoom (3000 CSS
+  pixels or wider) one tip in the lower right says to press Ctrl and +
+  (`static/js/wide_tip.js`, signed in
+  https://claude.ai/artifact/Bsy3mBQUUcQn6QWKEF9SHP, option A); either
+  answer hides it for good.
 - **Panels open with an animation inside their own widget**: they grow out
   of, or slide from behind, the thing clicked, never in from the window edge.
 - **Leaving unsaved changes warns first.** Register edits with

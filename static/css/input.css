@@ -972,6 +972,68 @@
     .page-col-stick { position: sticky; top: var(--page-stick-top, 1rem); align-self: start; }
   }
 
+  /* Pages beside (beside.js). The main page and every pane share the row
+     equally, which is also how the hint works out where a page will open. */
+  #beside-row.has-beside { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
+  .beside-pane { @apply flex flex-col min-w-0 min-h-0 border-l border-edge bg-surface; }
+  .beside-pane.is-fresh { animation: beside-in var(--dur-standard) var(--ease-out) both; }
+  @keyframes beside-in { from { opacity: 0; transform: translateX(1.5rem); } }
+  @media (prefers-reduced-motion: reduce) { .beside-pane.is-fresh { animation: none; } }
+  .beside-head {
+    @apply flex items-center gap-1 h-10 px-2 border-b border-edge-light shrink-0;
+  }
+  .beside-title { @apply flex-1 min-w-0 truncate px-1 text-sm font-semibold text-fg; }
+  .beside-earlier {
+    @apply shrink-0 px-2 py-1 rounded text-xs font-medium text-fg-secondary;
+  }
+  .beside-earlier:hover { @apply text-fg bg-surface-alt; }
+  /* Monochrome icons, framed only on hover (.ai/ui-standard.md). */
+  .beside-icon {
+    @apply shrink-0 inline-flex items-center justify-center w-7 h-7 rounded text-fg-muted border border-transparent;
+  }
+  .beside-icon:hover { @apply text-fg border-edge bg-surface-alt; }
+  .beside-icon:focus-visible, .beside-earlier:focus-visible { @apply outline-none ring-2 ring-accent; }
+  .beside-icon svg { width: 1rem; height: 1rem; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  .beside-frame { @apply flex-1 w-full min-h-0 border-0 bg-surface; }
+
+  /* Holding Alt: an outline where the page will open, with its name inside.
+     Fainter while the pointer is over it, so the page under it stays readable. */
+  .beside-ghost {
+    @apply fixed z-50 flex flex-col items-center justify-center gap-1 rounded-lg p-4 text-center pointer-events-none;
+    border: 2px dashed var(--color-accent);
+    background: color-mix(in srgb, var(--color-accent) 10%, var(--color-bg-primary) 82%);
+    opacity: 0; visibility: hidden;
+    transition: opacity var(--dur-standard) var(--ease-standard), visibility var(--dur-standard);
+  }
+  .beside-ghost.is-on { opacity: 1; visibility: visible; }
+  .beside-ghost.is-on.is-under { opacity: 0.35; }
+  .beside-ghost-title { @apply text-base font-semibold text-fg; }
+  .beside-ghost-sub { @apply text-xs text-fg-secondary; }
+
+  /* The one-time tip on a very wide screen (wide_tip.js). It sits above the
+     jot tab in the lower right. */
+  .wide-tip {
+    @apply fixed z-40 flex flex-col gap-1.5 p-4 rounded-xl border border-edge bg-surface text-sm text-fg-body shadow-xl;
+    right: 1.5rem; bottom: 4.5rem; width: 24rem; max-width: calc(100vw - 3rem); line-height: 1.45;
+    animation: wide-tip-in var(--dur-standard) var(--ease-out) both;
+  }
+  @keyframes wide-tip-in { from { opacity: 0; transform: translateY(0.5rem); } }
+  @media (prefers-reduced-motion: reduce) { .wide-tip { animation: none; } }
+  .wide-tip__title { @apply font-semibold text-fg; }
+  .wide-tip kbd { @apply px-1 rounded border border-edge bg-surface-alt text-xs font-sans; border-bottom-width: 2px; }
+  .wide-tip__acts { @apply flex items-center gap-3 mt-1; }
+  .wide-tip__quiet { @apply text-sm text-accent; }
+  .wide-tip__quiet:hover { @apply underline; }
+
+  /* The beside icon on rows that list pages shows only when a page fits. */
+  a[data-beside-open] { display: none; }
+  html[data-beside-room] a[data-beside-open] {
+    @apply inline-flex items-center justify-center w-6 h-6 rounded text-fg-muted border border-transparent opacity-0;
+  }
+  html[data-beside-room] :hover > a[data-beside-open], html[data-beside-room] a[data-beside-open]:focus-visible { opacity: 1; }
+  html[data-beside-room] a[data-beside-open]:hover { @apply text-fg border-edge bg-surface-alt; }
+  a[data-beside-open] i { font-size: 0.75rem; }
+
   /* ---- Find/Replace Bar ---- */
   .chronicle-find-bar {
     @apply flex flex-col gap-1 px-3 py-2 border-b border-edge-light;

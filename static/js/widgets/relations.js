@@ -191,6 +191,17 @@ Chronicle.register('relations', {
       }
       item.appendChild(nameWrap);
 
+      // Opens the page beside this one; beside.js shows it only when it fits.
+      var besideLink = document.createElement('a');
+      besideLink.href = entityHref;
+      besideLink.className = 'rel-beside';
+      besideLink.setAttribute('data-beside-open', '');
+      besideLink.setAttribute('data-beside-name', rel.targetEntityName || 'Unknown Entity');
+      besideLink.title = 'Open beside this page';
+      besideLink.setAttribute('aria-label', 'Open ' + (rel.targetEntityName || 'page') + ' beside this page');
+      besideLink.innerHTML = '<i class="fa-solid fa-table-columns" aria-hidden="true"></i>';
+      item.appendChild(besideLink);
+
       // Delete button (editable only).
       if (config.editable) {
         var delBtn = document.createElement('button');

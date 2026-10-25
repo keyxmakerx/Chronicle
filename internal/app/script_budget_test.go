@@ -18,7 +18,7 @@ import (
 // adds a script here must raise these numbers in the same PR and say why.
 // When a feature moves out, lower them to the new totals.
 const (
-	everyPageScriptBudget     = 98
+	everyPageScriptBudget     = 99
 	everyPageGzipBudgetKB     = 948
 	everyPageScriptReportRows = 15
 )

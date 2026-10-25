@@ -57,6 +57,15 @@ func IsHTMX(c echo.Context) bool {
 		h.Get("HX-History-Restore-Request") != "true"
 }
 
+// IsSameOriginFrame reports whether this request loads a page inside a frame
+// on one of Chronicle's own pages: a page opened beside another
+// (static/js/beside.js). Browsers set both headers themselves, so another
+// site framing Chronicle always says cross-site here.
+func IsSameOriginFrame(c echo.Context) bool {
+	h := c.Request().Header
+	return h.Get("Sec-Fetch-Dest") == "iframe" && h.Get("Sec-Fetch-Site") == "same-origin"
+}
+
 // IsAPIRequest reports whether the caller expects JSON rather than HTML: the
 // path is under /api, or the request sent or asked for JSON (Content-Type or
 // Accept: application/json). The header checks catch fetch() widgets under
