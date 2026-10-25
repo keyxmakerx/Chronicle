@@ -110,10 +110,12 @@ const (
 	// summaryMax and noteMax match the call log's columns.
 	summaryMax = 200
 	noteMax    = 120
-	// changesMax caps one request's blocks; requestsWaiting caps how many
+	// changesMax caps one request's size and blocksMax its blocks, which
+	// keeps what checking it costs small; requestsWaiting caps how many
 	// wait for the owner at once, so an AI can't bury them; requestsKept
 	// is how many answered ones are kept for the page.
 	changesMax      = 256 * 1024
+	blocksMax       = 200
 	requestsWaiting = 20
 	requestsKept    = 100
 )

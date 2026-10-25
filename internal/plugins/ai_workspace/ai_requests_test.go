@@ -169,7 +169,7 @@ func TestRequest_ReviewThenApply(t *testing.T) {
 		t.Fatalf("review: %d %s", rec.Code, html)
 	}
 	for _, want := range []string{
-		`name="ai_request" value="1"`, `hx-target="#ai-request-review-host"`, `name="rec_0_include"`,
+		`name="ai_request" value="1"`, `hx-target="#ai-request-1-review"`, `name="rec_0_include"`,
 		`id="ai-import-review-host" hx-swap-oob="innerHTML"`, "Tavern names", "Not now",
 	} {
 		if !strings.Contains(html, want) {
@@ -194,6 +194,11 @@ func TestRequest_ReviewThenApply(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), `id="ai-requests"`) || !strings.Contains(rec.Body.String(), `hx-swap-oob="true"`) {
 		t.Error("the requests list wasn't refreshed")
+	}
+	// The card goes with the answered request, so the result lands above
+	// the list.
+	if got := rec.Header().Get("HX-Retarget"); got != "#ai-request-result" || !strings.Contains(rec.Body.String(), "Made 1 of 1 change.") {
+		t.Errorf("result retargeted to %q: %s", got, rec.Body)
 	}
 	// Answered, so it can't be reviewed again.
 	if rec := post(t, h.ParseImport, "/campaigns/camp-1/ai-workspace/import/parse", url.Values{"ai_request": {"1"}}); rec.Code == http.StatusOK {

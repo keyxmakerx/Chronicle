@@ -18,6 +18,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/aiexport"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/connector"
+	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/importer"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -604,4 +605,19 @@ func sittingWhen(v ConnectView, t time.Time) string {
 // clockText is a time of day in the owner's zone: "2:44 pm".
 func clockText(v ConnectView, t time.Time) string {
 	return strings.ToLower(t.In(v.Loc).Format("3:04 PM"))
+}
+
+// doneLine says what a request's Apply made: "Made 5 of 6 changes. You
+// left 1 out."
+func doneLine(r importer.CommitResult) string {
+	made := r.Created + r.Renamed + r.Updated + r.Deleted
+	total := made + r.Skipped + r.Failed
+	line := fmt.Sprintf("Made %d of %s.", made, plural(total, "change"))
+	if r.Skipped > 0 {
+		line += fmt.Sprintf(" You left %d out.", r.Skipped)
+	}
+	if r.Failed > 0 {
+		line += fmt.Sprintf(" %d couldn't be made; see what changed.", r.Failed)
+	}
+	return line
 }

@@ -121,3 +121,44 @@
 @media (prefers-reduced-motion: reduce) {
   .aic-ov-enter, .aic-ov-leave, .aic-ov-enter .aic-sheet { transition: none; }
 }
+
+/* A request's review unfolds inside its card: Review and Turn down step
+ * aside, the changes slide in one after another, and Not now folds them
+ * back. The review sits flush in the card rather than as a card of its own. */
+.aic-request:has(.aic-req-review > *) .aic-req-actions { display: none; }
+.aic-req-review:not(:empty) { margin: 14px -20px -16px; border-top: 1px solid var(--color-border-light); }
+.aic-req-review .air { border: 0; box-shadow: none; margin: 0; border-radius: 0 0 12px 12px; background: transparent; overflow: visible; }
+.aic-req-review > form { animation: aic-unfold 320ms cubic-bezier(.2, .7, .2, 1) both; }
+.aic-req-review .air-row { position: relative; animation: aic-row-in 260ms cubic-bezier(.2, .7, .2, 1) both; }
+.aic-req-review .air-row:nth-child(2) { animation-delay: 80ms; }
+.aic-req-review .air-row:nth-child(3) { animation-delay: 120ms; }
+.aic-req-review .air-row:nth-child(4) { animation-delay: 160ms; }
+.aic-req-review .air-row:nth-child(5) { animation-delay: 200ms; }
+.aic-req-review .air-row:nth-child(n+6) { animation-delay: 240ms; }
+.aic-req-review.aic-folding > form { animation: aic-fold 240ms cubic-bezier(.4, 0, .6, 1) both; }
+@keyframes aic-unfold { 0% { max-height: 0; opacity: .2; overflow: hidden; } 99% { max-height: 2400px; opacity: 1; overflow: hidden; } 100% { max-height: none; opacity: 1; overflow: visible; } }
+@keyframes aic-fold { from { max-height: 1200px; opacity: 1; overflow: hidden; } to { max-height: 0; opacity: 0; overflow: hidden; } }
+@keyframes aic-row-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* The peek: a page's text beside its row, over the side column, while the
+ * row is pointed at or has focus. Only where there is room for it. */
+.air-peek { display: none; }
+@media (min-width: 1024px) {
+  .aic-req-review .air-peek { display: flex; flex-direction: column; gap: 2px; position: absolute; left: calc(100% + 34px); top: 0; width: 19rem; z-index: 5; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--color-border); background: var(--color-bg-secondary); box-shadow: var(--elev-hover); opacity: 0; transform: translateX(-6px); pointer-events: none; transition: opacity 160ms var(--ease-standard, ease), transform 160ms var(--ease-standard, ease); }
+  .aic-req-review .air-row:hover .air-peek, .aic-req-review .air-row:focus-within .air-peek { opacity: 1; transform: none; }
+}
+.air-peek-head { font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-text-secondary); }
+.air-peek b { color: var(--color-text-primary); }
+.air-peek-text { font-size: 0.8125rem; color: var(--color-text-body); white-space: pre-line; overflow-wrap: anywhere; }
+
+/* What a request's Apply made: one line, the full result folded under it. */
+.aic-done { border: 1px solid rgb(var(--color-ok-rgb)); background: rgb(var(--color-ok-rgb) / 0.08); border-radius: 12px; padding: 12px 18px; animation: aic-row-in 240ms ease-out both; }
+.aic-done-line { color: var(--color-text-primary); font-size: 0.9rem; }
+.aic-done-line i { color: rgb(var(--color-ok-rgb)); }
+.aic-done-more > summary { cursor: pointer; font-size: 0.8125rem; color: var(--color-accent); padding-top: 4px; }
+.aic-done-more .card { box-shadow: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .aic-req-review > form, .aic-req-review .air-row, .aic-req-review.aic-folding > form, .aic-done { animation-duration: 1ms; animation-delay: 0ms; }
+  .aic-req-review .air-peek { transition: none; }
+}

@@ -272,3 +272,20 @@ func TestAsk_CampaignCheck(t *testing.T) {
 		})
 	}
 }
+
+// A request of more blocks than one review should hold is refused before
+// anything is checked against the campaign.
+func TestAsk_TooManyBlocks(t *testing.T) {
+	s, sess, repo := askRig(t)
+	checked := false
+	s.Asks.(*Service).SetCheck(func(context.Context, string, string) ([]string, error) { checked = true; return nil, nil })
+	block := "---\nname: P%d\n---\n\nx\n\n"
+	var b strings.Builder
+	for i := 0; i <= blocksMax; i++ {
+		fmt.Fprintf(&b, block, i)
+	}
+	tr := toolText(t, s.Handle(context.Background(), sess, callBody(toolAsk, map[string]any{"summary": "many", "changes": b.String()})))
+	if !tr.IsError || !strings.Contains(tr.Content[0].Text, fmt.Sprintf("send at most %d", blocksMax)) || checked || len(repo.reqs) != 0 {
+		t.Errorf("reply %+v, checked %v, kept %d", tr, checked, len(repo.reqs))
+	}
+}

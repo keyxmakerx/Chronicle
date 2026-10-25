@@ -38,10 +38,7 @@ templ aiCopyPasteSection(cc *campaigns.CampaignContext) {
 				const t = e.target;
 				if (t && (t.closest('input, textarea, select') || t.isContentEditable)) return;
 				// A review already open, here or of a request, keeps the paste.
-				for (const id of ['ai-import-review-host', 'ai-request-review-host']) {
-					const host = document.getElementById(id);
-					if (host && host.querySelector('form')) return;
-				}
+				if (document.querySelector('#ai-import-review-host form, .aic-req-review form')) return;
 				const text = e.clipboardData && e.clipboardData.getData('text/plain');
 				const area = document.getElementById('ai-import-paste-area');
 				if (!text || !text.trim() || !area) return;

@@ -360,7 +360,11 @@ func checkChanges(changes string) (counts string, blocks int, err error) {
 	}
 	var add, change, remove int
 	var problems []string
-	for _, p := range importer.Parse(changes) {
+	parsed := importer.Parse(changes)
+	if len(parsed) > blocksMax {
+		return "", 0, fmt.Errorf("changes has %d blocks; send at most %d in one request", len(parsed), blocksMax)
+	}
+	for _, p := range parsed {
 		n := p.SourceIndex + 1
 		kind := strings.ToLower(strings.TrimSpace(p.FrontMatter.Kind))
 		switch {

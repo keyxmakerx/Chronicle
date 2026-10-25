@@ -19,7 +19,7 @@ import (
 templ AIPageView(cc *campaigns.CampaignContext, v ConnectView) {
 	@layouts.App(cc.Campaign.Name + " - Your AI") {
 		<link rel="stylesheet" href={ layouts.AssetURL("/static/css/ai_page.css") }/>
-		<div class="max-w-6xl mx-auto px-4 py-6" data-ai-page>
+		<div class="max-w-6xl mx-auto px-4 py-6" data-ai-page x-data @htmx:before-request={ aiPageReviews }>
 			@layouts.ManageHeader("Your AI")
 			<p class="-mt-4 mb-6 text-sm text-fg-secondary max-w-prose">
 				Connect your AI app once. It reads what you allow and asks for changes here, and you say yes or no to each one. No copying back and forth.
@@ -30,6 +30,10 @@ templ AIPageView(cc *campaigns.CampaignContext, v ConnectView) {
 	}
 }
 
+// aiPageReviews empties every other request's review when a review starts
+// loading, here or in copy and paste.
+const aiPageReviews = `const t = $event.detail.target; if (t && (t.id === 'ai-import-review-host' || t.classList.contains('aic-req-review'))) document.querySelectorAll('.aic-req-review').forEach((h) => { if (h !== t) h.innerHTML = '' })`
+
 // aiConnectSection is the part the connect, pause, change, new-key and
 // disconnect requests swap. With a working key, setup sits in the side
 // column; without one, making a key takes the main column. The requests and
@@ -39,8 +43,8 @@ templ aiConnectSection(v ConnectView) {
 		if hasKey(v) {
 			<div class="aic-grid">
 				<div class="aic-area-req space-y-4">
+					<div id={ requestResultHost }></div>
 					@aiRequests(v, false)
-					<div id={ requestReviewHost }></div>
 					<div x-show="renew" x-cloak x-collapse.duration.200ms>
 						@aiConnectForm(v, true)
 					</div>
@@ -56,8 +60,8 @@ templ aiConnectSection(v ConnectView) {
 		} else {
 			<div class="space-y-8">
 				<div class="space-y-4">
+					<div id={ requestResultHost }></div>
 					@aiRequests(v, false)
-					<div id={ requestReviewHost }></div>
 				</div>
 				if !v.Available {
 					<section class="aic-panel">
@@ -475,7 +479,8 @@ templ aiLogRow(v ConnectView, call connector.Call) {
 // aiRequests is what the connected AI asked for and the owner hasn't
 // answered yet, newest first. While the page is open it asks every 30
 // seconds whether anything new came in; the answer is empty (204, nothing
-// swapped) until something did, so an open "Turn down?" is never reset.
+// swapped) until something did, so an open "Turn down?" is never reset. The
+// poll skips while a review is open in a card, since redrawing would close it.
 // oob marks it to replace the list from another response.
 templ aiRequests(v ConnectView, oob bool) {
 	<div
@@ -487,6 +492,8 @@ templ aiRequests(v ConnectView, oob bool) {
 		if v.Available {
 			hx-get={ fmt.Sprintf("/campaigns/%s/ai/requests?seen=%s", v.CampaignID, requestsSeen(v.Requests)) }
 			hx-trigger="every 30s"
+			x-data
+			@htmx:before-request="if ($event.detail.elt === $el && document.querySelector('.aic-req-review form')) $event.preventDefault()"
 			hx-swap="outerHTML"
 		}
 	>
@@ -498,6 +505,7 @@ templ aiRequests(v ConnectView, oob bool) {
 
 // aiRequestCard is one waiting request: who asked, for how many changes,
 // the AI's own line in quotes, and Review or Turn down (which asks first).
+// Review unfolds the changes inside the card itself.
 templ aiRequestCard(v ConnectView, q connector.Request) {
 	<section
 		class="aic-panel aic-request"
@@ -510,11 +518,12 @@ templ aiRequestCard(v ConnectView, q connector.Request) {
 				<h2 id={ fmt.Sprintf("ai-request-%d", q.ID) } class="aic-h">{ requestHeading(q) }</h2>
 				<p class="aic-hint">{ requestLine(v, q) }</p>
 			</div>
-			<button type="button" class="quiet-word" @click="asking = !asking" :aria-expanded="asking">Turn down</button>
+			<button type="button" class="quiet-word aic-req-actions" @click="asking = !asking" :aria-expanded="asking">Turn down</button>
 			<form
+				class="aic-req-actions"
 				hx-post={ fmt.Sprintf("/campaigns/%s/ai-workspace/import/parse", v.CampaignID) }
-				hx-target={ "#" + requestReviewHost }
-				hx-swap={ fmt.Sprintf("innerHTML show:#%s:top", requestReviewHost) }
+				hx-target={ "#" + requestHost(q.ID) }
+				hx-swap="innerHTML"
 				hx-disabled-elt="find button"
 			>
 				<input type="hidden" name="ai_request" value={ strconv.FormatInt(q.ID, 10) }/>
@@ -539,23 +548,35 @@ templ aiRequestCard(v ConnectView, q connector.Request) {
 				<span class="aic-busy"><i class="fa-solid fa-spinner fa-spin mr-1.5" aria-hidden="true"></i>Turning down…</span>
 			</button>
 		</div>
+		<div id={ requestHost(q.ID) } class="aic-req-review"></div>
 	</section>
 }
 
-// requestReviewed answers a review of a request: the result in the request's
-// review host, and the requests list without it.
+// requestReviewed answers a review of a request: a short line of what was
+// made, with the full result one fold away, above the requests list without
+// the answered card.
 templ requestReviewed(d ImportResultData, v ConnectView) {
-	@ImportResult(d)
+	<section class="aic-done" role="status" aria-labelledby="ai-request-done">
+		<p id="ai-request-done" class="aic-done-line">
+			<i class="fa-solid fa-check mr-1.5" aria-hidden="true"></i>
+			{ doneLine(d.Result) }
+		</p>
+		<details class="aic-done-more">
+			<summary>See what changed</summary>
+			@ImportResult(d)
+		</details>
+	</section>
 	@aiRequests(v, true)
 }
 
-// reviewIn is a review with the other review host emptied, so only one
-// review is ever open on the page (two would share ids and keys).
+// reviewIn is a review with the paste box's review emptied when it is a
+// request's, so only one review is ever open on the page (two would share
+// ids and keys). The page empties the other requests' reviews itself
+// (aiPageReviews), since only it knows which are open.
 templ reviewIn(d ImportReviewData) {
 	@ImportReview(d)
-	if reviewHost(d) == requestReviewHost {
+	if d.RequestID > 0 {
 		<div id={ pasteReviewHost } hx-swap-oob="innerHTML"></div>
-	} else {
-		<div id={ requestReviewHost } hx-swap-oob="innerHTML"></div>
+		<div id={ requestResultHost } hx-swap-oob="innerHTML"></div>
 	}
 }

@@ -474,7 +474,7 @@ func (h *Handler) ParseImport(c echo.Context) error {
 
 	host := pasteReviewHost
 	if requestID != 0 {
-		host = requestReviewHost
+		host = requestHost(requestID)
 	}
 	return middleware.Render(c, http.StatusOK, reviewIn(ImportReviewData{
 		RequestID:      requestID,
@@ -664,6 +664,10 @@ func (h *Handler) CommitImport(c echo.Context) error {
 		if err != nil {
 			return err
 		}
+		// The card the review sat in goes with the answered request, so the
+		// result lands above the list instead.
+		c.Response().Header().Set("HX-Retarget", "#"+requestResultHost)
+		c.Response().Header().Set("HX-Reswap", "innerHTML")
 		return middleware.Render(c, http.StatusOK, requestReviewed(res, v))
 	}
 	return middleware.Render(c, http.StatusOK, ImportResult(res))
