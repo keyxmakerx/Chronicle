@@ -8,6 +8,9 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
+// AddonSlug is the add-on that switches Player Notes on for a campaign.
+const AddonSlug = "player-notes"
+
 // RegisterRoutes mounts the entity_notes REST endpoints. All routes
 // require campaign membership at minimum (RolePlayer); audience checks
 // further restrict what each viewer can see/write inside the service.
@@ -23,7 +26,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	g := e.Group("/campaigns/:id",
 		auth.RequireAuth(authSvc),
 		campaigns.RequireCampaignAccess(campaignSvc),
-		addons.RequireAddon(addonSvc, "player-notes"),
+		addons.RequireAddon(addonSvc, AddonSlug),
 		campaigns.RequireRole(campaigns.RolePlayer),
 	)
 	g.GET("/entities/:eid/notes", h.List)

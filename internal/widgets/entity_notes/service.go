@@ -23,6 +23,10 @@ type Service interface {
 	// List returns the notes on an entity that viewer can read.
 	List(ctx context.Context, entityID string, viewer ViewerContext) ([]Note, error)
 
+	// ListInCampaign returns the notes on every page of the viewer's
+	// campaign that viewer can read, newest first.
+	ListInCampaign(ctx context.Context, viewer ViewerContext) ([]Note, error)
+
 	// Get returns one note if viewer can read it. Returns NotFound
 	// (rather than Forbidden) when the viewer can't see it, to avoid
 	// leaking existence to unprivileged users.
@@ -128,6 +132,17 @@ func (s *service) List(ctx context.Context, entityID string, viewer ViewerContex
 		return nil, apperror.NewBadRequest("entity ID is required")
 	}
 	notes, err := s.repo.ListByEntity(ctx, entityID, viewer)
+	if err != nil {
+		return nil, apperror.NewInternal(err)
+	}
+	return notes, nil
+}
+
+func (s *service) ListInCampaign(ctx context.Context, viewer ViewerContext) ([]Note, error) {
+	if viewer.CampaignID == "" || viewer.UserID == "" {
+		return nil, apperror.NewBadRequest("campaign and viewer are required")
+	}
+	notes, err := s.repo.ListByCampaign(ctx, viewer)
 	if err != nil {
 		return nil, apperror.NewInternal(err)
 	}

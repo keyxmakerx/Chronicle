@@ -8,6 +8,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/records"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
+	"github.com/keyxmakerx/chronicle/internal/widgets/entity_notes"
 )
 
 type fakeAddonSwitch struct {
@@ -25,12 +26,12 @@ func TestAIFeatureGate(t *testing.T) {
 		sw   fakeAddonSwitch
 		want map[string]string
 	}{
-		{"all on", fakeAddonSwitch{on: map[string]bool{calendar.PluginSlug: true, sessions.SessionsAddonSlug: true, "maps": true}}, map[string]string{}},
+		{"all on", fakeAddonSwitch{on: map[string]bool{calendar.PluginSlug: true, sessions.SessionsAddonSlug: true, "maps": true, entity_notes.AddonSlug: true}}, map[string]string{}},
 		{"new campaign", fakeAddonSwitch{on: map[string]bool{}}, map[string]string{
 			records.KindCalendar: "Calendar", "event": "Calendar", "weather": "Calendar", "roll-night": "Calendar", "moon": "Calendar",
-			"game-night": "Game nights", "map": "Maps", "pin": "Maps",
+			"game-night": "Game nights", "map": "Maps", "pin": "Maps", records.KindPlayerNote: "Player Notes",
 		}},
-		{"calendar off, game nights on", fakeAddonSwitch{on: map[string]bool{sessions.SessionsAddonSlug: true, "maps": true}}, map[string]string{
+		{"calendar off, game nights on", fakeAddonSwitch{on: map[string]bool{sessions.SessionsAddonSlug: true, "maps": true, entity_notes.AddonSlug: true}}, map[string]string{
 			records.KindCalendar: "Calendar", "event": "Calendar", "weather": "Calendar", "roll-night": "Calendar", "moon": "Calendar",
 			"game-night": "Calendar",
 		}},
