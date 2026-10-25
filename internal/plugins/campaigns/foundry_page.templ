@@ -92,11 +92,11 @@ templ foundrySummaryStrip(row FoundryRowData, checks []FoundryCheck) {
 				<span class="text-fg-muted">&middot; { lowerFirst(row.Status.Text) }</span>
 			}
 		</a>
-		<a href="#foundry-version" class="card px-3 py-2 text-sm text-fg hover:bg-surface-alt">
+		<a href="#foundry-version" class="card px-3 py-2 text-sm text-fg hover:bg-surface-alt" title="The Chronicle Sync version your Foundry world last reported">
 			if row.ModuleVersion != "" {
-				Module <b class="tabular-nums">{ row.ModuleVersion }</b>
+				In Foundry: <b class="tabular-nums">{ row.ModuleVersion }</b>
 			} else {
-				Module version <b>unknown</b>
+				In Foundry: <b>unknown</b>
 			}
 		</a>
 		if n := foundryChecksNeedingLook(checks); n > 0 {
