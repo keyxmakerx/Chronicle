@@ -860,6 +860,31 @@ func TestStyleKitChoice(t *testing.T) {
 	}
 }
 
+func TestDmScreenKitChoice(t *testing.T) {
+	tests := []struct {
+		name    string
+		v       string
+		prev    *Appearance
+		want    string
+		wantErr bool
+	}{
+		{"not sent, nothing stored", "", nil, "", false},
+		{"not sent keeps the kit", "", &Appearance{DmScreenKit: "ornate"}, "ornate", false},
+		{"same clears it", "same", &Appearance{DmScreenKit: "ornate"}, "", false},
+		{"Material is kept as a real choice", "material", nil, "material", false},
+		{"a kit", "lumen", nil, "lumen", false},
+		{"unknown refused", "glossy", nil, "", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := dmScreenKitChoice(tt.v, tt.prev)
+			if (err != nil) != tt.wantErr || got != tt.want {
+				t.Errorf("dmScreenKitChoice(%q) = %q, %v; want %q", tt.v, got, err, tt.want)
+			}
+		})
+	}
+}
+
 func TestTimelinePopupChoice(t *testing.T) {
 	tests := []struct {
 		name    string
