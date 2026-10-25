@@ -135,6 +135,9 @@ type Lookups struct {
 	// Menu gives the owner's AI the sidebar menu's category order; nil
 	// leaves it out.
 	Menu MenuAPI
+	// Scenes answers `what: scenes` from what Foundry last reported; nil
+	// says it can't be looked up.
+	Scenes FoundryScenesAPI
 }
 
 // LookupAnswer is one lookup's result: the chip shown on screen and the
@@ -157,6 +160,7 @@ var lookupWhats = []struct{ what, keys, brief string }{
 	{"weather", "`from` and `to`, or `year` and `month`", "each day's weather in a date range"},
 	{"table", "optional `name`", "rolling tables, or one table's entries"},
 	{"pins", "optional `map`", "maps, or one map's pins"},
+	{"scenes", "optional `name` (part of a scene's name or folder)", "the scenes in the campaign's Foundry world, as Foundry last reported them, which says which maps already exist there (owner and co-DM only)"},
 	{"stock", "`shop`", "what a shop sells"},
 	{"inventory", "`character`", "what a character carries"},
 	{"notes", "none", "the titles of my own notes"},
@@ -257,6 +261,8 @@ func (run *lookupRun) one(what string, r Record) LookupAnswer {
 		ans, err = run.table(r.Name)
 	case "pins", "map", "maps":
 		ans, err = run.pins(firstNonEmpty(r.Str("map"), r.Name))
+	case "scenes", "scene", "foundry-scenes":
+		ans, err = run.scenes(firstNonEmpty(r.Name, r.Str("scene")))
 	case "stock", "shop":
 		ans, err = run.links(firstNonEmpty(r.Str("shop"), r.Name), "sells", "Stock")
 	case "inventory":

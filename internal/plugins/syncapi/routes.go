@@ -321,6 +321,9 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 		// Who is in the Foundry world and which member each user is linked
 		// to, from the GM's client. Owner or DM access only (in the handler).
 		cg.POST("/sync/players", api.history.ReportPlayers, RequirePermission(PermSync))
+		// The world's scenes, so the owner can see which maps exist in
+		// Foundry. Owner or DM access only (in the handler).
+		cg.POST("/sync/scenes", api.history.ReportScenes, RequirePermission(PermSync))
 	}
 
 	// Quests: boards, sheets and rewards for the Foundry module. Owner or
