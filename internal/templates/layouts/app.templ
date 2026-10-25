@@ -18,6 +18,32 @@ import "github.com/keyxmakerx/chronicle/internal/sanitize"
 // App renders the authenticated layout with sidebar navigation and a
 // topbar. The main content area is where page-specific content goes.
 templ App(title string) {
+	if IsPane(ctx) {
+		@paneApp(title) {
+			{ children... }
+		}
+	} else {
+		@fullApp(title) {
+			{ children... }
+		}
+	}
+}
+
+// paneApp draws a page opened beside another (static/js/beside.js): only its
+// content, since the page around it already has the sidebar and header.
+templ paneApp(title string) {
+	@Base(title) {
+		<main class="h-screen overflow-y-auto px-3 py-3 md:px-5 md:py-4 bg-surface" id="main-content" data-beside-doc>
+			if InCampaign(ctx) {
+				<span hidden data-nav-current={ navCurrentKey(ctx) } data-nav-page={ navCurrentPage(ctx) }></span>
+			}
+			{ children... }
+		</main>
+	}
+}
+
+// fullApp is the full page: sidebar, header, and the row of pages.
+templ fullApp(title string) {
 	@Base(title) {
 		<!-- Global HTMX loading indicator (thin bar at top of viewport) -->
 		<div id="htmx-indicator" class="htmx-indicator"></div>
@@ -118,16 +144,19 @@ templ App(title string) {
 					></div>
 				}
 
-				<!-- Page content (scrollable) -->
-				<main class="flex-1 overflow-y-auto px-3 py-3 md:px-5 md:py-4 bg-surface" id="main-content">
-					if InCampaign(ctx) {
-						<!-- Which sidebar row this page belongs to, and its name. A
-						     boosted navigation swaps only #main-content, so this is
-						     how sidebar_nav.js learns where the viewer now is. -->
-						<span hidden data-nav-current={ navCurrentKey(ctx) } data-nav-page={ navCurrentPage(ctx) }></span>
-					}
-					{ children... }
-				</main>
+				<!-- Page content (scrollable). The row also holds the pages opened
+				     beside it (static/js/beside.js). -->
+				<div id="beside-row" class="flex-1 flex min-h-0 min-w-0">
+					<main class="flex-1 min-w-0 overflow-y-auto px-3 py-3 md:px-5 md:py-4 bg-surface" id="main-content">
+						if InCampaign(ctx) {
+							<!-- Which sidebar row this page belongs to, and its name. A
+							     boosted navigation swaps only #main-content, so this is
+							     how sidebar_nav.js learns where the viewer now is. -->
+							<span hidden data-nav-current={ navCurrentKey(ctx) } data-nav-page={ navCurrentPage(ctx) }></span>
+						}
+						{ children... }
+					</main>
+				</div>
 				if InSiteAdmin(ctx) {
 					@AdminStatusStrip()
 				}

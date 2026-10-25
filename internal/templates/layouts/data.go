@@ -23,6 +23,7 @@ const (
 	keyUserAvatarPath      ctxKey = "layout_user_avatar_path"
 	keyIsAdmin             ctxKey = "layout_is_admin"
 	keyIsGuest             ctxKey = "layout_is_guest"
+	keyIsPane              ctxKey = "layout_is_pane"
 	keyCampaignID          ctxKey = "layout_campaign_id"
 	keyCampaignName        ctxKey = "layout_campaign_name"
 	keyCampaignRole        ctxKey = "layout_campaign_role"
@@ -117,6 +118,19 @@ func SetIsGuest(ctx context.Context, isGuest bool) context.Context {
 // IsGuest reports whether the signed-in person is a guest.
 func IsGuest(ctx context.Context) bool {
 	v, _ := ctx.Value(keyIsGuest).(bool)
+	return v
+}
+
+// SetIsPane marks a page drawn inside a pane beside another page: it gets
+// only its content, since the page around it already has the sidebar and
+// header.
+func SetIsPane(ctx context.Context, pane bool) context.Context {
+	return context.WithValue(ctx, keyIsPane, pane)
+}
+
+// IsPane reports whether the page is drawn inside a pane beside another.
+func IsPane(ctx context.Context) bool {
+	v, _ := ctx.Value(keyIsPane).(bool)
 	return v
 }
 

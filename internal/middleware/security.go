@@ -15,6 +15,15 @@ func SecurityHeaders() echo.MiddlewareFunc {
 		return func(c echo.Context) error {
 			h := c.Response().Header()
 
+			// Framing is refused, except a page Chronicle frames itself to
+			// show beside another. Only this site's own pages can do that;
+			// every other site is still refused.
+			frameAncestors, frameOptions := "'none'", "DENY"
+			if IsSameOriginFrame(c) {
+				frameAncestors, frameOptions = "'self'", "SAMEORIGIN"
+			}
+			h.Add("Vary", "Sec-Fetch-Dest, Sec-Fetch-Site")
+
 			// Content-Security-Policy: restrict what resources the browser can load.
 			// 'self' allows resources from the same origin only.
 			//
@@ -32,7 +41,7 @@ func SecurityHeaders() echo.MiddlewareFunc {
 					"img-src 'self' data: blob:; "+
 					"font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; "+
 					"connect-src 'self'; "+
-					"frame-ancestors 'none'; "+
+					"frame-ancestors "+frameAncestors+"; "+
 					"base-uri 'self'; "+
 					"form-action 'self'",
 			)
@@ -53,7 +62,7 @@ func SecurityHeaders() echo.MiddlewareFunc {
 
 			// X-Frame-Options: prevent clickjacking (redundant with CSP frame-ancestors
 			// but some older browsers only support this header).
-			h.Set("X-Frame-Options", "DENY")
+			h.Set("X-Frame-Options", frameOptions)
 
 			// Referrer-Policy: limit referrer information leaked to external sites.
 			h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
