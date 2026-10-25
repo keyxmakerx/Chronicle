@@ -63,7 +63,16 @@ type Service struct {
 	now    func() time.Time
 	limits *limiter
 	calls  atomic.Int64
+	check  ChangesCheck
 }
+
+// ChangesCheck looks at what an AI asks for against the campaign and returns
+// the problems it can fix itself; nil means none. An error only skips the
+// check, since the owner's review checks everything again.
+type ChangesCheck func(ctx context.Context, campaignID, changes string) ([]string, error)
+
+// SetCheck adds a check that runs when an AI asks for changes. Optional.
+func (s *Service) SetCheck(f ChangesCheck) { s.check = f }
 
 // NewService creates the connector service.
 func NewService(repo Repository, owners Owners) *Service {
@@ -210,6 +219,14 @@ func (s *Service) Ask(ctx context.Context, c *Connection, summary, changes strin
 	if err != nil {
 		return nil, err
 	}
+	if s.check != nil {
+		problems, err := s.check(ctx, c.CampaignID, changes)
+		if err != nil {
+			slog.Warn("ai-connector: changes check failed", slog.String("campaign_id", c.CampaignID), slog.Any("error", err))
+		} else if len(problems) > 0 {
+			return nil, unusable(problems)
+		}
+	}
 	app := c.ClientName
 	if app == "" {
 		app = "Your AI"
@@ -305,10 +322,7 @@ func checkChanges(changes string) (counts string, blocks int, err error) {
 		}
 	}
 	if len(problems) > 0 {
-		if len(problems) > 5 {
-			problems = append(problems[:5], fmt.Sprintf("and %d more", len(problems)-5))
-		}
-		return "", 0, errors.New("the owner couldn't use it: " + strings.Join(problems, "; "))
+		return "", 0, unusable(problems)
 	}
 	blocks = add + change + remove
 	if blocks == 0 {
@@ -324,6 +338,14 @@ func checkChanges(changes string) (counts string, blocks int, err error) {
 		}
 	}
 	return strings.Join(parts, ", "), blocks, nil
+}
+
+// unusable refuses a request with its first few problems, for the AI to fix.
+func unusable(problems []string) error {
+	if len(problems) > 5 {
+		problems = append(problems[:5:5], fmt.Sprintf("and %d more", len(problems)-5))
+	}
+	return errors.New("the owner couldn't use it: " + strings.Join(problems, "; "))
 }
 
 // cleanClientName keeps the plain characters of an app's name, cut short.

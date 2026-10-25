@@ -157,7 +157,7 @@ templ aiNewKey(v ConnectView) {
 				<ol>
 					<li>Open Customize, then Connectors, then Add custom connector.</li>
 					<li>Name it Chronicle and paste the address above as the server URL.</li>
-					<li>For sign-in, pick No sign-in. Under Request headers, pick <code>authorization</code> and paste this as its value:
+					<li>For sign-in, pick No sign-in, even if Claude marks Sign in now as Detected: Chronicle uses this key instead. Under Request headers, pick <code>authorization</code> and paste this as its value:
 						@aiCopyField("bearer", "", claudeHeaderValue(v.NewKey))
 					</li>
 					<li>Press Add, then turn Chronicle on in a chat from the + menu.</li>
