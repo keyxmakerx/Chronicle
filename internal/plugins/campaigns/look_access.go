@@ -261,7 +261,11 @@ func (p LookPart) campaignChoice(ap *Appearance) string {
 		case LookPartHover:
 			v = ap.HoverCard
 		case LookPartDmScreen:
+			// The screen wears the pages' kit unless the owner gave it its own.
 			v = ap.StyleKit
+			if ap.DmScreenKit != "" {
+				v = ap.DmScreenKit
+			}
 		}
 	}
 	if slices.Contains(p.Choices, v) {

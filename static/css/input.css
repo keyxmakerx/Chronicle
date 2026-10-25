@@ -6757,7 +6757,6 @@ mark.era-w { background: var(--era-hl-strong); color: inherit; border-radius: 3p
 /* Manage pages split on a big monitor: the main list (.manage-split-main)
    takes the left and every other panel stacks in a side column. Below that
    it is one column in page order, so nothing moves on a laptop or phone.
-   .manage-split-flat lets an HTMX swap target's panels join the split.
    The main block spans every row and the last row is 1fr, so a tall list
    grows that row instead of spreading the side panels apart. */
 .manage-split > :not([hidden]) ~ :not([hidden]) { margin-top: 1.5rem; }
@@ -6769,12 +6768,9 @@ mark.era-w { background: var(--era-hl-strong); color: inherit; border-radius: 3p
     column-gap: 1.5rem;
     align-items: start;
   }
-  .manage-split .manage-split-flat { display: contents; }
-  .manage-split > :not(.manage-split-main),
-  .manage-split .manage-split-flat > :not(.manage-split-main) { grid-column: 2; margin: 0 0 1.5rem; }
+  .manage-split > :not(.manage-split-main) { grid-column: 2; margin: 0 0 1.5rem; }
   .manage-split > :not([hidden]) ~ :not([hidden]) { margin-top: 0; }
-  .manage-split > :empty,
-  .manage-split .manage-split-flat > :empty { margin: 0; }
+  .manage-split > :empty { margin: 0; }
   .manage-split .manage-split-main { grid-column: 1; grid-row: 1 / -1; margin: 0; }
 }
 

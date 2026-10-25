@@ -2,9 +2,11 @@ package ai_workspace
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -13,19 +15,44 @@ import (
 
 	"github.com/labstack/echo/v4"
 
+	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/aiexport"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/connector"
 )
 
-// reqRepo is just enough of the connector's repository for its requests.
+// reqRepo is just enough of the connector's repository for its requests and
+// one connection.
 type reqRepo struct {
 	mu   sync.Mutex
 	reqs []*connector.Request
+	conn *connector.Connection
 }
 
 func (r *reqRepo) Replace(context.Context, *connector.Connection) (int64, error) { return 1, nil }
 func (r *reqRepo) RevokeAll(context.Context, string, time.Time) error            { return nil }
-func (r *reqRepo) Current(context.Context, string) (*connector.Connection, error) {
-	return nil, nil
+func (r *reqRepo) Current(_ context.Context, campaignID string) (*connector.Connection, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.conn == nil || r.conn.CampaignID != campaignID {
+		return nil, nil
+	}
+	cp := *r.conn
+	return &cp, nil
+}
+func (r *reqRepo) SetPaused(_ context.Context, _ string, id int64, at *time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.conn != nil && r.conn.ID == id {
+		r.conn.PausedAt = at
+	}
+	return nil
+}
+func (r *reqRepo) SetAccess(_ context.Context, _ string, id int64, privacy aiexport.PrivacyMode, canAsk bool) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.conn != nil && r.conn.ID == id {
+		r.conn.Privacy, r.conn.CanAsk = privacy, canAsk
+	}
+	return nil
 }
 func (r *reqRepo) FindByHash(context.Context, string) (*connector.Connection, error) {
 	return nil, nil
@@ -142,7 +169,7 @@ func TestRequest_ReviewThenApply(t *testing.T) {
 		t.Fatalf("review: %d %s", rec.Code, html)
 	}
 	for _, want := range []string{
-		`name="ai_request" value="1"`, `hx-target="#ai-request-review-host"`, `name="rec_0_include"`,
+		`name="ai_request" value="1"`, `hx-target="#ai-request-1-review"`, `name="rec_0_include"`,
 		`id="ai-import-review-host" hx-swap-oob="innerHTML"`, "Tavern names", "Not now",
 	} {
 		if !strings.Contains(html, want) {
@@ -167,6 +194,11 @@ func TestRequest_ReviewThenApply(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), `id="ai-requests"`) || !strings.Contains(rec.Body.String(), `hx-swap-oob="true"`) {
 		t.Error("the requests list wasn't refreshed")
+	}
+	// The card goes with the answered request, so the result lands above
+	// the list.
+	if got := rec.Header().Get("HX-Retarget"); got != "#ai-request-result" || !strings.Contains(rec.Body.String(), "Made 1 of 1 change.") {
+		t.Errorf("result retargeted to %q: %s", got, rec.Body)
 	}
 	// Answered, so it can't be reviewed again.
 	if rec := post(t, h.ParseImport, "/campaigns/camp-1/ai-workspace/import/parse", url.Values{"ai_request": {"1"}}); rec.Code == http.StatusOK {
@@ -276,5 +308,104 @@ func TestRequest_StayAfterDisconnect(t *testing.T) {
 	v.Requests = []connector.Request{{ID: 1, Blocks: 1, Counts: "1 to add", CreatedAt: time.Now()}}
 	if !strings.Contains(renderConnect(t, v), stays) {
 		t.Error("confirm doesn't say waiting requests stay")
+	}
+}
+
+// auditLog keeps the events the page logs.
+type auditLog struct{ events []string }
+
+func (a *auditLog) LogCampaignEvent(_ context.Context, _ string, action string, details map[string]any) {
+	a.events = append(a.events, action+" "+fmtDetails(details))
+}
+
+func fmtDetails(d map[string]any) string {
+	keys := make([]string, 0, len(d))
+	for k := range d {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var b strings.Builder
+	for _, k := range keys {
+		fmt.Fprintf(&b, "%s=%v ", k, d[k])
+	}
+	return strings.TrimSpace(b.String())
+}
+
+// Pause, Resume and Change act on the key the page shows, re-render the
+// section in its new state, and are logged; letting the AI see what the
+// owner sees needs the page's confirmation.
+func TestConnection_PauseAndChange(t *testing.T) {
+	future := time.Now().Add(time.Hour)
+	used := time.Now()
+	repo := &reqRepo{conn: &connector.Connection{ID: 7, CampaignID: "camp-1", ClientName: "Claude", CanAsk: true,
+		Privacy: aiexport.PrivacyModeSafe, CreatedAt: used, ExpiresAt: future, LastUsedAt: &used}}
+	h := recordsHandler(&memTables{})
+	log := &auditLog{}
+	h.SetAuditLogger(log)
+	h.SetConnector(connector.NewService(repo, anyOwner{}), "https://c.example")
+
+	if rec := post(t, h.PauseAI, "/x", url.Values{"connection": {"7"}}); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Claude is paused") {
+		t.Fatalf("pause: %d %s", rec.Code, rec.Body)
+	}
+	if repo.conn.PausedAt == nil {
+		t.Fatal("not paused")
+	}
+	if rec := post(t, h.ResumeAI, "/x", url.Values{"connection": {"7"}}); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Claude is connected") {
+		t.Fatalf("resume: %d %s", rec.Code, rec.Body)
+	}
+	if rec := post(t, h.PauseAI, "/x", url.Values{"connection": {"6"}}); rec.Code == http.StatusOK || repo.conn.PausedAt != nil {
+		t.Errorf("paused a key the page doesn't show: %d", rec.Code)
+	}
+
+	widen := url.Values{"connection": {"7"}, "sees": {"owner"}, "change": {"look"}}
+	if rec := post(t, h.ChangeAIAccess, "/x", widen); rec.Code == http.StatusOK || repo.conn.Privacy != aiexport.PrivacyModeSafe {
+		t.Errorf("widened without the confirmation: %d", rec.Code)
+	}
+	widen.Set("widen", "yes")
+	if rec := post(t, h.ChangeAIAccess, "/x", widen); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "sees what you see") {
+		t.Fatalf("change: %d %s", rec.Code, rec.Body)
+	}
+	if repo.conn.Privacy != aiexport.PrivacyModePermitted || repo.conn.CanAsk {
+		t.Errorf("after change: %+v", repo.conn)
+	}
+	// Narrowing never needs the confirmation.
+	if rec := post(t, h.ChangeAIAccess, "/x", url.Values{"connection": {"7"}, "sees": {"players"}, "change": {"ask"}}); rec.Code != http.StatusOK {
+		t.Errorf("narrow: %d %s", rec.Code, rec.Body)
+	}
+	want := []string{
+		"campaign.ai_connection.paused connection_id=7",
+		"campaign.ai_connection.resumed connection_id=7",
+		"campaign.ai_connection.changed can_ask_from=true can_ask_to=false connection_id=7 privacy_from=safe privacy_to=permitted",
+		"campaign.ai_connection.changed can_ask_from=false can_ask_to=true connection_id=7 privacy_from=permitted privacy_to=safe",
+	}
+	if strings.Join(log.events, "\n") != strings.Join(want, "\n") {
+		t.Errorf("audit:\n%s\nwant:\n%s", strings.Join(log.events, "\n"), strings.Join(want, "\n"))
+	}
+}
+
+// "What it did" redraws only when something new came in, so the sittings the
+// owner opened stay open; Show older asks for more.
+func TestAIActivity_RedrawsOnlyWhenNew(t *testing.T) {
+	h := recordsHandler(&memTables{})
+	h.SetConnector(connector.NewService(&reqRepo{}, anyOwner{}), "https://c.example")
+	get := func(query string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, "/campaigns/camp-1/ai/activity?"+query, nil)
+		rec := httptest.NewRecorder()
+		c := echo.New().NewContext(req, rec)
+		ownerCtx(c)
+		if err := h.AIActivity(c); err != nil {
+			t.Fatal(err)
+		}
+		return rec
+	}
+	if rec := get("shown=8&seen=0-8"); rec.Code != http.StatusNoContent {
+		t.Errorf("nothing new: %d", rec.Code)
+	}
+	if rec := get("shown=8&seen=5-8"); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "seen=0-8") {
+		t.Errorf("changed: %d %s", rec.Code, rec.Body)
+	}
+	// Asking for more than there are is cut to what exists, plus one step.
+	if rec := get("shown=999"); !strings.Contains(rec.Body.String(), "shown=8&amp;seen=0-8") {
+		t.Errorf("shown not clamped: %s", rec.Body)
 	}
 }

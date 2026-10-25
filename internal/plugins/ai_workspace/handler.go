@@ -81,6 +81,8 @@ type Handler struct {
 	// importFolders lets the review check a page's `folder:` name. Optional —
 	// nil refuses a page that names a folder.
 	importFolders importer.FolderAccess
+	// zone is the owner's time zone, for the Your AI page's times.
+	zone func(ctx context.Context, userID string) *time.Location
 
 	// memory remembers what AI Import applied in each campaign: the labelled
 	// parts of a split answer, and a fingerprint of every block. Optional —
@@ -472,7 +474,7 @@ func (h *Handler) ParseImport(c echo.Context) error {
 
 	host := pasteReviewHost
 	if requestID != 0 {
-		host = requestReviewHost
+		host = requestHost(requestID)
 	}
 	return middleware.Render(c, http.StatusOK, reviewIn(ImportReviewData{
 		RequestID:      requestID,
@@ -662,6 +664,10 @@ func (h *Handler) CommitImport(c echo.Context) error {
 		if err != nil {
 			return err
 		}
+		// The card the review sat in goes with the answered request, so the
+		// result lands above the list instead.
+		c.Response().Header().Set("HX-Retarget", "#"+requestResultHost)
+		c.Response().Header().Set("HX-Reswap", "innerHTML")
 		return middleware.Render(c, http.StatusOK, requestReviewed(res, v))
 	}
 	return middleware.Render(c, http.StatusOK, ImportResult(res))
@@ -1014,6 +1020,54 @@ func (h *Handler) ConnectorInstructions(ctx context.Context, campaignID, campaig
 		return "", errors.New("ai-workspace: prompt builder not configured")
 	}
 	return h.promptBuilder.Build(ctx, campaignName, userID, campaignID, h.instructionsInput())
+}
+
+// ConnectorCheck is what a connected AI is told about the changes it asks
+// for before they wait for the owner: for now, new pages filed in a folder
+// their category doesn't have. The AI can fix its own request, where the
+// owner would have to work out the right category at review. It looks up
+// categories and folders only, never pages.
+func (h *Handler) ConnectorCheck(ctx context.Context, campaignID, changes string) ([]string, error) {
+	if h.importLookup == nil || h.importFolders == nil {
+		return nil, nil
+	}
+	pages, recs := splitImport(importer.Parse(changes))
+	slips, err := importer.NewClassifier(h.importLookup, campaignID).
+		WithFolders(h.importFolders, pendingFolderNames(recs)).
+		NewPageFolderSlips(ctx, pages)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(slips))
+	for _, s := range slips {
+		out = append(out, folderSlipLine(s))
+	}
+	return out, nil
+}
+
+// folderSlipLine tells the AI what is wrong with a page's folder and how to
+// fix it, in the request's own terms.
+func folderSlipLine(s importer.FolderSlip) string {
+	head := fmt.Sprintf("block %d (%s): ", s.Block, s.Page)
+	folder := strconv.Quote(s.Folder)
+	var b strings.Builder
+	b.WriteString(head)
+	if s.NewCategory {
+		fmt.Fprintf(&b, "the category %s is new, so it has no folder %s", strconv.Quote(s.Category), folder)
+	} else {
+		fmt.Fprintf(&b, "the %s category has no folder %s", s.Category, folder)
+	}
+	switch {
+	case len(s.Elsewhere) == 1:
+		fmt.Fprintf(&b, "; %s has one. Use type: %s, or leave the folder out", s.Elsewhere[0], s.Elsewhere[0])
+	case len(s.Elsewhere) > 1:
+		fmt.Fprintf(&b, "; %s each have one. Use the type of the one you mean, or leave the folder out", strings.Join(s.Elsewhere, ", "))
+	case s.NewCategory:
+		b.WriteString(". Use an existing category, or leave the folder out")
+	default:
+		b.WriteString(". Make it first with a folder block in this request, or leave the folder out")
+	}
+	return b.String()
 }
 
 // calendarContext is the Calendar prompt's format and context: the docs of

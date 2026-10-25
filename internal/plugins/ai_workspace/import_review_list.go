@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/importer"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/records"
@@ -252,4 +253,19 @@ func sheetCheckJSON(v any) string {
 		return "{}"
 	}
 	return string(b)
+}
+
+// peekText is the start of a page's text for the review's peek, cut on a
+// word near 400 characters.
+func peekText(body string) string {
+	body = strings.TrimSpace(body)
+	if utf8.RuneCountInString(body) <= 400 {
+		return body
+	}
+	r := []rune(body)[:400]
+	cut := string(r)
+	if i := strings.LastIndexAny(cut, " \n"); i > 300 {
+		cut = cut[:i]
+	}
+	return strings.TrimRight(cut, " \n.,;:") + "…"
 }
