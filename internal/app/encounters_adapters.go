@@ -8,6 +8,7 @@ import (
 	"context"
 	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
@@ -195,11 +196,143 @@ func aiEncounterRef(e encounters.Encounter) records.EncounterRef {
 		ref.HeroIDs = append(ref.HeroIDs, h.ID)
 	}
 	for _, c := range e.Creatures {
-		ref.Creatures = append(ref.Creatures, records.EncounterCreature{
-			EntityID: c.EntityID, Name: c.Name, Count: c.Count, Group: c.Group, Start: c.Start,
-		})
+		ref.Creatures = append(ref.Creatures, aiCreatureRef(c))
+	}
+	names := map[string]string{}
+	for _, ver := range e.Versions {
+		names[ver.ID] = ver.Name
+		rv := records.EncounterVersion{Name: ver.Name, Creatures: aiVersionRows(e.Creatures, ver)}
+		if ver.Pick != nil {
+			rv.Test, rv.Result = ver.Pick.TestName, ver.Pick.ResultLabel
+		}
+		ref.Versions = append(ref.Versions, rv)
+	}
+	if e.Picked != nil {
+		ref.Playing = names[e.Picked.Version]
+		ref.Open = e.Picked.Open
 	}
 	return ref
+}
+
+func aiCreatureRef(c encounters.Creature) records.EncounterCreature {
+	return records.EncounterCreature{EntityID: c.EntityID, Name: c.Name, Count: c.Count, Group: c.Group, Start: c.Start}
+}
+
+// aiVersionRows is every creature a version plays: the base rows it keeps,
+// at its counts, then the rows it adds.
+func aiVersionRows(base []encounters.Creature, ver encounters.Version) []records.EncounterCreature {
+	removed := map[string]bool{}
+	for _, id := range ver.Remove {
+		removed[id] = true
+	}
+	counts := map[string]int{}
+	for _, cc := range ver.Counts {
+		counts[cc.Row] = cc.Count
+	}
+	out := []records.EncounterCreature{}
+	for _, c := range base {
+		if removed[c.ID] {
+			continue
+		}
+		if n, ok := counts[c.ID]; ok {
+			c.Count = n
+		}
+		out = append(out, aiCreatureRef(c))
+	}
+	for _, c := range ver.Add {
+		out = append(out, aiCreatureRef(c))
+	}
+	return out
+}
+
+// aiRowKey is what makes a version's line the same row as a base one: the
+// same creature, group and start. Only the count may differ.
+func aiRowKey(entityID, name, group, start string) string {
+	who := "p:" + entityID
+	if entityID == "" {
+		who = "n:" + strings.ToLower(strings.TrimSpace(name))
+	}
+	return who + "|" + group + "|" + start
+}
+
+// aiVersions turns each version's whole creature list into what the plugin
+// stores: changes from the base rows. A version named as before keeps its
+// id, and so does an added row it had, so stages naming them still find
+// them; every other id is one no row of the fight had, before or now.
+func aiVersions(in []records.EncounterVersionInput, base []encounters.Creature, old []encounters.Version, oldRows []encounters.Creature) []encounters.Version {
+	taken, inBase := map[string]bool{}, map[string]bool{}
+	for _, c := range base {
+		taken[c.ID], inBase[c.ID] = true, true
+	}
+	for _, c := range oldRows {
+		taken[c.ID] = true
+	}
+	vtaken := map[string]bool{}
+	oldByName := map[string]encounters.Version{}
+	for _, v := range old {
+		vtaken[v.ID] = true
+		oldByName[strings.ToLower(v.Name)] = v
+		for _, c := range v.Add {
+			taken[c.ID] = true
+		}
+	}
+	fresh := func(prefix string, used map[string]bool) string {
+		for n := 1; ; n++ {
+			if id := prefix + strconv.Itoa(n); !used[id] {
+				used[id] = true
+				return id
+			}
+		}
+	}
+	out := make([]encounters.Version, 0, len(in))
+	for _, v := range in {
+		prev, had := oldByName[strings.ToLower(v.Name)]
+		ver := encounters.Version{Name: v.Name, Add: []encounters.Creature{}, Remove: []string{}, Counts: []encounters.CountChange{}}
+		if had {
+			ver.ID = prev.ID
+		} else {
+			ver.ID = fresh("v", vtaken)
+		}
+		if v.TestID != "" {
+			ver.Pick = &encounters.Pick{Test: v.TestID, Result: v.ResultID}
+		}
+		used := make([]bool, len(base))
+		reused := map[string]bool{}
+		for _, c := range v.Creatures {
+			key := aiRowKey(c.EntityID, c.Name, c.Group, c.Start)
+			matched := false
+			for i, b := range base {
+				if !used[i] && aiRowKey(b.EntityID, b.Name, b.Group, b.Start) == key {
+					used[i], matched = true, true
+					if b.Count != c.Count {
+						ver.Counts = append(ver.Counts, encounters.CountChange{Row: b.ID, Count: c.Count})
+					}
+					break
+				}
+			}
+			if matched {
+				continue
+			}
+			row := encounters.Creature{EntityID: c.EntityID, Name: c.Name, Count: c.Count, Group: c.Group, Start: c.Start}
+			for _, pa := range prev.Add {
+				if !reused[pa.ID] && !inBase[pa.ID] && aiRowKey(pa.EntityID, pa.Name, pa.Group, pa.Start) == key {
+					row.ID, reused[pa.ID] = pa.ID, true
+					break
+				}
+			}
+			if row.ID == "" {
+				row.ID = fresh("ai", taken)
+			}
+			ver.Add = append(ver.Add, row)
+		}
+		for i, b := range base {
+			if !used[i] {
+				ver.Remove = append(ver.Remove, b.ID)
+			}
+		}
+		out = append(out, ver)
+	}
+	return out
 }
 
 // aiEncounterSave builds the whole-encounter body; rows get fresh ids,
@@ -261,7 +394,9 @@ func (a aiEncountersAdapter) ListForPage(ctx context.Context, campaignID, pageID
 }
 
 func (a aiEncountersAdapter) Create(ctx context.Context, campaignID, pageID string, act records.Actor, in records.EncounterInput) error {
-	_, err := a.svc.Create(ctx, campaignID, pageID, aiEncounterViewer(act), aiEncounterSave(in))
+	body := aiEncounterSave(in)
+	body.Versions = aiVersions(in.Versions, body.Creatures, nil, nil)
+	_, err := a.svc.Create(ctx, campaignID, pageID, aiEncounterViewer(act), body)
 	return err
 }
 
@@ -276,7 +411,11 @@ func (a aiEncountersAdapter) Update(ctx context.Context, campaignID, id string, 
 		return err
 	}
 	keepRowIDs(body.Creatures, cur.Creatures)
-	body.Versions = encounters.CarryVersions(cur.Versions, body.Creatures)
+	if in.SetVersions {
+		body.Versions = aiVersions(in.Versions, body.Creatures, cur.Versions, cur.Creatures)
+	} else {
+		body.Versions = encounters.CarryVersions(cur.Versions, body.Creatures)
+	}
 	rows := append([]encounters.Creature{}, body.Creatures...)
 	for _, ver := range body.Versions {
 		rows = append(rows, ver.Add...)

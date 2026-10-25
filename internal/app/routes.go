@@ -4375,6 +4375,12 @@ func (a *App) RegisterRoutes() {
 	// Who is in each campaign's Foundry world, as the GM's client reports it.
 	foundryPlayerRepo := syncapi.NewFoundryPlayerRepository(a.DB)
 	syncHistoryHandler.SetFoundryPlayers(foundryPlayerRepo)
+	// The monsters each campaign's Foundry world can place, for the AI.
+	foundryMonsterRepo := syncapi.NewFoundryMonsterRepository(a.DB)
+	syncHistoryHandler.SetFoundryMonsters(foundryMonsterRepo)
+	// Which of those monsters each creature page is, and whose numbers play.
+	foundryMatcher := syncapi.NewFoundryMatcher(foundryMonsterRepo, syncapi.NewFoundryMatchRepository(a.DB), foundryCreaturePages{entities: entityService})
+	syncHistoryHandler.SetFoundryMatcher(foundryMatcher)
 	// The scenes in each campaign's Foundry world, as the GM's client reports them.
 	syncHistoryHandler.SetFoundryScenes(syncapi.NewFoundrySceneRepository(a.DB))
 
@@ -4383,7 +4389,7 @@ func (a *App) RegisterRoutes() {
 		syncapi.RegisterSyncHistoryPageRoutes(e, syncHistoryHandler, campaignService, authService)
 		syncapi.RegisterFoundryPageRoutes(e, syncHistoryHandler, campaignService, authService)
 		syncapi.RegisterAdminSyncFlowRoute(adminGroup, syncHistoryHandler)
-		go syncapi.StartHistoryPruner(a.ShutdownCtx, syncHistoryRepo, foundryPlayerRepo)
+		go syncapi.StartHistoryPruner(a.ShutdownCtx, syncHistoryRepo, foundryPlayerRepo, foundryMonsterRepo)
 	}
 
 	// NPC plugin: gallery/hub view for revealed character entities.
@@ -6116,6 +6122,7 @@ func (a *App) RegisterRoutes() {
 	// Built before encounters, whose versions are picked by a test's result.
 	encounterPages := &encountersPageAdapter{svc: entityService, cards: entities.NewPageCards(a.DB), lists: characterListService, sys: systemHandler}
 	var encounterResults encounters.ResultDirectory
+	var pageTests pagetests.Service // nil while the Tests block is degraded
 	a.registerPlugin(PluginRegistration{
 		Slug:     pagetests.PluginSlug,
 		StaticFS: echo.MustSubFS(pagetests.StaticAssetsFS, "static"),
@@ -6129,6 +6136,7 @@ func (a *App) RegisterRoutes() {
 		pagetests.RegisterRoutes(e, pagetests.NewHandler(testsSvc), campaignService, authService)
 		registerPageTestsBlock(blockRegistry, testsSvc)
 		encounterResults = encounterResultsAdapter{svc: testsSvc}
+		pageTests = testsSvc
 	} else {
 		slog.Warn("page tests plugin degraded — the Tests block is not available")
 	}
@@ -6197,6 +6205,13 @@ func (a *App) RegisterRoutes() {
 	// write and read. Wired here, after the rulebook and rolling tables exist.
 	// Kinds register from their own files (ai_kinds.go), so this block is not
 	// edited when one is added.
+	// The monster list lives in syncapi's table, so the AI reads it only
+	// while that plugin's migrations are healthy.
+	var aiFoundryMonsters syncapi.FoundryMonsterRepository
+	var aiFoundryMatcher *syncapi.FoundryMatcher
+	if a.PluginHealth.IsHealthy("syncapi") {
+		aiFoundryMonsters, aiFoundryMatcher = foundryMonsterRepo, foundryMatcher
+	}
 	// The scenes the campaign's Foundry world reports, for the AI's
 	// `scenes` lookup.
 	var aiFoundryScenes records.FoundryScenesAPI
@@ -6229,6 +6244,9 @@ func (a *App) RegisterRoutes() {
 		Systems:         systemHandler,
 		Tags:            tagService,
 		PageLayouts:     pageLayoutService,
+		PageTests:       pageTests,
+		FoundryMonsters: aiFoundryMonsters,
+		FoundryMatcher:  aiFoundryMatcher,
 		FoundryScenes:   aiFoundryScenes,
 	})
 	aiRegistry := records.NewRegistry(aiKinds(aiWiring)...)

@@ -14,9 +14,11 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/fieldrules"
 	"github.com/keyxmakerx/chronicle/internal/plugins/maps"
 	"github.com/keyxmakerx/chronicle/internal/plugins/pageblocks"
+	"github.com/keyxmakerx/chronicle/internal/plugins/pagetests"
 	"github.com/keyxmakerx/chronicle/internal/plugins/quests"
 	"github.com/keyxmakerx/chronicle/internal/plugins/rolltables"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
+	"github.com/keyxmakerx/chronicle/internal/plugins/syncapi"
 	"github.com/keyxmakerx/chronicle/internal/systems"
 	"github.com/keyxmakerx/chronicle/internal/widgets/entity_notes"
 	"github.com/keyxmakerx/chronicle/internal/widgets/notes"
@@ -52,8 +54,11 @@ type aiDeps struct {
 	SystemEntries   systems.SystemEntryService
 	Systems         *systems.SystemHandler
 	Tags            tags.TagService
-	PageLayouts     entities.PageLayoutService // nil while its tables are degraded
-	FoundryScenes   records.FoundryScenesAPI   // nil while the sync API is degraded
+	PageLayouts     entities.PageLayoutService       // nil while its tables are degraded
+	PageTests       pagetests.Service                // nil while the Tests block is degraded
+	FoundryMonsters syncapi.FoundryMonsterRepository // nil while syncapi's tables are degraded
+	FoundryMatcher  *syncapi.FoundryMatcher          // with FoundryMonsters; nil leaves matches out
+	FoundryScenes   records.FoundryScenesAPI         // nil while the sync API is degraded
 
 	// Derived once and shared by several kinds and the lookups.
 	Rolls      records.EventRollAPI // the calendar's roll half; nil without one
@@ -62,6 +67,8 @@ type aiDeps struct {
 	Homebrew   records.HomebrewAPI // nil while field rules are degraded
 	Nights     aiGameNightsAdapter
 	PageMaps   records.PageMapsAPI // nil while page blocks are degraded
+	Tests      records.TestsAPI    // nil without the Tests block
+	Monsters   records.FoundryMonstersAPI
 }
 
 // newAIDeps fills the derived fields from the services.
@@ -84,6 +91,12 @@ func newAIDeps(d aiDeps) *aiDeps {
 	d.Nights = aiGameNightsAdapter{svc: d.Sessions, members: d.Campaigns}
 	if d.PageBlocks != nil {
 		d.PageMaps = aiPageMapsAdapter{svc: d.PageBlocks}
+	}
+	if d.PageTests != nil {
+		d.Tests = aiTestsAdapter{svc: d.PageTests}
+	}
+	if d.FoundryMonsters != nil {
+		d.Monsters = aiFoundryMonstersAdapter{repo: d.FoundryMonsters, matcher: d.FoundryMatcher}
 	}
 	return &d
 }
@@ -136,6 +149,11 @@ func aiLookups(d *aiDeps, reg *records.Registry) *records.Lookups {
 		Kinds:    reg,
 		PageMaps: d.PageMaps,
 		Menu:     aiMenuAdapter{campaigns: d.Campaigns, types: d.Entities},
+		Tests:    d.Tests,
+		Monsters: d.Monsters,
+	}
+	if d.Encounters != nil {
+		l.Encounters = aiEncountersAdapter{svc: d.Encounters}
 	}
 	if d.Health.IsHealthy(rolltables.PluginSlug) {
 		l.Tables = d.Tables.Svc
@@ -217,7 +235,7 @@ func init() {
 		if d.Encounters == nil {
 			return nil
 		}
-		return []records.Kind{records.EncounterKind{Svc: aiEncountersAdapter{svc: d.Encounters}, Entities: d.Entities}}
+		return []records.Kind{records.EncounterKind{Svc: aiEncountersAdapter{svc: d.Encounters}, Entities: d.Entities, Tests: d.Tests, Monsters: d.Monsters}}
 	})
 	addAIKinds(180, func(d *aiDeps) []records.Kind {
 		return []records.Kind{

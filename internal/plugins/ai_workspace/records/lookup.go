@@ -139,6 +139,11 @@ type Lookups struct {
 	// Menu gives the owner's AI the sidebar menu's category order; nil
 	// leaves it out.
 	Menu MenuAPI
+	// Encounters answers `what: encounters`; Tests `what: tests`; Monsters
+	// `what: foundry-monsters`. Each nil says it can't be looked up.
+	Encounters EncountersAPI
+	Tests      TestsAPI
+	Monsters   FoundryMonstersAPI
 	// Scenes answers `what: scenes` from what Foundry last reported; nil
 	// says it can't be looked up.
 	Scenes FoundryScenesAPI
@@ -172,6 +177,9 @@ var lookupWhats = []struct{ what, keys, brief string }{
 	{"house-rules", "none", "the house-rules chapters"},
 	{"system-entries", "optional `field` (e.g. ancestry, kit, race)", "the game system's entries for a character field; without `field`, the fields that have entries"},
 	{"game-nights", "none", "the campaign's game nights: name, date, time, status and summary (owner and co-DM only)"},
+	{"encounters", "optional `page`", "the fights planned on pages, written as encounter blocks, with the version that plays now and any creature Foundry can't place (owner and co-DM only)"},
+	{"tests", "optional `page`", "the montages and other tests on pages, their results and the one recorded, which pick encounter versions (owner and co-DM only)"},
+	{"foundry-monsters", "optional `name` (part of a name), `level` and `role`", "the monsters Foundry can place: its world's actors and its compendiums', with level, role and EV (owner and co-DM only)"},
 	{"players", "none", "each player's character right now: level and class, meters, conditions, what they carry, and whether they are coming to the next game night"},
 	{lookupWhatFormat, "`block`, the kind to explain (e.g. `block: calendar`)", "how to write one kind of block: every key, the rules and an example"},
 }
@@ -207,6 +215,9 @@ type lookupRun struct {
 	// layouts caches layoutNames.
 	layouts     map[string]string
 	layoutsRead bool
+	// monsters caches foundryReport.
+	monsters     FoundryMonsterReport
+	monstersRead bool
 }
 
 // Answer answers each lookup in order. A failing lookup gets an Error and
@@ -291,6 +302,12 @@ func (run *lookupRun) one(what string, r Record) LookupAnswer {
 		ans, err = run.tagsLookup()
 	case "game-nights", "game-night":
 		ans, err = run.gameNights()
+	case "encounters", "encounter", "fights":
+		ans, err = run.encountersLookup(firstNonEmpty(r.Str("page"), r.Name))
+	case "tests", "test":
+		ans, err = run.testsLookup(firstNonEmpty(r.Str("page"), r.Name))
+	case "foundry-monsters", "monsters", "foundry-monster":
+		ans, err = run.foundryMonsters(r)
 	case "players", "party":
 		ans, err = run.players()
 	case lookupWhatFormat, "formats", "how-to":

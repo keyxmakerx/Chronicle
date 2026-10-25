@@ -149,6 +149,8 @@ func RegisterFoundryPageRoutes(e *echo.Echo, h *SyncHistoryHandler, campaignSvc 
 	cg.GET("/foundry/players", h.PlayersFragment, owner)
 	cg.GET("/foundry/member-status", h.MemberStatusFragment, owner)
 	cg.GET("/foundry/problems", h.ProblemsFragment, owner)
+	cg.GET("/foundry/creatures", h.CreaturesFragment, owner)
+	cg.POST("/foundry/creatures/:eid", h.ChangeCreatureMatch, owner)
 	// Scenes are for anyone who may see DM-only material (checked in the
 	// handler), not only the owner: a co-DM writes pages too.
 	cg.GET("/foundry/scenes", h.ScenesJSON)

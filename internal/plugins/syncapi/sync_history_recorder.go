@@ -102,6 +102,7 @@ var historyRoutes = map[string]historyRoute{
 	"DELETE /sync/mappings/:mappingID":        {kind: "link", action: "unlinked"},
 	"POST /stashes/moves":                     {kind: "stash", action: "item moved"},
 	"POST /armory/shops/:eid/buy":             {kind: "shop", action: "bought"},
+	"PUT /entities/:entityID/foundry-match":   {kind: "page", action: "Foundry match changed"},
 	// A token drag sends a position on every step; one drag would bury the
 	// rest of the history.
 	"PATCH /maps/:mapID/tokens/:tokenID/position": {skip: true},
@@ -109,6 +110,8 @@ var historyRoutes = map[string]historyRoute{
 	"POST /sync/history": {skip: true},
 	// The player list is a status report, refreshed every few minutes.
 	"POST /sync/players": {skip: true},
+	// So is the monster list, sent when the world opens and its actors change.
+	"POST /sync/monsters": {skip: true},
 }
 
 // classifyHistoryCall maps a request to its history kind and action, and
@@ -222,8 +225,8 @@ func RecordSyncHistory(repo SyncHistoryRepository, namer EntityNamer) echo.Middl
 
 // StartHistoryPruner deletes expired history rows and stale Foundry player
 // lists at startup and then once a day until ctx ends. players may be nil.
-func StartHistoryPruner(ctx context.Context, repo SyncHistoryRepository, players FoundryPlayerRepository) {
-	pruneHistory(ctx, repo, players)
+func StartHistoryPruner(ctx context.Context, repo SyncHistoryRepository, players FoundryPlayerRepository, monsters FoundryMonsterRepository) {
+	pruneHistory(ctx, repo, players, monsters)
 	ticker := time.NewTicker(24 * time.Hour)
 	defer ticker.Stop()
 	for {
@@ -231,12 +234,12 @@ func StartHistoryPruner(ctx context.Context, repo SyncHistoryRepository, players
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			pruneHistory(ctx, repo, players)
+			pruneHistory(ctx, repo, players, monsters)
 		}
 	}
 }
 
-func pruneHistory(ctx context.Context, repo SyncHistoryRepository, players FoundryPlayerRepository) {
+func pruneHistory(ctx context.Context, repo SyncHistoryRepository, players FoundryPlayerRepository, monsters FoundryMonsterRepository) {
 	n, err := repo.PruneOlderThan(ctx, time.Now().UTC().Add(-historyRetention))
 	if err != nil {
 		slog.Warn("sync history prune failed", slog.Any("error", err))
@@ -247,6 +250,11 @@ func pruneHistory(ctx context.Context, repo SyncHistoryRepository, players Found
 		slog.Warn("foundry players prune failed", slog.Any("error", err))
 	} else if n > 0 {
 		slog.Info("foundry players pruned", slog.Int64("rows", n))
+	}
+	if n, err := pruneMonsters(ctx, monsters, time.Now().UTC()); err != nil {
+		slog.Warn("foundry monsters prune failed", slog.Any("error", err))
+	} else if n > 0 {
+		slog.Info("foundry monster lists pruned", slog.Int64("rows", n))
 	}
 }
 

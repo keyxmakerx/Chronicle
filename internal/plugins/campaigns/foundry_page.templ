@@ -44,6 +44,15 @@ templ FoundryPageView(cc *CampaignContext, row FoundryRowData, checks []FoundryC
 							<p class="px-4 py-3 text-sm text-fg-muted">Loading players&hellip;</p>
 						</div>
 					</section>
+					<section id="foundry-creatures" class="card scroll-mt-4" aria-labelledby="foundry-creatures-heading">
+						<div class="px-4 py-3 border-b border-edge">
+							<h2 id="foundry-creatures-heading" class="text-base font-semibold text-fg">Creatures in Foundry</h2>
+							<p class="text-xs text-fg-muted mt-0.5">Each creature page is matched to Foundry's monster of the same name, so nothing is copied twice. Choose whose numbers play on the creature's page.</p>
+						</div>
+						<div hx-get={ fmt.Sprintf("/campaigns/%s/foundry/creatures", cc.Campaign.ID) } hx-trigger="load" hx-swap="outerHTML">
+							<p class="px-4 py-3 text-sm text-fg-muted">Loading creatures&hellip;</p>
+						</div>
+					</section>
 					<section id="foundry-connection" class="card scroll-mt-4" aria-labelledby="foundry-connection-heading">
 						<div class="px-4 py-3 border-b border-edge">
 							<h2 id="foundry-connection-heading" class="text-base font-semibold text-fg">Connection</h2>

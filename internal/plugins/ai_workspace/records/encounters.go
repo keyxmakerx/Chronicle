@@ -33,6 +33,13 @@ type EncounterRef struct {
 	Heroes             []string // hero page names
 	HeroIDs            []string
 	Creatures          []EncounterCreature
+	// Versions are the other ways the fight can play, each in full.
+	Versions []EncounterVersion
+	// Playing is the version the recorded test results pick now; empty
+	// when none does and the base creatures play. Open names the tests
+	// that pick a version and have no result yet.
+	Playing string
+	Open    []string
 }
 
 // EncounterCreature is one creature row. EntityID is empty for a creature
@@ -49,6 +56,10 @@ type EncounterInput struct {
 	Ready     bool
 	HeroIDs   []string
 	Creatures []EncounterCreature
+	// Versions replaces the fight's versions when SetVersions is true; an
+	// update without it keeps the ones the DM planned.
+	Versions    []EncounterVersionInput
+	SetVersions bool
 }
 
 // EncounterKind writes the fights a DM plans on a page, matched by name
@@ -57,12 +68,18 @@ type EncounterInput struct {
 type EncounterKind struct {
 	Svc      EncountersAPI
 	Entities EntityLookup
+	// Tests finds the test results that pick versions; nil refuses a
+	// version that names a test.
+	Tests TestsAPI
+	// Monsters is what Foundry reported it holds, for the review's warning
+	// about a creature Foundry can't place; nil leaves the warning general.
+	Monsters FoundryMonstersAPI
 }
 
 func (EncounterKind) Name() string  { return "encounter" }
 func (EncounterKind) Label() string { return "Encounter" }
 func (EncounterKind) Doc() string {
-	return "A fight planned on a page, matched by `name` within its `page` (the page's name; an Adventures trial or any page). Keys: `heroes` (names of the pages for the heroes the fight is built for; any page works, so a Character page linked to a player is fine, not only a Hero page), `ready` (true puts it at the top of Foundry's list for game night), `rename_to`. `creatures` is a list, one line per kind of creature: an optional count, the creature's page name, then `group A` to `group H` (its initiative group) and how it starts: `starts seen` (the default), `starts hidden` (placed hidden; only the DM reveals it) or `arrives later` (left off the scene until the DM places it). A creature with no page yet goes in by name. On update, a key you leave out keeps what is there; `creatures` and `heroes` replace the whole list.\n\n```\n---\nkind: encounter\npage: The Siege of Harrowmere\nname: Ramparts fight\nheroes: [Ash, Bryn, Corvin, Dela]\nready: true\ncreatures:\n  - Goblin War Chief, group A, starts hidden\n  - 2 Hobgoblin Soldier, group B\n  - 4 Skeleton Archer, group C, arrives later\n---\n```"
+	return "A fight planned on a page, matched by `name` within its `page` (the page's name; an Adventures trial or any page). Keys: `heroes` (names of the pages for the heroes the fight is built for; any page works, so a Character page linked to a player is fine, not only a Hero page), `ready` (true puts it at the top of Foundry's list for game night), `rename_to`. `creatures` is a list, one line per kind of creature: an optional count, the creature's page name, then `group A` to `group H` (its initiative group) and how it starts: `starts seen` (the default), `starts hidden` (placed hidden; only the DM reveals it) or `arrives later` (left off the scene until the DM places it). A creature with no page yet goes in by name. Name a creature as Foundry names it (`what: foundry-monsters` lists them) so Foundry can place it; a creature Foundry has needs no page, and a Creature page matched to one of Foundry's monsters is that monster (the same lookup lists the matches), so it never gets a second stat block. `versions` (at most 6) are other ways the same fight plays, such as one per montage result: each has a `name`, its whole `creatures` list written the same way, and optionally `test` (a test's name; `what: tests` lists them) and `result` (one of its results), so recording that result in Chronicle picks the version and Foundry shows it. On update, a key you leave out keeps what is there; `creatures`, `heroes` and `versions` replace the whole list.\n\n```\n---\nkind: encounter\npage: The Siege of Harrowmere\nname: Ramparts fight\nheroes: [Ash, Bryn, Corvin, Dela]\nready: true\ncreatures:\n  - Goblin War Chief, group A, starts hidden\n  - 2 Hobgoblin Soldier, group B\n  - 4 Skeleton Archer, group C, arrives later\nversions:\n  - name: The walls held\n    test: Hold the walls\n    result: Success\n    creatures:\n      - Goblin War Chief, group A, starts hidden\n      - 2 Hobgoblin Soldier, group B\n---\n```"
 }
 
 // Title names the row on the review screen: "Ramparts fight on The Siege of
@@ -154,6 +171,7 @@ type encounterDraft struct {
 	existing  *EncounterRef
 	heroIDs   []string
 	creatures []EncounterCreature
+	versions  []EncounterVersionInput
 	warnings  []string
 	missing   []string // hero pages not found
 }
@@ -188,14 +206,75 @@ func (k EncounterKind) read(ctx context.Context, campaignID string, a Actor, r R
 		if err != nil {
 			return nil, err
 		}
-		if p := k.page(ctx, campaignID, c.Name); p != nil {
-			c.EntityID, c.Name = p.ID, p.Name
-		} else if !r.Made[entities.Slugify(c.Name)] {
-			d.warnings = append(d.warnings, quote(c.Name)+" is not a page yet; it goes in by name with no stat block, and Foundry looks its actor up by name")
+		d.creatures = append(d.creatures, k.link(ctx, campaignID, a, r, c, d))
+	}
+	if r.Has("versions") {
+		parsed, err := parseVersions(r.List("versions"))
+		if err != nil {
+			return nil, err
 		}
-		d.creatures = append(d.creatures, c)
+		pageName := r.Str("page")
+		if d.page != nil {
+			pageName = d.page.Name
+		}
+		if d.versions, err = resolveVersions(ctx, k.Tests, campaignID, pageName, a, parsed); err != nil {
+			return nil, err
+		}
+		for i := range d.versions {
+			for j, c := range d.versions[i].Creatures {
+				d.versions[i].Creatures[j] = k.link(ctx, campaignID, a, r, c, d)
+			}
+		}
 	}
 	return d, nil
+}
+
+// link points a creature line at its page, or warns, once per name, when
+// it has none: Foundry then places it by name, so the warning says whether
+// Foundry reported having it.
+func (k EncounterKind) link(ctx context.Context, campaignID string, a Actor, r Record, c EncounterCreature, d *encounterDraft) EncounterCreature {
+	if p := k.page(ctx, campaignID, c.Name); p != nil {
+		c.EntityID, c.Name = p.ID, p.Name
+		return c
+	}
+	if r.Made[entities.Slugify(c.Name)] {
+		return c
+	}
+	w := k.byNameWarning(ctx, campaignID, a, c.Name)
+	for _, have := range d.warnings {
+		if have == w {
+			return c
+		}
+	}
+	d.warnings = append(d.warnings, w)
+	return c
+}
+
+func (k EncounterKind) byNameWarning(ctx context.Context, campaignID string, a Actor, name string) string {
+	base := quote(name) + " is not a page yet; it goes in by name"
+	if k.Monsters == nil {
+		return base + " with no stat block, and Foundry looks its actor up by name"
+	}
+	rep, err := k.Monsters.Monsters(ctx, campaignID, a)
+	if err != nil || rep.ReportedAt == nil {
+		return base + " with no stat block, and Foundry looks its actor up by name"
+	}
+	if m := rep.Find(name); m != nil {
+		return base + ", and Foundry has it (" + m.Where() + ")"
+	}
+	return base + ", but Foundry did not report a monster by that name, so it can't place it until you add one"
+}
+
+// versionsSummary is the review row's note on versions: how many the block
+// sets, or that it clears them.
+func versionsSummary(vs []EncounterVersionInput, set bool) string {
+	switch {
+	case !set:
+		return ""
+	case len(vs) == 0:
+		return "; no versions"
+	}
+	return "; " + plural(len(vs), "version", "versions")
 }
 
 func encounterSummary(cs []EncounterCreature, heroes int) string {
@@ -261,7 +340,7 @@ func (k EncounterKind) Plan(ctx context.Context, campaignID string, a Actor, r R
 		if d.existing != nil {
 			return Plan{Error: "an encounter called " + quote(r.Name) + " is already on " + d.page.Name + "; use action: update"}
 		}
-		p.Summary = encounterSummary(d.creatures, len(d.heroIDs)+len(d.missing))
+		p.Summary = encounterSummary(d.creatures, len(d.heroIDs)+len(d.missing)) + versionsSummary(d.versions, r.Has("versions"))
 	case ActionUpdate:
 		if d.existing == nil {
 			return Plan{Error: "no encounter called " + quote(r.Name) + " on " + quote(r.Str("page"))}
@@ -273,7 +352,7 @@ func (k EncounterKind) Plan(ctx context.Context, campaignID string, a Actor, r R
 		if r.Has("heroes") {
 			heroes = len(d.heroIDs) + len(d.missing)
 		}
-		p.Summary = encounterSummary(cs, heroes)
+		p.Summary = encounterSummary(cs, heroes) + versionsSummary(d.versions, r.Has("versions"))
 		if s := r.Str("rename_to"); s != "" {
 			p.Summary += "; renamed to " + quote(s)
 		}
@@ -309,6 +388,7 @@ func (k EncounterKind) Apply(ctx context.Context, campaignID string, a Actor, r 
 		ready, _ := r.Bool("ready")
 		return k.Svc.Create(ctx, campaignID, d.page.ID, a, EncounterInput{
 			Name: r.Name, Ready: ready, HeroIDs: d.heroIDs, Creatures: d.creatures,
+			Versions: d.versions, SetVersions: true,
 		})
 	case ActionUpdate:
 		e := d.existing
@@ -324,6 +404,9 @@ func (k EncounterKind) Apply(ctx context.Context, campaignID string, a Actor, r 
 		}
 		if r.Has("creatures") {
 			in.Creatures = d.creatures
+		}
+		if r.Has("versions") {
+			in.Versions, in.SetVersions = d.versions, true
 		}
 		return k.Svc.Update(ctx, campaignID, e.ID, a, in, e.Version)
 	default:
@@ -343,25 +426,8 @@ func (k EncounterKind) Export(ctx context.Context, campaignID string, a Actor) (
 	}
 	var b strings.Builder
 	for _, e := range list {
-		b.WriteString("---\nkind: encounter\npage: " + quote(e.PageName) + "\nname: " + quote(e.Name) + "\n")
-		if e.Ready {
-			b.WriteString("ready: true\n")
-		}
-		if len(e.Heroes) > 0 {
-			hs := make([]string, len(e.Heroes))
-			for i, h := range e.Heroes {
-				hs[i] = quote(h)
-			}
-			b.WriteString("heroes: [" + strings.Join(hs, ", ") + "]\n")
-		}
-		if len(e.Creatures) > 0 {
-			b.WriteString("creatures:\n")
-			for _, c := range e.Creatures {
-				start := map[string]string{"seen": "starts seen", "hidden": "starts hidden", "later": "arrives later"}[c.Start]
-				b.WriteString("  - " + quote(fmt.Sprintf("%d %s, group %s, %s", c.Count, c.Name, c.Group, start)) + "\n")
-			}
-		}
-		b.WriteString("---\n\n")
+		writeEncounterBlock(&b, e)
+		b.WriteString("\n")
 	}
 	return b.String(), nil
 }

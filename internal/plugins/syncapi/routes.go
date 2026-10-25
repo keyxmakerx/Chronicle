@@ -321,6 +321,14 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 		// Who is in the Foundry world and which member each user is linked
 		// to, from the GM's client. Owner or DM access only (in the handler).
 		cg.POST("/sync/players", api.history.ReportPlayers, RequirePermission(PermSync))
+		// The monsters the Foundry world can place, from the GM's client, for
+		// the AI connection's fight planning. Owner or DM access only.
+		cg.POST("/sync/monsters", api.history.ReportMonsters, RequirePermission(PermSync))
+		// Which of those each creature page is, and whose numbers play.
+		cg.GET("/foundry-matches", api.history.ListFoundryMatches, RequirePermission(PermRead))
+		cg.GET("/foundry-monsters", api.history.SearchFoundryMonsters, RequirePermission(PermRead))
+		cg.GET("/entities/:entityID/foundry-match", api.history.GetFoundryMatch, RequirePermission(PermRead))
+		cg.PUT("/entities/:entityID/foundry-match", api.history.PutFoundryMatch, RequirePermission(PermWrite))
 		// The world's scenes, so the owner can see which maps exist in
 		// Foundry. Owner or DM access only (in the handler).
 		cg.POST("/sync/scenes", api.history.ReportScenes, RequirePermission(PermSync))
