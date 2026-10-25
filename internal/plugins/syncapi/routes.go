@@ -329,6 +329,9 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 		cg.GET("/foundry-monsters", api.history.SearchFoundryMonsters, RequirePermission(PermRead))
 		cg.GET("/entities/:entityID/foundry-match", api.history.GetFoundryMatch, RequirePermission(PermRead))
 		cg.PUT("/entities/:entityID/foundry-match", api.history.PutFoundryMatch, RequirePermission(PermWrite))
+		// The world's scenes, so the owner can see which maps exist in
+		// Foundry. Owner or DM access only (in the handler).
+		cg.POST("/sync/scenes", api.history.ReportScenes, RequirePermission(PermSync))
 	}
 
 	// Quests: boards, sheets and rewards for the Foundry module. Owner or

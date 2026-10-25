@@ -4381,6 +4381,8 @@ func (a *App) RegisterRoutes() {
 	// Which of those monsters each creature page is, and whose numbers play.
 	foundryMatcher := syncapi.NewFoundryMatcher(foundryMonsterRepo, syncapi.NewFoundryMatchRepository(a.DB), foundryCreaturePages{entities: entityService})
 	syncHistoryHandler.SetFoundryMatcher(foundryMatcher)
+	// The scenes in each campaign's Foundry world, as the GM's client reports them.
+	syncHistoryHandler.SetFoundryScenes(syncapi.NewFoundrySceneRepository(a.DB))
 
 	if a.PluginHealth.IsHealthy("syncapi") {
 		syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, noteAPIHandler, tagAPIHandler, syncMappingHandler, syncChangesHandler, stashAPIHandler, syncService, addonService, authService, campaignService, syncapi.WithSyncHistory(syncHistoryHandler), syncapi.WithQuests(syncapi.NewQuestAPIHandler(questAPI, campaignService, "armory")), syncapi.WithEncounters(syncapi.NewEncounterAPIHandler(encounterAPI, campaignService)))
@@ -6204,6 +6206,12 @@ func (a *App) RegisterRoutes() {
 	if a.PluginHealth.IsHealthy("syncapi") {
 		aiFoundryMonsters, aiFoundryMatcher = foundryMonsterRepo, foundryMatcher
 	}
+	// The scenes the campaign's Foundry world reports, for the AI's
+	// `scenes` lookup.
+	var aiFoundryScenes records.FoundryScenesAPI
+	if a.PluginHealth.IsHealthy("syncapi") {
+		aiFoundryScenes = aiFoundryScenesAdapter{repo: syncapi.NewFoundrySceneRepository(a.DB)}
+	}
 	aiWiring := newAIDeps(aiDeps{
 		Calendar:        calendarService,
 		Campaigns:       campaignService,
@@ -6230,6 +6238,7 @@ func (a *App) RegisterRoutes() {
 		PageTests:       pageTests,
 		FoundryMonsters: aiFoundryMonsters,
 		FoundryMatcher:  aiFoundryMatcher,
+		FoundryScenes:   aiFoundryScenes,
 	})
 	aiRegistry := records.NewRegistry(aiKinds(aiWiring)...)
 	aiWorkspaceHandler.SetRecords(aiRegistry)
