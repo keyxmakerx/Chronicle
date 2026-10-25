@@ -21,15 +21,15 @@ templ CampaignMembersPage(cc *CampaignContext, members []CampaignMember, transfe
 
 // MemberListComponent renders the member list and add form (HTMX partial swap target).
 templ MemberListComponent(cc *CampaignContext, members []CampaignMember, csrfToken, errMsg string) {
-	<div id="member-list" class="manage-split-flat">
+	<div id="member-list" class="space-y-6">
 		if errMsg != "" {
-			<div class="alert-error mb-4" role="alert">
+			<div class="alert-error" role="alert">
 				{ errMsg }
 			</div>
 		}
 		// Add member form (owner only).
 		if cc.MemberRole >= RoleOwner {
-			<div class="card p-6 mb-6">
+			<div class="card p-6">
 				<h2 class="text-sm font-semibold text-fg mb-3">Add Member</h2>
 				<form
 					method="POST"
@@ -55,8 +55,7 @@ templ MemberListComponent(cc *CampaignContext, members []CampaignMember, csrfTok
 				</form>
 			</div>
 		}
-		// Member table: the main column of the People page's split.
-		<div class="manage-split-main">
+		<div>
 			<div class="card overflow-x-auto">
 				<table class="w-full">
 					<thead>
@@ -107,9 +106,9 @@ templ MemberListComponent(cc *CampaignContext, members []CampaignMember, csrfTok
 
 // roleGuide is "What each role can do", under the member table.
 templ roleGuide() {
-	<section class="card mt-6" aria-labelledby="role-guide-heading">
+	<section class="card" aria-labelledby="role-guide-heading">
 		<h2 id="role-guide-heading" class="px-4 py-3 border-b border-edge text-sm font-semibold text-fg">What each role can do</h2>
-		<div class="grid gap-3 p-4 sm:grid-cols-3 min-[1600px]:grid-cols-1">
+		<div class="grid gap-3 p-4 sm:grid-cols-3">
 			<div class="rounded-md border border-edge bg-surface-alt/50 p-3">
 				<p class="text-sm font-semibold text-fg">Player</p>
 				<p class="text-xs text-fg-secondary mt-0.5">Reads what they are shown and plays their own characters.</p>
