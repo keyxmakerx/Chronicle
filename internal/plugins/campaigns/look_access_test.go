@@ -225,7 +225,8 @@ func TestValidateLookPick(t *testing.T) {
 		{"player picks page when open", RolePlayer, false, &Appearance{AccessPage: LookAccessEveryone}, "page", "sharp", false},
 		{"bad page kit", RolePlayer, false, &Appearance{AccessPage: LookAccessEveryone}, "page", "paper", true},
 		{"player refused page at co-dm", RolePlayer, false, &Appearance{AccessPage: LookAccessCoDM}, "page", "sharp", true},
-		{"scribe picks page at co-dm", RoleScribe, false, &Appearance{AccessPage: LookAccessCoDM}, "page", "sharp", false},
+		{"scribe refused page at co-dm", RoleScribe, false, &Appearance{AccessPage: LookAccessCoDM}, "page", "sharp", true},
+		{"co-dm scribe picks page at co-dm", RoleScribe, true, &Appearance{AccessPage: LookAccessCoDM}, "page", "sharp", false},
 		{"hover closed by default", RoleScribe, false, nil, "hover", "night", true},
 		{"player picks hover when open", RolePlayer, false, &Appearance{AccessHover: LookAccessEveryone}, "hover", "compact", false},
 		{"bad hover value", RolePlayer, false, &Appearance{AccessHover: LookAccessEveryone}, "hover", "ornate", true},
@@ -260,8 +261,8 @@ func TestAppliedLookPicksIgnoresNarrowedAccess(t *testing.T) {
 		{"owner never uses a pick", RoleOwner, nil, nil},
 		{"page and hover open to everyone", RolePlayer, &Appearance{AccessPage: LookAccessEveryone, AccessHover: LookAccessEveryone},
 			map[string]string{"sheet": "night", "page": "ornate", "hover": "plain"}},
-		{"page co-dm: scribe yes", RoleScribe, &Appearance{AccessPage: LookAccessCoDM},
-			map[string]string{"sheet": "night", "page": "ornate", "dmscreen": "sharp"}},
+		{"page co-dm: scribe without dm access sees only sheet", RoleScribe, &Appearance{AccessPage: LookAccessCoDM},
+			map[string]string{"sheet": "night"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
