@@ -122,6 +122,10 @@ func CORS(cfg CORSConfig) echo.MiddlewareFunc {
 					"HX-Refresh",
 					"HX-Trigger",
 					"HX-Trigger-After-Settle",
+					// A Foundry world reads these to wait out a 429.
+					"Retry-After",
+					"X-RateLimit-Limit",
+					"X-RateLimit-Remaining",
 				}, ", "))
 
 			return next(c)

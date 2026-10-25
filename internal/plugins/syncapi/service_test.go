@@ -395,13 +395,13 @@ func TestCreateKey_DefaultRateLimit(t *testing.T) {
 		Name:        "Test",
 		CampaignID:  "camp-1",
 		Permissions: []APIKeyPermission{PermRead},
-		RateLimit:   0, // Should default to 60.
+		RateLimit:   0, // Should take the default.
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if capturedKey.RateLimit != 60 {
-		t.Errorf("expected default rate limit 60, got %d", capturedKey.RateLimit)
+	if capturedKey.RateLimit != DefaultKeyRateLimit {
+		t.Errorf("expected default rate limit %d, got %d", DefaultKeyRateLimit, capturedKey.RateLimit)
 	}
 }
 

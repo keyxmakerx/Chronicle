@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"math"
 	"net"
 	"net/http"
 	"regexp"
@@ -480,6 +481,7 @@ func RateLimit(service SyncAPIService) echo.MiddlewareFunc {
 
 			window.count++
 			remaining := key.RateLimit - window.count
+			resetAt := window.resetAt
 			globalRateLimiter.mu.Unlock()
 
 			// Set rate limit headers.
@@ -494,13 +496,20 @@ func RateLimit(service SyncAPIService) echo.MiddlewareFunc {
 					IPAddress:  c.RealIP(),
 					UserAgent:  strPtr(c.Request().UserAgent()),
 				})
-				c.Response().Header().Set("Retry-After", "60")
+				c.Response().Header().Set("Retry-After", strconv.Itoa(retryAfterSeconds(resetAt, now)))
 				return &apperror.AppError{Code: http.StatusTooManyRequests, Type: "rate_limit_exceeded", Message: "rate limit exceeded"}
 			}
 
 			return next(c)
 		}
 	}
+}
+
+// retryAfterSeconds is the whole seconds until the window reopens, at least
+// one, so a client told to wait never retries into the same closed window.
+func retryAfterSeconds(resetAt, now time.Time) int {
+	secs := int(math.Ceil(resetAt.Sub(now).Seconds()))
+	return max(secs, 1)
 }
 
 // --- Helpers ---

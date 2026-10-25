@@ -14,7 +14,7 @@ As the campaign owner:
    `sync_api_disabled`.
 2. Settings > API keys (`/campaigns/:id/settings?tab=api-keys`) > create a key.
    Pick permissions: **read** (GETs), **write** (create, update, delete),
-   **sync** (`/sync` endpoints). Optional: rate limit (default 60 requests a
+   **sync** (`/sync` endpoints). Optional: rate limit (default 300 requests a
    minute), expiry date, IP allowlist (IPs or CIDRs).
 3. Copy the key (`chron_…`). It is shown once.
 

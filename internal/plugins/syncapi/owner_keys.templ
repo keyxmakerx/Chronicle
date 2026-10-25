@@ -5,6 +5,7 @@ package syncapi
 
 import (
 	"fmt"
+	"strconv"
 	"time"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"strings"
@@ -121,7 +122,7 @@ templ OwnerKeysPageTempl(campaignID string, keys []APIKey, stats *APIStats, csrf
 					<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 						<div>
 							<label for="rate_limit" class="block text-sm font-medium text-fg-body mb-1">Rate Limit (req/min)</label>
-							<input type="number" id="rate_limit" name="rate_limit" value="60" min="1" max="1000" class="input w-full"/>
+							<input type="number" id="rate_limit" name="rate_limit" value={ strconv.Itoa(DefaultKeyRateLimit) } min="1" max="1000" class="input w-full"/>
 						</div>
 						<div>
 							<label for="expires_at" class="block text-sm font-medium text-fg-body mb-1">Expires (optional)</label>
