@@ -233,7 +233,7 @@ func (s *syncAPIService) CreateKey(ctx context.Context, userID string, input Cre
 		}
 	}
 	if input.RateLimit <= 0 {
-		input.RateLimit = 60 // Default.
+		input.RateLimit = DefaultKeyRateLimit
 	}
 	if input.RateLimit > 1000 {
 		return nil, apperror.NewBadRequest("rate limit cannot exceed 1000 requests per minute")

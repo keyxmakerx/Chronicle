@@ -184,3 +184,22 @@ func TestServe_FailedKeysLimitedPerAddress(t *testing.T) {
 		t.Errorf("a good key from the same address: %d", rec.Code)
 	}
 }
+
+// A paused key is told so plainly, every time: it is the right key, so its
+// calls never count as wrong guesses, and nothing it sends is answered or
+// logged.
+func TestServe_PausedKey(t *testing.T) {
+	r := newRig(t, aiexport.PrivacyModeSafe)
+	if err := r.svc.Pause(context.Background(), "camp-1", "owner-1", r.repo.conns[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i <= failuresPerMinute+1; i++ {
+		rec := r.post("camp-1", pingBody, nil)
+		if rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "This key is paused") {
+			t.Fatalf("call %d: %d %s", i+1, rec.Code, rec.Body)
+		}
+	}
+	if len(r.repo.calls) != 0 {
+		t.Errorf("logged %d calls from a paused key", len(r.repo.calls))
+	}
+}

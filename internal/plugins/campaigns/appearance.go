@@ -43,6 +43,7 @@ type Appearance struct {
 	PageLook        string `json:"page_look,omitempty"`        // How pages draw their blocks (AppearancePageLooks); "standard" is the default.
 	TimelinePopup   string `json:"timeline_popup,omitempty"`   // What opens on a time line's event: "classic" (default) or "corner".
 	StyleKit        string `json:"style_kit,omitempty"`        // The pages' character under the Material page look (AppearanceStyleKits); "material" is the default.
+	DmScreenKit     string `json:"dmscreen_kit,omitempty"`     // The DM Screen's own style kit (AppearanceStyleKits); empty wears the pages' kit.
 
 	// Who may pick their own version of a part (look_access.go); empty is the
 	// part's default.
@@ -135,8 +136,9 @@ type AppearanceInput struct {
 		Style string `json:"style"`
 	} `json:"sheet"`
 	Page struct {
-		Look string `json:"look"`
-		Kit  string `json:"kit"`
+		Look  string `json:"look"`
+		Kit   string `json:"kit"`
+		DmKit string `json:"dmKit"` // "same" follows the pages' kit.
 	} `json:"page"`
 	// Access is who may change each part for themselves. Nil keeps what the
 	// campaign has stored.
@@ -279,6 +281,26 @@ func styleKitChoice(v string, prev *Appearance) (string, error) {
 		return "", nil
 	}
 	return oneOf("style kit", v, AppearanceStyleKits)
+}
+
+// dmScreenKitChoice is the DM Screen kit a save stores: "same" clears it so
+// the screen follows the pages' kit, and a save that sends nothing keeps the
+// stored choice, as styleKitChoice does.
+func dmScreenKitChoice(v string, prev *Appearance) (string, error) {
+	switch v {
+	case "":
+		if prev != nil {
+			return prev.DmScreenKit, nil
+		}
+		return "", nil
+	case "same":
+		return "", nil
+	case "material":
+		// Stored as itself, unlike the pages' kit: it lets the screen drop
+		// a kit the pages wear.
+		return v, nil
+	}
+	return oneOf("DM Screen kit", v, AppearanceStyleKits)
 }
 
 // calmColour validates an optional #RRGGBB and tones it down the way the
@@ -497,6 +519,9 @@ func applyAppearance(s *CampaignSettings, in AppearanceInput) (*string, error) {
 		return fail(err)
 	}
 	if a.StyleKit, err = styleKitChoice(in.Page.Kit, s.Appearance); err != nil {
+		return fail(err)
+	}
+	if a.DmScreenKit, err = dmScreenKitChoice(in.Page.DmKit, s.Appearance); err != nil {
 		return fail(err)
 	}
 	a.ReduceMotion = in.Motion.ReduceAll

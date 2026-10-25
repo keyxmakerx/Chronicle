@@ -20,6 +20,12 @@ type Repository interface {
 	Replace(ctx context.Context, c *Connection) (int64, error)
 	// RevokeAll revokes every connection of the campaign that is not revoked.
 	RevokeAll(ctx context.Context, campaignID string, at time.Time) error
+	// SetPaused pauses (at set) or resumes (nil) the campaign's connection id
+	// while it is not revoked.
+	SetPaused(ctx context.Context, campaignID string, id int64, at *time.Time) error
+	// SetAccess changes what the campaign's connection id may see and
+	// whether it may ask, while it is not revoked.
+	SetAccess(ctx context.Context, campaignID string, id int64, privacy aiexport.PrivacyMode, canAsk bool) error
 	// Current is the campaign's newest connection that is not revoked (it
 	// may have expired), or nil.
 	Current(ctx context.Context, campaignID string) (*Connection, error)
@@ -63,14 +69,14 @@ func dbError(what string, err error) error {
 }
 
 const connectionColumns = `c.id, c.campaign_id, c.user_id, c.key_hash, c.key_hint, c.privacy,
-	c.can_ask, c.client_name, c.created_at, c.expires_at, c.last_used_at, c.revoked_at`
+	c.can_ask, c.client_name, c.created_at, c.expires_at, c.last_used_at, c.revoked_at, c.paused_at`
 
 func scanConnection(row interface{ Scan(...any) error }) (*Connection, error) {
 	var c Connection
 	var privacy string
-	var lastUsed, revoked sql.NullTime
+	var lastUsed, revoked, paused sql.NullTime
 	if err := row.Scan(&c.ID, &c.CampaignID, &c.UserID, &c.KeyHash, &c.KeyHint, &privacy,
-		&c.CanAsk, &c.ClientName, &c.CreatedAt, &c.ExpiresAt, &lastUsed, &revoked); err != nil {
+		&c.CanAsk, &c.ClientName, &c.CreatedAt, &c.ExpiresAt, &lastUsed, &revoked, &paused); err != nil {
 		return nil, err
 	}
 	c.Privacy = parsePrivacy(privacy)
@@ -81,6 +87,10 @@ func scanConnection(row interface{ Scan(...any) error }) (*Connection, error) {
 	if revoked.Valid {
 		t := revoked.Time
 		c.RevokedAt = &t
+	}
+	if paused.Valid {
+		t := paused.Time
+		c.PausedAt = &t
 	}
 	return &c, nil
 }
@@ -134,6 +144,28 @@ func (r *repository) RevokeAll(ctx context.Context, campaignID string, at time.T
 		`UPDATE ai_connections SET revoked_at = ? WHERE campaign_id = ? AND revoked_at IS NULL`,
 		at.UTC(), campaignID); err != nil {
 		return dbError("revoking connections", err)
+	}
+	return nil
+}
+
+func (r *repository) SetPaused(ctx context.Context, campaignID string, id int64, at *time.Time) error {
+	var v any
+	if at != nil {
+		v = at.UTC()
+	}
+	if _, err := r.db.ExecContext(ctx,
+		`UPDATE ai_connections SET paused_at = ? WHERE campaign_id = ? AND id = ? AND revoked_at IS NULL`,
+		v, campaignID, id); err != nil {
+		return dbError("pausing connection", err)
+	}
+	return nil
+}
+
+func (r *repository) SetAccess(ctx context.Context, campaignID string, id int64, privacy aiexport.PrivacyMode, canAsk bool) error {
+	if _, err := r.db.ExecContext(ctx,
+		`UPDATE ai_connections SET privacy = ?, can_ask = ? WHERE campaign_id = ? AND id = ? AND revoked_at IS NULL`,
+		privacy.String(), canAsk, campaignID, id); err != nil {
+		return dbError("changing connection", err)
 	}
 	return nil
 }

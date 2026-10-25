@@ -109,6 +109,8 @@ type Classifier struct {
 	// folders checks `folder:` names; nil refuses any row that names one.
 	folders        FolderAccess
 	pendingFolders map[string]bool
+	// folderSeen keeps hasFolder's answers by type and lower-cased name.
+	folderSeen map[string]bool
 }
 
 // WithEras lets the classifier check `era:` blocks against the main

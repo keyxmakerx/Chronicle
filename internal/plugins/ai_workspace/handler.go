@@ -81,6 +81,8 @@ type Handler struct {
 	// importFolders lets the review check a page's `folder:` name. Optional —
 	// nil refuses a page that names a folder.
 	importFolders importer.FolderAccess
+	// zone is the owner's time zone, for the Your AI page's times.
+	zone func(ctx context.Context, userID string) *time.Location
 
 	// memory remembers what AI Import applied in each campaign: the labelled
 	// parts of a split answer, and a fingerprint of every block. Optional —
@@ -472,7 +474,7 @@ func (h *Handler) ParseImport(c echo.Context) error {
 
 	host := pasteReviewHost
 	if requestID != 0 {
-		host = requestReviewHost
+		host = requestHost(requestID)
 	}
 	return middleware.Render(c, http.StatusOK, reviewIn(ImportReviewData{
 		RequestID:      requestID,
@@ -662,6 +664,10 @@ func (h *Handler) CommitImport(c echo.Context) error {
 		if err != nil {
 			return err
 		}
+		// The card the review sat in goes with the answered request, so the
+		// result lands above the list instead.
+		c.Response().Header().Set("HX-Retarget", "#"+requestResultHost)
+		c.Response().Header().Set("HX-Reswap", "innerHTML")
 		return middleware.Render(c, http.StatusOK, requestReviewed(res, v))
 	}
 	return middleware.Render(c, http.StatusOK, ImportResult(res))

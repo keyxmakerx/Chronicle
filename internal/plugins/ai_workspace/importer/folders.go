@@ -148,11 +148,8 @@ func (c *Classifier) foldersElsewhere(ctx context.Context, name string, skipType
 			}
 		}
 		if !found {
-			// An ambiguous name is still a folder there; any other error
-			// only loses the hint.
-			node, err := c.folders.FindFolder(ctx, c.campaignID, et.ID, name)
-			var ae *apperror.AppError
-			found = node != nil || (errors.As(err, &ae) && ae.Code == 400)
+			// Any error only loses the hint.
+			found, _ = c.hasFolder(ctx, et.ID, name)
 		}
 		if found {
 			out = append(out, et.Name)
@@ -221,9 +218,8 @@ func (c *Classifier) NewPageFolderSlips(ctx context.Context, pages []ParsedPage)
 		slip := FolderSlip{Block: p.SourceIndex + 1, Page: p.Name, Folder: name, Category: cat}
 		et, known := c.typesBySlug[strings.ToLower(cat)]
 		if known {
-			// An error is an ambiguous name, which the review explains, or a
-			// failed lookup, which the review repeats.
-			if node, err := c.folders.FindFolder(ctx, c.campaignID, et.ID, name); node != nil || err != nil {
+			// A failed lookup is left to the review, which looks again.
+			if found, err := c.hasFolder(ctx, et.ID, name); found || err != nil {
 				continue
 			}
 			pending := false
@@ -240,6 +236,36 @@ func (c *Classifier) NewPageFolderSlips(ctx context.Context, pages []ParsedPage)
 			slip.Elsewhere = c.foldersElsewhere(ctx, name, 0)
 		}
 		out = append(out, slip)
+		// The AI is told only the first few, so the rest aren't looked up.
+		if len(out) > maxFolderSlips {
+			break
+		}
 	}
 	return out, nil
+}
+
+// maxFolderSlips is how many slips NewPageFolderSlips finds before it stops:
+// one more than the AI is shown, so it still hears there are more.
+const maxFolderSlips = 5
+
+// hasFolder reports whether the category has a folder of this name; an
+// ambiguous name is still a folder there. Answers are kept for the
+// classifier's life, so a request naming one folder many times, or one
+// folder under many categories, looks each up once.
+func (c *Classifier) hasFolder(ctx context.Context, typeID int, name string) (bool, error) {
+	key := strconv.Itoa(typeID) + "|" + strings.ToLower(strings.TrimSpace(name))
+	if found, ok := c.folderSeen[key]; ok {
+		return found, nil
+	}
+	node, err := c.folders.FindFolder(ctx, c.campaignID, typeID, name)
+	var ae *apperror.AppError
+	found := node != nil || (errors.As(err, &ae) && ae.Code == 400)
+	if err != nil && !found {
+		return false, err
+	}
+	if c.folderSeen == nil {
+		c.folderSeen = map[string]bool{}
+	}
+	c.folderSeen[key] = found
+	return found, nil
 }

@@ -55,3 +55,9 @@ test('the style kit is part of the Pages section and defaults to Material', () =
   assert.match(src, /if \(!d\.page\.kit\) d\.page\.kit = 'material'/, 'fromServer must default the kit');
   assert.match(src, /opts\('pg-kit', 'page\.kit'/, 'a control must bind page.kit');
 });
+
+test('the owner sets the DM Screen look beside the pages kit, defaulting to the same', () => {
+  assert.match(src, /'page\.kit', 'page\.dmKit'/, 'SEC_KEYS must list page.dmKit');
+  assert.match(src, /if \(!d\.page\.dmKit\) d\.page\.dmKit = 'same'/, 'fromServer must default to the pages kit');
+  assert.match(src, /opts\('pg-dmkit', 'page\.dmKit', 'pg-dmkit-l', \[\['same', 'Same as pages'\]\]\.concat\(STYLE_KITS\)\)/, 'a control must bind page.dmKit');
+});

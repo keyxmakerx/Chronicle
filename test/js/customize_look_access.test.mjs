@@ -45,7 +45,7 @@ test('page and hover start with the owner, like the server, so nothing changes f
 });
 
 test('access is part of Save, Discard and Reset and is sent with the look', () => {
-  assert.match(src, /page:\['page\.look', 'page\.kit', 'access\.page', 'access\.dmscreen'\]/);
+  assert.match(src, /page:\['page\.look', 'page\.kit', 'page\.dmKit', 'access\.page', 'access\.dmscreen'\]/);
   assert.match(src, /hover:\['hover\.look', 'hover\.timelinePopup', 'access\.hover'\]/);
   assert.match(src, /sheet:\['sheet\.style', 'access\.sheet'\]/);
   assert.match(src, /page:clone\(d\.page\), access:clone\(d\.access\)/, 'toInput must send access');
