@@ -107,7 +107,7 @@ func (s *pageLayoutService) SetPageLayout(ctx context.Context, e *Entity, et *En
 	if key == MainLayoutKey {
 		// A player's character with a layout of its own to start on keeps
 		// the main one only by choosing it.
-		if !(isPlayersCharacter(e) && p.Claimed != "") {
+		if !isPlayersCharacter(e) || p.Claimed == "" {
 			stored = ""
 		}
 	} else if _, ok := p.Find(key); !ok {
