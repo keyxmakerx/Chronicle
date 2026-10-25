@@ -26,7 +26,7 @@ var (
 func getConverter() *md.Converter {
 	converterOnce.Do(func() {
 		converter = md.NewConverter("", true, nil)
-		converter.AddRules(mentionRule(), secretRule())
+		converter.AddRules(mentionRule(), secretRule(), tableRule())
 	})
 	return converter
 }
