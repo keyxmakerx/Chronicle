@@ -14,9 +14,17 @@
  *   only peeks into the drill panel, also offers its own page. A row with
  *   nothing else offers the owner Edit sidebar.
  *
- * Rows in a category's page panel keep their own folder menu
- * (sidebar_tree.js); the editor's rows have their own buttons, so the menu
- * stays shut while the owner edits.
+ * Rows in a category's page panel (sidebar_tree.js) get the same menu:
+ *
+ * - A page, for anyone: open it, open it in a new tab, copy its link.
+ * - A page, for a scribe or the owner: a new page inside it, a new folder
+ *   beside it, rename it, move it to a folder.
+ * - A folder, for a scribe or the owner: a new folder inside it, rename it,
+ *   move it; the owner can also delete it, after a second step in the menu.
+ *   Its pages go back to the top level, as the route says.
+ *
+ * The editor's rows have their own buttons, so the menu stays shut while
+ * the owner edits.
  */
 (function () {
   'use strict';
@@ -78,6 +86,51 @@
     return stepWithin(ed, JSON.parse(JSON.stringify(model)), key, dir);
   }
 
+  /**
+   * The menu's entries for a row in a category's page panel. info: kind
+   * ("page", "place" for a page's extra listing, or "folder"), canEdit
+   * (scribe or owner), canDelete (owner).
+   */
+  function treeItemsFor(info) {
+    var out = [];
+    if (info.kind !== 'folder') {
+      out.push({ id: 'open', label: 'Open', icon: 'fa-arrow-right' });
+      out.push({ id: 'open-tab', label: 'Open in new tab', icon: 'fa-arrow-up-right-from-square' });
+      out.push({ id: 'copy-link', label: 'Copy link', icon: 'fa-link' });
+    }
+    // A listing follows its page: it is renamed or moved from the page's own row.
+    if (!info.canEdit || info.kind === 'place') return out;
+    if (out.length) out.push({ sep: true });
+    if (info.kind === 'page') {
+      out.push({ id: 'new-sub', label: 'New page inside', icon: 'fa-file-circle-plus' });
+      out.push({ id: 'new-folder', label: 'New folder here', icon: 'fa-folder-plus' });
+    } else {
+      out.push({ id: 'new-folder', label: 'New folder inside', icon: 'fa-folder-plus' });
+    }
+    out.push({ id: 'rename', label: 'Rename', icon: 'fa-i-cursor' });
+    out.push({ id: 'move', label: 'Move to folder…', icon: 'fa-folder-tree' });
+    if (info.kind === 'folder' && info.canDelete) {
+      out.push({ sep: true });
+      out.push({ id: 'delete', label: 'Delete folder', icon: 'fa-trash-can', danger: true });
+    }
+    return out;
+  }
+
+  /**
+   * The Move to folder list: the top level, then every folder in tree
+   * order, indented by depth. folders: [{id, name, depth}] already without
+   * the row itself and anything inside it. current is the row's folder id,
+   * or "" at the top level, and is shown but cannot be chosen.
+   */
+  function moveItemsFor(folders, current) {
+    var out = [{ id: 'back', label: 'Back', icon: 'fa-arrow-left' }, { sep: true }];
+    out.push({ id: 'move-to', target: '', label: 'Top level', icon: 'fa-layer-group', disabled: current === '' });
+    folders.forEach(function (f) {
+      out.push({ id: 'move-to', target: f.id, label: f.name, icon: 'fa-folder', indent: f.depth, disabled: current === f.id });
+    });
+    return out;
+  }
+
   // --- The page --------------------------------------------------------------
 
   var M = null; // the open menu: { el, items, info, opener, row, x, y }
@@ -92,6 +145,8 @@
   /** The sidebar row under el, or null for anything the menu leaves alone. */
   function rowFrom(el) {
     if (!el || !el.closest || document.body.classList.contains('nav-editing')) return null;
+    var tree = el.closest('#sidebar-entity-tree .sidebar-tree-node');
+    if (tree) return tree;
     if (el.closest('#sidebar-drill, #sidebar-nav-edit')) return null;
     var row = el.closest('#sidebar .nav-row[data-nav-key]');
     if (!row) {
@@ -135,6 +190,51 @@
     };
   }
 
+  function treeInfoFor(node) {
+    var tree = node.closest('#sidebar-entity-tree');
+    var link = node.querySelector(':scope > .sidebar-tree-item');
+    var parent = node.getAttribute('data-parent-id') || '';
+    var parentNode = parent && tree ? tree.querySelector('.sidebar-tree-node[data-node-id="' + cssEsc(parent) + '"]') : null;
+    var kind = node.hasAttribute('data-node-id') ? 'folder' : node.hasAttribute('data-place-key') ? 'place' : 'page';
+    return {
+      tree: true,
+      kind: kind,
+      node: node,
+      link: link,
+      nodeId: node.getAttribute('data-node-id') || '',
+      entityId: node.getAttribute('data-entity-id') || '',
+      href: link && link.tagName === 'A' ? sitePath(link.getAttribute('href')) : '',
+      // The folder the row sits in, "" when it is not in one.
+      folder: parentNode ? parent : '',
+      campaignId: tree ? tree.getAttribute('data-campaign-id') || '' : '',
+      typeId: tree ? parseInt(tree.getAttribute('data-entity-type-id') || '0', 10) || 0 : 0,
+      canEdit: !!tree && tree.getAttribute('data-can-edit') === 'true',
+      canDelete: !!tree && tree.getAttribute('data-can-delete-folders') === 'true',
+      name: link ? (link.getAttribute('data-entity-name') || link.textContent || '').trim() : ''
+    };
+  }
+
+  function cssEsc(s) {
+    return window.CSS && CSS.escape ? CSS.escape(s) : String(s).replace(/["\\]/g, '\\$&');
+  }
+
+  /** The folders a row may move into: every folder but itself and the ones inside it. */
+  function folderChoices(info) {
+    var tree = info.node.closest('#sidebar-entity-tree');
+    if (!tree) return [];
+    var out = [];
+    tree.querySelectorAll('.sidebar-tree-node[data-node-id]').forEach(function (f) {
+      if (info.kind === 'folder' && info.node.contains(f)) return;
+      var lb = f.querySelector(':scope > .sidebar-tree-item');
+      out.push({
+        id: f.getAttribute('data-node-id'),
+        name: lb ? (lb.getAttribute('data-entity-name') || lb.textContent || '').trim() : '',
+        depth: parseInt(f.getAttribute('data-depth') || '0', 10) || 0
+      });
+    });
+    return out;
+  }
+
   function el(tag, cls, attrs) {
     var n = document.createElement(tag);
     if (cls) n.className = cls;
@@ -149,7 +249,9 @@
       if (it.sep) { menu.appendChild(el('div', 'rowmenu-sep', { role: 'separator' })); return; }
       var b = el('button', 'rowmenu-item', { type: 'button', role: 'menuitem', 'data-idx': String(i), tabindex: '-1' });
       if (it.disabled) { b.disabled = true; b.setAttribute('aria-disabled', 'true'); }
-      var ic = el('i', 'fa-solid ' + it.icon, { 'aria-hidden': 'true' });
+      if (it.danger) b.setAttribute('data-danger', '');
+      if (it.indent) b.style.paddingLeft = (10 + it.indent * 14) + 'px';
+      var ic = el('i', it.icon ? 'fa-solid ' + it.icon : '', { 'aria-hidden': 'true' });
       var tx = el('span');
       tx.textContent = it.label;
       b.appendChild(ic);
@@ -178,8 +280,13 @@
 
   function open(row, x, y, opener) {
     close(false);
-    var info = infoFor(row);
-    var items = itemsFor(info);
+    var info = row.classList.contains('sidebar-tree-node') ? treeInfoFor(row) : infoFor(row);
+    return show(info.tree ? treeItemsFor(info) : itemsFor(info), info, row, x, y, opener);
+  }
+
+  /** Draws items as the open menu. A submenu (Move to folder, the delete
+   *  check) is drawn the same way, in the same place. */
+  function show(items, info, row, x, y, opener) {
     if (!items.length) return false;
     var menu = draw(items, info.name ? info.name + ' actions' : 'Row actions');
     document.body.appendChild(menu);
@@ -189,7 +296,7 @@
       menu.animate([{ opacity: 0, transform: 'translateY(-4px) scale(.97)' }, { opacity: 1, transform: 'none' }],
         { duration: 130, easing: EASE_OUT });
     }
-    M = { el: menu, items: items, info: info, opener: opener || null, row: row };
+    M = { el: menu, items: items, info: info, opener: opener || null, row: row, x: x, y: y };
     if (M.opener) M.opener.setAttribute('aria-expanded', 'true');
     focusAt(0);
     return true;
@@ -202,12 +309,13 @@
     if (m.el.parentNode) m.el.parentNode.removeChild(m.el);
     if (m.opener) m.opener.setAttribute('aria-expanded', 'false');
     if (returnFocus) {
-      var back = m.opener && document.contains(m.opener) ? m.opener : m.row;
+      var back = m.opener && document.contains(m.opener) ? m.opener : (m.info.link || m.row);
       if (back && document.contains(back)) back.focus({ preventScroll: true });
     }
   }
 
-  function run(id, info) {
+  function run(id, info, it) {
+    if (info.tree) { runTree(id, info, it); return; }
     var ed = info.editor;
     var nm = info.name;
     switch (id) {
@@ -258,10 +366,116 @@
     var it = M.items[i];
     if (!it || it.sep || it.disabled) return;
     var info = M.info;
+    var sub = submenu(it.id, info);
+    if (sub) {
+      var m = M;
+      close(false);
+      show(sub, info, m.row, m.x, m.y, m.opener);
+      return;
+    }
     // Focus goes back to the row first: the change may redraw the sidebar,
     // and the editor and pins move focus on from there.
     close(true);
-    run(it.id, info);
+    run(it.id, info, it);
+  }
+
+  /** The items a choice opens in place of the menu, or null. */
+  function submenu(id, info) {
+    if (id === 'move') return moveItemsFor(folderChoices(info), info.folder);
+    if (id === 'back') return treeItemsFor(info);
+    if (id === 'delete') {
+      return [
+        { id: 'back', label: 'Back', icon: 'fa-arrow-left' },
+        { sep: true },
+        { id: 'delete-yes', label: 'Delete "' + info.name + '"', icon: 'fa-trash-can', danger: true },
+        { id: 'note', label: 'Its pages move to the top level.', icon: '', disabled: true }
+      ];
+    }
+    return null;
+  }
+
+  function treeURL(info, tail) {
+    return '/campaigns/' + encodeURIComponent(info.campaignId) + tail;
+  }
+
+  function treeSave(url, method, body, done, failed) {
+    return Chronicle.apiFetch(url, { method: method, body: body }).then(function (res) {
+      if (!res.ok) throw new Error(String(res.status));
+      return res.status === 204 ? {} : res.json().catch(function () { return {}; });
+    }).then(done, function () {
+      if (Chronicle.notify) Chronicle.notify(failed, 'error');
+    });
+  }
+
+  /** Reloads the panel's tree, then runs then() once the new rows are drawn. */
+  function reloadTree(then) {
+    var api = Chronicle.sidebarTree;
+    if (!api) return;
+    if (then) {
+      document.addEventListener('chronicle:sidebar-tree', function once() {
+        document.removeEventListener('chronicle:sidebar-tree', once);
+        then();
+      });
+    }
+    api.refresh();
+  }
+
+  function runTree(id, info, it) {
+    var nm = info.name;
+    switch (id) {
+      case 'open':
+        // The row's own click, so the page opens the way any sidebar click does.
+        if (info.link) info.link.click();
+        break;
+      case 'open-tab':
+      case 'copy-link':
+        run(id, { href: info.href, page: '' });
+        break;
+      case 'new-sub':
+        window.location.assign(treeURL(info, '/entities/new?type=' + info.typeId + '&parent_id=' + encodeURIComponent(info.entityId)));
+        break;
+      case 'new-folder': {
+        var parent = info.kind === 'folder' ? info.nodeId : info.folder;
+        treeSave(treeURL(info, '/sidebar-nodes'), 'POST', { name: 'New folder', entity_type_id: info.typeId }, function (f) {
+          var placed = parent
+            ? treeSave(treeURL(info, '/sidebar-nodes/' + encodeURIComponent(f.id) + '/reorder'), 'PUT', { parent_id: parent },
+              function () {}, 'The folder was made at the top level.')
+            : Promise.resolve();
+          placed.then(function () {
+            reloadTree(function () {
+              var row = document.querySelector('#sidebar-entity-tree .sidebar-tree-node[data-node-id="' + cssEsc(f.id) + '"]');
+              var lb = row && row.querySelector(':scope > .sidebar-tree-item');
+              if (lb && Chronicle.sidebarTree) Chronicle.sidebarTree.rename(lb, f.id, info.campaignId);
+            });
+          });
+        }, 'The folder could not be made.');
+        break;
+      }
+      case 'rename':
+        if (info.link && Chronicle.sidebarTree) {
+          Chronicle.sidebarTree.rename(info.link, info.nodeId, info.campaignId, info.kind === 'page' ? info.entityId : '');
+        }
+        break;
+      case 'move-to': {
+        var to = it.target || null;
+        var url = info.kind === 'folder'
+          ? treeURL(info, '/sidebar-nodes/' + encodeURIComponent(info.nodeId) + '/reorder')
+          : treeURL(info, '/entities/' + encodeURIComponent(info.entityId) + '/reorder');
+        // A page goes to the end of its new folder; the route clamps the index.
+        var body = info.kind === 'folder' ? { parent_id: to } : { parent_id: null, parent_node_id: to, sort_order: 1000000 };
+        treeSave(url, 'PUT', body, function () {
+          reloadTree();
+          if (Chronicle.notify) Chronicle.notify(nm + ' moved to ' + it.label + '.', 'success');
+        }, nm + ' could not be moved.');
+        break;
+      }
+      case 'delete-yes':
+        treeSave(treeURL(info, '/sidebar-nodes/' + encodeURIComponent(info.nodeId)), 'DELETE', undefined, function () {
+          reloadTree();
+          if (Chronicle.notify) Chronicle.notify(nm + ' is deleted. Its pages are at the top level.', 'success');
+        }, nm + ' could not be deleted.');
+        break;
+    }
   }
 
   // --- Wiring ----------------------------------------------------------------
@@ -277,7 +491,7 @@
     if (justLongPressed) { justLongPressed = false; e.preventDefault(); e.stopPropagation(); return; }
     var item = M && t.closest('.rowmenu-item');
     if (item && M.el.contains(item)) { e.preventDefault(); choose(parseInt(item.getAttribute('data-idx'), 10)); return; }
-    var more = t.closest('#sidebar [data-nav-more]');
+    var more = t.closest('#sidebar [data-nav-more], #sidebar [data-tree-more]');
     if (more) {
       e.preventDefault();
       e.stopPropagation();
@@ -291,7 +505,7 @@
   }, true);
 
   document.addEventListener('pointerdown', function (e) {
-    if (M && e.target && !M.el.contains(e.target) && !(e.target.closest && e.target.closest('[data-nav-more]'))) close(false);
+    if (M && e.target && !M.el.contains(e.target) && !(e.target.closest && e.target.closest('[data-nav-more], [data-tree-more]'))) close(false);
   }, true);
 
   // A long press on a touch screen opens the menu where the finger is; the
@@ -352,5 +566,5 @@
   document.addEventListener('htmx:beforeSwap', function () { close(false); });
 
   window.Chronicle = window.Chronicle || {};
-  window.Chronicle.navRowMenu = { itemsFor: itemsFor, sitePath: sitePath };
+  window.Chronicle.navRowMenu = { itemsFor: itemsFor, treeItemsFor: treeItemsFor, moveItemsFor: moveItemsFor, sitePath: sitePath };
 })();

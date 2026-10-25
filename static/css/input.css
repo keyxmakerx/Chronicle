@@ -3504,6 +3504,7 @@
   .rowmenu-item:disabled { color: #6b7280; cursor: not-allowed; background: none; }
   .rowmenu-item:disabled i { color: #4b5563; }
   .rowmenu-sep { height: 1px; margin: 4px 6px; background: rgb(255 255 255 / 0.09); }
+  .rowmenu-item[data-danger], .rowmenu-item[data-danger] i { color: #fca5a5; }
 
   /* Section headings: the whole heading is the fold button. */
   .nav-gh-wrap { position: relative; margin-top: 8px; }
@@ -3801,6 +3802,16 @@
   /* New-item flash: draws the eye without moving anything else. */
   @keyframes tree-flash { 0% { background: rgb(var(--nav-accent) / 0.35); } 100% { background: transparent; } }
   .tree-row.is-new { animation: tree-flash 1100ms ease-out; }
+  /* A tree row's dots (sidebar_row_menu.js) sit beside the row, not in it,
+     and show only for the row under the pointer, not its whole folder. */
+  .sidebar-tree-node { position: relative; }
+  .sidebar-tree-node.has-more > .tree-row { padding-right: 34px; }
+  .tree-more { top: 2.5px; right: 10px; }
+  .tree-row:hover + .tree-more, .tree-row:focus-visible + .tree-more, .tree-more:hover, .tree-more:focus-visible { opacity: 1; }
+  @media (hover: none) {
+    :is(#sidebar:not(.nav-tools-gated), #sidebar[data-nav-tools="on"]) .tree-more { opacity: 1; }
+    #sidebar.nav-tools-gated:not([data-nav-tools="on"]) .tree-more:not([aria-expanded="true"]) { visibility: hidden; }
+  }
 
   /* Folded to icons (the unpinned sidebar when the pointer leaves it). */
   .sidebar-collapsed .nav-brand { padding: 0; justify-content: center; }
