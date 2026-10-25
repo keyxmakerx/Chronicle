@@ -539,6 +539,9 @@ func SidebarEntitySubTypes(ctx context.Context, parentID int) []SidebarEntityTyp
 // as their own rows, the folder tree and Recent. The category row's click
 // only peeks, so the way to the full page leads the panel where mouse,
 // touch and keyboard all reach it first.
+//
+// The panel inherits the boost's hx-select from #sidebar-drill; its own
+// hx-get requests unset it, since they answer with a bare fragment.
 templ SidebarDrillPanel(campaignID string, et SidebarEntityType, count int) {
 	<button type="button" class="nav-drill-back" data-drill-back>
 		<i class="fa-solid fa-chevron-left" aria-hidden="true"></i>
@@ -587,6 +590,7 @@ templ SidebarDrillPanel(campaignID string, et SidebarEntityType, count int) {
 			hx-trigger="keyup changed delay:300ms"
 			hx-target="#sidebar-cat-results"
 			hx-swap="innerHTML"
+			hx-select="unset"
 			name="q"
 			autocomplete="off"
 			aria-label={ fmt.Sprintf("Search %s", et.NamePlural) }
@@ -623,6 +627,7 @@ templ SidebarDrillPanel(campaignID string, et SidebarEntityType, count int) {
 				hx-trigger="load"
 				hx-target="#sidebar-cat-results"
 				hx-swap="innerHTML"
+				hx-select="unset"
 			>
 				<div class="nav-tree-skel">
 					<div class="skeleton-shimmer h-3 w-3/4"></div>

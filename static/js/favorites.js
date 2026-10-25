@@ -130,6 +130,8 @@
         });
 
         container.innerHTML = html;
+        // Built rows join the drill panel's boost, so they open in place.
+        if (window.htmx) htmx.process(container);
       })
       .catch(function () {
         // Silently fail — favorites section just stays empty.
