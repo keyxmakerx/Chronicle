@@ -45,7 +45,7 @@ func TestAIPage_ConnectSection(t *testing.T) {
 			[]string{key, "Bearer " + key, "claude mcp add --transport http chronicle", base.Endpoint, "only this once"},
 			[]string{"Make a key"}},
 		{"connected", func() ConnectView { v := base; v.Conn = conn; return v },
-			[]string{"Claude is connected", "sees what you see", "key ends in WXYZ", "last used 5 minutes ago", "Disconnect", "/ai/connection/disconnect"},
+			[]string{"Claude is connected", "sees what you see", "only looks", "key ends in WXYZ", "last used 5 minutes ago", "Disconnect", "/ai/connection/disconnect"},
 			[]string{key}},
 	}
 	for _, tc := range cases {

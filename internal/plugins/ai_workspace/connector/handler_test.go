@@ -25,7 +25,7 @@ type endpointRig struct {
 func newRig(t *testing.T, p aiexport.PrivacyMode) *endpointRig {
 	t.Helper()
 	svc, repo, _, _ := newTestService()
-	key, _, err := svc.Connect(context.Background(), "camp-1", "owner-1", p)
+	key, _, err := svc.Connect(context.Background(), "camp-1", "owner-1", p, false)
 	if err != nil {
 		t.Fatal(err)
 	}

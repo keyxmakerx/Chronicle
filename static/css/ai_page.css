@@ -1,5 +1,5 @@
-/* The campaign's Your AI page: connecting an AI app, what it did, and the
- * copy-and-paste tool. A workshop, so it sits on the theme tokens, never
+/* The campaign's Your AI page: connecting an AI app, what it asks for, what
+ * it did, and the copy-and-paste tool. A workshop, so it sits on the theme tokens, never
  * paper; panels are sheets with a hairline edge and a resting shadow. */
 
 .aic-panel { background: var(--color-bg-secondary); border: 1px solid var(--color-border); border-radius: 12px; box-shadow: var(--elev-resting); padding: 16px 20px; }
@@ -54,6 +54,10 @@
   .aic-log-row { grid-template-columns: minmax(0, 1fr); }
   .aic-log-note { text-align: left; max-width: none; }
 }
+
+/* A request waiting for the owner: a sheet lifted above the page with an
+ * accent edge, since it is the one thing here that needs an answer. */
+.aic-request { border-color: var(--color-accent); box-shadow: 0 0 0 1px var(--color-accent), var(--elev-hover); }
 
 /* The key, shown once: a sheet lifted above the page. */
 .aic-key { box-shadow: var(--elev-hover); }

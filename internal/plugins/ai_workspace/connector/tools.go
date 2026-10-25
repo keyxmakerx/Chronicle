@@ -9,7 +9,8 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/records"
 )
 
-// argMax caps one tool argument; every argument is a name or a date.
+// argMax caps one tool argument unless it says otherwise; nearly every
+// argument is a name or a date.
 const argMax = 200
 
 // arg is one input a tool takes. Key is the lookup field it fills, or "name"
@@ -17,17 +18,37 @@ const argMax = 200
 type arg struct {
 	Key, Desc string
 	Required  bool
+	// Max overrides argMax. Keep keeps the text's lines as sent; other
+	// arguments are folded onto one line.
+	Max  int
+	Keep bool
 }
 
-// tool is one read-only tool: a lookup the copy-and-paste flow already
-// answers (What), or the campaign outline (What == "").
+func (a arg) max() int {
+	if a.Max > 0 {
+		return a.Max
+	}
+	return argMax
+}
+
+// tool is one tool: a lookup the copy-and-paste flow already answers (What),
+// the campaign outline (What == ""), or, for a connection that may ask for
+// changes (Asks), the writing instructions and the request itself.
 type tool struct {
 	Name, Title, Desc string
 	// Did starts the "What it did" line, in the past tense.
 	Did  string
 	What string
 	Args []arg
+	// Asks marks the tools only an "Ask for changes" connection lists.
+	Asks bool
 }
+
+// The tools an "Ask for changes" connection adds.
+const (
+	toolHowTo = "how_to_write_changes"
+	toolAsk   = "ask_for_changes"
+)
 
 var dateArgs = []arg{
 	{Key: "from", Desc: "First day, as the calendar writes it (for example \"Deepwinter 1 1492\")"},
@@ -81,26 +102,49 @@ var tools = []tool{
 	{Name: "players", Title: "Players", Did: "Looked at the players", What: "players",
 		Desc: "Each player's character right now, what they carry, and whether they are coming to the next game night."},
 	{Name: "block_format", Title: "How to write a block", Did: "Read how to write a block", What: "format",
-		Desc: "How Chronicle writes one kind of block (an event, a calendar, a rolling table...), for answers the owner pastes in by hand. These tools can't make changes.",
+		Desc: "How Chronicle writes one kind of block (an event, a calendar, a rolling table...).",
 		Args: []arg{{Key: "block", Desc: "The kind of block, for example \"event\"", Required: true}}},
+	{Name: toolHowTo, Title: "How to write changes", Did: "Read how to write changes", Asks: true,
+		Desc: "Read this before ask_for_changes: how Chronicle writes pages and every other kind of block, and this campaign's kinds of pages with their sheet fields."},
+	{Name: toolAsk, Title: "Ask for changes", Did: "Asked for changes", Asks: true,
+		Desc: "Send changes for the campaign's owner to review: new pages, edits, removals, events and the other blocks how_to_write_changes describes. " +
+			"Nothing changes until the owner says yes to each one in Chronicle, so tell them it is waiting on their Your AI page. Send one request per job, not one per block.",
+		Args: []arg{
+			{Key: "summary", Required: true, Desc: "One line for the owner saying what this does, for example \"Five characters for Coral Court\""},
+			{Key: "changes", Required: true, Max: changesMax, Keep: true, Desc: "The blocks, written as how_to_write_changes says, one after another"},
+		}},
 }
 
-func findTool(name string) *tool {
+// toolsFor is the tools a connection may use, in order.
+func toolsFor(c *Connection) []*tool {
+	out := make([]*tool, 0, len(tools))
 	for i := range tools {
-		if tools[i].Name == name {
-			return &tools[i]
+		if !tools[i].Asks || (c != nil && c.CanAsk) {
+			out = append(out, &tools[i])
+		}
+	}
+	return out
+}
+
+// findTool is the connection's tool by name; one it may not use is not found.
+func findTool(c *Connection, name string) *tool {
+	for _, t := range toolsFor(c) {
+		if t.Name == name {
+			return t
 		}
 	}
 	return nil
 }
 
-// definition is the tool as tools/list describes it. Every tool is marked
-// read-only, so an AI app may run it without asking.
+// definition is the tool as tools/list describes it. Every lookup is marked
+// read-only, so an AI app may run it without asking. ask_for_changes is not
+// read-only, since it leaves the owner a request, but it is not destructive:
+// it applies nothing.
 func (t *tool) definition() map[string]any {
 	props := map[string]any{}
 	required := []string{}
 	for _, a := range t.Args {
-		props[a.Key] = map[string]any{"type": "string", "description": a.Desc, "maxLength": argMax}
+		props[a.Key] = map[string]any{"type": "string", "description": a.Desc, "maxLength": a.max()}
 		if a.Required {
 			required = append(required, a.Key)
 		}
@@ -117,16 +161,16 @@ func (t *tool) definition() map[string]any {
 		},
 		"annotations": map[string]any{
 			"title":           t.Title,
-			"readOnlyHint":    true,
+			"readOnlyHint":    t.Name != toolAsk,
 			"destructiveHint": false,
-			"idempotentHint":  true,
+			"idempotentHint":  t.Name != toolAsk,
 			"openWorldHint":   false,
 		},
 	}
 }
 
-// readArgs keeps only the tool's own arguments, each a short string. A
-// missing required one is an error the AI can fix.
+// readArgs keeps only the tool's own arguments, each a string within its
+// cap. A missing required one is an error the AI can fix.
 func (t *tool) readArgs(in map[string]any) (map[string]string, error) {
 	out := map[string]string{}
 	for _, a := range t.Args {
@@ -144,9 +188,13 @@ func (t *tool) readArgs(in map[string]any) (map[string]string, error) {
 				return nil, fmt.Errorf("%s should be text", a.Key)
 			}
 		}
-		s = strings.Join(strings.Fields(s), " ")
-		if len(s) > argMax {
-			return nil, fmt.Errorf("%s is too long (at most %d characters)", a.Key, argMax)
+		if a.Keep {
+			s = strings.TrimSpace(s)
+		} else {
+			s = strings.Join(strings.Fields(s), " ")
+		}
+		if len(s) > a.max() {
+			return nil, fmt.Errorf("%s is too long (at most %d characters)", a.Key, a.max())
 		}
 		if s == "" {
 			if a.Required {

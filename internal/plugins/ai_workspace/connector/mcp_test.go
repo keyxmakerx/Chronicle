@@ -65,7 +65,8 @@ func TestHandle_Initialize(t *testing.T) {
 	}
 }
 
-// Every tool says it only reads, so no AI app treats one as a change.
+// An "Only look" connection lists only lookups, and every one says it only
+// reads, so no AI app treats one as a change.
 func TestHandle_ToolsListIsReadOnly(t *testing.T) {
 	out := (&Server{}).Handle(context.Background(), session(aiexport.PrivacyModeSafe), []byte(`{"jsonrpc":"2.0","id":"a","method":"tools/list"}`))
 	var res struct {
@@ -78,7 +79,7 @@ func TestHandle_ToolsListIsReadOnly(t *testing.T) {
 	if err := json.Unmarshal(decode(t, out).Result, &res); err != nil {
 		t.Fatal(err)
 	}
-	if len(res.Tools) != len(tools) || res.Tools[0].Name != "campaign_outline" {
+	if len(res.Tools) != len(toolsFor(nil)) || len(res.Tools) == len(tools) || res.Tools[0].Name != "campaign_outline" {
 		t.Fatalf("got %d tools, first %q", len(res.Tools), res.Tools[0].Name)
 	}
 	seen := map[string]bool{}
@@ -100,6 +101,9 @@ func TestHandle_ToolsListIsReadOnly(t *testing.T) {
 // connector can never read something that flow can't.
 func TestTools_EachIsALookup(t *testing.T) {
 	for _, tl := range tools {
+		if tl.Asks {
+			continue
+		}
 		if tl.What == "" {
 			if tl.Name != "campaign_outline" {
 				t.Errorf("%s answers with no lookup", tl.Name)
@@ -189,7 +193,7 @@ func TestHandle_NotificationGetsNoBody(t *testing.T) {
 }
 
 func TestReadArgs(t *testing.T) {
-	read := findTool("read_page")
+	read := findTool(nil, "read_page")
 	cases := []struct {
 		name    string
 		in      map[string]any

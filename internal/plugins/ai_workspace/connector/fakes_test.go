@@ -14,6 +14,7 @@ type memRepo struct {
 	mu       sync.Mutex
 	conns    []*Connection
 	calls    []Call
+	reqs     []*Request
 	disabled map[string]bool
 }
 
@@ -105,6 +106,65 @@ func (r *memRepo) RecentCalls(_ context.Context, campaignID string, limit int) (
 }
 
 func (r *memRepo) PruneCalls(context.Context, string, int) error { return nil }
+
+func (r *memRepo) AddRequest(_ context.Context, q *Request, max int) (int64, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	waiting := 0
+	for _, x := range r.reqs {
+		if x.CampaignID == q.CampaignID && x.Status == RequestWaiting {
+			waiting++
+		}
+	}
+	if waiting >= max {
+		return 0, ErrTooManyWaiting
+	}
+	cp := *q
+	cp.ID = int64(len(r.reqs) + 1)
+	r.reqs = append(r.reqs, &cp)
+	return cp.ID, nil
+}
+
+func (r *memRepo) Requests(_ context.Context, campaignID, status string, limit int) ([]Request, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []Request
+	for i := len(r.reqs) - 1; i >= 0 && len(out) < limit; i-- {
+		if q := r.reqs[i]; q.CampaignID == campaignID && q.Status == status {
+			cp := *q
+			cp.Body = ""
+			out = append(out, cp)
+		}
+	}
+	return out, nil
+}
+
+func (r *memRepo) Request(_ context.Context, campaignID string, id int64) (*Request, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, q := range r.reqs {
+		if q.ID == id && q.CampaignID == campaignID {
+			cp := *q
+			return &cp, nil
+		}
+	}
+	return nil, nil
+}
+
+func (r *memRepo) FinishRequest(_ context.Context, campaignID string, id int64, status, outcome string, at time.Time) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, q := range r.reqs {
+		if q.ID == id && q.CampaignID == campaignID && q.Status == RequestWaiting {
+			t := at
+			q.Status, q.Outcome, q.DecidedAt = status, outcome, &t
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (r *memRepo) PruneRequests(context.Context, string, int) error { return nil }
 
 // owners says who owns which campaign; a campaign missing from the map is
 // deleted or in the Trash.

@@ -5036,14 +5036,16 @@ func (a *App) RegisterRoutes() {
 		aiWorkspaceHandler.SetImportMemory(ai_workspace.NewImportMemoryRepository(a.DB))
 	}
 
-	// Connecting an AI app straight to a campaign (read-only tools over the
-	// Model Context Protocol), left out when its tables did not migrate. The
+	// Connecting an AI app straight to a campaign (lookups and requests for
+	// changes over the Model Context Protocol), left out when its tables did
+	// not migrate. The
 	// endpoint checks its own key and never reads a session cookie.
 	var aiConnectorEndpoint *connector.Endpoint
 	if a.PluginHealth == nil || a.PluginHealth.IsHealthy(connector.SchemaSlug) {
 		aiConnectorSvc := connector.NewService(connector.NewRepository(a.DB), aiConnectorOwners{campaigns: campaignService})
 		aiWorkspaceHandler.SetConnector(aiConnectorSvc, a.Config.BaseURL)
 		aiConnectorEndpoint = connector.NewEndpoint(aiConnectorSvc, a.Config.BaseURL)
+		aiConnectorEndpoint.SetInstructions(aiWorkspaceHandler.ConnectorInstructions)
 		connector.RegisterRoutes(e, aiConnectorEndpoint)
 	}
 

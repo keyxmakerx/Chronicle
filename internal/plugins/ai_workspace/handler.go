@@ -10,6 +10,7 @@ package ai_workspace
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -347,6 +348,16 @@ func (h *Handler) ParseImport(c echo.Context) error {
 	if err == nil && trayKey != "" && strings.TrimSpace(body) == "" {
 		body, err = h.trayText(c.Request().Context(), cc.Campaign.ID, trayKey)
 	}
+	// Review on a request a connected AI made reviews its blocks, read from
+	// the campaign's own waiting requests, never from the form.
+	var requestID int64
+	if err == nil && trayKey == "" && strings.TrimSpace(body) == "" && c.FormValue("ai_request") != "" {
+		q, qerr := h.waitingRequest(c, cc, c.FormValue("ai_request"))
+		if qerr != nil {
+			return qerr
+		}
+		body, requestID = q.Body, q.ID
+	}
 	if err != nil {
 		// readImportBody already returns operator-friendly wording;
 		// pass it through verbatim.
@@ -367,7 +378,7 @@ func (h *Handler) ParseImport(c echo.Context) error {
 	}
 	// A part of an answer that isn't all in yet waits in the tray; the last
 	// part brings the waiting ones with it.
-	if trayKey == "" {
+	if trayKey == "" && requestID == 0 {
 		var notice *trayNotice
 		body, all, notice, err = h.trayStep(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c), body, all)
 		if err != nil {
@@ -381,6 +392,11 @@ func (h *Handler) ParseImport(c echo.Context) error {
 	lab := importer.TakeParts(all)
 	parsed, lookups := splitLookups(lab.Blocks)
 	if len(lookups) > 0 {
+		if requestID != 0 {
+			// The connector refuses these when they are sent; one here
+			// would be answered with the owner's privacy, not the AI's.
+			return apperror.NewBadRequest("this request holds lookups, which can't be reviewed; turn it down")
+		}
 		return h.answerLookups(c, cc, lookups, len(parsed))
 	}
 	pages, recs := splitImport(parsed)
@@ -454,7 +470,13 @@ func (h *Handler) ParseImport(c echo.Context) error {
 			})
 	}
 
-	return middleware.Render(c, http.StatusOK, ImportReview(ImportReviewData{
+	host := pasteReviewHost
+	if requestID != 0 {
+		host = requestReviewHost
+	}
+	return middleware.Render(c, http.StatusOK, reviewIn(ImportReviewData{
+		RequestID:      requestID,
+		Host:           host,
 		CampaignID:     cc.Campaign.ID,
 		Pages:          pages,
 		Classes:        cls,
@@ -625,10 +647,37 @@ func (h *Handler) CommitImport(c echo.Context) error {
 			})
 	}
 
-	return middleware.Render(c, http.StatusOK, ImportResult(ImportResultData{
-		CampaignID: cc.Campaign.ID,
-		Result:     result,
-	}))
+	res := ImportResultData{CampaignID: cc.Campaign.ID, Result: result}
+	if id, perr := strconv.ParseInt(c.FormValue("ai_request"), 10, 64); perr == nil && id > 0 && h.connector != nil {
+		applied := result.Created + result.Renamed + result.Updated + result.Deleted
+		outcome := fmt.Sprintf("%d applied, %d left out", applied, result.Skipped)
+		if result.Failed > 0 {
+			outcome += fmt.Sprintf(", %d failed", result.Failed)
+		}
+		if err := h.connector.Answered(c.Request().Context(), cc.Campaign.ID, id, outcome); err != nil {
+			slog.Warn("ai-workspace: marking request answered",
+				slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", err))
+		}
+		v, err := h.connectView(c, cc)
+		if err != nil {
+			return err
+		}
+		return middleware.Render(c, http.StatusOK, requestReviewed(res, v))
+	}
+	return middleware.Render(c, http.StatusOK, ImportResult(res))
+}
+
+// waitingRequest is one of the campaign's waiting requests, by the id the
+// page sent.
+func (h *Handler) waitingRequest(c echo.Context, cc *campaigns.CampaignContext, raw string) (*connector.Request, error) {
+	if h.connector == nil {
+		return nil, apperror.NewBadRequest("connecting an AI is not available on this Chronicle site")
+	}
+	id, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
+	if err != nil || id <= 0 {
+		return nil, apperror.NewBadRequest("that request isn't here any more")
+	}
+	return h.connector.WaitingRequest(c.Request().Context(), cc.Campaign.ID, id)
 }
 
 type recordCounts struct{ applied, failed int }
@@ -924,6 +973,23 @@ func (h *Handler) PromptInstructions(c echo.Context) error {
 	if h.promptBuilder == nil {
 		return apperror.NewBadRequest("AI prompt builder is not configured on this server")
 	}
+	out, err := h.promptBuilder.Build(c.Request().Context(), cc.Campaign.Name, auth.GetUserID(c), cc.Campaign.ID, h.instructionsInput())
+	if err != nil {
+		slog.Error("ai-workspace: prompt instructions failed",
+			slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", err))
+		return apperror.NewInternal(err)
+	}
+	if h.audit != nil {
+		h.audit.LogCampaignEvent(c.Request().Context(), cc.Campaign.ID, "campaign.ai_prompt.instructions_copied",
+			map[string]any{"prompt_byte_count": len(out)})
+	}
+	c.Response().Header().Set("Cache-Control", "no-store")
+	return c.String(http.StatusOK, out)
+}
+
+// instructionsInput is the standing half of the prompt: every block format,
+// the lookups and the rules, plus the campaign's page types.
+func (h *Handler) instructionsInput() prompt.Input {
 	in := prompt.Input{
 		IncludeEntityTypes:        true,
 		IncludeFrontMatterExample: true,
@@ -937,18 +1003,17 @@ func (h *Handler) PromptInstructions(c echo.Context) error {
 		in.Capabilities = h.records.Capabilities()
 		in.RecordDocs = h.records.Docs()
 	}
-	out, err := h.promptBuilder.Build(c.Request().Context(), cc.Campaign.Name, auth.GetUserID(c), cc.Campaign.ID, in)
-	if err != nil {
-		slog.Error("ai-workspace: prompt instructions failed",
-			slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", err))
-		return apperror.NewInternal(err)
+	return in
+}
+
+// ConnectorInstructions answers a connected AI's how_to_write_changes: the
+// same standing instructions "Copy AI instructions" gives, written for the
+// connection's owner.
+func (h *Handler) ConnectorInstructions(ctx context.Context, campaignID, campaignName, userID string) (string, error) {
+	if h.promptBuilder == nil {
+		return "", errors.New("ai-workspace: prompt builder not configured")
 	}
-	if h.audit != nil {
-		h.audit.LogCampaignEvent(c.Request().Context(), cc.Campaign.ID, "campaign.ai_prompt.instructions_copied",
-			map[string]any{"prompt_byte_count": len(out)})
-	}
-	c.Response().Header().Set("Cache-Control", "no-store")
-	return c.String(http.StatusOK, out)
+	return h.promptBuilder.Build(ctx, campaignName, userID, campaignID, h.instructionsInput())
 }
 
 // calendarContext is the Calendar prompt's format and context: the docs of

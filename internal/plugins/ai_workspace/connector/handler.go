@@ -28,8 +28,10 @@ func EndpointURL(baseURL, campaignID string) string {
 	return strings.TrimRight(baseURL, "/") + "/api/ai/campaigns/" + url.PathEscape(campaignID) + "/mcp"
 }
 
-// maxBody caps one request; a tool call is a name and a few short arguments.
-const maxBody = 64 * 1024
+// maxBody caps one request: a request for changes (changesMax) and room for
+// the message around it, its quoting included. Every other call is a name
+// and a few short arguments.
+const maxBody = changesMax*2 + 64*1024
 
 // Endpoint is the HTTP side of the connector.
 type Endpoint struct {
@@ -48,11 +50,14 @@ func NewEndpoint(svc *Service, baseURL string) *Endpoint {
 	if u, err := url.Parse(baseURL); err == nil && u.Scheme != "" && u.Host != "" {
 		origin = u.Scheme + "://" + u.Host
 	}
-	return &Endpoint{svc: svc, server: &Server{}, origin: origin, failures: newFailures()}
+	return &Endpoint{svc: svc, server: &Server{Asks: svc}, origin: origin, failures: newFailures()}
 }
 
 // SetLookups wires the lookups every tool answers with.
 func (e *Endpoint) SetLookups(l *records.Lookups) { e.server.Lookups = l }
+
+// SetInstructions wires how_to_write_changes' answer.
+func (e *Endpoint) SetInstructions(f InstructionsFunc) { e.server.Instructions = f }
 
 // RegisterRoutes mounts the endpoint. There is no per-address limit in front
 // of it: hosted AI apps call from shared addresses, so one stranger's junk
@@ -133,7 +138,7 @@ func (e *Endpoint) Serve(c echo.Context) error {
 			secs = 1
 		}
 		c.Response().Header().Set("Retry-After", strconv.Itoa(secs))
-		return refuse(c, http.StatusTooManyRequests, "Too many lookups at once. Wait a little and ask again.")
+		return refuse(c, http.StatusTooManyRequests, "Too many calls at once. Wait a little and ask again.")
 	}
 	if ct := req.Header.Get("Content-Type"); !strings.HasPrefix(strings.ToLower(strings.TrimSpace(ct)), "application/json") {
 		return refuse(c, http.StatusUnsupportedMediaType, "send JSON")

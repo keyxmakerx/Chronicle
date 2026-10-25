@@ -1,14 +1,16 @@
 // Package connector lets an AI app (Claude, ChatGPT, Open WebUI, LM Studio)
-// connect straight to one campaign over the Model Context Protocol and look
-// things up, with nothing to copy and paste. In this step every tool only
-// reads: none can change the campaign.
+// connect straight to one campaign over the Model Context Protocol, look
+// things up and ask for changes, with nothing to copy and paste. No tool
+// changes the campaign: a request for changes waits on the owner's Your AI
+// page until they review it on the same screen a paste uses, so an AI app set
+// to allow everything still can't apply anything.
 //
 // A connection is a key the campaign's owner makes on the "Your AI" page. The
 // key is shown once, sent by the AI app as a request header, kept only as its
 // SHA-256, expires on its own and can be revoked. It is scoped to one owner,
-// one campaign and the privacy mode chosen when it was made, and dies as soon
-// as its maker is no longer the campaign's owner. Every tool call is logged
-// for the owner as "What it did".
+// one campaign, and the privacy mode and Change setting chosen when it was
+// made, and dies as soon as its maker is no longer the campaign's owner.
+// Every tool call is logged for the owner as "What it did".
 package connector
 
 import (
@@ -29,6 +31,9 @@ type Connection struct {
 	KeyHint string
 	// Privacy is what the AI may see, fixed when the key was made.
 	Privacy aiexport.PrivacyMode
+	// CanAsk is the Change setting, fixed when the key was made: true lets
+	// the AI ask for changes, false ("Only look") only lets it read.
+	CanAsk bool
 	// ClientName is what the AI app called itself when it connected
 	// (untrusted, cleaned and cut to clientNameMax).
 	ClientName string
@@ -58,6 +63,34 @@ type Call struct {
 	OK   bool
 }
 
+// Request is what an AI asked for, waiting for the owner's review.
+type Request struct {
+	ID           int64
+	CampaignID   string
+	ConnectionID int64
+	// AppName is the connected app's name when it asked (untrusted, cleaned).
+	AppName string
+	// Summary is the AI's own one line about the request (untrusted, shown
+	// in quotes); Counts is Chronicle's ("2 to add, 1 to change").
+	Summary string
+	Counts  string
+	Blocks  int
+	// Body is the blocks, in the copy-and-paste format. Only Request reads
+	// it; lists leave it empty.
+	Body      string
+	Status    string
+	Outcome   string
+	CreatedAt time.Time
+	DecidedAt *time.Time
+}
+
+// A request's status.
+const (
+	RequestWaiting    = "waiting"
+	RequestAnswered   = "answered"
+	RequestTurnedDown = "turned_down"
+)
+
 // Limits on what a connection may do and keep.
 const (
 	// KeyLifetime is how long a new key works before it runs out.
@@ -74,4 +107,10 @@ const (
 	// summaryMax and noteMax match the call log's columns.
 	summaryMax = 200
 	noteMax    = 120
+	// changesMax caps one request's blocks; requestsWaiting caps how many
+	// wait for the owner at once, so an AI can't bury them; requestsKept
+	// is how many answered ones are kept for the page.
+	changesMax      = 256 * 1024
+	requestsWaiting = 20
+	requestsKept    = 100
 )

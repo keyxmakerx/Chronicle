@@ -35,6 +35,22 @@ type Repository interface {
 	RecentCalls(ctx context.Context, campaignID string, limit int) ([]Call, error)
 	// PruneCalls keeps the campaign's newest keep calls.
 	PruneCalls(ctx context.Context, campaignID string, keep int) error
+
+	// AddRequest stores a request unless the campaign already has max
+	// waiting, checked in one transaction holding the campaign's row. It
+	// returns the id, or ErrTooManyWaiting.
+	AddRequest(ctx context.Context, r *Request, max int) (int64, error)
+	// Requests lists the campaign's requests in one status, newest first,
+	// without their blocks.
+	Requests(ctx context.Context, campaignID, status string, limit int) ([]Request, error)
+	// Request is one of the campaign's requests with its blocks, or nil.
+	Request(ctx context.Context, campaignID string, id int64) (*Request, error)
+	// FinishRequest moves a waiting request to status. It reports whether
+	// the request was still waiting.
+	FinishRequest(ctx context.Context, campaignID string, id int64, status, outcome string, at time.Time) (bool, error)
+	// PruneRequests keeps the campaign's newest keep requests that are no
+	// longer waiting.
+	PruneRequests(ctx context.Context, campaignID string, keep int) error
 }
 
 type repository struct{ db *sql.DB }
@@ -47,14 +63,14 @@ func dbError(what string, err error) error {
 }
 
 const connectionColumns = `c.id, c.campaign_id, c.user_id, c.key_hash, c.key_hint, c.privacy,
-	c.client_name, c.created_at, c.expires_at, c.last_used_at, c.revoked_at`
+	c.can_ask, c.client_name, c.created_at, c.expires_at, c.last_used_at, c.revoked_at`
 
 func scanConnection(row interface{ Scan(...any) error }) (*Connection, error) {
 	var c Connection
 	var privacy string
 	var lastUsed, revoked sql.NullTime
 	if err := row.Scan(&c.ID, &c.CampaignID, &c.UserID, &c.KeyHash, &c.KeyHint, &privacy,
-		&c.ClientName, &c.CreatedAt, &c.ExpiresAt, &lastUsed, &revoked); err != nil {
+		&c.CanAsk, &c.ClientName, &c.CreatedAt, &c.ExpiresAt, &lastUsed, &revoked); err != nil {
 		return nil, err
 	}
 	c.Privacy = parsePrivacy(privacy)
@@ -98,9 +114,9 @@ func (r *repository) Replace(ctx context.Context, c *Connection) (id int64, err 
 		return 0, dbError("revoking connections", err)
 	}
 	res, err := tx.ExecContext(ctx,
-		`INSERT INTO ai_connections (campaign_id, user_id, key_hash, key_hint, privacy, created_at, expires_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		c.CampaignID, c.UserID, c.KeyHash, c.KeyHint, c.Privacy.String(), c.CreatedAt.UTC(), c.ExpiresAt.UTC())
+		`INSERT INTO ai_connections (campaign_id, user_id, key_hash, key_hint, privacy, can_ask, created_at, expires_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		c.CampaignID, c.UserID, c.KeyHash, c.KeyHint, c.Privacy.String(), c.CanAsk, c.CreatedAt.UTC(), c.ExpiresAt.UTC())
 	if err != nil {
 		return 0, dbError("creating connection", err)
 	}
@@ -212,6 +228,143 @@ func (r *repository) PruneCalls(ctx context.Context, campaignID string, keep int
 	if _, err := r.db.ExecContext(ctx,
 		`DELETE FROM ai_connection_calls WHERE campaign_id = ? AND id < ?`, campaignID, cut); err != nil {
 		return dbError("pruning calls", err)
+	}
+	return nil
+}
+
+// ErrTooManyWaiting: the campaign already has as many requests waiting as
+// it may.
+var ErrTooManyWaiting = errors.New("too many requests are waiting for the owner")
+
+func (r *repository) AddRequest(ctx context.Context, req *Request, max int) (id int64, err error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, dbError("starting request", err)
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+	var locked string
+	if err = tx.QueryRowContext(ctx, `SELECT id FROM campaigns WHERE id = ? FOR UPDATE`, req.CampaignID).Scan(&locked); err != nil {
+		return 0, dbError("locking campaign", err)
+	}
+	var waiting int
+	if err = tx.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM ai_connection_requests WHERE campaign_id = ? AND status = ?`,
+		req.CampaignID, RequestWaiting).Scan(&waiting); err != nil {
+		return 0, dbError("counting requests", err)
+	}
+	if waiting >= max {
+		err = ErrTooManyWaiting
+		return 0, err
+	}
+	res, err := tx.ExecContext(ctx,
+		`INSERT INTO ai_connection_requests
+		   (campaign_id, connection_id, app_name, summary, counts, blocks, body, status, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		req.CampaignID, req.ConnectionID, req.AppName, req.Summary, req.Counts, req.Blocks, req.Body,
+		RequestWaiting, req.CreatedAt.UTC())
+	if err != nil {
+		return 0, dbError("saving request", err)
+	}
+	if id, err = res.LastInsertId(); err != nil {
+		return 0, dbError("reading request id", err)
+	}
+	if err = tx.Commit(); err != nil {
+		return 0, dbError("saving request", err)
+	}
+	return id, nil
+}
+
+const requestColumns = `id, campaign_id, connection_id, app_name, summary, counts, blocks, status, outcome, created_at, decided_at`
+
+func scanRequest(row interface{ Scan(...any) error }, body *string) (*Request, error) {
+	var q Request
+	var decided sql.NullTime
+	dest := []any{&q.ID, &q.CampaignID, &q.ConnectionID, &q.AppName, &q.Summary, &q.Counts, &q.Blocks,
+		&q.Status, &q.Outcome, &q.CreatedAt, &decided}
+	if body != nil {
+		dest = append(dest, body)
+	}
+	if err := row.Scan(dest...); err != nil {
+		return nil, err
+	}
+	if decided.Valid {
+		t := decided.Time
+		q.DecidedAt = &t
+	}
+	return &q, nil
+}
+
+func (r *repository) Requests(ctx context.Context, campaignID, status string, limit int) ([]Request, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT `+requestColumns+` FROM ai_connection_requests
+		 WHERE campaign_id = ? AND status = ? ORDER BY id DESC LIMIT ?`, campaignID, status, limit)
+	if err != nil {
+		return nil, dbError("listing requests", err)
+	}
+	defer rows.Close()
+	var out []Request
+	for rows.Next() {
+		q, err := scanRequest(rows, nil)
+		if err != nil {
+			return nil, dbError("reading request", err)
+		}
+		out = append(out, *q)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, dbError("listing requests", err)
+	}
+	return out, nil
+}
+
+func (r *repository) Request(ctx context.Context, campaignID string, id int64) (*Request, error) {
+	var body string
+	q, err := scanRequest(r.db.QueryRowContext(ctx,
+		`SELECT `+requestColumns+`, body FROM ai_connection_requests WHERE campaign_id = ? AND id = ?`,
+		campaignID, id), &body)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, dbError("reading request", err)
+	}
+	q.Body = body
+	return q, nil
+}
+
+func (r *repository) FinishRequest(ctx context.Context, campaignID string, id int64, status, outcome string, at time.Time) (bool, error) {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE ai_connection_requests SET status = ?, outcome = ?, decided_at = ?
+		 WHERE campaign_id = ? AND id = ? AND status = ?`,
+		status, outcome, at.UTC(), campaignID, id, RequestWaiting)
+	if err != nil {
+		return false, dbError("finishing request", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, dbError("finishing request", err)
+	}
+	return n == 1, nil
+}
+
+func (r *repository) PruneRequests(ctx context.Context, campaignID string, keep int) error {
+	var cut int64
+	err := r.db.QueryRowContext(ctx,
+		`SELECT id FROM ai_connection_requests WHERE campaign_id = ? AND status <> ?
+		 ORDER BY id DESC LIMIT 1 OFFSET ?`, campaignID, RequestWaiting, keep-1).Scan(&cut)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return dbError("pruning requests", err)
+	}
+	if _, err := r.db.ExecContext(ctx,
+		`DELETE FROM ai_connection_requests WHERE campaign_id = ? AND status <> ? AND id < ?`,
+		campaignID, RequestWaiting, cut); err != nil {
+		return dbError("pruning requests", err)
 	}
 	return nil
 }

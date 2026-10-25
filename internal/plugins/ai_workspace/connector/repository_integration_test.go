@@ -12,11 +12,13 @@ import (
 	"context"
 	crand "crypto/rand"
 	"database/sql"
+	"errors"
 	"fmt"
 	"io/fs"
 	"math/rand"
 	"os"
 	"path/filepath"
+	"sort"
 	"testing"
 	"time"
 
@@ -64,13 +66,20 @@ func newScratchDB(t *testing.T) *sql.DB {
 	if err := database.RunMigrations(db, scratch.FormatDSN(), filepath.Join(root, "db", "migrations")); err != nil {
 		t.Skipf("core migrations did not apply: %v", err)
 	}
-	up, err := fs.ReadFile(MigrationsFS, "migrations/001_ai_connections.up.sql")
-	if err != nil {
-		t.Fatal(err)
+	ups, err := fs.Glob(MigrationsFS, "migrations/*.up.sql")
+	if err != nil || len(ups) == 0 {
+		t.Fatalf("no migrations: %v", err)
 	}
+	sort.Strings(ups)
 	for i := 0; i < 2; i++ { // idempotent DDL: a re-run must not fail
-		if _, err := db.Exec(string(up)); err != nil {
-			t.Fatalf("plugin migration run %d: %v", i+1, err)
+		for _, f := range ups {
+			up, err := fs.ReadFile(MigrationsFS, f)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := db.Exec(string(up)); err != nil {
+				t.Fatalf("plugin migration %s run %d: %v", f, i+1, err)
+			}
 		}
 	}
 	return db
@@ -199,5 +208,99 @@ func TestRepoIntegration_ConnectionsAndCalls(t *testing.T) {
 	}
 	if c, _ := repo.FindByHash(ctx, h2); c != nil {
 		t.Errorf("connection left after delete: %+v", c)
+	}
+}
+
+func TestRepoIntegration_Requests(t *testing.T) {
+	db := newScratchDB(t)
+	repo := NewRepository(db)
+	ctx := context.Background()
+	camp, user := seedCampaign(t, db)
+	other, otherUser := seedCampaign(t, db)
+	now := time.Now().UTC().Truncate(time.Second)
+
+	conn, err := repo.Replace(ctx, &Connection{CampaignID: camp, UserID: user, KeyHash: fmt.Sprintf("%064d", 1), KeyHint: "0001",
+		Privacy: aiexport.PrivacyModeSafe, CanAsk: true, CreatedAt: now, ExpiresAt: now.Add(KeyLifetime)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c, _ := repo.Current(ctx, camp); c == nil || !c.CanAsk {
+		t.Fatalf("the Change setting wasn't kept: %+v", c)
+	}
+	theirConn, _ := repo.Replace(ctx, &Connection{CampaignID: other, UserID: otherUser, KeyHash: fmt.Sprintf("%064d", 2), KeyHint: "0002",
+		Privacy: aiexport.PrivacyModeSafe, CreatedAt: now, ExpiresAt: now.Add(KeyLifetime)})
+	if c, _ := repo.Current(ctx, other); c == nil || c.CanAsk {
+		t.Fatalf("Only look read back as Ask: %+v", c)
+	}
+
+	add := func(campaign string, connID int64, summary string) (int64, error) {
+		return repo.AddRequest(ctx, &Request{CampaignID: campaign, ConnectionID: connID, AppName: "Claude", Summary: summary,
+			Counts: "1 to add", Blocks: 1, Body: "---\nname: " + summary + "\n---\nbody\n", CreatedAt: now}, 3)
+	}
+	var ids []int64
+	for i := 0; i < 3; i++ {
+		id, err := add(camp, conn, fmt.Sprintf("r%d", i))
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, id)
+	}
+	if _, err := add(camp, conn, "one too many"); !errors.Is(err, ErrTooManyWaiting) {
+		t.Errorf("the waiting cap: %v", err)
+	}
+	theirs, err := add(other, theirConn, "theirs")
+	if err != nil {
+		t.Fatalf("another campaign's cap is its own: %v", err)
+	}
+
+	list, err := repo.Requests(ctx, camp, RequestWaiting, 50)
+	if err != nil || len(list) != 3 || list[0].ID != ids[2] || list[0].Body != "" || list[0].Summary != "r2" {
+		t.Fatalf("waiting = %+v, %v", list, err)
+	}
+	if q, _ := repo.Request(ctx, camp, theirs); q != nil {
+		t.Errorf("read another campaign's request: %+v", q)
+	}
+	q, err := repo.Request(ctx, camp, ids[0])
+	if err != nil || q == nil || q.Body != "---\nname: r0\n---\nbody\n" || q.Status != RequestWaiting {
+		t.Fatalf("request = %+v, %v", q, err)
+	}
+
+	if ok, err := repo.FinishRequest(ctx, other, ids[0], RequestAnswered, "x", now); err != nil || ok {
+		t.Errorf("answered from another campaign: %v %v", ok, err)
+	}
+	if ok, err := repo.FinishRequest(ctx, camp, ids[0], RequestAnswered, "2 applied, 0 left out", now); err != nil || !ok {
+		t.Fatalf("answer: %v %v", ok, err)
+	}
+	if ok, _ := repo.FinishRequest(ctx, camp, ids[0], RequestTurnedDown, "y", now); ok {
+		t.Error("an answered request was answered again")
+	}
+	if q, _ := repo.Request(ctx, camp, ids[0]); q.Status != RequestAnswered || q.Outcome != "2 applied, 0 left out" || q.DecidedAt == nil {
+		t.Errorf("after answering = %+v", q)
+	}
+	if _, err := add(camp, conn, "room again"); err != nil {
+		t.Errorf("answering one should make room: %v", err)
+	}
+	if _, err := repo.FinishRequest(ctx, camp, ids[1], RequestTurnedDown, "nothing changed", now); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.PruneRequests(ctx, camp, 1); err != nil {
+		t.Fatal(err)
+	}
+	if q, _ := repo.Request(ctx, camp, ids[0]); q != nil {
+		t.Errorf("pruning kept the older answered request")
+	}
+	if q, _ := repo.Request(ctx, camp, ids[1]); q == nil {
+		t.Errorf("pruning took the newest answered request")
+	}
+	if list, _ := repo.Requests(ctx, camp, RequestWaiting, 50); len(list) != 2 {
+		t.Errorf("pruning touched waiting requests: %+v", list)
+	}
+
+	if _, err := db.Exec(`DELETE FROM campaigns WHERE id = ?`, camp); err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM ai_connection_requests WHERE campaign_id = ?`, camp).Scan(&n); err != nil || n != 0 {
+		t.Errorf("requests left after delete: %d, %v", n, err)
 	}
 }

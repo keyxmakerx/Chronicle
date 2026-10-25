@@ -1,10 +1,11 @@
-// ai_page.templ is the campaign's Your AI page: connect an AI app (it can
-// only look things up for now), see what it did, or use copy and paste.
+// ai_page.templ is the campaign's Your AI page: connect an AI app, answer
+// what it asks for, see what it did, or use copy and paste.
 
 package ai_workspace
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/connector"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -18,7 +19,7 @@ templ AIPageView(cc *campaigns.CampaignContext, v ConnectView) {
 		<div class="max-w-5xl mx-auto px-4 py-6" data-ai-page>
 			@layouts.ManageHeader("Your AI")
 			<p class="-mt-4 mb-6 text-sm text-fg-secondary max-w-prose">
-				Connect your AI app once and it can look things up in this campaign for you, with no copying back and forth. For now it can only read: nothing it does can change your campaign.
+				Connect your AI app once. It reads what you allow and asks for changes here, and you say yes or no to each one. No copying back and forth.
 			</p>
 			@aiConnectSection(v)
 			@aiCopyPasteSection(cc)
@@ -27,9 +28,14 @@ templ AIPageView(cc *campaigns.CampaignContext, v ConnectView) {
 }
 
 // aiConnectSection is the part the connect, new-key and disconnect requests
-// swap: the connection's state and what it did.
+// swap: what the AI asked for, the connection's state and what it did. The
+// requests stay after a disconnect, since they are the owner's to answer.
 templ aiConnectSection(v ConnectView) {
 	<div id="ai-connect" class="space-y-8">
+		<div class="space-y-4">
+			@aiRequests(v, false)
+			<div id={ requestReviewHost }></div>
+		</div>
 		if !v.Available {
 			<section class="aic-panel">
 				<p class="text-sm text-fg-secondary">Connecting an AI app isn't available on this Chronicle site. Copy and paste, below, works with every AI.</p>
@@ -74,9 +80,26 @@ templ aiConnectForm(v ConnectView, replacing bool) {
 					<span class="block aic-hint">Adds your { layouts.GMTerm(ctx) }-only pages and secrets. Only for an AI you trust, since text your players wrote could try to talk it into sharing them.</span>
 				</span>
 			</label>
-			<p class="aic-hint flex gap-2 items-start border-t border-edge pt-3">
+			<div class="space-y-1 border-t border-edge pt-3" role="radiogroup" aria-labelledby="ai-change-heading">
+				<h3 id="ai-change-heading" class="aic-label">Change</h3>
+				<label class="aic-choice">
+					<input type="radio" name="change" value="ask" checked/>
+					<span>
+						<b>Ask for changes</b>
+						<span class="block aic-hint">Each one waits here for your yes.</span>
+					</span>
+				</label>
+				<label class="aic-choice">
+					<input type="radio" name="change" value="look"/>
+					<span>
+						<b>Only look</b>
+						<span class="block aic-hint">It can read and answer, never ask to change.</span>
+					</span>
+				</label>
+			</div>
+			<p class="aic-hint flex gap-2 items-start">
 				<i class="fa-solid fa-lock mt-0.5" aria-hidden="true"></i>
-				<span>It can only look things up. It can't add, change or remove anything, even if your AI app is set to allow everything.</span>
+				<span>It can only ask. Every change and removal waits here for your yes, even if your AI app is set to allow everything. ChatGPT Plus and Pro only let connectors read, so there your AI gives you its changes to paste instead.</span>
 			</p>
 		</section>
 		<section aria-labelledby="ai-how-heading">
@@ -118,7 +141,7 @@ templ aiNewKey(v ConnectView) {
 	>
 		<div>
 			<h2 id="ai-key-heading" class="aic-h">Your key is ready</h2>
-			<p class="aic-hint">Copy it now: Chronicle shows it only this once. If you lose it, make a new one. Your AI { seesLabel(v.Conn.Privacy) }.</p>
+			<p class="aic-hint">Copy it now: Chronicle shows it only this once. If you lose it, make a new one. Your AI { seesLabel(v.Conn.Privacy) } and { changeLabel(v.Conn.CanAsk) }.</p>
 		</div>
 		<div class="grid gap-3 md:grid-cols-2">
 			@aiCopyField("addr", "Address", v.Endpoint)
@@ -221,7 +244,12 @@ templ aiStatus(v ConnectView) {
 			<button type="button" class="btn-secondary text-bad" @click="asking = !asking; renew = false" :aria-expanded="asking">Disconnect</button>
 		</div>
 		<div class="aic-ask" x-show="asking" x-cloak x-collapse.duration.200ms>
-			<p>Disconnect { appName(v.Conn) }? Its key stops working at once. You can connect again with a new key.</p>
+			<p>
+				Disconnect { appName(v.Conn) }? Its key stops working at once. You can connect again with a new key.
+				if len(v.Requests) > 0 {
+					What it already asked for stays here for you to answer.
+				}
+			</p>
 			<button type="button" class="btn-secondary" @click="asking = false">Keep it</button>
 			<button
 				type="button"
@@ -278,4 +306,92 @@ templ aiLogRow(v ConnectView, call connector.Call) {
 			{ call.Note }
 		</span>
 	</div>
+}
+
+// aiRequests is what the connected AI asked for and the owner hasn't
+// answered yet, newest first. While the page is open it asks every 30
+// seconds whether anything new came in; the answer is empty (204, nothing
+// swapped) until something did, so an open "Turn down?" is never reset.
+// oob marks it to replace the list from another response.
+templ aiRequests(v ConnectView, oob bool) {
+	<div
+		id="ai-requests"
+		class="space-y-3"
+		if oob {
+			hx-swap-oob="true"
+		}
+		if v.Available {
+			hx-get={ fmt.Sprintf("/campaigns/%s/ai/requests?seen=%s", v.CampaignID, requestsSeen(v.Requests)) }
+			hx-trigger="every 30s"
+			hx-swap="outerHTML"
+		}
+	>
+		for _, q := range v.Requests {
+			@aiRequestCard(v, q)
+		}
+	</div>
+}
+
+// aiRequestCard is one waiting request: who asked, for how many changes,
+// the AI's own line in quotes, and Review or Turn down (which asks first).
+templ aiRequestCard(v ConnectView, q connector.Request) {
+	<section
+		class="aic-panel aic-request"
+		aria-labelledby={ fmt.Sprintf("ai-request-%d", q.ID) }
+		x-data="{ asking: false }"
+	>
+		<div class="flex flex-wrap items-center gap-x-4 gap-y-3">
+			<div class="flex-1 min-w-[14rem]">
+				<span class="aic-label">Waiting for you</span>
+				<h2 id={ fmt.Sprintf("ai-request-%d", q.ID) } class="aic-h">{ requestHeading(q) }</h2>
+				<p class="aic-hint">{ requestLine(v, q) }</p>
+			</div>
+			<button type="button" class="quiet-word" @click="asking = !asking" :aria-expanded="asking">Turn down</button>
+			<form
+				hx-post={ fmt.Sprintf("/campaigns/%s/ai-workspace/import/parse", v.CampaignID) }
+				hx-target={ "#" + requestReviewHost }
+				hx-swap={ fmt.Sprintf("innerHTML show:#%s:top", requestReviewHost) }
+				hx-disabled-elt="find button"
+			>
+				<input type="hidden" name="ai_request" value={ strconv.FormatInt(q.ID, 10) }/>
+				<button type="submit" class="btn-primary">
+					<span class="aic-idle">Review</span>
+					<span class="aic-busy"><i class="fa-solid fa-spinner fa-spin mr-1.5" aria-hidden="true"></i>Reading it…</span>
+				</button>
+			</form>
+		</div>
+		<div class="aic-ask" x-show="asking" x-cloak x-collapse.duration.200ms>
+			<p>Turn down this request? Nothing in your campaign changes, and your AI isn't told.</p>
+			<button type="button" class="btn-secondary" @click="asking = false">Keep it</button>
+			<button
+				type="button"
+				class="btn-secondary"
+				hx-post={ fmt.Sprintf("/campaigns/%s/ai/requests/%d/turn-down", v.CampaignID, q.ID) }
+				hx-target="#ai-requests"
+				hx-swap="outerHTML"
+				hx-disabled-elt="this"
+			>
+				<span class="aic-idle">Turn down</span>
+				<span class="aic-busy"><i class="fa-solid fa-spinner fa-spin mr-1.5" aria-hidden="true"></i>Turning down…</span>
+			</button>
+		</div>
+	</section>
+}
+
+// requestReviewed answers a review of a request: the result in the request's
+// review host, and the requests list without it.
+templ requestReviewed(d ImportResultData, v ConnectView) {
+	@ImportResult(d)
+	@aiRequests(v, true)
+}
+
+// reviewIn is a review with the other review host emptied, so only one
+// review is ever open on the page (two would share ids and keys).
+templ reviewIn(d ImportReviewData) {
+	@ImportReview(d)
+	if reviewHost(d) == requestReviewHost {
+		<div id={ pasteReviewHost } hx-swap-oob="innerHTML"></div>
+	} else {
+		<div id={ requestReviewHost } hx-swap-oob="innerHTML"></div>
+	}
 }
