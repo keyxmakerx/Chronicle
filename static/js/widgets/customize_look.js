@@ -1191,6 +1191,7 @@
         var t = $('#tab-' + r[0]), on = r[0] === 'people' ? ['sheet', 'page', 'hover'].some(function(x){ return ch.indexOf(x) >= 0; }) : r[3].some(function(x){ return ch.indexOf(x) >= 0; });
         t.classList.toggle('changed', on); setText($('.chg-t', t), on ? ', changed' : '');
       });
+      tellShell();
       var dirty = ch.length > 0;
       if (dirty) ui.saved = false;
       $('#save').classList.toggle('dirty', dirty);
@@ -1593,7 +1594,19 @@
         if (ui.page !== pg) setPage(pg); else update();
         fzQueue();
       }
-      if (focus) $('#tab-' + id).focus();
+      if (focus && $('#tab-' + id).offsetParent) $('#tab-' + id).focus();
+      tellShell();
+    }
+    // tellShell names the open room to Customize's Look tab, and the rooms
+    // with unsaved changes for its drawer, since inside the frame the rooms
+    // are that drawer rather than tabs here.
+    function tellShell(){
+      if (!SHELL) return;
+      var ch = changedSections(), changed = ROOMS.filter(function(r){
+        return r[0] === 'people' ? SHARE_SECS.some(function(x){ return ch.indexOf(x) >= 0; }) : r[3].some(function(x){ return ch.indexOf(x) >= 0; });
+      }).map(function(r){ return r[0]; });
+      var R = ROOMS.filter(function(r){ return r[0] === ui.room; })[0];
+      document.dispatchEvent(new CustomEvent('chronicle:customize-part', { detail:{ area:'look', key:ui.room, label:R ? R[1] : '', changed:changed } }));
     }
     function showSection(id){
       ui.section = id; ui.last[ROOM_OF[id]] = id;

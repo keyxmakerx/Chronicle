@@ -72,9 +72,11 @@ templ entityPageBody(cc *campaigns.CampaignContext, entity *Entity, entityType *
 				</nav>
 				if editor {
 					@pageEditorBar(cc, entity) {
+						@pageLayoutChip(cc, entity)
 						@effectiveVisibilityBadge(cc, entity, GetEffectiveVisibility(ctx))
 					}
 				} else {
+					@pageLayoutChip(cc, entity)
 					@effectiveVisibilityBadge(cc, entity, GetEffectiveVisibility(ctx))
 				}
 			</div>
@@ -107,6 +109,7 @@ templ entityPageBody(cc *campaigns.CampaignContext, entity *Entity, entityType *
 				UserID:         userID,
 				OwnerName:      ownerName,
 				NPCPage:        isNPCPageCtx(ctx),
+				NamedLayout:    wearsNamedLayout(ctx),
 			}); comp != nil {
 				// A page renderer replaces the layout, and with it the title
 				// block that normally carries the panels, so mount them here.

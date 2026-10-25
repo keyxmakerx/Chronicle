@@ -127,6 +127,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// which characters are on it.
 	cg.POST("/characters/owner", h.SetCharacterOwner, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.POST("/characters/playable", h.SetCharacterPlayable, campaigns.RequireRole(campaigns.RoleScribe))
+	// Which of its category's layouts a page wears; the handler admits the
+	// Director team only.
+	cg.PUT("/entities/:eid/layout", h.SetPageLayoutAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/characters/players/search", h.SearchRosterFinder, campaigns.RequireRole(campaigns.RoleScribe))
 	// Hero creator: staff make heroes for the table, players their own when
 	// the owner allows claiming (checked in the handler).

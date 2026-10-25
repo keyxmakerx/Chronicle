@@ -609,3 +609,45 @@ func TestBuild_Today(t *testing.T) {
 		}
 	}
 }
+
+type stubLayouts map[int]entities.PageLayouts
+
+func (s stubLayouts) ForCampaign(context.Context, string) map[int]entities.PageLayouts { return s }
+
+// A category holding heroes and NPCs lists its layouts, and the prompt says
+// how to pick one; a campaign without named layouts reads as before.
+func TestBuild_PageLayouts(t *testing.T) {
+	heroes := stubLayouts{1: {MainName: "NPC", Extra: []entities.PageLayout{{Key: "hero", Name: "Hero"}}}}
+	tests := []struct {
+		name    string
+		layouts LayoutLister
+		want    []string
+		wantNot []string
+	}{
+		{"with named layouts", heroes,
+			[]string{"**Character** (slug: `character`) — preset: character — layouts: NPC, Hero", "`layout: Hero`"},
+			[]string{"**Location** (slug: `location`) — layouts"}},
+		{"without any", stubLayouts{}, nil, []string{"layouts:", "`layout:"}},
+		{"unwired", nil, nil, []string{"layouts:", "`layout:"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := NewService(&stubEntityLister{types: defaultEntityTypes()}, stubTagLister{}, &stubExporter{})
+			svc.Layouts = tt.layouts
+			got, err := svc.Build(context.Background(), "Ashfall", "owner-1", "camp-1", Input{IncludeEntityTypes: true, ContentMode: "none"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, w := range tt.want {
+				if !strings.Contains(got, w) {
+					t.Errorf("missing %q:\n%s", w, got)
+				}
+			}
+			for _, w := range tt.wantNot {
+				if strings.Contains(got, w) {
+					t.Errorf("should not contain %q", w)
+				}
+			}
+		})
+	}
+}

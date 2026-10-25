@@ -18,7 +18,7 @@ func pageEditorState(ctx context.Context, cc *campaigns.CampaignContext, et *Ent
 	if unsaved {
 		layout = shownFallbackLayout()
 	}
-	b, _ := json.Marshal(map[string]any{
+	state := map[string]any{
 		"unsaved":     unsaved,
 		"campaignId":  cc.Campaign.ID,
 		"key":         fmt.Sprintf("%d", et.ID),
@@ -31,8 +31,33 @@ func pageEditorState(ctx context.Context, cc *campaigns.CampaignContext, et *Ent
 		"preview":     fmt.Sprintf("%s/entity-types/%d/layout-preview", base, et.ID),
 		"presets":     fmt.Sprintf("%s/layout-presets", base),
 		"fieldsUrl":   fmt.Sprintf("%s/customize/categories/%d/fields", base, et.ID),
-	})
+	}
+	if pl, ok := typeLayoutsFrom(ctx); ok {
+		state["pageLayouts"] = pageLayoutsEditorState(ctx, et, pl)
+	}
+	b, _ := json.Marshal(state)
 	return string(b)
+}
+
+// pageLayoutsEditorState is the layout strip's starting point: the named
+// layouts as saved, whether pages of this category can be a player's
+// character (only then does "a page a player claims starts on" mean
+// anything), and whether a game system has a sheet for a claimed page, so a
+// new layout can start with it.
+func pageLayoutsEditorState(ctx context.Context, et *EntityType, pl PageLayouts) map[string]any {
+	extra := make([]map[string]any, 0, len(pl.Extra))
+	for _, l := range pl.Extra {
+		extra = append(extra, map[string]any{"key": l.Key, "name": l.Name, "layout": withoutRemovedBlocks(l.Layout)})
+	}
+	return map[string]any{
+		"mainName":    pl.MainName,
+		"mainDefault": pl.MainLabel(&EntityType{Name: et.Name}),
+		"claimed":     pl.Claimed,
+		"extra":       extra,
+		"max":         MaxPageLayouts,
+		"claimable":   isClaimableType(et),
+		"systemSheet": hasEntityShowRenderer(withNPCPage(ctx, false), et),
+	}
 }
 
 // removedBlockTypes are block types Chronicle no longer has. Older layouts

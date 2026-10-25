@@ -190,6 +190,15 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 		return entitySystemPanels(ctx.CC, ctx.Entity)
 	})
 
+	r.Register(BlockMeta{
+		Type: BlockGameSystemSheet, Label: "Game System Sheet", Icon: "fa-scroll",
+		Description: "The sheet your game system draws for this page, like a Draw Steel hero's",
+		Contexts:    []string{"template"},
+		Singleton:   true,
+	}, func(ctx BlockRenderContext) templ.Component {
+		return blockGameSystemSheet(ctx.CC, ctx.Entity, ctx.EntityType, ctx.CSRFToken, ctx.UserID)
+	})
+
 	// Items & Money (BlockCharacterItems) is registered by app beside the
 	// page panel it shows, which names the addon that gates it.
 

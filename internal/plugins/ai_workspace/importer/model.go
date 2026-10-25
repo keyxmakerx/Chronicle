@@ -63,6 +63,9 @@ type FrontMatter struct {
 	// against the category's own fields (CheckFields); on an update only
 	// the named fields change, and a null clears one.
 	Fields map[string]any `yaml:"fields"`
+	// Layout names which of its category's page layouts the page wears, by
+	// the layout's name; "" leaves it as it is.
+	Layout string `yaml:"layout"`
 }
 
 // IsEra reports a block that writes an era's version of a page.

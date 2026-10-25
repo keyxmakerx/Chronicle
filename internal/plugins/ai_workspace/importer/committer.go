@@ -60,6 +60,8 @@ type Committer struct {
 	tags TagWriter
 	// folders files pages into sidebar folders; nil refuses `folder:` rows.
 	folders FolderAccess
+	// layouts sets the layout a page wears; nil refuses `layout:` rows.
+	layouts LayoutAccess
 }
 
 // SetEraWriter wires pages by era. Optional.
@@ -528,6 +530,12 @@ func (c *Committer) commitRow(
 		out.Reason = reason
 		return out
 	}
+	layoutKey, reason := c.resolveLayout(ctx, campaignID, typeID, page)
+	if reason != "" {
+		out.Status = StatusFailed
+		out.Reason = reason
+		return out
+	}
 
 	// Create. Operator-facing errors stay friendly — the technical
 	// detail is captured by the handler's slog before this Reason is
@@ -564,6 +572,11 @@ func (c *Committer) commitRow(
 		return out
 	}
 	if reason := c.applyTags(ctx, campaignID, ent.ID, page.FrontMatter.Tags, false); reason != "" {
+		out.Status = StatusFailed
+		out.Reason = reason
+		return out
+	}
+	if reason := c.applyLayout(ctx, campaignID, typeID, ent, layoutKey); reason != "" {
 		out.Status = StatusFailed
 		out.Reason = reason
 		return out
@@ -617,6 +630,12 @@ func (c *Committer) commitUpdate(
 	}
 
 	folder, reason := c.resolveFolder(ctx, existing.CampaignID, existing.EntityTypeID, page, false, parent.Present() && !parent.IsNull())
+	if reason != "" {
+		out.Status = StatusFailed
+		out.Reason = reason
+		return out
+	}
+	layoutKey, reason := c.resolveLayout(ctx, existing.CampaignID, existing.EntityTypeID, page)
 	if reason != "" {
 		out.Status = StatusFailed
 		out.Reason = reason
@@ -679,6 +698,11 @@ func (c *Committer) commitUpdate(
 		return out
 	}
 	if reason := c.applyTags(ctx, existing.CampaignID, existing.ID, page.FrontMatter.Tags, true); reason != "" {
+		out.Status = StatusFailed
+		out.Reason = reason
+		return out
+	}
+	if reason := c.applyLayout(ctx, existing.CampaignID, existing.EntityTypeID, existing, layoutKey); reason != "" {
 		out.Status = StatusFailed
 		out.Reason = reason
 		return out

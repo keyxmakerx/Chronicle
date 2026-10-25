@@ -44,6 +44,10 @@ type EntityShowRenderContext struct {
 	// to the character preset draws a hero's sheet, so it skips these pages
 	// and they keep their layout.
 	NPCPage bool
+	// NamedLayout is a page that wears one of its category's named layouts.
+	// The layout draws it, so no renderer takes the page over; the
+	// renderer's sheet is the game_system_sheet block the layout can place.
+	NamedLayout bool
 }
 
 // EntityShowRenderer renders the inner contents of an entity show page
@@ -241,7 +245,7 @@ func (w widgetMount) Render(ctx context.Context, out io.Writer) error {
 // entity type's slug — the templ branches on nil to fall through to
 // block-dispatch.
 func lookupEntityShowRenderer(ctx EntityShowRenderContext) templ.Component {
-	if ctx.EntityType == nil {
+	if ctx.EntityType == nil || ctx.NamedLayout {
 		return nil
 	}
 	reg := globalEntityShowRendererRegistry.Load()
@@ -279,7 +283,7 @@ func isNPCPageCtx(ctx context.Context) bool {
 // page in place of the layout, by the same slug-then-category lookup
 // lookupEntityShowRenderer uses, NPC pages included.
 func hasEntityShowRenderer(ctx context.Context, et *EntityType) bool {
-	if et == nil {
+	if et == nil || wearsNamedLayout(ctx) {
 		return false
 	}
 	reg := globalEntityShowRendererRegistry.Load()

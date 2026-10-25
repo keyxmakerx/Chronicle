@@ -25,7 +25,10 @@ type templateData struct {
 
 	// Section data — populated by builder.go when the matching
 	// conditional is true.
-	EntityTypes     []entityTypeView
+	EntityTypes []entityTypeView
+	// AnyLayouts says some category has more than one page layout, so the
+	// prompt explains `layout:`.
+	AnyLayouts      bool
 	CategoriesInUse []categoryInUseView
 	SampleEntities  []sampleEntityView // not yet populated; see builder.go
 	TagsVocabulary  []tagView          // not yet populated; see builder.go
@@ -64,6 +67,9 @@ type entityTypeView struct {
 	// Fields are the category's sheet fields, one line each: the key the
 	// AI writes under `fields:` and what value it takes.
 	Fields []string
+	// Layouts names the category's page layouts, main one first, when it
+	// has more than one; each page wears one.
+	Layouts []string
 }
 
 // categoryInUseView is the "Categories currently in use" row.
@@ -153,7 +159,7 @@ The pages in my campaign, by type. Ask a ` + "`" + `what: page` + "`" + ` lookup
 ## My campaign's entity types
 
 {{ range .EntityTypes }}
-- **{{ .Name }}** (slug: ` + "`" + `{{ .Slug }}` + "`" + `){{ if .PresetCategory }} — preset: {{ .PresetCategory }}{{ end }}
+- **{{ .Name }}** (slug: ` + "`" + `{{ .Slug }}` + "`" + `){{ if .PresetCategory }} — preset: {{ .PresetCategory }}{{ end }}{{ if .Layouts }} — layouts: {{ join .Layouts ", " }}{{ end }}
 {{- if .Fields }}{{ range .Fields }}
   - {{ . }}{{ end }}{{ end }}
 {{ end }}
@@ -164,6 +170,14 @@ work, and each value must fit its field. On ` + "`" + `action: update` + "`" + `
 change, and ` + "`" + `null` + "`" + ` clears one. A field that holds a list (a stat block's traits or
 abilities, say) takes a YAML list. To build a monster, give its page the creature type
 and every stat block field, then name that page in an encounter's creatures.
+{{- if .AnyLayouts }}
+
+One category can hold different kinds of page, so a type listed with layouts gives each
+page one of them: its heroes might wear one and its NPCs another. Pick it with
+` + "`" + `layout:` + "`" + ` and the layout's name, for example ` + "`" + `layout: Hero` + "`" + `. Without it a new page wears
+the type's first layout (a player's character, the one the type starts claimed pages on).
+The list of my pages says which layout each existing page wears.
+{{- end }}
 {{ end }}
 
 {{ if and .IncludeCategoriesInUse .CategoriesInUse }}

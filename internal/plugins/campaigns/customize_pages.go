@@ -26,16 +26,46 @@ import (
 // "Players can claim" switch only means something while it is on.
 const addonCharacterClaiming = "player-character-claiming"
 
-// CustomizeArea is one entry in Customize's rail.
+// CustomizeArea is one of Customize's index tabs.
 type CustomizeArea struct {
 	ID    string `json:"id"`
 	Label string `json:"label"`
 	Icon  string `json:"icon"`
 	Href  string `json:"href"`
-	// Section is the draft section this area edits, so the rail can mark
+	// Section is the draft section this area edits, so its tab can mark
 	// the areas holding unsaved changes. Empty for areas that save by
 	// themselves.
 	Section string `json:"section,omitempty"`
+	// Parts are what the tab's drawer lists: the Look's rooms, every
+	// category with its kinds, each home. Empty for an area with none.
+	Parts []CustomizePart `json:"-"`
+	// Part names the part open now, shown after the tab's label.
+	Part string `json:"-"`
+}
+
+// CustomizePart is one line in a tab's drawer.
+type CustomizePart struct {
+	Label string
+	Href  string
+	// Key names a Look room, so the Look editor can mark the one open.
+	Key   string
+	Color string // A category's colour; empty for other parts.
+	Pages int    // A category's live pages.
+	// Kind is a sub-category, drawn under its parent.
+	Kind bool
+	// Quiet is a line about the area rather than one part of it ("All
+	// categories", "New category").
+	Quiet   bool
+	Current bool
+}
+
+// lookRooms are the Look editor's rooms, in its order (customize_look.js
+// ROOMS); a room's key in the address opens it.
+var lookRooms = []struct{ Key, Label string }{
+	{"frame", "Site frame"},
+	{"style", "Colours and type"},
+	{"pages", "Pages and sheets"},
+	{"people", "People"},
 }
 
 // CustomizeCrumb is one step in the area header's trail.
@@ -129,6 +159,64 @@ func (h *Handler) customizeAreas(cc *CampaignContext) []CustomizeArea {
 	return areas
 }
 
+// customizeParts fills each tab's drawer and names the part open now. The
+// part comes from the trail the area passed: its second step is the part
+// (a category, a home). The Look's room lives in the address's #, so the
+// Look editor names it itself.
+func (h *Handler) customizeParts(ctx context.Context, cc *CampaignContext, areas []CustomizeArea, area string, crumbs []CustomizeCrumb, cats []CustomizeCategory) {
+	base := h.customizeBase(cc)
+	open := ""
+	if len(crumbs) > 1 {
+		open = crumbs[1].Label
+	}
+	for i := range areas {
+		a := &areas[i]
+		here := a.ID == area
+		switch a.ID {
+		case "look":
+			for _, r := range lookRooms {
+				a.Parts = append(a.Parts, CustomizePart{Label: r.Label, Href: base + "/look#" + r.Key, Key: r.Key})
+			}
+		case "categories":
+			a.Parts = append(a.Parts, CustomizePart{Label: "All categories", Href: base + "/categories", Quiet: true, Current: here && open == ""})
+			for _, c := range cats {
+				if c.ParentID != nil {
+					continue
+				}
+				a.Parts = append(a.Parts, categoryPart(base, c, here && open == c.NamePlural, false))
+				for _, k := range cats {
+					if k.ParentID != nil && *k.ParentID == c.ID {
+						a.Parts = append(a.Parts, categoryPart(base, k, here && open == k.NamePlural, true))
+					}
+				}
+			}
+			a.Parts = append(a.Parts, CustomizePart{Label: "New category", Href: base + "/categories#new", Quiet: true})
+			if here {
+				a.Part = open
+				if a.Part == "" {
+					a.Part = "All categories"
+				}
+			}
+		case "home":
+			for _, t := range homeTabs {
+				name := t.label(ctx)
+				a.Parts = append(a.Parts, CustomizePart{Label: name, Href: base + "/home/" + t.Key, Current: here && open == name})
+			}
+			if here {
+				a.Part = open
+			}
+		}
+	}
+}
+
+// categoryPart is a category's line in the Categories drawer.
+func categoryPart(base string, c CustomizeCategory, current, kind bool) CustomizePart {
+	return CustomizePart{
+		Label: c.NamePlural, Href: fmt.Sprintf("%s/categories/%d/layout", base, c.ID),
+		Color: c.Color, Pages: c.Pages, Kind: kind, Current: current,
+	}
+}
+
 // customizeFind lists what the Find palette can open: every area, every
 // Look section and every category.
 func (h *Handler) customizeFind(cc *CampaignContext, areas []CustomizeArea, cats []CustomizeCategory) string {
@@ -163,6 +251,7 @@ func (h *Handler) renderCustomize(c echo.Context, cc *CampaignContext, area, tit
 	if cats == nil {
 		cats = h.CustomizeCategories(ctx, cc.Campaign.ID)
 	}
+	h.customizeParts(ctx, cc, areas, area, crumbs, cats)
 	d := customizeShellData{
 		Title:      cc.Campaign.Name + " - " + title,
 		CampaignID: cc.Campaign.ID,

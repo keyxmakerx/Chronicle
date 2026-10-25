@@ -103,6 +103,11 @@ type Options struct {
 	// is named here gets a Folder line; nil leaves folders out.
 	FolderNames map[string]string
 
+	// LayoutNames maps a page id to the name of the layout it wears, for
+	// pages whose category has more than one; the page's sub-line names it.
+	// nil leaves layouts out.
+	LayoutNames map[string]string
+
 	// EraVersions maps a page id to its versions for the eras the reader
 	// may see (oldest era first), with the calendar's current era marked.
 	// Filled by Service.Generate; nil leaves every page as its usual self.

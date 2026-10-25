@@ -67,6 +67,30 @@
     if (v && typeof v === 'object') return '{' + Object.keys(v).sort().map(function (k) { return JSON.stringify(k) + ':' + stable(v[k]); }).join(',') + '}';
     return JSON.stringify(v);
   }
+  // plCanon is a category's named layouts in the shape the server stores them.
+  function plCanon(p) {
+    p = p || {};
+    return {
+      mainName: String(p.mainName || ''),
+      claimed: String(p.claimed || ''),
+      extra: (Array.isArray(p.extra) ? p.extra : []).map(function (l) {
+        return { key: String(l.key), name: String(l.name), layout: canon(l.layout) };
+      })
+    };
+  }
+  function plFind(p, key) {
+    var ex = (p && p.extra) || [];
+    for (var i = 0; i < ex.length; i++) if (ex[i].key === key) return ex[i];
+    return null;
+  }
+  // layoutKey makes a stable key from a layout's name, unlike the others'.
+  function layoutKey(name, taken) {
+    var k = String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 28);
+    if (!/^[a-z]/.test(k)) k = ('layout-' + k).replace(/-+$/, '').slice(0, 28);
+    var out = k, n = 2;
+    while (out === 'main' || taken[out]) out = k + '-' + (n++);
+    return out;
+  }
   function sizeOf(s) { var p = String(s || '1x1').split('x'); return { w: Number(p[0]) || 1, h: Number(p[1]) || 1 }; }
 
   // canon is a layout in the shape the server stores it, so the draft can be
@@ -275,6 +299,13 @@
     // arrangement; the editor starts from it, and Save stores it once changed.
     var shown = canon(S.layout);
     var saved = S.unsaved ? { rows: [] } : shown;
+    // A category's named layouts besides its main one (page_layouts.go):
+    // each page wears one. VAR is the one being arranged, 'main' the
+    // category's main layout. A home has none.
+    var PLS = !ANYHOME && S.pageLayouts && typeof S.pageLayouts === 'object' ? S.pageLayouts : null;
+    var PL_SAVED = PLS ? plCanon(PLS) : null;
+    var PL_MAX = PLS ? Number(PLS.max) || 8 : 0;
+    var VAR = 'main';
     var W = {};               // palette entries by key (type, or ext_widget:slug)
     var paletteState = 'loading';
     var UI = { device: 'desktop', viewAs: 'dm', sel: null, insp: 'add', galQ: '', galTiles: false, sheet: false, reading: false, look: lookNow(), addAt: null, peekKeep: false };
@@ -295,6 +326,10 @@
       return sec && sec.items && sec.items[KEY];
     }
     function current() {
+      if (VAR !== 'main') {
+        var nl = plFind(plNow(), VAR);
+        return canon(nl ? nl.layout : shown);
+      }
       var it = draftItem();
       return canon(it && it[FIELD] ? it[FIELD] : shown);
     }
@@ -318,6 +353,24 @@
       }) }, opts);
       return true;
     }
+    // plNow is the category's named layouts as the draft has them.
+    function plNow() {
+      var it = draftItem();
+      return it && it.page_layouts ? plCanon(it.page_layouts) : clone(PL_SAVED);
+    }
+    // plWrite puts the named layouts in the draft, or takes them out when
+    // they match what is saved.
+    function plWrite(p, opts) {
+      if (!Chronicle.customizeCategoryWrite) return false;
+      Chronicle.customizeCategoryWrite(KEY, { page_layouts: stable(p) === stable(PL_SAVED) ? undefined : p }, opts);
+      return true;
+    }
+    // savedNow is what is saved of the layout being arranged.
+    function savedNow() {
+      if (VAR === 'main') return saved;
+      var sl = plFind(PL_SAVED, VAR);
+      return sl ? sl.layout : { rows: [] };
+    }
     var L = current();
     // edit applies fn to a copy of the layout and, when it changed, puts the
     // copy in the draft as one Undo step. fn returns false to call it off.
@@ -336,11 +389,15 @@
         return false;
       }
       L = next;
-      var same = JSON.stringify(L) === JSON.stringify(saved);
+      var same = JSON.stringify(L) === JSON.stringify(savedNow());
       var before = UI.glideBefore || snap();
       if (UI.glideFrom && UI.sel) before[UI.sel.id] = UI.glideFrom;
       if (HOME) homeWrite(same ? null : clone(L), { step: true });
-      else {
+      else if (VAR !== 'main') {
+        var pl = plNow(), nl = plFind(pl, VAR);
+        if (nl) nl.layout = clone(L);
+        plWrite(pl, { step: true });
+      } else {
         var patch = {};
         patch[FIELD] = same ? undefined : clone(L);
         Chronicle.customizeCategoryWrite(KEY, patch, { step: true });
@@ -746,6 +803,91 @@
       return '<div class="cpe-frame ' + UI.device + '"><div class="cpe-page" data-page>' + h + '</div></div>';
     }
 
+    /* ---------- Layouts ----------
+     * The strip over the editor lists the category's layouts: its main one
+     * and the named ones. Each page wears one, picked from the chip beside
+     * the page's name; a player's character starts on the one chosen here. */
+    function mainLabel(p) { return p.mainName || String(PLS.mainDefault || S.name || 'Main'); }
+    function layoutsHTML() {
+      if (!PLS || UI.reading) return '';
+      var p = plNow(), cur = VAR;
+      var chip = function (key, name) {
+        return '<button type="button" class="cpe-lay" data-act="lay" data-v="' + esc(key) + '" aria-pressed="' + (cur === key) + '">' + esc(name) + '</button>';
+      };
+      var h = '<div class="cpe-layouts" role="group" aria-label="Layouts"><span class="cpe-layouts-lab">Layouts</span><div class="cpe-lays">' +
+        chip('main', mainLabel(p)) + p.extra.map(function (l) { return chip(l.key, l.name); }).join('') +
+        '<button type="button" class="cpe-lay add" data-act="laynew"' + (p.extra.length >= PL_MAX ? ' disabled title="A category keeps ' + PL_MAX + ' layouts besides its main one"' : '') + '>' + ic('fa-plus') + ' New layout</button></div>' +
+        '<div class="cpe-lay-acts"><button class="btn-secondary btn-sm" type="button" data-act="layren">' + ic('fa-pen') + ' Rename</button>' +
+        (cur !== 'main' ? '<button class="btn-secondary btn-sm" type="button" data-act="layrm">' + ic('fa-trash-can') + ' Remove</button>' : '') + '</div>';
+      if (PLS.claimable && p.extra.length) {
+        h += '<label class="cpe-lay-claim"><span>A page a player claims starts on</span><select class="cpe-inp" id="cpe-claimed">' +
+          '<option value="main"' + (p.claimed ? '' : ' selected') + '>' + esc(mainLabel(p)) + '</option>' +
+          p.extra.map(function (l) { return '<option value="' + esc(l.key) + '"' + (p.claimed === l.key ? ' selected' : '') + '>' + esc(l.name) + '</option>'; }).join('') + '</select></label>';
+      }
+      h += '<p class="cpe-hint cpe-lay-hint">' + (p.extra.length
+        ? 'Each page wears one layout. Change a page’s layout from the chip beside its name.'
+        : 'One category can hold different kinds of page. Give it a second layout, like one for heroes and one for NPCs.') + '</p></div>';
+      return h;
+    }
+    // wear switches the editor to another of the category's layouts.
+    function wear(key) {
+      if (key !== 'main' && !plFind(plNow(), key)) return;
+      if (key === VAR) return;
+      VAR = key;
+      UI.sel = null; UI.insp = 'add'; UI.addAt = null;
+      L = current();
+      render();
+    }
+    function setClaimed(v) {
+      var p = plNow();
+      p.claimed = v === 'main' || !plFind(p, v) ? '' : v;
+      plWrite(p, { step: true });
+    }
+    // layoutNameMenu names a new layout (key ''), or renames one.
+    function layoutNameMenu(btn, key) {
+      var p = plNow(), isNew = !key, nl = isNew ? null : plFind(p, key);
+      var was = isNew ? '' : key === 'main' ? mainLabel(p) : (nl ? nl.name : '');
+      var pop = openPop(btn, '<div class="cpe-keep"><label class="cpe-lab" for="cpe-lay-n">' + (isNew ? 'Name for the new layout' : 'Name for this layout') + '</label>' +
+        '<input class="cpe-inp" id="cpe-lay-n" maxlength="40" value="' + esc(was) + '" placeholder="Hero">' +
+        '<span class="cpe-hint">' + (isNew ? (PLS.systemSheet ? 'It starts with your game system’s sheet. Add any widgets around it.' : 'It starts as a copy of ' + esc(mainLabel(p)) + '.') : 'Pages keep wearing it under its new name.') + '</span>' +
+        '<div class="cpe-acts cpe-end"><button class="btn-primary btn-sm" type="button" data-go>' + (isNew ? 'Make it' : 'Rename') + '</button></div></div>');
+      var inp = pop.querySelector('#cpe-lay-n');
+      inp.select();
+      function go() {
+        var name = inp.value.trim().replace(/\s+/g, ' ');
+        if (!name) { inp.focus(); return; }
+        var clash = [mainLabel(p)].concat(p.extra.map(function (l) { return l.name; })).some(function (n, i) {
+          var own = key === 'main' ? i === 0 : (nl && i > 0 && p.extra[i - 1].key === key);
+          return !own && n.toLowerCase() === name.toLowerCase();
+        });
+        if (clash) { toast('Another layout of this category is called “' + name + '”. Pick another name.', true); inp.focus(); return; }
+        closePop();
+        if (isNew) {
+          var taken = {};
+          p.extra.forEach(function (l) { taken[l.key] = true; });
+          var k = layoutKey(name, taken), lay;
+          if (PLS.systemSheet) lay = { rows: [colsRow([12], [[{ id: uid('b'), type: 'game_system_sheet' }]])] };
+          else { lay = clone(VAR === 'main' ? L : current()); lay.rows.forEach(reId); }
+          p.extra.push({ key: k, name: name, layout: canon(lay) });
+          if (plWrite(p, { step: true })) { VAR = k; L = current(); UI.sel = null; UI.insp = 'add'; render(); toast('Made the “' + name + '” layout. Arrange it, then Save.', false, undo); }
+          return;
+        }
+        if (key === 'main') p.mainName = name === String(PLS.mainDefault || S.name || '') ? '' : name;
+        else if (nl) nl.name = name;
+        plWrite(p, { step: true });
+      }
+      pop.querySelector('[data-go]').addEventListener('click', go);
+      inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); go(); } });
+    }
+    function removeLayout() {
+      var p = plNow(), nl = plFind(p, VAR);
+      if (!nl) return;
+      p.extra = p.extra.filter(function (l) { return l.key !== VAR; });
+      if (p.claimed === nl.key) p.claimed = '';
+      VAR = 'main';
+      if (plWrite(p, { step: true })) toast('Removed the “' + nl.name + '” layout. Pages that wore it go back to ' + mainLabel(p) + '.', false, undo);
+    }
+
     /* ---------- Toolbar ---------- */
     function toolbarHTML() {
       var hist = Chronicle.customizeHistory ? Chronicle.customizeHistory() : { undo: false, redo: false };
@@ -922,7 +1064,7 @@
 
     /* ---------- Drawing ---------- */
     function notices() {
-      if (!S.systemDrawn) return '';
+      if (!S.systemDrawn || VAR !== 'main') return '';
       return '<div class="cpe-banner">' + ic('fa-circle-info') + '<span>Your game system draws ' + esc((S.plural || 'these pages').toLowerCase()) + ' with its own sheet, so pages don’t use this layout right now. Changes here wait until they do.</span></div>';
     }
     function render() {
@@ -931,7 +1073,7 @@
       var ae = document.activeElement, fid = ae && el.contains(ae) ? ae.id : '', pos = fid === 'cpe-q' ? ae.selectionStart : null;
       // The canvas carries the player-view mark while it shows a player's
       // view, so marked Director-only parts inside drawn widgets hide too.
-      el.innerHTML = '<div class="cpe' + (UI.reading ? ' reading' : '') + '">' + notices() + '<div class="cpe-editor"><div class="cpe-main">' + toolbarHTML() +
+      el.innerHTML = '<div class="cpe' + (UI.reading ? ' reading' : '') + '">' + layoutsHTML() + notices() + '<div class="cpe-editor"><div class="cpe-main">' + toolbarHTML() +
         '<div class="cpe-canvas"' + (UI.viewAs === 'player' ? ' data-view-as-player' : '') + '>' + canvasHTML() + '</div></div>' + (UI.reading ? '' : inspectorHTML()) + '</div></div>';
       cv = $('.cpe-canvas'); if (cv) cv.scrollTop = top;
       ib = $('.cpe-insp-body'); if (ib && UI.keepInsp) ib.scrollTop = itop;
@@ -1540,6 +1682,10 @@
           case 'start': presetsMenu(b); return;
           case 'peek': e.stopPropagation(); peek(b, b.getAttribute('data-k')); return;
           case 'keep': keepMenu(b); return;
+          case 'lay': wear(v); return;
+          case 'laynew': e.stopPropagation(); layoutNameMenu(b, ''); return;
+          case 'layren': e.stopPropagation(); layoutNameMenu(b, VAR); return;
+          case 'layrm': removeLayout(); return;
           case 'vis': UI.keepInsp = true; edit(function (lay) { var c = cfgOf(findSel(lay).item); if (v) c.visibility = v; else delete c.visibility; }); return;
           case 'size': UI.keepInsp = true; edit(function (lay) { findSel(lay).item.size = v; }); return;
           case 'height': UI.keepInsp = true; edit(function (lay) { var c = cfgOf(findSel(lay).item); if (v) c.minHeight = v; else delete c.minHeight; }); return;
@@ -1603,6 +1749,7 @@
       var t = e.target;
       if (t.id === 'cpe-page') { showWith(t.value); return; }
       if (t.id === 'cpe-desc') { setDescription(t.value); return; }
+      if (t.id === 'cpe-claimed') { setClaimed(t.value); return; }
       var key = t.getAttribute('data-cfg');
       if (key == null) return;
       var f = findSel();
@@ -1616,6 +1763,7 @@
       // what the home shows. (A saved category reloads its page instead.)
       var d = (e && e.detail) || {};
       if (HOME && d.reason === 'publish' && !draftItem() && JSON.stringify(L) !== JSON.stringify(shown)) { shown = clone(L); saved = shown; }
+      if (VAR !== 'main' && !plFind(plNow(), VAR)) VAR = 'main';
       L = current();
       if (UI.sel && !findSel()) { UI.sel = null; UI.insp = 'add'; }
       if (UI.addAt && !findRow(UI.addAt)) UI.addAt = null;
@@ -1635,6 +1783,9 @@
       listeners.forEach(function (l) { l[0].removeEventListener(l[1], l[2], l[3]); });
     };
   }
+
+  // For the tests: the layout strip's pure helpers.
+  Chronicle._cpeLayouts = { layoutKey: layoutKey, plCanon: plCanon };
 
   Chronicle.register('customize-page-editor', {
     init: function (el) { el._cpeDestroy = mount(el); },
