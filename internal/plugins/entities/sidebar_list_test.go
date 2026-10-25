@@ -107,3 +107,31 @@ func TestSidebarTreeType(t *testing.T) {
 		})
 	}
 }
+
+// TestSidebarEntityList_RowMenuFlags pins what the tree tells the row menu:
+// edit actions from Scribe up, folder delete for the Owner only, matching the
+// routes those actions call.
+func TestSidebarEntityList_RowMenuFlags(t *testing.T) {
+	cases := []struct {
+		role         campaigns.Role
+		edit, delete bool
+	}{
+		{campaigns.RolePlayer, false, false},
+		{campaigns.RoleScribe, true, false},
+		{campaigns.RoleOwner, true, true},
+	}
+	for _, tc := range cases {
+		cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1", Name: "C"}, MemberRole: tc.role}
+		var buf bytes.Buffer
+		if err := SidebarEntityList([]Entity{{ID: "e-1", Name: "Page", EntityTypeID: 7}}, nil, 1, 7, cc, nil).Render(context.Background(), &buf); err != nil {
+			t.Fatalf("render failed: %v", err)
+		}
+		html := buf.String()
+		if got := strings.Contains(html, `data-can-edit="true"`); got != tc.edit {
+			t.Errorf("role %d: data-can-edit present = %v, want %v", tc.role, got, tc.edit)
+		}
+		if got := strings.Contains(html, `data-can-delete-folders="true"`); got != tc.delete {
+			t.Errorf("role %d: data-can-delete-folders present = %v, want %v", tc.role, got, tc.delete)
+		}
+	}
+}

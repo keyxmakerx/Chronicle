@@ -17,7 +17,8 @@ import (
 // collapsible tree with drag-and-drop support — no folder/page icons: a
 // folder is its chevron, a semibold name and a count (added client-side);
 // a page is its plain name. hiddenIDs marks entities that should appear
-// dimmed for owners.
+// dimmed for owners. data-can-edit and data-can-delete-folders tell the row
+// menu (sidebar_row_menu.js) which actions to offer; the routes check again.
 //
 // typeID is the drilled category's own entity type (the sidebar URL's ?type=),
 // NOT a per-row type. It drives data-entity-type-id, which sidebar_tree.js
@@ -38,6 +39,12 @@ templ SidebarEntityList(results []Entity, nodes []SidebarNode, total int, typeID
 			class="sidebar-entity-list py-1"
 			data-campaign-id={ cc.Campaign.ID }
 			data-entity-type-id={ strconv.Itoa(sidebarTreeType(typeID, results, nodes)) }
+			if cc.MemberRole >= campaigns.RoleScribe {
+				data-can-edit="true"
+			}
+			if cc.MemberRole >= campaigns.RoleOwner {
+				data-can-delete-folders="true"
+			}
 		>
 			// Render sidebar folder nodes (pure organizational containers).
 			for _, node := range nodes {

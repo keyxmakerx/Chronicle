@@ -63,6 +63,7 @@
     if (!container) return;
 
     var campaignId = container.getAttribute('data-campaign-id') || '';
+    var canEdit = container.getAttribute('data-can-edit') === 'true';
     var items = container.querySelectorAll('.sidebar-tree-item');
     if (!items.length) return;
 
@@ -263,6 +264,23 @@
 
       wrapper.appendChild(link);
 
+      // The row menu's dots (sidebar_row_menu.js). A sibling of the row, not
+      // inside it, since a page row is a link. A folder offers nothing to
+      // someone who cannot edit, so it gets none.
+      if (!isFolder || canEdit) {
+        var more = document.createElement('button');
+        more.type = 'button';
+        more.className = 'nav-more tree-more';
+        more.setAttribute('data-tree-more', '');
+        more.setAttribute('aria-haspopup', 'menu');
+        more.setAttribute('aria-expanded', 'false');
+        more.setAttribute('aria-label', 'More actions for ' + (node.el.getAttribute('data-entity-name') || ''));
+        more.title = 'More actions';
+        more.innerHTML = '<i class="fa-solid fa-ellipsis" aria-hidden="true"></i>';
+        wrapper.appendChild(more);
+        wrapper.classList.add('has-more');
+      }
+
       // Render children into a collapsible container.
       if (hasChildren) {
         sortChildren(node.children);
@@ -320,6 +338,7 @@
       container.setAttribute('data-reorg-active', 'true');
       updateDraggable(container, true);
     }
+    document.dispatchEvent(new CustomEvent('chronicle:sidebar-tree'));
   }
 
   /**
@@ -833,10 +852,11 @@
   }
 
   /**
-   * Start inline rename of a folder node. Replaces the name span with
-   * an input field. Enter/blur saves, Escape cancels.
+   * Start inline rename of a folder node or a page. Replaces the name span
+   * with an input field. Enter/blur saves, Escape cancels. A page saves
+   * through the metadata route, which changes only its name.
    */
-  function startInlineRename(link, nodeId, campaignId) {
+  function startInlineRename(link, nodeId, campaignId, entityId) {
     var nameSpan = link.querySelector('.tree-lb');
     if (!nameSpan || nameSpan._renaming) return;
     nameSpan._renaming = true;
@@ -870,7 +890,10 @@
         restore();
         return;
       }
-      Chronicle.apiFetch('/campaigns/' + campaignId + '/sidebar-nodes/' + nodeId, {
+      var url = entityId
+        ? '/campaigns/' + campaignId + '/entities/' + entityId + '/metadata'
+        : '/campaigns/' + campaignId + '/sidebar-nodes/' + nodeId;
+      Chronicle.apiFetch(url, {
         method: 'PUT',
         body: { name: newName }
       }).then(function (res) {
@@ -879,6 +902,7 @@
           link.setAttribute('data-entity-name', newName);
         } else {
           nameSpan.textContent = oldName;
+          if (Chronicle.notify) Chronicle.notify('The name could not be changed.', 'error');
         }
         nameSpan._renaming = false;
       }).catch(function () {
@@ -903,120 +927,6 @@
       if (e.key === 'Escape') { e.preventDefault(); cancel(); }
     });
     input.addEventListener('blur', save);
-  }
-
-  // --- Folder Context Menu (right-click + long-press in reorg mode) ---
-
-  /**
-   * Show a context menu for a folder node at (x, y) screen coords.
-   * Provides Rename and Delete options.
-   */
-  function showFolderContextMenu(x, y, nodeId, link, cid) {
-    removeFolderContextMenu();
-
-    var menu = document.createElement('div');
-    menu.id = 'sidebar-folder-ctx-menu';
-    // Touch-friendly: larger padding on menu items (min-h-[40px]).
-    menu.className = 'fixed z-[9999] bg-surface border border-border rounded-lg shadow-xl py-1 min-w-[160px] text-sm';
-    menu.style.left = Math.min(x, window.innerWidth - 180) + 'px';
-    menu.style.top = Math.min(y, window.innerHeight - 100) + 'px';
-
-    var renameBtn = document.createElement('button');
-    renameBtn.type = 'button';
-    renameBtn.className = 'w-full px-3 py-2 min-h-[40px] text-left flex items-center gap-2 text-fg hover:bg-surface-hover transition-colors';
-    renameBtn.innerHTML = '<i class="fa-solid fa-pen text-xs text-fg-muted w-4 text-center"></i> Rename';
-    renameBtn.addEventListener('click', function () {
-      removeFolderContextMenu();
-      if (link) startInlineRename(link, nodeId, cid);
-    });
-
-    var deleteBtn = document.createElement('button');
-    deleteBtn.type = 'button';
-    deleteBtn.className = 'w-full px-3 py-2 min-h-[40px] text-left flex items-center gap-2 text-fg hover:bg-red-500/10 hover:text-red-400 transition-colors';
-    deleteBtn.innerHTML = '<i class="fa-solid fa-trash text-xs text-fg-muted w-4 text-center"></i> Delete';
-    deleteBtn.addEventListener('click', function () {
-      removeFolderContextMenu();
-      if (!confirm('Delete this folder? Children will be moved to root.')) return;
-      Chronicle.apiFetch('/campaigns/' + cid + '/sidebar-nodes/' + nodeId, { method: 'DELETE' })
-        .then(function (res) {
-          if (res.ok) {
-            Chronicle.notify('Folder deleted', 'success');
-            refreshSidebarTree();
-          } else {
-            Chronicle.notify('Failed to delete folder', 'error');
-          }
-        });
-    });
-
-    menu.appendChild(renameBtn);
-    menu.appendChild(deleteBtn);
-    document.body.appendChild(menu);
-
-    // Dismiss on outside click/tap.
-    setTimeout(function () {
-      document.addEventListener('mousedown', onFolderCtxOutsideClick);
-      document.addEventListener('touchstart', onFolderCtxOutsideClick);
-    }, 0);
-  }
-
-  /** Get folder node info for context menu from any element. */
-  function getFolderNodeInfo(target) {
-    var node = target.closest('.sidebar-tree-node[data-node-id]');
-    if (!node) return null;
-    var tree = document.getElementById('sidebar-entity-tree');
-    return {
-      nodeId: node.getAttribute('data-node-id'),
-      link: node.querySelector('.sidebar-tree-item'),
-      cid: tree ? tree.getAttribute('data-campaign-id') : ''
-    };
-  }
-
-  // Right-click handler (desktop).
-  document.addEventListener('contextmenu', function (e) {
-    if (!document.body.classList.contains('sidebar-reorg-active')) return;
-    var info = getFolderNodeInfo(e.target);
-    if (!info) return;
-    e.preventDefault();
-    showFolderContextMenu(e.clientX, e.clientY, info.nodeId, info.link, info.cid);
-  });
-
-  // Long-press handler (mobile, 500ms).
-  var longPressTimer = null;
-  var longPressFired = false;
-
-  document.addEventListener('touchstart', function (e) {
-    if (!document.body.classList.contains('sidebar-reorg-active')) return;
-    var info = getFolderNodeInfo(e.target);
-    if (!info) return;
-
-    longPressFired = false;
-    var touch = e.touches[0];
-    longPressTimer = setTimeout(function () {
-      longPressFired = true;
-      showFolderContextMenu(touch.clientX, touch.clientY, info.nodeId, info.link, info.cid);
-    }, 500);
-  }, { passive: true });
-
-  document.addEventListener('touchmove', function () {
-    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
-  }, { passive: true });
-
-  document.addEventListener('touchend', function (e) {
-    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
-    // Prevent click firing after long-press opened the menu.
-    if (longPressFired) { e.preventDefault(); longPressFired = false; }
-  });
-
-  function removeFolderContextMenu() {
-    var m = document.getElementById('sidebar-folder-ctx-menu');
-    if (m) m.remove();
-    document.removeEventListener('mousedown', onFolderCtxOutsideClick);
-    document.removeEventListener('touchstart', onFolderCtxOutsideClick);
-  }
-
-  function onFolderCtxOutsideClick(e) {
-    var m = document.getElementById('sidebar-folder-ctx-menu');
-    if (m && !m.contains(e.target)) removeFolderContextMenu();
   }
 
   /**
@@ -1549,6 +1459,10 @@
     initTree();
     observeLoadMore();
   }
+
+  // The row menu renames rows and reloads the tree through these.
+  window.Chronicle = window.Chronicle || {};
+  window.Chronicle.sidebarTree = { rename: startInlineRename, refresh: refreshSidebarTree };
 
   // Test-only hook: exposes the pure drag-index + reorder-payload helpers so the
   // node:test contract suite can assert them without a real browser DOM. `module`
