@@ -1059,7 +1059,8 @@
       var a = (back ? p.ric : p.mk).getBoundingClientRect(), b = (back ? p.mk : p.ric).getBoundingClientRect(), f = document.createElement('span');
       f.className = 'flyer' + (p.mk.classList.contains('dir') ? ' dir' : '');
       f.setAttribute('style', (p.mk.getAttribute('style') || '') + ';width:' + a.width.toFixed(1) + 'px;height:' + a.height.toFixed(1) + 'px');
-      f.textContent = p.mk.textContent;
+      if (p.mk.classList.contains('gnm')) f.innerHTML = p.mk.innerHTML;
+      else f.textContent = p.mk.textContent;
       P.carry.appendChild(f);
       p.f = f;
       var sx = a.left - cr.left, sy = a.top - cr.top, ex = b.left - cr.left, ey = b.top - cr.top, k = b.width / a.width;
@@ -1424,6 +1425,10 @@
       if (this._escHandler) document.removeEventListener('keydown', this._escHandler);
       if (this._mvOffHandler) document.removeEventListener('pointerdown', this._mvOffHandler, true);
       if (this._plUp) document.removeEventListener('pointerup', this._plUp);
+      if (this._gnRaf) cancelAnimationFrame(this._gnRaf);
+      this._gnRaf = 0;
+      if (this._gnWake && window.MotionRest) window.MotionRest.offWake(this._gnWake);
+      this._gnWake = null;
     },
 
     // --------------------------------------------------------------
@@ -1448,7 +1453,11 @@
                 (this.showNights ? '<button type="button" class="tbtn waitbtn" id="cal5-waitbtn" aria-haspopup="dialog" aria-expanded="false" aria-controls="cal5-waitpop" hidden><b class="wcount"></b><span>waiting on you</span></button>' +
                   '<div class="waitpop" id="cal5-waitpop" role="dialog" aria-label="Waiting on you" hidden></div>' : '') +
                 (this.freeCan ? '<button type="button" class="tbtn" id="cal5-freebtn" aria-haspopup="dialog" aria-expanded="false" title="' + (this.freeDirector ? 'When players are free, and the best times to play' : 'Give your hours, and see who is free') + '"><i class="fa-solid fa-user-clock"></i><span>Who’s free</span></button>' : '') +
-                '<button type="button" class="tbtn" id="cal5-moonbtn" aria-haspopup="dialog" aria-expanded="false"><i class="fa-solid fa-moon"></i><span>Moons</span></button>' +
+                // A real-world calendar is for game nights, so its header lists
+                // them where a world calendar has its moons.
+                (this.showNights ? '<button type="button" class="tbtn" id="cal5-gnbtn" aria-haspopup="dialog" aria-expanded="false" aria-controls="cal5-gnpop"><span class="gnico" aria-hidden="true"></span><span>Game nights</span></button>' +
+                  '<div class="waitpop gnpop" id="cal5-gnpop" role="dialog" aria-label="Game nights" hidden></div>' : '') +
+                '<button type="button" class="tbtn" id="cal5-moonbtn" aria-haspopup="dialog" aria-expanded="false"' + (this.showNights ? ' hidden' : '') + '><i class="fa-solid fa-moon"></i><span>Moons</span></button>' +
               '</div>' +
             '</div>' +
             '<div class="h-row h-mid">' +
@@ -2192,6 +2201,7 @@
     openWaiting: function () {
       var btn = $('#cal5-waitbtn', this.el), pop = $('#cal5-waitpop', this.el);
       if (!btn || !pop || btn.hidden) return;
+      this.closeGnList();
       pop.hidden = false;
       btn.setAttribute('aria-expanded', 'true');
       var first = $('.wrow', pop);
@@ -2206,6 +2216,66 @@
         btn.setAttribute('aria-expanded', 'false');
         if (o && o.refocus) btn.focus();
       }
+    },
+
+    // The header's "Game nights": the nights coming up, from today through
+    // the next two months, and the last one played, each opening its day.
+    gnListOpen: function () {
+      var pop = $('#cal5-gnpop', this.el);
+      return !!pop && !pop.hidden;
+    },
+
+    openGnList: function () {
+      var self = this, btn = $('#cal5-gnbtn', this.el), pop = $('#cal5-gnpop', this.el);
+      if (!btn || !pop) return;
+      this.closeWaiting();
+      pop.innerHTML = '<p class="gnempty">Loading game nights…</p>';
+      pop.hidden = false;
+      btn.setAttribute('aria-expanded', 'true');
+      var y = this.cal.current_year, m = this.cal.current_month, months = [];
+      for (var i = 0; i < 3; i++) {
+        months.push({ y: y, m: m });
+        if (++m > 12) { m = 1; y++; }
+      }
+      Promise.all(months.map(function (o) { return self.fetchNights(o.y, o.m); })).then(function (lists) {
+        if (pop.hidden) return;
+        pop.innerHTML = self._gnListHTML([].concat.apply([], lists));
+        var first = $('.wrow', pop);
+        if (first) first.focus();
+      }).catch(function () { pop.innerHTML = '<p class="gnempty">Could not load the game nights. Try again.</p>'; });
+    },
+
+    closeGnList: function (o) {
+      var btn = $('#cal5-gnbtn', this.el), pop = $('#cal5-gnpop', this.el);
+      if (!pop || pop.hidden) return;
+      pop.hidden = true;
+      if (btn) {
+        btn.setAttribute('aria-expanded', 'false');
+        if (o && o.refocus) btn.focus();
+      }
+    },
+
+    _gnListHTML: function (all) {
+      var self = this, seen = {};
+      all = all.filter(function (n) { var k = self._gnId(n); if (seen[k]) return false; seen[k] = true; return true; });
+      all.sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+      var next = all.filter(function (n) { return !n.past; }).slice(0, 8), played = all.filter(function (n) { return n.past; }).pop();
+      var row = function (n) {
+        var dt = new Date(n.date + 'T12:00:00Z'), time = self._gnTime(n);
+        var mon = isNaN(dt) ? '' : dt.toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' });
+        var sub = [realDateWords(n.date).replace(/ \w+ \d+$/, ''), time].filter(Boolean).join(' · ');
+        var ans = n.past ? 'Played' : n.mine ? self._gnAnswerWord(n.mine) : '';
+        var k = n.mine && !n.past && !n.mine.carried ? ({ yes: 'y', maybe: 'm', no: 'n' }[n.mine.answer] || 'q') : '';
+        return '<li><button type="button" class="wrow" data-gn-go="' + esc(n.sessionId) + '" data-gn-date="' + esc(n.date) + '">' +
+          '<span class="wtile" aria-hidden="true"><small>' + esc(mon) + '</small><b>' + esc(String(+n.date.slice(8))) + '</b></span>' +
+          '<span class="wmain"><span class="wt">' + esc(n.name) + '</span><span class="ws">' + esc(sub) + '</span></span>' +
+          (ans ? '<span class="gnans' + (k ? ' ' + k : '') + '">' + esc(ans) + '</span>' : '') + '</button></li>';
+      };
+      var h = '<div class="gnhead">Coming up</div>';
+      h += next.length ? '<ul class="wlist">' + next.map(row).join('') + '</ul>'
+        : '<p class="gnempty">' + (this.role >= 2 ? 'Nothing planned yet. Open a day to plan a game night.' : 'Nothing planned yet.') + '</p>';
+      if (played) h += '<div class="gnhead">Last played</div><ul class="wlist">' + row(played) + '</ul>';
+      return h + '<div class="gnfoot"><a class="lnk" href="/campaigns/' + encodeURIComponent(this.campaignId) + '/sessions">All game nights</a></div>';
     },
 
     // A game night's id in the grid and the cards: "gn:" + session + date,
@@ -2401,7 +2471,7 @@
     _gnBoxHTML: function (n, highlightId) {
       var id = this._gnId(n), hl = highlightId === id ? ' hl' : '', time = this._anchor ? '' : this._gnTime(n);
       var h = '<div class="evd go gnb' + hl + '" data-ev="' + esc(id) + '">' +
-        '<div class="evh"><span class="ric"><i class="fa-solid fa-dice-d20"></i></span><span class="qt0">' + esc(n.name) + '</span></div>' +
+        '<div class="evh"><span class="ric"><span class="gnart" aria-hidden="true"></span></span><span class="qt0">' + esc(n.name) + '</span></div>' +
         this._gnRealLine(n) +
         '<div class="evm">' + (n.past ? '<span class="mi">Played</span>' : '') + (time ? '<span class="mi">' + esc(time) + '</span>' : '') +
           (n.recurring ? '<span class="mi"><i class="fa-solid fa-rotate"></i> Repeats</span>' : '') + '</div>' +
@@ -4461,6 +4531,25 @@
       this._paintMonth();
     },
 
+    // The game-night dice's rainbow turns once every 24 seconds on the
+    // page's rest clock (motion_rest.js), so it stops when the viewer steps
+    // away and wakes with them; reduced motion holds it still. The angle is
+    // set on the dice alone, so the rest of the grid is never restyled.
+    _gnSpin: function () {
+      var self = this, MR = window.MotionRest;
+      if (this._gnRaf || !MR || reducedMotion()) return;
+      var tick = function () {
+        self._gnRaf = 0;
+        var arts = self.el.querySelectorAll('.gnart');
+        if (!arts.length || !self.el.isConnected) return;
+        var a = ((MR.now() / 24000) * 360 + 200) % 360 + 'deg';
+        for (var i = 0; i < arts.length; i++) arts[i].style.setProperty('--gnA', a);
+        if (!MR.still()) self._gnRaf = requestAnimationFrame(tick);
+      };
+      if (!this._gnWake) { this._gnWake = function () { self._gnSpin(); }; MR.onWake(this._gnWake); }
+      this._gnRaf = requestAnimationFrame(tick);
+    },
+
     _paintMonth: function () {
       var cal = this.cal, y = this.view.y, m = this.view.m;
       var mc = CalDate.monthCount(cal), m0 = ((m - 1) % mc + mc) % mc;
@@ -4502,6 +4591,7 @@
       this._paintEraField(this._eraFade ? { crossfade: true } : null);
       this._eraFade = false;
       this._skyDay();
+      this._gnSpin();
       if (this._pollDraft) this._pollPaintPicks();
     },
 
@@ -4536,20 +4626,32 @@
       return '<button type="button" class="day' + (isToday ? ' today' : '') + (isPast ? ' past' : '') + '" data-key="' + key + '">' +
         moonHTML + weatherMarkHTML(this.weatherOnDay(y, m, d), !isPast && !isToday) + this.forecastMarkOn(y, m, d, !isPast && !isToday) +
         (this.canAuthorDmOnly ? this._paintMarkHTML(y, m, d, !isPast && !isToday) : '') +
-        '<div class="dc"><span class="num">' + d + '</span>' + this._marksHTML(y, m, d) + '</div>' +
+        '<div class="dc"><span class="num">' + d + '</span>' + this._marksHTML(y, m, d, true) + '</div>' +
+        this._gnDiceHTML(y, m, d) +
         this._eraStartHTML(y, m, d) +
         this._freeCellHTML(y, m, d) +
         '</button>';
     },
 
-    _marksHTML: function (y, m, d) {
-      var evs = this.eventsOnDay(y, m, d), nights = this.nightsOnDay(y, m, d), polls = this.pollsOnDay(y, m, d);
+    // A day's game nights: the d20 in the middle of the grid's cell.
+    _gnDiceHTML: function (y, m, d) {
+      var self = this, nights = this.nightsOnDay(y, m, d);
+      if (!nights.length) return '';
+      return '<div class="gnd">' + nights.slice(0, 2).map(function (n) {
+        return '<span class="mk gnm" data-ev="' + esc(self._gnId(n)) + '" title="' + esc(n.name) + '"><span class="gnart" aria-hidden="true"></span></span>';
+      }).join('') + '</div>';
+    },
+
+    // noNights leaves game nights out, for the grid's cell, which draws
+    // them on their own (_gnDiceHTML).
+    _marksHTML: function (y, m, d, noNights) {
+      var evs = this.eventsOnDay(y, m, d), nights = noNights ? [] : this.nightsOnDay(y, m, d), polls = this.pollsOnDay(y, m, d);
       if (!evs.length && !nights.length && !polls.length) return '';
       var self = this;
       // Game nights come first, then the dates polls suggest: they are the
       // marks a player acts on.
       var gn = nights.map(function (n) {
-        return '<span class="mk gnm" data-ev="' + esc(self._gnId(n)) + '" title="' + esc(n.name) + '"><i class="fa-solid fa-dice-d20"></i></span>';
+        return '<span class="mk gnm" data-ev="' + esc(self._gnId(n)) + '" title="' + esc(n.name) + '"><span class="gnart" aria-hidden="true"></span></span>';
       }).concat(polls.map(function (x) {
         return '<span class="mk plm' + (x.o.mine ? ' mine' : '') + '" data-ev="' + esc(self._pollId(x.p, x.o)) + '" title="' + esc('Date poll: ' + x.p.title) + '"><i class="fa-solid fa-square-poll-vertical"></i></span>';
       }));
@@ -4974,6 +5076,18 @@
       $('#cal5-moonbtn', this.el).addEventListener('click', function (e) {
         if (self.skyRail && !self._players) self.skyRail.toggle(e.detail === 0); else self.openMoonView();
       });
+      var gnBtn = $('#cal5-gnbtn', this.el);
+      if (gnBtn) {
+        gnBtn.addEventListener('click', function () {
+          if (self.gnListOpen()) self.closeGnList(); else self.openGnList();
+        });
+        $('#cal5-gnpop', this.el).addEventListener('click', function (e) {
+          var row = e.target.closest('[data-gn-go]');
+          if (!row) return;
+          self.closeGnList();
+          self._openNight({ sessionId: row.getAttribute('data-gn-go'), date: row.getAttribute('data-gn-date') });
+        });
+      }
       var waitBtn = $('#cal5-waitbtn', this.el);
       if (waitBtn) {
         waitBtn.addEventListener('click', function () {
@@ -5223,6 +5337,7 @@
         if (e.key !== 'Escape') return;
         if (self._hideEraTip) self._hideEraTip(true);
         if (self.waitOpen()) { self.closeWaiting({ refocus: true }); return; }
+        if (self.gnListOpen()) { self.closeGnList({ refocus: true }); return; }
         if (self.plannerOpen()) { self.closePlanner(); return; }
         if (self.evpEl.classList.contains('open')) { self.closeEventDetail(); return; }
         if (self.mvEl.classList.contains('open')) { self.closeMoonView(); return; }
@@ -5248,6 +5363,7 @@
         if (!(t instanceof Element) || self.evpEl.contains(t)) return;
         var inside = self.el.contains(t);
         if (self.waitOpen() && !t.closest('#cal5-waitpop, #cal5-waitbtn')) self.closeWaiting();
+        if (self.gnListOpen() && !t.closest('#cal5-gnpop, #cal5-gnbtn')) self.closeGnList();
         if (inside && self.mvEl.classList.contains('open') && !self.mvEl.contains(t) && !t.closest('#cal5-moonbtn, .msil, .mrow')) self.closeMoonView();
         if (inside && self.fvEl.classList.contains('open') && !self.fvEl.contains(t) && !t.closest('#cal5-freebtn') && !self._awayHolds(function () { self.refreshFreeView(); })) self.closeFreeView();
         if (self.popEl.classList.contains('open') && !self.popEl.contains(t) && !t.closest('#cal5-hub, #cal5-todaypill')) self._popOff();
@@ -5926,7 +6042,7 @@
       if (!moons.length) { this.say('This calendar has no moons.'); return; }
       this.mvMoonId = this.mvMoonId || moons[0].id;
       this.mvRange = this.mvRange || 'month';
-      var btn = $('#cal5-moonbtn', this.el);
+      var btn = this._mvBtn();
       this.mvEl.innerHTML = this._mvHTML();
       growOpen(this.mvEl, btn, this.calEl, { center: true });
       this._loadPhaseEvents();
@@ -5976,11 +6092,18 @@
 
     closeMoonView: function () {
       if (!this.mvEl.classList.contains('open')) return;
-      var btn = $('#cal5-moonbtn', this.el);
+      var btn = this._mvBtn();
       btn.setAttribute('aria-expanded', 'false');
       growClose(this.mvEl, btn);
       if (this._mvObserver) this._mvObserver.disconnect();
       this._updateScrim();
+    },
+
+    // The moon view grows from the Moons button, or, where a real-world
+    // calendar's header has Game nights instead, from the header's actions.
+    _mvBtn: function () {
+      var btn = $('#cal5-moonbtn', this.el);
+      return btn.hidden ? $('.h-acts', this.el) : btn;
     },
 
     selectMoon: function (id) { this.mvMoonId = id; this._refreshMv(); },
