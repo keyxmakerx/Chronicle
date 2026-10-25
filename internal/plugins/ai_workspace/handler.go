@@ -89,6 +89,10 @@ type Handler struct {
 	// nil reads labels but can't tell what came before.
 	memory ImportMemory
 
+	// noteAccess keeps the owner's switches for which shared notes the AI
+	// may change. Optional — nil leaves the switches off the page.
+	noteAccess NoteAccessStore
+
 	// connector makes and revokes the keys an AI app connects with.
 	// Optional — nil leaves the Your AI page with copy and paste only.
 	connector *connector.Service

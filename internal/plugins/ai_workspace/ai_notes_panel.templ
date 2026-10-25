@@ -1,0 +1,94 @@
+// ai_notes_panel.templ is the Your AI page's notes panel: what the AI reads
+// and changes in each kind of note, and the owner's switches for notes
+// co-DMs and Scribes shared.
+
+package ai_workspace
+
+import "fmt"
+
+// aiNotesPanel is swapped whole when the switches are saved. The "It can
+// change" cells follow the switches as they are ticked, before saving.
+// "co‑DMs" keeps a non-breaking hyphen so the narrow column never splits it.
+templ aiNotesPanel(n NotesView) {
+	<section
+		id="ai-notes"
+		class="aic-panel space-y-3"
+		aria-labelledby="ai-notes-heading"
+		x-data={ fmt.Sprintf("{ coDMs: %t, scribes: %t, get extra() { const w = [this.coDMs && 'co‑DMs', this.scribes && 'Scribes'].filter(Boolean); return w.length ? ', and ones your ' + w.join(' and ') + ' shared' : '' } }", n.Access.CoDMs, n.Access.Scribes) }
+	>
+		<h2 id="ai-notes-heading" class="aic-h">Notes your AI can use</h2>
+		if n.Shut {
+			<p class="aic-confirm">Notes are left out while your AI sees what players see. Choose “What you see” under Change what it may do to include them.</p>
+		}
+		<div class={ "aic-notes-body", templ.KV("aic-notes-shut", n.Shut) }>
+			<div class="overflow-x-auto">
+				<table class="aic-kinds">
+					<thead>
+						<tr><th scope="col">Kind</th><th scope="col">It reads</th><th scope="col">It can change</th></tr>
+					</thead>
+					<tbody>
+						<tr>
+							<th scope="row">Journal<span>with game night entries</span></th>
+							<td>Yours, and entries others shared with you</td>
+							<td>Yours<span class="aic-plus" x-show="extra" x-text="extra" x-cloak></span></td>
+						</tr>
+						<tr>
+							<th scope="row">Jot notes<span>on pages</span></th>
+							<td>Yours, and jots others shared with you</td>
+							<td>Yours<span class="aic-plus" x-show="extra" x-text="extra" x-cloak></span></td>
+						</tr>
+						if n.PlayerNotes {
+							<tr>
+								<th scope="row">Player Notes<span>on pages</span></th>
+								<td>Yours, and ones whose audience includes you</td>
+								<td>Yours</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+			<form
+				class="aic-notes-form"
+				hx-post={ fmt.Sprintf("/campaigns/%s/ai/notes", n.CampaignID) }
+				hx-target="#ai-notes"
+				hx-swap="outerHTML"
+				hx-disabled-elt="find button"
+				aria-labelledby="ai-notes-extra"
+			>
+				<h3 id="ai-notes-extra" class="aic-label">Also let it change</h3>
+				<label class="aic-choice">
+					<input type="checkbox" name="co_dms" x-model="coDMs"/>
+					<span>
+						<b>Journal entries and jots your co‑DMs shared with you</b>
+						<span class="block aic-hint">Their title and text only. It can't delete, move or reshare them.</span>
+					</span>
+				</label>
+				<label class="aic-choice">
+					<input type="checkbox" name="scribes" x-model="scribes"/>
+					<span>
+						<b>Journal entries and jots your Scribes shared with you</b>
+						<span class="block aic-hint">The same limits.</span>
+					</span>
+				</label>
+				<div class="flex flex-wrap items-center gap-2.5 pt-1">
+					<button type="submit" class="btn-primary">
+						<span class="aic-idle">Save</span>
+						<span class="aic-busy"><i class="fa-solid fa-spinner fa-spin mr-1.5" aria-hidden="true"></i>Saving…</span>
+					</button>
+					if n.Saved {
+						<span class="aic-hint aic-saved" role="status">Saved. Works from your AI's next call or paste.</span>
+					}
+				</div>
+			</form>
+			<p class="aic-hint flex gap-2 items-start">
+				<i class="fa-solid fa-lock mt-0.5" aria-hidden="true"></i>
+				<span>
+					Every change waits here for your yes. Players' notes stay read-only. Anything someone keeps private is never read.
+					if n.PlayerNotes {
+						Only the writer can change a Player Note, so other people's stay read-only.
+					}
+				</span>
+			</p>
+		</div>
+	</section>
+}

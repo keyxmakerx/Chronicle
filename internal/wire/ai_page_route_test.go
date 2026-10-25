@@ -38,6 +38,7 @@ func TestAIPageRoutes_HaveOwnerGate(t *testing.T) {
 		{"POST", `"/ai/connection/pause"`},
 		{"POST", `"/ai/connection/resume"`},
 		{"POST", `"/ai/connection/access"`},
+		{"POST", `"/ai/notes"`},
 		{"GET", `"/ai/requests"`},
 		{"POST", `"/ai/requests/:rid/turn-down"`},
 	} {

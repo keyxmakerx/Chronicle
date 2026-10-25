@@ -427,6 +427,7 @@ POST	/campaigns/:id/ai/connection/access	session	plugins/ai_workspace.(*Handler)
 POST	/campaigns/:id/ai/connection/disconnect	session	plugins/ai_workspace.(*Handler).DisconnectAI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/ai/connection/pause	session	plugins/ai_workspace.(*Handler).PauseAI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/ai/connection/resume	session	plugins/ai_workspace.(*Handler).ResumeAI	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
+POST	/campaigns/:id/ai/notes	session	plugins/ai_workspace.(*Handler).ChangeNoteAccess	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/ai/requests	session	plugins/ai_workspace.(*Handler).AIRequests	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 POST	/campaigns/:id/ai/requests/:rid/turn-down	session	plugins/ai_workspace.(*Handler).TurnDownRequest	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole
 GET	/campaigns/:id/api-keys	session	plugins/syncapi.(*Handler).KeysPage	plugins/auth.RequireAuth > plugins/campaigns.RequireCampaignAccess > plugins/campaigns.RequireRole

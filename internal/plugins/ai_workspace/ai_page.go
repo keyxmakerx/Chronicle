@@ -19,6 +19,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/aiexport"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/connector"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/importer"
+	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/records"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -43,6 +44,22 @@ type ConnectView struct {
 	Now      time.Time
 	// Loc is the owner's time zone for the sittings' times (UTC when unset).
 	Loc *time.Location
+	// Notes is the notes panel; nil when the switches aren't wired.
+	Notes *NotesView
+}
+
+// NotesView is the panel saying which notes the AI reads and changes, with
+// the owner's switches for notes co-DMs and Scribes shared.
+type NotesView struct {
+	CampaignID string
+	Access     records.NoteAccess
+	// PlayerNotes is false while the campaign has Player Notes switched off;
+	// the panel then leaves their row out.
+	PlayerNotes bool
+	// Shut is true while the connected AI sees what players see, when it
+	// reads no notes at all.
+	Shut  bool
+	Saved bool
 }
 
 // sittingsStep is how many sittings the page lists at first, and how many
@@ -52,6 +69,10 @@ const sittingsStep = 8
 // SetZone wires the owner's time zone, for the times of what their AI did.
 // Optional: unwired, times are UTC.
 func (h *Handler) SetZone(f func(ctx context.Context, userID string) *time.Location) { h.zone = f }
+
+// SetNoteAccess wires the store of the owner's switches for shared notes.
+// Optional: unwired, the page leaves the notes panel out.
+func (h *Handler) SetNoteAccess(s NoteAccessStore) { h.noteAccess = s }
 
 // SetConnector wires the connector service and the site's public address,
 // which the page shows as the connector's address.
@@ -67,6 +88,9 @@ func (h *Handler) connectView(c echo.Context, cc *campaigns.CampaignContext) (Co
 		if loc := h.zone(c.Request().Context(), auth.GetUserID(c)); loc != nil {
 			v.Loc = loc
 		}
+	}
+	if err := h.fillNotes(c, cc, &v); err != nil {
+		return v, err
 	}
 	if h.connector == nil {
 		return v, nil
@@ -86,7 +110,66 @@ func (h *Handler) connectView(c echo.Context, cc *campaigns.CampaignContext) (Co
 	if v.Requests, err = h.connector.Waiting(ctx, cc.Campaign.ID); err != nil {
 		return v, err
 	}
+	if v.Notes != nil && conn != nil && conn.Privacy == aiexport.PrivacyModeSafe {
+		v.Notes.Shut = true
+	}
 	return v, nil
+}
+
+// fillNotes reads the notes panel: the owner's switches, and whether Player
+// Notes are on in the campaign.
+func (h *Handler) fillNotes(c echo.Context, cc *campaigns.CampaignContext, v *ConnectView) error {
+	if h.noteAccess == nil {
+		return nil
+	}
+	ctx := c.Request().Context()
+	a, err := h.noteAccess.Get(ctx, cc.Campaign.ID)
+	if err != nil {
+		// The panel is left out rather than failing the whole page; the AI
+		// then changes only the owner's own notes, as with both switches off.
+		return nil
+	}
+	v.Notes = &NotesView{CampaignID: cc.Campaign.ID, Access: a, PlayerNotes: true}
+	if h.featureGate != nil && h.featureGate(ctx, cc.Campaign.ID)[records.KindPlayerNote] != "" {
+		v.Notes.PlayerNotes = false
+	}
+	return nil
+}
+
+// ChangeNoteAccess saves the owner's switches for which shared notes the AI
+// may change, from its next call or paste.
+func (h *Handler) ChangeNoteAccess(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	if h.noteAccess == nil {
+		return apperror.NewBadRequest("these switches aren't available on this Chronicle site")
+	}
+	ctx := c.Request().Context()
+	was, err := h.noteAccess.Get(ctx, cc.Campaign.ID)
+	if err != nil {
+		return err
+	}
+	to := records.NoteAccess{CoDMs: c.FormValue("co_dms") == "on", Scribes: c.FormValue("scribes") == "on"}
+	if err := h.noteAccess.Set(ctx, cc.Campaign.ID, auth.GetUserID(c), to); err != nil {
+		return err
+	}
+	if h.audit != nil && was != to {
+		h.audit.LogCampaignEvent(ctx, cc.Campaign.ID, "campaign.ai_note_access.changed", map[string]any{
+			"co_dms_from": was.CoDMs, "co_dms_to": to.CoDMs,
+			"scribes_from": was.Scribes, "scribes_to": to.Scribes,
+		})
+	}
+	v, err := h.connectView(c, cc)
+	if err != nil {
+		return err
+	}
+	if v.Notes == nil {
+		return apperror.NewBadRequest("these switches aren't available on this Chronicle site")
+	}
+	v.Notes.Saved = true
+	return middleware.Render(c, http.StatusOK, aiNotesPanel(*v.Notes))
 }
 
 // AIPage renders the Your AI page.
