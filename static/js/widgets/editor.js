@@ -218,6 +218,13 @@
         }));
       }
 
+      // Foundry scene mentions. Always in the schema, so a body holding one
+      // loads for every reader; the owner and co-DMs see whether the map
+      // exists in Foundry, everyone else just the name.
+      if (Chronicle.SceneMention) {
+        extensions.push(Chronicle.SceneMention.configure({ campaignId: campaignId }));
+      }
+
       // Build editor props. When mention extension is available and editor
       // is editable, intercept keydown events to let the mention popup
       // handle arrow keys, Enter, and Escape before ProseMirror processes them.

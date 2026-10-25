@@ -31,11 +31,15 @@ func rec(kind, action, name string, fields map[string]any, body string) Record {
 
 type fakeNotes struct {
 	notes   []notes.Note
-	deleted []string
-	updated []string
+	deleted    []string
+	updated    []string
+	lastUpdate notes.UpdateNoteRequest
 }
 
 func (f *fakeNotes) ListByUserAndCampaign(_ context.Context, _, _ string) ([]notes.Note, error) {
+	return f.notes, nil
+}
+func (f *fakeNotes) ListVisible(_ context.Context, _ string, _ permissions.Viewer, _ notes.ListScope) ([]notes.Note, error) {
 	return f.notes, nil
 }
 func (f *fakeNotes) GetByID(_ context.Context, id string) (*notes.Note, error) {
@@ -51,8 +55,9 @@ func (f *fakeNotes) Create(_ context.Context, campaignID string, v permissions.V
 	f.notes = append(f.notes, n)
 	return &n, nil
 }
-func (f *fakeNotes) Update(_ context.Context, id string, _ permissions.Viewer, _ notes.UpdateNoteRequest) (*notes.Note, error) {
+func (f *fakeNotes) Update(_ context.Context, id string, _ permissions.Viewer, req notes.UpdateNoteRequest) (*notes.Note, error) {
 	f.updated = append(f.updated, id)
+	f.lastUpdate = req
 	return nil, nil
 }
 func (f *fakeNotes) Delete(_ context.Context, id string) error {

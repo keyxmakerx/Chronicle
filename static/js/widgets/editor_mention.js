@@ -325,7 +325,9 @@
       })
       .then(function (data) {
         self.abortController = null;
-        var results = data.results || [];
+        // Foundry scenes follow the pages, for those who may see them.
+        var scenes = Chronicle.FoundryScenes ? Chronicle.FoundryScenes.pickerItems(self.campaignId, query) : [];
+        var results = (data.results || []).concat(scenes);
         self.items = results;
         self.selectedIndex = 0;
         self._renderItems(results);
@@ -365,6 +367,14 @@
 
     for (var i = 0; i < items.length; i++) {
       var item = items[i];
+      if (item.kind === 'scene') {
+        if (i === 0 || items[i - 1].kind !== 'scene') {
+          html += '<div class="mention-popup__group" style="padding:8px 12px 2px;font-size:11px;font-weight:600;' +
+            'letter-spacing:.08em;text-transform:uppercase;opacity:.7">Foundry scenes</div>';
+        }
+        html += this._sceneItemHTML(item, i, isDark);
+        continue;
+      }
       var note = Chronicle.linkRestrictionLabel(item);
       var sub = Chronicle.escapeHtml(item.type_name || '');
       if (item._warned) {
@@ -413,6 +423,27 @@
         });
       })(j);
     }
+  };
+
+  /**
+   * One Foundry scene row: its name and folder, or, for a name typed before
+   * the scene exists, the offer to mark it as needed.
+   */
+  MentionPopup.prototype._sceneItemHTML = function (item, i, isDark) {
+    var bgSelected = i === this.selectedIndex
+      ? (isDark ? 'background-color:#374151;' : 'background-color:#f3f4f6;')
+      : '';
+    var sub = item.needed ? 'Not in Foundry yet: mark the map as needed' : (item.folder || 'Top level');
+    return '<div class="mention-popup__item' + (i === this.selectedIndex ? ' mention-popup__item--selected' : '') + '" ' +
+      'data-index="' + i + '" style="display:flex;align-items:center;padding:8px 12px;cursor:pointer;' +
+      'transition:background-color 0.1s;' + bgSelected + '">' +
+      '<i class="fa-' + (item.needed ? 'regular' : 'solid') + ' fa-map" aria-hidden="true" ' +
+      'style="width:14px;margin-right:8px;font-size:12px;opacity:.75;flex-shrink:0"></i>' +
+      '<div style="min-width:0;flex:1">' +
+      '<div style="font-weight:500;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' +
+      (item.needed ? '“' + Chronicle.escapeHtml(item.name) + '”' : Chronicle.escapeHtml(item.name)) + '</div>' +
+      '<div style="font-size:12px;opacity:0.6">' + Chronicle.escapeHtml(sub) + '</div>' +
+      '</div></div>';
   };
 
   /**
@@ -476,6 +507,10 @@
      */
     function insertMention(entity) {
       if (!editorInstance || mentionStartPos === null) return;
+      if (entity.kind === 'scene') {
+        insertScene(entity);
+        return;
+      }
       if (entity.restricted && options.hostOpen && !entity._warned) {
         entity._warned = true;
         popup._renderItems(popup.items);
@@ -503,6 +538,20 @@
         .insertContent(mentionHTML + '&nbsp;')
         .run();
 
+      closeMention();
+    }
+
+    /**
+     * Insert a Foundry scene mention in place of the @query. Without the
+     * scene node in this editor's schema the name goes in as plain text.
+     */
+    function insertScene(item) {
+      var editor = editorInstance;
+      var range = { from: mentionStartPos, to: editor.state.selection.from };
+      var content = editor.schema.nodes.foundryScene
+        ? [{ type: 'foundryScene', attrs: { sceneId: item.sceneId || null, name: item.name } }, { type: 'text', text: ' ' }]
+        : item.name + ' ';
+      editor.chain().focus().deleteRange(range).insertContent(content).run();
       closeMention();
     }
 
@@ -551,6 +600,8 @@
           onSelect: insertMention,
           onClose: closeMention,
         });
+        // Load the scene list early, so the first @ already offers scenes.
+        if (Chronicle.FoundryScenes) Chronicle.FoundryScenes.want(options.campaignId);
       },
 
       /**

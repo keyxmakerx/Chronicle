@@ -24,6 +24,7 @@ import (
 	"github.com/go-sql-driver/mysql"
 
 	"github.com/keyxmakerx/chronicle/internal/database"
+	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/records"
 )
 
 func newPartsScratchDB(t *testing.T) *sql.DB {
@@ -64,14 +65,20 @@ func newPartsScratchDB(t *testing.T) *sql.DB {
 	if err := database.RunMigrations(db, scratch.FormatDSN(), filepath.Join(root, "db", "migrations")); err != nil {
 		t.Skipf("core migrations did not apply: %v", err)
 	}
-	// The plugin's own migration, run as written.
-	up, err := fs.ReadFile(MigrationsFS, "migrations/001_import_memory.up.sql")
-	if err != nil {
-		t.Fatal(err)
+	// The plugin's own migrations, in order, run as written.
+	ups, err := fs.Glob(MigrationsFS, "migrations/*.up.sql")
+	if err != nil || len(ups) == 0 {
+		t.Fatalf("plugin migrations: %v", err)
 	}
-	for i := 0; i < 2; i++ { // idempotent DDL: a re-run must not fail
-		if _, err := db.Exec(string(up)); err != nil {
-			t.Fatalf("plugin migration run %d: %v", i+1, err)
+	for _, f := range ups {
+		up, err := fs.ReadFile(MigrationsFS, f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i := 0; i < 2; i++ { // idempotent DDL: a re-run must not fail
+			if _, err := db.Exec(string(up)); err != nil {
+				t.Fatalf("%s run %d: %v", f, i+1, err)
+			}
 		}
 	}
 	return db
@@ -184,5 +191,29 @@ func TestImportMemoryRepoIntegration_TrayAppliedAndClear(t *testing.T) {
 	}
 	if seen, _ := repo.Seen(ctx, camp, []string{h1}); len(seen) != 0 {
 		t.Errorf("blocks outlived their campaign: %v", seen)
+	}
+}
+
+func TestNoteAccessRepoIntegration(t *testing.T) {
+	db := newPartsScratchDB(t)
+	repo := NewNoteAccessRepository(db)
+	ctx := context.Background()
+	camp, user := seedPartsCampaign(t, db)
+	other, _ := seedPartsCampaign(t, db)
+
+	if a, err := repo.Get(ctx, camp); err != nil || a.CoDMs || a.Scribes {
+		t.Fatalf("never set = %+v, %v; want both off", a, err)
+	}
+	if err := repo.Set(ctx, camp, user, records.NoteAccess{CoDMs: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.Set(ctx, camp, user, records.NoteAccess{CoDMs: true, Scribes: true}); err != nil {
+		t.Fatal(err)
+	}
+	if a, err := repo.Get(ctx, camp); err != nil || !a.CoDMs || !a.Scribes {
+		t.Fatalf("after two saves = %+v, %v", a, err)
+	}
+	if a, err := repo.Get(ctx, other); err != nil || a.CoDMs || a.Scribes {
+		t.Fatalf("another campaign = %+v, %v; must stay off", a, err)
 	}
 }

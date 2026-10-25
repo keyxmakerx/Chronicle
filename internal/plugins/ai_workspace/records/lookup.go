@@ -109,9 +109,12 @@ type Lookups struct {
 	Rels    RelationsAPI
 	Notes   NotesAPI
 	Journal JournalAPI
-	Rules   *HouseRuleKind
-	Entries SystemEntriesAPI
-	Party   PartyAPI
+	// NoteAccess says which shared notes the AI may change, so a shared
+	// note's answer can say so. Nil reads every shared note as read-only.
+	NoteAccess NoteAccessAPI
+	Rules      *HouseRuleKind
+	Entries    SystemEntriesAPI
+	Party      PartyAPI
 	// Tags answers the tag lookups and shows each page's tags; nil leaves
 	// them out.
 	Tags TagsAPI
@@ -206,6 +209,9 @@ type lookupRun struct {
 	journalNotes []JournalNote
 	journalErr   error
 	journalRead  bool
+	// editable caches, per writer, whether their shared notes may change.
+	editable map[string]NoteWriter
+	access   *NoteAccess
 	// layouts caches layoutNames.
 	layouts     map[string]string
 	layoutsRead bool

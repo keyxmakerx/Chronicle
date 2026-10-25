@@ -19,7 +19,8 @@ const PluginSlug = "ai-workspace"
 // package directory name.
 const PluginHealthKey = "ai_workspace"
 
-// MemorySchemaSlug is the migrations slug for the tables of what AI Import
-// applied (answer parts, block fingerprints). Kept apart from PluginHealthKey
-// so a failed migration leaves only that memory out, never the whole AI tool.
+// MemorySchemaSlug is the migrations slug for the plugin's own tables: what
+// AI Import applied (answer parts, block fingerprints) and the owner's
+// switches for shared notes. Kept apart from PluginHealthKey so a failed
+// migration leaves only those out, never the whole AI tool.
 const MemorySchemaSlug = "ai_import_memory"

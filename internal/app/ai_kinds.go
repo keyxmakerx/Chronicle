@@ -43,6 +43,7 @@ type aiDeps struct {
 	Maps            maps.MapService
 	Notes           notes.NoteService
 	PlayerNotes     entity_notes.Service
+	NoteAccess      records.NoteAccessAPI // nil while the plugin's own tables are degraded
 	Addons          aiAddonChecker // which add-ons a campaign has on
 	PageBlocks      pageblocks.Service
 	Quests          quests.QuestService // nil while the quests plugin is degraded
@@ -159,6 +160,7 @@ func aiLookups(d *aiDeps, reg *records.Registry) *records.Lookups {
 	}
 	if d.Notes != nil {
 		l.Journal = aiJournalAdapter{notes: d.Notes, members: d.Campaigns, players: d.PlayerNotes, addons: d.Addons}
+		l.NoteAccess = d.NoteAccess
 	}
 	if d.PageLayouts != nil {
 		l.Layouts = d.PageLayouts
@@ -208,7 +210,7 @@ func init() {
 			records.CarriedItemKind(d.Entities, d.Relations),
 			records.PinKind{Svc: aiMapsAdapter{d.Maps}, Entities: d.Entities},
 			records.MapSketchKind{Svc: aiMapSketchAdapter{maps: d.Maps, drawings: d.Drawings}, Pins: aiMapsAdapter{d.Maps}},
-			records.NoteKind{Svc: d.Notes, Entities: d.Entities},
+			records.NoteKind{Svc: d.Notes, Entities: d.Entities, Access: d.NoteAccess},
 		}
 		if d.PlayerNotes != nil {
 			kinds = append(kinds, records.PlayerNoteKind{Svc: d.PlayerNotes, Entities: d.Entities})

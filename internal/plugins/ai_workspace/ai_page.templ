@@ -51,6 +51,9 @@ templ aiConnectSection(v ConnectView) {
 				</div>
 				<div class="aic-area-side space-y-4">
 					@aiStatus(v)
+					if v.Notes != nil {
+						@aiNotesPanel(*v.Notes)
+					}
 					@aiCopyCard()
 				</div>
 				<div class="aic-area-hist">
@@ -71,6 +74,9 @@ templ aiConnectSection(v ConnectView) {
 					@aiNewKey(v)
 				} else {
 					@aiConnectForm(v, false)
+				}
+				if v.Notes != nil {
+					@aiNotesPanel(*v.Notes)
 				}
 				@aiCopyCard()
 				if v.Available && len(v.Sittings) > 0 {
