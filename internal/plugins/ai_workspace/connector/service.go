@@ -18,6 +18,8 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/aiexport"
+	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/importer"
+	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/records"
 )
 
 // keyPrefix starts every connection key, so a key pasted in the wrong place
@@ -85,8 +87,9 @@ func newKey() (string, error) {
 // Connect makes a new key for the campaign and revokes any earlier one, so a
 // campaign has one connection at a time. The key is returned once and never
 // kept. Only Safe and Permitted can be chosen: lookups read the same in
-// Permitted and Everything, so a third choice would mean nothing.
-func (s *Service) Connect(ctx context.Context, campaignID, userID string, privacy aiexport.PrivacyMode) (string, *Connection, error) {
+// Permitted and Everything, so a third choice would mean nothing. canAsk is
+// the Change setting.
+func (s *Service) Connect(ctx context.Context, campaignID, userID string, privacy aiexport.PrivacyMode, canAsk bool) (string, *Connection, error) {
 	if privacy != aiexport.PrivacyModeSafe && privacy != aiexport.PrivacyModePermitted {
 		return "", nil, apperror.NewBadRequest("pick what your AI may see")
 	}
@@ -104,6 +107,7 @@ func (s *Service) Connect(ctx context.Context, campaignID, userID string, privac
 		KeyHash:    hashKey(raw),
 		KeyHint:    raw[len(raw)-4:],
 		Privacy:    privacy,
+		CanAsk:     canAsk,
 		CreatedAt:  now,
 		ExpiresAt:  now.Add(KeyLifetime),
 	}
@@ -189,6 +193,137 @@ func (s *Service) Record(ctx context.Context, c *Connection, tool, summary, note
 // Activity is the campaign's newest calls, for the page.
 func (s *Service) Activity(ctx context.Context, campaignID string) ([]Call, error) {
 	return s.repo.RecentCalls(ctx, campaignID, CallsShown)
+}
+
+// ErrCannotAsk: the connection's Change setting is Only look.
+var ErrCannotAsk = errors.New("this connection may only look things up")
+
+// Ask queues what an AI asked for, for the owner to review. Nothing in it is
+// applied here or anywhere else until the owner presses Apply on the review
+// screen. A request the review couldn't use is refused now, with the reason,
+// so the AI can fix it instead of leaving the owner a broken one.
+func (s *Service) Ask(ctx context.Context, c *Connection, summary, changes string) (*Request, error) {
+	if !c.CanAsk {
+		return nil, ErrCannotAsk
+	}
+	counts, blocks, err := checkChanges(changes)
+	if err != nil {
+		return nil, err
+	}
+	app := c.ClientName
+	if app == "" {
+		app = "Your AI"
+	}
+	q := &Request{
+		CampaignID: c.CampaignID, ConnectionID: c.ID, AppName: cleanClientName(app),
+		Summary: oneLine(summary, summaryMax), Counts: counts, Blocks: blocks, Body: changes,
+		Status: RequestWaiting, CreatedAt: s.now().UTC().Truncate(time.Second),
+	}
+	id, err := s.repo.AddRequest(ctx, q, requestsWaiting)
+	if err != nil {
+		return nil, err
+	}
+	q.ID = id
+	return q, nil
+}
+
+// Waiting is the campaign's requests waiting for the owner, newest first.
+func (s *Service) Waiting(ctx context.Context, campaignID string) ([]Request, error) {
+	return s.repo.Requests(ctx, campaignID, RequestWaiting, requestsWaiting)
+}
+
+// WaitingRequest is one waiting request of the campaign, with its blocks, or
+// an error the owner can read.
+func (s *Service) WaitingRequest(ctx context.Context, campaignID string, id int64) (*Request, error) {
+	q, err := s.repo.Request(ctx, campaignID, id)
+	if err != nil {
+		return nil, err
+	}
+	if q == nil {
+		return nil, apperror.NewNotFound("that request isn't here any more")
+	}
+	if q.Status != RequestWaiting {
+		return nil, apperror.NewBadRequest("you already answered that request")
+	}
+	return q, nil
+}
+
+// Answered marks a request reviewed and applied; outcome says what was.
+// Answering one twice changes nothing.
+func (s *Service) Answered(ctx context.Context, campaignID string, id int64, outcome string) error {
+	return s.finish(ctx, campaignID, id, RequestAnswered, outcome)
+}
+
+// TurnDown answers a request No as a whole, applying nothing.
+func (s *Service) TurnDown(ctx context.Context, campaignID string, id int64) error {
+	return s.finish(ctx, campaignID, id, RequestTurnedDown, "nothing changed")
+}
+
+func (s *Service) finish(ctx context.Context, campaignID string, id int64, status, outcome string) error {
+	if _, err := s.repo.FinishRequest(ctx, campaignID, id, status, oneLine(outcome, noteMax), s.now()); err != nil {
+		return err
+	}
+	if err := s.repo.PruneRequests(ctx, campaignID, requestsKept); err != nil {
+		slog.Warn("ai connector: pruning requests", slog.Any("error", err))
+	}
+	return nil
+}
+
+// checkChanges reads a request's blocks as the review screen will, and
+// counts what they would do. Lookups and part labels belong to copy and
+// paste, so they are refused, as is any block that would not parse.
+func checkChanges(changes string) (counts string, blocks int, err error) {
+	if strings.TrimSpace(changes) == "" {
+		return "", 0, errors.New("changes is empty")
+	}
+	if len(changes) > changesMax {
+		return "", 0, fmt.Errorf("changes is too long (at most %d KB); send it in smaller requests", changesMax/1024)
+	}
+	var add, change, remove int
+	var problems []string
+	for _, p := range importer.Parse(changes) {
+		n := p.SourceIndex + 1
+		kind := strings.ToLower(strings.TrimSpace(p.FrontMatter.Kind))
+		switch {
+		case p.Status == importer.StatusParseError:
+			problems = append(problems, fmt.Sprintf("block %d: %s", n, strings.TrimRight(p.ParseError, ".")))
+			continue
+		case kind == records.KindLookup:
+			problems = append(problems, fmt.Sprintf("block %d is a lookup; use the lookup tools instead", n))
+			continue
+		case kind == importer.KindPart:
+			problems = append(problems, fmt.Sprintf("block %d is a part label; send the whole answer in one request", n))
+			continue
+		}
+		switch strings.ToLower(strings.TrimSpace(p.FrontMatter.Action)) {
+		case importer.ActionDelete:
+			remove++
+		case importer.ActionUpdate:
+			change++
+		default:
+			add++
+		}
+	}
+	if len(problems) > 0 {
+		if len(problems) > 5 {
+			problems = append(problems[:5], fmt.Sprintf("and %d more", len(problems)-5))
+		}
+		return "", 0, errors.New("the owner couldn't use it: " + strings.Join(problems, "; "))
+	}
+	blocks = add + change + remove
+	if blocks == 0 {
+		return "", 0, errors.New("changes has no blocks")
+	}
+	var parts []string
+	for _, x := range []struct {
+		n    int
+		what string
+	}{{add, "to add"}, {change, "to change"}, {remove, "to remove"}} {
+		if x.n > 0 {
+			parts = append(parts, fmt.Sprintf("%d %s", x.n, x.what))
+		}
+	}
+	return strings.Join(parts, ", "), blocks, nil
 }
 
 // cleanClientName keeps the plain characters of an app's name, cut short.

@@ -24,7 +24,7 @@ func newTestService() (*Service, *memRepo, owners, *time.Time) {
 // characters are stored.
 func TestConnect_KeyIsShownOnceAndStoredHashed(t *testing.T) {
 	svc, repo, _, _ := newTestService()
-	raw, c, err := svc.Connect(context.Background(), "camp-1", "owner-1", aiexport.PrivacyModeSafe)
+	raw, c, err := svc.Connect(context.Background(), "camp-1", "owner-1", aiexport.PrivacyModeSafe, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +41,7 @@ func TestConnect_KeyIsShownOnceAndStoredHashed(t *testing.T) {
 	if got := c.ExpiresAt.Sub(c.CreatedAt); got != KeyLifetime {
 		t.Errorf("lifetime = %v, want %v", got, KeyLifetime)
 	}
-	raw2, _, _ := svc.Connect(context.Background(), "camp-1", "owner-1", aiexport.PrivacyModeSafe)
+	raw2, _, _ := svc.Connect(context.Background(), "camp-1", "owner-1", aiexport.PrivacyModeSafe, false)
 	if raw2 == raw {
 		t.Error("two keys came out the same")
 	}
@@ -63,7 +63,7 @@ func TestConnect_Refusals(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			svc, repo, _, _ := newTestService()
-			if _, _, err := svc.Connect(context.Background(), tc.campaign, tc.user, tc.privacy); err == nil {
+			if _, _, err := svc.Connect(context.Background(), tc.campaign, tc.user, tc.privacy, false); err == nil {
 				t.Fatal("connected")
 			}
 			if len(repo.conns) != tc.wantStored {
@@ -77,8 +77,8 @@ func TestConnect_Refusals(t *testing.T) {
 func TestConnect_RevokesTheEarlierKey(t *testing.T) {
 	svc, _, _, _ := newTestService()
 	ctx := context.Background()
-	old, _, _ := svc.Connect(ctx, "camp-1", "owner-1", aiexport.PrivacyModeSafe)
-	if _, _, err := svc.Connect(ctx, "camp-1", "owner-1", aiexport.PrivacyModePermitted); err != nil {
+	old, _, _ := svc.Connect(ctx, "camp-1", "owner-1", aiexport.PrivacyModeSafe, false)
+	if _, _, err := svc.Connect(ctx, "camp-1", "owner-1", aiexport.PrivacyModePermitted, false); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := svc.Authenticate(ctx, "camp-1", old); !errors.Is(err, ErrKeyEnded) {
@@ -138,7 +138,7 @@ func TestAuthenticate(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			svc, repo, own, now := newTestService()
-			raw, _, err := svc.Connect(ctx, "camp-1", "owner-1", aiexport.PrivacyModeSafe)
+			raw, _, err := svc.Connect(ctx, "camp-1", "owner-1", aiexport.PrivacyModeSafe, false)
 			if err != nil {
 				t.Fatal(err)
 			}

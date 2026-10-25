@@ -7,6 +7,7 @@ package ai_workspace
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/importer"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -39,7 +40,27 @@ type ImportReviewData struct {
 	// campaign, with the date; they start on No so a second paste of the
 	// same answer makes no duplicates.
 	Repeats map[int]string
+	// RequestID is set when this reviews what a connected AI asked for: the
+	// commit marks that request answered. Host is the element the review
+	// sits in, which the result replaces ("" is the paste box's).
+	RequestID int64
+	Host      string
 }
+
+// reviewHost is the id of the element a review sits in.
+func reviewHost(d ImportReviewData) string {
+	if d.Host != "" {
+		return d.Host
+	}
+	return pasteReviewHost
+}
+
+// The review hosts: under the paste box, and under the requests a connected
+// AI made. One review is open at a time; opening one empties the other.
+const (
+	pasteReviewHost   = "ai-import-review-host"
+	requestReviewHost = "ai-request-review-host"
+)
 
 // ReviewSummary is the per-status tally rendered above the table.
 type ReviewSummary struct {
@@ -70,7 +91,7 @@ templ ImportReview(d ImportReviewData) {
 	<form
 		id="ai-import-review"
 		hx-post={ fmt.Sprintf("/campaigns/%s/ai-workspace/import/commit", d.CampaignID) }
-		hx-target="#ai-import-review-host"
+		hx-target={ "#" + reviewHost(d) }
 		hx-swap="innerHTML"
 		hx-indicator="#ai-import-committing"
 		hx-push-url={ fmt.Sprintf("/campaigns/%s/ai", d.CampaignID) }
@@ -86,6 +107,9 @@ templ ImportReview(d ImportReviewData) {
 		// can re-parse + match form fields by index, instead of
 		// round-tripping every per-page body as a hidden field.
 		<input type="hidden" name="markdown_source" value={ d.MarkdownSource }/>
+		if d.RequestID > 0 {
+			<input type="hidden" name="ai_request" value={ strconv.FormatInt(d.RequestID, 10) }/>
+		}
 
 		// `sr-only focus:not-sr-only` lets keyboard-only operators
 		// jump straight to Apply; invisible to sighted operators.
@@ -169,13 +193,24 @@ templ ImportReview(d ImportReviewData) {
 			// the settings route into the review host: that route
 			// renders a full page (no fragment branch), so
 			// fragment-targeting it would nest the app inside itself.
-			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/ai", d.CampaignID)) }
-				class="btn-secondary"
-				aria-label="Discard the paste and return to the import form"
-			>
-				Discard the paste
-			</a>
+			// A request closes without an answer: it keeps waiting.
+			if d.RequestID > 0 {
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/ai", d.CampaignID)) }
+					class="btn-secondary"
+					aria-label="Close the review; the request keeps waiting for you"
+				>
+					Not now
+				</a>
+			} else {
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/ai", d.CampaignID)) }
+					class="btn-secondary"
+					aria-label="Discard the paste and return to the import form"
+				>
+					Discard the paste
+				</a>
+			}
 			// Apply POSTs to /ai-workspace/import/commit, which makes every
 			// change answered Yes, then swaps in the import_result fragment.
 			<button
@@ -398,6 +433,14 @@ templ reviewRow(campaignID string, idx int, page importer.ParsedPage, cls import
 			}
 			if page.FrontMatter.Reason != "" {
 				<span class="air-line">AI's reason: <i>{ page.FrontMatter.Reason }</i></span>
+			}
+			// A connected AI's request was never in front of the owner the
+			// way a paste is, so its text is one fold away, as plain text.
+			if data.RequestID > 0 && page.FrontMatter.Action != importer.ActionDelete && strings.TrimSpace(page.Body) != "" {
+				<details class="air-more">
+					<summary>Read what it writes</summary>
+					<pre class="air-text">{ page.Body }</pre>
+				</details>
 			}
 			// A page with GM-only parts: any row that ends up replacing its
 			// text needs the tick (the details can turn a row into an

@@ -1,12 +1,13 @@
 // ai_page.go is the campaign's "Your AI" page (owner only): connecting an AI
-// app straight to the campaign, what it did, and the copy-and-paste tool for
-// every other AI.
+// app straight to the campaign, what it asked for, what it did, and the
+// copy-and-paste tool for every other AI.
 
 package ai_workspace
 
 import (
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -32,6 +33,8 @@ type ConnectView struct {
 	NewKey   string
 	Endpoint string
 	Calls    []connector.Call
+	// Requests are what the AI asked for, waiting for the owner.
+	Requests []connector.Request
 	Now      time.Time
 }
 
@@ -57,6 +60,9 @@ func (h *Handler) connectView(c echo.Context, cc *campaigns.CampaignContext) (Co
 	}
 	v.Conn = conn
 	if v.Calls, err = h.connector.Activity(ctx, cc.Campaign.ID); err != nil {
+		return v, err
+	}
+	if v.Requests, err = h.connector.Waiting(ctx, cc.Campaign.ID); err != nil {
 		return v, err
 	}
 	return v, nil
@@ -91,8 +97,82 @@ func (h *Handler) AIActivity(c echo.Context) error {
 	return middleware.Render(c, http.StatusOK, aiActivityList(v))
 }
 
+// AIRequests re-renders the waiting requests, which the page asks for while
+// open. seen is what the page shows now (requestsSeen); when nothing changed
+// the answer is 204, so htmx swaps nothing.
+func (h *Handler) AIRequests(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	v, err := h.connectView(c, cc)
+	if err != nil {
+		return err
+	}
+	if c.QueryParam("seen") == requestsSeen(v.Requests) {
+		return c.NoContent(http.StatusNoContent)
+	}
+	return middleware.Render(c, http.StatusOK, aiRequests(v, false))
+}
+
+// TurnDownRequest answers a waiting request No as a whole: nothing applies.
+func (h *Handler) TurnDownRequest(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	if h.connector == nil {
+		return apperror.NewBadRequest("connecting an AI is not available on this Chronicle site")
+	}
+	id, err := strconv.ParseInt(c.Param("rid"), 10, 64)
+	if err != nil || id <= 0 {
+		return apperror.NewBadRequest("that request isn't here any more")
+	}
+	if err := h.connector.TurnDown(c.Request().Context(), cc.Campaign.ID, id); err != nil {
+		return err
+	}
+	if h.audit != nil {
+		h.audit.LogCampaignEvent(c.Request().Context(), cc.Campaign.ID, "campaign.ai_request.turned_down", map[string]any{"request_id": id})
+	}
+	v, err := h.connectView(c, cc)
+	if err != nil {
+		return err
+	}
+	return middleware.Render(c, http.StatusOK, aiRequests(v, false))
+}
+
+// requestsSeen names the waiting requests a page shows: how many, and the
+// newest one's id.
+func requestsSeen(qs []connector.Request) string {
+	if len(qs) == 0 {
+		return "0"
+	}
+	return fmt.Sprintf("%d-%d", len(qs), qs[0].ID)
+}
+
+// requestHeading is a request card's title: "Claude asks for 6 changes".
+func requestHeading(q connector.Request) string {
+	app := appName(&connector.Connection{ClientName: q.AppName})
+	word := "changes"
+	if q.Blocks == 1 {
+		word = "change"
+	}
+	return fmt.Sprintf("%s asks for %d %s", app, q.Blocks, word)
+}
+
+// requestLine is the line under it: the AI's own words in quotes (never
+// Chronicle's), what the blocks would do, and when.
+func requestLine(v ConnectView, q connector.Request) string {
+	var parts []string
+	if q.Summary != "" {
+		parts = append(parts, "“"+q.Summary+"”")
+	}
+	parts = append(parts, q.Counts, agoText(v.Now, q.CreatedAt))
+	return strings.Join(parts, " · ") + ". Nothing has changed yet."
+}
+
 // ConnectAI makes a new connection key (revoking any earlier one) and shows
-// it once. sees is "players" or "owner".
+// it once. sees is "players" or "owner"; change is "ask" or "look".
 func (h *Handler) ConnectAI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
@@ -109,13 +189,21 @@ func (h *Handler) ConnectAI(c echo.Context) error {
 	default:
 		return apperror.NewBadRequest("pick what your AI may see")
 	}
-	raw, conn, err := h.connector.Connect(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c), privacy)
+	var canAsk bool
+	switch c.FormValue("change") {
+	case "ask":
+		canAsk = true
+	case "look":
+	default:
+		return apperror.NewBadRequest("pick whether your AI may ask for changes")
+	}
+	raw, conn, err := h.connector.Connect(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c), privacy, canAsk)
 	if err != nil {
 		return err
 	}
 	if h.audit != nil {
 		h.audit.LogCampaignEvent(c.Request().Context(), cc.Campaign.ID, "campaign.ai_connection.created",
-			map[string]any{"privacy": privacy.String(), "expires_at": conn.ExpiresAt.Format(time.RFC3339)})
+			map[string]any{"privacy": privacy.String(), "can_ask": canAsk, "expires_at": conn.ExpiresAt.Format(time.RFC3339)})
 	}
 	v, err := h.connectView(c, cc)
 	if err != nil {
@@ -180,6 +268,14 @@ func seesLabel(p aiexport.PrivacyMode) string {
 	return "sees what players see"
 }
 
+// changeLabel says what a connection may change, in the page's words.
+func changeLabel(canAsk bool) string {
+	if canAsk {
+		return "asks for changes"
+	}
+	return "only looks"
+}
+
 // agoText is a plain "5 minutes ago".
 func agoText(now, t time.Time) string {
 	d := now.Sub(t)
@@ -231,7 +327,7 @@ func statusLine(v ConnectView) string {
 	if c == nil {
 		return ""
 	}
-	parts := []string{"key made " + agoText(v.Now, c.CreatedAt), seesLabel(c.Privacy)}
+	parts := []string{"key made " + agoText(v.Now, c.CreatedAt), seesLabel(c.Privacy), changeLabel(c.CanAsk)}
 	if c.LastUsedAt != nil {
 		parts = append(parts, "last used "+agoText(v.Now, *c.LastUsedAt))
 	}
