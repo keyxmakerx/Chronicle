@@ -195,21 +195,22 @@ test('updateDraggable adds a capture click handler on activate and removes it on
   assert.ok(click.live, 'handler is live while reorg is active');
   assert.equal(typeof item._reorgClickInert, 'function', 'handler ref stored for exact removal');
 
-  // A plain row click is suppressed (preventDefault + stopPropagation).
+  // A plain row click is suppressed. The stop is immediate because htmx's
+  // boost listener sits on the same link and would otherwise still navigate.
   let prevented = false, stopped = false;
   click.fn({
     target: { closest: () => null },
     preventDefault: () => { prevented = true; },
-    stopPropagation: () => { stopped = true; },
+    stopImmediatePropagation: () => { stopped = true; },
   });
-  assert.ok(prevented && stopped, 'row click in reorg mode is preventDefault + stopPropagation');
+  assert.ok(prevented && stopped, 'row click in reorg mode is preventDefault + stopImmediatePropagation');
 
   // A click on the eye toggle passes through (handler bails on controls).
   let prevented2 = false;
   click.fn({
     target: { closest: (sel) => (sel === '.reorg-entity-visibility' ? {} : null) },
     preventDefault: () => { prevented2 = true; },
-    stopPropagation: () => {},
+    stopImmediatePropagation: () => {},
   });
   assert.ok(!prevented2, 'clicks on the eye/grip/toggle controls are not suppressed');
 

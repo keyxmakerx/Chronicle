@@ -308,13 +308,11 @@
       renderNode(node, 0);
     });
 
-    // Highlight the entity that matches the current page URL.
-    var currentPath = window.location.pathname;
-    container.querySelectorAll('a.sidebar-tree-item').forEach(function (a) {
-      if (a.getAttribute('href') === currentPath) {
-        a.setAttribute('aria-current', 'page');
-      }
-    });
+    markCurrent(container);
+
+    // The rows are fresh clones, which htmx has never seen: process them so
+    // they inherit the drill panel's boost and open in place.
+    if (window.htmx) htmx.process(container);
 
     // Stagger fade-in for tree nodes (brief reveal animation).
     var treeNodes = container.querySelectorAll('.sidebar-tree-node');
@@ -339,6 +337,17 @@
       updateDraggable(container, true);
     }
     document.dispatchEvent(new CustomEvent('chronicle:sidebar-tree'));
+  }
+
+  /** Marks the row for the page now showing. Boosted navigation keeps the
+   *  tree, so this runs again after each page swap, not only on build. */
+  function markCurrent(container) {
+    if (!container) return;
+    var currentPath = window.location.pathname;
+    container.querySelectorAll('a.sidebar-tree-item').forEach(function (a) {
+      if (a.getAttribute('href') === currentPath) a.setAttribute('aria-current', 'page');
+      else a.removeAttribute('aria-current');
+    });
   }
 
   /**
@@ -387,7 +396,9 @@
                 return;
               }
               e.preventDefault();
-              e.stopPropagation();
+              // Immediate: htmx's boost listener sits on the same link, and
+              // a plain stopPropagation would not keep it from navigating.
+              e.stopImmediatePropagation();
             };
             item.addEventListener('click', item._reorgClickInert, true);
           }
@@ -1449,6 +1460,12 @@
       e.detail.target.id === 'sidebar-cat-content'
     )) {
       setTimeout(function () { initTree(); observeLoadMore(); }, 10);
+    }
+  });
+
+  document.addEventListener('htmx:afterSettle', function (e) {
+    if (e.detail.target && e.detail.target.id === 'main-content') {
+      markCurrent(document.getElementById('sidebar-entity-tree'));
     }
   });
 

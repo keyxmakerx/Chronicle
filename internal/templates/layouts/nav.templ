@@ -84,6 +84,9 @@ templ campaignNavTop() {
 // the panel across this area only — campaignNavTop above is never touched.
 // A full page load on a category's own page (or a sub-category's) paints the
 // panel already open (NavActiveDrillSlug), so nothing pops in after a click.
+// The panel sits outside the categories nav, so it carries the same boost:
+// a page opened from its tree, Favorites or Recent swaps only #main-content
+// and the sidebar keeps its place instead of reloading and replaying.
 templ campaignNavCategories() {
 	<div class="nav-cat-zone">
 		<nav
@@ -114,6 +117,10 @@ templ campaignNavCategories() {
 			class={ "nav-drill", templ.KV("is-open", NavActiveDrillSlug(ctx) != "") }
 			id="sidebar-drill"
 			data-drill-base={ fmt.Sprintf("/campaigns/%s/sidebar/drill/", GetCampaignID(ctx)) }
+			hx-boost="true"
+			hx-target="#main-content"
+			hx-select="#main-content > *"
+			hx-swap="innerHTML show:window:top"
 		>
 			<div id="sidebar-cat-content">
 				if slug := NavActiveDrillSlug(ctx); slug != "" {
