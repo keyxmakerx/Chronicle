@@ -126,6 +126,29 @@ html[data-view-motion="calm"] .hc-leaf:not(.is-open), html[data-cz-reduce] .hc-l
 .oe-list .hc-row b { font-size: 17px; }
 .oe-seal--dm { border-color: var(--hc-neg); color: var(--hc-neg); background: color-mix(in srgb, var(--hc-neg) 7%, transparent); }
 .oe-pkg { margin: 0; font: 500 12.5px/1.5 var(--paper-ui-font); color: var(--hc-mute); }
+/* Players who may write their own entry: a quiet list under the entries,
+   with the small form a Director opens to let one more. */
+.oe-seal--wait { border-color: var(--paper-accent); color: var(--paper-accent); background: color-mix(in srgb, var(--paper-accent) 9%, transparent); }
+.oe-grants { display: grid; gap: 6px; margin: 14px 0 0; padding-top: 10px; border-top: 1px dashed var(--paper-edge); }
+.oe-grants > .oe-k { margin: 0; }
+.oe-grants ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.oe-grants li { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; font: 500 13px/1.5 var(--paper-ui-font); color: var(--paper-ink-soft); }
+.oe-grants li > span { flex: 1 1 14rem; min-width: 0; }
+.oe-grants li b { color: var(--paper-ink); }
+.oe-grants .oe-link { justify-self: start; color: var(--paper-accent); font: 600 12.5px var(--paper-ui-font); }
+.oe-give { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: end; }
+.oe-give label { display: grid; gap: 2px; }
+.oe-give select, .oe-give input { border: 0; border-bottom: 1.5px solid var(--paper-edge); background: transparent; padding: 3px 2px; color: var(--paper-ink);
+  font: 600 14px var(--paper-font); min-width: 0; }
+.oe-give input { width: 4.5em; }
+.oe-give select:focus, .oe-give input:focus { outline: none; border-bottom-color: var(--paper-accent); }
+.oe-asked { margin: 0 0 14px; padding: 8px 12px; border-left: 3px solid var(--color-accent); background: color-mix(in srgb, var(--color-accent) 7%, transparent);
+  font: 500 13.5px/1.5 var(--paper-ui-font); color: var(--color-text-body); border-radius: 0 6px 6px 0; }
+.oe-asked b { color: var(--color-text-primary); }
+.oe-f textarea[data-k="note"] { border: 0; border-bottom: 1.5px solid var(--paper-edge); background: transparent; padding: 4px 2px; color: var(--paper-ink);
+  font: 500 14px/1.5 var(--paper-font); resize: vertical; }
+.oe-f textarea[data-k="note"]:focus { outline: none; border-bottom-color: var(--paper-accent); }
+.hc-make { margin: 10px 0 0; font: 500 13px/1.5 var(--paper-ui-font); color: var(--hc-mute); }
 .oe-f { display: flex; flex-direction: column; gap: 3px; margin: 0 0 14px; border: 0; padding: 0; min-width: 0; }
 .oe-f > input, .oe-facts input { border: 0; border-bottom: 1.5px solid var(--paper-edge); background: transparent; padding: 4px 2px; color: var(--paper-ink);
   font: 500 15px/1.55 var(--paper-font); min-width: 0; }
@@ -209,6 +232,7 @@ html[data-view-motion="calm"] .hc-leaf:not(.is-open), html[data-cz-reduce] .hc-l
 .oe-cost button { border: 0; background: none; padding: 3px 9px; font: 600 11.5px var(--paper-ui-font); color: var(--color-text-secondary); }
 .oe-cost button[aria-pressed="true"] { background: var(--color-accent); color: #fff; }
 .oe-bud { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.oe-bud > output { font: 800 18px var(--paper-font); color: var(--color-text-primary); }
 .oe-step { display: inline-flex; align-items: center; border: 1px solid var(--color-border); border-radius: 999px; overflow: hidden; }
 .oe-step button { border: 0; background: var(--color-card-bg); width: 30px; height: 28px; font: 700 15px var(--paper-ui-font); color: var(--color-accent); }
 .oe-step output { min-width: 32px; text-align: center; font: 700 15px var(--paper-ui-font); color: var(--color-text-primary); font-variant-numeric: tabular-nums; }

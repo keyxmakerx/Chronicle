@@ -132,10 +132,66 @@ func (h *SystemEntryHandler) DeleteAPI(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
+// GrantsAPI lists the permissions to write an entry: every one for a
+// Director, the caller's own for a player.
+//
+// GET /campaigns/:id/system-entries/grants
+func (h *SystemEntryHandler) GrantsAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	list, err := h.svc.Grants(c.Request().Context(), cc.Campaign.ID, entryActor(c, cc))
+	if err != nil {
+		return err
+	}
+	c.Response().Header().Set("Cache-Control", "private, no-store")
+	return c.JSON(http.StatusOK, map[string]any{"grants": list})
+}
+
+// GrantAPI lets a player make their own entry for a pick list, or renews
+// the permission.
+//
+// POST /campaigns/:id/system-entries/grants
+func (h *SystemEntryHandler) GrantAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	var in GrantInput
+	if err := readEntryBody(c, &in); err != nil {
+		return err
+	}
+	g, err := h.svc.Grant(c.Request().Context(), cc.Campaign.ID, entryActor(c, cc), in)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]any{"grant": g})
+}
+
+// RevokeGrantAPI takes a permission back.
+//
+// DELETE /campaigns/:id/system-entries/grants/:grantId
+func (h *SystemEntryHandler) RevokeGrantAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	id, err := strconv.ParseInt(c.Param("grantId"), 10, 64)
+	if err != nil || id <= 0 {
+		return apperror.NewBadRequest("invalid permission id")
+	}
+	if err := h.svc.RevokeGrant(c.Request().Context(), cc.Campaign.ID, entryActor(c, cc), id); err != nil {
+		return err
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
 // RegisterSystemEntryRoutes mounts the entry API. The group admits any
 // member (they may read their own view of the list); writes are refused by
-// the service unless the caller is the owner or a co-Director, a rule a
-// role middleware cannot express because co-Director is a grant, not a role.
+// the service unless the caller is the owner or a co-Director, or a player
+// writing the one entry a Director let them make, rules a role middleware
+// cannot express.
 func RegisterSystemEntryRoutes(e *echo.Echo, h *SystemEntryHandler, authSvc auth.AuthService, campaignSvc campaigns.CampaignService) {
 	g := e.Group("/campaigns/:id/system-entries",
 		auth.RequireAuth(authSvc),
@@ -143,6 +199,9 @@ func RegisterSystemEntryRoutes(e *echo.Echo, h *SystemEntryHandler, authSvc auth
 		campaigns.RequireRole(campaigns.RolePlayer),
 	)
 	g.GET("", h.ListAPI)
+	g.GET("/grants", h.GrantsAPI)
+	g.POST("/grants", h.GrantAPI)
+	g.DELETE("/grants/:grantId", h.RevokeGrantAPI)
 	g.POST("", h.CreateAPI)
 	g.PUT("/:entryId", h.UpdateAPI)
 	g.DELETE("/:entryId", h.DeleteAPI)

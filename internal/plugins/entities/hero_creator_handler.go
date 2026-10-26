@@ -188,16 +188,41 @@ func (h *Handler) CreateHero(c echo.Context) error {
 	})
 }
 
-// OwnEntries renders the Directors' page for their own pick-list entries
-// (GET /campaigns/:id/characters/entries). The entry API enforces the same
-// Director rule on every write; this only keeps others off the page.
+// OwnEntries renders the page for a campaign's own pick-list entries
+// (GET /campaigns/:id/characters/entries): the Directors' list, or for a
+// player, the entries a Director let them write. The entry API enforces the
+// same rules on every write; this only keeps others off the page.
+//
+// ?field= opens that list; ?for= names the player's character the new entry
+// is for, and the page links back to it (or to the hero creator, ?back=new).
 func (h *Handler) OwnEntries(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
-	if !cc.CanAuthorDmOnly() || h.heroPlanner == nil {
+	if h.heroPlanner == nil {
 		return apperror.NewForbidden("only the campaign's Directors manage its own entries")
 	}
-	return middleware.Render(c, http.StatusOK, OwnEntriesPage(cc, middleware.GetCSRFToken(c)))
+	view := OwnEntriesView{Director: cc.CanAuthorDmOnly(), CSRFToken: middleware.GetCSRFToken(c), Field: c.QueryParam("field")}
+	if !view.Director {
+		ok, err := h.mayReadHeroPlan(c, cc)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return apperror.NewForbidden("only the campaign's Directors manage its own entries")
+		}
+		view.UserID = auth.GetUserID(c)
+	}
+	// The way back is a page of this campaign only: the character the entry
+	// is for, when the viewer may edit it, or the hero creator.
+	if id := c.QueryParam("for"); id != "" {
+		if e, err := h.service.GetByID(c.Request().Context(), id); err == nil && e.CampaignID == cc.Campaign.ID &&
+			CanEditIdentity(cc.MemberRole, e, auth.GetUserID(c)) {
+			view.ForID, view.ForName = e.ID, e.Name
+		}
+	} else if c.QueryParam("back") == "new" {
+		view.BackToCreator = true
+	}
+	return middleware.Render(c, http.StatusOK, OwnEntriesPage(cc, view))
 }

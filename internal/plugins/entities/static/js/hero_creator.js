@@ -17,6 +17,10 @@
  * stripped of Director-only text for players); package text is plain and is
  * escaped here. Picks are kept on this device until the hero is made.
  *
+ * A step whose list a Director let this player write in links to "Your own
+ * entries"; the player's draft then shows in the list, and once the hero is
+ * made the draft is kept to that hero.
+ *
  * Served per-plugin at /static/plugins/entities/js/hero_creator.js from the
  * body-script registry, so it survives boosted navigation. Re-wires after
  * HTMX swaps.
@@ -188,11 +192,15 @@
     var rows = st.choices.map(function (c, i) {
       var picked = self.picks[st.fieldKey] && lower(self.picks[st.fieldKey].name) === lower(c.name);
       return '<li><button type="button" class="hc-row" data-open="' + i + '" aria-expanded="false"><b>' + esc(c.name) +
-        (c.source === 'campaign' ? ' <span class="hc-seal">Campaign</span>' : '') +
+        (c.mine && c.status ? ' <span class="hc-seal">Yours · ' + (c.status === 'sent' ? 'handed in' : 'draft') + '</span>'
+          : c.source === 'campaign' ? ' <span class="hc-seal">Campaign</span>' : '') +
         (picked ? ' <span class="hc-row__pick" aria-label="chosen">✓</span>' : '') +
         '</b><span class="hc-row__go" aria-hidden="true">Read ›</span><small>' + esc(c.summary) + '</small></button></li>';
     }).join('');
-    return head + '<ul class="hc-list">' + rows + '</ul>';
+    var make = st.canMake ? '<p class="hc-make">Your Director lets you make your own ' + esc(lower(st.label)) + '. ' +
+      '<a class="hc-link" href="/campaigns/' + encodeURIComponent(this.campaignId) + '/characters/entries?field=' + encodeURIComponent(st.fieldKey) + '&back=new">Make yours ›</a> ' +
+      'Your picks here are kept while you do.</p>' : '';
+    return head + (rows ? '<ul class="hc-list">' + rows + '</ul>' : '') + make;
   };
 
   Creator.prototype.footHTML = function () {
@@ -424,8 +432,23 @@
     }).then(function (res) {
       if (!res.ok || !res.body.url) { fail(res.body.message || res.body.error || 'The hero could not be made. Try again.'); return; }
       self.clearDraft();
-      if (window.Chronicle && Chronicle.go) Chronicle.go(res.body.url); else window.location.href = res.body.url;
+      var go = function () { if (window.Chronicle && Chronicle.go) Chronicle.go(res.body.url); else window.location.href = res.body.url; };
+      self.keepDraftsTo(res.body.id).then(go, go);
     }).catch(function () { fail('The hero could not be made. Check your connection and try again.'); });
+  };
+
+  // The player's own draft entries they picked are kept to the hero just
+  // made, so a Director accepting one can give it to that hero only.
+  Creator.prototype.keepDraftsTo = function (heroId) {
+    var self = this, calls = [];
+    if (!heroId || !(window.Chronicle && Chronicle.apiFetch)) return Promise.resolve();
+    Object.keys(this.picks).forEach(function (k) {
+      var c = self.picks[k].name && self.choice(k, self.picks[k].name);
+      if (!c || !c.mine || !c.status || !c.entryId) return;
+      calls.push(Chronicle.apiFetch('/campaigns/' + encodeURIComponent(self.campaignId) + '/system-entries/' + encodeURIComponent(c.entryId),
+        { method: 'PUT', body: { forEntityId: heroId }, csrfToken: self.csrf }).catch(function () {}));
+    });
+    return Promise.all(calls);
   };
 
   Creator.prototype.wire = function () {

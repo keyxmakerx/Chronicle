@@ -10,10 +10,16 @@
  * ancestry is bought from in the creator exactly like a packaged one.
  * "Paste from an AI" reads the AI Import format into the form for checking.
  *
+ * A Director can also let one player write one entry of their own for a
+ * list, with the points budget the Director sets. That player opens the same
+ * page and editor, limited to their own entries: they save a draft and hand
+ * it in, and the Director accepts it or hands it back with a note. Until it
+ * is accepted only they and the Directors see it.
+ *
  * The pick lists, their labels and the system's own entries come from the
- * creator's plan; the campaign's entries are read and written through the
- * systems plugin's entry API, which also enforces the Director rule and
- * validates every list. Descriptions are HTML the server sanitizes; a
+ * creator's plan; the campaign's entries and the permissions are read and
+ * written through the systems plugin's entry API, which also enforces who
+ * may write what and validates every list. Descriptions are HTML the server sanitizes; a
  * passage wrapped in <span data-secret> is kept from players, as on pages.
  *
  * Served from the plugin body-script registry so it survives boosted
@@ -116,6 +122,16 @@
     this.planUrl = root.getAttribute('data-plan-url');
     this.entriesUrl = root.getAttribute('data-entries-url');
     this.csrf = root.getAttribute('data-csrf') || '';
+    this.membersUrl = root.getAttribute('data-members-url');
+    this.director = root.getAttribute('data-director') === 'true';
+    this.user = root.getAttribute('data-user') || '';
+    this.startField = root.getAttribute('data-field') || '';
+    this.forId = root.getAttribute('data-for-id') || '';
+    this.forName = root.getAttribute('data-for-name') || '';
+    this.backUrl = root.getAttribute('data-back-url') || '';
+    this.grants = [];   // permissions: all for a Director, the player's own
+    this.members = [];  // a Director's list of who can be given one
+    this.giving = false;
     this.system = '';
     this.fields = [];   // {key, label, pkg, facts, lists, budgetKey, budget, sample}
     this.entries = [];  // the campaign's own, every field
@@ -130,8 +146,10 @@
 
   Entries.prototype.load = function () {
     var self = this;
-    Promise.all([api(this.planUrl).then(json), api(this.entriesUrl).then(json)]).then(function (res) {
-      if (!res[0].ok || !res[1].ok) throw new Error('load');
+    var reads = [api(this.planUrl).then(json), api(this.entriesUrl).then(json), api(this.entriesUrl + '/grants').then(json)];
+    if (this.director) reads.push(api(this.membersUrl, { headers: { Accept: 'application/json' } }).then(json));
+    Promise.all(reads).then(function (res) {
+      if (!res[0].ok || !res[1].ok || !res[2].ok) throw new Error('load');
       var plan = res[0].body || {};
       self.system = plan.systemName || 'The game system';
       self.fields = (plan.steps || []).map(function (st) {
@@ -141,6 +159,14 @@
           budgetKey: sh.budgetKey, budget: sh.budget, sample: pkg[0] || null };
       });
       self.entries = (res[1].body && res[1].body.entries) || [];
+      self.grants = (res[2].body && res[2].body.grants) || [];
+      if (res[3] && res[3].ok && Array.isArray(res[3].body)) self.members = res[3].body;
+      if (!self.director) {
+        // A player's page holds only what they were let write, and what they wrote.
+        self.entries = self.entries.filter(function (e) { return e.createdBy === self.user; });
+        self.fields = self.fields.filter(function (f) { return self.grantFor(f.key) || self.mine(f.key).length; });
+      }
+      for (var i = 0; i < self.fields.length; i++) if (self.fields[i].key === self.startField) self.field = i;
       self.render();
     }).catch(function () {
       var t = self.root.querySelector('.hc-loading__text');
@@ -149,6 +175,17 @@
   };
 
   Entries.prototype.cur = function () { return this.fields[this.field]; };
+  // The player's own permission for a list (a Director has many, by player).
+  Entries.prototype.grantFor = function (key) {
+    var self = this;
+    return this.grants.filter(function (g) { return g.fieldKey === key && (self.director || g.userId === self.user); })[0] || null;
+  };
+  Entries.prototype.memberName = function (id) {
+    var m = this.members.filter(function (x) { return x.user_id === id; })[0];
+    return m ? (m.display_name || 'A player') : 'A player';
+  };
+  // Whether the open entry is a player's, not yet accepted.
+  function isDraft(e) { return !!e && !!e.status && e.status !== 'accepted'; }
   Entries.prototype.mine = function (key) {
     return this.entries.filter(function (e) { return e.fieldKey === key; })
       .sort(function (a, b) { return lower(a.name) < lower(b.name) ? -1 : 1; });
@@ -167,11 +204,11 @@
   }
   // A draft holds facts as label/value lines, each shaped list by its key,
   // and the points budget; lists the system doesn't share are kept as they are.
-  function draftOf(e, f) {
+  function draftOf(e, f, budget0) {
     var lists = {};
     f.lists.forEach(function (l) { lists[l.key] = []; });
     if (!e) {
-      return { id: '', name: '', summary: '', text: '', who: 'everyone', budget: f.budget, lists: lists,
+      return { id: '', name: '', summary: '', text: '', who: 'everyone', budget: budget0 || f.budget, lists: lists, status: '', note: '', reviewNote: '',
         facts: f.facts.map(function (k) { return { label: words(k), value: '', key: k }; }) };
     }
     var props = e.properties || {}, facts = [], budget = f.budget;
@@ -181,9 +218,14 @@
       else if (k === f.budgetKey && typeof v === 'number') budget = v;
       else if (!Array.isArray(v) && v !== null && typeof v !== 'object') facts.push({ label: words(k), value: String(v), key: k });
     });
-    return { id: e.id, name: e.name || '', summary: e.summary || '', text: e.description || '', who: e.visibility || 'everyone',
+    var who = e.visibility || 'everyone';
+    // A player's draft is only theirs until accepted; accepting it offers
+    // their character, or everyone, never "Directors only" by default.
+    if (isDraft(e)) who = e.visibility === 'character' ? 'character' : 'everyone';
+    return { id: e.id, name: e.name || '', summary: e.summary || '', text: e.description || '', who: who,
       forName: e.visibility === 'character' ? (e.forName || '') : undefined,
-      budget: budget, lists: lists, facts: facts };
+      budget: budget0 || budget, lists: lists, facts: facts,
+      status: e.status || 'accepted', reviewNote: e.reviewNote || '', note: '', by: e.createdBy || '' };
   }
   // The writing box's HTML reduced to the few tags it can make, parsed in an
   // inert document and stripped of every attribute but data-secret, so the
@@ -222,6 +264,7 @@
   };
 
   Entries.prototype.pageHTML = function () {
+    if (!this.director) return this.playerPageHTML();
     var self = this, f = this.cur();
     var head = '<div class="hc-head"><p class="paper-kind">' + esc(this.system) + ' · Directors only</p><h1 tabindex="-1">Your own entries</h1>' +
       '<p>Entries you add here sit beside ' + esc(this.system) + '’s own in the hero creator and the sheet’s pick lists. A system update never changes them.</p></div>';
@@ -230,22 +273,90 @@
         '<p class="hc-empty">' + esc(this.system) + ' doesn’t list any choices for making a hero, so there is nothing to add to here.</p></section>';
     }
     var tabs = this.fields.map(function (x, i) {
+      var waiting = self.mine(x.key).filter(function (e) { return e.status === 'sent'; }).length;
       return '<button type="button" role="tab" data-field="' + i + '" aria-selected="' + (i === self.field) + '">' + esc(x.label) +
-        '<small>' + self.mine(x.key).length + '</small></button>';
+        '<small>' + self.mine(x.key).length + (waiting ? ' · ' + waiting + ' waiting' : '') + '</small></button>';
     }).join('');
     var mine = this.mine(f.key), pl = plural(f.label);
     var rows = mine.length ? '<ul class="oe-list">' + mine.map(function (e) {
       return '<li><button type="button" class="hc-row" data-open="' + esc(e.id) + '" aria-expanded="' + (self.open === String(e.id)) + '"><b>' + esc(e.name) +
-        (e.visibility === 'directors' ? ' <span class="hc-seal oe-seal--dm">Directors only</span>' : '') +
-        (e.visibility === 'character' ? ' <span class="hc-seal oe-seal--dm">For ' + esc(e.forName || 'one character') + '</span>' : '') +
-        '</b><span class="hc-row__go" aria-hidden="true">Edit ›</span><small>' + esc(e.summary) + '</small></button></li>';
+        (e.status === 'sent' ? ' <span class="hc-seal oe-seal--wait">Waiting for you · ' + esc(self.memberName(e.createdBy)) + '</span>' : '') +
+        (e.status === 'draft' ? ' <span class="hc-seal oe-seal--dm">Draft · ' + esc(self.memberName(e.createdBy)) + '</span>' : '') +
+        (!isDraft(e) && e.visibility === 'directors' ? ' <span class="hc-seal oe-seal--dm">Directors only</span>' : '') +
+        (!isDraft(e) && e.visibility === 'character' ? ' <span class="hc-seal oe-seal--dm">For ' + esc(e.forName || 'one character') + '</span>' : '') +
+        '</b><span class="hc-row__go" aria-hidden="true">' + (e.status === 'sent' ? 'Review ›' : 'Edit ›') + '</span><small>' + esc(e.summary) + '</small></button></li>';
     }).join('') + '</ul>'
       : '<p class="hc-empty">No ' + esc(pl) + ' of your own yet. Add one and players see it next to ' + esc(this.system) + '’s ' + esc(pl) + ' when they make a hero.</p>';
     return '<section class="hc-page paper" aria-label="Your own entries">' + head +
       '<div class="oe-fields" role="tablist" aria-label="Pick lists">' + tabs + '</div>' + rows +
       '<p class="oe-pkg">' + esc(this.system) + ' brings ' + f.pkg + ' ' + esc(f.pkg === 1 ? lower(f.label) : pl) + ' of its own; they are not changed here.</p>' +
+      this.grantsHTML() +
       '<div class="hc-foot"><span>' + mine.length + ' of your own</span><span class="hc-foot__sp"></span>' +
       '<button type="button" class="hc-btn" data-act="add">+ Add ' + an(f.label) + ' ' + esc(lower(f.label)) + '</button></div></section>';
+  };
+
+  // A Director's list of the players who may write their own entry for this
+  // list, with the quiet "let a player" that opens the small form.
+  Entries.prototype.grantsHTML = function () {
+    var self = this, f = this.cur(), l = lower(f.label);
+    var gs = this.grants.filter(function (g) { return g.fieldKey === f.key; });
+    var made = function (g) {
+      var e = self.entries.filter(function (x) { return x.id === g.entryId; })[0];
+      if (g.entryId && e) return 'made ' + esc(e.name);
+      return g.entryId ? 'used it' : 'hasn’t made one yet';
+    };
+    var rows = gs.map(function (g) {
+      return '<li><span><b>' + esc(self.memberName(g.userId)) + '</b> ' + made(g) +
+        (f.budgetKey && g.budget ? ' · ' + g.budget + ' point' + (g.budget === 1 ? '' : 's') : '') + '</span>' +
+        (g.entryId ? '<button type="button" class="oe-link" data-act="regrant" data-user="' + esc(g.userId) + '" data-budget="' + g.budget + '">Let them make another</button>' : '') +
+        '<button type="button" class="oe-link" data-act="revoke" data-grant="' + esc(g.id) + '">Take back</button></li>';
+    }).join('');
+    var given = {};
+    gs.forEach(function (g) { given[g.userId] = true; });
+    var players = this.members.filter(function (m) { return m.role > 0 && m.role < 3 && !given[m.user_id]; });
+    var form = '';
+    if (this.giving) {
+      form = players.length ? '<div class="oe-give" role="group" aria-label="Let a player make their own">' +
+        '<label><span class="oe-k">Player</span><select data-give-user>' + players.map(function (m) {
+          return '<option value="' + esc(m.user_id) + '">' + esc(m.display_name || 'A player') + (m.character_name ? ' (' + esc(m.character_name) + ')' : '') + '</option>';
+        }).join('') + '</select></label>' +
+        (f.budgetKey ? '<label><span class="oe-k">' + esc(words(f.budgetKey)) + '</span><input type="number" min="1" max="20" step="1" data-give-budget value="' + (f.budget || 3) + '"></label>' : '') +
+        '<button type="button" class="oe-btn" data-act="give">Let them make one</button>' +
+        '<button type="button" class="oe-link" data-act="givecancel">Cancel</button></div>'
+        : '<p class="oe-hint">Everyone who plays here already may. <button type="button" class="oe-link" data-act="givecancel">Close</button></p>';
+    }
+    return '<div class="oe-grants"><p class="oe-k">Players who make their own</p>' +
+      (rows ? '<ul>' + rows + '</ul>' : '<p class="oe-hint">Let a player write one ' + esc(l) + ' of their own, on this page. You read it and accept it before anyone else sees it.</p>') +
+      (form || '<button type="button" class="oe-link" data-act="givestart">+ Let a player make their own ' + esc(l) + '</button>') + '</div>';
+  };
+
+  // A player's page: the lists a Director let them write in, their entries
+  // and how far along each is.
+  Entries.prototype.playerPageHTML = function () {
+    var self = this, f = this.cur();
+    var back = this.backUrl ? '<p><a class="oe-link" href="' + esc(this.backUrl) + '">← Back to ' + esc(this.forName || 'the hero creator') + '</a></p>' : '';
+    var head = '<div class="hc-head"><p class="paper-kind">' + esc(this.system) + ' · yours</p><h1 tabindex="-1">Your own entries</h1>' + back +
+      '<p>Your Director lets you write your own. Only you and the Directors see it until a Director accepts it.</p></div>';
+    if (!f) {
+      return '<section class="hc-page paper" aria-label="Your own entries">' + head +
+        '<p class="hc-empty">Your Director hasn’t let you make an entry of your own. Ask them, and it shows up here.</p></section>';
+    }
+    var tabs = this.fields.length > 1 ? '<div class="oe-fields" role="tablist" aria-label="Pick lists">' + this.fields.map(function (x, i) {
+      return '<button type="button" role="tab" data-field="' + i + '" aria-selected="' + (i === self.field) + '">' + esc(x.label) + '</button>';
+    }).join('') + '</div>' : '';
+    var state = { draft: 'Draft', sent: 'Handed in', accepted: 'Accepted' };
+    var mine = this.mine(f.key), g = this.grantFor(f.key);
+    var rows = mine.length ? '<ul class="oe-list">' + mine.map(function (e) {
+      var open = isDraft(e);
+      return '<li><' + (open ? 'button type="button" data-open="' + esc(e.id) + '" aria-expanded="' + (self.open === String(e.id)) + '"' : 'div') + ' class="hc-row"><b>' + esc(e.name) +
+        ' <span class="hc-seal' + (e.status === 'draft' && e.reviewNote ? ' oe-seal--wait' : ' oe-seal--dm') + '">' + (e.status === 'draft' && e.reviewNote ? 'Changes asked' : state[e.status] || 'Accepted') + '</span></b>' +
+        (open ? '<span class="hc-row__go" aria-hidden="true">Edit ›</span>' : '') + '<small>' + esc(e.summary) + '</small></' + (open ? 'button' : 'div') + '></li>';
+    }).join('') + '</ul>' : '';
+    var can = g && !g.entryId;
+    return '<section class="hc-page paper" aria-label="Your own entries">' + head + tabs + rows +
+      (can ? '' : (mine.length ? '' : '<p class="hc-empty">You’ve made your ' + esc(lower(f.label)) + '.</p>')) +
+      '<div class="hc-foot"><span class="hc-foot__sp"></span>' +
+      (can ? '<button type="button" class="hc-btn" data-act="add">+ Make your ' + esc(lower(f.label)) + '</button>' : '') + '</div></section>';
   };
 
   function sing(label) { return lower(label).replace(/ies$/, 'y').replace(/s$/, ''); }
@@ -272,7 +383,10 @@
           '<textarea rows="2" aria-label="What it does" data-li="' + esc(l.key) + '" data-ii="' + i + '" data-part="description" maxlength="2000" placeholder="What it does">' + esc(it.description) + '</textarea></div>';
       }).join('') + '<div><button type="button" class="oe-link" data-act="additem" data-li="' + esc(l.key) + '">+ Add ' + an(sing(l.label)) + ' ' + esc(sing(l.label)) + '</button></div></div>';
     }).join('');
-    var budget = f.budgetKey ? '<div class="oe-bud"><span class="oe-k" id="oe-bud-k">' + esc(words(f.budgetKey)) + '</span>' +
+    var g = this.director ? null : this.grantFor(f.key);
+    var budget = f.budgetKey && g && g.budget ? '<div class="oe-bud"><span class="oe-k">' + esc(words(f.budgetKey)) + '</span><output>' + d.budget + '</output>' +
+      '<span class="oe-hint">Set by your Director. You choose what the points buy.</span></div>'
+      : f.budgetKey ? '<div class="oe-bud"><span class="oe-k" id="oe-bud-k">' + esc(words(f.budgetKey)) + '</span>' +
       '<span class="oe-step" role="group" aria-labelledby="oe-bud-k"><button type="button" data-act="minus" aria-label="One point fewer">−</button>' +
       '<output>' + d.budget + '</output><button type="button" data-act="plus" aria-label="One point more">+</button></span>' +
       '<span class="oe-hint">Points a hero spends on ' + esc(lower(f.lists.filter(function (l) { return l.buy; })[0].label)) + '.</span></div>' : '';
@@ -281,14 +395,30 @@
       '<label class="oe-f"><span class="oe-k">One line for the list</span><input data-k="summary" maxlength="300" autocomplete="off" value="' + esc(d.summary) + '" placeholder="What a player reads before opening it"></label>' +
       '<div class="oe-f"><span class="oe-k" id="oe-text-k">The whole entry</span><div class="oe-tool">' +
         '<button type="button" data-act="bold" title="Bold"><b>B</b></button><button type="button" data-act="italic" title="Italic"><i>I</i></button>' +
-        '<button type="button" data-act="secret">Hide from players</button></div>' +
+        // A player's own entry has no hidden passages: players never read them, its writer included.
+        (this.director ? '<button type="button" data-act="secret">Hide from players</button>' : '') + '</div>' +
         '<div class="oe-text" contenteditable="true" role="textbox" aria-multiline="true" aria-labelledby="oe-text-k" data-k="text" data-placeholder="Write it as you would a page.">' + d.text + '</div>' +
-        '<span class="oe-hint" data-hint>' + (hidden ? '<b>Part of this entry is hidden from players.</b> Directors still read it.'
-          : 'Select a passage and press “Hide from players” to keep it for Directors.') + '</span></div>' +
+        (this.director ? '<span class="oe-hint" data-hint>' + (hidden ? '<b>Part of this entry is hidden from players.</b> Directors still read it.'
+          : 'Select a passage and press “Hide from players” to keep it for Directors.') + '</span>' : '') + '</div>' +
       '<div class="oe-f"><span class="oe-k">Facts</span>' + (d.facts.length ? '<div class="oe-facts">' + facts + '</div>' : '') +
         '<div><button type="button" class="oe-link" data-act="addfact">+ Add a fact</button></div></div>' +
-      budget + lists +
-      '<fieldset class="oe-f oe-who"><legend class="oe-k">Who sees it</legend>' +
+      budget + lists + this.whoHTML(d) +
+      '</div>';
+  };
+
+  // Who sees the entry. A player doesn't choose: it is theirs and the
+  // Directors' until accepted. A Director reviewing a draft chooses who sees
+  // it once they accept it, and can write what to change.
+  Entries.prototype.whoHTML = function (d) {
+    var f = this.cur();
+    if (!this.director) {
+      return '<div class="oe-f"><span class="oe-k">Who sees it</span><p class="oe-hint">Only you and the Directors, until a Director accepts it' +
+        (d.forName || this.forName ? '. It’s for ' + esc(d.forName || this.forName) : '') + '.</p></div>';
+    }
+    var review = isDraft(d) ? '<label class="oe-f"><span class="oe-k">What to change</span>' +
+      '<textarea rows="2" maxlength="500" data-k="note" placeholder="Sent with “Ask for changes”">' + esc(d.note) + '</textarea></label>' : '';
+    return review +
+      '<fieldset class="oe-f oe-who"><legend class="oe-k">' + (isDraft(d) ? 'Who sees it once you accept it' : 'Who sees it') + '</legend>' +
         '<label><input type="radio" name="oe-who" value="everyone"' + (d.who === 'everyone' ? ' checked' : '') + '><span>Everyone</span>' +
           '<small>Players can pick it in the hero creator and on their sheet.</small></label>' +
         '<label><input type="radio" name="oe-who" value="directors"' + (d.who === 'directors' ? ' checked' : '') + '><span>Directors only</span>' +
@@ -296,8 +426,7 @@
         // Kept to one character (set from the AI page): offered only while it is, so a save never opens it by accident.
         (d.forName !== undefined ? '<label><input type="radio" name="oe-who" value="character"' + (d.who === 'character' ? ' checked' : '') + '><span>Only ' + esc(d.forName || 'one character') + '’s player</span>' +
           '<small>Directors and whoever plays ' + esc(d.forName || 'that character') + ' see it.</small></label>' : '') +
-        '</fieldset>' +
-      '</div>';
+        '</fieldset>';
   };
 
   // The system's rules for an entry, read back. Each is [message, blocks]:
@@ -393,15 +522,34 @@
     } else {
       body = (this.paste ? this.pasteHTML() : '') + '<div class="oe-cols">' + this.writeHTML(d) + '<aside class="oe-view" aria-label="What a player sees">' + this.viewHTML(d) + '</aside></div>';
     }
-    pop.innerHTML = '<header class="oe-pop__head"><div><p class="oe-kind">' + esc(f.label) + ' · this campaign · Directors only</p>' +
+    var asked = d.reviewNote && d.status === 'draft' && !this.director ? '<p class="oe-asked" role="note"><b>Your Director asked:</b> ' + esc(d.reviewNote) + '</p>' : '';
+    var handed = isDraft(d) && this.director && d.status === 'sent' ? '<p class="oe-asked" role="note"><b>' + esc(this.memberName(d.by)) + ' handed this in.</b> Accept it, or say what to change.</p>' : '';
+    if (!this.confirm) body = asked + handed + body;
+    pop.innerHTML = '<header class="oe-pop__head"><div><p class="oe-kind">' + esc(f.label) + ' · ' + (this.director ? 'this campaign · Directors only' : 'yours') + '</p>' +
       '<h2 data-pop-title tabindex="-1">' + esc(d.name.trim() || (isNew ? 'New ' + lower(f.label) : 'Unnamed')) + '</h2></div>' +
       '<div class="oe-pop__acts">' + (this.confirm ? '' : '<button type="button" class="oe-btn oe-btn--ghost" data-act="paste" aria-expanded="' + this.paste + '">Paste from an AI</button>') +
       '<button type="button" class="oe-x" data-act="close" aria-label="Close">×</button></div></header>' +
       '<div class="oe-pop__body">' + body + '</div>' +
-      '<footer class="oe-pop__foot">' + (isNew ? '' : '<button type="button" class="oe-link oe-del" data-act="del">Delete</button>') +
+      '<footer class="oe-pop__foot">' + (isNew || !this.director ? '' : '<button type="button" class="oe-link oe-del" data-act="del">Delete</button>') +
       '<p class="oe-error" role="alert" hidden data-error></p><span class="hc-foot__sp"></span>' +
-      '<button type="button" class="oe-btn oe-btn--ghost" data-act="close">Cancel</button>' +
-      '<button type="button" class="oe-btn" data-act="save"' + (this.canSave() ? '' : ' disabled') + '>' + (isNew ? 'Add ' + esc(lower(f.label)) : 'Save') + '</button></footer>';
+      '<button type="button" class="oe-btn oe-btn--ghost" data-act="close">Cancel</button>' + this.footActsHTML(d, isNew) + '</footer>';
+  };
+
+  // The commands for the open entry. A Director saves, and on a player's
+  // draft also asks for changes or accepts; the player saves their draft or
+  // hands it in.
+  Entries.prototype.footActsHTML = function (d, isNew) {
+    var off = this.canSave() ? '' : ' disabled', f = this.cur();
+    if (!this.director) {
+      return '<button type="button" class="oe-btn oe-btn--ghost" data-act="save"' + off + '>' + (d.status === 'sent' ? 'Save' : 'Save draft') + '</button>' +
+        (d.status === 'sent' ? '' : '<button type="button" class="oe-btn" data-act="send"' + off + '>Hand it in</button>');
+    }
+    if (isDraft(d)) {
+      return '<button type="button" class="oe-btn oe-btn--ghost" data-act="save"' + off + '>Save</button>' +
+        '<button type="button" class="oe-btn oe-btn--ghost" data-act="askchanges"' + off + '>Ask for changes</button>' +
+        '<button type="button" class="oe-btn" data-act="accept"' + off + '>Accept</button>';
+    }
+    return '<button type="button" class="oe-btn" data-act="save"' + off + '>' + (isNew ? 'Add ' + esc(lower(f.label)) : 'Save') + '</button>';
   };
 
   Entries.prototype.canSave = function () {
@@ -409,8 +557,8 @@
   };
 
   Entries.prototype.openPop = function (e, from) {
-    var f = this.cur();
-    this.draft = draftOf(e, f);
+    var f = this.cur(), g = this.director ? null : this.grantFor(f.key);
+    this.draft = draftOf(e, f, g && g.budget);
     this.saved = JSON.parse(JSON.stringify(this.draft));
     this.open = e ? String(e.id) : 'new';
     this.confirm = false;
@@ -476,8 +624,8 @@
     if (view) view.innerHTML = this.viewHTML(d);
     var t = this.root.querySelector('[data-pop-title]');
     if (t) t.textContent = d.name.trim() || (d.id ? 'Unnamed' : 'New ' + lower(this.cur().label));
-    var sv = this.root.querySelector('[data-act="save"]');
-    if (sv) sv.disabled = !this.canSave();
+    var can = this.canSave();
+    this.root.querySelectorAll('.oe-pop__foot .oe-btn:not([data-act="close"])').forEach(function (b) { b.disabled = !can; });
   };
 
   // Redraws the form after a change that adds or removes fields, keeping the
@@ -565,16 +713,29 @@
     return { props: props };
   };
 
-  Entries.prototype.save = function () {
+  // mode is '' (save), 'send' (a player hands it in), 'accept' or 'ask' (a
+  // Director's answer to a player's draft).
+  Entries.prototype.save = function (mode) {
     var self = this, d = this.draft, f = this.cur();
     this.syncText();
     if (!this.canSave()) return;
+    if (mode === 'ask' && !d.note.trim()) { this.fail('Write what to change first, in “What to change”.'); return; }
     var built = this.properties();
     if (built.error) { this.fail(built.error); return; }
     var text = tidy(d.text);
     var body = { name: d.name.trim(), summary: d.summary.trim(), description: text.textContent.trim() ? text.innerHTML : '',
-      properties: built.props, visibility: d.who === 'directors' || d.who === 'character' ? d.who : 'everyone' };
+      properties: built.props };
     var isNew = !d.id;
+    if (this.director) {
+      body.visibility = d.who === 'directors' || d.who === 'character' ? d.who : 'everyone';
+      // A draft keeps who it is for until it is accepted.
+      if (isDraft(d) && mode !== 'accept') delete body.visibility;
+      if (mode === 'accept') body.status = 'accepted';
+      if (mode === 'ask') { body.status = 'draft'; body.reviewNote = d.note.trim(); }
+    } else {
+      if (mode === 'send') body.status = 'sent';
+      if (isNew && this.forId) body.forEntityId = this.forId;
+    }
     if (isNew) body.fieldKey = f.key;
     this.busy = true;
     this.touched();
@@ -585,13 +746,58 @@
         if (!res.ok || !res.body.entry) { self.fail(res.body.message || res.body.error || 'The entry could not be saved. Try again.'); return; }
         var e = res.body.entry;
         self.entries = self.entries.filter(function (x) { return x.id !== e.id; }).concat([e]);
+        if (isNew && !self.director) {
+          self.grants.forEach(function (g) { if (g.fieldKey === f.key && g.userId === self.user) g.entryId = e.id; });
+          // Made for their hero: the hero's sheet takes the new name at once.
+          if (self.forId) self.setHeroField(f.key, e.name);
+        }
         self.busy = false;
         self.closePop(true);
         self.render();
         var row = self.root.querySelector('.hc-row[data-open="' + e.id + '"]');
         if (row) row.focus({ preventScroll: true });
-        notify(e.name + (isNew ? ' added' : ' saved'));
+        var said = { send: ' handed in to your Director', accept: ' accepted', ask: ' handed back with your note' }[mode];
+        notify(e.name + (said || (isNew ? (self.director ? ' added' : ' saved as a draft') : ' saved')));
       }).catch(function () { self.fail('The entry could not be saved. Check your connection and try again.'); });
+  };
+
+  // Writes the entry's name into the player's hero, as picking it would.
+  Entries.prototype.setHeroField = function (key, name) {
+    var patch = {};
+    patch[key] = name;
+    var url = this.entriesUrl.replace(/\/system-entries$/, '') + '/entities/' + encodeURIComponent(this.forId) + '/fields';
+    api(url, { method: 'PUT', body: { fields_patch: patch }, csrfToken: this.csrf }).then(function (r) {
+      if (!r.ok) notify('Saved, but it isn’t on your sheet yet. Pick it there from the list.', 'info');
+    }).catch(function () {});
+  };
+
+  // A Director's permissions: give one (or renew a used one), or take it back.
+  Entries.prototype.give = function (userId, budget) {
+    var self = this, f = this.cur();
+    if (this.busy) return;
+    this.busy = true;
+    api(this.entriesUrl + '/grants', { method: 'POST', body: { fieldKey: f.key, userId: userId, budget: budget || 0 }, csrfToken: this.csrf })
+      .then(json).then(function (res) {
+        self.busy = false;
+        if (!res.ok || !res.body.grant) { notify(res.body.message || res.body.error || 'That didn’t save. Try again.', 'error'); return; }
+        var g = res.body.grant;
+        self.grants = self.grants.filter(function (x) { return x.id !== g.id; }).concat([g]);
+        self.giving = false;
+        self.render();
+        notify(self.memberName(userId) + ' can make their own ' + lower(f.label));
+      }).catch(function () { self.busy = false; notify('That didn’t save. Check your connection and try again.', 'error'); });
+  };
+  Entries.prototype.revoke = function (id) {
+    var self = this;
+    if (this.busy) return;
+    this.busy = true;
+    api(this.entriesUrl + '/grants/' + encodeURIComponent(id), { method: 'DELETE', csrfToken: this.csrf }).then(function (r) {
+      self.busy = false;
+      if (!r.ok) { notify('That didn’t save. Try again.', 'error'); return; }
+      self.grants = self.grants.filter(function (x) { return String(x.id) !== String(id); });
+      self.render();
+      notify('Permission taken back');
+    }).catch(function () { self.busy = false; notify('That didn’t save. Check your connection and try again.', 'error'); });
   };
 
   Entries.prototype.remove = function () {
@@ -769,7 +975,18 @@
       switch (t.getAttribute('data-act')) {
         case 'add': if (self.open === null) self.openPop(null, t); break;
         case 'close': self.closePop(); break;
-        case 'save': self.save(); break;
+        case 'save': self.save(''); break;
+        case 'send': self.save('send'); break;
+        case 'accept': self.save('accept'); break;
+        case 'askchanges': self.save('ask'); break;
+        case 'givestart': self.giving = true; self.render(); var sel = root.querySelector('[data-give-user]'); if (sel) sel.focus(); break;
+        case 'givecancel': self.giving = false; self.render(); break;
+        case 'give':
+          var u = root.querySelector('[data-give-user]'), bud = root.querySelector('[data-give-budget]');
+          if (u && u.value) self.give(u.value, bud ? Math.max(1, Math.min(20, Math.round(+bud.value) || 1)) : 0);
+          break;
+        case 'regrant': self.give(t.getAttribute('data-user'), +t.getAttribute('data-budget') || 0); break;
+        case 'revoke': self.revoke(t.getAttribute('data-grant')); break;
         case 'bold': case 'italic':
           document.execCommand(t.getAttribute('data-act'));
           self.syncText(); self.touched();
@@ -877,8 +1094,8 @@
         else self.closePop();
         return;
       }
-      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && self.open !== null) { e.preventDefault(); self.save(); return; }
-      if (e.key === 'Enter' && e.target.tagName === 'INPUT' && e.target.closest('.oe-pop') && e.target.type !== 'radio' && e.target.type !== 'checkbox') { e.preventDefault(); self.save(); }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && self.open !== null) { e.preventDefault(); self.save(''); return; }
+      if (e.key === 'Enter' && e.target.tagName === 'INPUT' && e.target.closest('.oe-pop') && e.target.type !== 'radio' && e.target.type !== 'checkbox') { e.preventDefault(); self.save(''); }
     });
     if (window.ResizeObserver) {
       new ResizeObserver(function () { if (self.open !== null) self.fit(); }).observe(root);

@@ -25,6 +25,16 @@ const (
 
 	// ChoiceSourceCampaign marks pick-list entries a campaign made itself.
 	ChoiceSourceCampaign = "campaign"
+
+	// EntryStatusAccepted is every Director's entry and a player's once a
+	// Director accepts it: visibility alone decides who sees it.
+	EntryStatusAccepted = "accepted"
+	// EntryStatusDraft is a player's entry they are still writing, or one a
+	// Director handed back with a note. Only its writer and the Directors
+	// see a draft, whatever its visibility says.
+	EntryStatusDraft = "draft"
+	// EntryStatusSent is a player's draft handed in for a Director to accept.
+	EntryStatusSent = "sent"
 )
 
 // SystemEntry is one campaign-made pick-list entry.
@@ -49,10 +59,15 @@ type SystemEntry struct {
 	ForEntityID string `json:"forEntityId,omitempty"`
 	// ForName is that character's name, filled for Directors on read so a
 	// list can say who an entry is for. Not stored.
-	ForName   string    `json:"forName,omitempty"`
-	CreatedBy string    `json:"createdBy,omitempty"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
+	ForName string `json:"forName,omitempty"`
+	// Status is EntryStatusAccepted, or draft/sent for a player's entry a
+	// Director has not accepted yet.
+	Status string `json:"status"`
+	// ReviewNote is what a Director asked the writer to change.
+	ReviewNote string    `json:"reviewNote,omitempty"`
+	CreatedBy  string    `json:"createdBy,omitempty"`
+	CreatedAt  time.Time `json:"createdAt"`
+	UpdatedAt  time.Time `json:"updatedAt"`
 }
 
 // EntryActor is who is asking. The service decides what they may do; the
@@ -75,6 +90,9 @@ type CreateSystemEntryInput struct {
 	// ForEntityID names the character page; required with visibility
 	// "character" and refused with any other.
 	ForEntityID string `json:"forEntityId"`
+	// Status is for a player's own entry only: "sent" hands it in at once,
+	// anything else keeps it a draft. A Director's entry is always accepted.
+	Status string `json:"status"`
 }
 
 // UpdateSystemEntryInput is a PARTIAL update: an absent key keeps the stored
@@ -90,6 +108,38 @@ type UpdateSystemEntryInput struct {
 	// ForEntityID changes the character a 'character' entry is kept to.
 	// Moving to another visibility clears it.
 	ForEntityID patch.Field[string] `json:"forEntityId"`
+	// Status moves a player's entry: its writer between draft and sent, a
+	// Director to accepted, or back to draft with a ReviewNote.
+	Status     patch.Field[string] `json:"status"`
+	ReviewNote patch.Field[string] `json:"reviewNote"`
+}
+
+// EntryGrant lets one player write one entry of their own for a pick list.
+// It is spent (EntryID set) when they save it; a Director can give it again.
+type EntryGrant struct {
+	ID         int64  `json:"id"`
+	CampaignID string `json:"-"`
+	SystemID   string `json:"-"`
+	FieldKey   string `json:"fieldKey"`
+	UserID     string `json:"userId"`
+	// Budget is the points total the player's entry gets (the "*_points"
+	// property), so a player cannot grant themselves more; 0 for none.
+	Budget int `json:"budget"`
+	// EntryID is the entry the player made with it; 0 while unspent.
+	EntryID   int64     `json:"entryId,omitempty"`
+	GrantedBy string    `json:"-"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+// Spent reports whether the player has already made their entry.
+func (g *EntryGrant) Spent() bool { return g.EntryID != 0 }
+
+// GrantInput is the body of a Director giving a player the permission.
+// Giving it again to the same player for the same list renews it.
+type GrantInput struct {
+	FieldKey string `json:"fieldKey"`
+	UserID   string `json:"userId"`
+	Budget   int    `json:"budget"`
 }
 
 // EntryCharacter is a character page an entry can be kept to.

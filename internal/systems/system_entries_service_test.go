@@ -15,6 +15,7 @@ import (
 type fakeEntryRepo struct {
 	rows   []SystemEntry
 	nextID int64
+	grants []EntryGrant
 }
 
 func (f *fakeEntryRepo) List(_ context.Context, camp, sys, field string, dirs bool) ([]SystemEntry, error) {
@@ -23,7 +24,7 @@ func (f *fakeEntryRepo) List(_ context.Context, camp, sys, field string, dirs bo
 		if r.CampaignID != camp || r.SystemID != sys || (field != "" && r.FieldKey != field) {
 			continue
 		}
-		if !dirs && r.Visibility == EntryVisibilityDirectors {
+		if !dirs && r.Visibility == EntryVisibilityDirectors && entryStatusOrAccepted(r.Status) == EntryStatusAccepted {
 			continue
 		}
 		out = append(out, r)

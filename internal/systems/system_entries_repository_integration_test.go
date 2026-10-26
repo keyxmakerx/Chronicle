@@ -117,3 +117,79 @@ func TestSystemEntryRepository_Integration(t *testing.T) {
 		t.Fatalf("entries survived campaign delete: %d", n)
 	}
 }
+
+// TestSystemEntryGrants_Integration runs the permission SQL and the draft
+// columns against a real MariaDB: renewing a grant, claiming it only once,
+// a player's draft reaching the player list, and the cascade on delete.
+func TestSystemEntryGrants_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test requires a database; skipped under -short")
+	}
+	db := openBookTestDB(t)
+	ctx := context.Background()
+	repo := NewSystemEntryRepository(db)
+
+	dm, pl, camp := bookTestUUID(t), bookTestUUID(t), bookTestUUID(t)
+	for _, u := range []string{dm, pl} {
+		mustBookExec(t, db, `INSERT INTO users (id, email, display_name, password_hash) VALUES (?, ?, ?, ?)`,
+			u, "grant-"+u+"@example.test", "Grant Test", "x")
+	}
+	mustBookExec(t, db, `INSERT INTO campaigns (id, name, slug, created_by) VALUES (?, ?, ?, ?)`, camp, "Grant "+camp, "grant-"+camp, dm)
+
+	g := &EntryGrant{CampaignID: camp, SystemID: "sys", FieldKey: "ancestry", UserID: pl, Budget: 3, GrantedBy: dm}
+	if err := repo.PutGrant(ctx, g); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.PutGrant(ctx, &EntryGrant{CampaignID: camp, SystemID: "sys", FieldKey: "ancestry", UserID: bookTestUUID(t)}); err == nil {
+		t.Fatal("a grant to someone with no account should be refused")
+	}
+	got, err := repo.FindGrant(ctx, camp, "sys", "ancestry", pl)
+	if err != nil || got == nil || got.Budget != 3 || got.Spent() {
+		t.Fatalf("find = %+v err %v", got, err)
+	}
+	if ok, err := repo.ClaimGrant(ctx, camp, got.ID); err != nil || !ok {
+		t.Fatalf("first claim = %v %v", ok, err)
+	}
+	if ok, _ := repo.ClaimGrant(ctx, camp, got.ID); ok {
+		t.Fatal("a claimed grant was claimed twice")
+	}
+
+	draft := &SystemEntry{CampaignID: camp, SystemID: "sys", FieldKey: "ancestry", Slug: "fairy", Name: "Fairy",
+		Description: "", Properties: map[string]any{}, Visibility: "directors", Status: EntryStatusDraft, CreatedBy: pl}
+	if err := repo.Create(ctx, draft); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.SetGrantEntry(ctx, camp, got.ID, draft.ID); err != nil {
+		t.Fatal(err)
+	}
+	if g2, _ := repo.FindGrant(ctx, camp, "sys", "ancestry", pl); g2.EntryID != draft.ID {
+		t.Fatalf("grant spent on %d, want %d", g2.EntryID, draft.ID)
+	}
+	// A draft kept from players by its visibility still reaches the player
+	// list, where the service keeps it to its writer.
+	if l, _ := repo.List(ctx, camp, "sys", "ancestry", false); len(l) != 1 || l[0].Status != EntryStatusDraft {
+		t.Fatalf("player list = %+v", l)
+	}
+	draft.Status, draft.ReviewNote = EntryStatusAccepted, ""
+	if err := repo.Update(ctx, draft); err != nil {
+		t.Fatal(err)
+	}
+	if l, _ := repo.List(ctx, camp, "sys", "ancestry", false); len(l) != 0 {
+		t.Fatalf("an accepted Directors-only entry left the player list: %+v", l)
+	}
+
+	// Renewing clears the spent mark and takes the new budget.
+	if err := repo.PutGrant(ctx, &EntryGrant{CampaignID: camp, SystemID: "sys", FieldKey: "ancestry", UserID: pl, Budget: 5, GrantedBy: dm}); err != nil {
+		t.Fatal(err)
+	}
+	if g3, _ := repo.FindGrant(ctx, camp, "sys", "ancestry", pl); g3.Spent() || g3.Budget != 5 {
+		t.Fatalf("renewed = %+v", g3)
+	}
+	if l, _ := repo.ListGrants(ctx, camp, "sys", ""); len(l) != 1 {
+		t.Fatalf("grants = %+v", l)
+	}
+	if ok, _ := repo.DeleteGrant(ctx, camp, got.ID); !ok {
+		t.Fatal("delete grant")
+	}
+	mustBookExec(t, db, `DELETE FROM campaigns WHERE id = ?`, camp)
+}
