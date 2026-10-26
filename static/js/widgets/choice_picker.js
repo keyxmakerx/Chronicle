@@ -5,7 +5,9 @@
  * under an anchor element. The value stored in fields_data stays the chosen
  * entry's NAME as plain text, so Foundry pulls (which write item names) stay
  * compatible; a value that is not in the list is still shown and kept, and
- * "Not listed? Type your own" always works.
+ * "Not listed? Type your own" always works. A player a Director let write
+ * their own entry for the field also gets a link to write it ("Make your
+ * own"), kept to the hero the picker is for.
  *
  * Shared on purpose: the attributes widget uses it, and so can a system
  * package's own widget (Draw Steel hero pages do not use attributes):
@@ -26,7 +28,7 @@
  * field edit; the server merges it so the other fields are untouched.
  *
  *   Chronicle.fetchChoices(campaignId, fieldKey)
- *     -> Promise<{systemName, choices: [{slug,name,summary,source}]}>
+ *     -> Promise<{systemName, choices: [{slug,name,summary,source}], canMake}>
  *
  * Calling pickChoice again on an anchor whose fold is open closes it. With a
  * pick not yet saved, that and Escape ask first in the shared slip
@@ -105,7 +107,7 @@
       if (!r.ok) throw new Error('choices ' + r.status);
       return r.json();
     }).then(function (d) {
-      return { systemName: d.systemName || '', choices: d.choices || [] };
+      return { systemName: d.systemName || '', choices: d.choices || [], canMake: !!d.canMake };
     });
   };
 
@@ -206,6 +208,7 @@
         return '<label class="ag-row"><input type="radio" name="ag-pick-' + esc(opts.fieldKey) +
           '" value="' + esc(x.name) + '"' + (x.name === current ? ' checked' : '') + '>' +
           '<span class="ag-name"><b>' + esc(x.name) + '</b>' +
+          (x.mine && x.status ? ' <small class="ag-src">yours · ' + (x.status === 'sent' ? 'handed in' : 'draft') + '</small>' : '') +
           (x.summary ? '<small>' + esc(x.summary) + '</small>' : '') + '</span></label>';
       }).join('') + '<div class="ag-more">' + m.length + ' of ' + all.length + '</div>';
     }
@@ -227,6 +230,11 @@
         esc(inList(current) ? '' : current) + '"></div>';
       if (has) {
         html += '<div class="ag-mine"><button type="button" class="ag-link" data-mine>Not listed? Type your own</button></div>';
+      }
+      if (list.canMake) {
+        html += '<div class="ag-mine"><a class="ag-link" href="/campaigns/' + encodeURIComponent(opts.campaignId) + '/characters/entries?field=' +
+          encodeURIComponent(opts.fieldKey) + (opts.entityId ? '&for=' + encodeURIComponent(opts.entityId) : '') +
+          '">Your Director lets you make your own ' + esc(String(label).toLowerCase()) + ' ›</a></div>';
       }
       html += '<div class="ag-hint" role="alert" data-err></div>' +
         '<div class="ag-foot"><span class="ag-sp"></span>' +

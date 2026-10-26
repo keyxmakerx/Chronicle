@@ -21,11 +21,12 @@ func (a heroPlannerAdapter) HeroPlan(ctx context.Context, campaignID, userID str
 	}
 	out := &entities.HeroPlan{SystemName: p.SystemName, Steps: make([]entities.HeroStep, 0, len(p.Steps))}
 	for _, s := range p.Steps {
-		step := entities.HeroStep{FieldKey: s.FieldKey, Label: s.Label, Choices: make([]entities.HeroChoice, 0, len(s.Choices))}
+		step := entities.HeroStep{FieldKey: s.FieldKey, Label: s.Label, CanMake: s.CanMake, Choices: make([]entities.HeroChoice, 0, len(s.Choices))}
 		for _, c := range s.Choices {
 			step.Choices = append(step.Choices, entities.HeroChoice{
 				Slug: c.Slug, Name: c.Name, Summary: c.Summary, Source: c.Source,
 				Description: c.Description, Properties: c.Properties,
+				Status: c.Status, Mine: c.Mine, EntryID: c.EntryID,
 			})
 		}
 		out.Steps = append(out.Steps, step)

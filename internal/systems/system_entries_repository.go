@@ -35,6 +35,23 @@ type SystemEntryRepository interface {
 	Update(ctx context.Context, e *SystemEntry) error
 	// Delete removes an entry; false when there was none.
 	Delete(ctx context.Context, campaignID string, id int64) (bool, error)
+
+	// ListGrants returns a system's permissions, for one player when userID
+	// is set, ordered by field.
+	ListGrants(ctx context.Context, campaignID, systemID, userID string) ([]EntryGrant, error)
+	// FindGrant returns one player's permission for a field; nil when none.
+	FindGrant(ctx context.Context, campaignID, systemID, fieldKey, userID string) (*EntryGrant, error)
+	// PutGrant gives the permission, or renews it (unspent, with the new
+	// budget) when the player already had one for the field.
+	PutGrant(ctx context.Context, g *EntryGrant) error
+	// DeleteGrant takes a permission back; false when there was none.
+	DeleteGrant(ctx context.Context, campaignID string, id int64) (bool, error)
+	// ClaimGrant marks an unspent permission as being used, so two saves at
+	// once cannot both use it; false when it was already spent.
+	ClaimGrant(ctx context.Context, campaignID string, id int64) (bool, error)
+	// SetGrantEntry records the entry a claimed permission made, or with
+	// entryID 0 releases the claim after a failed save.
+	SetGrantEntry(ctx context.Context, campaignID string, id, entryID int64) error
 }
 
 type systemEntryRepository struct {
@@ -47,13 +64,13 @@ func NewSystemEntryRepository(db *sql.DB) SystemEntryRepository {
 }
 
 const systemEntryColumns = `id, campaign_id, system_id, field_key, slug, name, summary, description,
-	properties, visibility, COALESCE(for_entity_id, ''), COALESCE(created_by, ''), created_at, updated_at`
+	properties, visibility, COALESCE(for_entity_id, ''), status, review_note, COALESCE(created_by, ''), created_at, updated_at`
 
 func scanSystemEntry(s rowScanner) (*SystemEntry, error) {
 	var e SystemEntry
 	var props []byte
 	if err := s.Scan(&e.ID, &e.CampaignID, &e.SystemID, &e.FieldKey, &e.Slug, &e.Name, &e.Summary,
-		&e.Description, &props, &e.Visibility, &e.ForEntityID, &e.CreatedBy, &e.CreatedAt, &e.UpdatedAt); err != nil {
+		&e.Description, &props, &e.Visibility, &e.ForEntityID, &e.Status, &e.ReviewNote, &e.CreatedBy, &e.CreatedAt, &e.UpdatedAt); err != nil {
 		return nil, err
 	}
 	e.Properties = map[string]any{}
@@ -74,7 +91,9 @@ func (r *systemEntryRepository) List(ctx context.Context, campaignID, systemID, 
 		args = append(args, fieldKey)
 	}
 	if !includeDirectors {
-		q += ` AND visibility IN ('everyone', 'character')`
+		// A draft is kept by its writer, not its visibility; the service
+		// keeps it to them.
+		q += ` AND (visibility IN ('everyone', 'character') OR status <> 'accepted')`
 	}
 	q += ` ORDER BY field_key, name, id`
 	rows, err := r.db.QueryContext(ctx, q, args...)
@@ -153,9 +172,10 @@ func (r *systemEntryRepository) Create(ctx context.Context, e *SystemEntry) erro
 	}
 	res, err := r.db.ExecContext(ctx,
 		`INSERT INTO campaign_system_entries
-		   (campaign_id, system_id, field_key, slug, name, summary, description, properties, visibility, for_entity_id, created_by)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULLIF(?, ''), NULLIF(?, ''))`,
-		e.CampaignID, e.SystemID, e.FieldKey, e.Slug, e.Name, e.Summary, e.Description, string(props), e.Visibility, e.ForEntityID, e.CreatedBy)
+		   (campaign_id, system_id, field_key, slug, name, summary, description, properties, visibility, for_entity_id, status, review_note, created_by)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULLIF(?, ''), ?, ?, NULLIF(?, ''))`,
+		e.CampaignID, e.SystemID, e.FieldKey, e.Slug, e.Name, e.Summary, e.Description, string(props), e.Visibility, e.ForEntityID,
+		entryStatusOrAccepted(e.Status), e.ReviewNote, e.CreatedBy)
 	if err != nil {
 		var me *mysql.MySQLError
 		if errors.As(err, &me) && me.Number == 1062 {
@@ -174,9 +194,11 @@ func (r *systemEntryRepository) Update(ctx context.Context, e *SystemEntry) erro
 	}
 	_, err = r.db.ExecContext(ctx,
 		`UPDATE campaign_system_entries
-		    SET name = ?, summary = ?, description = ?, properties = ?, visibility = ?, for_entity_id = NULLIF(?, '')
+		    SET name = ?, summary = ?, description = ?, properties = ?, visibility = ?, for_entity_id = NULLIF(?, ''),
+		        status = ?, review_note = ?
 		  WHERE campaign_id = ? AND id = ?`,
-		e.Name, e.Summary, e.Description, string(props), e.Visibility, e.ForEntityID, e.CampaignID, e.ID)
+		e.Name, e.Summary, e.Description, string(props), e.Visibility, e.ForEntityID,
+		entryStatusOrAccepted(e.Status), e.ReviewNote, e.CampaignID, e.ID)
 	if err != nil {
 		return apperror.NewInternal(err)
 	}
@@ -191,4 +213,112 @@ func (r *systemEntryRepository) Delete(ctx context.Context, campaignID string, i
 	}
 	n, _ := res.RowsAffected()
 	return n > 0, nil
+}
+
+// entryStatusOrAccepted stores an unset status as accepted, which is what
+// every entry made before player drafts existed is.
+func entryStatusOrAccepted(s string) string {
+	if s == "" {
+		return EntryStatusAccepted
+	}
+	return s
+}
+
+const entryGrantColumns = `id, campaign_id, system_id, field_key, user_id, budget, COALESCE(entry_id, 0),
+	COALESCE(granted_by, ''), created_at`
+
+func scanEntryGrant(s rowScanner) (*EntryGrant, error) {
+	var g EntryGrant
+	if err := s.Scan(&g.ID, &g.CampaignID, &g.SystemID, &g.FieldKey, &g.UserID, &g.Budget, &g.EntryID,
+		&g.GrantedBy, &g.CreatedAt); err != nil {
+		return nil, err
+	}
+	return &g, nil
+}
+
+func (r *systemEntryRepository) ListGrants(ctx context.Context, campaignID, systemID, userID string) ([]EntryGrant, error) {
+	q := `SELECT ` + entryGrantColumns + ` FROM campaign_entry_grants WHERE campaign_id = ? AND system_id = ?`
+	args := []any{campaignID, systemID}
+	if userID != "" {
+		q += ` AND user_id = ?`
+		args = append(args, userID)
+	}
+	q += ` ORDER BY field_key, created_at, id`
+	rows, err := r.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, apperror.NewInternal(err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := []EntryGrant{}
+	for rows.Next() {
+		g, err := scanEntryGrant(rows)
+		if err != nil {
+			return nil, apperror.NewInternal(err)
+		}
+		out = append(out, *g)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, apperror.NewInternal(err)
+	}
+	return out, nil
+}
+
+func (r *systemEntryRepository) FindGrant(ctx context.Context, campaignID, systemID, fieldKey, userID string) (*EntryGrant, error) {
+	g, err := scanEntryGrant(r.db.QueryRowContext(ctx,
+		`SELECT `+entryGrantColumns+` FROM campaign_entry_grants
+		  WHERE campaign_id = ? AND system_id = ? AND field_key = ? AND user_id = ?`,
+		campaignID, systemID, fieldKey, userID))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, apperror.NewInternal(err)
+	}
+	return g, nil
+}
+
+func (r *systemEntryRepository) PutGrant(ctx context.Context, g *EntryGrant) error {
+	_, err := r.db.ExecContext(ctx,
+		`INSERT INTO campaign_entry_grants (campaign_id, system_id, field_key, user_id, budget, granted_by)
+		 VALUES (?, ?, ?, ?, ?, NULLIF(?, ''))
+		 ON DUPLICATE KEY UPDATE budget = VALUES(budget), entry_id = NULL, granted_by = VALUES(granted_by)`,
+		g.CampaignID, g.SystemID, g.FieldKey, g.UserID, g.Budget, g.GrantedBy)
+	if err != nil {
+		var me *mysql.MySQLError
+		if errors.As(err, &me) && me.Number == 1452 {
+			return apperror.NewValidation("That person has no account here.")
+		}
+		return apperror.NewInternal(err)
+	}
+	return nil
+}
+
+func (r *systemEntryRepository) DeleteGrant(ctx context.Context, campaignID string, id int64) (bool, error) {
+	res, err := r.db.ExecContext(ctx,
+		`DELETE FROM campaign_entry_grants WHERE campaign_id = ? AND id = ?`, campaignID, id)
+	if err != nil {
+		return false, apperror.NewInternal(err)
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
+func (r *systemEntryRepository) ClaimGrant(ctx context.Context, campaignID string, id int64) (bool, error) {
+	// -1 marks "being used" until SetGrantEntry records the real entry.
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE campaign_entry_grants SET entry_id = -1 WHERE campaign_id = ? AND id = ? AND entry_id IS NULL`, campaignID, id)
+	if err != nil {
+		return false, apperror.NewInternal(err)
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
+func (r *systemEntryRepository) SetGrantEntry(ctx context.Context, campaignID string, id, entryID int64) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE campaign_entry_grants SET entry_id = NULLIF(?, 0) WHERE campaign_id = ? AND id = ?`, entryID, campaignID, id)
+	if err != nil {
+		return apperror.NewInternal(err)
+	}
+	return nil
 }

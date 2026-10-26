@@ -20,6 +20,8 @@ type CreatorStep struct {
 	FieldKey string   `json:"fieldKey"`
 	Label    string   `json:"label"`
 	Choices  []Choice `json:"choices"`
+	// CanMake: the viewer may write their own entry for this step.
+	CanMake bool `json:"canMake,omitempty"`
 }
 
 // CreatorPlan is everything the creator needs to draw its steps. Steps is
@@ -57,14 +59,14 @@ func (s *characterChoiceService) CreatorPlan(ctx context.Context, campaignID str
 		if err != nil {
 			return nil, err
 		}
-		if len(l.Choices) == 0 {
+		if len(l.Choices) == 0 && !l.CanMake {
 			continue
 		}
 		label := strings.TrimSpace(f.Label)
 		if label == "" {
 			label = f.Key
 		}
-		plan.Steps = append(plan.Steps, CreatorStep{FieldKey: f.Key, Label: label, Choices: l.Choices})
+		plan.Steps = append(plan.Steps, CreatorStep{FieldKey: f.Key, Label: label, Choices: l.Choices, CanMake: l.CanMake})
 		if len(plan.Steps) == maxCreatorSteps {
 			break
 		}

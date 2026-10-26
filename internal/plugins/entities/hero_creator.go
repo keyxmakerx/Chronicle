@@ -27,6 +27,11 @@ type HeroChoice struct {
 	Source      string         `json:"source"`
 	Description string         `json:"description,omitempty"`
 	Properties  map[string]any `json:"properties,omitempty"`
+	// Status is "draft" or "sent" for a player's own entry a Director has
+	// not accepted yet; Mine and EntryID are set for the player who wrote it.
+	Status  string `json:"status,omitempty"`
+	Mine    bool   `json:"mine,omitempty"`
+	EntryID int64  `json:"entryId,omitempty"`
 }
 
 // HeroStep is one question: a character field and the entries it offers.
@@ -34,6 +39,8 @@ type HeroStep struct {
 	FieldKey string       `json:"fieldKey"`
 	Label    string       `json:"label"`
 	Choices  []HeroChoice `json:"choices"`
+	// CanMake: a Director let this player write their own entry here.
+	CanMake bool `json:"canMake,omitempty"`
 }
 
 // HeroPlan is every step for one campaign, in the order the system declares

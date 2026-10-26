@@ -37,8 +37,9 @@ func (h *CharacterChoiceHandler) ChoicesAPI(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	// Private: the list depends on which systems this campaign enabled.
-	c.Response().Header().Set("Cache-Control", "private, max-age=300")
+	// Private and fresh: the list carries the viewer's own drafts and whether
+	// they may still make their own, which change as they write.
+	c.Response().Header().Set("Cache-Control", "private, no-store")
 	return c.JSON(http.StatusOK, list)
 }
 

@@ -181,7 +181,8 @@ numbered core migrations after it, tracked once each via `golang-migrate`'s
 
 | Table | Purpose | Notable columns |
 |---|---|---|
-| `campaign_system_entries` | A campaign's own pick-list entries (ancestry, kit, culture, class...) for its game system, kept apart from the package's data | `UNIQUE(campaign_id, system_id, field_key, slug)`; `visibility` enum(`everyone`,`directors`,`character`); `for_entity_id` the character page a `character` entry is kept to (no FK: a deleted character leaves the entry with Directors); `properties` JSON (flat scalars); `description` sanitized HTML; `created_by` carries no FK; FK to `campaigns` CASCADE |
+| `campaign_system_entries` | A campaign's own pick-list entries (ancestry, kit, culture, class...) for its game system, kept apart from the package's data | `UNIQUE(campaign_id, system_id, field_key, slug)`; `visibility` enum(`everyone`,`directors`,`character`); `for_entity_id` the character page a `character` entry is kept to (no FK: a deleted character leaves the entry with Directors); `properties` JSON (flat scalars); `description` sanitized HTML; `status` enum(`accepted`,`draft`,`sent`) and `review_note`: a player's entry stays a draft only its writer and Directors see until a Director accepts it; `created_by` carries no FK; FK to `campaigns` CASCADE |
+| `campaign_entry_grants` | A Director's permission for one player to write one entry of their own for a pick list | `UNIQUE(campaign_id, system_id, field_key, user_id)`; `budget` the points total the player's entry gets (0 = none); `entry_id` set when used (no FK; renewing clears it); FK to `campaigns` and `users` CASCADE |
 
 ### Media, addons & extensions
 

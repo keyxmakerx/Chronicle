@@ -31,6 +31,18 @@ func (f *fakeEntrySvc) FindByName(_ context.Context, _, field, name string, _ sy
 	}
 	return nil, nil
 }
+func (f *fakeEntrySvc) Grants(context.Context, string, systems.EntryActor) ([]systems.EntryGrant, error) {
+	return nil, nil
+}
+func (f *fakeEntrySvc) Grant(context.Context, string, systems.EntryActor, systems.GrantInput) (*systems.EntryGrant, error) {
+	return nil, nil
+}
+func (f *fakeEntrySvc) RevokeGrant(context.Context, string, systems.EntryActor, int64) error {
+	return nil
+}
+func (f *fakeEntrySvc) CanMake(context.Context, string, string, string) (bool, error) {
+	return false, nil
+}
 func (f *fakeEntrySvc) CheckCreate(_ context.Context, _ string, _ systems.EntryActor, _ systems.CreateSystemEntryInput) error {
 	return f.checkErr
 }

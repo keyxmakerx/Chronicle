@@ -52,6 +52,12 @@ type Choice struct {
 	// ForName is set on a campaign entry kept to one character, so a picker
 	// can say only that character's player and Directors see it.
 	ForName string `json:"forName,omitempty"`
+	// Status is "draft" or "sent" on a player's entry a Director has not
+	// accepted yet; empty otherwise.
+	Status string `json:"status,omitempty"`
+	// Mine and EntryID are set for the player who wrote the entry.
+	Mine    bool  `json:"mine,omitempty"`
+	EntryID int64 `json:"entryId,omitempty"`
 }
 
 // ChoiceList is the full answer for one field: the choices plus the system
@@ -62,6 +68,9 @@ type ChoiceList struct {
 	SystemID   string   `json:"systemId"`
 	SystemName string   `json:"systemName"`
 	Choices    []Choice `json:"choices"`
+	// CanMake says the viewer may write their own entry for this field, a
+	// permission a Director gave them (see EntryGrant).
+	CanMake bool `json:"canMake,omitempty"`
 }
 
 // ChoiceSource contributes extra choices for a field. It lets a later feature
@@ -103,6 +112,45 @@ func ChoiceViewerUser(ctx context.Context) string {
 func ChoiceViewerIsDirector(ctx context.Context) bool {
 	v, _ := ctx.Value(choiceViewerKey{}).(bool)
 	return v
+}
+
+// MakeOwnCheck reports whether a player may write their own entry for a
+// field. Like ChoiceSource it lets campaign entries plug in from outside.
+type MakeOwnCheck func(ctx context.Context, campaignID, fieldKey, userID string) (bool, error)
+
+var makeOwnChecks []MakeOwnCheck
+
+// RegisterMakeOwnCheck adds a check. Call at start-up.
+func RegisterMakeOwnCheck(fn MakeOwnCheck) {
+	if fn == nil {
+		return
+	}
+	choiceSourcesMu.Lock()
+	makeOwnChecks = append(makeOwnChecks, fn)
+	choiceSourcesMu.Unlock()
+}
+
+// canMakeOwn asks the registered checks for the viewer in ctx. A Director
+// writes entries on their own page, so the offer is for players only.
+func canMakeOwn(ctx context.Context, campaignID, fieldKey string) bool {
+	user := ChoiceViewerUser(ctx)
+	if user == "" || ChoiceViewerIsDirector(ctx) {
+		return false
+	}
+	choiceSourcesMu.RLock()
+	checks := append([]MakeOwnCheck(nil), makeOwnChecks...)
+	choiceSourcesMu.RUnlock()
+	for _, fn := range checks {
+		ok, err := fn(ctx, campaignID, fieldKey, user)
+		if err != nil {
+			slog.Warn("make-own check failed", slog.String("field", fieldKey), slog.Any("error", err))
+			continue
+		}
+		if ok {
+			return true
+		}
+	}
+	return false
 }
 
 // RegisterChoiceSource adds a source whose entries are appended after the
@@ -373,5 +421,6 @@ func (s *characterChoiceService) CharacterChoiceList(ctx context.Context, campai
 		}
 		res.Choices = append(res.Choices, extra...)
 	}
+	res.CanMake = canMakeOwn(ctx, campaignID, fieldKey)
 	return res, nil
 }
