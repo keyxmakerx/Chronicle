@@ -173,10 +173,10 @@ func TestItemLookService_MadeFrom(t *testing.T) {
 		vis        EntityVisibilityFilter
 		wantSource string // JSON of the source, or "" for none
 	}{
-		{"owner sees the source and its look, one hop only", "sword", permissions.RoleOwner, nil, `{"id":"adder","name":"Glass adder","look":{"look":"glass"}}`},
-		{"player who can see the source gets its name", "sword", permissions.RolePlayer, seeAdder, `{"id":"adder","name":"Glass adder","look":{"look":"glass"}}`},
+		{"owner sees the source and its look, one hop only", "sword", permissions.RoleOwner, nil, `{"id":"adder","name":"Glass adder","url":"/campaigns/camp-1/entities/adder","look":{"look":"glass"}}`},
+		{"player who can see the source gets its name", "sword", permissions.RolePlayer, seeAdder, `{"id":"adder","name":"Glass adder","url":"/campaigns/camp-1/entities/adder","look":{"look":"glass"}}`},
 		{"player who cannot see the source gets only its look", "sword", permissions.RolePlayer, hideAdder, `{"look":{"look":"glass"}}`},
-		{"a source with no look is still named to the owner", "ring", permissions.RoleOwner, nil, `{"id":"bare","name":"Bare page","look":null}`},
+		{"a source with no look is still named to the owner", "ring", permissions.RoleOwner, nil, `{"id":"bare","name":"Bare page","url":"/campaigns/camp-1/entities/bare","look":null}`},
 		{"a hidden source with no look says nothing", "ring", permissions.RolePlayer, hideAdder, ``},
 	}
 	for _, tc := range cases {

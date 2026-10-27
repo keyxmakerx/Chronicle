@@ -3,6 +3,7 @@ package armory
 import (
 	"context"
 	"encoding/json"
+	"net/url"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
@@ -16,11 +17,12 @@ type LookEntityFinder interface {
 }
 
 // LookSource is the page an item was made from, as one viewer may see it.
-// ID and Name are empty when the viewer cannot see that page, so the item
-// still carries its look without naming a hidden page.
+// ID, Name and URL are empty when the viewer cannot see that page, so the
+// item still carries its look without naming a hidden page.
 type LookSource struct {
 	ID   string          `json:"id,omitempty"`
 	Name string          `json:"name,omitempty"`
+	URL  string          `json:"url,omitempty"`
 	Look json.RawMessage `json:"look"`
 }
 
@@ -133,6 +135,7 @@ func (s *itemLookService) view(ctx context.Context, campaignID, entityID string,
 	v.Source = &LookSource{Look: ownLook(src)}
 	if seen {
 		v.Source.ID, v.Source.Name = l.MadeFrom, name
+		v.Source.URL = "/campaigns/" + url.PathEscape(campaignID) + "/entities/" + url.PathEscape(l.MadeFrom)
 	}
 	return v, nil
 }

@@ -584,7 +584,6 @@ templ blockItemLook(cc *campaigns.CampaignContext, entity *Entity, csrfToken str
 		data-look-endpoint={ fmt.Sprintf("/campaigns/%s/armory/items/%s/look", cc.Campaign.ID, entity.ID) }
 		data-entity-id={ entity.ID }
 		data-entity-search-endpoint={ fmt.Sprintf("/campaigns/%s/entities/search", cc.Campaign.ID) }
-		data-campaign-url={ fmt.Sprintf("/campaigns/%s", cc.Campaign.ID) }
 		data-item-name={ entity.Name }
 		data-item-type={ itemLookType(entity) }
 		if entity.ImagePath != nil && *entity.ImagePath != "" {

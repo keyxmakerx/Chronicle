@@ -321,7 +321,7 @@
           var b = e.target.closest('button[data-id]'); if (!b) return;
           var p = b._page;
           if (!saved) saved = { look: '', tint: '', sound: '', words: '' };
-          saved.madeFrom = p.id; source = { id: p.id, name: p.name, look: null };
+          saved.madeFrom = p.id; source = { id: p.id, name: p.name, url: p.url, look: null };
           input.value = ''; res.innerHTML = '';
           paintPanel(); show(); save();
         });
@@ -338,7 +338,11 @@
           box.textContent = 'Nothing. Pick the page it was made from, such as a Remnant, and it carries that page’s look.';
           return;
         }
-        var a = document.createElement('a'); a.href = ds.campaignUrl ? ds.campaignUrl + '/entities/' + encodeURIComponent(source.id) : '#'; a.textContent = source.name;
+        // The link comes from the server's answer, which builds it from the
+        // page id; a page id from the page itself never becomes a link.
+        var a = document.createElement(source.url && /^\/campaigns\/[\w-]+\/entities\/[\w-]+$/.test(source.url) ? 'a' : 'b');
+        if (a.tagName === 'A') a.href = source.url;
+        a.textContent = source.name;
         var say = document.createElement('span');
         say.textContent = !srcLook() ? 'has no look yet. Give it one on its own page.' : own() ? 'shows through on top of this look.' : 'gives this item its look.';
         box.appendChild(a); box.appendChild(say);
