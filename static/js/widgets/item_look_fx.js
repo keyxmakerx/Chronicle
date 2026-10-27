@@ -9,8 +9,15 @@
  * with Web Audio, so there are no sound files to ship, and play only after the
  * viewer turns them on.
  *
- * Everything above the Stage is pure (no DOM at load), so the library and
- * resolve() are unit-tested in Node. html[data-motion] "calm" quietens the
+ * Light behaves like light: each glow is a light that tints the room in its
+ * colour, lights the side of the target that faces it, and gives every
+ * object a contact shadow and a cast shadow that falls away from it. Effects
+ * can also sit on spots (the item, its trail, the point of impact, the
+ * target's body, the ground), the way games attach effects to sockets; the
+ * crafting bench uses the same engine with its own spots.
+ *
+ * Everything above the Stage is pure (no DOM at load), so the library,
+ * resolve(), the spot rules and the shadow maths are unit-tested in Node. html[data-motion] "calm" quietens the
  * idle trickle and drops travel; "off" draws a still picture until someone
  * presses a moment.
  */
@@ -30,13 +37,14 @@ function motionLevel() {
 }
 function calm() { return motionLevel() !== 'full'; }
 
-/* Soft round sprites, one per colour, so glows cost a drawImage. */
+/* Soft round sprites, one per colour, so glows cost a drawImage. The falloff
+   is long and gentle, so a glow reads as light, never as an outline. */
 var spriteCache = {};
 function sprite(hex) {
   if (spriteCache[hex]) return spriteCache[hex];
   var c = document.createElement('canvas'); c.width = c.height = 64;
   var g = c.getContext('2d'), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
-  gr.addColorStop(0, rgba(hex, 1)); gr.addColorStop(0.35, rgba(hex, 0.45)); gr.addColorStop(1, rgba(hex, 0));
+  [[0, 1], [0.12, 0.78], [0.28, 0.42], [0.45, 0.19], [0.62, 0.07], [0.8, 0.02], [1, 0]].forEach(function (s) { gr.addColorStop(s[0], rgba(hex, s[1])); });
   g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
   return (spriteCache[hex] = c);
 }
@@ -194,10 +202,10 @@ function drawThing(g, thing, look, t) {
 }
 function roundRect(g, x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
 
-/* The figure on the right: a training dummy for attacks, a friend for healing. */
-function drawTarget(g, kind, rim, rimA) {
+/* The figure on the right: a training dummy for attacks, a friend for healing.
+   Drawn unlit; litTarget adds the light and shade. */
+function drawTarget(g, kind) {
   g.save();
-  if (rim && rimA > 0.01) { g.shadowColor = rgba(rim, rimA); g.shadowBlur = 26 * rimA; }
   if (kind === 'ally') {
     g.fillStyle = '#17110d';
     g.beginPath(); g.arc(0, -96, 15, 0, TAU); g.fill();
@@ -213,6 +221,29 @@ function drawTarget(g, kind, rim, rimA) {
     g.strokeStyle = 'rgba(160,40,30,.55)'; g.lineWidth = 2; g.beginPath(); g.arc(0, -42, 8, 0, TAU); g.stroke();
   }
   g.restore();
+}
+
+/* ---------- Shadows ---------- */
+/* castShadow says where an object at ground x ox, w wide, throws its shadow
+   from one light: away from the light, longer for a brighter light, fainter
+   for a farther one. Null when the light is too weak to cast one. Pure. */
+function castShadow(ox, w, light) {
+  var dx = ox - light.x, dist = Math.max(80, Math.abs(dx)), dir = dx === 0 ? 1 : (dx > 0 ? 1 : -1);
+  var str = clamp(light.k * 160 / dist, 0, 0.6); if (str < 0.02) return null;
+  var len = w * (0.6 + 1.6 * clamp(light.k, 0, 1));
+  return { cx: ox + dir * len * 0.55, len: len, alpha: 0.38 * str };
+}
+/* A dark contact patch where the object meets the ground (ambient
+   occlusion), a soft falloff around it, and one cast shadow per light. */
+function shadowUnder(g, ox, oy, w, h, lights) {
+  g.fillStyle = 'rgba(0,0,0,.55)'; g.beginPath(); g.ellipse(ox, oy, w * 0.55, h * 0.7, 0, 0, TAU); g.fill();
+  var ao = g.createRadialGradient(ox, oy, 0, ox, oy, w * 1.25); ao.addColorStop(0, 'rgba(0,0,0,.42)'); ao.addColorStop(1, 'rgba(0,0,0,0)');
+  g.save(); g.translate(ox, oy); g.scale(1, h / w * 1.4); g.translate(-ox, -oy); g.fillStyle = ao; g.beginPath(); g.arc(ox, oy, w * 1.25, 0, TAU); g.fill(); g.restore();
+  (lights || []).forEach(function (li) {
+    var s = castShadow(ox, w, li); if (!s) return;
+    var cs = g.createRadialGradient(s.cx, oy, 0, s.cx, oy, s.len); cs.addColorStop(0, 'rgba(0,0,0,' + s.alpha.toFixed(3) + ')'); cs.addColorStop(1, 'rgba(0,0,0,0)');
+    g.save(); g.translate(s.cx, oy); g.scale(1, h / s.len * 1.1); g.translate(-s.cx, -oy); g.fillStyle = cs; g.beginPath(); g.arc(s.cx, oy, s.len, 0, TAU); g.fill(); g.restore();
+  });
 }
 
 /* ---------- Stage ---------- */
@@ -331,32 +362,41 @@ Stage.prototype.frame = function (dt) {
   if (this.mode === 'made') { flash = Math.exp(-this.mt * 3) * 1.2 * Math.max(light, 0.6); }
   var at = (this.mode === 'use' && this.mt >= tm.impact) ? Tg : pose;
   g.globalCompositeOperation = 'lighter';
-  var rl = g.createRadialGradient(pose.x, pose.y, 10, pose.x, pose.y, 340); rl.addColorStop(0, rgba(lc, base * 0.55)); rl.addColorStop(1, rgba(lc, 0));
+  var rl = g.createRadialGradient(pose.x, pose.y, 10, pose.x, pose.y, 340); rl.addColorStop(0, rgba(lc, base * 0.4)); rl.addColorStop(1, rgba(lc, 0));
   g.fillStyle = rl; g.fillRect(0, 0, 960, 540);
-  if (flash > 0.01) { var fl = g.createRadialGradient(at.x, at.y - 30, 10, at.x, at.y - 30, 520); fl.addColorStop(0, rgba(L.color2 || lc, flash * 0.7)); fl.addColorStop(0.4, rgba(lc, flash * 0.25)); fl.addColorStop(1, rgba(lc, 0)); g.fillStyle = fl; g.fillRect(0, 0, 960, 540); }
+  if (flash > 0.01) { var fl = g.createRadialGradient(at.x, at.y - 30, 10, at.x, at.y - 30, 520); fl.addColorStop(0, rgba(L.color2 || lc, flash * 0.42)); fl.addColorStop(0.4, rgba(lc, flash * 0.25)); fl.addColorStop(1, rgba(lc, 0)); g.fillStyle = fl; g.fillRect(0, 0, 960, 540); }
   g.globalCompositeOperation = 'source-over';
 
-  /* Shadows on the ledge. */
-  g.fillStyle = 'rgba(0,0,0,.45)'; g.beginPath(); g.ellipse(A.x, 392, 58, 8, 0, 0, TAU); g.fill();
-  g.beginPath(); g.ellipse(Tg.x, Tg.y + 88, 66, 10, 0, 0, TAU); g.fill();
+  /* Two lights, the item's own glow and the flash where the effect lands.
+     They reach the room's objects in their own colours, and every object
+     gets a contact shadow plus a cast shadow away from each light. */
+  var lights = [{ x: pose.x, y: pose.y, c: lc, k: base * 1.6 }];
+  if (flash > 0.01) lights.push({ x: at.x, y: at.y - 30, c: L.color2 || lc, k: flash });
+  this.lightRoom(lights);
+  shadowUnder(g, A.x, 392, 58, 8, lights);
+  shadowUnder(g, Tg.x, Tg.y + 88, 66, 10, lights);
 
-  /* Target, rim-lit by the effect when it lands. */
-  var rimA = 0;
-  if (this.mode === 'use' && this.mt >= tm.impact) rimA = Math.exp(-(this.mt - tm.impact) * 2.2);
   var shake = (!calm() && this.mode === 'use' && this.mt >= tm.impact && this.thing.target !== 'ally') ? Math.sin((this.mt - tm.impact) * 60) * 5 * Math.exp(-(this.mt - tm.impact) * 7) : 0;
-  g.save(); g.translate(Tg.x + shake, Tg.y); g.scale(1.3, 1.3); drawTarget(g, this.thing.target, lc, rimA); g.restore();
+  this.litTarget(g, Tg.x + shake, Tg.y, lights);
   g.fillStyle = 'rgba(255,240,220,.38)'; g.font = '500 12px Inter, system-ui, sans-serif'; g.textAlign = 'center';
   g.fillText(this.thing.target === 'ally' ? 'An ally' : 'Training dummy', Tg.x, Tg.y + 112);
 
   /* The thing, with its glow behind it. */
   g.save(); g.translate(pose.x, pose.y); g.rotate(pose.rot + (pose.spin ? pose.spin * Math.sin(this.t * 6) * 0.15 : 0)); g.scale(pose.s * 1.45, pose.s * 1.45);
   if (pose.alpha != null) g.globalAlpha = pose.alpha;
-  g.globalCompositeOperation = 'lighter'; g.globalAlpha = (pose.alpha == null ? 1 : pose.alpha) * clamp(base * 1.6 + flash * 0.4, 0, 1); g.drawImage(sprite(lc), -70, -80, 140, 140); g.globalCompositeOperation = 'source-over';
-  g.globalAlpha = pose.alpha == null ? 1 : pose.alpha;
+  /* A wide faint glow and a small warm core, rather than one bright disc. */
+  var pa = pose.alpha == null ? 1 : pose.alpha;
+  g.globalCompositeOperation = 'lighter';
+  g.globalAlpha = pa * clamp(base * 0.9 + flash * 0.25, 0, 0.55); g.drawImage(sprite(lc), -120, -130, 240, 240);
+  g.globalAlpha = pa * clamp(base * 0.7 + flash * 0.2, 0, 0.4); g.drawImage(sprite(mix(lc, '#ffffff', 0.25)), -48, -58, 96, 96);
+  g.globalCompositeOperation = 'source-over';
+  g.globalAlpha = pa;
   drawThing(g, this.thing, L, this.t); g.restore(); g.globalAlpha = 1;
 
   /* Emission: idle trickle, trails while moving, bursts on cue. */
   var self = this, still = calm() ? 0.35 : 1;
+  if (L.spots) this.spotFrame(dt, pose, Tg, tm, A, still);
+  else {
   layers.forEach(function (ly, i) {
     var rate = 9 * ly.amount * still * (self.mode === 'use' ? 0.6 : 1), key = 'e' + i;
     self.emitAcc[key] = (self.emitAcc[key] || 0) + rate * dt;
@@ -380,9 +420,16 @@ Stage.prototype.frame = function (dt) {
     fire('name', 0.35, function () { self.words.push({ text: self.thing.name, x: A.x, y: A.y - 140, age: 0, c: '#f6ead2', big: true }); });
     if (this.mt > 2.2) this.mode = 'idle';
   }
+  }
 
-  /* Rings, particles, words. */
-  this.rings = this.rings.filter(function (r) { r.age += dt; if (r.age < 0) return true; var k = r.age / 0.7; if (k > 1) return false; g.globalCompositeOperation = 'lighter'; g.strokeStyle = rgba(r.c, (1 - k) * 0.7); g.lineWidth = 3 * (1 - k) + 0.5; g.beginPath(); g.ellipse(r.x, r.y, 20 + 150 * ease(k), (20 + 150 * ease(k)) * 0.55, 0, 0, TAU); g.stroke(); g.globalCompositeOperation = 'source-over'; return true; });
+  /* Rings (a soft band of light spreading over the ground), particles, words. */
+  this.rings = this.rings.filter(function (r) {
+    r.age += dt; if (r.age < 0) return true; var k = r.age / 0.7; if (k > 1) return false;
+    var rr = 20 + 150 * ease(k), band = g.createRadialGradient(0, 0, rr * 0.3, 0, 0, rr);
+    band.addColorStop(0, rgba(r.c, 0)); band.addColorStop(0.6, rgba(r.c, (1 - k) * 0.06)); band.addColorStop(0.82, rgba(r.c, (1 - k) * 0.13)); band.addColorStop(1, rgba(r.c, 0));
+    g.globalCompositeOperation = 'lighter'; g.save(); g.translate(r.x, r.y); g.scale(1, 0.55); g.fillStyle = band; g.beginPath(); g.arc(0, 0, rr, 0, TAU); g.fill(); g.restore();
+    g.globalCompositeOperation = 'source-over'; return true;
+  });
   var ps = this.parts, keep = [];
   for (var i = 0; i < ps.length; i++) {
     var p = ps[i]; p.age += dt; if (p.age >= p.life) continue;
@@ -397,6 +444,82 @@ Stage.prototype.frame = function (dt) {
     g.globalAlpha = a; g.font = (w.big ? '28px' : '30px') + ' Georgia, "Times New Roman", serif'; g.textAlign = 'center'; g.shadowColor = 'rgba(0,0,0,.9)'; g.shadowBlur = 10; g.fillStyle = 'rgba(0,0,0,.001)'; g.fillText(w.text, w.x, w.y - 26 * ease(k)); g.shadowColor = rgba(w.c, 0.95); g.shadowBlur = 18; g.fillStyle = mix(w.c, '#ffffff', 0.45);
     g.fillText(w.text, w.x, w.y - 26 * ease(k)); g.shadowBlur = 0; g.globalAlpha = 1; return true; });
   if (this.onTick) this.onTick(this);
+};
+
+/* Light landing on the room: the backdrop, tinted by the light's colour,
+   added back inside the light's reach, so the shelf and ledge pick up the
+   colour of whatever is glowing near them. */
+Stage.prototype.lightRoom = function (lights) {
+  var bg = this.backdrop(), W = bg.width, H = bg.height, sc = this.scale, g = this.g;
+  if (!this.litC || this.litC.width !== W || this.litC.height !== H) { this.litC = document.createElement('canvas'); this.litC.width = W; this.litC.height = H; }
+  var lg = this.litC.getContext('2d'), litC = this.litC;
+  g.save(); g.setTransform(1, 0, 0, 1, 0, 0);
+  lights.forEach(function (li) {
+    var k = clamp(li.k, 0, 1.2); if (k < 0.03) return;
+    lg.globalCompositeOperation = 'copy'; lg.drawImage(bg, 0, 0);
+    lg.globalCompositeOperation = 'multiply'; lg.fillStyle = mix(li.c, '#ffffff', 0.35); lg.fillRect(0, 0, W, H);
+    lg.globalCompositeOperation = 'destination-in';
+    var m = lg.createRadialGradient(li.x * sc, li.y * sc, 0, li.x * sc, li.y * sc, 380 * sc); m.addColorStop(0, 'rgba(0,0,0,1)'); m.addColorStop(0.35, 'rgba(0,0,0,.55)'); m.addColorStop(1, 'rgba(0,0,0,0)');
+    lg.fillStyle = m; lg.fillRect(0, 0, W, H);
+    g.globalCompositeOperation = 'lighter'; g.globalAlpha = clamp(k * 0.85, 0, 1); g.drawImage(litC, 0, 0);
+  });
+  g.restore(); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+};
+/* The target on its own layer, so light and shade follow its silhouette:
+   lit on the side facing each light, shaded on the far side. */
+Stage.prototype.litTarget = function (g, x, y, lights) {
+  var S = 300, sc = this.scale;
+  if (!this.tgtC || this.tgtC.width !== Math.round(S * sc)) { this.tgtC = document.createElement('canvas'); this.tgtC.width = this.tgtC.height = Math.round(S * sc); }
+  var c = this.tgtC, t = c.getContext('2d');
+  t.setTransform(1, 0, 0, 1, 0, 0); t.globalCompositeOperation = 'source-over'; t.clearRect(0, 0, c.width, c.height);
+  t.setTransform(sc, 0, 0, sc, 0, 0); t.save(); t.translate(S / 2, S * 0.62); t.scale(1.3, 1.3); drawTarget(t, this.thing.target); t.restore();
+  t.globalCompositeOperation = 'source-atop';
+  var ox = x - S / 2, oy = y - S * 0.62;
+  lights.forEach(function (li) {
+    var k = clamp(li.k, 0, 1.2); if (k < 0.02) return;
+    var lx = li.x - ox, ly = li.y - oy, gr = t.createRadialGradient(lx, ly, 0, lx, ly, 260 + 120 * k);
+    gr.addColorStop(0, rgba(mix(li.c, '#ffffff', 0.3), 0.75 * k)); gr.addColorStop(0.45, rgba(li.c, 0.35 * k)); gr.addColorStop(1, rgba(li.c, 0));
+    t.fillStyle = gr; t.fillRect(0, 0, S, S);
+  });
+  var main = lights.reduce(function (a, b) { return b.k > a.k ? b : a; }), dir = main.x < x ? 1 : -1;
+  var sh = t.createLinearGradient(S / 2 - dir * 40, 0, S / 2 + dir * 60, 0); sh.addColorStop(0, 'rgba(0,0,0,0)'); sh.addColorStop(1, 'rgba(0,0,0,' + (0.18 + 0.25 * clamp(main.k, 0, 1)).toFixed(3) + ')');
+  t.fillStyle = sh; t.fillRect(0, 0, S, S);
+  g.drawImage(c, ox, oy, S, S);
+};
+/* Effects placed on spots (look.spots, from spotLayers): the item itself,
+   the trail on the way, the point of impact, the target's body afterwards
+   and the ground under it. Each spot plays at its own moment. */
+Stage.prototype.spotFrame = function (dt, pose, Tg, tm, A, still) {
+  var S = this.look.spots, L = this.look, self = this, use = this.mode === 'use', u = this.mt, g = this.g;
+  function emit(key, ly, x, y, rate, sx, sy) { self.emitAcc[key] = (self.emitAcc[key] || 0) + rate * dt; while (self.emitAcc[key] >= 1) { self.emitAcc[key] -= 1; self.spawn(ly, x + rand(-sx, sx), y + rand(-sy, sy), 1); } }
+  if (S.item) emit('item', S.item, pose.x, pose.y - 10, 9 * S.item.amount * still * (use ? 0.6 : 1), 2, 2);
+  var moving = use && u >= tm.motion && u < tm.impact + 0.04, tp = pose.proj || { x: pose.x, y: pose.y - 20 };
+  if (moving && S.trail) {
+    if (pose.pour) { var ang = pose.rot - Math.PI / 2, mx = pose.x + Math.cos(ang) * 40, my = pose.y + Math.sin(ang) * 40; this.spawn(S.trail, mx + (Tg.x - mx) * Math.random(), my + (Tg.y - 60 - my) * Math.random(), Math.ceil(2 * S.trail.amount)); }
+    else this.spawn(S.trail, tp.x, tp.y, Math.ceil(3 * S.trail.amount));
+  }
+  if (pose.proj) {
+    var pc = S.trail || S.impact || S.item || { c: '#e8dcc0' };
+    g.globalCompositeOperation = 'lighter'; g.drawImage(sprite(pc.c2 || pc.c), pose.proj.x - 22, pose.proj.y - 22, 44, 44); g.drawImage(sprite(pc.c), pose.proj.x - 40, pose.proj.y - 40, 80, 80); g.globalCompositeOperation = 'source-over';
+  }
+  var fire = function (name, at, fn) { if (self.fired[name] || self.mt < at) return; self.fired[name] = true; fn(); };
+  var gy = Tg.y + 86;
+  if (use) {
+    fire('impact', tm.impact, function () {
+      if (S.impact) { self.spawn(S.impact, Tg.x, Tg.y - 62, Math.round(34 * S.impact.amount), true); self.rings.push({ x: Tg.x, y: Tg.y - 62, age: 0, c: S.impact.c }); }
+      if (S.ground) { self.spawn(S.ground, Tg.x, gy, Math.round(20 * S.ground.amount), 0.7); self.rings.push({ x: Tg.x, y: gy, age: 0.05, c: S.ground.c }); }
+      var d = 0; SPOTS.forEach(function (k) { if (S[k] && S[k].sound && S[k].sound !== 'none') { Sound.play(S[k].sound, S[k].pitch, d); d += 0.07; } });
+    });
+    if (S.body && u >= tm.impact && u < tm.impact + 1.5) emit('body', S.body, Tg.x, Tg.y - 40, 28 * S.body.amount * still, 26, 52);
+    if (S.ground && u >= tm.impact && u < tm.impact + 1.3) emit('ground', S.ground, Tg.x, gy - 4, 22 * S.ground.amount * still, 70, 5);
+    fire('words', tm.words, function () { if (L.words) self.words.push({ text: L.words, x: Tg.x + 110, y: Tg.y - 118, age: 0, c: (S.impact || S.item || { c: '#f6ead2' }).c }); });
+    if (u > tm.end + (S.body ? 0.4 : 0)) this.mode = 'idle';
+  } else if (this.mode === 'made') {
+    var m = S.item || S.impact;
+    fire('burst', 0, function () { if (m) { self.spawn(m, A.x, A.y - 10, Math.round(46 * Math.max(m.amount, 0.5)), 1.3); self.rings.push({ x: A.x, y: A.y - 10, age: 0, c: m.c }); Sound.play(m.sound, m.pitch, 0); } Sound.play('bell', 7, 0.18); });
+    fire('name', 0.35, function () { self.words.push({ text: self.thing.name, x: A.x, y: A.y - 140, age: 0, c: '#f6ead2', big: true }); });
+    if (u > 2.2) this.mode = 'idle';
+  }
 };
 
 /* Small live tiles for galleries: the motif alone, idling in its own colour. */
@@ -418,7 +541,6 @@ Mini.prototype.frame = function (dt) {
   this.parts = keep.slice(-160); g.globalCompositeOperation = 'source-over';
 };
 
-/* One clock for every visible stage and tile; hidden ones sleep. */
 /* One clock for every visible stage and tile; hidden ones sleep, and the
    clock stops when nothing is left. With motion off an idle stage is drawn
    once and then left still. */
@@ -464,6 +586,28 @@ function resolve(saved) {
   return L;
 }
 
+/* Spots an effect can be placed on. The item stage uses SPOTS; the crafting
+   bench uses BENCH_SPOTS (the tool, its trail, where it touches the work,
+   the work itself and the bench top). */
+var SPOTS = ['item', 'trail', 'impact', 'body', 'ground'];
+var BENCH_SPOTS = ['tool', 'trail', 'contact', 'work', 'bench'];
+
+/* spotLayers turns saved placements ({spot: {look, tint}}) into the layers
+   the stage draws on each spot. Only spots in the given list and looks in
+   the gallery survive, so saved data can never name anything else; a look
+   with no particles still counts, for its sound and light. Pure. */
+function spotLayers(saved, spots) {
+  var out = {}, n = 0, list = spots || SPOTS;
+  if (!saved || typeof saved !== 'object') return null;
+  list.forEach(function (k) {
+    if (!Object.prototype.hasOwnProperty.call(saved, k)) return;
+    var L = resolve(saved[k]); if (!L) return;
+    out[k] = { motif: L.motif, c: L.color, c2: L.color2, amount: L.amount == null ? 1 : L.amount, sound: L.sound, pitch: L.pitch };
+    n++;
+  });
+  return n ? out : null;
+}
+
 /* kindFor picks how the stage draws and moves an item from its type text:
    blades lunge, flasks pour onto an ally, rings and charms throw, anything
    else shows the item's own picture or a sigil. Pure. */
@@ -475,5 +619,7 @@ function kindFor(typeText, hasImage) {
   return hasImage ? 'picture' : 'sigil';
 }
 
-window.ItemLookFX = { Stage: Stage, Mini: Mini, Sound: Sound, LOOKS: LOOKS, TINTS: TINTS, SOUNDS: SOUNDS, SOUND_NAMES: SOUND_NAMES, MOTIF_NAMES: MOTIF_NAMES, resolve: resolve, kindFor: kindFor, mix: mix, rgba: rgba };
+window.ItemLookFX = { Stage: Stage, Mini: Mini, Sound: Sound, LOOKS: LOOKS, TINTS: TINTS, SOUNDS: SOUNDS, SOUND_NAMES: SOUND_NAMES, MOTIF_NAMES: MOTIF_NAMES, resolve: resolve, kindFor: kindFor, mix: mix, rgba: rgba,
+  SPOTS: SPOTS, BENCH_SPOTS: BENCH_SPOTS, spotLayers: spotLayers, castShadow: castShadow, shadowUnder: shadowUnder,
+  MOTIFS: MOTIFS, sprite: sprite, drawParticle: drawParticle };
 })();

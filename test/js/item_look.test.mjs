@@ -76,3 +76,36 @@ test('kindFor reads the item type', () => {
     ['Ring', false, 'ring'], ['amulet', false, 'ring'], ['Reagent', true, 'picture'], ['Reagent', false, 'sigil'], ['', false, 'sigil'], [undefined, true, 'picture']];
   for (const [type, img, want] of cases) assert.equal(FX.kindFor(type, img), want, `${type} → ${want}`);
 });
+
+test('spotLayers keeps only known spots and gallery looks', () => {
+  const S = FX.spotLayers({ impact: { look: 'ember' }, trail: { look: 'frost', tint: '#a99bff' }, hand: { look: 'ember' }, ground: { look: 'fireball' } });
+  assert.deepEqual(Object.keys(S).sort(), ['impact', 'trail']);
+  assert.equal(S.impact.motif, 'embers');
+  assert.equal(S.impact.sound, 'crackle');
+  assert.equal(S.trail.c, '#a99bff');
+  assert.equal(FX.spotLayers({ __proto__: { item: { look: 'ember' } } }), null);
+  assert.equal(FX.spotLayers({ hand: { look: 'ember' } }), null);
+  assert.equal(FX.spotLayers(null), null);
+  assert.equal(FX.spotLayers('ember'), null);
+});
+test('the bench has its own spots', () => {
+  assert.deepEqual([...FX.BENCH_SPOTS], ['tool', 'trail', 'contact', 'work', 'bench']);
+  const S = FX.spotLayers({ contact: { look: 'storm' }, impact: { look: 'ember' } }, FX.BENCH_SPOTS);
+  assert.deepEqual(Object.keys(S), ['contact']);
+});
+test('a look with no particles still fills its spot, for its light and sound', () => {
+  const S = FX.spotLayers({ item: { look: 'quiet', sound: 'bell' } });
+  assert.equal(S.item.motif, 'none');
+  assert.equal(S.item.sound, 'bell');
+});
+test('cast shadows fall away from the light, longer when it is brighter', () => {
+  const right = FX.castShadow(500, 60, { x: 300, k: 1 });
+  const left = FX.castShadow(500, 60, { x: 700, k: 1 });
+  assert.ok(right.cx > 500, 'light on the left throws the shadow right');
+  assert.ok(left.cx < 500, 'light on the right throws the shadow left');
+  const dim = FX.castShadow(500, 60, { x: 300, k: 0.3 });
+  assert.ok(dim.len < right.len);
+  const far = FX.castShadow(500, 60, { x: -1500, k: 1 });
+  assert.ok(far.alpha < right.alpha, 'a farther light casts a fainter shadow');
+  assert.equal(FX.castShadow(500, 60, { x: 300, k: 0 }), null);
+});
