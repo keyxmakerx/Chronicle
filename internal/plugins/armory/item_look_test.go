@@ -93,6 +93,16 @@ func (f *fakeLookRepo) Delete(_ context.Context, _, id string) error {
 	delete(f.looks, id)
 	return nil
 }
+func (f *fakeLookRepo) List(_ context.Context, _ string, limit int) (map[string]json.RawMessage, bool, error) {
+	out := map[string]json.RawMessage{}
+	for k, v := range f.looks {
+		if len(out) == limit {
+			return out, true, nil
+		}
+		out[k] = v
+	}
+	return out, false, nil
+}
 
 // fakePages knows each entity's campaign and name.
 type fakePages map[string][2]string
@@ -241,5 +251,67 @@ func TestItemLookService_SaveLook(t *testing.T) {
 	}
 	if repo.upserts != 2 {
 		t.Fatalf("a refused save wrote: upserts = %d", repo.upserts)
+	}
+}
+
+func TestItemLookService_ListLooks(t *testing.T) {
+	repo := newLookRepo(map[string]string{
+		"sword": `{"look":"","madeFrom":"adder","words":"6 fire"}`,
+		"ring":  `{"look":"frost"}`,
+		"adder": `{"look":"glass","madeFrom":"stag"}`,
+		"ghost": `{"look":"ember"}`,
+	})
+	cases := []struct {
+		name string
+		role int
+		vis  EntityVisibilityFilter
+		want string // name<made from> per page, in order; ghost has no page
+	}{
+		{"owner sees every page and its source", permissions.RoleOwner, nil, "Glass adder<Ashen stag>|Ring|Sword<Glass adder>"},
+		{"player sees only visible pages, and no hidden source", permissions.RolePlayer, &fakeRoomVis{viewable: map[string]bool{"sword": true, "ring": true}}, "Ring|Sword"},
+		{"no visibility filter fails closed", permissions.RolePlayer, nil, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, more, err := NewItemLookService(repo, lookPages, tc.vis).ListLooks(context.Background(), "camp-1", tc.role, "u1")
+			if err != nil || more {
+				t.Fatalf("err %v more %v", err, more)
+			}
+			var parts []string
+			for _, p := range got {
+				if p.Look.MadeFrom != "" {
+					t.Fatalf("%s kept a page id in MadeFrom", p.Name)
+				}
+				s := p.Name
+				if p.MadeFromName != "" {
+					s += "<" + p.MadeFromName + ">"
+				}
+				parts = append(parts, s)
+			}
+			if g := strings.Join(parts, "|"); g != tc.want {
+				t.Fatalf("got %q, want %q", g, tc.want)
+			}
+		})
+	}
+}
+
+func TestItemLookService_CheckLook(t *testing.T) {
+	repo := newLookRepo(nil)
+	svc := NewItemLookService(repo, lookPages, nil)
+	ctx := context.Background()
+	if cleared, err := svc.CheckLook(ctx, "camp-1", "sword", []byte(`{"look":"ember","madeFrom":"adder"}`)); err != nil || cleared {
+		t.Fatalf("good look: cleared %v err %v", cleared, err)
+	}
+	if cleared, err := svc.CheckLook(ctx, "camp-1", "sword", []byte(`{"look":""}`)); err != nil || !cleared {
+		t.Fatalf("clearing: cleared %v err %v", cleared, err)
+	}
+	if _, err := svc.CheckLook(ctx, "camp-1", "sword", []byte(`{"look":"ember","madeFrom":"sword"}`)); !isStatus(err, http.StatusBadRequest) {
+		t.Fatalf("made from itself: err %v", err)
+	}
+	if _, err := svc.CheckLook(ctx, "camp-1", "ghost", []byte(`{"look":"ember"}`)); !isStatus(err, http.StatusNotFound) {
+		t.Fatalf("missing page: err %v", err)
+	}
+	if repo.upserts+repo.deletes != 0 {
+		t.Fatal("a check wrote")
 	}
 }

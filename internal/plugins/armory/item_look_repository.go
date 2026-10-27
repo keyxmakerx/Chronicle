@@ -17,6 +17,9 @@ type ItemLookRepository interface {
 	Upsert(ctx context.Context, campaignID, itemEntityID, userID string, look json.RawMessage) error
 	// Delete removes the item's look; removing a look that is not there is fine.
 	Delete(ctx context.Context, campaignID, itemEntityID string) error
+	// List returns up to limit looks in the campaign, keyed by page id, and
+	// whether more were left unread.
+	List(ctx context.Context, campaignID string, limit int) (map[string]json.RawMessage, bool, error)
 }
 
 type itemLookRepository struct {
@@ -68,4 +71,33 @@ func (r *itemLookRepository) Delete(ctx context.Context, campaignID, itemEntityI
 		return apperror.NewInternal(err)
 	}
 	return nil
+}
+
+func (r *itemLookRepository) List(ctx context.Context, campaignID string, limit int) (map[string]json.RawMessage, bool, error) {
+	// One row past the limit says whether the list was cut.
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT item_entity_id, look FROM armory_item_looks WHERE campaign_id = ?
+		 ORDER BY item_entity_id LIMIT ?`,
+		campaignID, limit+1)
+	if err != nil {
+		return nil, false, apperror.NewInternal(err)
+	}
+	defer rows.Close()
+	out := map[string]json.RawMessage{}
+	more := false
+	for rows.Next() {
+		var id, look string
+		if err := rows.Scan(&id, &look); err != nil {
+			return nil, false, apperror.NewInternal(err)
+		}
+		if len(out) == limit {
+			more = true
+			break
+		}
+		out[id] = json.RawMessage(look)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, false, apperror.NewInternal(err)
+	}
+	return out, more, nil
 }

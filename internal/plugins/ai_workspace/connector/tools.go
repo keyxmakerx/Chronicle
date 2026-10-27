@@ -96,6 +96,8 @@ var tools = []tool{
 	{Name: "inventory", Title: "What a character carries", Did: "Looked at what someone carries", What: "inventory",
 		Desc: "What a character carries.",
 		Args: []arg{{Key: "character", Desc: "The character's page name", Required: true}}},
+	{Name: "crafting", Title: "Crafting", Did: "Looked at crafting", What: "crafting",
+		Desc: "What crafting keeps in this campaign: each item's look (how it shows its magic when used, and the page it was made from, such as a Remnant). It also says which parts of crafting are not stored in Chronicle yet (recipes, materials, harvesting, benches), so don't guess at those."},
 	{Name: "my_notes", Title: "My notes", Did: "Listed your notes", What: "notes",
 		Desc: "The campaign owner's Journal notes, page jots and Player Notes on pages, and the ones other members shared with them, game night entries among them: titles, folders, pages, nights, who wrote each and who it is shared with. Use read_note for one note's text."},
 	{Name: "read_note", Title: "Read a note", Did: "Read a note", What: "note",

@@ -152,6 +152,9 @@ type Lookups struct {
 	// Scenes answers `what: scenes` from what Foundry last reported; nil
 	// says it can't be looked up.
 	Scenes FoundryScenesAPI
+	// Looks answers `what: crafting` and adds a page's look to the `page`
+	// answer; nil says looks can't be looked up.
+	Looks ItemLooksAPI
 }
 
 // LookupAnswer is one lookup's result: the chip shown on screen and the
@@ -167,7 +170,7 @@ type LookupAnswer struct {
 var lookupWhats = []struct{ what, keys, brief string }{
 	{"pages", "optional `type` (e.g. Character) and `tag` (a tag's name)", "page names with their tags, by type or tag"},
 	{"tags", "none", "every tag with how many pages carry it, colour and whether it is Directors only"},
-	{"page", "`name`", "one page: its text, tags and links, and for a Director its quest notice and notice boards"},
+	{"page", "`name`", "one page: its text, tags and links, its item look, and for a Director its quest notice and notice boards"},
 	{lookupWhatCalendar, "none", "the calendar itself: months, weekdays, seasons, moons with today's phase and the next new and full moon, eras, festivals, today's date, and its climate"},
 	{"weather-kinds", "none", "every climate, built-in weather label and sky effect the calendar can animate, and the owner's own kinds of weather"},
 	{"events", "`from` and `to` (e.g. `Deepwinter 1 1492`), or `year` and optional `month`", "calendar events in a date range"},
@@ -186,6 +189,7 @@ var lookupWhats = []struct{ what, keys, brief string }{
 	{"tests", "optional `page`", "the montages and other tests on pages, their results and the one recorded, which pick encounter versions (owner and co-DM only)"},
 	{"foundry-monsters", "optional `name` (part of a name), `level` and `role`", "the monsters Foundry can place: its world's actors and its compendiums', with level, role and EV (owner and co-DM only)"},
 	{"waiting", "none", "what is waiting for a Director's review: the changes this AI asked for (and how the owner answered the latest), entries players wrote and handed in, and players' stash moves and requests to buy (owner and co-DM only)"},
+	{"crafting", "none", "what crafting keeps: every item look (how an item shows its magic, and the page it was made from), and which parts of crafting are not stored yet"},
 	{"players", "none", "each player's character right now: level and class, meters, conditions, what they carry, and whether they are coming to the next game night"},
 	{lookupWhatFormat, "`block`, the kind to explain (e.g. `block: calendar`)", "how to write one kind of block: every key, the rules and an example"},
 }
@@ -318,6 +322,8 @@ func (run *lookupRun) one(what string, r Record) LookupAnswer {
 		ans, err = run.waiting()
 	case "players", "party":
 		ans, err = run.players()
+	case "crafting", "item-looks", "looks", "recipes":
+		ans, err = run.crafting()
 	case lookupWhatFormat, "formats", "how-to":
 		ans, err = run.format(firstNonEmpty(r.Str("block"), r.Name))
 	case "":
@@ -724,6 +730,7 @@ func (run *lookupRun) page(name string) (LookupAnswer, error) {
 	md += sheetFieldsText(e, types, run.director(), e.OwnerUserID != nil && *e.OwnerUserID == run.a.UserID)
 	md += pageMapText(run.ctx, run.l.PageMaps, run.campaignID, e, run.a)
 	md += run.pageQuestText(e)
+	md += run.pageLookText(e)
 	ans.Chip = "Page · " + e.Name
 	ans.Text = md
 	return ans, nil
