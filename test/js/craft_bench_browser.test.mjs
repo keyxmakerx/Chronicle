@@ -250,12 +250,14 @@ test('a finished recipe is sealed, and a blot stays with its recipe', { skip, ti
   assert.equal(sealed.wax, 1);
   const blots = await page.evaluate(async () => {
     const c = document.querySelector('[data-widget="craft_bench"]')._crb, wait = (ms) => new Promise((r) => setTimeout(r, ms)), n = () => document.querySelectorAll('.pj-blots .pj-blot').length;
+    // A page turn swaps the blots at its midpoint and a slow runner stretches the turn, so each count is waited for, not timed.
+    const settle = async (want) => { for (let w = 0; w < 100 && n() !== want; w++) await wait(200); await wait(300); return n(); };
     c.reset('heal'); await wait(200);
     c.skin.onFeedback('miss', 884, 400, c.state());
     const out = [n()];
-    c.reset('heal'); await wait(200); out.push(n());
-    c.reset('caustic'); await wait(1500); out.push(n());
-    c.reset('heal'); await wait(1500); out.push(n());
+    c.reset('heal'); out.push(await settle(1));
+    c.reset('caustic'); out.push(await settle(0));
+    c.reset('heal'); out.push(await settle(1));
     return out;
   });
   assert.deepEqual(blots, [1, 1, 0, 1], 'the blot stays on its own recipe’s page');
