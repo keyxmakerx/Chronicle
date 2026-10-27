@@ -205,7 +205,8 @@ test('a finished recipe is sealed, and a blot stays with its recipe', { skip, ti
       if (c.state().points < c.state().r.goal) continue;
       const said = document.querySelector('.cr-say').textContent;
       [...document.querySelectorAll('.cr-acts .cr-btn')].find((b) => /seal/i.test(b.textContent)).click();
-      await wait(3500);
+      // The press is a chain of tweens, which a slow runner stretches; wait for it to end, not for a fixed time.
+      for (let w = 0; w < 100 && !/^Finished/.test(document.querySelector('.cr-say').textContent); w++) await wait(200);
       return { said, after: document.querySelector('.cr-say').textContent, wax: document.querySelectorAll('.cr-book .pj-wax').length };
     }
     return null;
