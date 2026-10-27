@@ -434,7 +434,7 @@
         if (!res.ok) throw new Error(String(res.status));
       });
     }).catch(function () {
-      if (window.Chronicle && Chronicle.notify) Chronicle.notify(name + ' could not be moved. The list shows the saved order again.', 'error');
+      if (window.Chronicle && Chronicle.notify) Chronicle.notify('The move could not be saved. The list shows the saved order again.', 'error');
       refreshSidebarTree();
     });
     return true;

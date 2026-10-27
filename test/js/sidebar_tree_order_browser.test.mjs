@@ -156,7 +156,7 @@ test('the category picker saves its order; a failed move says so and redraws the
     await pg.evaluate(() => { window.failNext = true; });
     await pg.click('.sidebar-tree-node[data-entity-id="e3"] > .tree-step > [data-step="1"]', { force: true });
     await pg.waitForFunction(() => notes.length === 1);
-    assert.match(await pg.evaluate(() => notes[0]), /^error: Cass could not be moved/);
+    assert.match(await pg.evaluate(() => notes[0]), /^error: The move could not be saved/);
     await pg.waitForFunction(() => [...document.querySelectorAll('#sidebar-entity-tree > .sidebar-tree-node > .sidebar-tree-item .tree-lb')].map((l) => l.textContent).join() === 'Lore,Bryn,Cass,Ash');
   } finally { await browser.close(); }
 });
