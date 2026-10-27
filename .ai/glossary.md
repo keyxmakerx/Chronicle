@@ -1,12 +1,5 @@
 # Glossary
 
-<!-- ====================================================================== -->
-<!-- Category: STATIC                                                         -->
-<!-- Purpose: Defines TTRPG and Chronicle-specific terms so AI uses correct    -->
-<!--          domain language consistently.                                   -->
-<!-- Update: When new domain concepts are introduced.                         -->
-<!-- ====================================================================== -->
-
 ## TTRPG Terms
 
 - **TTRPG** -- Tabletop Role-Playing Game (D&D, Pathfinder, Draw Steel, etc.)
@@ -21,12 +14,6 @@
 - **Homebrew** -- Custom rules, items, or content created by the GM/players
 - **SRD (System Reference Document)** -- Freely available game rules (e.g., D&D 5e SRD)
 - **OGL (Open Game License)** -- License allowing use of game mechanics
-
-## Game Systems (Modules)
-
-- **D&D 5e** -- Dungeons & Dragons 5th Edition. Most popular TTRPG.
-- **Pathfinder** -- D&D derivative with more mechanical depth.
-- **Draw Steel** -- Matt Colville's tactical TTRPG. Modern design.
 
 ## Chronicle-Specific Terms
 

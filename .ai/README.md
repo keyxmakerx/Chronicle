@@ -1,50 +1,44 @@
 # AI Documentation Index
 
-Context for AI sessions working on Chronicle. Start at the root `CLAUDE.md`
-("Where things live" covers open work, GitHub Issues, and when to edit a doc);
-this page maps the rest of `.ai/`, present tense throughout.
-
-Read a plugin's or widget's own `.ai.md` when working on it (index below).
-Older cross-repo rulings live in the private Cordinator repo's `decisions/`,
-which code comments still cite; Cordinator is otherwise a frozen archive.
+Start at the root `CLAUDE.md` ("Where things live" covers open work and when to
+edit a doc). Read a plugin's or widget's own `.ai.md` when working on it.
+Older cross-repo rulings are in the frozen Cordinator repo's `decisions/`,
+which code comments still cite.
 
 ## Reference files
 
 | File | What it covers |
 |------|----------------|
-| `architecture.md` | System design, the three-tier extension model, request flow, dependency graph |
+| `architecture.md` | System design, three-tier extension model, request flow, dependency graph |
 | `ui-standard.md` | How Chronicle looks and behaves: what is on a page, opening and closing, motion, look, sign-off. Read before any UI change |
-| `conventions.md` | Code patterns with Go/Templ/SQL examples, CI guards, security rules, cross-plugin import discipline |
+| `conventions.md` | Code patterns, CI guards, security rules, cross-plugin import rules |
 | `decisions.md` | Architecture Decision Records. Append-only; code cites ADR numbers, so never renumber |
-| `tech-stack.md` | Technology versions, configs, and why each was chosen |
-| `data-model.md` | Schema overview: every live table and what it holds. The migrations are the source of truth |
-| `api-routes.md` | Where to find routes: `internal/wire/routes_snapshot.txt` lists every route (CI-guarded) and `docs/api/openapi.yaml` describes the sync API |
+| `tech-stack.md` | Technology versions and configs |
+| `data-model.md` | Schema overview; the migrations are the source of truth |
+| `api-routes.md` | Where routes are listed (`internal/wire/routes_snapshot.txt`, `docs/api/openapi.yaml`) |
 | `glossary.md` | TTRPG and Chronicle terminology |
-| `troubleshooting.md` | Non-obvious problems and their fixes, including the test-environment ones |
+| `troubleshooting.md` | Non-obvious problems and fixes, including test-environment ones |
 | `plugin-development.md` | Building WASM extensions |
-| `designs/` | `2026-09-13-media-renovation.md` is the media plan; its slices and open decisions are tracked in #733. The header and navigation plans are built and their issues closed (#739); the header's last parts are #881 and #959. |
+| `designs/` | `2026-09-13-media-renovation.md`: the media plan; slices and open decisions in #733 |
 
-`status.md` and `todo.md` are pointers to the issues now. Finished plans,
-audits and old designs were deleted; git history keeps them.
+`status.md` and `todo.md` are pointers to the issues.
 
 ## Per-plugin and per-widget docs
 
-Every directory below has an `.ai.md` describing its purpose, files, routes,
-business rules and footguns.
+Each has an `.ai.md` (purpose, files, routes, rules, footguns).
 
 - **Plugins** (`internal/plugins/<name>/`): addons, admin, ai_workspace (and
   ai_workspace/aiexport), armory, audit, auth, backup, bestiary, calendar,
-  campaigns, designlab, dmscreen, encounters, entities, fieldrules, foundry_vtt, homebrew, maps, media, npcs,
-  packages, pageblocks, quests, restore, rolltables, rumours, sessions, settings, smtp, syncapi,
-  systemstate, timeline, trackers, vault_import, widgetbindings.
-  calendar's V5 rebuild (#741) is landing in parts — its `.ai.md` says
-  which parts have shipped and which are still open.
+  campaigns, designlab, dmscreen, encounters, entities, fieldrules,
+  foundry_vtt, homebrew, maps, media, npcs, packages, pageblocks, pagetests,
+  quests, restore, rolltables, rumours, sessions, settings, smtp, syncapi,
+  systemstate, timeline, trackers, vault_import, widgetbindings. The
+  calendar's `.ai.md` says which V5 parts (#741) have shipped.
 - **Widgets** (`internal/widgets/<name>/`): attributes, editor, entity_notes,
   mentions, notes, posts, relations, sky, tags, title.
 - **Infrastructure:** `internal/database/`, `internal/extensions/`,
-  `internal/systems/` (game systems are external packages installed through
-  Admin → Packages, so there is one systems-infrastructure doc, not one per
-  system), `internal/websocket/`.
+  `internal/systems/` (one doc for all game systems, which are external
+  packages), `internal/websocket/`.
 - **Front-end scripts** (`static/js/`): `boot`, `hovercard`, `motion_rest`,
   `notifications`, `sheet_motion`, `shortcuts_help`, `sidebar_tag_filter`, `sidebar_tree`, and
   under `widgets/`: `dynamic_surface`, `entity_posts`, `entity_tooltip`,
@@ -63,7 +57,6 @@ business rules and footguns.
 
 ## Other documentation
 
-- `docs/`: operator-facing docs (deployment and upgrades, the restore drill,
-  admin diagnostics, the OpenAPI spec, package authoring).
+- `docs/`: operator docs (deployment, restore drill, diagnostics), the OpenAPI spec, package authoring.
 - `tools/`: the CI guard scripts.
 - Root `README.md`: the project overview for humans.
