@@ -589,9 +589,8 @@ func (h *Handler) CommitImport(c echo.Context) error {
 		if conflict == "" {
 			conflict = bulkConflict
 		}
-		// The review screen sends "update"; accept the legacy
-		// "overwrite" value from in-flight sessions. TODO: drop this
-		// alias once no in-flight sessions predate the rename.
+		// The review screen sends "update"; a review page opened before
+		// the option was renamed still sends "overwrite".
 		if conflict == "overwrite" {
 			conflict = "update"
 		}

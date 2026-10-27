@@ -29,7 +29,6 @@ const (
 	keyCampaignRole        ctxKey = "layout_campaign_role"
 	keyCSRFToken           ctxKey = "layout_csrf_token"
 	keyFlashSuccess        ctxKey = "layout_flash_success"
-	keyFlashError          ctxKey = "layout_flash_error"
 	keyActivePath          ctxKey = "layout_active_path"
 	keyEntityTypes         ctxKey = "layout_entity_types"
 	keyEntityCounts        ctxKey = "layout_entity_counts"
@@ -159,11 +158,6 @@ func SetFlashSuccess(ctx context.Context, msg string) context.Context {
 	return context.WithValue(ctx, keyFlashSuccess, msg)
 }
 
-// SetFlashError stores an error flash message for the current render.
-func SetFlashError(ctx context.Context, msg string) context.Context {
-	return context.WithValue(ctx, keyFlashError, msg)
-}
-
 // SetActivePath stores the current request path for nav highlighting.
 func SetActivePath(ctx context.Context, path string) context.Context {
 	return context.WithValue(ctx, keyActivePath, path)
@@ -257,12 +251,6 @@ func GetFlashSuccess(ctx context.Context) string {
 	return msg
 }
 
-// GetFlashError returns an error flash message, or "".
-func GetFlashError(ctx context.Context) string {
-	msg, _ := ctx.Value(keyFlashError).(string)
-	return msg
-}
-
 // GetActivePath returns the current request path for nav highlighting.
 func GetActivePath(ctx context.Context) string {
 	path, _ := ctx.Value(keyActivePath).(string)
@@ -333,56 +321,18 @@ func IsAddonEnabled(ctx context.Context, slug string) bool {
 	return addons[slug]
 }
 
-// --- Plugin health (for conditional widget rendering) ---
-//
-// Distinct from IsAddonEnabled: an addon can be turned ON in the campaign's
-// settings while its plugin failed to load its own schema migrations (a
-// degraded install, see database.PluginHealthRegistry) — its routes are
-// never registered, so an hx-get to one 404s. HTMX does not swap an error
-// response, so a block whose hx-get target route may not exist must check
-// this BEFORE emitting the hx-get wrapper, or it renders as a stuck spinner
-// forever, and any accompanying error response still pops a toast for every
-// viewer even though nothing is actually wrong for them.
-type ctxKeyHealthyPlugins struct{}
-
-// SetHealthyPlugins stores which plugin slugs have a healthy schema for the
-// current request. A plugin absent from the map is treated as healthy —
-// most plugins have no degraded-install concept worth checking, so callers
-// only need to populate the ones a template actually branches on.
-func SetHealthyPlugins(ctx context.Context, healthy map[string]bool) context.Context {
-	return context.WithValue(ctx, ctxKeyHealthyPlugins{}, healthy)
-}
-
-// IsPluginHealthy reports whether slug's plugin has a healthy schema, per
-// SetHealthyPlugins. Defaults to true when unset (nothing was ever recorded
-// for that slug, or the map wasn't set for this request) — a template
-// checking a plugin's health degrades to "assume healthy" the same way
-// IsAddonEnabled degrades to "assume disabled" for an unrecognized slug: the
-// safer default for what each check protects against.
-func IsPluginHealthy(ctx context.Context, slug string) bool {
-	healthy, ok := ctx.Value(ctxKeyHealthyPlugins{}).(map[string]bool)
-	if !ok {
-		return true
-	}
-	status, known := healthy[slug]
-	if !known {
-		return true
-	}
-	return status
-}
-
 // --- Upcoming-events availability (dashboard/category calendar cards) ---
 //
 // The campaign dashboard and entity-category dashboard each have an
 // "Upcoming Events" card that hx-gets the calendar plugin's own embed
-// route. Whether that route actually exists for this request depends on
-// two calendar-specific facts — the calendar addon enabled for the
-// campaign, and the calendar plugin's schema healthy (see IsPluginHealthy)
-// — that neither the campaigns nor the entities package may check by name:
+// route. That route exists only when the calendar addon is enabled for the
+// campaign and the calendar plugin's schema is healthy: a degraded plugin's
+// routes are never registered, and HTMX does not swap the 404, so the card
+// would spin forever. Neither the campaigns nor the entities package may check by name:
 // a literal calendar-plugin slug in either would cross plugin isolation
 // (T-B2), since neither owns nor may import the calendar plugin. internal/app
 // is allowed to name it (it wires every plugin), so it resolves both facts
-// into this one neutral flag, once, alongside SetHealthyPlugins.
+// into this one neutral flag, once.
 type ctxKeyUpcomingEventsAvailable struct{}
 
 // SetUpcomingEventsAvailable records whether a dashboard/category "Upcoming
@@ -1000,13 +950,4 @@ func GetAdminNavPins(ctx context.Context) []string {
 func GetDegradedPluginCount(ctx context.Context) int {
 	count, _ := ctx.Value(keyDegradedPluginCount).(int)
 	return count
-}
-
-// EscapeJSONString escapes a string for safe embedding inside a JSON
-// double-quoted value. Only handles the characters that could break
-// the JSON structure (backslash and double-quote).
-func EscapeJSONString(s string) string {
-	s = strings.ReplaceAll(s, `\`, `\\`)
-	s = strings.ReplaceAll(s, `"`, `\"`)
-	return s
 }

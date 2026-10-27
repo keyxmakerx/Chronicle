@@ -143,14 +143,6 @@ func SetGlobalEntityShowRendererRegistry(r *EntityShowRendererRegistry) {
 	globalEntityShowRendererRegistry.Store(r)
 }
 
-// GetGlobalEntityShowRendererRegistry returns the installed registry.
-// May be nil if SetGlobalEntityShowRendererRegistry hasn't been called
-// yet (only possible during boot, before user requests can reach
-// rendering code). All read-time callers must nil-check.
-func GetGlobalEntityShowRendererRegistry() *EntityShowRendererRegistry {
-	return globalEntityShowRendererRegistry.Load()
-}
-
 // MakeWidgetMountRenderer returns an EntityShowRenderer that emits a single
 // <div data-widget="…" data-entity-id="…" data-campaign-id="…"> element.
 // The standard boot.js auto-mounter (static/js/boot.js) picks the element

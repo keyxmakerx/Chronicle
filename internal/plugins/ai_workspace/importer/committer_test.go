@@ -317,7 +317,7 @@ func TestCommit_RenameWithCollisionLoop(t *testing.T) {
 // TestCommit_UpdatePreservesExistingNameAndID: update mode loads the
 // existing entity by slug and runs Update keeping the original name —
 // the operator decided to keep the existing entity, so existing.ID is
-// what gets touched. Also checks the "overwrite" backward-compat alias.
+// what gets touched.
 func TestCommit_UpdatePreservesExistingNameAndID(t *testing.T) {
 	f := &fakeCreator{
 		types: []entities.EntityType{{ID: 1, Name: "Character", Slug: "character", Enabled: true}},
@@ -329,8 +329,7 @@ func TestCommit_UpdatePreservesExistingNameAndID(t *testing.T) {
 	res, err := c.Commit(context.Background(), "camp-1", CommitInput{
 		OwnerID: "u-1",
 		Pages:   []ParsedPage{page("Lyra Vance", "character", "# Lyra\n\nNew body.")},
-		// "overwrite" form value still accepted as an alias for "update".
-		Decisions: []RowDecision{decision(true, "Lyra Vance", "character", "private", "overwrite")},
+		Decisions: []RowDecision{decision(true, "Lyra Vance", "character", "private", "update")},
 	})
 	if err != nil {
 		t.Fatalf("Commit: %v", err)

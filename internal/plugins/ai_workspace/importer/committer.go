@@ -113,7 +113,6 @@ type RowDecision struct {
 	// the action is "create" (or empty) AND the corresponding entity
 	// slug exists in the campaign. Ignored for action=update /
 	// action=delete (those actions encode operator intent directly).
-	// "overwrite" is accepted as a backward-compat alias for "update".
 	ConflictMode string
 
 	// Action is the operator-confirmed action verb for this row,
@@ -501,7 +500,7 @@ func (c *Committer) commitRow(
 			out.Status = StatusSkipped
 			out.Reason = "Skipped: name conflicts with " + strconv.Quote(existing.Name)
 			return out
-		case "update", "overwrite": // "overwrite" is a back-compat alias for "update"
+		case "update":
 			parent, _, reason := c.resolveParent(ctx, campaignID, page, made)
 			if reason != "" {
 				out.Status = StatusFailed

@@ -90,3 +90,9 @@ uploads/
 # Verified at the time of writing: nothing under data/ had ever been committed
 # on any branch (`git log --all -- data/` was empty). This keeps it that way.
 data/
+
+# --- Local tool output ---
+# Redis writes dump.rdb in its working directory, and it holds live sessions.
+# Playwright writes test-results/ beside the run.
+dump.rdb
+test-results/

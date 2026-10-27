@@ -352,7 +352,7 @@ templ bulkDefaultsBar(d ImportReviewData) {
 				<select name="bulk_default_conflict" class="input text-xs w-full" aria-label="Default action when a row's name conflicts with an existing entity">
 					<option value="rename" selected>Rename (suffix)</option>
 					<option value="skip">Skip</option>
-					<option value="overwrite">Overwrite existing</option>
+					<option value="update">Overwrite existing</option>
 				</select>
 			</label>
 		</div>
@@ -720,7 +720,7 @@ templ reviewRowFields(idx int, page importer.ParsedPage, cls importer.Classifica
 				>
 					<option value="rename" selected>Rename (suffix)</option>
 					<option value="skip">Skip</option>
-					<option value="overwrite">Overwrite</option>
+					<option value="update">Overwrite</option>
 				</select>
 				<span class="block text-[10px] text-fg-muted mt-0.5">
 					Exists as: { cls.ConflictEntity.Name }

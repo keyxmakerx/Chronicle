@@ -58,7 +58,7 @@ func charTypes() []entities.EntityType {
 // operator who leaves the dropdown alone has not consented to publish
 // anything.
 func TestCommitUpdate_AbsentFrontMatterVisibility_PreservesPrivacy(t *testing.T) {
-	for _, conflictMode := range []string{"update", "overwrite"} {
+	for _, conflictMode := range []string{"update"} {
 		t.Run(conflictMode, func(t *testing.T) {
 			f := &fakeCreator{types: charTypes(), existing: existingDMOnlyPage()}
 			// decision() carries "public" exactly as the review form would

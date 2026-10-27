@@ -5762,26 +5762,13 @@ func (a *App) RegisterRoutes() {
 				}
 			}
 
-			// Plugin health, for the same dashboard/category blocks that
-			// check IsAddonEnabled above: an addon can be turned on in
-			// settings while its plugin's own schema is degraded, in which
-			// case its routes (like calendar's) were never registered (see
-			// the calendar.PluginSlug health gate around RegisterRoutes
-			// below) and an hx-get to one would 404 forever with no swap.
-			// Only calendar is populated today; a block for another
-			// health-gated plugin can add its slug here when it needs the
-			// same guard.
+			// An addon can be on while its plugin's schema is degraded, in
+			// which case its routes were never registered (see the health
+			// gate around calendar's RegisterRoutes below). The "Upcoming
+			// Events" cards need both facts as one flag, and campaigns and
+			// entities may not name the calendar plugin (T-B2), so it is
+			// resolved here.
 			calendarHealthy := a.PluginHealth == nil || a.PluginHealth.IsHealthy(calendar.PluginSlug)
-			healthyPlugins := map[string]bool{
-				calendar.PluginSlug: calendarHealthy,
-			}
-			ctx = layouts.SetHealthyPlugins(ctx, healthyPlugins)
-
-			// The campaign/category "Upcoming Events" cards need both facts
-			// above (addon on AND plugin healthy) combined into one flag,
-			// but campaigns/entities may not name the calendar plugin
-			// themselves (plugin isolation, T-B2) to compute it — resolve it
-			// here, where calendar.PluginSlug is already in scope.
 			ctx = layouts.SetUpcomingEventsAvailable(ctx, enabledSlugs[calendar.PluginSlug] && calendarHealthy)
 
 			// The header's data-backed widgets (date, weather, moon, game

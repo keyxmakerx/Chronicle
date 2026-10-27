@@ -1076,7 +1076,7 @@ templ Topbar() {
 	</header>
 }
 
-// FlashMessages renders success/error flash messages if present in context.
+// FlashMessages renders the success flash message if present in context.
 // Messages auto-dismiss after 5 seconds via Alpine.js.
 templ FlashMessages() {
 	if msg := GetFlashSuccess(ctx); msg != "" {
@@ -1089,18 +1089,6 @@ templ FlashMessages() {
 		>
 			<span>{ msg }</span>
 			<button @click="show = false" class="text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-300 ml-4">&times;</button>
-		</div>
-	}
-	if msg := GetFlashError(ctx); msg != "" {
-		<div
-			x-data="{ show: true }"
-			x-show="show"
-			x-init="setTimeout(() => show = false, 8000)"
-			x-transition
-			class="mx-6 mt-4 px-4 py-3 rounded-md bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-400 text-sm flex items-center justify-between"
-		>
-			<span>{ msg }</span>
-			<button @click="show = false" class="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 ml-4">&times;</button>
 		</div>
 	}
 }
