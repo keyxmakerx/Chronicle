@@ -86,6 +86,8 @@ test('build mode opens the editor and a look redraws the room', { skip, timeout:
   // Picking a piece opens its card, and the card is hidden until then.
   assert.equal(await page.isVisible('.crb-pcard'), false);
   await page.click('[data-tab="pieces"]');
+  const tools = await page.$$eval('.crb-ptools .crb-prow > span:first-child', (els) => els.map((e) => e.textContent));
+  assert.deepEqual(tools.slice(0, 2), ['Mortar', 'Round flask'], 'tools are listed by name, not by id');
   await page.click('.crb-prow[data-id="cat"]');
   await page.waitForSelector('.crb-pcard:not([hidden])');
   assert.deepEqual(errors, []);
