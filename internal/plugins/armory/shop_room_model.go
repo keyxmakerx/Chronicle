@@ -18,8 +18,9 @@ type ShopRoomLayout struct {
 	Furniture   string `json:"furniture"`
 	Decorations string `json:"decorations"`
 	Palette     string `json:"palette"`
-	// Look is how the room is drawn: "lit" (the isometric room) or "paper" (a
-	// pop-up book). Empty, from layouts saved before there was a choice, is lit.
+	// Look is how the room is drawn: "lit" (the isometric room), "paper" (a
+	// pop-up book) or "counter" (standing at the counter, able to turn round to
+	// the shop floor). Empty, from layouts saved before there was a choice, is lit.
 	Look string `json:"look"`
 	// Mood themes the room's furniture and atmosphere. Empty, from layouts
 	// saved before moods existed, is no mood.

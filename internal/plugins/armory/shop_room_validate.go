@@ -44,7 +44,7 @@ var (
 	shopRoomFurnitures  = setOf("sparse", "normal", "packed")
 	shopRoomDecorations = setOf("none", "some", "lots")
 	shopRoomPalettes    = setOf("oak", "ember", "moss", "gilt", "slate", "dusk")
-	shopRoomLooks       = setOf("lit", "paper", "")
+	shopRoomLooks       = setOf("lit", "paper", "counter", "")
 	shopRoomMoods       = setOf("", "cozy", "eldritch", "candy", "haunted", "festive", "underwater", "fey", "desert", "dwarven")
 	shopRoomWeathers    = setOf("", "rain", "snow")
 	shopRoomTimes       = setOf("", "dawn", "dusk", "night")

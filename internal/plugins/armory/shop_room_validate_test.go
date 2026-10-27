@@ -190,6 +190,11 @@ func TestNormalizeShopRoomLayout_Accepts(t *testing.T) {
 				t.Errorf("look = %q, want paper", l.Look)
 			}
 		}},
+		{"counter look kept", mutate(func(m map[string]any) { m["look"] = "counter" }), func(t *testing.T, l ShopRoomLayout) {
+			if l.Look != "counter" {
+				t.Errorf("look = %q, want counter", l.Look)
+			}
+		}},
 		{"no look reads as the lit room", mutate(func(m map[string]any) { delete(m, "look") }), func(t *testing.T, l ShopRoomLayout) {
 			if l.Look != "" {
 				t.Errorf("look = %q, want empty", l.Look)
