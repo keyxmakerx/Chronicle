@@ -59,6 +59,8 @@ const pile = (p) => p.evaluate(() => Array.from(document.querySelectorAll('#srcb
 // Presses a piece by its data-k, the way a pointer would, wherever the camera has put it.
 const press = (p, k) => p.evaluate((k) => document.querySelector('.src-svg [data-k="' + k + '"]').dispatchEvent(new MouseEvent('click', { bubbles: true })), k);
 const settle = (p) => p.waitForTimeout(120);
+// Adding lands on the next animation frame, which a busy machine can hold back while a view bakes.
+const take = async (p, n) => { await p.click('.src-hint [data-act="take"]'); await p.waitForFunction((n) => document.querySelector('.shr-cnt').textContent === n, n); };
 
 test('the counter stands its goods on the shelves and shuts the finer ones in the case', { skip }, async (t) => {
   const p = await shop(t);
@@ -76,16 +78,15 @@ test('the counter stands its goods on the shelves and shuts the finer ones in th
 
 test('a good comes to the cloth and goes on the pile only when you say so', { skip }, async (t) => {
   const p = await shop(t);
-  await press(p, 'ware:11'); await settle(p);
-  assert.ok(await p.$('[data-k="held:11"]'), 'the potion is on the cloth');
+  await press(p, 'ware:11');
+  await p.waitForSelector('[data-k="held:11"]');
   assert.equal(await count(p), '', 'nothing in the basket yet');
-  await p.click('.src-hint [data-act="take"]'); await settle(p);
-  assert.equal(await count(p), '1');
+  await take(p, '1');
   assert.deepEqual(await pile(p), ['pile:11']);
   // Escape puts the next one back without buying it, and leaves the shop open.
   await press(p, 'ware:14'); await settle(p);
-  await p.keyboard.press('Escape'); await settle(p);
-  assert.equal(await p.$('[data-k^="held:"]'), null);
+  await p.waitForSelector('[data-k="held:14"]');
+  await p.keyboard.press('Escape'); await p.waitForSelector('[data-k^="held:"]', { state: 'detached' });
   assert.equal(await count(p), '1');
   assert.equal(await p.evaluate(() => document.querySelector('.shr-dlg').open), true);
   // A sold-out good cannot be fetched.
@@ -98,14 +99,12 @@ test('turning round shows the shop floor, where a good is held until you add it'
   await p.keyboard.press('ArrowLeft'); await p.waitForFunction(() => /shop floor/.test(document.querySelector('.src-svg').getAttribute('aria-label')));
   const floor = await p.evaluate(() => Array.from(document.querySelectorAll('#srcf-wares [data-k], #srcf-barrels [data-k^="ware:"]'), (e) => e.getAttribute('data-k')));
   assert.deepEqual(floor.sort(), ['ware:13', 'ware:15'], 'the tea in a barrel, the toolbox in the cabinet');
-  await press(p, 'ware:15'); await settle(p);
-  assert.ok(await p.$('[data-k="held:15"]'), 'picked up');
-  await p.keyboard.press('Escape'); await p.waitForTimeout(300);
-  assert.equal(await p.$('[data-k^="held:"]'), null, 'Escape puts it back');
+  await press(p, 'ware:15');
+  await p.waitForSelector('[data-k="held:15"]');
+  await p.keyboard.press('Escape'); await p.waitForSelector('[data-k^="held:"]', { state: 'detached' });
   assert.equal(await count(p), '');
   await press(p, 'ware:15'); await settle(p);
-  await p.click('.src-hint [data-act="take"]'); await settle(p);
-  assert.equal(await count(p), '1');
+  await take(p, '1');
   await p.click('.src-turn-right'); await p.waitForFunction(() => /seen from the counter/.test(document.querySelector('.src-svg').getAttribute('aria-label')));
   assert.deepEqual(await pile(p), ['pile:15'], 'the pile on the counter holds what you chose on the floor');
 });
@@ -116,15 +115,14 @@ test('the case opens from the counter and Escape closes it', { skip }, async (t)
   const inCase = await p.evaluate(() => Array.from(document.querySelectorAll('#srcc-wares [data-k]'), (e) => e.getAttribute('data-k')).sort());
   assert.deepEqual(inCase, ['ware:16', 'ware:17']);
   await press(p, 'ware:16'); await settle(p);
-  await p.click('.src-hint [data-act="take"]'); await settle(p);
-  assert.equal(await count(p), '1');
+  await take(p, '1');
   await p.keyboard.press('Escape'); await p.waitForFunction(() => /seen from the counter/.test(document.querySelector('.src-svg').getAttribute('aria-label')));
 });
 
 test('buying sends what is on the pile, and the pile becomes a parcel', { skip }, async (t) => {
   const p = await shop(t);
-  await press(p, 'ware:11'); await settle(p); await p.click('.src-hint [data-act="take"]'); await settle(p);
-  await press(p, 'ware:11'); await settle(p); await p.click('.src-hint [data-act="take"]'); await settle(p);
+  await press(p, 'ware:11'); await settle(p); await take(p, '1');
+  await press(p, 'ware:11'); await settle(p); await take(p, '2');
   await p.click('.shr-cart'); await p.click('[data-buy]');
   await p.waitForFunction(() => window.__posts.length === 1);
   assert.deepEqual(await p.evaluate(() => window.__posts[0]), { buyerEntityId: 'c1', items: [{ relationId: 11, quantity: 2 }] });
