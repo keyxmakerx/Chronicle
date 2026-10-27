@@ -200,6 +200,10 @@ test('a real calendar is read from the calendar API', { skip, timeout: 180000 },
   assert.match(out.tl, /THAW|Thaw/);
   assert.match(out.tl, /Tide/);
   assert.match(out.sentences, /Tide/, 'the sample rules are written in this calendar’s names');
+  // Today is Thaw 20: the repeating event is on the 22nd but skipped on the
+  // 29th, and the rolled event came up on the 25th.
+  const marks = await page.$$eval('.crr-tl-cell[data-d] span[title]', (els) => els.map((e) => [+e.parentElement.getAttribute('data-d'), e.title]));
+  assert.deepEqual(marks.filter((m) => /Net mending|Gull omen/.test(m[1])), [[2, 'Net mending'], [5, 'Gull omen: Storm gulls']]);
   // Both months the thirty days cross were asked for, and the rolled event's results.
   assert.ok(asked.some((a) => a.startsWith('/campaigns/c1/calendars/k1/events?year=7&month=3')));
   assert.ok(asked.includes('/campaigns/c1/calendars/k1/events/e2/roll?year=7'));
