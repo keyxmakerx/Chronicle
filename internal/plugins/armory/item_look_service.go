@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"net/url"
+	"sort"
+	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
@@ -46,7 +48,26 @@ type ItemLookService interface {
 	// names none, returning what the page now shows. Who may save is
 	// decided by the route (Owner).
 	SaveLook(ctx context.Context, campaignID, entityID, userID string, raw []byte) (*LookView, error)
+	// CheckLook runs SaveLook's checks without saving, so a change can be
+	// reviewed before it is made. cleared says raw would clear the look.
+	CheckLook(ctx context.Context, campaignID, entityID string, raw []byte) (cleared bool, err error)
+	// ListLooks returns the looks on pages the viewer can see, by page name,
+	// and whether the campaign has more than were read.
+	ListLooks(ctx context.Context, campaignID string, role int, userID string) ([]PageLook, bool, error)
 }
+
+// PageLook is one page's own look as ListLooks returns it. Look.MadeFrom is
+// always empty: MadeFromName names that page instead, or is "" when the
+// viewer cannot see it.
+type PageLook struct {
+	EntityID, Name string
+	Look           ItemLook
+	MadeFromName   string
+}
+
+// maxListedLooks bounds one ListLooks read; the caller is told when a
+// campaign has more.
+const maxListedLooks = 500
 
 type itemLookService struct {
 	repo       ItemLookRepository
@@ -158,34 +179,110 @@ func ownLook(raw json.RawMessage) json.RawMessage {
 	return out
 }
 
-func (s *itemLookService) SaveLook(ctx context.Context, campaignID, entityID, userID string, raw []byte) (*LookView, error) {
+// check validates raw for the page and returns its canonical JSON, or
+// cleared when it names no look.
+func (s *itemLookService) check(ctx context.Context, campaignID, entityID string, raw []byte) (json.RawMessage, bool, error) {
 	if err := s.requireEntity(ctx, campaignID, entityID); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	look, cleared, err := NormalizeItemLook(raw)
+	if err != nil || cleared {
+		return nil, cleared, err
+	}
+	var l ItemLook
+	if err := json.Unmarshal(look, &l); err != nil {
+		return nil, false, apperror.NewInternal(err)
+	}
+	if l.MadeFrom != "" {
+		if l.MadeFrom == entityID {
+			return nil, false, apperror.NewBadRequest("a page cannot be made from itself")
+		}
+		if _, ok, err := s.entities.EntityName(ctx, campaignID, l.MadeFrom); err != nil {
+			return nil, false, apperror.NewInternal(err)
+		} else if !ok {
+			return nil, false, apperror.NewBadRequest("unknown page")
+		}
+	}
+	return look, false, nil
+}
+
+func (s *itemLookService) CheckLook(ctx context.Context, campaignID, entityID string, raw []byte) (bool, error) {
+	_, cleared, err := s.check(ctx, campaignID, entityID, raw)
+	return cleared, err
+}
+
+func (s *itemLookService) SaveLook(ctx context.Context, campaignID, entityID, userID string, raw []byte) (*LookView, error) {
+	look, cleared, err := s.check(ctx, campaignID, entityID, raw)
 	if err != nil {
 		return nil, err
 	}
 	if cleared {
 		return &LookView{}, s.repo.Delete(ctx, campaignID, entityID)
 	}
-	var l ItemLook
-	if err := json.Unmarshal(look, &l); err != nil {
-		return nil, apperror.NewInternal(err)
-	}
-	if l.MadeFrom != "" {
-		if l.MadeFrom == entityID {
-			return nil, apperror.NewBadRequest("a page cannot be made from itself")
-		}
-		if _, ok, err := s.entities.EntityName(ctx, campaignID, l.MadeFrom); err != nil {
-			return nil, apperror.NewInternal(err)
-		} else if !ok {
-			return nil, apperror.NewBadRequest("unknown page")
-		}
-	}
 	if err := s.repo.Upsert(ctx, campaignID, entityID, userID, look); err != nil {
 		return nil, err
 	}
 	// Only the Owner saves, so the Owner's view is the right answer.
 	return s.view(ctx, campaignID, entityID, look, permissions.RoleOwner, userID)
+}
+
+func (s *itemLookService) ListLooks(ctx context.Context, campaignID string, role int, userID string) ([]PageLook, bool, error) {
+	stored, more, err := s.repo.List(ctx, campaignID, maxListedLooks)
+	if err != nil {
+		return nil, false, err
+	}
+	looks := make(map[string]ItemLook, len(stored))
+	ids := make([]string, 0, len(stored)*2)
+	for id, raw := range stored {
+		var l ItemLook
+		if json.Unmarshal(raw, &l) != nil {
+			continue
+		}
+		looks[id] = l
+		ids = append(ids, id)
+		if l.MadeFrom != "" {
+			ids = append(ids, l.MadeFrom)
+		}
+	}
+	seen := map[string]bool{}
+	if role >= permissions.RoleOwner {
+		for _, id := range ids {
+			seen[id] = true
+		}
+	} else if s.visibility != nil && len(ids) > 0 {
+		if seen, err = s.visibility.FilterViewableEntityIDs(ctx, campaignID, ids, role, userID); err != nil {
+			return nil, false, apperror.NewInternal(err)
+		}
+	}
+	out := make([]PageLook, 0, len(looks))
+	for id, l := range looks {
+		if !seen[id] {
+			continue
+		}
+		name, ok, err := s.entities.EntityName(ctx, campaignID, id)
+		if err != nil {
+			return nil, false, apperror.NewInternal(err)
+		}
+		if !ok {
+			continue
+		}
+		p := PageLook{EntityID: id, Name: name}
+		if l.MadeFrom != "" && l.MadeFrom != id && seen[l.MadeFrom] {
+			if src, ok, err := s.entities.EntityName(ctx, campaignID, l.MadeFrom); err != nil {
+				return nil, false, apperror.NewInternal(err)
+			} else if ok {
+				p.MadeFromName = src
+			}
+		}
+		l.MadeFrom = ""
+		p.Look = l
+		out = append(out, p)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if a, b := strings.ToLower(out[i].Name), strings.ToLower(out[j].Name); a != b {
+			return a < b
+		}
+		return out[i].EntityID < out[j].EntityID
+	})
+	return out, more, nil
 }

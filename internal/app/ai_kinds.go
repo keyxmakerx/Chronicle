@@ -61,6 +61,7 @@ type aiDeps struct {
 	FoundryScenes   records.FoundryScenesAPI         // nil while the sync API is degraded
 	AIAsks          aiAskLister                      // nil while the AI connector's tables are degraded
 	ArmoryRequests  dmscreen.RequestSource           // stash and buy requests, as the DM Screen lists them
+	ItemLooks       records.ItemLooksAPI             // nil while the item looks table is degraded
 
 	// Derived once and shared by several kinds and the lookups.
 	Rolls      records.EventRollAPI // the calendar's roll half; nil without one
@@ -171,6 +172,9 @@ func aiLookups(d *aiDeps, reg *records.Registry) *records.Lookups {
 		l.Scenes = d.FoundryScenes
 	}
 	l.Waiting = aiWaitingAdapter{asks: d.AIAsks, entries: d.SystemEntries, members: d.Campaigns, requests: d.ArmoryRequests}
+	if d.ItemLooks != nil {
+		l.Looks = d.ItemLooks
+	}
 	if d.Quests != nil && d.Boards != nil {
 		l.Quests = aiQuestsAdapter{quests: d.Quests, boards: d.Boards, types: d.Entities}
 	}
@@ -246,6 +250,12 @@ func init() {
 			records.GameNightKind{Svc: d.Nights},
 			records.TagKind{Svc: d.Tags, Pages: d.Entities},
 		}
+	})
+	addAIKinds(200, func(d *aiDeps) []records.Kind {
+		if d.ItemLooks == nil {
+			return nil
+		}
+		return []records.Kind{records.ItemLookKind{Svc: d.ItemLooks, Entities: d.Entities, Owners: aiMenuAdapter{campaigns: d.Campaigns, types: d.Entities}}}
 	})
 	addAIKinds(210, func(d *aiDeps) []records.Kind {
 		if d.PageMaps == nil {

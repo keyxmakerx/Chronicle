@@ -4470,11 +4470,13 @@ func (a *App) RegisterRoutes() {
 		},
 	})
 	shopRoomHandler := armory.NewShopRoomHandler(shopRoomService)
-	itemLookHandler := armory.NewItemLookHandler(armory.NewItemLookService(
+	lookPages := &armoryLookEntityAdapter{svc: entityService}
+	itemLookService := armory.NewItemLookService(
 		armory.NewItemLookRepository(a.DB),
-		&armoryLookEntityAdapter{svc: entityService},
+		lookPages,
 		&entityVisibilityFilterAdapter{svc: entityService},
-	))
+	)
+	itemLookHandler := armory.NewItemLookHandler(itemLookService)
 	armory.RegisterRoutes(e, armoryHandler, txHandler, instHandler, stashHandler, shopRoomHandler, itemLookHandler, shopBuyHandler, campaignService, authService, addonService)
 
 	// Notes widget: personal floating note-taking panel (Google Keep-style).
@@ -6252,6 +6254,12 @@ func (a *App) RegisterRoutes() {
 	if a.PluginHealth.IsHealthy("syncapi") {
 		aiFoundryScenes = aiFoundryScenesAdapter{repo: syncapi.NewFoundrySceneRepository(a.DB)}
 	}
+	// Item looks live in the armory's own migration; while it is degraded
+	// the AI neither reads nor writes them.
+	var aiItemLooks records.ItemLooksAPI
+	if a.PluginHealth.IsHealthy(armory.AddonSlug) {
+		aiItemLooks = aiItemLooksAdapter{svc: itemLookService, names: lookPages}
+	}
 	aiWiring := newAIDeps(aiDeps{
 		Calendar:        calendarService,
 		Campaigns:       campaignService,
@@ -6284,6 +6292,7 @@ func (a *App) RegisterRoutes() {
 		FoundryScenes:   aiFoundryScenes,
 		AIAsks:          aiAsks,
 		ArmoryRequests:  dmSources.Requests,
+		ItemLooks:       aiItemLooks,
 	})
 	aiRegistry := records.NewRegistry(aiKinds(aiWiring)...)
 	aiWorkspaceHandler.SetRecords(aiRegistry)
