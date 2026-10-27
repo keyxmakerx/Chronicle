@@ -192,6 +192,8 @@
     '.crb-wrap{position:relative;min-width:0}',
     '.crb-pcard{position:absolute;z-index:8;width:292px;max-height:calc(100% - 20px);overflow:auto;display:flex;flex-direction:column;gap:12px;padding:12px 14px 14px;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-top:3px solid var(--color-warn);border-radius:12px;box-shadow:var(--elev-dragged);transition:opacity .12s}',
     '.crb-wrap.is-dragging .crb-pcard{opacity:0;pointer-events:none}',
+    // A class that sets display outranks the browser's own [hidden] rule.
+    '.crb [hidden],.cr-stage [hidden]{display:none!important}',
     '.crb-ihead{display:flex;align-items:center;gap:8px}',
     '.crb-ihead .crb-title{flex:1;min-width:0;font-size:15px;font-weight:700;padding:5px 8px;border-color:transparent;background:transparent}',
     '.crb-ihead .crb-title:hover{border-color:var(--color-border)}.crb-ihead .crb-title:focus{border-color:var(--color-accent);background:var(--color-input-bg)}',

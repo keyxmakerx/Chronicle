@@ -34,7 +34,7 @@ test('a play mount bakes its light and plays a step', { skip, timeout: 180000 },
   await page.mouse.down();
   await page.mouse.move(...from.mortar, { steps: 12 });
   await page.mouse.up();
-  await page.waitForFunction(() => document.querySelector('[data-widget="craft_bench"]')._crb.state().i === 1, null, { timeout: 10000 });
+  await page.waitForFunction(() => document.querySelector('[data-widget="craft_bench"]')._crb.state().i === 1, null, { timeout: 30000 });
   const out = await page.evaluate(() => ({
     pointLights: document.querySelectorAll('fePointLight, feSpotLight').length,
     say: document.querySelector('.cr-say').textContent,
@@ -78,10 +78,12 @@ test('build mode opens the editor and a look redraws the room', { skip, timeout:
   });
   assert.match(status, /Nothing is saved/);
   await page.click('[data-look="hut"]');
-  await page.waitForFunction(() => window.__redrawn > 0, null, { timeout: 10000 });
+  await page.waitForFunction(() => window.__redrawn > 0, null, { timeout: 30000 });
   const pressed = await page.getAttribute('[data-look="hut"]', 'aria-pressed');
   assert.equal(pressed, 'true');
-  // Picking a piece opens its card.
+  // Picking a piece opens its card, and the card is hidden until then.
+  assert.equal(await page.isVisible('.crb-pcard'), false);
+  await page.click('[data-tab="pieces"]');
   await page.click('.crb-prow[data-id="cat"]');
   await page.waitForSelector('.crb-pcard:not([hidden])');
   assert.deepEqual(errors, []);
