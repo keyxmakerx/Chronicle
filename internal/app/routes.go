@@ -2651,6 +2651,37 @@ func (a *armoryShopCheckerAdapter) IsShopInCampaign(ctx context.Context, campaig
 	return ent.CampaignID == campaignID && ent.TypeSlug == "shop", nil
 }
 
+// armoryItemCheckerAdapter wraps entities.EntityService to implement
+// armory.ItemEntityChecker: an entity counts as an item when it is in the
+// campaign and its category's preset is "item", the same test the gallery uses.
+type armoryItemCheckerAdapter struct {
+	svc entities.EntityService
+}
+
+// IsItemInCampaign reports false (not an error) for a missing entity.
+func (a *armoryItemCheckerAdapter) IsItemInCampaign(ctx context.Context, campaignID, entityID string) (bool, error) {
+	ent, err := a.svc.GetByID(ctx, entityID)
+	if err != nil {
+		var appErr *apperror.AppError
+		if errors.As(err, &appErr) && appErr.Code == http.StatusNotFound {
+			return false, nil
+		}
+		return false, err
+	}
+	if ent.CampaignID != campaignID {
+		return false, nil
+	}
+	et, err := a.svc.GetEntityTypeByID(ctx, ent.EntityTypeID)
+	if err != nil {
+		var appErr *apperror.AppError
+		if errors.As(err, &appErr) && appErr.Code == http.StatusNotFound {
+			return false, nil
+		}
+		return false, err
+	}
+	return et != nil && et.PresetCategory != nil && *et.PresetCategory == "item", nil
+}
+
 // armoryRelationFinderAdapter wraps the relations service to implement
 // armory.RelationFinder. Used by the transaction service to validate stock
 // before a purchase.
@@ -4446,7 +4477,12 @@ func (a *App) RegisterRoutes() {
 		},
 	})
 	shopRoomHandler := armory.NewShopRoomHandler(shopRoomService)
-	armory.RegisterRoutes(e, armoryHandler, txHandler, instHandler, stashHandler, shopRoomHandler, shopBuyHandler, campaignService, authService, addonService)
+	itemLookHandler := armory.NewItemLookHandler(armory.NewItemLookService(
+		armory.NewItemLookRepository(a.DB),
+		&armoryItemCheckerAdapter{svc: entityService},
+		&entityVisibilityFilterAdapter{svc: entityService},
+	))
+	armory.RegisterRoutes(e, armoryHandler, txHandler, instHandler, stashHandler, shopRoomHandler, itemLookHandler, shopBuyHandler, campaignService, authService, addonService)
 
 	// Notes widget: personal floating note-taking panel (Google Keep-style).
 	// noteSvc was created above (before REST API v1 registration).
@@ -6376,6 +6412,7 @@ var coreWidgets = []PluginWidget{
 	{Name: "dm-screen", Scripts: []string{"/static/js/widgets/dm_sheet.js", "/static/js/widgets/dm_screen.js"}},
 	{Name: "tile", Scripts: []string{"/static/js/widgets/tile.js"}},
 	{Name: "shop_inventory", Scripts: []string{"/static/js/widgets/shop_inventory.js"}},
+	{Name: "item_look", Scripts: []string{"/static/js/widgets/item_look_fx.js", "/static/js/widgets/item_look.js"}},
 	{Name: "shop_room", Scripts: []string{"/static/js/widgets/shop_room_icons.js", "/static/js/widgets/shop_room_paper.js", "/static/js/widgets/shop_room.js"}},
 	{Name: "craft_bench", Scripts: []string{"/static/js/widgets/craft_scene.js", "/static/js/widgets/craft_desk.js", "/static/js/widgets/craft_journal.js", "/static/js/widgets/craft_bench_editor.js", "/static/js/widgets/craft_bench.js"}},
 }

@@ -180,6 +180,9 @@ const_registry_files=(
   # AI Import's `what: calendar` lookup: a word of the import format, not a
   # use of the calendar plugin's slug.
   "internal/plugins/ai_workspace/records/lookup_calendar_info.go"
+  # The add-on slugs that gate core layout blocks: the entities plugin can't
+  # import the owning plugins to reuse their PluginSlug consts.
+  "internal/plugins/entities/block_addon_slugs.go"
 )
 
 # ---------------------------------------------------------------------------
