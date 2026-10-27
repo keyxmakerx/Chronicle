@@ -2651,35 +2651,28 @@ func (a *armoryShopCheckerAdapter) IsShopInCampaign(ctx context.Context, campaig
 	return ent.CampaignID == campaignID && ent.TypeSlug == "shop", nil
 }
 
-// armoryItemCheckerAdapter wraps entities.EntityService to implement
-// armory.ItemEntityChecker: an entity counts as an item when it is in the
-// campaign and its category's preset is "item", the same test the gallery uses.
-type armoryItemCheckerAdapter struct {
+// armoryLookEntityAdapter wraps entities.EntityService to implement
+// armory.LookEntityFinder: the look endpoints accept any page in the
+// campaign, since a Remnant's page holds the look its items inherit.
+type armoryLookEntityAdapter struct {
 	svc entities.EntityService
 }
 
-// IsItemInCampaign reports false (not an error) for a missing entity.
-func (a *armoryItemCheckerAdapter) IsItemInCampaign(ctx context.Context, campaignID, entityID string) (bool, error) {
+// EntityName reports ok=false (not an error) for a missing entity or one in
+// another campaign.
+func (a *armoryLookEntityAdapter) EntityName(ctx context.Context, campaignID, entityID string) (string, bool, error) {
 	ent, err := a.svc.GetByID(ctx, entityID)
 	if err != nil {
 		var appErr *apperror.AppError
 		if errors.As(err, &appErr) && appErr.Code == http.StatusNotFound {
-			return false, nil
+			return "", false, nil
 		}
-		return false, err
+		return "", false, err
 	}
 	if ent.CampaignID != campaignID {
-		return false, nil
+		return "", false, nil
 	}
-	et, err := a.svc.GetEntityTypeByID(ctx, ent.EntityTypeID)
-	if err != nil {
-		var appErr *apperror.AppError
-		if errors.As(err, &appErr) && appErr.Code == http.StatusNotFound {
-			return false, nil
-		}
-		return false, err
-	}
-	return et != nil && et.PresetCategory != nil && *et.PresetCategory == "item", nil
+	return ent.Name, true, nil
 }
 
 // armoryRelationFinderAdapter wraps the relations service to implement
@@ -4479,7 +4472,7 @@ func (a *App) RegisterRoutes() {
 	shopRoomHandler := armory.NewShopRoomHandler(shopRoomService)
 	itemLookHandler := armory.NewItemLookHandler(armory.NewItemLookService(
 		armory.NewItemLookRepository(a.DB),
-		&armoryItemCheckerAdapter{svc: entityService},
+		&armoryLookEntityAdapter{svc: entityService},
 		&entityVisibilityFilterAdapter{svc: entityService},
 	))
 	armory.RegisterRoutes(e, armoryHandler, txHandler, instHandler, stashHandler, shopRoomHandler, itemLookHandler, shopBuyHandler, campaignService, authService, addonService)

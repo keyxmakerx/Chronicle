@@ -8,14 +8,18 @@
  * it is used; every change saves on its own. The Owner can also put looks on
  * five spots of the stage (the item, its trail, the point of impact, the
  * target's body, the ground) by dragging a gallery tile onto a spot, or by
- * tapping a spot and then a look. Players see the stage only, and
- * the block hides itself when the item has no look or is not an item (the
- * endpoint answers 404). Drawing and sound live in item_look_fx.js.
+ * tapping a spot and then a look. "Made from" names the page the item was
+ * made from (a Remnant, say), and the item carries that page's look: as its
+ * look when it has none of its own, shown on top when it has. The same block
+ * on the Remnant's page sets that look. Players see the stage only, and
+ * the block hides itself when the page has no look and carries none, or is
+ * hidden from them (the endpoint answers 404). Drawing and sound live in item_look_fx.js.
  *
  * Mount via:
  *   <div data-widget="item_look"
  *        data-look-endpoint="/campaigns/:id/armory/items/:eid/look"
  *        data-item-name="..." data-item-type="..." data-item-image="..."
+ *        data-entity-search-endpoint="/campaigns/:id/entities/search"
  *        data-can-edit="true"
  *        data-csrf-token="..."></div>
  */
@@ -73,7 +77,15 @@
     '.ilk-srow{display:grid;grid-template-columns:12px minmax(0,1fr) auto;gap:10px;align-items:center;font-size:.84rem;color:var(--color-text-body)}',
     '.ilk-srow .dot{width:12px;height:12px;border-radius:50%;border:1px dashed var(--color-text-muted)}',
     '.ilk-srow b{color:var(--color-text-primary);font-weight:600}',
-    '.ilk-srow em{font-style:normal;color:var(--color-text-muted);font-size:.76rem;display:block}'
+    '.ilk-srow em{font-style:normal;color:var(--color-text-muted);font-size:.76rem;display:block}',
+    '.ilk-from{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline;font-size:.87rem;color:var(--color-text-body)}',
+    '.ilk-from a{color:var(--color-text-primary);font-weight:600}',
+    '.ilk-res{display:flex;flex-direction:column;gap:2px}',
+    '.ilk-res:empty{display:none}',
+    '.ilk-res button{font:inherit;font-size:.86rem;text-align:left;color:var(--color-text-body);background:none;border:0;border-radius:8px;padding:6px 8px;cursor:pointer;display:flex;gap:8px;align-items:baseline;min-width:0}',
+    '.ilk-res button:hover,.ilk-res button:focus-visible{background:var(--color-bg-tertiary);outline:none}',
+    '.ilk-res button b{font-weight:600;color:var(--color-text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+    '.ilk-res button span{font-size:.76rem;color:var(--color-text-muted);white-space:nowrap}'
   ].join('\n');
   function injectStyle() {
     if (document.getElementById('ilk-style')) return;
@@ -126,15 +138,23 @@
       // put there, so placing a trail adds to the look instead of replacing
       // it. Other empty spots stay quiet.
       var BASE_SPOTS = ['item', 'impact'];
-      function withBase(sv) {
-        if (!sv.spots || !Object.keys(sv.spots).length) return null;
-        var out = {}; Object.keys(sv.spots).forEach(function (k) { out[k] = sv.spots[k]; });
-        BASE_SPOTS.forEach(function (k) { if (!out[k]) out[k] = { look: sv.look, tint: sv.tint }; });
+      function withBase(sp, base) {
+        if (!sp || !Object.keys(sp).length) return null;
+        var out = {}; Object.keys(sp).forEach(function (k) { out[k] = sp[k]; });
+        BASE_SPOTS.forEach(function (k) { if (!out[k] && base) out[k] = { look: base.look, tint: base.tint }; });
         return out;
       }
+      // source is the page this one was made from: {id, name, look}, where a
+      // player who can't see that page gets only its look.
+      var source = null;
+      function srcLook() { return source && source.look && source.look.look ? source.look : null; }
+      function own() { return saved && saved.look ? saved : null; }
       function show() {
-        var L = FX.resolve(saved) || FX.resolve({ look: 'quiet' });
-        L.spots = saved ? FX.spotLayers(withBase(saved)) : null;
+        var L = FX.carried(saved, srcLook()) || FX.resolve({ look: 'quiet' });
+        // Spots are the item's own; an item with no look of its own takes
+        // its source's spots with its source's look.
+        var base = own() || srcLook(), sp = saved && saved.spots && Object.keys(saved.spots).length ? saved.spots : (!own() && srcLook() ? srcLook().spots : null);
+        L.spots = base ? FX.spotLayers(withBase(sp, base)) : null;
         thing.target = (thing.kind === 'flask' || L.heals) ? 'ally' : 'dummy';
         stage.set(thing, L);
       }
@@ -146,12 +166,20 @@
         clearTimeout(timer);
         status.textContent = 'Saving…'; status.className = '';
         timer = setTimeout(function () {
-          var mine = ++seq, body = saved ? { look: saved.look, tint: saved.tint || '', sound: saved.sound || '', words: saved.words || '' } : { look: '' };
+          var mine = ++seq, body = saved ? { look: saved.look || '', tint: saved.tint || '', sound: saved.sound || '', words: saved.words || '' } : { look: '' };
           if (saved && saved.spots && Object.keys(saved.spots).length) body.spots = saved.spots;
+          if (saved && saved.madeFrom) body.madeFrom = saved.madeFrom;
           Chronicle.apiFetch(ds.lookEndpoint, { method: 'PUT', body: body, csrfToken: ds.csrfToken }).then(function (r) {
             if (mine !== seq) return;
             if (!r.ok) throw new Error(String(r.status));
-            status.textContent = saved ? 'Saved. Players see this look.' : 'Look removed.';
+            return r.json().then(function (j) {
+              if (mine !== seq) return;
+              // The answer carries the source page's look, which the Owner
+              // may just have picked.
+              source = j && j.source ? j.source : null;
+              paintPanel(); show();
+              status.textContent = saved ? 'Saved. Players see this look.' : 'Look removed.';
+            });
           }).catch(function () {
             if (mine !== seq) return;
             status.textContent = 'That did not save. Change anything to try again.'; status.className = 'err';
@@ -161,6 +189,9 @@
       function buildPanel() {
         panel = document.createElement('div'); panel.className = 'ilk-panel';
         panel.innerHTML = '<div class="ilk-f"><p class="ilk-h">Look</p><div class="ilk-gal"></div></div>' +
+          '<div class="ilk-f"><p class="ilk-h">Made from</p><div class="ilk-from"></div>' +
+          '<label class="ilk-l">Find the page it was made from<input type="search" data-k="from" autocomplete="off" placeholder="A Remnant, a creature, a place…"></label>' +
+          '<div class="ilk-res" role="group" aria-label="Pages found"></div></div>' +
           '<div class="ilk-f"><p class="ilk-h">Spots</p><p class="ilk-hint" aria-live="polite"></p><div class="ilk-slist"></div></div>' +
           '<div class="ilk-f"><p class="ilk-h">Colour</p><div class="ilk-sw"></div></div>' +
           '<div class="ilk-row"><label class="ilk-l">Sound<select data-k="sound"></select></label>' +
@@ -184,19 +215,20 @@
           var b = e.target.closest('.ilk-tile'); if (!b) return;
           if (b.dataset.dragged) { delete b.dataset.dragged; return; }
           if (armed) { put(armed, b.dataset.look); return; }
-          saved = { look: b.dataset.look, tint: '', sound: '', words: saved ? saved.words : '', spots: saved ? saved.spots : null };
+          saved = { look: b.dataset.look, tint: '', sound: '', words: saved ? saved.words : '', spots: saved ? saved.spots : null, madeFrom: saved ? saved.madeFrom : '' };
           paintPanel(); show(); stage.play('use'); paintMoment('use'); prev = 'use'; save();
         });
         var sel = panel.querySelector('select');
         sel.innerHTML = '<option value="">The look’s own</option>' + FX.SOUNDS.map(function (k) { return '<option value="' + k + '">' + FX.SOUND_NAMES[k] + '</option>'; }).join('');
-        sel.addEventListener('change', function () { if (!saved) return; saved.sound = sel.value; show(); var L = FX.resolve(saved); FX.Sound.play(L.sound, L.pitch); save(); });
-        var words = panel.querySelector('input');
+        sel.addEventListener('change', function () { if (!saved) return; saved.sound = sel.value; show(); var L = FX.carried(saved, srcLook()); if (L) FX.Sound.play(L.sound, L.pitch); save(); });
+        var words = panel.querySelector('[data-k="words"]');
         words.addEventListener('input', function () { if (!saved) return; saved.words = words.value; show(); save(); });
         panel.querySelector('.ilk-sw').addEventListener('click', function (e) {
-          var b = e.target.closest('button'); if (!b || !saved) return;
+          var b = e.target.closest('button'); if (!b || !own()) return;
           saved.tint = b.dataset.tint || ''; paintPanel(); show(); stage.play('use'); paintMoment('use'); prev = 'use'; save();
         });
-        panel.querySelector('[data-k="clear"]').addEventListener('click', function () { saved = null; armed = null; paintPanel(); show(); save(); });
+        panel.querySelector('[data-k="clear"]').addEventListener('click', function () { saved = null; source = null; armed = null; paintPanel(); show(); save(); });
+        buildFrom();
       }
       // ---- Spots: markers over the stage, the drop targets ----
       function buildSpots() {
@@ -265,6 +297,55 @@
         b.addEventListener('pointerup', function (e) { end(e, false); });
         b.addEventListener('pointercancel', function (e) { end(e, true); });
       }
+      // ---- Made from: search the campaign's pages and pick one ----
+      function buildFrom() {
+        var input = panel.querySelector('[data-k="from"]'), res = panel.querySelector('.ilk-res'), t = null, q = 0;
+        input.addEventListener('input', function () {
+          clearTimeout(t); var text = input.value.trim();
+          if (text.length < 2 || !ds.entitySearchEndpoint) { res.innerHTML = ''; return; }
+          t = setTimeout(function () {
+            var mine = ++q;
+            Chronicle.apiFetch(ds.entitySearchEndpoint + '?pages=1&q=' + encodeURIComponent(text)).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }).then(function (j) {
+              if (mine !== q) return;
+              res.innerHTML = '';
+              ((j && j.results) || []).filter(function (p) { return p.id !== ds.entityId; }).slice(0, 6).forEach(function (p) {
+                var b = document.createElement('button'), n = document.createElement('b'), k = document.createElement('span');
+                b.type = 'button'; b.dataset.id = p.id; n.textContent = p.name; k.textContent = p.type_name || '';
+                b.appendChild(n); b.appendChild(k); b._page = p; res.appendChild(b);
+              });
+              if (!res.children.length) res.textContent = 'No page by that name.';
+            });
+          }, 250);
+        });
+        res.addEventListener('click', function (e) {
+          var b = e.target.closest('button[data-id]'); if (!b) return;
+          var p = b._page;
+          if (!saved) saved = { look: '', tint: '', sound: '', words: '' };
+          saved.madeFrom = p.id; source = { id: p.id, name: p.name, look: null };
+          input.value = ''; res.innerHTML = '';
+          paintPanel(); show(); save();
+        });
+        panel.querySelector('.ilk-from').addEventListener('click', function (e) {
+          var b = e.target.closest('button[data-k]'); if (!b || !saved) return;
+          if (b.dataset.k === 'unfrom') { saved.madeFrom = ''; source = null; if (!saved.look) saved = null; }
+          else if (b.dataset.k === 'only') { saved.look = ''; saved.tint = ''; }
+          paintPanel(); show(); stage.play('use'); paintMoment('use'); prev = 'use'; save();
+        });
+      }
+      function paintFrom() {
+        var box = panel.querySelector('.ilk-from'); box.innerHTML = '';
+        if (!source || !source.id) {
+          box.textContent = 'Nothing. Pick the page it was made from, such as a Remnant, and it carries that page’s look.';
+          return;
+        }
+        var a = document.createElement('a'); a.href = ds.campaignUrl ? ds.campaignUrl + '/entities/' + encodeURIComponent(source.id) : '#'; a.textContent = source.name;
+        var say = document.createElement('span');
+        say.textContent = !srcLook() ? 'has no look yet. Give it one on its own page.' : own() ? 'shows through on top of this look.' : 'gives this item its look.';
+        box.appendChild(a); box.appendChild(say);
+        if (own() && srcLook()) box.appendChild(btn('only', 'Use only its look'));
+        box.appendChild(btn('unfrom', 'Clear'));
+        function btn(k, text) { var b = document.createElement('button'); b.type = 'button'; b.className = 'ilk-q'; b.dataset.k = k; b.textContent = text; return b; }
+      }
       function paintSpots() {
         var sp = (saved && saved.spots) || {};
         marks.querySelectorAll('.ilk-spot').forEach(function (b) {
@@ -280,7 +361,7 @@
           var dot = document.createElement('span'); dot.className = 'dot'; if (L) dot.style.cssText = 'background:' + L.color + ';border-color:' + L.color;
           var txt = document.createElement('span'), nm = document.createElement('b'), em = document.createElement('em');
           nm.textContent = SPOT_UI[k].name; em.textContent = SPOT_UI[k].when;
-          var base = !L && saved && BASE_SPOTS.indexOf(k) >= 0 ? FX.LOOKS[saved.look] : null;
+          var bl = own() || srcLook(), base = !L && bl && BASE_SPOTS.indexOf(k) >= 0 ? FX.LOOKS[bl.look] : null;
           txt.appendChild(nm); txt.appendChild(document.createTextNode(' · ' + (L ? L.name : base ? base.name + ', the item’s look' : 'empty'))); txt.appendChild(em);
           row.appendChild(dot); row.appendChild(txt);
           if (L) { var x = document.createElement('button'); x.type = 'button'; x.className = 'ilk-q'; x.dataset.empty = k; x.textContent = 'Empty'; x.setAttribute('aria-label', 'Empty ' + SPOT_UI[k].name); row.appendChild(x); }
@@ -296,8 +377,9 @@
         var sw = panel.querySelector('.ilk-sw');
         sw.innerHTML = '<button type="button" class="own" data-tint="" aria-label="The look’s own colour" title="The look’s own colour"></button>' +
           FX.TINTS.map(function (c) { return '<button type="button" data-tint="' + c + '" style="background:' + c + '" aria-label="Colour ' + c + '"></button>'; }).join('');
-        sw.querySelectorAll('button').forEach(function (b) { b.disabled = !saved; b.setAttribute('aria-pressed', saved && (saved.tint || '') === b.dataset.tint ? 'true' : 'false'); });
-        var sel = panel.querySelector('select'), words = panel.querySelector('input');
+        sw.querySelectorAll('button').forEach(function (b) { b.disabled = !own(); b.setAttribute('aria-pressed', own() && (saved.tint || '') === b.dataset.tint ? 'true' : 'false'); });
+        var sel = panel.querySelector('select'), words = panel.querySelector('[data-k="words"]');
+        paintFrom();
         sel.disabled = words.disabled = !saved;
         sel.value = saved ? (saved.sound || '') : '';
         if (document.activeElement !== words) words.value = saved ? (saved.words || '') : '';
@@ -309,9 +391,10 @@
         if (!r.ok) return null;
         return r.json();
       }).catch(function () { return null; }).then(function (j) {
-        if (!j) return; // not an item, hidden, or the armory is off
-        saved = FX.resolve(j.look) ? j.look : null;
-        if (!saved && !canEdit) return;
+        if (!j) return; // hidden, or the armory is off
+        saved = j.look && (FX.resolve(j.look) || j.look.madeFrom) ? j.look : null;
+        source = j.source || null;
+        if (!FX.carried(saved, srcLook()) && !canEdit) return;
         el.hidden = false;
         if (canEdit) { buildPanel(); paintPanel(); }
         show();

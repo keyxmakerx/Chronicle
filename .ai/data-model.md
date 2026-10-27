@@ -415,7 +415,7 @@ Foundry module repo for the wire contract.
 | Table | Purpose | Notable columns |
 |---|---|---|
 | `armory_item_shares` | Remembers which view grants on a hidden item came from a holder sharing it with the party, so un-sharing takes back only what sharing added | `PRIMARY KEY (character_id, item_entity_id, user_id)`; `made_grant` = the share added the grant; FKs to `campaigns` and `entities` (`ON DELETE CASCADE`) |
-| `armory_item_looks` | An item's look: how it glows, sounds and strikes (the Look block) | PK `item_entity_id` FK→`entities` CASCADE; `look` TEXT (a normalized JSON document of fixed-list values, including looks placed on stage spots); `updated_by` |
+| `armory_item_looks` | A page's look, usually an item's: how it glows, sounds and strikes (the Look block); `madeFrom` inside names the page whose look it carries | PK `item_entity_id` FK→`entities` CASCADE; `look` TEXT (a normalized JSON document of fixed-list values, including looks placed on stage spots); `updated_by` |
 
 ### rolltables (`internal/plugins/rolltables/migrations/`)
 

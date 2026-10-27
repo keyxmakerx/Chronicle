@@ -3,6 +3,7 @@ package armory
 import (
 	"bytes"
 	"encoding/json"
+	"regexp"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -17,7 +18,8 @@ import (
 // are mirrored in static/js/widgets/item_look_fx.js, and
 // test/js/item_look.test.mjs fails when the two drift.
 type ItemLook struct {
-	// Look names a gallery look. "" means the item has no look.
+	// Look names a gallery look. "" means the item has no look of its own,
+	// which is allowed only when it is made from a page that has one.
 	Look string `json:"look"`
 	// Tint replaces the look's own colour; "" keeps it.
 	Tint string `json:"tint,omitempty"`
@@ -29,6 +31,10 @@ type ItemLook struct {
 	// trail, the point of impact, the target's body, the ground), each
 	// playing at its own moment. Empty spots stay quiet.
 	Spots map[string]ItemLookSpot `json:"spots,omitempty"`
+	// MadeFrom is the page (a Remnant, say) the item was made from. The item
+	// carries that page's look: as its look when it has none of its own,
+	// added on top when it has. One hop only, so a chain of pages never loops.
+	MadeFrom string `json:"madeFrom,omitempty"`
 }
 
 // ItemLookSpot is one gallery look placed on a spot, optionally recoloured.
@@ -44,6 +50,10 @@ const (
 	maxItemLookWords = 24
 )
 
+// entityIDPattern is the shape of an entity id; anything else in MadeFrom
+// is refused before it reaches a lookup.
+var entityIDPattern = regexp.MustCompile(`^[0-9A-Za-z-]{1,36}$`)
+
 var (
 	itemLooks  = setOf("ember", "frost", "storm", "bloom", "dawn", "rot", "venom", "glass", "quiet")
 	itemTints  = setOf("#ff7a2f", "#ffd66b", "#8fe07a", "#7cf5c8", "#8fd8ff", "#a99bff", "#f59ac0", "#e8dcc0")
@@ -52,7 +62,8 @@ var (
 )
 
 // NormalizeItemLook validates a saved look and returns its canonical JSON.
-// A look of "" clears the item, reported as cleared with a nil document.
+// A look of "" with no MadeFrom clears the item, reported as cleared with a
+// nil document. Whether MadeFrom names a real page is the service's check.
 func NormalizeItemLook(raw []byte) (doc json.RawMessage, cleared bool, err error) {
 	if len(raw) > maxItemLookBytes {
 		return nil, false, apperror.NewBadRequest("look is too large")
@@ -66,10 +77,17 @@ func NormalizeItemLook(raw []byte) (doc json.RawMessage, cleared bool, err error
 	if dec.More() {
 		return nil, false, apperror.NewBadRequest("invalid look")
 	}
-	if l.Look == "" {
+	if l.MadeFrom != "" && !entityIDPattern.MatchString(l.MadeFrom) {
+		return nil, false, apperror.NewBadRequest("invalid page")
+	}
+	if l.Look == "" && l.MadeFrom == "" {
 		return nil, true, nil
 	}
-	if !itemLooks[l.Look] {
+	if l.Look == "" && l.Tint != "" {
+		// A colour recolours the item's own look, so it needs one.
+		return nil, false, apperror.NewBadRequest("a colour needs a look")
+	}
+	if l.Look != "" && !itemLooks[l.Look] {
 		return nil, false, apperror.NewBadRequest("unknown look")
 	}
 	if l.Tint != "" && !itemTints[l.Tint] {

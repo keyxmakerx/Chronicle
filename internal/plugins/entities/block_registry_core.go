@@ -135,11 +135,12 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 		return blockShopInventory(ctx.CC, ctx.Entity, ctx.CSRFToken)
 	})
 
-	// How an item shows its magic. The widget hides itself on a page that is
-	// not an item (its endpoint answers 404), so any category may place it.
+	// How a page shows its magic: an item's glow, sound and strike, or the
+	// look a Remnant's page passes to the items made from it. Any category
+	// may place it; for players it hides itself when there is no look.
 	r.Register(BlockMeta{
 		Type: "item_look", Label: "Look", Icon: "fa-wand-magic-sparkles",
-		Description: "How an item glows, sounds and strikes when it is used",
+		Description: "How an item glows, sounds and strikes, or the look a page passes to items made from it",
 		Addon: addonArmory, Contexts: []string{"template"},
 	}, func(ctx BlockRenderContext) templ.Component {
 		return blockItemLook(ctx.CC, ctx.Entity, ctx.CSRFToken)
