@@ -202,7 +202,10 @@ test('the flask counts as the flask wherever it is clicked, and a tap opens a sk
   const pts = await page.evaluate(async () => {
     const c = document.querySelector('[data-widget="craft_bench"]')._crb, wait = (ms) => new Promise((r) => setTimeout(r, ms));
     document.querySelector('.crj').scrollIntoView();
-    c.reset('caustic'); await wait(1500); c.state().i = 3;
+    c.reset('caustic');
+    // The page turn and the sky load are tweens a slow runner stretches; wait for what the test touches.
+    for (let w = 0; w < 100 && !(document.querySelector('[data-item="bile"]') && document.querySelector('[data-prop="moon-0"]')); w++) await wait(200);
+    await wait(300); c.state().i = 3;
     const svg = document.querySelector('.cr-svg'), m = svg.getScreenCTM(), p = svg.createSVGPoint();
     const at = (x, y) => { p.x = x; p.y = y; const q = p.matrixTransform(m); return [q.x, q.y]; };
     const it = document.querySelector('[data-item="bile"]').getBoundingClientRect();
