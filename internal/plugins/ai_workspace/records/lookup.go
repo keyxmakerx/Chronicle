@@ -47,7 +47,9 @@ type PageLayoutsAPI interface {
 }
 
 // SystemEntry is one game-system pick-list entry (an ancestry, a kit…).
-type SystemEntry struct{ Name, Slug, Source, Summary string }
+// Status is "" for an accepted entry, or "draft"/"sent" for a player's entry
+// no Director has accepted, which only a Director's lookup lists.
+type SystemEntry struct{ Name, Slug, Source, Summary, Status string }
 
 // SystemEntriesAPI lists the campaign system's entries for one character
 // field, package and campaign-made alike. director includes entries kept
@@ -144,6 +146,9 @@ type Lookups struct {
 	Encounters EncountersAPI
 	Tests      TestsAPI
 	Monsters   FoundryMonstersAPI
+	// Waiting answers `what: waiting`: what waits on a Director's review.
+	// Nil says it can't be looked up.
+	Waiting WaitingAPI
 	// Scenes answers `what: scenes` from what Foundry last reported; nil
 	// says it can't be looked up.
 	Scenes FoundryScenesAPI
@@ -180,6 +185,7 @@ var lookupWhats = []struct{ what, keys, brief string }{
 	{"encounters", "optional `page`", "the fights planned on pages, written as encounter blocks, with the version that plays now and any creature Foundry can't place (owner and co-DM only)"},
 	{"tests", "optional `page`", "the montages and other tests on pages, their results and the one recorded, which pick encounter versions (owner and co-DM only)"},
 	{"foundry-monsters", "optional `name` (part of a name), `level` and `role`", "the monsters Foundry can place: its world's actors and its compendiums', with level, role and EV (owner and co-DM only)"},
+	{"waiting", "none", "what is waiting for a Director's review: the changes this AI asked for (and how the owner answered the latest), entries players wrote and handed in, and players' stash moves and requests to buy (owner and co-DM only)"},
 	{"players", "none", "each player's character right now: level and class, meters, conditions, what they carry, and whether they are coming to the next game night"},
 	{lookupWhatFormat, "`block`, the kind to explain (e.g. `block: calendar`)", "how to write one kind of block: every key, the rules and an example"},
 }
@@ -308,6 +314,8 @@ func (run *lookupRun) one(what string, r Record) LookupAnswer {
 		ans, err = run.testsLookup(firstNonEmpty(r.Str("page"), r.Name))
 	case "foundry-monsters", "monsters", "foundry-monster":
 		ans, err = run.foundryMonsters(r)
+	case "waiting", "pending", "queue", "review":
+		ans, err = run.waiting()
 	case "players", "party":
 		ans, err = run.players()
 	case lookupWhatFormat, "formats", "how-to":
@@ -1002,6 +1010,12 @@ func (run *lookupRun) systemEntries(field string) (LookupAnswer, error) {
 	var lines []string
 	for _, e := range list {
 		line := fmt.Sprintf("- %s (%s), %s", e.Name, e.Slug, firstNonEmpty(e.Source, "package"))
+		switch e.Status {
+		case "sent":
+			line += ", a player's entry handed in and not accepted yet"
+		case "draft":
+			line += ", a player's draft, not accepted yet"
+		}
 		if s := strings.TrimSpace(e.Summary); s != "" {
 			line += ": " + oneLine(s, 140)
 		}

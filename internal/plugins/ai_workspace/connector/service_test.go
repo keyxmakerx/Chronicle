@@ -211,3 +211,37 @@ func TestOneLine(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+// Decided merges applied and turned-down requests, newest answer first, and
+// leaves out waiting ones and other campaigns'.
+func TestDecided_NewestAnswerFirst(t *testing.T) {
+	svc, repo, _, now := newTestService()
+	at := func(h int) *time.Time { t := now.Add(time.Duration(h) * time.Hour); return &t }
+	repo.reqs = []*Request{
+		{ID: 1, CampaignID: "camp-1", Summary: "old applied", Status: RequestAnswered, DecidedAt: at(1)},
+		{ID: 2, CampaignID: "camp-1", Summary: "turned down", Status: RequestTurnedDown, DecidedAt: at(3)},
+		{ID: 3, CampaignID: "camp-1", Summary: "new applied", Status: RequestAnswered, DecidedAt: at(2)},
+		{ID: 4, CampaignID: "camp-1", Summary: "still waiting", Status: RequestWaiting},
+		{ID: 5, CampaignID: "camp-2", Summary: "elsewhere", Status: RequestAnswered, DecidedAt: at(4)},
+	}
+	tests := []struct {
+		n    int
+		want []string
+	}{
+		{5, []string{"turned down", "new applied", "old applied"}},
+		{2, []string{"turned down", "new applied"}},
+	}
+	for _, tt := range tests {
+		got, err := svc.Decided(context.Background(), "camp-1", tt.n)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var names []string
+		for _, q := range got {
+			names = append(names, q.Summary)
+		}
+		if strings.Join(names, ",") != strings.Join(tt.want, ",") {
+			t.Errorf("Decided(%d) = %v, want %v", tt.n, names, tt.want)
+		}
+	}
+}

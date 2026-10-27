@@ -89,7 +89,7 @@ func (a aiSystemEntriesAdapter) Entries(ctx context.Context, campaignID, field s
 	}
 	out := make([]records.SystemEntry, 0, len(l.Choices))
 	for _, c := range l.Choices {
-		out = append(out, records.SystemEntry{Name: c.Name, Slug: c.Slug, Source: c.Source, Summary: c.Summary})
+		out = append(out, records.SystemEntry{Name: c.Name, Slug: c.Slug, Source: c.Source, Summary: c.Summary, Status: c.Status})
 	}
 	return l.SystemName, out, nil
 }
