@@ -351,7 +351,7 @@ window.CraftJournal = (function () {
       '<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" class="p-ink p-thin" filter="url(#p-rough)"/>'+
       '<circle cx="'+cx+'" cy="'+cy+'" r="'+(r+8)+'" fill="transparent"/></g>';}
   // One moon is named under its sketch; several share a caption, and each still has its own card.
-  function moonRow(moons){var n=moons.length,s='',x0=556-(n-1)*40;
+  function moonRow(moons){var n=moons.length,s='',x0=542-(n-1)*40;
     moons.forEach(function(m,i){s+=moonSketch(m,x0+i*40,72,15,i);});
     return s+'<text class="p-small" x="'+(x0+(n-1)*20)+'" y="106" text-anchor="middle">'+esc(n===1?moons[0].name:'the moons tonight')+'</text>';}
 
