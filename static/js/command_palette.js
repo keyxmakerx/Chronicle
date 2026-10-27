@@ -100,7 +100,7 @@
       cmds.push({ label: 'New Page', icon: 'fa-plus', href: '/campaigns/' + cid + '/entities/new', shortcut: mod + '+N' });
       cmds.push({
         label: 'Quick Capture Note', icon: 'fa-bolt', shortcut: mod + '+Shift+N',
-        action: function () { window.dispatchEvent(new CustomEvent('chronicle:quick-capture')); }
+        action: function () { if (Chronicle.openQuickCapture) Chronicle.openQuickCapture(); }
       });
     }
 

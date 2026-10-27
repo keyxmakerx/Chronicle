@@ -26,12 +26,6 @@ type GMOnlyParts struct {
 	Rollers  int
 }
 
-// GMOnlyPartsOf measures an existing page against a replacement that carries
-// no GM-only passages at all; a page with no text has none.
-func GMOnlyPartsOf(e *entities.Entity) GMOnlyParts {
-	return GMOnlyPartsAfter(e, "")
-}
-
 // GMOnlyPartsAfter measures what replacing the page's text with incomingHTML
 // (already converted from the AI's markdown) would lose. Passages are matched
 // as a multiset on their words, so a repeated line is not covered by one copy.

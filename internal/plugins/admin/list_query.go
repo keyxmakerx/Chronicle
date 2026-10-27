@@ -146,7 +146,3 @@ func (v listView) PagerParams() string {
 	}
 	return vals.Encode()
 }
-
-// Searching reports whether any narrowing is active; the empty state words
-// itself differently for "nothing exists" and "nothing matches".
-func (v listView) Searching() bool { return v.Query != "" || v.Filter != "" }

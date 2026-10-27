@@ -243,8 +243,7 @@ func TestCommit_ConflictModeOverwriteAlias(t *testing.T) {
 	res, err := c.Commit(context.Background(), "camp-1", CommitInput{
 		OwnerID: "u-1",
 		Pages:   []ParsedPage{page("Lyra Vance", "character", "# Lyra\n\nNew body.")},
-		// action="" + ConflictMode="update"; the handler also accepts
-		// conflict="overwrite" as an alias, exercised elsewhere.
+		// action="" + ConflictMode="update".
 		Decisions: []RowDecision{decisionWithAction(true, "Lyra Vance", "character", "private", "update", "", false)},
 	})
 	if err != nil {

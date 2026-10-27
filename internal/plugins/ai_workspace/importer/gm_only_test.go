@@ -77,7 +77,7 @@ func TestCommit_UpdateOverGMOnlyPage(t *testing.T) {
 		{"update, no tick", strp(gmHTML), ActionUpdate, "", false, StatusSkipped, false},
 		{"update, ticked", strp(gmHTML), ActionUpdate, "", true, StatusUpdated, true},
 		{"create over it, update mode, no tick", strp(gmHTML), ActionCreate, "update", false, StatusSkipped, false},
-		{"create over it, overwrite alias, ticked", strp(gmHTML), ActionCreate, "overwrite", true, StatusUpdated, true},
+		{"create over it, update mode, ticked", strp(gmHTML), ActionCreate, "update", true, StatusUpdated, true},
 		{"update, plain page, no tick", strp("<p>Public only.</p>"), ActionUpdate, "", false, StatusUpdated, true},
 		{"update, page with no text, no tick", nil, ActionUpdate, "", false, StatusUpdated, true},
 	}
