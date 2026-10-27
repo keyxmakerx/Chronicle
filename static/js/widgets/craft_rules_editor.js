@@ -63,7 +63,6 @@
   var VIS = {book: ['Written in the book', 'Always on the recipe page'], shown: ['Shown when it happens', 'A moment on the bench when it fires'],
     secret: ['Only you', 'Players never see it']};
   function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
-  function strip(h) { return String(h).replace(/<[^>]*>/g, ''); }
   function days(n) { return n + (n === 1 ? ' day' : ' days'); }
   function whenSub(c) { return c.kind === 'rolled' ? c.event : KNAME[c.kind]; }
   function thenSub(r) {

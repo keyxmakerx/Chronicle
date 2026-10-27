@@ -430,10 +430,12 @@
   function fa(n) { return '<i class="fa-solid fa-' + n + '" aria-hidden="true"></i>'; }
   function calm() { return (document.documentElement.getAttribute('data-motion') || 'full') !== 'full'; }
 
+  /* Counts mounts, so two editors on a page keep their tab ids apart. */
+  var mounts = 0;
   function start(el, input, note) {
     var fx = {spots: FX.MOMENT_SPOTS, looks: FX.LOOKS}, W = R.world(Object.assign({sky: window.SkyWorld, span: 30}, input));
     var S = {W: W, at: 0, fx: fx, pick: 2, recipes: recipes(W, !!input.real, fx), calm: calm};
-    var ed = null, looks = null, tab = 'rules', uid = 'crr' + Math.random().toString(36).slice(2, 8);
+    var ed = null, looks = null, tab = 'rules', uid = 'crr' + (++mounts);
     S.rec = function () { return S.recipes[S.pick]; };
     S.setDay = function (d) { S.at = d; };
     S.changed = function () {};
