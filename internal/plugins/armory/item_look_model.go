@@ -25,6 +25,16 @@ type ItemLook struct {
 	Sound string `json:"sound,omitempty"`
 	// Words float up from the target when the item is used.
 	Words string `json:"words,omitempty"`
+	// Spots places gallery looks on named spots of the stage (the item, its
+	// trail, the point of impact, the target's body, the ground), each
+	// playing at its own moment. Empty spots stay quiet.
+	Spots map[string]ItemLookSpot `json:"spots,omitempty"`
+}
+
+// ItemLookSpot is one gallery look placed on a spot, optionally recoloured.
+type ItemLookSpot struct {
+	Look string `json:"look"`
+	Tint string `json:"tint,omitempty"`
 }
 
 const (
@@ -38,6 +48,7 @@ var (
 	itemLooks  = setOf("ember", "frost", "storm", "bloom", "dawn", "rot", "venom", "glass", "quiet")
 	itemTints  = setOf("#ff7a2f", "#ffd66b", "#8fe07a", "#7cf5c8", "#8fd8ff", "#a99bff", "#f59ac0", "#e8dcc0")
 	itemSounds = setOf("crackle", "ping", "zap", "chime", "bell", "thrum", "bubble", "hiss", "none")
+	itemSpots  = setOf("item", "trail", "impact", "body", "ground")
 )
 
 // NormalizeItemLook validates a saved look and returns its canonical JSON.
@@ -73,6 +84,20 @@ func NormalizeItemLook(raw []byte) (doc json.RawMessage, cleared bool, err error
 	}
 	if strings.IndexFunc(l.Words, unicode.IsControl) >= 0 {
 		return nil, false, apperror.NewBadRequest("invalid words")
+	}
+	for spot, p := range l.Spots {
+		if !itemSpots[spot] {
+			return nil, false, apperror.NewBadRequest("unknown spot")
+		}
+		if !itemLooks[p.Look] {
+			return nil, false, apperror.NewBadRequest("unknown look")
+		}
+		if p.Tint != "" && !itemTints[p.Tint] {
+			return nil, false, apperror.NewBadRequest("unknown colour")
+		}
+	}
+	if len(l.Spots) == 0 {
+		l.Spots = nil
 	}
 	out, err := json.Marshal(l)
 	if err != nil {

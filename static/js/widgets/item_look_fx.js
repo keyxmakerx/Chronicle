@@ -594,15 +594,19 @@ var BENCH_SPOTS = ['tool', 'trail', 'contact', 'work', 'bench'];
 
 /* spotLayers turns saved placements ({spot: {look, tint}}) into the layers
    the stage draws on each spot. Only spots in the given list and looks in
-   the gallery survive, so saved data can never name anything else; a look
-   with no particles still counts, for its sound and light. Pure. */
+   the gallery survive, so saved data can never name anything else. A look
+   with no particles shows as its glints; the first spot (the item itself)
+   plays a little softer than the moments. Pure. */
 function spotLayers(saved, spots) {
   var out = {}, n = 0, list = spots || SPOTS;
   if (!saved || typeof saved !== 'object') return null;
   list.forEach(function (k) {
     if (!Object.prototype.hasOwnProperty.call(saved, k)) return;
     var L = resolve(saved[k]); if (!L) return;
-    out[k] = { motif: L.motif, c: L.color, c2: L.color2, amount: L.amount == null ? 1 : L.amount, sound: L.sound, pitch: L.pitch };
+    var amount = (L.amount == null ? 1 : L.amount) * (k === list[0] ? 0.8 : 1);
+    out[k] = L.motif === 'none'
+      ? { motif: 'glints', c: L.shimmer || L.color, c2: '#ffffff', amount: 0.5, sound: L.sound, pitch: L.pitch }
+      : { motif: L.motif, c: L.color, c2: L.color2, amount: amount, sound: L.sound, pitch: L.pitch };
     n++;
   });
   return n ? out : null;

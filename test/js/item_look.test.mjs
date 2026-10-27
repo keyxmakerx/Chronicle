@@ -93,10 +93,15 @@ test('the bench has its own spots', () => {
   const S = FX.spotLayers({ contact: { look: 'storm' }, impact: { look: 'ember' } }, FX.BENCH_SPOTS);
   assert.deepEqual(Object.keys(S), ['contact']);
 });
-test('a look with no particles still fills its spot, for its light and sound', () => {
-  const S = FX.spotLayers({ item: { look: 'quiet', sound: 'bell' } });
-  assert.equal(S.item.motif, 'none');
+test('a look with no particles shows its glints on a spot, with its sound', () => {
+  const S = FX.spotLayers({ item: { look: 'quiet', sound: 'bell' }, impact: { look: 'ember' } });
+  assert.equal(S.item.motif, 'glints');
   assert.equal(S.item.sound, 'bell');
+  assert.equal(S.impact.amount, 1);
+  assert.equal(FX.spotLayers({ item: { look: 'ember' } }).item.amount, 0.8, 'the item itself plays softer');
+});
+test('the spots match the ones the server accepts', () => {
+  assert.deepEqual([...FX.SPOTS].sort(), goSet('itemSpots'));
 });
 test('cast shadows fall away from the light, longer when it is brighter', () => {
   const right = FX.castShadow(500, 60, { x: 300, k: 1 });

@@ -33,6 +33,14 @@ func TestNormalizeItemLook(t *testing.T) {
 		{"trailing data", `{"look":"ember"}{"look":"frost"}`, ``, false, true},
 		{"not json", `look=ember`, ``, false, true},
 		{"too large", `{"look":"ember","words":"` + strings.Repeat(" ", maxItemLookBytes) + `"}`, ``, false, true},
+		{"spots", `{"look":"ember","spots":{"trail":{"look":"frost"},"impact":{"look":"storm","tint":"#ffd66b"}}}`, `{"look":"ember","spots":{"impact":{"look":"storm","tint":"#ffd66b"},"trail":{"look":"frost"}}}`, false, false},
+		{"every spot at once fits", `{"look":"glass","tint":"#ffd66b","sound":"bell","words":"` + strings.Repeat("é", 24) + `","spots":{"item":{"look":"glass","tint":"#ffd66b"},"trail":{"look":"glass","tint":"#ffd66b"},"impact":{"look":"glass","tint":"#ffd66b"},"body":{"look":"glass","tint":"#ffd66b"},"ground":{"look":"glass","tint":"#ffd66b"}}}`, `{"look":"glass","tint":"#ffd66b","sound":"bell","words":"` + strings.Repeat("é", 24) + `","spots":{"body":{"look":"glass","tint":"#ffd66b"},"ground":{"look":"glass","tint":"#ffd66b"},"impact":{"look":"glass","tint":"#ffd66b"},"item":{"look":"glass","tint":"#ffd66b"},"trail":{"look":"glass","tint":"#ffd66b"}}}`, false, false},
+		{"empty spots dropped", `{"look":"ember","spots":{}}`, `{"look":"ember"}`, false, false},
+		{"unknown spot", `{"look":"ember","spots":{"hand":{"look":"frost"}}}`, ``, false, true},
+		{"unknown look on a spot", `{"look":"ember","spots":{"trail":{"look":"fireball"}}}`, ``, false, true},
+		{"empty look on a spot", `{"look":"ember","spots":{"trail":{"look":""}}}`, ``, false, true},
+		{"colour off the palette on a spot", `{"look":"ember","spots":{"trail":{"look":"frost","tint":"#000000"}}}`, ``, false, true},
+		{"unknown field on a spot", `{"look":"ember","spots":{"trail":{"look":"frost","move":"shake"}}}`, ``, false, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
