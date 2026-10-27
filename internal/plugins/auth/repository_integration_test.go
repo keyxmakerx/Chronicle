@@ -220,3 +220,63 @@ func TestUserRepository_GetTimezonesByIDs_Integration(t *testing.T) {
 		t.Errorf("empty id list = %v, %v; want empty map, nil", empty, err)
 	}
 }
+
+// TestUserRepository_UpdateIsAdmin_LastAdmin_Integration checks the last-admin
+// guard against a real MariaDB, where the row locks are what make it hold: two
+// admins removing each other at the same moment must leave one admin, never
+// none. Each run has its own scratch schema, so these are the only admins.
+func TestUserRepository_UpdateIsAdmin_LastAdmin_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test requires a database; skipped under -short")
+	}
+
+	db := openAuthTestDB(t)
+	defer db.Close()
+
+	ctx := context.Background()
+	repo := NewUserRepository(db)
+
+	a, b := authTestUUID(t), authTestUUID(t)
+	for _, id := range []string{a, b} {
+		mustAuthExec(t, db, `INSERT INTO users (id, email, display_name, password_hash, is_admin) VALUES (?, ?, ?, ?, true)`,
+			id, "admin-int-"+id+"@example.test", "Admin Int Test", "x")
+		defer mustAuthExec(t, db, `DELETE FROM users WHERE id = ?`, id)
+	}
+
+	errs := make(chan error, 2)
+	for _, id := range []string{a, b} {
+		go func(id string) { errs <- repo.UpdateIsAdmin(ctx, id, false) }(id)
+	}
+	var ok, refused int
+	for range 2 {
+		switch err := <-errs; err {
+		case nil:
+			ok++
+		case ErrLastAdmin:
+			refused++
+		default:
+			t.Fatalf("revoking admin: %v", err)
+		}
+	}
+	if ok != 1 || refused != 1 {
+		t.Fatalf("two simultaneous revokes: %d succeeded, %d refused; want 1 and 1", ok, refused)
+	}
+
+	n, err := repo.CountAdmins(ctx)
+	if err != nil {
+		t.Fatalf("counting admins: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("admins left = %d, want 1", n)
+	}
+
+	// Granting is never refused, and a disabled admin can't stand in for one.
+	if err := repo.UpdateIsAdmin(ctx, a, true); err != nil {
+		t.Fatalf("granting admin: %v", err)
+	}
+	mustAuthExec(t, db, `UPDATE users SET is_admin = true, is_disabled = true WHERE id = ?`, b)
+	mustAuthExec(t, db, `UPDATE users SET is_admin = true, is_disabled = false WHERE id = ?`, a)
+	if err := repo.UpdateIsAdmin(ctx, a, false); err != ErrLastAdmin {
+		t.Fatalf("revoking the only admin who can sign in: got %v, want ErrLastAdmin", err)
+	}
+}

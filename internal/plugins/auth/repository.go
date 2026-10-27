@@ -255,21 +255,67 @@ func (r *userRepository) ListUsers(ctx context.Context, offset, limit int) ([]Us
 	return users, total, rows.Err()
 }
 
-// UpdateIsAdmin sets or clears the is_admin flag for a user.
-func (r *userRepository) UpdateIsAdmin(ctx context.Context, id string, isAdmin bool) error {
-	query := `UPDATE users SET is_admin = ? WHERE id = ?`
+// ErrLastAdmin refuses removing admin rights from the only admin who can
+// still sign in, which would lock everyone out of the admin pages.
+var ErrLastAdmin = apperror.NewBadRequest("This is the only admin, so their admin rights can't be removed. Make someone else an admin first.")
 
-	result, err := r.db.ExecContext(ctx, query, isAdmin, id)
+// UpdateIsAdmin sets or clears the is_admin flag for a user. Clearing it
+// refuses with ErrLastAdmin when no other admin could still sign in. The
+// count and the write share one transaction that locks the admin rows, so
+// two admins removing each other at once cannot both pass the check.
+func (r *userRepository) UpdateIsAdmin(ctx context.Context, id string, isAdmin bool) error {
+	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("updating is_admin: %w", err)
+		return fmt.Errorf("starting transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	// A revoke locks every admin row first, in id order, so two revokes
+	// queue behind each other instead of deadlocking on each other's target.
+	if !isAdmin {
+		rows, err := tx.QueryContext(ctx,
+			`SELECT id FROM users WHERE is_admin = true AND is_disabled = FALSE ORDER BY id FOR UPDATE`)
+		if err != nil {
+			return fmt.Errorf("locking admins: %w", err)
+		}
+		others := 0
+		for rows.Next() {
+			var adminID string
+			if err := rows.Scan(&adminID); err != nil {
+				rows.Close()
+				return fmt.Errorf("reading admins: %w", err)
+			}
+			if adminID != id {
+				others++
+			}
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return fmt.Errorf("reading admins: %w", err)
+		}
+		if others == 0 {
+			return ErrLastAdmin
+		}
 	}
 
-	n, _ := result.RowsAffected()
-	if n == 0 {
+	// Read the target rather than trust RowsAffected: MariaDB reports zero
+	// for an UPDATE that changes nothing, which would look like a missing user.
+	var current bool
+	err = tx.QueryRowContext(ctx, `SELECT is_admin FROM users WHERE id = ? FOR UPDATE`, id).Scan(&current)
+	if errors.Is(err, sql.ErrNoRows) {
 		return apperror.NewNotFound("user not found")
 	}
+	if err != nil {
+		return fmt.Errorf("reading user: %w", err)
+	}
+	if current == isAdmin {
+		return nil
+	}
 
-	return nil
+	if _, err := tx.ExecContext(ctx, `UPDATE users SET is_admin = ? WHERE id = ?`, isAdmin, id); err != nil {
+		return fmt.Errorf("updating is_admin: %w", err)
+	}
+	return tx.Commit()
 }
 
 // UpdateIsDisabled sets or clears the is_disabled flag for a user. Disabled
