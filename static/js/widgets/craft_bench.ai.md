@@ -1,0 +1,140 @@
+# craft_bench -- the crafting bench and how to build one
+
+`data-widget="craft_bench"` mounts a crafting scene: a lit workbench where a
+player makes something one step at a time (drag an ingredient into the mortar,
+grind, tip it into the flask, pour to the line, keep the heat steady, strike at
+the right moment), and the steps grade into a Draw Steel project roll. Build
+mode is the same scene with an editor round it, for a Director to arrange the
+room. It runs on the admin Design Lab (`/admin/design-lab`) against demo data
+and saves nothing; the crafting app that stores recipes and benches is #1808.
+
+## The parts
+
+A bench is four scripts, loaded together on sight (`coreWidgets` in
+`internal/app/routes.go`):
+
+| File | Owns | Global |
+|---|---|---|
+| `craft_scene.js` | Play: the steps, grading, the project roll, hover cards, the right-click menu, particles, sound | `CraftScene` |
+| `craft_desk.js` | One skin: the candlelit desk's art, light, sky window and ambiance, and what each piece is | `CraftDesk` |
+| `craft_bench_editor.js` | Build mode, for any skin that fills in the editor tables below | `CraftBenchEditor` |
+| `craft_bench.js` | The widget glue: reads the mount's attributes, injects the bench's CSS once, hands each part its data | registers `craft_bench` |
+
+Every skin plays the same rules, so a new look (the paper journal, a forge, a
+ritual circle) is a new skin, never a new engine. The CSS lives in
+`craft_bench.js` and is injected at mount, like the shop room's, so Tailwind's
+purge never sees it.
+
+Attributes: `data-mode` (`play`, the default, or `build`), `data-thumbs` (the
+folder of tray pictures, `/static/img/crafting/desk/`), and
+`data-campaign-id` + `data-calendar-id` for the window's sky. Without both ids
+the window shows the demo calendar. The Design Lab passes
+`?campaign_id=<id>&calendar_id=<id>` through to them, so an admin can see a real
+campaign's sky in the window.
+
+## The engine
+
+`CraftScene.mount(el, skin, {recipes, items, recipe, settings})` returns
+`{reset, settings, apply, sound, skip, on, state, stage, svg, skin, rerender, destroy}`.
+
+- **Recipes and items are data from anyone**, a Director or their AI, so the
+  engine cleans them (`rules.cleanRecipes`, `rules.cleanItems`): strings become
+  strings, numbers are clamped, a colour that is not a hex colour falls back.
+  Every text that reaches `innerHTML` is escaped.
+- **Steps**: `add` (`to: 'mortar'|'flask'`; anything else means the mortar),
+  `grind` (`turns` 1-8), `tip`, `pour` (`item`), `simmer` (`secs` 2-20),
+  `strike` (`n` 1-6). Unknown kinds and missing ingredients are dropped.
+  `pour`, `simmer` and `strike` are graded perfect, good or miss.
+- **The verdict follows Draw Steel**: no misses and at least one perfect earns
+  an edge (+2 on the project roll); two or more misses earn a bane (−2) only
+  when `settings.bane` is on; anything else is a plain roll. Skipping the
+  steps (allowed when `settings.skip` is on) is a plain roll.
+- **Ids are scoped per scene.** Every id a skin draws, and every `url(#…)` and
+  `href="#…"` pointing at one, is prefixed per mount (`rules.scoper`), so two
+  benches on a page never share a gradient or filter. A skin writes plain ids.
+- **One frame loop per scene**, stopped while the scene is off screen or the
+  tab is hidden. Timers go through `later()` and die with the scene. Calm
+  (reduce-motion, `html[data-cz-reduce]`, `data-view-motion="calm"`) is read
+  per mount: tweens finish at once and shakes are skipped.
+- **A Director's actions are data, never code.** A piece's right-click actions
+  are `[label, name]` (a skin's own action, run by `skin.act`) or
+  `{label, fx, sound, say}`, where `fx` is one of `CraftScene.effects`
+  (`shake`, `sparkle`, `smoke`, `glow`) or `b:<name>` for one of the skin's
+  built-in actions, `sound` is one of `CraftScene.sounds`, and `say` is a line
+  of text shown over the piece.
+
+## What a skin provides
+
+`CraftDesk.create(opts)` is the model; a new skin copies its shape.
+
+| Member | Used by | What it is |
+|---|---|---|
+| `label` | engine | The scene's accessible name |
+| `layout` | engine | Where the flask, mortar, ingredient slots and gauges sit, in the 1200×700 viewBox |
+| `defs()`, `background()`, `foreground()`, `shade()` | engine | SVG strings for the scene's layers |
+| `art.{burner, flask, mortar, pestle, item, bottle, gaugeFrame, barFrame}` | engine | The tools and ingredients, drawn by the skin |
+| `book(state)` | engine | The recipe book's pages, redrawn as the steps go |
+| `fx.{drop, fizz, dust, steam, spark, smoke, bubbles, success}` | engine | Particle bursts for each moment of play |
+| `ambient(P, dt, state, clock)`, `light(clock, state, svg)` | engine | Per-frame ambiance and the flicker |
+| `info`, `act(target, name)` | engine | Each piece's hover name, lines and actions, and the skin's own actions |
+| `itemSpot(key, i)`, `onStep`, `onDone` | engine | Optional: where an ingredient waits, and hooks on each step and the finish |
+| `bind({scope, id, calm})` | engine | Called once at mount with the scene's id scoper |
+| `sound` | engine | Which ambient sound set to play |
+| `opts`, `setOpt(key, value)` | editor | The room's settings and the way to change one |
+| `choices`, `tabs`, `looks`, `look(id)` | editor | The tray: each setting's values, the tabs they sit in, and whole-room presets |
+| `pieces` | editor | Each piece: `kind` (tool or piece), `sel` (its SVG selector), `lock` (why it stays put), `fixed` (actions it always has), `uses`, `light`, `kit` |
+| `kit`, `builtins`, `glows` | editor | Optional decor a Director can add, the skin's own actions offered for `b:`, and the glows that follow a dragged light |
+| `thumb(key, value)` | editor | The URL of a tray picture |
+| `destroy()` | engine | Releases the sky and any object URLs |
+
+The skin dispatches `craft:redrawn` on the scene's `<svg>` after it redraws
+the room, so the editor can re-find its pieces.
+
+## The quality bar
+
+The desk was signed off at this level; a new skin meets it before it ships.
+
+- **One light.** Every highlight faces it and every shadow runs away from it.
+  Its light falls off with distance into the room's ambient colour.
+- **No point lights.** `fePointLight` and `feSpotLight` compute in half
+  precision on many phone GPUs and overflow, so the lit layer renders black or
+  as grey stripes. Light with `feDistantLight` instead, normalised so the
+  surface under the light comes out at the same brightness, and draw the
+  falloff as a radial gradient over the lit layer. Keep the lighting colour at
+  half strength and double it afterwards, so nothing clips inside the filter.
+  The desk's `sun`, `fall`, `half` and `sheen` helpers do all of this; the
+  browser test fails if a point light appears.
+- **Bake the expensive layers.** Plaster, wood and the book are lit by SVG
+  filters once, then replaced by images (`[data-bake]`), so a frame costs only
+  the moving parts. A setting that changes the light re-bakes.
+- **Glass looks like glass**: a rim, a highlight facing the light, the liquid
+  seen through it, a caustic on the bench.
+- **The window is the calendar's sky** (`SkyPane.Scene`), painted from the
+  scene's frame loop, so it stops off screen and holds still under Calm. Its
+  paint time is measured, and a device too slow for the painted sky falls back
+  to the basic one.
+- **Phones**: the scene keeps its 12:7 shape and the build card drops below
+  the scene under 720px.
+
+## Tray pictures
+
+Each tray picture is cut from the real scene with one choice made, so the tray
+shows exactly what a choice does. After changing how a skin draws, redraw
+them:
+
+```
+node tools/craft-thumbs.mjs            # every picture
+node tools/craft-thumbs.mjs cat look   # only the renders that cut those
+```
+
+It needs playwright-core and Chromium, like the browser tests, and writes
+`static/img/crafting/desk/<key>-<value>.jpg`, `kit-*.jpg` and `look-*.jpg`.
+
+## Tests
+
+- `test/js/craft_scene.test.mjs`: the engine's rules in a vm (steps, the
+  verdict, cleaning, the scoper, the action lists).
+- `test/js/craft_bench_browser.test.mjs`: the widget in Chromium (a step plays,
+  two benches keep their ids apart, build mode and a look, every tray picture
+  exists, destroy, no point lights). Shares `test/js/_craft_harness.mjs` with
+  the picture tool.
