@@ -3,7 +3,7 @@
 // unload flushes, not just a save-on-Done click. notes.js is a browser IIFE
 // bound to TipTap + the live DOM, so these pin the wiring by static source
 // contract rather than executing it; behavioral verification (typing → save
-// fires) needs a real browser. (cordinator#6)
+// fires) needs a real browser.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

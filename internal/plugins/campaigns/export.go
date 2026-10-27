@@ -238,13 +238,9 @@ type ExportCalendarWeekday struct {
 
 // ExportCalendarMoon is a moon definition for export.
 //
-// HiddenFromPlayers is an additive field (V5, #778): dropping it on export
-// would mean an imported campaign always shows a previously GM-only moon to
-// players, quietly reversing a secrecy choice the Director made — the same
-// class of mistake CLAUDE.md's partial-update warning names ("a rename push
-// once bound is_private=false and published a hidden character"). It is a
-// *bool, not bool, so a backup taken before this field existed (which omits
-// the key entirely) can be told apart from one that explicitly recorded
+// HiddenFromPlayers must be exported: dropping it would make an imported
+// campaign show a GM-only moon to players. It is a *bool, not bool, so a
+// backup that omits the key can be told apart from one that explicitly recorded
 // "visible": the exporter always writes a non-nil true/false, and a nil read
 // back on import means "unknown, from an old backup" — see
 // calendarImportAdapter.ImportCalendar, which fails that case closed
@@ -289,11 +285,8 @@ type ExportCalendarSeason struct {
 
 // ExportCalendarEra is an era definition for export.
 //
-// StartMonth/StartDay/EndMonth/EndDay are additive fields (V5, calendar-v5
-// seams, #778): the calendar plugin's Era became day-granular under V5 (see
-// calendar.Era), but this struct predates that and originally carried only
-// year boundaries. A backup written before this change (or by any importer
-// that doesn't know these fields) omits them, which unmarshals as zero —
+// StartMonth/StartDay/EndMonth/EndDay make the era day-granular (see
+// calendar.Era). A backup (or importer) that omits them unmarshals as zero —
 // calendarImportAdapter treats a zero StartMonth/StartDay as "day-level
 // precision unknown" and defaults to month 1 day 1 of the year (and month 12
 // day 31 of EndYear when set), the same "whole year" reading

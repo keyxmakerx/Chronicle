@@ -570,31 +570,20 @@ func RenderNoteText(n notes.Note) (string, error) {
 // Year 1247"). The era is appended via the matching Era row when one exists
 // for the year.
 //
-// Privacy filter (defense in depth): the caller's CalendarLister
-// (aiexport's interfaces.go) deliberately bypasses per-viewer role
-// filtering — the AI export is a Director-only tool that needs the full
-// picture — so Safe mode's drops happen HERE, independently, rather than
-// trusting an upstream read to already agree with what "safe" means:
+// Privacy filter: the caller's CalendarLister bypasses per-viewer role
+// filtering (the export is Director-only), so Safe mode drops here,
+// independently of the upstream read:
 //
-//   - cal.Visibility == "dm_only": the CALENDAR itself is GM-only (mirroring
-//     the sibling timeline renderer's tl.Visibility == "dm_only" check
-//     above), so none of its events — even "everyone" ones — are Safe. A
-//     calendar's own visibility is independent of any individual event's,
-//     and skipping this check would export every "everyone" event inside a
-//     hidden calendar even in Safe mode.
-//   - Visibility == "dm_only": never shown to a Player, so never Safe.
-//   - Not yet announced: EffectiveAnnounced resolves to "on_day" (the
-//     event's own kind default, absent an override) AND the event's date is
-//     still in the calendar's future (cal.CurrentAbsoluteDay()) — an event
-//     players could not yet know about. An "ahead"-announced event (a
-//     yearly festival, or one explicitly marked AnnouncedAhead) is common
-//     knowledge regardless of date and stays in.
+//   - cal.Visibility == "dm_only": the whole calendar is GM-only, so none
+//     of its events are Safe, even "everyone" ones.
+//   - event Visibility == "dm_only": never Safe.
+//   - Not yet announced: EffectiveAnnounced resolves to "on_day" and the
+//     event's date is still in the future (cal.CurrentAbsoluteDay()).
+//     "ahead"-announced events (yearly festivals, AnnouncedAhead) stay in.
 //
-// Moons and weather are deliberately NOT read or rendered by this function
-// at all — RenderCalendarEvents' job is events, and a hidden moon
-// (Moon.HiddenFromPlayers) or a not-yet-happened day's weather can only leak
-// through a renderer that touches that data; this one never does, so there
-// is nothing here for Safe mode to independently filter for either.
+// Moons and weather are never read or rendered here: a hidden moon
+// (Moon.HiddenFromPlayers) or a future day's weather could only leak
+// through a renderer that touches them.
 func RenderCalendarEvents(
 	ctx context.Context,
 	cal *calendar.Calendar,

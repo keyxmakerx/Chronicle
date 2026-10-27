@@ -1245,12 +1245,11 @@ func ebmlReadUint(data []byte, el ebmlElement, parentEnd int) (uint64, bool) {
 // inside — so cost is bounded by ebmlMaxScanElements, not file size.
 //
 // A file whose Tracks element can't be found within that budget is
-// rejected: this function only ever narrows what audio/webm accepts, so
-// "can't tell" must fail closed rather than fall back to the old
-// magic-bytes-only behavior.
+// rejected: this function only narrows what audio/webm accepts, so "can't
+// tell" fails closed.
 //
-// audioOnly starts true and only a video TrackEntry actually read flips
-// it, so running out of budget partway through Tracks must never read as
+// audioOnly starts true and only a video TrackEntry actually read flips it,
+// so running out of budget partway through Tracks must never read as
 // "scanned, all audio": padding can push a video entry past the budget.
 // truncated latches on any budget exhaustion inside the Tracks walk and
 // forces rejection.

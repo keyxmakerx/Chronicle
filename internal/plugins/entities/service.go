@@ -74,8 +74,7 @@ type EntityService interface {
 
 	// Entity types
 	GetEntityTypes(ctx context.Context, campaignID string) ([]EntityType, error)
-	// PlacePageExtras places the page pieces that used to be drawn outside
-	// the layout into a campaign's entity types (see page_extras.go).
+	// PlacePageExtras places the page pieces drawn outside the layout into a campaign's entity types (see page_extras.go).
 	PlacePageExtras(ctx context.Context, campaignID string, plans map[int]PageExtrasPlan) (int, error)
 	// PlaceSystemPanels adds only the Game System Panels block to the given
 	// types (see page_extras.go).
@@ -1538,8 +1537,7 @@ func (s *entityService) EnsurePlayerCharacterType(ctx context.Context, campaignI
 
 	// Migrate a stray top-level generic PC type, and (independently) nest a
 	// system's own character type — either or both may be present. Both run; an
-	// early return here is what previously left the system type unnested when a
-	// stray also existed (the operator's live both-types campaign).
+	// early return would leave the system type unnested when a stray exists.
 	if err := nest(pcType, "player-character"); err != nil {
 		return err
 	}

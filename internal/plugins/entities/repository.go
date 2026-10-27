@@ -77,9 +77,8 @@ func NewEntityTypeRepository(db *sql.DB) EntityTypeRepository {
 
 // entityTypeColumns is the canonical SELECT column list for entity_types,
 // in the exact order scanEntityType reads them. Centralizing the list and
-// the scan in one place removes what used to be a six-way duplication where
-// a single column/scan-argument drift would panic at runtime (the scan binds
-// by position, not by name — it never fails to compile). Every entity-type
+// the scan in one place avoids column/scan-argument drift, which panics at
+// runtime (the scan binds by position and still compiles). Every entity-type
 // read MUST go through this pair; bare column names so it composes into any
 // FROM entity_types query without an alias.
 const entityTypeColumns = `id, campaign_id, slug, name, name_plural, icon, color,
@@ -1300,19 +1299,12 @@ func tagFilterClause(tagSlugs []string) (string, []any) {
 // excludes anonymous (role 0); 'public' matches every viewer including
 // anonymous.
 //
-// SECURITY-SENSITIVE: previously mirrored in the (now-deleted) calendar
-// plugin per rule 8 (no cross-plugin repo imports).
-// CALV5-PLACEHOLDER: V5's calendar plugin re-ties events to entities via
-// calendar.Event.EntityID; calendar/service.go's redactHiddenEntityLinks
-// (restored ahead of this comment, #741/#778) is that re-mirroring — it
-// blanks EntityID/EntityName/EntityIcon/EntityColor for a viewer this
-// filter would also exclude, fail-closed if its entity gate is ever
-// unwired. The two policies are read from separate places (this SQL
-// fragment vs. an injected EntityVisibilityGate) and could still drift if
-// one changes without the other; no cross-mirror sync test exists yet
-// (#778 evaluated adding one and judged it over-engineering for the
-// dashboard/category-preview call sites currently wired — revisit if a
-// THIRD caller of either policy appears).
+// SECURITY-SENSITIVE: the calendar plugin mirrors this policy without
+// importing this repo: redactHiddenEntityLinks (calendar/service.go) blanks
+// the entity link fields for a viewer this filter would exclude, failing
+// closed if its entity gate is unwired. The two read separate sources (this
+// SQL vs. an injected EntityVisibilityGate) and no sync test pins them
+// (#778); change both together.
 func visibilityFilter(role int, userID string) (string, []any) {
 	if role >= permissions.RoleOwner {
 		return liveOnly, nil

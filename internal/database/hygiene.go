@@ -1,8 +1,6 @@
-// Package database — hygiene.go
-// Data-shape hygiene checks run on every Chronicle boot as part of
+// Data-shape hygiene checks run on every boot as part of
 // RunStartupHealthChecks, catching invariants the FK schema can't enforce
-// on its own (rules stored in JSON columns, model rules like sub-category
-// nesting depth).
+// (rules stored in JSON columns, sub-category nesting depth).
 //
 // A small registry of HygieneCheck values; the engine iterates them and
 // reports counts. Add a new check here when the DB schema can't enforce
@@ -14,6 +12,7 @@
 // boot. Auto-fix is intentionally avoided — most inconsistencies reflect
 // intent the engine can't infer, and silently rewriting data is worse
 // than the warning.
+
 package database
 
 import (

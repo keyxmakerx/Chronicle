@@ -1,5 +1,4 @@
 // sidebar_tree_reorder.test.mjs — contracts for sidebar_tree.js entity reorder
-// (cordinator#47).
 //
 // Bug 1 (silent revert): the client must send a 0-based *index* among the final
 //   siblings, never a midpoint sort_order. The PUT body carries that index; the

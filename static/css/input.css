@@ -2866,7 +2866,7 @@
     font-size: 10px;
   }
 
-  /* ---- Timeline Visual Enrichment (Phase 2) ---- */
+  /* ---- Timeline visual enrichment ---- */
 
   /* Central ruler line ("spine" of the timeline) */
   .timeline-viz-svg .timeline-ruler-line {
