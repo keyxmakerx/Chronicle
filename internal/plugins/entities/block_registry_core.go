@@ -135,6 +135,16 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 		return blockShopInventory(ctx.CC, ctx.Entity, ctx.CSRFToken)
 	})
 
+	// How an item shows its magic. The widget hides itself on a page that is
+	// not an item (its endpoint answers 404), so any category may place it.
+	r.Register(BlockMeta{
+		Type: "item_look", Label: "Look", Icon: "fa-wand-magic-sparkles",
+		Description: "How an item glows, sounds and strikes when it is used",
+		Addon: "armory", Contexts: []string{"template"},
+	}, func(ctx BlockRenderContext) templ.Component {
+		return blockItemLook(ctx.CC, ctx.Entity, ctx.CSRFToken)
+	})
+
 	// The "permissions" block was removed per ADR-057: editing now lives
 	// only in edit mode via form.templ's inline widget mount. A stored
 	// layout may still reference the unregistered type; RenderBlock drops
