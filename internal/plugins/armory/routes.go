@@ -19,7 +19,7 @@ const AddonSlug = "armory"
 // Public-capable routes use AllowPublicCampaignAccess so public campaigns
 // show items to unauthenticated visitors. All routes are gated behind the
 // "armory" addon — campaign owners can enable/disable via the Plugin Hub.
-func RegisterRoutes(e *echo.Echo, h *Handler, th *TransactionHandler, ih *InstanceHandler, sh *StashHandler, rh *ShopRoomHandler, bh *ShopBuyHandler, campaignSvc campaigns.CampaignService, authSvc auth.AuthService, addonSvc addons.AddonService) {
+func RegisterRoutes(e *echo.Echo, h *Handler, th *TransactionHandler, ih *InstanceHandler, sh *StashHandler, rh *ShopRoomHandler, lh *ItemLookHandler, bh *ShopBuyHandler, campaignSvc campaigns.CampaignService, authSvc auth.AuthService, addonSvc addons.AddonService) {
 	// Public-capable routes: gallery view (Player+).
 	pub := e.Group("/campaigns/:id",
 		auth.OptionalAuth(authSvc),
@@ -32,6 +32,8 @@ func RegisterRoutes(e *echo.Echo, h *Handler, th *TransactionHandler, ih *Instan
 	// A shop's room layout is readable wherever the shop is; the service hides
 	// it from viewers who cannot see the shop entity.
 	pub.GET("/armory/shops/:eid/room", rh.Get, campaigns.RequireViewAccess())
+	// An item's look is readable wherever the item is, on the same terms.
+	pub.GET("/armory/items/:eid/look", lh.Get, campaigns.RequireViewAccess())
 
 	// Authenticated routes for instances and transactions.
 	cg := e.Group("/campaigns/:id",
@@ -53,6 +55,8 @@ func RegisterRoutes(e *echo.Echo, h *Handler, th *TransactionHandler, ih *Instan
 
 	// Only the campaign Owner arranges a shop room.
 	cg.PUT("/armory/shops/:eid/room", rh.Put, campaigns.RequireRole(campaigns.RoleOwner))
+	// Only the campaign Owner gives an item its look.
+	cg.PUT("/armory/items/:eid/look", lh.Put, campaigns.RequireRole(campaigns.RoleOwner))
 
 	// Buying from a shop with a character's coins. The service decides who may
 	// buy for which character and hides a shop the caller cannot see (404).

@@ -135,6 +135,17 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 		return blockShopInventory(ctx.CC, ctx.Entity, ctx.CSRFToken)
 	})
 
+	// How a page shows its magic: an item's glow, sound and strike, or the
+	// look a Remnant's page passes to the items made from it. Any category
+	// may place it; for players it hides itself when there is no look.
+	r.Register(BlockMeta{
+		Type: "item_look", Label: "Look", Icon: "fa-wand-magic-sparkles",
+		Description: "How an item glows, sounds and strikes, or the look a page passes to items made from it",
+		Addon: addonArmory, Contexts: []string{"template"},
+	}, func(ctx BlockRenderContext) templ.Component {
+		return blockItemLook(ctx.CC, ctx.Entity, ctx.CSRFToken)
+	})
+
 	// The "permissions" block was removed per ADR-057: editing now lives
 	// only in edit mode via form.templ's inline widget mount. A stored
 	// layout may still reference the unregistered type; RenderBlock drops
@@ -144,7 +155,7 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 	r.Register(BlockMeta{
 		Type: "inventory", Label: "Inventory", Icon: "fa-shield-halved",
 		Description: "Character inventory — items with quantity, equipped, and attuned",
-		Addon: "armory", Contexts: []string{"template"},
+		Addon: addonArmory, Contexts: []string{"template"},
 	}, func(ctx BlockRenderContext) templ.Component {
 		return blockInventory(ctx.CC, ctx.Entity, ctx.CSRFToken)
 	})
@@ -152,7 +163,7 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 	r.Register(BlockMeta{
 		Type: "transaction_log", Label: "Transaction Log", Icon: "fa-receipt",
 		Description: "Purchase and sale history for shops",
-		Addon: "armory", Contexts: []string{"template"},
+		Addon: addonArmory, Contexts: []string{"template"},
 	}, func(ctx BlockRenderContext) templ.Component {
 		return blockTransactionLog(ctx.CC, ctx.Entity)
 	})

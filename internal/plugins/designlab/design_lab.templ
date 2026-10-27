@@ -9,7 +9,8 @@ import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
 // box expand/collapse primitive, an action that pushes an overlay, and the
 // mini->full launch (container-transform). Admin-only via /admin/design-lab.
 // Below it, the crafting bench kit runs in build mode on demo recipes, once
-// with the desk skin and once with the paper journal skin.
+// with the desk skin and once with the paper journal skin, and the crafting
+// rules editor writes a recipe's "When… then…" rules against a calendar.
 templ SurfaceDemoPage(sky BenchSky) {
 	@layouts.App("Design Lab") {
 		<!-- Sample System consumer: registers the box renderers + mounts the sheet.
@@ -83,6 +84,26 @@ templ SurfaceDemoPage(sky BenchSky) {
 					data-campaign-id={ sky.CampaignID }
 					data-calendar-id={ sky.CalendarID }
 				><p class="text-sm text-fg-muted" role="status">Loading the journal…</p></div>
+			</section>
+
+			<!-- The crafting rules editor (static/js/widgets/craft_rules.ai.md): a
+			     recipe's "When… then…" rules over a calendar, and how the moments
+			     players see look on the bench, with the shared item-look effects. -->
+			<section class="space-y-2">
+				<p class="section-header">Crafting rules &mdash; When&hellip; then&hellip;</p>
+				<p class="text-sm text-fg-secondary max-w-3xl">
+					What changes a recipe: when a moon is full, an event comes round, the
+					weather turns or a rolled event comes up, then the roll gets an edge, it
+					can&rsquo;t be made, it makes an extra one, and so on. The strip shows when
+					each rule is on over the calendar&rsquo;s next 30 days; <strong>How it looks</strong>
+					plays each moment players see on the bench, dressed by dragging effects onto
+					it. Uses the same calendar as the bench above. Nothing saves.
+				</p>
+				<div
+					data-widget="craft_rules"
+					data-campaign-id={ sky.CampaignID }
+					data-calendar-id={ sky.CalendarID }
+				><p class="text-sm text-fg-muted" role="status">Loading the rules editor…</p></div>
 			</section>
 
 		</div>
