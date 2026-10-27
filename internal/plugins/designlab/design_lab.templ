@@ -8,7 +8,8 @@ import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
 // by a sample "System" (static/js/widgets/surface_demo.js). It demonstrates the
 // box expand/collapse primitive, an action that pushes an overlay, and the
 // mini->full launch (container-transform). Admin-only via /admin/design-lab.
-// Below it, the crafting bench kit runs in build mode on demo recipes.
+// Below it, the crafting bench kit runs in build mode on demo recipes, once
+// with the desk skin and once with the paper journal skin.
 templ SurfaceDemoPage(sky BenchSky) {
 	@layouts.App("Design Lab") {
 		<!-- Sample System consumer: registers the box renderers + mounts the sheet.
@@ -61,6 +62,27 @@ templ SurfaceDemoPage(sky BenchSky) {
 					data-campaign-id={ sky.CampaignID }
 					data-calendar-id={ sky.CalendarID }
 				><p class="text-sm text-fg-muted" role="status">Loading the bench…</p></div>
+			</section>
+
+			<!-- The same engine with the paper journal skin (craft_journal.js): a
+			     player's own book, its date, moons and window read as players see them. -->
+			<section class="space-y-2">
+				<p class="section-header">Crafting journal &mdash; build mode</p>
+				<p class="text-sm text-fg-secondary max-w-3xl">
+					The paper version of the same bench: the crafter's journal open on a desk.
+					The quill writes each step, a slip leaves an ink blot, changing recipe turns
+					the page, and a finished recipe is sealed in wax. The tray changes the paper,
+					ink, handwriting, seal, binding, light and wear. The date, the moons and the
+					window's light come from the same calendar as above, as players see it.
+				</p>
+				<div
+					data-widget="craft_bench"
+					data-mode="build"
+					data-skin="journal"
+					data-thumbs="/static/img/crafting/journal/"
+					data-campaign-id={ sky.CampaignID }
+					data-calendar-id={ sky.CalendarID }
+				><p class="text-sm text-fg-muted" role="status">Loading the journal…</p></div>
 			</section>
 
 		</div>

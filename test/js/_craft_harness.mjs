@@ -10,7 +10,7 @@ import { pw, chromePath } from './_browser_env.mjs';
 export const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 const SKY = ['sky_world', 'sky_looks', 'sky_moon', 'sky_events', 'sky_2d', 'sky_shaders', 'sky_gl', 'sky_pane'];
-const CRAFT = ['craft_scene', 'craft_desk', 'craft_bench_editor', 'craft_bench'];
+const CRAFT = ['craft_scene', 'craft_desk', 'craft_journal', 'craft_bench_editor', 'craft_bench'];
 const TYPES = { '.css': 'text/css', '.js': 'application/javascript', '.jpg': 'image/jpeg', '.png': 'image/png', '.woff2': 'font/woff2', '.svg': 'image/svg+xml' };
 
 // mounts: the craft_bench elements' attributes, one string per mount.
@@ -28,6 +28,7 @@ ${scripts}
 </body></html>`;
 }
 
+// api: an optional (url) => body for requests outside /static, standing in for Chronicle's API.
 export async function open(opts = {}) {
   const browser = await pw.chromium.launch({ executablePath: chromePath, args: ['--no-sandbox'] });
   // A browser left open keeps the test process alive after a failure.
@@ -39,7 +40,7 @@ export async function open(opts = {}) {
   }
 }
 
-async function load(browser, { mounts = ['data-mode="play"'], width = 1200, height = 900, scale = 1, paintedSky = false }) {
+async function load(browser, { mounts = ['data-mode="play"'], width = 1200, height = 900, scale = 1, paintedSky = false, api = null }) {
   const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: scale });
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
@@ -52,6 +53,8 @@ async function load(browser, { mounts = ['data-mode="play"'], width = 1200, heig
       const ext = u.pathname.slice(u.pathname.lastIndexOf('.'));
       return route.fulfill({ contentType: TYPES[ext] || 'application/octet-stream', body: readFileSync(file) });
     }
+    const body = api && api(u);
+    if (body != null) return route.fulfill({ contentType: 'application/json', body: JSON.stringify(body) });
     return route.fulfill({ status: 404, contentType: 'application/json', body: '{}' });
   });
   // A busy runner, several browsers at once on a software GPU, can take far

@@ -135,7 +135,7 @@ window.CraftScene = (function () {
   /* Sound, made on the spot with Web Audio so nothing is downloaded. Off
      until the player turns it on, which is also the gesture browsers need. */
   var Sound=(function(){
-    var ac=null,master=null,noise=null,on=false,beds={},crackT=0,profile='desk';
+    var ac=null,master=null,noise=null,on=false,beds={},crackT=0,profile='desk',rainOn=false;
     function init(){if(ac)return;var A=window.AudioContext||window.webkitAudioContext;if(!A)return;ac=new A();master=ac.createGain();master.gain.value=.7;master.connect(ac.destination);
       var len=ac.sampleRate*2,b=ac.createBuffer(1,len,ac.sampleRate),d=b.getChannelData(0),last=0;
       for(var i=0;i<len;i++){var w=Math.random()*2-1;last=(last+.02*w)/1.02;d[i]=w*.6+last*2.4;}noise=b;}
@@ -146,7 +146,8 @@ window.CraftScene = (function () {
     function tone(f,g,dur,type,f2){if(!on)return;var o=ac.createOscillator(),gn=ac.createGain(),t=ac.currentTime;o.type=type||'sine';o.frequency.setValueAtTime(f,t);if(f2)o.frequency.exponentialRampToValueAtTime(f2,t+dur);
       gn.gain.setValueAtTime(.0001,t);gn.gain.exponentialRampToValueAtTime(g,t+.012);gn.gain.exponentialRampToValueAtTime(.0001,t+dur);o.connect(gn);gn.connect(master);o.start(t);o.stop(t+dur+.05);}
     function set(v,prof){profile=prof||profile;if(v){init();if(!ac)return;ac.resume();on=true;
-        if(!beds.rain&&profile==='desk')bed('rain',1400,.4,.05);
+        // The desk always hears rain; another skin only while its own window shows it
+        if(!beds.rain)bed('rain',1400,.4,.05);beds.rain.base=profile==='desk'||rainOn?.05:0;
         if(!beds.room)bed('room',220,.7,profile==='desk'?.05:.035,'lowpass');
         if(!beds.pour)bed('pour',900,1.2,0);
         Object.keys(beds).forEach(function(k){if(k!=='pour')beds[k].g.gain.setTargetAtTime(beds[k].base,ac.currentTime,.4);});}
@@ -154,6 +155,7 @@ window.CraftScene = (function () {
     function tick(dt,heat){if(!on)return;crackT-=dt;if(crackT<=0){crackT=rnd(.05,.5);burst(rnd(1800,4200),2,rnd(.03,.12)*(profile==='desk'?1:.6),rnd(.015,.04),'highpass');}
       if(heat>.35&&Math.random()<dt*heat*9)tone(rnd(260,420),.05,.08,'sine',rnd(600,900));}
     function pour(v){if(!on||!beds.pour)return;beds.pour.g.gain.setTargetAtTime(v?.16:0,ac.currentTime,.05);}
+    function rain(v){rainOn=!!v;if(on&&beds.rain){beds.rain.base=profile==='desk'||rainOn?.05:0;beds.rain.g.gain.setTargetAtTime(beds.rain.base,ac.currentTime,.5);}}
     var fx={
       grind:function(){burst(rnd(500,800),3,.18,.09);},
       drop:function(){tone(180,.25,.18,'sine',90);burst(700,1,.08,.08);},
@@ -168,9 +170,11 @@ window.CraftScene = (function () {
       purr:function(){if(!on)return;var s=ac.createBufferSource();s.buffer=noise;var fl=ac.createBiquadFilter();fl.type='lowpass';fl.frequency.value=140;var g=ac.createGain(),t=ac.currentTime,lfo=ac.createOscillator(),lg=ac.createGain();lfo.frequency.value=24;lg.gain.value=.12;lfo.connect(lg);lg.connect(g.gain);g.gain.setValueAtTime(.14,t);g.gain.linearRampToValueAtTime(0,t+1.6);s.connect(fl);fl.connect(g);g.connect(master);s.start(t);lfo.start(t);s.stop(t+1.7);lfo.stop(t+1.7);},
       thunder:function(){burst(90,.6,.5,2.2,'lowpass');setTimeout(function(){burst(160,.5,.3,1.4,'lowpass');},180);},
       dice:function(){for(var i=0;i<5;i++)setTimeout(function(){tone(rnd(900,1500),.05,.05,'square');},i*70);},
+      page:function(){burst(2200,.5,.16,.35,'bandpass');setTimeout(function(){burst(900,.6,.1,.25,'lowpass');},180);},
+      wax:function(){burst(1200,.8,.06,.5,'lowpass');},
       done:function(){[523,659,784,1047].forEach(function(f,i){setTimeout(function(){tone(f,.12,.9);},i*110);});}
     };
-    return {set:set,tick:tick,pour:pour,fx:function(n){if(on&&fx.hasOwnProperty(n))fx[n]();},isOn:function(){return on;},names:function(){return Object.keys(fx);}};
+    return {set:set,tick:tick,pour:pour,rain:rain,fx:function(n){if(on&&fx.hasOwnProperty(n))fx[n]();},isOn:function(){return on;},names:function(){return Object.keys(fx);}};
   })();
 
   function el(tag,attrs,html){var e=document.createElementNS(NS,tag);for(var k in attrs)e.setAttribute(k,attrs[k]);if(html)e.innerHTML=html;return e;}
@@ -222,14 +226,21 @@ window.CraftScene = (function () {
         var h=spot(k,i);parts.items[k]={g:g,x:h[0],y:h[1],rot:0,s:1,home:h,gone:false};});
     }
 
+    /* A skin with turnTo animates a change of recipe (the journal turns the
+       page) and calls go() at the moment the new recipe should appear. */
+    var turning=false;
     function reset(rk){
-      rk=rk&&RECIPES[rk]?rk:(S&&S.rk)||Object.keys(RECIPES)[0];var r=RECIPES[rk];if(!r)return;var steps=buildSteps(r,ITEMS);
+      rk=rk&&RECIPES[rk]?rk:(S&&S.rk)||Object.keys(RECIPES)[0];
+      if(skin.turnTo&&S&&rk!==S.rk){if(turning)return;turning=true;skin.turnTo(function(){turning=false;if(!dead)setup(rk);});return;}
+      setup(rk);
+    }
+    function setup(rk){var r=RECIPES[rk];if(!r)return;var steps=buildSteps(r,ITEMS);
       var pre=!steps.some(function(s){return s.t==='pour';}),items=[];
       steps.forEach(function(s){if(s.item&&items.indexOf(s.item)<0)items.push(s.item);});
       S={rk:rk,r:r,steps:steps,items:items,i:0,res:[],level:pre?.6:.12,liq:r.base,paste:null,pasteK:0,heat:.12,holding:false,phase:'step',
         mortar:{x:L.mortar.x,y:L.mortar.y,rot:0},pestle:{x:0,y:0,rot:0},sel:null,drag:null,mini:null,verdict:null,points:+r.start||0,roll:null,shake:0,flash:0};
       restPestle();P.clear();tweens.length=0;
-      build();gUI.innerHTML='';parts.result.innerHTML='';
+      build();gUI.innerHTML='';parts.result.innerHTML='';if(skin.onReset)skin.onReset(S);
       enterStep();emitChange();
     }
     function restPestle(){S.pestle.x=S.mortar.x+L.mortar.r*.32;S.pestle.y=S.mortar.y+2;S.pestle.rot=28;}
@@ -282,11 +293,16 @@ window.CraftScene = (function () {
        and every hold or press also works with the space bar. */
     function pt(e){var p=svg.createSVGPoint();p.x=e.clientX;p.y=e.clientY;var m=svg.getScreenCTM();return m?p.matrixTransform(m.inverse()):{x:0,y:0};}
     function dist(a,b,c,d){return Math.hypot(a-c,b-d);}
-    function targetOf(st){return st.t==='tip'||st.to==='flask'||st.t==='pour'?{x:L.flask.x,y:L.flask.neck+20,r:120}:{x:L.mortar.x,y:L.mortar.y,r:L.mortar.r*1.3};}
+    function targetOf(st){return st.t==='tip'||st.to==='flask'||st.t==='pour'?{x:L.flask.x,y:L.flask.neck+20,r:120,sel:'.cr-flaskg'}:{x:L.mortar.x,y:L.mortar.y,r:L.mortar.r*1.3,sel:'.cr-mortar'};}
+    // The flask's target circle sits at its neck, so its round body counts too: the hint says "the flask", and players aim at the bulb.
+    function onTarget(x,y,tg,n){if(dist(x,y,tg.x,tg.y)<tg.r)return true;if(n&&n.closest&&n.closest(tg.sel))return true;
+      return tg.sel==='.cr-flaskg'&&dist(x,y,L.flask.x,L.flask.y)<L.flask.r*1.15;}
 
+    // A skin's own drags (the journal's signet) get the pointer first and say whether they took it.
     function down(e){
+      if(skin.down&&skin.down(e,pt(e))){e.preventDefault();return;}
       if(S.phase!=='step')return;var st=cur(),p=pt(e),hitItem=e.target.closest&&e.target.closest('[data-item]');
-      if(S.sel){var tg=targetOf(st);if(dist(p.x,p.y,tg.x,tg.y)<tg.r){var s=S.sel;S.sel=null;svg.classList.remove('cr-picking');place(s);e.preventDefault();return;}}
+      if(S.sel){var tg=targetOf(st);if(onTarget(p.x,p.y,tg,e.target)){var s=S.sel;S.sel=null;svg.classList.remove('cr-picking');place(s);e.preventDefault();return;}}
       if((st.t==='add'||(st.t==='pour'&&!S.mini.posed))&&hitItem&&hitItem.getAttribute('data-item')===st.item){
         var it=parts.items[st.item];S.drag={k:'item',it:it,ox:p.x-it.x,oy:p.y-it.y,sx:p.x,sy:p.y,moved:0};}
       else if(st.t==='tip'&&(e.target.closest('.cr-mortar')||dist(p.x,p.y,S.mortar.x,S.mortar.y)<L.mortar.r*1.2)){
@@ -298,17 +314,17 @@ window.CraftScene = (function () {
       try{svg.setPointerCapture(e.pointerId);}catch(_){}
       e.preventDefault();
     }
-    function move(e){if(!S.drag){hover(e);return;}hideCard();var p=pt(e),d=S.drag;
+    function move(e){if(skin.move&&skin.move(e,pt(e)))return;if(!S.drag){hover(e);return;}hideCard();var p=pt(e),d=S.drag;
       if(d.k==='grind'){grindMove(p);return;}
       d.moved=Math.max(d.moved,dist(p.x,p.y,d.sx,d.sy));
-      if(d.k==='item'){d.it.x=p.x-d.ox;d.it.y=p.y-d.oy;var tg=targetOf(cur());d.it.over=dist(d.it.x,d.it.y,tg.x,tg.y)<tg.r;}
+      if(d.k==='item'){d.it.x=p.x-d.ox;d.it.y=p.y-d.oy;var tg=targetOf(cur());d.it.over=onTarget(d.it.x,d.it.y,tg);}
       if(d.k==='mortar'){S.mortar.x=p.x-d.ox;S.mortar.y=p.y-d.oy;var near=dist(S.mortar.x,S.mortar.y,L.flask.x,L.flask.neck)<170;S.mortar.rot=lerp(S.mortar.rot,near?L.tip.rot:0,.25);restPestle();}
     }
-    function up(e){if(S.holding)release();var d=S.drag;S.drag=null;if(!d)return;
+    function up(e){if(skin.up&&skin.up(e,pt(e)))return;if(S.holding)release();var d=S.drag;S.drag=null;if(!d)return;
       if(d.k==='grind'){if(cur()&&cur().t==='grind')restPestle();return;}
       var st=cur(),tg=targetOf(st);
       if(d.k==='item'){if(d.moved<6){S.sel=d.it;svg.classList.add('cr-picking');setSay('Now click the '+(st.to==='mortar'?'mortar':'flask')+' to put it in');return;}
-        if(dist(d.it.x,d.it.y,tg.x,tg.y)<tg.r)place(d.it);else home(d.it);}
+        if(onTarget(d.it.x,d.it.y,tg))place(d.it);else home(d.it);}
       if(d.k==='mortar'){if(d.moved<6){S.sel='mortar';svg.classList.add('cr-picking');setSay('Now click the flask to tip it in');return;}
         if(dist(S.mortar.x,S.mortar.y,L.flask.x,L.flask.neck)<190)place('mortar');else{tween(S.mortar,{x:L.mortar.x,y:L.mortar.y,rot:0},.35);}}
     }
@@ -353,7 +369,7 @@ window.CraftScene = (function () {
       if(m.hits.length>=cur().n){var miss=m.hits.filter(function(h){return h==='miss';}).length,per=m.hits.filter(function(h){return h==='perfect';}).length;
         grade(miss>=2?'miss':miss===0&&per>=2?'perfect':'good');placeZone();later(function(){S.fizzing=false;tweenColor(S.r.final,.8);advance();},500);return;}
       m.c=rnd(.25,.75);m.z*=.82;placeZone();}
-    function feedback(g,x,y){Sound.fx(g);skin.fx.spark(P,x,y,g);if(g==='miss')skin.fx.smoke(P,x,y);
+    function feedback(g,x,y){Sound.fx(g);if(skin.onFeedback)skin.onFeedback(g,x,y,S);skin.fx.spark(P,x,y,g);if(g==='miss')skin.fx.smoke(P,x,y);
       var t=el('text',{'class':'cr-pop is-'+g,x:x,y:y-40,'text-anchor':'middle'});t.textContent=g==='perfect'?'Perfect':g==='good'?'Good':'Miss';gUI.appendChild(t);later(function(){t.remove();},1100);}
     function tweenColor(c,dur){var from=S.liq,o={k:0};tween(o,{k:1},dur);(function s(){S.liq=mix(from,c,o.k);if(o.k<1)frame(s);})();}
 
@@ -363,7 +379,9 @@ window.CraftScene = (function () {
       var again=[{label:'Again',fn:function(){reset();}}];
       if(S.points>=S.r.goal){var R=L.result,o={s:0};parts.result.innerHTML=scope('<g class="cr-bottle">'+skin.art.bottle(S.r.final,S.r.name)+'</g>');var gB=parts.result.firstChild;
         tween(o,{s:1},.6);(function g(){gB.setAttribute('transform','translate('+R.x+','+R.y+') scale('+o.s+')');if(o.s<1)frame(g);})();
-        skin.fx.success(P,R.x,R.y-30,S.r.final);Sound.fx('done');if(skin.onDone)skin.onDone(S);setSay('Finished. One '+S.r.name.toLowerCase()+' is in '+S.r.who+'’s pack.',again);}
+        // A skin's onDone may return true to finish in its own time (the journal's seal), calling fin when it has.
+        var fin=function(){if(!dead)setSay('Finished. One '+S.r.name.toLowerCase()+' is in '+S.r.who+'’s pack.',again);};
+        skin.fx.success(P,R.x,R.y-30,S.r.final);Sound.fx('done');if(!(skin.onDone&&skin.onDone(S,fin)===true))fin();}
       else setSay('+'+total+' project points. '+(S.r.goal-S.points)+' to go at the next respite.',again);}
     function drawDice(a,b,fin){var D=L.dice;gUI.innerHTML='<g class="cr-dice'+(fin?' is-final':'')+'">'+d10(D.x-34,D.y,a)+d10(D.x+34,D.y,b,'b')+'</g>';}
 
@@ -410,8 +428,10 @@ window.CraftScene = (function () {
        what you can do with it now; the menu holds the same actions plus a few
        for flavour. A long press opens the menu on touch. */
     function targetAt(n){if(!n||!n.closest)return null;var it=n.closest('[data-item]');if(it)return {id:'item:'+it.getAttribute('data-item'),el:it};
-      var m=[['.cr-mortar','mortar'],['.cr-pestle','pestle'],['.cr-flaskg','flask'],['.cr-book','book']];for(var i=0;i<m.length;i++){var e=n.closest(m[i][0]);if(e)return {id:m[i][1],el:e};}
-      var pr=n.closest('[data-prop]');return pr?{id:pr.getAttribute('data-prop'),el:pr}:null;}
+      // The innermost wins, so a prop drawn inside the book (the journal's moons) is the one hovered
+      var pr=n.closest('[data-prop]'),m=[['.cr-mortar','mortar'],['.cr-pestle','pestle'],['.cr-flaskg','flask'],['.cr-book','book']];
+      for(var i=0;i<m.length;i++){var e=n.closest(m[i][0]);if(e&&!(pr&&e.contains(pr)))return {id:m[i][1],el:e};}
+      return pr?{id:pr.getAttribute('data-prop'),el:pr}:null;}
     // The tools every recipe uses. A skin's info table renames or rewords them; their built-in actions stay.
     var BASE={mortar:{name:'Mortar',text:'Granite, heavy enough to stay put.'},pestle:{name:'Pestle',text:'Worn smooth by a hundred grindings.'},
       flask:{name:'Round flask',text:'Thin glass on a brass ring over the burner.',acts:[['Swirl it','swirl']]},book:{name:'Recipe book',text:'The recipe, copied out by hand.',acts:[['Read the recipe','read']]}};
@@ -481,7 +501,13 @@ window.CraftScene = (function () {
     var io=window.IntersectionObserver?new IntersectionObserver(function(es){visible=es[es.length-1].isIntersecting;kick();}):null;if(io)io.observe(stage);
     document.addEventListener('visibilitychange',kick);
 
-    svg.addEventListener('pointerdown',function(e){stage.focus({preventScroll:true});down(e);});
+    /* A tap or click on something the step doesn't use opens its card, since a
+       touch screen has no hover and a sketch can be hard to make out. */
+    var tap=null;
+    svg.addEventListener('pointerdown',function(e){stage.focus({preventScroll:true});down(e);
+      var t=!e.defaultPrevented&&!S.sel&&targetAt(e.target);tap=t?{t:t,x:e.clientX,y:e.clientY,at:performance.now(),touch:e.pointerType!=='mouse'}:null;});
+    svg.addEventListener('pointerup',function(e){var k=tap;tap=null;if(!k||!menu.hidden||performance.now()-k.at>500||Math.hypot(e.clientX-k.x,e.clientY-k.y)>8)return;
+      var h=cardHTML(infoFor(k.t.id));if(k.touch)h=h.replace('Right-click for more','Press and hold for more');cancel(hovT);pin(h,e.clientX,e.clientY);});
     svg.addEventListener('pointermove',move);svg.addEventListener('pointerup',up);svg.addEventListener('pointercancel',up);
     stage.addEventListener('keydown',function(e){if(e.code!=='Space'&&e.key!==' ')return;e.preventDefault();if(e.repeat)return;var st=cur();if(S.phase!=='step'||!st)return;
       if(st.t==='strike')strike();else if((st.t==='pour'&&S.mini.posed)||st.t==='simmer')press();});
@@ -492,6 +518,10 @@ window.CraftScene = (function () {
       if(io)io.disconnect();document.removeEventListener('visibilitychange',kick);document.removeEventListener('pointerdown',outside);
       if(soundOn)Sound.set(false);P.destroy();if(skin.destroy)skin.destroy();root.innerHTML='';}
 
+    /* What a skin with its own layers and drags needs from the scene, handed
+       over once the scene's elements exist and before the first recipe. */
+    if(skin.mounted)skin.mounted({P:P,svg:svg,stage:stage,root:root,calm:calm,state:function(){return S;},tween:tween,later:later,
+      say:setSay,sfx:Sound.fx,rain:Sound.rain,rerender:function(){if(S)renderBook();}});
     reset(opts.recipe);kick();
     return {reset:reset,settings:set,apply:function(){reset(S.rk);},sound:function(v){soundOn=!!v;Sound.set(v,skin.sound);},
       skip:function(){if(!set.skip||S.phase!=='step')return;S.res=[];S.phase='roll';S.verdict=verdict([],set);S.verdict.why='Steps skipped';S.liq=S.r.final;enterStep();emitChange();},

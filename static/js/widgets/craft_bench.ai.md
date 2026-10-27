@@ -10,23 +10,25 @@ and saves nothing; the crafting app that stores recipes and benches is #1808.
 
 ## The parts
 
-A bench is four scripts, loaded together on sight (`coreWidgets` in
+A bench is five scripts, loaded together on sight (`coreWidgets` in
 `internal/app/routes.go`):
 
 | File | Owns | Global |
 |---|---|---|
 | `craft_scene.js` | Play: the steps, grading, the project roll, hover cards, the right-click menu, particles, sound | `CraftScene` |
 | `craft_desk.js` | One skin: the candlelit desk's art, light, sky window and ambiance, and what each piece is | `CraftDesk` |
+| `craft_journal.js` | The other skin: the crafter's paper journal open on a desk, its ink, quill, blots, page turn and wax seal | `CraftJournal` |
 | `craft_bench_editor.js` | Build mode, for any skin that fills in the editor tables below | `CraftBenchEditor` |
 | `craft_bench.js` | The widget glue: reads the mount's attributes, injects the bench's CSS once, hands each part its data | registers `craft_bench` |
 
-Every skin plays the same rules, so a new look (the paper journal, a forge, a
-ritual circle) is a new skin, never a new engine. The CSS lives in
+Every skin plays the same rules, so a new look (a forge, a ritual circle) is
+a new skin, never a new engine. The CSS lives in
 `craft_bench.js` and is injected at mount, like the shop room's, so Tailwind's
 purge never sees it.
 
-Attributes: `data-mode` (`play`, the default, or `build`), `data-thumbs` (the
-folder of tray pictures, `/static/img/crafting/desk/`), and
+Attributes: `data-mode` (`play`, the default, or `build`), `data-skin`
+(`desk`, the default, or `journal`), `data-thumbs` (the folder of tray
+pictures, `/static/img/crafting/desk/` or `/static/img/crafting/journal/`), and
 `data-campaign-id` + `data-calendar-id` for the window's sky. Without both ids
 the window shows the demo calendar. The Design Lab passes
 `?campaign_id=<id>&calendar_id=<id>` through to them, so an admin can see a real
@@ -86,9 +88,43 @@ campaign's sky in the window.
 | `kit`, `builtins`, `glows` | editor | Optional decor a Director can add, the skin's own actions offered for `b:`, and the glows that follow a dragged light |
 | `thumb(key, value)` | editor | The URL of a tray picture |
 | `destroy()` | engine | Releases the sky and any object URLs |
+| `mounted(api)` | engine | Optional: called once the scene's elements exist, before the first recipe, for a skin with layers or drags of its own. `api` is `{P, svg, stage, root, calm, state, tween, later, say, sfx, rain, rerender}` |
+| `down`, `move`, `up` `(e, pt)` | engine | Optional: a skin's own drag gets the pointer first and returns true when it took it (the journal's signet) |
+| `onReset(S)`, `onFeedback(grade, x, y, S)` | engine | Optional: after a recipe is set up, and on every graded moment (the journal blots a miss) |
+| `onDone(S, fin)` | engine | Optional: returning true means the skin finishes in its own time and calls `fin()` (the journal waits for its seal) |
+| `turnTo(go)` | engine | Optional: animates a change of recipe and calls `go()` when the new one should appear (the journal turns the page) |
 
 The skin dispatches `craft:redrawn` on the scene's `<svg>` after it redraws
 the room, so the editor can re-find its pieces.
+
+## The journal
+
+`CraftJournal.create(opts)` takes the desk's `sky`, `thumbs` and `info`, plus
+`look`, a saved set of its choices. What differs from the desk:
+
+- **The page is baked as one picture.** Desk, binding, paper, wear and props
+  are a standalone SVG document turned into an image (`data-bake="page"`), so
+  it carries no fonts or CSS variables; ink, washes and moving parts are live
+  over it, coloured by CSS variables on the stage (`--pp`, `--ink`, `--hand`,
+  `--seal`, …). Paper, binding, wear and wax colour re-bake; ink and hand don't.
+- **Light is one plain canvas over the scene**: ambient, the candle's pool and
+  the window panes thrown across the left page, plus the glow. It is worked out
+  as a multiply, then turned into a see-through shade that matches the multiply
+  over the paper and the desk, because a blend mode over the whole scene costs
+  a full extra pass every frame. It redraws at 30 a second, and the blurred
+  window panes are drawn once per colour.
+- **Writing.** Anything new on the page is written by the quill: `wr()` and
+  `wtext()` wrap it in a clip that the quill reveals. What was on the page when
+  it opened is simply there. Under Calm everything is simply there.
+- **The calendar is read as players see it** (`?audience=players`, and moons
+  with `hidden_from_players` are skipped anyway): it is a player's book, so a
+  Director previewing it sees no secret moon. The date line, up to three moons
+  and the window's weather and hour come from it.
+- **Fonts** are self-hosted: Kalam and IM Fell from `static/fonts/customize/`,
+  the other hands from `static/fonts/crafting/`.
+- Its CSS is `JOURNAL_CSS` in `craft_bench.js`, every rule under `.crj` (the
+  class the journal puts on its stage), resetting the desk's dark-room colours
+  on the parts both skins share.
 
 ## The quality bar
 
@@ -113,6 +149,13 @@ The desk was signed off at this level; a new skin meets it before it ships.
   scene's frame loop, so it stops off screen and holds still under Calm. Its
   paint time is measured, and a device too slow for the painted sky falls back
   to the basic one.
+- **No blend modes over the whole scene.** A `mix-blend-mode` layer the size
+  of the stage makes the browser composite the scene twice every frame; on the
+  journal it cost a third of the frame rate. Blend inside a baked picture, or
+  draw a plain see-through layer that looks the same.
+- **Targets are what the hint names.** When the hint says "click the flask",
+  anywhere on the flask counts (`onTarget`), not just the circle the engine
+  aims at.
 - **Phones**: the scene keeps its 12:7 shape and the build card drops below
   the scene under 720px.
 
@@ -123,12 +166,15 @@ shows exactly what a choice does. After changing how a skin draws, redraw
 them:
 
 ```
-node tools/craft-thumbs.mjs            # every picture
-node tools/craft-thumbs.mjs cat look   # only the renders that cut those
+node tools/craft-thumbs.mjs                  # every desk picture
+node tools/craft-thumbs.mjs cat look         # only the renders that cut those
+node tools/craft-thumbs.mjs --skin=journal   # the journal's pictures
 ```
 
 It needs playwright-core and Chromium, like the browser tests, and writes
-`static/img/crafting/desk/<key>-<value>.jpg`, `kit-*.jpg` and `look-*.jpg`.
+`static/img/crafting/<skin>/<key>-<value>.jpg`, `kit-*.jpg` and `look-*.jpg`.
+The journal's seal and signet pictures are cut from a recipe it has really
+finished and sealed.
 
 ## Tests
 
@@ -136,5 +182,7 @@ It needs playwright-core and Chromium, like the browser tests, and writes
   verdict, cleaning, the scoper, the action lists).
 - `test/js/craft_bench_browser.test.mjs`: the widget in Chromium (a step plays,
   two benches keep their ids apart, build mode and a look, every tray picture
-  exists, destroy, no point lights). Shares `test/js/_craft_harness.mjs` with
+  exists, destroy, no point lights), and the journal (a step plays beside a
+  desk with ids apart, the players' calendar with no hidden moon, the seal, a
+  blot staying with its recipe, its tray pictures). Shares `test/js/_craft_harness.mjs` with
   the picture tool.
