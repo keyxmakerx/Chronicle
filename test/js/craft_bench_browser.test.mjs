@@ -184,13 +184,43 @@ test('the journal reads the players’ calendar and never draws a hidden moon', 
   await page.waitForFunction(() => /Rain/i.test((document.querySelector('.p-date') || {}).textContent || ''), null, { timeout: 30000 });
   const out = await page.evaluate(() => {
     const svg = document.querySelector('.cr-svg'), skin = document.querySelector('[data-widget="craft_bench"]')._crb.skin;
-    return { date: svg.querySelector('.p-date').textContent, moons: svg.querySelectorAll('[data-prop^="moon-"]').length, umbra: /Umbra/.test(svg.outerHTML + JSON.stringify(skin.info)), moon: skin.info['moon-0'] };
+    return { date: svg.querySelector('.p-date').textContent, moons: svg.querySelectorAll('[data-prop^="moon-"]').length, umbra: /Umbra/.test(svg.outerHTML + JSON.stringify(skin.info)), moon: skin.info['moon-0'], named: svg.textContent.includes('Lacrimosa') };
   });
   assert.ok(asked.includes('/campaigns/c1/calendars/cal1?audience=players'), 'the calendar is read as players see it');
   assert.equal(out.date, 'Firstfrost 8, 100 AS · rain');
   assert.equal(out.moons, 1);
   assert.equal(out.umbra, false, 'a moon hidden from players is never drawn or named');
   assert.equal(out.moon.name, 'Lacrimosa');
+  assert.ok(out.named, 'the moon is named under its sketch');
+  assert.deepEqual(errors, []);
+});
+
+test('the flask counts as the flask wherever it is clicked, and a tap opens a sketch’s card', { skip, timeout: 180000 }, async (t) => {
+  const { page, errors } = await bench(t, { mounts: [JOURNAL] });
+  await ready(page);
+  // The caustic flask's fourth step adds the wyrmbile to the flask.
+  const pts = await page.evaluate(async () => {
+    const c = document.querySelector('[data-widget="craft_bench"]')._crb, wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    document.querySelector('.crj').scrollIntoView();
+    c.reset('caustic'); await wait(1500); c.state().i = 3;
+    const svg = document.querySelector('.cr-svg'), m = svg.getScreenCTM(), p = svg.createSVGPoint();
+    const at = (x, y) => { p.x = x; p.y = y; const q = p.matrixTransform(m); return [q.x, q.y]; };
+    const it = document.querySelector('[data-item="bile"]').getBoundingClientRect();
+    const moon = document.querySelector('[data-prop="moon-0"]').getBoundingClientRect();
+    return { item: [it.x + it.width / 2, it.y + it.height / 2], bulb: at(884, 430), moon: [moon.x + moon.width / 2, moon.y + moon.height / 2] };
+  });
+  await page.mouse.click(...pts.item);
+  await page.waitForTimeout(300);
+  await page.mouse.click(...pts.bulb);
+  await page.waitForFunction(() => document.querySelector('[data-widget="craft_bench"]')._crb.state().i === 4, null, { timeout: 30000 });
+  const card = await page.evaluate(([x, y]) => {
+    const el = document.elementFromPoint(x, y), o = { bubbles: true, clientX: x, clientY: y, pointerType: 'touch', pointerId: 7, isPrimary: true };
+    el.dispatchEvent(new PointerEvent('pointerdown', o)); el.dispatchEvent(new PointerEvent('pointerup', o));
+    const c = document.querySelector('.cr-card');
+    return c.classList.contains('show') ? c.textContent : '';
+  }, pts.moon);
+  assert.match(card, /waxing|waning|full|new|crescent|gibbous|quarter/i, 'a tap on the moon opens its card');
+  assert.match(card, /Press and hold/, 'a touch card says how to get more');
   assert.deepEqual(errors, []);
 });
 

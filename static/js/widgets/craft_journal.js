@@ -339,20 +339,26 @@ window.CraftJournal = (function () {
   }
   function wtext(key,x,y,cls,txt,extra){return wr(key,x,y,'<text class="p-hand '+cls+(W.wet[key]>performance.now()?' is-wet':'')+'" data-w="'+esc(key)+'" x="'+x+'" y="'+y+'" '+(extra||'')+'>'+txt+'</text>');}
 
-  /* A moon sketched in the margin: the outline in ink, the dark part hatched,
-     the lit part washed in the moon's own colour. p runs new 0, full .5. */
+  /* A moon sketched in the margin: the outline in ink, the lit part left as
+     bright paper under the moon's own colour, the dark part shaded and
+     hatched, so the phase reads even on a page in shadow. p runs new 0, full .5. */
   function moonSketch(m,cx,cy,r,i){
-    var a=2*Math.PI*m.p,k=Math.cos(a),wax=m.p<.5,rx=Math.abs(k)*r;
+    var a=2*Math.PI*m.p,k=Math.cos(a),wax=m.p<.5,rx=Math.abs(k)*r,col=m.color==='#e5e7eb'?'#b8c4d8':m.color;
     var lit='M'+cx+','+(cy-r)+' A'+r+','+r+' 0 0 '+(wax?1:0)+' '+cx+','+(cy+r)+' A'+rx.toFixed(2)+','+r+' 0 0 '+((k>0)===wax?0:1)+' '+cx+','+(cy-r)+' Z';
-    return '<g data-prop="moon-'+i+'">'+wash(lit,m.color==='#e5e7eb'?'#b8c4d8':m.color,m.color==='#e5e7eb'?.5:.42,'filter="url(#p-wc)"')+
+    var dark='M'+cx+','+(cy-r)+' A'+r+','+r+' 0 0 '+(wax?0:1)+' '+cx+','+(cy+r)+' A'+rx.toFixed(2)+','+r+' 0 0 '+((k>0)===wax?0:1)+' '+cx+','+(cy-r)+' Z';
+    return '<g data-prop="moon-'+i+'"><path d="'+dark+'" style="fill:var(--ink)" fill-opacity=".5"/><path d="'+dark+'" fill="url(#p-hatch)"/>'+
+      '<path d="'+lit+'" fill="#fbf4de" fill-opacity=".92"/>'+wash(lit,col,.5,'filter="url(#p-wc)"')+
       '<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" class="p-ink p-thin" filter="url(#p-rough)"/>'+
-      '<path d="M'+cx+','+(cy-r)+' A'+r+','+r+' 0 0 '+(wax?0:1)+' '+cx+','+(cy+r)+' A'+rx.toFixed(2)+','+r+' 0 0 '+((k>0)===wax?0:1)+' '+cx+','+(cy-r)+' Z" fill="url(#p-hatch)"/>'+
       '<circle cx="'+cx+'" cy="'+cy+'" r="'+(r+8)+'" fill="transparent"/></g>';}
+  // One moon is named under its sketch; several share a caption, and each still has its own card.
+  function moonRow(moons){var n=moons.length,s='',x0=556-(n-1)*40;
+    moons.forEach(function(m,i){s+=moonSketch(m,x0+i*40,72,15,i);});
+    return s+'<text class="p-small" x="'+(x0+(n-1)*20)+'" y="106" text-anchor="middle">'+esc(n===1?moons[0].name:'the moons tonight')+'</text>';}
 
   function book(c){var r=c.r,S=c.S,s='<g class="p-book">';
     /* Left page: tonight, from the calendar, then the recipe */
     if(SKY.ok){s+='<g data-prop="tonight"><text class="p-hand p-date" x="154" y="82">'+esc(SKY.line)+'</text></g>';
-      SKY.moons.forEach(function(m,i){s+=moonSketch(m,556-(SKY.moons.length-1-i)*40,76,14,i);});}
+      if(SKY.moons.length)s+=moonRow(SKY.moons);}
     s+='<text class="p-hand p-title" x="154" y="134">'+esc(r.name)+'</text><text class="p-small" x="156" y="160">'+esc(r.kind)+' · for '+esc(r.who)+'</text>'+
       '<path d="M154,170 Q260,165 384,171" class="p-ink p-thin"/>';
     var gi=0;
@@ -430,6 +436,10 @@ window.CraftJournal = (function () {
      night, the candle's warm pool, and the window's light lying across the
      left page in four panes. A second canvas adds the glow you see in the
      air: the flame's bloom and dust turning in the window light. */
+  // The glow was a screen blend; drawn plainly it needs less, or it washes the page out.
+  var GLOW=.45;
+  // The desk's walnut under its grain: the shade over the desk is matched to it, as the page's is to the paper.
+  var DESK=[74,48,28];
   var LM={c:null,x:null,g:null,gx:null,turn:null,tx:null,n:0,t:0,motes:[],rain:[],snuff:0,flare:0};
   var QUAD=[[-80,30],[300,-60],[540,300],[160,420]];
   function qpt(u,v){var a=QUAD,x=(1-u)*(1-v)*a[0][0]+u*(1-v)*a[1][0]+u*v*a[2][0]+(1-u)*v*a[3][0],y=(1-u)*(1-v)*a[0][1]+u*(1-v)*a[1][1]+u*v*a[2][1]+(1-u)*v*a[3][1];return [x,y];}
@@ -441,7 +451,13 @@ window.CraftJournal = (function () {
     if(w==='rain')return {amb:[52,56,74],win:[92,104,132],k:.85,rain:1};
     if(w==='snow')return {amb:[64,68,88],win:[150,160,188],k:.9,snow:1};
     return {amb:[56,60,82],win:[128,142,180],k:1};}
-  function lightFrame(dt,clock){var c=LM.x,s=c.canvas.width/1200,Lg=LIGHT[O.light],wl=winLook();
+  // The window's light on the desk is soft-edged; a blur is costly, so it is drawn once per colour and reused.
+  function paneLight(col,like){var k=col.join(',')+'/'+like.width;if(LM.pk===k)return LM.pc;
+    var c=LM.pc||document.createElement('canvas');c.width=like.width;c.height=like.height;var x=c.getContext('2d'),s=c.width/1200;
+    x.clearRect(0,0,c.width,c.height);x.filter='blur('+(2.5*s*4).toFixed(1)+'px)';x.fillStyle='rgb('+k.split('/')[0]+')';panes(x,s);x.filter='none';
+    LM.pc=c;LM.pk=k;return c;}
+  // The light changes slowly enough to redraw at 30 a second, which halves its cost.
+  function lightFrame(dt,clock){LM.t+=dt;if(LM.t<1/31)return;dt=LM.t;LM.t=0;var c=LM.x,s=c.canvas.width/1200,Lg=LIGHT[O.light],wl=winLook();
     LM.n+=(Math.random()-.5)*.24;LM.n*=.92;var fl=host.calm?1:1+(LM.n*.5+Math.sin(clock*6.3)*.03+Math.sin(clock*13.1)*.02)*Lg.flick;
     LM.flare=Math.max(0,LM.flare-dt*.8);var on=O.light==='none'?0:1-LM.snuff;fl*=1+LM.flare*.25;
     var cx=L.candle.x,cy=L.candle.y;if(Lg.bob&&!host.calm){cx+=Math.sin(clock*.7)*14;cy+=Math.sin(clock*1.1)*10;}
@@ -450,7 +466,7 @@ window.CraftJournal = (function () {
     if(on>0){var R=Lg.r*(wl.day?.7:1)*(.96+.04*fl),g=c.createRadialGradient(cx*s,cy*s,0,cx*s,cy*s,R*s),col=Lg.c,k=on*(wl.day?.45:1)*fl;
       function st(o,m){g.addColorStop(o,'rgba('+Math.round(col[0]*m*k)+','+Math.round(col[1]*m*k)+','+Math.round(col[2]*m*k)+',1)');}
       st(0,1.25);st(.12,1.05);st(.32,.72);st(.6,.34);st(.85,.1);st(1,0);c.fillStyle=g;c.fillRect(0,0,c.canvas.width,c.canvas.height);}
-    c.filter='blur('+(2.5*s*4).toFixed(1)+'px)';c.fillStyle='rgb('+wl.win.join(',')+')';panes(c,s);c.filter='none';
+    c.drawImage(paneLight(wl.win,c.canvas),0,0);
     /* Rain running down the glass throws moving shadows into the window light */
     if(wl.rain){c.save();pane(c,0,1,0,1,s);c.clip();c.globalCompositeOperation='source-over';c.strokeStyle='rgba(24,28,40,.75)';c.lineWidth=2.2*s*2;
       if(LM.rain.length<40)LM.rain.push({u:Math.random(),v:Math.random()*-1,sp:.05+Math.random()*.12,w:Math.random()*6});
@@ -459,9 +475,19 @@ window.CraftJournal = (function () {
     if(wl.snow){c.save();pane(c,0,1,0,1,s);c.clip();c.globalCompositeOperation='source-over';c.fillStyle='rgba(40,44,60,.35)';
       if(LM.rain.length<40)LM.rain.push({u:Math.random(),v:Math.random(),sp:.02+Math.random()*.03,w:Math.random()*6});
       LM.rain.forEach(function(d){d.v+=d.sp*dt;d.u+=Math.sin(clock*.8+d.w)*.0008;if(d.v>1.05){d.v=-.05;d.u=Math.random();}var p=qpt(d.u,d.v);c.beginPath();c.arc(p[0]*s,p[1]*s,(1.2+d.w*.25)*s*2,0,6.283);c.fill();});c.restore();}
-    /* Glow */
-    var gx=LM.gx,gs=gx.canvas.width/1200;gx.clearRect(0,0,gx.canvas.width,gx.canvas.height);
-    if(on>0){var gg=gx.createRadialGradient(cx*gs,cy*gs,0,cx*gs,cy*gs,150*gs*fl);gg.addColorStop(0,'rgba('+Lg.glow+','+(.55*on)+')');gg.addColorStop(.3,'rgba('+Lg.glow+','+(.16*on)+')');gg.addColorStop(1,'rgba('+Lg.glow+',0)');gx.fillStyle=gg;gx.fillRect(0,0,gx.canvas.width,gx.canvas.height);}
+    /* The light map is a multiply, but a blended layer over the whole scene costs a
+       full extra pass every frame, a third of the frame rate on a phone. So it is
+       turned into a plain see-through shade: exact over the page's own paper and
+       the desk's wood, close over everything else. The glow goes on the same layer. */
+    if(LM.stock!==O.stock){LM.stock=O.stock;var hx=STOCK[O.stock].pp;LM.paper=[1,3,5].map(function(j){return parseInt(hx.substr(j,2),16);});}
+    var id=c.getImageData(0,0,c.canvas.width,c.canvas.height),d=id.data,P=LM.paper;
+    var cw=c.canvas.width,ch=c.canvas.height,x0=118*s,x1=1082*s,y0=36*s,y1=676*s,i=0;
+    for(var py=0;py<ch;py++)for(var px=0;px<cw;px++,i+=4){var mn=d[i]<d[i+1]?d[i]:d[i+1];if(d[i+2]<mn)mn=d[i+2];var a=255-mn;
+      if(a<1){d[i+3]=0;continue;}var Q=px>=x0&&px<x1&&py>=y0&&py<y1?P:DESK;
+      d[i]=Q[0]*(d[i]-mn)/a;d[i+1]=Q[1]*(d[i+1]-mn)/a;d[i+2]=Q[2]*(d[i+2]-mn)/a;d[i+3]=a;}
+    LM.ox.putImageData(id,0,0);
+    var gx=LM.gx,gs=gx.canvas.width/1200;gx.clearRect(0,0,gx.canvas.width,gx.canvas.height);gx.drawImage(LM.o,0,0,gx.canvas.width,gx.canvas.height);
+    if(on>0){var gg=gx.createRadialGradient(cx*gs,cy*gs,0,cx*gs,cy*gs,150*gs*fl);gg.addColorStop(0,'rgba('+Lg.glow+','+(.55*on*GLOW)+')');gg.addColorStop(.3,'rgba('+Lg.glow+','+(.16*on*GLOW)+')');gg.addColorStop(1,'rgba('+Lg.glow+',0)');gx.fillStyle=gg;gx.fillRect(0,0,gx.canvas.width,gx.canvas.height);}
     if(!host.calm&&LM.motes.length<34)LM.motes.push({u:Math.random(),v:Math.random(),du:(Math.random()-.5)*.01,dv:(Math.random()-.5)*.01,r:.6+Math.random()*1.3,t:Math.random()*6});
     var mc=wl.day?'255,236,200':'200,214,255';
     LM.motes.forEach(function(m){m.u+=m.du*dt;m.v+=m.dv*dt+.002*dt;m.t+=dt;if(m.u<0||m.u>1||m.v<0||m.v>1){m.u=Math.random();m.v=Math.random();}
@@ -546,12 +572,13 @@ window.CraftJournal = (function () {
   /* The journal's own layers over the engine's: canvases for the page turn,
      the light map and the glow, and live groups for the blots, the seal, the
      signet, the quill and the candle's flame. */
+  function offscreen(){var c=document.createElement('canvas');c.width=200;c.height=117;return c;}
   function canvas(cls,w,h,after){var c=document.createElement('canvas');c.className=cls;c.width=w;c.height=h;c.setAttribute('aria-hidden','true');after.insertAdjacentElement('afterend',c);return c;}
   function split(art,mark){var p=art.split(mark);return [p[0],mark+p[1]];}
   function mounted(api){API=api;var st=api.stage,fxc=st.querySelector('.cr-fx');st.classList.add('crj');
     LM.turn=canvas('pj-turn',900,525,fxc);LM.tx=LM.turn.getContext('2d');
-    LM.c=canvas('pj-lm',320,187,LM.turn);LM.x=LM.c.getContext('2d');
-    LM.g=canvas('pj-glow',600,350,LM.c);LM.gx=LM.g.getContext('2d');
+    LM.c=offscreen();LM.x=LM.c.getContext('2d',{willReadFrequently:true});LM.o=offscreen();LM.ox=LM.o.getContext('2d');
+    LM.g=canvas('pj-light',600,350,LM.turn);LM.gx=LM.g.getContext('2d');
     var q=split(quillArt(),'<g class="pj-qbody">'),g=split(signetArt(),'<g class="pj-sbody">');
     api.svg.querySelector('.cr-top').insertAdjacentHTML('beforebegin',sc('<g class="pj-blots"></g><g class="pj-seal"></g>'+
       '<g class="pj-signet" data-prop="signet"><g class="pj-ss">'+g[0]+'</g><g class="pj-sb">'+g[1]+'</g></g>'+

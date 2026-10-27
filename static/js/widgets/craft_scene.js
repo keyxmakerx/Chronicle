@@ -293,13 +293,16 @@ window.CraftScene = (function () {
        and every hold or press also works with the space bar. */
     function pt(e){var p=svg.createSVGPoint();p.x=e.clientX;p.y=e.clientY;var m=svg.getScreenCTM();return m?p.matrixTransform(m.inverse()):{x:0,y:0};}
     function dist(a,b,c,d){return Math.hypot(a-c,b-d);}
-    function targetOf(st){return st.t==='tip'||st.to==='flask'||st.t==='pour'?{x:L.flask.x,y:L.flask.neck+20,r:120}:{x:L.mortar.x,y:L.mortar.y,r:L.mortar.r*1.3};}
+    function targetOf(st){return st.t==='tip'||st.to==='flask'||st.t==='pour'?{x:L.flask.x,y:L.flask.neck+20,r:120,sel:'.cr-flaskg'}:{x:L.mortar.x,y:L.mortar.y,r:L.mortar.r*1.3,sel:'.cr-mortar'};}
+    // The flask's target circle sits at its neck, so its round body counts too: the hint says "the flask", and players aim at the bulb.
+    function onTarget(x,y,tg,n){if(dist(x,y,tg.x,tg.y)<tg.r)return true;if(n&&n.closest&&n.closest(tg.sel))return true;
+      return tg.sel==='.cr-flaskg'&&dist(x,y,L.flask.x,L.flask.y)<L.flask.r*1.15;}
 
     // A skin's own drags (the journal's signet) get the pointer first and say whether they took it.
     function down(e){
       if(skin.down&&skin.down(e,pt(e))){e.preventDefault();return;}
       if(S.phase!=='step')return;var st=cur(),p=pt(e),hitItem=e.target.closest&&e.target.closest('[data-item]');
-      if(S.sel){var tg=targetOf(st);if(dist(p.x,p.y,tg.x,tg.y)<tg.r){var s=S.sel;S.sel=null;svg.classList.remove('cr-picking');place(s);e.preventDefault();return;}}
+      if(S.sel){var tg=targetOf(st);if(onTarget(p.x,p.y,tg,e.target)){var s=S.sel;S.sel=null;svg.classList.remove('cr-picking');place(s);e.preventDefault();return;}}
       if((st.t==='add'||(st.t==='pour'&&!S.mini.posed))&&hitItem&&hitItem.getAttribute('data-item')===st.item){
         var it=parts.items[st.item];S.drag={k:'item',it:it,ox:p.x-it.x,oy:p.y-it.y,sx:p.x,sy:p.y,moved:0};}
       else if(st.t==='tip'&&(e.target.closest('.cr-mortar')||dist(p.x,p.y,S.mortar.x,S.mortar.y)<L.mortar.r*1.2)){
@@ -314,14 +317,14 @@ window.CraftScene = (function () {
     function move(e){if(skin.move&&skin.move(e,pt(e)))return;if(!S.drag){hover(e);return;}hideCard();var p=pt(e),d=S.drag;
       if(d.k==='grind'){grindMove(p);return;}
       d.moved=Math.max(d.moved,dist(p.x,p.y,d.sx,d.sy));
-      if(d.k==='item'){d.it.x=p.x-d.ox;d.it.y=p.y-d.oy;var tg=targetOf(cur());d.it.over=dist(d.it.x,d.it.y,tg.x,tg.y)<tg.r;}
+      if(d.k==='item'){d.it.x=p.x-d.ox;d.it.y=p.y-d.oy;var tg=targetOf(cur());d.it.over=onTarget(d.it.x,d.it.y,tg);}
       if(d.k==='mortar'){S.mortar.x=p.x-d.ox;S.mortar.y=p.y-d.oy;var near=dist(S.mortar.x,S.mortar.y,L.flask.x,L.flask.neck)<170;S.mortar.rot=lerp(S.mortar.rot,near?L.tip.rot:0,.25);restPestle();}
     }
     function up(e){if(skin.up&&skin.up(e,pt(e)))return;if(S.holding)release();var d=S.drag;S.drag=null;if(!d)return;
       if(d.k==='grind'){if(cur()&&cur().t==='grind')restPestle();return;}
       var st=cur(),tg=targetOf(st);
       if(d.k==='item'){if(d.moved<6){S.sel=d.it;svg.classList.add('cr-picking');setSay('Now click the '+(st.to==='mortar'?'mortar':'flask')+' to put it in');return;}
-        if(dist(d.it.x,d.it.y,tg.x,tg.y)<tg.r)place(d.it);else home(d.it);}
+        if(onTarget(d.it.x,d.it.y,tg))place(d.it);else home(d.it);}
       if(d.k==='mortar'){if(d.moved<6){S.sel='mortar';svg.classList.add('cr-picking');setSay('Now click the flask to tip it in');return;}
         if(dist(S.mortar.x,S.mortar.y,L.flask.x,L.flask.neck)<190)place('mortar');else{tween(S.mortar,{x:L.mortar.x,y:L.mortar.y,rot:0},.35);}}
     }
@@ -498,7 +501,13 @@ window.CraftScene = (function () {
     var io=window.IntersectionObserver?new IntersectionObserver(function(es){visible=es[es.length-1].isIntersecting;kick();}):null;if(io)io.observe(stage);
     document.addEventListener('visibilitychange',kick);
 
-    svg.addEventListener('pointerdown',function(e){stage.focus({preventScroll:true});down(e);});
+    /* A tap or click on something the step doesn't use opens its card, since a
+       touch screen has no hover and a sketch can be hard to make out. */
+    var tap=null;
+    svg.addEventListener('pointerdown',function(e){stage.focus({preventScroll:true});down(e);
+      var t=!e.defaultPrevented&&!S.sel&&targetAt(e.target);tap=t?{t:t,x:e.clientX,y:e.clientY,at:performance.now(),touch:e.pointerType!=='mouse'}:null;});
+    svg.addEventListener('pointerup',function(e){var k=tap;tap=null;if(!k||!menu.hidden||performance.now()-k.at>500||Math.hypot(e.clientX-k.x,e.clientY-k.y)>8)return;
+      var h=cardHTML(infoFor(k.t.id));if(k.touch)h=h.replace('Right-click for more','Press and hold for more');cancel(hovT);pin(h,e.clientX,e.clientY);});
     svg.addEventListener('pointermove',move);svg.addEventListener('pointerup',up);svg.addEventListener('pointercancel',up);
     stage.addEventListener('keydown',function(e){if(e.code!=='Space'&&e.key!==' ')return;e.preventDefault();if(e.repeat)return;var st=cur();if(S.phase!=='step'||!st)return;
       if(st.t==='strike')strike();else if((st.t==='pour'&&S.mini.posed)||st.t==='simmer')press();});

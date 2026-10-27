@@ -107,8 +107,12 @@ the room, so the editor can re-find its pieces.
   it carries no fonts or CSS variables; ink, washes and moving parts are live
   over it, coloured by CSS variables on the stage (`--pp`, `--ink`, `--hand`,
   `--seal`, …). Paper, binding, wear and wax colour re-bake; ink and hand don't.
-- **Light is a canvas multiplied over the scene**: ambient, the candle's pool
-  and the window panes thrown across the left page, plus a screen-blended glow.
+- **Light is one plain canvas over the scene**: ambient, the candle's pool and
+  the window panes thrown across the left page, plus the glow. It is worked out
+  as a multiply, then turned into a see-through shade that matches the multiply
+  over the paper and the desk, because a blend mode over the whole scene costs
+  a full extra pass every frame. It redraws at 30 a second, and the blurred
+  window panes are drawn once per colour.
 - **Writing.** Anything new on the page is written by the quill: `wr()` and
   `wtext()` wrap it in a clip that the quill reveals. What was on the page when
   it opened is simply there. Under Calm everything is simply there.
@@ -145,6 +149,13 @@ The desk was signed off at this level; a new skin meets it before it ships.
   scene's frame loop, so it stops off screen and holds still under Calm. Its
   paint time is measured, and a device too slow for the painted sky falls back
   to the basic one.
+- **No blend modes over the whole scene.** A `mix-blend-mode` layer the size
+  of the stage makes the browser composite the scene twice every frame; on the
+  journal it cost a third of the frame rate. Blend inside a baked picture, or
+  draw a plain see-through layer that looks the same.
+- **Targets are what the hint names.** When the hint says "click the flask",
+  anywhere on the flask counts (`onTarget`), not just the circle the engine
+  aims at.
 - **Phones**: the scene keeps its 12:7 shape and the build card drops below
   the scene under 720px.
 
