@@ -586,13 +586,16 @@ function resolve(saved) {
   return L;
 }
 
-/* Spots an effect can be placed on. The item stage uses SPOTS. The crafting
-   bench uses BENCH_SPOTS for its moments (the window, the flask, the flame,
-   the bench top, what comes out), and a crafting motion adds MOTION_SPOTS,
-   which follow the moving tool: the tool, its trail, and where it touches. */
+/* Spots an effect can be placed on. The item stage uses SPOTS. Every
+   crafting station shares BENCH_SPOTS, named for their role rather than a
+   station's furniture (the skin labels "work" as the flask or the anvil), so
+   a saved key means the same thing at every station. A moment (success,
+   a mishap, a rule) uses MOMENT_SPOTS; a step's motion uses MOTION_SPOTS,
+   whose tool, trail and contact follow the moving tool. */
 var SPOTS = ['item', 'trail', 'impact', 'body', 'ground'];
-var BENCH_SPOTS = ['window', 'flask', 'flame', 'bench', 'result'];
-var MOTION_SPOTS = ['tool', 'trail', 'contact'];
+var BENCH_SPOTS = ['window', 'heat', 'work', 'tool', 'trail', 'contact', 'bench', 'result'];
+var MOMENT_SPOTS = ['window', 'heat', 'work', 'bench', 'result'];
+var MOTION_SPOTS = ['tool', 'trail', 'contact', 'work', 'bench'];
 
 /* spotLayers turns saved placements ({spot: {look, tint}}) into the layers
    the stage draws on each spot. Only spots in the given list and looks in
@@ -626,6 +629,6 @@ function kindFor(typeText, hasImage) {
 }
 
 window.ItemLookFX = { Stage: Stage, Mini: Mini, Sound: Sound, LOOKS: LOOKS, TINTS: TINTS, SOUNDS: SOUNDS, SOUND_NAMES: SOUND_NAMES, MOTIF_NAMES: MOTIF_NAMES, resolve: resolve, kindFor: kindFor, mix: mix, rgba: rgba,
-  SPOTS: SPOTS, BENCH_SPOTS: BENCH_SPOTS, MOTION_SPOTS: MOTION_SPOTS, spotLayers: spotLayers, castShadow: castShadow, shadowUnder: shadowUnder,
+  SPOTS: SPOTS, BENCH_SPOTS: BENCH_SPOTS, MOMENT_SPOTS: MOMENT_SPOTS, MOTION_SPOTS: MOTION_SPOTS, spotLayers: spotLayers, castShadow: castShadow, shadowUnder: shadowUnder,
   MOTIFS: MOTIFS, sprite: sprite, drawParticle: drawParticle };
 })();

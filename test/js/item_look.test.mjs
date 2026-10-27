@@ -88,12 +88,14 @@ test('spotLayers keeps only known spots and gallery looks', () => {
   assert.equal(FX.spotLayers(null), null);
   assert.equal(FX.spotLayers('ember'), null);
 });
-test('the bench has its own spots, and a motion adds the tool\'s', () => {
-  assert.deepEqual([...FX.BENCH_SPOTS], ['window', 'flask', 'flame', 'bench', 'result']);
-  assert.deepEqual([...FX.MOTION_SPOTS], ['tool', 'trail', 'contact']);
-  const S = FX.spotLayers({ flame: { look: 'ember', move: 'shake' }, impact: { look: 'ember' } }, FX.BENCH_SPOTS);
-  assert.deepEqual(Object.keys(S), ['flame']);
-  const M = FX.spotLayers({ contact: { look: 'storm' }, flask: { look: 'venom' } }, FX.MOTION_SPOTS);
+test('every station shares one bench spot list; moments and motions use parts of it', () => {
+  assert.deepEqual([...FX.BENCH_SPOTS], ['window', 'heat', 'work', 'tool', 'trail', 'contact', 'bench', 'result']);
+  assert.deepEqual([...FX.MOMENT_SPOTS], ['window', 'heat', 'work', 'bench', 'result']);
+  assert.deepEqual([...FX.MOTION_SPOTS], ['tool', 'trail', 'contact', 'work', 'bench']);
+  for (const k of [...FX.MOMENT_SPOTS, ...FX.MOTION_SPOTS]) assert.ok(FX.BENCH_SPOTS.includes(k), k);
+  const S = FX.spotLayers({ heat: { look: 'ember', move: 'shake' }, impact: { look: 'ember' } }, FX.MOMENT_SPOTS);
+  assert.deepEqual(Object.keys(S), ['heat']);
+  const M = FX.spotLayers({ contact: { look: 'storm' }, result: { look: 'venom' } }, FX.MOTION_SPOTS);
   assert.deepEqual(Object.keys(M), ['contact']);
 });
 test('a look with no particles shows its glints on a spot, with its sound', () => {
