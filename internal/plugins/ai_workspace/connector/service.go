@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -309,6 +310,31 @@ func (s *Service) Ask(ctx context.Context, c *Connection, summary, changes strin
 // Waiting is the campaign's requests waiting for the owner, newest first.
 func (s *Service) Waiting(ctx context.Context, campaignID string) ([]Request, error) {
 	return s.repo.Requests(ctx, campaignID, RequestWaiting, requestsWaiting)
+}
+
+// Decided is the campaign's latest n requests the owner answered, applied
+// or turned down, newest answer first.
+func (s *Service) Decided(ctx context.Context, campaignID string, n int) ([]Request, error) {
+	var out []Request
+	for _, status := range []string{RequestAnswered, RequestTurnedDown} {
+		l, err := s.repo.Requests(ctx, campaignID, status, n)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, l...)
+	}
+	sort.SliceStable(out, func(i, j int) bool { return decidedAt(out[i]).After(decidedAt(out[j])) })
+	if len(out) > n {
+		out = out[:n]
+	}
+	return out, nil
+}
+
+func decidedAt(q Request) time.Time {
+	if q.DecidedAt != nil {
+		return *q.DecidedAt
+	}
+	return q.CreatedAt
 }
 
 // WaitingRequest is one waiting request of the campaign, with its blocks, or

@@ -636,6 +636,8 @@ window.CraftDesk = (function () {
      room's settings make them. opts.info lays a bench's own words on top. */
   var INFO={
     window:null,
+    mortar:{name:'Mortar',text:'Granite, heavy enough to stay put.'},
+    flask:{name:'Round flask',text:'Thin glass on a brass ring over the burner.'},
     cat:{name:'Cat',text:'Asleep on the sill. Sleeps through anything.',acts:[['Pet the cat','pet']]},
     herbs:{name:'Drying herbs',text:'Sage, lavender and nettle, hung to dry.'},
     shelf:{name:'Shelf of jars',text:'Spares and oddments. The blue jar glows on its own.'},

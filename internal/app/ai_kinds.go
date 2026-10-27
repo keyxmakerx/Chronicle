@@ -59,6 +59,8 @@ type aiDeps struct {
 	FoundryMonsters syncapi.FoundryMonsterRepository // nil while syncapi's tables are degraded
 	FoundryMatcher  *syncapi.FoundryMatcher          // with FoundryMonsters; nil leaves matches out
 	FoundryScenes   records.FoundryScenesAPI         // nil while the sync API is degraded
+	AIAsks          aiAskLister                      // nil while the AI connector's tables are degraded
+	ArmoryRequests  dmscreen.RequestSource           // stash and buy requests, as the DM Screen lists them
 
 	// Derived once and shared by several kinds and the lookups.
 	Rolls      records.EventRollAPI // the calendar's roll half; nil without one
@@ -168,6 +170,7 @@ func aiLookups(d *aiDeps, reg *records.Registry) *records.Lookups {
 	if d.FoundryScenes != nil {
 		l.Scenes = d.FoundryScenes
 	}
+	l.Waiting = aiWaitingAdapter{asks: d.AIAsks, entries: d.SystemEntries, members: d.Campaigns, requests: d.ArmoryRequests}
 	if d.Quests != nil && d.Boards != nil {
 		l.Quests = aiQuestsAdapter{quests: d.Quests, boards: d.Boards, types: d.Entities}
 	}

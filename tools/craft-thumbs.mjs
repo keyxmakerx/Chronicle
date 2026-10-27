@@ -77,7 +77,7 @@ async function sealOne(page) {
 }
 
 async function shoot(set, take) {
-  const { browser, page, errors } = await open({ mounts: [MOUNT], width: 1200, height: 760, scale: 2 });
+  const { browser, page, errors } = await open({ mounts: [MOUNT], width: 1200, height: 760, scale: 2, paintedSky: true });
   try {
     if (SKIN === 'journal') {
       await page.waitForSelector('.pj-ready', { timeout: 120000 });
