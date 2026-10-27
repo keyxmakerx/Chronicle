@@ -1,13 +1,15 @@
 /**
  * craft_bench.js -- the crafting bench widget (data-widget="craft_bench")
  *
- * Mounts a crafting scene: CraftScene plays it, a skin draws it (CraftDesk
- * for now), and in build mode CraftBenchEditor arranges it. This file is the
+ * Mounts a crafting scene: CraftScene plays it, a skin draws it (CraftDesk,
+ * the lit workbench, or CraftJournal, the crafter's paper journal), and in
+ * build mode CraftBenchEditor arranges it. This file is the
  * glue: it reads the mount's data attributes, injects the bench's styles
  * once, and hands each part its data. craft_bench.ai.md is the guide.
  *
  * Attributes:
  *   data-mode         "play" (default) or "build"
+ *   data-skin         "desk" (default) or "journal"
  *   data-thumbs       base URL of the tray's room pictures (build mode)
  *   data-campaign-id, data-calendar-id
  *                     a calendar for the window's sky; without them the
@@ -238,18 +240,165 @@
     'html[data-cz-reduce] .crb-scene *,html[data-view-motion="calm"] .crb-scene *{animation:none!important;transition:none!important}'
   ].join('\n');
 
+  /* The paper journal's look (craft_journal.js). Every rule sits under .crj,
+     the class the journal puts on its scene, so the desk's rules above keep
+     their own scenes and the journal's never leak into them. Its fonts are
+     self-hosted like the desk's. */
+  var JOURNAL_CSS = [
+    '@font-face{font-family:"Crafting Kalam";src:url(/static/fonts/customize/kalam-latin-400.woff2) format("woff2");font-weight:400;font-style:normal;font-display:swap}',
+    '@font-face{font-family:"Crafting Caveat";src:url(/static/fonts/crafting/caveat-latin-400.woff2) format("woff2");font-weight:400;font-style:normal;font-display:swap}',
+    '@font-face{font-family:"Crafting Apple";src:url(/static/fonts/crafting/homemadeapple-latin-400.woff2) format("woff2");font-weight:400;font-style:normal;font-display:swap}',
+    '@font-face{font-family:"Crafting Cedarville";src:url(/static/fonts/crafting/cedarville-latin-400.woff2) format("woff2");font-weight:400;font-style:normal;font-display:swap}',
+    '@font-face{font-family:"Crafting Garamond";src:url(/static/fonts/customize/ebgaramond-latin-var.woff2) format("woff2");font-weight:400 800;font-style:normal;font-display:swap}',
+    '@font-face{font-family:"Crafting Garamond";src:url(/static/fonts/customize/ebgaramond-latin-400-italic.woff2) format("woff2");font-weight:400;font-style:italic;font-display:swap}',
+    '.crj{--pp:#ecdcba;--pp-cut:#f6ecd4;--pp-edge:#b9a57c;--ink:#2c2119;--now:#8a2a1a;--ok:#2f6a2a;--bad:#8a1a1a;--gold:#a8741c;--seal:#a3201c; --hand:"Crafting Kalam",cursive;--hs:1;--lift:0 1px 1px rgb(0 0 0 / .2),0 6px 10px -4px rgb(0 0 0 / .22),0 22px 34px -14px rgb(0 0 0 / .42);background:#1a100a}',
+    '.crj[data-dark="1"]{--now:#ffb08a;--ok:#a8e090;--bad:#ff8a7a;--gold:#f0c060}',
+    '.crj.cr-stage{background:#1a100a}',
+    '.crj .cr-svg{opacity:0;transition:opacity .5s var(--ease-out)}',
+    '.crj.pj-ready .cr-svg{opacity:1}',
+    '.crj .pj-lm,.crj .pj-glow,.crj .pj-turn{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}',
+    '.crj .pj-lm{mix-blend-mode:multiply}',
+    '.crj .pj-glow{mix-blend-mode:screen}',
+    '.crj .p-ink{stroke:var(--ink);fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}',
+    '.crj .p-thin{stroke-width:1.2}',
+    '.crj .p-fillpaper{fill:var(--pp)}',
+    '.crj .p-fillnone{fill:none}',
+    '.crj .p-washed{mix-blend-mode:multiply}',
+    '.crj[data-dark="1"] .p-washed,.crj[data-dark="1"] .p-liq .cr-liq{mix-blend-mode:screen}',
+    '.crj .p-liq .cr-liq{mix-blend-mode:multiply;opacity:.74}',
+    '.crj .p-liq .cr-liqtop{opacity:.35}',
+    '.crj[data-dark="1"] .p-liq .cr-liq{opacity:.6}',
+    '.crj .p-card,.crj .p-slip{fill:var(--pp-cut);stroke:var(--pp-edge);stroke-width:.8}',
+    '.crj .p-card{filter:drop-shadow(-2px 3px 2px rgb(40 20 6 / .3))}',
+    '.crj .p-slip{filter:drop-shadow(-2px 3px 3px rgb(40 20 6 / .3))}',
+    '.crj .cr-item .p-lift{transition:filter .2s var(--ease-out)}',
+    '.crj .cr-item.is-lifted .p-card{filter:drop-shadow(-14px 20px 12px rgb(20 10 4 / .38))}',
+    '.crj .cr-item.is-lifted{cursor:grabbing}',
+    '.crj .p-hand{font-family:var(--hand);fill:var(--ink)}',
+    '.crj .p-hand.is-wet{stroke:var(--ink);stroke-width:.6px;paint-order:stroke}',
+    '.crj .p-run{font-family:"Crafting Garamond",Georgia,serif;font-size:12px;letter-spacing:.14em;text-transform:uppercase;fill:var(--ink);opacity:.55}',
+    '.crj .p-cap{font-size:calc(16px*var(--hs));opacity:.72}',
+    '.crj .p-date{font-size:calc(17px*var(--hs));opacity:.8}',
+    '.crj .p-small{font-family:"Crafting Garamond",Georgia,serif;font-style:italic;font-size:14.5px;fill:var(--ink);opacity:.85}',
+    '.crj .p-title{font-size:calc(38px*var(--hs))}',
+    '.crj .p-step{font-size:calc(21px*var(--hs))}',
+    '.crj .p-step.is-now{fill:var(--now)}',
+    '.crj .p-step.is-done{opacity:.55}',
+    '.crj .p-grade{font-size:calc(16px*var(--hs))}',
+    '.crj .p-grade.is-perfect{fill:var(--gold)}',
+    '.crj .p-grade.is-miss{fill:var(--bad)}',
+    '.crj .p-mark{stroke-width:2.8}',
+    '.crj .p-mark.is-miss{stroke:var(--bad)}',
+    '.crj .p-box{stroke-width:1.5}',
+    '.crj .p-arrow{stroke:var(--now);stroke-width:2.4}',
+    '.crj .p-num{font-size:calc(32px*var(--hs))}',
+    '.crj .p-of{font-size:calc(18px*var(--hs));opacity:.7}',
+    '.crj .p-num.is-struck{opacity:.5}',
+    '.crj .p-verd{font-size:calc(21px*var(--hs))}',
+    '.crj .p-verd.is-edge{fill:var(--ok)}',
+    '.crj .p-verd.is-bane{fill:var(--bad)}',
+    '.crj .p-rolled{font-size:calc(19px*var(--hs))}',
+    '.crj .p-notet{font-size:calc(18px*var(--hs));opacity:.85}',
+    '.crj .p-itemlab{font-size:calc(18px*var(--hs))}',
+    '@keyframes crj-flk{0%{transform:scale(1,1)}50%{transform:scale(.94,1.07)}100%{transform:scale(1.03,.96)}}',
+    '.crj .p-flick{transform-box:fill-box;transform-origin:50% 100%;animation:crj-flk .5s ease-in-out infinite alternate}',
+    '@keyframes crj-hot{0%,100%{filter:drop-shadow(0 0 1px rgb(214 160 60 / .3))}50%{filter:drop-shadow(0 0 9px rgb(214 160 60 / .95))}}',
+    '.crj .cr-hot{animation:crj-hot 1.4s ease-in-out infinite}',
+    '.crj .cr-bel-top{transform-box:fill-box;transform-origin:0% 100%;transition:transform .16s var(--ease-out)}',
+    '.crj .cr-bellows.pump .cr-bel-top{transform:rotate(9deg)}',
+    '.crj .cr-bel-mid{transform-box:fill-box;transform-origin:50% 100%;transition:transform .16s var(--ease-out)}',
+    '.crj .cr-bellows.pump .cr-bel-mid{transform:scaleY(.5)}',
+    '.crj .cr-g-track{fill:none;stroke:var(--ink);stroke-opacity:.14;stroke-width:12}',
+    '.crj .cr-g-band{fill:none;stroke:var(--gold);stroke-opacity:.5;stroke-width:12}',
+    '.crj .cr-g-band.is-in{stroke-opacity:.95}',
+    '.crj .cr-g-time{fill:none;stroke:var(--ink);stroke-width:1.5;stroke-dasharray:3 4}',
+    '.crj .cr-g-needle{stroke:var(--ink);stroke-width:3;stroke-linecap:round}',
+    '.crj .cr-g-hub{fill:var(--ink)}',
+    '.crj .cr-g-lab{font-family:var(--hand);font-size:16px;fill:var(--ink)}',
+    '.crj .cr-b-track{fill:none;stroke:var(--ink);stroke-width:1.6}',
+    '.crj .cr-b-zone{fill:var(--gold);fill-opacity:.45}',
+    '.crj .cr-b-perfect{fill:var(--gold);fill-opacity:.85}',
+    '.crj .cr-b-mark{stroke:var(--ink);stroke-width:3;stroke-linecap:round}',
+    '.crj .cr-b-pip{fill:none;stroke:var(--ink);stroke-width:1.4}',
+    '.crj .cr-b-pip.is-perfect{fill:var(--gold)}',
+    '.crj .cr-b-pip.is-good{fill:var(--ink);fill-opacity:.45}',
+    '.crj .cr-b-pip.is-miss{fill:var(--bad);stroke:var(--bad)}',
+    '.crj .cr-mark{stroke:var(--ink);stroke-width:1.4}',
+    '.crj .cr-mark-gold{stroke:var(--gold);stroke-width:2.8}',
+    '.crj .cr-stream{stroke-width:4;stroke-linecap:round;opacity:.55}',
+    '.crj .cr-ringpath{fill:none;stroke:var(--ink);stroke-width:2;stroke-dasharray:6 5}',
+    '@keyframes crj-pop{0%{opacity:0;transform:translateY(10px) scale(.8)}20%{opacity:1;transform:none}100%{opacity:0;transform:translateY(-26px)}}',
+    '.crj .cr-pop{font-family:var(--hand);font-size:32px;transform-box:fill-box;transform-origin:50% 50%;animation:crj-pop 1.1s var(--ease-out) forwards}',
+    '.crj .cr-pop.is-perfect{fill:var(--gold)}',
+    '.crj .cr-pop.is-good{fill:var(--ink)}',
+    '.crj .cr-pop.is-miss{fill:var(--bad)}',
+    '.crj .cr-die-face{fill:var(--pp-cut);stroke:var(--ink);stroke-width:1.6}',
+    '.crj .cr-die-edge{fill:none;stroke:var(--ink);stroke-opacity:.45;stroke-width:1}',
+    '.crj .cr-die-n{font-family:var(--hand);font-size:21px;fill:var(--ink)}',
+    '.crj .cr-die{transform-box:fill-box;transform-origin:50% 50%}',
+    '.crj .cr-dice.is-final .cr-die{animation:crj-diepop .4s var(--ease-out)}',
+    '@keyframes crj-diepop{0%{transform:scale(1.25)}100%{transform:scale(1)}}',
+    '.crj .pj-waxc{fill:var(--seal)}',
+    '.crj .pj-emb{fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}',
+    '.crj text.pj-emb{stroke:none}',
+    '.crj .pj-emb-lo .pj-emb{stroke:#000;stroke-opacity:.5}',
+    '.crj .pj-emb-lo text.pj-emb{fill:#000;fill-opacity:.5}',
+    '.crj .pj-emb-hi .pj-emb{stroke:#fff;stroke-opacity:.32}',
+    '.crj .pj-emb-hi text.pj-emb{fill:#fff;fill-opacity:.32}',
+    '.crj .pj-emb-mid .pj-emb{stroke:var(--seal)}',
+    '.crj .pj-emb-mid text.pj-emb{fill:var(--seal)}',
+    '.crj .pj-semb-p{fill:none;stroke:#5a3c12;stroke-width:2}',
+    '.crj text.pj-semb-p{fill:#5a3c12;stroke:none}',
+    '.crj .pj-blotc{fill:var(--ink)}',
+    '.crj .pj-bi{transform-box:fill-box;transform-origin:50% 50%}',
+    '.crj .pj-blot.is-new .pj-bi{animation:crj-blot .9s cubic-bezier(.15,.8,.2,1) both}',
+    '@keyframes crj-blot{0%{transform:scale(.15);opacity:.4}100%{transform:scale(1);opacity:1}}',
+    '.crj .pj-drop{fill:var(--ink);opacity:.75}',
+    '.crj .pj-pencil{fill:none;stroke:#5d5a55;stroke-opacity:.55;stroke-width:1.3;stroke-dasharray:5 4}',
+    '.crj[data-dark="1"] .pj-pencil{stroke:#d8d0c0}',
+    '.crj .pj-ring{animation:crj-hot 1.4s ease-in-out infinite}',
+    '.crj .pj-signet,.crj .pj-quill{cursor:default}',
+    '.crj .pj-signet.cr-hot{cursor:grab}',
+    '@media (prefers-reduced-motion:reduce){.crj .pj-blot.is-new .pj-bi{animation:none}}',
+    '.crj .cr-hint{background:var(--pp-cut);color:var(--ink);border:1px solid var(--pp-edge);border-radius:3px;font-family:"Crafting Garamond",Georgia,serif;font-style:italic;font-size:15px;box-shadow:var(--lift);transform:translateX(-50%) rotate(-.4deg)}',
+    '.crj .cr-btn{background:none;border:1.5px solid var(--ink);color:var(--ink);font-family:"Crafting Garamond",Georgia,serif;font-style:normal;border-radius:3px}',
+    '.crj .cr-btn:hover{background:rgb(0 0 0 / .05)}',
+    '.crj .cr-btn-primary{background:var(--ink);color:var(--pp-cut)}',
+    '.crj .cr-btn-primary:hover{opacity:.9;background:var(--ink)}',
+    '.crj .cr-hov{filter:drop-shadow(0 0 5px rgb(214 160 60 / .65))}',
+    '.crj .cr-card,.crj .cr-menu{background:var(--pp-cut);color:var(--ink);border:1px solid var(--pp-edge);border-radius:3px;box-shadow:var(--lift);font-family:"Crafting Garamond",Georgia,serif}',
+    '.crj .cr-card b{font-family:var(--hand);font-size:19px;font-weight:400}',
+    '.crj .cr-card .cr-meta,.crj .cr-card .cr-foot{opacity:.7;font-style:italic}',
+    '.crj .cr-card .cr-now{color:var(--now)}',
+    '.crj .cr-menu .cr-mhead{opacity:.7}',
+    '.crj .cr-menu button{color:var(--ink);font-family:"Crafting Garamond",Georgia,serif;font-size:14px}',
+    '.crj .cr-menu button:hover,.crj .cr-menu button:focus-visible{background:rgb(0 0 0 / .06);outline:none}',
+    '.crj .cr-x{color:var(--ink)}',
+    '@media (max-width:640px){.crj.cr-stage{aspect-ratio:auto}.crj .cr-svg,.crj .cr-fx,.crj .pj-lm,.crj .pj-glow,.crj .pj-turn{height:auto;aspect-ratio:12/7}.crj .cr-hint{position:static;transform:none;margin:8px;border-radius:6px;font-size:13px;justify-content:space-between}.crj .cr-btn{padding:4px 10px}}',
+    // The desk's rules above colour the shared parts for a dark room; on paper they are reset to the ink
+    '.crj .cr-card b,.crj .cr-card .cr-meta,.crj .cr-card .cr-foot,.crj .cr-menu .cr-mhead{color:inherit}',
+    '.crj .cr-btn-primary{border-color:var(--ink)}',
+    '.crj .cr-pop{stroke:none}',
+    '.crj .cr-g-band.is-in,.crj .cr-g-needle,.crj .cr-b-mark,.crj .cr-ringpath{filter:none}',
+    '.crj .cr-mark{stroke-opacity:1}',
+    '.crj .cr-g-lab{text-transform:none;letter-spacing:0}',
+    '.crj .cr-die-n{font-weight:400}'
+  ].join('\n');
+
   function injectStyle() {
     if (document.getElementById('crb-style')) return;
-    var st = document.createElement('style'); st.id = 'crb-style'; st.textContent = CSS; document.head.appendChild(st);
+    var st = document.createElement('style'); st.id = 'crb-style'; st.textContent = CSS + '\n' + JOURNAL_CSS; document.head.appendChild(st);
   }
 
   Chronicle.register('craft_bench', {
     init: function (el) {
-      if (!window.CraftScene || !window.CraftDesk) return;
+      var ds = el.dataset, Skin = ds.skin === 'journal' ? window.CraftJournal : window.CraftDesk;
+      if (!window.CraftScene || !Skin) return;
       injectStyle();
-      var ds = el.dataset, build = ds.mode === 'build' && window.CraftBenchEditor;
+      var build = ds.mode === 'build' && window.CraftBenchEditor;
       var sky = ds.campaignId && ds.calendarId ? {campaignId: ds.campaignId, calendarId: ds.calendarId} : {calendar: DEMO.calendar};
-      var skin = CraftDesk.create({sky: sky, thumbs: ds.thumbs || '', info: DEMO.info});
+      // The demo's hover cards describe the desk's own pieces (its cat, its tray), so only the desk takes them
+      var skin = Skin.create({sky: sky, thumbs: ds.thumbs || '', info: Skin === window.CraftDesk ? DEMO.info : {}});
       var data = {recipes: DEMO.recipes, items: DEMO.items, recipe: 'heal'};
       if (build) {
         el._crb = CraftBenchEditor.start(el, Object.assign({skin: skin}, data));
