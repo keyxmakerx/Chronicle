@@ -1375,9 +1375,10 @@ func (r *entityRepository) FilterViewableEntityIDs(ctx context.Context, campaign
 	}
 
 	// Build the IN (?, ?, ...) placeholder list; campaign scope goes first.
+	// args grows by append rather than a precomputed capacity: no size sum
+	// on a caller-supplied length.
 	placeholders := make([]string, len(entityIDs))
-	args := make([]any, 0, len(entityIDs)+8)
-	args = append(args, campaignID)
+	args := []any{campaignID}
 	for i, id := range entityIDs {
 		placeholders[i] = "?"
 		args = append(args, id)
