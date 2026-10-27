@@ -586,6 +586,25 @@ function resolve(saved) {
   return L;
 }
 
+/* carried merges a page's own saved look with the look it carries from the
+   page it was made from (a Remnant, say). With no look of its own the item
+   takes the source's look and keeps its own words; with one, the source
+   shows through on top: its particles and sound as an extra layer and some
+   of its light. Null when there is neither. Pure. */
+function carried(own, src) {
+  var mine = own && own.look ? resolve(own) : null, theirs = resolve(src);
+  if (!mine) {
+    if (theirs) theirs.words = own && typeof own.words === 'string' ? own.words : '';
+    return theirs;
+  }
+  if (theirs) {
+    var none = theirs.motif === 'none';
+    mine.extra = [{ motif: none ? 'glints' : theirs.motif, color: none ? (theirs.shimmer || theirs.color) : theirs.color, color2: theirs.color2, amount: 0.55, sound: theirs.sound, pitch: theirs.pitch }];
+    mine.lightColor = mix(mine.lightColor || mine.color, theirs.lightColor || theirs.color, 0.4);
+  }
+  return mine;
+}
+
 /* Spots an effect can be placed on. The item stage uses SPOTS. Every
    crafting station shares BENCH_SPOTS, named for their role rather than a
    station's furniture (the skin labels "work" as the flask or the anvil), so
@@ -629,6 +648,6 @@ function kindFor(typeText, hasImage) {
 }
 
 window.ItemLookFX = { Stage: Stage, Mini: Mini, Sound: Sound, LOOKS: LOOKS, TINTS: TINTS, SOUNDS: SOUNDS, SOUND_NAMES: SOUND_NAMES, MOTIF_NAMES: MOTIF_NAMES, resolve: resolve, kindFor: kindFor, mix: mix, rgba: rgba,
-  SPOTS: SPOTS, BENCH_SPOTS: BENCH_SPOTS, MOMENT_SPOTS: MOMENT_SPOTS, MOTION_SPOTS: MOTION_SPOTS, spotLayers: spotLayers, castShadow: castShadow, shadowUnder: shadowUnder,
+  SPOTS: SPOTS, BENCH_SPOTS: BENCH_SPOTS, MOMENT_SPOTS: MOMENT_SPOTS, MOTION_SPOTS: MOTION_SPOTS, spotLayers: spotLayers, carried: carried, castShadow: castShadow, shadowUnder: shadowUnder,
   MOTIFS: MOTIFS, sprite: sprite, drawParticle: drawParticle };
 })();

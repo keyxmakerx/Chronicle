@@ -119,3 +119,25 @@ test('cast shadows fall away from the light, longer when it is brighter', () => 
   assert.ok(far.alpha < right.alpha, 'a farther light casts a fainter shadow');
   assert.equal(FX.castShadow(500, 60, { x: 300, k: 0 }), null);
 });
+
+test('an item with no look of its own carries its source\'s, keeping its own words', () => {
+  const L = FX.carried({ look: '', words: '6 fire', madeFrom: 'x' }, { look: 'glass', words: 'not these' });
+  assert.equal(L.motif, 'shards');
+  assert.equal(L.words, '6 fire');
+});
+test('an item with its own look shows its source on top', () => {
+  const L = FX.carried({ look: 'ember' }, { look: 'rot' });
+  assert.equal(L.motif, 'embers');
+  assert.equal(L.extra.length, 1);
+  assert.equal(L.extra[0].motif, 'smoke');
+  assert.equal(L.extra[0].sound, 'thrum');
+  assert.notEqual(L.lightColor, FX.LOOKS.ember.color, 'some of the source\'s light shows');
+  assert.equal(FX.LOOKS.ember.extra, undefined, 'the gallery is untouched');
+  assert.equal(FX.carried({ look: 'ember' }, { look: 'quiet' }).extra[0].motif, 'glints');
+});
+test('carried is null with neither look, and ignores junk', () => {
+  assert.equal(FX.carried(null, null), null);
+  assert.equal(FX.carried({ look: '', madeFrom: 'x' }, null), null);
+  assert.equal(FX.carried({ look: '' }, { look: 'fireball' }), null);
+  assert.equal(FX.carried({ look: 'frost' }, { look: 'fireball' }).extra, undefined);
+});

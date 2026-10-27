@@ -575,12 +575,15 @@ templ blockShopInventory(cc *campaigns.CampaignContext, entity *Entity, csrfToke
 	></div>
 }
 
-// blockItemLook renders the mount point for a placed Look block: the item's
-// effect on a small stage, with the gallery for the Owner.
+// blockItemLook renders the mount point for a placed Look block: the page's
+// effect on a small stage, with the gallery and "Made from" for the Owner.
+// Any page can hold a look; a Remnant's page holds the one its items carry.
 templ blockItemLook(cc *campaigns.CampaignContext, entity *Entity, csrfToken string) {
 	<div
 		data-widget="item_look"
 		data-look-endpoint={ fmt.Sprintf("/campaigns/%s/armory/items/%s/look", cc.Campaign.ID, entity.ID) }
+		data-entity-id={ entity.ID }
+		data-entity-search-endpoint={ fmt.Sprintf("/campaigns/%s/entities/search", cc.Campaign.ID) }
 		data-item-name={ entity.Name }
 		data-item-type={ itemLookType(entity) }
 		if entity.ImagePath != nil && *entity.ImagePath != "" {
