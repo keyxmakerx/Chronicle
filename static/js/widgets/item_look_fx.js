@@ -586,11 +586,13 @@ function resolve(saved) {
   return L;
 }
 
-/* Spots an effect can be placed on. The item stage uses SPOTS; the crafting
-   bench uses BENCH_SPOTS (the tool, its trail, where it touches the work,
-   the work itself and the bench top). */
+/* Spots an effect can be placed on. The item stage uses SPOTS. The crafting
+   bench uses BENCH_SPOTS for its moments (the window, the flask, the flame,
+   the bench top, what comes out), and a crafting motion adds MOTION_SPOTS,
+   which follow the moving tool: the tool, its trail, and where it touches. */
 var SPOTS = ['item', 'trail', 'impact', 'body', 'ground'];
-var BENCH_SPOTS = ['tool', 'trail', 'contact', 'work', 'bench'];
+var BENCH_SPOTS = ['window', 'flask', 'flame', 'bench', 'result'];
+var MOTION_SPOTS = ['tool', 'trail', 'contact'];
 
 /* spotLayers turns saved placements ({spot: {look, tint}}) into the layers
    the stage draws on each spot. Only spots in the given list and looks in
@@ -624,6 +626,6 @@ function kindFor(typeText, hasImage) {
 }
 
 window.ItemLookFX = { Stage: Stage, Mini: Mini, Sound: Sound, LOOKS: LOOKS, TINTS: TINTS, SOUNDS: SOUNDS, SOUND_NAMES: SOUND_NAMES, MOTIF_NAMES: MOTIF_NAMES, resolve: resolve, kindFor: kindFor, mix: mix, rgba: rgba,
-  SPOTS: SPOTS, BENCH_SPOTS: BENCH_SPOTS, spotLayers: spotLayers, castShadow: castShadow, shadowUnder: shadowUnder,
+  SPOTS: SPOTS, BENCH_SPOTS: BENCH_SPOTS, MOTION_SPOTS: MOTION_SPOTS, spotLayers: spotLayers, castShadow: castShadow, shadowUnder: shadowUnder,
   MOTIFS: MOTIFS, sprite: sprite, drawParticle: drawParticle };
 })();
