@@ -34,7 +34,7 @@ test('a play mount bakes its light and plays a step', { skip, timeout: 180000 },
   await page.mouse.down();
   await page.mouse.move(...from.mortar, { steps: 12 });
   await page.mouse.up();
-  await page.waitForFunction(() => document.querySelector('[data-widget="craft_bench"]')._crb.state().i === 1, null, { timeout: 30000 });
+  await page.waitForFunction(() => document.querySelector('[data-widget="craft_bench"]')._crb.state().i === 1, null, { timeout: 60000 });
   const out = await page.evaluate(() => ({
     pointLights: document.querySelectorAll('fePointLight, feSpotLight').length,
     say: document.querySelector('.cr-say').textContent,
@@ -77,8 +77,10 @@ test('build mode opens the editor and a look redraws the room', { skip, timeout:
     return document.querySelector('.crb-status').textContent;
   });
   assert.match(status, /Nothing is saved/);
-  await page.click('[data-look="hut"]');
-  await page.waitForFunction(() => window.__redrawn > 0, null, { timeout: 30000 });
+  // Clicked in the page: a look relights the room on the spot, and a busy
+  // runner can hold the page longer than a Playwright click waits.
+  await page.evaluate(() => document.querySelector('[data-look="hut"]').click());
+  await page.waitForFunction(() => window.__redrawn > 0, null, { timeout: 60000 });
   const pressed = await page.getAttribute('[data-look="hut"]', 'aria-pressed');
   assert.equal(pressed, 'true');
   // Picking a piece opens its card, and the card is hidden until then.

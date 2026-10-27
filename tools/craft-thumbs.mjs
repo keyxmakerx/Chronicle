@@ -37,7 +37,7 @@ const BOX = {
 };
 
 async function shoot(set, take) {
-  const { browser, page, errors } = await open({ width: 1200, height: 760, scale: 2 });
+  const { browser, page, errors } = await open({ width: 1200, height: 760, scale: 2, paintedSky: true });
   try {
     await baked(page);
     await page.evaluate((s) => {
