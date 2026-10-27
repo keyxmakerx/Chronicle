@@ -5087,6 +5087,9 @@ func (a *App) RegisterRoutes() {
 	// not migrate. The
 	// endpoint checks its own key and never reads a session cookie.
 	var aiConnectorEndpoint *connector.Endpoint
+	// The connector's request queue, for the AI's `waiting` lookup; nil
+	// without the connector.
+	var aiAsks aiAskLister
 	if a.PluginHealth == nil || a.PluginHealth.IsHealthy(connector.SchemaSlug) {
 		aiConnectorSvc := connector.NewService(connector.NewRepository(a.DB), aiConnectorOwners{campaigns: campaignService})
 		aiWorkspaceHandler.SetConnector(aiConnectorSvc, a.Config.BaseURL)
@@ -5098,6 +5101,7 @@ func (a *App) RegisterRoutes() {
 			}
 			return timeutil.LoadLocation(*u.Timezone)
 		})
+		aiAsks = aiConnectorSvc
 		aiConnectorEndpoint = connector.NewEndpoint(aiConnectorSvc, a.Config.BaseURL)
 		aiConnectorEndpoint.SetInstructions(aiWorkspaceHandler.ConnectorInstructions)
 		connector.RegisterRoutes(e, aiConnectorEndpoint)
@@ -6249,6 +6253,8 @@ func (a *App) RegisterRoutes() {
 		FoundryMonsters: aiFoundryMonsters,
 		FoundryMatcher:  aiFoundryMatcher,
 		FoundryScenes:   aiFoundryScenes,
+		AIAsks:          aiAsks,
+		ArmoryRequests:  dmSources.Requests,
 	})
 	aiRegistry := records.NewRegistry(aiKinds(aiWiring)...)
 	aiWorkspaceHandler.SetRecords(aiRegistry)

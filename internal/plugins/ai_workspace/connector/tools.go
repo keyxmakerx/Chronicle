@@ -112,6 +112,8 @@ var tools = []tool{
 		Args: []arg{{Key: "field", Desc: "A character field, for example \"ancestry\""}}},
 	{Name: "game_nights", Title: "Game nights", Did: "Listed the game nights", What: "game-nights",
 		Desc: "The campaign's game nights: name, date, time, status and summary."},
+	{Name: "waiting_for_review", Title: "Waiting for review", Did: "Looked at what is waiting for review", What: "waiting",
+		Desc: "What is waiting for the owner's yes or no: the changes you asked for that are still waiting, how the owner answered your latest ones, entries players wrote and handed in, and players' stash moves and requests to buy. Read-only: only the owner can accept or turn these down, in Chronicle."},
 	{Name: "players", Title: "Players", Did: "Looked at the players", What: "players",
 		Desc: "Each player's character right now, what they carry, and whether they are coming to the next game night."},
 	{Name: "encounters", Title: "Encounters", Did: "Looked at the encounters", What: "encounters",
@@ -130,7 +132,7 @@ var tools = []tool{
 		Desc: "Read this before ask_for_changes: how Chronicle writes pages and every other kind of block, and this campaign's kinds of pages with their sheet fields."},
 	{Name: toolAsk, Title: "Ask for changes", Did: "Asked for changes", Asks: true,
 		Desc: "Send changes for the campaign's owner to review: new pages, edits, removals, events and the other blocks how_to_write_changes describes. " +
-			"Nothing changes until the owner says yes to each one in Chronicle, so tell them it is waiting on their Your AI page. Send one request per job, not one per block.",
+			"Nothing changes until the owner says yes to each one in Chronicle, so tell them it is waiting on their Your AI page; waiting_for_review shows later how they answered. Send one request per job, not one per block.",
 		Args: []arg{
 			{Key: "summary", Required: true, Desc: "One line for the owner saying what this does, for example \"Five characters for Coral Court\""},
 			{Key: "changes", Required: true, Max: changesMax, Keep: true, Desc: "The blocks, written as how_to_write_changes says, one after another"},
