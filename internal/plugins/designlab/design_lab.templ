@@ -8,7 +8,8 @@ import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
 // by a sample "System" (static/js/widgets/surface_demo.js). It demonstrates the
 // box expand/collapse primitive, an action that pushes an overlay, and the
 // mini->full launch (container-transform). Admin-only via /admin/design-lab.
-templ SurfaceDemoPage() {
+// Below it, the crafting bench kit runs in build mode on demo recipes.
+templ SurfaceDemoPage(sky BenchSky) {
 	@layouts.App("Design Lab") {
 		<!-- Sample System consumer: registers the box renderers + mounts the sheet.
 		     Loaded defer; it polls for Chronicle.surface (the frame loads later in
@@ -40,6 +41,26 @@ templ SurfaceDemoPage() {
 			<section class="space-y-2">
 				<p class="section-header">Inline sheet</p>
 				<div id="surface-demo-root"><p class="text-sm text-fg-muted" role="status">Loading the sample sheet… If this stays here, reload the page.</p></div>
+			</section>
+
+			<!-- The crafting bench kit (static/js/widgets/craft_bench.ai.md): the play
+			     engine, the desk skin and build mode, on demo recipes. Nothing saves. -->
+			<section class="space-y-2">
+				<p class="section-header">Crafting bench &mdash; build mode</p>
+				<p class="text-sm text-fg-secondary max-w-3xl">
+					The bench the crafting app will use. Click a piece to rename it or give it
+					right-click actions, drag it to move it, and change the room in the tray of
+					pictures. <strong>Try it as a player</strong> plays a demo recipe. The window
+					shows a demo calendar's sky unless this page is opened with
+					<code class="px-1 rounded bg-surface-alt text-xs">?campaign_id=…&amp;calendar_id=…</code>.
+				</p>
+				<div
+					data-widget="craft_bench"
+					data-mode="build"
+					data-thumbs="/static/img/crafting/desk/"
+					data-campaign-id={ sky.CampaignID }
+					data-calendar-id={ sky.CalendarID }
+				><p class="text-sm text-fg-muted" role="status">Loading the bench…</p></div>
 			</section>
 
 		</div>
